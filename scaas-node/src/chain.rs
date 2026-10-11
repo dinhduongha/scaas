@@ -165,10 +165,10 @@ impl Chain {
     }
 
     /// `mtxDigest(m)` / `mtxTransferDigest(t)`: exactly the digest the contract emits in `MetaTransactionExecuted` (R78).
-    pub async fn mtx_digest(&self, token: Address, m: Mtx) -> Result<B256> {
+    pub async fn mtx_digest(&self, token: Address, m: Mtx) -> std::result::Result<B256, SimError> {
         match m {
-            Mtx::Call(m) => self.view(token, IToken::mtxDigestCall { m }).await,
-            Mtx::Transfer(t) => self.view(token, IToken::mtxTransferDigestCall { t }).await,
+            Mtx::Call(m) => self.call_view(token, IToken::mtxDigestCall { m }).await,
+            Mtx::Transfer(t) => self.call_view(token, IToken::mtxTransferDigestCall { t }).await,
         }
     }
 

@@ -127,6 +127,11 @@ pub trait ChainAdapter: Send + Sync {
     async fn op_consumed(&self, _job: &Job) -> Result<Option<bool>> {
         Ok(None)
     }
+    /// G2's in-flight key of a claimed job. Default: the job's own digest; an EVM meta-tx answers the token's
+    /// `mtxDigest`, never the job's field (review T2 m6). `Revert` = no key (its simulation answers for it).
+    async fn digest(&self, job: &Job) -> std::result::Result<Option<alloy::primitives::B256>, SimError> {
+        Ok(job_digest(job))
+    }
 }
 
 /// Lỗi `submit` khi mạng TỪ CHỐI tx trước mempool (sequence lệch, thiếu phí, chữ ký sai…): gửi lại cùng bytes
@@ -388,7 +393,15 @@ async fn step_once(
     }
     let Some(job) = job else { return Ok(Step::Idle) };
     // G2: giữ digest tới khi `follow` xong (guard rơi ở mọi lối ra của hàm này).
-    let _guard = match job_digest(&job).map(|d| inflight.try_acquire(d)) {
+    let digest = match adapter.digest(&job).await {
+        Ok(d) => d,
+        Err(SimError::Revert(_)) => None,
+        Err(SimError::Transport(r)) => {
+            report(odoo, Report { error: Some(format!("rpc: {r}")), ..rep(job.id, "queued") }).await;
+            return Ok(Step::Retry(format!("rpc: {r}")));
+        }
+    };
+    let _guard = match digest.map(|d| inflight.try_acquire(d)) {
         Some(None) => {
             report(odoo, Report { error: Some("in flight on another path".into()), ..rep(job.id, "queued") }).await;
             return Ok(Step::Done);

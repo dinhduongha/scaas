@@ -108,7 +108,13 @@ struct Sent {
     _guard: Option<InflightGuard>,
 }
 
-pub fn work_from_job(job: &Job) -> Result<Work> {
+/// NODE-LANE-10 (R84) for the outbox: the unbound `relayer`/`feeRecipient` are normalized here as the gateway does
+/// (`fee_recipient` = `[[chains]] fee_recipient`), never relayed as the job carries them. The digest is left `None`:
+/// the dedup key is the token's own `mtxDigest`, read before submit (`Submitter::with_chain_digest`), never the job's.
+pub fn work_from_job(job: &Job, fee_recipient: Option<Address>) -> Result<Work> {
+    if job.receiver_fee.is_some() {
+        anyhow::bail!("receiver-pays (receiver_fee) is not built in the node; refused, never relayed without it");
+    }
     if let Some(e) = job.entry.as_deref() {
         return entry_work(job, e);
     }
@@ -120,10 +126,11 @@ pub fn work_from_job(job: &Job) -> Result<Work> {
     let (Some(m), Some(token), Some(sig)) = (&job.metatx, job.token, &job.signature) else {
         anyhow::bail!("job {} has neither a meta-transaction nor a call", job.id);
     };
-    let m = Mtx::from_wire(job.struct_.as_deref(), m)?;
+    let mut m = Mtx::from_wire(job.struct_.as_deref(), m)?;
+    m.normalize(fee_recipient);
     let sig = alloy::hex::decode(sig.strip_prefix("0x").unwrap_or(sig))?;
     let valid_until = m.valid_until().saturating_to();
-    let meta = Some(MetaRef::of(token, &m, job_digest(job)));
+    let meta = Some(MetaRef::of(token, &m, None));
     Ok(Work { job_id: Some(job.id), to: token, data: m.calldata(sig.into()), valid_until, meta, entry: false })
 }
 
@@ -225,7 +232,14 @@ impl Submitter {
             let (Some(n), Some(h)) = (j.nonce, j.tx_hash.as_deref()) else { continue };
             let Ok(hash) = h.parse::<B256>() else { continue };
             let fees = me.chain.fees().await?;
-            let work = work_from_job(&j.payload).ok();
+            let work = match work_from_job(&j.payload, me.cfg.fee_recipient) {
+                Ok(w) => Some(match me.with_chain_digest(w.clone()).await {
+                    Ok(w) => w,
+                    Err(SimError::Revert(_)) => w, // no dedup key; its simulation answers for it
+                    Err(SimError::Transport(e)) => anyhow::bail!("mtxDigest: {e}"),
+                }),
+                Err(_) => None,
+            };
             // Tập in-flight dựng lại từ việc đang theo dõi (§8.6).
             let guard = work.as_ref().and_then(|w| w.meta?.digest).and_then(|d| me.digests.try_acquire(d));
             let gas = me.cfg.max_gas_per_tx;
@@ -315,6 +329,14 @@ impl Submitter {
         self.inflight.insert(nonce, Sent { work: None, hashes: vec![hash], gas: GAP_FILL_GAS, fees, at: Instant::now(), _guard: None });
         warn!(nonce, "gap-filled");
         Ok(())
+    }
+
+    /// The in-flight key of a meta-tx job: the token's own digest (`mtxDigest`/`mtxTransferDigest`, as the gateway
+    /// reads it), never the job's `digest` field (review T2 m6). Other work passes unchanged.
+    async fn with_chain_digest(&self, mut w: Work) -> std::result::Result<Work, SimError> {
+        let (Some(r), Some((m, _))) = (w.meta, Mtx::from_calldata(&w.data)) else { return Ok(w) };
+        w.meta = Some(MetaRef { digest: Some(self.chain.mtx_digest(w.to, m).await?), ..r });
+        Ok(w)
     }
 
     /// G2: digest đã có tx vỏ sống ở đường khác (lane khác, gateway) ⇒ không ký lần hai.
@@ -614,8 +636,12 @@ impl Submitter {
                     continue;
                 }
             }
-            match work_from_job(&job) {
-                Ok(w) => self.submit(w).await,
+            match work_from_job(&job, self.cfg.fee_recipient) {
+                Ok(w) => match self.with_chain_digest(w.clone()).await {
+                    Ok(w) => self.submit(w).await,
+                    Err(SimError::Revert(r)) => self.fail(&w, format!("mtxDigest: {r}")).await,
+                    Err(SimError::Transport(r)) => self.requeue(&w, format!("mtxDigest: {r}")).await,
+                },
                 Err(e) => {
                     let _ = self.report(job.id, "dead", None, None, Some(format!("bad payload: {e:#}"))).await;
                 }
@@ -725,6 +751,8 @@ mod tests {
                         let gas = p[0]["gas"].as_str().map_or(u64::MAX, |g| u64::from_str_radix(&g[2..], 16).unwrap());
                         let ok = vec![true, gas >= e.settle_from];
                         Ok(json!(format!("0x{}", alloy::hex::encode(<Vec<bool> as SolValue>::abi_encode(&ok)))))
+                    } else if sel == IToken::mtxTransferDigestCall::SELECTOR || sel == IToken::mtxDigestCall::SELECTOR {
+                        Ok(json!(D))
                     } else if sel == IToken::mtxNonceCall::SELECTOR {
                         e.mtx_nonce.map(|n| word(U256::from(n))).ok_or_else(|| err(-32000, "upstream timeout", None))
                     } else {
@@ -989,21 +1017,21 @@ mod tests {
         let job = |v: Value| -> crate::odoo::Job { serde_json::from_value(v).unwrap() };
         let cancel = job(json!({"id": 1, "kind": "metatx", "entry": "mtxCancelOrder", "token": token,
             "order": crate::dex::WireOrder::from_sol(&o), "signature": s("cancel_signature"), "validUntil": "1800000300"}));
-        let w = work_from_job(&cancel).unwrap();
+        let w = work_from_job(&cancel, None).unwrap();
         assert_eq!((format!("0x{}", alloy::hex::encode(&w.data)), w.valid_until, w.meta), (s("cancel_calldata").to_lowercase(), 1_800_000_300, None));
         let inv = job(json!({"id": 2, "kind": "metatx", "entry": "mtxInvalidateNonces", "token": token,
             "from": s("signer").to_lowercase(), "batch": s("invalidate_batch"), "newMin": s("invalidate_min_nonce"),
             "signature": s("invalidate_signature"), "validUntil": "1800000300"}));
-        assert_eq!(format!("0x{}", alloy::hex::encode(&work_from_job(&inv).unwrap().data)), s("invalidate_calldata").to_lowercase());
+        assert_eq!(format!("0x{}", alloy::hex::encode(&work_from_job(&inv, None).unwrap().data)), s("invalidate_calldata").to_lowercase());
         let wrap = job(json!({"id": 3, "kind": "metatx", "entry": "mtxWrap", "token": token, "underlying": format!("{:#x}", TOKEN),
             "order": crate::dex::WireOrder::from_sol(&o), "signature": s("order_signature")}));
-        let w = work_from_job(&wrap).unwrap();
+        let w = work_from_job(&wrap, None).unwrap();
         assert_eq!((&w.data[..4], w.valid_until), (&[0x3e, 0xd1, 0x8b, 0xa8][..], o.validUntil.saturating_to()));
         for bad in [json!({"id": 4, "kind": "metatx", "entry": "mtxTrade", "token": token, "signature": "0x00"}),
                     json!({"id": 5, "kind": "metatx", "entry": "mtxCancelOrder", "token": token, "signature": "0x00", "validUntil": "1"}),
                     json!({"id": 6, "kind": "metatx", "entry": "mtxCancelOrder", "token": token, "signature": "0x00",
                            "order": crate::dex::WireOrder::from_sol(&o)})] {
-            assert!(work_from_job(&job(bad)).is_err(), "mtxTrade is never a job; an order and a deadline are needed");
+            assert!(work_from_job(&job(bad), None).is_err(), "mtxTrade is never a job; an order and a deadline are needed");
         }
     }
 
@@ -1016,8 +1044,9 @@ mod tests {
         let set = InflightSet::default();
         let mut a = lane(&url, odoo.clone(), 1, set.clone()).await;
         let mut b = lane(&url, odoo, 2, set.clone()).await;
-        let mut w = work_from_job(&serde_json::from_value(job(0)).unwrap()).unwrap();
-        w.job_id = None; // gateway
+        let mut w = work_from_job(&serde_json::from_value(job(0)).unwrap(), None).unwrap();
+        w.job_id = None; // gateway: `post_metatx` read the digest from the token
+        w.meta = w.meta.map(|m| MetaRef { digest: Some(D.parse().unwrap()), ..m });
         a.submit(w.clone()).await;
         b.poll_outbox().await;
         a.submit(w).await;
@@ -1031,5 +1060,44 @@ mod tests {
         lane(&url, odoo, 1, set.clone()).await.poll_outbox().await;
         assert_eq!(states(&o), ["queued"]);
         assert!(!set.contains(&D.parse().unwrap()));
+    }
+
+    /// NODE-LANE-10 for every origin (review T2 I1): an outbox job's unbound `feeRecipient`/`relayer` never reach the
+    /// chain as the job carries them; receiver-pays is refused, not dropped (m5); the in-flight key is the token's
+    /// digest, never the job's `digest` (m6).
+    #[tokio::test]
+    async fn outbox_jobs_are_normalized_and_keyed_by_the_token_digest() {
+        let (thief, ours) = (Address::repeat_byte(0x7e), Address::repeat_byte(0x99));
+        let Mtx::Transfer(mut t) = meta(7) else { unreachable!() };
+        (t.mode, t.fee, t.feeRecipient, t.relayer) = (0x20, U256::from(1_000u64), thief, thief); // FIXED fee, nothing bound
+        let raw = |t: &MetaTransfer| {
+            let (kind, wire) = Mtx::Transfer(t.clone()).to_wire();
+            json!({"id": 1, "kind": "metatx", "token": format!("{TOKEN:#x}"), "digest": "0x00", "struct": kind,
+                   "signature": format!("0x{}", "11".repeat(65)), "metatx": wire})
+        };
+        let sent = |v: Value, fr: Option<Address>| {
+            let w = work_from_job(&serde_json::from_value(v).unwrap(), fr).unwrap();
+            assert_eq!(w.meta.unwrap().digest, None, "never the job's digest");
+            Mtx::from_calldata(&w.data).unwrap().0
+        };
+        let m = sent(raw(&t), Some(ours));
+        assert_eq!((m.fee_recipient(), m.relayer()), (ours, Address::ZERO));
+        let m = sent(raw(&t), None);
+        assert_eq!((m.fee_recipient(), m.relayer()), (Address::ZERO, Address::ZERO), "unset: the contract pays msg.sender");
+        let bound = MetaTransfer { mode: 0x23, ..t.clone() };
+        assert_eq!(sent(raw(&bound), Some(ours)), Mtx::Transfer(bound.clone()), "bound fields are the signer's");
+        let mut rf = raw(&t);
+        rf["receiver_fee"] = json!({"fee": "1", "feeRecipient": format!("{thief:#x}"), "validUntil": "1", "signature": "0x"});
+        assert!(work_from_job(&serde_json::from_value(rf).unwrap(), None).is_err(), "receiver-pays is not built");
+        // through the lane: normalized on chain, keyed by `mtxTransferDigest` (the fake answers D)
+        let (url, rpc) = fake_evm(Evm { mtx_nonce: Some(0), ..Default::default() }).await;
+        let (odoo, o) = fake_odoo(Fake { jobs: vec![raw(&t)], tokens: json!([]), ..Default::default() }).await;
+        let set = InflightSet::default();
+        let mut s = lane(&url, odoo, 1, set.clone()).await;
+        s.poll_outbox().await;
+        assert_eq!(states(&o), ["signed", "broadcast"]);
+        assert!(set.contains(&D.parse().unwrap()), "held while in flight");
+        let m = Mtx::from_calldata(&rpc.lock().unwrap().sent[0].2).unwrap().0;
+        assert_eq!((m.fee_recipient(), m.relayer()), (Address::ZERO, Address::ZERO));
     }
 }

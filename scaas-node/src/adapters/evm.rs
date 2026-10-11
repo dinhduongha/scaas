@@ -19,7 +19,7 @@ use crate::finality::{quorum_ok, safe_head, Mode};
 use crate::guard::{self, Guard};
 use crate::indexer::encode_event;
 use crate::odoo::Job;
-use crate::submit::work_from_job;
+use crate::submit::{job_digest, work_from_job};
 
 pub struct EvmAdapter {
     key: String,
@@ -33,6 +33,8 @@ pub struct EvmAdapter {
     pub tokens: Arc<RwLock<Vec<Address>>>,
     /// PAY-FIX2, NODE-GW-07, NODE-JOB-20: checked before every simulation.
     guard: Guard,
+    /// `[[chains]] fee_recipient`: NODE-LANE-10 normalizes every job with it (`work_from_job`).
+    pub(crate) fee_recipient: Option<Address>,
 }
 
 impl EvmAdapter {
@@ -56,6 +58,7 @@ impl EvmAdapter {
             quorum: cfg.finality.quorum,
             max_gas: cfg.max_gas_per_tx,
             tokens,
+            fee_recipient: cfg.fee_recipient,
         })
     }
 
@@ -78,8 +81,15 @@ impl ChainAdapter for EvmAdapter {
         &self.lanes
     }
 
+    async fn digest(&self, job: &Job) -> std::result::Result<Option<B256>, SimError> {
+        let Ok(w) = work_from_job(job, self.fee_recipient) else { return Ok(None) };
+        let Some((m, _)) = crate::metatx::Mtx::from_calldata(&w.data) else { return Ok(job_digest(job)) };
+        let chain = self.lane(0).map_err(|e| SimError::Transport(e.to_string()))?;
+        chain.mtx_digest(w.to, m).await.map(Some)
+    }
+
     async fn build(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
-        let w = work_from_job(job).map_err(|e| SimError::Revert(format!("bad payload: {e:#}")))?;
+        let w = work_from_job(job, self.fee_recipient).map_err(|e| SimError::Revert(format!("bad payload: {e:#}")))?;
         let chain = self.lane(lane).map_err(|e| SimError::Transport(e.to_string()))?;
         self.guard.check(chain, &w).await?;
         let gas = guard::gas(chain, &w, self.max_gas).await?;

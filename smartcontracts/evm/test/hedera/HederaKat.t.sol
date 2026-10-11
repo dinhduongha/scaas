@@ -9,10 +9,11 @@ import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {noneInit} from "../v2/helpers/V2Fixture.sol";
 
 /// The Hedera vector (NET-HED-03, CTR-TOK-23): a payment `MetaTransfer` of the Hedera account 0.0.1234567 (long-zero
-/// `from`) on an `IS_HEDERA` `NoUnderlyingToken` clone on chain 296, in the salted token domain. Forge writes the
-/// struct, digest and relayed calldata (`WRITE_KAT=true forge test --match-contract HederaKatTest`), then
-/// `python3 test/hedera/gen_hedera_kat.py` adds the RFC 8032 ed25519 signature over the digest (the bytes HIP-632's
-/// `isAuthorizedRaw` checks); scaas-node (`adapters::hedera` tests) verifies both. The v1 vector is in `legacy/p5/`.
+/// `from`) on an `IS_HEDERA` `NoUnderlyingToken` clone on chain 296, in the salted token domain. Forge writes every
+/// struct field, the struct hash and the digest (`WRITE_KAT=true forge test --match-contract HederaKatTest`); it
+/// writes no calldata and executes nothing. Then `python3 test/hedera/gen_hedera_kat.py` adds the RFC 8032 ed25519
+/// signature over the digest (the bytes HIP-632's `isAuthorizedRaw` checks); scaas-node (`adapters::hedera` tests)
+/// verifies both. The v1 vector is in `legacy/p5/`.
 contract HederaKatTest is Test {
     using MetaTxLib for MetaTxLib.MetaTransfer;
 
@@ -46,13 +47,15 @@ contract HederaKatTest is Test {
         vm.serializeString(k, "valid_until", vm.toString(t.validUntil));
         vm.serializeString(k, "mode", vm.toString(uint256(t.mode)));
         vm.serializeString(k, "relayer", vm.toString(t.relayer));
+        vm.serializeString(k, "fee", vm.toString(t.fee));
+        vm.serializeString(k, "fee_recipient", vm.toString(t.feeRecipient));
         vm.serializeString(k, "struct_hash", vm.toString(t.hashStruct()));
         string memory out = vm.serializeString(k, "digest", vm.toString(digest));
         if (vm.envOr("WRITE_KAT", false)) vm.writeJson(out, OUT);
 
         string memory onDisk = vm.readFile(OUT);
         string[] memory keys = vm.parseJsonKeys(out, "$");
-        assertEq(keys.length, 15);
+        assertEq(keys.length, 17);
         for (uint256 i; i < keys.length; ++i) {
             assertEq(vm.parseJsonString(onDisk, string.concat(".", keys[i])),
                 vm.parseJsonString(out, string.concat(".", keys[i])), keys[i]);

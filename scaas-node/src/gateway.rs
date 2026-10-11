@@ -174,7 +174,7 @@ async fn post_metatx(State(s): State<AppState>, Json(r): Json<SignedReq>) -> Rep
     let Some((m, _)) = Mtx::from_calldata(&w.data) else { return bad("not a meta-transaction") };
     match c.chain.mtx_digest(w.to, m).await {
         Ok(d) => w.meta = w.meta.map(|r| MetaRef { digest: Some(d), ..r }),
-        Err(e) => return sim_reply(SimError::Transport(format!("mtxDigest: {e:#}"))),
+        Err(e) => return sim_reply(e),
     }
     enqueue(c, w, "queued").await
 }
@@ -370,6 +370,17 @@ mod tests {
         let r = req(MODE_RESTRICT_RELAYER | MODE_RESTRICT_FEE_RECIPIENT | 0x20);
         let signed = wire(&r);
         assert_eq!(sent(&work_of(r, Some(Address::repeat_byte(0x99))).unwrap()), signed);
+    }
+
+    /// Expired at arrival (`validUntil <= now`): refused before any simulation.
+    #[test]
+    fn an_expired_request_is_refused() {
+        let mut r = req(0x20);
+        r.m["validUntil"] = json!(now().to_string());
+        assert_eq!(work_of(r, None).unwrap_err().1 .0["error"], "expired");
+        let mut r = req(0x20);
+        r.m["validUntil"] = json!((now() + 60).to_string());
+        assert!(work_of(r, None).is_ok());
     }
 
     /// `struct` absent = `transfer`; a call body without `struct` is refused, never misread.

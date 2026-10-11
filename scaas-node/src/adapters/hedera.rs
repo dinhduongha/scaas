@@ -13,7 +13,7 @@
 //!   đã hết hạn thì `dead` trước cả bước kiểm số dư (không xoay vòng mãi trên lane chưa nạp tiền).
 //! - Danh sách token lọc event: token Odoo đăng ký, lấy từ `node_config` mỗi vòng `index_step` (review H2;
 //!   không danh sách tĩnh trong cấu hình node — event của contract lạ không bao giờ gửi Odoo).
-use alloy::primitives::{Address, Bytes, U256};
+use alloy::primitives::{Address, Bytes, B256, U256};
 use alloy::providers::{DynProvider, Provider, ProviderBuilder};
 use anyhow::{anyhow, bail, Result};
 use async_trait::async_trait;
@@ -150,12 +150,16 @@ impl ChainAdapter for HederaAdapter {
 
     /// R80: meta-tx ⇒ `mtxNonce(from, batch)` (both structs share the lane); job `call` ⇒ không biết.
     async fn op_consumed(&self, job: &Job) -> Result<Option<bool>> {
-        let Some(m) = work_from_job(job).ok().and_then(|w| w.meta) else { return Ok(None) };
+        let Some(m) = work_from_job(job, self.inner.fee_recipient).ok().and_then(|w| w.meta) else { return Ok(None) };
         Ok(Some(self.inner.lane(0)?.mtx_nonce(m.token, m.from, m.batch).await? > m.nonce))
     }
 
+    async fn digest(&self, job: &Job) -> std::result::Result<Option<B256>, SimError> {
+        self.inner.digest(job).await
+    }
+
     async fn build(&self, job: &Job, lane: usize) -> std::result::Result<Built, SimError> {
-        let w = work_from_job(job).map_err(|e| SimError::Revert(format!("bad payload: {e:#}")))?;
+        let w = work_from_job(job, self.inner.fee_recipient).map_err(|e| SimError::Revert(format!("bad payload: {e:#}")))?;
         if now() > w.valid_until {
             return Err(SimError::Revert("expired before inclusion".into()));
         }
@@ -430,7 +434,7 @@ mod tests {
         let s = |f: &str| k[f].as_str().unwrap().to_string();
         let wire = json!({"from": s("from"), "to": s("to"), "value": s("value"), "entryRef": s("entry_ref"),
             "batch": s("batch"), "nonce": s("nonce"), "validUntil": s("valid_until"), "mode": s("mode").parse::<u32>().unwrap(),
-            "relayer": s("relayer"), "fee": "0", "feeRecipient": format!("{:#x}", Address::ZERO)});
+            "relayer": s("relayer"), "fee": s("fee"), "feeRecipient": s("fee_recipient")});
         let m = Mtx::from_wire(Some("transfer"), &wire).unwrap();
         let d = Domain {
             name: "SCaaS MetaToken".into(),

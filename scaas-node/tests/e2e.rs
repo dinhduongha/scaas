@@ -785,7 +785,7 @@ async fn a_peer_landing_our_intent_makes_the_job_consumed_never_dead() {
     let gwei = 1_000_000_000u128;
     let mine = || async { p.raw_request::<_, Value>("evm_mine".into(), ()).await.unwrap() };
     let peer_sends = |job: &Value, max_fee: u128, tip: u128| {
-        let w = work_from_job(&serde_json::from_value(job.clone()).unwrap()).unwrap();
+        let w = work_from_job(&serde_json::from_value(job.clone()).unwrap(), None).unwrap();
         let tx = TransactionRequest::default().to(w.to).input(w.data.into()).gas_limit(500_000).max_fee_per_gas(max_fee).max_priority_fee_per_gas(tip);
         let peer = peer.clone();
         async move { peer.send_transaction(tx).await.unwrap() }

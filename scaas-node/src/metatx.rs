@@ -442,10 +442,19 @@ mod tests {
         assert!(bad("batch", json!("01")));
         assert!(bad("from", json!("0x12")));
         assert!(bad("mode", json!(4)));
+        assert!(bad("mode", json!(0x30)), "fee nibble 3 (ModeFeeInvalid)");
         assert!(bad("data", json!("zz")));
         assert!(bad("value", json!("1")), "a transfer field in a call");
         assert!(Mtx::from_wire(None, &good).is_err(), "a call body is not a transfer");
         assert!(Mtx::from_wire(Some("ua"), &good).is_err());
+        let (_, mut transfer) = Mtx::Transfer(MetaTransfer {
+            from: Address::repeat_byte(0xab), to: Address::repeat_byte(0x5e), value: U256::from(1), entryRef: B256::ZERO,
+            batch: U256::ZERO, nonce: U256::ZERO, validUntil: U256::from(1), mode: 0, relayer: Address::ZERO,
+            fee: U256::ZERO, feeRecipient: Address::ZERO,
+        }).to_wire();
+        assert!(Mtx::from_wire(None, &transfer).is_ok());
+        transfer["data"] = json!("0x");
+        assert!(Mtx::from_wire(None, &transfer).is_err(), "a call field in a transfer (N1, the reverse)");
     }
 
     #[test]

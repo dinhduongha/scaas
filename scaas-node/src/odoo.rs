@@ -107,6 +107,10 @@ pub struct Job {
     /// Deadline of an entry job that carries none of its own (cancels never expire on chain).
     #[serde(default, rename = "validUntil")]
     pub valid_until: Option<String>,
+    /// Receiver-pays (job-api.md): not built in the node, so a job carrying it is refused (`work_from_job`), never
+    /// relayed as a plain transfer that drops the payee's fee authorization (review T2 m5).
+    #[serde(default)]
+    pub receiver_fee: Option<Value>,
     /// `metatx` | `call` | `signed_op` (họ không phải EVM: payload ký + chữ ký + khoá công khai, adapter tự đọc).
     #[serde(default)]
     pub kind: Option<String>,
@@ -265,7 +269,7 @@ mod tests {
             "calldata": "0xdeadbeef", "validUntil": "1800000300"}}"#;
         let job: Job = serde_json::from_str(raw).unwrap();
         assert!(job.metatx.is_none());
-        let w = crate::submit::work_from_job(&job).unwrap();
+        let w = crate::submit::work_from_job(&job, None).unwrap();
         assert_eq!(w.data.as_ref(), &[0xde, 0xad, 0xbe, 0xef]);
         assert_eq!(w.valid_until, 1_800_000_300);
     }

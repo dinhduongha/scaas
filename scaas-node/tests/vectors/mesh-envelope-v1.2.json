@@ -423,6 +423,75 @@
           },
           "meta_tx": {
             "batch": "7405258708504342445307474482762115553420430596304838433236153892639744162364",
+            "data": "0xcfdd7aea0000000000000000000000000000000000000000000000000000000000000001",
+            "fee": "5000",
+            "feeRecipient": "0x0000000000000000000000000000000000000000",
+            "from": "0xe05fcc23807536bee418f142d19fa0d21bb0cff7",
+            "mode": 32,
+            "nonce": "0",
+            "relayer": "0x0000000000000000000000000000000000000000",
+            "validUntil": "1800000300"
+          },
+          "sig_kind": "eoa",
+          "signature": "0x3022a3b07563170f957399f4f7460cc2bbb98e59820334b7728b92bc1e645d2a6d42d2b1d21d00ca4afbd6b6ca0e7c062437c3265f7af4a2f7c17bce4da48b111b",
+          "struct": "call"
+        },
+        "family": "evm",
+        "hop_count": 0,
+        "hub": {
+          "id": "fd110d301d2f077de1414b8f99f441b1403fab207b2052fbd2c065e4ee8e7dc2",
+          "pubkey": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+          "published_at": 1800000000,
+          "sig": "699017244c14542d11c2ef56e96800634900fd377b0cee30e65101f85ae25400e9b0e0906bf8cf6186df26e9e5a5009755702d5681c88de961d2dc95c2404006"
+        },
+        "intent_id": "0x18cf461530436d5bcad3ce5e6a58f4ca6402a1e1693ff638cb57ea409c0e1fbf",
+        "spec": "scaas-intent/1.2",
+        "visibility": "open"
+      },
+      "expect": {
+        "accept": true,
+        "body_hash": "0x3964418ca717a318133b0839a3c71a86b0336f8480fe096043f02e32b7b186b1",
+        "exclusive_until": null,
+        "fee_effective": "5000",
+        "from": "0xe05fcc23807536bee418f142d19fa0d21bb0cff7",
+        "hub_msg": "0x73636161732d6875622f76310865766d3a3736323218cf461530436d5bcad3ce5e6a58f4ca6402a1e1693ff638cb57ea409c0e1fbf3964418ca717a318133b0839a3c71a86b0336f8480fe096043f02e32b7b186b1fd110d301d2f077de1414b8f99f441b1403fab207b2052fbd2c065e4ee8e7dc2000000006b49d200000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+        "hub_sig": "699017244c14542d11c2ef56e96800634900fd377b0cee30e65101f85ae25400e9b0e0906bf8cf6186df26e9e5a5009755702d5681c88de961d2dc95c2404006",
+        "intent_id": "0x18cf461530436d5bcad3ce5e6a58f4ca6402a1e1693ff638cb57ea409c0e1fbf",
+        "lane": "7405258708504342445307474482762115553420430596304838433236153892639744162364",
+        "may_submit": true,
+        "nonce": "0",
+        "selector": "0xcfdd7aea",
+        "state": "submittable",
+        "submit_meta_tx": {
+          "batch": "7405258708504342445307474482762115553420430596304838433236153892639744162364",
+          "data": "0xcfdd7aea0000000000000000000000000000000000000000000000000000000000000001",
+          "fee": "5000",
+          "feeRecipient": "0x000000000000000000000000000000000000c01d",
+          "from": "0xe05fcc23807536bee418f142d19fa0d21bb0cff7",
+          "mode": 32,
+          "nonce": "0",
+          "relayer": "0x0000000000000000000000000000000000000000",
+          "validUntil": "1800000300"
+        },
+        "token": "0x2e234dae75c793f67a35089c9d99245e1c58470b",
+        "valid_until": 1800000300,
+        "visibility": "open"
+      },
+      "from_peer_class": "open",
+      "name": "05b_evm_call"
+    },
+    {
+      "chain_profile": "public",
+      "envelope": {
+        "chain_key": "evm:7622",
+        "contract": "0x2e234dae75c793f67a35089c9d99245e1c58470b",
+        "evm": {
+          "domain": {
+            "name": "SCaaS MetaToken",
+            "version": "1"
+          },
+          "meta_tx": {
+            "batch": "7405258708504342445307474482762115553420430596304838433236153892639744162364",
             "entryRef": "0x17b3a4b47b86824218fba3a68c90cd53ea80198f8a5efef1a8775864b2cb5eca",
             "fee": "5000",
             "feeRecipient": "0x0000000000000000000000000000000000000000",
@@ -602,6 +671,52 @@
       },
       "from_peer_class": "open",
       "name": "08_hedera_296"
+    },
+    {
+      "chain_profile": "public",
+      "envelope": {
+        "chain_key": "evm:7623",
+        "contract": "0x2e234dae75c793f67a35089c9d99245e1c58470b",
+        "evm": {
+          "domain": {
+            "name": "SCaaS MetaToken",
+            "version": "1"
+          },
+          "meta_tx": {
+            "batch": "7405258708504342445307474482762115553420430596304838433236153892639744162364",
+            "entryRef": "0x17b3a4b47b86824218fba3a68c90cd53ea80198f8a5efef1a8775864b2cb5eca",
+            "fee": "5000",
+            "feeRecipient": "0x0000000000000000000000000000000000000000",
+            "from": "0xe05fcc23807536bee418f142d19fa0d21bb0cff7",
+            "mode": 32,
+            "nonce": "0",
+            "relayer": "0x0000000000000000000000000000000000000000",
+            "to": "0x0000000000000000000000000000000000005409",
+            "validUntil": "1800000300",
+            "value": "100000000"
+          },
+          "sig_kind": "eoa",
+          "signature": "0xf45ee08d416bcd12eb206561bc4c7e311c778618b418f0ffcb1fa89ca0a7254c2e83a145e1beb43ab0d05e50ab77b772b59b8b074a56e476b437a717448f81d41c",
+          "struct": "transfer"
+        },
+        "family": "evm",
+        "hop_count": 0,
+        "hub": {
+          "id": "fd110d301d2f077de1414b8f99f441b1403fab207b2052fbd2c065e4ee8e7dc2",
+          "pubkey": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+          "published_at": 1800000000,
+          "sig": "a02eb166977daf609e251d523f1582cf11d9a3a81d338dfec985d6df2f585b583d337985d6b876cbfd1655a49d9d872559a548ad59a743e8d98b28f0a9f74c07"
+        },
+        "intent_id": "0x1631838e65a7eb34317d241f49a09439ef8e125c5d7757300769ec0ef9544706",
+        "spec": "scaas-intent/1.2",
+        "visibility": "open"
+      },
+      "expect": {
+        "accept": false,
+        "code": "UNKNOWN_CHAIN"
+      },
+      "from_peer_class": "open",
+      "name": "08b_evm_chain_without_chain_uid"
     },
     {
       "chain_profile": "public",
@@ -2210,6 +2325,87 @@
       "chain_profile": "public",
       "envelope": {
         "chain_key": "evm:7622",
+        "contract": "0x2e234dae75c793f67a35089c9d99245e1c58470b",
+        "evm": {
+          "domain": {
+            "name": "SCaaS MetaToken",
+            "version": "1"
+          },
+          "meta_tx": {
+            "batch": "7405258708504342445307474482762115553420430596304838433236153892639744162364",
+            "data": "0xcfdd7aea0000000000000000000000000000000000000000000000000000000000000001",
+            "fee": "5000",
+            "feeRecipient": "0x0000000000000000000000000000000000000000",
+            "from": "0xe05fcc23807536bee418f142d19fa0d21bb0cff7",
+            "mode": 16,
+            "nonce": "0",
+            "relayer": "0x0000000000000000000000000000000000000000",
+            "validUntil": "1800000300"
+          },
+          "sig_kind": "eoa",
+          "signature": "0xb7032be9652b09b9959ede76cc1d50bb97d7a53bbddaf340e9b307fdcd4d600a4950e72b231f5287f5e270a4ab0afa21ea635897da7151e7ccc9611f041920bd1c",
+          "struct": "call"
+        },
+        "family": "evm",
+        "hop_count": 0,
+        "hub": {
+          "id": "fd110d301d2f077de1414b8f99f441b1403fab207b2052fbd2c065e4ee8e7dc2",
+          "pubkey": "8a88e3dd7409f195fd52db2d3cba5d72ca6709bf1d94121bf3748801b40f6f5c",
+          "published_at": 1800000000,
+          "sig": "5822af84c7566321fb5c145b95f946fa863e4c093ad8721285957d5323e9f0fdf94c532ebe6a22da7602cd8908021b6156d8c2e946634f74faea27c25c31c604"
+        },
+        "intent_id": "0x25e76c12f28721997d90b46f3a66c336c0a6064e708df498ce57166f79f1c5f1",
+        "spec": "scaas-intent/1.2",
+        "visibility": "open"
+      },
+      "expect": {
+        "accept": true,
+        "body_hash": "0xae16339f6fd4f85ce4a2bbe596c49641a078fbe170014b60eed006af6296a341",
+        "exclusive_until": null,
+        "fee_effective": "0",
+        "from": "0xe05fcc23807536bee418f142d19fa0d21bb0cff7",
+        "hub_msg": "0x73636161732d6875622f76310865766d3a3736323225e76c12f28721997d90b46f3a66c336c0a6064e708df498ce57166f79f1c5f1ae16339f6fd4f85ce4a2bbe596c49641a078fbe170014b60eed006af6296a341fd110d301d2f077de1414b8f99f441b1403fab207b2052fbd2c065e4ee8e7dc2000000006b49d200000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+        "hub_sig": "5822af84c7566321fb5c145b95f946fa863e4c093ad8721285957d5323e9f0fdf94c532ebe6a22da7602cd8908021b6156d8c2e946634f74faea27c25c31c604",
+        "intent_id": "0x25e76c12f28721997d90b46f3a66c336c0a6064e708df498ce57166f79f1c5f1",
+        "lane": "7405258708504342445307474482762115553420430596304838433236153892639744162364",
+        "may_submit": false,
+        "nonce": "0",
+        "selector": "0xcfdd7aea",
+        "state": "pooled",
+        "submit_meta_tx": {
+          "batch": "7405258708504342445307474482762115553420430596304838433236153892639744162364",
+          "data": "0xcfdd7aea0000000000000000000000000000000000000000000000000000000000000001",
+          "fee": "5000",
+          "feeRecipient": "0x000000000000000000000000000000000000c01d",
+          "from": "0xe05fcc23807536bee418f142d19fa0d21bb0cff7",
+          "mode": 16,
+          "nonce": "0",
+          "relayer": "0x0000000000000000000000000000000000000000",
+          "validUntil": "1800000300"
+        },
+        "token": "0x2e234dae75c793f67a35089c9d99245e1c58470b",
+        "valid_until": 1800000300,
+        "visibility": "open"
+      },
+      "from_peer_class": "open",
+      "name": "29b_percent_call_counts_zero",
+      "policy": [
+        {
+          "chain_key": "evm:7622",
+          "contract": "0x2e234dae75c793f67a35089c9d99245e1c58470b",
+          "fee_recipient_allow": "any",
+          "min_fee": "1",
+          "pool_visibility": "open",
+          "selector": "*",
+          "submit": true,
+          "support": "full"
+        }
+      ]
+    },
+    {
+      "chain_profile": "public",
+      "envelope": {
+        "chain_key": "evm:7622",
         "contract": "0x00000000000000000000000000000000000bad00",
         "evm": {
           "domain": {
@@ -2410,6 +2606,9 @@
     "evm:7622": [
       "0x000000000000000000000000000000000000beef"
     ],
+    "evm:7623": [
+      "0x000000000000000000000000000000000000beef"
+    ],
     "hedera:296": [
       "0x000000000000000000000000000000000000beef"
     ],
@@ -2440,6 +2639,9 @@
       "wasm1g3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zyg3zqn0lflt"
     ],
     "evm:7622": [
+      "0x2e234dae75c793f67a35089c9d99245e1c58470b"
+    ],
+    "evm:7623": [
       "0x2e234dae75c793f67a35089c9d99245e1c58470b"
     ],
     "hedera:296": [

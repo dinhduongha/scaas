@@ -377,6 +377,12 @@ fn regenerate() {
     cases.push(case("05_evm_transfer", evm_env("evm:7622", &token,
         &m(&|x| x["entryRef"] = json!(format!("{:#x}", alloy::primitives::B256::ZERO)))),
         json!({"accept": true, "selector": "transfer"})));
+    // 05b: a `MetaTransaction` (`struct = call`, `cancelNonce(1)`): its selector is the call's first 4 bytes.
+    let call = json!({"from": ks("from"), "data": format!("0xcfdd7aea{}01", "00".repeat(31)), "batch": ks("batch"),
+        "nonce": "0", "validUntil": (NOW + 300).to_string(), "mode": 0x20, "relayer": zero.clone(), "fee": "5000",
+        "feeRecipient": zero.clone()});
+    cases.push(case("05b_evm_call", evm_env("evm:7622", &token, &call),
+        json!({"accept": true, "selector": "0xcfdd7aea", "fee_effective": "5000"})));
     let wallet = m(&|x| x["from"] = json!("0x0000000000000000000000000000000000001271"));
     let e6 = evm_env_named("evm:7622", &token, "SCaaS MetaToken", &wallet, "erc1271", Some(format!("0x{}", "ab".repeat(96))));
     cases.push(case("06_evm_erc1271_no_local_recover", e6.clone(), json!({"accept": true, "may_submit": true})));
@@ -392,6 +398,8 @@ fn regenerate() {
     seal(&mut e7);
     cases.push(case("07_evm_high_s", e7, reject("BAD_SIGNATURE")));
     cases.push(case("08_hedera_296", evm_env("hedera:296", &token, &base), json!({"accept": true, "may_submit": true})));
+    // 08b: an EVM chain whose `chain_uid` the receiver does not know: the salt is never taken from the envelope.
+    cases.push(case("08b_evm_chain_without_chain_uid", evm_env("evm:7623", &token, &base), reject("UNKNOWN_CHAIN")));
 
     // 09–13: payload/digest của vector chéo adapter; từ 10 đến 13 kèm bản sinh đôi với account của người khác.
     let cosmos_payload = cosmos_vector("payload");
@@ -538,6 +546,12 @@ fn regenerate() {
         x["mode"] = json!(0x00);
         x["fee"] = json!(format!("1{}", "0".repeat(30)));
     })), json!({"accept": true, "fee_effective": "0", "may_submit": false})), "policy", pol(&token, "1")));
+    // 29b: a PERCENT `call` counts 0 (its basis is a selector argument this layer does not read): under `min_fee = 1`
+    // it is accepted and never submittable.
+    let mut pct = call.clone();
+    pct["mode"] = json!(0x10);
+    cases.push(with(case("29b_percent_call_counts_zero", evm_env("evm:7622", &token, &pct),
+        json!({"accept": true, "fee_effective": "0", "may_submit": false})), "policy", pol(&token, "1")));
     cases.push(with(case("30_unregistered_contract", evm_env("evm:7622", UNREGISTERED, &base),
         json!({"accept": true, "token": UNREGISTERED, "may_submit": false})), "policy", pol(UNREGISTERED, "0")));
     let mut e31 = evm_env_named("evm:7622", &token, "SCaaS MetaToken", &base, "eoa", None);
@@ -549,12 +563,12 @@ fn regenerate() {
                       "envelope_raw": raw, "expect": {"accept": true}}));
 
     let tokens = json!({
-        "evm:7622": [token], "hedera:296": [token],
+        "evm:7622": [token], "evm:7623": [token], "hedera:296": [token],
         "cosmos:scaas-1": [cosmos_vector("contract")], "sui:localnet": [SUI_REGISTRY], "aptos:4": [asset],
         "ton:-239": [master.raw()], sol_chain.clone(): [SOL_USD],
     });
     let lanes = json!({
-        "evm:7622": [EVM_LANE], "hedera:296": [EVM_LANE], "cosmos:scaas-1": ["wasm1xvenxvenxvenxvenxvenxvenxvenxvenkz5vxp"],
+        "evm:7622": [EVM_LANE], "evm:7623": [EVM_LANE], "hedera:296": [EVM_LANE], "cosmos:scaas-1": ["wasm1xvenxvenxvenxvenxvenxvenxvenxvenkz5vxp"],
         "sui:localnet": [format!("0x{}", "77".repeat(32))], "aptos:4": [format!("0x{}", "77".repeat(32))],
         "ton:-239": [format!("0:{}", "77".repeat(32))], sol_chain.clone(): [SOL_BOB],
     });

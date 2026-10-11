@@ -12,7 +12,7 @@ use std::collections::{HashMap, VecDeque};
 use std::sync::Arc;
 use std::time::Duration;
 
-use alloy::primitives::{Address, Bytes, B256, U256};
+use alloy::primitives::{keccak256, Address, Bytes, B256, U256};
 use alloy::providers::Provider;
 use alloy::rpc::types::{Filter, Log, TransactionRequest};
 use alloy::signers::Signature;
@@ -24,10 +24,10 @@ use tokio::sync::Mutex;
 use tracing::{info, warn};
 
 use super::{
-    hex_bytes, hex_of, pair, Book, DexOrder, ISCaaSDex, MarketCfg, PlannedSettlement, Resting, Row,
+    hex_bytes, hex_of, pair, Book, DexOrder, ISCaaSDex, MarketCfg, Placement, PlannedSettlement, Resting, Row,
     TradeOrder, WireOrder, FLAG_IOC, KIND_OUTSIDE, KIND_SCAAS,
 };
-use crate::abi::IToken;
+use crate::abi::{IToken, TradeFill};
 use crate::chain::{classify, Chain, SimError};
 use crate::finality::{next_range, quorum_ok, safe_head, Mode};
 use crate::odoo::Odoo;
@@ -42,6 +42,11 @@ const CANCEL_BATCH: usize = 50;
 const MAX_LOG_SPAN: u64 = 1000;
 /// Cancels and invalidations never expire on chain; the job carrying one is given a day.
 const CANCEL_JOB_SECS: u64 = 86_400;
+/// `SigCheck.ERC1271_GAS` and `SCaaSDex.SMART_KEY_1271_GAS` (CTR-DEX-08, CTR-ACC-05).
+const ERC1271_GAS: u64 = 50_000;
+const SMART_KEY_1271_GAS: u64 = 400_000;
+const MAGIC_1271: [u8; 4] = [0x16, 0x26, 0xba, 0x7e];
+const PPM: u64 = 1_000_000;
 
 /// Error for the client: `Bad` = 400 (the order's fault), `Unavailable` = 503 (RPC or client store).
 #[derive(Debug)]
@@ -192,6 +197,9 @@ pub struct Venue {
     puller: Address,
     /// `tokenKind` per token, from the DEX's listing (never from the order or the client).
     kinds: HashMap<Address, u8>,
+    /// EIP-1167 runtime codehash of this chain's `SmartKeyAccount` clones (the DEX's `SMART_KEY_ACCOUNT_IMPL`): the one
+    /// ERC-1271 signer given 400 k gas (CTR-DEX-08). `None` = no implementation on this chain.
+    clone_codehash: Option<B256>,
     book: Mutex<Book>,
     trades: std::sync::Mutex<VecDeque<TradeView>>,
     cancels: std::sync::Mutex<CancelQueue>,
@@ -209,6 +217,7 @@ impl Venue {
             bail!("chain {n}: client DEX {:#x} != node config {dex:#x}", mr.dex);
         }
         let puller = view(&chain, dex, ISCaaSDex::pullerCall {}).await.context("puller()")?;
+        let ska = view(&chain, dex, ISCaaSDex::SMART_KEY_ACCOUNT_IMPLCall {}).await.context("SMART_KEY_ACCOUNT_IMPL()")?;
         let mut markets = vec![];
         let mut kinds = HashMap::new();
         for m in mr.markets {
@@ -228,17 +237,34 @@ impl Venue {
             .context("dex_book_load")?;
         let book = Book::load(markets, &load.rows)?;
         info!(chain = n, orders = book.len(), "dex book loaded");
-        Ok(Arc::new(Self {
+        let me = Arc::new(Self {
             chain,
             relay,
             indexer,
             dex,
             puller,
             kinds,
+            clone_codehash: clone_codehash(ska),
             book: Mutex::new(book),
             trades: Default::default(),
             cancels: Default::default(),
-        }))
+        });
+        me.load_pending(&mut *me.book.lock().await).await.context("pending fills")?;
+        Ok(me)
+    }
+
+    /// The unmined part of each partly filled order, from the chain: `amount − pulled` there minus the book's
+    /// `remaining` (review T3 I1). After a restart or reload an unmined remainder is still never planned as closing.
+    async fn load_pending(&self, book: &mut Book) -> Result<()> {
+        let partial: Vec<Resting> = book.all().filter(|r| r.remaining < r.order.amount).cloned().collect();
+        for r in partial {
+            let c = self.on_chain(r.sell, r.hash, &r.order).await?;
+            let p = c.remaining.saturating_sub(r.remaining);
+            if !p.is_zero() {
+                book.pending.insert(r.hash, p);
+            }
+        }
+        Ok(())
     }
 
     pub fn relayer(&self) -> Address {
@@ -284,10 +310,17 @@ impl Venue {
         Ok(OnChain { remaining, fundable })
     }
 
+    /// Where an order of `sell` is checked: the SCaaS sell token itself, or the DEX for an outside token.
+    fn verifier(&self, sell: Address) -> Address {
+        if self.kind(sell) == KIND_OUTSIDE { self.dex } else { sell }
+    }
+
     /// A resting order can still settle `r.remaining`: open on chain for that much, funded, signature valid.
     async fn healthy(&self, r: &Resting) -> Result<bool> {
         let c = self.on_chain(r.sell, r.hash, &r.order).await?;
-        Ok(c.remaining >= r.remaining && c.fundable >= r.remaining && self.valid_sig(r.order.from, r.hash, &r.sig).await)
+        Ok(c.remaining >= r.remaining
+            && c.fundable >= r.remaining
+            && self.valid_sig(self.verifier(r.sell), r.order.from, r.hash, &r.sig).await?)
     }
 
     /// Simulate `mtxSettle` from the lane: `Ok(ok per settlement)`; all failed ⇒ `NothingSettled` ⇒ all `false`. A
@@ -312,35 +345,70 @@ impl Venue {
         }
     }
 
-    /// The order a failed settlement blames: its revert data from `settleOne(s, lane)` called as the DEX names an
-    /// order hash (token and DEX errors carry it, NODE-DEX-15); `None` when it names none of them.
-    async fn fault(&self, p: &PlannedSettlement) -> Option<B256> {
+    /// Every order a failed settlement names: the order hashes in the revert data of `settleOne(s, lane)` called as
+    /// the DEX (token and DEX errors carry one, NODE-DEX-15); empty when it names none of them.
+    async fn fault(&self, p: &PlannedSettlement) -> Vec<B256> {
         let data = ISCaaSDex::settleOneCall { s: p.to_settlement(), submitter: self.relayer() }.abi_encode();
         let tx = TransactionRequest::default().from(self.dex).to(self.dex).input(data.into());
-        let err = self.chain.primary().call(tx).await.err()?;
-        let raw = err.as_error_resp()?.as_revert_data()?;
-        let hashes: Vec<B256> = p.makers.iter().map(|(m, _, _)| m.hash).chain([p.taker.hash]).collect();
-        raw.get(4..)?.chunks_exact(32).map(B256::from_slice).find(|w| hashes.contains(w))
+        let Err(err) = self.chain.primary().call(tx).await else { return vec![] };
+        let Some(raw) = err.as_error_resp().and_then(|r| r.as_revert_data()) else { return vec![] };
+        let legs: Vec<B256> = p.makers.iter().map(|(m, _, _)| m.hash).chain([p.taker.hash]).collect();
+        let mut named: Vec<B256> = vec![];
+        for w in raw.get(4..).unwrap_or_default().chunks_exact(32).map(B256::from_slice) {
+            if legs.contains(&w) && !named.contains(&w) {
+                named.push(w);
+            }
+        }
+        named
     }
 
-    /// EOA signature (recovered here, low-s as the contract requires) or ERC-1271 (`isValidSignature`).
-    async fn valid_sig(&self, signer: Address, digest: B256, sig: &Bytes) -> bool {
-        if sig.len() == 65 {
-            if let Ok(s) = Signature::try_from(sig.as_ref()) {
-                // High-s: `ECDSA.tryRecover` refuses it (review I4). A contract wallet still goes the ERC-1271 way.
-                if s.normalize_s().is_none() && s.recover_address_from_prehash(&digest).ok() == Some(signer) {
-                    return true;
-                }
+    /// Evidence when a failed settlement names no order (a SCaaS token reports a bad signature as
+    /// `MetaTxBadSignature()`, no hash): each SCaaS leg's own `mtxTrade(o, sig, fill)`, called alone as the DEX calls it.
+    /// A leg whose own pull reverts is at fault. Outside legs name their hash themselves (`BadSignature(h)`, `TradeLib`).
+    /// Review T3 C1, N8: no leg is blamed without this evidence.
+    async fn leg_faults(&self, p: &PlannedSettlement) -> std::result::Result<Vec<B256>, VenueError> {
+        let fee = |recv: U256, o: &TradeOrder| (recv * o.fee + U256::from(PPM - 1)) / U256::from(PPM);
+        let legs = p.makers.iter().map(|(m, x, y)| (m, *x, *y)).chain([(&p.taker, p.taker_fill, p.taker_receives())]);
+        let mut out = vec![];
+        for (r, sold, recv) in legs {
+            if self.kind(r.sell) != KIND_SCAAS {
+                continue;
             }
+            let f = TradeFill { sellFill: sold, receiveFill: recv, dexFee: fee(recv, &r.order), submitter: self.relayer() };
+            let data = IToken::mtxTradeCall { o: r.order.clone(), sig: r.sig.clone(), f }.abi_encode();
+            match self.call(self.dex, r.sell, data).await {
+                Ok(_) => {}
+                Err(SimError::Revert(_)) => out.push(r.hash),
+                Err(SimError::Transport(e)) => return Err(down(format!("rpc: {e}"))),
+            }
+        }
+        Ok(out)
+    }
+
+    /// `SigCheck.isValid` exactly as `verifier` (the order's token, or the DEX) runs it (CTR-MTX-25, review T3 C1): no
+    /// code or an EIP-7702 designator ⇒ ECDSA only; a contract ⇒ ERC-1271 called from `verifier` with the cap by
+    /// codehash as the callee's gas, accepted only as exactly 32 bytes equal to the magic word. `Err` = the RPC, never
+    /// a verdict.
+    async fn valid_sig(&self, verifier: Address, signer: Address, digest: B256, sig: &Bytes) -> Result<bool> {
+        let code = self.chain.primary().get_code_at(signer).await?;
+        if !is_contract(&code) {
+            return Ok(ecdsa_ok(signer, digest, sig));
         }
         alloy::sol! {
             function isValidSignature(bytes32 hash, bytes signature) external view returns (bytes4);
         }
         let data = isValidSignatureCall { hash: digest, signature: sig.clone() }.abi_encode();
-        let tx = TransactionRequest::default().to(signer).input(data.into());
+        // the callee of a top-level call gets `gas − intrinsic`: exactly the cap `staticcall` gives it
+        let gas = sig_cap(&code, self.clone_codehash) + intrinsic(&data);
+        let tx = TransactionRequest::default().from(verifier).to(signer).input(data.into()).gas_limit(gas);
         match self.chain.primary().call(tx).await {
-            Ok(out) => out.len() >= 4 && out[..4] == [0x16, 0x26, 0xba, 0x7e],
-            Err(_) => false,
+            Ok(out) => Ok(magic_ok(&out)),
+            // the EVM's answer (a revert, out of gas inside the cap) is `false`, as a failed `staticcall` is
+            Err(e) if e.as_error_resp().is_some_and(|r| {
+                let m = r.message.to_ascii_lowercase();
+                r.as_revert_data().is_some() || m.contains("revert") || m.contains("execution") || m.contains("gas")
+            }) => Ok(false),
+            Err(e) => Err(e.into()),
         }
     }
 
@@ -355,61 +423,82 @@ impl Venue {
             return Err(bad(format!("TOKEN_NOT_SERVED: {sell:#x} is not a side of a listed market")));
         }
         let h = self.order_hash(sell, &o).await.map_err(down)?;
-        if !self.valid_sig(o.from, h, &sig).await {
+        if !self.valid_sig(self.verifier(sell), o.from, h, &sig).await.map_err(down)? {
             return Err(bad("bad order signature"));
         }
         let c = self.on_chain(sell, h, &o).await.map_err(down)?;
         let mut book = self.book.lock().await;
         book.purge(now());
-        book.admit(h, sell, &o, c.remaining, c.fundable, self.relayer(), self.dex, now()).map_err(bad)?;
+        // an order handed in again while a fill of it is unmined: that fill is not on chain yet (never over-credit)
+        let rem = c.remaining.saturating_sub(book.pending_of(h));
+        book.admit(h, sell, &o, rem, c.fundable, self.relayer(), self.dex, now()).map_err(bad)?;
 
         let mut commit = Commit::default();
-        let mut dropped_makers: Vec<B256> = vec![];
-        let (mut trial, mut placed);
-        let mut round = 0;
-        loop {
-            trial = book.clone();
-            for d in &dropped_makers {
-                trial.remove(*d);
-            }
-            placed = trial.place(h, sell, o.clone(), sig.clone(), c.remaining);
-            let Some(s) = &placed.settlement else { break };
-            let ok = self.simulate(std::slice::from_ref(s)).await.map_err(|e| match e {
-                SimError::Revert(r) => bad(format!("settlement simulation: {r}")),
-                SimError::Transport(r) => down(format!("rpc: {r}")),
-            })?;
-            if ok.first() == Some(&true) {
-                break;
-            }
-            // NODE-DEX-02: blame by evidence. An order hash in the revert names the order at fault; otherwise each
-            // maker's state is read, and a maker that can no longer settle is the one dropped.
-            let at_fault = match self.fault(s).await {
-                Some(f) if f == h => return Err(bad("settlement simulation refused this order")),
-                Some(f) => vec![f],
-                None => {
-                    let mut v = vec![];
-                    for (m, _, _) in &s.makers {
-                        if !self.healthy(m).await.map_err(down)? {
-                            v.push(m.hash);
-                        }
+        let mut dropped: Vec<B256> = vec![];
+        let matched: std::result::Result<(Book, Placement), VenueError> = async {
+            let mut round = 0;
+            loop {
+                let mut trial = book.clone();
+                for d in &dropped {
+                    trial.remove(*d);
+                }
+                let placed = trial.place(h, sell, o.clone(), sig.clone(), rem);
+                let Some(s) = placed.settlement.clone() else { break Ok((trial, placed)) };
+                let ok = self.simulate(std::slice::from_ref(&s)).await.map_err(|e| match e {
+                    SimError::Revert(r) => bad(format!("settlement simulation: {r}")),
+                    SimError::Transport(r) => down(format!("rpc: {r}")),
+                })?;
+                if ok.first() == Some(&true) {
+                    break Ok((trial, placed));
+                }
+                // NODE-DEX-02, N8: blame by evidence only. Every order hash the revert names, and every maker of the
+                // settlement whose state or signature can no longer settle; failing both, each leg's own pull.
+                let mut at_fault = self.fault(&s).await;
+                if at_fault.contains(&h) {
+                    return Err(bad("settlement simulation refused this order"));
+                }
+                for (m, _, _) in &s.makers {
+                    if !at_fault.contains(&m.hash) && !self.healthy(m).await.map_err(down)? {
+                        at_fault.push(m.hash);
                     }
-                    v
                 }
-            };
-            if at_fault.is_empty() {
-                return Err(bad("settlement simulation refused this order"));
-            }
-            for f in at_fault {
-                if let Some((m, _, _)) = s.makers.iter().find(|(m, _, _)| m.hash == f) {
-                    commit.order(s.market_id, m, "invalid");
+                if at_fault.is_empty() {
+                    at_fault = self.leg_faults(&s).await?;
+                    if at_fault.contains(&h) {
+                        return Err(bad("settlement simulation refused this order"));
+                    }
                 }
-                dropped_makers.push(f);
-            }
-            round += 1;
-            if round >= MAX_ROUNDS {
-                return Err(down("order book unstable; retry"));
+                if at_fault.is_empty() {
+                    // no evidence against anyone: never the taker's 400 (NODE-DEX-02)
+                    return Err(down("settlement simulation failed with no evidence against an order; retry"));
+                }
+                for f in at_fault {
+                    if let Some((m, _, _)) = s.makers.iter().find(|(m, _, _)| m.hash == f) {
+                        commit.order(s.market_id, m, "invalid");
+                    }
+                    dropped.push(f);
+                }
+                round += 1;
+                if round >= MAX_ROUNDS {
+                    return Err(down("order book unstable; retry"));
+                }
             }
         }
+        .await;
+        let (trial, placed) = match matched {
+            Ok(x) => x,
+            Err(e) => {
+                // review T3 I2: the evidence is kept — the makers found at fault leave the book and the client first
+                if !commit.is_empty() {
+                    let mut next = book.clone();
+                    for d in &dropped {
+                        next.remove(*d);
+                    }
+                    self.commit_or_reload(&mut book, next, commit).await?;
+                }
+                return Err(e);
+            }
+        };
 
         let (market_id, base) =
             book.market_of(sell, o.receiveToken).map(|m| (m.id, m.base)).ok_or_else(|| bad("no market"))?;
@@ -419,7 +508,7 @@ impl Venue {
         let settlement: Vec<PlannedSettlement> = placed.settlement.iter().cloned().collect();
         self.add_settlements(&mut commit, &trial, &settlement);
         let filled_here = placed.settlement.as_ref().map(|s| s.taker_fill).unwrap_or_default();
-        let taker_after = Resting { hash: h, sell, order: o.clone(), sig: sig.clone(), remaining: c.remaining - filled_here, seq: placed.seq };
+        let taker_after = Resting { hash: h, sell, order: o.clone(), sig: sig.clone(), remaining: rem - filled_here, seq: placed.seq };
         let taker_state = match (&placed.rested, placed.dropped.is_zero()) {
             (Some(_), _) => state_of(&taker_after),
             (None, true) => "filled",
@@ -496,7 +585,7 @@ impl Venue {
         let load: LoadReply =
             self.relay.call("blockchain.dex.order", "dex_book_load", json!({"evm_chain_number": self.chain.number})).await?;
         *book = Book::load(book.markets().cloned().collect(), &load.rows)?;
-        Ok(())
+        self.load_pending(book).await
     }
 
     fn remember(&self, ss: &[PlannedSettlement], base: Address) {
@@ -521,7 +610,7 @@ impl Venue {
             _ => view(&self.chain, self.dex, ISCaaSDex::cancelOrderDigestCall { orderHash: h }).await,
         }
         .map_err(down)?;
-        if !self.valid_sig(r.order.from, digest, &sig).await {
+        if !self.valid_sig(self.verifier(r.sell), r.order.from, digest, &sig).await.map_err(down)? {
             return Err(bad("bad cancel signature"));
         }
         let market_id = book.market_of(r.sell, r.order.receiveToken).map(|m| m.id).unwrap_or_default();
@@ -558,7 +647,7 @@ impl Venue {
             (sell, view(&self.chain, sell, IToken::invalidateNoncesDigestCall { from, batch, newMin: min }).await,
              IToken::mtxInvalidateNoncesCall { from, batch, newMin: min, sig: sig.clone() }.abi_encode())
         };
-        if !self.valid_sig(from, digest.map_err(down)?, &sig).await {
+        if !self.valid_sig(target, from, digest.map_err(down)?, &sig).await.map_err(down)? {
             return Err(bad("bad invalidate signature"));
         }
         // already at or past `min` on chain (MinNonceNotIncreasing): the orders are closed, no job needed
@@ -614,13 +703,14 @@ impl Venue {
                     let Some(row) = &leg.row else { continue };
                     let r = row.resting()?;
                     let fill = crate::metatx::uint(&leg.fill)?;
+                    next.settled(r.hash, fill); // a failed fill is never mined: no longer pending
                     if give_up || skip.contains(&r.hash) || r.order.flags & FLAG_IOC != 0 || r.order.validUntil < U256::from(now()) {
                         continue;
                     }
                     let Some(market_id) = next.market_of(r.sell, r.order.receiveToken).map(|m| m.id) else { continue };
                     let in_book = next.get(r.hash).map(|x| x.remaining).unwrap_or_default();
                     let c = self.on_chain(r.sell, r.hash, &r.order).await?;
-                    let add = fill.min(c.remaining.saturating_sub(in_book));
+                    let add = restorable(fill, c.remaining, in_book, next.pending_of(r.hash));
                     if add.is_zero() || c.fundable < in_book + add {
                         continue;
                     }
@@ -709,6 +799,13 @@ impl Venue {
         for e in &events {
             let addr_of = |k: &str| e[k].as_str().unwrap_or_default().parse::<Address>();
             match e["event"].as_str() {
+                // a planned fill is final on chain: no longer pending (review T3 I1)
+                Some("LegSettled") => {
+                    if let (Ok(h), Ok(sold)) = (e["order_hash"].as_str().unwrap_or_default().parse::<B256>(),
+                                                 crate::metatx::uint(e["sold"].as_str().unwrap_or_default())) {
+                        book.settled(h, sold);
+                    }
+                }
                 Some("OrderCancelled") => {
                     if let Ok(h) = e["order_hash"].as_str().unwrap_or_default().parse::<B256>() {
                         book.remove(h);
@@ -796,6 +893,51 @@ impl Venue {
     pub async fn rows(&self) -> Vec<Row> {
         self.book.lock().await.rows()
     }
+}
+
+/// What a failed fill may hand back: at most `fill`, and never more than the chain still has open for the order
+/// (`amount − pulled`) after what rests in the book and what other planned fills still pull (review T3 I1).
+fn restorable(fill: U256, on_chain: U256, in_book: U256, pending: U256) -> U256 {
+    fill.min(on_chain.saturating_sub(in_book.saturating_add(pending)))
+}
+
+/// `SigCheck.isContract`: code, and not an EIP-7702 designator (`0xef0100 ‖ address`, whose key still signs).
+fn is_contract(code: &[u8]) -> bool {
+    !code.is_empty() && !(code.len() == 23 && code.starts_with(&[0xef, 0x01, 0x00]))
+}
+
+/// The ERC-1271 cap (CTR-DEX-08): 400 k for this chain's `SmartKeyAccount` clone, by codehash; 50 k for any other.
+fn sig_cap(code: &[u8], clone_codehash: Option<B256>) -> u64 {
+    if clone_codehash == Some(keccak256(code)) { SMART_KEY_1271_GAS } else { ERC1271_GAS }
+}
+
+/// `SigCheck`'s ERC-1271 verdict: exactly 32 bytes of returndata, equal to `isValidSignature.selector ‖ 0²⁸`.
+fn magic_ok(out: &[u8]) -> bool {
+    out.len() == 32 && out[..4] == MAGIC_1271 && out[4..].iter().all(|b| *b == 0)
+}
+
+/// `ECDSA.tryRecover` (OpenZeppelin): 65 bytes, `v` 27 or 28, low-s (review I4), recovering exactly `signer`.
+fn ecdsa_ok(signer: Address, digest: B256, sig: &[u8]) -> bool {
+    sig.len() == 65
+        && matches!(sig[64], 27 | 28)
+        && Signature::try_from(sig)
+            .is_ok_and(|s| s.normalize_s().is_none() && s.recover_address_from_prehash(&digest).ok() == Some(signer))
+}
+
+/// Intrinsic gas of a call carrying `data`: 21 000 + 4 per zero byte + 16 per other byte. ponytail: no EIP-7623
+/// floor; it binds only when calldata gas exceeds the call's execution, never next to a ≥ 50 k cap.
+fn intrinsic(data: &[u8]) -> u64 {
+    21_000 + data.iter().map(|b| if *b == 0 { 4 } else { 16 }).sum::<u64>()
+}
+
+/// `SCaaSDex._SMART_KEY_CLONE_CODEHASH`: keccak of the EIP-1167 runtime of a clone of `implementation` (0 = none).
+fn clone_codehash(implementation: Address) -> Option<B256> {
+    (implementation != Address::ZERO).then(|| keccak256(clone_code(implementation)))
+}
+
+fn clone_code(implementation: Address) -> Vec<u8> {
+    use alloy::primitives::hex;
+    [&hex!("363d3d373d3d3d363d73")[..], implementation.as_slice(), &hex!("5af43d82803e903d91602b57fd5bf3")].concat()
 }
 
 async fn view<C: SolCall>(chain: &Chain, to: Address, call: C) -> Result<C::Return> {
@@ -1067,5 +1209,291 @@ mod tests {
         assert_eq!(kinds, vec![("metatx", 1), ("cancel", 1), ("cancel", 2)]);
         assert_eq!((jobs[0]["entry"].as_str(), jobs[0]["token"].as_str()), (Some("mtxCancelOrder"), Some(&*format!("{BASE:#x}"))));
         assert_eq!(jobs[1]["target"], format!("{dex:#x}"));
+    }
+
+    // ------------------------------------------------------------------ the venue on a fake chain (review T3 C1, I2)
+
+    use std::collections::HashSet;
+    use alloy::signers::local::PrivateKeySigner;
+    use alloy::signers::SignerSync;
+    use alloy::sol_types::SolValue;
+
+    const DEX: Address = Address::repeat_byte(0xd0);
+
+    /// A chain where each leg's fate is scripted by its order hash (`keccak(abi(order))`, as the fake token's
+    /// `tradeOrderDigest` answers). `mtxSettle` fails a settlement holding any failing leg; `settleOne` reverts as the
+    /// first failing leg would; `mtxTrade` alone fails only for a bad signature.
+    #[derive(Default)]
+    struct World {
+        codes: HashMap<Address, Bytes>,
+        /// `isValidSignature` returndata per contract signer.
+        answers: HashMap<Address, Bytes>,
+        /// The token reports `MetaTxBadSignature()` (no hash) for the leg, in a settlement and alone.
+        bad_sig: HashSet<B256>,
+        /// In a settlement only: `MetaTxBadSignature()`, yet its own `mtxTrade` passes (no evidence anywhere).
+        silent: HashSet<B256>,
+        /// The leg's revert names it: `BelowMinFill(h)`.
+        named: HashSet<B256>,
+        /// `balanceOf` = 0.
+        unfunded: HashSet<Address>,
+        /// `(from, to, gas)` of every `isValidSignature` call.
+        sig_calls: Vec<(Address, Address, u64)>,
+    }
+    type W = Arc<std::sync::Mutex<World>>;
+
+    fn oh(o: &TradeOrder) -> B256 {
+        keccak256(o.abi_encode())
+    }
+
+    async fn fake_chain(w: World) -> (String, W) {
+        use axum::extract::State;
+        use axum::Json;
+        async fn h(State(s): State<W>, Json(r): Json<Value>) -> Json<Value> {
+            let mut w = s.lock().unwrap();
+            let p = &r["params"];
+            let hexs = |b: &[u8]| json!(format!("0x{}", alloy::hex::encode(b)));
+            let revert = |e: Vec<u8>| Err(json!({"code": 3, "message": "execution reverted", "data": format!("0x{}", alloy::hex::encode(e))}));
+            let out: std::result::Result<Value, Value> = match r["method"].as_str().unwrap() {
+                "eth_getCode" => {
+                    let a: Address = p[0].as_str().unwrap().parse().unwrap();
+                    Ok(hexs(w.codes.get(&a).map(|c| c.as_ref()).unwrap_or_default()))
+                }
+                "eth_call" => {
+                    let input = alloy::hex::decode(&p[0]["input"].as_str().or(p[0]["data"].as_str()).unwrap()[2..]).unwrap();
+                    let to: Address = p[0]["to"].as_str().unwrap().parse().unwrap();
+                    let from: Address = p[0]["from"].as_str().map_or(Address::ZERO, |f| f.parse().unwrap());
+                    let sel: [u8; 4] = input[..4].try_into().unwrap();
+                    let word = |v: U256| hexs(&v.abi_encode());
+                    let fails = |w: &World, sell: Address, o: &TradeOrder| -> Option<Vec<u8>> {
+                        let h = if sell == BASE || sell == QUOTE { oh(o) } else { B256::ZERO };
+                        if w.named.contains(&h) {
+                            Some(IToken::BelowMinFill { orderHash: h }.abi_encode())
+                        } else if w.bad_sig.contains(&h) || w.silent.contains(&h) {
+                            Some(IToken::MetaTxBadSignature {}.abi_encode())
+                        } else if w.unfunded.contains(&o.from) {
+                            Some(IToken::MetaTxInsufficientForFee { needed: U256::from(1), available: U256::ZERO }.abi_encode())
+                        } else {
+                            None
+                        }
+                    };
+                    let legs = |s: &crate::abi::Settlement| -> Vec<(Address, TradeOrder)> {
+                        std::iter::once((s.taker.sellToken, s.taker.o.clone()))
+                            .chain(s.makers.iter().map(|m| (m.sellToken, m.o.clone()))).collect()
+                    };
+                    if sel == IToken::tradeOrderDigestCall::SELECTOR {
+                        Ok(hexs(oh(&IToken::tradeOrderDigestCall::abi_decode(&input).unwrap().o).as_slice()))
+                    } else if sel == IToken::pulledCall::SELECTOR || sel == IToken::minNonceCall::SELECTOR {
+                        Ok(word(U256::ZERO))
+                    } else if sel == IToken::balanceOfCall::SELECTOR {
+                        let who = IToken::balanceOfCall::abi_decode(&input).unwrap().who;
+                        Ok(word(if w.unfunded.contains(&who) { U256::ZERO } else { U256::from(10u64).pow(U256::from(30)) }))
+                    } else if sel == MAGIC_1271 {
+                        let gas = u64::from_str_radix(&p[0]["gas"].as_str().unwrap()[2..], 16).unwrap();
+                        w.sig_calls.push((from, to, gas));
+                        Ok(hexs(w.answers.get(&to).map(|b| b.as_ref()).unwrap_or_default()))
+                    } else if sel == ISCaaSDex::mtxSettleCall::SELECTOR {
+                        let c = ISCaaSDex::mtxSettleCall::abi_decode(&input).unwrap();
+                        let ok: Vec<bool> = c.s.iter().map(|s| legs(s).iter().all(|(t, o)| fails(&w, *t, o).is_none())).collect();
+                        if ok.iter().any(|x| *x) { Ok(hexs(&ok.abi_encode())) } else { revert(ISCaaSDex::NothingSettled {}.abi_encode()) }
+                    } else if sel == ISCaaSDex::settleOneCall::SELECTOR {
+                        assert_eq!((from, to), (DEX, DEX));
+                        let c = ISCaaSDex::settleOneCall::abi_decode(&input).unwrap();
+                        match legs(&c.s).iter().find_map(|(t, o)| fails(&w, *t, o)) {
+                            Some(e) => revert(e),
+                            None => Ok(hexs(&[])),
+                        }
+                    } else if sel == IToken::mtxTradeCall::SELECTOR {
+                        assert_eq!(from, DEX, "a leg is probed as the DEX pulls it");
+                        let h = oh(&IToken::mtxTradeCall::abi_decode(&input).unwrap().o);
+                        if w.bad_sig.contains(&h) { revert(IToken::MetaTxBadSignature {}.abi_encode()) } else { Ok(hexs(&[])) }
+                    } else {
+                        panic!("unexpected eth_call {}", alloy::hex::encode(sel))
+                    }
+                }
+                m => panic!("unexpected {m}"),
+            };
+            Json(match out {
+                Ok(v) => json!({"jsonrpc": "2.0", "id": r["id"], "result": v}),
+                Err(e) => json!({"jsonrpc": "2.0", "id": r["id"], "error": e}),
+            })
+        }
+        let s: W = Arc::new(std::sync::Mutex::new(w));
+        let app = axum::Router::new().route("/", axum::routing::post(h)).with_state(s.clone());
+        let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let url = format!("http://{}", l.local_addr().unwrap());
+        tokio::spawn(async move { axum::serve(l, app).await.unwrap() });
+        (url, s)
+    }
+
+    fn market() -> MarketCfg {
+        MarketCfg { id: 1, base: BASE, quote: QUOTE, base_decimals: 0, quote_decimals: 0, maker_fee_ppm: 0,
+                    taker_fee_ppm: 0, min_base_amount: "0".into() }
+    }
+
+    fn relayer_key() -> PrivateKeySigner {
+        PrivateKeySigner::from_bytes(&B256::repeat_byte(0x42)).unwrap()
+    }
+
+    fn order(from: Address, receive: Address, amount: u64, receive_amount: u64, nonce: u64) -> TradeOrder {
+        TradeOrder {
+            from, receiveToken: receive, amount: U256::from(amount), receiveAmount: U256::from(receive_amount),
+            minFill: U256::ZERO, fee: U256::ZERO, relayer: relayer_key().address(), dex: DEX, destination: Address::ZERO,
+            flags: 0, batch: U256::from(1), nonce: U256::from(nonce), validUntil: U256::from(now() + 300),
+        }
+    }
+
+    fn sig_of(k: &PrivateKeySigner, h: B256) -> Bytes {
+        Bytes::from(k.sign_hash_sync(&h).unwrap().as_bytes().to_vec())
+    }
+
+    /// A venue on the fake chain whose book holds `makers` (asks, best first by price as inserted).
+    async fn venue(w: World, makers: Vec<(TradeOrder, Bytes)>) -> (Venue, W) {
+        let (url, world) = fake_chain(w).await;
+        let cfg = crate::config::ChainCfg { family: "evm".into(), evm_chain_number: 31337, rpc_urls: vec![url],
+                                            chain_uid: Some(B256::repeat_byte(0x24)), ..Default::default() };
+        let chain = Arc::new(Chain::with_signer(&cfg, relayer_key()).unwrap());
+        let (relay, _) = crate::adapter::tests::fake_odoo(Default::default()).await;
+        let mut book = Book::new(vec![market()]);
+        for (i, (o, sig)) in makers.into_iter().enumerate() {
+            book.insert(Resting { hash: oh(&o), sell: BASE, remaining: o.amount, order: o, sig, seq: i as u64 + 1 });
+        }
+        book.next_seq = 100;
+        let v = Venue { chain, relay, indexer: None, dex: DEX, puller: Address::repeat_byte(0x9),
+            kinds: [(BASE, KIND_SCAAS), (QUOTE, KIND_SCAAS)].into_iter().collect(), clone_codehash: None,
+            book: Mutex::new(book), trades: Default::default(), cancels: Default::default() };
+        (v, world)
+    }
+
+    async fn take(v: &Venue, k: &PrivateKeySigner, quote: u64, base: u64, nonce: u64) -> std::result::Result<PlaceReply, VenueError> {
+        let o = order(k.address(), BASE, quote, base, nonce);
+        v.place(QUOTE, &WireOrder::from_sol(&o), &hex_of(&sig_of(k, oh(&o)))).await
+    }
+
+    fn in_book(rows: &[Row], o: &TradeOrder) -> bool {
+        rows.iter().any(|r| r.order_hash == format!("{:#x}", oh(o)))
+    }
+
+    /// Review T3 C1: an ERC-1271 maker at the best price whose wallet answers anything but exactly the 32-byte magic
+    /// word fails its leg; the venue's check is `SigCheck`'s, so it is found unhealthy and dropped, and the taker fills
+    /// at the next maker. The taker is an EIP-7702 delegated EOA: its key signs, it is never asked ERC-1271.
+    #[tokio::test]
+    async fn a_hostile_1271_maker_at_the_best_price_never_blocks_a_taker() {
+        let taker = PrivateKeySigner::random();
+        let honest = PrivateKeySigner::random();
+        let hostile = Address::repeat_byte(0x71);
+        let mut designator = vec![0xef, 0x01, 0x00];
+        designator.extend_from_slice(Address::repeat_byte(0x55).as_slice());
+        let magic_then_one = [MAGIC_1271.to_vec(), vec![0; 28], U256::from(1).to_be_bytes::<32>().to_vec()].concat();
+        for answer in [MAGIC_1271.to_vec(), magic_then_one] {
+            let bad_ask = order(hostile, QUOTE, 10, 20, 1);
+            let good_ask = order(honest.address(), QUOTE, 10, 22, 1);
+            let mut w = World::default();
+            w.codes.insert(hostile, Bytes::from_static(&[0x60, 0x01]));
+            w.codes.insert(taker.address(), Bytes::from(designator.clone()));
+            w.answers.insert(hostile, Bytes::from(answer.clone()));
+            w.bad_sig.insert(oh(&bad_ask));
+            let makers = vec![(bad_ask.clone(), Bytes::from_static(&[0xab; 65])), (good_ask.clone(), sig_of(&honest, oh(&good_ask)))];
+            let (v, world) = venue(w, makers).await;
+            let r = take(&v, &taker, 22, 10, 1).await.unwrap_or_else(|e| panic!("{} bytes: {e}", answer.len()));
+            assert_eq!((r.status, r.fills[0]["maker_hash"].as_str().unwrap()), ("filled", &*format!("{:#x}", oh(&good_ask))));
+            assert!(!in_book(&v.rows().await, &bad_ask), "the hostile maker left the book");
+            let calls = world.lock().unwrap().sig_calls.clone();
+            let data = {
+                alloy::sol! { function isValidSignature(bytes32 hash, bytes signature) external view returns (bytes4); }
+                isValidSignatureCall { hash: oh(&bad_ask), signature: Bytes::from_static(&[0xab; 65]) }.abi_encode()
+            };
+            assert_eq!(calls, vec![(BASE, hostile, ERC1271_GAS + intrinsic(&data))], "from the token, with the 50 k cap");
+        }
+    }
+
+    /// N8: a leg whose revert names no order and whose state and signature read healthy is found by its own pull
+    /// (`mtxTrade` as the DEX calls it); with no evidence at all the taker gets 503, never a 400.
+    #[tokio::test]
+    async fn a_failing_leg_is_found_by_its_own_pull_and_no_evidence_is_never_the_takers_fault() {
+        let taker = PrivateKeySigner::random();
+        let (sly, honest) = (PrivateKeySigner::random(), PrivateKeySigner::random());
+        let sly_ask = order(sly.address(), QUOTE, 10, 20, 1);
+        let good_ask = order(honest.address(), QUOTE, 10, 22, 1);
+        let makers = vec![(sly_ask.clone(), sig_of(&sly, oh(&sly_ask))), (good_ask.clone(), sig_of(&honest, oh(&good_ask)))];
+        let mut w = World::default();
+        w.bad_sig.insert(oh(&sly_ask));
+        let (v, _) = venue(w, makers.clone()).await;
+        assert_eq!(take(&v, &taker, 22, 10, 1).await.unwrap().status, "filled");
+        assert!(!in_book(&v.rows().await, &sly_ask));
+        let mut w = World::default();
+        w.silent.insert(oh(&sly_ask));
+        let (v, _) = venue(w, makers).await;
+        assert!(matches!(take(&v, &taker, 22, 10, 1).await, Err(VenueError::Unavailable(_))));
+        assert!(in_book(&v.rows().await, &sly_ask), "nobody is dropped without evidence");
+    }
+
+    /// Review T3 I2: every maker named or unhealthy in a round leaves at once, and the round limit keeps what it found.
+    #[tokio::test]
+    async fn three_bad_makers_at_the_top_never_cause_an_endless_503() {
+        let taker = PrivateKeySigner::random();
+        let keys: Vec<PrivateKeySigner> = (0..4).map(|_| PrivateKeySigner::random()).collect();
+        let asks: Vec<TradeOrder> = [(10, 20), (10, 21), (10, 22), (40, 92)].iter().zip(&keys)
+            .map(|((b, q), k)| order(k.address(), QUOTE, *b, *q, 1)).collect();
+        let makers: Vec<(TradeOrder, Bytes)> = asks.iter().zip(&keys).map(|(o, k)| (o.clone(), sig_of(k, oh(o)))).collect();
+        // (a) each named by its own revert, one per settlement, state healthy: the third round gives up with 503,
+        //     yet all three are gone for the next taker
+        let mut w = World::default();
+        w.named.extend(asks[..3].iter().map(oh));
+        let (v, _) = venue(w, makers.clone()).await;
+        assert!(matches!(take(&v, &taker, 23, 10, 1).await, Err(VenueError::Unavailable(_))));
+        let rows = v.rows().await;
+        assert!(asks[..3].iter().all(|o| !in_book(&rows, o)) && in_book(&rows, &asks[3]), "the drops are committed");
+        assert_eq!(take(&v, &taker, 69, 30, 2).await.unwrap().status, "filled");
+        // (b) one settlement over all three: the revert names the first, the other two read unfunded — all leave in
+        //     the same round and the taker fills at once
+        let mut w = World::default();
+        w.named.extend(asks[..3].iter().map(oh));
+        w.unfunded.extend(keys[..3].iter().map(|k| k.address()));
+        let (v, _) = venue(w, makers).await;
+        let r = take(&v, &taker, 69, 30, 1).await.unwrap();
+        assert_eq!((r.status, r.fills[0]["maker_hash"].as_str().unwrap()), ("filled", &*format!("{:#x}", oh(&asks[3]))));
+    }
+
+    #[test]
+    fn the_signature_rules_are_sigcheck_s() {
+        let k = PrivateKeySigner::random();
+        let d = B256::repeat_byte(7);
+        let sig = sig_of(&k, d);
+        assert!(ecdsa_ok(k.address(), d, &sig));
+        let mut v01 = sig.to_vec();
+        v01[64] -= 27;
+        assert!(!ecdsa_ok(k.address(), d, &v01), "v must be 27 or 28 (ecrecover)");
+        assert!(!ecdsa_ok(k.address(), d, &sig[..64]), "65 bytes only");
+        assert!(!ecdsa_ok(Address::repeat_byte(1), d, &sig));
+        let mut designator = vec![0xef, 0x01, 0x00];
+        designator.extend_from_slice(&[0x55; 20]);
+        assert!(!is_contract(&designator), "an EIP-7702 EOA signs with its key");
+        assert!(is_contract(&designator[..22]) && is_contract(&[0xef, 0x01, 0x01, 0, 0]) && !is_contract(&[]));
+        let mut ok = MAGIC_1271.to_vec();
+        ok.extend_from_slice(&[0; 28]);
+        assert!(magic_ok(&ok));
+        assert!(!magic_ok(&MAGIC_1271), "4 bytes");
+        assert!(!magic_ok(&[ok.clone(), vec![0; 32]].concat()), "64 bytes");
+        let mut dirty = ok.clone();
+        dirty[31] = 1;
+        assert!(!magic_ok(&dirty), "the whole word");
+        let implementation = Address::repeat_byte(0x5a);
+        let clone = clone_code(implementation);
+        assert_eq!(clone.len(), 45);
+        assert_eq!(sig_cap(&clone, clone_codehash(implementation)), SMART_KEY_1271_GAS);
+        assert_eq!(sig_cap(&clone_code(Address::repeat_byte(0x5b)), clone_codehash(implementation)), ERC1271_GAS);
+        assert_eq!(sig_cap(&clone, None), ERC1271_GAS);
+        assert_eq!(clone_codehash(Address::ZERO), None);
+        assert_eq!(intrinsic(&[0, 1, 0]), 21_000 + 4 + 16 + 4);
+    }
+
+    /// A failed fill hands back no more than the chain still has open after the book and the other planned fills.
+    #[test]
+    fn restores_never_over_credit() {
+        let u = U256::from;
+        assert_eq!(restorable(u(60), u(100), u(0), u(0)), u(60));
+        assert_eq!(restorable(u(60), u(100), u(40), u(0)), u(60));
+        assert_eq!(restorable(u(60), u(100), u(40), u(20)), u(40), "another fill of 20 still pulls");
+        assert_eq!(restorable(u(60), u(50), u(40), u(20)), u(0));
     }
 }

@@ -358,6 +358,9 @@ pub struct Book {
     next_seq: u64,
     salt: u64,
     made: u64,
+    /// Per order hash: sell fills planned and not yet final (mined `LegSettled`) or failed. The chain's closing clause
+    /// is `sellFill == amount − pulled` with `pulled` as mined, so a remainder closes only while this is 0.
+    pending: HashMap<B256, U256>,
 }
 
 impl Book {
@@ -366,7 +369,22 @@ impl Book {
             .into_iter()
             .map(|cfg| (pair(cfg.base, cfg.quote), MarketBook { cfg, asks: vec![], bids: vec![] }))
             .collect();
-        Self { markets, next_seq: 1, salt: random_u64(), made: 0 }
+        Self { markets, next_seq: 1, salt: random_u64(), made: 0, pending: HashMap::new() }
+    }
+
+    /// What of `h` is planned and not yet final or failed.
+    pub fn pending_of(&self, h: B256) -> U256 {
+        self.pending.get(&h).copied().unwrap_or_default()
+    }
+
+    /// `amount` of `h` planned earlier is now final on chain or failed: no longer pending.
+    pub fn settled(&mut self, h: B256, amount: U256) {
+        if let Some(p) = self.pending.get_mut(&h) {
+            *p = p.saturating_sub(amount);
+            if p.is_zero() {
+                self.pending.remove(&h);
+            }
+        }
     }
 
     /// Rebuild from the client's rows: inserted by increasing `seq`, so equal prices keep their time order.
@@ -593,6 +611,8 @@ impl Book {
             out.dropped = t.remaining;
             return out;
         };
+        let pending = &self.pending;
+        let unmined = |h: B256| pending.get(&h).is_some_and(|p| !p.is_zero());
         let (market_id, maker_ppm, taker_ppm) = (mb.cfg.id, mb.cfg.maker_fee_ppm, mb.cfg.taker_fee_ppm);
         let base = mb.cfg.base;
         let opposite = if t.sell == base { &mut mb.bids } else { &mut mb.asks };
@@ -618,8 +638,9 @@ impl Book {
                     break; // the taker's rest buys less than one unit here
                 }
                 let y = maker_receives(&r.order, x);
-                // the maker's minimum per settlement, unless this fill closes it; a deeper maker may still fit
-                if x < r.remaining && x < min_fill(&r.order) {
+                // the maker's minimum per settlement, unless this fill closes it ON CHAIN (nothing of it still
+                // unmined: `amount − pulled` counts only mined fills); a deeper maker may still fit
+                if x < min_fill(&r.order) && (x < r.remaining || unmined(r.hash)) {
                     continue;
                 }
                 if !limits_ok(r, &Resting { remaining: left, ..t.clone() }, x, y) {
@@ -637,9 +658,11 @@ impl Book {
                 opposite.remove(i);
             }
         }
-        let settles = !makers.is_empty() && (taken >= min_fill(&t.order) || taken == t.remaining);
+        let settles =
+            !makers.is_empty() && (taken >= min_fill(&t.order) || (taken == t.remaining && !unmined(t.hash)));
         if settles {
             for (m, x, _) in &makers {
+                *self.pending.entry(m.hash).or_default() += *x;
                 if let Some(i) = opposite.iter().position(|r| r.hash == m.hash) {
                     opposite[i].remaining -= *x;
                     if opposite[i].remaining.is_zero() {
@@ -647,6 +670,7 @@ impl Book {
                     }
                 }
             }
+            *self.pending.entry(t.hash).or_default() += taken;
             self.made += 1;
             out.settlement = Some(PlannedSettlement {
                 tag: tag(&t, self.salt, self.made),
@@ -1006,10 +1030,29 @@ mod tests {
         assert!(settlement_ok(&s(vec![(m.clone(), U256::from(3), U256::from(10))], 10)));
         assert!(!settlement_ok(&s(vec![(m.clone(), U256::from(3), U256::from(10))], 9)), "FillMismatch");
         assert!(!settlement_ok(&s(vec![], 0)), "NoMakers");
-        let mut twice = m.clone();
-        twice.remaining = U256::from(6);
-        assert!(!settlement_ok(&s(vec![(twice.clone(), U256::from(1), U256::from(4)), (twice, U256::from(1), U256::from(4))], 8)),
-            "DuplicateOrder");
+        // DuplicateOrder: each leg alone is within every limit (2 ≥ ceil(4/2), receive ceil(2·8/4) = 4, both prices
+        // hold, Σ = the taker's whole remainder); only the repeated hash refuses it
+        let dm = Resting { order: ask(1, 4, 8, 1), remaining: U256::from(4), ..m.clone() };
+        let dt = Resting { order: bid(2, 8, 4, 1), remaining: U256::from(8), ..t.clone() };
+        let ds = |makers: Vec<(Resting, U256, U256)>| PlannedSettlement {
+            tag: B256::ZERO, market_id: 1, taker: dt.clone(), taker_fill: U256::from(8), makers };
+        let leg = (dm.clone(), U256::from(2), U256::from(4));
+        let other = (Resting { hash: B256::repeat_byte(9), ..dm.clone() }, U256::from(2), U256::from(4));
+        assert!(settlement_ok(&ds(vec![leg.clone(), other])), "two distinct makers settle");
+        assert!(!settlement_ok(&ds(vec![leg.clone(), leg.clone()])), "DuplicateOrder");
+        let wrong_token = (Resting { hash: B256::repeat_byte(9), sell: QUOTE, ..dm.clone() }, U256::from(2), U256::from(4));
+        assert!(!settlement_ok(&ds(vec![leg.clone(), wrong_token])), "TokenMismatch");
+        // the taker's minimum: 4 of 8 quote is ceil(8/2); one leg of a taker whose minFill is 8 is below it
+        let fok = PlannedSettlement { taker: Resting { order: TradeOrder { minFill: U256::from(8), ..dt.order.clone() }, ..dt.clone() },
+            taker_fill: U256::from(4), ..ds(vec![leg.clone()]) };
+        assert!(settlement_ok(&PlannedSettlement { taker_fill: U256::from(4), ..ds(vec![leg.clone()]) }));
+        assert!(!settlement_ok(&fok), "below the taker's minimum");
+        // the maker's receive is the CEILING (a floor would silently stop matching non-multiples)
+        assert_eq!(maker_receives(&m.order, U256::from(1)), U256::from(4), "ceil(1 · 10 / 3)");
+        assert_eq!(maker_receives(&m.order, U256::from(3)), U256::from(10));
+        // the 50 % floor rounds up for odd amounts (`amount − amount/2`, as `TradeLib.record`)
+        assert_eq!(min_fill(&ask(1, 101, 202, 1)), U256::from(51));
+        assert_eq!(min_fill(&TradeOrder { minFill: U256::from(70), ..ask(1, 101, 202, 1) }), U256::from(70));
         let mut me = m.clone();
         me.order.from = t.order.from;
         assert!(!settlement_ok(&s(vec![(me, U256::from(3), U256::from(10))], 10)), "SelfTrade");
@@ -1052,8 +1095,11 @@ mod tests {
         assert_eq!(b.open_of(Address::repeat_byte(1))[0].seq, m.seq, "time priority kept");
         let mut ioc = s.taker.clone();
         ioc.order.flags = FLAG_IOC;
-        b.restore(ioc, s.taker_fill);
+        let p = b.restore(ioc, s.taker_fill);
+        assert!(p.settlement.is_none(), "an IOC hand-back never takes the resting maker again");
+        assert_eq!(p.dropped, s.taker_fill);
         assert!(b.open_of(Address::repeat_byte(2)).is_empty());
+        assert_eq!(b.open_of(Address::repeat_byte(1))[0].remaining, U256::from(10), "the maker still rests whole");
     }
 
     #[test]
@@ -1168,6 +1214,8 @@ mod tests {
         assert_eq!(b.purge(NOW + 11).len(), 1);
         let all = |_: Address| true;
         assert_eq!(b.drop_below(Address::repeat_byte(2), U256::from(1), U256::from(6), &all).len(), 1, "lane 1 only");
+        assert!(b.drop_below(Address::repeat_byte(2), U256::from(1), U256::from(9), &all).is_empty(),
+            "nonce == minNonce is still valid");
         assert_eq!(b.drop_below(Address::repeat_byte(2), U256::from(1), U256::from(99), &|s| s == QUOTE).len(), 0,
             "another sell token's lane");
         assert_eq!(b.len(), 2);
@@ -1189,5 +1237,38 @@ mod tests {
         assert_eq!((st.r#ref, st.taker.sellToken, st.taker.fill), (s.tag, QUOTE, U256::from(20)));
         assert_eq!((st.makers[0].sellToken, st.makers[0].fill), (BASE, U256::from(10)));
         assert_eq!(&ISCaaSDex::mtxSettleCall { s: vec![st] }.abi_encode()[..4], &[0xb0, 0x95, 0x5d, 0xd6]);
+    }
+
+    /// Review T3 I1 (the reviewer's PoC `poc_second_fill_of_an_unmined_remainder`): a remainder whose first settlement
+    /// is not mined yet does not close on chain (`amount − pulled` counts mined fills only), so it is never planned as
+    /// closing until that fill is final or failed — for a maker and for a re-placed taker.
+    #[test]
+    fn poc_second_fill_of_an_unmined_remainder() {
+        let mut b = Book::new(vec![market()]);
+        let a = ask(1, 100, 200, 1); // min 50 base
+        let ah = hash_of(&a);
+        put(&mut b, a.clone());
+        let p1 = put(&mut b, bid(2, 120, 60, 1));
+        assert_eq!(makers(&p1)[0].1, U256::from(60));
+        assert_eq!(b.pending_of(ah), U256::from(60));
+        let p2 = put(&mut b, bid(3, 80, 40, 1));
+        assert!(p2.settlement.is_none(), "40 != 100 − 0 and 40 < 50 on chain: BelowMinFill, so never planned");
+        assert_eq!(b.get(ah).unwrap().remaining, U256::from(40), "the honest maker stays");
+        b.settled(ah, U256::from(60)); // the watcher's LegSettled
+        let s3 = put(&mut b, bid(4, 80, 40, 1)).settlement.expect("the remainder now closes on chain");
+        assert_eq!(s3.makers[0].1, a.amount - U256::from(60));
+        assert!(settlement_ok(&s3));
+        assert_eq!(b.pending_of(ah), U256::from(40));
+        b.settled(ah, U256::from(40));
+        assert_eq!(b.pending_of(ah), U256::ZERO);
+        // a taker: the order re-placed with its remainder while its first fill is unmined
+        let mut b = Book::new(vec![market()]);
+        put(&mut b, a.clone());
+        put(&mut b, bid(2, 120, 60, 1));
+        let rest = b.remove(ah).unwrap();
+        put(&mut b, bid(5, 80, 40, 1));
+        assert!(b.place(ah, BASE, a.clone(), Bytes::new(), rest.remaining).settlement.is_none());
+        b.settled(ah, U256::from(60));
+        assert!(b.place(ah, BASE, a, Bytes::new(), rest.remaining).settlement.is_some());
     }
 }

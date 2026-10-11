@@ -30,6 +30,10 @@ sol! {
         uint256 validUntil;
     }
 
+    /// `ITradeToken.TradeFill`: what the DEX asks the sell token to pull for one leg (`mtxTrade`).
+    #[derive(Debug, PartialEq, Eq)]
+    struct TradeFill { uint256 sellFill; uint256 receiveFill; uint256 dexFee; address submitter; }
+
     /// `ISCaaSDex.Leg`: one order in one settlement; `fill` = its sell fill in this call.
     #[derive(Debug, PartialEq, Eq)]
     struct Leg { address sellToken; TradeOrder o; bytes sig; uint256 fill; }
@@ -61,6 +65,7 @@ sol! {
         function marketListed(address a, address b) external view returns (bool);
         function tokenKind(address token) external view returns (uint8);
         function chainUid() external view returns (bytes32);
+        function SMART_KEY_ACCOUNT_IMPL() external view returns (address);
         event LegSettled(bytes32 indexed ref, bytes32 indexed orderHash, address indexed from, address destination,
             uint256 sold, uint256 received, uint256 dexFee, uint256 refund, uint256 relayerShare, uint256 treasuryShare);
         event MatchFailed(bytes32 indexed ref, bytes reason);
@@ -96,6 +101,7 @@ sol! {
         function supportedModes() external view returns (uint32);
         function balanceOf(address who) external view returns (uint256);
         function transfer(address to, uint256 value) external returns (bool);
+        function mtxTrade(TradeOrder o, bytes sig, TradeFill f) external;
         function mtxCancelOrder(TradeOrder o, bytes sig) external;
         function mtxInvalidateNonces(address from, uint256 batch, uint256 newMin, bytes sig) external;
         function mtxWrap(address underlying, TradeOrder o, bytes sig) external;

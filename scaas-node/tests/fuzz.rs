@@ -64,7 +64,7 @@ proptest! {
         let shaped = json!({"id": 1, "token": "0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd", "signature": sig,
                             "struct": kind, "metatx": m, "call": v});
         if let Ok(job) = serde_json::from_value::<Job>(shaped) {
-            let _ = work_from_job(&job);
+            let _ = work_from_job(&job, None);
         }
     }
 
