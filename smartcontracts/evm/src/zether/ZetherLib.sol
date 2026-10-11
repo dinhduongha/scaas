@@ -49,7 +49,8 @@ library ZetherLib {
     }
 
     /// @notice The token's immutables a call needs, and the statement's binding: `(ZTX_V1_DIRECT, 0)` for a direct
-    ///         call, `(ZTX_V1_RELAYED, envelopeBinding)` inside `mtxExecute`.
+    ///         call, `(ZTX_V1_RELAYED, envelopeBinding)` inside `mtxExecute`, `(ZTX_V1_DIRECT, unwrapBinding)` for a direct
+    ///         `zetherUnshieldUnwrap`.
     struct Env {
         address registry;
         bytes32 chainUid;
@@ -97,6 +98,7 @@ library ZetherLib {
     bytes32 internal constant TAG_DIRECT = keccak256("ZTX_V1_DIRECT");
     bytes32 internal constant TAG_RELAYED = keccak256("ZTX_V1_RELAYED");
     bytes32 internal constant TAG_ENVELOPE = keccak256("SCAAS-ZETHER-ENVELOPE-V1");
+    bytes32 internal constant TAG_UNWRAP = keccak256("SCAAS-ZETHER-UNWRAP-V1");
     bytes32 private constant OP_TRANSFER = keccak256("SCAAS-ZETHER-OP-TRANSFER-V1");
     bytes32 private constant OP_BURN = keccak256("SCAAS-ZETHER-OP-BURN-V1");
     bytes32 private constant OP_MULTI_HASH = keccak256("SCAAS-ZETHER-OP-TRANSFER-MULTI-V1/HASH");
@@ -355,6 +357,13 @@ library ZetherLib {
     /// @notice `ZTX_V1_RELAYED` for a non-zero envelope binding, else `ZTX_V1_DIRECT`.
     function tagOf(bytes32 binding) internal pure returns (bytes32) {
         return binding == bytes32(0) ? TAG_DIRECT : TAG_RELAYED;
+    }
+
+    /// @notice The binding word of a direct `zetherUnshieldUnwrap`: its leg and `minOut` (controller ruling, pending
+    ///         the owner), so a proof lifted from a pending call cannot pick another leg, drop `minOut` or go through
+    ///         `zetherUnshield` instead.
+    function unwrapBinding(address u, uint256 minOut) internal pure returns (bytes32) {
+        return keccak256(abi.encode(TAG_UNWRAP, u, minOut));
     }
 
     /// @notice `entryRef` (zether.md §12) with `chainUid` (CTR-ZTH-36); `sendCounter` before the increment.

@@ -51,6 +51,29 @@ contract ZetherStatements {
         return _unshield(token, payload, amount, recipient, beneficiary, ZetherLib.tagOf(envelopeBinding), envelopeBinding);
     }
 
+    /// @notice The statement of `zetherUnshieldUnwrap` on an `UNDERLYING_ZETHER` token: relayed, the envelope binding;
+    ///         direct, `ZTX_V1_DIRECT` with the leg and `minOut` bound (`unwrapBinding`).
+    function unshieldUnwrapStatement(
+        address token,
+        bytes calldata payload,
+        uint256 amount,
+        address recipient,
+        ZetherTypes.UA beneficiary,
+        address u,
+        uint256 minOut,
+        bytes32 envelopeBinding
+    ) external view returns (bytes memory) {
+        if (envelopeBinding != bytes32(0)) {
+            return _unshield(token, payload, amount, recipient, beneficiary, ZetherLib.TAG_RELAYED, envelopeBinding);
+        }
+        return _unshield(token, payload, amount, recipient, beneficiary, ZetherLib.TAG_DIRECT, unwrapBinding(u, minOut));
+    }
+
+    /// @notice The binding word of a direct `zetherUnshieldUnwrap` (controller ruling, pending the owner).
+    function unwrapBinding(address u, uint256 minOut) public pure returns (bytes32) {
+        return ZetherLib.unwrapBinding(u, minOut);
+    }
+
     function _unshield(
         address token,
         bytes calldata payload,
