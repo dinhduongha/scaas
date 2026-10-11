@@ -60,11 +60,41 @@ contract FallbackOnly {
     fallback() external {}
 }
 
+/// ERC-777-style hook token: every transfer calls `hook(from, to)` on `hookTarget`.
+contract HookERC20 is MockERC20 {
+    address public hookTarget;
+    constructor() MockERC20("Hook", "HK", 18) {}
+    function setHook(address h) external { hookTarget = h; }
+    function _update(address from, address to, uint256 v) internal override {
+        super._update(from, to, v);
+        if (from != address(0) && hookTarget != address(0)) Reenter(hookTarget).hook();
+    }
+}
+
+/// Re-enters the DEX's four external entries from a token hook and records the first selector each reverts with.
+contract Reenter {
+    ISCaaSDex immutable dex;
+    bytes4[] public errs;
+    constructor(ISCaaSDex d) { dex = d; }
+    function n() external view returns (uint256) { return errs.length; }
+    function hook() external {
+        if (errs.length != 0) return;
+        ISCaaSDex.Settlement[] memory ss = new ISCaaSDex.Settlement[](0);
+        try dex.mtxSettle(ss) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
+        try dex.mtxCancelOrders(new ISCaaSDex.DexOrder[](0), new bytes[](0)) { errs.push(0); }
+        catch (bytes memory r) { errs.push(bytes4(r)); }
+        try dex.mtxInvalidateNonces(address(1), 0, 1, "") { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
+        ISCaaSDex.Settlement memory st;
+        try SCaaSDex(address(dex)).settleOne(st, address(this)) { errs.push(0); } catch (bytes memory r) { errs.push(bytes4(r)); }
+    }
+}
+
 /// Outside-token legs (CTR-DEX-18, -22, -08, -02): the same `TradeOrder` signed in the DEX's domain as `DexOrder`, the
 /// token's checks run by the DEX on its own state, the fill pulled through the `DexPuller` under the party's allowance
 /// to the puller, `ESCROW` refused, cancels per DEX, the ERC-1271 cap by codehash, a bounded `MatchFailed` reason, a
 /// starved signature check reverting the whole call, conservation catching inexact tokens.
 contract DexOutsideTest is Test {
+    uint256 constant GAS_STARVED = 330_000; // reaches the SCaaS token's 50 k ERC-1271 check with too little left
     uint256 constant ALICE_PK = 0xA11CE;
     uint256 constant DAVE_PK = 0xDA7E;
     address alice = vm.addr(ALICE_PK);
@@ -495,5 +525,44 @@ contract DexOutsideTest is Test {
         dex.mtxCancelOrders{gas: 1_000_000}(os, sigs);
         assertEq(dex.pulled(hg), 2000);
         assertEq(dex.pulled(dex.dexOrderDigest(address(usdc), os[0].order)), 0);
+    }
+
+    /// A hook token re-entering the DEX during a pull is refused on every entry: `nonReentrant` on `mtxSettle`,
+    /// `mtxCancelOrders` and `mtxInvalidateNonces`, `NotSelf` on `settleOne`.
+    function test_hookTokenReentry_isRefused() public {
+        HookERC20 hk = new HookERC20();
+        _list(MockERC20(address(hk)));
+        _fund(MockERC20(address(hk)), dave);
+        Reenter r = new Reenter(ISCaaSDex(address(dex)));
+        hk.setHook(address(r));
+        ISCaaSDex.Settlement[] memory ss = _one(_settlement(_dave(address(hk), 1, 2000), 1));
+        vm.prank(relayer);
+        bool[] memory ok = dex.mtxSettle(ss);
+        assertTrue(ok[0]);
+        assertEq(r.n(), 4);
+        bytes4 guard = bytes4(keccak256("ReentrancyGuardReentrantCall()"));
+        assertEq(r.errs(0), guard);
+        assertEq(r.errs(1), guard);
+        assertEq(r.errs(2), guard);
+        assertEq(r.errs(3), ISCaaSDex.NotSelf.selector);
+    }
+
+    /// `SigCheckGasStarved` raised by a SCaaS token's own check (Path A taker with an ERC-1271 signer, too little gas
+    /// left at the token) reverts the whole `mtxSettle`, not just that settlement and not as `MatchFailed`.
+    function test_starvedCheckInsideASCaaSLeg_revertsTheBatch() public {
+        Mock1271Wallet w = new Mock1271Wallet(alice);
+        vm.prank(alice);
+        a.transfer(address(w), 1000);
+        ISCaaSDex.Settlement memory sw = _settlement(_dave(address(usdc), 2, 2000), 2);
+        ITradeToken.TradeOrder memory t = sw.taker.o;
+        t.from = address(w);
+        sw.taker = _taker(t, sw.taker.fill); // the wallet's owner signs; the wallet answers ERC-1271
+        ISCaaSDex.Settlement[] memory ss = _two(_settlement(_dave(address(usdc), 1, 2000), 1), sw);
+        vm.prank(relayer);
+        vm.expectPartialRevert(ISCaaSDex.SigCheckGasStarved.selector);
+        dex.mtxSettle{gas: GAS_STARVED}(ss);
+        vm.prank(relayer);
+        bool[] memory ok = dex.mtxSettle(ss);
+        assertTrue(ok[0] && ok[1]);
     }
 }
