@@ -19,7 +19,7 @@ the rules every one of them shares. Status tags (**BUILT**, **SPECIFIED**, **PLA
 | [mandates.md](mandates.md) | `MandateWallet`: delegated, capped payment from the payer's own wallet; auto-pay client integration | **BUILT**; revocation epoch **SPECIFIED** |
 | [settlement.md](settlement.md) | map of every settlement kind: entry points, who checks what, fees, finality (adds no rules) | overview |
 
-<p align="center"><img src="../assets/token-axes.svg" width="860" alt="Token model on two axes. Kind = confidential layer: NONE and UNDERLYING (plain, built in P1), NONE_ZETHER and UNDERLYING_ZETHER (target, P3; classical Zether built and unaudited on dev chains), NONE_PQZ and UNDERLYING_PQZ (reserved, not built; PQ Zether specified and unaudited) and NONE_ZETHER_PQZ and UNDERLYING_ZETHER_PQZ (reserved, not built). Who signs = the account: an EOA (ECDSA, built), a SmartKeyAccount (ERC-1271, built) or a Universal Account with a PQ key mldsa44, mldsa65 or fndsa512 through the UA ledger in the token base (specified, not built); every kind accepts the same intents from each."></p>
+<p align="center"><img src="../assets/token-axes.svg" width="860" alt="Token model on two axes. Kind = confidential layer: NONE and UNDERLYING (plain, built in P1), NONE_ZETHER and UNDERLYING_ZETHER (built in P3, unaudited, dev chains only), NONE_PQZ and UNDERLYING_PQZ (reserved, not built; PQ Zether specified and unaudited) and NONE_ZETHER_PQZ and UNDERLYING_ZETHER_PQZ (reserved, not built). Who signs = the account: an EOA (ECDSA, built), a SmartKeyAccount (ERC-1271, built) or a Universal Account with a PQ key mldsa44, mldsa65 or fndsa512 through the UA ledger in the token base (specified, not built); every kind accepts the same intents from each."></p>
 
 How the families relate:
 
@@ -72,7 +72,7 @@ the implementation's immutables). `chain_uid` is the chain's genesis block hash 
 
 | Contract | Source of `chain_uid` |
 |---|---|
-| token implementations (`NoUnderlyingToken`, `UnderlyingToken`; `ZetherToken` with P3) | constructor immutable of the **implementation**; a clone runs its code by `DELEGATECALL`, so it uses the value with no storage and no `initialize` argument and cannot declare another one |
+| token implementations (`NoUnderlyingToken`, `UnderlyingToken`, `NoUnderlyingZetherToken`, `UnderlyingZetherToken`) | constructor immutable of the **implementation**; a clone runs its code by `DELEGATECALL`, so it uses the value with no storage and no `initialize` argument and cannot declare another one |
 | `OpenFactory` | constructor immutable; `registerImplementation` refuses an implementation whose `chainUid()` differs ([CTR-TOK-03](token-wrappers.md#CTR-TOK-03)) |
 | `SmartKeyAccount` | the factory's constructor argument, passed to `new SmartKeyAccount(chainUid)` |
 | `MandateWallet`, `HederaMandateWallet` | constructor argument from the chain profile; the node checks it before relaying for that wallet |
@@ -192,7 +192,7 @@ families carry stronger gates, enforced in code:
 | Chain 7622 as a classical Zether dev chain | whether chain 7622 counts as "dev": not a dev chain until the owner decides ([CTR-ZTH-33](zether.md#CTR-ZTH-33)) | open |
 | Production curve for classical Zether | bn254 vs BLS12-381; BLS12-381 is more secure and **not** cheaper ([CTR-ZTH-32](zether.md#CTR-ZTH-32)) | open |
 | Cryptographic audit | independent audit of the Σ-Bulletproofs protocol, the transcript, the inner-product argument and the registry PoP **before** any dev gate is lifted | open |
-| Gas before public chains | the bn254 transfer (3.29 M execution gas) exceeds the 2.5 M per-transfer kill criterion; optimization is required before a public chain | open |
+| Gas before public chains | the bn254 transfer (3.33 M execution gas) exceeds the 2.5 M per-transfer kill criterion; optimization is required before a public chain | open |
 | PQ Zether gate | hard-coded allowlist (31337, 1337 and the private chain 7622) **and** a constructor precompile self-test; `OpenFactory.pqzEnabled = false` by default; release gates: **G-LIC** (licences/patents) and audit ([CTR-PQZ-01](pq-zether.md#CTR-PQZ-01)) | **SPECIFIED** |
 | Clients | every Zether and PQ Zether contract carries **UNAUDITED — NOT FOR PRODUCTION FUNDS** in its NatSpec; client chain/token screens show an UNAUDITED warning | **BUILT** (NatSpec) |
 

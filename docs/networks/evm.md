@@ -107,7 +107,7 @@ BLS12-381 precompiles `0x0b`/`0x0c`/`0x0f`/`0x10` were empty while `alt_bn128` `
 Forks must be written with Nethermind's own keys (`eip1559TransitionTimestamp`, `eip2537TransitionTimestamp`, …),
 and changing them changes the genesis hash (chain reset). The only detection is to inspect a block header or call
 the precompile — the deployment checklist does both. The chainspec was fixed on 2026-08-31 before the reset to
-7622. The 16,777,216 block gas limit admits only ~5 classical confidential transfers per block (3.29 M gas each,
+7622. The 16,777,216 block gas limit admits only ~5 classical confidential transfers per block (3.33 M gas each,
 measured); post-quantum Zether raises the target to 80 M ([CTR-PQZ-11](../contracts/pq-zether.md#CTR-PQZ-11)).
 
 ## 3. Precompiles

@@ -767,3 +767,58 @@ FactoryV2.t.sol	renamed	P1e: smartcontracts/evm/test/v2/Factory.t.sol, contracts
 createTiered(META_SINGLE, …)	obsolete	P1e: createToken(UNDERLYING, version, cfg, salt), contracts/token-wrappers.md#CTR-TOK-25
 createMetaToken(1, underlying, abi.encode(name, symbol, 0, 0, address(0)), salt)	obsolete	P1e: createToken(UNDERLYING, version, cfg, salt) with one leg, contracts/token-wrappers.md#CTR-TOK-25; the v1 createMetaToken stays on OpenFactoryV1
 28	obsolete	solc 0.8.28 pin; the pin is 0.8.37 with evm_version osaka since 2026-10-11 (contracts/README.md build pins)
+smartcontracts/src/zether/**	internal-path	contracts/zether.md header: the sources live under smartcontracts/evm/src/zether (P3)
+smartcontracts/src/…	internal-path	contracts/zether.md header: every contract path is under smartcontracts/evm/
+smartcontracts/test/…	internal-path	contracts/zether.md header: every test path is under smartcontracts/evm/
+rollOverBatch	renamed	zetherRollOverBatch, contracts/zether.md#CTR-ZTH-45 (P3)
+("SCaaS ZetherToken", "1", chainId, token)	obsolete	salt-less domain of the built ZetherMetaTx, in legacy/p3; the salted domain is contracts/metatx.md#CTR-MTX-02
+m.data = op ‖ abi.encode(...)	obsolete	hand-written envelope ops of ZetherMetaTx (legacy/p3); m.data is the real calldata, contracts/zether.md#CTR-ZTH-34
+m.to = address(0)	obsolete	the 11-field LegacyMetaTransaction of ZetherMetaTx (legacy/p3); MetaTransaction has no to, contracts/metatx.md#CTR-MTX-15
+OP_ZTRANSFER = bytes4(keccak256("zetherTransfer(bytes,bytes,bytes,bytes32)"))	obsolete	envelope op of ZetherMetaTx (legacy/p3); zetherTransfer is the multi-recipient entry, contracts/zether.md#CTR-ZTH-34
+ZetherMetaTx.sol:74-75	obsolete	line reference into legacy/p3; the fee recipient rule is contracts/zether.md#CTR-ZTH-23
+ZetherMetaTx.sol:123	obsolete	line reference into legacy/p3; the ERC-1271 cap is contracts/zether.md#CTR-ZTH-21
+ZetherToken.sol:136	obsolete	line reference into legacy/p3; the registry is an implementation immutable, contracts/zether.md#CTR-ZTH-44
+test_smartAccount1271Auth	obsolete	test of the built ZetherToken (legacy/p3); the envelope ERC-1271 test is ZetherRelay.t, contracts/zether.md#CTR-ZTH-21
+ZetherVerifier.sol:170	obsolete	line reference; the D_out = O check is pinned by test_dOutIdentityRejected, contracts/zether.md#CTR-ZTH-22
+ZetherMetaTx.sol	obsolete	the built Zether envelope mixin, backed up in smartcontracts/evm/legacy/p3/ (P3)
+ZetherToken.sol:138-140	obsolete	line reference into legacy/p3; the fee bound is ZetherLib.init, contracts/zether.md (limits table)
+zetherBurn	renamed	zetherUnshield, contracts/zether.md#CTR-ZTH-45
+nonce++	obsolete	step of the built ZetherMetaTx pipeline (legacy/p3); the base pipeline is contracts/metatx.md#CTR-MTX-17
+ZetherVerifier.t.sol	obsolete	gas table source of the old ZetherToken; the P3 gas tests are named per row in contracts/zether.md#gas-measured
+forge test -vv	renamed	contracts/zether.md#gas-measured: `forge test --match-path 'test/zether/*' -vv`
+max_gas_per_tx ≥ 4.2 M	obsolete	contracts/zether.md#gas-measured: the node gas cap paragraph states the cap in prose
+2162249	obsolete	gas of the old ZetherToken (2026-10-05 table); re-measured on the P3 kinds, contracts/zether.md#gas-measured
+2700151	obsolete	gas of the old ZetherToken (2026-10-05 table); re-measured on the P3 kinds, contracts/zether.md#gas-measured
+2411138	obsolete	gas of the old ZetherToken (2026-10-05 table); re-measured on the P3 kinds, contracts/zether.md#gas-measured
+2928567	obsolete	gas of the old ZetherToken (2026-10-05 table); re-measured on the P3 kinds, contracts/zether.md#gas-measured
+2190479	obsolete	gas of the old ZetherToken (2026-10-05 table); re-measured on the P3 kinds, contracts/zether.md#gas-measured
+2728409	obsolete	gas of the old ZetherToken (2026-10-05 table); re-measured on the P3 kinds, contracts/zether.md#gas-measured
+2453597	obsolete	gas of the old ZetherToken (2026-10-05 table); re-measured on the P3 kinds, contracts/zether.md#gas-measured
+2971201	obsolete	gas of the old ZetherToken (2026-10-05 table); re-measured on the P3 kinds, contracts/zether.md#gas-measured
+1329969	obsolete	gas of the old ZetherToken (2026-10-05 table); re-measured on the P3 kinds, contracts/zether.md#gas-measured
+1329957	obsolete	gas of the old ZetherToken (2026-10-05 table); re-measured on the P3 kinds, contracts/zether.md#gas-measured
+1428870	obsolete	gas of the old ZetherToken (2026-10-05 table); re-measured on the P3 kinds, contracts/zether.md#gas-measured
+1428858	obsolete	gas of the old ZetherToken (2026-10-05 table); re-measured on the P3 kinds, contracts/zether.md#gas-measured
+3286339	obsolete	gas of the old ZetherToken (2026-10-05 table); re-measured on the P3 kinds, contracts/zether.md#gas-measured
+3357045	obsolete	gas of the old ZetherToken (2026-10-05 table); re-measured on the P3 kinds, contracts/zether.md#gas-measured
+1396398	obsolete	gas of the old ZetherToken (2026-10-05 table); re-measured on the P3 kinds, contracts/zether.md#gas-measured
+1396358	obsolete	gas of the old ZetherToken (2026-10-05 table); re-measured on the P3 kinds, contracts/zether.md#gas-measured
+1521199	obsolete	gas of the old ZetherToken (2026-10-05 table); re-measured on the P3 kinds, contracts/zether.md#gas-measured
+1521169	obsolete	gas of the old ZetherToken (2026-10-05 table); re-measured on the P3 kinds, contracts/zether.md#gas-measured
+191360	obsolete	gas of the old ZetherToken (2026-10-05 table); re-measured on the P3 kinds, contracts/zether.md#gas-measured
+28591	obsolete	gas of the old ZetherToken (2026-10-05 table); re-measured on the P3 kinds, contracts/zether.md#gas-measured
+247307	obsolete	gas of the old ZetherToken (2026-10-05 table); re-measured on the P3 kinds, contracts/zether.md#gas-measured
+36832	obsolete	gas of the old ZetherToken (2026-10-05 table); re-measured on the P3 kinds, contracts/zether.md#gas-measured
+115234	obsolete	gas of the old ZetherToken (2026-10-05 table); re-measured on the P3 kinds, contracts/zether.md#gas-measured
+2305	obsolete	gas of the old ZetherToken (2026-10-05 table); re-measured on the P3 kinds, contracts/zether.md#gas-measured
+166414	obsolete	gas of the old ZetherToken (2026-10-05 table); re-measured on the P3 kinds, contracts/zether.md#gas-measured
+2295	obsolete	gas of the old ZetherToken (2026-10-05 table); re-measured on the P3 kinds, contracts/zether.md#gas-measured
+133370	obsolete	gas of the old ZetherToken (2026-10-05 table); re-measured on the P3 kinds, contracts/zether.md#gas-measured
+133557	obsolete	gas of the old ZetherToken (2026-10-05 table); re-measured on the P3 kinds, contracts/zether.md#gas-measured
+197316	obsolete	gas of the old ZetherToken (2026-10-05 table); re-measured on the P3 kinds, contracts/zether.md#gas-measured
+197503	obsolete	gas of the old ZetherToken (2026-10-05 table); re-measured on the P3 kinds, contracts/zether.md#gas-measured
+102645	obsolete	gas of the old ZetherToken (2026-10-05 table); re-measured on the P3 kinds, contracts/zether.md#gas-measured
+83437	obsolete	gas of the old ZetherToken (2026-10-05 table); re-measured on the P3 kinds, contracts/zether.md#gas-measured
+3.36	obsolete	old ZetherToken envelope gas (M); re-measured on the P3 kinds, contracts/zether.md#gas-measured
+3.98	obsolete	old ZetherToken envelope gas (M); re-measured on the P3 kinds, contracts/zether.md#gas-measured
+4.10	obsolete	old ZetherToken envelope gas (M); re-measured on the P3 kinds, contracts/zether.md#gas-measured

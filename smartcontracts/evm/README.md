@@ -15,8 +15,8 @@ Interface đã chốt cộng các implementation đã có (2026-10-03,
 | `MandateWallet` | `src/wallet/MandateWallet.sol` | ví một người trả cho auto-pay delegated: mandate on-chain (hạn mức lần/kỳ, payee, hạn), ERC-1271 cho chủ ví, trả bằng `payWithFee`. Deploy ngoài Odoo: `forge create src/wallet/MandateWallet.sol:MandateWallet --constructor-args <owner>` (R29) |
 | Deploy | `script/Deploy.s.sol` | ghi `deployments/<chainid>.json` |
 
-Zether is built (`src/zether/`: `ZetherToken`, `ZetherMetaTx`, `ZetherVerifierBn254`, `ZetherVerifierBls12381`;
-`src/registry/UniversalAccountRegistry.sol`), unaudited and gated to dev chains 31337/1337 (`ZetherSafety`,
+Zether is built (P3: the kinds `NONE_ZETHER` and `UNDERLYING_ZETHER` in `src/zether/` as `NoUnderlyingZetherToken`, `UnderlyingZetherToken`, `ZetherLayer`, `ZetherLib`, `ZetherStatements`, `ZetherVerifierBn254`, `ZetherVerifierBls12381`;
+`src/registry/UniversalAccountRegistry.sol`; the old `ZetherToken` line is in `legacy/p3/`, not built), unaudited and gated to dev chains 31337/1337 (`ZetherSafety`,
 RS2-1); see `docs/contracts/zether.md` (CTR-ZTH-02) and `docs/contracts/README.md`. `test/vectors/metatx_kat.json` là vector v3 `MetaTransaction` (MetaTxBase);
 `test/vectors/metatx_v1_kat.json` là struct v1 đã build, dùng chung với Odoo (`dms_blockchain/lib/eip712.py`) và relayer (`scaas-node`) đến P5.
 
