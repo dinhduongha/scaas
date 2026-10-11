@@ -44,7 +44,7 @@ export function addressWord(address) {
   return concatBytes(new Uint8Array(12), a);
 }
 
-function bytes32(v) {
+export function bytes32(v) {
   const b = v instanceof Uint8Array ? v : fromHex(v);
   if (b.length !== 32) throw new Error('bytes32 must be 32 bytes');
   return b;

@@ -1,6 +1,6 @@
 // EVM pieces: EIP-712 digests, addresses, SmartKeyAccount key/salt/CREATE2, Merkle batch.
 import {
-  keccak_256, sha256, concatBytes, utf8ToBytes, bytesToHex, fromHex, hex, word, addressWord, abiEncode,
+  keccak_256, sha256, concatBytes, utf8ToBytes, bytesToHex, fromHex, hex, word, addressWord, abiEncode, bytes32,
 } from './bytes.js';
 
 export function checksumAddress(address) {
@@ -34,7 +34,7 @@ function encodeValue(type, value, types) {
   if (type === 'bytes') return keccak_256(value instanceof Uint8Array ? value : fromHex(value));
   if (type === 'address') return addressWord(value);
   if (type === 'bool') return word(value ? 1 : 0);
-  if (type === 'bytes32') return fromHex(value);
+  if (type === 'bytes32') return bytes32(value);
   if (/^uint\d+$/.test(type)) return word(value);
   throw new Error(`EIP-712 type ${type} is not supported here`);
 }
@@ -247,55 +247,83 @@ export function metaTransferTypedData({ name = 'SCaaS MetaToken', contract, chai
   };
 }
 
-/** The server's typed data must be a token payment `MetaTransfer` of exactly the shown `amount` (in the token's
- *  `decimals`) from `account`, in the token's domain salted with the signer's own `chainUid` (CLI-SGN-33), on the
- *  signer's pinned `expectedToken` when given (CLI-SGN-08), with a non-zero reference (the request's, when `entryRef` is
- *  given), no fee, a near deadline (CLI-SGN-05). Returns {digest, payee, token, entryRef}. */
-export function checkPayment(td, { account, chainId, chainUid, amount, decimals, entryRef, expectedToken,
-  now = Math.floor(Date.now() / 1000), maxWindow = 86400 }) {
-  if (!td || td.primaryType !== 'MetaTransfer') refuse('this is not a payment');
-  const m = td.message || {};
-  const d = td.domain || {};
-  if (uint(d.chainId, 'the chain') !== BigInt(chainId)) refuse('wrong network');
-  if (!/^0x[0-9a-fA-F]{40}$/.test(String(d.verifyingContract)) || same(d.verifyingContract, account)) refuse('wrong token');
-  // CLI-SGN-08: the token from the signer's own profile, never from the server
-  if (expectedToken !== undefined && !same(d.verifyingContract, expectedToken)) refuse('wrong token');
-  if (!same(m.from, account)) refuse('the payment is not from your account');
-  if (uint(m.value, 'the amount') !== toBase(amount, decimals)) refuse('the amount differs from what you were shown');
-  if (!/^0x[0-9a-fA-F]{64}$/.test(String(m.entryRef)) || BigInt(m.entryRef) === 0n) refuse('this is not a payment');
-  if (entryRef !== undefined && !same(m.entryRef, entryRef)) refuse('the payment reference differs from the request');
-  if (uint(m.fee, 'the fee') !== 0n) refuse('the payment carries a fee');
-  if (![0, 1].includes(Number(m.mode))) refuse('unexpected payment mode');
-  deadline(m.validUntil, now, maxWindow);
-  const mine = metaTransferTypedData({ name: d.name, contract: d.verifyingContract, chainId, chainUid, message: m });
-  const digest = digestOf(mine);
-  if (hex(digestOf(td)) !== hex(digest)) refuse('unexpected payment fields');
-  return { digest, payee: m.to, token: d.verifyingContract, entryRef: m.entryRef };
+/** The lane of a payment request, `keccak256("scaas.pay.lane" ‖ entryRef)` with nonce 0 (CTR-MTX-03; on chain `payLane`). */
+export function payLane(entryRef) {
+  return BigInt(hex(keccak_256(concatBytes(utf8ToBytes('scaas.pay.lane'), bytes32(entryRef)))));
 }
 
-/** A self-call `MetaTransaction` (CTR-MTX-17) the user asked for: `data` decoded against the contract's published
- *  allowlist `[{selector, name, feeClass}]` (`mtxSelectors()`, pinned per implementation version, CLI-SGN-34); an
- *  unknown selector, a transfer/pay selector or an approval is refused; a PERCENT fee on an ABSOLUTE selector too.
- *  Returns {digest, selector, name} for the review screen. */
-export function checkCall(td, { account, chainId, chainUid, allowlist, now = Math.floor(Date.now() / 1000), maxWindow = 3600 }) {
+/** A fee and its bindings against the user's policy (CTR-MTX-13): known flags and fee mode; NONE carries no fee; FIXED
+ *  costs `fee`, PERCENT (≤ 1 %, only with an amount `basis`) ⌊basis × fee / 10^6⌋, either at most `maxFee` (base
+ *  units); a bound fee recipient or relayer is the one the user named. Returns what the review screen shows. */
+function feePolicy(m, { maxFee = 0, feeRecipient, relayer }, basis) {
+  const mode = uint(m.mode, 'the fee mode');
+  const kind = mode >> 4n;
+  if (mode & ~0xf3n || kind > 2n) refuse('unexpected fee mode');
+  const rate = uint(m.fee, 'the fee');
+  if (kind === 0n && rate !== 0n) refuse('a fee with fee mode NONE');
+  if (kind === 1n && (basis === undefined || rate > 10000n)) refuse('a percentage fee without an amount, or above 1 %');
+  const fee = kind === 1n ? basis * rate / 1000000n : rate;
+  if (fee > uint(maxFee, 'your fee limit')) refuse('the fee is above your limit');
+  if (mode & 2n && !same(m.feeRecipient, feeRecipient)) refuse('the fee goes to an address you did not name');
+  if (mode & 1n && relayer !== undefined && !same(m.relayer, relayer)) refuse('the call is bound to another relayer');
+  return { feeMode: Number(kind), fee, feeRecipient: mode & 2n ? m.feeRecipient : null, relayer: mode & 1n ? m.relayer : null };
+}
+
+/** The server's typed data must be the payment the user was shown: a `MetaTransfer` from `account` to `payee` of
+ *  `amount` (in the token's `decimals`) with the request's `entryRef`, on the request's lane `payLane(entryRef)` with
+ *  nonce 0, in the domain of `expectedToken` (the signer's own profile, CLI-SGN-08) salted with its own `chainUid`
+ *  (CLI-SGN-33), the fee within `maxFee` (default 0), a near deadline (CLI-SGN-05). `payee`, `entryRef`,
+ *  `expectedToken` and `amount` are required; the server supplies only `validUntil` and the fee fields. Returns
+ *  {digest, payee, token, entryRef, feeMode, fee, feeRecipient, relayer}. */
+export function checkPayment(td, { account, chainId, chainUid, amount, decimals, payee, entryRef, expectedToken, maxFee,
+  feeRecipient, relayer, now = Math.floor(Date.now() / 1000), maxWindow = 86400 }) {
+  if (!td || td.primaryType !== 'MetaTransfer') refuse('this is not a payment');
+  if ([amount, payee, entryRef, expectedToken].some((v) => v == null)) refuse('the amount, payee, reference and token are required');
+  const m = td.message || {};
+  const d = td.domain || {};
+  if (!same(d.verifyingContract, expectedToken)) refuse('wrong token');
+  if (!same(m.to, payee)) refuse('the payee differs from the one you were shown');
+  const value = toBase(amount, decimals);
+  if (uint(m.value, 'the amount') !== value || value === 0n) refuse('the amount differs from what you were shown');
+  if (!/^0x[0-9a-fA-F]{64}$/.test(String(entryRef)) || BigInt(entryRef) === 0n) refuse('this is not a payment');
+  if (!same(m.entryRef, entryRef)) refuse('the payment reference differs from the request');
+  const batch = payLane(entryRef);
+  if (uint(m.batch, 'the lane') !== batch || uint(m.nonce, 'the nonce') !== 0n) refuse('a payment is signed once, on its request lane');
+  const fee = feePolicy(m, { maxFee, feeRecipient, relayer }, value);
+  deadline(m.validUntil, now, maxWindow);
+  const digest = digestOf(metaTransferTypedData({ name: d.name, contract: expectedToken, chainId, chainUid,
+    message: { ...m, from: account, to: payee, value, entryRef, batch, nonce: 0 } }));
+  if (hex(digestOf(td)) !== hex(digest)) refuse('unexpected payment fields');
+  return { digest, payee, token: expectedToken, entryRef, ...fee };
+}
+
+/** A self-call `MetaTransaction` (CTR-MTX-17) that is exactly the call the client built, `call = {contract, data}`:
+ *  `verifyingContract` and `data` equal; `data` decoded against the contract's published allowlist `[{selector, name,
+ *  feeClass, amountArg}]` (`mtxSelectors()`, pinned per implementation version, CLI-SGN-34); an unknown selector, a
+ *  transfer/pay selector or an approval is refused; the fee within `maxFee` (default 0; PERCENT only on an AMOUNT
+ *  selector, CTR-MTX-20), a bound fee recipient / relayer the one named. The server supplies only nonce, lane,
+ *  `validUntil` and the fee fields. Returns {digest, selector, name, feeMode, fee, feeRecipient, relayer}. */
+export function checkCall(td, { account, chainId, chainUid, allowlist, call, maxFee, feeRecipient, relayer,
+  now = Math.floor(Date.now() / 1000), maxWindow = 3600 }) {
   if (!td || td.primaryType !== 'MetaTransaction') refuse('this is not a contract call');
   const m = td.message || {};
   const d = td.domain || {};
-  if (uint(d.chainId, 'the chain') !== BigInt(chainId)) refuse('wrong network');
-  if (!same(m.from, account)) refuse('the call is not from your account');
+  if (!call || !same(d.verifyingContract, call.contract)) refuse('the call is not on the contract you chose');
   let data;
-  try { data = fromHex(m.data); } catch { refuse('malformed data'); }
-  if (data.length < 4) refuse('the call names no function');
+  try { data = call.data instanceof Uint8Array ? call.data : fromHex(call.data); } catch { refuse('malformed data'); }
+  if (!same(m.data, hex(data))) refuse('this is not the call you asked for');
   const selector = hex(data.subarray(0, 4));
   if (NEVER_CALLED.has(selector)) refuse('moving funds or an approval is never signed as a call');
   const row = (allowlist || []).find((r) => same(r.selector, selector));
   if (!row) refuse('the function is not on the contract\'s allowlist');
-  if (Number(row.feeClass) === 1 && (Number(m.mode) & 0xf0) === 0x10) refuse('a percentage fee on a fixed-fee call');
+  const at = 4 + 32 * Number(row.amountArg || 0);
+  const basis = Number(row.feeClass) === 2 && data.length >= at + 32 ? BigInt(hex(data.subarray(at, at + 32))) : undefined;
+  const fee = feePolicy(m, { maxFee, feeRecipient, relayer }, basis);
   deadline(m.validUntil, now, maxWindow);
-  const mine = metaTxTypedData({ name: d.name, contract: d.verifyingContract, chainId, chainUid, message: m });
-  const digest = digestOf(mine);
+  const digest = digestOf(metaTxTypedData({ name: d.name, contract: call.contract, chainId, chainUid,
+    message: { ...m, from: account, data: hex(data) } }));
   if (hex(digestOf(td)) !== hex(digest)) refuse('unexpected call fields');
-  return { digest, selector, name: row.name };
+  return { digest, selector, name: row.name, ...fee };
 }
 
 /** A `TradeOrder` in its SCaaS sell token's salted domain (CTR-DEX-13), or for an outside sell token the `DexOrder`
@@ -324,40 +352,50 @@ export function orderCancelTypedData({ name = 'SCaaS MetaToken', contract, chain
     domain, message: { orderHash } };
 }
 
-/** A trade order the user asked for (CLI-SGN-35): `dex` on the signer's pinned list of listed DEXes (or, for a wrap by
- *  signature, CLI-SGN-36: `dex` = `receiveToken` = a pinned wrapper of that underlying and `minFill = amount`), `from`
- *  the account, fee at most 1 %, known flags, a near deadline, the salt of the signer's chain. Returns {digest,
- *  minFill (the effective one per settlement), warnings}. */
-export function checkTradeOrder(td, { account, chainId, chainUid, dexes = [], wrappers = [], now = Math.floor(Date.now() / 1000),
-  maxWindow = 30 * 86400 }) {
-  if (!td || !['TradeOrder', 'DexOrder'].includes(td.primaryType)) refuse('this is not a trade order');
-  const outside = td.primaryType === 'DexOrder';
-  const o = (outside ? (td.message || {}).order : td.message) || {};
-  const d = td.domain || {};
-  if (uint(d.chainId, 'the chain') !== BigInt(chainId)) refuse('wrong network');
-  if (!same(o.from, account)) refuse('the order is not from your account');
-  const wrap = wrappers.some((w) => same(w, o.dex));
-  if (wrap) {
+/** A cancel the user chose: `CancelOrder(orderHash)` of the client's own stored order, or `InvalidateNonces(account,
+ *  batch, minNonce)`, in the domain that holds the order (`contract`: the sell token, or the DEX). Returns the digest. */
+export function checkCancel(td, { account, chainId, chainUid, contract, orderHash, invalidate }) {
+  const d = (td && td.domain) || {};
+  const mine = digestOf(orderCancelTypedData({ name: d.name, contract, chainId, chainUid, orderHash,
+    invalidate: invalidate && { ...invalidate, from: account } }));
+  if (hex(digestOf(td)) !== hex(mine)) refuse('this is not the cancel you asked for');
+  return mine;
+}
+
+/** A trade order that is exactly the one the client built from the user's input (CLI-SGN-35): `order` (receiveToken,
+ *  amount, receiveAmount, minFill, fee, relayer, dex, destination, flags, batch, optional validUntil) from `account`,
+ *  selling `sellToken` (`outside`: an outside token, signed as `DexOrder` in the DEX's domain, CTR-DEX-18). The order
+ *  itself must name a DEX on the signer's pinned list (or, for a wrap by signature, CLI-SGN-36: `dex` = `receiveToken` =
+ *  a pinned wrapper and `minFill = amount`), fee at most 1 %, known flags (no ESCROW on an outside token), non-zero
+ *  amounts. The server supplies only the nonce and, when `order` has none, `validUntil` within the window. Returns
+ *  {digest, minFill (the effective one per settlement), warnings}. */
+export function checkTradeOrder(td, { account, chainId, chainUid, order, sellToken, outside = false, dexes = [], wrappers = [],
+  now = Math.floor(Date.now() / 1000), maxWindow = 30 * 86400 }) {
+  if (!td || td.primaryType !== (outside ? 'DexOrder' : 'TradeOrder')) refuse('this is not the trade order you asked for');
+  const got = (outside ? (td.message || {}).order : td.message) || {};
+  const o = { minFill: '0', fee: '0', relayer: ZERO_ADDRESS, destination: ZERO_ADDRESS, flags: 0, batch: '0', ...order,
+    from: account, nonce: uint(got.nonce, 'the nonce'), validUntil: (order || {}).validUntil ?? got.validUntil };
+  if (wrappers.some((w) => same(w, o.dex))) {
     if (outside || !same(o.receiveToken, o.dex) || uint(o.minFill, 'minFill') !== uint(o.amount, 'the amount')) {
       refuse('a wrap by signature mints from this wrapper, all or nothing');
     }
   } else if (!dexes.some((x) => same(x, o.dex))) {
     refuse('the order names a DEX that is not on your chain profile');
   }
-  if (outside && !same(d.verifyingContract, o.dex)) refuse('an outside-token order is signed for its own DEX');
   if (uint(o.fee, 'the fee') > 10000n) refuse('the fee is above 1 %');
-  if (BigInt(o.flags) & ~7n || (BigInt(o.flags) & 2n && !(BigInt(o.flags) & 1n))) refuse('unknown order flags');
+  const flags = uint(o.flags, 'the flags');
+  if (flags & ~7n || (flags & 2n && (outside || !(flags & 1n)))) refuse('unknown order flags');
   const amount = uint(o.amount, 'the amount');
-  if (amount === 0n || uint(o.receiveAmount, 'the price') === 0n || uint(o.minFill, 'minFill') > amount) refuse('the amounts are malformed');
+  const minFill = uint(o.minFill, 'minFill');
+  if (amount === 0n || uint(o.receiveAmount, 'the price') === 0n || minFill > amount) refuse('the amounts are malformed');
   deadline(o.validUntil, now, maxWindow);
-  const mine = outside
-    ? tradeOrderTypedData({ dex: d.verifyingContract, name: d.name, sellToken: td.message.sellToken, chainId, chainUid, order: o })
-    : tradeOrderTypedData({ token: d.verifyingContract, name: d.name, chainId, chainUid, order: o });
-  const digest = digestOf(mine);
-  if (hex(digestOf(td)) !== hex(digest)) refuse('unexpected order fields');
+  const d = td.domain || {};
+  const digest = digestOf(outside
+    ? tradeOrderTypedData({ dex: o.dex, name: d.name, sellToken, chainId, chainUid, order: o })
+    : tradeOrderTypedData({ token: sellToken, name: d.name, chainId, chainUid, order: o }));
+  if (hex(digestOf(td)) !== hex(digest)) refuse('this is not the trade order you asked for');
   const half = amount - amount / 2n;
-  const minFill = uint(o.minFill, 'minFill') > half ? uint(o.minFill, 'minFill') : half;
-  const warnings = same(o.destination, ZERO_ADDRESS) || same(o.destination, o.from) ? [] : ['someone else receives the proceeds'];
+  const warnings = same(o.destination, ZERO_ADDRESS) || same(o.destination, account) ? [] : ['someone else receives the proceeds'];
   if (same(o.relayer, ZERO_ADDRESS)) warnings.push('any submitter may settle this order and earn the relayer share');
-  return { digest, minFill, warnings };
+  return { digest, minFill: minFill > half ? minFill : half, warnings };
 }

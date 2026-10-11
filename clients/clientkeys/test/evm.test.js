@@ -6,7 +6,7 @@ import {
   hashTypedData, hashStruct, secpSubjectKey, accountSalt, predictAccount, accountSignature, merkleBatch, processProof,
   batchLeaf, evmAddress, passkeySubjectKey, addKeyCalldata, ownerCallTypedData, checkOwnerCall, checkPayment,
   keyProofMessage, metaTxTypedData, metaTransferTypedData, checkCall, tradeOrderTypedData, orderCancelTypedData,
-  checkTradeOrder,
+  checkTradeOrder, checkCancel, payLane,
 } from '../src/evm.js';
 import { abiEncode, hex, fromHex, keccak_256, utf8ToBytes } from '../src/bytes.js';
 
@@ -261,112 +261,247 @@ function concatSel(sig) {
 
 const TOKEN = '0x' + 'cd'.repeat(20);
 const REF = '0x' + '09'.repeat(32);
+const ATK = '0x' + 'ee'.repeat(20);
+const PAYEE = '0x' + '5e'.repeat(20);
+const word = (n) => BigInt(n).toString(16).padStart(64, '0');
 
-/** A payment `MetaTransfer` as a server issues it, in the token's salted domain. */
-function serverPayment(over = {}, dom = {}) {
-  const td = metaTransferTypedData({ contract: TOKEN, chainId: 7622, chainUid: UID, message: { from: ACCOUNT,
-    to: '0x' + '5e'.repeat(20), value: '125000500000', entryRef: REF, batch: '7', nonce: '0', validUntil: String(NOW + 300),
-    mode: 1, relayer: '0x' + '02'.repeat(20), ...over } });
+/** A payment `MetaTransfer` as a server issues it, in the token's salted domain, on the request's lane with nonce 0. */
+function serverPayment(over = {}, dom = {}, tok = TOKEN) {
+  const td = metaTransferTypedData({ contract: tok, chainId: 7622, chainUid: UID, message: { from: ACCOUNT, to: PAYEE,
+    value: '125000500000', entryRef: REF, batch: payLane(REF), nonce: '0', validUntil: String(NOW + 300), mode: 1,
+    relayer: '0x' + '02'.repeat(20), ...over } });
   td.domain = { ...td.domain, ...dom };
   return td;
 }
 
-test('payment: the client signs only a MetaTransfer of the amount it showed, from its account, on its chain', () => {
-  const intent = { account: ACCOUNT, chainId: 7622, chainUid: UID, amount: 125000.5, decimals: 6, now: NOW };
+test('payment lane = payLane(entryRef) of the forge KAT; the KAT payment passes with its fee named', () => {
+  const k = read('metatransfer_kat.json');   // mode 35: FIXED fee 100000 to 0xFEE, relayer 0xbEEF bound
+  assert.equal(payLane(k.entry_ref).toString(), k.batch);
+  const td = metaTransferTypedData({ name: k.domain_name, contract: k.verifying_contract, chainId: 7622, chainUid: k.salt,
+    message: { from: k.from, to: k.to, value: k.value, entryRef: k.entry_ref, batch: k.batch, nonce: k.nonce,
+      validUntil: k.valid_until, mode: Number(k.mode), relayer: k.relayer, fee: k.fee, feeRecipient: k.fee_recipient } });
+  const want = { account: k.from, chainId: 7622, chainUid: k.salt, amount: '100', decimals: 6, payee: k.to,
+    entryRef: k.entry_ref, expectedToken: k.verifying_contract, maxFee: '100000', feeRecipient: k.fee_recipient,
+    relayer: k.relayer, now: NOW };
+  const ok = checkPayment(td, want);
+  assert.equal(hex(ok.digest), k.digest);
+  assert.deepEqual([ok.feeMode, ok.fee, ok.feeRecipient, ok.relayer], [2, 100000n, k.fee_recipient, k.relayer]);
+  assert.throws(() => checkPayment(td, { ...want, maxFee: '99999' }), /the fee is above your limit/);
+  assert.throws(() => checkPayment(td, { ...want, feeRecipient: ATK }), /an address you did not name/);
+  assert.throws(() => checkPayment(td, { ...want, feeRecipient: undefined }), /an address you did not name/);
+  assert.throws(() => checkPayment(td, { ...want, relayer: ATK }), /bound to another relayer/);
+});
+
+test('payment: only the payment the user was shown (payee, token, reference, amount, lane, fee), CLI-SGN-05/08', () => {
+  const intent = { account: ACCOUNT, chainId: 7622, chainUid: UID, amount: 125000.5, decimals: 6, payee: PAYEE, entryRef: REF,
+    expectedToken: TOKEN, now: NOW };
   const td = serverPayment();
   const ok = checkPayment(td, intent);
   assert.equal(hex(ok.digest), hex(hashTypedData(td)));
-  assert.equal(ok.payee, '0x' + '5e'.repeat(20));
-  assert.equal(ok.entryRef, REF);
+  assert.deepEqual([ok.payee, ok.entryRef, ok.token, ok.fee, ok.feeMode], [PAYEE, REF, TOKEN, 0n, 0]);
   checkPayment(serverPayment({ value: '125000000000' }), { ...intent, amount: 125000 });
   checkPayment(serverPayment({ mode: 0, relayer: '0x' + '00'.repeat(20) }), intent);
-  checkPayment(td, { ...intent, entryRef: REF, expectedToken: TOKEN });
-  assert.throws(() => checkPayment(td, { ...intent, expectedToken: '0x' + 'ce'.repeat(20) }), /wrong token/, 'CLI-SGN-08');
+  assert.equal(checkPayment(serverPayment({ mode: 0x20, fee: '1' }), { ...intent, maxFee: 1 }).fee, 1n);
+  // PERCENT: ⌊value × rate / 10^6⌋ against the limit
+  const pct = serverPayment({ mode: 0x10, fee: '10000' });
+  assert.equal(checkPayment(pct, { ...intent, maxFee: '1250005000' }).fee, 1250005000n);
+  assert.throws(() => checkPayment(pct, { ...intent, maxFee: '1250004999' }), /the fee is above your limit/);
+  const cases = [
+    [serverPayment({ to: ATK }), /the payee differs/],                               // hostile probe: payee swap
+    [serverPayment({ batch: '8', nonce: '5' }), /signed once, on its request lane/],   // pay twice on a fresh lane
+    [serverPayment({ batch: '8' }), /signed once/],
+    [serverPayment({ nonce: '5' }), /signed once/],
+    [serverPayment({}, {}, ATK), /wrong token/],                                      // CLI-SGN-08
+    [serverPayment({}, { verifyingContract: ACCOUNT }), /wrong token/],
+    [serverPayment({ entryRef: '0x' + '07'.repeat(32) }), /reference differs/],
+    [serverPayment({ value: '125000500001' }), /amount differs/],                    // more than shown
+    [serverPayment({ fee: '1', mode: 1 }), /a fee with fee mode NONE/],
+    [serverPayment({ fee: '0', mode: 0x22, feeRecipient: ATK }), /an address you did not name/],
+    [serverPayment({ fee: '1', mode: 0x20 }), /the fee is above your limit/],
+    [serverPayment({ fee: '10001', mode: 0x10 }), /a percentage fee/],
+    [serverPayment({ mode: 0x30 }), /unexpected fee mode/],
+    [serverPayment({ mode: 0x04 }), /unexpected fee mode/],
+    [serverPayment({ mode: '0x1' }), /the fee mode is not a number/],
+    [serverPayment({ from: '0x' + 'bd'.repeat(20) }), /unexpected payment fields/],
+    [serverPayment({ validUntil: String(NOW) }), /deadline/],
+    [serverPayment({ validUntil: String(NOW + 86401) }), /deadline/],
+    [serverPayment({}, { chainId: '1' }), /unexpected payment fields/],
+    [serverPayment({}, { salt: '0x' + '11'.repeat(32) }), /unexpected payment fields/],  // another chain_uid (CLI-SGN-33)
+    [{ ...serverPayment(), primaryType: 'MetaTransaction' }, /this is not a payment/],    // the v1 struct
+    [serverOwnerCall(addKeyCalldata(NEW_KEY)), /this is not a payment/],
+  ];
   const unsalted = serverPayment();
   unsalted.types = { ...unsalted.types, EIP712Domain: unsalted.types.EIP712Domain.slice(0, 4) };
   delete unsalted.domain.salt;
-  const v1 = { ...serverPayment(), primaryType: 'MetaTransaction' };
-  const refused = [
-    serverPayment({ value: '125000500001' }),                       // more than shown
-    serverPayment({ from: '0x' + 'bd'.repeat(20) }),
-    serverPayment({ entryRef: '0x' + '00'.repeat(32) }),             // a plain transfer, not a payment
-    serverPayment({ fee: '1', mode: 0x21 }),
-    serverPayment({ validUntil: String(NOW - 1) }),
-    serverPayment({ validUntil: String(NOW + 8 * 86400) }),
-    serverPayment({}, { chainId: '1' }),
-    serverPayment({}, { verifyingContract: ACCOUNT }),
-    serverPayment({}, { salt: '0x' + '11'.repeat(32) }),             // another chain_uid (CLI-SGN-33)
-    unsalted,
-    v1,                                                              // the v1 struct
-  ];
-  for (const [i, bad] of refused.entries()) assert.throws(() => checkPayment(bad, intent), /Refusing to sign/, `case ${i}`);
-  assert.throws(() => checkPayment(td, { ...intent, entryRef: '0x' + '08'.repeat(32) }), /reference differs/);
+  cases.push([unsalted, /unexpected payment fields/]);
+  for (const [i, [bad, why]] of cases.entries()) assert.throws(() => checkPayment(bad, intent), why, `case ${i}`);
+  checkPayment(serverPayment({ validUntil: String(NOW + 86400) }), intent);
+  // the pins are required: a caller that forgets one gets a refusal, never an unpinned signature
+  for (const f of ['payee', 'entryRef', 'expectedToken', 'amount']) {
+    assert.throws(() => checkPayment(td, { ...intent, [f]: undefined }), /are required/, f);
+  }
+  assert.throws(() => checkPayment(serverPayment({ value: '0' }), { ...intent, amount: 0 }), /amount differs/);
+  const zero = '0x' + '00'.repeat(32);
+  assert.throws(() => checkPayment(serverPayment({ entryRef: zero }), { ...intent, entryRef: zero }), /this is not a payment/);
   assert.throws(() => checkPayment(td, { ...intent, amount: 1e21 }), /Refusing to sign/);
-  // an owner call disguised as a payment, on the payment's own chain: its struct is a MetaTransaction
-  assert.throws(() => checkPayment(serverOwnerCall(addKeyCalldata(NEW_KEY)), intent), /Refusing to sign: this is not a payment/);
 });
 
-test('self-call: decoded against the published allowlist; transfers, payments and approvals are never calls', () => {
-  const k = read('metatx_kat.json');   // cancelNonce(42), relayer bound
+test('self-call: exactly the call the client built, on its contract, with the fee the user allows (CLI-SGN-34)', () => {
+  const k = read('metatx_kat.json');   // cancelNonce(42), relayer bound, fee mode NONE
   const allowlist = [{ selector: '0xcfdd7aea', name: 'cancelNonce', feeClass: 1 }];
-  const want = { account: k.from, chainId: 7622, chainUid: k.salt, allowlist, now: 1_800_000_000 };
-  const call = (over = {}) => metaTxTypedData({ name: k.domain_name, contract: k.verifying_contract, chainId: 7622,
+  const want = { account: k.from, chainId: 7622, chainUid: k.salt, allowlist, call: { contract: k.verifying_contract, data: k.data },
+    now: NOW };
+  const call = (over = {}, contract = k.verifying_contract) => metaTxTypedData({ name: k.domain_name, contract, chainId: 7622,
     chainUid: k.salt, message: { from: k.from, data: k.data, batch: k.batch, nonce: k.nonce, validUntil: k.valid_until,
       mode: Number(k.mode), relayer: k.relayer, ...over } });
   const ok = checkCall(call(), want);
   assert.equal(hex(ok.digest), k.digest);
-  assert.equal(ok.name, 'cancelNonce');
-  const word = (n) => n.toString(16).padStart(64, '0');
-  for (const [i, data] of [
-    '0x12345678' + word(1),                                          // not on the allowlist
-    '0xa9059cbb' + word(1) + word(2),                                // transfer
-    '0x095ea7b3' + word(1) + word(2),                                // approve
-    '0x23b872dd' + word(1) + word(2) + word(3),                      // transferFrom
-    '0x',
-  ].entries()) {
-    assert.throws(() => checkCall(call({ data }), { ...want, allowlist: [...allowlist,
-      { selector: '0xa9059cbb', name: 'transfer', feeClass: 2 }, { selector: '0x095ea7b3', name: 'approve', feeClass: 1 }] }),
-    /Refusing to sign/, `case ${i}`);
-  }
-  assert.throws(() => checkCall(call({ mode: 0x11 }), want), /percentage fee/);
+  assert.deepEqual([ok.name, ok.selector, ok.fee, ok.feeMode, ok.relayer], ['cancelNonce', '0xcfdd7aea', 0n, 0, k.relayer]);
+  checkCall(call(), { ...want, call: { ...want.call, data: fromHex(k.data) } });   // calldata as bytes
+  const big = '1000000000000000000000000';
+  assert.equal(checkCall(call({ mode: 0x21, fee: big }), { ...want, maxFee: big }).fee, BigInt(big));
+  const cases = [
+    [call({ mode: 0x23, fee: big, feeRecipient: ATK }), /the fee is above your limit/],   // hostile probe: fee to attacker
+    [call({ mode: 0x21, fee: big }), /the fee is above your limit/],
+    [call({ fee: '1' }), /a fee with fee mode NONE/],
+    [call({ mode: 0x11, fee: '1' }), /a percentage fee/],                                 // PERCENT on an ABSOLUTE selector
+    [call({}, ATK), /not on the contract you chose/],
+    [call({}, k.from), /not on the contract you chose/],                                  // the account itself
+    [call({ data: '0xcfdd7aea' + word(43) }), /not the call you asked for/],
+    [call({ data: k.data + word(1) }), /not the call you asked for/],                     // trailing words
+    [call({ validUntil: String(NOW + 7200) }), /deadline/],
+    [call({ from: ACCOUNT }), /unexpected call fields/],
+  ];
+  for (const [i, [bad, why]] of cases.entries()) assert.throws(() => checkCall(bad, want), why, `case ${i}`);
   assert.throws(() => checkCall(call(), { ...want, chainUid: '0x' + '11'.repeat(32) }), /unexpected call fields/);
-  assert.throws(() => checkCall(call({ from: ACCOUNT }), want), /not from your account/);
+  assert.throws(() => checkCall(call(), { ...want, relayer: ATK }), /bound to another relayer/);
+  assert.throws(() => checkCall(call({ mode: 0x23, fee: big, feeRecipient: ATK }), { ...want, maxFee: big }),
+    /an address you did not name/);
+  assert.throws(() => checkCall(call(), { ...want, call: undefined }), /not on the contract you chose/);
+  assert.throws(() => checkCall({ ...call(), primaryType: 'MetaTransfer' }, want), /this is not a contract call/);
+  // calldata the client itself built is still decoded: transfers, payments and approvals are never calls
+  const never = { ...want, allowlist: [...allowlist, { selector: '0xa9059cbb', name: 'transfer', feeClass: 2 },
+    { selector: '0x095ea7b3', name: 'approve', feeClass: 1 }] };
+  for (const [i, [data, why]] of [
+    ['0x12345678' + word(1), /not on the contract's allowlist/],
+    ['0x', /not on the contract's allowlist/],
+    ['0xa9059cbb' + word(1) + word(2), /never signed as a call/],
+    ['0x095ea7b3' + word(1) + word(2), /never signed as a call/],
+    ['0x23b872dd' + word(1) + word(2) + word(3), /never signed as a call/],
+    [hex(keccak_256(utf8ToBytes('pay(bytes32)')).subarray(0, 4)) + word(1), /never signed as a call/],
+    [hex(keccak_256(utf8ToBytes('payWithFee(address,uint256,uint8,uint256,address,bytes32)')).subarray(0, 4)) + word(1),
+      /never signed as a call/],
+  ].entries()) {
+    assert.throws(() => checkCall(call({ data }), { ...never, call: { ...want.call, data } }), why, `selector ${i}`);
+  }
+  // PERCENT on an AMOUNT selector: the basis is argument `amountArg` of the call
+  const UNWRAP = hex(keccak_256(utf8ToBytes('unwrap(address,uint256,address,uint256)')).subarray(0, 4));
+  const unwrap = UNWRAP + '00'.repeat(12) + 'aa'.repeat(20) + word(1_000_000) + word(0) + word(0);
+  const pct = { ...want, allowlist: [{ selector: UNWRAP, name: 'unwrap', feeClass: 2, amountArg: 1 }],
+    call: { ...want.call, data: unwrap } };
+  const td = call({ data: unwrap, mode: 0x10, fee: '10000' });
+  assert.equal(checkCall(td, { ...pct, maxFee: 10000 }).fee, 10000n);
+  assert.throws(() => checkCall(td, { ...pct, maxFee: 9999 }), /the fee is above your limit/);
 });
 
-test('trade order: only a DEX on the pinned list, a wrap only into a pinned wrapper (CLI-SGN-35, CLI-SGN-36)', () => {
+test('trade order: exactly the order the client built, on a pinned DEX or wrapper (CLI-SGN-35, CLI-SGN-36)', () => {
   const DEX = '0x' + 'de'.repeat(20);
+  const DEX2 = '0x' + 'df'.repeat(20);
   const WRAPPER = '0x' + 'aa'.repeat(20);
-  const order = { from: ACCOUNT, receiveToken: '0x' + 'bb'.repeat(20), amount: '1000', receiveAmount: '2000', minFill: '0',
-    fee: '3000', relayer: '0x' + '02'.repeat(20), dex: DEX, destination: '0x' + '00'.repeat(20), flags: 0, batch: '1',
-    nonce: '1', validUntil: String(NOW + 600) };
-  const want = { account: ACCOUNT, chainId: 7622, chainUid: UID, dexes: [DEX], wrappers: [WRAPPER], now: NOW };
-  const td = (o, outside) => outside
-    ? tradeOrderTypedData({ dex: o.dex, sellToken: '0x' + '0c'.repeat(20), chainId: 7622, chainUid: UID, order: o })
-    : tradeOrderTypedData({ token: TOKEN, chainId: 7622, chainUid: UID, order: o });
-  const ok = checkTradeOrder(td(order), want);
+  const OUT = '0x' + '0c'.repeat(20);
+  const mine = { receiveToken: '0x' + 'bb'.repeat(20), amount: '1000', receiveAmount: '2000', minFill: '0', fee: '3000',
+    relayer: '0x' + '02'.repeat(20), dex: DEX, destination: '0x' + '00'.repeat(20), flags: 0, batch: '1' };
+  const server = (o = {}, { outside = false, sellToken, dom = {} } = {}) => {
+    const order = { ...mine, from: ACCOUNT, nonce: '1', validUntil: String(NOW + 600), ...o };
+    const td = outside
+      ? tradeOrderTypedData({ dex: order.dex, sellToken: sellToken || OUT, chainId: 7622, chainUid: UID, order })
+      : tradeOrderTypedData({ token: sellToken || TOKEN, chainId: 7622, chainUid: UID, order });
+    td.domain = { ...td.domain, ...dom };
+    return td;
+  };
+  const want = { account: ACCOUNT, chainId: 7622, chainUid: UID, order: mine, sellToken: TOKEN, dexes: [DEX, DEX2],
+    wrappers: [WRAPPER], now: NOW };
+  const ok = checkTradeOrder(server(), want);
   assert.deepEqual(ok.warnings, []);
   assert.equal(ok.minFill, 500n, 'a minFill below half is shown as half');
-  assert.equal(hex(ok.digest), hex(hashTypedData(td(order))));
-  checkTradeOrder(td(order, true), want);
-  assert.deepEqual(checkTradeOrder(td({ ...order, destination: '0x' + '77'.repeat(20) }), want).warnings,
-    ['someone else receives the proceeds']);
-  // a wrap by signature: dex = receiveToken = the wrapper, all or nothing
-  checkTradeOrder(td({ ...order, dex: WRAPPER, receiveToken: WRAPPER, minFill: '1000' }), want);
-  const refused = [
-    td({ ...order, dex: '0x' + 'ee'.repeat(20) }),                   // unlisted DEX
-    td({ ...order, dex: WRAPPER, receiveToken: WRAPPER }),           // a wrap that is not all or nothing
-    td({ ...order, dex: WRAPPER, minFill: '1000' }),                 // a wrap paying out something else
-    td({ ...order, fee: '10001' }),
-    td({ ...order, flags: 2 }),                                      // ESCROW without IOC
-    td({ ...order, flags: 8 }),
-    td({ ...order, minFill: '1001' }),
-    td({ ...order, from: '0x' + 'bd'.repeat(20) }),
-    td({ ...order, validUntil: String(NOW - 1) }),
+  assert.equal(hex(ok.digest), hex(hashTypedData(server())));
+  const odd = { ...mine, amount: '1001' };
+  assert.equal(checkTradeOrder(server(odd), { ...want, order: odd }).minFill, 501n, 'ceil(amount / 2)');
+  checkTradeOrder(server(), { ...want, order: { ...mine, validUntil: String(NOW + 600) } });
+  const outsideWant = { ...want, outside: true, sellToken: OUT };
+  checkTradeOrder(server({}, { outside: true }), outsideWant);
+  const away = { ...mine, destination: '0x' + '77'.repeat(20) };
+  assert.deepEqual(checkTradeOrder(server(away), { ...want, order: away }).warnings, ['someone else receives the proceeds']);
+  const open = { ...mine, relayer: '0x' + '00'.repeat(20) };
+  assert.deepEqual(checkTradeOrder(server(open), { ...want, order: open }).warnings,
+    ['any submitter may settle this order and earn the relayer share']);
+  const wrap = { ...mine, dex: WRAPPER, receiveToken: WRAPPER, minFill: '1000' };
+  checkTradeOrder(server(wrap), { ...want, order: wrap });
+  const escrow = { ...mine, flags: 3 };
+  checkTradeOrder(server(escrow), { ...want, order: escrow });
+  // a hostile server changes one field of the order the client built: refused (hostile probe cases included)
+  const NOT = /this is not the trade order you asked for/;
+  const changed = [
+    server({ receiveAmount: '1' }), server({ receiveToken: ATK }), server({ amount: '1000000000' }),
+    server({}, { sellToken: ATK }), server({ relayer: ATK }), server({ flags: 3 }), server({ flags: 4 }),
+    server({ fee: '3001' }), server({ batch: '2' }), server({ minFill: '1' }), server({ dex: DEX2 }),
+    server({ destination: ATK }), server({ from: '0x' + 'bd'.repeat(20) }), server({}, { dom: { salt: '0x' + '11'.repeat(32) } }),
+    server({}, { outside: true }),                                       // a DexOrder where the client built a TradeOrder
   ];
-  const wrongDex = td(order, true);
-  wrongDex.domain = { ...wrongDex.domain, verifyingContract: '0x' + 'ee'.repeat(20) };
-  refused.push(wrongDex);                                            // a DexOrder signed for another DEX
-  for (const [i, bad] of refused.entries()) assert.throws(() => checkTradeOrder(bad, want), /Refusing to sign/, `case ${i}`);
+  for (const [i, bad] of changed.entries()) assert.throws(() => checkTradeOrder(bad, want), NOT, `changed ${i}`);
+  assert.throws(() => checkTradeOrder(server({ validUntil: String(NOW + 601) }),
+    { ...want, order: { ...mine, validUntil: String(NOW + 600) } }), NOT);
+  for (const [i, bad] of [
+    server({}, { outside: true, dom: { verifyingContract: ATK } }),       // a DexOrder signed for another DEX
+    server({}, { outside: true, sellToken: ATK }),
+    server(),
+  ].entries()) assert.throws(() => checkTradeOrder(bad, outsideWant), NOT, `outside ${i}`);
+  // the order the client built must itself be sane
+  for (const [i, [o, why, extra]] of [
+    [{ dex: '0x' + 'ee'.repeat(20) }, /DEX that is not on your chain profile/],
+    [{ dex: WRAPPER, receiveToken: WRAPPER }, /wrap by signature/],                  // not all or nothing
+    [{ dex: WRAPPER, minFill: '1000' }, /wrap by signature/],                        // paying out something else
+    [{ dex: WRAPPER, receiveToken: WRAPPER, minFill: '1000' }, /wrap by signature/, { outside: true, sellToken: OUT }],
+    [{ fee: '10001' }, /the fee is above 1 %/],
+    [{ flags: 2 }, /unknown order flags/],                                           // ESCROW without IOC
+    [{ flags: 8 }, /unknown order flags/],
+    [{ flags: 3 }, /unknown order flags/, { outside: true, sellToken: OUT }],        // ESCROW on an outside token (BadFlags)
+    [{ flags: 'x' }, /the flags is not a number/],
+    [{ minFill: '1001' }, /the amounts are malformed/],
+    [{ amount: '0' }, /the amounts are malformed/],
+    [{ receiveAmount: '0' }, /the amounts are malformed/],
+    [{ validUntil: String(NOW) }, /deadline/],
+    [{ validUntil: String(NOW + 30 * 86400 + 1) }, /deadline/],
+  ].entries()) {
+    const x = extra || {};
+    const o2 = { ...mine, ...o };
+    assert.throws(() => checkTradeOrder(server(o2, x), { ...want, ...x, order: o2 }), why, `shape ${i}`);
+  }
+  checkTradeOrder(server({ validUntil: String(NOW + 30 * 86400) }), want);
+});
+
+test('cancel: only the order hash or the lane the user chose, from the account, in the order\'s domain', () => {
+  const H = '0x' + '5a'.repeat(32);
+  const want = { account: ACCOUNT, chainId: 7622, chainUid: UID, contract: TOKEN, orderHash: H };
+  const at = { contract: TOKEN, chainId: 7622, chainUid: UID };
+  const td = orderCancelTypedData({ ...at, orderHash: H });
+  assert.equal(hex(checkCancel(td, want)), hex(hashTypedData(td)));
+  const inv = { batch: 7, minNonce: 43 };
+  const tdInv = orderCancelTypedData({ ...at, invalidate: { ...inv, from: ACCOUNT } });
+  assert.equal(hex(checkCancel(tdInv, { ...want, orderHash: undefined, invalidate: inv })), hex(hashTypedData(tdInv)));
+  const short = orderCancelTypedData({ ...at, orderHash: H });
+  short.message.orderHash = '0x' + '5a'.repeat(31);
+  assert.throws(() => hashTypedData(short), /bytes32 must be 32 bytes/);
+  for (const [i, bad] of [
+    orderCancelTypedData({ ...at, orderHash: '0x' + '5b'.repeat(32) }),
+    orderCancelTypedData({ ...at, contract: ATK, orderHash: H }),
+    orderCancelTypedData({ ...at, invalidate: { ...inv, from: ATK } }),
+    short,
+  ].entries()) assert.throws(() => checkCancel(bad, want), /Refusing to sign/, `case ${i}`);
+  assert.throws(() => checkCancel(orderCancelTypedData({ ...at, invalidate: { ...inv, minNonce: 44, from: ACCOUNT } }),
+    { ...want, orderHash: undefined, invalidate: inv }), /not the cancel you asked for/);
+  assert.throws(() => checkCancel(orderCancelTypedData({ ...at, invalidate: { ...inv, from: ATK } }),
+    { ...want, orderHash: undefined, invalidate: inv }), /not the cancel you asked for/);
 });
 
 const KEY_PROOF_ZERO = '0xfa7987471ecf88572865d4f53880fda17e67fadcae78beb98eb39504833f66de';
