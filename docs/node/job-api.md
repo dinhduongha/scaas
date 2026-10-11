@@ -253,6 +253,27 @@ submitting lane the order's `fee` from minted units. `mtxTrade` is never a job: 
    namespace, [NODE-SPN-01](sponsorship.md#NODE-SPN-01)). Deadlock/serialization failure ⇒ retry the transaction
    (≤ 3).
 
+The checks as a flow, each refusal with its code:
+
+```mermaid
+flowchart TD
+    IN["POST /v1/jobs item"] --> S1{"1 scope submit,<br/>namespace active,<br/>chain granted"}
+    S1 -->|no| E1["403 CHAIN_NOT_GRANTED"]
+    S1 --> S2{"2 payload decodes,<br/>digest matches"}
+    S2 -->|no| E2["422 BAD_PAYLOAD"]
+    S2 --> S3{"3 token registered, active,<br/>in the namespace subset"}
+    S3 -->|no| E3["422 UNKNOWN_TOKEN"]
+    S3 --> S4{"4 call: allow_call and<br/>call table row"}
+    S4 -->|no| E4["403 CALL_NOT_ALLOWED /<br/>CALL_TARGET_REFUSED"]
+    S4 --> S5{"5 now &lt; valid_until<br/>≤ now + max_valid_for_secs"}
+    S5 -->|no| E5["422 EXPIRED / VALID_TOO_LONG"]
+    S5 --> S6{"6 relayer bound<br/>to a lane of the chain"}
+    S6 -->|no| E6["422 RELAYER_NOT_OURS"]
+    S6 --> S7["7 normalize, kind rules,<br/>denylist, sponsorship match"]
+    S7 --> S8["8 one transaction: re-check authority,<br/>idempotency, INSERT"]
+    S8 --> OK["created: true, state queued"]
+```
+
 <a id="NODE-JOB-14"></a>**NODE-JOB-14** — **Intake authority is re-checked inside the insert transaction.** The
 transaction that inserts a job (or a tombstone) re-reads, with locking reads (`FOR SHARE`; SQLite: inside
 `BEGIN IMMEDIATE`), the namespace row (`state`, `allow_call`, `all_tokens`, quotas), the `namespace_chain` row, the
