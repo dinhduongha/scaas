@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="960" height="646" viewBox="0 0 960 646" role="img" aria-labelledby="t d">
   <title id="t">Smart chain vs IaaS and BaaS</title>
-  <desc id="d">Scorecard of a cloud VM (IaaS), a hosted backend (BaaS) and a smart chain with SCaaS across five rows. Code and data: the chain is worse (seconds to minutes until finality). Money and billing: the chain is better (a native fee in every transaction). Operations and reliability: different (many validators, lock-in to the chain). Who holds the power: the chain wins (the subject signs every write). Privacy and data: the chain is worse (public, cannot delete). Use the chain for write authority and value; keep reads, reports and workflows on ordinary infrastructure.</desc>
+  <desc id="d">Scorecard of a cloud VM (IaaS), a hosted backend (BaaS) and a smart chain with SCaaS across five rows. Code and data: the chain is worse (seconds to minutes until finality). Money and billing: the chain is better (a native fee in every transaction). Operations and reliability: different (many validators, lock-in to the chain). Who holds the power: the chain wins (the subject signs every write). Privacy and data: the chain is better (Zether and PQ Zether hide amounts and balances; records are immutable, so a mistake is corrected by a new entry). Use the chain for write authority, value and records nobody may rewrite; keep reads, reports and workflows on ordinary infrastructure.</desc>
   <defs>
     <style>
       text { font-family: system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #1f2328; }
@@ -17,7 +17,7 @@
   </defs>
   <rect x="0.5" y="0.5" width="959" height="645" rx="16" fill="#f8fafc" stroke="#d0d7de"/>
   <text class="h" x="24" y="40">Smart chain vs IaaS and BaaS</text>
-  <text class="sub" x="24" y="61">Five questions, three answers: the chain loses on some counts, wins on the one that matters most</text>
+  <text class="sub" x="24" y="61">Five questions: the chain is slower, but wins on money, authority and records nobody can rewrite</text>
 
   <rect x="206" y="76" width="238" height="36" rx="8" fill="#f1f5f9" stroke="#94a3b8"/>
   <text class="col" x="325" y="99" text-anchor="middle">Cloud VM (IaaS)</text>
@@ -83,17 +83,17 @@
   <text class="s" x="710" y="452">Relayers can only refuse or delay</text>
   <rect x="20" y="472" width="176" height="72" rx="8" fill="#ffffff" stroke="#d0d7de"/>
   <text class="rl" x="30" y="504">e) Privacy &amp; data</text>
-  <text class="rs" x="30" y="522">published forever</text>
+  <text class="rs" x="30" y="522">confidential, tamper-proof</text>
   <rect x="206" y="472" width="238" height="72" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
-  <text class="s" x="218" y="515">Operator and whom it grants</text>
-  <text class="s" x="218" y="532">Rows and backups can be deleted</text>
+  <text class="s" x="218" y="515">The operator sees all it hosts</text>
+  <text class="s" x="218" y="532">Rows can be silently rewritten</text>
   <rect x="452" y="472" width="238" height="72" rx="8" fill="#ffffff" stroke="#d0d7de" stroke-width="1"/>
-  <text class="s" x="464" y="515">Operator and whom it grants</text>
-  <text class="s" x="464" y="532">Rows can be deleted</text>
-  <rect x="698" y="472" width="238" height="72" rx="8" fill="#fee2e2" stroke="#dc2626" stroke-width="1.5"/>
-  <rect x="708" y="480" width="56" height="18" rx="9" fill="#dc2626"/><text class="chip" x="736" y="493" text-anchor="middle" style="fill:#ffffff">WORSE</text>
-  <text class="b" x="710" y="515">Public chain: everyone can see it</text>
-  <text class="s" x="710" y="532">Deleting is impossible</text>
+  <text class="s" x="464" y="515">The provider sees all it stores</text>
+  <text class="s" x="464" y="532">Rows can be silently rewritten</text>
+  <rect x="698" y="472" width="238" height="72" rx="8" fill="#dcfce7" stroke="#16a34a" stroke-width="1.5"/>
+  <rect x="708" y="480" width="64" height="18" rx="9" fill="#16a34a"/><text class="chip" x="740" y="493" text-anchor="middle" style="fill:#ffffff">BETTER</text>
+  <text class="b" x="710" y="515" style="font-size:12px">Zether / PQZ hide amounts, balances</text>
+  <text class="s" x="710" y="532">Immutable: fixes are new entries</text>
   <text class="lg" x="24" y="566">Verdict for the chain:</text>
   <rect x="170" y="553" width="16" height="16" rx="4" fill="#dcfce7" stroke="#16a34a" stroke-width="1.5"/><text class="lg" x="192" y="566">better than IaaS/BaaS</text>
   <rect x="352.6" y="553" width="16" height="16" rx="4" fill="#fee2e2" stroke="#dc2626" stroke-width="1.5"/><text class="lg" x="374.6" y="566">worse than IaaS/BaaS</text>
@@ -101,5 +101,5 @@
   <rect x="698.0" y="553" width="16" height="16" rx="4" fill="#ffffff" stroke="#d0d7de"/><text class="lg" x="720.0" y="566">IaaS / BaaS (neutral)</text>
   <rect x="16" y="588" width="928" height="46" rx="12" fill="#dbeafe" stroke="#3b82f6"/>
   <text class="b" x="30" y="608" style="font-size:13.5px">f) Which to use for what</text>
-  <text class="s" x="30" y="625" style="font-size:13px">Use the chain for write authority and value; keep reads, reports and workflows on ordinary infrastructure.</text>
+  <text class="s" x="30" y="625" style="font-size:13px">Use the chain for write authority, value and records nobody may rewrite; keep reads, reports and workflows on ordinary infrastructure.</text>
 </svg>

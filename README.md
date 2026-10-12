@@ -81,11 +81,11 @@ Three supporting services complete the picture:
 ### How a smart chain compares with IaaS and BaaS
 
 If a smart chain is infrastructure, it should be judged next to the infrastructure people already use: a **cloud VM**
-(IaaS, e.g. EC2, Compute Engine) and a **hosted backend** (BaaS, e.g. Supabase, Firebase). The chain loses on some
-counts and wins on others; the five tables below — a) to e) — say which, and f) sums up.
+(IaaS, e.g. EC2, Compute Engine) and a **hosted backend** (BaaS, e.g. Supabase, Firebase). The chain loses on speed
+and wins on money, authority and trustworthy records; the five tables below — a) to e) — say which, and f) sums up.
 
 <p align="center">
-  <img src="docs/assets/chain-vs-iaas-baas.svg" width="900" alt="Scorecard of a cloud VM (IaaS), a hosted backend (BaaS) and a smart chain with SCaaS across five rows. a) Code and data: the chain is worse, with writes taking seconds to minutes until finality against milliseconds, and block space shared with everyone. b) Money and billing: the chain is better, with a native fee inside every transaction and value moving as an ordinary call, against a monthly invoice and a bank or payment processor. c) Operations and reliability: different, with many independent validators but lock-in to the chain itself, against one provider. d) Who holds the power, highlighted as where the chain wins: the chain is better, because the subject signs every write and nobody can forge it without the key, while on IaaS and BaaS a server or auth service issues the token and a leaked key or secret impersonates every user. e) Privacy and data: the chain is worse, because a public chain shows everything and deleting is impossible. Footer f): use the chain for write authority and value; keep reads, reports and workflows on ordinary infrastructure.">
+  <img src="docs/assets/chain-vs-iaas-baas.svg" width="900" alt="Scorecard of a cloud VM (IaaS), a hosted backend (BaaS) and a smart chain with SCaaS across five rows. a) Code and data: the chain is worse, with writes taking seconds to minutes until finality against milliseconds, and block space shared with everyone. b) Money and billing: the chain is better, with a native fee inside every transaction and value moving as an ordinary call, against a monthly invoice and a bank or payment processor. c) Operations and reliability: different, with many independent validators but lock-in to the chain itself, against one provider. d) Who holds the power, highlighted as where the chain wins: the chain is better, because the subject signs every write and nobody can forge it without the key, while on IaaS and BaaS a server or auth service issues the token and a leaked key or secret impersonates every user. e) Privacy and data: the chain is better, because Zether and PQ Zether hide amounts and balances, and records are immutable, so a mistake is corrected by a new entry instead of a silent edit. Footer f): use the chain for write authority, value and records nobody may rewrite; keep reads, reports and workflows on ordinary infrastructure.">
 </p>
 
 <details>
@@ -151,20 +151,20 @@ ERP trusts finalized events, is in [docs/architecture.md](docs/architecture.md#a
 </details>
 
 <details>
-<summary><b>e) Privacy and data</b> — treat whatever goes on a chain as published forever</summary>
+<summary><b>e) Privacy and data</b> — confidential amounts, and records nobody can rewrite</summary>
 
 | | Cloud VM | Hosted backend | Smart chain + SCaaS |
 |---|---|---|---|
-| Who can see the data | The operator and whom it grants | Same | Everyone on a public chain; Zether hides amounts and balances, identities stay visible |
-| Deleting data | Delete rows, files and backups | Delete rows | Impossible: chain history is permanent |
+| Who can see the data | The operator, and whomever it grants | The provider, and whomever it grants | Amounts and balances hidden by Zether, and by PQ Zether (post-quantum, planned); who transacts stays visible |
+| Changing a record | Rows can be edited or deleted, often without a trace | Same | Immutable: a mistake is fixed by a new entry that references it — a wrong invoice gets a correcting invoice, never an edit — so the history is its own audit trail |
 | A private setup | A private network | Self-hosting | A private or permissioned chain with admitted peers only |
 
-Treat whatever goes on a chain as published forever: personal data never goes on chain, only commitments, references
-and amounts ([docs/integration.md](docs/integration.md#data-protection)).
+Because nothing on a chain can be deleted, personal data never goes on chain — only commitments, references and
+(hidden) amounts ([docs/integration.md](docs/integration.md#data-protection)).
 
 </details>
 
-**f) Which to use for what.** Use the chain for **write authority and value**: every valuable create or update — a
+**f) Which to use for what.** Use the chain for **write authority, value and records nobody may rewrite**: every valuable create or update — a
 payment, a trade, a grant of rights, a key registration — carries the subject's signature, and no server ever holds
 a key to sign for a subject. Keep reads, reports and business workflows on ordinary infrastructure with ordinary
 sessions. The chain does not replace the application's database; it replaces the server's power to act for the
