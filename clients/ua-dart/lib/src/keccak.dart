@@ -99,7 +99,7 @@ void _f(Uint32List s) {
 
 /// keccak-256 of the concatenation of [parts].
 Uint8List keccak256(List<Uint8List> parts) {
-  assert(_init);
+  if (!_init) throw StateError('keccak tables');
   const rate = 136;
   var len = 0;
   for (final p in parts) {
