@@ -28,12 +28,12 @@ const eq = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
 const tag = (p) => ua.purposeTag(p);
 const attempt = (f) => { try { return f(); } catch { return false; } };
 
-test('the generator reproduces signatures.json and ed25519_fuzz.json byte for byte', () => {
+test('the generator reproduces signatures.json, ed25519_fuzz.json and metatx3.json byte for byte', () => {
   const out = mkdtempSync(join(tmpdir(), 'ua-sig-vectors-'));
   try {
     const r = spawnSync(process.execPath, [fileURLToPath(new URL('../scripts/ua-sig-vectors.mjs', import.meta.url)), out], { encoding: 'utf8' });
     assert.equal(r.status, 0, r.stderr);
-    for (const f of ['signatures.json', 'ed25519_fuzz.json']) assert.equal(readFileSync(join(out, f), 'utf8'), readFileSync(new URL(f, dir), 'utf8'), f);
+    for (const f of ['signatures.json', 'ed25519_fuzz.json', 'metatx3.json']) assert.equal(readFileSync(join(out, f), 'utf8'), readFileSync(new URL(f, dir), 'utf8'), f);
   } finally {
     rmSync(out, { recursive: true, force: true });
   }
