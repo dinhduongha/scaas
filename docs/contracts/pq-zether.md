@@ -1025,7 +1025,12 @@ only ids it implements.
     secret-keyed streams) or by SHAKE where the fork changes the stream (then all KATs are fork-generated).
 
   Upstream cannot produce our transcripts once the samplers and PRNG change, so the only cross-check against upstream
-  is at the **arithmetic layer** (NTT, ring products, norms on the same inputs) on a CI runner with AVX-512. CI asserts
+  is at the **arithmetic layer** (NTT, ring products, norms on the same inputs), as a **one-shot golden dump** (owner
+  2026-10-13): a static x86-64 harness `pqz-core/kat/lazer_dump` links upstream LaZer at the pinned commit, runs fixed
+  seeded inputs through that layer once — on any AVX-512 machine or under Intel SDE emulation — and writes
+  `pqz-core/kat/lazer-<commit>.json`; `pqz-core`'s tests check byte equality against that file, so CI needs no
+  AVX-512 runner. The dump is regenerated only when the LaZer pin changes (a dump made under SDE gets one cross-check
+  on real AVX-512 hardware). CI asserts
   that `libpqz.so`, the WASM module and the mobile libraries link no GMP, MPFR, libstdc++ or libm symbols and contain no
   floating-point instructions on the verify and prove paths (`nm`/`objdump` check).
 - **Relations.** `R_TX`, `R_BURN` (also REFRESH), `R_REG`, `R_DS`, `R_DR` written as LaZer specifications
@@ -1441,7 +1446,8 @@ The UA `smartcontracts/vectors/ua/kinds.json` gains the `pqz-mlwe` row (seed →
 
 **Cross-language and cross-backend.** Same vectors through: `pqz-core` portable, AVX2, aarch64, freestanding `wasm32`
 (bit-exact samplers: the same `rnd32` gives the same masks, rejection decisions and proof bytes on native and WASM);
-upstream LaZer on an AVX-512 runner for the **arithmetic layer only** (NTT, ring products, norms), since transcripts
+upstream LaZer for the **arithmetic layer only** (NTT, ring products, norms) via the committed golden dump
+`pqz-core/kat/lazer-<commit>.json` ([CTR-PQZ-09](#CTR-PQZ-09); no AVX-512 runner in CI), since transcripts
 differ once samplers and PRNG change; Rust reference `Enc/Dec`; Solidity `PqzCt` (add/sub/hash/`< q` check); JS
 clientkeys (derivation, ML-DSA, `authDigest`); a pure-Python `pqz_kat.py` (no numpy) for encoding, `A`, CBD, keygen,
 `Enc`/`Dec`, statements (`--check` reports drift, like classical `kat.py`).
