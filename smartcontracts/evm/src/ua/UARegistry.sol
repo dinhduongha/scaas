@@ -13,7 +13,7 @@ import {UAKinds} from "./UAKinds.sol";
 /// @title UA registry, UA-2a/2c scope (accounts.md §1.8): the single-key kinds 0x0100–0x0107, the group kinds
 ///        0x0110–0x0113 (MuSig2/FROST, stored), the structure `msig`, native EVM ids, generations.
 /// @notice Monotonic and admin-free (CTR-UA-15): no owner, no setter, no `payable`, a record never changes. `register`
-///         derives every record field from `keyData` (CTR-UA-07), so anyone may relay it. Every verifier `staticcall` is
+///         derives every record field from `keyData` (CTR-UA-07), so anyone may relay it. Every verifier `staticcall` (group PoP: see below) is
 ///         capped at the kind's `verifyCap` and counts only exactly 32 bytes equal to 1; a caller that leaves too little
 ///         gas for the cap gets `UAVerifyGas`, never a pass (T-AUTH-4).
 ///

@@ -12,8 +12,9 @@ import {KEYAGG_LIST_TAG, KEYAGG_COEF_TAG} from "./Musig2Secp256k1Verifier.sol";
 ///         BIP-327 KeyAgg port: `L = hash_{KeyAgg list}(P_1 ‖ … ‖ P_n)` (BIP-327's 32-byte tagged SHA-256),
 ///         `a_i = H_{KeyAgg coefficient}(L ‖ P_i)` with the widened hash `H_t(x) = tagged_t(x ‖ 0x00) ‖ tagged_t(x ‖ 0x01)`
 ///         read as a 512-bit integer mod r, `a_i = 1` for the second key (`P_2`), `Q == Σ a_i·P_i` (ECMUL/ECADD, full
-///         points, no parity), then the Schnorr by `Q`. Runs inside `UASafeVerifier` (an invalid point makes the
-///         precompile fail and `G1Bn254` revert: false). **UNAUDITED — NOT FOR PRODUCTION FUNDS.**
+///         points, no parity), then the Schnorr by `Q`. Runs inside `UASafeVerifier` (an off-curve point makes the
+///         precompile fail and `G1Bn254` revert: false; the identity (0,0) is ECMUL's O, so it is not refused here: `UAKinds`
+///         key validation (`_bnG1`) refuses an identity member before the registry calls this). **UNAUDITED — NOT FOR PRODUCTION FUNDS.**
 contract Musig2Bn254Verifier is UASafeVerifier {
     /// verifyPop at n = 16 measured 188,045 inside `check` (`Musig2Verifiers.t.sol` `test_bnPopGas`); ~20 % margin.
     uint256 public constant POP_GAS = 230_000;
