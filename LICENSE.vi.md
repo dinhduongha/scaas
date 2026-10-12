@@ -16,7 +16,8 @@ công ty con, công ty chung quyền kiểm soát) thuộc một trong các trư
 3. **Trên 10% doanh thu** tập đoàn đến từ việc bán, phân phối, chế biến, vận chuyển, tiếp thị hoặc tài trợ sản phẩm
    động vật bị cấm hoặc hoạt động giết động vật (kể cả bán lẻ, bán buôn).
 4. **Buôn bán sản phẩm từ con người**, ở bất kỳ quy mô nào: mua, bán, môi giới hoặc chế biến để bán nội tạng, mô, tế bào,
-   máu và thành phần máu, bộ phận cơ thể, di hài, phôi, giao tử và mọi sản phẩm làm từ chúng. **Ngoại lệ duy nhất:** hiến
+   máu và thành phần máu, bộ phận cơ thể, tóc, di hài, phôi, giao tử và mọi sản phẩm làm từ chúng (sữa mẹ không thuộc diện
+   này: được phép). **Ngoại lệ duy nhất:** hiến
    tặng nội tạng, mô, tế bào, máu để chữa bệnh cho người, kể cả việc bệnh viện, ngân hàng máu/mô/tạng thu lại chi phí trên
    cơ sở phi lợi nhuận.
 
