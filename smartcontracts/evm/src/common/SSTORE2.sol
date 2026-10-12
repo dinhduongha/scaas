@@ -9,6 +9,7 @@ library SSTORE2 {
 
     /// Deploys `0x00 ‖ data` with CREATE; reverts if the deployment fails (out of gas, data over the EIP-170 limit).
     function write(bytes memory data) internal returns (address ptr) {
+        if (data.length > 0xfffe) revert SSTORE2WriteFailed(); // PUSH2 len+1 below
         // init: PUSH2 len+1, DUP1, PUSH1 0x0c, PUSH1 0, CODECOPY, PUSH1 0, RETURN (12 bytes), then the runtime
         bytes memory init = abi.encodePacked(hex"61", uint16(data.length + 1), hex"80600c6000396000f3", hex"00", data);
         assembly ("memory-safe") {

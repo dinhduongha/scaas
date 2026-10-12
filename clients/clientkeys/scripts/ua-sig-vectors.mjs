@@ -10,6 +10,10 @@
 // (test/ua/UAMetaTx3Vectors.t.sol) recomputes each digest on a token and verifies each auth with the real verifiers.
 // Also writes ed25519_fuzz.json (UA-2b T-FUZZ, accounts.md §1.16): mutated / crafted ed25519 cases from a fixed seed, each
 // with its strict verdict (ed25519-dalek verify_strict, re-checked by clients/ua-rs tests/ed25519_fuzz.rs).
+// Also writes pq_signatures.json (P6c, accounts.md §1.16): the PQ kinds (src/pq.js, the keys of pq_kat.json) on context A —
+// PoPs, metatx / member signatures and negatives, the msig treasury {mldsa65 ×3} t=2 and hybrid {mldsa65, p256} t=2
+// with their member signature sets, and their metatx3 rows; test/pq-sig.test.js re-verifies them with noble,
+// test/ua/UARegistryPq.t.sol and UAMetaTx3Pq.t.sol on chain.
 //   node scripts/ua-sig-vectors.mjs [outDir]
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -23,6 +27,9 @@ import { sha256, sha512 } from '@noble/hashes/sha2.js';
 import { hex, fromHex, keccak_256, utf8ToBytes, concatBytes, b64url, abiEncode, word } from '../src/bytes.js';
 import * as ua from '../src/ua.js';
 import { hashStruct, hashTypedData, padId, payLane, uaMetaTxTypedData, uaMetaTransferTypedData } from '../src/evm.js';
+import { shake256 } from '@noble/hashes/sha3.js';
+import { seedFromWords } from '../src/seed.js';
+import { PQ_KINDS, pqKeygen, pqMessage } from '../src/pq.js';
 
 const VECTORS = fileURLToPath(new URL('../../../smartcontracts/vectors/ua/', import.meta.url));
 const OUT = process.argv[2] ?? VECTORS;
@@ -524,6 +531,98 @@ const m3Out = {
   transfer: m3Rows(m3Transfer),
 };
 
+// --- pq_signatures.json (P6c): the PQ kinds on context A; stored kinds, so every auth carries an empty keyData ---
+const PQ_MNEMONIC = 'bench hurt jump file august wise shallow faculty impulse spring exact slush thunder author '
+  + 'capable act festival slice deposit sauce coconut afford frown better'; // pq_kat.json's
+const pqSeedBytes = seedFromWords(PQ_MNEMONIC);
+// Test vectors only: this fixed Falcon sampler stream repeats across messages; never copy it into a production signer.
+const pqFixed = (n) => shake256(utf8ToBytes('scaas p6a falcon randomness'), { dkLen: n });
+const pqOpts = (name) => (name === 'fndsa512' ? { random: pqFixed } : { extraEntropy: false });
+/** Signs a 32-byte ua_msg the kind's way: pq_msg with the empty context (ML-DSA, SLH-DSA), ua_msg itself (Falcon). */
+const pqSignMsg = (name, sk, uaMsg, opts = pqOpts(name)) =>
+  PQ_KINDS[name].alg.sign(PQ_KINDS[name].pq ? pqMessage(name, uaMsg) : uaMsg, sk, opts);
+const PQ_OTHER = { mldsa44: 'mldsa65', mldsa65: 'mldsa44', fndsa512: 'slhdsa128s', slhdsa128s: 'fndsa512' };
+const pqKey = (name, index) => pqKeygen(pqSeedBytes, name, 0, index);
+const pqAuth = (sig) => hex(abiEncode(['bytes', 'bytes'], [new Uint8Array(0), sig]));
+const pqRows = Object.keys(PQ_KINDS).map((name) => {
+  const { kind } = PQ_KINDS[name];
+  const kp = pqKey(name, 0);
+  const sign = (m) => pqSignMsg(name, kp.secretKey, m);
+  const pop = (ctx) => { const p = popOf(kind, kp.ua, ctx); return { context: ctx, popDigest: hex(p.popDigest), message: hex(p.message), sig: hex(sign(p.message)) }; };
+  const metatx = ua.uaMessage(kind, tag('metatx'), DIGEST);
+  const member = ua.uaMessage(kind, tag('member'), DIGEST);
+  const metatxSig = sign(metatx);
+  const popA = popOf(kind, kp.ua, 'A').message;
+  const neg = (n, verifyPop, message, sig) => ({ name: n, verifyPop, message: hex(message), sig: hex(sig) });
+  const negatives = [
+    neg('wrong-purpose', false, member, metatxSig),
+    neg('wrong-kind-tag', false, metatx, sign(ua.uaMessage(PQ_KINDS[PQ_OTHER[name]].kind, tag('metatx'), DIGEST))),
+    neg('other-chain-uid', true, popOf(kind, kp.ua, 'B').message, sign(popOf(kind, kp.ua, 'C').message)),
+    neg('other-registry', true, popA, sign(popOf(kind, kp.ua, 'D').message)),
+    neg('pop-as-sig', false, metatx, sign(popA)),
+    neg('mutated', false, metatx, flip(metatxSig, metatxSig.length >> 1)),
+  ];
+  if (PQ_KINDS[name].pq) { // the transitional context form CTR-UA-23 dropped
+    negatives.push(neg('context-kind-tag', false, metatx,
+      PQ_KINDS[name].alg.sign(pqMessage(name, metatx), kp.secretKey, { context: utf8ToBytes(PQ_KINDS[name].tag), extraEntropy: false })));
+  }
+  return { name, kind, keyData: hex(kp.publicKey), ua: hex(kp.ua), pop: pop('A'), popOther: pop('B'),
+    sigs: [
+      { purpose: 'metatx', purposeTag: hex(tag('metatx')), digest: hex(DIGEST), message: hex(metatx), sig: hex(metatxSig) },
+      { purpose: 'member', purposeTag: hex(tag('member')), digest: hex(DIGEST), message: hex(member), sig: hex(sign(member)) },
+    ],
+    negatives };
+});
+// msig over PQ members (accounts.md §1.6 "Which kind for whom", CTR-PQZ-12): mldsa65 keys 0–2, the p256 key of signatures.json
+const pqMembers = [0, 1, 2].map((i) => ({ i, kp: pqKey('mldsa65', i) }));
+const pqExtra = pqMembers.slice(1).map(({ i, kp }) => {
+  const p = popOf(0x0131, kp.ua, 'A');
+  return { name: 'mldsa65', index: i, kind: 0x0131, keyData: hex(kp.publicKey), ua: hex(kp.ua),
+    pop: { context: 'A', popDigest: hex(p.popDigest), message: hex(p.message), sig: hex(pqSignMsg('mldsa65', kp.secretKey, p.message)) } };
+});
+const p256Sk = secretOf('p256', SCHEMES.p256.n);
+function pqMsig(name, list, threshold) {
+  const ms = list.map((m) => ({ ...m })).sort((a, b) => cmp(a.id, b.id)).map((m, index) => ({ ...m, index }));
+  const keyData = ua.encodeMsig(threshold, ms);
+  const id = ua.deriveUA(0x0120, keyData);
+  const md = ua.memberDigest(id, ua.uaMessage(0x0120, tag('metatx'), DIGEST));
+  const sigOf = (m) => (m.kind === 0x0101
+    ? { index: m.index, keyData: SCHEMES.p256.keyData(p256Sk), sig: SCHEMES.p256.sign(p256Sk, ua.uaMessage(0x0101, tag('member'), md)) }
+    : { index: m.index, keyData: new Uint8Array(0), sig: pqSignMsg('mldsa65', m.sk, ua.uaMessage(0x0131, tag('member'), md)) });
+  const set = (n, valid, picks) => {
+    const list = picks.map((k) => sigOf(ms[k]));
+    const sig = encodeMemberSigs(list);
+    return { name: n, valid, indices: picks,
+      memberSigs: list.map((x) => ({ index: x.index, keyData: hex(x.keyData), sig: hex(x.sig) })),
+      sig: hex(sig), auth: hex(abiEncode(['bytes', 'bytes'], [keyData, sig])) };
+  };
+  const sets = threshold === 2 && ms.length === 3
+    ? [set('members-0-1', true, [0, 1]), set('members-1-2', true, [1, 2]), set('below-threshold', false, [0])]
+    : [set('both', true, [0, 1]), set('below-threshold', false, [0])];
+  return { name, keyData: hex(keyData), ua: hex(id), threshold, purpose: 'metatx', digest: hex(DIGEST), memberDigest: hex(md),
+    members: ms.map((m) => ({ index: m.index, kind: m.kind, id: hex(m.id), weight: m.weight })), sets };
+}
+const pqTreasury = pqMsig('treasury', pqMembers.map(({ kp }) => ({ kind: 0x0131, id: kp.ua, weight: 1, sk: kp.secretKey })), 2);
+const pqHybrid = pqMsig('hybrid', [{ kind: 0x0131, id: pqMembers[0].kp.ua, weight: 1, sk: pqMembers[0].kp.secretKey },
+  { kind: 0x0101, id: fromHex(row('p256').ua), weight: 1 }], 2);
+const pqM3Rows = (build) => pqRows.map((r) => {
+  const typedData = build(fromHex(r.ua));
+  const digest = hashTypedData(typedData);
+  const sig = pqSignMsg(r.name, pqKey(r.name, 0).secretKey, ua.uaMessage(r.kind, tag('metatx'), digest));
+  return { name: r.name, kind: r.kind, from: r.ua, typedData,
+    structHash: hex(hashStruct(typedData.types, typedData.primaryType, typedData.message)), digest: hex(digest), auth: pqAuth(sig) };
+});
+const pqOut = {
+  note: 'Generated by clients/clientkeys/scripts/ua-sig-vectors.mjs (src/pq.js on @noble/post-quantum 0.7.1, the keys of '
+    + 'pq_kat.json: account 0, index 0; mldsa65 indexes 1 and 2 for the treasury); never edit by hand. Context A of '
+    + 'signatures.json. PQ kinds are stored (CTR-UA-17): every auth is abi.encode(bytes(""), sig). ML-DSA and SLH-DSA sign '
+    + 'pq_msg with the empty context, Falcon ua_msg (CTR-UA-23). Negatives: verifyPop = which registry entry point is asked. '
+    + 'metatx3 rows: the domain, structs and fields of metatx3.json, one per PQ signer.',
+  version: 1, context: 'A', contexts: { A: contexts.A, B: contexts.B, C: contexts.C, D: contexts.D }, digest: hex(DIGEST),
+  mnemonic: PQ_MNEMONIC, kinds: pqRows, extraKeys: pqExtra, msig: { treasury: pqTreasury, hybrid: pqHybrid },
+  metatx3: { token: M3.contract, call: pqM3Rows(m3Call), transfer: pqM3Rows(m3Transfer) },
+};
+
 // --- write ---
 const note = 'Generated by clients/clientkeys/scripts/ua-sig-vectors.mjs (src/ua.js on @noble/curves 2.4.0); never edit by hand. '
   + 'Every positive must verify and every negative must fail (verifyPop: which verifier entry point is asked). '
@@ -545,9 +644,12 @@ const fuzzJson = JSON.stringify({ ...fuzzOut, cases: [] }, null, 2)
   .replace('"cases": []', `"cases": [\n${fuzzCases.map((c) => `    ${JSON.stringify(c)}`).join(',\n')}\n  ]`);
 writeFileSync(join(OUT, 'ed25519_fuzz.json'), `${fuzzJson}\n`);
 writeFileSync(join(OUT, 'metatx3.json'), `${JSON.stringify(m3Out, null, 2)}\n`);
+writeFileSync(join(OUT, 'pq_signatures.json'), `${JSON.stringify(pqOut, null, 2)}\n`);
 const fuzzValid = fuzzCases.filter((c) => c.valid).length;
 const fuzzDiff = fuzzCases.filter((c) => c.noble !== c.valid).length;
 const negs = derivedRows.reduce((n, r) => n + r.negatives.length, 0);
 console.log(`signatures.json: ${derivedRows.length} derived kinds (${negs} negatives), native ${nativeSigs.length}+${nativeNegatives.length}, msig ${sets.length} sets, ${bip340Official.length} BIP-340 official, ${ed25519Rfc8032.length} ed25519Rfc8032; `
   + `ed25519_fuzz.json: ${fuzzCases.length} cases (${fuzzValid} valid, noble zip215:false alone differs on ${fuzzDiff}); `
-  + `metatx3.json: ${m3Out.call.length} + ${m3Out.transfer.length} rows; written to ${OUT}`);
+  + `metatx3.json: ${m3Out.call.length} + ${m3Out.transfer.length} rows; `
+  + `pq_signatures.json: ${pqRows.length} kinds (${pqRows.reduce((n, r) => n + r.negatives.length, 0)} negatives), msig 2 structures, `
+  + `metatx3 ${pqOut.metatx3.call.length} + ${pqOut.metatx3.transfer.length}; written to ${OUT}`);

@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
-import {IUAKindVerifier} from "./IUAVerifier.sol";
+import {IUAPopVerifier} from "./IUAVerifier.sol";
 import {Shake} from "./Shake.sol";
 import {PqNtt} from "./PqNtt.sol";
 
@@ -154,9 +154,14 @@ library Falcon512 {
 /// @title `fndsa512` UA verifier (accounts.md CTR-UA-23, kind 0x0132): Falcon-512 over the 32-byte `ua_msg`, the message
 ///        size of EIP-8052 (Falcon has no context string; `ua_msg` already carries `TAG(kind)`). Pure Solidity: EIP-8052
 ///        has no addresses yet. **UNAUDITED.**
-contract UAFndsaVerifier is IUAKindVerifier {
-    function verify(bytes calldata keyData, bytes32 message, bytes calldata sig) external pure returns (bool) {
+contract UAFndsaVerifier is IUAPopVerifier {
+    function verify(bytes calldata keyData, bytes32 message, bytes calldata sig) public pure returns (bool) {
         Shake.reserve();
         return Falcon512.verify(keyData, abi.encodePacked(message), sig);
+    }
+
+    /// The PoP is an ordinary signature over the PoP `ua_msg` (accounts.md §1.8 step 6).
+    function verifyPop(bytes calldata keyData, bytes32 message, bytes calldata sig) external pure returns (bool) {
+        return verify(keyData, message, sig);
     }
 }

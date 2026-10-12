@@ -109,6 +109,52 @@ contract MlDsaTest is PqVectors {
         }
     }
 
+    /// P6c: the parts the UA registry stores concatenate to the expanded key, each fits EIP-170 with its STOP byte;
+    /// `verifyCached` reads them by EXTCODECOPY and agrees with `verify`; a wrong count, order or byte fails; a part
+    /// past the last reverts; `verifyPop` is `verify`.
+    function test_expandedKeyParts_verifyCached() public {
+        string memory kat = _kat();
+        string[2] memory names = ["mldsa44", "mldsa65"];
+        uint16[2] memory kinds = [PqUA.MLDSA44, PqUA.MLDSA65];
+        for (uint256 i; i < 2; ++i) {
+            UAMldsaVerifier v = new UAMldsaVerifier(kinds[i], address(0), "", "");
+            bytes memory pk = _k(kat, names[i], "pk");
+            uint256 parts = v.expandedKeyParts();
+            assertEq(parts, i + 1, "parts");
+            bytes memory chunks;
+            bytes memory all;
+            for (uint256 p; p < parts; ++p) {
+                bytes memory part = v.expandedKeyPart(pk, p);
+                assertLt(part.length, 24_576, "EIP-170 with the STOP byte");
+                address ptr = address(uint160(0xc0de00 + 16 * i + p));
+                vm.etch(ptr, bytes.concat(hex"00", part));
+                chunks = bytes.concat(chunks, bytes20(ptr));
+                all = bytes.concat(all, part);
+            }
+            assertEq(all, _k(kat, names[i], "expanded_key"), names[i]);
+            vm.expectRevert(abi.encodeWithSelector(UAMldsaVerifier.UAMldsaPart.selector, parts));
+            v.expandedKeyPart(pk, parts);
+            bytes32 m = bytes32(_k(kat, names[i], "ua_msg"));
+            bytes memory sig = _k(kat, names[i], "sig");
+            assertTrue(v.verifyCached(chunks, m, sig), "cached");
+            assertTrue(v.verifyExpanded(all, m, sig), "expanded");
+            assertTrue(v.verifyPop(pk, m, sig), "verifyPop = verify");
+            assertFalse(v.verifyCached(chunks, ~m, sig), "other message");
+            assertFalse(v.verifyCached(bytes.concat(chunks, bytes20(address(0xc0de00))), m, sig), "extra pointer");
+            assertFalse(v.verifyCached(bytes.concat(bytes20(address(0xbad)), _slice(chunks, 20, chunks.length - 20)), m, sig),
+                "a pointer without code");
+            if (parts == 2) {
+                bytes memory swapped = bytes.concat(_slice(chunks, 20, 20), _slice(chunks, 0, 20));
+                assertFalse(v.verifyCached(swapped, m, sig), "parts out of order");
+            }
+            address last = address(bytes20(_slice(chunks, chunks.length - 20, 20)));
+            bytes memory code = last.code;
+            code[code.length - 1] ^= 0x01; // one t̂1 coefficient's low byte
+            vm.etch(last, code);
+            assertFalse(v.verifyCached(chunks, m, sig), "one flipped byte");
+        }
+    }
+
     function test_acvp_mldsa() public {
         vm.pauseGasMetering(); // 60 full verifications: correctness only
         string memory ext = _ext();

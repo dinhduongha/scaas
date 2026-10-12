@@ -472,7 +472,9 @@ tightened; owner). A `pqz-mlwe` record's `authRef` must be a registered `mldsa65
 UA registry enables it, FIPS 206), or a UA `msig` whose non-PQ members' total weight is **below** its threshold — so no
 classical-only subset can authorize. That `msig` rule is the hybrid (e.g. `mldsa65` w 1 + `p256` w 1, threshold 2) and
 the t-of-n ML-DSA form. Refused: `authRef = 0` (self), native ids (EOA/ERC-1271), any classical-only kind
-(`UAAuthRef`). One key = one purpose: the PQZ key decrypts and proves, the ML-DSA key authorizes; the UA's PQ signing
+(`UAAuthRef`). BUILT in UA registry generation 1 (P6c, `UARegistry._checkPqzAuthRef`): "PQ" is every PQ signing kind
+0x0130–0x0133 — `fndsa512` and `slhdsa128s` included, since the registry enables them with ML-DSA — and the `msig`'s
+members are read from the key data in `authPop`, which the co-sign verifies against the id. One key = one purpose: the PQZ key decrypts and proves, the ML-DSA key authorizes; the UA's PQ signing
 kinds ([CTR-UA-23](accounts.md#CTR-UA-23)) invite exactly this hybrid. A leaked PQZ key is a read-only breach
 (`survivesEncKeyLeak`).
 
@@ -587,8 +589,10 @@ states and values in signed 64-bit for clients. The classical 2^54 rationale (th
 PQZ-specific content of each step:
 
 1. Kind enabled only where the registry generation was deployed with `UAPqzVerifier`
-   ([CTR-UA-05](accounts.md#CTR-UA-05), [CTR-UA-23](accounts.md#CTR-UA-23)).
-2. Key data: exactly 16,384 bytes, every coefficient `< q` (`UAKeyData`).
+   ([CTR-UA-05](accounts.md#CTR-UA-05), [CTR-UA-23](accounts.md#CTR-UA-23)). P6c built the registry slot, the stored
+   `pk` (step 8) and step 5; the verifier, and with it the kind on chain 7622, is P6g's.
+2. Key data: exactly 16,384 bytes, every coefficient `< q` (`UAKeyData`; P6c checks the length, the coefficient check
+   comes with the encoding E-S2 freezes, P6e/P6g).
 3. Id: `uaOf(0x0142, pk)`, not in the native space, not registered.
 4. `keyHash = keccak256("pqz-mlwe" ‖ pk)` free (`UAKeyInUse`).
 5. `authRef` per [CTR-PQZ-12](#CTR-PQZ-12) (`UAAuthRef`); the auth UA registered first with its own PoP.

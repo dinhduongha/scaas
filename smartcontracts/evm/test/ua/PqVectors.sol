@@ -6,6 +6,7 @@ import {PqUA} from "../../src/ua/PqUA.sol";
 
 interface IVerify {
     function verify(bytes calldata keyData, bytes32 message, bytes calldata sig) external view returns (bool);
+    function verifyPop(bytes calldata keyData, bytes32 message, bytes calldata sig) external view returns (bool);
 }
 
 /// Shared reader of the PQ vectors: `pq_kat.json` (SCaaS: keys from clientkeys `src/pq.js`, UA messages, a mutation set
@@ -49,6 +50,8 @@ abstract contract PqVectors is Test {
         bytes32 signed = kind == PqUA.FNDSA512 ? uaMsg : PqUA.pqMessage(tag, uaMsg);
         assertEq(signed, bytes32(_k(kat, name, "signed_message")), "signed message");
         assertTrue(IVerify(verifier).verify(pk, uaMsg, _k(kat, name, "sig")), "valid signature");
+        assertTrue(IVerify(verifier).verifyPop(pk, uaMsg, _k(kat, name, "sig")), "verifyPop = verify (P6c)");
+        assertFalse(IVerify(verifier).verifyPop(pk, ~uaMsg, _k(kat, name, "sig")), "verifyPop, other message");
         uint256 n;
         for (; vm.keyExistsJson(kat, string.concat(".kinds.", name, ".mutations[", vm.toString(n), "]")); ++n) {
             string memory m = string.concat(".kinds.", name, ".mutations[", vm.toString(n), "]");

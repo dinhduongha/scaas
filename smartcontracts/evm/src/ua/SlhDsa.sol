@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
-import {IUAKindVerifier} from "./IUAVerifier.sol";
+import {IUAPopVerifier} from "./IUAVerifier.sol";
 import {PqUA} from "./PqUA.sol";
 
 /// @title SLH-DSA-SHA2-128s verification (FIPS 205, Algorithms 8, 11, 13, 17, 20; SHA2 category 1, §11.2.1).
@@ -156,10 +156,15 @@ library SlhDsaSha2128s {
 
 /// @title `slhdsa128s` UA verifier (accounts.md CTR-UA-23, kind 0x0133): SLH-DSA-SHA2-128s over `pq_msg` with the empty
 ///        context, pure Solidity on SHA-256 `0x02` (no EIP proposes an SLH-DSA precompile). **UNAUDITED.**
-contract UASlhdsaVerifier is IUAKindVerifier {
+contract UASlhdsaVerifier is IUAPopVerifier {
     bytes32 public constant TAG = keccak256("scaas.ua.slhdsa128s.v1");
 
-    function verify(bytes calldata keyData, bytes32 message, bytes calldata sig) external view returns (bool) {
+    function verify(bytes calldata keyData, bytes32 message, bytes calldata sig) public view returns (bool) {
         return SlhDsaSha2128s.verify(keyData, PqUA.emptyContext(PqUA.pqMessage(TAG, message)), sig);
+    }
+
+    /// The PoP is an ordinary signature over the PoP `ua_msg` (accounts.md §1.8 step 6).
+    function verifyPop(bytes calldata keyData, bytes32 message, bytes calldata sig) external view returns (bool) {
+        return verify(keyData, message, sig);
     }
 }

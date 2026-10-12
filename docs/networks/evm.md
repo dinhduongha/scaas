@@ -179,7 +179,9 @@ kind-`NONE` demo tokens; the v1 line left the deploy in P5 (`legacy/p5/`) ([depl
 Since UA-3 it also deploys the UA registry generation 1 with its verifiers on every chain (first, since UA-4: the token implementations take its address; `_deployUARegistry`; budget
 12 M, Hedera 10.5 M): the EIP-2537 kinds and `bls-bn254-minsig` only where `script/UAPrecompileProbe.sol`, asked
 through an `eth_call` with no `to` (the node's own precompiles), passes; `bls-bn254-minsig` only on private chains, the
-Zether kinds only on dev chains ([accounts.md §1.9](../contracts/accounts.md#verifiers)).
+Zether kinds only on dev chains; the PQ signing kinds (P6c, unaudited) only on the dev chains and 7622, ML-DSA in
+Solidity on the registry's expanded-key cache: an ML-DSA UA's cache parts (`cacheExpandedKey`, one transaction each,
+≤ 13.5 M gas) come before its `register` ([accounts.md §1.9](../contracts/accounts.md#verifiers)).
 
 It writes
 `deployments/<chainid>.json` (`token_factory`, `implementation_none`, `dex_implementation`, `ua_registry`, `chain_uid`, `smart_key_account_factory`,
