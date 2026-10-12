@@ -1,7 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-SCaaS-Community-1.0
 pragma solidity ^0.8.24;
 
-import {IUAKindVerifier, PqUA} from "./PqUA.sol";
+import {IUAKindVerifier} from "./IUAVerifier.sol";
+import {PqUA} from "./PqUA.sol";
 
 /// @title SLH-DSA-SHA2-128s verification (FIPS 205, Algorithms 8, 11, 13, 17, 20; SHA2 category 1, §11.2.1).
 /// @notice n = 16, h = 63, d = 7, h' = 9, a = 12, k = 14, lg w = 4, len = 35, m = 30; pk = PK.seed ‖ PK.root (32 B),

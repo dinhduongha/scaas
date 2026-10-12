@@ -4,11 +4,11 @@ pragma solidity ^0.8.24;
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {P256} from "@openzeppelin/contracts/utils/cryptography/P256.sol";
 import {MerkleProof} from "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
-import {Base64} from "@openzeppelin/contracts/utils/Base64.sol";
 import {IERC1271} from "@openzeppelin/contracts/interfaces/IERC1271.sol";
 import {MetaTxBase} from "../metatx/MetaTxBase.sol";
 import {IMetaTx} from "../metatx/IMetaTx.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
+import {WebAuthnClientData} from "../common/WebAuthnClientData.sol";
 
 enum KeyKind {
     NONE,           // 0: empty or removed slot
@@ -312,28 +312,9 @@ contract SmartKeyAccount is MetaTxBase, IERC1271 {
         return P256.verify(h, r, s, k.x, k.y);
     }
 
-    /// @dev The bounded WebAuthn L3 §5.8.1.2 check: the fixed prefix with type and challenge, the origin up to the
-    ///      next `"`, then exactly one of: `}` as the last character (Safari, L2), or `,"crossOrigin":false` followed
-    ///      by `}` or `,` (Chrome, Firefox, L3). Everything else (`crossOrigin:true`, a member before crossOrigin,
-    ///      whitespace) fails closed.
+    /// @dev The strict clientDataJSON grammar (`WebAuthnClientData.parse`) with the key's origin.
     function _clientDataOk(bytes memory cd, bytes32 challenge, bytes32 originHash) private pure returns (bool) {
-        bytes memory prefix = abi.encodePacked(
-            '{"type":"webauthn.get","challenge":"', Base64.encodeURL(abi.encodePacked(challenge)), '","origin":"');
-        uint256 p = prefix.length;
-        uint256 n = cd.length;
-        if (n < p + 2 || _hashSlice(cd, 0, p) != keccak256(prefix)) return false;
-        uint256 end = p;
-        while (end < n && cd[end] != '"') ++end;
-        if (end + 1 >= n || _hashSlice(cd, p, end - p) != originHash) return false;
-        if (cd[end + 1] == "}") return end + 2 == n;
-        bytes memory crossFalse = ',"crossOrigin":false';
-        uint256 after_ = end + 1 + crossFalse.length;
-        if (after_ >= n || _hashSlice(cd, end + 1, crossFalse.length) != keccak256(crossFalse)) return false;
-        if (cd[after_] == "}") return after_ + 1 == n;
-        return cd[after_] == ",";
-    }
-
-    function _hashSlice(bytes memory b, uint256 start, uint256 len) private pure returns (bytes32 h) {
-        assembly ("memory-safe") { h := keccak256(add(add(b, 32), start), len) }
+        (bool ok, uint256 o, uint256 len) = WebAuthnClientData.parse(cd, challenge);
+        return ok && WebAuthnClientData.hashSlice(cd, o, len) == originHash;
     }
 }
