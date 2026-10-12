@@ -40,8 +40,8 @@ in the component docs under [`docs/`](docs/README.md), each with an id and a rea
 | 2. [Smart contracts are API services](#2-smart-contracts-are-api-services) | 7. [Meta-transactions and EIP-1776](#7-meta-transactions-and-eip-1776) | 13. [Components and where to read more](#13-the-components-and-where-to-read-more) |
 | 3. [Contracts: what is built on what](#3-contracts-what-is-built-on-what) | 8. [Who pays the fee](#8-who-pays-the-fee-every-model) | 14. [How the design evolved](#14-how-the-design-evolved) |
 | 4. [Shared code, delegate call, separate data](#4-shared-code-delegate-call-separate-data-and-upgradeable) | 9. [Meta-transactions and liquidity](#9-meta-transactions-and-liquidity) | 15. [Repository layout](#15-repository-layout) |
-| 5. [What the traditional model gets wrong](#5-what-the-traditional-model-gets-wrong) | 10. [Open relayers](#10-open-relayers-open-and-competitive) | [Use cases](#use-cases) |
-| | 11. [Zether and PQ Zether](#11-confidential-amounts-zether-and-pq-zether) | [Free Pay](#free-pay) |
+| 5. [What the traditional model gets wrong](#5-what-the-traditional-model-gets-wrong) | 10. [Open relayers](#10-open-relayers-open-and-competitive) | 16. [Use cases](#16-use-cases) |
+| | 11. [Zether and PQ Zether](#11-confidential-amounts-zether-and-pq-zether) | 17. [Free Pay](#17-free-pay) |
 
 ---
 
@@ -903,17 +903,7 @@ flowchart LR
 SCaaS depends on no ERP. One worked ERP connector lives in a separate repository and is described as an example in
 [docs/integration-odoo-example.md](docs/integration-odoo-example.md).
 
-## License
-
-SCaaS is licensed under the [Vegan Community License 1.0](LICENSE) (summary in Vietnamese:
-[LICENSE.vi.md](LICENSE.vi.md)). Free with the freedoms of MIT or Apache-2.0 for vegan organizations and for
-organizations whose group revenue is below USD 10 million; not available to anyone who kills animals (any animal: mammals, birds, fish, insects and every other species), to food businesses that
-serve products from killed animals, fertilized eggs or bee products, to groups earning more than 10% of revenue from
-such products, or to anyone trading in human organs, tissue, blood or other human-derived products outside donation for
-medical treatment (see the license for the exact terms); everyone else needs a Vegan Enterprise License. Contributions are accepted under the CLA in [CONTRIBUTING.md](CONTRIBUTING.md).
-Third-party components keep their own licenses.
-
-## Use cases
+## 16. Use cases
 
 What people can build by combining SCaaS contracts with meta-transactions, in eight groups. Each row names the parts
 it uses, who can pay the fee and the status. **BUILT**, **SPECIFIED** and **PLANNED** are the docs' own tags;
@@ -1008,7 +998,7 @@ EIP-1167 clone at a CREATE2 address through a factory, then uses it by meta-tran
 | **Provenance and traceability on a public chain (farm to table, medicines, luxury goods, certificates of origin)** | A provenance registry built on `MetaTxBase` records signed events per batch — harvested, processed, tested, shipped, sold — so a buyer can check a product's history without trusting the brand's server. Producers and inspectors sign gaslessly; the brand or a service company relays and pays ([CTR-MTX-22](docs/contracts/metatx.md#CTR-MTX-22)). Product data (batch, origin, test results, certificates) is not personal data and can be stored in full or as hashes of off-chain documents; names of people stay off chain by default ([data protection](docs/architecture.md#data-protection)) | The brand or a service company (sponsored call, SPECIFIED); or a producer, self-paid | `MetaTxBase` BUILT; sponsored call SPECIFIED; the registry itself NOT SPECIFIED |
 | **Long-lived, quantum-resistant records** | Records that must stay valid for decades (titles, diplomas, contracts, minutes) are signed with post-quantum UA kinds — ML-DSA, or the hash-based SLH-DSA as a backup if lattice assumptions fall — so a future quantum computer cannot forge them ([CTR-UA-23](docs/contracts/accounts.md#CTR-UA-23)). The verifiers are built but unaudited (a public chain enables them only after an audit) and costly in Solidity (ML-DSA-44 ≈ 11.4 M gas, measured); the record contract is not specified | The record keeper (sponsored call, SPECIFIED); or the signer, self-paid | PQ verifiers BUILT (P6a, unaudited); PQ kinds SPECIFIED (P6); record contract NOT SPECIFIED |
 
-## Free Pay
+## 17. Free Pay
 
 If you find SCaaS useful, you can pay for it. This is not a donation: the developer does not need donations. Pay any
 amount you want, whenever you want, or not at all.
@@ -1017,3 +1007,13 @@ Free Pay carries no warranty and no obligation, and nothing is bound to it: it b
 license terms. The license is the same whether you pay or not.
 
 You can Free Pay to **Tu Viện Chơn Như** (Chơn Như Monastery): <https://www.tuvienchonnhu.net>.
+
+## License
+
+SCaaS is licensed under the [Vegan Community License 1.0](LICENSE) (summary in Vietnamese:
+[LICENSE.vi.md](LICENSE.vi.md)). Free with the freedoms of MIT or Apache-2.0 for vegan organizations and for
+organizations whose group revenue is below USD 10 million; not available to anyone who kills animals (any animal: mammals, birds, fish, insects and every other species), to food businesses that
+serve products from killed animals, fertilized eggs or bee products, to groups earning more than 10% of revenue from
+such products, or to anyone trading in human organs, tissue, blood or other human-derived products outside donation for
+medical treatment (see the license for the exact terms); everyone else needs a Vegan Enterprise License. Contributions are accepted under the CLA in [CONTRIBUTING.md](CONTRIBUTING.md).
+Third-party components keep their own licenses.
