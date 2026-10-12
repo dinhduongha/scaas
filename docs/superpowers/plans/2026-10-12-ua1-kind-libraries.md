@@ -165,7 +165,7 @@ in the native space and a derived member's id outside it, ids strictly increasin
 ## Out of scope (next sub-plans)
 
 UA-2: `UARegistry`, the verifiers, PoP signatures, `groups.json`, T-REG/T-AUTH/T-CHAIN/T-MEMBER/T-FROST/T-GAS. UA-3: the
-Zether re-point. UA-4: the UA ledger, `metatx3.json`. UA-1b (evaluated 2026-10-12, not planned): a C++/Qt-QML client as a `cxx` bridge over
+Zether re-point. UA-4: the UA ledger, `metatx3.json`. UA-1b (owner 2026-10-12: the next sub-plan): a C++/Qt-QML client as a `cxx` bridge over
 `scaas-ua` (built by CMake + corrosion, wrapped in a `QObject` for QML; no async bridge: every call is synchronous and
 CPU-bound) and a Dart client on the crate's WASM build (owner: WASM; wasm-bindgen + `dart:js_interop` on Flutter web;
 native Flutter targets via flutter_rust_bridge v2 over a wrapper crate), rather than two more curve implementations.
