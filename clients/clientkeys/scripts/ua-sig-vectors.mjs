@@ -535,6 +535,7 @@ const m3Out = {
 const PQ_MNEMONIC = 'bench hurt jump file august wise shallow faculty impulse spring exact slush thunder author '
   + 'capable act festival slice deposit sauce coconut afford frown better'; // pq_kat.json's
 const pqSeedBytes = seedFromWords(PQ_MNEMONIC);
+// Test vectors only: this fixed Falcon sampler stream repeats across messages; never copy it into a production signer.
 const pqFixed = (n) => shake256(utf8ToBytes('scaas p6a falcon randomness'), { dkLen: n });
 const pqOpts = (name) => (name === 'fndsa512' ? { random: pqFixed } : { extraEntropy: false });
 /** Signs a 32-byte ua_msg the kind's way: pq_msg with the empty context (ML-DSA, SLH-DSA), ua_msg itself (Falcon). */
