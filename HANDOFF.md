@@ -1,6 +1,43 @@
 # HANDOFF — scaas
 
-## Session 2026-10-12 (UA-2c merged) — resume here
+## Session 2026-10-12 (UA-3 merged, license, README) — resume here
+
+**State:** UA-3 merged into main (`520642c`) and pushed; branch `ua3-zether` and worktree `.claude/worktrees/ua3` kept.
+Plan `docs/superpowers/plans/2026-10-12-ua3-zether.md` (rulings Z1–Z19). Forge 1047 passed / 10 skipped on merged main;
+`--isolate` UAGas 6 / UARegistryGroups 14 / UARegistryZether 13; prague verifiers 52 + 1 skipped; size gate 0 errors;
+ZetherProverCross 10; zether-prover cargo + wasm-smoke 18; clientkeys green; `scripts/e2e-zether.sh` 3/3 on anvil;
+scaas-node e2e 4 + e2e_hedera 1; docs and facts checks clean.
+
+**Built (UA-3):** `zether-bn254` 0x0140 / `zether-bls12381` 0x0141 in `UARegistry` gen 1 (PoP over
+`popDigest(ua, authRef)`, the authority co-signs with purpose `authref`, `Y` stored by SSTORE2, `keyOf`,
+`requireZetherAuthorized(ua, digest, auth, zkCovered)`: purpose follows the digest — `zether-auth` spends, `zether-owner`
+roll-over/mode), dev-only `ZetherSchnorrBn254Verifier` / `ZetherSchnorrBls12381Verifier`; tokens on tagged `toUA` +
+`kindOf`; `UniversalAccountRegistry`, `AuthScheme` and their tests in `legacy/ua3/` (`test/MultiSig.t.sol` restored);
+zether-prover API `pop` / `ownerAuth`, vectors regenerated (`r33_keys.json` registered on a real registry by forge);
+clientkeys `zetherPop` / `zetherOwnerAuth` / `zetherKind`; `DeployBase` deploys the UA registry on every chain with the
+§1.9 kind set, `script/UAPrecompileProbe.sol` via `eth_call` (subgroup rows, MSM/pairing prices, G1ADD and MAP_FP_TO_G1),
+fail closed; JSON `ua_registry` (+ `zether_registry` = same with `DEPLOY_ZETHER`).
+
+**Controller rulings this session (UA-3):** SPDX of the plan updated to the new license before execution; MultiSig's 4
+tests restored (`MultiSig.sol` stays, owner rule); no CREATE2 address pin for the registry (init code carries `uid` and the
+probe-dependent kind array); the probe also checks G1ADD / MAP_FP_TO_G1 (reviewer: not a CTR-UA-23 violation since a
+missing precompile makes the kind unregistrable, taken anyway). Deferred minors (test gaps, e2e port hygiene, prover
+`authRef` null parsing, an owner-auth cross-language vector) → UA F3 / next touch.
+
+**Also this session (on main):** license renamed — Vegan Community License 1.0 / Vegan Enterprise License, SPDX
+`LicenseRef-Vegan-Community-1.0` (terms unchanged); README §10 relayer diagram + `docs/assets/relayer-network.svg`, §15
+links, §13 "Node", §16 Use cases (34 rows in 8 groups, who can pay the fee), §17 Free Pay (Tu Viện Chơn Như), License
+last; `clients/ua-cs/scaas.slnx`; UA client dirs renamed (`ua-rs`, `ua-cxx`, `ua-qt`, `ua-dart-frb`).
+
+**Owner decisions this session:** template library = implementations deployed once per chain, instances by
+clone/CREATE2 with parameters, incl. commercial contracts (TODO §0, spec first); "SCaaS Chain" chain id 22776 is a new
+chain beside the others (ports 22776+; 7622 and `m/7622'` unchanged; TODO); family-tree use case stores every record on
+chain; `claude-code-api.txt` hidden by `.git/info/exclude`.
+
+**Next steps:** UA-4 (UA ledger) or P6c (PQ kinds incl. `pqz-mlwe`); the template-library spec; onboarding SCaaS Chain
+22776 when the owner's chain is up (genesis hash needed). P6b can run beside.
+
+## Session 2026-10-12 (UA-2c merged)
 
 **State:** UA-2c merged into main (`c35f494`) and pushed; branch `ua2c-groups` kept, worktree `.claude/worktrees/ua2c`
 kept; then the UA client dirs rename merged (flat `clients/ua-<lang>`: `ua-rs`, `ua-cxx`, `ua-qt`, `ua-dart-frb`; branch `ua-dirs-rename` kept). Plan `docs/superpowers/plans/2026-10-12-ua2c-groups.md` (rulings C1–C19). Forge 1052 passed / 10 skipped on merged
