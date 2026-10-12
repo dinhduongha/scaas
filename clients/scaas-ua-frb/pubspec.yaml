@@ -1,0 +1,14 @@
+name: scaas_ua_frb
+description: Dart bindings (flutter_rust_bridge v2) over the Rust crate scaas-ua. UNAUDITED.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ^3.12.0
+
+dependencies:
+  flutter_rust_bridge: 2.13.0
+  meta: ^1.15.0
+
+dev_dependencies:
+  test: 1.25.15

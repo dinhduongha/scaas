@@ -228,3 +228,23 @@ jobs:
           dotnet-version: '10.0.x'
       - name: vectors
         run: dotnet test
+
+  scaas-ua-frb:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: clients/scaas-ua-frb
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: clients/scaas-ua-frb/rust
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: 3.12.2
+      - run: dart pub get
+      - run: cargo build --manifest-path rust/Cargo.toml
+      - run: dart test
+      # optional drift guard: cargo install flutter_rust_bridge_codegen --version 2.13.0 --locked
+      #   && flutter_rust_bridge_codegen generate && git diff --exit-code
