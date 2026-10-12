@@ -47,10 +47,12 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     error UAConfig(uint16 kind);
 
     uint256 internal constant SMART_KEY_1271_GAS = 400_000;
-    /// @notice Registration bound for `msig` (register step 4): gas per member beyond its verifier's cap — MemberSig
-    ///         decoding, `uaOf`, `uaMessage`, the call, the gen-1 hand-off (measured worst: 14.1 k warm), two cold
-    ///         accounts (5.2 k), and what the caller must hold for the largest cap (400 k / 63 + 5 k); rounded up.
-    ///         `UAGas.t.sol` `test_T_GAS_msigMemberOverhead` keeps it honest.
+    /// @notice Registration bound for `msig` (register step 4): gas per member beyond its cap — MemberSig decoding,
+    ///         `uaOf`, `uaMessage`, the call or the gen-1 hand-off, cold accounts (measured worst, cold under
+    ///         `--isolate`: 19,987 for a member handed to gen 1), plus what the caller must hold for the largest cap
+    ///         (400 k / 63 + 5 k): 31,336, rounded up. A member handed to gen 1 adds gen 1's own hold
+    ///         (`cap / 63 + GAS_MARGIN`) in `_checkMembers`. `UAGas.t.sol` `test_T_GAS_msigAtBudget` authorizes msigs
+    ///         registered exactly at `verifyBudget` within `verifyBudget`.
     uint256 internal constant MSIG_MEMBER_GAS = 35_000;
 
     uint8 public immutable generation;
@@ -219,7 +221,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     }
 
     /// Step 4 for `msig`: every member ∈ MEMBER of this profile and native or registered under its stated kind; the
-    /// worst case of a minimal authorizing set fits `verifyBudget`.
+    /// worst case of a minimal authorizing set (the `c` largest caps + `c` × `MSIG_MEMBER_GAS`) fits `verifyBudget`.
     function _checkMembers(bytes memory d) private view {
         (uint256 threshold, uint256 count) = (_u16(d, 0), _u16(d, 2));
         uint256[] memory weights = new uint256[](count);
@@ -234,7 +236,13 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
             } else {
                 if (kindOf(id) != kind) revert UAMemberUnknown(id);
                 uint256 cfg = _cfg(kind);
-                caps[i] = uint160(cfg) != 0 ? cfg >> 160 : IUARegistry(predecessor).verifyCap(kind);
+                if (uint160(cfg) != 0) {
+                    caps[i] = cfg >> 160;
+                } else {
+                    // handed to gen 1, which holds cap / 63 + GAS_MARGIN again inside the 63/64 gen 2 gives it
+                    uint256 cap = IUARegistry(predecessor).verifyCap(kind);
+                    caps[i] = cap + cap / 63 + SigCheck.GAS_MARGIN;
+                }
             }
             weights[i] = _u16(d, o + 34);
         }
