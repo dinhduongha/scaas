@@ -1,6 +1,29 @@
 # HANDOFF — scaas
 
-## Session 2026-10-12 (UA-1b merged, license) — resume here
+## Session 2026-10-12 (UA-2a merged) — resume here
+
+**State:** UA-2a merged into main and pushed (branch `ua2a-registry` kept); plan
+`docs/superpowers/plans/2026-10-12-ua2a-registry.md` (rulings R1–R24). UA-2 is split in three (owner): UA-2a done, next
+UA-2b (`ed25519` verifier in Solidity, T-FUZZ) and UA-2c (MuSig2 KeyAgg with hints, FROST secp256k1/bn254 with the DKG
+check, `groups.json`, `keyPtr` storage, T-FROST).
+
+**Built:** `src/ua/UARegistry.sol` + `IUARegistry.sol` (gen 1: records, `keyOwner`, PoP `register`, `requireAuthorized` for
+derived / native ECDSA-7702-1271 with `UAAuth` / `msig` with the structure bound incl. gen 1's hold for handed members,
+generations, `chainUid`, `hederaNative`, ERC-5267; kind table = one immutable per slot from `KindConfig[]`; ed25519 slot
+exists, MuSig2/FROST/PQ/Zether refused with `UAConfig`), `src/ua/IUAVerifier.sol`, verifiers in `src/ua/verifiers/`
+(P-256 + WebAuthn with a constructor probe of P256VERIFY, BIP-340 via the ecrecover trick, Schnorr bn254/BLS12-381 and BLS
+min-sig BLS12-381/bn254 under a bounded self-call), `src/common/CurveSigs.sol`, `WebAuthnClientData.sol`;
+`smartcontracts/vectors/ua/signatures.json` from `clients/clientkeys/scripts/ua-sig-vectors.mjs`, re-verified by noble and by
+`scaas-ua::verify` (Rust). forge 995 passed / 10 skipped; measured gas in accounts.md §1.15.
+
+**Open:** HIP-632 for `hedera-native` cannot run in a `view` (R19; verified as ECDSA/1271 for now); member kinds outside
+MEMBER give `UAKeyData` (R20); `bls-bn254-minsig` register needs ≥ 450 k call gas plus calldata (R23); msig worst-case
+cold slack ~4 k under the bound. Carry-overs for UA-3: per-chain precompile probes (0x08/0x0c/0x0e outside-subgroup rows),
+EIP-2537/pairing prices ≤ 2× before enabling those kinds.
+
+**Next steps:** UA-2b, then UA-2c (or UA-3 in parallel with UA-2b). P6b can run beside it.
+
+## Session 2026-10-12 (UA-1b merged, license)
 
 **State:** UA-1b (UA identity layer bindings) and the SCaaS Community License 1.0 merged into main and pushed; branches
 `ua1b-bindings` and `license-community` kept. Plan `docs/superpowers/plans/2026-10-12-ua1b-bindings.md`.
