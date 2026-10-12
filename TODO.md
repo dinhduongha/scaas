@@ -182,7 +182,7 @@ stream definition (scope, gate, depends) in `docs/history/specs/` — section nu
 - [ ] Remove merged worktrees under `.claude/worktrees/`.
 - [ ] Residual TON: a `final` from the indexer before the node's `mined` still flags `landed_elsewhere` (informational).
 - [ ] Queued research: none open beyond the specs above.
-- [ ] **scaas-node docker-compose** (owner 2026-10-12, deferred): standalone, not tied to any Odoo docker — Dockerfile (multi-stage, Rust 1.90), `scaas-node` service + one-shot `store-init` (the node never creates its store), store volume, secrets via `.env`, chain RPC / chain_uid from `.env`; default gateway-only (no `[odoo]`: submit/indexer/admin off, gateway with hmac/bearer auth), a second sample config with submit + indexer for an Odoo reached by URL (legacy pull path R104 until the node job API).
+- [ ] **scaas-node docker-compose** (owner 2026-10-12, deferred): standalone, not tied to any Odoo docker — Dockerfile (multi-stage, Rust 1.90), `scaas-node` service + one-shot `store-init` (the node never creates its store), store volume, secrets via `.env`, chain RPC / chain_uid from `.env`; default gateway-only (no `[odoo]`: submit/indexer/admin off, gateway with hmac/bearer auth), a second sample config with submit + indexer for an Odoo reached by URL (legacy pull path, NODE-JOB-10 / R104: decided to be removed after the per-chain push cutover; until node streams P2–P6 land it is the only job source — once push exists the full config needs no Odoo section).
 
 Owner/operator gates from `docs/history/HANDOFF-blockchain.md` §1 (O1–O8 are standing rules in
 [node/runbooks.md#production-gates](docs/node/runbooks.md#production-gates)):
