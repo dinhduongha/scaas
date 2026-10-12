@@ -1,6 +1,28 @@
 # HANDOFF — scaas
 
-## Session 2026-10-12 (UA-2a merged) — resume here
+## Session 2026-10-12 (UA-2b merged) — resume here
+
+**State:** UA-2b merged into main and pushed (branch `ua2b-ed25519` kept); plan
+`docs/superpowers/plans/2026-10-12-ua2b-ed25519.md` (rulings B1–B9). Next UA-2c (MuSig2 KeyAgg with hints, FROST
+secp256k1/bn254 with the DKG check, `groups.json`, `keyPtr` storage, T-FROST).
+
+**Built:** `src/common/Sha512.sol` (unrolled, 30 k gas per block), `src/common/Ed25519.sol` (Straus–Shamir 4-bit windows,
+precomputed base table, MODEXP sqrt/inversion, R compared by encoding), `src/ua/verifiers/Ed25519Verifier.sol` — strict RFC
+8032 = ed25519-dalek `verify_strict` (S < L, canonical and not small-order A and R, cofactorless equation; mixed-order A
+accepted when the equation holds; A with y ≥ p refused on top of dalek); ~168 k gas valid, 171 k worst, cap 210 k.
+`signatures.json` gained derived[7] `ed25519` and `ed25519Rfc8032`; `ed25519_fuzz.json` (2144 cases, dalek verdicts; noble
+`zip215:false` differs on small-order R and torsion components — dalek is the reference); `scaas-ua` `verify_strict` arm
+(`ed25519-dalek =2.2.0`). Registry tests enable ed25519 (KINDS = 8). `Bip340Verifier` reads `returndatasize()` after its
+MODEXP call (Yul evaluates arguments right to left). forge 1009 passed / 10 skipped.
+
+**Carried to UA-2c's docs task (optional minors):** test/comment wording "+~20 %" (real margin +23 %); §1.9 canonical-A
+phrase; an audit note on the ed25519 per-chain row; a mixed-order key through the registry with the real verifier; the
+rejecting-side cap measurement. Stale `Cargo.lock` of `scaas-ua-cxx`/`-qt`/`-frb` (missing UA-2a/2b crates): refresh when
+those crates are next built.
+
+**Next steps:** UA-2c (or UA-3 in parallel). P6b can run beside it.
+
+## Session 2026-10-12 (UA-2a merged)
 
 **State:** UA-2a merged into main and pushed (branch `ua2a-registry` kept); plan
 `docs/superpowers/plans/2026-10-12-ua2a-registry.md` (rulings R1–R24). UA-2 is split in three (owner): UA-2a done, next
