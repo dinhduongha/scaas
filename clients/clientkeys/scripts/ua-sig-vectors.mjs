@@ -183,7 +183,7 @@ const nativeSigs = [['A', 1, 'metatx'], ['A', 1, 'member'], ['A', 2, 'metatx'], 
   return { context, generation, purpose, digest: hex(DIGEST), uaAuthDigest: hex(h), sig: hex(ecdsa(nativeSk, h)) };
 });
 const goodA = fromHex(nativeSigs[0].sig);
-const nativeHighS = concatBytes(goodA.subarray(0, 32), be(SECP_N - int(goodA.subarray(32, 64)), 32), Uint8Array.of(goodA[64] ^ 1));
+const nativeHighS = concatBytes(goodA.subarray(0, 32), be(SECP_N - int(goodA.subarray(32, 64)), 32), Uint8Array.of(55 - goodA[64]));
 const nativeNeg = (name, sig) => ({ name, context: 'A', generation: 1, purpose: 'metatx', digest: hex(DIGEST), sig: hex(sig) });
 const nativeNegatives = [
   nativeNeg('raw-digest', ecdsa(nativeSk, DIGEST)),

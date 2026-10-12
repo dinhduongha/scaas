@@ -177,6 +177,13 @@ test('native EOA: UAAuth signatures verify, negatives fail', () => {
     const h = ua.uaAuthDigest(domain(n.context, n.generation), B(N.ua), tag(n.purpose), B(n.digest));
     assert.equal(nativeOk(N.address, h, n.sig), false, n.name);
   }
+  // high-s must be refused for the low-s rule alone: raw recovery of the negative still yields the native address
+  const hs = N.negatives.find((n) => n.name === 'high-s');
+  const sg = B(hs.sig);
+  assert.ok(int(sg.subarray(32, 64)) > SECP_N / 2n);
+  const hh = ua.uaAuthDigest(domain(hs.context, hs.generation), B(N.ua), tag(hs.purpose), B(hs.digest));
+  const pub = secp256k1.recoverPublicKey(concatBytes(Uint8Array.of(sg[64] - 27), sg.subarray(0, 64)), hh, { prehash: false });
+  assert.equal(hex(keccak_256(secp256k1.Point.fromBytes(pub).toBytes(false).subarray(1)).subarray(12)), N.address);
 });
 
 /** The registry's msig path (§1.9): auth = abi.encode(bytes keyData, bytes abi.encode(MemberSig[])). */
