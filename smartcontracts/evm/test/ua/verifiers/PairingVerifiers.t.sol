@@ -323,13 +323,16 @@ contract PairingVerifiersTest is Test {
             if (it < minIt) (minIt, minGas) = (it, g);
             if (it > maxIt) (maxIt, maxGas) = (it, g);
         }
+        assertGt(maxIt, minIt, "sample spans several iteration counts");
         uint256 per = (maxGas - minGas) / (maxIt - minIt);
         console.log("bn254 mapToG1: iterations min/max", minIt, maxIt);
         console.log("  gas at min / per extra iteration", minGas, per);
         Row[] memory rows = _rows();
         Row memory r = rows[3];
         uint256 valid = _gas(verifier[r.kind], false, r.keyData, r.memberMsg, r.memberSig);
-        console.log("  CHECK_GAS headroom in iterations ", (verifier[r.kind].CHECK_GAS() + 3_000 - valid) / per);
+        uint256 headroom = (verifier[r.kind].CHECK_GAS() + 3_000 - valid) / per;
+        console.log("  CHECK_GAS headroom in iterations ", headroom);
+        assertGe(headroom, 32, "330 k leaves ~39 extra iterations");
     }
 
     function _iterations(bytes memory prefix) internal view returns (uint256 n) {

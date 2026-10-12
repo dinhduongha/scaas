@@ -12,7 +12,8 @@ import {CurveSigs} from "../../common/CurveSigs.sol";
 ///         failing EIP-196/197/2537 precompile consumes all the gas it was given, and the curve helpers forward `gas()`,
 ///         so without it a malformed point would burn 63/64 of the caller's gas. A call that cannot give `check` its
 ///         full `CHECK_GAS` reverts `UAKinds.UAVerifyGas` (a statement about the gas, never `false` about the key).
-///         Worst case of any call: `CHECK_GAS` + the wrapper. **UNAUDITED — NOT FOR PRODUCTION FUNDS.**
+///         For well-sized inputs the worst case of any call is `CHECK_GAS` + the wrapper (oversized calldata only shortens the inner
+///         budget and fails the length checks). **UNAUDITED — NOT FOR PRODUCTION FUNDS.**
 abstract contract UASafeVerifier is IUAPopVerifier {
     uint256 public immutable CHECK_GAS;
 
