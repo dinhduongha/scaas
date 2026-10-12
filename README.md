@@ -84,6 +84,10 @@ If a smart chain is infrastructure, it should be judged next to the infrastructu
 (IaaS, e.g. EC2, Compute Engine) and a **hosted backend** (BaaS, e.g. Supabase, Firebase). The chain loses on some
 counts and wins on others; the five tables below — a) to e) — say which, and f) sums up.
 
+<p align="center">
+  <img src="docs/assets/chain-vs-iaas-baas.svg" width="900" alt="Scorecard of a cloud VM (IaaS), a hosted backend (BaaS) and a smart chain with SCaaS across five rows. a) Code and data: the chain is worse, with writes taking seconds to minutes until finality against milliseconds, and block space shared with everyone. b) Money and billing: the chain is better, with a native fee inside every transaction and value moving as an ordinary call, against a monthly invoice and a bank or payment processor. c) Operations and reliability: different, with many independent validators but lock-in to the chain itself, against one provider. d) Who holds the power, highlighted as where the chain wins: the chain is better, because the subject signs every write and nobody can forge it without the key, while on IaaS and BaaS a server or auth service issues the token and a leaked key or secret impersonates every user. e) Privacy and data: the chain is worse, because a public chain shows everything and deleting is impossible. Footer f): use the chain for write authority and value; keep reads, reports and workflows on ordinary infrastructure.">
+</p>
+
 <details>
 <summary><b>a) Code and data</b> — for computing and storing data, the chain is slower, smaller and dearer</summary>
 
