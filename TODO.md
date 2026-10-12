@@ -109,8 +109,9 @@ phases P1–P5 (P0 = the docs, done); each phase ends with the size gate (CTR-TO
 - [x] Meta-tx generic call (GC-1…10) accepted and folded 2026-10-08; record `docs/history/specs/2026-10-08-metatx-generic-call-design.md`.
 - [x] DEX exchange path (DS-1…8) accepted and folded 2026-10-08; record `docs/history/specs/2026-10-08-dex-exchange-design.md`.
 
-## 0. Finish the spec phase (5 items left)
+## 0. Finish the spec phase (6 items left)
 
+- [ ] **Template library** (owner 2026-10-12): every README use case ships as a reusable template or ready implementation others can adopt — including economic (commercial) contracts: escrow with an arbiter, milestone service contracts, sale with delivery, leases, installment loans, subscriptions, revenue sharing, deposit with periodic withdrawal (`VestingGrant` / `MandateWallet`), provenance and family-tree registries. Spec first (owner rule): a `docs/contracts/templates.md` extending CTR-AS-14 (versioned off-chain presets) to contract templates on `MetaTxBase` — which use cases are presets over existing contracts and which need a new contract; who pays the fee per template; client builders; then code streams per template.
 - [ ] **P0 follow-ups (minor, deferred by the final review):** `zether.md` gas-cap / 2.5 M paragraphs quote only
       single-recipient figures; `zether.md` ~1327 `recipient` vs target `to`, ~216/220/238 informal `zetherShield(Y…)`
       prose; architecture sequence 5 lacks `UnderlyingLib`; `asset-suite.md` 893–897 "BUILT" next to `createToken`, `IRegulatedToken` block old names (`issuer()`, `compliance()`, `ControlsDisabled`, `RoleRenounced`);
