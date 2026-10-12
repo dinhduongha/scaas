@@ -106,6 +106,41 @@ contract PqGasTest is Test {
         require(ok, "expanded");
     }
 
+    /// P6c (accounts.md CTR-UA-23, owner 2026-10-12): the registry's expanded-key cache. Gas of each `expandedKeyPart`
+    /// (the registry adds the SSTORE2 write, 200 gas per byte, measured with the registry in `UARegistryPq.t.sol`) and
+    /// of `verifyCached` on the parts (the kind's cap without a precompile; ≤ 50 % of the 12 M budget).
+    function test_gas_mldsaCache() public {
+        string memory kat = _kat();
+        string[2] memory names = ["mldsa44", "mldsa65"];
+        uint16[2] memory kinds = [PqUA.MLDSA44, PqUA.MLDSA65];
+        uint256[2] memory bound = [uint256(4_250_000), 5_950_000];
+        for (uint256 i; i < 2; ++i) {
+            UAMldsaVerifier v = new UAMldsaVerifier(kinds[i], address(0), "", "");
+            string memory k = string.concat(".kinds.", names[i]);
+            bytes memory pk = vm.parseJsonBytes(kat, string.concat(k, ".pk"));
+            bytes memory chunks;
+            for (uint256 p; p < v.expandedKeyParts(); ++p) {
+                uint256 g = gasleft();
+                bytes memory part = v.expandedKeyPart(pk, p);
+                g -= gasleft();
+                console2.log(string.concat(names[i], " expandedKeyPart ", vm.toString(p), " bytes"), part.length);
+                console2.log(string.concat(names[i], " expandedKeyPart ", vm.toString(p), " gas"), g);
+                assertLt(g, 9_000_000, "a part leaves room for its SSTORE2 write under the 16,777,216 tx cap");
+                address ptr = address(uint160(0xcace00 + 16 * i + p));
+                vm.etch(ptr, bytes.concat(hex"00", part));
+                chunks = bytes.concat(chunks, bytes20(ptr));
+            }
+            bytes32 m = bytes32(vm.parseJsonBytes(kat, string.concat(k, ".ua_msg")));
+            bytes memory sig = vm.parseJsonBytes(kat, string.concat(k, ".sig"));
+            uint256 g2 = gasleft();
+            bool ok = v.verifyCached(chunks, m, sig);
+            g2 -= gasleft();
+            assertTrue(ok);
+            console2.log(string.concat(names[i], " verifyCached (valid)"), g2);
+            assertLt(g2, bound[i], "cached verify: the cap without a precompile");
+        }
+    }
+
     function test_gas_mldsa() public {
         string memory kat = _kat();
         uint256 c44 = _one(kat, "mldsa44", address(new UAMldsaVerifier(PqUA.MLDSA44, address(0), "", "")));

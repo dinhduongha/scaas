@@ -35,5 +35,8 @@ contract SSTORE2Test is Test {
         bytes memory kb = new bytes(1_000);
         vm.expectRevert(SSTORE2.SSTORE2WriteFailed.selector);
         h.write{gas: 100_000}(kb);
+        // P6c: data the 2-byte length of the init code cannot carry reverts instead of storing a truncated copy
+        vm.expectRevert(SSTORE2.SSTORE2WriteFailed.selector);
+        h.write(new bytes(0xffff));
     }
 }
