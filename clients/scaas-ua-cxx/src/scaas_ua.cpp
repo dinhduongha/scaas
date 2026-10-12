@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-SCaaS-Community-1.0
 // Implements include/scaas_ua.hpp over the cxx-generated bridge; translates rust::Error into scaas::ua::Error.
 #include "scaas_ua.hpp"
 

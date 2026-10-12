@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-SCaaS-Community-1.0
 // Mirrors clients/scaas-ua/tests/vectors.rs against smartcontracts/vectors/ua/. Needs the native library:
 //   (cd rust && cargo build)   # -> rust/target/debug/libscaas_ua_frb.so, or set SCAAS_UA_LIB to its path
 import 'dart:convert';

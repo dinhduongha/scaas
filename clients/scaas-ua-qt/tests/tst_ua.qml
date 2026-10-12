@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-SCaaS-Community-1.0
 import QtQuick
 import QtTest
 import Scaas.Ua

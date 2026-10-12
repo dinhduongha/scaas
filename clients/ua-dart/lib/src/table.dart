@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-SCaaS-Community-1.0
 /// An error whose [code] every implementation and the vector files share.
 class UAError implements Exception {
   final String code;

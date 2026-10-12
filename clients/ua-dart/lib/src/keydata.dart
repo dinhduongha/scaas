@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-SCaaS-Community-1.0
 // Key-data validation (accounts.md §1.6 "Validation at registration") over BigInt: affine short Weierstrass
 // arithmetic on y² = x³ + b over Fp and Fp2 (u² = -1) for curve and subgroup checks, twisted Edwards for ed25519.
 // Public inputs only: nothing here is constant-time. Every length is checked before it is read.

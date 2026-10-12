@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-SCaaS-Community-1.0
 //! cxx bridge over `scaas-ua`. Byte data crosses as `&[u8]` / `Vec<u8>`; fixed-size inputs are length-checked here, so a
 //! malformed call is an `Err` (thrown as `rust::Error` in C++), never UB. Fallible calls return `Result`; the message is
 //! `UAError`'s Display (`"<code>"` or `"UAKeyData: <reason>"`), which `include/scaas_ua.hpp` turns into code + reason.

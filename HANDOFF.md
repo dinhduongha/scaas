@@ -1,6 +1,33 @@
 # HANDOFF — scaas
 
-## Session 2026-10-12 (UA-1 merged) — resume here
+## Session 2026-10-12 (UA-1b merged, license) — resume here
+
+**State:** UA-1b (UA identity layer bindings) and the SCaaS Community License 1.0 merged into main and pushed; branches
+`ua1b-bindings` and `license-community` kept. Plan `docs/superpowers/plans/2026-10-12-ua1b-bindings.md`.
+
+**UA-1b built:** `clients/scaas-ua-cxx` (C++17 over `scaas-ua` with cxx 1.0.202; `scaas::ua::Error`; ctest 6/6),
+`clients/scaas-ua-qt` (QML singleton `Scaas.Ua/UaKinds` in Rust with CXX-Qt 0.10.0, Qt 6.8.2 at `~/usr/Qt/6.8.2/gcc_64`;
+hex strings + `lastError`; Qt Quick Test 12/12 offscreen), `clients/scaas-ua-frb` (flutter_rust_bridge 2.13.0, sync API,
+`int` kinds/chain ids with range checks, committed generated code; `dart test` 7/7, Linux only), `clients/ua-dart`
+(pure Dart, in-package Keccak; VM, node and asserts-off runs 7/7). The final review caught the pure-Dart Keccak being wrong
+with asserts off (fixed; CI runs the vectors with asserts off). Open: FRB as a Flutter plugin with Android/iOS/web builds
+(does `scaas-ua` build for wasm?), Qt packaging for Windows/macOS.
+
+**License (owner 2026-10-12):** `LICENSE` (SCaaS Community License 1.0, Licensor Dinh Duong Ha), `LICENSE.vi.md`
+(non-binding summary), CLA in `CONTRIBUTING.md` (`git commit -s`), README "License" section; SPDX headers
+`LicenseRef-SCaaS-Community-1.0` (Solidity, UA-1b sources), clientkeys/Move manifests. Terms: prohibited at any scale for
+groups that kill animals (every species, any life stage; incl. commercial pest control), food service serving any
+prohibited animal product (meat, fish, seafood, insects, silk, carmine, gelatin…, fertilized eggs, honey and bee products;
+milk, unfertilized eggs, shorn wool allowed), groups with > 10% revenue from such products, and anyone trading in
+human-derived products (hair, organs, tissue, blood, gametes…; only donation for medical treatment excepted; human milk
+allowed); free (rights as MIT or Apache-2.0, license kept on redistribution) for fully vegan groups or groups under
+USD 10 M revenue (90-day grace); everyone else an Enterprise License with the same prohibitions. A lawyer's review is
+recommended before relying on it; earlier public versions stay under their old headers.
+
+**Next steps:** UA-2 (registry and verifiers, PoP signatures, `groups.json`; carry-overs in the UA roadmap's UA-2 row).
+P6b (E-S0 spike) can run beside it.
+
+## Session 2026-10-12 (UA-1 merged)
 
 **State:** UA-1 (UA F0, Universal Account kind libraries) merged into main and pushed; branch `ua1-kinds` kept. UA phase
 roadmap `docs/superpowers/plans/2026-10-12-ua-roadmap.md` (owner: UA F0/F1 + F2 as their own phase before P6c; UA-1,

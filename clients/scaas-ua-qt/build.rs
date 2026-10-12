@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-SCaaS-Community-1.0
 use cxx_qt_build::{CxxQtBuilder, QmlModule};
 
 fn main() {

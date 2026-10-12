@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-SCaaS-Community-1.0
 import 'dart:typed_data';
 
 // Keccak-256 (original 0x01 padding, not SHA3's 0x06). Lanes are kept as two 32-bit halves so the code is exact when

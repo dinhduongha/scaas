@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-SCaaS-Community-1.0
 // scaas_ua against smartcontracts/vectors/ua/{kinds,structures}.json. The files are found by walking up from the
 // current directory (the package dir under `dart test`) to <ancestor>/smartcontracts/vectors/ua, or from the
 // directory named by $UA_VECTORS. Works on the VM and under `dart test -p node` (chain id 2^40+7 needs > 32 bits).

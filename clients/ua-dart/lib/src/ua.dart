@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-SCaaS-Community-1.0
 import 'dart:convert';
 import 'dart:typed_data';
 

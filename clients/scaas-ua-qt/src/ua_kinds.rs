@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: LicenseRef-SCaaS-Community-1.0
 //! `UaKinds`: QML singleton over `scaas-ua`. Bytes travel as "0x…" hex strings. Every invokable clears `lastError`, and on
 //! failure sets it to the error code and returns "" (strings) or false (bools); panics never cross the FFI.
 #[cxx_qt::bridge]
