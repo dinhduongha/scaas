@@ -1,0 +1,4 @@
+<Solution>
+  <Project Path="Scaas.Ua.Tests/Scaas.Ua.Tests.csproj" />
+  <Project Path="Scaas.Ua/Scaas.Ua.csproj" />
+</Solution>
