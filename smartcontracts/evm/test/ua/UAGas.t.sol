@@ -31,16 +31,17 @@ contract UAGasTest is UARegistryBase {
     /// (which over-counts). `MSIG_MEMBER_GAS` must cover the worst plus what the caller must hold for the largest cap.
     function test_T_GAS_msigMemberOverhead() public {
         bytes memory big = _bigSig();
-        AcceptAll v = new AcceptAll();
+        address[] memory v = new address[](7); // one verifier account per kind: each member's is cold
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](7);
         for (uint256 i; i < 7; ++i) {
-            c[i] = UARegistry.KindConfig(KINDS[i], address(v), _cap(KINDS[i]));
+            v[i] = address(new AcceptAll());
+            c[i] = UARegistry.KindConfig(KINDS[i], v[i], _cap(KINDS[i]));
         }
         UARegistry home = _deploy(address(0x5ca1), chainUidA, address(0), false, BUDGET, address(0), true, c);
         UARegistry.KindConfig[] memory none = new UARegistry.KindConfig[](0);
         UARegistry gen2 = _deploy(address(0x5ca2), chainUidA, address(home), false, BUDGET, address(0), true, none);
-        uint256 local = _derivedOverhead(home, home, big, address(v), 1);
-        uint256 handed = _derivedOverhead(gen2, home, big, address(v), 2); // other weights: other ids; gen 2 reads its record, then gen 1's
+        uint256 local = _derivedOverhead(home, home, big, v, 1);
+        uint256 handed = _derivedOverhead(gen2, home, big, v, 2); // other weights: other ids; gen 2 reads its record, then gen 1's
         uint256 eoa = _nativeOverhead(0);
         uint256 designator = _nativeOverhead(1);
         uint256 wallet = _nativeOverhead(2);
@@ -55,7 +56,14 @@ contract UAGasTest is UARegistryBase {
         worst = worst > designator ? worst : designator;
         worst = worst > wallet ? worst : wallet;
         // + what the caller holds for the largest cap (400 k / 63) + the call margin
-        uint256 total = worst + SMART_KEY_1271_GAS / 63 + 5_000;
+        // `vm.cool` does not make accounts cold in a single-transaction test: unless run with `--isolate` (every call its
+        // own transaction, the true cold measure), a member's verifier/wallet account is warm here, so add its cold
+        // surcharge (2,600 - 100) per member. Probe: a first call to a fresh verifier costs > 2,000 only when cold.
+        uint256 g = gasleft();
+        AcceptAll(v[0]).verify("", 0, "");
+        uint256 surcharge = g - gasleft() > 2_000 ? 0 : 2_500;
+        emit log_named_uint("account cold surcharge added (0 under --isolate)", surcharge);
+        uint256 total = worst + surcharge + SMART_KEY_1271_GAS / 63 + 5_000;
         emit log_named_uint("msig member bound needed", total);
         assertLe(total, 35_000, "MSIG_MEMBER_GAS");
     }
@@ -95,7 +103,7 @@ contract UAGasTest is UARegistryBase {
     }
 
     /// msig over the 7 single-key kinds (weights 1); (gas with 7 member sigs - gas with 1) / 6, all cold.
-    function _derivedOverhead(UARegistry r, UARegistry home, bytes memory big, address verifier, uint16 w)
+    function _derivedOverhead(UARegistry r, UARegistry home, bytes memory big, address[] memory verifiers, uint16 w)
         internal
         returns (uint256)
     {
@@ -119,7 +127,7 @@ contract UAGasTest is UARegistryBase {
             bytes memory auth = _msigAuth(d, s);
             vm.cool(address(r));
             vm.cool(address(home));
-            vm.cool(verifier);
+            _cool(verifiers);
             uint256 g = gasleft();
             r.requireAuthorized(ua, UAKinds.PURPOSE_METATX, DIGEST, auth);
             used[x] = g - gasleft();
