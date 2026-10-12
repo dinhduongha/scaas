@@ -16,7 +16,7 @@ Interface đã chốt cộng các implementation đã có (2026-10-03,
 | Deploy | `script/Deploy.s.sol` | ghi `deployments/<chainid>.json` |
 
 Zether is built (P3: the kinds `NONE_ZETHER` and `UNDERLYING_ZETHER` in `src/zether/` as `NoUnderlyingZetherToken`, `UnderlyingZetherToken`, `ZetherLayer`, `ZetherLib`, `ZetherStatements`, `ZetherVerifierBn254`, `ZetherVerifierBls12381`;
-`src/registry/UniversalAccountRegistry.sol`; the old `ZetherToken` line is in `legacy/p3/`, not built), unaudited and gated to dev chains 31337/1337 (`ZetherSafety`,
+Zether accounts are UAs of the UA registry's Zether kinds, `src/ua/UARegistry.sol`, UA-3; the old Zether-only registry is in `legacy/ua3/` and the old `ZetherToken` line in `legacy/p3/`, not built), unaudited and gated to dev chains 31337/1337 (`ZetherSafety`,
 RS2-1); see `docs/contracts/zether.md` (CTR-ZTH-02) and `docs/contracts/README.md`. `test/vectors/metatx_kat.json` là vector v3 `MetaTransaction` (MetaTxBase);
 The v1 line (`MetaToken`, `HederaMetaToken`, `OpenFactoryV1`, `MetaTxDex`, `SCaaSDexV1`, `metatx_v1_kat.json`, `dex_kat.json`) is in `legacy/p5/`, not built (P5).
 

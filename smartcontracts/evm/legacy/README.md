@@ -34,3 +34,8 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   with its `LegacyMetaTransaction` and the v1/v2 gas table `MetaTxGasV2.t` as they were. The node's and clientkeys'
   v1 modules are in `scaas-node/legacy/p5/` and `clients/clientkeys/legacy/p5/`. Nothing deployed: every chain is a
   test chain and is redeployed.
+- `ua3/`: the Zether-era account registry as it stood on `main` before UA-3 re-pointed Zether to the UA registry
+  (CTR-UA-22; owner: backup, not delete): `src/registry/UniversalAccountRegistry.sol`, `IUniversalAccountRegistry.sol`
+  (`UA = keccak256(encodedY)`, eight `AuthScheme`s, PoP bound to `msg.sender`, `links`/`link_eth`, `keyOf`),
+  `src/common/AuthScheme.sol`, and their tests `test/zether/UniversalAccountRegistry.t.sol`, `test/AuthScheme.t.sol`;
+  not built. `src/common/MultiSig.sol` stays in `src/` (accounts.md §1.13).

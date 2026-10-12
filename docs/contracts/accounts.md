@@ -31,7 +31,7 @@ Passkeys can serve either way: as a `webauthn-p256` Universal Account, or as a k
    - 1.10 [EIP-7702 and chain identity](#110-eip-7702-and-chain-identity)
    - 1.11 [Credentials (optional)](#111-credentials-optional)
    - 1.12 [Touchpoints](#112-touchpoints)
-   - 1.13 [Migration from the built registry](#113-migration-from-the-built-registry)
+   - 1.13 [Migration from the legacy registry](#113-migration-from-the-legacy-registry)
    - 1.14 [Security](#114-security)
    - 1.15 [Gas and calldata (estimates; measured numbers replace them in `test/ua/UAGas.t.sol`)](#115-gas-and-calldata-estimates-measured-numbers-replace-them-in-testuauagastsol)
    - 1.16 [Vectors and tests](#116-vectors-and-tests)
@@ -45,7 +45,7 @@ A Universal Account is an account identifier for every signature scheme SCaaS su
 or a 32-byte id derived from key data or from a policy (a multisig structure). A per-chain, admin-free registry stores
 what the chain needs to verify derived ids; per-kind verifiers check signatures; tokens accept exactly the kinds each
 function needs. An optional verifiable-credential layer sits on top. Status: **SPECIFIED**; the identity layer (kind table, ids, keyHash, purpose tags, digests, key-data validation) is BUILT in six libraries ([ua-libraries.md](../clients/ua-libraries.md)). The
-built Zether-only registry is replaced by it ([legacy registry](#legacy-registry), [migration](#migration)).
+Zether-only registry it replaced is backed up in `smartcontracts/evm/legacy/ua3/` (UA-3; [legacy registry](#legacy-registry), [migration](#migration)).
 
 ### 1.1 Scope
 
@@ -501,9 +501,14 @@ EVM Zether (the `*_ZETHER` kinds, built P3, re-pointed at migration):
 | `mtxExecute(m, sig)` (self-call of `zetherTransfer`/`zetherUnshield`/`zetherShield`/`wrap`/`unwrap`, outer fee) | `m.from` (outer-fee payer) | N | the base's `_requireValidSignature` |
 | views `registered`, `accountState`, `sendCounter` | `ua` | Z | — |
 
-`authSig` for Z-auth: `0x` with a proof and `authRef = 0`; else `abi.encode(bytes authKeyData, bytes sig)` checked by the
-registry against `authRef` with purpose `zether-auth` (a native `authRef`: ECDSA/1271 over the EIP-712
-`UAAuth(authRef, PURPOSE_ZETHER_AUTH, authDigest)`, never the raw `authDigest`).
+`authSig` for Z-auth: `0x` with a proof and `authRef = 0`. Otherwise it is what `requireAuthorized` takes for `authRef`
+(purpose `zether-auth`): a native `authRef` takes its signature raw (ECDSA, 65-byte or 64-byte compact, or the ERC-1271 bytes) over the
+EIP-712 `UAAuth(authRef, PURPOSE_ZETHER_AUTH, authDigest)`, never the raw `authDigest`; a derived `authRef` takes
+`abi.encode(bytes authKeyData, bytes sig)`. The roll-over and mode digests (`zkCovered = false`) take purpose
+`zether-owner` whoever signs (the purpose names the digest, CTR-UA-10), with the same encoding by `authRef`: with
+`authRef = 0` the owner op is `abi.encode(bytes(""), sig)`, `sig` a Zether Schnorr by x over uaMessage(kind,
+PURPOSE_ZETHER_OWNER, digest), `Y` read from the record (Zether kinds are stored kinds, below); with an `authRef` its
+signature under `PURPOSE_ZETHER_OWNER` (UA-3).
 
 <a id="zether-kinds"></a>
 <a id="CTR-UA-16"></a>**CTR-UA-16** — **Zether kinds bind only the encryption key; authorization is an immutable
@@ -514,7 +519,7 @@ account or a registered SIGNING UA. `authRef` is covered by the PoP and co-signe
 `[x]G2` would make DDH on G1 decidable). The post-quantum Zether kind `pqz-mlwe` (`0x0142`) tightens this: its `authRef`
 must be an `mldsa*`/`fndsa512` UA or an `msig` whose non-PQ members' weight is below the threshold; `0`, native ids and
 classical-only kinds are refused ([CTR-PQZ-12](pq-zether.md#CTR-PQZ-12)). This supersedes the eight `AuthScheme` values
-and `link_eth`/`links` of the built registry. The token derives the receiver UA from `Y` in the payload with one keccak
+and `link_eth`/`links` of the legacy registry. The token derives the receiver UA from `Y` in the payload with one keccak
 and no lookup; spend authority stays separate from decryption (`survivesEncKeyLeak` for `authRef ≠ 0`). `authRef`
 cannot rotate ([CTR-UA-13](#CTR-UA-13)); a timelocked `rotateZetherAuth` was the rejected alternative.
 
@@ -663,7 +668,9 @@ large key data is stored once.** `requireAuthorized(ua, purpose, digest, auth)` 
 one call. For kinds with key data ≤ 256 bytes and for structures, `auth` carries the key data and the registry checks
 `keccak(tag ‖ keyData) == ua`; for **stored kinds** — PQ kinds (public key) and MuSig2/FROST (the checked group key) — the
 registry stores the verification key at registration (an SSTORE2 code pointer, `keyPtr`) and `auth` carries only the
-signature. Tokens do not cache records in v1 (one call per check); because records are immutable
+signature. The Zether kinds store `Y` the same way (UA-3): not for verification (64 / 128 bytes would fit calldata)
+but so that `keyOf(ua)` serves a sender's storage-only recovery ([CTR-ZTH-50](zether.md#CTR-ZTH-50)); their owner
+ops then carry only the signature too. Tokens do not cache records in v1 (one call per check); because records are immutable
 ([CTR-UA-15](#CTR-UA-15)) a cache would be safe, and is allowed in a later token version if measured worthwhile. Calldata
 beats storage for small keys (a 64-byte key costs ~1 k gas in calldata vs 4.2 k for two cold SLOADs); PQ keys are
 1.3–2.6 KB (21–42 k gas each time in calldata vs ~3 k to read back). A token-local "seen" bit would save the cold `CALL`
@@ -710,6 +717,7 @@ interface IUARegistry is IERC5267 {
     function kindOf(bytes32 ua) external view returns (uint16);              // 0 = not registered (native ids too)
     function isRegistered(bytes32 ua) external view returns (bool);
     function keyOwner(bytes32 keyHash) external view returns (bytes32);
+    function keyOf(bytes32 ua) external view returns (bytes memory);         // stored key (MuSig2 Q, FROST Y, Zether Y), else empty
 
     /// Reverts UAUnauthorized unless `auth` authorizes `digest` for `ua` under `purposeTag`.
     /// Native ids (ua >> 160 == 0): ECDSA low-s (EOA) or ERC-1271 (50 k cap; 400 k for SmartKeyAccount clones, by the
@@ -720,7 +728,8 @@ interface IUARegistry is IERC5267 {
     function requireAuthorized(bytes32 ua, bytes32 purposeTag, bytes32 digest, bytes calldata auth) external view;
 
     /// Zether: `authRef == 0` and zkCovered ⇒ auth must be empty; `authRef == 0` and !zkCovered ⇒ Zether Schnorr
-    /// by x (purpose zether-owner); else requireAuthorized(authRef, PURPOSE_ZETHER_AUTH, digest, auth).
+    /// by x (purpose zether-owner; auth = abi.encode(bytes(""), sig), Y from keyPtr); else requireAuthorized(authRef,
+    /// zkCovered ? PURPOSE_ZETHER_AUTH : PURPOSE_ZETHER_OWNER, digest, auth). Not a Zether UA or unregistered: UAUnauthorized.
     function requireZetherAuthorized(bytes32 ua, bytes32 digest, bytes calldata auth, bool zkCovered) external view;
 }
 // constructor (the UA-2a UARegistry): error UAConfig(uint16 kind) — kind outside the code's table, duplicate, verifier
@@ -764,7 +773,7 @@ it. The v3 token's own native path keeps its `UAMetaTransaction` typed data.
 7. `authRef ≠ 0`: `requireAuthorized(authRef, PURPOSE_AUTHREF, popDigest(ua, authRef), authPop)` — the authority
    consents to this exact `(ua, authRef)` on this chain and registry — `UAUnauthorized(authRef)`.
 8. Store `Record{kind, uint40(block.timestamp), keyPtr}` (stored kinds: `keyPtr = SSTORE2.write(vk)`, `vk` = PQ `pk`,
-   MuSig2 `Q`, FROST `Y`), `authRef` (Zether only, own slot), `keyOwner[kh] = ua`; emit
+   MuSig2 `Q`, FROST `Y`, Zether `Y`), `authRef` (Zether only, own slot), `keyOwner[kh] = ua`; emit
    `UARegistered(ua, kind, keyData, authRef)`.
 
 The event carries the full key data: records and ids are rebuildable offline from logs. Every verifier `staticcall` is
@@ -878,15 +887,17 @@ Per-chain enablement:
 | `webauthn-p256`, `p256` | every EVM chain | precompile `0x100` where present (≈ 3.5–6.9 k gas), OZ Solidity fallback otherwise (measure; the passkey accounts already accept it) |
 | `bip340`, `musig2-*`, `frost-*`, `schnorr-bn254` | every EVM chain | `ecrecover`, SHA-256, `MODEXP`, bn254 `0x06/0x07` |
 | `ed25519` | every EVM chain (owner) | no precompile; Solidity verify incl. SHA-512, ~170 k gas (measured); unaudited — audit before a public chain enables it (S15) |
-| `bls12381-*`, `schnorr-bls12381`, `zether-bls12381` | chains where the `CurveCapability` probe passes (returndata compared) | EIP-2537 |
-| `bls-bn254-minsig` | private chains only | ~100-bit pairing security |
+| `bls12381-*`, `schnorr-bls12381`, `zether-bls12381` | chains where the deploy-time `CurveCapability` probe passes (built as `script/UAPrecompileProbe.sol`, asked through `eth_call`: G1MSM/G2MSM return the point within the registry's key-check caps and refuse kinds.json's points outside the subgroup, returndata compared; a k = 2 PAIRING_CHECK within its EIP-2537 price; G1ADD 0x0b and MAP_FP_TO_G1 0x10 answer within their EIP-2537 prices) | EIP-2537 |
+| `bls-bn254-minsig` | private chains only (the dev chains and 7622), where the probe passes the bn254 G2 check (0x08 refuses kinds.json's G2 point outside the subgroup within `PAIRING_GAS`; a k = 2 pairing within its EIP-1108 price) | ~100-bit pairing security |
+| `zether-bn254`, `zether-bls12381` | dev chains only ([CTR-ZTH-02](zether.md#CTR-ZTH-02); their verifiers refuse to deploy elsewhere) | classical Zether |
 | `mldsa44/65`, `fndsa512` | every EVM chain (owner); only ML-DSA probes (EIP-8355); unaudited: audit before a public chain enables | Solidity (measured, P6a): ML-DSA-44 / -65 11.4 / 18.9 M (FIPS 204 key; 4.1 / 5.8 M on an expanded key), FN-DSA-512 2.3 M; measured cap ≤ ~50 % of the chain's `UA_VERIFY_BUDGET` on public chains, else disabled on that chain ([CTR-UA-23](#CTR-UA-23)) |
 | `slhdsa128s` | every EVM chain: the P6 gas gate passed; unaudited: audit before a public chain enables ([CTR-UA-23](#CTR-UA-23)) | pure Solidity on SHA-256 `0x02`: 0.79 M valid, 1.32 M worst case (measured, P6a) |
 | `pqz-mlwe` | chain 7622 only | [CTR-PQZ-01](pq-zether.md#CTR-PQZ-01), [CTR-PQZ-10](pq-zether.md#CTR-PQZ-10) |
 
 The enabled set, each kind's measured `verifyCap` and the chain's `verifyBudget` are constructor arguments (verifier
 address 0 = disabled); the chain profile publishes them; clients read `kindEnabled` and the caps before offering a kind
-or building a structure.
+or building a structure. `DeployBase` (`_deployUARegistry`, UA-3) deploys generation 1 on every chain it runs on with
+this table's set and the gen-1 default caps; a kind whose probe fails gets no verifier (CTR-UA-23).
 
 ### 1.10 EIP-7702 and chain identity
 
@@ -1040,15 +1051,16 @@ destruction.
   `webauthn-p256` UA and registers it gaslessly ([clients/app.md](../clients/app.md)).
 - **ERP**: UAs are stored as addresses of a new kind, never as off-chain policy ([integration.md](../integration.md#accounts)).
 
-### 1.13 Migration from the built registry
+### 1.13 Migration from the legacy registry
 
 <a id="migration"></a>
 <a id="CTR-UA-22"></a>**CTR-UA-22** — **Migration is breaking, dev chains only**: `UniversalAccountRegistry`,
-`IUniversalAccountRegistry` and `AuthScheme` are deleted; `ZetherTypes.toUA` becomes the tagged derivation; Zether
-accounts re-register; no data migration. Only dev chains ([CTR-ZTH-02](zether.md#CTR-ZTH-02)) hold registrations today;
+`IUniversalAccountRegistry` and `AuthScheme` leave the build (backed up in `smartcontracts/evm/legacy/ua3/`, owner:
+backup, not delete); `ZetherTypes.toUA` becomes the tagged derivation; Zether accounts re-register; no data migration.
+**BUILT (UA-3)**, plan `docs/superpowers/plans/2026-10-12-ua3-zether.md`. Only dev chains ([CTR-ZTH-02](zether.md#CTR-ZTH-02)) hold registrations today;
 dev balances are recreated by scripts.
 
-What exists: `UniversalAccountRegistry` (Zether-only, `UA = keccak256(encodedY)`, untagged; `AuthScheme` 8 values; PoP
+What existed before UA-3: `UniversalAccountRegistry` (Zether-only, `UA = keccak256(encodedY)`, untagged; `AuthScheme` 8 values; PoP
 binds `msg.sender`; `links`/`link_eth`; no rotation). Consumers: the Zether kinds, P3 (`ZetherLayer.registered` via `keyLengthOf`,
 `ZetherLib` `requireAuthorized`, `toUA` on shield/transfer/unshield), `IZetherToken`, `ITransferDisclosure`, tests
 (`UniversalAccountRegistry.t.sol`, `ZetherFixture`, `ZetherNone.t.sol`, `ZetherRevertPaths.t.sol`, `AuthScheme.t.sol`,
@@ -1059,15 +1071,16 @@ the node, client-system code or non-EVM contracts.
 
 | Item | Change |
 |---|---|
-| `src/registry/UniversalAccountRegistry.sol`, `IUniversalAccountRegistry.sol` | deleted; `UARegistry.sol`, `IUARegistry.sol`, `verifiers/*.sol` added |
-| `src/common/AuthScheme.sol` + `test/AuthScheme.t.sol` | deleted (kinds replace schemes) |
-| `src/common/MultiSig.sol` | kept as the EOA-member path of `msig` (sorted, low-s, threshold) |
+| `src/registry/UniversalAccountRegistry.sol`, `IUniversalAccountRegistry.sol` | moved to `legacy/ua3/` with `test/zether/UniversalAccountRegistry.t.sol`; `UARegistry.sol`, `IUARegistry.sol`, `verifiers/*.sol` (UA-2) |
+| `src/common/AuthScheme.sol` + `test/AuthScheme.t.sol` | moved to `legacy/ua3/` (kinds replace schemes) |
+| `src/common/MultiSig.sol` | kept in `src/` (no caller since UA-3: the `msig` structure verifies its EOA members itself) |
 | `ZetherTypes.toUA(encodedY)` | `keccak256(keccak256("scaas.ua.zether-<curve>.v1") ‖ Y)` = `keccak256(abi.encodePacked(TAG_ZETHER_<curve>, encodedY))`; curve from length |
 | `ZetherLayer.registered(ua)` | `registry.kindOf(ua) == ZETHER_<verifier curve>` |
 | `ZetherLib` auth calls | `requireZetherAuthorized(ua, digest, sig, zkCovered)` |
 | `entryRef` | unchanged formula; `fromUA` is the new id (vectors regenerate) |
-| zether-prover | `ua_of` tagged; PoP per [CTR-UA-07](#CTR-UA-07); vectors regenerated |
-| clientkeys | `zether.js` (`confPublic` returns the tagged UA; `zetherPop` signs the new PoP; `popMessage` removed); `r33_keys.json` regenerated |
+| zether-prover | `ua_of` tagged; PoP per [CTR-UA-07](#CTR-UA-07) (`schnorr::zether_pop`, API `pop`), the self owner op (`owner_auth`, API `ownerAuth`); vectors regenerated (`r33_keys.json` carries the PoP context) |
+| clientkeys | `zether.js` (`confPublic` returns the tagged UA; `zetherPop` signs the new PoP; `zetherOwnerAuth` signs owner ops; `popMessage` removed); `r33_keys.json` regenerated |
+| `DeployBase` | deploys the UA registry on every chain (`ua_registry`); `DEPLOY_ZETHER` points the Zether implementations at it (`zether_registry` = the same address); e2e `scripts/e2e-zether.sh` on a dev chain |
 | `AuthScheme` → `authRef` | `SELF_SCHNORR` → `0`; `ECDSA_MULTISIG` → `msig` of EOA members; `FROST/MUSIG2_BN254` → `frost/musig2-bn254` UA (key data = the checked transcript / member list; groups re-run their DKG or KeyAgg); `BLS_BN254/12381` → `bls-*` UA (cross-curve rule kept); `PQ_COMMITMENT` → retired; `SMART_ACCOUNT_1271` → native contract id; `linkEVM` → retired (index `UARegistered`) |
 
 New registration flow:
@@ -1085,15 +1098,18 @@ New registration flow:
 
 Order: the registry, the Zether re-point, the prover and the client Zether change land in one change set (the vectors
 are shared; a partial landing breaks the cross-language tests); dev chains 31337/1337 redeploy; fixtures re-register;
-dev `SmartKeyAccount` secp256k1 keys rotate to the role path with `rotateKey` (script); non-EVM owner derivations move
-with their family work.
+dev `SmartKeyAccount` secp256k1 keys rotate to the role path with `rotateKey` (script; UA-3: no dev chain keeps state
+across deploys, so nothing to rotate — every chain is redeployed); non-EVM owner derivations move with their family
+work. The built client bundle (`npm run build`, written outside this repo) and the app's account and Zether screens
+follow with their own work.
 
 #### <a id="legacy-registry"></a>1.13.1 Legacy registry
 
 <a id="legacy-registry"></a>
 
-**Transitional (BUILT, dev chains).** Until the migration above lands, `smartcontracts/evm/src/registry/` holds the
-Zether-only `UniversalAccountRegistry`. It is described byte for byte in [zether.md](zether.md#registry); in short:
+**Backed up (UA-3).** Until UA-3 `smartcontracts/evm/src/registry/` held the Zether-only `UniversalAccountRegistry`;
+it is kept, not built, in `smartcontracts/evm/legacy/ua3/`, and described byte for byte in
+[zether.md](zether.md#legacy-zether-registry). In short:
 `UA = keccak256(encodedY)` (64 or 128 bytes ⇒ curve; one UA per (curve, network, account) — never per token; the same
 person has distinct UAs on two curves, never merged). `register(encodedY, authScheme, authData, popSignature, linkEVM)`:
 
@@ -1120,8 +1136,8 @@ FROST and MuSig2 share one Schnorr verification path (`z·G == R + c·P`, O(1) g
 on the same curve as the ElGamal key is rejected because publishing `[x]G2` makes DDH decidable on G1. BLS keys at
 infinity are rejected ([CTR-UA-01](#CTR-UA-01)). Authorization digest `keccak256("SCAAS-ZETHER-AUTH-V1" ‖
 keccak256(statement))`: every transfer and burn needs **both** the proof (knowledge of `x`) **and** the scheme
-signature, so a leaked `x` of a non-`SELF_SCHNORR` account is a read-only breach (`survivesEncKeyLeak`). The built PoP
-does not bind an authority: register only from an account you alone control until the UA registry replaces it. Scheme
+signature, so a leaked `x` of a non-`SELF_SCHNORR` account is a read-only breach (`survivesEncKeyLeak`). The legacy PoP
+did not bind an authority (the UA registry replaced it in UA-3, which binds `authRef`). Scheme
 mapping at migration: the table above.
 
 ```solidity
@@ -1151,7 +1167,7 @@ enum AuthScheme { SELF_SCHNORR, ECDSA_MULTISIG, FROST_BN254, MUSIG2_BN254, BLS_B
 ```
 
 There is no `EVMLinkUpdated` (no relinking). An earlier `attributes(UA)` extension proposal is withdrawn: compliance flags
-live in the separate `ComplianceRegistry`. This interface is deleted and replaced by `IUARegistry` at migration.
+live in the separate `ComplianceRegistry`. This interface was replaced by `IUARegistry` at migration (UA-3).
 
 #### 1.13.2 Threshold and aggregate signatures (status)
 
@@ -1181,7 +1197,7 @@ live in the separate `ComplianceRegistry`. This interface is deleted and replace
 | S9 | WebAuthn origin/iframe confusion | the `SmartKeyAccount` clientDataJSON grammar reused (fail-closed), `crossOrigin` refused, `rpIdHash` in the id | no origin in the id: any origin the platform lets assert for the `rpId` (subdomains, related origins) can request a signature; deployment rule: narrowest `rpId`, no untrusted content under it |
 | S10 | ed25519 malleability / small-order keys | strict RFC 8032 verify; small-order `A` refused at registration | — |
 | S11 | BLS subgroup / infinity | G2MSM k=1 at registration; signatures in subgroup, ≠ O ([CTR-UA-01](#CTR-UA-01)) | — |
-| S12 | Zether same-curve BLS auth (DDH) | refused at registration; disjoint trees + a clientkeys test | a foreign wallet reusing a Zether `x` as an independent same-curve BLS key makes G1 DDH decidable (not detectable on chain) |
+| S12 | Zether same-curve BLS auth (DDH) | refused at registration; disjoint trees + a clientkeys test | a foreign wallet reusing a Zether `x` as an independent same-curve BLS key makes G1 DDH decidable (not detectable on chain); an `msig` `authRef` with a same-curve BLS member is not refused (the registry keeps no structure key data; UA-3) |
 | S13 | Zether key used as a signing key | `zether-*` signatures use the Zether Schnorr tag only; `schnorr-*` can never register the same point | — |
 | S14 | Verifier DoS (huge structures, PQ; node intake) | `count`/`n` caps; measured per-chain caps; the structure bound with stop-at-threshold; the node verifies natively | — |
 | S15 | Registry capture; permissive verifier | no admin, no upgrade, immutable verifier set; generations disjoint; differential fuzzing of the pure-Solidity verifiers (T-FUZZ) | a bug in a verifier is permanent for that generation (audit before public chains, the dev gate kept); kinds with a single implementation are only self-consistent |
@@ -1232,7 +1248,7 @@ the caller's hold for a 400 k cap, 11.3 k), and a member handed to gen 1 adds ge
 | `mldsa44` | 2 420 sig | EIP-8355-class precompile / 11.4 M Solidity (4.1 M expanded key) | ~5 k + EXTCODECOPY ~3 k | measured; ≈ 20 k with a precompile |
 | `mldsa65` | 3 309 sig | 9 k-class precompile / 18.9 M Solidity (5.8 M expanded key) | ~5 k + EXTCODECOPY ~3 k | measured: ≈ 20 k (chain 7622), Solidity worst case elsewhere (≤ 50 % of budget on public chains) |
 | `fndsa512` | 666 sig | 2.3 M Solidity (measured) | ~5 k + EXTCODECOPY ~1.5 k | measured, as `mldsa65` |
-| `zether-*` | — (proof path) | unchanged ([zether.md](zether.md#gas-measured)) | ~5 k (`kindOf` + `authRef`) | — |
+| `zether-*` | — (proof path); owner op `R ‖ z` | unchanged ([zether.md](zether.md#gas-measured)); self owner op 46.7 k bn254 / 58.7 k BLS12-381, cold (measured, `UARegistryZether.t.sol --isolate`) | ~5 k (`kindOf` + `authRef`) | 50 k / 70 k (as `schnorr-*`) |
 
 The `bls12381-minsig` figure is ~159 k as measured in UA-2a (forge, the verifier with its bounded self-call). An earlier
 estimate from the private chain with EIP-2537 live gave ≈ 120 k (precompile costs: `MAP_FP_TO_G1` (0x10) × 2 = 11,682;
@@ -1265,7 +1281,7 @@ Registration (execution gas, bn254 base):
 | `musig2-bn254` (n) | as above, SSTORE2(64 B) | n `ECMUL` + `ECADD` + one scaas Schnorr; measured register 180 k / 254 k / 352 k at n = 2 / 8 / 16, verify 28.6 k | requireAuthorized ~45 k |
 | `frost-secp256k1` (t, n) | as above | n PoKs (~22 k each, measured) + `Σ C_i0` + one FROST verify; key validation dominates (1.6 M at t = n = 16); measured register 262 k / 794 k / 2.19 M at (2,3) / (2,16) / (16,16), verify ~16 k | requireAuthorized ~31 k |
 | `frost-bn254` (t, n) | as above | n PoKs (~19 k each, measured) + `Σ C_i0` + one scaas Schnorr; measured register 229 k / 548 k / 893 k at (2,3) / (2,16) / (16,16), verify ~27 k | requireAuthorized ~43 k |
-| `zether-bn254` | record + keyOwner + authRef (if ≠ 0) | ~13 k + the authority's co-sign (`authPop`) | ~60–80 k + co-sign |
+| `zether-bn254` / `zether-bls12381` | record + keyOwner + SSTORE2(`Y`) + authRef (if ≠ 0) | one Zether Schnorr + the authority's co-sign (`authPop`) | measured, cold: 165,126 / 205,059 self; 194,288 with a native `authRef` (bn254) |
 | `mldsa44` / `mldsa65` | 2 slots + SSTORE2 1 312 / 1 952 B ≈ 0.3 / 0.43 M | one verify | ~0.35–0.5 M + verify |
 | `pqz-mlwe` | as [pq-zether.md](pq-zether.md#keys) (SSTORE2 16 KB, ~0.13 M log) | `R_REG` via precompile | [pq-zether.md](pq-zether.md#gas) |
 
@@ -1339,7 +1355,7 @@ EVM tests:
 | T-AUTH-4 | 63/64 starvation and out-of-gas inside every capped verifier `staticcall` ⇒ the check reverts, never passes; malformed/short returndata ⇒ revert |
 | T-FROST | RFC 9591 vectors pass `UAFrostSecp256k1Verifier`; the same signatures fail the BIP-340 verifier and vice versa (BUILT, `test/ua/UAFrost.t.sol`) |
 | T-FUZZ | **differential fuzzing** (deterministic part BUILT in P6a: mutation sets with noble's verdicts, `test/ua/PqVectors.sol` `_uaVector`; for ed25519 in UA-2b: `smartcontracts/vectors/ua/ed25519_fuzz.json`, 2144 cases with ed25519-dalek `verify_strict` verdicts, noble cross-checked, Solidity parity in `test/ua/verifiers/Ed25519Verifier.t.sol`) of the pure-Solidity ML-DSA-44/65, FN-DSA-512, SLH-DSA and ed25519 (incl. SHA-512) verifiers against at least one independent implementation (e.g. the precompile's C core / `pqcrystals`, `ed25519-dalek` strict): accept/reject parity on mutated signatures, keys and messages; run before each generation is deployed (a permissive verifier is permanent, S15) |
-| T-ZET-1 | the Zether suite green with tagged UAs; `authRef` 0/native/derived; same-curve BLS refused; `zkCovered` rules |
+| T-ZET-1 | the Zether suite green with tagged UAs; `authRef` 0/native/derived; same-curve BLS refused; `zkCovered` rules (BUILT, UA-3: `test/ua/UARegistryZether.t.sol`, `test/zether/ZetherAuthRef.t.sol`, the Zether suites) |
 | T-V3-1 | v3 equivalences (`uaTransfer ≡ uaExecute`, …) as for the v2 named functions; the v2 address-typed path and the `ua*` path share `_uaNonce[pad(addr)]` |
 | T-V3-2 | invariants: `totalSupply == Σ balanceOf(native incl. UA_POOL)`, `balanceOf(UA_POOL) == Σ _uaBalance`, replaying `Transfer` logs equals `balanceOf` for every native holder; `UATransfer` emitted iff a side is derived |
 | T-V3-3 | `to` unregistered ⇒ revert; `approve`/`trade` in any `ua*` function, native or derived `from` ⇒ `MetaTxUnknownOp`; `FeeRecipientIsPayee` with a padded `feeRecipient` |
@@ -1395,7 +1411,7 @@ exists today on EVM and Soroban only; the other families verify one digest per a
 preimages), and each operation carries `(assertion, proof)`: the verifier checks the proof (digest → root), then the
 assertion over the root.
 
-On EVM the subject account is the built registry's `AuthScheme.SMART_ACCOUNT_1271 = 7` kind of
+On EVM the subject account is the legacy registry's (`legacy/ua3/`) `AuthScheme.SMART_ACCOUNT_1271 = 7` kind of
 account, holding several passkeys `(qx, qy, rpIdHash)`; key types are `P256_WEBAUTHN(qx,qy,rpIdHash)` or
 `SECP256K1(address)`; the account signature was first specified as `abi.encode(keyIndex, payload)` and is now
 `abi.encode(keyIndex, bytes32[] proof, bytes sig)` for both key types. Key lifecycle: `addKey`/`removeKey`/`setGuardian`

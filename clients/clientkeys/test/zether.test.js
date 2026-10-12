@@ -5,12 +5,13 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
-  deriveMasterSk, deriveChildSk, deriveConfKey, confPublic, schnorrSign, schnorrVerify, popMessage, zetherPop,
+  deriveMasterSk, deriveChildSk, deriveConfKey, confPublic, schnorrSign, schnorrVerify, zetherKind, zetherPop, zetherOwnerAuth,
   sealConfKey, openConfKey, confLabel, CURVES, encodePoint, decodePoint, checkBalance, sealBalanceCache, openBalanceCache,
   setCachedBalance, cacheAfterDebit, cacheAfterRollOver, readBalance,
 } from '../src/zether.js';
 import { deriveKey, seedFromWords, NETWORKS } from '../src/seed.js';
-import { fromHex, hex } from '../src/bytes.js';
+import { fromHex, hex, abiEncode } from '../src/bytes.js';
+import { uaMessage, purposeTag, popDigest } from '../src/ua.js';
 
 const vec = (f) => JSON.parse(readFileSync(new URL(`./vectors/${f}`, import.meta.url)));
 const R33 = vec('r33_keys.json');
@@ -61,24 +62,42 @@ test('conf/disclosure keys from the mnemonic == S3 (x, Y, UA, path) on both curv
   }
 });
 
-test('S3 PoP vectors verify here; our PoP has the same c and verifies', () => {
+test('S3 PoP vectors (the UA registry PoP, CTR-UA-07) verify here; ours has the same digest and verifies', () => {
   for (const curve of ['bn254', 'bls12381']) {
     for (const k of R33[curve].keys.filter((x) => x.pop)) {
-      const { registry, account } = k.pop;
-      const c = popMessage(curve, registry, k.Y, account);
-      assert.equal(hex(c), k.pop.c);
-      assert.ok(schnorrVerify(curve, fromHex(k.Y), c, fromHex(k.pop.schnorrPop)), `${curve} ${k.path}`);
-      const mine = zetherPop(curve, fromHex(k.x), { registry, account });
-      assert.equal(mine.c, k.pop.c);
-      assert.ok(schnorrVerify(curve, fromHex(k.Y), c, fromHex(mine.schnorrPop)));
-      assert.notEqual(mine.schnorrPop, k.pop.schnorrPop, 'hedged nonce');
-      // popSignature = abi.encode(bytes schnorrPop, bytes "") — same layout as S3
-      assert.equal(mine.popSignature.length, k.pop.popSignature.length);
-      assert.equal(mine.popSignature.slice(0, 2 + 64 * 3), k.pop.popSignature.slice(0, 2 + 64 * 3));
-      // bound to the account: another account or registry fails
-      const other = popMessage(curve, registry, k.Y, '0x' + 'cc'.repeat(20));
-      assert.equal(schnorrVerify(curve, fromHex(k.Y), other, fromHex(k.pop.schnorrPop)), false);
+      const { chainId, chainUid, registry, authRef } = k.pop;
+      assert.equal(zetherKind(curve), k.pop.kind);
+      const mine = zetherPop(curve, fromHex(k.x), { chainId, chainUid, registry, authRef });
+      assert.deepEqual([mine.UA, mine.popDigest, mine.uaMsg], [k.UA, k.pop.popDigest, k.pop.uaMsg]);
+      assert.ok(schnorrVerify(curve, fromHex(k.Y), fromHex(k.pop.uaMsg), fromHex(k.pop.pop)), `${curve} ${k.path}`);
+      assert.ok(schnorrVerify(curve, fromHex(k.Y), fromHex(mine.uaMsg), fromHex(mine.pop)));
+      assert.notEqual(mine.pop, k.pop.pop, 'hedged nonce');
+      // bound to chain, chainUid, registry and authRef: each changed field moves the message
+      const moved = [
+        { chainId: chainId + 1, chainUid, registry, authRef },
+        { chainId, chainUid: '0x' + '25'.repeat(32), registry, authRef },
+        { chainId, chainUid, registry: '0x' + 'ab'.repeat(20), authRef },
+        { chainId, chainUid, registry, authRef: '0x' + '01'.repeat(32) },
+      ];
+      for (const ctx of moved) {
+        const m = uaMessage(k.pop.kind, purposeTag('pop'), popDigest({ ...ctx, ua: k.UA }));
+        assert.equal(schnorrVerify(curve, fromHex(k.Y), m, fromHex(k.pop.pop)), false);
+      }
     }
+  }
+});
+
+test('owner op: abi.encode(bytes(""), Schnorr over uaMessage(kind, zether-owner, digest))', () => {
+  for (const curve of ['bn254', 'bls12381']) {
+    const k = R33[curve].keys[0];
+    const digest = '0x' + '77'.repeat(32);
+    const auth = fromHex(zetherOwnerAuth(curve, fromHex(k.x), digest));
+    const sig = auth.subarray(auth.length - (curve === 'bn254' ? 96 : 160));
+    assert.equal(hex(auth), hex(abiEncode(['bytes', 'bytes'], [new Uint8Array(0), sig])));
+    const m = uaMessage(zetherKind(curve), purposeTag('zether-owner'), digest);
+    assert.ok(schnorrVerify(curve, fromHex(k.Y), m, sig));
+    assert.equal(schnorrVerify(curve, fromHex(k.Y), fromHex(digest), sig), false, 'never the raw digest');
+    assert.equal(schnorrVerify(curve, fromHex(k.Y), uaMessage(zetherKind(curve), purposeTag('zether-auth'), digest), sig), false);
   }
 });
 

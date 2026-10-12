@@ -77,8 +77,11 @@ fn api_roundtrip_mnemonic_keygen_prove_decrypt() {
         assert_eq!(call("checkBalance", json!({"curve": curve, "key": k0, "acc": acc, "balance": 5000}))["ok"], json!(true));
         assert_eq!(call("checkBalance", json!({"curve": curve, "key": k1, "acc": acc, "balance": 5000}))["ok"], json!(false));
         let pop = call("pop", json!({"curve": curve, "key": k0, "registry": "0x".to_string() + &"aa".repeat(20),
-                                      "account": "0x".to_string() + &"bb".repeat(20)}));
+                                      "chainId": 31337, "chainUid": "0x".to_string() + &"24".repeat(32)}));
         assert_eq!(pop["UA"], a["UA"]);
+        assert_eq!(pop["authRef"], json!("0x".to_string() + &"00".repeat(32)));
+        let own = call("ownerAuth", json!({"curve": curve, "key": k0, "digest": "0x".to_string() + &"77".repeat(32)}));
+        assert!(own["auth"].as_str().unwrap().len() > 2 + 2 * 128);
     }
     assert!(zether_prover::api::call("keygen", r#"{"curve":"secp256k1","key":{"x":"0x01"}}"#).is_err());
     // 2^32 + 60 must not silently alias coin 60.

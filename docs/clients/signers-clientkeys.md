@@ -705,7 +705,7 @@ Built entry points (BUILT; load only what the chosen signer needs):
 |---|---|---|
 | `passkey-signer.js` | `passkeySupported`, `creationOptions` (PRF on), `requestOptions`, `publicKeyFromSpki`, `derToRS`, `encodeAssertion`, `hashTypedData`, `passkeySubjectKey`, `accountSignature`, `merkleBatch`, `checkOwnerCall`, `checkPayment`, `checkCall`, `checkTradeOrder`, `checkCancel`, `payLane`, `metaTransferTypedData`, `tradeOrderTypedData`, `orderCancelTypedData` (both bundles) | create a passkey, sign `challenge = digest`, encode for `SmartKeyAccount.isValidSignature` |
 | `seed-signer.js` | `normalizeMnemonic`, `wordsToEntropy`, `seedFromEntropy`, `deriveKey`, `signDigest`, `NETWORKS`, `createVault`, `openVault`, `enablePrf`, `rewrapPin`, `SeedBackup`, `wipe` | 24-word vault: generate, back up (3-word challenge), unlock by PRF or PIN, derive per family, sign digests |
-| `zether-keys.js` (`zether.js`) | `deriveConfKey`, `confPublic` (returns the tagged UA once Universal Accounts land), `zetherPop` (signs the new PoP; `popMessage` removed), `sealConfKey`/`openConfKey`, `checkBalance`, cache helpers, `readBalance` | confidential keys and balance cache; proofs via the prover WASM `zetherCall(cmd, json)` (`keygen`, `encrypt`, `decrypt`, `decryptPending`, `checkBalance`, `proveTransfer`, `proveBurn`, `verifyTransfer`, `verifyBurn`, `pop`, `fundCalldata`, `envelope`) |
+| `zether-keys.js` (`zether.js`) | `deriveConfKey`, `confPublic` (the tagged UA, `zetherKind`), `zetherPop` (the UA registry PoP, CTR-UA-07; `popMessage` removed in UA-3), `zetherOwnerAuth` (a self account's roll-over / mode signature), `sealConfKey`/`openConfKey`, `checkBalance`, cache helpers, `readBalance` | confidential keys and balance cache; proofs via the prover WASM `zetherCall(cmd, json)` (`keygen`, `encrypt`, `decrypt`, `decryptPending`, `checkBalance`, `proveTransfer`, `proveBurn`, `verifyTransfer`, `verifyBurn`, `pop`, `ownerAuth`, `fundCalldata`, `envelope`) |
 
 EVM extension wallets also use `wallet_switchEthereumChain`/`wallet_addEthereumChain`. A UA or role key signs only
 through `UAKey.signUA(purpose, digest)`: there is no raw "sign these 32 bytes" for a UA key.
@@ -785,11 +785,10 @@ any signing scalar. BIP-32/SLIP-10 have no bn254 or BLS12-381, so derivation is 
   changing the verifier's curve ⇒ another tree ⇒ no scalar reuse.
 - The audit view/disclosure key (`ITransferDisclosure`): `<use> = 8`, on both trees.
 - Short forms: `m/12381/<coin>/<acct>/7` and `m/254/<coin>/<acct>/7` (`m/254/…`).
-- `y = g^x` (G1 of the curve); in the built registry `UA = keccak256(encodedY)` (`ZetherTypes.toUA`: bn254 64 bytes
+- `y = g^x` (G1 of the curve); `UA = keccak256(TAG(kind) ‖ encodedY)` (`ZetherTypes.toUA`, tagged; `encodedY`: bn254 64 bytes
   `x‖y`, BLS12-381 128 bytes per EIP-2537); the proof of possession now binds chain, registry, UA and `authRef`
   ([CTR-UA-07](../contracts/accounts.md#CTR-UA-07); an earlier Schnorr PoP over `keccak256(registry ‖ encodedY ‖
-  account)` bound to the caller account is replaced; the built dev registry's challenge has no chain id,
-`UniversalAccountRegistry.sol:95-96`). Zether protocol: [contracts/zether](../contracts/zether.md).
+  account)` bound to the caller account is replaced; the legacy registry's (`legacy/ua3/`) challenge had no chain id). Zether protocol: [contracts/zether](../contracts/zether.md).
 - Stored like the seed: client only, encrypted at rest, never sent to a server or a relayer.
 - Tests: the published EIP-2333 vectors (BLS12-381); self-generated pinned bn254 vectors; one seed on different paths ⇒
   independent keys; `x` ≠ every signing scalar of the same seed; `y`/UA round trip.

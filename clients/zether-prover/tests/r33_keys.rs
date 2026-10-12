@@ -152,13 +152,59 @@ fn ua_roundtrip<C: ZCurve>() {
     let y = decode_point::<C>(&enc).unwrap();
     assert_eq!(y, k.y);
     assert_eq!(ua_of::<C>(&y), k.ua());
-    assert_eq!(k.ua(), keccak256(&enc));
+    let tag = keccak256(format!("scaas.ua.zether-{}.v1", C::NAME).as_bytes());
+    assert_eq!(k.ua(), keccak256(&[&tag[..], &enc].concat()), "UA = keccak256(TAG(kind) ‖ Y), CTR-UA-16");
 }
 
 #[test]
 fn ua_pubkey_roundtrip() {
     ua_roundtrip::<Bn254>();
     ua_roundtrip::<Bls12381>();
+}
+
+fn hex32(v: &serde_json::Value) -> [u8; 32] {
+    hex::decode(&v.as_str().unwrap()[2..]).unwrap().try_into().unwrap()
+}
+
+/// The UA identity vectors (UA-1, `smartcontracts/vectors/ua/`): the Zether kinds' `UA` (kinds.json `valid`), their PoP
+/// `ua_msg` (kinds.json `messages`) and `popDigest` (structures.json `pop`, contexts A and B) — one derivation for the
+/// prover, the registry and the six UA libraries.
+#[test]
+fn ua_identity_matches_ua_vectors() {
+    use zether_prover::curve::decode_point;
+    use zether_prover::schnorr::{pop_digest, ua_message};
+    let dir = concat!(env!("CARGO_MANIFEST_DIR"), "/../../smartcontracts/vectors/ua/");
+    let kinds: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(format!("{dir}kinds.json")).unwrap()).unwrap();
+    let mut n = 0;
+    for row in kinds["valid"].as_array().unwrap() {
+        let kd = hex::decode(&row["keyData"].as_str().unwrap()[2..]).unwrap();
+        let ua = match row["kind"].as_u64().unwrap() {
+            0x0140 => ua_of::<Bn254>(&decode_point::<Bn254>(&kd).unwrap()),
+            0x0141 => ua_of::<Bls12381>(&decode_point::<Bls12381>(&kd).unwrap()),
+            _ => continue,
+        };
+        assert_eq!(ua, hex32(&row["ua"]));
+        n += 1;
+    }
+    for row in kinds["messages"].as_array().unwrap() {
+        let (p, d) = (hex32(&row["purposeTag"]), hex32(&row["digest"]));
+        let m = match row["kind"].as_u64().unwrap() {
+            0x0140 => ua_message::<Bn254>(&p, &d),
+            0x0141 => ua_message::<Bls12381>(&p, &d),
+            _ => continue,
+        };
+        assert_eq!(m, hex32(&row["uaMsg"]));
+        n += 1;
+    }
+    let st: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(format!("{dir}structures.json")).unwrap()).unwrap();
+    for row in st["pop"].as_array().unwrap() {
+        let c = &st["contexts"][row["context"].as_str().unwrap()];
+        let reg: [u8; 20] = hex::decode(&c["registry"].as_str().unwrap()[2..]).unwrap().try_into().unwrap();
+        let d = pop_digest(c["chainId"].as_u64().unwrap(), &hex32(&c["chainUid"]), &reg, &hex32(&row["ua"]), &hex32(&row["authRef"]));
+        assert_eq!(d, hex32(&row["popDigest"]));
+        n += 1;
+    }
+    assert!(n >= 7, "{n} rows");
 }
 
 /// BIP-39 salt is `"mnemonic" ‖ NFKD(passphrase)`. The expected seed is what @scure/bip39

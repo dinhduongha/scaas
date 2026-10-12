@@ -10,16 +10,17 @@ import {IUARegistry} from "./IUARegistry.sol";
 import {IUAKindVerifier, IUAPopVerifier} from "./IUAVerifier.sol";
 import {UAKinds} from "./UAKinds.sol";
 
-/// @title UA registry, UA-2a/2c scope (accounts.md §1.8): the single-key kinds 0x0100–0x0107, the group kinds
-///        0x0110–0x0113 (MuSig2/FROST, stored), the structure `msig`, native EVM ids, generations.
+/// @title UA registry, UA-2a/2c/3 scope (accounts.md §1.8): the single-key kinds 0x0100–0x0107, the group kinds
+///        0x0110–0x0113 (MuSig2/FROST, stored), the structure `msig`, the Zether kinds 0x0140–0x0141 (stored, with
+///        `authRef`), native EVM ids, generations.
 /// @notice Monotonic and admin-free (CTR-UA-15): no owner, no setter, no `payable`, a record never changes. `register`
 ///         derives every record field from `keyData` (CTR-UA-07), so anyone may relay it. Every verifier `staticcall` (group PoP: see below) is
 ///         capped at the kind's `verifyCap` and counts only exactly 32 bytes equal to 1; a caller that leaves too little
 ///         gas for the cap gets `UAVerifyGas`, never a pass (T-AUTH-4).
 ///
 ///         Kind table: one `uint256` immutable per kind this code can verify, `verifier | cap << 160` (0 = disabled):
-///         read with no SLOAD and no EXTCODECOPY. Kinds whose registry code is not written yet — PQ (P6c), Zether
-///         (UA-3) — are refused by the constructor; each later sub-plan adds its slot and code and redeploys (all chains
+///         read with no SLOAD and no EXTCODECOPY. Kinds whose registry code is not written yet — PQ and `pqz-mlwe`
+///         (P6c) — are refused by the constructor; each later sub-plan adds its slot and code and redeploys (all chains
 ///         are test chains). `ed25519` (0x0102) has its slot already: it is a plain single-key kind, so UA-2b only
 ///         deploys its verifier and passes it here.
 ///
@@ -29,6 +30,15 @@ import {UAKinds} from "./UAKinds.sol";
 ///         secp256k1, 64 on bn254) with SSTORE2 as `keyPtr`. `requireAuthorized` takes `auth = abi.encode(bytes keyData,
 ///         bytes sig)` with `keyData` empty (non-empty ⇒ `UAUnauthorized`) and verifies `sig` against `vk` read from the
 ///         record's `keyPtr`; an `msig` member of a stored kind is checked the same way through the member's own record.
+///
+///         Zether kinds (UA-3; CTR-UA-16): `register` takes `authRef` — 0 (self), a native id or a registered SIGNING
+///         UA, never a BLS UA on the curve of `Y` — bound by the PoP (`popDigest(ua, authRef)`) and co-signed by the
+///         authority (`authPop`, purpose `authref`); `Y` is stored with SSTORE2 like a group key, so `keyOf` serves a
+///         sender's storage-only recovery (zether.md CTR-ZTH-50). `requireAuthorized` refuses Zether UAs;
+///         `requireZetherAuthorized` is their only check: `authRef == 0` ⇒ the proof (`zkCovered`, empty `auth`) or a
+///         Zether Schnorr by `x` with `auth = abi.encode(bytes(""), sig)`; else the authority through
+///         `requireAuthorized(authRef, …)`. Purpose: `zether-auth` for the proof-covered `authDigest`, `zether-owner`
+///         for the roll-over / mode digests.
 ///
 ///         Gen 2 (`predecessor ≠ 0`) reads gen 1 for `UAAlreadyRegistered` / `UAKeyInUse` / `kindOf` / `keyOwner` /
 ///         `recordOf` and hands records it does not hold, and members whose kind it does not enable, to gen 1's
@@ -83,17 +93,20 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     uint256 private immutable _CFG9; // 0x0111 frost-secp256k1 (UA-2c, stored)
     uint256 private immutable _CFG10; // 0x0112 musig2-bn254 (UA-2c, stored)
     uint256 private immutable _CFG11; // 0x0113 frost-bn254 (UA-2c, stored)
+    uint256 private immutable _CFG12; // 0x0140 zether-bn254 (UA-3, stored, authRef)
+    uint256 private immutable _CFG13; // 0x0141 zether-bls12381 (UA-3, stored, authRef)
     uint256 private immutable _CFG_MSIG; // 0x0120: address(this) | verifyBudget << 160
 
     mapping(bytes32 ua => Record) private _records;
     mapping(bytes32 keyHash => bytes32) private _keyOwner;
+    mapping(bytes32 ua => bytes32) private _authRef; // Zether kinds only, ≠ 0
 
     /// @param chainUid_ the chain's genesis hash (≠ 0, `SaltedEIP712.ChainUidZero`).
     /// @param predecessor_ 0 for generation 1, else the chain's gen-1 registry.
     /// @param smartKeyAccountImpl_ the chain's `SmartKeyAccount` implementation (0 = none): its EIP-1167 clones get the
     ///        400 k ERC-1271 cap.
     /// @param msig_ enables the structure kind `msig`.
-    /// @param kinds_ the enabled single-key and group kinds with their verifier and measured verify cap.
+    /// @param kinds_ the enabled single-key, group and Zether kinds with their verifier and measured verify cap.
     constructor(
         bytes32 chainUid_,
         address predecessor_,
@@ -112,12 +125,12 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
                 revert UAConfig(0);
             }
         }
-        uint256[12] memory k;
+        uint256[14] memory k;
         for (uint256 i; i < kinds_.length; ++i) {
             KindConfig memory c = kinds_[i];
             uint256 slot = _slot(c.kind);
             if (
-                slot > 11 || k[slot] != 0 || c.verifier.code.length == 0 || c.cap == 0 || c.cap > verifyBudget_
+                slot > 13 || k[slot] != 0 || c.verifier.code.length == 0 || c.cap == 0 || c.cap > verifyBudget_
                     || (predecessor_ != address(0) && _groupInPredecessor(predecessor_, c.kind))
             ) revert UAConfig(c.kind);
             k[slot] = uint256(uint160(c.verifier)) | uint256(c.cap) << 160;
@@ -125,6 +138,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         (_CFG0, _CFG1, _CFG2, _CFG3) = (k[0], k[1], k[2], k[3]);
         (_CFG4, _CFG5, _CFG6, _CFG7) = (k[4], k[5], k[6], k[7]);
         (_CFG8, _CFG9, _CFG10, _CFG11) = (k[8], k[9], k[10], k[11]);
+        (_CFG12, _CFG13) = (k[12], k[13]);
         _CFG_MSIG = msig_ ? uint256(uint160(address(this))) | uint256(verifyBudget_) << 160 : 0;
 
         generation = predecessor_ == address(0) ? 1 : 2;
@@ -173,10 +187,18 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         return UAKinds.uaAuthDigest(_domainSeparatorV4(), ua, purposeTag, digest);
     }
 
-    /// `authRef` is always 0 here: only Zether kinds (UA-3) store one. `r.keyPtr ≠ 0` only for stored kinds.
+    /// `authRef ≠ 0` only for Zether kinds; `r.keyPtr ≠ 0` only for stored kinds.
     function recordOf(bytes32 ua) external view returns (Record memory r, bytes32 authRef) {
         r = _records[ua];
         if (r.kind == 0 && predecessor != address(0)) return IUARegistry(predecessor).recordOf(ua);
+        authRef = _authRef[ua];
+    }
+
+    /// The stored key of a stored kind (MuSig2 `Q`, FROST `Y`, Zether `Y`), empty for every other id.
+    function keyOf(bytes32 ua) external view returns (bytes memory) {
+        Record memory r = _records[ua];
+        if (r.kind == 0 && predecessor != address(0)) return IUARegistry(predecessor).keyOf(ua);
+        return SSTORE2.read(r.keyPtr);
     }
 
     function kindOf(bytes32 ua) public view returns (uint16 kind) {
@@ -193,7 +215,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         if (owner == 0 && predecessor != address(0)) owner = IUARegistry(predecessor).keyOwner(keyHash);
     }
 
-    // ----- register (accounts.md §1.8 steps 1–8; steps 5 and 7 reduce to "authRef == 0" until UA-3) -----
+    // ----- register (accounts.md §1.8 steps 1–8) -----
 
     function register(uint16 kind, bytes calldata keyData, bytes calldata pop, bytes32 authRef, bytes calldata authPop)
         external
@@ -208,37 +230,66 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         ua = UAKinds.uaOf(kind, d); // 3
         if (UAKinds.inNativeSpace(ua)) revert UAIdInNativeSpace(ua);
         if (kindOf(ua) != 0) revert UAAlreadyRegistered(ua);
-        bytes32 kh; // 4
-        if (structure) {
-            _checkMembers(d);
-        } else {
-            kh = UAKinds.keyHashOf(kind, d);
-            bytes32 owner = keyOwner(kh);
-            if (owner != 0) revert UAKeyInUse(kh, owner);
-        }
-        if (authRef != 0 || authPop.length != 0) revert UAAuthRef(authRef); // 5, 7
+        bytes32 kh = _claim(kind, d, structure); // 4
+        _checkAuthRef(kind, authRef, authPop); // 5
         // 6. Structures have no PoP of their own (members proved theirs): `pop` must be empty.
-        if (structure ? pop.length != 0 : !_popOk(cfg, kind, d, ua, pop)) revert UAPoP();
+        if (structure ? pop.length != 0 : !_popOk(cfg, kind, d, ua, authRef, pop)) revert UAPoP();
+        _coSign(ua, authRef, authPop); // 7
         _records[ua] = Record(kind, uint40(block.timestamp), _keyPtr(kind, keyData)); // 8
+        if (authRef != 0) _authRef[ua] = authRef;
         if (!structure) _keyOwner[kh] = ua;
-        emit UARegistered(ua, kind, keyData, 0);
+        emit UARegistered(ua, kind, keyData, authRef);
     }
 
-    /// Stored kinds keep `vk` (`Q` / `Y`, the first bytes of the key data) as SSTORE2 code (CTR-UA-17); others: 0.
+    /// Step 4: single-key kinds claim their keyHash (`UAKeyInUse`); structures check their members (no keyHash).
+    function _claim(uint16 kind, bytes memory d, bool structure) private view returns (bytes32 kh) {
+        if (structure) {
+            _checkMembers(d);
+            return 0;
+        }
+        kh = UAKinds.keyHashOf(kind, d);
+        bytes32 owner = keyOwner(kh);
+        if (owner != 0) revert UAKeyInUse(kh, owner);
+    }
+
+    /// Step 7: the authority consents to this exact `(ua, authRef)` on this chain and registry (purpose `authref`).
+    function _coSign(bytes32 ua, bytes32 authRef, bytes calldata authPop) private view {
+        if (authRef != 0 && !_authorized(authRef, UAKinds.PURPOSE_AUTHREF, popDigest(ua, authRef), authPop)) {
+            revert UAUnauthorized(authRef);
+        }
+    }
+
+    /// Step 5. Zether: `authRef` 0, a native id, or a registered SIGNING UA that is not a BLS UA on the curve of `Y`
+    /// (`[x]G2` would make DDH on G1 decidable); `authPop` empty iff `authRef == 0`. Other kinds: both empty.
+    function _checkAuthRef(uint16 kind, bytes32 authRef, bytes calldata authPop) private view {
+        if (authRef == 0 || !UAKinds.isZether(kind)) {
+            if (authRef != 0 || authPop.length != 0) revert UAAuthRef(authRef);
+            return;
+        }
+        if (UAKinds.inNativeSpace(authRef)) return;
+        uint16 k = kindOf(authRef);
+        uint16 sameCurveBls = kind == UAKinds.ZETHER_BN254 ? UAKinds.BLS_BN254_MINSIG : UAKinds.BLS12381_MINSIG;
+        if (!UAKinds.isSigning(k) || k == sameCurveBls) revert UAAuthRef(authRef);
+    }
+
+    /// Stored kinds keep `vk` (`Q` / `Y`, the first bytes of the key data; Zether: all of it) as SSTORE2 code
+    /// (CTR-UA-17); others: 0.
     function _keyPtr(uint16 kind, bytes calldata keyData) private returns (address) {
         uint256 len = _vkLength(kind);
         return len == 0 ? address(0) : SSTORE2.write(keyData[0:len]);
     }
 
-    function _popOk(uint256 cfg, uint16 kind, bytes memory d, bytes32 ua, bytes calldata pop)
+    function _popOk(uint256 cfg, uint16 kind, bytes memory d, bytes32 ua, bytes32 authRef, bytes calldata pop)
         private
         view
         returns (bool)
     {
-        bytes32 message = UAKinds.uaMessage(kind, UAKinds.PURPOSE_POP, popDigest(ua, 0));
+        bytes32 message = UAKinds.uaMessage(kind, UAKinds.PURPOSE_POP, popDigest(ua, authRef));
         bytes memory data = abi.encodeWithSelector(IUAPopVerifier.verifyPop.selector, d, message, pop);
         // group kinds: the whole group check runs here, bounded by verifyBudget (§1.8 step 6), without the hold
-        if (_vkLength(kind) != 0) return _capped(address(uint160(cfg)), verifyBudget, data, 1, false);
+        if (kind >= UAKinds.MUSIG2_SECP256K1 && kind <= UAKinds.FROST_BN254) {
+            return _capped(address(uint160(cfg)), verifyBudget, data, 1, false);
+        }
         return _capped(address(uint160(cfg)), cfg >> 160, data, 1, true);
     }
 
@@ -298,8 +349,9 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         returns (bool)
     {
         if (UAKinds.inNativeSpace(ua)) return _native(ua, purposeTag, digest, auth);
-        uint16 kind = _records[ua].kind; // every kind this code registers is SIGNING
+        uint16 kind = _records[ua].kind;
         if (kind == 0) return _viaPredecessor(ua, purposeTag, digest, auth);
+        if (UAKinds.isZether(kind)) return false; // a decryption key never signs (CTR-UA-14)
         (bytes memory keyData, bytes memory sig) = abi.decode(auth, (bytes, bytes));
         return _derived(ua, kind, purposeTag, digest, keyData, sig);
     }
@@ -331,6 +383,51 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         return _verifierCall(
             cfg, IUAKindVerifier.verify.selector, keyData, UAKinds.uaMessage(kind, purposeTag, digest), sig
         );
+    }
+
+    // ----- requireZetherAuthorized -----
+
+    function requireZetherAuthorized(bytes32 ua, bytes32 digest, bytes calldata auth, bool zkCovered) external view {
+        if (!_zetherAuthorized(ua, digest, auth, zkCovered)) revert UAUnauthorized(ua);
+    }
+
+    /// accounts.md §1.7 Z-auth: `authRef` signs through `requireAuthorized`; self (`authRef == 0`) is the proof when
+    /// `zkCovered` (then `auth` must be empty), else a Zether Schnorr by `x` over `ua_msg` with `Y` from `keyPtr`.
+    function _zetherAuthorized(bytes32 ua, bytes32 digest, bytes calldata auth, bool zkCovered)
+        private
+        view
+        returns (bool)
+    {
+        Record memory r = _records[ua];
+        if (r.kind == 0) return _zetherViaPredecessor(ua, digest, auth, zkCovered);
+        if (!UAKinds.isZether(r.kind)) return false;
+        bytes32 purpose = zkCovered ? UAKinds.PURPOSE_ZETHER_AUTH : UAKinds.PURPOSE_ZETHER_OWNER;
+        bytes32 authRef = _authRef[ua];
+        if (authRef != 0) return _authorized(authRef, purpose, digest, auth);
+        if (zkCovered) return auth.length == 0;
+        return _zetherOwner(r, UAKinds.uaMessage(r.kind, purpose, digest), auth);
+    }
+
+    /// A self Zether UA's owner op: `auth = abi.encode(bytes(""), sig)` (stored kind: no key data), `Y` from `keyPtr`.
+    function _zetherOwner(Record memory r, bytes32 message, bytes calldata auth) private view returns (bool) {
+        (bytes memory keyData, bytes memory sig) = abi.decode(auth, (bytes, bytes));
+        if (keyData.length != 0) return false;
+        return _verifierCall(_cfg(r.kind), IUAKindVerifier.verify.selector, SSTORE2.read(r.keyPtr), message, sig);
+    }
+
+    /// A Zether UA of gen 1 is checked by gen 1; any revert there is a failed check, except `UAVerifyGas`.
+    function _zetherViaPredecessor(bytes32 ua, bytes32 digest, bytes calldata auth, bool zkCovered)
+        private
+        view
+        returns (bool)
+    {
+        if (predecessor == address(0)) return false;
+        try IUARegistry(predecessor).requireZetherAuthorized(ua, digest, auth, zkCovered) {
+            return true;
+        } catch (bytes memory err) {
+            if (err.length == 4 && bytes4(err) == UAKinds.UAVerifyGas.selector) revert UAKinds.UAVerifyGas();
+            return false;
+        }
     }
 
     /// accounts.md §1.9 `msig` row: strictly increasing member indexes, stop at the threshold (a MemberSig after it
@@ -433,24 +530,28 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     function _cfg(uint16 kind) private view returns (uint256) {
         if (kind == UAKinds.MSIG) return _CFG_MSIG;
         uint256 s = _slot(kind);
-        if (s > 11) return 0;
+        if (s > 13) return 0;
+        if (s > 11) return s == 12 ? _CFG12 : _CFG13;
         if (s > 7) return s < 10 ? (s == 8 ? _CFG8 : _CFG9) : (s == 10 ? _CFG10 : _CFG11);
         if (s < 4) return s < 2 ? (s == 0 ? _CFG0 : _CFG1) : (s == 2 ? _CFG2 : _CFG3);
         return s < 6 ? (s == 4 ? _CFG4 : _CFG5) : (s == 6 ? _CFG6 : _CFG7);
     }
 
-    /// Kind-table slot: 0x0100–0x0107 → 0–7, 0x0110–0x0113 → 8–11, anything else 12 (not in this code's table).
+    /// Kind-table slot: 0x0100–0x0107 → 0–7, 0x0110–0x0113 → 8–11, 0x0140–0x0141 → 12–13, anything else 14 (not in
+    /// this code's table).
     function _slot(uint16 kind) private pure returns (uint256) {
         if (kind >= 0x0100 && kind <= 0x0107) return kind - 0x0100;
         if (kind >= UAKinds.MUSIG2_SECP256K1 && kind <= UAKinds.FROST_BN254) return kind - 0x0110 + 8;
-        return 12;
+        if (kind == UAKinds.ZETHER_BN254 || kind == UAKinds.ZETHER_BLS12381) return kind - 0x0140 + 12;
+        return 14;
     }
 
     /// Length of the stored `vk` of a stored kind (CTR-UA-17), 0 otherwise: `Q` / `Y` SEC1 compressed (secp256k1) or
-    /// EIP-196 uncompressed (bn254), the first bytes of the key data.
+    /// EIP-196 uncompressed (bn254), the first bytes of the key data; Zether `Y` (64 / 128), the whole key data.
     function _vkLength(uint16 kind) private pure returns (uint256) {
         if (kind == UAKinds.MUSIG2_SECP256K1 || kind == UAKinds.FROST_SECP256K1) return 33;
-        if (kind == UAKinds.MUSIG2_BN254 || kind == UAKinds.FROST_BN254) return 64;
+        if (kind == UAKinds.MUSIG2_BN254 || kind == UAKinds.FROST_BN254 || kind == UAKinds.ZETHER_BN254) return 64;
+        if (kind == UAKinds.ZETHER_BLS12381) return 128;
         return 0;
     }
 

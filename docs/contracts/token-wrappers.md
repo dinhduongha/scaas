@@ -81,7 +81,7 @@ is a per-chain variant, not a creator's choice ([CTR-TOK-23](#CTR-TOK-23)).
 | `MetaTxBase` | any SCaaS contract (`MandateWallet`, `SmartKeyAccount`, third parties): [CTR-MTX-22](metatx.md#CTR-MTX-22) |
 | `ERC20MetaTx` | every token is gasless ([CTR-MTX-07](metatx.md#CTR-MTX-07)); UA ledger, `UAMetaTransaction` ([CTR-UA-18](accounts.md#CTR-UA-18)) |
 | `MetaTokenBase` | `TradeLib`, pay behind `PAYABLE` (no external `PayLib` built: pay is inline, controller ruling pending the owner), `AdminLib`, init, provenance |
-| Zether verifiers (one per curve), `UniversalAccountRegistry`, `ZetherDisclosure`, `ZetherStatements`, `OpenFactory` | outside the tokens; roles unchanged |
+| Zether verifiers (one per curve), the UA registry `UARegistry`, `ZetherDisclosure`, `ZetherStatements`, `OpenFactory` | outside the tokens; roles unchanged |
 
 Confidential tokens are kinds of the same tree, not a parallel branch: every one is relayable through the same
 envelope ([CTR-PQZ-15](pq-zether.md#CTR-PQZ-15)). Non-EVM families implement the same roles natively.

@@ -4,6 +4,7 @@ pragma solidity ^0.8.24;
 import {IUAPopVerifier} from "../IUAVerifier.sol";
 import {UAKinds} from "../UAKinds.sol";
 import {CurveSigs} from "../../common/CurveSigs.sol";
+import {ZetherSafety} from "../../zether/ZetherSafety.sol";
 
 /// @title A UA verifier that answers false instead of reverting (accounts.md §1.9, CTR-UA-17).
 /// @notice `verify` / `verifyPop` run `check` through an external self-call capped at `CHECK_GAS` under `try`, so a
@@ -104,5 +105,35 @@ contract BlsMinSigBn254Verifier is UASafeVerifier {
         external view override returns (bool)
     {
         return CurveSigs.blsBn254(pop ? LABEL_POP : LABEL_SIG, keyData, message, sig);
+    }
+}
+
+bytes constant ZETHER_SCHNORR_TAG = "SCAAS-ZETHER-SCHNORR-V1";
+
+/// @title `zether-bn254` (0x0140): `Y` (64), `sig = R ‖ z` (96) under the Zether Schnorr tag (accounts.md §1.9), never
+///        the UA one, so a Zether key never yields a `schnorr-bn254` signature (S13); `verifyPop` = `verify`. Dev chains
+///        only, like every Zether contract (zether.md CTR-ZTH-02).
+contract ZetherSchnorrBn254Verifier is UASafeVerifier {
+    constructor() UASafeVerifier(40_000) {
+        ZetherSafety.requireDevChain();
+    }
+
+    function check(bytes calldata keyData, bytes32 message, bytes calldata sig, bool)
+        external view override returns (bool)
+    {
+        return keyData.length == 64 && CurveSigs.schnorr(ZETHER_SCHNORR_TAG, keyData, message, sig);
+    }
+}
+
+/// @title `zether-bls12381` (0x0141): `Y` (128, EIP-2537), `sig = R ‖ z` (160) under the Zether Schnorr tag; dev chains.
+contract ZetherSchnorrBls12381Verifier is UASafeVerifier {
+    constructor() UASafeVerifier(60_000) {
+        ZetherSafety.requireDevChain();
+    }
+
+    function check(bytes calldata keyData, bytes32 message, bytes calldata sig, bool)
+        external view override returns (bool)
+    {
+        return keyData.length == 128 && CurveSigs.schnorr(ZETHER_SCHNORR_TAG, keyData, message, sig);
     }
 }

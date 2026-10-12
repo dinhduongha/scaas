@@ -2,12 +2,13 @@
 pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
-import {DeployBase} from "../../script/DeployBase.sol";
+import {DeployHarness} from "../helpers/DeployHarness.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {AdminLib} from "../../src/metatx/AdminLib.sol";
-import {UniversalAccountRegistry} from "../../src/registry/UniversalAccountRegistry.sol";
+import {IUARegistry} from "../../src/ua/IUARegistry.sol";
+import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {ZetherDisclosure} from "../../src/zether/ZetherDisclosure.sol";
 import {ZetherStatements} from "../../src/zether/ZetherStatements.sol";
 import {ZetherVerifierBn254, ZetherVerifierBls12381} from "../../src/zether/ZetherVerifier.sol";
@@ -16,17 +17,6 @@ import {ZetherLayer} from "../../src/zether/ZetherLayer.sol";
 import {NoUnderlyingZetherToken} from "../../src/zether/NoUnderlyingZetherToken.sol";
 import {UnderlyingZetherToken} from "../../src/zether/UnderlyingZetherToken.sol";
 import {ZUID} from "./helpers/ZetherFixture.sol";
-
-/// The deploy steps without the RPC parts (`_setup`): the salt, `chain_uid` and `DEPLOY_ZETHER` set directly.
-contract DeployHarness is DeployBase {
-    function deploy(bytes32 uid_, bool zether, address ska) external returns (OpenFactory f, string memory json) {
-        salt = keccak256("scaas.deploy.v1");
-        uid = uid_;
-        deployZether = zether;
-        f = _deployTokenFactory(address(this), true, ska, false);
-        json = vm.serializeBytes32("deploy", "chain_uid", uid);
-    }
-}
 
 /// @notice `DeployBase` with `DEPLOY_ZETHER` on a dev chain deploys and registers the Zether stack (kinds 2 and 3, the
 ///         gate on); without it (the default) or on any other chain (the e2e's 319xx, Hedera's 298) none of it.
@@ -48,7 +38,12 @@ contract ZetherDeployTest is Test {
             UnderlyingZetherToken(payable(f.implementationOf(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1)));
         assertEq(none.kind(), AdminLib.KIND_NONE_ZETHER);
         assertEq(und.kind(), AdminLib.KIND_UNDERLYING_ZETHER);
-        address reg = _at(h, type(UniversalAccountRegistry).creationCode);
+        address reg = vm.parseJsonAddress(json, ".ua_registry");
+        assertEq(vm.parseJsonAddress(json, ".zether_registry"), reg, "the same registry");
+        assertTrue(IUARegistry(reg).kindEnabled(UAKinds.ZETHER_BN254));
+        assertTrue(IUARegistry(reg).kindEnabled(UAKinds.ZETHER_BLS12381));
+        assertEq(IUARegistry(reg).chainUid(), ZUID);
+        assertEq(IUARegistry(reg).verifyBudget(), 12_000_000);
         address dis = _at(h, type(ZetherDisclosure).creationCode);
         address bn = _at(h, type(ZetherVerifierBn254).creationCode);
         assertEq(none.registry(), reg);
@@ -56,7 +51,6 @@ contract ZetherDeployTest is Test {
         assertEq(none.SMART_KEY_ACCOUNT_IMPL(), ska);
         assertEq(und.SMART_KEY_ACCOUNT_IMPL(), ska);
         // the JSON keys the node and Odoo read
-        assertEq(vm.parseJsonAddress(json, ".zether_registry"), reg);
         assertEq(vm.parseJsonAddress(json, ".zether_disclosure"), dis);
         assertEq(vm.parseJsonAddress(json, ".zether_statements"), _at(h, type(ZetherStatements).creationCode));
         assertEq(vm.parseJsonAddress(json, ".zether_verifier_bn254"), bn);
@@ -96,10 +90,8 @@ contract ZetherDeployTest is Test {
     /// calldata + the CREATE2 measured here + the 1/64 the deployer's call holds back; forge's estimate was 1.047× this
     /// figure on anvil (BLS verifier: 14,963,261 vs 14,296,783; 14,083,070 used), hence the first ×1.05.
     function test_zetherStack_fitsOneOsakaTx() public {
-        bytes memory zArgs = abi.encode(address(this), ska, ZUID, address(new UniversalAccountRegistry()),
-            address(new ZetherDisclosure()));
-        bytes[7] memory codes = [
-            type(UniversalAccountRegistry).creationCode,
+        bytes memory zArgs = abi.encode(address(this), ska, ZUID, address(this), address(new ZetherDisclosure()));
+        bytes[6] memory codes = [
             type(ZetherDisclosure).creationCode,
             type(ZetherStatements).creationCode,
             type(ZetherVerifierBn254).creationCode,

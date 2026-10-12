@@ -77,7 +77,7 @@ the implementation's immutables). `chain_uid` is the chain's genesis block hash 
 | `SmartKeyAccount` | the factory's constructor argument, passed to `new SmartKeyAccount(chainUid)` |
 | `MandateWallet`, `HederaMandateWallet` | constructor argument from the chain profile; the node checks it before relaying for that wallet |
 | `SCaaSDex` (implementation; `SCaaSDexV1`) | constructor immutable of the implementation, checked at `registerDexImplementation`; `SCaaSDexV1` has none (its domain is unsalted; constructor `(admin)`) |
-| built `UniversalAccountRegistry` | constructor immutable, in its PoP challenge; it checks raw digests, so every caller's digest carries `chainUid` ([CTR-ZTH-36](zether.md#CTR-ZTH-36)) |
+| `UniversalAccountRegistry` (legacy, `legacy/ua3/`, not built) | constructor immutable, in its PoP challenge; it checks raw digests, so every caller's digest carries `chainUid` ([CTR-ZTH-36](zether.md#CTR-ZTH-36)) |
 | `UARegistry` | constructor immutable ([CTR-UA-07](accounts.md#CTR-UA-07)) |
 | any later contract with a signature (tender, asset suite) | the same helper, constructor argument |
 

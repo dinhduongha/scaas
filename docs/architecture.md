@@ -235,7 +235,7 @@ agent signs, a relayer pays gas); Zether keeps commercial amounts confidential w
 
 | Component | Path | Role | Status |
 |---|---|---|---|
-| EVM contracts | `smartcontracts/evm/` (Foundry; `src/{common,metatx,factory,dex,wallet,account,registry,zether,hedera,chains}`) | Target: the token tree `MetaTxBase` → `ERC20MetaTx` → `MetaTokenBase` → kinds `NONE`, `UNDERLYING`, `NONE_ZETHER`, `UNDERLYING_ZETHER` ([CTR-TOK-21](contracts/token-wrappers.md#CTR-TOK-21)); the libraries `TradeLib`, `AdminLib`, `UnderlyingLib`, `ZetherLib`, `HederaLib`, with pay inline behind the `PAYABLE` flag in `MetaTokenBase` (no `PayLib`; [CTR-TOK-24](contracts/token-wrappers.md#CTR-TOK-24)); `OpenFactory` for tokens and DEX clones ([CTR-TOK-25](contracts/token-wrappers.md#CTR-TOK-25)); `SCaaSDex`; `MandateWallet`; `SmartKeyAccount`; `UniversalAccountRegistry`; the Zether verifiers (bn254, BLS12-381), `ZetherDisclosure`, `ZetherStatements`. Build profiles `private7622` (the private chain 7622), `zether`, `gnosis`, `celo` | BUILT (P1a–P1e): `MetaTxBase` → `ERC20MetaTx` → `MetaTokenBase`, kind `NONE` = `NoUnderlyingToken`, kind `UNDERLYING` = `UnderlyingToken` (1–8 legs, native-coin leg) + `UnderlyingLib`, `AdminLib`, `HederaLib`, and `OpenFactory` with `createToken`/`TokenConfig`; `TradeLib` and the `SCaaSDex` clone (P2), the `*_ZETHER` kinds and `ZetherLib` (P3), `MandateWallet` and `SmartKeyAccount` (P4); the v1 line, the old `ZetherToken` and the typed structs in `legacy/` (P3–P5). SPECIFIED: `PqzToken` |
+| EVM contracts | `smartcontracts/evm/` (Foundry; `src/{account,chains,common,dex,factory,hedera,metatx,trade,ua,wallet,zether}`) | Target: the token tree `MetaTxBase` → `ERC20MetaTx` → `MetaTokenBase` → kinds `NONE`, `UNDERLYING`, `NONE_ZETHER`, `UNDERLYING_ZETHER` ([CTR-TOK-21](contracts/token-wrappers.md#CTR-TOK-21)); the libraries `TradeLib`, `AdminLib`, `UnderlyingLib`, `ZetherLib`, `HederaLib`, with pay inline behind the `PAYABLE` flag in `MetaTokenBase` (no `PayLib`; [CTR-TOK-24](contracts/token-wrappers.md#CTR-TOK-24)); `OpenFactory` for tokens and DEX clones ([CTR-TOK-25](contracts/token-wrappers.md#CTR-TOK-25)); `SCaaSDex`; `MandateWallet`; `SmartKeyAccount`; `UARegistry` (`src/ua/`); the Zether verifiers (bn254, BLS12-381), `ZetherDisclosure`, `ZetherStatements`. Build profiles `private7622` (the private chain 7622), `zether`, `gnosis`, `celo` | BUILT (P1a–P1e): `MetaTxBase` → `ERC20MetaTx` → `MetaTokenBase`, kind `NONE` = `NoUnderlyingToken`, kind `UNDERLYING` = `UnderlyingToken` (1–8 legs, native-coin leg) + `UnderlyingLib`, `AdminLib`, `HederaLib`, and `OpenFactory` with `createToken`/`TokenConfig`; `TradeLib` and the `SCaaSDex` clone (P2), the `*_ZETHER` kinds and `ZetherLib` (P3), `MandateWallet` and `SmartKeyAccount` (P4); the v1 line, the old `ZetherToken` and the typed structs in `legacy/` (P3–P5). SPECIFIED: `PqzToken` |
 | Hedera contracts | the EVM implementations | No separate contracts: the EVM implementations deployed with `IS_HEDERA` (HIP-632 signatures, fail-closed HTS checks; [CTR-TOK-23](contracts/token-wrappers.md#CTR-TOK-23)) | BUILT (P1c–P1d): `IS_HEDERA` is an immutable of every implementation; `HederaLib` (`smartcontracts/evm/src/hedera/`) holds the HIP-632 path, and the HTS association is called from `UnderlyingLib` init; the Hedera wrapper children are deleted (the v1 `HederaMetaToken` is in `legacy/p5/`) |
 | Cosmos contracts | `smartcontracts/cosmos/` (CosmWasm workspace) | `scaas-token` (CW20 + meta-op), `scaas-mandate`, `scaas-dex`, shared `scaas-metaop` | BUILT |
 | Soroban contracts | `smartcontracts/soroban/` | SEP-41 token + `pay`, mandate, DEX; native auth as the meta-tx (Stellar and Pi Network) | BUILT |
@@ -406,7 +406,7 @@ flowchart LR
     UA["Universal Account<br/>32-byte id"]
     SKA["SmartKeyAccount<br/>ERC-1271, many keys"]
     MW["MandateWallet<br/>holds the payer's funds"]
-    REG["UniversalAccountRegistry"]
+    REG["UARegistry"]
     GUA["Guardian"]
     DEL["Delegate"]
     T["Token or any<br/>MetaTxBase contract"]
@@ -430,7 +430,7 @@ An account is whoever can produce a valid signature, and SCaaS has three forms (
 A **native account** is what the chain already understands, and never registers. A **Universal Account** is the
 default for subjects: a 32-byte id derived from key data, so any key type works on any family without a contract per
 user ([universal-account](contracts/accounts.md#universal-account)). Because a token must know how to verify such a
-key, the id is registered once per chain in the admin-free `UniversalAccountRegistry` with a proof of possession that
+key, the id is registered once per chain in the admin-free UA registry (`UARegistry`) with a proof of possession that
 binds the chain, the registry, the id and `authRef` — but not the caller, so a relayer can submit the registration and
 onboarding is gasless ([CTR-UA-07](contracts/accounts.md#CTR-UA-07)).
 
@@ -453,7 +453,7 @@ flowchart LR
         S["Shielded balance<br/>acc and pending per UA"]
     end
     V["Zether verifier<br/>bn254 or BLS12-381"]
-    R["UniversalAccountRegistry"]
+    R["UARegistry"]
     ST["ZetherStatements"]
     D["ZetherDisclosure"]
     U -->|"wrap"| P
@@ -720,7 +720,7 @@ sequenceDiagram
     participant APP as Client app (clientkeys)
     participant GW as Node gateway
     participant LANE as Submit lane
-    participant REG as UniversalAccountRegistry
+    participant REG as UARegistry
     participant VER as Kind verifier
     APP->>APP: ua = uaOf(kind, keyData)
     APP->>REG: popDigest(ua, authRef), bound to chain_uid
@@ -856,7 +856,7 @@ target; the rules are at the linked anchors.
 | DEX `admin` (written once at creation) | list or delist a market, set the fee split, list exchange targets, switch listed-only mode | touch funds, change a signed fee amount, pause the whole DEX | [CTR-DEX-03](contracts/dex.md#CTR-DEX-03) |
 | Auditor (ideally a k-of-n threshold key) | read the per-transfer auditor ciphertext `C_aud` of transfers that include it, give an `AUDITOR` opening | read anyone's balance (`acc`, `pending`), read a transfer whose sender left it out | [CTR-ZTH-41](contracts/zether.md#CTR-ZTH-41), [CTR-ZTH-42](contracts/zether.md#CTR-ZTH-42) |
 | Relayers and nodes | submit, delay or refuse an intent; choose the fee recipient where the intent leaves it unbound | change any signed field, move funds, sign for a subject | [CTR-MTX-17](contracts/metatx.md#CTR-MTX-17), [NODE-LANE-16](node/submit-lanes.md#NODE-LANE-16) |
-| `UniversalAccountRegistry`, `ZetherDisclosure`, `ZetherStatements` | nobody administers them | — | [CTR-UA-15](contracts/accounts.md#CTR-UA-15), [CTR-ZTH-43](contracts/zether.md#CTR-ZTH-43) |
+| `UARegistry`, `ZetherDisclosure`, `ZetherStatements` | nobody administers them | — | [CTR-UA-15](contracts/accounts.md#CTR-UA-15), [CTR-ZTH-43](contracts/zether.md#CTR-ZTH-43) |
 
 <a id="families"></a>
 ## 8. Families

@@ -9,7 +9,25 @@ import {AdminLib} from "../src/metatx/AdminLib.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {NoUnderlyingToken} from "../src/metatx/NoUnderlyingToken.sol";
 import {SCaaSDex} from "../src/dex/SCaaSDex.sol";
-import {UniversalAccountRegistry} from "../src/registry/UniversalAccountRegistry.sol";
+import {UARegistry} from "../src/ua/UARegistry.sol";
+import {UAKinds} from "../src/ua/UAKinds.sol";
+import {WebAuthnP256Verifier} from "../src/ua/verifiers/WebAuthnP256Verifier.sol";
+import {P256Verifier} from "../src/ua/verifiers/P256Verifier.sol";
+import {Ed25519Verifier} from "../src/ua/verifiers/Ed25519Verifier.sol";
+import {Bip340Verifier} from "../src/ua/verifiers/Bip340Verifier.sol";
+import {
+    SchnorrBn254Verifier,
+    SchnorrBls12381Verifier,
+    BlsMinSigBls12381Verifier,
+    BlsMinSigBn254Verifier,
+    ZetherSchnorrBn254Verifier,
+    ZetherSchnorrBls12381Verifier
+} from "../src/ua/verifiers/PairingVerifiers.sol";
+import {Musig2Secp256k1Verifier} from "../src/ua/verifiers/Musig2Secp256k1Verifier.sol";
+import {UAFrostSecp256k1Verifier} from "../src/ua/verifiers/UAFrostSecp256k1Verifier.sol";
+import {Musig2Bn254Verifier} from "../src/ua/verifiers/Musig2Bn254Verifier.sol";
+import {FrostBn254Verifier} from "../src/ua/verifiers/FrostBn254Verifier.sol";
+import {UAPrecompileProbe} from "./UAPrecompileProbe.sol";
 import {ZetherSafety} from "../src/zether/ZetherSafety.sol";
 import {ZetherDisclosure} from "../src/zether/ZetherDisclosure.sol";
 import {ZetherStatements} from "../src/zether/ZetherStatements.sol";
@@ -18,7 +36,7 @@ import {NoUnderlyingZetherToken} from "../src/zether/NoUnderlyingZetherToken.sol
 import {UnderlyingZetherToken} from "../src/zether/UnderlyingZetherToken.sol";
 
 /// @title Shared deploy steps (CTR-GEN-05, CTR-GEN-06, NET-EVM-05): `chain_uid` from the RPC, the deterministic CREATE2
-///        deployer, the token factory with its implementations, the `chainUid()` gate.
+///        deployer, the UA registry with its verifiers, the token factory with its implementations, the `chainUid()` gate.
 /// @notice `new X{salt: DEPLOY_SALT}(…)` inside a broadcast goes through the deterministic deployer at `CREATE2_FACTORY`
 ///         (forge-std), so an address depends only on the init code and the salt: a contract that takes `chain_uid`
 ///         gets a different address on each chain, the others the same one. Re-running on the same chain collides:
@@ -30,6 +48,11 @@ abstract contract DeployBase is Script {
     bytes32 internal uid;
     /// @notice `DEPLOY_ZETHER` env (default false): also deploy the Zether stack (`_deployZether`, dev chains only).
     bool internal deployZether;
+
+    /// @notice `UA_VERIFY_BUDGET = min(12 M, ⌊0.7 × the chain's per-transaction gas cap⌋)` (CTR-UA-23): EIP-7825
+    ///         chains (16,777,216) 12 M, Hedera (15 M) 10.5 M.
+    uint64 internal constant UA_VERIFY_BUDGET = 12_000_000;
+    uint64 internal constant UA_VERIFY_BUDGET_HEDERA = 10_500_000;
 
     /// @notice Call first in `run()`, before the broadcast.
     function _setup() internal {
@@ -54,8 +77,9 @@ abstract contract DeployBase is Script {
     }
 
     /// @notice The token factory, the `NONE` implementation and the `SCaaSDex` implementation by CREATE2, each
-    ///         registered as version 1 when the deployer is the registrar; writes `token_factory`,
-    ///         `implementation_none`, `dex_implementation`, `chain_uid` into the JSON object `"deploy"`; with `DEPLOY_ZETHER`
+    ///         registered as version 1 when the deployer is the registrar, and the UA registry (`_deployUARegistry`);
+    ///         writes `token_factory`, `implementation_none`, `dex_implementation`, `ua_registry`, `chain_uid` into the
+    ///         JSON object `"deploy"`; with `DEPLOY_ZETHER`
     ///         also the Zether stack (`_deployZether`, dev chains only). `UNDERLYING` is not deployed: over EIP-170 on real chains
     ///         (owner: wait for Glamsterdam).
     function _deployTokenFactory(address registrar, bool register, address smartKeyAccountImpl, bool isHedera)
@@ -74,29 +98,93 @@ abstract contract DeployBase is Script {
         if (register) f.registerDexImplementation(1, address(dexImpl));
         _gate(address(dexImpl));
         vm.serializeAddress("deploy", "dex_implementation", address(dexImpl));
-        if (deployZether) {
-            require(ZetherSafety.isDevChain(), "DEPLOY_ZETHER: dev chains only (CTR-ZTH-02)");
-            _deployZether(f, register, smartKeyAccountImpl);
-        }
+        if (deployZether) require(ZetherSafety.isDevChain(), "DEPLOY_ZETHER: dev chains only (CTR-ZTH-02)");
+        UARegistry reg = _deployUARegistry(smartKeyAccountImpl, isHedera);
+        if (deployZether) _deployZether(f, register, smartKeyAccountImpl, address(reg));
         vm.serializeBytes32("deploy", "chain_uid", uid);
     }
 
-    /// @notice Dev chains only (CTR-ZTH-02; elsewhere the registry and the verifiers refuse to deploy): the account
-    ///         registry, `ZetherDisclosure`, `ZetherStatements`, both verifiers, the two confidential implementations
-    ///         registered as version 1 of `NONE_ZETHER` and `UNDERLYING_ZETHER`, and the factory's Zether gate switched on
+    /// @notice UA registry generation 1 (accounts.md §1.8, CTR-UA-22) on every chain, with per-chain enablement (§1.9):
+    ///         `webauthn-p256`, `p256`, `ed25519`, `bip340`, `schnorr-bn254`, the four group kinds and `msig` everywhere;
+    ///         `schnorr-bls12381` and `bls12381-minsig` where `UAPrecompileProbe` passes EIP-2537; `bls-bn254-minsig` on
+    ///         private chains (the dev chains and 7622) where it passes the bn254 G2 check; `zether-bn254` (and
+    ///         `zether-bls12381` with EIP-2537) on the dev chains only (CTR-ZTH-02). Caps: the gen-1 defaults measured in
+    ///         `test/ua/UAGas.t.sol` (accounts.md §1.15). A disabled kind gets no verifier (never "registrable but
+    ///         unusable", CTR-UA-23). JSON `ua_registry`. **UNAUDITED — NOT FOR PRODUCTION FUNDS.**
+    function _deployUARegistry(address smartKeyAccountImpl, bool isHedera) internal returns (UARegistry reg) {
+        (bool bls, bool bnG2) = _precompiles();
+        bool dev = ZetherSafety.isDevChain();
+        UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](16);
+        uint256 n;
+        k[n++] = UARegistry.KindConfig(UAKinds.WEBAUTHN_P256, address(new WebAuthnP256Verifier{salt: salt}()), 400_000);
+        k[n++] = UARegistry.KindConfig(UAKinds.P256, address(new P256Verifier{salt: salt}()), 400_000);
+        k[n++] = UARegistry.KindConfig(UAKinds.ED25519, address(new Ed25519Verifier{salt: salt}()), 210_000);
+        k[n++] = UARegistry.KindConfig(UAKinds.BIP340, address(new Bip340Verifier{salt: salt}()), 50_000);
+        k[n++] = UARegistry.KindConfig(UAKinds.SCHNORR_BN254, address(new SchnorrBn254Verifier{salt: salt}()), 50_000);
+        if (bls) {
+            k[n++] = UARegistry.KindConfig(
+                UAKinds.SCHNORR_BLS12381, address(new SchnorrBls12381Verifier{salt: salt}()), 70_000
+            );
+            k[n++] = UARegistry.KindConfig(
+                UAKinds.BLS12381_MINSIG, address(new BlsMinSigBls12381Verifier{salt: salt}()), 200_000
+            );
+        }
+        if (bnG2 && (dev || block.chainid == 7622)) {
+            k[n++] = UARegistry.KindConfig(
+                UAKinds.BLS_BN254_MINSIG, address(new BlsMinSigBn254Verifier{salt: salt}()), 345_000
+            );
+        }
+        k[n++] = UARegistry.KindConfig(
+            UAKinds.MUSIG2_SECP256K1, address(new Musig2Secp256k1Verifier{salt: salt}()), 50_000
+        );
+        k[n++] = UARegistry.KindConfig(UAKinds.FROST_SECP256K1, address(new UAFrostSecp256k1Verifier{salt: salt}()), 50_000);
+        k[n++] = UARegistry.KindConfig(UAKinds.MUSIG2_BN254, address(new Musig2Bn254Verifier{salt: salt}()), 50_000);
+        k[n++] = UARegistry.KindConfig(UAKinds.FROST_BN254, address(new FrostBn254Verifier{salt: salt}()), 50_000);
+        if (dev) {
+            k[n++] = UARegistry.KindConfig(
+                UAKinds.ZETHER_BN254, address(new ZetherSchnorrBn254Verifier{salt: salt}()), 50_000
+            );
+            if (bls) {
+                k[n++] = UARegistry.KindConfig(
+                    UAKinds.ZETHER_BLS12381, address(new ZetherSchnorrBls12381Verifier{salt: salt}()), 70_000
+                );
+            }
+        }
+        assembly ("memory-safe") {
+            mstore(k, n)
+        }
+        uint64 budget = isHedera ? UA_VERIFY_BUDGET_HEDERA : UA_VERIFY_BUDGET;
+        reg = new UARegistry{salt: salt}(uid, address(0), isHedera, budget, smartKeyAccountImpl, true, k);
+        _gate(address(reg));
+        vm.serializeAddress("deploy", "ua_registry", address(reg));
+    }
+
+    /// @notice The chain's own verdict on its pairing precompiles (`UAPrecompileProbe`), asked through `eth_call` with
+    ///         no `to` — the node's precompiles, not forge's. An RPC that refuses the call disables both kind sets (fail
+    ///         closed). Tests override it with a local probe.
+    function _precompiles() internal virtual returns (bool bls12381, bool bn254G2) {
+        string memory params =
+            string.concat('[{"data":"', vm.toString(type(UAPrecompileProbe).creationCode), '"},"latest"]');
+        try vm.rpc("eth_call", params) returns (bytes memory out) {
+            if (out.length == 64) (bls12381, bn254G2) = abi.decode(out, (bool, bool));
+        } catch {}
+    }
+
+    /// @notice Dev chains only (CTR-ZTH-02; elsewhere the Zether verifiers refuse to deploy): `ZetherDisclosure`,
+    ///         `ZetherStatements`, both proof verifiers, the two confidential implementations on the UA registry `reg`
+    ///         (its Zether kinds; JSON `zether_registry` = `ua_registry`), registered as version 1 of `NONE_ZETHER` and `UNDERLYING_ZETHER`, and the factory's Zether gate switched on
     ///         when the deployer is the registrar. **UNAUDITED — NOT FOR PRODUCTION FUNDS.** The implementations exceed
     ///         EIP-170 and the BLS verifier takes ~14.1 M gas: anvil `--code-size-limit 65536`, forge script
     ///         `--code-size-limit 65536 --gas-estimate-multiplier 105` (deploy.sh adds both; docs/networks/evm.md).
-    function _deployZether(OpenFactory f, bool register, address smartKeyAccountImpl) internal {
-        UniversalAccountRegistry reg = new UniversalAccountRegistry{salt: salt}();
+    function _deployZether(OpenFactory f, bool register, address smartKeyAccountImpl, address reg) internal {
         ZetherDisclosure dis = new ZetherDisclosure{salt: salt}();
         ZetherStatements stm = new ZetherStatements{salt: salt}();
         ZetherVerifierBn254 bn = new ZetherVerifierBn254{salt: salt}();
         ZetherVerifierBls12381 bls = new ZetherVerifierBls12381{salt: salt}();
         NoUnderlyingZetherToken none =
-            new NoUnderlyingZetherToken{salt: salt}(address(f), smartKeyAccountImpl, uid, address(reg), dis);
+            new NoUnderlyingZetherToken{salt: salt}(address(f), smartKeyAccountImpl, uid, reg, dis);
         UnderlyingZetherToken und =
-            new UnderlyingZetherToken{salt: salt}(address(f), smartKeyAccountImpl, uid, address(reg), dis);
+            new UnderlyingZetherToken{salt: salt}(address(f), smartKeyAccountImpl, uid, reg, dis);
         if (register) {
             f.registerImplementation(IOpenFactory.TokenKind.NONE_ZETHER, 1, address(none));
             f.registerImplementation(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, address(und));
@@ -104,7 +192,7 @@ abstract contract DeployBase is Script {
         }
         _gate(address(none));
         _gate(address(und));
-        vm.serializeAddress("deploy", "zether_registry", address(reg));
+        vm.serializeAddress("deploy", "zether_registry", reg); // = ua_registry
         vm.serializeAddress("deploy", "zether_disclosure", address(dis));
         vm.serializeAddress("deploy", "zether_statements", address(stm));
         vm.serializeAddress("deploy", "zether_verifier_bn254", address(bn));

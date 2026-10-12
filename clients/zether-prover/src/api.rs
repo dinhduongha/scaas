@@ -14,8 +14,8 @@ use zeroize::Zeroizing;
 use crate::abi::{self, Tok};
 use crate::bulletproofs::Gens;
 use crate::curve::{
-    decode_point, decode_scalar, encode_point, encode_scalar, generator, keccak256, point_len, ua_of, Bls12381, Bn254,
-    Fr, ZCurve, G,
+    decode_point, decode_scalar, encode_point, encode_scalar, generator, keccak256, point_len, ua_of, zether_kind,
+    Bls12381, Bn254, Fr, ZCurve, G,
 };
 use crate::elgamal::{
     cached_table, cached_table_bits, check_balance, check_ram, encrypt, mem_available, BsgsParams, Ciphertext,
@@ -632,15 +632,25 @@ fn by_curve<C: ZCurve>(cmd: &str, v: &Value, rng: &mut OsRng) -> R<Value> {
         "verifyTransfer" => verify_json::<C>(&gens(), v, false),
         "verifyTransferMulti" => verify_multi_json::<C>(&gens(), v),
         "verifyBurn" => verify_json::<C>(&gens(), v, true),
+        // The `register` PoP (CTR-UA-07): `chainId`, `chainUid`, `registry`, `authRef` (optional, 0 = self).
         "pop" => {
             let k = key::<C>(v)?;
-            let (reg, acct) = (fixed::<20>(v, "registry")?, fixed::<20>(v, "account")?);
-            let pop = schnorr::schnorr_pop(&k, &reg, &acct, rng);
+            let (chain, uid, reg) = (num(v, "chainId")?, fixed::<32>(v, "chainUid")?, fixed::<20>(v, "registry")?);
+            let auth_ref = if v.get("authRef").is_some() { fixed::<32>(v, "authRef")? } else { [0u8; 32] };
+            let d = schnorr::pop_digest(chain, &uid, &reg, &k.ua(), &auth_ref);
             Ok(json!({
-                "Y": hx(&k.encoded_y()), "UA": hx(&k.ua()),
-                "c": hx(&schnorr::pop_message::<C>(&reg, &k.y, &acct)),
-                "schnorrPop": hx(&pop),
-                "popSignature": hx(&schnorr::pop_signature(&pop, &[])),
+                "kind": zether_kind::<C>(), "Y": hx(&k.encoded_y()), "UA": hx(&k.ua()), "authRef": hx(&auth_ref),
+                "popDigest": hx(&d), "uaMsg": hx(&schnorr::ua_message::<C>(&schnorr::purpose_tag("pop"), &d)),
+                "pop": hx(&schnorr::zether_pop(&k, chain, &uid, &reg, &auth_ref, rng)),
+            }))
+        }
+        // A self account's owner op (roll-over, mode): `sig` for `zetherRollOverSigned` / `zetherSetRollOverMode`.
+        "ownerAuth" => {
+            let k = key::<C>(v)?;
+            let d = fixed::<32>(v, "digest")?;
+            Ok(json!({
+                "uaMsg": hx(&schnorr::ua_message::<C>(&schnorr::purpose_tag("zether-owner"), &d)),
+                "auth": hx(&schnorr::owner_auth(&k, &d, rng)),
             }))
         }
         "shieldCalldata" => {

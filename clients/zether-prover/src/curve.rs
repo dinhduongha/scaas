@@ -195,9 +195,22 @@ pub fn keccak256(data: &[u8]) -> [u8; 32] {
     Keccak256::digest(data).into()
 }
 
-/// keccak256 of the encoded point — `ZetherTypes.toUA`.
+/// `TAG(kind) = keccak256("scaas.ua.zether-<curve>.v1")`, the kind tag of this curve's Zether kind (accounts.md §1.6:
+/// `zether-bn254` 0x0140, `zether-bls12381` 0x0141).
+pub fn zether_tag<C: ZCurve>() -> [u8; 32] {
+    keccak256(format!("scaas.ua.zether-{}.v1", C::NAME).as_bytes())
+}
+
+/// The UA kind number of this curve's Zether kind.
+pub fn zether_kind<C: ZCurve>() -> u16 {
+    if C::NAME == "bn254" { 0x0140 } else { 0x0141 }
+}
+
+/// `UA = keccak256(TAG(kind) ‖ Y)` — `ZetherTypes.toUA` (accounts.md CTR-UA-16, CTR-UA-22).
 pub fn ua_of<C: ZCurve>(y: &G<C>) -> [u8; 32] {
-    keccak256(&encode_point::<C>(y))
+    let mut b = zether_tag::<C>().to_vec();
+    b.extend(encode_point::<C>(y));
+    keccak256(&b)
 }
 
 #[cfg(test)]

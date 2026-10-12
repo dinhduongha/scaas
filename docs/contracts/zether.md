@@ -3,9 +3,10 @@
 **Status: BUILT, UNAUDITED — NOT FOR PRODUCTION FUNDS.** The kinds `NONE_ZETHER` (`NoUnderlyingZetherToken`) and
 `UNDERLYING_ZETHER` (`UnderlyingZetherToken`) on the one meta-transaction base (`ZetherLayer` + `ZetherLib`),
 `ZetherStatements`, `ZetherDisclosure`, `ZetherVerifierBn254`, `ZetherVerifierBls12381`, `ZetherCurves`,
-`ZetherTranscript`, `ZetherSafety`, the built `UniversalAccountRegistry` and the Rust prover `zether-prover` exist with
-tests (P3; `smartcontracts/evm/src/zether/**`, `src/registry/**`). Every Zether contract and the registry refuse to
-deploy or initialize outside chain ids 31337/1337, and `OpenFactory.zetherEnabled` defaults to `false` ([safety
+`ZetherTranscript`, `ZetherSafety` and the Rust prover `zether-prover` exist with tests (P3;
+`smartcontracts/evm/src/zether/**`); the accounts are UAs of the UA registry's Zether kinds (UA-3,
+[registry](#registry)). Every Zether contract and the Zether Schnorr verifiers of the registry refuse to deploy or
+initialize outside chain ids 31337/1337, and `OpenFactory.zetherEnabled` defaults to `false` ([safety
 gate](#safety-gate)). Post-quantum confidential balances are a separate class ([pq-zether.md](pq-zether.md)). Relaying is
 the generic self-call ([relaying](#envelope)), `chainUid` is in every chain-bound digest; the built `ZetherToken` with its
 `ZetherMetaTx` envelope is backed up, not built, in `smartcontracts/evm/legacy/p3/`. **Built (P3b):** the storage and auditor modes, the salted `s` and the sender memo ([CTR-ZTH-38](#CTR-ZTH-38), [CTR-ZTH-48](#CTR-ZTH-48)–[CTR-ZTH-50](#CTR-ZTH-50), [CTR-ZTH-30](#CTR-ZTH-30)).
@@ -34,7 +35,7 @@ terminator.
 11. [Multi-recipient transfer](#11-multi-recipient-transfer)
 12. [Meta-transaction envelope and replay protection](#12-meta-transaction-envelope-and-replay-protection)
    - 12.1 [Fees](#121-fees)
-13. [Authorization and the built registry](#13-authorization-and-the-built-registry)
+13. [Authorization and the UA registry](#13-authorization-and-the-ua-registry)
 14. [Disclosure](#disclosure)
 15. [Confidential layer](#15-confidential-layer)
 16. [Safety gate](#safety-gate)
@@ -293,7 +294,7 @@ sendCounter_f++
   signature. `zetherRollOverBatch` skips `OWNER_ONLY` and unregistered items.
 - `OWNER_ONLY` (treasury, B2B high value): `zetherRollOver` reverts `RollOverOwnerOnly`; only `zetherRollOverSigned(UA,
   expectedPendingSeq, validUntilBlock, sig)` — `block.number ≤ validUntilBlock`, `lastRolledPendingSeq <
-  expectedPendingSeq ≤ pendingSeq`, signed by the account's authority (`authScheme` in the built registry) over
+  expectedPendingSeq ≤ pendingSeq`, signed by the account's authority (its `authRef`, purpose `zether-owner`, [registry](#registry)) over
   `keccak256(abi.encode(keccak256("ZETHER_ROLLOVER_V1"), chainid, chainUid, token, UA, accSeq, expectedPendingSeq, validUntilBlock))`.
 - `zetherRollOverSigned` also works for `PUBLIC` accounts.
 - `zetherSetRollOverMode(UA, mode, validUntilBlock, sig)`: digest
@@ -363,8 +364,7 @@ block numbers, so a captured mode or rollover signature, a proof or a disclosure
 it so that references never collide across chains (client reconciliation still keys by `(chain_key, entryRef)`). The
 UA registry (target) takes `chainUid` as a constructor immutable and adds it to its PoP challenge; because
 it checks raw digests, every caller's digest carries `chainUid` itself. **Built (P3)** for every token-side digest and
-the prover (which also mixes `chainUid` into its `s`); the vectors are regenerated. **Transitional:** the built `UniversalAccountRegistry` (only `keyOf` added in P3b, [CTR-ZTH-50](#CTR-ZTH-50)) takes no
-`chainUid` until the UA registry replaces it ([CTR-UA-22](accounts.md#CTR-UA-22); controller ruling, pending the owner).
+the prover (which also mixes `chainUid` into its `s`); the vectors are regenerated. The UA registry has it since UA-3 (`popDigest`, the `UAAuth` domain salt).
 
 Points:
 
@@ -559,7 +559,7 @@ The mode is in `opTag`, so a relayer cannot switch the mode of a signed proof. `
 matches it. Relaying through the meta-transaction envelope is the generic self-call ([CTR-ZTH-34](#CTR-ZTH-34)).
 
 **Token.** Checks and order as `zetherTransferSingle` (cheap first, `accSeq`/`sendCounter`, registry
-`requireAuthorized` over the statement digest, verify). Effects: `acc_f −= (C_deb + [fee]G, D_out)`; per `j`
+`requireZetherAuthorized` over the statement digest, verify). Effects: `acc_f −= (C_deb + [fee]G, D_out)`; per `j`
 `pending_tj += (C_out_j, D_out)`, `pendingSeq_tj++`; fee to the beneficiary as in the single format; `sendCounter_f++`
 once. `entryRef` as in the single format (one per transfer); recipient `j` is addressed as `(entryRef, j)`.
 
@@ -601,7 +601,7 @@ ks   = HKDF-Expand-SHA256(key, info = "ZTX/memo/ks/v1", L = 1 + 40·M)
 memo = salt ‖ ((flags ‖ (be8(v_j) ‖ toUA_j)_{j=1..M}) XOR ks)      flags: u8, bit0 = auditor included   (17 + 40·M B)
 ```
 
-No MAC: a wrong decryption rebuilds bundles that fail the commitment. The memo travels in `payload`; `memoHash = keccak256(memo)` is in the statement header ([Statement](#statement-byte-layout)), so `authSig` covers it and a relayer can neither alter nor drop it; the token checks `|memo| = 17 + 40·M` and that the memo's clear salt is the payload's (`MemoSaltMismatch`: with a stale salt the transfer would not open from storage; controller ruling). The keystream label `"ZTX/memo/ks/v1"` and the `flags` byte are a controller ruling, pending the owner. Only what cannot be recomputed is stored (the sender's choices: amounts, decoys at 0, recipients); `s`, the memo key and `Y_a` are recomputed. The `flags` byte records the auditor choice, so recovery needs no guessing (it matters under OPTIONAL). Size at `M = 1`: 32 + 57 B (the commitment slot, the memo's length slot and two data slots) against ≈ 9 slots for a full bn254 record (gas: [§19](#gas)). The recipients' keys come from the registry's `keyOf(toUA)` (added in P3b and stored at registration, +67 k bn254 / +112 k BLS12-381 gas, [§19](#gas); the built registry kept only the key length; controller ruling, pending the owner). The prover runs the flow below in two steps: `openMemo` returns the salt, the flag, the amounts and `needKeys` (the recipient UAs), then `recoverTransfer` takes their keys (`keys`, or a `keyOf` lookup in the library, `recover_transfer_with`); a stored record `R` or the calldata (it carries every `Y_tj`, the memo the amounts) needs no key. The receiver and the auditor do not know `s` and still read `R` from `TransferBundles` / calldata: commit-reveal guarantees recovery from storage for the sender only; theirs depends on log availability (an archive of `TransferBundles` is an open item). Recovery:
+No MAC: a wrong decryption rebuilds bundles that fail the commitment. The memo travels in `payload`; `memoHash = keccak256(memo)` is in the statement header ([Statement](#statement-byte-layout)), so `authSig` covers it and a relayer can neither alter nor drop it; the token checks `|memo| = 17 + 40·M` and that the memo's clear salt is the payload's (`MemoSaltMismatch`: with a stale salt the transfer would not open from storage; controller ruling). The keystream label `"ZTX/memo/ks/v1"` and the `flags` byte are a controller ruling, pending the owner. Only what cannot be recomputed is stored (the sender's choices: amounts, decoys at 0, recipients); `s`, the memo key and `Y_a` are recomputed. The `flags` byte records the auditor choice, so recovery needs no guessing (it matters under OPTIONAL). Size at `M = 1`: 32 + 57 B (the commitment slot, the memo's length slot and two data slots) against ≈ 9 slots for a full bn254 record (gas: [§19](#gas)). The recipients' keys come from the registry's `keyOf(toUA)` (stored at registration: SSTORE2 of `Y` in the UA registry since UA-3, [§19](#gas); controller ruling, pending the owner). The prover runs the flow below in two steps: `openMemo` returns the salt, the flag, the amounts and `needKeys` (the recipient UAs), then `recoverTransfer` takes their keys (`keys`, or a `keyOf` lookup in the library, `recover_transfer_with`); a stored record `R` or the calldata (it carries every `Y_tj`, the memo the amounts) needs no key. The receiver and the auditor do not know `s` and still read `R` from `TransferBundles` / calldata: commit-reveal guarantees recovery from storage for the sender only; theirs depends on log availability (an archive of `TransferBundles` is an open item). Recovery:
 
 ```mermaid
 flowchart LR
@@ -762,15 +762,53 @@ reverts everything. Relayers simulate first, so an envelope whose signer lacks t
 <a id="CTR-ZTH-12"></a>**CTR-ZTH-12** — **No AEAD memo** (the only memo is the commit-reveal sender memo, [CTR-ZTH-50](#CTR-ZTH-50)); the client decrypts balances itself, with the configurable BSGS
 and the device balance cache of [CTR-ZTH-19](#CTR-ZTH-19) (there is no `DECRYPT_BOUND` constant).
 
-## 13. Authorization and the built registry
+## 13. Authorization and the UA registry
 
 <a id="registry"></a>
 
-**Transitional (BUILT).** The built `UniversalAccountRegistry` described here (eight `AuthScheme` values, `links` /
-`link_eth`, a PoP bound to `msg.sender`, "register is not relayable") is **superseded by the Universal Account
-registry** ([accounts.md](accounts.md)): it is deleted and replaced, dev chains only, when the UA
-registry and the Zether re-point land ([CTR-UA-22](accounts.md#CTR-UA-22)). Until then this section describes
-the code that runs.
+**BUILT (UA-3).** A Zether account is a Universal Account of the kind `zether-bn254` (0x0140) or `zether-bls12381`
+(0x0141) in the UA registry ([accounts.md](accounts.md#zether-kinds), CTR-UA-16; `smartcontracts/evm/src/ua/UARegistry.sol`):
+`UA = keccak256(TAG(kind) ‖ Y)` (`ZetherTypes.toUA`, the kind by the length of `Y`), the record carries an immutable
+`authRef`. The token derives the UA from `Y` in the payload, counts it registered when `registry.kindOf(UA)` is the
+Zether kind of its verifier's curve, and checks every spend through `registry.requireZetherAuthorized(UA, digest,
+authSig, zkCovered)`. The Zether-era `UniversalAccountRegistry` (eight `AuthScheme`s, `links`/`link_eth`, a PoP bound to
+`msg.sender`) is backed up, not built, in `smartcontracts/evm/legacy/ua3/` ([legacy registry](accounts.md#legacy-registry)).
+
+Transfer and burn authenticate **two** things: the proof (knowledge of `x`) **and** the account's `authRef` over
+`authDigest = keccak256("SCAAS-ZETHER-AUTH-V1" ‖ keccak256(statement))`. A leaked `x` of an account with `authRef ≠ 0`
+is only a read-only breach (`survivesEncKeyLeak`).
+
+| `authRef` | transfer / unshield (`zkCovered = true`) | `zetherRollOverSigned`, `zetherSetRollOverMode` (`zkCovered = false`) |
+|---|---|---|
+| `0` (self) | the proof alone; `authSig` must be empty | `abi.encode(bytes(""), sig)`: Schnorr by `x` over `uaMessage(kind, PURPOSE_ZETHER_OWNER, digest)`, `Y` from the record |
+| a native id (EOA, ERC-1271, EIP-7702) | ECDSA / ERC-1271 over the EIP-712 `UAAuth(authRef, PURPOSE_ZETHER_AUTH, authDigest)` | the same under `PURPOSE_ZETHER_OWNER` |
+| a registered SIGNING UA (single-key, group, `msig`) | `abi.encode(keyData, sig)` of its kind over `uaMessage(kind, PURPOSE_ZETHER_AUTH, authDigest)` (stored kinds: `keyData` empty) | the same under `PURPOSE_ZETHER_OWNER` |
+
+Schnorr (every curve):
+
+```
+sign(x, msg32):  k hedged;  R = [k]G;  e = hashToScalar(keccak256("SCAAS-ZETHER-SCHNORR-V1" ‖ R ‖ Y ‖ msg32))
+                 z = k + e·x mod r;   sig = R ‖ be32(z)                    (P + 32 bytes)
+verify:          z < r, R ≠ O, Y ≠ O, e ≠ 0, [z]G − R − [e]Y == O
+```
+
+`UARegistry.register(kind, Y, pop, authRef, authPop)` ([accounts.md §1.8](accounts.md#registry)): `Y` canonical, on
+the curve, in the subgroup, `≠ O` (bn254 64 bytes `x‖y`, BLS12-381 128 bytes in the EIP-2537 encoding); `pop` = the
+Schnorr above by `x` over `uaMessage(kind, PURPOSE_POP, popDigest(UA, authRef))`, which binds the chain key,
+`chainUid`, the registry, the UA and `authRef` — never the caller, so anyone may relay it and a front-runner gets the
+identical record or a revert. `authRef` is 0, a native id or a registered SIGNING UA; a Zether UA and **a BLS UA on the
+curve of `Y` are refused** (publishing `[x]G2` makes DDH on G1 decidable; `UAAuthRef`); BLS keys and signatures at
+infinity are refused ([CTR-UA-01](accounts.md#CTR-UA-01)). A non-zero `authRef` co-signs with `authPop` (purpose
+`authref`). `Y` is stored with SSTORE2: `keyOf(UA)` serves the sender's storage-only recovery
+([CTR-ZTH-50](#CTR-ZTH-50)). No key rotation: a new key = a new UA ([CTR-UA-13](accounts.md#CTR-UA-13)). The registry's
+interface is [accounts.md §1.8](accounts.md#registry); the Zether Schnorr verifiers (`ZetherSchnorrBn254Verifier`,
+`ZetherSchnorrBls12381Verifier`) deploy on dev chains only.
+
+<a id="legacy-zether-registry"></a>
+
+### 13.1 The Zether-era registry (backed up, UA-3)
+
+**Backed up, not built** (`smartcontracts/evm/legacy/ua3/`; [CTR-UA-22](accounts.md#CTR-UA-22)). Until UA-3 the tokens used this `UniversalAccountRegistry`; the text below is how it worked, kept for the record (line references are to the backed-up files).
 
 Transfer and burn authenticate **two** things: the proof (knowledge of `x`) **and** `authSig` by the account's
 authorization scheme over `authDigest = keccak256("SCAAS-ZETHER-AUTH-V1" ‖ keccak256(statement))`. A leaked `x` of an
@@ -976,13 +1014,15 @@ chain is open ([CTR-ZTH-33](#CTR-ZTH-33)). Post-quantum Zether serves the privat
 <a id="dev-gate"></a>
 <a id="CTR-ZTH-02"></a>**CTR-ZTH-02** — **Classical Zether is gated to dev chains**: a hard-coded allowlist
 `ZetherSafety.isDevChain()`: `chainid ∈ {31337 (anvil/hardhat), 1337 (geth --dev)}`; the factory flag is off by
-default; the check is repeated in `initialize` and in the verifier and registry constructors. Adding a chain = a change
+default; the check is repeated in `initialize` and in the constructors of the proof verifiers and of the registry's
+Zether Schnorr verifiers (the UA registry itself deploys on every chain; without those verifiers its Zether kinds are
+disabled). Adding a chain = a change
 of `ZetherSafety` + a new deployment, after the cryptographic audit.
 
 - `OpenFactory.zetherEnabled` defaults to `false`; `setZetherEnabled(true)` (registrar) reverts outside a dev chain;
   creating a `*_ZETHER` token reverts when the flag is off **or** the chain is not a dev chain (built, P3).
-- The kinds' `initialize`, the constructors of both verifiers and `UniversalAccountRegistry` also revert outside a dev
-  chain (a manual deploy cannot bypass it).
+- The kinds' `initialize`, the constructors of both proof verifiers and of `ZetherSchnorrBn254Verifier` /
+  `ZetherSchnorrBls12381Verifier` also revert outside a dev chain (a manual deploy cannot bypass it).
 - The NatSpec of every Zether contract carries **UNAUDITED — NOT FOR PRODUCTION FUNDS**.
 
 <a id="CTR-ZTH-33"></a>**CTR-ZTH-33** — *Open (owner).* **Chain 7622 is not a classical-Zether dev chain**:
@@ -1000,7 +1040,7 @@ of **canonical** verifiers and `registry()` equals the chain's canonical registr
 (`OpenFactory._checkZether`, as the v1 `_checkVerifier`, only requires code + `isSupportedOnThisChain()`; the registry is
 an implementation immutable checked only for code) — "provenance instead of gatekeeping"
 ([CTR-TOK-17](token-wrappers.md#CTR-TOK-17)) — so a v1 token from a registered implementation could still carry a fake
-verifier (returning `true` for every proof ⇒ `zetherUnshield` drains the escrow) or a fake registry (`requireAuthorized` a no-op).
+verifier (returning `true` for every proof ⇒ `zetherUnshield` drains the escrow) or a fake registry (`requireZetherAuthorized` a no-op).
 
 Pin by **address**, not codehash: a verifier embeds its `generatorStore` address as an immutable, so its codehash differs
 per deployment. The built `clients/clientkeys/src/zether.js` does not read `verifier()`/`registry()` yet. Tests: the client
@@ -1162,10 +1202,11 @@ the first column; `zetherUnshield` is on `NONE_ZETHER` (public mint, no underlyi
 | `verifyBurn` (`test_burnBn254` / `Bls`) | **1,349,144** | **1,448,212** | ~1.27 M | +6 % |
 | `zetherTransferSingle` / `zetherTransfer` (multi) | see tables (a) and (b) below | | earlier single-recipient figures: 3.29 M / 3.92 M (direct, auditor, inner fee) | superseded by (a) |
 | `zetherUnshield` (`ZetherNone.t` `test_lifecycleShieldTransferRollOverUnshield`) | **1,439,816** | **1,565,410** | ~1.27 M | +13 % |
-| `zetherShield` (first credit / warm; `test_shieldAndRollOverGas`) | 159,788 / 25,384 | 215,748 / 33,639 | — | −16 % / −11 % against the old token |
+| `zetherShield` (first credit / warm; `test_shieldAndRollOverGas`) | 160,332 / 25,928 | 216,283 / 34,174 | — | UA-3 (`kindOf`); before 159,788 / 25,384 and 215,748 / 33,639 |
 | `zetherRollOver` (work / no-op; `test_shieldAndRollOverGas`) | 115,783 / 3,093 | 166,975 / 3,083 | ~66 k execution | unchanged |
-| `zetherRollOverSigned` (Schnorr; `test_ownerOnlyRollOver`) | **135,768** | **199,750** | ~31 k | ×4 |
-| `register` SELF_SCHNORR (`UniversalAccountRegistry.t` `test_registerGas`) | **169,802** | **194,966** | ~105,750; BLS ~160 k | P3: 102,659 / 83,440; +67 k / +112 k in P3b, the key kept for `keyOf` (CTR-ZTH-50) |
+| `zetherRollOverSigned` (Schnorr; `test_ownerOnlyRollOver`) | **144,588** | **207,785** | ~31 k | UA-3: the registry's verifier call and `Y` from SSTORE2 (before 135,768 / 199,750) |
+| UA registry `register`, self (`UARegistryZether.t` `test_registerSelf`, cold, `--isolate`) | **165,126** | **205,059** | — | UA-3: the UA PoP + SSTORE2(`Y`) for `keyOf` (CTR-ZTH-50) |
+| `register` SELF_SCHNORR, the backed-up registry (`legacy/ua3`, `UniversalAccountRegistry.t` `test_registerGas`) | 169,802 | 194,966 | ~105,750; BLS ~160 k | P3: 102,659 / 83,440; +67 k / +112 k in P3b, the key kept for `keyOf` (CTR-ZTH-50) |
 
 `n_v` 32 → 64 (measured 2026-10-05) adds exactly one inner-product round and 64 pairs `G_i`/`H_i` to the BP-2 MSM of Bulletproof #1:
 ≈ +538 k (bn254) / +519 k (BLS) execution gas, ≈ +20 %/+15 % on a single-recipient transfer. The relayed form adds ≈ +85 k (bn254, `ZetherRelay.t` `test_relayedTransferSingle_outerFeeFromPublicBalance_innerFeeToBeneficiary`) to a direct transfer. Burn is unchanged (BP#2 only).
@@ -1183,7 +1224,7 @@ from earlier estimates, so nobody "fixes" the wrong thing:
   gas.
 - **The token adds ~560 k (bn254) over verification:** storing the disclosure bundle `Y_t‖C_out‖D_out‖C_aud` (256 B ≈ 9
   new slots ≈ 200 k — the price of `transferCiphertext`, [CTR-ZTH-14](#CTR-ZTH-14)), updating `acc`/`pending` as `bytes`
-  in storage, the `g1Add/g1Sub/g1MulBase` calls to the verifier, the registry's `requireAuthorized`.
+  in storage, the `g1Add/g1Sub/g1MulBase` calls to the verifier, the registry's `requireZetherAuthorized`.
 - **rollOver:** 4 `bytes` points rewritten + 2 additions through the verifier; the estimate counted 10 warm SSTOREs.
 
 <a id="gas-multi"></a>

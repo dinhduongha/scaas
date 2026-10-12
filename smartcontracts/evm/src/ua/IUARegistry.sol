@@ -6,13 +6,13 @@ import {IERC5267} from "@openzeppelin/contracts/interfaces/IERC5267.sol";
 /// @title The UA registry (accounts.md §1.8): monotonic, admin-free records of derived UAs and the one entry point
 ///        `requireAuthorized` that tokens call for every UA signature.
 /// @notice `eip712Domain()` (ERC-5267) comes from `IERC5267`: fields `0x1f`, name "SCaaS UARegistry", version = the
-///         generation in decimal, salt = `chainUid`. `requireZetherAuthorized` joins this interface with the Zether
-///         kinds (UA-3).
+///         generation in decimal, salt = `chainUid`. The Zether kinds (UA-3) add `requireZetherAuthorized` and
+///         `keyOf`.
 interface IUARegistry is IERC5267 {
     struct Record {
         uint16 kind;
         uint40 registeredAt;
-        address keyPtr; // ≠ 0 only for stored kinds (UA-2c MuSig2/FROST, P6c PQ)
+        address keyPtr; // ≠ 0 only for stored kinds (UA-2c MuSig2/FROST, UA-3 Zether, P6c PQ)
     }
 
     event UARegistered(bytes32 indexed ua, uint16 indexed kind, bytes keyData, bytes32 authRef);
@@ -49,6 +49,8 @@ interface IUARegistry is IERC5267 {
     function kindOf(bytes32 ua) external view returns (uint16); // 0 = not registered (native ids too)
     function isRegistered(bytes32 ua) external view returns (bool);
     function keyOwner(bytes32 keyHash) external view returns (bytes32);
+    /// The stored key of a stored kind (MuSig2 `Q`, FROST `Y`, Zether `Y`: zether.md CTR-ZTH-50), empty otherwise.
+    function keyOf(bytes32 ua) external view returns (bytes memory);
 
     /// Reverts UAUnauthorized unless `auth` authorizes `digest` for `ua` under `purposeTag`.
     /// Native ids (ua >> 160 == 0): ECDSA low-s (EOA) or ERC-1271 (50 k cap; 400 k for SmartKeyAccount clones, by the
@@ -58,4 +60,11 @@ interface IUARegistry is IERC5267 {
     ///   msig: sig = abi.encode(MemberSig[]), MemberSig{uint16 index; bytes keyData; bytes sig}.
     /// ZETHER or unregistered: UAUnauthorized.
     function requireAuthorized(bytes32 ua, bytes32 purposeTag, bytes32 digest, bytes calldata auth) external view;
+
+    /// Reverts UAUnauthorized unless `auth` authorizes `digest` for the Zether UA `ua` (accounts.md §1.7 Z-auth).
+    /// `authRef == 0`: zkCovered ⇒ `auth` empty (the proof is the authorization); !zkCovered ⇒ a Zether Schnorr by `x`,
+    ///   `auth = abi.encode(bytes(""), sig)`, over uaMessage(kind, PURPOSE_ZETHER_OWNER, digest), `Y` from `keyPtr`.
+    /// `authRef ≠ 0`: requireAuthorized(authRef, zkCovered ? PURPOSE_ZETHER_AUTH : PURPOSE_ZETHER_OWNER, digest, auth).
+    /// Not a Zether UA, or unregistered: UAUnauthorized.
+    function requireZetherAuthorized(bytes32 ua, bytes32 digest, bytes calldata auth, bool zkCovered) external view;
 }

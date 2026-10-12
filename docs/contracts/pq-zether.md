@@ -58,7 +58,7 @@ module-lattice assumptions:
 | Balance encryption | lifted ElGamal on bn254 / BLS12-381 G1 | additive module-LWE, BFV-style scaling `Δ`, digit-packed plaintext ([encryption](#encryption)) |
 | Validity proofs | Σ-protocol + 2 Bulletproofs (`n_v = n_b = 64`) | one LNP22 lattice proof per op ([proof engine](#proof-engine)): key, encryption, decryption and integer-carry relations with exact norms |
 | Verification | Solidity + bn254/BLS precompiles | native precompile on chain 7622 (`0x…0F01`), same C core as the prover ([CTR-PQZ-09](#CTR-PQZ-09), [CTR-PQZ-10](#CTR-PQZ-10)) |
-| Authorization | 8 `AuthScheme`s in the built registry; the UA registry replaces them by `authRef` | UA `authRef` = `mldsa65` UA (default) or a PQ-dominant UA `msig` (hybrid, t-of-n), verified via precompile `0x…0F10` ([CTR-PQZ-12](#CTR-PQZ-12)) |
+| Authorization | 8 `AuthScheme`s in the legacy registry (`legacy/ua3/`); the UA registry replaces them by `authRef` | UA `authRef` = `mldsa65` UA (default) or a PQ-dominant UA `msig` (hybrid, t-of-n), verified via precompile `0x…0F10` ([CTR-PQZ-12](#CTR-PQZ-12)) |
 | Relaying | ERC-20 on the one base `ERC20MetaTx`: allowlisted self-calls through `mtxExecute`, outer fee `NONE`/`FIXED` from the public balance, `envelopeBinding` in the statement ([CTR-ZTH-34](zether.md#CTR-ZTH-34); built: `ZetherMetaTx` with `OP_ZTRANSFER`/`OP_ZBURN`) | the same base, self-call and rules ([CTR-PQZ-15](#CTR-PQZ-15), [CTR-PQZ-21](#CTR-PQZ-21)), plus the UA path's `UAMetaTransaction` so a PQ UA pays the outer fee |
 | Decryption | BSGS discrete log, device cache, `zether-read-balance` | direct rounding, microseconds, exact; no BSGS, no cache needed ([CTR-PQZ-16](#CTR-PQZ-16)) |
 | State | points in storage | ciphertext **hashes** in storage, bytes in calldata + events; public amounts (`pqzShield`, fees) as a public `plainPending` integer; public keys in SSTORE2 ([CTR-PQZ-07](#CTR-PQZ-07), [CTR-PQZ-06](#CTR-PQZ-06)) |
@@ -131,7 +131,7 @@ ML-DSA/Falcon verified on chain by precompile; interaction with existing Zether 
 
 **Why classical Zether cannot be patched.** ElGamal and Bulletproofs both rest on discrete log in G1; Shor breaks both,
 and breaks every ciphertext already recorded (*"no PQ path; a new protocol is required, not a new signature"*). The
-built registry's `PQ_COMMITMENT` auth scheme (#6) protects only future control of an account, never past amounts. A
+legacy registry's `PQ_COMMITMENT` auth scheme (#6) protects only future control of an account, never past amounts. A
 private chain lowers exposure (only participants see state) but does not remove it: any participant that archives the
 chain holds the ciphertexts. Hence a new protocol, deployed beside the classical one.
 
