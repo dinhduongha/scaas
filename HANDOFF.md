@@ -3,7 +3,7 @@
 ## Session 2026-10-12 (UA-2c merged) — resume here
 
 **State:** UA-2c merged into main (`c35f494`) and pushed; branch `ua2c-groups` kept, worktree `.claude/worktrees/ua2c`
-kept. Plan `docs/superpowers/plans/2026-10-12-ua2c-groups.md` (rulings C1–C19). Forge 1052 passed / 10 skipped on merged
+kept; then the UA client dirs rename merged (flat `clients/ua-<lang>`: `ua-rs`, `ua-cxx`, `ua-qt`, `ua-dart-frb`; branch `ua-dirs-rename` kept). Plan `docs/superpowers/plans/2026-10-12-ua2c-groups.md` (rulings C1–C19). Forge 1052 passed / 10 skipped on merged
 main; `--isolate` UAGas 6 / UARegistryGroups 14; prague verifiers 52 + 1 skipped; size gate 0 errors; `scaas-ua` with and
 without `signers` + clippy clean; node 13/13; docs and facts checks clean; binding crates build `--locked` again (Qt needs
 `QMAKE=~/usr/Qt/6.8.2/gcc_64/bin/qmake6`).
@@ -21,7 +21,7 @@ runs out at the key write after the PoP passed — never a record (`test_registe
 owner wants `UAPoP` only, map the SSTORE2 failure in `UARegistry`. FROST(secp256k1) repeated/cancelling `C_i0` is refused
 on chain but accepted by Rust/noble (fails closed; §1.6.1) — mirror deferred to UA F3. Follow-ups listed under UA-2c in TODO.
 
-**Next steps:** the UA client dirs rename (flat `clients/ua-<lang>`, one commit), then UA-3 (deployment, Zether kinds). P6b
+**Next steps:** UA-3 (deployment, Zether kinds). P6b
 can run beside.
 
 ## Session 2026-10-12 (UA-2c in progress, paused)
