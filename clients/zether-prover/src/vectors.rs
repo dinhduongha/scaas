@@ -9,7 +9,7 @@ use serde_json::{json, Value};
 
 use crate::api::{hx, prove_burn_json, prove_transfer_json, prove_transfer_multi_json};
 use crate::bulletproofs::Gens;
-use crate::curve::{decode_scalar, encode_point, encode_scalar, Bls12381, Bn254, Fr, ZCurve};
+use crate::curve::{decode_scalar, encode_point, encode_scalar, zether_kind, Bls12381, Bn254, Fr, ZCurve};
 use crate::elgamal::encrypt;
 use crate::keys::{derive_child_sk, derive_master_sk, seed_from_mnemonic, ZetherKey, USE_CONF, USE_DISCLOSURE};
 use crate::schnorr::{self, entry_ref, open_chaum_pedersen, open_sender, open_sender_cp, Entry, OpeningKind};
@@ -144,9 +144,10 @@ fn per_curve<C: ZCurve>(files: &mut Vec<(String, Value)>, transcripts: &mut Vec<
     transcripts.push(json!({"name": format!("burn_{}", C::NAME), "case": transcript_json::<C>(&t)}));
     files.push((format!("burn_{}.json", C::NAME), bv));
 
-    // Schnorr over the registry PoP message, fixed k.
-    let (registry, account) = ([0xaa_u8; 20], [0xbb_u8; 20]);
-    let msg = schnorr::pop_message::<C>(&registry, &from.y, &account);
+    // Schnorr over the UA registry's PoP message (CTR-UA-07, authRef 0), fixed k.
+    let (registry, uid) = ([0xaa_u8; 20], hex::decode(&CHAIN_UID[2..]).unwrap().try_into().unwrap());
+    let d = schnorr::pop_digest(CHAIN, &uid, &registry, &from.ua(), &[0u8; 32]);
+    let msg = schnorr::ua_message::<C>(&schnorr::purpose_tag("pop"), &d);
     let k = Fr::<C>::from(0xcafe_f00d_u64);
     let (r, e, z) = schnorr::sign_with_k::<C>(&from.x, &msg, &k);
     let mut sig = encode_point::<C>(&r);
@@ -234,13 +235,16 @@ fn r33_curve<C: ZCurve>() -> Value {
                 "x": hx(&encode_scalar::<C>(&k.x)), "Y": hx(&k.encoded_y()), "UA": hx(&k.ua()),
             });
             if key_use == USE_CONF {
-                let (registry, acct) = ([0xaa_u8; 20], [0xbb_u8; 20]);
-                let pop = schnorr::schnorr_pop(&k, &registry, &acct, &mut rng);
-                schnorr::verify_pop(&registry, &k.y, &acct, &pop).unwrap();
+                // the UA registry's PoP (CTR-UA-07), self (authRef 0), on the vectors' chain
+                let (registry, auth_ref) = ([0xaa_u8; 20], [0u8; 32]);
+                let uid: [u8; 32] = hex::decode(&CHAIN_UID[2..]).unwrap().try_into().unwrap();
+                let pop = schnorr::zether_pop(&k, CHAIN, &uid, &registry, &auth_ref, &mut rng);
+                schnorr::verify_pop(&k.y, CHAIN, &uid, &registry, &auth_ref, &pop).unwrap();
+                let d = schnorr::pop_digest(CHAIN, &uid, &registry, &k.ua(), &auth_ref);
                 v["pop"] = json!({
-                    "registry": hx(&registry), "account": hx(&acct),
-                    "c": hx(&schnorr::pop_message::<C>(&registry, &k.y, &acct)),
-                    "schnorrPop": hx(&pop), "popSignature": hx(&schnorr::pop_signature(&pop, &[])),
+                    "kind": zether_kind::<C>(), "chainId": CHAIN, "chainUid": CHAIN_UID, "registry": hx(&registry),
+                    "authRef": hx(&auth_ref), "popDigest": hx(&d),
+                    "uaMsg": hx(&schnorr::ua_message::<C>(&schnorr::purpose_tag("pop"), &d)), "pop": hx(&pop),
                 });
             }
             keys.push(v);

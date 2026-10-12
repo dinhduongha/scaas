@@ -8,6 +8,9 @@ import {IZetherVerifier} from "../../src/zether/IZetherVerifier.sol";
 import {ZetherTranscript as T} from "../../src/zether/ZetherTranscript.sol";
 import {ITransferDisclosure} from "../../src/zether/ITransferDisclosure.sol";
 import {ZetherDisclosure} from "../../src/zether/ZetherDisclosure.sol";
+import {IUARegistry} from "../../src/ua/IUARegistry.sol";
+import {UARegistry} from "../../src/ua/UARegistry.sol";
+import {ZetherSchnorrBn254Verifier, ZetherSchnorrBls12381Verifier} from "../../src/ua/verifiers/PairingVerifiers.sol";
 
 /// Token views `ZetherDisclosure` reads, etched at a vector's token address.
 contract S3Token {
@@ -136,12 +139,13 @@ contract ZetherS3VectorsTest is Test {
         assertEq(ben, j.readBytes32(".request.beneficiary"));
         _checkMemo(j, st);
         _checkMemo(vm.readFile(string.concat(DIR, "transfer_multi_bls12381.json")), "");
-        // entryRef (CTR-ZTH-36) = keccak(tag, chainId, chainUid, token, keccak(Y_f), sendCounter)
+        // entryRef (CTR-ZTH-36) = keccak(tag, chainId, chainUid, token, fromUA, sendCounter), fromUA tagged (CTR-UA-16)
         bytes memory yf = new bytes(64);
         for (uint256 i; i < 64; ++i) yf[i] = st[480 + i];
+        bytes32 fromUA = keccak256(abi.encodePacked(keccak256("scaas.ua.zether-bn254.v1"), yf));
         assertEq(
             keccak256(abi.encode(keccak256("SCAAS-ZETHER-ENTRY-V1"), j.readUint(".request.chainId"),
-                j.readBytes32(".request.chainUid"), j.readAddress(".request.token"), keccak256(yf), sc)),
+                j.readBytes32(".request.chainUid"), j.readAddress(".request.token"), fromUA, sc)),
             j.readBytes32(".entryRef")
         );
     }
@@ -243,6 +247,35 @@ contract ZetherS3VectorsTest is Test {
             uint256 e = T.hashToScalar(keccak256(abi.encodePacked("SCAAS-ZETHER-SCHNORR-V1", r, y, j.readBytes32(".msg"))), vs[i].groupOrder());
             assertEq(e, j.readUint(".e"));
             assertEq(vs[i].g1MulBase(j.readUint(".z")), vs[i].g1Add(r, vs[i].g1Mul(y, e)));
+        }
+    }
+
+    /// The prover's registration PoP (`r33_keys.json`, CTR-UA-07: chain 31337, the vectors' `chainUid`, registry
+    /// `0xaa…aa`, `authRef` 0) registers on a real UA registry at that address: one PoP for the prover, clientkeys
+    /// (`test/zether.test.js` reads the same file) and the registry. A flipped bit is `UAPoP`.
+    function test_s3PopRegisters() public {
+        string memory j = vm.readFile(string.concat(DIR, "r33_keys.json"));
+        address at = j.readAddress(".bn254.keys[0].pop.registry");
+        UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](2);
+        k[0] = UARegistry.KindConfig(0x0140, address(new ZetherSchnorrBn254Verifier()), 50_000);
+        k[1] = UARegistry.KindConfig(0x0141, address(new ZetherSchnorrBls12381Verifier()), 70_000);
+        bytes32 uid = j.readBytes32(".bn254.keys[0].pop.chainUid");
+        deployCodeTo("UARegistry.sol:UARegistry", abi.encode(uid, address(0), false, uint64(12_000_000), address(0), false, k), at);
+        IUARegistry reg = IUARegistry(at);
+        string[2] memory curves = [".bn254", ".bls12381"];
+        for (uint256 i; i < 2; ++i) {
+            string memory key = string.concat(curves[i], ".keys[0]");
+            uint16 kind = uint16(j.readUint(string.concat(key, ".pop.kind")));
+            bytes memory y = j.readBytes(string.concat(key, ".Y"));
+            bytes32 ua = j.readBytes32(string.concat(key, ".UA"));
+            assertEq(j.readUint(string.concat(key, ".pop.chainId")), block.chainid);
+            assertEq(reg.uaOf(kind, y), ua);
+            assertEq(reg.popDigest(ua, 0), j.readBytes32(string.concat(key, ".pop.popDigest")));
+            bytes memory pop = j.readBytes(string.concat(key, ".pop.pop"));
+            vm.expectRevert(IUARegistry.UAPoP.selector);
+            reg.register(kind, y, _flip(pop, pop.length - 1), 0, "");
+            assertEq(reg.register(kind, y, pop, 0, ""), ua);
+            assertEq(reg.keyOf(ua), y);
         }
     }
 }

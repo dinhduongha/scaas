@@ -1,10 +1,14 @@
-//! Schnorr (zether-design §11.1), registry PoP (§11.2, R33) and transfer disclosure (§12).
+//! Schnorr (zether-design §11.1), the UA registry's PoP and owner authorization of a Zether UA (accounts.md CTR-UA-07,
+//! §1.7 Z-auth) and transfer disclosure (§12).
 
 use ark_ff::Zero;
 use rand_core::{CryptoRng, RngCore};
 
 use crate::abi::{self, Tok};
-use crate::curve::{decode_point, decode_scalar, encode_point, encode_scalar, generator, keccak256, point_len, Fr, ZCurve, G};
+use crate::curve::{
+    decode_point, decode_scalar, encode_point, encode_scalar, generator, keccak256, point_len, ua_of, zether_tag, Fr,
+    ZCurve, G,
+};
 use crate::keys::ZetherKey;
 use crate::nonce::Nonces;
 use crate::transcript::hash_to_scalar;
@@ -55,33 +59,56 @@ pub fn verify<C: ZCurve>(y: &G<C>, msg: &[u8; 32], sig: &[u8]) -> Result<(), ZEr
     Ok(())
 }
 
-/// `c = keccak256(abi.encodePacked(registry, encodedY, account))` (SRS §7.5; R33 `account` =
-/// the subject account that calls `register`).
-pub fn pop_message<C: ZCurve>(registry: &[u8; 20], y: &G<C>, account: &[u8; 20]) -> [u8; 32] {
-    let mut b = registry.to_vec();
-    b.extend(encode_point::<C>(y));
-    b.extend_from_slice(account);
-    keccak256(&b)
+/// `purposeTag = keccak256("scaas.ua.purpose.<p>.v1")` (accounts.md CTR-UA-10): `pop`, `zether-owner`, …
+pub fn purpose_tag(purpose: &str) -> [u8; 32] {
+    keccak256(format!("scaas.ua.purpose.{purpose}.v1").as_bytes())
 }
 
-/// `schnorrPop` = Schnorr by `x` over `c`.
-pub fn schnorr_pop<C: ZCurve, R: RngCore + CryptoRng>(
+/// `ua_msg = keccak256(MSG_TAG ‖ TAG(kind) ‖ purposeTag ‖ digest)` of this curve's Zether kind (CTR-UA-12) — what the
+/// Zether key signs; the registry's `uaMessage(kind, purposeTag, digest)`.
+pub fn ua_message<C: ZCurve>(purpose: &[u8; 32], digest: &[u8; 32]) -> [u8; 32] {
+    keccak256(&[keccak256(b"scaas.ua.msg.v1"), zether_tag::<C>(), *purpose, *digest].concat())
+}
+
+/// `pop_digest = keccak256(abi.encode(POP_TAG, keccak256("evm:" ‖ decimal(chainId)), chainUid, registry, ua, authRef))`
+/// (CTR-UA-07) — the registry's `popDigest(ua, authRef)`; `authRef` 0 = self.
+pub fn pop_digest(chain_id: u64, chain_uid: &[u8; 32], registry: &[u8; 20], ua: &[u8; 32], auth_ref: &[u8; 32]) -> [u8; 32] {
+    let chain_key = keccak256(format!("evm:{chain_id}").as_bytes());
+    keccak256(&[purpose_tag("pop"), chain_key, *chain_uid, abi::addr(registry), *ua, *auth_ref].concat())
+}
+
+/// The `pop` of `register(kind, Y, pop, authRef, authPop)`: Schnorr by `x` under the Zether tag over
+/// `ua_message(POP, pop_digest(…, UA(Y), authRef))`. A non-zero `authRef` also needs its own co-sign (`authPop`,
+/// purpose `authref`), made by the authority's signer.
+pub fn zether_pop<C: ZCurve, R: RngCore + CryptoRng>(
     key: &ZetherKey<C>,
+    chain_id: u64,
+    chain_uid: &[u8; 32],
     registry: &[u8; 20],
-    account: &[u8; 20],
+    auth_ref: &[u8; 32],
     rng: &mut R,
 ) -> Vec<u8> {
-    sign(key, &pop_message::<C>(registry, &key.y, account), rng)
+    let d = pop_digest(chain_id, chain_uid, registry, &key.ua(), auth_ref);
+    sign(key, &ua_message::<C>(&purpose_tag("pop"), &d), rng)
 }
 
-/// `popSignature = abi.encode(bytes schnorrPop, bytes authPop)`; `authPop` is empty for
-/// `SELF_SCHNORR`/`PQ_COMMITMENT`, otherwise produced by the authorising key's own signer.
-pub fn pop_signature(schnorr_pop: &[u8], auth_pop: &[u8]) -> Vec<u8> {
-    abi::encode(&[Tok::Bytes(schnorr_pop.to_vec()), Tok::Bytes(auth_pop.to_vec())])
+pub fn verify_pop<C: ZCurve>(
+    y: &G<C>,
+    chain_id: u64,
+    chain_uid: &[u8; 32],
+    registry: &[u8; 20],
+    auth_ref: &[u8; 32],
+    pop: &[u8],
+) -> Result<(), ZError> {
+    let d = pop_digest(chain_id, chain_uid, registry, &ua_of::<C>(y), auth_ref);
+    verify(y, &ua_message::<C>(&purpose_tag("pop"), &d), pop)
 }
 
-pub fn verify_pop<C: ZCurve>(registry: &[u8; 20], y: &G<C>, account: &[u8; 20], schnorr_pop: &[u8]) -> Result<(), ZError> {
-    verify(y, &pop_message::<C>(registry, y, account), schnorr_pop)
+/// The `sig` of a self account's owner op (`zetherRollOverSigned`, `zetherSetRollOverMode`; `authRef = 0`):
+/// `abi.encode(bytes(""), Schnorr by x over ua_message(zether-owner, digest))` — the registry reads `Y` from its record.
+pub fn owner_auth<C: ZCurve, R: RngCore + CryptoRng>(key: &ZetherKey<C>, digest: &[u8; 32], rng: &mut R) -> Vec<u8> {
+    let sig = sign(key, &ua_message::<C>(&purpose_tag("zether-owner"), digest), rng);
+    abi::encode(&[Tok::Bytes(vec![]), Tok::Bytes(sig)])
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -296,13 +323,22 @@ mod tests {
         *bad.last_mut().unwrap() ^= 1;
         assert!(verify(&k1.y, &msg, &bad).is_err());
 
-        // PoP is bound to registry, key and account.
-        let (reg, acct) = ([0xaa; 20], [0xbb; 20]);
-        let pop = schnorr_pop(&k1, &reg, &acct, &mut rng);
-        verify_pop(&reg, &k1.y, &acct, &pop).unwrap();
-        assert!(verify_pop(&reg, &k1.y, &[0xbc; 20], &pop).is_err());
-        assert!(verify_pop(&[0xab; 20], &k1.y, &acct, &pop).is_err());
-        assert!(verify_pop(&reg, &k2.y, &acct, &pop).is_err());
+        // PoP is bound to chain, chainUid, registry, key and authRef (CTR-UA-07), never to the caller.
+        let (uid, reg, auth) = ([0x24; 32], [0xaa; 20], [0u8; 32]);
+        let pop = zether_pop(&k1, 31337, &uid, &reg, &auth, &mut rng);
+        verify_pop(&k1.y, 31337, &uid, &reg, &auth, &pop).unwrap();
+        assert!(verify_pop(&k1.y, 1337, &uid, &reg, &auth, &pop).is_err());
+        assert!(verify_pop(&k1.y, 31337, &[0x25; 32], &reg, &auth, &pop).is_err());
+        assert!(verify_pop(&k1.y, 31337, &uid, &[0xab; 20], &auth, &pop).is_err());
+        assert!(verify_pop(&k1.y, 31337, &uid, &reg, &[0x01; 32], &pop).is_err());
+        assert!(verify_pop(&k2.y, 31337, &uid, &reg, &auth, &pop).is_err());
+        // the owner op signs zether-owner: not a PoP, not the raw digest
+        let d = keccak256(b"rollover");
+        let auth_blob = owner_auth(&k1, &d, &mut rng);
+        let sig = &auth_blob[auth_blob.len() - (point_len::<C>() + 32)..]; // the second `bytes`, a multiple of 32 long
+        assert_eq!(auth_blob.len(), 32 * 4 + sig.len(), "abi.encode(bytes(\"\"), sig)");
+        verify(&k1.y, &ua_message::<C>(&purpose_tag("zether-owner"), &d), sig).unwrap();
+        assert!(verify(&k1.y, &d, sig).is_err());
 
         // Nonce reuse leaks x: (z1 - z2)/(e1 - e2) — the reason nonces are hedged.
         let k = Fr::<C>::from(12345u64);
