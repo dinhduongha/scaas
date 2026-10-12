@@ -151,3 +151,19 @@ jobs:
         run: pip install -r requirements.txt
       - name: vectors
         run: python -m unittest -v tests.test_vectors
+
+  ua-go:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: clients/ua-go
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache-dependency-path: clients/ua-go/go.sum
+      - name: vet
+        run: go vet ./...
+      - name: vectors
+        run: go test ./...
