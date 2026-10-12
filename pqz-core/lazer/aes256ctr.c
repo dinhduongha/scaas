@@ -207,7 +207,8 @@ _aes256ctr_stream (aes256ctr_state_t state, uint8_t *out, size_t outlen)
 {
   size_t len = MIN (outlen, state->nbytes);
 
-  memcpy (out, state->cache_ptr, len);
+  if (len > 0)
+    memcpy (out, state->cache_ptr, len);
   state->cache_ptr += len;
   state->nbytes -= len;
   out += len;

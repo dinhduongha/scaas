@@ -141,6 +141,10 @@ if nprime > 0 and Bprime > 0:
     alpha4 = Bprime
 elif nprime != 0 or Bprime != 0:  # either both > 0, or both == 0
     err("Invalid approximate proof params")
+else:
+    # PQZ: LaZer 3330e48's tbox lays out m with both the y3 and y4 blocks (lnp-tbox.c places beta at
+    # l + 2 * 256/d) while its asserts and tbeta use only the blocks present; nprime = 0 fails to verify.
+    err("nprime = 0 is not supported by the tbox at 3330e48; use a (small) approximate l_inf proof")
 
 # number of repetitions for boosting soundness, we assume lambda is even
 lmbda = 2 * ceil(KAPPA/(2*log2q1_))

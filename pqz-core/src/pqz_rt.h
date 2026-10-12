@@ -15,12 +15,21 @@
 #define PQZ_ERR_INPUT 3    /* malformed input (decoder) */
 #define PQZ_ERR_REJECT 4   /* rejection-sampling loop hit its cap */
 
+#define PQZ_REJ_MAX 1000 /* expected tries ~6 (R_REG) / ~9 (R_TX); 1000 fail with prob < 2^-140 */
+
 extern int pqz_err;
+extern const char *pqz_err_file; /* where the first error of the call was raised (diagnostics) */
+extern int pqz_err_line;
+#define pqz_err_set(e) pqz_err_set_at ((e), __FILE__, __LINE__)
 static inline void
-pqz_err_set (int e)
+pqz_err_set_at (int e, const char *file, int line)
 {
   if (pqz_err == PQZ_OK)
-    pqz_err = e;
+    {
+      pqz_err = e;
+      pqz_err_file = file;
+      pqz_err_line = line;
+    }
 }
 
 /* ---- arena ---- */
@@ -30,6 +39,12 @@ void *pqz_arena_realloc (void *p, size_t olen, size_t nlen);
 void pqz_arena_free (void *p, size_t len);
 size_t pqz_arena_peak (void);
 size_t pqz_arena_used (void);
+typedef struct
+{
+  size_t top, last;
+} pqz_arena_mark_t;
+void pqz_arena_mark (pqz_arena_mark_t *m);
+void pqz_arena_release (const pqz_arena_mark_t *m);
 
 /* ---- freestanding libc subset ---- */
 #ifdef PQZ_FREESTANDING

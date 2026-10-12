@@ -75,8 +75,8 @@ gaussian155 (rng_state_t state, uint64_t u, unsigned int s)
       k = ((-b) & (2 * k0)) - k0 + b; /* bimodal: b ? k0 + 1 : -k0 (upstream's formula) */
 
       /* x = ((k - c)^2 - (k - b)^2) / (2 * 1.55^2) = (b - c)(2k - b - c) / (2 * 1.55^2), in Q56 */
-      int64_t f1 = (b << s) - (int64_t)u;               /* (b - c) * 2^s */
-      int64_t f2 = ((2 * k - b) << s) - (int64_t)u;     /* (2k - b - c) * 2^s */
+      int64_t f1 = b * ((int64_t)1 << s) - (int64_t)u;           /* (b - c) * 2^s */
+      int64_t f2 = (2 * k - b) * ((int64_t)1 << s) - (int64_t)u; /* (2k - b - c) * 2^s */
       f1 *= (int64_t)1 << (56 - s);
       f2 *= (int64_t)1 << (56 - s);                     /* |f2| < 44 * 2^56 */
       pqz_fx_i128 x56 = ((pqz_fx_i128)f1 * f2) >> 56;  /* >= 0 */

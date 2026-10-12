@@ -3,6 +3,7 @@
  * lazer.h is assembled by build.sh from lazer/lazer-in1.h, lazer/config.h and lazer/lazer-in2.h,
  * as upstream's Makefile does.
  */
+#include "abdlop.c"
 #include "brandom.c"
 #include "coder.c"
 #include "dcompress.c"

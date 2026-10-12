@@ -113,9 +113,9 @@ static const int_srcptr pqz_reg_l2Bsq[] = {pqz_reg_l2Bsq0, pqz_reg_l2Bsq1};
 static const int_srcptr pqz_reg_Ppmodq[] = {pqz_reg_Ppmodq_0, pqz_reg_Ppmodq_1};
 static const polyring_t pqz_reg_ring = {{pqz_reg_q, 64, 42, 6, moduli_d64, 2, pqz_reg_Pmodq, pqz_reg_Ppmodq, pqz_reg_inv2}};
 static const dcompress_params_t pqz_reg_dcomp = {{ pqz_reg_q, pqz_reg_qminus1, pqz_reg_m, pqz_reg_mby2, pqz_reg_gamma, pqz_reg_gammaby2, pqz_reg_pow2D, pqz_reg_pow2Dby2, 9, 1, 25 }};
-static const abdlop_params_t pqz_reg_tbox = {{ pqz_reg_ring, pqz_reg_dcomp, 66, 63, 0, 12, 22, pqz_reg_Bsq, 1, 8, 5, 140, 1, 18, pqz_reg_scM1, pqz_reg_stdev1sq, 2, 12, pqz_reg_scM2, pqz_reg_stdev2sq}};
-static const abdlop_params_t pqz_reg_quad_eval_ = {{ pqz_reg_ring, pqz_reg_dcomp, 66, 63, 9, 3, 22, pqz_reg_Bsq, 1, 8, 5, 140, 1, 18, pqz_reg_scM1, pqz_reg_stdev1sq, 2, 12, pqz_reg_scM2, pqz_reg_stdev2sq}};
-static const abdlop_params_t pqz_reg_quad_many_ = {{ pqz_reg_ring, pqz_reg_dcomp, 66, 63, 11, 1, 22, pqz_reg_Bsq, 1, 8, 5, 140, 1, 18, pqz_reg_scM1, pqz_reg_stdev1sq, 2, 12, pqz_reg_scM2, pqz_reg_stdev2sq}};
+static const abdlop_params_t pqz_reg_tbox = {{ pqz_reg_ring, pqz_reg_dcomp, 66, 63, 0, 8, 22, pqz_reg_Bsq, 1, 8, 5, 140, 1, 18, pqz_reg_scM1, pqz_reg_stdev1sq, 2, 12, pqz_reg_scM2, pqz_reg_stdev2sq}};
+static const abdlop_params_t pqz_reg_quad_eval_ = {{ pqz_reg_ring, pqz_reg_dcomp, 66, 63, 5, 3, 22, pqz_reg_Bsq, 1, 8, 5, 140, 1, 18, pqz_reg_scM1, pqz_reg_stdev1sq, 2, 12, pqz_reg_scM2, pqz_reg_stdev2sq}};
+static const abdlop_params_t pqz_reg_quad_many_ = {{ pqz_reg_ring, pqz_reg_dcomp, 66, 63, 7, 1, 22, pqz_reg_Bsq, 1, 8, 5, 140, 1, 18, pqz_reg_scM1, pqz_reg_stdev1sq, 2, 12, pqz_reg_scM2, pqz_reg_stdev2sq}};
 static const lnp_quad_eval_params_t pqz_reg_quad_eval = {{ pqz_reg_quad_eval_, pqz_reg_quad_many_, 4}};
 static const lnp_tbox_params_t pqz_reg = {{ pqz_reg_tbox, pqz_reg_quad_eval, 0, pqz_reg_n, 0, 2, 66, 2, 13, pqz_reg_scM3, pqz_reg_stdev3sq, 2, 6, pqz_reg_scM4, pqz_reg_stdev4sq, pqz_reg_Bz3sqr, pqz_reg_Bz4, &pqz_reg_l2Bsq[0], pqz_reg_inv4, 27012UL }};
 

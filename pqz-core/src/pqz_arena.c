@@ -19,6 +19,8 @@ static size_t cap, top, peak, last = SIZE_MAX; /* last: offset of the top block,
 static _Alignas (16) uint8_t sink[PQZ_SINK];
 
 int pqz_err;
+const char *pqz_err_file;
+int pqz_err_line;
 
 void
 pqz_arena_init (void *mem, size_t len)
@@ -76,8 +78,10 @@ void
 pqz_arena_free (void *p, size_t len)
 {
   (void)len;
+  if (p == NULL || (uint8_t *)p == sink)
+    return;
   uint8_t *h = (uint8_t *)p - HDR;
-  if ((uint8_t *)p == sink || h < base || h >= base + top)
+  if (h < base || h >= base + top)
     return;
   ((uint64_t *)h)[1] = 1;
   pop ();
@@ -91,4 +95,19 @@ pqz_arena_realloc (void *p, size_t olen, size_t nlen)
     memcpy (n, p, olen < nlen ? olen : nlen);
   pqz_arena_free (p, olen);
   return n;
+}
+
+/* mark / release: everything allocated after the mark is dropped (long-lived caches sit below it) */
+void
+pqz_arena_mark (pqz_arena_mark_t *m)
+{
+  m->top = top;
+  m->last = last;
+}
+
+void
+pqz_arena_release (const pqz_arena_mark_t *m)
+{
+  top = m->top;
+  last = m->last;
 }

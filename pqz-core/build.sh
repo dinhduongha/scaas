@@ -18,7 +18,7 @@ lazer_h() {
     echo "#define moduli_d128 ((const modulus_srcptr *)0)"; } > $B/include/lazer.h
 }
 
-LIBSRC="src/pqz_lazer.c src/pqz_ntt.c src/pqz_arena.c"
+LIBSRC="src/pqz_lazer.c src/pqz_ntt.c src/pqz_arena.c src/pqz_rel.c"
 
 native() {
   lazer_h
@@ -30,8 +30,11 @@ native() {
     objs="$objs $o"
   done
   ar rcs $B/native/libpqz.a $objs
-  $CC -shared -nostdlib -Wl,--gc-sections -o $B/native/libpqz.so $objs -lgcc 2>/dev/null \
-    || $CC -shared -Wl,--gc-sections -o $B/native/libpqz.so $objs
+  $CC -shared -Wl,--gc-sections -o $B/native/libpqz.so $objs
+  # tests and bench (hosted programs; the library objects stay libc-free)
+  $CC -std=gnu11 -O2 $WARN -Isrc -o $B/native/pqz_bench test/pqz_bench.c $B/native/libpqz.a
+  $CC -std=gnu11 -O2 -DPQZ_BACKEND -DBUILD_FLAGS='"pqz-core native"' -I$B/include -Isrc -Ilazer -Iparams \
+    -o $B/native/kat_dump kat/lazer_dump.c $B/native/libpqz.a
 }
 
 case "${1:-native}" in

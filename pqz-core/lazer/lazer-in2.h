@@ -381,6 +381,8 @@ typedef struct
   uint8_t *out;
   unsigned int byte_off;
   unsigned int bit_off;
+  size_t in_len; /* PQZ: bounded decoding (coder_dec_begin_len) */
+  int err;
 } coder_state_struct;
 typedef coder_state_struct coder_state_t[1];
 typedef coder_state_struct *coder_state_ptr;
@@ -1334,6 +1336,7 @@ void lin_toisoring (polymat_t r1, polyvec_t r0, polymat_t r1prime,
   coder_state_t __name__ = { { NULL, NULL, 0, 0 } }
 void coder_enc_begin (coder_state_t state, uint8_t *out);
 void coder_dec_begin (coder_state_t state, const uint8_t *in);
+void coder_dec_begin_len (coder_state_t state, const uint8_t *in, size_t len);
 void coder_enc_end (coder_state_t state);
 int coder_dec_end (coder_state_t state);
 unsigned int coder_get_offset (coder_state_t state);

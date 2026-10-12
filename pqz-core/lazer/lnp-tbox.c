@@ -260,7 +260,7 @@ lnp_tbox_prove (uint8_t hash[32], polyvec_t tB, polyvec_t h, poly_t c,
 #if ASSERT == ASSERT_ENABLED
   for (i = 0; i < N; i++)
     {
-      ASSERT_ERR (i >= N || spolymat_is_upperdiag (R2[i]));
+      ASSERT_ERR (i >= N || R2[i] == NULL || spolymat_is_upperdiag (R2[i])); /* PQZ: NULL = linear eq */
       ASSERT_ERR (R2[i] == NULL
                   || spolymat_get_nrows (R2[i]) == 2 * (m1 + Z + quad->l));
       ASSERT_ERR (R2[i] == NULL
@@ -270,7 +270,7 @@ lnp_tbox_prove (uint8_t hash[32], polyvec_t tB, polyvec_t h, poly_t c,
     }
   for (i = 0; i < M; i++)
     {
-      ASSERT_ERR (spolymat_is_upperdiag (R2prime[i]));
+      ASSERT_ERR (R2prime[i] == NULL || spolymat_is_upperdiag (R2prime[i])); /* PQZ: NULL = linear eq */
       ASSERT_ERR (R2prime[i] == NULL
                   || spolymat_get_nrows (R2prime[i])
                          == 2 * (m1 + Z + quad_eval->l));
@@ -913,7 +913,7 @@ lnp_tbox_verify (uint8_t hash[32], polyvec_t h, poly_t c, polyvec_t z1,
 #if ASSERT == ASSERT_ENABLED
   for (i = 0; i < N; i++)
     {
-      ASSERT_ERR (i >= N || spolymat_is_upperdiag (R2[i]));
+      ASSERT_ERR (i >= N || R2[i] == NULL || spolymat_is_upperdiag (R2[i])); /* PQZ: NULL = linear eq */
       ASSERT_ERR (R2[i] == NULL
                   || spolymat_get_nrows (R2[i]) == 2 * (m1 + Z + quad->l));
       ASSERT_ERR (R2[i] == NULL
@@ -923,7 +923,7 @@ lnp_tbox_verify (uint8_t hash[32], polyvec_t h, poly_t c, polyvec_t z1,
     }
   for (i = 0; i < M; i++)
     {
-      ASSERT_ERR (spolymat_is_upperdiag (R2prime[i]));
+      ASSERT_ERR (R2prime[i] == NULL || spolymat_is_upperdiag (R2prime[i])); /* PQZ: NULL = linear eq */
       ASSERT_ERR (R2prime[i] == NULL
                   || spolymat_get_nrows (R2prime[i])
                          == 2 * (m1 + Z + quad_eval->l));
@@ -1590,8 +1590,14 @@ _lnp_tbox_compute_z34 (uint8_t hash[32], polyvec_t tB, polyvec_t z3,
   rng_init (rstate_rej, seed_tbox, dom++);
   rng_init (rstate_signs, seed_tbox, dom++);
 
-  while (1)
+  /* PQZ: capped rejection loop (pq-zether.md CTR-PQZ-10: bounded loops; hitting the cap is an error) */
+  for (unsigned int pqz_tries = 0;; pqz_tries++)
     {
+      if (pqz_tries >= PQZ_REJ_MAX)
+        {
+          pqz_err_set (PQZ_ERR_REJECT);
+          break;
+        }
       /* sample signs */
       if (nrbits == 0)
         {

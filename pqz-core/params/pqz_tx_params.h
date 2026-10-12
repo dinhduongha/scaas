@@ -123,9 +123,9 @@ static const int_srcptr pqz_tx_l2Bsq[] = {pqz_tx_l2Bsq0, pqz_tx_l2Bsq1, pqz_tx_l
 static const int_srcptr pqz_tx_Ppmodq[] = {pqz_tx_Ppmodq_0, pqz_tx_Ppmodq_1};
 static const polyring_t pqz_tx_ring = {{pqz_tx_q, 64, 42, 6, moduli_d64, 2, pqz_tx_Pmodq, pqz_tx_Ppmodq, pqz_tx_inv2}};
 static const dcompress_params_t pqz_tx_dcomp = {{ pqz_tx_q, pqz_tx_qminus1, pqz_tx_m, pqz_tx_mby2, pqz_tx_gamma, pqz_tx_gammaby2, pqz_tx_pow2D, pqz_tx_pow2Dby2, 11, 0, 23 }};
-static const abdlop_params_t pqz_tx_tbox = {{ pqz_tx_ring, pqz_tx_dcomp, 153, 64, 0, 12, 23, pqz_tx_Bsq, 1, 8, 5, 140, 1, 18, pqz_tx_scM1, pqz_tx_stdev1sq, 2, 12, pqz_tx_scM2, pqz_tx_stdev2sq}};
-static const abdlop_params_t pqz_tx_quad_eval_ = {{ pqz_tx_ring, pqz_tx_dcomp, 153, 64, 9, 3, 23, pqz_tx_Bsq, 1, 8, 5, 140, 1, 18, pqz_tx_scM1, pqz_tx_stdev1sq, 2, 12, pqz_tx_scM2, pqz_tx_stdev2sq}};
-static const abdlop_params_t pqz_tx_quad_many_ = {{ pqz_tx_ring, pqz_tx_dcomp, 153, 64, 11, 1, 23, pqz_tx_Bsq, 1, 8, 5, 140, 1, 18, pqz_tx_scM1, pqz_tx_stdev1sq, 2, 12, pqz_tx_scM2, pqz_tx_stdev2sq}};
+static const abdlop_params_t pqz_tx_tbox = {{ pqz_tx_ring, pqz_tx_dcomp, 153, 64, 0, 8, 23, pqz_tx_Bsq, 1, 8, 5, 140, 1, 18, pqz_tx_scM1, pqz_tx_stdev1sq, 2, 12, pqz_tx_scM2, pqz_tx_stdev2sq}};
+static const abdlop_params_t pqz_tx_quad_eval_ = {{ pqz_tx_ring, pqz_tx_dcomp, 153, 64, 5, 3, 23, pqz_tx_Bsq, 1, 8, 5, 140, 1, 18, pqz_tx_scM1, pqz_tx_stdev1sq, 2, 12, pqz_tx_scM2, pqz_tx_stdev2sq}};
+static const abdlop_params_t pqz_tx_quad_many_ = {{ pqz_tx_ring, pqz_tx_dcomp, 153, 64, 7, 1, 23, pqz_tx_Bsq, 1, 8, 5, 140, 1, 18, pqz_tx_scM1, pqz_tx_stdev1sq, 2, 12, pqz_tx_scM2, pqz_tx_stdev2sq}};
 static const lnp_quad_eval_params_t pqz_tx_quad_eval = {{ pqz_tx_quad_eval_, pqz_tx_quad_many_, 4}};
 static const lnp_tbox_params_t pqz_tx = {{ pqz_tx_tbox, pqz_tx_quad_eval, 15, pqz_tx_n, 0, 7, 153, 2, 14, pqz_tx_scM3, pqz_tx_stdev3sq, 2, 6, pqz_tx_scM4, pqz_tx_stdev4sq, pqz_tx_Bz3sqr, pqz_tx_Bz4, &pqz_tx_l2Bsq[0], pqz_tx_inv4, 42270UL }};
 

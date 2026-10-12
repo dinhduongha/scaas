@@ -16,5 +16,7 @@ nbin = 0
 n = [32, 32]
 B = [36, 164]
 
-nprime = 0
-Bprime = 0
+# LaZer's tbox needs nprime > 0 (see codegen): a one-poly approximate l_inf proof as filler
+# (s[0], coefficients in [-1, 1]).
+nprime = 1
+Bprime = 1

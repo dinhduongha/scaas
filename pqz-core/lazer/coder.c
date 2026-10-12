@@ -1,6 +1,13 @@
 #include "lazer.h"
 
 static inline void _inc_idx (unsigned int *byte, unsigned int *bit);
+
+/* PQZ: bounded reads for decoding untrusted proofs. Upstream's unary decoders read until they find a
+   terminating bit, past the end of the buffer on malformed input. Reads at or beyond in_len return 0 and
+   set err; coder_dec_end then fails. coder_dec_begin keeps upstream's unbounded behaviour. */
+#define RDB(n)                                                                \
+  ((size_t)state->byte_off + (n) < state->in_len ? _byte[n]                    \
+                                                 : (state->err = 1, (uint8_t)0))
 static inline void _inc_idx_zero (uint8_t *buf, unsigned int *byte,
                                   unsigned int *bit);
 static unsigned int _uencode (uint8_t **byte, unsigned int *bit,
@@ -26,6 +33,16 @@ coder_dec_begin (coder_state_t state, const uint8_t *in)
   state->in = in;
   state->byte_off = 0;
   state->bit_off = 0;
+  state->in_len = (size_t)-1;
+  state->err = 0;
+}
+
+/* PQZ: decoding with a known input length */
+void
+coder_dec_begin_len (coder_state_t state, const uint8_t *in, size_t len)
+{
+  coder_dec_begin (state, in);
+  state->in_len = len;
 }
 
 unsigned int
@@ -132,9 +149,9 @@ coder_dec_ghint (coder_state_t state, intvec_t ghint)
   {
     elem = intvec_get_elem (ghint, i);
 
-    bit0 = !!(_byte[nbytes] & (1 << _bit));
+    bit0 = !!(RDB (nbytes) & (1 << _bit));
     _inc_idx (&nbytes, &_bit);
-    bit1 = !!(_byte[nbytes] & (1 << _bit));
+    bit1 = !!(RDB (nbytes) & (1 << _bit));
     _inc_idx (&nbytes, &_bit);
 
     if (bit0 == 0 && bit1 == 0)
@@ -152,7 +169,7 @@ coder_dec_ghint (coder_state_t state, intvec_t ghint)
     else
       {
         j = 0;
-        while (!(_byte[nbytes] & (1 << _bit)))
+        while (!(RDB (nbytes) & (1 << _bit)) && !state->err)
           {
             j++;
             _inc_idx (&nbytes, &_bit);
@@ -299,7 +316,7 @@ coder_dec_grandom (coder_state_t state, intvec_t v, unsigned int log2o)
   {
     /* z1: unitary encoding */
 
-    for (nones = 0; (_byte[nbytes] & (1 << _bit)) > 0; nones++)
+    for (nones = 0; (RDB (nbytes) & (1 << _bit)) > 0; nones++)
       _inc_idx (&nbytes, &_bit);
     _inc_idx (&nbytes, &_bit); /* final zero */
 
@@ -309,7 +326,7 @@ coder_dec_grandom (coder_state_t state, intvec_t v, unsigned int log2o)
     z0 = 0;
     for (j = 0; j < log2ao; j++)
       {
-        z0 |= ((((long)_byte[nbytes] & ((long)1 << _bit)) >> _bit) << j);
+        z0 |= ((((long)RDB (nbytes) & ((long)1 << _bit)) >> _bit) << j);
 
         _inc_idx (&nbytes, &_bit);
       }
@@ -372,6 +389,12 @@ coder_dec_urandom (coder_state_t state, intvec_t v, const int_t m,
   ASSERT_ERR (state->out == NULL);
   ASSERT_ERR (state->in != NULL);
 
+  /* PQZ: the fixed-width decoder reads nelems * mbits bits; refuse if they are not all there */
+  if ((size_t)state->byte_off + (state->bit_off + (size_t)v->nelems * mbits + 7) / 8 > state->in_len)
+    {
+      state->err = 1;
+      return 1;
+    }
   nbits = _udecode (v, &(state->in), &(state->bit_off), m, mbits);
   state->byte_off += (nbits >> 3);
   return nbits == 0 ? 1 : 0;
@@ -393,7 +416,7 @@ coder_dec_end (coder_state_t state)
   _bit = state->bit_off;
 
   /* check final one and possibly trailing zeros */
-  if ((_byte[0] & ((uint8_t)(~0) << _bit)) == ((uint8_t)1 << _bit))
+  if (!state->err && (RDB (0) & ((uint8_t)(~0) << _bit)) == ((uint8_t)1 << _bit))
     {
       succ = 1;
       state->bit_off = 0;
@@ -778,7 +801,7 @@ coder_dec_urandom5 (coder_state_t state, spolymat_t v, const int_t m,
   ptr = (uint8_t *)&header;
   for (i = 0; i < 16; i++)
     {
-      if (_byte[nbytes] & (1 << _bit))
+      if (RDB (nbytes) & (1 << _bit))
         ptr[i / 8] |= (1 << (i % 8));
 
       _inc_idx (&nbytes, &_bit);
@@ -793,7 +816,7 @@ coder_dec_urandom5 (coder_state_t state, spolymat_t v, const int_t m,
   ptr = (uint8_t *)buf;
   for (i = 0; i < len * 2 * 8; i++)
     {
-      if (_byte[nbytes] & (1 << _bit))
+      if (RDB (nbytes) & (1 << _bit))
         ptr[i / 8] |= (1 << (i % 8));
 
       _inc_idx (&nbytes, &_bit);
@@ -837,7 +860,7 @@ coder_dec_urandom6 (coder_state_t state, spolyvec_t v, const int_t m,
   ptr = (uint8_t *)&header;
   for (i = 0; i < 16; i++)
     {
-      if (_byte[nbytes] & (1 << _bit))
+      if (RDB (nbytes) & (1 << _bit))
         ptr[i / 8] |= (1 << (i % 8));
 
       _inc_idx (&nbytes, &_bit);
@@ -852,7 +875,7 @@ coder_dec_urandom6 (coder_state_t state, spolyvec_t v, const int_t m,
   ptr = (uint8_t *)buf;
   for (i = 0; i < len * 2 * 8; i++)
     {
-      if (_byte[nbytes] & (1 << _bit))
+      if (RDB (nbytes) & (1 << _bit))
         ptr[i / 8] |= (1 << (i % 8));
 
       _inc_idx (&nbytes, &_bit);
