@@ -5,7 +5,8 @@ pragma solidity ^0.8.24;
 /// @notice The 25 lanes (A[x + 5y] at 0x80 + 32·(x + 5y), each a clean 64-bit value), the rho/pi temporaries, the
 ///         round constants and one padding block live in [0x80, END). `reserve()` claims that region and must be the
 ///         first allocation of the call frame (an external `verify`); otherwise it reverts `ShakeMemory`, never
-///         corrupting memory. The round body is unrolled from the FIPS 202 rotation table (theta, rho + pi, chi as Yul
+///         corrupting memory. It assumes the legacy code generator (free memory pointer starts at 0x80); under via-IR
+///         memory spilling every verify reverts `ShakeMemory`. The round body is unrolled from the FIPS 202 rotation table (theta, rho + pi, chi as Yul
 ///         functions to stay within the legacy code generator's stack); `reserve()` writes the 24 round constants.
 /// @dev Byte order: a lane is the little-endian reading of its 8 bytes; `_bswap` reverses the bytes of the four
 ///      64-bit groups of a word, so a 32-byte read of the stream becomes four lanes and back.
