@@ -809,7 +809,11 @@ indexer for state. The node's indexer normalizes `MetaTransactionExecuted`, `UAM
 
 <a id="disclosure"></a>
 <a id="CTR-PQZ-14"></a>**CTR-PQZ-14** — **Disclosure by zero-knowledge proof**, never by revealing randomness or noise.
-`ITransferDisclosure` is kept (the three v1 kinds (classical Zether added `SENDER_CP`, [CTR-ZTH-40](zether.md#CTR-ZTH-40); open for PQZ); `opening = bundle ‖ proof`). `transferCiphertext(entryRef)`
+`ITransferDisclosure` is kept with **three kinds, `SENDER_S`, `RECEIVER_X`, `AUDITOR`; no `SENDER_CP`** (owner
+2026-10-13). Classical Zether added `SENDER_CP` ([CTR-ZTH-40](zether.md#CTR-ZTH-40)) because its `SENDER_S` hands over `s`,
+which opens every leg of a multi-recipient transfer, decoys included; PQZ's `SENDER_S` is already a zero-knowledge proof
+that reveals neither `r` nor noise, and a PQZ transfer has one recipient, so a one-leg sender proof would add nothing;
+`opening = bundle ‖ proof`. `transferCiphertext(entryRef)`
 reverts `CiphertextOffState(bundleHash)`; new view `transferCiphertextHash(entryRef)`. Shared randomness and decryption
 noise must not leak ([CTR-PQZ-04](#CTR-PQZ-04)); the indexer or the parties supply the bundle bytes.
 
