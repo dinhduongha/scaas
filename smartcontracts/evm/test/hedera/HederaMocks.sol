@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: LicenseRef-SCaaS-Community-1.0
 pragma solidity ^0.8.20;
 
 /// @notice Giả precompile HIP-632 (đặt ở 0x16a bằng `vm.etch`), theo đúng nhánh của `IsAuthorizedRawCall.java`:

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: LicenseRef-SCaaS-Community-1.0
 pragma solidity ^0.8.24;
 
 /// @title SHAKE128 / SHAKE256 (FIPS 202) for the PQ verifiers: a Keccak-f[1600] sponge at fixed memory.

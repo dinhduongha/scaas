@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "private": true,
   "description": "Client-side keys for SCaaS chain payments: passkey (WebAuthn) and BIP-39 seed wallet. Secrets never leave the device.",
-  "license": "LGPL-3.0",
+  "license": "SEE LICENSE IN ../../LICENSE",
   "type": "module",
   "scripts": {
     "test": "node --test test/",
