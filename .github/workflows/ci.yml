@@ -163,6 +163,28 @@ jobs:
       - name: vectors
         run: ctest --test-dir build --output-on-failure
 
+  ua-qt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.90.0
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: 6.8.2
+          cache: true
+      - run: sudo apt-get update && sudo apt-get install -y ninja-build libgl1-mesa-dev libxkbcommon-dev
+      - name: Build
+        working-directory: clients/scaas-ua-qt
+        run: |
+          export QMAKE="$QT_ROOT_DIR/bin/qmake6"
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR"
+          cmake --build build
+      - name: Test
+        working-directory: clients/scaas-ua-qt/build
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: ctest --output-on-failure
+
   ua-py:
     runs-on: ubuntu-latest
     defaults:
