@@ -141,6 +141,28 @@ jobs:
       - name: vectors
         run: cargo test
 
+  scaas-ua-cxx:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: clients/scaas-ua-cxx
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: clients/scaas-ua-cxx
+      - name: clippy
+        run: cargo clippy --all-targets -- -D warnings
+      - name: configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSCAAS_UA_CARGO_TARGET_DIR=$PWD/target
+      - name: build
+        run: cmake --build build
+      - name: vectors
+        run: ctest --test-dir build --output-on-failure
+
   ua-py:
     runs-on: ubuntu-latest
     defaults:
