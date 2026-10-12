@@ -31,6 +31,13 @@ def _need(ok, reason):
         raise UAError('UAKeyData', reason)
 
 
+def _bytes(v):
+    """Key data and raw ids are bytes-like only; ints, strs, lists and floats are refused, not coerced."""
+    if isinstance(v, (bytes, bytearray, memoryview)):
+        return bytes(v)
+    raise UAError('UAKeyData', 'type')
+
+
 # (number, name, native, lengths (empty = variable), keyHash group)
 KINDS = (
     (0x0001, 'evm-eoa', True, (20,), None),
@@ -147,7 +154,7 @@ def _sized(b, n, what):
 
 def ua_of(kind, key_data):
     """``keccak256(TAG(kind) ‖ keyData)``; no validation (see derive_ua)."""
-    return keccak256(tag(kind), key_data)
+    return keccak256(tag(kind), _bytes(key_data))
 
 
 def in_native_space(ua_id):
@@ -167,7 +174,7 @@ def native_id(kind, raw):
     k = kind_info(kind)
     if not k[2]:
         raise UAError('UAKindNotNative', k[1])
-    raw = bytes(raw)
+    raw = _bytes(raw)
     _need(len(raw) in k[3], 'length')
     return bytes(32 - len(raw)) + raw
 
@@ -177,7 +184,7 @@ def key_hash_of(kind, key_data):
     k = _derived(kind)
     if k[4] is None:
         return None
-    d = bytes(key_data)
+    d = _bytes(key_data)
     lo, hi = {0x0100: (0, 32), 0x0101: (0, 32), 0x0110: (1, 33), 0x0111: (1, 33), 0x0112: (0, 64), 0x0113: (0, 64)}.get(kind, (0, len(d)))
     _need(len(d) >= hi, 'length')
     return keccak256(group_tag(k[4]), d[lo:hi])
@@ -394,7 +401,7 @@ def _fndsa(d):
 def validate_key_data(kind, key_data, hedera_native=False):
     """Raises UAError('UAKeyData') unless key_data is the unique canonical encoding of a valid key or structure."""
     k = _derived(kind)
-    d = bytes(key_data)
+    d = _bytes(key_data)
     if k[3]:
         _need(len(d) in k[3], 'length')
     if kind == 0x0100:

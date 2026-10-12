@@ -96,6 +96,16 @@ class Vectors(unittest.TestCase):
         for m in S['member']:
             self.assertEqual(hx(ua.member_digest(b(m['structureUa']), b(m['uaMsg']))), m['memberDigest'])
 
+    def test_non_bytes_key_data_raises_ua_key_data(self):
+        for x in (None, 'ab', 1312, [1, 2], 1.5):
+            with self.subTest(x=x):
+                with self.assertRaises(ua.UAError) as c:
+                    ua.validate_key_data(0x0130, x)
+                self.assertEqual(c.exception.code, 'UAKeyData')
+                with self.assertRaises(ua.UAError) as c:
+                    ua.native_id(0x0001, x)
+                self.assertEqual(c.exception.code, 'UAKeyData')
+
 
 if __name__ == '__main__':
     unittest.main()
