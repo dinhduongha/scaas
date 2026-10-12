@@ -1,6 +1,38 @@
 # HANDOFF — scaas
 
-## Session 2026-10-13 (P6b merged) — resume here
+## Session 2026-10-13 (shutdown: P6d WIP, UA-1c draft) — resume here
+
+**State:** main pushed. Merged this session: UA-3, UA client dirs rename, the license rename (Vegan Community / Vegan
+Enterprise License), README (§10 relayer diagram, §13–§17, use cases grouped with fee payers, Free Pay), UA-4 (UA
+ledger), P6c (PQ kinds in registry gen 1), P6b (E-S0 estimator, gate met). Spec edits on main (owner 2026-10-13,
+pq-zether.md): why LaZer and no equivalent (`#why-lazer`); upstream cross-check = one-shot golden dump (no AVX-512 CI
+runner); no on-chain attestation for PQZ; three disclosure kinds, no `SENDER_CP`; `be32(sendCounter)` in the HKDF info,
+`be8(v)` amount kept (amounts < 2^64 by encoding; Zether's 2^54 is a token-wide BSGS cap, see `shieldScale`).
+
+**P6d WIP (resume first):** branch `p6d-pqz-core`, worktree `.claude/worktrees/p6d`, commits `c91b3ab` (LaZer 3330e48
+subset, MIT), `c397a6d` (six layers rewritten + golden dump: 19/19 equal under Intel SDE 9.48 `-spr`, AVX2 build too;
+upstream strict-aliasing bug in `aes256ctr-amd64.c` worked around with `-fno-strict-aliasing`), `9ba594d` (relations
+driver WIP). Read `pqz-core/STATUS.md`. Resume: (1) rerun `params/run_e_s1.sh` (~20 min, capped) and
+`params/codegen/run.sh` for both relations, add the ℓ∞ filler proof in `pqz_rel.c`; (2) fix the arena crash
+(`spolyvec_free`; upstream enlarges `nelems_max` after allocation) with upstream's tbox test; get `pqz_bench` to prove
+and verify R_REG / R_TX; (3) measure native + wasm32 (clang 18, wasm-ld-18, node), symbol scan, README, research note
+`docs/research/pqz-core-e-s1.md`, roadmap P6d row (golden-dump wording), docs_check — then the owner's kill decision.
+Findings so far: LaZer's default MSIS target gives β 353 < Kyber-512's 406 — the stricter target gives R_TX kmsis 23 /
+m2 64 (β 456 / 470), R_REG 22 / 63 (β 452 / 470); real constants ω 8, η 140, λ 4, binding 4η√(B1²+B2²) (E-S0 assumed
+8η), JL 41 confirmed; codegen estimates R_REG ≈ 27 KB, R_TX ≈ 42 KB (+2 KB filler) — not measured.
+
+**UA-1c draft:** `docs/superpowers/plans/2026-10-13-ua1c-c-abi.md` (DRAFT, not spiked; 13 rulings U1C-1…13: caller
+buffers, `int32_t` status + `scaas_ua_last_error`, `catch_unwind`, cbindgen `=0.28.0` dev-dep with a header-drift test,
+surface = ua-cxx's, no `verify`). Resume at "Spike (Task 1, Step 1)"; check first that cbindgen 0.28.0 builds offline.
+Existing bindings unchanged (owner: "only add ua-c").
+
+**Owner steps open (TODO):** P6c — redeploy UA registry gen 1 on chain 7622 after reading its block gas limit; audit
+the PQ verifiers before any public chain. SCaaS Chain 22776 genesis hash when the chain is up. A one-time cross-check of
+the golden dump on real AVX-512 hardware (recommended).
+
+**Next steps:** finish P6d → owner kill decision → P6e/P6g; UA-1c (spike, execute); the template-library spec.
+
+## Session 2026-10-13 (P6b merged)
 
 **State:** P6b (E-S0 parameter spike) merged into main (`676366a`) and pushed; branch `p6b-estimator` kept. Outputs:
 `pqz-core/params/{estimator.txt,e_s0.py,run.sh,README.md}` (Sage `sagemath/sagemath:10.7` @ sha256:4f5589eb…d528,
