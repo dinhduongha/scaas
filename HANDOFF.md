@@ -1,6 +1,37 @@
 # HANDOFF — scaas
 
-## Session 2026-10-13 (UA-4 merged) — resume here
+## Session 2026-10-13 (P6c merged) — resume here
+
+**State:** P6c merged into main (`06629d8`) and pushed; branch `p6c-pq-kinds` and worktree `.claude/worktrees/p6c` kept.
+Plan `docs/superpowers/plans/2026-10-13-p6c-pq-kinds.md` (rulings C6-1…C6-19). Forge 1104 passed / 10 skipped on merged
+main; `test/ua` 232; `--isolate` UARegistryPq/UAGas/UARegistryGroups 34; size gate 0 errors (UARegistry 23,658 B);
+`private7622` build ok; clientkeys 101 / 99 / 2 skipped (generator rerun byte-identical); `scripts/e2e-zether.sh` 3/3;
+scaas-node e2e 4 + e2e_hedera 1; docs and facts checks clean.
+
+**Built (P6c):** PQ verifiers registry-ready (`verifyPop`; ML-DSA `expandKeyRows` / `expandedKeyPart` / `verifyCached` /
+`verifyExpanded`; SSTORE2 length guard); `pq_signatures.json` (PoPs, signatures, 27 negatives, msig treasury / hybrid,
+metatx3 rows; in the byte-for-byte regeneration test); `UARegistry` slots 0x0130–0x0133 (stored keys, registry-derived
+ML-DSA expanded-key cache `cacheExpandedKey` / `expandedKeyOf` — -44 one part, -65 two parts, never caller-supplied;
+an uncached ML-DSA PoP fails `UAPoP` where there is no precompile) and the `pqz-mlwe` 0x0142 slot with its authRef rule
+(verifier and enabling in P6g); msig gas bound counts the caller's hold for caps > 400 k, own-generation and handed to
+gen 1; PQ signers on the UA ledger; DeployBase enables the PQ kinds on dev chains + 7622 only, caps 4.25 M / 5.95 M /
+2.5 M / 1.4 M (cold headroom ML-DSA-44 75.8 k, ML-DSA-65 56.2 k, pinned ≥ 30 k by a test).
+
+**Owner steps (open, in TODO):** redeploy UA registry gen 1 on chain 7622 after reading its block gas limit (an
+ML-DSA-65 cache part needs a ~13.5 M-gas tx; with a lower limit only fndsa512 / slhdsa128s are usable); audit the PQ
+verifiers and the cache before any public chain enables a PQ kind.
+
+**Controller rulings (P6c):** fixed the plan's C6-8 gap — gen 2 also holds for PQ members it hands to gen 1 (a gen-2
+msig could otherwise register within budget yet need ~47 k more to authorize); the final wave removed the now-dead
+hold tag bit (behaviour-identical), stated the real cap headroom and pinned it; malformed msig `authPop` still reverts
+without data (fails closed). Deferred minors: `verifyCached` edge-branch tests, UAMetaTx3Pq events/gas ceilings,
+UADeploy public chain ids.
+
+**Next steps:** the P6 E-streams (P6b E-S0 spike, P6d E-S1 `pqz-core`, P6e relations; P6f chain-7622 precompiles is
+owner-gated; P6g `PqzToken` + `UAPqzVerifier`); the template-library spec; SCaaS Chain 22776 onboarding when the
+chain is up.
+
+## Session 2026-10-13 (UA-4 merged)
 
 **State:** UA-4 merged into main (`8152ee7`) and pushed; branch `ua4-ledger` and worktree `.claude/worktrees/ua4` kept.
 Plan `docs/superpowers/plans/2026-10-12-ua4-ledger.md` (rulings L4-1…L4-20). Forge 1086 passed / 10 skipped on merged
