@@ -307,7 +307,7 @@ Native kinds (no registration, no tag-derived id; listed so that structures and 
 |---|---|---|---|---|
 | `0x0001` | `evm-eoa` | 20-byte address (incl. EIP-7702 delegated) | EVM, Hedera (ECDSA alias) | ECDSA low-s over the EIP-712 digest; 7702-delegated: ECDSA, else ERC-1271 of the delegate ([CTR-UA-24](#CTR-UA-24)) |
 | `0x0002` | `evm-contract` | 20-byte address with code | EVM, Hedera | ERC-1271 `isValidSignature(digest, sig)`, 50 k gas (400 k for `SmartKeyAccount` clones) |
-| `0x0003` | `hedera-native` | long-zero address `0.0.N` | **Hedera only** (never a member on another EVM chain) | HIP-632 `isAuthorizedRaw` (64-byte ed25519), else as 0x0001/0x0002 |
+| `0x0003` | `hedera-native` | long-zero address `0.0.N` | **Hedera only** (never a member on another EVM chain) | HIP-632 `isAuthorizedRaw` (64-byte ed25519), else as 0x0001/0x0002 (HIP-632 halts in a static frame: until a non-view path exists, `requireAuthorized` verifies it as 0x0001/0x0002) |
 | `0x0010` | `solana-ed25519` | 32-byte pubkey | Solana | ed25519 precompile instruction |
 | `0x0011` | `stellar-account` | 32-byte `G…` pubkey | Soroban (Stellar, Pi) | host `require_auth` |
 | `0x0012` | `soroban-contract` | 32-byte `C…` id | Soroban | `__check_auth` |
@@ -678,7 +678,7 @@ interface IUARegistry {
     error UAIdInNativeSpace(bytes32 ua);
     error UAAlreadyRegistered(bytes32 ua);
     error UAKeyInUse(bytes32 keyHash, bytes32 owner);   // layer 2
-    error UAMemberUnknown(bytes32 member);        // structure member not native/registered, or kind ∉ MEMBER
+    error UAMemberUnknown(bytes32 member);        // structure member not native/registered, or hedera-native outside a Hedera profile (other kinds ∉ MEMBER: UAKeyData)
     error UAAuthRef(bytes32 authRef);             // Zether: not native/SIGNING, same-curve BLS, PQ rule; others: ≠ 0
     error UAPoP();
     error UAUnauthorized(bytes32 ua);             // also: ua is ZETHER or unregistered
@@ -1186,21 +1186,26 @@ live in the separate `ComplianceRegistry`. This interface is deleted and replace
 <a id="gas"></a>
 
 Verification per check (execution gas, EVM). Caps are **starting values**; the deployed `verifyCap[kind]` per chain is the
-measured worst case (T-GAS), published in the chain profile.
+measured worst case (T-GAS), published in the chain profile. Measured (UA-2a, forge, osaka;
+`test/ua/UAGas.t.sol` and the verifier tests): the registry adds ~6 k per derived check; `register` costs 77 k–273 k
+per kind, and a `bls-bn254-minsig` registration needs ≥ 450 k call gas because of the 63/64 holds; `msig` adds
+`MSIG_MEMBER_GAS` = 35 k per member to the structure bound.
 
 | Kind | Calldata (key data + sig) | Verify | Registry overhead | Cap |
 |---|---|---|---|---|
 | native EOA | 65 | ~3.5 k | none (token-local) | — |
 | native 1271 | per account | per account | — | 50 k / 400 k (registry: by the immutable `SmartKeyAccount` codehash too) |
 | native behind the registry (`UAAuth`) | 65 | ~3.5 k + EIP-712 hash ~1 k | ~5 k | 50 k / 400 k for 1271 |
-| `webauthn-p256` | 96 + ~300 | ~6.9 k precompile / ~200 k+ OZ fallback (measure) | ~5 k (cold call + SLOAD + hash) | 400 k |
-| `p256` | 64 + 64 | as above, no JSON | ~5 k | 400 k |
-| `bip340` | 32 + 64 | ~5 k + `MODEXP` lift | ~5 k | 50 k |
+| `webauthn-p256` | 96 + ~300 | 24.7 k with P256VERIFY / ~260 k Solidity (measured; invalid signatures cost the same) | ~6 k (measured) | 400 k |
+| `p256` | 64 + 64 | 10.6 k with P256VERIFY / ~250 k Solidity (measured) | ~6 k (measured) | 400 k |
+| `bip340` | 32 + 64 | 11.2 k osaka / 8.5 k prague (measured; one `MODEXP`) | ~6 k (measured) | 50 k |
 | `musig2-secp256k1` | 64 (stored `Q`) | as `bip340` | ~5 k + EXTCODECOPY ~2.6 k | 50 k |
 | `frost-secp256k1` | 65 (stored `Y`) | ~10 k (`expand_message_xmd` SHA-256 + `MODEXP` + `ecrecover`) | ~5 k + EXTCODECOPY ~2.6 k | 50 k |
-| `schnorr-bn254` | 64 + 96 | ~13 k (measured `_schnorr`) | ~5 k | 50 k |
+| `schnorr-bn254` | 64 + 96 | ~29 k (measured, bounded self-call; a malformed point ~5 k) | ~6 k (measured) | 50 k |
 | `musig2-bn254`, `frost-bn254` | 96 (stored) | as `schnorr-bn254` | ~5 k + EXTCODECOPY ~2.6 k | 50 k |
-| `bls12381-minsig` | 256 + 128 | ~120 k (measured on the private chain) | ~5 k | 200 k |
+| `schnorr-bls12381` | 128 + 160 | ~41 k (measured, bounded self-call) | ~6 k (measured) | 70 k |
+| `bls-bn254-minsig` | 128 + 64 | ~125 k (measured; try-and-increment map, `CHECK_GAS` 330 k) | ~27 k (measured) | 345 k |
+| `bls12381-minsig` | 256 + 128 | ~159 k (measured, bounded self-call) | ~6 k (measured) | 200 k |
 | `msig` k-of-n | 4 + 36n + Σ member | Σ member verifies (≤ `c` members, stop at threshold) + ~2 k; stored-kind members + EXTCODECOPY | ~5 k | Σ of the `c` largest member caps ≤ `verifyBudget` |
 | `ed25519` | 32 + 64 | ~0.3–1.2 M (Solidity, SHA-512 dominates) | ~5 k | 1.5 M |
 | `mldsa44` | 2 420 sig | EIP-8355-class precompile / 11.4 M Solidity (4.1 M expanded key) | ~5 k + EXTCODECOPY ~3 k | measured; ≈ 20 k with a precompile |
@@ -1252,7 +1257,7 @@ private/PoA chains with zero gas price it is not money. EIP-7825 (16.78 M per tr
 
 <a id="vectors"></a>
 
-Cross-language vectors (`smartcontracts/vectors/ua/`; `kinds.json` and `structures.json` BUILT as the identity layer — no signatures yet: PoP signatures and `groups.json` come with the registry's verifiers, `metatx3.json` with the UA ledger, `derivation.json` with the signers):
+Cross-language vectors (`smartcontracts/vectors/ua/`; `kinds.json` and `structures.json` BUILT as the identity layer — `signatures.json` BUILT with the UA-2a verifiers (PoPs, `metatx` / `member` signatures and negatives for the seven classical kinds, native `UAAuth`, `msig` sets, the official BIP-340 vectors; re-verified by noble and by `scaas-ua::verify`); `groups.json` comes with MuSig2 / FROST (UA-2c), `metatx3.json` with the UA ledger, `derivation.json` with the signers):
 
 `kinds.json` — for **every** kind (including native rows for member refs):
 
