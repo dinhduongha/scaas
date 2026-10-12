@@ -32,12 +32,22 @@ read the same files. Never edit them by hand.
 `UAKindNotDerived`, `UAKindNotNative`, `UAIdFormat`, `UAPurposeUnknown`. The Solidity library has the on-chain subset.
 
 **Bindings.** C++: `std::vector<uint8_t>` in and out, `std::optional` for `keyHashOf`, errors as `scaas::ua::Error` with
-`code()` and `reason()`. QML: byte values as `"0x…"` hex strings, `kindInfo` as a JSON string, `encodeMsig` from a JSON
-array; a failing call returns `""` / `false` and sets `UaKinds.lastError` (readable from QML) to the code (cleared by the
-next call; undecodable key data is `UAKeyData`, other undecodable arguments `UAArgument`); `keyHashOf` of a structure kind
-returns `""` with an empty `lastError` (not an error); chain ids are exact to 2^53. FRB Dart: `Uint8List`,
-`U8Array32` / `U8Array20` for fixed sizes, `BigInt` chain ids, `UAError` with `code` and `reason`. Pure Dart: `Uint8List`
-or hex strings, `UAError`; chain ids are exact to 2^53 when compiled to JavaScript. No Rust panic crosses a binding.
+`code()` and `reason()`; a wrong-length digest, id or registry is reported as `UAKeyData: length`, and non-UTF-8 text maps
+to `UAPurposeUnknown` (purpose), `UAIdFormat` (canonical id) or "unknown" (`std::nullopt`, groups). QML: byte values as
+`"0x…"` hex strings, `kindInfo` as a JSON string, `encodeMsig` from a JSON array; a failing call returns `""` / `false` and
+sets `UaKinds.lastError` (readable from QML) to the code (cleared by the next call; undecodable key data is `UAKeyData`,
+other undecodable arguments, wrong lengths included, `UAArgument`); `keyHashOf` of a structure kind returns `""` with an
+empty `lastError` (not an error); chain ids are exact to 2^53; a kind outside 0..0xFFFF is `UAArgument`, but QML numbers
+beyond int32 wrap (ToInt32) before they reach the binding, so range-check them in QML. FRB Dart: `Uint8List`, `U8Array32` /
+`U8Array20` for fixed sizes (a wrong length throws `AssertionError` with asserts on and a `PanicException` with asserts
+off, not a coded error), `UAError` with `code` and `reason` (the label after `UAKeyData: `, as in C++ and pure Dart);
+integers are `int` (i64) so nothing wraps: a kind outside 0..0xFFFF is `UAKindUnknown`, a negative chain id or an
+out-of-range generation, threshold or weight is `UAArgument`. Pure Dart: `Uint8List` or hex strings, `UAError`; chain ids
+are exact to 2^53 when compiled to JavaScript. No Rust panic crosses a binding.
+
+**Test overrides.** Each suite finds the vectors at `smartcontracts/vectors/ua` by default: the cxx and Qt suites take the
+CMake cache variables `-DSCAAS_UA_VECTORS_DIR` and `-DUA_VECTORS_DIR`, FRB Dart the environment variable
+`SCAAS_UA_VECTORS` (and `SCAAS_UA_LIB` for the native library), pure Dart `UA_VECTORS`.
 
 **Definitions this layer fixes** (controller rulings, pending the owner): `GROUP(g) = keccak256("scaas.ua.group." ‖ g ‖
 ".v1")` and `keyHash = keccak256(GROUP(g) ‖ canonical pubkey)` (secp256k1 `x`, P-256 `x`, the full point or key otherwise;
