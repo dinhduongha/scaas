@@ -1,6 +1,22 @@
 # HANDOFF — scaas
 
-## Session 2026-10-13 (P6c merged) — resume here
+## Session 2026-10-13 (P6b merged) — resume here
+
+**State:** P6b (E-S0 parameter spike) merged into main (`676366a`) and pushed; branch `p6b-estimator` kept. Outputs:
+`pqz-core/params/{estimator.txt,e_s0.py,run.sh,README.md}` (Sage `sagemath/sagemath:10.7` @ sha256:4f5589eb…d528,
+lattice-estimator `53da598`, `RC.ADPS16`) and `docs/research/pqz-parameters-e-s0.md`. **Gate met:** every PQZ instance
+beats Kyber-512 (115.5 / 106.3 bits classical / quantum) — key and encryption 136.1 / 124.3, with 32 hints 133.5 / 121.6
+(DDGR20 worst direction β 464 vs the spec's 466), proof ABDLOP MLWE 132.7 / 121.1, MSIS 132.6 / 120.3 — and every
+Fiat–Shamir round ≥ 128 bits (JL 128.0, Z_q λ=4 168, R_q 672, final κ=8 129.8). Constraints for P6d: keep κ ≥ 8,
+λ ≥ 4, n ≥ 24, m2 ≥ 66. Approximations: the DDGR20 hint estimator was re-implemented (matches the estimator's usvp);
+LNP22 / LaZer constants marked [unverified] — P6d reruns with LaZer's values; `bdd_mitm_hybrid` only on two instances;
+`estimator.txt` produced once (a full byte-for-byte rerun not yet done).
+
+**Blocked on the owner for P6d (E-S1 `pqz-core`):** the spike's KAT equality runs against upstream LaZer's AVX-512 build —
+this machine has no AVX-512 (`/proc/cpuinfo`), so an AVX-512 runner is needed; and its result is the owner's kill
+decision (CTR-PQZ-09). P6e / P6g follow P6d; P6f is owner-gated chain-7622 work.
+
+## Session 2026-10-13 (P6c merged)
 
 **State:** P6c merged into main (`06629d8`) and pushed; branch `p6c-pq-kinds` and worktree `.claude/worktrees/p6c` kept.
 Plan `docs/superpowers/plans/2026-10-13-p6c-pq-kinds.md` (rulings C6-1…C6-19). Forge 1104 passed / 10 skipped on merged
