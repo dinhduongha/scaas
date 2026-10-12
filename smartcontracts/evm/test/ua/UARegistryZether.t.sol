@@ -300,12 +300,12 @@ contract UARegistryZetherTest is UARegistryBase {
 
     // ----- constructor, verifiers -----
 
-    /// 0x0140/0x0141 have slots; `pqz-mlwe` (P6c) and the neighbours do not.
+    /// 0x0140/0x0141 have slots (and `pqz-mlwe` since P6c, `UARegistryPq.t.sol`); the neighbours do not.
     function test_constructorZetherSlots() public {
         assertTrue(zreg.kindEnabled(UAKinds.ZETHER_BN254));
         assertEq(zreg.verifyCap(UAKinds.ZETHER_BLS12381), 70_000);
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](1);
-        uint16[3] memory refused = [0x013f, UAKinds.PQZ_MLWE, 0x0143];
+        uint16[3] memory refused = [0x013f, 0x0143, 0x0144];
         for (uint256 i; i < refused.length; ++i) {
             c[0] = UARegistry.KindConfig(refused[i], address(mock), 50_000);
             vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, refused[i]));

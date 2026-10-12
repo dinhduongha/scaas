@@ -7,7 +7,7 @@ import {IERC5267} from "@openzeppelin/contracts/interfaces/IERC5267.sol";
 ///        `requireAuthorized` that tokens call for every UA signature.
 /// @notice `eip712Domain()` (ERC-5267) comes from `IERC5267`: fields `0x1f`, name "SCaaS UARegistry", version = the
 ///         generation in decimal, salt = `chainUid`. The Zether kinds (UA-3) add `requireZetherAuthorized` and
-///         `keyOf`.
+///         `keyOf`; the PQ kinds (P6c) the ML-DSA expanded-key cache.
 interface IUARegistry is IERC5267 {
     struct Record {
         uint16 kind;
@@ -16,6 +16,8 @@ interface IUARegistry is IERC5267 {
     }
 
     event UARegistered(bytes32 indexed ua, uint16 indexed kind, bytes keyData, bytes32 authRef);
+    /// One part of an ML-DSA id's expanded key stored (P6c), at `ptr` (SSTORE2).
+    event UAKeyCached(bytes32 indexed ua, uint16 indexed kind, uint256 part, address ptr);
 
     error UAKindDisabled(uint16 kind); // not enabled in this generation (incl. kinds a predecessor offers)
     error UAKeyData(uint16 kind); // non-canonical, curve, subgroup, identity, ordering, threshold, cap bound
@@ -26,6 +28,7 @@ interface IUARegistry is IERC5267 {
     error UAAuthRef(bytes32 authRef); // Zether: not native/SIGNING, same-curve BLS, PQ rule; others: ≠ 0
     error UAPoP();
     error UAUnauthorized(bytes32 ua); // also: ua is ZETHER or unregistered
+    error UAKeyCache(uint16 kind); // not ML-DSA, disabled, part past the last, or the verifier uses a precompile
 
     function generation() external view returns (uint8); // 1 or 2
     function predecessor() external view returns (address);
@@ -49,8 +52,16 @@ interface IUARegistry is IERC5267 {
     function kindOf(bytes32 ua) external view returns (uint16); // 0 = not registered (native ids too)
     function isRegistered(bytes32 ua) external view returns (bool);
     function keyOwner(bytes32 keyHash) external view returns (bytes32);
-    /// The stored key of a stored kind (MuSig2 `Q`, FROST `Y`, Zether `Y`: zether.md CTR-ZTH-50), empty otherwise.
+    /// The stored key of a stored kind (MuSig2 `Q`, FROST `Y`, Zether `Y`: zether.md CTR-ZTH-50; PQ `pk`), empty
+    /// otherwise.
     function keyOf(bytes32 ua) external view returns (bytes memory);
+
+    /// ML-DSA without a precompile (P6c): stores part `part` (ML-DSA-44: 0; ML-DSA-65: 0, 1; one transaction each) of
+    /// the EIP-8051 expanded key the registry derives from `pk` under `uaOf(kind, pk)`; PoP and verify use it once
+    /// every part is stored. Anyone may call it, before or after `register`; a stored part is never rewritten.
+    function cacheExpandedKey(uint16 kind, bytes calldata pk, uint256 part) external returns (bytes32 ua);
+    /// The stored part pointers (0 = not yet), this generation only.
+    function expandedKeyOf(bytes32 ua) external view returns (address[2] memory);
 
     /// Reverts UAUnauthorized unless `auth` authorizes `digest` for `ua` under `purposeTag`.
     /// Native ids (ua >> 160 == 0): ECDSA low-s (EOA) or ERC-1271 (50 k cap; 400 k for SmartKeyAccount clones, by the
