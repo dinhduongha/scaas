@@ -924,7 +924,8 @@ EIP-1167 clone at a CREATE2 address through a factory, then uses it by meta-tran
 ([CTR-AS-14](docs/contracts/asset-suite.md#CTR-AS-14)). A template library beyond tokens and the DEX is PLANNED
 (owner, 2026-10-12).
 
-### Retail and loyalty
+<details>
+<summary><b>a) Retail and loyalty</b> — loyalty and cashback, prepaid points, game points, membership cards, point exchange</summary>
 
 | Use case | How SCaaS maps it | Who can pay the fee | Status |
 |---|---|---|---|
@@ -934,7 +935,10 @@ EIP-1167 clone at a CREATE2 address through a factory, then uses it by meta-tran
 | **Membership cards and event tickets** | A card or ticket is a `decimals 0` token the organizer mints; at the door the holder's passkey (a `SmartKeyAccount` key) can sign a transfer of the ticket back to the organizer, and the gate submits it. Limiting who may receive a card needs the receiver allowlist of the regulated flags ([regulated controls](docs/contracts/asset-suite.md#2-regulated-controls)); fully non-transferable tokens and NFTs are not available, and no ticketing flow is specified | The organizer: its relayer at fee 0, or the gate submitting the holder's signed check-in | Tokens and `SmartKeyAccount` BUILT; allowlist SPECIFIED; NFTs PLANNED; ticketing NOT SPECIFIED |
 | **Cross-brand point exchange** | Each brand's points trade on a `SCaaSDex` market that the DEX operator lists; members sign orders gaslessly, with no allowance, and the same orders can fill against Uniswap pools ([dex](docs/contracts/dex.md)). The rate is the book's price; a fixed-rate agreement between brands is not specified | Each trader, as its signed order fee (≤ 1 %, from what it receives); or fee 0 on a brand's own venue | BUILT on EVM |
 
-### Payments and collections
+</details>
+
+<details>
+<summary><b>b) Payments and collections</b> — payroll, direct debit, deposit with periodic withdrawal, split settlement, cross-border payment</summary>
 
 | Use case | How SCaaS maps it | Who can pay the fee | Status |
 |---|---|---|---|
@@ -947,14 +951,20 @@ EIP-1167 clone at a CREATE2 address through a factory, then uses it by meta-tran
 | **Cross-border buying, selling and payment through licensed deposit and withdrawal gateways** | The parts: 1:1 stablecoin wrappers that holders wrap and unwrap against the reserve ([token-wrappers](docs/contracts/token-wrappers.md)), gasless payments with references, and an enterprise inbound gateway a licensed company can run ([gateway](docs/node/gateway.md)). The bank side — deposits, withdrawals, licensing and customer checks — is not specified | The licensed company (gateway, fee 0); or the customer, as a fee in the wrapper token | NOT SPECIFIED (parts BUILT) |
 | **Micro-insurance payouts and social benefits** | An insurer or agency pays claims or benefits in a `mtxBatchTransfer` to people who hold only a passkey: today a `SmartKeyAccount` with P-256 passkeys and guardian recovery, later a `webauthn-p256` UA on the UA-ledger tokens ([accounts](docs/contracts/accounts.md#subjectaccount)). Recipients spend without native coin. Claim, eligibility and payout rules are not specified | The insurer or agency, at fee 0; when recipients spend: the merchant, or a fee in the token | Batch and `SmartKeyAccount` BUILT; passkey UA SPECIFIED; claim rules NOT SPECIFIED |
 
-### Commercial contracts
+</details>
+
+<details>
+<summary><b>c) Commercial contracts</b> — escrow and deposits, milestone services, sales with delivery, leases, installment loans</summary>
 
 | Use case | How SCaaS maps it | Who can pay the fee | Status |
 |---|---|---|---|
 | **Escrow and deposits (rent, car rental, bookings)** | Holding a deposit and releasing it to either side, by both parties or an arbiter, needs an escrow contract; none is specified, and the asset suite leaves escrow with an arbiter out of its scope ([scope](docs/contracts/asset-suite.md#scope)). The parts: the deposit is a signed payment with a reference, and the contract would be a `MetaTxBase` contract like the mandate wallet ([CTR-MTX-22](docs/contracts/metatx.md#CTR-MTX-22)) | The landlord or rental company's relayer; or the depositor, as a fee in the token | NOT SPECIFIED (parts BUILT) |
 | **Milestone service contracts, sale with delivery, leases, installment loans, revenue sharing** | Parts exist: tranches released by an `approver` (a milestone `VestingGrant`), installments and subscriptions by mandate, revenue shares as a `Distribution` to holders of a share token ([asset suite](docs/contracts/asset-suite.md)). No contract or template for any of them is specified | The party that relays — usually the seller, lessor or lender, at fee 0; payers may add a fee in the token | Mandates BUILT; `VestingGrant`, `Distribution` SPECIFIED; the contracts NOT SPECIFIED |
 
-### Accounts and authority
+</details>
+
+<details>
+<summary><b>d) Accounts and authority</b> — passkey accounts, multi-signature approval, AI agents under a mandate</summary>
 
 | Use case | How SCaaS maps it | Who can pay the fee | Status |
 |---|---|---|---|
@@ -962,7 +972,10 @@ EIP-1167 clone at a CREATE2 address through a factory, then uses it by meta-tran
 | **Multi-signature spending approval for a company** | Large payments need a quorum: an `msig` UA (a weighted threshold over up to 16 members of any signing kind) or a FROST t-of-n / MuSig2 n-of-n group key whose one signature the chain checks once; a Safe already signs through ERC-1271. Small everyday spends go through a `MandateWallet` delegate within its caps ([mandates](docs/contracts/mandates.md)) | The company's relayer at fee 0; or self-paid | Safe and mandates BUILT; `msig`, FROST and MuSig2 UAs SPECIFIED |
 | **AI agents spending on a user's behalf** | The agent holds the delegate key of the user's `MandateWallet`: it pays only approved payees, within per-payment and per-period caps, until the expiry, and the user revokes at once. Several delegates per token, per-payee caps, a co-sign threshold and an MCP adapter are a research direction only ([node-ai-agents](docs/research/node-ai-agents.md)) | The merchant or the agent platform's relayer; or the owner, self-paid | `MandateWallet` BUILT; agent features NOT SPECIFIED (research) |
 
-### Business and supply chain
+</details>
+
+<details>
+<summary><b>e) Business and supply chain</b> — invoice finance, confidential payroll, hidden-amount tenders, enterprise relayers</summary>
 
 | Use case | How SCaaS maps it | Who can pay the fee | Status |
 |---|---|---|---|
@@ -971,7 +984,10 @@ EIP-1167 clone at a CREATE2 address through a factory, then uses it by meta-tran
 | **Contract tenders with hidden amounts (Zether / PQ Zether)** | `SealedBidTender` keeps every bid a salted commitment, bonded by a deposit, until the deadline; bids are revealed afterwards and honest losers' deposits return without anyone's approval ([tender](docs/contracts/tender.md)). Bids that stay hidden after the reveal, with Zether or PQ Zether deposits, are outside the tender's scope | The buyer's relayer or a sponsor (sponsorship policy, SPECIFIED); or a bidder submitting its own commit and reveal | SPECIFIED (sealed until reveal); confidential bids NOT SPECIFIED |
 | **Enterprises running their own relayer** | A company runs `scaas-node`: partners post signed intents to its gateway and it relays them on its own lanes ([gateway](docs/node/gateway.md)); it pays gas for its own customers at fee 0 or by a sponsorship policy ([sponsorship](docs/node/sponsorship.md)); the relayers of a business group exchange intents over the mesh's pull bus ([mesh](docs/node/mesh.md)) | The company (gateway at fee 0, or a sponsorship policy); partners may add a fee in the token | Gateway BUILT on EVM; sponsorship policy SPECIFIED; mesh envelope BUILT, bus SPECIFIED |
 
-### Assets and investment
+</details>
+
+<details>
+<summary><b>f) Assets and investment</b> — shares and bonds, pooled funds, tokenized real-world assets, decentralized trading</summary>
 
 | Use case | How SCaaS maps it | Who can pay the fee | Status |
 |---|---|---|---|
@@ -980,7 +996,10 @@ EIP-1167 clone at a CREATE2 address through a factory, then uses it by meta-tran
 | **Tokenized real-world assets (fractional real estate, gold, warehoused produce)** | Fractions are a token the issuer mints, with the regulated flags and eligibility where the law requires them ([regulated controls](docs/contracts/asset-suite.md#2-regulated-controls)); an asset already tokenized on chain (a gold token, say) can be wrapped in a reserve-backed SCaaS wrapper, gasless and redeemable from a reserve anyone can read ([token-wrappers](docs/contracts/token-wrappers.md)). Custody of the physical asset, appraisal and legal title are off chain and not specified | The issuer's relayer at fee 0; or holders, as a fee in the token | Tokens and wrappers BUILT; regulated flags SPECIFIED; custody and title NOT SPECIFIED |
 | **Decentralized trading of digital assets** | Orders and cancels are signatures in the node's off-chain book; `SCaaSDex` settles one taker against many makers, with no allowance for SCaaS tokens and no gas for traders, and the same orders fill against Uniswap v2/v3 pools ([dex](docs/contracts/dex.md), [DEX venue](docs/node/dex-venue.md)). Book gossip between relayers is specified | Each trader, as its signed order fee (≤ 1 %, from what it receives), shared with the relayer | BUILT on EVM; book gossip SPECIFIED |
 
-### Public sector and community
+</details>
+
+<details>
+<summary><b>g) Public sector and community</b> — CBDC, public budgets, donations, group funds, voting</summary>
 
 | Use case | How SCaaS maps it | Who can pay the fee | Status |
 |---|---|---|---|
@@ -990,13 +1009,18 @@ EIP-1167 clone at a CREATE2 address through a factory, then uses it by meta-tran
 | **Group fund management** | The fund sits in a `MandateWallet`: delegates pay within per-payment and per-period caps, to approved payees, until an expiry, revocable at any time ([mandates](docs/contracts/mandates.md)). A `SmartKeyAccount` holds several keys with guardian recovery; a weighted-multisig Universal Account, one id for a group of keys, is specified ([accounts](docs/contracts/accounts.md)). Contribution, voting and pay-out rules of a fund are not specified | A delegate's or member's relayer (the wallet takes no fee on chain); or self-paid | BUILT (mandates, smart account); UA multisig SPECIFIED; fund rules NOT SPECIFIED |
 | **Shareholder and member voting** | Members sign their votes with their own UA, so anyone can check each vote; records kept for decades can be signed with post-quantum kinds (see the last row). No voting contract, weighting or tally rules are specified | The organizer's relayer (sponsored call, SPECIFIED); or a member, self-paid | NOT SPECIFIED (UA SPECIFIED) |
 
-### Data and records
+</details>
+
+<details>
+<summary><b>h) Data and records</b> — family tree, provenance and traceability, long-lived quantum-resistant records</summary>
 
 | Use case | How SCaaS maps it | Who can pay the fee | Status |
 |---|---|---|---|
 | **Family tree (permanently stored data)** | A family-tree registry built on `MetaTxBase` stores every record in full on chain — people, names, dates, relations and their changes — so the tree outlives any company or server. Members sign calls such as `addPerson` without holding a native coin; a service company relays them, pays the gas and bills off chain ([CTR-MTX-22](docs/contracts/metatx.md#CTR-MTX-22)). This use case deliberately departs from the platform's default of no personal data on chain ([data protection](docs/architecture.md#data-protection)): what is written can never be erased, and on a public chain anyone can read it, so a deployment needs the consent of the living people it records; a private chain limits who can read the tree | The service company (sponsored call, SPECIFIED); or a member, self-paid | `MetaTxBase` BUILT; sponsored call SPECIFIED; the registry itself NOT SPECIFIED |
 | **Provenance and traceability on a public chain (farm to table, medicines, luxury goods, certificates of origin)** | A provenance registry built on `MetaTxBase` records signed events per batch — harvested, processed, tested, shipped, sold — so a buyer can check a product's history without trusting the brand's server. Producers and inspectors sign gaslessly; the brand or a service company relays and pays ([CTR-MTX-22](docs/contracts/metatx.md#CTR-MTX-22)). Product data (batch, origin, test results, certificates) is not personal data and can be stored in full or as hashes of off-chain documents; names of people stay off chain by default ([data protection](docs/architecture.md#data-protection)) | The brand or a service company (sponsored call, SPECIFIED); or a producer, self-paid | `MetaTxBase` BUILT; sponsored call SPECIFIED; the registry itself NOT SPECIFIED |
 | **Long-lived, quantum-resistant records** | Records that must stay valid for decades (titles, diplomas, contracts, minutes) are signed with post-quantum UA kinds — ML-DSA, or the hash-based SLH-DSA as a backup if lattice assumptions fall — so a future quantum computer cannot forge them ([CTR-UA-23](docs/contracts/accounts.md#CTR-UA-23)). The verifiers are built but unaudited (a public chain enables them only after an audit) and costly in Solidity (ML-DSA-44 ≈ 11.4 M gas, measured); the record contract is not specified | The record keeper (sponsored call, SPECIFIED); or the signer, self-paid | PQ verifiers BUILT (P6a, unaudited); PQ kinds SPECIFIED (P6); record contract NOT SPECIFIED |
+
+</details>
 
 ## 17. Free Pay
 
