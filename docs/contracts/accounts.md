@@ -790,9 +790,10 @@ it. The v3 token's own native path keeps its `UAMetaTransaction` typed data.
    verify gas of a minimal authorizing set — Σ of the `c` largest member `verifyCap`s plus a fixed per-member overhead
    (`MSIG_MEMBER_GAS`), `c` = the number of lightest-weight members needed to reach the threshold — is ≤
    `verifyBudget()` — `UAKeyData`. A member whose kind this generation does not enable is checked by the predecessor,
-   which holds `cap / 63 + 5 k` again inside the call: it counts with that hold. A cap of this generation above the
-   400 k that `MSIG_MEMBER_GAS` holds for (the PQ caps, P6c) adds `(cap − 400 k) / 63` for the largest one among the
-   `c`. The bound is sound because
+   which holds `cap / 63 + 5 k` again inside the call: it counts with `cap + cap / 63 + 5 k` (gen 2 itself keeps 1/64 of
+   what it forwards through `_viaPredecessor`, so a handed member has the caller's hold too). Let `held` be the largest
+   such entry among the `c` — a member of this generation with its cap, or a handed one with `cap + cap / 63 + 5 k`; if
+   `held` is above the 400 k that `MSIG_MEMBER_GAS` holds for (the PQ caps, P6c), the bound adds `(held − 400 k) / 63`. The bound is sound because
    verification stops at the threshold, so no accepted set has more than `c` members (T-GAS authorizes an `msig`
    registered exactly at the budget with `verifyBudget` gas).
 5. Zether kinds: `authRef` is 0, a native id, or a registered SIGNING UA; a BLS UA on the curve of `Y` is refused; for
