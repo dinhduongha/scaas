@@ -16,7 +16,7 @@ add_custom_command(
   OUTPUT "${_lib}" "${_gen}/scaas-ua-cxx/src/lib.rs.h"
   COMMAND ${CMAKE_COMMAND} -E env "CARGO_TARGET_DIR=${SCAAS_UA_CARGO_TARGET_DIR}"
           ${CARGO} build --release --locked --manifest-path "${CMAKE_CURRENT_SOURCE_DIR}/Cargo.toml"
-  DEPENDS ${_rs} Cargo.toml build.rs
+  DEPENDS ${_rs} Cargo.toml Cargo.lock build.rs "${CMAKE_CURRENT_SOURCE_DIR}/../scaas-ua/Cargo.toml"
   COMMENT "cargo build scaas-ua-cxx")
 add_custom_target(scaas_ua_cargo DEPENDS "${_lib}")
 

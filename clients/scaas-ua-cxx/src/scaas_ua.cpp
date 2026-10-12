@@ -1,6 +1,8 @@
 // Implements include/scaas_ua.hpp over the cxx-generated bridge; translates rust::Error into scaas::ua::Error.
 #include "scaas_ua.hpp"
 
+#include <stdexcept>
+
 #include "rust/cxx.h"  // rust::Error
 #include "scaas-ua-cxx/src/lib.rs.h"
 
@@ -44,14 +46,31 @@ std::vector<KindInfo> kinds() {
 }
 Bytes tag(uint16_t k) { return call([&] { return bytes(ffi::tag(k)); }); }
 std::string kindTagString(uint16_t k) { return call([&] { return std::string(ffi::kind_tag_string(k)); }); }
-std::optional<Bytes> groupTag(const std::string& g) { return opt(ffi::group_tag(g)); }
+// Non-UTF-8 text is not a known group / purpose / id: std::invalid_argument from rust::Str becomes the matching code.
+std::optional<Bytes> groupTag(const std::string& g) {
+    try {
+        return opt(ffi::group_tag(g));
+    } catch (const std::invalid_argument&) {
+        return std::nullopt;
+    }
+}
 std::optional<std::string> groupTagString(const std::string& g) {
-    std::string s(ffi::group_tag_string(g));
-    if (s.empty()) return std::nullopt;
-    return s;
+    try {
+        std::string s(ffi::group_tag_string(g));
+        if (s.empty()) return std::nullopt;
+        return s;
+    } catch (const std::invalid_argument&) {
+        return std::nullopt;
+    }
 }
 Bytes msgTag() { return bytes(ffi::msg_tag()); }
-Bytes purposeTag(const std::string& p) { return call([&] { return bytes(ffi::purpose_tag(p)); }); }
+Bytes purposeTag(const std::string& p) {
+    try {
+        return call([&] { return bytes(ffi::purpose_tag(p)); });
+    } catch (const std::invalid_argument&) {
+        throw Error("UAPurposeUnknown", "");
+    }
+}
 Bytes uaOf(uint16_t k, const Bytes& d) { return call([&] { return bytes(ffi::ua_of(k, sl(d))); }); }
 Bytes deriveUA(uint16_t k, const Bytes& d, bool h) { return call([&] { return bytes(ffi::derive_ua(k, sl(d), h)); }); }
 Bytes nativeId(uint16_t k, const Bytes& r) { return call([&] { return bytes(ffi::native_id(k, sl(r))); }); }
@@ -76,7 +95,13 @@ Bytes uaAuthDigest(const Domain& d, const Bytes& ua, const Bytes& p, const Bytes
     });
 }
 Bytes memberDigest(const Bytes& s, const Bytes& m) { return call([&] { return bytes(ffi::member_digest(sl(s), sl(m))); }); }
-std::string canonicalId(const std::string& t) { return call([&] { return std::string(ffi::canonical_id(t)); }); }
+std::string canonicalId(const std::string& t) {
+    try {
+        return call([&] { return std::string(ffi::canonical_id(t)); });
+    } catch (const std::invalid_argument&) {
+        throw Error("UAIdFormat", "");
+    }
+}
 Bytes encodeMsig(uint16_t th, const std::vector<Member>& ms) {
     std::vector<ffi::Member> v;
     for (auto& m : ms) v.push_back(conv(m));

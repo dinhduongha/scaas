@@ -158,6 +158,11 @@ static void structures() {
         CHECK(hx(memberDigest(bytes(m["structureUa"]), bytes(m["uaMsg"]))) == m["memberDigest"].get<std::string>(), "memberDigest");
     // malformed input is an error, not a crash
     CHECK(code_of([] { memberDigest(Bytes(3), Bytes(32)); }) == "UAKeyData", "short digest");
+    // non-UTF-8 text stays inside the documented error contract
+    const std::string bad("\xff\xfe");
+    CHECK(code_of([&] { purposeTag(bad); }) == "UAPurposeUnknown", "non-UTF-8 purpose");
+    CHECK(code_of([&] { canonicalId(bad); }) == "UAIdFormat", "non-UTF-8 id");
+    CHECK(!groupTag(bad) && !groupTagString(bad), "non-UTF-8 group");
     CHECK(encodeMsig(2, {{0x0001, Bytes(32, 1), 1}}).size() == 4 + 36, "encodeMsig size");
 }
 

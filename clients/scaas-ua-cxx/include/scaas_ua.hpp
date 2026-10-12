@@ -1,5 +1,6 @@
 // Plain C++17 API over the Rust crate scaas-ua (via cxx). No Qt. Errors are thrown as scaas::ua::Error.
 #pragma once
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <stdexcept>
