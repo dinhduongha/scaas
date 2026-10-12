@@ -875,7 +875,7 @@ SCaaS depends on no ERP. One worked ERP connector lives in a separate repository
 
 SCaaS is licensed under the [SCaaS Community License 1.0](LICENSE) (summary in Vietnamese:
 [LICENSE.vi.md](LICENSE.vi.md)). Free with the freedoms of MIT or Apache-2.0 for vegan organizations and for
-organizations whose group revenue is below USD 10 million; not available to anyone who kills animals, to food businesses that
+organizations whose group revenue is below USD 10 million; not available to anyone who kills animals (any animal: mammals, birds, fish, insects and every other species), to food businesses that
 serve products from killed animals, fertilized eggs or bee products, or to groups earning more than 10% of revenue from
 such products (see the license for the exact terms); everyone else needs an Enterprise License. Contributions are accepted under the CLA in [CONTRIBUTING.md](CONTRIBUTING.md).
 Third-party components keep their own licenses.

@@ -16,8 +16,11 @@ công ty con, công ty chung quyền kiểm soát) thuộc một trong các trư
 3. **Trên 10% doanh thu** tập đoàn đến từ việc bán, phân phối, chế biến, vận chuyển, tiếp thị hoặc tài trợ sản phẩm
    động vật bị cấm hoặc hoạt động giết động vật (kể cả bán lẻ, bán buôn).
 
-**Sản phẩm động vật bị cấm:** thịt, gia cầm, cá, hải sản, lông thú, da, gelatin, xương và mọi thứ có được từ việc giết
-động vật; **trứng có phôi** (trứng có trống); **mật ong và các sản phẩm từ ong** (sáp ong, sữa ong chúa, keo ong); và mọi
+**Động vật** là mọi loài thuộc giới động vật trừ con người, ở mọi giai đoạn sống (phôi, ấu trùng, con non): thú, chim, bò
+sát, lưỡng cư, cá, giáp xác, thân mềm, côn trùng, nhện, giun và mọi loài có xương sống hoặc không xương sống khác.
+
+**Sản phẩm động vật bị cấm:** thịt, gia cầm, cá, hải sản, côn trùng làm thực phẩm, lông thú, da, tơ tằm, phẩm màu carmine
+(rệp son), gelatin, xương và mọi thứ có được từ việc giết động vật; **trứng có phôi** (trứng có trống); **mật ong và các sản phẩm từ ong** (sáp ong, sữa ong chúa, keo ong); và mọi
 món ăn, sản phẩm có chứa chúng. **Không bị cấm:** sữa, trứng không có phôi (trứng công nghiệp không trống), len xén.
 
 Điều cấm được ưu tiên hơn mọi điều khoản khác, và áp dụng cả cho Enterprise License.
