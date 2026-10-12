@@ -5,13 +5,13 @@
 #   docs:          python3 scripts/test_docs_check.py; python3 scripts/docs_check.py check; ... facts check
 #   clients/clientkeys:    npm ci --ignore-scripts; npm test
 #   clients/zether-prover: cargo test; ./wasm-smoke.sh (wasm32 build + wasm-bindgen + node smoke)
-#   clients/scaas-ua:      cargo test; cargo clippy --all-targets -- -D warnings; the same with --features signers (groups.json signers + regeneration)
+#   clients/ua-rs:         cargo test; cargo clippy --all-targets -- -D warnings; the same with --features signers (groups.json signers + regeneration)
 #   clients/ua-py:         python3 -m unittest tests.test_vectors
 #   clients/ua-go:         go vet ./...; go test ./...
 #   clients/ua-cs:         dotnet test Scaas.Ua.Tests
-#   clients/scaas-ua-cxx:  cargo clippy --locked --all-targets -- -D warnings; cmake -S . -B build -G Ninja && cmake --build build && ctest --test-dir build
-#   clients/scaas-ua-qt:   cmake -S . -B build -G Ninja (QMAKE, CMAKE_PREFIX_PATH set) && cmake --build build && QT_QPA_PLATFORM=offscreen ctest
-#   clients/scaas-ua-frb:  dart pub get --enforce-lockfile; cargo build --locked --manifest-path rust/Cargo.toml; dart test
+#   clients/ua-cxx:        cargo clippy --locked --all-targets -- -D warnings; cmake -S . -B build -G Ninja && cmake --build build && ctest --test-dir build
+#   clients/ua-qt:         cmake -S . -B build -G Ninja (QMAKE, CMAKE_PREFIX_PATH set) && cmake --build build && QT_QPA_PLATFORM=offscreen ctest
+#   clients/ua-dart-frb:   dart pub get --enforce-lockfile; cargo build --locked --manifest-path rust/Cargo.toml; dart test
 #   clients/ua-dart:       dart analyze; dart test; dart test -p node; dart run test/vectors_test.dart (asserts off)
 name: scaas-ci
 
@@ -127,11 +127,11 @@ jobs:
       - name: wasm build and node smoke
         run: WASM_BINDGEN=wasm-bindgen ./wasm-smoke.sh
 
-  scaas-ua:
+  ua-rs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: clients/scaas-ua
+        working-directory: clients/ua-rs
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -139,7 +139,7 @@ jobs:
           components: clippy
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: clients/scaas-ua
+          workspaces: clients/ua-rs
       - name: clippy
         run: cargo clippy --all-targets -- -D warnings
       - name: clippy (signers)
@@ -149,11 +149,11 @@ jobs:
       - name: groups.json (signers, byte-for-byte regeneration, BIP-327 / RFC 9591 vectors)
         run: cargo test --features signers --test groups
 
-  scaas-ua-cxx:
+  ua-cxx:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: clients/scaas-ua-cxx
+        working-directory: clients/ua-cxx
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
@@ -161,7 +161,7 @@ jobs:
           components: clippy
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: clients/scaas-ua-cxx
+          workspaces: clients/ua-cxx
       - name: clippy
         run: cargo clippy --locked --all-targets -- -D warnings
       - name: configure
@@ -182,13 +182,13 @@ jobs:
           cache: true
       - run: sudo apt-get update && sudo apt-get install -y ninja-build libgl1-mesa-dev libxkbcommon-dev
       - name: Build
-        working-directory: clients/scaas-ua-qt
+        working-directory: clients/ua-qt
         run: |
           export QMAKE="$QT_ROOT_DIR/bin/qmake6"
           cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR"
           cmake --build build
       - name: Test
-        working-directory: clients/scaas-ua-qt/build
+        working-directory: clients/ua-qt/build
         env:
           QT_QPA_PLATFORM: offscreen
         run: ctest --output-on-failure
@@ -237,17 +237,17 @@ jobs:
       - name: vectors
         run: dotnet test
 
-  scaas-ua-frb:
+  ua-dart-frb:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: clients/scaas-ua-frb
+        working-directory: clients/ua-dart-frb
     steps:
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: clients/scaas-ua-frb/rust
+          workspaces: clients/ua-dart-frb/rust
       - uses: dart-lang/setup-dart@v1
         with:
           sdk: 3.12.2

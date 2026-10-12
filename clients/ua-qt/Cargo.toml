@@ -10,7 +10,7 @@ description = "CXX-Qt QObject UaKinds (QML module Scaas.Ua) over scaas-ua. UNAUD
 crate-type = ["staticlib"]
 
 [dependencies]
-scaas-ua = { path = "../scaas-ua" }
+scaas-ua = { path = "../ua-rs" }
 cxx = "=1.0.202"
 cxx-qt = "=0.10.0"
 cxx-qt-lib = "=0.10.0"

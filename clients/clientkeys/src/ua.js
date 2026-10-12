@@ -1,6 +1,6 @@
 // UNAUDITED. UA identity layer (accounts.md §1.3–§1.6; CTR-UA-02…05, 07, 09, 11, 12): the kind table, ids, keyHash, purpose tags,
 // ua_msg, popDigest, the registry's UAAuth digest, member digests, canonical ids and key-data validation. The same rules
-// live in Solidity (src/ua/UAKinds.sol), Rust (clients/scaas-ua), Python (clients/ua-py), Go (clients/ua-go) and C#
+// live in Solidity (src/ua/UAKinds.sol), Rust (clients/ua-rs), Python (clients/ua-py), Go (clients/ua-go) and C#
 // (clients/ua-cs); smartcontracts/vectors/ua/kinds.json and structures.json, written by scripts/ua-vectors.mjs from
 // this file, pin all six. No signing here (UAKey and the signers are UA F3).
 import { secp256k1 } from '@noble/curves/secp256k1.js';

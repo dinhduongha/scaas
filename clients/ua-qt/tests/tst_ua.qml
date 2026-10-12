@@ -3,7 +3,7 @@ import QtQuick
 import QtTest
 import Scaas.Ua
 
-// Mirrors clients/scaas-ua/tests/vectors.rs against the shared vector files.
+// Mirrors clients/ua-rs/tests/vectors.rs against the shared vector files.
 TestCase {
     name: "UaKinds"
 

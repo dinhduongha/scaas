@@ -10,7 +10,7 @@ description = "C++ (cxx) bridge over scaas-ua. UNAUDITED."
 crate-type = ["staticlib"]
 
 [dependencies]
-scaas-ua = { path = "../scaas-ua" }
+scaas-ua = { path = "../ua-rs" }
 cxx = "=1.0.202"
 
 [build-dependencies]
