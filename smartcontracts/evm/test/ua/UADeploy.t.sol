@@ -61,18 +61,36 @@ contract UADeployTest is Test {
         assertEq(reg.verifyCap(UAKinds.ED25519), 210_000);
         assertEq(reg.verifyCap(UAKinds.ZETHER_BLS12381), 70_000);
         assertFalse(reg.kindEnabled(UAKinds.PQZ_MLWE));
+        _pq(reg, true);
     }
 
-    /// Chain 7622 (private, not dev): no Zether kind; `bls-bn254-minsig` stays. Another chain (the e2e's 31901): no
-    /// `bls-bn254-minsig` either. Hedera 298: `hederaNative`, budget 10.5 M.
+    /// P6c: the PQ signing kinds with the gen-1 caps (each ≤ 50 % of the budget) on the private chains, none elsewhere;
+    /// the ML-DSA verifiers in Solidity (the registry's expanded-key cache).
+    function _pq(IUARegistry reg, bool on) internal view {
+        uint64[4] memory caps = [uint64(4_250_000), 5_950_000, 2_500_000, 1_400_000];
+        for (uint16 k = UAKinds.MLDSA44; k <= UAKinds.SLHDSA128S; ++k) {
+            assertEq(reg.kindEnabled(k), on);
+            assertEq(reg.verifyCap(k), on ? caps[k - UAKinds.MLDSA44] : 0);
+            assertLe(reg.verifyCap(k), reg.verifyBudget() / 2);
+        }
+    }
+
+    /// Chain 7622 (private, not dev): no Zether kind; `bls-bn254-minsig` and the PQ kinds stay. Another chain (the e2e's
+    /// 31901): no `bls-bn254-minsig`, no PQ kind either. Hedera 298: `hederaNative`, budget 10.5 M, no PQ kind.
     function test_otherChains() public {
-        bool[5] memory on = _kinds(_registry(7622, false), [uint16(0x0105), 0x0106, 0x0107, 0x0140, 0x0141]);
+        IUARegistry r7622 = _registry(7622, false);
+        bool[5] memory on = _kinds(r7622, [uint16(0x0105), 0x0106, 0x0107, 0x0140, 0x0141]);
         assertTrue(on[0] && on[1] && on[2] && !on[3] && !on[4]);
-        on = _kinds(_registry(31901, false), [uint16(0x0105), 0x0106, 0x0107, 0x0140, 0x0141]);
+        _pq(r7622, true);
+        assertFalse(r7622.kindEnabled(UAKinds.PQZ_MLWE));
+        IUARegistry r31901 = _registry(31901, false);
+        on = _kinds(r31901, [uint16(0x0105), 0x0106, 0x0107, 0x0140, 0x0141]);
         assertTrue(on[0] && on[1] && !on[2] && !on[3] && !on[4]);
+        _pq(r31901, false);
         IUARegistry h = _registry(298, true);
         assertTrue(h.hederaNative());
         assertEq(h.verifyBudget(), 10_500_000);
+        _pq(h, false);
     }
 
     /// A chain whose precompiles fail the probe gets none of the kinds that need them (never registrable but unusable).

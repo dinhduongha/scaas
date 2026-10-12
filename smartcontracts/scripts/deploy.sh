@@ -8,7 +8,8 @@
 #                            CREATE2 deployer on the chain (NET-EVM-05). Writes evm/deployments/<chainid>.json (the
 #                            previous file is put back if the broadcast fails). Every chain gets the UA registry
 #                            (`ua_registry`; its EIP-2537 / bn254-G2 kinds by an eth_call precompile probe, the Zether
-#                            kinds on dev chains only). Always --code-size-limit 65536: every token implementation
+#                            kinds on dev chains only, the PQ kinds on the dev chains and 7622 only: unaudited, P6c).
+#                            Always --code-size-limit 65536: every token implementation
 #                            exceeds EIP-170 since the UA ledger (UA-4; owner: wait for Glamsterdam), so the chain needs
 #                            64 KiB code (anvil --code-size-limit 65536, chain 7622 maxCodeSize 0x10000); a chain at
 #                            24,576 refuses the deploy. DEPLOY_ZETHER=1 (dev chains only) adds the Zether stack and

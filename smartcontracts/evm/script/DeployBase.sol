@@ -27,6 +27,9 @@ import {Musig2Secp256k1Verifier} from "../src/ua/verifiers/Musig2Secp256k1Verifi
 import {UAFrostSecp256k1Verifier} from "../src/ua/verifiers/UAFrostSecp256k1Verifier.sol";
 import {Musig2Bn254Verifier} from "../src/ua/verifiers/Musig2Bn254Verifier.sol";
 import {FrostBn254Verifier} from "../src/ua/verifiers/FrostBn254Verifier.sol";
+import {UAMldsaVerifier} from "../src/ua/MlDsa.sol";
+import {UAFndsaVerifier} from "../src/ua/FnDsa.sol";
+import {UASlhdsaVerifier} from "../src/ua/SlhDsa.sol";
 import {UAPrecompileProbe} from "./UAPrecompileProbe.sol";
 import {ZetherSafety} from "../src/zether/ZetherSafety.sol";
 import {ZetherDisclosure} from "../src/zether/ZetherDisclosure.sol";
@@ -53,6 +56,14 @@ abstract contract DeployBase is Script {
     ///         chains (16,777,216) 12 M, Hedera (15 M) 10.5 M.
     uint64 internal constant UA_VERIFY_BUDGET = 12_000_000;
     uint64 internal constant UA_VERIFY_BUDGET_HEDERA = 10_500_000;
+    /// @notice Gen-1 caps of the PQ kinds without an ML-DSA precompile (P6c, `test/ua/PqGas.t.sol`, accounts.md §1.15):
+    ///         ML-DSA on the registry's cached expanded key (measured valid 4.11 M / 5.80 M, + ~3 %; ML-DSA-65's
+    ///         cap keeps the treasury {mldsa65 ×3} t=2 over the budget), FN-DSA (2.27–2.35 M measured) + ~6 %,
+    ///         SLH-DSA above its 1.32 M worst case. Each ≤ 50 % of the 12 M budget.
+    uint64 internal constant CAP_MLDSA44 = 4_250_000;
+    uint64 internal constant CAP_MLDSA65 = 5_950_000;
+    uint64 internal constant CAP_FNDSA512 = 2_500_000;
+    uint64 internal constant CAP_SLHDSA128S = 1_400_000;
 
     /// @notice Call first in `run()`, before the broadcast.
     function _setup() internal {
@@ -110,13 +121,16 @@ abstract contract DeployBase is Script {
     ///         `webauthn-p256`, `p256`, `ed25519`, `bip340`, `schnorr-bn254`, the four group kinds and `msig` everywhere;
     ///         `schnorr-bls12381` and `bls12381-minsig` where `UAPrecompileProbe` passes EIP-2537; `bls-bn254-minsig` on
     ///         private chains (the dev chains and 7622) where it passes the bn254 G2 check; `zether-bn254` (and
-    ///         `zether-bls12381` with EIP-2537) on the dev chains only (CTR-ZTH-02). Caps: the gen-1 defaults measured in
-    ///         `test/ua/UAGas.t.sol` (accounts.md §1.15). A disabled kind gets no verifier (never "registrable but
-    ///         unusable", CTR-UA-23). JSON `ua_registry`. **UNAUDITED — NOT FOR PRODUCTION FUNDS.**
+    ///         `zether-bls12381` with EIP-2537) on the dev chains only (CTR-ZTH-02); the PQ signing kinds (P6c) on the
+    ///         private chains (the dev chains and 7622) only — unaudited, CTR-UA-23 — ML-DSA in Solidity on the
+    ///         registry's cached expanded key (no chain has an ML-DSA precompile yet; P6g passes chain 7622's to the
+    ///         verifier's probe); `pqz-mlwe` nowhere (its verifier is P6g's). Caps: the gen-1 defaults measured in
+    ///         `test/ua/UAGas.t.sol` and `test/ua/PqGas.t.sol` (accounts.md §1.15). A disabled kind gets no verifier
+    ///         (never "registrable but unusable", CTR-UA-23). JSON `ua_registry`. **UNAUDITED — NOT FOR PRODUCTION FUNDS.**
     function _deployUARegistry(address smartKeyAccountImpl, bool isHedera) internal returns (UARegistry reg) {
         (bool bls, bool bnG2) = _precompiles();
         bool dev = ZetherSafety.isDevChain();
-        UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](16);
+        UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](20);
         uint256 n;
         k[n++] = UARegistry.KindConfig(UAKinds.WEBAUTHN_P256, address(new WebAuthnP256Verifier{salt: salt}()), 400_000);
         k[n++] = UARegistry.KindConfig(UAKinds.P256, address(new P256Verifier{salt: salt}()), 400_000);
@@ -151,6 +165,16 @@ abstract contract DeployBase is Script {
                     UAKinds.ZETHER_BLS12381, address(new ZetherSchnorrBls12381Verifier{salt: salt}()), 70_000
                 );
             }
+        }
+        if (dev || block.chainid == 7622) {
+            k[n++] = UARegistry.KindConfig(
+                UAKinds.MLDSA44, address(new UAMldsaVerifier{salt: salt}(UAKinds.MLDSA44, address(0), "", "")), CAP_MLDSA44
+            );
+            k[n++] = UARegistry.KindConfig(
+                UAKinds.MLDSA65, address(new UAMldsaVerifier{salt: salt}(UAKinds.MLDSA65, address(0), "", "")), CAP_MLDSA65
+            );
+            k[n++] = UARegistry.KindConfig(UAKinds.FNDSA512, address(new UAFndsaVerifier{salt: salt}()), CAP_FNDSA512);
+            k[n++] = UARegistry.KindConfig(UAKinds.SLHDSA128S, address(new UASlhdsaVerifier{salt: salt}()), CAP_SLHDSA128S);
         }
         assembly ("memory-safe") {
             mstore(k, n)
