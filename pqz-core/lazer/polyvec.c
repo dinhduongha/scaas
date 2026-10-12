@@ -919,6 +919,7 @@ polyvec_urandom_bnd (polyvec_t r, const int_t lo, const int_t hi,
   }
 }
 
+#if PQZ_STDIO
 size_t
 polyvec_out_str (FILE *stream, int base, polyvec_t a)
 {
@@ -946,7 +947,9 @@ polyvec_out_str (FILE *stream, int base, polyvec_t a)
 
   return nbytes;
 }
+#endif
 
+#if PQZ_STDIO
 void
 polyvec_dump (polyvec_t vec)
 {
@@ -954,3 +957,4 @@ polyvec_dump (polyvec_t vec)
   fprintf (stdout, "\n");
   fflush (stdout);
 }
+#endif

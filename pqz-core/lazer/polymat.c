@@ -548,6 +548,7 @@ polymat_redc (polymat_t r, polymat_t a)
   }
 }
 
+#if PQZ_STDIO
 size_t
 polymat_out_str (FILE *stream, int base, const polymat_t a)
 {
@@ -590,7 +591,9 @@ polymat_out_str (FILE *stream, int base, const polymat_t a)
 
   return nbytes;
 }
+#endif
 
+#if PQZ_STDIO
 void
 polymat_dump (polymat_t mat)
 {
@@ -598,3 +601,4 @@ polymat_dump (polymat_t mat)
   fprintf (stdout, "\n");
   fflush (stdout);
 }
+#endif

@@ -6,7 +6,6 @@
 #include "poly.h"
 #include "urandom.h"
 
-#include <stdlib.h>
 #include <string.h>
 
 static int
@@ -44,7 +43,7 @@ spolymat_sort (spolymat_ptr r)
 {
   ASSERT_ERR (r->sorted == 0);
 
-  qsort (r->elems, r->nelems, sizeof (_spolymat_struct), _cmp_polymat);
+  pqz_qsort (r->elems, r->nelems, sizeof (_spolymat_struct), _cmp_polymat);
   r->sorted = 1;
 }
 
@@ -394,6 +393,7 @@ spolymat_get_elem2 (spolymat_ptr a, unsigned int row, unsigned int col)
   return NULL;
 }
 
+#if PQZ_STDIO
 size_t
 spolymat_out_str (FILE *stream, int base, spolymat_t a)
 {
@@ -444,7 +444,9 @@ spolymat_out_str (FILE *stream, int base, spolymat_t a)
 
   return nbytes;
 }
+#endif
 
+#if PQZ_STDIO
 void
 spolymat_dump (spolymat_t mat)
 {
@@ -452,3 +454,4 @@ spolymat_dump (spolymat_t mat)
   fprintf (stdout, "\n");
   fflush (stdout);
 }
+#endif

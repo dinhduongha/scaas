@@ -90,6 +90,7 @@ intmat_urandom (intmat_t r, const int_t mod, unsigned int log2mod,
   }
 }
 
+#if PQZ_STDIO
 size_t
 intmat_out_str (FILE *stream, int base, const intmat_t a)
 {
@@ -132,7 +133,9 @@ intmat_out_str (FILE *stream, int base, const intmat_t a)
 
   return nbytes;
 }
+#endif
 
+#if PQZ_STDIO
 void
 intmat_dump (intmat_t mat)
 {
@@ -140,6 +143,7 @@ intmat_dump (intmat_t mat)
   fprintf (stdout, "\n");
   fflush (stdout);
 }
+#endif
 
 void
 intmat_clear (intmat_t r)

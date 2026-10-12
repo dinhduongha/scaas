@@ -1,19 +1,188 @@
+/*
+ * PQZ rewrite of LaZer's AES-256-CTR PRNG (upstream: AES-NI in aes256ctr-amd64.c, a slow bit-serial
+ * reference in this file). Bitsliced software AES, bit-exact with the AES-NI stream (same key, same
+ * 128-bit big-endian counter starting at the nonce), constant-time: no table lookups, no data-dependent
+ * branches. 4 blocks per call: 64 bytes, bit plane p holds bit p of every byte (see gen_aes.py).
+ * S-box: inversion x^254 in GF(2^8) (bitsliced multiply, linear squaring) and the FIPS-197 affine map.
+ */
 #include "aes256ctr.h"
 #include "lazer.h"
 
-#include <stdlib.h>
-#include <string.h>
+#include "pqz_aes_gen.h"
 
 #if RNG == RNG_AES256CTR
 #if TARGET == TARGET_GENERIC
+
+/* r = a * b in GF(2^8) = GF(2)[x]/(x^8 + x^4 + x^3 + x + 1), bitsliced */
+static inline void
+gfmul (uint64_t r[8], const uint64_t a[8], const uint64_t b[8])
+{
+  uint64_t p[15] = { 0 };
+  int i, j;
+
+  for (i = 0; i < 8; i++)
+    for (j = 0; j < 8; j++)
+      p[i + j] ^= a[i] & b[j];
+  for (i = 14; i >= 8; i--)
+    {
+      p[i - 8] ^= p[i];
+      p[i - 7] ^= p[i];
+      p[i - 5] ^= p[i];
+      p[i - 4] ^= p[i];
+    }
+  for (i = 0; i < 8; i++)
+    r[i] = p[i];
+}
+
+static void
+sbox (uint64_t x[8])
+{
+  uint64_t c3[8], c7[8], c63[8], c127[8], t[8];
+
+  /* x^254 = x^-1 (0 -> 0), as upstream's generic bytesub chain */
+  pqz_aes_gfsq (t, x);
+  gfmul (c3, t, x);
+  pqz_aes_gfsq (t, c3);
+  gfmul (c7, t, x);
+  pqz_aes_gfsq (t, c7);
+  pqz_aes_gfsq (t, t);
+  pqz_aes_gfsq (t, t);
+  gfmul (c63, t, c7);
+  pqz_aes_gfsq (t, c63);
+  gfmul (c127, t, x);
+  pqz_aes_gfsq (t, c127);
+  /* affine: b_i = t_i ^ t_{i+4} ^ t_{i+5} ^ t_{i+6} ^ t_{i+7} ^ c_i, c = 0x63 */
+  for (int i = 0; i < 8; i++)
+    {
+      uint64_t c = -(uint64_t)((0x63 >> i) & 1);
+      x[i] = t[i] ^ t[(i + 4) & 7] ^ t[(i + 5) & 7] ^ t[(i + 6) & 7] ^ t[(i + 7) & 7] ^ c;
+    }
+}
+
+static inline void
+to_planes (uint64_t q[8], const uint8_t in[64])
+{
+  for (int p = 0; p < 8; p++)
+    {
+      uint64_t v = 0;
+      for (int j = 0; j < 64; j++)
+        v |= (uint64_t)((in[j] >> p) & 1) << j;
+      q[p] = v;
+    }
+}
+
+static inline void
+from_planes (uint8_t out[64], const uint64_t q[8])
+{
+  for (int j = 0; j < 64; j++)
+    {
+      uint8_t b = 0;
+      for (int p = 0; p < 8; p++)
+        b |= (uint8_t)(((q[p] >> j) & 1) << p);
+      out[j] = b;
+    }
+}
+
+static inline void
+mixcolumns (uint64_t q[8])
+{
+  uint64_t r1[8], t[8];
+  int p;
+
+  for (p = 0; p < 8; p++)
+    {
+      r1[p] = pqz_aes_rotrow1 (q[p]);
+      t[p] = q[p] ^ r1[p];
+    }
+  /* out = xtime(a_r ^ a_{r+1}) ^ a_{r+1} ^ a_{r+2} ^ a_{r+3} */
+  uint64_t hi = t[7];
+  uint64_t xt[8] = { hi, t[0] ^ hi, t[1], t[2] ^ hi, t[3] ^ hi, t[4], t[5], t[6] };
+  for (p = 0; p < 8; p++)
+    q[p] = xt[p] ^ r1[p] ^ pqz_aes_rotrow2 (q[p]) ^ pqz_aes_rotrow3 (q[p]);
+}
+
+static void
+aes256_4blocks (const aes256ctr_state_t state, uint8_t out[64], const uint8_t in[64])
+{
+  uint64_t q[8];
+  int r, p;
+
+  to_planes (q, in);
+  for (p = 0; p < 8; p++)
+    q[p] ^= state->rk[0][p];
+  for (r = 1; r < 15; r++)
+    {
+      sbox (q);
+      for (p = 0; p < 8; p++)
+        q[p] = pqz_aes_shiftrows (q[p]);
+      if (r < 14)
+        mixcolumns (q);
+      for (p = 0; p < 8; p++)
+        q[p] ^= state->rk[r][p];
+    }
+  from_planes (out, q);
+}
+
+/* SubWord on 4 bytes through the bitsliced S-box (lanes 4..63 unused) */
+static void
+subword (uint8_t w[4])
+{
+  uint8_t buf[64] = { 0 };
+  uint64_t q[8];
+  int i;
+
+  for (i = 0; i < 4; i++)
+    buf[i] = w[i];
+  to_planes (q, buf);
+  sbox (q);
+  from_planes (buf, q);
+  for (i = 0; i < 4; i++)
+    w[i] = buf[i];
+}
+
+static void
+_aes256ctr_init (aes256ctr_state_t state, const uint8_t key[32], const uint8_t nonce[16])
+{
+  uint8_t w[240], t[4], rcon = 1, blk[64];
+  int i, j;
+
+  state->cache_ptr = NULL;
+  state->nbytes = 0;
+  memcpy (state->nonce, nonce, 16);
+
+  memcpy (w, key, 32);
+  for (i = 8; i < 60; i++)
+    {
+      for (j = 0; j < 4; j++)
+        t[j] = w[4 * (i - 1) + j];
+      if (i % 8 == 0)
+        {
+          uint8_t t0 = t[0];
+          t[0] = t[1], t[1] = t[2], t[2] = t[3], t[3] = t0;
+          subword (t);
+          t[0] ^= rcon;
+          rcon = (uint8_t)((rcon << 1) ^ (0x1b & -(rcon >> 7)));
+        }
+      else if (i % 8 == 4)
+        subword (t);
+      for (j = 0; j < 4; j++)
+        w[4 * i + j] = w[4 * (i - 8) + j] ^ t[j];
+    }
+  for (i = 0; i < 15; i++)
+    {
+      for (j = 0; j < 4; j++)
+        memcpy (blk + 16 * j, w + 16 * i, 16);
+      to_planes (state->rk[i], blk);
+    }
+  pqz_zeroize (w, sizeof (w));
+  pqz_zeroize (blk, sizeof (blk));
+}
 
 static inline void
 incbe (uint8_t n[16])
 {
   unsigned int c = 1;
-  int i;
-
-  for (i = 15; i >= 0; i--)
+  for (int i = 15; i >= 0; i--)
     {
       c += n[i];
       n[i] = c & 0xff;
@@ -21,191 +190,41 @@ incbe (uint8_t n[16])
     }
 }
 
-static unsigned char
-multiply (unsigned int c, unsigned int d)
-{
-  unsigned char f[8];
-  unsigned char g[8];
-  unsigned char h[15];
-  unsigned char result;
-  int i;
-  int j;
-
-  for (i = 0; i < 8; ++i)
-    f[i] = 1 & (c >> i);
-  for (i = 0; i < 8; ++i)
-    g[i] = 1 & (d >> i);
-  for (i = 0; i < 15; ++i)
-    h[i] = 0;
-  for (i = 0; i < 8; ++i)
-    for (j = 0; j < 8; ++j)
-      h[i + j] ^= f[i] & g[j];
-
-  for (i = 6; i >= 0; --i)
-    {
-      h[i + 0] ^= h[i + 8];
-      h[i + 1] ^= h[i + 8];
-      h[i + 3] ^= h[i + 8];
-      h[i + 4] ^= h[i + 8];
-      h[i + 8] ^= h[i + 8];
-    }
-
-  result = 0;
-  for (i = 0; i < 8; ++i)
-    result |= h[i] << i;
-  return result;
-}
-
-static unsigned char
-square (unsigned char c)
-{
-  return multiply (c, c);
-}
-
-static unsigned char
-xtime (unsigned char c)
-{
-  return multiply (c, 2);
-}
-
-static unsigned char
-bytesub (unsigned char c)
-{
-  unsigned char c3 = multiply (square (c), c);
-  unsigned char c7 = multiply (square (c3), c);
-  unsigned char c63 = multiply (square (square (square (c7))), c7);
-  unsigned char c127 = multiply (square (c63), c);
-  unsigned char c254 = square (c127);
-  unsigned char f[8];
-  unsigned char h[8];
-  unsigned char result;
-  int i;
-
-  for (i = 0; i < 8; ++i)
-    f[i] = 1 & (c254 >> i);
-  h[0] = f[0] ^ f[4] ^ f[5] ^ f[6] ^ f[7] ^ 1;
-  h[1] = f[1] ^ f[5] ^ f[6] ^ f[7] ^ f[0] ^ 1;
-  h[2] = f[2] ^ f[6] ^ f[7] ^ f[0] ^ f[1];
-  h[3] = f[3] ^ f[7] ^ f[0] ^ f[1] ^ f[2];
-  h[4] = f[4] ^ f[0] ^ f[1] ^ f[2] ^ f[3];
-  h[5] = f[5] ^ f[1] ^ f[2] ^ f[3] ^ f[4] ^ 1;
-  h[6] = f[6] ^ f[2] ^ f[3] ^ f[4] ^ f[5] ^ 1;
-  h[7] = f[7] ^ f[3] ^ f[4] ^ f[5] ^ f[6];
-  result = 0;
-  for (i = 0; i < 8; ++i)
-    result |= h[i] << i;
-  return result;
-}
-
 static void
-aes256 (aes256ctr_state_t state, unsigned char *out, const unsigned char *in)
+next64 (aes256ctr_state_t state, uint8_t out[64])
 {
-  unsigned char _state[4][4];
-  unsigned char new_state[4][4];
-  int i, j, r;
-
-  for (j = 0; j < 4; ++j)
-    for (i = 0; i < 4; ++i)
-      _state[i][j] = in[j * 4 + i] ^ state->expanded[i][j];
-
-  for (r = 0; r < 14; ++r)
+  uint8_t ctr[64];
+  for (int j = 0; j < 4; j++)
     {
-      for (i = 0; i < 4; ++i)
-        for (j = 0; j < 4; ++j)
-          new_state[i][j] = bytesub (_state[i][j]);
-      for (i = 0; i < 4; ++i)
-        for (j = 0; j < 4; ++j)
-          _state[i][j] = new_state[i][(j + i) % 4];
-      if (r < 13)
-        for (j = 0; j < 4; ++j)
-          {
-            unsigned char a0 = _state[0][j];
-            unsigned char a1 = _state[1][j];
-            unsigned char a2 = _state[2][j];
-            unsigned char a3 = _state[3][j];
-            _state[0][j] = xtime (a0 ^ a1) ^ a1 ^ a2 ^ a3;
-            _state[1][j] = xtime (a1 ^ a2) ^ a2 ^ a3 ^ a0;
-            _state[2][j] = xtime (a2 ^ a3) ^ a3 ^ a0 ^ a1;
-            _state[3][j] = xtime (a3 ^ a0) ^ a0 ^ a1 ^ a2;
-          }
-      for (i = 0; i < 4; ++i)
-        for (j = 0; j < 4; ++j)
-          _state[i][j] ^= state->expanded[i][r * 4 + 4 + j];
+      memcpy (ctr + 16 * j, state->nonce, 16);
+      incbe (state->nonce);
     }
-
-  for (j = 0; j < 4; ++j)
-    for (i = 0; i < 4; ++i)
-      out[j * 4 + i] = _state[i][j];
-}
-
-static void
-_aes256ctr_init (aes256ctr_state_t state, const uint8_t key[32],
-                 const uint8_t nonce[16])
-{
-  unsigned char roundconstant;
-  int i, j;
-
-  state->cache_ptr = NULL;
-  state->nbytes = 0;
-  memcpy (state->nonce, nonce, 16);
-
-  for (j = 0; j < 8; ++j)
-    for (i = 0; i < 4; ++i)
-      state->expanded[i][j] = key[j * 4 + i];
-
-  roundconstant = 1;
-  for (j = 8; j < 60; ++j)
-    {
-      unsigned char temp[4];
-      if (j % 4)
-        for (i = 0; i < 4; ++i)
-          temp[i] = state->expanded[i][j - 1];
-      else if (j % 8)
-        for (i = 0; i < 4; ++i)
-          temp[i] = bytesub (state->expanded[i][j - 1]);
-      else
-        {
-          for (i = 0; i < 4; ++i)
-            temp[i] = bytesub (state->expanded[(i + 1) % 4][j - 1]);
-          temp[0] ^= roundconstant;
-          roundconstant = xtime (roundconstant);
-        }
-      for (i = 0; i < 4; ++i)
-        state->expanded[i][j] = temp[i] ^ state->expanded[i][j - 8];
-    }
+  aes256_4blocks (state, out, ctr);
 }
 
 static void
 _aes256ctr_stream (aes256ctr_state_t state, uint8_t *out, size_t outlen)
 {
-  size_t len;
+  size_t len = MIN (outlen, state->nbytes);
 
-  len = MIN (outlen, state->nbytes);
   memcpy (out, state->cache_ptr, len);
-
   state->cache_ptr += len;
   state->nbytes -= len;
-
   out += len;
   outlen -= len;
 
-  while (outlen >= 16)
+  while (outlen >= 64)
     {
-      aes256 (state, out, state->nonce);
-      incbe (state->nonce);
-
-      out += 16;
-      outlen -= 16;
+      next64 (state, out);
+      out += 64;
+      outlen -= 64;
     }
   if (outlen > 0)
     {
-      aes256 (state, state->cache, state->nonce);
-      incbe (state->nonce);
-
+      next64 (state, state->cache);
       memcpy (out, state->cache, outlen);
-
       state->cache_ptr = state->cache + outlen;
-      state->nbytes = 16 - outlen;
+      state->nbytes = 64 - outlen;
     }
 }
 

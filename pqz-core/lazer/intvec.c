@@ -548,6 +548,7 @@ intvec_urandom_bnd (intvec_t r, const int_t lo, const int_t hi,
   _urandom_bnd (r, lo, hi, seed, dom);
 }
 
+#if PQZ_STDIO
 size_t
 intvec_out_str (FILE *stream, int base, const intvec_t a)
 {
@@ -575,7 +576,9 @@ intvec_out_str (FILE *stream, int base, const intvec_t a)
 
   return nbytes;
 }
+#endif
 
+#if PQZ_STDIO
 void
 intvec_dump (intvec_t vec)
 {
@@ -583,6 +586,7 @@ intvec_dump (intvec_t vec)
   fprintf (stdout, "\n");
   fflush (stdout);
 }
+#endif
 
 void
 intvec_clear (intvec_t r)

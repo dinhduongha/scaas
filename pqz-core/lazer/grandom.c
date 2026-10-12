@@ -1,9 +1,22 @@
+/*
+ * PQZ rewrite of LaZer's discrete Gaussian sampler (upstream: double exp_small / BerExp / pow / log).
+ *
+ * Same construction as upstream: a sample of D_{Z, 1.55 * 2^s} is k * 2^s - u with u uniform in
+ * [0, 2^s) and k from D_{Z, 1.55, c = u / 2^s}, drawn from the bimodal half-Gaussian CDF table CDF155
+ * (upstream's) and accepted with probability exp(-x), x = ((k - c)^2 - (k - b)^2) / (2 * 1.55^2).
+ * Changes: integer fixed-point x and exp (pqz_fixexp.h), a constant-time full scan of the CDF table,
+ * per-iteration bits from the stream (upstream kept a static bit buffer across calls), a capped loop.
+ * Upstream cannot reproduce these streams: KATs of masks are fork-generated (pq-zether.md CTR-PQZ-09).
+ */
 #include "grandom.h"
 #include "lazer.h"
 #include "rng.h"
 
-#include <math.h>
+#include "pqz_fixexp.h"
+
 #include <stdint.h>
+
+#define PQZ_GAUSS_MAX_TRIES 256 /* P(reject) <= 0.6 per try; 256 tries fail with prob < 2^-180 */
 
 typedef struct
 {
@@ -33,134 +46,51 @@ static const z128 CDF155[]
         { 0ULL, 98ULL },
         { 0ULL, 0ULL } };
 
-/*
- * Compute exp(x) for x such that |x| <= 0.5*ln 2
- * FIXME: Recompute Remez coefficients for interval [-ln 2,0]
- *
- * The algorithm used below is derived from the public domain
- * library fdlibm (http://www.netlib.org/fdlibm/e_exp.c).
- *
- */
-static inline double
-exp_small (double x)
-{
-#define C1 (1.66666666666666019037e-01)
-#define C2 (-2.77777777770155933842e-03)
-#define C3 (6.61375632143793436117e-05)
-#define C4 (-1.65339022054652515390e-06)
-#define C5 (4.13813679705723846039e-08)
+#define DSS_Q62 ((uint64_t)959768162003618710ULL) /* 2^62 / (2 * 1.55^2) = 2^62 * 200 / 961 */
 
-  double t;
-
-  t = x * x;
-  t = x - t * (C1 + t * (C2 + t * (C3 + t * (C4 + t * C5)))); // R1
-  t = 1.0 - ((x * t) / (t - 2.0) - x);
-  return t;
-
-#undef C1
-#undef C2
-#undef C3
-#undef C4
-#undef C5
-}
-
-static inline unsigned int
-cdfsampler (rng_state_t state, const z128 CDF[])
-{
-  uint64_t buf[2];
-  const uint64_t *hi = buf, *lo = buf + 1;
-  unsigned int z;
-
-  rng_urandom (state, (unsigned char *)buf, 16);
-
-  z = 0;
-  while (*hi <= CDF[z].hi && (*hi < CDF[z].hi || *lo < CDF[z].lo))
-    ++z;
-
-  return z;
-}
-
-static inline unsigned int
-BerExp (rng_state_t state, double x)
-{
-  unsigned int b;
-  uint64_t w[2], t, u;
-
-  rng_urandom (state, (unsigned char *)w, 16);
-
-  t = w[0];
-  u = x * (1 / log (2));
-  x -= log (2) * u;
-  u ^= (u ^ 63) & ((int64_t)(63 - u) >> 63); /* if(u > 63) u = 63; */
-  t ^= (t >> u) << u;                        /* u random bits */
-  b = 1 - ((t | -t) >> 63);                  /* 1 with probability 2^-u */
-
-  t = w[1];
-  t &= (1ULL << 53) - 1;
-  u = exp_small (-x) * pow (2, 53);
-  b &= (t - u) >> 63; /* t < u with probability u/2^56 = e^-x */
-
-  return b;
-}
-
-static inline int
-gaussian155 (rng_state_t state, double c)
-{
-  static int pos = 64;
-  static uint64_t bits;
-  int k, b;
-  double x;
-  const double dss = 1 / (2 * 1.55 * 1.55);
-
-  do
-    {
-      if (pos >= 64)
-        {
-          rng_urandom (state, (unsigned char *)&bits, 8);
-          pos = 0;
-        }
-      b = bits & 1;
-      bits >>= 1;
-      pos += 1;
-      k = cdfsampler (state, CDF155);
-      k = (-b & (2 * k)) - k + b; // bimodal Gaussian
-      x = ((k - c) * (k - c) - (k - b) * (k - b)) * dss;
-    }
-  while (!BerExp (state, x));
-
-  return k;
-}
-
-#ifdef XXX
-/*
- * sample centered discrete gaussian with sigma = 1.55 * 2^log2o
- */
+/* k from D_{Z,1.55,c}, c = u / 2^s; constant-time per try */
 static int64_t
-_grandom_sample_i64 (unsigned int log2o, const uint8_t seed[32],
-                    uint64_t dom)
+gaussian155 (rng_state_t state, uint64_t u, unsigned int s)
 {
-  rng_state_t state;
-  double c;
-  int k;
-  int64_t urandom = 0;
-  const unsigned int nbytes = CEIL (log2o, 8);
-  const uint8_t mask = 0xff >> ((nbytes * 8) - log2o);
-  uint8_t *urandom_ptr = (uint8_t *)&urandom;
+  for (int tries = 0; tries < PQZ_GAUSS_MAX_TRIES; tries++)
+    {
+      uint8_t buf[32];
+      uint64_t w[4];
+      int64_t k0 = 0, k, b;
+      unsigned int z;
 
-  _rng_init (state, seed, dom);
+      rng_urandom (state, buf, sizeof (buf));
+      for (z = 0; z < 4; z++)
+        {
+          uint64_t v = 0;
+          for (int j = 0; j < 8; j++)
+            v |= (uint64_t)buf[8 * z + j] << (8 * j);
+          w[z] = v;
+        }
+      /* k0 = #{z : (hi, lo) < CDF155[z]} (the table decreases) */
+      pqz_fx_u128 x128 = ((pqz_fx_u128)w[0] << 64) | w[1];
+      for (z = 0; z < sizeof (CDF155) / sizeof (CDF155[0]); z++)
+        k0 += (int64_t)(x128 < (((pqz_fx_u128)CDF155[z].hi << 64) | CDF155[z].lo));
+      b = (int64_t)(w[3] & 1);
+      k = ((-b) & (2 * k0)) - k0 + b; /* bimodal: b ? k0 + 1 : -k0 (upstream's formula) */
 
-  _rng_urandom (state, urandom_ptr, nbytes);
-  urandom_ptr[nbytes - 1] &= mask;
-  urandom = le64toh (urandom);
+      /* x = ((k - c)^2 - (k - b)^2) / (2 * 1.55^2) = (b - c)(2k - b - c) / (2 * 1.55^2), in Q56 */
+      int64_t f1 = (b << s) - (int64_t)u;               /* (b - c) * 2^s */
+      int64_t f2 = ((2 * k - b) << s) - (int64_t)u;     /* (2k - b - c) * 2^s */
+      f1 *= (int64_t)1 << (56 - s);
+      f2 *= (int64_t)1 << (56 - s);                     /* |f2| < 44 * 2^56 */
+      pqz_fx_i128 x56 = ((pqz_fx_i128)f1 * f2) >> 56;  /* >= 0 */
+      int64_t x = (int64_t)(((pqz_fx_u128)x56 * DSS_Q62) >> 62);
 
-  c = (double)urandom / (1 << log2o);
-  k = gaussian155 (state, c);
-
-  _rng_clear (state);
-
-  return ((int64_t)k << log2o) - urandom;
+      uint64_t mant;
+      int32_t e;
+      pqz_exp_fp (-x, &mant, &e);
+      if (pqz_bernoulli_fp (w[2], mant, e))
+        return k;
+    }
+  pqz_err_set (PQZ_ERR_REJECT);
+  return 0;
 }
-#endif
 
 /*
  * sample centered discrete gaussian with sigma = 1.55 * 2^log2o
@@ -170,13 +100,10 @@ _grandom_sample_i32 (int32_t *ret, unsigned int nelems, unsigned int log2o,
                     const uint8_t seed[32], uint64_t dom)
 {
   rng_state_t state;
-
   unsigned int i, j;
   unsigned int outlen = CEIL (log2o * nelems, 8);
-  uint8_t out[outlen];
+  uint8_t out[outlen + 1];
   uint32_t urand;
-  int32_t k;
-  double c;
 
   _rng_init (state, seed, dom);
   _rng_urandom (state, out, outlen);
@@ -191,56 +118,32 @@ _grandom_sample_i32 (int32_t *ret, unsigned int nelems, unsigned int log2o,
 
           urand |= (((out[q] & (1 << r)) >> r) << j);
         }
-
-      c = (double)urand / (1 << log2o);
-      k = gaussian155 (state, c);
-
-      ret[i] = ((int32_t)k << log2o) - urand;
+      int64_t k = gaussian155 (state, urand, log2o);
+      ret[i] = (int32_t)((k * ((int64_t)1 << log2o)) - (int64_t)urand);
     }
 
   _rng_clear (state);
 }
 
 /*
- * sample centered discrete gaussian with sigma = 1.55 * 2^log2o
+ * sample centered discrete gaussian with sigma = 1.55 * 2^log2o (log2o <= 56)
  */
 static void
 _grandom_sample (int_t z, unsigned int log2o, const uint8_t seed[32],
                 uint64_t dom)
 {
-  INT_T (z1, z->nlimbs);
   rng_state_t state;
-  double c;
-  unsigned int i, m;
-  int k;
-  int64_t urandom = 0;
-  const unsigned int nbytes = CEIL (log2o, 8);
-  const uint8_t mask = 0xff >> ((nbytes * 8) - log2o);
-  uint8_t *urandom_ptr = (uint8_t *)z->limbs;
+  uint8_t buf[8] = { 0 };
+  uint64_t u = 0;
 
-  ASSERT_ERR (nbytes <= z->nlimbs * sizeof (*(z->limbs)));
-
-  int_set_i64 (z, 0);
-
+  ERR (log2o > 56, "%s", "log2o");
   _rng_init (state, seed, dom);
-
-  _rng_urandom (state, urandom_ptr, nbytes);
-  urandom_ptr[nbytes - 1] &= mask;
-
-  /* most significant bits to double */
-  urandom = 0;
-  m = MIN (nbytes, 6);
-  for (i = 1; i <= m; i++)
-    urandom |= ((uint64_t)(urandom_ptr[nbytes - i]) << (8 * (m - i)));
-
-  c = (double)urandom / ((uint64_t)1 << (log2o - (nbytes - m) * 8));
-  k = gaussian155 (state, c);
-
+  _rng_urandom (state, buf, CEIL (log2o, 8));
+  for (int j = 0; j < 8; j++)
+    u |= (uint64_t)buf[j] << (8 * j);
+  u &= ((uint64_t)1 << log2o) - 1;
+  int64_t k = gaussian155 (state, u, log2o);
   _rng_clear (state);
 
-  z->neg = 1; /* substract */
-
-  int_set_i64 (z1, k);
-  int_lshift (z1, z1, log2o);
-  int_add (z, z, z1);
+  int_set_i64 (z, k * ((int64_t)1 << log2o) - (int64_t)u);
 }

@@ -3141,7 +3141,7 @@ __schwartz_zippel_accumulate_z4 (spolymat_ptr R2i[], spolyvec_ptr r1i[],
         RPRIME[i * (nprime * d) + j] = Rprimei[j];
     }
   intmat_set_i32 (Rprime, RPRIME);
-  intmat_dump (Rprime);
+  /* PQZ: debug dump removed */
   //intmat_dump (V);
   //intmat_dump (vR);
 #endif
@@ -3495,7 +3495,7 @@ __schwartz_zippel_accumulate_z3 (
         RPRIME[i * (nex * d) + j] = Rprimei[j];
     }
   intmat_set_i32 (Rprime, RPRIME);
-  intmat_dump (Rprime);
+  /* PQZ: debug dump removed */
   //intmat_dump (V);
   //intmat_dump (vR);
 #endif

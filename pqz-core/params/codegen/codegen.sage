@@ -12,7 +12,8 @@ nbit = 50 # XXX  # bit-length of moduli
 # Print if verbose == 1.
 def printv(x):
     global verbose
-    if verbose == 1:
+    # PQZ: the old lwe-estimator's load rebinds the global `verbose`; pqz_verbose survives it.
+    if globals().get('pqz_verbose', verbose) == 1:
         print(f"// {x}")
 
 

@@ -74,80 +74,22 @@ extern struct debuginfo debug;
  * 1 Headers and defines
  */
 
-#if __linux__
-
-#define _OS_LINUX
-#include <endian.h>
-
-#elif __APPLE__
-
-#include <TargetConditionals.h>
-
-#if TARGET_OS_IPHONE
-
-#define _OS_IOS
-#include <libkern/OSByteOrder.h>
-#include <machine/endian.h>
-#include <strings.h>
-
-#define explicit_bzero bzero
-
-#define htobe16(x) OSSwapHostToBigInt16 (x)
-#define htole16(x) OSSwapHostToLittleInt16 (x)
-#define be16toh(x) OSSwapBigToHostInt16 (x)
-#define le16toh(x) OSSwapLittleToHostInt16 (x)
-#define htobe32(x) OSSwapHostToBigInt32 (x)
-#define htole32(x) OSSwapHostToLittleInt32 (x)
-#define be32toh(x) OSSwapBigToHostInt32 (x)
-#define le32toh(x) OSSwapLittleToHostInt32 (x)
-#define htobe64(x) OSSwapHostToBigInt64 (x)
-#define htole64(x) OSSwapHostToLittleInt64 (x)
-#define be64toh(x) OSSwapBigToHostInt64 (x)
-#define le64toh(x) OSSwapLittleToHostInt64 (x)
-
-#elif TARGET_OS_MAC
-
-#define _OS_MACOS
-#include <libkern/OSByteOrder.h>
-#include <machine/endian.h>
-#include <strings.h>
-#include <sys/random.h>
-
-#define explicit_bzero bzero
-
-#define htobe16(x) OSSwapHostToBigInt16 (x)
-#define htole16(x) OSSwapHostToLittleInt16 (x)
-#define be16toh(x) OSSwapBigToHostInt16 (x)
-#define le16toh(x) OSSwapLittleToHostInt16 (x)
-#define htobe32(x) OSSwapHostToBigInt32 (x)
-#define htole32(x) OSSwapHostToLittleInt32 (x)
-#define be32toh(x) OSSwapBigToHostInt32 (x)
-#define le32toh(x) OSSwapLittleToHostInt32 (x)
-#define htobe64(x) OSSwapHostToBigInt64 (x)
-#define htole64(x) OSSwapHostToLittleInt64 (x)
-#define be64toh(x) OSSwapBigToHostInt64 (x)
-#define le64toh(x) OSSwapLittleToHostInt64 (x)
-
-#endif
-
+/* PQZ: no platform headers beyond the freestanding set; no GMP, no stdio, no intrinsics. */
+#include "pqz_rt.h"
+#include "pqz_mpn.h"
+#include "pqz_ntt.h"
+#ifndef __BEGIN_DECLS
+#ifdef __cplusplus
+#define __BEGIN_DECLS extern "C" {
+#define __END_DECLS }
 #else
-#error "Unsupported platform"
+#define __BEGIN_DECLS
+#define __END_DECLS
+#endif
 #endif
 
-#include <sys/cdefs.h> /* for __BEGIN_DECLS, __END_DECLS */
-
-#include <stddef.h> /* for FILE */
-#include <stdint.h> /* for exact-width int types */
-#include <stdio.h>  /* for size_t */
-#include <stdlib.h>
-#include <string.h>
-
-#if TARGET == TARGET_AMD64
-#include <immintrin.h>
-#include <x86intrin.h>
-#endif
-
-#include <gmp.h>
+#include <stddef.h>
+#include <stdint.h>
 
 __BEGIN_DECLS
 
@@ -186,9 +128,10 @@ typedef const shake128_state_struct *shake128_state_srcptr;
 typedef struct
 {
 #if TARGET == TARGET_GENERIC
-  uint8_t expanded[4][60];
+  /* PQZ: bitsliced software AES (aes256ctr.c): 15 round keys x 8 bit planes, 4-block cache */
+  uint64_t rk[15][8];
   uint8_t nonce[16];
-  uint8_t cache[16];
+  uint8_t cache[64];
   uint8_t *cache_ptr;
   unsigned int nbytes;
 #elif TARGET == TARGET_AMD64
@@ -276,7 +219,7 @@ typedef modulus_struct modulus_t[1];
 typedef modulus_struct *modulus_ptr;
 typedef const modulus_struct *modulus_srcptr;
 
-#include "src/moduli.h"
+/* PQZ: CRT moduli tables (src/moduli.h) dropped; see pqz_ntt.c */
 
 typedef struct
 {
@@ -775,24 +718,7 @@ typedef user_state_struct user_state_t[1];
 typedef user_state_struct *user_state_ptr;
 typedef const user_state_struct *user_state_srcptr;
 
-/* forward declarations of internal stuff */
-void *hexl_ntt_alloc (uint64_t d, uint64_t p);
-void hexl_ntt_fwd (void *ntt, int64_t *out, uint64_t out_mod_factor,
-                   const int64_t *in, uint64_t in_mod_factor);
-void hexl_ntt_inv (void *ntt, int64_t *out, uint64_t out_mod_factor,
-                   const int64_t *in, uint64_t in_mod_factor);
-void hexl_ntt_free (void *ntt);
-
-void hexl_ntt_add (int64_t *r, const int64_t *a, const int64_t *b, uint64_t d,
-                   uint64_t p);
-void hexl_ntt_sub (int64_t *r, const int64_t *a, const int64_t *b, uint64_t d,
-                   uint64_t p);
-void hexl_ntt_mul (int64_t *r, const int64_t *a, const int64_t *b,
-                   uint64_t in_mod_factor, uint64_t d, uint64_t p);
-void hexl_ntt_scale (int64_t *r, const uint64_t s, const int64_t *b, int64_t d,
-                     uint64_t p, uint64_t in_mod_factor);
-void hexl_ntt_red (int64_t *r, uint64_t out_mod_factor, const int64_t *a,
-                   uint64_t in_mod_factor, uint64_t d, uint64_t p);
+/* PQZ: HEXL declarations removed (no HEXL) */
 
 /********************************************************************
  * 3.1 API functions and macros
@@ -815,10 +741,18 @@ void lazer_get_memory_functions (void *(**nalloc) (size_t),
 
 void bytes_urandom (uint8_t *bytes, const size_t len);
 void bytes_clear (uint8_t *bytes, const size_t len);
+#if PQZ_STDIO
 size_t bytes_out_str (FILE *stream, const uint8_t *bytes, size_t len);
+#endif
+#if PQZ_STDIO
 size_t bytes_inp_str (uint8_t *bytes, size_t len, FILE *stream);
+#endif
+#if PQZ_STDIO
 size_t bytes_out_raw (FILE *stream, const uint8_t *bytes, size_t len);
+#endif
+#if PQZ_STDIO
 size_t bytes_inp_raw (uint8_t *bytes, size_t len, FILE *stream);
+#endif
 
 void shake128_init (shake128_state_t state);
 void shake128_absorb (shake128_state_t state, const uint8_t *in, size_t len);
@@ -888,11 +822,17 @@ void int_urandom (int_t r, const int_t mod, unsigned int log2mod,
 void int_urandom_bnd (int_t r, const int_t lo, const int_t hi,
                       const uint8_t seed[32], uint32_t dom);
 void int_binexp (poly_t upsilon, poly_t powB, int_srcptr B);
+#if PQZ_STDIO
 size_t int_out_str (FILE *stream, int base, const int_t a);
+#endif
+#if PQZ_STDIO
 size_t int_inp_str (int_t r, FILE *stream, int base);
+#endif
 void int_import (int_t r, const uint8_t *bytes, size_t nbytes);
 void int_export (uint8_t *bytes, size_t *nbytes, const int_t a);
+#if PQZ_STDIO
 void int_dump (int_t z);
+#endif
 void int_clear (int_t r);
 
 #define INTVEC_T(__name__, __nelems__, __nlimbs__)                            \
@@ -907,7 +847,9 @@ static inline void intvec_set_zero (intvec_t r);
 static inline void intvec_set_one (intvec_t r, unsigned int idx);
 static inline void intvec_set_ones (intvec_t r);
 static inline unsigned int intvec_get_nlimbs (const intvec_t a);
+#if PQZ_STDIO
 size_t intvec_out_str (FILE *stream, int base, const intvec_t a);
+#endif
 static inline unsigned int intvec_get_nelems (const intvec_t r);
 static inline int_ptr intvec_get_elem (const intvec_t a, unsigned int col);
 static inline int_srcptr intvec_get_elem_src (const intvec_t a,
@@ -961,7 +903,9 @@ void intvec_get_subvec (intvec_t subvec, const intvec_t vec, unsigned int col,
 void intvec_mul_matvec (intvec_t r, const intmat_t mat, const intvec_t vec);
 void intvec_auto (intvec_t r, const intvec_t a);
 void intvec_auto_self (intvec_t r);
+#if PQZ_STDIO
 void intvec_dump (intvec_t z);
+#endif
 void intvec_clear (intvec_t r);
 
 #define INTMAT_T(__name__, __nrows__, __ncols__, __nlimbs__)                  \
@@ -1025,8 +969,12 @@ void intmat_urandom (intmat_t r, const int_t mod, unsigned int log2mod,
                      const uint8_t seed[32], uint32_t dom);
 int intmat_eq (const intmat_t a, const intmat_t b);
 void intmat_mul_sgn_self (intmat_t r, int sgn);
+#if PQZ_STDIO
 size_t intmat_out_str (FILE *stream, int base, const intmat_t a);
+#endif
+#if PQZ_STDIO
 void intmat_dump (intmat_t mat);
+#endif
 void intmat_clear (intmat_t r);
 
 #define POLYRING_T(__name__, __q__, __d__)                                    \
@@ -1120,8 +1068,12 @@ void poly_auto_self (poly_t r);
 void poly_tracemap (poly_t r, poly_t a);
 void poly_toisoring (polyvec_t vec, poly_t a);
 void poly_fromisoring (poly_t a, polyvec_t vec);
+#if PQZ_STDIO
 size_t poly_out_str (FILE *stream, int base, poly_t a);
+#endif
+#if PQZ_STDIO
 void poly_dump (poly_t a);
+#endif
 
 #define POLYVEC_T(__name__, __ring__, __nelems__)                             \
   _ALIGN8 uint8_t                                                             \
@@ -1218,8 +1170,12 @@ void polyvec_sublshift (polyvec_t r, polyvec_t a, unsigned int n);
 void polyvec_toisoring (polyvec_t vec, polyvec_t a);
 void polyvec_fromisoring (polyvec_t a, polyvec_t vec);
 void polyvec_elem_mul (polyvec_t r, polyvec_t a, polyvec_t b);
+#if PQZ_STDIO
 size_t polyvec_out_str (FILE *stream, int base, polyvec_t a);
+#endif
+#if PQZ_STDIO
 void polyvec_dump (polyvec_t vec);
+#endif
 
 #define POLYMAT_T(__name__, __ring__, __nrows__, __ncols__)                   \
   _ALIGN8 uint8_t __name__##bytes__[_sizeof_polymat_data (                    \
@@ -1305,8 +1261,12 @@ void polymat_urandom (polymat_t r, const int_t mod, unsigned int log2mod,
 void polymat_brandom (polymat_t r, unsigned int k, const uint8_t seed[32],
                       uint32_t dom);
 void polymat_auto (polymat_t r, polymat_t a);
+#if PQZ_STDIO
 size_t polymat_out_str (FILE *stream, int base, const polymat_t a);
+#endif
+#if PQZ_STDIO
 void polymat_dump (polymat_t mat);
+#endif
 
 void spolyvec_sort (spolyvec_ptr r);
 void spolyvec_alloc (spolyvec_ptr r, const polyring_t ring,
@@ -1327,8 +1287,12 @@ void spolyvec_brandom (spolyvec_t r, unsigned int k, const uint8_t seed[32],
 poly_ptr spolyvec_insert_elem (spolyvec_ptr r, unsigned int elem);
 void spolyvec_free (spolyvec_ptr r);
 poly_ptr spolyvec_get_elem2 (spolyvec_ptr a, unsigned int elem);
+#if PQZ_STDIO
 size_t spolyvec_out_str (FILE *stream, int base, spolyvec_t a);
+#endif
+#if PQZ_STDIO
 void spolyvec_dump (spolyvec_t vec);
+#endif
 
 void spolymat_alloc (spolymat_ptr r, const polyring_t ring, unsigned int nrows,
                      unsigned int ncols, unsigned int nelems_max);
@@ -1353,8 +1317,12 @@ void spolymat_lrot (spolymat_t r, spolymat_t b, unsigned int n);
 void spolymat_set (spolymat_ptr r, spolymat_ptr a);
 void spolymat_fromcrt (spolymat_t r);
 void spolymat_free (spolymat_ptr r);
+#if PQZ_STDIO
 void spolymat_dump (spolymat_t mat);
+#endif
+#if PQZ_STDIO
 size_t spolymat_out_str (FILE *stream, int base, spolymat_t a);
+#endif
 
 void quad_toisoring (polymat_ptr R2[], polyvec_ptr r1[], poly_ptr r0[],
                      polymat_ptr R2prime, polyvec_ptr r1prime,
@@ -1671,34 +1639,23 @@ void falcon1024_preimage_sample (int16_t s1[1024], int16_t s2[1024],
 #define MAX(x, y) ((x) >= (y) ? (x) : (y))
 #define MIN(x, y) ((x) <= (y) ? (x) : (y))
 
+/* PQZ: ERR/ASSERT set the sticky error (pqz_rt.h) instead of fprintf + abort; asserts stay on in release. */
 #define ERR(expr, fmt, ...)                                                   \
   do                                                                          \
     {                                                                         \
       if (UNLIKELY ((expr)))                                                  \
-        {                                                                     \
-          fprintf (stderr, "lazer: error: " fmt "\n", __VA_ARGS__);           \
-          abort ();                                                           \
-        }                                                                     \
+        pqz_err_set (PQZ_ERR_INTERNAL);                                       \
     }                                                                         \
   while (0)
 
-#define WARN(expr, fmt, ...)                                                  \
-  do                                                                          \
-    {                                                                         \
-      if (UNLIKELY ((expr)))                                                  \
-        fprintf (stderr, "lazer: warning: " fmt "\n", __VA_ARGS__);           \
-    }                                                                         \
-  while (0)
+#define WARN(expr, fmt, ...) (void)0
 
 #if ASSERT == ASSERT_ENABLED
-#define ASSERT_ERR(expr)                                                      \
-  ERR (!(expr), "assertion %s failed (%s:%d).", #expr, __FILE__, __LINE__)
-#define ASSERT_WARN(expr)                                                     \
-  WARN (!(expr), "assertion %s failed (%s:%d).", #expr, __FILE__, __LINE__)
+#define ASSERT_ERR(expr) ERR (!(expr), "%s", "")
 #else
 #define ASSERT_ERR(expr) (void)0
-#define ASSERT_WARN(expr) (void)0
 #endif
+#define ASSERT_WARN(expr) (void)0
 
 #define _VEC_FOREACH_ELEM(__vec__, __it__)                                    \
   for ((__it__) = 0; (__it__) < (__vec__)->nelems; (__it__)++)
@@ -1785,7 +1742,7 @@ _sizeof_intmat (unsigned int nrows, unsigned int ncols, unsigned int nlimbs)
 static inline size_t
 _sizeof_crtrep_data (polyring_srcptr ring)
 {
-  return sizeof (crtcoeff_t) * ring->d * ring->nmoduli;
+  return sizeof (crtcoeff_t) * ring->d; /* PQZ: one NTT residue vector mod q, no CRT primes */
 }
 
 static inline size_t
@@ -2775,41 +2732,7 @@ int_redc_ct (int_t r, const int_t a, const int_t m)
 
 // XXX
 /* result in [-(m-1),...,m-1] */
-static inline crtcoeff_t
-int_mod_XXX (const int_t a, crtcoeff_t m)
-{
-  limb_t d1, d2, r;
-  int k;
-
-  r = 0;
-  for (k = a->nlimbs - 1; k >= 0; k--)
-    {
-      d1 = r;
-      d2 = a->limbs[k];
-      r = (((crtcoeff_dbl_t)d1 << CRTCOEFF_NBITS) + d2) % m; // XXX
-    }
-
-  return a->neg ? -r : r;
-}
-// XXX
-// XXX
-/* result in [-(m-1),...,m-1] */
-static inline uint64_t
-int_mod_XXX_hexl (const int_t a, crtcoeff_t m)
-{
-  limb_t d1, d2, r;
-  int k;
-
-  r = 0;
-  for (k = a->nlimbs - 1; k >= 0; k--)
-    {
-      d1 = r;
-      d2 = a->limbs[k];
-      r = (((crtcoeff_dbl_t)d1 << CRTCOEFF_NBITS) + d2) % m; // XXX
-    }
-
-  return a->neg ? m - r : r;
-}
+/* PQZ: int_mod_XXX / int_mod_XXX_hexl (variable-time 128-bit %) removed; see pqz_glue.h */
 
 static inline unsigned int
 intvec_get_nlimbs (const intvec_t a)
@@ -3529,17 +3452,10 @@ poly_neg_self (poly_t a)
 
   if (a->crt == 1)
     {
-      polyring_srcptr ring = poly_get_ring (a);
-      const unsigned int deg = polyring_get_deg (ring);
-      unsigned int i;
-      crtcoeff_t *c;
-
-      _POLYRING_FOREACH_P (ring, i)
-      {
-        c = _get_crtcoeff (a->crtrep, i, 0, deg);
-        hexl_ntt_scale (c, ring->moduli[i]->p - 1, c, deg, ring->moduli[i]->p,
-                        1);
-      }
+      /* PQZ: negate in the NTT domain mod q (was hexl_ntt_scale by p - 1 per CRT prime) */
+      uint64_t *c = (uint64_t *)a->crtrep;
+      for (unsigned int i = 0; i < PQZ_D; i++)
+        c[i] = pqz_csubq (PQZ_Q - c[i]);
     }
   else
     {
@@ -4212,6 +4128,8 @@ spolymat_get_ncols (spolymat_ptr r)
 {
   return r->ncols;
 }
+
+#include "pqz_glue.h"
 
 __END_DECLS
 #endif

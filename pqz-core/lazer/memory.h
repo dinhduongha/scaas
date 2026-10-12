@@ -3,14 +3,11 @@
 
 #include <stddef.h>
 
-static void *alloc_default (size_t)
-    __attribute__ ((__returns_nonnull__, alloc_size (1)));
-static void *realloc_default (void *, size_t, size_t)
-    __attribute__ ((__returns_nonnull__, alloc_size (2)));
-static void free_default (void *, size_t);
+#include "pqz_rt.h"
 
-static void *(*_alloc) (size_t) = alloc_default;
-static void *(*_realloc) (void *, size_t, size_t) = realloc_default;
-static void (*_free) (void *, size_t) = free_default;
+/* PQZ: LaZer's malloc/realloc/free hooks point at the caller-provided arena (pqz_arena.c). */
+#define _alloc pqz_arena_alloc
+#define _realloc pqz_arena_realloc
+#define _free pqz_arena_free
 
 #endif

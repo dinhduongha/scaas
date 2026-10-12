@@ -81,6 +81,12 @@ gamma4 = 5
 if not loaded:
     load(params_file)
 
+# PQZ: overrides that must survive the constants block above (params are loaded before it when loaded == 1).
+if 'pqz_L' in globals():
+    L = pqz_L        # X^d + 1 splits into L factors mod q
+if 'pqz_delta' in globals():
+    DELTA128 = pqz_delta  # root-Hermite target; 1.00366 ~ beta 450 (CTR-PQZ-03) instead of LaZer's 1.0044
+
 
 # default values if no norms are proven
 if not 'nbin' in globals():
@@ -143,7 +149,9 @@ D = 0       # dropping low-order bits of t_A
 gamma = 0   # dropping low-order bits of w
 
 # challenge space
-if d == 64 and L == 2 and log2q1_ >= 4:
+# PQZ: L = 4 (q = 9 mod 16) keeps LaZer's d = 64 challenge set: differences have
+# l_inf <= 2*omega = 16 < q^(1/4)/sqrt(4) ~ 724 (LS18 Cor. 1.2), so they stay invertible.
+if d == 64 and L in (2, 4) and log2q1_ >= 4:
     omega = 8
     eta = 140
     Csize = 2 ** 129
@@ -217,6 +225,11 @@ while True:
 
 # Find an appropriate Module-SIS dimension
 kmsis = 0   # dimension of the MSIS problem
+# PQZ: floors from the lattice-estimator check (pqz-core/params/e_s1_proof.py)
+if 'kmlwe_min' in globals() and kmlwe < kmlwe_min:
+    kmlwe = kmlwe_min
+if 'kmsis_min' in globals():
+    kmsis = kmsis_min - 1
 while True:
     kmsis += 1
     # we use the packing optimisation from Section 5.3 XXX (paper)
@@ -241,9 +254,17 @@ while True:       # searching for right gamma
 
 # Find exact values for q, q1 and gamma:
 done = false
+if 'q_fixed' in globals():
+    # PQZ: the proof modulus is the encryption modulus q (pq-zether.md CTR-PQZ-09
+    # "Proof modulus = q"), not a prime searched near 2^log2q. gamma: the largest
+    # even divisor of q - 1 not above the MSIS-derived gamma.
+    q = q1 = Integer(q_fixed)
+    gamma = max(i for i in divisors(q - 1) if i <= gamma and is_even(i))
+    done = True
 # q1 = 2L+1 mod 4L
-q1 = ceil((2 ** log2q1_)/(4*L)) * 4*L + 2*L+1
-q1 -= 4*L
+if not done:
+    q1 = ceil((2 ** log2q1_)/(4*L)) * 4*L + 2*L+1
+    q1 -= 4*L
 while done == False:
     q1 += 4*L
     while is_prime(q1) == False:

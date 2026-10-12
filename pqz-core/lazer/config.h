@@ -2,7 +2,7 @@
  * TARGET: GENERIC, AMD64
  * Architecture target.
  */
-#define TARGET TARGET_AMD64
+#define TARGET TARGET_GENERIC /* PQZ: portable, no intrinsics */
 
 /*
  * RNG: SHAKE128, AES256CTR
@@ -14,7 +14,14 @@
  * ASSERT: ENABLED, DISABLED
  * Enable or diasble assertions.
  */
+#ifndef PQZ_ASSERT
+#define PQZ_ASSERT 1
+#endif
+#if PQZ_ASSERT /* PQZ: invariant checks stay on in release (error returns), pq-zether.md §10 */
+#define ASSERT ASSERT_ENABLED
+#else
 #define ASSERT ASSERT_DISABLED
+#endif
 
 /*
  * TIMERS: ENABLED, DISABLED

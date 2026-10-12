@@ -4,8 +4,6 @@
 #include "memory.h"
 #include "urandom.h"
 
-#include <gmp.h>
-#include <string.h>
 
 void
 int_alloc (int_ptr r, unsigned int nlimbs)
@@ -150,9 +148,7 @@ int_mod (int_t r, const int_t a, const int_t m)
 
   if (m->nlimbs == 1)
     {
-      const crtcoeff_t mod = (crtcoeff_t)m->limbs[0];
-      crtcoeff_t x = int_mod_XXX (a, mod);
-      int_set_i64 (r, x);
+      int_set_i64 (r, pqz_int_mod1 (a, m->limbs[0])); /* PQZ: constant-time, no 128-bit '%' */
     }
   else
     {
@@ -280,6 +276,7 @@ int_clear (int_t r)
   memset (r, 0, sizeof (int_t));
 }
 
+#if PQZ_STDIO
 size_t
 int_out_str (FILE *stream, int base, const int_t a)
 {
@@ -307,30 +304,31 @@ int_inp_str (UNUSED int_t r, UNUSED FILE *stream, UNUSED int base)
   return 0;
 }
 
-/* import export twos complement ? XXX */
+#endif
+
+/* PQZ: little-endian magnitude import/export without GMP (upstream: mpz_import/mpz_export, -1 order) */
 void
 int_import (int_t r, const uint8_t *bytes, size_t nbytes)
 {
-  const mp_limb_t *ptr;
   size_t i;
-  mpz_t z;
 
-  mpz_init2 (z, 8 * (sizeof (mp_limb_t) + nbytes));
-  mpz_import (z, nbytes, -1, 1, -1, 0, bytes);
-
-  ptr = mpz_limbs_read (z);
-  for (i = 0; i < MIN (mpz_size (z), r->nlimbs); i++)
-    r->limbs[i] = ptr[i];
+  for (i = 0; i < r->nlimbs; i++)
+    r->limbs[i] = 0;
+  for (i = 0; i < nbytes && i < 8 * (size_t)r->nlimbs; i++)
+    r->limbs[i >> 3] |= (limb_t)bytes[i] << (8 * (i & 7));
   r->neg = 0;
-
-  mpz_clear (z);
 }
 
 void
 int_export (uint8_t *bytes, size_t *nbytes, const int_t a)
 {
-  mpz_t _a;
+  size_t i, n = 0;
 
-  mpz_roinit_n (_a, a->limbs, a->nlimbs);
-  mpz_export (bytes, nbytes, -1, 1, -1, 0, _a);
+  for (i = 0; i < 8 * (size_t)a->nlimbs; i++)
+    {
+      bytes[i] = (uint8_t)(a->limbs[i >> 3] >> (8 * (i & 7)));
+      if (bytes[i] != 0)
+        n = i + 1;
+    }
+  *nbytes = n; /* mpz_export writes no leading zero bytes */
 }

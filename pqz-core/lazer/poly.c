@@ -6,7 +6,6 @@
 #include "memory.h"
 // #include "ntt.h"
 #include "urandom.h"
-#include <math.h>
 
 void
 poly_alloc (poly_ptr r, const polyring_t ring)
@@ -44,8 +43,7 @@ poly_set (poly_t r, const poly_t a)
       if (r->crtrep == NULL)
         r->crtrep = _alloc (_sizeof_crtrep_data (ring));
 
-      memcpy (r->crtrep, a->crtrep,
-              sizeof (crtcoeff_t) * ring->d * ring->nmoduli);
+      memcpy (r->crtrep, a->crtrep, _sizeof_crtrep_data (ring));
     }
   else
     {
@@ -58,9 +56,6 @@ void
 poly_add (poly_t r, poly_t a, poly_t b, int crt)
 {
   polyring_srcptr ring = poly_get_ring (r);
-  const unsigned int deg = polyring_get_deg (ring);
-  crtcoeff_t *ca, *cb, *cr;
-  unsigned int i;
 
   ASSERT_ERR (ring == poly_get_ring (a));
   ASSERT_ERR (ring == poly_get_ring (b));
@@ -68,31 +63,10 @@ poly_add (poly_t r, poly_t a, poly_t b, int crt)
   r->crt = _to_same_dom (a, b, crt);
   if (r->crt)
     {
+      /* PQZ: NTT domain mod q (pqz_ntt.c); was HEXL per CRT prime */
       if (r->crtrep == NULL)
         r->crtrep = _alloc (_sizeof_crtrep_data (ring));
-
-      _POLYRING_FOREACH_P (ring, i)
-      {
-#ifdef XXX
-        crtcoeff_t tmp;
-        unsigned int j;
-
-        for (j = 0; j < ring->d; j++)
-          {
-            ca = _get_crtcoeff (a->crtrep, i, j, deg);
-            cb = _get_crtcoeff (b->crtrep, i, j, deg);
-            cr = _get_crtcoeff (r->crtrep, i, j, deg);
-
-            tmp = (crtcoeff_t)(*ca) + (*cb);
-            *cr = _mont_rsum (tmp, ring->moduli[i]->p);
-          }
-#else
-        ca = _get_crtcoeff (a->crtrep, i, 0, deg);
-        cb = _get_crtcoeff (b->crtrep, i, 0, deg);
-        cr = _get_crtcoeff (r->crtrep, i, 0, deg);
-        hexl_ntt_add (cr, ca, cb, deg, ring->moduli[i]->p);
-#endif
-      }
+      pqz_ntt_add ((uint64_t *)r->crtrep, (uint64_t *)a->crtrep, (uint64_t *)b->crtrep);
     }
   else
     {
@@ -105,9 +79,6 @@ void
 poly_sub (poly_t r, poly_t a, poly_t b, int crt)
 {
   polyring_srcptr ring = poly_get_ring (r);
-  const unsigned int deg = polyring_get_deg (ring);
-  crtcoeff_t *ca, *cb, *cr;
-  unsigned int i;
 
   ASSERT_ERR (ring == poly_get_ring (a));
   ASSERT_ERR (ring == poly_get_ring (b));
@@ -115,31 +86,10 @@ poly_sub (poly_t r, poly_t a, poly_t b, int crt)
   r->crt = _to_same_dom (a, b, crt);
   if (r->crt)
     {
+      /* PQZ: NTT domain mod q (pqz_ntt.c); was HEXL per CRT prime */
       if (r->crtrep == NULL)
         r->crtrep = _alloc (_sizeof_crtrep_data (ring));
-
-      _POLYRING_FOREACH_P (ring, i)
-      {
-#ifdef XXX
-        crtcoeff_t tmp;
-        unsigned int j;
-
-        for (j = 0; j < ring->d; j++)
-          {
-            ca = _get_crtcoeff (a->crtrep, i, j, deg);
-            cb = _get_crtcoeff (b->crtrep, i, j, deg);
-            cr = _get_crtcoeff (r->crtrep, i, j, deg);
-
-            tmp = (crtcoeff_t)(*ca) - (*cb);
-            *cr = _mont_rsum (tmp, ring->moduli[i]->p);
-          }
-#else
-        ca = _get_crtcoeff (a->crtrep, i, 0, deg);
-        cb = _get_crtcoeff (b->crtrep, i, 0, deg);
-        cr = _get_crtcoeff (r->crtrep, i, 0, deg);
-        hexl_ntt_sub (cr, ca, cb, deg, ring->moduli[i]->p);
-#endif
-      }
+      pqz_ntt_sub ((uint64_t *)r->crtrep, (uint64_t *)a->crtrep, (uint64_t *)b->crtrep);
     }
   else
     {
@@ -174,34 +124,6 @@ poly_scale (poly_t r, const int_t a, poly_t b)
   ASSERT_ERR (ring == poly_get_ring (b));
   ASSERT_ERR (a->nlimbs == b->coeffs->nlimbs);
 
-#if 0
-  crtcoeff_t _a;
-  crtcoeff_t *cb, *cr;
-  unsigned int i;
-
-  if (b->crt == 1)
-    {
-      const unsigned int deg = polyring_get_deg (ring);
-
-      if (r->crtrep == NULL)
-        {
-          ASSERT_ERR (r->crt == 0);
-          r->crtrep = _alloc (_sizeof_crtrep_data (ring));
-        }
-      r->crt = 1;
-
-      _POLYRING_FOREACH_P (ring, i)
-      {
-        _a = int_mod_XXX_hexl (a, ring->moduli[i]->p);
-
-        cb = _get_crtcoeff (b->crtrep, i, 0, deg);
-        cr = _get_crtcoeff (r->crtrep, i, 0, deg);
-        hexl_ntt_scale (cr, _a, cb, deg, ring->moduli[i]->p, 1);
-      }
-    }
-  else
-    {
-#endif
   INTVEC_T (tmp, polyring_get_deg (ring), 2 * a->nlimbs);
 
   _fromcrt (b); // XXX can also do this in crt dom
@@ -210,7 +132,6 @@ poly_scale (poly_t r, const int_t a, poly_t b)
   intvec_scale (tmp, a, _get_coeffvec_src (b));
   intvec_mod (r->coeffs, tmp, ring->q);
   intvec_redc (r->coeffs, r->coeffs, ring->q);
-  //}
 }
 
 void
@@ -414,9 +335,6 @@ void
 poly_mul (poly_t r, poly_t a, poly_t b)
 {
   polyring_srcptr ring = r->ring;
-  const unsigned int deg = polyring_get_deg (ring);
-  unsigned int i;
-  crtcoeff_t *ca, *cb, *cr;
 
   ASSERT_ERR (r->ring == a->ring);
   ASSERT_ERR (r->ring == b->ring);
@@ -430,31 +348,8 @@ poly_mul (poly_t r, poly_t a, poly_t b)
       r->crtrep = _alloc (_sizeof_crtrep_data (ring));
     }
   r->crt = 1;
-
-  _POLYRING_FOREACH_P (ring, i)
-  {
-#ifdef XXX
-    crtcoeff_t p = ring->moduli[i]->p;
-    crtcoeff_t pinv = ring->moduli[i]->mont_pinv;
-    unsigned int j;
-    crtcoeff_dbl_t tmp;
-
-    for (j = 0; j < deg; j++)
-      {
-        ca = _get_crtcoeff (a->crtrep, i, j, deg);
-        cb = _get_crtcoeff (b->crtrep, i, j, deg);
-        cr = _get_crtcoeff (r->crtrep, i, j, deg);
-
-        tmp = (crtcoeff_dbl_t)(*ca) * (*cb);
-        *cr = _mont_rprod (tmp, p, pinv);
-      }
-#else
-    ca = _get_crtcoeff (a->crtrep, i, 0, deg);
-    cb = _get_crtcoeff (b->crtrep, i, 0, deg);
-    cr = _get_crtcoeff (r->crtrep, i, 0, deg);
-    hexl_ntt_mul (cr, ca, cb, 1, deg, ring->moduli[i]->p);
-#endif
-  }
+  /* PQZ: base multiplication mod X^16 - rho_j (pqz_ntt.c); was HEXL pointwise per CRT prime */
+  pqz_ntt_basemul ((uint64_t *)r->crtrep, (uint64_t *)a->crtrep, (uint64_t *)b->crtrep);
 }
 
 void
@@ -595,60 +490,19 @@ poly_tocrt (poly_t r)
 
   polyring_srcptr ring = poly_get_ring (r);
   const unsigned int deg = polyring_get_deg (ring);
-  intvec_srcptr coeffs = r->coeffs;
-  crtcoeff_t *crtrep;
-  unsigned int i;
-  void **hexl_ntts;
-  // intvec_t tmp1;
-  // INT_T (p, 1);
-  crtcoeff_t *crtcoeff;
+  unsigned int j;
 
-  DEBUG_PRINTF (DEBUG_PRINT_TOCRT, "crt %p", (void *)r);
-
-  // intvec_alloc (tmp1, deg, 1); // XXX costs more than NTTs ...
+  /* PQZ: coefficients -> [0, q) -> incomplete NTT mod q. Only the PQZ ring exists. */
+  ERR (deg != PQZ_D || ring->q->nlimbs != 1 || ring->q->limbs[0] != PQZ_Q, "%s", "ring is not R_q");
 
   if (r->crtrep == NULL)
     r->crtrep = _alloc (_sizeof_crtrep_data (ring));
   r->crt = 1;
 
-  hexl_ntts = (deg == 64 ? hexl_ntt_d64 : hexl_ntt_d128);
-
-  crtrep = r->crtrep;
-  _POLYRING_FOREACH_P (ring, i)
-  {
-#if 0
-    int_set_i64 (p, ring->moduli[i]->p);
-
-    intvec_mod (tmp1, coeffs, p); /* reduce to (-p,p) */
-    // not needed, ntt input can be in (-p,p)
-    // intvec_redc (tmp1, tmp1, p); /* reduce to (-(p-1)/2,(p-1)/2) */
-
-    crtcoeff = _get_crtcoeff (crtrep, i, 0, deg);
-#if CRTCOEFF_NBITS == 32
-    intvec_get_i32 (crtcoeff, tmp1);
-#else
-#error "not implemented"
-#endif
-#else
-    // XXX
-    unsigned int j;
-    for (j = 0; j < deg; j++)
-      {
-        crtcoeff = _get_crtcoeff (crtrep, i, j, deg);
-        int_ptr coeff = intvec_get_elem (coeffs, j);
-        *crtcoeff = int_mod_XXX_hexl (coeff, ring->moduli[i]->p);
-      }
-    crtcoeff = _get_crtcoeff (crtrep, i, 0, deg);
-    // XXX
-    //_ntt (crtcoeff, ring->moduli[i], deg);
-
-    void *hexl_ntt = hexl_ntts[i];
-
-    crtcoeff = _get_crtcoeff (crtrep, i, 0, deg);
-    hexl_ntt_fwd (hexl_ntt, crtcoeff, 1, crtcoeff, 1);
-#endif
-  }
-  // XXXintvec_free (tmp1);
+  uint64_t *c = (uint64_t *)r->crtrep;
+  for (j = 0; j < PQZ_D; j++)
+    c[j] = pqz_int_modq (intvec_get_elem (r->coeffs, j));
+  pqz_ntt_fwd (c);
 }
 
 void
@@ -658,215 +512,19 @@ poly_fromcrt (poly_t r)
     return;
 
   polyring_srcptr ring = poly_get_ring (r);
-  const unsigned int deg = polyring_get_deg (ring);
-  int_srcptr mod = polyring_get_mod (ring);
   intvec_ptr coeffs = _get_coeffvec (r);
-  const unsigned int s = ring->nmoduli;
-  crtcoeff_t *crtrep = r->crtrep;
-  modulus_srcptr crtmod = ring->moduli[s - 1];
-  crtcoeff_t *crtcoeff, x;
-  crtcoeff_t p;
-  int_ptr coeff;
-  void **hexl_ntts;
-  unsigned int i, j;
-  float z;
-  long round_z;
+  uint64_t *c = (uint64_t *)r->crtrep;
+  unsigned int j;
 
-  if (ring->Ppmodq != NULL)
-    {
-#define ECRT 0
-#if ECRT == 1
-      INT_T (Pz, crtmod->P->nlimbs * 2);
-      INT_T (tmp2, crtmod->P->nlimbs * 2);
-      INT_T (tmp1, crtmod->P->nlimbs);
-#else
-      INT_T (Pz, ring->q->nlimbs + 1);
-      INT_T (tmp2, ring->q->nlimbs + 1);
-      INT_T (tmp1, ring->q->nlimbs * 2);
-#endif
+  /* PQZ: inverse NTT mod q, then the centred representative in [-(q-1)/2, (q-1)/2] (as upstream's
+     int_mod + int_redc after the CRT reconstruction, which used a float rounding step) */
+  pqz_ntt_inv (c);
+  for (j = 0; j < PQZ_D; j++)
+    pqz_int_set_centred (intvec_get_elem (coeffs, j), c[j]);
 
-      DEBUG_PRINTF (DEBUG_PRINT_FROMCRT, "icrt %p", (void *)r);
-
-      crtmod = ring->moduli[s - 1];
-      hexl_ntts = (deg == 64 ? hexl_ntt_d64 : hexl_ntt_d128);
-
-      _POLYRING_FOREACH_P (ring, i)
-      {
-        crtcoeff = _get_crtcoeff (crtrep, i, 0, deg);
-        // XXX_intt (crtcoeff, ring->moduli[i], deg);
-
-        void *hexl_ntt = hexl_ntts[i];
-
-        crtcoeff = _get_crtcoeff (crtrep, i, 0, deg);
-        hexl_ntt_inv (hexl_ntt, crtcoeff, 1, crtcoeff, 1);
-        for (j = 0; j < deg; j++)
-          {
-            crtcoeff = _get_crtcoeff (crtrep, i, j, deg);
-            // if (*crtcoeff > (ring->moduli[i]->p - 1) / 2)
-            // XXX  *crtcoeff = *crtcoeff - ring->moduli[i]->p;
-          }
-      }
-
-      _VEC_FOREACH_ELEM (coeffs, j)
-      {
-        coeff = intvec_get_elem (coeffs, j);
-        int_set_i64 (Pz, 0);
-        z = 0;
-
-        _POLYRING_FOREACH_P (ring, i)
-        {
-          p = ring->moduli[i]->p;
-
-          crtcoeff = _get_crtcoeff (crtrep, i, j, deg);
-          // if (*crtcoeff > (p - 1) / 2)
-          //   *crtcoeff -= p;
-          // else if (*crtcoeff < -(p - 1) / 2)
-          //   *crtcoeff += p;
-          //  XXX
-
-          x = ((crtcoeff_dbl_t)crtmod->k[i] * (*crtcoeff))
-              % p; // XXX in (-p,p)
-                   // XXX
-                   // if (x > (p - 1) / 2)
-                   //  x -= p;
-                   // else if (x < -(p - 1) / 2)
-                   //  x += p;
-                   // XXX
-
-#if ECRT == 1
-          int_set_i64 (tmp1, x);
-          int_mul (tmp2, crtmod->Pp[i], tmp1);
-#else
-          int_mul1 (tmp2, ring->Ppmodq[i], x);
-#endif
-          int_add (Pz, Pz, tmp2);
-
-          z += (float)x / p;
-        }
-
-        round_z = lroundf (z);
-
-#if ECRT == 1
-        int_set_i64 (tmp1, round_z);
-        int_mul (tmp2, crtmod->P, tmp1);
-#else
-        int_mul1 (tmp2, ring->Pmodq, round_z);
-#endif
-
-        int_sub (Pz, Pz, tmp2);
-
-#if ECRT == 1
-        int_mod (coeff, Pz, mod);
-        int_redc (coeff, coeff, mod);
-#else
-        int_set (tmp1, Pz);
-        int_mod (coeff, tmp1, mod);
-        int_redc (coeff, coeff, mod);
-#endif
-      }
-
-      _free (r->crtrep, _sizeof_crtrep_data (ring));
-      r->crtrep = NULL;
-      r->crt = 0;
-    }
-  else
-    {
-#undef ECRT
-#define ECRT 1
-#if ECRT == 1
-      INT_T (Pz, crtmod->P->nlimbs * 2);
-      INT_T (tmp2, crtmod->P->nlimbs * 2);
-      INT_T (tmp1, crtmod->P->nlimbs);
-#else
-      INT_T (Pz, ring->q->nlimbs + 1);
-      INT_T (tmp2, ring->q->nlimbs + 1);
-      INT_T (tmp1, ring->q->nlimbs * 2);
-#endif
-
-      DEBUG_PRINTF (DEBUG_PRINT_FROMCRT, "icrt %p", (void *)r);
-
-      crtmod = ring->moduli[s - 1];
-      hexl_ntts = (deg == 64 ? hexl_ntt_d64 : hexl_ntt_d128);
-
-      _POLYRING_FOREACH_P (ring, i)
-      {
-        crtcoeff = _get_crtcoeff (crtrep, i, 0, deg);
-        // XXX_intt (crtcoeff, ring->moduli[i], deg);
-
-        void *hexl_ntt = hexl_ntts[i];
-
-        crtcoeff = _get_crtcoeff (crtrep, i, 0, deg);
-        hexl_ntt_inv (hexl_ntt, crtcoeff, 1, crtcoeff, 1);
-        for (j = 0; j < deg; j++)
-          {
-            crtcoeff = _get_crtcoeff (crtrep, i, j, deg);
-            // if (*crtcoeff > (ring->moduli[i]->p - 1) / 2)
-            // XXX  *crtcoeff = *crtcoeff - ring->moduli[i]->p;
-          }
-      }
-
-      _VEC_FOREACH_ELEM (coeffs, j)
-      {
-        coeff = intvec_get_elem (coeffs, j);
-        int_set_i64 (Pz, 0);
-        z = 0;
-
-        _POLYRING_FOREACH_P (ring, i)
-        {
-          p = ring->moduli[i]->p;
-
-          crtcoeff = _get_crtcoeff (crtrep, i, j, deg);
-          // if (*crtcoeff > (p - 1) / 2)
-          //   *crtcoeff -= p;
-          // else if (*crtcoeff < -(p - 1) / 2)
-          //   *crtcoeff += p;
-          //  XXX
-
-          x = ((crtcoeff_dbl_t)crtmod->k[i] * (*crtcoeff))
-              % p; // XXX in (-p,p)
-                   // XXX
-                   // if (x > (p - 1) / 2)
-                   //  x -= p;
-                   // else if (x < -(p - 1) / 2)
-                   //  x += p;
-                   // XXX
-
-#if ECRT == 1
-          int_set_i64 (tmp1, x);
-          int_mul (tmp2, crtmod->Pp[i], tmp1);
-#else
-          int_mul1 (tmp2, ring->Ppmodq[i], x);
-#endif
-          int_add (Pz, Pz, tmp2);
-
-          z += (float)x / p;
-        }
-
-        round_z = lroundf (z);
-
-#if ECRT == 1
-        int_set_i64 (tmp1, round_z);
-        int_mul (tmp2, crtmod->P, tmp1);
-#else
-        int_mul1 (tmp2, ring->Pmodq, round_z);
-#endif
-
-        int_sub (Pz, Pz, tmp2);
-
-#if ECRT == 1
-        int_mod (coeff, Pz, mod);
-        int_redc (coeff, coeff, mod);
-#else
-        int_set (tmp1, Pz);
-        int_mod (coeff, tmp1, mod);
-        int_redc (coeff, coeff, mod);
-#endif
-      }
-
-      _free (r->crtrep, _sizeof_crtrep_data (ring));
-      r->crtrep = NULL;
-      r->crt = 0;
-    }
+  _free (r->crtrep, _sizeof_crtrep_data (ring));
+  r->crtrep = NULL;
+  r->crt = 0;
 }
 
 void
@@ -1162,13 +820,16 @@ poly_linf (int_t r, poly_t a)
   intvec_linf (r, poly_get_coeffvec (a));
 }
 
+#if PQZ_STDIO
 size_t
 poly_out_str (FILE *stream, int base, poly_t a)
 {
   _fromcrt (a);
   return intvec_out_str (stream, base, a->coeffs);
 }
+#endif
 
+#if PQZ_STDIO
 void
 poly_dump (poly_t a)
 {
@@ -1176,6 +837,7 @@ poly_dump (poly_t a)
   fprintf (stdout, "\n");
   fflush (stdout);
 }
+#endif
 
 static void
 _poly_urandom (poly_t r, const int_t mod, unsigned int log2mod,

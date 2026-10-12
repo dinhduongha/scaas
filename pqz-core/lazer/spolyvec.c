@@ -6,7 +6,6 @@
 #include "poly.h"
 #include "urandom.h"
 
-#include <stdlib.h>
 #include <string.h>
 
 static int
@@ -40,7 +39,7 @@ spolyvec_sort (spolyvec_ptr r)
 {
   ASSERT_ERR (r->sorted == 0);
 
-  qsort (r->elems, r->nelems, sizeof (_spolyvec_struct), _cmp_spolyvec);
+  pqz_qsort (r->elems, r->nelems, sizeof (_spolyvec_struct), _cmp_spolyvec);
   r->sorted = 1;
 }
 
@@ -360,6 +359,7 @@ spolyvec_get_elem2 (spolyvec_ptr a, unsigned int elem)
   return NULL;
 }
 
+#if PQZ_STDIO
 size_t
 spolyvec_out_str (FILE *stream, int base, spolyvec_t a)
 {
@@ -395,7 +395,9 @@ spolyvec_out_str (FILE *stream, int base, spolyvec_t a)
 
   return nbytes;
 }
+#endif
 
+#if PQZ_STDIO
 void
 spolyvec_dump (spolyvec_t vec)
 {
@@ -403,3 +405,4 @@ spolyvec_dump (spolyvec_t vec)
   fprintf (stdout, "\n");
   fflush (stdout);
 }
+#endif

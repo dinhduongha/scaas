@@ -1,6 +1,5 @@
 #include "lazer.h"
 #include "stopwatch.h"
-#include <mpfr.h>
 
 static void
 _schwartz_zippel_poly (spolymat_t R2, spolyvec_t r1, poly_t r0,
