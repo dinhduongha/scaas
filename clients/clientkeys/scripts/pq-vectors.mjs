@@ -1,7 +1,8 @@
 // Generates smartcontracts/vectors/ua/pq_kat.json: for each PQ kind, the key pair derived from the SEP-0005 test mnemonic
 // (account 0, index 0) by src/pq.js, the UA id, ua_msg / signed message for purpose `pop` over a fixed digest, a
 // deterministic signature (ML-DSA, SLH-DSA: extraEntropy false; Falcon: a fixed `random`), the EIP-8051 expanded key
-// (ML-DSA), the EIP-8355 probe inputs (ML-DSA) and a mutation set with noble's verdict for each entry (the forge test
+// (ML-DSA), the EIP-8355 probe inputs (ML-DSA) and a mutation set with noble's verdict for each entry (for ML-DSA and
+// SLH-DSA also signatures that are valid under the context `kind_tag`, which the empty-context verifier refuses; the forge test
 // requires the Solidity verifier to give the same verdict: differential parity, T-FUZZ's deterministic part).
 //   node scripts/pq-vectors.mjs
 import { writeFileSync, mkdirSync } from 'node:fs';
@@ -41,6 +42,11 @@ for (const name of Object.keys(PQ_KINDS)) {
     ['ua_msg[0] ^ 0x01', kp.publicKey, sig, flip(ua, 0)],
     ['truncated sig', kp.publicKey, sig.slice(0, n - 1), ua],
   ];
+  if (PQ_KINDS[name].pq) { // valid signatures under a non-empty context: the transitional form CTR-UA-23 dropped
+    const ctx = { context: utf8ToBytes(PQ_KINDS[name].tag), extraEntropy: false };
+    cases.push(['ctx = kind_tag, over pq_msg', kp.publicKey, PQ_KINDS[name].alg.sign(msg, kp.secretKey, ctx), ua]);
+    cases.push(['ctx = kind_tag, over ua_msg', kp.publicKey, PQ_KINDS[name].alg.sign(ua, kp.secretKey, ctx), ua]);
+  }
   const mutations = cases.map(([what, pk, s, u]) => {
     const m2 = PQ_KINDS[name].pq ? keccak_256(concatBytes(kindTag(name), u)) : u;
     let valid;

@@ -26,7 +26,10 @@ function spec(name) {
   return s;
 }
 
-const u32 = (v) => new Uint8Array([v >>> 24, (v >>> 16) & 255, (v >>> 8) & 255, v & 255]);
+const u32 = (v, what) => {
+  if (!Number.isInteger(v) || v < 0 || v > 0xffffffff) throw new Error(`${what} must be an integer in [0, 2^32)`);
+  return new Uint8Array([v >>> 24, (v >>> 16) & 255, (v >>> 8) & 255, v & 255]);
+};
 const b32 = (x, what) => {
   if (!(x instanceof Uint8Array) || x.length !== 32) throw new Error(`${what} must be 32 bytes`);
   return x;
@@ -51,7 +54,9 @@ export const pqMessage = (name, uaMsg) => keccak_256(concatBytes(kindTag(name), 
 /** ξ = HKDF-SHA256(ikm = BIP-39 seed, salt = "scaas.ua.pq.v1", info = kind_tag ‖ u32 account ‖ u32 index). */
 export function pqSeed(seed, name, account, index) {
   const s = spec(name);
-  return hkdf(sha256, seed, utf8ToBytes('scaas.ua.pq.v1'), concatBytes(utf8ToBytes(s.tag), u32(account), u32(index)), s.seedLen);
+  if (!(seed instanceof Uint8Array)) throw new Error('seed must be a Uint8Array');
+  const info = concatBytes(utf8ToBytes(s.tag), u32(account, 'account'), u32(index, 'index'));
+  return hkdf(sha256, seed, utf8ToBytes('scaas.ua.pq.v1'), info, s.seedLen);
 }
 
 /** Deterministic key pair of a PQ kind. Falcon keys are implementation-specific: pinned to @noble/post-quantum 0.7.1 by the vectors. */
