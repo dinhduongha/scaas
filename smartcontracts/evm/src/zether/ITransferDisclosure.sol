@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: LicenseRef-SCaaS-Community-1.0
 pragma solidity ^0.8.20;
 
 /// @title Selective disclosure: chứng minh "tôi đã gửi ĐÚNG số tiền này, trong ĐÚNG

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: Apache-2.0
+// SPDX-License-Identifier: LicenseRef-SCaaS-Community-1.0
 pragma solidity ^0.8.24;
 
 /// @title Negacyclic NTT over Z_q[X]/(X^n + 1) on memory polynomials (one coefficient per 32-byte word).
