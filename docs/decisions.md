@@ -3027,7 +3027,7 @@ Change (2026-10-08): both UA structs (`UAMetaTransaction`, `UAMetaTransfer`) sha
 ### CTR-UA-22 — Breaking dev-only migration from Zether registry
 - old: R312 · status: current · owner: no · date: 2026-10-06 · normative: contracts/accounts.md#CTR-UA-22 · superseded-by: —
 
-**Why.** Migration from the built Zether registry is breaking and dev-only: the old registry and `AuthScheme` are deleted, Zether accounts re-register.
+**Why.** Migration from the built Zether registry is breaking and dev-only: the old registry and `AuthScheme` leave the build (backed up in `smartcontracts/evm/legacy/ua3/`, UA-3), Zether accounts re-register.
 **Cost if wrong.** Dev balances are recreated by scripts; no production data exists.
 **Source.** `history/specs/2026-10-06-universal-account-design.md:278`
 

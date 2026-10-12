@@ -406,7 +406,7 @@ flowchart LR
     UA["Universal Account<br/>32-byte id"]
     SKA["SmartKeyAccount<br/>ERC-1271, many keys"]
     MW["MandateWallet<br/>holds the payer's funds"]
-    REG["UniversalAccountRegistry"]
+    REG["UARegistry"]
     GUA["Guardian"]
     DEL["Delegate"]
     T["Token or any<br/>MetaTxBase contract"]
@@ -430,7 +430,7 @@ An account is whoever can produce a valid signature, and SCaaS has three forms (
 A **native account** is what the chain already understands, and never registers. A **Universal Account** is the
 default for subjects: a 32-byte id derived from key data, so any key type works on any family without a contract per
 user ([universal-account](contracts/accounts.md#universal-account)). Because a token must know how to verify such a
-key, the id is registered once per chain in the admin-free `UniversalAccountRegistry` with a proof of possession that
+key, the id is registered once per chain in the admin-free UA registry (`UARegistry`) with a proof of possession that
 binds the chain, the registry, the id and `authRef` — but not the caller, so a relayer can submit the registration and
 onboarding is gasless ([CTR-UA-07](contracts/accounts.md#CTR-UA-07)).
 
@@ -453,7 +453,7 @@ flowchart LR
         S["Shielded balance<br/>acc and pending per UA"]
     end
     V["Zether verifier<br/>bn254 or BLS12-381"]
-    R["UniversalAccountRegistry"]
+    R["UARegistry"]
     ST["ZetherStatements"]
     D["ZetherDisclosure"]
     U -->|"wrap"| P
@@ -720,7 +720,7 @@ sequenceDiagram
     participant APP as Client app (clientkeys)
     participant GW as Node gateway
     participant LANE as Submit lane
-    participant REG as UniversalAccountRegistry
+    participant REG as UARegistry
     participant VER as Kind verifier
     APP->>APP: ua = uaOf(kind, keyData)
     APP->>REG: popDigest(ua, authRef), bound to chain_uid

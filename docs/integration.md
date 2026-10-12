@@ -806,9 +806,9 @@ the bid's own data. Either way the salt is unknown to anyone else until reveal, 
   and subjects move their balances by signing `pay` from the old account. Clients re-read chain profiles after such a
   redeploy.
 
-**Universal Account registration (SPECIFIED; [contracts/accounts](contracts/accounts.md#universal-account)).** It
-replaces the Zether-only flow of the built `UniversalAccountRegistry` (`UA = keccak256(encodedY)`, PoP bound to
-`msg.sender`, `AuthScheme`, `linkEVM`), which stays on dev chains until the new registry ships.
+**Universal Account registration ([contracts/accounts](contracts/accounts.md#universal-account); the registry BUILT, UA-2/UA-3).** It
+replaced the Zether-only flow of the old `UniversalAccountRegistry` (`UA = keccak256(encodedY)`, PoP bound to
+`msg.sender`, `AuthScheme`, `linkEVM`; backed up in `smartcontracts/evm/legacy/ua3/`).
 
 **Native accounts are never registered** ([CTR-UA-06](contracts/accounts.md#CTR-UA-06)): an EVM EOA or contract
 account (incl. `SmartKeyAccount`, Safe), Hedera native accounts (an `msig` member only on Hedera registries), Solana,

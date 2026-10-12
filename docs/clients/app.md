@@ -375,7 +375,7 @@ unlocked ([vault threat model](signers-clientkeys.md#vault)).
 | Backup | `hasBackup`, `backupStatus` — keys de-duplicated by P-256 `(x, y)` across `rpIdHash`/`originHash` before counting; `keys[]` carries `x, y`; the backup vectors gain "same passkey, two origins ⇒ 1 key" and the `msig` rule |
 | Seed vault | `createVault`, `openVault`, `rewrapPin`, `needsRewrap`, `checkPassphrase`, `SeedBackup`, `deriveKey`, `signDigest` (native only), `signFamily`; v2: `openStore`, `deviceKey`, `sealDevice`, `openDevice`, `needsBinding` |
 | UA | `ua.js`: `uaOf`, `keyHashOf`, `uaMessage`, `popDigest`, `deriveUAKey`, `UAKey.signUA`, `UAMetaTransaction` typed data |
-| Zether | `deriveConfKey` (uses 7/8 only), `sealConfKey`, `openConfKey`, the tagged `zetherPop`, the balance cache |
+| Zether | `deriveConfKey` (uses 7/8 only), `sealConfKey`, `openConfKey`, the tagged `zetherPop`, `zetherOwnerAuth`, the balance cache |
 | Wallets | `wallets/<family>.js`, `wallets/evm.js` (EIP-6963 + `walletKind`), `wallet-signer.js` entry |
 
 ## 6. Submission and status
