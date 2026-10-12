@@ -5,22 +5,30 @@ import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 import {IERC1271} from "@openzeppelin/contracts/interfaces/IERC1271.sol";
 import {SaltedEIP712} from "../common/SaltedEIP712.sol";
 import {SigCheck} from "../common/SigCheck.sol";
+import {SSTORE2} from "../common/SSTORE2.sol";
 import {IUARegistry} from "./IUARegistry.sol";
 import {IUAKindVerifier, IUAPopVerifier} from "./IUAVerifier.sol";
 import {UAKinds} from "./UAKinds.sol";
 
-/// @title UA registry, UA-2a scope (accounts.md §1.8): the single-key kinds 0x0100–0x0107, the structure `msig`, native
-///        EVM ids, generations.
+/// @title UA registry, UA-2a/2c scope (accounts.md §1.8): the single-key kinds 0x0100–0x0107, the group kinds
+///        0x0110–0x0113 (MuSig2/FROST, stored), the structure `msig`, native EVM ids, generations.
 /// @notice Monotonic and admin-free (CTR-UA-15): no owner, no setter, no `payable`, a record never changes. `register`
 ///         derives every record field from `keyData` (CTR-UA-07), so anyone may relay it. Every verifier `staticcall` is
 ///         capped at the kind's `verifyCap` and counts only exactly 32 bytes equal to 1; a caller that leaves too little
 ///         gas for the cap gets `UAVerifyGas`, never a pass (T-AUTH-4).
 ///
 ///         Kind table: one `uint256` immutable per kind this code can verify, `verifier | cap << 160` (0 = disabled):
-///         read with no SLOAD and no EXTCODECOPY. Kinds whose registry code is not written yet — MuSig2/FROST and the
-///         stored-key path (UA-2c), PQ (P6c), Zether (UA-3) — are refused by the constructor; each later sub-plan adds
-///         its slot and code and redeploys (all chains are test chains). `ed25519` (0x0102) has its slot already: it is
-///         a plain single-key kind, so UA-2b only deploys its verifier and passes it here.
+///         read with no SLOAD and no EXTCODECOPY. Kinds whose registry code is not written yet — PQ (P6c), Zether
+///         (UA-3) — are refused by the constructor; each later sub-plan adds its slot and code and redeploys (all chains
+///         are test chains). `ed25519` (0x0102) has its slot already: it is a plain single-key kind, so UA-2b only
+///         deploys its verifier and passes it here.
+///
+///         Stored kinds (CTR-UA-17; UA-2c: MuSig2/FROST): `register` has the kind's verifier run the whole group check
+///         in `verifyPop` (KeyAgg with hints / DKG PoKs, then one group signature; capped at `verifyBudget`, no hold:
+///         a starved PoP is `UAPoP`, a revert like every PoP failure), then stores `vk` (`Q` / `Y`: 33 bytes on
+///         secp256k1, 64 on bn254) with SSTORE2 as `keyPtr`. `requireAuthorized` takes `auth = abi.encode(bytes keyData,
+///         bytes sig)` with `keyData` empty (non-empty ⇒ `UAUnauthorized`) and verifies `sig` against `vk` read from the
+///         record's `keyPtr`; an `msig` member of a stored kind is checked the same way through the member's own record.
 ///
 ///         Gen 2 (`predecessor ≠ 0`) reads gen 1 for `UAAlreadyRegistered` / `UAKeyInUse` / `kindOf` / `keyOwner` /
 ///         `recordOf` and hands records it does not hold, and members whose kind it does not enable, to gen 1's
@@ -71,6 +79,10 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     uint256 private immutable _CFG5; // 0x0105 schnorr-bls12381
     uint256 private immutable _CFG6; // 0x0106 bls12381-minsig
     uint256 private immutable _CFG7; // 0x0107 bls-bn254-minsig
+    uint256 private immutable _CFG8; // 0x0110 musig2-secp256k1 (UA-2c, stored)
+    uint256 private immutable _CFG9; // 0x0111 frost-secp256k1 (UA-2c, stored)
+    uint256 private immutable _CFG10; // 0x0112 musig2-bn254 (UA-2c, stored)
+    uint256 private immutable _CFG11; // 0x0113 frost-bn254 (UA-2c, stored)
     uint256 private immutable _CFG_MSIG; // 0x0120: address(this) | verifyBudget << 160
 
     mapping(bytes32 ua => Record) private _records;
@@ -81,7 +93,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     /// @param smartKeyAccountImpl_ the chain's `SmartKeyAccount` implementation (0 = none): its EIP-1167 clones get the
     ///        400 k ERC-1271 cap.
     /// @param msig_ enables the structure kind `msig`.
-    /// @param kinds_ the enabled single-key kinds with their verifier and measured cap.
+    /// @param kinds_ the enabled single-key and group kinds with their verifier and measured verify cap.
     constructor(
         bytes32 chainUid_,
         address predecessor_,
@@ -100,18 +112,19 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
                 revert UAConfig(0);
             }
         }
-        uint256[8] memory k;
+        uint256[12] memory k;
         for (uint256 i; i < kinds_.length; ++i) {
             KindConfig memory c = kinds_[i];
-            uint256 slot = c.kind >= 0x0100 ? c.kind - 0x0100 : 8;
+            uint256 slot = _slot(c.kind);
             if (
-                slot > 7 || k[slot] != 0 || c.verifier.code.length == 0 || c.cap == 0 || c.cap > verifyBudget_
+                slot > 11 || k[slot] != 0 || c.verifier.code.length == 0 || c.cap == 0 || c.cap > verifyBudget_
                     || (predecessor_ != address(0) && _groupInPredecessor(predecessor_, c.kind))
             ) revert UAConfig(c.kind);
             k[slot] = uint256(uint160(c.verifier)) | uint256(c.cap) << 160;
         }
         (_CFG0, _CFG1, _CFG2, _CFG3) = (k[0], k[1], k[2], k[3]);
         (_CFG4, _CFG5, _CFG6, _CFG7) = (k[4], k[5], k[6], k[7]);
+        (_CFG8, _CFG9, _CFG10, _CFG11) = (k[8], k[9], k[10], k[11]);
         _CFG_MSIG = msig_ ? uint256(uint160(address(this))) | uint256(verifyBudget_) << 160 : 0;
 
         generation = predecessor_ == address(0) ? 1 : 2;
@@ -160,7 +173,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         return UAKinds.uaAuthDigest(_domainSeparatorV4(), ua, purposeTag, digest);
     }
 
-    /// `authRef` is always 0 here: only Zether kinds (UA-3) store one.
+    /// `authRef` is always 0 here: only Zether kinds (UA-3) store one. `r.keyPtr ≠ 0` only for stored kinds.
     function recordOf(bytes32 ua) external view returns (Record memory r, bytes32 authRef) {
         r = _records[ua];
         if (r.kind == 0 && predecessor != address(0)) return IUARegistry(predecessor).recordOf(ua);
@@ -180,7 +193,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         if (owner == 0 && predecessor != address(0)) owner = IUARegistry(predecessor).keyOwner(keyHash);
     }
 
-    // ----- register (accounts.md §1.8 steps 1–8; steps 5 and 7 reduce to "authRef == 0" in UA-2a) -----
+    // ----- register (accounts.md §1.8 steps 1–8; steps 5 and 7 reduce to "authRef == 0" until UA-3) -----
 
     function register(uint16 kind, bytes calldata keyData, bytes calldata pop, bytes32 authRef, bytes calldata authPop)
         external
@@ -206,9 +219,15 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         if (authRef != 0 || authPop.length != 0) revert UAAuthRef(authRef); // 5, 7
         // 6. Structures have no PoP of their own (members proved theirs): `pop` must be empty.
         if (structure ? pop.length != 0 : !_popOk(cfg, kind, d, ua, pop)) revert UAPoP();
-        _records[ua] = Record(kind, uint40(block.timestamp), address(0)); // 8
+        _records[ua] = Record(kind, uint40(block.timestamp), _keyPtr(kind, keyData)); // 8
         if (!structure) _keyOwner[kh] = ua;
         emit UARegistered(ua, kind, keyData, 0);
+    }
+
+    /// Stored kinds keep `vk` (`Q` / `Y`, the first bytes of the key data) as SSTORE2 code (CTR-UA-17); others: 0.
+    function _keyPtr(uint16 kind, bytes calldata keyData) private returns (address) {
+        uint256 len = _vkLength(kind);
+        return len == 0 ? address(0) : SSTORE2.write(keyData[0:len]);
     }
 
     function _popOk(uint256 cfg, uint16 kind, bytes memory d, bytes32 ua, bytes calldata pop)
@@ -217,7 +236,10 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         returns (bool)
     {
         bytes32 message = UAKinds.uaMessage(kind, UAKinds.PURPOSE_POP, popDigest(ua, 0));
-        return _verifierCall(cfg, IUAPopVerifier.verifyPop.selector, d, message, pop);
+        bytes memory data = abi.encodeWithSelector(IUAPopVerifier.verifyPop.selector, d, message, pop);
+        // group kinds: the whole group check runs here, bounded by verifyBudget (§1.8 step 6), without the hold
+        if (_vkLength(kind) != 0) return _capped(address(uint160(cfg)), verifyBudget, data, 1, false);
+        return _capped(address(uint160(cfg)), cfg >> 160, data, 1, true);
     }
 
     /// Step 4 for `msig`: every member ∈ MEMBER of this profile and native or registered under its stated kind; the
@@ -282,8 +304,9 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         return _derived(ua, kind, purposeTag, digest, keyData, sig);
     }
 
-    /// A derived id of `kind` (taken from the record, or from the structure for members): key data against the id,
-    /// then the kind's verifier, `msig`, or gen 1 for a kind this generation does not enable.
+    /// A derived id of `kind` (taken from the record, or from the structure for members): key data against the id
+    /// (stored kinds: `keyData` empty, `vk` from the id's own record), then the kind's verifier, `msig`, or gen 1 for
+    /// a kind this generation does not enable.
     function _derived(
         bytes32 id,
         uint16 kind,
@@ -292,9 +315,18 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         bytes memory keyData,
         bytes memory sig
     ) private view returns (bool) {
-        if (UAKinds.uaOf(kind, keyData) != id) return false;
-        if (kind == UAKinds.MSIG) return _msig(id, purposeTag, digest, keyData, sig);
         uint256 cfg = _cfg(kind);
+        if (_vkLength(kind) != 0) {
+            if (keyData.length != 0) return false; // CTR-UA-17: auth carries only the signature
+            if (uint160(cfg) != 0) {
+                Record memory r = _records[id];
+                if (r.kind != kind) return false;
+                keyData = SSTORE2.read(r.keyPtr);
+            }
+        } else if (UAKinds.uaOf(kind, keyData) != id) {
+            return false;
+        }
+        if (kind == UAKinds.MSIG) return _msig(id, purposeTag, digest, keyData, sig);
         if (uint160(cfg) == 0) return _viaPredecessor(id, purposeTag, digest, abi.encode(keyData, sig));
         return _verifierCall(
             cfg, IUAKindVerifier.verify.selector, keyData, UAKinds.uaMessage(kind, purposeTag, digest), sig
@@ -349,7 +381,8 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
             a,
             cap,
             abi.encodeCall(IERC1271.isValidSignature, (h, sig)),
-            uint256(bytes32(IERC1271.isValidSignature.selector))
+            uint256(bytes32(IERC1271.isValidSignature.selector)),
+            true
         );
     }
 
@@ -358,13 +391,19 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         view
         returns (bool)
     {
-        return _capped(address(uint160(cfg)), cfg >> 160, abi.encodeWithSelector(selector, keyData, message, sig), 1);
+        return
+            _capped(address(uint160(cfg)), cfg >> 160, abi.encodeWithSelector(selector, keyData, message, sig), 1, true);
     }
 
     /// `staticcall` with exactly `cap` gas; true iff it succeeds with exactly one 32-byte word equal to `expect`.
-    /// Too little gas left to hand over the full cap ⇒ `UAVerifyGas` (63/64 starvation never turns into a verdict).
-    function _capped(address target, uint256 cap, bytes memory data, uint256 expect) private view returns (bool ok) {
-        if (gasleft() < cap + cap / 63 + SigCheck.GAS_MARGIN) revert UAKinds.UAVerifyGas();
+    /// `hold`: too little gas left to hand over the full cap ⇒ `UAVerifyGas` (63/64 starvation never turns into a
+    /// verdict). Without `hold` (the group PoP, whose failure reverts `register` anyway) the call gets at most `cap`.
+    function _capped(address target, uint256 cap, bytes memory data, uint256 expect, bool hold)
+        private
+        view
+        returns (bool ok)
+    {
+        if (hold && gasleft() < cap + cap / 63 + SigCheck.GAS_MARGIN) revert UAKinds.UAVerifyGas();
         assembly ("memory-safe") {
             mstore(0, 0)
             let s := staticcall(cap, target, add(data, 0x20), mload(data), 0, 0x20)
@@ -393,10 +432,26 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
 
     function _cfg(uint16 kind) private view returns (uint256) {
         if (kind == UAKinds.MSIG) return _CFG_MSIG;
-        if (kind < 0x0100 || kind > 0x0107) return 0;
-        uint256 i = kind - 0x0100;
-        if (i < 4) return i < 2 ? (i == 0 ? _CFG0 : _CFG1) : (i == 2 ? _CFG2 : _CFG3);
-        return i < 6 ? (i == 4 ? _CFG4 : _CFG5) : (i == 6 ? _CFG6 : _CFG7);
+        uint256 s = _slot(kind);
+        if (s > 11) return 0;
+        if (s > 7) return s < 10 ? (s == 8 ? _CFG8 : _CFG9) : (s == 10 ? _CFG10 : _CFG11);
+        if (s < 4) return s < 2 ? (s == 0 ? _CFG0 : _CFG1) : (s == 2 ? _CFG2 : _CFG3);
+        return s < 6 ? (s == 4 ? _CFG4 : _CFG5) : (s == 6 ? _CFG6 : _CFG7);
+    }
+
+    /// Kind-table slot: 0x0100–0x0107 → 0–7, 0x0110–0x0113 → 8–11, anything else 12 (not in this code's table).
+    function _slot(uint16 kind) private pure returns (uint256) {
+        if (kind >= 0x0100 && kind <= 0x0107) return kind - 0x0100;
+        if (kind >= UAKinds.MUSIG2_SECP256K1 && kind <= UAKinds.FROST_BN254) return kind - 0x0110 + 8;
+        return 12;
+    }
+
+    /// Length of the stored `vk` of a stored kind (CTR-UA-17), 0 otherwise: `Q` / `Y` SEC1 compressed (secp256k1) or
+    /// EIP-196 uncompressed (bn254), the first bytes of the key data.
+    function _vkLength(uint16 kind) private pure returns (uint256) {
+        if (kind == UAKinds.MUSIG2_SECP256K1 || kind == UAKinds.FROST_SECP256K1) return 33;
+        if (kind == UAKinds.MUSIG2_BN254 || kind == UAKinds.FROST_BN254) return 64;
+        return 0;
     }
 
     /// Gen-2 rule (§1.8 "Generations"): a single-key kind whose keyHash group any kind of gen 1 enables stays in gen 1.
