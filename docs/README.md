@@ -193,7 +193,7 @@ One table per area; ids in brackets are the rule prefixes each area owns.
 | Doc | Covers |
 |---|---|
 | [signers-clientkeys.md](clients/signers-clientkeys.md) | Signers, key vault, what a wallet checks before signing |
-| [ua-libraries.md](clients/ua-libraries.md) | UA identity layer in Solidity, JS, Rust, Python, Go, C# |
+| [ua-libraries.md](clients/ua-libraries.md) | UA identity layer in Solidity, JS, Rust, Python, Go, C#; C++, QML and Dart bindings |
 | [app.md](clients/app.md) | Console and dApp |
 | [integration.md](integration.md) | Connecting any ERP or back office |
 | [integration-odoo-example.md](integration-odoo-example.md) | One worked ERP connector (example only) |

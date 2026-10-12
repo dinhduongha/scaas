@@ -1,0 +1,21 @@
+[package]
+name = "scaas_ua_qt"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.90"
+publish = false
+description = "CXX-Qt QObject UaKinds (QML module Scaas.Ua) over scaas-ua. UNAUDITED."
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+scaas-ua = { path = "../scaas-ua" }
+cxx = "=1.0.202"
+cxx-qt = "=0.10.0"
+cxx-qt-lib = "=0.10.0"
+serde_json = "=1.0.145"
+
+[build-dependencies]
+cxx-qt-build = "=0.10.0"
+cxx-gen = "=0.7.202"

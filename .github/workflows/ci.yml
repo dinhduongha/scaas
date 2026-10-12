@@ -9,6 +9,10 @@
 #   clients/ua-py:         python3 -m unittest tests.test_vectors
 #   clients/ua-go:         go vet ./...; go test ./...
 #   clients/ua-cs:         dotnet test Scaas.Ua.Tests
+#   clients/scaas-ua-cxx:  cargo clippy --locked --all-targets -- -D warnings; cmake -S . -B build -G Ninja && cmake --build build && ctest --test-dir build
+#   clients/scaas-ua-qt:   cmake -S . -B build -G Ninja (QMAKE, CMAKE_PREFIX_PATH set) && cmake --build build && QT_QPA_PLATFORM=offscreen ctest
+#   clients/scaas-ua-frb:  dart pub get --enforce-lockfile; cargo build --locked --manifest-path rust/Cargo.toml; dart test
+#   clients/ua-dart:       dart analyze; dart test; dart test -p node; dart run test/vectors_test.dart (asserts off)
 name: scaas-ci
 
 on:
@@ -141,6 +145,50 @@ jobs:
       - name: vectors
         run: cargo test
 
+  scaas-ua-cxx:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: clients/scaas-ua-cxx
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: clients/scaas-ua-cxx
+      - name: clippy
+        run: cargo clippy --locked --all-targets -- -D warnings
+      - name: configure
+        run: cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DSCAAS_UA_CARGO_TARGET_DIR=$PWD/target
+      - name: build
+        run: cmake --build build
+      - name: vectors
+        run: ctest --test-dir build --output-on-failure
+
+  ua-qt:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.90.0
+      - uses: jurplel/install-qt-action@v4
+        with:
+          version: 6.8.2
+          cache: true
+      - run: sudo apt-get update && sudo apt-get install -y ninja-build libgl1-mesa-dev libxkbcommon-dev
+      - name: Build
+        working-directory: clients/scaas-ua-qt
+        run: |
+          export QMAKE="$QT_ROOT_DIR/bin/qmake6"
+          cmake -S . -B build -G Ninja -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="$QT_ROOT_DIR"
+          cmake --build build
+      - name: Test
+        working-directory: clients/scaas-ua-qt/build
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: ctest --output-on-failure
+
   ua-py:
     runs-on: ubuntu-latest
     defaults:
@@ -184,3 +232,45 @@ jobs:
           dotnet-version: '10.0.x'
       - name: vectors
         run: dotnet test
+
+  scaas-ua-frb:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: clients/scaas-ua-frb
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: clients/scaas-ua-frb/rust
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: 3.12.2
+      - run: dart pub get --enforce-lockfile
+      - run: cargo build --locked --manifest-path rust/Cargo.toml
+      - run: dart test
+      # optional drift guard: cargo install flutter_rust_bridge_codegen --version 2.13.0 --locked
+      #   && flutter_rust_bridge_codegen generate && git diff --exit-code
+
+  ua-dart:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: 3.12.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: dart pub get
+        working-directory: clients/ua-dart
+      - run: dart analyze
+        working-directory: clients/ua-dart
+      - run: dart test
+        working-directory: clients/ua-dart
+      - run: dart test -p node
+        working-directory: clients/ua-dart
+      # asserts are off here (plain `dart run`), like a release build
+      - run: dart run test/vectors_test.dart
+        working-directory: clients/ua-dart
