@@ -7,7 +7,7 @@ import {DeployBase} from "../DeployBase.sol";
 
 /// Như `script/Deploy.s.sol` trên Hedera (R63): every implementation with `IS_HEDERA` (HIP-632 signatures, CTR-TOK-23),
 /// no `SmartKeyAccount` implementation (Hedera accounts are native), two demo tokens.
-/// Hedera JSON-RPC Relay: `forge script script/hedera/DeployHedera.s.sol --rpc-url $RELAY --broadcast --slow --sender <địa chỉ deployer>`
+/// Hedera JSON-RPC Relay: `forge script script/hedera/DeployHedera.s.sol --rpc-url $RELAY --broadcast --slow --code-size-limit 65536 --sender <địa chỉ deployer>`
 /// (relay không có mempool: `--slow` gửi tuần tự, mỗi tx chờ receipt). Deployer = tài khoản ECDSA có alias EVM.
 /// env: PRIVATE_KEY, REGISTRAR?, DEMO_SUPPLY?, DEMO_HOLDER?, CHAIN_UID? (mặc định hash block 0 của RPC),
 ///      DEPLOY_SALT? (mặc định keccak256("scaas.deploy.v1"); chạy lại trên cùng chain cần salt mới).

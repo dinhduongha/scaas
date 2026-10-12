@@ -402,6 +402,9 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
 
     /// @dev Every UA-ledger move: derived sides in `balance`, native sides (or `UA_POOL` for a derived side) through
     ///      the ERC-20 core, so `Transfer` is emitted iff a native balance changes and `UATransfer` iff a side is derived.
+    // ponytail: calls `ERC20._update` directly, skipping `_update`'s hooks and `_transfer`'s zero checks (callers
+    // exclude 0); when the REGULATED features (FREEZE / PAUSE / ALLOWLIST, AdminLib) are built they must also hook
+    // here, including the UA->UA branch.
     function _uaMove(bytes32 from, bytes32 to, uint256 value) internal {
         bool fromUA = !UAKinds.inNativeSpace(from);
         bool toUA = !UAKinds.inNativeSpace(to);

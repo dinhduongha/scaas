@@ -81,7 +81,8 @@ abstract contract DeployBase is Script {
     ///         registered as version 1 when the deployer is the registrar;
     ///         writes `token_factory`, `implementation_none`, `dex_implementation`, `ua_registry`, `chain_uid` into the
     ///         JSON object `"deploy"`; with `DEPLOY_ZETHER`
-    ///         also the Zether stack (`_deployZether`, dev chains only). `UNDERLYING` is not deployed: over EIP-170 on real chains
+    ///         also the Zether stack (`_deployZether`, dev chains only). NONE and `UNDERLYING` both exceed EIP-170 (the UA ledger):
+    ///         deploy with `--code-size-limit 65536` (deploy.sh); `UNDERLYING` is still not deployed here
     ///         (owner: wait for Glamsterdam).
     function _deployTokenFactory(address registrar, bool register, address smartKeyAccountImpl, bool isHedera)
         internal returns (OpenFactory f)

@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
+import {IUnderlyingToken} from "../../src/metatx/IUnderlyingToken.sol";
 import {IUALedger} from "../../src/metatx/IUALedger.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
 import {AdminLib} from "../../src/metatx/AdminLib.sol";
@@ -14,8 +15,7 @@ import {noneInit} from "../v2/helpers/V2Fixture.sol";
 import {UALedgerBase} from "./UALedgerBase.sol";
 
 /// T-V3-1: the named `ua*` functions build their struct and run its pipeline (CTR-UA-26 mirroring CTR-MTX-09) —
-/// same digest, same events, one lane consumed once — and enforce only their mode shape. Gas of each path is logged
-/// (`-vv`; stand-in verifier, warm lane).
+/// same digest, same events, one lane consumed once — and enforce only their mode shape.
 contract UALedgerNamedTest is UALedgerBase {
     function setUp() public override {
         super.setUp();
@@ -81,6 +81,15 @@ contract UALedgerNamedTest is UALedgerBase {
         np.initialize(address(this), 1, c);
         vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureNotSet.selector, AdminLib.PAYABLE));
         np.uaPay(uaP, uaB, 1, keccak256("p"), block.timestamp + 1, RR, RELAYER, 0, address(0), "");
+        // a UAMetaTransfer with `entryRef` set is not gated
+        np.mint(alice, 10);
+        bytes32 ref = keccak256("p");
+        MetaTxLib.UAMetaTransfer memory t = _t(_pad(alice), _pad(bob), 7);
+        (t.entryRef, t.batch, t.nonce) = (ref, np.payLane(ref), 0);
+        bytes memory auth = _authFor(t.from, np.uaTransferDigest(t));
+        vm.prank(RELAYER);
+        np.uaExecuteTransfer(t, auth);
+        assertEq(np.balanceOf(bob), 7);
     }
 
     /// `uaUnwrap(f,u,w,r,min,b,n,v,mode,rel,s) ≡ uaExecute({f, unwrap(u,w,r,min), b,n,v,mode,rel,0,0}, s)`.
@@ -113,6 +122,22 @@ contract UALedgerNamedTest is UALedgerBase {
         vm.expectRevert(abi.encodeWithSelector(IUALedger.MetaTxUnknownOp.selector, bytes4(data)));
         vm.prank(RELAYER);
         tok.uaUnwrap(uaP, address(und), 1, bob, 0, 1, 0, until, RR, RELAYER, a);
+    }
+
+    /// M2: `UA_POOL` holds every derived balance; an unwrap never pays out to it.
+    function test_uaUnwrap_poolRecipientRefused() public {
+        _wrapFor(alice, 1_000);
+        vm.prank(alice);
+        wrp.transferToUA(uaP, 1_000);
+        bytes memory data = abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", address(und), 10, POOL, 0);
+        MetaTxLib.UAMetaTransaction memory m = _m(address(wrp), uaP, data);
+        bytes memory a = _authM(address(wrp), m);
+        vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.UnwrapRecipientInvalid.selector, POOL));
+        vm.prank(RELAYER);
+        wrp.uaExecute(m, a);
+        vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.UnwrapRecipientInvalid.selector, POOL));
+        vm.prank(RELAYER);
+        wrp.uaUnwrap(uaP, address(und), 10, POOL, 0, 1, 0, m.validUntil, RR, RELAYER, a);
     }
 
     function test_uaTransfer_modeShape() public {

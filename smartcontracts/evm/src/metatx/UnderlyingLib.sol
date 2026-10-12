@@ -9,6 +9,7 @@ import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {IUnderlyingToken} from "./IUnderlyingToken.sol";
 import {IFactoryToken} from "../factory/IFactoryToken.sol";
 import {ITradeToken} from "../trade/ITradeToken.sol";
+import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {AdminLib} from "./AdminLib.sol";
 import {MetaTokenBase} from "./MetaTokenBase.sol";
 import {HederaLib} from "../hedera/HederaLib.sol";
@@ -210,7 +211,7 @@ library UnderlyingLib {
     function quoteUnwrap(uint256 i, uint256 wrapped, address recipient, uint256 minOut)
         public view returns (uint256 out, uint256 burned)
     {
-        if (recipient == address(0) || recipient == address(this)) {
+        if (recipient == address(0) || recipient == address(this) || recipient == MetaTxLib.UA_POOL) {
             revert IUnderlyingToken.UnwrapRecipientInvalid(recipient);
         }
         Leg storage L = $().legs[i];
