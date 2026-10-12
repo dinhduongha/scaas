@@ -240,17 +240,21 @@ contract UARegistryTest is UARegistryBase {
         _expectUnauthorizedOn(gen2, msig2, UAKinds.PURPOSE_METATX, DIGEST, _msigAuth(d2, s));
     }
 
-    /// msig re-enabled in gen 2: the same id registered in both generations is the same record.
+    /// msig re-enabled in gen 2: the same id registered in both generations has the same `kind` and `keyPtr`; each
+    /// generation keeps its own `registeredAt`.
     function test_T_REG_4_msigBothGenerations() public {
         UARegistry gen2 = _gen2();
         Member[] memory m = new Member[](1);
         m[0] = Member(UAKinds.EVM_EOA, _pad(vm.addr(PK_B)), 1);
         bytes memory d = _msigKey(1, m);
         bytes32 id = gen2.register(UAKinds.MSIG, d, "", 0, "");
+        vm.warp(block.timestamp + 1 days);
         assertEq(reg.register(UAKinds.MSIG, d, "", 0, ""), id);
         (IUARegistry.Record memory ra,) = reg.recordOf(id);
         (IUARegistry.Record memory rb,) = gen2.recordOf(id);
-        assertEq(abi.encode(ra), abi.encode(rb));
+        assertEq(ra.kind, rb.kind);
+        assertEq(ra.keyPtr, rb.keyPtr);
+        assertEq(rb.registeredAt + 1 days, ra.registeredAt);
     }
 
     /// gen 2 = ed25519 (a group gen 1 does not enable) + msig.
@@ -380,6 +384,32 @@ contract UARegistryTest is UARegistryBase {
         _expectUnauthorized(ua, UAKinds.PURPOSE_METATX, DIGEST, _msigAuth(d2, _sigs(d, f, md, 0x9)));
     }
 
+    /// R21: an msig `auth` that does not ABI-decode reverts without data (fail closed), never passes.
+    function test_T_AUTH_2_msigUndecodableAuth() public {
+        (bytes memory d, bytes32 ua, Fixture memory f) = _msigRegistered();
+        bytes memory sigs = abi.encode(_sigs(d, f, _memberDigest(ua, UAKinds.PURPOSE_METATX, DIGEST), 0x9));
+        bytes memory auth = abi.encode(d, sigs);
+        reg.requireAuthorized(ua, UAKinds.PURPOSE_METATX, DIGEST, auth); // the untouched blob passes
+        // truncated outer `abi.encode(keyData, sig)`
+        bytes memory cut = new bytes(auth.length - 64);
+        for (uint256 i; i < cut.length; ++i) {
+            cut[i] = auth[i];
+        }
+        _expectBareRevert(ua, cut);
+        // MemberSig[0].index = 0x10000 (does not fit uint16): words 0x20 | length | offset[0] | index
+        assembly ("memory-safe") {
+            mstore(add(sigs, 0x80), 0x10000)
+        }
+        _expectBareRevert(ua, abi.encode(d, sigs));
+    }
+
+    function _expectBareRevert(bytes32 ua, bytes memory auth) internal view {
+        (bool ok, bytes memory ret) =
+            address(reg).staticcall(abi.encodeCall(reg.requireAuthorized, (ua, UAKinds.PURPOSE_METATX, DIGEST, auth)));
+        assertFalse(ok, "undecodable auth passed");
+        assertEq(ret.length, 0, "undecodable auth: revert data");
+    }
+
     /// Native contract members: an ERC-1271 wallet (`evm-contract`) and a 7702-delegated EOA signing through its
     /// delegate's 1271 (`evm-eoa`), both over `UAAuth(memberId, member, member_digest)`.
     function test_T_AUTH_2_msigContractMembers() public {
@@ -500,10 +530,11 @@ contract UARegistryTest is UARegistryBase {
         _expectUnauthorized(wua, UAKinds.PURPOSE_METATX, DIGEST, abi.encode(UAKinds.PURPOSE_KEYOP, DIGEST, inner));
     }
 
-    /// 400 k for `SmartKeyAccount` clones (by the immutable clone codehash), 50 k for the same code elsewhere.
+    /// 400 k for `SmartKeyAccount` clones (by the immutable clone codehash), 50 k for the same code elsewhere; a clone
+    /// burning 380 k passes (the clone keeps 1/64 of the cap for its DELEGATECALL), one burning 410 k is refused.
     function test_T_AUTH_3_smartKeyCloneCap() public {
         address owner = vm.addr(PK_B);
-        MockWallet impl = new MockWallet(owner, 0, 200_000, address(0));
+        MockWallet impl = new MockWallet(owner, 0, 380_000, address(0));
         UARegistry r =
             _deploy(address(0x5ca4), chainUidA, address(0), false, BUDGET, address(impl), true, _cfgs(address(mock)));
         address clone = Clones.clone(address(impl));
@@ -511,7 +542,7 @@ contract UARegistryTest is UARegistryBase {
         r.requireAuthorized(
             cua, UAKinds.PURPOSE_METATX, DIGEST, _ecdsa(PK_B, r.uaAuthDigest(cua, UAKinds.PURPOSE_METATX, DIGEST))
         );
-        MockWallet same = new MockWallet(owner, 0, 200_000, address(0));
+        MockWallet same = new MockWallet(owner, 0, 380_000, address(0));
         bytes32 sua = _pad(address(same));
         bytes memory sig = _ecdsa(PK_B, r.uaAuthDigest(sua, UAKinds.PURPOSE_METATX, DIGEST));
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, sua));
@@ -520,6 +551,13 @@ contract UARegistryTest is UARegistryBase {
         _expectUnauthorized(
             cua, UAKinds.PURPOSE_METATX, DIGEST, _ecdsa(PK_B, reg.uaAuthDigest(cua, UAKinds.PURPOSE_METATX, DIGEST))
         );
+        // over the 400 k cap: a clone whose 1271 burns 410 k
+        MockWallet heavy = new MockWallet(owner, 0, 410_000, address(0));
+        UARegistry rh =
+            _deploy(address(0x5ca5), chainUidA, address(0), false, BUDGET, address(heavy), true, _cfgs(address(mock)));
+        bytes32 hua = _pad(Clones.clone(address(heavy)));
+        sig = _ecdsa(PK_B, rh.uaAuthDigest(hua, UAKinds.PURPOSE_METATX, DIGEST));
+        _expectUnauthorizedOn(rh, hua, UAKinds.PURPOSE_METATX, DIGEST, sig);
     }
 
     /// CTR-UA-24: a 7702-delegated EOA signs with its base key, or through the delegate's 1271 within 50 k.
