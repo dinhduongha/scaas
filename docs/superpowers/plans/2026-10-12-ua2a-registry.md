@@ -104,8 +104,9 @@ already in `package.json` (no new npm dependency); Rust 1.90 with `scaas-ua` + `
 - **R15** The kind table is one immutable per slot (`verifier | cap << 160`) from a `KindConfig[]` constructor argument (no
   SLOAD / EXTCODECOPY at verify time); slots `0x0100`–`0x0107` + `msig` (the `ed25519` slot exists, so UA-2b only configures
   it); MuSig2 / FROST, PQ and Zether kinds are refused by the constructor with `UAConfig(kind)` until their sub-plans.
-- **R16** `MSIG_MEMBER_GAS = 35_000` (measured worst per-member overhead 14,095 + two cold accounts + the 63/64 hold of the
-  largest cap), asserted by `UAGas.t.sol`.
+- **R16** `MSIG_MEMBER_GAS = 35_000` (measured worst per-member overhead, cold under `--isolate`: 19,987 for a member
+  handed to gen 1, + the 63/64 hold of the largest cap, 11,349 = 31,336; a member handed to gen 1 adds gen 1's own hold
+  `cap / 63 + 5 k` in `_checkMembers`), proven end to end by `UAGas.t.sol` `test_T_GAS_msigAtBudget`.
 - **R17** In the msig bound a native member counts at the 400 k 1271 cap whenever the chain has a SmartKeyAccount
   implementation (a counterfactual clone may appear later at the member's address).
 - **R18** Generation 2 reads generation 1 for every lookup and hands gen-1 records, and members of kinds it does not enable,
@@ -708,9 +709,10 @@ test('BIP-340 official vectors (32-byte messages) give their verdict', () => {
 ```
 
 - [ ] **Step 3: Generate.** `cd clients/clientkeys && ../../scripts/capped node scripts/ua-sig-vectors.mjs` — prints
-  `signatures.json: 7 derived kinds (59 negatives), native 4+5, msig 8 sets, 15 BIP-340 official; written to …/smartcontracts/vectors/ua/`.
-  The file is 103 028 bytes; its sha256 must be `771e7c5ec1f88907c7606c9a5455fa83a94b821f99a740f78b933f35e7acdfe8`
-  (the spike run on 2026-10-12 produced exactly this file).
+  `signatures.json: 7 derived kinds (59 negatives), native 4+5, msig 9 sets, 15 BIP-340 official; written to …/smartcontracts/vectors/ua/`.
+  The file is 106 940 bytes; its sha256 must be `93fa6bd174ebb857f67dbf117dfa6e82270f6db425d83b92cd8560ffd7df58a8`
+  (after the final review's `native-member-keydata` set; `de2f91d66719311fdffc8deb34d58f8d55e352324c8bdff104a0038f88d8602c`
+  after the native high-s fix; the spike run on 2026-10-12 produced `771e7c5e…` with 8 sets).
 
 - [ ] **Step 4: Rust verify module.** Create `clients/scaas-ua/src/verify.rs`:
 

@@ -7,6 +7,7 @@ use sha3::{Digest, Keccak256};
 
 mod keydata;
 pub use keydata::validate_key_data;
+pub mod verify;
 
 /// An error whose [`UAError::code`] every implementation and the vector files share.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

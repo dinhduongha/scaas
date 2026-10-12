@@ -1,13 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-SCaaS-Community-1.0
 pragma solidity ^0.8.24;
 
-/// @title Per-kind UA verifier (accounts.md CTR-UA-17 "Verifiers").
-/// @notice Stateless. The registry has matched `keyData` against the id (or read the stored key from `keyPtr`);
-///         `message` is the 32-byte `ua_msg` (CTR-UA-12). A malformed input returns false, never true.
-interface IUAKindVerifier {
-    function verify(bytes calldata keyData, bytes32 message, bytes calldata sig) external view returns (bool);
-}
-
 /// @title PQ signing kinds: tags, the PQ message and the precompile probe (accounts.md CTR-UA-23).
 /// @notice ML-DSA and SLH-DSA sign `pq_msg = keccak256(TAG(kind) ‖ ua_msg)` with the empty FIPS 204 / FIPS 205
 ///         context, so the signed message is `M' = 0x00 ‖ 0x00 ‖ pq_msg`; FN-DSA (Falcon) signs `ua_msg` itself,

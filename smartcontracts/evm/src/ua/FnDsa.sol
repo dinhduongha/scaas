@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-SCaaS-Community-1.0
 pragma solidity ^0.8.24;
 
-import {IUAKindVerifier} from "./PqUA.sol";
+import {IUAKindVerifier} from "./IUAVerifier.sol";
 import {Shake} from "./Shake.sol";
 import {PqNtt} from "./PqNtt.sol";
 
