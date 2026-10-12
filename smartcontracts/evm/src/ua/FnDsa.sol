@@ -95,8 +95,9 @@ library Falcon512 {
         }
     }
 
-    /// Reference `comp_decode` over the 625 bytes after the salt; s2 as signed words (two's complement).
-    function _decompress(bytes calldata comp) private pure returns (bool ok, uint256 s2) {
+    /// Reference `comp_decode` over the 625 bytes after the salt; s2 as signed words (two's complement). Internal for the
+    /// decoder test (`|s2_i| ≤ 2047` is not observable through `verify`).
+    function _decompress(bytes calldata comp) internal pure returns (bool ok, uint256 s2) {
         s2 = PqNtt.alloc(N);
         ok = true;
         uint256 src;

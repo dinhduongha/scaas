@@ -167,9 +167,14 @@ library Shake {
     }
 
     /// Fresh sponge: absorbs `len` bytes at memory `p` with the SHAKE padding (0x1F … 0x80); the padded last block is
-    /// XORed in but not permuted (every `squeeze` permutes first, so no permutation is wasted).
+    /// XORed in but not permuted (every `squeeze` permutes first, so no permutation is wasted). Reverts `ShakeMemory`
+    /// unless `reserve()` ran, checked by its side effects (the first two round constants, the free pointer ≥ `END`).
     function absorb(uint256 rate, uint256 p, uint256 len) internal pure {
         assembly ("memory-safe") {
+            if iszero(and(and(eq(mload(1728), 0x1), eq(mload(1760), 0x8082)), iszero(lt(mload(0x40), END)))) {
+                mstore(0, 0xddb10a0e) // ShakeMemory()
+                revert(0x1c, 4)
+            }
             for { let i := 0 } lt(i, 25) { i := add(i, 1) } { mstore(add(S, shl(5, i)), 0) }
         }
         while (len >= rate) {

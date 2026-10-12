@@ -4,8 +4,8 @@ pragma solidity ^0.8.24;
 /// @title Negacyclic NTT over Z_q[X]/(X^n + 1) on memory polynomials (one coefficient per 32-byte word).
 /// @notice `ntt` / `intt` are FIPS 204 Algorithms 41 / 42 for any n, q with `zetas[k] = root^brv(k)`, root a
 ///         primitive 2n-th root of unity, brv over log2 n bits (ML-DSA: n = 256, q = 8380417, root 1753; Falcon:
-///         n = 512, q = 12289, root 10302 = 11^12); the callers keep the tables as constants (`test/ua/PqVerifiers.t.sol`
-///         recomputes them). Inputs must be reduced (< q).
+///         n = 512, q = 12289, root 10302 = 11^12); the callers keep the tables as constants (`_zetas` in
+///         `test/ua/PqVectors.sol` recomputes them). Inputs must be reduced (< q).
 library PqNtt {
     /// A new polynomial of `n` zero coefficients (memory pointer to its first word).
     function alloc(uint256 n) internal pure returns (uint256 p) {

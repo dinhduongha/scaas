@@ -54,6 +54,10 @@ library MlDsa {
     }
 
     /// Verify against the expanded key (every coefficient must be `< q`).
+    /// @dev Trust: only an expanded key the caller derived itself with `expandKey(pk)` from an authenticated `pk`. The
+    ///      layout holds no ρ and nothing ties `Â`, `tr`, `t̂1` together, so a caller-supplied key allows universal
+    ///      forgery: `Â = 0, t̂1 = 0` (any `tr`) accepts `z = 0, h = 0` for any message, and the victim's own `tr`, `t̂1`
+    ///      with `Â[i][0] = t̂1_i`, `Â[i][j>0] = 0` accepts `z = (c, 0, …)` for any message.
     function verifyExpanded(Params memory P, bytes calldata ek, bytes memory mPrime, bytes calldata sig)
         internal pure returns (bool)
     {
@@ -62,6 +66,7 @@ library MlDsa {
     }
 
     /// The expanded key of a FIPS 204 public key (what EIP-8051's precompile and a stored-key verifier take).
+    /// @dev The only trustworthy source of an expanded key: never accept one from a caller (see `verifyExpanded`).
     function expandKey(Params memory P, bytes calldata pk) internal pure returns (bytes memory ek) {
         require(pk.length == P.pkLen, "MlDsa: pk length");
         ek = new bytes(expandedLen(P));
@@ -78,6 +83,8 @@ library MlDsa {
                 dst = _put(a, dst);
             }
         }
+        // tr: `hash` writes a whole block (160 bytes) for these 64; the overrun lands in the t̂1 region, which the loop
+        // below overwrites afterwards (correct only because of this write order).
         Shake.hash(Shake.SHAKE256, _copy(pk), pk.length, dst, 64);
         dst += 64;
         for (uint256 i; i < P.k; ++i) {
@@ -246,6 +253,7 @@ library MlDsa {
         uint256 g1 = P.gamma1;
         uint256 bound = P.gamma1 - P.beta;
         uint256 bits = P.zBits;
+        // forge-lint: disable-next-line(incorrect-shift)
         uint256 mask = (1 << bits) - 1;
         ok = true;
         assembly ("memory-safe") {
@@ -283,6 +291,7 @@ library MlDsa {
             while (idx < end) {
                 uint256 pos = uint8(y[idx]);
                 if (idx > first && uint8(y[idx - 1]) >= pos) return (false, h);
+                // forge-lint: disable-next-line(incorrect-shift)
                 mask |= 1 << pos;
                 ++idx;
             }
@@ -434,11 +443,15 @@ contract UAMldsaVerifier is IUAKindVerifier {
     error UAMldsaKind(uint16 kind);
 
     /// @param probeValid an input `pk ‖ sig ‖ msg` in the EIP-8355 layout that verifies; `probeInvalid` one that does not.
+    ///        Both must be exactly `pkLen + sigLen + 32` bytes of this level (the split `verify` sends), else pure Solidity.
     constructor(uint16 kind_, address candidate, bytes memory probeValid, bytes memory probeInvalid) {
         if (kind_ != PqUA.MLDSA44 && kind_ != PqUA.MLDSA65) revert UAMldsaKind(kind_);
         KIND = kind_;
         KIND_TAG = PqUA.tag(kind_);
-        PRECOMPILE = PqUA.probe(candidate, probeValid, probeInvalid) ? candidate : address(0);
+        MlDsa.Params memory P = kind_ == PqUA.MLDSA44 ? MlDsa.params44() : MlDsa.params65();
+        uint256 len = P.pkLen + P.sigLen + 32;
+        bool exact = probeValid.length == len && probeInvalid.length == len;
+        PRECOMPILE = exact && PqUA.probe(candidate, probeValid, probeInvalid) ? candidate : address(0);
     }
 
     function verify(bytes calldata keyData, bytes32 message, bytes calldata sig) external view returns (bool) {
@@ -450,7 +463,7 @@ contract UAMldsaVerifier is IUAKindVerifier {
         return MlDsa.verify(P, keyData, PqUA.emptyContext(pq), sig);
     }
 
-    /// EIP-8051 expanded key of `pk` (FIPS 64-byte `tr`).
+    /// EIP-8051 expanded key of `pk` (FIPS 64-byte `tr`); see `MlDsa.verifyExpanded` on trusting one.
     function expandedKey(bytes calldata pk) external view returns (bytes memory) {
         Shake.reserve();
         return MlDsa.expandKey(KIND == PqUA.MLDSA44 ? MlDsa.params44() : MlDsa.params65(), pk);

@@ -49,18 +49,21 @@ abstract contract PqVectors is Test {
         bytes32 signed = kind == PqUA.FNDSA512 ? uaMsg : PqUA.pqMessage(tag, uaMsg);
         assertEq(signed, bytes32(_k(kat, name, "signed_message")), "signed message");
         assertTrue(IVerify(verifier).verify(pk, uaMsg, _k(kat, name, "sig")), "valid signature");
-        for (uint256 i; i < 6; ++i) {
-            string memory m = string.concat(".kinds.", name, ".mutations[", vm.toString(i), "]");
+        uint256 n;
+        for (; vm.keyExistsJson(kat, string.concat(".kinds.", name, ".mutations[", vm.toString(n), "]")); ++n) {
+            string memory m = string.concat(".kinds.", name, ".mutations[", vm.toString(n), "]");
             bool got = IVerify(verifier).verify(_b(kat, string.concat(m, ".pk")),
                 bytes32(_b(kat, string.concat(m, ".ua_msg"))), _b(kat, string.concat(m, ".sig")));
             assertEq(got, vm.parseJsonBool(kat, string.concat(m, ".valid")), vm.parseJsonString(kat, string.concat(m, ".what")));
         }
+        assertEq(n, kind == PqUA.FNDSA512 ? 6 : 8, "mutations"); // + 2 non-empty-context signatures for ML-DSA, SLH-DSA
     }
 
     /// `t` (n entries of `width` bytes, big-endian) is `root^brv(k) mod q`, and root^n = −1 (a primitive 2n-th root).
     function _zetas(bytes memory t, uint256 width, uint256 n, uint256 q, uint256 root) internal pure {
         assertEq(t.length, n * width);
         uint256 bits;
+        // forge-lint: disable-next-line(incorrect-shift)
         while ((1 << bits) < n) ++bits;
         uint256 pw = 1;
         for (uint256 i; i < n; ++i) {
