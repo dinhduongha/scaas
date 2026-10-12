@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-SCaaS-Community-1.0
+// SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.20;
 
 /// @title Hợp đồng giữa `OpenFactoryV1` và MỌI implementation, kể cả kind ZETHER.

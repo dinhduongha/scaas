@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-SCaaS-Community-1.0
+// SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 // Host access for `dart test -p node` (no dart:io there): node's fs and process via js_interop.
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';

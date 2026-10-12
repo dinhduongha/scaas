@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-SCaaS-Community-1.0
+// SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
 /// @title PQ signing kinds: tags, the PQ message and the precompile probe (accounts.md CTR-UA-23).

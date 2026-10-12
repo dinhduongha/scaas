@@ -1,12 +1,12 @@
-SCaaS Community License 1.0
+Vegan Community License 1.0
 
 Copyright (c) 2026 Dinh Duong Ha (the "Licensor")
 
-SPDX-License-Identifier: LicenseRef-SCaaS-Community-1.0
+SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 
 This license lets eligible people and organizations use the Software with the freedoms of the MIT License or the
 Apache License 2.0, at their choice, and keeps the Software away from businesses that kill animals. Everyone else
-needs an Enterprise License from the Licensor. A plain-language summary is in LICENSE.vi.md (Vietnamese); it is not
+needs a Vegan Enterprise License from the Licensor. A plain-language summary is in LICENSE.vi.md (Vietnamese); it is not
 part of this license, and this English text controls.
 
 1. Definitions
@@ -62,7 +62,7 @@ No rights are granted under this license, and You may not use the Software in an
       donation of organs, tissue, cells, blood or blood components for the medical treatment of humans, including the
       recovery of costs on a non-profit basis by hospitals and by blood, tissue and organ services.
 
-This section prevails over every other section of this license and applies equally to Enterprise Licenses (Section 5).
+This section prevails over every other section of this license and applies equally to Vegan Enterprise Licenses (Section 5).
 
 3. Free license for eligible users
 
@@ -73,7 +73,7 @@ then the Licensor grants You a worldwide, royalty-free, non-exclusive license to
 distribute and sell copies of the Software, and to permit persons to whom You distribute it to do the same, under the
 terms of either the MIT License or the Apache License 2.0, at Your choice, modified as follows:
   (i)   every copy of the Software You distribute, in source or object form, alone or as part of a larger work, must
-        be licensed to its recipients under this license (SCaaS Community License 1.0), not under the MIT License or
+        be licensed to its recipients under this license (Vegan Community License 1.0), not under the MIT License or
         the Apache License 2.0 alone, and must include this license text;
   (ii)  the rights of each recipient depend on that recipient's own eligibility under Sections 2 and 3;
   (iii) Sections 2, 4, 5, 6 and 7 of this license apply in addition to, and take precedence over, the chosen terms.
@@ -85,15 +85,15 @@ licenses You choose for them; the Software within them stays under this license.
 
 If Your Group's Gross Revenue for a completed fiscal year reaches USD 10,000,000 or more, and You are not eligible
 under Section 3(a), Your rights under Section 3 continue for 90 days after the end of that fiscal year, then end
-unless You obtain an Enterprise License. If any member of Your Group falls under Section 2, Your rights end at once,
+unless You obtain a Vegan Enterprise License. If any member of Your Group falls under Section 2, Your rights end at once,
 without a grace period.
 
-5. Enterprise License
+5. Vegan Enterprise License
 
-Anyone not eligible under Section 3 may use the Software only under a separate written Enterprise License from the
-Licensor. To request one, contact the Licensor through https://github.com/dinhduongha/scaas. No Enterprise License is
-granted to anyone who falls under Section 2, and every Enterprise License contains the conditions of Section 2: an
-Enterprise licensee whose group later falls under Section 2 loses its rights as set out in Sections 4 and 6.
+Anyone not eligible under Section 3 may use the Software only under a separate written Vegan Enterprise License from the
+Licensor. To request one, contact the Licensor through https://github.com/dinhduongha/scaas. No Vegan Enterprise License is
+granted to anyone who falls under Section 2, and every Vegan Enterprise License contains the conditions of Section 2: a
+Vegan Enterprise licensee whose group later falls under Section 2 loses its rights as set out in Sections 4 and 6.
 
 6. Eligibility, verification and termination
 

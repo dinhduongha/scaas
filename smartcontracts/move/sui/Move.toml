@@ -1,6 +1,6 @@
 [package]
 name = "scaas"
 edition = "2024"
-license = "LicenseRef-SCaaS-Community-1.0"
+license = "LicenseRef-Vegan-Community-1.0"
 
 [dependencies]

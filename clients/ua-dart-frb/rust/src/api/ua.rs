@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-SCaaS-Community-1.0
+// SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 //! flutter_rust_bridge surface over `scaas-ua`. Every function is synchronous; failures are a `UAError { code, reason }`
 //! (a Dart exception). Byte data is `Uint8List` (`Vec<u8>`), ids and digests are fixed-size arrays.
 use flutter_rust_bridge::frb;

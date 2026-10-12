@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-SCaaS-Community-1.0
+// SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 // legacy/p5 — reference only, not built: cut from `test/helpers/Mocks.sol` when the v1 line left the build (P5).
 pragma solidity ^0.8.20;
 

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-SCaaS-Community-1.0
+// SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 // Qt Quick Test main; `vectors.load("kinds.json")` hands the shared vector files to QML as JS objects.
 #include <QFile>
 #include <QJsonDocument>

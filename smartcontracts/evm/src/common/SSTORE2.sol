@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-SCaaS-Community-1.0
+// SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
 /// @title Bytes stored once as contract code (SSTORE2): runtime = `0x00` (STOP) ‖ data, so the data contract cannot

@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-SCaaS-Community-1.0
+// SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
 /// @title The token's side of the DEX (CTR-DEX-13, CTR-DEX-15, CTR-DEX-02): a role-free signed `TradeOrder`, checked by
