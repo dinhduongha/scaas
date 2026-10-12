@@ -108,11 +108,11 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken {
     function _executeTransfer(MetaTxLib.MetaTransfer memory t, bytes calldata signature)
         internal returns (bytes32 digest)
     {
-        _checkEnvelope(t.from, t.batch, t.nonce, t.validUntil, t.mode, t.relayer);              // 1
+        _checkEnvelope(MetaTxLib.pad(t.from), t.batch, t.nonce, t.validUntil, t.mode, t.relayer); // 1
         digest = _hashTypedDataV4(t.hashStruct());                                              // 2
         _requireValidSignature(t.from, digest, signature);
         (uint256 fee, address feeTo) = _checkTransfer(t);                                       // 3
-        _useNonce(t.from, t.batch);                                                             // 4
+        _useNonce(MetaTxLib.pad(t.from), t.batch);                                              // 4
         if (fee != 0) _transfer(t.from, feeTo, fee);                                            // 5
         _transfer(t.from, t.to, t.value);
         if (t.entryRef != 0) emit PaymentSettled(t.from, t.to, t.value, fee, feeTo, t.entryRef);

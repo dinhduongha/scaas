@@ -12,8 +12,8 @@ contract LaneHarness is MetaTxBase {
     constructor() MetaTxBase("SCaaS Lane", bytes32(uint256(1))) {}
 
     function consume(address from, uint256 batch, uint256 nonce) external {
-        _checkEnvelope(from, batch, nonce, block.timestamp + 1, MetaTxLib.MODE_OPEN, address(0));
-        _useNonce(from, batch);
+        _checkEnvelope(MetaTxLib.pad(from), batch, nonce, block.timestamp + 1, MetaTxLib.MODE_OPEN, address(0));
+        _useNonce(MetaTxLib.pad(from), batch);
     }
 
     function unguarded() external {}

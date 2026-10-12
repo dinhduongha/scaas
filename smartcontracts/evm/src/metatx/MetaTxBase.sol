@@ -39,8 +39,11 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
     bytes32 private constant _BINDING = 0x7a352a4ca0b7d094432a2dbe626c3b7c08a75c6b3464420d2516ca3859c7c12e; // keccak256("scaas.mtx.binding")
 
     /// @custom:storage-location erc7201:scaas.metatx
+    /// @dev One nonce map for every path, keyed by id (CTR-UA-26): a native address zero-padded (`MetaTxLib.pad`), a
+    ///      derived UA as itself. A mapping hashes an `address` key as the padded word, so the slots of native ids are
+    ///      those of the earlier `address`-keyed map.
     struct MetaTxStorage {
-        mapping(address from => mapping(uint256 batch => uint256)) nonce;
+        mapping(bytes32 from => mapping(uint256 batch => uint256)) nonce;
     }
 
     // keccak256(abi.encode(uint256(keccak256("scaas.metatx")) - 1)) & ~bytes32(uint256(0xff))
@@ -66,7 +69,7 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
     // ------------------------------------------------------------------ views
 
     function mtxNonce(address from, uint256 batch) public view returns (uint256) {
-        return _mtxStorage().nonce[from][batch];
+        return _nonce(MetaTxLib.pad(from), batch);
     }
 
     function mtxDigest(MetaTxLib.MetaTransaction calldata m) external view returns (bytes32) {
@@ -123,9 +126,7 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
     /// @notice Direct, or signed through `mtxExecute` on another lane (a subject without gas can cancel).
     function cancelNonce(uint256 batch) external nonReentrant {
         address from = _msgSender();
-        uint256 n;
-        unchecked { n = ++_mtxStorage().nonce[from][batch]; }
-        emit MetaNonceCancelled(from, batch, n);
+        emit MetaNonceCancelled(from, batch, _bumpNonce(MetaTxLib.pad(from), batch));
     }
 
     // ------------------------------------------------------------------ pipeline (CTR-MTX-17)
@@ -135,9 +136,9 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
         internal returns (bytes memory ret)
     {
         bytes32 digest = _checkIntent(m, signature);            // 1, 2
-        uint256 basis = _checkCall(m);                          // 3
-        _useNonce(m.from, m.batch);                             // 4
-        ret = _selfCall(m);                                     // 5
+        uint256 basis = _checkCall(m.data, m.mode);             // 3
+        _useNonce(MetaTxLib.pad(m.from), m.batch);              // 4
+        ret = _selfCall(MetaTxLib.pad(m.from), m.data, _envelopeBinding(m)); // 5
         uint256 fee = _chargeFee(m.from, basis, m);             // 6
         emit MetaTransactionExecuted(m.from, msg.sender, m.batch, m.nonce, digest, _feeRecipientOf(m), fee); // 7
     }
@@ -146,15 +147,16 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
     function _checkIntent(MetaTxLib.MetaTransaction memory m, bytes calldata signature)
         internal view returns (bytes32 digest)
     {
-        _checkEnvelope(m.from, m.batch, m.nonce, m.validUntil, m.mode, m.relayer);
+        _checkEnvelope(MetaTxLib.pad(m.from), m.batch, m.nonce, m.validUntil, m.mode, m.relayer);
         digest = _hashTypedDataV4(m.hashStruct());
         _requireValidSignature(m.from, digest, signature);
     }
 
-    /// @dev Step 1 on the shared lane space (CTR-MTX-15): the common envelope of every signed struct
-    ///      (`MetaTransaction`, and P1b's `MetaTransfer`). Not virtual: one lane, one nonce sequence.
+    /// @dev Step 1 on the shared lane space (CTR-MTX-15, CTR-UA-26): the common envelope of every signed struct
+    ///      (`MetaTransaction`, `MetaTransfer` and the UA ledger's two), `from` as an id. Not virtual: one lane, one
+    ///      nonce sequence.
     function _checkEnvelope(
-        address from, uint256 batch, uint256 nonce, uint256 validUntil, uint32 mode, address relayer
+        bytes32 from, uint256 batch, uint256 nonce, uint256 validUntil, uint32 mode, address relayer
     ) internal view {
         if (mode & MetaTxLib.MODE_RESTRICT_RELAYER != 0 && relayer != msg.sender) {
             revert MetaTxUnauthorizedRelayer(relayer, msg.sender);
@@ -163,19 +165,27 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
         if (mode & ~MetaTxLib.MODE_KNOWN_MASK != 0 || mode & MetaTxLib.MODE_FEE_MASK > MetaTxLib.MODE_FEE_FIXED) {
             revert MetaTxUnknownMode(mode);
         }
-        uint256 expected = _mtxStorage().nonce[from][batch];
+        uint256 expected = _nonce(from, batch);
         if (expected != nonce) revert MetaTxBadNonce(expected, nonce);
-        if (from == address(this)) _selfSender();
+        if (from == MetaTxLib.pad(address(this))) _selfSender();
+    }
+
+    function _nonce(bytes32 from, uint256 batch) internal view returns (uint256) {
+        return _mtxStorage().nonce[from][batch];
     }
 
     /// @dev Step 4: consume the lane's current nonce (call after `_checkEnvelope` passed).
-    function _useNonce(address from, uint256 batch) internal {
+    function _useNonce(bytes32 from, uint256 batch) internal {
         unchecked { ++_mtxStorage().nonce[from][batch]; }
     }
 
+    /// @dev `cancelNonce` and the UA ledger's `uaCancelNonce`: the lane's next nonce, returned.
+    function _bumpNonce(bytes32 from, uint256 batch) internal returns (uint256 n) {
+        unchecked { n = ++_mtxStorage().nonce[from][batch]; }
+    }
+
     /// @dev Step 3: shape, allowlist, fee class, `supportedModes()`. Returns the fee basis.
-    function _checkCall(MetaTxLib.MetaTransaction memory m) internal view returns (uint256 basis) {
-        bytes memory data = m.data;
+    function _checkCall(bytes memory data, uint32 mode) internal view returns (uint256 basis) {
         bytes4 sel = bytes4(data);
         if (data.length < 4) revert MtxDataShape(sel);
         MtxRule memory r = _mtxRule(sel);
@@ -183,10 +193,10 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
         uint256 basisEnd = 36 + 32 * uint256(r.amountArg);
         if ((r.staticLen != 0 && data.length != r.staticLen)
             || (r.feeClass == FEE_CLASS_AMOUNT && data.length < basisEnd)) revert MtxDataShape(sel);
-        if (r.feeClass == FEE_CLASS_ABSOLUTE && MetaTxLib.feeModeOf(m.mode) == FeeMode.PERCENT) {
-            revert MtxFeeClass(sel, m.mode);
+        if (r.feeClass == FEE_CLASS_ABSOLUTE && MetaTxLib.feeModeOf(mode) == FeeMode.PERCENT) {
+            revert MtxFeeClass(sel, mode);
         }
-        if (m.mode & ~supportedModes() != 0) revert MetaTxUnknownMode(m.mode);
+        if (mode & ~supportedModes() != 0) revert MetaTxUnknownMode(mode);
         if (r.feeClass == FEE_CLASS_AMOUNT) {
             assembly ("memory-safe") { basis := mload(add(data, basisEnd)) }
         }
@@ -194,14 +204,15 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
 
     /// @dev Step 5: store the ticket (and the envelope binding, when the contract has one), call self, clear the ticket;
     ///      a failed call reverts with its own revert data. The binding is read only under a live ticket, and every
-    ///      self-call of a contract that has one writes it first, so it needs no clearing.
-    function _selfCall(MetaTxLib.MetaTransaction memory m) private returns (bytes memory ret) {
-        _tstore(_SENDER, uint256(uint160(m.from)));
+    ///      self-call of a contract that has one writes it first, so it needs no clearing. `subject` is the signer as
+    ///      an id: a native address padded, or a derived UA (the UA ledger, CTR-UA-26), which the body sees as
+    ///      `_msgSender() == UA_POOL` and `_ticketSubject() == subject`.
+    function _selfCall(bytes32 subject, bytes memory data, bytes32 binding) internal returns (bytes memory ret) {
+        _tstore(_SENDER, uint256(subject));
         _tstore(_TICKET, 1);
-        bytes32 binding = _envelopeBinding(m);
         if (binding != bytes32(0)) _tstore(_BINDING, uint256(binding));
         bool ok;
-        (ok, ret) = address(this).call(m.data);
+        (ok, ret) = address(this).call(data);
         bool guarded = _tload(_TICKET) == 2;    // the target was `nonReentrant` and consumed the ticket
         _tstore(_TICKET, 0);
         _tstore(_SENDER, 0);
@@ -254,10 +265,20 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
         return bytes32(0);
     }
 
-    /// @notice The signer inside the one self-call of step 5 (live ticket), else `msg.sender` (CTR-MTX-18).
+    /// @notice The signer inside the one self-call of step 5 (live ticket), else `msg.sender` (CTR-MTX-18). A derived
+    ///         UA signer (top 96 bits non-zero) is `UA_POOL`: its balance is the pool's sub-ledger (CTR-UA-18).
     function _msgSender() internal view virtual override returns (address) {
-        if (msg.sender == address(this) && _tload(_TICKET) != 0) return address(uint160(_tload(_SENDER)));
+        if (msg.sender == address(this) && _tload(_TICKET) != 0) {
+            uint256 s = _tload(_SENDER);
+            return s >> 160 == 0 ? address(uint160(s)) : MetaTxLib.UA_POOL;
+        }
         return msg.sender;
+    }
+
+    /// @notice The signer as an id inside the one self-call of step 5, else 0.
+    function _ticketSubject() internal view returns (bytes32) {
+        if (msg.sender == address(this) && _tload(_TICKET) != 0) return bytes32(_tload(_SENDER));
+        return bytes32(0);
     }
 
     /// @dev `m.feeRecipient`, or `msg.sender` when 0 (CTR-MTX-13).
