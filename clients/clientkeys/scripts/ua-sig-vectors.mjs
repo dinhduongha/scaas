@@ -1,9 +1,12 @@
 // Generates smartcontracts/vectors/ua/signatures.json: UA-2a signatures (accounts.md §1.4, §1.8, §1.9) on deterministic
 // keys — per derived kind a key, its PoP in structures.json context A and B, signatures over ua_msg under metatx and member,
 // and negatives a verifier must refuse; native EOA UAAuth signatures; an msig structure with member signature sets.
-// Secrets: keccak256("scaas.ua.vectors.sig.<name>") mod (n − 1) + 1. Nonces: RFC 6979 (P-256, secp256k1 ECDSA), zero
-// aux_rand (BIP-340), keccak256(secret ‖ message ‖ "scaas.ua.vectors.nonce") (scaas Schnorr). test/ua-sig.test.js
-// re-verifies every row with noble; clients/scaas-ua (tests/signatures.rs) with p256 / k256 / arkworks.
+// Secrets: keccak256("scaas.ua.vectors.sig.<name>") mod (n − 1) + 1 (ed25519: the 32-byte keccak itself, RFC 8032 seed).
+// Nonces: RFC 6979 (P-256, secp256k1 ECDSA), zero aux_rand (BIP-340), keccak256(secret ‖ message ‖ "scaas.ua.vectors.nonce")
+// (scaas Schnorr), RFC 8032 (ed25519). test/ua-sig.test.js re-verifies every row with noble; clients/scaas-ua
+// (tests/signatures.rs) with p256 / k256 / arkworks / ed25519-dalek.
+// Also writes ed25519_fuzz.json (UA-2b T-FUZZ, accounts.md §1.16): mutated / crafted ed25519 cases from a fixed seed, each
+// with its strict verdict (ed25519-dalek verify_strict, re-checked by clients/scaas-ua tests/ed25519_fuzz.rs).
 //   node scripts/ua-sig-vectors.mjs [outDir]
 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -12,7 +15,8 @@ import { p256 } from '@noble/curves/nist.js';
 import { secp256k1, schnorr } from '@noble/curves/secp256k1.js';
 import { bn254 } from '@noble/curves/bn254.js';
 import { bls12_381 } from '@noble/curves/bls12-381.js';
-import { sha256 } from '@noble/hashes/sha2.js';
+import { ed25519, ED25519_TORSION_SUBGROUP } from '@noble/curves/ed25519.js';
+import { sha256, sha512 } from '@noble/hashes/sha2.js';
 import { hex, fromHex, keccak_256, utf8ToBytes, concatBytes, b64url, abiEncode, word } from '../src/bytes.js';
 import * as ua from '../src/ua.js';
 
@@ -81,6 +85,39 @@ function mapToG1Bn254(prefix) {
 }
 const BN_LABEL = { sig: utf8ToBytes('SCAAS-UA-BLS-BN254-SIG-V1'), pop: utf8ToBytes('SCAAS-UA-BLS-BN254-POP-V1') };
 const BLS_DST = { sig: 'SCAAS-UA-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_SIG_', pop: 'SCAAS-UA-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_POP_' };
+// --- ed25519 (UA-2b): strict = ed25519-dalek verify_strict ---
+const ED_L = ed25519.Point.Fn.ORDER;
+const ED_P = ed25519.Point.Fp.ORDER;
+const EdPoint = ed25519.Point;
+const le = (v) => be(v, 32).reverse();
+const leInt = (b) => int(Uint8Array.from(b).reverse());
+const edK = (Rb, A, M) => leInt(sha512(concatBytes(Rb, A, M))) % ED_L;
+const edNonce = (label, i) => int(keccak_256(concatBytes(utf8ToBytes(label), be(BigInt(i), 4)))) % ED_L;
+const TORSION = ED25519_TORSION_SUBGROUP.map(fromHex); // [0] identity, [1] order 8
+const ED_ID = TORSION[0];
+const ED_T8 = TORSION[1];
+const withSign = (b) => { const c = Uint8Array.from(b); c[31] |= 0x80; return c; };
+/** Strict verdict: noble zip215:false (canonical A and R, S < L, A not small order, cofactored equation), plus R not small
+ * order and the cofactorless equation [S]B == R + [k]A — the rules of ed25519-dalek verify_strict. */
+function edStrict(pk, msg, sig) {
+  try {
+    if (!ed25519.verify(sig, msg, pk, { zip215: false })) return false;
+    const R = EdPoint.fromBytes(sig.subarray(0, 32), false);
+    if (R.isSmallOrder()) return false;
+    const k = edK(sig.subarray(0, 32), pk, msg);
+    return EdPoint.BASE.multiplyUnsafe(leInt(sig.subarray(32))).equals(R.add(EdPoint.fromBytes(pk, false).multiplyUnsafe(k)));
+  } catch { return false; }
+}
+const edNoble = (pk, msg, sig) => { try { return ed25519.verify(sig, msg, pk, { zip215: false }); } catch { return false; } };
+/** A signature with R replaced by `Rb` and S = k·a: the [k]A side alone, so it satisfies the cofactored equation when `Rb`
+ * is small order, and the cofactorless one when `Rb` decodes to the identity. */
+const edForgeR = (a, A, M, Rb) => concatBytes(Rb, le((edK(Rb, A, M) * a) % ED_L));
+/** Signs `M` under key bytes `A` (scalar a, possibly plus torsion) with nonce point R = [r]B + T. */
+const edSignRaw = (a, A, M, r, T = ED_ID) => {
+  const Rb = EdPoint.BASE.multiply(r).add(EdPoint.fromBytes(T)).toBytes();
+  return concatBytes(Rb, le((r + edK(Rb, A, M) * a) % ED_L));
+};
+
 const bnG2enc = (P) => { const { x, y } = P.toAffine(); return concatBytes(be(x.c1, 32), be(x.c0, 32), be(y.c1, 32), be(y.c0, 32)); };
 const blsG2enc = (P) => { const { x, y } = P.toAffine(); return concatBytes(be(x.c0, 64), be(x.c1, 64), be(y.c0, 64), be(y.c1, 64)); };
 
@@ -98,9 +135,11 @@ const SCHEMES = {
     sign: (sk, m, { pop = false } = {}) => blsG1enc(bls12_381.G1.hashToCurve(m, { DST: pop ? BLS_DST.pop : BLS_DST.sig }).multiply(sk)) },
   'bls-bn254-minsig': { kind: 0x0107, n: BN.Fr.ORDER, keyData: (sk) => bnG2enc(bn254.G2.Point.BASE.multiply(sk)),
     sign: (sk, m, { pop = false } = {}) => bnG1enc(mapToG1Bn254(concatBytes(pop ? BN_LABEL.pop : BN_LABEL.sig, m)).multiply(sk)) },
+  // UA-2b, appended (signatures.json is append-only): the secret is the RFC 8032 seed
+  ed25519: { kind: 0x0102, seed: true, keyData: (sk) => ed25519.getPublicKey(be(sk, 32)), sign: (sk, m) => ed25519.sign(m, be(sk, 32)) },
 };
 // a sibling kind whose tag a "wrong-kind-tag" negative signs under (same curve where one exists)
-const OTHER_KIND = { 0x0100: 0x0101, 0x0101: 0x0100, 0x0103: 0x0110, 0x0104: 0x0140, 0x0105: 0x0141, 0x0106: 0x0105, 0x0107: 0x0104 };
+const OTHER_KIND = { 0x0100: 0x0101, 0x0101: 0x0100, 0x0103: 0x0110, 0x0104: 0x0140, 0x0105: 0x0141, 0x0106: 0x0105, 0x0107: 0x0104, 0x0102: 0x0103 };
 
 /** First point on y² = x³ + 4 (x = 1, 2, …) outside the BLS12-381 G1 subgroup. */
 function blsG1OffSubgroup() {
@@ -119,7 +158,7 @@ const popOf = (kind, uaId, ctx) => {
   return { popDigest, message: ua.uaMessage(kind, ua.POP_TAG, popDigest) };
 };
 const derivedRows = Object.entries(SCHEMES).map(([name, s]) => {
-  const sk = secretOf(name, s.n);
+  const sk = s.seed ? int(keccak_256(utf8ToBytes(`scaas.ua.vectors.sig.${name}`))) : secretOf(name, s.n);
   const keyData = s.keyData(sk);
   const id = ua.deriveUA(s.kind, keyData);
   const sign = (m, o) => s.sign(sk, m, o);
@@ -151,7 +190,26 @@ const derivedRows = Object.entries(SCHEMES).map(([name, s]) => {
       neg('extra-without-cross-origin', false, metatx, wa({ tail: CHROME_EXTRA })),
       neg('wrong-rp-id', false, metatx, wa({ rpId: 'other.example' })), neg('type-create', false, metatx, wa({ type: 'webauthn.create' })));
   } else {
-    negatives.push(neg('mutated', false, metatx, flip(metatxSig, metatxSig.length - 1)));
+    // ed25519: flip S's low byte (its last byte would move S by 2^248, possibly past L)
+    negatives.push(neg('mutated', false, metatx, flip(metatxSig, s.kind === 0x0102 ? 32 : metatxSig.length - 1)));
+  }
+  if (s.kind === 0x0102) {
+    const { scalar: a } = ed25519.utils.getExtendedPublicKey(be(sk, 32));
+    const R = metatxSig.subarray(0, 32);
+    const S = leInt(metatxSig.subarray(32));
+    const withS = (v) => concatBytes(R, le(v));
+    const forge = (Rb) => edForgeR(a, keyData, metatx, Rb);
+    negatives.push(
+      neg('s-plus-l', false, metatx, withS(S + ED_L)), // same point: malleability
+      neg('s-ge-l', false, metatx, withS(S + ((1n << 256n) - 1n - S) / ED_L * ED_L)), // S + 15·L ≥ 2^255, same point
+      neg('s-eq-l', false, metatx, withS(ED_L)),
+      neg('r-identity', false, metatx, forge(ED_ID)), // the cofactorless equation holds: only the small-order R rule refuses
+      neg('r-small-order', false, metatx, forge(ED_T8)), // the cofactored equation holds (noble zip215:false alone accepts)
+      neg('r-noncanonical-y', false, metatx, forge(le(ED_P + 1n))), // the identity as y = p + 1
+      neg('r-x0-signbit', false, metatx, forge(withSign(ED_ID))), // the identity with the sign bit set (x = 0)
+      // R = [r]B + T8 and S = r + k·a: cofactored equation holds (noble zip215:false alone accepts), cofactorless does not
+      neg('r-mixed-order', false, metatx, edSignRaw(a, keyData, metatx, edNonce('scaas.ua.vectors.sig.ed25519.r-mixed', 0), ED_T8)),
+    );
   }
   if (s.kind === 0x0101) negatives.push(neg('high-s', false, metatx, highS(metatxSig)));
   if (s.kind === 0x0104 || s.kind === 0x0105) {
@@ -285,6 +343,139 @@ const bip340Official = [
   return { index, publicKey: `0x${publicKey}`, message: `0x${message}`, sig: `0x${signature}`, valid, comment };
 });
 
+// --- ed25519 (UA-2b): RFC 8032 §7.1 test vectors (any message length: the verifier library's verifyRaw) and A-side cases ---
+const RFC8032 = [
+  ['TEST 1', '9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60',
+    'd75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a',
+    '',
+    'e5564300c360ac729086e2cc806e828a84877f1eb8e5d974d873e065224901555fb8821590a33bacc61e39701cf9b46bd25bf5f0595bbe24655141438e7a100b'],
+  ['TEST 2', '4ccd089b28ff96da9db6c346ec114e0f5b8a319f35aba624da8cf6ed4fb8a6fb',
+    '3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c',
+    '72',
+    '92a009a9f0d4cab8720e820b5f642540a2b27b5416503f8fb3762223ebdb69da085ac1e43e15996e458f3613d0f11d8c387b2eaeb4302aeeb00d291612bb0c00'],
+  ['TEST 3', 'c5aa8df43f9f837bedb7442f31dcb7b166d38535076f094b85ce3a2e0b4458f7',
+    'fc51cd8e6218a1a38da47ed00230f0580816ed13ba3303ac5deb911548908025',
+    'af82',
+    '6291d657deec24024827e69c3abe01a30ce548a284743a445e3680d7db5ac3ac18ff9b538d16f290ae67f760984dc6594a7c15e9716ed28dc027beceea1ec40a'],
+  ['TEST 1024', 'f5e5767cf153319517630f226876b86c8160cc583bc013744c6bf255f5cc0ee5',
+    '278117fc144c72340f67d0f2316e8386ceffbf2b2428c9c51fef7c597f1d426e',
+    '08b8b2b733424243760fe426a4b54908632110a66c2f6591eabd3345e3e4eb98fa6e264bf09efe12ee50f8f54e9f77b1e355f6c50544e23fb1433ddf73be84d879de7c0046dc4996d9e773f4bc9efe5738829adb26c81b37c93a1b270b20329d658675fc6ea534e0810a4432826bf58c941efb65d57a338bbd2e26640f89ffbc1a858efcb8550ee3a5e1998bd177e93a7363c344fe6b199ee5d02e82d522c4feba15452f80288a821a579116ec6dad2b3b310da903401aa62100ab5d1a36553e06203b33890cc9b832f79ef80560ccb9a39ce767967ed628c6ad573cb116dbefefd75499da96bd68a8a97b928a8bbc103b6621fcde2beca1231d206be6cd9ec7aff6f6c94fcd7204ed3455c68c83f4a41da4af2b74ef5c53f1d8ac70bdcb7ed185ce81bd84359d44254d95629e9855a94a7c1958d1f8ada5d0532ed8a5aa3fb2d17ba70eb6248e594e1a2297acbbb39d502f1a8c6eb6f1ce22b3de1a1f40cc24554119a831a9aad6079cad88425de6bde1a9187ebb6092cf67bf2b13fd65f27088d78b7e883c8759d2c4f5c65adb7553878ad575f9fad878e80a0c9ba63bcbcc2732e69485bbc9c90bfbd62481d9089beccf80cfe2df16a2cf65bd92dd597b0707e0917af48bbb75fed413d238f5555a7a569d80c3414a8d0859dc65a46128bab27af87a71314f318c782b23ebfe808b82b0ce26401d2e22f04d83d1255dc51addd3b75a2b1ae0784504df543af8969be3ea7082ff7fc9888c144da2af58429ec96031dbcad3dad9af0dcbaaaf268cb8fcffead94f3c7ca495e056a9b47acdb751fb73e666c6c655ade8297297d07ad1ba5e43f1bca32301651339e22904cc8c42f58c30c04aafdb038dda0847dd988dcda6f3bfd15c4b4c4525004aa06eeff8ca61783aacec57fb3d1f92b0fe2fd1a85f6724517b65e614ad6808d6f6ee34dff7310fdc82aebfd904b01e1dc54b2927094b2db68d6f903b68401adebf5a7e08d78ff4ef5d63653a65040cf9bfd4aca7984a74d37145986780fc0b16ac451649de6188a7dbdf191f64b5fc5e2ab47b57f7f7276cd419c17a3ca8e1b939ae49e488acba6b965610b5480109c8b17b80e1b7b750dfc7598d5d5011fd2dcc5600a32ef5b52a1ecc820e308aa342721aac0943bf6686b64b2579376504ccc493d97e6aed3fb0f9cd71a43dd497f01f17c0e2cb3797aa2a2f256656168e6c496afc5fb93246f6b1116398a346f1a641f3b041e989f7914f90cc2c7fff357876e506b50d334ba77c225bc307ba537152f3f1610e4eafe595f6d9d90d11faa933a15ef1369546868a7f3a45a96768d40fd9d03412c091c6315cf4fde7cb68606937380db2eaaa707b4c4185c32eddcdd306705e4dc1ffc872eeee475a64dfac86aba41c0618983f8741c5ef68d3a101e8a3b8cac60c905c15fc910840b94c00a0b9d0',
+    '0aab4c900501b3e24d7cdf4663326a3a87df5e4843b2cbdb67cbf6e460fec350aa5371b1508f9f4528ecea23c436d94b5e8fcd4f681e30a6ac00a9704a188a03'],
+  ['TEST SHA(abc)', '833fe62409237b9d62ec77587520911e9a759cec1d19755b7da901b96dca3d42',
+    'ec172b93ad5e563bf4932c70e1245034c35467ef2efd4d64ebf819683467e2bf',
+    'ddaf35a193617abacc417349ae20413112e6fa4e89a97ea20a9eeee64b55d39a2192992a274fc1a836ba3c23a3feebbd454d4423643ce80e2a9ac94fa54ca49f',
+    'dc2a4459e7369633a52b1bf277839a00201009a3efbf3ecb69bea2186c26b58909351fc9ac90b3ecfdfbc7c66431e0303dca179c138ac17ad9bef1177331a704'],
+];
+const edRow = derivedRows.find((r) => r.name === 'ed25519');
+const edMsg = fromHex(edRow.sigs[0].message);
+const edScalar = ed25519.utils.getExtendedPublicKey(fromHex(edRow.secret)).scalar;
+/** R = [r_i]B (r_i = edNonce(label, i)), S = r_i + k·a under key bytes A, for the first i whose k = H(R ‖ A ‖ M) passes `want`. */
+function edGrind(label, a, A, M, want) {
+  for (let i = 0; ; i++) {
+    const sig = edSignRaw(a, A, M, edNonce(label, i));
+    if (want(edK(sig.subarray(0, 32), A, M))) return sig;
+  }
+}
+const edMixedA = EdPoint.BASE.multiply(edScalar).add(EdPoint.fromBytes(ED_T8)).toBytes();
+const ed25519Rfc8032 = [
+  ...RFC8032.map(([name, secret, publicKey, message, signature]) => {
+    const [sk, pk, m, sig] = [secret, publicKey, message, signature].map(fromHex);
+    if (hex(ed25519.getPublicKey(sk)) !== hex(pk) || hex(ed25519.sign(m, sk)) !== hex(sig)) throw new Error(`RFC 8032 ${name}: noble differs`);
+    if (name === 'TEST SHA(abc)' && hex(m) !== hex(sha512(utf8ToBytes('abc')))) throw new Error('TEST SHA(abc) message');
+    return { name, publicKey: hex(pk), message: hex(m), sig: hex(sig), valid: true, comment: `RFC 8032 §7.1 ${name} (${m.length}-byte message)` };
+  }),
+  // A-side: each satisfies the cofactorless equation; only the A rules refuse (A = T8: k ≡ 0 mod 8; A = identity: any k)
+  ...[
+    ['small-order-a', ED_T8, (k) => k % 8n === 0n, 'A of order 8, k ≡ 0 mod 8, S = r: [S]B == R + [k]A'],
+    ['a-identity', ED_ID, () => true, 'A = identity, S = r'],
+    ['a-noncanonical-y', le(ED_P + 1n), () => true, 'A = the identity as y = p + 1 (non-canonical), S = r'],
+    ['a-x0-signbit', withSign(ED_ID), () => true, 'A = the identity with the sign bit set (x = 0), S = r'],
+  ].map(([name, A, want, comment]) => ({ name, publicKey: hex(A), message: hex(edMsg), sig: hex(edGrind(`scaas.ua.vectors.sig.ed25519.${name}`, 0n, A, edMsg, want)), valid: false, comment })),
+  // A = [a]B + T8 (mixed order, not small order: key data accepts it): S = r + k·a holds cofactorless iff [k]T8 = O
+  { name: 'a-mixed-order-k0', publicKey: hex(edMixedA), message: hex(edMsg), valid: true,
+    sig: hex(edGrind('scaas.ua.vectors.sig.ed25519.a-mixed-order-k0', edScalar, edMixedA, edMsg, (k) => k % 8n === 0n)),
+    comment: 'A = [a]B + T8, k ≡ 0 mod 8: the cofactorless equation holds (verify_strict accepts)' },
+  { name: 'a-mixed-order', publicKey: hex(edMixedA), message: hex(edMsg), valid: false,
+    sig: hex(edGrind('scaas.ua.vectors.sig.ed25519.a-mixed-order', edScalar, edMixedA, edMsg, (k) => k % 8n !== 0n)),
+    comment: 'A = [a]B + T8, k ≢ 0 mod 8: only the cofactored equation holds (noble zip215:false alone accepts)' },
+];
+for (const t of ed25519Rfc8032) {
+  if (edStrict(fromHex(t.publicKey), fromHex(t.message), fromHex(t.sig)) !== t.valid) throw new Error(`ed25519Rfc8032 ${t.name}: verdict`);
+}
+
+// --- ed25519_fuzz.json (T-FUZZ): cases from a fixed seed, verdict = strict (edStrict, = ed25519-dalek verify_strict) ---
+const FUZZ_SEED = 'scaas.ua.vectors.ed25519.fuzz.v1';
+let fuzzCtr = 0;
+const rnd = () => keccak_256(concatBytes(utf8ToBytes(FUZZ_SEED), be(BigInt(fuzzCtr++), 4)));
+const rint = (n) => Number(int(rnd()) % BigInt(n));
+const pick = (list) => list[rint(list.length)];
+const fuzzKeys = Array.from({ length: 16 }, (_, i) => {
+  const seed = keccak_256(utf8ToBytes(`${FUZZ_SEED}.key.${i}`));
+  const { scalar, pointBytes } = ed25519.utils.getExtendedPublicKey(seed);
+  return { seed, a: scalar, A: pointBytes };
+});
+/** Non-canonical encodings (y ≥ p, or x = 0 with the sign bit) of points on the curve, split by small order. */
+const nonCanon = { small: [withSign(ED_ID), withSign(le(ED_P - 1n))], mixed: [] };
+for (let y = 0n; y < 19n; y++) for (const b of [le(ED_P + y), withSign(le(ED_P + y))]) {
+  let P;
+  try { P = EdPoint.fromBytes(b, true); } catch { continue; }
+  nonCanon[P.isSmallOrder() ? 'small' : 'mixed'].push(b);
+}
+const smallOrder = [...TORSION, ...nonCanon.small];
+const T_NONZERO = TORSION.slice(1);
+const torsionOrder = (T) => { let P = EdPoint.fromBytes(T); let n = 1; while (!P.is0()) { P = P.add(EdPoint.fromBytes(T)); n++; } return BigInt(n); };
+const flipBit = (b) => { const c = Uint8Array.from(b); const i = rint(c.length * 8); c[i >> 3] ^= 1 << (i & 7); return c; };
+const honest = () => { const key = pick(fuzzKeys); const msg = rnd(); return { key, pk: key.A, msg, sig: ed25519.sign(msg, key.seed) }; };
+const setS = (sig, v) => concatBytes(sig.subarray(0, 32), le(v));
+const getS = (sig) => leInt(sig.subarray(32));
+const nonce = () => int(rnd()) % ED_L;
+const FUZZ = [
+  ['valid', 192, () => honest()],
+  ['sig-bit', 416, () => { const c = honest(); return { ...c, sig: flipBit(c.sig) }; }],
+  ['sig-byte', 128, () => { const c = honest(); const sig = Uint8Array.from(c.sig); const i = rint(64); sig[i] = (sig[i] + 1 + rint(255)) & 0xff; return { ...c, sig }; }],
+  ['pk-bit', 192, () => { const c = honest(); return { ...c, pk: flipBit(c.pk) }; }],
+  ['msg-bit', 192, () => { const c = honest(); return { ...c, msg: flipBit(c.msg) }; }],
+  ['msg-random', 64, () => ({ ...honest(), msg: rnd() })],
+  ['s-near-l', 128, () => { const c = honest(); return { ...c, sig: setS(c.sig, ED_L + BigInt(rint(33)) - 16n) }; }],
+  ['s-plus-jl', 96, () => { const c = honest(); const S = getS(c.sig); return { ...c, sig: setS(c.sig, S + BigInt(1 + rint(Number(((1n << 256n) - 1n - S) / ED_L))) * ED_L) }; }],
+  // R spliced with a small-order encoding; S = k·a (cofactored equation holds when canonical) or random
+  ['r-small-order', 128, () => { const c = honest(); const Rb = pick(smallOrder);
+    return { ...c, sig: rint(2) ? edForgeR(c.key.a, c.pk, c.msg, Rb) : concatBytes(Rb, le(nonce())) }; }],
+  ['r-noncanonical', 96, () => { const c = honest(); const Rb = pick([...nonCanon.small, ...nonCanon.mixed]);
+    return { ...c, sig: rint(2) ? edForgeR(c.key.a, c.pk, c.msg, Rb) : concatBytes(Rb, c.sig.subarray(32)) }; }],
+  ['r-mixed-order', 96, () => { const c = honest(); return { ...c, sig: edSignRaw(c.key.a, c.pk, c.msg, nonce(), pick(T_NONZERO)) }; }],
+  // A small order (canonical or not), R = [r]B, S = r; half ground so that [k]A = O (the cofactorless equation holds too)
+  ['a-small-order', 96, () => { const A = pick(smallOrder); const msg = rnd(); const ground = rint(2);
+    for (;;) { const r = nonce(); const sig = edSignRaw(0n, A, msg, r);
+      if (!ground || (edK(sig.subarray(0, 32), A, msg) % 8n === 0n)) return { pk: A, msg, sig }; } }],
+  ['a-noncanonical', 64, () => { const c = honest(); return { ...c, pk: pick(nonCanon.mixed) }; }],
+  // A = [a]B + T: S = r + k·a; half ground so that [k]T = O (strict accepts), else as drawn
+  ['a-mixed-order', 160, () => { const key = pick(fuzzKeys); const T = pick(T_NONZERO); const ord = torsionOrder(T);
+    const A = EdPoint.BASE.multiply(key.a).add(EdPoint.fromBytes(T)).toBytes(); const msg = rnd(); const ground = rint(2);
+    for (;;) { const sig = edSignRaw(key.a, A, msg, nonce());
+      if (!ground || edK(sig.subarray(0, 32), A, msg) % ord === 0n) return { pk: A, msg, sig }; } }],
+  ['random', 96, () => ({ pk: rnd(), msg: rnd(), sig: concatBytes(rnd(), le(nonce())) })],
+];
+const fuzzCases = [];
+for (const [cls, n, make] of FUZZ) for (let i = 0; i < n; i++) {
+  const { pk, msg, sig } = make();
+  // keys in alphabetical order (forge's parseJson decodes objects into structs that way)
+  fuzzCases.push({ class: cls, msg: hex(msg), noble: edNoble(pk, msg, sig), pk: hex(pk), sig: hex(sig), valid: edStrict(pk, msg, sig) });
+}
+const NOBLE_DIFFERS = ['r-small-order', 'r-mixed-order', 'a-mixed-order'];
+for (const c of fuzzCases) if (c.noble !== c.valid && !NOBLE_DIFFERS.includes(c.class)) throw new Error(`noble differs outside the known classes: ${c.class}`);
+const fuzzCounts = Object.fromEntries(FUZZ.map(([cls]) => {
+  const cs = fuzzCases.filter((c) => c.class === cls);
+  return [cls, { cases: cs.length, valid: cs.filter((c) => c.valid).length, nobleDiffers: cs.filter((c) => c.noble !== c.valid).length }];
+}));
+const fuzzNote = 'Generated by clients/clientkeys/scripts/ua-sig-vectors.mjs (@noble/curves 2.4.0); never edit by hand. UA-2b T-FUZZ '
+  + '(accounts.md §1.16): ed25519 cases over 32-byte messages from a fixed seed. `valid` = strict RFC 8032 = ed25519-dalek '
+  + 'verify_strict (canonical A and R, S < L, A and R not small order, cofactorless [S]B == R + [k]A); clients/scaas-ua '
+  + 'tests/ed25519_fuzz.rs requires dalek == valid on every case, the Solidity verifier must give `valid` too. `noble` = '
+  + 'noble ed25519.verify with zip215:false alone (cofactored equation, small-order R allowed): it differs from `valid` only '
+  + 'in the classes listed in nobleDiffers (R small order with S = k·a, R or A with a torsion component).';
+const fuzzOut = { note: fuzzNote, version: 1, seed: FUZZ_SEED, nobleDiffers: NOBLE_DIFFERS, counts: fuzzCounts, cases: fuzzCases };
+
 // --- write ---
 const note = 'Generated by clients/clientkeys/scripts/ua-sig-vectors.mjs (src/ua.js on @noble/curves 2.4.0); never edit by hand. '
   + 'Every positive must verify and every negative must fail (verifyPop: which verifier entry point is asked). '
@@ -297,8 +488,16 @@ const out = {
   msig: { keyData: hex(msigKey), ua: hex(msigUa), threshold: THRESHOLD, context: 'A', generation: 1,
     members: members.map((m) => ({ index: m.index, kind: m.kind, name: m.name, id: hex(m.id), weight: m.weight, secretRef: m.name })),
     sets },
+  ed25519Rfc8032,
 };
 mkdirSync(OUT, { recursive: true });
 writeFileSync(join(OUT, 'signatures.json'), `${JSON.stringify(out, null, 2)}\n`);
+// one case per line: the file stays near 0.6 MB and diffs by case
+const fuzzJson = JSON.stringify({ ...fuzzOut, cases: [] }, null, 2)
+  .replace('"cases": []', `"cases": [\n${fuzzCases.map((c) => `    ${JSON.stringify(c)}`).join(',\n')}\n  ]`);
+writeFileSync(join(OUT, 'ed25519_fuzz.json'), `${fuzzJson}\n`);
+const fuzzValid = fuzzCases.filter((c) => c.valid).length;
+const fuzzDiff = fuzzCases.filter((c) => c.noble !== c.valid).length;
 const negs = derivedRows.reduce((n, r) => n + r.negatives.length, 0);
-console.log(`signatures.json: ${derivedRows.length} derived kinds (${negs} negatives), native ${nativeSigs.length}+${nativeNegatives.length}, msig ${sets.length} sets, ${bip340Official.length} BIP-340 official; written to ${OUT}`);
+console.log(`signatures.json: ${derivedRows.length} derived kinds (${negs} negatives), native ${nativeSigs.length}+${nativeNegatives.length}, msig ${sets.length} sets, ${bip340Official.length} BIP-340 official, ${ed25519Rfc8032.length} ed25519Rfc8032; `
+  + `ed25519_fuzz.json: ${fuzzCases.length} cases (${fuzzValid} valid, noble zip215:false alone differs on ${fuzzDiff}); written to ${OUT}`);

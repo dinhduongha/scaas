@@ -12,6 +12,7 @@ k256 = { version = "0.13", default-features = false, features = ["arithmetic", "
 p256 = { version = "0.13", default-features = false, features = ["arithmetic", "ecdsa"] }
 sha2 = "=0.10.9"
 curve25519-dalek = "4"
+ed25519-dalek = { version = "=2.2.0", default-features = false, features = ["fast"] }
 ark-ff = "0.5"
 ark-ec = "0.5"
 ark-bn254 = "0.5"

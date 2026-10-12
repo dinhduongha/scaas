@@ -1,6 +1,8 @@
 // smartcontracts/vectors/ua/signatures.json (UA-2a): the generator reproduces it byte for byte, and every row is re-verified
 // here with noble through verifiers written from accounts.md §1.9 (not the generator's signing code): positives pass,
-// negatives fail, msig sets give their stated verdict.
+// negatives fail, msig sets give their stated verdict. ed25519 (UA-2b): the derived row, the ed25519Rfc8032 section and
+// ed25519_fuzz.json (T-FUZZ) against a strict verifier = noble zip215:false + the two ed25519-dalek verify_strict rules
+// noble leaves out (R not small order, the cofactorless equation).
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, mkdtempSync, rmSync } from 'node:fs';
@@ -12,24 +14,26 @@ import { p256 } from '@noble/curves/nist.js';
 import { secp256k1, schnorr } from '@noble/curves/secp256k1.js';
 import { bn254 } from '@noble/curves/bn254.js';
 import { bls12_381 } from '@noble/curves/bls12-381.js';
-import { sha256 } from '@noble/hashes/sha2.js';
+import { ed25519 } from '@noble/curves/ed25519.js';
+import { sha256, sha512 } from '@noble/hashes/sha2.js';
 import * as ua from '../src/ua.js';
 import { hex, fromHex, keccak_256, utf8ToBytes, concatBytes, b64url } from '../src/bytes.js';
 
 const dir = new URL('../../../smartcontracts/vectors/ua/', import.meta.url);
 const V = JSON.parse(readFileSync(new URL('signatures.json', dir)));
+const FUZZ = JSON.parse(readFileSync(new URL('ed25519_fuzz.json', dir)));
 const int = (b) => BigInt(hex(b));
 const B = (h) => fromHex(h);
 const eq = (a, b) => a.length === b.length && a.every((x, i) => x === b[i]);
 const tag = (p) => ua.purposeTag(p);
 const attempt = (f) => { try { return f(); } catch { return false; } };
 
-test('the generator reproduces signatures.json byte for byte', () => {
+test('the generator reproduces signatures.json and ed25519_fuzz.json byte for byte', () => {
   const out = mkdtempSync(join(tmpdir(), 'ua-sig-vectors-'));
   try {
     const r = spawnSync(process.execPath, [fileURLToPath(new URL('../scripts/ua-sig-vectors.mjs', import.meta.url)), out], { encoding: 'utf8' });
     assert.equal(r.status, 0, r.stderr);
-    assert.equal(readFileSync(join(out, 'signatures.json'), 'utf8'), readFileSync(new URL('signatures.json', dir), 'utf8'));
+    for (const f of ['signatures.json', 'ed25519_fuzz.json']) assert.equal(readFileSync(join(out, f), 'utf8'), readFileSync(new URL(f, dir), 'utf8'), f);
   } finally {
     rmSync(out, { recursive: true, force: true });
   }
@@ -116,8 +120,21 @@ function bls12381Ok(kd, msg, sig, pop) {
   const H = bls12_381.G1.hashToCurve(msg, { DST: `SCAAS-UA-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_${pop ? 'POP' : 'SIG'}_` });
   return pairingEq(bls12_381, S, bls12_381.G2.Point.BASE, H, pk);
 }
+// ed25519 (§1.9 "RFC 8032 strict"): noble zip215:false refuses non-canonical A / R, S ≥ L and small-order A and checks the
+// cofactored equation; verify_strict also refuses small-order R and checks [S]B == R + [k]A without the cofactor.
+const ED_L = ed25519.Point.Fn.ORDER;
+const leInt = (b) => int(Uint8Array.from(b).reverse());
+const edNoble = (pk, msg, sig) => attempt(() => ed25519.verify(sig, msg, pk, { zip215: false }));
+function ed25519Ok(pk, msg, sig) {
+  if (sig.length !== 64 || !edNoble(pk, msg, sig)) return false;
+  const R = ed25519.Point.fromBytes(sig.subarray(0, 32));
+  if (R.isSmallOrder()) return false;
+  const k = leInt(sha512(concatBytes(sig.subarray(0, 32), pk, msg))) % ED_L;
+  return ed25519.Point.BASE.multiplyUnsafe(leInt(sig.subarray(32))).equals(R.add(ed25519.Point.fromBytes(pk).multiplyUnsafe(k)));
+}
 const VERIFY = {
   0x0100: webauthnOk,
+  0x0102: ed25519Ok,
   0x0101: (kd, msg, sig) => sig.length === 64 && p256Ok(kd, sha256(msg), sig.subarray(0, 32), sig.subarray(32)),
   0x0103: (kd, msg, sig) => sig.length === 64 && schnorr.verify(sig, msg, kd),
   0x0104: schnorrOk(bn254.G1.Point, bn254.fields.Fr.ORDER, 64, bnG1),
@@ -141,7 +158,8 @@ function nativeOk(address, h, sig) {
 const domain = (ctx, generation) => ({ generation, ...V.contexts[ctx] });
 
 test('derived kinds: key data, ids, PoP messages, every signature verifies', () => {
-  assert.equal(V.derived.length, 7);
+  assert.equal(V.derived.length, 8);
+  assert.deepEqual(V.derived.map((r) => r.kind), [0x0100, 0x0101, 0x0103, 0x0104, 0x0105, 0x0106, 0x0107, 0x0102]); // append-only
   for (const r of V.derived) {
     const kd = B(r.keyData);
     assert.equal(hex(ua.deriveUA(r.kind, kd)), r.ua, r.name);
@@ -242,4 +260,41 @@ test('msig: structure id, members, every set gives its verdict', () => {
 test('BIP-340 official vectors (32-byte messages) give their verdict', () => {
   assert.equal(V.bip340Official.length, 15);
   for (const t of V.bip340Official) assert.equal(verify(0x0103, t.publicKey, t.message, t.sig), t.valid, `vector ${t.index}`);
+});
+
+test('ed25519: the strict-only negatives are the ones noble zip215:false alone accepts', () => {
+  const r = V.derived.find((x) => x.kind === 0x0102);
+  assert.equal(r.negatives.length, 14);
+  const nobleAccepts = r.negatives.filter((n) => edNoble(B(r.keyData), B(n.message), B(n.sig))).map((n) => n.name);
+  assert.deepEqual(nobleAccepts, ['r-identity', 'r-small-order', 'r-mixed-order']);
+  const S = (n) => leInt(B(r.negatives.find((x) => x.name === n).sig).subarray(32));
+  const S0 = leInt(B(r.sigs[0].sig).subarray(32));
+  assert.equal(S('s-plus-l'), S0 + ED_L);
+  assert.ok(S('s-ge-l') >= 1n << 255n && S('s-ge-l') % ED_L === S0);
+});
+
+test('ed25519Rfc8032: RFC 8032 §7.1 TEST 1, 2, 3, 1024, SHA(abc) verify; the A-side cases give their verdict', () => {
+  const T = V.ed25519Rfc8032;
+  assert.equal(T.length, 11);
+  assert.deepEqual(T.slice(0, 5).map((t) => B(t.message).length), [0, 1, 2, 1023, 64]);
+  assert.equal(T[4].message, hex(sha512(utf8ToBytes('abc'))));
+  for (const t of T) assert.equal(ed25519Ok(B(t.publicKey), B(t.message), B(t.sig)), t.valid, t.name);
+  assert.deepEqual(T.filter((t) => t.valid).map((t) => t.name), ['TEST 1', 'TEST 2', 'TEST 3', 'TEST 1024', 'TEST SHA(abc)', 'a-mixed-order-k0']);
+});
+
+test('ed25519_fuzz.json: every case gives its strict verdict; noble zip215:false alone differs only in the listed classes', () => {
+  const C = FUZZ.cases;
+  assert.ok(C.length >= 2000);
+  let differs = 0;
+  for (const [i, c] of C.entries()) {
+    const [pk, msg, sig] = [c.pk, c.msg, c.sig].map(B);
+    assert.equal(msg.length, 32);
+    assert.equal(ed25519Ok(pk, msg, sig), c.valid, `case ${i} ${c.class}`);
+    assert.equal(edNoble(pk, msg, sig), c.noble, `case ${i} ${c.class} noble`);
+    if (c.noble !== c.valid) { differs++; assert.ok(FUZZ.nobleDiffers.includes(c.class), `case ${i} ${c.class}`); }
+  }
+  assert.deepEqual(FUZZ.nobleDiffers, ['r-small-order', 'r-mixed-order', 'a-mixed-order']);
+  for (const [cls, n] of Object.entries(FUZZ.counts)) assert.equal(C.filter((c) => c.class === cls).length, n.cases, cls);
+  assert.equal(C.filter((c) => c.valid).length, 291);
+  assert.equal(differs, 191);
 });
