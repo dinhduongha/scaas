@@ -491,7 +491,7 @@ contract UAGasTest is UARegistryBase {
     }
 
     /// UA-2b `ed25519`: the least frame gas of the verifier on its most expensive accepted input (every Straus window
-    /// adds, decompression takes the √−1 branch; the vector of `Ed25519Verifier.t.sol`) fits the cap with ~20 %
+    /// adds, decompression takes the √−1 branch; the vector of `Ed25519Verifier.t.sol`) fits the cap with ~23 %
     /// margin; `register` (PoP under the cap) and `requireAuthorized` on the signatures.json row.
     function test_T_GAS_ed25519() public {
         Ed25519Verifier ev = new Ed25519Verifier();
@@ -507,7 +507,7 @@ contract UAGasTest is UARegistryBase {
         uint256 least = _leastGas(address(ev), worst, cap);
         emit log_named_uint("ed25519 verify worst: least frame gas", least);
         emit log_named_uint("ed25519 cap", cap);
-        assertLe(least * 6 / 5, cap + 5_000, "cap = measured worst + ~20 %");
+        assertLe(least * 6 / 5, cap + 5_000, "cap >= 1.2 x measured worst");
         assertLe(cap, BUDGET / 2, "cap over 50 % of the budget");
 
         string memory sj = vm.readFile("../vectors/ua/signatures.json");

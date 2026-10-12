@@ -13,7 +13,7 @@ import {Ed25519Verifier} from "../../../src/ua/verifiers/Ed25519Verifier.sol";
 contract Ed25519VerifierTest is Test {
     uint256 internal constant P = Ed25519.P;
     uint256 internal constant L = Ed25519.L;
-    /// The registry cap (UARegistryBase `_cap(0x0102)`): the measured worst + ~20 %.
+    /// The registry cap (UARegistryBase `_cap(0x0102)`): the measured worst + ~23 %.
     uint256 internal constant CAP = 210_000;
 
     /// A valid signature whose `S` and `k` have no zero 4-bit window below bit 252 (every Straus addition runs) and
@@ -359,7 +359,7 @@ contract Ed25519VerifierTest is Test {
         emit log_named_uint("verify early reject (S = L)", early);
         assertLe(valid, worst);
         assertLe(invalid, worst);
-        assertLe(worst * 6 / 5, CAP + 5_000, "cap = worst + ~20 %");
+        assertLe(worst * 6 / 5, CAP + 5_000, "cap >= 1.2 x measured worst");
         assertLe(worst, CAP, "worst over the cap");
     }
 }

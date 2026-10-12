@@ -34,9 +34,15 @@ abstract contract UASafeVerifier is IUAPopVerifier {
     function check(bytes calldata keyData, bytes32 message, bytes calldata sig, bool pop)
         external view virtual returns (bool);
 
+    /// The gas `check` gets: `CHECK_GAS`; a kind whose PoP costs more (the MuSig2 / FROST group checks) overrides it.
+    function _checkGas(bool) internal view virtual returns (uint256) {
+        return CHECK_GAS;
+    }
+
     function _safe(bytes calldata keyData, bytes32 message, bytes calldata sig, bool pop) private view returns (bool) {
-        if (gasleft() < CHECK_GAS + CHECK_GAS / 63 + 5_000) revert UAKinds.UAVerifyGas();
-        try this.check{gas: CHECK_GAS}(keyData, message, sig, pop) returns (bool ok) {
+        uint256 g = _checkGas(pop);
+        if (gasleft() < g + g / 63 + 5_000) revert UAKinds.UAVerifyGas();
+        try this.check{gas: g}(keyData, message, sig, pop) returns (bool ok) {
             return ok;
         } catch {
             return false;

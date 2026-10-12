@@ -1013,3 +1013,5 @@ keyOwner[keccak256(group_tag ‖ canonical_pubkey)]	renamed	contracts/accounts.m
 blst	renamed	contracts/accounts.md §1.16 (independent check now k256/p256/curve25519-dalek/arkworks, UA-1 T7)
 ark-bn254	renamed	contracts/accounts.md §1.16 (arkworks, UA-1 T7)
 190	renamed	contracts/accounts.md §1.15 registration table: the ~190 k `bls12381-minsig` estimate is replaced by the measured `register` 245,960 (UA-2a final review)
+checkGroup(keyData, pop)	renamed	contracts/accounts.md §1.8 (`verifyPop(keyData, message, pop)`, UA-2c T7)
+98	renamed	contracts/accounts.md §1.15 group rows: the calldata estimate is replaced by measured register gas (UA-2c T7)
