@@ -29,9 +29,6 @@ contract BurnVerify {
 /// T-GAS for every groups.json group (`-vv`; `--isolate` for the cold numbers).
 contract UARegistryGroupsTest is UARegistryBase, GroupFixtures {
     uint64 internal constant GROUP_CAP = 50_000; // accounts.md §1.15: every group kind's verify cap
-    uint256 internal constant SWEEP_LO = 20_000;
-    uint256 internal constant SWEEP_HI = 2_500_000;
-    uint256 internal constant SWEEP_STEP = 20_000;
     uint256 internal constant PK_E = 0xE0A;
     /// 02 ‖ N: a valid secp256k1 point with x ≥ N (refused by the hint check, not by key validation).
     bytes internal constant KEY_X_N = hex"02fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141";
@@ -243,23 +240,39 @@ contract UARegistryGroupsTest is UARegistryBase, GroupFixtures {
         }
     }
 
-    /// C13: a group registration that is starved gives `UAPoP` (the verifier's gas share runs out), or runs out of
-    /// gas in the outer call (empty return data); never another error, and both a `UAPoP` and a success occur.
+    /// C13: a starved group registration reverts `UAPoP` (the PoP call's share runs out), `SSTORE2WriteFailed` (the
+    /// key-write `CREATE` runs out) or with empty data (the outer call runs out), and never leaves a record. Per main
+    /// group: find the least outer gas that registers, sweep finely below it (covers both bands) and coarsely under.
     function test_registerStoredStarved() public {
         Group[4] memory gs = _mains();
         for (uint256 k; k < 4; ++k) {
-            bytes memory call = abi.encodeCall(reg.register, (gs[k].kind, gs[k].keyData, gs[k].pop, 0, ""));
+            Group memory g = gs[k];
+            bytes memory call = abi.encodeCall(reg.register, (g.kind, g.keyData, g.pop, 0, ""));
+            (uint256 lo, uint256 hi) = (20_000, 8_000_000); // lo fails, hi succeeds
+            while (hi - lo > 250) {
+                uint256 mid = (lo + hi) / 2;
+                uint256 snap = vm.snapshotState();
+                (bool ok,) = address(reg).call{gas: mid}(call);
+                vm.revertToState(snap);
+                if (ok) hi = mid;
+                else lo = mid;
+            }
+            uint256 found = hi;
+            emit log_named_uint(string.concat("register threshold kind ", vm.toString(g.kind)), found);
             bool sawPoP;
-            bool sawOk;
-            for (uint256 gas = SWEEP_LO; gas < SWEEP_HI; gas += SWEEP_STEP) {
+            for (uint256 gas = 20_000; gas < found; gas += gas + 80_000 < found ? 20_000 : 250) {
                 uint256 snap = vm.snapshotState();
                 (bool ok, bytes memory ret) = address(reg).call{gas: gas}(call);
-                if (ok) sawOk = true;
-                else if (ret.length == 4 && bytes4(ret) == IUARegistry.UAPoP.selector) sawPoP = true;
-                else assertEq(ret.length, 0, "a starved register gives UAPoP or runs out of gas");
+                if (!ok) {
+                    assertEq(reg.kindOf(g.ua), 0, "no record after a starved register");
+                    assertEq(reg.keyOwner(g.keyHash), 0, "no key owner after a starved register");
+                    if (ret.length == 0) {} // outer out-of-gas
+                    else if (bytes4(ret) == IUARegistry.UAPoP.selector && ret.length == 4) sawPoP = true;
+                    else assertTrue(bytes4(ret) == bytes4(keccak256("SSTORE2WriteFailed()")) && ret.length == 4, "outcome");
+                }
                 vm.revertToState(snap);
             }
-            assertTrue(sawPoP && sawOk, "both outcomes");
+            assertTrue(sawPoP, "UAPoP seen");
         }
     }
 

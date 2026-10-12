@@ -759,7 +759,7 @@ it. The v3 token's own native path keeps its `UAMetaTransaction` typed data.
    PoP of their own — members proved theirs, a non-empty `pop` is refused; Zether: Schnorr by `x` under the Zether
    tag) — `UAPoP`. The PoP goes through `IUAPopVerifier.verifyPop` (below). For the group kinds the PoP call is capped at `verifyBudget` without the
    caller-holds-that-much check (else every group registration needs a ≥ 12.4 M gas limit); a starved group registration
-   reverts `UAPoP`, never creates a record.
+   reverts `UAPoP` (a gas shortage at the key write reverts `SSTORE2WriteFailed`), never creates a record.
 7. `authRef ≠ 0`: `requireAuthorized(authRef, PURPOSE_AUTHREF, popDigest(ua, authRef), authPop)` — the authority
    consents to this exact `(ua, authRef)` on this chain and registry — `UAUnauthorized(authRef)`.
 8. Store `Record{kind, uint40(block.timestamp), keyPtr}` (stored kinds: `keyPtr = SSTORE2.write(vk)`, `vk` = PQ `pk`,
