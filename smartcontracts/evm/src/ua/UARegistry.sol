@@ -89,7 +89,9 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         bool msig_,
         KindConfig[] memory kinds_
     ) SaltedEIP712("SCaaS UARegistry", predecessor_ == address(0) ? "1" : "2", chainUid_) {
-        if (verifyBudget_ == 0) revert UAConfig(0);
+        if (verifyBudget_ == 0 || (smartKeyAccountImpl_ != address(0) && smartKeyAccountImpl_.code.length == 0)) {
+            revert UAConfig(0);
+        }
         if (predecessor_ != address(0)) {
             IUARegistry p = IUARegistry(predecessor_);
             if (p.generation() != 1 || p.chainUid() != chainUid_ || p.hederaNative() != hederaNative_) {
@@ -363,7 +365,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     }
 
     /// Records and kinds of gen 1 are checked by gen 1 (its verifiers, its `UAAuth` domain for native members of its
-    /// structures). Any revert there is a failed check.
+    /// structures). Any revert there is a failed check, except `UAVerifyGas` (re-raised).
     function _viaPredecessor(bytes32 id, bytes32 purposeTag, bytes32 digest, bytes memory auth)
         private
         view
@@ -372,7 +374,9 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         if (predecessor == address(0)) return false;
         try IUARegistry(predecessor).requireAuthorized(id, purposeTag, digest, auth) {
             return true;
-        } catch {
+        } catch (bytes memory err) {
+            // a starved caller must see UAVerifyGas, never a verdict (T-AUTH-4)
+            if (err.length == 4 && bytes4(err) == UAKinds.UAVerifyGas.selector) revert UAKinds.UAVerifyGas();
             return false;
         }
     }

@@ -620,6 +620,63 @@ contract UARegistryTest is UARegistryBase {
         r.requireAuthorized(wua, UAKinds.PURPOSE_METATX, DIGEST, wsig);
     }
 
+    // ----- fix round 1 -----
+
+    /// Gen 1 starved through gen 2 ⇒ UAVerifyGas (record and msig member), enough gas ⇒ passes.
+    function test_T_AUTH_4_gen2Starvation() public {
+        bytes memory p = _key(0x0101);
+        bytes32 p256Ua = _register(reg, 0x0101, p);
+        UARegistry gen2 = _gen2();
+        bytes memory a = abi.encodeCall(
+            gen2.requireAuthorized,
+            (p256Ua, UAKinds.PURPOSE_METATX, DIGEST, _auth(reg, 0x0101, p, UAKinds.PURPOSE_METATX, DIGEST))
+        );
+        (bool ok, bytes memory ret) = address(gen2).staticcall{gas: 100_000}(a);
+        assertFalse(ok);
+        assertEq(bytes4(ret), UAKinds.UAVerifyGas.selector);
+        (ok,) = address(gen2).staticcall{gas: 2_000_000}(a);
+        assertTrue(ok);
+
+        // gen-1 p256 member + native EOA member of a gen-2 msig
+        Member[] memory m = new Member[](2);
+        m[0] = Member(0x0101, p256Ua, 1);
+        m[1] = Member(UAKinds.EVM_EOA, _pad(vm.addr(PK_A)), 1);
+        bytes memory d2 = _msigKey(2, m);
+        bytes32 msig2 = gen2.register(UAKinds.MSIG, d2, "", 0, "");
+        bytes32 md = _memberDigest(msig2, UAKinds.PURPOSE_METATX, DIGEST);
+        UARegistry.MemberSig[] memory s = new UARegistry.MemberSig[](2);
+        uint16 ip = _indexOf(d2, p256Ua);
+        uint16 ie = _indexOf(d2, _pad(vm.addr(PK_A)));
+        s[ip] = UARegistry.MemberSig(ip, p, _sig(p, UAKinds.uaMessage(0x0101, UAKinds.PURPOSE_MEMBER, md)));
+        s[ie] = UARegistry.MemberSig(
+            ie, "", _ecdsa(PK_A, gen2.uaAuthDigest(_pad(vm.addr(PK_A)), UAKinds.PURPOSE_MEMBER, md))
+        );
+        bytes memory b = abi.encodeCall(
+            gen2.requireAuthorized, (msig2, UAKinds.PURPOSE_METATX, DIGEST, _msigAuth(d2, s))
+        );
+        (ok, ret) = address(gen2).staticcall{gas: 100_000}(b);
+        assertFalse(ok);
+        assertEq(bytes4(ret), UAKinds.UAVerifyGas.selector);
+        (ok,) = address(gen2).staticcall{gas: 2_000_000}(b); // native member through gen 2 passes too
+        assertTrue(ok);
+    }
+
+    /// A 1271 answer with the magic in the high 4 bytes but dirty low bytes is refused.
+    function test_T_AUTH_3_dirtyMagic() public {
+        address a = address(0xD1127);
+        // returns 0x1626ba7e ‖ 28 bytes of 0x01
+        vm.etch(
+            a,
+            hex"7f1626ba7e01010101010101010101010101010101010101010101010101010101600052602060006000f3"
+        );
+        _expectUnauthorized(_pad(a), UAKinds.PURPOSE_METATX, DIGEST, hex"00");
+    }
+
+    function test_constructorSmartKeyNoCode() public {
+        vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, uint16(0)));
+        new UARegistry(chainUidA, address(0), false, BUDGET, address(0x1234), true, new UARegistry.KindConfig[](0));
+    }
+
     // ----- T-CHAIN, T-MEMBER -----
 
     /// Contexts B and C of structures.json: chain 7622 twice, same registry address, different chainUid.
