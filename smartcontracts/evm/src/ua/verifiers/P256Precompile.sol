@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-SCaaS-Community-1.0
+// SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
 import {P256} from "@openzeppelin/contracts/utils/cryptography/P256.sol";

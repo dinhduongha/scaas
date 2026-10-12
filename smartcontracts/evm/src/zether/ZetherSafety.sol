@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-SCaaS-Community-1.0
+// SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.20;
 
 /// @title Cổng an toàn của owner (R34, ruling RS2-1): Zether chỉ sống trên chain dev.

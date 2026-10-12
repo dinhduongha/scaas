@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-SCaaS-Community-1.0
+// SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
 /// @title BIP-340 verify on the EVM (accounts.md §1.9 `bip340` / `musig2-secp256k1` row), shared by `Bip340Verifier`

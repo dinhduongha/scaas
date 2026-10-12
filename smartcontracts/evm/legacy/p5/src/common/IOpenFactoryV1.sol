@@ -1,4 +1,4 @@
-// SPDX-License-Identifier: LicenseRef-SCaaS-Community-1.0
+// SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.20;
 
 /// @title Factory mở. Ai cũng tạo được token. Token tạo ra thì BẤT BIẾN VĨNH VIỄN.

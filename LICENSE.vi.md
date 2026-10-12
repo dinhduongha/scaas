@@ -1,4 +1,4 @@
-# SCaaS Community License 1.0 — tóm tắt tiếng Việt
+# Vegan Community License 1.0 — tóm tắt tiếng Việt
 
 > Bản tóm tắt này **không phải** là license và không có giá trị pháp lý. Văn bản ràng buộc là bản tiếng Anh trong
 > [LICENSE](LICENSE); nếu hai bản khác nhau, bản tiếng Anh được áp dụng.
@@ -28,7 +28,7 @@ sát, lưỡng cư, cá, giáp xác, thân mềm, côn trùng, nhện, giun và 
 (rệp son), gelatin, xương và mọi thứ có được từ việc giết động vật; **trứng có phôi** (trứng có trống); **mật ong và các sản phẩm từ ong** (sáp ong, sữa ong chúa, keo ong); và mọi
 món ăn, sản phẩm có chứa chúng. **Không bị cấm:** sữa, trứng không có phôi (trứng công nghiệp không trống), len xén.
 
-Điều cấm được ưu tiên hơn mọi điều khoản khác, và áp dụng cả cho Enterprise License.
+Điều cấm được ưu tiên hơn mọi điều khoản khác, và áp dụng cả cho Vegan Enterprise License.
 
 ## Ai được dùng miễn phí
 
@@ -40,14 +40,14 @@ Nếu không thuộc diện bị cấm, và:
   tổng chi tiêu hằng năm),
 
 thì bạn được dùng, sao chép, sửa, phân phối, bán phần mềm **với các quyền như MIT hoặc Apache-2.0, tuỳ bạn chọn** (chọn
-Apache thì có cả quyền bằng sáng chế của Apache), với điều kiện: **khi phân phối lại, phải giữ nguyên SCaaS Community
+Apache thì có cả quyền bằng sáng chế của Apache), với điều kiện: **khi phân phối lại, phải giữ nguyên Vegan Community
 License**, nên mỗi người nhận cũng phải tự đủ điều kiện. Phần mềm của bạn chỉ gọi hoặc link tới SCaaS vẫn theo license
 bạn chọn cho nó.
 
 ## Vượt ngưỡng, vi phạm
 
 - Doanh thu tập đoàn đạt 10 triệu USD trở lên (và không phải thuần chay): quyền miễn phí còn **90 ngày** sau khi kết thúc
-  năm tài chính đó, sau đó cần Enterprise License.
+  năm tài chính đó, sau đó cần Vegan Enterprise License.
 - Rơi vào diện bị cấm, hoặc vi phạm điều khoản: **mất quyền ngay**, không có thời gian ân hạn. Chỉ Licensor mới khôi phục
   được, bằng văn bản.
 - Bạn tự đánh giá có đủ điều kiện hay không; khi Licensor yêu cầu bằng văn bản, phải cung cấp bằng chứng hợp lý (ví dụ
@@ -55,8 +55,8 @@ bạn chọn cho nó.
 
 ## Còn lại
 
-Mọi trường hợp khác cần **Enterprise License**: liên hệ Licensor qua https://github.com/dinhduongha/scaas. Enterprise
-License **cũng có cùng điều cấm**: không cấp cho ai thuộc diện bị cấm, và bên đã có Enterprise License mà sau đó rơi vào
+Mọi trường hợp khác cần **Vegan Enterprise License**: liên hệ Licensor qua https://github.com/dinhduongha/scaas. Vegan Enterprise
+License **cũng có cùng điều cấm**: không cấp cho ai thuộc diện bị cấm, và bên đã có Vegan Enterprise License mà sau đó rơi vào
 diện bị cấm thì mất quyền ngay.
 
 Thành phần bên thứ ba (ví dụ Qt theo LGPL) giữ license riêng của chúng. Không cấp quyền dùng tên hay nhãn hiệu "SCaaS".
