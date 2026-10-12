@@ -29,8 +29,7 @@ contract UARegistryTest is UARegistryBase {
         }
         assertTrue(reg.kindEnabled(UAKinds.MSIG));
         assertEq(reg.verifyCap(UAKinds.MSIG), BUDGET);
-        uint16[12] memory off =
-            [0x0001, 0x0002, 0x0003, 0x0102, 0x0110, 0x0111, 0x0112, 0x0113, 0x0130, 0x0133, 0x0140, 0x0142];
+        uint16[11] memory off = [0x0001, 0x0002, 0x0003, 0x0110, 0x0111, 0x0112, 0x0113, 0x0130, 0x0133, 0x0140, 0x0142];
         for (uint256 i; i < off.length; ++i) {
             assertFalse(reg.kindEnabled(off[i]));
             assertEq(reg.verifyCap(off[i]), 0);
@@ -115,7 +114,7 @@ contract UARegistryTest is UARegistryBase {
 
     function test_T_REG_2_negativeRegistry() public {
         // disabled kinds: natives, out-of-scope kinds, unknown
-        uint16[9] memory off = [0x0001, 0x0003, 0x0102, 0x0110, 0x0113, 0x0131, 0x0140, 0x0142, 0x0121];
+        uint16[9] memory off = [0x0001, 0x0003, 0x0111, 0x0110, 0x0113, 0x0131, 0x0140, 0x0142, 0x0121];
         for (uint256 i; i < off.length; ++i) {
             vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKindDisabled.selector, off[i]));
             reg.register(off[i], hex"00", "", 0, "");
@@ -184,6 +183,7 @@ contract UARegistryTest is UARegistryBase {
         );
         vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, uint16(0)));
         new UARegistry(chainUidA, address(reg), true, BUDGET, address(0), true, new UARegistry.KindConfig[](0));
+        _gen1WithoutEd25519();
         UARegistry gen2 = _gen2();
         vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, uint16(0))); // no gen 3
         new UARegistry(chainUidA, address(gen2), false, BUDGET, address(0), true, new UARegistry.KindConfig[](0));
@@ -195,6 +195,7 @@ contract UARegistryTest is UARegistryBase {
 
     /// Gen 2 sees gen-1 records, refuses gen-1 kinds and ids, and hands gen-1 records to gen 1 for verification.
     function test_T_REG_4_gen2SeesGen1() public {
+        _gen1WithoutEd25519();
         bytes memory p = _key(0x0101);
         bytes32 p256Ua = _register(reg, 0x0101, p);
         (bytes memory d1, bytes32 msig1) = _registerMsig();
@@ -217,6 +218,7 @@ contract UARegistryTest is UARegistryBase {
 
     /// A gen-2 msig over a gen-1 p256 member and a gen-2 ed25519 member; gen 1 cannot register it.
     function test_T_REG_4_gen2Msig() public {
+        _gen1WithoutEd25519();
         bytes memory p = _key(0x0101);
         bytes32 p256Ua = _register(reg, 0x0101, p);
         UARegistry gen2 = _gen2();
@@ -243,6 +245,7 @@ contract UARegistryTest is UARegistryBase {
     /// msig re-enabled in gen 2: the same id registered in both generations has the same `kind` and `keyPtr`; each
     /// generation keeps its own `registeredAt`.
     function test_T_REG_4_msigBothGenerations() public {
+        _gen1WithoutEd25519();
         UARegistry gen2 = _gen2();
         Member[] memory m = new Member[](1);
         m[0] = Member(UAKinds.EVM_EOA, _pad(vm.addr(PK_B)), 1);
@@ -257,7 +260,18 @@ contract UARegistryTest is UARegistryBase {
         assertEq(rb.registeredAt + 1 days, ra.registeredAt);
     }
 
-    /// gen 2 = ed25519 (a group gen 1 does not enable) + msig.
+    /// Gen 1 enables every single-key kind since UA-2b; the gen-2 tests need a keyHash group gen 1 does not enable, so
+    /// they first redeploy `reg` without ed25519.
+    function _gen1WithoutEd25519() internal {
+        UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](KINDS.length - 1);
+        uint256 n;
+        for (uint256 i; i < KINDS.length; ++i) {
+            if (KINDS[i] != 0x0102) c[n++] = UARegistry.KindConfig(KINDS[i], address(mock), _cap(KINDS[i]));
+        }
+        reg = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), true, c);
+    }
+
+    /// gen 2 = ed25519 (a group gen 1 does not enable after `_gen1WithoutEd25519`) + msig.
     function _gen2() internal returns (UARegistry) {
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](1);
         c[0] = UARegistry.KindConfig(0x0102, address(mock), 50_000);
@@ -316,8 +330,8 @@ contract UARegistryTest is UARegistryBase {
                 );
             }
         }
-        // unregistered derived id
-        bytes memory e = _key(0x0102);
+        // unregistered derived id (another 32-byte key under the ed25519 tag)
+        bytes memory e = _key(0x0103);
         _expectUnauthorized(
             UAKinds.uaOf(0x0102, e),
             UAKinds.PURPOSE_METATX,
@@ -662,6 +676,7 @@ contract UARegistryTest is UARegistryBase {
 
     /// Gen 1 starved through gen 2 ⇒ UAVerifyGas (record and msig member), enough gas ⇒ passes.
     function test_T_AUTH_4_gen2Starvation() public {
+        _gen1WithoutEd25519();
         bytes memory p = _key(0x0101);
         bytes32 p256Ua = _register(reg, 0x0101, p);
         UARegistry gen2 = _gen2();

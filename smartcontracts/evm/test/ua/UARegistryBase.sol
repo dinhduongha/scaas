@@ -139,7 +139,7 @@ abstract contract UARegistryBase is Test {
     MockVerifier internal mock;
     UARegistry internal reg;
     bytes[8] internal keys; // kinds.json valid[0..7] = kinds 0x0100..0x0107
-    uint16[7] internal KINDS = [0x0100, 0x0101, 0x0103, 0x0104, 0x0105, 0x0106, 0x0107];
+    uint16[8] internal KINDS = [0x0100, 0x0101, 0x0102, 0x0103, 0x0104, 0x0105, 0x0106, 0x0107];
 
     struct Member {
         uint16 kind;
@@ -175,9 +175,11 @@ abstract contract UARegistryBase is Test {
 
     // ----- deployment -----
 
-    /// The gen-1 default caps (controller ruling 2026-10-12; mock verifiers stay far below them).
+    /// The gen-1 default caps (controller ruling 2026-10-12; ed25519, UA-2b: the measured worst 170,286 frame gas
+    /// + ~20 %, `UAGas.t.sol` `test_T_GAS_ed25519`; mock verifiers stay far below them).
     function _cap(uint16 kind) internal pure returns (uint64) {
         if (kind == 0x0100 || kind == 0x0101) return 400_000;
+        if (kind == 0x0102) return 210_000;
         if (kind == 0x0105) return 70_000;
         if (kind == 0x0106) return 200_000;
         if (kind == 0x0107) return 345_000;

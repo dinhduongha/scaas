@@ -7,6 +7,7 @@ import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {P256Verifier} from "../../src/ua/verifiers/P256Verifier.sol";
 import {WebAuthnP256Verifier} from "../../src/ua/verifiers/WebAuthnP256Verifier.sol";
 import {Bip340Verifier} from "../../src/ua/verifiers/Bip340Verifier.sol";
+import {Ed25519Verifier} from "../../src/ua/verifiers/Ed25519Verifier.sol";
 import {
     SchnorrBn254Verifier,
     SchnorrBls12381Verifier,
@@ -15,7 +16,7 @@ import {
 } from "../../src/ua/verifiers/PairingVerifiers.sol";
 import {UARegistryBase} from "./UARegistryBase.sol";
 
-/// The registry with the real UA-2a verifiers on smartcontracts/vectors/ua/signatures.json (context A, generation 1):
+/// The registry with the real UA-2a/UA-2b verifiers on smartcontracts/vectors/ua/signatures.json (context A, generation 1):
 /// T-REG-1/T-REG-2/T-AUTH-1/T-AUTH-2/T-AUTH-3/T-CHAIN on the published rows. Gas of every call is logged (`-vv`).
 contract UARegistryVectorsTest is UARegistryBase {
     string internal sj;
@@ -32,17 +33,18 @@ contract UARegistryVectorsTest is UARegistryBase {
 
     /// The gen-1 default caps (controller ruling 2026-10-12) on the real verifiers.
     function _realCfgs() internal returns (UARegistry.KindConfig[] memory c) {
-        address[7] memory v = [
+        address[8] memory v = [
             address(new WebAuthnP256Verifier()),
             address(new P256Verifier()),
+            address(new Ed25519Verifier()),
             address(new Bip340Verifier()),
             address(new SchnorrBn254Verifier()),
             address(new SchnorrBls12381Verifier()),
             address(new BlsMinSigBls12381Verifier()),
             address(new BlsMinSigBn254Verifier())
         ];
-        c = new UARegistry.KindConfig[](7);
-        for (uint256 i; i < 7; ++i) {
+        c = new UARegistry.KindConfig[](8);
+        for (uint256 i; i < 8; ++i) {
             c[i] = UARegistry.KindConfig(KINDS[i], v[i], _cap(KINDS[i]));
         }
     }
@@ -61,9 +63,9 @@ contract UARegistryVectorsTest is UARegistryBase {
             _derivedRow(i);
             ++rows;
         }
-        assertEq(rows, 7, "derived kinds");
-        assertEq(nSigs, 16, "derived sigs");
-        assertEq(nNegs, 59, "derived negatives");
+        assertEq(rows, 8, "derived kinds");
+        assertEq(nSigs, 18, "derived sigs");
+        assertEq(nNegs, 73, "derived negatives");
     }
 
     function _derivedRow(uint256 i) internal {

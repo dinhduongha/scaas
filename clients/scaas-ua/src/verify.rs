@@ -1,6 +1,6 @@
 //! UA-2a signature verification (accounts.md §1.9) on curve code independent of the JS generator: p256 (P-256, WebAuthn),
 //! k256 (BIP-340, native ECDSA), arkworks (scaas Schnorr on bn254 / BLS12-381; BLS min-sig on both curves, with an own
-//! port of the bn254 `mapToG1` and arkworks' RFC 9380 hasher for BLS12-381). Key data is assumed validated
+//! port of the bn254 `mapToG1` and arkworks' RFC 9380 hasher for BLS12-381), ed25519-dalek (`verify_strict`). Key data is assumed validated
 //! ([`crate::validate_key_data`]) and matched against the id; signatures are untrusted: anything malformed is `false`,
 //! never a panic. UNAUDITED.
 use crate::keccak;
@@ -24,6 +24,7 @@ pub fn verify(kind: u16, key_data: &[u8], message: &[u8; 32], sig: &[u8], pop: b
     match kind {
         0x0100 => webauthn_p256(key_data, message, sig),
         0x0101 => sig.len() == 64 && key_data.len() == 64 && p256_ok(key_data, &sha256(&[message]), sig),
+        0x0102 => ed25519(key_data, message, sig),
         0x0103 => bip340(key_data, message, sig),
         0x0104 => schnorr::<ark_bn254::g1::Config>(key_data, message, sig, 32),
         0x0105 => schnorr::<ark_bls12_381::g1::Config>(key_data, message, sig, 64),
@@ -122,6 +123,19 @@ fn webauthn_p256(key_data: &[u8], message: &[u8; 32], sig: &[u8]) -> bool {
         return false;
     }
     client_data_ok(cd, message) && p256_ok(&key_data[..64], &sha256(&[auth, &sha256(&[cd])]), &sig[64..128])
+}
+
+// --- ed25519 ---
+
+/// RFC 8032 strict (§1.9) over a message of any length: ed25519-dalek `verify_strict` (S < L, canonical R, R and A not small
+/// order, cofactorless `[S]B == R + [k]A`) and a canonical `A` encoding, which `verify_strict` leaves unchecked
+/// (dalek-cryptography/curve25519-dalek#626; such keys have no known discrete log, so no vector can tell the difference).
+pub fn ed25519(pk: &[u8], message: &[u8], sig: &[u8]) -> bool {
+    use curve25519_dalek::edwards::CompressedEdwardsY;
+    let (Ok(pk), Ok(sig)) = (<[u8; 32]>::try_from(pk), ed25519_dalek::Signature::from_slice(sig)) else { return false };
+    let canonical = CompressedEdwardsY(pk).decompress().is_some_and(|p| p.compress().to_bytes() == pk);
+    let Ok(vk) = ed25519_dalek::VerifyingKey::from_bytes(&pk) else { return false };
+    canonical && vk.verify_strict(message, &sig).is_ok()
 }
 
 // --- BIP-340 ---
