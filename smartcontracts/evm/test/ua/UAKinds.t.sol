@@ -59,7 +59,8 @@ contract UAKindsTest is Test {
 
     function test_groupsPurposesConstants() public view {
         string memory j = _k();
-        for (uint256 i; i < _count(j, "groups"); ++i) {
+        uint256 ng = _count(j, "groups");
+        for (uint256 i; i < ng; ++i) {
             assertEq(
                 UAKinds.groupTag(vm.parseJsonString(j, _at("groups", i, "group"))),
                 vm.parseJsonBytes32(j, _at("groups", i, "GROUP"))
@@ -88,6 +89,7 @@ contract UAKindsTest is Test {
             bytes memory d = vm.parseJsonBytes(j, _at("valid", i, "keyData"));
             h.validate(kind, d, vm.parseJsonBool(j, _at("valid", i, "hederaNative")));
             bytes32 ua = UAKinds.uaOf(kind, d);
+            assertEq(UAKinds.name(kind), vm.parseJsonString(j, _at("valid", i, "name")));
             assertEq(ua, vm.parseJsonBytes32(j, _at("valid", i, "ua")), UAKinds.name(kind));
             assertFalse(UAKinds.inNativeSpace(ua));
             bytes32 want = kind == UAKinds.MSIG ? bytes32(0) : vm.parseJsonBytes32(j, _at("valid", i, "keyHash"));
@@ -124,13 +126,15 @@ contract UAKindsTest is Test {
     function test_nativeSpaceAndMessages() public {
         vm.pauseGasMetering(); // a 220 KB JSON string per cheatcode call; correctness test, not a gas test
         string memory j = _k();
-        for (uint256 i; i < _count(j, "nativeSpace"); ++i) {
+        uint256 nn = _count(j, "nativeSpace");
+        for (uint256 i; i < nn; ++i) {
             assertEq(
                 UAKinds.inNativeSpace(vm.parseJsonBytes32(j, _at("nativeSpace", i, "id"))),
                 vm.parseJsonBool(j, _at("nativeSpace", i, "inNativeSpace"))
             );
         }
-        for (uint256 i; i < _count(j, "messages"); ++i) {
+        uint256 nm = _count(j, "messages");
+        for (uint256 i; i < nm; ++i) {
             uint16 kind = uint16(vm.parseJsonUint(j, _at("messages", i, "kind")));
             bytes32 got = UAKinds.uaMessage(
                 kind, vm.parseJsonBytes32(j, _at("messages", i, "purposeTag")), vm.parseJsonBytes32(j, _at("messages", i, "digest"))
@@ -141,7 +145,8 @@ contract UAKindsTest is Test {
 
     function test_structures() public view {
         string memory s = _s();
-        for (uint256 i; i < _count(s, "pop"); ++i) {
+        uint256 np = _count(s, "pop");
+        for (uint256 i; i < np; ++i) {
             string memory c = string.concat(".contexts.", vm.parseJsonString(s, _at("pop", i, "context")));
             bytes32 ckh = UAKinds.chainKeyHash(vm.parseJsonUint(s, string.concat(c, ".chainId")));
             assertEq(ckh, vm.parseJsonBytes32(s, _at("pop", i, "chainKeyHash")));
@@ -154,7 +159,8 @@ contract UAKindsTest is Test {
             );
             assertEq(got, vm.parseJsonBytes32(s, _at("pop", i, "popDigest")));
         }
-        for (uint256 i; i < _count(s, "uaAuth"); ++i) {
+        uint256 nu = _count(s, "uaAuth");
+        for (uint256 i; i < nu; ++i) {
             string memory c = string.concat(".contexts.", vm.parseJsonString(s, _at("uaAuth", i, "context")));
             bytes32 sep = UAKinds.uaAuthDomainSeparator(
                 vm.parseJsonUint(s, _at("uaAuth", i, "generation")),
@@ -171,8 +177,67 @@ contract UAKindsTest is Test {
             );
             assertEq(got, vm.parseJsonBytes32(s, _at("uaAuth", i, "uaAuthDigest")));
         }
-        bytes32 m = UAKinds.memberDigest(vm.parseJsonBytes32(s, ".member[0].structureUa"), vm.parseJsonBytes32(s, ".member[0].uaMsg"));
-        assertEq(m, vm.parseJsonBytes32(s, ".member[0].memberDigest"));
+        uint256 nmem = _count(s, "member");
+        for (uint256 i; i < nmem; ++i) {
+            bytes32 m = UAKinds.memberDigest(
+                vm.parseJsonBytes32(s, _at("member", i, "structureUa")), vm.parseJsonBytes32(s, _at("member", i, "uaMsg"))
+            );
+            assertEq(m, vm.parseJsonBytes32(s, _at("member", i, "memberDigest")));
+        }
+    }
+
+    /// A valid key whose precompile call starts short of gas is "not enough gas", never a bad key (review I1).
+    function test_gasShortIsNotKeyData() public {
+        string memory j = _k();
+        uint256 n = _count(j, "valid");
+        bytes memory d;
+        for (uint256 i; i < n && d.length == 0; ++i) {
+            if (vm.parseJsonUint(j, _at("valid", i, "kind")) == UAKinds.BLS_BN254_MINSIG) {
+                d = vm.parseJsonBytes(j, _at("valid", i, "keyData"));
+            }
+        }
+        assertGt(d.length, 0);
+        try h.validate{gas: 70_000}(UAKinds.BLS_BN254_MINSIG, d, false) {
+            revert("accepted with 70k gas");
+        } catch (bytes memory got) {
+            assertEq(got, abi.encodeWithSelector(UAKinds.UAVerifyGas.selector));
+        }
+    }
+
+    /// An invalid precompile key burns at most the cap of its call, not the caller's gas (review I1).
+    function test_invalidPrecompileKeyGasBounded() public {
+        string memory j = _k();
+        uint256 n = _count(j, "invalid");
+        uint256 checked;
+        for (uint256 i; i < n; ++i) {
+            uint16 kind = uint16(vm.parseJsonUint(j, _at("invalid", i, "kind")));
+            if (kind != UAKinds.BLS12381_MINSIG && kind != UAKinds.BLS_BN254_MINSIG) continue;
+            if (!_contains(vm.parseJsonString(j, _at("invalid", i, "reason")), "outside the subgroup")) continue;
+            bytes memory d = vm.parseJsonBytes(j, _at("invalid", i, "keyData"));
+            uint256 before = gasleft();
+            try h.validate{gas: 5_000_000}(kind, d, false) {
+                revert("accepted");
+            } catch (bytes memory got) {
+                assertEq(got, abi.encodeWithSelector(UAKinds.UAKeyData.selector, kind));
+            }
+            assertLt(before - gasleft(), 300_000);
+            ++checked;
+        }
+        assertEq(checked, 2);
+    }
+
+    function _contains(string memory s, string memory sub) internal pure returns (bool) {
+        bytes memory a = bytes(s);
+        bytes memory b = bytes(sub);
+        for (uint256 i; i + b.length <= a.length; ++i) {
+            if (keccak256(_slice(a, i, b.length)) == keccak256(b)) return true;
+        }
+        return false;
+    }
+
+    function _slice(bytes memory a, uint256 start, uint256 len) internal pure returns (bytes memory out) {
+        out = new bytes(len);
+        for (uint256 i; i < len; ++i) out[i] = a[start + i];
     }
 
     /// P6a's PqUA keeps its own tags (ruling U8): they must equal the table's.

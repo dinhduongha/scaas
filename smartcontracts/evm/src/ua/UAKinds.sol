@@ -9,7 +9,10 @@ import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 ///         `clients/ua-cs`; `smartcontracts/vectors/ua/kinds.json` and `structures.json` pin all six.
 ///         `GROUP(g) = keccak256("scaas.ua.group." ‖ g ‖ ".v1")`, `keyHash = keccak256(GROUP(g) ‖ canonical pubkey)`.
 ///         Validation uses EIP-2537 (BLS12-381 G1/G2 MSM with scalar 1: canonical, on curve, in the subgroup) and the
-///         bn254 pairing precompile (G2 on the twist and in the subgroup). UNAUDITED — NOT FOR PRODUCTION FUNDS.
+///         bn254 pairing precompile (G2 on the twist and in the subgroup). Each precompile call is capped at 2× its EIP
+///         price (G1MSM 24 000, G2MSM 45 000, pairing 158 000), so a failing call cannot burn the caller's gas; a call
+///         starting with less gas than the cap plus 1/64 reverts `UAVerifyGas`, never `UAKeyData`.
+///         UNAUDITED — NOT FOR PRODUCTION FUNDS.
 library UAKinds {
     uint16 internal constant EVM_EOA = 0x0001;
     uint16 internal constant EVM_CONTRACT = 0x0002;
@@ -55,6 +58,13 @@ library UAKinds {
     error UAKeyData(uint16 kind);
     error UAKindUnknown(uint16 kind);
     error UAKindNotDerived(uint16 kind);
+    /// Gas left is below what a validation precompile needs. A statement about the gas, not about the key.
+    error UAVerifyGas();
+
+    // Gas caps for the precompile calls: 2× the EIP-2537 / EIP-1108 prices for one pair or one point.
+    uint256 private constant G1MSM_GAS = 24_000;
+    uint256 private constant G2MSM_GAS = 45_000;
+    uint256 private constant PAIRING_GAS = 158_000;
 
     uint256 private constant SECP_P = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F;
     uint256 private constant SECP_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141;
@@ -179,6 +189,7 @@ library UAKinds {
         else if (kind == MUSIG2_SECP256K1 || kind == FROST_SECP256K1) (lo, len) = (1, 32);
         else if (kind == MUSIG2_BN254 || kind == FROST_BN254) len = 64;
         if (d.length < lo + len) revert UAKeyData(kind);
+        if (lo == 0 && len == d.length) return keccak256(abi.encodePacked(groupTag(g), d));
         bytes memory pub = new bytes(len);
         for (uint256 i; i < len; ++i) pub[i] = d[lo + i];
         return keccak256(abi.encodePacked(groupTag(g), pub));
@@ -274,7 +285,7 @@ library UAKinds {
 
     function _modexp(uint256 b, uint256 e, uint256 m) private view returns (uint256 r) {
         (bool ok, bytes memory out) = address(0x05).staticcall(abi.encode(32, 32, 32, b, e, m));
-        require(ok && out.length == 32, "modexp");
+        if (!ok || out.length != 32) revert UAVerifyGas();
         r = abi.decode(out, (uint256));
     }
 
@@ -348,14 +359,19 @@ library UAKinds {
     /// EIP-197 pairing with the G1 generator: fails unless the G2 point is canonical, on the twist and in the subgroup.
     function _bnG2(bytes memory d) private view returns (bool) {
         if (_isZero(d)) return false;
-        (bool ok, bytes memory out) = address(0x08).staticcall(abi.encodePacked(uint256(1), uint256(2), d));
+        if (gasleft() < PAIRING_GAS + PAIRING_GAS / 63 + 5_000) revert UAVerifyGas();
+        (bool ok, bytes memory out) = address(0x08).staticcall{gas: PAIRING_GAS}(
+            abi.encodePacked(uint256(1), uint256(2), d)
+        );
         return ok && out.length == 32;
     }
 
     /// EIP-2537 MSM with scalar 1 (G1MSM `0x0c` / G2MSM `0x0e`): fails unless padded, canonical, on curve, in the subgroup.
     function _bls(bytes memory d, address msm, uint256 size) private view returns (bool) {
         if (_isZero(d)) return false;
-        (bool ok, bytes memory out) = msm.staticcall(abi.encodePacked(d, uint256(1)));
+        uint256 cap = size == 128 ? G1MSM_GAS : G2MSM_GAS;
+        if (gasleft() < cap + cap / 63 + 5_000) revert UAVerifyGas();
+        (bool ok, bytes memory out) = msm.staticcall{gas: cap}(abi.encodePacked(d, uint256(1)));
         return ok && out.length == size;
     }
 
