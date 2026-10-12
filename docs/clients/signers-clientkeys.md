@@ -788,8 +788,7 @@ any signing scalar. BIP-32/SLIP-10 have no bn254 or BLS12-381, so derivation is 
 - `y = g^x` (G1 of the curve); `UA = keccak256(TAG(kind) ‖ encodedY)` (`ZetherTypes.toUA`, tagged; `encodedY`: bn254 64 bytes
   `x‖y`, BLS12-381 128 bytes per EIP-2537); the proof of possession now binds chain, registry, UA and `authRef`
   ([CTR-UA-07](../contracts/accounts.md#CTR-UA-07); an earlier Schnorr PoP over `keccak256(registry ‖ encodedY ‖
-  account)` bound to the caller account is replaced; the built dev registry's challenge has no chain id,
-`UniversalAccountRegistry.sol:95-96`). Zether protocol: [contracts/zether](../contracts/zether.md).
+  account)` bound to the caller account is replaced; the legacy registry's (`legacy/ua3/`) challenge had no chain id). Zether protocol: [contracts/zether](../contracts/zether.md).
 - Stored like the seed: client only, encrypted at rest, never sent to a server or a relayer.
 - Tests: the published EIP-2333 vectors (BLS12-381); self-generated pinned bn254 vectors; one seed on different paths ⇒
   independent keys; `x` ≠ every signing scalar of the same seed; `y`/UA round trip.

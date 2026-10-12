@@ -1018,3 +1018,4 @@ checkGroup(keyData, pop)	renamed	contracts/accounts.md §1.8 (`verifyPop(keyData
 src/registry/**	renamed	contracts/zether.md header and §13: the Zether-era registry moved to smartcontracts/evm/legacy/ua3/, the UA registry is src/ua/UARegistry.sol (UA-3)
 AuthScheme 7	renamed	contracts/metatx.md: a native authRef of a Zether UA (the AuthScheme values are backed up in smartcontracts/evm/legacy/ua3/, UA-3)
 UniversalAccountRegistry.register	renamed	node/job-api.md call targets: UARegistry.register (the UA registry, UA-3; the old registry in smartcontracts/evm/legacy/ua3/)
+src/{common,metatx,factory,dex,wallet,account,registry,zether,hedera,chains}	renamed	architecture.md §3.1: the src/ folder list now matches the tree (registry gone, ua and trade added; UA-3)

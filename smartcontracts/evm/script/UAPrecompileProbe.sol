@@ -6,7 +6,7 @@ import {CurveSigs} from "../src/common/CurveSigs.sol";
 import {UAKinds} from "../src/ua/UAKinds.sol";
 import {G1Bn254, G1Bls12381} from "../src/zether/ZetherCurves.sol";
 
-/// @title Deploy-time probe of the pairing precompiles the UA registry's curve kinds need (accounts.md §1.9 per-chain
+/// @title Deploy-time probe of the BLS12-381 / bn254 precompiles the UA registry's curve kinds need (accounts.md §1.9 per-chain
 ///        enablement; the UA-2 carry-overs: 0x0c / 0x0e / 0x08 refuse the points outside the subgroup, prices fit).
 /// @notice Runs in its constructor and returns `abi.encode(bool bls12381, bool bn254G2)` as its code, so `DeployBase`
 ///         asks the **chain's own** precompiles through an `eth_call` with no `to` (a forge script runs precompiles in
@@ -16,7 +16,8 @@ import {G1Bn254, G1Bls12381} from "../src/zether/ZetherCurves.sol";
 ///         - `bls12381` (EIP-2537; kinds 0x0105, 0x0106, 0x0141): G1MSM / G2MSM with k = 1 return the point under the
 ///           registry's key-check caps (`UAKinds.G1MSM_GAS` / `G2MSM_GAS`) and refuse kinds.json's points outside the
 ///           subgroup; a k = 2 PAIRING_CHECK returns 1 within its EIP-2537 price (102,900), the price the verifier caps
-///           were measured at.
+///           were measured at; G1ADD (0x0b, g1 + O = g1, 375) and MAP_FP_TO_G1 (0x10, 128 bytes for 0, 5,500), which
+///           `bls12381-minsig` uses besides MSM / pairing, answer within their EIP-2537 prices.
 ///         - `bn254G2` (0x08; kind 0x0107): the registry's G2 check (the G1 generator and the key, `UAKinds.PAIRING_GAS`)
 ///           answers 32 bytes for the G2 generator and refuses kinds.json's G2 point outside the subgroup; a k = 2
 ///           pairing returns 1 within its EIP-1108 price (113,000).
@@ -63,7 +64,8 @@ contract UAPrecompileProbe {
             && !_answers(address(0x0e), abi.encodePacked(G2_OUTSIDE, uint256(1)), UAKinds.G2MSM_GAS, 256)
             && _returns(
                 address(0x0f), bytes.concat(g1, g2, G1Bls12381.neg(g1), g2), BLS_PAIRING_2_GAS, abi.encode(uint256(1))
-            );
+            ) && _returns(address(0x0b), bytes.concat(g1, new bytes(128)), 375, g1) // G1ADD: g1 + O = g1 (EIP-2537 price)
+            && _answers(address(0x10), new bytes(64), 5_500, 128); // MAP_FP_TO_G1(0) (EIP-2537 price)
     }
 
     function bn254G2() internal view returns (bool) {
