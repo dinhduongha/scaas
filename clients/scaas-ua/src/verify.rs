@@ -12,6 +12,8 @@ use ark_ff::field_hashers::DefaultFieldHasher;
 use ark_ff::{BigInteger, Field, PrimeField, Zero};
 use sha2::{Digest, Sha256};
 
+pub use crate::groups::{dkg_transcript_ok, frost_secp256k1};
+
 pub const SCHNORR_TAG: &[u8] = b"scaas.ua.schnorr.v1";
 pub const BLS12381_DST_SIG: &[u8] = b"SCAAS-UA-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_SIG_";
 pub const BLS12381_DST_POP: &[u8] = b"SCAAS-UA-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_POP_";
@@ -19,7 +21,9 @@ pub const BN254_LABEL_SIG: &[u8] = b"SCAAS-UA-BLS-BN254-SIG-V1";
 pub const BN254_LABEL_POP: &[u8] = b"SCAAS-UA-BLS-BN254-POP-V1";
 
 /// `IUAKindVerifier.verify` (`pop = false`) / `IUAPopVerifier.verifyPop` (`pop = true`) for the UA-2a kinds; `pop` only
-/// changes the BLS kinds' domain. Other kinds: `false`.
+/// changes the BLS kinds' domain. The group kinds 0x0110–0x0113 (UA-2c, `groups.rs`): `pop = false` takes the stored `vk`
+/// (`Q`/`Y`: 33 bytes SEC1 compressed or 64 bytes bn254) and checks a group signature; `pop = true` takes the full key
+/// data and the registration `pop` blob and runs the whole group check. Other kinds: `false`.
 pub fn verify(kind: u16, key_data: &[u8], message: &[u8; 32], sig: &[u8], pop: bool) -> bool {
     match kind {
         0x0100 => webauthn_p256(key_data, message, sig),
@@ -30,6 +34,7 @@ pub fn verify(kind: u16, key_data: &[u8], message: &[u8; 32], sig: &[u8], pop: b
         0x0105 => schnorr::<ark_bls12_381::g1::Config>(key_data, message, sig, 64),
         0x0106 => bls12381_minsig(key_data, message, sig, pop),
         0x0107 => bls_bn254_minsig(key_data, message, sig, pop),
+        0x0110..=0x0113 => crate::groups::verify(kind, key_data, message, sig, pop),
         _ => false,
     }
 }
@@ -50,7 +55,7 @@ pub fn native_ecdsa(address: &[u8; 20], digest: &[u8; 32], sig: &[u8]) -> bool {
     keccak(&[&pt.as_bytes()[1..]])[12..] == address[..]
 }
 
-fn sha256(parts: &[&[u8]]) -> [u8; 32] {
+pub(crate) fn sha256(parts: &[&[u8]]) -> [u8; 32] {
     let mut h = Sha256::new();
     for p in parts {
         h.update(p);
@@ -140,7 +145,7 @@ pub fn ed25519(pk: &[u8], message: &[u8], sig: &[u8]) -> bool {
 
 // --- BIP-340 ---
 
-fn bip340(key_data: &[u8], message: &[u8; 32], sig: &[u8]) -> bool {
+pub(crate) fn bip340(key_data: &[u8], message: &[u8; 32], sig: &[u8]) -> bool {
     let (Ok(vk), Ok(s)) = (k256::schnorr::VerifyingKey::from_bytes(key_data), k256::schnorr::Signature::try_from(sig)) else {
         return false;
     };
@@ -162,7 +167,7 @@ fn coord<F: PrimeField>(b: &[u8], w: usize) -> Option<F> {
     fe(&b[w - F::MODULUS.to_bytes_be().len()..w])
 }
 /// `x ‖ y`, on the curve, in the prime-order subgroup, not the identity.
-fn g1<P: SWCurveConfig>(b: &[u8], w: usize) -> Option<Affine<P>>
+pub(crate) fn g1<P: SWCurveConfig>(b: &[u8], w: usize) -> Option<Affine<P>>
 where
     P::BaseField: PrimeField,
 {
@@ -175,7 +180,7 @@ where
 
 /// scaas Schnorr: `R ‖ z`, `e = hashToScalar(keccak256(tag ‖ R ‖ Y ‖ m))` with hashToScalar(s) =
 /// `(keccak(s ‖ 0x02) · 2^256 + keccak(s ‖ 0x03)) mod r`; accept iff `z < r`, `R ≠ O`, `e ≠ 0`, `[z]G == R + [e]Y`.
-fn schnorr<P: SWCurveConfig>(key_data: &[u8], message: &[u8; 32], sig: &[u8], w: usize) -> bool
+pub(crate) fn schnorr<P: SWCurveConfig>(key_data: &[u8], message: &[u8; 32], sig: &[u8], w: usize) -> bool
 where
     P::BaseField: PrimeField,
 {

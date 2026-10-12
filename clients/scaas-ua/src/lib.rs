@@ -2,12 +2,18 @@
 //! `popDigest`, the registry's `UAAuth` digest, member digests, canonical ids and key-data validation. The same rules live
 //! in Solidity (`UAKinds.sol`), JS (clientkeys `ua.js`), Python, Go and C#; `smartcontracts/vectors/ua/` pins all six.
 //! The curve code here (k256, p256, curve25519-dalek, arkworks) is independent of the JS generator's (noble): the vectors
-//! are accepted only when both agree. UNAUDITED.
+//! are accepted only when both agree. Feature `signers` (UA-2c): the MuSig2 / FROST group signers that generate
+//! `groups.json` (`musig2`, `frost`); the group kinds' registry checks are in the default build (`verify`). UNAUDITED.
 use sha3::{Digest, Keccak256};
 
 mod keydata;
 pub use keydata::validate_key_data;
 pub mod verify;
+mod groups;
+#[cfg(feature = "signers")]
+pub mod musig2;
+#[cfg(feature = "signers")]
+pub mod frost;
 
 /// An error whose [`UAError::code`] every implementation and the vector files share.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
