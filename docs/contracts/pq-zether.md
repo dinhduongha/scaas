@@ -195,6 +195,25 @@ of [Katsumata–Kwiatkowski–Pintore–Prest 2020](https://eprint.iacr.org/2020
 | ML-DSA | `pqcrypto`/`fips204`-class Rust crates, liboqs (C) | FIPS 204 | precompile and clients; pick one audited/ACVP-tested implementation |
 | [lattice-estimator](https://github.com/malb/lattice-estimator) | Sage | security estimates | parameter freeze |
 
+<a id="why-lazer"></a>
+**Why LaZer, and why no equivalent replaces it** (summary of the two tables above; owner asked for it on record,
+2026-10-13). PQZ needs additive encryption, a lattice zero-knowledge proof of a valid transfer (non-negative balance,
+correct addition, correct key) and proofs small enough for calldata. LNP22 proves exactly those lattice statements
+(`As = t mod q`, exact ℓ2 norms, binary/quadratic/linear relations) at tens of KB, and **LaZer is LNP22's reference C
+implementation by its authors**, with codegen from relation specifications and lattice-estimator integration, under MIT.
+**Lether** (CCS 2026), the closest prior art (account-model lattice Zether), runs LNP22 through LaZer at ~51 KB of proof
+and sub-second prove/verify; PQZ drops anonymity, so its proof should be smaller. No other library is a drop-in:
+LaBRADOR has a ~50 KB floor and is not zero-knowledge in its original form (kept for later block-level aggregation);
+Greyhound is a polynomial commitment needing a SNARK around it; MatRiCT/MatRiCT+ target UTXO ring signatures;
+LNS20 is a technique (the digit-carry relation, expressed inside LNP22), not a library; hash-based systems (Plonky3,
+Winterfell) are mature but 100–300 KB with multi-second provers and no default zero-knowledge — the **fallback** if
+E-S1 trips the kill criteria ([CTR-PQZ-09](#CTR-PQZ-09)); a PQ statement inside a pairing SNARK is rejected (pairing
+soundness). On the encryption side, OpenFHE / Lattigo / fhe.rs are full FHE stacks where PQZ needs ~200 lines of
+K-PKE-style code, and tfhe-rs (fhEVM) is a different trust model (a threshold network key) with a pairing-based input
+proof and a patent licence. LaZer is **forked, not linked**: its protocol logic, specifications and codegen are kept,
+and the six layers below are rewritten. The landscape was surveyed on 2026-10-06; re-survey it before the E-S1 kill
+decision.
+
 **Hardware fact that drives the build.** LaZer requires AVX-512 and AES-NI and has no portable code path. The
 chain-7622 host is an **AMD Ryzen 5 7235HS (Zen 3+): AVX2 and AES-NI, no AVX-512** (`/proc/cpuinfo`, 2026-10-06), as
 are most phones and every WASM runtime. A verifier that needs AVX-512 cannot run in the node. Hence the portable fork
