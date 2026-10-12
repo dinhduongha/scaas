@@ -26,6 +26,9 @@ import {FeePolicy, FeeMode} from "../common/FeePolicy.sol";
 abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IERC165, ITokenAdmin {
     using MetaTxLib for MetaTxLib.MetaTransfer;
 
+    /// @notice The single-leg-or-any `unwrap` that `uaUnwrap` builds (accounts.md CTR-UA-26).
+    bytes4 internal constant SEL_UA_UNWRAP = bytes4(keccak256("unwrap(address,uint256,address,uint256)"));
+
     bytes32 internal constant RECEIVER_FEE_TYPEHASH =
         keccak256("ReceiverFee(bytes32 paymentDigest,uint256 fee,address feeRecipient,uint256 validUntil)");
 
@@ -204,6 +207,87 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
         t.feeRecipient = feeRecipient;
         _executeTransfer(t, signature);
         return true;
+    }
+
+    // ------------------------------------------------------------------ named UA functions (CTR-UA-26)
+
+    /// @notice `uaExecuteTransfer(UAMetaTransfer{from, to, amount, 0, batch, nonce, validUntil, mode, relayer, 0, 0})`.
+    function uaTransfer(
+        bytes32 from, bytes32 to, uint256 amount, uint256 batch, uint256 nonce, uint256 validUntil,
+        uint32 mode, address relayer, bytes calldata auth
+    ) external nonReentrant returns (bool) {
+        if (mode & ~MetaTxLib.MODE_RESTRICT_RELAYER != 0) revert MtxModeShape(mode);
+        MetaTxLib.UAMetaTransfer memory t;
+        t.from = from;
+        t.to = to;
+        t.value = amount;
+        t.batch = batch;
+        t.nonce = nonce;
+        t.validUntil = validUntil;
+        t.mode = mode;
+        t.relayer = relayer;
+        _uaExecuteTransfer(t, auth);
+        return true;
+    }
+
+    function uaTransferWithFee(
+        bytes32 from, bytes32 to, uint256 amount, uint256 batch, uint256 nonce, uint256 validUntil,
+        uint32 mode, address relayer, uint256 fee, address feeRecipient, bytes calldata auth
+    ) external nonReentrant returns (bool) {
+        _requireFeeShape(mode, feeRecipient);
+        MetaTxLib.UAMetaTransfer memory t;
+        t.from = from;
+        t.to = to;
+        t.value = amount;
+        t.batch = batch;
+        t.nonce = nonce;
+        t.validUntil = validUntil;
+        t.mode = mode;
+        t.relayer = relayer;
+        t.fee = fee;
+        t.feeRecipient = feeRecipient;
+        _uaExecuteTransfer(t, auth);
+        return true;
+    }
+
+    /// @notice Payment `payId` on its lane `payLane(payId)`, nonce 0, as `mtxPay`.
+    function uaPay(
+        bytes32 from, bytes32 to, uint256 amount, bytes32 payId, uint256 validUntil,
+        uint32 mode, address relayer, uint256 fee, address feeRecipient, bytes calldata auth
+    ) external nonReentrant returns (bool) {
+        AdminLib.requireFeature(AdminLib.PAYABLE);
+        MetaTxLib.UAMetaTransfer memory t;
+        t.from = from;
+        t.to = to;
+        t.value = amount;
+        t.entryRef = payId;
+        t.batch = payLane(payId);
+        t.validUntil = validUntil;
+        t.mode = mode;
+        t.relayer = relayer;
+        t.fee = fee;
+        t.feeRecipient = feeRecipient;
+        _uaExecuteTransfer(t, auth);
+        return true;
+    }
+
+    /// @notice `uaExecute(UAMetaTransaction{from, unwrap(underlying, wrapped, recipient, minOut), …, fee 0})`: the
+    ///         gasless unwrap of a UA (CTR-MTX-12); fee `NONE` (as `mtxTransfer`). Only on kinds whose UA allowlist
+    ///         has that `unwrap` (else `MetaTxUnknownOp`).
+    function uaUnwrap(
+        bytes32 from, address underlying, uint256 wrapped, address recipient, uint256 minOut,
+        uint256 batch, uint256 nonce, uint256 validUntil, uint32 mode, address relayer, bytes calldata auth
+    ) external nonReentrant returns (bytes memory) {
+        if (mode & ~MetaTxLib.MODE_RESTRICT_RELAYER != 0) revert MtxModeShape(mode);
+        MetaTxLib.UAMetaTransaction memory m;
+        m.from = from;
+        m.data = abi.encodeWithSelector(SEL_UA_UNWRAP, underlying, wrapped, recipient, minOut);
+        m.batch = batch;
+        m.nonce = nonce;
+        m.validUntil = validUntil;
+        m.mode = mode;
+        m.relayer = relayer;
+        return _uaExecute(m, auth);
     }
 
     // ------------------------------------------------------------------ receiver-pays (CTR-MTX-05, CTR-MTX-06)
