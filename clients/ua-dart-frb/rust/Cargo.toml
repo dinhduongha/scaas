@@ -11,7 +11,7 @@ crate-type = ["cdylib", "staticlib"]
 
 [dependencies]
 flutter_rust_bridge = "=2.13.0"
-scaas-ua = { path = "../../scaas-ua" }
+scaas-ua = { path = "../../ua-rs" }
 
 # arkworks subgroup checks crawl unoptimised
 [profile.dev.package."*"]

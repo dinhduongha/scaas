@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-SCaaS-Community-1.0
-// scaas-ua (C++ / cxx) against smartcontracts/vectors/ua/: mirrors clients/scaas-ua/tests/vectors.rs. `vectors_test <name>`.
+// scaas-ua (C++ / cxx) against smartcontracts/vectors/ua/: mirrors clients/ua-rs/tests/vectors.rs. `vectors_test <name>`.
 #include <cstdio>
 #include <cstdlib>
 #include <fstream>

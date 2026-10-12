@@ -11,12 +11,12 @@ find_program(CARGO cargo REQUIRED)
 set(SCAAS_UA_CARGO_TARGET_DIR "${CMAKE_CURRENT_BINARY_DIR}/cargo" CACHE PATH "cargo target dir")
 set(_gen "${SCAAS_UA_CARGO_TARGET_DIR}/cxxbridge")
 set(_lib "${SCAAS_UA_CARGO_TARGET_DIR}/release/${CMAKE_STATIC_LIBRARY_PREFIX}scaas_ua_cxx${CMAKE_STATIC_LIBRARY_SUFFIX}")
-file(GLOB _rs CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.rs" "${CMAKE_CURRENT_SOURCE_DIR}/../scaas-ua/src/*.rs")
+file(GLOB _rs CONFIGURE_DEPENDS "${CMAKE_CURRENT_SOURCE_DIR}/src/*.rs" "${CMAKE_CURRENT_SOURCE_DIR}/../ua-rs/src/*.rs")
 add_custom_command(
   OUTPUT "${_lib}" "${_gen}/scaas-ua-cxx/src/lib.rs.h"
   COMMAND ${CMAKE_COMMAND} -E env "CARGO_TARGET_DIR=${SCAAS_UA_CARGO_TARGET_DIR}"
           ${CARGO} build --release --locked --manifest-path "${CMAKE_CURRENT_SOURCE_DIR}/Cargo.toml"
-  DEPENDS ${_rs} Cargo.toml Cargo.lock build.rs "${CMAKE_CURRENT_SOURCE_DIR}/../scaas-ua/Cargo.toml"
+  DEPENDS ${_rs} Cargo.toml Cargo.lock build.rs "${CMAKE_CURRENT_SOURCE_DIR}/../ua-rs/Cargo.toml"
   COMMENT "cargo build scaas-ua-cxx")
 add_custom_target(scaas_ua_cargo DEPENDS "${_lib}")
 

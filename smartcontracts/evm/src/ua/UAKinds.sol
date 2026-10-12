@@ -5,7 +5,7 @@ import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
 
 /// @title UA identity layer (accounts.md §1.3–§1.6): kind table, tags, ids, keyHash, purpose tags, `ua_msg`, `popDigest`,
 ///        the registry's `UAAuth` digest, member digests and key-data validation.
-/// @notice The same rules are implemented by clientkeys `ua.js`, `clients/scaas-ua`, `clients/ua-py`, `clients/ua-go` and
+/// @notice The same rules are implemented by clientkeys `ua.js`, `clients/ua-rs`, `clients/ua-py`, `clients/ua-go` and
 ///         `clients/ua-cs`; `smartcontracts/vectors/ua/kinds.json` and `structures.json` pin all six.
 ///         `GROUP(g) = keccak256("scaas.ua.group." ‖ g ‖ ".v1")`, `keyHash = keccak256(GROUP(g) ‖ canonical pubkey)`.
 ///         Validation uses EIP-2537 (BLS12-381 G1/G2 MSM with scalar 1: canonical, on curve, in the subgroup) and the
