@@ -118,3 +118,21 @@ jobs:
         run: cargo test
       - name: wasm build and node smoke
         run: WASM_BINDGEN=wasm-bindgen ./wasm-smoke.sh
+
+  scaas-ua:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: clients/scaas-ua
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: clients/scaas-ua
+      - name: clippy
+        run: cargo clippy --all-targets -- -D warnings
+      - name: vectors
+        run: cargo test
