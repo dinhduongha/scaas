@@ -320,6 +320,8 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
         if (m.data.length < 4 || !_uaAllowed(sel)) revert MetaTxUnknownOp(sel);
         uint256 basis = _checkCall(m.data, m.mode);
         _useNonce(m.from, m.batch);                                                                    // 4
+        // ponytail: binding 0 is safe only while no confidential (Zether/PQZ) selector is on the UA allowlist (L4-4);
+        // when one joins (P6), write the envelope binding here as the address path does.
         ret = _selfCall(m.from, m.data, bytes32(0));                                                   // 5
         (uint256 fee, address feeTo) =                                                                 // 6
             _callFee(m.data, basis, m.mode, m.fee, m.feeRecipient == address(0) ? msg.sender : m.feeRecipient);
@@ -403,6 +405,7 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
     function _uaMove(bytes32 from, bytes32 to, uint256 value) internal {
         bool fromUA = !UAKinds.inNativeSpace(from);
         bool toUA = !UAKinds.inNativeSpace(to);
+        if (!toUA && address(uint160(uint256(to))) == address(this)) revert TransferToSelf(); // CTR-MTX-18
         if (fromUA) _uaDebit(from, value);
         if (toUA) _ua().balance[to] += value;
         if (!(fromUA && toUA)) {

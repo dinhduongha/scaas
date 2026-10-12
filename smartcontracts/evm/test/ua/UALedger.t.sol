@@ -200,6 +200,25 @@ contract UALedgerTest is UALedgerBase {
         tok.uaExecuteTransfer(t, a);
     }
 
+    /// CTR-MTX-18: a `uaExecute` fee to the token's own address is refused (derived and native `from`).
+    function test_T_V3_3_feeToTokenRefused() public {
+        _wrapFor(alice, 10_000);
+        vm.prank(alice);
+        wrp.transferToUA(uaP, 5_000);
+        bytes32[2] memory froms = [uaP, _pad(alice)];
+        for (uint256 i; i < 2; ++i) {
+            bytes memory data = froms[i] == uaP
+                ? abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", address(und), 100, bob, 100)
+                : abi.encodeWithSignature("unwrap(uint256,address,uint256)", 100, bob, 100);
+            MetaTxLib.UAMetaTransaction memory m = _m(address(wrp), froms[i], data);
+            (m.mode, m.fee, m.feeRecipient) = (RR | RF | FIX, 1, address(wrp));
+            bytes memory a = _authM(address(wrp), m);
+            vm.expectRevert(IERC20MetaTx.TransferToSelf.selector);
+            vm.prank(RELAYER);
+            wrp.uaExecute(m, a);
+        }
+    }
+
     // ----- T-V3-3b: Zether receivers, UA_POOL, native cancel -----
 
     function test_T_V3_3b_zetherReceiverRefused() public {
