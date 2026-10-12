@@ -5,9 +5,8 @@ import {IERC1271} from "@openzeppelin/contracts/interfaces/IERC1271.sol";
 import {AuthScheme} from "../common/AuthScheme.sol";
 import {MultiSig} from "../common/MultiSig.sol";
 import {Bls12381} from "../common/Bls12381.sol";
-import {HashToCurve} from "../common/HashToCurve.sol";
+import {CurveSigs} from "../common/CurveSigs.sol";
 import {ZetherTypes} from "../zether/ZetherTypes.sol";
-import {ZetherTranscript} from "../zether/ZetherTranscript.sol";
 import {ZetherSafety} from "../zether/ZetherSafety.sol";
 import {G1Bn254, G1Bls12381} from "../zether/ZetherCurves.sol";
 import {IUniversalAccountRegistry} from "./IUniversalAccountRegistry.sol";
@@ -40,13 +39,6 @@ contract UniversalAccountRegistry is IUniversalAccountRegistry {
     bytes private constant BLS_BN254_POP = "SCAAS-BLS-BN254-POP-V1";
     bytes private constant BLS381_DST_SIG = "SCAAS-AUTH-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_SIG_";
     bytes private constant BLS381_DST_POP = "SCAAS-AUTH-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_POP_";
-    /// bn254 G2 generator, thứ tự EIP-197: x_im, x_re, y_im, y_re.
-    bytes private constant BN254_G2 = abi.encodePacked(
-        uint256(11559732032986387107991004021392285783925812861821192530917403151452391805634),
-        uint256(10857046999023057135944570762232829481370756359578518086990519993285655852781),
-        uint256(4082367875863433681332203403145435568316851327593401208105741076214120093531),
-        uint256(8495653923123431417604973247489272438418190587263600148770280649306958101930)
-    );
 
     mapping(ZetherTypes.UA => Account) private _accounts;
     mapping(address => ZetherTypes.UA) public links;
@@ -205,9 +197,7 @@ contract UniversalAccountRegistry is IUniversalAccountRegistry {
         }
         if (s == AuthScheme.BLS_BN254) return _blsBn254(abi.decode(d, (bytes)), m, sig, pop);
         if (s == AuthScheme.BLS_12381) {
-            if (sig.length != 128 || _isZero(sig)) return false;
-            bytes memory h = HashToCurve.hashToG1(abi.encodePacked(m), pop ? BLS381_DST_POP : BLS381_DST_SIG);
-            return Bls12381.verifyMinSig(h, abi.decode(d, (bytes)), sig);
+            return CurveSigs.bls12381(pop ? BLS381_DST_POP : BLS381_DST_SIG, abi.decode(d, (bytes)), m, sig);
         }
         // SMART_ACCOUNT_1271 — trần gas như ERC20MetaTx
         (bool ok, bytes memory ret) = abi.decode(d, (address)).staticcall{gas: 50_000}(
@@ -218,34 +208,11 @@ contract UniversalAccountRegistry is IUniversalAccountRegistry {
 
     /// @dev Schnorr §11.1 trên đường cong của `y`: `[z]G − R − [e]Y == O`.
     function _schnorr(bytes memory y, bytes32 m, bytes memory sig) private view returns (bool) {
-        uint256 p = y.length;
-        if ((p != 64 && p != 128) || sig.length != p + 32) return false;
-        bytes memory rPt = new bytes(p);
-        uint256 z;
-        assembly ("memory-safe") {
-            for { let i := 0 } lt(i, p) { i := add(i, 32) } { mstore(add(add(rPt, 32), i), mload(add(add(sig, 32), i))) }
-            z := mload(add(add(sig, 32), p))
-        }
-        uint256 r = p == 64 ? G1Bn254.R : G1Bls12381.R;
-        uint256 e = ZetherTranscript.hashToScalar(keccak256(abi.encodePacked(SCHNORR_TAG, rPt, y, m)), r);
-        if (z >= r || e == 0 || keccak256(rPt) == keccak256(new bytes(p)) || keccak256(y) == keccak256(new bytes(p))) {
-            return false;
-        }
-        uint256[] memory sc = new uint256[](3);
-        (sc[0], sc[1], sc[2]) = (z, r - 1, r - e);
-        bytes memory out = p == 64
-            ? G1Bn254.msm(bytes.concat(G1Bn254.generator(), rPt, y), sc)
-            : G1Bls12381.msm(bytes.concat(G1Bls12381.generator(), rPt, y), sc);
-        return keccak256(out) == keccak256(new bytes(p));
+        return CurveSigs.schnorr(SCHNORR_TAG, y, m, sig);
     }
 
     /// @dev BLS min-sig trên bn254: `e(−sig, G2) · e(H(m), pk) == 1`, H = try-and-increment (§3.1, §11.2).
     function _blsBn254(bytes memory pk, bytes32 m, bytes memory sig, bool pop) private view returns (bool) {
-        if (sig.length != 64 || !G1Bn254.isValid(sig) || G1Bn254.isIdentity(sig)) return false;
-        bytes memory h = G1Bn254.mapToG1(abi.encodePacked(pop ? BLS_BN254_POP : BLS_BN254_SIG, m));
-        (bool ok, bytes memory out) = address(0x08).staticcall(
-            bytes.concat(G1Bn254.neg(sig), BN254_G2, h, pk)
-        );
-        return ok && out.length == 32 && abi.decode(out, (uint256)) == 1;
+        return CurveSigs.blsBn254(pop ? BLS_BN254_POP : BLS_BN254_SIG, pk, m, sig);
     }
 }
