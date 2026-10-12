@@ -213,7 +213,7 @@ function msigOk(structureUa, purposeTag, digest, auth) {
       const mkd = bytesAt(sigs, t, t + 32);
       const sig = bytesAt(sigs, t, t + 64);
       const ok = ua.isNativeKind(kind)
-        ? nativeOk(hex(id.subarray(12)), ua.uaAuthDigest(domain(V.msig.context, V.msig.generation), id, tag('member'), md), hex(sig))
+        ? mkd.length === 0 && nativeOk(hex(id.subarray(12)), ua.uaAuthDigest(domain(V.msig.context, V.msig.generation), id, tag('member'), md), hex(sig))
         : eq(ua.uaOf(kind, mkd), id) && verify(kind, hex(mkd), hex(ua.uaMessage(kind, tag('member'), md)), hex(sig));
       if (!ok) return false;
       sum += weight;
@@ -235,7 +235,8 @@ test('msig: structure id, members, every set gives its verdict', () => {
     assert.equal(hex(ua.memberDigest(B(M.ua), ua.uaMessage(0x0120, tag(s.purpose), B(s.digest)))), s.memberDigest);
     assert.equal(msigOk(B(M.ua), tag(s.purpose), B(s.digest), B(s.auth)), s.valid, s.name);
   }
-  assert.ok(M.sets.filter((s) => s.valid).length >= 2);
+  assert.equal(M.sets.length, 9);
+  assert.equal(M.sets.filter((s) => s.valid).length, 2);
 });
 
 test('BIP-340 official vectors (32-byte messages) give their verdict', () => {

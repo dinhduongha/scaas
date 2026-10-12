@@ -240,6 +240,8 @@ const sets = [
   set('duplicate', false, byIndex([S('native'), S('native'), S('p256')])),
   set('wrong-member-key', false, byIndex([S('native'), S('p256', { secretName: 'p256-other' }), S('bls-bn254-minsig')])),
   set('native-raw-digest', false, byIndex([S('native', { raw: true }), S('schnorr-bn254')])),
+  // R12: a native member's MemberSig carries no key data (here its address), even with a valid signature
+  set('native-member-keydata', false, byIndex([{ ...S('native'), keyData: nativeAddr }, S('schnorr-bn254')])),
 ];
 
 // --- BIP-340 official test vectors (bip-0340/test-vectors.csv), the 32-byte-message cases 0–14 ---

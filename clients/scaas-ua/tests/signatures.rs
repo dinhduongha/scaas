@@ -136,8 +136,9 @@ fn msig_ok(v: &Value, ua: &[u8; 32], purpose: &[u8; 32], digest: &[u8; 32], auth
         let id: [u8; 32] = key[o + 2..o + 34].try_into().ok()?;
         let (mkd, sig) = (dyn_bytes(sigs, t, t + 32)?, dyn_bytes(sigs, t, t + 64)?);
         let ok = if is_native(kind) {
+            // R12: a native member's MemberSig carries no key data
             let d = domain(v, s(&v["msig"]["context"]), num(&v["msig"]["generation"]) as u32);
-            native_ecdsa(&id[12..].try_into().ok()?, &ua_auth_digest(&d, &id, &member, &md), sig)
+            mkd.is_empty() && native_ecdsa(&id[12..].try_into().ok()?, &ua_auth_digest(&d, &id, &member, &md), sig)
         } else {
             ua_of(kind, mkd).ok()? == id && verify(kind, mkd, &ua_message(kind, &member, &md).ok()?, sig, false)
         };
@@ -159,6 +160,7 @@ fn msig_sets() {
     assert_eq!(key, bytes(&m["keyData"]));
     let ua = derive_ua(0x0120, &key, false).unwrap();
     assert_eq!(ua, b32(&m["ua"]));
+    assert_eq!(arr(&m["sets"]).len(), 9);
     for x in arr(&m["sets"]) {
         let p = purpose_tag(s(&x["purpose"])).unwrap();
         let d = b32(&x["digest"]);

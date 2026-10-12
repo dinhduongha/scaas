@@ -226,7 +226,7 @@ contract UARegistryVectorsTest is UARegistryBase {
                 reg.requireAuthorized(ua, p, dg, auth);
             }
         }
-        assertEq(sets, 8, "msig sets");
+        assertEq(sets, 9, "msig sets");
         assertEq(valid, 2);
     }
 }
