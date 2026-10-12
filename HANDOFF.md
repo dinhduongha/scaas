@@ -1,6 +1,30 @@
 # HANDOFF — scaas
 
-## Session 2026-10-12 (UA-2c in progress, paused) — resume here
+## Session 2026-10-12 (UA-2c merged) — resume here
+
+**State:** UA-2c merged into main (`c35f494`) and pushed; branch `ua2c-groups` kept, worktree `.claude/worktrees/ua2c`
+kept. Plan `docs/superpowers/plans/2026-10-12-ua2c-groups.md` (rulings C1–C19). Forge 1052 passed / 10 skipped on merged
+main; `--isolate` UAGas 6 / UARegistryGroups 14; prague verifiers 52 + 1 skipped; size gate 0 errors; `scaas-ua` with and
+without `signers` + clippy clean; node 13/13; docs and facts checks clean; binding crates build `--locked` again (Qt needs
+`QMAKE=~/usr/Qt/6.8.2/gcc_64/bin/qmake6`).
+
+**Built:** `src/common/SSTORE2.sol`; `UARegistry` stored kinds 0x0110–0x0113 (`keyPtr` = SSTORE2(vk), `auth.keyData` empty,
+group PoP capped at `verifyBudget` without hold, gen-2 hand-off, stored msig members); verifiers `Musig2Secp256k1Verifier`
+(BIP-327 KeyAgg with `ecrecover` hints), `Musig2Bn254Verifier`, `UAFrostSecp256k1Verifier` (RFC 9591), `FrostBn254Verifier`,
+`library Bip340` (extracted from `Bip340Verifier`, behaviour unchanged); `scaas-ua` `src/groups.rs` (registry-side checks) and
+feature `signers` (BIP-327, ZF frost-core 3.0.0, FROST(bn254, keccak256)); `smartcontracts/vectors/ua/groups.json` (20 groups,
+57 negatives, T-FROST); noble cross-check `test/ua-groups.test.js`; `test/ua/UARegistryGroups.t.sol`, `UAFrost.t.sol`,
+`Musig2Verifiers.t.sol`; accounts.md §1.6.1/§1.8/§1.15/§1.16 updated.
+
+**Controller rulings (final review upheld):** a starved group registration reverts `UAPoP`, or `SSTORE2WriteFailed` when gas
+runs out at the key write after the PoP passed — never a record (`test_registerStoredStarved`, spec §1.8 step 6); if the
+owner wants `UAPoP` only, map the SSTORE2 failure in `UARegistry`. FROST(secp256k1) repeated/cancelling `C_i0` is refused
+on chain but accepted by Rust/noble (fails closed; §1.6.1) — mirror deferred to UA F3. Follow-ups listed under UA-2c in TODO.
+
+**Next steps:** the UA client dirs rename (flat `clients/ua-<lang>`, one commit), then UA-3 (deployment, Zether kinds). P6b
+can run beside.
+
+## Session 2026-10-12 (UA-2c in progress, paused)
 
 **State:** main has UA-2a and UA-2b merged and pushed (up to `3eb2e2b`); unpushed on main since then: the README
 scorecard was pushed (`8bbac31`), then `e26749a` (TODO: UA client dirs rename), `2d40f69` (plan UA-2c), `fd900ec`,
