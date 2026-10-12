@@ -6,13 +6,15 @@
 // `<use>` 7 = conf key, 8 = disclosure (reserved). Byte-for-byte the same as S3's
 // `zether-prover/src/keys.rs` + `schnorr.rs` (pinned by test/vectors/r33_keys.json and schnorr_*.json),
 // so the browser does not need the 1 MB prover wasm just to register. `x` is sealed like the seed
-// (vault.js) and never sent anywhere; only `Y`, `UA` and the PoP leave the device.
+// (vault.js) and never sent anywhere; only `Y`, `UA` and the PoP leave the device. The UA, the PoP and the
+// owner-op signature are the UA registry's (accounts.md CTR-UA-07, CTR-UA-16; ids and digests from ua.js).
 import { bn254 } from '@noble/curves/bn254.js';
 import { bls12_381 } from '@noble/curves/bls12-381.js';
 import { hkdf } from '@noble/hashes/hkdf.js';
 import { sha256, sha512 } from '@noble/hashes/sha2.js';
 import { keccak_256, concatBytes, utf8ToBytes, bytesToHex, fromHex, hex, word, abiEncode, wipe } from './bytes.js';
 import { createVault, openVault, seal, open } from './vault.js';
+import { uaOf, popDigest, uaMessage, purposeTag } from './ua.js';
 
 export const USE_CONF = 7;
 export const USE_DISCLOSURE = 8;
@@ -90,13 +92,16 @@ export function decodePoint(curve, bytes) {
   return P;
 }
 
-/** `Y = g^x`, `UA = keccak256(encodedY)` (ZetherTypes.toUA). */
+/** The UA kind of a curve's Zether key: `zether-bn254` 0x0140, `zether-bls12381` 0x0141 (accounts.md §1.6). */
+export const zetherKind = (curve) => (curveOf(curve) === CURVES.bn254 ? 0x0140 : 0x0141);
+
+/** `Y = g^x`, `UA = keccak256(TAG(zether-<curve>) ‖ Y)` (ZetherTypes.toUA, CTR-UA-16). */
 export function confPublic(curve, x) {
   const { Point } = curveOf(curve);
   const s = typeof x === 'bigint' ? x : toInt(x);
   if (s === 0n || s >= Point.Fn.ORDER) throw new Error('bad Zether scalar');
   const Y = encodePoint(curve, Point.BASE.multiply(s));
-  return { Y: hex(Y), UA: hex(keccak_256(Y)) };
+  return { Y: hex(Y), UA: hex(uaOf(zetherKind(curve), Y)) };
 }
 
 /** Same rule as the S3 prover's JSON API (`api.rs num32`): an integer in [0, 2^32 - 1], as a number
@@ -164,22 +169,28 @@ export function schnorrVerify(curve, Ybytes, msg, sig) {
   }
 }
 
-/** `c = keccak256(registry ‖ encodedY ‖ account)`; `account` = the subject account (R33 binding). */
-export function popMessage(curve, registry, Y, account) {
-  const reg = fromHex(registry);
-  const acct = fromHex(account);
-  if (reg.length !== 20 || acct.length !== 20) throw new Error('registry and account are addresses');
-  const y = fromHex(Y);
-  if (y.length !== 2 * curveOf(curve).coordLen) throw new Error('wrong point length');
-  return keccak_256(concatBytes(reg, y, acct));
+/**
+ * The `pop` of `UARegistry.register(kind, Y, pop, authRef, authPop)` (CTR-UA-07): Schnorr by `x` under the Zether tag
+ * over `uaMessage(kind, POP, popDigest)`, `popDigest` over the chain, its `chainUid`, the registry, the UA and `authRef`
+ * (0 = self; a non-zero `authRef` also needs the authority's own `authPop`, purpose `authref`). Never bound to a caller:
+ * anyone may relay the registration.
+ */
+export function zetherPop(curve, x, { chainId, chainUid, registry, authRef = new Uint8Array(32) }) {
+  // chainUid, registry, authRef: hex strings or bytes (ua.js)
+  const kind = zetherKind(curve);
+  const { Y, UA } = confPublic(curve, x);
+  const d = popDigest({ chainId, chainUid, registry, ua: UA, authRef });
+  const m = uaMessage(kind, purposeTag('pop'), d);
+  return { kind, Y, UA, popDigest: hex(d), uaMsg: hex(m), pop: hex(schnorrSign(curve, x, m)) };
 }
 
-/** Registry PoP: `schnorrPop` and `popSignature = abi.encode(bytes schnorrPop, bytes authPop="")`. */
-export function zetherPop(curve, x, { registry, account }) {
-  const { Y, UA } = confPublic(curve, x);
-  const c = popMessage(curve, registry, Y, account);
-  const pop = schnorrSign(curve, x, c);
-  return { Y, UA, c: hex(c), schnorrPop: hex(pop), popSignature: hex(abiEncode(['bytes', 'bytes'], [pop, new Uint8Array(0)])) };
+/**
+ * The `sig` of a self account's owner op (`zetherRollOverSigned`, `zetherSetRollOverMode`; `authRef = 0`):
+ * `abi.encode(bytes(""), Schnorr by x over uaMessage(kind, zether-owner, digest))`; the registry reads `Y` from its record.
+ */
+export function zetherOwnerAuth(curve, x, digest) {
+  const m = uaMessage(zetherKind(curve), purposeTag('zether-owner'), digest);
+  return hex(abiEncode(['bytes', 'bytes'], [new Uint8Array(0), schnorrSign(curve, x, m)]));
 }
 
 // ------------------------------------------------------------------ at rest
