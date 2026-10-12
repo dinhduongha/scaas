@@ -1,6 +1,35 @@
 # HANDOFF — scaas
 
-## Session 2026-10-12 (UA-2b merged) — resume here
+## Session 2026-10-12 (UA-2c in progress, paused) — resume here
+
+**State:** main has UA-2a and UA-2b merged and pushed (up to `3eb2e2b`); unpushed on main since then: the README
+scorecard was pushed (`8bbac31`), then `e26749a` (TODO: UA client dirs rename), `2d40f69` (plan UA-2c), `fd900ec`,
+`5cf6c35`, `a670d90` (TODO: scaas-node docker-compose) and this HANDOFF commit. **UA-2c is mid-execution**
+(subagent-driven): worktree `.claude/worktrees/ua2c`, branch `ua2c-groups` from `fd900ec`; Task 1 committed (`49a3aab`:
+`scaas-ua` signers behind feature `signers` — BIP-327 MuSig2 + bn254 port, ZF frost-core 3.0.0 FROST secp256k1 + the
+FROST(bn254, keccak256) ciphersuite — registry-side checks `src/groups.rs`, `smartcontracts/vectors/ua/groups.json`
+444,457 B sha256 `92348225…`, node cross-check `test/ua-groups.test.js`); its Opus review was stopped before finishing;
+Task 2 was stopped and its partial edits discarded (worktree clean).
+
+**Resume UA-2c:** in the worktree, read `.superpowers/sdd/2026-10-12-ua2c-groups/progress.md` (ledger, preflight table,
+the pause note) — then re-dispatch the Task 1 review (package `review-fd900ec..49a3aab.diff` is there) and the Task 2
+implementer (BASE `49a3aab`, brief `task-2-brief.md`), and continue Tasks 3–7, final review, merge (owner). Plan:
+`docs/superpowers/plans/2026-10-12-ua2c-groups.md` (task order fixed: 1 → 2 → 3 FROST → 4 MuSig2 + `library Bip340` → 5
+registry on groups.json → 6 binding lockfiles → 7 docs; rulings C1–C19). The scratch dry-run under `/tmp` may be gone after
+a reboot — the briefs are self-contained.
+
+**Owner decisions this session:** UA client dirs → flat `clients/ua-<lang>` (`ua-rs` keeps crate `scaas-ua`, `ua-cxx`,
+`ua-qt`, `ua-dart-frb`; ports unchanged) — one commit right after UA-2c merges; scaas-node docker-compose deferred until
+node streams P2 + P3 + P4 + P6 (P5 Odoo client not yet; the legacy pull path NODE-JOB-10 is decided to go after the
+per-chain push cutover, push is not built yet); README scorecard row e) Privacy & data is a chain advantage (Zether / PQZ,
+immutable records).
+
+**Known issue:** the binding crates' `Cargo.lock` (`scaas-ua-cxx`, `-qt`, `-frb/rust`) have been stale since UA-2a, so
+their `--locked` CI fails on main; UA-2c Task 6 refreshes them (+7 packages, no version moves, dry-run checked).
+
+**Next steps:** finish UA-2c → UA client dirs rename → UA-3 (deployment, Zether kinds). P6b can run beside.
+
+## Session 2026-10-12 (UA-2b merged)
 
 **State:** UA-2b merged into main and pushed (branch `ua2b-ed25519` kept); plan
 `docs/superpowers/plans/2026-10-12-ua2b-ed25519.md` (rulings B1–B9). Next UA-2c (MuSig2 KeyAgg with hints, FROST
