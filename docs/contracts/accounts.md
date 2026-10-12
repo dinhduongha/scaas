@@ -668,7 +668,7 @@ beats storage for small keys (a 64-byte key costs ~1 k gas in calldata vs 4.2 k 
 in v1.
 
 ```solidity
-interface IUARegistry {
+interface IUARegistry is IERC5267 {
     struct Record { uint16 kind; uint40 registeredAt; address keyPtr; }   // one slot; keyPtr ≠ 0 only for stored kinds
 
     event UARegistered(bytes32 indexed ua, uint16 indexed kind, bytes keyData, bytes32 authRef);
@@ -689,6 +689,7 @@ interface IUARegistry {
     function verifyCap(uint16 kind) external view returns (uint64);          // measured per chain
     function verifyBudget() external view returns (uint64);                  // UA_VERIFY_BUDGET of this chain
     function chainUid() external view returns (bytes32);                     // genesis hash, constructor immutable
+    function chainKeyHash() external view returns (bytes32);                 // keccak256("evm:" ‖ decimal(chainid)), at deploy
     function hederaNative() external view returns (bool);                    // Hedera profile: 0x0003 ∈ MEMBER
     function uaOf(uint16 kind, bytes calldata keyData) external pure returns (bytes32);
     function keyHashOf(uint16 kind, bytes calldata keyData) external pure returns (bytes32);   // 0 for structures
@@ -719,6 +720,9 @@ interface IUARegistry {
     /// by x (purpose zether-owner); else requireAuthorized(authRef, PURPOSE_ZETHER_AUTH, digest, auth).
     function requireZetherAuthorized(bytes32 ua, bytes32 digest, bytes calldata auth, bool zkCovered) external view;
 }
+// constructor (the UA-2a UARegistry): error UAConfig(uint16 kind) — kind outside the code's table, duplicate, verifier
+//   without code, cap 0 or above the budget, a keyHash group the predecessor enables, a predecessor of another
+//   chain/profile (kind 0 for the non-kind arguments)
 // UAAuth typehash = keccak256("UAAuth(bytes32 ua,bytes32 purpose,bytes32 digest)")
 // domain          = EIP712Domain("SCaaS UARegistry", "<generation, decimal>", block.chainid, address(this),
 //                                bytes32 salt = chainUid)                 // ERC-5267 fields = 0x1f
@@ -740,14 +744,18 @@ it. The v3 token's own native path keeps its `UAMetaTransaction` typed data.
 4. Single-key kinds: `kh = keyHashOf(kind, keyData)`; `keyOwner[kh] == 0` here and in the predecessor — `UAKeyInUse`.
    Structures: every member's kind ∈ MEMBER of this registry's profile (`0x0003` only if `hederaNative()`) and the member
    is native or `kindOf(member) == memberKind` (here or in the predecessor) — `UAMemberUnknown`; and the worst-case
-   verify gas of a minimal authorizing set — Σ of the `c` largest member `verifyCap`s plus a fixed per-member overhead,
-   `c` = the number of lightest-weight members needed to reach the threshold — is ≤ `verifyBudget()` — `UAKeyData`. The
-   bound is sound because verification stops at the threshold, so no accepted set has more than `c` members.
+   verify gas of a minimal authorizing set — Σ of the `c` largest member `verifyCap`s plus a fixed per-member overhead
+   (`MSIG_MEMBER_GAS`), `c` = the number of lightest-weight members needed to reach the threshold — is ≤
+   `verifyBudget()` — `UAKeyData`. A member whose kind this generation does not enable is checked by the predecessor,
+   which holds `cap / 63 + 5 k` again inside the call: it counts with that hold. The bound is sound because
+   verification stops at the threshold, so no accepted set has more than `c` members (T-GAS authorizes an `msig`
+   registered exactly at the budget with `verifyBudget` gas).
 5. Zether kinds: `authRef` is 0, a native id, or a registered SIGNING UA; a BLS UA on the curve of `Y` is refused; for
    `pqz-mlwe` only PQ `authRef`s — `UAAuthRef`. Other kinds: `authRef == 0` and `authPop` empty — `UAAuthRef`.
 6. PoP: verify `pop` over `uaMessage(kind, POP_TAG, popDigest(ua, authRef))` with the kind's verifier (MuSig2: the KeyAgg
    check, then one group signature; FROST: the DKG PoKs and `Y = Σ C_i0`, then one group signature; structures: **no**
-   PoP of their own — members proved theirs; Zether: Schnorr by `x` under the Zether tag) — `UAPoP`.
+   PoP of their own — members proved theirs, a non-empty `pop` is refused; Zether: Schnorr by `x` under the Zether
+   tag) — `UAPoP`. The PoP goes through `IUAPopVerifier.verifyPop` (below).
 7. `authRef ≠ 0`: `requireAuthorized(authRef, PURPOSE_AUTHREF, popDigest(ua, authRef), authPop)` — the authority
    consents to this exact `(ua, authRef)` on this chain and registry — `UAUnauthorized(authRef)`.
 8. Store `Record{kind, uint40(block.timestamp), keyPtr}` (stored kinds: `keyPtr = SSTORE2.write(vk)`, `vk` = PQ `pk`,
@@ -778,9 +786,15 @@ Verifiers: per-kind verifiers are stateless contracts whose addresses are immuta
 `staticcall`s them with the kind's measured cap. They share one interface:
 
 ```solidity
+// src/ua/IUAVerifier.sol
 interface IUAKindVerifier {
     /// keyData already matched against the id (or vk read from keyPtr) by the registry; message = ua_msg.
     function verify(bytes calldata keyData, bytes32 message, bytes calldata sig) external view returns (bool);
+}
+interface IUAPopVerifier is IUAKindVerifier {
+    /// message = uaMessage(kind, PURPOSE_POP, popDigest(...)); the BLS min-sig kinds check their PoP domain here
+    /// (DST_POP / the POP label), every other kind as verify.
+    function verifyPop(bytes calldata keyData, bytes32 message, bytes calldata sig) external view returns (bool);
 }
 ```
 
@@ -797,8 +811,8 @@ gas). Generation 2 takes `predecessor = gen1` and reads it for `UAAlreadyRegiste
   (verifier 0) may be enabled in gen 2 if its group is also new. Then no key can register under two kinds of one group
   across generations, and no Zether UA can get two records with different `authRef`s.
 - **Structures (`msig`) may be re-enabled in gen 2**: a structure record is a pure function of its key data (no keyHash,
-  no `authRef`), so the same id registered in both generations is the same record. A gen-1 `msig` can only name gen-1
-  members; an `msig` with a gen-2 member registers in gen 2.
+  no `authRef`), so the same id registered in both generations has the same `kind` and `keyPtr` (each generation keeps
+  its own `registeredAt`). A gen-1 `msig` can only name gen-1 members; an `msig` with a gen-2 member registers in gen 2.
 - **Chain 7622's gen 1 deploys after the PQ signing kinds**, with them and `pqz-mlwe` together, so `pqz-mlwe`'s PQ
   `authRef` is visible to it. On other chains PQ signing kinds may arrive as gen 2 (their groups are new).
 
@@ -843,7 +857,7 @@ native   : ECDSA / 1271 over uaAuthDigest(ua, purposeTag, digest), classified by
 | `schnorr-bls12381` | `R ‖ z` (160) | as above on BLS12-381 G1 |
 | `bls12381-minsig` | G1 sig (128) | `HashToCurve.hashToG1(ua_msg, DST)` with `DST_SIG = "SCAAS-UA-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_SIG_"`, PoP uses `…_POP_`; sig in subgroup, ≠ O |
 | `bls-bn254-minsig` | G1 sig (64) | `mapToG1("SCAAS-UA-BLS-BN254-SIG-V1" ‖ ua_msg)` (POP label for PoP); pairing `0x08` |
-| `msig` | `abi.encode(MemberSig[] sigs)`, `MemberSig{uint16 index; bytes keyData; bytes sig}` with strictly increasing `index`; the structure's key data is `auth.keyData` (not repeated) | for each: member `kind,id` from the structure; native ⇒ ECDSA/1271 over `uaAuthDigest(id, PURPOSE_MEMBER, member_digest)`; derived ⇒ `keccak(TAG(kind) ‖ keyData) == id` (stored kinds: `vk` from the member's `keyPtr`; no `kindOf` per member at verify: records are immutable and were checked at registration), verifier over `uaMessage(kind, PURPOSE_MEMBER, member_digest)`; `member_digest = keccak256(ua ‖ ua_msg)`; **stops at the threshold**: a `MemberSig` after Σ weight ≥ threshold ⇒ `UAUnauthorized` (keeps register step 4's bound sound) |
+| `msig` | `abi.encode(MemberSig[] sigs)`, `MemberSig{uint16 index; bytes keyData; bytes sig}` with strictly increasing `index`; the structure's key data is `auth.keyData` (not repeated) | for each: member `kind,id` from the structure; native ⇒ `MemberSig.keyData` empty (else `UAUnauthorized`), ECDSA/1271 over `uaAuthDigest(id, PURPOSE_MEMBER, member_digest)`; derived ⇒ `keccak(TAG(kind) ‖ keyData) == id` (stored kinds: `vk` from the member's `keyPtr`; no `kindOf` per member at verify: records are immutable and were checked at registration), verifier over `uaMessage(kind, PURPOSE_MEMBER, member_digest)`; `member_digest = keccak256(ua ‖ ua_msg)`; **stops at the threshold**: a `MemberSig` after Σ weight ≥ threshold ⇒ `UAUnauthorized` (keeps register step 4's bound sound); an `auth` or `MemberSig[]` that does not ABI-decode reverts without data (fails closed) |
 | `mldsa*` / `fndsa512` / `slhdsa128s` | raw signature | ML-DSA: an EIP-8355 precompile if probed, else Solidity; FN-DSA, SLH-DSA (on SHA-256 `0x02`): Solidity; `pk` from `keyPtr` (EXTCODECOPY); ML-DSA and SLH-DSA verify `pq_msg` with the empty context, Falcon `ua_msg` ([CTR-UA-23](#CTR-UA-23); verifiers BUILT, P6a) |
 | `pqz-mlwe` | as [pq-zether.md](pq-zether.md) | proofs via the PQZ precompile; authorization via its PQ `authRef` |
 | `zether-*` (self, owner ops) | `R ‖ z` | Zether Schnorr with tag `SCAAS-ZETHER-SCHNORR-V1` over `ua_msg` — never the UA Schnorr tag, so a Zether key never produces a `schnorr-*` signature |
@@ -1189,14 +1203,16 @@ Verification per check (execution gas, EVM). Caps are **starting values**; the d
 measured worst case (T-GAS), published in the chain profile. Measured (UA-2a, forge, osaka;
 `test/ua/UAGas.t.sol` and the verifier tests): the registry adds ~6 k per derived check; `register` costs 77 k–273 k
 per kind, and a `bls-bn254-minsig` registration needs ≥ 450 k call gas because of the 63/64 holds; `msig` adds
-`MSIG_MEMBER_GAS` = 35 k per member to the structure bound.
+`MSIG_MEMBER_GAS` = 35 k per member to the structure bound (the worst measured member overhead, cold, is 20.0 k, plus
+the caller's hold for a 400 k cap, 11.3 k), and a member handed to gen 1 adds gen 1's own hold, `cap / 63 + 5 k`; an
+`msig` registered exactly at `verifyBudget` authorizes with `verifyBudget` gas (T-GAS, cold under `--isolate`).
 
 | Kind | Calldata (key data + sig) | Verify | Registry overhead | Cap |
 |---|---|---|---|---|
 | native EOA | 65 | ~3.5 k | none (token-local) | — |
 | native 1271 | per account | per account | — | 50 k / 400 k (registry: by the immutable `SmartKeyAccount` codehash too) |
 | native behind the registry (`UAAuth`) | 65 | ~3.5 k + EIP-712 hash ~1 k | ~5 k | 50 k / 400 k for 1271 |
-| `webauthn-p256` | 96 + ~300 | 24.7 k with P256VERIFY / ~260 k Solidity (measured; invalid signatures cost the same) | ~6 k (measured) | 400 k |
+| `webauthn-p256` | 96 + ~300 | 24.7 k with P256VERIFY / ~267 k Solidity (measured; invalid signatures cost the same) | ~6 k (measured) | 400 k |
 | `p256` | 64 + 64 | 10.6 k with P256VERIFY / ~250 k Solidity (measured) | ~6 k (measured) | 400 k |
 | `bip340` | 32 + 64 | 11.2 k osaka / 8.5 k prague (measured; one `MODEXP`) | ~6 k (measured) | 50 k |
 | `musig2-secp256k1` | 64 (stored `Q`) | as `bip340` | ~5 k + EXTCODECOPY ~2.6 k | 50 k |
@@ -1204,18 +1220,19 @@ per kind, and a `bls-bn254-minsig` registration needs ≥ 450 k call gas because
 | `schnorr-bn254` | 64 + 96 | ~29 k (measured, bounded self-call; a malformed point ~5 k) | ~6 k (measured) | 50 k |
 | `musig2-bn254`, `frost-bn254` | 96 (stored) | as `schnorr-bn254` | ~5 k + EXTCODECOPY ~2.6 k | 50 k |
 | `schnorr-bls12381` | 128 + 160 | ~41 k (measured, bounded self-call) | ~6 k (measured) | 70 k |
-| `bls-bn254-minsig` | 128 + 64 | ~125 k (measured; try-and-increment map, `CHECK_GAS` 330 k) | ~27 k (measured) | 345 k |
+| `bls-bn254-minsig` | 128 + 64 | ~125–146 k (measured; message-dependent try-and-increment map iterations, `CHECK_GAS` 330 k) | ~6 k (measured) | 345 k |
 | `bls12381-minsig` | 256 + 128 | ~159 k (measured, bounded self-call) | ~6 k (measured) | 200 k |
-| `msig` k-of-n | 4 + 36n + Σ member | Σ member verifies (≤ `c` members, stop at threshold) + ~2 k; stored-kind members + EXTCODECOPY | ~5 k | Σ of the `c` largest member caps ≤ `verifyBudget` |
+| `msig` k-of-n | 4 + 36n + Σ member | Σ member verifies (≤ `c` members, stop at threshold) + ~2 k; stored-kind members + EXTCODECOPY | ~5 k | Σ of the `c` largest member caps + `c` × `MSIG_MEMBER_GAS` ≤ `verifyBudget` |
 | `ed25519` | 32 + 64 | ~0.3–1.2 M (Solidity, SHA-512 dominates) | ~5 k | 1.5 M |
 | `mldsa44` | 2 420 sig | EIP-8355-class precompile / 11.4 M Solidity (4.1 M expanded key) | ~5 k + EXTCODECOPY ~3 k | measured; ≈ 20 k with a precompile |
 | `mldsa65` | 3 309 sig | 9 k-class precompile / 18.9 M Solidity (5.8 M expanded key) | ~5 k + EXTCODECOPY ~3 k | measured: ≈ 20 k (chain 7622), Solidity worst case elsewhere (≤ 50 % of budget on public chains) |
 | `fndsa512` | 666 sig | 2.3 M Solidity (measured) | ~5 k + EXTCODECOPY ~1.5 k | measured, as `mldsa65` |
 | `zether-*` | — (proof path) | unchanged ([zether.md](zether.md#gas-measured)) | ~5 k (`kindOf` + `authRef`) | — |
 
-The `bls12381-minsig` figure is the measured BLS12-381 min-sig verification on the private chain with EIP-2537 live
-(precompile costs: `MAP_FP_TO_G1` (0x10) × 2 = 11,682; `G1ADD` (0x0b) ~1,100; `expand_message_xmd` + 2 × reduced MODEXP
-~4,000 (estimate); `PAIRING_CHECK` (0x0f) with k = 2 = 103,959 (measured); total ≈ 120 k). That does not contradict the
+The `bls12381-minsig` figure is ~159 k as measured in UA-2a (forge, the verifier with its bounded self-call). An earlier
+estimate from the private chain with EIP-2537 live gave ≈ 120 k (precompile costs: `MAP_FP_TO_G1` (0x10) × 2 = 11,682;
+`G1ADD` (0x0b) ~1,100; `expand_message_xmd` + 2 × reduced MODEXP ~4,000 (estimate); `PAIRING_CHECK` (0x0f) with k = 2
+= 103,959 (measured)). That does not contradict the
 Zether measurement that BLS12-381 is ~2 % more expensive at Bulletproofs-scale MSM (k = 277): pairing and MSM are
 different operations. Measured on the private chain (2026-08-31, EIP-2537 live): the BLS12-381 pairing with k = 2 costs 103,959 gas, **less**
 than the bn254 pairing (114,091), so `bls-bn254-minsig` exists only for chains without EIP-2537. Final EIP-2537
@@ -1231,12 +1248,14 @@ the subgroup, so aggregating keys with plain `G2ADD`s is unprotected: registrati
 
 Registration (execution gas, bn254 base):
 
-| Kind | Storage | PoP | Total (est.) |
+| Kind | Storage | PoP | Total (measured: UA-2a `register`, with P256VERIFY; else est.) |
 |---|---|---|---|
-| `webauthn-p256` / `p256` | record + keyOwner = 2 × 22.1 k | 7–200 k | ~55 k – 250 k |
-| `bip340`, `schnorr-bn254` | 2 × 22.1 k | 5–13 k | ~55–65 k |
-| `bls12381-minsig` | 2 × 22.1 k + G2MSM 22.5 k | ~120 k | ~190 k |
-| `msig` (n members) | 1 × 22.1 k | none (n member lookups, 2.6 k each) | ~30 k + 2.6 k·n + event |
+| `webauthn-p256` / `p256` | record + keyOwner = 2 × 22.1 k | 25 k / 11 k with P256VERIFY; ~267 k / ~250 k Solidity | 93,009 / 79,574 (+ ~240 k on Solidity P-256) |
+| `bip340` / `schnorr-bn254` | 2 × 22.1 k | 11 k / 29 k | 76,794 / 90,052 |
+| `schnorr-bls12381` | 2 × 22.1 k | ~41 k | 115,853 |
+| `bls12381-minsig` | 2 × 22.1 k + G2MSM 22.5 k | ~159 k | 245,960 |
+| `bls-bn254-minsig` | 2 × 22.1 k + the G2 subgroup pairing check | ~125–146 k | 272,706 (needs ≥ 450 k call gas: the 63/64 holds) |
+| `msig` (n members) | 1 × 22.1 k | none (n member lookups `kindOf`, 2.6 k each, + the step-4 bound) | 51,162 for 4 members; ~30 k + 2.6 k·n + event |
 | `musig2-secp256k1` (n) | record + keyOwner + SSTORE2(33 B) ≈ 2 × 22.1 k + ~40 k | KeyAgg: 2 SHA-256 + 1 `ecrecover` hint check + 1 affine add per member (~10 k·n) + one BIP-340 | ~0.1 M + 10 k·n |
 | `musig2-bn254` (n) | as above, SSTORE2(64 B) | n `ECMUL` + `ECADD` (~6.2 k·n) + one scaas Schnorr | ~0.1 M + 7 k·n |
 | `frost-secp256k1` (t, n) | as above | n PoKs (`MODEXP` lift + `ecrecover` + `hash_to_field`, ~15 k each) + n affine adds + one FROST verify; calldata ~33·t·n + 98·n B | ~0.1 M + 15 k·n + calldata |
@@ -1303,7 +1322,7 @@ EVM tests:
 | T-REG-2 | every negative vector reverts with its error |
 | T-REG-3 | the same `register` calldata from two senders ⇒ identical storage diff |
 | T-REG-3b | the same `pop` with a different `authRef` ⇒ `UAPoP`; a valid `pop` for `authRef` without the authority's `authPop` ⇒ `UAUnauthorized(authRef)`; non-Zether with `authRef ≠ 0` or non-empty `authPop` ⇒ `UAAuthRef` |
-| T-REG-4 | a gen-2 registry sees gen-1 records; `UAKeyInUse` across generations; gen 2 refuses (`UAKindDisabled`) every kind or keyHash group gen 1 enables, so registering in gen 1 after gen 2 for a shared group is impossible by construction; `msig` re-enabled in gen 2 gives an identical record; chain-7622 `pqz-mlwe` with an `mldsa65` `authRef` in gen 1 |
+| T-REG-4 | a gen-2 registry sees gen-1 records; `UAKeyInUse` across generations; gen 2 refuses (`UAKindDisabled`) every kind or keyHash group gen 1 enables, so registering in gen 1 after gen 2 for a shared group is impossible by construction; `msig` re-enabled in gen 2 gives the same `kind` and `keyPtr` (its own `registeredAt`); chain-7622 `pqz-mlwe` with an `mldsa65` `authRef` in gen 1 |
 | T-REG-5 | invariants: registry balance 0, no record ever changes, `uaOf(record.keyData) == ua` |
 | T-REG-6 | MuSig2: wrong `Q`, a bad hint, unsorted keys ⇒ `UAKeyData`/`UAPoP`; FROST: one bad PoK, `Y ≠ Σ C_i0`, a commitment vector of the wrong length ⇒ refused; the attack of naming one's own key as `Q` with the board's list ⇒ refused |
 | T-AUTH-1 | `requireAuthorized` per kind × purpose; a wrong purpose fails; a wrong kind's tag fails |
