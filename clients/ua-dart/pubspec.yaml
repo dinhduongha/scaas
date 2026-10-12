@@ -1,0 +1,10 @@
+name: scaas_ua
+description: SCaaS Universal Account identity layer (kind table, ids, keyHash, ua_msg, digests, key-data validation) in pure Dart. UNAUDITED.
+version: 0.1.0
+publish_to: none
+
+environment:
+  sdk: ">=3.12.2 <4.0.0"
+
+dev_dependencies:
+  test: 1.26.3

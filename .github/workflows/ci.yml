@@ -248,3 +248,22 @@ jobs:
       - run: dart test
       # optional drift guard: cargo install flutter_rust_bridge_codegen --version 2.13.0 --locked
       #   && flutter_rust_bridge_codegen generate && git diff --exit-code
+
+  ua-dart:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dart-lang/setup-dart@v1
+        with:
+          sdk: 3.12.2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: dart pub get
+        working-directory: clients/ua-dart
+      - run: dart analyze
+        working-directory: clients/ua-dart
+      - run: dart test
+        working-directory: clients/ua-dart
+      - run: dart test -p node
+        working-directory: clients/ua-dart
