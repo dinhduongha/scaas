@@ -62,9 +62,9 @@ library UAKinds {
     error UAVerifyGas();
 
     // Gas caps for the precompile calls: 2× the EIP-2537 / EIP-1108 prices for one pair or one point.
-    uint256 private constant G1MSM_GAS = 24_000;
-    uint256 private constant G2MSM_GAS = 45_000;
-    uint256 private constant PAIRING_GAS = 158_000;
+    uint256 internal constant G1MSM_GAS = 24_000;
+    uint256 internal constant G2MSM_GAS = 45_000;
+    uint256 internal constant PAIRING_GAS = 158_000;
 
     uint256 private constant SECP_P = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEFFFFFC2F;
     uint256 private constant SECP_N = 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141;

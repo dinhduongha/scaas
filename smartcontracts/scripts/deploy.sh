@@ -6,7 +6,9 @@
 #                            which is 0 past block 256, so a long-running chain needs it), DEPLOY_SALT? (CREATE2 salt);
 #                            FOUNDRY_PROFILE=private7622|gnosis|celo|bsc|polygon|base (all osaka). Needs the deterministic
 #                            CREATE2 deployer on the chain (NET-EVM-05). Writes evm/deployments/<chainid>.json (the
-#                            previous file is put back if the broadcast fails). DEPLOY_ZETHER=1 (dev chains only) adds
+#                            previous file is put back if the broadcast fails). Every chain gets the UA registry
+#                            (`ua_registry`; its EIP-2537 / bn254-G2 kinds by an eth_call precompile probe, the Zether
+#                            kinds on dev chains only). DEPLOY_ZETHER=1 (dev chains only) adds
 #                            the Zether stack and the forge flags it needs: --code-size-limit 65536
 #                            --gas-estimate-multiplier 105 (the anvil needs --code-size-limit 65536 too).
 #   hedera  <relay-url>      same, script/hedera/DeployHedera.s.sol --slow (writes deployments/hedera-<chainid>.json)
