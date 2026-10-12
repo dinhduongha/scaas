@@ -31,7 +31,7 @@ Passkeys can serve either way: as a `webauthn-p256` Universal Account, or as a k
    - 1.10 [EIP-7702 and chain identity](#110-eip-7702-and-chain-identity)
    - 1.11 [Credentials (optional)](#111-credentials-optional)
    - 1.12 [Touchpoints](#112-touchpoints)
-   - 1.13 [Migration from the built registry](#113-migration-from-the-built-registry)
+   - 1.13 [Migration from the legacy registry](#113-migration-from-the-legacy-registry)
    - 1.14 [Security](#114-security)
    - 1.15 [Gas and calldata (estimates; measured numbers replace them in `test/ua/UAGas.t.sol`)](#115-gas-and-calldata-estimates-measured-numbers-replace-them-in-testuauagastsol)
    - 1.16 [Vectors and tests](#116-vectors-and-tests)
@@ -502,7 +502,7 @@ EVM Zether (the `*_ZETHER` kinds, built P3, re-pointed at migration):
 | views `registered`, `accountState`, `sendCounter` | `ua` | Z | — |
 
 `authSig` for Z-auth: `0x` with a proof and `authRef = 0`. Otherwise it is what `requireAuthorized` takes for `authRef`
-(purpose `zether-auth`): a native `authRef` takes its signature raw (ECDSA 65 bytes, or the ERC-1271 bytes) over the
+(purpose `zether-auth`): a native `authRef` takes its signature raw (ECDSA, 65-byte or 64-byte compact, or the ERC-1271 bytes) over the
 EIP-712 `UAAuth(authRef, PURPOSE_ZETHER_AUTH, authDigest)`, never the raw `authDigest`; a derived `authRef` takes
 `abi.encode(bytes authKeyData, bytes sig)`. The roll-over and mode digests (`zkCovered = false`) take purpose
 `zether-owner` whoever signs (the purpose names the digest, CTR-UA-10), with the same encoding by `authRef`: with
@@ -519,7 +519,7 @@ account or a registered SIGNING UA. `authRef` is covered by the PoP and co-signe
 `[x]G2` would make DDH on G1 decidable). The post-quantum Zether kind `pqz-mlwe` (`0x0142`) tightens this: its `authRef`
 must be an `mldsa*`/`fndsa512` UA or an `msig` whose non-PQ members' weight is below the threshold; `0`, native ids and
 classical-only kinds are refused ([CTR-PQZ-12](pq-zether.md#CTR-PQZ-12)). This supersedes the eight `AuthScheme` values
-and `link_eth`/`links` of the built registry. The token derives the receiver UA from `Y` in the payload with one keccak
+and `link_eth`/`links` of the legacy registry. The token derives the receiver UA from `Y` in the payload with one keccak
 and no lookup; spend authority stays separate from decryption (`survivesEncKeyLeak` for `authRef ≠ 0`). `authRef`
 cannot rotate ([CTR-UA-13](#CTR-UA-13)); a timelocked `rotateZetherAuth` was the rejected alternative.
 
@@ -1051,7 +1051,7 @@ destruction.
   `webauthn-p256` UA and registers it gaslessly ([clients/app.md](../clients/app.md)).
 - **ERP**: UAs are stored as addresses of a new kind, never as off-chain policy ([integration.md](../integration.md#accounts)).
 
-### 1.13 Migration from the built registry
+### 1.13 Migration from the legacy registry
 
 <a id="migration"></a>
 <a id="CTR-UA-22"></a>**CTR-UA-22** — **Migration is breaking, dev chains only**: `UniversalAccountRegistry`,
@@ -1136,8 +1136,8 @@ FROST and MuSig2 share one Schnorr verification path (`z·G == R + c·P`, O(1) g
 on the same curve as the ElGamal key is rejected because publishing `[x]G2` makes DDH decidable on G1. BLS keys at
 infinity are rejected ([CTR-UA-01](#CTR-UA-01)). Authorization digest `keccak256("SCAAS-ZETHER-AUTH-V1" ‖
 keccak256(statement))`: every transfer and burn needs **both** the proof (knowledge of `x`) **and** the scheme
-signature, so a leaked `x` of a non-`SELF_SCHNORR` account is a read-only breach (`survivesEncKeyLeak`). The built PoP
-does not bind an authority: register only from an account you alone control until the UA registry replaces it. Scheme
+signature, so a leaked `x` of a non-`SELF_SCHNORR` account is a read-only breach (`survivesEncKeyLeak`). The legacy PoP
+did not bind an authority (the UA registry replaced it in UA-3, which binds `authRef`). Scheme
 mapping at migration: the table above.
 
 ```solidity
@@ -1411,7 +1411,7 @@ exists today on EVM and Soroban only; the other families verify one digest per a
 preimages), and each operation carries `(assertion, proof)`: the verifier checks the proof (digest → root), then the
 assertion over the root.
 
-On EVM the subject account is the built registry's `AuthScheme.SMART_ACCOUNT_1271 = 7` kind of
+On EVM the subject account is the legacy registry's (`legacy/ua3/`) `AuthScheme.SMART_ACCOUNT_1271 = 7` kind of
 account, holding several passkeys `(qx, qy, rpIdHash)`; key types are `P256_WEBAUTHN(qx,qy,rpIdHash)` or
 `SECP256K1(address)`; the account signature was first specified as `abi.encode(keyIndex, payload)` and is now
 `abi.encode(keyIndex, bytes32[] proof, bytes sig)` for both key types. Key lifecycle: `addKey`/`removeKey`/`setGuardian`

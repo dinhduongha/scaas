@@ -785,7 +785,7 @@ any signing scalar. BIP-32/SLIP-10 have no bn254 or BLS12-381, so derivation is 
   changing the verifier's curve ⇒ another tree ⇒ no scalar reuse.
 - The audit view/disclosure key (`ITransferDisclosure`): `<use> = 8`, on both trees.
 - Short forms: `m/12381/<coin>/<acct>/7` and `m/254/<coin>/<acct>/7` (`m/254/…`).
-- `y = g^x` (G1 of the curve); in the built registry `UA = keccak256(encodedY)` (`ZetherTypes.toUA`: bn254 64 bytes
+- `y = g^x` (G1 of the curve); `UA = keccak256(TAG(kind) ‖ encodedY)` (`ZetherTypes.toUA`, tagged; `encodedY`: bn254 64 bytes
   `x‖y`, BLS12-381 128 bytes per EIP-2537); the proof of possession now binds chain, registry, UA and `authRef`
   ([CTR-UA-07](../contracts/accounts.md#CTR-UA-07); an earlier Schnorr PoP over `keccak256(registry ‖ encodedY ‖
   account)` bound to the caller account is replaced; the built dev registry's challenge has no chain id,
