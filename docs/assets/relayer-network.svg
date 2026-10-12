@@ -1,0 +1,118 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="630" viewBox="0 0 960 630" role="img" aria-labelledby="t d">
+  <title id="t">Open relayer network</title>
+  <desc id="d">Clients post subject-signed intents to the gateway of any relayer. Admitted partners pull each other's intents over the bus (HTTPS mTLS or QUIC, pinned peer keys); the origin signs hub.sig and a round-robin exclusive window. The open mesh exchanges public intents over libp2p gossipsub; each hop validates before it forwards, and after the window any relayer may race to land. An intent reaches gossip only from its origin, on a public chain, by opt-in; private-chain intents go only from the origin to admitted private peers. Each relayer's submit lanes sign and pay gas on the chains; the intent's fee goes to the lander and is the only reward. Envelope, hub.sig and acceptance library and the EVM gateway are built; bus, gossip and scheduler are specified.</desc>
+  <defs>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0 0 L10 5 L0 10 z" fill="#57606a"/>
+    </marker>
+    <style>
+      text { font-family: system-ui, -apple-system, "Segoe UI", Helvetica, Arial, sans-serif; fill: #1f2328; }
+      .h { font-size: 22px; font-weight: 700; }
+      .sub { font-size: 13px; fill: #57606a; }
+      .tier { font-size: 15px; font-weight: 700; }
+      .tiers { font-size: 12px; fill: #57606a; }
+      .b { font-size: 13.5px; font-weight: 700; }
+      .s { font-size: 11px; fill: #424a53; }
+      .lab { font-size: 11.5px; fill: #424a53; }
+      .chip { font-size: 10px; font-weight: 700; }
+      .flow { stroke: #57606a; stroke-width: 1.5; fill: none; }
+      .back { stroke: #57606a; stroke-width: 1.4; fill: none; stroke-dasharray: 5 4; }
+      .bus { stroke: #b45309; stroke-width: 1.8; fill: none; }
+      .gsp { stroke: #15803d; stroke-width: 1.8; fill: none; stroke-dasharray: 6 4; }
+      .pa { fill: #ffffff; stroke: #d97706; }
+      .po { fill: #ffffff; stroke: #16a34a; }
+    </style>
+  </defs>
+
+  <rect x="0.5" y="0.5" width="959" height="629" rx="16" fill="#f8fafc" stroke="#d0d7de"/>
+  <text class="h" x="24" y="40">Open relayer network</text>
+  <text class="sub" x="24" y="61">Relayers share signed intents; any of them may land one; the intent's own fee is the only reward</text>
+
+  <!-- clients -->
+  <rect x="16" y="80" width="928" height="60" rx="12" fill="#dbeafe" stroke="#3b82f6"/>
+  <text class="tier" x="30" y="106">Clients</text>
+  <text class="tiers" x="30" y="126">subjects sign</text>
+  <text class="b" x="190" y="106">Wallets, apps, AI agents, ERPs, partners</text>
+  <text class="s" x="190" y="126">each posts a subject-signed intent to the gateway (door A) of any relayer; no relayer can forge or change it</text>
+
+  <!-- admitted partners -->
+  <rect x="16" y="198" width="440" height="280" rx="12" fill="#fef3c7" stroke="#d97706"/>
+  <text class="tier" x="200" y="222">Admitted partners</text>
+  <rect x="378" y="210" width="70" height="16" rx="8" fill="#ddf4ff"/><text class="chip" x="413" y="222" text-anchor="middle" fill="#0969da">SPECIFIED</text>
+  <text class="tiers" x="200" y="240">pull bus: mTLS or QUIC, pinned keys</text>
+  <rect class="pa" x="36" y="254" width="140" height="64" rx="8"/>
+  <text class="b" x="106" y="280" text-anchor="middle">Relayer A</text>
+  <text class="s" x="106" y="298" text-anchor="middle">origin of this intent</text>
+  <rect class="pa" x="296" y="254" width="140" height="64" rx="8"/>
+  <text class="b" x="366" y="280" text-anchor="middle">Relayer B</text>
+  <text class="s" x="366" y="298" text-anchor="middle">partner</text>
+  <rect class="pa" x="166" y="352" width="140" height="64" rx="8"/>
+  <text class="b" x="236" y="378" text-anchor="middle">Relayer C</text>
+  <text class="s" x="236" y="396" text-anchor="middle">private-class peer</text>
+  <line class="bus" x1="180" y1="286" x2="292" y2="286" marker-start="url(#ah)" marker-end="url(#ah)"/>
+  <text class="s" x="236" y="278" text-anchor="middle">bus pull</text>
+  <text class="s" x="236" y="302" text-anchor="middle">exclusive: B, 7 s</text>
+  <line class="bus" x1="124" y1="321" x2="190" y2="349" marker-start="url(#ah)" marker-end="url(#ah)"/>
+  <line class="bus" x1="348" y1="321" x2="282" y2="349" marker-start="url(#ah)" marker-end="url(#ah)"/>
+  <text class="s" x="30" y="438">Origin signs hub.sig and a round-robin exclusive window;</text>
+  <text class="s" x="30" y="453">exclusivity is a courtesy, not a lock.</text>
+  <text class="s" x="30" y="468">Private-chain intents: origin to admitted private peers only.</text>
+
+  <!-- bridge -->
+  <line class="gsp" x1="458" y1="330" x2="502" y2="330" marker-end="url(#ah)"/>
+  <text class="chip" x="480" y="322" text-anchor="middle" fill="#424a53">opt-in</text>
+
+  <!-- open mesh -->
+  <rect x="504" y="198" width="440" height="280" rx="12" fill="#dcfce7" stroke="#16a34a"/>
+  <text class="tier" x="688" y="222">Open mesh</text>
+  <rect x="866" y="210" width="70" height="16" rx="8" fill="#ddf4ff"/><text class="chip" x="901" y="222" text-anchor="middle" fill="#0969da">SPECIFIED</text>
+  <text class="tiers" x="688" y="240">libp2p gossipsub, scored peers</text>
+  <rect class="po" x="524" y="254" width="140" height="64" rx="8"/>
+  <text class="b" x="594" y="280" text-anchor="middle">Relayer D</text>
+  <text class="s" x="594" y="298" text-anchor="middle">open relayer</text>
+  <rect class="po" x="784" y="254" width="140" height="64" rx="8"/>
+  <text class="b" x="854" y="280" text-anchor="middle">Relayer E</text>
+  <text class="s" x="854" y="298" text-anchor="middle">open relayer</text>
+  <rect class="po" x="654" y="352" width="140" height="64" rx="8"/>
+  <text class="b" x="724" y="378" text-anchor="middle">Relayer F</text>
+  <text class="s" x="724" y="396" text-anchor="middle">open relayer</text>
+  <line class="gsp" x1="668" y1="286" x2="780" y2="286" marker-start="url(#ah)" marker-end="url(#ah)"/>
+  <text class="s" x="724" y="278" text-anchor="middle">gossip</text>
+  <text class="s" x="724" y="302" text-anchor="middle">validate, forward</text>
+  <line class="gsp" x1="612" y1="321" x2="678" y2="349" marker-start="url(#ah)" marker-end="url(#ah)"/>
+  <line class="gsp" x1="836" y1="321" x2="770" y2="349" marker-start="url(#ah)" marker-end="url(#ah)"/>
+  <text class="s" x="518" y="438">Each hop validates before it forwards; after the window</text>
+  <text class="s" x="518" y="453">any relayer may race to land. Gossip gets an intent only</text>
+  <text class="s" x="518" y="468">from its origin, on a public chain, by opt-in.</text>
+
+  <!-- intake -->
+  <line class="flow" x1="106" y1="141" x2="106" y2="252" marker-end="url(#ah)"/>
+  <text class="lab" x="118" y="172">signed intent to its gateway</text>
+  <line class="flow" x1="594" y1="141" x2="594" y2="252" marker-end="url(#ah)"/>
+  <text class="lab" x="606" y="172">or to any other relayer</text>
+
+  <rect x="16" y="510" width="928" height="64" rx="12" fill="#ede9fe" stroke="#7c3aed"/>
+  <text class="tier" x="30" y="538">Smart chains</text>
+  <text class="tiers" x="30" y="556">lanes hold gas only</text>
+  <rect x="190" y="518" width="250" height="48" rx="8" fill="#ffffff" stroke="#7c3aed"/>
+  <text class="b" x="315" y="538" text-anchor="middle">Private chain</text>
+  <text class="s" x="315" y="556" text-anchor="middle">served by admitted peers only</text>
+  <rect x="470" y="518" width="460" height="48" rx="8" fill="#ffffff" stroke="#7c3aed"/>
+  <text class="b" x="700" y="538" text-anchor="middle">Public chains</text>
+  <text class="s" x="700" y="556" text-anchor="middle">the first to land earns the fee; the others simulate first and spend nothing</text>
+
+  <!-- to the chains -->
+  <line class="flow" x1="300" y1="479" x2="300" y2="516" marker-end="url(#ah)"/>
+  <text class="lab" x="312" y="502">sign, pay gas</text>
+  <line class="flow" x1="430" y1="479" x2="496" y2="516" marker-end="url(#ah)"/>
+  <line class="flow" x1="600" y1="479" x2="600" y2="516" marker-end="url(#ah)"/>
+  <text class="lab" x="612" y="502">sign, pay gas</text>
+  <line class="back" x1="900" y1="516" x2="900" y2="481" marker-end="url(#ah)"/>
+  <text class="lab" x="888" y="502" text-anchor="end">fee to the lander</text>
+
+
+  <rect x="24" y="594" width="42" height="16" rx="8" fill="#dafbe1"/><text class="chip" x="45" y="606" text-anchor="middle" fill="#1a7f37">BUILT</text>
+  <text class="lab" x="74" y="606">envelope, hub.sig and acceptance library; gateway /v1/metatx</text>
+  <rect x="470" y="594" width="70" height="16" rx="8" fill="#ddf4ff"/><text class="chip" x="505" y="606" text-anchor="middle" fill="#0969da">SPECIFIED</text>
+  <text class="lab" x="548" y="606">bus and gossip transports, scheduler, hints</text>
+</svg>
