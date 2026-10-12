@@ -5,6 +5,10 @@
 #   docs:          python3 scripts/test_docs_check.py; python3 scripts/docs_check.py check; ... facts check
 #   clients/clientkeys:    npm ci --ignore-scripts; npm test
 #   clients/zether-prover: cargo test; ./wasm-smoke.sh (wasm32 build + wasm-bindgen + node smoke)
+#   clients/scaas-ua:      cargo test; cargo clippy --all-targets -- -D warnings
+#   clients/ua-py:         python3 -m unittest tests.test_vectors
+#   clients/ua-go:         go vet ./...; go test ./...
+#   clients/ua-cs:         dotnet test Scaas.Ua.Tests
 name: scaas-ci
 
 on:

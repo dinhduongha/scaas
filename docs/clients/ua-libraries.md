@@ -21,7 +21,7 @@ byte for byte. The Rust crate's curve code is independent of noble: a row is acc
 read the same files. Never edit them by hand.
 
 **One API.** Each library has the same functions in its own case (`uaOf` / `ua_of` / `UAOf`): the table and closed sets
-(`kindInfo`, `isNativeKind`, `isZetherKind`, `isSigningKind`, `isMemberKind(kind, hederaNative)`), tags (`TAG`, `GROUP`,
+(`kindInfo`, `isNativeKind`, `isZetherKind`, `isSigningKind`, `isMemberKind(kind, hederaNative)`; JS names shown, the set predicates drop `Kind` elsewhere: `is_native` / `IsNative`), tags (`TAG`, `GROUP`,
 `MSG_TAG`, `purposeTag`), ids (`uaOf`, `deriveUA`, `nativeId`, `inNativeSpace`, `canonicalId`), `keyHashOf`,
 `validateKeyData`, digests (`uaMessage`, `chainKeyHash`, `popDigest`, `uaAuthDomainSeparator`, `uaAuthDigest`,
 `memberDigest`) and `encodeMsig`. Errors carry one code everywhere: `UAKeyData`, `UAIdInNativeSpace`, `UAKindUnknown`,
@@ -37,7 +37,7 @@ every weight ≥ 1, native members with ids in the native space and derived memb
 (EIP-197, imaginary part first) and BLS12-381 G1/G2 (EIP-2537, 16 zero bytes of padding, `c0` first) on the curve and in
 the prime-order subgroup; MuSig2 / FROST layouts of valid points with sorted members and scalars below the order; `msig`
 layout and member rules; FN-DSA header and coefficients `< 12289`; ML-DSA, SLH-DSA and `pqz-mlwe` by length. Precompile calls (EIP-2537 G1MSM / G2MSM, the bn254 pairing) are capped at 2× their EIP price; a gas
-shortage reverts `UAVerifyGas`, never `UAKeyData`. Registration status, KeyAgg, the FROST DKG check, PoP and the structure gas bound are the registry's.
+shortage reverts `UAVerifyGas`, never `UAKeyData`; on a chain that prices those precompiles above 2× the EIP price, valid keys fail with `UAVerifyGas` (check the prices before enabling the kinds). Registration status, KeyAgg, the FROST DKG check, PoP and the structure gas bound are the registry's.
 
 **Not here.** Signing (`UAKey`, the per-kind signers), PoP signatures and group vectors, the registry contract, the UA ledger.
-C++/Qt-QML and Dart bindings over `scaas-ua` follow (UA-1b).
+C++ (a `cxx` bridge and CXX-Qt for QML) and Dart (flutter_rust_bridge v2 and a pure-Dart port) bindings follow (UA-1b).
