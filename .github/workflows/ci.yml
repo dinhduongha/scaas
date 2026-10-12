@@ -5,6 +5,10 @@
 #   docs:          python3 scripts/test_docs_check.py; python3 scripts/docs_check.py check; ... facts check
 #   clients/clientkeys:    npm ci --ignore-scripts; npm test
 #   clients/zether-prover: cargo test; ./wasm-smoke.sh (wasm32 build + wasm-bindgen + node smoke)
+#   clients/scaas-ua:      cargo test; cargo clippy --all-targets -- -D warnings
+#   clients/ua-py:         python3 -m unittest tests.test_vectors
+#   clients/ua-go:         go vet ./...; go test ./...
+#   clients/ua-cs:         dotnet test Scaas.Ua.Tests
 name: scaas-ci
 
 on:
@@ -118,3 +122,65 @@ jobs:
         run: cargo test
       - name: wasm build and node smoke
         run: WASM_BINDGEN=wasm-bindgen ./wasm-smoke.sh
+
+  scaas-ua:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: clients/scaas-ua
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: clients/scaas-ua
+      - name: clippy
+        run: cargo clippy --all-targets -- -D warnings
+      - name: vectors
+        run: cargo test
+
+  ua-py:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: clients/ua-py
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: install
+        run: pip install -r requirements.txt
+      - name: vectors
+        run: python -m unittest -v tests.test_vectors
+
+  ua-go:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: clients/ua-go
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version: '1.22'
+          cache-dependency-path: clients/ua-go/go.sum
+      - name: vet
+        run: go vet ./...
+      - name: vectors
+        run: go test ./...
+
+  ua-cs:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: clients/ua-cs/Scaas.Ua.Tests
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: vectors
+        run: dotnet test

@@ -44,7 +44,7 @@ Passkeys can serve either way: as a `webauthn-p256` Universal Account, or as a k
 A Universal Account is an account identifier for every signature scheme SCaaS supports: a native account of a chain,
 or a 32-byte id derived from key data or from a policy (a multisig structure). A per-chain, admin-free registry stores
 what the chain needs to verify derived ids; per-kind verifiers check signatures; tokens accept exactly the kinds each
-function needs. An optional verifiable-credential layer sits on top. Status: **SPECIFIED**; nothing is built. The
+function needs. An optional verifiable-credential layer sits on top. Status: **SPECIFIED**; the identity layer (kind table, ids, keyHash, purpose tags, digests, key-data validation) is BUILT in six libraries ([ua-libraries.md](../clients/ua-libraries.md)). The
 built Zether-only registry is replaced by it ([legacy registry](#legacy-registry), [migration](#migration)).
 
 ### 1.1 Scope
@@ -228,7 +228,7 @@ kinds sign kind-tagged messages only, and wallets refuse to use an EOA key for a
 secp256k1 key leak through nonce relations; a Schnorr signing oracle on an ElGamal key is a decryption-adjacent oracle;
 untagged digests replay across protocols.
 
-Layer 2 — registry: `keyOwner[keccak256(group_tag ‖ canonical_pubkey)]`. Canonical forms: secp256k1 x-only (so a BIP-340
+Layer 2 — registry: `keyOwner[keccak256(GROUP(g) ‖ canonical_pubkey)]`. Canonical forms: secp256k1 x-only (so a BIP-340
 key and a MuSig2 aggregate or FROST group key with the same x collide, as they must); P-256 `x`; bn254/BLS points
 uncompressed; PQ `pk`. A valid PoP does not override `UAKeyInUse`. Because key data must be canonical, one key has one
 canonical form here.
@@ -259,9 +259,9 @@ exposes no nonce/key mapping); layer 1 prevents it for our wallets, and the resi
 recorded under security.
 
 <a id="keyhash"></a>
-<a id="CTR-UA-11"></a>**CTR-UA-11** — **`keyHash` is per group, not per kind**: `keccak256(group_tag ‖ canonical_pubkey)`
-with groups `secp256k1` (x-only), `p256` (x), `ed25519`, `bn254-g1`, `bls12381-g1`, `bls12381-g2`, `bn254-g2`, `mldsa44`,
-`mldsa65`, `fndsa512`, `pqz-mlwe` ([CTR-PQZ-13](pq-zether.md#CTR-PQZ-13)). All kinds over the same group share the
+<a id="CTR-UA-11"></a>**CTR-UA-11** — **`keyHash` is per group, not per kind**: `keccak256(GROUP(g) ‖ canonical_pubkey)`
+with `GROUP(g) = keccak256("scaas.ua.group." ‖ g ‖ ".v1")` (controller ruling, pending the owner: the spec named `group_tag` without defining it) and groups `secp256k1` (x-only), `p256` (x), `ed25519`, `bn254-g1`, `bls12381-g1`, `bls12381-g2`, `bn254-g2`, `mldsa44`,
+`mldsa65`, `fndsa512`, `slhdsa128s`, `pqz-mlwe` ([CTR-PQZ-13](pq-zether.md#CTR-PQZ-13)). All kinds over the same group share the
 namespace, so `schnorr-bn254`, `frost-bn254`, `musig2-bn254` and `zether-bn254` can never register the same point, nor
 `webauthn-p256` and `p256` the same key. For MuSig2/FROST the keyHash is over the **group key**; participant keys are
 not claimed (a participant key may sit in several groups; layer 1 gives it its own path). Key data must be the **unique
@@ -287,7 +287,7 @@ display what they sign, and no raw-hash (`eth_sign`) signature is ever asked of 
 ```
 kind_tag    = "scaas.ua." ‖ <name> ‖ ".v" ‖ <n>                        (ASCII, e.g. "scaas.ua.zether-bn254.v1")
 TAG(kind)   = keccak256(kind_tag)
-UA(kind, d) = keccak256(TAG(kind) ‖ d)                                 d = canonical key data, raw bytes
+UA(kind, d) = keccak256(TAG(kind) ‖ d)                                 d = canonical key data, raw bytes; GROUP(g) = keccak256("scaas.ua.group." ‖ g ‖ ".v1")
 valid       ⇔ UA >> 160 ≠ 0
 native id   = family native identifier, left-zero-padded to 32 bytes   (EVM/Cosmos 20 B; others 32 B)
 canonical   = lower-case hex; top-96-zero values written in 20-byte form
@@ -369,7 +369,7 @@ still need a new UA.
 | Set | Members | Enforced at |
 |---|---|---|
 | ZETHER | `0x0140`, `0x0141`, `0x0142` | Zether functions only (`requireZetherAuthorized`, `kindOf` in `ZetherLib`) |
-| SIGNING | every derived kind not in ZETHER: single-key `0x0100`–`0x0107`, `0x0110`–`0x0113`, `0x0130`–`0x0132`, and the structure `0x0120` | `requireAuthorized` (native or SIGNING; ZETHER ⇒ `UAUnauthorized`); v3 `from`/`to` (native or registered SIGNING, else `UAKindNotAccepted(kind)`); Zether `authRef` (native or SIGNING; the PQ Zether kind narrows it) |
+| SIGNING | every derived kind not in ZETHER: single-key `0x0100`–`0x0107`, `0x0110`–`0x0113`, `0x0130`–`0x0133`, and the structure `0x0120` | `requireAuthorized` (native or SIGNING; ZETHER ⇒ `UAUnauthorized`); v3 `from`/`to` (native or registered SIGNING, else `UAKindNotAccepted(kind)`); Zether `authRef` (native or SIGNING; the PQ Zether kind narrows it) |
 | MEMBER | SIGNING single-key kinds, plus the native kinds the chain profile can verify, all with `id >> 160 == 0` — on EVM `0x0001`–`0x0002`; `0x0003` **only** in a Hedera-profile registry (constructor immutable `hederaNative`, HIP-632) | `msig` members (`UAMemberUnknown`); no other family's native kind, no `hedera-native` outside Hedera and no structure is ever an EVM member |
 
 #### <a id="musig2-and-frost-what-the-registry-checks"></a>1.6.1 MuSig2 and FROST: what the registry checks
@@ -1252,7 +1252,7 @@ private/PoA chains with zero gas price it is not money. EIP-7825 (16.78 M per tr
 
 <a id="vectors"></a>
 
-Cross-language vectors (`smartcontracts/vectors/ua/`):
+Cross-language vectors (`smartcontracts/vectors/ua/`; `kinds.json` and `structures.json` BUILT as the identity layer — no signatures yet: PoP signatures and `groups.json` come with the registry's verifiers, `metatx3.json` with the UA ledger, `derivation.json` with the signers):
 
 `kinds.json` — for **every** kind (including native rows for member refs):
 
@@ -1282,11 +1282,11 @@ bad PoK, `Y ≠ Σ C_i0`; the FROST(bn254, keccak256) ciphersuite's vectors.
 like `MetaTxKat`). `derivation.json` — seed → per-kind keys for the derivation paths (BIP-39 test mnemonic), including the
 role paths and the PQ HKDF.
 
-Consumers that must pass the same files: Foundry (`test/ua/*`), clientkeys (Jest), zether-prover (Rust), the node (Rust
-kind library), the reference client system (Python), and each family's tests when its work lands (Move, Soroban,
-CosmWasm, Solana). The files are generated by one script (`smartcontracts/scripts/gen_ua_vectors.*`) from independent
-implementations (noble/`@noble/curves` in JS, `k256`/`p256`/`ed25519-dalek`/`blst`/`ark-bn254` in Rust); a vector is
-accepted only when both agree. **Single-implementation kinds** — the scaas Schnorr transcript (bn254/BLS), bn254
+Consumers that must pass the same files: Foundry (`test/ua/*`), clientkeys (`node --test`), the `scaas-ua` crate (to be adopted by the node and
+zether-prover), the client-system libraries in Python, Go and C#, and each family's tests when its work lands (Move, Soroban,
+CosmWasm, Solana). The files are generated by one script (clientkeys `scripts/ua-vectors.mjs`, on `@noble/curves`)
+and accepted only when an independent implementation agrees (`k256`/`p256`/`curve25519-dalek`/arkworks in Rust; py_ecc,
+gnark-crypto and big-integer code in the others). **Single-implementation kinds** — the scaas Schnorr transcript (bn254/BLS), bn254
 `mapToG1`, `musig2-bn254` (our BIP-327 port), FROST(bn254, keccak256), `pqz-mlwe` — have no independent second
 implementation: for them "both agree" is self-consistency only, stated as such in the vector files and the audit scope.
 

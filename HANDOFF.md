@@ -1,6 +1,33 @@
 # HANDOFF — scaas
 
-## Session 2026-10-12 (P6a merged) — resume here
+## Session 2026-10-12 (UA-1 merged) — resume here
+
+**State:** UA-1 (UA F0, Universal Account kind libraries) merged into main and pushed; branch `ua1-kinds` kept. UA phase
+roadmap `docs/superpowers/plans/2026-10-12-ua-roadmap.md` (owner: UA F0/F1 + F2 as their own phase before P6c; UA-1,
+UA-1b, UA-2 registry and verifiers, UA-3 Zether re-point, UA-4 UA ledger). Plan `docs/superpowers/plans/2026-10-12-ua1-kind-libraries.md`.
+Forge 926 passed / 10 skipped, clientkeys 80 (78 pass, 2 skipped), scaas-ua 6, ua-py 7, ua-go ok, ua-cs 6; size gate 0
+errors; docs checks clean.
+
+**Built:** the UA identity layer (kind table, tags, ids, keyHash with `GROUP(g) = keccak256("scaas.ua.group.<g>.v1")`,
+purpose tags, `ua_msg`, `popDigest`, the registry's `UAAuth` digest, member digests, canonical ids, closed sets with
+`slhdsa128s` in SIGNING/MEMBER, key-data validation incl. curve and subgroup checks, MuSig2/FROST/`msig` layouts) in six
+libraries: Solidity `src/ua/UAKinds.sol` (internal; precompile calls capped at 2× the EIP price, a gas shortage reverts
+`UAVerifyGas`, never `UAKeyData`), clientkeys `src/ua.js` (reference) + `scripts/ua-vectors.mjs`, Rust `clients/scaas-ua`
+(independent cross-check), Python `clients/ua-py`, Go `clients/ua-go`, C# `clients/ua-cs`; vectors
+`smartcontracts/vectors/ua/kinds.json` (27 valid / 201 invalid rows) and `structures.json`; CI jobs; `docs/clients/ua-libraries.md`.
+The final review ran the six libraries on 6,060 inputs: identical outputs, no panics. No signatures yet (PoP signatures and
+`groups.json` are UA-2). Rulings and carry-overs: plan header (U1–U10), the UA roadmap's UA-2 row (probe 0x08/0x0c/0x0e on
+each target chain, `ecrecover` address(0) vs an `evm-eoa` member with id 0, ~165k gas for bn254 G2 validation, precompile
+prices ≤ 2× EIP before enabling BLS / bn254-G2 kinds).
+
+**Owner decisions 2026-10-12:** Go and C# client libraries added; Python in this repo; UA ledger as UA-4; UA-1b next:
+C++ as a plain `cxx` bridge plus CXX-Qt (a `QObject` in Rust for QML; Qt 6 must be installed — not on this machine),
+Dart as both flutter_rust_bridge v2 and a pure-Dart port, all on the shared vectors. ML-DSA stored key: the FIPS 204 pk;
+the expanded key an optional registry-computed cache (P6c).
+
+**Next steps:** write the UA-1b plan (bindings), then UA-2 (registry and verifiers). P6b (E-S0 spike) can run beside them.
+
+## Session 2026-10-12 (P6a merged)
 
 **State:** P6a (PQ signature verifiers) merged into main and pushed; branches `p6a-pq` and `p6a-val` kept (owner).
 Plan `docs/superpowers/plans/2026-10-12-p6a-pq-verifiers.md`. Forge 917 passed / 10 skipped, clientkeys 75 (73 pass,
