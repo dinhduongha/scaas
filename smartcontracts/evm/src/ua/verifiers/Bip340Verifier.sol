@@ -47,7 +47,8 @@ contract Bip340Verifier is IUAPopVerifier {
             mstore(add(m, 0x60), a)
             mstore(add(m, 0x80), 0x3fffffffffffffffffffffffffffffffffffffffffffffffffffffffbfffff0c) // (p + 1) / 4
             mstore(add(m, 0xa0), _P)
-            ok := and(staticcall(gas(), 0x05, m, 0xc0, m, 0x20), eq(returndatasize(), 0x20))
+            let success := staticcall(gas(), 0x05, m, 0xc0, m, 0x20)
+            ok := and(success, eq(returndatasize(), 0x20))
             r := mload(m)
         }
     }
