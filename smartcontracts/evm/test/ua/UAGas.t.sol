@@ -151,14 +151,19 @@ contract UAGasTest is UARegistryBase {
     }
 
     /// The bound of msig key data `d` whose threshold needs every member (weights 1, threshold = count) or whose only
-    /// member is the threshold: Σ (cap + MSIG_MEMBER_GAS), + gen 1's hold for a derived member handed to gen 1.
+    /// member is the threshold: Σ (cap + MSIG_MEMBER_GAS), + gen 1's hold for a derived member handed to gen 1, + the
+    /// registry's own hold (held - 400 k) / 63 for the largest held cap above 400 k (a handed member holds in gen 2 too).
     function _boundOf(bytes memory d, bool handed) internal pure returns (uint256 b) {
         uint256 count = uint16(bytes2(abi.encodePacked(d[2], d[3])));
+        uint256 held;
         for (uint256 j; j < count; ++j) {
             uint16 kind = uint16(bytes2(abi.encodePacked(d[4 + 36 * j], d[5 + 36 * j])));
             uint256 cap = kind < 0x0100 ? SMART_KEY_1271_GAS : _cap(kind);
-            b += cap + MSIG_MEMBER_GAS + (handed && kind >= 0x0100 ? cap / 63 + 5_000 : 0);
+            uint256 e = cap + (handed && kind >= 0x0100 ? cap / 63 + 5_000 : 0);
+            b += e + MSIG_MEMBER_GAS;
+            if (e > held) held = e;
         }
+        if (held > SMART_KEY_1271_GAS) b += (held - SMART_KEY_1271_GAS) / 63;
     }
 
     function _atBudget(uint256 gen, uint256 n, address pred, UARegistry.KindConfig[] memory cfg, bytes memory d)

@@ -10,6 +10,7 @@ import {UASlhdsaVerifier} from "../../src/ua/SlhDsa.sol";
 import {P256Verifier} from "../../src/ua/verifiers/P256Verifier.sol";
 import {console2} from "forge-std/Test.sol";
 import {MockVerifier, UARegistryBase} from "./UARegistryBase.sol";
+import {BurnAll, GasProbe} from "./UAGas.t.sol";
 
 /// P6c: the PQ kinds in registry generation 1 (accounts.md CTR-UA-17, CTR-UA-23, §1.8, §1.9; pq-zether.md CTR-PQZ-12,
 /// CTR-PQZ-13). Mock verifiers for the slots, the stored keys, the cache refusals and the `pqz-mlwe` `authRef` rule; the
@@ -319,9 +320,9 @@ contract UARegistryPqTest is UARegistryBase {
         r2.register(UAKinds.MSIG, d, "", 0, "");
     }
 
-    /// Three `mldsa65` UAs on mock verifiers with cap `cap` at `at`, and the treasury {×3, w1} t=2 over them.
-    function _burnMembers(address at, address burner, uint64 cap) internal returns (UARegistry r, bytes memory d) {
-        r = _deploy(at, chainUidA, address(0), false, BUDGET, address(0), true, _mockPq(burner, cap));
+    /// Three `mldsa65` UAs on mock verifiers with cap `cap` at `where`, and the treasury {×3, w1} t=2 over them.
+    function _burnMembers(address where, address burner, uint64 cap) internal returns (UARegistry r, bytes memory d) {
+        r = _deploy(where, chainUidA, address(0), false, BUDGET, address(0), true, _mockPq(burner, cap));
         Member[] memory m = new Member[](3);
         for (uint256 i; i < 3; ++i) m[i] = Member(0x0131, _register(r, 0x0131, _pk(0x0131, i)), 1);
         d = _msigKey(2, m);
@@ -339,9 +340,88 @@ contract UARegistryPqTest is UARegistryBase {
     }
 
     /// The salt of the `_pk(0x0131, salt)` key that sits at member index `i` of `d` (members are sorted by id).
-    function _saltOf(UARegistry r, bytes memory d, uint256 i) internal view returns (uint256) {
+    function _saltOf(UARegistry r, bytes memory d, uint256 i) internal pure returns (uint256) {
         for (uint256 s; s < 3; ++s) if (_indexOf(d, r.uaOf(0x0131, _pk(0x0131, s))) == i) return s;
         revert("member");
+    }
+
+    // ----- fix round 1: gen 2 hand-off (C6-8, CTR-UA-23) -----
+
+    /// A gen-2 `msig` {native SmartKeyAccount clone, `mldsa65` handed to gen 1} t=2, every capped call burning its whole
+    /// cap, a real-size (3,309 B) signature: registered at exactly its bound (one gas less is refused), it authorizes
+    /// with exactly the bound as the `requireAuthorized` frame's gas (gen 2 holds for the handed member too).
+    function test_T_GAS_pqHandedAtBudget() public {
+        (UARegistry home, address impl, bytes32 mlId) = _handedHome();
+        address a = address(0x5d10);
+        vm.etch(a, abi.encodePacked(hex"363d3d373d3d3d363d73", impl, hex"5af43d82803e903d91602b57fd5bf3"));
+        Member[] memory m = new Member[](2);
+        m[0] = Member(0x0131, mlId, 1);
+        m[1] = Member(UAKinds.EVM_EOA, _pad(a), 1);
+        bytes memory d = _msigKey(2, m);
+        uint256 held = CAP_MLDSA65 + CAP_MLDSA65 / 63 + 5_000; // gen 1's hold inside gen 2's 63/64
+        uint256 bound = 435_000 + 35_000 + held + (held - 400_000) / 63;
+        UARegistry.KindConfig[] memory none = new UARegistry.KindConfig[](0);
+        UARegistry tight = _deploy(address(0x5d20), chainUidA, address(home), false, uint64(bound - 1), impl, true, none);
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKeyData.selector, UAKinds.MSIG));
+        tight.register(UAKinds.MSIG, d, "", 0, "");
+        UARegistry r = _deploy(address(0x5d21), chainUidA, address(home), false, uint64(bound), impl, true, none);
+        bytes32 ua = r.register(UAKinds.MSIG, d, "", 0, "");
+        uint256 least = _handedLeast(r, d, ua, mlId, bound);
+        emit log_named_uint("gen-2 handed mldsa65 bound", bound);
+        emit log_named_uint("  least requireAuthorized frame gas", least);
+    }
+
+    function _handedHome() internal returns (UARegistry home, address impl, bytes32 mlId) {
+        impl = address(new BurnAll());
+        UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](1);
+        c[0] = UARegistry.KindConfig(0x0131, address(new BurnAll()), CAP_MLDSA65);
+        home = _deploy(address(0x5d00), chainUidA, address(0), false, BUDGET, impl, true, c);
+        mlId = home.register(0x0131, _pk(0x0131, 1), "", 0, "");
+    }
+
+    /// Asserts `requireAuthorized` succeeds with `bound` gas (3,309 B ML-DSA-65 signature); returns the least frame gas.
+    function _handedLeast(UARegistry r, bytes memory d, bytes32 ua, bytes32 mlId, uint256 bound)
+        internal
+        returns (uint256 hi)
+    {
+        UARegistry.MemberSig[] memory s = new UARegistry.MemberSig[](2);
+        for (uint16 i; i < 2; ++i) s[i] = UARegistry.MemberSig(i, "", new bytes(i == _indexOf(d, mlId) ? 3309 : 65));
+        bytes memory call = abi.encodeCall(r.requireAuthorized, (ua, UAKinds.PURPOSE_METATX, DIGEST, _msigAuth(d, s)));
+        GasProbe p = new GasProbe();
+        assertTrue(p.probe(address(r), call, bound), "authorizes with its bound");
+        uint256 lo;
+        for (hi = bound; hi - lo > 1;) {
+            uint256 mid = (lo + hi) / 2;
+            if (p.probe(address(r), call, mid)) hi = mid;
+            else lo = mid;
+        }
+    }
+
+    /// Half of an `mldsa65` expanded key (part 0 of 2) does not satisfy the registry: the PoP is refused.
+    function test_halfCacheRefusesPop() public {
+        string memory pj = _pj();
+        UARegistry r = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), true, _realPq());
+        bytes memory pk = vm.parseJsonBytes(pj, _row(1, "keyData"));
+        r.cacheExpandedKey(0x0131, pk, 0);
+        _popRefused(r, 0x0131, pk, vm.parseJsonBytes(pj, _row(1, "pop.sig")));
+    }
+
+    /// Gen 2 hands PQ records to gen 1: it authorizes with gen 1's cache; it has no cache of its own.
+    function test_gen2PqHandoff() public {
+        string memory pj = _pj();
+        UARegistry r = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), true, _realPq());
+        UARegistry.KindConfig[] memory none = new UARegistry.KindConfig[](0);
+        UARegistry g2 = _deploy(address(0x5d30), chainUidA, address(r), false, BUDGET, address(0), true, none);
+        bytes memory pk = vm.parseJsonBytes(pj, _row(0, "keyData"));
+        assertEq(uint16(vm.parseJsonUint(pj, _row(0, "kind"))), 0x0130);
+        _cache(r, 0x0130, pk, "mldsa44");
+        bytes32 ua = r.register(0x0130, pk, vm.parseJsonBytes(pj, _row(0, "pop.sig")), 0, "");
+        _pqSigs(g2, pj, 0, ua);
+        address[2] memory z = g2.expandedKeyOf(ua);
+        assertEq(z[0], address(0));
+        assertEq(z[1], address(0));
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKeyCache.selector, uint16(0x0130)));
+        g2.cacheExpandedKey(0x0130, pk, 0);
     }
 
     // ----- pqz-mlwe (CTR-PQZ-12/13; its verifier is P6g's: mocks here) -----

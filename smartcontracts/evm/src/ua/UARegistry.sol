@@ -399,9 +399,9 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
                 if (uint160(cfg) != 0) {
                     caps[i] = (cfg >> 160) << 1 | 1;
                 } else {
-                    // handed to gen 1, which holds cap / 63 + GAS_MARGIN again inside the 63/64 gen 2 gives it
+                    // handed to gen 1, which holds cap / 63 + GAS_MARGIN again inside the 63/64 gen 2 gives it; gen 2 holds for it too
                     uint256 cap = IUARegistry(predecessor).verifyCap(kind);
-                    caps[i] = (cap + cap / 63 + SigCheck.GAS_MARGIN) << 1;
+                    caps[i] = (cap + cap / 63 + SigCheck.GAS_MARGIN) << 1 | 1;
                 }
             }
             weights[i] = _u16(d, o + 34);
