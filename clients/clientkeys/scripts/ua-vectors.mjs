@@ -145,7 +145,6 @@ for (const [a, b] of [[0x0104, 0x0140], [0x0101, 0x0100]]) {
 const edY = (y) => be(y, 32).reverse();
 const edPoint = (y) => { try { return ed25519.Point.fromBytes(edY(y), false); } catch { return null; } };
 const edMixedY = (() => { for (let y = 2n; y < 19n; y++) { const P = edPoint(y); if (P && !P.isSmallOrder() && !P.isTorsionFree()) return y; } throw new Error('no mixed-order y < 19'); })();
-const edPlainY = (() => { for (let y = 2n; y < 19n; y++) { const P = edPoint(y); if (P && !P.isSmallOrder()) return y; } throw new Error('no y < 19'); })();
 valid.push(row(0x0102, edY(edMixedY)));
 const heavy = 65535;
 const msigMembers2 = sortM([mem(0x0002, ua.nativeId(0x0002, label('evm-contract').subarray(12))), mem(0x0133, id(0x0133)),
@@ -295,17 +294,21 @@ const addP = (d, off, len, P) => {
 const accepts = (kind, d) => { ua.validateKeyData(kind, d); return d; };
 const rng = (kind, d, reason) => bad(kind, d, reason, { why: 'range' });
 {
-  // ed25519: y = k + p < 2^255 only for k < 19
-  accepts(0x0102, edY(edPlainY));
-  rng(0x0102, edY(edPlainY + ED_P), `y = ${edPlainY} + p (non-canonical, reduces to a valid point)`);
-  rng(0x0102, edY(edMixedY + ED_P), `y = ${edMixedY} + p (non-canonical mixed-order point)`);
-  // P-256: x = 5 is on the curve; y + p never fits in 256 bits for a point of this size
+  // ed25519: y = k + p < 2^255 only for k < 19; every valid point there has a torsion component, so one row
+  rng(0x0102, edY(edMixedY + ED_P), `y = ${edMixedY} + p (non-canonical, reduces to a valid point)`);
+  // P-256: x = 5 is on the curve (y + p does not fit for that point; the y = 1 point below pins y < p)
   const x5 = 5n;
   const y5 = p256.Point.fromBytes(concatBytes(Uint8Array.of(2), be(x5, 32))).toAffine().y;
   const xy5 = concatBytes(be(x5, 32), be(y5, 32));
   for (const [kind, d] of [[0x0101, xy5], [0x0100, concatBytes(xy5, sha256(utf8ToBytes('scaas.example')))]]) {
     accepts(kind, d);
     rng(kind, put(d, 0, be(x5 + P256_P, 32)), 'x = 5 + p (non-canonical)');
+  }
+  // the P-256 point with y = 1: (x, 1 + p) fits in 256 bits
+  const xy1 = concatBytes(be(0x6916fac45e568b6b9e2e2ecd611b282e5fcc40a3067d601057f879ce5a8a73ccn, 32), be(1n, 32));
+  for (const [kind, d] of [[0x0101, xy1], [0x0100, concatBytes(xy1, sha256(utf8ToBytes('scaas.example')))]]) {
+    accepts(kind, d);
+    rng(kind, addP(d, 32, 32, P256_P), 'y = 1 + p (non-canonical)');
   }
   // secp256k1: x = 1 lifts; x + p < 2^256 only for x < 2^32 + 977
   const sx1 = concatBytes(Uint8Array.of(2), be(1n, 32));
@@ -332,8 +335,12 @@ const rng = (kind, d, reason) => bad(kind, d, reason, { why: 'range' });
   for (const kind of [0x0105, 0x0141]) {
     rng(kind, addP(key.get(kind), 16, 48, BLS.Fp.ORDER), 'x = valid + p (non-canonical)');
     rng(kind, addP(key.get(kind), 80, 48, BLS.Fp.ORDER), 'y = valid + p (non-canonical)');
+    bad(kind, put(key.get(kind), 64, Uint8Array.of(1)), 'non-zero padding on y', { why: 'padding' });
   }
-  for (const [i, w] of ['x.c0', 'x.c1', 'y.c0', 'y.c1'].entries()) rng(0x0106, addP(key.get(0x0106), 64 * i + 16, 48, BLS.Fp.ORDER), `${w} = valid + p (non-canonical)`);
+  for (const [i, w] of ['x.c0', 'x.c1', 'y.c0', 'y.c1'].entries()) {
+    rng(0x0106, addP(key.get(0x0106), 64 * i + 16, 48, BLS.Fp.ORDER), `${w} = valid + p (non-canonical)`);
+    if (i) bad(0x0106, put(key.get(0x0106), 64 * i, Uint8Array.of(1)), `non-zero padding on ${w}`, { why: 'padding' });
+  }
 }
 {
   const nonLift = firstRefused((x) => be(x, 32), (b) => secp256k1.Point.fromBytes(concatBytes(Uint8Array.of(2), b)));
@@ -363,6 +370,8 @@ const rng = (kind, d, reason) => bad(kind, d, reason, { why: 'range' });
   bad(0x0112, mb.subarray(0, mb.length - 64), 'MuSig2 n = 3 with two members', { why: 'length' });
   bad(0x0112, mb.subarray(0, 66), 'MuSig2 header alone', { why: 'length' });
   bad(0x0112, mb.subarray(0, mb.length - 1), 'MuSig2 body one byte short', { why: 'length' });
+  bad(0x0111, put(d, 37 + 2 * per + 3 * 33, be(SECP_N, 32)), 'mu_3 = N', { why: 'scalar' });
+  bad(0x0113, put(b, 68 + 2 * bper + 3 * 64, be(BN.Fr.ORDER, 32)), 'mu_3 = r', { why: 'scalar' });
   bad(0x0111, d.subarray(0, d.length - per), 'FROST with one participant missing', { why: 'length' });
   bad(0x0111, d.subarray(0, 37), 'FROST header alone', { why: 'length' });
   bad(0x0111, d.subarray(0, d.length - 1), 'FROST body one byte short', { why: 'length' });
@@ -412,6 +421,7 @@ const badId = (input) => {
 const canonicalIds = [
   okId(`0x${'0'.repeat(24)}${eoa40.slice(2).toUpperCase()}`), okId(`0x${eoa40.slice(2).toUpperCase()}`), okId(eoa40),
   okId(`0x${derivedId.slice(2).toUpperCase()}`), okId(derivedId),
+  okId(`0x${'0'.repeat(23)}1${'ab'.repeat(20)}`), okId(`0x${'0'.repeat(24)}${'0'.repeat(38)}ab`), okId(`0x${'0'.repeat(38)}ab`),
   badId(eoa40.slice(0, 41)), badId(`0X${eoa40.slice(2)}`), badId(`${derivedId}0`), badId(eoa40.slice(2)),
   badId(`0x${'g'.repeat(40)}`), badId(''), badId(`${eoa40}\n`),
 ];
@@ -429,6 +439,7 @@ const contexts = {
   B: { chainId: 7622, chainUid: hex(label('chain uid B')), registry },
   C: { chainId: 7622, chainUid: hex(label('chain uid C')), registry },
   D: { chainId: 31337, chainUid: hex(label('chain uid A')), registry: '0x5ca0000000000000000000000000000000000002' },
+  E: { chainId: 2 ** 40 + 7, chainUid: hex(label('chain uid E')), registry },
 };
 const zero = hex(z32);
 const pop = [...Object.keys(contexts).map((c) => ({ context: c, ua: derivedId, authRef: zero })),
@@ -439,7 +450,7 @@ const pop = [...Object.keys(contexts).map((c) => ({ context: c, ua: derivedId, a
   });
 assert(new Set(pop.map((p) => p.popDigest)).size === pop.length, 'popDigest must separate chain id, chain uid, registry, ua and authRef');
 const memberTag = ua.purposeTag('member');
-const uaAuth = [['A', 1], ['A', 2], ['B', 1], ['C', 1]].map(([context, generation]) => {
+const uaAuth = [['A', 1], ['A', 2], ['B', 1], ['C', 1], ['E', 1]].map(([context, generation]) => {
   const domain = { generation, ...contexts[context] };
   return { context, generation, domainSeparator: hex(ua.uaAuthDomainSeparator(domain)), ua: hex(eoa), purpose: 'member',
     purposeTag: hex(memberTag), digest: hex(digest), uaAuthDigest: hex(ua.uaAuthDigest(domain, eoa, memberTag, digest)) };

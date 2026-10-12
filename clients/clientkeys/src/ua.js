@@ -1,4 +1,4 @@
-// UA identity layer (accounts.md §1.3–§1.6; CTR-UA-02…05, 07, 09, 11, 12): the kind table, ids, keyHash, purpose tags,
+// UNAUDITED. UA identity layer (accounts.md §1.3–§1.6; CTR-UA-02…05, 07, 09, 11, 12): the kind table, ids, keyHash, purpose tags,
 // ua_msg, popDigest, the registry's UAAuth digest, member digests, canonical ids and key-data validation. The same rules
 // live in Solidity (src/ua/UAKinds.sol), Rust (clients/scaas-ua), Python (clients/ua-py), Go (clients/ua-go) and C#
 // (clients/ua-cs); smartcontracts/vectors/ua/kinds.json and structures.json, written by scripts/ua-vectors.mjs from
@@ -21,7 +21,7 @@ export class UAError extends Error {
 const fail = (code, reason) => { throw new UAError(code, reason); };
 const need = (ok, reason) => { if (!ok) fail('UAKeyData', reason); };
 
-const bytes = (v) => (v instanceof Uint8Array ? v : fromHex(v));
+const bytes = (v) => (v instanceof Uint8Array ? v : typeof v === 'string' ? fromHex(v) : fail('UAKeyData', 'type'));
 const sized = (v, n, what) => {
   const b = bytes(v);
   if (b.length !== n) throw new Error(`${what} must be ${n} bytes`);

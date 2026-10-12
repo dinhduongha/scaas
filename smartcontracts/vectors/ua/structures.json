@@ -21,6 +21,11 @@
       "chainId": 31337,
       "chainUid": "0xfd5ae6a2375e412f1c037047add923e138f84c83e565e12d4000707f3d0eabcc",
       "registry": "0x5ca0000000000000000000000000000000000002"
+    },
+    "E": {
+      "chainId": 1099511627783,
+      "chainUid": "0x2fe166d1897298cbc9d37b64f981acf3b7fa9d095e4e3ba1a2412bc0a6326f54",
+      "registry": "0x5ca0000000000000000000000000000000000001"
     }
   },
   "pop": [
@@ -51,6 +56,13 @@
       "authRef": "0x0000000000000000000000000000000000000000000000000000000000000000",
       "chainKeyHash": "0x82edc2b39aa54ca5fe83c5c514f9c4354216691c195b2540d1a14049d3fb360d",
       "popDigest": "0x3d5394d76ba2f7d1051d248ebbfb5a00f43efca2619835d120e1898b56140048"
+    },
+    {
+      "context": "E",
+      "ua": "0xb99f05b3007d0b9e1f2e1b01b42aa8eb2d866429925796ec3330a3bed7e5e04c",
+      "authRef": "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "chainKeyHash": "0x6e45d591a544f53396f6e86d49f5809196c5725f9d99dbd2ca97f9925c7ce950",
+      "popDigest": "0x031366d2d2965a6f9ae02961dbf6452ef332b10a5e45d1c442206422d7dcf747"
     },
     {
       "context": "A",
@@ -100,6 +112,16 @@
       "purposeTag": "0xfbd8600564b68d09f75fe5d3e6acb8fe3c5a3a4cb20da6988723433beff5212a",
       "digest": "0xad66503cebdd9341697249795f4c068a98fc92a57a828eec7ff59ee24a6124a1",
       "uaAuthDigest": "0x7e7e91f8d86fb069664f3521160daf5a1f48b86044cec1ac7eb0ee126a2b1d18"
+    },
+    {
+      "context": "E",
+      "generation": 1,
+      "domainSeparator": "0x919feada671c2c56ce7d6974c84b562e250cd5b8326a015a1b8340e19d983a3d",
+      "ua": "0x000000000000000000000000804d4d3b798f2d5f0902318d3e50ae8b24d83e04",
+      "purpose": "member",
+      "purposeTag": "0xfbd8600564b68d09f75fe5d3e6acb8fe3c5a3a4cb20da6988723433beff5212a",
+      "digest": "0xad66503cebdd9341697249795f4c068a98fc92a57a828eec7ff59ee24a6124a1",
+      "uaAuthDigest": "0xb81eb7709bb332547fad43d7a2c7de55911819ae57ca8d44853213cbe681f549"
     }
   ],
   "member": [

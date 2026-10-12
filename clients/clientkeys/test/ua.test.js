@@ -59,3 +59,12 @@ test('pq.js and ua.js agree on the PQ kinds', () => {
     assert.equal(hex(uaId(name, fromHex(r.keyData))), r.ua, name);
   }
 });
+
+test('key data that is neither bytes nor a hex string is UAKeyData type', () => {
+  for (const v of [5, 5n, null, undefined, [1, 2], {}]) {
+    for (const f of [() => ua.validateKeyData(0x0101, v), () => ua.deriveUA(0x0101, v), () => ua.uaOf(0x0101, v),
+      () => ua.keyHashOf(0x0101, v), () => ua.nativeId(0x0001, v)]) {
+      assert.throws(f, (e) => e instanceof ua.UAError && e.code === 'UAKeyData' && e.reason === 'type');
+    }
+  }
+});
