@@ -9,11 +9,18 @@ pragma solidity ^0.8.20;
 ///         `bytes` mã hoá theo `IZetherVerifier.proofSystemId()` — gói một bó điểm vào một `bytes` còn bỏ
 ///         được toàn bộ ABI offset của mảng động. Phép toán theo từng curve: `ZetherCurves.sol`.
 library ZetherTypes {
-    /// Universal Account. `keccak256(<mã hoá chính tắc của y>)`.
+    /// Universal Account of a Zether key (accounts.md CTR-UA-16): `keccak256(TAG(kind) ‖ Y)`, kind `zether-bn254` (0x0140)
+    /// or `zether-bls12381` (0x0141) by the length of `Y`.
     ///
     /// **Curve-dependent.** Cùng một người trên bn254 và trên BLS12-381 có HAI UA khác nhau — hai keypair
     /// trên hai nhóm khác nhau. Ví tuyệt đối không được gộp chúng.
     type UA is bytes32;
+
+    uint16 internal constant KIND_ZETHER_BN254 = 0x0140;
+    uint16 internal constant KIND_ZETHER_BLS12381 = 0x0141;
+    /// `TAG(kind) = keccak256("scaas.ua.<name>.v1")` (accounts.md §1.6).
+    bytes32 internal constant TAG_ZETHER_BN254 = keccak256("scaas.ua.zether-bn254.v1");
+    bytes32 internal constant TAG_ZETHER_BLS12381 = keccak256("scaas.ua.zether-bls12381.v1");
 
     /// Ai được gộp `pending → acc` (SRS §7.6, canon C5 bản 5). Cờ per (UA, token), chỉ chủ đổi được.
     enum RollOverMode {
@@ -42,7 +49,15 @@ library ZetherTypes {
         OPTIONAL // có khoá: người gửi được bỏ auditor theo transfer (mọi C_aud = O hoặc không cái nào)
     }
 
+    /// The Zether kind of a point length `p` (64 bn254, 128 BLS12-381).
+    function kindOf(uint256 p) internal pure returns (uint16) {
+        return p == 128 ? KIND_ZETHER_BLS12381 : KIND_ZETHER_BN254;
+    }
+
+    /// `UA = keccak256(TAG_ZETHER_<curve> ‖ encodedY)`, the curve from the length (CTR-UA-22). A length other than 64
+    /// or 128 gives an id no registry can hold (`UAKeyData` at registration).
     function toUA(bytes memory encodedY) internal pure returns (UA) {
-        return UA.wrap(keccak256(encodedY));
+        bytes32 tag = encodedY.length == 128 ? TAG_ZETHER_BLS12381 : TAG_ZETHER_BN254;
+        return UA.wrap(keccak256(abi.encodePacked(tag, encodedY)));
     }
 }

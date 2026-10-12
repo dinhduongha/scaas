@@ -19,7 +19,7 @@ import {G1Bn254} from "../../src/zether/ZetherCurves.sol";
 import {ZetherVerifierBn254, ZetherVerifierBls12381} from "../../src/zether/ZetherVerifier.sol";
 import {Puller} from "../helpers/WalletMocks.sol";
 import {ZetherKeys} from "./helpers/ZetherKeys.sol";
-import {AuthScheme} from "../../src/common/AuthScheme.sol";
+import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 
 /// `NONE_ZETHER` with one guarded call-out to the caller (`reenter`): a frame that holds the guard.
@@ -50,9 +50,12 @@ contract ZetherRevertPathsTest is ZetherFixture {
         tok.zetherShield(alice.y, over);
         // a curve the token does not run: a BLS key on a bn254 token is not registered here
         bytes memory blsKey = ZetherKeys.pub(0x7777, true);
-        bytes memory pop = abi.encode(ZetherKeys.schnorr(0x7777, reg.popChallenge(blsKey, address(0xB15)), true), bytes(""));
-        vm.prank(address(0xB15));
-        ZetherTypes.UA blsUa = reg.register(blsKey, AuthScheme.SELF_SCHNORR, "", pop, false);
+        ZetherTypes.UA blsUa = ZetherTypes.toUA(blsKey);
+        bytes32 m = reg.uaMessage(
+            UAKinds.ZETHER_BLS12381, UAKinds.PURPOSE_POP, reg.popDigest(ZetherTypes.UA.unwrap(blsUa), 0)
+        );
+        reg.register(UAKinds.ZETHER_BLS12381, blsKey, ZetherKeys.schnorr(0x7777, m, true), 0, "");
+        assertEq(reg.kindOf(ZetherTypes.UA.unwrap(blsUa)), UAKinds.ZETHER_BLS12381);
         assertFalse(tok.registered(blsUa));
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.AccountNotRegistered.selector, blsUa));
         tok.zetherShield(blsKey, 1);
@@ -286,43 +289,6 @@ contract ZetherRevertPathsTest is ZetherFixture {
         _vta(tok, bytes32("nope"), 0, 1, ITransferDisclosure.OpeningKind.SENDER_S, abi.encode(uint256(1)), "");
         vm.expectRevert(abi.encodeWithSelector(ITransferDisclosure.UnknownEntry.selector, bytes32("nope")));
         dis.transferCiphertext(address(tok), bytes32("nope"), 0, "");
-    }
-
-    /// Security invariant: with a scheme other than SELF_SCHNORR, knowing `x` is not enough to spend; the account's
-    /// authority must sign `authDigest` (over the statement, `chainUid` included).
-    function test_confKeyAloneCannotSpendMultisigAccount() public {
-        User memory dave = _multisigUser(0xDA7E, 0x0DD, address(0xD4));
-        _fund(tok, dave, 100);
-        tok.zetherRollOver(dave.ua);
-        Tx memory t = _proveTransfer(tok, dave, bob, 10, 100, _none(), 0);
-        vm.expectRevert(); // a valid proof, but no signature of the multisig owner
-        tok.zetherTransferSingle(t.payload, t.proof, "", _none());
-        bytes32 authDigest = keccak256(abi.encodePacked(
-            "SCAAS-ZETHER-AUTH-V1", keccak256(stm.transferStatementSingle(address(tok), t.payload, _none(), 0))
-        ));
-        bytes[] memory sigs = new bytes[](1);
-        sigs[0] = _ecdsa(0x0DD, authDigest);
-        tok.zetherTransferSingle(t.payload, t.proof, abi.encode(sigs), _none());
-        assertEq(tok.sendCounter(dave.ua), 1);
-    }
-
-    function _multisigUser(uint256 x, uint256 ownerPk, address evm) internal returns (User memory u) {
-        address[] memory owners = new address[](1);
-        owners[0] = vm.addr(ownerPk);
-        u.x = x;
-        u.y = ZetherKeys.pub(x, false);
-        u.evm = evm;
-        bytes32 c = reg.popChallenge(u.y, evm);
-        bytes[] memory pop = new bytes[](1);
-        pop[0] = _ecdsa(ownerPk, c);
-        bytes memory popSig = abi.encode(ZetherKeys.schnorr(x, c, false), abi.encode(pop));
-        vm.prank(evm);
-        u.ua = reg.register(u.y, AuthScheme.ECDSA_MULTISIG, abi.encode(owners, uint256(1)), popSig, false);
-    }
-
-    function _ecdsa(uint256 pk, bytes32 h) internal pure returns (bytes memory) {
-        (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, h);
-        return abi.encodePacked(r, s, v);
     }
 
     function test_curveLibBadLength() public {

@@ -3,7 +3,7 @@ pragma solidity ^0.8.20;
 
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
 
-/// @title N-of-M ECDSA thô, cho `AuthScheme.ECDSA_MULTISIG`.
+/// @title N-of-M ECDSA thô (was `AuthScheme.ECDSA_MULTISIG`, legacy/ua3; kept, accounts.md §1.13).
 /// @notice **Đọc mục này trước khi dùng: phần lớn trường hợp KHÔNG cần nó.**
 ///
 /// Ở tầng meta-transaction, `m.from` là một địa chỉ EVM, nên multisig đã được phục vụ

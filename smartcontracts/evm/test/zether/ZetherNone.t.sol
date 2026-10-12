@@ -7,7 +7,6 @@ import {ZetherLayer} from "../../src/zether/ZetherLayer.sol";
 import {IZetherToken} from "../../src/zether/IZetherToken.sol";
 import {ITransferDisclosure} from "../../src/zether/ITransferDisclosure.sol";
 import {ZetherTypes} from "../../src/zether/ZetherTypes.sol";
-import {ZetherKeys} from "./helpers/ZetherKeys.sol";
 
 /// @notice The whole life of a `NONE_ZETHER` token (a factory clone, the real verifier, real proofs from the test
 ///         prover), on BOTH curves through the two contracts at the end: shield from the public balance, transfer,
@@ -189,7 +188,7 @@ abstract contract ZetherNoneSuite is ZetherFixture {
             abi.encode(keccak256("ZETHER_SET_ROLLOVER_MODE_V1"), block.chainid, ZUID, address(tok)),
             abi.encode(u.ua, uint8(mode), nonce, until)
         ));
-        return abi.encode(u.y, ZetherKeys.schnorr(u.x, d, bls));
+        return _ownerAuth(u, d);
     }
 
     function _rollSig(User memory u, uint64 accSeq, uint64 pendSeq, uint64 until) internal view returns (bytes memory) {
@@ -197,7 +196,7 @@ abstract contract ZetherNoneSuite is ZetherFixture {
             abi.encode(keccak256("ZETHER_ROLLOVER_V1"), block.chainid, ZUID, address(tok)),
             abi.encode(u.ua, accSeq, pendSeq, until)
         ));
-        return abi.encode(u.y, ZetherKeys.schnorr(u.x, d, bls));
+        return _ownerAuth(u, d);
     }
 
     /// CTR-ZTH-36: a mode or roll-over signature over the digest without `chainUid` (a captured signature from a
@@ -208,7 +207,7 @@ abstract contract ZetherNoneSuite is ZetherFixture {
             abi.encode(keccak256("ZETHER_SET_ROLLOVER_MODE_V1"), block.chainid, address(tok)),
             abi.encode(alice.ua, uint8(ZetherTypes.RollOverMode.OWNER_ONLY), uint64(0), until)
         ));
-        bytes memory bad = abi.encode(alice.y, ZetherKeys.schnorr(alice.x, noUid, bls));
+        bytes memory bad = _ownerAuth(alice, noUid);
         vm.expectRevert();
         tok.zetherSetRollOverMode(alice.ua, ZetherTypes.RollOverMode.OWNER_ONLY, until, bad);
         _fund(tok, alice, 10);
@@ -216,7 +215,7 @@ abstract contract ZetherNoneSuite is ZetherFixture {
             abi.encode(keccak256("ZETHER_ROLLOVER_V1"), block.chainid, address(tok)),
             abi.encode(alice.ua, uint64(0), uint64(1), until)
         ));
-        bad = abi.encode(alice.y, ZetherKeys.schnorr(alice.x, rollNoUid, bls));
+        bad = _ownerAuth(alice, rollNoUid);
         vm.expectRevert();
         tok.zetherRollOverSigned(alice.ua, 1, until, bad);
         tok.zetherRollOverSigned(alice.ua, 1, until, _rollSig(alice, 0, 1, until));

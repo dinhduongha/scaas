@@ -6,8 +6,13 @@ import {OpenFactory} from "../../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../../src/factory/IFactoryToken.sol";
 import {AdminLib} from "../../../src/metatx/AdminLib.sol";
-import {AuthScheme} from "../../../src/common/AuthScheme.sol";
-import {UniversalAccountRegistry} from "../../../src/registry/UniversalAccountRegistry.sol";
+import {UARegistry} from "../../../src/ua/UARegistry.sol";
+import {UAKinds} from "../../../src/ua/UAKinds.sol";
+import {
+    SchnorrBn254Verifier,
+    ZetherSchnorrBn254Verifier,
+    ZetherSchnorrBls12381Verifier
+} from "../../../src/ua/verifiers/PairingVerifiers.sol";
 import {NoUnderlyingZetherToken} from "../../../src/zether/NoUnderlyingZetherToken.sol";
 import {ZetherLayer} from "../../../src/zether/ZetherLayer.sol";
 import {ZetherDisclosure} from "../../../src/zether/ZetherDisclosure.sol";
@@ -23,7 +28,8 @@ import {ZetherKeys} from "./ZetherKeys.sol";
 
 bytes32 constant ZUID = 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464;
 
-/// @notice The real stack: `OpenFactory` with the Zether gate on, the registry, a verifier, `ZetherDisclosure`,
+/// @notice The real stack: `OpenFactory` with the Zether gate on, the UA registry (`zether-bn254`, `zether-bls12381` and
+///         `schnorr-bn254` for a derived `authRef`, on their real verifiers), a verifier, `ZetherDisclosure`,
 ///         `ZetherStatements` and `NoUnderlyingZetherToken` clones. The test wallet keeps `x` and the plaintext balances
 ///         to build witnesses and decrypt; the prover is the test-only `ZetherProver`. Public units come from `mint`
 ///         (the fixture is the minter); `_public` is overridden where they come from a wrap.
@@ -37,7 +43,7 @@ abstract contract ZetherFixture is Test {
 
     OpenFactory internal factory;
     NoUnderlyingZetherToken internal noneImpl;
-    UniversalAccountRegistry internal reg;
+    UARegistry internal reg;
     IZetherVerifier internal ver;
     ZetherLayer internal tok;
     ZetherDisclosure internal dis;
@@ -79,7 +85,7 @@ abstract contract ZetherFixture is Test {
         factory = new OpenFactory(registrar, ZUID);
         dis = new ZetherDisclosure();
         stm = new ZetherStatements();
-        reg = new UniversalAccountRegistry();
+        reg = _uaRegistry();
         prover = new ZetherProver();
         ver = useBls ? IZetherVerifier(address(new ZetherVerifierBls12381())) : IZetherVerifier(address(new ZetherVerifierBn254()));
         noneImpl = new NoUnderlyingZetherToken(address(factory), address(0), ZUID, address(reg), dis);
@@ -87,6 +93,15 @@ abstract contract ZetherFixture is Test {
         factory.registerImplementation(IOpenFactory.TokenKind.NONE_ZETHER, 1, address(noneImpl));
         factory.setZetherEnabled(true);
         vm.stopPrank();
+    }
+
+    /// Gen 1 with the two Zether kinds and `schnorr-bn254` (caps as accounts.md §1.15), budget 12 M, no msig.
+    function _uaRegistry() internal returns (UARegistry) {
+        UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](3);
+        c[0] = UARegistry.KindConfig(UAKinds.ZETHER_BN254, address(new ZetherSchnorrBn254Verifier()), 50_000);
+        c[1] = UARegistry.KindConfig(UAKinds.ZETHER_BLS12381, address(new ZetherSchnorrBls12381Verifier()), 70_000);
+        c[2] = UARegistry.KindConfig(UAKinds.SCHNORR_BN254, address(new SchnorrBn254Verifier()), 50_000);
+        return new UARegistry(ZUID, address(0), false, 12_000_000, address(0), false, c);
     }
 
     function _users() internal {
@@ -117,12 +132,33 @@ abstract contract ZetherFixture is Test {
     }
 
     function _user(uint256 x, address evm) internal returns (User memory u) {
+        return _user(x, evm, 0, "");
+    }
+
+    /// Registers `Y = [x]G` as this stack's Zether kind with `authRef` (0 = self) and the authority's co-sign `authPop`,
+    /// relayed by `evm` (the record does not depend on the caller, CTR-UA-07).
+    function _user(uint256 x, address evm, bytes32 authRef, bytes memory authPop) internal returns (User memory u) {
         u.x = x;
         u.y = ZetherKeys.pub(x, bls);
         u.evm = evm;
-        bytes memory pop = abi.encode(ZetherKeys.schnorr(x, reg.popChallenge(u.y, evm), bls), bytes(""));
+        bytes memory pop = ZetherKeys.schnorr(x, _popMsg(u.y, authRef), bls);
         vm.prank(evm);
-        u.ua = reg.register(u.y, AuthScheme.SELF_SCHNORR, "", pop, true);
+        u.ua = ZetherTypes.UA.wrap(reg.register(_zkind(), u.y, pop, authRef, authPop));
+    }
+
+    function _zkind() internal view returns (uint16) {
+        return bls ? UAKinds.ZETHER_BLS12381 : UAKinds.ZETHER_BN254;
+    }
+
+    /// `uaMessage(kind, POP, popDigest(UA(Y), authRef))`, what the Zether key signs to register (CTR-UA-07).
+    function _popMsg(bytes memory y, bytes32 authRef) internal view returns (bytes32) {
+        bytes32 ua = ZetherTypes.UA.unwrap(ZetherTypes.toUA(y));
+        return reg.uaMessage(_zkind(), UAKinds.PURPOSE_POP, reg.popDigest(ua, authRef));
+    }
+
+    /// A self account's owner op (roll-over, mode): `abi.encode(bytes(""), Schnorr by x over the zether-owner ua_msg)`.
+    function _ownerAuth(User memory u, bytes32 digest) internal view returns (bytes memory) {
+        return abi.encode(bytes(""), ZetherKeys.schnorr(u.x, reg.uaMessage(_zkind(), UAKinds.PURPOSE_ZETHER_OWNER, digest), bls));
     }
 
     // ------------------------------------------------------------------ operations

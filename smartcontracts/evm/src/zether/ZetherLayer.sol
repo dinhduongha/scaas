@@ -4,7 +4,6 @@ pragma solidity ^0.8.24;
 import {ERC20MetaTx} from "../metatx/ERC20MetaTx.sol";
 import {MetaTokenBase} from "../metatx/MetaTokenBase.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
-import {IUniversalAccountRegistry} from "../registry/IUniversalAccountRegistry.sol";
 import {IZetherToken} from "./IZetherToken.sol";
 import {IZetherVerifier} from "./IZetherVerifier.sol";
 import {ITransferDisclosure} from "./ITransferDisclosure.sol";
@@ -53,9 +52,9 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
     }
     function sendCounter(ZetherTypes.UA ua) external view returns (uint256) { return ZetherLib.$().acct[ua].sendCounter; }
 
-    /// @notice Registered on this token's curve.
+    /// @notice Registered as this token's Zether kind (`registry.kindOf`, accounts.md §1.13).
     function registered(ZetherTypes.UA ua) external view returns (bool) {
-        return IUniversalAccountRegistry(_REGISTRY).keyLengthOf(ua) == ZetherLib.$().p;
+        return ZetherLib.registeredOn(_REGISTRY, ua, ZetherLib.$().p);
     }
 
     function accountState(ZetherTypes.UA ua) external view returns (AccountState memory) {

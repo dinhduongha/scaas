@@ -123,7 +123,7 @@ abstract contract ZetherProverCrossSuite is ZetherFixture {
         string memory keys;
         for (uint256 j; j < need.length; ++j) {
             assertEq(need[j], ZetherTypes.UA.unwrap(rs[j].ua), "needKeys");
-            keys = string.concat(keys, j == 0 ? '"' : ',"', vm.toString(reg.keyOf(ZetherTypes.UA.wrap(need[j]))), '"');
+            keys = string.concat(keys, j == 0 ? '"' : ',"', vm.toString(reg.keyOf(need[j])), '"');
         }
         if (!memo.readBool(".auditorIncluded")) ya = "null";
         return _cli("recoverTransfer", string.concat(q, ',"keys":[', keys, '],"yAud":', ya, "}"));

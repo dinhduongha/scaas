@@ -2,7 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {IFactoryToken} from "../factory/IFactoryToken.sol";
-import {IUniversalAccountRegistry} from "../registry/IUniversalAccountRegistry.sol";
+import {IUARegistry} from "../ua/IUARegistry.sol";
 import {IZetherToken} from "./IZetherToken.sol";
 import {IZetherVerifier} from "./IZetherVerifier.sol";
 import {ZetherTypes} from "./ZetherTypes.sol";
@@ -172,7 +172,7 @@ library ZetherLib {
     ///         (`zetherShield`) or the underlying (`zetherWrapShield`); the minter never mints shielded value.
     function shield(ZetherTypes.UA ua, uint256 amount, address registry) public {
         ZetherStorage storage s = $();
-        if (IUniversalAccountRegistry(registry).keyLengthOf(ua) != s.p) revert IZetherToken.AccountNotRegistered(ua);
+        if (!registeredOn(registry, ua, s.p)) revert IZetherToken.AccountNotRegistered(ua);
         uint256 room = s.maxShielded - s.totalShielded;
         if (amount == 0 || amount > room) revert IZetherToken.AmountOutOfRange(amount, room);
         s.totalShielded += amount;
@@ -336,7 +336,7 @@ library ZetherLib {
         bytes32 digest = keccak256(abi.encode(
             TAG_ROLLOVER, block.chainid, e.chainUid, address(this), ua, a.accSeq, expectedPendingSeq, validUntilBlock
         ));
-        IUniversalAccountRegistry(e.registry).requireAuthorized(ua, digest, sig, false);
+        IUARegistry(e.registry).requireZetherAuthorized(ZetherTypes.UA.unwrap(ua), digest, sig, false);
         _rollOver(s, ua);
     }
 
@@ -353,7 +353,7 @@ library ZetherLib {
         bytes32 digest = keccak256(abi.encode(
             TAG_SET_MODE, block.chainid, e.chainUid, address(this), ua, uint8(mode), a.modeNonce, validUntilBlock
         ));
-        IUniversalAccountRegistry(e.registry).requireAuthorized(ua, digest, sig, false);
+        IUARegistry(e.registry).requireZetherAuthorized(ZetherTypes.UA.unwrap(ua), digest, sig, false);
         a.mode = mode;
         a.modeNonce += 1;
         emit IZetherToken.RollOverModeChanged(ua, mode);
@@ -576,13 +576,18 @@ library ZetherLib {
 
     /// @dev Registered on the verifier's curve.
     function _requireRegistered(Ctx memory c, ZetherTypes.UA ua) private view {
-        if (IUniversalAccountRegistry(c.registry).keyLengthOf(ua) != c.p) revert IZetherToken.AccountNotRegistered(ua);
+        if (!registeredOn(c.registry, ua, c.p)) revert IZetherToken.AccountNotRegistered(ua);
+    }
+
+    /// @notice `ua` is registered as the Zether kind of the point length `p` (accounts.md §1.13: `kindOf`).
+    function registeredOn(address registry, ZetherTypes.UA ua, uint256 p) internal view returns (bool) {
+        return IUARegistry(registry).kindOf(ZetherTypes.UA.unwrap(ua)) == ZetherTypes.kindOf(p);
     }
 
     /// @dev The account's spending authority over the statement (registry), then the proof (knowledge of `x`).
     function _check(Ctx memory c, Prepared memory pp, bytes calldata authSig, bytes calldata proof, bytes32 op) private view {
-        IUniversalAccountRegistry(c.registry).requireAuthorized(
-            pp.from, keccak256(abi.encodePacked(AUTH_TAG, keccak256(pp.statement))), authSig, true
+        IUARegistry(c.registry).requireZetherAuthorized(
+            ZetherTypes.UA.unwrap(pp.from), keccak256(abi.encodePacked(AUTH_TAG, keccak256(pp.statement))), authSig, true
         );
         bool ok = op == OP_TRANSFER
             ? c.ver.verifyTransfer(pp.statement, proof)

@@ -9,7 +9,9 @@ import {AdminLib} from "../src/metatx/AdminLib.sol";
 import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import {NoUnderlyingToken} from "../src/metatx/NoUnderlyingToken.sol";
 import {SCaaSDex} from "../src/dex/SCaaSDex.sol";
-import {UniversalAccountRegistry} from "../src/registry/UniversalAccountRegistry.sol";
+import {UARegistry} from "../src/ua/UARegistry.sol";
+import {UAKinds} from "../src/ua/UAKinds.sol";
+import {ZetherSchnorrBn254Verifier, ZetherSchnorrBls12381Verifier} from "../src/ua/verifiers/PairingVerifiers.sol";
 import {ZetherSafety} from "../src/zether/ZetherSafety.sol";
 import {ZetherDisclosure} from "../src/zether/ZetherDisclosure.sol";
 import {ZetherStatements} from "../src/zether/ZetherStatements.sol";
@@ -30,6 +32,12 @@ abstract contract DeployBase is Script {
     bytes32 internal uid;
     /// @notice `DEPLOY_ZETHER` env (default false): also deploy the Zether stack (`_deployZether`, dev chains only).
     bool internal deployZether;
+
+    /// @notice `UA_VERIFY_BUDGET` of an EIP-7825 chain: min(12 M, 0.7 × 16,777,216) (CTR-UA-23).
+    uint64 internal constant UA_VERIFY_BUDGET = 12_000_000;
+    /// @notice Verify caps (accounts.md §1.15): as `schnorr-bn254` / `schnorr-bls12381`, the same Schnorr under another tag.
+    uint64 internal constant ZETHER_BN254_CAP = 50_000;
+    uint64 internal constant ZETHER_BLS12381_CAP = 70_000;
 
     /// @notice Call first in `run()`, before the broadcast.
     function _setup() internal {
@@ -81,14 +89,23 @@ abstract contract DeployBase is Script {
         vm.serializeBytes32("deploy", "chain_uid", uid);
     }
 
-    /// @notice Dev chains only (CTR-ZTH-02; elsewhere the registry and the verifiers refuse to deploy): the account
-    ///         registry, `ZetherDisclosure`, `ZetherStatements`, both verifiers, the two confidential implementations
+    /// @notice Dev chains only (CTR-ZTH-02; elsewhere the Zether verifiers refuse to deploy): the UA registry with the
+    ///         Zether kinds (`zether-bn254`, `zether-bls12381` on their Schnorr verifiers), `ZetherDisclosure`, `ZetherStatements`, both verifiers, the two confidential implementations
     ///         registered as version 1 of `NONE_ZETHER` and `UNDERLYING_ZETHER`, and the factory's Zether gate switched on
     ///         when the deployer is the registrar. **UNAUDITED — NOT FOR PRODUCTION FUNDS.** The implementations exceed
     ///         EIP-170 and the BLS verifier takes ~14.1 M gas: anvil `--code-size-limit 65536`, forge script
     ///         `--code-size-limit 65536 --gas-estimate-multiplier 105` (deploy.sh adds both; docs/networks/evm.md).
     function _deployZether(OpenFactory f, bool register, address smartKeyAccountImpl) internal {
-        UniversalAccountRegistry reg = new UniversalAccountRegistry{salt: salt}();
+        UARegistry.KindConfig[] memory kinds = new UARegistry.KindConfig[](2);
+        kinds[0] = UARegistry.KindConfig(
+            UAKinds.ZETHER_BN254, address(new ZetherSchnorrBn254Verifier{salt: salt}()), ZETHER_BN254_CAP
+        );
+        kinds[1] = UARegistry.KindConfig(
+            UAKinds.ZETHER_BLS12381, address(new ZetherSchnorrBls12381Verifier{salt: salt}()), ZETHER_BLS12381_CAP
+        );
+        UARegistry reg =
+            new UARegistry{salt: salt}(uid, address(0), false, UA_VERIFY_BUDGET, smartKeyAccountImpl, false, kinds);
+        _gate(address(reg));
         ZetherDisclosure dis = new ZetherDisclosure{salt: salt}();
         ZetherStatements stm = new ZetherStatements{salt: salt}();
         ZetherVerifierBn254 bn = new ZetherVerifierBn254{salt: salt}();
