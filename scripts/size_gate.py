@@ -3,7 +3,7 @@
 
 Limits: token implementations (TOKENS) 20,480 B, every other contract 24,576 B (EIP-170), init code 49,152 B
 (EIP-3860). A contract named in the baseline may exceed its limit but never its recorded size (a ratchet: it can only
-shrink). A baseline entry that now fits is reported, so it gets removed.
+shrink); `<name>.init` does the same for the init code. A baseline entry that now fits is reported, so it gets removed.
 
 usage: size_gate.py <sizes.json> <size-baseline.json>     exit 1 on a violation
 """
@@ -20,8 +20,13 @@ def check(sizes, baseline):
         rt, init = s['runtime_size'], s['init_size']
         limit = TOKEN_LIMIT if name in TOKENS else EIP170
         allowed = baseline.get(name)
-        if init > EIP3860:
+        allowed_init = baseline.get(f'{name}.init')
+        if init > EIP3860 and allowed_init is None:
             errs.append(f'{name}: init {init} > {EIP3860} (EIP-3860)')
+        elif allowed_init is not None and init > allowed_init:
+            errs.append(f'{name}: init {init} > baseline {allowed_init} (it may only shrink)')
+        elif allowed_init is not None and init <= EIP3860:
+            notes.append(f'{name}: init fits ({init} <= {EIP3860}); remove {name}.init from the baseline')
         if rt > limit and allowed is None:
             errs.append(f'{name}: runtime {rt} > {limit}')
         elif allowed is not None and rt > allowed:
@@ -54,6 +59,9 @@ if __name__ == '__main__':
         assert check({'X': s(26_001)}, {'X': 26_000})[0]
         assert check({'X': s(20_000)}, {'X': 26_000})[1]
         assert check({'A': s(1, 49_153)}, {})[0]
+        assert check({'A': s(1, 50_000)}, {'A.init': 50_000}) == ([], [])
+        assert check({'A': s(1, 50_001)}, {'A.init': 50_000})[0]
+        assert check({'A': s(1, 40_000)}, {'A.init': 50_000})[1]
         print('size gate self-test ok')
         sys.exit(0)
     sys.exit(main(sys.argv))

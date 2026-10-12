@@ -35,7 +35,7 @@ contract DexKatTest is Test {
         vm.warp(1_800_000_000);
         OpenFactory f = new OpenFactory(address(this), UID_);
         f.registerImplementation(IOpenFactory.TokenKind.NONE, 1,
-            address(new NoUnderlyingToken(address(f), address(0), UID_, false)));
+            address(new NoUnderlyingToken(address(f), address(0), UID_, address(0), false)));
         f.registerDexImplementation(1, address(new SCaaSDex(address(f), UID_, address(0))));
         a = NoUnderlyingToken(f.createToken(IOpenFactory.TokenKind.NONE, 1,
             noneInit("A", "A", 6, 1e9, alice, address(0)), "a"));

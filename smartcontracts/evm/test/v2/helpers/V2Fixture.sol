@@ -15,7 +15,7 @@ bytes32 constant UID_ = 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65
 /// Minimal kind on `MetaTokenBase` for the base tests: name, symbol, decimals, `initialSupply` to `initialHolder`;
 /// `PAYABLE` set as built (P1c), whatever `cfg.features` says.
 contract BaseHarness is MetaTokenBase {
-    constructor(address f, address s) MetaTokenBase(f, s, UID_, false) {}
+    constructor(address f, address s) MetaTokenBase(f, s, UID_, address(0), false) {}
 
     function kind() public pure override returns (uint8) {
         return AdminLib.KIND_NONE;
@@ -115,7 +115,7 @@ abstract contract V2Fixture is Test {
 
     function _none(address creator_, uint256 supply, address minter) internal returns (NoUnderlyingToken) {
         if (noneImpl == address(0)) {
-            noneImpl = address(new NoUnderlyingToken(address(this), address(0), UID_, false));
+            noneImpl = address(new NoUnderlyingToken(address(this), address(0), UID_, address(0), false));
         }
         return NoUnderlyingToken(_clone(noneImpl, creator_, new address[](0),
             abi.encode(noneInit("Points", "PTS", 0, supply, creator_, minter))));
@@ -146,7 +146,7 @@ abstract contract V2Fixture is Test {
 
     function _underlyingImpl() internal returns (address) {
         if (underlyingImpl == address(0)) {
-            underlyingImpl = address(new UnderlyingToken(address(this), address(0), UID_, false));
+            underlyingImpl = address(new UnderlyingToken(address(this), address(0), UID_, address(0), false));
         }
         return underlyingImpl;
     }

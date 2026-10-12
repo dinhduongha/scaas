@@ -8,9 +8,11 @@
 #                            CREATE2 deployer on the chain (NET-EVM-05). Writes evm/deployments/<chainid>.json (the
 #                            previous file is put back if the broadcast fails). Every chain gets the UA registry
 #                            (`ua_registry`; its EIP-2537 / bn254-G2 kinds by an eth_call precompile probe, the Zether
-#                            kinds on dev chains only). DEPLOY_ZETHER=1 (dev chains only) adds
-#                            the Zether stack and the forge flags it needs: --code-size-limit 65536
-#                            --gas-estimate-multiplier 105 (the anvil needs --code-size-limit 65536 too).
+#                            kinds on dev chains only). Always --code-size-limit 65536: every token implementation
+#                            exceeds EIP-170 since the UA ledger (UA-4; owner: wait for Glamsterdam), so the chain needs
+#                            64 KiB code (anvil --code-size-limit 65536, chain 7622 maxCodeSize 0x10000); a chain at
+#                            24,576 refuses the deploy. DEPLOY_ZETHER=1 (dev chains only) adds the Zether stack and
+#                            --gas-estimate-multiplier 105. --slow always (one tx per block: anvil automine can strand a large tx).
 #   hedera  <relay-url>      same, script/hedera/DeployHedera.s.sol --slow (writes deployments/hedera-<chainid>.json)
 #   aptos   <cli-profile>    aptos move deploy-object --address-name scaas
 #   sui     <client-env>     sui client --client.env <env> publish
@@ -20,14 +22,14 @@ set -euo pipefail
 SC="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FAMILY="${1:?usage: $0 <family> <network> [args…]}"; NET="${2:?network}"; shift 2
 case "$FAMILY" in
-  evm)     cd "$SC/evm"; Z=()
-           case "${DEPLOY_ZETHER:-}" in 1|true|TRUE|True) Z=(--code-size-limit 65536 --gas-estimate-multiplier 105) ;; esac
+  evm)     cd "$SC/evm"; Z=(--code-size-limit 65536)
+           case "${DEPLOY_ZETHER:-}" in 1|true|TRUE|True) Z+=(--gas-estimate-multiplier 105) ;; esac
            # forge writes the JSON in the simulation, before the broadcast: keep the previous one until it succeeds
            J="deployments/$(cast chain-id --rpc-url "$NET").json"; [ -f "$J" ] && cp "$J" "$J.prev"
-           if forge script script/Deploy.s.sol --rpc-url "$NET" --broadcast "${Z[@]}" \
+           if forge script script/Deploy.s.sol --rpc-url "$NET" --broadcast --slow "${Z[@]}" \
                --sender "$(cast wallet address --private-key "$PRIVATE_KEY")" "$@"; then rm -f "$J.prev"
            else [ -f "$J.prev" ] && mv "$J.prev" "$J" || rm -f "$J"; exit 1; fi ;;
-  hedera)  cd "$SC/evm" && exec forge script script/hedera/DeployHedera.s.sol --rpc-url "$NET" --broadcast --slow \
+  hedera)  cd "$SC/evm" && exec forge script script/hedera/DeployHedera.s.sol --rpc-url "$NET" --broadcast --slow --code-size-limit 65536 \
              --sender "$(cast wallet address --private-key "$PRIVATE_KEY")" "$@" ;;
   aptos)   exec aptos move deploy-object --package-dir "$SC/move/aptos" --address-name scaas --profile "$NET" "$@" ;;
   sui)     exec sui client --client.env "$NET" publish "$@" "$SC/move/sui" ;;

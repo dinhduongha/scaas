@@ -25,8 +25,8 @@ contract UnderlyingToken is MetaTokenBase, IUnderlyingToken {
     bytes4 internal constant SEL_UNWRAP_LEG = bytes4(keccak256("unwrap(address,uint256,address,uint256)"));
     bytes4 internal constant SEL_ADD_RESERVE = bytes4(keccak256("addReserve(address,uint256)"));
 
-    constructor(address factory_, address smartKeyAccountImpl_, bytes32 chainUid_, bool isHedera_)
-        MetaTokenBase(factory_, smartKeyAccountImpl_, chainUid_, isHedera_)
+    constructor(address factory_, address smartKeyAccountImpl_, bytes32 chainUid_, address registry_, bool isHedera_)
+        MetaTokenBase(factory_, smartKeyAccountImpl_, chainUid_, registry_, isHedera_)
     {}
 
     function kind() public pure virtual override returns (uint8) {
@@ -145,6 +145,11 @@ contract UnderlyingToken is MetaTokenBase, IUnderlyingToken {
         (s[3], c[3]) = (SEL_WRAP_LEG, FEE_CLASS_ABSOLUTE);
         (s[4], c[4], a[4]) = (SEL_UNWRAP_LEG, FEE_CLASS_AMOUNT, 1);
         (s[5], c[5]) = (SEL_ADD_RESERVE, FEE_CLASS_ABSOLUTE);
+    }
+
+    /// @notice The UA allowlist (CTR-UA-26): the two `unwrap`s with `minOut` (a derived signer burns its UA balance).
+    function _uaAllowed(bytes4 sel) internal view virtual override returns (bool) {
+        return sel == SEL_UNWRAP_MIN || sel == SEL_UNWRAP_LEG;
     }
 
     function _mtxRule(bytes4 sel) internal view virtual override returns (MtxRule memory) {

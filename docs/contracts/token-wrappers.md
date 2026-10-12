@@ -804,8 +804,10 @@ each library ≤ 24,576 B.
   contract exceeds its budget. **Transitional (BUILT, P1e):** `scripts/size_gate.py` runs in CI over
   `forge build src --sizes --json` as a ratchet (controller ruling, pending the owner): token implementations ≤ 20,480 B,
   other contracts ≤ 24,576 B, init code ≤ 49,152 B, and a contract named in `smartcontracts/evm/size-baseline.json`
-  may exceed its limit but never its recorded size (`NoUnderlyingToken` 22,978 B, `UnderlyingToken` 30,036 B, `NoUnderlyingZetherToken` 30,659 B, `UnderlyingZetherToken` 40,381 B; owner decision 2026-10-11: optimise
+  may exceed its limit but never its recorded size (UA-4, with the UA ledger: `NoUnderlyingToken` 31,770 B, `UnderlyingToken` 39,189 B, `NoUnderlyingZetherToken` 40,067 B, `UnderlyingZetherToken` 49,778 B, and its init code 51,473 B as the entry `UnderlyingZetherToken.init` over EIP-3860; owner decision 2026-10-11: optimise
   later, wait for the Glamsterdam fork, code size is not a concern); the baseline does not tighten itself, so a smaller contract's entry is lowered by hand.
+  Every token implementation now needs a chain with 64 KiB code (anvil `--code-size-limit 65536`, chain 7622), and
+  `deploy.sh` and the node e2e pass `--code-size-limit 65536` to `forge script` (`deploy.sh` also `--slow`: one tx per block; parallel broadcast can strand a deploy tx that doesn't fit the block's remaining gas).
   **Flag:** with P2a `NoUnderlyingToken` is over its 20,480 B budget (still under EIP-170).
 
 **Transitional (BUILT, P1d).** `MetaTokenBase` state is in `scaas.token`, the legs in `scaas.underlying`

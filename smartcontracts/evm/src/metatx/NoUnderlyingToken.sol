@@ -11,8 +11,8 @@ import {IMetaTx} from "./IMetaTx.sol";
 ///         rate limit, if an issuer needs one, lives in its minter contract. Built by `OpenFactory.createToken`
 ///         (CTR-TOK-25): `initialSupply` is minted to `initialHolder`; `legs`, `rate`, `conf` must be empty.
 contract NoUnderlyingToken is MetaTokenBase {
-    constructor(address factory_, address smartKeyAccountImpl_, bytes32 chainUid_, bool isHedera_)
-        MetaTokenBase(factory_, smartKeyAccountImpl_, chainUid_, isHedera_)
+    constructor(address factory_, address smartKeyAccountImpl_, bytes32 chainUid_, address registry_, bool isHedera_)
+        MetaTokenBase(factory_, smartKeyAccountImpl_, chainUid_, registry_, isHedera_)
     {}
 
     function kind() public pure virtual override returns (uint8) {

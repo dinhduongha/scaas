@@ -11,6 +11,10 @@ contract SigCheckHarness {
         return SigCheck.isValid(signer, digest, sig, cap);
     }
 
+    function isValid7702(address signer, bytes32 digest, bytes calldata sig, uint256 cap) external view returns (bool) {
+        return SigCheck.isValid7702(signer, digest, sig, cap);
+    }
+
     function isContract(address a) external view returns (bool) {
         return SigCheck.isContract(a);
     }
@@ -64,6 +68,24 @@ contract SigCheckTest is Test {
         assertFalse(h.isContract(delegated));
         assertTrue(h.isValid(delegated, D, _sig(0xD7702, D), SigCheck.ERC1271_GAS));
         assertTrue(h.isContract(address(wallet)));
+    }
+
+    /// accounts.md CTR-UA-24 (`isValid7702`, the UA ledger's native path): a 7702-delegated EOA signs with its base
+    /// key or through its delegate's ERC-1271 (v2's `isValid` takes the base key only); empty code is ECDSA only; other
+    /// code is ERC-1271 only.
+    function test_isValid7702() public {
+        address delegated = vm.addr(0xD7702);
+        Mock1271Wallet delegate = new Mock1271Wallet(signer); // answers for ECDSA by `signer` over the hash
+        vm.signAndAttachDelegation(address(delegate), 0xD7702);
+        assertTrue(h.isValid7702(delegated, D, _sig(0xD7702, D), SigCheck.ERC1271_GAS));
+        assertEq(delegated.code.length, 23);
+        assertTrue(h.isValid7702(delegated, D, _sig(PK, D), SigCheck.ERC1271_GAS));
+        assertFalse(h.isValid(delegated, D, _sig(PK, D), SigCheck.ERC1271_GAS));
+        assertFalse(h.isValid7702(delegated, D, _sig(0xB0B, D), SigCheck.ERC1271_GAS));
+        assertTrue(h.isValid7702(signer, D, _sig(PK, D), SigCheck.ERC1271_GAS));
+        assertFalse(h.isValid7702(signer, D, _sig(0xB0B, D), SigCheck.ERC1271_GAS));
+        assertTrue(h.isValid7702(address(wallet), D, _sig(PK, D), SigCheck.ERC1271_GAS));
+        assertFalse(h.isValid7702(address(wallet), D, _sig(0xB0B, D), SigCheck.ERC1271_GAS));
     }
 
     function test_1271_valid() public view {

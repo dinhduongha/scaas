@@ -52,8 +52,8 @@ contract FactoryTest is Test {
 
     function setUp() public {
         f = new OpenFactory(registrar, UID_);
-        noneImpl = new NoUnderlyingToken(address(f), address(0), UID_, false);
-        underlyingImpl = new UnderlyingToken(address(f), address(0), UID_, false);
+        noneImpl = new NoUnderlyingToken(address(f), address(0), UID_, address(0), false);
+        underlyingImpl = new UnderlyingToken(address(f), address(0), UID_, address(0), false);
         vm.startPrank(registrar);
         f.registerImplementation(NONE, 1, address(noneImpl));
         f.registerImplementation(UNDERLYING, 1, address(underlyingImpl));
@@ -90,11 +90,11 @@ contract FactoryTest is Test {
         vm.startPrank(registrar);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VersionKindMismatch.selector, UNDERLYING, 0));
         f.registerImplementation(UNDERLYING, 2, address(noneImpl));
-        address otherFactory = address(new NoUnderlyingToken(address(0xFAC), address(0), UID_, false));
+        address otherFactory = address(new NoUnderlyingToken(address(0xFAC), address(0), UID_, address(0), false));
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ImplementationFactoryMismatch.selector, otherFactory));
         f.registerImplementation(NONE, 2, otherFactory);
         bytes32 otherUid = keccak256("other chain");
-        address otherChain = address(new NoUnderlyingToken(address(f), address(0), otherUid, false));
+        address otherChain = address(new NoUnderlyingToken(address(f), address(0), otherUid, address(0), false));
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ChainUidMismatch.selector, UID_, otherUid));
         f.registerImplementation(NONE, 2, otherChain);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ImplementationNotAContract.selector, address(0xDEAD)));
@@ -239,13 +239,13 @@ contract FactoryTest is Test {
     }
 
     function test_createTokenUnregistered_isCheckedAndRecordedAsVersion0() public {
-        NoUnderlyingToken mine = new NoUnderlyingToken(address(f), address(0), UID_, false);
+        NoUnderlyingToken mine = new NoUnderlyingToken(address(f), address(0), UID_, address(0), false);
         vm.prank(alice);
         address t = f.createTokenUnregistered(NONE, address(mine), _none(alice), "u");
         (, uint64 v) = f.versionOf(t);
         assertEq(v, 0);
         assertEq(NoUnderlyingToken(t).version(), 0);
-        NoUnderlyingToken other = new NoUnderlyingToken(address(f), address(0), keccak256("x"), false);
+        NoUnderlyingToken other = new NoUnderlyingToken(address(f), address(0), keccak256("x"), address(0), false);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ChainUidMismatch.selector, UID_, keccak256("x")));
         f.createTokenUnregistered(NONE, address(other), _none(alice), "u2");
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VersionKindMismatch.selector, UNDERLYING, 0));
@@ -300,9 +300,10 @@ contract FactoryTest is Test {
     }
 
     function test_sizes() public view {
-        assertLe(address(noneImpl).code.length, 23_552); // owner: size later; budget 20,480 (P2a ruling)
+        // owner: size later (Glamsterdam); budget 20,480 (P2a ruling); +8.7 KB for the UA ledger (UA-4)
+        assertLe(address(noneImpl).code.length, 32_768);
         assertLe(address(f).code.length, 24_576);
         // Transitional (P1d D2): over EIP-170 until the size work
-        assertLe(address(underlyingImpl).code.length, 30_720);
+        assertLe(address(underlyingImpl).code.length, 40_960);
     }
 }

@@ -76,17 +76,20 @@ abstract contract DeployBase is Script {
         require(u != bytes32(0), "RPC gave no block 0 hash");
     }
 
-    /// @notice The token factory, the `NONE` implementation and the `SCaaSDex` implementation by CREATE2, each
-    ///         registered as version 1 when the deployer is the registrar, and the UA registry (`_deployUARegistry`);
+    /// @notice The UA registry (`_deployUARegistry`), then the token factory, the `NONE` implementation (on that
+    ///         registry: the UA ledger, CTR-UA-18) and the `SCaaSDex` implementation by CREATE2, each
+    ///         registered as version 1 when the deployer is the registrar;
     ///         writes `token_factory`, `implementation_none`, `dex_implementation`, `ua_registry`, `chain_uid` into the
     ///         JSON object `"deploy"`; with `DEPLOY_ZETHER`
-    ///         also the Zether stack (`_deployZether`, dev chains only). `UNDERLYING` is not deployed: over EIP-170 on real chains
+    ///         also the Zether stack (`_deployZether`, dev chains only). NONE and `UNDERLYING` both exceed EIP-170 (the UA ledger):
+    ///         deploy with `--code-size-limit 65536` (deploy.sh); `UNDERLYING` is still not deployed here
     ///         (owner: wait for Glamsterdam).
     function _deployTokenFactory(address registrar, bool register, address smartKeyAccountImpl, bool isHedera)
         internal returns (OpenFactory f)
     {
         f = new OpenFactory{salt: salt}(registrar, uid);
-        NoUnderlyingToken none = new NoUnderlyingToken{salt: salt}(address(f), smartKeyAccountImpl, uid, isHedera);
+        UARegistry reg = _deployUARegistry(smartKeyAccountImpl, isHedera);
+        NoUnderlyingToken none = new NoUnderlyingToken{salt: salt}(address(f), smartKeyAccountImpl, uid, address(reg), isHedera);
         if (register) f.registerImplementation(IOpenFactory.TokenKind.NONE, 1, address(none));
         _gate(address(f));
         _gate(address(none));
@@ -99,7 +102,6 @@ abstract contract DeployBase is Script {
         _gate(address(dexImpl));
         vm.serializeAddress("deploy", "dex_implementation", address(dexImpl));
         if (deployZether) require(ZetherSafety.isDevChain(), "DEPLOY_ZETHER: dev chains only (CTR-ZTH-02)");
-        UARegistry reg = _deployUARegistry(smartKeyAccountImpl, isHedera);
         if (deployZether) _deployZether(f, register, smartKeyAccountImpl, address(reg));
         vm.serializeBytes32("deploy", "chain_uid", uid);
     }

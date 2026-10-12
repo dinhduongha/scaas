@@ -133,6 +133,71 @@ library MetaTxLib {
         ));
     }
 
+    // ------------------------------------------------------------------ the UA ledger (accounts.md CTR-UA-18/19/26)
+
+    /// @notice CTR-UA-18: the one address ERC-20 observers see for the whole UA ledger; `balanceOf(UA_POOL)` = Σ of the
+    ///         derived UAs' balances. Nobody holds its key.
+    address internal constant UA_POOL = address(uint160(uint256(keccak256("scaas.ua.pool.v1"))));
+
+    /// @notice A native id as a UA-ledger id: the address zero-padded (top 96 bits zero, accounts.md §1.3).
+    function pad(address a) internal pure returns (bytes32) {
+        return bytes32(uint256(uint160(a)));
+    }
+
+    /// @notice CTR-UA-19/26: an allowlisted call of this token under a UA (`from` a native id or a registered
+    ///         SIGNING UA); the fields after `from` are those of `MetaTransaction`.
+    struct UAMetaTransaction {
+        bytes32 from;
+        bytes   data;
+        uint256 batch;
+        uint256 nonce;
+        uint256 validUntil;
+        uint32  mode;
+        address relayer;
+        uint256 fee;
+        address feeRecipient;
+    }
+
+    /// @dev Pinned by `test_uaTypehashesArePinned` (test/metatx/MetaTxLib.t.sol).
+    bytes32 internal constant UAMETATX_TYPEHASH = keccak256(
+        "UAMetaTransaction(bytes32 from,bytes data,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+    );
+
+    /// @notice CTR-UA-26: the typed transfer (`entryRef == 0`) or payment of the UA ledger; `from` and `to` are ids.
+    struct UAMetaTransfer {
+        bytes32 from;
+        bytes32 to;
+        uint256 value;
+        bytes32 entryRef;
+        uint256 batch;
+        uint256 nonce;
+        uint256 validUntil;
+        uint32  mode;
+        address relayer;
+        uint256 fee;
+        address feeRecipient;
+    }
+
+    bytes32 internal constant UAMETATRANSFER_TYPEHASH = keccak256(
+        "UAMetaTransfer(bytes32 from,bytes32 to,uint256 value,bytes32 entryRef,uint256 batch,uint256 nonce,uint256 validUntil,uint32 mode,address relayer,uint256 fee,address feeRecipient)"
+    );
+
+    function hashStruct(UAMetaTransaction memory m) internal pure returns (bytes32) {
+        address r = (m.mode & MODE_RESTRICT_RELAYER) != 0 ? m.relayer : address(0);
+        address f = (m.mode & MODE_RESTRICT_FEE_RECIPIENT) != 0 ? m.feeRecipient : address(0);
+        return keccak256(abi.encode(
+            UAMETATX_TYPEHASH, m.from, keccak256(m.data), m.batch, m.nonce, m.validUntil, m.mode, r, m.fee, f
+        ));
+    }
+
+    function hashStruct(UAMetaTransfer memory t) internal pure returns (bytes32) {
+        address r = (t.mode & MODE_RESTRICT_RELAYER) != 0 ? t.relayer : address(0);
+        address f = (t.mode & MODE_RESTRICT_FEE_RECIPIENT) != 0 ? t.feeRecipient : address(0);
+        return keccak256(abi.encode(
+            UAMETATRANSFER_TYPEHASH, t.from, t.to, t.value, t.entryRef, t.batch, t.nonce, t.validUntil, t.mode, r, t.fee, f
+        ));
+    }
+
     /// @notice Đọc cách tính phí từ nửa byte sau của `mode`.
     /// @dev Trả về `FeeMode` để `FeePolicy` dùng nguyên như cũ — enum vẫn là kiểu
     ///      chuẩn tắc của tầng phí, chỉ không còn là một trường riêng trong struct.

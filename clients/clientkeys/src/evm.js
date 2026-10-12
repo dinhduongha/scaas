@@ -247,6 +247,46 @@ export function metaTransferTypedData({ name = 'SCaaS MetaToken', contract, chai
   };
 }
 
+// The UA ledger's two structs (accounts.md CTR-UA-19, CTR-UA-26): ids as bytes32 (a native address zero-padded), the
+// token's own salted domain; the typehash separates them from `MetaTransaction` / `MetaTransfer`.
+const UA_TX_TYPES = { EIP712Domain: SALTED_DOMAIN_TYPE, UAMetaTransaction: fields(['from:bytes32', 'data:bytes',
+  'batch:uint256', 'nonce:uint256', 'validUntil:uint256', 'mode:uint32', 'relayer:address', 'fee:uint256',
+  'feeRecipient:address']) };
+const UA_TRANSFER_TYPES = { EIP712Domain: SALTED_DOMAIN_TYPE, UAMetaTransfer: fields(['from:bytes32', 'to:bytes32',
+  'value:uint256', 'entryRef:bytes32', 'batch:uint256', 'nonce:uint256', 'validUntil:uint256', 'mode:uint32',
+  'relayer:address', 'fee:uint256', 'feeRecipient:address']) };
+const ZERO_ID = '0x' + '00'.repeat(32);
+
+/** A native address as a UA-ledger id: the address zero-padded to 32 bytes (accounts.md §1.3). */
+export const padId = (address) => hex(addressWord(address));
+
+/** A token's `UAMetaTransaction` (an allowlisted call under a UA) in its salted domain; unset fields 0; canonical
+ *  zeroing as `metaTxTypedData`. `from` is a 32-byte id. */
+export function uaMetaTxTypedData({ name = 'SCaaS MetaToken', contract, chainId, chainUid, message }) {
+  const m = { from: ZERO_ID, data: '0x', batch: '0', nonce: '0', validUntil: '0', mode: 0, relayer: ZERO_ADDRESS,
+    fee: '0', feeRecipient: ZERO_ADDRESS, ...message };
+  const mode = BigInt(m.mode);
+  return {
+    types: UA_TX_TYPES, primaryType: 'UAMetaTransaction', domain: salted({ name, contract, chainId, chainUid }),
+    message: { ...m, from: hex(bytes32(m.from)), data: typeof m.data === 'string' ? m.data : hex(m.data),
+      batch: String(m.batch), nonce: String(m.nonce), validUntil: String(m.validUntil), fee: String(m.fee),
+      relayer: mode & 1n ? m.relayer : ZERO_ADDRESS, feeRecipient: mode & 2n ? m.feeRecipient : ZERO_ADDRESS },
+  };
+}
+
+/** A token's `UAMetaTransfer` (transfer or payment between ids) in its salted domain; as `metaTransferTypedData`. */
+export function uaMetaTransferTypedData({ name = 'SCaaS MetaToken', contract, chainId, chainUid, message }) {
+  const m = { from: ZERO_ID, to: ZERO_ID, value: '0', entryRef: ZERO_ID, batch: '0', nonce: '0', validUntil: '0', mode: 0,
+    relayer: ZERO_ADDRESS, fee: '0', feeRecipient: ZERO_ADDRESS, ...message };
+  const mode = BigInt(m.mode);
+  return {
+    types: UA_TRANSFER_TYPES, primaryType: 'UAMetaTransfer', domain: salted({ name, contract, chainId, chainUid }),
+    message: { ...m, from: hex(bytes32(m.from)), to: hex(bytes32(m.to)), value: String(m.value), batch: String(m.batch),
+      nonce: String(m.nonce), validUntil: String(m.validUntil), fee: String(m.fee),
+      relayer: mode & 1n ? m.relayer : ZERO_ADDRESS, feeRecipient: mode & 2n ? m.feeRecipient : ZERO_ADDRESS },
+  };
+}
+
 /** The lane of a payment request, `keccak256("scaas.pay.lane" ‖ entryRef)` with nonce 0 (CTR-MTX-03; on chain `payLane`). */
 export function payLane(entryRef) {
   return BigInt(hex(keccak_256(concatBytes(utf8ToBytes('scaas.pay.lane'), bytes32(entryRef)))));

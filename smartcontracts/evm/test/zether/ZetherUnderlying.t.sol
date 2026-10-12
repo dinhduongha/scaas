@@ -378,7 +378,7 @@ contract ZetherUnderlyingTest is ZetherFixture {
     /// An EOA holding a SCaaS underlying cannot approve (CTR-TOK-01): it wraps by signature (`mtxWrap`, inherited) and
     /// shields through `mtxExecute`, paying no gas.
     function test_mtxWrapThenRelayedShield_noApproveAnywhere() public {
-        NoUnderlyingToken pImpl = new NoUnderlyingToken(address(factory), address(0), ZUID, false);
+        NoUnderlyingToken pImpl = new NoUnderlyingToken(address(factory), address(0), ZUID, address(0), false);
         vm.prank(registrar);
         factory.registerImplementation(IOpenFactory.TokenKind.NONE, 1, address(pImpl));
         IFactoryToken.TokenConfig memory pc;

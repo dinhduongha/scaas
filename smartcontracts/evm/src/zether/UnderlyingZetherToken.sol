@@ -26,8 +26,8 @@ import {ZetherLib} from "./ZetherLib.sol";
 contract UnderlyingZetherToken is UnderlyingToken, ZetherLayer {
     constructor(address factory_, address smartKeyAccountImpl_, bytes32 chainUid_, address registry_,
         ITransferDisclosure disclosure_)
-        UnderlyingToken(factory_, smartKeyAccountImpl_, chainUid_, false)
-        ZetherLayer(registry_, disclosure_)
+        UnderlyingToken(factory_, smartKeyAccountImpl_, chainUid_, registry_, false)
+        ZetherLayer(disclosure_)
     {}
 
     function kind() public pure override(UnderlyingToken, MetaTokenBase) returns (uint8) {
@@ -150,5 +150,9 @@ contract UnderlyingZetherToken is UnderlyingToken, ZetherLayer {
         if (_isZetherOp(sel) || sel == this.zetherUnshieldUnwrap.selector) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 0);
         if (sel == this.zetherWrapShield.selector) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 100);
         return UnderlyingToken._mtxRule(sel);
+    }
+
+    function _uaAllowed(bytes4 sel) internal view override(UnderlyingToken, ERC20MetaTx) returns (bool) {
+        return UnderlyingToken._uaAllowed(sel);
     }
 }

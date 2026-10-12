@@ -36,10 +36,28 @@ library SigCheck {
     function isValid(address signer, bytes32 digest, bytes memory sig, uint256 cap1271)
         internal view returns (bool ok)
     {
-        if (!isContract(signer)) {
-            (address rec, ECDSA.RecoverError err,) = ECDSA.tryRecover(digest, sig);
-            return err == ECDSA.RecoverError.NoError && rec == signer;
-        }
+        if (!isContract(signer)) return _ecdsa(signer, digest, sig);
+        return _erc1271(signer, digest, sig, cap1271);
+    }
+
+    /// @notice accounts.md CTR-UA-24 (the UA ledger's native path, like the UA registry): no code ⇒ ECDSA; the 23-byte
+    ///         EIP-7702 designator ⇒ ECDSA by the base key, else ERC-1271 through the delegate; other code ⇒ ERC-1271.
+    function isValid7702(address signer, bytes32 digest, bytes memory sig, uint256 cap1271)
+        internal view returns (bool)
+    {
+        if (signer.code.length == 0) return _ecdsa(signer, digest, sig);
+        if (!isContract(signer) && _ecdsa(signer, digest, sig)) return true;
+        return _erc1271(signer, digest, sig, cap1271);
+    }
+
+    function _ecdsa(address signer, bytes32 digest, bytes memory sig) private pure returns (bool) {
+        (address rec, ECDSA.RecoverError err,) = ECDSA.tryRecover(digest, sig);
+        return err == ECDSA.RecoverError.NoError && rec == signer;
+    }
+
+    function _erc1271(address signer, bytes32 digest, bytes memory sig, uint256 cap1271)
+        private view returns (bool ok)
+    {
         bytes memory payload = abi.encodeCall(IERC1271.isValidSignature, (digest, sig));
         uint256 left = gasleft();
         if (left < cap1271 * 64 / 63 + GAS_MARGIN) revert SigCheckGasStarved(cap1271, left);

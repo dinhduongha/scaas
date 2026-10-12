@@ -35,7 +35,7 @@ contract FeaturesTest is Test {
     function setUp() public {
         vm.chainId(7622);
         vm.warp(1_800_000_000);
-        impl = address(new NoUnderlyingToken(address(this), address(0), UID, false));
+        impl = address(new NoUnderlyingToken(address(this), address(0), UID, address(0), false));
     }
 
     function _cfg(uint256 features, uint256 locked, address owner_, address minter_, uint256 supply)
@@ -254,7 +254,7 @@ contract FeaturesTest is Test {
         uint256 edKey = 0xA11CE5;
         address native = address(uint160(1_234_567));
         MockHederaAccountService(has).setEdKey(native, vm.addr(edKey));
-        address hImpl = address(new NoUnderlyingToken(address(this), address(0), UID, true));
+        address hImpl = address(new NoUnderlyingToken(address(this), address(0), UID, address(0), true));
         IFactoryToken.TokenConfig memory cfg;
         (cfg.name, cfg.symbol, cfg.initialSupply, cfg.initialHolder) = ("P", "P", 100, native);
         NoUnderlyingToken h = _token(hImpl, cfg);

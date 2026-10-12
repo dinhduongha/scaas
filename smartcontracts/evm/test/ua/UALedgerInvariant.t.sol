@@ -1,0 +1,283 @@
+// SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
+pragma solidity ^0.8.24;
+
+import {Test} from "forge-std/Test.sol";
+import {Vm} from "forge-std/Vm.sol";
+import {UAKinds} from "../../src/ua/UAKinds.sol";
+import {UARegistry} from "../../src/ua/UARegistry.sol";
+import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
+import {UnderlyingToken} from "../../src/metatx/UnderlyingToken.sol";
+import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
+import {IUALedger} from "../../src/metatx/IUALedger.sol";
+import {MockERC20} from "../helpers/Mocks.sol";
+import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
+import {UALedgerBase} from "./UALedgerBase.sol";
+
+/// Random mixes of native moves, mints, burns, `transferToUA`, the UA transfer entries (`uaExecuteTransfer`, the named
+/// `uaTransfer` / `uaTransferWithFee`, `uaBatchTransfer`; any side native or derived, with or without a fee) on the NONE
+/// clone and on the 1:1 UNDERLYING clone `wrp`, plus wrap, wrap→UA and the burn under a derived UA (`unwrap` through
+/// `uaExecute` with a fee after the self-call, or the named `uaUnwrap`), and the `UA_POOL` `transferFrom` refusal.
+/// After every call the handler replays the token's `Transfer` logs per native holder and `UATransfer` logs per
+/// derived id, and checks `UATransfer` is emitted exactly for the moves with a derived side.
+contract UALedgerHandler is Test {
+    bytes32 internal constant TRANSFER_SIG = keccak256("Transfer(address,address,uint256)");
+    bytes32 internal constant UATRANSFER_SIG = keccak256("UATransfer(bytes32,bytes32,uint256)");
+    address internal constant RELAYER = address(0xBEEF);
+    address internal constant FEE_TO = address(0xFEE);
+
+    MetaTokenBase internal immutable tok;
+    MetaTokenBase internal immutable wrp;
+    MockERC20 internal immutable und;
+    UARegistry internal immutable reg;
+    address internal immutable minter;
+    uint256[3] internal pks = [uint256(0xA11CE), 0xB0B, 0xCA401];
+    bytes32[2] public uas;
+    bytes[2] internal keys;
+    uint16[2] internal kinds;
+    mapping(address => mapping(address => int256)) public replay; // token => native holder
+    mapping(address => mapping(bytes32 => int256)) public uaReplay; // token => derived id
+
+    constructor(
+        NoUnderlyingToken tok_, UnderlyingToken wrp_, MockERC20 und_, UARegistry reg_, address minter_,
+        bytes32[2] memory uas_, bytes[2] memory keys_, uint16[2] memory kinds_
+    ) {
+        (tok, wrp, und, reg, minter) = (tok_, wrp_, und_, reg_, minter_);
+        (uas, keys, kinds) = (uas_, keys_, kinds_);
+        replay[address(tok_)][vm.addr(pks[0])] = int256(tok_.balanceOf(vm.addr(pks[0])));
+        vm.recordLogs();
+    }
+
+    function natives() public view returns (address[6] memory a) {
+        a = [vm.addr(pks[0]), vm.addr(pks[1]), vm.addr(pks[2]), RELAYER, FEE_TO, MetaTxLib.UA_POOL];
+    }
+
+    // ----- ops: NONE clone -----
+
+    function mint(uint256 who, uint256 amount) external {
+        amount = bound(amount, 0, 1e12);
+        vm.prank(minter);
+        NoUnderlyingToken(address(tok)).mint(vm.addr(pks[who % 3]), amount);
+        _settle(tok, 0, 1);
+    }
+
+    function burn(uint256 who, uint256 amount) external {
+        address a = vm.addr(pks[who % 3]);
+        amount = bound(amount, 0, tok.balanceOf(a));
+        vm.prank(a);
+        NoUnderlyingToken(address(tok)).burn(amount);
+        _settle(tok, 0, 1);
+    }
+
+    function nativeTransfer(uint256 from, uint256 to, uint256 amount) external {
+        address a = vm.addr(pks[from % 3]);
+        amount = bound(amount, 0, tok.balanceOf(a));
+        vm.prank(a);
+        tok.transfer(vm.addr(pks[to % 3]), amount);
+        _settle(tok, 0, 1);
+    }
+
+    function transferToUA(uint256 from, uint256 ua, uint256 amount) external {
+        address a = vm.addr(pks[from % 3]);
+        amount = bound(amount, 0, tok.balanceOf(a));
+        vm.prank(a);
+        tok.transferToUA(uas[ua % 2], amount);
+        _settle(tok, 1, 1);
+    }
+
+    // ----- ops: UNDERLYING clone (1:1, one leg) -----
+
+    function wrapNative(uint256 who, uint256 amount) external {
+        address a = vm.addr(pks[who % 3]);
+        amount = bound(amount, 1, 1e12); // wrap(0) reverts
+        und.mint(a, amount);
+        vm.startPrank(a);
+        und.approve(address(wrp), amount);
+        UnderlyingToken(address(wrp)).wrap(amount);
+        vm.stopPrank();
+        _settle(wrp, 0, 1);
+    }
+
+    function wrpToUA(uint256 from, uint256 ua, uint256 amount) external {
+        address a = vm.addr(pks[from % 3]);
+        amount = bound(amount, 0, wrp.balanceOf(a));
+        vm.prank(a);
+        wrp.transferToUA(uas[ua % 2], amount);
+        _settle(wrp, 1, 1);
+    }
+
+    /// The burn under a derived UA: `unwrap(und, amt, recipient, 0)` as `uaExecute` (optionally with a 1 % fee paid
+    /// after the self-call) or the fee-less named `uaUnwrap`. `amt + fee` is bounded to the UA's balance.
+    function unwrapUnder(uint256 fromIdx, uint256 amount, bool withFee, bool viaNamed) external {
+        bytes32 f = uas[fromIdx % 2];
+        uint256 have = wrp.balanceOfUA(f);
+        // fee = amt / 100 exactly: amt is a multiple of 100 and `amt + amt / 100 ≤ have`
+        amount = bound(amount, 0, have * 100 / 101) / 100 * 100;
+        if (amount == 0) return;
+        address recipient = vm.addr(pks[1]);
+        uint256 fee = withFee && !viaNamed ? amount / 100 : 0;
+        MetaTxLib.UAMetaTransaction memory m = MetaTxLib.UAMetaTransaction({
+            from: f, data: abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", address(und), amount, recipient, 0),
+            batch: 1, nonce: wrp.uaNonce(f, 1), validUntil: block.timestamp + 300, mode: MetaTxLib.MODE_RESTRICT_RELAYER,
+            relayer: RELAYER, fee: 0, feeRecipient: address(0)
+        });
+        if (fee != 0) {
+            m.mode |= MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT | MetaTxLib.MODE_FEE_PERCENT;
+            (m.fee, m.feeRecipient) = (10_000, FEE_TO);
+        }
+        bytes memory auth = _auth(3 + fromIdx % 2, wrp.uaDigest(m));
+        vm.prank(RELAYER);
+        if (viaNamed) {
+            wrp.uaUnwrap(f, address(und), amount, recipient, 0, 1, m.nonce, m.validUntil, m.mode, RELAYER, auth);
+        } else {
+            wrp.uaExecute(m, auth);
+        }
+        uint256 n = fee != 0 ? 2 : 1; // the burn, and the fee move out of the UA
+        _settle(wrp, n, n);
+    }
+
+    // ----- ops: UA transfers on either token -----
+
+    /// `from`/`to` index 0–2 a native holder, 3–4 a UA; `withFee` adds a FIXED fee to `FEE_TO` (1 % cap). `seed` picks
+    /// the token (NONE or `wrp`) and the entry (`uaExecuteTransfer`, the named form, `uaBatchTransfer`).
+    function uaTransfer(uint256 from, uint256 to, uint256 amount, bool withFee, uint256 seed) external {
+        MetaTokenBase t_ = seed % 2 == 0 ? tok : wrp;
+        bytes32 f = _id(from % 5);
+        bytes32 t = _id(to % 5);
+        uint256 have = t_.balanceOfUA(f);
+        MetaTxLib.UAMetaTransfer memory x = MetaTxLib.UAMetaTransfer({
+            from: f, to: t, value: bound(amount, 0, have), entryRef: 0, batch: 1, nonce: t_.uaNonce(f, 1),
+            validUntil: block.timestamp + 300, mode: MetaTxLib.MODE_RESTRICT_RELAYER, relayer: RELAYER, fee: 0,
+            feeRecipient: address(0)
+        });
+        uint256 fee = withFee ? x.value / 100 : 0;
+        if (fee != 0 && x.value + fee <= have) {
+            x.mode |= MetaTxLib.MODE_RESTRICT_FEE_RECIPIENT | MetaTxLib.MODE_FEE_FIXED;
+            (x.fee, x.feeRecipient) = (fee, FEE_TO);
+        } else {
+            fee = 0;
+        }
+        bytes memory auth = _auth(from % 5, t_.uaTransferDigest(x));
+        vm.prank(RELAYER);
+        _submit(t_, x, auth, (seed / 2) % 3);
+        bool fromUA = from % 5 > 2;
+        bool toUA = to % 5 > 2;
+        uint256 moves = fee != 0 ? 2 : 1;
+        // derived side ⇒ UATransfer per move; a native side ⇒ Transfer per move (the fee always lands natively)
+        _settle(t_, fromUA || toUA ? (fromUA ? moves : 1) : 0, fromUA && toUA ? moves - 1 : moves);
+    }
+
+    /// A contract spender cannot pull from `UA_POOL` outside a UA self-call: `transferFrom(UA_POOL, x, 0)` reverts.
+    function poolTransferFrom(uint256 seed, uint256 to) external {
+        MetaTokenBase t_ = seed % 2 == 0 ? tok : wrp;
+        try t_.transferFrom(MetaTxLib.UA_POOL, vm.addr(pks[to % 3]), 0) returns (bool) {
+            revert("transferFrom(UA_POOL) must revert");
+        } catch (bytes memory err) {
+            assertEq(bytes4(err), IUALedger.UAPoolNotPayable.selector, "UAPoolNotPayable");
+        }
+    }
+
+    // ----- helpers -----
+
+    function _submit(MetaTokenBase t_, MetaTxLib.UAMetaTransfer memory x, bytes memory auth, uint256 entry) internal {
+        if (entry == 1 && x.fee == 0) {
+            t_.uaTransfer(x.from, x.to, x.value, x.batch, x.nonce, x.validUntil, x.mode, x.relayer, auth);
+        } else if (entry == 1) {
+            t_.uaTransferWithFee(
+                x.from, x.to, x.value, x.batch, x.nonce, x.validUntil, x.mode, x.relayer, x.fee, x.feeRecipient, auth
+            );
+        } else if (entry == 2) {
+            MetaTxLib.UAMetaTransfer[] memory xs = new MetaTxLib.UAMetaTransfer[](1);
+            bytes[] memory as_ = new bytes[](1);
+            (xs[0], as_[0]) = (x, auth);
+            t_.uaBatchTransfer(xs, as_);
+        } else {
+            t_.uaExecuteTransfer(x, auth);
+        }
+    }
+
+    function _id(uint256 i) internal view returns (bytes32) {
+        return i < 3 ? bytes32(uint256(uint160(vm.addr(pks[i])))) : uas[i - 3];
+    }
+
+    function _auth(uint256 i, bytes32 digest) internal view returns (bytes memory) {
+        if (i < 3) {
+            (uint8 v, bytes32 r, bytes32 s) = vm.sign(pks[i], digest);
+            return abi.encodePacked(r, s, v);
+        }
+        bytes memory k = keys[i - 3];
+        bytes32 message = reg.uaMessage(kinds[i - 3], UAKinds.PURPOSE_METATX, digest);
+        return abi.encode(k, abi.encodePacked(keccak256(abi.encode(k, message))));
+    }
+
+    /// Replays this call's `Transfer` and `UATransfer` logs and checks the event counts.
+    function _settle(MetaTokenBase t_, uint256 wantUATransfers, uint256 wantTransfers) internal {
+        Vm.Log[] memory logs = vm.getRecordedLogs();
+        uint256 transfers;
+        uint256 uaTransfers;
+        for (uint256 i; i < logs.length; ++i) {
+            if (logs[i].emitter != address(t_)) continue;
+            if (logs[i].topics[0] == UATRANSFER_SIG) {
+                ++uaTransfers;
+                bytes32 f = logs[i].topics[1];
+                bytes32 t = logs[i].topics[2];
+                int256 u = int256(abi.decode(logs[i].data, (uint256)));
+                if (!UAKinds.inNativeSpace(f)) uaReplay[address(t_)][f] -= u;
+                if (!UAKinds.inNativeSpace(t)) uaReplay[address(t_)][t] += u;
+                continue;
+            }
+            if (logs[i].topics[0] != TRANSFER_SIG) continue;
+            ++transfers;
+            address from = address(uint160(uint256(logs[i].topics[1])));
+            address to = address(uint160(uint256(logs[i].topics[2])));
+            int256 v = int256(abi.decode(logs[i].data, (uint256)));
+            if (from != address(0)) replay[address(t_)][from] -= v;
+            if (to != address(0)) replay[address(t_)][to] += v;
+        }
+        assertEq(uaTransfers, wantUATransfers, "UATransfer iff a side is derived");
+        assertEq(transfers, wantTransfers, "Transfer iff a native balance changes");
+        vm.recordLogs();
+    }
+}
+
+/// T-V3-2, on the NONE clone and on the 1:1 UNDERLYING clone: `totalSupply == Σ balanceOf(native incl. UA_POOL)`,
+/// `balanceOf(UA_POOL) == Σ balanceOfUA`, replaying `Transfer` logs equals `balanceOf` for every native holder
+/// (`UA_POOL` included), replaying `UATransfer` logs equals `balanceOfUA` for every tracked UA; `UATransfer` iff a side
+/// is derived (checked per call by the handler); on `wrp` also `totalSupply == underlying.balanceOf(wrp)`.
+contract UALedgerInvariantTest is UALedgerBase {
+    UALedgerHandler internal h;
+
+    function setUp() public override {
+        super.setUp();
+        bytes32[2] memory u = [uaP, uaB];
+        bytes[2] memory k = [_key(UAKinds.P256), _key(UAKinds.BIP340)];
+        uint16[2] memory kd = [UAKinds.P256, UAKinds.BIP340];
+        h = new UALedgerHandler(tok, wrp, und, lreg, address(this), u, k, kd); // this fixture is the NONE token's minter
+        targetContract(address(h));
+    }
+
+    function _check(MetaTokenBase t) internal view {
+        address[6] memory a = h.natives();
+        uint256 sum;
+        for (uint256 i; i < a.length; ++i) {
+            sum += t.balanceOf(a[i]);
+            assertEq(h.replay(address(t), a[i]), int256(t.balanceOf(a[i])), "Transfer replay");
+        }
+        assertEq(t.totalSupply(), sum, "supply");
+        uint256 uaSum;
+        for (uint256 i; i < 2; ++i) {
+            bytes32 ua = h.uas(i);
+            uaSum += t.balanceOfUA(ua);
+            assertEq(h.uaReplay(address(t), ua), int256(t.balanceOfUA(ua)), "UATransfer replay");
+        }
+        assertEq(t.balanceOf(POOL), uaSum, "pool");
+    }
+
+    function invariant_T_V3_2_none() public view {
+        _check(tok);
+    }
+
+    function invariant_T_V3_2_underlying() public view {
+        _check(wrp);
+        assertEq(wrp.totalSupply(), und.balanceOf(address(wrp)), "1:1 backing");
+    }
+}

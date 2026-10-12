@@ -11,6 +11,8 @@ import {IERC20MetaTx} from "./IERC20MetaTx.sol";
 import {IERC20Payment} from "./IERC20Payment.sol";
 import {HederaLib} from "../hedera/HederaLib.sol";
 import {IMetaTokenV2} from "./IMetaTokenV2.sol";
+import {IUALedger} from "./IUALedger.sol";
+import {IUARegistry} from "../ua/IUARegistry.sol";
 import {IFactoryToken} from "../factory/IFactoryToken.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {FeePolicy, FeeMode} from "../common/FeePolicy.sol";
@@ -23,6 +25,9 @@ import {FeePolicy, FeeMode} from "../common/FeePolicy.sol";
 ///         `IS_HEDERA` (CTR-TOK-23): HIP-632 signatures through `HederaLib`.
 abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IERC165, ITokenAdmin {
     using MetaTxLib for MetaTxLib.MetaTransfer;
+
+    /// @notice The single-leg-or-any `unwrap` that `uaUnwrap` builds (accounts.md CTR-UA-26).
+    bytes4 internal constant SEL_UA_UNWRAP = bytes4(keccak256("unwrap(address,uint256,address,uint256)"));
 
     bytes32 internal constant RECEIVER_FEE_TYPEHASH =
         keccak256("ReceiverFee(bytes32 paymentDigest,uint256 fee,address feeRecipient,uint256 validUntil)");
@@ -44,9 +49,10 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
     /// @notice Wrong underlying count for the tier (0 / 1 / 2–8).
     error UnderlyingCountInvalid(uint256 n);
 
-    /// @dev Runs ONCE on the implementation and locks it, so nobody can `initialize` it.
-    constructor(address factory_, address smartKeyAccountImpl_, bytes32 chainUid_, bool isHedera_)
-        ERC20MetaTx(chainUid_)
+    /// @dev Runs ONCE on the implementation and locks it, so nobody can `initialize` it. `registry_` is the chain's UA
+    ///      registry (0 = no UA ledger).
+    constructor(address factory_, address smartKeyAccountImpl_, bytes32 chainUid_, address registry_, bool isHedera_)
+        ERC20MetaTx(chainUid_, registry_)
     {
         FACTORY = factory_;
         _SELF = address(this);
@@ -57,9 +63,14 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
         AdminLib.$().initialized = true;
     }
 
-    /// @notice The factory calls it in the SAME call as CREATE2 (CTR-TOK-25).
+    /// @notice The factory calls it in the SAME call as CREATE2 (CTR-TOK-25). A UA registry must name this chain's
+    ///         `chain_uid` (CTR-UA-19).
     function initialize(address creator_, uint64 version_, TokenConfig calldata cfg) external {
         if (msg.sender != FACTORY) revert NotFactory();
+        if (_REGISTRY != address(0)) {
+            bytes32 u = IUARegistry(_REGISTRY).chainUid();
+            if (u != CHAIN_UID) revert UARegistryChainUid(u, CHAIN_UID);
+        }
         AdminLib.TokenStorage storage t = AdminLib.$();
         if (t.initialized) revert AlreadyInitialized();
         t.initialized = true;
@@ -121,7 +132,8 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
     function supportsInterface(bytes4 id) external view returns (bool) {
         return id == type(IERC165).interfaceId || id == type(IERC20).interfaceId || id == type(IMetaTx).interfaceId
             || id == type(IERC20MetaTx).interfaceId
-            || (id == type(IERC20Payment).interfaceId && AdminLib.hasFeature(AdminLib.PAYABLE));
+            || (id == type(IERC20Payment).interfaceId && AdminLib.hasFeature(AdminLib.PAYABLE))
+            || (id == type(IUALedger).interfaceId && _REGISTRY != address(0));
     }
 
     function payLane(bytes32 payId) public pure returns (uint256) {
@@ -197,6 +209,87 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
         return true;
     }
 
+    // ------------------------------------------------------------------ named UA functions (CTR-UA-26)
+
+    /// @notice `uaExecuteTransfer(UAMetaTransfer{from, to, amount, 0, batch, nonce, validUntil, mode, relayer, 0, 0})`.
+    function uaTransfer(
+        bytes32 from, bytes32 to, uint256 amount, uint256 batch, uint256 nonce, uint256 validUntil,
+        uint32 mode, address relayer, bytes calldata auth
+    ) external nonReentrant returns (bool) {
+        if (mode & ~MetaTxLib.MODE_RESTRICT_RELAYER != 0) revert MtxModeShape(mode);
+        MetaTxLib.UAMetaTransfer memory t;
+        t.from = from;
+        t.to = to;
+        t.value = amount;
+        t.batch = batch;
+        t.nonce = nonce;
+        t.validUntil = validUntil;
+        t.mode = mode;
+        t.relayer = relayer;
+        _uaExecuteTransfer(t, auth);
+        return true;
+    }
+
+    function uaTransferWithFee(
+        bytes32 from, bytes32 to, uint256 amount, uint256 batch, uint256 nonce, uint256 validUntil,
+        uint32 mode, address relayer, uint256 fee, address feeRecipient, bytes calldata auth
+    ) external nonReentrant returns (bool) {
+        _requireFeeShape(mode, feeRecipient);
+        MetaTxLib.UAMetaTransfer memory t;
+        t.from = from;
+        t.to = to;
+        t.value = amount;
+        t.batch = batch;
+        t.nonce = nonce;
+        t.validUntil = validUntil;
+        t.mode = mode;
+        t.relayer = relayer;
+        t.fee = fee;
+        t.feeRecipient = feeRecipient;
+        _uaExecuteTransfer(t, auth);
+        return true;
+    }
+
+    /// @notice Payment `payId` on its lane `payLane(payId)`, nonce 0, as `mtxPay`.
+    function uaPay(
+        bytes32 from, bytes32 to, uint256 amount, bytes32 payId, uint256 validUntil,
+        uint32 mode, address relayer, uint256 fee, address feeRecipient, bytes calldata auth
+    ) external nonReentrant returns (bool) {
+        AdminLib.requireFeature(AdminLib.PAYABLE);
+        MetaTxLib.UAMetaTransfer memory t;
+        t.from = from;
+        t.to = to;
+        t.value = amount;
+        t.entryRef = payId;
+        t.batch = payLane(payId);
+        t.validUntil = validUntil;
+        t.mode = mode;
+        t.relayer = relayer;
+        t.fee = fee;
+        t.feeRecipient = feeRecipient;
+        _uaExecuteTransfer(t, auth);
+        return true;
+    }
+
+    /// @notice `uaExecute(UAMetaTransaction{from, unwrap(underlying, wrapped, recipient, minOut), …, fee 0})`: the
+    ///         gasless unwrap of a UA (CTR-MTX-12); fee `NONE` (as `mtxTransfer`). Only on kinds whose UA allowlist
+    ///         has that `unwrap` (else `MetaTxUnknownOp`).
+    function uaUnwrap(
+        bytes32 from, address underlying, uint256 wrapped, address recipient, uint256 minOut,
+        uint256 batch, uint256 nonce, uint256 validUntil, uint32 mode, address relayer, bytes calldata auth
+    ) external nonReentrant returns (bytes memory) {
+        if (mode & ~MetaTxLib.MODE_RESTRICT_RELAYER != 0) revert MtxModeShape(mode);
+        MetaTxLib.UAMetaTransaction memory m;
+        m.from = from;
+        m.data = abi.encodeWithSelector(SEL_UA_UNWRAP, underlying, wrapped, recipient, minOut);
+        m.batch = batch;
+        m.nonce = nonce;
+        m.validUntil = validUntil;
+        m.mode = mode;
+        m.relayer = relayer;
+        return _uaExecute(m, auth);
+    }
+
     // ------------------------------------------------------------------ receiver-pays (CTR-MTX-05, CTR-MTX-06)
 
     function receiverFeeDigest(bytes32 paymentDigest, uint256 fee, address feeRecipient, uint256 validUntil)
@@ -258,6 +351,11 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
     function _requireValidSignature(address from, bytes32 digest, bytes calldata sig) internal view override {
         if (IS_HEDERA && sig.length == 64 && !_isContract(from)) return HederaLib.requireValid(from, digest, sig);
         super._requireValidSignature(from, digest, sig);
+    }
+
+    function _requireNativeUASignature(address from, bytes32 digest, bytes calldata sig) internal view override {
+        if (IS_HEDERA && sig.length == 64 && !_isContract(from)) return HederaLib.requireValid(from, digest, sig);
+        super._requireNativeUASignature(from, digest, sig);
     }
 
     function _erc1271Gas(address from) internal view override returns (uint256) {

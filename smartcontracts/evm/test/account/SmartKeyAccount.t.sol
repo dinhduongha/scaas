@@ -103,7 +103,7 @@ contract SmartKeyAccountTest is WebAuthnSoft {
         vm.chainId(7622);
         vm.warp(1_800_000_000);
         fac = new SmartKeyAccountFactory(UID_);
-        NoUnderlyingToken impl = new NoUnderlyingToken(address(this), fac.IMPLEMENTATION(), UID_, false);
+        NoUnderlyingToken impl = new NoUnderlyingToken(address(this), fac.IMPLEMENTATION(), UID_, address(0), false);
         t = NoUnderlyingToken(_clone(address(impl), address(this), new address[](0),
             abi.encode(noneInit("Points", "PTS", 0, 0, address(this), address(this)))));
         acct = SmartKeyAccount(payable(fac.deploy(_passkey(PASSKEY), GUARDIAN)));

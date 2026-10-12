@@ -48,10 +48,10 @@ contract AllowlistTest is Test {
         vm.warp(1_800_000_000);
         u = new MockERC20("U", "U", 6);
         u2 = new MockERC20("U2", "U2", 6);
-        none = NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(address(this), address(0), UID, false))));
+        none = NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(address(this), address(0), UID, address(0), false))));
         none.initialize(address(this), 1, noneInit("P", "P", 6, 0, address(this), address(this)));
         single = UnderlyingToken(
-            Clones.clone(address(new UnderlyingToken(address(this), address(0), UID, false))));
+            Clones.clone(address(new UnderlyingToken(address(this), address(0), UID, address(0), false))));
         Rate memory cfg;
         address[] memory one = new address[](1);
         one[0] = address(u);
@@ -59,7 +59,7 @@ contract AllowlistTest is Test {
         r1[0] = 1;
         single.initialize(address(this), 1, underlyingInit(one, r1, r1, 6, cfg, address(0), address(0)));
         multi = UnderlyingToken(
-            Clones.clone(address(new UnderlyingToken(address(this), address(0), UID, false))));
+            Clones.clone(address(new UnderlyingToken(address(this), address(0), UID, address(0), false))));
         address[] memory two = new address[](2);
         (two[0], two[1]) = (address(u), address(u2));
         uint256[] memory r = new uint256[](2);
@@ -298,7 +298,7 @@ contract AllowlistTest is Test {
     function test_reentryFromUnderlyingHook_reverts() public {
         ReenteringERC20 bad = new ReenteringERC20();
         UnderlyingToken w = UnderlyingToken(
-            Clones.clone(address(new UnderlyingToken(address(this), address(0), UID, false))));
+            Clones.clone(address(new UnderlyingToken(address(this), address(0), UID, address(0), false))));
         Rate memory cfg;
         address[] memory one = new address[](1);
         one[0] = address(bad);

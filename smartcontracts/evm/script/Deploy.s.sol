@@ -6,7 +6,7 @@ import {OpenFactory} from "../src/factory/OpenFactory.sol";
 import {SmartKeyAccountFactory} from "../src/account/SmartKeyAccountFactory.sol";
 import {DeployBase} from "./DeployBase.sol";
 
-/// forge script script/Deploy.s.sol --rpc-url $RPC --broadcast --sender <địa chỉ deployer = vm.addr(PRIVATE_KEY)>
+/// forge script script/Deploy.s.sol --rpc-url $RPC --broadcast --slow --code-size-limit 65536 --sender <địa chỉ deployer = vm.addr(PRIVATE_KEY)>
 /// env: PRIVATE_KEY (deployer; registrar mặc định), REGISTRAR (tuỳ chọn),
 ///      DEMO_SUPPLY (tuỳ chọn; 0 = không tạo token demo), DEMO_HOLDER (tuỳ chọn, nhận một nửa),
 ///      DEPLOY_SALT (tuỳ chọn; mặc định keccak256("scaas.deploy.v1"); chạy lại trên cùng chain cần salt mới),

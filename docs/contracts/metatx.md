@@ -380,7 +380,8 @@ payments through it ([NODE-LANE-11](../node/submit-lanes.md#NODE-LANE-11)).
 
 ## 6. 2D nonces and lanes
 
-Storage `_metaNonce[from][batch]`; an intent — a `MetaTransaction` or a `MetaTransfer` — is valid iff its `nonce ==
+Storage `_metaNonce[from][batch]` (BUILT: keyed by `bytes32`, a native address zero-padded, shared with the UA
+ledger's `ua*` path, [CTR-UA-26](accounts.md#CTR-UA-26)); an intent — a `MetaTransaction` or a `MetaTransfer` — is valid iff its `nonce ==
 mtxNonce(from, batch)`; execution increments it. Both structs share the one map. Independent lanes remove head-of-line blocking between agents and between business flows of the same subject.
 
 | Lane derivation | Rule | Status |

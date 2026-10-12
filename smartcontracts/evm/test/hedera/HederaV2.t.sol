@@ -42,9 +42,9 @@ contract HederaV2Test is Test {
         f = new OpenFactory(registrar, UID);
         vm.startPrank(registrar);
         f.registerImplementation(IOpenFactory.TokenKind.NONE, 1,
-            address(new NoUnderlyingToken(address(f), address(0), UID, true)));
+            address(new NoUnderlyingToken(address(f), address(0), UID, address(0), true)));
         f.registerImplementation(IOpenFactory.TokenKind.UNDERLYING, 1,
-            address(new UnderlyingToken(address(f), address(0), UID, true)));
+            address(new UnderlyingToken(address(f), address(0), UID, address(0), true)));
         vm.stopPrank();
         usdc = new MockERC20("USD Coin", "USDC", 6);
         plain = new MockERC20("Plain", "PLN", 6);
@@ -52,9 +52,10 @@ contract HederaV2Test is Test {
     }
 
     function test_implementationSizes() public view {
-        assertLe(f.implementationOf(IOpenFactory.TokenKind.NONE, 1).code.length, 23_552); // owner: size later; budget 20,480 (P2a ruling)
+        // owner: size later (Glamsterdam); budget 20,480 (P2a ruling); +8.7 KB for the UA ledger (UA-4)
+        assertLe(f.implementationOf(IOpenFactory.TokenKind.NONE, 1).code.length, 32_768);
         // Transitional (P1d D2): over EIP-170 until the size work
-        assertLe(f.implementationOf(IOpenFactory.TokenKind.UNDERLYING, 1).code.length, 30_720);
+        assertLe(f.implementationOf(IOpenFactory.TokenKind.UNDERLYING, 1).code.length, 40_960);
     }
 
     function _edSign(bytes32 digest) internal pure returns (bytes memory) {
