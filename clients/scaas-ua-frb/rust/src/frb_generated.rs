@@ -98,10 +98,10 @@ fn wire__crate__api__ua__chain_key_hash_impl(
             };
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_chain_id = <u64>::sse_decode(&mut deserializer);
+            let api_chain_id = <i64>::sse_decode(&mut deserializer);
             deserializer.end();
-            transform_result_sse::<_, ()>((move || {
-                let output_ok = Ok::<_, ()>(crate::api::ua::chain_key_hash(api_chain_id))?;
+            transform_result_sse::<_, crate::api::ua::UAError>((move || {
+                let output_ok = crate::api::ua::chain_key_hash(api_chain_id)?;
                 std::result::Result::Ok(output_ok)
             })())
         },
@@ -128,7 +128,7 @@ fn wire__crate__api__ua__derive_ua_impl(
             };
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_kind = <u16>::sse_decode(&mut deserializer);
+            let api_kind = <i64>::sse_decode(&mut deserializer);
             let api_key_data = <Vec<u8>>::sse_decode(&mut deserializer);
             let api_hedera_native = <bool>::sse_decode(&mut deserializer);
             deserializer.end();
@@ -161,12 +161,11 @@ fn wire__crate__api__ua__encode_msig_impl(
             };
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_threshold = <u16>::sse_decode(&mut deserializer);
-            let api_members = <Vec<(u16, [u8; 32], u16)>>::sse_decode(&mut deserializer);
+            let api_threshold = <i64>::sse_decode(&mut deserializer);
+            let api_members = <Vec<(i64, [u8; 32], i64)>>::sse_decode(&mut deserializer);
             deserializer.end();
-            transform_result_sse::<_, ()>((move || {
-                let output_ok =
-                    Ok::<_, ()>(crate::api::ua::encode_msig(api_threshold, api_members))?;
+            transform_result_sse::<_, crate::api::ua::UAError>((move || {
+                let output_ok = crate::api::ua::encode_msig(api_threshold, api_members)?;
                 std::result::Result::Ok(output_ok)
             })())
         },
@@ -283,7 +282,7 @@ fn wire__crate__api__ua__is_member_impl(
             };
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_kind = <u16>::sse_decode(&mut deserializer);
+            let api_kind = <i64>::sse_decode(&mut deserializer);
             let api_hedera_native = <bool>::sse_decode(&mut deserializer);
             deserializer.end();
             transform_result_sse::<_, ()>((move || {
@@ -315,7 +314,7 @@ fn wire__crate__api__ua__is_native_impl(
             };
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_kind = <u16>::sse_decode(&mut deserializer);
+            let api_kind = <i64>::sse_decode(&mut deserializer);
             deserializer.end();
             transform_result_sse::<_, ()>((move || {
                 let output_ok = Ok::<_, ()>(crate::api::ua::is_native(api_kind))?;
@@ -345,7 +344,7 @@ fn wire__crate__api__ua__is_signing_impl(
             };
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_kind = <u16>::sse_decode(&mut deserializer);
+            let api_kind = <i64>::sse_decode(&mut deserializer);
             deserializer.end();
             transform_result_sse::<_, ()>((move || {
                 let output_ok = Ok::<_, ()>(crate::api::ua::is_signing(api_kind))?;
@@ -375,7 +374,7 @@ fn wire__crate__api__ua__is_zether_impl(
             };
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_kind = <u16>::sse_decode(&mut deserializer);
+            let api_kind = <i64>::sse_decode(&mut deserializer);
             deserializer.end();
             transform_result_sse::<_, ()>((move || {
                 let output_ok = Ok::<_, ()>(crate::api::ua::is_zether(api_kind))?;
@@ -405,7 +404,7 @@ fn wire__crate__api__ua__key_hash_of_impl(
             };
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_kind = <u16>::sse_decode(&mut deserializer);
+            let api_kind = <i64>::sse_decode(&mut deserializer);
             let api_key_data = <Vec<u8>>::sse_decode(&mut deserializer);
             deserializer.end();
             transform_result_sse::<_, crate::api::ua::UAError>((move || {
@@ -436,7 +435,7 @@ fn wire__crate__api__ua__kind_info_impl(
             };
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_kind = <u16>::sse_decode(&mut deserializer);
+            let api_kind = <i64>::sse_decode(&mut deserializer);
             deserializer.end();
             transform_result_sse::<_, crate::api::ua::UAError>((move || {
                 let output_ok = crate::api::ua::kind_info(api_kind)?;
@@ -466,7 +465,7 @@ fn wire__crate__api__ua__kind_tag_string_impl(
             };
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_kind = <u16>::sse_decode(&mut deserializer);
+            let api_kind = <i64>::sse_decode(&mut deserializer);
             deserializer.end();
             transform_result_sse::<_, crate::api::ua::UAError>((move || {
                 let output_ok = crate::api::ua::kind_tag_string(api_kind)?;
@@ -557,7 +556,7 @@ fn wire__crate__api__ua__native_id_impl(
             };
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_kind = <u16>::sse_decode(&mut deserializer);
+            let api_kind = <i64>::sse_decode(&mut deserializer);
             let api_raw = <Vec<u8>>::sse_decode(&mut deserializer);
             deserializer.end();
             transform_result_sse::<_, crate::api::ua::UAError>((move || {
@@ -588,20 +587,20 @@ fn wire__crate__api__ua__pop_digest_impl(
             };
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_chain_id = <u64>::sse_decode(&mut deserializer);
+            let api_chain_id = <i64>::sse_decode(&mut deserializer);
             let api_chain_uid = <[u8; 32]>::sse_decode(&mut deserializer);
             let api_registry = <[u8; 20]>::sse_decode(&mut deserializer);
             let api_ua = <[u8; 32]>::sse_decode(&mut deserializer);
             let api_auth_ref = <[u8; 32]>::sse_decode(&mut deserializer);
             deserializer.end();
-            transform_result_sse::<_, ()>((move || {
-                let output_ok = Ok::<_, ()>(crate::api::ua::pop_digest(
+            transform_result_sse::<_, crate::api::ua::UAError>((move || {
+                let output_ok = crate::api::ua::pop_digest(
                     api_chain_id,
                     api_chain_uid,
                     api_registry,
                     api_ua,
                     api_auth_ref,
-                ))?;
+                )?;
                 std::result::Result::Ok(output_ok)
             })())
         },
@@ -658,7 +657,7 @@ fn wire__crate__api__ua__tag_impl(
             };
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_kind = <u16>::sse_decode(&mut deserializer);
+            let api_kind = <i64>::sse_decode(&mut deserializer);
             deserializer.end();
             transform_result_sse::<_, crate::api::ua::UAError>((move || {
                 let output_ok = crate::api::ua::tag(api_kind)?;
@@ -693,13 +692,9 @@ fn wire__crate__api__ua__ua_auth_digest_impl(
             let api_purpose = <[u8; 32]>::sse_decode(&mut deserializer);
             let api_digest = <[u8; 32]>::sse_decode(&mut deserializer);
             deserializer.end();
-            transform_result_sse::<_, ()>((move || {
-                let output_ok = Ok::<_, ()>(crate::api::ua::ua_auth_digest(
-                    api_domain,
-                    api_ua,
-                    api_purpose,
-                    api_digest,
-                ))?;
+            transform_result_sse::<_, crate::api::ua::UAError>((move || {
+                let output_ok =
+                    crate::api::ua::ua_auth_digest(api_domain, api_ua, api_purpose, api_digest)?;
                 std::result::Result::Ok(output_ok)
             })())
         },
@@ -728,8 +723,8 @@ fn wire__crate__api__ua__ua_auth_domain_separator_impl(
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
             let api_domain = <crate::api::ua::UaDomain>::sse_decode(&mut deserializer);
             deserializer.end();
-            transform_result_sse::<_, ()>((move || {
-                let output_ok = Ok::<_, ()>(crate::api::ua::ua_auth_domain_separator(api_domain))?;
+            transform_result_sse::<_, crate::api::ua::UAError>((move || {
+                let output_ok = crate::api::ua::ua_auth_domain_separator(api_domain)?;
                 std::result::Result::Ok(output_ok)
             })())
         },
@@ -756,7 +751,7 @@ fn wire__crate__api__ua__ua_message_impl(
             };
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_kind = <u16>::sse_decode(&mut deserializer);
+            let api_kind = <i64>::sse_decode(&mut deserializer);
             let api_purpose = <[u8; 32]>::sse_decode(&mut deserializer);
             let api_digest = <[u8; 32]>::sse_decode(&mut deserializer);
             deserializer.end();
@@ -788,7 +783,7 @@ fn wire__crate__api__ua__ua_of_impl(
             };
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_kind = <u16>::sse_decode(&mut deserializer);
+            let api_kind = <i64>::sse_decode(&mut deserializer);
             let api_key_data = <Vec<u8>>::sse_decode(&mut deserializer);
             deserializer.end();
             transform_result_sse::<_, crate::api::ua::UAError>((move || {
@@ -819,7 +814,7 @@ fn wire__crate__api__ua__validate_key_data_impl(
             };
             let mut deserializer =
                 flutter_rust_bridge::for_generated::SseDeserializer::new(message);
-            let api_kind = <u16>::sse_decode(&mut deserializer);
+            let api_kind = <i64>::sse_decode(&mut deserializer);
             let api_key_data = <Vec<u8>>::sse_decode(&mut deserializer);
             let api_hedera_native = <bool>::sse_decode(&mut deserializer);
             deserializer.end();
@@ -846,6 +841,13 @@ impl SseDecode for bool {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         deserializer.cursor.read_u8().unwrap() != 0
+    }
+}
+
+impl SseDecode for i64 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
+        deserializer.cursor.read_i64::<NativeEndian>().unwrap()
     }
 }
 
@@ -891,13 +893,13 @@ impl SseDecode for Vec<u8> {
     }
 }
 
-impl SseDecode for Vec<(u16, [u8; 32], u16)> {
+impl SseDecode for Vec<(i64, [u8; 32], i64)> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         let mut len_ = <i32>::sse_decode(deserializer);
         let mut ans_ = Vec::with_capacity(len_ as usize);
         for idx_ in 0..len_ {
-            ans_.push(<(u16, [u8; 32], u16)>::sse_decode(deserializer));
+            ans_.push(<(i64, [u8; 32], i64)>::sse_decode(deserializer));
         }
         return ans_;
     }
@@ -925,12 +927,12 @@ impl SseDecode for Option<[u8; 32]> {
     }
 }
 
-impl SseDecode for (u16, [u8; 32], u16) {
+impl SseDecode for (i64, [u8; 32], i64) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        let mut var_field0 = <u16>::sse_decode(deserializer);
+        let mut var_field0 = <i64>::sse_decode(deserializer);
         let mut var_field1 = <[u8; 32]>::sse_decode(deserializer);
-        let mut var_field2 = <u16>::sse_decode(deserializer);
+        let mut var_field2 = <i64>::sse_decode(deserializer);
         return (var_field0, var_field1, var_field2);
     }
 }
@@ -946,13 +948,6 @@ impl SseDecode for u32 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
         deserializer.cursor.read_u32::<NativeEndian>().unwrap()
-    }
-}
-
-impl SseDecode for u64 {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        deserializer.cursor.read_u64::<NativeEndian>().unwrap()
     }
 }
 
@@ -982,8 +977,8 @@ impl SseDecode for [u8; 32] {
 impl SseDecode for crate::api::ua::UaDomain {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_decode(deserializer: &mut flutter_rust_bridge::for_generated::SseDeserializer) -> Self {
-        let mut var_generation = <u32>::sse_decode(deserializer);
-        let mut var_chainId = <u64>::sse_decode(deserializer);
+        let mut var_generation = <i64>::sse_decode(deserializer);
+        let mut var_chainId = <i64>::sse_decode(deserializer);
         let mut var_registry = <[u8; 20]>::sse_decode(deserializer);
         let mut var_chainUid = <[u8; 32]>::sse_decode(deserializer);
         return crate::api::ua::UaDomain {
@@ -1139,6 +1134,13 @@ impl SseEncode for bool {
     }
 }
 
+impl SseEncode for i64 {
+    // Codec=Sse (Serialization based), see doc to use other codecs
+    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
+        serializer.cursor.write_i64::<NativeEndian>(self).unwrap();
+    }
+}
+
 impl SseEncode for crate::api::ua::KindInfo {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
@@ -1170,12 +1172,12 @@ impl SseEncode for Vec<u8> {
     }
 }
 
-impl SseEncode for Vec<(u16, [u8; 32], u16)> {
+impl SseEncode for Vec<(i64, [u8; 32], i64)> {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         <i32>::sse_encode(self.len() as _, serializer);
         for item in self {
-            <(u16, [u8; 32], u16)>::sse_encode(item, serializer);
+            <(i64, [u8; 32], i64)>::sse_encode(item, serializer);
         }
     }
 }
@@ -1200,12 +1202,12 @@ impl SseEncode for Option<[u8; 32]> {
     }
 }
 
-impl SseEncode for (u16, [u8; 32], u16) {
+impl SseEncode for (i64, [u8; 32], i64) {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        <u16>::sse_encode(self.0, serializer);
+        <i64>::sse_encode(self.0, serializer);
         <[u8; 32]>::sse_encode(self.1, serializer);
-        <u16>::sse_encode(self.2, serializer);
+        <i64>::sse_encode(self.2, serializer);
     }
 }
 
@@ -1220,13 +1222,6 @@ impl SseEncode for u32 {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
         serializer.cursor.write_u32::<NativeEndian>(self).unwrap();
-    }
-}
-
-impl SseEncode for u64 {
-    // Codec=Sse (Serialization based), see doc to use other codecs
-    fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        serializer.cursor.write_u64::<NativeEndian>(self).unwrap();
     }
 }
 
@@ -1266,8 +1261,8 @@ impl SseEncode for [u8; 32] {
 impl SseEncode for crate::api::ua::UaDomain {
     // Codec=Sse (Serialization based), see doc to use other codecs
     fn sse_encode(self, serializer: &mut flutter_rust_bridge::for_generated::SseSerializer) {
-        <u32>::sse_encode(self.generation, serializer);
-        <u64>::sse_encode(self.chain_id, serializer);
+        <i64>::sse_encode(self.generation, serializer);
+        <i64>::sse_encode(self.chain_id, serializer);
         <[u8; 20]>::sse_encode(self.registry, serializer);
         <[u8; 32]>::sse_encode(self.chain_uid, serializer);
     }

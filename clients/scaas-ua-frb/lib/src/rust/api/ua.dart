@@ -7,15 +7,16 @@ import '../frb_generated.dart';
 import 'package:collection/collection.dart';
 import 'package:flutter_rust_bridge/flutter_rust_bridge_for_generated.dart';
 
-// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `fmt`, `from`, `from`
+// These functions are ignored because they are not marked as `pub`: `arg`, `k`, `n`
+// These function are ignored because they are on traits that is not defined in current crate (put an empty `#[frb]` on it to unignore): `clone`, `fmt`, `from`, `try_from`
 
-KindInfo kindInfo({required int kind}) =>
+KindInfo kindInfo({required PlatformInt64 kind}) =>
     ScaasUa.instance.api.crateApiUaKindInfo(kind: kind);
 
-U8Array32 tag({required int kind}) =>
+U8Array32 tag({required PlatformInt64 kind}) =>
     ScaasUa.instance.api.crateApiUaTag(kind: kind);
 
-String kindTagString({required int kind}) =>
+String kindTagString({required PlatformInt64 kind}) =>
     ScaasUa.instance.api.crateApiUaKindTagString(kind: kind);
 
 U8Array32? groupTag({required String group}) =>
@@ -29,11 +30,11 @@ U8Array32 msgTag() => ScaasUa.instance.api.crateApiUaMsgTag();
 U8Array32 purposeTag({required String purpose}) =>
     ScaasUa.instance.api.crateApiUaPurposeTag(purpose: purpose);
 
-U8Array32 uaOf({required int kind, required List<int> keyData}) =>
+U8Array32 uaOf({required PlatformInt64 kind, required List<int> keyData}) =>
     ScaasUa.instance.api.crateApiUaUaOf(kind: kind, keyData: keyData);
 
 U8Array32 deriveUa({
-  required int kind,
+  required PlatformInt64 kind,
   required List<int> keyData,
   required bool hederaNative,
 }) => ScaasUa.instance.api.crateApiUaDeriveUa(
@@ -42,14 +43,16 @@ U8Array32 deriveUa({
   hederaNative: hederaNative,
 );
 
-U8Array32 nativeId({required int kind, required List<int> raw}) =>
+U8Array32 nativeId({required PlatformInt64 kind, required List<int> raw}) =>
     ScaasUa.instance.api.crateApiUaNativeId(kind: kind, raw: raw);
 
-U8Array32? keyHashOf({required int kind, required List<int> keyData}) =>
-    ScaasUa.instance.api.crateApiUaKeyHashOf(kind: kind, keyData: keyData);
+U8Array32? keyHashOf({
+  required PlatformInt64 kind,
+  required List<int> keyData,
+}) => ScaasUa.instance.api.crateApiUaKeyHashOf(kind: kind, keyData: keyData);
 
 void validateKeyData({
-  required int kind,
+  required PlatformInt64 kind,
   required List<int> keyData,
   required bool hederaNative,
 }) => ScaasUa.instance.api.crateApiUaValidateKeyData(
@@ -61,22 +64,23 @@ void validateKeyData({
 bool inNativeSpace({required U8Array32 id}) =>
     ScaasUa.instance.api.crateApiUaInNativeSpace(id: id);
 
-bool isNative({required int kind}) =>
+bool isNative({required PlatformInt64 kind}) =>
     ScaasUa.instance.api.crateApiUaIsNative(kind: kind);
 
-bool isZether({required int kind}) =>
+bool isZether({required PlatformInt64 kind}) =>
     ScaasUa.instance.api.crateApiUaIsZether(kind: kind);
 
-bool isSigning({required int kind}) =>
+bool isSigning({required PlatformInt64 kind}) =>
     ScaasUa.instance.api.crateApiUaIsSigning(kind: kind);
 
-bool isMember({required int kind, required bool hederaNative}) => ScaasUa
-    .instance
-    .api
-    .crateApiUaIsMember(kind: kind, hederaNative: hederaNative);
+bool isMember({required PlatformInt64 kind, required bool hederaNative}) =>
+    ScaasUa.instance.api.crateApiUaIsMember(
+      kind: kind,
+      hederaNative: hederaNative,
+    );
 
 U8Array32 uaMessage({
-  required int kind,
+  required PlatformInt64 kind,
   required U8Array32 purpose,
   required U8Array32 digest,
 }) => ScaasUa.instance.api.crateApiUaUaMessage(
@@ -85,11 +89,11 @@ U8Array32 uaMessage({
   digest: digest,
 );
 
-U8Array32 chainKeyHash({required BigInt chainId}) =>
+U8Array32 chainKeyHash({required PlatformInt64 chainId}) =>
     ScaasUa.instance.api.crateApiUaChainKeyHash(chainId: chainId);
 
 U8Array32 popDigest({
-  required BigInt chainId,
+  required PlatformInt64 chainId,
   required U8Array32 chainUid,
   required U8Array20 registry,
   required U8Array32 ua,
@@ -128,10 +132,11 @@ U8Array32 memberDigest({
 String canonicalId({required String text}) =>
     ScaasUa.instance.api.crateApiUaCanonicalId(text: text);
 
-/// Members are `(kind, id, weight)`.
+/// Members are `(kind, id, weight)`; a kind outside 0..=0xFFFF is `UAKindUnknown`, a threshold or weight outside u16 (or
+/// more than 65535 members) is `UAArgument`.
 Uint8List encodeMsig({
-  required int threshold,
-  required List<(int, U8Array32, int)> members,
+  required PlatformInt64 threshold,
+  required List<(PlatformInt64, U8Array32, PlatformInt64)> members,
 }) => ScaasUa.instance.api.crateApiUaEncodeMsig(
   threshold: threshold,
   members: members,
@@ -198,10 +203,10 @@ class U8Array32 extends NonGrowableListView<int> {
   U8Array32.init() : this(Uint8List(arraySize));
 }
 
-/// The registry's EIP-712 domain.
+/// The registry's EIP-712 domain (`generation` 0..=u32::MAX, `chain_id` >= 0, else `UAArgument`).
 class UaDomain {
-  final int generation;
-  final BigInt chainId;
+  final PlatformInt64 generation;
+  final PlatformInt64 chainId;
   final U8Array20 registry;
   final U8Array32 chainUid;
 
@@ -230,7 +235,11 @@ class UaDomain {
           chainUid == other.chainUid;
 }
 
-/// `code` is one of the seven shared codes (`UAKeyData`, `UAKindUnknown`, ...); `reason` is `Display` text.
+/// `code` is one of the seven shared codes (`UAKeyData`, `UAKindUnknown`, ...); `reason` is the label after `UAKeyData: ` (empty for every other code),
+/// as in the cxx and pure-Dart libraries.
+///
+/// Integers are `i64` so a Dart value cannot wrap at the Rust width: a kind outside 0..=0xFFFF is `UAKindUnknown`; a chain
+/// id, generation, threshold or weight outside its range (chain id < 0, generation > u32, ...) is `UAArgument`.
 class UAError implements FrbException {
   final String code;
   final String reason;

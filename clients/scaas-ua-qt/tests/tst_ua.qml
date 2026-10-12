@@ -125,6 +125,35 @@ TestCase {
         compare(UaKinds.lastError, "UAIdFormat")
     }
 
+    function test_malformed_numbers_and_hex() {
+        for (const bad of [NaN, Infinity, -1, 1.5, 9007199254740994, 2 ** 64]) {
+            compare(UaKinds.chainKeyHash(bad), "", String(bad))
+            compare(UaKinds.lastError, "UAArgument", String(bad))
+        }
+        // kinds outside 0..0xFFFF (an int parameter: QML wraps beyond int32 before the binding sees the value)
+        for (const bad of [-1, 0x10100, 0x7fffffff]) {
+            compare(UaKinds.kindInfo(bad), "", String(bad))
+            compare(UaKinds.lastError, "UAArgument", String(bad))
+        }
+        // digests: odd-length hex and a "0X" prefix are not hex; a wrong length is an argument error
+        compare(UaKinds.purposeTag("pop") !== "", true)
+        compare(UaKinds.memberDigest("0x" + "0".repeat(63), "0x" + "0".repeat(64)), "")
+        compare(UaKinds.lastError, "UAArgument")
+        compare(UaKinds.memberDigest("0X" + "0".repeat(64), "0x" + "0".repeat(64)), "")
+        compare(UaKinds.lastError, "UAArgument")
+        compare(UaKinds.memberDigest("0x00", "0x" + "0".repeat(64)), "")
+        compare(UaKinds.lastError, "UAArgument")
+        // key data (nativeId raw, keyHashOf, deriveUA): undecodable is UAKeyData
+        for (const bad of ["0xabc", "0X00", "0xzz"]) {
+            compare(UaKinds.nativeId(0x0001, bad), "", bad)
+            compare(UaKinds.lastError, "UAKeyData", bad)
+            compare(UaKinds.keyHashOf(0x0100, bad), "", bad)
+            compare(UaKinds.lastError, "UAKeyData", bad)
+            compare(UaKinds.deriveUA(0x0100, bad, false), "", bad)
+            compare(UaKinds.lastError, "UAKeyData", bad)
+        }
+    }
+
     function test_last_error_cleared_and_notifies() {
         UaKinds.msgTag()                       // lastError "" before
         errSpy.clear()

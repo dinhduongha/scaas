@@ -127,7 +127,7 @@ void main() {
     final s = load('structures.json');
     for (final p in rows(s, 'pop')) {
       final c = s['contexts'][p['context']];
-      final id = BigInt.from(c['chainId']); // 2^40+7 in context E
+      final id = c['chainId'] as int; // 2^40+7 in context E
       expect(hx(chainKeyHash(chainId: id)), p['chainKeyHash']);
       expect(
           hx(popDigest(
@@ -142,7 +142,7 @@ void main() {
       final c = s['contexts'][a['context']];
       final d = UaDomain(
           generation: a['generation'],
-          chainId: BigInt.from(c['chainId']),
+          chainId: c['chainId'] as int,
           registry: b20(c['registry']),
           chainUid: b32(c['chainUid']));
       expect(hx(uaAuthDomainSeparator(domain: d)), a['domainSeparator']);
@@ -164,7 +164,13 @@ void main() {
       fail('accepted');
     } on UAError catch (e) {
       expect(e.code, 'UAKeyData');
-      expect(e.reason, startsWith('UAKeyData: '));
+      expect(e.reason, 'length');
     }
+    expect(errCode(() => kindInfo(kind: 0x10100)), 'UAKindUnknown'); // would wrap to 0x0100 as u16
+    expect(errCode(() => kindInfo(kind: -1)), 'UAKindUnknown');
+    expect(errCode(() => chainKeyHash(chainId: -1)), 'UAArgument'); // would wrap to 2^64-1 as u64
+    expect(errCode(() => encodeMsig(threshold: 0x10001, members: [(1, id, 1)])), 'UAArgument');
+    expect(errCode(() => encodeMsig(threshold: 1, members: [(0x10001, id, 1)])), 'UAKindUnknown');
+    expect(isNative(kind: 0x10000), false);
   });
 }

@@ -30,6 +30,9 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
   UaDomain dco_decode_box_autoadd_ua_domain(dynamic raw);
 
   @protected
+  PlatformInt64 dco_decode_i_64(dynamic raw);
+
+  @protected
   KindInfo dco_decode_kind_info(dynamic raw);
 
   @protected
@@ -42,9 +45,8 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
   Uint8List dco_decode_list_prim_u_8_strict(dynamic raw);
 
   @protected
-  List<(int, U8Array32, int)> dco_decode_list_record_u_16_u_8_array_32_u_16(
-    dynamic raw,
-  );
+  List<(PlatformInt64, U8Array32, PlatformInt64)>
+  dco_decode_list_record_i_64_u_8_array_32_i_64(dynamic raw);
 
   @protected
   String? dco_decode_opt_String(dynamic raw);
@@ -53,16 +55,14 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
   U8Array32? dco_decode_opt_u_8_array_32(dynamic raw);
 
   @protected
-  (int, U8Array32, int) dco_decode_record_u_16_u_8_array_32_u_16(dynamic raw);
+  (PlatformInt64, U8Array32, PlatformInt64)
+  dco_decode_record_i_64_u_8_array_32_i_64(dynamic raw);
 
   @protected
   int dco_decode_u_16(dynamic raw);
 
   @protected
   int dco_decode_u_32(dynamic raw);
-
-  @protected
-  BigInt dco_decode_u_64(dynamic raw);
 
   @protected
   int dco_decode_u_8(dynamic raw);
@@ -92,6 +92,9 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
   UaDomain sse_decode_box_autoadd_ua_domain(SseDeserializer deserializer);
 
   @protected
+  PlatformInt64 sse_decode_i_64(SseDeserializer deserializer);
+
+  @protected
   KindInfo sse_decode_kind_info(SseDeserializer deserializer);
 
   @protected
@@ -104,9 +107,8 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
   Uint8List sse_decode_list_prim_u_8_strict(SseDeserializer deserializer);
 
   @protected
-  List<(int, U8Array32, int)> sse_decode_list_record_u_16_u_8_array_32_u_16(
-    SseDeserializer deserializer,
-  );
+  List<(PlatformInt64, U8Array32, PlatformInt64)>
+  sse_decode_list_record_i_64_u_8_array_32_i_64(SseDeserializer deserializer);
 
   @protected
   String? sse_decode_opt_String(SseDeserializer deserializer);
@@ -115,18 +117,14 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
   U8Array32? sse_decode_opt_u_8_array_32(SseDeserializer deserializer);
 
   @protected
-  (int, U8Array32, int) sse_decode_record_u_16_u_8_array_32_u_16(
-    SseDeserializer deserializer,
-  );
+  (PlatformInt64, U8Array32, PlatformInt64)
+  sse_decode_record_i_64_u_8_array_32_i_64(SseDeserializer deserializer);
 
   @protected
   int sse_decode_u_16(SseDeserializer deserializer);
 
   @protected
   int sse_decode_u_32(SseDeserializer deserializer);
-
-  @protected
-  BigInt sse_decode_u_64(SseDeserializer deserializer);
 
   @protected
   int sse_decode_u_8(SseDeserializer deserializer);
@@ -162,6 +160,9 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
   );
 
   @protected
+  void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer);
+
+  @protected
   void sse_encode_kind_info(KindInfo self, SseSerializer serializer);
 
   @protected
@@ -180,8 +181,8 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
   );
 
   @protected
-  void sse_encode_list_record_u_16_u_8_array_32_u_16(
-    List<(int, U8Array32, int)> self,
+  void sse_encode_list_record_i_64_u_8_array_32_i_64(
+    List<(PlatformInt64, U8Array32, PlatformInt64)> self,
     SseSerializer serializer,
   );
 
@@ -192,8 +193,8 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
   void sse_encode_opt_u_8_array_32(U8Array32? self, SseSerializer serializer);
 
   @protected
-  void sse_encode_record_u_16_u_8_array_32_u_16(
-    (int, U8Array32, int) self,
+  void sse_encode_record_i_64_u_8_array_32_i_64(
+    (PlatformInt64, U8Array32, PlatformInt64) self,
     SseSerializer serializer,
   );
 
@@ -202,9 +203,6 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
 
   @protected
   void sse_encode_u_32(int self, SseSerializer serializer);
-
-  @protected
-  void sse_encode_u_64(BigInt self, SseSerializer serializer);
 
   @protected
   void sse_encode_u_8(int self, SseSerializer serializer);
