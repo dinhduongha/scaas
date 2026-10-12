@@ -136,3 +136,18 @@ jobs:
         run: cargo clippy --all-targets -- -D warnings
       - name: vectors
         run: cargo test
+
+  ua-py:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: clients/ua-py
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: install
+        run: pip install -r requirements.txt
+      - name: vectors
+        run: python -m unittest -v tests.test_vectors
