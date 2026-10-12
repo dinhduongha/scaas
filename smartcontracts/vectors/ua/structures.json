@@ -82,6 +82,16 @@
       "uaAuthDigest": "0xaaf776d6448e8678db6080f3a85d6fe6d99f683e663cabf24472d76e86258d37"
     },
     {
+      "context": "B",
+      "generation": 1,
+      "domainSeparator": "0x7c5fb198fb3be09ed571579ec4b2fad5f387a446d241f67fe5f6648a17286825",
+      "ua": "0x000000000000000000000000804d4d3b798f2d5f0902318d3e50ae8b24d83e04",
+      "purpose": "member",
+      "purposeTag": "0xfbd8600564b68d09f75fe5d3e6acb8fe3c5a3a4cb20da6988723433beff5212a",
+      "digest": "0xad66503cebdd9341697249795f4c068a98fc92a57a828eec7ff59ee24a6124a1",
+      "uaAuthDigest": "0x9471314c994caf4fc2da331823c3d7494bfc6449765bf9b0cfc1eb422a24e434"
+    },
+    {
       "context": "C",
       "generation": 1,
       "domainSeparator": "0x6b9c01eb298f68562b21b2295675fc8a0eafe999e546ced3a03eb748c6dd2756",

@@ -1,5 +1,5 @@
 // The UA identity layer (src/ua.js) against smartcontracts/vectors/ua/: the generator reproduces both files byte for byte,
-// every row holds through the public API, and pq.js (P6a) agrees on the PQ kinds.
+// the valid, invalid, pop, uaAuth and member rows hold through the public API (the other tables are covered by the regeneration), and pq.js (P6a) agrees on the PQ kinds.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, mkdtempSync, rmSync } from 'node:fs';

@@ -141,13 +141,28 @@ for (const [a, b] of [[0x0104, 0x0140], [0x0101, 0x0100]]) {
   assert(ra.keyHash === rb.keyHash && ra.ua !== rb.ua, `shared key 0x${a.toString(16)} / 0x${b.toString(16)}`);
 }
 
+// ed25519 key with a torsion component (not small order, not in the prime-order subgroup): section 1.6 accepts it
+const edY = (y) => be(y, 32).reverse();
+const edPoint = (y) => { try { return ed25519.Point.fromBytes(edY(y), false); } catch { return null; } };
+const edMixedY = (() => { for (let y = 2n; y < 19n; y++) { const P = edPoint(y); if (P && !P.isSmallOrder() && !P.isTorsionFree()) return y; } throw new Error('no mixed-order y < 19'); })();
+const edPlainY = (() => { for (let y = 2n; y < 19n; y++) { const P = edPoint(y); if (P && !P.isSmallOrder()) return y; } throw new Error('no y < 19'); })();
+valid.push(row(0x0102, edY(edMixedY)));
+const heavy = 65535;
+const msigMembers2 = sortM([mem(0x0002, ua.nativeId(0x0002, label('evm-contract').subarray(12))), mem(0x0133, id(0x0133)),
+  mem(0x0110, id(0x0110)), mem(0x0111, id(0x0111)), mem(0x0100, id(0x0100))]);
+valid.push(row(0x0120, ua.encodeMsig(3, msigMembers2)));
+// weights above 255 and a threshold above the member count; a u16 weight sum that overflows
+valid.push(row(0x0120, ua.encodeMsig(301, sortM([mem(0x0001, eoa, 300), mem(0x0101, id(0x0101), 1)]))));
+valid.push(row(0x0120, ua.encodeMsig(heavy, sortM([mem(0x0001, eoa, heavy), mem(0x0101, id(0x0101), heavy)]))));
+
 // --- invalid rows: each refused by src/ua.js with the stated error before it is written ---
 const invalid = [];
-function bad(kind, keyData, reason, { error = 'UAKeyData', hederaNative = false } = {}) {
+function bad(kind, keyData, reason, { error = 'UAKeyData', hederaNative = false, why } = {}) {
   try {
     ua.validateKeyData(kind, keyData, { hederaNative });
   } catch (e) {
     assert(e instanceof ua.UAError && e.code === error, `0x${kind.toString(16)} ${reason}: ${e.message}`);
+    assert(why === undefined || e.reason === why, `0x${kind.toString(16)} ${reason}: refused by '${e.reason}', not '${why}'`);
     invalid.push({ kind, hederaNative, keyData: hex(keyData), error, reason });
     return;
   }
@@ -271,6 +286,104 @@ for (const kind of [0x0105, 0x0141]) {
   q0[2] = ((12289 & 0x3f) << 2) | (q0[2] & 0x03);
   bad(0x0132, q0, 'h_0 = q');
 }
+// --- non-canonical coordinates (value >= p that reduces to a valid point), bad FROST points, t > n, truncated bodies ---
+const addP = (d, off, len, P) => {
+  const v = int(d.subarray(off, off + len)) + P;
+  assert(v < 1n << BigInt(8 * len), 'value + p overflows the field width');
+  return put(d, off, be(v, len));
+};
+const accepts = (kind, d) => { ua.validateKeyData(kind, d); return d; };
+const rng = (kind, d, reason) => bad(kind, d, reason, { why: 'range' });
+{
+  // ed25519: y = k + p < 2^255 only for k < 19
+  accepts(0x0102, edY(edPlainY));
+  rng(0x0102, edY(edPlainY + ED_P), `y = ${edPlainY} + p (non-canonical, reduces to a valid point)`);
+  rng(0x0102, edY(edMixedY + ED_P), `y = ${edMixedY} + p (non-canonical mixed-order point)`);
+  // P-256: x = 5 is on the curve; y + p never fits in 256 bits for a point of this size
+  const x5 = 5n;
+  const y5 = p256.Point.fromBytes(concatBytes(Uint8Array.of(2), be(x5, 32))).toAffine().y;
+  const xy5 = concatBytes(be(x5, 32), be(y5, 32));
+  for (const [kind, d] of [[0x0101, xy5], [0x0100, concatBytes(xy5, sha256(utf8ToBytes('scaas.example')))]]) {
+    accepts(kind, d);
+    rng(kind, put(d, 0, be(x5 + P256_P, 32)), 'x = 5 + p (non-canonical)');
+  }
+  // secp256k1: x = 1 lifts; x + p < 2^256 only for x < 2^32 + 977
+  const sx1 = concatBytes(Uint8Array.of(2), be(1n, 32));
+  secp256k1.Point.fromBytes(sx1);
+  const sx1p = concatBytes(Uint8Array.of(2), be(1n + SECP_P, 32));
+  accepts(0x0103, be(1n, 32));
+  rng(0x0103, be(1n + SECP_P, 32), 'x = 1 + p (non-canonical)');
+  const mu = key.get(0x0110);
+  rng(0x0110, put(mu, 0, sx1p), 'Q: x = 1 + p (non-canonical)');
+  rng(0x0110, put(mu, 35 + 66, sx1p), 'member: x = 1 + p (non-canonical)');
+  const fr = key.get(0x0111);
+  rng(0x0111, put(fr, 0, sx1p), 'Y: x = 1 + p (non-canonical)');
+  // bn254 G1 (1, 2)
+  const g1 = concatBytes(be(1n, 32), be(2n, 32));
+  for (const kind of [0x0104, 0x0140]) {
+    accepts(kind, g1);
+    rng(kind, addP(g1, 0, 32, BN.Fp.ORDER), '(1 + p, 2) (non-canonical x)');
+    rng(kind, addP(g1, 32, 32, BN.Fp.ORDER), '(1, 2 + p) (non-canonical y)');
+  }
+  rng(0x0112, addP(key.get(0x0112), 66 + 128, 32, BN.Fp.ORDER), 'member: x + p (non-canonical)');
+  rng(0x0113, addP(key.get(0x0113), 68 + 128, 32, BN.Fp.ORDER), 'R_1: x + p (non-canonical)');
+  for (const [i, w] of ['x_im', 'x_re', 'y_im', 'y_re'].entries()) rng(0x0107, addP(key.get(0x0107), 32 * i, 32, BN.Fp.ORDER), `${w} = valid + p (non-canonical)`);
+  // BLS12-381: 48-byte field words, value + p < 2^384 for any coordinate
+  for (const kind of [0x0105, 0x0141]) {
+    rng(kind, addP(key.get(kind), 16, 48, BLS.Fp.ORDER), 'x = valid + p (non-canonical)');
+    rng(kind, addP(key.get(kind), 80, 48, BLS.Fp.ORDER), 'y = valid + p (non-canonical)');
+  }
+  for (const [i, w] of ['x.c0', 'x.c1', 'y.c0', 'y.c1'].entries()) rng(0x0106, addP(key.get(0x0106), 64 * i + 16, 48, BLS.Fp.ORDER), `${w} = valid + p (non-canonical)`);
+}
+{
+  const nonLift = firstRefused((x) => be(x, 32), (b) => secp256k1.Point.fromBytes(concatBytes(Uint8Array.of(2), b)));
+  const d = key.get(0x0111);
+  const per = 3 * 33 + 32;
+  const lastR = 37 + 2 * per + 2 * 33;
+  bad(0x0111, put(d, 0, Uint8Array.of(4)), 'Y prefix 04', { why: 'prefix' });
+  bad(0x0111, put(d, 37 + 2 * 33, concatBytes(Uint8Array.of(2), nonLift)), 'R_1 does not lift', { why: 'curve' });
+  bad(0x0111, put(d, 37 + 33, Uint8Array.of(4)), 'C_11 prefix 04', { why: 'prefix' });
+  bad(0x0111, put(d, lastR, Uint8Array.of(4)), 'R_3 prefix 04', { why: 'prefix' });
+  const b = key.get(0x0113);
+  const bper = 3 * 64 + 32;
+  const bump = (o) => put(b, o + 32, be((int(b.subarray(o + 32, o + 64)) + 1n) % BN.Fp.ORDER, 32));
+  bad(0x0113, bump(0), 'Y off the curve', { why: 'curve' });
+  bad(0x0113, put(b, 68 + 2 * 64, new Uint8Array(64)), 'R_1 identity', { why: 'identity' });
+  bad(0x0113, put(b, 68 + 64, new Uint8Array(64)), 'C_11 identity', { why: 'identity' });
+  bad(0x0113, bump(68 + 2 * bper + 2 * 64), 'R_3 off the curve', { why: 'curve' });
+  // t > n on a well-formed transcript of the right length
+  bad(0x0111, frost(secpC, 'frost-secp256k1', SECP_N, 4, 3), 't = 4 > n = 3', { why: 'threshold' });
+  bad(0x0113, frost(bnG1, 'frost-bn254', BN.Fr.ORDER, 4, 3), 't = 4 > n = 3', { why: 'threshold' });
+  // valid header, short body
+  const mu = key.get(0x0110);
+  bad(0x0110, mu.subarray(0, mu.length - 33), 'MuSig2 n = 3 with two members', { why: 'length' });
+  bad(0x0110, mu.subarray(0, 35), 'MuSig2 header alone', { why: 'length' });
+  bad(0x0110, mu.subarray(0, mu.length - 1), 'MuSig2 body one byte short', { why: 'length' });
+  const mb = key.get(0x0112);
+  bad(0x0112, mb.subarray(0, mb.length - 64), 'MuSig2 n = 3 with two members', { why: 'length' });
+  bad(0x0112, mb.subarray(0, 66), 'MuSig2 header alone', { why: 'length' });
+  bad(0x0112, mb.subarray(0, mb.length - 1), 'MuSig2 body one byte short', { why: 'length' });
+  bad(0x0111, d.subarray(0, d.length - per), 'FROST with one participant missing', { why: 'length' });
+  bad(0x0111, d.subarray(0, 37), 'FROST header alone', { why: 'length' });
+  bad(0x0111, d.subarray(0, d.length - 1), 'FROST body one byte short', { why: 'length' });
+  bad(0x0113, b.subarray(0, b.length - bper), 'FROST with one participant missing', { why: 'length' });
+  bad(0x0113, b.subarray(0, 68), 'FROST header alone', { why: 'length' });
+  bad(0x0113, b.subarray(0, b.length - 1), 'FROST body one byte short', { why: 'length' });
+  bad(0x0120, msigKey.subarray(0, msigKey.length - 36), 'msig count = 4 with three members', { why: 'length' });
+  bad(0x0120, msigKey.subarray(0, 4), 'msig header alone', { why: 'length' });
+  bad(0x0120, msigKey.subarray(0, msigKey.length - 1), 'msig body one byte short', { why: 'length' });
+  // threshold = sum of weights + 1 where the sum is not the count
+  bad(0x0120, ua.encodeMsig(302, sortM([mem(0x0001, eoa, 300), mem(0x0101, id(0x0101), 1)])), 'threshold = total weight + 1 (weights > 255)', { why: 'threshold' });
+  // FN-DSA: a later coefficient
+  const f = Uint8Array.from(key.get(0x0132));
+  for (let j = 0; j < 14; j++) {
+    const k = 511 * 14 + j;
+    const bit = (12289 >> (13 - j)) & 1;
+    f[1 + (k >> 3)] = (f[1 + (k >> 3)] & ~(1 << (7 - (k & 7)))) | (bit << (7 - (k & 7)));
+  }
+  bad(0x0132, f, 'h_511 = q', { why: 'coefficient' });
+}
+
 bad(0x0000, new Uint8Array(32), 'kind 0', { error: 'UAKindUnknown' });
 bad(0x0108, new Uint8Array(32), 'unassigned kind', { error: 'UAKindUnknown' });
 bad(0x0001, new Uint8Array(20), 'native kind', { error: 'UAKindNotDerived' });
@@ -326,7 +439,7 @@ const pop = [...Object.keys(contexts).map((c) => ({ context: c, ua: derivedId, a
   });
 assert(new Set(pop.map((p) => p.popDigest)).size === pop.length, 'popDigest must separate chain id, chain uid, registry, ua and authRef');
 const memberTag = ua.purposeTag('member');
-const uaAuth = [['A', 1], ['A', 2], ['C', 1]].map(([context, generation]) => {
+const uaAuth = [['A', 1], ['A', 2], ['B', 1], ['C', 1]].map(([context, generation]) => {
   const domain = { generation, ...contexts[context] };
   return { context, generation, domainSeparator: hex(ua.uaAuthDomainSeparator(domain)), ua: hex(eoa), purpose: 'member',
     purposeTag: hex(memberTag), digest: hex(digest), uaAuthDigest: hex(ua.uaAuthDigest(domain, eoa, memberTag, digest)) };
