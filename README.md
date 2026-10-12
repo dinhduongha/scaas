@@ -40,8 +40,8 @@ in the component docs under [`docs/`](docs/README.md), each with an id and a rea
 | 2. [Smart contracts are API services](#2-smart-contracts-are-api-services) | 7. [Meta-transactions and EIP-1776](#7-meta-transactions-and-eip-1776) | 13. [Components and where to read more](#13-the-components-and-where-to-read-more) |
 | 3. [Contracts: what is built on what](#3-contracts-what-is-built-on-what) | 8. [Who pays the fee](#8-who-pays-the-fee-every-model) | 14. [How the design evolved](#14-how-the-design-evolved) |
 | 4. [Shared code, delegate call, separate data](#4-shared-code-delegate-call-separate-data-and-upgradeable) | 9. [Meta-transactions and liquidity](#9-meta-transactions-and-liquidity) | 15. [Repository layout](#15-repository-layout) |
-| 5. [What the traditional model gets wrong](#5-what-the-traditional-model-gets-wrong) | 10. [Open relayers](#10-open-relayers-open-and-competitive) | |
-| | 11. [Zether and PQ Zether](#11-confidential-amounts-zether-and-pq-zether) | |
+| 5. [What the traditional model gets wrong](#5-what-the-traditional-model-gets-wrong) | 10. [Open relayers](#10-open-relayers-open-and-competitive) | [Use cases](#use-cases) |
+| | 11. [Zether and PQ Zether](#11-confidential-amounts-zether-and-pq-zether) | [Free Pay](#free-pay) |
 
 ---
 
@@ -703,6 +703,38 @@ the same contract rules and the same subject signatures.
   ([NODE-MESH-05](docs/node/mesh.md#NODE-MESH-05)). A sponsor that wants to pay for others' gas does it by policy or
   by an opt-in sponsorship contract.
 
+<p align="center">
+  <img src="docs/assets/relayer-network.svg" width="900" alt="Open relayer network: clients post subject-signed intents to the gateway of any relayer. Admitted partners (relayers A, B and a private-class peer C) pull each other's intents over the bus, HTTPS mTLS or QUIC with pinned keys; the origin signs a round-robin exclusive window of about 7 seconds. The open mesh (relayers D, E, F) exchanges public intents over libp2p gossipsub, each hop validating before it forwards; an intent reaches gossip only from its origin, on a public chain, by opt-in. Every relayer's lanes sign and pay gas on the chains; private-chain intents stay with admitted peers; the first to land earns the fee. Envelope library and EVM gateway built; bus, gossip and scheduler specified.">
+</p>
+
+**One intent, step by step.** The envelope, its signatures and the acceptance checks are BUILT as a library; the bus,
+gossip and the scheduler that turn them into a network are SPECIFIED ([docs/node/mesh.md](docs/node/mesh.md),
+[docs/node/gossip.md](docs/node/gossip.md), [docs/architecture.md](docs/architecture.md#data-flows)).
+
+```mermaid
+sequenceDiagram
+    participant S as Subject
+    participant A as Relayer A (origin)
+    participant B as Relayer B (admitted partner)
+    participant O as Open relayers (gossip)
+    participant C as Chain
+    S->>A: signed intent to the gateway (door A)
+    A->>A: check it, store it, sign hub.sig with an exclusive window for B (round-robin, about 7 s)
+    B->>A: pull new intents over the bus (mTLS or QUIC, pinned keys)
+    B->>B: run the same checks before it stores the intent
+    opt public chain and the origin opted in
+        A->>O: publish once on gossip
+        O->>O: each hop validates before it forwards
+    end
+    alt inside the window
+        B->>C: submit from its own lane and pay the gas
+    else after the window
+        O->>C: any eligible relayer may race to land
+    end
+    Note over C: the intent's fee goes to whoever landed it
+    Note over A,O: The others simulate before submitting, see the used nonce and spend nothing. On gossip, a landed hint tells them sooner
+```
+
 The economics are modest by design. A meta-transaction on Gnosis costs about $0.00015 of gas; even at a 10× markup a
 relayer needs roughly 40,000 transactions a month to cover a small server and an RPC plan. Many relayers will
 therefore be run by parties with a business reason — the issuer, distributors, partners, the payee — alongside open,
@@ -860,11 +892,11 @@ flowchart LR
 
 | Path | What |
 |---|---|
-| `smartcontracts/` | On-chain code by family: `evm/` (Foundry; Gnosis, Celo, private chain, Hedera), `move/{aptos,sui}`, `soroban/`, `cosmos/`, `ton/`, `solana/`; `scripts/{build,test,deploy,devnet}.sh <family>`. See [`smartcontracts/README.md`](smartcontracts/README.md) |
-| `scaas-node/` | Rust relayer node: gateway, submit lanes, indexer, admin, mesh |
-| `clients/` | Everything that runs on the user's side: `clientkeys/` (browser signers: passkey, seed vault, Zether keys), `zether-prover/` (Rust/WASM prover for Zether proofs, balance reading and disclosure), `app/` (React + Vite console and dApp, planned) |
+| `smartcontracts/` | On-chain code by family: `evm/` (Foundry; Gnosis, Celo, private chain, Hedera), `move/{aptos,sui}`, `soroban/`, `cosmos/`, `ton/`, `solana/`; `scripts/{build,test,deploy,devnet}.sh <family>`. See [`smartcontracts/README.md`](smartcontracts/README.md), [`smartcontracts/evm/README.md`](smartcontracts/evm/README.md) and [docs/contracts/](docs/contracts/README.md) |
+| `scaas-node/` | Rust relayer node: gateway, submit lanes, indexer, admin, mesh. See [`scaas-node/README.md`](scaas-node/README.md) and [docs/node/](docs/node/README.md) |
+| `clients/` | Everything that runs on the user's side: `clientkeys/` (browser signers: passkey, seed vault, Zether keys; [signers-clientkeys.md](docs/clients/signers-clientkeys.md)), `zether-prover/` (Rust/WASM prover for Zether proofs, balance reading and disclosure; [zether.md](docs/contracts/zether.md)), and the Universal Account identity libraries `ua-rs/` (Rust), `ua-cxx/` (C++), `ua-qt/` (QML), `ua-dart-frb/` (Dart over Rust), `ua-py/`, `ua-go/`, `ua-cs/` (C#) and `ua-dart/` (pure Dart) ([ua-libraries.md](docs/clients/ua-libraries.md)). The console and dApp `app/` (React + Vite) is planned ([app.md](docs/clients/app.md)) |
 | `docs/` | Product docs — start at [`docs/README.md`](docs/README.md). Check: `python3 scripts/docs_check.py check` |
-| `scripts/capped` | Run one heavy build in a 4 GB systemd scope, one at a time machine-wide |
+| `scripts/` | [`capped`](scripts/capped): run one heavy build in a 4 GB systemd scope, one at a time machine-wide; [`docs_check.py`](scripts/docs_check.py): the docs checker; [`size_gate.py`](scripts/size_gate.py): the contract size gate |
 
 </details>
 
@@ -880,3 +912,34 @@ serve products from killed animals, fertilized eggs or bee products, to groups e
 such products, or to anyone trading in human organs, tissue, blood or other human-derived products outside donation for
 medical treatment (see the license for the exact terms); everyone else needs a Vegan Enterprise License. Contributions are accepted under the CLA in [CONTRIBUTING.md](CONTRIBUTING.md).
 Third-party components keep their own licenses.
+
+## Use cases
+
+What people can build by combining SCaaS contracts with meta-transactions. Each row names the parts it uses and their
+status. **BUILT**, **SPECIFIED** and **PLANNED** are the docs' own tags; **NOT SPECIFIED** means no SCaaS doc covers
+the use case yet: it is an idea the parts could support, not a feature.
+
+| Use case | How SCaaS maps it | Status |
+|---|---|---|
+| **Loyalty and cashback for supermarkets and store chains** | The chain issues points as a `NONE` token with its own minter ([loyalty template](docs/contracts/asset-suite.md#templates)). Members receive and spend points without holding any native coin; the store's relayer pays the gas at fee 0, and one atomic `mtxBatchTransfer` carries many signed credits ([CTR-MTX-24](docs/contracts/metatx.md#CTR-MTX-24)). Campaign payouts as a `Distribution` are specified | BUILT; `Distribution` SPECIFIED |
+| **Prepaid points (PPP, like gift-card points) used for payment** | A wrapper of a stablecoin at a fixed rate (say 1 USDC → 100 points) is a prepaid point backed by its own reserve ([rates](docs/contracts/token-wrappers.md#rates)). Customers pay merchants with a signed `mtxPay` that carries the payment reference ([section 7](#7-meta-transactions-and-eip-1776)). The voucher template, where expiry is the end of a closable redemption offer, is specified ([templates](docs/contracts/asset-suite.md#templates)) | BUILT; voucher redemption SPECIFIED |
+| **Group fund management** | The fund sits in a `MandateWallet`: delegates pay within per-payment and per-period caps, to approved payees, until an expiry, revocable at any time ([mandates](docs/contracts/mandates.md)). A `SmartKeyAccount` holds several keys with guardian recovery; a weighted-multisig Universal Account, one id for a group of keys, is specified ([accounts](docs/contracts/accounts.md)). Contribution, voting and pay-out rules of a fund are not specified | BUILT (mandates, smart account); UA multisig SPECIFIED; fund rules NOT SPECIFIED |
+| **Virtual points in games** | In-game points are a `NONE` token minted by the game's own contract or treasury; players sign gasless and the game's relayer pays the gas ([section 8](#8-who-pays-the-fee-every-model)). In-game items as NFTs (ERC-721/1155 with meta-transactions) are planned ([asset suite](docs/contracts/asset-suite.md#templates)) | BUILT (points); NFTs PLANNED |
+| **A CBDC issued by the state on a public chain, under strict state control** | The docs list central-bank digital currency as a use of the regulated flags: freeze, forced transfer against a recorded order, bounded pause and a receiver allowlist, chosen at creation and disclosed, with eligibility in a `ComplianceRegistry` ([permissionless vs controlled](docs/contracts/token-wrappers.md#permissionless-vs-controlled), [regulated controls](docs/contracts/asset-suite.md#2-regulated-controls)). Holders still pay without native coin. Today a token refuses these flags (`FeatureNotBuilt`) until the asset suite is built | SPECIFIED |
+| **Sales: payment with automatic tax remittance to the state** | The parts exist: a buyer can sign two payments, one to the seller and one to the tax authority, each with its own reference, and a relayer lands both in one atomic `mtxBatchTransfer` ([CTR-MTX-24](docs/contracts/metatx.md#CTR-MTX-24)). Computing the tax, enforcing the split and reconciling with the authority are not specified | NOT SPECIFIED |
+| **Sales: the seller pays the fee to receive a CBDC or stablecoin** | Receiver pays: the buyer signs a payment of `N`, the seller co-signs a fee from its own balance, and one transaction delivers `N` and pays the relayer ([receiver-pays](docs/contracts/metatx.md#receiver-pays)). Or the seller submits the buyer's signed payment itself and pays the gas ([section 8](#8-who-pays-the-fee-every-model)). A stablecoin takes part through a SCaaS wrapper; a CBDC token needs the regulated flags | BUILT on EVM; CBDC token SPECIFIED |
+| **Cross-border buying, selling and payment through licensed deposit and withdrawal gateways** | The parts: 1:1 stablecoin wrappers that holders wrap and unwrap against the reserve ([token-wrappers](docs/contracts/token-wrappers.md)), gasless payments with references, and an enterprise inbound gateway a licensed company can run ([gateway](docs/node/gateway.md)). The bank side — deposits, withdrawals, licensing and customer checks — is not specified | NOT SPECIFIED (parts BUILT) |
+| **Contract tenders with hidden amounts (Zether / PQ Zether)** | `SealedBidTender` keeps every bid a salted commitment, bonded by a deposit, until the deadline; bids are revealed afterwards and honest losers' deposits return without anyone's approval ([tender](docs/contracts/tender.md)). Bids that stay hidden after the reveal, with Zether or PQ Zether deposits, are outside the tender's scope | SPECIFIED (sealed until reveal); confidential bids NOT SPECIFIED |
+| **Family tree (permanently stored data)** | A family-tree registry built on `MetaTxBase` accepts signed calls such as `addPerson`; a service company relays them, pays the gas and bills off chain ([CTR-MTX-22](docs/contracts/metatx.md#CTR-MTX-22)). The docs keep personal data off chain: the chain stores salted commitments, names stay in a system where they can be erased ([data protection](docs/architecture.md#data-protection)) | `MetaTxBase` BUILT; sponsored call SPECIFIED; the registry itself NOT SPECIFIED |
+| **Issuing shares and bonds on chain, public or private** | Equity and bond templates: a token with the regulated flags, eligibility in a `ComplianceRegistry`, dividends and coupons as a `Distribution`, redemption at maturity as an `ExchangeOffer`, trading on a managed DEX market ([templates](docs/contracts/asset-suite.md#templates)). A private chain keeps intents among admitted nodes ([profiles](docs/architecture.md#profiles)) | SPECIFIED |
+| **Decentralized trading of digital assets** | Orders and cancels are signatures in the node's off-chain book; `SCaaSDex` settles one taker against many makers, with no allowance for SCaaS tokens and no gas for traders, and the same orders fill against Uniswap v2/v3 pools ([dex](docs/contracts/dex.md), [DEX venue](docs/node/dex-venue.md)). Book gossip between relayers is specified | BUILT on EVM; book gossip SPECIFIED |
+
+## Free Pay
+
+If you find SCaaS useful, you can pay for it. This is not a donation: the developer does not need donations. Pay any
+amount you want, whenever you want, or not at all.
+
+Free Pay carries no warranty and no obligation, and nothing is bound to it: it buys no support, no rights and no
+license terms. The license is the same whether you pay or not.
+
+You can Free Pay to **Tu Viện Chơn Như** (Chơn Như Monastery): <https://www.tuvienchonnhu.net>.
