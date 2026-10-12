@@ -20,6 +20,8 @@ import {UARegistryBase} from "./UARegistryBase.sol";
 contract UARegistryVectorsTest is UARegistryBase {
     string internal sj;
     bytes32 internal digest;
+    uint256 internal nSigs; // counted by the loops: a path mismatch must not pass vacuously
+    uint256 internal nNegs;
 
     function setUp() public override {
         super.setUp();
@@ -54,9 +56,14 @@ contract UARegistryVectorsTest is UARegistryBase {
     }
 
     function test_vectors_derived() public {
+        uint256 rows;
         for (uint256 i; vm.keyExistsJson(sj, string.concat(".derived[", vm.toString(i), "]")); ++i) {
             _derivedRow(i);
+            ++rows;
         }
+        assertEq(rows, 7, "derived kinds");
+        assertEq(nSigs, 16, "derived sigs");
+        assertEq(nNegs, 59, "derived negatives");
     }
 
     function _derivedRow(uint256 i) internal {
@@ -79,8 +86,10 @@ contract UARegistryVectorsTest is UARegistryBase {
         assertEq(reg.kindOf(ua), kind);
         for (uint256 s; vm.keyExistsJson(sj, _d(i, string.concat("sigs[", vm.toString(s), "]"))); ++s) {
             _derivedSig(i, s, k, ua);
+            ++nSigs;
         }
         for (uint256 n; _hasNeg(i, n); ++n) {
+            ++nNegs;
             if (!vm.parseJsonBool(sj, _neg(i, n, "verifyPop"))) _derivedNegative(i, n, kind, k, ua);
         }
     }
@@ -126,6 +135,7 @@ contract UARegistryVectorsTest is UARegistryBase {
         assertEq(ua, _pad(vm.addr(vm.parseJsonUint(sj, ".native.secret"))));
         string memory s = _structures();
         // gen 1 on A, gen 2 on A (gen 1 elsewhere), gen 1 on B
+        uint256 sigRows;
         UARegistry gen1 = _deploy(
             address(0x5ca9), chainUidA, address(0), false, BUDGET, address(0), true, new UARegistry.KindConfig[](0)
         );
@@ -160,14 +170,21 @@ contract UARegistryVectorsTest is UARegistryBase {
             r.requireAuthorized(ua, p, dg, sig);
             if (i == 0) emit log_named_uint("requireAuthorized native ECDSA", g - gasleft());
             vm.revertToState(snap);
+            vm.chainId(31337); // not relied on to be restored by the snapshot
+            ++sigRows;
         }
+        assertEq(sigRows, 4, "native sigs");
+        assertEq(block.chainid, 31337);
+        uint256 negRows;
         for (uint256 i; vm.keyExistsJson(sj, string.concat(".native.negatives[", vm.toString(i), "]")); ++i) {
             string memory row = string.concat(".native.negatives[", vm.toString(i), "].");
             bytes32 p = _purposeTag(vm.parseJsonString(sj, string.concat(row, "purpose")));
             bytes memory sig = vm.parseJsonBytes(sj, string.concat(row, "sig"));
             vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua));
             reg.requireAuthorized(ua, p, vm.parseJsonBytes32(sj, string.concat(row, "digest")), sig);
+            ++negRows;
         }
+        assertEq(negRows, 5, "native negatives");
     }
 
     function test_vectors_msig() public {
@@ -187,8 +204,10 @@ contract UARegistryVectorsTest is UARegistryBase {
         emit log_named_uint("register msig (4 members)", g - gasleft());
         assertEq(ua, vm.parseJsonBytes32(sj, ".msig.ua"));
         uint256 valid;
+        uint256 sets;
         for (uint256 i; vm.keyExistsJson(sj, string.concat(".msig.sets[", vm.toString(i), "]")); ++i) {
             string memory row = string.concat(".msig.sets[", vm.toString(i), "].");
+            ++sets;
             bytes memory auth = vm.parseJsonBytes(sj, string.concat(row, "auth"));
             assertEq(auth, abi.encode(d, vm.parseJsonBytes(sj, string.concat(row, "sig"))));
             bytes32 p = _purposeTag(vm.parseJsonString(sj, string.concat(row, "purpose")));
@@ -207,6 +226,7 @@ contract UARegistryVectorsTest is UARegistryBase {
                 reg.requireAuthorized(ua, p, dg, auth);
             }
         }
+        assertEq(sets, 8, "msig sets");
         assertEq(valid, 2);
     }
 }
