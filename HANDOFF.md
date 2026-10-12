@@ -1,6 +1,36 @@
 # HANDOFF — scaas
 
-## Session 2026-10-12 (UA-3 merged, license, README) — resume here
+## Session 2026-10-13 (UA-4 merged) — resume here
+
+**State:** UA-4 merged into main (`8152ee7`) and pushed; branch `ua4-ledger` and worktree `.claude/worktrees/ua4` kept.
+Plan `docs/superpowers/plans/2026-10-12-ua4-ledger.md` (rulings L4-1…L4-20). Forge 1086 passed / 10 skipped on merged
+main; `test/ua` 214; size gate 0 errors; `private7622` build ok; clientkeys 97 / 95 / 2 skipped; `scripts/e2e-zether.sh`
+3/3; scaas-node e2e 4 + e2e_hedera 1; docs and facts checks clean.
+
+**Built (UA-4):** `UAMetaTransaction` / `UAMetaTransfer` (MetaTxLib), `UA_POOL`, one `bytes32` nonce map with the signer
+as an id (`pad(addr)` for native ids), `SigCheck.isValid7702`; the UA ledger in `ERC20MetaTx` (registry bound at
+`initialize`, balances in the ERC-7201 `scaas.ua.ledger` struct, `UA_POOL`'s own ERC-20 slot = the ledger total (L4-2),
+`transferToUA`, `uaExecute` / `uaBatch` / `uaExecuteTransfer` / `uaBatchTransfer`, `uaCancelNonce`, `IUALedger`, a
+derived UA may self-call only the two `unwrap`s (L4-3/L4-4), a ledger move to the token itself reverts `TransferToSelf`);
+named `uaTransfer` / `uaTransferWithFee` / `uaPay` / `uaUnwrap`; T-V3-1/2/3 (the invariants fuzz NONE and a 1:1
+UNDERLYING clone incl. the burn under a UA, per-UA replay, reserve; a mutation check confirmed they catch ledger bugs);
+`metatx3.json` + clientkeys typed data; unwrap refuses `UA_POOL` as recipient. MT-2's UA path closed. T-V3-4 (size)
+deferred to Glamsterdam.
+
+**Owner-visible consequence:** every token implementation now exceeds EIP-170 (NONE 31,770 B; UnderlyingZetherToken
+49,778 B, init 51,473 B > EIP-3860) — deploys need `--code-size-limit 65536` (test chains / anvil only); public chains with
+the 24 KiB limit cannot take the tokens until Glamsterdam (owner rule: no size optimisation). `deploy.sh evm` now also
+runs forge `--slow` (parallel broadcast vs anvil automine left a deploy tx pending forever; per-tx gas fits 2^24).
+
+**Controller rulings (UA-4):** fixed the plan's fee-to-token gap (CTR-MTX-18) in `_uaMove`; `--slow` on the evm deploy
+path (multiplier 105 kept); final fix wave added the burn-under-UA invariant handler and the `UA_POOL` unwrap-recipient
+refusal. Deferred minors: `uaBatch` / `uaPay` not fuzzed; `metatx3.json` negatives / mode-0 row; `isValid7702` malformed-sig
+tests; Hedera HIP-632 UA branch test; node `ua_metatx` jobs (UA F5, L4-17).
+
+**Next steps:** P6c (PQ kinds in registry gen 1 incl. `pqz-mlwe`), then the P6 E-streams; the template-library spec;
+SCaaS Chain 22776 onboarding when the chain is up.
+
+## Session 2026-10-12 (UA-3 merged, license, README)
 
 **State:** UA-3 merged into main (`520642c`) and pushed; branch `ua3-zether` and worktree `.claude/worktrees/ua3` kept.
 Plan `docs/superpowers/plans/2026-10-12-ua3-zether.md` (rulings Z1–Z19). Forge 1047 passed / 10 skipped on merged main;
