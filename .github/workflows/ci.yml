@@ -167,3 +167,16 @@ jobs:
         run: go vet ./...
       - name: vectors
         run: go test ./...
+
+  ua-cs:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: clients/ua-cs/Scaas.Ua.Tests
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
+      - name: vectors
+        run: dotnet test
