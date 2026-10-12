@@ -5,6 +5,7 @@ import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {ZetherTypes} from "./ZetherTypes.sol";
 import {IZetherVerifier} from "./IZetherVerifier.sol";
 import {ITransferDisclosure} from "./ITransferDisclosure.sol";
+import {IUALedger} from "../metatx/IUALedger.sol";
 
 /// @title The confidential layer of the kinds `NONE_ZETHER` and `UNDERLYING_ZETHER` (CTR-ZTH-44, CTR-ZTH-45): ElGamal
 ///        `acc`/`pending` balances over the token's public ERC-20 balance.
@@ -13,7 +14,7 @@ import {ITransferDisclosure} from "./ITransferDisclosure.sol";
 ///         direct call (statement `ZTX_V1_DIRECT`, binding 0) or an allowlisted self-call of `mtxExecute` whose envelope
 ///         binding the statement carries (`ZTX_V1_RELAYED`, CTR-ZTH-34). `zetherWrapShield` and `zetherUnshieldUnwrap`
 ///         are on `UNDERLYING_ZETHER` only; the prover views are in `ZetherStatements` (CTR-ZTH-46).
-interface IZetherToken {
+interface IZetherToken is IUALedger {
     /// @notice One account at one block. An unset point is `O`.
     struct AccountState {
         bytes accC;
@@ -105,8 +106,7 @@ interface IZetherToken {
     /// @notice The canonical `ZetherDisclosure` (stateless, shared), an implementation immutable (CTR-ZTH-43).
     function disclosure() external view returns (ITransferDisclosure);
     function verifier() external view returns (IZetherVerifier);
-    /// @notice The account registry, an implementation immutable (CTR-ZTH-44).
-    function registry() external view returns (address);
+    // `registry()` (the account registry, an implementation immutable, CTR-ZTH-44) is the UA ledger's (`IUALedger`).
 
     // ------------------------------------------------------------------ state
 

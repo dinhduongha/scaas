@@ -20,8 +20,8 @@ import {MetaTxLib} from "../common/MetaTxLib.sol";
 contract NoUnderlyingZetherToken is NoUnderlyingToken, ZetherLayer {
     constructor(address factory_, address smartKeyAccountImpl_, bytes32 chainUid_, address registry_,
         ITransferDisclosure disclosure_)
-        NoUnderlyingToken(factory_, smartKeyAccountImpl_, chainUid_, false)
-        ZetherLayer(registry_, disclosure_)
+        NoUnderlyingToken(factory_, smartKeyAccountImpl_, chainUid_, registry_, false)
+        ZetherLayer(disclosure_)
     {}
 
     function kind() public pure override(NoUnderlyingToken, MetaTokenBase) returns (uint8) {

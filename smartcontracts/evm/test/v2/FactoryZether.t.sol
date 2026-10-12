@@ -17,7 +17,7 @@ import {UID_, noneInit} from "./helpers/V2Fixture.sol";
 /// Kind 2 stand-in: the public `NONE` kind under the confidential id and domain name, accepting `conf` (the factory's
 /// side only; the Zether layer is tested in `test/zether`).
 contract MockNoneZether is NoUnderlyingToken {
-    constructor(address f) NoUnderlyingToken(f, address(0), UID_, false) {}
+    constructor(address f) NoUnderlyingToken(f, address(0), UID_, address(0), false) {}
 
     function kind() public pure override returns (uint8) { return AdminLib.KIND_NONE_ZETHER; }
 
@@ -32,7 +32,7 @@ contract MockNoneZether is NoUnderlyingToken {
 
 /// Kind 3 stand-in: the public `UNDERLYING` kind under the confidential id, its flags validated for kind 3.
 contract MockUnderlyingZether is UnderlyingToken {
-    constructor(address f) UnderlyingToken(f, address(0), UID_, false) {}
+    constructor(address f) UnderlyingToken(f, address(0), UID_, address(0), false) {}
 
     function kind() public pure override returns (uint8) { return AdminLib.KIND_UNDERLYING_ZETHER; }
 
@@ -158,7 +158,7 @@ contract FactoryZetherTest is Test {
         address w = f.createToken(UZ, 1, _underlying(address(okVer)), "ok");
         assertEq(f.getWrapper(address(this), address(usd)), w);
         // the public kinds never pass through the gate (no flag, no verifier)
-        NoUnderlyingToken none = new NoUnderlyingToken(address(f), address(0), UID_, false);
+        NoUnderlyingToken none = new NoUnderlyingToken(address(f), address(0), UID_, address(0), false);
         vm.prank(registrar);
         f.registerImplementation(IOpenFactory.TokenKind.NONE, 1, address(none));
         vm.prank(registrar);
@@ -181,7 +181,7 @@ contract FactoryZetherTest is Test {
     /// A public kind refuses every `conf` field, the two modes included.
     function test_publicKinds_refuseEveryConfField() public {
         OpenFactory g = new OpenFactory(registrar, UID_);
-        NoUnderlyingToken none = new NoUnderlyingToken(address(g), address(0), UID_, false);
+        NoUnderlyingToken none = new NoUnderlyingToken(address(g), address(0), UID_, address(0), false);
         vm.prank(registrar);
         g.registerImplementation(IOpenFactory.TokenKind.NONE, 1, address(none));
         IFactoryToken.TokenConfig memory c = noneInit("P", "P", 0, 0, address(0), address(0));

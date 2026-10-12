@@ -150,7 +150,7 @@ contract DexExchangeTest is Test {
     function setUp() public {
         f = new OpenFactory(address(this), UID_);
         f.registerImplementation(IOpenFactory.TokenKind.NONE, 1,
-            address(new NoUnderlyingToken(address(f), address(0), UID_, false)));
+            address(new NoUnderlyingToken(address(f), address(0), UID_, address(0), false)));
         f.registerDexImplementation(1, address(new SCaaSDex(address(f), UID_, address(0))));
         a = NoUnderlyingToken(f.createToken(IOpenFactory.TokenKind.NONE, 1,
             noneInit("A", "A", 0, 1e6, alice, address(0)), "a"));

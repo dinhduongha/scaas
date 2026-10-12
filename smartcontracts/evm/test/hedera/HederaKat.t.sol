@@ -24,7 +24,7 @@ contract HederaKatTest is Test {
     function test_hederaKat() public {
         vm.chainId(296);
         NoUnderlyingToken tok =
-            NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(address(this), address(0), UID, true))));
+            NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(address(this), address(0), UID, address(0), true))));
         tok.initialize(address(this), 1, noneInit("HBUSD", "HBUSD", 6, 0, address(this), address(0)));
         bytes32 ref = bytes32(uint256(0x42));
         MetaTxLib.MetaTransfer memory t = MetaTxLib.MetaTransfer({

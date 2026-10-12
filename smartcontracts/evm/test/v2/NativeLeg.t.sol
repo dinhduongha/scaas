@@ -206,7 +206,7 @@ contract NativeLegTest is V2Fixture {
     }
 
     function test_native_decimalsOnHederaAre8() public {
-        UnderlyingToken h = UnderlyingToken(_clone(address(new UnderlyingToken(address(this), address(0), UID_, true)),
+        UnderlyingToken h = UnderlyingToken(_clone(address(new UnderlyingToken(address(this), address(0), UID_, address(0), true)),
             address(this), _one(address(0)), _singleInit(address(0), 8, 1, 1, _fixedRate())));
         (,,, uint8 dec,) = h.legOf(address(0));
         assertEq(dec, 8);

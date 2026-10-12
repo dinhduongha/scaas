@@ -14,16 +14,15 @@ import {ZetherLib} from "./ZetherLib.sol";
 ///        CTR-ZTH-45 and the views; the state and the logic are `ZetherLib` (`scaas.zether`).
 /// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Dev chains only (`ZetherSafety`, CTR-ZTH-02). A layer over the
 ///         public ERC-20 balance: `zetherShield` burns public units, `zetherUnshield` mints them; the confidential layer
-///         keeps no underlying of its own. The registry and the disclosure contract are implementation immutables; the
+///         keeps no underlying of its own. The registry (the base's, `ERC20MetaTx`) and the disclosure contract are implementation immutables; the
 ///         verifier (the curve), the auditor key and the two modes (`disclosureMode`, `auditorMode`) are chosen at
 ///         creation and never change. Every entry point is `nonReentrant`.
 abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
-    address internal immutable _REGISTRY;
     ITransferDisclosure private immutable _DISCLOSURE;
 
-    constructor(address registry_, ITransferDisclosure disclosure_) {
-        if (registry_.code.length == 0 || address(disclosure_).code.length == 0) revert BadInit();
-        _REGISTRY = registry_;
+    /// @dev Runs after `MetaTokenBase`'s constructor, which set `_REGISTRY`: a Zether kind needs a registry.
+    constructor(ITransferDisclosure disclosure_) {
+        if (_REGISTRY.code.length == 0 || address(disclosure_).code.length == 0) revert BadInit();
         _DISCLOSURE = disclosure_;
     }
 
@@ -35,7 +34,6 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
     // ------------------------------------------------------------------ views
 
     function verifier() external view returns (IZetherVerifier) { return ZetherLib.$().verifier; }
-    function registry() external view returns (address) { return _REGISTRY; }
     function disclosure() external view returns (ITransferDisclosure) { return _DISCLOSURE; }
     function shieldScale() external view returns (uint256) { return ZetherLib.$().shieldScale; }
     function maxDecryptableShielded() external view returns (uint256) { return ZetherLib.$().maxShielded; }

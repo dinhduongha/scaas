@@ -59,9 +59,9 @@ contract MetaTxGasV2Test is Test {
         signer = vm.addr(PK);
         OpenFactory f2 = new OpenFactory(address(this), UID);
         f2.registerImplementation(IOpenFactory.TokenKind.NONE, 1,
-            address(new NoUnderlyingToken(address(f2), address(0), UID, false)));
+            address(new NoUnderlyingToken(address(f2), address(0), UID, address(0), false)));
         f2.registerImplementation(IOpenFactory.TokenKind.UNDERLYING, 1,
-            address(new UnderlyingToken(address(f2), address(0), UID, false)));
+            address(new UnderlyingToken(address(f2), address(0), UID, address(0), false)));
         acct = new Always1271();
         v2 = _v2(f2, "a");
         v2b = _v2(f2, "b");

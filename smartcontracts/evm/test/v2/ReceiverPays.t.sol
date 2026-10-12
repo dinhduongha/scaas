@@ -29,7 +29,7 @@ contract ReceiverPaysTest is Test {
     function setUp() public {
         vm.chainId(7622);
         vm.warp(1_800_000_000);
-        address impl = address(new NoUnderlyingToken(address(this), address(0), UID, false));
+        address impl = address(new NoUnderlyingToken(address(this), address(0), UID, address(0), false));
         t = NoUnderlyingToken(Clones.clone(impl));
         t.initialize(address(this), 1, noneInit("Points", "PTS", 6, 0, address(this), address(this)));
         t.mint(payer, 1_000e6);

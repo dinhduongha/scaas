@@ -22,7 +22,7 @@ contract TradeKatTest is Test {
     function setUp() public {
         vm.chainId(7622);
         vm.warp(1_800_000_000);
-        tok = NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(address(this), address(0), UID, false))));
+        tok = NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(address(this), address(0), UID, address(0), false))));
         tok.initialize(address(this), 1, noneInit("Points", "PTS", 6, 0, address(this), address(this)));
     }
 

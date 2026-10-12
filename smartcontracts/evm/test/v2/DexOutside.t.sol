@@ -117,7 +117,7 @@ contract DexOutsideTest is Test {
         work = address(new Work1271());
         f = new OpenFactory(address(this), UID_);
         f.registerImplementation(IOpenFactory.TokenKind.NONE, 1,
-            address(new NoUnderlyingToken(address(f), work, UID_, false)));
+            address(new NoUnderlyingToken(address(f), work, UID_, address(0), false)));
         f.registerDexImplementation(1, address(new SCaaSDex(address(f), UID_, work)));
         a = NoUnderlyingToken(f.createToken(IOpenFactory.TokenKind.NONE, 1,
             noneInit("A", "A", 0, 1e6, alice, address(0)), "a"));

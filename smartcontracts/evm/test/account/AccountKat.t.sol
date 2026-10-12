@@ -104,7 +104,7 @@ contract MandateWalletKatTest is MtxKatBase {
         vm.chainId(7622);
         vm.warp(1_800_000_000);
         NoUnderlyingToken tok =
-            NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(address(this), address(0), UID, false))));
+            NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(address(this), address(0), UID, address(0), false))));
         tok.initialize(address(this), 1, noneInit("Points", "PTS", 6, 0, address(this), address(this)));
         MandateWallet w = new MandateWallet(vm.addr(OWNER_PK), UID);
         tok.mint(address(w), 1_000e6);

@@ -11,6 +11,8 @@ import {IERC20MetaTx} from "./IERC20MetaTx.sol";
 import {IERC20Payment} from "./IERC20Payment.sol";
 import {HederaLib} from "../hedera/HederaLib.sol";
 import {IMetaTokenV2} from "./IMetaTokenV2.sol";
+import {IUALedger} from "./IUALedger.sol";
+import {IUARegistry} from "../ua/IUARegistry.sol";
 import {IFactoryToken} from "../factory/IFactoryToken.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {FeePolicy, FeeMode} from "../common/FeePolicy.sol";
@@ -44,9 +46,10 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
     /// @notice Wrong underlying count for the tier (0 / 1 / 2–8).
     error UnderlyingCountInvalid(uint256 n);
 
-    /// @dev Runs ONCE on the implementation and locks it, so nobody can `initialize` it.
-    constructor(address factory_, address smartKeyAccountImpl_, bytes32 chainUid_, bool isHedera_)
-        ERC20MetaTx(chainUid_)
+    /// @dev Runs ONCE on the implementation and locks it, so nobody can `initialize` it. `registry_` is the chain's UA
+    ///      registry (0 = no UA ledger).
+    constructor(address factory_, address smartKeyAccountImpl_, bytes32 chainUid_, address registry_, bool isHedera_)
+        ERC20MetaTx(chainUid_, registry_)
     {
         FACTORY = factory_;
         _SELF = address(this);
@@ -57,9 +60,14 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
         AdminLib.$().initialized = true;
     }
 
-    /// @notice The factory calls it in the SAME call as CREATE2 (CTR-TOK-25).
+    /// @notice The factory calls it in the SAME call as CREATE2 (CTR-TOK-25). A UA registry must name this chain's
+    ///         `chain_uid` (CTR-UA-19).
     function initialize(address creator_, uint64 version_, TokenConfig calldata cfg) external {
         if (msg.sender != FACTORY) revert NotFactory();
+        if (_REGISTRY != address(0)) {
+            bytes32 u = IUARegistry(_REGISTRY).chainUid();
+            if (u != CHAIN_UID) revert UARegistryChainUid(u, CHAIN_UID);
+        }
         AdminLib.TokenStorage storage t = AdminLib.$();
         if (t.initialized) revert AlreadyInitialized();
         t.initialized = true;
@@ -121,7 +129,8 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
     function supportsInterface(bytes4 id) external view returns (bool) {
         return id == type(IERC165).interfaceId || id == type(IERC20).interfaceId || id == type(IMetaTx).interfaceId
             || id == type(IERC20MetaTx).interfaceId
-            || (id == type(IERC20Payment).interfaceId && AdminLib.hasFeature(AdminLib.PAYABLE));
+            || (id == type(IERC20Payment).interfaceId && AdminLib.hasFeature(AdminLib.PAYABLE))
+            || (id == type(IUALedger).interfaceId && _REGISTRY != address(0));
     }
 
     function payLane(bytes32 payId) public pure returns (uint256) {
@@ -258,6 +267,11 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
     function _requireValidSignature(address from, bytes32 digest, bytes calldata sig) internal view override {
         if (IS_HEDERA && sig.length == 64 && !_isContract(from)) return HederaLib.requireValid(from, digest, sig);
         super._requireValidSignature(from, digest, sig);
+    }
+
+    function _requireNativeUASignature(address from, bytes32 digest, bytes calldata sig) internal view override {
+        if (IS_HEDERA && sig.length == 64 && !_isContract(from)) return HederaLib.requireValid(from, digest, sig);
+        super._requireNativeUASignature(from, digest, sig);
     }
 
     function _erc1271Gas(address from) internal view override returns (uint256) {

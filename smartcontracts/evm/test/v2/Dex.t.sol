@@ -45,7 +45,7 @@ contract DexTest is Test {
 
     function setUp() public {
         f = new OpenFactory(registrar, UID_);
-        address noneImpl = address(new NoUnderlyingToken(address(f), address(0), UID_, false));
+        address noneImpl = address(new NoUnderlyingToken(address(f), address(0), UID_, address(0), false));
         dexImpl = new SCaaSDex(address(f), UID_, address(0));
         vm.startPrank(registrar);
         f.registerImplementation(IOpenFactory.TokenKind.NONE, 1, noneImpl);
@@ -435,7 +435,7 @@ contract DexTest is Test {
     }
 
     function test_classification_deprecatedAndUnregisteredAreOutside() public {
-        address impl = address(new NoUnderlyingToken(address(f), address(0), UID_, false));
+        address impl = address(new NoUnderlyingToken(address(f), address(0), UID_, address(0), false));
         address u = f.createTokenUnregistered(
             IOpenFactory.TokenKind.NONE, impl, noneInit("C", "C", 0, 1e6, alice, address(0)), "c");
         vm.startPrank(admin);
