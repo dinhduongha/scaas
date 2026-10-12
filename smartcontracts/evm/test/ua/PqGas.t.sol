@@ -138,6 +138,24 @@ contract PqGasTest is Test {
             assertTrue(ok);
             console2.log(string.concat(names[i], " verifyCached (valid)"), g2);
             assertLt(g2, bound[i], "cached verify: the cap without a precompile");
+            // the least gas limit at which verifyCached still verifies (cold pointers; verifyCached's self-call
+            // to verifyExpanded loses 1/64), binary search: the deployed cap keeps >= 30 k above it
+            uint256 lo = g2;
+            uint256 hi = bound[i];
+            while (hi - lo > 1000) {
+                uint256 mid = (lo + hi) / 2;
+                for (uint256 q; q < chunks.length / 20; ++q) {
+                    vm.cool(address(uint160(0xcace00 + 16 * i + q)));
+                }
+                try v.verifyCached{gas: mid}(chunks, m, sig) returns (bool r) {
+                    if (r) hi = mid;
+                    else lo = mid;
+                } catch {
+                    lo = mid;
+                }
+            }
+            console2.log(string.concat(names[i], " least working cap (cold pointers, +-1000)"), hi);
+            assertGe(bound[i] - hi, 30_000, "cap headroom over the least working cap");
         }
     }
 

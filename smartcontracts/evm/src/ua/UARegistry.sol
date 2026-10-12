@@ -77,8 +77,10 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     /// @notice Registration bound for `msig` (register step 4): gas per member beyond its cap — MemberSig decoding,
     ///         `uaOf`, `uaMessage`, the call or the gen-1 hand-off, cold accounts (measured worst, cold under
     ///         `--isolate`: 19,987 for a member handed to gen 1), plus what the caller must hold for the largest cap
-    ///         (400 k / 63 + 5 k): 31,336, rounded up. A member handed to gen 1 adds gen 1's own hold
-    ///         (`cap / 63 + GAS_MARGIN`) in `_checkMembers`. `UAGas.t.sol` `test_T_GAS_msigAtBudget` authorizes msigs
+    ///         (400 k / 63 + 5 k): 31,336, rounded up. Also added in `_checkMembers`: `(held - 400 k) / 63` for the
+    ///         largest held member cap above 400 k, and for each member gen 2 hands to gen 1 the hold gen 2 keeps
+    ///         around that call (the member counts `cap + cap / 63 + SigCheck.GAS_MARGIN`; gen 1 holds again
+    ///         inside). `UAGas.t.sol` `test_T_GAS_msigAtBudget` authorizes msigs
     ///         registered exactly at `verifyBudget` within `verifyBudget`.
     uint256 internal constant MSIG_MEMBER_GAS = 35_000;
 
@@ -385,23 +387,23 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     function _checkMembers(bytes memory d) private view {
         (uint256 threshold, uint256 count) = (_u16(d, 0), _u16(d, 2));
         uint256[] memory weights = new uint256[](count);
-        uint256[] memory caps = new uint256[](count); // cap << 1 | 1 when this generation's frame holds for it
+        uint256[] memory caps = new uint256[](count);
         for (uint256 i; i < count; ++i) {
             uint256 o = 4 + 36 * i;
             uint16 kind = uint16(_u16(d, o));
             bytes32 id = bytes32(_word(d, o + 2));
             if (!UAKinds.isMember(kind, hederaNative)) revert UAMemberUnknown(id);
             if (UAKinds.isNative(kind)) {
-                caps[i] = _nativeCap() << 1 | 1;
+                caps[i] = _nativeCap();
             } else {
                 if (kindOf(id) != kind) revert UAMemberUnknown(id);
                 uint256 cfg = _cfg(kind);
                 if (uint160(cfg) != 0) {
-                    caps[i] = (cfg >> 160) << 1 | 1;
+                    caps[i] = cfg >> 160;
                 } else {
                     // handed to gen 1, which holds cap / 63 + GAS_MARGIN again inside the 63/64 gen 2 gives it; gen 2 holds for it too
                     uint256 cap = IUARegistry(predecessor).verifyCap(kind);
-                    caps[i] = (cap + cap / 63 + SigCheck.GAS_MARGIN) << 1 | 1;
+                    caps[i] = cap + cap / 63 + SigCheck.GAS_MARGIN;
                 }
             }
             weights[i] = _u16(d, o + 34);
@@ -413,12 +415,10 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
             acc += weights[c];
         }
         uint256 worst = c * MSIG_MEMBER_GAS;
-        uint256 held; // the largest cap among the c that this frame holds for (P6c: PQ caps exceed 400 k)
         for (uint256 i; i < c; ++i) {
-            uint256 e = caps[count - 1 - i];
-            worst += e >> 1;
-            if (e & 1 == 1 && e >> 1 > held) held = e >> 1;
+            worst += caps[count - 1 - i];
         }
+        uint256 held = c == 0 ? 0 : caps[count - 1]; // the largest cap among the c (P6c: PQ caps exceed 400 k)
         if (held > SMART_KEY_1271_GAS) worst += (held - SMART_KEY_1271_GAS) / 63;
         if (worst > verifyBudget) revert UAKeyData(UAKinds.MSIG);
     }

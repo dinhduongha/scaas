@@ -505,6 +505,8 @@ contract UAMldsaVerifier is IUAPopVerifier {
     /// The registry's cached path: `chunks` = the 20-byte SSTORE2 pointers of the parts, in order (code = `0x00 ‖ part`).
     /// Reads them by EXTCODECOPY and verifies on the result. **Trusts the pointers**: only the registry, which wrote the
     /// parts from `expandedKeyPart` of an authenticated `pk`, may call this for a verdict (`MlDsa.verifyExpanded`).
+    /// The self-call to `verifyExpanded` loses 1/64 of the gas, so the least working cap is above the measured cost:
+    /// 5,893,303 (ML-DSA-65) and 4,174,074 (ML-DSA-44) with warm pointers, ~5 k more cold (`PqGas.t.sol` pins it).
     function verifyCached(bytes calldata chunks, bytes32 message, bytes calldata sig) external view returns (bool) {
         uint256 len = MlDsa.expandedLen(_params());
         if (chunks.length != 20 * expandedKeyParts()) return false;

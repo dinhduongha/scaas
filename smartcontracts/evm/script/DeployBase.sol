@@ -57,7 +57,9 @@ abstract contract DeployBase is Script {
     uint64 internal constant UA_VERIFY_BUDGET = 12_000_000;
     uint64 internal constant UA_VERIFY_BUDGET_HEDERA = 10_500_000;
     /// @notice Gen-1 caps of the PQ kinds without an ML-DSA precompile (P6c, `test/ua/PqGas.t.sol`, accounts.md §1.15):
-    ///         ML-DSA on the registry's cached expanded key (measured valid 4.11 M / 5.80 M, + ~3 %; ML-DSA-65's
+    ///         ML-DSA on the registry's cached expanded key (measured valid 4.11 M / 5.80 M; `verifyCached`'s self-call loses
+    ///         1/64, so the least working caps are 4,174,074 / 5,893,303 warm, ~5 k more cold, and the caps leave ~73 k (~1.7 %) /
+    ///         ~52 k (~0.9 %) over the cold minimum, pinned by `PqGas.t.sol`; ML-DSA-65's
     ///         cap keeps the treasury {mldsa65 ×3} t=2 over the budget), FN-DSA (2.27–2.35 M measured) + ~6 %,
     ///         SLH-DSA above its 1.32 M worst case. Each ≤ 50 % of the 12 M budget.
     uint64 internal constant CAP_MLDSA44 = 4_250_000;

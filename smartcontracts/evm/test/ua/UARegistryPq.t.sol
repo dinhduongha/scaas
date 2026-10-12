@@ -149,6 +149,8 @@ contract UARegistryPqTest is UARegistryBase {
         bytes32 ua = r.uaOf(kind, pk);
         for (uint256 p; p < (kind == 0x0130 ? 1 : 2); ++p) {
             uint256 g = gasleft();
+            vm.expectEmit(true, true, false, false, address(r));
+            emit IUARegistry.UAKeyCached(ua, kind, p, address(0));
             assertEq(r.cacheExpandedKey(kind, pk, p), ua);
             g -= gasleft();
             emit log_named_uint(string.concat("cacheExpandedKey ", name, " part ", vm.toString(p)), g);
@@ -329,7 +331,7 @@ contract UARegistryPqTest is UARegistryBase {
     }
 
     /// Members 0 and 1 sign (mock signatures, stored kind: no key data).
-    function _burnAuth(UARegistry r, bytes memory d, bytes32 ua) internal view returns (bytes memory) {
+    function _burnAuth(UARegistry r, bytes memory d, bytes32 ua) internal pure returns (bytes memory) {
         bytes32 md = _memberDigest(ua, UAKinds.PURPOSE_METATX, DIGEST);
         UARegistry.MemberSig[] memory sigs = new UARegistry.MemberSig[](2);
         for (uint256 i; i < 2; ++i) {
