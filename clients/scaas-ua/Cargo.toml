@@ -8,8 +8,9 @@ description = "SCaaS Universal Account identity layer: kind table, ids, keyHash,
 
 [dependencies]
 sha3 = "0.10"
-k256 = { version = "0.13", default-features = false, features = ["arithmetic"] }
-p256 = { version = "0.13", default-features = false, features = ["arithmetic"] }
+k256 = { version = "0.13", default-features = false, features = ["arithmetic", "ecdsa", "schnorr"] }
+p256 = { version = "0.13", default-features = false, features = ["arithmetic", "ecdsa"] }
+sha2 = "=0.10.9"
 curve25519-dalek = "4"
 ark-ff = "0.5"
 ark-ec = "0.5"
