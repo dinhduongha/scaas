@@ -64,7 +64,7 @@ module-lattice assumptions:
 | State | points in storage | ciphertext **hashes** in storage, bytes in calldata + events; public amounts (`pqzShield`, fees) as a public `plainPending` integer; public keys in SSTORE2 ([CTR-PQZ-07](#CTR-PQZ-07), [CTR-PQZ-06](#CTR-PQZ-06)) |
 | Chains | dev allowlist 31337/1337 | allowlist 31337/1337/**7622** **and** a constructor self-test through the precompile **and** the registry's `chain_uid` in every statement ([CTR-PQZ-01](#CTR-PQZ-01), [NET-ALL-22](../networks/README.md#NET-ALL-22)) |
 
-**Cost.** Ciphertext 16,512 B, public key 16,384 B, transfer proof ≈ 30–50 KB (estimate). A transfer is ≈ 77 KB of
+**Cost.** Ciphertext 16,512 B, public key 16,384 B, transfer proof ≈ 30–50 KB (estimate; the E-S1 spike's `R_TX` measured 42.7 KB). A transfer is ≈ 77 KB of
 calldata and ≈ **2.8 M gas** while the p99 verify time stays under ≈ 11 ms (the EIP-7623 calldata floor binds,
 [gas](#gas)), rising to ≈ 7.5 M at the 50 ms kill threshold — the same order as classical Zether's measured 3.29–3.36 M.
 Consuming each received credit later costs ≈ 0.52 M gas more (its ciphertext enters calldata once more,
@@ -372,9 +372,9 @@ multiplied by `γ` in this derivation, `K_MAX` is recomputed, and the change is 
 | PQZ public key `pk` | **16,384** | 32 polys × 64 coeffs × `be8`, coefficient 0 first, poly 0 first; each `< q` |
 | Ciphertext `ct = u ‖ v` | **16,512** | `u` as `pk`; `v` = 16 × `be8` |
 | Transfer outputs `u ‖ v_t ‖ v_f ‖ v_a` | 16,768 | `v_a` absent (0 bytes) when the auditor is off |
-| Transfer proof | ≈ 30–50 KB (**estimate**; kill at 96 KB) | `pqz-core` serialization v1 |
+| Transfer proof | ≈ 30–50 KB (**estimate**; kill at 96 KB; E-S1 `R_TX` measured 42.7 KB, `docs/research/pqz-core-e-s1.md`) | `pqz-core` serialization v1 |
 | Burn / refresh proof | ≈ same as transfer minus one recipient | |
-| Registration PoP proof | ≈ 15–25 KB (estimate) | |
+| Registration PoP proof | ≈ 15–25 KB (estimate; E-S1 `R_REG` measured 28.1 KB) | |
 | Disclosure proof | ≈ 15–25 KB (estimate) | |
 | ML-DSA-65 pk / sig | 1,952 / 3,309 | FIPS 204 |
 
