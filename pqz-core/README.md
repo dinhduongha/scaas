@@ -18,6 +18,7 @@ open: [STATUS.md](STATUS.md); write-up: `docs/research/pqz-core-e-s1.md`.
 | `test/` | `pqz_bench.c` (prove, verify, tamper checks, timings, a hash of the proofs) and `run_wasm.mjs` (the same steps under node) |
 | `opt/` | P6d-2 optimisation: `bench.sh` (native + wasm bench under `scripts/capped`), `prof.sh` (gprof), `asan.sh` (ASan + UBSan, malloc path), microbenches `micro_basemul.c` / `micro_aes.c`, raw results `runs/` (STATUS.md) |
 | `rel3/` | `R_BURN` / `R_DS` / `R_DR` measurement: `bench.sh` (build, KAT, `R_REG` / `R_TX` proof hashes, timings; under `scripts/capped`), `relfix.sh` (after the owner's fix-ups: build, KAT, proof hashes, arena peak per relation, ASan + UBSan, timings of all five), raw runs `runs/` |
+| `sz/`, `l2dom/` | The two LaZer `tbox` soundness fixes behind `proofSystemId` v2 ([lazer#24](https://github.com/lazer-crypto/lazer/issues/24), [#25](https://github.com/lazer-crypto/lazer/issues/25)): challenge-row trace and the pooled-slack cheating prover; `check_tbox_fixes.sh` fails if either fix is gone (`sz/README.md`) |
 | `floor/` | Verifier-floor microbenchmarks and cost model (`docs/research/pqz-verifier-floor.md`): unit costs, prototypes, operation counts of the generic verifier; `floor/build.sh run` under `scripts/capped` |
 
 ## Build and run
@@ -40,6 +41,7 @@ opt/bench.sh <label>                                        # pqz_bench 5 5 + ru
 node test/run_wasm.mjs 3 1                                  # the same under node
 build/native/kat_dump > build/native/kat-pqz.json
 python3 -I kat/check.py kat/lazer-3330e48.json build/native/kat-pqz.json   # must print 19/19
+./check_tbox_fixes.sh                                       # after ./build.sh native: the tbox fixes are in place
 ```
 
 `R_TX` needs about 0.30 GB of arena alone (0.31 GB after an `R_REG` in the same process: a relation's keys are built

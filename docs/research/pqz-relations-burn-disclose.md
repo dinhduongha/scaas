@@ -132,6 +132,10 @@ ones): `R_BURN` s_f ‖ e_f ‖ r ‖ e1 ‖ e2_f ‖ d′ (12,336 B), `R_DS` r 
 | ASan + UBSan (libc heap, `-DPQZ_DEBUG_MALLOC`; 1 prove, 1 + 6 verifies per relation) | `fails 0`, no ASan report; UBSan reports only the known upstream nits (zero-length VLAs at `lnp-tbox.c` 223 / 875 / 3451, null + 0 at `aes256ctr.c:339`; `pqz-core/STATUS.md` Open 4) (`f2-asan*`) |
 | Symbol scan (`check_symbols.sh`) | native and wasm objects reference only `memcpy`, `memset`, `__stack_chk_fail`, `__stack_pointer` |
 
+These hashes are `proofSystemId` v1. v2 (the LaZer `tbox` fixes [lazer#24](https://github.com/lazer-crypto/lazer/issues/24) /
+[#25](https://github.com/lazer-crypto/lazer/issues/25), branch `pqz-v2`) changes the transcript and so every proof hash;
+sizes, arena and times stay the same within noise. The v2 values: `pqz-core/STATUS.md`, run `rel3/runs/v2-*`.
+
 **Arena.** Before the fix-ups every relation's ABDLOP keys (A1, A2′, B′) were built at `pqz_init` below the arena base
 mark and kept: base 54.5 MB native / 43.3 MB wasm, init 212 ms native / 292 ms wasm, and every op carried the keys of
 all five relations; the three new relations had added ≈ 27 MB native / ≈ 21 MB wasm to the base (`R_REG` peak

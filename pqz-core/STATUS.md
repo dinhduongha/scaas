@@ -117,6 +117,32 @@ Times and sizes unchanged within host noise (±20 %); memory is the change: "per
 wasm, init arena 54.5 → 3.1 MB native. p99 verify (honest or adversarial, the larger) against 50 ms: `R_BURN` 624 ms
 (12.5×), `R_DS` 221 ms (4.4×), `R_DR` 232 ms (4.6×).
 
+## proofSystemId v2: the LaZer tbox soundness fixes (branch `pqz-v2`)
+
+Two Schwartz–Zippel findings in `lazer/lnp-tbox.c`, public as [lazer#24](https://github.com/lazer-crypto/lazer/issues/24)
+(P6-SZ: one challenge pair reused for all λ/2 evaluation accumulators; fix: the full λ × M matrix) and
+[lazer#25](https://github.com/lazer-crypto/lazer/issues/25) (P6-L2: one domain for all exact-ℓ2 equations, only the
+sum of the block norms checked; fix: `dom + i`). Both change the transcript, so one bump:
+`proofSystemId = keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v2")` (`PQZ_PROOF_SYSTEM_ID` in `src/pqz.h`; the bench
+statements now carry it at bytes 32..63). Harnesses and the regression check: `sz/README.md`, `check_tbox_fixes.sh`
+(with either fix reverted it exits 1: P6-L2 reverted, the production verifier accepts the 4 pooled-slack proofs;
+P6-SZ reverted, the trace reports 2 independent tests). Run `NP=10 NV=30 NPW=5 NVW=10 rel3/relfix.sh v2`
+(`rel3/runs/v2-*`) [measured]: KAT 19/19, `check_tbox_fixes: ok`, `fails 0` (native, wasm, ASan + UBSan with only
+the upstream nits of Open 4), symbol scan clean; native and wasm proofs equal byte for byte (5-seed and 1-seed hashes).
+
+| `proofs_fnv` f2 → v2 | native 5 seeds | wasm 3 seeds | native 10 seeds | wasm 5 seeds (= native 5) |
+|---|---|---|---|---|
+| `R_REG` | `12ec7452` → `5124b5f8` | `3bc7e9b3` → `e23b746d` | `41a5db50` → `e2a4ba8d` | `12ec7452` → `5124b5f8` |
+| `R_TX` | `4690aaa0` → `fa87fff6` | `f1c3e7f6` → `762dacd2` | `58c67500` → `b69bb773` | `4690aaa0` → `fa87fff6` |
+| `R_BURN` | `13b973e1` → `8df6b744` | `84a163ba` → `3d80d4a8` | `3289ff3e` → `626710cc` | `13b973e1` → `8df6b744` |
+| `R_DS` | `50dfbe90` → `46c77f3e` | `02f903f8` → `216b75fc` | `b6e547db` → `f4b59d4b` | `50dfbe90` → `46c77f3e` |
+| `R_DR` | `7cbb59f8` → `84a15cd2` | `f5c53099` → `e0d2deda` | `d66d665a` → `ea72ce2d` | `7cbb59f8` → `84a15cd2` |
+
+Proof sizes and arena peaks unchanged (same parameters and proof format; per-op peaks identical to `f2-alone`). Times
+within host noise (the fix draws 2 M more challenge coefficients per evaluation call, the accumulations are the same):
+native p50 prove / verify `R_TX` 949 / 620 → 1,061 / 648 ms, `R_BURN` 683 / 526 → 755 / 544 ms, `R_REG` 228 / 165 →
+252 / 177 ms, `R_DS` 271 / 195 → 314 / 211 ms, `R_DR` 295 / 194 → 323 / 212 ms; wasm verify p50 `R_TX` 761 → 818 ms.
+
 ## Measured (2026-10-13, this machine, single thread)
 
 Native: clang -O2, `pqz_bench 5 5` under `scripts/capped` (5 proves, 5 + 5 honest verifies, 10 adversarial). wasm32:
