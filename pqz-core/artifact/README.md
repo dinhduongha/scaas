@@ -5,28 +5,46 @@ Source and scripts to rebuild pqz-core (PQZL: the LaZer fork with the five relat
 measurements in `../STATUS.md`. Nothing built is published: no image, no wasm, no binaries. You build and run
 everything on your own machine, and the package compares your results with `expected-results.json`.
 
-## Status / resume (2026-10-14)
+## Status / resume (2026-10-14, WIP, machine shut down)
 
-- **Done:** `Dockerfile`, `reproduce.sh` (quick, `--full`, `--serve`, `--upstream`), `results.py`,
-  `web/index.html`, this README.
-- **`expected-results.json` is PROVISIONAL.** It comes from the runs `rel3/runs/v2full-*` and `sv/runs/v2-*`
-  (2026-10-13, before the z21 merge). The z21 fix changed only the verifier, so the proofs and their `proofs_fnv`
-  stayed the same (`STATUS.md`, P6-Z21). The times in the file are pre-z21.
-- **Tested:** see `runs/` (Docker build, quick mode in Docker, `--upstream`, `--serve`). Each log ends with its
-  outcome and wall time.
-- **Not done: the freeze run.** It runs through the package on the host toolchain, under the machine-wide lock:
+- **Done (source, committed):** `Dockerfile`, `Dockerfile.dockerignore`, `reproduce.sh` (quick, `--full`, `--serve`,
+  `--upstream`), `results.py` (`check`, `freeze`), `web/index.html`, this README, `.gitignore` entry `artifact/out/`.
+- **Tested:** `results.py freeze` on the v2 runs (`rel3/runs/v2full-*` + `sv/runs/v2-*`): 69 / 69 checks ok, and
+  the table it prints matches the v2 numbers in `../STATUS.md`. `sh -n reproduce.sh`. In a plain `ubuntu:24.04`
+  container (same digest), the apt snapshot `20261013T000000Z` offers exactly the pinned versions (clang-18 / lld-18
+  1:18.1.3-1ubuntu1, gcc-13 / g++-13 13.3.0-6ubuntu2~24.04.1, cmake 3.28.3-1build7).
+- **Untested:** the image build after the fix, and every `reproduce.sh` mode (quick, `--full`, `--serve`,
+  `--upstream`), in Docker and on the host. In particular, nobody has yet checked that `--upstream` compiles
+  `../xcheck/shim` (written at `b2402b5`) against the current headers, or that `http.server` serves `pqz.wasm` as
+  `application/wasm`.
+- **Why the first image build failed** (`runs/docker-build-1-failed.txt`): `snapshot.ubuntu.com` is HTTPS only,
+  and the base image has no `ca-certificates`, so `apt-get update --snapshot` fetched nothing. Fixed in the
+  `Dockerfile`: `ca-certificates` now comes from the live archive first. Not rebuilt (owner: no further runs).
+- **`expected-results.json` is PROVISIONAL.** It was built from `rel3/runs/v2full-*` + `sv/runs/v2-*` (2026-10-13,
+  before the z21 merge). z21 changed only the verifier, and the post-z21 `rel3/runs/final-*` gives the same
+  `proofs_fnv`. Its times are pre-z21.
+- **Phase 1 runs on disk:** `rel3/runs/final-*` is a complete `rel3/relfix.sh` run with the v2full sample sizes,
+  post z21: rc 0, KAT 19/19, `check_tbox_fixes: ok`, `fails 0`, and `proofs_fnv` = v2 for all five relations.
+  `sv/runs/final-*` was interrupted (see `final-rc.txt`). Only the portable differential is complete there: 2,710
+  cases, 0 mismatches. Neither is the freeze.
 
-  ```sh
-  OUT=pqz-core/artifact/runs/freeze-2026-10-14 scripts/capped pqz-core/artifact/reproduce.sh --full
-  cd pqz-core && python3 -I artifact/results.py freeze "frozen 2026-10-14 (post z21)" artifact/runs/freeze-2026-10-14 \
-    > artifact/expected-results.json      # prints the frozen table (Markdown) on stderr
-  ```
+Next, in order (each heavy step under the machine-wide lock):
 
-  Then commit the run directory except the large `kat-pqz.json`. Write the frozen table and the reference machine
-  into `../STATUS.md` and the five-relation table of `../README.md`.
+```sh
+# 1. image build + Docker tests (from the repo root); keep logs in pqz-core/artifact/runs/
+scripts/capped docker build --progress=plain -t pqz-core-artifact -f pqz-core/artifact/Dockerfile pqz-core
+scripts/capped docker run --rm --memory=4g -u "$(id -u):$(id -g)" -v "$PWD/pqz-core/artifact/runs/docker-quick:/out" -e OUT=/out pqz-core-artifact
+scripts/capped docker run --rm --memory=4g --network none -u "$(id -u):$(id -g)" -v "$PWD/pqz-core/artifact/runs/docker-upstream:/out" -e OUT=/out pqz-core-artifact --upstream
+docker run --rm -p 127.0.0.1:8000:8000 pqz-core-artifact --serve     # open http://127.0.0.1:8000/, then Ctrl-C
+docker image rm pqz-core-artifact
+# 2. the freeze, through the package on the host toolchain
+OUT=pqz-core/artifact/runs/freeze-2026-10-14 scripts/capped pqz-core/artifact/reproduce.sh --full
+cd pqz-core && python3 -I artifact/results.py freeze "frozen 2026-10-14 (post z21)" artifact/runs/freeze-2026-10-14 \
+  > artifact/expected-results.json      # prints the frozen table (Markdown) on stderr
+```
 
-  A direct `rel3/relfix.sh final` + `sv/rel3.sh final` run was started before the order changed. Its files, if
-  complete, are in `rel3/runs/final-*` and `sv/runs/final-*`; compare them with the `--full` run.
+After the freeze, write the frozen table and the reference machine into `../STATUS.md` and the five-relation table
+of `../README.md`. Compare it with `rel3/runs/final-*` (a direct relfix run). Then remove the PROVISIONAL notes.
 
 ## What is reproduced
 
