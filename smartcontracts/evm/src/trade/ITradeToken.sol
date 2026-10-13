@@ -24,6 +24,25 @@ interface ITradeToken {
         uint256 validUntil;
     }
 
+    /// @notice A UA's order (CTR-DEX-25): `TradeOrder` with `from` and `destination` as ids (a native address
+    ///         zero-padded, or a registered SIGNING UA), signed in the sell token's domain under the UA purpose `trade`
+    ///         (a native id signs the digest itself). The same 13 ABI words as `TradeOrder`, in the same order.
+    struct UATradeOrder {
+        bytes32 from;
+        address receiveToken;
+        uint256 amount;
+        uint256 receiveAmount;
+        uint256 minFill;
+        uint256 fee;
+        address relayer;
+        address dex;
+        bytes32 destination; // receives the proceeds in receiveToken (a derived id: by `transferToUA`); 0 = from
+        uint8 flags;
+        uint256 batch;       // order lane: one `minNonce` per id across `TradeOrder` and `UATradeOrder`
+        uint256 nonce;
+        uint256 validUntil;
+    }
+
     /// @notice What the DEX passes: the fill of THIS order (Path B: `amount`, 0, 0) and its own `msg.sender`.
     struct TradeFill {
         uint256 sellFill;
@@ -36,6 +55,11 @@ interface ITradeToken {
         uint256 dexFee);
     event OrderCancelled(bytes32 indexed orderHash, address indexed from);
     event NoncesInvalidated(address indexed from, uint256 indexed batch, uint256 minNonce);
+    /// @notice The `UATradeOrder` twins (CTR-DEX-25), by entry point: a padded native signer gets these too.
+    event UATradeFilled(bytes32 indexed orderHash, bytes32 indexed from, uint256 sellFill, uint256 receiveFill,
+        uint256 dexFee);
+    event UAOrderCancelled(bytes32 indexed orderHash, bytes32 indexed from);
+    event UANoncesInvalidated(bytes32 indexed from, uint256 indexed batch, uint256 minNonce);
 
     error NotDex(address caller);
     error DexNotContract(address dex);
@@ -65,7 +89,18 @@ interface ITradeToken {
     /// @notice `InvalidateNonces(address from,uint256 batch,uint256 minNonce)` signed by `from`.
     function mtxInvalidateNonces(address from, uint256 batch, uint256 newMin, bytes calldata sig) external;
 
+    /// @notice CTR-DEX-25: `mtxTrade` for a `UATradeOrder`; step 4 through the UA rule (a derived `from` by
+    ///         `requireAuthorized(from, trade, h, auth)`), skipped when `pulled[h] ≠ 0`; the fill moves by the UA ledger.
+    function uaTrade(UATradeOrder calldata o, bytes calldata auth, TradeFill calldata f) external;
+    /// @notice `CancelOrder(uaTradeOrderDigest(o))` under `trade`; never expires; already closed = no-op.
+    function uaCancelOrder(UATradeOrder calldata o, bytes calldata auth) external;
+    /// @notice `UAInvalidateNonces(from, batch, minNonce)` under `trade`; raises the one floor of the id.
+    function uaInvalidateNonces(bytes32 from, uint256 batch, uint256 newMin, bytes calldata auth) external;
+
     function tradeOrderDigest(TradeOrder calldata o) external view returns (bytes32);
+    function uaTradeOrderDigest(UATradeOrder calldata o) external view returns (bytes32);
+    function uaInvalidateNoncesDigest(bytes32 from, uint256 batch, uint256 newMin) external view returns (bytes32);
+    function uaMinNonce(bytes32 from, uint256 batch) external view returns (uint256);
     function cancelOrderDigest(bytes32 orderHash) external view returns (bytes32);
     function invalidateNoncesDigest(address from, uint256 batch, uint256 newMin) external view returns (bytes32);
     function pulled(bytes32 orderHash) external view returns (uint256);

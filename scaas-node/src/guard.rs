@@ -25,7 +25,7 @@ use crate::config::ChainCfg;
 use crate::metatx::{Mtx, MODE_FEE_MASK};
 use crate::submit::Work;
 
-pub const SEL_MTX_SETTLE: [u8; 4] = [0xb0, 0x95, 0x5d, 0xd6];
+pub const SEL_MTX_SETTLE: [u8; 4] = [0x04, 0x03, 0xb1, 0x3c];
 pub const SEL_MTX_INVALIDATE_NONCES: [u8; 4] = [0xdb, 0xac, 0x32, 0xd0];
 pub const SEL_MTX_CANCEL_ORDER: [u8; 4] = [0x93, 0xcb, 0x3e, 0x81];
 pub const SEL_MTX_WRAP: [u8; 4] = [0x3e, 0xd1, 0x8b, 0xa8];

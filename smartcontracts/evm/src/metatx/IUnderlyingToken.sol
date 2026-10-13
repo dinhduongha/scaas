@@ -14,6 +14,9 @@ interface IUnderlyingToken {
     ///         `UATransfer(ua, 0)` names the UA).
     event UnwrappedToUA(address indexed account, address indexed underlying, bytes32 indexed to, uint256 burned,
         uint256 out);
+    /// @notice `uaWrap` (CTR-TOK-20, UA-5b): the signer's id; the units went to its `destination` (or itself) and the
+    ///         submitter's fee.
+    event UAWrapped(bytes32 indexed from, address indexed underlying, uint256 underlyingIn, uint256 minted);
     event ReserveAdded(address indexed from, address indexed underlying, uint256 amount);
     event RateChangeProposed(address indexed underlying, uint96 oldNum, uint96 oldDen, uint96 newNum, uint96 newDen,
         uint64 eta);
@@ -77,6 +80,10 @@ interface IUnderlyingToken {
     /// @notice Wrap a SCaaS underlying by the holder's `TradeOrder` (`dex` = this token, `receiveToken` = this
     ///         token, `receiveAmount` = the minimum minted, `minFill = amount`); `fee` pays the submitter in minted units.
     function mtxWrap(address underlying, ITradeToken.TradeOrder calldata o, bytes calldata sig)
+        external returns (uint256 minted);
+    /// @notice `mtxWrap` for a `UATradeOrder` (UA-5b): the underlying must be a SCaaS ledger token; `minted − fee`
+    ///         to `o.destination` (0 ⇒ `o.from`), a derived id into the UA ledger.
+    function uaWrap(address underlying, ITradeToken.UATradeOrder calldata o, bytes calldata auth)
         external returns (uint256 minted);
     function disableWrap(address underlying, bytes32 reason) external;
     function proposeRate(address underlying, uint96 num, uint96 den) external;

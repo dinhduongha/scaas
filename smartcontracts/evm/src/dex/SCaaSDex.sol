@@ -11,6 +11,8 @@ import {IOpenFactory} from "../factory/IOpenFactory.sol";
 import {SaltedEIP712} from "../common/SaltedEIP712.sol";
 import {SigCheck} from "../common/SigCheck.sol";
 import {TradeLib} from "../trade/TradeLib.sol";
+import {IUALedger} from "../metatx/IUALedger.sol";
+import {UAKinds} from "../ua/UAKinds.sol";
 import {DexPuller} from "./DexPuller.sol";
 
 /// @title `SCaaSDex` (CTR-DEX-16, -17, -11, -03, -24, -18, -22, -08, -20, -21, -23): an EIP-1167 clone made by
@@ -31,7 +33,11 @@ import {DexPuller} from "./DexPuller.sol";
 ///         not call the DEX, the puller or any `mtxTrade`, nor call `increaseAllowance` or Permit2 `approve`
 ///         (controller ruling, pending the owner; other allowance-raising calls are not tracked),
 ///         listed targets only when a leg or the admin asks (CTR-DEX-23), and every allowance an `approve` interaction
-///         grants is set back to 0 before the payout.
+///         grants is set back to 0 before the payout. UA legs (CTR-DEX-26): a leg is tagged — shape 0 a `TradeOrder`,
+///         shape 1 a `UATradeOrder` (ids as `bytes32`) — and decoded into one form (`UATradeOrder` in memory, a native
+///         id zero-padded); a shape-1 leg sells a SCaaS token with its UA ledger on, through the token's `uaTrade`; a
+///         derived party is paid and refunded by the token's `transferToUA` from the DEX's own balance; self-trade is
+///         over ids; a UA leg's starved verify (`UAVerifyGas`) reverts the whole `mtxSettle`.
 contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
     using SafeERC20 for IERC20;
 
@@ -89,6 +95,8 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
         uint256 fee;     // dexFee on recv
         uint256 refund;  // Path B: amount - sold
         bool outside;    // an outside-token leg (`DexOrder`), from the DEX's listing
+        bool ua;         // shape 1: a `UATradeOrder`
+        ITradeToken.UATradeOrder o; // the decoded order, ids as `bytes32` (shape 0: the address zero-padded)
     }
 
     /// @dev Per token of an exchange plan.
@@ -205,10 +213,14 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
     function puller() external view returns (address) { return _s().puller; }
     function pulled(bytes32 orderHash) external view returns (uint256) { return TradeLib.$().pulled[orderHash]; }
     function minNonce(address from, uint256 batch) external view returns (uint256) {
-        return TradeLib.$().minNonce[from][batch];
+        return TradeLib.$().minNonce[TradeLib.pad(from)][batch];
     }
 
-    function dexOrderDigest(address sellToken, ITradeToken.TradeOrder calldata o) public view returns (bytes32) {
+    function dexOrderDigest(address sellToken, ITradeToken.TradeOrder calldata o) external view returns (bytes32) {
+        return _dexOrderDigest(sellToken, o);
+    }
+
+    function _dexOrderDigest(address sellToken, ITradeToken.TradeOrder memory o) private view returns (bytes32) {
         return _hashTypedDataV4(keccak256(abi.encode(DEX_ORDER_TYPEHASH, sellToken, TradeLib.hashStruct(o))));
     }
 
@@ -228,15 +240,17 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
         if (orders.length != sigs.length) revert LengthMismatch();
         for (uint256 i; i < orders.length; ++i) {
             ITradeToken.TradeOrder calldata o = orders[i].order;
-            bytes32 h = dexOrderDigest(orders[i].sellToken, o);
-            if (SigCheck.isValid(o.from, cancelOrderDigest(h), sigs[i], _cap(o.from))) TradeLib.cancel(o, h);
+            bytes32 h = _dexOrderDigest(orders[i].sellToken, o);
+            if (SigCheck.isValid(o.from, cancelOrderDigest(h), sigs[i], _cap(o.from))) {
+                TradeLib.cancel(h, o.amount, TradeLib.pad(o.from), false);
+            }
         }
     }
 
     function mtxInvalidateNonces(address from, uint256 batch, uint256 newMin, bytes calldata sig) external nonReentrant {
         bytes32 d = invalidateNoncesDigest(from, batch, newMin);
         if (!SigCheck.isValid(from, d, sig, _cap(from))) revert BadSignature(d);
-        TradeLib.invalidate(from, batch, newMin);
+        TradeLib.invalidate(TradeLib.pad(from), batch, newMin, false);
     }
 
     /// @dev CTR-DEX-08: 400 k for a `SmartKeyAccount` clone, else 50 k.
@@ -245,11 +259,12 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
         return h != bytes32(0) && signer.codehash == h ? SMART_KEY_1271_GAS : SigCheck.ERC1271_GAS;
     }
 
-    // ------------------------------------------------------------------ settle (CTR-DEX-16)
+    // ------------------------------------------------------------------ settle (CTR-DEX-16, CTR-DEX-26)
 
     /// @notice Each settlement atomic; at least one must succeed, else the call reverts (the relayer's simulation
     ///         catches it). A failed settlement emits `MatchFailed` with at most `MAX_REASON` bytes of its revert data;
-    ///         `SigCheckGasStarved` reverts the whole call (CTR-DEX-08: the submitter's gas, not the signature, failed).
+    ///         `SigCheckGasStarved` and a UA leg's `UAVerifyGas` revert the whole call (CTR-DEX-08, CTR-DEX-26: the
+    ///         submitter's gas, not the signature, failed).
     function mtxSettle(Settlement[] calldata ss) external nonReentrant returns (bool[] memory ok) {
         ok = new bool[](ss.length);
         bool any;
@@ -269,7 +284,8 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
             if (success) {
                 ok[i] = true;
                 any = true;
-            } else if (reason.length >= 4 && bytes4(reason) == SigCheckGasStarved.selector) {
+            } else if (reason.length >= 4
+                && (bytes4(reason) == SigCheckGasStarved.selector || bytes4(reason) == UAVerifyGas.selector)) {
                 assembly ("memory-safe") { revert(add(reason, 0x20), mload(reason)) }
             } else {
                 emit MatchFailed(ss[i].ref, reason);
@@ -283,29 +299,34 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
         if (msg.sender != address(this)) revert NotSelf();
         uint256 n = s.makers.length;
         if (n == 0) revert NoMakers();
+        Calc memory taker = _decode(s.taker.sellToken, s.taker.shape, s.taker.order);
         address tokenA = s.taker.sellToken;      // the taker sells A, the makers sell B
-        address tokenB = s.taker.o.receiveToken;
+        address tokenB = taker.o.receiveToken;
         _checkMarket(tokenA, tokenB);
         Calc[] memory makers = new Calc[](n);
         uint256 takerSell;
         uint256 takerRecv;
         for (uint256 i; i < n; ++i) {
             Leg calldata m = s.makers[i];
-            if (m.sellToken != tokenB || m.o.receiveToken != tokenA) revert TokenMismatch();
-            if (m.o.from == s.taker.o.from) revert SelfTrade(m.o.from);
-            makers[i] = _makerCalc(m, submitter);
-            for (uint256 j; j < i; ++j) if (makers[j].h == makers[i].h) revert DuplicateOrder(makers[i].h);
-            takerSell += makers[i].recv;
-            takerRecv += makers[i].sold;
+            Calc memory c = _decode(m.sellToken, m.shape, m.order);
+            if (m.sellToken != tokenB || c.o.receiveToken != tokenA) revert TokenMismatch();
+            if (c.o.from == taker.o.from) revert SelfTrade(c.o.from);
+            // a maker sells `fill` at its own price: it receives `⌈fill·receiveAmount/amount⌉` (in its favour)
+            uint256 recv = Math.mulDiv(m.fill, c.o.receiveAmount, c.o.amount, Math.Rounding.Ceil);
+            _calc(c, m.sellToken, submitter, m.fill, recv);
+            makers[i] = c;
+            for (uint256 j; j < i; ++j) if (makers[j].h == c.h) revert DuplicateOrder(c.h);
+            takerSell += c.recv;
+            takerRecv += c.sold;
         }
         if (s.taker.fill != takerSell) revert FillMismatch(takerSell, s.taker.fill);
-        Calc memory taker = _calc(s.taker.sellToken, s.taker.o, submitter, takerSell, takerRecv);
+        _calc(taker, tokenA, submitter, takerSell, takerRecv);
         uint256 balA = IERC20(tokenA).balanceOf(address(this));
         uint256 balB = IERC20(tokenB).balanceOf(address(this));
-        _pullLeg(s.taker, taker, submitter);
-        for (uint256 i; i < n; ++i) _pullLeg(s.makers[i], makers[i], submitter);
-        _pay(s.ref, s.taker, taker, submitter);
-        for (uint256 i; i < n; ++i) _pay(s.ref, s.makers[i], makers[i], submitter);
+        _pull(tokenA, taker, s.taker.sig, submitter);
+        for (uint256 i; i < n; ++i) _pull(tokenB, makers[i], s.makers[i].sig, submitter);
+        _pay(s.ref, tokenA, taker, submitter);
+        for (uint256 i; i < n; ++i) _pay(s.ref, tokenB, makers[i], submitter);
         if (IERC20(tokenA).balanceOf(address(this)) != balA) revert ConservationBroken(tokenA);
         if (IERC20(tokenB).balanceOf(address(this)) != balB) revert ConservationBroken(tokenB);
     }
@@ -316,22 +337,41 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
         if (!s.listed[_pair(a, b)]) revert MarketNotListed(a, b);
     }
 
-    /// @dev A maker sells `fill` at its own price: it receives `⌈fill·receiveAmount/amount⌉` (in its favour).
-    function _makerCalc(Leg calldata m, address submitter) private view returns (Calc memory c) {
-        uint256 recv = Math.mulDiv(m.fill, m.o.receiveAmount, m.o.amount, Math.Rounding.Ceil);
-        c = _calc(m.sellToken, m.o, submitter, m.fill, recv);
+    /// @dev A leg's order in the one form, and its kind from the listing (never from the leg): shape 0 a `TradeOrder`
+    ///      (address words validated by the decoder; a native id is its address zero-padded, the same word), shape 1 a
+    ///      `UATradeOrder`, only on a SCaaS token whose UA ledger is on (a UA holds no other token, CTR-DEX-26).
+    function _decode(address sellToken, uint8 shape, bytes calldata order) private view returns (Calc memory c) {
+        if (shape > 1) revert LegShapeUnknown(shape);
+        c.outside = _s().kind[sellToken] != KIND_SCAAS;
+        if (shape == 0) {
+            c.o = TradeLib.core(abi.decode(order, (ITradeToken.TradeOrder)));
+        } else {
+            if (!_ledgerOn(sellToken)) revert UALegNotLedger(sellToken);
+            c.ua = true;
+            c.o = abi.decode(order, (ITradeToken.UATradeOrder));
+        }
     }
 
-    /// @dev Relayer binding, `dex`, the leg's kind from the listing (an outside leg is a `DexOrder`, never `ESCROW`),
-    ///      the fee on the aggregate receive (the floor on the exchange path); Path B: the DEX's own checks on the
-    ///      matched part. Path A bounds are checked at the pull, by the token or by `TradeLib` on the DEX.
-    function _calc(address sellToken, ITradeToken.TradeOrder calldata o, address submitter, uint256 sold, uint256 recv)
-        private view returns (Calc memory c)
-    {
+    /// @dev A SCaaS token (factory-made, recorded at `setMarket`) whose UA ledger is on.
+    function _ledgerOn(address token) private view returns (bool) {
+        return _s().kind[token] == KIND_SCAAS && IUALedger(token).registry() != address(0);
+    }
+
+    /// @dev The shape-0 view of a decoded `TradeOrder` (the same memory words; only ever on a shape-0 leg).
+    function _native(ITradeToken.UATradeOrder memory o) private pure returns (ITradeToken.TradeOrder memory t) {
+        assembly ("memory-safe") { t := o }
+    }
+
+    /// @dev Relayer binding, `dex`, the order hash in its signing domain (an outside leg is a `DexOrder`, never
+    ///      `ESCROW`), the fee on the aggregate receive (the floor on the exchange path); Path B: the DEX's own checks
+    ///      on the matched part. Path A bounds are checked at the pull, by the token or by `TradeLib` on the DEX.
+    function _calc(Calc memory c, address sellToken, address submitter, uint256 sold, uint256 recv) private view {
+        ITradeToken.UATradeOrder memory o = c.o;
         if (o.relayer != address(0) && o.relayer != submitter) revert WrongRelayer(submitter);
         if (o.dex != address(this)) revert DexMismatch(o.dex);
-        c.outside = _s().kind[sellToken] != KIND_SCAAS;
-        c.h = c.outside ? dexOrderDigest(sellToken, o) : ITradeToken(sellToken).tradeOrderDigest(o);
+        if (c.ua) c.h = ITradeToken(sellToken).uaTradeOrderDigest(o);
+        else if (c.outside) c.h = _dexOrderDigest(sellToken, _native(o));
+        else c.h = ITradeToken(sellToken).tradeOrderDigest(_native(o));
         if (c.outside && o.flags & ESCROW != 0) revert BadFlags(c.h); // pulled exactly into the DEX: nothing to escrow
         c.sold = sold;
         c.recv = recv;
@@ -348,45 +388,50 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
         }
     }
 
-    function _pullLeg(Leg calldata l, Calc memory c, address submitter) private {
-        _pull(l.sellToken, l.o, l.sig, c, submitter);
-    }
-
-    function _pull(address sellToken, ITradeToken.TradeOrder calldata o, bytes calldata sig, Calc memory c,
-        address submitter) private
-    {
+    function _pull(address sellToken, Calc memory c, bytes calldata sig, address submitter) private {
+        ITradeToken.UATradeOrder memory o = c.o;
         ITradeToken.TradeFill memory f = o.flags & ESCROW != 0
             ? ITradeToken.TradeFill(o.amount, 0, 0, submitter)
             : ITradeToken.TradeFill(c.sold, c.recv, c.fee, submitter);
-        if (!c.outside) return ITradeToken(sellToken).mtxTrade(o, sig, f);
-        // outside token: the DEX runs the token's checks on its own state, then pulls through the puller
+        if (c.ua) return ITradeToken(sellToken).uaTrade(o, sig, f);
+        if (!c.outside) return ITradeToken(sellToken).mtxTrade(_native(o), sig, f);
+        // outside token: the DEX runs the token's checks on its own state (the signature once, CTR-DEX-15 step 4),
+        // then pulls through the puller
         TradeLib.precheck(o, f, c.h, address(this), sellToken);
-        if (!SigCheck.isValid(o.from, c.h, sig, _cap(o.from))) revert BadSignature(c.h);
-        DexPuller(_s().puller).pull(sellToken, o.from, TradeLib.record(o, f, c.h));
+        address from = TradeLib.addr(o.from);
+        if (TradeLib.$().pulled[c.h] == 0 && !SigCheck.isValid(from, c.h, sig, _cap(from))) revert BadSignature(c.h);
+        DexPuller(_s().puller).pull(sellToken, from, TradeLib.record(o, f, c.h, false));
     }
 
-    function _pay(bytes32 ref, Leg calldata l, Calc memory c, address submitter) private {
-        (address to, uint256 relayerShare, uint256 treasuryShare) = _payLeg(l.sellToken, l.o, c, 0, submitter);
-        emit LegSettled(ref, c.h, l.o.from, to, c.sold, c.recv - c.fee, c.fee, c.refund, relayerShare, treasuryShare);
+    function _pay(bytes32 ref, address sellToken, Calc memory c, address submitter) private {
+        (bytes32 to, uint256 relayerShare, uint256 treasuryShare) = _payLeg(sellToken, c, 0, submitter);
+        if (c.ua) {
+            emit UALegSettled(ref, c.h, c.o.from, to, c.sold, c.recv - c.fee, c.fee, c.refund, relayerShare,
+                treasuryShare);
+        } else {
+            emit LegSettled(ref, c.h, TradeLib.addr(c.o.from), TradeLib.addr(to), c.sold, c.recv - c.fee, c.fee,
+                c.refund, relayerShare, treasuryShare);
+        }
     }
 
     /// @dev Proceeds net of the fee, plus `surplus`, to `destination` (or `from`), the fee split, the Path B refund.
-    function _payLeg(address sellToken, ITradeToken.TradeOrder calldata o, Calc memory c, uint256 surplus,
-        address submitter) private returns (address to, uint256 relayerShare, uint256 treasuryShare)
+    function _payLeg(address sellToken, Calc memory c, uint256 surplus, address submitter)
+        private returns (bytes32 to, uint256 relayerShare, uint256 treasuryShare)
     {
         DexStorage storage s = _s();
-        to = o.destination == address(0) ? o.from : o.destination;
+        ITradeToken.UATradeOrder memory o = c.o;
+        to = o.destination == 0 ? o.from : o.destination;
         relayerShare = c.fee * s.relayerSharePpm / PPM;
         treasuryShare = c.fee - relayerShare;
-        _send(o.receiveToken, to, c.recv - c.fee + surplus);
+        _sendTo(o.receiveToken, to, c.recv - c.fee + surplus);
         _send(o.receiveToken, submitter, relayerShare);
         _send(o.receiveToken, s.treasury, treasuryShare);
-        _send(sellToken, o.from, c.refund);
+        _sendTo(sellToken, o.from, c.refund);
     }
 
     // ------------------------------------------------------------------ exchange path (CTR-DEX-20, -21, -23)
 
-    /// @notice Path (a): the DEX makes each interaction (never on itself or its puller, never `mtxTrade`,
+    /// @notice Path (a): the DEX makes each interaction (never on itself or its puller, never `mtxTrade`, `uaTrade`,
     ///         `increaseAllowance` or Permit2 `approve` (controller ruling, pending the owner), listed when a leg or
     ///         the admin asks); a failing one reverts the plan with its data. Every allowance an `approve`
     ///         interaction granted is set back to 0 after the last interaction (controller ruling: the DEX keeps no
@@ -408,8 +453,8 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
     }
 
     /// @notice Path (b): the sold fills go to `executor` (listed when a leg or the admin asks), which must transfer at
-    ///         least the floors to the DEX inside `exchangeCallback`; re-entry hits `nonReentrant`, a `mtxTrade` or a
-    ///         puller call from it fails (it is neither `o.dex` nor the DEX).
+    ///         least the floors to the DEX inside `exchangeCallback`; re-entry hits `nonReentrant`, a `mtxTrade`,
+    ///         `uaTrade` or a puller call from it fails (it is neither `o.dex` nor the DEX).
     // At the stack limit (via_ir off): add no locals here; move _flows + hand-out + callback into a helper first.
     function mtxExchangeVia(ExchangePlan calldata p, address executor, bytes calldata data) external nonReentrant {
         (Tok[] memory t, Calc[] memory c, bool onlyListed) = _exchangeIn(p);
@@ -452,16 +497,18 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
         c = new Calc[](n);
         for (uint256 i; i < n; ++i) {
             ExchangeLeg calldata l = p.legs[i];
-            address rt = l.o.receiveToken;
+            Calc memory ci = _decode(l.sellToken, l.shape, l.order);
+            address rt = ci.o.receiveToken;
             if (s.listings[l.sellToken] == 0) revert TokenNotKnown(l.sellToken);
             if (s.listings[rt] == 0) revert TokenNotKnown(rt);
-            for (uint256 j; j < i; ++j) if (p.legs[j].o.from == l.o.from) revert SelfTrade(l.o.from);
-            c[i] = _calc(l.sellToken, l.o, msg.sender, l.sellFill, l.receiveFill);
-            if (l.o.flags & LISTED_POOLS != 0) onlyListed = true;
+            for (uint256 j; j < i; ++j) if (c[j].o.from == ci.o.from) revert SelfTrade(ci.o.from);
+            _calc(ci, l.sellToken, msg.sender, l.sellFill, l.receiveFill);
+            c[i] = ci;
+            if (ci.o.flags & LISTED_POOLS != 0) onlyListed = true;
             Tok memory ts = _tok(t, l.sellToken);
-            ts.sold += c[i].sold;
-            ts.refunds += c[i].refund;
-            _tok(t, rt).floors += c[i].recv;
+            ts.sold += ci.sold;
+            ts.refunds += ci.refund;
+            _tok(t, rt).floors += ci.recv;
         }
         for (uint256 i; i < p.extraTokens.length; ++i) _tok(t, p.extraTokens[i]);
         uint256 nt;
@@ -471,7 +518,7 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
             t[i].snap = IERC20(t[i].token).balanceOf(address(this));
             t[i].floorsLeft = t[i].floors;
         }
-        for (uint256 i; i < n; ++i) _pull(p.legs[i].sellToken, p.legs[i].o, p.legs[i].sig, c[i], msg.sender);
+        for (uint256 i; i < n; ++i) _pull(p.legs[i].sellToken, c[i], p.legs[i].sig, msg.sender);
         for (uint256 i; i < nt; ++i) {
             Tok memory x = t[i];
             if (IERC20(x.token).balanceOf(address(this)) != x.snap + x.sold + x.refunds) {
@@ -485,7 +532,9 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
         DexStorage storage s = _s();
         if (x.target == address(this) || x.target == s.puller) revert ForbiddenTarget(x.target);
         sel = bytes4(x.data);
-        if (x.data.length < 4 || sel == ITradeToken.mtxTrade.selector) revert ForbiddenSelector(x.target, sel);
+        if (x.data.length < 4 || sel == ITradeToken.mtxTrade.selector || sel == ITradeToken.uaTrade.selector) {
+            revert ForbiddenSelector(x.target, sel);
+        }
         // controller ruling: no allowance may be raised outside `approve` (reset after the route)
         if (sel == INCREASE_ALLOWANCE || sel == PERMIT2_APPROVE) revert ForbiddenSelector(x.target, sel);
         if (onlyListed && !s.exchangeTarget[x.target]) revert TargetNotListed(x.target);
@@ -505,28 +554,26 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
             x.excess = bal - keep;
         }
         for (uint256 i; i < p.legs.length; ++i) {
-            ExchangeLeg calldata l = p.legs[i];
-            Tok memory x = _tok(t, l.o.receiveToken);
+            Tok memory x = _tok(t, c[i].o.receiveToken);
             uint256 share = x.floorsLeft == c[i].recv ? x.excess - x.paid : Math.mulDiv(x.excess, c[i].recv, x.floors);
             x.floorsLeft -= c[i].recv;
             x.paid += share;
-            _payExchange(p.ref, l, c[i], share);
+            _payExchange(p.ref, p.legs[i].sellToken, c[i], share);
         }
         for (uint256 i; i < t.length; ++i) {
             if (IERC20(t[i].token).balanceOf(address(this)) != t[i].snap) revert ConservationBroken(t[i].token);
         }
     }
 
-    function _payExchange(bytes32 ref, ExchangeLeg calldata l, Calc memory c, uint256 surplus) private {
-        (address to,,) = _payLeg(l.sellToken, l.o, c, surplus, msg.sender);
-        uint256 limit = Math.mulDiv(c.sold, l.o.receiveAmount, l.o.amount, Math.Rounding.Ceil);
-        _emitExchangeLeg(ref, l.o.from, to, c, surplus, limit);
-    }
-
-    function _emitExchangeLeg(bytes32 ref, address from, address to, Calc memory c, uint256 surplus, uint256 limit)
-        private
-    {
-        emit ExchangeLegSettled(ref, c.h, from, to, c.sold, c.recv, surplus, c.fee, c.refund, limit);
+    function _payExchange(bytes32 ref, address sellToken, Calc memory c, uint256 surplus) private {
+        (bytes32 to,,) = _payLeg(sellToken, c, surplus, msg.sender);
+        uint256 limit = Math.mulDiv(c.sold, c.o.receiveAmount, c.o.amount, Math.Rounding.Ceil);
+        if (c.ua) {
+            emit UAExchangeLegSettled(ref, c.h, c.o.from, to, c.sold, c.recv, surplus, c.fee, c.refund, limit);
+        } else {
+            emit ExchangeLegSettled(ref, c.h, TradeLib.addr(c.o.from), TradeLib.addr(to), c.sold, c.recv, surplus,
+                c.fee, c.refund, limit);
+        }
     }
 
     /// @dev The entry of `token`, added in the first free slot if absent (`t` is sized for every token of the plan).
@@ -543,5 +590,15 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
 
     function _send(address token, address to, uint256 amount) private {
         if (amount != 0) IERC20(token).safeTransfer(to, amount);
+    }
+
+    /// @dev To an id: a native one by `safeTransfer`, a derived one by the token's `transferToUA` from the DEX's own
+    ///      balance (it lowers `balanceOf(this)` as `safeTransfer` does, so conservation is unchanged), only in a SCaaS
+    ///      token with its UA ledger on; the token checks the receiver (registered SIGNING).
+    function _sendTo(address token, bytes32 to, uint256 amount) private {
+        if (amount == 0) return;
+        if (UAKinds.inNativeSpace(to)) return IERC20(token).safeTransfer(TradeLib.addr(to), amount);
+        if (!_ledgerOn(token)) revert UAReceiveNotLedger(token);
+        IUALedger(token).transferToUA(to, amount);
     }
 }

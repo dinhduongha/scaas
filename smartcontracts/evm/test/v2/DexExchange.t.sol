@@ -10,6 +10,7 @@ import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
 import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
 import {ISCaaSDex, IExchangeExecutor} from "../../src/dex/ISCaaSDex.sol";
+import {DexLegs} from "../helpers/DexLegs.sol";
 import {DexPuller} from "../../src/dex/DexPuller.sol";
 import {ITradeToken} from "../../src/trade/ITradeToken.sol";
 import {MockERC20, FeeOnTransferERC20} from "../helpers/Mocks.sol";
@@ -120,7 +121,7 @@ contract Hostile {
 
     function boom() external pure { revert Boom(42); }
     function burn() external pure { while (true) {} }
-    function reenter(ISCaaSDex d) external { d.mtxSettle(new ISCaaSDex.Settlement[](0)); }
+    function reenter(ISCaaSDex d) external { d.mtxSettle(DexLegs.wire(new DexLegs.Settlement[](0))); }
 }
 
 /// The exchange path (CTR-DEX-20, -21, -23, -03): `TradeOrder`s executed against AMM routes at a floor, the surplus to
@@ -196,36 +197,36 @@ contract DexExchangeTest is Test {
 
     /// Signed on the token for a SCaaS sell token, as a `DexOrder` otherwise (the DEX's listing decides).
     function _leg(uint256 pk, address sellToken, ITradeToken.TradeOrder memory o, uint256 sellFill, uint256 floor)
-        internal view returns (ISCaaSDex.ExchangeLeg memory)
+        internal view returns (DexLegs.ExchangeLeg memory)
     {
         bytes32 d = dex.tokenKind(sellToken) == 1
             ? ITradeToken(sellToken).tradeOrderDigest(o) : dex.dexOrderDigest(sellToken, o);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(pk, d);
-        return ISCaaSDex.ExchangeLeg(sellToken, o, abi.encodePacked(r, s, v), sellFill, floor);
+        return DexLegs.ExchangeLeg(sellToken, o, abi.encodePacked(r, s, v), sellFill, floor);
     }
 
-    function _plan(ISCaaSDex.ExchangeLeg memory l0) internal pure returns (ISCaaSDex.ExchangePlan memory p) {
+    function _plan(DexLegs.ExchangeLeg memory l0) internal pure returns (DexLegs.ExchangePlan memory p) {
         p.ref = "x";
-        p.legs = new ISCaaSDex.ExchangeLeg[](1);
+        p.legs = new DexLegs.ExchangeLeg[](1);
         p.legs[0] = l0;
     }
 
-    function _plan2(ISCaaSDex.ExchangeLeg memory l0, ISCaaSDex.ExchangeLeg memory l1)
-        internal pure returns (ISCaaSDex.ExchangePlan memory p)
+    function _plan2(DexLegs.ExchangeLeg memory l0, DexLegs.ExchangeLeg memory l1)
+        internal pure returns (DexLegs.ExchangePlan memory p)
     {
         p.ref = "x";
-        p.legs = new ISCaaSDex.ExchangeLeg[](2);
+        p.legs = new DexLegs.ExchangeLeg[](2);
         p.legs[0] = l0;
         p.legs[1] = l1;
     }
 
     /// Alice sells 1000 A for at least 1900 B (fee 0.3 %), floor 1900.
-    function _alice() internal view returns (ISCaaSDex.ExchangeLeg memory) {
+    function _alice() internal view returns (DexLegs.ExchangeLeg memory) {
         return _leg(ALICE_PK, address(a), _order(alice, address(b), 1000, 1900, 3_000), 1000, 1900);
     }
 
     /// Alice as above; Carol sells 1000 of 1999 A at 3597 B (limit ceil(1799.4) = 1800, fee 0.1 %), floor 1800.
-    function _twoLegs() internal view returns (ISCaaSDex.ExchangePlan memory) {
+    function _twoLegs() internal view returns (DexLegs.ExchangePlan memory) {
         return _plan2(_alice(), _leg(CAROL_PK, address(a), _order(carol, address(b), 1999, 3597, 1_000), 1000, 1800));
     }
 
@@ -250,17 +251,17 @@ contract DexExchangeTest is Test {
         for (uint256 i; i < y.length; ++i) z[x.length + i] = y[i];
     }
 
-    function _exchange(ISCaaSDex.ExchangePlan memory p, ISCaaSDex.Interaction[] memory xs) internal {
+    function _exchange(DexLegs.ExchangePlan memory p, ISCaaSDex.Interaction[] memory xs) internal {
         vm.prank(relayer);
-        dex.mtxExchange(p, xs);
+        dex.mtxExchange(DexLegs.wire(p), xs);
     }
 
-    function _expectExchange(ISCaaSDex.ExchangePlan memory p, ISCaaSDex.Interaction[] memory xs, bytes memory err)
+    function _expectExchange(DexLegs.ExchangePlan memory p, ISCaaSDex.Interaction[] memory xs, bytes memory err)
         internal
     {
         vm.prank(relayer);
         vm.expectRevert(err);
-        dex.mtxExchange(p, xs);
+        dex.mtxExchange(DexLegs.wire(p), xs);
     }
 
     function _err(bytes4 sel, address x) internal pure returns (bytes memory) {
@@ -295,7 +296,7 @@ contract DexExchangeTest is Test {
     /// Two legs, one router swap of 2000 A for 3800 B: floors 3700, surplus 100 split by floor (51, and 49 for the last
     /// leg with the remainder), fees on the floors only, the DEX left with nothing.
     function test_exchange_twoLegs_floorsPlusSurplus_feesOnTheFloor() public {
-        ISCaaSDex.ExchangePlan memory p = _twoLegs();
+        DexLegs.ExchangePlan memory p = _twoLegs();
         ISCaaSDex.Interaction[] memory xs = _swap(address(a), address(b), 2000, 3800);
         bytes32 ha = a.tradeOrderDigest(p.legs[0].o);
         bytes32 hc = a.tradeOrderDigest(p.legs[1].o);
@@ -325,7 +326,7 @@ contract DexExchangeTest is Test {
         address dest = address(0xD0D0);
         ITradeToken.TradeOrder memory o = _order(alice, address(b), 1000, 1900, 3_000);
         o.destination = dest;
-        ISCaaSDex.ExchangePlan memory p = _plan(_leg(ALICE_PK, address(a), o, 1000, 1900));
+        DexLegs.ExchangePlan memory p = _plan(_leg(ALICE_PK, address(a), o, 1000, 1900));
         ISCaaSDex.Interaction[] memory xs = _swap(address(a), address(b), 1000, 2000);
         vm.recordLogs();
         _exchange(p, xs);
@@ -339,7 +340,7 @@ contract DexExchangeTest is Test {
     /// A floor above the limit: `receivedFloor` is the committed floor (1950), `limitReceive` the signed price at the
     /// sold amount (1900); the surplus is measured over the floor (2000 - 1950).
     function test_exchange_floorAboveLimit_eventFields() public {
-        ISCaaSDex.ExchangePlan memory p = _plan(_leg(ALICE_PK, address(a), _order(alice, address(b), 1000, 1900, 3_000), 1000, 1950));
+        DexLegs.ExchangePlan memory p = _plan(_leg(ALICE_PK, address(a), _order(alice, address(b), 1000, 1900, 3_000), 1000, 1950));
         ISCaaSDex.Interaction[] memory xs = _swap(address(a), address(b), 1000, 2000);
         vm.recordLogs();
         _exchange(p, xs);
@@ -352,7 +353,7 @@ contract DexExchangeTest is Test {
     /// declared intermediate token back at its snapshot.
     function test_exchange_profitableCycle_xToX() public {
         ITradeToken.TradeOrder memory o = _order(alice, address(a), 1000, 1010, 0);
-        ISCaaSDex.ExchangePlan memory p = _plan(_leg(ALICE_PK, address(a), o, 1000, 1010));
+        DexLegs.ExchangePlan memory p = _plan(_leg(ALICE_PK, address(a), o, 1000, 1010));
         p.extraTokens = new address[](1);
         p.extraTokens[0] = address(b);
         ISCaaSDex.Interaction[] memory xs =
@@ -380,7 +381,7 @@ contract DexExchangeTest is Test {
 
     /// A → C → B through the DEX: C is declared, so a unit of C left behind fails conservation; the exact route passes.
     function test_exchange_intermediateLeftover_reverts() public {
-        ISCaaSDex.ExchangePlan memory p = _plan(_alice());
+        DexLegs.ExchangePlan memory p = _plan(_alice());
         p.extraTokens = new address[](1);
         p.extraTokens[0] = address(c);
         ISCaaSDex.Interaction[] memory first = _swap(address(a), address(c), 1000, 2000);
@@ -402,7 +403,7 @@ contract DexExchangeTest is Test {
         vm.prank(alice);
         a.transfer(address(dex), 50);
         router.setQuirks(50, 0);
-        ISCaaSDex.ExchangePlan memory p = _plan(_alice());
+        DexLegs.ExchangePlan memory p = _plan(_alice());
         _expectExchange(p, _swap(address(a), address(b), 1000, 2000), abi.encodeWithSelector(
             IERC20Errors.ERC20InsufficientAllowance.selector, address(router), 1000, 1050));
         ISCaaSDex.Interaction[] memory xs = _swap(address(a), address(b), 1000, 2000);
@@ -413,7 +414,7 @@ contract DexExchangeTest is Test {
     /// The router claims 3800 and pays 3699: below the floors (3700) ⇒ `InsufficientOutput`; at exactly the floors the
     /// plan settles with no surplus.
     function test_exchange_lyingRouter_insufficientOutput_exactFloorsSettle() public {
-        ISCaaSDex.ExchangePlan memory p = _twoLegs();
+        DexLegs.ExchangePlan memory p = _twoLegs();
         ISCaaSDex.Interaction[] memory xs = _swap(address(a), address(b), 2000, 3800);
         router.setQuirks(0, 101);
         _expectExchange(p, xs, _err(ISCaaSDex.InsufficientOutput.selector, address(b)));
@@ -427,7 +428,7 @@ contract DexExchangeTest is Test {
     function test_exchange_pathBLeg_refundsTheRest() public {
         ITradeToken.TradeOrder memory o = _order(carol, address(b), 2000, 3600, 1_000);
         o.flags = 3; // IOC | ESCROW
-        ISCaaSDex.ExchangePlan memory p = _plan(_leg(CAROL_PK, address(a), o, 1000, 1800));
+        DexLegs.ExchangePlan memory p = _plan(_leg(CAROL_PK, address(a), o, 1000, 1800));
         vm.recordLogs();
         _exchange(p, _swap(address(a), address(b), 1000, 1850));
         assertEq(a.balanceOf(carol), 100_000 - 1000);
@@ -441,7 +442,7 @@ contract DexExchangeTest is Test {
     function test_exchange_coincidenceOfWants_noInteractions_refundNotDistributed() public {
         ITradeToken.TradeOrder memory ob = _order(bob, address(a), 4000, 1900, 1_000);
         ob.flags = 3;
-        ISCaaSDex.ExchangePlan memory p = _plan2(_alice(), _leg(BOB_PK, address(b), ob, 2000, 950));
+        DexLegs.ExchangePlan memory p = _plan2(_alice(), _leg(BOB_PK, address(b), ob, 2000, 950));
         _exchange(p, new ISCaaSDex.Interaction[](0));
         assertEq(b.balanceOf(alice), 1900 - 6 + 100);
         assertEq(a.balanceOf(bob), 950 - 1 + 50);
@@ -453,7 +454,7 @@ contract DexExchangeTest is Test {
     /// An outside leg on the exchange path: a `DexOrder` pulled through the puller.
     function test_exchange_outsideLeg_throughThePuller() public {
         ITradeToken.TradeOrder memory o = _order(dave, address(b), 2000, 3800, 0);
-        ISCaaSDex.ExchangePlan memory p = _plan(_leg(DAVE_PK, address(usdc), o, 2000, 3800));
+        DexLegs.ExchangePlan memory p = _plan(_leg(DAVE_PK, address(usdc), o, 2000, 3800));
         bytes32 h = dex.dexOrderDigest(address(usdc), o);
         _exchange(p, _swap(address(usdc), address(b), 2000, 3900));
         assertEq(b.balanceOf(dave), 3900);
@@ -470,7 +471,7 @@ contract DexExchangeTest is Test {
         fot.approve(puller, type(uint256).max);
         vm.prank(admin);
         dex.setMarket(address(fot), address(b), true);
-        ISCaaSDex.ExchangePlan memory p =
+        DexLegs.ExchangePlan memory p =
             _plan(_leg(DAVE_PK, address(fot), _order(dave, address(b), 1000, 1000, 0), 1000, 1000));
         _expectExchange(p, _swap(address(fot), address(b), 990, 1000),
             _err(ISCaaSDex.ConservationBroken.selector, address(fot)));
@@ -487,7 +488,7 @@ contract DexExchangeTest is Test {
         bon.approve(puller, type(uint256).max);
         vm.prank(admin);
         dex.setMarket(address(bon), address(b), true);
-        ISCaaSDex.ExchangePlan memory p =
+        DexLegs.ExchangePlan memory p =
             _plan(_leg(DAVE_PK, address(bon), _order(dave, address(b), 1000, 1900, 0), 1000, 1900));
         _expectExchange(p, _swap(address(bon), address(b), 1001, 2000),
             _err(ISCaaSDex.ConservationBroken.selector, address(bon)));
@@ -508,7 +509,7 @@ contract DexExchangeTest is Test {
     // ------------------------------------------------------------------ what an interaction may call (CTR-DEX-23)
 
     function test_exchange_forbiddenTargets_theDexAndThePuller() public {
-        ISCaaSDex.ExchangePlan memory p = _plan(_alice());
+        DexLegs.ExchangePlan memory p = _plan(_alice());
         _expectExchange(p, _ix(address(dex), abi.encodeCall(ISCaaSDex.setListedOnly, (true))),
             _err(ISCaaSDex.ForbiddenTarget.selector, address(dex)));
         _expectExchange(p, _ix(puller, abi.encodeCall(DexPuller.pull, (address(usdc), dave, 1))),
@@ -522,7 +523,7 @@ contract DexExchangeTest is Test {
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(BOB_PK, b.tradeOrderDigest(ob));
         bytes memory steal = abi.encodeCall(ITradeToken.mtxTrade,
             (ob, abi.encodePacked(r, s, v), ITradeToken.TradeFill(1000, 1e9, 0, relayer)));
-        ISCaaSDex.ExchangePlan memory p = _plan(_alice());
+        DexLegs.ExchangePlan memory p = _plan(_alice());
         ISCaaSDex.Interaction[] memory route = _swap(address(a), address(b), 1000, 2000);
         _expectExchange(p, _cat(_ix(address(b), steal), route), abi.encodeWithSelector(
             ISCaaSDex.ForbiddenSelector.selector, address(b), ITradeToken.mtxTrade.selector));
@@ -569,13 +570,13 @@ contract DexExchangeTest is Test {
     /// A failing interaction reverts the plan with its own data; a gas-burning one fails only this call.
     function test_exchange_revertingAndGasBurningTargets() public {
         Hostile h = new Hostile();
-        ISCaaSDex.ExchangePlan memory p = _plan(_alice());
+        DexLegs.ExchangePlan memory p = _plan(_alice());
         _expectExchange(p, _ix(address(h), abi.encodeCall(Hostile.boom, ())),
             abi.encodeWithSelector(Hostile.Boom.selector, 42));
         ISCaaSDex.Interaction[] memory xs = _ix(address(h), abi.encodeCall(Hostile.burn, ()));
         vm.prank(relayer);
         vm.expectRevert();
-        dex.mtxExchange{gas: 1_000_000}(p, xs);
+        dex.mtxExchange{gas: 1_000_000}(DexLegs.wire(p), xs);
     }
 
     // ------------------------------------------------------------------ listed targets: LISTED_POOLS × listed-only
@@ -594,7 +595,7 @@ contract DexExchangeTest is Test {
             }
             ITradeToken.TradeOrder memory o = _order(alice, address(b), 1000, 1900, 0);
             if (flag) o.flags = 4;
-            ISCaaSDex.ExchangePlan memory p = _plan(_leg(ALICE_PK, address(a), o, 1000, 1900));
+            DexLegs.ExchangePlan memory p = _plan(_leg(ALICE_PK, address(a), o, 1000, 1900));
             if (via) _listedVia(p, flag || mode);
             else _listedDirect(p, flag || mode);
             assertEq(b.balanceOf(alice), 2000);
@@ -602,7 +603,7 @@ contract DexExchangeTest is Test {
         }
     }
 
-    function _listedDirect(ISCaaSDex.ExchangePlan memory p, bool needsListing) internal {
+    function _listedDirect(DexLegs.ExchangePlan memory p, bool needsListing) internal {
         ISCaaSDex.Interaction[] memory xs = _swap(address(a), address(b), 1000, 2000);
         if (needsListing) {
             _expectExchange(p, xs, _err(ISCaaSDex.TargetNotListed.selector, address(a)));
@@ -615,18 +616,18 @@ contract DexExchangeTest is Test {
         _exchange(p, xs);
     }
 
-    function _listedVia(ISCaaSDex.ExchangePlan memory p, bool needsListing) internal {
+    function _listedVia(DexLegs.ExchangePlan memory p, bool needsListing) internal {
         MockExecutor e = _executor();
         bytes memory data = abi.encode(int256(100));
         if (needsListing) {
             vm.prank(relayer);
             vm.expectRevert(_err(ISCaaSDex.TargetNotListed.selector, address(e)));
-            dex.mtxExchangeVia(p, address(e), data);
+            dex.mtxExchangeVia(DexLegs.wire(p), address(e), data);
             vm.prank(admin);
             dex.setExchangeTarget(address(e), true);
         }
         vm.prank(relayer);
-        dex.mtxExchangeVia(p, address(e), data);
+        dex.mtxExchangeVia(DexLegs.wire(p), address(e), data);
     }
 
     // ------------------------------------------------------------------ plan checks
@@ -634,7 +635,7 @@ contract DexExchangeTest is Test {
     /// Known = a side of a listed market (counted per listed market, so a repeated listing is one): an unlisted token,
     /// or one whose last market was delisted, is refused on either side of a leg.
     function test_exchange_tokenNotKnown() public {
-        ISCaaSDex.ExchangePlan memory p = _plan(_leg(ALICE_PK, address(c), _order(alice, address(b), 1000, 1900, 0),
+        DexLegs.ExchangePlan memory p = _plan(_leg(ALICE_PK, address(c), _order(alice, address(b), 1000, 1900, 0),
             1000, 1900));
         _expectExchange(p, new ISCaaSDex.Interaction[](0), _err(ISCaaSDex.TokenNotKnown.selector, address(c)));
         p = _plan(_leg(ALICE_PK, address(a), _order(alice, address(c), 1000, 1900, 0), 1000, 1900));
@@ -654,16 +655,16 @@ contract DexExchangeTest is Test {
     }
 
     function test_exchange_distinctSigners_noLegs_relayer_priceLimit() public {
-        ISCaaSDex.ExchangeLeg memory l2 = _alice();
+        DexLegs.ExchangeLeg memory l2 = _alice();
         l2.o.nonce = 2;
         l2 = _leg(ALICE_PK, address(a), l2.o, 1000, 1900);
         ISCaaSDex.Interaction[] memory xs = _swap(address(a), address(b), 2000, 3800);
-        _expectExchange(_plan2(_alice(), l2), xs, _err(ISCaaSDex.SelfTrade.selector, alice));
-        _expectExchange(ISCaaSDex.ExchangePlan("x", new ISCaaSDex.ExchangeLeg[](0), new address[](0)),
+        _expectExchange(_plan2(_alice(), l2), xs, abi.encodeWithSelector(ISCaaSDex.SelfTrade.selector, bytes32(uint256(uint160(alice)))));
+        _expectExchange(DexLegs.ExchangePlan("x", new DexLegs.ExchangeLeg[](0), new address[](0)),
             new ISCaaSDex.Interaction[](0), abi.encodeWithSelector(ISCaaSDex.NoLegs.selector));
         ITradeToken.TradeOrder memory o = _order(alice, address(b), 1000, 1900, 0);
         o.relayer = address(0x5EED);
-        ISCaaSDex.ExchangePlan memory p = _plan(_leg(ALICE_PK, address(a), o, 1000, 1900));
+        DexLegs.ExchangePlan memory p = _plan(_leg(ALICE_PK, address(a), o, 1000, 1900));
         _expectExchange(p, xs, _err(ISCaaSDex.WrongRelayer.selector, relayer));
         // a floor below the signed limit: the token refuses it (Path A)
         p = _plan(_leg(ALICE_PK, address(a), _order(alice, address(b), 1000, 1900, 0), 1000, 1899));
@@ -679,10 +680,10 @@ contract DexExchangeTest is Test {
     function test_exchangeVia_executorPaysMore_distributed() public {
         ITradeToken.TradeOrder memory oc = _order(carol, address(b), 2000, 3600, 1_000);
         oc.flags = 3;
-        ISCaaSDex.ExchangePlan memory p = _plan2(_alice(), _leg(CAROL_PK, address(a), oc, 1000, 1800));
+        DexLegs.ExchangePlan memory p = _plan2(_alice(), _leg(CAROL_PK, address(a), oc, 1000, 1800));
         MockExecutor e = _executor();
         vm.prank(relayer);
-        dex.mtxExchangeVia(p, address(e), abi.encode(int256(1000)));
+        dex.mtxExchangeVia(DexLegs.wire(p), address(e), abi.encode(int256(1000)));
         assertEq(b.balanceOf(alice), 1900 - 6 + 513);
         assertEq(b.balanceOf(carol), 1800 - 2 + 487);
         assertEq(b.balanceOf(treasury), 7);
@@ -698,22 +699,22 @@ contract DexExchangeTest is Test {
     }
 
     function test_exchangeVia_executorPaysLess_reverts() public {
-        ISCaaSDex.ExchangePlan memory p = _twoLegs();
+        DexLegs.ExchangePlan memory p = _twoLegs();
         MockExecutor e = _executor();
         vm.prank(relayer);
         vm.expectRevert(_err(ISCaaSDex.InsufficientOutput.selector, address(b)));
-        dex.mtxExchangeVia(p, address(e), abi.encode(int256(-1)));
+        dex.mtxExchangeVia(DexLegs.wire(p), address(e), abi.encode(int256(-1)));
     }
 
     /// An executor that re-enters the DEX, calls `mtxTrade` of a resting order or calls the puller fails.
     function test_exchangeVia_hostileExecutor_reenterTradePull_fail() public {
-        ISCaaSDex.ExchangePlan memory p = _plan(_alice());
+        DexLegs.ExchangePlan memory p = _plan(_alice());
         MockExecutor e = _executor();
         bytes memory data = abi.encode(int256(0));
         ITradeToken.TradeOrder memory ob = _order(bob, address(a), 1000, 500, 0);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(BOB_PK, b.tradeOrderDigest(ob));
         bytes[3] memory calls = [
-            abi.encodeCall(ISCaaSDex.mtxSettle, (new ISCaaSDex.Settlement[](0))),
+            abi.encodeCall(ISCaaSDex.mtxSettle, (DexLegs.wire(new DexLegs.Settlement[](0)))),
             abi.encodeCall(ITradeToken.mtxTrade, (ob, abi.encodePacked(r, s, v), ITradeToken.TradeFill(1000, 1e9, 0, relayer))),
             abi.encodeCall(DexPuller.pull, (address(usdc), dave, 1))
         ];
@@ -727,7 +728,7 @@ contract DexExchangeTest is Test {
             e.setCall(targets[i], calls[i]);
             vm.prank(relayer);
             vm.expectRevert(errs[i]);
-            dex.mtxExchangeVia(p, address(e), data);
+            dex.mtxExchangeVia(DexLegs.wire(p), address(e), data);
         }
     }
 
@@ -756,10 +757,10 @@ contract DexExchangeTest is Test {
     /// split is pro rata over all floors and the remainder goes to the last receiver, not the last leg. Excess 250 B
     /// over floors 1900/1800/3800: 63, 60 and the remainder 127.
     function test_exchange_surplusSplit_threeReceivers_lastReceiverNotLastLeg() public {
-        ISCaaSDex.ExchangePlan memory p;
+        DexLegs.ExchangePlan memory p;
         p.ref = "x";
-        p.legs = new ISCaaSDex.ExchangeLeg[](4);
-        ISCaaSDex.ExchangePlan memory two = _twoLegs();
+        p.legs = new DexLegs.ExchangeLeg[](4);
+        DexLegs.ExchangePlan memory two = _twoLegs();
         p.legs[0] = two.legs[0];
         p.legs[1] = two.legs[1];
         p.legs[2] = _leg(DAVE_PK, address(usdc), _order(dave, address(b), 2000, 3800, 0), 2000, 3800);
@@ -778,7 +779,7 @@ contract DexExchangeTest is Test {
     function test_exchange_listedPools_onTheSecondLeg() public {
         ITradeToken.TradeOrder memory oc = _order(carol, address(b), 1999, 3597, 1_000);
         oc.flags = 4;
-        ISCaaSDex.ExchangePlan memory p = _plan2(_alice(), _leg(CAROL_PK, address(a), oc, 1000, 1800));
+        DexLegs.ExchangePlan memory p = _plan2(_alice(), _leg(CAROL_PK, address(a), oc, 1000, 1800));
         _expectExchange(p, _swap(address(a), address(b), 2000, 3800), _err(ISCaaSDex.TargetNotListed.selector, address(a)));
     }
 
@@ -803,7 +804,7 @@ contract DexExchangeTest is Test {
     function test_exchange_legEvent_refAndFromTopics() public {
         ITradeToken.TradeOrder memory o = _order(alice, address(b), 1000, 1900, 3_000);
         o.destination = address(0xD0D0);
-        ISCaaSDex.ExchangePlan memory p = _plan(_leg(ALICE_PK, address(a), o, 1000, 1900));
+        DexLegs.ExchangePlan memory p = _plan(_leg(ALICE_PK, address(a), o, 1000, 1900));
         vm.recordLogs();
         _exchange(p, _swap(address(a), address(b), 1000, 2000));
         Vm.Log[] memory logs = vm.getRecordedLogs();
@@ -822,7 +823,7 @@ contract DexExchangeTest is Test {
         vm.prank(bob);
         b.transfer(address(e), 10_000);
         vm.prank(relayer);
-        dex.mtxExchangeVia(_plan(_alice()), address(e), "");
+        dex.mtxExchangeVia(DexLegs.wire(_plan(_alice())), address(e), "");
         assertEq(e.ref(), bytes32("x"));
     }
 

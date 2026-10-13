@@ -780,6 +780,7 @@ impl Venue {
         contracts.push(self.dex);
         let f = Filter::new().from_block(from).to_block(to).address(contracts).event_signature(vec![
             ISCaaSDex::LegSettled::SIGNATURE_HASH,
+            ISCaaSDex::UALegSettled::SIGNATURE_HASH,
             ISCaaSDex::MatchFailed::SIGNATURE_HASH,
             ISCaaSDex::OrderCancelled::SIGNATURE_HASH,
             ISCaaSDex::NoncesInvalidated::SIGNATURE_HASH,
@@ -800,7 +801,7 @@ impl Venue {
             let addr_of = |k: &str| e[k].as_str().unwrap_or_default().parse::<Address>();
             match e["event"].as_str() {
                 // a planned fill is final on chain: no longer pending (review T3 I1)
-                Some("LegSettled") => {
+                Some("LegSettled" | "UALegSettled") => {
                     if let (Ok(h), Ok(sold)) = (e["order_hash"].as_str().unwrap_or_default().parse::<B256>(),
                                                  crate::metatx::uint(e["sold"].as_str().unwrap_or_default())) {
                         book.settled(h, sold);
@@ -1065,6 +1066,20 @@ pub fn encode_event(log: &Log) -> Option<Value> {
         v["refund"] = json!(e.refund.to_string());
         v["relayer_share"] = json!(e.relayerShare.to_string());
         v["treasury_share"] = json!(e.treasuryShare.to_string());
+    } else if topic0 == ISCaaSDex::UALegSettled::SIGNATURE_HASH {
+        // a shape-1 leg (CTR-DEX-26): `from` / `destination` are ids (32-byte hex)
+        let e = log.log_decode::<ISCaaSDex::UALegSettled>().ok()?.inner.data;
+        v["event"] = json!("UALegSettled");
+        v["tag"] = json!(format!("{:#x}", e.r#ref));
+        v["order_hash"] = json!(format!("{:#x}", e.orderHash));
+        v["from"] = json!(format!("{:#x}", e.from));
+        v["destination"] = json!(format!("{:#x}", e.destination));
+        v["sold"] = json!(e.sold.to_string());
+        v["received"] = json!(e.received.to_string());
+        v["dex_fee"] = json!(e.dexFee.to_string());
+        v["refund"] = json!(e.refund.to_string());
+        v["relayer_share"] = json!(e.relayerShare.to_string());
+        v["treasury_share"] = json!(e.treasuryShare.to_string());
     } else if topic0 == ISCaaSDex::MatchFailed::SIGNATURE_HASH {
         let e = log.log_decode::<ISCaaSDex::MatchFailed>().ok()?.inner.data;
         v["event"] = json!("MatchFailed");
@@ -1122,6 +1137,28 @@ mod tests {
         assert_eq!((v["event"].as_str(), v["received"].as_str(), v["dex_fee"].as_str()), (Some("LegSettled"), Some("199"), Some("1")));
         assert_eq!(v["tag"], format!("{:#x}", B256::repeat_byte(1)));
         assert_eq!(v["from"], format!("{:#x}", Address::repeat_byte(3)));
+    }
+
+    /// CTR-DEX-26: a shape-1 leg's event carries ids; the client reads the same keys as `LegSettled`.
+    #[test]
+    fn ua_leg_settled_is_encoded_with_ids() {
+        let ev = ISCaaSDex::UALegSettled {
+            r#ref: B256::repeat_byte(1),
+            orderHash: B256::repeat_byte(2),
+            from: B256::repeat_byte(3),
+            destination: B256::repeat_byte(4),
+            sold: U256::from(100),
+            received: U256::from(199),
+            dexFee: U256::from(1),
+            refund: U256::from(5),
+            relayerShare: U256::ZERO,
+            treasuryShare: U256::from(1),
+        };
+        let v = encode_event(&log_of(ev.encode_log_data())).unwrap();
+        assert_eq!((v["event"].as_str(), v["sold"].as_str(), v["refund"].as_str()), (Some("UALegSettled"), Some("100"), Some("5")));
+        assert_eq!(v["order_hash"], format!("{:#x}", B256::repeat_byte(2)));
+        assert_eq!(v["from"], format!("{:#x}", B256::repeat_byte(3)));
+        assert_eq!(v["destination"], format!("{:#x}", B256::repeat_byte(4)));
     }
 
     #[test]
@@ -1292,8 +1329,10 @@ mod tests {
                         }
                     };
                     let legs = |s: &crate::abi::Settlement| -> Vec<(Address, TradeOrder)> {
-                        std::iter::once((s.taker.sellToken, s.taker.o.clone()))
-                            .chain(s.makers.iter().map(|m| (m.sellToken, m.o.clone()))).collect()
+                        std::iter::once(&s.taker).chain(&s.makers).map(|l| {
+                            assert_eq!(l.shape, 0, "the venue sends shape-0 legs only (C5b-11)");
+                            (l.sellToken, TradeOrder::abi_decode(&l.order).unwrap())
+                        }).collect()
                     };
                     if sel == IToken::tradeOrderDigestCall::SELECTOR {
                         Ok(hexs(oh(&IToken::tradeOrderDigestCall::abi_decode(&input).unwrap().o).as_slice()))

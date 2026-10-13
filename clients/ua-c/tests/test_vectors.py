@@ -159,7 +159,7 @@ class Vectors(unittest.TestCase):
                 self.assertEqual(hx(opt32(L.group_tag, g)), r['GROUP'])
         self.assertIsNone(opt32(L.group_tag, b'nope'))
         self.assertIsNone(opt_text(L.group_tag_string, b'nope'))
-        self.assertEqual(len(K['purposes']), 11)
+        self.assertEqual(len(K['purposes']), 12)
         for r in K['purposes']:
             self.assertEqual(hx(out32(L.purpose_tag, r['purpose'].encode())), r['purposeTag'], r['purpose'])
         self.assertEqual(code_of(lambda: out32(L.purpose_tag, b'nope')), 'UAPurposeUnknown')

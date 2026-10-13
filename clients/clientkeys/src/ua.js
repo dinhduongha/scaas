@@ -94,7 +94,7 @@ export const groupTagString = (group) => {
 export const GROUP = (group) => tagHash(groupTagString(group));
 export const MSG_TAG = tagHash('scaas.ua.msg.v1');
 export const PURPOSES = Object.freeze(['pop', 'authref', 'metatx', 'metatx-cancel', 'member', 'zether-auth', 'zether-owner',
-  'keyop', 'receiver-fee', 'vp', 'vc-anchor']);
+  'keyop', 'receiver-fee', 'vp', 'vc-anchor', 'trade']);
 export const purposeTag = (p) => {
   if (!PURPOSES.includes(p)) fail('UAPurposeUnknown', p);
   return tagHash(`scaas.ua.purpose.${p}.v1`);

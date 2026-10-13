@@ -7,6 +7,7 @@ import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
 import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
 import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
+import {DexLegs} from "../helpers/DexLegs.sol";
 import {ITradeToken} from "../../src/trade/ITradeToken.sol";
 import {TradeLib} from "../../src/trade/TradeLib.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
@@ -82,12 +83,12 @@ contract DexKatTest is Test {
     function _settle(string memory k, ITradeToken.TradeOrder memory m, ITradeToken.TradeOrder memory t, bytes32 hm)
         internal
     {
-        ISCaaSDex.Settlement[] memory ss = new ISCaaSDex.Settlement[](1);
+        DexLegs.Settlement[] memory ss = new DexLegs.Settlement[](1);
         ss[0].ref = keccak256("scaas.kat.settlement");
-        ss[0].taker = ISCaaSDex.Leg(address(a), t, _sign(ALICE_PK, a.tradeOrderDigest(t)), 500e6);
-        ss[0].makers = new ISCaaSDex.Leg[](1);
-        ss[0].makers[0] = ISCaaSDex.Leg(address(usdc), m, _sign(DAVE_PK, hm), 1000e6);
-        bytes memory settleData = abi.encodeCall(ISCaaSDex.mtxSettle, (ss));
+        ss[0].taker = DexLegs.Leg(address(a), t, _sign(ALICE_PK, a.tradeOrderDigest(t)), 500e6);
+        ss[0].makers = new DexLegs.Leg[](1);
+        ss[0].makers[0] = DexLegs.Leg(address(usdc), m, _sign(DAVE_PK, hm), 1000e6);
+        bytes memory settleData = abi.encodeCall(ISCaaSDex.mtxSettle, (DexLegs.wire(ss)));
         vm.prank(RELAYER);
         (bool ok, bytes memory ret) = address(dex).call(settleData);   // the vectors really execute
         assertTrue(ok);

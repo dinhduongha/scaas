@@ -111,7 +111,7 @@ pub const GROUPS: &[&str] = &[
 
 pub const PURPOSES: &[&str] = &[
     "pop", "authref", "metatx", "metatx-cancel", "member", "zether-auth", "zether-owner", "keyop", "receiver-fee", "vp",
-    "vc-anchor",
+    "vc-anchor", "trade",
 ];
 
 pub const DOMAIN_TYPE: &str =

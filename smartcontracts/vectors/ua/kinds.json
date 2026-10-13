@@ -568,6 +568,11 @@
       "purpose": "vc-anchor",
       "tag": "scaas.ua.purpose.vc-anchor.v1",
       "purposeTag": "0x4b3315ed4659777e3dbd7fb244393de7ca6633764cbf5f316ea4f885e7ff9225"
+    },
+    {
+      "purpose": "trade",
+      "tag": "scaas.ua.purpose.trade.v1",
+      "purposeTag": "0xc9e1f4425dfd623d47306639b52fc06a544c0894eddfea71bd35af4fa4fdc29f"
     }
   ],
   "valid": [
@@ -2522,6 +2527,13 @@
       "purposeTag": "0x4b3315ed4659777e3dbd7fb244393de7ca6633764cbf5f316ea4f885e7ff9225",
       "digest": "0xad66503cebdd9341697249795f4c068a98fc92a57a828eec7ff59ee24a6124a1",
       "uaMsg": "0x2d817d97f19c2a16326c7bf9d42e5ed15324f5887317450e115c04568662cf8d"
+    },
+    {
+      "kind": 256,
+      "purpose": "trade",
+      "purposeTag": "0xc9e1f4425dfd623d47306639b52fc06a544c0894eddfea71bd35af4fa4fdc29f",
+      "digest": "0xad66503cebdd9341697249795f4c068a98fc92a57a828eec7ff59ee24a6124a1",
+      "uaMsg": "0xa1b498e215a21c348b4eed0fa5ee37d9d9089113402e10ac8baae4fa7a587b44"
     }
   ],
   "canonicalIds": [
