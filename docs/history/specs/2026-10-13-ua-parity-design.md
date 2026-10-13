@@ -1,7 +1,12 @@
 # UA parity: every native-address operation for a derived UA
 
-**Status:** DRAFT for the owner. Nothing normative changes until it is accepted; §8 lists the spec deltas. Ids: UP-1…UP-13
-(design rules), O1…O9 (options), Q1…Q10 (owner questions).
+**Status:** ACCEPTED by the owner 2026-10-13 (§6) and folded; frozen here. Ids: UP-1…UP-6, UP-8, UP-10 and Q1, Q2 →
+CTR-UA-27; UP-9, §4.2, §4.5 (`_uaMint`, `wrapToUA`, `unwrapToUA`, `mintToUA`, `payWithFeeToUA`) → CTR-UA-28 and the
+CTR-MTX-19 rows; §4.8 (`uaPayReceiverFee`) → CTR-MTX-05/06; UP-11, §4.6, Q3, Q4 → CTR-DEX-25 and the `trade` row of
+CTR-UA-10; UP-12, Q6 → CTR-DEX-15 step 4; §4.7, Q5 → CTR-DEX-26 (with CTR-DEX-16, -23); `uaWrap` → CTR-TOK-20; UP-13,
+Q8 → CTR-MTX-22 and CTR-ACC-12; §4.11, Q7 → CTR-ZTH-51; Q9 → CTR-UA-28; Q10 → CTR-AS-07; §7 → the TODO stream UA-5
+(UA-5a / 5b / 5c). UP-7 (size) needs no rule. Draft ids: UP-1…UP-13 (design rules), O1…O9 (options), Q1…Q10 (owner
+questions).
 **Date:** 2026-10-13. **Scope:** the EVM (and Hedera) token kinds `NONE`, `UNDERLYING`, `NONE_ZETHER`,
 `UNDERLYING_ZETHER`, `SCaaSDex` with `DexPuller`, `MandateWallet`, `SmartKeyAccount`, the factory where a subject is a
 user. Non-EVM families: out of scope. PQZ (`PqzToken`) is not built; §4.11 notes what it inherits. Nothing is deployed
@@ -9,7 +14,7 @@ user. Non-EVM families: out of scope. PQZ (`PqzToken`) is not built; §4.11 note
 **Builds on:** [accounts.md](../../contracts/accounts.md) (CTR-UA-10, -14, -18, -19, -24, -26), [metatx.md](../../contracts/metatx.md),
 [dex.md](../../contracts/dex.md), [token-wrappers.md](../../contracts/token-wrappers.md), [zether.md](../../contracts/zether.md),
 [mandates.md](../../contracts/mandates.md), the UA-4 plan `docs/superpowers/plans/2026-10-12-ua4-ledger.md` (rulings
-L4-1…L4-20), TODO items **UA-DEX** and **UA wrap in one step**.
+L4-1…L4-20), TODO items **UA-DEX** and **UA wrap in one step** (replaced by the stream UA-5).
 
 Marks: **[code]** found in the code at `main` 3b9a150; **[spec]** found in a normative doc; **[inferred]** this draft's
 design or estimate. Unmarked design text is [inferred].
@@ -70,7 +75,8 @@ function _subjectId() internal view returns (bytes32);
 
 ## 3. Inventory
 
-"Today UA" = what a derived UA can do now. Phase: see §7. "excl." = excluded by the recommendation of Q1.
+"Today UA" = what a derived UA can do now. Phase: see §7. "unchanged (Q1)" = kept as it is, with no UA counterpart
+(owner, 2026-10-13, §6 Q1); the role or admin holder still acts gaslessly through its own contract account.
 
 ### 3.1 Tokens (every kind: `ERC20MetaTx`, `MetaTokenBase`)
 
@@ -88,7 +94,7 @@ function _subjectId() internal view returns (bytes32);
 | `mtxTrade(o, sig, f)` | `o.from` (`dex` calls) | sell side of an order | `MetaTxUnknownOp` | `uaTrade(UATradeOrder, auth, f)` — 5b |
 | `mtxCancelOrder`, `mtxInvalidateNonces` | `o.from`, `from` | close an order / a lane | none | `uaCancelOrder`, `uaInvalidateNonces` — 5b |
 | views `tradeOrderDigest`, `invalidateNoncesDigest`, `minNonce` | — | — | none | `uaTradeOrderDigest`, `uaInvalidateNoncesDigest`, `uaMinNonce` — 5b |
-| `grantRole`, `revokeRole`, `renounceRole`, `disableFeature`, ownership | owner, role holders | administration | none | excl. (Q1) |
+| `grantRole`, `revokeRole`, `renounceRole`, `disableFeature`, ownership | owner, role holders | administration | none | unchanged (Q1) |
 
 ### 3.2 Kinds
 
@@ -99,10 +105,10 @@ function _subjectId() internal view returns (bytes32);
 | `UNDERLYING` `wrap(v)`, `wrap(u, v)` (payable) | sender pays and receives | two calls | `wrapToUA(u, v, bytes32 to)` payable, also allowlisted on the address path — 5a |
 | `UNDERLYING` `mtxWrap(u, o, sig)` | `o.from` on the underlying, `o.destination` | none | `uaWrap(u, UATradeOrder, auth)` — 5b |
 | `UNDERLYING` `unwrap(…, address recipient, minOut)` | sender → `recipient` | `uaUnwrap` / `uaExecute(unwrap)` to an address | exists; plus `unwrapToUA(u, wrapped, bytes32 to, minOut)` for a ledger underlying — 5a |
-| `UNDERLYING` `addReserve(u, v)` | anyone | none | excl. (Q1) |
-| `UNDERLYING` `disableWrap`, `proposeRate`, `cancelRate`, `executeRate` | role holders | none | excl. (Q1) |
+| `UNDERLYING` `addReserve(u, v)` | anyone | none | unchanged (Q1) |
+| `UNDERLYING` `disableWrap`, `proposeRate`, `cancelRate`, `executeRate` | role holders | none | unchanged (Q1) |
 | `*_ZETHER` `zetherShield(Y, amount)` | burns the signer's public units | none | `zetherShield` on the UA allowlist — 5c |
-| `UNDERLYING_ZETHER` `zetherWrapShield(u, amountIn, ua)` | sender pays the underlying | none | excl.: two signed steps (`uaWrap`, then `uaExecute(zetherShield)`) (Q1) |
+| `UNDERLYING_ZETHER` `zetherWrapShield(u, amountIn, ua)` | sender pays the underlying | none | unchanged (Q1); from a UA source: two signed steps (`uaWrap`, then `uaExecute(zetherShield)`) |
 | `*_ZETHER` `zetherTransfer*`, `zetherUnshield`, `zetherUnshieldUnwrap` through `mtxExecute` | `m.from` pays the outer fee | none | the same selectors on the UA allowlist with a UA envelope binding — 5c |
 | `*_ZETHER` `zetherUnshield(…, address to, amount)` | receiver `to` | none | `zetherUnshieldToUA(…, bytes32 to, amount)` — 5c |
 | `UNDERLYING_ZETHER` `zetherUnshieldUnwrap(…, address recipient, …)` | receiver `recipient` | none | `zetherUnshieldUnwrapToUA` for a ledger underlying — 5c |
@@ -115,16 +121,16 @@ function _subjectId() internal view returns (bytes32);
 | `SCaaSDex.mtxSettle(Settlement[])` | each leg's `o.from`, `o.destination` | none | tagged legs carrying a `UATradeOrder` (§4.7) — 5b |
 | `SCaaSDex.mtxExchange`, `mtxExchangeVia` | each `ExchangeLeg` | none | same — 5b |
 | `SCaaSDex.mtxCancelOrders`, `mtxInvalidateNonces` | outside-token orders | n/a | none: a UA holds no outside token (UP-5) |
-| `SCaaSDex` `setMarket`, `setFeeSplit`, `setExchangeTarget`, `setListedOnly` | `admin` | none | excl. (Q1) |
+| `SCaaSDex` `setMarket`, `setFeeSplit`, `setExchangeTarget`, `setListedOnly` | `admin` | none | unchanged (Q1) |
 | `DexPuller.pull` | outside-token holder | n/a | unchanged: never a UA leg (UP-5) |
 | `MandateWallet` owner: `setMandate`, `setPayee`, `revoke(token)`, `execute`, `mtxExecuteAsOwner`, `isValidSignature` | `owner` | none | `bytes32 owner`, UA pipeline (§4.12) — 5c |
 | `MandateWallet` delegate: `payUnderMandate`, `revoke(token, epoch)`, `mtxPayUnderMandate`, `mtxRevoke` | `Mandate.delegate`; payee | none | `bytes32 delegate`, `bytes32` payees — 5c |
-| `SmartKeyAccount` (keys, guardian, recovery), `SmartKeyAccountFactory.deploy` | its own keys; `guardian` | is itself an N id | excl. (Q1) |
-| `OpenFactory.createToken`, `createDex`; `TokenConfig.owner`, `roles`, `initialHolder` | creator = sender | none | excl. (Q1); a creator moves the initial supply with `transferToUA` |
+| `SmartKeyAccount` (keys, guardian, recovery), `SmartKeyAccountFactory.deploy` | its own keys; `guardian` | is itself an N id | unchanged (Q1) |
+| `OpenFactory.createToken`, `createDex`; `TokenConfig.owner`, `roles`, `initialHolder` | creator = sender | none | unchanged (Q1); a creator moves the initial supply with `transferToUA` |
 | `UARegistry.register` | any derived kind | exists | unchanged |
 | planned: regulated flags (`FREEZE`…`ALLOWLIST`), `SealedBidTender`, `VestingGrant`, `Distribution`, `ExchangeOffer` | receivers, bidders | not built (`FeatureNotBuilt` [code]) | `bytes32`-keyed when built (§4.13) |
 
-Doc drift found (not fixed here): [accounts.md §1.7](../../contracts/accounts.md#functions) lists `mtxPayReceiverFee` as
+Doc drift found (fixed in the fold, 2026-10-13): [accounts.md §1.7](../../contracts/accounts.md#functions) lists `mtxPayReceiverFee` as
 "(planned)" and metatx.md §12 as SPECIFIED; it is built in `MetaTokenBase` [code].
 
 ## 4. Design per group
@@ -475,32 +481,37 @@ No size work before Glamsterdam (owner).
 | O8 | Allowance for UAs | (a) `uaApprove` to contracts; (b) none | **(b)** (UP-10): an EOA has none; every pull is a signed, named intent |
 | O9 | Events for UA parties | (a) `bytes32` in the existing events; (b) separate `UA…` events | **(b)** (UP-6): address events and their indexers stay; same pattern as `UATransfer`, `UAPaymentSettled` |
 
-## 6. Open decisions for the owner
+## 6. Decisions (owner, 2026-10-13)
 
-1. **Q1 Scope exclusions.** Are these out of parity: token owner and role holders (`mint` role, rate admin, guardian),
-   the DEX `admin`, the factory creator and `TokenConfig.owner`/`roles`/`initialHolder`, `SmartKeyAccount` keys and
-   guardian, `addReserve`, a one-call `zetherWrapShield` from a UA source? **Recommended: yes, excluded.** Role and
-   admin functions are never gasless by rule (CTR-MTX-19: a signature check would skip a minter contract's caps or a
-   Safe's guards), so a UA could hold a role only by breaking that rule; `SmartKeyAccount` is option (b), the alternative
-   to a UA, not a UA consumer; `addReserve` is a donation; the UA wrap-shield is two signed steps (`uaWrap`, then
-   `uaExecute(zetherShield)`).
-2. **Q2 UA allowance.** Drop `uaApprove` from CTR-UA-14? **Recommended: yes — no UA ever grants or holds an allowance**
-   (UP-10, as an EOA); the DEX, wrappers and mandates pull against signed intents.
-3. **Q3 Trade struct.** A separate `UATradeOrder` (and `UAInvalidateNonces`) beside `TradeOrder`? **Recommended: yes**
-   (O2).
-4. **Q4 Purpose.** A new purpose `trade` for the order, cancel and invalidate digests? **Recommended: yes** (O4).
-5. **Q5 DEX.** Extend `SCaaSDex` in place with tagged legs (`shape`, `bytes order`), changing today's `Leg` and
-   `ExchangeLeg` ABI? **Recommended: yes** (O3); UA legs only on SCaaS ledger tokens, UA payouts by `transferToUA`.
-6. **Q6 Verify once.** Skip the order signature check when `pulled[h] ≠ 0`, on both paths (a change to CTR-DEX-15 step
-   4)? **Recommended: yes** (UP-12).
-7. **Q7 Zether public side.** Shield from, unshield to, and pay the outer fee of confidential ops from the UA ledger,
-   with the UA envelope tag `SCAAS-ZETHER-UA-ENVELOPE-V1` and a `bytes32` recipient word in the unshield statement?
-   **Recommended: yes** (O5, §4.11).
-8. **Q8 Mandates.** Move the generic UA pipeline into `MetaTxBase`, make `MandateWallet`'s owner, delegate and payees
-   `bytes32`, and give a derived owner no ERC-1271 answer? **Recommended: yes** (O7, §4.12).
-9. **Q9 Direct pay to a UA.** Add `payWithFeeToUA` (needed for UA payees of a mandate)? **Recommended: yes** (§4.2).
-10. **Q10 Regulated tokens.** Record now that the asset suite, when built, hooks the UA ledger and keys compliance by
-    `bytes32` (an AS amendment)? **Recommended: yes, as a constraint only; no code until AS is built** (§4.13).
+The owner decided every question on 2026-10-13: Q2–Q10 as recommended; Q1 in the owner's words "Giữ nguyên, họ vẫn
+có thể chạy gasless" ("keep them as they are; they can still run gasless").
+
+1. **Q1 Scope.** **Decided: unchanged** — no UA counterpart for the token owner and role holders (`mint` role, rate
+   admin, guardian, the `ITokenAdmin` functions), the DEX `admin`, the factory creator and `TokenConfig.owner` /
+   `roles` / `initialHolder`, `SmartKeyAccount` keys and guardian, `addReserve`, and a one-call `zetherWrapShield` from
+   a UA source. They are not "excluded because never gasless": a role or admin holder still acts gaslessly through its
+   own contract account — `SmartKeyAccount.mtxExecuteAsOwner`, `MandateWallet` owner `execute` through `mtxExecute`,
+   or a Safe's `execTransaction` — fee `NONE`, relayed as a `call` job (NODE-JOB-01, NODE-JOB-19); what stays is that
+   no token allowlist carries a role function (CTR-MTX-19: a signature check would skip a minter contract's caps or a
+   Safe's guards). `SmartKeyAccount` is option (b), the alternative to a UA, not a UA consumer; `addReserve` is a
+   donation; a UA source wrap-shields in two signed steps (`uaWrap`, then `uaExecute(zetherShield)`).
+2. **Q2 UA allowance.** **Decided: as recommended** — `uaApprove` leaves CTR-UA-14; no UA ever grants or holds an
+   allowance (UP-10, as an EOA); the DEX, wrappers and mandates pull against signed intents.
+3. **Q3 Trade struct.** **Decided: as recommended** — a separate `UATradeOrder` and `UAInvalidateNonces` beside
+   `TradeOrder` (O2).
+4. **Q4 Purpose.** **Decided: as recommended** — a new purpose `trade` for the order, cancel and invalidate digests (O4).
+5. **Q5 DEX.** **Decided: as recommended** — `SCaaSDex` extended in place with tagged legs (`shape`, `bytes order`),
+   changing today's `Leg` and `ExchangeLeg` ABI (O3); UA legs only on SCaaS ledger tokens, UA payouts by `transferToUA`.
+6. **Q6 Verify once.** **Decided: as recommended** — the order signature check is skipped when `pulled[h] ≠ 0`, on both
+   paths (a change to CTR-DEX-15 step 4; UP-12).
+7. **Q7 Zether public side.** **Decided: as recommended** — shield from, unshield to, and pay the outer fee of
+   confidential ops from the UA ledger, with the UA envelope tag `SCAAS-ZETHER-UA-ENVELOPE-V1` and a `bytes32`
+   recipient word in the unshield statement (O5, §4.11).
+8. **Q8 Mandates.** **Decided: as recommended** — the generic UA pipeline moves into `MetaTxBase`; `MandateWallet`'s
+   owner, delegate and payees become `bytes32`; a derived owner gets no ERC-1271 answer (O7, §4.12).
+9. **Q9 Direct pay to a UA.** **Decided: as recommended** — `payWithFeeToUA` (§4.2).
+10. **Q10 Regulated tokens.** **Decided: as recommended** — a constraint only: the asset suite, when built, hooks the UA
+    ledger and keys compliance by `bytes32` (an AS amendment); no code until AS is built (§4.13).
 
 ## 7. Phasing
 
@@ -517,7 +528,7 @@ Every phase ends with the size gate (`scripts/size_gate.py`, `size-baseline.json
 
 5a stands alone. 5b needs 5a's `_uaMint` (for `uaWrap`). 5c needs nothing from 5b.
 
-## 8. Spec-text deltas (draft wording; not applied)
+## 8. Spec-text deltas (draft wording; applied 2026-10-13, the normative wording differs where the fold says so)
 
 **accounts.md**
 
@@ -525,8 +536,9 @@ Every phase ends with the size gate (`scripts/size_gate.py`, `size-baseline.json
   ids only — the DEX with UA makers … are not in v1;" with: "every operation open to a native id is open to a registered
   SIGNING UA (owner 2026-10-13, parity): through the UA-ledger functions (`ua*`), the UA allowlist, `UATradeOrder` on
   tokens and in `SCaaSDex`, and `bytes32` owners, delegates and payees in `MandateWallet`; the address-typed functions
-  keep their ABI and accept native ids only. Excluded: role and admin functions, `SmartKeyAccount` keys and guardian
-  (Q1). A UA never grants or holds an allowance."
+  keep their ABI and accept native ids only. Unchanged (Q1): role and admin functions, `SmartKeyAccount` keys and
+  guardian; their holders still act gaslessly through their own contract account. A UA never grants or holds an
+  allowance."
 - **§1.7 tables:** `mtxPayReceiverFee` loses "(planned)"; new rows `uaPayReceiverFee` (payer U, payee U),
   `payWithFeeToUA` (sender N, to U-derived), `wrapToUA`, `unwrapToUA`, `mintToUA`, `uaWrap`, `uaTrade`/`uaCancelOrder`/
   `uaInvalidateNonces` (U), `zetherUnshieldToUA` (Z; to U-derived); `SCaaSDex` row: "N or U (`UATradeOrder` legs on SCaaS
@@ -585,3 +597,4 @@ unshield to UA, one lane per id across both paths, the "stays `msg.sender`" lint
 | Rev | Date | What |
 |---|---|---|
 | 1 | 2026-10-13 | First draft from the owner's parity decision |
+| 2 | 2026-10-13 | Owner decisions on Q1–Q10 (§6; Q1 "unchanged", role holders stay gasless through their own contract account); accepted, folded into the component docs and frozen here |
