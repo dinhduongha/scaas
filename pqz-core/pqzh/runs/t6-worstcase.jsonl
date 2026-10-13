@@ -1,0 +1,14 @@
+{"file": "runs/t6-zk5-conj-b3-q38.jsonl", "rel": "R_REG", "proof_bytes": 314953, "worst_case_bytes": 345301}
+{"file": "runs/t6-zk5-conj-b3-q38.jsonl", "rel": "R_TX", "proof_bytes": 418983, "worst_case_bytes": 452659}
+{"file": "runs/t6-zk5-conj-b4-q29.jsonl", "rel": "R_REG", "proof_bytes": 255906, "worst_case_bytes": 277148}
+{"file": "runs/t6-zk5-conj-b4-q29.jsonl", "rel": "R_TX", "proof_bytes": 340431, "worst_case_bytes": 364602}
+{"file": "runs/t6-zk5-proven-b3-q75.jsonl", "rel": "R_REG", "proof_bytes": 573972, "worst_case_bytes": 626481}
+{"file": "runs/t6-zk5-proven-b3-q75.jsonl", "rel": "R_TX", "proof_bytes": 776128, "worst_case_bytes": 836578}
+{"file": "runs/t6-zk5-proven-b4-q57.jsonl", "rel": "R_REG", "proof_bytes": 468231, "worst_case_bytes": 512730}
+{"file": "runs/t6-zk5-proven-b4-q57.jsonl", "rel": "R_TX", "proof_bytes": 622448, "worst_case_bytes": 672305}
+{"file": "runs/t1-base-default.jsonl", "rel": "R_REG", "proof_bytes": 110501, "worst_case_bytes": 124968}
+{"file": "runs/t1-base-default.jsonl", "rel": "R_TX", "proof_bytes": 143128, "worst_case_bytes": 159144}
+{"file": "runs/t2-keccak256-be-default.jsonl", "rel": "R_REG", "proof_bytes": 99859, "worst_case_bytes": 112158}
+{"file": "runs/t2-keccak256-be-default.jsonl", "rel": "R_TX", "proof_bytes": 128335, "worst_case_bytes": 141575}
+{"file": "runs/t3-preprocessed-default.jsonl", "rel": "R_REG", "proof_bytes": 112796, "worst_case_bytes": 126415}
+{"file": "runs/t3-preprocessed-default.jsonl", "rel": "R_TX", "proof_bytes": 143704, "worst_case_bytes": 158604}
