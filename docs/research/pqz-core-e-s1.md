@@ -219,6 +219,9 @@ accumulated matrices on the verifier side.
 - **Knowledge error.** The generated headers state a knowledge error ≤ 2^-127.0 (the codegen's bound for the whole
   protocol). P6b's gate is per Fiat–Shamir round; the per-round figures were not recomputed with LaZer's
   \|C\| = 2^129 and η = 140.
+  Note (2026-10-13): that bound holds for `proofSystemId` v2 only. v1, measured here, drew one Schwartz–Zippel
+  challenge pair for all λ/2 evaluation accumulators (lazer#24), so its evaluation step was sound to ≈ 2^-84;
+  see `pqz-tbox-soundness.md`. Sizes and times are unchanged by the v2 fix.
 - UBSan findings left as upstream: zero-length VLAs when M = 0 or nbin = 0 (`lnp-tbox.c` 223, 875, 3358), null + 0
   in `aes256ctr.c:212`.
 
