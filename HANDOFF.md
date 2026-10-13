@@ -13,7 +13,7 @@ study, `475b066`), `pqz-rel3` (`R_BURN` / `R_DS` / `R_DR` in pqz-core with the g
 portable, all five relations ≤ 10 ms p99 portable). PQZH: six answers in TODO P6-PQZH — ≤ 160 KB proof for PQZH (PQZL
 keeps 96 KB), sweep provable vs conjectured (leaning provable), PQZH tokens register with a PQZH `R_REG`, **"two kinds" =
 PQZL and PQZH as one configuration value (`proofSystemId` at `initialize`), the four reserved PQZ `TokenKind`s stay**,
-Keccak / SHAKE transcript, prototype now. PQZ relation points A, B, 1–5 accepted (burn randomness fresh; R_TX on the
+Keccak / SHAKE transcript, prototype now. PQZ relation points A, B, 1–5 accepted (A: merge `pqz-rel3` and push, done `3ad4069`; B: burn randomness fresh; 1: R_TX on the
 §7.7 layout; disclosure `kind` a 32-byte word; precompile checks opTag / proofSystemId; e′ ∈ [−2^24, 2^24); lazy keys).
 Credit cap stays 1024 units for now.
 

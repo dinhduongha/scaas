@@ -156,9 +156,11 @@ the NTT form of the keys (LaZer holds both forms), or derive the keys per call (
 ## 5. Owner decisions (2026-10-13) and the fix-ups
 
 The first version of this note left four choices open (statement layouts, what pqz-core checks, the disclosure noise
-bound, the arena base). The owner answered on 2026-10-13; branch `pqz-relfix` carries them in code and in
-pq-zether.md / decisions.md:
+bound, the arena base). The owner answered on 2026-10-13 (points A, B, 1–5, all accepted as proposed); branch
+`pqz-relfix` (merged `7e6e9b0`) carries B and 1–5 in code and in pq-zether.md / decisions.md:
 
+- **A. Merge `pqz-rel3`** (`R_BURN` / `R_DS` / `R_DR` with the generic verifier and the first version of this note)
+  into main and push: done, `3ad4069`.
 - **B. Burn / refresh randomness** is fresh CSPRNG output (hedging with the key seed allowed), never derived from the
   counter: their salt is 0, so two burns at one `sendCounter` would otherwise reveal `Δ·(b′ − b″)` (CTR-PQZ-19, §7.5,
   T12, a prover test in §14). No code change in pqz-core (the bench uses its test RNG; `R_BURN` proofs unchanged).
