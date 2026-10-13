@@ -75,7 +75,7 @@ _BY = {k[0]: k for k in KINDS}
 GROUPS = ('p256', 'ed25519', 'secp256k1', 'bn254-g1', 'bls12381-g1', 'bls12381-g2', 'bn254-g2', 'mldsa44', 'mldsa65',
           'fndsa512', 'slhdsa128s', 'pqz-mlwe')
 PURPOSES = ('pop', 'authref', 'metatx', 'metatx-cancel', 'member', 'zether-auth', 'zether-owner', 'keyop', 'receiver-fee',
-            'vp', 'vc-anchor')
+            'vp', 'vc-anchor', 'trade')
 
 
 def kind_info(kind):

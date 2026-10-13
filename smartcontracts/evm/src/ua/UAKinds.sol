@@ -50,6 +50,8 @@ library UAKinds {
     bytes32 internal constant PURPOSE_RECEIVER_FEE = keccak256("scaas.ua.purpose.receiver-fee.v1");
     bytes32 internal constant PURPOSE_VP = keccak256("scaas.ua.purpose.vp.v1");
     bytes32 internal constant PURPOSE_VC_ANCHOR = keccak256("scaas.ua.purpose.vc-anchor.v1");
+    /// @notice `UATradeOrder`, `CancelOrder` over a UA order hash, `UAInvalidateNonces` (dex.md CTR-DEX-25; UA-5b).
+    bytes32 internal constant PURPOSE_TRADE = keccak256("scaas.ua.purpose.trade.v1");
     bytes32 internal constant UAAUTH_TYPEHASH = keccak256("UAAuth(bytes32 ua,bytes32 purpose,bytes32 digest)");
     bytes32 internal constant DOMAIN_TYPEHASH =
         keccak256("EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)");

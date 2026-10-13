@@ -73,7 +73,7 @@ var Groups = []string{"p256", "ed25519", "secp256k1", "bn254-g1", "bls12381-g1",
 	"mldsa65", "fndsa512", "slhdsa128s", "pqz-mlwe"}
 
 var Purposes = []string{"pop", "authref", "metatx", "metatx-cancel", "member", "zether-auth", "zether-owner", "keyop",
-	"receiver-fee", "vp", "vc-anchor"}
+	"receiver-fee", "vp", "vc-anchor", "trade"}
 
 const (
 	DomainType   = "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)"
