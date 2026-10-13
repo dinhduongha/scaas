@@ -74,6 +74,7 @@ chain, verify ≤ 50 ms, proof ≤ 96 KB, browser prover) **[inference]**, not a
 
 | Family | Systems | Post-quantum | Fits PQZ? |
 |---|---|---|---|
+| Lattice RingCT proofs | MatRiCT / MatRiCT+; SMILE (Lyubashevsky, Nguyen, Seiler, CRYPTO 2021, [ePrint 2021/564](https://eprint.iacr.org/2021/564): ≈ 30 KB for a 2-in / 2-out transaction with 2^15 anonymity); Gao et al. ([ePrint 2021/1674](https://eprint.iacr.org/2021/1674): up to 50 % / 20 % smaller than MatRiCT / MatRiCT+) | yes | built for UTXO ring confidential transactions; PQZ is account-based without anonymity, so their set-membership part is unused; the balance and range parts are the same kind of LNP22-family proof |
 | Lattice, other than LNP22 | LaBRADOR (recursive, ≈ 50 KB floor, not zero-knowledge in its original form); Greyhound (a polynomial commitment, with LaBRADOR); LatticeFold / LatticeFold+ (folding, not a final proof) | yes | not for one transfer; LaBRADOR is the spec's later block-level aggregation path (§4.4) |
 | Hash-based, other IOPs | Aurora (R1CS, polylog proof, verifier linear in the circuit); Fractal (preprocessing, recursion); Brakedown / Orion / Blaze (linear-time prover, larger proofs); Binius (binary fields); FRI successors STIR / WHIR / Basefold (smaller proofs) | yes | candidates beside STARK / Ligero; WHIR-class commitments shrink the proof |
 | MPC-in-the-head and VOLE-in-the-head | ZKBoo, ZKB++, KKW, Limbo; FAEST-style VOLEitH | yes | proof grows linearly with the circuit (MB class for `R_TX`); fits small statements only |
@@ -81,12 +82,27 @@ chain, verify ≤ 50 ms, proof ≤ 96 KB, browser prover) **[inference]**, not a
 | Pairing SNARK around a PQ statement | Groth16, PLONK over BN254 / BLS12-381 | no | rejected by the spec (pairing soundness) |
 | Lattice SNARKs with a preprocessed CRS | research only | yes | no mature implementation |
 
-Options that change the architecture rather than the proof system:
+## 4. Options that change the architecture, not the proof system
 
-- **Optimise LNP22 first.** The spike's fork is portable C without SIMD; lazy reduction, a real sort, fewer `R_TX`
-  equations, verifier reuse, and an AVX2 / `simd128` backend. The upstream cross-check tells how far that can go.
-- **Split the statement.** Prove `R_TX` as several smaller statements (or transactions), each under the gas cap.
-- **Aggregate.** Many transfers per proof (LaBRADOR, or STARK recursion), so the chain verifies one proof per block
-  instead of one per transfer; changes the transaction model.
-- **Move verification off chain** (a committee or a TEE attests): changes the trust model; not compatible with the
-  current spec.
+| Option | What changes | Effect on the P6d misses | Cost |
+|---|---|---|---|
+| Optimise LNP22 first | nothing in the spec: lazy reduction, a real sort, fewer `R_TX` equations, verifier reuse, an AVX2 / `simd128` backend | unknown; the upstream cross-check tells how far it can go | engineering time only |
+| Split the statement | `R_TX` proved as several smaller statements (or transactions), each under the gas cap | per-proof verify drops; the total does not | more transactions per transfer, more calldata |
+| Aggregate | many transfers per proof (LaBRADOR, or STARK recursion); the chain verifies one proof per block | verify paid once per block | changes the transaction model (an aggregator, latency) |
+| Verify off chain | a committee or a TEE attests the proof | removes on-chain verify | changes the trust model; not compatible with the current spec |
+
+## 5. Other chains: Cellframe
+
+Cellframe (DemLabs, built on the DAP SDK) is a post-quantum chain. What its public material shows (2026-10-13):
+
+| Item | Cellframe | Source |
+|---|---|---|
+| Signatures | CRYSTALS-Dilithium (default, hybrid mode possible), Falcon, SPHINCS+ (backup, large), Shipovnik (code-based, Stern identification + Fiat–Shamir); Picnic in older posts | [wiki: Encryption Protocols](https://wiki.cellframe.net/02.+Learn/Technology/Architecture/Encryption+Protocols), [blog](https://cellframe.net/blog/cellframe-alphabet-asymmetric-encryption/) |
+| Key encapsulation | Kyber-512 | wiki |
+| "Zero-knowledge transactions" | outputs tied to one-time keys and closed by a ring signature; no proof system for hidden amounts is named | [white paper](https://cellframe.net/white-paper/) |
+| Ring signature | ChipmunkRing (Gerasimov, [arXiv 2510.09617](https://arxiv.org/abs/2510.09617)), on the Chipmunk lattice signature: rings of 2–64, 20.5–279.7 KB, sign 1.1–15.1 ms, verify 0.4–4.5 ms (paper's figures); code in a DAP SDK feature branch; deployment not stated | arXiv |
+
+For PQZ **[inference]**: Cellframe hides the **signer** (ring signatures), not the **amount**; nothing found proves
+balance conservation or a range over encrypted amounts. PQZ is the opposite case (amounts hidden, no anonymity), so
+Cellframe offers no proof system to take over. Its signature set matches what P6c already has (ML-DSA, Falcon,
+SLH-DSA). A ring signature such as ChipmunkRing would only matter if PQZ later adds sender anonymity.
