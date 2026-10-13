@@ -157,6 +157,12 @@ Medians [measured]; native 7 proves and 7 + 7 honest verifies, wasm 3 proves and
   rejected: in ≈ 3 ms (`R_REG`) / ≈ 15 ms (`R_TX`) when the decoder or the hash check fails, otherwise after a full
   verify.
 - Iterations count both rejection loops (z3 / z4 and z1 / z2), so they are not the codegen's "expected attempts".
+- Browser budgets (pq-zether.md, client budgets table: prove `R_TX` ≤ 5 s desktop browser, ≤ 15 s phone, hard limit
+  30 s; peak WASM memory ≤ 128 MiB, hard limit 256 MiB for iOS WebKit) are missed too: `R_TX` wasm prove 39.3 s,
+  wasm arena peak 476 MB, ≈ 1.9× the hard memory limit (`R_REG` 113 MB fits) [measured]. These budgets are not kill
+  criteria.
+- The wasm / native ratio is 2.3–2.7× (`R_TX` 39.3 / 17.0, `R_REG` 3.27 / 1.20) [measured], so the 3 s native prove
+  target maps to ≈ 7–8 s in the browser, above the 5 s desktop-browser budget [inference].
 - wasm gives the same proof lengths as native for the same seeds; honest proofs verify and tampered ones are rejected
   under both. Byte equality of the proofs was not checked.
 - Library objects, native and wasm, reference only `memcpy`, `memset`, `__stack_chk_fail` (and `__stack_pointer`)
