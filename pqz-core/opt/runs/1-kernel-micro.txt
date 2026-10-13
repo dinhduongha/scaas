@@ -1,0 +1,20 @@
+# PQZ_MUL128=1
+e1 (E-S1)                1707.2 ns per pointwise product (4 blocks), best of 7
+col u128                  681.6 ns per pointwise product (4 blocks), best of 7
+col u128 red88            720.1 ns per pointwise product (4 blocks), best of 7
+limb21 x4                1290.9 ns per pointwise product (4 blocks), best of 7
+limb21 karatsuba x3      1069.9 ns per pointwise product (4 blocks), best of 7
+karatsuba 1 lvl          1100.4 ns per pointwise product (4 blocks), best of 7
+karatsuba 2 lvl          1148.7 ns per pointwise product (4 blocks), best of 7
+col unrolled              612.5 ns per pointwise product (4 blocks), best of 7
+library pqz_ntt_basemul    602.1 ns per pointwise product (4 blocks), best of 7
+# PQZ_MUL128=0
+e1 (E-S1)                1680.0 ns per pointwise product (4 blocks), best of 7
+col u128                  689.2 ns per pointwise product (4 blocks), best of 7
+col u128 red88            722.8 ns per pointwise product (4 blocks), best of 7
+limb21 x4                1309.1 ns per pointwise product (4 blocks), best of 7
+limb21 karatsuba x3      1086.6 ns per pointwise product (4 blocks), best of 7
+karatsuba 1 lvl          1143.4 ns per pointwise product (4 blocks), best of 7
+karatsuba 2 lvl          1167.3 ns per pointwise product (4 blocks), best of 7
+col unrolled              619.0 ns per pointwise product (4 blocks), best of 7
+library pqz_ntt_basemul   1127.4 ns per pointwise product (4 blocks), best of 7
