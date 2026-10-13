@@ -19,3 +19,4 @@ target/release/pqzh_security --batch-pow 24 --ood-pow 24 --lookup-pow 24 > runs/
 target/release/pqzh_security --ext 5 --measure > runs/s6-measure-ext5.jsonl
 target/release/pqzh_security --ext 2 --target 100 --measure > runs/s6-measure-ext2-t100.jsonl
 target/release/pqzh_security --ext 5 --pow 24 --measure > runs/s6-measure-ext5-pow24.jsonl
+runs/bench.sh s7-ext5-b32-q21-pow24 --ext5 --blowup 5 --queries 21 --pow 24 --np 5 --nv 100 --nadv 10
