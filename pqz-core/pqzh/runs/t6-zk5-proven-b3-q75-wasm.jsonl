@@ -1,0 +1,9 @@
+{"wasm_bytes":1890322,"node":"v26.8.1","args":{"np":0,"nv":100,"nadv":10,"lb":3,"q":75,"zk":1,"maxp":4000000,"ext5":1,"cap":0,"ar":0,"pow":0,"proofs":"target/proofs/t6-zk5-proven-b3-q75"}}
+{"init_ms":63.883,"memory_mib":2.1875}
+{"rel":"R_REG","proof_bytes":573972,"fnv_loaded":"321ff3f0","memory_mib":3.3125}
+{"rel":"R_REG","timing":"verify_honest","stats":{"n":100,"mean_ms":21.867,"p50_ms":15.55,"p99_ms":19.44,"max_ms":613.313},"memory_mib":69}
+{"rel":"R_REG","timing":"verify_adversarial","stats":{"n":120,"mean_ms":2.777,"p50_ms":2.451,"p99_ms":9.847,"max_ms":10.888},"memory_mib":69}
+{"rel":"R_TX","proof_bytes":776128,"fnv_loaded":"2d6991bb","memory_mib":69}
+{"rel":"R_TX","timing":"verify_honest","stats":{"n":100,"mean_ms":38.197,"p50_ms":26.874,"p99_ms":30.76,"max_ms":1123.483},"memory_mib":141.1875}
+{"rel":"R_TX","timing":"verify_adversarial","stats":{"n":120,"mean_ms":5.32,"p50_ms":5.25,"p99_ms":12.161,"max_ms":14.63},"memory_mib":141.1875}
+{"fails":0,"memory_mib_final":141.1875}

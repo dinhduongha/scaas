@@ -231,9 +231,10 @@ fn parse_tx(stmt: &[u8]) -> Option<TxSt> {
     Some(TxSt { pkf, pkt, pka, ut, vt_, u, v, fee })
 }
 
-/// Digit table height: 16 rows, or enough for the hiding PCS's masking budget (2 (queries + 2 * 2 points) rows).
+/// Digit table height: 16 rows, or enough for the hiding PCS's masking budget (2 (queries + extension degree * 2
+/// opening points) rows).
 pub fn digit_height(p: &Params) -> usize {
-    if p.zk { (2 * (p.num_queries + 8)).next_power_of_two().max(16) } else { 16 }
+    if p.zk { (2 * (p.num_queries + 2 * p.ext_degree())).next_power_of_two().max(16) } else { 16 }
 }
 
 /// R_TX rows 1-7 (pq-zether.md §7.4, pqz_rel.c build_tx).

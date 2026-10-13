@@ -215,8 +215,19 @@ impl Params {
         let mmcs =
             HidingValMmcs::new(BeKeccak, Compress::new(Keccak256Hash {}), self.cap_height, StdRng::from_rng(&mut r));
         let fri = self.fri(ExtensionMmcs::new(mmcs.clone()));
-        let pcs = HidingFriPcs::new(Dft::default(), mmcs, fri, 4, StdRng::from_rng(&mut r));
+        let pcs = HidingFriPcs::new(Dft::default(), mmcs, fri, self.random_codewords(), StdRng::from_rng(&mut r));
         StarkConfig::new(pcs, BeChallenger::new(seed))
+    }
+
+    /// random codewords of the hiding PCS: Plonky3 needs at least the extension degree (4 as in the prototype, 5 for
+    /// Goldilocks^5)
+    pub fn random_codewords(&self) -> usize {
+        if self.ext5 { 5 } else { 4 }
+    }
+
+    /// extension degree of the challenge field
+    pub fn ext_degree(&self) -> usize {
+        if self.ext5 { 5 } else { 2 }
     }
 
     pub fn zk(&self, seed: &[u8; 32], rnd: [u8; 32]) -> ZkConfig {

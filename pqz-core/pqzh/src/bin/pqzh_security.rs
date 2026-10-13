@@ -38,9 +38,10 @@ fn shape(op: u8, stmt: &[u8], p: &Params, ext: usize) -> Shape {
     let zk = p.zk as usize;
     let deg = rel::degrees(&b, p.zk);
     let cfg = p.plain(&[0; 32]);
-    let pd = ProverData::from_airs_and_degrees(&cfg, &b.airs, &deg).unwrap();
+    // lookups only (the plain config: trace degrees without the ZK bit)
+    let pd = ProverData::from_airs_and_degrees(&cfg, &b.airs, &deg.iter().map(|d| d - zk).collect::<Vec<_>>()).unwrap();
     let gadget = LogUpGadget::new();
-    let opening = if p.zk { OpeningShape::hiding(4) } else { OpeningShape::new() };
+    let opening = if p.zk { OpeningShape::hiding(p.random_codewords()) } else { OpeningShape::new() };
     let (mut ncons, mut maxdeg, mut chunks, mut batched, mut width) = (0, 0, 0, 0, 0);
     let mut denoms = 0f64; // sum over AIRs of interactions * rows
     let mut widths = vec![];

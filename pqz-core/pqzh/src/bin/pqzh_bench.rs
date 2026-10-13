@@ -98,7 +98,7 @@ fn main() {
         for i in 0..np.max(1) {
             arm();
             let t = Instant::now();
-            pt = prove(op, st, w, [i as u8; 32], &p).expect("prove");
+            pt = prove(op, st, w, [i as u8; 32], &p).unwrap_or_else(|e| { eprintln!("prove: {e}"); std::process::exit(2) });
             tp.push(t.elapsed().as_secs_f64() * 1e3);
             peak_p = peak_p.max(disarm());
         }
