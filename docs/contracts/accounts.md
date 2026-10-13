@@ -49,6 +49,8 @@ function needs. An optional verifiable-credential layer sits on top. Status: **S
 `docs/superpowers/plans/2026-10-12-ua4-ledger.md`); the PQ signing kinds and the `pqz-mlwe` slot are BUILT in registry
 generation 1 (P6c, plan `docs/superpowers/plans/2026-10-13-p6c-pq-kinds.md`; `UAPqzVerifier` is P6g's). The
 Zether-only registry it replaced is backed up in `smartcontracts/evm/legacy/ua3/` (UA-3; [legacy registry](#legacy-registry), [migration](#migration)).
+UA parity — every native-address operation for a derived UA ([CTR-UA-27](#CTR-UA-27), [CTR-UA-28](#CTR-UA-28), owner
+2026-10-13) — is **SPECIFIED**, in three phases UA-5a / 5b / 5c (`TODO.md`).
 
 ### 1.1 Scope
 
@@ -249,6 +251,7 @@ Layer 3 — purposes:
 | `zether-owner` | the Zether rollOver/mode digests |
 | `keyop` | family subject-account key operations (replaces `scaas.keyop.v1` by version bump) |
 | `receiver-fee` | the `ReceiverFee` co-sign when the payee is a UA ([CTR-MTX-05](metatx.md#CTR-MTX-05)) |
+| `trade` | EIP-712 digest of `UATradeOrder`, of `CancelOrder` over a `UATradeOrder` hash, and of `UAInvalidateNonces` ([CTR-DEX-25](dex.md#CTR-DEX-25)); SPECIFIED (UA-5b) |
 | `vp` | VC presentation / KB-JWT |
 | `vc-anchor` | *reserved* (anchor contract deferred) |
 
@@ -462,17 +465,70 @@ cost real money on public chains (an ML-DSA-65 signature is 53–132 k gas of ca
 
 <a id="functions"></a>
 <a id="function-kinds"></a>
-<a id="CTR-UA-14"></a>**CTR-UA-14** — **Each function accepts the kinds it needs** (owner): native-address functions (the
-tokens' address-typed paths, DEX, mandates) keep accepting native ids only — the DEX with UA makers (UA holders trade through native
-accounts; it would need a UA-ledger allowance `uaApprove` to contracts and an `SCaaSDex` v2 with `bytes32 maker`),
-`MandateWallet` with a UA owner or delegate, and regulated tokens with UA receivers are not in v1; the UA-ledger functions of the token base accept a
-native id or a registered SIGNING kind as `from` and as `to`; Zether functions accept Zether kinds only, registered
-first. The kind sets SIGNING, ZETHER and MEMBER are **closed and enforced** at each point that names them: v3
+<a id="CTR-UA-14"></a>**CTR-UA-14** — **Each function accepts the kinds it needs** (owner): every operation open to a
+native id is open to a registered SIGNING UA ([CTR-UA-27](#CTR-UA-27), owner 2026-10-13) through the UA-ledger functions
+(`ua*`), the UA allowlist, `UATradeOrder` on tokens and in `SCaaSDex`, and `bytes32` owners, delegates and payees in
+`MandateWallet`; the address-typed functions keep their ABI and accept native ids only; the role and admin functions
+stay as they are, their holders gasless through their own contract account ([CTR-UA-27](#CTR-UA-27)); a UA never grants
+or holds an allowance. The UA-ledger functions of the token base accept a native id or a registered SIGNING kind as
+`from` and as `to`; Zether functions accept Zether kinds only, registered first, as the confidential account (the
+public side may be a UA, [CTR-ZTH-51](zether.md#CTR-ZTH-51)). The kind sets SIGNING, ZETHER and MEMBER are **closed and enforced** at each point that names them: v3
 `from`/`to`, `requireAuthorized` (SIGNING and native only; ZETHER reverts), `msig` members (MEMBER), Zether `authRef`.
 The address-typed ABI does not change for them; a Zether UA can never be a v3 receiver (it could never spend) nor sign
 through `requireAuthorized` (that would be a signing use of the decryption key). "v3" in this file names the
 UA-ledger functions (`ua*`) of the one token base `ERC20MetaTx` ([CTR-MTX-07](metatx.md#CTR-MTX-07)), not a separate
 token generation.
+
+<a id="ua-parity"></a>
+<a id="CTR-UA-27"></a>**CTR-UA-27** — **Parity: every operation open to a native id is open to a registered SIGNING UA**
+(owner 2026-10-13), PQ kinds included. A UA never sends a transaction, so parity has two axes: the **subject** — every
+function a native calls or signs has a signed UA form (the `ua*` functions and the UA allowlist,
+[CTR-UA-26](#CTR-UA-26); `UATradeOrder` on tokens and in `SCaaSDex`, [CTR-DEX-25](dex.md#CTR-DEX-25),
+[CTR-DEX-26](dex.md#CTR-DEX-26); the generic UA pipeline of `MetaTxBase`, [CTR-MTX-22](metatx.md#CTR-MTX-22), with
+`bytes32` ids in `MandateWallet`, [CTR-ACC-12](mandates.md#CTR-ACC-12); the Zether public side,
+[CTR-ZTH-51](zether.md#CTR-ZTH-51)) — and the **receiver** — every `address` receiver has a `bytes32` form credited in
+the UA ledger ([CTR-UA-28](#CTR-UA-28)). Rules for every UA form:
+
+- **Own struct, any id.** A UA intent is its own struct with `bytes32` ids and its own typehash in the contract's
+  existing domain ([CTR-UA-19](#CTR-UA-19)); it takes a native id too (zero-padded, **U**): a native signs the digest
+  itself (ECDSA, ERC-1271 by [CTR-UA-24](#CTR-UA-24), HIP-632 on Hedera), a derived id goes through
+  `registry.requireAuthorized(id, purpose, digest, auth)`.
+- **One lane per id.** UA nonces and order lanes use the existing maps keyed by `bytes32`, natives zero-padded, so a
+  native id and its padded form share one lane on both paths.
+- **Receivers.** A derived receiver is registered and SIGNING (`UANotRegistered`, `UAKindNotAccepted`); a Zether kind
+  never receives.
+- **Ledger writes.** Every UA credit or debit goes through `_uaMove` (a mint is a move from 0,
+  [CTR-UA-28](#CTR-UA-28)), so `balanceOf(UA_POOL) == Σ _uaBalance` and the `Transfer` / `UATransfer` pairing of
+  [CTR-UA-18](#CTR-UA-18) hold by construction.
+- **Funds.** A derived UA holds balances only in SCaaS tokens whose ledger is on (`registry() ≠ 0`), never an outside
+  ERC-20, an HTS token or the native coin: a UA leg in such an asset reverts (`UALegNotLedger(token)`,
+  `UAReceiveNotLedger(token)`) and that side stays on the address path; outside-token orders and the `DexPuller` are
+  native only.
+- **Events.** An address-typed event keeps its shape; a UA party gets a separate `UA…` event with `bytes32` ids (as
+  `UATransfer`, `UAPaymentSettled`).
+- **Allowlist or dedicated function.** A self-call whose body reads only `_msgSender()` as its subject joins the UA
+  allowlist (under a derived ticket `_msgSender()` is `UA_POOL` and a burn debits the subject); a `bytes32` receiver,
+  another signed struct or a native caller who pays (`msg.value`, an outside `transferFrom`) needs a dedicated function.
+  Named UA builders exist only where the address path has one.
+- **No allowance.** A UA never grants or holds an allowance, as an EOA ([CTR-TOK-01](token-wrappers.md#CTR-TOK-01));
+  a contract moves a UA's funds only against a signed, named intent (`UATradeOrder` for the DEX and `uaWrap`, a
+  mandate in the payer's own `MandateWallet`); `approve` stays refused on every `ua*` function.
+- **Unchanged, no UA counterpart:** the token owner and role holders (`mint` role, rate admin, guardian, the
+  `ITokenAdmin` functions), the DEX `admin`, the factory creator and `TokenConfig.owner` / `roles` / `initialHolder`,
+  `SmartKeyAccount` keys and guardian, `addReserve`, and a one-call `zetherWrapShield` from a UA source (a UA source
+  wrap-shields in two signed steps: `uaWrap`, then `uaExecute(zetherShield)`). Their holders **still act gaslessly**
+  through their own contract account — `SmartKeyAccount.mtxExecuteAsOwner`, a `MandateWallet` owner's `execute` through
+  `mtxExecute`, or a Safe's `execTransaction` — with fee `NONE`, relayed as a `call` job
+  ([NODE-JOB-01](../node/job-api.md#NODE-JOB-01), [NODE-JOB-19](../node/job-api.md#NODE-JOB-19)); what stays is that no
+  token allowlist carries a role function ([CTR-MTX-19](metatx.md#CTR-MTX-19)). `SmartKeyAccount` is option (b), the
+  alternative to a UA, not a UA consumer.
+- **Regulated tokens** (not built): the asset suite's per-transfer checks will hook `_uaMove` and `_uaMint` too, the
+  UA → UA branch included, and compliance will key accounts by `bytes32` ([CTR-AS-07](asset-suite.md#CTR-AS-07)).
+
+Phases (`TODO.md`, stream UA-5): **UA-5a** receivers, one-step wrap and receiver-pays ([CTR-UA-28](#CTR-UA-28),
+[CTR-MTX-05](metatx.md#CTR-MTX-05)); **UA-5b** trade and DEX; **UA-5c** Zether public side and mandates. Status
+**SPECIFIED**; relayed use needs the node's UA jobs (UA F5). Design record:
+`docs/history/specs/2026-10-13-ua-parity-design.md`.
 
 Legend: **N** = native ids only (EOA, ERC-1271 incl. `SmartKeyAccount`/Safe/`MandateWallet`, Hedera native); **U** = a
 native id or a registered SIGNING kind (never ZETHER); **Z** = a Zether kind matching the token's verifier curve;
@@ -489,21 +545,24 @@ EVM tokens, address-typed paths:
 | same | `mtxTrade`, `mtxCancelOrder`, `mtxInvalidateNonces` | `o.from` | N | `_requireValidSignature`; `msg.sender == o.dex` |
 | `MetaTokenBase` | `mtxTransfer`, `mtxTransferWithFee`, `mtxExecuteWithFee`, `mtxPay`, `mtxBatch` | `from` / `m.from` | N | same pipeline |
 | same | `payWithFee`, `wrap`, `unwrap`, `addReserve`; `mtxWrap` | sender (`_msgSender()`); `o.from` | N | — ; the underlying's `mtxTrade` |
-| `mtxPayReceiverFee` (planned) | payer `m.from`, payee `m.to` co-sign | N (payer), N (payee) | `_requireValidSignature` | |
+| same | `mtxPayReceiverFee` | payer `t.from`, payee `t.to` co-signs | N (payer), N (payee) | `_requireValidSignature` |
+| same (SPECIFIED, UA-5a) | `payWithFeeToUA`; `wrapToUA`; `unwrapToUA`; `mintToUA` (`NONE*`, minter) | sender (`_msgSender()`), or for `unwrapToUA` the signer of `uaExecute`; receiver `to` | sender N (`unwrapToUA`: U); `to` U-derived | — ([CTR-UA-28](#CTR-UA-28)) |
 | Hedera children | as above | as above | N incl. `hedera-native` | HIP-632 for 64-byte sigs from codeless accounts |
-| regulated tokens (planned) | transfers, `recordOrder`, `freeze`, … | `to`, `account` | N (address-keyed `ComplianceRegistry`) | — |
+| regulated tokens (planned) | transfers, `recordOrder`, `freeze`, … | `to`, `account` | N (address-keyed `ComplianceRegistry`); U when built, keyed by `bytes32` ([CTR-UA-27](#CTR-UA-27)) | — |
 
 EVM Zether (the `*_ZETHER` kinds, built P3, re-pointed at migration):
 
 | Function | Subject | Accepts | Verified by |
 |---|---|---|---|
-| `zetherShield(encodedY, amount)` | receiver `UA(zether, Y)`; sender pays | Z (registered); sender N | registry `kindOf` |
+| `zetherShield(encodedY, amount)` | receiver `UA(zether, Y)`; sender pays | Z (registered); sender N, or U through `uaExecute` (UA-5c) | registry `kindOf` |
 | `zetherTransfer(payload, proof, authSig, beneficiary)` | `from = UA(Y_f)`, `to = UA(Y_t)`, `beneficiary` | Z, Z, Z | proof + `requireZetherAuthorized(from, digest, authSig, zkCovered = true)` ⇒ Z-auth |
 | `zetherUnshield(payload, proof, authSig, beneficiary, to, amount)` | `from`, `beneficiary`; `to` address | Z, Z; recipient N | as transfer |
+| `zetherUnshieldToUA(…, bytes32 to, amount)`, `zetherUnshieldUnwrapToUA` (SPECIFIED, UA-5c) | `from`, `beneficiary`; `to` id | Z, Z; recipient U-derived | as transfer ([CTR-ZTH-51](zether.md#CTR-ZTH-51)) |
 | `zetherRollOverSigned(ua, …, sig)`, `zetherSetRollOverMode(ua, …, sig)` | `ua` | Z | `requireZetherAuthorized(ua, digest, sig, zkCovered = false)` ⇒ Z-auth (self ⇒ Zether Schnorr by `x`, purpose `zether-owner`) |
 | `zetherRollOver(ua)`, `zetherRollOverBatch(uas)` | `ua` | Z | none (public) |
 | `wrap`, `unwrap` | sender | N | — |
 | `mtxExecute(m, sig)` (self-call of `zetherTransfer`/`zetherUnshield`/`zetherShield`/`wrap`/`unwrap`, outer fee) | `m.from` (outer-fee payer) | N | the base's `_requireValidSignature` |
+| `uaExecute(m, auth)` (the same self-calls under the UA envelope binding, outer fee from the UA ledger; SPECIFIED, UA-5c) | `m.from` (outer-fee payer) | U | `requireAuthorized` (derived) / the native check ([CTR-ZTH-51](zether.md#CTR-ZTH-51)) |
 | views `registered`, `accountState`, `sendCounter` | `ua` | Z | — |
 
 `authSig` for Z-auth: `0x` with a proof and `authRef = 0`. Otherwise it is what `requireAuthorized` takes for `authRef`
@@ -542,7 +601,9 @@ whose burn through `UA_POOL` debits that UA (`unwrap`: `UATransfer(ua, 0)` + `Tr
 Every movement emits `UATransfer(bytes32 from, bytes32 to, uint256 value)` (BUILT with `from` and `to` indexed) when a side
 is derived, and every move that changes a native balance also emits ERC-20 `Transfer`: native → UA is
 `Transfer(sender, UA_POOL)`, UA → native (including a fee from a UA to `feeRecipient`) is `Transfer(UA_POOL, to)`; UA →
-UA emits `UATransfer` only. Native `transfer`/`transferFrom` and v3 `to` refuse `UA_POOL` (`UAPoolNotPayable`).
+UA emits `UATransfer` only; a mint into a derived UA (`_uaMint`: `wrapToUA`, `mintToUA`, `uaWrap`,
+`zetherUnshieldToUA`; [CTR-UA-28](#CTR-UA-28)) emits `Transfer(0, UA_POOL)` and `UATransfer(0, ua)`. Native
+`transfer`/`transferFrom` and v3 `to` refuse `UA_POOL` (`UAPoolNotPayable`).
 Projecting `bytes32 → address` re-creates the 2^80 collision ([CTR-UA-03](#CTR-UA-03)); without the pool, replaying
 `Transfer` logs would stop equalling `balanceOf` for native holders. Naive ERC-20 indexers see one large `UA_POOL`
 holder; the SCaaS indexer splits it.
@@ -558,7 +619,8 @@ implementation's constructor immutable ([CTR-MTX-02](metatx.md#CTR-MTX-02)), che
 chainUid)` and copied `registry.chainUid()` into the clone at `initialize`; neither is built. This is a deliberate exception to "no second typehash"
 ([CTR-MTX-11](metatx.md#CTR-MTX-11)): that rule forbids a second hash of the **same** intent; these are different
 structs whose `from` cannot be an `address`. Clients build the UA struct shapes beside the address ones (vectors
-below).
+below). `UATradeOrder` and `UAInvalidateNonces` ([CTR-DEX-25](dex.md#CTR-DEX-25)) follow the same rule: own struct, own
+typehash, the sell token's domain.
 
 The `ua*` functions live in the one base, so every kind (built kinds `NONE`, `UNDERLYING`) has them. Storage adds `_uaBalance[bytes32]`, the used `metatx-cancel` digests (ERC-7201 `scaas.ua.ledger`) and
 `_uaNonce[bytes32][batch]` (BUILT: `MetaTxBase`'s one map, keyed by `bytes32`; the registry is an implementation
@@ -566,8 +628,10 @@ immutable, 0 = the ledger is off: every `ua*` reverts `UALedgerOff` and `support
 both paths; native ids are zero-padded).
 
 <a id="CTR-UA-26"></a>**CTR-UA-26** — **The UA path splits like the address path** (owner): a generic
-`UAMetaTransaction` (an allowlisted call of this token under a UA — today `unwrap` only, and `PqzToken`'s four PQZ
-selectors, [CTR-PQZ-21](pq-zether.md#CTR-PQZ-21)) and a typed `UAMetaTransfer` (transfer with `entryRef = 0`, or
+`UAMetaTransaction` (an allowlisted call of this token under a UA — BUILT: the two `unwrap`s with `minOut`;
+SPECIFIED: `unwrapToUA` and `burn` (UA-5a), `zetherShield` and the confidential ops under the UA envelope binding on
+the Zether kinds (UA-5c, [CTR-ZTH-51](zether.md#CTR-ZTH-51)); `PqzToken`'s four PQZ selectors,
+[CTR-PQZ-21](pq-zether.md#CTR-PQZ-21)) and a typed `UAMetaTransfer` (transfer with `entryRef = 0`, or
 payment). Both share the one nonce map `_uaNonce[bytes32][batch]` with the address path (native ids zero-padded). The
 `ua*` functions keep their signatures and build the struct of their kind; `uaExecuteTransfer` and `uaBatchTransfer`
 mirror `mtxExecuteTransfer` and `mtxBatchTransfer` ([CTR-MTX-23](metatx.md#CTR-MTX-23),
@@ -600,14 +664,18 @@ struct UAMetaTransfer {
 | `uaBatchTransfer(UAMetaTransfer[] ts, bytes[] auths)` | `UAMetaTransfer` per item | `mtxBatchTransfer` | each U | each |
 | `uaCancelNonce(bytes32 ua, uint256 batch, uint256 validUntil, bytes auth)` | — | `cancelNonce` | **derived** SIGNING `ua` only (purpose `metatx-cancel`); native ids use `cancelNonce` (sender), which writes `_uaNonce[pad(sender)]` | — |
 | `transferToUA(bytes32 to, uint256 amount)` | — | — | sender N | registered SIGNING (emits `Transfer(sender, UA_POOL)` + `UATransfer`) |
+| `uaPayReceiverFee(UAMetaTransfer t, payerAuth, fee, feeRecipient, rfValidUntil, payeeAuth)` (SPECIFIED, UA-5a) | `UAMetaTransfer` as given; the payee co-signs `ReceiverFee` | `mtxPayReceiverFee` | U | U, co-signs (derived: purpose `receiver-fee`) ([CTR-MTX-05](metatx.md#CTR-MTX-05)) |
+| `uaTrade(UATradeOrder o, auth, f)` (only `o.dex`), `uaCancelOrder`, `uaInvalidateNonces` (SPECIFIED, UA-5b) | `UATradeOrder` / `CancelOrder` / `UAInvalidateNonces` | `mtxTrade`, `mtxCancelOrder`, `mtxInvalidateNonces` | U (purpose `trade`) | `o.dex`; proceeds to `o.destination` U via the DEX ([CTR-DEX-25](dex.md#CTR-DEX-25)) |
+| `uaWrap(address u, UATradeOrder o, auth)` (SPECIFIED, UA-5b) | `UATradeOrder` on the underlying | `mtxWrap` | U | `o.destination` U ([CTR-TOK-20](token-wrappers.md#CTR-TOK-20)) |
 | views `balanceOfUA(bytes32)`, `uaNonce(bytes32, batch)`, `uaDigest(m)`, `uaTransferDigest(t)`, `registry()` | — | — | — | — |
 
 Rules: step 5 of the pipeline is ECDSA/1271 over the v3 EIP-712 digest when `from` is a native id (`from >> 160 == 0`),
 classified per [CTR-UA-24](#CTR-UA-24) (a 7702-delegated `from`: ECDSA, else 1271 — not v2's `_isContract` rule), else
 `registry.requireAuthorized(from, PURPOSE_METATX, digest, auth)`. Selectors allowed in `UAMetaTransaction.data`: the
-UA allowlist (`unwrap(…)`; on `PqzToken` its four PQZ selectors); **`approve` and `trade` are refused in every `ua*`
-function, for native `from` too**
-(`MetaTxUnknownOp`; natives use the address-typed path; a UA-ledger allowance model waits for DEX v2). The base **keeps the
+UA allowlist (`unwrap(…)`, with UA-5a/5c the selectors above; on `PqzToken` its four PQZ selectors); **`approve`,
+`mtxTrade` and `uaTrade` are refused in every `ua*` function, for native `from` too** (`MetaTxUnknownOp`): a UA trades
+by a signed `UATradeOrder` ([CTR-DEX-25](dex.md#CTR-DEX-25)) and never holds an allowance
+([CTR-UA-27](#CTR-UA-27)). The base **keeps the
 address-typed entry points** (`mtxExecute`, `mtx*`) unchanged; they and the `ua*` functions share one
 nonce map, `_uaNonce[pad(addr)]`, so one native nonce cannot be used on both paths (test T-V3-1).
 
@@ -627,16 +695,48 @@ derived one is required), `UAInsufficientBalance`, `UACancelUsed`, `MetaTxUnknow
 fallback decoder is not built (owner: no size work before Glamsterdam); every token implementation exceeds 24 576 bytes
 (`size-baseline.json`), so chains need 64 KiB code until then; verification code never lives in the token.
 
+<a id="ua-receivers"></a>
+<a id="CTR-UA-28"></a>**CTR-UA-28** — **A native caller credits a derived UA in one call** (owner 2026-10-13: the receiver
+axis of [CTR-UA-27](#CTR-UA-27), Q9; the TODO's "UA wrap in one step"). Beside `transferToUA`, every `address` receiver
+of a direct path gets a `bytes32` form. A mint into a UA is a UA-ledger move from 0, so it emits `Transfer(0, UA_POOL,
+v)` and `UATransfer(0, ua, v)`:
+
+```solidity
+function _uaMint(bytes32 to, uint256 v) internal;  // ERC20MetaTx: `to` registered SIGNING (derived); _uaMove(0, to, v)
+// UnderlyingToken (and UNDERLYING_ZETHER)
+function wrapToUA(address u, uint256 amount, bytes32 to) external payable returns (uint256 minted);
+function unwrapToUA(address u, uint256 wrapped, bytes32 to, uint256 minOut) external returns (uint256 out, uint256 burned);
+// NoUnderlyingToken (and NONE_ZETHER): MINTABLE, role minter, as mint
+function mintToUA(bytes32 to, uint256 amount) external;
+// every kind: PAYABLE, as payWithFee
+function payWithFeeToUA(bytes32 to, uint256 amount, FeeMode feeMode, uint256 fee, address feeRecipient,
+                        bytes32 entryRef) external returns (bool);
+event UnwrappedToUA(address indexed account, address indexed underlying, bytes32 indexed to, uint256 burned, uint256 out);
+error UALegNotLedger(address token);
+```
+
+| Function | Rule |
+|---|---|
+| `wrapToUA` | exactly `wrap(u, amount)` — `UnderlyingLib.wrap(i, amount, _msgSender(), msg.value)` on any leg (outside ERC-20, HTS, native coin) — then `_uaMint(to, minted)`; `Wrapped(account, u, received, minted)`. Address allowlist `ABSOLUTE` ([CTR-MTX-19](metatx.md#CTR-MTX-19)): relayed, a self-call carries no value (a native-coin leg reverts as the address path does) and the fee is charged after the call from the signer's own native balance of this token (a signer without one signs fee `NONE`). Not on the UA allowlist (a UA holds no outside underlying; a UA holding a SCaaS underlying uses `uaWrap`, UA-5b). No single-leg `wrapToUA(uint256, bytes32)`. |
+| `unwrapToUA` | the checks of `unwrap(u, …)`; burns from the subject (a native caller, or a UA through `UA_POOL` under `uaExecute`), `reserve -= out`, then pays leg `u` by `IUALedger(u).transferToUA(to, out)`; the wrapper's own balance of `u` must drop by exactly `out` (`UnderlyingTransferMismatch`). A leg whose token does not report `IUALedger` by ERC-165 (an outside ERC-20, HTS, the native coin, a SCaaS token with the ledger off) reverts `UALegNotLedger(u)`; a native `to` reverts in `u` (`UANotRegistered`: use `unwrap`). Event `UnwrappedToUA(account, u, to, burned, out)` (`account` = `UA_POOL` under a derived subject, whose burn `UATransfer(ua, 0)` names it; controller ruling, pending the owner). Both allowlists, `AMOUNT(1)`. |
+| `mintToUA` | `mint`'s role check (`MINTABLE`, role `minter`), then `_uaMint(to, amount)`; a native `to` reverts `UANotRegistered` (use `mint`); never allowlisted (a role function, [CTR-MTX-19](metatx.md#CTR-MTX-19)). |
+| `payWithFeeToUA` | `payWithFee` with a derived payee: the caller (`_msgSender()`, native: not allowlisted, it charges its own fee) pays `amount` to `to` by `_uaMove(pad(payer), to, amount)` and the fee on top to `feeRecipient`; a native `to` reverts `UANotRegistered` (use `payWithFee`); emits `UAPaymentSettled(pad(payer), to, amount, feeAmount, feeRecipient, entryRef)`. `MandateWallet` pays a derived payee through it ([CTR-ACC-12](mandates.md#CTR-ACC-12)). |
+
+Every `to` is checked as a `UAMetaTransfer` receiver (`UANotRegistered`, `UAKindNotAccepted`). The reserve invariant of
+the wrapper kinds is unchanged: `totalSupply` counts `UA_POOL`. `uaPayReceiverFee` (the UA twin of receiver-pays) is
+[CTR-MTX-05](metatx.md#CTR-MTX-05); `zetherUnshieldToUA` is [CTR-ZTH-51](zether.md#CTR-ZTH-51). Status **SPECIFIED**
+(UA-5a; plan `docs/superpowers/plans/2026-10-13-ua5a-receivers-wrap.md`).
+
 EVM DEX, mandates, accounts, registry:
 
 | Contract | Function | Subject | Accepts | Note |
 |---|---|---|---|---|
-| `SCaaSDex` | `mtxSettle`, `mtxCancelOrders`, `mtxInvalidateNonces`; SCaaS legs through the token's `mtxTrade` | `o.from` | N | outside legs: `_validSig`, its ERC-1271 branch with the 50 k/400 k cap ([CTR-DEX-08](dex.md#CTR-DEX-08)); SCaaS legs: the token; UA legs wait for a `bytes32` order |
-| `MandateWallet` (native 1271 itself) | `setMandate`, `setPayee`, `revoke`, `execute`; `mtxExecuteAsOwner`; `mtxPayUnderMandate`, `mtxRevoke` | owner; delegate | owner N (ECDSA); delegate N (ECDSA) | a UA owner/delegate = a future `MandateWallet` v2 calling `requireAuthorized` |
+| `SCaaSDex` | `mtxSettle`, `mtxCancelOrders`, `mtxInvalidateNonces`; SCaaS legs through the token's `mtxTrade` | `o.from` | N; U on shape-1 legs (`UATradeOrder` on SCaaS ledger tokens, SPECIFIED, UA-5b) | outside legs: `_validSig`, its ERC-1271 branch with the 50 k/400 k cap ([CTR-DEX-08](dex.md#CTR-DEX-08)), native only; SCaaS legs: the token (`mtxTrade` / `uaTrade`, [CTR-DEX-26](dex.md#CTR-DEX-26)) |
+| `MandateWallet` (native 1271 itself) | `setMandate`, `setPayee`, `revoke`, `execute`; `mtxExecuteAsOwner`; `mtxPayUnderMandate`, `mtxRevoke` | owner; delegate; payee | owner N (ECDSA); delegate N (ECDSA); payee N — SPECIFIED (UA-5c): owner, delegate, payee U | UA ids through the generic UA pipeline of `MetaTxBase`; a derived owner gets no ERC-1271 answer ([CTR-ACC-12](mandates.md#CTR-ACC-12)) |
 | `SmartKeyAccount` (option (b)) | `mtxExecuteAsOwner`, `isValidSignature`, recovery | its keys | P-256 WebAuthn, secp256k1 (account keys) | is itself an N id |
 | `UARegistry` | `register` | — | any derived kind | PoP |
-| `SealedBidTender` (planned) | `commitBid(… m, depositSig)`; `revealBid`, `withdrawDeposit` | bidder = `m.from` | N | a UA bidder needs a v3 deposit token; the bidder id in the commitment becomes `bytes32` then |
-| `VestingGrant`, `Distribution`, `ExchangeOffer` (planned) | `release`, `claim(account)`, `exchange(m, sig)` | beneficiary, account | N | beneficiaries "should be a `SmartKeyAccount`" — still valid as option (b) |
+| `SealedBidTender` (planned) | `commitBid(… m, depositSig)`; `revealBid`, `withdrawDeposit` | bidder = `m.from` | N; U when built ([CTR-UA-27](#CTR-UA-27)) | a UA bidder deposits through the UA ledger; the bidder id in the commitment is `bytes32` |
+| `VestingGrant`, `Distribution`, `ExchangeOffer` (planned) | `release`, `claim(account)`, `exchange(m, sig)` | beneficiary, account | N; U when built ([CTR-UA-27](#CTR-UA-27)) | beneficiaries keyed by `bytes32`; a `SmartKeyAccount` beneficiary stays valid as option (b) |
 
 **Transitional (BUILT names).** `SmartKeyAccount` and `MandateWallet` expose `executeAsOwner(data, nonce, validUntil,
 signature)` (recovery cancel: `executeAsOwner(cancelRecovery)`); Zether exposes `rollOverSigned(ua, …, sig)` and

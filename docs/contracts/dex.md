@@ -7,6 +7,8 @@ itself, which moves funds only into the DEX the signer named. Status: the target
 `TradeOrder`s, `SCaaSDex.mtxSettle`, outside-token legs, one signed fee rate, the exchange path against AMMs
 `mtxExchange`, the `DexPuller`) **BUILT** (`SCaaSDex`, P2b-1, P2b-2, P2c; the node's venue on it, P5); `SCaaSDexV1` and
 `MetaTxDex` are in `legacy/p5/` ([Transitional](#transitional-built)); non-EVM settlement programs **BUILT** with the fixes below **SPECIFIED**.
+UA orders and legs — a derived UA (PQ kinds included) trades through `UATradeOrder` on its SCaaS tokens and in the same
+book ([CTR-DEX-25](#CTR-DEX-25), [CTR-DEX-26](#CTR-DEX-26); owner 2026-10-13) — are **SPECIFIED** (UA-5b).
 
 **Contents**
 
@@ -102,7 +104,9 @@ passkey `SmartKeyAccount`), told apart as in the token pipeline (an EIP-7702 des
 consumed per fill: it is the cancel handle of its lane. `relayer ≠ 0` means only that address may submit the
 settlement — the meaning of `MetaTransaction.relayer`. Clients show `dex`, `relayer`, `destination` and the effective
 minimum fill before signing, warn when `destination ≠ from`, default `relayer` to the venue node, and label the order
-lane and the meta-tx lane (both called `batch`; they live in different maps).
+lane and the meta-tx lane (both called `batch`; they live in different maps). A UA signs the same order as
+`UATradeOrder` (`bytes32 from`, `bytes32 destination`, otherwise the same fields) in the sell token's domain under the
+UA purpose `trade` ([CTR-DEX-25](#CTR-DEX-25)).
 
 <a id="CTR-DEX-14"></a>**CTR-DEX-14** — **Minimum fill: the signer's `minFill` over a 50 % floor, for every order in a
 settlement** (owner). `MIN_FILL_PPM = 500_000`; the effective minimum is
@@ -153,7 +157,9 @@ function tradeOrderDigest(TradeOrder calldata o) external view returns (bytes32)
    (`BadFlags`); `amount > 0`, `receiveAmount > 0`
    (`ZeroAmount`); `minFill ≤ amount` (`BadMinFill`); `fee ≤ 10 000` (`FeeAboveCap`).
 4. Signature over `h` = the order's digest through the virtual `_requireValidSignature` (EOA low-s, ERC-1271 with the
-   50 k/400 k cap; Hedera's override adds HIP-632).
+   50 k/400 k cap; Hedera's override adds HIP-632). **Skipped when `pulled[h] ≠ 0`** (owner 2026-10-13; SPECIFIED,
+   UA-5b; on the DEX's outside legs too): `pulled[h]` becomes non-zero only after a verified pull or a verified cancel,
+   and `h` binds every field, so a Path A order's second fill needs no second check (for a PQ signer up to 5.95 M gas).
 5. With `p = pulled[h]`: `p < amount` (`OrderClosed` — covers filled, cancelled and already-pulled IOC orders).
 6. **Path A** (`ESCROW` clear) — the token enforces every bound the signer set, against the figures the DEX passes:
    `f.sellFill > 0` (`ZeroFill`); `p + f.sellFill ≤ amount` (`Overfill`); the effective minimum and the received-side
@@ -167,12 +173,48 @@ function tradeOrderDigest(TradeOrder calldata o) external view returns (bytes32)
    receiveFill, dexFee)` (a Path B leg shows `sellFill = amount`, `receiveFill = 0`; the DEX's `LegSettled` is the
    accounting record of what was matched and refunded).
 
+`minNonce` is keyed by id (`bytes32`, an address zero-padded: the same slots) once the UA form exists, so
+`mtxInvalidateNonces(addr, b, n)` and `uaInvalidateNonces(pad(addr), b, n)` raise one floor (SPECIFIED, UA-5b).
 The token has exactly one recipient, `o.dex`; it splits nothing and pays no fee itself. With `sellFill > 0` and
 `receiveAmount > 0` the price and received-side checks force `receiveFill > 0`. `mtxTrade` is not in any allowlist
 (`msg.sender` must be a contract other than the token) and stays a direct read of `msg.sender`
 ([CTR-MTX-18](metatx.md#CTR-MTX-18)); a wrapper calls it to wrap by signature ([CTR-TOK-20](token-wrappers.md#CTR-TOK-20)).
 
 **Transitional (BUILT, P2a).** The token side is built on every kind on `MetaTokenBase` (`NONE`, `UNDERLYING`, and P3's `*_ZETHER` for their public units; refused inside `mtxExecute`); v1 `MetaToken` has no `mtxTrade`: `mtxTrade`, `mtxCancelOrder`, `mtxInvalidateNonces`, `pulled`, `minNonce`, `tradeOrderDigest`, `cancelOrderDigest`, `invalidateNoncesDigest` and the events, in `ERC20MetaTx` through the external `TradeLib` (namespace `scaas.trade`, `precheck` → the token's signature check → `record`). Errors the list leaves open (controller ruling, pending the owner): `MinNonceNotIncreasing(current, requested)`, `MinNonceAboveCap(requested)`; `EscrowFillShape` is named by the spec and carries the order hash, `NotDex` and `DexNotContract` are named by the spec and only their arguments (the caller, the `dex`) were open; the others carry the order hash. The DEX side is `SCaaSDex` ([CTR-DEX-16](#CTR-DEX-16)).
+
+<a id="ua-trade"></a>
+<a id="CTR-DEX-25"></a>**CTR-DEX-25** — **`UATradeOrder`: a UA's order, verified by its token** (owner 2026-10-13,
+[CTR-UA-27](accounts.md#CTR-UA-27)). A separate struct in the sell token's domain, because `from` cannot be an
+`address` ([CTR-UA-19](accounts.md#CTR-UA-19)); `TradeOrder` and its vectors do not change. A native id may sign it too
+(zero-padded): that is how a native seller names a UA `destination`.
+
+```solidity
+struct UATradeOrder {
+    bytes32 from; address receiveToken; uint256 amount; uint256 receiveAmount; uint256 minFill; uint256 fee;
+    address relayer; address dex; bytes32 destination; uint8 flags; uint256 batch; uint256 nonce; uint256 validUntil;
+}
+// "UATradeOrder(bytes32 from,address receiveToken,uint256 amount,uint256 receiveAmount,uint256 minFill,uint256 fee,"
+// "address relayer,address dex,bytes32 destination,uint8 flags,uint256 batch,uint256 nonce,uint256 validUntil)"
+// "UAInvalidateNonces(bytes32 from,uint256 batch,uint256 minNonce)"; cancel: CancelOrder(bytes32 orderHash), orderHash = the UATradeOrder digest
+function uaTrade(UATradeOrder calldata o, bytes calldata auth, TradeFill calldata f) external;           // only o.dex
+function uaCancelOrder(UATradeOrder calldata o, bytes calldata auth) external;                          // never expires
+function uaInvalidateNonces(bytes32 from, uint256 batch, uint256 newMin, bytes calldata auth) external; // strictly up
+function uaTradeOrderDigest(UATradeOrder calldata o) external view returns (bytes32);
+function uaInvalidateNoncesDigest(bytes32 from, uint256 batch, uint256 newMin) external view returns (bytes32);
+function uaMinNonce(bytes32 from, uint256 batch) external view returns (uint256);
+event UATradeFilled(bytes32 indexed orderHash, bytes32 indexed from, uint256 sellFill, uint256 receiveFill, uint256 dexFee);
+event UAOrderCancelled(bytes32 indexed orderHash, bytes32 indexed from);
+event UANoncesInvalidated(bytes32 indexed from, uint256 indexed batch, uint256 minNonce);
+```
+
+`uaTrade` checks exactly [CTR-DEX-15](#CTR-DEX-15) steps 1–8 with `o.from ≠ pad(this)` (`SelfOrder`) and step 4 by the
+UA rule: a native `from` signs the digest itself, a derived one through `requireAuthorized(from, trade, h, auth)` (the
+purpose `trade`, [accounts.md](accounts.md#purposes)); the same purpose covers the `CancelOrder` digest over a UA order
+hash and the `UAInvalidateNonces` digest. The fill moves by `_uaMove(o.from, pad(o.dex), sellFill)` (a derived seller:
+`Transfer(UA_POOL, dex)` + `UATransfer`). `pulled[h]` is keyed by the digest; `minNonce` is the one `bytes32`-keyed map
+of CTR-DEX-15 (one floor per id across both structs); `TradeLib`'s checks run over the fields both structs share, so no
+logic is duplicated. The rest of CTR-DEX-15 (one recipient, no allowlist, a direct read of `msg.sender`) and
+CTR-DEX-02 (cancels never expire, the `2^128` cap) apply unchanged. Status **SPECIFIED** (UA-5b).
 
 <a id="CTR-DEX-04"></a>**CTR-DEX-04** — **IOC is closed on chain at its single pull.** An `IOC` order is pulled **once**:
 the token (or, for an outside leg, the DEX) sets `pulled[h] = amount` at that pull, whatever was matched, so an IOC
@@ -203,7 +245,8 @@ at once. For outside-token orders the DEX keeps the same state and entry points 
 unchanged balances** (owner).
 
 ```solidity
-struct Leg { address sellToken; TradeOrder o; bytes sig; uint256 fill; }  // fill = sellFill of this leg in this call
+struct Leg { address sellToken; TradeOrder o; bytes sig; uint256 fill; }  // fill = sellFill of this leg in this call (BUILT)
+// UA-5b (CTR-DEX-26): struct Leg { address sellToken; uint8 shape; bytes order; bytes sig; uint256 fill; }
 struct Settlement { bytes32 ref; Leg taker; Leg[] makers; }               // ref: chosen by the submitter, echoed in events only
 function mtxSettle(Settlement[] calldata s) external nonReentrant returns (bool[] memory ok); // each settlement atomic (low-level self-call)
 ```
@@ -254,6 +297,59 @@ construction; fee-on-transfer, rebasing and hook (ERC-777) outside tokens are no
 DEX's own balance moves and conservation reverts the settlement. `SCaaSDex` keeps its book semantics (price-time
 priority, limit + IOC/FOK, partial fills above the effective minimum); the execution price is each maker's signed
 price, rounded in the maker's favour, and the node only emits matches that pass the same checks as the contract.
+
+<a id="ua-legs"></a>
+<a id="CTR-DEX-26"></a>**CTR-DEX-26** — **UA legs: `SCaaSDex` takes tagged legs, one book for UA and native orders**
+(owner 2026-10-13: extended in place, not a second DEX; nothing is deployed, so the `Leg` and `ExchangeLeg` ABI
+change). A leg names its order's shape:
+
+```solidity
+struct Leg         { address sellToken; uint8 shape; bytes order; bytes sig; uint256 fill; }
+struct ExchangeLeg { address sellToken; uint8 shape; bytes order; bytes sig; uint256 sellFill; uint256 receiveFill; }
+// shape 0: order = abi.encode(TradeOrder)    — today's legs
+// shape 1: order = abi.encode(UATradeOrder)  — sig = the registry auth (derived) or the native signature
+event UALegSettled(bytes32 indexed ref, bytes32 indexed orderHash, bytes32 indexed from, bytes32 destination,
+                   uint256 sold, uint256 received, uint256 dexFee, uint256 refund, uint256 relayerShare, uint256 treasuryShare);
+event UAExchangeLegSettled(bytes32 indexed ref, bytes32 indexed orderHash, bytes32 indexed from, bytes32 destination,
+                   uint256 sold, uint256 receivedFloor, uint256 surplus, uint256 dexFee, uint256 refund, uint256 limitReceive);
+```
+
+The DEX decodes each leg into one internal form with ids as `bytes32` and runs the logic of
+[CTR-DEX-16](#CTR-DEX-16) and [CTR-DEX-20](#CTR-DEX-20) on it; a UA order can match a native one.
+
+| Step | Shape 1 |
+|---|---|
+| leg kind | `sellToken` recorded SCaaS at `setMarket` and its ledger on, else `UALegNotLedger(sellToken)`; never a `DexOrder`, never the `DexPuller` (a UA holds no outside token) |
+| pull | `uaTrade(o, sig, f)` on the sell token, which verifies ([CTR-DEX-25](#CTR-DEX-25)) |
+| self-trade | over ids: a native order and its padded id are one party (`SelfTrade`) |
+| payout | `to = destination == 0 ? from : destination`; a derived `to` is paid by `IUALedger(receiveToken).transferToUA(to, amount)` from the DEX's own balance (`receiveToken` a SCaaS ledger token, else `UAReceiveNotLedger(receiveToken)`), a native one by `safeTransfer` |
+| Path B refund | to a derived `from` by `transferToUA` on the sell token |
+| fee shares, conservation | unchanged: relayer and treasury are addresses; `transferToUA` lowers the DEX's own `balanceOf` as `safeTransfer` does |
+| events | `UALegSettled` / `UAExchangeLegSettled` for a shape-1 leg; `LegSettled` / `ExchangeLegSettled` keep their shape |
+
+- **Gas starvation.** The registry reverts `UAVerifyGas` when less than `cap + cap/63 + margin` is left; `mtxSettle`
+  re-raises it as a whole-call revert, exactly as `SigCheckGasStarved` ([CTR-DEX-08](#CTR-DEX-08)), so a starved
+  submitter never turns a valid UA order into `MatchFailed` and the node never drops it
+  ([NODE-DEX-06](../node/dex-venue.md#NODE-DEX-06)).
+- **Interactions.** `uaTrade`'s selector is refused in every interaction as `mtxTrade`'s is
+  ([CTR-DEX-23](#CTR-DEX-23)): an interaction runs as the DEX, which is `o.dex` of every order.
+- **Packing by the caps.** A shape-1 leg costs its kind's verify (the registry holds the full cap before each call),
+  ≈ 0.12 M of leg work (estimate, measured in UA-5b) and its signature calldata; one transaction is bounded by the
+  EIP-7825 cap 16,777,216 (Hedera: 15 M), ≈ 0.17 M of settlement base. Every settlement of one `mtxSettle` shares that
+  cap, so the node packs settlements by the leg kinds' caps ([accounts.md](accounts.md#CTR-UA-23)):
+
+| Leg kind | Cap (gas) | Sig calldata | Legs of that kind per transaction (16.78 M) | Hedera (15 M) |
+|---|---|---|---|---|
+| `mldsa65` (cached key) | 5,950,000 | 3,309 B | 2 | 2 |
+| `mldsa44` (cached key) | 4,250,000 | 2,420 B | 3 | 3 |
+| `fndsa512` | 2,500,000 | 666 B | 6 | 5 |
+| `slhdsa128s` | 1,400,000 | 7,856 B | 10 | 9 |
+| `ed25519` | 210,000 | 96 B | ≈ 50 | ≈ 45 |
+| classical (`bip340`, `p256`, native) | ≤ 50,000 | ≤ 400 B | > 90 (settlement work bounds it) | > 80 |
+| `msig` at `verifyBudget` | up to 12,000,000 | Σ members | 1, plus classical legs | 1 |
+
+A PQ taker against one PQ maker fits everywhere; against two `mldsa65` makers it does not, and the node splits it. A
+resting order's second fill verifies nothing ([CTR-DEX-15](#CTR-DEX-15) step 4). Status **SPECIFIED** (UA-5b).
 
 ## 5. Fees and admin
 
@@ -334,6 +430,7 @@ by the DEX** (a contract SCaaS does not control cannot verify it):
 | Pull | `DexPuller.pull(token, from, sellFill)` = `safeTransferFrom(from, DEX, sellFill)` under the party's allowance to the **puller**, never to the DEX ([CTR-DEX-22](#CTR-DEX-22)); an EOA may approve a contract on a token SCaaS does not control |
 | Cancel | `mtxCancelOrders(DexOrder[] orders, bytes[] sigs)` (`CancelOrder(bytes32 orderHash)` in the DEX domain; closed or bad-signature items skipped, no revert of the batch) and `mtxInvalidateNonces(from, batch, newMin, sig)` (`InvalidateNonces(address from,uint256 batch,uint256 minNonce)` in the DEX domain) |
 | Backstop | conservation ([CTR-DEX-16](#CTR-DEX-16)) |
+| Parties | native only: a UA holds no outside token ([CTR-UA-27](accounts.md#CTR-UA-27)); a shape-1 leg in an outside token reverts `UALegNotLedger` ([CTR-DEX-26](#CTR-DEX-26)) |
 | Transitional (BUILT, P2b-2) | on the DEX: `dexOrderDigest(sellToken, o)`, `cancelOrderDigest`, `invalidateNoncesDigest`, `pulled`, `minNonce`, `puller()`; `TradeLib`'s checks on the DEX's own `scaas.trade` state, the leg's token as the sell token (`SelfOrder` if `from` is it); `BadSignature(digest)`, `LengthMismatch`; payouts by `SafeERC20`; no `checkOrder`: the [section 10](#10-intake-reads-and-invariants) reads are the intake (controller ruling, pending the owner); limitation: no HIP-632 branch on DEX signatures, so a Hedera ED25519 account cannot sign a `DexOrder` or a DEX cancel |
 
 ## 7. Exchange settlement
@@ -343,7 +440,7 @@ by the DEX** (a contract SCaaS does not control cannot verify it):
 multi-hop routes, cycles — instead of `makers[]`; the same order, no new signature** (owner). Beside `mtxSettle`:
 
 ```solidity
-struct ExchangeLeg  { address sellToken; TradeOrder o; bytes sig; uint256 sellFill; uint256 receiveFill; } // receiveFill = floor
+struct ExchangeLeg  { address sellToken; TradeOrder o; bytes sig; uint256 sellFill; uint256 receiveFill; } // receiveFill = floor (BUILT; UA-5b: tagged, CTR-DEX-26)
 struct Interaction  { address target; bytes data; }                       // no value: the DEX holds no native coin
 struct ExchangePlan { bytes32 ref; ExchangeLeg[] legs; address[] extraTokens; } // extraTokens: intermediate hop tokens
 function mtxExchange(ExchangePlan calldata p, Interaction[] calldata interactions) external nonReentrant;  // (a) DEX calls
@@ -386,8 +483,8 @@ Holders of an **outside** token approve the puller, never the DEX; the DEX calls
 held could be spent by `outsideToken.transferFrom(victim, attacker, x)`. SCaaS tokens need no allowance at all.
 
 <a id="CTR-DEX-23"></a>**CTR-DEX-23** — **What an interaction may call; listed targets** (owner). (a) refuses an
-interaction unless `target ∉ {DEX, puller}` (`ForbiddenTarget`), `data.length ≥ 4` and `bytes4(data) ≠
-mtxTrade.selector` for **every** target (`ForbiddenSelector`; else an interaction could pull a victim's resting order
+interaction unless `target ∉ {DEX, puller}` (`ForbiddenTarget`), `data.length ≥ 4` and `bytes4(data) ∉
+{mtxTrade.selector, uaTrade.selector}` (`uaTrade` with UA-5b, [CTR-DEX-26](#CTR-DEX-26)) for **every** target (`ForbiddenSelector`; else an interaction could pull a victim's resting order
 that names this DEX with an invented `receiveFill` and move the same amount out, and conservation would balance), and,
 when any leg sets `LISTED_POOLS` **or** the admin's listed-only mode is on, `exchangeTarget[target]`
 (`TargetNotListed`). (b) needs no blocklist — an executor that re-enters hits `nonReentrant`, calls `mtxTrade` is not

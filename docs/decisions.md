@@ -1614,6 +1614,8 @@ Change (2026-10-08): every SCaaS contract on `MetaTxBase` signs in `("SCaaS <Con
 ### CTR-MTX-05 — Receiver-pays via payee co-signed ReceiverFee
 - old: R192 · status: current · owner: no · date: 2026-10-08 · normative: contracts/metatx.md#CTR-MTX-05 · superseded-by: —
 
+Change (2026-10-13): owner — the UA twin `uaPayReceiverFee(UAMetaTransfer t, payerAuth, fee, feeRecipient, rfValidUntil, payeeAuth)`: payer and payee are ids; the payee co-signs the same `ReceiverFee` over the payer's UA digest, a derived payee through `requireAuthorized` under purpose `receiver-fee`; event `UAReceiverFeePaid`. SPECIFIED (UA-5a). The address-path function is BUILT (P1b/P1c), not planned. Source add: owner, 2026-10-13; `history/specs/2026-10-13-ua-parity-design.md` §4.8.
+
 **Why.** Receiver-pays needs the payee to consent to the fee; a co-signed `ReceiverFee` keeps both parties bound to the same numbers.
 **Cost if wrong.** Without the payee signature a relayer could charge the payee arbitrarily.
 **Source.** `history/specs/2026-10-06-tender-sponsorship-shredding.md:172`
@@ -1749,6 +1751,8 @@ Change (2026-10-08): the non-EVM exception is gone — non-EVM families name sig
 ### CTR-MTX-22 — MetaTxBase: the generic base of every SCaaS contract; fee NONE unless overridden
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/metatx.md#CTR-MTX-22 · superseded-by: —
 
+Change (2026-10-13): owner — the generic UA path (`uaExecute`, `uaBatch`, `uaCancelNonce`, the UA allowlist, the cancel-used set, the registry immutable) moves from `ERC20MetaTx` into `MetaTxBase` with a virtual `_chargeUAFee` refusing every mode but `NONE`, so `MandateWallet` and any contract on the base take UA signers; balances, `_uaMove` and the typed UA path stay in `ERC20MetaTx`. SPECIFIED (UA-5c). Source add: owner, 2026-10-13; `history/specs/2026-10-13-ua-parity-design.md` §4.12, UP-13, O7, Q8.
+
 **Why.** SCaaS meta-transactions exist so that someone other than the subject pays for a call of any SCaaS contract, not only for moving tokens (owner: a family-tree contract whose edits a service company pays for in native gas). One generic base gives every contract the struct, digest, lanes, ticket, allowlist and `mtxExecute`; a contract that holds no charged balance cannot collect a fee, so `_chargeFee` refuses every mode but `NONE` unless a token overrides it, and the sponsor settles with the user off chain.
 **Cost if wrong.** A token-only base forces every other contract to invent its own signed struct and nonce rules (as `MandateWallet` and `SmartKeyAccount` did); a fee field such a contract cannot collect would mislead signers.
 **Source.** `history/specs/2026-10-08-metatx-generic-call-design.md` §1, §2 G2, G3, §3 GC-2, GC-7.
@@ -1808,6 +1812,8 @@ Change (2026-10-08): the non-EVM exception is gone — non-EVM families name sig
 
 ### CTR-TOK-01 — Only contracts call approve, are spenders, or call transferFrom
 - old: R26 · status: current · owner: yes · date: 2026-10-08 · normative: contracts/token-wrappers.md#CTR-TOK-01 · superseded-by: —
+
+Change (2026-10-13): owner — a Universal Account never grants or holds an allowance either (no `uaApprove`); contracts move a UA's funds only against signed, named intents (CTR-UA-27). Source add: owner, 2026-10-13; `history/specs/2026-10-13-ua-parity-design.md` §4.4, UP-10, Q2.
 
 **Why.** An allowance held or granted by an EOA is the classic drain vector; the owner narrowed the rule to the **caller** of `approve` as well, so an EOA never holds or grants an allowance on a SCaaS token in any form (no meta-tx `approve`, no permit). Contract accounts approve through their own call path, where their guards run; a `TradeOrder`'s `dex` must be a contract and nothing more (owner-accepted residual risk, CTR-DEX-19). Outside tokens are not ours: an EOA may approve our wrapper on USDT.
 **Cost if wrong.** EOA phishing approvals drain balances; a gasless ERC-1271 `approve` would bypass Safe guards and thresholds.
@@ -1940,6 +1946,8 @@ Change (2026-10-08): the non-EVM exception is gone — non-EVM families name sig
 ### CTR-TOK-20 — Signature wrap of a SCaaS underlying (mtxWrap)
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/token-wrappers.md#CTR-TOK-20 · superseded-by: —
 
+Change (2026-10-13): owner — `uaWrap(u, UATradeOrder, auth)`: the same wrap by signature with a UA order pulled by the underlying's `uaTrade`, minting to a `bytes32` destination (derived: `_uaMint`); event `UAWrapped`. SPECIFIED (UA-5b). Source add: owner, 2026-10-13; `history/specs/2026-10-13-ua-parity-design.md` §4.3.
+
 **Why.** An EOA holding a SCaaS underlying cannot approve the wrapper, so the owner accepted a signature wrap: the holder signs a `TradeOrder` in the underlying's domain naming the wrapper as `dex`; the wrapper pulls through the underlying's `mtxTrade`, checks the received amount and mints in the same call, paying the relayer from the order's `fee`.
 **Cost if wrong.** Without it, holders of SCaaS underlyings could never wrap (or fund Zether) without a contract account.
 **Source.** `history/specs/2026-10-07-metatx-generic.md` §2 A9, §3 MG-7b.
@@ -2032,6 +2040,8 @@ Change (2026-10-09): `PAYABLE` and `BURNABLE` have no role and are always treate
 ### CTR-ACC-06 — Delegated payment uses MandateWallet, no allowance
 - old: R25 · status: current · owner: yes · date: 2026-10-08 · normative: contracts/mandates.md#CTR-ACC-06 · superseded-by: —
 
+Change (2026-10-13): owner — owner, delegate and payees may be UAs (CTR-ACC-12; SPECIFIED, UA-5c). Source add: owner, 2026-10-13; `history/specs/2026-10-13-ua-parity-design.md` §4.12, Q8.
+
 **Why.** Delegated payment through a dedicated `MandateWallet` (`mtxPayUnderMandate`) with per-token limits never exposes the payer's main balance to an allowance; a mandate is not an allowance, since the wallet, a contract, is the token's caller. The wallet's domain is salted with a deployer-chosen `chain_uid`, so the node checks it before relaying.
 **Cost if wrong.** An allowance-based mandate would be an unlimited spender on the payer's tokens.
 **Source.** `history/specs/2026-10-03-blockchain-payments-addendum-wallets.md:196`; `history/specs/2026-10-07-metatx-generic.md` §3 MG-3, MG-4, MG-7.
@@ -2072,6 +2082,13 @@ Change (2026-10-08): the epoch travels in the revoke data, `revoke(token, epoch)
 **Why.** "Smart" marks a contract account and "key" its many keys; the old name said nothing a reader could use. One name in every family (EVM `SmartKeyAccount` and `SmartKeyAccountFactory`, the Solana, Sui, Aptos and Soroban equivalents) is renamed in code in phase P4, all at once.
 **Cost if wrong.** Two names live side by side in code and docs for longer than P4; a half-renamed family reads as a different contract.
 **Source.** `history/specs/2026-10-08-token-tree-design.md` T15.
+
+### CTR-ACC-12 — A UA may own, delegate and receive under a MandateWallet
+- old: — · status: current · owner: yes · date: 2026-10-13 · normative: contracts/mandates.md#CTR-ACC-12 · superseded-by: —
+
+**Why.** `bytes32` owner, delegate and payees with the generic UA pipeline of `MetaTxBase` let a UA use a mandate without a wallet-specific signature path; a derived owner gets no ERC-1271 answer because callers cap 1271 at 50 k gas (a PQ check needs up to 5.95 M) and a 1271 answer would be a generic signing oracle for a UA key (CTR-UA-10 layer 1).
+**Cost if wrong.** A derived owner cannot pay by hand through ERC-1271; it acts through `uaExecute(execute(…))` on the wallet.
+**Source.** owner, 2026-10-13 (Q8); `history/specs/2026-10-13-ua-parity-design.md` §4.12, O7.
 
 ### CTR-ACC-80 — Typed owner and mandate structs (OwnerCall, PayUnderMandate, RevokeMandate)
 - old: — · status: superseded · owner: yes · date: 2026-10-08 · normative: — · superseded-by: CTR-ACC-06, CTR-ACC-07, CTR-ACC-10
@@ -2183,6 +2200,8 @@ Change (2026-10-08): `admin` is written once by `initialize` of a factory-made c
 ### CTR-DEX-15 — The sell token verifies the order and moves funds only into dex
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/dex.md#CTR-DEX-15 · superseded-by: —
 
+Change (2026-10-13): owner — step 4 is skipped when `pulled[h] ≠ 0` (verified at the first pull or cancel; `h` binds every field), on the token and on the DEX's outside legs; `minNonce` is keyed by `bytes32` (natives padded: same slots), one floor for `TradeOrder` and `UATradeOrder`. SPECIFIED (UA-5b). Source add: owner, 2026-10-13; `history/specs/2026-10-13-ua-parity-design.md` §4.6, UP-12, O6, Q6.
+
 **Why.** `mtxTrade` checks the caller is the named contract `dex`, the relayer binding, expiry, order lane, flags, amounts, the fee cap, the signature and `pulled[h] < amount`; on Path A it also checks fill, overfill, minimum, price and fee figures against the signed values; it moves funds to `dex` only, so no allowance is needed and a signer reads one address to know where its funds can go.
 **Cost if wrong.** A token that trusts a caller-chosen route or recipient turns every order into a permit.
 **Source.** `history/specs/2026-10-07-metatx-generic.md` §2 A7, §3 MG-8.2, §12 (C1, H7, M1), §13 (N-M1).
@@ -2190,6 +2209,8 @@ Change (2026-10-08): `o.receiveToken == address(this)` is allowed (a cycle order
 
 ### CTR-DEX-16 — mtxSettle: everything through the DEX, balances unchanged
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/dex.md#CTR-DEX-16 · superseded-by: —
+
+Change (2026-10-13): owner — legs become tagged (`{sellToken, shape, order, sig, fill}`, shape 0 `TradeOrder`, shape 1 `UATradeOrder`); the UA rules are CTR-DEX-26. SPECIFIED (UA-5b). Source add: owner, 2026-10-13; `history/specs/2026-10-13-ua-parity-design.md` §4.7, O3, Q5.
 
 **Why.** One taker against many makers per settlement: check, match at maker prices, pull every leg into the DEX, pay every destination, fee share and refund in the same call, then assert the DEX's balance of every token unchanged. One choke point and one invariant replace per-party delta checks, which misfire on shared addresses; listing only exact-transfer tokens makes conservation catch a misbehaving token.
 **Cost if wrong.** Payments outside the DEX would leave the token trusting a fill it cannot see; dust or donations could be paid out.
@@ -2253,6 +2274,20 @@ Change (2026-10-08): wording only — the token consults no registry; the factor
 **Why.** `OpenFactory.createDex` makes an `SCaaSDex` clone with `admin` written once by `initialize` and the `DexPuller` deployed by `initialize`; `isDex` serves clients and the node, and tokens never consult it, because requiring a factory-made DEX would give the factory admin too much power over trades (CTR-DEX-19 unchanged).
 **Cost if wrong.** If tokens required `isDex`, the factory admin could stop trading; without the registry, clients and the node have no on-chain list of genuine DEX versions.
 **Source.** `history/specs/2026-10-08-token-tree-design.md` T12, §7.
+
+### CTR-DEX-25 — UATradeOrder: a UA's order, verified by its token
+- old: — · status: current · owner: yes · date: 2026-10-13 · normative: contracts/dex.md#CTR-DEX-25 · superseded-by: —
+
+**Why.** `TradeOrder.from` is an `address`, so a UA needs its own struct (`bytes32 from`, `bytes32 destination`) in the sell token's domain, signed under the new purpose `trade`; the token runs CTR-DEX-15 unchanged on the fields both structs share, moves the fill by `_uaMove`, and shares `minNonce` by id. Widening `TradeOrder` for everyone was rejected: native wallets keep displaying an `address`, and existing vectors and node encoders stay.
+**Cost if wrong.** Two order structs for clients, node and vectors.
+**Source.** owner, 2026-10-13 (Q3, Q4); `history/specs/2026-10-13-ua-parity-design.md` §4.6 (UP-11), O2, O4.
+
+### CTR-DEX-26 — UA legs: tagged legs in SCaaSDex, one book
+- old: — · status: current · owner: yes · date: 2026-10-13 · normative: contracts/dex.md#CTR-DEX-26 · superseded-by: —
+
+**Why.** Extending `SCaaSDex` in place (a `shape` tag and an encoded order per leg) keeps one book in which UA and native orders match; UA legs only in SCaaS ledger tokens, payouts and refunds to UAs by `transferToUA`; `UAVerifyGas` reverts the whole `mtxSettle` as `SigCheckGasStarved` does, so a starved submitter cannot turn a valid order into `MatchFailed`; `uaTrade` is refused in interactions as `mtxTrade`. A second DEX implementation was rejected: two books, no cross-matching.
+**Cost if wrong.** The `Leg` / `ExchangeLeg` ABI changes (nothing deployed); the DEX crosses EIP-170 (size baseline; owner: Glamsterdam); PQ legs bound a settlement to the EIP-7825 cap, so the node packs settlements by kind.
+**Source.** owner, 2026-10-13 (Q5); `history/specs/2026-10-13-ua-parity-design.md` §4.7, O3.
 
 ### CTR-DEX-80 — Fill-or-kill two-leg MetaTxDex settlement
 - old: R3 · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: CTR-DEX-01, NODE-DEX-01, INT-ERP-12
@@ -2367,6 +2402,8 @@ Change (2026-10-08): the deposit is a payment `MetaTransfer` (`entryRef = deposi
 
 ### CTR-AS-07 — Allowlist through ComplianceRegistry, receivers only
 - old: R206 · status: current · owner: no · date: 2026-10-06 · normative: contracts/asset-suite.md#CTR-AS-07 · superseded-by: —
+
+Change (2026-10-13): owner — a constraint for when the suite is built: the registry and the freeze set key accounts by `bytes32` (natives padded) and the per-transfer checks hook the UA ledger too, UA → UA included; no code until AS. Source add: owner, 2026-10-13; `history/specs/2026-10-13-ua-parity-design.md` §4.13, Q10.
 
 **Why.** Allowlisting runs through the address-keyed `ComplianceRegistry` and checks receivers only, so holders can always exit to an allowed address.
 **Cost if wrong.** Checking senders too could trap holders who lost status.
@@ -2804,6 +2841,13 @@ Change (2026-10-11): owner — only under `auditorMode = OPTIONAL` (CTR-ZTH-49);
 **Cost if wrong.** Without the memo a sender whose logs are gone cannot open its own commit-reveal transfers.
 **Source.** owner, 2026-10-11; background `research/zether-disclosure.md` §4, §6, §7, §9.
 
+### CTR-ZTH-51 — The Zether public side from and to the UA ledger
+- old: — · status: current · owner: yes · date: 2026-10-13 · normative: contracts/zether.md#CTR-ZTH-51 · superseded-by: —
+
+**Why.** Only the public side (units a shield burns, units an unshield mints, the outer fee) may be a UA; the confidential account stays a Zether kind. Without it a PQ UA holder would need a classical key to use a Zether token — what PQZ's UA path exists to avoid. A distinct UA envelope tag (`SCAAS-ZETHER-UA-ENVELOPE-V1`) keeps a proof from moving between address and UA envelopes; the unshield recipient word carries a `bytes32` id, so one proof binds one recipient id with no new op tag.
+**Cost if wrong.** A new binding and two `…ToUA` entry points per Zether kind; the prover takes a 32-byte recipient.
+**Source.** owner, 2026-10-13 (Q7); `history/specs/2026-10-13-ua-parity-design.md` §4.11, O5.
+
 ### CTR-ZTH-80 — Range bits 32 and DECRYPT_BOUND 2^40
 - old: R34(params) · status: superseded · owner: yes · date: 2026-10-03 · normative: — · superseded-by: CTR-ZTH-18, CTR-ZTH-19
 
@@ -2942,6 +2986,8 @@ Change (2026-10-11): owner — only under `auditorMode = OPTIONAL` (CTR-ZTH-49);
 ### CTR-UA-10 — One key one purpose: registry, tags, EOAs
 - old: R298(2-3-4) · status: current · owner: yes · date: 2026-10-06 · normative: contracts/accounts.md#CTR-UA-10 · superseded-by: —
 
+Change (2026-10-13): owner — new purpose `trade` (`scaas.ua.purpose.trade.v1`) for the `UATradeOrder` digest, the `CancelOrder` digest over a UA order hash and the `UAInvalidateNonces` digest (CTR-DEX-25); the registry is unchanged (it takes any purpose tag), the constant joins `UAKinds` and the six UA libraries. SPECIFIED (UA-5b). Source add: owner, 2026-10-13; `history/specs/2026-10-13-ua-parity-design.md` §4.6, O4, Q4.
+
 **Why.** One key = one purpose in four layers (derivation, registry `keyOwner`, tagged messages, EOA rules) prevents cross-scheme nonce leaks and signing oracles.
 **Cost if wrong.** A foreign wallet reusing an EOA key for `bip340` remains undetectable on chain.
 **Source.** `history/specs/2026-10-06-universal-account-design.md:166`
@@ -2969,6 +3015,8 @@ Change (2026-10-11): owner — only under `auditorMode = OPTIONAL` (CTR-ZTH-49);
 
 ### CTR-UA-14 — Each function accepts only the kinds it needs
 - old: R303, UA:Q4, UA:Q5, UA:Q7 · status: current · owner: yes · date: 2026-10-07 · normative: contracts/accounts.md#CTR-UA-14 · superseded-by: —
+
+Change (2026-10-13): owner — UA parity (CTR-UA-27): the DEX, `MandateWallet` and (when built) regulated tokens open to registered SIGNING UAs through UA forms; the address-typed ABI is unchanged; the earlier plan of a UA-ledger allowance `uaApprove` and an `SCaaSDex` v2 with `bytes32 maker` is dropped (no UA ever grants or holds an allowance, Q2; UA orders are `UATradeOrder`s in the one `SCaaSDex`, CTR-DEX-25/26); the role and admin functions stay as they are, their holders gasless through their own contract account (Q1). Source add: owner, 2026-10-13; `history/specs/2026-10-13-ua-parity-design.md` §6 Q1, Q2.
 
 **Why.** Each function accepts exactly the kinds it needs; native-address functions keep their ABIs and Zether UAs can neither receive on v3 nor sign through `requireAuthorized`.
 **Cost if wrong.** UA holders need v3 tokens; deployed v1/v2 clones stay native-only.
@@ -3057,9 +3105,26 @@ Change (2026-10-11): owner — (1) ML-DSA signs `pq_msg = keccak256(TAG(kind) �
 ### CTR-UA-26 — The UA path splits into UAMetaTransaction and UAMetaTransfer
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/accounts.md#CTR-UA-26 · superseded-by: —
 
+Change (2026-10-13): owner — the UA allowlist grows with parity: `unwrapToUA` and `burn` (UA-5a), `zetherShield` and the confidential ops under the UA envelope binding (UA-5c); `approve`, `mtxTrade` and `uaTrade` stay refused in every `ua*` function — a UA trades by a signed `UATradeOrder`, not by a UA-ledger allowance. SPECIFIED. Source add: owner, 2026-10-13; `history/specs/2026-10-13-ua-parity-design.md` §4.1, UP-8, UP-10.
+
 **Why.** The UA ledger carried the same token-shaped `to`/`value`/`data` struct as the address path; splitting it the same way (owner G8) gives one model everywhere: a generic call for the UA allowlist and a typed transfer/payment, sharing the one nonce map.
 **Cost if wrong.** Two meta-tx models — split on the address path, mixed on the UA path — for clients, node and vectors.
 **Source.** `history/specs/2026-10-08-metatx-generic-call-design.md` §2 G8, §3 GC-9.
+
+### CTR-UA-27 — Parity: every native-id operation is open to a registered SIGNING UA
+- old: — · status: current · owner: yes · date: 2026-10-13 · normative: contracts/accounts.md#CTR-UA-27 · superseded-by: —
+
+**Rule.** Owner decisions of 2026-10-13 on the UA parity design: a derived UA of any SIGNING kind, PQ included, can do every operation a native id can — as a subject through a signed UA form (`ua*`, the UA allowlist, `UATradeOrder`, the generic UA pipeline of `MetaTxBase`) and as a receiver through a `bytes32` form credited in the UA ledger. Q1: the role and admin functions (token owner and role holders, DEX `admin`, factory creator and `TokenConfig.owner`/`roles`/`initialHolder`, `SmartKeyAccount` keys and guardian, `addReserve`, a one-call UA-source `zetherWrapShield`) stay as they are, with no UA counterpart — their holders still act gaslessly through their own contract account (`SmartKeyAccount` / `MandateWallet` `execute`, fee `NONE`, NODE-JOB-01, NODE-JOB-19). Q2: no UA ever grants or holds an allowance. Q10: regulated tokens key compliance by `bytes32` when built. Phases UA-5a / 5b / 5c.
+**Why.** A UA never sends a transaction, so without a UA form for every subject and a `bytes32` form for every receiver a PQ-key UA could not trade, wrap in one step, receive from a mandate or use a Zether token without keeping a classical key — the reason UAs exist. Separate structs and events keep every address-typed ABI, vector and indexer unchanged; the allowlist/dedicated-function split reuses the self-call where the body needs only `_msgSender()`. Role functions stay off every allowlist because a signature check would skip a minter contract's caps or a Safe's guards (CTR-MTX-19); the owner keeps them as they are since their holders are gasless already through their own contract account. An allowance for UAs was rejected: an EOA has none on a SCaaS token (CTR-TOK-01), and every pull already has a signed, named intent.
+**Cost if wrong.** Each operation has two forms to build, test and vector (code size grows; owner: no size work before Glamsterdam); a UA cannot hold a role directly, so a UA-only holder who needs a role deploys a contract account.
+**Source.** owner, 2026-10-13; `history/specs/2026-10-13-ua-parity-design.md` §1–§6 (UP-1…UP-6, UP-8, UP-10; Q1, Q2, Q10).
+
+### CTR-UA-28 — A native caller credits a derived UA in one call
+- old: — · status: current · owner: yes · date: 2026-10-13 · normative: contracts/accounts.md#CTR-UA-28 · superseded-by: —
+
+**Why.** Every `address` receiver of a direct path gets a `bytes32` form (`wrapToUA`, `unwrapToUA`, `mintToUA`, `payWithFeeToUA`, beside `transferToUA`), each crediting through `_uaMove` (a mint is a move from 0), so a wrap reaches a UA in one call instead of `wrap` + `transferToUA` and a mandate can pay a UA payee. `wrapToUA` is on the address allowlist only (a UA holds no outside underlying); `unwrapToUA` pays a SCaaS ledger leg by `transferToUA` and is on both allowlists. The `UnwrappedToUA` event and the ERC-165 test for a ledger leg are controller rulings, pending the owner.
+**Cost if wrong.** Four more entry points per kind; a leg that falsely reports `IUALedger` can only cheat the unwrapper who chose it (the exact balance delta still holds the wrapper's reserve).
+**Source.** owner, 2026-10-13 (Q9); `history/specs/2026-10-13-ua-parity-design.md` §4.2, §4.3, §4.5 (UP-9).
 
 ## 25. Contracts — Post-quantum Zether
 

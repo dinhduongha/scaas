@@ -3,7 +3,8 @@
 A mandate lets a delegate pay from a payer's own wallet within limits the chain enforces: per payment, per period,
 to approved payees, until an expiry, revocable at any time. It is a payment authority, not an account: the payer keeps
 its own account ([accounts.md](accounts.md)) and the funds sit in its `MandateWallet`. Status: **BUILT**
-(`smartcontracts/evm/src/wallet/`, on `MetaTxBase` since P4; the typed-struct wallet before it is in `legacy/p4/`).
+(`smartcontracts/evm/src/wallet/`, on `MetaTxBase` since P4; the typed-struct wallet before it is in `legacy/p4/`);
+a UA owner, delegate or payee ([CTR-ACC-12](#CTR-ACC-12)) is **SPECIFIED** (UA-5c).
 
 ## <a id="mandatewallet"></a>1. `MandateWallet`
 
@@ -86,6 +87,21 @@ vector. Status **BUILT** (P4).
 | `payUnderMandate(token, payee, amount, entryRef, epoch)` | delegate-signed `MetaTransaction` (`mtxExecute`, or the named `mtxPayUnderMandate(token, payee, amount, entryRef, epoch, validUntil, sig)`); anyone submits |
 | `revoke(token, epoch)` | delegate-signed `MetaTransaction` (`mtxExecute`, or the named `mtxRevoke`) |
 | `mtxExecuteAsOwner` (owner-signed `MetaTransaction`), `isValidSignature` | owner |
+
+<a id="ua-mandates"></a>
+<a id="CTR-ACC-12"></a>**CTR-ACC-12** — **A UA may own, delegate and receive under a `MandateWallet`** (owner 2026-10-13,
+[CTR-UA-27](accounts.md#CTR-UA-27); SPECIFIED, UA-5c). The wallet's ids become `bytes32` (a native address
+zero-padded): constructor `(bytes32 owner, bytes32 chainUid, address registry)`, `Mandate.delegate` `bytes32`,
+`payeeAllowed[token][bytes32]`. Every authority check compares the subject of the call as an id (`_subjectId()`: the
+ticket's subject inside a self-call, else `pad(msg.sender)`) with the stored id. A UA signs through the generic UA
+pipeline of `MetaTxBase` ([CTR-MTX-22](metatx.md#CTR-MTX-22)): `uaExecute` with the wallet's own allowlist, fee `NONE`
+only; the named builders `uaPayUnderMandate`, `uaRevoke`, `uaExecuteAsOwner` mirror the `mtx*` ones and derive the same
+lanes. A native payee is paid by `payWithFee`, a derived one by `payWithFeeToUA`
+([CTR-UA-28](accounts.md#CTR-UA-28)). **ERC-1271:** a native owner keeps today's `isValidSignature` (ECDSA); a derived
+owner gets none (`0xffffffff`): token and DEX callers cap ERC-1271 at 50 k gas (a PQ check needs up to 5.95 M), and a
+1271 answer would be a generic "sign this digest" for a UA key, which [CTR-UA-10](accounts.md#CTR-UA-10) layer 1
+forbids; a derived owner acts through `uaExecute(execute(…))` on the wallet. `HederaMandateWallet` follows (HIP-632 on
+the native branch).
 
 ### 1.1 Client integration (auto-pay)
 
