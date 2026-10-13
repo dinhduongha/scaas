@@ -126,7 +126,7 @@ rel_init (rel_t *R, const lnp_tbox_params_struct *P, uint8_t op)
   polymat_tocrt (R->A1);
   polymat_tocrt (R->A2p);
   polymat_tocrt (R->Bp);
-  if (pqz_err == PQZ_OK && (op == PQZ_OP_REGISTER || op == PQZ_OP_TRANSFER)) /* merge: R_REG / R_TX only */
+  if (pqz_err == PQZ_OK)
     pqz_sv_setup (op, P, R->A, R->A1, R->A2p, R->Bp); /* specialised verifier's tables, below the base mark */
   return pqz_err;
 }
