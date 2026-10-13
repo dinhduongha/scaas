@@ -182,6 +182,8 @@ stream definition (scope, gate, depends) in `docs/history/specs/` — section nu
 
 ## 2. Ops / housekeeping
 
+- [ ] **Foundry 1.3.5 → 1.8.5** (not scheduled; CI pins forge v1.3.5 since 2026-10-13): upgrade local and CI together. Known breaks with 1.8.5: 13 forge tests (gas pins, KAT addresses, `selfdestruct`) to re-measure / regenerate (spec gas tables follow), and `forge script` now applies the EIP-3860 initcode limit (2 × `--code-size-limit`) to the script contract itself — `Deploy.s.sol` initcode is 368,154 B > 131,072, so deploy / e2e scripts need `--disable-code-size-limit` on `forge script` (checked 2026-10-13: then the deploy runs; anvil keeps `--code-size-limit 65536`, which in 1.8.5 still lifts anvil's initcode limit to 128 KiB — no new anvil flag exists).
+
 - [ ] Redeploy all dev/test contracts (tags renamed); update `blockchain.token.domain_name` / Cosmos `network_key`.
 - [ ] Remove merged worktrees under `.claude/worktrees/`.
 - [ ] Residual TON: a `final` from the indexer before the node's `mined` still flags `landed_elsewhere` (informational).
