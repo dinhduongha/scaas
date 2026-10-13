@@ -207,7 +207,9 @@ Run `NP=10 NV=30 NPW=5 NVW=10 rel3/relfix.sh z21full` + `sv/check_sv_fixes.sh` +
 z21 differential [measured]: KAT 19/19; `check_tbox_fixes: ok`; `check_sv_fixes: ok`; `fails 0` (native, wasm,
 ASan + UBSan with only the Open 4 nits); `proofs_fnv` of all five relations unchanged from v2 (native 5 / 10 seeds,
 wasm 3 / 5 seeds); PoC `z21_big` ACCEPT / ACCEPT before (`rel3/runs/z21-before-norm.txt`) → REJECT / REJECT
-(`z21full-norm.txt`), PoC proofs byte-identical; DIFFSTATUS Generic verify p50 native `R_TX` 677 ms, `R_REG` 184 ms
+(`z21full-norm.txt`), PoC proofs byte-identical; differential test (v2-sized sample) 2,710 cases, 0 mismatches
+(`sv/runs/z21s-diff-portable.jsonl`); z21 differential 290 z21-inflated proofs, 0 disagreements, verdict = (‖z2‖² ≤
+Bsq) in every case (`sv/runs/z21s-z21diff.jsonl`); the same under ASan + UBSan 145 cases, 0 disagreements, no sanitizer report (`sv/runs/z21s-asan-*`). Generic verify p50 native `R_TX` 677 ms, `R_REG` 184 ms
 (v2 648 / 177, noise).
 
 ## Measured (2026-10-13, this machine, single thread)

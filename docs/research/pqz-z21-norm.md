@@ -69,7 +69,7 @@ LNP22, Appendix A.2, Fig. 18 (ABDLOP opening proof with Dilithium compression, A
 LaZer's codegen matches this exactly: `Bound_()` is that B term by term, `Bound2() = 2·Bound_()`, `Bound()` is B̄, and
 the generated `Bsq = floor(Bound_()²)` [code]. The honest prover rejects on ‖(z21, z22 − c·tA,2 − w0)‖² ≤ Bsqr, and
 `A1·z1 + A2′·z21 − c·2^D·tA,1 − γ·w1` is −(z22 − c·tA,2 − w0) [paper, the correctness part of Thm A.2; measured
-in §7.2: the verifier's sum equals the prover's on 285 proofs, and the accept / reject boundary is exactly Bsq].
+in §7.2: the verifier's sum equals the prover's on all 290 + 145 z21-differential proofs, and the accept / reject boundary is exactly Bsq].
 
 **The check, chosen: ‖z21‖² + ‖w − γ·w1‖² ≤ Bsq** (Bsq = `Bsqr` of the `quad_many` params). Reasons:
 
@@ -197,7 +197,7 @@ not a broken PoC). Run `pqz-core/rel3/runs/z21full-tbox-fixes.txt` [measured].
 Mutated proofs cannot reach the check (they fail the final hash first), so `sv/review/z21diff.c` (`review.sh zdiff`,
 also run by `sv/diff.sh`) proves all five relations with the cheating prover in mode 4: the first polynomial of y21
 times k, k = round(1.25^j), j = 0 … 31, z2 checks skipped; per proof both verifiers must agree, and must accept exactly
-when the prover's ‖(z21, z22)‖² ≤ Bsq. Results: see §7.3.
+when the prover's ‖(z21, z22)‖² ≤ Bsq. Results (§7.3): 290 cases, 0 disagreements between the verifiers, 0 cases where the verdict differs from ‖(z21, z22)‖² ≤ Bsq, both verdicts for every relation, the closest case 1.0103 × Bsq.
 
 ### 7.3 Runs
 
@@ -213,7 +213,14 @@ All under `scripts/capped` on this machine, branch `pqz-z21` [measured]:
 | bench: honest verifies and six tamper kinds, five relations | `fails 0` native, wasm, ASan + UBSan (only the upstream nits of STATUS Open 4, the same 4 reports as `v2full`) | `rel3/runs/z21full-native.jsonl`, `z21full-wasm.jsonl`, `z21full-asan.jsonl`, `z21full-asan-stderr.txt` |
 | `sv/check_sv_fixes.sh` | tree 10 / 0 mismatches, SZ reverted 10 / 10, L2 reverted 10 / 10: ok | `rel3/runs/z21full-check-sv-fixes.txt` |
 | z21 differential, probe (1 seed) | 145 cases, 0 disagreements, 0 expectation mismatches, both verdicts for every relation, closest ‖z2‖² / Bsq = 1.0103 | `rel3/runs/z21-probe-z21diff.jsonl` |
-DIFFROWS
+| differential test, portable, the v2-sized sample (`pqz_sv_diff 4 4 2 1 10 12 12 12`, as `sv/rel3.sh`): honest and mutated proofs, five relations | 2,710 cases, 0 mismatches, PRG check 0 mismatches | `sv/runs/z21s-diff-portable.jsonl` |
+| z21 differential, 2 seeds (`review.sh zdiff 2 31`) | 290 cases (58 per relation: 29 values of k × 2 seeds), 0 disagreements, 0 expectation mismatches, 0 prove errors; accepted / rejected `R_REG` 36 / 22, `R_TX` 48 / 10, `R_BURN` 48 / 10, `R_DS` 27 / 31, `R_DR` 53 / 5; closest ‖z2‖² / Bsq = 1.0103 | `sv/runs/z21s-z21diff.jsonl` |
+| z21 differential under ASan + UBSan (malloc path, 1 seed) | 145 cases (`R_REG`, `R_TX` from a five-relation process that was stopped at `R_BURN`, most likely at the 4 GB cap since the malloc path keeps the per-prove statement objects [inference]; `R_BURN`, `R_DS`, `R_DR` one process each), 0 disagreements, 0 expectation mismatches, no sanitizer report | `sv/runs/z21s-asan-z21diff-all-killed.jsonl`, `z21s-asan-z21diff-m{4,8,16}.jsonl`, their `-stderr.txt`, `z21s-rc.txt` |
+
+A first attempt at `sv/diff.sh z21` with its defaults (40 / 20 proofs per relation, ten times the v2 sample) was
+stopped after 29 min in the portable step (`rel3/runs/z21full-rc.txt`); the v2-sized sample above replaced it. The
+x86-64-v3 and wasm differential builds were not re-run: `pqz_sv.c` changed only in the last norm check and setup
+guards, both build-independent C.
 Generic verify times are unchanged within host noise (the extra work is one ℓ2 norm of 45–46 polynomials): native
 p50 `R_TX` 648 → 677 ms, `R_REG` 177 → 184 ms (`z21full-native.jsonl` against the v2 row of `pqz-core/STATUS.md`).
 Command: `NP=10 NV=30 NPW=5 NVW=10 scripts/capped pqz-core/rel3/relfix.sh z21full`, then
