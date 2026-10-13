@@ -2108,7 +2108,7 @@ __schwartz_zippel_accumulate (spolymat_ptr R2i, spolyvec_ptr r1i, poly_ptr r0i,
 
       spolymat_scale (t1, intvec_get_elem (v, j), Rprime2i[j]);
       spolymat_add (t2, t0, t1, 0);
-      spolymat_set (t0, t2);
+      spolymat_swap (t0, t2); /* PQZ: was spolymat_set, a full copy */
     }
   spolymat_mod (R2i, t0);
 
@@ -2124,7 +2124,7 @@ __schwartz_zippel_accumulate (spolymat_ptr R2i, spolyvec_ptr r1i, poly_ptr r0i,
 
       spolyvec_scale (u1, intvec_get_elem (v, j), rprime1i[j]);
       spolyvec_add (u2, u0, u1, 0);
-      spolyvec_set (u0, u2);
+      spolyvec_swap (u0, u2); /* PQZ: was spolyvec_set, a full copy */
     }
   spolyvec_mod (r1i, u0);
 
@@ -2186,7 +2186,7 @@ __schwartz_zippel_accumulate_ (spolymat_ptr R2i, spolyvec_ptr r1i,
       spolymat_fromcrt (Rprime2i[j]);
 
       spolymat_add (t2, t0, Rprime2i[j], 0);
-      spolymat_set (t0, t2);
+      spolymat_swap (t0, t2); /* PQZ: was spolymat_set, a full copy */
     }
   spolymat_mod (R2i, t0);
 
@@ -2201,7 +2201,7 @@ __schwartz_zippel_accumulate_ (spolymat_ptr R2i, spolyvec_ptr r1i,
       spolyvec_fromcrt (rprime1i[j]);
 
       spolyvec_add (u2, u0, rprime1i[j], 0);
-      spolyvec_set (u0, u2);
+      spolyvec_swap (u0, u2); /* PQZ: was spolyvec_set, a full copy */
     }
   spolyvec_mod (r1i, u0);
 

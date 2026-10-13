@@ -62,6 +62,19 @@ spolymat_alloc (spolymat_ptr r, const polyring_t ring, unsigned int nrows,
   memset (r->elems, 0, nelems_max * sizeof (_spolymat_t));
 }
 
+/* PQZ: exchange two matrices of the same ring (elements, sizes, flags) in O(1). The accumulation loops did
+   "add (t2, t0, t1); set (t0, t2)", a full copy of the accumulator per equation; they now swap instead. */
+void
+spolymat_swap (spolymat_ptr a, spolymat_ptr b)
+{
+  spolymat_struct t;
+
+  ASSERT_ERR (a->ring == b->ring);
+  t = *a;
+  *a = *b;
+  *b = t;
+}
+
 void
 spolymat_set (spolymat_ptr r, spolymat_ptr a)
 {

@@ -1274,6 +1274,7 @@ void spolyvec_sort (spolyvec_ptr r);
 void spolyvec_alloc (spolyvec_ptr r, const polyring_t ring,
                      unsigned int nelems, unsigned int nelems_max);
 void spolyvec_set (spolyvec_ptr r, spolyvec_ptr a);
+void spolyvec_swap (spolyvec_ptr a, spolyvec_ptr b); /* PQZ */
 void spolyvec_redc (spolyvec_ptr r);
 void spolyvec_redp (spolyvec_ptr r);
 void spolyvec_add (spolyvec_t r, spolyvec_t a, spolyvec_t b, int crt);
@@ -1317,6 +1318,7 @@ void spolymat_sort (spolymat_ptr r);
 void spolymat_mod (spolymat_ptr r, spolymat_ptr b);
 void spolymat_lrot (spolymat_t r, spolymat_t b, unsigned int n);
 void spolymat_set (spolymat_ptr r, spolymat_ptr a);
+void spolymat_swap (spolymat_ptr a, spolymat_ptr b); /* PQZ */
 void spolymat_fromcrt (spolymat_t r);
 void spolymat_free (spolymat_ptr r);
 #if PQZ_STDIO
