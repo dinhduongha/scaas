@@ -24,8 +24,9 @@ poly_free (poly_ptr r)
   if (r == NULL)
     return;
 
-  if (r->crt)
-    _free (r->crtrep, _sizeof_crtrep_data (r->ring));
+  /* PQZ: free crtrep whenever it exists (as polyvec_free does); upstream freed it only if r->crt, so a
+     poly set back to coefficients (crt = 0, crtrep kept) leaked it, pinning the arena below it */
+  _free (r->crtrep, _sizeof_crtrep_data (r->ring));
   _free (r->mem, _sizeof_poly_data (r->ring));
 }
 

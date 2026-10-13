@@ -1804,6 +1804,7 @@ _lnp_tbox_compute_z34 (uint8_t hash[32], polyvec_t tB, polyvec_t z3,
   polyvec_free (y4);
   polyvec_free (z3_);
   polyvec_free (z4_);
+  polyvec_free (tmp_polyvec); /* PQZ: upstream leaked it (pins the arena below it) */
 }
 
 static int
