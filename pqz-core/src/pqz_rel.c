@@ -1,6 +1,6 @@
 /*
- * pqz-core relations for the E-S1 spike: R_REG and R_TX as LaZer tbox statements
- * (pq-zether.md §7.2 step 6 and §7.4), the C ABI of pqz.h, proof encoding (LaZer lin-proofs.c's
+ * pqz-core relations: R_REG, R_TX (E-S1 spike), R_BURN, R_DS and R_DR as LaZer tbox statements
+ * (pq-zether.md §7.2 step 6, §7.4, §7.5, §7.9), the C ABI of pqz.h, proof encoding (LaZer lin-proofs.c's
  * lnp_tbox_encproof / decproof, MIT, with the bounded decoder), and the A / ABDLOP-key caches.
  *
  * Witness layout in the tbox vector s1 (R_TX, m1 = 146 + Z = 7 slack polys):
@@ -9,12 +9,23 @@
  *   d_i: 4i+b | d'_i: 64+4i+b | M_i: 128+14i+b | c_i + 64: 352+11i+b (i < 15) | e_T[i] + 2^24: 517+25i+b
  * Rows 1, 2 are R_q-linear equations (quadeqs with no quadratic part); rows 3-7 are Z_q-linear equations
  * on single coefficients: ct(X^-i * (...)) = 0 (tbox evaleqs). Norms: 7 exact l2 proofs, 1 binary proof.
+ *
+ * R_BURN = R_TX rows 1, 2, 4, 6, 7 with d = digits(amount) public (m1 = 143 + Z = 5):
+ *   0..31 s_f | 32..63 e_f | 64..95 r | 96..127 e1 | 128 e2_f | 129..142 bits
+ *   d'_i: 4i+b | M_i: 64+14i+b | c_i + 64: 288+11i+b (i < 15) | e_T[i] + 2^24: 453+25i+b
+ * R_DS (SENDER_S): u = A^T r + e1 (R_q rows), (pk_t^T r)_i + e2_t,i + Delta d_i - v_i = 0 (evaleqs), d public;
+ *   s1 = 0..31 r | 32..63 e1 | 64 e2_t (m1 = 65 + Z = 3), no binary part.
+ * R_DR (RECEIVER_X, AUDITOR): pk = A s + e (R_q rows), (u^T s)_i + (e'_i + 2^24) - 2^24 + Delta d_i - v_i = 0
+ *   (evaleqs), d public; s1 = 0..31 s | 32..63 e | 64..70 bits (m1 = 71 + Z = 2), e'_i + 2^24: 25i+b.
  */
 #include "lazer.h"
 #include "lnp-tbox.h"
 #include "memory.h"
 
 #include "pqz.h"
+#include "pqz_burn_params.h"
+#include "pqz_dr_params.h"
+#include "pqz_ds_params.h"
 #include "pqz_reg_params.h"
 #include "pqz_tx_params.h"
 
@@ -30,7 +41,7 @@ typedef struct
   polymat_t A, A1, A2p, Bp;
 } rel_t;
 
-static rel_t REG, TX;
+static rel_t REG, TX, BURN, DS, DR;
 static int ready;
 static pqz_arena_mark_t base;
 
@@ -98,8 +109,13 @@ rel_init (rel_t *R, const lnp_tbox_params_struct *P, uint8_t op)
   uint8_t pp[32];
 
   R->P = P;
-  polymat_alloc (R->A, Rq, K, K);
-  expand_A (R->A);
+  if (R == &REG)
+    {
+      polymat_alloc (R->A, Rq, K, K);
+      expand_A (R->A);
+    }
+  else
+    memcpy (R->A, REG.A, sizeof (polymat_t)); /* A is public and the same for every relation: shared */
   polymat_alloc (R->A1, Rq, tb->kmsis, tb->m1);
   polymat_alloc (R->A2p, Rq, tb->kmsis, tb->m2 - tb->kmsis);
   polymat_alloc (R->Bp, Rq, tb->l + tb->lext, tb->m2 - tb->kmsis);
@@ -117,7 +133,9 @@ pqz_init (void *arena, size_t len)
 {
   pqz_err = PQZ_OK;
   pqz_arena_init (arena, len);
-  if (rel_init (&REG, pqz_reg, PQZ_OP_REGISTER) || rel_init (&TX, pqz_tx, PQZ_OP_TRANSFER))
+  if (rel_init (&REG, pqz_reg, PQZ_OP_REGISTER) || rel_init (&TX, pqz_tx, PQZ_OP_TRANSFER)
+      || rel_init (&BURN, pqz_burn, PQZ_OP_BURN) || rel_init (&DS, pqz_ds, PQZ_OP_DISCLOSE_SENDER)
+      || rel_init (&DR, pqz_dr, PQZ_OP_DISCLOSE_RECEIVER))
     return pqz_err;
   pqz_arena_mark (&base);
   ready = 1;
@@ -317,6 +335,7 @@ typedef struct
 {
   rel_t *R;
   unsigned N, M;
+  unsigned bits, nbin; /* evaleqs: the binary witness polys are s1[bits .. bits + nbin) */
   spolymat_ptr R2[NTXQ], R2p[NTXE];
   spolyvec_ptr r1[NTXQ], r1p[NTXE];
   poly_ptr r0[NTXQ], r0p[NTXE];
@@ -395,20 +414,22 @@ build_reg (sys_t *S, const uint8_t *stmt, polyvec_t pk)
   return 1;
 }
 
-/* ---- R_TX ---- */
-
 #define TX_BITS 131
-#define SLOT_D(i, b) (4 * (i) + (b))
-#define SLOT_DP(i, b) (64 + 4 * (i) + (b))
-#define SLOT_M(i, b) (128 + 14 * (i) + (b))
-#define SLOT_C(i, b) (352 + 11 * (i) + (b))
-#define SLOT_E(i, b) (517 + 25 * (i) + (b))
+/* ---- R_TX and R_BURN (the debit relations) ---- */
+
+/* bit slots: base of each group (slot = base + width * i + b), -1 if the group is absent (R_BURN: d public) */
+typedef struct
+{
+  int d, dp, m, c, e;
+} lay_t;
+static const lay_t LAY_TX = { 0, 64, 128, 352, 517 }, LAY_BURN = { -1, 0, 64, 288, 453 };
+#define SLOT(base, w, i, b) ((unsigned)(base) + (w) * (i) + (b))
 
 typedef struct
 {
-  polyvec_ptr pkf, pkt, pka, uT, u;
-  poly_t vT, vt, vf, va;
-  uint64_t fee;
+  polyvec_ptr pkf, pkt, pka, uT, u; /* R_DS / R_DR: pkt = pk, u = u */
+  poly_t vT, vt, vf, va;            /* R_DS / R_DR: vt = v */
+  uint64_t fee, amount;             /* amount: R_BURN, R_DS, R_DR */
 } txst_t;
 
 /* coefficient term coef * bit(slot) into the evaleq vector accumulators (one poly per bit poly) */
@@ -448,9 +469,9 @@ evaleq (sys_t *S, unsigned idx, polyvec_ptr pkrow, unsigned off_x, unsigned i, i
       else
         set_c (p, PQZ_D - i, -1);
     }
-  for (unsigned b = 0; b < 15; b++)
+  for (unsigned b = 0; b < S->nbin; b++)
     {
-      poly_ptr p = spolyvec_insert_elem (S->r1p[idx], 2 * (TX_BITS + b));
+      poly_ptr p = spolyvec_insert_elem (S->r1p[idx], 2 * (S->bits + b));
       poly_set (p, acc[b]);
       poly_redc (p, p);
     }
@@ -474,16 +495,37 @@ cval (poly_ptr p, unsigned k)
   return int_get_i64 (poly_get_coeff (p, k));
 }
 
+static unsigned
+digit (uint64_t x, unsigned i)
+{
+  return (unsigned)((x >> (4 * i)) & 15);
+}
+
+/* a be32 statement word that must be < 2^64 (pq-zether.md §5: anything else is non-canonical) */
+static int
+rd_word64 (uint64_t *v, const uint8_t *p)
+{
+  int ok = 1;
+  for (unsigned b = 0; b < 24; b++)
+    ok &= p[b] == 0;
+  *v = rd_be8 (p + 24);
+  return ok;
+}
+
+static polyvec_ptr
+new_vec (polyring_srcptr Rq)
+{
+  polyvec_ptr v = _alloc (sizeof (polyvec_t));
+  polyvec_alloc (v, Rq, K);
+  return v;
+}
+
 static int
 parse_tx (txst_t *T, polyring_srcptr Rq, const uint8_t *stmt)
 {
   const uint8_t *p = stmt + PQZ_PREFIX_BYTES;
   int ok = 1;
-  T->pkf = _alloc (sizeof (polyvec_t)), polyvec_alloc (T->pkf, Rq, K);
-  T->pkt = _alloc (sizeof (polyvec_t)), polyvec_alloc (T->pkt, Rq, K);
-  T->pka = _alloc (sizeof (polyvec_t)), polyvec_alloc (T->pka, Rq, K);
-  T->uT = _alloc (sizeof (polyvec_t)), polyvec_alloc (T->uT, Rq, K);
-  T->u = _alloc (sizeof (polyvec_t)), polyvec_alloc (T->u, Rq, K);
+  T->pkf = new_vec (Rq), T->pkt = new_vec (Rq), T->pka = new_vec (Rq), T->uT = new_vec (Rq), T->u = new_vec (Rq);
   poly_alloc (T->vT, Rq), poly_alloc (T->vt, Rq), poly_alloc (T->vf, Rq), poly_alloc (T->va, Rq);
   ok &= rd_polyvec (T->pkf, p), p += PQZ_POLYVEC_BYTES;
   ok &= rd_polyvec (T->pkt, p), p += PQZ_POLYVEC_BYTES;
@@ -495,21 +537,44 @@ parse_tx (txst_t *T, polyring_srcptr Rq, const uint8_t *stmt)
   ok &= rd_poly (T->vf, p, 16), p += PQZ_V_BYTES;
   ok &= rd_poly (T->va, p, 16), p += PQZ_V_BYTES;
   T->fee = rd_be8 (p);
+  T->amount = 0;
   return ok;
 }
 
+/* R_BURN: header || pk_f || u_T || v_T || u || v_f (pq-zether.md §7.7) */
 static int
-build_tx (sys_t *S, txst_t *T, const uint8_t *stmt)
+parse_burn (txst_t *T, polyring_srcptr Rq, const uint8_t *stmt)
 {
-  rel_t *R = &TX;
+  const uint8_t *p = stmt + PQZ_HEADER_BYTES;
+  int ok = rd_word64 (&T->fee, stmt + PQZ_HDR_FEE) & rd_word64 (&T->amount, stmt + PQZ_HDR_AMOUNT);
+  T->pkf = new_vec (Rq), T->uT = new_vec (Rq), T->u = new_vec (Rq);
+  poly_alloc (T->vT, Rq), poly_alloc (T->vf, Rq);
+  ok &= rd_polyvec (T->pkf, p), p += PQZ_POLYVEC_BYTES;
+  ok &= rd_polyvec (T->uT, p), p += PQZ_POLYVEC_BYTES;
+  ok &= rd_poly (T->vT, p, 16), p += PQZ_V_BYTES;
+  ok &= rd_polyvec (T->u, p), p += PQZ_POLYVEC_BYTES;
+  ok &= rd_poly (T->vf, p, 16);
+  return ok;
+}
+
+/* R_TX (burn = 0) or R_BURN (burn = 1): the rows of pq-zether.md §7.4; R_BURN skips rows 3 and 5 and moves
+   Delta d_i (row 4 has none: d' is the witness) and d_i (row 7) into the constant term */
+static int
+build_debit (sys_t *S, txst_t *T, const uint8_t *stmt, int burn)
+{
+  rel_t *R = burn ? &BURN : &TX;
+  const lay_t *L = burn ? &LAY_BURN : &LAY_TX;
   polyring_srcptr Rq = R->P->tbox->ring;
+  const unsigned m1 = burn ? 143 : 146, e2f = burn ? 128 : 129;
   poly_ptr acc[15];
   unsigned i, b, e = 0;
 
   S->R = R;
   S->N = NTXQ;
-  S->M = NTXE;
-  if (!parse_tx (T, Rq, stmt))
+  S->M = burn ? 48 : NTXE;
+  S->bits = burn ? 129 : TX_BITS;
+  S->nbin = burn ? 14 : 15;
+  if (!(burn ? parse_burn (T, Rq, stmt) : parse_tx (T, Rq, stmt)))
     return 0;
   for (b = 0; b < 15; b++)
     acc[b] = new_poly (Rq);
@@ -522,62 +587,148 @@ build_tx (sys_t *S, txst_t *T, const uint8_t *stmt)
 
   for (i = 0; i < 16; i++)
     {
+      const int64_t dpub = burn ? digit (T->amount, i) : 0;
       /* rows 3-5: (pk^T r)_i + e2_i + Delta * digit_i - v_i = 0 */
+      if (!burn)
+        {
+          acc_zero (acc);
+          for (b = 0; b < 4; b++)
+            add_bit (acc, SLOT (L->d, 4, i, b), DELTA << b);
+          evaleq (S, e++, T->pkt, 64, i, 128, acc, -cval (T->vt, i));
+        }
       acc_zero (acc);
       for (b = 0; b < 4; b++)
-        add_bit (acc, SLOT_D (i, b), DELTA << b);
-      evaleq (S, e++, T->pkt, 64, i, 128, acc, -cval (T->vt, i));
-      acc_zero (acc);
-      for (b = 0; b < 4; b++)
-        add_bit (acc, SLOT_DP (i, b), DELTA << b);
-      evaleq (S, e++, T->pkf, 64, i, 129, acc, -cval (T->vf, i));
-      acc_zero (acc);
-      for (b = 0; b < 4; b++)
-        add_bit (acc, SLOT_D (i, b), DELTA << b);
-      evaleq (S, e++, T->pka, 64, i, 130, acc, -cval (T->va, i));
+        add_bit (acc, SLOT (L->dp, 4, i, b), DELTA << b);
+      evaleq (S, e++, T->pkf, 64, i, e2f, acc, -cval (T->vf, i));
+      if (!burn)
+        {
+          acc_zero (acc);
+          for (b = 0; b < 4; b++)
+            add_bit (acc, SLOT (L->d, 4, i, b), DELTA << b);
+          evaleq (S, e++, T->pka, 64, i, 130, acc, -cval (T->va, i));
+        }
       /* row 6: (u_T^T s_f)_i + Delta M_i + (e_T,i + 2^24) - 2^24 - v_T,i = 0 */
       acc_zero (acc);
       for (b = 0; b < 14; b++)
-        add_bit (acc, SLOT_M (i, b), DELTA << b);
+        add_bit (acc, SLOT (L->m, 14, i, b), DELTA << b);
       for (b = 0; b < 25; b++)
-        add_bit (acc, SLOT_E (i, b), (int64_t)1 << b);
+        add_bit (acc, SLOT (L->e, 25, i, b), (int64_t)1 << b);
       evaleq (S, e++, T->uT, 0, i, -1, acc, -cval (T->vT, i) - ((int64_t)1 << 24));
       /* row 7 (over Z, all terms < 2^15): M_i + c_{i-1} - d'_i - d_i - f_i - 16 c_i = 0, c = cbits - 64 */
       acc_zero (acc);
-      int64_t rhs = -(int64_t)((T->fee >> (4 * i)) & 15);
+      int64_t rhs = -(int64_t)digit (T->fee, i) - dpub;
       for (b = 0; b < 14; b++)
-        add_bit (acc, SLOT_M (i, b), (int64_t)1 << b);
+        add_bit (acc, SLOT (L->m, 14, i, b), (int64_t)1 << b);
       if (i >= 1)
         {
           for (b = 0; b < 11; b++)
-            add_bit (acc, SLOT_C (i - 1, b), (int64_t)1 << b);
+            add_bit (acc, SLOT (L->c, 11, i - 1, b), (int64_t)1 << b);
           rhs -= 64;
         }
       for (b = 0; b < 4; b++)
         {
-          add_bit (acc, SLOT_DP (i, b), -((int64_t)1 << b));
-          add_bit (acc, SLOT_D (i, b), -((int64_t)1 << b));
+          add_bit (acc, SLOT (L->dp, 4, i, b), -((int64_t)1 << b));
+          if (!burn)
+            add_bit (acc, SLOT (L->d, 4, i, b), -((int64_t)1 << b));
         }
       if (i <= 14)
         {
           for (b = 0; b < 11; b++)
-            add_bit (acc, SLOT_C (i, b), -((int64_t)16 << b));
+            add_bit (acc, SLOT (L->c, 11, i, b), -((int64_t)16 << b));
           rhs += 16 * 64;
         }
       evaleq (S, e++, NULL, 0, i, -1, acc, rhs);
     }
 
-  S->Es[0] = new_sel (Rq, 32, 146, 0);
-  S->Es[1] = new_sel (Rq, 32, 146, 32);
-  S->Es[2] = new_sel (Rq, 32, 146, 64);
-  S->Es[3] = new_sel (Rq, 32, 146, 96);
-  S->Es[4] = new_sel (Rq, 1, 146, 128);
-  S->Es[5] = new_sel (Rq, 1, 146, 129);
-  S->Es[6] = new_sel (Rq, 1, 146, 130);
-  S->Ps = new_sel (Rq, 15, 146, TX_BITS);
-  S->Ds = new_sel (Rq, 1, 146, 128); /* e2_t, |coefficients| <= 20 < 64 (tx_params.sage Bprime) */
+  S->Es[0] = new_sel (Rq, 32, m1, 0);
+  S->Es[1] = new_sel (Rq, 32, m1, 32);
+  S->Es[2] = new_sel (Rq, 32, m1, 64);
+  S->Es[3] = new_sel (Rq, 32, m1, 96);
+  S->Es[4] = new_sel (Rq, 1, m1, 128);
+  if (!burn)
+    {
+      S->Es[5] = new_sel (Rq, 1, m1, 129);
+      S->Es[6] = new_sel (Rq, 1, m1, 130);
+    }
+  S->Ps = new_sel (Rq, S->nbin, m1, S->bits);
+  S->Ds = new_sel (Rq, 1, m1, 128); /* e2_t (R_TX) / e2_f (R_BURN), |coefficients| <= 20 < 64 (Bprime) */
   return 1;
 }
+
+/* ---- R_DS and R_DR (disclosure, pq-zether.md §7.9) ---- */
+
+/* opTag || proofSystemId || chainId || chainUid || token || registry || entryRef || be32(amount) || u8(kind)
+   || pk || u || v; only amount, pk, u, v enter the equations, the rest is hashed */
+static int
+parse_disc (txst_t *T, polyring_srcptr Rq, const uint8_t *stmt)
+{
+  const uint8_t *p = stmt + PQZ_DISC_PK;
+  int ok = rd_word64 (&T->amount, stmt + PQZ_DISC_AMOUNT);
+  T->pkt = new_vec (Rq), T->u = new_vec (Rq);
+  poly_alloc (T->vt, Rq);
+  ok &= rd_polyvec (T->pkt, p), p += PQZ_POLYVEC_BYTES;
+  ok &= rd_polyvec (T->u, p), p += PQZ_POLYVEC_BYTES;
+  ok &= rd_poly (T->vt, p, 16);
+  return ok;
+}
+
+/* R_DS: u = A^T r + e1; (pk^T r)_i + e2_i + Delta d_i - v_i = 0 */
+static int
+build_ds (sys_t *S, txst_t *T, const uint8_t *stmt)
+{
+  rel_t *R = &DS;
+  polyring_srcptr Rq = R->P->tbox->ring;
+  S->R = R;
+  S->N = K;
+  S->M = 16;
+  S->bits = 65;
+  S->nbin = 0;
+  if (!parse_disc (T, Rq, stmt))
+    return 0;
+  for (unsigned i = 0; i < K; i++)
+    add_lin_row (S, i, 1, i, 0, 32, polyvec_get_elem (T->u, i));
+  for (unsigned i = 0; i < 16; i++)
+    evaleq (S, i, T->pkt, 0, i, 64, NULL, DELTA * digit (T->amount, i) - cval (T->vt, i));
+  S->Es[0] = new_sel (Rq, 32, 65, 0);
+  S->Es[1] = new_sel (Rq, 32, 65, 32);
+  S->Es[2] = new_sel (Rq, 1, 65, 64);
+  S->Ps = NULL;
+  S->Ds = new_sel (Rq, 1, 65, 64); /* e2_t, |coefficients| <= 20 < 64 (ds_params.sage Bprime) */
+  return 1;
+}
+
+/* R_DR: pk = A s + e; (u^T s)_i + (e'_i + 2^24) - 2^24 + Delta d_i - v_i = 0 */
+static int
+build_dr (sys_t *S, txst_t *T, const uint8_t *stmt)
+{
+  rel_t *R = &DR;
+  polyring_srcptr Rq = R->P->tbox->ring;
+  poly_ptr acc[15];
+  S->R = R;
+  S->N = K;
+  S->M = 16;
+  S->bits = 64;
+  S->nbin = 7;
+  if (!parse_disc (T, Rq, stmt))
+    return 0;
+  for (unsigned b = 0; b < 15; b++)
+    acc[b] = new_poly (Rq);
+  for (unsigned i = 0; i < K; i++)
+    add_lin_row (S, i, 0, i, 0, 32, polyvec_get_elem (T->pkt, i));
+  for (unsigned i = 0; i < 16; i++)
+    {
+      acc_zero (acc);
+      for (unsigned b = 0; b < 25; b++)
+        add_bit (acc, 25 * i + b, (int64_t)1 << b);
+      evaleq (S, i, T->u, 0, i, -1, acc, DELTA * digit (T->amount, i) - cval (T->vt, i) - ((int64_t)1 << 24));
+    }
+  S->Es[0] = new_sel (Rq, 32, 71, 0);
+  S->Es[1] = new_sel (Rq, 32, 71, 32);
+  S->Ps = new_sel (Rq, 7, 71, 64);
+  S->Ds = new_sel (Rq, 1, 71, 0); /* s[0], coefficients in [-1, 1] (dr_params.sage Bprime) */
+  return 1;
+}
+
 
 /* ---------------------------------------------------------------- prove / verify */
 
@@ -686,61 +837,79 @@ do_verify (sys_t *S, pf_t *F, const uint8_t hash0[32], const uint8_t *proof, siz
          == 1;
 }
 
-/* R_TX witness -> s1 (incl. derived M, carries, e_T); returns 0 if inconsistent */
-static int
-tx_witness (const lnp_tbox_params_struct *P, txst_t *T, const uint8_t *w, polyvec_t s1)
+/* 2048 witness coefficients (int8, or int16 LE if wide) into s1[off .. off + 32) */
+static const uint8_t *
+wit_vec (polyvec_t s1, unsigned off, const uint8_t *p, int wide)
 {
-  polyring_srcptr Rq = P->tbox->ring;
+  for (unsigned j = 0; j < 2048; j++)
+    set_c (polyvec_get_elem (s1, off + j / 64), j % 64, wide ? rd_le16 (p + 2 * j) : (int8_t)p[j]);
+  return p + (wide ? 4096 : 2048);
+}
+
+/* w_i = centre(v_i - (u^T s)_i), s = s1[0 .. 32) */
+static void
+dec_w (polyring_srcptr Rq, polyvec_ptr u, poly_ptr v, polyvec_t s1, int64_t w[16])
+{
+  polyvec_t s;
+  poly_t acc;
+  poly_alloc (acc, Rq);
+  polyvec_get_subvec (s, s1, 0, K, 1);
+  polyvec_dot (acc, u, s);
+  poly_fromcrt (acc);
+  for (unsigned i = 0; i < 16; i++)
+    {
+      int64_t wv = cval (v, i) - cval (acc, i);
+      wv %= (int64_t)PQZ_Q;
+      if (wv > (int64_t)(PQZ_Q - 1) / 2)
+        wv -= (int64_t)PQZ_Q;
+      if (wv < -(int64_t)(PQZ_Q - 1) / 2)
+        wv += (int64_t)PQZ_Q;
+      w[i] = wv;
+    }
+  poly_free (acc);
+}
+
+/* R_TX / R_BURN witness -> s1 (incl. derived M, carries, e_T); returns 0 if inconsistent */
+static int
+debit_witness (txst_t *T, const uint8_t *w, polyvec_t s1, int burn)
+{
+  polyring_srcptr Rq = (burn ? BURN.P : TX.P)->tbox->ring;
+  const lay_t *L = burn ? &LAY_BURN : &LAY_TX;
+  const unsigned bits = burn ? 129 : TX_BITS, ne2 = burn ? 1 : 3;
   const uint8_t *p = w;
   unsigned i, j, b;
   int64_t d[16], dp[16], M[16], eT[16], c[16];
 
-  for (j = 0; j < 2048; j++)
-    set_c (polyvec_get_elem (s1, j / 64), j % 64, (int8_t)p[j]);
-  p += 2048;
-  for (j = 0; j < 2048; j++)
-    set_c (polyvec_get_elem (s1, 32 + j / 64), j % 64, rd_le16 (p + 2 * j));
-  p += 4096;
-  for (j = 0; j < 2048; j++)
-    set_c (polyvec_get_elem (s1, 64 + j / 64), j % 64, (int8_t)p[j]);
-  p += 2048;
-  for (j = 0; j < 2048; j++)
-    set_c (polyvec_get_elem (s1, 96 + j / 64), j % 64, rd_le16 (p + 2 * j));
-  p += 4096;
-  for (i = 0; i < 3; i++)
+  p = wit_vec (s1, 0, p, 0);
+  p = wit_vec (s1, 32, p, 1);
+  p = wit_vec (s1, 64, p, 0);
+  p = wit_vec (s1, 96, p, 1);
+  for (i = 0; i < ne2; i++)
     for (j = 0; j < 16; j++)
       set_c (polyvec_get_elem (s1, 128 + i), j, rd_le16 (p + 32 * i + 2 * j));
-  p += 96;
+  p += 32 * ne2;
   for (i = 0; i < 16; i++)
-    d[i] = p[i], dp[i] = p[16 + i];
+    if (burn)
+      d[i] = digit (T->amount, i), dp[i] = p[i];
+    else
+      d[i] = p[i], dp[i] = p[16 + i];
 
   /* decrypt T with s_f: w_i = centre(v_T,i - (u_T^T s_f)_i), M_i = round(w_i / Delta), e_T = w - Delta M */
   {
-    polyvec_t sf;
-    poly_t acc;
-    poly_alloc (acc, Rq);
-    polyvec_get_subvec (sf, s1, 0, K, 1);
-    polyvec_dot (acc, T->uT, sf);
-    poly_fromcrt (acc);
+    int64_t wv[16];
+    dec_w (Rq, T->uT, T->vT, s1, wv);
     for (i = 0; i < 16; i++)
       {
-        int64_t wv = cval (T->vT, i) - cval (acc, i);
-        wv %= (int64_t)PQZ_Q;
-        if (wv > (int64_t)(PQZ_Q - 1) / 2)
-          wv -= (int64_t)PQZ_Q;
-        if (wv < -(int64_t)(PQZ_Q - 1) / 2)
-          wv += (int64_t)PQZ_Q;
-        int64_t m = (wv >= 0 ? wv + DELTA / 2 : wv - DELTA / 2) / DELTA;
+        int64_t m = (wv[i] >= 0 ? wv[i] + DELTA / 2 : wv[i] - DELTA / 2) / DELTA;
         M[i] = m;
-        eT[i] = wv - DELTA * m;
+        eT[i] = wv[i] - DELTA * m;
       }
-    poly_free (acc);
   }
   /* carries: c_i = (M_i + c_{i-1} - d'_i - d_i - f_i) / 16, exact, c_15 = 0 */
   int64_t cprev = 0;
   for (i = 0; i < 16; i++)
     {
-      int64_t s = M[i] + cprev - dp[i] - d[i] - (int64_t)((T->fee >> (4 * i)) & 15);
+      int64_t s = M[i] + cprev - dp[i] - d[i] - (int64_t)digit (T->fee, i);
       if (s % 16 != 0)
         return 0;
       c[i] = s / 16;
@@ -756,14 +925,114 @@ tx_witness (const lnp_tbox_params_struct *P, txst_t *T, const uint8_t *w, polyve
   for (i = 0; i < 16; i++)
     for (b = 0; b < 25; b++)
       {
-        unsigned slots[5] = { SLOT_D (i, b), SLOT_DP (i, b), SLOT_M (i, b), SLOT_C (i, b), SLOT_E (i, b) };
+        int base[5] = { L->d, L->dp, L->m, L->c, L->e };
         int64_t vals[5] = { d[i], dp[i], M[i], c[i] + 64, eT[i] + (1 << 24) };
-        unsigned widths[5] = { 4, 4, 14, i < 15 ? 11u : 0u, 25 };
+        unsigned widths[5] = { 4, 4, 14, 11, 25 }, n[5] = { 4, 4, 14, i < 15 ? 11u : 0u, 25 };
         for (unsigned k = 0; k < 5; k++)
-          if (b < widths[k])
-            set_c (polyvec_get_elem (s1, TX_BITS + slots[k] / 64), slots[k] % 64, (vals[k] >> b) & 1);
+          if (base[k] >= 0 && b < n[k])
+            {
+              unsigned slot = SLOT (base[k], widths[k], i, b);
+              set_c (polyvec_get_elem (s1, bits + slot / 64), slot % 64, (vals[k] >> b) & 1);
+            }
       }
   return 1;
+}
+
+/* R_DR witness -> s1: s, e and the bits of e'_i + 2^24, e'_i = centre(v_i - (u^T s)_i) - Delta d_i */
+static int
+dr_witness (txst_t *T, const uint8_t *w, polyvec_t s1)
+{
+  int64_t wv[16];
+  wit_vec (s1, 32, wit_vec (s1, 0, w, 0), 1);
+  dec_w (DR.P->tbox->ring, T->u, T->vt, s1, wv);
+  for (unsigned i = 0; i < 16; i++)
+    {
+      int64_t e = wv[i] - DELTA * digit (T->amount, i);
+      if (e < -(1 << 24) || e >= (1 << 24))
+        return 0; /* not an encryption of amount under this key */
+      for (unsigned b = 0; b < 25; b++)
+        set_c (polyvec_get_elem (s1, 64 + (25 * i + b) / 64), (25 * i + b) % 64, ((e + (1 << 24)) >> b) & 1);
+    }
+  return 1;
+}
+
+/* the statement of op (stmt_len checked); 0 if the op is unknown or the statement malformed */
+static int
+build (sys_t *S, txst_t *T, uint8_t op, const uint8_t *stmt, size_t stmt_len, polyvec_t pk)
+{
+  switch (op)
+    {
+    case PQZ_OP_REGISTER:
+      return stmt_len == PQZ_REG_STMT_BYTES && build_reg (S, stmt, pk);
+    case PQZ_OP_TRANSFER:
+      return stmt_len == PQZ_TX_STMT_BYTES && build_debit (S, T, stmt, 0);
+    case PQZ_OP_BURN:
+      return stmt_len == PQZ_BURN_STMT_BYTES && build_debit (S, T, stmt, 1);
+    case PQZ_OP_DISCLOSE_SENDER:
+      return stmt_len == PQZ_DISC_STMT_BYTES && build_ds (S, T, stmt);
+    case PQZ_OP_DISCLOSE_RECEIVER:
+      return stmt_len == PQZ_DISC_STMT_BYTES && build_dr (S, T, stmt);
+    }
+  return 0;
+}
+
+static rel_t *
+rel_of (uint8_t op)
+{
+  switch (op)
+    {
+    case PQZ_OP_REGISTER:
+      return &REG;
+    case PQZ_OP_TRANSFER:
+      return &TX;
+    case PQZ_OP_BURN:
+      return &BURN;
+    case PQZ_OP_DISCLOSE_SENDER:
+      return &DS;
+    case PQZ_OP_DISCLOSE_RECEIVER:
+      return &DR;
+    }
+  return NULL;
+}
+
+/* witness -> s1 and the l2 slack (upsilon); 0 if the witness is malformed, inconsistent or above a bound */
+static int
+witness (txst_t *T, uint8_t op, const uint8_t *wit, size_t wit_len, polyvec_t s1)
+{
+  static const unsigned st_reg[2] = { 0, 32 }, ln_reg[2] = { 32, 32 };
+  static const unsigned st_tx[7] = { 0, 32, 64, 96, 128, 129, 130 }, ln_tx[7] = { 32, 32, 32, 32, 1, 1, 1 };
+  static const unsigned st_ds[3] = { 0, 32, 64 }, ln_ds[3] = { 32, 32, 1 };
+  const unsigned *st = st_reg, *ln = ln_reg;
+  switch (op)
+    {
+    case PQZ_OP_REGISTER:
+      if (wit_len != PQZ_REG_WIT_BYTES)
+        return 0;
+      wit_vec (s1, 32, wit_vec (s1, 0, wit, 0), 1);
+      break;
+    case PQZ_OP_TRANSFER:
+    case PQZ_OP_BURN:
+      if (wit_len != (op == PQZ_OP_BURN ? PQZ_BURN_WIT_BYTES : PQZ_TX_WIT_BYTES)
+          || !debit_witness (T, wit, s1, op == PQZ_OP_BURN))
+        return 0;
+      st = st_tx, ln = ln_tx; /* R_BURN: the first 5 blocks */
+      break;
+    case PQZ_OP_DISCLOSE_SENDER:
+      if (wit_len != PQZ_DS_WIT_BYTES)
+        return 0;
+      wit = wit_vec (s1, 32, wit_vec (s1, 0, wit, 0), 1);
+      for (unsigned j = 0; j < 16; j++)
+        set_c (polyvec_get_elem (s1, 64), j, rd_le16 (wit + 2 * j));
+      st = st_ds, ln = ln_ds;
+      break;
+    case PQZ_OP_DISCLOSE_RECEIVER:
+      if (wit_len != PQZ_DR_WIT_BYTES || !dr_witness (T, wit, s1))
+        return 0;
+      break;
+    default:
+      return 0;
+    }
+  return set_upsilon (rel_of (op)->P, s1, st, ln);
 }
 
 int
@@ -772,43 +1041,25 @@ pqz_prove (uint8_t op, const uint8_t *stmt, size_t stmt_len, const uint8_t *wit,
 {
   sys_t S;
   pf_t F;
+  txst_t T;
+  polyvec_t pk;
   uint8_t h[32];
   int rc = PQZ_ERR_INPUT;
+  rel_t *R = rel_of (op);
 
   if (!ready)
     return PQZ_ERR_INTERNAL;
+  if (R == NULL)
+    return PQZ_ERR_INPUT;
   pqz_err = PQZ_OK;
   pqz_arena_release (&base);
   memset (&S, 0, sizeof (S));
   stmt_hash (h, op, stmt, stmt_len);
-  if (op == PQZ_OP_REGISTER && stmt_len == PQZ_REG_STMT_BYTES && wit_len == PQZ_REG_WIT_BYTES)
-    {
-      polyvec_t pk;
-      polyvec_alloc (pk, REG.P->tbox->ring, K);
-      pf_alloc (&F, REG.P);
-      if (build_reg (&S, stmt, pk))
-        {
-          for (unsigned j = 0; j < 2048; j++)
-            {
-              set_c (polyvec_get_elem (F.s1, j / 64), j % 64, (int8_t)wit[j]);
-              set_c (polyvec_get_elem (F.s1, 32 + j / 64), j % 64, rd_le16 (wit + 2048 + 2 * j));
-            }
-          static const unsigned st[2] = { 0, 32 }, ln[2] = { 32, 32 };
-          if (set_upsilon (REG.P, F.s1, st, ln))
-            rc = do_prove (&S, &F, h, rnd32, proof, proof_len);
-        }
-    }
-  else if (op == PQZ_OP_TRANSFER && stmt_len == PQZ_TX_STMT_BYTES && wit_len == PQZ_TX_WIT_BYTES)
-    {
-      txst_t T;
-      pf_alloc (&F, TX.P);
-      if (build_tx (&S, &T, stmt) && tx_witness (TX.P, &T, wit, F.s1))
-        {
-          static const unsigned st[7] = { 0, 32, 64, 96, 128, 129, 130 }, ln[7] = { 32, 32, 32, 32, 1, 1, 1 };
-          if (set_upsilon (TX.P, F.s1, st, ln))
-            rc = do_prove (&S, &F, h, rnd32, proof, proof_len);
-        }
-    }
+  if (op == PQZ_OP_REGISTER)
+    polyvec_alloc (pk, REG.P->tbox->ring, K);
+  pf_alloc (&F, R->P);
+  if (build (&S, &T, op, stmt, stmt_len, pk) && witness (&T, op, wit, wit_len, F.s1))
+    rc = do_prove (&S, &F, h, rnd32, proof, proof_len);
   if (pqz_err)
     rc = pqz_err;
   pqz_arena_release (&base);
@@ -820,35 +1071,29 @@ pqz_verify (uint8_t op, const uint8_t *stmt, size_t stmt_len, const uint8_t *pro
 {
   sys_t S;
   pf_t F;
+  txst_t T;
+  polyvec_t pk;
   uint8_t h[32];
   int ok = 0;
+  rel_t *R = rel_of (op);
 
-  if (!ready)
+  if (!ready || R == NULL)
     return 0;
   pqz_err = PQZ_OK;
   pqz_arena_release (&base);
   memset (&S, 0, sizeof (S));
   stmt_hash (h, op, stmt, stmt_len);
-  if (op == PQZ_OP_REGISTER && stmt_len == PQZ_REG_STMT_BYTES)
-    {
-      polyvec_t pk;
-      polyvec_alloc (pk, REG.P->tbox->ring, K);
-      pf_alloc (&F, REG.P);
-      if (build_reg (&S, stmt, pk))
-        ok = do_verify (&S, &F, h, proof, proof_len);
-    }
-  else if (op == PQZ_OP_TRANSFER && stmt_len == PQZ_TX_STMT_BYTES)
-    {
-      txst_t T;
-      pf_alloc (&F, TX.P);
-      if (build_tx (&S, &T, stmt))
-        ok = do_verify (&S, &F, h, proof, proof_len);
-    }
+  if (op == PQZ_OP_REGISTER)
+    polyvec_alloc (pk, REG.P->tbox->ring, K);
+  pf_alloc (&F, R->P);
+  if (build (&S, &T, op, stmt, stmt_len, pk))
+    ok = do_verify (&S, &F, h, proof, proof_len);
   if (pqz_err)
     ok = 0;
   pqz_arena_release (&base);
   return ok;
 }
+
 
 /* ---------------------------------------------------------------- client helpers (tests) */
 
