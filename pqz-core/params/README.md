@@ -1,10 +1,12 @@
-# pqz-core/params — E-S0 parameter spike
+# pqz-core/params — E-S0 parameter spike and E-S1 codegen
 
 `estimator.txt` is the recorded output of `e_s0.py`: lattice-estimator runs under `RC.ADPS16` (core-SVP, classical
 `0.292β` and quantum `0.265β`) on the encryption MLWE instances, the proof's ABDLOP MSIS/MLWE instances and Kyber-512;
 the DDGR20 hint estimate on the shared `(r, e1)`; the proof challenge space; the exactness checks of the norm proofs;
 and the soundness of each Fiat–Shamir round. Spec: `docs/contracts/pq-zether.md` CTR-PQZ-03, CTR-PQZ-04 and §5;
-write-up: `docs/research/pqz-parameters-e-s0.md`. Only this directory of `pqz-core` exists so far (P6d creates the rest).
+write-up: `docs/research/pqz-parameters-e-s0.md`. The E-S1 files (P6d) are the codegen `codegen/` with
+`reg_params.sage` / `tx_params.sage` (rerun `codegen/run.sh`), the generated `pqz_{reg,tx}_params.h`, and the rank sizing
+`e_s1_proof.sage` → `estimator-e-s1.txt` (rerun `run_e_s1.sh`); write-up `docs/research/pqz-core-e-s1.md`.
 
 | Pin | Value |
 |---|---|

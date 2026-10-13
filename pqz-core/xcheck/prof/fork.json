@@ -1,0 +1,5 @@
+{"init_ms": 349.4}
+{"run": "R_TX", "i": 0, "prove_ms": 18096.5, "len": 42738, "fnv": "1c549121fd09d755", "tries": 4}
+{"timing": "R_TX prove", "n": 1, "mean_ms": 18096.515, "p50_ms": 18096.515, "p99_ms": 18096.515, "max_ms": 18096.515}
+{"rel": "R_TX", "proof_bytes_last": 42738, "proof_bytes_max": 42738, "arena_peak": 610731712, "rej_tries_mean": 4.00}
+{"fails": 0}
