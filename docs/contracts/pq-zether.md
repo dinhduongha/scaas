@@ -206,13 +206,14 @@ and sub-second prove/verify; PQZ drops anonymity, so its proof should be smaller
 LaBRADOR has a ~50 KB floor and is not zero-knowledge in its original form (kept for later block-level aggregation);
 Greyhound is a polynomial commitment needing a SNARK around it; MatRiCT/MatRiCT+ target UTXO ring signatures;
 LNS20 is a technique (the digit-carry relation, expressed inside LNP22), not a library; hash-based systems (Plonky3,
-Winterfell) are mature but 100–300 KB with multi-second provers and no default zero-knowledge — the **fallback** if
-E-S1 trips the kill criteria ([CTR-PQZ-09](#CTR-PQZ-09)); a PQ statement inside a pairing SNARK is rejected (pairing
-soundness). On the encryption side, OpenFHE / Lattigo / fhe.rs are full FHE stacks where PQZ needs ~200 lines of
+Stwo, Winterfell) are mature, and the PQZH design study estimates `R_TX` at ≈ 105–225 KB with sub-second provers and a
+hiding mode still to confirm (research note `pqzh-design.md`) — no longer only a fallback: PQZH is the
+second proof-system value next to PQZL (owner 2026-10-13, TODO P6-PQZH); a PQ statement inside a pairing SNARK is
+rejected (pairing soundness). On the encryption side, OpenFHE / Lattigo / fhe.rs are full FHE stacks where PQZ needs ~200 lines of
 K-PKE-style code, and tfhe-rs (fhEVM) is a different trust model (a threshold network key) with a pairing-based input
 proof and a patent licence. LaZer is **forked, not linked**: its protocol logic, specifications and codegen are kept,
-and the six layers below are rewritten. The landscape was surveyed on 2026-10-06; re-survey it before the E-S1 kill
-decision.
+and the six layers below are rewritten. The landscape was surveyed on 2026-10-06 and re-surveyed on 2026-10-13
+(research note `pqz-proof-alternatives.md` §3, §7: prior art and proof backends).
 
 **Hardware fact that drives the build.** LaZer requires AVX-512 and AES-NI and has no portable code path. The
 chain-7622 host is an **AMD Ryzen 5 7235HS (Zen 3+): AVX2 and AES-NI, no AVX-512** (`/proc/cpuinfo`, 2026-10-06), as
