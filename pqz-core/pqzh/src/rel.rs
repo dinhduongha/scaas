@@ -7,7 +7,7 @@ use p3_matrix::dense::RowMajorMatrix;
 use sha3::digest::{ExtendableOutput, Update, XofReader};
 
 use crate::air::{DigitAir, MvAir, MvOut, PolyAir, PolySpec, PqzhAir, RANGE_N, RangeAir, dc};
-use crate::config::{Params, PlainConfig, ZkConfig};
+use crate::config::{Challenge5, Params, Plain5Config, PlainConfig, ZkConfig};
 use crate::ring::*;
 
 pub const OP_TRANSFER: u8 = 1;
@@ -362,7 +362,8 @@ pub fn build(op: u8, stmt: &[u8], wit: Option<&[u8]>, check: bool, p: &Params) -
     }
 }
 
-fn degrees(b: &Built, zk: bool) -> Vec<usize> {
+/// log2 of each AIR's committed height (trace height, +1 under the hiding PCS)
+pub fn degrees(b: &Built, zk: bool) -> Vec<usize> {
     b.airs
         .iter()
         .map(|a| {
@@ -418,15 +419,27 @@ pub fn prove_unchecked(op: u8, stmt: &[u8], wit: &[u8], rnd32: [u8; 32], p: &Par
 }
 
 fn prove_inner(op: u8, stmt: &[u8], wit: &[u8], rnd32: [u8; 32], p: &Params, check: bool) -> Result<Vec<u8>, &'static str> {
+    if p.zk && p.ext5 {
+        return Err("zk with ext5 not built");
+    }
     let b = build(op, stmt, Some(wit), check, p)?;
     let seed = stmt_digest(op, stmt);
-    let proof = if p.zk { prove_with!(p.zk(&seed, rnd32), b) } else { prove_with!(p.plain(&seed), b) };
+    let proof = if p.zk {
+        prove_with!(p.zk(&seed, rnd32), b)
+    } else if p.ext5 {
+        prove_with!(p.plain_ext::<Challenge5>(&seed), b)
+    } else {
+        prove_with!(p.plain(&seed), b)
+    };
     Ok(proof) // a proof above MAX_PROOF is returned (for measurement); verify rejects it
 }
 
+/// Panics caught by `verify` (diagnostics: wasm32 has no unwinding, so there a panic would trap).
+pub static VERIFY_PANICS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
 /// 1 = valid, 0 = anything else; panics inside the verifier count as invalid.
 pub fn verify(op: u8, stmt: &[u8], proof: &[u8], p: &Params) -> bool {
-    if proof.len() > MAX_PROOF {
+    if proof.len() > p.max_proof {
         return false;
     }
     std::panic::catch_unwind(|| {
@@ -434,11 +447,16 @@ pub fn verify(op: u8, stmt: &[u8], proof: &[u8], p: &Params) -> bool {
         let seed = stmt_digest(op, stmt);
         if p.zk {
             verify_with!(p.zk(&seed, [0; 32]), ZkConfig, b, proof, true)
+        } else if p.ext5 {
+            verify_with!(p.plain_ext::<Challenge5>(&seed), Plain5Config, b, proof, false)
         } else {
             verify_with!(p.plain(&seed), PlainConfig, b, proof, false)
         }
     })
-    .unwrap_or(false)
+    .unwrap_or_else(|_| {
+        VERIFY_PANICS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        false
+    })
 }
 
 fn sz<T: serde::Serialize>(t: &T) -> usize {

@@ -1,7 +1,7 @@
 //! Test and bench inputs: the same keys, ciphertexts, statements and witnesses as pqz-core's test/pqz_bench.c
 //! setup() (same xorshift stream, same samplers), so the bytes can be compared with pqz-core's (xcheck/).
 
-use crate::rel::{PREFIX, REG_STMT, REG_WIT, TX_STMT, TX_WIT};
+use crate::rel::{OP_REGISTER, OP_TRANSFER, PREFIX, REG_STMT, REG_WIT, TX_STMT, TX_WIT};
 use crate::ring::*;
 
 pub struct Rng(pub u64);
@@ -190,4 +190,68 @@ pub fn setup_with(tw: &Tweak) -> Setup {
     w.extend_from_slice(&m[1]);
     assert_eq!((tx.len(), w.len()), (TX_STMT, TX_WIT));
     Setup { reg_stmt, reg_wit, tx_stmt: tx, tx_wit: w }
+}
+
+// ---- adversarial inputs (bench native and wasm) ----
+
+/// xorshift for mutations (independent of the setup stream)
+pub struct R(pub u64);
+impl R {
+    pub fn next(&mut self) -> u64 {
+        self.0 ^= self.0 << 13;
+        self.0 ^= self.0 >> 7;
+        self.0 ^= self.0 << 17;
+        self.0
+    }
+}
+
+pub const KINDS: [&str; 12] = [
+    "bitflip", "byte_set", "random_bytes", "truncate", "extend", "stmt_coeff", "stmt_oob", "stmt_prefix",
+    "stmt_tail", "other_proof", "field_noncanon", "empty",
+];
+
+/// mutated (statement, proof) of kind k
+pub fn mutate(k: usize, op: u8, st: &[u8], pf: &[u8], other: &[u8], r: &mut R) -> (Vec<u8>, Vec<u8>) {
+    let (mut s, mut p) = (st.to_vec(), pf.to_vec());
+    let body = crate::rel::PREFIX + if op == OP_REGISTER { 32 } else { 0 };
+    let ncoef = (s.len() - body - if op == OP_TRANSFER { 8 } else { 0 }) / 8;
+    match KINDS[k] {
+        "bitflip" => {
+            let b = (r.next() % (8 * p.len() as u64)) as usize;
+            p[b / 8] ^= 1 << (b % 8);
+        }
+        "byte_set" => {
+            let i = (r.next() % p.len() as u64) as usize;
+            p[i] = p[i].wrapping_add(1 + (r.next() % 255) as u8);
+        }
+        "random_bytes" => p.iter_mut().for_each(|b| *b = r.next() as u8),
+        "truncate" => p.truncate(p.len() - 1 - (r.next() % 64) as usize),
+        "extend" => p.extend((0..1 + r.next() % 64).map(|_| r.next() as u8)),
+        "stmt_coeff" => {
+            // +1 mod q on one coefficient (stays canonical)
+            let o = body + 8 * (r.next() as usize % ncoef);
+            let v = u64::from_be_bytes(s[o..o + 8].try_into().unwrap());
+            s[o..o + 8].copy_from_slice(&((v + 1) % Q).to_be_bytes());
+        }
+        "stmt_oob" => {
+            let o = body + 8 * (r.next() as usize % ncoef);
+            let v = u64::from_be_bytes(s[o..o + 8].try_into().unwrap());
+            s[o..o + 8].copy_from_slice(&(v + Q).to_be_bytes());
+        }
+        "stmt_prefix" => s[(r.next() % crate::rel::PREFIX as u64) as usize] ^= 1 << (r.next() % 8),
+        "stmt_tail" => {
+            // R_REG: message byte; R_TX: fee
+            let i = if op == OP_REGISTER { crate::rel::PREFIX + (r.next() % 32) as usize } else { s.len() - 1 - (r.next() % 8) as usize };
+            s[i] ^= 1 << (r.next() % 8);
+        }
+        "other_proof" => p = other.to_vec(),
+        "field_noncanon" => {
+            // add p to one 8-byte-aligned little-endian word near the end (a field element of the FRI final poly)
+            let i = p.len() - 8 * (1 + (r.next() % 16) as usize);
+            let w = u64::from_le_bytes(p[i..i + 8].try_into().unwrap());
+            p[i..i + 8].copy_from_slice(&w.wrapping_add(0xFFFF_FFFF_0000_0001).to_le_bytes());
+        }
+        _ => p.clear(),
+    }
+    (s, p)
 }

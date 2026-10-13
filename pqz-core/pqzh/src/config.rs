@@ -5,6 +5,7 @@ use p3_challenger::{HashChallenger, SerializingChallenger64};
 use p3_commit::ExtensionMmcs;
 use p3_dft::Radix2DitParallel;
 use p3_field::extension::BinomialExtensionField;
+use p3_field::{ExtensionField, TwoAdicField};
 use p3_fri::{FriParameters, HidingFriPcs, TwoAdicFriPcs};
 use p3_keccak::{Keccak256Hash, KeccakF, VECTOR_LEN};
 use p3_merkle_tree::{MerkleTreeHidingMmcs, MerkleTreeMmcs};
@@ -16,6 +17,8 @@ use rand::rngs::StdRng;
 use crate::ring::F;
 
 pub type Challenge = BinomialExtensionField<F, 2>;
+/// Quintic extension (≈ 2^320): the field the soundness sweep needs for 128 proven bits (pqzh-prototype.md §7).
+pub type Challenge5 = BinomialExtensionField<F, 5>;
 type U64Hash = PaddingFreeSponge<KeccakF, 25, 17, 4>;
 type FieldHash = SerializingHasher<U64Hash>;
 type Compress = CompressionFunctionFromHasher<U64Hash, 2, 4>;
@@ -25,8 +28,9 @@ type HidingValMmcs =
 type Challenger = SerializingChallenger64<F, HashChallenger<u8, Keccak256Hash, 32>>;
 type Dft = Radix2DitParallel<F>;
 
-pub type PlainConfig =
-    StarkConfig<TwoAdicFriPcs<F, Dft, ValMmcs, ExtensionMmcs<F, Challenge, ValMmcs>>, Challenge, Challenger>;
+pub type PlainCfg<EF> = StarkConfig<TwoAdicFriPcs<F, Dft, ValMmcs, ExtensionMmcs<F, EF, ValMmcs>>, EF, Challenger>;
+pub type PlainConfig = PlainCfg<Challenge>;
+pub type Plain5Config = PlainCfg<Challenge5>;
 pub type ZkConfig = StarkConfig<
     HidingFriPcs<F, Dft, HidingValMmcs, ExtensionMmcs<F, Challenge, HidingValMmcs>, StdRng>,
     Challenge,
@@ -44,6 +48,10 @@ pub struct Params {
     pub commit_pow_bits: usize,
     pub cap_height: usize,
     pub zk: bool,
+    /// challenge field Goldilocks^5 instead of Goldilocks^2 (plain mode only)
+    pub ext5: bool,
+    /// proof-length limit checked before parsing (the PQZH kind: rel::MAX_PROOF; larger only for measurements)
+    pub max_proof: usize,
     /// layout, not FRI: accumulator columns of the MV AIR (outputs per stacked group)
     pub mv_width: usize,
 }
@@ -61,6 +69,8 @@ impl Params {
         commit_pow_bits: 0,
         cap_height: 0,
         zk: false,
+        ext5: false,
+        max_proof: crate::rel::MAX_PROOF,
         mv_width: 9,
     };
 
@@ -84,6 +94,10 @@ impl Params {
 
     /// The challenger starts from the 32-byte statement digest (strong Fiat-Shamir).
     pub fn plain(&self, seed: &[u8; 32]) -> PlainConfig {
+        self.plain_ext(seed)
+    }
+
+    pub fn plain_ext<EF: ExtensionField<F> + TwoAdicField>(&self, seed: &[u8; 32]) -> PlainCfg<EF> {
         let (fh, c) = Self::hashes();
         let mmcs = ValMmcs::new(fh, c, self.cap_height);
         let fri = self.fri(ExtensionMmcs::new(mmcs.clone()));

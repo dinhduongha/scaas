@@ -20,6 +20,7 @@ p3-challenger = "=0.8.0"
 p3-dft = "=0.8.0"
 p3-lookup = "=0.8.0"
 p3-batch-stark = "=0.8.0"
+p3-security = "=0.8.0"
 rand = { version = "=0.10.3", default-features = false, features = ["std_rng"] }
 sha3 = "=0.10.8"
 postcard = { version = "=1.1.1", default-features = false, features = ["alloc"] }

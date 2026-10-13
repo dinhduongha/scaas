@@ -1,12 +1,13 @@
 //! PQZH bench: proof bytes and breakdown, prove time, honest and adversarial verify p50 / p99, peak heap.
 //!   pqzh_bench [--rel reg|tx|both] [--np N] [--nv N] [--nadv N] [--blowup L] [--queries Q] [--arity A]
-//!              [--final F] [--pow B] [--cap H] [--mvw W] [--zk] [--sizes-only]
+//!              [--final F] [--pow B] [--cap H] [--mvw W] [--zk] [--ext5] [--max-proof N] [--sizes-only]
 //! Prints JSON lines. Run under scripts/capped.
 
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicUsize, Ordering};
 use std::time::Instant;
 
+use pqzh::client::{KINDS, R, mutate};
 use pqzh::{OP_REGISTER, OP_TRANSFER, Params, client, prove, rel, verify};
 
 struct Track;
@@ -58,68 +59,6 @@ fn stats(v: &mut [f64]) -> String {
     )
 }
 
-/// xorshift for mutations (independent of the setup stream)
-struct R(u64);
-impl R {
-    fn next(&mut self) -> u64 {
-        self.0 ^= self.0 << 13;
-        self.0 ^= self.0 >> 7;
-        self.0 ^= self.0 << 17;
-        self.0
-    }
-}
-
-const KINDS: [&str; 12] = [
-    "bitflip", "byte_set", "random_bytes", "truncate", "extend", "stmt_coeff", "stmt_oob", "stmt_prefix",
-    "stmt_tail", "other_proof", "field_noncanon", "empty",
-];
-
-/// mutated (statement, proof) of kind k
-fn mutate(k: usize, op: u8, st: &[u8], pf: &[u8], other: &[u8], r: &mut R) -> (Vec<u8>, Vec<u8>) {
-    let (mut s, mut p) = (st.to_vec(), pf.to_vec());
-    let body = rel::PREFIX + if op == OP_REGISTER { 32 } else { 0 };
-    let ncoef = (s.len() - body - if op == OP_TRANSFER { 8 } else { 0 }) / 8;
-    match KINDS[k] {
-        "bitflip" => {
-            let b = (r.next() % (8 * p.len() as u64)) as usize;
-            p[b / 8] ^= 1 << (b % 8);
-        }
-        "byte_set" => {
-            let i = (r.next() % p.len() as u64) as usize;
-            p[i] = p[i].wrapping_add(1 + (r.next() % 255) as u8);
-        }
-        "random_bytes" => p.iter_mut().for_each(|b| *b = r.next() as u8),
-        "truncate" => p.truncate(p.len() - 1 - (r.next() % 64) as usize),
-        "extend" => p.extend((0..1 + r.next() % 64).map(|_| r.next() as u8)),
-        "stmt_coeff" => {
-            // +1 mod q on one coefficient (stays canonical)
-            let o = body + 8 * (r.next() as usize % ncoef);
-            let v = u64::from_be_bytes(s[o..o + 8].try_into().unwrap());
-            s[o..o + 8].copy_from_slice(&((v + 1) % pqzh::ring::Q).to_be_bytes());
-        }
-        "stmt_oob" => {
-            let o = body + 8 * (r.next() as usize % ncoef);
-            let v = u64::from_be_bytes(s[o..o + 8].try_into().unwrap());
-            s[o..o + 8].copy_from_slice(&(v + pqzh::ring::Q).to_be_bytes());
-        }
-        "stmt_prefix" => s[(r.next() % rel::PREFIX as u64) as usize] ^= 1 << (r.next() % 8),
-        "stmt_tail" => {
-            // R_REG: message byte; R_TX: fee
-            let i = if op == OP_REGISTER { rel::PREFIX + (r.next() % 32) as usize } else { s.len() - 1 - (r.next() % 8) as usize };
-            s[i] ^= 1 << (r.next() % 8);
-        }
-        "other_proof" => p = other.to_vec(),
-        "field_noncanon" => {
-            // add p to one 8-byte-aligned little-endian word near the end (a field element of the FRI final poly)
-            let i = p.len() - 8 * (1 + (r.next() % 16) as usize);
-            let w = u64::from_le_bytes(p[i..i + 8].try_into().unwrap());
-            p[i..i + 8].copy_from_slice(&w.wrapping_add(0xFFFF_FFFF_0000_0001).to_le_bytes());
-        }
-        _ => p.clear(),
-    }
-    (s, p)
-}
-
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let get = |k: &str| a.iter().position(|x| x == k).and_then(|i| a.get(i + 1)).map(|s| s.as_str());
@@ -133,6 +72,8 @@ fn main() {
     p.cap_height = num("--cap", p.cap_height);
     p.mv_width = num("--mvw", p.mv_width);
     p.zk = a.iter().any(|x| x == "--zk");
+    p.ext5 = a.iter().any(|x| x == "--ext5");
+    p.max_proof = num("--max-proof", p.max_proof); // measurement only: verify proofs above the 160 KB limit
     let sizes_only = a.iter().any(|x| x == "--sizes-only");
     let (np, nv, nadv) = (num("--np", 3), num("--nv", 50), num("--nadv", 4));
     let rels: Vec<(u8, &str)> = match get("--rel").unwrap_or("both") {
@@ -141,9 +82,10 @@ fn main() {
         _ => vec![(OP_REGISTER, "R_REG"), (OP_TRANSFER, "R_TX")],
     };
     println!(
-        "{{\"params\": {{\"log_blowup\": {}, \"queries\": {}, \"max_log_arity\": {}, \"log_final_poly_len\": {}, \"query_pow_bits\": {}, \"cap_height\": {}, \"mv_width\": {}, \"zk\": {}}}}}",
-        p.log_blowup, p.num_queries, p.max_log_arity, p.log_final_poly_len, p.query_pow_bits, p.cap_height, p.mv_width, p.zk
+        "{{\"params\": {{\"log_blowup\": {}, \"queries\": {}, \"max_log_arity\": {}, \"log_final_poly_len\": {}, \"query_pow_bits\": {}, \"cap_height\": {}, \"mv_width\": {}, \"zk\": {}, \"ext5\": {}}}}}",
+        p.log_blowup, p.num_queries, p.max_log_arity, p.log_final_poly_len, p.query_pow_bits, p.cap_height, p.mv_width, p.zk, p.ext5
     );
+    std::panic::set_hook(Box::new(|_| {})); // verify counts caught panics; keep stderr quiet
     let s = client::setup();
     // a second statement of each relation for "other_proof": another key (R_REG) / another salt-free prefix (R_TX)
     for (op, name) in rels {
@@ -162,8 +104,9 @@ fn main() {
         }
         let bd: Vec<String> = rel::breakdown(&pt).iter().map(|(k, v)| format!("\"{k}\": {v}")).collect();
         println!(
-            "{{\"rel\": \"{name}\", \"proof_bytes\": {}, \"within_max_proof\": {}, \"breakdown\": {{{}}}}}",
+            "{{\"rel\": \"{name}\", \"proof_bytes\": {}, \"fnv_last\": \"{:08x}\", \"within_max_proof\": {}, \"breakdown\": {{{}}}}}",
             pt.len(),
+            pt.iter().fold(2166136261u32, |h, &b| (h ^ b as u32).wrapping_mul(16777619)),
             pt.len() <= rel::MAX_PROOF,
             bd.join(", ")
         );
@@ -171,7 +114,7 @@ fn main() {
         if sizes_only {
             continue;
         }
-        let ok_size = pt.len() <= rel::MAX_PROOF;
+        let ok_size = pt.len() <= p.max_proof;
         let other = prove(op, &st2, w, [9; 32], &p).expect("prove other");
         let mut tv = Vec::new();
         arm();
@@ -188,6 +131,7 @@ fn main() {
         for k in 0..KINDS.len() {
             let mut tk = Vec::new();
             let mut acc = 0;
+            let p0 = rel::VERIFY_PANICS.load(Ordering::Relaxed);
             for _ in 0..nadv {
                 let (ms, mp) = mutate(k, op, st, &pt, &other, &mut r);
                 let t = Instant::now();
@@ -195,7 +139,7 @@ fn main() {
                 tk.push(t.elapsed().as_secs_f64() * 1e3);
             }
             tall.extend_from_slice(&tk);
-            println!("{{\"rel\": \"{name}\", \"kind\": \"{}\", \"cases\": {nadv}, \"accepted\": {acc}, \"stats\": {}}}", KINDS[k], stats(&mut tk));
+            println!("{{\"rel\": \"{name}\", \"kind\": \"{}\", \"cases\": {nadv}, \"accepted\": {acc}, \"panics\": {}, \"stats\": {}}}", KINDS[k], rel::VERIFY_PANICS.load(Ordering::Relaxed) - p0, stats(&mut tk));
             assert_eq!(acc, 0, "mutated input accepted");
         }
         println!("{{\"rel\": \"{name}\", \"timing\": \"verify_adversarial\", \"stats\": {}}}", stats(&mut tall));
