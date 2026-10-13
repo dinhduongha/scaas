@@ -505,17 +505,20 @@ main (int argc, char **argv)
               fails++;
               continue;
             }
-          if (i == 0) /* arena working set of one verify, above the base mark (init tables) */
+          if (i == 0) /* arena working set of one verify above the base mark (A, the op's keys; the fast verifier's
+                         tables for the op are built by its first call and stay below the mark) */
             {
-              size_t base = pqz_arena_used (), pg, pfst;
+              size_t base = pqz_arena_used (), pg, pfst, tab;
               pqz_arena_peak_reset ();
               pqz_verify (op, st, stlen, pf, len);
               pg = pqz_arena_peak () - base;
+              pqz_verify_fast (op, st, stlen, pf, len);
+              tab = pqz_arena_used () - base;
               pqz_arena_peak_reset ();
               pqz_verify_fast (op, st, stlen, pf, len);
-              pfst = pqz_arena_peak () - base;
-              printf ("{\"rel\": \"%s\", \"arena_base\": %zu, \"verify_peak_generic\": %zu, \"verify_peak_fast\": %zu}\n",
-                      RN[rel], base, pg, pfst);
+              pfst = pqz_arena_peak () - base - tab;
+              printf ("{\"rel\": \"%s\", \"arena_base\": %zu, \"sv_tables\": %zu, \"verify_peak_generic\": %zu, "
+                      "\"verify_peak_fast\": %zu}\n", RN[rel], base, tab, pg, pfst);
             }
           check (0, op, st, stlen, pf, len);
           {

@@ -20,7 +20,7 @@ open: [STATUS.md](STATUS.md); write-up: `docs/research/pqz-core-e-s1.md`.
 | `rel3/` | `R_BURN` / `R_DS` / `R_DR` measurement: `bench.sh` (build, KAT, `R_REG` / `R_TX` proof hashes, timings; under `scripts/capped`), `relfix.sh` (after the owner's fix-ups: build, KAT, proof hashes, arena peak per relation, ASan + UBSan, timings of all five), raw runs `runs/` |
 | `sz/`, `l2dom/` | The two LaZer `tbox` soundness fixes behind `proofSystemId` v2 ([lazer#24](https://github.com/lazer-crypto/lazer/issues/24), [#25](https://github.com/lazer-crypto/lazer/issues/25)): challenge-row trace and the pooled-slack cheating prover; `check_tbox_fixes.sh` fails if either fix is gone (`sz/README.md`) |
 | `floor/` | Verifier-floor microbenchmarks and cost model (`docs/research/pqz-verifier-floor.md`): unit costs, prototypes, operation counts of the generic verifier; `floor/build.sh run` under `scripts/capped` |
-| `sv/` | P6-SV specialised verifier (`src/pqz_sv.c`, `pqz_verify_fast`; `docs/research/pqz-specialised-verifier.md`): `diff.sh` (differential test against `pqz_verify`, `test/pqz_sv_diff.c`), `bench.sh` (native portable, x86-64-v3, wasm), `fuzz.sh` (ASan + UBSan, libFuzzer `test/pqz_sv_fuzz.c`), `rel3.sh` (all five relations under one capped job), raw results `runs/` |
+| `sv/` | P6-SV specialised verifier (`src/pqz_sv.c`, `pqz_verify_fast`; `docs/research/pqz-specialised-verifier.md`): `diff.sh` (differential test against `pqz_verify`, `test/pqz_sv_diff.c`), `bench.sh` (native portable, x86-64-v3, wasm), `fuzz.sh` (ASan + UBSan, libFuzzer `test/pqz_sv_fuzz.c`), `rel3.sh` (all five relations under one capped job: diff, bench, wasm both, ASan, KAT, both fix checks, memory per op), `check_sv_fixes.sh` (fails unless the differential test catches either tbox fix reverted in `pqz_sv.c`), raw results `runs/` |
 
 ## Build and run
 
@@ -28,6 +28,8 @@ open: [STATUS.md](STATUS.md); write-up: `docs/research/pqz-core-e-s1.md`.
 ./build.sh native            # build/native: libpqz.a, libpqz.so, pqz_bench, kat_dump
 ./build.sh native-x86v3      # optional: pqz_sv.c (pqz_verify_fast) for x86-64-v3 + AES-NI, build/native-x86v3
 ./build.sh wasm              # build/wasm/pqz.wasm (clang 18, wasm-ld-18, freestanding)
+SV=0 B=build/wasm-nosv ./build.sh wasm   # without the specialised verifier (no pqz_sv.c, no pqz_verify_fast): a
+                                         #   wallet's prover build; SV=0 works for native too
 ./build.sh all
 ```
 
@@ -46,6 +48,7 @@ build/native/pqz_sv_diff 10 5 2 1 10                        # both verifiers on 
 build/native/kat_dump > build/native/kat-pqz.json
 python3 -I kat/check.py kat/lazer-3330e48.json build/native/kat-pqz.json   # must print 19/19
 ./check_tbox_fixes.sh                                       # after ./build.sh native: the tbox fixes are in place
+sv/check_sv_fixes.sh                                        # after ./build.sh native: pqz_verify_fast follows both fixes
 ```
 
 `R_TX` needs about 0.30 GB of arena alone (0.31 GB after an `R_REG` in the same process: a relation's keys are built
