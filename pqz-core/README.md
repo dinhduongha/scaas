@@ -17,7 +17,7 @@ open: [STATUS.md](STATUS.md); write-up: `docs/research/pqz-core-e-s1.md`.
 | `test/` | `pqz_bench.c` (prove, verify, tamper checks, timings, a hash of the proofs) and `run_wasm.mjs` (the same steps under node) |
 | `opt/` | P6d-2 optimisation: `bench.sh` (native + wasm bench under `scripts/capped`), `prof.sh` (gprof), `asan.sh` (ASan + UBSan, malloc path), microbenches `micro_basemul.c` / `micro_aes.c`, raw results `runs/` (STATUS.md) |
 | `floor/` | Verifier-floor microbenchmarks and cost model (`docs/research/pqz-verifier-floor.md`): unit costs, prototypes, operation counts of the generic verifier; `floor/build.sh run` under `scripts/capped` |
-| `sv/` | P6-SV specialised verifier (`src/pqz_sv.c`, `pqz_verify_fast`; `docs/research/pqz-specialised-verifier.md`): `diff.sh` (differential test against `pqz_verify`, `test/pqz_sv_diff.c`), `bench.sh` (native portable, x86-64-v3, wasm), `fuzz.sh` (ASan + UBSan, libFuzzer `test/pqz_sv_fuzz.c`), raw results `runs/` |
+| `sv/` | P6-SV specialised verifier (`src/pqz_sv.c`, `pqz_verify_fast`; `docs/research/pqz-specialised-verifier.md`): `diff.sh` (differential test against `pqz_verify`, `test/pqz_sv_diff.c`), `bench.sh` (native portable, x86-64-v3, wasm), `fuzz.sh` (ASan + UBSan, libFuzzer `test/pqz_sv_fuzz.c`), `rel3.sh` (all five relations under one capped job), raw results `runs/` |
 
 ## Build and run
 

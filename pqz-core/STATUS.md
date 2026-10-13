@@ -105,6 +105,11 @@ blocks, no sparse matrices), 4 × 30-bit CRT primes with a complete NTT, table-b
 - Constraints: no malloc / GMP / MPFR / float / abort on the path, arena only (+9.1 MB of tables at init), invariant
   checks as error returns; symbol scan clean on native, x86-64-v3 and wasm objects. Prover unchanged (`proofs_fnv`
   `3bc7e9b3` / `834d6853`), KAT 19/19.
+- `R_BURN` / `R_DS` / `R_DR` (branch `pqz-sv-rel3` = `pqz-sv` + `pqz-rel3`, `sv/rel3.sh`, runs `sv/runs/r3-*`):
+  native portable p50 7.69 / 4.17 / 4.37 ms (p99 adversarial ≤ 10.9 / 6.5 / 7.3 ms), x86-64-v3 4.47 / 2.82 / 2.67 ms,
+  wasm 13.2 / 7.2 / 7.8 ms; differential test 2,710 portable + 1,350 x86-64-v3 + 360 wasm cases over all five
+  relations, **0 disagreements**; ASan + UBSan bench clean. Tables for five relations: 20.8 MB (wasm `R_TX` prove
+  peak with them 284 MB, over 256 MiB).
 - Open: independent review of `pqz_sv.c` against `lnp-tbox.c` (a second implementation of a soundness-critical
   check); hand-written AVX2 (floor 2.5 ms); a run on the chain host.
 

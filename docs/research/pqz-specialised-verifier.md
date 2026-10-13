@@ -40,6 +40,27 @@ changed statement coefficient runs the whole verify); in the diff harness it is 
 of which pass the decoder and are rejected only by the final hash check, i.e. full verifies. The work does not depend
 on the proof's content beyond the decoder, so p99 adversarial ≈ the honest time plus noise [inference].
 
+**`R_BURN`, `R_DS`, `R_DR`** (added on branch `pqz-sv-rel3`, after the relations themselves,
+`pqz-relations-burn-disclose.md`; run `sv/runs/r3-*`, same machine) [measured]:
+
+| verify, ms [measured] | p50 honest | p99 honest | p99 adversarial (bench / diff) | generic p50 | vs 50 ms |
+|---|---|---|---|---|---|
+| `R_BURN` native portable | **7.69** | 9.8 | 10.0 / 10.9 (n = 730) | 571 | ≈ 4.6× under |
+| `R_BURN` x86-64-v3 + AES-NI | 4.47 | 5.8 | 5.9 / 6.1 (n = 364) | — | |
+| `R_BURN` wasm32 (node) | 13.2 | 20.4 | 16.3 | 707 ¹ | ≈ 2.5× under |
+| `R_DS` native portable | **4.17** | 5.7 | 5.7 / 6.5 (n = 730) | 219 | ≈ 7.7× under |
+| `R_DS` x86-64-v3 + AES-NI | 2.82 | 3.6 | 3.7 / 3.8 | — | |
+| `R_DS` wasm32 (node) | 7.2 | 8.9 | 9.3 | 286 ¹ | |
+| `R_DR` native portable | **4.37** | 6.0 | 5.4 / 7.3 (n = 730) | 221 | ≈ 6.9× under |
+| `R_DR` x86-64-v3 + AES-NI | 2.67 | 3.9 | 3.1 / 3.7 | — | |
+| `R_DR` wasm32 (node) | 7.8 | 9.6 | 9.7 | 262 ¹ | |
+
+Bench: `pqz_bench 2 200` (200 honest, 246 adversarial verifies per relation), wasm `run_wasm.mjs 2 100` (100 honest,
+600 adversarial); diff: the differential harness's mutated proofs (§4). ¹ from `pqz-relations-burn-disclose.md`
+(30 runs). In the same session `R_TX` gave 8.03 ms p50 / 11.5 p99 honest portable, 4.59 x86-64-v3, 13.7 wasm, as
+before within the host's noise. `R_BURN` is `R_TX` without two row groups and costs the same; the disclosure
+relations cost what `R_REG` costs [inference].
+
 **Gas** at the 0.12 M gas/ms conversion (`pqz-proof-alternatives.md` §6) [estimate]: `R_TX` p99 ≈ 10 ms portable →
 ≈ 1.2 M gas (p50 ≈ 0.95 M); x86-64-v3 ≈ 5.6 ms → ≈ 0.7 M; `R_REG` portable ≈ 4.9 ms → ≈ 0.6 M.
 
@@ -135,6 +156,15 @@ inserts / deletes, chunk copies) per proof. Two runs of the final code, determin
 | `d2-portable` | portable | 40 / 20 | 5,694 | 129 (60 honest, 60 re-encoded, 9 no-op mutations) | **0** |
 | `d2-x86v3` | x86-64-v3 + AES-NI | 20 / 10 | 2,844 | 61 | **0** |
 | `b2-wasm-both` | wasm32 (`PQZ_VERIFY=both`) | 2 / 2 (each verified, then 20 verifies and 5 × 20 tamper cases per relation) | 244 | 44 | **0** |
+| `r3-diff-portable` | portable, all five relations | `R_REG` 4, `R_TX` 4, `R_BURN` / `R_DS` / `R_DR` 12 each | 2,710 (`R_BURN`, `R_DS`, `R_DR` 742 each) | 90 (44 honest, 44 re-encoded, 2 no-op) | **0** |
+| `r3-diff-x86v3` | x86-64-v3 + AES-NI, all five | 2 / 2 / 6 / 6 / 6 | 1,350 | 44 | **0** |
+| `r3-wasm-both` | wasm32 (`PQZ_VERIFY=both`), all five | 2 per relation, then 10 verifies and 6 × 10 tamper cases | 360 | 60 | **0** |
+
+For `R_BURN` / `R_DS` / `R_DR` the harness makes fresh statements the same way (new keys, balance < 2^48, amount,
+fee, random header bytes; for the disclosures a fresh transfer leg and an amount of random size); its "public scalar"
+mutation changes the fee or amount word, one time in four in a high byte, which makes it non-canonical (≥ 2^64), and
+the `R_TX` fee as before. The bench's sixth tamper kind does the same. ASan + UBSan on the libc-heap path, the bench
+with the fast verifier over all five relations (`sv/runs/r3-asan.jsonl`): no reports [measured].
 
 The same harness on the previous commit (`d1-*`) gave the same 8,538 cases, 0 disagreements. "Generic accepts"
 beyond the honest and re-encoded proofs are mutations that left the decoded proof unchanged (a poly swapped with
@@ -186,6 +216,14 @@ hand-written AVX2 for the NTTs and products (≈ 3 ms of the 4.6 ms) is what the
 and 273 MB). The tables add 9.1 MB at `pqz_init` (A 1 MB, `R_REG` keys 3.0 MB, `R_TX` keys 5.1 MB; arena base
 36.2 MB with LaZer's own copies). Init time 112 → 118 ms native.
 
+With all five relations the tables are 20.8 MB native (arena base 54.5 → 75.3 MB) and 20.9 MB wasm (43.3 → 64.2 MB);
+one verify of `R_BURN` / `R_DS` / `R_DR` needs 1.64 / 1.08 / 1.12 MB above the base [measured]. On wasm this pushes
+the generic `R_TX` prove to an arena peak of 284 MB, above the 256 MiB hard limit of CTR-PQZ-18 (263 MB without the
+tables): a browser prover build would leave out the specialised verifier's tables or build them lazily [inference].
+Arena peaks of a long mixed run also depend on the history (the arena recycles freed blocks of at most 32 distinct
+sizes): `R_BURN`'s prove peak was 443 MB after the other four relations had run and 348 MB alone [measured], so
+per-relation peaks are read from a run of that relation alone.
+
 **Prover unchanged:** the bench's proof hash over seeds 0..2 is `3bc7e9b3` / `834d6853` as on main; arithmetic KAT
 19/19 [measured].
 
@@ -202,7 +240,8 @@ and 273 MB). The tables add 9.1 MB at `pqz_init` (A 1 MB, `R_REG` keys 3.0 MB, `
 | `R_TX` verify, native / wasm | 660 / 741 ms | 7.85 / 11.9 ms (p50) |
 | `R_REG` verify, native / wasm | 166 / 204 ms | 3.97 / 5.9 ms (p50) |
 | Arena per verify, `R_REG` / `R_TX` | 81 / 273 MB | 1.06 / 1.67 MB (+ 9.1 MB tables once) |
-| Relations | any, from the generated parameters | `R_REG` and `R_TX` only |
+| `R_BURN` / `R_DS` / `R_DR` verify, native p50 | 571 / 219 / 221 ms | 7.69 / 4.17 / 4.37 ms |
+| Relations | any, from the generated parameters | the five of pq-zether.md §9.1, hand-written (§3) |
 
 **Coverage of the precompile ops** (pq-zether.md §9.1). Rollover carries no proof.
 
@@ -210,9 +249,9 @@ and 273 MB). The tables add 9.1 MB at `pqz_init` (A 1 MB, `R_REG` keys 3.0 MB, `
 |---|---|---|---|
 | `OP_REGISTER` | `R_REG` | yes | yes |
 | `OP_TRANSFER` | `R_TX` | yes | yes |
-| `OP_BURN` (also REFRESH) | `R_BURN` = `R_TX` rows 1, 2, 4, 6, 7 with `d` public | not yet | to write with the relation; mostly `R_TX` code |
-| `OP_DISCLOSE_SENDER` | `R_DS` | not yet | to write with the relation |
-| `OP_DISCLOSE_RECEIVER` (also auditor) | `R_DR` | not yet | to write with the relation (runs in `eth_call`, so speed matters less) |
+| `OP_BURN` (also REFRESH) | `R_BURN` = `R_TX` rows 1, 2, 4, 6, 7 with `d` public | yes (branch `pqz-rel3`) | yes: the `R_TX` evaluation fold with the `R_BURN` bit layout |
+| `OP_DISCLOSE_SENDER` | `R_DS` | yes (branch `pqz-rel3`) | yes |
+| `OP_DISCLOSE_RECEIVER` (also auditor) | `R_DR` | yes (branch `pqz-rel3`) | yes (runs in `eth_call`, so speed matters less) |
 
 **What a change costs** [inference, from `pqz_sv_setup` and the `R_TX` evaluation code]:
 
@@ -220,7 +259,7 @@ and 273 MB). The tables add 9.1 MB at `pqz_init` (A 1 MB, `R_REG` keys 3.0 MB, `
 |---|---|---|
 | Proof-system parameters | `l2Bsqr`, `Bz3sqr`, `Bz4`, `gamma`, `D`, `m`, `kmsis`, stdev, block sizes `n[i]` | read from the generated `*params.h` at `pqz_init`: regenerate, rerun `sv/diff.sh` |
 | Structural assumptions | `d = 64`, `log2 q = 42`, λ = 4, ω = 8, number of blocks (2 / 7), `nprime = 1`, size totals | checked at `pqz_init`; a mismatch makes init fail (`PQZ_ERR_INTERNAL`), never a wrong accept; code change |
-| Relation formulas | an `R_TX` row added or changed, Δ = 2^26 − 1, 16 digits × 4 bits, slot layout (`SLOT_M` 14 bits, `SLOT_C` 11, `SLOT_E` 25), `NPK` | hand-written from `pqz_rel.c` (`build_reg`, `build_tx`); not checked at init; the differential test fails on the first honest proof |
+| Relation formulas | an `R_TX` row added or changed, Δ = 2^26 − 1, 16 digits × 4 bits, slot layout (`SLOT_M` 14 bits, `SLOT_C` 11, `SLOT_E` 25), `NPK` | hand-written from `pqz_rel.c` (`build_reg`, `build_debit`, `build_ds`, `build_dr`); not checked at init; the differential test fails on the first honest proof |
 
 So the differential test (`sv/diff.sh`) should run in CI whenever `pqz_rel.c`, `params/` or `pqz_sv.c` changes.
 Generating the evaluation code from the same relation spec (as LaZer's codegen does for parameters) would remove the
@@ -241,7 +280,7 @@ verifier accepts the same proofs; a wallet (wasm) can check its own proof before
   `_lnp_tbox_check_z34` line by line. An independent review of `pqz_sv.c` against `lnp-tbox.c` is still due before any
   use.
 - **The statement is hard-wired.** The selection blocks, the `R_TX` evaluation equations and the input rows are
-  re-stated from `pqz_rel.c` (`build_reg`, `build_tx`). A change to a relation must change both files; the
+  re-stated from `pqz_rel.c` (`build_reg`, `build_debit`, `build_ds`, `build_dr`). A change to a relation must change both files; the
   differential test catches a mismatch on the first honest proof.
 - **Upstream LaZer's transcript is mirrored as it is** (domains, PRG, encodings). Any change to the protocol or
   its transcript has to be made in both verifiers and bumps `proofSystemId` (CTR-PQZ-09).
@@ -257,7 +296,8 @@ cd pqz-core
 ./build.sh wasm              # pqz.wasm (WASM_SIMD=1 B=build/wasm-simd ./build.sh wasm: -msimd128)
 sv/diff.sh <label>           # differential test, portable + x86-64-v3 -> sv/runs/<label>-*.jsonl
 sv/bench.sh <label>          # p50 / p99, generic vs specialised, native / x86-64-v3 / wasm -> sv/runs/
-sv/fuzz.sh <label> [secs]    # ASan + UBSan bench (malloc path) and the libFuzzer target
+sv/fuzz.sh <label> [secs]    # ASan + UBSan bench (malloc path) and the libFuzzer target (R_REG / R_TX inputs)
+../scripts/capped sv/rel3.sh <label>   # all five relations under one capped job: diff, bench, wasm both, ASan
 PQZ_VERIFY=fast build/native/pqz_bench 2 200                   # the bench with the specialised verifier
 PQZ_VERIFY=both node test/run_wasm.mjs 2 20                     # wasm: both verifiers on every input, must agree
 ```
