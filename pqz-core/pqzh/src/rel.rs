@@ -4,10 +4,11 @@
 use p3_batch_stark::{BatchProof, ProverData, StarkInstance, prove_batch, verify_batch};
 use p3_field::PrimeCharacteristicRing;
 use p3_matrix::dense::RowMajorMatrix;
-use sha3::digest::{ExtendableOutput, Update, XofReader};
+use sha3::Digest;
 
 use crate::air::{DigitAir, MvAir, MvOut, PolyAir, PolySpec, PqzhAir, RANGE_N, RangeAir, dc};
-use crate::config::{Challenge5, Params, Plain5Config, PlainConfig, ZkConfig};
+use crate::config::{Challenge5, Params, Plain5Config, PlainConfig, Zk5Config, ZkConfig};
+use crate::enc;
 use crate::ring::*;
 
 pub const OP_TRANSFER: u8 = 1;
@@ -51,16 +52,16 @@ const fn hex32(h: &str) -> [u8; 32] {
 const BS: i64 = 36 * 36;
 const BE: i64 = 164 * 164;
 
-/// SHAKE256("SCAAS-PQZH-TRANSCRIPT-V1" || u8(op) || be32(len) || stmt): seeds the challenger before any commitment.
+/// keccak256("SCAAS-PQZH-TRANSCRIPT-V1" || u8(op) || be32(len) || stmt): seeds the challenger before any commitment.
+/// Keccak-256, not SHAKE256 (owner 2026-10-13, P6-PQZH-SOL: the EVM's opcode; SHAKE256 of the R_TX statement in
+/// Solidity is 43.3 M gas).
 pub fn stmt_digest(op: u8, stmt: &[u8]) -> [u8; 32] {
-    let mut h = sha3::Shake256::default();
+    let mut h = sha3::Keccak256::new();
     h.update(b"SCAAS-PQZH-TRANSCRIPT-V1");
-    h.update(&[op]);
-    h.update(&(stmt.len() as u32).to_be_bytes());
+    h.update([op]);
+    h.update((stmt.len() as u32).to_be_bytes());
     h.update(stmt);
-    let mut out = [0u8; 32];
-    h.finalize_xof().read(&mut out);
-    out
+    h.finalize().into()
 }
 
 fn rd_i8(b: &[u8], n: usize) -> Vec<Poly> {
@@ -420,14 +421,14 @@ macro_rules! prove_with {
             .collect();
         let pd = ProverData::from_instances(&cfg, &inst).map_err(|_| "setup")?;
         let proof = prove_batch(&cfg, &inst, &pd).map_err(|_| "prove")?;
-        postcard::to_allocvec(&proof).map_err(|_| "encode")?
+        enc::to_vec(&proof).map_err(|_| "encode")?
     }};
 }
 
 macro_rules! verify_with {
     ($cfg:expr, $ty:ty, $b:expr, $proof:expr, $zk:expr) => {{
         let cfg = $cfg;
-        let Ok((proof, rest)) = postcard::take_from_bytes::<BatchProof<$ty>>($proof) else { return false };
+        let Ok((proof, rest)) = enc::take_from_bytes::<BatchProof<$ty>>($proof) else { return false };
         let deg = degrees(&$b, $zk);
         if !rest.is_empty() || proof.degree_bits != deg {
             return false;
@@ -449,12 +450,11 @@ pub fn prove_unchecked(op: u8, stmt: &[u8], wit: &[u8], rnd32: [u8; 32], p: &Par
 }
 
 fn prove_inner(op: u8, stmt: &[u8], wit: &[u8], rnd32: [u8; 32], p: &Params, check: bool) -> Result<Vec<u8>, &'static str> {
-    if p.zk && p.ext5 {
-        return Err("zk with ext5 not built");
-    }
     let b = build(op, stmt, Some(wit), check, p)?;
     let seed = stmt_digest(op, stmt);
-    let proof = if p.zk {
+    let proof = if p.zk && p.ext5 {
+        prove_with!(p.zk_ext::<Challenge5>(&seed, rnd32), b)
+    } else if p.zk {
         prove_with!(p.zk(&seed, rnd32), b)
     } else if p.ext5 {
         prove_with!(p.plain_ext::<Challenge5>(&seed), b)
@@ -475,7 +475,9 @@ pub fn verify(op: u8, stmt: &[u8], proof: &[u8], p: &Params) -> bool {
     std::panic::catch_unwind(|| {
         let Ok(b) = build(op, stmt, None, false, p) else { return false };
         let seed = stmt_digest(op, stmt);
-        if p.zk {
+        if p.zk && p.ext5 {
+            verify_with!(p.zk_ext::<Challenge5>(&seed, [0; 32]), Zk5Config, b, proof, true)
+        } else if p.zk {
             verify_with!(p.zk(&seed, [0; 32]), ZkConfig, b, proof, true)
         } else if p.ext5 {
             verify_with!(p.plain_ext::<Challenge5>(&seed), Plain5Config, b, proof, false)
@@ -490,23 +492,18 @@ pub fn verify(op: u8, stmt: &[u8], proof: &[u8], p: &Params) -> bool {
 }
 
 fn sz<T: serde::Serialize>(t: &T) -> usize {
-    postcard::to_allocvec(t).map(|v| v.len()).unwrap_or(0)
+    enc::to_vec(t).map(|v| v.len()).unwrap_or(0)
 }
 
-/// Byte breakdown of a plain (non-hiding) proof: commitments, out-of-domain values, per-round input openings
-/// (opened rows / Merkle multiproof), FRI layers, final polynomial.
-pub fn breakdown(proof: &[u8]) -> Vec<(String, usize)> {
-    let Ok(p) = postcard::from_bytes::<BatchProof<PlainConfig>>(proof) else { return vec![] };
-    let f = &p.opening_proof;
-    let mut out = vec![
-        ("total".into(), proof.len()),
-        ("commitments".into(), sz(&p.commitments)),
-        ("ood_values".into(), sz(&p.opened_values)),
-        ("lookup_terminals".into(), sz(&p.lookup_terminals)),
-    ];
+fn fri_parts<F: p3_field::Field, M: p3_commit::Mmcs<F>, W, I: serde::Serialize>(
+    out: &mut Vec<(String, usize)>,
+    f: &p3_fri::FriProof<F, M, W, Vec<I>>,
+    rows: impl Fn(&I) -> (usize, usize),
+) {
     for (i, o) in f.input_openings.iter().enumerate() {
-        out.push((format!("round{i}_rows"), sz(&o.opened_values)));
-        out.push((format!("round{i}_merkle"), sz(&o.opening_proof)));
+        let (r, m) = rows(o);
+        out.push((format!("round{i}_rows"), r));
+        out.push((format!("round{i}_merkle"), m));
     }
     out.push(("fri_commits".into(), sz(&f.commit_phase_commits)));
     for (i, s) in f.commit_phase_openings.iter().enumerate() {
@@ -514,5 +511,38 @@ pub fn breakdown(proof: &[u8]) -> Vec<(String, usize)> {
         out.push((format!("fri{i}_merkle"), sz(&s.opening_proof)));
     }
     out.push(("final_poly".into(), sz(&f.final_poly)));
-    out
+}
+
+macro_rules! breakdown_as {
+    ($ty:ty, $proof:expr, |$f:ident, $o:ident| $fri:expr) => {{
+        let Ok((p, _)) = enc::take_from_bytes::<BatchProof<$ty>>($proof) else { return vec![] };
+        let mut out = vec![
+            ("total".into(), $proof.len()),
+            ("commitments".into(), sz(&p.commitments)),
+            ("ood_values".into(), sz(&p.opened_values)),
+            ("lookup_terminals".into(), sz(&p.lookup_terminals)),
+        ];
+        let $f = &p.opening_proof;
+        let $o = &mut out;
+        let fri = $fri;
+        fri_parts(&mut out, fri, |o| (sz(&o.opened_values), sz(&o.opening_proof)));
+        out
+    }};
+}
+
+/// Byte breakdown of a proof: commitments, out-of-domain values, per-round input openings (opened rows / Merkle
+/// multiproof), FRI layers, final polynomial; hiding proofs also list the random codewords' opened values.
+pub fn breakdown(proof: &[u8], p: &Params) -> Vec<(String, usize)> {
+    match (p.zk, p.ext5) {
+        (false, false) => breakdown_as!(PlainConfig, proof, |f, _o| f),
+        (false, true) => breakdown_as!(Plain5Config, proof, |f, _o| f),
+        (true, false) => breakdown_as!(ZkConfig, proof, |f, o| {
+            o.push(("zk_random_ood".into(), sz(&f.0)));
+            &f.1
+        }),
+        (true, true) => breakdown_as!(Zk5Config, proof, |f, o| {
+            o.push(("zk_random_ood".into(), sz(&f.0)));
+            &f.1
+        }),
+    }
 }

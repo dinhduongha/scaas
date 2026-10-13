@@ -102,7 +102,7 @@ fn main() {
             tp.push(t.elapsed().as_secs_f64() * 1e3);
             peak_p = peak_p.max(disarm());
         }
-        let bd: Vec<String> = rel::breakdown(&pt).iter().map(|(k, v)| format!("\"{k}\": {v}")).collect();
+        let bd: Vec<String> = rel::breakdown(&pt, &p).iter().map(|(k, v)| format!("\"{k}\": {v}")).collect();
         println!(
             "{{\"rel\": \"{name}\", \"proof_bytes\": {}, \"fnv_last\": \"{:08x}\", \"within_max_proof\": {}, \"breakdown\": {{{}}}}}",
             pt.len(),

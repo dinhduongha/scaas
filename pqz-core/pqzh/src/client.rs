@@ -253,10 +253,10 @@ pub fn mutate(k: usize, op: u8, st: &[u8], pf: &[u8], other: &[u8], r: &mut R) -
         }
         "other_proof" => p = other.to_vec(),
         "field_noncanon" => {
-            // add p to one 8-byte-aligned little-endian word near the end (a field element of the FRI final poly)
+            // add p to one big-endian word near the end (a field element of the FRI final poly or the PoW witness)
             let i = p.len() - 8 * (1 + (r.next() % 16) as usize);
-            let w = u64::from_le_bytes(p[i..i + 8].try_into().unwrap());
-            p[i..i + 8].copy_from_slice(&w.wrapping_add(0xFFFF_FFFF_0000_0001).to_le_bytes());
+            let w = u64::from_be_bytes(p[i..i + 8].try_into().unwrap());
+            p[i..i + 8].copy_from_slice(&w.wrapping_add(0xFFFF_FFFF_0000_0001).to_be_bytes());
         }
         _ => p.clear(),
     }

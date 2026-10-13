@@ -4,6 +4,7 @@
 pub mod air;
 pub mod client;
 pub mod config;
+pub mod enc;
 pub mod rel;
 pub mod ring;
 
