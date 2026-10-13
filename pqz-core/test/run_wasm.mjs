@@ -4,7 +4,7 @@ import { readFileSync } from 'node:fs';
 
 const [np = 3, nv = 3] = process.argv.slice(2).map(Number);
 const ARENA = 768 * 2 ** 20; // as ARENA_BYTES in pqz_bench.c
-const wasm = readFileSync(new URL('../build/wasm/pqz.wasm', import.meta.url));
+const wasm = readFileSync(process.env.PQZ_WASM_FILE || new URL('../build/wasm/pqz.wasm', import.meta.url));
 const { instance } = await WebAssembly.instantiate(wasm, {});
 const x = instance.exports;
 const heap = x.__heap_base.value;
@@ -29,16 +29,19 @@ for (const tx of [0, 1]) {
   const rel = tx ? 'R_TX' : 'R_REG';
   const tp = [];
   let maxlen = 0;
+  let hall = 2166136261;
   for (let i = 0; i < np; i++) {
     t0 = performance.now();
     const rc = tx ? x.step_prove_tx(i) : x.step_prove_reg(i);
     tp.push(performance.now() - t0);
     if (rc !== 0) { out({ rel, prove_rc: rc }); fails++; continue; }
     maxlen = Math.max(maxlen, x.step_len(tx));
+    hall = Math.imul((hall ^ x.step_hash(tx)) >>> 0, 16777619) >>> 0;
     if (x.step_verify(tx) !== 1) { out({ rel, verify_honest: 0, run: i }); fails++; }
   }
   stats(`${rel} prove`, tp);
-  out({ rel, proof_bytes_last: x.step_len(tx), proof_bytes_max: maxlen, arena_peak: x.step_arena_peak() });
+  out({ rel, proof_bytes_last: x.step_len(tx), proof_bytes_max: maxlen, arena_peak: x.step_arena_peak(),
+       proofs_fnv: hall.toString(16).padStart(8, '0') });
   const tv = [];
   for (let i = 0; i < nv; i++) {
     t0 = performance.now();

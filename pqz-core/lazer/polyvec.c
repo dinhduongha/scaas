@@ -250,6 +250,20 @@ polyvec_muldiag (polyvec_t r, polymat_t diag, polyvec_t b)
   }
 }
 
+/* PQZ: 1 iff every polynomial of a is zero (public data only, see polyvec_mul2) */
+static int
+_pqz_col_is_zero (polyvec_t a)
+{
+  unsigned int i;
+
+  _VEC_FOREACH_ELEM (a, i)
+  {
+    if (!pqz_poly_is_zero_pub (polyvec_get_elem (a, i)))
+      return 0;
+  }
+  return 1;
+}
+
 void
 polyvec_mul2 (polyvec_t r, polyvec_t a, polymat_t b)
 {
@@ -267,6 +281,17 @@ polyvec_mul2 (polyvec_t r, polyvec_t a, polymat_t b)
     ri = polyvec_get_elem (r, i);
 
     polymat_get_col (coli, b, i);
+    /* PQZ: a zero column of b gives a zero entry (as polyvec_dot would: NTT domain, all zero) without the
+       products. Every caller (lnp-tbox.c) passes a public statement matrix b (selections Es / Em / Ps / Pm /
+       Ds / Dm and their automorphisms, mostly zero columns), so the branch is on public data only. */
+    if (_pqz_col_is_zero (coli))
+      {
+        if (ri->crtrep == NULL)
+          ri->crtrep = _alloc (_sizeof_crtrep_data (ri->ring));
+        ri->crt = 1;
+        memset (ri->crtrep, 0, _sizeof_crtrep_data (ri->ring));
+        continue;
+      }
     polyvec_dot (ri, a, coli);
   }
 }

@@ -3,7 +3,8 @@
  * Same source for native (build/native/pqz_bench) and wasm32 (build/wasm/pqz.wasm, driven by test/run_wasm.mjs):
  * PQZ_WASM builds export the steps instead of main() and time on the JS side.
  *
- *   pqz_bench [n_prove] [n_verify]   prints JSON lines: sizes, times (ms), check results
+ *   pqz_bench [n_prove] [n_verify] [rel]   prints JSON lines: sizes, times (ms), check results
+ *   rel: 1 = R_REG only, 2 = R_TX only, 3 = both (default); n_verify = 0 also skips the adversarial verifies
  */
 #include <stddef.h>
 #include <stdint.h>
@@ -252,6 +253,19 @@ step_verify_bad (int tx, int kind, unsigned seed)
   return pqz_verify (op, st, stlen, bad, len);
 }
 
+/* FNV-1a of the last proof: same seeds must give the same bytes before and after a pure implementation change,
+   and on native and wasm */
+uint32_t
+step_hash (int tx)
+{
+  const uint8_t *pf = tx ? tx_proof : reg_proof;
+  size_t len = tx ? tx_len : reg_len;
+  uint32_t h = 2166136261u;
+  for (size_t i = 0; i < len; i++)
+    h = (h ^ pf[i]) * 16777619u;
+  return h;
+}
+
 size_t
 step_arena_peak (void)
 {
@@ -291,6 +305,7 @@ int
 main (int argc, char **argv)
 {
   int np = argc > 1 ? atoi (argv[1]) : 10, nv = argc > 2 ? atoi (argv[2]) : 100, fails = 0;
+  int rels = argc > 3 ? atoi (argv[3]) : 3;
   void *arena = malloc (ARENA_BYTES);
   double t0, *tp = malloc (sizeof (double) * (np > nv ? np : nv) * 6);
 
@@ -304,9 +319,12 @@ main (int argc, char **argv)
 
   for (int tx = 0; tx < 2; tx++)
     {
+      if (!(rels >> tx & 1))
+        continue;
       const char *rel = tx ? "R_TX" : "R_REG";
       size_t maxlen = 0;
       unsigned tries = 0;
+      uint32_t hall = 2166136261u;
       for (int i = 0; i < np; i++)
         {
           extern unsigned pqz_rej_tries;
@@ -326,6 +344,7 @@ main (int argc, char **argv)
             }
           if (step_len (tx) > maxlen)
             maxlen = step_len (tx);
+          hall = (hall ^ step_hash (tx)) * 16777619u;
           if (step_verify (tx) != 1)
             {
               printf ("{\"rel\": \"%s\", \"verify_honest\": 0, \"run\": %d}\n", rel, i);
@@ -336,8 +355,8 @@ main (int argc, char **argv)
       snprintf (nm, sizeof nm, "%s prove", rel);
       stats (nm, tp, np);
       printf ("{\"rel\": \"%s\", \"proof_bytes_last\": %zu, \"proof_bytes_max\": %zu, \"arena_peak\": %zu, "
-              "\"rej_tries_mean\": %.2f}\n",
-              rel, step_len (tx), maxlen, step_arena_peak (), np ? (double)tries / np : 0.0);
+              "\"rej_tries_mean\": %.2f, \"proofs_fnv\": \"%08x\"}\n",
+              rel, step_len (tx), maxlen, step_arena_peak (), np ? (double)tries / np : 0.0, hall);
       for (int i = 0; i < nv; i++)
         {
           t0 = now_ms ();
@@ -348,7 +367,7 @@ main (int argc, char **argv)
       snprintf (nm, sizeof nm, "%s verify valid", rel);
       stats (nm, tp, nv);
       int n = 0;
-      for (int kind = 0; kind < 5; kind++)
+      for (int kind = 0; kind < 5 * (nv > 0); kind++)
         for (int i = 0; i < nv / 5 + 1; i++)
           {
             t0 = now_ms ();

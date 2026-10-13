@@ -72,4 +72,24 @@ pqz_ntt_sub (uint64_t r[64], const uint64_t a[64], const uint64_t b[64])
     r[k] = pqz_csubq (a[k] + PQZ_Q - b[k]);
 }
 
+/* 1 iff p is the zero polynomial, in either domain (the NTT residues are canonical, in [0, q)). Variable-time:
+   for public data only (statement selection matrices, P6d-2) */
+static inline int
+pqz_poly_is_zero_pub (const poly_struct *p)
+{
+  unsigned int j;
+
+  if (p->crt)
+    {
+      for (j = 0; j < PQZ_D; j++)
+        if (((const uint64_t *)p->crtrep)[j] != 0)
+          return 0;
+      return 1;
+    }
+  for (j = 0; j < p->coeffs->nelems; j++)
+    if (!int_eqzero (intvec_get_elem (p->coeffs, j)))
+      return 0;
+  return 1;
+}
+
 #endif

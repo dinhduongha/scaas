@@ -76,18 +76,44 @@ pqz_zeroize (void *p, size_t n)
     *v++ = 0;
 }
 
-/* qsort replacement (insertion sort; sorts sparse-matrix index lists, public data) */
+/* qsort replacement: heapsort, O(n log n), in place (sorts sparse-matrix index lists, public data; keys are
+   unique, so the result is the same as any other sort's). P6d-2: was insertion sort, O(n^2) on LaZer's
+   ~10^4-element Schwartz-Zippel matrices */
+static inline void
+pqz_qsort_swap (uint8_t *x, uint8_t *y, size_t sz)
+{
+  for (size_t i = 0; i < sz; i++)
+    {
+      uint8_t t = x[i];
+      x[i] = y[i];
+      y[i] = t;
+    }
+}
+
+static inline void
+pqz_qsort_sift (uint8_t *b, size_t root, size_t n, size_t sz, int (*cmp) (const void *, const void *))
+{
+  for (size_t c; (c = 2 * root + 1) < n; root = c)
+    {
+      if (c + 1 < n && cmp (b + c * sz, b + (c + 1) * sz) < 0)
+        c++;
+      if (cmp (b + root * sz, b + c * sz) >= 0)
+        return;
+      pqz_qsort_swap (b + root * sz, b + c * sz, sz);
+    }
+}
+
 static inline void
 pqz_qsort (void *base, size_t n, size_t sz, int (*cmp) (const void *, const void *))
 {
-  uint8_t *b = (uint8_t *)base, tmp[64];
-  for (size_t i = 1; i < n; i++)
-    for (size_t j = i; j > 0 && cmp (b + (j - 1) * sz, b + j * sz) > 0; j--)
-      {
-        memcpy (tmp, b + j * sz, sz);
-        memcpy (b + j * sz, b + (j - 1) * sz, sz);
-        memcpy (b + (j - 1) * sz, tmp, sz);
-      }
+  uint8_t *b = (uint8_t *)base;
+  for (size_t i = n / 2; i-- > 0;)
+    pqz_qsort_sift (b, i, n, sz, cmp);
+  for (size_t i = n; i-- > 1;)
+    {
+      pqz_qsort_swap (b, b + i * sz, sz);
+      pqz_qsort_sift (b, 0, i, sz, cmp);
+    }
 }
 
 #endif

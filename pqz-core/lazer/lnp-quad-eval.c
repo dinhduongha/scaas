@@ -171,13 +171,13 @@ _schwartz_zippel_int (spolymat_ptr R2i[], spolyvec_ptr r1i[], poly_ptr r0i[],
 
           spolymat_scale (t3, intmat_get_elem (v, 2 * i, j), t2);
           spolymat_add (t1, t0, t3, 0);
-          spolymat_set (t0, t1);
+          spolymat_swap (t0, t1); /* PQZ: was spolymat_set, a full copy */
 
           spolymat_lrot (t1, t2, d / 2);
 
           spolymat_scale (t3, intmat_get_elem (v, 2 * i + 1, j), t1);
           spolymat_add (t1, t0, t3, 0);
-          spolymat_set (t0, t1);
+          spolymat_swap (t0, t1); /* PQZ: was spolymat_set, a full copy */
         }
       spolymat_scale (t1, Rq->inv2, t0);
       spolymat_mod (R2i[i], t1);
@@ -224,13 +224,13 @@ _schwartz_zippel_int (spolymat_ptr R2i[], spolyvec_ptr r1i[], poly_ptr r0i[],
 
           spolyvec_scale (u3, intmat_get_elem (v, 2 * i, j), u2);
           spolyvec_add (u1, u0, u3, 0);
-          spolyvec_set (u0, u1);
+          spolyvec_swap (u0, u1); /* PQZ: was spolyvec_set, a full copy */
 
           spolyvec_lrot (u1, u2, d / 2);
 
           spolyvec_scale (u3, intmat_get_elem (v, 2 * i + 1, j), u1);
           spolyvec_add (u1, u0, u3, 0);
-          spolyvec_set (u0, u1);
+          spolyvec_swap (u0, u1); /* PQZ: was spolyvec_set, a full copy */
         }
       spolyvec_scale (u1, Rq->inv2, u0);
       spolyvec_mod (r1i[i], u1);

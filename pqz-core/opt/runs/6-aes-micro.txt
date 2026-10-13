@@ -1,0 +1,4 @@
+# before (E-S1 bitsliced AES, inversion chain, bit-by-bit planes)
+rng_urandom 1 MiB: 59.96 ms; fresh 64-byte stream: 15.11 us (out[0] = 127)
+# after (Boyar-Peralta S-box, transposed planes)
+rng_urandom 1 MiB: 8.79 ms; fresh 64-byte stream: 3.04 us (out[0] = 127)
