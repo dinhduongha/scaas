@@ -10,6 +10,7 @@
 #   clients/ua-go:         go vet ./...; go test ./...
 #   clients/ua-cs:         dotnet test Scaas.Ua.Tests
 #   clients/ua-cxx:        cargo clippy --locked --all-targets -- -D warnings; cmake -S . -B build -G Ninja && cmake --build build && ctest --test-dir build
+#   clients/ua-c:          cargo clippy --locked --all-targets -- -D warnings; cargo build --locked; cargo test --locked (header drift); cc ... tests/smoke.c (C99 smoke); python3 -m unittest -v tests.test_vectors
 #   clients/ua-qt:         cmake -S . -B build -G Ninja (QMAKE, CMAKE_PREFIX_PATH set) && cmake --build build && QT_QPA_PLATFORM=offscreen ctest
 #   clients/ua-dart-frb:   dart pub get --enforce-lockfile; cargo build --locked --manifest-path rust/Cargo.toml; dart test
 #   clients/ua-dart:       dart analyze; dart test; dart test -p node; dart run test/vectors_test.dart (asserts off)
@@ -170,6 +171,33 @@ jobs:
         run: cmake --build build
       - name: vectors
         run: ctest --test-dir build --output-on-failure
+
+  ua-c:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: clients/ua-c
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: clients/ua-c
+      - name: clippy
+        run: cargo clippy --locked --all-targets -- -D warnings
+      - name: build
+        run: cargo build --locked
+      - name: test (header drift)
+        run: cargo test --locked
+      - name: C smoke
+        run: |
+          cc -std=c99 -Wall -Wextra -Werror -Iinclude tests/smoke.c target/debug/libscaas_ua_c.a -lpthread -ldl -lm -o target/smoke
+          target/smoke
+          c++ -fsyntax-only -x c++ include/scaas_ua.h
+      - name: vectors (ctypes)
+        run: python3 -m unittest -v tests.test_vectors
 
   ua-qt:
     runs-on: ubuntu-latest

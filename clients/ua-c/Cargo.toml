@@ -1,0 +1,16 @@
+[package]
+name = "scaas-ua-c"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.90"
+publish = false
+description = "C ABI (cbindgen header) over scaas-ua. UNAUDITED."
+
+[lib]
+crate-type = ["cdylib", "staticlib"]
+
+[dependencies]
+scaas-ua = { path = "../ua-rs" }
+
+[dev-dependencies]
+cbindgen = { version = "=0.28.0", default-features = false }
