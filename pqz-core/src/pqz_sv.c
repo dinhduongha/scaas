@@ -1635,8 +1635,8 @@ verify_body (const svrel_t *S, uint8_t op, const uint8_t hash_stmt[32], const ui
       ONE (M + 2 * (DEG - 1) + 1); /* binary */
     else
       e++;
-    for (i = 0; i < Z; i++) /* l2: one call per equation, dom as __schwartz_zippel_accumulate_l2 passes it */
-      ONE (M + 2 * (DEG - 1) + 2);
+    for (i = 0; i < Z; i++) /* l2: one call per equation, dom + i as __schwartz_zippel_accumulate_l2 (P6-L2) */
+      ONE (M + 2 * (DEG - 1) + 2 + i);
 #undef ONE
   }
   for (k = 0; k < LAMBDA; k++)
