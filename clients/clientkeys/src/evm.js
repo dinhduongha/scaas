@@ -364,6 +364,51 @@ export function checkPayment(td, { account, chainId, chainUid, amount, decimals,
   return { digest, payee, token: expectedToken, entryRef, ...fee };
 }
 
+/** The payee's side of receiver-pays (CTR-MTX-05/06), both paths: `td` is the `ReceiverFee` to co-sign, `payment` the
+ *  payer's `MetaTransfer` (`mtxPayReceiverFee`) or `UAMetaTransfer` (`uaPayReceiverFee`; `payee` then a 32-byte id,
+ *  `padId` for a native one) it rides on. The payment must be the one the payee expects, as `checkPayment` checks it for
+ *  the payer: to `payee`, `amount` (× 10^`decimals`) with the request's `entryRef` on lane `payLane(entryRef)` nonce 0,
+ *  the contract's shape (fee NONE, relayer bound: mode 1), in `expectedToken`'s domain salted with `chainUid`; its digest
+ *  is recomputed here and must be `paymentDigest`. The fee is the payee's own: non-zero, at most the amount and
+ *  `maxFee` (default 0), to the `feeRecipient` it named, with a near deadline. The server supplies only the payment's
+ *  `from` / `validUntil` / `relayer` and the fee's `validUntil`. Returns {digest, paymentDigest, payer, fee, feeRecipient}. */
+export function checkReceiverFee(td, { payee, chainId, chainUid, amount, decimals, entryRef, expectedToken, payment,
+  maxFee = 0, feeRecipient, now = Math.floor(Date.now() / 1000), maxWindow = 86400 }) {
+  if (!td || td.primaryType !== 'ReceiverFee') refuse('this is not a receiver fee');
+  if ([payee, amount, entryRef, expectedToken, feeRecipient].some((v) => v == null)) {
+    refuse('the payee, amount, reference, token and fee recipient are required');
+  }
+  const ua = payment && payment.primaryType === 'UAMetaTransfer';
+  if (!payment || !(ua || payment.primaryType === 'MetaTransfer')) refuse('the fee is not on a payment');
+  const p = payment.message || {};
+  const pdom = payment.domain || {};
+  if (!same(pdom.verifyingContract, expectedToken) || !same((td.domain || {}).verifyingContract, expectedToken)) refuse('wrong token');
+  if (!same(p.to, payee)) refuse('the payment does not pay you');
+  const value = toBase(amount, decimals);
+  if (uint(p.value, 'the amount') !== value || value === 0n) refuse('the amount differs from what you were shown');
+  if (!/^0x[0-9a-fA-F]{64}$/.test(String(entryRef)) || BigInt(entryRef) === 0n) refuse('this is not a payment');
+  if (!same(p.entryRef, entryRef)) refuse('the payment reference differs from the request');
+  const batch = payLane(entryRef);
+  if (uint(p.batch, 'the lane') !== batch || uint(p.nonce, 'the nonce') !== 0n) refuse('a payment is signed once, on its request lane');
+  if (uint(p.mode, 'the fee mode') !== 1n || uint(p.fee, 'the payer fee') !== 0n) refuse('the payment is not in the receiver-pays shape');
+  const build = ua ? uaMetaTransferTypedData : metaTransferTypedData;
+  const paymentDigest = digestOf(build({ name: pdom.name, contract: expectedToken, chainId, chainUid,
+    message: { ...p, to: payee, value, entryRef, batch, nonce: 0 } }));
+  if (hex(digestOf(payment)) !== hex(paymentDigest)) refuse('unexpected payment fields');
+  const m = td.message || {};
+  if (!same(m.paymentDigest, hex(paymentDigest))) refuse('the fee is not on the payment you expect');
+  const fee = uint(m.fee, 'the fee');
+  if (fee === 0n) refuse('no fee to co-sign');
+  if (fee > value) refuse('the fee is more than the payment');
+  if (fee > uint(maxFee, 'your fee limit')) refuse('the fee is above your limit');
+  if (!same(m.feeRecipient, feeRecipient)) refuse('the fee goes to an address you did not name');
+  const validUntil = deadline(m.validUntil, now, maxWindow);
+  const digest = digestOf(receiverFeeTypedData({ name: (td.domain || {}).name, contract: expectedToken, chainId, chainUid,
+    paymentDigest, fee, feeRecipient, validUntil }));
+  if (hex(digestOf(td)) !== hex(digest)) refuse('unexpected receiver fee fields');
+  return { digest, paymentDigest, payer: p.from, fee, feeRecipient };
+}
+
 /** A self-call `MetaTransaction` (CTR-MTX-17) that is exactly the call the client built, `call = {contract, data}`:
  *  `verifyingContract` and `data` equal; `data` decoded against the contract's published allowlist `[{selector, name,
  *  feeClass, amountArg}]` (`mtxSelectors()`, pinned per implementation version, CLI-SGN-34); an unknown selector, a
