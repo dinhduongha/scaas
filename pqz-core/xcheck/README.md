@@ -10,6 +10,8 @@ and seeds. Results and method: `RESULTS.md`; summary: `docs/research/pqz-core-e-
 - `shim/`: the fork's statement builder and bench compiled against upstream (`up_rel.c`, `bench.c`, `memory.h`,
   `shim.c`) and the microbenchmark (`micro.c`).
 - `stub/cpuf/`: header stub for HEXL's `cpu_features` (reports no AVX-512; no network fetch).
+- `static/`: a portable static benchmark bundle (upstream v3 / v4-IFMA and the fork) for measuring on other
+  machines; its own README.
 - `runs/`: raw bench output; `prof/`: gprof flat profiles and summaries; `logs/`: build logs.
 
 Binaries and `gmon` files are not kept (rebuild from the scripts).
