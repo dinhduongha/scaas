@@ -2585,6 +2585,39 @@ _pqz_zero_cols (uint8_t *z, polymat_srcptr A, unsigned int n)
     }
 }
 
+/* PQZ: polyvec_dot for public operands (selection-matrix columns, the statement vectors v / f): products with a
+   zero polynomial are skipped, the sum (NTT domain, as polyvec_dot leaves it) is unchanged. The Gram entries of
+   a selection matrix are dots of two unit columns: 32 products of which at most one is nonzero. */
+static void
+_pqz_dot_pub (poly_t r, polyvec_t a, polyvec_t b)
+{
+  poly_ptr ap, bp;
+  poly_t prod;
+  unsigned int i;
+
+  ASSERT_ERR (a->ring == b->ring);
+
+  poly_alloc (prod, a->ring);
+  if (r->crtrep == NULL)
+    {
+      ASSERT_ERR (r->crt == 0);
+      r->crtrep = _alloc (_sizeof_crtrep_data (r->ring));
+    }
+  r->crt = 1;
+  memset (r->crtrep, 0, _sizeof_crtrep_data (r->ring));
+
+  _VEC_FOREACH_ELEM (a, i)
+  {
+    ap = polyvec_get_elem (a, i);
+    bp = polyvec_get_elem (b, i);
+    if (pqz_poly_is_zero_pub (ap) || pqz_poly_is_zero_pub (bp))
+      continue;
+    poly_mul (prod, ap, bp);
+    poly_add (r, r, prod, 1);
+  }
+  poly_free (prod);
+}
+
 static void
 __schwartz_zippel_accumulate_bin (spolymat_ptr R2i[], spolyvec_ptr r1i[],
                                   poly_ptr r0i[], spolymat_ptr R2i2[],
@@ -2690,7 +2723,7 @@ __schwartz_zippel_accumulate_bin (spolymat_ptr R2i[], spolyvec_ptr r1i[],
               if (!(zs[k] | zs[j])) /* PQZ: zero column pair */
                 {
                   poly = spolymat_insert_elem (R2t, row, col);
-                  polyvec_dot (poly, subv2, subv);
+                  _pqz_dot_pub (poly, subv2, subv);
                 }
             }
 
@@ -2704,7 +2737,7 @@ __schwartz_zippel_accumulate_bin (spolymat_ptr R2i[], spolyvec_ptr r1i[],
                   if (!(zs[k] | zm[j])) /* PQZ: zero column pair */
                     {
                       poly = spolymat_insert_elem (R2t, row, col);
-                      polyvec_dot (poly, subv2, subv);
+                      _pqz_dot_pub (poly, subv2, subv);
                     }
                 }
             }
@@ -2713,7 +2746,7 @@ __schwartz_zippel_accumulate_bin (spolymat_ptr R2i[], spolyvec_ptr r1i[],
           if (!zs[k]) /* PQZ: zero column */
             {
               poly = spolyvec_insert_elem (r1t, 2 * k + 1);
-              polyvec_dot (poly, subv2, f_);
+              _pqz_dot_pub (poly, subv2, f_);
             }
         }
     }
@@ -2735,7 +2768,7 @@ __schwartz_zippel_accumulate_bin (spolymat_ptr R2i[], spolyvec_ptr r1i[],
                   if (!(zm[k] | zs[j])) /* PQZ: zero column pair */
                     {
                       poly = spolymat_insert_elem (R2t, row, col);
-                      polyvec_dot (poly, subv2, subv);
+                      _pqz_dot_pub (poly, subv2, subv);
                     }
                 }
             }
@@ -2748,7 +2781,7 @@ __schwartz_zippel_accumulate_bin (spolymat_ptr R2i[], spolyvec_ptr r1i[],
               if (!(zm[k] | zm[j])) /* PQZ: zero column pair */
                 {
                   poly = spolymat_insert_elem (R2t, row, col);
-                  polyvec_dot (poly, subv2, subv);
+                  _pqz_dot_pub (poly, subv2, subv);
                 }
             }
 
@@ -2756,7 +2789,7 @@ __schwartz_zippel_accumulate_bin (spolymat_ptr R2i[], spolyvec_ptr r1i[],
           if (!zm[k]) /* PQZ: zero column */
             {
               poly = spolyvec_insert_elem (r1t, 2 * (m1 + Z + k) + 1);
-              polyvec_dot (poly, subv2, f_);
+              _pqz_dot_pub (poly, subv2, f_);
             }
         }
     }
@@ -2930,7 +2963,7 @@ __schwartz_zippel_accumulate_l2 (spolymat_ptr R2i[], spolyvec_ptr r1i[],
                   if (!(zs[k] | zs[j])) /* PQZ: zero column pair */
                     {
                       poly = spolymat_insert_elem (R2t, row, col);
-                      polyvec_dot (poly, subv2, subv);
+                      _pqz_dot_pub (poly, subv2, subv);
                     }
                 }
 
@@ -2944,7 +2977,7 @@ __schwartz_zippel_accumulate_l2 (spolymat_ptr R2i[], spolyvec_ptr r1i[],
                       if (!(zs[k] | zm[j])) /* PQZ: zero column pair */
                         {
                           poly = spolymat_insert_elem (R2t, row, col);
-                          polyvec_dot (poly, subv2, subv);
+                          _pqz_dot_pub (poly, subv2, subv);
                         }
                     }
                 }
@@ -2953,7 +2986,7 @@ __schwartz_zippel_accumulate_l2 (spolymat_ptr R2i[], spolyvec_ptr r1i[],
               if (v != NULL && v[i] != NULL && !zs[k]) /* PQZ: zero column */
                 {
                   poly = spolyvec_insert_elem (r1t, 2 * k + 1);
-                  polyvec_dot (poly, subv2, v[i]);
+                  _pqz_dot_pub (poly, subv2, v[i]);
                 }
             }
         }
@@ -2976,7 +3009,7 @@ __schwartz_zippel_accumulate_l2 (spolymat_ptr R2i[], spolyvec_ptr r1i[],
                       if (!(zm[k] | zs[j])) /* PQZ: zero column pair */
                         {
                           poly = spolymat_insert_elem (R2t, row, col);
-                          polyvec_dot (poly, subv2, subv);
+                          _pqz_dot_pub (poly, subv2, subv);
                         }
                     }
                 }
@@ -2989,7 +3022,7 @@ __schwartz_zippel_accumulate_l2 (spolymat_ptr R2i[], spolyvec_ptr r1i[],
                   if (!(zm[k] | zm[j])) /* PQZ: zero column pair */
                     {
                       poly = spolymat_insert_elem (R2t, row, col);
-                      polyvec_dot (poly, subv2, subv);
+                      _pqz_dot_pub (poly, subv2, subv);
                     }
                 }
 
@@ -2997,7 +3030,7 @@ __schwartz_zippel_accumulate_l2 (spolymat_ptr R2i[], spolyvec_ptr r1i[],
               if (v != NULL && v[i] != NULL && !zm[k]) /* PQZ: zero column */
                 {
                   poly = spolyvec_insert_elem (r1t, 2 * (m1 + Z + k) + 1);
-                  polyvec_dot (poly, subv2, v[i]);
+                  _pqz_dot_pub (poly, subv2, v[i]);
                 }
             }
         }
@@ -3471,25 +3504,25 @@ __schwartz_zippel_accumulate_z3 (
 
   for (i = 0; i < 256; i++)
     {
-      _expand_R_i (Ri, nex * d, i, seed);
+      _expand_Rprime_i (Rprimei, nprime * d, i, seed);
 
       for (k = 0; k < lambda; k++)
         {
           chal = intmat_get_elem (V, k, i);
 
-          for (j = 0; j < nex * d; j++)
+          for (j = 0; j < nprime * d; j++)
             {
-              if (Ri[j] == 0)
+              if (Rprimei[j] == 0)
                 {
                 }
               else
                 {
-                  ASSERT_ERR (Ri[j] == 1 || Ri[j] == -1);
+                  ASSERT_ERR (Rprimei[j] == 1 || Rprimei[j] == -1);
 
                   acc = intmat_get_elem (vR, k, j);
 
                   int_set (tmp, chal);
-                  int_mul_sgn_self (tmp, Ri[j]);
+                  int_mul_sgn_self (tmp, Rprimei[j]);
                   int_add (acc, acc, tmp);
                 }
             }
