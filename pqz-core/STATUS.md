@@ -71,7 +71,7 @@ loops (z3/z4 and z1/z2), so they are not directly the codegen's "total" attempts
 between runs on this machine (R_TX prove 13.7–17.0 s).
 
 Browser budgets (pq-zether.md CTR-PQZ-18): R_TX wasm prove 39.3 s against 5 s desktop / 30 s hard limit; wasm arena
-peak 476 MB against 128 MiB / 256 MiB hard (≈ 1.8×); wasm/native 2.3–2.7× (R_TX 39.3/17.0, R_REG 3.27/1.20), so
+peak 476 MB against 128 MiB / 256 MiB hard (≈ 1.8–1.9×); wasm/native 2.3–2.7× (R_TX 39.3/17.0, R_REG 3.27/1.20), so
 the 3 s native target maps to ≈ 7–8 s in wasm. No decision (owner).
 
 Profile (gprof, R_TX): ~55 % in the ring arithmetic (`pqz_red128` 3.6·10^9 calls + `basemul16` 5.9·10^7: a

@@ -159,12 +159,6 @@ Medians [measured]; native 7 proves and 7 + 7 honest verifies, wasm 3 proves and
   rejected: in ≈ 3 ms (`R_REG`) / ≈ 15 ms (`R_TX`) when the decoder or the hash check fails, otherwise after a full
   verify.
 - Iterations count both rejection loops (z3 / z4 and z1 / z2), so they are not the codegen's "expected attempts".
-- Browser budgets (pq-zether.md, client budgets table: prove `R_TX` ≤ 5 s desktop browser, ≤ 15 s phone, hard limit
-  30 s; peak WASM memory ≤ 128 MiB, hard limit 256 MiB for iOS WebKit) are missed too: `R_TX` wasm prove 39.3 s,
-  wasm arena peak 476 MB, ≈ 1.9× the hard memory limit (`R_REG` 113 MB fits) [measured]. These budgets are not kill
-  criteria.
-- The wasm / native ratio is 2.3–2.7× (`R_TX` 39.3 / 17.0, `R_REG` 3.27 / 1.20) [measured], so the 3 s native prove
-  target maps to ≈ 7–8 s in the browser, above the 5 s desktop-browser budget [inference].
 - wasm gives the same proof lengths as native for the same seeds; honest proofs verify and tampered ones are rejected
   under both. Byte equality of the proofs was not checked.
 - Library objects, native and wasm, reference only `memcpy`, `memset`, `__stack_chk_fail` (and `__stack_pointer`)
@@ -180,7 +174,7 @@ not kill criteria; the spike's wasm numbers against them [measured; node, not a 
 | Budget | Desktop browser | Phone | Hard limit | Measured (wasm32) | |
 |---|---|---|---|---|---|
 | Prove `R_TX` | ≤ 5 s | ≤ 15 s | 30 s ⇒ fallback | 39.3 s | above the hard limit; ≈ 8× the desktop budget |
-| Peak WASM memory | ≤ 128 MiB | ≤ 128 MiB | 256 MiB (iOS WebKit) | `R_TX` arena peak 476 MB (`R_REG` 113 MB) | `R_TX` ≈ 1.8× the hard limit |
+| Peak WASM memory | ≤ 128 MiB | ≤ 128 MiB | 256 MiB (iOS WebKit) | `R_TX` arena peak 476 MB (`R_REG` 113 MB) | `R_TX` ≈ 1.8–1.9× the hard limit |
 | Module size | ≤ 1.0 MB gzip | same | — | `pqz.wasm` 337 KB uncompressed (with the bench steps) | inside |
 
 **wasm / native ratio 2.3–2.7×** [measured]: prove `R_TX` 39.3 / 17.0 s = 2.3, `R_REG` 3.27 / 1.20 s = 2.7; verify
