@@ -1028,9 +1028,12 @@ LaBRADOR/Greyhound deferred to aggregation work. **Kill criterion**: stop and re
 the transfer proof exceeds 96 KB, if p99 adversarial verify exceeds 50 ms on the chain host, or if the rewritten layers
 cannot reach arithmetic-layer KAT equality with upstream. Single implementation; LaZer is MIT and protocol logic stays
 upstream-shaped. We own a C fork with six rewritten layers, a rewrite rather than a kernel swap; upstream protocol
-fixes are merged by hand. **Versioning:** `proofSystemId = keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v1")`; every
-parameter, relation or serialization change bumps it; the token stores it at `initialize` and the precompile accepts
-only ids it implements.
+fixes are merged by hand. **Versioning:** `proofSystemId = keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v2")`
+(`0x2e07e6ed…798c2f`, `PQZ_PROOF_SYSTEM_ID` in `pqz-core/src/pqz.h`); every parameter, relation, transcript or
+serialization change bumps it; the token stores it at `initialize` and the precompile accepts only ids it implements.
+v1 → v2 (2026-10-13): the two LaZer `tbox` Schwartz–Zippel fixes
+([lazer#24](https://github.com/lazer-crypto/lazer/issues/24), [lazer#25](https://github.com/lazer-crypto/lazer/issues/25);
+`pqz-core/sz/README.md`) change the transcript; v1 is retired.
 
 - **Origin.** Fork of LaZer at a pinned commit (`main` was `3330e48`, 2026-09-28; the pin is recorded), MIT, repo path
   `scaas/pqz-core/`. Kept: LNP22 protocol logic, codegen (`scripts/lin-codegen.sage` with lattice-estimator), parameter

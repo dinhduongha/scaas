@@ -120,6 +120,7 @@ static const size_t STLEN[NREL] = { sizeof reg_stmt, sizeof tx_stmt, sizeof burn
 static const uint8_t *const WIT[NREL] = { reg_wit, tx_wit, burn_wit, ds_wit, dr_wit };
 static const size_t WLEN[NREL] = { sizeof reg_wit, sizeof tx_wit, sizeof burn_wit, sizeof ds_wit, sizeof dr_wit };
 static const unsigned SEEDMUL[NREL] = { 31, 17, 13, 11, 7 };
+static const uint8_t PSID[32] = PQZ_PROOF_SYSTEM_ID; /* statement bytes 32..63 */
 /* tamper kind 2: first byte of a 2048-coefficient key in the statement (R_REG pk, R_TX / R_BURN pk_f, disclosure
    pk); kind 5: the last byte of a public scalar (R_REG message, R_TX fee, R_BURN / disclosure amount) */
 static const size_t KEYOFF[NREL] = { PQZ_PREFIX_BYTES + 32, PQZ_HEADER_BYTES, PQZ_HEADER_BYTES, PQZ_DISC_PK,
@@ -141,6 +142,7 @@ setup (void)
 
   /* R_REG: prefix || message || pk */
   memset (reg_stmt, 0xA5, PQZ_PREFIX_BYTES);
+  memcpy (reg_stmt + 32, PSID, 32);
   for (int i = 0; i < 32; i++)
     reg_stmt[PQZ_PREFIX_BYTES + i] = (uint8_t)i;
   memcpy (reg_stmt + PQZ_PREFIX_BYTES + 32, KF.pk, PQZ_POLYVEC_BYTES);
@@ -167,6 +169,7 @@ setup (void)
   /* header (pq-zether.md §7.7): opTag, proofSystemId, then words hashed only, fee at 256, amount 0 */
   uint8_t *p = tx_stmt;
   memset (p, 0x5A, PQZ_PREFIX_BYTES);
+  memcpy (p + 32, PSID, 32);
   for (int i = PQZ_PREFIX_BYTES; i < PQZ_HEADER_BYTES; i++)
     p[i] = (uint8_t)(i * 3);
   memset (p + PQZ_HDR_FEE, 0, 64);
@@ -207,6 +210,7 @@ setup (void)
     {
       uint8_t *st = k ? dr_stmt : ds_stmt;
       memset (st, k ? 0xD5 : 0xD4, PQZ_PREFIX_BYTES);
+      memcpy (st + 32, PSID, 32);
       for (int i = PQZ_PREFIX_BYTES; i < PQZ_DISC_AMOUNT; i++)
         st[i] = (uint8_t)(i * 7);
       memset (st + PQZ_DISC_AMOUNT, 0, 64);
@@ -240,6 +244,7 @@ setup (void)
     pqz_encrypt (pkf, 1, (const uint8_t (*)[16])mb, rb, e1b, (const int16_t (*)[16])e2b, ub, vb);
     p = burn_stmt;
     memset (p, 0xB2, PQZ_PREFIX_BYTES);
+    memcpy (p + 32, PSID, 32);
     for (int i = PQZ_PREFIX_BYTES; i < PQZ_HEADER_BYTES; i++)
       p[i] = (uint8_t)(i * 5); /* chainId .. memoHash: hashed only */
     memset (p + PQZ_HDR_FEE, 0, 64);

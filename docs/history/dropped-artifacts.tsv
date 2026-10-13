@@ -1023,3 +1023,4 @@ src/{common,metatx,factory,dex,wallet,account,registry,zether,hedera,chains}	ren
 |e − e'| ≤ 2^25 − 2 < Δ/2	obsolete	contracts/pq-zether.md §4.3 uniqueness: |e - e'| <= 2^25 - 1 < Delta/2 with the half-open ranges (owner 2026-10-13)
 . The contract loads 	extraction-artifact	contracts/pq-zether.md §7.9: the disclosure statement is now a byte-offset table (CTR-PQZ-14)
 abs(e'_i) < 2^24	obsolete	contracts/pq-zether.md §7.9 RECEIVER_X: e'_i in [-2^24, 2^24), the range R_DR proves; uniqueness unchanged (CTR-PQZ-14, owner 2026-10-13)
+proofSystemId = keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v1")	obsolete	PQZL proofSystemId v1 retired by v2 (2026-10-13, LaZer tbox Schwartz-Zippel fixes lazer#24 / #25): contracts/pq-zether.md §8 Versioning, CTR-PQZ-09
