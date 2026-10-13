@@ -479,6 +479,13 @@ allowlisted, so never a self-call; the submitter may be any address, an EOA rela
 Clients refuse by default to build or sign such an order when `dex` is not a registered wrapper of that underlying
 ([CTR-DEX-19](dex.md#CTR-DEX-19)).
 
+**`uaWrap`** (owner 2026-10-13; SPECIFIED, UA-5b): `uaWrap(address u, UATradeOrder o, bytes auth)` is `mtxWrap` with
+the holder's `UATradeOrder` ([CTR-DEX-25](dex.md#CTR-DEX-25)) pulled by the underlying's `uaTrade`; the underlying must
+be a SCaaS ledger token (`UALegNotLedger(u)`); `minted − wrapFee` goes to `o.destination` (0 ⇒ `o.from`), a derived id
+by `_uaMint`, a native one by `_mint`; event `UAWrapped(bytes32 indexed from, address indexed u, uint256 received,
+uint256 minted)`. A native holder uses it to wrap straight into its UA. A holder of an outside underlying wraps into a
+UA with `wrapToUA` ([CTR-UA-28](accounts.md#CTR-UA-28)).
+
 ## 4. Features
 
 <a id="CTR-TOK-10"></a>**CTR-TOK-10** — "No one alters a deployed token" holds with only visible exceptions: the feature flags are
@@ -547,6 +554,8 @@ admin functions, events and errors in `ITokenAdmin`, including `RoleAccountZero(
 <a id="CTR-TOK-01"></a>**CTR-TOK-01** — **Only a contract may call `approve`, an `approve`/allowance spender must be a
 contract, and only a contract may call `transferFrom`. An EOA never holds or grants an allowance on a SCaaS token** —
 directly, through `mtxExecute` (`approve` is in no allowlist, [CTR-MTX-19](metatx.md#CTR-MTX-19)), or by any permit.
+Nor does a Universal Account, on any `ua*` path ([CTR-UA-27](accounts.md#CTR-UA-27): no `uaApprove`; its pulls are
+signed `UATradeOrder`s).
 Enforced in the token code of every family (owner). The caller is `_msgSender()`, equal to `msg.sender` because
 `approve` is never a self-call. Allowance-like grants obey the same rule: a `TradeOrder` names its executor `dex`,
 which must be a contract (`mtxTrade` checks `msg.sender == o.dex` and `_isContract(o.dex)`), so signing `dex` = an EOA

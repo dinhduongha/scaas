@@ -272,6 +272,7 @@ construction: the underlying is already held for those public units. A holder of
 funds — two direct calls, or one gasless `mtxBatch` of `mtxExecute(wrap)` and `mtxExecute(zetherShield)`; an EOA holding a
 SCaaS underlying wraps by signature (`mtxWrap`, [CTR-TOK-20](token-wrappers.md#CTR-TOK-20)), then funds. Without it, an
 EOA holding a SCaaS underlying could not shield at all (it cannot approve, [CTR-TOK-01](token-wrappers.md#CTR-TOK-01)).
+A UA shields from its UA balance through `uaExecute(zetherShield)` ([CTR-ZTH-51](#CTR-ZTH-51); SPECIFIED, UA-5c).
 - **transfer:** the sender proves over `acc`. Effect:
 
 ```
@@ -670,7 +671,8 @@ a public ERC-20 transfer is a `MetaTransfer` like on every token ([CTR-MTX-23](m
 relays the same way ([CTR-PQZ-21](pq-zether.md#CTR-PQZ-21)). `zetherTransfer` and `zetherUnshield` compute
 `binding = (msg.sender == address(this) && ticket live) ? ticketBinding : 0`, so the statement tag is
 `ZTX_V1_RELAYED` with the envelope's binding inside `mtxExecute` and `ZTX_V1_DIRECT` with binding 0 otherwise: a proof
-lifted from a pending meta-tx fails as a direct call, and the envelope-stripping attack stays closed.
+lifted from a pending meta-tx fails as a direct call, and the envelope-stripping attack stays closed. Under a UA
+signer (`uaExecute`) the binding is the UA envelope's, with its own tag ([CTR-ZTH-51](#CTR-ZTH-51); SPECIFIED, UA-5c).
 
 The outer fee is
 the base's step 6, `FIXED` absolute or `NONE` (fee class `ABSOLUTE`, [CTR-MTX-20](metatx.md#CTR-MTX-20)); the inner fee
@@ -983,6 +985,38 @@ confidential kinds depend on that registry for gasless onboarding. **Built (P3)*
 `transferConfidential*`, `burn`, `fund`, `rollOverPublic`, `setRollOverMode`, …; node and client ABI in P5);
 `zetherShield` takes the encoded key, `zetherWrapShield` the UA; the two underlying paths emit only `ZetherShielded` /
 `ZetherUnshielded`, since nothing is minted or burnt (controller ruling, pending the owner).
+
+<a id="ua-public-side"></a>
+<a id="CTR-ZTH-51"></a>**CTR-ZTH-51** — **The public side from and to the UA ledger** (owner 2026-10-13,
+[CTR-UA-27](accounts.md#CTR-UA-27)). The confidential account stays a Zether kind (CTR-UA-14); only the **public** side
+— the units a shield burns, the units an unshield mints, the outer fee — may be a UA, so a PQ UA holder needs no
+classical key to use a Zether token.
+
+- **Shield from a UA.** `zetherShield` joins the UA allowlist on both Zether kinds: its body `_burn(_msgSender(), …)`
+  already debits the subject under a derived ticket ([CTR-UA-26](accounts.md#CTR-UA-26)); it carries no proof, so it
+  needs no binding.
+- **Confidential ops paid by a UA.** `zetherTransfer*`, `zetherUnshield`, `zetherUnshieldUnwrap` and the two `…ToUA`
+  below join the UA allowlist (`ABSOLUTE`, the outer fee from the signer's UA balance), and `uaExecute` stores a UA
+  envelope binding in the ticket as the address path does ([CTR-ZTH-34](#CTR-ZTH-34)):
+  `uaEnvelopeBinding(m) = keccak256(abi.encode(TAG_UA_ENVELOPE, chainid, chainUid, token, m.from, m.batch, m.nonce,
+  m.validUntil, m.mode, canonRelayer, m.fee, canonFeeRecipient))` with `TAG_UA_ENVELOPE =
+  keccak256("SCAAS-ZETHER-UA-ENVELOPE-V1")`, a tag distinct from the address envelope's (as PQZ's
+  `SCAAS-PQZ-UA-ENVELOPE-V1`, [CTR-PQZ-21](pq-zether.md#CTR-PQZ-21)): a proof lifted from a UA envelope into an address
+  envelope, or back, fails.
+- **Unshield to a UA.** `zetherUnshieldToUA(payload, proof, authSig, beneficiary, bytes32 to, uint256 amount)`: `to`
+  registered SIGNING; the same `OP_BURN` statement, whose recipient word (header word 12 counting from 0, today
+  `abi.encode(address)`) carries `to` as a `bytes32`. A native recipient's word is unchanged (a padded address) and a
+  derived id has non-zero top bits, so one proof binds exactly one recipient id with no new op tag. Then
+  `_uaMint(to, amount · shieldScale)` ([CTR-UA-28](accounts.md#CTR-UA-28)); event `ZetherUnshieldedUA(UA indexed from,
+  uint256 amount, bytes32 indexed to)`. `zetherUnshieldUnwrapToUA` likewise pays a SCaaS ledger leg through
+  `transferToUA` (`UALegNotLedger` otherwise). The prover takes the recipient as 32 bytes; the statement layout does
+  not change.
+- **Invariant.** `totalSupply` counts `UA_POOL`, so the reserve invariant of `UNDERLYING_ZETHER` ([CTR-ZTH-44](#CTR-ZTH-44))
+  is unchanged.
+- **Unchanged:** a one-call `zetherWrapShield` from a UA source (a UA wrap-shields in two signed steps, `uaWrap` then
+  `uaExecute(zetherShield)`; owner 2026-10-13); the roll-over functions; Zether kinds as the confidential account.
+
+Status **SPECIFIED** (UA-5c). `pqzUnshield` takes a `bytes32` recipient from the start (P6g).
 
 <a id="CTR-ZTH-46"></a>**CTR-ZTH-46** — **The prover views live in a stateless `ZetherStatements`** (owner, T14; pairs
 with `ZetherDisclosure`). It serves `transferStatement`, `transferStatementSingle` and `unshieldStatement` (built:

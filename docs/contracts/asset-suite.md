@@ -138,7 +138,10 @@ admin-free by design, [CTR-UA-15](accounts.md#CTR-UA-15)); compliance flags live
 token pins one registry and one `requiredFlags` mask at creation. **Only receivers of this token are checked** (`to`
 of a transfer or mint, fee recipient): a holder whose attestation lapsed can still send to an eligible party, burn and
 unwrap. The owner may `disableFeature(ALLOWLIST)` one-way when the flag is not locked ([CTR-TOK-22](token-wrappers.md#CTR-TOK-22)), so a dead registry never locks a token that left it disableable. A sender-side
-check would trap holders when an attester is slow.
+check would trap holders when an attester is slow. **Universal Accounts** (owner 2026-10-13, a constraint for when the
+suite is built, [CTR-UA-27](accounts.md#CTR-UA-27)): the registry keys accounts by `bytes32` (a native address
+zero-padded) instead of `address`, the freeze set likewise, and the per-transfer checks hook the UA ledger's
+`_uaMove` and `_uaMint` too, the UA → UA branch included.
 
 <a id="step6-checks"></a>
 <a id="CTR-AS-08"></a>**CTR-AS-08** — **Regulated checks run at the shape step** (owner) through an override of the

@@ -11,7 +11,7 @@ same model natively ([networks/README.md](../networks/README.md)).
 
 Status: the target layer of this file (two bases, two structs, the generic self-call `mtxExecute`, the typed
 `mtxExecuteTransfer`, the selector allowlist, fee classes, `mtx` names, salted domains) is **SPECIFIED**; receiver-pays
-**SPECIFIED**. What runs today is two built
+**BUILT** (`mtxPayReceiverFee`, P1b/P1c; its UA twin `uaPayReceiverFee` SPECIFIED, UA-5a). What runs today is two built
 lines, v1 and v2, with a hand-written op dispatch (`smartcontracts/evm/src/metatx/`, **BUILT**); the differences are
 listed under [Transitional (BUILT)](#transitional-built) at the end. Nothing is deployed, so the target replaces the
 built lines in place: no version coexistence, no migration.
@@ -104,6 +104,15 @@ policy ([NODE-SPN-01](../node/sponsorship.md#NODE-SPN-01)) and the node's call t
 ([NODE-JOB-20](../node/job-api.md#NODE-JOB-20)), and any charge to the user is settled off chain. Why: a token
 transfer is one kind of gasless call, not the only one (owner); a fee field the contract cannot collect would only
 mislead signers.
+
+**The generic UA path lives here too** (owner 2026-10-13, [CTR-UA-27](accounts.md#CTR-UA-27); SPECIFIED, UA-5c; BUILT
+today in `ERC20MetaTx`): `uaExecute`, `uaBatch`, `uaCancelNonce`, `uaDigest`, `uaNonce`, the UA allowlist
+(`_uaAllowed`), the used `metatx-cancel` digests and the UA registry as an implementation immutable (0 = off:
+`UALedgerOff`) move down into `MetaTxBase`, so every contract on it — `MandateWallet`, a contract built on SCaaS —
+takes UA signers. Its fee is a virtual `_chargeUAFee` that refuses every mode but `NONE` unless the contract overrides
+it, as `_chargeFee`; a token overrides it to charge its UA ledger. The UA balances, `_uaMove`, `transferToUA` and the
+typed `UAMetaTransfer` path stay in `ERC20MetaTx`. `SmartKeyAccount` inherits the path with registry 0 (off): it is
+option (b), not a UA consumer.
 
 ## 2. `MetaTransaction`, `MetaTransfer` and the pinned typehashes
 
@@ -293,8 +302,9 @@ or the ticket is spent), and no allowlisted function runs with a live ticket; `m
 
 Authority and balance owners are read through `_msgSender()` everywhere; the reads that **stay** `msg.sender` are
 exactly: the relayer binding, the default fee recipient and the event `relayer` of the pipeline; the factory check in
-`initialize`; `mtxTrade`'s `msg.sender == o.dex` ([CTR-DEX-15](dex.md#CTR-DEX-15)); and `mtxWrap`'s relayer binding
-and fee payee ([CTR-TOK-20](token-wrappers.md#CTR-TOK-20)). A lint test greps the sources and pins that set
+`initialize`; `mtxTrade`'s and `uaTrade`'s `msg.sender == o.dex` ([CTR-DEX-15](dex.md#CTR-DEX-15),
+[CTR-DEX-25](dex.md#CTR-DEX-25)); and `mtxWrap`'s and `uaWrap`'s relayer binding and fee payee
+([CTR-TOK-20](token-wrappers.md#CTR-TOK-20); the `ua*` reads SPECIFIED, UA-5b). A lint test greps the sources and pins that set
 (built in P2a: `msg.sender` appears 3 times in `ERC20MetaTx` including the `mtxTrade` caller, twice in `UnderlyingToken`
 for `mtxWrap`, never in `TradeLib`, whose caller is a parameter). Defence in
 depth: `from ≠ address(this)` (step 1), and `_update` refuses transfers and mints **to** `address(this)`
@@ -314,9 +324,12 @@ it. Nothing else is reachable through `mtxExecute`.
 | | `wrap(address,uint256)` | `ABSOLUTE` |
 | | `unwrap(address,uint256,address,uint256)` | `AMOUNT(1)` |
 | | `addReserve(address,uint256)` | `ABSOLUTE` |
+| | `wrapToUA(address,uint256,bytes32)` (SPECIFIED, UA-5a; [CTR-UA-28](accounts.md#CTR-UA-28)) | `ABSOLUTE` |
+| | `unwrapToUA(address,uint256,bytes32,uint256)` (SPECIFIED, UA-5a; also on the UA allowlist) | `AMOUNT(1)` |
 | `NONE_ZETHER` / `UNDERLYING_ZETHER` (built, P3) | the kind's public entries (`burn`; or `UnderlyingToken`'s six, without `unwrap(uint256,address)`) | as above |
 | | `zetherShield(bytes,uint256)`, `zetherWrapShield(address,uint256,bytes32)` (`UNDERLYING_ZETHER`) | `ABSOLUTE` |
 | | `zetherTransfer`, `…Bundle`, `…NoBundle`, `…Single` `(bytes,bytes,bytes,bytes32)`, `zetherUnshield(bytes,bytes,bytes,bytes32,address,uint256)`, `zetherUnshieldUnwrap` | `ABSOLUTE`; envelope binding through the ticket ([CTR-ZTH-34](zether.md#CTR-ZTH-34)) |
+| | `zetherUnshieldToUA`, `zetherUnshieldUnwrapToUA` (`UNDERLYING_ZETHER`) (SPECIFIED, UA-5c; [CTR-ZTH-51](zether.md#CTR-ZTH-51)) | `ABSOLUTE`; envelope binding as above |
 | `PqzToken` | `pqzTransfer(bytes,bytes,bytes[],bytes,bytes)`, `pqzUnshield(bytes,bytes,bytes[],uint256,address,bytes,bytes)`, `pqzShield(bytes32,uint256)`, `pqzRollOver(bytes32,bytes,bytes[])` | `ABSOLUTE`; not batchable ([CTR-PQZ-21](pq-zether.md#CTR-PQZ-21)) |
 | `MandateWallet` | delegate: `payUnderMandate(address,address,uint256,bytes32,uint64)`, `revoke(address,uint64)`; owner: `setMandate`, `setPayee`, `revoke(address)`, `execute` ([CTR-ACC-06](mandates.md#CTR-ACC-06)) | fee `NONE` only |
 | `SmartKeyAccount` | `addKey`, `removeKey`, `rotateKey`, `setGuardian`, `cancelRecovery`, `execute`, signed by the account itself ([CTR-ACC-10](accounts.md#CTR-ACC-10)) | fee `NONE` only |
@@ -325,10 +338,10 @@ Transfer and payment are `MetaTransfer`s ([CTR-MTX-23](#CTR-MTX-23)); neither `t
 allowlisted, so one transfer has one encoding and one digest. `UnderlyingToken`'s two-argument `unwrap(uint256,address)` is not listed (the same intent with a
 second digest and no `minOut`). **Never allowlisted:**
 `approve` and `transferFrom` (contract accounts approve and spend through their own call path,
-[CTR-TOK-01](token-wrappers.md#CTR-TOK-01)); every role function — `mint`, the `ITokenAdmin` functions (`grantRole`, `revokeRole`, `renounceRole`, `disableFeature`, the ownership functions), `proposeRate`,
+[CTR-TOK-01](token-wrappers.md#CTR-TOK-01)); every role function — `mint`, `mintToUA`, the `ITokenAdmin` functions (`grantRole`, `revokeRole`, `renounceRole`, `disableFeature`, the ownership functions), `proposeRate`,
 `cancelRate`, `executeRate`, `disableWrap` (role holders act through their own
 contract, [NODE-JOB-01](../node/job-api.md#NODE-JOB-01); a signature check would skip a minter contract's caps or a
-Safe's guards); `transfer` and `pay` (they are `MetaTransfer`s); `payWithFee` (it charges its own fee); `mtxExecute`, its alias and every other `mtx…` entry
+Safe's guards; the holder still acts gaslessly through its own contract account, [CTR-UA-27](accounts.md#CTR-UA-27)); `transfer` and `pay` (they are `MetaTransfer`s); `payWithFee` and `payWithFeeToUA` (they charge their own fee); `mtxExecute`, its alias and every other `mtx…` entry
 (no nesting); `initialize`; views; Zether `zetherRollOverSigned`/`zetherSetRollOverMode` (they carry their
 own signature). For selectors with dynamic arguments (Zether) the contract cannot cheaply pin one encoding: the node
 re-encodes the decoded arguments and refuses non-canonical `data` before it computes the mesh `intent_id`; a
@@ -640,7 +653,8 @@ reverting reverts the batch, so all-or-nothing holds per item and per batch; ite
 never structs, contracts or chains (it is a function of one contract). Different structs signed in the token's domain
 are not a second hash of one intent: `MetaTransfer` beside `MetaTransaction`, the Universal Account path's
 `UAMetaTransaction` and `UAMetaTransfer` ([CTR-UA-19](accounts.md#CTR-UA-19), [CTR-UA-26](accounts.md#CTR-UA-26)),
-and trading has `TradeOrder`, `CancelOrder` and `InvalidateNonces` ([CTR-DEX-13](dex.md#CTR-DEX-13)).
+and trading has `TradeOrder`, `CancelOrder` and `InvalidateNonces` ([CTR-DEX-13](dex.md#CTR-DEX-13)) and, for UAs,
+`UATradeOrder` and `UAInvalidateNonces` ([CTR-DEX-25](dex.md#CTR-DEX-25)).
 
 `mtxBatch` saves the 21 000 intrinsic gas per item after the first, plus warm re-reads of shared slots, minus the ABI
 overhead of `MetaTransaction[]`/`bytes[]` (the token address is pre-warmed as `tx.to` anyway). Measured on the built
@@ -720,7 +734,7 @@ their errors are in [dex.md](dex.md#CTR-DEX-15); the kind functions (wrap, unwra
 | Sponsored (company relayer) | Subject signs with `MODE_FEE_NONE` + `MODE_RESTRICT_RELAYER` = company lane | Company (OPEX) | **BUILT** (portal default, [INT-ERP-06](../integration.md#INT-ERP-06)) |
 | Fee in token | `MODE_FEE_PERCENT`/`FIXED`, fee ≤ 1 % to `feeRecipient` (absolute for `ABSOLUTE` selectors) | Relayer, reimbursed in token | **BUILT** |
 | **Payee self-relay / direct settlement** | Payer signs offline (`fee = 0`, relayer unbound or bound to the payee); hands the signature to the payee by QR, NFC, message or file; the payee's wallet submits it, paying gas itself; `PaymentSettled` identical. The signature is an expiring electronic cheque (`validUntil`) | Payee | **BUILT** at contract level (any `msg.sender` may submit an unbound intent); QR (EIP-681-style) tooling and a user `cancelNonce` screen **PLANNED** |
-| **Receiver pays the fee** | Payer signs `pay` of `N`; payee co-signs a fee authorization (`fee`, `feeRecipient`) from its own balance; relayer submits both in one transaction (payer sends `N`, payee receives `N`, pays `fee`) | Relayer, reimbursed by payee | **SPECIFIED** (`mtxPayReceiverFee`, payee co-signs `ReceiverFee` over the payer digest; [receiver-pays](#receiver-pays)) |
+| **Receiver pays the fee** | Payer signs `pay` of `N`; payee co-signs a fee authorization (`fee`, `feeRecipient`) from its own balance; relayer submits both in one transaction (payer sends `N`, payee receives `N`, pays `fee`) | Relayer, reimbursed by payee | **BUILT** in the contracts (`mtxPayReceiverFee`, payee co-signs `ReceiverFee` over the payer digest; [receiver-pays](#receiver-pays)); the node refuses `receiver_fee` jobs until its receiver-pays job is built; the UA twin `uaPayReceiverFee` **SPECIFIED** (UA-5a) |
 | Gas sponsorship policy | Node policy: e.g. "inbound to wallet W, value ≥ X ⇒ accept with fee 0, book gas to account Y" | Sponsor (contract outside the chain) | **SPECIFIED** ([NODE-SPN-01](../node/sponsorship.md#NODE-SPN-01)); on-chain `SponsorshipPool` **PLANNED** later |
 | `fee = 0` B2B | Company relayer, `MODE_FEE_NONE`; gas is OPEX | Company | **BUILT** |
 | Enterprise inbound gateway | Partners post signed intents to the company's gateway (`POST /v1/metatx`); the company relays with its lanes | Company | **BUILT** (EVM door A); intake rules that stop door A being a free gas faucet **SPECIFIED** ([NODE-GW-01](../node/gateway.md#NODE-GW-01)) |
@@ -835,6 +849,29 @@ expired co-signature; replay after the payer intent landed through `mtxExecuteTr
 (`SmartKeyAccount`) and Hedera HIP-632 payee; RP1/RP4 under fuzz; event fields; node accept rules and the forced
 `restricted` scope. Families: EVM and Hedera only; non-EVM families do not have it (no fee fields off EVM) — there the
 options are payee self-relay and sponsorship.
+
+<a id="ua-receiver-pays"></a>**The UA twin: `uaPayReceiverFee`** (owner 2026-10-13, [CTR-UA-27](accounts.md#CTR-UA-27);
+SPECIFIED, UA-5a). Payer and payee are ids (**U**); the payee co-signs the same `ReceiverFee` over the payer's
+`UAMetaTransfer` digest:
+
+```solidity
+function uaPayReceiverFee(MetaTxLib.UAMetaTransfer calldata t, bytes calldata payerAuth, uint256 fee,
+                          address feeRecipient, uint256 rfValidUntil, bytes calldata payeeAuth)
+    external nonReentrant returns (bool);
+event UAReceiverFeePaid(bytes32 indexed paymentDigest, bytes32 indexed payee, address indexed feeRecipient, uint256 fee);
+```
+
+Order: `PAYABLE`; step 1's shape on `t` (`ReceiverFeeShape`: `entryRef ≠ 0`, fee `NONE` and `fee == 0`, relayer bound,
+`batch == payLane(entryRef)`, `nonce == 0`, `feeRecipient ≠ 0`), `ReceiverFeeExpired`, `ReceiverFeeAmount`; `pad(feeRecipient) ==
+t.to` ⇒ `FeeRecipientIsPayee`, `feeRecipient` the token ⇒ `TransferToSelf`, `UA_POOL` ⇒ `UAPoolNotPayable`; then `d =`
+the unchanged typed UA pipeline on `t` with `payerAuth` (payer → payee `N`, `UAPaymentSettled`,
+`UAMetaTransactionExecuted`); then the payee's co-signature over `receiverFeeDigest(d, fee, feeRecipient,
+rfValidUntil)` — a native `t.to` signs it itself (ECDSA, ERC-1271 by [CTR-UA-24](accounts.md#CTR-UA-24), HIP-632 on
+Hedera), a derived one through `requireAuthorized(t.to, receiver-fee, digest, payeeAuth)` (the purpose exists for this,
+[accounts.md](accounts.md#purposes)); then `fee` moves from `t.to` to `feeRecipient` in the UA ledger; emit
+`UAReceiverFeePaid(d, t.to, feeRecipient, fee)`. RP1–RP4 and the threat table above hold with ids for addresses. Two
+`mldsa65` signatures cost ≈ 11.9 M (under 16.78 M and Hedera's 15 M); an `msig` payer at its 12 M budget with any PQ
+payee does not fit one transaction. Not in `uaBatchTransfer` (as the address path).
 
 ## <a id="security"></a>14. Security
 
