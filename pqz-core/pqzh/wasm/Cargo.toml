@@ -1,0 +1,21 @@
+[package]
+name = "pqzh-wasm"
+version = "0.1.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+publish = false
+
+# wasm32-unknown-unknown module for the PQZH bench (run_wasm.mjs); raw C-ABI exports, no wasm-bindgen.
+[lib]
+crate-type = ["cdylib"]
+path = "lib.rs"
+
+[dependencies]
+pqzh = { path = ".." }
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+
+[workspace]

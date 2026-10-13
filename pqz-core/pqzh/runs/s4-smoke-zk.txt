@@ -1,0 +1,14 @@
+   Compiling pqzh v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzhp/pqz-core/pqzh)
+    Finished `checked` profile [optimized + debuginfo] target(s) in 21.01s
+     Running tests/smoke.rs (target/checked/deps/smoke-08d7120a191a17d1)
+
+running 2 tests
+test honest_reg_and_tx ... reg proof 110388 B, 1.50358857s
+tx proof 141079 B, 3.185620507s
+ok
+test zk_honest_and_hiding ... zk op 3: 190501 B
+zk op 1: 248750 B
+ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 40.41s
+

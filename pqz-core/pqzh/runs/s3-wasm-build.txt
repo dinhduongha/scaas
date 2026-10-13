@@ -1,0 +1,3 @@
+   Compiling pqzh v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzhp/pqz-core/pqzh)
+   Compiling pqzh-wasm v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzhp/pqz-core/pqzh/wasm)
+    Finished `release` profile [optimized] target(s) in 37.63s
