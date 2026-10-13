@@ -6,6 +6,8 @@
  *   pqz_bench [n_prove] [n_verify] [rel]   prints JSON lines: sizes, times (ms), check results
  *   rel: bit mask, 1 = R_REG, 2 = R_TX, 4 = R_BURN, 8 = R_DS, 16 = R_DR (default 31 = all); n_verify = 0 also
  *   skips the adversarial verifies
+ *   PQZ_VERIFY=fast (native) / step_set_fast (wasm): time pqz_verify_fast instead of pqz_verify (P6-SV; builds with
+ *   PQZ_SV only, the default of build.sh)
  */
 #include <stddef.h>
 #include <stdint.h>
@@ -109,6 +111,29 @@ static uint8_t dr_stmt[PQZ_DISC_STMT_BYTES], dr_wit[PQZ_DR_WIT_BYTES];
 static uint8_t proofs[5][PQZ_MAX_PROOF], bad[PQZ_MAX_PROOF];
 static size_t lens[5];
 static uint8_t rnd32[32];
+static int fast; /* 1: verify with pqz_verify_fast */
+
+static int
+vfy (uint8_t op, const uint8_t *st, size_t stlen, const uint8_t *pf, size_t len)
+{
+#ifdef PQZ_SV
+  if (fast)
+    return pqz_verify_fast (op, st, stlen, pf, len);
+#endif
+  return pqz_verify (op, st, stlen, pf, len);
+}
+
+/* 0 ok; -1: asked for the specialised verifier in a build without it (SV=0) */
+int
+step_set_fast (int on)
+{
+#ifndef PQZ_SV
+  if (on)
+    return -1;
+#endif
+  fast = on;
+  return 0;
+}
 
 /* relation index: 0 R_REG, 1 R_TX, 2 R_BURN, 3 R_DS, 4 R_DR */
 #define NREL 5
@@ -299,15 +324,27 @@ step_len (int rel)
 int
 step_verify (int rel)
 {
-  return pqz_verify (OPS[rel], STMT[rel], STLEN[rel], proofs[rel], lens[rel]);
+  return vfy (OPS[rel], STMT[rel], STLEN[rel], proofs[rel], lens[rel]);
 }
 
 /* adversarial verify inputs: kind 0 = one random bit flipped in the proof, 1 = random bytes of the valid
    length, 2 = one statement coefficient changed, 3 = proof truncated by one byte, 4 = proof with a long
    unary run (all-ones tail), 5 = public scalar changed (KEYOFF / SCALOFF) */
 #define NKIND 6
+static int verify_bad (int rel, int kind, unsigned seed);
+
+/* deterministic in (kind, seed): the generator state is restored, so the same call can run with both verifiers */
 int
 step_verify_bad (int rel, int kind, unsigned seed)
+{
+  uint64_t xs0 = xs;
+  int rc = verify_bad (rel, kind, seed);
+  xs = xs0;
+  return rc;
+}
+
+static int
+verify_bad (int rel, int kind, unsigned seed)
 {
   uint8_t *pf = proofs[rel];
   size_t len = lens[rel];
@@ -321,26 +358,26 @@ step_verify_bad (int rel, int kind, unsigned seed)
     {
       uint64_t b = rnd () % (8 * len);
       bad[b >> 3] ^= (uint8_t)(1 << (b & 7));
-      return pqz_verify (op, st, stlen, bad, len);
+      return vfy (op, st, stlen, bad, len);
     }
   if (kind == 1)
     {
       for (size_t i = 0; i < len; i++)
         bad[i] = (uint8_t)rnd ();
-      return pqz_verify (op, st, stlen, bad, len);
+      return vfy (op, st, stlen, bad, len);
     }
   if (kind == 2 || kind == 5)
     {
       size_t off = kind == 2 ? KEYOFF[rel] + 8 * (rnd () % 2048) + 7 : SCALOFF[rel];
       st[off] ^= 1;
-      rc = pqz_verify (op, st, stlen, pf, len);
+      rc = vfy (op, st, stlen, pf, len);
       st[off] ^= 1;
       return rc;
     }
   if (kind == 3)
-    return pqz_verify (op, st, stlen, bad, len - 1);
+    return vfy (op, st, stlen, bad, len - 1);
   memset (bad + len / 2, 0xff, len - len / 2);
-  return pqz_verify (op, st, stlen, bad, len);
+  return vfy (op, st, stlen, bad, len);
 }
 
 /* FNV-1a of the last proof: same seeds must give the same bytes before and after a pure implementation change,
@@ -405,6 +442,12 @@ main (int argc, char **argv)
   int np = argc > 1 ? atoi (argv[1]) : 10, nv = argc > 2 ? atoi (argv[2]) : 100, fails = 0;
   int rels = argc > 3 ? atoi (argv[3]) : 31;
   void *arena = malloc (ARENA_BYTES);
+  const char *ve = getenv ("PQZ_VERIFY");
+  if (step_set_fast (ve != NULL && strcmp (ve, "fast") == 0) != 0)
+    {
+      printf ("{\"error\": \"PQZ_VERIFY=fast: built without the specialised verifier (SV=0)\"}\n");
+      return 1;
+    }
   double t0, *tp = malloc (sizeof (double) * (np > nv ? np : nv) * 7 + 64);
 
   t0 = now_ms ();
@@ -413,7 +456,8 @@ main (int argc, char **argv)
       printf ("{\"error\": \"init\"}\n");
       return 1;
     }
-  printf ("{\"init_ms\": %.1f, \"init_arena\": %zu}\n", now_ms () - t0, step_arena_peak ());
+  printf ("{\"init_ms\": %.1f, \"init_arena\": %zu, \"verify\": \"%s\"}\n", now_ms () - t0, step_arena_peak (),
+          fast ? "fast" : "generic");
 
   for (int tx = 0; tx < NREL; tx++)
     {

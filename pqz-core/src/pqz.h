@@ -72,6 +72,10 @@ int pqz_prove (uint8_t op, const uint8_t *stmt, size_t stmt_len, const uint8_t *
                const uint8_t rnd32[32], uint8_t *proof, size_t *proof_len); /* 0 = ok */
 int pqz_verify (uint8_t op, const uint8_t *stmt, size_t stmt_len, const uint8_t *proof,
                 size_t proof_len); /* 1 = valid, 0 = anything else */
+/* specialised verifier for the same statements (pqz_sv.c): accepts exactly the proofs pqz_verify accepts, by
+   evaluating the relation's equations directly; pqz_verify stays the reference. Its tables for an op are built at
+   the op's first call. Only in builds with PQZ_SV (build.sh default; SV=0 leaves it out, e.g. a wallet's prover). */
+int pqz_verify_fast (uint8_t op, const uint8_t *stmt, size_t stmt_len, const uint8_t *proof, size_t proof_len);
 
 /* helpers for tests and clients: the public matrix A (spec CTR-PQZ-03) applied to short vectors */
 int pqz_keypair_from_secret (const int8_t s[2048], const int16_t e[2048], uint8_t pk[PQZ_POLYVEC_BYTES]);

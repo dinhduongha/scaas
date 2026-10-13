@@ -1,0 +1,22 @@
+{"init_ms":25.9,"init_arena":2471136,"verify":"both"}
+{"timing":"R_REG prove","n":2,"mean_ms":433.363,"p50_ms":471.841,"p99_ms":394.884,"max_ms":471.841}
+{"rel":"R_REG","proof_bytes_last":28085,"proof_bytes_max":28085,"arena_peak":77794896,"proofs_fnv":"a0faa73c"}
+{"timing":"R_REG verify valid","n":10,"mean_ms":7.252,"p50_ms":6.89,"p99_ms":7.624,"max_ms":10.027}
+{"timing":"R_REG verify adversarial","n":60,"mean_ms":3.703,"p50_ms":6.653,"p99_ms":8.106,"max_ms":8.47}
+{"timing":"R_TX prove","n":2,"mean_ms":1483.361,"p50_ms":1709.736,"p99_ms":1256.986,"max_ms":1709.736}
+{"rel":"R_TX","proof_bytes_last":42749,"proof_bytes_max":42749,"arena_peak":247474592,"proofs_fnv":"71396f48"}
+{"timing":"R_TX verify valid","n":10,"mean_ms":14.037,"p50_ms":13.53,"p99_ms":13.873,"max_ms":18.465}
+{"timing":"R_TX verify adversarial","n":60,"mean_ms":7.338,"p50_ms":13.364,"p99_ms":14.691,"max_ms":18.409}
+{"timing":"R_BURN prove","n":2,"mean_ms":1046.476,"p50_ms":1080.921,"p99_ms":1012.031,"max_ms":1080.921}
+{"rel":"R_BURN","proof_bytes_last":41940,"proof_bytes_max":41940,"arena_peak":251904784,"proofs_fnv":"330c19fd"}
+{"timing":"R_BURN verify valid","n":10,"mean_ms":13.395,"p50_ms":13.265,"p99_ms":13.993,"max_ms":14.526}
+{"timing":"R_BURN verify adversarial","n":60,"mean_ms":7.136,"p50_ms":12.899,"p99_ms":16.576,"max_ms":18.165}
+{"timing":"R_DS prove","n":2,"mean_ms":518.215,"p50_ms":524.135,"p99_ms":512.296,"max_ms":524.135}
+{"rel":"R_DS","proof_bytes_last":28958,"proof_bytes_max":28958,"arena_peak":121976912,"proofs_fnv":"d7fbc082"}
+{"timing":"R_DS verify valid","n":10,"mean_ms":7.126,"p50_ms":7.151,"p99_ms":7.221,"max_ms":7.255}
+{"timing":"R_DS verify adversarial","n":60,"mean_ms":3.97,"p50_ms":7.003,"p99_ms":8.568,"max_ms":9.8}
+{"timing":"R_DR prove","n":2,"mean_ms":402.413,"p50_ms":446.657,"p99_ms":358.169,"max_ms":446.657}
+{"rel":"R_DR","proof_bytes_last":28979,"proof_bytes_max":28979,"arena_peak":137762624,"proofs_fnv":"22be6479"}
+{"timing":"R_DR verify valid","n":10,"mean_ms":7.658,"p50_ms":7.561,"p99_ms":7.602,"max_ms":9.008}
+{"timing":"R_DR verify adversarial","n":60,"mean_ms":4.358,"p50_ms":7.496,"p99_ms":9.54,"max_ms":10.224}
+{"fails":0,"mismatches":0}
