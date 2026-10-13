@@ -1,0 +1,40 @@
+
+thread 'main' (1314682) panicked at src/bin/pqzh_whir.rs:130:48:
+WHIR config: PowBitsExceedBudget { required: 42, budget: 16 }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+ext 2 rate 1 fold 4 target 128 rc=101
+
+thread 'main' (1314694) panicked at src/bin/pqzh_whir.rs:130:48:
+WHIR config: PowBitsExceedBudget { required: 44, budget: 16 }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+ext 2 rate 1 fold 4 target 130 rc=101
+
+thread 'main' (1314701) panicked at src/bin/pqzh_whir.rs:130:48:
+WHIR config: PowBitsExceedBudget { required: 44, budget: 16 }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+ext 2 rate 2 fold 4 target 128 rc=101
+
+thread 'main' (1314714) panicked at src/bin/pqzh_whir.rs:130:48:
+WHIR config: PowBitsExceedBudget { required: 46, budget: 16 }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+ext 2 rate 2 fold 4 target 130 rc=101
+
+thread 'main' (1314726) panicked at src/bin/pqzh_whir.rs:130:48:
+WHIR config: PowBitsExceedBudget { required: 46, budget: 16 }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+ext 2 rate 3 fold 4 target 128 rc=101
+
+thread 'main' (1314727) panicked at src/bin/pqzh_whir.rs:130:48:
+WHIR config: PowBitsExceedBudget { required: 48, budget: 16 }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+ext 2 rate 3 fold 4 target 130 rc=101
+
+thread 'main' (1314728) panicked at src/bin/pqzh_whir.rs:130:48:
+WHIR config: PowBitsExceedBudget { required: 48, budget: 16 }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+ext 2 rate 4 fold 4 target 128 rc=101
+
+thread 'main' (1314729) panicked at src/bin/pqzh_whir.rs:130:48:
+WHIR config: PowBitsExceedBudget { required: 50, budget: 16 }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+ext 2 rate 4 fold 4 target 130 rc=101
