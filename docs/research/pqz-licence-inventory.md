@@ -241,19 +241,19 @@ These are local scripts; `.github/workflows/ci.yml` references none of them [cod
    beside them or in the app's licence screen [code]. *Owner / release process.*
 2. **One unmarked modification.** `lazer/lnp-quad-many.c` differs from upstream by one removed line
    (`#include <mpfr.h>`) without a `PQZ:` comment; all other modified files carry `PQZ:` marks [code]. The MIT text
-   has no change-marking condition; the README promises the marks. *Fix: add a mark (code change, left to owner).*
+   has no change-marking condition; the README promises the marks. **Resolved 2026-10-14 (owner): `PQZ:` mark added.**
 3. **AES S-box provenance.** `lazer/aes256ctr.c` (commit `405a3e3`) implements the Boyar–Peralta circuit; its
    comment says "the same circuit as BearSSL's constant-time AES". Whether the code text was transcribed from
    BearSSL's source (MIT, Thomas Pornin) or from the published circuit is not recorded [unknown]. If from BearSSL,
-   `NOTICE` needs BearSSL's MIT notice. *Owner to confirm.*
+   `NOTICE` needs BearSSL's MIT notice. **Resolved 2026-10-14 (owner): BearSSL's MIT notice added to `NOTICE` as a precaution (§4 there).**
 4. **LaZer code outside `lazer/`.** `src/pqz_rel.c` (from `lin-proofs.c`) and `src/pqz_sv.c` (following
    `lnp-tbox.c`) contain LaZer-derived code in SCaaS-headed files. Now listed in `NOTICE`; not otherwise marked.
 5. **PQZH declared licence.** `pqz-core/pqzh/Cargo.toml` says `MIT OR Apache-2.0`; the repository licence is the
-   Vegan Community License 1.0 [code]. Not shipped, but the declaration is inconsistent. *Owner decision.*
+   Vegan Community License 1.0 [code]. Not shipped, but the declaration is inconsistent. **Resolved 2026-10-14 (owner): `license-file = "../../LICENSE"`.**
 6. **`xcheck/static` bundle.** The tarball statically links GMP and MPFR (LGPL), glibc (LGPL), libstdc++ (GPL with
    the GCC runtime exception), HEXL (Apache-2.0) and LaZer's Falcon (MIT) [code: README and build script]. It is
    built for the owner's own machines and is git-ignored; handing it to a third party would be a distribution of
-   those libraries with their duties (LGPL relinking, Apache NOTICE).
+   those libraries with their duties (LGPL relinking, Apache NOTICE). **Owner 2026-10-14: the bundle is never uploaded or published (no built binaries on GitHub); it stays on the owner's machines.**
 7. **Test-vector licences unknown.** `pq_external.json` holds data from NIST ACVP-Server and from EIP assets
    (including Wycheproof-derived cases) in a public repository; their licence terms were not checked [unknown].
 8. **Retained, unused files.** `lazer/bytes.c` and `lazer/mont.h` are kept but not compiled [code]. Harmless; they

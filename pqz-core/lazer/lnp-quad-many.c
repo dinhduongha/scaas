@@ -1,5 +1,6 @@
 #include "lazer.h"
 #include "stopwatch.h"
+/* PQZ: upstream's #include <mpfr.h> removed (pqz-core links no MPFR). */
 
 static void
 _schwartz_zippel_poly (spolymat_t R2, spolyvec_t r1, poly_t r0,
