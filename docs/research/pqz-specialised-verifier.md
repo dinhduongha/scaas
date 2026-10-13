@@ -1,12 +1,95 @@
 > **Research note — background and rationale only, not normative; the current rules are in docs/ (see decisions.md).**
 
-# PQZL specialised verifier: `R_REG` / `R_TX` without LaZer's generic machinery (P6-SV)
+# PQZL specialised verifier: the five PQZ relations without LaZer's generic machinery (P6-SV)
 
 Written 2026-10-13 for the owner's P6-SV spike (TODO P6-SV), after the verifier-floor analysis
-(`pqz-verifier-floor.md`). Question: can a verifier written for our two fixed statements accept exactly the proofs
+(`pqz-verifier-floor.md`). Question: can a verifier written for our fixed statements accept exactly the proofs
 LaZer's generic `tbox` verifier accepts, and how close does it get to the floor and to the 50 ms p99 verify limit
-(CTR-PQZ-09)? Code on branch `pqz-sv` (not merged yet): `pqz-core/src/pqz_sv.c`, tests `pqz-core/test/pqz_sv_diff.c`,
-`pqz-core/test/pqz_sv_fuzz.c`, runs `pqz-core/sv/`. **No decision is recorded here.**
+(CTR-PQZ-09)? Code on branch `pqz-sv-relfix` (not merged yet; history `pqz-sv` → `pqz-sv-rel3` → `pqz-sv-relfix`):
+`pqz-core/src/pqz_sv.c`, tests `pqz-core/test/pqz_sv_diff.c`, `pqz-core/test/pqz_sv_fuzz.c`,
+`pqz-core/sv/check_sv_fixes.sh`, runs `pqz-core/sv/runs/`. **No decision is recorded here.**
+
+**Current state (§0): the fixed transcript, `proofSystemId` v2, all five relations.** §1–§8 below were written on
+the pre-fix transcript (v1) and keep their numbers as the "before"; where the v2 run changed something, §0 says so.
+
+## 0. On the fixed transcript (`proofSystemId` v2), all five relations
+
+`pqz-sv-relfix` = `pqz-sv-rel3` + main (the relation fix-ups: `R_TX` on the pq-zether.md §7.7 layout, the 32-byte
+disclosure `kind` word, ABDLOP keys built at an op's first use; and `pqz-v2`: the two LaZer `tbox` Schwartz–Zippel
+fixes, [lazer#24](https://github.com/lazer-crypto/lazer/issues/24) P6-SZ and
+[lazer#25](https://github.com/lazer-crypto/lazer/issues/25) P6-L2, under `proofSystemId` v2). The specialised verifier
+follows both fixes, each a one-line change: `sz_eval_challenges` draws λ × M challenge values from (seed, dom) and
+gives half h of accumulator pair i row 2i + h (P6-SZ; v1 drew 2M values and gave every pair the same two rows), and
+exact-ℓ2 equation i draws from domain dom + i (P6-L2; v1 used one domain for all Z equations, so only the sum of the
+block norms was checked). It parses the v2 statements (header with the fee word for `R_TX`, `kind` word) as
+`pqz_rel.c` does. Run `scripts/capped pqz-core/sv/rel3.sh v2` (`sv/runs/v2-*`), same machine as §2 [measured].
+
+**Equivalence.** 0 disagreements in 4,420 cases; both fixes are needed and caught:
+
+| Run (`sv/runs/`) | Build | Cases `R_REG` / `R_TX` / `R_BURN` / `R_DS` / `R_DR` | Generic accepts | Disagreements |
+|---|---|---|---|---|
+| `v2-diff-portable` | portable | 238 / 246 / 742 / 742 / 742 = 2,710 | 90 (44 honest, 44 re-encoded, 2 no-op) | **0** |
+| `v2-diff-x86v3` | x86-64-v3 + AES-NI | 118 / 122 / 370 / 370 / 370 = 1,350 | 44 | **0** |
+| `v2-wasm-both` | wasm32 (`PQZ_VERIFY=both`) | 72 each = 360 (2 honest, 10 verifies, 60 tamper cases) | 60 | **0** |
+| `v2-sv-fixes-tree` | portable, the tree | 2 per relation = 10 (honest + re-encoded) | 10 | **0** |
+| `v2-sv-fixes-sz-reverted` | P6-SZ line reverted in a copy of `pqz_sv.c` | 10 | 10 | **10** (every proof) |
+| `v2-sv-fixes-l2-reverted` | P6-L2 line reverted | 10 | 10 | **10** (every proof) |
+
+The last three are `sv/check_sv_fixes.sh` (exit 0 only if the tree agrees and each reverted copy disagrees), the SV
+counterpart of `check_tbox_fixes.sh` (also ok in this run: the P6-SZ trace sees 4 independent evaluation-step tests,
+the P6-L2 pooled-slack proofs are rejected by the production verifier and accepted with the fix undone). Before the
+fixes were ported (the merge commit alone) the same harness gave 10 disagreements in 129 cases: exactly the honest
+and re-encoded proofs, which v2's generic verifier accepts and a v1 transcript rejects. PRG check 0 mismatches,
+KAT 19/19, ASan + UBSan bench clean, symbol scan clean on native, x86-64-v3, wasm and the SV=0 build.
+
+**Speed** (`pqz_bench 2 200`: 200 honest and 246 adversarial verifies per relation; wasm `run_wasm.mjs 2 100`: 100
+honest, 600 adversarial), ms, v1 (§1, runs `d2-*` / `r3-*`) → v2 [measured]:
+
+| verify, ms | p50 honest | p99 honest | p99 adversarial (bench / diff) | generic p50 | vs 50 ms (worst p99) |
+|---|---|---|---|---|---|
+| `R_TX` portable | 7.85 → **8.00** | 12.6 → 11.1 | 10.4 / 9.5 → 9.3 / 10.1 | 638 | 4.5× under |
+| `R_TX` x86-64-v3 | 4.54 → 4.65 | 5.5 → 5.9 | 4.7 / 5.6 → 5.9 / 5.0 | | |
+| `R_TX` wasm32 | 11.9 → 13.5 | 14.4 → 16.0 | 13.4 → 15.7 | | 3.1× under |
+| `R_BURN` portable | 7.69 → 7.74 | 9.8 → 9.7 | 10.0 / 10.9 → 9.3 / 9.8 | 535 | 5.1× under |
+| `R_BURN` x86-64-v3 | 4.47 → 4.52 | 5.8 → 5.8 | 5.9 / 6.1 → 5.0 / 5.9 | | |
+| `R_BURN` wasm32 | 13.2 → 13.0 | 20.4 → 15.3 | 16.3 → 15.5 | | 3.2× under |
+| `R_REG` portable | 3.97 → 3.87 | 4.5 → 5.9 | 4.7 / 4.9 → 5.5 / 5.3 | 178 | 8.5× under |
+| `R_REG` x86-64-v3 | 2.38 → 2.39 | 2.7 → 3.3 | 2.9 / 3.0 → 3.3 / 3.2 | | |
+| `R_REG` wasm32 | 5.9 → 6.8 | 6.8 → 9.2 | 6.5 → 8.1 | | 5.4× under |
+| `R_DS` portable | 4.17 → 4.35 | 5.7 → 5.9 | 5.7 / 6.5 → 4.7 / 5.5 | 213 | 8.5× under |
+| `R_DS` x86-64-v3 | 2.82 → 2.68 | 3.6 → 3.6 | 3.7 / 3.8 → 3.7 / 3.8 | | |
+| `R_DS` wasm32 | 7.2 → 7.1 | 8.9 → 8.8 | 9.3 → 8.4 | | 5.7× under |
+| `R_DR` portable | 4.37 → 4.50 | 6.0 → 6.1 | 5.4 / 7.3 → 5.7 / 6.2 | 204 | 8.1× under |
+| `R_DR` x86-64-v3 | 2.67 → 2.87 | 3.9 → 3.6 | 3.1 / 3.7 → 3.5 / 3.9 | | |
+| `R_DR` wasm32 | 7.8 → 7.6 | 9.6 → 9.4 | 9.7 → 9.8 | | 5.1× under |
+
+No change beyond the host's noise (±20 %, §1 ¹): the fixes draw (λ − 2)·M more challenge values per evaluation call
+(a few hundred 42-bit values) and one more domain per ℓ2 equation, against ≈ 8 ms of NTTs, AES and folds [inference].
+The wasm `R_TX` / `R_REG` p50 moved by +13 % / +15 %, inside the spread seen for the same v1 code across sessions
+(`R_TX` wasm 11.9 in `d2`, 13.7 in `r3`). Every relation stays ≥ 3× under the 50 ms p99 limit on every build.
+
+**Memory.** The tables are now built per op at its first `pqz_verify_fast` (after that op's ABDLOP keys, below the
+arena base mark), not at `pqz_init` for all five (v1: 20.8 MB at init, arena base 54.5 → 75.3 MB). Sizes per op,
+native [measured]: `R_REG` 4.10 MB (includes A, shared, 1 MB), `R_TX` 5.22 MB, `R_BURN` 5.10 MB, `R_DS` 3.10 MB,
+`R_DR` 3.33 MB; working set per verify unchanged (1.06 / 1.67 / 1.64 / 1.08 / 1.12 MB; generic 81 / 273 / 258 / 85 /
+92 MB). Init is A alone again (3.1 MB native, 2.5 MB wasm; 9–12 ms native, 24–30 ms wasm). Build option `SV=0`
+(`build.sh`; the code is compiled only with `PQZ_SV`) leaves `pqz_sv.c` and `pqz_verify_fast` out: `pqz.wasm` 404,755
+→ 350,585 B. Arena peak of one op alone (prove + one honest verify, one process per relation, `v2-alone.jsonl`):
+
+| wasm32, MB (MiB) | `R_TX` | `R_BURN` | `R_DS` | `R_DR` | `R_REG` |
+|---|---|---|---|---|---|
+| `SV=0` (wallet prover) | **231.9 (221.1)** | 220.4 | 76.9 | 83.0 | 73.7 |
+| with SV, generic verify | 231.9 | 220.4 | 76.9 | 83.0 | 73.7 |
+| with SV, fast verify | 231.9 | 220.4 | 76.9 | 83.0 | 73.7 |
+
+The prove sets the peak in all three; with the lazy tables a build with the specialised verifier costs a prover
+nothing until it calls `pqz_verify_fast`, and then that op's tables (≤ 5.2 MB) plus 1.7 MB of working set, below
+the prove's peak. `R_TX` prover: 221.1 MiB, 13.6 % under the 256 MiB hard limit (CTR-PQZ-18), as on main; the v1
+branch with eager tables reached 284 MB. A wallet that fast-verifies first and proves afterwards carries the tables
+under the prove: ≈ 221 + 5 = 226 MiB for `R_TX` [estimate]. Native `R_TX` alone 304 MB, as main.
+
+**Proofs** unchanged by this branch: `proofs_fnv` 1-seed native = wasm (`R_REG` `a4477f23`, `R_TX` `6ffad36b`,
+`R_BURN` `478eb819`, `R_DS` `10639246`, `R_DR` `82621a18`); the 5-seed hashes are main's v2 (`rel3/runs/v2-*`).
 
 **[measured]** marks a number from a run in this note (machine in §2). **[estimate]** marks a number computed from
 counts or a rough figure. **[inference]** marks a conclusion drawn here.
@@ -107,7 +190,8 @@ PRG: AES-256-CTR with key = seed, nonce = le64(dom) ‖ 0⁸, 128-bit big-endian
 42-bit LSB-first fields with rejection, `intmat_urandom`'s row domains (dom ≪ 32 | i·256), `polyvec_urandom`'s
 (dom ≪ 32 | i + 1), `_brandom`'s plus / minus bit halves. The evaluation-equation challenges come from one function,
 `sz_eval_challenges`, which mirrors `lnp-tbox.c`'s `__schwartz_zippel_accumulate2` derivation; the domains are those
-`lnp_tbox_verify` passes. A test hook checks this PRG against LaZer's on random seeds, domains and lengths, plus the
+`lnp_tbox_verify` passes. Since v2 (§0) that derivation is the fixed one: λ × M values per call (P6-SZ, lazer#24) and
+domain dom + i for exact-ℓ2 equation i (P6-L2, lazer#25). A test hook checks this PRG against LaZer's on random seeds, domains and lengths, plus the
 FIPS-197 AES-256 vector.
 
 **Arithmetic.** Ring products through a complete negacyclic NTT of degree 64 over **four** NTT-friendly 30-bit primes
@@ -118,7 +202,7 @@ all). With four primes every sum below stays under 2^106 for any input (inputs a
 bounds next to each sum in the code), against P/2 ≈ 2^119 [inference]. Cost: 4/3 of the three-prime products and
 NTTs [estimate].
 
-**Precomputed** at `pqz_init`, below the arena base mark: A (32 × 32, shared), A1, A2′, B′ of both relations in
+**Precomputed** (v1: at `pqz_init`; since v2 per op at its first `pqz_verify_fast`, §0), below the arena base mark: A (32 × 32, shared), A1, A2′, B′ of both relations in
 4-prime NTT form (9.1 MB), the CRT constants, the automorphism as a permutation of the NTT slots, the o(2^j powers)
 polynomials of the ℓ2 bounds. Public keys are not cached: 160 forward NTTs per `R_TX` verify cost ≈ 0.1 ms
 [estimate], below the noise of the rest.
@@ -282,8 +366,10 @@ verifier accepts the same proofs; a wallet (wasm) can check its own proof before
 - **The statement is hard-wired.** The selection blocks, the `R_TX` evaluation equations and the input rows are
   re-stated from `pqz_rel.c` (`build_reg`, `build_debit`, `build_ds`, `build_dr`). A change to a relation must change both files; the
   differential test catches a mismatch on the first honest proof.
-- **Upstream LaZer's transcript is mirrored as it is** (domains, PRG, encodings). Any change to the protocol or
-  its transcript has to be made in both verifiers and bumps `proofSystemId` (CTR-PQZ-09).
+- **LaZer's transcript is mirrored as our fork runs it** (domains, PRG, encodings), since v2 with the two `tbox`
+  fixes (§0). Any change to the protocol or its transcript has to be made in both verifiers and bumps
+  `proofSystemId` (CTR-PQZ-09); `sv/check_sv_fixes.sh` shows the differential test catches a verifier left on the
+  old transcript.
 - Not done: hand-written AVX2 for the NTT and the products (the x86-64-v3 build relies on auto-vectorisation),
   wasm SIMD tuning, a run on the chain host or a phone.
 
@@ -297,7 +383,10 @@ cd pqz-core
 sv/diff.sh <label>           # differential test, portable + x86-64-v3 -> sv/runs/<label>-*.jsonl
 sv/bench.sh <label>          # p50 / p99, generic vs specialised, native / x86-64-v3 / wasm -> sv/runs/
 sv/fuzz.sh <label> [secs]    # ASan + UBSan bench (malloc path) and the libFuzzer target (R_REG / R_TX inputs)
-../scripts/capped sv/rel3.sh <label>   # all five relations under one capped job: diff, bench, wasm both, ASan
+../scripts/capped sv/rel3.sh <label>   # all five relations under one capped job: diff, bench, wasm both, ASan,
+                                       #   KAT, check_tbox_fixes, check_sv_fixes, memory per op (SV=0 wasm too)
+sv/check_sv_fixes.sh                   # each tbox fix reverted in a copy of pqz_sv.c must give disagreements
+SV=0 B=build/wasm-nosv ./build.sh wasm # without the specialised verifier (wallet prover)
 PQZ_VERIFY=fast build/native/pqz_bench 2 200                   # the bench with the specialised verifier
 PQZ_VERIFY=both node test/run_wasm.mjs 2 20                     # wasm: both verifiers on every input, must agree
 ```

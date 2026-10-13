@@ -85,7 +85,27 @@ prove). Not done, with the reason: asserts stay on (pq-zether.md §10: release b
 multiplication and no Karatsuba on the polynomials (the microbench: Karatsuba with u128 sums is slower than the
 column kernel).
 
-## Specialised verifier P6-SV (branch `pqz-sv`, not merged)
+## Specialised verifier P6-SV (branch `pqz-sv-relfix`, not merged)
+
+**On v2, all five relations (branch `pqz-sv-relfix` = `pqz-sv-rel3` + main; run `sv/rel3.sh v2`, `sv/runs/v2-*`;
+note §0).** `pqz_sv.c` follows both tbox fixes (P6-SZ: λ × M rows in `sz_eval_challenges`; P6-L2: domain dom + i per
+exact-ℓ2 equation) and the v2 statements (§7.7 `R_TX` header, `kind` word). Differential test 2,710 portable + 1,350
+x86-64-v3 + 360 wasm cases over all five relations, **0 disagreements**; `sv/check_sv_fixes.sh` ok (either fix
+reverted in a copy of `pqz_sv.c`: 10 / 10 disagreements; the tree: 0 / 10); `check_tbox_fixes.sh` ok, KAT 19/19,
+ASan + UBSan clean. Tables built per op at its first `pqz_verify_fast` (≤ 5.2 MB per op, init back to A alone);
+`SV=0 ./build.sh` leaves the specialised verifier out (`pqz.wasm` 404,755 → 350,585 B). wasm `R_TX` prover alone
+221.1 MiB (13.6 % under 256 MiB), with or without the specialised verifier (v1 eager tables: 284 MB).
+
+| v2, ms [measured] | p50 portable | p99 portable (honest / adv.) | p50 x86-64-v3 | p50 / p99 wasm | generic p50 |
+|---|---|---|---|---|---|
+| `R_TX` | **8.00** | 11.1 / 10.1 | 4.65 | 13.5 / 16.0 | 638 |
+| `R_BURN` | 7.74 | 9.7 / 9.8 | 4.52 | 13.0 / 15.5 | 535 |
+| `R_REG` | 3.87 | 5.9 / 5.5 | 2.39 | 6.8 / 9.2 | 178 |
+| `R_DS` | 4.35 | 5.9 / 5.5 | 2.68 | 7.1 / 8.8 | 213 |
+| `R_DR` | 4.50 | 6.1 / 6.2 | 2.87 | 7.6 / 9.8 | 204 |
+
+Same as v1 within host noise; every relation ≥ 3× under the 50 ms p99 limit on every build. The rest of this
+section is the v1 (pre-fix transcript) record.
 
 `pqz_verify_fast` (`src/pqz_sv.c`, ABI in `pqz.h`): same decoder, transcript, challenges and checks as
 `pqz_verify`, but v and w1 computed by evaluating each equation on the proof directly (selection blocks as identity
