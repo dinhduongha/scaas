@@ -7,6 +7,9 @@ and the soundness of each Fiat–Shamir round. Spec: `docs/contracts/pq-zether.m
 write-up: `docs/research/pqz-parameters-e-s0.md`. The E-S1 files (P6d) are the codegen `codegen/` with
 `reg_params.sage` / `tx_params.sage` (rerun `codegen/run.sh`), the generated `pqz_{reg,tx}_params.h`, and the rank sizing
 `e_s1_proof.sage` → `estimator-e-s1.txt` (rerun `run_e_s1.sh`); write-up `docs/research/pqz-core-e-s1.md`.
+`burn_params.sage`, `ds_params.sage`, `dr_params.sage` → `pqz_{burn,ds,dr}_params.h` are the `R_BURN` / `R_DS` / `R_DR`
+specs (`docs/research/pqz-relations-burn-disclose.md`); `run_e_s1.sh <LaZer> <estimator> burn ds dr` sizes them
+(`estimator-e-s1-rel3.txt`).
 
 | Pin | Value |
 |---|---|

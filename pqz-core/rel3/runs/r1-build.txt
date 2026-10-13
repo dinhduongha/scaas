@@ -1,0 +1,6 @@
+symbols ok: only memcpy memset __stack_chk_fail __stack_pointer outside the library objects
+symbols ok: only memcpy memset __stack_chk_fail __stack_pointer outside the library objects
+test/pqz_bench.c:115:26: warning: unused variable 'NAMES' [-Wunused-const-variable]
+  115 | static const char *const NAMES[NREL] = { "R_REG", "R_TX", "R_BURN", "R_DS", "R_DR" };
+      |                          ^~~~~
+1 warning generated.
