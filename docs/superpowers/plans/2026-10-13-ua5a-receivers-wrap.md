@@ -240,7 +240,7 @@ All kept by the spike; where the spike settled a detail the ruling names, the co
   `validUntil` 1,800,000,060.
 - **C5a-15 Ledger-off wrapper, ledger-on leg** (final review M2). `unwrapToUA` on a wrapper whose own ledger is off
   (registry 0), called directly by a native, pays a UA of a ledger-on leg: the credit lives in the leg's ledger, which
-  checks `to`; the wrapper needs its own ledger only for a UA subject (`uaExecute`). Kept as is, pinned by
+  checks `to`; the wrapper needs its own ledger only for a UA subject (`uaExecute`). Kept as is (owner confirmed 2026-10-13), pinned by
   `test_unwrapToUA_ledgerOffWrapper_ledgerOnLeg`; one sentence in CTR-UA-28.
 
 ## Spike findings
