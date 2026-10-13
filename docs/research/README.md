@@ -52,6 +52,7 @@ output) are kept while the repository is private and are dropped before a public
 | [pqz-z21-norm.md](pqz-z21-norm.md) | LaZer `lnp-quad` / `abdlop` verify: `z21` never norm-checked, only ‖w − γ·w1‖ bounded; MSIS β 452–461 → 286–311 before the fix (lazer#26, P6-Z21) (2026-10-13) |
 | [pqzh-design.md](pqzh-design.md) | PQZH design study: the hash-based proof kind of PQ Zether (P6-PQZH, E-S1H) (2026-10-13) |
 | [pqz-relations-burn-disclose.md](pqz-relations-burn-disclose.md) | PQZ relations `R_BURN`, `R_DS`, `R_DR`: burn / refresh and disclosure proofs in `pqz-core` (P6) (2026-10-13) |
+| [pqzh-ligero.md](pqzh-ligero.md) | PQZH over Ligero (F_q, q = 2^42 − 215): design, ZK, soundness, parameter model; build and measurements pending (P6-PQZH) (2026-10-14) |
 | [pqzh-prototype.md](pqzh-prototype.md) | PQZH prototype: `R_REG` and `R_TX` as a Plonky3 STARK — sizes, timings, wasm32, ZK, soundness sweep (P6-PQZH) (2026-10-13) |
 | [pqzh-solidity-verifier.md](pqzh-solidity-verifier.md) | PQZH Solidity verifier: gas without the precompile (P6-PQZH-SOL) (2026-10-13) |
 | [pqz-licence-inventory.md](pqz-licence-inventory.md) | PQZ licence inventory: third-party code, GMP / MPFR / HEXL absence, open questions (G-LIC step 1) (2026-10-14) |
