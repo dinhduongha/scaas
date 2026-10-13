@@ -161,7 +161,7 @@ contract UARegistryGroupsTest is UARegistryBase, GroupFixtures {
                 ++seen;
             }
         }
-        assertEq(seen, 12 + 12 + 9 + 11);
+        assertEq(seen, 16 + 17 + 11 + 13);
     }
 
     /// `x(P_i) ≥ N` passes key validation (a valid point) and is refused by the hint check: `UAPoP`.
@@ -422,24 +422,31 @@ contract UARegistryGroupsTest is UARegistryBase, GroupFixtures {
         }
     }
 
-    /// The msig bound (register step 4) with a stored-kind member: an msig of one MuSig2 member whose verifier burns
+    /// The msig bound (register step 4) with a stored-kind member: an msig of one group member whose verifier burns
     /// its whole cap authorizes with exactly `cap + MSIG_MEMBER_GAS` for the `requireAuthorized` frame, in gen 1 and
-    /// handed from gen 2 (+ gen 1's hold). Run with `--isolate` for the cold case.
+    /// handed from gen 2 (+ gen 1's hold). MuSig2-secp256k1 n = 16 with a 64-byte signature, and musig2-bn254 n = 16
+    /// (the widest stored key data, 1,090 bytes) with a 96-byte one. Run with `--isolate` for the cold case.
     function test_T_GAS_msigStoredMemberBound() public {
+        _memberBound(MS, 64, address(0x5cb1));
+        _memberBound(MB, 96, address(0x5cb3));
+    }
+
+    function _memberBound(uint16 kind, uint256 sigLen, address at) internal {
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](1);
-        c[0] = UARegistry.KindConfig(MS, address(new BurnVerify()), GROUP_CAP);
-        UARegistry r1 = _deploy(address(0x5cb1), chainUidA, address(0), false, BUDGET, address(0), true, c);
+        c[0] = UARegistry.KindConfig(kind, address(new BurnVerify()), GROUP_CAP);
+        UARegistry r1 = _deploy(at, chainUidA, address(0), false, BUDGET, address(0), true, c);
         UARegistry r2 = _deploy(
-            address(0x5cb2), chainUidA, address(r1), false, BUDGET, address(0), true, new UARegistry.KindConfig[](0)
+            address(uint160(at) + 1), chainUidA, address(r1), false, BUDGET, address(0), true,
+            new UARegistry.KindConfig[](0)
         );
-        Group memory g = _group(MS, 16, 16);
-        bytes32 mu = r1.register(MS, g.keyData, "", 0, "");
+        Group memory g = _group(kind, 16, 16);
+        bytes32 mu = r1.register(kind, g.keyData, "", 0, "");
         Member[] memory m = new Member[](1);
         UARegistry.MemberSig[] memory s = new UARegistry.MemberSig[](1);
-        s[0] = UARegistry.MemberSig(0, "", new bytes(64));
+        s[0] = UARegistry.MemberSig(0, "", new bytes(sigLen));
         UARegistry[2] memory regs = [r1, r2];
         for (uint256 i; i < 2; ++i) {
-            m[0] = Member(MS, mu, uint16(i + 1)); // another id per generation
+            m[0] = Member(kind, mu, uint16(i + 1)); // another id per generation
             bytes memory d = _msigKey(uint16(i + 1), m);
             bytes32 ms = regs[i].register(UAKinds.MSIG, d, "", 0, "");
             uint256 bound = GROUP_CAP + 35_000; // UARegistry.MSIG_MEMBER_GAS

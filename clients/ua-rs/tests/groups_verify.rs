@@ -81,7 +81,7 @@ fn group_negatives_refused() {
             n += 1;
         }
     }
-    assert_eq!(n, 57);
+    assert_eq!(n, 70);
     println!("{n} group negatives refused");
 }
 

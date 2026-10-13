@@ -63,7 +63,8 @@ function frostVerify(Y, msg, sig) {
   const c = H('chal', concatBytes(sig.subarray(0, 33), Y, msg));
   return mul(G, z).equals(R.add(mul(point(Y), c)));
 }
-/** frost-core keys::dkg: c_i = HDKG(id_i (32 B) ‖ C_i0 ‖ R_i), R_i == μ_i·G − c_i·C_i0; Y == Σ C_i0. */
+/** frost-core keys::dkg: c_i = HDKG(id_i (32 B) ‖ C_i0 ‖ R_i), R_i == μ_i·G − c_i·C_i0; Y == Σ C_i0, refusing a C_i0 that
+ *  shares its x with the partial sum (repeated or cancelling: UAFrostSecp256k1Verifier's mixed addition refuses it). */
 function frostDkg(kd) {
   const t = u16(kd, 33), n = u16(kd, 35), per = (t + 1) * 33 + 32;
   let S = Pt.ZERO;
@@ -72,6 +73,7 @@ function frostDkg(kd) {
     const C0 = b.subarray(0, 33), R = b.subarray(t * 33, (t + 1) * 33);
     const c = H('dkg', concatBytes(word(i + 1), C0, R));
     if (!point(R).equals(mul(G, int(b.subarray((t + 1) * 33))).subtract(mul(point(C0), c)))) return false;
+    if (i > 0 && S.x === point(C0).x) return false;
     S = S.add(point(C0));
   }
   return eq(enc(S), kd.subarray(0, 33));
@@ -143,7 +145,7 @@ test('secp256k1 negatives refused for their stated reason', () => {
     }
     n++;
   }
-  assert.equal(n, 31);
+  assert.equal(n, 40);
 });
 
 test('BIP-327 KeyAgg rows (official, incl. duplicate and unsorted lists)', () => {

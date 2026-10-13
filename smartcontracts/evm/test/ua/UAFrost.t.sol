@@ -276,7 +276,8 @@ contract UAFrostTest is Test {
     }
 
     /// Main groups' `negatives[]`: `register` rows — `verifyPop` false; `UAKeyData` rows are refused by
-    /// `UAKinds.validateKeyData`, `UAPoP` rows pass it; `sigValid` ⇒ the signature alone verifies against keyData's Y
+    /// `UAKinds.validateKeyData`, `UAPoP` rows pass it (the `c11-*` rows malform `C_11`, which enters no equation in
+    /// `verifyPop`: only `validateKeyData` refuses them, and `verifyPop` alone accepts); `sigValid` ⇒ the signature alone verifies against keyData's Y
     /// (only the group check refuses). `verify` rows — false.
     function test_negatives() public view {
         uint256[2] memory mains = [sMain, bMain];
@@ -296,7 +297,8 @@ contract UAFrostTest is Test {
                 } else {
                     bytes memory kd = _gb(i, string.concat(p, "keyData"));
                     bytes memory pop = _gb(i, string.concat(p, "pop"));
-                    assertFalse(_pop(secp, kd, m, pop), name);
+                    bool c11 = bytes(name).length > 4 && bytes4(bytes(name)) == bytes4("c11-");
+                    assertEq(_pop(secp, kd, m, pop), c11, name);
                     if (err == keccak256("UAKeyData")) {
                         try kh.validate(kind, kd) {
                             revert(string.concat(name, ": validateKeyData accepted"));
@@ -314,8 +316,8 @@ contract UAFrostTest is Test {
                 ++counts[k];
             }
         }
-        assertEq(counts[0], 16);
-        assertEq(counts[1], 14);
+        assertEq(counts[0], 21);
+        assertEq(counts[1], 16);
     }
 
     // ---- DKG negatives not in groups.json (main groups)
