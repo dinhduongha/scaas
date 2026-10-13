@@ -17,5 +17,9 @@ for f in src/pqz_lazer.c src/pqz_ntt.c src/pqz_arena.c src/pqz_rel.c; do
 done
 $CC -std=gnu11 -O2 -DPQZ_L2DOM_POC -Isrc -o "$B/l2dom/l2dom_prove" l2dom/l2dom_poc.c $objs
 $CC -std=gnu11 -O2 -Isrc -o "$B/l2dom/l2dom_verify" l2dom/l2dom_poc.c "$B/native/libpqz.a"
+$CC -std=gnu11 -O2 -DPQZ_L2DOM_POC -Isrc -o "$B/l2dom/l2dom_tx_prove" l2dom/l2dom_tx.c $objs -lm
+$CC -std=gnu11 -O2 -Isrc -o "$B/l2dom/l2dom_tx_verify" l2dom/l2dom_tx.c "$B/native/libpqz.a" -lm
 "$B/l2dom/l2dom_prove" prove "$O"
 "$B/l2dom/l2dom_verify" verify "$O"
+"$B/l2dom/l2dom_tx_prove" prove "$O"
+"$B/l2dom/l2dom_tx_verify" verify "$O"
