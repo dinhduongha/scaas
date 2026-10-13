@@ -313,6 +313,29 @@ contract UADexTest is UADexBase {
         assertTrue(_settle(ss));
     }
 
+    /// Logged (cold, one state snapshot per pair): the same native parties as shape-0 legs and as padded shape-1 legs
+    /// (ECDSA either way), and a derived `p256` taker (stand-in verifier) — what the tag and the UA ledger cost.
+    function test_gas_legShapes() public {
+        ITradeToken.TradeOrder memory t0 = _nat(alice, address(B), 1000, 2000, 3_000);
+        ITradeToken.TradeOrder memory m0 = _nat(bob, address(A), 2000, 1000, 3_000);
+        ISCaaSDex.Settlement[] memory s00 = _s(_natLeg(address(A), t0, 1000), _natLeg(address(B), m0, 2000));
+        ISCaaSDex.Settlement[] memory s11 = _s(_uaLeg(address(A), _ua(_pad(alice), address(B), 1000, 2000, 3_000), 1000),
+            _uaLeg(address(B), _ua(_pad(bob), address(A), 2000, 1000, 3_000), 2000));
+        ISCaaSDex.Settlement[] memory sP1 = _s(_uaLeg(address(A), _ua(uaP, address(B), 1000, 2000, 3_000), 1000),
+            _uaLeg(address(B), _ua(_pad(bob), address(A), 2000, 1000, 3_000), 2000));
+        string[3] memory names = ["native x native, shape 0 x 0", "native x native, shape 1 x 1 (padded ids)",
+            "p256 UA (stand-in) x native, shape 1 x 1"];
+        ISCaaSDex.Settlement[][3] memory all = [s00, s11, sP1];
+        for (uint256 i; i < 3; ++i) {
+            uint256 snap = vm.snapshotState();
+            vm.prank(RELAYER);
+            uint256 g = gasleft();
+            assertTrue(dex.mtxSettle(all[i])[0]);
+            emit log_named_uint(string.concat("mtxSettle ", names[i]), g - gasleft());
+            vm.revertToState(snap);
+        }
+    }
+
     function test_exchange_uaLegGetsTheSurplus_and_uaTradeIsNoInteraction() public {
         UARouter router = new UARouter();
         vm.prank(bob);

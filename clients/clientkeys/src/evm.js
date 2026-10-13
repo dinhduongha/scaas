@@ -146,6 +146,14 @@ const TRADE_ORDER = fields(['from:address', 'receiveToken:address', 'amount:uint
   'minFill:uint256', 'fee:uint256', 'relayer:address', 'dex:address', 'destination:address', 'flags:uint8',
   'batch:uint256', 'nonce:uint256', 'validUntil:uint256']);
 const ORDER_TYPES = { EIP712Domain: SALTED_DOMAIN_TYPE, TradeOrder: TRADE_ORDER };
+// A UA's order (dex.md CTR-DEX-25): the same fields with `from` and `destination` as 32-byte ids, in the sell token's
+// domain; a derived signer signs `ua_msg(kind, trade, digest)` through the registry, a native id the digest itself.
+const UA_TRADE_ORDER = fields(['from:bytes32', 'receiveToken:address', 'amount:uint256', 'receiveAmount:uint256',
+  'minFill:uint256', 'fee:uint256', 'relayer:address', 'dex:address', 'destination:bytes32', 'flags:uint8',
+  'batch:uint256', 'nonce:uint256', 'validUntil:uint256']);
+const UA_ORDER_TYPES = { EIP712Domain: SALTED_DOMAIN_TYPE, UATradeOrder: UA_TRADE_ORDER };
+const UA_INVALIDATE_TYPES = { EIP712Domain: SALTED_DOMAIN_TYPE,
+  UAInvalidateNonces: fields(['from:bytes32', 'batch:uint256', 'minNonce:uint256']) };
 const DEX_ORDER_TYPES = { EIP712Domain: SALTED_DOMAIN_TYPE, DexOrder: fields(['sellToken:address', 'order:TradeOrder']),
   TradeOrder: TRADE_ORDER };
 const sel = (sig) => hex(keccak_256(utf8ToBytes(sig)).subarray(0, 4));
@@ -406,6 +414,23 @@ export function tradeOrderTypedData({ token, dex, sellToken, chainId, chainUid, 
     message };
 }
 
+/** A `UATradeOrder` in its SCaaS sell token's salted domain (CTR-DEX-25); ids 32 bytes (a native address zero-padded,
+ *  `padId`); unset fields 0. Its cancel is `orderCancelTypedData({ orderHash })` over this order's digest. */
+export function uaTradeOrderTypedData({ token, chainId, chainUid, order, name = 'SCaaS MetaToken' }) {
+  const o = { minFill: '0', fee: '0', relayer: ZERO_ADDRESS, destination: ZERO_ID, flags: 0, batch: '0', ...order };
+  const message = Object.fromEntries(UA_TRADE_ORDER.map((f) => [f.name,
+    f.type === 'bytes32' ? hex(bytes32(o[f.name])) : f.type === 'address' || f.type === 'uint8' ? o[f.name] : String(o[f.name])]));
+  return { types: UA_ORDER_TYPES, primaryType: 'UATradeOrder', domain: salted({ name, contract: token, chainId, chainUid }),
+    message };
+}
+
+/** `UAInvalidateNonces(from, batch, minNonce)` in the sell token's domain: one floor per id, shared with the address's
+ *  `InvalidateNonces` (CTR-DEX-25). */
+export function uaInvalidateNoncesTypedData({ name = 'SCaaS MetaToken', contract, chainId, chainUid, from, batch, minNonce }) {
+  return { types: UA_INVALIDATE_TYPES, primaryType: 'UAInvalidateNonces', domain: salted({ name, contract, chainId, chainUid }),
+    message: { from: hex(bytes32(from)), batch: String(batch), minNonce: String(minNonce) } };
+}
+
 /** `CancelOrder(orderHash)` or `InvalidateNonces(from, batch, minNonce)` in the domain that holds the order (the sell
  *  token, or the DEX for an outside token). */
 export function orderCancelTypedData({ name = 'SCaaS MetaToken', contract, chainId, chainUid, orderHash, invalidate }) {
@@ -420,11 +445,14 @@ export function orderCancelTypedData({ name = 'SCaaS MetaToken', contract, chain
 }
 
 /** A cancel the user chose: `CancelOrder(orderHash)` of the client's own stored order, or `InvalidateNonces(account,
- *  batch, minNonce)`, in the domain that holds the order (`contract`: the sell token, or the DEX). Returns the digest. */
-export function checkCancel(td, { account, chainId, chainUid, contract, orderHash, invalidate }) {
+ *  batch, minNonce)`, in the domain that holds the order (`contract`: the sell token, or the DEX). `ua`: the account is
+ *  a 32-byte id and the invalidation is `UAInvalidateNonces` (CTR-DEX-25). Returns the digest. */
+export function checkCancel(td, { account, chainId, chainUid, contract, orderHash, invalidate, ua = false }) {
   const d = (td && td.domain) || {};
-  const mine = digestOf(orderCancelTypedData({ name: d.name, contract, chainId, chainUid, orderHash,
-    invalidate: invalidate && { ...invalidate, from: account } }));
+  const mine = digestOf(ua && invalidate
+    ? uaInvalidateNoncesTypedData({ name: d.name, contract, chainId, chainUid, ...invalidate, from: account })
+    : orderCancelTypedData({ name: d.name, contract, chainId, chainUid, orderHash,
+      invalidate: invalidate && { ...invalidate, from: account } }));
   if (hex(digestOf(td)) !== hex(mine)) refuse('this is not the cancel you asked for');
   return mine;
 }
@@ -437,10 +465,12 @@ export function checkCancel(td, { account, chainId, chainUid, contract, orderHas
  *  amounts. The server supplies only the nonce and, when `order` has none, `validUntil` within the window. Returns
  *  {digest, minFill (the effective one per settlement), warnings}. */
 export function checkTradeOrder(td, { account, chainId, chainUid, order, sellToken, outside = false, dexes = [], wrappers = [],
-  now = Math.floor(Date.now() / 1000), maxWindow = 30 * 86400 }) {
-  if (!td || td.primaryType !== (outside ? 'DexOrder' : 'TradeOrder')) refuse('this is not the trade order you asked for');
+  ua = false, now = Math.floor(Date.now() / 1000), maxWindow = 30 * 86400 }) {
+  if (ua && outside) refuse('a UA order sells a SCaaS token only');
+  if (!td || td.primaryType !== (outside ? 'DexOrder' : ua ? 'UATradeOrder' : 'TradeOrder')) refuse('this is not the trade order you asked for');
   const got = (outside ? (td.message || {}).order : td.message) || {};
-  const o = { minFill: '0', fee: '0', relayer: ZERO_ADDRESS, destination: ZERO_ADDRESS, flags: 0, batch: '0', ...order,
+  const none = ua ? ZERO_ID : ZERO_ADDRESS;
+  const o = { minFill: '0', fee: '0', relayer: ZERO_ADDRESS, destination: none, flags: 0, batch: '0', ...order,
     from: account, nonce: uint(got.nonce, 'the nonce'), validUntil: (order || {}).validUntil ?? got.validUntil };
   if (wrappers.some((w) => same(w, o.dex))) {
     if (outside || !same(o.receiveToken, o.dex) || uint(o.minFill, 'minFill') !== uint(o.amount, 'the amount')) {
@@ -459,10 +489,13 @@ export function checkTradeOrder(td, { account, chainId, chainUid, order, sellTok
   const d = td.domain || {};
   const digest = digestOf(outside
     ? tradeOrderTypedData({ dex: o.dex, name: d.name, sellToken, chainId, chainUid, order: o })
-    : tradeOrderTypedData({ token: sellToken, name: d.name, chainId, chainUid, order: o }));
+    : ua ? uaTradeOrderTypedData({ token: sellToken, name: d.name, chainId, chainUid, order: o })
+      : tradeOrderTypedData({ token: sellToken, name: d.name, chainId, chainUid, order: o }));
   if (hex(digestOf(td)) !== hex(digest)) refuse('this is not the trade order you asked for');
   const half = amount - amount / 2n;
-  const warnings = same(o.destination, ZERO_ADDRESS) || same(o.destination, account) ? [] : ['someone else receives the proceeds'];
+  const idOf = (x) => (ua ? hex(bytes32(x)) : String(x).toLowerCase());
+  const warnings = idOf(o.destination) === idOf(none) || idOf(o.destination) === idOf(account) ? []
+    : ['someone else receives the proceeds'];
   if (same(o.relayer, ZERO_ADDRESS)) warnings.push('any submitter may settle this order and earn the relayer share');
   return { digest, minFill: minFill > half ? minFill : half, warnings };
 }
