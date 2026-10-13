@@ -179,34 +179,53 @@ library UnderlyingLib {
     function wrapBySig(address u, ITradeToken.TradeOrder calldata o, bytes calldata sig, address submitter)
         public returns (uint256 received, uint256 minted, uint256 fee)
     {
-        Leg storage L = _wrapLeg(u, o);
-        minted = Math.mulDiv(o.amount, L.num, L.den);
-        if (minted == 0) revert IUnderlyingToken.WrapTooSmall();
-        fee = Math.mulDiv(minted, o.fee, 1_000_000, Math.Rounding.Ceil);
-        received = _pullBySig(L, o, sig, ITradeToken.TradeFill(o.amount, minted, fee, submitter));
+        Leg storage L = _wrapLeg(u, o.receiveToken);
+        (minted, fee) = _sigQuote(L, o.amount, o.fee);
+        uint256 before = _sigBefore(L);
+        ITradeToken(u).mtxTrade(o, sig, ITradeToken.TradeFill(o.amount, minted, fee, submitter));
+        received = _sigReceived(L, before, o.amount);
     }
 
-    function _wrapLeg(address u, ITradeToken.TradeOrder calldata o) private view returns (Leg storage L) {
+    /// @notice `uaWrap` (CTR-TOK-20, UA-5b): `wrapBySig` with the holder's `UATradeOrder` pulled by the underlying's
+    ///         `uaTrade`; the underlying must be a SCaaS ledger token (`IUALedger` by ERC-165, as `payOutToUA`).
+    function wrapBySigUA(address u, ITradeToken.UATradeOrder calldata o, bytes calldata auth, address submitter)
+        public returns (uint256 received, uint256 minted, uint256 fee)
+    {
+        Leg storage L = _wrapLeg(u, o.receiveToken);
+        if (!ERC165Checker.supportsInterface(u, type(IUALedger).interfaceId)) revert IUALedger.UALegNotLedger(u);
+        (minted, fee) = _sigQuote(L, o.amount, o.fee);
+        uint256 before = _sigBefore(L);
+        ITradeToken(u).uaTrade(o, auth, ITradeToken.TradeFill(o.amount, minted, fee, submitter));
+        received = _sigReceived(L, before, o.amount);
+    }
+
+    function _wrapLeg(address u, address receiveToken) private view returns (Leg storage L) {
         if (u == NATIVE) revert IUnderlyingToken.NativeNotGasless();
         UnderlyingStorage storage s = $();
         L = s.legs[indexOf(u)];
         if (!L.wrapEnabled) revert IUnderlyingToken.WrapDisabledFor(u);
         if (L.adjustable && _isPending(s)) revert IUnderlyingToken.WrapPausedForRateChange(u);
-        if (o.receiveToken != address(this)) revert IUnderlyingToken.WrapOrderInvalid(o.receiveToken);
+        if (receiveToken != address(this)) revert IUnderlyingToken.WrapOrderInvalid(receiveToken);
+    }
+
+    /// @dev `minted = ⌊amount·num/den⌋`, the submitter's `fee = ⌈minted·feePpm/10⁶⌉`.
+    function _sigQuote(Leg storage L, uint256 amount, uint256 feePpm) private view returns (uint256 minted, uint256 fee) {
+        minted = Math.mulDiv(amount, L.num, L.den);
+        if (minted == 0) revert IUnderlyingToken.WrapTooSmall();
+        fee = Math.mulDiv(minted, feePpm, 1_000_000, Math.Rounding.Ceil);
     }
 
     /// @dev One balance read before serves the shortfall check and the measurement, as in `_pull`.
-    function _pullBySig(Leg storage L, ITradeToken.TradeOrder calldata o, bytes calldata sig,
-        ITradeToken.TradeFill memory f) private returns (uint256 received)
-    {
-        address u = L.token;
+    function _sigBefore(Leg storage L) private view returns (uint256 before) {
         uint256 reserve = L.reserve;
-        uint256 before = IERC20(u).balanceOf(address(this));
-        if (before < reserve) revert IUnderlyingToken.ReserveShortfall(u, before, reserve);
-        ITradeToken(u).mtxTrade(o, sig, f);
-        received = IERC20(u).balanceOf(address(this)) - before;
-        if (received != o.amount) revert IUnderlyingToken.WrapReceivedMismatch(o.amount, received);
-        L.reserve = reserve + received;
+        before = IERC20(L.token).balanceOf(address(this));
+        if (before < reserve) revert IUnderlyingToken.ReserveShortfall(L.token, before, reserve);
+    }
+
+    function _sigReceived(Leg storage L, uint256 before, uint256 amount) private returns (uint256 received) {
+        received = IERC20(L.token).balanceOf(address(this)) - before;
+        if (received != amount) revert IUnderlyingToken.WrapReceivedMismatch(amount, received);
+        L.reserve += received;
     }
 
     /// @notice Every check before any effect: recipient, `0 < out`, `out ≥ minOut`, `out ≤ reserve`.

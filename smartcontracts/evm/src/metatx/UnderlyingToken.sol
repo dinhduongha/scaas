@@ -7,6 +7,7 @@ import {UnderlyingLib} from "./UnderlyingLib.sol";
 import {IUnderlyingToken} from "./IUnderlyingToken.sol";
 import {MetaTxBase} from "./MetaTxBase.sol";
 import {IMetaTx} from "./IMetaTx.sol";
+import {UAKinds} from "../ua/UAKinds.sol";
 
 /// @title Kind `UNDERLYING` (CTR-TOK-21): a wrapper of 1–8 legs, each an ERC-20 or the native coin (CTR-TOK-26), at
 ///        per-leg rates `num/den`, with internal per-leg reserves; the logic is in `UnderlyingLib`.
@@ -104,6 +105,23 @@ contract UnderlyingToken is MetaTokenBase, IUnderlyingToken {
         _mint(o.destination == address(0) ? o.from : o.destination, minted - fee);
         if (fee != 0) _mint(msg.sender, fee);
         emit Wrapped(o.from, u, received, minted);
+    }
+
+    /// @notice `mtxWrap` for a `UATradeOrder` (CTR-TOK-20, UA-5b): the underlying's `uaTrade` checks the holder (a
+    ///         derived id under purpose `trade`, a native id itself); `minted − fee` goes to `o.destination` (0 ⇒
+    ///         `o.from`) — a derived id by `_uaMint` (registered SIGNING), a native one by `_mint` — and `fee` to the
+    ///         submitter. Not allowlisted: a direct read of the caller.
+    function uaWrap(address u, UATradeOrder calldata o, bytes calldata auth)
+        external nonReentrant returns (uint256 minted)
+    {
+        uint256 received;
+        uint256 fee;
+        (received, minted, fee) = UnderlyingLib.wrapBySigUA(u, o, auth, msg.sender);
+        bytes32 to = o.destination == 0 ? o.from : o.destination;
+        if (UAKinds.inNativeSpace(to)) _mint(address(uint160(uint256(to))), minted - fee);
+        else _uaMint(to, minted - fee);
+        if (fee != 0) _mint(msg.sender, fee);
+        emit UAWrapped(o.from, u, received, minted);
     }
 
     /// @dev `to == 0` is a sentinel, "mint to the caller", not a receiver; any other `to` is minted into that derived UA
