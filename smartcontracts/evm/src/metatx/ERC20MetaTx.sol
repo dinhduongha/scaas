@@ -252,9 +252,7 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
 
     /// @notice Native `msg.sender` → a registered SIGNING UA: `Transfer(sender, UA_POOL)` and `UATransfer`.
     function transferToUA(bytes32 to, uint256 amount) external nonReentrant returns (bool) {
-        _uaOn();
-        if (UAKinds.inNativeSpace(to)) revert UANotRegistered(to);
-        _checkTo(to);
+        _requireDerivedReceiver(to);
         _uaMove(MetaTxLib.pad(_msgSender()), to, amount);
         return true;
     }
@@ -315,7 +313,7 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
         _uaOn();
         _checkEnvelope(m.from, m.batch, m.nonce, m.validUntil, m.mode, m.relayer);                    // 1
         bytes32 digest = _hashTypedDataV4(m.hashStruct());                                             // 2
-        _uaAuthorize(m.from, digest, auth);
+        _uaAuthorize(m.from, UAKinds.PURPOSE_METATX, digest, auth);
         bytes4 sel = bytes4(m.data);                                                                   // 3
         if (m.data.length < 4 || !_uaAllowed(sel)) revert MetaTxUnknownOp(sel);
         uint256 basis = _checkCall(m.data, m.mode);
@@ -336,7 +334,7 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
         _uaOn();
         _checkEnvelope(t.from, t.batch, t.nonce, t.validUntil, t.mode, t.relayer);                    // 1
         digest = _hashTypedDataV4(t.hashStruct());                                                     // 2
-        _uaAuthorize(t.from, digest, auth);
+        _uaAuthorize(t.from, UAKinds.PURPOSE_METATX, digest, auth);
         (uint256 fee, address feeTo) = _checkUATransfer(t);                                           // 3
         _useNonce(t.from, t.batch);                                                                    // 4
         if (fee != 0) _uaMove(t.from, MetaTxLib.pad(feeTo), fee);                                     // 5
@@ -363,6 +361,20 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
         if (have < need) revert MetaTxInsufficientForFee(need, have);
     }
 
+    /// @dev The receiver of every `…ToUA` function (CTR-UA-28): the ledger on and a registered SIGNING derived id; a
+    ///      native id belongs to the address twin (`UANotRegistered`).
+    function _requireDerivedReceiver(bytes32 to) internal view {
+        _uaOn();
+        if (UAKinds.inNativeSpace(to)) revert UANotRegistered(to);
+        _checkTo(to);
+    }
+
+    /// @dev A mint into a derived UA (CTR-UA-28): a UA-ledger move from 0, `Transfer(0, UA_POOL)` and `UATransfer(0, to)`.
+    function _uaMint(bytes32 to, uint256 v) internal {
+        _requireDerivedReceiver(to);
+        _uaMove(bytes32(0), to, v);
+    }
+
     /// @dev A receiver: a native id other than 0, the token and `UA_POOL`; or a registered SIGNING UA (never Zether).
     function _checkTo(bytes32 to) private view {
         if (UAKinds.inNativeSpace(to)) {
@@ -377,12 +389,13 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
         if (!UAKinds.isSigning(kind)) revert UAKindNotAccepted(to, kind);
     }
 
-    /// @dev Step 2: a native id is checked here over the v3 digest (CTR-UA-24: no code ⇒ ECDSA; an EIP-7702 designator
-    ///      ⇒ ECDSA, else ERC-1271 through the delegate; other code ⇒ ERC-1271; Hedera's HIP-632 as on the address
-    ///      path); a derived one by the registry under purpose `metatx`.
-    function _uaAuthorize(bytes32 from, bytes32 digest, bytes calldata auth) private view {
+    /// @dev Step 2: a native id is checked here over the digest itself (CTR-UA-24: no code ⇒ ECDSA; an EIP-7702
+    ///      designator ⇒ ECDSA, else ERC-1271 through the delegate; other code ⇒ ERC-1271; Hedera's HIP-632 as on the
+    ///      address path), whatever the purpose; a derived one by the registry under `purpose` (`metatx`, or
+    ///      `receiver-fee` for a payee's `ReceiverFee`).
+    function _uaAuthorize(bytes32 from, bytes32 purpose, bytes32 digest, bytes calldata auth) internal view {
         if (!UAKinds.inNativeSpace(from)) {
-            return IUARegistry(_REGISTRY).requireAuthorized(from, UAKinds.PURPOSE_METATX, digest, auth);
+            return IUARegistry(_REGISTRY).requireAuthorized(from, purpose, digest, auth);
         }
         address a = address(uint160(uint256(from)));
         if (a == MetaTxLib.UA_POOL) revert UAPoolNotPayable();
