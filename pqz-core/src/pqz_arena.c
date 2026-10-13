@@ -54,6 +54,12 @@ pqz_arena_peak (void)
   return peak;
 }
 
+void
+pqz_arena_peak_reset (void) /* diagnostics (P6-SV): measure the peak of the calls that follow */
+{
+  peak = top;
+}
+
 size_t
 pqz_arena_used (void)
 {

@@ -40,6 +40,7 @@ void *pqz_arena_realloc (void *p, size_t olen, size_t nlen);
 void pqz_arena_free (void *p, size_t len);
 size_t pqz_arena_peak (void);
 size_t pqz_arena_used (void);
+void pqz_arena_peak_reset (void);
 typedef struct
 {
   size_t top, last;

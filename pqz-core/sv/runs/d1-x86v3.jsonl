@@ -1,0 +1,63 @@
+{"prg_mismatches": 0}
+{"rel": "R_REG", "arena_base": 36207984, "verify_peak_generic": 80654384, "verify_peak_fast": 1063648}
+{"rel": "R_TX", "arena_base": 36207984, "verify_peak_generic": 272876784, "verify_peak_fast": 1674704}
+{"rel": "R_REG", "kind": "honest", "cases": 20, "generic_accepts": 20, "mismatches": 0}
+{"rel": "R_REG", "kind": "reencode", "cases": 20, "generic_accepts": 20, "mismatches": 0}
+{"rel": "R_REG", "kind": "bitflip", "cases": 60, "generic_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "byte_set", "cases": 60, "generic_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "random_bytes", "cases": 60, "generic_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "truncate", "cases": 60, "generic_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "extend", "cases": 60, "generic_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "stmt_coeff", "cases": 60, "generic_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "stmt_oob", "cases": 60, "generic_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "stmt_prefix", "cases": 60, "generic_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "other_proof", "cases": 57, "generic_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "bench_k4_unary", "cases": 60, "generic_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "m_swap_z1", "cases": 60, "generic_accepts": 1, "mismatches": 0}
+{"rel": "R_REG", "kind": "m_swap_z21", "cases": 60, "generic_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "m_swap_z3z4", "cases": 60, "generic_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "m_z1_pm1", "cases": 60, "generic_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "m_z1_large", "cases": 60, "generic_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "m_z4_bound", "cases": 60, "generic_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "m_z3_large", "cases": 60, "generic_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "m_h", "cases": 60, "generic_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "m_hint", "cases": 60, "generic_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "m_c", "cases": 60, "generic_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "m_tB", "cases": 60, "generic_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "m_tA1", "cases": 60, "generic_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "m_z21_pm1", "cases": 60, "generic_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "m_swap_h", "cases": 60, "generic_accepts": 0, "mismatches": 0}
+{"rel": "R_REG", "kind": "fuzz", "cases": 400, "generic_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "honest", "cases": 10, "generic_accepts": 10, "mismatches": 0}
+{"rel": "R_TX", "kind": "reencode", "cases": 10, "generic_accepts": 10, "mismatches": 0}
+{"rel": "R_TX", "kind": "bitflip", "cases": 30, "generic_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "byte_set", "cases": 30, "generic_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "random_bytes", "cases": 30, "generic_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "truncate", "cases": 30, "generic_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "extend", "cases": 30, "generic_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "stmt_coeff", "cases": 30, "generic_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "stmt_oob", "cases": 30, "generic_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "stmt_prefix", "cases": 30, "generic_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "stmt_fee", "cases": 30, "generic_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "other_proof", "cases": 27, "generic_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "bench_k4_unary", "cases": 30, "generic_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "m_swap_z1", "cases": 30, "generic_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "m_swap_z21", "cases": 30, "generic_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "m_swap_z3z4", "cases": 30, "generic_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "m_z1_pm1", "cases": 30, "generic_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "m_z1_large", "cases": 30, "generic_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "m_z4_bound", "cases": 30, "generic_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "m_z3_large", "cases": 30, "generic_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "m_h", "cases": 30, "generic_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "m_hint", "cases": 30, "generic_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "m_c", "cases": 30, "generic_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "m_tB", "cases": 30, "generic_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "m_tA1", "cases": 30, "generic_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "m_z21_pm1", "cases": 30, "generic_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "m_swap_h", "cases": 30, "generic_accepts": 0, "mismatches": 0}
+{"rel": "R_TX", "kind": "fuzz", "cases": 200, "generic_accepts": 0, "mismatches": 0}
+{"timing": "R_REG fast honest", "n": 20, "p50_ms": 2.533, "p99_ms": 2.636, "max_ms": 2.650}
+{"timing": "R_REG fast adversarial", "n": 1857, "p50_ms": 2.484, "p99_ms": 2.954, "max_ms": 3.942}
+{"timing": "R_TX fast honest", "n": 10, "p50_ms": 4.691, "p99_ms": 4.878, "max_ms": 6.480}
+{"timing": "R_TX fast adversarial", "n": 957, "p50_ms": 4.585, "p99_ms": 5.443, "max_ms": 6.521}
+{"seed": 2, "cases": 2844, "mismatches": 0, "other_fails": 0}

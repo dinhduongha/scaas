@@ -5,6 +5,7 @@
  *
  *   pqz_bench [n_prove] [n_verify] [rel]   prints JSON lines: sizes, times (ms), check results
  *   rel: 1 = R_REG only, 2 = R_TX only, 3 = both (default); n_verify = 0 also skips the adversarial verifies
+ *   PQZ_VERIFY=fast (native) / step_set_fast (wasm): time pqz_verify_fast instead of pqz_verify (P6-SV)
  */
 #include <stddef.h>
 #include <stdint.h>
@@ -105,6 +106,19 @@ static uint8_t tx_stmt[PQZ_TX_STMT_BYTES], tx_wit[PQZ_TX_WIT_BYTES];
 static uint8_t reg_proof[PQZ_MAX_PROOF], tx_proof[PQZ_MAX_PROOF], bad[PQZ_MAX_PROOF];
 static size_t reg_len, tx_len;
 static uint8_t rnd32[32];
+static int fast; /* 1: verify with pqz_verify_fast */
+
+static int
+vfy (uint8_t op, const uint8_t *st, size_t stlen, const uint8_t *pf, size_t len)
+{
+  return fast ? pqz_verify_fast (op, st, stlen, pf, len) : pqz_verify (op, st, stlen, pf, len);
+}
+
+void
+step_set_fast (int on)
+{
+  fast = on;
+}
 
 static void
 setup (void)
@@ -209,15 +223,27 @@ step_len (int tx)
 int
 step_verify (int tx)
 {
-  return tx ? pqz_verify (PQZ_OP_TRANSFER, tx_stmt, sizeof (tx_stmt), tx_proof, tx_len)
-            : pqz_verify (PQZ_OP_REGISTER, reg_stmt, sizeof (reg_stmt), reg_proof, reg_len);
+  return tx ? vfy (PQZ_OP_TRANSFER, tx_stmt, sizeof (tx_stmt), tx_proof, tx_len)
+            : vfy (PQZ_OP_REGISTER, reg_stmt, sizeof (reg_stmt), reg_proof, reg_len);
 }
 
 /* adversarial verify inputs: kind 0 = one random bit flipped in the proof, 1 = random bytes of the valid
    length, 2 = one statement coefficient changed, 3 = proof truncated by one byte, 4 = proof with a long
    unary run (all-ones tail) */
+static int verify_bad (int tx, int kind, unsigned seed);
+
+/* deterministic in (kind, seed): the generator state is restored, so the same call can run with both verifiers */
 int
 step_verify_bad (int tx, int kind, unsigned seed)
+{
+  uint64_t xs0 = xs;
+  int rc = verify_bad (tx, kind, seed);
+  xs = xs0;
+  return rc;
+}
+
+static int
+verify_bad (int tx, int kind, unsigned seed)
 {
   uint8_t *pf = tx ? tx_proof : reg_proof;
   size_t len = tx ? tx_len : reg_len;
@@ -231,26 +257,26 @@ step_verify_bad (int tx, int kind, unsigned seed)
     {
       uint64_t b = rnd () % (8 * len);
       bad[b >> 3] ^= (uint8_t)(1 << (b & 7));
-      return pqz_verify (op, st, stlen, bad, len);
+      return vfy (op, st, stlen, bad, len);
     }
   if (kind == 1)
     {
       for (size_t i = 0; i < len; i++)
         bad[i] = (uint8_t)rnd ();
-      return pqz_verify (op, st, stlen, bad, len);
+      return vfy (op, st, stlen, bad, len);
     }
   if (kind == 2)
     {
       size_t off = PQZ_PREFIX_BYTES + 32 + 8 * (rnd () % 2048) + 7;
       st[off] ^= 1;
-      rc = pqz_verify (op, st, stlen, pf, len);
+      rc = vfy (op, st, stlen, pf, len);
       st[off] ^= 1;
       return rc;
     }
   if (kind == 3)
-    return pqz_verify (op, st, stlen, bad, len - 1);
+    return vfy (op, st, stlen, bad, len - 1);
   memset (bad + len / 2, 0xff, len - len / 2);
-  return pqz_verify (op, st, stlen, bad, len);
+  return vfy (op, st, stlen, bad, len);
 }
 
 /* FNV-1a of the last proof: same seeds must give the same bytes before and after a pure implementation change,
@@ -307,6 +333,8 @@ main (int argc, char **argv)
   int np = argc > 1 ? atoi (argv[1]) : 10, nv = argc > 2 ? atoi (argv[2]) : 100, fails = 0;
   int rels = argc > 3 ? atoi (argv[3]) : 3;
   void *arena = malloc (ARENA_BYTES);
+  const char *ve = getenv ("PQZ_VERIFY");
+  fast = ve != NULL && strcmp (ve, "fast") == 0;
   double t0, *tp = malloc (sizeof (double) * (np > nv ? np : nv) * 6);
 
   t0 = now_ms ();
@@ -315,7 +343,7 @@ main (int argc, char **argv)
       printf ("{\"error\": \"init\"}\n");
       return 1;
     }
-  printf ("{\"init_ms\": %.1f}\n", now_ms () - t0);
+  printf ("{\"init_ms\": %.1f, \"verify\": \"%s\"}\n", now_ms () - t0, fast ? "fast" : "generic");
 
   for (int tx = 0; tx < 2; tx++)
     {

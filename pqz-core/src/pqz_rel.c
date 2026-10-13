@@ -15,6 +15,7 @@
 #include "memory.h"
 
 #include "pqz.h"
+#include "pqz_int.h"
 #include "pqz_reg_params.h"
 #include "pqz_tx_params.h"
 
@@ -109,6 +110,8 @@ rel_init (rel_t *R, const lnp_tbox_params_struct *P, uint8_t op)
   polymat_tocrt (R->A1);
   polymat_tocrt (R->A2p);
   polymat_tocrt (R->Bp);
+  if (pqz_err == PQZ_OK)
+    pqz_sv_setup (op, P, R->A, R->A1, R->A2p, R->Bp); /* specialised verifier's tables, below the base mark */
   return pqz_err;
 }
 
@@ -212,8 +215,8 @@ l2sq_poly (poly_ptr p)
 }
 
 /* statement digest: SHAKE128("SCAAS-PQZ-TRANSCRIPT-V1" || op || be32(len) || stmt) */
-static void
-stmt_hash (uint8_t h[32], uint8_t op, const uint8_t *stmt, size_t len)
+void
+pqz_stmt_hash (uint8_t h[32], uint8_t op, const uint8_t *stmt, size_t len)
 {
   uint8_t hdr[5] = { op, (uint8_t)(len >> 24), (uint8_t)(len >> 16), (uint8_t)(len >> 8), (uint8_t)len };
   shake_tag (h, "SCAAS-PQZ-TRANSCRIPT-V1", hdr, 5, stmt, len);
@@ -277,8 +280,8 @@ encproof (uint8_t *out, size_t *len, polyvec_t tA1, polyvec_t tB, polyvec_t h, p
   *len = coder_get_offset (cstate) >> 3;
 }
 
-static int
-decproof (size_t len, const uint8_t *in, polyvec_t tA1, polyvec_t tB, polyvec_t h, poly_t c, polyvec_t z1,
+int
+pqz_decproof (size_t len, const uint8_t *in, polyvec_t tA1, polyvec_t tB, polyvec_t h, poly_t c, polyvec_t z1,
           polyvec_t z21, polyvec_t hint, polyvec_t z3, polyvec_t z4, const lnp_tbox_params_t params)
 {
   polyring_srcptr Rq = params->tbox->ring;
@@ -670,7 +673,7 @@ do_verify (sys_t *S, pf_t *F, const uint8_t hash0[32], const uint8_t *proof, siz
   const lnp_tbox_params_struct *P = S->R->P;
   uint8_t hash[32];
   if (proof_len > PQZ_MAX_PROOF
-      || !decproof (proof_len, proof, F->tA1, F->tB, F->h, F->c, F->z1, F->z21, F->hint, F->z3, F->z4, P))
+      || !pqz_decproof (proof_len, proof, F->tA1, F->tB, F->h, F->c, F->z1, F->z21, F->hint, F->z3, F->z4, P))
     return 0;
   polyvec_mod (F->h, F->h), polyvec_redc (F->h, F->h);
   poly_mod (F->c, F->c), poly_redc (F->c, F->c);
@@ -780,7 +783,7 @@ pqz_prove (uint8_t op, const uint8_t *stmt, size_t stmt_len, const uint8_t *wit,
   pqz_err = PQZ_OK;
   pqz_arena_release (&base);
   memset (&S, 0, sizeof (S));
-  stmt_hash (h, op, stmt, stmt_len);
+  pqz_stmt_hash (h, op, stmt, stmt_len);
   if (op == PQZ_OP_REGISTER && stmt_len == PQZ_REG_STMT_BYTES && wit_len == PQZ_REG_WIT_BYTES)
     {
       polyvec_t pk;
@@ -828,7 +831,7 @@ pqz_verify (uint8_t op, const uint8_t *stmt, size_t stmt_len, const uint8_t *pro
   pqz_err = PQZ_OK;
   pqz_arena_release (&base);
   memset (&S, 0, sizeof (S));
-  stmt_hash (h, op, stmt, stmt_len);
+  pqz_stmt_hash (h, op, stmt, stmt_len);
   if (op == PQZ_OP_REGISTER && stmt_len == PQZ_REG_STMT_BYTES)
     {
       polyvec_t pk;
@@ -844,6 +847,25 @@ pqz_verify (uint8_t op, const uint8_t *stmt, size_t stmt_len, const uint8_t *pro
       if (build_tx (&S, &T, stmt))
         ok = do_verify (&S, &F, h, proof, proof_len);
     }
+  if (pqz_err)
+    ok = 0;
+  pqz_arena_release (&base);
+  return ok;
+}
+
+/* the specialised verifier (pqz_sv.c): same statements, same transcript, same accept / reject */
+int
+pqz_verify_fast (uint8_t op, const uint8_t *stmt, size_t stmt_len, const uint8_t *proof, size_t proof_len)
+{
+  uint8_t h[32];
+  int ok;
+
+  if (!ready)
+    return 0;
+  pqz_err = PQZ_OK;
+  pqz_arena_release (&base);
+  pqz_stmt_hash (h, op, stmt, stmt_len);
+  ok = pqz_sv_verify (op, h, stmt, stmt_len, proof, proof_len) == 1;
   if (pqz_err)
     ok = 0;
   pqz_arena_release (&base);
@@ -939,3 +961,107 @@ pqz_decrypt_raw (const int8_t s[2048], const uint8_t u[PQZ_POLYVEC_BYTES], const
   pqz_arena_release (&base);
   return pqz_err;
 }
+
+#ifdef PQZ_TEST_HOOKS
+/* ---------------------------------------------------------------- test hook (P6-SV diff harness only; not in
+   libpqz): decode a proof, change one field, re-encode. kind / r1 / r2 pick the field and the change. Returns 1
+   and the new proof in out, or 0 if the input does not decode. */
+static void
+mut_swap (poly_ptr a, poly_ptr b)
+{
+  for (unsigned j = 0; j < PQZ_D; j++)
+    {
+      int64_t t = cval (a, j);
+      set_c (a, j, cval (b, j));
+      set_c (b, j, t);
+    }
+}
+
+int
+pqz_test_mutate (uint8_t op, const uint8_t *proof, size_t len, unsigned kind, uint64_t r1, uint64_t r2,
+                 uint8_t *out, size_t *outlen)
+{
+  const lnp_tbox_params_struct *P = op == PQZ_OP_REGISTER ? REG.P : TX.P;
+  abdlop_params_srcptr tb = P->tbox;
+  static uint8_t buf[2 * PQZ_MAX_PROOF];
+  pf_t F;
+  size_t n;
+  int ok = 0;
+
+  pqz_err = PQZ_OK;
+  pqz_arena_release (&base);
+  pf_alloc (&F, P);
+  if (len > PQZ_MAX_PROOF
+      || !pqz_decproof (len, proof, F.tA1, F.tB, F.h, F.c, F.z1, F.z21, F.hint, F.z3, F.z4, P))
+    goto done;
+  polyvec_mod (F.h, F.h), polyvec_redc (F.h, F.h);
+  poly_mod (F.c, F.c), poly_redc (F.c, F.c);
+  polyvec_mod (F.z1, F.z1), polyvec_redc (F.z1, F.z1);
+  polyvec_mod (F.z21, F.z21), polyvec_redc (F.z21, F.z21);
+  polyvec_mod (F.z3, F.z3), polyvec_redc (F.z3, F.z3);
+  polyvec_mod (F.z4, F.z4), polyvec_redc (F.z4, F.z4);
+  const unsigned m1 = tb->m1, m2r = tb->m2 - tb->kmsis, km = tb->kmsis, c64 = (unsigned)(r2 % PQZ_D);
+  const int64_t sg = (r2 >> 8) & 1 ? 1 : -1;
+  poly_ptr p;
+  switch (kind)
+    {
+    case 0: /* swap two z1 polys */
+      mut_swap (polyvec_get_elem (F.z1, r1 % m1), polyvec_get_elem (F.z1, (r1 / m1 + 1 + r1 % m1) % m1));
+      break;
+    case 1: /* swap two z21 polys */
+      mut_swap (polyvec_get_elem (F.z21, r1 % m2r), polyvec_get_elem (F.z21, (r1 / m2r + 1 + r1 % m2r) % m2r));
+      break;
+    case 2: /* swap a z3 poly with a z4 poly */
+      mut_swap (polyvec_get_elem (F.z3, r1 % 4), polyvec_get_elem (F.z4, (r1 >> 8) % 4));
+      break;
+    case 3: /* z1 coefficient +-1 */
+      p = polyvec_get_elem (F.z1, r1 % m1), set_c (p, c64, cval (p, c64) + sg);
+      break;
+    case 4: /* z1 coefficient large (norm) */
+      p = polyvec_get_elem (F.z1, r1 % m1), set_c (p, c64, sg * (((int64_t)1 << 25) + (int64_t)(r1 % 1000)));
+      break;
+    case 5: /* z4 coefficient at / over the l_inf bound */
+      p = polyvec_get_elem (F.z4, r1 % 4), set_c (p, c64, sg * (int_get_i64 (P->Bz4) + (int64_t)(r1 >> 8) % 2));
+      break;
+    case 6: /* z3 coefficient large (norm) */
+      p = polyvec_get_elem (F.z3, r1 % 4), set_c (p, c64, cval (p, c64) + sg * ((int64_t)1 << 20));
+      break;
+    case 7: /* h: coefficient 0 / d/2 nonzero, or another coefficient changed */
+      p = polyvec_get_elem (F.h, r1 % 2);
+      set_c (p, r1 & 4 ? 0 : (r1 & 8 ? PQZ_D / 2 : c64), cval (p, r1 & 4 ? 0 : (r1 & 8 ? PQZ_D / 2 : c64)) + sg);
+      break;
+    case 8: /* hint coefficient +-1..1000 (|hint| = m would need 2m bits, more than PQZ_MAX_PROOF) */
+      p = polyvec_get_elem (F.hint, r1 % km), set_c (p, c64, cval (p, c64) + sg * (1 + (int64_t)(r1 >> 9) % 1000));
+      break;
+    case 9: /* c: one coefficient to another value in [-8, 8] */
+      p = F.c, set_c (p, c64, (cval (p, c64) + 8 + 1 + (int64_t)(r1 % 16)) % 17 - 8);
+      break;
+    case 10: /* tB coefficient */
+      p = polyvec_get_elem (F.tB, r1 % (tb->l + tb->lext)), set_c (p, c64, (int64_t)(r1 % PQZ_Q));
+      break;
+    case 11: /* tA1 coefficient */
+      p = polyvec_get_elem (F.tA1, r1 % km);
+      set_c (p, c64, (int64_t)((r1 >> 8) % ((uint64_t)1 << (42 - P->quad_eval->quad_many->dcompress->D))));
+      break;
+    case 12: /* z21 coefficient +-1 */
+      p = polyvec_get_elem (F.z21, r1 % m2r), set_c (p, c64, cval (p, c64) + sg);
+      break;
+    case 13: /* swap the two h polys */
+      mut_swap (polyvec_get_elem (F.h, 0), polyvec_get_elem (F.h, 1));
+      break;
+    default: /* re-encode only */
+      break;
+    }
+  encproof (buf, &n, F.tA1, F.tB, F.h, F.c, F.z1, F.z21, F.hint, F.z3, F.z4, P);
+  if (pqz_err == PQZ_OK && n <= *outlen)
+    {
+      memcpy (out, buf, n);
+      *outlen = n;
+      ok = 1;
+    }
+done:
+  pqz_err = PQZ_OK;
+  pqz_arena_release (&base);
+  return ok;
+}
+#endif
