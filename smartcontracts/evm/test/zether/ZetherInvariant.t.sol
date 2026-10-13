@@ -162,7 +162,8 @@ contract ZetherHandler is ZetherFixture {
         bps = bound(bps, 1, 1000);
         (uint96 n, uint96 d,,,) = w.legOf(address(leg[l]));
         (uint256 sn, uint256 sd) = n < 1e6 ? (uint256(n) * 1000, uint256(d) * 1000) : (uint256(n), uint256(d));
-        uint256 nn = up ? sn * (10_000 + bps) / 10_000 : sn * (10_000 - bps) / 10_000;
+        // Down rounds up: a floored down-step at bps = maxRateStepBps overshoots it (RateStepTooLarge).
+        uint256 nn = up ? sn * (10_000 + bps) / 10_000 : (sn * (10_000 - bps) + 9_999) / 10_000;
         if (nn == 0 || nn > type(uint96).max || sd > type(uint96).max) return;
         w.proposeRate(address(leg[l]), uint96(nn), uint96(sd));
         vm.warp(block.timestamp + 2 days);
