@@ -48,5 +48,6 @@ output) are kept while the repository is private and are dropped before a public
 | [pqz-verifier-floor.md](pqz-verifier-floor.md) | PQZL verifier floor: what a specialised LNP22 verifier for R_REG / R_TX must cost (2026-10-13) |
 | [pqz-specialised-verifier.md](pqz-specialised-verifier.md) | PQZL specialised verifier: `R_REG` / `R_TX` without LaZer's generic machinery (P6-SV) (2026-10-13) |
 | [pqzh-design.md](pqzh-design.md) | PQZH design study: the hash-based proof kind of PQ Zether (P6-PQZH, E-S1H) (2026-10-13) |
+| [pqz-relations-burn-disclose.md](pqz-relations-burn-disclose.md) | PQZ relations `R_BURN`, `R_DS`, `R_DR`: burn / refresh and disclosure proofs in `pqz-core` (P6) (2026-10-13) |
 | [node-ai-agents.md](node-ai-agents.md) | scaas-node and AI agents — direction (2026-10-11) |
 | [zether-disclosure.md](zether-disclosure.md) | Zether disclosure — who can reveal what, under which conditions (2026-10-11) |
