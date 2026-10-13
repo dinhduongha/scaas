@@ -1,0 +1,22 @@
+{"build": "portable", "primes": [1073741441, 1073739649, 1073738753]}
+{"op": "fork pqz_ntt_fwd (mod q, 2 layers, 4 x 16 blocks)", "unit": "per poly", "ns": 191.3}
+{"op": "fork pqz_ntt_inv", "unit": "per poly", "ns": 351.3}
+{"op": "fork pqz_ntt_basemul (pointwise product, 4 x 16x16 schoolbook)", "unit": "per product", "ns": 1795.0}
+{"op": "scalar mod-q multiply (u128 product + pqz_red128)", "unit": "per 4096 dependent mulmods", "ns": 25196.1}
+{"op": "fork LaZer poly_mul, both in NTT form (API level)", "unit": "per product", "ns": 1791.7}
+{"op": "crt30 ntt_fwd, one prime (scalar)", "unit": "per poly per prime", "ns": 198.1}
+{"op": "crt30 ntt_inv, one prime (scalar)", "unit": "per poly per prime", "ns": 188.0}
+{"op": "crt30 pointwise multiply-accumulate, one prime (scalar)", "unit": "per product per prime", "ns": 42.7}
+{"op": "R_TX w = A1 z1 + A2' z21 - c 2^D tA1 (23 x 198), fork basemul per product", "unit": "per mat-vec", "ns": 8278662.2}
+{"op": "R_TX w mat-vec, fork representation, lazy u128 row accumulation", "unit": "per mat-vec", "ns": 6033925.8}
+{"op": "R_TX w mat-vec, CRT 3 x 30-bit scalar (NTT z, T; products; INTT; CRT to mod q)", "unit": "per mat-vec", "ns": 586638.1}
+{"op": "R_REG w = A1 z1 + A2' z21 - c 2^D tA1 (22 x 111), fork basemul per product", "unit": "per mat-vec", "ns": 4484050.8}
+{"op": "R_REG w mat-vec, fork representation, lazy u128 row accumulation", "unit": "per mat-vec", "ns": 3262232.0}
+{"op": "R_REG w mat-vec, CRT 3 x 30-bit scalar (NTT z, T; products; INTT; CRT to mod q)", "unit": "per mat-vec", "ns": 347119.7}
+{"op": "R_TX JL fold vR = V^T R, 4 x 256 x 9792 ternary, scalar branchless", "unit": "per fold", "ns": 5745057.2}
+{"op": "R_REG JL fold vR = V^T R, 4 x 256 x 4224 ternary, scalar branchless", "unit": "per fold", "ns": 2420722.2}
+{"op": "filler JL fold vR = V^T R, 4 x 256 x 64 ternary, scalar branchless", "unit": "per fold", "ns": 39318.2}
+{"op": "fork AES-256-CTR stream (bitsliced, LaZer rng_urandom)", "unit": "per MiB", "ns": 61008419.6}
+{"op": "fork rng_init + 16 B + clear (AES key schedule per challenge domain)", "unit": "per call", "ns": 15531.4}
+{"op": "fork SHAKE128 squeeze", "unit": "per MiB", "ns": 1835264.9}
+{"op": "fork SHAKE128 absorb 64 KiB + squeeze 32 B", "unit": "per 64 KiB", "ns": 110639.3}

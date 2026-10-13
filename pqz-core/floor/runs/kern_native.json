@@ -1,0 +1,33 @@
+{"build": "native (AVX2 kernels on)", "primes": [1073741441, 1073739649, 1073738753]}
+{"op": "fork pqz_ntt_fwd (mod q, 2 layers, 4 x 16 blocks)", "unit": "per poly", "ns": 183.2}
+{"op": "fork pqz_ntt_inv", "unit": "per poly", "ns": 350.6}
+{"op": "fork pqz_ntt_basemul (pointwise product, 4 x 16x16 schoolbook)", "unit": "per product", "ns": 1779.0}
+{"op": "scalar mod-q multiply (u128 product + pqz_red128)", "unit": "per 4096 dependent mulmods", "ns": 25472.9}
+{"op": "fork LaZer poly_mul, both in NTT form (API level)", "unit": "per product", "ns": 1769.5}
+{"op": "crt30 ntt_fwd, one prime (scalar)", "unit": "per poly per prime", "ns": 167.6}
+{"op": "crt30 ntt_inv, one prime (scalar)", "unit": "per poly per prime", "ns": 196.6}
+{"op": "crt30 pointwise multiply-accumulate, one prime (scalar)", "unit": "per product per prime", "ns": 17.0}
+{"op": "crt30 ntt_fwd x4 (AVX2, 4 polys per call)", "unit": "per 4 polys per prime", "ns": 230.3}
+{"op": "crt30 ntt_inv x4 (AVX2)", "unit": "per 4 polys per prime", "ns": 232.3}
+{"op": "crt30 pointwise multiply-accumulate x4 (AVX2)", "unit": "per 4 products per prime", "ns": 33.0}
+{"op": "R_TX w = A1 z1 + A2' z21 - c 2^D tA1 (23 x 198), fork basemul per product", "unit": "per mat-vec", "ns": 8246728.2}
+{"op": "R_TX w mat-vec, fork representation, lazy u128 row accumulation", "unit": "per mat-vec", "ns": 3634824.4}
+{"op": "R_TX w mat-vec, CRT 3 x 30-bit scalar (NTT z, T; products; INTT; CRT to mod q)", "unit": "per mat-vec", "ns": 413735.2}
+{"op": "R_TX w mat-vec, CRT 3 x 30-bit AVX2", "unit": "per mat-vec", "ns": 417402.2}
+{"op": "R_REG w = A1 z1 + A2' z21 - c 2^D tA1 (22 x 111), fork basemul per product", "unit": "per mat-vec", "ns": 4439885.6}
+{"op": "R_REG w mat-vec, fork representation, lazy u128 row accumulation", "unit": "per mat-vec", "ns": 1960376.6}
+{"op": "R_REG w mat-vec, CRT 3 x 30-bit scalar (NTT z, T; products; INTT; CRT to mod q)", "unit": "per mat-vec", "ns": 246162.5}
+{"op": "R_REG w mat-vec, CRT 3 x 30-bit AVX2", "unit": "per mat-vec", "ns": 165504.1}
+{"op": "R_TX JL fold vR = V^T R, 4 x 256 x 9792 ternary, scalar branchless", "unit": "per fold", "ns": 5910427.0}
+{"op": "R_TX JL fold, AVX2 (4 columns per vector, nibble LUT, 256-column tiles)", "unit": "per fold", "ns": 1409244.9}
+{"op": "R_REG JL fold vR = V^T R, 4 x 256 x 4224 ternary, scalar branchless", "unit": "per fold", "ns": 2546312.8}
+{"op": "R_REG JL fold, AVX2 (4 columns per vector, nibble LUT, 256-column tiles)", "unit": "per fold", "ns": 580171.4}
+{"op": "filler JL fold vR = V^T R, 4 x 256 x 64 ternary, scalar branchless", "unit": "per fold", "ns": 39037.6}
+{"op": "filler JL fold, AVX2 (4 columns per vector, nibble LUT, 256-column tiles)", "unit": "per fold", "ns": 10205.8}
+{"op": "fork AES-256-CTR stream (bitsliced, LaZer rng_urandom)", "unit": "per MiB", "ns": 60245996.8}
+{"op": "fork rng_init + 16 B + clear (AES key schedule per challenge domain)", "unit": "per call", "ns": 15001.9}
+{"op": "fork SHAKE128 squeeze", "unit": "per MiB", "ns": 1761063.0}
+{"op": "fork SHAKE128 absorb 64 KiB + squeeze 32 B", "unit": "per 64 KiB", "ns": 110936.2}
+{"op": "OpenSSL 3.0 AES-256-CTR (AES-NI)", "unit": "per MiB", "ns": 113703.4}
+{"op": "OpenSSL 3.0 SHAKE128 squeeze", "unit": "per MiB", "ns": 1549546.5}
+{"op": "OpenSSL 3.0 SHAKE128 absorb 64 KiB + squeeze 32 B", "unit": "per 64 KiB", "ns": 101271.6}

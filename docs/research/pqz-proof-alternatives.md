@@ -121,6 +121,8 @@ before any commitment; nothing in the normative docs changes yet.
 | On-chain verify | not viable as measured: ≈ 790 M gas at 0.12 M gas/ms against the 16.78 M cap [estimate]; needs off-chain verification or aggregation | the intended on-chain variant if the spike meets ≤ 50 ms |
 | Assumptions | MLWE / MSIS (lattice) | hash functions only, for soundness |
 
+**Verifier floor (2026-10-13, `pqz-verifier-floor.md`):** a verifier specialised to `R_TX` would cost ≈ 2.5 ms (AVX2) / ≈ 9 ms (portable C) / ≈ 13 ms (wasm32) per verify [estimate], against 6.6 s for generic LaZer; the seconds are LaZer's generic quadratic-form machinery, not the protocol.
+
 **Shared layer, unchanged between the two:** MLWE ciphertexts and state (CTR-PQZ-03/04/06/07), account keys (the UA
 registry's `pqz-mlwe` 0x0142 kind serves both), disclosure and auditor, the client wallet and decryption. Only the
 proof and its verifier differ, selected per token at `initialize` (the spec already stores a `proofSystemId`).
