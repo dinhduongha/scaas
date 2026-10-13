@@ -49,10 +49,12 @@ pub struct Params {
 }
 
 impl Params {
-    /// Default: blowup 8, 38 queries + 16 grinding bits = 130 conjectured bits, FRI arity 8.
+    /// Default: blowup 16, 28 queries + 16 grinding bits = 128 bits by the ethSTARK conjectured formula
+    /// (queries * log_blowup + pow bits), FRI arity 8. Blowup 8 / 38 queries gave R_TX 178 KB, over MAX_PROOF.
+    /// Proven bits for this and other settings: src/bin/pqzh_security.rs.
     pub const DEFAULT: Params = Params {
-        log_blowup: 3,
-        num_queries: 38,
+        log_blowup: 4,
+        num_queries: 28,
         max_log_arity: 3,
         log_final_poly_len: 3,
         query_pow_bits: 16,

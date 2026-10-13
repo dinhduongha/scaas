@@ -1,0 +1,10 @@
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 9.00s
+op 3: [("total", 110388), ("commitments", 119), ("ood_values", 3488), ("lookup_terminals", 52), ("round0_rows", 19377), ("round0_merkle", 13116), ("round1_rows", 1933), ("round1_merkle", 13089), ("round2_rows", 4145), ("round2_merkle", 13117), ("fri_commits", 196), ("fri0_siblings", 477), ("fri0_merkle", 12050), ("fri1_siblings", 3165), ("fri1_merkle", 8847), ("fri2_siblings", 3165), ("fri2_merkle", 5650), ("fri3_siblings", 3165), ("fri3_merkle", 2665), ("fri4_siblings", 477), ("fri4_merkle", 1886), ("final_poly", 129)]
+op 1: [("total", 143965), ("commitments", 115), ("ood_values", 5483), ("lookup_terminals", 69), ("round0_rows", 26125), ("round0_merkle", 14230), ("round1_rows", 2885), ("round1_merkle", 14221), ("round2_rows", 10893), ("round2_merkle", 14204), ("fri_commits", 236), ("fri0_siblings", 477), ("fri0_merkle", 13211), ("fri1_siblings", 477), ("fri1_merkle", 12113), ("fri2_siblings", 3165), ("fri2_merkle", 8898), ("fri3_siblings", 3165), ("fri3_merkle", 5766), ("fri4_siblings", 3165), ("fri4_merkle", 2628), ("fri5_siblings", 477), ("fri5_merkle", 1744), ("final_poly", 129)]
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.32s
+reg proof 110388 B, 1.351870505s
+tx proof 143965 B, 2.818112866s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.22s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s

@@ -1,7 +1,7 @@
 //! Honest proofs verify; mutated proofs / statements and out-of-range witnesses do not (run with --release).
 use pqzh::client::{Tweak, digits, setup, setup_with};
 use pqzh::rel::{OP_REGISTER, OP_TRANSFER, prove_unchecked};
-use pqzh::{Params, prove, verify};
+use pqzh::{MAX_PROOF, Params, prove, verify};
 
 fn p() -> Params {
     Params::DEFAULT
@@ -21,6 +21,8 @@ fn honest_and_cross() {
     let s = setup();
     let pr = prove(OP_REGISTER, &s.reg_stmt, &s.reg_wit, [1; 32], &p()).unwrap();
     let pt = prove(OP_TRANSFER, &s.tx_stmt, &s.tx_wit, [2; 32], &p()).unwrap();
+    // the PQZH kind's limit (owner, TODO P6-PQZH): both proofs within 160 KB at the default parameters
+    assert!(pr.len() <= MAX_PROOF && pt.len() <= MAX_PROOF, "R_REG {} B, R_TX {} B", pr.len(), pt.len());
     assert!(verify(OP_REGISTER, &s.reg_stmt, &pr, &p()));
     assert!(verify(OP_TRANSFER, &s.tx_stmt, &pt, &p()));
     // wrong op / swapped proofs / other parameters
