@@ -2564,6 +2564,27 @@ _diag (unsigned int *row, unsigned int *col, unsigned int r, unsigned int c)
     }
 }
 
+/* PQZ: z[k] = 1 iff column k < n of A is zero (A = NULL: nothing to do). Es / Em / Ps / Pm are public selection
+   matrices: most columns are zero, so most entries of their Gram matrices o(A)^T B are zero polynomials.
+   Upstream inserted and multiplied them all (R_TX: 146^2 dot products and sparse entries per l2 equation, all but
+   32 of them zero); the loops below skip pairs with a zero column. The skipped entries are zero, so every sum the
+   sparse matrices enter is unchanged. Public data: the branch is not secret-dependent. */
+static void
+_pqz_zero_cols (uint8_t *z, polymat_srcptr A, unsigned int n)
+{
+  polyvec_t col;
+  unsigned int k, i;
+
+  if (A == NULL)
+    return;
+  for (k = 0; k < n; k++)
+    {
+      polymat_get_col (col, A, k);
+      z[k] = 1;
+      _VEC_FOREACH_ELEM (col, i) { z[k] &= pqz_poly_is_zero_pub (polyvec_get_elem (col, i)); }
+    }
+}
+
 static void
 __schwartz_zippel_accumulate_bin (spolymat_ptr R2i[], spolyvec_ptr r1i[],
                                   poly_ptr r0i[], spolymat_ptr R2i2[],
@@ -2597,6 +2618,7 @@ __schwartz_zippel_accumulate_bin (spolymat_ptr R2i[], spolyvec_ptr r1i[],
   spolymat_ptr R2tptr[1];
   spolyvec_ptr r1tptr[1];
   poly_ptr r0tptr[1];
+  uint8_t zs[m1 + 1], zm[l + 1]; /* PQZ: zero-column flags of Ps, Pm */
 
   polyvec_alloc (tmp_polyvec, Rq, nbin);
   polyvec_alloc (tmp_polyvec2, Rq, nbin);
@@ -2649,6 +2671,9 @@ __schwartz_zippel_accumulate_bin (spolymat_ptr R2i[], spolyvec_ptr r1i[],
   spolymat_set_empty (R2t);
   spolyvec_set_empty (r1t);
 
+  _pqz_zero_cols (zs, Ps, m1); /* PQZ */
+  _pqz_zero_cols (zm, Pm, l);
+
   if (Ps != NULL)
     {
       for (k = 0; k < m1; k++)
@@ -2662,8 +2687,11 @@ __schwartz_zippel_accumulate_bin (spolymat_ptr R2i[], spolyvec_ptr r1i[],
             {
               polymat_get_col (subv, Ps, j);
               _diag (&row, &col, 2 * k + 1, 2 * j);
-              poly = spolymat_insert_elem (R2t, row, col);
-              polyvec_dot (poly, subv2, subv);
+              if (!(zs[k] | zs[j])) /* PQZ: zero column pair */
+                {
+                  poly = spolymat_insert_elem (R2t, row, col);
+                  polyvec_dot (poly, subv2, subv);
+                }
             }
 
           /* o(s1)^T*o(Ps)^T*Pm*m */
@@ -2673,14 +2701,20 @@ __schwartz_zippel_accumulate_bin (spolymat_ptr R2i[], spolyvec_ptr r1i[],
                 {
                   polymat_get_col (subv, Pm, j);
                   _diag (&row, &col, 2 * k + 1, 2 * (m1 + Z + j));
-                  poly = spolymat_insert_elem (R2t, row, col);
-                  polyvec_dot (poly, subv2, subv);
+                  if (!(zs[k] | zm[j])) /* PQZ: zero column pair */
+                    {
+                      poly = spolymat_insert_elem (R2t, row, col);
+                      polyvec_dot (poly, subv2, subv);
+                    }
                 }
             }
 
           /* o(s1)^T*o(Ps)^T*(f-1) */
-          poly = spolyvec_insert_elem (r1t, 2 * k + 1);
-          polyvec_dot (poly, subv2, f_);
+          if (!zs[k]) /* PQZ: zero column */
+            {
+              poly = spolyvec_insert_elem (r1t, 2 * k + 1);
+              polyvec_dot (poly, subv2, f_);
+            }
         }
     }
   if (Pm != NULL)
@@ -2698,8 +2732,11 @@ __schwartz_zippel_accumulate_bin (spolymat_ptr R2i[], spolyvec_ptr r1i[],
                 {
                   polymat_get_col (subv, Ps, j);
                   _diag (&row, &col, 2 * (m1 + Z + k) + 1, 2 * j);
-                  poly = spolymat_insert_elem (R2t, row, col);
-                  polyvec_dot (poly, subv2, subv);
+                  if (!(zm[k] | zs[j])) /* PQZ: zero column pair */
+                    {
+                      poly = spolymat_insert_elem (R2t, row, col);
+                      polyvec_dot (poly, subv2, subv);
+                    }
                 }
             }
 
@@ -2708,13 +2745,19 @@ __schwartz_zippel_accumulate_bin (spolymat_ptr R2i[], spolyvec_ptr r1i[],
             {
               polymat_get_col (subv, Pm, j);
               _diag (&row, &col, 2 * (m1 + Z + k) + 1, 2 * (m1 + Z + j));
-              poly = spolymat_insert_elem (R2t, row, col);
-              polyvec_dot (poly, subv2, subv);
+              if (!(zm[k] | zm[j])) /* PQZ: zero column pair */
+                {
+                  poly = spolymat_insert_elem (R2t, row, col);
+                  polyvec_dot (poly, subv2, subv);
+                }
             }
 
           /* o(m)^T*o(Pm)^T*(f-1) */
-          poly = spolyvec_insert_elem (r1t, 2 * (m1 + Z + k) + 1);
-          polyvec_dot (poly, subv2, f_);
+          if (!zm[k]) /* PQZ: zero column */
+            {
+              poly = spolyvec_insert_elem (r1t, 2 * (m1 + Z + k) + 1);
+              polyvec_dot (poly, subv2, f_);
+            }
         }
     }
 
@@ -2802,6 +2845,7 @@ __schwartz_zippel_accumulate_l2 (spolymat_ptr R2i[], spolyvec_ptr r1i[],
   spolymat_ptr R2tptr[1];
   spolyvec_ptr r1tptr[1];
   poly_ptr r0tptr[1];
+  uint8_t zs[m1 + 1], zm[l + 1]; /* PQZ: zero-column flags of Es[i], Em[i] */
 
   nelems = 0;
   for (i = 0; i < Z; i++)
@@ -2867,6 +2911,9 @@ __schwartz_zippel_accumulate_l2 (spolymat_ptr R2i[], spolyvec_ptr r1i[],
       spolyvec_set_empty (r1t);
       r1t->sorted = 0;
 
+      _pqz_zero_cols (zs, Es != NULL ? Es[i] : NULL, m1); /* PQZ */
+      _pqz_zero_cols (zm, Em != NULL ? Em[i] : NULL, l);
+
       if (Es != NULL && Es[i] != NULL)
         {
           for (k = 0; k < m1; k++)
@@ -2880,8 +2927,11 @@ __schwartz_zippel_accumulate_l2 (spolymat_ptr R2i[], spolyvec_ptr r1i[],
                 {
                   polymat_get_col (subv, Es[i], j);
                   _diag (&row, &col, 2 * k + 1, 2 * j);
-                  poly = spolymat_insert_elem (R2t, row, col);
-                  polyvec_dot (poly, subv2, subv);
+                  if (!(zs[k] | zs[j])) /* PQZ: zero column pair */
+                    {
+                      poly = spolymat_insert_elem (R2t, row, col);
+                      polyvec_dot (poly, subv2, subv);
+                    }
                 }
 
               /* o(s1)^T*o(Es)^T*Em*m */
@@ -2891,13 +2941,16 @@ __schwartz_zippel_accumulate_l2 (spolymat_ptr R2i[], spolyvec_ptr r1i[],
                     {
                       polymat_get_col (subv, Em[i], j);
                       _diag (&row, &col, 2 * k + 1, 2 * (m1 + Z + j));
-                      poly = spolymat_insert_elem (R2t, row, col);
-                      polyvec_dot (poly, subv2, subv);
+                      if (!(zs[k] | zm[j])) /* PQZ: zero column pair */
+                        {
+                          poly = spolymat_insert_elem (R2t, row, col);
+                          polyvec_dot (poly, subv2, subv);
+                        }
                     }
                 }
 
               /* o(s1)^T*o(Es)^T*v */
-              if (v != NULL && v[i] != NULL)
+              if (v != NULL && v[i] != NULL && !zs[k]) /* PQZ: zero column */
                 {
                   poly = spolyvec_insert_elem (r1t, 2 * k + 1);
                   polyvec_dot (poly, subv2, v[i]);
@@ -2920,8 +2973,11 @@ __schwartz_zippel_accumulate_l2 (spolymat_ptr R2i[], spolyvec_ptr r1i[],
                     {
                       polymat_get_col (subv, Es[i], j);
                       _diag (&row, &col, 2 * (m1 + Z + k) + 1, 2 * j);
-                      poly = spolymat_insert_elem (R2t, row, col);
-                      polyvec_dot (poly, subv2, subv);
+                      if (!(zm[k] | zs[j])) /* PQZ: zero column pair */
+                        {
+                          poly = spolymat_insert_elem (R2t, row, col);
+                          polyvec_dot (poly, subv2, subv);
+                        }
                     }
                 }
 
@@ -2930,12 +2986,15 @@ __schwartz_zippel_accumulate_l2 (spolymat_ptr R2i[], spolyvec_ptr r1i[],
                 {
                   polymat_get_col (subv, Em[i], j);
                   _diag (&row, &col, 2 * (m1 + Z + k) + 1, 2 * (m1 + Z + j));
-                  poly = spolymat_insert_elem (R2t, row, col);
-                  polyvec_dot (poly, subv2, subv);
+                  if (!(zm[k] | zm[j])) /* PQZ: zero column pair */
+                    {
+                      poly = spolymat_insert_elem (R2t, row, col);
+                      polyvec_dot (poly, subv2, subv);
+                    }
                 }
 
               /* o(m)^T*o(Em)^T*v */
-              if (v != NULL && v[i] != NULL)
+              if (v != NULL && v[i] != NULL && !zm[k]) /* PQZ: zero column */
                 {
                   poly = spolyvec_insert_elem (r1t, 2 * (m1 + Z + k) + 1);
                   polyvec_dot (poly, subv2, v[i]);
