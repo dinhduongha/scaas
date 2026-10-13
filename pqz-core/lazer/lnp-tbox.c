@@ -3428,7 +3428,7 @@ __schwartz_zippel_accumulate_z3 (
   spolymat_ptr R2tptr[1];
   spolyvec_ptr r1tptr[1];
   poly_ptr r0tptr[1];
-  int_ptr chal, acc;
+  int_ptr chal; /* PQZ: acc dropped with the int64 accumulation below */
   polymat_t mat, vRPs, vRPm, vRpol;
   polyvec_t subv1, subv2;
   int_ptr coeff1, coeff2;
@@ -3500,34 +3500,31 @@ __schwartz_zippel_accumulate_z3 (
         }
     }
 
-  intmat_set_zero (vR);
+  {
+    /* PQZ: vR = V R accumulated in int64 (|entry| <= 256 q < 2^51; R public, entries in {-1, 0, 1}), then
+       stored into the int_t matrix; was a 2-limb int_set / int_mul_sgn_self / int_add per nonzero entry of R */
+    const size_t ncols = (size_t)nex * d;
+    int64_t *vR64 = _alloc (lambda * ncols * sizeof (int64_t));
+    int64_t c;
 
-  for (i = 0; i < 256; i++)
-    {
-      _expand_Rprime_i (Rprimei, nprime * d, i, seed);
+    memset (vR64, 0, lambda * ncols * sizeof (int64_t));
+    for (i = 0; i < 256; i++)
+      {
+        _expand_R_i (Ri, nex * d, i, seed);
 
-      for (k = 0; k < lambda; k++)
-        {
-          chal = intmat_get_elem (V, k, i);
-
-          for (j = 0; j < nprime * d; j++)
-            {
-              if (Rprimei[j] == 0)
-                {
-                }
-              else
-                {
-                  ASSERT_ERR (Rprimei[j] == 1 || Rprimei[j] == -1);
-
-                  acc = intmat_get_elem (vR, k, j);
-
-                  int_set (tmp, chal);
-                  int_mul_sgn_self (tmp, Rprimei[j]);
-                  int_add (acc, acc, tmp);
-                }
-            }
-        }
-    }
+        for (k = 0; k < lambda; k++)
+          {
+            chal = intmat_get_elem (V, k, i);
+            c = int_get_i64 (chal);
+            for (j = 0; j < ncols; j++)
+              vR64[k * ncols + j] += Ri[j] * c;
+          }
+      }
+    for (k = 0; k < lambda; k++)
+      for (j = 0; j < ncols; j++)
+        int_set_i64 (intmat_get_elem (vR, k, j), vR64[k * ncols + j]);
+    _free (vR64, lambda * ncols * sizeof (int64_t));
+  }
 
   _MAT_FOREACH_ELEM (vR, i, j)
   {
