@@ -14,7 +14,7 @@ from the codegen or the estimator, not a run. **[inference]** marks a conclusion
 
 ## 1. Result
 
-**Two of the roadmap's four kill criteria are missed: verify by ≈ 300× and prove by ≈ 6×. The kill decision is pending
+**Two of the roadmap's four kill criteria are missed: verify by ≈ 300× and prove by ≈ 2.8× (the owner raised the prove limit from 3 s to 6 s on 2026-10-13; ≈ 6× against 3 s). The kill decision is pending
 (owner).** The upstream timing cross-check the owner ordered is done (§10): upstream LaZer runs the same `R_TX` 2.3–2.6×
 faster than the fork and still misses both time criteria (prove 6.6 s, verify 6.6 s). The proof size and the forbidden-symbol scan pass. The
 browser budgets of CTR-PQZ-18 are missed too: `R_TX` wasm prove time and wasm memory are both above the hard limits
@@ -24,7 +24,7 @@ browser budgets of CTR-PQZ-18 are missed too: `R_TX` wasm prove time and wasm me
 |---|---|---|---|
 | Transfer proof size | ≤ 96 KB (98,304 B, `PQZ_MAX_PROOF`) | 42,738–42,770 B [measured] | pass |
 | p99 adversarial verify | ≤ 50 ms (chain host) | 15.2 s native, 33.4 s wasm (median honest verify) [measured] | **miss, ≈ 300×** |
-| Prove | ≤ 3 s desktop | 17.0 s native, 39.3 s wasm (median) [measured] | **miss, ≈ 6×** |
+| Prove | ≤ 6 s desktop (3 s until 2026-10-13, owner) | 17.0 s native, 39.3 s wasm (median) [measured] | **miss, ≈ 2.8×** |
 | GMP / MPFR / float / `abort` / `malloc` on prove or verify paths | none | none [measured] | pass |
 | Arithmetic-layer KAT equal to upstream (CTR-PQZ-09) | equal | 19/19 cases [measured] | pass |
 
@@ -179,7 +179,7 @@ not kill criteria; the spike's wasm numbers against them [measured; node, not a 
 | Module size | ≤ 1.0 MB gzip | same | — | `pqz.wasm` 337 KB uncompressed (with the bench steps) | inside |
 
 **wasm / native ratio 2.3–2.7×** [measured]: prove `R_TX` 39.3 / 17.0 s = 2.3, `R_REG` 3.27 / 1.20 s = 2.7; verify
-2.2 and 2.6. At that ratio the engine exit target of prove ≤ 3 s native (CTR-PQZ-18) maps to ≈ 7–8 s in wasm, above
+2.2 and 2.6. At that ratio the engine exit target of prove ≤ 6 s native (CTR-PQZ-18) maps to ≈ 14–16 s in wasm, above
 the 5 s desktop-browser budget [inference]. The spike's wasm build has no `-msimd128` (the spec's build target names
 it); the phone was not measured.
 
@@ -268,7 +268,7 @@ is blocked on this host) [measured]:
 **What is inherent.** In upstream's own profile pointwise multiplication is ≈ 16 %; most of its time is LaZer's
 generic sparse-matrix / Schwartz–Zippel bookkeeping over the 153-dimensional quadratic forms, integer arithmetic and
 malloc, on prover and verifier alike [measured]. Against the thresholds on this machine, upstream `R_TX` prove 6.6 s
-is ≈ 2.2× over 3 s and verify 6.6 s ≈ 130× over 50 ms; `R_REG` prove 0.62 s meets 3 s, verify 0.57 s is ≈ 11× over
+is ≈ 1.1× over 6 s (≈ 2.2× over the former 3 s) and verify 6.6 s ≈ 130× over 50 ms; `R_REG` prove 0.62 s meets 6 s, verify 0.57 s is ≈ 11× over
 50 ms [measured]. So the fork's rewrite explains a factor of ≈ 2–2.6; the remaining gap to 50 ms is in the
 statement as LaZer proves it [inference].
 

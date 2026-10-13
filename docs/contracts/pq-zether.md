@@ -1338,8 +1338,8 @@ configured PQZ tokens; the CSP already allows `'wasm-unsafe-eval'`.
 
 The prover streams commitment-matrix expansion from its seed (no tables beyond `NTT(A)`, 512 KB) and reports
 rejection-sampling rounds to the UI; LNP22 retries make prove time variable, hence p95 budgets. Single-threaded in v1:
-WASM threads need cross-origin isolation (COOP/COEP), which the app does not set. The engine exit target is prove ≤ 3 s
-on a desktop (native).
+WASM threads need cross-origin isolation (COOP/COEP), which the app does not set. The engine exit target is prove ≤ 6 s
+on a desktop (native; raised from 3 s by the owner on 2026-10-13).
 
 *Fallback: native prover service run by the user.* `pqz-cli serve` holds the user's 32-byte PQZ leaf (stdin; never the
 BIP-39 seed) and answers `POST /v1/prove` with the same request/response as the worker. **v1 binds loopback only**,
