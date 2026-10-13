@@ -1,0 +1,49 @@
+lazer/aes256ctr.c:339:20: runtime error: applying zero offset to null pointer
+    #0 0x593a34864c40 in _aes256ctr_stream /home/ha/work/ainative/scaas/.claude/worktrees/artifact/pqz-core/lazer/aes256ctr.c:339:20
+    #1 0x593a34864c40 in _rng_urandom /home/ha/work/ainative/scaas/.claude/worktrees/artifact/pqz-core/lazer/rng.c:52:3
+    #2 0x593a34871b6e in _urandom_i64 /home/ha/work/ainative/scaas/.claude/worktrees/artifact/pqz-core/lazer/urandom.c:104:7
+    #3 0x593a347dc6ba in _urandom /home/ha/work/ainative/scaas/.claude/worktrees/artifact/pqz-core/lazer/urandom.c:12:7
+    #4 0x593a3479b1ab in polymat_urandom /home/ha/work/ainative/scaas/.claude/worktrees/artifact/pqz-core/lazer/polymat.c:475:5
+    #5 0x593a34799b61 in abdlop_keygen /home/ha/work/ainative/scaas/.claude/worktrees/artifact/pqz-core/lazer/abdlop.c:55:7
+    #6 0x593a34895680 in rel_keys /home/ha/work/ainative/scaas/.claude/worktrees/artifact/pqz-core/src/pqz_rel.c:127:3
+    #7 0x593a34893dd5 in pqz_prove /home/ha/work/ainative/scaas/.claude/worktrees/artifact/pqz-core/src/pqz_rel.c:1101:7
+    #8 0x593a348aa09f in step_prove /home/ha/work/ainative/scaas/.claude/worktrees/artifact/pqz-core/test/pqz_bench.c:315:10
+    #9 0x593a348aba12 in main /home/ha/work/ainative/scaas/.claude/worktrees/artifact/pqz-core/test/pqz_bench.c:476:20
+    #10 0x72cc1522a1c9 in __libc_start_call_main csu/../sysdeps/nptl/libc_start_call_main.h:58:16
+    #11 0x72cc1522a28a in __libc_start_main csu/../csu/libc-start.c:360:3
+    #12 0x593a346c0354 in _start (/home/ha/work/ainative/scaas/.claude/worktrees/artifact/pqz-core/build/asan/pqz_bench+0x8a354) (BuildId: ffd5d4ec107d5aa86cc4937d907852017149b6aa)
+
+SUMMARY: UndefinedBehaviorSanitizer: undefined-behavior lazer/aes256ctr.c:339:20 
+lazer/lnp-tbox.c:255:3: runtime error: variable length array bound evaluates to non-positive value 0
+    #0 0x593a3481f907 in lnp_tbox_prove /home/ha/work/ainative/scaas/.claude/worktrees/artifact/pqz-core/lazer/lnp-tbox.c:255:3
+    #1 0x593a34898c3c in do_prove /home/ha/work/ainative/scaas/.claude/worktrees/artifact/pqz-core/src/pqz_rel.c:850:3
+    #2 0x593a34894cb3 in pqz_prove /home/ha/work/ainative/scaas/.claude/worktrees/artifact/pqz-core/src/pqz_rel.c:1113:10
+    #3 0x593a348aa09f in step_prove /home/ha/work/ainative/scaas/.claude/worktrees/artifact/pqz-core/test/pqz_bench.c:315:10
+    #4 0x593a348aba12 in main /home/ha/work/ainative/scaas/.claude/worktrees/artifact/pqz-core/test/pqz_bench.c:476:20
+    #5 0x72cc1522a1c9 in __libc_start_call_main csu/../sysdeps/nptl/libc_start_call_main.h:58:16
+    #6 0x72cc1522a28a in __libc_start_main csu/../csu/libc-start.c:360:3
+    #7 0x593a346c0354 in _start (/home/ha/work/ainative/scaas/.claude/worktrees/artifact/pqz-core/build/asan/pqz_bench+0x8a354) (BuildId: ffd5d4ec107d5aa86cc4937d907852017149b6aa)
+
+SUMMARY: UndefinedBehaviorSanitizer: undefined-behavior lazer/lnp-tbox.c:255:3 
+lazer/lnp-tbox.c:3502:3: runtime error: variable length array bound evaluates to non-positive value 0
+    #0 0x593a3483a135 in __schwartz_zippel_accumulate_z3 /home/ha/work/ainative/scaas/.claude/worktrees/artifact/pqz-core/lazer/lnp-tbox.c:3502:3
+    #1 0x593a3481a7e7 in lnp_tbox_prove /home/ha/work/ainative/scaas/.claude/worktrees/artifact/pqz-core/lazer/lnp-tbox.c:685:7
+    #2 0x593a34898c3c in do_prove /home/ha/work/ainative/scaas/.claude/worktrees/artifact/pqz-core/src/pqz_rel.c:850:3
+    #3 0x593a34894cb3 in pqz_prove /home/ha/work/ainative/scaas/.claude/worktrees/artifact/pqz-core/src/pqz_rel.c:1113:10
+    #4 0x593a348aa09f in step_prove /home/ha/work/ainative/scaas/.claude/worktrees/artifact/pqz-core/test/pqz_bench.c:315:10
+    #5 0x593a348aba12 in main /home/ha/work/ainative/scaas/.claude/worktrees/artifact/pqz-core/test/pqz_bench.c:476:20
+    #6 0x72cc1522a1c9 in __libc_start_call_main csu/../sysdeps/nptl/libc_start_call_main.h:58:16
+    #7 0x72cc1522a28a in __libc_start_main csu/../csu/libc-start.c:360:3
+    #8 0x593a346c0354 in _start (/home/ha/work/ainative/scaas/.claude/worktrees/artifact/pqz-core/build/asan/pqz_bench+0x8a354) (BuildId: ffd5d4ec107d5aa86cc4937d907852017149b6aa)
+
+SUMMARY: UndefinedBehaviorSanitizer: undefined-behavior lazer/lnp-tbox.c:3502:3 
+lazer/lnp-tbox.c:908:3: runtime error: variable length array bound evaluates to non-positive value 0
+    #0 0x593a34845981 in lnp_tbox_verify /home/ha/work/ainative/scaas/.claude/worktrees/artifact/pqz-core/lazer/lnp-tbox.c:908:3
+    #1 0x593a3489a0e7 in do_verify /home/ha/work/ainative/scaas/.claude/worktrees/artifact/pqz-core/src/pqz_rel.c:879:10
+    #2 0x593a3489a0e7 in pqz_verify /home/ha/work/ainative/scaas/.claude/worktrees/artifact/pqz-core/src/pqz_rel.c:1146:10
+    #3 0x593a348abbe8 in main /home/ha/work/ainative/scaas/.claude/worktrees/artifact/pqz-core/test/pqz_bench.c:491:15
+    #4 0x72cc1522a1c9 in __libc_start_call_main csu/../sysdeps/nptl/libc_start_call_main.h:58:16
+    #5 0x72cc1522a28a in __libc_start_main csu/../csu/libc-start.c:360:3
+    #6 0x593a346c0354 in _start (/home/ha/work/ainative/scaas/.claude/worktrees/artifact/pqz-core/build/asan/pqz_bench+0x8a354) (BuildId: ffd5d4ec107d5aa86cc4937d907852017149b6aa)
+
+SUMMARY: UndefinedBehaviorSanitizer: undefined-behavior lazer/lnp-tbox.c:908:3 

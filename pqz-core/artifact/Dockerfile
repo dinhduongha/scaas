@@ -8,14 +8,16 @@
 # the Ubuntu snapshot archive (APT_SNAPSHOT), node by version + sha256, LaZer (for --upstream) by commit.
 FROM ubuntu:24.04@sha256:534baea6a22c03a63003dbc8dbe78fe34bc0d7e595d9a9dc9834884ff530eb55
 
-ARG APT_SNAPSHOT=20261014T000000Z
+ARG APT_SNAPSHOT=20261013T000000Z
 ARG NODE_VERSION=26.8.1
 ARG NODE_SHA256=3e301118d7df53d563b7e96c1617545f26e2f76f9724be668d6cab65c15dda5d
 ARG LAZER_COMMIT=3330e487228f633eceb322807b13a596b516770f
 
 # clang 18 + lld 18 (wasm-ld-18): the measured toolchain (host: Ubuntu 24.04, clang 18.1.3); gcc 13, cmake, GMP /
 # MPFR headers and libraries: only for --upstream (upstream LaZer, built from source in the container)
-RUN apt-get update -qq --snapshot "$APT_SNAPSHOT" \
+# The snapshot archive is HTTPS-only, so ca-certificates (root certificates only) comes from the live archive first.
+RUN apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends ca-certificates \
+ && apt-get update -qq --snapshot "$APT_SNAPSHOT" \
  && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends --snapshot "$APT_SNAPSHOT" \
       clang-18=1:18.1.3-1ubuntu1 lld-18=1:18.1.3-1ubuntu1 llvm-18=1:18.1.3-1ubuntu1 \
       gcc-13=13.3.0-6ubuntu2~24.04.1 g++-13=13.3.0-6ubuntu2~24.04.1 build-essential make cmake=3.28.3-1build7 \
