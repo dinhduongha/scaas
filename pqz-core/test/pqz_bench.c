@@ -122,9 +122,9 @@ static const size_t WLEN[NREL] = { sizeof reg_wit, sizeof tx_wit, sizeof burn_wi
 static const unsigned SEEDMUL[NREL] = { 31, 17, 13, 11, 7 };
 /* tamper kind 2: first byte of a 2048-coefficient key in the statement (R_REG pk, R_TX / R_BURN pk_f, disclosure
    pk); kind 5: the last byte of a public scalar (R_REG message, R_TX fee, R_BURN / disclosure amount) */
-static const size_t KEYOFF[NREL] = { PQZ_PREFIX_BYTES + 32, PQZ_PREFIX_BYTES + 32, PQZ_HEADER_BYTES, PQZ_DISC_PK,
+static const size_t KEYOFF[NREL] = { PQZ_PREFIX_BYTES + 32, PQZ_HEADER_BYTES, PQZ_HEADER_BYTES, PQZ_DISC_PK,
                                      PQZ_DISC_PK };
-static const size_t SCALOFF[NREL] = { PQZ_PREFIX_BYTES + 31, PQZ_TX_STMT_BYTES - 1, PQZ_HDR_AMOUNT + 31,
+static const size_t SCALOFF[NREL] = { PQZ_PREFIX_BYTES + 31, PQZ_HDR_FEE + 31, PQZ_HDR_AMOUNT + 31,
                                       PQZ_DISC_AMOUNT + 31, PQZ_DISC_AMOUNT + 31 };
 
 static void
@@ -164,8 +164,14 @@ setup (void)
   const uint8_t *pks[3] = { KT.pk, KF.pk, KA.pk };
   pqz_encrypt (pks, 3, (const uint8_t (*)[16])m, r, e1, (const int16_t (*)[16])e2, u, vs);
 
+  /* header (pq-zether.md §7.7): opTag, proofSystemId, then words hashed only, fee at 256, amount 0 */
   uint8_t *p = tx_stmt;
-  memset (p, 0x5A, PQZ_PREFIX_BYTES), p += PQZ_PREFIX_BYTES;
+  memset (p, 0x5A, PQZ_PREFIX_BYTES);
+  for (int i = PQZ_PREFIX_BYTES; i < PQZ_HEADER_BYTES; i++)
+    p[i] = (uint8_t)(i * 3);
+  memset (p + PQZ_HDR_FEE, 0, 64);
+  be8 (p + PQZ_HDR_FEE + 24, fee);
+  p += PQZ_HEADER_BYTES;
   memcpy (p, KF.pk, PQZ_POLYVEC_BYTES), p += PQZ_POLYVEC_BYTES;
   memcpy (p, KT.pk, PQZ_POLYVEC_BYTES), p += PQZ_POLYVEC_BYTES;
   memcpy (p, KA.pk, PQZ_POLYVEC_BYTES), p += PQZ_POLYVEC_BYTES;
@@ -174,8 +180,6 @@ setup (void)
   memcpy (p, u, PQZ_POLYVEC_BYTES), p += PQZ_POLYVEC_BYTES;
   for (int k = 0; k < 3; k++)
     memcpy (p, vs[k], PQZ_V_BYTES), p += PQZ_V_BYTES;
-  for (int b = 7; b >= 0; b--)
-    *p++ = (uint8_t)(fee >> (8 * b));
 
   p = tx_wit;
   for (int j = 0; j < 2048; j++)
@@ -205,9 +209,9 @@ setup (void)
       memset (st, k ? 0xD5 : 0xD4, PQZ_PREFIX_BYTES);
       for (int i = PQZ_PREFIX_BYTES; i < PQZ_DISC_AMOUNT; i++)
         st[i] = (uint8_t)(i * 7);
-      memset (st + PQZ_DISC_AMOUNT, 0, 32);
+      memset (st + PQZ_DISC_AMOUNT, 0, 64);
       be8 (st + PQZ_DISC_AMOUNT + 24, v);
-      st[PQZ_DISC_AMOUNT + 32] = (uint8_t)(k ? 1 : 0); /* kind */
+      st[PQZ_DISC_KIND + 31] = (uint8_t)(k ? 1 : 0); /* kind: SENDER_S 0, RECEIVER_X 1 (AUDITOR 2) */
       memcpy (st + PQZ_DISC_PK, KT.pk, PQZ_POLYVEC_BYTES);
       memcpy (st + PQZ_DISC_PK + PQZ_POLYVEC_BYTES, u, PQZ_POLYVEC_BYTES);
       memcpy (st + PQZ_DISC_PK + 2 * PQZ_POLYVEC_BYTES, vs[0], PQZ_V_BYTES);
@@ -224,7 +228,8 @@ setup (void)
   for (int j = 0; j < 2048; j++)
     dr_wit[j] = (uint8_t)KT.s[j], le16 (dr_wit + 2048 + 2 * j, KT.e[j]);
 
-  /* R_BURN: burn 123,456 with fee 7 from the same T; fresh (r, e1, e2_f) for the new balance */
+  /* R_BURN: burn 123,456 with fee 7 from the same T; fresh (r, e1, e2_f) for the new balance (pq-zether.md
+     CTR-PQZ-19: burn / refresh randomness is fresh CSPRNG output, never derived from the counter; here the test RNG) */
   {
     static int8_t rb[2048];
     static int16_t e1b[2048], e2b[1][16];

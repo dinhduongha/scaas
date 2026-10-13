@@ -191,11 +191,18 @@ pqz_arena_release (const pqz_arena_mark_t *m)
 {
   top = m->top;
   last = m->last;
-  /* rebuild the free lists from the blocks that remain (drops the listed blocks above the mark) */
-  for (int c = 0; c < ncls; c++)
-    cls_head[c] = NONE;
+  /* rebuild the size classes and free lists from the blocks that remain (drops the listed blocks above the mark,
+     and the classes only they used: the sizes of earlier calls of other relations would otherwise fill the
+     NCLS classes, and the sizes of the next call would not be recycled) */
+  ncls = 0;
   for (size_t o = last; o != NONE; o = H (o)[0])
     if (H (o)[1] & LISTED)
-      push (cls (H (o)[1] & ~(uint64_t)(ALIGN - 1), 0), o);
+      {
+        int c = cls (H (o)[1] & ~(uint64_t)(ALIGN - 1), 1);
+        if (c >= 0)
+          push (c, o);
+        else
+          H (o)[1] &= ~(uint64_t)LISTED; /* stays freed below the mark, not reused */
+      }
   pop ();
 }
