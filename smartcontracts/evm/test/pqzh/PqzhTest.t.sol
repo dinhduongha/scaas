@@ -43,35 +43,36 @@ contract PqzhBench {
         return a;
     }
 
-    /// Mixed-height opening: groups (10, 24 values) and (7, 6 values) as ref.py's merkle vector.
-    function merkle(uint256 n, bytes calldata rows, bytes calldata inj, uint256 index, bytes calldata path)
-        external
-        pure
-        returns (bytes32 root)
-    {
+    /// Mixed-height opening (Pqzh.walk): groups (10, 24 values) and (7, 6 values) as ref.py's merkle vector, the
+    /// injected row right after the leaf row in `rows`.
+    function merkle(uint256 n, bytes calldata rows, uint256 index, bytes calldata path) external pure returns (bytes32 root) {
         uint256[] memory lh = new uint256[](2);
         uint256[] memory w = new uint256[](2);
         (lh[0], lh[1], w[0], w[1]) = (10, 7, 24, 6);
-        for (uint256 i; i < n; ++i) root = _walk(lh, w, index, Pqzh.off(rows), Pqzh.off(inj), Pqzh.off(path));
+        for (uint256 i; i < n; ++i) root = Pqzh.walk(lh, w, index, Pqzh.off(rows), Pqzh.off(path));
     }
 
-    function _walk(uint256[] memory lh, uint256[] memory w, uint256 i, uint256 rows, uint256 inj, uint256 sib)
-        private
-        pure
-        returns (bytes32 node)
-    {
-        node = Pqzh.hashCd(rows, 8 * w[0]);
-        for (uint256 l; l < lh[0]; ++l) {
-            node = Pqzh.merkle(node, i, 1, sib + 32 * l);
-            i >>= 1;
-            if (lh[1] == lh[0] - l - 1) {
-                bytes32 h = Pqzh.hashCd(inj, 8 * w[1]);
-                assembly ("memory-safe") {
-                    mstore(0, node)
-                    mstore(32, h)
-                    node := keccak256(0, 64)
-                }
+    /// Goldilocks^5 (x^5 = 3) multiplication, unrolled, fixed memory buffers (no allocation per step), n times: c_k = sum_{i+j=k} a_i b_j + 3 sum_{i+j=k+5}.
+    function loopEmul5(uint256 n, uint256[5] memory a) external pure returns (uint256[5] memory r) {
+        assembly ("memory-safe") {
+            for { let i := 0 } lt(i, n) { i := add(i, 1) } {
+                mstore(add(r, 0), mod(add(mul(mload(add(a, 0)), mload(add(a, 0))), mul(3, mod(add(add(add(mul(mload(add(a, 32)), mload(add(a, 128))), mul(mload(add(a, 64)), mload(add(a, 96)))), mul(mload(add(a, 96)), mload(add(a, 64)))), mul(mload(add(a, 128)), mload(add(a, 32)))), 0xffffffff00000001))), 0xffffffff00000001))
+                mstore(add(r, 32), mod(add(add(mul(mload(add(a, 0)), mload(add(a, 32))), mul(mload(add(a, 32)), mload(add(a, 0)))), mul(3, mod(add(add(mul(mload(add(a, 64)), mload(add(a, 128))), mul(mload(add(a, 96)), mload(add(a, 96)))), mul(mload(add(a, 128)), mload(add(a, 64)))), 0xffffffff00000001))), 0xffffffff00000001))
+                mstore(add(r, 64), mod(add(add(add(mul(mload(add(a, 0)), mload(add(a, 64))), mul(mload(add(a, 32)), mload(add(a, 32)))), mul(mload(add(a, 64)), mload(add(a, 0)))), mul(3, mod(add(mul(mload(add(a, 96)), mload(add(a, 128))), mul(mload(add(a, 128)), mload(add(a, 96)))), 0xffffffff00000001))), 0xffffffff00000001))
+                mstore(add(r, 96), mod(add(add(add(add(mul(mload(add(a, 0)), mload(add(a, 96))), mul(mload(add(a, 32)), mload(add(a, 64)))), mul(mload(add(a, 64)), mload(add(a, 32)))), mul(mload(add(a, 96)), mload(add(a, 0)))), mul(3, mod(mul(mload(add(a, 128)), mload(add(a, 128))), 0xffffffff00000001))), 0xffffffff00000001))
+                mstore(add(r, 128), mod(add(add(add(add(mul(mload(add(a, 0)), mload(add(a, 128))), mul(mload(add(a, 32)), mload(add(a, 96)))), mul(mload(add(a, 64)), mload(add(a, 64)))), mul(mload(add(a, 96)), mload(add(a, 32)))), mul(mload(add(a, 128)), mload(add(a, 0)))), 0xffffffff00000001))
+                mcopy(a, r, 160)
             }
+        }
+    }
+
+    function mul5(uint256[5] memory a, uint256[5] memory b) public pure returns (uint256[5] memory r) {
+        assembly ("memory-safe") {
+            mstore(add(r, 0), mod(add(mul(mload(add(a, 0)), mload(add(b, 0))), mul(3, mod(add(add(add(mul(mload(add(a, 32)), mload(add(b, 128))), mul(mload(add(a, 64)), mload(add(b, 96)))), mul(mload(add(a, 96)), mload(add(b, 64)))), mul(mload(add(a, 128)), mload(add(b, 32)))), 0xffffffff00000001))), 0xffffffff00000001))
+            mstore(add(r, 32), mod(add(add(mul(mload(add(a, 0)), mload(add(b, 32))), mul(mload(add(a, 32)), mload(add(b, 0)))), mul(3, mod(add(add(mul(mload(add(a, 64)), mload(add(b, 128))), mul(mload(add(a, 96)), mload(add(b, 96)))), mul(mload(add(a, 128)), mload(add(b, 64)))), 0xffffffff00000001))), 0xffffffff00000001))
+            mstore(add(r, 64), mod(add(add(add(mul(mload(add(a, 0)), mload(add(b, 64))), mul(mload(add(a, 32)), mload(add(b, 32)))), mul(mload(add(a, 64)), mload(add(b, 0)))), mul(3, mod(add(mul(mload(add(a, 96)), mload(add(b, 128))), mul(mload(add(a, 128)), mload(add(b, 96)))), 0xffffffff00000001))), 0xffffffff00000001))
+            mstore(add(r, 96), mod(add(add(add(add(mul(mload(add(a, 0)), mload(add(b, 96))), mul(mload(add(a, 32)), mload(add(b, 64)))), mul(mload(add(a, 64)), mload(add(b, 32)))), mul(mload(add(a, 96)), mload(add(b, 0)))), mul(3, mod(mul(mload(add(a, 128)), mload(add(b, 128))), 0xffffffff00000001))), 0xffffffff00000001))
+            mstore(add(r, 128), mod(add(add(add(add(mul(mload(add(a, 0)), mload(add(b, 128))), mul(mload(add(a, 32)), mload(add(b, 96)))), mul(mload(add(a, 64)), mload(add(b, 64)))), mul(mload(add(a, 96)), mload(add(b, 32)))), mul(mload(add(a, 128)), mload(add(b, 0)))), 0xffffffff00000001))
         }
     }
 
@@ -169,6 +170,17 @@ contract PqzhTest is Test {
         }
     }
 
+    function test_fp5_vector() public view {
+        bytes memory v = vm.parseJsonBytes(json, ".fp5");
+        for (uint256 i; i < 4; ++i) {
+            uint256[5] memory a;
+            uint256[5] memory c;
+            for (uint256 j; j < 5; ++j) (a[j], c[j]) = (_wd(v, 15 * i + j), _wd(v, 15 * i + 5 + j));
+            uint256[5] memory r = b.mul5(a, c);
+            for (uint256 j; j < 5; ++j) assertEq(r[j], _wd(v, 15 * i + 10 + j));
+        }
+    }
+
     function test_ext_vectors() public view {
         for (uint256 E = 2; E <= 3; ++E) {
             bytes memory v = vm.parseJsonBytes(json, E == 2 ? ".fp2" : ".fp3");
@@ -186,9 +198,10 @@ contract PqzhTest is Test {
         bytes memory path = vm.parseJsonBytes(json, ".merkle.path");
         uint256 index = vm.parseJsonUint(json, ".merkle.index");
         bytes32 root = bytes32(vm.parseJsonBytes(json, ".merkle.root"));
-        assertEq(b.merkle(1, rows, inj, index, path), root);
+        bytes memory both = bytes.concat(rows, inj);
+        assertEq(b.merkle(1, both, index, path), root);
         path[100] ^= 0x01;
-        assertTrue(b.merkle(1, rows, inj, index, path) != root, "tampered sibling must change the root");
+        assertTrue(b.merkle(1, both, index, path) != root, "tampered sibling must change the root");
     }
 
     function test_fold_vectors() public view {
@@ -249,6 +262,8 @@ contract PqzhTest is Test {
         console2.log("fp3 mul", _perOp(abi.encodeCall(b.loopEmul, (0, x3, 3)), abi.encodeCall(b.loopEmul, (n, x3, 3)), n));
         console2.log("fp2 inv", _perOp(abi.encodeCall(b.loopEinv, (0, x2, 2)), abi.encodeCall(b.loopEinv, (20, x2, 2)), 20));
         console2.log("fp3 inv", _perOp(abi.encodeCall(b.loopEinv, (0, x3, 3)), abi.encodeCall(b.loopEinv, (20, x3, 3)), 20));
+        uint256[5] memory a5 = [x, x2 >> 64, x3 >> 128, uint256(5), uint256(11)];
+        console2.log("fp5 mul (memory)", _perOp(abi.encodeCall(b.loopEmul5, (0, a5)), abi.encodeCall(b.loopEmul5, (n, a5)), n));
         console2.log("ext scale+add", _perOp(abi.encodeCall(b.loopEscaleAdd, (0, x3, x)), abi.encodeCall(b.loopEscaleAdd, (n, x3, x)), n));
     }
 
@@ -258,7 +273,8 @@ contract PqzhTest is Test {
         bytes memory inj = vm.parseJsonBytes(json, ".merkle.inj");
         bytes memory path = vm.parseJsonBytes(json, ".merkle.path");
         uint256 index = vm.parseJsonUint(json, ".merkle.index");
-        uint256 walk = _perOp(abi.encodeCall(b.merkle, (0, rows, inj, index, path)), abi.encodeCall(b.merkle, (10, rows, inj, index, path)), 10);
+        bytes memory both = bytes.concat(rows, inj);
+        uint256 walk = _perOp(abi.encodeCall(b.merkle, (0, both, index, path)), abi.encodeCall(b.merkle, (10, both, index, path)), 10);
         console2.log("merkle depth-10 mixed-height opening (24 + 6 values)", walk);
         uint256 lvl = _perOp(abi.encodeCall(b.path, (0, bytes32(0), index, 10, path)), abi.encodeCall(b.path, (10, bytes32(0), index, 10, path)), 10);
         console2.log("merkle path, 10 levels (keccak opcode)", lvl);
@@ -331,6 +347,11 @@ contract PqzhTest is Test {
         s.verify(shape, stmt, proof);
         gasUsed = g - gasleft();
         proofLen = lp;
+        uint256[12] memory pf = s.profile(shape, stmt, proof);
+        string[12] memory nm = ["  seed (keccak opcode)", "  roots, challenges, OOD, FRI roots, PoW", "  Horner fingerprint",
+            "  DEEP precomputation", "  constraint stand-in", "  opened rows (DEEP numerators)", "  trace Merkle openings",
+            "  DEEP inversions", "  FRI rows + Merkle paths", "  FRI folds", "  final poly + query loop rest", "  total (inside)"];
+        for (uint256 i; i < 12; ++i) console2.log(nm[i], pf[i]);
         // a flipped byte in the last Merkle sibling of the proof must be caught
         proof[lp - 5] ^= 0x01;
         vm.expectRevert();

@@ -126,23 +126,34 @@ library Pqzh {
         pure
         returns (bytes32 node)
     {
-        uint256 depth = lh[0];
-        node = hashCd(rows, 8 * w[0]);
-        uint256 rp = rows + 8 * w[0];
-        uint256 g = 1;
-        uint256 ng = lh.length;
-        for (uint256 l; l < depth; ++l) {
-            node = merkle(node, i, 1, sib + 32 * l);
-            i >>= 1;
-            if (g < ng && lh[g] == depth - l - 1) {
-                bytes32 inj = hashCd(rp, 8 * w[g]);
-                assembly ("memory-safe") {
+        assembly ("memory-safe") {
+            let f := mload(0x40)
+            let depth := mload(add(lh, 32))
+            let len := shl(3, mload(add(w, 32)))
+            calldatacopy(f, rows, len)
+            node := keccak256(f, len)
+            let rp := add(rows, len)
+            let g := 1
+            let ng := mload(lh)
+            let nextH := 0x100
+            if lt(g, ng) { nextH := mload(add(lh, 64)) }
+            for { let l := 0 } lt(l, depth) { l := add(l, 1) } {
+                let b := shl(5, and(i, 1))
+                mstore(b, node)
+                mstore(xor(b, 32), calldataload(add(sib, shl(5, l))))
+                node := keccak256(0, 64)
+                i := shr(1, i)
+                if eq(nextH, sub(sub(depth, l), 1)) {
+                    let wl := shl(3, mload(add(w, shl(5, add(g, 1)))))
+                    calldatacopy(f, rp, wl)
+                    mstore(32, keccak256(f, wl))
                     mstore(0, node)
-                    mstore(32, inj)
                     node := keccak256(0, 64)
+                    rp := add(rp, wl)
+                    g := add(g, 1)
+                    nextH := 0x100
+                    if lt(g, ng) { nextH := mload(add(lh, shl(5, add(g, 1)))) }
                 }
-                rp += 8 * w[g];
-                ++g;
             }
         }
     }
@@ -408,7 +419,7 @@ library Pqzh {
 /// End-to-end PQZH verifier skeleton for the gas study: the work of a Plonky3-style FRI verifier on a given proof
 /// shape (trees, widths, heights, FRI schedule), with every Merkle path and the proof of work enforced. The
 /// constraint check at the out-of-domain point is a stand-in loop of the estimated size (`oodMuls` extension
-/// multiplications, `perMacs` base x ext MACs); the final-polynomial values and the statement fingerprint are
+/// multiplications, `perBf` base-twiddle butterflies); the final-polynomial values and the statement fingerprint are
 /// computed but not enforced (the synthetic proof of ref.py has random values there). Query indices come from the
 /// statement digest (synthetic shortcut, same gas). Not a verifier: never deploy.
 contract PqzhSkeleton {
@@ -439,7 +450,7 @@ contract PqzhSkeleton {
         uint256[] arity;
         uint256 finalLen;
         uint256 oodMuls;
-        uint256 perMacs;
+        uint256 perBf;
         uint256 stmtOff;
         uint256 op;
         bytes32 seed;
@@ -466,18 +477,39 @@ contract PqzhSkeleton {
         uint256[] key;
         uint256[64] tbl;
         uint256 out;
+        uint256[12] prof; // gas per stage, see `profile`
     }
 
-    function verify(bytes calldata shape, bytes calldata stmt, bytes calldata proof) external pure returns (bytes32) {
-        Ctx memory c = _shape(shape);
+    function verify(bytes calldata shape, bytes calldata stmt, bytes calldata proof) external view returns (bytes32) {
+        return bytes32(_run(shape, stmt, proof).out);
+    }
+
+    /// Gas per stage: 0 seed (keccak of the statement), 1 roots / challenges / out-of-domain / FRI roots / proof of
+    /// work, 2 Horner fingerprint, 3 DEEP precomputation, 4 constraint stand-in, 5 per-query opened rows (DEEP
+    /// numerators), 6 trace Merkle openings, 7 DEEP inversions, 8 FRI rows and Merkle paths, 9 FRI folds,
+    /// 10 final polynomial and query overhead (the rest of the query loop), 11 total.
+    function profile(bytes calldata shape, bytes calldata stmt, bytes calldata proof) external view returns (uint256[12] memory) {
+        return _run(shape, stmt, proof).prof;
+    }
+
+    function _run(bytes calldata shape, bytes calldata stmt, bytes calldata proof) private view returns (Ctx memory c) {
+        uint256 g0 = gasleft();
+        c = _shape(shape);
         c.tbl = Pqzh.tables();
+        uint256 g = gasleft();
         _seed(c, stmt);
+        c.prof[0] = g - gasleft();
+        g = gasleft();
         uint256 p = _commit(c, proof);
+        c.prof[1] = g - gasleft();
+        g = gasleft();
         (uint256 h, bool ok) = Pqzh.horner(Pqzh.off(stmt) + c.stmtOff, Pqzh.off(stmt) + stmt.length, c.gamma, c.E);
         if (!ok) revert NonCanonical();
         c.out ^= h;
+        c.prof[2] = g - gasleft();
         _pre(c);
         bytes32 qs = keccak256(abi.encodePacked(c.seed, "QUERY"));
+        g = gasleft();
         for (uint256 q; q < c.Q; ++q) {
             uint256 idx;
             assembly ("memory-safe") {
@@ -488,11 +520,13 @@ contract PqzhSkeleton {
             idx &= (1 << c.H0) - 1;
             p = _query(c, idx, p, q);
         }
+        g -= gasleft();
+        c.prof[10] = g - c.prof[5] - c.prof[6] - c.prof[7] - c.prof[8] - c.prof[9];
         if (p != Pqzh.off(proof) + proof.length) revert ProofLength();
-        return bytes32(c.out);
+        c.prof[11] = g0 - gasleft();
     }
 
-    function _shape(bytes calldata s) private pure returns (Ctx memory c) {
+    function _shape(bytes calldata s) private view returns (Ctx memory c) {
         uint256 i;
         c.E = _w(s, i++);
         c.Q = _w(s, i++);
@@ -519,24 +553,24 @@ contract PqzhSkeleton {
         for (uint256 r; r < c.arity.length; ++r) c.arity[r] = _w(s, i++);
         c.finalLen = _w(s, i++);
         c.oodMuls = _w(s, i++);
-        c.perMacs = _w(s, i++);
+        c.perBf = _w(s, i++);
         c.stmtOff = _w(s, i++);
         c.op = _w(s, i++);
     }
 
-    function _w(bytes calldata s, uint256 i) private pure returns (uint256 v) {
+    function _w(bytes calldata s, uint256 i) private view returns (uint256 v) {
         assembly ("memory-safe") {
             v := calldataload(add(s.offset, shl(5, i)))
         }
     }
 
     /// seed = keccak256(TAG || u8(op) || be32(len) || stmt): the Keccak-256 transcript seed (the EVM keccak opcode).
-    function _seed(Ctx memory c, bytes calldata stmt) private pure {
+    function _seed(Ctx memory c, bytes calldata stmt) private view {
         c.seed = keccak256(abi.encodePacked("SCAAS-PQZH-TRANSCRIPT-V1", uint8(c.op), uint32(stmt.length), stmt));
         c.st = c.seed;
     }
 
-    function _observe(Ctx memory c, uint256 ptr, uint256 len) private pure {
+    function _observe(Ctx memory c, uint256 ptr, uint256 len) private view {
         bytes32 st = c.st;
         assembly ("memory-safe") {
             let f := mload(0x40)
@@ -547,7 +581,7 @@ contract PqzhSkeleton {
         c.st = st;
     }
 
-    function _sample(Ctx memory c) private pure returns (uint256 r) {
+    function _sample(Ctx memory c) private view returns (uint256 r) {
         bytes32 st = c.st;
         assembly ("memory-safe") {
             mstore(0, st)
@@ -561,7 +595,7 @@ contract PqzhSkeleton {
     }
 
     /// Roots and challenges, out-of-domain values, FRI roots, final polynomial, proof of work.
-    function _commit(Ctx memory c, bytes calldata proof) private pure returns (uint256 p) {
+    function _commit(Ctx memory c, bytes calldata proof) private view returns (uint256 p) {
         p = Pqzh.off(proof);
         uint256 k;
         for (uint256 t; t < c.trees.length; ++t) {
@@ -616,7 +650,7 @@ contract PqzhSkeleton {
         p += 8;
     }
 
-    function _cd(uint256 p) private pure returns (uint256 v) {
+    function _cd(uint256 p) private view returns (uint256 v) {
         assembly ("memory-safe") {
             v := calldataload(p)
         }
@@ -624,7 +658,7 @@ contract PqzhSkeleton {
 
     /// Once per proof: DEEP alpha powers, per (tree, group, point) lambda = ad^offset and the combined
     /// out-of-domain value O = sum_c ad^c ood_c; zeta * g per height; the constraint-check stand-in.
-    function _alphaPowers(Ctx memory c) private pure returns (uint256[] memory packed) {
+    function _alphaPowers(Ctx memory c) private view returns (uint256[] memory packed) {
         uint256 E = c.E;
         uint256 maxw;
         for (uint256 t; t < c.trees.length; ++t) {
@@ -642,7 +676,7 @@ contract PqzhSkeleton {
         }
     }
 
-    function _oodCombine(Ctx memory c, uint256[] memory packed) private pure {
+    function _oodCombine(Ctx memory c, uint256[] memory packed) private view {
         uint256 terms;
         for (uint256 t; t < c.trees.length; ++t) terms += c.trees[t].w.length * c.trees[t].npts;
         c.lam = new uint256[](terms);
@@ -663,7 +697,7 @@ contract PqzhSkeleton {
         }
     }
 
-    function _combine(uint256[] memory packed, uint256 ptr, uint256 w, uint256 E) private pure returns (uint256 o, uint256) {
+    function _combine(uint256[] memory packed, uint256 ptr, uint256 w, uint256 E) private view returns (uint256 o, uint256) {
         for (uint256 col; col < w; ++col) {
             o = o.eadd(packed[col].emul(Pqzh.ldExt(ptr, E), E));
             ptr += 8 * E;
@@ -671,7 +705,8 @@ contract PqzhSkeleton {
         return (o, ptr);
     }
 
-    function _pre(Ctx memory c) private pure {
+    function _pre(Ctx memory c) private view {
+        uint256 g = gasleft();
         uint256[] memory packed = _alphaPowers(c);
         _oodCombine(c, packed);
         c.z1 = new uint256[](c.H0 + 1);
@@ -684,8 +719,11 @@ contract PqzhSkeleton {
         c.den = new uint256[](2 * (c.H0 + 1));
         c.pre = new uint256[](2 * (c.H0 + 1) + 1);
         c.key = new uint256[](2 * (c.H0 + 1));
+        c.prof[3] = g - gasleft();
+        g = gasleft();
         // constraint-check stand-in: oodMuls extension multiplications over the out-of-domain values (folded with
-        // alpha), perMacs base x ext MACs (the period-64 NTT weight columns)
+        // alpha), perBf base-twiddle butterflies (the 64 period-64 NTT-weight columns at once: a 64-point transform
+        // of their Lagrange weights)
         uint256 E = c.E;
         uint256 acc;
         uint256 n = (c.finalPtr - c.oodPtr) / (8 * E);
@@ -694,11 +732,16 @@ contract PqzhSkeleton {
             acc = acc.emul(c.alpha, E).eadd(Pqzh.ldExt(ptr + 8 * E * (i % n), E));
         }
         uint256 z = c.zeta;
-        for (uint256 i; i < c.perMacs; ++i) acc = acc.eadd(z.escale(((i + 1) * 0x9e3779b97f4a7c15) % P));
+        for (uint256 i; i < c.perBf; ++i) {
+            uint256 v = z.escale(((i + 1) * 0x9e3779b97f4a7c15) % P);
+            acc = acc.eadd(v);
+            z = z.esub(v);
+        }
         c.out ^= acc;
+        c.prof[4] = g - gasleft();
     }
 
-    function _query(Ctx memory c, uint256 idx, uint256 p, uint256 q) private pure returns (uint256) {
+    function _query(Ctx memory c, uint256 idx, uint256 p, uint256 q) private view returns (uint256) {
         uint256 x = mulmod(7, Pqzh.pw(c.tbl, idx, c.H0, 31), P);
         for (uint256 h; h <= c.H0; ++h) {
             c.ro[h] = 0;
@@ -706,20 +749,27 @@ contract PqzhSkeleton {
             c.num[2 * h + 1] = 0;
         }
         uint256 ti;
-        for (uint256 t; t < c.trees.length; ++t) {
-            Tree memory tr = c.trees[t];
-            uint256 rowsBytes;
-            (rowsBytes, ti) = _rows(c, tr, p, ti);
-            uint256 depth = tr.lh[0];
-            if (Pqzh.walk(tr.lh, tr.w, idx >> (c.H0 - depth), p, p + rowsBytes) != tr.root) revert MerkleMismatch(t, q);
-            p += rowsBytes + 32 * depth;
-        }
+        for (uint256 t; t < c.trees.length; ++t) (p, ti) = _tree(c, t, idx, p, q, ti);
+        uint256 g2 = gasleft();
         _deep(c, x);
+        c.prof[7] += g2 - gasleft();
         return _fri(c, idx, p, q);
     }
 
+    function _tree(Ctx memory c, uint256 t, uint256 idx, uint256 p, uint256 q, uint256 ti) private view returns (uint256, uint256) {
+        Tree memory tr = c.trees[t];
+        uint256 rowsBytes;
+        uint256 g = gasleft();
+        (rowsBytes, ti) = _rows(c, tr, p, ti);
+        c.prof[5] += g - gasleft();
+        g = gasleft();
+        if (Pqzh.walk(tr.lh, tr.w, idx >> (c.H0 - tr.lh[0]), p, p + rowsBytes) != tr.root) revert MerkleMismatch(t, q);
+        c.prof[6] += g - gasleft();
+        return (p + rowsBytes + 32 * tr.lh[0], ti);
+    }
+
     /// DEEP numerators of one tree's opened rows: num[h, point] += lambda (sum_c ad^c v_c - O).
-    function _rows(Ctx memory c, Tree memory tr, uint256 p, uint256 ti) private pure returns (uint256 rowsBytes, uint256) {
+    function _rows(Ctx memory c, Tree memory tr, uint256 p, uint256 ti) private view returns (uint256 rowsBytes, uint256) {
         for (uint256 g; g < tr.w.length; ++g) {
             (uint256 R, bool bad) = Pqzh.rowsum(p + rowsBytes, tr.w[g], c.apow, c.E);
             if (bad) revert NonCanonical();
@@ -734,7 +784,7 @@ contract PqzhSkeleton {
     }
 
     /// ro[h] = sum over points of num[h, point] / (x^(2^(H0 - h)) - z_point), one batched inversion per query.
-    function _deep(Ctx memory c, uint256 x) private pure {
+    function _deep(Ctx memory c, uint256 x) private view {
         uint256 E = c.E;
         uint256 n;
         uint256[] memory den = c.den;
@@ -764,7 +814,7 @@ contract PqzhSkeleton {
         }
     }
 
-    function _fri(Ctx memory c, uint256 i, uint256 p, uint256 q) private pure returns (uint256) {
+    function _fri(Ctx memory c, uint256 i, uint256 p, uint256 q) private view returns (uint256) {
         uint256[4] memory st = [i, c.H0, p, c.ro[c.H0]]; // index, log height, proof pointer, folded value
         for (uint256 r; r < c.arity.length; ++r) _round(c, r, st, q);
         // final polynomial at the query point (computed, not enforced: synthetic proof)
@@ -775,14 +825,18 @@ contract PqzhSkeleton {
         return st[2];
     }
 
-    function _round(Ctx memory c, uint256 r, uint256[4] memory st, uint256 q) private pure {
+    function _round(Ctx memory c, uint256 r, uint256[4] memory st, uint256 q) private view {
+        uint256 g = gasleft();
         uint256 a = c.arity[r];
         uint256 h = st[1];
         uint256 s = _gather(c.ev, 1 << a, st[0] & ((1 << a) - 1), st[3], st[2], c.E);
         uint256 li = st[0] >> a;
         if (Pqzh.merkle(_leaf(c.ev, 1 << a, c.E), li, h - a, st[2] + s) != c.friRoots[r]) revert MerkleMismatch(100 + r, q);
         st[2] += s + 32 * (h - a);
+        c.prof[8] += g - gasleft();
+        g = gasleft();
         uint256 folded = Pqzh.fold(c.ev, a, c.betas[r], Pqzh.pw(c.tbl, li, h - a, 63 - a), c.E, c.tbl);
+        c.prof[9] += g - gasleft();
         h -= a;
         if (c.used[h]) folded = folded.eadd(c.betaK[r].emul(c.ro[h], c.E));
         (st[0], st[1], st[3]) = (li, h, folded);
@@ -791,7 +845,7 @@ contract PqzhSkeleton {
     /// The row of k values: the verifier's own at `pos`, the k - 1 siblings from calldata `p`; returns their bytes.
     function _gather(uint256[] memory ev, uint256 k, uint256 pos, uint256 folded, uint256 p, uint256 E)
         private
-        pure
+        view
         returns (uint256 s)
     {
         for (uint256 j; j < k; ++j) {
@@ -805,7 +859,7 @@ contract PqzhSkeleton {
     }
 
     /// keccak256 of k ext values as E 8-byte big-endian coefficients each.
-    function _leaf(uint256[] memory ev, uint256 k, uint256 E) private pure returns (bytes32 h) {
+    function _leaf(uint256[] memory ev, uint256 k, uint256 E) private view returns (bytes32 h) {
         assembly ("memory-safe") {
             let f := mload(0x40)
             let o := f

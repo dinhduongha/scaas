@@ -66,6 +66,14 @@ def emul(a, b):
     return ((c[0] + c[3]) % P, (c[1] + c[3] + c[4]) % P, (c[2] + c[4]) % P)
 
 
+def emul5(a, b):                            # Goldilocks^5, x^5 = 3 (p3-goldilocks BinomiallyExtendable<5>)
+    c = [0] * 9
+    for i in range(5):
+        for j in range(5):
+            c[i + j] += a[i] * b[j]
+    return tuple((c[k] + 3 * (c[k + 5] if k + 5 < 9 else 0)) % P for k in range(5))
+
+
 def einv(a):
     if len(a) == 2:
         n = inv((a[0] * a[0] - 7 * a[1] * a[1]) % P)
@@ -257,7 +265,7 @@ def shape_words(sh):
         w += [1 if t['fixed'] else 0, int.from_bytes(t.get('root', bytes(32)), 'big'), t['npts'], len(t['groups'])]
         for lh, wd in t['groups']:
             w += [lh, wd]
-    w += [len(sh['arity'])] + sh['arity'] + [sh['finalLen'], sh['oodMuls'], sh['perMacs'], sh['stmtOff'], sh['op']]
+    w += [len(sh['arity'])] + sh['arity'] + [sh['finalLen'], sh['oodMuls'], sh['perBf'], sh['stmtOff'], sh['op']]
     return b''.join(x.to_bytes(32, 'big') for x in w)
 
 
@@ -413,6 +421,11 @@ def components(rng):
             x, y = tuple(rng.randrange(P) for _ in range(E)), tuple(rng.randrange(P) for _ in range(E))
             rows += [pack(x), pack(y), pack(emul(x, y)), pack(einv(x))]
         v[f'fp{E}'] = words(rows)
+    rows = []
+    for _ in range(4):
+        x, y = tuple(rng.randrange(P) for _ in range(5)), tuple(rng.randrange(P) for _ in range(5))
+        rows += list(x) + list(y) + list(emul5(x, y))
+    v['fp5'] = words(rows)
     # Merkle depth 10, one leaf row of 24 elements, one injected group of 6 elements at height 2^7
     groups, idx = [(10, 24), (7, 6)], rng.randrange(1 << 10)
     rows = [{idx: [rng.randrange(P) for _ in range(24)]}, {idx >> 3: [rng.randrange(P) for _ in range(6)]}]
@@ -478,6 +491,9 @@ def selftest():
             ys = [sum_ext(cf, e(xx, E)) for xx in xs]
             assert fold_row(3, 9, a, beta, ys) == sum_ext(cf, beta)
     assert pruned_siblings(3, [1, 2, 5]) == 4, 'pruning.rs doc example'
+    x = tuple(rng.randrange(P) for _ in range(5))
+    y = (0, 1, 0, 0, 0)
+    assert emul5(emul5(emul5(emul5(y, y), y), y), y) == (3, 0, 0, 0, 0), 'x^5 = 3'
     return True
 
 
