@@ -1,8 +1,16 @@
 #ifndef STOPWATCH_H
 #define STOPWATCH_H
 #include "lazer.h"
+#ifndef PQZ_FREESTANDING
 #include <stdio.h>
 #include <time.h>
+#else /* PQZ: no libc on wasm32; timers are disabled, the type only has to exist */
+struct timespec
+{
+  long long tv_sec;
+  long tv_nsec;
+};
+#endif
 
 #define STOPWATCH_SEC (1ULL)           /* seconds per second */
 #define STOPWATCH_MSEC (1000ULL)       /* milliseconds per second */

@@ -1973,7 +1973,7 @@ _get_coeffvec (poly_t poly)
   return poly->coeffs;
 }
 
-#ifndef _OS_IOS
+#if !defined(_OS_IOS) && defined(__x86_64__) /* PQZ: unused by the fork; absent on wasm32 */
 #include <immintrin.h>
 #include <x86intrin.h>
 #endif
@@ -2014,7 +2014,7 @@ static inline unsigned char
 _addcarry_u64_ (unsigned char c, unsigned long long x, unsigned long long y,
                 unsigned long long *p)
 {
-#ifdef _OS_IOS
+#if defined(_OS_IOS) || !defined(__x86_64__) /* PQZ: portable builtin off x86-64 (wasm32) */
   unsigned long long cout;
 
   *p = __builtin_addcll (x, y, c, &cout);
@@ -2028,7 +2028,7 @@ static inline unsigned char
 _subborrow_u64_ (unsigned char c, unsigned long long x, unsigned long long y,
                  unsigned long long *p)
 {
-#ifdef _OS_IOS
+#if defined(_OS_IOS) || !defined(__x86_64__) /* PQZ: portable builtin off x86-64 (wasm32) */
   unsigned long long cout;
 
   *p = __builtin_subcll (x, y, c, &cout);
@@ -2541,7 +2541,7 @@ static inline void
 int_lshift (int_t r, const int_t a, unsigned int n)
 {
   unsigned int nlimbs, nbits;
-  long i;
+  int64_t i; /* PQZ: was long; on ILP32 (wasm32) i >= <unsigned int> compared unsigned and ran below 0 */
 
   nlimbs = n / NBITS_LIMB;
   nbits = n - nlimbs * NBITS_LIMB;

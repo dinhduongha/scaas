@@ -30,6 +30,7 @@ native() {
     objs="$objs $o"
   done
   ar rcs $B/native/libpqz.a $objs
+  ./check_symbols.sh $objs
   $CC -shared -Wl,--gc-sections -o $B/native/libpqz.so $objs
   # tests and bench (hosted programs; the library objects stay libc-free)
   $CC -std=gnu11 -O2 $WARN -Isrc -o $B/native/pqz_bench test/pqz_bench.c $B/native/libpqz.a
@@ -37,8 +38,31 @@ native() {
     -o $B/native/kat_dump kat/lazer_dump.c $B/native/libpqz.a
 }
 
+# wasm32: freestanding (no libc, no compiler-rt; src/pqz_wasm_rt.c), 8 MiB stack below the data, arena from
+# __heap_base (test/run_wasm.mjs grows the memory)
+wasm() {
+  lazer_h
+  mkdir -p $B/wasm
+  W="--target=wasm32-unknown-unknown -ffreestanding -fno-builtin -DPQZ_FREESTANDING -Isrc/freestanding"
+  objs=""
+  for f in $LIBSRC src/pqz_wasm_rt.c; do
+    o=$B/wasm/$(basename "$f" .c).o
+    ${CLANG:-clang} $W $CFLAGS_LIB -c "$f" -o "$o"
+    objs="$objs $o"
+  done
+  ./check_symbols.sh $objs
+  ${CLANG:-clang} $W $CFLAGS_LIB -DPQZ_WASM -c test/pqz_bench.c -o $B/wasm/pqz_bench.o
+  ex=""
+  for e in step_init step_prove_reg step_prove_tx step_len step_verify step_verify_bad step_arena_peak __heap_base; do
+    ex="$ex --export=$e"
+  done
+  ${WASM_LD:-wasm-ld-18} --no-entry $ex -z stack-size=8388608 --stack-first --max-memory=4294967296 \
+    -o $B/wasm/pqz.wasm $objs $B/wasm/pqz_bench.o
+}
+
 case "${1:-native}" in
   native) native ;;
-  all) native ;;
+  wasm) wasm ;;
+  all) native && wasm ;;
   *) echo "usage: $0 native|wasm|all" >&2; exit 2 ;;
 esac

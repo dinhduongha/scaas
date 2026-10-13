@@ -230,10 +230,10 @@ void
 coder_enc_grandom (coder_state_t state, const intvec_t v, unsigned int log2o)
 {
   const unsigned int log2ao = log2o + 1;
-  const long ao = (limb_t)1 << log2ao;
+  const int64_t ao = (limb_t)1 << log2ao;
   unsigned int i, j, nones, _bit;
   unsigned int nbytes = 0;
-  long z, z0, z1;
+  int64_t z, z0, z1; /* PQZ: int64_t, was long (32-bit on wasm32) */
   int_srcptr elem;
   uint8_t *_byte;
 
@@ -299,8 +299,8 @@ void
 coder_dec_grandom (coder_state_t state, intvec_t v, unsigned int log2o)
 {
   const unsigned int log2ao = log2o + 1;
-  const long ao = (limb_t)1 << log2ao;
-  long z, z0, z1;
+  const int64_t ao = (limb_t)1 << log2ao;
+  int64_t z, z0, z1; /* PQZ: int64_t, was long (32-bit on wasm32) */
   const uint8_t *_byte;
   unsigned int nbytes = 0;
   unsigned int i, j, _bit, nones;
@@ -320,19 +320,19 @@ coder_dec_grandom (coder_state_t state, intvec_t v, unsigned int log2o)
       _inc_idx (&nbytes, &_bit);
     _inc_idx (&nbytes, &_bit); /* final zero */
 
-    z1 = (nones % 2 == 0 ? -(long)nones / 2 : ((long)nones + 1) / 2);
+    z1 = (nones % 2 == 0 ? -(int64_t)nones / 2 : ((int64_t)nones + 1) / 2);
 
     /* z0: binary encoding (two's complement) */
     z0 = 0;
     for (j = 0; j < log2ao; j++)
       {
-        z0 |= ((((long)RDB (nbytes) & ((long)1 << _bit)) >> _bit) << j);
+        z0 |= ((((int64_t)RDB (nbytes) & ((int64_t)1 << _bit)) >> _bit) << j);
 
         _inc_idx (&nbytes, &_bit);
       }
 
     if ((z0 & ((limb_t)1 << (log2ao - 1))) > 0)
-      z0 |= (((unsigned long)~0) << log2ao); /* sign-extend */
+      z0 |= ((~(uint64_t)0) << log2ao); /* sign-extend */
 
     z = ao * z1 + z0;
 

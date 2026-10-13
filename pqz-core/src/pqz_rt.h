@@ -53,6 +53,8 @@ void *memcpy (void *d, const void *s, size_t n);
 void *memmove (void *d, const void *s, size_t n);
 void *memset (void *d, int c, size_t n);
 int memcmp (const void *a, const void *b, size_t n);
+#define htole16(x) ((uint16_t)(x))
+#define le16toh(x) ((uint16_t)(x))
 #define htole64(x) ((uint64_t)(x))
 #define le64toh(x) ((uint64_t)(x))
 #define htole32(x) ((uint32_t)(x))
