@@ -189,7 +189,50 @@ and 273 MB). The tables add 9.1 MB at `pqz_init` (A 1 MB, `R_REG` keys 3.0 MB, `
 **Prover unchanged:** the bench's proof hash over seeds 0..2 is `3bc7e9b3` / `834d6853` as on main; arithmetic KAT
 19/19 [measured].
 
-## 6. Risks and open points
+## 6. At a glance, coverage, maintenance, integration
+
+**Generic vs specialised** (portable build unless stated; numbers from §1 and §5) [measured]:
+
+| | Generic (`pqz_verify`, LaZer `tbox`) | Specialised (`pqz_verify_fast`) |
+|---|---|---|
+| How v is computed | every equation built as a sparse quadratic form over the (s, o(s)) slots, folded into accumulators, then evaluated once | every equation evaluated directly on z, combined with the same scalars (§3) |
+| Ring products | ≈ 394× the mandatory count (dense Gram matrices of selection matrices, `pqz-verifier-floor.md`) | the mandatory ones only |
+| Arithmetic | LaZer's generic integers and polynomials | complete NTT, degree 64, over 4 × 30-bit primes, exact for any input |
+| JL matrix / fold | bitsliced AES / generic | table AES (AES-NI optional), 8-row subset-sum tables |
+| `R_TX` verify, native / wasm | 660 / 741 ms | 7.85 / 11.9 ms (p50) |
+| `R_REG` verify, native / wasm | 166 / 204 ms | 3.97 / 5.9 ms (p50) |
+| Arena per verify, `R_REG` / `R_TX` | 81 / 273 MB | 1.06 / 1.67 MB (+ 9.1 MB tables once) |
+| Relations | any, from the generated parameters | `R_REG` and `R_TX` only |
+
+**Coverage of the precompile ops** (pq-zether.md §9.1). Rollover carries no proof.
+
+| op | Relation | In `pqz-core` | Specialised verifier |
+|---|---|---|---|
+| `OP_REGISTER` | `R_REG` | yes | yes |
+| `OP_TRANSFER` | `R_TX` | yes | yes |
+| `OP_BURN` (also REFRESH) | `R_BURN` = `R_TX` rows 1, 2, 4, 6, 7 with `d` public | not yet | to write with the relation; mostly `R_TX` code |
+| `OP_DISCLOSE_SENDER` | `R_DS` | not yet | to write with the relation |
+| `OP_DISCLOSE_RECEIVER` (also auditor) | `R_DR` | not yet | to write with the relation (runs in `eth_call`, so speed matters less) |
+
+**What a change costs** [inference, from `pqz_sv_setup` and the `R_TX` evaluation code]:
+
+| Change | Example | Specialised verifier |
+|---|---|---|
+| Proof-system parameters | `l2Bsqr`, `Bz3sqr`, `Bz4`, `gamma`, `D`, `m`, `kmsis`, stdev, block sizes `n[i]` | read from the generated `*params.h` at `pqz_init`: regenerate, rerun `sv/diff.sh` |
+| Structural assumptions | `d = 64`, `log2 q = 42`, λ = 4, ω = 8, number of blocks (2 / 7), `nprime = 1`, size totals | checked at `pqz_init`; a mismatch makes init fail (`PQZ_ERR_INTERNAL`), never a wrong accept; code change |
+| Relation formulas | an `R_TX` row added or changed, Δ = 2^26 − 1, 16 digits × 4 bits, slot layout (`SLOT_M` 14 bits, `SLOT_C` 11, `SLOT_E` 25), `NPK` | hand-written from `pqz_rel.c` (`build_reg`, `build_tx`); not checked at init; the differential test fails on the first honest proof |
+
+So the differential test (`sv/diff.sh`) should run in CI whenever `pqz_rel.c`, `params/` or `pqz_sv.c` changes.
+Generating the evaluation code from the same relation spec (as LaZer's codegen does for parameters) would remove the
+hand copy; with five fixed relations, hand-written code plus the differential test is enough [inference].
+
+**Integration.** The verifier runs inside the node's precompile (`libpqz`, C), not in Solidity: the precompile would
+call `pqz_verify_fast` instead of `pqz_verify`, and the op prices follow the measured time (CTR-PQZ-11). Contracts and
+ABI do not change. Clients generate nothing new: the prover and the proof bytes are unchanged, and the specialised
+verifier accepts the same proofs; a wallet (wasm) can check its own proof before sending in ≈ 12 ms instead of
+≈ 0.8 s.
+
+## 7. Risks and open points
 
 - **Second implementation.** The specialised verifier re-states LaZer's equations (`lnp-tbox.c`, `pqz_rel.c`) by
   hand. The differential test covers what honest and mutated proofs reach; it cannot construct a proof that passes
@@ -205,7 +248,7 @@ and 273 MB). The tables add 9.1 MB at `pqz_init` (A 1 MB, `R_REG` keys 3.0 MB, `
 - Not done: hand-written AVX2 for the NTT and the products (the x86-64-v3 build relies on auto-vectorisation),
   wasm SIMD tuning, a run on the chain host or a phone.
 
-## 7. Files and reruns
+## 8. Files and reruns
 
 ```sh
 cd pqz-core
