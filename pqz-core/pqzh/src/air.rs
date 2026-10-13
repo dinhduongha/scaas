@@ -13,7 +13,7 @@
 
 use std::borrow::Cow;
 
-use p3_air::{Air, AirBuilder, BaseAir, PermutationAirBuilder, WindowAccess};
+use p3_air::{Air, AirBuilder, BaseAir, WindowAccess};
 use p3_field::PrimeCharacteristicRing;
 use p3_lookup::{Count, InteractionBuilder, LookupBus, PermutationCheckBus};
 use p3_matrix::dense::RowMajorMatrix;
@@ -134,7 +134,7 @@ impl PolyAir {
         RowMajorMatrix::new(v, PC_W)
     }
 
-    fn eval<AB: PermutationAirBuilder<F = F> + InteractionBuilder>(&self, b: &mut AB) {
+    fn eval<AB: InteractionBuilder<F = F>>(&self, b: &mut AB) {
         let main = b.main();
         let c: Vec<AB::Expr> = main.current_slice().iter().map(|&x| x.into()).collect();
         let n: Vec<AB::Expr> = main.next_slice().iter().map(|&x| x.into()).collect();
@@ -336,7 +336,7 @@ impl MvAir {
         RowMajorMatrix::new(v, w)
     }
 
-    fn eval<AB: PermutationAirBuilder<F = F> + InteractionBuilder>(&self, b: &mut AB) {
+    fn eval<AB: InteractionBuilder<F = F>>(&self, b: &mut AB) {
         let main = b.main();
         let c: Vec<AB::Expr> = main.current_slice().iter().map(|&x| x.into()).collect();
         let n: Vec<AB::Expr> = main.next_slice().iter().map(|&x| x.into()).collect();
@@ -371,7 +371,7 @@ impl RangeAir {
         RowMajorMatrix::new(v, 2)
     }
 
-    fn eval<AB: PermutationAirBuilder<F = F> + InteractionBuilder>(&self, b: &mut AB) {
+    fn eval<AB: InteractionBuilder<F = F>>(&self, b: &mut AB) {
         let main = b.main();
         let (c0, c1) = (main.current_slice()[0], main.current_slice()[1]);
         let n0 = main.next_slice()[0];
@@ -490,7 +490,7 @@ impl DigitAir {
         k
     }
 
-    fn eval<AB: PermutationAirBuilder<F = F> + InteractionBuilder>(&self, b: &mut AB) {
+    fn eval<AB: InteractionBuilder<F = F>>(&self, b: &mut AB) {
         use dc::*;
         let main = b.main();
         let c: Vec<AB::Expr> = main.current_slice().iter().map(|&x| x.into()).collect();
@@ -608,7 +608,7 @@ impl PqzhAir {
     }
 }
 
-impl<AB: PermutationAirBuilder<F = F> + InteractionBuilder> Air<AB> for PqzhAir {
+impl<AB: InteractionBuilder<F = F>> Air<AB> for PqzhAir {
     fn eval(&self, b: &mut AB) {
         match self {
             PqzhAir::Poly(a) => a.eval(b),

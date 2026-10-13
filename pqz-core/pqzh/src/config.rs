@@ -41,8 +41,13 @@ impl CryptographicHasher<F, [u8; 32]> for BeKeccak {
     }
 }
 
-type Compress = CompressionFunctionFromHasher<Keccak256Hash, 2, 32>;
-type ValMmcs = MerkleTreeMmcs<F, u8, BeKeccak, Compress, 2, 32>;
+pub type Compress = CompressionFunctionFromHasher<Keccak256Hash, 2, 32>;
+pub type ValMmcs = MerkleTreeMmcs<F, u8, BeKeccak, Compress, 2, 32>;
+
+/// the Keccak-256 Merkle tree over big-endian rows
+pub fn mmcs(cap_height: usize) -> ValMmcs {
+    ValMmcs::new(BeKeccak, Compress::new(Keccak256Hash {}), cap_height)
+}
 type HidingValMmcs = MerkleTreeHidingMmcs<F, u8, BeKeccak, Compress, StdRng, 2, 32, 4>;
 type Dft = Radix2DitParallel<F>;
 

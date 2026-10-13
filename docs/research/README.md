@@ -51,5 +51,6 @@ output) are kept while the repository is private and are dropped before a public
 | [pqz-relations-burn-disclose.md](pqz-relations-burn-disclose.md) | PQZ relations `R_BURN`, `R_DS`, `R_DR`: burn / refresh and disclosure proofs in `pqz-core` (P6) (2026-10-13) |
 | [pqzh-prototype.md](pqzh-prototype.md) | PQZH prototype: `R_REG` and `R_TX` as a Plonky3 STARK — sizes, timings, wasm32, ZK, soundness sweep (P6-PQZH) (2026-10-13) |
 | [pqzh-solidity-verifier.md](pqzh-solidity-verifier.md) | PQZH Solidity verifier: gas without the precompile (P6-PQZH-SOL) (2026-10-13) |
+| [pqzh-zk-ext5.md](pqzh-zk-ext5.md) | PQZH with zero knowledge over Goldilocks⁵ at 128 bits: EVM-friendly configuration, proven / conjectured sizes, Merkle caps, WHIR (P6-PQZH) (2026-10-14) |
 | [node-ai-agents.md](node-ai-agents.md) | scaas-node and AI agents — direction (2026-10-11) |
 | [zether-disclosure.md](zether-disclosure.md) | Zether disclosure — who can reveal what, under which conditions (2026-10-11) |

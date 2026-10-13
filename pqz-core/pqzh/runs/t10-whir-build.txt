@@ -1,0 +1,2 @@
+   Compiling pqzh v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzhnext/pqz-core/pqzh)
+    Finished `release` profile [optimized + debuginfo] target(s) in 30.70s
