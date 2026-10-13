@@ -679,18 +679,12 @@ urandom (uint64_t *v, unsigned n, uint64_t mod, unsigned log2mod, const prg_t *g
 #define urandom_q(v, n, g, dom) urandom ((v), (n), Q, 42, (g), (dom))
 
 /* Challenges of one batch of M evaluation equations, derived as lnp-tbox.c's __schwartz_zippel_accumulate2
-   derives them (2 M values mod q from (seed, dom)). g[(2 i + h) M + j] weights equation j in half h (0: first
-   accumulator, 1: second) of accumulator pair i < LAMBDA / 2. */
+   derives them (LAMBDA M values mod q from (seed, dom), row 2 i + h for half h of pair i). g[(2 i + h) M + j]
+   weights equation j in half h (0: first accumulator, 1: second) of accumulator pair i < LAMBDA / 2. */
 static int
 sz_eval_challenges (uint64_t *g, const prg_t *seed, uint32_t dom, unsigned M)
 {
-  uint64_t V[2 * M];
-  if (!urandom_q (V, 2 * M, seed, dom))
-    return 0;
-  for (unsigned i = 0; i < LAMBDA / 2; i++)
-    for (unsigned j = 0; j < M; j++)
-      g[(2 * i) * M + j] = V[j], g[(2 * i + 1) * M + j] = V[M + j];
-  return 1;
+  return urandom_q (g, LAMBDA * M, seed, dom);
 }
 
 /* intmat_urandom: row i from dom (dom << 32 | i * ncols) */
