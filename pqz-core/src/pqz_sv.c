@@ -97,11 +97,13 @@ mulq (uint64_t a, uint64_t b)
   x = (x >> 42) * 215 + (x & M42);
   return pqz_csubq (x);
 }
-/* any |x| < 2^62 -> [0, q) */
+/* -q 2^20 <= x < 2^62 -> [0, q). q 2^20 = 2^62 - 215 2^20, so x + q 2^20 lies in [0, 2^63); below -q 2^20 the
+   result would be wrong. Every caller passes |x| < 2^51 (JL fold < 256 q, statement and proof values < q, bit
+   coefficients < 2^40). */
 static inline uint64_t
 modq (int64_t x)
 {
-  uint64_t u = (uint64_t)(x + ((int64_t)Q << 20)); /* q 2^20 > 2^62 */
+  uint64_t u = (uint64_t)(x + ((int64_t)Q << 20)); /* in [0, 2^63) by the precondition */
   u = (u & M42) + 215 * (u >> 42);                  /* < 2^42 + 2^31 */
   u = (u & M42) + 215 * (u >> 42);
   return pqz_csubq (u);
@@ -892,11 +894,14 @@ pqz_sv_setup (uint8_t op, const lnp_tbox_params_struct *P, polymat_t A, polymat_
   abdlop_params_srcptr tb = P->tbox, qm = P->quad_eval->quad_many;
   dcompress_params_srcptr dc = qm->dcompress;
   const int idx = sv_idx (op);
-  svrel_t *S = &SR[idx < 0 ? 0 : idx];
   int ok = 1;
 
-  if (idx < 0)
-    goto fail;
+  if (idx < 0) /* before any slot is touched: the fail path below would clear SR[0] (R_REG) and could drop SA */
+    {
+      pqz_err_set (PQZ_ERR_INTERNAL);
+      return pqz_err;
+    }
+  svrel_t *S = &SR[idx];
   if (S->ready)
     return PQZ_OK;
   if (!sv_ready)
@@ -973,12 +978,15 @@ pqz_sv_setup (uint8_t op, const lnp_tbox_params_struct *P, polymat_t A, polymat_
     ok &= int_u64 (&S->gamma, dc->gamma) & int_u64 (&S->gammaby2, dc->gammaby2) & int_u64 (&S->m, dc->m);
     ok &= int_u64 (&S->qm1, dc->qminus1);
     S->D = dc->D, S->log2m = dc->log2m;
+    ok &= S->log2m <= 42; /* the final-round transcript buffer in pqz_sv_verify is sized from log2m */
     S->inv2 = pqz_int_modq (tb->ring->inv2), S->inv4 = pqz_int_modq (P->inv4);
     ok &= mulq (S->inv2, 2) == 1 && mulq (S->inv4, 4) == 1 && S->qm1 == Q - 1;
     /* lnp_quad_verify: ||z1||^2 <= 2 m1 d 962 2^(2 log2stdev1) / 400 */
     t = (uint64_t)2 * S->mq * DEG * 962;
-    ok &= qm->log2stdev1 <= 20 && t < ((uint64_t)1 << 30);
-    S->z1bnd = (t << (2 * qm->log2stdev1)) / 400;
+    ok &= qm->log2stdev1 <= 20 && t < ((uint64_t)1 << (62 - 2 * qm->log2stdev1)); /* t 2^(2 log2stdev1) < 2^62 */
+    S->z1bnd = ok ? (t << (2 * qm->log2stdev1)) / 400 : 0;
+    /* l2_le / l2_sum need bnd < 2^62 (no wrap of the running sum); actual 2^36.7 .. 2^51.5 */
+    ok &= S->Bz3sqr < ((uint64_t)1 << 62) && S->Bsq < ((uint64_t)1 << 62) && S->z1bnd < ((uint64_t)1 << 62);
     for (unsigned i = 0; ok && i < S->Z; i++)
       {
         int64_t a[DEG] = { 0 }, o[DEG];
@@ -1382,7 +1390,10 @@ verify_body (const svrel_t *S, uint8_t op, const uint8_t hash_stmt[32], const ui
   int64_t *hc = sv_alloc (sizeof (int64_t) * DEG * LAMBDA / 2), *cc = sv_alloc (sizeof (int64_t) * DEG);
   int64_t *hint = sv_alloc (sizeof (int64_t) * DEG * km), *tA1 = sv_alloc (sizeof (int64_t) * DEG * km);
   int64_t *z21 = sv_alloc (sizeof (int64_t) * DEG * m2r), *tBc = sv_alloc (sizeof (int64_t) * DEG * (NQL + 1));
-  uint8_t *buf = sv_alloc (CEIL (2 * 42 * DEG + 25 * DEG * km, 8) + CEIL (256 * 2 * 42 + DEG * 42, 8) + 64);
+  /* transcript buffer: the largest of the encodings (ty3 || ty4 || tbeta: 9 polys of 42 bits; tg: 2; final:
+     t || v || w1, 2 polys of 42 bits + km of log2m bits, as lnp_quad_verify's out[]), log2m <= 42 at setup */
+  const size_t nfin = CEIL (2 * 42 * DEG + S->log2m * DEG * km, 8), nty = CEIL (256 * 2 * 42 + DEG * 42, 8);
+  uint8_t *buf = sv_alloc ((nfin > nty ? nfin : nty) + 64);
   if (buf == NULL)
     return 0;
 
