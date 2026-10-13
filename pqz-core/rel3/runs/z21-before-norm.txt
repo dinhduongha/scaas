@@ -1,0 +1,22 @@
+prover patch: 40 lines added or changed
+== cheating prover
+honest   prove rc=0 proof 28070 B
+z1_over  prove rc=0 proof 32663 B
+z21_big  prove rc=0 proof 85105 B  ||z21||^2 = 1941176994896500 (R_REG Bsq = 22226101053479, 87.3x)
+w_over   prove rc=0 proof 28262 B
+== production verifiers (build/native/libpqz.a)
+honest   generic ACCEPT  fast ACCEPT
+z1_over  generic REJECT  fast REJECT
+z21_big  generic ACCEPT  fast ACCEPT
+w_over   generic REJECT  fast REJECT
+== control: z1 norm check removed from both verifiers
+honest   generic ACCEPT  fast ACCEPT
+z1_over  generic ACCEPT  fast ACCEPT
+z21_big  generic ACCEPT  fast ACCEPT
+w_over   generic REJECT  fast REJECT
+== control: ||w - gamma w1|| check removed from both verifiers
+honest   generic ACCEPT  fast ACCEPT
+z1_over  generic REJECT  fast REJECT
+z21_big  generic ACCEPT  fast ACCEPT
+w_over   generic ACCEPT  fast ACCEPT
+rc=0
