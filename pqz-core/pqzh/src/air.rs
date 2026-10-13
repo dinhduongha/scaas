@@ -370,12 +370,13 @@ pub mod dc {
     pub const MACT: usize = 29;
     pub const W: usize = 30;
 }
-// periodic: V_t, V_f, V_a, V_T, FEE, FEE of the next row, LAST, ACT
+// periodic: V_t, V_f, V_a, V_T, FEE, FEE of the next row, LAST, ACT, END (digit row 15)
 const DP_V: usize = 0;
 const DP_FEE: usize = 4;
 const DP_FEEN: usize = 5;
 const DP_LAST: usize = 6;
 const DP_ACT: usize = 7;
+const DP_END: usize = 8;
 pub const E2_BSQ: i64 = 64 * 64;
 
 impl DigitAir {
@@ -390,6 +391,7 @@ impl DigitAir {
         per.push((0..height).map(|i| nib(i + 1)).collect());
         per.push((0..height).map(|i| F::from_bool(i == height - 1)).collect());
         per.push((0..height).map(|i| F::from_bool(i < 16)).collect());
+        per.push((0..height).map(|i| F::from_bool(i == 15)).collect());
         DigitAir { height, ids, periodic: per }
     }
 
@@ -399,6 +401,9 @@ impl DigitAir {
         let mut nrm = [0i64; 3];
         for r in 0..self.height {
             let mut cells = if r < 16 { rows[r] } else { [0i64; dc::W] };
+            if r >= 16 {
+                cells[dc::ETHI] = (1 << 24) / RANGE_N as i64; // padding row: e_T = 0 satisfies row 6 with v = y = 0
+            }
             for x in 0..3 {
                 nrm[x] += cells[dc::E2 + x] * cells[dc::E2 + x];
                 cells[dc::NRM + x] = nrm[x];
@@ -475,7 +480,8 @@ impl DigitAir {
         b.when_transition().assert_zero(
             mm(&n) + c[C].clone() - n[DP].clone() - n[DD].clone() - per[DP_FEEN].clone() - n[C].clone() * sixteen,
         );
-        b.when_last_row().assert_zero(c[C].clone());
+        // carry out of digit 15 is zero; padding rows (ZK mode) must not extend the chain
+        b.assert_zero(per[DP_END].clone() * c[C].clone());
         b.assert_bool(c[MHI].clone());
         for x in 0..3 {
             let (nr, e) = (NRM + x, E2 + x);
