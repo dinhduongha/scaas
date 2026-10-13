@@ -1,5 +1,5 @@
 #!/bin/sh
-# P6-SZ trace harness build (defensive review; see sz/README.md).
+# P6-SZ trace harness build (lazer-crypto/lazer issue 24; see sz/README.md).
 #   sz/build.sh            builds build/sz/sz_trace and runs it
 # Compiles the kept LaZer protocol code + the rewritten layers with -DPQZ_SZ_TRACE so lnp-tbox.c calls the
 # trace hook, then links the harness. Production builds (build.sh) never define PQZ_SZ_TRACE, so this is inert

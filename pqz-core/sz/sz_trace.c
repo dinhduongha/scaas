@@ -1,5 +1,5 @@
 /*
- * P6-SZ trace harness (defensive review of our LaZer fork; see sz/README.md).
+ * P6-SZ trace harness (https://github.com/lazer-crypto/lazer/issues/24; see sz/README.md).
  *
  * Runs one honest R_REG prove with the lnp-tbox.c trace hook (-DPQZ_SZ_TRACE) enabled and records every
  * Fiat-Shamir challenge vector handed to the evaluation-equation accumulator. It then reports, per transcript
@@ -188,8 +188,10 @@ main (void)
   printf ("\n%u evaluation doms; %u have all four accumulator slots; of those %u reuse subv1 across the "
           "two pairs (acc0==acc2).\n",
           ndom, pairs, dom_collapsed);
+  /* exit 1 unless every recorded dom has four distinct rows (the P6-SZ fix): check_tbox_fixes.sh relies on it */
+  int ok = pairs > 0 && dom_collapsed == 0;
   printf ("\nVERDICT: evaluation-step independent Z_q tests = %s (lambda=4 expected)\n",
-          (pairs > 0 && dom_collapsed == pairs) ? "2 (subv1,subv2 only) -> SOUNDNESS REDUCED"
-                                                : "4 -> ok");
-  return 0;
+          ok ? "4 -> ok" : dom_collapsed == pairs && pairs ? "2 (subv1,subv2 only) -> SOUNDNESS REDUCED"
+                                                           : "UNKNOWN (no or partial reuse) -> FAIL");
+  return !ok;
 }

@@ -2391,7 +2391,7 @@ __schwartz_zippel_accumulate2 (spolymat_ptr R2i[], spolyvec_ptr r1i[],
      2 * M challenges and reuses that one (subv1, subv2) pair for every i, so the lambda/2 pairs are identical
      accumulators and the evaluation / beta / upsilon / binary / l2 equations get 2 independent Schwartz-Zippel
      tests instead of lambda (soundness ~ q^-2, not q^-4). We draw the full lambda * M and index per pair. This
-     changes the transcript, hence proofSystemId (CTR-PQZ-09) -- owner sign-off required before it is normative. */
+     changes the transcript: proofSystemId v2 (CTR-PQZ-09). Upstream: https://github.com/lazer-crypto/lazer/issues/24 */
   INTVEC_T (V, lambda * M, Rq->q->nlimbs);
   intvec_t subv1, subv2;
   unsigned int i;
@@ -3133,7 +3133,8 @@ __schwartz_zippel_accumulate_l2 (spolymat_ptr R2i[], spolyvec_ptr r1i[],
          Z equations get identical challenges and the verifier only checks their sum,
          sum_i (||x_i||^2 + <pow2, upsilon_i> - B_i^2) = 0, i.e. sum_i ||x_i||^2 <= sum_i B_i^2 instead of each
          ||x_i|| <= B_i. The callers already reserve Z domains (z4 starts at this dom + Z, under hash0), and no
-         other equation uses (seed, dom + i), i > 0. Transcript change: proofSystemId (CTR-PQZ-09). */
+         other equation uses (seed, dom + i), i > 0. Transcript change: proofSystemId v2 (CTR-PQZ-09).
+         Upstream: https://github.com/lazer-crypto/lazer/issues/25 */
       __schwartz_zippel_accumulate2 (R2i, r1i, r0i, R2i2, r1i2, r0i2, R2tptr,
                                      r1tptr, r0tptr, 1, seed, dom + i,
                                      params->quad_eval);

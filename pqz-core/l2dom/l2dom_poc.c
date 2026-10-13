@@ -1,5 +1,5 @@
 /*
- * l2dom PoC (private review): does the tbox verifier enforce each exact-l2 bound separately?
+ * l2dom PoC (P6-L2, https://github.com/lazer-crypto/lazer/issues/25): does the tbox verifier enforce each exact-l2 bound separately?
  * R_REG proves pk = A s + e with ||s|| <= 36, ||e|| <= 164. The cheating prover (pqz_rel.c set_upsilon under
  * -DPQZ_L2DOM_POC) only needs ||s||^2 + ||e||^2 <= 36^2 + 164^2.
  *

@@ -1,5 +1,5 @@
 /*
- * l2dom PoC, R_TX (private review). A sender and a colluding recipient (the sender knows the recipient key
+ * l2dom PoC, R_TX (P6-L2, https://github.com/lazer-crypto/lazer/issues/25). A sender and a colluding recipient (the sender knows the recipient key
  * (s_t, e_t)) build a transfer whose (r, e1) is aligned with (e_t, -s_t) and uses the whole pooled l2 budget
  * sum_z B_z^2 = 2*36^2 + 2*164^2 + 3*64^2 = 68672 (‖r‖ <= 36 and ‖e1‖ <= 164 are not respected). The recipient's
  * decryption noise on coefficient 0 then exceeds the spec's B_FRESH = 11,872 (pq-zether.md §4.3).
@@ -140,9 +140,13 @@ main (int argc, char **argv)
   const uint8_t *pks[3] = { pkt, pkf, pka };
   pqz_encrypt (pks, 3, (const uint8_t (*)[16])m, r8, e1, (const int16_t (*)[16])e2, u, vs);
 
-  /* statement and witness, as test/pqz_bench.c */
+  /* statement (§7.7 header, fee word at 256) and witness, as test/pqz_bench.c */
   uint8_t *p = stmt;
-  memset (p, 0x5A, PQZ_PREFIX_BYTES), p += PQZ_PREFIX_BYTES;
+  memset (p, 0x5A, PQZ_HEADER_BYTES);
+  for (int b = 7; b >= 0; b--)
+    p[PQZ_HDR_FEE + 31 - b] = (uint8_t)(fee >> (8 * b));
+  memset (p + PQZ_HDR_FEE, 0, 24), memset (p + PQZ_HDR_AMOUNT, 0, 32);
+  p += PQZ_HEADER_BYTES;
   memcpy (p, pkf, PQZ_POLYVEC_BYTES), p += PQZ_POLYVEC_BYTES;
   memcpy (p, pkt, PQZ_POLYVEC_BYTES), p += PQZ_POLYVEC_BYTES;
   memcpy (p, pka, PQZ_POLYVEC_BYTES), p += PQZ_POLYVEC_BYTES;
@@ -151,8 +155,6 @@ main (int argc, char **argv)
   memcpy (p, u, PQZ_POLYVEC_BYTES), p += PQZ_POLYVEC_BYTES;
   for (int k = 0; k < 3; k++)
     memcpy (p, vs[k], PQZ_V_BYTES), p += PQZ_V_BYTES;
-  for (int b = 7; b >= 0; b--)
-    *p++ = (uint8_t)(fee >> (8 * b));
   p = wit;
   for (int j = 0; j < 2048; j++)
     p[j] = (uint8_t)sf[j];
