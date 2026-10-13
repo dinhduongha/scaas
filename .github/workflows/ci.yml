@@ -38,6 +38,8 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: v1.3.5 # the forge every local build, gas figure and KAT was made with (stable drifts)
       # lib/ is not committed: install the pinned tags (no submodule bookkeeping).
       - name: Libraries at pinned tags
         run: |
@@ -67,6 +69,8 @@ jobs:
         with:
           workspaces: scaas-node
       - uses: foundry-rs/foundry-toolchain@v1
+        with:
+          version: v1.3.5 # the forge every local build, gas figure and KAT was made with (stable drifts)
       - name: Contract libraries for the e2e deploy script
         working-directory: smartcontracts/evm
         run: |
