@@ -3129,8 +3129,13 @@ __schwartz_zippel_accumulate_l2 (spolymat_ptr R2i[], spolyvec_ptr r1i[],
       r1tptr[0] = r1t;
       r0tptr[0] = r0t;
 
+      /* PQZ (P6-L2): one domain per exact-l2 equation. Upstream passes the same dom for every i < Z, so all
+         Z equations get identical challenges and the verifier only checks their sum,
+         sum_i (||x_i||^2 + <pow2, upsilon_i> - B_i^2) = 0, i.e. sum_i ||x_i||^2 <= sum_i B_i^2 instead of each
+         ||x_i|| <= B_i. The callers already reserve Z domains (z4 starts at this dom + Z, under hash0), and no
+         other equation uses (seed, dom + i), i > 0. Transcript change: proofSystemId (CTR-PQZ-09). */
       __schwartz_zippel_accumulate2 (R2i, r1i, r0i, R2i2, r1i2, r0i2, R2tptr,
-                                     r1tptr, r0tptr, 1, seed, dom,
+                                     r1tptr, r0tptr, 1, seed, dom + i,
                                      params->quad_eval);
     }
 
