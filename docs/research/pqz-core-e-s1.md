@@ -14,8 +14,9 @@ from the codegen or the estimator, not a run. **[inference]** marks a conclusion
 
 ## 1. Result
 
-**Two of the roadmap's four kill criteria are missed: verify by ≈ 300× and prove by ≈ 6×. The kill decision is pending: the
-owner ordered an upstream timing cross-check first** (§9). The proof size and the forbidden-symbol scan pass. The
+**Two of the roadmap's four kill criteria are missed: verify by ≈ 300× and prove by ≈ 6×. The kill decision is pending
+(owner).** The upstream timing cross-check the owner ordered is done (§10): upstream LaZer runs the same `R_TX` 2.3–2.6×
+faster than the fork and still misses both time criteria (prove 6.6 s, verify 6.6 s). The proof size and the forbidden-symbol scan pass. The
 browser budgets of CTR-PQZ-18 are missed too: `R_TX` wasm prove time and wasm memory are both above the hard limits
 (§7).
 
@@ -202,9 +203,8 @@ accumulated matrices on the verifier side.
 
 ## 9. Open
 
-- **Kill decision pending the upstream cross-check (owner).** Build upstream LaZer `3330e48` (AVX2 build), run the
-  same `R_TX` statement with the same parameters, and measure prove and verify. This tells whether the gap is the
-  fork's rewrite or inherent to the statement. Optimisation only after that.
+- **Kill decision (owner).** The upstream cross-check is done (§10); the decision and any optimisation wait for the
+  owner.
   What the hash-based fallback would mean (STARK, Ligero) and the other options: `pqz-proof-alternatives.md`.
 - **Browser budgets.** `R_TX` wasm prove (39.3 s) and wasm memory (476 MB) are above CTR-PQZ-18's hard limits; no
   browser or phone run yet (§7).
@@ -220,3 +220,62 @@ accumulated matrices on the verifier side.
   \|C\| = 2^129 and η = 140.
 - UBSan findings left as upstream: zero-length VLAs when M = 0 or nbin = 0 (`lnp-tbox.c` 223, 875, 3358), null + 0
   in `aes256ctr.c:212`.
+
+## 10. Upstream cross-check
+
+Done 2026-10-13 at the owner's request, before any optimisation. Scripts, shim and the full write-up:
+`pqz-core/xcheck/` (`RESULTS.md`; the scripts name the session scratch paths they ran from).
+
+**Method.** The fork's own statement builder (`src/pqz_rel.c`) and bench, at `b2402b5`, compiled unchanged in logic
+against upstream LaZer `3330e48` through a small shim (malloc instead of the arena, no bounded decoder). Same params
+headers (q = 2^42 − 215; upstream accepts them as is, they carry its 2 × 50-bit CRT moduli), same 64 quadratic + 80
+evaluation equations, same witness and seeds. Upstream built offline with its Makefile flags (gcc 13.3 `-O3
+-march=native`, AVX2 here, no AVX-512), HEXL scalar path, static GMP / MPFR, AES-NI, asserts off, plus
+`-fno-strict-aliasing`. Every upstream proof verifies; proof sizes match the fork's.
+
+Medians of 5, ms [measured]:
+
+| | upstream | fork as shipped (clang -O2, asserts on) | fork / upstream | fork `-O3 -march=native`, asserts off | fork / upstream |
+|---|---|---|---|---|---|
+| `R_REG` prove | 622 | 1,302 | 2.1× | 985 | 1.6× |
+| `R_REG` verify | 566 | 992 | 1.75× | 784 | 1.4× |
+| `R_TX` prove | 6,623 | 17,110 | 2.6× | 13,497 | 2.0× |
+| `R_TX` verify | 6,621 | 15,027 | 2.3× | 12,076 | 1.8× |
+| `R_TX` proof bytes | 42,736–42,755 | 42,734–42,770 | same | | |
+
+Microbenchmarks, fork as shipped against upstream [measured]:
+
+| Operation | upstream | fork | fork / upstream |
+|---|---|---|---|
+| Ring multiplication, coefficient form in and out | 6.9 µs | 3.3 µs | 0.48× (fork faster) |
+| Pointwise product, operands already in NTT form | 0.31 µs | 1.79 µs | 5.8× |
+| 23 × 153 matrix × vector (`R_TX` size) | 1.42 ms | 6.61 ms | 4.6× |
+| AES-256-CTR per MiB | 0.13 ms | 61 ms | 480× |
+
+**Where the fork's extra time goes** (gprof, one `R_TX` prove + verify, 13.3 s upstream against 27.6 s fork; `perf`
+is blocked on this host) [measured]:
+
+- ≈ 75–80 % of the gap: pointwise multiplication. The fork's NTT mod q splits X^64 + 1 into 4 factors only, so each
+  product is four degree-16 schoolbook multiplications (`basemul16`, 12.7 s); upstream's complete CRT NTT does
+  2 × 64 modular multiplications (2.15 s).
+- ≈ 25 %: sparse-matrix sorting (`spolymat_sort` 4.5 s + `spolymat_insert_elem` 1.0 s, insertion sort) against
+  upstream's libc `qsort`.
+- ≈ 1.5 %: software AES (480× slower per MiB, little PRG output used).
+- Asserts ≈ 4 %; clang `-O2` generic against `-O3 -march=native` ≈ 18 %.
+- No GMP, the arena, the integer Gaussian and the fixed-point rejection cost nothing or help (upstream: `int_mod`
+  1.9 s against the fork's 1.0 s, plus ≈ 1.5 s in malloc).
+
+**What is inherent.** In upstream's own profile pointwise multiplication is ≈ 16 %; most of its time is LaZer's
+generic sparse-matrix / Schwartz–Zippel bookkeeping over the 153-dimensional quadratic forms, integer arithmetic and
+malloc, on prover and verifier alike [measured]. Against the thresholds on this machine, upstream `R_TX` prove 6.6 s
+is ≈ 2.2× over 3 s and verify 6.6 s ≈ 130× over 50 ms; `R_REG` prove 0.62 s meets 3 s, verify 0.57 s is ≈ 11× over
+50 ms [measured]. So the fork's rewrite explains a factor of ≈ 2–2.6; the remaining gap to 50 ms is in the
+statement as LaZer proves it [inference].
+
+Caveats: no AVX-512 on this CPU (HEXL's IFMA kernels would only shrink upstream's ≈ 2.2 s of pointwise / NTT time,
+not the bookkeeping) [inference]; compilers differ (the `-O3 -march=native` fork column removes most of it); a noisy
+host (upstream ±5 % across seeds, fork ±20 % run to run) and 5 samples, so medians, not p99; proofs not
+byte-identical (MPFR against integer samplers change rejection counts; ≈ 0.15 s per extra try); upstream leaks in
+this harness (max RSS 2.1 GB against the fork's 612 MB arena) and its malloc time is included; adversarial verifies
+skipped on both sides (upstream has no bounded decoder).
+

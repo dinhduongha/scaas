@@ -1,0 +1,7 @@
+gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+cmake version 3.28.3
+libgmp-dev:amd64	2:6.3.0+dfsg-2ubuntu6.1
+libmpfr-dev:amd64	4.2.1-1build1.1
+  -march=                     		znver3
+  -mavx2                      		[enabled]
+  -mavx512f                   		[disabled]

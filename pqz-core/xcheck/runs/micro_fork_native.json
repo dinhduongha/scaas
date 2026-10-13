@@ -1,0 +1,6 @@
+{"op": "poly_mul full (coeff in, coeff out)", "ns": 2224.7}
+{"op": "poly_mul pointwise (both in NTT/CRT form)", "ns": 1065.3}
+{"op": "poly_tocrt (forward)", "ns": 477.0}
+{"op": "poly_set (copy, baseline for the line above)", "ns": 103.6}
+{"op": "polyvec_mul A(23x153, NTT) * v(153, coeff), result to coeff", "ns": 3710497.8}
+{"op": "rng_urandom AES-256-CTR 1 MiB", "ns": 74531571.0}
