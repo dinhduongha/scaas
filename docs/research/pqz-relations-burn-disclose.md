@@ -68,8 +68,9 @@ witness block, one binary proof for all bits, and the one-poly approximate ℓ�
 | Bits | d′ 64, M 224, c + 64 165, e_T + 2^24 400: 853 | none | e′ + 2^24: 16 × 25 = 400 |
 | Exact ℓ2 bounds | 36, 164, 36, 164, 64 | 36, 164, 64 | 36, 164 |
 | ℓ∞ filler | e2_f, bound 64 | e2_t, bound 64 | s[0], bound 1 |
-| Codegen (MSIS / MLWE, D, γ, estimate) | MSIS(23, 211, 2^35.95), MLWE(33, 35); D 11, γ 704,254; ≈ 43,758 B | MSIS(22, 132, 2^35.31), MLWE(33, 34); D 7, γ 65,512 | MSIS(23, 139, 2^35.84), MLWE(33, 35); D 12, γ 1,408,508 |
+| Codegen (MSIS / MLWE, D, γ, estimate) | MSIS(23, 211, 2^35.95), MLWE(33, 35); D 11, γ 704,254; ≈ 43,758 B | MSIS(22, 132, 2^35.31), MLWE(33, 34); D 7, γ 65,512; ≈ 30,084 B | MSIS(23, 139, 2^35.84), MLWE(33, 35); D 12, γ 1,408,508; ≈ 30,150 B |
 | Knowledge error (codegen) | ≤ 2^−127 | ≤ 2^−127 | ≤ 2^−127 |
+| Pinned estimator (`run_e_s1.sh … burn ds dr`): MSIS β / MLWE uSVP β, best attack classical / quantum | 457 / 470; 2^133.4 / 2^121.1 | 452 / 470; 2^132.0 / 2^119.8 | 461 / 470; 2^134.6 / 2^122.2 |
 
 `R_BURN` shares the `R_TX` builder (`build_debit`): the same rows in the same order, with rows 3 and 5 skipped and the
 public digits moved into the constant terms, and the bit layout of the remaining groups packed from slot 0. The
@@ -77,7 +78,9 @@ prover derives M, the carries and e_T by decrypting T with s_f, as for `R_TX`; t
 Σ M_i 16^i = b′ + amount + fee are `R_TX`'s (the carries of honest states stay in [−3, 1093]). With amount = 0 the
 same relation is `REFRESH` [inference]. `R_DR`'s prover derives e′_i = centre(v_i − (uᵀs)_i) − Δ·d_i and refuses if it
 is outside the range. Each relation has its own ABDLOP keys (`SCAAS-PQZ-ABDLOP-PP-V1 ‖ op`); `REFRESH` shares op 2's,
-`AUDITOR` op 5's. The public matrix A is now expanded once and shared by all relations.
+`AUDITOR` op 5's. With the same `pqz_delta` (1.00366) and MLWE rank floor as `R_REG` / `R_TX`, all three reach the
+CTR-PQZ-03 target β ≥ 450 on the first try under lattice-estimator `53da598`, RC.ADPS16
+(`params/estimator-e-s1-rel3.txt`) [measured]. The public matrix A is now expanded once and shared by all relations.
 
 **Statements** (`pqz.h`), as pq-zether.md lays them out:
 
