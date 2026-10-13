@@ -15,6 +15,7 @@
 #define PQZ_ERR_INPUT 3    /* malformed input (decoder) */
 #define PQZ_ERR_REJECT 4   /* rejection-sampling loop hit its cap */
 
+extern unsigned pqz_rej_tries; /* rejection-loop iterations (z3/z4 and z1/z2 loops), diagnostics */
 #define PQZ_REJ_MAX 1000 /* expected tries ~6 (R_REG) / ~9 (R_TX); 1000 fail with prob < 2^-140 */
 
 extern int pqz_err;

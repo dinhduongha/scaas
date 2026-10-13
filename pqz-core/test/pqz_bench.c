@@ -20,7 +20,7 @@ void *memcpy (void *d, const void *s, size_t n);
 void *memset (void *d, int c, size_t n);
 #endif
 
-#define ARENA_BYTES ((size_t)96 << 20)
+#define ARENA_BYTES ((size_t)768 << 20) /* measured peak: R_REG 144 MB, R_TX 612 MB (live set, STATUS.md) */
 
 static uint64_t xs = 0x243F6A8885A308D3ULL;
 static uint64_t
@@ -306,11 +306,15 @@ main (int argc, char **argv)
     {
       const char *rel = tx ? "R_TX" : "R_REG";
       size_t maxlen = 0;
+      unsigned tries = 0;
       for (int i = 0; i < np; i++)
         {
+          extern unsigned pqz_rej_tries;
+          pqz_rej_tries = 0;
           t0 = now_ms ();
           int rc = tx ? step_prove_tx (i) : step_prove_reg (i);
           tp[i] = now_ms () - t0;
+          tries += pqz_rej_tries;
           if (rc != 0)
             {
               extern const char *pqz_err_file;
@@ -331,8 +335,9 @@ main (int argc, char **argv)
       char nm[64];
       snprintf (nm, sizeof nm, "%s prove", rel);
       stats (nm, tp, np);
-      printf ("{\"rel\": \"%s\", \"proof_bytes_last\": %zu, \"proof_bytes_max\": %zu, \"arena_peak\": %zu}\n", rel,
-              step_len (tx), maxlen, step_arena_peak ());
+      printf ("{\"rel\": \"%s\", \"proof_bytes_last\": %zu, \"proof_bytes_max\": %zu, \"arena_peak\": %zu, "
+              "\"rej_tries_mean\": %.2f}\n",
+              rel, step_len (tx), maxlen, step_arena_peak (), np ? (double)tries / np : 0.0);
       for (int i = 0; i < nv; i++)
         {
           t0 = now_ms ();

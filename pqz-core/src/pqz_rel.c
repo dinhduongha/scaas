@@ -105,6 +105,10 @@ rel_init (rel_t *R, const lnp_tbox_params_struct *P, uint8_t op)
   polymat_alloc (R->Bp, Rq, tb->l + tb->lext, tb->m2 - tb->kmsis);
   shake_tag (pp, "SCAAS-PQZ-ABDLOP-PP-V1", &op, 1, NULL, 0);
   abdlop_keygen (R->A1, R->A2p, R->Bp, pp, tb);
+  /* NTT form now: a crtrep created lazily inside a call would sit above the arena mark and be dropped */
+  polymat_tocrt (R->A1);
+  polymat_tocrt (R->A2p);
+  polymat_tocrt (R->Bp);
   return pqz_err;
 }
 
@@ -265,14 +269,17 @@ encproof (uint8_t *out, size_t *len, polyvec_t tA1, polyvec_t tB, polyvec_t h, p
   coder_enc_grandom3 (cstate, z1, params->quad_eval->quad_many->log2stdev1);
   coder_enc_grandom3 (cstate, z21, params->quad_eval->quad_many->log2stdev2);
   coder_enc_grandom3 (cstate, z3, params->log2stdev3);
-  (void)z4; /* nprime = 0: no approximate l_inf proof */
+  polyvec_fromcrt (z4); /* the nprime = 1 approximate l_inf filler */
+  polyvec_mod (z4, z4);
+  polyvec_redc (z4, z4);
+  coder_enc_grandom3 (cstate, z4, params->log2stdev4);
   coder_enc_end (cstate);
   *len = coder_get_offset (cstate) >> 3;
 }
 
 static int
 decproof (size_t len, const uint8_t *in, polyvec_t tA1, polyvec_t tB, polyvec_t h, poly_t c, polyvec_t z1,
-          polyvec_t z21, polyvec_t hint, polyvec_t z3, const lnp_tbox_params_t params)
+          polyvec_t z21, polyvec_t hint, polyvec_t z3, polyvec_t z4, const lnp_tbox_params_t params)
 {
   polyring_srcptr Rq = params->tbox->ring;
   int_srcptr q = Rq->q;
@@ -298,6 +305,7 @@ decproof (size_t len, const uint8_t *in, polyvec_t tA1, polyvec_t tB, polyvec_t 
   coder_dec_grandom3 (cstate, z1, params->quad_eval->quad_many->log2stdev1);
   coder_dec_grandom3 (cstate, z21, params->quad_eval->quad_many->log2stdev2);
   coder_dec_grandom3 (cstate, z3, params->log2stdev3);
+  coder_dec_grandom3 (cstate, z4, params->log2stdev4);
   if (cstate->err || coder_dec_end (cstate) != 1)
     return 0;
   return (coder_get_offset (cstate) >> 3) == len; /* exactly the given length, no trailing bytes */
@@ -314,6 +322,7 @@ typedef struct
   poly_ptr r0[NTXQ], r0p[NTXE];
   polymat_ptr Es[7];
   polymat_ptr Ps;
+  polymat_ptr Ds; /* nprime = 1 approximate l_inf filler: one witness poly, u = 0 */
 } sys_t;
 
 static spolyvec_ptr
@@ -382,6 +391,7 @@ build_reg (sys_t *S, const uint8_t *stmt, polyvec_t pk)
   S->Es[0] = new_sel (Rq, 32, 64, 0);
   S->Es[1] = new_sel (Rq, 32, 64, 32);
   S->Ps = NULL;
+  S->Ds = new_sel (Rq, 1, 64, 0); /* s[0], coefficients in [-1, 1] (reg_params.sage Bprime) */
   return 1;
 }
 
@@ -565,6 +575,7 @@ build_tx (sys_t *S, txst_t *T, const uint8_t *stmt)
   S->Es[5] = new_sel (Rq, 1, 146, 129);
   S->Es[6] = new_sel (Rq, 1, 146, 130);
   S->Ps = new_sel (Rq, 15, 146, TX_BITS);
+  S->Ds = new_sel (Rq, 1, 146, 128); /* e2_t, |coefficients| <= 20 < 64 (tx_params.sage Bprime) */
   return 1;
 }
 
@@ -642,7 +653,7 @@ do_prove (sys_t *S, pf_t *F, const uint8_t hash0[32], const uint8_t rnd32[32], u
   abdlop_hashcomm (hash, F->tA1, F->tB, tb);
   lnp_tbox_prove (hash, F->tB, F->h, F->c, F->z1, F->z21, F->hint, F->z3, F->z4, F->s1, F->m, F->s2, F->tA2,
                   S->R->A1, S->R->A2p, S->R->Bp, S->R2, S->r1, S->N, S->R2p, S->r1p, S->r0p, S->M, S->Es, NULL,
-                  NULL, S->Ps, NULL, NULL, NULL, NULL, NULL, ex + 32, P);
+                  NULL, S->Ps, NULL, NULL, S->Ds, NULL, NULL, ex + 32, P);
   if (pqz_err)
     return pqz_err;
   encproof (buf, &len, F->tA1, F->tB, F->h, F->c, F->z1, F->z21, F->hint, F->z3, F->z4, P);
@@ -659,18 +670,19 @@ do_verify (sys_t *S, pf_t *F, const uint8_t hash0[32], const uint8_t *proof, siz
   const lnp_tbox_params_struct *P = S->R->P;
   uint8_t hash[32];
   if (proof_len > PQZ_MAX_PROOF
-      || !decproof (proof_len, proof, F->tA1, F->tB, F->h, F->c, F->z1, F->z21, F->hint, F->z3, P))
+      || !decproof (proof_len, proof, F->tA1, F->tB, F->h, F->c, F->z1, F->z21, F->hint, F->z3, F->z4, P))
     return 0;
   polyvec_mod (F->h, F->h), polyvec_redc (F->h, F->h);
   poly_mod (F->c, F->c), poly_redc (F->c, F->c);
   polyvec_mod (F->z1, F->z1), polyvec_redc (F->z1, F->z1);
   polyvec_mod (F->z21, F->z21), polyvec_redc (F->z21, F->z21);
   polyvec_mod (F->z3, F->z3), polyvec_redc (F->z3, F->z3);
+  polyvec_mod (F->z4, F->z4), polyvec_redc (F->z4, F->z4);
   memcpy (hash, hash0, 32);
   abdlop_hashcomm (hash, F->tA1, F->tB, P->tbox);
   return lnp_tbox_verify (hash, F->h, F->c, F->z1, F->z21, F->hint, F->z3, F->z4, F->tA1, F->tB, S->R->A1,
                           S->R->A2p, S->R->Bp, S->R2, S->r1, S->r0, S->N, S->R2p, S->r1p, S->r0p, S->M, S->Es,
-                          NULL, NULL, S->Ps, NULL, NULL, NULL, NULL, NULL, P)
+                          NULL, NULL, S->Ps, NULL, NULL, S->Ds, NULL, NULL, P)
          == 1;
 }
 

@@ -157,6 +157,7 @@ lnp_quad_prove (uint8_t hash[32], polyvec_t tB, poly_t c, polyvec_t z1,
           pqz_err_set (PQZ_ERR_REJECT);
           break;
         }
+      pqz_rej_tries++;
       /* y1, y2 */
 
       polyvec_grandom (y1, params->log2stdev1, yseed, dom);

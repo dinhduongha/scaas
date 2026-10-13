@@ -88,8 +88,6 @@ __evaleq (poly_ptr res, spolymat_ptr Rprime2, spolyvec_ptr rprime1,
 
   ASSERT_ERR (res != rprime0);
 
-  polyvec_alloc (tmp, Rq, spolymat_get_nrows (Rprime2));
-
   if (rprime0 != NULL)
     poly_set (res, rprime0);
   else
@@ -98,17 +96,17 @@ __evaleq (poly_ptr res, spolymat_ptr Rprime2, spolyvec_ptr rprime1,
   if (rprime1 != NULL)
     poly_adddot2 (res, rprime1, s, 0);
 
-  if (Rprime2 != NULL)
+  if (Rprime2 != NULL) /* PQZ: tmp only for a quadratic part (NULL = linear eq) */
     {
+      polyvec_alloc (tmp, Rq, spolymat_get_nrows (Rprime2));
       polyvec_mulsparse (tmp, Rprime2, s);
       polyvec_fromcrt (tmp);
       poly_adddot (res, s, tmp, 0);
+      polyvec_free (tmp);
     }
   poly_fromcrt (res);
   poly_mod (res, res);
   poly_redc (res, res);
-
-  polyvec_free (tmp);
 }
 
 #if ASSERT == ASSERT_ENABLED
@@ -1598,6 +1596,7 @@ _lnp_tbox_compute_z34 (uint8_t hash[32], polyvec_t tB, polyvec_t z3,
           pqz_err_set (PQZ_ERR_REJECT);
           break;
         }
+      pqz_rej_tries++;
       /* sample signs */
       if (nrbits == 0)
         {
@@ -1872,13 +1871,13 @@ _lnp_tbox_check_z34 (uint8_t hash[32], polyvec_t z3, polyvec_t z4,
       ASSERT_ERR (Dm == NULL || polymat_get_nrows (Dm) == nprime);
       ASSERT_ERR (Dm == NULL || polymat_get_ncols (Dm) == l);
       ASSERT_ERR (u == NULL || polyvec_get_nelems (u) == nprime);
-      for (i = 0; i < Z; i++)
+      for (i = 0; i < Z; i++) /* PQZ: Es / Em / v may be NULL arrays (as the prover's checks allow) */
         {
-          ASSERT_ERR (Es[i] == NULL || polymat_get_nrows (Es[i]) == ni[i]);
-          ASSERT_ERR (Es[i] == NULL || polymat_get_ncols (Es[i]) == m1);
-          ASSERT_ERR (Em[i] == NULL || polymat_get_nrows (Em[i]) == ni[i]);
-          ASSERT_ERR (Em[i] == NULL || polymat_get_ncols (Em[i]) == l);
-          ASSERT_ERR (v[i] == NULL || polyvec_get_nelems (v[i]) == ni[i]);
+          ASSERT_ERR (Es == NULL || Es[i] == NULL || polymat_get_nrows (Es[i]) == ni[i]);
+          ASSERT_ERR (Es == NULL || Es[i] == NULL || polymat_get_ncols (Es[i]) == m1);
+          ASSERT_ERR (Em == NULL || Em[i] == NULL || polymat_get_nrows (Em[i]) == ni[i]);
+          ASSERT_ERR (Em == NULL || Em[i] == NULL || polymat_get_ncols (Em[i]) == l);
+          ASSERT_ERR (v == NULL || v[i] == NULL || polyvec_get_nelems (v[i]) == ni[i]);
         }
 
       polyvec_get_subvec (ty4, tB, l + loff, 256 / d, 1);
