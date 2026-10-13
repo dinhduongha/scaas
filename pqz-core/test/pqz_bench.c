@@ -112,7 +112,6 @@ static uint8_t rnd32[32];
 
 /* relation index: 0 R_REG, 1 R_TX, 2 R_BURN, 3 R_DS, 4 R_DR */
 #define NREL 5
-static const char *const NAMES[NREL] = { "R_REG", "R_TX", "R_BURN", "R_DS", "R_DR" };
 static const uint8_t OPS[NREL] = { PQZ_OP_REGISTER, PQZ_OP_TRANSFER, PQZ_OP_BURN, PQZ_OP_DISCLOSE_SENDER,
                                    PQZ_OP_DISCLOSE_RECEIVER };
 static uint8_t *const STMT[NREL] = { reg_stmt, tx_stmt, burn_stmt, ds_stmt, dr_stmt };
@@ -360,6 +359,8 @@ step_arena_peak (void)
 }
 
 #ifndef PQZ_WASM
+static const char *const NAMES[NREL] = { "R_REG", "R_TX", "R_BURN", "R_DS", "R_DR" };
+
 static double
 now_ms (void)
 {
@@ -402,7 +403,7 @@ main (int argc, char **argv)
       printf ("{\"error\": \"init\"}\n");
       return 1;
     }
-  printf ("{\"init_ms\": %.1f}\n", now_ms () - t0);
+  printf ("{\"init_ms\": %.1f, \"init_arena\": %zu}\n", now_ms () - t0, step_arena_peak ());
 
   for (int tx = 0; tx < NREL; tx++)
     {

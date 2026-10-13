@@ -25,7 +25,7 @@ const stats = (name, v) => {
 
 let t0 = performance.now();
 if (x.step_init(heap, ARENA) !== 0) { out({ error: 'init' }); process.exit(1); }
-out({ init_ms: Math.round((performance.now() - t0) * 10) / 10 });
+out({ init_ms: Math.round((performance.now() - t0) * 10) / 10, init_arena: x.step_arena_peak() });
 
 let fails = 0;
 for (let tx = 0; tx < NAMES.length; tx++) {
