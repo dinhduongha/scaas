@@ -347,6 +347,22 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
         return true;
     }
 
+    /// @notice `payWithFee` to a derived payee (CTR-UA-28): the caller pays `amount` into `to`'s UA balance and the fee
+    ///         on top to `feeRecipient` (an address: never the payee; `UA_POOL` and the token are refused by `_update`).
+    function payWithFeeToUA(
+        bytes32 to, uint256 amount, FeeMode feeMode, uint256 fee, address feeRecipient, bytes32 entryRef
+    ) external returns (bool) {
+        AdminLib.requireFeature(AdminLib.PAYABLE);
+        _requireDerivedReceiver(to);
+        bytes32 payer = MetaTxLib.pad(_msgSender());
+        uint256 feeAmount = FeePolicy.compute(feeMode, amount, fee);
+        FeePolicy.validateRecipient(feeMode, feeRecipient);
+        if (feeAmount != 0) _transfer(_msgSender(), feeRecipient, feeAmount);
+        _uaMove(payer, to, amount);
+        emit UAPaymentSettled(payer, to, amount, feeAmount, feeRecipient, entryRef);
+        return true;
+    }
+
     /// @dev Hedera (CTR-TOK-23): a 64-byte signature from an account without code is HIP-632; all else is EVM.
     function _requireValidSignature(address from, bytes32 digest, bytes calldata sig) internal view override {
         if (IS_HEDERA && sig.length == 64 && !_isContract(from)) return HederaLib.requireValid(from, digest, sig);

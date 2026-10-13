@@ -6,7 +6,9 @@ import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IER
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {Address} from "@openzeppelin/contracts/utils/Address.sol";
 import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+import {ERC165Checker} from "@openzeppelin/contracts/utils/introspection/ERC165Checker.sol";
 import {IUnderlyingToken} from "./IUnderlyingToken.sol";
+import {IUALedger} from "./IUALedger.sol";
 import {IFactoryToken} from "../factory/IFactoryToken.sol";
 import {ITradeToken} from "../trade/ITradeToken.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
@@ -214,6 +216,16 @@ library UnderlyingLib {
         if (recipient == address(0) || recipient == address(this) || recipient == MetaTxLib.UA_POOL) {
             revert IUnderlyingToken.UnwrapRecipientInvalid(recipient);
         }
+        return _quote(i, wrapped, minOut);
+    }
+
+    /// @notice `unwrapToUA` (CTR-UA-28): the checks of `quoteUnwrap` but the recipient's (the leg's `transferToUA`
+    ///         checks `to`).
+    function quoteUnwrapToUA(uint256 i, uint256 wrapped, uint256 minOut) public view returns (uint256 out, uint256 burned) {
+        return _quote(i, wrapped, minOut);
+    }
+
+    function _quote(uint256 i, uint256 wrapped, uint256 minOut) private view returns (uint256 out, uint256 burned) {
         Leg storage L = $().legs[i];
         (uint256 num, uint256 den) = (L.num, L.den);
         out = Math.mulDiv(wrapped, den, num);
@@ -235,6 +247,24 @@ library UnderlyingLib {
         if (u == NATIVE) Address.sendValue(payable(recipient), out);
         else IERC20(u).safeTransfer(recipient, out);
         uint256 after_ = _balance(u);
+        uint256 sent = before > after_ ? before - after_ : 0;
+        if (sent != out) revert IUnderlyingToken.UnderlyingTransferMismatch(u, out, sent);
+    }
+
+    /// @notice `payOut` into a derived UA (CTR-UA-28): leg `u` pays `to` in its own UA ledger,
+    ///         `IUALedger(u).transferToUA(to, out)`, which checks `to`. A leg that does not report `IUALedger` by ERC-165
+    ///         (the native coin, an outside ERC-20 or HTS token, a SCaaS token with the ledger off) reverts
+    ///         `UALegNotLedger` before anything moves; the balance must drop by EXACTLY `out`, as in `payOut`.
+    function payOutToUA(uint256 i, bytes32 to, uint256 out) public returns (address u) {
+        Leg storage L = $().legs[i];
+        u = L.token;
+        if (u == NATIVE || !ERC165Checker.supportsInterface(u, type(IUALedger).interfaceId)) {
+            revert IUALedger.UALegNotLedger(u);
+        }
+        L.reserve -= out;
+        uint256 before = IERC20(u).balanceOf(address(this));
+        IUALedger(u).transferToUA(to, out);
+        uint256 after_ = IERC20(u).balanceOf(address(this));
         uint256 sent = before > after_ ? before - after_ : 0;
         if (sent != out) revert IUnderlyingToken.UnderlyingTransferMismatch(u, out, sent);
     }

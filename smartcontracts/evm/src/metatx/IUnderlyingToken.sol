@@ -10,6 +10,10 @@ interface IUnderlyingToken {
     event Wrapped(address indexed account, address indexed underlying, uint256 underlyingIn, uint256 minted);
     event Unwrapped(address indexed account, address indexed underlying, address recipient, uint256 burned,
         uint256 underlyingOut);
+    /// @notice `unwrapToUA` (accounts.md CTR-UA-28): `account` is `UA_POOL` under a derived subject (its burn's
+    ///         `UATransfer(ua, 0)` names the UA).
+    event UnwrappedToUA(address indexed account, address indexed underlying, bytes32 indexed to, uint256 burned,
+        uint256 out);
     event ReserveAdded(address indexed from, address indexed underlying, uint256 amount);
     event RateChangeProposed(address indexed underlying, uint96 oldNum, uint96 oldDen, uint96 newNum, uint96 newDen,
         uint64 eta);
@@ -65,6 +69,11 @@ interface IUnderlyingToken {
     function unwrap(address underlying, uint256 wrapped, address recipient, uint256 minOut)
         external returns (uint256 out, uint256 burned);
     function addReserve(address underlying, uint256 amount) external payable;
+    /// @notice `wrap(underlying, amount)` minted into the registered SIGNING UA `to` (CTR-UA-28).
+    function wrapToUA(address underlying, uint256 amount, bytes32 to) external payable returns (uint256 minted);
+    /// @notice `unwrap(underlying, …)` paid into `to` in the leg's UA ledger; the leg must be a SCaaS ledger token.
+    function unwrapToUA(address underlying, uint256 wrapped, bytes32 to, uint256 minOut)
+        external returns (uint256 out, uint256 burned);
     /// @notice Wrap a SCaaS underlying by the holder's `TradeOrder` (`dex` = this token, `receiveToken` = this
     ///         token, `receiveAmount` = the minimum minted, `minFill = amount`); `fee` pays the submitter in minted units.
     function mtxWrap(address underlying, ITradeToken.TradeOrder calldata o, bytes calldata sig)

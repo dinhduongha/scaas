@@ -3,6 +3,14 @@ pragma solidity ^0.8.20;
 
 import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 
+/// A UA registry stand-in for fixtures without the real one (accounts.md CTR-UA-19): `chainUid` for `initialize`, and
+/// every derived id a registered `p256` UA. It authorizes nothing: only native signers work against it.
+contract StubUARegistry {
+    bytes32 public immutable chainUid;
+    constructor(bytes32 u) { chainUid = u; }
+    function kindOf(bytes32) external pure returns (uint16) { return 0x0101; }
+}
+
 contract MockERC20 is ERC20 {
     uint8 private immutable _d;
     constructor(string memory n, string memory s, uint8 d) ERC20(n, s) { _d = d; }

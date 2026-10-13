@@ -14,7 +14,9 @@ import {UARegistryBase} from "./UARegistryBase.sol";
 
 /// The UA ledger fixture (accounts.md CTR-UA-18/19/26): a registry at `REG_L` on context A (chain 31337, `chainUidA`)
 /// with the stand-in verifier for the eight classical kinds and `zether-bn254`; a `NONE` clone and a one-leg 1:1
-/// `UNDERLYING` clone bound to it; two registered SIGNING UAs (`p256`, `bip340`) and a registered Zether UA.
+/// `UNDERLYING` clone bound to it; two registered SIGNING UAs (`p256`, `bip340`) and a registered Zether UA. UA-5a
+/// (CTR-UA-28): `wrpL`, a one-leg 1:1 wrapper of the ledger token `tok` (its reserve wrapped by this fixture, a contract
+/// that may approve, CTR-TOK-01), and `wrpN`, a one-leg 1:1 wrapper of the native coin.
 abstract contract UALedgerBase is UARegistryBase {
     using MetaTxLib for MetaTxLib.UAMetaTransfer;
     using MetaTxLib for MetaTxLib.UAMetaTransaction;
@@ -33,6 +35,8 @@ abstract contract UALedgerBase is UARegistryBase {
     UARegistry internal lreg;
     NoUnderlyingToken internal tok;
     UnderlyingToken internal wrp;
+    UnderlyingToken internal wrpL; // leg: `tok` (a SCaaS ledger token)
+    UnderlyingToken internal wrpN; // leg: the native coin
     MockERC20 internal und;
     address internal alice;
     address internal bob;
@@ -61,6 +65,18 @@ abstract contract UALedgerBase is UARegistryBase {
         (us[0], one[0]) = (address(und), 1);
         Rate memory fixedRate;
         wrp.initialize(address(this), 1, underlyingInit(us, one, one, 6, fixedRate, address(0), address(0)));
+        wrpL = _wrapper(address(tok));
+        wrpN = _wrapper(address(0));
+    }
+
+    /// A one-leg 1:1 wrapper of `leg`, ledger on (`REG_L`), `PAYABLE`, fixed rate.
+    function _wrapper(address leg) internal returns (UnderlyingToken w) {
+        w = UnderlyingToken(Clones.clone(address(new UnderlyingToken(address(this), address(0), chainUidA, REG_L, false))));
+        address[] memory us = new address[](1);
+        uint256[] memory one = new uint256[](1);
+        (us[0], one[0]) = (leg, 1);
+        Rate memory fixedRate;
+        w.initialize(address(this), 1, underlyingInit(us, one, one, 6, fixedRate, address(0), address(0)));
     }
 
     // ----- structs -----
@@ -123,5 +139,13 @@ abstract contract UALedgerBase is UARegistryBase {
         und.approve(address(wrp), amount);
         wrp.wrap(amount);
         vm.stopPrank();
+    }
+
+    /// `wrpL` units for `who`: this fixture (the `tok` minter, a contract) mints `tok`, wraps it and passes the units on.
+    function _wrapL(address who, uint256 amount) internal {
+        tok.mint(address(this), amount);
+        tok.approve(address(wrpL), amount);
+        wrpL.wrap(amount);
+        wrpL.transfer(who, amount);
     }
 }
