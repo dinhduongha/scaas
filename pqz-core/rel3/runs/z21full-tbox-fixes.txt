@@ -1,0 +1,8 @@
+VERDICT: evaluation-step independent Z_q tests = 4 -> ok (lambda=4 expected)
+l2dom honest: control (fix undone) accepts 1/1, production rejects 1/1
+l2dom s_over_A: control (fix undone) accepts 1/1, production rejects 1/1
+l2dom s_over_B: control (fix undone) accepts 1/1, production rejects 1/1
+l2dom tx_over: control (fix undone) accepts 1/1, production rejects 1/1
+z21 z21_big: proved 1/1; production: honest accepted 1/1, z21_big / z1_over / w_over rejected by both 3/3; control (z21 term removed) accepts z21_big 1/1
+z21_big  prove rc=0 proof 85105 B  ||z21||^2 = 1941176994896500 (R_REG Bsq = 22226101053479, 87.3x)
+check_tbox_fixes: ok
