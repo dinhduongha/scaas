@@ -205,6 +205,7 @@ accumulated matrices on the verifier side.
 - **Kill decision pending the upstream cross-check (owner).** Build upstream LaZer `3330e48` (AVX2 build), run the
   same `R_TX` statement with the same parameters, and measure prove and verify. This tells whether the gap is the
   fork's rewrite or inherent to the statement. Optimisation only after that.
+  What the hash-based fallback would mean (STARK, Ligero) and the other options: `pqz-proof-alternatives.md`.
 - **Browser budgets.** `R_TX` wasm prove (39.3 s) and wasm memory (476 MB) are above CTR-PQZ-18's hard limits; no
   browser or phone run yet (§7).
 - **Golden dump on real AVX-512.** One run of the `v4` dump binary on AVX-512 hardware, diffed against
