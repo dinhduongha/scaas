@@ -21,27 +21,31 @@ input tried, and fit the proof-size and prove-time limits with room; like `R_TX`
 limit with the generic verifier (4.4× to 12.5×) [measured].** `R_BURN` costs about what `R_TX` costs (it is `R_TX`
 without two of its seven row groups); the two disclosure relations cost about what `R_REG` costs.
 
-| Generic verifier, after the fix-ups [measured] | proof bytes | prove p50 / p99 native | verify p50 / p99 native | p99 adversarial native | prove p50 wasm | verify p50 / p99 wasm | arena peak native / wasm, one op |
+| Generic verifier, after the fix-ups, `proofSystemId` v2 [measured] | proof bytes | prove p50 / p99 native | verify p50 / p99 native | p99 adversarial native | prove p50 wasm | verify p50 / p99 wasm | arena peak native / wasm, one op |
 |---|---|---|---|---|---|---|---|
-| `R_BURN` | 41,916–41,939 | 683 / 993 ms | 526 / 599 ms | 624 ms | 973 ms | 664 / 753 ms | 289 / 220 MB |
-| `R_DS` | 28,937–28,975 | 271 / 303 ms | 195 / 221 ms | 212 ms | 410 ms | 263 / 282 ms | 100 / 77 MB |
-| `R_DR` | 28,987–29,001 | 295 / 373 ms | 194 / 232 ms | 206 ms | 447 ms | 252 / 262 ms | 108 / 83 MB |
-| for reference: `R_TX` | 42,741–42,772 | 949 / 1,155 ms | 620 / 709 ms | 701 ms | 1,551 ms | 761 / 807 ms | 304 / 232 MB |
-| for reference: `R_REG` | 28,097–28,107 | 228 / 294 ms | 165 / 190 ms | 183 ms | 387 ms | 217 / 227 ms | 96 / 74 MB |
+| `R_BURN` | 41,916–41,940 | 749 / 1,197 ms | 536 / 627 ms | 560 ms | 982 ms | 714 / 751 ms | 289 / 220 MB |
+| `R_DS` | 28,936–28,976 | 292 / 337 ms | 199 / 247 ms | 226 ms | 489 ms | 271 / 284 ms | 100 / 77 MB |
+| `R_DR` | 28,988–28,999 | 311 / 403 ms | 202 / 222 ms | 231 ms | 462 ms | 270 / 281 ms | 108 / 83 MB |
+| for reference: `R_TX` | 42,741–42,770 | 1,007 / 1,111 ms | 638 / 721 ms | 675 ms | 1,566 ms | 809 / 878 ms | 304 / 232 MB |
+| for reference: `R_REG` | 28,097–28,108 | 235 / 321 ms | 158 / 212 ms | 180 ms | 387 ms | 216 / 232 ms | 96 / 74 MB |
 
-Run `f2` (`rel3/relfix.sh`, §2). Native: `pqz_bench 10 100 31` (10 proves, 100 + 100 honest verifies, 126 adversarial
-per relation, all five relations); wasm32 under node: `run_wasm.mjs 5 30 31` (5 proves, 30 + 30 honest, 42
+Run `v2full` (`rel3/relfix.sh v2full` on main after the `pqz-v2` merge, 2026-10-13; the same sample sizes as
+`f2`, §2). Native: `pqz_bench 10 100 31` (10 proves, 100 + 100 honest verifies, 126 adversarial per relation, all
+five relations); wasm32 under node: `run_wasm.mjs 5 30 31` (5 proves, 30 + 30 honest, 42
 adversarial). Proof bytes: the last and the largest of the native seeds. "Arena peak, one op" is the high-water mark of
-a process that runs only that relation (`f2-alone.jsonl`), i.e. what a prover for that op carries: since the fix-ups a
+a process that runs only that relation (`v2full-alone.jsonl`), i.e. what a prover for that op carries: since the fix-ups a
 relation's keys are built at its first use (§4). Each relation's first prove includes building its keys.
 
-| Against CTR-PQZ-09 / CTR-PQZ-18 (after the fix-ups) | `R_BURN` | `R_DS` | `R_DR` |
+| Against CTR-PQZ-09 / CTR-PQZ-18 (after the fix-ups, v2) | `R_BURN` | `R_DS` | `R_DR` |
 |---|---|---|---|
 | proof ≤ 96 KB (98,304 B) | 42.7 % of the limit | 29.5 % | 29.5 % |
-| prove ≤ 6 s desktop (native p99) | 0.99 s, inside | 0.30 s, inside | 0.37 s, inside |
-| p99 verify ≤ 50 ms (native, honest or adversarial, the larger) | 624 ms, **12.5× over** | 221 ms, **4.4× over** | 232 ms, **4.6× over** |
-| browser prove 5 s desktop / 15 s phone / 30 s hard (wasm, node, max of 5) | 1.08 s, inside | 0.48 s, inside | 0.65 s, inside |
+| prove ≤ 6 s desktop (native p99) | 1.20 s, inside | 0.34 s, inside | 0.40 s, inside |
+| p99 verify ≤ 50 ms (native, honest or adversarial, the larger; generic verifier) | 627 ms, **12.5× over** | 247 ms, **4.9× over** | 231 ms, **4.6× over** |
+| browser prove 5 s desktop / 15 s phone / 30 s hard (wasm, node, max of 5) | 1.10 s, inside | 0.65 s, inside | 0.65 s, inside |
 | browser memory 128 MiB budget / 256 MiB hard (wasm arena peak, one op) | 210 MiB: over the budget, inside the hard limit | 73 MiB, inside | 79 MiB, inside |
+
+The 50 ms verify limit is met by the specialised verifier (`pqz-specialised-verifier.md` §0: p99 ≤ 11.1 ms portable,
+≤ 16.0 ms wasm32 for all five relations on v2), not by the generic one above.
 
 **Change from the first run** (`r1`, branch `pqz-rel3`, before the fix-ups; `R_REG` / `R_TX` from `r1-fnv-*` against
 `f2-fnv-*`, the same 5 native / 3 wasm proves) [measured]:
@@ -134,7 +138,7 @@ ones): `R_BURN` s_f ‖ e_f ‖ r ‖ e1 ‖ e2_f ‖ d′ (12,336 B), `R_DS` r 
 
 These hashes are `proofSystemId` v1. v2 (the LaZer `tbox` fixes [lazer#24](https://github.com/lazer-crypto/lazer/issues/24) /
 [#25](https://github.com/lazer-crypto/lazer/issues/25), branch `pqz-v2`) changes the transcript and so every proof hash;
-sizes, arena and times stay the same within noise. The v2 values: `pqz-core/STATUS.md`, run `rel3/runs/v2-*`.
+sizes, arena and times stay the same within noise. The v2 values: `pqz-core/STATUS.md`, runs `rel3/runs/v2-*` and `rel3/runs/v2full-*` (§1).
 
 **Arena.** Before the fix-ups every relation's ABDLOP keys (A1, A2′, B′) were built at `pqz_init` below the arena base
 mark and kept: base 54.5 MB native / 43.3 MB wasm, init 212 ms native / 292 ms wasm, and every op carried the keys of
