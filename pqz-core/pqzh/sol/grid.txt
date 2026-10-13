@@ -1,0 +1,101 @@
+# PQZH Solidity verifier: gas grid (model.py output; units [measured] in forge, totals [estimate])
+
+Skeleton code = the gas of test/pqzh/Pqzh.sol PqzhSkeleton on the shape (unpruned paths), from the units
+fitted to its three measured runs; floor = a hand-scheduled verifier counted by opcodes (model.py).
+Tx = 21,000 + max(4 tokens + execution, 10 tokens) (EIP-7623), execution = verify + the op's other
+execution (pq-zether.md §9.3); cap 16,777,216 (EIP-7825). Calldata incl. the op's non-proof bytes.
+
+## R_TX, every configuration
+
+| Field | Blowup | Max FRI arity (rounds) | Regime | Queries | Proof KB | Verify M (skeleton code) | Verify M (floor) | Calldata M (EIP-2028 / EIP-7623 floor) | Tx M, skeleton (≤ cap?) | Tx M, floor (≤ cap?) |
+|---|---|---|---|---|---|---|---|---|---|---|
+| gl2 | 4 | 2 (2/2/2/2/2/2/2/2/2/2/2/2) | conj | 56 | 270 | 16.1 | 2.5 | 4.79 / 11.98 | 21.3 (no) | 12.0 (yes) |
+| gl2 | 4 | 8 (4/8/8/8/2) | conj | 56 | 222 | 15.9 | 2.1 | 4.02 / 10.06 | 20.2 (no) | 10.1 (yes) |
+| gl2 | 4 | 16 (4/16/16/2/2) | conj | 56 | 227 | 17.3 | 2.2 | 4.09 / 10.23 | 21.7 (no) | 10.3 (yes) |
+| gl2 | 8 | 2 (2/2/2/2/2/2/2/2/2/2/2/2) | conj | 38 | 211 | 12.2 | 1.9 | 3.85 / 9.62 | 16.4 (yes) | 9.6 (yes) |
+| gl2 | 8 | 8 (4/8/8/8/2) | conj | 38 | 167 | 12.0 | 1.7 | 3.14 / 7.85 | 15.5 (yes) | 7.9 (yes) |
+| gl2 | 8 | 16 (4/16/16/2/2) | conj | 38 | 169 | 13.0 | 1.7 | 3.18 / 7.95 | 16.5 (yes) | 8.0 (yes) |
+| gl2 | 16 | 2 (2/2/2/2/2/2/2/2/2/2/2/2) | conj | 28 | 177 | 10.1 | 1.6 | 3.30 / 8.26 | 13.7 (yes) | 8.3 (yes) |
+| gl2 | 16 | 8 (4/8/8/8/2) | conj | 28 | 135 | 9.8 | 1.4 | 2.64 / 6.59 | 12.8 (yes) | 6.6 (yes) |
+| gl2 | 16 | 16 (4/16/16/2/2) | conj | 28 | 137 | 10.5 | 1.5 | 2.67 / 6.67 | 13.5 (yes) | 6.7 (yes) |
+| gl3 | 4 | 2 (2/2/2/2/2/2/2/2/2/2/2/2) | johnson | 112 | 530 | 33.4 | 5.0 | 8.94 / 22.35 | 42.6 (no) | 22.4 (no) |
+| gl3 | 4 | 8 (4/8/8/8/2) | johnson | 112 | 468 | 32.9 | 4.5 | 7.95 / 19.87 | 41.2 (no) | 19.9 (no) |
+| gl3 | 4 | 16 (4/16/16/2/2) | johnson | 112 | 487 | 36.1 | 4.7 | 8.25 / 20.62 | 44.7 (no) | 20.6 (no) |
+| gl3 | 8 | 2 (2/2/2/2/2/2/2/2/2/2/2/2) | johnson | 75 | 410 | 24.3 | 3.7 | 7.02 / 17.55 | 31.7 (no) | 17.6 (no) |
+| gl3 | 8 | 8 (4/8/8/8/2) | johnson | 75 | 345 | 23.9 | 3.3 | 5.98 / 14.94 | 30.2 (no) | 15.0 (yes) |
+| gl3 | 8 | 16 (4/16/16/2/2) | johnson | 75 | 356 | 26.0 | 3.5 | 6.16 / 15.40 | 32.5 (no) | 15.4 (yes) |
+| gl3 | 16 | 2 (2/2/2/2/2/2/2/2/2/2/2/2) | johnson | 56 | 347 | 19.7 | 3.1 | 6.01 / 15.03 | 26.0 (no) | 15.0 (yes) |
+| gl3 | 16 | 8 (4/8/8/8/2) | johnson | 56 | 281 | 19.2 | 2.7 | 4.96 / 12.39 | 24.5 (no) | 12.4 (yes) |
+| gl3 | 16 | 16 (4/16/16/2/2) | johnson | 56 | 289 | 20.8 | 2.8 | 5.09 / 12.72 | 26.2 (no) | 12.7 (yes) |
+| gl5 | 8 | 2 (2/2/2/2/2/2/2/2/2/2/2/2) | conj | 35 | 249 | 19.4 | 3.4 | 4.45 / 11.13 | 24.2 (no) | 11.1 (yes) |
+| gl5 | 8 | 8 (4/8/8/8/2) | conj | 35 | 218 | 19.1 | 3.2 | 3.95 / 9.88 | 23.4 (no) | 9.9 (yes) |
+| gl5 | 8 | 16 (4/16/16/2/2) | conj | 35 | 229 | 20.1 | 3.4 | 4.12 / 10.31 | 24.6 (no) | 10.3 (yes) |
+| gl5 | 16 | 2 (2/2/2/2/2/2/2/2/2/2/2/2) | conj | 27 | 215 | 17.1 | 2.9 | 3.91 / 9.77 | 21.3 (no) | 9.8 (yes) |
+| gl5 | 16 | 8 (4/8/8/8/2) | conj | 27 | 183 | 16.8 | 2.7 | 3.39 / 8.48 | 20.5 (no) | 8.5 (yes) |
+| gl5 | 16 | 16 (4/16/16/2/2) | conj | 27 | 191 | 17.5 | 2.9 | 3.52 / 8.81 | 21.4 (no) | 8.8 (yes) |
+| gl5 | 32 | 2 (2/2/2/2/2/2/2/2/2/2/2/2) | conj | 21 | 187 | 15.3 | 2.6 | 3.46 / 8.65 | 19.1 (no) | 8.7 (yes) |
+| gl5 | 32 | 8 (4/8/8/8/2) | conj | 21 | 155 | 15.0 | 2.4 | 2.95 / 7.37 | 18.3 (no) | 7.4 (yes) |
+| gl5 | 32 | 16 (4/16/16/2/2) | conj | 21 | 161 | 15.6 | 2.5 | 3.05 / 7.63 | 19.0 (no) | 7.6 (yes) |
+| gl5 | 8 | 2 (2/2/2/2/2/2/2/2/2/2/2/2) | proven | 70 | 447 | 30.3 | 5.5 | 7.61 / 19.02 | 38.3 (no) | 19.0 (no) |
+| gl5 | 8 | 8 (4/8/8/8/2) | proven | 70 | 399 | 29.7 | 5.2 | 6.84 / 17.10 | 36.9 (no) | 17.1 (no) |
+| gl5 | 8 | 16 (4/16/16/2/2) | proven | 70 | 421 | 31.7 | 5.5 | 7.19 / 17.98 | 39.2 (no) | 18.0 (no) |
+| gl5 | 16 | 2 (2/2/2/2/2/2/2/2/2/2/2/2) | proven | 53 | 379 | 25.3 | 4.6 | 6.52 / 16.31 | 32.1 (no) | 16.3 (yes) |
+| gl5 | 16 | 8 (4/8/8/8/2) | proven | 53 | 326 | 24.7 | 4.3 | 5.68 / 14.21 | 30.7 (no) | 14.2 (yes) |
+| gl5 | 16 | 16 (4/16/16/2/2) | proven | 53 | 343 | 26.2 | 4.5 | 5.94 / 14.86 | 32.5 (no) | 14.9 (yes) |
+| gl5 | 32 | 2 (2/2/2/2/2/2/2/2/2/2/2/2) | proven | 42 | 331 | 22.0 | 3.9 | 5.75 / 14.38 | 28.1 (no) | 14.4 (yes) |
+| gl5 | 32 | 8 (4/8/8/8/2) | proven | 42 | 277 | 21.4 | 3.7 | 4.90 / 12.25 | 26.7 (no) | 12.3 (yes) |
+| gl5 | 32 | 16 (4/16/16/2/2) | proven | 42 | 290 | 22.6 | 3.9 | 5.11 / 12.76 | 28.1 (no) | 12.8 (yes) |
+| gl5 ZK | 16 | 8 (4/8/8/2/8/2) | conj | 27 | 337 | 22.5 | 3.9 | 5.86 / 14.64 | 28.6 (no) | 14.7 (yes) |
+| gl5 ZK | 32 | 8 (4/8/8/2/8/2) | conj | 21 | 282 | 19.8 | 3.4 | 4.98 / 12.44 | 25.1 (no) | 12.5 (yes) |
+| gl5 ZK | 16 | 8 (4/8/8/2/8/2) | proven | 53 | 606 | 34.1 | 6.3 | 10.14 / 25.35 | 44.6 (no) | 25.4 (no) |
+| gl5 ZK | 32 | 8 (4/8/8/2/8/2) | proven | 42 | 506 | 29.3 | 5.4 | 8.56 / 21.40 | 38.2 (no) | 21.4 (no) |
+
+## Five relations, cheapest Goldilocks^5 configuration per regime (by skeleton-code total)
+
+| Relation | Regime | ZK | Blowup / arity / queries | Proof KB | Verify M skeleton / floor | Calldata M (EIP-7623 floor) | Tx M skeleton / floor | ≤ cap (skeleton / floor) |
+|---|---|---|---|---|---|---|---|---|
+| R_REG | conj | no | 32 / 8 / 21 | 123 | 8.4 / 1.5 | 5.56 | 14.1 / 7.2 | yes / yes |
+| R_REG | conj | yes | 32 / 8 / 21 | 190 | 10.7 / 2.0 | 8.23 | 17.5 / 8.8 | no / yes |
+| R_REG | proven | no | 32 / 4 / 42 | 220 | 13.5 / 2.4 | 9.47 | 20.8 / 9.7 | no / yes |
+| R_REG | proven | yes | 32 / 8 / 42 | 341 | 17.5 / 3.3 | 14.28 | 26.6 / 14.3 | no / yes |
+| R_TX | conj | no | 32 / 8 / 21 | 155 | 15.0 / 2.4 | 7.37 | 18.3 / 7.4 | no / yes |
+| R_TX | conj | yes | 32 / 8 / 21 | 282 | 19.8 / 3.4 | 12.44 | 25.1 / 12.5 | no / yes |
+| R_TX | proven | no | 32 / 8 / 42 | 277 | 21.4 / 3.7 | 12.25 | 26.7 / 12.3 | no / yes |
+| R_TX | proven | yes | 32 / 8 / 42 | 506 | 29.3 / 5.4 | 21.40 | 38.2 / 21.4 | no / no |
+| R_BURN | conj | no | 32 / 8 / 21 | 147 | 12.3 / 2.1 | 6.84 | 15.3 / 6.9 | yes / yes |
+| R_BURN | conj | yes | 32 / 8 / 21 | 258 | 16.4 / 2.9 | 11.28 | 21.2 / 11.3 | no / yes |
+| R_BURN | proven | no | 32 / 8 / 42 | 263 | 18.5 / 3.3 | 11.47 | 23.4 / 11.5 | no / yes |
+| R_BURN | proven | yes | 32 / 8 / 42 | 464 | 25.3 / 4.8 | 19.49 | 33.4 / 19.5 | no / no |
+| R_DS | conj | no | 32 / 8 / 21 | 134 | 10.5 / 1.8 | 5.88 | 12.9 / 5.9 | yes / yes |
+| R_DS | conj | yes | 32 / 8 / 21 | 229 | 14.0 / 2.6 | 9.67 | 17.9 / 9.7 | no / yes |
+| R_DS | proven | no | 32 / 8 / 42 | 239 | 16.4 / 3.0 | 10.07 | 20.5 / 10.1 | no / yes |
+| R_DS | proven | yes | 32 / 8 / 42 | 410 | 22.1 / 4.2 | 16.91 | 28.9 / 16.9 | no / no |
+| R_DR | conj | no | 32 / 8 / 21 | 133 | 10.5 / 1.8 | 5.87 | 12.9 / 5.9 | yes / yes |
+| R_DR | conj | yes | 32 / 8 / 21 | 229 | 14.0 / 2.6 | 9.66 | 17.9 / 9.7 | no / yes |
+| R_DR | proven | no | 32 / 8 / 42 | 238 | 16.4 / 3.0 | 10.05 | 20.4 / 10.1 | no / yes |
+| R_DR | proven | yes | 32 / 8 / 42 | 410 | 22.0 / 4.2 | 16.90 | 28.9 / 16.9 | no / no |
+
+## Transcript seed over the R_TX statement (83,072 B)
+
+- SHAKE256 in Solidity (src/ua/Shake.sol): 43.3 M [measured]
+- keccak256 opcode: 49 k [measured]
+- Horner fingerprint (statement into the AIR, not a transcript seed), E = 2: 1.89 M skeleton, 0.41 M floor
+- Horner fingerprint (statement into the AIR, not a transcript seed), E = 3: 2.98 M skeleton, 0.41 M floor
+- Horner fingerprint (statement into the AIR, not a transcript seed), E = 5: 5.47 M skeleton, 0.56 M floor
+
+## Stage breakdown, R_TX (verify gas, k)
+
+| Stage | gl2 b16 a8 conj (prototype default): skeleton / floor | gl5 b32 a8 conj: skeleton / floor | gl5 b32 a8 proven: skeleton / floor |
+|---|---|---|---|
+| seed | 49 / 49 | 49 / 49 | 49 / 49 |
+| commit | 24 / 20 | 43 / 20 | 43 / 20 |
+| horner | 1,886 / 412 | 5,473 / 556 | 5,473 / 556 |
+| deep_pre | 552 / 42 | 1,411 / 238 | 1,411 / 238 |
+| standin | 980 / 62 | 1,549 / 238 | 1,549 / 238 |
+| rows | 1,725 / 260 | 2,448 / 614 | 4,896 / 1,228 |
+| merkle | 538 / 314 | 427 / 271 | 853 / 503 |
+| deep_inv | 825 / 35 | 931 / 100 | 1,862 / 194 |
+| fri_open | 1,063 / 24 | 702 / 22 | 1,403 / 44 |
+| fri_fold | 1,316 / 101 | 1,254 / 226 | 2,508 / 453 |
+| rest | 866 / 98 | 691 / 74 | 1,383 / 147 |
+| total | 9,823 / 1,418 | 14,977 / 2,407 | 21,430 / 3,669 |
