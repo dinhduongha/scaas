@@ -1,7 +1,8 @@
 /*
  * pqz-core relations: R_REG, R_TX (E-S1 spike), R_BURN, R_DS and R_DR as LaZer tbox statements
  * (pq-zether.md §7.2 step 6, §7.4, §7.5, §7.9), the C ABI of pqz.h, proof encoding (LaZer lin-proofs.c's
- * lnp_tbox_encproof / decproof, MIT, with the bounded decoder), and the A / ABDLOP-key caches.
+ * lnp_tbox_encproof / decproof, MIT, with the bounded decoder), and the A / ABDLOP-key caches (A at pqz_init,
+ * each relation's keys at its first use).
  *
  * Witness layout in the tbox vector s1 (R_TX, m1 = 146 + Z = 7 slack polys):
  *   0..31 s_f | 32..63 e_f | 64..95 r | 96..127 e1 | 128 e2_t | 129 e2_f | 130 e2_a | 131..145 bits
@@ -39,10 +40,15 @@
 typedef struct
 {
   const lnp_tbox_params_struct *P;
-  polymat_t A, A1, A2p, Bp;
+  uint8_t op;
+  int ready; /* ABDLOP keys built (at the first prove / verify of this op) */
+  polymat_t A1, A2p, Bp;
 } rel_t;
 
-static rel_t REG, TX, BURN, DS, DR;
+static rel_t REG = { .P = pqz_reg, .op = PQZ_OP_REGISTER }, TX = { .P = pqz_tx, .op = PQZ_OP_TRANSFER },
+             BURN = { .P = pqz_burn, .op = PQZ_OP_BURN }, DS = { .P = pqz_ds, .op = PQZ_OP_DISCLOSE_SENDER },
+             DR = { .P = pqz_dr, .op = PQZ_OP_DISCLOSE_RECEIVER };
+static polymat_t A; /* public, the same for every relation */
 static int ready;
 static pqz_arena_mark_t base;
 
@@ -102,43 +108,46 @@ expand_A (polymat_t A)
       }
 }
 
+/* ABDLOP keys of R from SHAKE128("SCAAS-PQZ-ABDLOP-PP-V1" || op), built at the relation's first use and kept below
+   the arena base mark, so an op never carries the keys of relations it does not use. Call with the arena released
+   to the base mark (start of pqz_prove / pqz_verify); moves the mark above the keys. */
 static int
-rel_init (rel_t *R, const lnp_tbox_params_struct *P, uint8_t op)
+rel_keys (rel_t *R)
 {
-  abdlop_params_srcptr tb = P->tbox;
+  abdlop_params_srcptr tb = R->P->tbox;
   polyring_srcptr Rq = tb->ring;
   uint8_t pp[32];
 
-  R->P = P;
-  if (R == &REG)
-    {
-      polymat_alloc (R->A, Rq, K, K);
-      expand_A (R->A);
-    }
-  else
-    memcpy (R->A, REG.A, sizeof (polymat_t)); /* A is public and the same for every relation: shared */
+  if (R->ready)
+    return PQZ_OK;
   polymat_alloc (R->A1, Rq, tb->kmsis, tb->m1);
   polymat_alloc (R->A2p, Rq, tb->kmsis, tb->m2 - tb->kmsis);
   polymat_alloc (R->Bp, Rq, tb->l + tb->lext, tb->m2 - tb->kmsis);
-  shake_tag (pp, "SCAAS-PQZ-ABDLOP-PP-V1", &op, 1, NULL, 0);
+  shake_tag (pp, "SCAAS-PQZ-ABDLOP-PP-V1", &R->op, 1, NULL, 0);
   abdlop_keygen (R->A1, R->A2p, R->Bp, pp, tb);
   /* NTT form now: a crtrep created lazily inside a call would sit above the arena mark and be dropped */
   polymat_tocrt (R->A1);
   polymat_tocrt (R->A2p);
   polymat_tocrt (R->Bp);
-  if (pqz_err == PQZ_OK)
-    pqz_sv_setup (op, P, R->A, R->A1, R->A2p, R->Bp); /* specialised verifier's tables, below the base mark */
-  return pqz_err;
+  if (pqz_err)
+    return pqz_err; /* nothing kept: the caller releases to the old mark */
+  pqz_arena_mark (&base);
+  R->ready = 1;
+  return PQZ_OK;
 }
 
 int
 pqz_init (void *arena, size_t len)
 {
   pqz_err = PQZ_OK;
+  REG.ready = TX.ready = BURN.ready = DS.ready = DR.ready = 0;
+#ifdef PQZ_SV
+  pqz_sv_reset ();
+#endif
   pqz_arena_init (arena, len);
-  if (rel_init (&REG, pqz_reg, PQZ_OP_REGISTER) || rel_init (&TX, pqz_tx, PQZ_OP_TRANSFER)
-      || rel_init (&BURN, pqz_burn, PQZ_OP_BURN) || rel_init (&DS, pqz_ds, PQZ_OP_DISCLOSE_SENDER)
-      || rel_init (&DR, pqz_dr, PQZ_OP_DISCLOSE_RECEIVER))
+  polymat_alloc (A, REG.P->tbox->ring, K, K);
+  expand_A (A);
+  if (pqz_err)
     return pqz_err;
   pqz_arena_mark (&base);
   ready = 1;
@@ -387,7 +396,7 @@ add_lin_row (sys_t *S, unsigned idx, int transpose, unsigned i, unsigned off_x, 
   S->r1[idx] = new_r1 (Rq, n);
   for (unsigned j = 0; j < K; j++)
     poly_set (spolyvec_insert_elem (S->r1[idx], 2 * (off_x + j)),
-              transpose ? polymat_get_elem (R->A, j, i) : polymat_get_elem (R->A, i, j));
+              transpose ? polymat_get_elem (A, j, i) : polymat_get_elem (A, i, j));
   poly_set_one (spolyvec_insert_elem (S->r1[idx], 2 * (off_y + i)));
   S->r1[idx]->sorted = 0;
   spolyvec_sort (S->r1[idx]);
@@ -523,40 +532,34 @@ new_vec (polyring_srcptr Rq)
   return v;
 }
 
+/* R_TX: header || pk_f || pk_t || pk_a || u_T || v_T || u || v_t || v_f || v_a; R_BURN: header || pk_f || u_T || v_T
+   || u || v_f (pq-zether.md §7.7). Reads fee and (R_BURN) amount from the header; the rest of it is hashed only. */
 static int
-parse_tx (txst_t *T, polyring_srcptr Rq, const uint8_t *stmt)
-{
-  const uint8_t *p = stmt + PQZ_PREFIX_BYTES;
-  int ok = 1;
-  T->pkf = new_vec (Rq), T->pkt = new_vec (Rq), T->pka = new_vec (Rq), T->uT = new_vec (Rq), T->u = new_vec (Rq);
-  poly_alloc (T->vT, Rq), poly_alloc (T->vt, Rq), poly_alloc (T->vf, Rq), poly_alloc (T->va, Rq);
-  ok &= rd_polyvec (T->pkf, p), p += PQZ_POLYVEC_BYTES;
-  ok &= rd_polyvec (T->pkt, p), p += PQZ_POLYVEC_BYTES;
-  ok &= rd_polyvec (T->pka, p), p += PQZ_POLYVEC_BYTES;
-  ok &= rd_polyvec (T->uT, p), p += PQZ_POLYVEC_BYTES;
-  ok &= rd_poly (T->vT, p, 16), p += PQZ_V_BYTES;
-  ok &= rd_polyvec (T->u, p), p += PQZ_POLYVEC_BYTES;
-  ok &= rd_poly (T->vt, p, 16), p += PQZ_V_BYTES;
-  ok &= rd_poly (T->vf, p, 16), p += PQZ_V_BYTES;
-  ok &= rd_poly (T->va, p, 16), p += PQZ_V_BYTES;
-  T->fee = rd_be8 (p);
-  T->amount = 0;
-  return ok;
-}
-
-/* R_BURN: header || pk_f || u_T || v_T || u || v_f (pq-zether.md §7.7) */
-static int
-parse_burn (txst_t *T, polyring_srcptr Rq, const uint8_t *stmt)
+parse_debit (txst_t *T, polyring_srcptr Rq, const uint8_t *stmt, int burn)
 {
   const uint8_t *p = stmt + PQZ_HEADER_BYTES;
-  int ok = rd_word64 (&T->fee, stmt + PQZ_HDR_FEE) & rd_word64 (&T->amount, stmt + PQZ_HDR_AMOUNT);
+  int ok = rd_word64 (&T->fee, stmt + PQZ_HDR_FEE);
+  T->amount = 0;
+  if (burn)
+    ok &= rd_word64 (&T->amount, stmt + PQZ_HDR_AMOUNT);
   T->pkf = new_vec (Rq), T->uT = new_vec (Rq), T->u = new_vec (Rq);
   poly_alloc (T->vT, Rq), poly_alloc (T->vf, Rq);
   ok &= rd_polyvec (T->pkf, p), p += PQZ_POLYVEC_BYTES;
+  if (!burn)
+    {
+      T->pkt = new_vec (Rq), T->pka = new_vec (Rq);
+      poly_alloc (T->vt, Rq), poly_alloc (T->va, Rq);
+      ok &= rd_polyvec (T->pkt, p), p += PQZ_POLYVEC_BYTES;
+      ok &= rd_polyvec (T->pka, p), p += PQZ_POLYVEC_BYTES;
+    }
   ok &= rd_polyvec (T->uT, p), p += PQZ_POLYVEC_BYTES;
   ok &= rd_poly (T->vT, p, 16), p += PQZ_V_BYTES;
   ok &= rd_polyvec (T->u, p), p += PQZ_POLYVEC_BYTES;
-  ok &= rd_poly (T->vf, p, 16);
+  if (!burn)
+    ok &= rd_poly (T->vt, p, 16), p += PQZ_V_BYTES;
+  ok &= rd_poly (T->vf, p, 16), p += PQZ_V_BYTES;
+  if (!burn)
+    ok &= rd_poly (T->va, p, 16);
   return ok;
 }
 
@@ -577,7 +580,7 @@ build_debit (sys_t *S, txst_t *T, const uint8_t *stmt, int burn)
   S->M = burn ? 48 : NTXE;
   S->bits = burn ? 129 : TX_BITS;
   S->nbin = burn ? 14 : 15;
-  if (!(burn ? parse_burn (T, Rq, stmt) : parse_tx (T, Rq, stmt)))
+  if (!parse_debit (T, Rq, stmt, burn))
     return 0;
   for (b = 0; b < 15; b++)
     acc[b] = new_poly (Rq);
@@ -660,7 +663,7 @@ build_debit (sys_t *S, txst_t *T, const uint8_t *stmt, int burn)
 
 /* ---- R_DS and R_DR (disclosure, pq-zether.md §7.9) ---- */
 
-/* opTag || proofSystemId || chainId || chainUid || token || registry || entryRef || be32(amount) || u8(kind)
+/* opTag || proofSystemId || chainId || chainUid || token || registry || entryRef || amount || kind (32-byte words)
    || pk || u || v; only amount, pk, u, v enter the equations, the rest is hashed */
 static int
 parse_disc (txst_t *T, polyring_srcptr Rq, const uint8_t *stmt)
@@ -763,11 +766,50 @@ pf_alloc (pf_t *F, const lnp_tbox_params_struct *P)
   polyvec_set_zero (F->m);
 }
 
+#ifdef PQZ_L2DOM_POC
+/* Test-only cheating prover (pqz-core/l2dom/, never in a production build): when set, pool the l2 slack of all
+   Z blocks, sum_z (B_z^2 - ||x_z||^2), and spread it greedily over the upsilon_z (each holds bitlen(B_z^2) bits), so a
+   block may exceed its own B_z as long as sum_z ||x_z||^2 <= sum_z B_z^2. Checks whether the verifier enforces each
+   exact-l2 equation separately. */
+int pqz_l2dom_poc;
+#define POC_IGNORE_ERR pqz_l2dom_poc /* and emit the proof although the prover's own self-checks fail */
+#else
+#define POC_IGNORE_ERR 0
+#endif
+
 /* s1 slack polys: upsilon_i = binexp(B_i^2 - ||x_i||^2) */
 static int
 set_upsilon (const lnp_tbox_params_struct *P, polyvec_t s1, const unsigned *start, const unsigned *len)
 {
   const unsigned m1 = P->tbox->m1 - P->Z;
+#ifdef PQZ_L2DOM_POC
+  if (pqz_l2dom_poc)
+    {
+      int64_t slack = 0;
+      for (unsigned z = 0; z < P->Z; z++)
+        {
+          slack += int_get_i64 (P->l2Bsqr[z]);
+          for (unsigned j = 0; j < len[z]; j++)
+            slack -= l2sq_poly (polyvec_get_elem (s1, start[z] + j));
+          poly_set_zero (polyvec_get_elem (s1, m1 + z));
+        }
+      if (slack < 0)
+        return 0;
+      for (unsigned z = 0; z < P->Z; z++)
+        {
+          /* upsilon_z carries bits 2^0 .. 2^(bitlen(B_z^2) - 1) */
+          int64_t cap = ((int64_t)2 << (63 - __builtin_clzll (int_get_i64 (P->l2Bsqr[z])))) - 1;
+          int64_t put = slack < cap ? slack : cap;
+          INT_T (d, 2 * P->tbox->ring->q->nlimbs);
+          int_set_i64 (d, put);
+          int_binexp (polyvec_get_elem (s1, m1 + z), NULL, d);
+          slack -= put;
+        }
+      if (slack > 0)
+        return 0;
+      return 1;
+    }
+#endif
   for (unsigned z = 0; z < P->Z; z++)
     {
       int64_t n2 = 0;
@@ -808,7 +850,7 @@ do_prove (sys_t *S, pf_t *F, const uint8_t hash0[32], const uint8_t rnd32[32], u
   lnp_tbox_prove (hash, F->tB, F->h, F->c, F->z1, F->z21, F->hint, F->z3, F->z4, F->s1, F->m, F->s2, F->tA2,
                   S->R->A1, S->R->A2p, S->R->Bp, S->R2, S->r1, S->N, S->R2p, S->r1p, S->r0p, S->M, S->Es, NULL,
                   NULL, S->Ps, NULL, NULL, S->Ds, NULL, NULL, ex + 32, P);
-  if (pqz_err)
+  if (pqz_err && !POC_IGNORE_ERR)
     return pqz_err;
   encproof (buf, &len, F->tA1, F->tB, F->h, F->c, F->z1, F->z21, F->hint, F->z3, F->z4, P);
   if (len > PQZ_MAX_PROOF || len > *proof_len)
@@ -1056,6 +1098,12 @@ pqz_prove (uint8_t op, const uint8_t *stmt, size_t stmt_len, const uint8_t *wit,
     return PQZ_ERR_INPUT;
   pqz_err = PQZ_OK;
   pqz_arena_release (&base);
+  if (rel_keys (R))
+    {
+      rc = pqz_err;
+      pqz_arena_release (&base);
+      return rc;
+    }
   memset (&S, 0, sizeof (S));
   pqz_stmt_hash (h, op, stmt, stmt_len);
   if (op == PQZ_OP_REGISTER)
@@ -1063,7 +1111,7 @@ pqz_prove (uint8_t op, const uint8_t *stmt, size_t stmt_len, const uint8_t *wit,
   pf_alloc (&F, R->P);
   if (build (&S, &T, op, stmt, stmt_len, pk) && witness (&T, op, wit, wit_len, F.s1))
     rc = do_prove (&S, &F, h, rnd32, proof, proof_len);
-  if (pqz_err)
+  if (pqz_err && !POC_IGNORE_ERR)
     rc = pqz_err;
   pqz_arena_release (&base);
   return rc;
@@ -1084,6 +1132,11 @@ pqz_verify (uint8_t op, const uint8_t *stmt, size_t stmt_len, const uint8_t *pro
     return 0;
   pqz_err = PQZ_OK;
   pqz_arena_release (&base);
+  if (rel_keys (R))
+    {
+      pqz_arena_release (&base);
+      return 0;
+    }
   memset (&S, 0, sizeof (S));
   pqz_stmt_hash (h, op, stmt, stmt_len);
   if (op == PQZ_OP_REGISTER)
@@ -1097,17 +1150,27 @@ pqz_verify (uint8_t op, const uint8_t *stmt, size_t stmt_len, const uint8_t *pro
   return ok;
 }
 
-/* the specialised verifier (pqz_sv.c): same statements, same transcript, same accept / reject */
+#ifdef PQZ_SV
+/* the specialised verifier (pqz_sv.c): same statements, same transcript, same accept / reject. Its tables for op are
+   built at the first pqz_verify_fast of op, after the relation's ABDLOP keys, and kept below the base mark like
+   them; a build without PQZ_SV (SV=0 ./build.sh wasm, the wallet's prover) has neither the code nor the tables */
 int
 pqz_verify_fast (uint8_t op, const uint8_t *stmt, size_t stmt_len, const uint8_t *proof, size_t proof_len)
 {
   uint8_t h[32];
   int ok;
+  rel_t *R = rel_of (op);
 
-  if (!ready)
+  if (!ready || R == NULL)
     return 0;
   pqz_err = PQZ_OK;
   pqz_arena_release (&base);
+  if (rel_keys (R) || pqz_sv_setup (op, R->P, A, R->A1, R->A2p, R->Bp))
+    {
+      pqz_arena_release (&base);
+      return 0;
+    }
+  pqz_arena_mark (&base); /* the tables just built, if any, stay */
   pqz_stmt_hash (h, op, stmt, stmt_len);
   ok = pqz_sv_verify (op, h, stmt, stmt_len, proof, proof_len) == 1;
   if (pqz_err)
@@ -1115,6 +1178,7 @@ pqz_verify_fast (uint8_t op, const uint8_t *stmt, size_t stmt_len, const uint8_t
   pqz_arena_release (&base);
   return ok;
 }
+#endif
 
 /* ---------------------------------------------------------------- client helpers (tests) */
 
@@ -1135,7 +1199,7 @@ pqz_keypair_from_secret (const int8_t s[2048], const int16_t e[2048], uint8_t pk
   polyvec_alloc (sv, Rq, K), polyvec_alloc (ev, Rq, K), polyvec_alloc (t, Rq, K);
   set_short (sv, s, NULL);
   set_short (ev, NULL, e);
-  polyvec_mul (t, REG.A, sv);
+  polyvec_mul (t, A, sv);
   polyvec_fromcrt (t);
   polyvec_add (t, t, ev, 0);
   for (unsigned i = 0; i < K; i++)
@@ -1162,7 +1226,7 @@ pqz_encrypt (const uint8_t *const pks[], unsigned npk, const uint8_t msgs[][16],
   for (unsigned i = 0; i < K; i++) /* u = A^T r + e1 */
     {
       for (unsigned j = 0; j < K; j++)
-        poly_set (polyvec_get_elem (row, j), polymat_get_elem (REG.A, j, i));
+        poly_set (polyvec_get_elem (row, j), polymat_get_elem (A, j, i));
       polyvec_dot (polyvec_get_elem (t, i), row, rv);
     }
   polyvec_fromcrt (t);

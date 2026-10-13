@@ -6,7 +6,8 @@
  *   pqz_bench [n_prove] [n_verify] [rel]   prints JSON lines: sizes, times (ms), check results
  *   rel: bit mask, 1 = R_REG, 2 = R_TX, 4 = R_BURN, 8 = R_DS, 16 = R_DR (default 31 = all); n_verify = 0 also
  *   skips the adversarial verifies
- *   PQZ_VERIFY=fast (native) / step_set_fast (wasm): time pqz_verify_fast instead of pqz_verify (P6-SV)
+ *   PQZ_VERIFY=fast (native) / step_set_fast (wasm): time pqz_verify_fast instead of pqz_verify (P6-SV; builds with
+ *   PQZ_SV only, the default of build.sh)
  */
 #include <stddef.h>
 #include <stdint.h>
@@ -115,13 +116,23 @@ static int fast; /* 1: verify with pqz_verify_fast */
 static int
 vfy (uint8_t op, const uint8_t *st, size_t stlen, const uint8_t *pf, size_t len)
 {
-  return fast ? pqz_verify_fast (op, st, stlen, pf, len) : pqz_verify (op, st, stlen, pf, len);
+#ifdef PQZ_SV
+  if (fast)
+    return pqz_verify_fast (op, st, stlen, pf, len);
+#endif
+  return pqz_verify (op, st, stlen, pf, len);
 }
 
-void
+/* 0 ok; -1: asked for the specialised verifier in a build without it (SV=0) */
+int
 step_set_fast (int on)
 {
+#ifndef PQZ_SV
+  if (on)
+    return -1;
+#endif
   fast = on;
+  return 0;
 }
 
 /* relation index: 0 R_REG, 1 R_TX, 2 R_BURN, 3 R_DS, 4 R_DR */
@@ -134,11 +145,12 @@ static const size_t STLEN[NREL] = { sizeof reg_stmt, sizeof tx_stmt, sizeof burn
 static const uint8_t *const WIT[NREL] = { reg_wit, tx_wit, burn_wit, ds_wit, dr_wit };
 static const size_t WLEN[NREL] = { sizeof reg_wit, sizeof tx_wit, sizeof burn_wit, sizeof ds_wit, sizeof dr_wit };
 static const unsigned SEEDMUL[NREL] = { 31, 17, 13, 11, 7 };
+static const uint8_t PSID[32] = PQZ_PROOF_SYSTEM_ID; /* statement bytes 32..63 */
 /* tamper kind 2: first byte of a 2048-coefficient key in the statement (R_REG pk, R_TX / R_BURN pk_f, disclosure
    pk); kind 5: the last byte of a public scalar (R_REG message, R_TX fee, R_BURN / disclosure amount) */
-static const size_t KEYOFF[NREL] = { PQZ_PREFIX_BYTES + 32, PQZ_PREFIX_BYTES + 32, PQZ_HEADER_BYTES, PQZ_DISC_PK,
+static const size_t KEYOFF[NREL] = { PQZ_PREFIX_BYTES + 32, PQZ_HEADER_BYTES, PQZ_HEADER_BYTES, PQZ_DISC_PK,
                                      PQZ_DISC_PK };
-static const size_t SCALOFF[NREL] = { PQZ_PREFIX_BYTES + 31, PQZ_TX_STMT_BYTES - 1, PQZ_HDR_AMOUNT + 31,
+static const size_t SCALOFF[NREL] = { PQZ_PREFIX_BYTES + 31, PQZ_HDR_FEE + 31, PQZ_HDR_AMOUNT + 31,
                                       PQZ_DISC_AMOUNT + 31, PQZ_DISC_AMOUNT + 31 };
 
 static void
@@ -155,6 +167,7 @@ setup (void)
 
   /* R_REG: prefix || message || pk */
   memset (reg_stmt, 0xA5, PQZ_PREFIX_BYTES);
+  memcpy (reg_stmt + 32, PSID, 32);
   for (int i = 0; i < 32; i++)
     reg_stmt[PQZ_PREFIX_BYTES + i] = (uint8_t)i;
   memcpy (reg_stmt + PQZ_PREFIX_BYTES + 32, KF.pk, PQZ_POLYVEC_BYTES);
@@ -178,8 +191,15 @@ setup (void)
   const uint8_t *pks[3] = { KT.pk, KF.pk, KA.pk };
   pqz_encrypt (pks, 3, (const uint8_t (*)[16])m, r, e1, (const int16_t (*)[16])e2, u, vs);
 
+  /* header (pq-zether.md §7.7): opTag, proofSystemId, then words hashed only, fee at 256, amount 0 */
   uint8_t *p = tx_stmt;
-  memset (p, 0x5A, PQZ_PREFIX_BYTES), p += PQZ_PREFIX_BYTES;
+  memset (p, 0x5A, PQZ_PREFIX_BYTES);
+  memcpy (p + 32, PSID, 32);
+  for (int i = PQZ_PREFIX_BYTES; i < PQZ_HEADER_BYTES; i++)
+    p[i] = (uint8_t)(i * 3);
+  memset (p + PQZ_HDR_FEE, 0, 64);
+  be8 (p + PQZ_HDR_FEE + 24, fee);
+  p += PQZ_HEADER_BYTES;
   memcpy (p, KF.pk, PQZ_POLYVEC_BYTES), p += PQZ_POLYVEC_BYTES;
   memcpy (p, KT.pk, PQZ_POLYVEC_BYTES), p += PQZ_POLYVEC_BYTES;
   memcpy (p, KA.pk, PQZ_POLYVEC_BYTES), p += PQZ_POLYVEC_BYTES;
@@ -188,8 +208,6 @@ setup (void)
   memcpy (p, u, PQZ_POLYVEC_BYTES), p += PQZ_POLYVEC_BYTES;
   for (int k = 0; k < 3; k++)
     memcpy (p, vs[k], PQZ_V_BYTES), p += PQZ_V_BYTES;
-  for (int b = 7; b >= 0; b--)
-    *p++ = (uint8_t)(fee >> (8 * b));
 
   p = tx_wit;
   for (int j = 0; j < 2048; j++)
@@ -217,11 +235,12 @@ setup (void)
     {
       uint8_t *st = k ? dr_stmt : ds_stmt;
       memset (st, k ? 0xD5 : 0xD4, PQZ_PREFIX_BYTES);
+      memcpy (st + 32, PSID, 32);
       for (int i = PQZ_PREFIX_BYTES; i < PQZ_DISC_AMOUNT; i++)
         st[i] = (uint8_t)(i * 7);
-      memset (st + PQZ_DISC_AMOUNT, 0, 32);
+      memset (st + PQZ_DISC_AMOUNT, 0, 64);
       be8 (st + PQZ_DISC_AMOUNT + 24, v);
-      st[PQZ_DISC_AMOUNT + 32] = (uint8_t)(k ? 1 : 0); /* kind */
+      st[PQZ_DISC_KIND + 31] = (uint8_t)(k ? 1 : 0); /* kind: SENDER_S 0, RECEIVER_X 1 (AUDITOR 2) */
       memcpy (st + PQZ_DISC_PK, KT.pk, PQZ_POLYVEC_BYTES);
       memcpy (st + PQZ_DISC_PK + PQZ_POLYVEC_BYTES, u, PQZ_POLYVEC_BYTES);
       memcpy (st + PQZ_DISC_PK + 2 * PQZ_POLYVEC_BYTES, vs[0], PQZ_V_BYTES);
@@ -238,7 +257,8 @@ setup (void)
   for (int j = 0; j < 2048; j++)
     dr_wit[j] = (uint8_t)KT.s[j], le16 (dr_wit + 2048 + 2 * j, KT.e[j]);
 
-  /* R_BURN: burn 123,456 with fee 7 from the same T; fresh (r, e1, e2_f) for the new balance */
+  /* R_BURN: burn 123,456 with fee 7 from the same T; fresh (r, e1, e2_f) for the new balance (pq-zether.md
+     CTR-PQZ-19: burn / refresh randomness is fresh CSPRNG output, never derived from the counter; here the test RNG) */
   {
     static int8_t rb[2048];
     static int16_t e1b[2048], e2b[1][16];
@@ -249,6 +269,7 @@ setup (void)
     pqz_encrypt (pkf, 1, (const uint8_t (*)[16])mb, rb, e1b, (const int16_t (*)[16])e2b, ub, vb);
     p = burn_stmt;
     memset (p, 0xB2, PQZ_PREFIX_BYTES);
+    memcpy (p + 32, PSID, 32);
     for (int i = PQZ_PREFIX_BYTES; i < PQZ_HEADER_BYTES; i++)
       p[i] = (uint8_t)(i * 5); /* chainId .. memoHash: hashed only */
     memset (p + PQZ_HDR_FEE, 0, 64);
@@ -422,7 +443,11 @@ main (int argc, char **argv)
   int rels = argc > 3 ? atoi (argv[3]) : 31;
   void *arena = malloc (ARENA_BYTES);
   const char *ve = getenv ("PQZ_VERIFY");
-  fast = ve != NULL && strcmp (ve, "fast") == 0;
+  if (step_set_fast (ve != NULL && strcmp (ve, "fast") == 0) != 0)
+    {
+      printf ("{\"error\": \"PQZ_VERIFY=fast: built without the specialised verifier (SV=0)\"}\n");
+      return 1;
+    }
   double t0, *tp = malloc (sizeof (double) * (np > nv ? np : nv) * 7 + 64);
 
   t0 = now_ms ();

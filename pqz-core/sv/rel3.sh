@@ -22,7 +22,7 @@ PQZ_VERIFY=fast node test/run_wasm.mjs 2 $((NF / 2)) > "$R-wasm-fast.jsonl" 2>&1
 PQZ_VERIFY=both node test/run_wasm.mjs 2 10 > "$R-wasm-both.jsonl" 2>&1 || echo "rc=$?"
 mkdir -p build/sv-san
 SRC="src/pqz_lazer.c src/pqz_ntt.c src/pqz_arena.c src/pqz_rel.c src/pqz_sv.c"
-INC="-std=gnu11 -g -fno-omit-frame-pointer -w -Ibuild/include -Isrc -Ilazer -Iparams"
+INC="-std=gnu11 -g -fno-omit-frame-pointer -w -DPQZ_SV -Ibuild/include -Isrc -Ilazer -Iparams"
 SAN="-fsanitize=address,undefined -fno-sanitize=vla-bound,pointer-overflow -fno-sanitize-recover=all"
 ${CC:-clang} -O1 $INC $SAN -DPQZ_DEBUG_MALLOC -o build/sv-san/pqz_bench $SRC test/pqz_bench.c
 ASAN_OPTIONS=detect_leaks=0 PQZ_VERIFY=fast build/sv-san/pqz_bench 1 3 > "$R-asan.jsonl" 2>&1 || echo "asan rc=$?"

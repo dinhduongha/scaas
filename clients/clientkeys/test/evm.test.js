@@ -7,7 +7,7 @@ import {
   batchLeaf, evmAddress, passkeySubjectKey, addKeyCalldata, ownerCallTypedData, checkOwnerCall, checkPayment,
   keyProofMessage, metaTxTypedData, metaTransferTypedData, checkCall, tradeOrderTypedData, orderCancelTypedData,
   checkTradeOrder, checkCancel, payLane, receiverFeeTypedData, wrapToUACalldata, unwrapToUACalldata,
-  payWithFeeToUACalldata,
+  payWithFeeToUACalldata, checkReceiverFee,
 } from '../src/evm.js';
 import { abiEncode, hex, fromHex, keccak_256, utf8ToBytes } from '../src/bytes.js';
 
@@ -553,4 +553,46 @@ test('UA-5a: ReceiverFee typed data and the receivers\' calldata (`cast calldata
   assert.equal(run(unwrap, { mode: 0x11, fee: '10000' }).fee, 10000n);   // PERCENT on wrapped (argument 1): 1 %
   assert.throws(() => run(hex(wrapToUACalldata(U, 1000000n, TO)), { mode: 0x11, fee: '1' }), /a percentage fee/);
   assert.throws(() => run(hex(payWithFeeToUACalldata(TO, 1n, 0, 0n, '0x' + '00'.repeat(20), TO))), /never signed as a call/);
+});
+
+test('receiver-pays, address path: the payee co-signs ReceiverFee only over the payment it expects, within its own bounds', () => {
+  const FEE_TO = '0x' + '0f'.repeat(20);
+  const payment = serverPayment();   // mode 1 (relayer bound), fee NONE, lane payLane(REF), nonce 0: CTR-MTX-06's shape
+  const pd = hex(hashTypedData(payment));
+  const rf = (over = {}, dom = {}) => {
+    const t = receiverFeeTypedData({ contract: TOKEN, chainId: 7622, chainUid: UID, paymentDigest: pd, fee: '3000000',
+      feeRecipient: FEE_TO, validUntil: String(NOW + 60), ...over });
+    t.domain = { ...t.domain, ...dom };
+    return t;
+  };
+  const want = { payee: PAYEE, chainId: 7622, chainUid: UID, amount: '125000.5', decimals: 6, entryRef: REF,
+    expectedToken: TOKEN, payment, maxFee: '3000000', feeRecipient: FEE_TO, now: NOW };
+  const ok = checkReceiverFee(rf(), want);
+  assert.equal(hex(ok.digest), hex(hashTypedData(rf())));
+  assert.deepEqual([hex(ok.paymentDigest), ok.payer, ok.fee, ok.feeRecipient], [pd, ACCOUNT, 3000000n, FEE_TO]);
+  const no = (td, w, why) => assert.throws(() => checkReceiverFee(td, { ...want, ...w }), why);
+  // the payee's own bounds on fee / feeRecipient / deadline
+  no(rf(), { maxFee: '2999999' }, /the fee is above your limit/);
+  no(rf(), { maxFee: undefined }, /the fee is above your limit/);
+  no(rf({ feeRecipient: ATK }), {}, /an address you did not name/);
+  no(rf(), { feeRecipient: undefined }, /required/);
+  no(rf({ fee: '0' }), {}, /no fee/);
+  no(rf({ validUntil: String(NOW + 86401) }), {}, /deadline is not near/);
+  no(rf({ validUntil: String(NOW) }), {}, /deadline is not near/);
+  // paymentDigest recomputed from the payment the payee expects
+  no(rf({ paymentDigest: hex(keccak_256(utf8ToBytes('another payment'))) }), {}, /not on the payment you expect/);
+  no(rf(), { payment: serverPayment({ to: ATK }) }, /does not pay you/);
+  no(rf(), { amount: '125000.4' }, /the amount differs/);
+  no(rf({ fee: '125000500001' }), { maxFee: '999999999999' }, /more than the payment/);
+  no(rf(), { entryRef: '0x' + '0a'.repeat(32) }, /reference differs/);
+  no(rf(), { payment: serverPayment({ nonce: '1' }) }, /on its request lane/);
+  no(rf(), { payment: serverPayment({ mode: 0x21, fee: '1' }) }, /receiver-pays shape/);
+  no(rf(), { payment: serverPayment({ mode: 0, relayer: '0x' + '00'.repeat(20) }) }, /receiver-pays shape/);
+  no(rf(), { payment: serverPayment({}, {}, ATK) }, /wrong token/);
+  no(rf({}, { verifyingContract: ATK }), {}, /wrong token/);
+  no(rf({}, { salt: '0x' + '11'.repeat(32) }), {}, /unexpected receiver fee fields/);
+  no(rf(), { payment: serverPayment({}, { salt: '0x' + '11'.repeat(32) }) }, /unexpected payment fields/);
+  no(rf(), { payment: { ...payment, primaryType: 'MetaTransaction' } }, /not on a payment/);
+  no({ ...rf(), primaryType: 'MetaTransfer' }, {}, /not a receiver fee/);
+  no(rf(), { payment: undefined }, /not on a payment/);
 });

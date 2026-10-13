@@ -1019,3 +1019,8 @@ src/registry/**	renamed	contracts/zether.md header and §13: the Zether-era regi
 AuthScheme 7	renamed	contracts/metatx.md: a native authRef of a Zether UA (the AuthScheme values are backed up in smartcontracts/evm/legacy/ua3/, UA-3)
 UniversalAccountRegistry.register	renamed	node/job-api.md call targets: UARegistry.register (the UA registry, UA-3; the old registry in smartcontracts/evm/legacy/ua3/)
 src/{common,metatx,factory,dex,wallet,account,registry,zether,hedera,chains}	renamed	architecture.md §3.1: the src/ folder list now matches the tree (registry gone, ua and trade added; UA-3)
+|e_T[i]| < 2^24	obsolete	contracts/pq-zether.md §4.3: the debit proof shows e_T[i] in [-2^24, 2^24), the half-open range a binary decomposition proves (owner 2026-10-13)
+|e − e'| ≤ 2^25 − 2 < Δ/2	obsolete	contracts/pq-zether.md §4.3 uniqueness: |e - e'| <= 2^25 - 1 < Delta/2 with the half-open ranges (owner 2026-10-13)
+. The contract loads 	extraction-artifact	contracts/pq-zether.md §7.9: the disclosure statement is now a byte-offset table (CTR-PQZ-14)
+abs(e'_i) < 2^24	obsolete	contracts/pq-zether.md §7.9 RECEIVER_X: e'_i in [-2^24, 2^24), the range R_DR proves; uniqueness unchanged (CTR-PQZ-14, owner 2026-10-13)
+proofSystemId = keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v1")	obsolete	PQZL proofSystemId v1 retired by v2 (2026-10-13, LaZer tbox Schwartz-Zippel fixes lazer#24 / #25): contracts/pq-zether.md §8 Versioning, CTR-PQZ-09

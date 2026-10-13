@@ -1,5 +1,70 @@
 # HANDOFF — scaas
 
+## Session 2026-10-13 (shutdown 2: UA-5b, PQZH, PQZ relations WIP) — resume here
+
+**State:** main pushed at the HANDOFF commit (after `af8ccf5`). Merged and pushed this session: UA-5a (`04bad29`; C5a-15
+confirmed), `ua-followups` (UA-2c follow-ups + clientkeys `checkReceiverFee`, `5c5b6f5`), `pqzh-design` (PQZH design
+study, `475b066`), `pqz-rel3` (`R_BURN` / `R_DS` / `R_DR` in pqz-core with the generic verifier, `3ad4069`), research:
+`pqz-specialised-verifier.md` (P6-SV results; code branch not merged yet), `pqz-proof-alternatives.md` §6 candidates and
+§7 prior art (Lether, MatRiCT+, backends), pq-zether.md "Why LaZer" refreshed. Private notes live in `scratchpad/`
+(git-ignored); read them before touching PQZ branches.
+
+**Owner decisions this session (recorded in TODO):** PQZL not killed (P6-SV: specialised verifier `R_TX` ≈ 8 ms p50
+portable, all five relations ≤ 10 ms p99 portable). PQZH: six answers in TODO P6-PQZH — ≤ 160 KB proof for PQZH (PQZL
+keeps 96 KB), sweep provable vs conjectured (leaning provable), PQZH tokens register with a PQZH `R_REG`, **"two kinds" =
+PQZL and PQZH as one configuration value (`proofSystemId` at `initialize`), the four reserved PQZ `TokenKind`s stay**,
+Keccak / SHAKE transcript, prototype now. PQZ relation points A, B, 1–5 accepted (A: merge `pqz-rel3` and push, done `3ad4069`; B: burn randomness fresh; 1: R_TX on the
+§7.7 layout; disclosure `kind` a 32-byte word; precompile checks opTag / proofSystemId; e′ ∈ [−2^24, 2^24); lazy keys).
+Credit cap stays 1024 units for now.
+
+**WIP branches (resume in this order; none merged, none pushed; agents stop at the branch, owner approves merge/push):**
+
+1. **UA-5b** — branch `ua5b`, worktree `.claude/worktrees/ua5b`, last `39cd048` (from `279b5d8`). Tasks 1–6 of 8 done
+   (purpose `trade` in UAKinds + six libraries; `UATradeOrder` / `uaTrade` / `uaCancelOrder` / `uaInvalidateNonces`;
+   `uaWrap`; `SCaaSDex` tagged legs; DEX conservation invariant; `uatrade_kat.json` + clientkeys typed data). Plan
+   `docs/superpowers/plans/2026-10-13-ua5b-trade-dex.md`. **Node does not build until Task 7** (leg ABI changed):
+   `scaas-node/src/abi.rs` tagged `Leg {sellToken, shape, order, sig, fill}`, `UATradeOrder`, `SelfTrade(bytes32)`,
+   `UALegSettled`; `dex.rs::to_settlement` (shape-0 legs `abi_encode(TradeOrder)`, mtxSettle selector assertion ~l.1239,
+   KAT ~l.840); `dex/venue.rs` watcher filter / `encode_event` / `book.settled` / mock decoder ~l.1312. Then Task 8 docs
+   (dex.md CTR-DEX-15/16/23/25/26, accounts.md CTR-UA-14/-19/-26/-27 + §1.7, token-wrappers.md CTR-TOK-20, metatx.md
+   CTR-MTX-18, decisions.md, TODO), full checks (forge default + `private7622`, `test/ua/**`, `--isolate` UAGas /
+   UARegistryGroups, size gate, clientkeys, vectors regenerate byte-identical), mutations (`_uaMove` amount in
+   `uaTrade`, `pulled[h] == 0`, `_sendTo` branch, `_payLeg` refund, `uaWrap` destination, `UAVerifyGas` re-raise), self-review.
+   **Owner to confirm rulings** C5b-1/-7 (one internal order form, trailing bytes ignored), C5b-2 (`ua*` trade revert
+   `UALedgerOff` when the ledger is off), C5b-3 (`SelfTrade(bytes32)`), C5b-4 (`LegShapeUnknown`), C5b-5 (DEX "ledger
+   on" = listing + `registry() != 0`, no ERC-165), C5b-6 (derived destination checked only at payout → `MatchFailed`),
+   C5b-9 (`uaWrap` emits only `UAWrapped`), C5b-11 (node: tagged legs + `UALegSettled` only; intake / bytes32 book / PQ
+   gossip wait for UA F5), C5b-12, C5b-14 (`SCaaSDex` 23,493 B stays out of the size baseline). Numbers so far: two
+   `mldsa65` legs 12,124,252 gas (three revert `UAVerifyGas`); `UNDERLYING` size pin raised 45,056 → 49,152.
+   Then **UA-5c** (from `ua5b`).
+2. **PQZ relation fix-ups** — branch `pqz-relfix`, worktree `.claude/worktrees/relfix`, `53f5ab3` WIP (from `3ad4069`).
+   Decisions B, 1–5 done in code + spec; builds, KAT 19/19, tamper `fails 0`, ASan/UBSan clean, docs_check 0 errors.
+   R_TX `proofs_fnv` changed by design (native `cb562b47` → `4690aaa0`, wasm `834d6853` → `f1c3e7f6`); R_REG unchanged.
+   Lazy keys: wasm R_TX arena 251 → 221 MiB (13.6 % under 256 MiB); arena block-class rebuild fixed. Remaining: timing run
+   (`scripts/capped pqz-core/rel3/relfix.sh f2`, > 10 min, background), numbers into
+   `pqz-relations-burn-disclose.md` §1/§3/§4/§5 + `pqz-core/README.md` / `STATUS.md`, final non-WIP commit. Then the
+   specialised-verifier part on its private branch (see the private notes).
+3. **PQZH prototype** — branch `pqzh-proto`, worktree `.claude/worktrees/pqzhp`, `e1fa752` WIP. Crate `pqz-core/pqzh/`,
+   Plonky3 `=0.8.0` (needs Rust 1.97.1, pinned in `rust-toolchain.toml`), Goldilocks² + FRI + Keccak Merkle, transcript
+   seeded by SHAKE256(tag ‖ op ‖ be32(len) ‖ stmt); NTT(A) and the statement in periodic columns. R_REG and R_TX prove
+   and verify honestly (constraint-checked). Single-run sizes: R_REG 130.7 KB; R_TX 178 KB at blowup 8 / 38 queries
+   (over 160 KB), **144 KB at blowup 16 / 28 queries** (conjectured); prove ≈ 0.7–1.0 s R_REG, 1.9 s R_TX native.
+   Next: default to blowup 16 / 28 queries (the first test in `tests/attacks.rs` expects ≤ 160 KB), run attacks + full
+   bench, wasm build + node runner, ZK mode (pad the 16-row Digit table to ≥ 128 rows), C cross-check of statement bytes
+   against `pqz_bench.c`, `p3-security` provable vs conjectured sweep, then `docs/research/pqzh-prototype.md`.
+4. **PQZH Solidity verifier gas** — branch `pqzh-sol` (= main, nothing committed), worktree `.claude/worktrees/pqzhsol`
+   (`smartcontracts/evm/lib` symlinked). Plan: stdlib Python references (Goldilocks, Fp2/Fp3, pure-Python keccak,
+   depth-10 Merkle, FRI folds arity 2/8/16, LogUp sum) → `test/pqzh/Pqzh.sol` + `PqzhTest.t.sol` (test-only, per-component
+   gas, synthetic end-to-end skeleton with Merkle checks enforced) → `pqz-core/pqzh/sol/model.py` grid (blowup 4/8/16 ×
+   arity 2/8/16 × conjectured/Johnson, five relations) with calldata (EIP-2028 / EIP-7623) vs the 16,777,216 cap →
+   `docs/research/pqzh-solidity-verifier.md`. Pre-measurement guess only: R_TX ≈ 2.3–4 M verify + ≈ 2 M calldata; risks:
+   SHAKE over the statement in Solidity (≈ 15 M) — use the keccak opcode or a Horner fingerprint. Owner asked: measure,
+   write into research, push.
+
+**Owner steps outstanding:** the items in the private notes; 7622 registry redeploy after
+the gas limit; PQ verifier audit; chain 22776 genesis; run the static bench tarball on an AVX-512 IFMA machine.
+
+
 ## Session 2026-10-13 (shutdown: P6d WIP, UA-1c draft) — resume here
 
 **State:** main pushed. Merged this session: UA-3, UA client dirs rename, the license rename (Vegan Community / Vegan

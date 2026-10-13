@@ -46,7 +46,8 @@ setup (void)
   pqz_encrypt (pks, 1, (const uint8_t (*)[16])m, r, e1, (const int16_t (*)[16])e2, uT, vT);
   pqz_encrypt (pks, 3, (const uint8_t (*)[16])m, r, e1, (const int16_t (*)[16])e2, u, vs);
   uint8_t *p = tx_stmt;
-  memset (p, 0x5A, PQZ_PREFIX_BYTES), p += PQZ_PREFIX_BYTES;
+  memset (p, 0x5A, PQZ_HEADER_BYTES); /* pq-zether.md §7.7 header; fee and amount words 0 */
+  memset (p + PQZ_HDR_FEE, 0, 64), p += PQZ_HEADER_BYTES;
   for (int k = 0; k < 3; k++)
     memcpy (p, pk, PQZ_POLYVEC_BYTES), p += PQZ_POLYVEC_BYTES;
   memcpy (p, uT, PQZ_POLYVEC_BYTES), p += PQZ_POLYVEC_BYTES;
@@ -54,7 +55,6 @@ setup (void)
   memcpy (p, u, PQZ_POLYVEC_BYTES), p += PQZ_POLYVEC_BYTES;
   for (int k = 0; k < 3; k++)
     memcpy (p, vs[k], PQZ_V_BYTES), p += PQZ_V_BYTES;
-  memset (p, 0, 8);
   p = tx_wit;
   for (int j = 0; j < 2048; j++)
     p[j] = (uint8_t)s[j], p[2048 + 2 * j] = (uint8_t)e[j], p[2049 + 2 * j] = (uint8_t)(e[j] >> 8);

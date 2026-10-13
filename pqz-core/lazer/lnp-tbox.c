@@ -2,6 +2,38 @@
 #include "lazer.h"
 #include "stopwatch.h"
 
+/* PQZ: P6-SZ trace hook (pqz-core/sz): reports how the Fiat-Shamir challenges of the evaluation step are derived.
+   Compiled only with -DPQZ_SZ_TRACE; production builds are unchanged. kind: 0 = begin (dom 0 prove, 1 verify),
+   1 = challenge vector of one evaluation-equation call for accumulator acc (n = number of equations),
+   2 / 3 = seed and dom of the z4 / z3 combination matrix V, 4 = seed and dom of a JL row (R or R'). */
+#ifdef PQZ_SZ_TRACE
+void (*pqz_sz_trace_fn) (int kind, const uint8_t seed[32], uint64_t dom, int acc, const int64_t *v,
+                         unsigned int n)
+    = 0;
+#define PQZ_SZT(...)                                                                                   \
+  do                                                                                                        \
+    {                                                                                                       \
+      if (pqz_sz_trace_fn)                                                                                  \
+        pqz_sz_trace_fn (__VA_ARGS__);                                                                      \
+    }                                                                                                       \
+  while (0)
+static void
+_pqz_sz_trace_vec (const uint8_t seed[32], uint64_t dom, int acc, const intvec_t v)
+{
+  int64_t buf[v->nelems];
+  for (unsigned int j = 0; j < v->nelems; j++)
+    buf[j] = int_get_i64 (intvec_get_elem (v, j));
+  PQZ_SZT (1, seed, dom, acc, buf, v->nelems);
+}
+#else
+#define PQZ_SZT(...)                                                                                   \
+  do                                                                                                        \
+    {                                                                                                       \
+    }                                                                                                       \
+  while (0)
+#define _pqz_sz_trace_vec(...) PQZ_SZT ()
+#endif
+
 static inline void _expand_R_i (int8_t *Ri, unsigned int ncols, unsigned int i,
                                 const uint8_t cseed[32]);
 static inline void _expand_Rprime_i (int8_t *Rprimei, unsigned int ncols,
@@ -282,6 +314,7 @@ lnp_tbox_prove (uint8_t hash[32], polyvec_t tB, polyvec_t h, poly_t c,
 
   DEBUG_PRINTF (DEBUG_PRINT_FUNCTION_ENTRY, "%s", __func__);
   STOPWATCH_START (stopwatch_lnp_tbox_prove, "lnp_tbox_prove");
+  PQZ_SZT (0, hash, 0, -1, NULL, 0);
 
   polyvec_alloc (s, Rq, 2 * (m1 + Z + quad->l));
 
@@ -935,6 +968,7 @@ lnp_tbox_verify (uint8_t hash[32], polyvec_t h, poly_t c, polyvec_t z1,
 
   DEBUG_PRINTF (DEBUG_PRINT_FUNCTION_ENTRY, "%s", __func__);
   STOPWATCH_START (stopwatch_lnp_tbox_verify, "lnp_tbox_verify");
+  PQZ_SZT (0, hash, 1, -1, NULL, 0);
 
   /* allocate tmp space for 1 quadrativ eq */
   spolymat_alloc (R2t, Rq, n_, n_, NELEMS_DIAG (n_));
@@ -1962,6 +1996,7 @@ static inline void
 _expand_R_i (int8_t *Ri, unsigned int ncols, unsigned int i,
              const uint8_t cseed[32])
 {
+  PQZ_SZT (4, cseed, i, -1, NULL, 0);
   _brandom (Ri, ncols, 1, cseed, i);
 }
 
@@ -1970,6 +2005,7 @@ static inline void
 _expand_Rprime_i (int8_t *Rprimei, unsigned int ncols, unsigned int i,
                   const uint8_t cseed[32])
 {
+  PQZ_SZT (4, cseed, 256 + i, -1, NULL, 0);
   _brandom (Rprimei, ncols, 1, cseed, 256 + i);
 }
 
@@ -2350,18 +2386,26 @@ __schwartz_zippel_accumulate2 (spolymat_ptr R2i[], spolyvec_ptr r1i[],
   polyring_srcptr Rq = quad_eval->ring;
   int_srcptr q = polyring_get_mod (Rq);
   const unsigned int log2q = polyring_get_log2q (Rq);
-  INTVEC_T (V, 2 * M, Rq->q->nlimbs);
+  /* PQZ (P6-SZ): the challenge matrix is Gamma in Z_q^{lambda x M} (LNP22 Fig. 8 / Sec. 4.4), i.e. lambda
+     independent rows: rows 2i, 2i+1 drive the a / b halves of accumulator pair i. Upstream LaZer draws only
+     2 * M challenges and reuses that one (subv1, subv2) pair for every i, so the lambda/2 pairs are identical
+     accumulators and the evaluation / beta / upsilon / binary / l2 equations get 2 independent Schwartz-Zippel
+     tests instead of lambda (soundness ~ q^-2, not q^-4). We draw the full lambda * M and index per pair. This
+     changes the transcript: proofSystemId v2 (CTR-PQZ-09). Upstream: https://github.com/lazer-crypto/lazer/issues/24 */
+  INTVEC_T (V, lambda * M, Rq->q->nlimbs);
   intvec_t subv1, subv2;
   unsigned int i;
 
   DEBUG_PRINTF (DEBUG_PRINT_FUNCTION_ENTRY, "%s begin", __func__);
 
-  intvec_get_subvec (subv1, V, 0, M, 1);
-  intvec_get_subvec (subv2, V, M, M, 1);
   intvec_urandom (V, q, log2q, seed, dom);
 
   for (i = 0; i < lambda / 2; i++)
     {
+      intvec_get_subvec (subv1, V, (2 * i) * M, M, 1);
+      intvec_get_subvec (subv2, V, (2 * i + 1) * M, M, 1);
+      _pqz_sz_trace_vec (seed, dom, 2 * i, subv1);
+      _pqz_sz_trace_vec (seed, dom, 2 * i + 1, subv2);
       __schwartz_zippel_accumulate (R2i[i], r1i[i], r0i[i], R2primei, r1primei,
                                     r0primei, M, subv1, params);
       __schwartz_zippel_accumulate (R2i2[i], r1i2[i], r0i2[i], R2primei,
@@ -3085,8 +3129,14 @@ __schwartz_zippel_accumulate_l2 (spolymat_ptr R2i[], spolyvec_ptr r1i[],
       r1tptr[0] = r1t;
       r0tptr[0] = r0t;
 
+      /* PQZ (P6-L2): one domain per exact-l2 equation. Upstream passes the same dom for every i < Z, so all
+         Z equations get identical challenges and the verifier only checks their sum,
+         sum_i (||x_i||^2 + <pow2, upsilon_i> - B_i^2) = 0, i.e. sum_i ||x_i||^2 <= sum_i B_i^2 instead of each
+         ||x_i|| <= B_i. The callers already reserve Z domains (z4 starts at this dom + Z, under hash0), and no
+         other equation uses (seed, dom + i), i > 0. Transcript change: proofSystemId v2 (CTR-PQZ-09).
+         Upstream: https://github.com/lazer-crypto/lazer/issues/25 */
       __schwartz_zippel_accumulate2 (R2i, r1i, r0i, R2i2, r1i2, r0i2, R2tptr,
-                                     r1tptr, r0tptr, 1, seed, dom,
+                                     r1tptr, r0tptr, 1, seed, dom + i,
                                      params->quad_eval);
     }
 
@@ -3143,6 +3193,7 @@ __schwartz_zippel_accumulate_z4 (spolymat_ptr R2i[], spolyvec_ptr r1i[],
   INTMAT_T (vR, lambda, nprime * d, 2 * Rq->q->nlimbs);
   INTVEC_T (vRu, lambda, 2 * Rq->q->nlimbs);
   intmat_urandom (V, q, log2q, seed, dom);
+  PQZ_SZT (2, seed, dom, -1, NULL, 0);
 
   polymat_alloc (mat, Rq, nprime, MAX (m1, l));
   polymat_alloc (vRpol, Rq, lambda, nprime);
@@ -3455,6 +3506,7 @@ __schwartz_zippel_accumulate_z3 (
   INTMAT_T (vR, lambda, nex * d, 2 * Rq->q->nlimbs);
   INTVEC_T (vRf, lambda, 2 * Rq->q->nlimbs);
   intmat_urandom (V, q, log2q, seed, dom);
+  PQZ_SZT (3, seed, dom, -1, NULL, 0);
 
   // printf ("V:\n");
   // intmat_dump (V);

@@ -903,7 +903,8 @@ pqz_sv_setup (uint8_t op, const lnp_tbox_params_struct *P, polymat_t A, polymat_
 
   if (idx < 0)
     goto fail;
-
+  if (S->ready)
+    return PQZ_OK;
   if (!sv_ready)
     {
       aes_tables ();
@@ -1009,8 +1010,19 @@ pqz_sv_setup (uint8_t op, const lnp_tbox_params_struct *P, polymat_t A, polymat_
   S->ready = 1;
   return PQZ_OK;
 fail:
+  /* the caller releases the arena to the mark before this call: a shared table built here goes with it */
+  if (SA != NULL && !SR[0].ready && !SR[1].ready && !SR[2].ready && !SR[3].ready && !SR[4].ready)
+    sv_ready = 0, SA = NULL;
+  memset (S, 0, sizeof *S);
   pqz_err_set (PQZ_ERR_INTERNAL);
   return pqz_err;
+}
+
+void
+pqz_sv_reset (void)
+{
+  memset (SR, 0, sizeof SR);
+  sv_ready = 0, SA = NULL;
 }
 
 /* ---------------------------------------------------------------- statement */
@@ -1068,31 +1080,34 @@ parse_stmt (stmt_t *T, uint8_t op, const uint8_t *stmt, size_t len)
     {
     case PQZ_OP_REGISTER:
       return len == PQZ_REG_STMT_BYTES && rd_vec (T->vec[V_PK], p + 32);
-    case PQZ_OP_TRANSFER: /* pqz_rel.c parse_tx */
-      if (len != PQZ_TX_STMT_BYTES)
-        return 0;
-      ok &= rd_vec (T->vec[V_PKF], p), p += PQZ_POLYVEC_BYTES;
-      ok &= rd_vec (T->vec[V_PKT], p), p += PQZ_POLYVEC_BYTES;
-      ok &= rd_vec (T->vec[V_PKA], p), p += PQZ_POLYVEC_BYTES;
-      ok &= rd_vec (T->vec[V_UT], p), p += PQZ_POLYVEC_BYTES;
-      ok &= rd_coeffs (T->vT, p, 16), p += PQZ_V_BYTES;
-      ok &= rd_vec (T->vec[V_U], p), p += PQZ_POLYVEC_BYTES;
-      ok &= rd_coeffs (T->vt, p, 16), p += PQZ_V_BYTES;
-      ok &= rd_coeffs (T->vf, p, 16), p += PQZ_V_BYTES;
-      ok &= rd_coeffs (T->va, p, 16), p += PQZ_V_BYTES;
-      T->fee = rd_be8 (p), T->amount = 0;
-      return ok;
-    case PQZ_OP_BURN: /* pqz_rel.c parse_burn */
-      if (len != PQZ_BURN_STMT_BYTES)
-        return 0;
-      ok &= rd_word64 (&T->fee, stmt + PQZ_HDR_FEE) & rd_word64 (&T->amount, stmt + PQZ_HDR_AMOUNT);
-      p = stmt + PQZ_HEADER_BYTES;
-      ok &= rd_vec (T->vec[V_PKF], p), p += PQZ_POLYVEC_BYTES;
-      ok &= rd_vec (T->vec[V_UT], p), p += PQZ_POLYVEC_BYTES;
-      ok &= rd_coeffs (T->vT, p, 16), p += PQZ_V_BYTES;
-      ok &= rd_vec (T->vec[V_U], p), p += PQZ_POLYVEC_BYTES;
-      ok &= rd_coeffs (T->vf, p, 16);
-      return ok;
+    case PQZ_OP_TRANSFER:
+    case PQZ_OP_BURN: /* pqz_rel.c parse_debit: header || pk_f (|| pk_t || pk_a) || u_T || v_T || u (|| v_t) || v_f
+                         (|| v_a), fee (and the R_BURN amount) from the header */
+      {
+        const int burn = op == PQZ_OP_BURN;
+        if (len != (burn ? PQZ_BURN_STMT_BYTES : PQZ_TX_STMT_BYTES))
+          return 0;
+        ok &= rd_word64 (&T->fee, stmt + PQZ_HDR_FEE);
+        T->amount = 0;
+        if (burn)
+          ok &= rd_word64 (&T->amount, stmt + PQZ_HDR_AMOUNT);
+        p = stmt + PQZ_HEADER_BYTES;
+        ok &= rd_vec (T->vec[V_PKF], p), p += PQZ_POLYVEC_BYTES;
+        if (!burn)
+          {
+            ok &= rd_vec (T->vec[V_PKT], p), p += PQZ_POLYVEC_BYTES;
+            ok &= rd_vec (T->vec[V_PKA], p), p += PQZ_POLYVEC_BYTES;
+          }
+        ok &= rd_vec (T->vec[V_UT], p), p += PQZ_POLYVEC_BYTES;
+        ok &= rd_coeffs (T->vT, p, 16), p += PQZ_V_BYTES;
+        ok &= rd_vec (T->vec[V_U], p), p += PQZ_POLYVEC_BYTES;
+        if (!burn)
+          ok &= rd_coeffs (T->vt, p, 16), p += PQZ_V_BYTES;
+        ok &= rd_coeffs (T->vf, p, 16), p += PQZ_V_BYTES;
+        if (!burn)
+          ok &= rd_coeffs (T->va, p, 16);
+        return ok;
+      }
     case PQZ_OP_DISCLOSE_SENDER:
     case PQZ_OP_DISCLOSE_RECEIVER: /* pqz_rel.c parse_disc */
       if (len != PQZ_DISC_STMT_BYTES)
@@ -1848,8 +1863,7 @@ pqz_sv_test_prg (unsigned iters)
   int bad = 0;
   uint64_t x = 0x9E3779B97F4A7C15ULL;
 
-  if (!sv_ready)
-    return 1;
+  aes_tables (); /* the tables are built lazily; idempotent */
   prg_seed (&g, k);
   aes_enc (g.rk, pt, o);
   bad += memcmp (o, ct, 16) != 0;

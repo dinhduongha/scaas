@@ -12,7 +12,7 @@ L=$1 T=${2:-600}
 ./build.sh native >/dev/null 2>&1 # lazer.h
 mkdir -p build/sv-san sv/runs
 SRC="src/pqz_lazer.c src/pqz_ntt.c src/pqz_arena.c src/pqz_rel.c src/pqz_sv.c"
-INC="-std=gnu11 -g -fno-omit-frame-pointer -w -Ibuild/include -Isrc -Ilazer -Iparams"
+INC="-std=gnu11 -g -fno-omit-frame-pointer -w -DPQZ_SV -Ibuild/include -Isrc -Ilazer -Iparams"
 # known upstream UBSan nits (STATUS.md): zero-length VLAs (M = 0 / nbin = 0), null + 0 in aes256ctr.c
 SAN="-fsanitize=address,undefined -fno-sanitize=vla-bound,pointer-overflow -fno-sanitize-recover=all"
 ${CC:-clang} -O1 $INC $SAN -DPQZ_DEBUG_MALLOC -o build/sv-san/pqz_bench $SRC test/pqz_bench.c

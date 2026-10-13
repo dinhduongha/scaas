@@ -19,34 +19,44 @@
 #define PQZ_POLYVEC_BYTES 16384 /* 32 polys x 64 coeffs x be8 */
 #define PQZ_V_BYTES 128         /* 16 coeffs x be8 */
 #define PQZ_PREFIX_BYTES 64     /* opTag || proofSystemId */
+/* proofSystemId (statement bytes 32..63) = keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v2") (pq-zether.md §8,
+   CTR-PQZ-09). pqz-core only hashes it; the precompile accepts only ids it implements. v2 (was .../v1): the LaZer tbox
+   Schwartz-Zippel fixes P6-SZ / P6-L2 (lazer/lnp-tbox.c; lazer-crypto/lazer issues 24, 25) change the transcript. */
+#define PQZ_PROOF_SYSTEM_ID                                                                                 \
+  { 0x2e, 0x07, 0xe6, 0xed, 0x1f, 0xd3, 0x03, 0xa0, 0x8c, 0x89, 0xb3, 0xea, 0xb6, 0xe8, 0x42, 0x3f,  \
+    0xdf, 0xb8, 0xf3, 0x12, 0x02, 0x95, 0x8d, 0xd6, 0x82, 0xa0, 0x61, 0x93, 0x13, 0x79, 0x8c, 0x2f }
 
 /* R_REG: prefix || message (32) || pk */
 #define PQZ_REG_STMT_BYTES (PQZ_PREFIX_BYTES + 32 + PQZ_POLYVEC_BYTES)
 /* R_REG witness: s (2048 x int8) || e (2048 x int16 LE) */
 #define PQZ_REG_WIT_BYTES (2048 + 4096)
 
-/* R_TX (spike): prefix || pk_f || pk_t || pk_a || T = u_T || v_T || out = u || v_t || v_f || v_a || be8(fee) */
+/* Debit statements (pq-zether.md §7.7): header (640 B of 32-byte words) || body. The relations read fee (header
+   offset 256) and, for R_BURN, amount (288), each a be32 word that must be < 2^64; the rest of the header is only
+   hashed (opTag, proofSystemId: the precompile checks them, §9.1). */
+#define PQZ_HEADER_BYTES 640
+#define PQZ_HDR_FEE 256
+#define PQZ_HDR_AMOUNT 288
+/* R_TX (auditor on): header || pk_f || pk_t || pk_a || T = u_T || v_T || out = u || v_t || v_f || v_a */
 #define PQZ_TX_STMT_BYTES                                                                                   \
-  (PQZ_PREFIX_BYTES + 3 * PQZ_POLYVEC_BYTES + (PQZ_POLYVEC_BYTES + PQZ_V_BYTES)                            \
-   + (PQZ_POLYVEC_BYTES + 3 * PQZ_V_BYTES) + 8)
+  (PQZ_HEADER_BYTES + 3 * PQZ_POLYVEC_BYTES + (PQZ_POLYVEC_BYTES + PQZ_V_BYTES)                            \
+   + (PQZ_POLYVEC_BYTES + 3 * PQZ_V_BYTES))
 /* R_TX witness: s_f (int8) || e_f (int16) || r (int8) || e1 (int16) || e2_t, e2_f, e2_a (16 x int16 each)
    || d (16 x u8) || d' (16 x u8)   [M, carries and e_T are derived by the prover] */
 #define PQZ_TX_WIT_BYTES (2048 + 4096 + 2048 + 4096 + 3 * 32 + 16 + 16)
 
-/* R_BURN (pq-zether.md §7.5, §7.7): header (640) || pk_f || T = u_T || v_T || out = u || v_f. The relation reads
-   fee (header offset 256) and amount (288), each a be32 word < 2^64; the rest of the header is only hashed. */
-#define PQZ_HEADER_BYTES 640
-#define PQZ_HDR_FEE 256
-#define PQZ_HDR_AMOUNT 288
+/* R_BURN (§7.5): header || pk_f || T = u_T || v_T || out = u || v_f */
 #define PQZ_BURN_STMT_BYTES (PQZ_HEADER_BYTES + PQZ_POLYVEC_BYTES + 2 * (PQZ_POLYVEC_BYTES + PQZ_V_BYTES))
 /* R_BURN witness: s_f (int8) || e_f (int16) || r (int8) || e1 (int16) || e2_f (16 x int16) || d' (16 x u8)
    [M, carries and e_T are derived by the prover; d = digits(amount) is public] */
 #define PQZ_BURN_WIT_BYTES (2048 + 4096 + 2048 + 4096 + 32 + 16)
 
 /* Disclosure (pq-zether.md §7.9): opTag || proofSystemId || chainId || chainUid || token || registry || entryRef
-   || be32(amount) || u8(kind) || pk || u || v  (32-byte words; amount < 2^64). Same layout for R_DS and R_DR. */
+   || amount || kind || pk || u || v, every scalar a 32-byte word (amount < 2^64; kind is hashed only), so pk starts
+   at 288. Same layout for R_DS and R_DR; 33,184 B. */
 #define PQZ_DISC_AMOUNT (PQZ_PREFIX_BYTES + 5 * 32)
-#define PQZ_DISC_PK (PQZ_DISC_AMOUNT + 32 + 1)
+#define PQZ_DISC_KIND (PQZ_DISC_AMOUNT + 32)
+#define PQZ_DISC_PK (PQZ_DISC_KIND + 32)
 #define PQZ_DISC_STMT_BYTES (PQZ_DISC_PK + 2 * PQZ_POLYVEC_BYTES + PQZ_V_BYTES)
 /* R_DS witness (sender): r (int8) || e1 (int16) || e2_t (16 x int16) */
 #define PQZ_DS_WIT_BYTES (2048 + 4096 + 32)
@@ -63,7 +73,8 @@ int pqz_prove (uint8_t op, const uint8_t *stmt, size_t stmt_len, const uint8_t *
 int pqz_verify (uint8_t op, const uint8_t *stmt, size_t stmt_len, const uint8_t *proof,
                 size_t proof_len); /* 1 = valid, 0 = anything else */
 /* specialised verifier for the same statements (pqz_sv.c): accepts exactly the proofs pqz_verify accepts, by
-   evaluating the relation's equations directly; pqz_verify stays the reference */
+   evaluating the relation's equations directly; pqz_verify stays the reference. Its tables for an op are built at
+   the op's first call. Only in builds with PQZ_SV (build.sh default; SV=0 leaves it out, e.g. a wallet's prover). */
 int pqz_verify_fast (uint8_t op, const uint8_t *stmt, size_t stmt_len, const uint8_t *proof, size_t proof_len);
 
 /* helpers for tests and clients: the public matrix A (spec CTR-PQZ-03) applied to short vectors */

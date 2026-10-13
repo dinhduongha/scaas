@@ -12,7 +12,7 @@ import { sha256 } from '@noble/hashes/sha2.js';
 import * as ua from '../src/ua.js';
 import { hex, fromHex, keccak_256, utf8ToBytes, abiEncode, concatBytes } from '../src/bytes.js';
 import { hashTypedData, hashStruct, padId, uaMetaTxTypedData, uaMetaTransferTypedData, receiverFeeTypedData,
-  unwrapToUACalldata } from '../src/evm.js';
+  unwrapToUACalldata, checkReceiverFee } from '../src/evm.js';
 
 const dir = new URL('../../../smartcontracts/vectors/ua/', import.meta.url);
 const V = JSON.parse(readFileSync(new URL('metatx3.json', dir)));
@@ -123,4 +123,21 @@ test('receiverFee rows: native payer x every derived payee and p256 x bip340; pa
     }
   }
   assert.equal(nobled, 8 + 1 + 4, 'the native payer x8 (ECDSA), the p256 payer, the p256 / bip340 x2 / ed25519 payees');
+});
+
+test('receiver-pays, UA path: checkReceiverFee accepts every receiverFee row for its payee id and refuses another payee', () => {
+  for (const r of V.receiverFee) {
+    const t = r.transfer.message;
+    const rf = r.receiverFee.message;
+    const want = { payee: t.to, chainId: V.chainId, chainUid: V.chainUid, amount: t.value, decimals: 0, entryRef: t.entryRef,
+      expectedToken: V.token, payment: r.transfer, maxFee: rf.fee, feeRecipient: rf.feeRecipient,
+      now: Number(rf.validUntil) - 60 };
+    const ok = checkReceiverFee(r.receiverFee, want);
+    assert.deepEqual([hex(ok.digest), hex(ok.paymentDigest), ok.payer], [r.receiverFeeDigest, r.paymentDigest, t.from]);
+    assert.throws(() => checkReceiverFee(r.receiverFee, { ...want, payee: padId('0x' + '5e'.repeat(20)) }), /does not pay you/);
+    assert.throws(() => checkReceiverFee(r.receiverFee, { ...want, maxFee: BigInt(rf.fee) - 1n }), /above your limit/);
+    // the address-path struct over the same fields is another digest: never accepted for a UA payment
+    assert.throws(() => checkReceiverFee(r.receiverFee, { ...want, payment: { ...r.transfer, primaryType: 'MetaTransfer' } }),
+      /malformed|unexpected payment fields/);
+  }
 });

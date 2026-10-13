@@ -3,8 +3,8 @@
 //! halves at infinity = 64 zero bytes), scalar hashes widened to 512 bits (`tagged(x ‖ 0x00) ‖ tagged(x ‖ 0x01)` mod r),
 //! no x-only key or parity negation, challenge = the scaas Schnorr challenge, signature `R (64) ‖ s (32)` (verifies as
 //! `schnorr-bn254`). `L = hash_{KeyAgg list}(pk_1 ‖ … ‖ pk_n)` is the plain 32-byte tagged hash on both curves (it is a
-//! byte string, not a scalar). No tweaks (the registry has none). Feature `signers`; test-vector signer, not hardened
-//! (secret nonces are plain bytes). UNAUDITED.
+//! byte string, not a scalar). No tweaks (the registry has none). Feature `signers`: malformed input is an error, never a
+//! panic; not side-channel hardened (secret nonces are plain bytes). UNAUDITED.
 use crate::keccak;
 use core::ops::{Add, Mul, Neg};
 use sha2::{Digest, Sha256};
@@ -35,6 +35,8 @@ pub trait Curve {
     type P: Copy + PartialEq + Add<Output = Self::P> + Mul<Self::S, Output = Self::P> + Neg<Output = Self::P>;
     /// Serialized point length.
     const PLEN: usize;
+    /// `agg_bytes` length (the aggregate key as NonceGen takes it).
+    const ALEN: usize;
     fn g() -> Self::P;
     fn inf() -> Self::P;
     fn one() -> Self::S;
@@ -65,6 +67,7 @@ impl Curve for Secp256k1 {
     type S = k256::Scalar;
     type P = k256::ProjectivePoint;
     const PLEN: usize = 33;
+    const ALEN: usize = 32;
     fn g() -> Self::P {
         k256::ProjectivePoint::GENERATOR
     }
@@ -156,6 +159,7 @@ impl Curve for Bn254 {
     type S = ark_bn254::Fr;
     type P = ark_bn254::G1Projective;
     const PLEN: usize = 64;
+    const ALEN: usize = 64;
     fn g() -> Self::P {
         use ark_ec::PrimeGroup;
         ark_bn254::G1Projective::generator()
@@ -239,7 +243,8 @@ pub fn key_agg<C: Curve>(pks: &[Vec<u8>]) -> Result<KeyAgg<C>, Error> {
     Ok(ka)
 }
 
-/// BIP-327 NonceGen: `(secnonce = k1 ‖ k2 ‖ pk, pubnonce = R1 ‖ R2)`. `aggpk` is `xbytes(Q)` / `Q`.
+/// BIP-327 NonceGen: `(secnonce = k1 ‖ k2 ‖ pk, pubnonce = R1 ‖ R2)`. `aggpk` is `xbytes(Q)` / `Q`. `sk` must be 32 bytes
+/// (never truncated), `pk` `PLEN`, `aggpk` `ALEN` (BIP-327's length checks).
 pub fn nonce_gen<C: Curve>(
     rand_: &[u8; 32],
     sk: Option<&[u8]>,
@@ -247,7 +252,16 @@ pub fn nonce_gen<C: Curve>(
     aggpk: Option<&[u8]>,
     msg: Option<&[u8]>,
     extra_in: Option<&[u8]>,
-) -> (Vec<u8>, Vec<u8>) {
+) -> Result<(Vec<u8>, Vec<u8>), Error> {
+    if sk.is_some_and(|sk| sk.len() != 32) {
+        return Err(Error::Value("The optional byte array sk must have length 32."));
+    }
+    if pk.len() != C::PLEN {
+        return Err(Error::Value("The pk has the wrong length."));
+    }
+    if aggpk.is_some_and(|a| a.len() != C::ALEN) {
+        return Err(Error::Value("The optional byte array aggpk has the wrong length."));
+    }
     let rand: Vec<u8> = match sk {
         Some(sk) => sk.iter().zip(tagged("MuSig/aux", &[rand_])).map(|(a, b)| a ^ b).collect(),
         None => rand_.to_vec(),
@@ -266,7 +280,7 @@ pub fn nonce_gen<C: Curve>(
     };
     let (k1, k2) = (k(0), k(1));
     let secnonce = [&C::s_bytes(&k1)[..], &C::s_bytes(&k2), pk].concat();
-    (secnonce, [C::ser(&(C::g() * k1)), C::ser(&(C::g() * k2))].concat())
+    Ok((secnonce, [C::ser(&(C::g() * k1)), C::ser(&(C::g() * k2))].concat()))
 }
 
 /// A point or, for `PLEN` zero bytes, the identity (BIP-327 `cpoint_ext`).
@@ -313,6 +327,9 @@ fn sign_g<C: Curve>(q: &C::P) -> C::S {
 
 /// BIP-327 Sign: the partial signature `s` (32 bytes).
 pub fn sign<C: Curve>(secnonce: &[u8], sk: &[u8], aggnonce: &[u8], pks: &[Vec<u8>], msg: &[u8]) -> Result<[u8; 32], Error> {
+    if secnonce.len() != 64 + C::PLEN {
+        return Err(Error::Value("The secnonce must be k1 ‖ k2 ‖ pk."));
+    }
     let (ka, b, r, e) = session::<C>(aggnonce, pks, msg)?;
     let nonzero = |s: Option<C::S>| s.filter(|s| *s != C::zero_s());
     let k1 = nonzero(C::s_parse(&secnonce[..32])).ok_or(Error::Value("first secnonce value is out of range."))?;
@@ -339,6 +356,9 @@ pub fn partial_sig_verify_internal<C: Curve>(
     pks: &[Vec<u8>],
     msg: &[u8],
 ) -> Result<bool, Error> {
+    if pubnonce.len() != 2 * C::PLEN {
+        return Err(Error::Value("The pubnonce has the wrong length."));
+    }
     let (ka, b, r, e) = session::<C>(aggnonce, pks, msg)?;
     let Some(s) = C::s_parse(psig) else { return Ok(false) };
     let (Some(r1), Some(r2), Some(p)) = (C::parse(&pubnonce[..C::PLEN]), C::parse(&pubnonce[C::PLEN..]), C::parse(pk)) else {
@@ -351,8 +371,11 @@ pub fn partial_sig_verify_internal<C: Curve>(
 
 /// BIP-327 PartialSigVerify: signer `i`'s `psig` against all public nonces.
 pub fn partial_sig_verify<C: Curve>(psig: &[u8], pubnonces: &[Vec<u8>], pks: &[Vec<u8>], msg: &[u8], i: usize) -> Result<bool, Error> {
+    let (Some(pubnonce), Some(pk)) = (pubnonces.get(i), pks.get(i)) else {
+        return Err(Error::Value("The signer index is out of range."));
+    };
     let aggnonce = nonce_agg::<C>(pubnonces)?;
-    partial_sig_verify_internal::<C>(psig, &pubnonces[i], &pks[i], &aggnonce, pks, msg)
+    partial_sig_verify_internal::<C>(psig, pubnonce, pk, &aggnonce, pks, msg)
 }
 
 /// BIP-327 PartialSigAgg (no tweaks): the final signature.
@@ -368,9 +391,12 @@ pub fn partial_sig_agg<C: Curve>(psigs: &[[u8; 32]], aggnonce: &[u8], pks: &[Vec
 /// The whole n-of-n protocol for one message, every signer simulated: `rands[i]` is signer i's NonceGen `rand'`.
 /// Returns the signature; every partial signature is verified on the way.
 pub fn sign_all<C: Curve>(sks: &[Vec<u8>], pks: &[Vec<u8>], msg: &[u8], rands: &[[u8; 32]]) -> Result<Vec<u8>, Error> {
+    if pks.len() != sks.len() || rands.len() != sks.len() {
+        return Err(Error::Value("One pk and one rand per sk."));
+    }
     let ka = key_agg::<C>(pks)?;
     let agg = C::agg_bytes(&ka.q);
-    let nonces: Vec<_> = (0..sks.len()).map(|i| nonce_gen::<C>(&rands[i], Some(&sks[i]), &pks[i], Some(&agg), Some(msg), None)).collect();
+    let nonces = (0..sks.len()).map(|i| nonce_gen::<C>(&rands[i], Some(&sks[i]), &pks[i], Some(&agg), Some(msg), None)).collect::<Result<Vec<_>, _>>()?;
     let pubnonces: Vec<Vec<u8>> = nonces.iter().map(|n| n.1.clone()).collect();
     let aggnonce = nonce_agg::<C>(&pubnonces)?;
     let mut psigs = Vec::new();

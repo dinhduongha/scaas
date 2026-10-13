@@ -15,8 +15,10 @@ int pqz_decproof (size_t len, const uint8_t *in, polyvec_t tA1, polyvec_t tB, po
                   polyvec_t z1, polyvec_t z21, polyvec_t hint, polyvec_t z3, polyvec_t z4,
                   const lnp_tbox_params_t params);
 
-/* pqz_sv.c: per-relation precomputation at pqz_init (below the arena base mark) and the verify body
-   (called by pqz_verify_fast with the arena released to the base mark) */
+/* pqz_sv.c (builds with PQZ_SV): per-relation tables, built at the first pqz_verify_fast of the op (PQZ_OK at once
+   if built; the caller moves the arena base mark above them), the verify body (called by pqz_verify_fast with the
+   arena released to the base mark), and the reset at pqz_init (the arena they lived in is gone) */
+void pqz_sv_reset (void);
 int pqz_sv_setup (uint8_t op, const lnp_tbox_params_struct *P, polymat_t A, polymat_t A1, polymat_t A2p,
                   polymat_t Bp);
 int pqz_sv_verify (uint8_t op, const uint8_t hash[32], const uint8_t *stmt, size_t stmt_len,

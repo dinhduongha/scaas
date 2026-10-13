@@ -206,13 +206,14 @@ and sub-second prove/verify; PQZ drops anonymity, so its proof should be smaller
 LaBRADOR has a ~50 KB floor and is not zero-knowledge in its original form (kept for later block-level aggregation);
 Greyhound is a polynomial commitment needing a SNARK around it; MatRiCT/MatRiCT+ target UTXO ring signatures;
 LNS20 is a technique (the digit-carry relation, expressed inside LNP22), not a library; hash-based systems (Plonky3,
-Winterfell) are mature but 100–300 KB with multi-second provers and no default zero-knowledge — the **fallback** if
-E-S1 trips the kill criteria ([CTR-PQZ-09](#CTR-PQZ-09)); a PQ statement inside a pairing SNARK is rejected (pairing
-soundness). On the encryption side, OpenFHE / Lattigo / fhe.rs are full FHE stacks where PQZ needs ~200 lines of
+Stwo, Winterfell) are mature, and the PQZH design study estimates `R_TX` at ≈ 105–225 KB with sub-second provers and a
+hiding mode still to confirm (research note `pqzh-design.md`) — no longer only a fallback: PQZH is the
+second proof-system value next to PQZL (owner 2026-10-13, TODO P6-PQZH); a PQ statement inside a pairing SNARK is
+rejected (pairing soundness). On the encryption side, OpenFHE / Lattigo / fhe.rs are full FHE stacks where PQZ needs ~200 lines of
 K-PKE-style code, and tfhe-rs (fhEVM) is a different trust model (a threshold network key) with a pairing-based input
 proof and a patent licence. LaZer is **forked, not linked**: its protocol logic, specifications and codegen are kept,
-and the six layers below are rewritten. The landscape was surveyed on 2026-10-06; re-survey it before the E-S1 kill
-decision.
+and the six layers below are rewritten. The landscape was surveyed on 2026-10-06 and re-surveyed on 2026-10-13
+(research note `pqz-proof-alternatives.md` §3, §7: prior art and proof backends).
 
 **Hardware fact that drives the build.** LaZer requires AVX-512 and AES-NI and has no portable code path. The
 chain-7622 host is an **AMD Ryzen 5 7235HS (Zen 3+): AVX2 and AES-NI, no AVX-512** (`/proc/cpuinfo`, 2026-10-06), as
@@ -360,11 +361,11 @@ B_FRESH = β_e·β_s + β_s·β_e + β_2 = 164·36 + 36·164 + 64 = 11,872      
 
 The trivial plain term has noise 0. A sum of at most `K_MAX = 1024` units has
 `|noise| ≤ 1024 · 11,872 = 12,156,928 < 2^24 = 16,777,216`, and digit sums `M_i ≤ 1024 · 15 = 15,360 < 2^14`. The debit
-proof shows `|e_T[i]| < 2^24` and `0 ≤ M_i < 2^14` (complete for every honest state). Honest decryption rounds correctly
+proof shows `e_T[i] ∈ [−2^24, 2^24)` and `0 ≤ M_i < 2^14` (complete for every honest state). Honest decryption rounds correctly
 because `2^24 < Δ/2`, and `Δ·M_i + e < q/4 + 2^24 < q/2` stays inside the centred range.
 
 **Uniqueness (soundness of the decryption relation).** Suppose `Δ·M + e ≡ Δ·M' + e' (mod q)` with both pairs in the
-proven ranges. Then `|Δ(M − M')| ≤ Δ·(2^14 − 1) < q/4` and `|e − e'| ≤ 2^25 − 2 < Δ/2`, so the congruence is an integer
+proven ranges. Then `|Δ(M − M')| ≤ Δ·(2^14 − 1) < q/4` and `|e − e'| ≤ 2^25 − 1 < Δ/2` (the ranges are half-open, `[−2^24, 2^24)`), so the congruence is an integer
 equation, `|Δ(M − M')| < Δ`, hence `M = M'`.
 
 **Soundness depends on accounting, not only liveness.** Uniqueness assumes that the *true* noise of `T` is inside the
@@ -717,7 +718,7 @@ classical `C_deb` disappears. The proof carries a decryption relation, which the
 in another form.
 
 <a id="derived-randomness"></a>
-<a id="CTR-PQZ-19"></a>**CTR-PQZ-19** — **Encryption randomness is derived from the seed and a published salt**, so the sender can re-create it for disclosure (owner 2026-10-11: the classical salt rule, [CTR-ZTH-30](zether.md#CTR-ZTH-30), applies to PQZ): `seed_enc = HKDF-SHA256(ikm = pqzKeySeed, salt = "SCAAS-PQZ-ENC-V2" (controller ruling, pending the owner), info = chainUid ‖ token(20) ‖ fromUA ‖ be32(sendCounter) ‖ salt)`, with `salt` = 16 fresh random bytes per build, carried in the payload and the statement header, hence in `PqzTransfer`, the stored bundle, the commitment and the no-bundle calldata; the contract does not check it. A fresh salt per build means a re-proof at the same counter never reuses `r` (reusing `r` across two messages leaks `Δ·(m − m')` up to small noise), and the sender remembers no amount. Masking randomness *inside* the proof is hedged (`H(secret ‖ statement ‖ 32 B CSPRNG)`). Replaces the message-bound form (`info = be32(chainId) ‖ token ‖ fromUA ‖ be8(sendCounter) ‖ toUA ‖ be8(v) ‖ be8(b') ‖ u8(auditorOn)`, never built).
+<a id="CTR-PQZ-19"></a>**CTR-PQZ-19** — **Encryption randomness is derived from the seed and a published salt**, so the sender can re-create it for disclosure (owner 2026-10-11: the classical salt rule, [CTR-ZTH-30](zether.md#CTR-ZTH-30), applies to PQZ): `seed_enc = HKDF-SHA256(ikm = pqzKeySeed, salt = "SCAAS-PQZ-ENC-V2" (controller ruling, pending the owner), info = chainUid ‖ token(20) ‖ fromUA ‖ be32(sendCounter) ‖ salt)`, with `salt` = 16 fresh random bytes per build, carried in the payload and the statement header, hence in `PqzTransfer`, the stored bundle, the commitment and the no-bundle calldata; the contract does not check it. A fresh salt per build means a re-proof at the same counter never reuses `r` (reusing `r` across two messages leaks `Δ·(m − m')` up to small noise), and the sender remembers no amount. Masking randomness *inside* the proof is hedged (`H(secret ‖ statement ‖ 32 B CSPRNG)`). **Burn and refresh are outside this derivation** (owner 2026-10-13): their encryption randomness `r, e1, e2_f` is fresh CSPRNG output (hedging it with `pqzKeySeed` is allowed), never `seed_enc` or any other value fixed by the counter. Their header salt is 0 ([statement](#statement)), so a counter-derived seed would give two burns or refreshes built at one `sendCounter` for different balances `b' ≠ b''` (a re-proof after `InlineTooFar`, another `plainUsed`) the same `r` and `e2_f`, and `v_f − v_f'` would be `Δ·(b' − b'')` exactly. No disclosure re-derives them: the burned amount is public and `v_f` is the sender's own balance. Replaces the message-bound form (`info = be32(chainId) ‖ token ‖ fromUA ‖ be8(sendCounter) ‖ toUA ‖ be8(v) ‖ be8(b') ‖ u8(auditorOn)`, never built).
 
 <a id="pqz-storage-modes"></a>
 <a id="CTR-PQZ-23"></a>**CTR-PQZ-23** — **Storage modes and the sender memo as classical** (owner, 2026-10-11; spec only): `disclosureMode ∈ {BUNDLE, COMPACT}` at `initialize`, immutable ([CTR-ZTH-48](zether.md#CTR-ZTH-48)). The bundle is `R = salt ‖ u ‖ v_t ‖ v_a ‖ toUA` (16,688 B with the auditor, 16,560 B without). Entries as [CTR-ZTH-38](zether.md#CTR-ZTH-38), the plain name being the mode's default: `pqzTransfer` stores `R` with SSTORE2 on a BUNDLE token (≈ 3.4 M gas at 200 gas per code byte, **estimate**, against ≈ 0.52 M of calldata) and is commit-reveal on a COMPACT token; `pqzTransferCompact` is commit-reveal on both (`entry[entryRef] = keccak256(R)` plus the sender memo); `pqzTransferNoBundle` stores nothing and reverts `TransferEntryDisabled` on a COMPACT token. Salt and memo travel inside `payload`. The memo is [CTR-ZTH-50](zether.md#CTR-ZTH-50) with `pqzKeySeed` and `info = "PQZ/memo/v1" ‖ chainUid ‖ token(20) ‖ fromUA ‖ be32(sendCounter) ‖ salt`: `memo = salt ‖ ((flags ‖ be8(v) ‖ toUA) XOR ks)` (`flags` bit0 = `auditorOn`; `ks` of 41 B), 57 B for the one recipient (owner 2026-10-13: `be32` counter, as classical Zether — it only enters the off-chain HKDF, so it costs nothing; `be8` amount, because amounts are `< 2^64` by the plaintext encoding and a wider field would only add calldata) (labels `"PQZ/memo/v1"`, `"SCAAS-PQZ-ENC-V2"`: controller ruling, pending the owner), `memoHash` in the statement header. The sender recovers from storage alone: `sendCounter` → `entryRef` → memo → `seed_enc` → `r, e1, e2_t, e2_a` → `u ‖ v_t ‖ v_a` with `pk_t` from the registry → the hash check → a `SENDER_S` proof. Receiver and auditor read `R` from storage (full record) or from `PqzTransfer` logs / calldata.
@@ -733,7 +734,8 @@ be32(plainUsed) ‖ fromUA ‖ beneficiaryUA ‖ u' ‖ v_f`. `0 < amount ≤ ma
 `inline` (`inline.length == n`, element lengths, index mapping `lo + i`) as for a transfer. Relation `R_BURN` = `R_TX`
 rows 1, 2, 4, 6, 7 with `d = digits(amount)` **public** (no `d` witness, no rows 3/5). Effects: `acc[from]`, `floor`,
 `cleared`, `plainPending[from]` as for a transfer; fee to `plainPending[ben]`; `totalShielded −= amount`; underlying
-`amount·shieldScale` to `recipient`; `sendCounter++`.
+`amount·shieldScale` to `recipient`; `sendCounter++`. The randomness of `u' ‖ v_f` is fresh on every build, never derived
+from the counter ([CTR-PQZ-19](#CTR-PQZ-19)).
 
 ### 7.6 Rollover
 
@@ -784,7 +786,7 @@ Header (640 bytes; `salt` and `memoHash` per [CTR-PQZ-23](#CTR-PQZ-23)):
 | 480 | `plainUsed` ([CTR-PQZ-06](#CTR-PQZ-06)) |
 | 512 | `chainUid` (the token's copy of `registry.chainUid()`, [CTR-PQZ-01](#CTR-PQZ-01)) |
 | 544 | `envelopeBinding` ([CTR-PQZ-15](#CTR-PQZ-15)): 0 for a direct call, else the v1 or v3 binding of the envelope that carries the op |
-| 576 | `salt` (16 zero bytes ‖ the build salt, [CTR-PQZ-19](#CTR-PQZ-19); burn/refresh 0) |
+| 576 | `salt` (16 zero bytes ‖ the build salt, [CTR-PQZ-19](#CTR-PQZ-19); burn/refresh 0, their randomness is fresh CSPRNG output) |
 | 608 | `memoHash` (`keccak256(memo)` on commit-reveal, else 0) |
 
 Body: `pk_f ‖ [pk_t] ‖ [pk_a] ‖ T ‖ out` (`T` already includes the plain term). Transfer with auditor:
@@ -819,14 +821,30 @@ noise must not leak ([CTR-PQZ-04](#CTR-PQZ-04)); the indexer or the parties supp
 
 `verifyTransferAmount(entryRef, amount, kind, opening)` with `opening = abi.encode(bytes bundle, bytes proof)`,
 `bundle = R` ([CTR-PQZ-23](#CTR-PQZ-23)), `keccak256(bundle) == entry[entryRef]` (or the stored `R`), `amount < 2^64`; statement
-`opTag(DISCLOSE-<KIND>) ‖ proofSystemId ‖ chainId ‖ chainUid ‖ token ‖ registry ‖ entryRef ‖ be32(amount) ‖ u8(kind) ‖
-pk ‖ u ‖ v`. The contract loads `pk` from the **registry** (`keyPtr` of `toUA` for `SENDER_S`/`RECEIVER_X`, of the
+(33,184 B, every scalar a 32-byte word as [encodings](#encodings), so `pk` starts word-aligned; owner 2026-10-13):
+
+| Offset | Field |
+|---|---|
+| 0 | `opTag` — `keccak256("SCAAS-PQZ-OP-DISCLOSE-SENDER-V1")`, `…-RECEIVER-V1` or `…-AUDITOR-V1` |
+| 32 | `proofSystemId` |
+| 64 | `chainId` |
+| 96 | `chainUid` |
+| 128 | `token` (12 zero bytes ‖ address) |
+| 160 | `registry` (12 zero bytes ‖ address) |
+| 192 | `entryRef` |
+| 224 | `amount` (`< 2^64`) |
+| 256 | `kind` (`OpeningKind`: `SENDER_S` 0, `RECEIVER_X` 1, `AUDITOR` 2) |
+| 288 | `pk` (16,384) |
+| 16,672 | `u` (16,384) |
+| 33,056 | `v` (128; 16 coefficients `be8`) |
+
+The contract loads `pk` from the **registry** (`keyPtr` of `toUA` for `SENDER_S`/`RECEIVER_X`, of the
 token's `auditorUA` for `AUDITOR`), never from the opening; `v = v_t`, or `v_a` for `AUDITOR`:
 
 | Kind | Prover | Relation |
 |---|---|---|
 | `SENDER_S` | sender, re-deriving `r, e1, e2_t` ([CTR-PQZ-19](#CTR-PQZ-19)) | `u = A^T r + e1`, `v_t[i] = (pk_t^T r)[i] + e2_t[i] + Δ·digits(amount)_i`, norms as [parameters](#parameters) |
-| `RECEIVER_X` | receiver | `pk_t = A s + e`, `v_t[i] − (u^T s)[i] = Δ·digits(amount)_i + e'_i`, `abs(e'_i) < 2^24` |
+| `RECEIVER_X` | receiver | `pk_t = A s + e`, `v_t[i] − (u^T s)[i] = Δ·digits(amount)_i + e'_i`, `e'_i ∈ [−2^24, 2^24)` |
 | `AUDITOR` | auditor | as `RECEIVER_X` with `pk_a`, `v_a` |
 
 Uniqueness by [noise](#noise). `verifyTransferAmount` is a view (the precompile runs in `eth_call`);
@@ -1011,9 +1029,12 @@ LaBRADOR/Greyhound deferred to aggregation work. **Kill criterion**: stop and re
 the transfer proof exceeds 96 KB, if p99 adversarial verify exceeds 50 ms on the chain host, or if the rewritten layers
 cannot reach arithmetic-layer KAT equality with upstream. Single implementation; LaZer is MIT and protocol logic stays
 upstream-shaped. We own a C fork with six rewritten layers, a rewrite rather than a kernel swap; upstream protocol
-fixes are merged by hand. **Versioning:** `proofSystemId = keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v1")`; every
-parameter, relation or serialization change bumps it; the token stores it at `initialize` and the precompile accepts
-only ids it implements.
+fixes are merged by hand. **Versioning:** `proofSystemId = keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v2")`
+(`0x2e07e6ed…798c2f`, `PQZ_PROOF_SYSTEM_ID` in `pqz-core/src/pqz.h`); every parameter, relation, transcript or
+serialization change bumps it; the token stores it at `initialize` and the precompile accepts only ids it implements.
+v1 → v2 (2026-10-13): the two LaZer `tbox` Schwartz–Zippel fixes
+([lazer#24](https://github.com/lazer-crypto/lazer/issues/24), [lazer#25](https://github.com/lazer-crypto/lazer/issues/25);
+`pqz-core/sz/README.md`) change the transcript; v1 is retired.
 
 - **Origin.** Fork of LaZer at a pinned commit (`main` was `3330e48`, 2026-09-28; the pin is recorded), MIT, repo path
   `scaas/pqz-core/`. Kept: LNP22 protocol logic, codegen (`scripts/lin-codegen.sage` with lattice-estimator), parameter
@@ -1115,7 +1136,9 @@ cryptographic failure; reverts (consumes all gas) only on input `> MAX_INPUT = 2
 
 For **every** op except 6 the precompile checks, before any cryptography, that `stmt` starts with an `opTag` that
 belongs to `op` and a `proofSystemId` it implements, and that the total length is one of the op's fixed lengths;
-anything else returns `0`.
+anything else returns `0`. `pqz-core` does not repeat these checks (nor the disclosure `kind`): it reads only the
+fields its equations use, and `opTag`, `proofSystemId` and `kind` bind the proof because the whole statement is hashed
+into the transcript.
 
 ### 9.2 Precompile `MLDSA65` (`0x…0F10`)
 
@@ -1380,7 +1403,7 @@ service is the user's (or the organization's key oracle), never a third party's 
 | T9 | Replay / proof transplant | `sendCounter`, `chainId`, `chainUid`, `token`, `registry`, `validUntilBlock`, UAs, fee, beneficiary and `envelopeBinding` in the statement; envelope 2D nonce and `validUntil`; strong FS |
 | T10 | Fiat–Shamir for multi-round LNP22 (round-by-round grinding; QROM) | `op` and statement absorbed first; every challenge round ≥ 128-bit sound on its own, listed in `estimator.txt`; QROM soundness an assumption, stated; tracked for the audit |
 | T11 | Side channels in the prover (timing of sampling, rejection, Gaussian masks; WASM JIT gives no constant-time guarantee) | constant-time CBD; masking sampler **rewritten** integer-only and constant-time (CDT full-table scan or uniform masks) — upstream uses `double` and MPFR on secret-dependent values; rejection test in constant-time fixed point, since rejected attempts would otherwise leak `⟨z, v⟩` through timing; no secret-indexed tables (software AES bitsliced) |
-| T12 | Randomness reuse | message-bound derivation ([CTR-PQZ-19](#CTR-PQZ-19)); hedged proof masks |
+| T12 | Randomness reuse | salted derivation for transfers, fresh CSPRNG randomness for burn / refresh ([CTR-PQZ-19](#CTR-PQZ-19)); hedged proof masks |
 | T13 | Precompile bug ⇒ consensus split or false accept | single C core shared with prover tests; continuous ASan/UBSan fuzzing of `pqz_verify`; fail-closed returndata check; deterministic integer code |
 | T13a | Precompile **crash** (abort, OOB, stack overflow) on crafted input ⇒ the single signer dies ⇒ chain halt | never-crash requirement: Rust bounds-checked decoder, error returns instead of `abort`, fixed arena and stack, bounded loops, no timeouts ([CTR-PQZ-10](#CTR-PQZ-10)); follower-only public RPC and pre-simulation |
 | T13b | Malicious recipient keys extract hints on the shared `(r, e1)` (forms `e^T r − s^T e1 + e2`) | assumption "MLWE with ≤ 32 adversarial perfect hints on `(r, e1)`", approximated at β ≈ 466, worst-direction estimate before the freeze; fresh `(r, e1)` per operation; split-randomness fallback ([CTR-PQZ-04](#CTR-PQZ-04)) |
@@ -1490,6 +1513,8 @@ clientkeys (derivation, ML-DSA, `authDigest`); a pure-Python `pqz_kat.py` (no nu
   or changed ⇒ `UAPoP`/`UAUnauthorized`; an `authSig` over a message without `MSG_TAG`, or with `TAG(mldsa65)` for an
   `mldsa44` or `msig` `authRef` ⇒ `AuthRejected`;
 - disclosure: right amount ⇒ true, amount ± 1 ⇒ false, wrong `entryRef`, bundle bytes not matching the hash;
+- **burn / refresh randomness** (prover test): two burns, and two refreshes, built at one `sendCounter` for different
+  balances (another `plainUsed`) carry different `u'`, and `v_f − v_f'` is not `Δ·(b' − b'')` ([CTR-PQZ-19](#CTR-PQZ-19));
 - **meta-tx**, each on the v1 and the v3 path: `PERCENT` on a PQZ op ⇒ `PercentFeeForbiddenOnConfidential` (and accepted
   on a plain public transfer); an unknown selector ⇒ `MtxSelectorNotAllowed`; a PQZ selector in `mtxBatch`/`uaBatch` ⇒ `MtxNotBatchable`; outer fee above
   the payer's public balance ⇒ `MetaTxInsufficientForFee` **with the precompile mock asserting zero calls**; invalid

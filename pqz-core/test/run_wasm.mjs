@@ -2,7 +2,8 @@
 //   node test/run_wasm.mjs [n_prove] [n_verify] [rel]  (after ./build.sh wasm; prints JSON lines)
 //   rel: bit mask as pqz_bench (1 R_REG, 2 R_TX, 4 R_BURN, 8 R_DS, 16 R_DR; default 31)
 //   PQZ_VERIFY=fast: time pqz_verify_fast (P6-SV); PQZ_VERIFY=both: also run every verify with both verifiers
-//   and count disagreements (honest proofs and n_verify seeds of each of the six tamper kinds)
+//   and count disagreements (honest proofs and n_verify seeds of each of the six tamper kinds); both need a pqz.wasm
+//   with the specialised verifier (the default; SV=0 ./build.sh wasm leaves it out)
 import { readFileSync } from 'node:fs';
 
 const [np = 3, nv = 3, rels = 31] = process.argv.slice(2).map(Number);
@@ -39,6 +40,8 @@ const stats = (name, v) => {
         p99_ms: r(v[Math.floor(0.99 * (v.length - 1))]), max_ms: r(v[v.length - 1]) });
 };
 
+if (fast && x.step_set_fast(1) !== 0) { out({ error: 'PQZ_VERIFY: pqz.wasm built without the specialised verifier (SV=0)' }); process.exit(1); }
+x.step_set_fast(0);
 let t0 = performance.now();
 if (x.step_init(heap, ARENA) !== 0) { out({ error: 'init' }); process.exit(1); }
 out({ init_ms: Math.round((performance.now() - t0) * 10) / 10, init_arena: x.step_arena_peak(), verify: mode });

@@ -134,11 +134,44 @@ It costs a second prover, verifier / precompile, audit, vector set and WASM modu
 
 **Token kinds.** `IOpenFactory.TokenKind` reserves four PQZ kinds today (`NONE_PQZ`, `UNDERLYING_PQZ`,
 `NONE_ZETHER_PQZ`, `UNDERLYING_ZETHER_PQZ`, values 4–7, `KindReserved`). Two proof systems give either eight kinds
-(`*_PQZL` / `*_PQZH`) or four kinds plus the proof system as an `initialize` parameter; the owner's "two kinds" reads
-as the first. To settle in the PQZ spec with the spike's numbers.
+(`*_PQZL` / `*_PQZH`) or four kinds plus the proof system as an `initialize` parameter; the owner's "two kinds" means
+only PQZL and PQZH, i.e. the second: four kinds plus the proof system as a configuration value (owner 2026-10-13).
+To write into the PQZ spec with the spike's numbers.
 
 **Next: the PQZH spike (E-S1H).** `R_TX` (and `R_REG`) as a circuit in a STARK (Plonky3 first; Ligero if the field
 emulation is too costly), measured like E-S1: proof bytes, prove native and wasm, verify (p99 adversarial), memory,
 and the zero-knowledge mode. The hard part is arithmetic mod q = 2^42 − 215 inside a small STARK field (Goldilocks /
 BabyBear): limbs and range checks multiply the circuit size. Then decide per kind: PQZH on chain if it meets the
 verify limit with acceptable gas; PQZL kept only for off-chain or aggregated use; if neither meets, back to §4.
+
+Candidates for the PQZH design study (TODO P6-PQZH; all rest only on hash assumptions):
+
+| Candidate | Family | Role in the study |
+|---|---|---|
+| Plonky3 (FRI over Goldilocks / KoalaBear / BabyBear) | STARK | first choice |
+| Stwo (Circle STARK over Mersenne-31) | STARK | comparison |
+| Binius (binary tower fields) | STARK family over binary fields | comparison |
+| WHIR | polynomial commitment, a drop-in for FRI | smaller proofs for a STARK |
+| Ligero / Ligetron | linear-code IOP, not a STARK | fallback if mod-q emulation in a STARK field costs too much; larger proofs, simpler prover |
+
+## 7. Prior art: lattice private payments and their proof backends
+
+Added 2026-10-13 at the owner's request. Searched the web on 2026-10-13; "no public code" means none was found then.
+
+| Protocol | Model | Proof backend | Reported size / speed | Code | Relation to PQZ |
+|---|---|---|---|---|---|
+| **Lether** (Wang, Esgin, Steinfeld, Yiu; [ePrint 2026/076](https://eprint.iacr.org/2026/076), ACM CCS 2026, revised 2026-07-27; HKU and Monash) | account model, Anonymous Zether paradigm (ring, linkable tags) | LNP22 through LaZer | ≈ 68 KB per transaction, of which ≈ 51 KB proof; prove and verify each "a fraction of a second on a standard PC" [measured by others] | no public code found | closest prior art: same encryption family (refreshable additively homomorphic multi-recipient MLWE) and the same proof library; PQZ drops anonymity (no ring, no tags), which is why its `R_TX` proof is smaller (≈ 42.7 KB) |
+| **MatRiCT+** (Esgin, Steinfeld, Zhao; [ePrint 2021/545](https://eprint.iacr.org/2021/545)) | UTXO, RingCT (Monero-style) | its own lattice proofs | see the paper | not checked | earlier work of the same group; UTXO, not account model |
+| MatRiCT, SMILE, Gao et al. | UTXO / ring signatures | own lattice proofs | §3 table | — | §3 |
+
+Proof backends that a PQZ-style protocol can sit on, and where this repo covers them:
+
+| Backend | Assumption | Language | Covered in |
+|---|---|---|---|
+| LaZer (LNP22 "Lantern"; the upstream library also ships LaBRADOR) | lattice (MSIS / MLWE) | C, Python bindings | PQZL: `pqz-core` (fork of 3330e48), `pqz-core-e-s1.md`, `pqz-specialised-verifier.md` |
+| Plonky3 (FRI over Goldilocks / KoalaBear / BabyBear) | hash | Rust | PQZH first choice: `pqzh-design.md` |
+| Stwo (Circle STARK, Mersenne-31) | hash | Rust | `pqzh-design.md` (comparison) |
+| Winterfell | hash | Rust | §2 (mature STARK library, not shortlisted) |
+| Binius | hash, binary fields | Rust | `pqzh-design.md` (excluded: no zero knowledge, costly ring products) |
+| WHIR (polynomial commitment) | hash | Rust | `pqzh-design.md` (smaller proofs for a STARK) |
+| Ligero / Ligetron | hash | C++ / own | §2, `pqzh-design.md` (fallback) |

@@ -112,11 +112,12 @@ static const size_t STLEN[NREL] = { sizeof reg_stmt, sizeof tx_stmt, sizeof burn
 static const uint8_t *const WIT[NREL] = { reg_wit, tx_wit, burn_wit, ds_wit, dr_wit };
 static const size_t WLEN[NREL] = { sizeof reg_wit, sizeof tx_wit, sizeof burn_wit, sizeof ds_wit, sizeof dr_wit };
 /* first coefficient byte of the polynomial part of each statement, and its length in coefficients */
-static const size_t POLY0[NREL] = { PQZ_PREFIX_BYTES + 32, PQZ_PREFIX_BYTES, PQZ_HEADER_BYTES, PQZ_DISC_PK,
+static const size_t POLY0[NREL] = { PQZ_PREFIX_BYTES + 32, PQZ_HEADER_BYTES, PQZ_HEADER_BYTES, PQZ_DISC_PK,
                                     PQZ_DISC_PK };
-static const size_t NCOEF[NREL] = { 2048, (PQZ_TX_STMT_BYTES - PQZ_PREFIX_BYTES - 8) / 8,
+static const size_t NCOEF[NREL] = { 2048, (PQZ_TX_STMT_BYTES - PQZ_HEADER_BYTES) / 8,
                                     (PQZ_BURN_STMT_BYTES - PQZ_HEADER_BYTES) / 8,
                                     (PQZ_DISC_STMT_BYTES - PQZ_DISC_PK) / 8, (PQZ_DISC_STMT_BYTES - PQZ_DISC_PK) / 8 };
+static const uint8_t PSID[32] = PQZ_PROOF_SYSTEM_ID; /* statement bytes 32..63 (hashed only) */
 static int rel_of_op (uint8_t op)
 {
   for (int r = 0; r < NREL; r++)
@@ -138,6 +139,7 @@ make_reg (void)
   static key_t_ K;
   keygen (&K);
   memset (reg_stmt, (int)(rnd () & 255), PQZ_PREFIX_BYTES);
+  memcpy (reg_stmt + 32, PSID, 32);
   for (int i = 0; i < 32; i++)
     reg_stmt[PQZ_PREFIX_BYTES + i] = (uint8_t)rnd ();
   memcpy (reg_stmt + PQZ_PREFIX_BYTES + 32, K.pk, PQZ_POLYVEC_BYTES);
@@ -168,8 +170,13 @@ make_tx (void)
   const uint8_t *pks[3] = { KT.pk, KF.pk, KA.pk };
   pqz_encrypt (pks, 3, (const uint8_t (*)[16])m, r, e1, (const int16_t (*)[16])e2, u, vs);
 
-  uint8_t *p = tx_stmt;
-  memset (p, (int)(rnd () & 255), PQZ_PREFIX_BYTES), p += PQZ_PREFIX_BYTES;
+  uint8_t *p = tx_stmt; /* header (pq-zether.md §7.7): random bytes, proofSystemId, fee word, amount word 0 */
+  for (int i = 0; i < PQZ_HEADER_BYTES; i++)
+    p[i] = (uint8_t)rnd ();
+  memcpy (p + 32, PSID, 32);
+  memset (p + PQZ_HDR_FEE, 0, 64);
+  be8 (p + PQZ_HDR_FEE + 24, fee);
+  p += PQZ_HEADER_BYTES;
   memcpy (p, KF.pk, PQZ_POLYVEC_BYTES), p += PQZ_POLYVEC_BYTES;
   memcpy (p, KT.pk, PQZ_POLYVEC_BYTES), p += PQZ_POLYVEC_BYTES;
   memcpy (p, KA.pk, PQZ_POLYVEC_BYTES), p += PQZ_POLYVEC_BYTES;
@@ -178,8 +185,6 @@ make_tx (void)
   memcpy (p, u, PQZ_POLYVEC_BYTES), p += PQZ_POLYVEC_BYTES;
   for (int k = 0; k < 3; k++)
     memcpy (p, vs[k], PQZ_V_BYTES), p += PQZ_V_BYTES;
-  for (int b = 7; b >= 0; b--)
-    *p++ = (uint8_t)(fee >> (8 * b));
 
   p = tx_wit;
   for (int j = 0; j < 2048; j++)
@@ -225,6 +230,7 @@ make_burn (void)
   uint8_t *p = burn_stmt;
   for (int i = 0; i < PQZ_HEADER_BYTES; i++)
     p[i] = (uint8_t)rnd ();
+  memcpy (p + 32, PSID, 32);
   memset (p + PQZ_HDR_FEE, 0, 64);
   be8 (p + PQZ_HDR_FEE + 24, fee), be8 (p + PQZ_HDR_AMOUNT + 24, v);
   p += PQZ_HEADER_BYTES;
@@ -265,8 +271,10 @@ make_disc (void)
       uint8_t *st = k ? dr_stmt : ds_stmt;
       for (int i = 0; i < PQZ_DISC_PK; i++)
         st[i] = (uint8_t)rnd ();
-      memset (st + PQZ_DISC_AMOUNT, 0, 32);
+      memcpy (st + 32, PSID, 32);
+      memset (st + PQZ_DISC_AMOUNT, 0, 64);
       be8 (st + PQZ_DISC_AMOUNT + 24, v);
+      st[PQZ_DISC_KIND + 31] = (uint8_t)(k ? 1 + rnd () % 2 : 0); /* kind word: SENDER_S 0, RECEIVER_X 1, AUDITOR 2 */
       memcpy (st + PQZ_DISC_PK, KT.pk, PQZ_POLYVEC_BYTES);
       memcpy (st + PQZ_DISC_PK + PQZ_POLYVEC_BYTES, u, PQZ_POLYVEC_BYTES);
       memcpy (st + PQZ_DISC_PK + 2 * PQZ_POLYVEC_BYTES, vt[0], PQZ_V_BYTES);
@@ -383,17 +391,14 @@ mutate_round (uint8_t op, const uint8_t *st, size_t stlen, size_t len, int fuzz)
   memcpy (st2, st, stlen);
   st2[rnd () % PQZ_PREFIX_BYTES] ^= (uint8_t)(1 + rnd () % 255);
   check (9, op, st2, stlen, pf, len);
-  if (op != PQZ_OP_REGISTER) /* the public scalars: R_TX fee (be8); R_BURN fee / amount, disclosure amount (be32
-                                 words, 1 in 4 times a high byte set: non-canonical) */
+  if (op != PQZ_OP_REGISTER) /* the public scalars, be32 words (1 in 4 times a high byte set: non-canonical): R_TX
+                                 fee, R_BURN fee / amount, disclosure amount */
     {
       memcpy (st2, st, stlen);
-      if (op == PQZ_OP_TRANSFER)
-        st2[stlen - 1 - rnd () % 2] ^= (uint8_t)(1 + rnd () % 15);
-      else
-        {
-          size_t w = op == PQZ_OP_BURN ? (rnd () & 1 ? PQZ_HDR_FEE : PQZ_HDR_AMOUNT) : PQZ_DISC_AMOUNT;
-          st2[w + (rnd () % 4 == 0 ? rnd () % 24 : 30 + rnd () % 2)] ^= (uint8_t)(1 + rnd () % 15);
-        }
+      size_t w = op == PQZ_OP_TRANSFER ? PQZ_HDR_FEE
+                 : op == PQZ_OP_BURN   ? (rnd () & 1 ? PQZ_HDR_FEE : PQZ_HDR_AMOUNT)
+                                       : PQZ_DISC_AMOUNT;
+      st2[w + (rnd () % 4 == 0 ? rnd () % 24 : 30 + rnd () % 2)] ^= (uint8_t)(1 + rnd () % 15);
       check (10, op, st2, stlen, pf, len);
     }
   if (prevlen[rel])

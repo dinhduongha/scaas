@@ -1,0 +1,140 @@
+## Bounds (selftest passed)
+
+- mat: 3,584,407,906,373,884 (2^51.67)
+- ev: 3,585,507,367,653,529 (2^51.67)
+- tq: 816 (2^9.67)
+- limb: 40,059,044 (2^25.26)
+- l2: 55,083,008 (2^25.72)
+
+## Relation shapes (field-independent)
+
+| Relation | short coeffs | l2 norms | A-products (R_q) | statement products (R_q) | mod-q identities | digit values | statement coeffs |
+|---|---|---|---|---|---|---|---|
+| R_REG | 4,096 | 2 | 1,024 | 0 | 2,048 | 0 | 2,048 |
+| R_TX | 8,240 | 7 | 2,048 | 128 | 4,160 | 79 | 10,304 |
+| R_BURN | 8,208 | 5 | 2,048 | 64 | 4,128 | 63 | 6,176 |
+| R_DS | 4,112 | 3 | 1,024 | 32 | 2,064 | 0 | 4,112 |
+| R_DR | 4,096 | 2 | 1,024 | 32 | 2,064 | 16 | 4,112 |
+
+## D1 (challenge-free, NTT domain) per relation and field
+
+| Relation | Field | range lookups | NTT-domain mults | NTTs (64-pt) | main cells | preprocessed cells | LogUp interactions |
+|---|---|---|---|---|---|---|---|
+| R_REG | Goldilocks | 6,146 | 65,536 | 64 | 167,936 | 131,072 | 75,778 |
+| R_REG | KoalaBear | 10,242 | 196,608 | 128 | 462,848 | 262,144 | 219,138 |
+| R_REG | M31 (Circle) | 10,242 | 589,824 | 128 | 905,216 | 458,752 | 219,138 |
+| R_TX | Goldilocks | 12,502 | 139,264 | 260 | 409,391 | 196,608 | 174,358 |
+| R_TX | KoalaBear | 20,822 | 417,792 | 652 | 1,145,903 | 458,752 | 506,390 |
+| R_TX | M31 (Circle) | 20,822 | 1,253,376 | 652 | 2,231,855 | 851,968 | 506,390 |
+| R_BURN | Goldilocks | 12,420 | 135,168 | 194 | 371,615 | 196,608 | 161,956 |
+| R_BURN | KoalaBear | 20,676 | 405,504 | 454 | 1,032,735 | 458,752 | 469,284 |
+| R_BURN | M31 (Circle) | 20,676 | 1,216,512 | 454 | 2,018,079 | 851,968 | 469,284 |
+| R_DS | Goldilocks | 6,179 | 67,584 | 97 | 186,816 | 131,072 | 81,971 |
+| R_DS | KoalaBear | 10,307 | 202,752 | 227 | 519,424 | 262,144 | 237,683 |
+| R_DS | M31 (Circle) | 10,307 | 608,256 | 227 | 1,012,096 | 458,752 | 237,683 |
+| R_DR | Goldilocks | 6,194 | 67,584 | 97 | 186,800 | 131,072 | 81,986 |
+| R_DR | KoalaBear | 10,322 | 202,752 | 227 | 519,408 | 262,144 | 237,698 |
+| R_DR | M31 (Circle) | 10,322 | 608,256 | 227 | 1,012,080 | 458,752 | 237,698 |
+
+## D2 (Schwartz-Zippel at one point) per relation and field
+
+| Relation | Field | range lookups | in-circuit ext MACs | main cells | verifier base x ext MACs |
+|---|---|---|---|---|---|
+| R_REG | Goldilocks | 6,146 | 8,160 | 14,304 | 68,608 |
+| R_REG | KoalaBear | 10,242 | 16,288 | 26,528 | 72,704 |
+| R_TX | Goldilocks | 12,502 | 16,828 | 29,355 | 77,888 |
+| R_TX | KoalaBear | 20,822 | 34,100 | 54,947 | 98,496 |
+| R_BURN | Goldilocks | 12,420 | 16,574 | 28,989 | 73,760 |
+| R_BURN | KoalaBear | 20,676 | 33,338 | 54,009 | 86,112 |
+| R_DS | Goldilocks | 6,179 | 8,287 | 14,479 | 70,672 |
+| R_DS | KoalaBear | 10,307 | 16,669 | 26,989 | 78,896 |
+| R_DR | Goldilocks | 6,194 | 8,287 | 14,463 | 70,672 |
+| R_DR | KoalaBear | 10,322 | 16,669 | 26,973 | 78,896 |
+
+## STARK (FRI) proof size, R_TX and R_REG, D1 layout, 128-bit target, 16 grinding bits
+
+| Relation | Field | trace rows | opened width (main/pre/aux/quot) | blowup | FRI arity | regime | queries | proof KB | verify hash perms | prover LDE MB |
+|---|---|---|---|---|---|---|---|---|---|---|
+| R_TX | Goldilocks | 2^16 | 7/3/6/4 | 2 | 2 | conj | 112 | 394 | 22,848 | 30 |
+| R_TX | Goldilocks | 2^16 | 7/3/6/4 | 2 | 2 | johnson | 224 | 686 | 45,696 | 30 |
+| R_TX | Goldilocks | 2^16 | 7/3/6/4 | 4 | 2 | conj | 56 | 252 | 12,264 | 60 |
+| R_TX | Goldilocks | 2^16 | 7/3/6/4 | 4 | 2 | johnson | 112 | 448 | 24,528 | 60 |
+| R_TX | Goldilocks | 2^16 | 7/3/6/4 | 8 | 2 | conj | 38 | 190 | 8,892 | 120 |
+| R_TX | Goldilocks | 2^16 | 7/3/6/4 | 8 | 2 | johnson | 75 | 336 | 17,550 | 120 |
+| R_TX | Goldilocks | 2^16 | 7/3/6/4 | 8 | 8 | conj | 38 | 124 | 4,940 | 120 |
+| R_TX | Goldilocks | 2^16 | 7/3/6/4 | 8 | 8 | johnson | 75 | 225 | 9,750 | 120 |
+| R_TX | Goldilocks | 2^16 | 7/3/6/4 | 16 | 2 | conj | 28 | 167 | 6,972 | 240 |
+| R_TX | Goldilocks | 2^16 | 7/3/6/4 | 16 | 2 | johnson | 56 | 305 | 13,944 | 240 |
+| R_TX | Goldilocks | 2^16 | 7/3/6/4 | 16 | 16 | conj | 28 | 105 | 3,444 | 240 |
+| R_TX | Goldilocks | 2^16 | 7/3/6/4 | 16 | 16 | johnson | 56 | 196 | 6,888 | 240 |
+| R_TX | KoalaBear | 2^18 | 5/2/8/8 | 2 | 2 | conj | 112 | 501 | 27,888 | 69 |
+| R_TX | KoalaBear | 2^18 | 5/2/8/8 | 2 | 2 | johnson | 224 | 886 | 55,776 | 69 |
+| R_TX | KoalaBear | 2^18 | 5/2/8/8 | 4 | 2 | conj | 56 | 312 | 14,896 | 138 |
+| R_TX | KoalaBear | 2^18 | 5/2/8/8 | 4 | 2 | johnson | 112 | 562 | 29,792 | 138 |
+| R_TX | KoalaBear | 2^18 | 5/2/8/8 | 8 | 2 | conj | 38 | 233 | 10,754 | 276 |
+| R_TX | KoalaBear | 2^18 | 5/2/8/8 | 8 | 2 | johnson | 75 | 418 | 21,225 | 276 |
+| R_TX | KoalaBear | 2^18 | 5/2/8/8 | 8 | 8 | conj | 38 | 147 | 5,814 | 276 |
+| R_TX | KoalaBear | 2^18 | 5/2/8/8 | 8 | 8 | johnson | 75 | 266 | 11,475 | 276 |
+| R_TX | KoalaBear | 2^18 | 5/2/8/8 | 16 | 2 | conj | 28 | 203 | 8,400 | 552 |
+| R_TX | KoalaBear | 2^18 | 5/2/8/8 | 16 | 2 | johnson | 56 | 373 | 16,800 | 552 |
+| R_TX | KoalaBear | 2^18 | 5/2/8/8 | 16 | 16 | conj | 28 | 124 | 4,032 | 552 |
+| R_TX | KoalaBear | 2^18 | 5/2/8/8 | 16 | 16 | johnson | 56 | 232 | 8,064 | 552 |
+| R_REG | Goldilocks | 2^16 | 3/2/4/4 | 2 | 2 | conj | 112 | 388 | 22,848 | 20 |
+| R_REG | Goldilocks | 2^16 | 3/2/4/4 | 2 | 2 | johnson | 224 | 673 | 45,696 | 20 |
+| R_REG | Goldilocks | 2^16 | 3/2/4/4 | 4 | 2 | conj | 56 | 248 | 12,264 | 39 |
+| R_REG | Goldilocks | 2^16 | 3/2/4/4 | 4 | 2 | johnson | 112 | 441 | 24,528 | 39 |
+| R_REG | Goldilocks | 2^16 | 3/2/4/4 | 8 | 2 | conj | 38 | 187 | 8,892 | 78 |
+| R_REG | Goldilocks | 2^16 | 3/2/4/4 | 8 | 2 | johnson | 75 | 332 | 17,550 | 78 |
+| R_REG | Goldilocks | 2^16 | 3/2/4/4 | 8 | 8 | conj | 38 | 122 | 4,940 | 78 |
+| R_REG | Goldilocks | 2^16 | 3/2/4/4 | 8 | 8 | johnson | 75 | 220 | 9,750 | 78 |
+| R_REG | Goldilocks | 2^16 | 3/2/4/4 | 16 | 2 | conj | 28 | 165 | 6,972 | 156 |
+| R_REG | Goldilocks | 2^16 | 3/2/4/4 | 16 | 2 | johnson | 56 | 302 | 13,944 | 156 |
+| R_REG | Goldilocks | 2^16 | 3/2/4/4 | 16 | 16 | conj | 28 | 103 | 3,444 | 156 |
+| R_REG | Goldilocks | 2^16 | 3/2/4/4 | 16 | 16 | johnson | 56 | 192 | 6,888 | 156 |
+
+## Prover estimate, R_TX, blowup 8, one thread [inference: throughput band, see source comment]
+
+| Design | Field | base cells (main+pre+aux+quot) | LDE cells | native s | wasm32 s | LDE + tree MB |
+|---|---|---|---|---|---|---|
+| D1 | Goldilocks | 1,216,859 | 9,734,872 | 0.24-0.97 | 0.73-3.89 | 202 |
+| D1 | KoalaBear | 5,727,367 | 45,818,936 | 0.57-2.29 | 1.72-9.16 | 687 |
+| D2 | Goldilocks | 415,695 | 3,325,560 | 0.08-0.33 | 0.25-1.33 | 153 |
+| D2 | KoalaBear | 864,459 | 6,915,672 | 0.09-0.35 | 0.26-1.38 | 154 |
+
+## Ligero over F_q, per relation
+
+| Relation | witness elems | linear constraints | quadratic constraints | rate | regime | queries t | rows m | proof KB | verifier ext mults | verify ms (6 mulmod x 1.5 ns each, + 1 ms) |
+|---|---|---|---|---|---|---|---|---|---|---|
+| R_REG | 40,986 | 6,146 | 36,890 | 1/4 | classic | 309 | 40 | 220 | 4,284,560 | 40 |
+| R_REG | 40,986 | 6,146 | 36,890 | 1/4 | johnson | 128 | 61 | 125 | 3,013,888 | 28 |
+| R_REG | 40,986 | 6,146 | 36,890 | 1/8 | classic | 258 | 54 | 198 | 5,778,648 | 53 |
+| R_REG | 40,986 | 6,146 | 36,890 | 1/8 | johnson | 86 | 97 | 103 | 3,545,350 | 33 |
+| R_TX | 83,408 | 12,502 | 75,168 | 1/4 | classic | 309 | 57 | 283 | 6,105,498 | 56 |
+| R_TX | 83,408 | 12,502 | 75,168 | 1/4 | johnson | 128 | 94 | 166 | 4,644,352 | 43 |
+| R_TX | 83,408 | 12,502 | 75,168 | 1/8 | classic | 258 | 63 | 261 | 14,483,196 | 131 |
+| R_TX | 83,408 | 12,502 | 75,168 | 1/8 | johnson | 86 | 106 | 137 | 7,192,524 | 66 |
+| R_BURN | 82,998 | 12,420 | 74,790 | 1/4 | classic | 309 | 58 | 282 | 6,212,612 | 57 |
+| R_BURN | 82,998 | 12,420 | 74,790 | 1/4 | johnson | 128 | 93 | 165 | 4,594,944 | 42 |
+| R_BURN | 82,998 | 12,420 | 74,790 | 1/8 | classic | 258 | 62 | 260 | 14,253,304 | 129 |
+| R_BURN | 82,998 | 12,420 | 74,790 | 1/8 | johnson | 86 | 106 | 137 | 7,156,060 | 65 |
+| R_DS | 41,159 | 6,179 | 37,047 | 1/4 | classic | 309 | 40 | 220 | 4,284,560 | 40 |
+| R_DS | 41,159 | 6,179 | 37,047 | 1/4 | johnson | 128 | 62 | 125 | 3,063,296 | 29 |
+| R_DS | 41,159 | 6,179 | 37,047 | 1/8 | classic | 258 | 54 | 198 | 5,778,648 | 53 |
+| R_DS | 41,159 | 6,179 | 37,047 | 1/8 | johnson | 86 | 97 | 103 | 3,562,034 | 33 |
+| R_DR | 41,386 | 6,178 | 37,290 | 1/4 | classic | 309 | 40 | 220 | 4,284,560 | 40 |
+| R_DR | 41,386 | 6,178 | 37,290 | 1/4 | johnson | 128 | 63 | 125 | 3,112,704 | 29 |
+| R_DR | 41,386 | 6,178 | 37,290 | 1/8 | classic | 258 | 55 | 199 | 5,885,660 | 54 |
+| R_DR | 41,386 | 6,178 | 37,290 | 1/8 | johnson | 86 | 98 | 104 | 3,581,900 | 33 |
+
+## Transfer gas floor (EIP-7623) and input limits by proof size
+
+| proof KB | floor gas (M) | +16 inline credits (M) | R_TX input bytes (MAX_INPUT 262,144) |
+|---|---|---|---|
+| 42.7 | 2.89 | 11.22 | 125,777 |
+| 64 | 3.74 | 12.07 | 147,077 |
+| 96 | 5.02 | 13.34 | 179,077 |
+| 128 | 6.30 | 14.62 | 211,077 |
+| 150 | 7.17 | 15.50 | 233,077 |
+| 179 | 8.33 | 16.65 | 262,077 |
+| 200 | 9.17 | 17.49 | 283,077 |
+| 250 | 11.16 | 19.49 | 333,077 |

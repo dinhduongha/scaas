@@ -18,7 +18,16 @@ lazer_h() {
     echo "#define moduli_d128 ((const modulus_srcptr *)0)"; } > $B/include/lazer.h
 }
 
-LIBSRC="src/pqz_lazer.c src/pqz_ntt.c src/pqz_arena.c src/pqz_rel.c src/pqz_sv.c"
+# SV=0: leave the specialised verifier (src/pqz_sv.c, pqz_verify_fast, its tables) out, e.g. the wallet's prover
+# wasm (SV=0 B=build/wasm-nosv ./build.sh wasm); the default builds it (PQZ_SV). native-x86v3 needs it.
+SV=${SV:-1}
+LIBSRC="src/pqz_lazer.c src/pqz_ntt.c src/pqz_arena.c src/pqz_rel.c"
+SVDEF=""
+if [ "$SV" = 1 ]; then
+  LIBSRC="$LIBSRC src/pqz_sv.c"
+  SVDEF="-DPQZ_SV"
+  CFLAGS_LIB="$CFLAGS_LIB $SVDEF"
+fi
 
 native() {
   lazer_h
@@ -33,9 +42,10 @@ native() {
   ./check_symbols.sh $objs
   $CC -shared -Wl,--gc-sections -o $B/native/libpqz.so $objs
   # tests and bench (hosted programs; the library objects stay libc-free)
-  $CC -std=gnu11 -O2 $WARN -Isrc -o $B/native/pqz_bench test/pqz_bench.c $B/native/libpqz.a
+  $CC -std=gnu11 -O2 $WARN $SVDEF -Isrc -o $B/native/pqz_bench test/pqz_bench.c $B/native/libpqz.a
   $CC -std=gnu11 -O2 -DPQZ_BACKEND -DBUILD_FLAGS='"pqz-core native"' -I$B/include -Isrc -Ilazer -Iparams \
     -o $B/native/kat_dump kat/lazer_dump.c $B/native/libpqz.a
+  [ "$SV" = 1 ] || return 0
   # P6-SV differential test: the relation and specialised-verifier objects again, with the test hooks
   mkdir -p $B/native/hooks
   for f in pqz_rel pqz_sv; do
@@ -71,6 +81,7 @@ wasm() {
 # optional x86-64 backend of the specialised verifier (P6-SV): the native library with pqz_sv.c built for
 # x86-64-v3 (AVX2) + AES-NI, -O3; everything else as native. The portable build stays the reference.
 native_x86v3() {
+  [ "$SV" = 1 ] || { echo "native-x86v3 is the specialised verifier's backend: needs SV=1" >&2; exit 2; }
   native
   mkdir -p $B/native-x86v3
   cp $B/native/*.o $B/native-x86v3/
@@ -79,7 +90,7 @@ native_x86v3() {
   objs="$objs $B/native-x86v3/pqz_sv.o"
   ar rcs $B/native-x86v3/libpqz.a $objs
   ./check_symbols.sh $objs
-  $CC -std=gnu11 -O2 $WARN -Isrc -o $B/native-x86v3/pqz_bench test/pqz_bench.c $B/native-x86v3/libpqz.a
+  $CC -std=gnu11 -O2 $WARN $SVDEF -Isrc -o $B/native-x86v3/pqz_bench test/pqz_bench.c $B/native-x86v3/libpqz.a
   $CC $CFLAGS_LIB -O3 -march=x86-64-v3 -maes -DPQZ_TEST_HOOKS -c src/pqz_sv.c -o $B/native-x86v3/pqz_sv_hooks.o
   $CC -std=gnu11 -O2 $WARN -Isrc -o $B/native-x86v3/pqz_sv_diff test/pqz_sv_diff.c $B/native/hooks/pqz_rel.o \
     $B/native-x86v3/pqz_sv_hooks.o $B/native/pqz_lazer.o $B/native/pqz_ntt.o $B/native/pqz_arena.o
