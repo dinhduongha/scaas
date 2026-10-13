@@ -1,0 +1,8 @@
+build
+artifact/out
+xcheck/static/raw-*
+xcheck/static/results-*.json
+**/*.o
+**/*.a
+**/*.so
+**/*.wasm
