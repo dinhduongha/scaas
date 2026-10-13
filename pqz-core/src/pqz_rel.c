@@ -609,11 +609,38 @@ pf_alloc (pf_t *F, const lnp_tbox_params_struct *P)
   polyvec_set_zero (F->m);
 }
 
+#ifdef PQZ_L2DOM_POC
+/* Test-only cheating prover (pqz-core/l2dom/, never in a production build): when set, pool the l2 slack of all
+   Z blocks into the last block's upsilon (upsilon_z = 0 for z < Z-1), so a block may exceed its own B_z as long
+   as sum_z ||x_z||^2 <= sum_z B_z^2. Checks whether the verifier enforces each exact-l2 equation separately. */
+int pqz_l2dom_poc;
+#endif
+
 /* s1 slack polys: upsilon_i = binexp(B_i^2 - ||x_i||^2) */
 static int
 set_upsilon (const lnp_tbox_params_struct *P, polyvec_t s1, const unsigned *start, const unsigned *len)
 {
   const unsigned m1 = P->tbox->m1 - P->Z;
+#ifdef PQZ_L2DOM_POC
+  if (pqz_l2dom_poc)
+    {
+      int64_t slack = 0;
+      for (unsigned z = 0; z < P->Z; z++)
+        {
+          slack += int_get_i64 (P->l2Bsqr[z]);
+          for (unsigned j = 0; j < len[z]; j++)
+            slack -= l2sq_poly (polyvec_get_elem (s1, start[z] + j));
+          poly_set_zero (polyvec_get_elem (s1, m1 + z));
+        }
+      /* the last block's upsilon carries bits 2^0 .. 2^(bitlen(B_last^2)-1) */
+      if (slack < 0 || slack >= ((int64_t)2 << (63 - __builtin_clzll (int_get_i64 (P->l2Bsqr[P->Z - 1])))))
+        return 0;
+      INT_T (d, 2 * P->tbox->ring->q->nlimbs);
+      int_set_i64 (d, slack);
+      int_binexp (polyvec_get_elem (s1, m1 + P->Z - 1), NULL, d);
+      return 1;
+    }
+#endif
   for (unsigned z = 0; z < P->Z; z++)
     {
       int64_t n2 = 0;
