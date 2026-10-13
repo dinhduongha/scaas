@@ -1,0 +1,42 @@
+== control (P6-L2 fix undone)
+honest    ||s||^2=998 (bound 1296) ||e||^2=1014 (bound 26896) sum=2012 (bound 28192)
+  honest prover rc=0 (proves)
+  pooled-slack prover rc=0 proof 28071 B; prover self-checks: pass:0
+  in-process pqz_verify(honest): ACCEPT
+s_over_A  ||s||^2=17889 (bound 1296) ||e||^2=991 (bound 26896) sum=18880 (bound 28192)  <-- s exceeds its own bound
+  honest prover rc=3 (refuses: witness above a block bound)
+  pooled-slack prover rc=0 proof 28085 B; prover self-checks: pass:0
+  in-process pqz_verify(s_over_A): ACCEPT
+s_over_B  ||s||^2=28192 (bound 1296) ||e||^2=0 (bound 26896) sum=28192 (bound 28192)  <-- s exceeds its own bound
+  honest prover rc=3 (refuses: witness above a block bound)
+  pooled-slack prover rc=0 proof 28084 B; prover self-checks: pass:0
+  in-process pqz_verify(s_over_B): ACCEPT
+tx_over  ||s_f||^2+||e_f||^2=2042 ||r||^2=59933 (bound 1296, ||r||=244.8 vs 36) ||e1||^2=4144 (bound 26896) sum=66119 (bound 68672)
+  recipient decryption noise, coefficient 0: 36861  (spec worst case B_FRESH = 11872; ratio 3.10)
+  x 1023 credits = 37.71 M  (2^24 = 16.78 M debit range; Delta/2 = 33.55 M; mint threshold Delta - 2^24 = 50.33 M)
+  honest prover rc=3 (refuses: witness above a block bound)
+  pooled-slack prover rc=0 proof 42748 B; prover self-checks: pass:0
+  in-process pqz_verify(tx_over): ACCEPT
+== fixed tree, production verifier
+honest    ||s||^2=998 (bound 1296) ||e||^2=1014 (bound 26896) sum=2012 (bound 28192)
+  honest prover rc=0 (proves)
+  pooled-slack prover rc=1 proof 28070 B; prover self-checks: FAIL (ignored), first at lazer/lnp-tbox.c:167
+  in-process pqz_verify(honest): REJECT
+s_over_A  ||s||^2=17889 (bound 1296) ||e||^2=991 (bound 26896) sum=18880 (bound 28192)  <-- s exceeds its own bound
+  honest prover rc=3 (refuses: witness above a block bound)
+  pooled-slack prover rc=1 proof 28085 B; prover self-checks: FAIL (ignored), first at lazer/lnp-tbox.c:167
+  in-process pqz_verify(s_over_A): REJECT
+s_over_B  ||s||^2=28192 (bound 1296) ||e||^2=0 (bound 26896) sum=28192 (bound 28192)  <-- s exceeds its own bound
+  honest prover rc=3 (refuses: witness above a block bound)
+  pooled-slack prover rc=1 proof 28083 B; prover self-checks: FAIL (ignored), first at lazer/lnp-tbox.c:167
+  in-process pqz_verify(s_over_B): REJECT
+  production-lib pqz_verify(honest): REJECT
+  production-lib pqz_verify(s_over_A): REJECT
+  production-lib pqz_verify(s_over_B): REJECT
+tx_over  ||s_f||^2+||e_f||^2=2042 ||r||^2=59933 (bound 1296, ||r||=244.8 vs 36) ||e1||^2=4144 (bound 26896) sum=66119 (bound 68672)
+  recipient decryption noise, coefficient 0: 36861  (spec worst case B_FRESH = 11872; ratio 3.10)
+  x 1023 credits = 37.71 M  (2^24 = 16.78 M debit range; Delta/2 = 33.55 M; mint threshold Delta - 2^24 = 50.33 M)
+  honest prover rc=3 (refuses: witness above a block bound)
+  pooled-slack prover rc=1 proof 42749 B; prover self-checks: FAIL (ignored), first at lazer/lnp-tbox.c:167
+  in-process pqz_verify(tx_over): REJECT
+  production-lib pqz_verify(tx_over): REJECT
