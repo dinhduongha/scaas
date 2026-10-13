@@ -205,7 +205,7 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
     function puller() external view returns (address) { return _s().puller; }
     function pulled(bytes32 orderHash) external view returns (uint256) { return TradeLib.$().pulled[orderHash]; }
     function minNonce(address from, uint256 batch) external view returns (uint256) {
-        return TradeLib.$().minNonce[from][batch];
+        return TradeLib.$().minNonce[TradeLib.pad(from)][batch];
     }
 
     function dexOrderDigest(address sellToken, ITradeToken.TradeOrder calldata o) public view returns (bytes32) {
@@ -229,14 +229,16 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
         for (uint256 i; i < orders.length; ++i) {
             ITradeToken.TradeOrder calldata o = orders[i].order;
             bytes32 h = dexOrderDigest(orders[i].sellToken, o);
-            if (SigCheck.isValid(o.from, cancelOrderDigest(h), sigs[i], _cap(o.from))) TradeLib.cancel(o, h);
+            if (SigCheck.isValid(o.from, cancelOrderDigest(h), sigs[i], _cap(o.from))) {
+                TradeLib.cancel(h, o.amount, TradeLib.pad(o.from), false);
+            }
         }
     }
 
     function mtxInvalidateNonces(address from, uint256 batch, uint256 newMin, bytes calldata sig) external nonReentrant {
         bytes32 d = invalidateNoncesDigest(from, batch, newMin);
         if (!SigCheck.isValid(from, d, sig, _cap(from))) revert BadSignature(d);
-        TradeLib.invalidate(from, batch, newMin);
+        TradeLib.invalidate(TradeLib.pad(from), batch, newMin, false);
     }
 
     /// @dev CTR-DEX-08: 400 k for a `SmartKeyAccount` clone, else 50 k.
@@ -359,10 +361,12 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
             ? ITradeToken.TradeFill(o.amount, 0, 0, submitter)
             : ITradeToken.TradeFill(c.sold, c.recv, c.fee, submitter);
         if (!c.outside) return ITradeToken(sellToken).mtxTrade(o, sig, f);
-        // outside token: the DEX runs the token's checks on its own state, then pulls through the puller
-        TradeLib.precheck(o, f, c.h, address(this), sellToken);
-        if (!SigCheck.isValid(o.from, c.h, sig, _cap(o.from))) revert BadSignature(c.h);
-        DexPuller(_s().puller).pull(sellToken, o.from, TradeLib.record(o, f, c.h));
+        // outside token: the DEX runs the token's checks on its own state (the signature once, CTR-DEX-15 step 4),
+        // then pulls through the puller
+        ITradeToken.UATradeOrder memory u = TradeLib.core(o);
+        TradeLib.precheck(u, f, c.h, address(this), sellToken);
+        if (TradeLib.$().pulled[c.h] == 0 && !SigCheck.isValid(o.from, c.h, sig, _cap(o.from))) revert BadSignature(c.h);
+        DexPuller(_s().puller).pull(sellToken, o.from, TradeLib.record(u, f, c.h, false));
     }
 
     function _pay(bytes32 ref, Leg calldata l, Calc memory c, address submitter) private {

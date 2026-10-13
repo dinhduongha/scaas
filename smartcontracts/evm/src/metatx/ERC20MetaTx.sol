@@ -90,10 +90,14 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
         ));
     }
 
-    // ------------------------------------------------------------------ trade orders (CTR-DEX-15, CTR-DEX-02)
+    // ------------------------------------------------------------------ trade orders (CTR-DEX-15, -25, -02)
 
     function tradeOrderDigest(TradeOrder calldata o) public view returns (bytes32) {
         return _hashTypedDataV4(TradeLib.hashStruct(o));
+    }
+
+    function uaTradeOrderDigest(UATradeOrder calldata o) public view returns (bytes32) {
+        return _hashTypedDataV4(TradeLib.hashStructUA(o));
     }
 
     function cancelOrderDigest(bytes32 orderHash) public view returns (bytes32) {
@@ -104,33 +108,68 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
         return _hashTypedDataV4(keccak256(abi.encode(TradeLib.INVALIDATE_NONCES_TYPEHASH, from, batch, newMin)));
     }
 
+    function uaInvalidateNoncesDigest(bytes32 from, uint256 batch, uint256 newMin) public view returns (bytes32) {
+        return _hashTypedDataV4(keccak256(abi.encode(TradeLib.UA_INVALIDATE_NONCES_TYPEHASH, from, batch, newMin)));
+    }
+
     function pulled(bytes32 orderHash) external view returns (uint256) {
         return TradeLib.$().pulled[orderHash];
     }
 
+    /// @notice One floor per id: `minNonce(a, b) == uaMinNonce(pad(a), b)`.
     function minNonce(address from, uint256 batch) external view returns (uint256) {
+        return TradeLib.$().minNonce[TradeLib.pad(from)][batch];
+    }
+
+    function uaMinNonce(bytes32 from, uint256 batch) external view returns (uint256) {
         return TradeLib.$().minNonce[from][batch];
     }
 
     /// @notice Only `o.dex` calls (a direct read of the caller, CTR-MTX-18); never allowlisted. Moves the fill from
-    ///         `o.from` to `o.dex` and nowhere else.
+    ///         `o.from` to `o.dex` and nowhere else. The signature is checked once: a later fill of an order already
+    ///         pulled (`pulled[h] ≠ 0`, `h` binds every field) skips it (CTR-DEX-15 step 4).
     function mtxTrade(TradeOrder calldata o, bytes calldata sig, TradeFill calldata f) external nonReentrant {
         bytes32 h = tradeOrderDigest(o);
-        TradeLib.precheck(o, f, h, msg.sender, address(this));
-        _requireValidSignature(o.from, h, sig);
-        _transfer(o.from, o.dex, TradeLib.record(o, f, h));
+        UATradeOrder memory c = TradeLib.core(o);
+        TradeLib.precheck(c, f, h, msg.sender, address(this));
+        if (TradeLib.$().pulled[h] == 0) _requireValidSignature(o.from, h, sig);
+        _transfer(o.from, o.dex, TradeLib.record(c, f, h, false));
+    }
+
+    /// @notice CTR-DEX-25: `mtxTrade` for an id; the UA rule under purpose `trade` (a native id signs `h` itself); the
+    ///         fill moves through the UA ledger (a derived seller: `Transfer(UA_POOL, dex)` + `UATransfer`).
+    function uaTrade(UATradeOrder calldata o, bytes calldata auth, TradeFill calldata f) external nonReentrant {
+        _uaOn();
+        bytes32 h = uaTradeOrderDigest(o);
+        UATradeOrder memory c = o;
+        TradeLib.precheck(c, f, h, msg.sender, address(this));
+        if (TradeLib.$().pulled[h] == 0) _uaAuthorize(o.from, UAKinds.PURPOSE_TRADE, h, auth);
+        _uaMove(o.from, TradeLib.pad(o.dex), TradeLib.record(c, f, h, true));
     }
 
     /// @notice Cancel signatures never expire (CTR-DEX-02); anyone may submit one.
     function mtxCancelOrder(TradeOrder calldata o, bytes calldata sig) external nonReentrant {
         bytes32 h = tradeOrderDigest(o);
         _requireValidSignature(o.from, cancelOrderDigest(h), sig);
-        TradeLib.cancel(o, h);
+        TradeLib.cancel(h, o.amount, TradeLib.pad(o.from), false);
+    }
+
+    function uaCancelOrder(UATradeOrder calldata o, bytes calldata auth) external nonReentrant {
+        _uaOn();
+        bytes32 h = uaTradeOrderDigest(o);
+        _uaAuthorize(o.from, UAKinds.PURPOSE_TRADE, cancelOrderDigest(h), auth);
+        TradeLib.cancel(h, o.amount, o.from, true);
     }
 
     function mtxInvalidateNonces(address from, uint256 batch, uint256 newMin, bytes calldata sig) external nonReentrant {
         _requireValidSignature(from, invalidateNoncesDigest(from, batch, newMin), sig);
-        TradeLib.invalidate(from, batch, newMin);
+        TradeLib.invalidate(TradeLib.pad(from), batch, newMin, false);
+    }
+
+    function uaInvalidateNonces(bytes32 from, uint256 batch, uint256 newMin, bytes calldata auth) external nonReentrant {
+        _uaOn();
+        _uaAuthorize(from, UAKinds.PURPOSE_TRADE, uaInvalidateNoncesDigest(from, batch, newMin), auth);
+        TradeLib.invalidate(from, batch, newMin, true);
     }
 
     // ------------------------------------------------------------------ typed path (CTR-MTX-23, CTR-MTX-24)
