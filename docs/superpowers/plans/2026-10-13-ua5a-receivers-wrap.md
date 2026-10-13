@@ -9,7 +9,7 @@ of Task 6 are generated, never applied. Checked on a clean checkout of `main` `e
 `82d7d7c`: `.gitignore`, PQZ verifier-floor docs and `pqz-core/floor`): the diffs, taken from this file, apply in sequence
 with `git apply --check --whitespace=error`; with the vectors generated, the tree equals `ua5a-spike` byte for byte; every
 command and count below was run there. Two ways to land it: merge `ua5a-spike` (then do Task 7), or execute Tasks 1–7 on a
-fresh branch. Rulings R5a-1…R5a-15 are kept; the spike's own choices are the controller rulings C5a-1…C5a-14 below.
+fresh branch. Rulings R5a-1…R5a-15 are kept; the spike's own choices are the controller rulings C5a-1…C5a-15 below.
 
 **Goal:** the UA-5a row of the UA-5 stream (`TODO.md`; owner 2026-10-13): the receiver axis of UA parity
 ([accounts.md](../../contracts/accounts.md) CTR-UA-27, CTR-UA-28) and receiver-pays on the UA path
@@ -238,6 +238,10 @@ All kept by the spike; where the spike settled a detail the ruling names, the co
   5000 ppm); `receiverFee`: payment of 100,000,000 with mode `0x01` (relayer bound, fee `NONE`) on
   `payLane(keccak256("scaas.metatx3.receiverFee.<payer>.<payee>"))`, `ReceiverFee` fee 300,000 to `0x…0fee`,
   `validUntil` 1,800,000,060.
+- **C5a-15 Ledger-off wrapper, ledger-on leg** (final review M2). `unwrapToUA` on a wrapper whose own ledger is off
+  (registry 0), called directly by a native, pays a UA of a ledger-on leg: the credit lives in the leg's ledger, which
+  checks `to`; the wrapper needs its own ledger only for a UA subject (`uaExecute`). Kept as is, pinned by
+  `test_unwrapToUA_ledgerOffWrapper_ledgerOnLeg`; one sentence in CTR-UA-28.
 
 ## Spike findings
 
@@ -3532,13 +3536,21 @@ that touch the spec: none change a rule), `TODO.md` (UA-5a done with the merge c
 
 ### Final
 
-- [ ] **Whole branch.** In `smartcontracts/evm`: `../../scripts/capped forge test` — 97 suites, 1152 passed / 0 failed / 10 skipped (base 1104 + 48);
+- [ ] **Whole branch.** In `smartcontracts/evm`: `../../scripts/capped forge test` — 97 suites, 1157 passed / 0 failed / 10 skipped (base 1104 + 48, + 5 from the final fix wave);
   `FOUNDRY_PROFILE=private7622 ../../scripts/capped forge test` — the same; `../../scripts/capped forge test
-  --match-path 'test/ua/**'` — 26 suites, 276 passed; cold gas suites `--isolate --match-path test/ua/UAGas.t.sol` 6 passed and
+  --match-path 'test/ua/**'` — 26 suites, 281 passed; cold gas suites `--isolate --match-path test/ua/UAGas.t.sol` 6 passed and
   `--isolate --match-path test/ua/UARegistryGroups.t.sol` 14 passed; the size gate — `size gate: 0 error(s), 84
   contracts`. `clients/clientkeys`: `../../scripts/capped node --test test/` — 105 / 103 / 2 skipped; the generator a second time
   leaves every vector file unchanged. Docs checkers clean (Task 7). `/usr/bin/git status` clean apart from ignored
   files. `/usr/bin/grep -rn "_uaBalance\|\.balance\[" smartcontracts/evm/src` — four hits, all in `ERC20MetaTx`:
   the read in `balanceOfUA`, the writes in `_uaMove` and `_uaDebit`.
+- [x] **Final fix wave** (after the read-only final review; one commit on `ua5a-spike` after Task 7, not in the task
+  diffs above, so the "byte for byte" check of the Status line covers Tasks 1–6 only): `wrapToUA` / `unwrapToUA` at a
+  3/2 rate, direct, relayed (`mtxExecute`) and under `uaExecute` (minted, burned = ⌈out·num/den⌉, out, reserve, events);
+  the invariant handler's ledger-leg wrapper at 3/2 with per-call minted / burned / out / reserve checks; `LyingLedgerLeg`
+  mode 2 (over-pay, `UnderlyingTransferMismatch(leg, 40, 41)`); `wrapToUA(…, bytes32(0))` refused
+  (`UANotRegistered(0)`); C5a-15. Mutations killed (applied, run, reverted): `_burn(from, wrapped)`, `payOutToUA(i, to,
+  burned)`, the `UnwrappedToUA` `burned`/`out` swap, `_uaMove(0, to, received)`, `sent < out`. Comments only in `src`
+  (`_wrap`'s `to == 0` sentinel, `payOutToUA`'s natspec, the two refusal checks whose removal gives the same error).
 - [ ] **Review** against the Review Focus; then merge to `main` (owner). Next: UA-5b (trade and DEX) or UA-5c (Zether
   public side and mandates), in either order; relayed use after UA F5.
