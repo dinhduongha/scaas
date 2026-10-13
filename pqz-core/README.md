@@ -3,7 +3,8 @@
 The PQ Zether proof engine ([pq-zether.md](../docs/contracts/pq-zether.md) §8, CTR-PQZ-09): a fork of
 [LaZer](https://github.com/lazer-crypto/lazer) at commit `3330e48` (MIT, IBM) with six layers rewritten, so the
 prover and verifier run without GMP, MPFR, HEXL, floating point, `malloc`, `abort` or stdio. This is the E-S1 spike
-(P6d): `R_REG` and a first `R_TX`, built natively and as freestanding `wasm32`. State, measured numbers and what is
+(P6d): `R_REG` and a first `R_TX`, built natively and as freestanding `wasm32`; then `R_BURN` (also REFRESH), `R_DS`
+and `R_DR` (also the auditor), `docs/research/pqz-relations-burn-disclose.md`. State, measured numbers and what is
 open: [STATUS.md](STATUS.md); write-up: `docs/research/pqz-core-e-s1.md`.
 
 ## Layout
@@ -11,11 +12,12 @@ open: [STATUS.md](STATUS.md); write-up: `docs/research/pqz-core-e-s1.md`.
 | Path | Content |
 |---|---|
 | `lazer/` | LaZer `3330e48` subset. The pristine copy is commit `c91b3ab`; changes are in place, marked `PQZ:`. Licence: `lazer/LICENSE` |
-| `src/` | The rewritten layers and the C ABI (`pqz.h`): integers without GMP (`pqz_mpn.h`), incomplete NTT mod q = 2^42 − 215 with l = 4 (`pqz_ntt.c`), fixed-point exp for the sampler and rejection (`pqz_fixexp.h`), arena (`pqz_arena.c`), sticky error returns (`pqz_rt.h`), bitsliced software AES-256-CTR (`pqz_aes_gen.h`, from `gen_aes.py`), relations `R_REG` / `R_TX` (`pqz_rel.c`), wasm runtime (`pqz_wasm_rt.c`) |
-| `params/` | LaZer codegen (`codegen/`), relation specs (`reg_params.sage`, `tx_params.sage`), generated headers `pqz_{reg,tx}_params.h`, E-S0 and E-S1 sizing (`e_s0.py`, `e_s1_proof.sage`, `estimator*.txt`; see `params/README.md`) |
+| `src/` | The rewritten layers and the C ABI (`pqz.h`): integers without GMP (`pqz_mpn.h`), incomplete NTT mod q = 2^42 − 215 with l = 4 (`pqz_ntt.c`), fixed-point exp for the sampler and rejection (`pqz_fixexp.h`), arena (`pqz_arena.c`), sticky error returns (`pqz_rt.h`), bitsliced software AES-256-CTR (`pqz_aes_gen.h`, from `gen_aes.py`), relations `R_REG`, `R_TX`, `R_BURN`, `R_DS`, `R_DR` (`pqz_rel.c`), wasm runtime (`pqz_wasm_rt.c`) |
+| `params/` | LaZer codegen (`codegen/`), relation specs (`{reg,tx,burn,ds,dr}_params.sage`), generated headers `pqz_*_params.h`, E-S0 and E-S1 sizing (`e_s0.py`, `e_s1_proof.sage`, `estimator*.txt`; see `params/README.md`) |
 | `kat/` | Arithmetic-layer KAT: `lazer_dump.c` (one source, upstream or pqz-core backend), golden `lazer-3330e48.json`, `check.py`, `build-lazer-dump.sh` |
 | `test/` | `pqz_bench.c` (prove, verify, tamper checks, timings, a hash of the proofs) and `run_wasm.mjs` (the same steps under node) |
 | `opt/` | P6d-2 optimisation: `bench.sh` (native + wasm bench under `scripts/capped`), `prof.sh` (gprof), `asan.sh` (ASan + UBSan, malloc path), microbenches `micro_basemul.c` / `micro_aes.c`, raw results `runs/` (STATUS.md) |
+| `rel3/` | `R_BURN` / `R_DS` / `R_DR` measurement: `bench.sh` (build, KAT, `R_REG` / `R_TX` proof hashes, timings; under `scripts/capped`), raw runs `runs/` |
 | `floor/` | Verifier-floor microbenchmarks and cost model (`docs/research/pqz-verifier-floor.md`): unit costs, prototypes, operation counts of the generic verifier; `floor/build.sh run` under `scripts/capped` |
 | `sv/` | P6-SV specialised verifier (`src/pqz_sv.c`, `pqz_verify_fast`; `docs/research/pqz-specialised-verifier.md`): `diff.sh` (differential test against `pqz_verify`, `test/pqz_sv_diff.c`), `bench.sh` (native portable, x86-64-v3, wasm), `fuzz.sh` (ASan + UBSan, libFuzzer `test/pqz_sv_fuzz.c`), `rel3.sh` (all five relations under one capped job), raw results `runs/` |
 
@@ -34,7 +36,8 @@ GMP, MPFR, `getentropy`).
 
 ```sh
 build/native/pqz_bench 7 7                                  # 7 proves, 7 + 7 honest verifies per relation (JSON lines)
-build/native/pqz_bench 1 0 2                                # R_TX only (3rd argument: 1 R_REG, 2 R_TX, 3 both)
+build/native/pqz_bench 1 0 2                                # R_TX only (3rd argument, bit mask: 1 R_REG, 2 R_TX,
+                                                            #   4 R_BURN, 8 R_DS, 16 R_DR; default 31 = all)
 opt/bench.sh <label>                                        # pqz_bench 5 5 + run_wasm.mjs 3 1 -> opt/runs/<label>-*.jsonl
 node test/run_wasm.mjs 3 1                                  # the same under node
 PQZ_VERIFY=fast build/native/pqz_bench 2 200                # time pqz_verify_fast (wasm: PQZ_VERIFY=fast|both node ...)

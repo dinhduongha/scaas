@@ -1,0 +1,7 @@
+2
+2
+19/19 cases equal; golden: lazer-3330e48 (lazer 3330e48 static v4: -march=x86-64-v4 -mavx512ifma -mavx512vbmi2 -maes -mpclmul, avx512f=1); checked: pqz-core
+{"rel": "R_REG", "proof_bytes_last": 28107, "proof_bytes_max": 28107, "arena_peak": 159784368, "rej_tries_mean": 5.00, "proofs_fnv": "12ec7452"}
+{"rel": "R_TX", "proof_bytes_last": 42734, "proof_bytes_max": 42770, "arena_peak": 364436032, "rej_tries_mean": 12.60, "proofs_fnv": "cb562b47"}
+{"rel":"R_REG","proof_bytes_last":28085,"proof_bytes_max":28085,"arena_peak":129078288,"proofs_fnv":"3bc7e9b3"}
+{"rel":"R_TX","proof_bytes_last":42770,"proof_bytes_max":42770,"arena_peak":283923632,"proofs_fnv":"834d6853"}

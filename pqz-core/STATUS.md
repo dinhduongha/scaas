@@ -113,6 +113,17 @@ blocks, no sparse matrices), 4 × 30-bit CRT primes with a complete NTT, table-b
 - Open: independent review of `pqz_sv.c` against `lnp-tbox.c` (a second implementation of a soundness-critical
   check); hand-written AVX2 (floor 2.5 ms); a run on the chain host.
 
+## R_BURN, R_DS, R_DR (branch `pqz-rel3`)
+
+The three remaining relations (pq-zether.md §7.5, §7.9) through the same `pqz_prove` / `pqz_verify`: specs
+`params/{burn,ds,dr}_params.sage`, builders in `src/pqz_rel.c` (`R_BURN` shares the `R_TX` builder), statements as
+§7.7 / §7.9 (burn 50,048 B, disclosure 33,153 B), runs `rel3/runs/`. Generic verifier, native p50 / p99 verify:
+`R_BURN` 561 / 664 ms, `R_DS` 208 / 244 ms, `R_DR` 198 / 229 ms; proofs 41.9 / 29.0 / 29.0 KB; prove p99 1.06 /
+0.31 / 0.37 s; wasm verify p50 707 / 286 / 262 ms. All six tamper kinds rejected, KAT 19/19, `R_REG` / `R_TX`
+`proofs_fnv` unchanged, symbol scan clean. The keys of all five relations live in the arena base: +27 MB native /
++21 MB wasm on every op (wasm `R_TX` peak 263 MB, 2 % under 256 MiB). Write-up and open questions:
+`docs/research/pqz-relations-burn-disclose.md`.
+
 ## Measured (2026-10-13, this machine, single thread)
 
 Native: clang -O2, `pqz_bench 5 5` under `scripts/capped` (5 proves, 5 + 5 honest verifies, 10 adversarial). wasm32:
