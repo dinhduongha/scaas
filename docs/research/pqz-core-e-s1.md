@@ -15,7 +15,8 @@ from the codegen or the estimator, not a run. **[inference]** marks a conclusion
 ## 1. Result
 
 **Two of the roadmap's four kill criteria are missed: verify by ≈ 300× and prove by ≈ 2.8× (the owner raised the prove limit from 3 s to 6 s on 2026-10-13; ≈ 6× against 3 s). The kill decision is pending
-(owner).** The upstream timing cross-check the owner ordered is done (§10): upstream LaZer runs the same `R_TX` 2.3–2.6×
+(owner).** **Update P6d-2 (§11, pure implementation changes, proofs byte-identical): `R_TX` prove 1.10 s native now
+meets the 6 s limit; verify 0.72 s is ≈ 14× over 50 ms.** The table below is the spike's state (main `fd8600f`). The upstream timing cross-check the owner ordered is done (§10): upstream LaZer runs the same `R_TX` 2.3–2.6×
 faster than the fork and still misses both time criteria (prove 6.6 s, verify 6.6 s). The proof size and the forbidden-symbol scan pass. The
 browser budgets of CTR-PQZ-18 are missed too: `R_TX` wasm prove time and wasm memory are both above the hard limits
 (§7).
@@ -279,3 +280,45 @@ byte-identical (MPFR against integer samplers change rejection counts; ≈ 0.15 
 this harness (max RSS 2.1 GB against the fork's 612 MB arena) and its malloc time is included; adversarial verifies
 skipped on both sides (upstream has no bounded decoder).
 
+
+## 11. Optimisation (P6d-2)
+
+Done 2026-10-13 at the owner's request ("optimise the fork"), branch `p6d2-opt`. Pure implementation changes: the
+parameters, the relations, the proof format and `proofSystemId` are unchanged. The bench now hashes the proofs
+(FNV-1a over the seeds): **every step left the proofs byte-identical** to main for the same seeds, and native and
+wasm proofs are equal byte for byte (seeds 0..2) [measured]. KAT 19/19, the symbol scan (native and wasm) and the five
+tamper kinds pass after every step; ASan + UBSan on the malloc path find nothing beyond the four known upstream
+UBSan nits [measured]. Steps, numbers and raw runs: `pqz-core/STATUS.md`, `pqz-core/opt/`.
+
+Medians, same session, the setup of §2 [measured]:
+
+| | main: prove / verify native | P6d-2 | main: prove / verify wasm | P6d-2 | arena peak native / wasm, main → P6d-2 |
+|---|---|---|---|---|---|
+| `R_REG` | 1.30 s / 1.02 s | 0.25 s / 0.17 s | 3.30 s / 2.61 s | 0.38 s / 0.23 s | 144 → 112 MB / 113 → 87 MB |
+| `R_TX` | 17.0 s / 14.9 s | **1.10 s / 0.72 s** | 39.6 s / 34.5 s | **1.59 s / 0.82 s** | 612 → 316 MB / 476 → 241 MB |
+
+What gave what (`R_TX` prove native, cumulative) [measured]:
+
+| Change | `R_TX` prove | Why it was slow |
+|---|---|---|
+| Base multiplication mod X^16 − ρ: one u128 column sum per output against a twisted operand (ρ·b), 64-bit-only reduction; on wasm32 21-bit limbs with 64-bit products | 17.0 → 12.1 s (wasm 39.6 → 18.4 s) | separate low / high sums, three reductions and a multiplication by ρ per output; on wasm32 every 64 × 64 → 128 product was a `__multi3` call |
+| Heapsort for the sparse-matrix sort | → 8.4 s | insertion sort, O(n²) |
+| Accumulators swapped, not copied | → 7.7 s | a full copy of the accumulated sparse matrix per equation |
+| Gram terms of the ℓ2 / binary equations skip the zero columns of the public selection matrices | → 1.74 s (arena 612 → 325 MB) | `R_TX` selects 32 of 146 witness polynomials per ℓ2 equation; LaZer built all 146² entries of o(Es)ᵀEs (all but 32 zero) and carried them through every later sparse-matrix sum, sort and copy |
+| Bitsliced AES with the Boyar–Peralta S-box and transposed bit planes | → 1.24 s | the S-box was an inversion chain of four bitsliced GF(2^8) multiplications; 1 MiB 60 → 8.8 ms |
+| Zero columns skipped in `polyvec_mul2`, zero products in the Gram dots, the z3 term accumulated in int64 | → 1.10 s (verify 0.88 → 0.72 s) | the same zero structure, and 2-limb integer adds for sums below 2^51 |
+
+Tried and dropped: a `poly_scale` fast path (no measurable gain once the zero columns were gone), Karatsuba on the
+degree-16 products (slower than the column kernel with u128 sums, microbench) [measured]. Not done: asserts off
+(pq-zether.md §10 keeps the invariant checks in release builds; the cross-check measured ≈ 4 %), `-O3` /
+`-march=native` (pq-zether.md §10: portable `-O2`), an AVX2 backend and an integer CRT multiplication (the base
+multiplication is ≈ 7 % of the `R_TX` profile now).
+
+**Against the kill criteria.** `R_TX` prove 1.10 s meets the 6 s limit (and the former 3 s) [measured]. Verify
+0.72 s honest, 0.67 s adversarial maximum, is ≈ 14× over 50 ms (was ≈ 300×) [measured]; the profile is now flat
+LaZer bookkeeping (`intvec_set`, sparse inserts, `int_mod`), so reaching 50 ms needs structural work (fewer
+equations, typed accumulation instead of generic sparse matrices), not more kernel tuning [inference]. §10's "what is
+inherent" overstated the statement's share: most of LaZer's bookkeeping was spent on zero entries of the selection
+matrices' Gram matrices, which upstream computes as well (upstream verifies `R_TX` in 6.6 s, the fork now in 0.72 s)
+[measured / inference]. Browser budgets (CTR-PQZ-18, node): wasm `R_TX` prove 1.59 s is inside the 5 s desktop budget;
+the wasm arena peak 230 MiB is under the 256 MiB hard limit but 1.8× the 128 MiB budget [measured].
