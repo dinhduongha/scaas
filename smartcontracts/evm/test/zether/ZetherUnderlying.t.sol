@@ -13,6 +13,7 @@ import {ITokenAdmin} from "../../src/metatx/ITokenAdmin.sol";
 import {ITradeToken} from "../../src/trade/ITradeToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {UnderlyingZetherToken} from "../../src/zether/UnderlyingZetherToken.sol";
+import {NoUnderlyingZetherToken} from "../../src/zether/NoUnderlyingZetherToken.sol";
 import {ZetherLayer} from "../../src/zether/ZetherLayer.sol";
 import {IZetherToken} from "../../src/zether/IZetherToken.sol";
 import {ZetherTypes} from "../../src/zether/ZetherTypes.sol";
@@ -558,6 +559,26 @@ contract ZetherUnderlyingTest is ZetherFixture {
         ua = UAKinds.uaOf(UAKinds.SCHNORR_BN254, y);
         bytes32 m = reg.uaMessage(UAKinds.SCHNORR_BN254, UAKinds.PURPOSE_POP, reg.popDigest(ua, 0));
         reg.register(UAKinds.SCHNORR_BN254, y, ZetherKeys.sign("scaas.ua.schnorr.v1", 0xA07, m, false), 0, "");
+    }
+
+    /// UA-5a (CTR-UA-26): `NONE_ZETHER` inherits `burn` on the UA allowlist from `NoUnderlyingToken`; a derived signer
+    /// burns its public UA balance through `UA_POOL`.
+    function test_noneZether_burnUnderUA() public {
+        signer = _signingUA();
+        ZetherLayer nz = _newToken(false, "nz");
+        NoUnderlyingZetherToken(address(nz)).mint(address(this), 100);
+        nz.transferToUA(signer, 100);
+        MetaTxLib.UAMetaTransaction memory m = MetaTxLib.UAMetaTransaction({
+            from: signer, data: abi.encodeCall(NoUnderlyingToken.burn, (40)), batch: 1, nonce: 0,
+            validUntil: block.timestamp + 300, mode: MetaTxLib.MODE_RESTRICT_RELAYER, relayer: relayer, fee: 0,
+            feeRecipient: address(0)
+        });
+        bytes32 um = reg.uaMessage(UAKinds.SCHNORR_BN254, UAKinds.PURPOSE_METATX, nz.uaDigest(m));
+        bytes memory auth = abi.encode(ZetherKeys.pub(0xA07, false), ZetherKeys.sign("scaas.ua.schnorr.v1", 0xA07, um, false));
+        vm.prank(relayer);
+        nz.uaExecute(m, auth);
+        assertEq(nz.balanceOfUA(signer), 60);
+        assertEq(nz.totalSupply(), 60);
     }
 
     /// Every selector kind 3 publishes runs relayed once (review T4 I1). On this two-leg token the two single-asset

@@ -174,9 +174,10 @@ contract UnderlyingToken is MetaTokenBase, IUnderlyingToken {
         (s[7], c[7], a[7]) = (SEL_UNWRAP_TO_UA, FEE_CLASS_AMOUNT, 1);
     }
 
-    /// @notice The UA allowlist (CTR-UA-26): the two `unwrap`s with `minOut` (a derived signer burns its UA balance).
+    /// @notice The UA allowlist (CTR-UA-26): the two `unwrap`s with `minOut` and `unwrapToUA` (a derived signer burns
+    ///         its UA balance).
     function _uaAllowed(bytes4 sel) internal view virtual override returns (bool) {
-        return sel == SEL_UNWRAP_MIN || sel == SEL_UNWRAP_LEG;
+        return sel == SEL_UNWRAP_MIN || sel == SEL_UNWRAP_LEG || sel == SEL_UNWRAP_TO_UA;
     }
 
     function _mtxRule(bytes4 sel) internal view virtual override returns (MtxRule memory) {

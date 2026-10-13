@@ -1,8 +1,8 @@
 {
   "_comment": "CTR-TOK-24 size gate (scripts/size_gate.py). Contracts allowed over their limit, with the measured runtime size they may not exceed; `<name>.init` likewise for init code over EIP-3860. Owner 2026-10-11: size optimised later (Glamsterdam); remove an entry once the contract fits. UA-4: + the UA ledger. UA-5a: + the receivers (wrapToUA, unwrapToUA, mintToUA, payWithFeeToUA), the UA allowlist, uaPayReceiverFee.",
-  "NoUnderlyingToken": 32150,
-  "UnderlyingToken": 40815,
-  "NoUnderlyingZetherToken": 40383,
-  "UnderlyingZetherToken": 51327,
-  "UnderlyingZetherToken.init": 53022
+  "NoUnderlyingToken": 32169,
+  "UnderlyingToken": 40842,
+  "NoUnderlyingZetherToken": 40417,
+  "UnderlyingZetherToken": 51354,
+  "UnderlyingZetherToken.init": 53049
 }

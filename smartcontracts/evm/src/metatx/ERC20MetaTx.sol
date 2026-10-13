@@ -407,8 +407,9 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
         if (!SigCheck.isValid7702(from, digest, sig, _erc1271Gas(from))) revert MetaTxBadSignature();
     }
 
-    /// @notice The UA allowlist (CTR-UA-26): selectors a `UAMetaTransaction` may call; none on the base, the wrapper
-    ///         kinds add their `unwrap`s. `approve`, `trade` and transfers are never on it (`MetaTxUnknownOp`).
+    /// @notice The UA allowlist (CTR-UA-26): selectors a `UAMetaTransaction` may call; none on the base, `NONE` adds
+    ///         `burn`, the wrapper kinds their `unwrap`s and `unwrapToUA`. `approve`, `trade`, transfers and the dedicated
+    ///         `…ToUA` functions are never on it (`MetaTxUnknownOp`).
     function _uaAllowed(bytes4) internal view virtual returns (bool) {
         return false;
     }

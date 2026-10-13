@@ -55,6 +55,11 @@ contract NoUnderlyingToken is MetaTokenBase {
         (s[1], c[1]) = (this.burn.selector, FEE_CLASS_AMOUNT);
     }
 
+    /// @notice The UA allowlist (CTR-UA-26): `burn` (a derived signer burns its UA balance through `UA_POOL`).
+    function _uaAllowed(bytes4 sel) internal view virtual override returns (bool) {
+        return sel == this.burn.selector;
+    }
+
     function _mtxRule(bytes4 sel) internal view virtual override returns (MtxRule memory) {
         if (sel == this.burn.selector) return MtxRule(FEE_CLASS_AMOUNT, 0, 36);
         return super._mtxRule(sel);
