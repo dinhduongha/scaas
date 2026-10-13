@@ -1,7 +1,7 @@
 //! ABI — copied from `smartcontracts/evm/src` (`IMetaTx`, `IERC20MetaTx`, `IERC20Payment`, `ITradeToken`, `MetaTxLib`,
 //! `ISCaaSDex`, `MandateWallet`), never inferred: one wrong `indexed` is one wrong topic. Pinned by the forge KATs
 //! (`metatx_kat.json`, `metatransfer_kat.json`, `trade_kat.json`, `dex_order_kat.json`: digests and relayed calldata).
-// `sol!` builds a constructor per event; `LegSettled` has ten fields.
+// `sol!` builds a constructor per event; `LegSettled` / `UALegSettled` have ten fields.
 #![allow(clippy::too_many_arguments)]
 
 use alloy::sol;
@@ -34,9 +34,23 @@ sol! {
     #[derive(Debug, PartialEq, Eq)]
     struct TradeFill { uint256 sellFill; uint256 receiveFill; uint256 dexFee; address submitter; }
 
-    /// `ISCaaSDex.Leg`: one order in one settlement; `fill` = its sell fill in this call.
+    /// `ITradeToken.UATradeOrder` (CTR-DEX-25): `TradeOrder` with `from` / `destination` as ids (a native address
+    /// zero-padded, or a SIGNING UA), signed under the UA purpose `trade`. The same 13 ABI words in the same order.
     #[derive(Debug, PartialEq, Eq)]
-    struct Leg { address sellToken; TradeOrder o; bytes sig; uint256 fill; }
+    struct UATradeOrder {
+        bytes32 from; address receiveToken; uint256 amount; uint256 receiveAmount; uint256 minFill; uint256 fee;
+        address relayer; address dex; bytes32 destination; uint8 flags; uint256 batch; uint256 nonce;
+        uint256 validUntil;
+    }
+
+    /// `ISCaaSDex.Leg` (CTR-DEX-26): one order in one settlement, tagged; `shape` 0 = `order` is
+    /// `abi.encode(TradeOrder)`, 1 = `abi.encode(UATradeOrder)`; `fill` = its sell fill in this call.
+    #[derive(Debug, PartialEq, Eq)]
+    struct Leg { address sellToken; uint8 shape; bytes order; bytes sig; uint256 fill; }
+
+    /// `ISCaaSDex.ExchangeLeg` (CTR-DEX-20, -26): an exchange-path order, tagged as `Leg`.
+    #[derive(Debug, PartialEq, Eq)]
+    struct ExchangeLeg { address sellToken; uint8 shape; bytes order; bytes sig; uint256 sellFill; uint256 receiveFill; }
 
     /// An outside-token order (CTR-DEX-18): the `TradeOrder` signed in the DEX's domain with its sell token.
     #[derive(Debug, PartialEq, Eq)]
@@ -68,6 +82,9 @@ sol! {
         function SMART_KEY_ACCOUNT_IMPL() external view returns (address);
         event LegSettled(bytes32 indexed ref, bytes32 indexed orderHash, address indexed from, address destination,
             uint256 sold, uint256 received, uint256 dexFee, uint256 refund, uint256 relayerShare, uint256 treasuryShare);
+        /// `LegSettled` of a shape-1 leg (CTR-DEX-26): `from` and `destination` are ids.
+        event UALegSettled(bytes32 indexed ref, bytes32 indexed orderHash, bytes32 indexed from, bytes32 destination,
+            uint256 sold, uint256 received, uint256 dexFee, uint256 refund, uint256 relayerShare, uint256 treasuryShare);
         event MatchFailed(bytes32 indexed ref, bytes reason);
         event TradeFilled(bytes32 indexed orderHash, address indexed from, uint256 sellFill, uint256 receiveFill,
             uint256 dexFee);
@@ -78,7 +95,11 @@ sol! {
         error WrongRelayer(address submitter);
         error DexMismatch(address dex);
         error TokenMismatch();
-        error SelfTrade(address from);
+        error SelfTrade(bytes32 from);
+        error LegShapeUnknown(uint8 shape);
+        error UALegNotLedger(address token);
+        error UAReceiveNotLedger(address token);
+        error UAVerifyGas();
         error DuplicateOrder(bytes32 orderHash);
         error MarketNotListed(address tokenA, address tokenB);
         error BadSignature(bytes32 digest);

@@ -9,7 +9,7 @@ pub mod venue;
 use std::collections::HashMap;
 
 use alloy::primitives::{keccak256, Address, Bytes, B256, U256, U512};
-use alloy::sol_types::{Eip712Domain, SolStruct};
+use alloy::sol_types::{Eip712Domain, SolStruct, SolValue};
 use anyhow::{anyhow, bail, Result};
 use serde::{Deserialize, Serialize};
 
@@ -219,7 +219,10 @@ pub struct PlannedSettlement {
 
 impl PlannedSettlement {
     pub fn to_settlement(&self) -> Settlement {
-        let leg = |r: &Resting, fill: U256| Leg { sellToken: r.sell, o: r.order.clone(), sig: r.sig.clone(), fill };
+        // shape 0: the book holds `TradeOrder`s only (UA intake waits for UA F5, C5b-11)
+        let leg = |r: &Resting, fill: U256| Leg {
+            sellToken: r.sell, shape: 0, order: r.order.abi_encode().into(), sig: r.sig.clone(), fill,
+        };
         Settlement {
             r#ref: self.tag,
             taker: leg(&self.taker, self.taker_fill),
@@ -839,8 +842,9 @@ mod tests {
         // the calldata: decode forge's, re-encode it here, byte for byte
         let settle = hex_bytes(&word(&k, "settle_calldata")).unwrap();
         let c = ISCaaSDex::mtxSettleCall::abi_decode(&settle).unwrap();
-        assert_eq!(c.s[0].makers[0].o, maker);
-        assert_eq!(c.s[0].taker.o, taker);
+        assert_eq!((c.s[0].makers[0].shape, c.s[0].taker.shape), (0, 0));
+        assert_eq!(TradeOrder::abi_decode(&c.s[0].makers[0].order).unwrap(), maker);
+        assert_eq!(TradeOrder::abi_decode(&c.s[0].taker.order).unwrap(), taker);
         assert_eq!(ISCaaSDex::mtxSettleCall { s: c.s.clone() }.abi_encode(), settle.to_vec());
         let cancel = hex_bytes(&word(&k, "cancel_orders_calldata")).unwrap();
         let c = ISCaaSDex::mtxCancelOrdersCall::abi_decode(&cancel).unwrap();
@@ -1236,7 +1240,10 @@ mod tests {
         let st = s.to_settlement();
         assert_eq!((st.r#ref, st.taker.sellToken, st.taker.fill), (s.tag, QUOTE, U256::from(20)));
         assert_eq!((st.makers[0].sellToken, st.makers[0].fill), (BASE, U256::from(10)));
-        assert_eq!(&ISCaaSDex::mtxSettleCall { s: vec![st] }.abi_encode()[..4], &[0xb0, 0x95, 0x5d, 0xd6]);
+        assert_eq!((st.taker.shape, st.makers[0].shape), (0, 0), "shape 0: abi.encode(TradeOrder)");
+        assert_eq!(st.taker.order.len(), 13 * 32);
+        assert_eq!(TradeOrder::abi_decode(&st.makers[0].order).unwrap(), s.makers[0].0.order);
+        assert_eq!(&ISCaaSDex::mtxSettleCall { s: vec![st] }.abi_encode()[..4], &[0x04, 0x03, 0xb1, 0x3c]);
     }
 
     /// Review T3 I1 (the reviewer's PoC `poc_second_fill_of_an_unmined_remainder`): a remainder whose first settlement
