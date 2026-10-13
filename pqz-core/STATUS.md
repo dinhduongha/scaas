@@ -89,12 +89,33 @@ column kernel).
 
 The three remaining relations (pq-zether.md §7.5, §7.9) through the same `pqz_prove` / `pqz_verify`: specs
 `params/{burn,ds,dr}_params.sage`, builders in `src/pqz_rel.c` (`R_BURN` shares the `R_TX` builder), statements as
-§7.7 / §7.9 (burn 50,048 B, disclosure 33,153 B), runs `rel3/runs/`. Generic verifier, native p50 / p99 verify:
-`R_BURN` 561 / 664 ms, `R_DS` 208 / 244 ms, `R_DR` 198 / 229 ms; proofs 41.9 / 29.0 / 29.0 KB; prove p99 1.06 /
-0.31 / 0.37 s; wasm verify p50 707 / 286 / 262 ms. All six tamper kinds rejected, KAT 19/19, `R_REG` / `R_TX`
-`proofs_fnv` unchanged, symbol scan clean. The keys of all five relations live in the arena base: +27 MB native /
-+21 MB wasm on every op (wasm `R_TX` peak 263 MB, 2 % under 256 MiB). Write-up and open questions:
+§7.7 / §7.9 (burn 50,048 B, disclosure 33,153 B), runs `rel3/runs/`. All six tamper kinds rejected, KAT 19/19,
+`R_REG` / `R_TX` `proofs_fnv` unchanged, symbol scan clean. The keys of all five relations lived in the arena base:
++27 MB native / +21 MB wasm on every op (wasm `R_TX` peak 263 MB, 2 % under 256 MiB). Write-up:
 `docs/research/pqz-relations-burn-disclose.md`.
+
+**Fix-ups (branch `pqz-relfix`, owner 2026-10-13, note §5).** `R_TX` on the §7.7 layout (header 640 B, fee word at
+256; 83,072 B), disclosure `kind` a 32-byte word (33,184 B, pk at 288), burn / refresh randomness fresh (spec),
+e′ ∈ [−2^24, 2^24) (spec), ABDLOP keys built at a relation's first prove or verify (`pqz_init` expands A only), arena
+release rebuilds the size classes. Run `rel3/relfix.sh f2` (`rel3/runs/f2-*`) [measured]: KAT 19/19; `fails 0`
+(honest + six tamper kinds, all five relations, native, wasm, ASan + UBSan with only the upstream nits of Open 4);
+`proofs_fnv` `R_REG` `12ec7452` / `3bc7e9b3` and `R_BURN` unchanged, `R_TX` changed by design (native
+`cb562b47` → `4690aaa0`, wasm `834d6853` → `f1c3e7f6`), `R_DS` / `R_DR` changed by design; native and wasm proofs
+equal byte for byte (same 5-seed hashes, all five relations). Generic verifier, `pqz_bench 10 100 31` /
+`run_wasm.mjs 5 30 31`, before (`r1`) → after:
+
+| | proof bytes | prove p50 / p99 native | verify p50 / p99 native | verify p50 wasm | arena peak per op native / wasm |
+|---|---|---|---|---|---|
+| `R_TX` | 42,741–42,772 | 949 / 1,155 ms | 620 / 709 ms | 761 ms | 344 / 263 → **304 / 232 MB** |
+| `R_BURN` | 41,916–41,939 (same proofs) | 818 / 1,062 → 683 / 993 ms | 561 / 664 → 526 / 599 ms | 707 → 664 ms | 327 / 251 → **289 / 220 MB** |
+| `R_DS` | 28,937–28,975 | 263 / 313 → 271 / 303 ms | 208 / 244 → 195 / 221 ms | 286 → 263 ms | 144 / 112 → **100 / 77 MB** |
+| `R_DR` | 28,987–29,001 | 326 / 372 → 295 / 373 ms | 198 / 229 → 194 / 232 ms | 262 → 252 ms | 168 / 126 → **108 / 83 MB** |
+| `R_REG` | 28,097–28,107 | 228 / 294 ms | 165 / 190 ms | 217 ms | 139 / 108 → **96 / 74 MB** |
+
+Times and sizes unchanged within host noise (±20 %); memory is the change: "per op" is one relation per process
+(`f2-alone.jsonl`), wasm `R_TX` 251 → 221 MiB (2 % → 13.6 % under 256 MiB), init 212 → 10 ms native, 292 → 26 ms
+wasm, init arena 54.5 → 3.1 MB native. p99 verify (honest or adversarial, the larger) against 50 ms: `R_BURN` 624 ms
+(12.5×), `R_DS` 221 ms (4.4×), `R_DR` 232 ms (4.6×).
 
 ## Measured (2026-10-13, this machine, single thread)
 
@@ -131,14 +152,14 @@ rest bookkeeping; the zero entries of the selection matrices' Gram matrices were
    criterion is missed by ≈ 14×. What is left is LaZer's generic sparse-matrix bookkeeping (flat profile). Further
    levers, not done: fewer R_TX equations (e.g. merge the 16 per-digit evaleqs), restructuring the Schwartz–Zippel
    accumulation (typed dense / structured matrices instead of `spolymat` copies), verifier-side reuse; each is a
-   larger change than P6d-2's. Owner's kill decision input. wasm arena 230 MiB: under the 256 MiB hard limit, 1.8×
-   the 128 MiB budget.
+   larger change than P6d-2's. Owner's kill decision input. wasm arena `R_TX` 221 MiB per op since the fix-ups
+   (230 MiB after P6d-2): under the 256 MiB hard limit, 1.7× the 128 MiB budget.
 2. **Arena exhaustion is not graceful.** On exhaustion the sink block is shared by every later allocation;
    sparse structures in it then hold garbage pointers and the call can crash instead of returning
    PQZ_ERR_ARENA. Size the arena from the measured peaks (bench uses 768 MiB; P6d-2 peaks 316 MB native) or make
    exhaustion abort the call.
 3. **wasm.** Proofs equal byte for byte with native (P6d-2, seeds 0..2); no browser run (node only); R_TX needs
-   ~0.25 GB of the 4 GiB wasm32 memory.
+   ~0.23 GB of the 4 GiB wasm32 memory (fix-ups, one op per process).
 4. UBSan nits left as upstream: zero-length VLAs when M = 0 / nbin = 0 (`lnp-tbox.c` 223, 875, 3451),
    null + 0 in `aes256ctr.c:339` (P6d-2 `opt/asan.sh`: nothing else). LSan on the malloc path reports the relation
    layer's statement objects (`pqz_rel.c` frees them by arena release), on main as well; `opt/asan.sh` runs with
