@@ -762,11 +762,50 @@ pf_alloc (pf_t *F, const lnp_tbox_params_struct *P)
   polyvec_set_zero (F->m);
 }
 
+#ifdef PQZ_L2DOM_POC
+/* Test-only cheating prover (pqz-core/l2dom/, never in a production build): when set, pool the l2 slack of all
+   Z blocks, sum_z (B_z^2 - ||x_z||^2), and spread it greedily over the upsilon_z (each holds bitlen(B_z^2) bits), so a
+   block may exceed its own B_z as long as sum_z ||x_z||^2 <= sum_z B_z^2. Checks whether the verifier enforces each
+   exact-l2 equation separately. */
+int pqz_l2dom_poc;
+#define POC_IGNORE_ERR pqz_l2dom_poc /* and emit the proof although the prover's own self-checks fail */
+#else
+#define POC_IGNORE_ERR 0
+#endif
+
 /* s1 slack polys: upsilon_i = binexp(B_i^2 - ||x_i||^2) */
 static int
 set_upsilon (const lnp_tbox_params_struct *P, polyvec_t s1, const unsigned *start, const unsigned *len)
 {
   const unsigned m1 = P->tbox->m1 - P->Z;
+#ifdef PQZ_L2DOM_POC
+  if (pqz_l2dom_poc)
+    {
+      int64_t slack = 0;
+      for (unsigned z = 0; z < P->Z; z++)
+        {
+          slack += int_get_i64 (P->l2Bsqr[z]);
+          for (unsigned j = 0; j < len[z]; j++)
+            slack -= l2sq_poly (polyvec_get_elem (s1, start[z] + j));
+          poly_set_zero (polyvec_get_elem (s1, m1 + z));
+        }
+      if (slack < 0)
+        return 0;
+      for (unsigned z = 0; z < P->Z; z++)
+        {
+          /* upsilon_z carries bits 2^0 .. 2^(bitlen(B_z^2) - 1) */
+          int64_t cap = ((int64_t)2 << (63 - __builtin_clzll (int_get_i64 (P->l2Bsqr[z])))) - 1;
+          int64_t put = slack < cap ? slack : cap;
+          INT_T (d, 2 * P->tbox->ring->q->nlimbs);
+          int_set_i64 (d, put);
+          int_binexp (polyvec_get_elem (s1, m1 + z), NULL, d);
+          slack -= put;
+        }
+      if (slack > 0)
+        return 0;
+      return 1;
+    }
+#endif
   for (unsigned z = 0; z < P->Z; z++)
     {
       int64_t n2 = 0;
@@ -807,7 +846,7 @@ do_prove (sys_t *S, pf_t *F, const uint8_t hash0[32], const uint8_t rnd32[32], u
   lnp_tbox_prove (hash, F->tB, F->h, F->c, F->z1, F->z21, F->hint, F->z3, F->z4, F->s1, F->m, F->s2, F->tA2,
                   S->R->A1, S->R->A2p, S->R->Bp, S->R2, S->r1, S->N, S->R2p, S->r1p, S->r0p, S->M, S->Es, NULL,
                   NULL, S->Ps, NULL, NULL, S->Ds, NULL, NULL, ex + 32, P);
-  if (pqz_err)
+  if (pqz_err && !POC_IGNORE_ERR)
     return pqz_err;
   encproof (buf, &len, F->tA1, F->tB, F->h, F->c, F->z1, F->z21, F->hint, F->z3, F->z4, P);
   if (len > PQZ_MAX_PROOF || len > *proof_len)
@@ -1068,7 +1107,7 @@ pqz_prove (uint8_t op, const uint8_t *stmt, size_t stmt_len, const uint8_t *wit,
   pf_alloc (&F, R->P);
   if (build (&S, &T, op, stmt, stmt_len, pk) && witness (&T, op, wit, wit_len, F.s1))
     rc = do_prove (&S, &F, h, rnd32, proof, proof_len);
-  if (pqz_err)
+  if (pqz_err && !POC_IGNORE_ERR)
     rc = pqz_err;
   pqz_arena_release (&base);
   return rc;
