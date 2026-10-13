@@ -1,7 +1,7 @@
 //! R_REG and R_TX as PQZH statements: the same statement and witness bytes as pqz-core (pqz.h, pqz_rel.c
 //! build_reg / build_tx / tx_witness), proved with the AIRs of air.rs.
 
-use p3_batch_stark::{BatchProof, ProverData, StarkInstance, prove_batch, verify_batch};
+use p3_batch_stark::{BatchProof, CommonData, ProverData, StarkInstance, prove_batch, verify_batch};
 use p3_field::PrimeCharacteristicRing;
 use p3_matrix::dense::RowMajorMatrix;
 use sha3::Digest;
@@ -169,6 +169,7 @@ pub fn build_reg(stmt: &[u8], wit: Option<&[u8]>, check: bool, p: &Params) -> Re
                 .chain((0..K).map(|j| delta_arr(i == j, -(Q as i64))))
                 .collect(),
             target: pkh[i],
+            stmt_lead: 0,
         })
         .collect();
     let (poly, mv) = layout(specs, vec![BS, BE], &[((0..3 * K).collect(), outs)], p);
@@ -263,9 +264,10 @@ pub fn build_tx(stmt: &[u8], wit: Option<&[u8]>, check: bool, p: &Params) -> Res
                 .chain([zero])
                 .collect(),
             target: pkfh[i],
+            stmt_lead: 0,
         })
         .collect();
-    outs1.push(MvOut { coef: uth.iter().copied().chain(vec![zero; 2 * K]).chain([neg1]).collect(), target: zero });
+    outs1.push(MvOut { coef: uth.iter().copied().chain(vec![zero; 2 * K]).chain([neg1]).collect(), target: zero, stmt_lead: K });
 
     // MV2: inputs r, e1, t2, y_t, y_f, y_a
     let mut outs2: Vec<MvOut> = (0..K)
@@ -277,12 +279,13 @@ pub fn build_tx(stmt: &[u8], wit: Option<&[u8]>, check: bool, p: &Params) -> Res
                 .chain([zero; 3])
                 .collect(),
             target: uh[i],
+            stmt_lead: 0,
         })
         .collect();
     for (x, pkx) in [&pkth, &pkfh, &pkah].into_iter().enumerate() {
         let mut coef: Vec<[F; D]> = pkx.iter().copied().chain(vec![zero; 2 * K]).chain([zero; 3]).collect();
         coef[3 * K + x] = neg1;
-        outs2.push(MvOut { coef, target: zero });
+        outs2.push(MvOut { coef, target: zero, stmt_lead: K });
     }
     let (poly, mv) = layout(
         specs,
@@ -410,7 +413,7 @@ pub fn degrees(b: &Built, zk: bool) -> Vec<usize> {
 }
 
 macro_rules! prove_with {
-    ($cfg:expr, $b:expr) => {{
+    ($cfg:expr, $setup:expr, $b:expr) => {{
         let cfg = $cfg;
         let traces = $b.traces.as_ref().unwrap();
         let inst: Vec<StarkInstance<_, PqzhAir>> = $b
@@ -419,23 +422,61 @@ macro_rules! prove_with {
             .zip(traces)
             .map(|(air, trace)| StarkInstance { air, trace, public_values: vec![] })
             .collect();
-        let pd = ProverData::from_instances(&cfg, &inst).map_err(|_| "setup")?;
+        // the preprocessed tree is committed with the setup configuration (fixed salts under the hiding PCS), so its
+        // root is the verifier's constant; a wallet / node would keep it across proofs, here it is rebuilt per proof
+        let pd = ProverData::from_instances(&$setup, &inst).map_err(|_| "setup")?;
         let proof = prove_batch(&cfg, &inst, &pd).map_err(|_| "prove")?;
         enc::to_vec(&proof).map_err(|_| "encode")?
     }};
 }
 
+/// The verifier's constants per (op, parameters): the preprocessed commitment (statement-independent) and the lookup
+/// layout, computed once with the setup configuration and kept (a precompile would hard-code the root).
+fn common<SC: SetupCfg>(op: u8, p: &Params, b: &Built, deg: &[usize]) -> Option<std::rc::Rc<CommonData<SC>>> {
+    thread_local! {
+        static CACHE: std::cell::RefCell<std::collections::HashMap<(u8, Params), std::rc::Rc<dyn std::any::Any>>> =
+            Default::default();
+    }
+    let mut key = *p;
+    key.max_proof = 0;
+    if let Some(c) = CACHE.with(|c| c.borrow().get(&(op, key)).cloned()) {
+        return c.downcast::<CommonData<SC>>().ok();
+    }
+    let c = std::rc::Rc::new(SC::build_common(p, &b.airs, deg)?);
+    CACHE.with(|m| m.borrow_mut().insert((op, key), c.clone()));
+    Some(c)
+}
+
+/// the configuration the preprocessed tree is committed with (seed and salts fixed)
+trait SetupCfg: p3_uni_stark::StarkGenericConfig + Sized + 'static {
+    fn build_common(p: &Params, airs: &[PqzhAir], deg: &[usize]) -> Option<CommonData<Self>>;
+}
+macro_rules! setup_cfg {
+    ($ty:ty, $mk:expr) => {
+        impl SetupCfg for $ty {
+            fn build_common(p: &Params, airs: &[PqzhAir], deg: &[usize]) -> Option<CommonData<Self>> {
+                let cfg: $ty = $mk(p);
+                ProverData::from_airs_and_degrees(&cfg, airs, deg).ok().map(|d| d.common)
+            }
+        }
+    };
+}
+setup_cfg!(PlainConfig, |p: &Params| p.plain(&[0; 32]));
+setup_cfg!(Plain5Config, |p: &Params| p.plain_ext(&[0; 32]));
+setup_cfg!(ZkConfig, |p: &Params| p.zk(&[0; 32], [0; 32]));
+setup_cfg!(Zk5Config, |p: &Params| p.zk_ext(&[0; 32], [0; 32]));
+
 macro_rules! verify_with {
-    ($cfg:expr, $ty:ty, $b:expr, $proof:expr, $zk:expr) => {{
+    ($cfg:expr, $ty:ty, $b:expr, $proof:expr, $zk:expr, $op:expr, $p:expr) => {{
         let cfg = $cfg;
         let Ok((proof, rest)) = enc::take_from_bytes::<BatchProof<$ty>>($proof) else { return false };
         let deg = degrees(&$b, $zk);
         if !rest.is_empty() || proof.degree_bits != deg {
             return false;
         }
-        let Ok(pd) = ProverData::from_airs_and_degrees(&cfg, &$b.airs, &deg) else { return false };
+        let Some(common) = common::<$ty>($op, $p, &$b, &deg) else { return false };
         let pvs = vec![vec![]; $b.airs.len()];
-        verify_batch(&cfg, &$b.airs, &proof, &pvs, &pd.common).is_ok()
+        verify_batch(&cfg, &$b.airs, &proof, &pvs, &common).is_ok()
     }};
 }
 
@@ -453,13 +494,13 @@ fn prove_inner(op: u8, stmt: &[u8], wit: &[u8], rnd32: [u8; 32], p: &Params, che
     let b = build(op, stmt, Some(wit), check, p)?;
     let seed = stmt_digest(op, stmt);
     let proof = if p.zk && p.ext5 {
-        prove_with!(p.zk_ext::<Challenge5>(&seed, rnd32), b)
+        prove_with!(p.zk_ext::<Challenge5>(&seed, rnd32), p.zk_ext::<Challenge5>(&[0; 32], [0; 32]), b)
     } else if p.zk {
-        prove_with!(p.zk(&seed, rnd32), b)
+        prove_with!(p.zk(&seed, rnd32), p.zk(&[0; 32], [0; 32]), b)
     } else if p.ext5 {
-        prove_with!(p.plain_ext::<Challenge5>(&seed), b)
+        prove_with!(p.plain_ext::<Challenge5>(&seed), p.plain_ext::<Challenge5>(&[0; 32]), b)
     } else {
-        prove_with!(p.plain(&seed), b)
+        prove_with!(p.plain(&seed), p.plain(&[0; 32]), b)
     };
     Ok(proof) // a proof above MAX_PROOF is returned (for measurement); verify rejects it
 }
@@ -476,13 +517,13 @@ pub fn verify(op: u8, stmt: &[u8], proof: &[u8], p: &Params) -> bool {
         let Ok(b) = build(op, stmt, None, false, p) else { return false };
         let seed = stmt_digest(op, stmt);
         if p.zk && p.ext5 {
-            verify_with!(p.zk_ext::<Challenge5>(&seed, [0; 32]), Zk5Config, b, proof, true)
+            verify_with!(p.zk_ext::<Challenge5>(&seed, [0; 32]), Zk5Config, b, proof, true, op, p)
         } else if p.zk {
-            verify_with!(p.zk(&seed, [0; 32]), ZkConfig, b, proof, true)
+            verify_with!(p.zk(&seed, [0; 32]), ZkConfig, b, proof, true, op, p)
         } else if p.ext5 {
-            verify_with!(p.plain_ext::<Challenge5>(&seed), Plain5Config, b, proof, false)
+            verify_with!(p.plain_ext::<Challenge5>(&seed), Plain5Config, b, proof, false, op, p)
         } else {
-            verify_with!(p.plain(&seed), PlainConfig, b, proof, false)
+            verify_with!(p.plain(&seed), PlainConfig, b, proof, false, op, p)
         }
     })
     .unwrap_or_else(|_| {

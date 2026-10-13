@@ -1,9 +1,13 @@
 // PQZH wasm32 runner: prove / verify / adversarial verify timed on the JS side, linear-memory high-water vs 256 MiB.
-//   node wasm/run_wasm.mjs [n_prove] [n_verify] [n_adv per kind] [log_blowup] [queries] [zk] [max_proof]   (0 = default)
+//   node wasm/run_wasm.mjs [n_prove] [n_verify] [n_adv per kind] [log_blowup] [queries] [zk] [max_proof] [ext5] [cap]
+//                          [log_arity] [pow]   (0 = default)
+// PQZH_PROOFS=DIR: verify only, proofs made natively by `pqzh_bench --dump DIR` with the same parameters.
 // Build first: (cd wasm && cargo build --release --offline --target wasm32-unknown-unknown). Prints JSON lines.
 import { readFileSync } from 'node:fs';
 
-const [np = 3, nv = 50, nadv = 4, lb = 0, q = 0, zk = 0, maxp = 0] = process.argv.slice(2).map(Number);
+const [np = 3, nv = 50, nadv = 4, lb = 0, q = 0, zk = 0, maxp = 0, ext5 = 0, cap = 0, ar = 0, pow = 0] =
+  process.argv.slice(2).map(Number);
+const proofs = process.env.PQZH_PROOFS;
 const file = process.env.PQZH_WASM_FILE || new URL('target/wasm32-unknown-unknown/release/pqzh_wasm.wasm', import.meta.url);
 const bytes = readFileSync(file);
 const { instance } = await WebAssembly.instantiate(bytes, {});
@@ -19,24 +23,36 @@ const stats = (v) => {
            max_ms: r3(v[n - 1]) };
 };
 
-out({ wasm_bytes: bytes.length, node: process.version, args: { np, nv, nadv, lb, q, zk, maxp } });
+out({ wasm_bytes: bytes.length, node: process.version, args: { np, nv, nadv, lb, q, zk, maxp, ext5, cap, ar, pow, proofs } });
 let t0 = performance.now();
-const kinds = x.step_init(lb, q, zk, maxp);
+const kinds = x.step_init2(lb, q, zk, maxp, ext5, cap, ar, pow);
+const load = (tx, which, file) => {
+  const b = readFileSync(file);
+  const p = x.step_alloc(b.length);
+  new Uint8Array(x.memory.buffer, p, b.length).set(b);
+  x.step_load(tx, which, p, b.length);
+  return b.length;
+};
 out({ init_ms: r3(performance.now() - t0), memory_mib: mem() });
 let fails = 0;
 for (const tx of [0, 1]) {
   const rel = tx ? 'R_TX' : 'R_REG';
   const tp = [];
   let len = 0;
-  for (let i = 0; i < np; i++) {
+  if (proofs) {
+    len = load(tx, 0, `${proofs}/${rel}.proof`);
+    load(tx, 1, `${proofs}/${rel}.other`);
+  }
+  for (let i = 0; i < (proofs ? 0 : np); i++) {
     t0 = performance.now();
     len = x.step_prove(tx, i);
     tp.push(performance.now() - t0);
     if (!len) { out({ rel, prove_failed: i }); fails++; }
   }
   const fnv = (x.step_hash(tx) >>> 0).toString(16).padStart(8, '0');
-  out({ rel, proof_bytes: len, fnv_last: fnv, timing: 'prove', stats: stats(tp), memory_mib: mem(), within_256mib: mem() <= 256 });
-  x.step_prove_other(tx);
+  if (!proofs) out({ rel, proof_bytes: len, fnv_last: fnv, timing: 'prove', stats: stats(tp), memory_mib: mem(), within_256mib: mem() <= 256 });
+  else out({ rel, proof_bytes: len, fnv_loaded: fnv, memory_mib: mem() });
+  if (!proofs) x.step_prove_other(tx);
   const tv = [];
   for (let i = 0; i < nv; i++) {
     t0 = performance.now();

@@ -1,6 +1,6 @@
 //! PQZH bench: proof bytes and breakdown, prove time, honest and adversarial verify p50 / p99, peak heap.
 //!   pqzh_bench [--rel reg|tx|both] [--np N] [--nv N] [--nadv N] [--blowup L] [--queries Q] [--arity A]
-//!              [--final F] [--pow B] [--cap H] [--mvw W] [--zk] [--ext5] [--max-proof N] [--sizes-only]
+//!              [--final F] [--pow B] [--cap H] [--mvw W] [--zk] [--ext5] [--max-proof N] [--sizes-only] [--dump DIR]
 //! Prints JSON lines. Run under scripts/capped.
 
 use std::alloc::{GlobalAlloc, Layout, System};
@@ -116,6 +116,11 @@ fn main() {
         }
         let ok_size = pt.len() <= p.max_proof;
         let other = prove(op, &st2, w, [9; 32], &p).expect("prove other");
+        if let Some(d) = get("--dump") {
+            // proofs for the wasm verifier (wasm/run_wasm.mjs verify-only mode)
+            std::fs::write(format!("{d}/{name}.proof"), &pt).unwrap();
+            std::fs::write(format!("{d}/{name}.other"), &other).unwrap();
+        }
         let mut tv = Vec::new();
         arm();
         for _ in 0..nv {

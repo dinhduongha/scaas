@@ -30,7 +30,22 @@ fn with<T>(f: impl FnOnce(&mut St) -> T) -> T {
 /// limit in bytes (0 = the PQZH kind's 160 KB; larger only to measure proofs above it)
 #[no_mangle]
 pub extern "C" fn step_init(log_blowup: u32, queries: u32, zk: u32, max_proof: u32) -> u32 {
+    step_init2(log_blowup, queries, zk, max_proof, 0, 0, 0, 0)
+}
+
+/// step_init plus Goldilocks^5, Merkle cap height, FRI log arity and grinding bits (0 = default)
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn step_init2(log_blowup: u32, queries: u32, zk: u32, max_proof: u32, ext5: u32, cap: u32, arity: u32, pow: u32) -> u32 {
     let mut p = Params::DEFAULT;
+    p.ext5 = ext5 != 0;
+    p.cap_height = cap as usize;
+    if arity != 0 {
+        p.max_log_arity = arity as usize;
+    }
+    if pow != 0 {
+        p.query_pow_bits = pow as usize;
+    }
     if log_blowup != 0 {
         p.log_blowup = log_blowup as usize;
     }
@@ -98,4 +113,17 @@ pub extern "C" fn step_verify_bad(tx: u32, kind: u32) -> u32 {
 #[no_mangle]
 pub extern "C" fn step_hash(tx: u32) -> u32 {
     with(|st| st.proof[tx as usize].iter().fold(2166136261u32, |h, &b| (h ^ b as u32).wrapping_mul(16777619)))
+}
+
+/// a buffer of `len` bytes in linear memory for step_load (proofs made natively: pqzh_bench --dump)
+#[no_mangle]
+pub extern "C" fn step_alloc(len: u32) -> *mut u8 {
+    Box::leak(vec![0u8; len as usize].into_boxed_slice()).as_mut_ptr()
+}
+
+/// take the proof (which = 0) or the other statement's proof (which = 1) of relation `tx` from a step_alloc buffer
+#[no_mangle]
+pub extern "C" fn step_load(tx: u32, which: u32, ptr: *mut u8, len: u32) {
+    let v = unsafe { Vec::from_raw_parts(ptr, len as usize, len as usize) };
+    with(|st| if which == 0 { st.proof[tx as usize] = v } else { st.other[tx as usize] = v });
 }

@@ -56,7 +56,7 @@ fn shape(op: u8, stmt: &[u8], p: &Params, ext: usize) -> Shape {
         let c = 1 << (lc + zk);
         chunks = usize::max(chunks, c);
         let next = !air.main_next_row_columns().is_empty();
-        batched += num_batched_openings(air.width(), next, 0, false, c, lk.len(), ext, opening);
+        batched += num_batched_openings(air.width(), next, air.preprocessed_width(), false, c, lk.len(), ext, opening);
         let inter: usize = lk.iter().map(|l| l.elements.len()).sum();
         width = lk.iter().flat_map(|l| l.elements.iter().map(|e| e.len())).fold(width, usize::max);
         denoms += inter as f64 * (1u64 << deg[i]) as f64;
