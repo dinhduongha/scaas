@@ -3,7 +3,7 @@
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:executing-plans to implement this plan task-by-task.
 > Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Status: IN PROGRESS (2026-10-13).** Branch `ua5b` from `main` `279b5d8`, worktree `.claude/worktrees/ua5b`. One commit
+**Status: BUILT, awaiting owner review (2026-10-13; Tasks 1–8 committed, Final below).** Branch `ua5b` from `main` `279b5d8`, worktree `.claude/worktrees/ua5b`. One commit
 per task; the controller merges after the owner approves. Rulings R5b-1…R5b-n restate the accepted design where it is
 exact; the implementer's own choices where the design leaves room are C5b-1…C5b-n (recorded, not blocking).
 
@@ -240,3 +240,15 @@ CTR-TOK-20 (`uaWrap`); `docs/contracts/metatx.md` CTR-MTX-18 (the `msg.sender` s
 - [ ] forge default and `private7622` (all suites), `test/ua`, invariants, `UAGas` / `UARegistryGroups` `--isolate`,
   the size gate; clientkeys; the six libraries; `cargo test` in scaas-node; docs checkers. Mutations on the settlement
   and accounting lines (apply, run, revert). Self-review against the design row.
+
+**Results (Final, 2026-10-13).** forge default 102 suites, 1196 passed / 0 failed / 10 skipped; `private7622` the same;
+`test/ua/**` 31 suites, 320 passed; `--isolate` `UAGas` 6, `UARegistryGroups` 14; size gate 0 errors, 84 contracts
+(`SCaaSDex` 23,493 B fits; NONE 35,272, UNDERLYING 45,132, NONE_ZETHER 43,624, UNDERLYING_ZETHER 55,528 / init 57,223,
+`UnderlyingLib` 13,016, `TradeLib` 3,369). scaas-node `cargo test` 279 passed, e2e (EVM, anvil) 4/4, clippy
+`-D warnings` clean; settle selector `0x0403b13c` (solc). clientkeys 109 / 107 / 2 skipped; `ua-vectors.mjs`,
+`ua-sig-vectors.mjs` and `WRITE_KAT` `DexKat` regenerate byte-identical. Docs checkers 0 errors, facts 0 misses.
+Mutations (applied, run, reverted; each killed): `_uaMove` amount in `uaTrade` − 1 (23 fail); `pulled[h] == 0` →
+`!= 0` on `uaTrade` (8) and `mtxTrade` (7), always verify on `uaTrade` (3); `_sendTo` without the ledger check (1) and
+with the native branch negated (68); `_payLeg` refund to `to` (3) and dropped (5); `uaWrap` destination → `o.from`
+(3); `UAVerifyGas` not re-raised (2).
+
