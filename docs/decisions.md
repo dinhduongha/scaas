@@ -1948,6 +1948,8 @@ Change (2026-10-13): owner — a Universal Account never grants or holds an allo
 
 Change (2026-10-13): owner — `uaWrap(u, UATradeOrder, auth)`: the same wrap by signature with a UA order pulled by the underlying's `uaTrade`, minting to a `bytes32` destination (derived: `_uaMint`); event `UAWrapped`. SPECIFIED (UA-5b). Source add: owner, 2026-10-13; `history/specs/2026-10-13-ua-parity-design.md` §4.3.
 
+Change (2026-10-13): built as ruled (UA-5b): `uaWrap` in `UnderlyingToken` / `UnderlyingLib`. Controller ruling pending the owner: it emits `UAWrapped` only (no `Wrapped`), the leg check is ERC-165 on `IUALedger` before the pull (C5b-9). Source add: plan `superpowers/plans/2026-10-13-ua5b-trade-dex.md`.
+
 **Why.** An EOA holding a SCaaS underlying cannot approve the wrapper, so the owner accepted a signature wrap: the holder signs a `TradeOrder` in the underlying's domain naming the wrapper as `dex`; the wrapper pulls through the underlying's `mtxTrade`, checks the received amount and mints in the same call, paying the relayer from the order's `fee`.
 **Cost if wrong.** Without it, holders of SCaaS underlyings could never wrap (or fund Zether) without a contract account.
 **Source.** `history/specs/2026-10-07-metatx-generic.md` §2 A9, §3 MG-7b.
@@ -2278,12 +2280,16 @@ Change (2026-10-08): wording only — the token consults no registry; the factor
 ### CTR-DEX-25 — UATradeOrder: a UA's order, verified by its token
 - old: — · status: current · owner: yes · date: 2026-10-13 · normative: contracts/dex.md#CTR-DEX-25 · superseded-by: —
 
+Change (2026-10-13): built as ruled (UA-5b): `UATradeOrder`, `uaTrade`, `uaCancelOrder`, `uaInvalidateNonces` and the views in `ITradeToken` / `ERC20MetaTx`, `TradeLib` on one internal form with `bytes32` `minNonce` (one floor per id both ways), verify once on both paths (CTR-DEX-15 step 4), purpose `trade` in `UAKinds` and the six UA libraries, `uatrade_kat.json`. Controller rulings pending the owner: the `ua*` trade functions revert `UALedgerOff` while the ledger is off, a padded native `from` included (C5b-2); one internal order form, a `TradeOrder` read as a `UATradeOrder` in memory (C5b-1). Source add: plan `superpowers/plans/2026-10-13-ua5b-trade-dex.md`.
+
 **Why.** `TradeOrder.from` is an `address`, so a UA needs its own struct (`bytes32 from`, `bytes32 destination`) in the sell token's domain, signed under the new purpose `trade`; the token runs CTR-DEX-15 unchanged on the fields both structs share, moves the fill by `_uaMove`, and shares `minNonce` by id. Widening `TradeOrder` for everyone was rejected: native wallets keep displaying an `address`, and existing vectors and node encoders stay.
 **Cost if wrong.** Two order structs for clients, node and vectors.
 **Source.** owner, 2026-10-13 (Q3, Q4); `history/specs/2026-10-13-ua-parity-design.md` §4.6 (UP-11), O2, O4.
 
 ### CTR-DEX-26 — UA legs: tagged legs in SCaaSDex, one book
 - old: — · status: current · owner: yes · date: 2026-10-13 · normative: contracts/dex.md#CTR-DEX-26 · superseded-by: —
+
+Change (2026-10-13): built as ruled (UA-5b): tagged `Leg` / `ExchangeLeg`, shape-1 legs on SCaaS ledger tokens pulled by `uaTrade`, payouts and Path B refunds to derived ids by `transferToUA`, `UALegSettled` / `UAExchangeLegSettled`, `UAVerifyGas` re-raised, `uaTrade` refused in interactions; the node sends shape-0 legs and indexes `UALegSettled` (its UA intake, `bytes32` book and PQ gossip after UA F5, C5b-11). `SCaaSDex` is 23,493 B, under EIP-170, so it does not join the size baseline (C5b-14; the cost line above expected it to cross). Controller rulings pending the owner: `SelfTrade(bytes32)` (C5b-3), `LegShapeUnknown(uint8)` (C5b-4), "ledger on" = the listing's `tokenKind == SCaaS` and `registry() ≠ 0`, no ERC-165 (C5b-5), a derived destination checked only by the receive token's `transferToUA` at the payout, so an unregistered one is `MatchFailed` (C5b-6), shape-0 bytes after the 13 words ignored (C5b-7). Measured: two `mldsa65` legs 12,124,252 transaction gas; three revert `UAVerifyGas`. Source add: plan `superpowers/plans/2026-10-13-ua5b-trade-dex.md`.
 
 **Why.** Extending `SCaaSDex` in place (a `shape` tag and an encoded order per leg) keeps one book in which UA and native orders match; UA legs only in SCaaS ledger tokens, payouts and refunds to UAs by `transferToUA`; `UAVerifyGas` reverts the whole `mtxSettle` as `SigCheckGasStarved` does, so a starved submitter cannot turn a valid order into `MatchFailed`; `uaTrade` is refused in interactions as `mtxTrade`. A second DEX implementation was rejected: two books, no cross-matching.
 **Cost if wrong.** The `Leg` / `ExchangeLeg` ABI changes (nothing deployed); the DEX crosses EIP-170 (size baseline; owner: Glamsterdam); PQ legs bound a settlement to the EIP-7825 cap, so the node packs settlements by kind.

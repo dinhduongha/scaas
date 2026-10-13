@@ -251,7 +251,9 @@ a dependency for no need at the volumes served.
 <a id="watcher"></a><a id="NODE-DEX-04"></a>**NODE-DEX-04** — **The DEX watcher has its own cursor.** One task per
 chain with the same finality helpers as the indexer (`finality::{safe_head, next_range, quorum_ok}`) and a **separate
 cursor** (`dex_cursor`) reads the DEX's `LegSettled`, `MatchFailed` (an empty reason reported `out_of_gas`), `OrderCancelled`,
-`NoncesInvalidated` and the market tokens' `OrderCancelled`, `NoncesInvalidated` (BUILT, P5; `ExchangeLegSettled` with P7,
+`NoncesInvalidated` and the market tokens' `OrderCancelled`, `NoncesInvalidated` (BUILT, P5; `UALegSettled`, a shape-1
+leg's `LegSettled` with ids, read the same way, BUILT with UA-5b ([CTR-DEX-26](../contracts/dex.md#CTR-DEX-26)); the
+venue itself sends shape-0 legs until its UA order intake (UA F5); `ExchangeLegSettled` with P7,
 [indexer-feeds.md#event-normalization](indexer-feeds.md#event-normalization)), writes `dex_range` feed items and advances `dex_cursor`, then removes from the book every order
 closed on chain (cancelled through any relayer, too). `settled` is final: a later `MatchFailed` does not flip it. A
 separate cursor means a DEX ingest fault never blocks payment booking and vice versa.
