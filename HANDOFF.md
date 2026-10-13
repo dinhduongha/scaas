@@ -1,5 +1,76 @@
 # HANDOFF — scaas
 
+## Session 2026-10-14 (shutdown 3: z21 merged, PQZH next steps, artifact WIP) — resume here
+
+**State:** main pushed at the HANDOFF commit. Merged and pushed since the last HANDOFF (`c2f2e0d`): `pqz-l2-domain` +
+`pqz-tbox-soundness` (P6-SZ / P6-L2 fixes, `5361946`), `pqz-relfix` (`04ccd85`), `pqz-v2` (proofSystemId v2 =
+`keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v2")`, `98695de`), `ua5b` (UA-5b trade and DEX, `1b9e244`),
+`pqzh-proto` (`f78056c`), `pqzh-sol` (`be81b7c`), `pqz-sv-relfix` (P6-SV specialised verifier on all five relations,
+`dcf0da3`), `pqz-v2-run` (`0e7da0c`), `pqz-publish` (tbox write-ups, `099039a`), `glic-inventory` (G-LIC step 1,
+`9f6677f`), `pqz-z21` (z21 norm check, lazer#26, `a8b5b66`), `pqzh-next` (PQZH ZK + Goldilocks⁵, Merkle caps, WHIR,
+Plonky3 0.9.0-rc.1, `9fc5714`); research note `pqz-anonymity.md` (`623a455`). LaZer issues public: lazer#24, #25, #26;
+follow-up comment on #26 (paper condition LNP22 Fig. 18, impact β 452–461 → 286–311, fix, hint ℓ∞ side note).
+
+**Owner decisions this session (recorded in TODO / decisions.md):** priority "P6 first, finish the WIP, then focus on
+PQZ" (UA-5c and UA F5 paused); token-family rename `UnderlyingToken` → `WrappedToken`, `NoUnderlyingToken` →
+`IssuedToken` after P6; z21: merge `pqz-z21` (done) and **no proofSystemId bump** (every v2 verifier checks
+‖z21‖² + ‖w − γ·w1‖² ≤ Bsq; decisions.md CTR-PQZ-03); merge `pqzh-next` with the Plonky3 0.9.0-rc.1 upgrade (pin 0.9.0
+final when released); **PQZH is not shelved**: next build and measure a ZK WHIR path and a Ligero backend, then decide
+soundness regime, proof limit / `MAX_INPUT`, prover memory target, the PQZH proofSystemId string and the backend;
+P6-PUB (ethresear.ch + ePrint, PQZL only, source-only reproducibility package, numbers frozen after the z21 merge,
+README §11 PQZ subsection + headline line without LaZer-findings text, results mail to the LaZer maintainers after the
+freeze, separate from the G-LIC letter); G-LIC is a production gate, not a publication prerequisite (step 1 done,
+step 2 letter drafted, step 3 preliminary patent search done, step 4 lawyer = owner); order changed 2026-10-14:
+Docker package before the freeze run.
+
+**WIP branches (worktrees under `.claude/worktrees/`; local only, not pushed; agents stop at the branch):**
+
+1. **`pqz-artifact`** (worktree `artifact`, last `ed0aa43`) — P6-PUB reproducibility package `pqz-core/artifact/`,
+   written, **not tested**: `Dockerfile` (ubuntu:24.04 by digest, apt from snapshot `20261013T000000Z`, clang/lld 18.1.3,
+   gcc 13.3.0, cmake 3.28.3, node 26.8.1 by sha256, LaZer 3330e48 source only), `reproduce.sh` (quick default, `--full`,
+   `--serve`, `--upstream` building x86-64-v3 + AVX-512 IFMA, running the latter only with `avx512ifma`),
+   `results.py` (`check` / `freeze`), `web/index.html`, `README.md` with a "Status / resume" section,
+   `expected-results.json` PROVISIONAL (pre-z21 times; `proofs_fnv` match post-z21). The one image build failed at apt
+   (snapshot archive is HTTPS-only, base image lacks `ca-certificates`); fixed, not rebuilt (owner: no build before
+   shutdown). Risks to check first: `xcheck/shim` compiling against current headers; `http.server` serving `pqz.wasm`
+   as `application/wasm`. Runs: `rel3/runs/final-*` complete post-z21 run (rc 0, KAT 19/19, tbox fixes ok, `proofs_fnv`
+   equal to v2; times not compared with `v2full` yet); `sv/runs/final-*` interrupted by the owner (portable
+   differential 2,710 cases / 0 mismatches kept, rest not run). Resume (owner: no measuring this session): the commands
+   in `pqz-core/artifact/README.md` "Status / resume" — image build, quick / `--upstream` / `--serve` tests,
+   `docker image rm`; then the freeze `OUT=pqz-core/artifact/runs/freeze-2026-10-14 scripts/capped
+   pqz-core/artifact/reproduce.sh --full` + `results.py freeze` → `expected-results.json`, frozen table in
+   `pqz-core/STATUS.md` and `pqz-core/README.md`; then (separate tasks) README §11 PQZ subsection + headline,
+   ethresear.ch post, ePrint draft, the results mail (`scratchpad/sz-private/results-letter-lazer.md`). Agent's
+   question: add a CI workflow running quick mode that stores text / JSON only?
+2. **`pqzh-zkwhir`** (worktree `zkwhir`, `9d748ed`) — design note `docs/research/pqzh-zk-whir.md` only, no code. Chosen
+   path: Plonky3's ZK batch STARK unchanged + an adapter (`src/whirpcs.rs`, ≈ 600–900 lines) implementing
+   `UnivariateStarkPcs` over `p3-whir`'s `HidingWhirPcs` (HVZK WHIR, ePrint 2026/391); rejected: ZK `p3-multi-stark`
+   (weeks of unanalysed protocol work), random rows around the non-ZK prover (leaks), recursion, BlindFold. Effort
+   3–5 days + 1–2 days measuring; expected `R_TX` ≈ 400–500 KB at Goldilocks⁵ (not measured). Resume: note §7.
+   Agent's questions for the owner: (1) accept this path; (2) if it lands above FRI+ZK conjectured (340,431 B), build a
+   batched multi-round WHIR opening or settle on FRI; (3) report Goldilocks² only at its reachable 96–100-bit targets.
+3. **`pqzh-ligero`** (worktree `ligero`, `11d1493`) — design note `docs/research/pqzh-ligero.md` + parameter model
+   `pqz-core/pqzh/ligero/ligero_params.py`, no Rust yet. Field F_q itself (q − 1 = 2^3·19·43·431·1,561,243, generator 3,
+   domains 2^a·19^b·43^c ≤ 6,536), challenges in F_q^4 = F_q[X]/(X^4 − 3); model `R_TX` ZK 128 bits ≈ 298 KB proven
+   (rate 1/8, t = 166) / ≈ 112 KB conjectured (rate 1/19, t = 35), prove ≈ 0.1–0.3 s, verify ≈ 15–40 / 3–8 ms
+   (inferred). Resume: note §7 (crate, tests ≥ 960 mutations, bench + wasm32, capped runs). Agent's questions: (1) add a
+   radix-431 FFT stage for longer codes (could lower the proven size); (2) use its modified ZK construction (blinding
+   rows at full degree inside the proximity test) instead of the paper's §4.7 text.
+
+**Open owner questions:** the five above; P6e (codegen, serialization v1, `pqz-ffi`, fuzzing, freeze proofSystemId) in
+parallel or after PQZH; anonymity (`docs/research/pqz-anonymity.md`: ring N ≈ 8 practical, ≈ 10–12 M gas; or one-time
+receiver accounts) — read Lether in full before deciding.
+
+**Owner steps outstanding:** send the G-LIC letter (`scratchpad/sz-private/g-lic-letter-lazer.md`); after the freeze,
+the results mail; tag + Zenodo source snapshot for P6-PUB; AVX-512 IFMA run of the upstream comparison; chain 22776
+genesis; 7622 registry redeploy in P6g (gas limit 16,777,216, all four PQ kinds usable); lawyer (G-LIC step 4,
+scope PQZ and classical Zether, private note `scratchpad/glic/`) and a cryptographic audit before production.
+
+**Rules in force:** no built binaries on GitHub (no release assets, hosted wasm, pushed images; the xcheck/static
+bundle stays local); never push `pqz-sv-fixed`, `pqz-sv-fixed-l2`, `backup/pre-sanitize-60ec820`; `pqz-verifier-floor`
+kept local; `scratchpad/` and `docs/reviews/` never committed; heavy jobs only via `scripts/capped`, agents never poll
+with until/sleep or `pgrep -f`.
+
 ## Session 2026-10-13 (shutdown 2: UA-5b, PQZH, PQZ relations WIP) — resume here
 
 **State:** main pushed at the HANDOFF commit (after `af8ccf5`). Merged and pushed this session: UA-5a (`04bad29`; C5a-15
