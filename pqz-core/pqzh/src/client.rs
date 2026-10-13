@@ -1,7 +1,7 @@
 //! Test and bench inputs: the same keys, ciphertexts, statements and witnesses as pqz-core's test/pqz_bench.c
 //! setup() (same xorshift stream, same samplers), so the bytes can be compared with pqz-core's (xcheck/).
 
-use crate::rel::{OP_REGISTER, OP_TRANSFER, PREFIX, REG_STMT, REG_WIT, TX_STMT, TX_WIT};
+use crate::rel::{HDR_FEE, HEADER, OP_REGISTER, PQZH_PROOF_SYSTEM_ID, PREFIX, REG_STMT, REG_WIT, TX_STMT, TX_WIT};
 use crate::ring::*;
 
 pub struct Rng(pub u64);
@@ -120,9 +120,12 @@ pub struct Tweak {
     pub s_f: Option<Vec<i64>>,
     pub d: Option<[u8; 16]>,
     pub e2_t: Option<Vec<i64>>,
+    /// proofSystemId written at statement bytes 32..63 (default PQZH's; xcheck passes PQZL's to match pqz_bench.c)
+    pub psid: Option<[u8; 32]>,
 }
 
-/// pqz_bench.c setup(): R_REG for key F, R_TX = balance 1,000,000 in T, transfer 123,456 with fee 7.
+/// pqz_bench.c setup(): R_REG for key F, R_TX = balance 1,000,000 in T, transfer 123,456 with fee 7; R_TX in the
+/// §7.7 layout (640-byte header, fee word at 256, the other header words filled as pqz_bench.c does).
 pub fn setup() -> Setup {
     setup_with(&Tweak::default())
 }
@@ -138,7 +141,9 @@ pub fn setup_with(tw: &Tweak) -> Setup {
     let ka = keygen(&mut rng);
     let _kx = keygen(&mut rng);
 
+    let psid = tw.psid.unwrap_or(PQZH_PROOF_SYSTEM_ID);
     let mut reg_stmt = vec![0xA5u8; PREFIX];
+    reg_stmt[32..64].copy_from_slice(&psid);
     reg_stmt.extend((0..32u8).collect::<Vec<_>>());
     wr_vec(&mut reg_stmt, &kf.pk);
     let mut reg_wit: Vec<u8> = kf.s.iter().map(|&x| x as i8 as u8).collect();
@@ -164,7 +169,10 @@ pub fn setup_with(tw: &Tweak) -> Setup {
     }
     let (u, vs) = encrypt(&[&kt.pk, &kf.pk, &ka.pk], &m, &polys(&r), &polys(&e1), &e2);
 
-    let mut tx = vec![0x5Au8; PREFIX];
+    let mut tx: Vec<u8> = (0..HEADER).map(|i| if i < PREFIX { 0x5A } else { (i * 3) as u8 }).collect();
+    tx[32..64].copy_from_slice(&psid);
+    tx[HDR_FEE..HDR_FEE + 64].fill(0);
+    tx[HDR_FEE + 24..HDR_FEE + 32].copy_from_slice(&fee.to_be_bytes());
     wr_vec(&mut tx, &kf.pk);
     wr_vec(&mut tx, &kt.pk);
     wr_vec(&mut tx, &ka.pk);
@@ -177,7 +185,6 @@ pub fn setup_with(tw: &Tweak) -> Setup {
         wr_poly(&mut vb, vk, 16);
         tx.extend_from_slice(&vb);
     }
-    tx.extend_from_slice(&fee.to_be_bytes());
 
     let mut w: Vec<u8> = kf.s.iter().map(|&x| x as i8 as u8).collect();
     le16(&mut w, &kf.e);
@@ -213,8 +220,8 @@ pub const KINDS: [&str; 12] = [
 /// mutated (statement, proof) of kind k
 pub fn mutate(k: usize, op: u8, st: &[u8], pf: &[u8], other: &[u8], r: &mut R) -> (Vec<u8>, Vec<u8>) {
     let (mut s, mut p) = (st.to_vec(), pf.to_vec());
-    let body = crate::rel::PREFIX + if op == OP_REGISTER { 32 } else { 0 };
-    let ncoef = (s.len() - body - if op == OP_TRANSFER { 8 } else { 0 }) / 8;
+    let body = if op == OP_REGISTER { PREFIX + 32 } else { HEADER };
+    let ncoef = (s.len() - body) / 8;
     match KINDS[k] {
         "bitflip" => {
             let b = (r.next() % (8 * p.len() as u64)) as usize;
@@ -238,18 +245,18 @@ pub fn mutate(k: usize, op: u8, st: &[u8], pf: &[u8], other: &[u8], r: &mut R) -
             let v = u64::from_be_bytes(s[o..o + 8].try_into().unwrap());
             s[o..o + 8].copy_from_slice(&(v + Q).to_be_bytes());
         }
-        "stmt_prefix" => s[(r.next() % crate::rel::PREFIX as u64) as usize] ^= 1 << (r.next() % 8),
+        "stmt_prefix" => s[(r.next() % PREFIX as u64) as usize] ^= 1 << (r.next() % 8),
         "stmt_tail" => {
             // R_REG: message byte; R_TX: fee
-            let i = if op == OP_REGISTER { crate::rel::PREFIX + (r.next() % 32) as usize } else { s.len() - 1 - (r.next() % 8) as usize };
+            let i = if op == OP_REGISTER { PREFIX + (r.next() % 32) as usize } else { HDR_FEE + 24 + (r.next() % 8) as usize };
             s[i] ^= 1 << (r.next() % 8);
         }
         "other_proof" => p = other.to_vec(),
         "field_noncanon" => {
-            // add p to one 8-byte-aligned little-endian word near the end (a field element of the FRI final poly)
+            // add p to one big-endian word near the end (a field element of the FRI final poly or the PoW witness)
             let i = p.len() - 8 * (1 + (r.next() % 16) as usize);
-            let w = u64::from_le_bytes(p[i..i + 8].try_into().unwrap());
-            p[i..i + 8].copy_from_slice(&w.wrapping_add(0xFFFF_FFFF_0000_0001).to_le_bytes());
+            let w = u64::from_be_bytes(p[i..i + 8].try_into().unwrap());
+            p[i..i + 8].copy_from_slice(&w.wrapping_add(0xFFFF_FFFF_0000_0001).to_be_bytes());
         }
         _ => p.clear(),
     }

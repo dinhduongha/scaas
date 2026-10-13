@@ -1,0 +1,40 @@
+
+thread 'main' (1324793) panicked at src/bin/pqzh_whir.rs:130:48:
+WHIR config: PowBitsExceedBudget { required: 18, budget: 16 }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+args --ext 2 --rate 3 --fold 4 --target 100 rc=101
+
+thread 'main' (1324799) panicked at src/bin/pqzh_whir.rs:130:48:
+WHIR config: PowBitsExceedBudget { required: 28, budget: 16 }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+args --ext 2 --rate 3 --fold 4 --target 110 rc=101
+
+thread 'main' (1324802) panicked at src/bin/pqzh_whir.rs:130:48:
+WHIR config: PowBitsExceedBudget { required: 33, budget: 16 }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+args --ext 2 --rate 3 --fold 4 --target 115 rc=101
+
+thread 'main' (1324803) panicked at src/bin/pqzh_whir.rs:130:48:
+WHIR config: PowBitsExceedBudget { required: 38, budget: 16 }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+args --ext 2 --rate 3 --fold 4 --target 120 rc=101
+
+thread 'main' (1324804) panicked at src/bin/pqzh_whir.rs:247:13:
+security report: InvalidShape("trace arity is outside the supported range")
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+args --ext 5 --rate 3 --fold 6 --target 128 rc=101
+
+thread 'main' (1325066) panicked at src/bin/pqzh_whir.rs:247:13:
+security report: InvalidShape("trace arity is outside the supported range")
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+args --ext 5 --rate 4 --fold 6 --target 128 rc=101
+
+thread 'main' (1325206) panicked at src/bin/pqzh_whir.rs:247:13:
+security report: InvalidShape("trace arity is outside the supported range")
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+args --ext 5 --rate 3 --fold 8 --target 128 rc=101
+
+thread 'main' (1325410) panicked at src/bin/pqzh_whir.rs:247:13:
+security report: InvalidShape("trace arity is outside the supported range")
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+args --ext 5 --rate 4 --fold 8 --target 128 rc=101

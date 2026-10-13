@@ -8,6 +8,10 @@ LogUp, design D1), cost in proof bytes, prove and verify time, memory, wasm32 an
 setting reaches 128 bits — provable and conjectured — within the 160 KB PQZH limit? Code: crate `pqz-core/pqzh/`
 (branch `pqzh-proto`, not merged yet); raw runs `pqz-core/pqzh/runs/`. **No decision is recorded here.**
 
+**Follow-up (2026-10-14):** the next step — `R_TX` on the §7.7 layout, the EVM-friendly configuration, ZK +
+Goldilocks⁵ at 128 bits proven and conjectured, Merkle caps, WHIR — is in `pqzh-zk-ext5.md` (branch `pqzh-next`);
+the numbers below are the prototype's and stay as measured.
+
 **[measured]** marks a number from a run in this note (machine in §2). **[model]** marks a number computed by
 Plonky3's own soundness calculator (`p3-security` 0.8.0) from the measured AIR shapes. **[estimate]** marks a rough
 figure; **[inference]** a conclusion drawn here.

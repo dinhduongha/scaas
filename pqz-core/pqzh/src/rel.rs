@@ -1,40 +1,67 @@
 //! R_REG and R_TX as PQZH statements: the same statement and witness bytes as pqz-core (pqz.h, pqz_rel.c
 //! build_reg / build_tx / tx_witness), proved with the AIRs of air.rs.
 
-use p3_batch_stark::{BatchProof, ProverData, StarkInstance, prove_batch, verify_batch};
+use p3_batch_stark::{BatchProof, CommonData, ProverData, StarkInstance, prove_batch, verify_batch};
 use p3_field::PrimeCharacteristicRing;
 use p3_matrix::dense::RowMajorMatrix;
-use sha3::digest::{ExtendableOutput, Update, XofReader};
+use sha3::Digest;
 
 use crate::air::{DigitAir, MvAir, MvOut, PolyAir, PolySpec, PqzhAir, RANGE_N, RangeAir, dc};
-use crate::config::{Challenge5, Params, Plain5Config, PlainConfig, ZkConfig};
+use crate::config::{Challenge5, Params, Plain5Config, PlainConfig, Zk5Config, ZkConfig};
+use crate::enc;
 use crate::ring::*;
 
 pub const OP_TRANSFER: u8 = 1;
 pub const OP_REGISTER: u8 = 3;
 pub const PREFIX: usize = 64;
+/// Debit statements (pq-zether.md §7.7, pqz.h PQZ_HEADER_BYTES): 640-byte header of 32-byte words; the relation reads
+/// only the fee word (offset 256, be32 < 2^64); opTag, proofSystemId and the other words are only hashed.
+pub const HEADER: usize = 640;
+pub const HDR_FEE: usize = 256;
 pub const POLYVEC: usize = 16384;
 pub const VB: usize = 128;
 pub const REG_STMT: usize = PREFIX + 32 + POLYVEC;
 pub const REG_WIT: usize = 2048 + 4096;
-pub const TX_STMT: usize = PREFIX + 3 * POLYVEC + (POLYVEC + VB) + (POLYVEC + 3 * VB) + 8;
+pub const TX_STMT: usize = HEADER + 3 * POLYVEC + (POLYVEC + VB) + (POLYVEC + 3 * VB);
 pub const TX_WIT: usize = 2048 + 4096 + 2048 + 4096 + 3 * 32 + 16 + 16;
 /// Proof limit of the PQZH kind (owner, TODO P6-PQZH): 160 KB.
 pub const MAX_PROOF: usize = 160 * 1024;
+/// proofSystemId (statement bytes 32..63) of PQZH, proposed in the style of pqz.h's PQZ_PROOF_SYSTEM_ID:
+/// keccak256("scaas/pqz/pqzh/stark-d1-goldilocks5-fri-keccak256-zk/v1"). Like pqz-core, the relation only hashes it
+/// (the precompile dispatches on it). Provisional until the FRI parameters (soundness regime) are fixed.
+pub const PQZH_PROOF_SYSTEM_ID: [u8; 32] = hex32("aa1f92ddc5763201c2582c8387bd6513842e52779310d6bcf39a7fec99284304");
+/// PQZL's id as pqz-core v2 writes it (pqz.h PQZ_PROOF_SYSTEM_ID = keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v2")),
+/// used only for the byte cross-check against pqz_bench.c.
+pub const PQZL_PROOF_SYSTEM_ID: [u8; 32] = hex32("2e07e6ed1fd303a08c89b3eab6e8423fdfb8f31202958dd682a0619313798c2f");
+
+const fn nib(c: u8) -> u8 {
+    if c <= b'9' { c - b'0' } else { c - b'a' + 10 }
+}
+
+const fn hex32(h: &str) -> [u8; 32] {
+    let b = h.as_bytes();
+    let mut out = [0u8; 32];
+    let mut i = 0;
+    while i < 64 {
+        out[i / 2] = nib(b[i]) << 4 | nib(b[i + 1]);
+        i += 2;
+    }
+    out
+}
 
 const BS: i64 = 36 * 36;
 const BE: i64 = 164 * 164;
 
-/// SHAKE256("SCAAS-PQZH-TRANSCRIPT-V1" || u8(op) || be32(len) || stmt): seeds the challenger before any commitment.
+/// keccak256("SCAAS-PQZH-TRANSCRIPT-V1" || u8(op) || be32(len) || stmt): seeds the challenger before any commitment.
+/// Keccak-256, not SHAKE256 (owner 2026-10-13, P6-PQZH-SOL: the EVM's opcode; SHAKE256 of the R_TX statement in
+/// Solidity is 43.3 M gas).
 pub fn stmt_digest(op: u8, stmt: &[u8]) -> [u8; 32] {
-    let mut h = sha3::Shake256::default();
+    let mut h = sha3::Keccak256::new();
     h.update(b"SCAAS-PQZH-TRANSCRIPT-V1");
-    h.update(&[op]);
-    h.update(&(stmt.len() as u32).to_be_bytes());
+    h.update([op]);
+    h.update((stmt.len() as u32).to_be_bytes());
     h.update(stmt);
-    let mut out = [0u8; 32];
-    h.finalize_xof().read(&mut out);
-    out
+    h.finalize().into()
 }
 
 fn rd_i8(b: &[u8], n: usize) -> Vec<Poly> {
@@ -142,6 +169,7 @@ pub fn build_reg(stmt: &[u8], wit: Option<&[u8]>, check: bool, p: &Params) -> Re
                 .chain((0..K).map(|j| delta_arr(i == j, -(Q as i64))))
                 .collect(),
             target: pkh[i],
+            stmt_lead: 0,
         })
         .collect();
     let (poly, mv) = layout(specs, vec![BS, BE], &[((0..3 * K).collect(), outs)], p);
@@ -182,7 +210,13 @@ struct TxSt {
 }
 
 fn parse_tx(stmt: &[u8]) -> Option<TxSt> {
-    let mut p = PREFIX;
+    // fee: a be32 word that must be < 2^64 (pqz_rel.c rd_word64)
+    let fw = &stmt[HDR_FEE..HDR_FEE + 32];
+    if fw[..24].iter().any(|&b| b != 0) {
+        return None;
+    }
+    let fee = u64::from_be_bytes(fw[24..].try_into().unwrap());
+    let mut p = HEADER;
     let mut pv = || {
         let r = rd_polyvec(&stmt[p..]);
         p += POLYVEC;
@@ -194,14 +228,13 @@ fn parse_tx(stmt: &[u8]) -> Option<TxSt> {
     let u = rd_polyvec(&stmt[p..])?;
     p += POLYVEC;
     let v = [rd_poly(&stmt[p..], 16)?, rd_poly(&stmt[p + VB..], 16)?, rd_poly(&stmt[p + 2 * VB..], 16)?];
-    p += 3 * VB;
-    let fee = u64::from_be_bytes(stmt[p..p + 8].try_into().unwrap());
     Some(TxSt { pkf, pkt, pka, ut, vt_, u, v, fee })
 }
 
-/// Digit table height: 16 rows, or enough for the hiding PCS's masking budget (2 (queries + 2 * 2 points) rows).
+/// Digit table height: 16 rows, or enough for the hiding PCS's masking budget (2 (queries + extension degree * 2
+/// opening points) rows).
 pub fn digit_height(p: &Params) -> usize {
-    if p.zk { (2 * (p.num_queries + 8)).next_power_of_two().max(16) } else { 16 }
+    if p.zk { (2 * (p.num_queries + 2 * p.ext_degree())).next_power_of_two().max(16) } else { 16 }
 }
 
 /// R_TX rows 1-7 (pq-zether.md §7.4, pqz_rel.c build_tx).
@@ -232,9 +265,10 @@ pub fn build_tx(stmt: &[u8], wit: Option<&[u8]>, check: bool, p: &Params) -> Res
                 .chain([zero])
                 .collect(),
             target: pkfh[i],
+            stmt_lead: 0,
         })
         .collect();
-    outs1.push(MvOut { coef: uth.iter().copied().chain(vec![zero; 2 * K]).chain([neg1]).collect(), target: zero });
+    outs1.push(MvOut { coef: uth.iter().copied().chain(vec![zero; 2 * K]).chain([neg1]).collect(), target: zero, stmt_lead: K });
 
     // MV2: inputs r, e1, t2, y_t, y_f, y_a
     let mut outs2: Vec<MvOut> = (0..K)
@@ -246,12 +280,13 @@ pub fn build_tx(stmt: &[u8], wit: Option<&[u8]>, check: bool, p: &Params) -> Res
                 .chain([zero; 3])
                 .collect(),
             target: uh[i],
+            stmt_lead: 0,
         })
         .collect();
     for (x, pkx) in [&pkth, &pkfh, &pkah].into_iter().enumerate() {
         let mut coef: Vec<[F; D]> = pkx.iter().copied().chain(vec![zero; 2 * K]).chain([zero; 3]).collect();
         coef[3 * K + x] = neg1;
-        outs2.push(MvOut { coef, target: zero });
+        outs2.push(MvOut { coef, target: zero, stmt_lead: K });
     }
     let (poly, mv) = layout(
         specs,
@@ -379,7 +414,7 @@ pub fn degrees(b: &Built, zk: bool) -> Vec<usize> {
 }
 
 macro_rules! prove_with {
-    ($cfg:expr, $b:expr) => {{
+    ($cfg:expr, $setup:expr, $b:expr) => {{
         let cfg = $cfg;
         let traces = $b.traces.as_ref().unwrap();
         let inst: Vec<StarkInstance<_, PqzhAir>> = $b
@@ -388,23 +423,61 @@ macro_rules! prove_with {
             .zip(traces)
             .map(|(air, trace)| StarkInstance { air, trace, public_values: vec![] })
             .collect();
-        let pd = ProverData::from_instances(&cfg, &inst).map_err(|_| "setup")?;
+        // the preprocessed tree is committed with the setup configuration (fixed salts under the hiding PCS), so its
+        // root is the verifier's constant; a wallet / node would keep it across proofs, here it is rebuilt per proof
+        let pd = ProverData::from_instances(&$setup, &inst).map_err(|_| "setup")?;
         let proof = prove_batch(&cfg, &inst, &pd).map_err(|_| "prove")?;
-        postcard::to_allocvec(&proof).map_err(|_| "encode")?
+        enc::to_vec(&proof).map_err(|_| "encode")?
     }};
 }
 
+/// The verifier's constants per (op, parameters): the preprocessed commitment (statement-independent) and the lookup
+/// layout, computed once with the setup configuration and kept (a precompile would hard-code the root).
+fn common<SC: SetupCfg>(op: u8, p: &Params, b: &Built, deg: &[usize]) -> Option<std::rc::Rc<CommonData<SC>>> {
+    thread_local! {
+        static CACHE: std::cell::RefCell<std::collections::HashMap<(u8, Params), std::rc::Rc<dyn std::any::Any>>> =
+            Default::default();
+    }
+    let mut key = *p;
+    key.max_proof = 0;
+    if let Some(c) = CACHE.with(|c| c.borrow().get(&(op, key)).cloned()) {
+        return c.downcast::<CommonData<SC>>().ok();
+    }
+    let c = std::rc::Rc::new(SC::build_common(p, &b.airs, deg)?);
+    CACHE.with(|m| m.borrow_mut().insert((op, key), c.clone()));
+    Some(c)
+}
+
+/// the configuration the preprocessed tree is committed with (seed and salts fixed)
+trait SetupCfg: p3_uni_stark::StarkGenericConfig + Sized + 'static {
+    fn build_common(p: &Params, airs: &[PqzhAir], deg: &[usize]) -> Option<CommonData<Self>>;
+}
+macro_rules! setup_cfg {
+    ($ty:ty, $mk:expr) => {
+        impl SetupCfg for $ty {
+            fn build_common(p: &Params, airs: &[PqzhAir], deg: &[usize]) -> Option<CommonData<Self>> {
+                let cfg: $ty = $mk(p);
+                ProverData::from_airs_and_degrees(&cfg, airs, deg).ok().map(|d| d.common)
+            }
+        }
+    };
+}
+setup_cfg!(PlainConfig, |p: &Params| p.plain(&[0; 32]));
+setup_cfg!(Plain5Config, |p: &Params| p.plain_ext(&[0; 32]));
+setup_cfg!(ZkConfig, |p: &Params| p.zk(&[0; 32], [0; 32]));
+setup_cfg!(Zk5Config, |p: &Params| p.zk_ext(&[0; 32], [0; 32]));
+
 macro_rules! verify_with {
-    ($cfg:expr, $ty:ty, $b:expr, $proof:expr, $zk:expr) => {{
+    ($cfg:expr, $ty:ty, $b:expr, $proof:expr, $zk:expr, $op:expr, $p:expr) => {{
         let cfg = $cfg;
-        let Ok((proof, rest)) = postcard::take_from_bytes::<BatchProof<$ty>>($proof) else { return false };
+        let Ok((proof, rest)) = enc::take_from_bytes::<BatchProof<$ty>>($proof) else { return false };
         let deg = degrees(&$b, $zk);
         if !rest.is_empty() || proof.degree_bits != deg {
             return false;
         }
-        let Ok(pd) = ProverData::from_airs_and_degrees(&cfg, &$b.airs, &deg) else { return false };
+        let Some(common) = common::<$ty>($op, $p, &$b, &deg) else { return false };
         let pvs = vec![vec![]; $b.airs.len()];
-        verify_batch(&cfg, &$b.airs, &proof, &pvs, &pd.common).is_ok()
+        verify_batch(&cfg, &$b.airs, &proof, &pvs, &common).is_ok()
     }};
 }
 
@@ -419,17 +492,16 @@ pub fn prove_unchecked(op: u8, stmt: &[u8], wit: &[u8], rnd32: [u8; 32], p: &Par
 }
 
 fn prove_inner(op: u8, stmt: &[u8], wit: &[u8], rnd32: [u8; 32], p: &Params, check: bool) -> Result<Vec<u8>, &'static str> {
-    if p.zk && p.ext5 {
-        return Err("zk with ext5 not built");
-    }
     let b = build(op, stmt, Some(wit), check, p)?;
     let seed = stmt_digest(op, stmt);
-    let proof = if p.zk {
-        prove_with!(p.zk(&seed, rnd32), b)
+    let proof = if p.zk && p.ext5 {
+        prove_with!(p.zk_ext::<Challenge5>(&seed, rnd32), p.zk_ext::<Challenge5>(&[0; 32], [0; 32]), b)
+    } else if p.zk {
+        prove_with!(p.zk(&seed, rnd32), p.zk(&[0; 32], [0; 32]), b)
     } else if p.ext5 {
-        prove_with!(p.plain_ext::<Challenge5>(&seed), b)
+        prove_with!(p.plain_ext::<Challenge5>(&seed), p.plain_ext::<Challenge5>(&[0; 32]), b)
     } else {
-        prove_with!(p.plain(&seed), b)
+        prove_with!(p.plain(&seed), p.plain(&[0; 32]), b)
     };
     Ok(proof) // a proof above MAX_PROOF is returned (for measurement); verify rejects it
 }
@@ -445,12 +517,14 @@ pub fn verify(op: u8, stmt: &[u8], proof: &[u8], p: &Params) -> bool {
     std::panic::catch_unwind(|| {
         let Ok(b) = build(op, stmt, None, false, p) else { return false };
         let seed = stmt_digest(op, stmt);
-        if p.zk {
-            verify_with!(p.zk(&seed, [0; 32]), ZkConfig, b, proof, true)
+        if p.zk && p.ext5 {
+            verify_with!(p.zk_ext::<Challenge5>(&seed, [0; 32]), Zk5Config, b, proof, true, op, p)
+        } else if p.zk {
+            verify_with!(p.zk(&seed, [0; 32]), ZkConfig, b, proof, true, op, p)
         } else if p.ext5 {
-            verify_with!(p.plain_ext::<Challenge5>(&seed), Plain5Config, b, proof, false)
+            verify_with!(p.plain_ext::<Challenge5>(&seed), Plain5Config, b, proof, false, op, p)
         } else {
-            verify_with!(p.plain(&seed), PlainConfig, b, proof, false)
+            verify_with!(p.plain(&seed), PlainConfig, b, proof, false, op, p)
         }
     })
     .unwrap_or_else(|_| {
@@ -460,23 +534,18 @@ pub fn verify(op: u8, stmt: &[u8], proof: &[u8], p: &Params) -> bool {
 }
 
 fn sz<T: serde::Serialize>(t: &T) -> usize {
-    postcard::to_allocvec(t).map(|v| v.len()).unwrap_or(0)
+    enc::to_vec(t).map(|v| v.len()).unwrap_or(0)
 }
 
-/// Byte breakdown of a plain (non-hiding) proof: commitments, out-of-domain values, per-round input openings
-/// (opened rows / Merkle multiproof), FRI layers, final polynomial.
-pub fn breakdown(proof: &[u8]) -> Vec<(String, usize)> {
-    let Ok(p) = postcard::from_bytes::<BatchProof<PlainConfig>>(proof) else { return vec![] };
-    let f = &p.opening_proof;
-    let mut out = vec![
-        ("total".into(), proof.len()),
-        ("commitments".into(), sz(&p.commitments)),
-        ("ood_values".into(), sz(&p.opened_values)),
-        ("lookup_terminals".into(), sz(&p.lookup_terminals)),
-    ];
+fn fri_parts<F: p3_field::Field, M: p3_commit::Mmcs<F>, W, I: serde::Serialize>(
+    out: &mut Vec<(String, usize)>,
+    f: &p3_fri::FriProof<F, M, W, Vec<I>>,
+    rows: impl Fn(&I) -> (usize, usize),
+) {
     for (i, o) in f.input_openings.iter().enumerate() {
-        out.push((format!("round{i}_rows"), sz(&o.opened_values)));
-        out.push((format!("round{i}_merkle"), sz(&o.opening_proof)));
+        let (r, m) = rows(o);
+        out.push((format!("round{i}_rows"), r));
+        out.push((format!("round{i}_merkle"), m));
     }
     out.push(("fri_commits".into(), sz(&f.commit_phase_commits)));
     for (i, s) in f.commit_phase_openings.iter().enumerate() {
@@ -484,5 +553,38 @@ pub fn breakdown(proof: &[u8]) -> Vec<(String, usize)> {
         out.push((format!("fri{i}_merkle"), sz(&s.opening_proof)));
     }
     out.push(("final_poly".into(), sz(&f.final_poly)));
-    out
+}
+
+macro_rules! breakdown_as {
+    ($ty:ty, $proof:expr, |$f:ident, $o:ident| $fri:expr) => {{
+        let Ok((p, _)) = enc::take_from_bytes::<BatchProof<$ty>>($proof) else { return vec![] };
+        let mut out = vec![
+            ("total".into(), $proof.len()),
+            ("commitments".into(), sz(&p.commitments)),
+            ("ood_values".into(), sz(&p.opened_values)),
+            ("lookup_terminals".into(), sz(&p.lookup_terminals)),
+        ];
+        let $f = &p.opening_proof;
+        let $o = &mut out;
+        let fri = $fri;
+        fri_parts(&mut out, fri, |o| (sz(&o.opened_values), sz(&o.opening_proof)));
+        out
+    }};
+}
+
+/// Byte breakdown of a proof: commitments, out-of-domain values, per-round input openings (opened rows / Merkle
+/// multiproof), FRI layers, final polynomial; hiding proofs also list the random codewords' opened values.
+pub fn breakdown(proof: &[u8], p: &Params) -> Vec<(String, usize)> {
+    match (p.zk, p.ext5) {
+        (false, false) => breakdown_as!(PlainConfig, proof, |f, _o| f),
+        (false, true) => breakdown_as!(Plain5Config, proof, |f, _o| f),
+        (true, false) => breakdown_as!(ZkConfig, proof, |f, o| {
+            o.push(("zk_random_ood".into(), sz(&f.0)));
+            &f.1
+        }),
+        (true, true) => breakdown_as!(Zk5Config, proof, |f, o| {
+            o.push(("zk_random_ood".into(), sz(&f.0)));
+            &f.1
+        }),
+    }
 }

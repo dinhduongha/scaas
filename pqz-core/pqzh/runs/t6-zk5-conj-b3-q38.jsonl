@@ -1,0 +1,33 @@
+{"params": {"log_blowup": 3, "queries": 38, "max_log_arity": 3, "log_final_poly_len": 3, "query_pow_bits": 16, "cap_height": 0, "mv_width": 9, "zk": true, "ext5": true}}
+{"rel": "R_REG", "proof_bytes": 314953, "fnv_last": "b6892ff4", "within_max_proof": false, "breakdown": {"total": 314953, "commitments": 134, "ood_values": 14209, "lookup_terminals": 124, "zk_random_ood": 6266, "round0_rows": 9273, "round0_merkle": 18267, "round1_rows": 29033, "round1_merkle": 18267, "round2_rows": 49287, "round2_merkle": 34569, "round3_rows": 5891, "round3_merkle": 17013, "round4_rows": 16873, "round4_merkle": 18267, "fri_commits": 166, "fri0_siblings": 1559, "fri0_merkle": 14543, "fri1_siblings": 10679, "fri1_merkle": 10895, "fri2_siblings": 10679, "fri2_merkle": 7343, "fri3_siblings": 10679, "fri3_merkle": 3854, "fri4_siblings": 4599, "fri4_merkle": 2062, "final_poly": 321}}
+{"rel": "R_REG", "timing": "prove", "stats": {"n": 3, "mean_ms": 5310.470, "p50_ms": 5330.376, "p99_ms": 5330.376, "max_ms": 5455.055}, "peak_heap_mb": 749.1}
+{"rel": "R_REG", "timing": "verify_honest", "stats": {"n": 100, "mean_ms": 10.634, "p50_ms": 7.035, "p99_ms": 8.790, "max_ms": 363.584}, "peak_heap_mb": 65.2}
+{"rel": "R_REG", "kind": "bitflip", "cases": 10, "accepted": 0, "panics": 0, "stats": {"n": 10, "mean_ms": 3.406, "p50_ms": 3.383, "p99_ms": 4.372, "max_ms": 5.030}}
+{"rel": "R_REG", "kind": "byte_set", "cases": 10, "accepted": 0, "panics": 0, "stats": {"n": 10, "mean_ms": 3.246, "p50_ms": 3.264, "p99_ms": 4.090, "max_ms": 4.994}}
+{"rel": "R_REG", "kind": "random_bytes", "cases": 10, "accepted": 0, "panics": 0, "stats": {"n": 10, "mean_ms": 1.839, "p50_ms": 1.503, "p99_ms": 2.210, "max_ms": 2.990}}
+{"rel": "R_REG", "kind": "truncate", "cases": 10, "accepted": 0, "panics": 0, "stats": {"n": 10, "mean_ms": 1.952, "p50_ms": 1.943, "p99_ms": 2.030, "max_ms": 2.079}}
+{"rel": "R_REG", "kind": "extend", "cases": 10, "accepted": 0, "panics": 0, "stats": {"n": 10, "mean_ms": 1.871, "p50_ms": 1.873, "p99_ms": 1.903, "max_ms": 1.930}}
+{"rel": "R_REG", "kind": "stmt_coeff", "cases": 10, "accepted": 0, "panics": 0, "stats": {"n": 10, "mean_ms": 2.188, "p50_ms": 2.183, "p99_ms": 2.251, "max_ms": 2.253}}
+{"rel": "R_REG", "kind": "stmt_oob", "cases": 10, "accepted": 0, "panics": 0, "stats": {"n": 10, "mean_ms": 0.002, "p50_ms": 0.002, "p99_ms": 0.002, "max_ms": 0.003}}
+{"rel": "R_REG", "kind": "stmt_prefix", "cases": 10, "accepted": 0, "panics": 0, "stats": {"n": 10, "mean_ms": 2.292, "p50_ms": 2.201, "p99_ms": 2.513, "max_ms": 2.815}}
+{"rel": "R_REG", "kind": "stmt_tail", "cases": 10, "accepted": 0, "panics": 0, "stats": {"n": 10, "mean_ms": 2.231, "p50_ms": 2.195, "p99_ms": 2.338, "max_ms": 2.373}}
+{"rel": "R_REG", "kind": "other_proof", "cases": 10, "accepted": 0, "panics": 0, "stats": {"n": 10, "mean_ms": 2.197, "p50_ms": 2.187, "p99_ms": 2.233, "max_ms": 2.292}}
+{"rel": "R_REG", "kind": "field_noncanon", "cases": 10, "accepted": 0, "panics": 0, "stats": {"n": 10, "mean_ms": 1.999, "p50_ms": 1.898, "p99_ms": 2.206, "max_ms": 2.230}}
+{"rel": "R_REG", "kind": "empty", "cases": 10, "accepted": 0, "panics": 0, "stats": {"n": 10, "mean_ms": 1.368, "p50_ms": 1.370, "p99_ms": 1.384, "max_ms": 1.397}}
+{"rel": "R_REG", "timing": "verify_adversarial", "stats": {"n": 120, "mean_ms": 2.049, "p50_ms": 2.161, "p99_ms": 4.372, "max_ms": 5.030}}
+{"rel": "R_TX", "proof_bytes": 418983, "fnv_last": "bd02d2a0", "within_max_proof": false, "breakdown": {"total": 418983, "commitments": 134, "ood_values": 22827, "lookup_terminals": 165, "zk_random_ood": 8890, "round0_rows": 12351, "round0_merkle": 20641, "round1_rows": 39711, "round1_merkle": 20641, "round2_rows": 73911, "round2_merkle": 45721, "round3_rows": 5891, "round3_merkle": 18133, "round4_rows": 35151, "round4_merkle": 20641, "fri_commits": 199, "fri0_siblings": 1559, "fri0_merkle": 15663, "fri1_siblings": 1559, "fri1_merkle": 14447, "fri2_siblings": 10679, "fri2_merkle": 10799, "fri3_siblings": 10679, "fri3_merkle": 7151, "fri4_siblings": 10679, "fri4_merkle": 3694, "fri5_siblings": 4599, "fri5_merkle": 2030, "final_poly": 321}}
+{"rel": "R_TX", "timing": "prove", "stats": {"n": 3, "mean_ms": 10343.264, "p50_ms": 10390.435, "p99_ms": 10390.435, "max_ms": 10511.954}, "peak_heap_mb": 1420.3}
+{"rel": "R_TX", "timing": "verify_honest", "stats": {"n": 100, "mean_ms": 20.347, "p50_ms": 12.834, "p99_ms": 16.547, "max_ms": 746.016}, "peak_heap_mb": 130.7}
+{"rel": "R_TX", "kind": "bitflip", "cases": 10, "accepted": 0, "panics": 0, "stats": {"n": 10, "mean_ms": 6.643, "p50_ms": 6.328, "p99_ms": 8.039, "max_ms": 8.360}}
+{"rel": "R_TX", "kind": "byte_set", "cases": 10, "accepted": 0, "panics": 0, "stats": {"n": 10, "mean_ms": 6.548, "p50_ms": 6.506, "p99_ms": 7.398, "max_ms": 7.653}}
+{"rel": "R_TX", "kind": "random_bytes", "cases": 10, "accepted": 0, "panics": 0, "stats": {"n": 10, "mean_ms": 4.070, "p50_ms": 3.922, "p99_ms": 4.559, "max_ms": 4.894}}
+{"rel": "R_TX", "kind": "truncate", "cases": 10, "accepted": 0, "panics": 0, "stats": {"n": 10, "mean_ms": 4.684, "p50_ms": 4.695, "p99_ms": 4.757, "max_ms": 4.807}}
+{"rel": "R_TX", "kind": "extend", "cases": 10, "accepted": 0, "panics": 0, "stats": {"n": 10, "mean_ms": 4.907, "p50_ms": 4.758, "p99_ms": 4.836, "max_ms": 6.479}}
+{"rel": "R_TX", "kind": "stmt_coeff", "cases": 10, "accepted": 0, "panics": 0, "stats": {"n": 10, "mean_ms": 4.905, "p50_ms": 4.900, "p99_ms": 5.131, "max_ms": 5.153}}
+{"rel": "R_TX", "kind": "stmt_oob", "cases": 10, "accepted": 0, "panics": 0, "stats": {"n": 10, "mean_ms": 0.007, "p50_ms": 0.008, "p99_ms": 0.011, "max_ms": 0.012}}
+{"rel": "R_TX", "kind": "stmt_prefix", "cases": 10, "accepted": 0, "panics": 0, "stats": {"n": 10, "mean_ms": 4.802, "p50_ms": 4.794, "p99_ms": 4.838, "max_ms": 5.057}}
+{"rel": "R_TX", "kind": "stmt_tail", "cases": 10, "accepted": 0, "panics": 0, "stats": {"n": 10, "mean_ms": 4.777, "p50_ms": 4.770, "p99_ms": 4.811, "max_ms": 4.851}}
+{"rel": "R_TX", "kind": "other_proof", "cases": 10, "accepted": 0, "panics": 0, "stats": {"n": 10, "mean_ms": 4.796, "p50_ms": 4.780, "p99_ms": 4.813, "max_ms": 5.028}}
+{"rel": "R_TX", "kind": "field_noncanon", "cases": 10, "accepted": 0, "panics": 0, "stats": {"n": 10, "mean_ms": 4.734, "p50_ms": 4.916, "p99_ms": 4.942, "max_ms": 4.972}}
+{"rel": "R_TX", "kind": "empty", "cases": 10, "accepted": 0, "panics": 0, "stats": {"n": 10, "mean_ms": 3.704, "p50_ms": 3.685, "p99_ms": 3.779, "max_ms": 3.831}}
+{"rel": "R_TX", "timing": "verify_adversarial", "stats": {"n": 120, "mean_ms": 4.548, "p50_ms": 4.758, "p99_ms": 7.653, "max_ms": 8.360}}

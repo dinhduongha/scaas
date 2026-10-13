@@ -1,0 +1,45 @@
+    Updating crates.io index
+     Locking 20 packages to latest compatible versions
+    Updating p3-air v0.8.0 -> v0.9.0-rc.1
+    Updating p3-batch-stark v0.8.0 -> v0.9.0-rc.1
+    Updating p3-challenger v0.8.0 -> v0.9.0-rc.1
+    Updating p3-commit v0.8.0 -> v0.9.0-rc.1
+    Updating p3-dft v0.8.0 -> v0.9.0-rc.1
+    Updating p3-field v0.8.0 -> v0.9.0-rc.1
+    Updating p3-fri v0.8.0 -> v0.9.0-rc.1
+    Updating p3-goldilocks v0.8.0 -> v0.9.0-rc.1
+    Updating p3-keccak v0.8.0 -> v0.9.0-rc.1
+    Updating p3-lookup v0.8.0 -> v0.9.0-rc.1
+    Updating p3-matrix v0.8.0 -> v0.9.0-rc.1
+    Updating p3-maybe-rayon v0.8.0 -> v0.9.0-rc.1
+    Updating p3-mds v0.8.0 -> v0.9.0-rc.1
+    Updating p3-merkle-tree v0.8.0 -> v0.9.0-rc.1
+    Updating p3-poseidon1 v0.8.0 -> v0.9.0-rc.1
+    Updating p3-poseidon2 v0.8.0 -> v0.9.0-rc.1
+    Updating p3-security v0.8.0 -> v0.9.0-rc.1
+    Updating p3-symmetric v0.8.0 -> v0.9.0-rc.1
+    Updating p3-uni-stark v0.8.0 -> v0.9.0-rc.1
+    Updating p3-util v0.8.0 -> v0.9.0-rc.1
+   Compiling p3-maybe-rayon v0.9.0-rc.1
+   Compiling tiny-keccak v2.0.2
+   Compiling p3-util v0.9.0-rc.1
+   Compiling p3-field v0.9.0-rc.1
+   Compiling p3-matrix v0.9.0-rc.1
+   Compiling p3-symmetric v0.9.0-rc.1
+   Compiling p3-keccak v0.9.0-rc.1
+   Compiling p3-challenger v0.9.0-rc.1
+   Compiling p3-dft v0.9.0-rc.1
+   Compiling p3-air v0.9.0-rc.1
+   Compiling p3-commit v0.9.0-rc.1
+   Compiling p3-mds v0.9.0-rc.1
+   Compiling p3-poseidon1 v0.9.0-rc.1
+   Compiling p3-poseidon2 v0.9.0-rc.1
+   Compiling p3-lookup v0.9.0-rc.1
+   Compiling p3-security v0.9.0-rc.1
+   Compiling p3-merkle-tree v0.9.0-rc.1
+   Compiling p3-goldilocks v0.9.0-rc.1
+   Compiling p3-uni-stark v0.9.0-rc.1
+   Compiling p3-fri v0.9.0-rc.1
+   Compiling p3-batch-stark v0.9.0-rc.1
+   Compiling pqzh v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzhnext/pqz-core/pqzh)
+    Finished `release` profile [optimized + debuginfo] target(s) in 30.12s

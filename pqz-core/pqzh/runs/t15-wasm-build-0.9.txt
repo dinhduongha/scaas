@@ -1,0 +1,66 @@
+    Updating crates.io index
+     Locking 31 packages to latest compatible versions
+      Adding cobs v0.3.0
+      Adding embedded-io v0.4.0
+      Adding embedded-io v0.6.1
+    Updating p3-air v0.8.0 -> v0.9.0-rc.1
+    Updating p3-batch-stark v0.8.0 -> v0.9.0-rc.1
+      Adding p3-binary-field v0.9.0-rc.1
+      Adding p3-bus v0.9.0-rc.1
+    Updating p3-challenger v0.8.0 -> v0.9.0-rc.1
+    Updating p3-commit v0.8.0 -> v0.9.0-rc.1
+    Updating p3-dft v0.8.0 -> v0.9.0-rc.1
+    Updating p3-field v0.8.0 -> v0.9.0-rc.1
+    Updating p3-fri v0.8.0 -> v0.9.0-rc.1
+    Updating p3-goldilocks v0.8.0 -> v0.9.0-rc.1
+    Updating p3-keccak v0.8.0 -> v0.9.0-rc.1
+    Updating p3-lookup v0.8.0 -> v0.9.0-rc.1
+    Updating p3-matrix v0.8.0 -> v0.9.0-rc.1
+    Updating p3-maybe-rayon v0.8.0 -> v0.9.0-rc.1
+    Updating p3-mds v0.8.0 -> v0.9.0-rc.1
+    Updating p3-merkle-tree v0.8.0 -> v0.9.0-rc.1
+      Adding p3-multi-stark v0.9.0-rc.1
+      Adding p3-multilinear-util v0.9.0-rc.1
+    Updating p3-poseidon1 v0.8.0 -> v0.9.0-rc.1
+    Updating p3-poseidon2 v0.8.0 -> v0.9.0-rc.1
+    Updating p3-security v0.8.0 -> v0.9.0-rc.1
+      Adding p3-sumcheck v0.9.0-rc.1
+    Updating p3-symmetric v0.8.0 -> v0.9.0-rc.1
+    Updating p3-uni-stark v0.8.0 -> v0.9.0-rc.1
+    Updating p3-util v0.8.0 -> v0.9.0-rc.1
+      Adding p3-whir v0.9.0-rc.1
+      Adding p3-zk-codes v0.9.0-rc.1
+      Adding postcard v1.1.3
+   Compiling p3-maybe-rayon v0.9.0-rc.1
+   Compiling tiny-keccak v2.0.2
+   Compiling cobs v0.3.0
+   Compiling p3-util v0.9.0-rc.1
+   Compiling postcard v1.1.3
+   Compiling p3-field v0.9.0-rc.1
+   Compiling p3-matrix v0.9.0-rc.1
+   Compiling p3-symmetric v0.9.0-rc.1
+   Compiling p3-keccak v0.9.0-rc.1
+   Compiling p3-challenger v0.9.0-rc.1
+   Compiling p3-dft v0.9.0-rc.1
+   Compiling p3-air v0.9.0-rc.1
+   Compiling p3-multilinear-util v0.9.0-rc.1
+   Compiling p3-binary-field v0.9.0-rc.1
+   Compiling p3-commit v0.9.0-rc.1
+   Compiling p3-zk-codes v0.9.0-rc.1
+   Compiling p3-mds v0.9.0-rc.1
+   Compiling p3-lookup v0.9.0-rc.1
+   Compiling p3-poseidon2 v0.9.0-rc.1
+   Compiling p3-poseidon1 v0.9.0-rc.1
+   Compiling p3-security v0.9.0-rc.1
+   Compiling p3-merkle-tree v0.9.0-rc.1
+   Compiling p3-goldilocks v0.9.0-rc.1
+   Compiling p3-uni-stark v0.9.0-rc.1
+   Compiling p3-fri v0.9.0-rc.1
+   Compiling p3-batch-stark v0.9.0-rc.1
+   Compiling p3-sumcheck v0.9.0-rc.1
+   Compiling p3-bus v0.9.0-rc.1
+   Compiling p3-whir v0.9.0-rc.1
+   Compiling p3-multi-stark v0.9.0-rc.1
+   Compiling pqzh v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzhnext/pqz-core/pqzh)
+   Compiling pqzh-wasm v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzhnext/pqz-core/pqzh/wasm)
+    Finished `release` profile [optimized] target(s) in 1m 00s
