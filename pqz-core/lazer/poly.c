@@ -130,6 +130,22 @@ poly_scale (poly_t r, const int_t a, poly_t b)
   _fromcrt (b); // XXX can also do this in crt dom
 
   r->crt = 0;
+  if (a->nlimbs == 1 && ring->q->nlimbs == 1 && ring->q->limbs[0] == PQZ_Q)
+    {
+      /* PQZ: single-limb fast path, same result as int_mul + int_mod + int_redc below: |a b| mod q with the
+         product's sign, then the centred representative (constant-time; was three generic limb calls and
+         a 2-limb temporary per coefficient) */
+      intvec_srcptr bc = _get_coeffvec_src (b);
+      unsigned int j;
+      for (j = 0; j < polyring_get_deg (ring); j++)
+        {
+          int_srcptr bj = intvec_get_elem_src (bc, j);
+          uint64_t x = pqz_red128 ((pqz_u128)a->limbs[0] * bj->limbs[0]);
+          uint64_t s = -(uint64_t)((a->neg ^ bj->neg) & 1);
+          pqz_int_set_centred (intvec_get_elem (r->coeffs, j), pqz_csubq ((x & ~s) | ((PQZ_Q - x) & s)));
+        }
+      return;
+    }
   intvec_scale (tmp, a, _get_coeffvec_src (b));
   intvec_mod (r->coeffs, tmp, ring->q);
   intvec_redc (r->coeffs, r->coeffs, ring->q);
