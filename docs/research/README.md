@@ -46,5 +46,6 @@ output) are kept while the repository is private and are dropped before a public
 | [pqz-proof-alternatives.md](pqz-proof-alternatives.md) | PQ Zether proof system: LNP22, the hash-based fallback (STARK, Ligero) and other options (2026-10-13) |
 | [pqz-parameters-e-s0.md](pqz-parameters-e-s0.md) | PQ Zether parameters: the E-S0 spike (P6b) (2026-10-13) |
 | [pqz-verifier-floor.md](pqz-verifier-floor.md) | PQZL verifier floor: what a specialised LNP22 verifier for R_REG / R_TX must cost (2026-10-13) |
+| [pqz-specialised-verifier.md](pqz-specialised-verifier.md) | PQZL specialised verifier: `R_REG` / `R_TX` without LaZer's generic machinery (P6-SV) (2026-10-13) |
 | [node-ai-agents.md](node-ai-agents.md) | scaas-node and AI agents — direction (2026-10-11) |
 | [zether-disclosure.md](zether-disclosure.md) | Zether disclosure — who can reveal what, under which conditions (2026-10-11) |

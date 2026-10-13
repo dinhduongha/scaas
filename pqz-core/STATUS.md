@@ -85,6 +85,29 @@ prove). Not done, with the reason: asserts stay on (pq-zether.md §10: release b
 multiplication and no Karatsuba on the polynomials (the microbench: Karatsuba with u128 sums is slower than the
 column kernel).
 
+## Specialised verifier P6-SV (branch `pqz-sv`, not merged)
+
+`pqz_verify_fast` (`src/pqz_sv.c`, ABI in `pqz.h`): same decoder, transcript, challenges and checks as
+`pqz_verify`, but v and w1 computed by evaluating each equation on the proof directly (selection blocks as identity
+blocks, no sparse matrices), 4 × 30-bit CRT primes with a complete NTT, table-based AES-256-CTR for the JL rows,
+8-row subset-sum tables for the JL fold. `pqz_verify` stays the reference. Write-up:
+`docs/research/pqz-specialised-verifier.md`; runs `sv/runs/`.
+
+| | `R_TX` p50 honest | p99 adversarial | `R_REG` p50 | generic `R_TX` | working arena `R_TX` |
+|---|---|---|---|---|---|
+| native portable (`-O2`) | **7.85 ms** | 10.4 ms | 3.97 ms | 660 ms | 1.7 MB (generic 273 MB) |
+| native x86-64-v3 + AES-NI (`build.sh native-x86v3`) | 4.54 ms | 5.6 ms | 2.38 ms | | |
+| wasm32 (node) | 11.9 ms | 13.4 ms | 5.9 ms | 741 ms | |
+
+- Differential test (`sv/diff.sh`, `test/pqz_sv_diff.c`): 8,538 native cases (honest proofs on fresh statements, byte /
+  statement mutations, 14 re-encoded field mutations, random multi-edit fuzz) + 244 wasm cases, **0 disagreements**;
+  PRG check against LaZer 0 mismatches; ASan + UBSan bench and 10 min libFuzzer: no findings.
+- Constraints: no malloc / GMP / MPFR / float / abort on the path, arena only (+9.1 MB of tables at init), invariant
+  checks as error returns; symbol scan clean on native, x86-64-v3 and wasm objects. Prover unchanged (`proofs_fnv`
+  `3bc7e9b3` / `834d6853`), KAT 19/19.
+- Open: independent review of `pqz_sv.c` against `lnp-tbox.c` (a second implementation of a soundness-critical
+  check); hand-written AVX2 (floor 2.5 ms); a run on the chain host.
+
 ## Measured (2026-10-13, this machine, single thread)
 
 Native: clang -O2, `pqz_bench 5 5` under `scripts/capped` (5 proves, 5 + 5 honest verifies, 10 adversarial). wasm32:

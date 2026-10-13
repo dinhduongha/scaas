@@ -33,7 +33,7 @@ const stats = (name, v) => {
   v.sort((a, b) => a - b);
   const r = (t) => Math.round(t * 1000) / 1000;
   out({ timing: name, n: v.length, mean_ms: r(v.reduce((s, t) => s + t, 0) / v.length), p50_ms: r(v[v.length >> 1]),
-        max_ms: r(v[v.length - 1]) });
+        p99_ms: r(v[Math.floor(0.99 * (v.length - 1))]), max_ms: r(v[v.length - 1]) });
 };
 
 let t0 = performance.now();
