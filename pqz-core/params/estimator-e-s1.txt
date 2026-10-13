@@ -1,38 +1,38 @@
 
 == /tmp/w/reg_params.sage
-LaZer codegen as is: kmsis 22, kmlwe 33, m2 63, B 2^35.30, D 9, gamma 148264: MSIS beta 452, MLWE uSVP beta 470, proof ~27012 B
-  pqz_delta 1.00366, kmlwe_min 33: kmsis 22, kmlwe 33, m2 63, B 2^35.30, D 9, gamma 148264: MSIS beta 452, MLWE beta 470, proof ~27012 B
-=> /tmp/w/reg_params.sage: pqz_delta = 1.00366, kmlwe_min = 33 (kmsis = 22, m2 = 63, D = 9, gamma = 148264, codegen proof size ~27012 B)
+LaZer codegen as is: kmsis 22, kmlwe 33, m2 67, B 2^35.30, D 9, gamma 148264: MSIS beta 452, MLWE uSVP beta 470, proof ~29188 B
+  pqz_delta 1.00366, kmlwe_min 33: kmsis 22, kmlwe 33, m2 67, B 2^35.30, D 9, gamma 148264: MSIS beta 452, MLWE beta 470, proof ~29188 B
+=> /tmp/w/reg_params.sage: pqz_delta = 1.00366, kmlwe_min = 33 (kmsis = 22, m2 = 67, D = 9, gamma = 148264, codegen proof size ~29188 B)
 lattice  :: rop: ≈2^132.0, red: ≈2^132.0, δ: 1.003656, β: 452, d: 3350, tag: euclidean
-  MSIS(22,127,2^35.30) classical: 132.0 (lattice, beta 452)
+  MSIS(22,131,2^35.30) classical: 132.0 (lattice, beta 452)
 usvp                 :: rop: ≈2^137.2, red: ≈2^137.2, δ: 1.003557, β: 470, d: 4031, tag: usvp
-bdd                  :: rop: ≈2^137.9, red: ≈2^137.5, svp: ≈2^135.8, β: 471, η: 464, d: 4023, tag: bdd
-dual                 :: rop: ≈2^139.3, mem: ≈2^107.9, m: 1920, β: 477, d: 4032, ↻: 1, tag: dual
+bdd                  :: rop: ≈2^137.7, red: ≈2^137.5, svp: ≈2^134.3, β: 471, η: 459, d: 4158, tag: bdd
+dual                 :: rop: ≈2^139.0, mem: ≈2^107.7, m: ≈2^11.0, β: 476, d: 4181, ↻: 1, tag: dual
 dual_hybrid          :: rop: ≈2^134.9, red: ≈2^134.9, guess: ≈2^129.6, β: 462, p: 3, ζ: 0, t: 70, β': 462, N: ≈2^94.7, m: ≈2^11.0
-  MLWE(33,30,[-1,1]) classical: 134.9 (dual_hybrid); uSVP beta 470
+  MLWE(33,34,[-1,1]) classical: 134.9 (dual_hybrid); uSVP beta 470
 lattice  :: rop: ≈2^119.8, red: ≈2^119.8, δ: 1.003656, β: 452, d: 3350, tag: euclidean
-  MSIS(22,127,2^35.30) quantum: 119.8 (lattice, beta 452)
+  MSIS(22,131,2^35.30) quantum: 119.8 (lattice, beta 452)
 usvp                 :: rop: ≈2^124.6, red: ≈2^124.6, δ: 1.003557, β: 470, d: 4031, tag: usvp
-bdd                  :: rop: ≈2^125.2, red: ≈2^124.8, svp: ≈2^123.2, β: 471, η: 464, d: 4023, tag: bdd
-dual                 :: rop: ≈2^126.4, mem: ≈2^107.9, m: 1920, β: 477, d: 4032, ↻: 1, tag: dual
+bdd                  :: rop: ≈2^125.0, red: ≈2^124.8, svp: ≈2^121.9, β: 471, η: 459, d: 4158, tag: bdd
+dual                 :: rop: ≈2^126.1, mem: ≈2^107.7, m: ≈2^11.0, β: 476, d: 4181, ↻: 1, tag: dual
 dual_hybrid          :: rop: ≈2^123.0, red: ≈2^123.0, guess: ≈2^113.5, β: 464, p: 3, ζ: 0, t: 60, β': 464, N: ≈2^94.4, m: ≈2^11.0
-  MLWE(33,30,[-1,1]) quantum: 123.0 (dual_hybrid); uSVP beta 470
+  MLWE(33,34,[-1,1]) quantum: 123.0 (dual_hybrid); uSVP beta 470
 
 == /tmp/w/tx_params.sage
-LaZer codegen as is: kmsis 23, kmlwe 33, m2 64, B 2^35.97, D 11, gamma 704254: MSIS beta 456, MLWE uSVP beta 470, proof ~42270 B
-  pqz_delta 1.00366, kmlwe_min 33: kmsis 23, kmlwe 33, m2 64, B 2^35.97, D 11, gamma 704254: MSIS beta 456, MLWE beta 470, proof ~42270 B
-=> /tmp/w/tx_params.sage: pqz_delta = 1.00366, kmlwe_min = 33 (kmsis = 23, m2 = 64, D = 11, gamma = 704254, codegen proof size ~42270 B)
+LaZer codegen as is: kmsis 23, kmlwe 33, m2 68, B 2^35.97, D 11, gamma 704254: MSIS beta 456, MLWE uSVP beta 470, proof ~44638 B
+  pqz_delta 1.00366, kmlwe_min 33: kmsis 23, kmlwe 33, m2 68, B 2^35.97, D 11, gamma 704254: MSIS beta 456, MLWE beta 470, proof ~44638 B
+=> /tmp/w/tx_params.sage: pqz_delta = 1.00366, kmlwe_min = 33 (kmsis = 23, m2 = 68, D = 11, gamma = 704254, codegen proof size ~44638 B)
 lattice  :: rop: ≈2^133.2, red: ≈2^133.2, δ: 1.003634, β: 456, d: 3437, tag: euclidean
-  MSIS(23,210,2^35.97) classical: 133.2 (lattice, beta 456)
+  MSIS(23,214,2^35.97) classical: 133.2 (lattice, beta 456)
 usvp                 :: rop: ≈2^137.2, red: ≈2^137.2, δ: 1.003557, β: 470, d: 4031, tag: usvp
-bdd                  :: rop: ≈2^137.7, red: ≈2^137.5, svp: ≈2^134.9, β: 471, η: 461, d: 4075, tag: bdd
-dual                 :: rop: ≈2^139.0, mem: ≈2^107.7, m: 1984, β: 476, d: 4096, ↻: 1, tag: dual
+bdd                  :: rop: ≈2^137.7, red: ≈2^137.5, svp: ≈2^134.3, β: 471, η: 459, d: 4158, tag: bdd
+dual                 :: rop: ≈2^139.0, mem: ≈2^107.7, m: ≈2^11.0, β: 476, d: 4181, ↻: 1, tag: dual
 dual_hybrid          :: rop: ≈2^134.9, red: ≈2^134.9, guess: ≈2^129.6, β: 462, p: 3, ζ: 0, t: 70, β': 462, N: ≈2^94.7, m: ≈2^11.0
-  MLWE(33,31,[-1,1]) classical: 134.9 (dual_hybrid); uSVP beta 470
+  MLWE(33,35,[-1,1]) classical: 134.9 (dual_hybrid); uSVP beta 470
 lattice  :: rop: ≈2^120.8, red: ≈2^120.8, δ: 1.003634, β: 456, d: 3437, tag: euclidean
-  MSIS(23,210,2^35.97) quantum: 120.8 (lattice, beta 456)
+  MSIS(23,214,2^35.97) quantum: 120.8 (lattice, beta 456)
 usvp                 :: rop: ≈2^124.6, red: ≈2^124.6, δ: 1.003557, β: 470, d: 4031, tag: usvp
-bdd                  :: rop: ≈2^125.1, red: ≈2^124.8, svp: ≈2^122.4, β: 471, η: 461, d: 4075, tag: bdd
-dual                 :: rop: ≈2^126.1, mem: ≈2^107.7, m: 1984, β: 476, d: 4096, ↻: 1, tag: dual
+bdd                  :: rop: ≈2^125.0, red: ≈2^124.8, svp: ≈2^121.9, β: 471, η: 459, d: 4158, tag: bdd
+dual                 :: rop: ≈2^126.1, mem: ≈2^107.7, m: ≈2^11.0, β: 476, d: 4181, ↻: 1, tag: dual
 dual_hybrid          :: rop: ≈2^123.0, red: ≈2^123.0, guess: ≈2^113.5, β: 464, p: 3, ζ: 0, t: 60, β': 464, N: ≈2^94.4, m: ≈2^11.0
-  MLWE(33,31,[-1,1]) quantum: 123.0 (dual_hybrid); uSVP beta 470
+  MLWE(33,35,[-1,1]) quantum: 123.0 (dual_hybrid); uSVP beta 470
