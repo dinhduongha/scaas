@@ -10,6 +10,9 @@ import {FeeMode} from "../common/FeePolicy.sol";
 interface IMetaTokenV2 is IERC20Payment {
     event ReceiverFeePaid(bytes32 indexed paymentDigest, address indexed payee, address indexed feeRecipient,
                           uint256 fee);
+    /// @notice `uaPayReceiverFee` (CTR-MTX-05 on ids): the payee is an id.
+    event UAReceiverFeePaid(bytes32 indexed paymentDigest, bytes32 indexed payee, address indexed feeRecipient,
+                            uint256 fee);
 
     error ReceiverFeeShape();
     error ReceiverFeeExpired(uint256 validUntil, uint256 nowTs);
@@ -40,6 +43,12 @@ interface IMetaTokenV2 is IERC20Payment {
 
     function receiverFeeDigest(bytes32 paymentDigest, uint256 fee, address feeRecipient, uint256 validUntil)
         external view returns (bytes32);
+
+    /// @notice Receiver-pays on the UA path: payer and payee are ids; a derived payee co-signs under `receiver-fee`.
+    function uaPayReceiverFee(
+        MetaTxLib.UAMetaTransfer calldata t, bytes calldata payerAuth,
+        uint256 fee, address feeRecipient, uint256 rfValidUntil, bytes calldata payeeAuth
+    ) external returns (bool);
 
     function payLane(bytes32 payId) external pure returns (uint256);
 
