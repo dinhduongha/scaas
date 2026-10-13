@@ -142,3 +142,13 @@ emulation is too costly), measured like E-S1: proof bytes, prove native and wasm
 and the zero-knowledge mode. The hard part is arithmetic mod q = 2^42 − 215 inside a small STARK field (Goldilocks /
 BabyBear): limbs and range checks multiply the circuit size. Then decide per kind: PQZH on chain if it meets the
 verify limit with acceptable gas; PQZL kept only for off-chain or aggregated use; if neither meets, back to §4.
+
+Candidates for the PQZH design study (TODO P6-PQZH; all rest only on hash assumptions):
+
+| Candidate | Family | Role in the study |
+|---|---|---|
+| Plonky3 (FRI over Goldilocks / KoalaBear / BabyBear) | STARK | first choice |
+| Stwo (Circle STARK over Mersenne-31) | STARK | comparison |
+| Binius (binary tower fields) | STARK family over binary fields | comparison |
+| WHIR | polynomial commitment, a drop-in for FRI | smaller proofs for a STARK |
+| Ligero / Ligetron | linear-code IOP, not a STARK | fallback if mod-q emulation in a STARK field costs too much; larger proofs, simpler prover |
