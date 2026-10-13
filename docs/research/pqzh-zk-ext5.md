@@ -38,7 +38,11 @@ prototype's 160 KB line:
   faster (p99 11.8 → 9.8 ms) [measured, §3]. Not badly worse: kept.
 - **Merkle caps do not help** (§5): Plonky3's pruned multiproof already sends each shared top node once, so a cap
   only adds its 2^h digests per tree; cap 0 is the smallest at every setting [measured].
-- **WHIR** does not plug into the uni/batch-STARK path of Plonky3 0.9.0-rc.1 (§7).
+- **WHIR** does not plug into the uni/batch-STARK path of Plonky3 0.9.0-rc.1 (it is a multilinear PCS; the batch
+  STARK needs a univariate one), and the multilinear Plonky3 prover it does plug into is not ZK (§7). Measured
+  without ZK through that prover: Goldilocks⁵ Johnson `R_TX` 257,530 B at 125.3 composed bits (11.4 s, 1.1 GB),
+  ≈ 17 % under proven FRI at equal memory; Goldilocks² caps at ≈ 91–95 bits (WHIR fold term, LogUp fingerprint).
+- The Plonky3 upgrade 0.8.0 → 0.9.0-rc.1 needed no source change (own commit `2e1788c`).
 - **Goldilocks² cannot reach 128 bits with ZK either**: the opening-batching term caps `R_TX` at 97.9–99.9 bits
   [model, §6]; Goldilocks⁵ reaches 128 in both regimes, bound by the 128-bit Keccak collision term.
 - `R_TX` statement now on the §7.7 layout (640-byte header, fee word at 256); C cross-check against main's
@@ -128,7 +132,8 @@ at FRI arity 8 (the same counts as plain mode in the prototype; ZK does not chan
 | 16 | 57 / 53 | 29 / 27 | same |
 | 32 | 45 / 42 | 23 / 21 | same |
 
-**Measured** (`runs/t6-zk5-<regime>-b<log blowup>-q<queries>.jsonl`, wasm `…-wasm.jsonl`; n = 3 proofs, 100 honest
+**Measured** on Plonky3 0.8.0 before the upgrade of §7 (repeat on 0.9.0-rc.1 for conjectured blowup 16: 344,239 B,
+23.2 s, verify p99 16.1 ms, `runs/t9-p3-0.9-zk5-conj-b4-q29.jsonl`) (`runs/t6-zk5-<regime>-b<log blowup>-q<queries>.jsonl`, wasm `…-wasm.jsonl`; n = 3 proofs, 100 honest
 verifies, 12 mutation kinds × 10; 16 grinding bits, arity 8, cap 0):
 
 | Relation | Regime | Blowup / queries | Proof B | Worst case B [estimate] | Prove p50 | Peak heap / max RSS | Verify p50 / p99 honest | Verify p99 adversarial | Accepted / panics | wasm32 verify p50 / p99, memory |
@@ -156,7 +161,8 @@ Single runs [probe] (`runs/t5-probe-b*-q*.jsonl`, `-time.txt`, `runs/t5-probe.lo
 - **Prover**: ZK doubles the committed domain, and the masks and quotient chunks are extension-heavy: `R_TX` needs
   1.42 GB at blowup 8, 2.82 GB at 16, 5.6 GB at 32 [measured]. Native-only proving (owner, 2026-10-13) is needed: a
   4 GiB wasm32 address space would hold blowup 8 at most [inference].
-- **Verifier**: well under the 50 ms p99 limit everywhere, native and wasm32; verifying in wasm needs 68–260 MiB of
+- **Verifier**: well under the 50 ms p99 limit everywhere, native and wasm32 (wasm: 0 of 960 mutated inputs accepted,
+  `fails: 0` in each `-wasm.jsonl`); verifying in wasm needs 68–260 MiB of
   linear memory (the preprocessed commitment is recomputed once per op in that process; a precompile keeps the root
   as a constant) [measured].
 - **Worst case** (`runs/worstcase.py`, `runs/t6-worstcase.jsonl`) [estimate]: each Merkle multiproof part scaled
@@ -197,7 +203,9 @@ FRI, as in the prototype's plain mode (`pqzh-prototype.md` §7).
 tests pass (`runs/t9-p3-0.9-tests.txt`), default-parameter proofs keep their sizes (`R_TX` 143,704 B), prove
 4.41 → 4.78 s, verify p99 9.8 → 11.6 ms (`runs/t9-p3-0.9-default.jsonl`); ZK + Goldilocks⁵ conjectured blowup 16:
 `R_TX` 344,239 B, 23.2 s, 2.82 GB, verify p99 16.1 ms, 0 of 240 mutated accepted (`runs/t9-p3-0.9-zk5-conj-b4-q29.jsonl`);
-`p3-security` 0.9 gives the same 128-bit query counts (`runs/t9-p3-0.9-model-ext5-zk.jsonl`) [measured].
+`p3-security` 0.9 gives the same 128-bit query counts (`runs/t9-p3-0.9-model-ext5-zk.jsonl`); the wasm32 module
+builds (`runs/t15-wasm-build-0.9.txt`); tests after the WHIR driver's AIR-bound change pass (`runs/t14-tests.txt`)
+[measured].
 
 **Hiding WHIR does not plug into the batch STARK** (0.9.0-rc.1, from the sources):
 
@@ -229,7 +237,55 @@ Merkle tree and challenger as §3), Goldilocks² and Goldilocks⁵, 128-bit targ
 (`SecurityAssumption::JohnsonBound`; the capacity bound is the conjecture ePrint 2025/2046 disproved and is not
 used). These are **not ZK** numbers: a lower bound for what a hiding WHIR proof would cost.
 
-[measurements below]
+Bits are `p3-multi-stark`'s `security_report`: the union bound over every term (WHIR opening of the main and the
+preprocessed commitment, Keccak-256 collision 128, LogUp fingerprint, fractional GKR, constraint sumcheck and
+batching). With a 128-bit collision term in the sum the composed bound cannot reach 128.0; a per-term target of 128
+gives 125.1–125.4 bits composed, 130 gives 126.6–126.9 (binding: the collision term) [model,
+`runs/t10-whir-sweep.jsonl`]. The FRI numbers of §4 are `p3-security`'s report, whose figure is the weakest term
+(128.0 = the collision term); the two are not the same yardstick: WHIR's 125.2 is a sum, FRI's 128 a minimum.
+
+Non-hiding WHIR, Goldilocks⁵, Johnson bound, per-term target 128, fold 4, 16 grinding bits
+(`runs/t12-whir-ext5-r<rate>.jsonl`, `-time.txt`; n = 3 proofs, 100 honest + 120 mutated verifies; rate 5 a single
+run from `runs/t11-whir-sweep2.jsonl`) [measured]:
+
+| Relation | Starting rate (blowup) | Bits composed (binding) | Proof B | Prove p50 | Peak heap / max RSS | Verify p50 / p99 honest | Verify p99 adversarial | Accepted |
+|---|---|---|---|---|---|---|---|---|
+| `R_REG` | 2 (4) | 125.4 (WHIR opening, main) | 301,298 | 1.75 s | 141 MB | 7.5 / 11.7 ms | 6.9 ms | 0 / 120 |
+| `R_REG` | 3 (8) | 125.4 | 256,102 | 2.90 s | 280 MB | 6.6 / 7.6 ms | 6.0 ms | 0 / 120 |
+| `R_REG` | 4 (16) | 125.4 | 228,651 | 5.45 s | 560 MB | 6.5 / 8.2 ms | 6.3 ms | 0 / 120 |
+| `R_REG` | 5 (32) [probe] | 125.3 | 209,446 | 10.5 s | 1,120 MB | 6.4 ms (n = 3) | — | 0 / 12 |
+| `R_TX` | 2 (4) | 125.2 | 336,036 | 3.57 s | 284 MB / 398 MB | 15.2 / 24.5 ms | 19.0 ms | 0 / 120 |
+| `R_TX` | 3 (8) | 125.2 | 286,646 | 6.02 s | 564 MB / 680 MB | 13.7 / 18.6 ms | 12.6 ms | 0 / 120 |
+| `R_TX` | 4 (16) | 125.3 | 257,530 | 11.43 s | 1,123 MB / 1.31 GB | 13.6 / 20.1 ms | 13.8 ms | 0 / 120 |
+| `R_TX` | 5 (32) [probe] | 125.2 | 238,932 | 22.2 s | 2,243 MB | 13.5 ms (n = 3) | — | 0 / 12 |
+
+Folding factors 6 and 8 (`runs/t11-whir-sweep2.jsonl`, `.err`): `R_REG` grows to 333–873 KB, and `R_TX` is refused by
+`p3-multi-stark` ("trace arity is outside the supported range": the fold is the per-table padding floor, and the
+16-row `Digit` table is below it) [measured]. Fold 4 is the best here.
+
+**The same regime with FRI, this configuration, not ZK** (Goldilocks⁵, 128 bits by `p3-security`, one proof each,
+`runs/t13-fri-plain5-*.jsonl`) [probe]: proven `R_TX` 358,874 B at blowup 16 (5.0 s, 673 MB), 309,539 B at blowup 32
+(10.0 s, 1.33 GB); conjectured 201,698 B (blowup 16) / 175,126 B (blowup 32). **WHIR (proven, Johnson) is ≈ 17–20 %
+smaller than proven FRI at the same prover memory** (`R_TX` 257,530 B at rate 4 / 1.12 GB against 309,539 B at blowup
+32 / 1.33 GB), still larger than conjectured FRI, and far from the 60–110 KB hoped for in `pqzh-design.md` §5.5
+[inference]. Verify is similar (13.6 ms p50 `R_TX`).
+
+**Goldilocks² with WHIR**: the 128-bit target is out of reach the same way as with FRI, with a different binding term
+(`runs/t10-whir-sweep.err`, `runs/t11-whir-sweep2.err`, `runs/t12-whir-ext2-*-time.txt`) [model]: WHIR refuses the
+configuration because the grinding needed per phase exceeds the budget — 42–50 bits for a 128-bit per-term target
+(rate 1–4), 18 for 100, 28 for 110, 33 for 115, 38 for 120 (rate 3). The phase error it grinds against is the
+Johnson-radius proximity-gap error of a fold, ≈ n·m³ / |F| for a 2^128 field (p3-security `assumption.rs`, [DKT26]
+Thm 5.12). At what grinding allows [measured, `runs/t13-whir-ext2-r3-*.jsonl`, n = 3 / 100 / 120]:
+
+| Goldilocks², rate 3 | Bits composed | Weakest terms | `R_TX` proof | Prove | Verify p99 |
+|---|---|---|---|---|---|
+| target 96, 16 grinding bits | 90.9 (`R_REG` 91.1) | WHIR opening 96.0 (main / preprocessed), LogUp fingerprint 95.4 | 152,186 B (`R_REG` 135,759) | 3.12 s | 14.3 ms |
+| target 100, 20 grinding bits | 94.2 (`R_REG` 94.7) | LogUp fingerprint 95.4, WHIR openings 96.0, fractional GKR 105.6, constraint sumcheck 107.9 | 152,986 B (`R_REG` 135,935) | 5.30 s | 14.7 ms |
+
+So over Goldilocks² WHIR's composed bound sits at ≈ 91–95 bits, against FRI's ≈ 98–101 (§6): **the same kind of cap,
+a little lower**, bound by the WHIR fold's proximity-gap term (grinding-limited) and by the LogUp fingerprint
+(≈ 95.4 bits for `R_TX`, field-size-limited, no grinding) [inference from the term lists]. Goldilocks⁵ removes both
+(LogUp 285 bits, the WHIR openings at their target).
 
 ## 8. What was not done
 
@@ -239,6 +295,9 @@ used). These are **not ZK** numbers: a lower bound for what a hiding WHIR proof 
 - **Vectorised Keccak-256 Merkle hashing** (would recover most of the +40 % prove time of §3): not built.
 - **Horner statement binding** (removes the last full-height periodic columns, needed only for a Solidity verifier):
   not built.
+- **ZK with WHIR**: no Plonky3 path (§7); only non-hiding WHIR measured. Goldilocks² WHIR at 128 bits: refused by
+  WHIR's own configuration check (42–50 grinding bits), so no proof exists to measure.
+- **wasm32 verify of WHIR proofs**: not built (the WHIR driver is native only); native verify is 13.6 ms p50 `R_TX`.
 
 ## 9. Open questions for the owner
 
@@ -251,6 +310,14 @@ used). These are **not ZK** numbers: a lower bound for what a hiding WHIR proof 
 3. **Prover hardware**: blowup 16 needs ≈ 2.9 GB RSS for `R_TX`, blowup 32 ≈ 5.6 GB. Is a 4 GB native prover the
    target (then blowup 16), or more?
 4. **proofSystemId** string of §2: accept, and name the final FRI parameters in it when the regime is chosen?
+   Recommendation: yes; bump `/v1` → `/v2` once the parameters are fixed.
+5. **WHIR**: build a ZK WHIR path (a `UnivariateStarkPcs` adapter over HVZK-WHIR, ≈ 1–2 weeks plus review, or a
+   masked multi-stark, weeks)? The non-ZK lower bound saves ≈ 17 % against proven FRI. Recommendation: not now; the
+   proof stays ≈ 250–340 KB either way, so it does not change the limit question of (1)–(2). Revisit if Plonky3 ships a
+   ZK multilinear prover.
+6. **Keep the Plonky3 0.9.0-rc.1 upgrade** (`2e1788c`)? It is a release candidate; nothing in the FRI path needs it.
+   Recommendation: keep it on this branch for the WHIR driver, pin the final 0.9.0 before any merge to main, or revert
+   `2e1788c` and the WHIR driver commit if the branch should stay on 0.8.0.
 
 ## 10. Reruns
 
@@ -263,5 +330,14 @@ scripts/capped sh -c 'target/release/pqzh_security --ext 5 --zk > runs/t4-model-
 scripts/capped runs/t5-probe.sh                                                         # §4 single runs incl. blowup 32
 scripts/capped runs/t6-zk5.sh > runs/t6-zk5.log                                         # §4 benches, wasm, §5 caps
 scripts/capped runs/t8-pow24.sh > runs/t8-pow24.log                                     # §4 24 grinding bits
-python3 runs/summ.py runs/t6-*.jsonl; python3 runs/worstcase.py runs/t6-zk5-conj-b4-q29.jsonl 29 4 5 1
+scripts/capped runs/t9-p3-0.9.sh > runs/t9-p3-0.9.log                                   # §7 upgrade check
+scripts/capped runs/t10-whir-sweep.sh; scripts/capped runs/t11-whir-sweep2.sh            # §7 WHIR sweeps
+scripts/capped runs/t12-whir-bench.sh > runs/t12-whir-bench.log                          # §7 WHIR Goldilocks^5
+scripts/capped runs/t13-whir-ext2-fri-plain.sh > runs/t13-whir-ext2-fri-plain.log        # §7 Goldilocks^2, FRI plain
+python3 runs/summ.py runs/t6-*.jsonl; python3 runs/whir-summ.py runs/t12-*.jsonl
+python3 runs/worstcase.py runs/t6-zk5-conj-b4-q29.jsonl 29 4 5 1
 ```
+
+`runs/` also holds the trial runs of this step: `t1`–`t3` (§3), `t3-tests.txt`, `t4-model-*` (§4, §6), `t5-probe*`
+(§4), `t6-*` (§4), `t6-worstcase.jsonl`, `t7-cap-*` (§5), `t8-pow24-*` (§4), `t9-*` (§7), `t10`–`t13` (§7),
+`t14-tests.txt` (tests after the AIR bound change for the WHIR driver).
