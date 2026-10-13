@@ -254,10 +254,12 @@ library UnderlyingLib {
     /// @notice `payOut` into a derived UA (CTR-UA-28): leg `u` pays `to` in its own UA ledger,
     ///         `IUALedger(u).transferToUA(to, out)`, which checks `to`. A leg that does not report `IUALedger` by ERC-165
     ///         (the native coin, an outside ERC-20 or HTS token, a SCaaS token with the ledger off) reverts
-    ///         `UALegNotLedger` before anything moves; the balance must drop by EXACTLY `out`, as in `payOut`.
+    ///         `UALegNotLedger` before the reserve or the leg moves; the caller's burn before it is unwound by the
+    ///         revert, atomically. The balance must drop by EXACTLY `out`, as in `payOut`.
     function payOutToUA(uint256 i, bytes32 to, uint256 out) public returns (address u) {
         Leg storage L = $().legs[i];
         u = L.token;
+        // `u == NATIVE` only skips the probe: `supportsInterface(address(0), …)` is false, so the error is the same
         if (u == NATIVE || !ERC165Checker.supportsInterface(u, type(IUALedger).interfaceId)) {
             revert IUALedger.UALegNotLedger(u);
         }

@@ -70,13 +70,19 @@ abstract contract UALedgerBase is UARegistryBase {
     }
 
     /// A one-leg 1:1 wrapper of `leg`, ledger on (`REG_L`), `PAYABLE`, fixed rate.
-    function _wrapper(address leg) internal returns (UnderlyingToken w) {
+    function _wrapper(address leg) internal returns (UnderlyingToken) {
+        return _wrapperAt(leg, 1, 1);
+    }
+
+    /// The same at rate `num/den` (units per leg unit).
+    function _wrapperAt(address leg, uint256 num, uint256 den) internal returns (UnderlyingToken w) {
         w = UnderlyingToken(Clones.clone(address(new UnderlyingToken(address(this), address(0), chainUidA, REG_L, false))));
         address[] memory us = new address[](1);
-        uint256[] memory one = new uint256[](1);
-        (us[0], one[0]) = (leg, 1);
+        uint256[] memory n = new uint256[](1);
+        uint256[] memory d = new uint256[](1);
+        (us[0], n[0], d[0]) = (leg, num, den);
         Rate memory fixedRate;
-        w.initialize(address(this), 1, underlyingInit(us, one, one, 6, fixedRate, address(0), address(0)));
+        w.initialize(address(this), 1, underlyingInit(us, n, d, 6, fixedRate, address(0), address(0)));
     }
 
     // ----- structs -----
@@ -143,9 +149,14 @@ abstract contract UALedgerBase is UARegistryBase {
 
     /// `wrpL` units for `who`: this fixture (the `tok` minter, a contract) mints `tok`, wraps it and passes the units on.
     function _wrapL(address who, uint256 amount) internal {
+        _wrapLOn(wrpL, who, amount);
+    }
+
+    /// The same on any wrapper `w` of `tok`, at its rate: returns the units minted (and passed on).
+    function _wrapLOn(UnderlyingToken w, address who, uint256 amount) internal returns (uint256 minted) {
         tok.mint(address(this), amount);
-        tok.approve(address(wrpL), amount);
-        wrpL.wrap(amount);
-        wrpL.transfer(who, amount);
+        tok.approve(address(w), amount);
+        minted = w.wrap(amount);
+        w.transfer(who, minted);
     }
 }

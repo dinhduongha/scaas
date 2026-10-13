@@ -106,7 +106,9 @@ contract UnderlyingToken is MetaTokenBase, IUnderlyingToken {
         emit Wrapped(o.from, u, received, minted);
     }
 
-    /// @dev `to == 0`: mint to the caller; else into the derived UA `to` (checked by the caller), a move from 0.
+    /// @dev `to == 0` is a sentinel, "mint to the caller", not a receiver; any other `to` is minted into that derived UA
+    ///      as a move from 0, unchecked here: a caller passing a `to` must validate it first (`wrapToUA`:
+    ///      `_requireDerivedReceiver`, which also refuses 0 as a native id).
     function _wrap(uint256 i, uint256 amount, bytes32 to) private returns (uint256 minted) {
         address account = _msgSender();
         (address u, uint256 received, uint256 m) = UnderlyingLib.wrap(i, amount, account, msg.value);

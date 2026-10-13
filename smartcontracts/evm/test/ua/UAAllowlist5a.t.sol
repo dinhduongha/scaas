@@ -105,6 +105,36 @@ contract UAAllowlist5aTest is UALedgerBase {
         assertEq(reserve, 6_000);
     }
 
+    /// At 3/2 under `uaExecute`: `unwrapToUA(1000)` burns ⌈666·3/2⌉ = 999 from the UA, pays out 666 in `tok`; the
+    /// `AMOUNT(1)` fee (1 % of `wrapped` = 10) comes after.
+    function test_uaExecute_unwrapToUA_rate32() public {
+        UnderlyingToken w = _wrapperAt(address(tok), 3, 2);
+        _wrapLOn(w, alice, 1_001);
+        vm.prank(alice);
+        w.transferToUA(uaP, 1_501);
+        MetaTxLib.UAMetaTransaction memory m =
+            _m(address(w), uaP, abi.encodeCall(UnderlyingToken.unwrapToUA, (address(tok), 1_000, uaB, 666)));
+        (m.mode, m.fee, m.feeRecipient) = (RR | RF | PCT, 10_000, FEE_TO);
+        vm.expectEmit(address(w));
+        emit IUALedger.UATransfer(uaP, bytes32(0), 999);
+        vm.expectEmit(address(w));
+        emit IERC20.Transfer(POOL, address(0), 999);
+        vm.expectEmit(address(tok));
+        emit IUALedger.UATransfer(_pad(address(w)), uaB, 666);
+        vm.expectEmit(address(w));
+        emit IUnderlyingToken.UnwrappedToUA(POOL, address(tok), uaB, 999, 666);
+        vm.expectEmit(address(w));
+        emit IERC20.Transfer(POOL, FEE_TO, 10);
+        _exec(address(w), m, "");
+        assertEq(w.balanceOfUA(uaP), 1_501 - 999 - 10);
+        assertEq(w.balanceOf(FEE_TO), 10);
+        assertEq(w.totalSupply(), 1_501 - 999);
+        assertEq(tok.balanceOfUA(uaB), 666);
+        assertEq(tok.balanceOf(address(w)), 1_001 - 666);
+        (,, uint256 reserve,,) = w.legOf(address(tok));
+        assertEq(reserve, 1_001 - 666);
+    }
+
     function test_uaExecute_unwrapToUA_nativeToRefused() public {
         _wrapL(alice, 100);
         vm.prank(alice);

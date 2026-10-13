@@ -337,6 +337,7 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
         if (fee == 0 || fee > t.value) revert ReceiverFeeAmount(fee, t.value);
         bytes32 to = MetaTxLib.pad(feeRecipient);
         if (to == t.to) revert FeeRecipientIsPayee();
+        // early only: without it the fee's `_uaMove` reverts the whole call with the same `TransferToSelf`
         if (feeRecipient == address(this)) revert TransferToSelf();
         if (feeRecipient == MetaTxLib.UA_POOL) revert UAPoolNotPayable();
         bytes32 d = _uaExecuteTransfer(t, payerAuth);

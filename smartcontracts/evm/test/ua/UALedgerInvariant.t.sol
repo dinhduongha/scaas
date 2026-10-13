@@ -19,8 +19,10 @@ import {UALedgerBase} from "./UALedgerBase.sol";
 /// clone and on the 1:1 UNDERLYING clone `wrp`, plus wrap, wrap→UA and the burn under a derived UA (`unwrap` through
 /// `uaExecute` with a fee after the self-call, or the named `uaUnwrap`), and the `UA_POOL` `transferFrom` refusal.
 /// UA-5a (CTR-UA-28, CTR-UA-26, CTR-MTX-05): `wrapToUA` on `wrp` and on the native-leg `wrpN`, `mintToUA`,
-/// `payWithFeeToUA`, `burn` under a derived UA, wraps of the ledger-leg `wrpL` (leg `tok`, wrapped by this handler, a
-/// contract), `unwrapToUA` from `wrpL` (direct by a native, or under `uaExecute` by a UA), `uaPayReceiverFee`.
+/// `payWithFeeToUA`, `burn` under a derived UA, wraps of the ledger-leg `wrpL` (leg `tok` at 3/2, wrapped by this
+/// handler, a contract; `wrap` or `wrapToUA`), `unwrapToUA` from `wrpL` (direct by a native, or under `uaExecute` by a
+/// UA), `uaPayReceiverFee`. On `wrpL` the handler checks minted ⌊a·n/d⌋, out ⌊w·d/n⌋, burned ⌈out·n/d⌉ and the reserve
+/// against the balances per call.
 /// After every call the handler replays the tokens' `Transfer` logs per native holder and `UATransfer` logs per
 /// derived id, and checks `UATransfer` is emitted exactly for the moves with a derived side.
 contract UALedgerHandler is Test {
@@ -194,39 +196,81 @@ contract UALedgerHandler is Test {
     }
 
     /// `wrpL` units for a native or a UA: this handler (a contract, so it may approve) gets `tok` from the minter, wraps
-    /// it and passes the units on (`transfer`, or `transferToUA`).
-    function wrapLedger(uint256 to, uint256 amount) external {
+    /// it and passes the units on (`transfer`, or `transferToUA`), or wraps straight into the UA (`wrapToUA`).
+    function wrapLedger(uint256 to, uint256 amount, bool oneStep) external {
         amount = bound(amount, 1, 1e12);
+        to %= 5;
+        (uint256 n, uint256 d, uint256 r0) = _legL();
+        uint256 want = amount * n / d;
+        if (want == 0) return; // WrapTooSmall
         vm.prank(minter);
         NoUnderlyingToken(address(tok)).mint(address(this), amount);
         tok.approve(address(wrpL), amount);
-        UnderlyingToken(address(wrpL)).wrap(amount);
-        bool toUA = to % 5 > 2;
-        if (toUA) wrpL.transferToUA(_id(to % 5), amount);
-        else wrpL.transfer(vm.addr(pks[to % 5]), amount);
-        _settle2(tok, 0, 2, wrpL, toUA ? 1 : 0, 2);
+        uint256 b0 = _balL(to);
+        if (to > 2 && oneStep) {
+            assertEq(UnderlyingToken(address(wrpL)).wrapToUA(address(tok), amount, _id(to)), want, "minted");
+            _settle2(tok, 0, 2, wrpL, 1, 1);
+        } else {
+            assertEq(UnderlyingToken(address(wrpL)).wrap(amount), want, "minted");
+            if (to > 2) wrpL.transferToUA(_id(to), want);
+            else wrpL.transfer(vm.addr(pks[to]), want);
+            _settle2(tok, 0, 2, wrpL, to > 2 ? 1 : 0, 2);
+        }
+        assertEq(_balL(to) - b0, want, "credited");
+        (,, uint256 r1) = _legL();
+        assertEq(r1 - r0, amount, "reserve += received");
+    }
+
+    /// `wrpL` balance of id index `i` (0–2 a native, 3–4 a UA).
+    function _balL(uint256 i) internal view returns (uint256) {
+        return i > 2 ? wrpL.balanceOfUA(_id(i)) : wrpL.balanceOf(vm.addr(pks[i]));
+    }
+
+    /// `wrpL`'s leg: rate and reserve.
+    function _legL() internal view returns (uint256 n, uint256 d, uint256 r) {
+        (uint96 n_, uint96 d_, uint256 r_,,) = UnderlyingToken(address(wrpL)).legOf(address(tok));
+        (n, d, r) = (n_, d_, r_);
+    }
+
+    /// Checks one `unwrapToUA` of `wrapped` against the balances: `debited` (burned + fee) off the subject, `out` into
+    /// `to` in `tok`, `out` off the reserve.
+    function _checkUnwrapToUA(uint256 wrapped, uint256 fee, uint256 debited, uint256 credited, uint256 r0) internal view {
+        (uint256 n, uint256 d, uint256 r1) = _legL();
+        uint256 out = wrapped * d / n;
+        assertEq(credited, out, "out");
+        assertEq(debited, (out * n + d - 1) / d + fee, "burned + fee");
+        assertEq(r0 - r1, out, "reserve -= out");
     }
 
     /// `unwrapToUA` from `wrpL` into a UA of `tok`: direct by a native, or under `uaExecute` by a UA (optionally with
     /// the `AMOUNT(1)` fee of 1 %).
     function unwrapToUA(uint256 fromIdx, uint256 toUa, uint256 amount, bool viaUA, bool withFee) external {
         bytes32 to = uas[toUa % 2];
-        bytes memory data;
+        uint256 c0 = tok.balanceOfUA(to);
+        (uint256 rn, uint256 rd, uint256 r0) = _legL();
         if (!viaUA) {
             address a = vm.addr(pks[fromIdx % 3]);
             amount = bound(amount, 0, wrpL.balanceOf(a));
-            if (amount == 0) return;
+            if (amount * rd / rn == 0) return; // UnwrapTooSmall
+            uint256 b0 = wrpL.balanceOf(a);
             vm.prank(a);
             UnderlyingToken(address(wrpL)).unwrapToUA(address(tok), amount, to, 0);
             _settle2(wrpL, 0, 1, tok, 1, 1);
+            _checkUnwrapToUA(amount, 0, b0 - wrpL.balanceOf(a), tok.balanceOfUA(to) - c0, r0);
             return;
         }
         bytes32 f = uas[fromIdx % 2];
-        amount = bound(amount, 0, wrpL.balanceOfUA(f) * 100 / 101) / 100 * 100;
+        uint256 have = wrpL.balanceOfUA(f);
+        amount = bound(amount, 0, have * 100 / 101) / 100 * 100;
         if (amount == 0) return;
         uint256 fee = withFee ? amount / 100 : 0;
-        data = abi.encodeCall(UnderlyingToken.unwrapToUA, (address(tok), amount, to, 0));
-        MetaTxLib.UAMetaTransaction memory m = _uaCall(wrpL, f, data, fee);
+        _unwrapToUAUnder(fromIdx, f, to, amount, fee);
+        _checkUnwrapToUA(amount, fee, have - wrpL.balanceOfUA(f), tok.balanceOfUA(to) - c0, r0);
+    }
+
+    function _unwrapToUAUnder(uint256 fromIdx, bytes32 f, bytes32 to, uint256 amount, uint256 fee) internal {
+        MetaTxLib.UAMetaTransaction memory m =
+            _uaCall(wrpL, f, abi.encodeCall(UnderlyingToken.unwrapToUA, (address(tok), amount, to, 0)), fee);
         bytes memory auth = _auth(3 + fromIdx % 2, wrpL.uaDigest(m));
         vm.prank(RELAYER);
         wrpL.uaExecute(m, auth);
@@ -396,11 +440,12 @@ contract UALedgerHandler is Test {
     }
 }
 
-/// T-V3-2, on the NONE clone and on the 1:1 UNDERLYING clones (`wrp`; UA-5a: the ledger-leg `wrpL`, the native-leg
-/// `wrpN`): `totalSupply == Σ balanceOf(native incl. UA_POOL)`, `balanceOf(UA_POOL) == Σ balanceOfUA`, replaying
+/// T-V3-2, on the NONE clone and on the UNDERLYING clones (`wrp` 1:1; UA-5a: the ledger-leg `wrpL` at 3/2, the
+/// native-leg `wrpN` 1:1): `totalSupply == Σ balanceOf(native incl. UA_POOL)`, `balanceOf(UA_POOL) == Σ balanceOfUA`, replaying
 /// `Transfer` logs equals `balanceOf` for every native holder (`UA_POOL` included), replaying `UATransfer` logs equals
-/// `balanceOfUA` for every tracked UA; `UATransfer` iff a side is derived (checked per call by the handler); each
-/// wrapper backed 1:1 by its leg; `wrpL` solvent (CTR-TOK-05) over `unwrapToUA`'s pay-outs into `tok`'s UA ledger.
+/// `balanceOfUA` for every tracked UA; `UATransfer` iff a side is derived (checked per call by the handler); `wrp` and
+/// `wrpN` backed 1:1 by their leg; `wrpL`'s leg balance equal to its reserve and the wrapper solvent (CTR-TOK-05) over
+/// `unwrapToUA`'s pay-outs into `tok`'s UA ledger.
 contract UALedgerInvariantTest is UALedgerBase {
     UALedgerHandler internal h;
 
@@ -409,6 +454,7 @@ contract UALedgerInvariantTest is UALedgerBase {
         bytes32[2] memory u = [uaP, uaB];
         bytes[2] memory k = [_key(UAKinds.P256), _key(UAKinds.BIP340)];
         uint16[2] memory kd = [UAKinds.P256, UAKinds.BIP340];
+        wrpL = _wrapperAt(address(tok), 3, 2); // a non-unit rate: minted, burned and out differ
         h = new UALedgerHandler(tok, wrp, wrpL, wrpN, und, lreg, address(this), u, k, kd); // this fixture is tok's minter
         targetContract(address(h));
     }
@@ -441,7 +487,8 @@ contract UALedgerInvariantTest is UALedgerBase {
 
     function invariant_T_V3_2_ledgerLeg() public view {
         _check(wrpL);
-        assertEq(wrpL.totalSupply(), tok.balanceOf(address(wrpL)), "1:1 backing");
+        (,, uint256 reserve,,) = wrpL.legOf(address(tok));
+        assertEq(tok.balanceOf(address(wrpL)), reserve, "leg balance == reserve (no donation)");
     }
 
     function invariant_T_V3_2_nativeLeg() public view {
