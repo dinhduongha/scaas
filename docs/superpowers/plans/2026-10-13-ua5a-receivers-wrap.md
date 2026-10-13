@@ -147,7 +147,7 @@ counts, the sizes of the four token implementations and `UnderlyingLib`.
   balanceOf(this)`; `IUALedger(u).transferToUA(to, out)`; the balance must drop by exactly `out`
   (`UnderlyingTransferMismatch`). The token burns `burned` from `_msgSender()` between quote and pay-out (CEI, as
   `_unwrap`) and emits `UnwrappedToUA(account, u, to, burned, out)` (`account` = `UA_POOL` under a derived subject;
-  CTR-UA-28, controller ruling pending the owner). `to` is checked by the leg's own `transferToUA` (a native `to` ⇒
+  CTR-UA-28, owner 2026-10-13). `to` is checked by the leg's own `transferToUA` (a native `to` ⇒
   `UANotRegistered`, a Zether or unregistered `to` likewise) — the wrapper does not repeat the registry call. Both
   allowlists, `AMOUNT(1)`, static length 132.
 - **R5a-5 `mintToUA(bytes32 to, uint256 amount)`** on `NoUnderlyingToken`: `AdminLib.requireRole(MINTABLE,
@@ -214,7 +214,7 @@ None in UA-5a (no deployment; every chain is a test chain and redeploys with the
 
 - `UnwrappedToUA` as a new event (R5a-4) rather than `Unwrapped` with a placeholder recipient; and the ERC-165 test for
   a ledger leg (a leg that lies about `IUALedger` can only short the unwrapper who chose that leg, and the exact-delta
-  check still protects the reserve). Both are controller rulings in CTR-UA-28, pending the owner.
+  check still protects the reserve). Both are rulings of CTR-UA-28, accepted by the owner on 2026-10-13.
 - Whether `payWithFeeToUA` should accept a native `to` and behave as `payWithFee` (one entry point for a mandate's
   payees) instead of refusing it (R5a-2); UA-5c's `MandateWallet` branches on the id either way.
 

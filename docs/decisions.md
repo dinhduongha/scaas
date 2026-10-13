@@ -3122,7 +3122,7 @@ Change (2026-10-13): owner — the UA allowlist grows with parity: `unwrapToUA` 
 ### CTR-UA-28 — A native caller credits a derived UA in one call
 - old: — · status: current · owner: yes · date: 2026-10-13 · normative: contracts/accounts.md#CTR-UA-28 · superseded-by: —
 
-**Why.** Every `address` receiver of a direct path gets a `bytes32` form (`wrapToUA`, `unwrapToUA`, `mintToUA`, `payWithFeeToUA`, beside `transferToUA`), each crediting through `_uaMove` (a mint is a move from 0), so a wrap reaches a UA in one call instead of `wrap` + `transferToUA` and a mandate can pay a UA payee. `wrapToUA` is on the address allowlist only (a UA holds no outside underlying); `unwrapToUA` pays a SCaaS ledger leg by `transferToUA` and is on both allowlists. The `UnwrappedToUA` event and the ERC-165 test for a ledger leg are controller rulings, pending the owner.
+**Why.** Every `address` receiver of a direct path gets a `bytes32` form (`wrapToUA`, `unwrapToUA`, `mintToUA`, `payWithFeeToUA`, beside `transferToUA`), each crediting through `_uaMove` (a mint is a move from 0), so a wrap reaches a UA in one call instead of `wrap` + `transferToUA` and a mandate can pay a UA payee. `wrapToUA` is on the address allowlist only (a UA holds no outside underlying); `unwrapToUA` pays a SCaaS ledger leg by `transferToUA` and is on both allowlists. The `UnwrappedToUA` event and the ERC-165 test for a ledger leg were controller rulings, accepted by the owner on 2026-10-13.
 **Cost if wrong.** Four more entry points per kind; a leg that falsely reports `IUALedger` can only cheat the unwrapper who chose it (the exact balance delta still holds the wrapper's reserve).
 **Source.** owner, 2026-10-13 (Q9); `history/specs/2026-10-13-ua-parity-design.md` §4.2, §4.3, §4.5 (UP-9).
 
