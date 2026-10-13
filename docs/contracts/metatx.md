@@ -11,7 +11,7 @@ same model natively ([networks/README.md](../networks/README.md)).
 
 Status: the target layer of this file (two bases, two structs, the generic self-call `mtxExecute`, the typed
 `mtxExecuteTransfer`, the selector allowlist, fee classes, `mtx` names, salted domains) is **SPECIFIED**; receiver-pays
-**BUILT** (`mtxPayReceiverFee`, P1b/P1c; its UA twin `uaPayReceiverFee` SPECIFIED, UA-5a). What runs today is two built
+**BUILT** (`mtxPayReceiverFee`, P1b/P1c; its UA twin `uaPayReceiverFee` BUILT, UA-5a). What runs today is two built
 lines, v1 and v2, with a hand-written op dispatch (`smartcontracts/evm/src/metatx/`, **BUILT**); the differences are
 listed under [Transitional (BUILT)](#transitional-built) at the end. Nothing is deployed, so the target replaces the
 built lines in place: no version coexistence, no migration.
@@ -324,8 +324,8 @@ it. Nothing else is reachable through `mtxExecute`.
 | | `wrap(address,uint256)` | `ABSOLUTE` |
 | | `unwrap(address,uint256,address,uint256)` | `AMOUNT(1)` |
 | | `addReserve(address,uint256)` | `ABSOLUTE` |
-| | `wrapToUA(address,uint256,bytes32)` (SPECIFIED, UA-5a; [CTR-UA-28](accounts.md#CTR-UA-28)) | `ABSOLUTE` |
-| | `unwrapToUA(address,uint256,bytes32,uint256)` (SPECIFIED, UA-5a; also on the UA allowlist) | `AMOUNT(1)` |
+| | `wrapToUA(address,uint256,bytes32)` (BUILT, UA-5a; [CTR-UA-28](accounts.md#CTR-UA-28)) | `ABSOLUTE` |
+| | `unwrapToUA(address,uint256,bytes32,uint256)` (BUILT, UA-5a; also on the UA allowlist) | `AMOUNT(1)` |
 | `NONE_ZETHER` / `UNDERLYING_ZETHER` (built, P3) | the kind's public entries (`burn`; or `UnderlyingToken`'s six, without `unwrap(uint256,address)`) | as above |
 | | `zetherShield(bytes,uint256)`, `zetherWrapShield(address,uint256,bytes32)` (`UNDERLYING_ZETHER`) | `ABSOLUTE` |
 | | `zetherTransfer`, `…Bundle`, `…NoBundle`, `…Single` `(bytes,bytes,bytes,bytes32)`, `zetherUnshield(bytes,bytes,bytes,bytes32,address,uint256)`, `zetherUnshieldUnwrap` | `ABSOLUTE`; envelope binding through the ticket ([CTR-ZTH-34](zether.md#CTR-ZTH-34)) |
@@ -851,7 +851,7 @@ expired co-signature; replay after the payer intent landed through `mtxExecuteTr
 options are payee self-relay and sponsorship.
 
 <a id="ua-receiver-pays"></a>**The UA twin: `uaPayReceiverFee`** (owner 2026-10-13, [CTR-UA-27](accounts.md#CTR-UA-27);
-SPECIFIED, UA-5a). Payer and payee are ids (**U**); the payee co-signs the same `ReceiverFee` over the payer's
+BUILT, UA-5a). Payer and payee are ids (**U**); the payee co-signs the same `ReceiverFee` over the payer's
 `UAMetaTransfer` digest:
 
 ```solidity
@@ -869,8 +869,11 @@ the unchanged typed UA pipeline on `t` with `payerAuth` (payer → payee `N`, `U
 rfValidUntil)` — a native `t.to` signs it itself (ECDSA, ERC-1271 by [CTR-UA-24](accounts.md#CTR-UA-24), HIP-632 on
 Hedera), a derived one through `requireAuthorized(t.to, receiver-fee, digest, payeeAuth)` (the purpose exists for this,
 [accounts.md](accounts.md#purposes)); then `fee` moves from `t.to` to `feeRecipient` in the UA ledger; emit
-`UAReceiverFeePaid(d, t.to, feeRecipient, fee)`. RP1–RP4 and the threat table above hold with ids for addresses. Two
-`mldsa65` signatures cost ≈ 11.9 M (under 16.78 M and Hedera's 15 M); an `msig` payer at its 12 M budget with any PQ
+`UAReceiverFeePaid(d, t.to, feeRecipient, fee)`. RP1–RP4 and the threat table above hold with ids for addresses.
+Measured (forge, osaka): a native payer and payee 103,349 cold (`mtxPayReceiverFee` 103,876); with the real verifiers
+(`UAMetaTx3Vectors.t.sol`, warm token) a native payer × a `p256` payee 98,052 … × an `ed25519` payee 256,335, `p256` ×
+`bip340` 85,175. Two `mldsa65` signatures (`UAMetaTx3Pq.t.sol`): calldata 7,492 B (110,644 gas), execution 11,743,018,
+transaction **11,874,662** (asserted under 16,777,216; also under Hedera's 15 M, not run on a Hedera profile); an `msig` payer at its 12 M budget with any PQ
 payee does not fit one transaction. Not in `uaBatchTransfer` (as the address path).
 
 ## <a id="security"></a>14. Security

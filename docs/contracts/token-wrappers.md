@@ -484,7 +484,8 @@ the holder's `UATradeOrder` ([CTR-DEX-25](dex.md#CTR-DEX-25)) pulled by the unde
 be a SCaaS ledger token (`UALegNotLedger(u)`); `minted − wrapFee` goes to `o.destination` (0 ⇒ `o.from`), a derived id
 by `_uaMint`, a native one by `_mint`; event `UAWrapped(bytes32 indexed from, address indexed u, uint256 received,
 uint256 minted)`. A native holder uses it to wrap straight into its UA. A holder of an outside underlying wraps into a
-UA with `wrapToUA` ([CTR-UA-28](accounts.md#CTR-UA-28)).
+UA with `wrapToUA`, and unwraps a SCaaS ledger leg straight into a UA with `unwrapToUA` (both BUILT, UA-5a;
+[CTR-UA-28](accounts.md#CTR-UA-28)).
 
 ## 4. Features
 
