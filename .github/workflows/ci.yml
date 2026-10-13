@@ -1,5 +1,6 @@
 # R52 (GA 2.1#4): contracts and the relay node. Mirrors the local commands:
-#   smartcontracts/evm: forge test; FOUNDRY_PROFILE=private7622 forge build;
+#   smartcontracts/evm: forge test; forge test --isolate --match-path 'test/ua/{UAGas,UARegistryGroups}.t.sol' (cold gas);
+#                  FOUNDRY_PROFILE=private7622 forge build;
 #                  forge build src --sizes --json > /tmp/sizes.json; python3 ../../scripts/size_gate.py /tmp/sizes.json size-baseline.json
 #   scaas-node:    cargo test; cargo clippy --all-targets -- -D warnings; cargo test --test e2e -- --ignored
 #   docs:          python3 scripts/test_docs_check.py; python3 scripts/docs_check.py check; ... facts check
@@ -47,6 +48,9 @@ jobs:
           forge install --no-git OpenZeppelin/openzeppelin-contracts@${OZ_REF}
       - name: forge test (default profile)
         run: forge test
+      # the registry's gas bounds (msig at verifyBudget, stored-member bound, T-GAS) hold cold: every call its own tx
+      - name: forge test --isolate (UAGas, UARegistryGroups)
+        run: forge test --isolate --match-path 'test/ua/{UAGas,UARegistryGroups}.t.sol'
       - name: size gate (CTR-TOK-24, ratchet)
         run: |
           python3 ../../scripts/size_gate.py --self-test

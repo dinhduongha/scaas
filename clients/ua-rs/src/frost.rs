@@ -118,6 +118,7 @@ impl Ciphersuite for Bn254Keccak256 {
     }
 }
 
+/// Participant `i` (1..=n); panics on 0 — a fixture helper, `Dkg::sign` takes untrusted indices without it.
 pub fn id<C: Ciphersuite>(i: u16) -> Identifier<C> {
     Identifier::try_from(i).expect("nonzero")
 }
@@ -136,6 +137,9 @@ fn others<K: Ord + Copy, V: Clone>(m: &BTreeMap<K, V>, me: &K) -> BTreeMap<K, V>
 }
 
 pub fn dkg<C: Ciphersuite, R: RngCore + CryptoRng>(t: u16, n: u16, rng: &mut R) -> Result<Dkg<C>, Error<C>> {
+    if n < 2 {
+        return Err(Error::InvalidMaxSigners); // part1 checks t and n, but n = 0 would never reach it
+    }
     let mut sec1 = BTreeMap::new();
     let mut round1 = BTreeMap::new();
     for i in 1..=n {
@@ -187,9 +191,11 @@ impl<C: Ciphersuite> Dkg<C> {
         let mut nonces = BTreeMap::new();
         let mut commitments = BTreeMap::new();
         for i in signers {
-            let (n, c) = frost_core::round1::commit(self.keys[&id(*i)].signing_share(), &mut *rng);
-            nonces.insert(id::<C>(*i), n);
-            commitments.insert(id::<C>(*i), c);
+            let me = Identifier::try_from(*i)?;
+            let key = self.keys.get(&me).ok_or(Error::UnknownIdentifier)?;
+            let (n, c) = frost_core::round1::commit(key.signing_share(), &mut *rng);
+            nonces.insert(me, n);
+            commitments.insert(me, c);
         }
         let package = SigningPackage::new(commitments, msg);
         let mut shares = BTreeMap::new();

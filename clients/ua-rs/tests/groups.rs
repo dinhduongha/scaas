@@ -17,6 +17,9 @@ const MUSIG_BN: u16 = 0x0112;
 const FROST_BN: u16 = 0x0113;
 const SECP_N: &str = "fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141";
 const BN_R: &str = "30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001";
+/// secp256k1 x = 5 (x³ + 7 a non-residue: off the curve) and x = p + 1 (≥ p: non-canonical; ≡ 1, a valid x).
+const SECP_X_OFF: &str = "0000000000000000000000000000000000000000000000000000000000000005";
+const SECP_P_PLUS_1: &str = "fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc30";
 const BIP327: [&str; 5] = ["key_sort_vectors", "key_agg_vectors", "nonce_gen_vectors", "nonce_agg_vectors", "sign_verify_vectors"];
 const BIP327_COMMIT: &str = "927b6de9915c9262615a6399de51b200f81e5aa4";
 
@@ -39,6 +42,22 @@ fn rand32(r: &mut impl RngCore) -> [u8; 32] {
     let mut b = [0u8; 32];
     r.fill_bytes(&mut b);
     b
+}
+fn secp_x(prefix: u8, x: &str) -> Vec<u8> {
+    [vec![prefix], hex::decode(x).unwrap()].concat()
+}
+/// A bn254 `x ‖ y` with `y + 1 mod q` (off the curve) or `y + q` (non-canonical, the same point mod q); x unchanged.
+fn bn_y(p: &[u8], plus_q: bool) -> Vec<u8> {
+    use ark_ff::{BigInteger, PrimeField};
+    let y = ark_bn254::Fq::from_be_bytes_mod_order(&p[32..64]);
+    let yb = if plus_q {
+        let mut b = y.into_bigint();
+        assert!(!b.add_with_carry(&ark_bn254::Fq::MODULUS));
+        b.to_bytes_be()
+    } else {
+        (y + ark_bn254::Fq::from(1u64)).into_bigint().to_bytes_be()
+    };
+    [p[..32].to_vec(), yb].concat()
 }
 fn flip_last(b: &[u8]) -> Vec<u8> {
     let mut v = b.to_vec();
@@ -256,6 +275,41 @@ fn musig_row<C: MusigKind>(label: &str, n: usize, role: &str, e: &Env) -> Value 
         negs.push(reg("pop-sig-mutated", &kd, &[flip_last(&sig), hints.clone()].concat(), "UAPoP", "last byte of s flipped"));
         let mb = pop_of(kind, &kd, b).2;
         negs.push(reg("pop-other-context", &kd, &[g.sign(&mb, &mut r), hints.clone()].concat(), "UAPoP", "a valid PoP for context B (other chainUid) offered under context A"));
+        // malformed group key data (UA F3, every UA library that reads groups.json): one member point changed, the
+        // list still sorted, Q and the PoP by the group unchanged (over the changed ua)
+        let mut r2 = rng(&format!("{label}/key-data"));
+        let with_member = |i: usize, p: Vec<u8>| { let mut v = g.pks.clone(); v[i] = p; v };
+        let key_data = |q: &C::P, pks: &[Vec<u8>]| [C::ser(q), (n as u16).to_be_bytes().to_vec(), pks.concat()].concat();
+        let bad: Vec<(&str, Vec<Vec<u8>>, &str)> = if kind == MUSIG_SECP {
+            vec![
+                ("pk-off-curve", with_member(0, secp_x(2, SECP_X_OFF)), "pk_1 = 02 ‖ 5: x³ + 7 is a non-residue (off the curve)"),
+                ("pk-non-canonical", with_member(n - 1, secp_x(3, SECP_P_PLUS_1)), "pk_n = 03 ‖ p + 1: x ≥ p (≡ 1, a valid x mod p)"),
+                ("pk-prefix-04", with_member(n - 1, [&[4u8][..], &g.pks[n - 1][1..]].concat()), "pk_n with prefix 04 (x unchanged)"),
+            ]
+        } else {
+            vec![
+                ("pk-off-curve", with_member(0, bn_y(&g.pks[0], false)), "pk_1 = (x, y + 1): off the curve"),
+                ("pk-non-canonical", with_member(0, bn_y(&g.pks[0], true)), "pk_1 = (x, y + q): y ≥ q (the same point mod q)"),
+            ]
+        };
+        for (name, pks2, c) in bad {
+            assert!(pks2.windows(2).all(|w| w[0] < w[1]), "{name}: still sorted");
+            assert!(pks2.iter().any(|p| C::parse(p).is_none()), "{name}: a malformed point");
+            let kd2 = key_data(&g.ka.q, &pks2);
+            let m2 = pop_of(kind, &kd2, a).2;
+            negs.push(reg(name, &kd2, &[g.sign(&m2, &mut r2), hints.clone()].concat(), "UAKeyData", c));
+        }
+        if kind == MUSIG_SECP {
+            // x(P_n) ≥ N: a valid point, so the key data is valid; Q = KeyAgg and the hints a_i·P_i are exact for that
+            // list, and the hint check refuses it (ecrecover needs r = x(P_n) < N). No PoP signature by Q exists
+            // (dlog of P_n unknown): the blob carries the group's signature, which does not verify under this Q.
+            let pks2 = with_member(n - 1, secp_x(3, SECP_N));
+            let ka2 = mu::key_agg::<C>(&pks2).unwrap();
+            let kd2 = key_data(&ka2.q, &pks2);
+            let m2 = pop_of(kind, &kd2, a).2;
+            negs.push(reg("pk-x-ge-n", &kd2, &[g.sign(&m2, &mut r2), C::hints(&ka2, &pks2)].concat(), "UAPoP",
+                "pk_n = 03 ‖ N (a valid point, x ≥ N): Q and hints exact for that list; the hint check refuses it"));
+        }
         let s0 = unhex(&sigs[0]["sig"]);
         let (m_meta, m_member): ([u8; 32], [u8; 32]) = (unhex(&sigs[0]["message"]).try_into().unwrap(), unhex(&sigs[1]["message"]).try_into().unwrap());
         negs.push(neg_verify("wrong-purpose", vk, &m_member, &s0, "the metatx signature offered for the member message"));
@@ -308,6 +362,20 @@ fn dkg_rows<C: Ciphersuite>(kd: &[u8], w: usize) -> Vec<Value> {
                     "mu": hx(&b[(t + 1) * w..]), "preimage": hx(&pre), "challenge": hx(&ss::<C>(&C::HDKG(&pre).unwrap())) })
         })
         .collect()
+}
+
+/// Participant `i`'s block `(t × C_ik, R ‖ μ)` for the constant term `a0`: `C_ik` (k ≥ 1) random points, the frost-core
+/// PoK `R = k·G`, `μ = k + H_dkg(id ‖ C_i0 ‖ R)·a0`.
+fn frost_block<C: Ciphersuite>(i: u16, a0: Scalar<C>, t: u16, r: &mut ChaCha20Rng) -> (Vec<Vec<u8>>, Vec<u8>) {
+    let g = <C::Group>::generator();
+    let mut cs = vec![gs::<C>(&(g * a0))];
+    for _ in 1..t {
+        cs.push(gs::<C>(&(g * frost_core::SigningKey::<C>::new(&mut *r).to_scalar())));
+    }
+    let k = frost_core::SigningKey::<C>::new(&mut *r).to_scalar();
+    let rr = gs::<C>(&(g * k));
+    let c = C::HDKG(&[id::<C>(i).serialize(), cs[0].clone(), rr.clone()].concat()).unwrap();
+    (cs, [rr, ss::<C>(&(k + c * a0))].concat())
 }
 
 /// Key data with participant blocks rebuilt by `f(i, commitments, R‖μ)`, `Y`, `t` overridden.
@@ -406,6 +474,48 @@ fn frost_row<C: Ciphersuite>(kind: u16, label: &str, (t, n): (u16, u16), role: &
         if kind == FROST_SECP {
             let bip = Secp256k1::single(&Secp256k1::s_parse(&ss::<C>(&secret)).unwrap(), &m);
             negs.push(reg("pop-bip340", &kd, &bip, "UAPoP", "a BIP-340 signature by x(Y) as the PoP (T-FROST: never verified as BIP-340)"));
+        }
+        // malformed key data (UA F3, every UA library that reads groups.json) in participant 1's C_11, which enters no
+        // equation on chain: only key-data validation refuses it; the PoP by the group over the changed ua
+        let mut r2 = rng(&format!("{label}/key-data"));
+        let c11 = blocks[0].0[1].clone();
+        let bad: Vec<(&str, Vec<u8>, &str)> = if kind == FROST_SECP {
+            vec![
+                ("c11-off-curve", secp_x(2, SECP_X_OFF), "C_11 = 02 ‖ 5: off the curve"),
+                ("c11-non-canonical", secp_x(c11[0], SECP_P_PLUS_1), "C_11 with x = p + 1: x ≥ p"),
+                ("c11-prefix-04", [&[4u8][..], &c11[1..]].concat(), "C_11 with prefix 04 (x unchanged)"),
+            ]
+        } else {
+            vec![
+                ("c11-off-curve", bn_y(&c11, false), "C_11 = (x, y + 1): off the curve"),
+                ("c11-non-canonical", bn_y(&c11, true), "C_11 = (x, y + q): y ≥ q"),
+            ]
+        };
+        for (name, p, c) in bad {
+            let mut b2 = blocks.clone();
+            b2[0].0[1] = p;
+            let kd2 = frost_kd(&vk, t, &b2);
+            let m2 = pop_of(kind, &kd2, a).2;
+            negs.push(reg(name, &kd2, &g.sign(&first, &m2, &mut r2).unwrap().serialize().unwrap(), "UAKeyData", c));
+        }
+        if kind == FROST_SECP {
+            // repeated / cancelling C_i0: every PoK valid and Y = Σ C_i0, but the partial sum and C_20 share an x, which
+            // UAFrostSecp256k1Verifier's mixed addition refuses (_addMixed: doubling or a sum at infinity)
+            assert_eq!(n, 3);
+            let zero = <<C::Group as Group>::Field>::zero();
+            for (name, cancel, c) in [
+                ("c0-repeated", false, "C_20 = C_10 (C_30 independent), PoKs and Y = Σ C_i0 valid, PoP by Y valid: the verifier refuses the doubling"),
+                ("c0-cancelling", true, "C_20 = −C_10 (Y = C_30), PoKs and Y = Σ C_i0 valid, PoP by Y valid: the verifier refuses the sum at infinity"),
+            ] {
+                let s1 = frost_core::SigningKey::<C>::new(&mut r2).to_scalar();
+                let s3 = frost_core::SigningKey::<C>::new(&mut r2).to_scalar();
+                let s2 = if cancel { zero - s1 } else { s1 };
+                let b2: Vec<_> = [s1, s2, s3].iter().enumerate().map(|(i, a0)| frost_block::<C>(i as u16 + 1, *a0, t, &mut r2)).collect();
+                let y = s1 + s2 + s3;
+                let kd2 = frost_kd(&gs::<C>(&(<C::Group>::generator() * y)), t, &b2);
+                let m2 = pop_of(kind, &kd2, a).2;
+                negs.push(reg(name, &kd2, &single_frost::<C>(&y, &m2, &mut r2), "UAPoP", c));
+            }
         }
         let s0 = unhex(&sigs[0]["sig"]);
         let (m_meta, m_member): ([u8; 32], [u8; 32]) = (unhex(&sigs[0]["message"]).try_into().unwrap(), unhex(&sigs[1]["message"]).try_into().unwrap());
@@ -615,7 +725,7 @@ fn bip327_nonce_gen_and_agg() {
     for c in bip("nonce_gen_vectors")["test_cases"].as_array().unwrap() {
         let opt = |k: &str| (!c[k].is_null()).then(|| unhex(&c[k]));
         let (sk, agg, msg, extra) = (opt("sk"), opt("aggpk"), opt("msg"), opt("extra_in"));
-        let (sec, pubn) = mu::nonce_gen::<Secp256k1>(&unhex(&c["rand_"]).try_into().unwrap(), sk.as_deref(), &unhex(&c["pk"]), agg.as_deref(), msg.as_deref(), extra.as_deref());
+        let (sec, pubn) = mu::nonce_gen::<Secp256k1>(&unhex(&c["rand_"]).try_into().unwrap(), sk.as_deref(), &unhex(&c["pk"]), agg.as_deref(), msg.as_deref(), extra.as_deref()).unwrap();
         assert_eq!(sec, unhex(&c["expected_secnonce"]));
         assert_eq!(pubn, unhex(&c["expected_pubnonce"]));
     }
@@ -733,4 +843,51 @@ fn zf_dkg_vector_pok_preimage() {
         let (r, mu_) = (ge::<Secp256K1Sha256>(&pok[..33]), sd::<Secp256K1Sha256>(&pok[33..]));
         assert!(r == <<Secp256K1Sha256 as Ciphersuite>::Group as Group>::generator() * mu_ - ge::<Secp256K1Sha256>(&cs[0]) * c);
     }
+}
+
+/// The signers refuse malformed input with an error, never a panic or a silent truncation (UA F3, before the
+/// `signers` API is exposed): `nonce_gen` takes a 32-byte `sk`, a `PLEN` pk and an aggregate key of its curve's
+/// width; `sign` a `k1 ‖ k2 ‖ pk` secnonce; `partial_sig_verify_internal` a `2 × PLEN` pubnonce; `partial_sig_verify`
+/// an index inside both lists; `sign_all` equal lengths; FROST `dkg` n ≥ 2 and `Dkg::sign` known identifiers.
+#[test]
+fn signers_refuse_malformed_input() {
+    type S = Secp256k1;
+    let (d1, d2) = (S::secret("hardening", 0), S::secret("hardening", 1));
+    let (sk, sk2) = (S::s_bytes(&d1).to_vec(), S::s_bytes(&d2).to_vec());
+    let (pk, pk2) = (S::ser(&(S::g() * d1)), S::ser(&(S::g() * d2)));
+    let pks = vec![pk.clone(), pk2.clone()];
+    let (r1, r2, msg) = ([7u8; 32], [8u8; 32], [1u8; 32]);
+    let long_sk = [sk.clone(), vec![0]].concat();
+    for bad in [&sk[..31], &long_sk[..], &[][..]] {
+        assert!(mu::nonce_gen::<S>(&r1, Some(bad), &pk, None, None, None).is_err(), "sk of {} bytes", bad.len());
+    }
+    assert!(mu::nonce_gen::<S>(&r1, Some(&sk), &pk[..32], None, None, None).is_err(), "pk of 32 bytes");
+    assert!(mu::nonce_gen::<S>(&r1, Some(&sk), &pk, Some(&[0; 33]), None, None).is_err(), "aggpk of 33 bytes");
+    assert!(mu::nonce_gen::<Bn254>(&r1, None, &[0; 64], Some(&[0; 32]), None, None).is_err(), "bn254 aggpk of 32 bytes");
+    let (sec, pubn) = mu::nonce_gen::<S>(&r1, Some(&sk), &pk, None, None, None).unwrap();
+    let (_, pubn2) = mu::nonce_gen::<S>(&r2, Some(&sk2), &pk2, None, None, None).unwrap();
+    let pubnonces = vec![pubn.clone(), pubn2];
+    let agg = mu::nonce_agg::<S>(&pubnonces).unwrap();
+    let long_sec = [sec.clone(), vec![0]].concat();
+    for bad in [&[][..], &sec[..32], &sec[..64], &sec[..96], &long_sec[..]] {
+        assert!(mu::sign::<S>(bad, &sk, &agg, &pks, &msg).is_err(), "secnonce of {} bytes", bad.len());
+    }
+    let psig = mu::sign::<S>(&sec, &sk, &agg, &pks, &msg).unwrap();
+    assert!(mu::partial_sig_verify::<S>(&psig, &pubnonces, &pks, &msg, 0).unwrap());
+    for bad in [&[][..], &pubn[..33], &pubn[..65]] {
+        assert!(mu::partial_sig_verify_internal::<S>(&psig, bad, &pk, &agg, &pks, &msg).is_err(), "pubnonce of {} bytes", bad.len());
+    }
+    assert!(mu::partial_sig_verify::<S>(&psig, &pubnonces, &pks, &msg, 2).is_err(), "index past both lists");
+    assert!(mu::partial_sig_verify::<S>(&psig, &pubnonces, &pks[..1], &msg, 1).is_err(), "index past pks");
+    assert!(mu::sign_all::<S>(std::slice::from_ref(&sk), &pks, &msg, &[r1, r2]).is_err(), "one sk, two pks");
+    assert!(mu::sign_all::<S>(&[sk, sk2], &pks, &msg, &[r1]).is_err(), "one rand, two signers");
+    let mut r = rng("hardening");
+    for n in [0, 1] {
+        assert!(dkg::<Secp256K1Sha256, _>(2, n, &mut r).is_err(), "n = {n}");
+    }
+    let g: Dkg<Secp256K1Sha256> = dkg(2, 3, &mut r).unwrap();
+    for signers in [&[0u16, 1][..], &[1, 4]] {
+        assert!(g.sign(signers, b"m", &mut r).is_err(), "signers {signers:?}");
+    }
+    assert!(g.sign(&[1, 3], b"m", &mut r).is_ok());
 }

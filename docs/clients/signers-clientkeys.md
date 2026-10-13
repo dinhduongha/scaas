@@ -181,7 +181,8 @@ Hedera HashPack (also a seam) and the TON Connect HTTP bridge.
 first.** The server supplies only the nonce, a `validUntil` inside the window and a fee within the user's `maxFee`.
 `checkPayment` rebuilds the payment `MetaTransfer` from the required `payee`, `entryRef` (the request's, on lane
 `payLane(entryRef)` with nonce 0), `expectedToken` and `amount` (× 10^`tokenDecimals`): `from` = the account, the right
-chain, fee ≤ `maxFee` (default 0), expiry ≤ 1 day, the right type; `checkOwnerCall` accepts only a `SmartKeyAccount` `MetaTransaction` (`from` = the account itself,
+chain, fee ≤ `maxFee` (default 0), expiry ≤ 1 day, the right type; `checkReceiverFee` likewise for a payee's receiver-pays co-signature (both paths):
+`paymentDigest` = the expected payment's digest, fee ≤ the payee's `maxFee`, to its `feeRecipient` ([CTR-MTX-06](../contracts/metatx.md#CTR-MTX-06)); `checkOwnerCall` accepts only a `SmartKeyAccount` `MetaTransaction` (`from` = the account itself,
 [CTR-ACC-10](../contracts/accounts.md#CTR-ACC-10)) whose `data` is `addKey(the key just created)` on the right
 account/chain with expiry ≤ 1 hour; anything else ⇒ refused. An owner call is signed only after a form showing the account, the selector and value 0. BUILT.
 
