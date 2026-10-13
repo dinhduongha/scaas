@@ -106,3 +106,37 @@ For PQZ **[inference]**: Cellframe hides the **signer** (ring signatures), not t
 balance conservation or a range over encrypted amounts. PQZ is the opposite case (amounts hidden, no anonymity), so
 Cellframe offers no proof system to take over. Its signature set matches what P6c already has (ML-DSA, Falcon,
 SLH-DSA). A ring signature such as ChipmunkRing would only matter if PQZ later adds sender anonymity.
+
+## 6. PQZL and PQZH: one PQZ, two proof systems
+
+Discussed with the owner on 2026-10-13 after the cross-check. **Owner direction: PQZL (lattice proof) and PQZH
+(hash-based proof) are two configuration values — two kinds — of one PQZ, not two protocols.** The spike below comes
+before any commitment; nothing in the normative docs changes yet.
+
+| | PQZL | PQZH |
+|---|---|---|
+| Proof | LNP22 through `pqz-core` (LaZer fork) | a hash-based proof (STARK, e.g. Plonky3; or Ligero), §2 |
+| Proof size | 42.7 KB [measured] | 100–300 KB (spec estimate) |
+| Verify | 6.6 s upstream, 7–11 s fork during P6d-2 [measured] | a few ms expected for a STARK [inference] |
+| On-chain verify | not viable as measured: ≈ 790 M gas at 0.12 M gas/ms against the 16.78 M cap [estimate]; needs off-chain verification or aggregation | the intended on-chain variant if the spike meets ≤ 50 ms |
+| Assumptions | MLWE / MSIS (lattice) | hash functions only, for soundness |
+
+**Shared layer, unchanged between the two:** MLWE ciphertexts and state (CTR-PQZ-03/04/06/07), account keys (the UA
+registry's `pqz-mlwe` 0x0142 kind serves both), disclosure and auditor, the client wallet and decryption. Only the
+proof and its verifier differ, selected per token at `initialize` (the spec already stores a `proofSystemId`).
+
+**What the split buys and what it does not [inference].** Privacy rests on MLWE in both: there is no
+additively homomorphic encryption from hashes, so PQZH still encrypts balances with MLWE and a break of MLWE exposes
+balances under both. PQZH diversifies **soundness** only (no one can mint or overspend if lattice proofs fail).
+It costs a second prover, verifier / precompile, audit, vector set and WASM module.
+
+**Token kinds.** `IOpenFactory.TokenKind` reserves four PQZ kinds today (`NONE_PQZ`, `UNDERLYING_PQZ`,
+`NONE_ZETHER_PQZ`, `UNDERLYING_ZETHER_PQZ`, values 4–7, `KindReserved`). Two proof systems give either eight kinds
+(`*_PQZL` / `*_PQZH`) or four kinds plus the proof system as an `initialize` parameter; the owner's "two kinds" reads
+as the first. To settle in the PQZ spec with the spike's numbers.
+
+**Next: the PQZH spike (E-S1H).** `R_TX` (and `R_REG`) as a circuit in a STARK (Plonky3 first; Ligero if the field
+emulation is too costly), measured like E-S1: proof bytes, prove native and wasm, verify (p99 adversarial), memory,
+and the zero-knowledge mode. The hard part is arithmetic mod q = 2^42 − 215 inside a small STARK field (Goldilocks /
+BabyBear): limbs and range checks multiply the circuit size. Then decide per kind: PQZH on chain if it meets the
+verify limit with acceptable gas; PQZL kept only for off-chain or aggregated use; if neither meets, back to §4.
