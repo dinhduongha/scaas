@@ -25,28 +25,32 @@
 /* R_REG witness: s (2048 x int8) || e (2048 x int16 LE) */
 #define PQZ_REG_WIT_BYTES (2048 + 4096)
 
-/* R_TX (spike): prefix || pk_f || pk_t || pk_a || T = u_T || v_T || out = u || v_t || v_f || v_a || be8(fee) */
+/* Debit statements (pq-zether.md §7.7): header (640 B of 32-byte words) || body. The relations read fee (header
+   offset 256) and, for R_BURN, amount (288), each a be32 word that must be < 2^64; the rest of the header is only
+   hashed (opTag, proofSystemId: the precompile checks them, §9.1). */
+#define PQZ_HEADER_BYTES 640
+#define PQZ_HDR_FEE 256
+#define PQZ_HDR_AMOUNT 288
+/* R_TX (auditor on): header || pk_f || pk_t || pk_a || T = u_T || v_T || out = u || v_t || v_f || v_a */
 #define PQZ_TX_STMT_BYTES                                                                                   \
-  (PQZ_PREFIX_BYTES + 3 * PQZ_POLYVEC_BYTES + (PQZ_POLYVEC_BYTES + PQZ_V_BYTES)                            \
-   + (PQZ_POLYVEC_BYTES + 3 * PQZ_V_BYTES) + 8)
+  (PQZ_HEADER_BYTES + 3 * PQZ_POLYVEC_BYTES + (PQZ_POLYVEC_BYTES + PQZ_V_BYTES)                            \
+   + (PQZ_POLYVEC_BYTES + 3 * PQZ_V_BYTES))
 /* R_TX witness: s_f (int8) || e_f (int16) || r (int8) || e1 (int16) || e2_t, e2_f, e2_a (16 x int16 each)
    || d (16 x u8) || d' (16 x u8)   [M, carries and e_T are derived by the prover] */
 #define PQZ_TX_WIT_BYTES (2048 + 4096 + 2048 + 4096 + 3 * 32 + 16 + 16)
 
-/* R_BURN (pq-zether.md §7.5, §7.7): header (640) || pk_f || T = u_T || v_T || out = u || v_f. The relation reads
-   fee (header offset 256) and amount (288), each a be32 word < 2^64; the rest of the header is only hashed. */
-#define PQZ_HEADER_BYTES 640
-#define PQZ_HDR_FEE 256
-#define PQZ_HDR_AMOUNT 288
+/* R_BURN (§7.5): header || pk_f || T = u_T || v_T || out = u || v_f */
 #define PQZ_BURN_STMT_BYTES (PQZ_HEADER_BYTES + PQZ_POLYVEC_BYTES + 2 * (PQZ_POLYVEC_BYTES + PQZ_V_BYTES))
 /* R_BURN witness: s_f (int8) || e_f (int16) || r (int8) || e1 (int16) || e2_f (16 x int16) || d' (16 x u8)
    [M, carries and e_T are derived by the prover; d = digits(amount) is public] */
 #define PQZ_BURN_WIT_BYTES (2048 + 4096 + 2048 + 4096 + 32 + 16)
 
 /* Disclosure (pq-zether.md §7.9): opTag || proofSystemId || chainId || chainUid || token || registry || entryRef
-   || be32(amount) || u8(kind) || pk || u || v  (32-byte words; amount < 2^64). Same layout for R_DS and R_DR. */
+   || amount || kind || pk || u || v, every scalar a 32-byte word (amount < 2^64; kind is hashed only), so pk starts
+   at 288. Same layout for R_DS and R_DR; 33,184 B. */
 #define PQZ_DISC_AMOUNT (PQZ_PREFIX_BYTES + 5 * 32)
-#define PQZ_DISC_PK (PQZ_DISC_AMOUNT + 32 + 1)
+#define PQZ_DISC_KIND (PQZ_DISC_AMOUNT + 32)
+#define PQZ_DISC_PK (PQZ_DISC_KIND + 32)
 #define PQZ_DISC_STMT_BYTES (PQZ_DISC_PK + 2 * PQZ_POLYVEC_BYTES + PQZ_V_BYTES)
 /* R_DS witness (sender): r (int8) || e1 (int16) || e2_t (16 x int16) */
 #define PQZ_DS_WIT_BYTES (2048 + 4096 + 32)

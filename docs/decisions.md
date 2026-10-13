@@ -3225,6 +3225,8 @@ Change (2026-10-08): owner — PQZ is meant for public chains too; the route is 
 ### CTR-PQZ-14 — Disclosure only by zero-knowledge proof
 - old: R283 · status: current · owner: no · date: 2026-10-06 · normative: contracts/pq-zether.md#CTR-PQZ-14 · superseded-by: —
 
+Change (2026-10-13): owner — the disclosure statement layout is fixed byte by byte (32-byte words; `kind` a word, so `pk` is aligned; 33,184 B), and the `RECEIVER_X` noise bound reads `e'_i ∈ [−2^24, 2^24)`, the range the proof shows; uniqueness is unchanged. Source add: owner, 2026-10-13 (`research/pqz-relations-burn-disclose.md` §5).
+
 **Why.** Disclosure is by zero-knowledge proof only; revealing `r` would open the sender's balance and noise must not leak.
 **Cost if wrong.** Each disclosure costs a proof (≈ 15–25 KB, estimate).
 **Source.** `history/specs/2026-10-06-pq-zether-design.md:333`
@@ -3262,6 +3264,8 @@ Change (2026-10-08): `PqzToken` sits on the one token base and relays like `Zeth
 - old: R288 · status: current · owner: no · date: 2026-10-06 · normative: contracts/pq-zether.md#CTR-PQZ-19 · superseded-by: —
 
 Change (2026-10-11): owner — the seed is bound to a fresh published 16-byte salt instead of the amounts (CTR-ZTH-30 for PQZ): a re-proof still never reuses `r`, and the sender remembers no amount. Source add: owner, 2026-10-11.
+
+Change (2026-10-13): owner — burn and refresh take fresh CSPRNG randomness (hedging with the key seed allowed), never the counter-derived seed: their salt is 0, so two burns at one `sendCounter` for different balances would reveal `Δ·(b' − b'')`; no disclosure re-derives it. Source add: owner, 2026-10-13 (`research/pqz-relations-burn-disclose.md` §5).
 
 **Why.** Encryption randomness is derived from a message-bound seed, so the sender can re-derive it for disclosure and a re-proof never reuses `r`.
 **Cost if wrong.** Reusing `r` across two messages leaks `Δ·(m − m')` up to noise.
