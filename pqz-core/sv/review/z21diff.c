@@ -7,7 +7,7 @@
  * both must accept exactly when the prover's ||(z21, z22)||^2 <= Bsq (the verifier's ||(z21, w - gamma w1)||^2 is
  * that same vector). Linked only against the patched-prover library of review.sh (build/review/poc), never into a
  * production build.
- *   z21diff [nseeds = 1] [jmax = 31]          JSON lines; exit 0 = no disagreement, no expectation mismatch, and
+ *   z21diff [nseeds = 1] [jmax = 31] [mask = 31]  JSON lines (mask: 1 R_REG, 2 R_TX, 4 R_BURN, 8 R_DS, 16 R_DR); exit 0 = no disagreement, no expectation mismatch, and
  *                                             both verdicts seen for every relation
  */
 #define main pqz_sv_diff_main
@@ -27,6 +27,7 @@ main (int argc, char **argv)
 {
   static uint8_t proof[PQZ_MAX_PROOF];
   const int nseeds = argc > 1 ? atoi (argv[1]) : 1, jmax = argc > 2 ? atoi (argv[2]) : 31;
+  const int mask = argc > 3 ? atoi (argv[3]) : 31; /* one relation per process keeps an ASan malloc build small */
   long cases = 0, dis = 0, mis = 0, err = 0, acc[NREL] = { 0 }, rej[NREL] = { 0 };
   double closest = 1e9;
   xs = 0x5A21D1FF00000001ULL;
@@ -36,6 +37,8 @@ main (int argc, char **argv)
   for (int rel = 0; rel < NREL; rel++)
     {
       int64_t last = 0;
+      if (!(mask >> rel & 1))
+        continue;
       for (int j = 0; j <= jmax; j++)
         {
           const int64_t k = (int64_t)llround (pow (1.25, j));
@@ -78,7 +81,7 @@ main (int argc, char **argv)
   for (int rel = 0; rel < NREL; rel++)
     {
       printf ("{\"rel\": \"%s\", \"accepted\": %ld, \"rejected\": %ld}\n", RN[rel], acc[rel], rej[rel]);
-      both &= acc[rel] > 0 && rej[rel] > 0;
+      both &= !(mask >> rel & 1) || (acc[rel] > 0 && rej[rel] > 0);
     }
   printf ("{\"z21diff\": 1, \"cases\": %ld, \"disagreements\": %ld, \"expect_mismatches\": %ld, \"prove_errors\": %ld, "
           "\"closest_z2sq_over_bsq\": %.6f, \"both_verdicts_every_relation\": %d}\n",
