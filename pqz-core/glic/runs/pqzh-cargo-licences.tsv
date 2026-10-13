@@ -1,0 +1,75 @@
+# pqz-core/pqzh crate licences, 2026-10-14, from Cargo.lock (commit 836c95c)
+# $ (cd pqz-core/pqzh && cargo 1.90.0 metadata --format-version 1 --offline --locked) | python3: name, version, license field, source
+# every package of the resolved lock (all targets, dev and build deps included)
+allocator-api2	0.2.21	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+autocfg	1.5.1	Apache-2.0 OR MIT	registry+https://github.com/rust-lang/cr
+block-buffer	0.10.4	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+cfg-if	1.0.5	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+chacha20	0.10.2	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+cobs	0.2.3	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+cpufeatures	0.2.17	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+cpufeatures	0.3.1	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+crunchy	0.2.4	MIT	registry+https://github.com/rust-lang/cr
+crypto-common	0.1.7	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+digest	0.10.7	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+either	1.19.0	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+embedded-io	0.4.0	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+embedded-io	0.6.1	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+equivalent	1.0.2	Apache-2.0 OR MIT	registry+https://github.com/rust-lang/cr
+foldhash	0.2.0	Zlib	registry+https://github.com/rust-lang/cr
+generic-array	0.14.7	MIT	registry+https://github.com/rust-lang/cr
+hashbrown	0.17.1	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+itertools	0.15.0	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+keccak	0.1.6	Apache-2.0 OR MIT	registry+https://github.com/rust-lang/cr
+libc	0.2.190	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+libm	0.2.16	MIT	registry+https://github.com/rust-lang/cr
+lock_api	0.4.14	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+num-bigint	0.5.1	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+num-integer	0.1.47	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+num-traits	0.2.19	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+p3-air	0.8.0	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+p3-batch-stark	0.8.0	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+p3-challenger	0.8.0	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+p3-commit	0.8.0	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+p3-dft	0.8.0	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+p3-field	0.8.0	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+p3-fri	0.8.0	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+p3-goldilocks	0.8.0	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+p3-keccak	0.8.0	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+p3-lookup	0.8.0	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+p3-matrix	0.8.0	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+p3-maybe-rayon	0.8.0	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+p3-mds	0.8.0	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+p3-merkle-tree	0.8.0	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+p3-poseidon1	0.8.0	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+p3-poseidon2	0.8.0	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+p3-security	0.8.0	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+p3-symmetric	0.8.0	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+p3-uni-stark	0.8.0	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+p3-util	0.8.0	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+paste	1.0.15	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+pin-project-lite	0.2.17	Apache-2.0 OR MIT	registry+https://github.com/rust-lang/cr
+postcard	1.1.1	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+pqzh	0.1.0	MIT OR Apache-2.0	local
+proc-macro2	1.0.107	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+quote	1.0.47	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+rand	0.10.3	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+rand_core	0.10.1	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+scopeguard	1.2.0	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+serde	1.0.229	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+serde_core	1.0.229	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+serde_derive	1.0.229	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+sha3	0.10.8	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+spin	0.12.3	MIT	registry+https://github.com/rust-lang/cr
+syn	2.0.119	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+syn	3.0.9	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+thiserror	2.0.21	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+thiserror-impl	2.0.21	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+tiny-keccak	2.0.2	CC0-1.0	registry+https://github.com/rust-lang/cr
+tracing	0.1.44	MIT	registry+https://github.com/rust-lang/cr
+tracing-attributes	0.1.31	MIT	registry+https://github.com/rust-lang/cr
+tracing-core	0.1.36	MIT	registry+https://github.com/rust-lang/cr
+typenum	1.20.1	MIT OR Apache-2.0	registry+https://github.com/rust-lang/cr
+unicode-ident	1.0.27	(MIT OR Apache-2.0) AND Unicode-3.0	registry+https://github.com/rust-lang/cr
+version_check	0.9.5	MIT/Apache-2.0	registry+https://github.com/rust-lang/cr
+# counts: Counter({'MIT OR Apache-2.0': 56, 'MIT': 7, 'Apache-2.0 OR MIT': 4, 'Zlib': 1, 'CC0-1.0': 1, '(MIT OR Apache-2.0) AND Unicode-3.0': 1, 'MIT/Apache-2.0': 1})
