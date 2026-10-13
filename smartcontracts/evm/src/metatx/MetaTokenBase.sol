@@ -16,6 +16,7 @@ import {IUARegistry} from "../ua/IUARegistry.sol";
 import {IFactoryToken} from "../factory/IFactoryToken.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {FeePolicy, FeeMode} from "../common/FeePolicy.sol";
+import {UAKinds} from "../ua/UAKinds.sol";
 
 /// @title Common root of the v2 tiers on `ERC20MetaTx` (TW2 §3.3, §7; CTR-MTX-07). EIP-1167 clones.
 /// @notice The named functions (CTR-MTX-09) only build the struct of their kind and run its pipeline; receiver-pays
@@ -319,6 +320,33 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
         return true;
     }
 
+    /// @notice The UA twin of `mtxPayReceiverFee` (CTR-MTX-05/06 on ids): the same shape on `t`, then the payer's
+    ///         `UAMetaTransfer` through the typed UA pipeline; the payee `t.to` co-signs `ReceiverFee` over its digest —
+    ///         a native id itself (ECDSA, ERC-1271, HIP-632), a derived one through the registry under `receiver-fee` —
+    ///         and pays `fee` out of what it received. A `UA_POOL` recipient is refused before any move (a move to the
+    ///         pool's address would credit its slot with no UA balance behind it).
+    function uaPayReceiverFee(
+        MetaTxLib.UAMetaTransfer calldata t, bytes calldata payerAuth,
+        uint256 fee, address feeRecipient, uint256 rfValidUntil, bytes calldata payeeAuth
+    ) external nonReentrant returns (bool) {
+        AdminLib.requireFeature(AdminLib.PAYABLE);
+        if (t.entryRef == 0 || t.mode & MetaTxLib.MODE_FEE_MASK != 0 || t.fee != 0
+            || t.mode & MetaTxLib.MODE_RESTRICT_RELAYER == 0 || t.batch != payLane(t.entryRef) || t.nonce != 0
+            || feeRecipient == address(0)) revert ReceiverFeeShape();
+        if (block.timestamp > rfValidUntil) revert ReceiverFeeExpired(rfValidUntil, block.timestamp);
+        if (fee == 0 || fee > t.value) revert ReceiverFeeAmount(fee, t.value);
+        bytes32 to = MetaTxLib.pad(feeRecipient);
+        if (to == t.to) revert FeeRecipientIsPayee();
+        // early only: without it the fee's `_uaMove` reverts the whole call with the same `TransferToSelf`
+        if (feeRecipient == address(this)) revert TransferToSelf();
+        if (feeRecipient == MetaTxLib.UA_POOL) revert UAPoolNotPayable();
+        bytes32 d = _uaExecuteTransfer(t, payerAuth);
+        _uaAuthorize(t.to, UAKinds.PURPOSE_RECEIVER_FEE, receiverFeeDigest(d, fee, feeRecipient, rfValidUntil), payeeAuth);
+        _uaMove(t.to, to, fee);
+        emit UAReceiverFeePaid(d, t.to, feeRecipient, fee);
+        return true;
+    }
+
     /// @dev Fee `PERCENT`/`FIXED`, recipient bound by the signer and non-zero.
     function _requireFeeShape(uint32 mode, address feeRecipient) private pure {
         uint32 f = mode & MetaTxLib.MODE_FEE_MASK;
@@ -344,6 +372,22 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
         }
         _transfer(payer, to, amount);
         emit PaymentSettled(payer, to, amount, feeAmount, feeRecipient, entryRef);
+        return true;
+    }
+
+    /// @notice `payWithFee` to a derived payee (CTR-UA-28): the caller pays `amount` into `to`'s UA balance and the fee
+    ///         on top to `feeRecipient` (an address: never the payee; `UA_POOL` and the token are refused by `_update`).
+    function payWithFeeToUA(
+        bytes32 to, uint256 amount, FeeMode feeMode, uint256 fee, address feeRecipient, bytes32 entryRef
+    ) external returns (bool) {
+        AdminLib.requireFeature(AdminLib.PAYABLE);
+        _requireDerivedReceiver(to);
+        bytes32 payer = MetaTxLib.pad(_msgSender());
+        uint256 feeAmount = FeePolicy.compute(feeMode, amount, fee);
+        FeePolicy.validateRecipient(feeMode, feeRecipient);
+        if (feeAmount != 0) _transfer(_msgSender(), feeRecipient, feeAmount);
+        _uaMove(payer, to, amount);
+        emit UAPaymentSettled(payer, to, amount, feeAmount, feeRecipient, entryRef);
         return true;
     }
 

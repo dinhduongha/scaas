@@ -13,12 +13,15 @@ import {ITokenAdmin} from "../../src/metatx/ITokenAdmin.sol";
 import {ITradeToken} from "../../src/trade/ITradeToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {UnderlyingZetherToken} from "../../src/zether/UnderlyingZetherToken.sol";
+import {NoUnderlyingZetherToken} from "../../src/zether/NoUnderlyingZetherToken.sol";
 import {ZetherLayer} from "../../src/zether/ZetherLayer.sol";
 import {IZetherToken} from "../../src/zether/IZetherToken.sol";
 import {ZetherTypes} from "../../src/zether/ZetherTypes.sol";
 import {ITransferDisclosure} from "../../src/zether/ITransferDisclosure.sol";
 import {ZetherKeys} from "./helpers/ZetherKeys.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
+import {IUALedger} from "../../src/metatx/IUALedger.sol";
+import {UAKinds} from "../../src/ua/UAKinds.sol";
 
 /// A leg that calls back into the token when the token pays it out or pulls it (an ERC-777-style hook).
 contract HookLeg is MockERC20 {
@@ -70,6 +73,7 @@ contract ZetherUnderlyingTest is ZetherFixture {
     MockERC20 internal eur = new MockERC20("EUR", "EUR", 6);
     uint256 constant PAYER_PK = 0x9A7E5;
     address payer = vm.addr(PAYER_PK);
+    bytes32 internal signer; // a SIGNING UA, receiver of `wrapToUA`
 
     function setUp() public {
         _stack(false);
@@ -484,9 +488,15 @@ contract ZetherUnderlyingTest is ZetherFixture {
 
     function test_allowlistPinned_underlyingZether() public {
         (bytes4[] memory s, uint8[] memory c, uint8[] memory a) = w.mtxSelectors();
-        assertEq(s.length, 14);
+        assertEq(s.length, 16);
         assertEq(s[12], UnderlyingZetherToken.zetherWrapShield.selector);
         assertEq(s[13], UnderlyingZetherToken.zetherUnshieldUnwrap.selector);
+        assertEq(s[14], UnderlyingToken.wrapToUA.selector);
+        assertEq(s[15], UnderlyingToken.unwrapToUA.selector);
+        assertEq(c[14], 1, "wrapToUA ABSOLUTE");
+        assertEq(a[14], 0);
+        assertEq(c[15], 2, "unwrapToUA AMOUNT(1)");
+        assertEq(a[15], 1);
         assertEq(s[6], ZetherLayer.zetherShield.selector);
         assertEq(s[7], ZetherLayer.zetherTransfer.selector);
         assertEq(s[8], ZetherLayer.zetherTransferCompact.selector);
@@ -543,8 +553,37 @@ contract ZetherUnderlyingTest is ZetherFixture {
         }
     }
 
+    /// A registered SIGNING UA (`schnorr-bn254`) for `wrapToUA` (CTR-UA-28).
+    function _signingUA() internal returns (bytes32 ua) {
+        bytes memory y = ZetherKeys.pub(0xA07, false);
+        ua = UAKinds.uaOf(UAKinds.SCHNORR_BN254, y);
+        bytes32 m = reg.uaMessage(UAKinds.SCHNORR_BN254, UAKinds.PURPOSE_POP, reg.popDigest(ua, 0));
+        reg.register(UAKinds.SCHNORR_BN254, y, ZetherKeys.sign("scaas.ua.schnorr.v1", 0xA07, m, false), 0, "");
+    }
+
+    /// UA-5a (CTR-UA-26): `NONE_ZETHER` inherits `burn` on the UA allowlist from `NoUnderlyingToken`; a derived signer
+    /// burns its public UA balance through `UA_POOL`.
+    function test_noneZether_burnUnderUA() public {
+        signer = _signingUA();
+        ZetherLayer nz = _newToken(false, "nz");
+        NoUnderlyingZetherToken(address(nz)).mint(address(this), 100);
+        nz.transferToUA(signer, 100);
+        MetaTxLib.UAMetaTransaction memory m = MetaTxLib.UAMetaTransaction({
+            from: signer, data: abi.encodeCall(NoUnderlyingToken.burn, (40)), batch: 1, nonce: 0,
+            validUntil: block.timestamp + 300, mode: MetaTxLib.MODE_RESTRICT_RELAYER, relayer: relayer, fee: 0,
+            feeRecipient: address(0)
+        });
+        bytes32 um = reg.uaMessage(UAKinds.SCHNORR_BN254, UAKinds.PURPOSE_METATX, nz.uaDigest(m));
+        bytes memory auth = abi.encode(ZetherKeys.pub(0xA07, false), ZetherKeys.sign("scaas.ua.schnorr.v1", 0xA07, um, false));
+        vm.prank(relayer);
+        nz.uaExecute(m, auth);
+        assertEq(nz.balanceOfUA(signer), 60);
+        assertEq(nz.totalSupply(), 60);
+    }
+
     /// Every selector kind 3 publishes runs relayed once (review T4 I1). On this two-leg token the two single-asset
-    /// entries reach the call and revert `UnderlyingRequired`: the rule let them through.
+    /// entries reach the call and revert `UnderlyingRequired`, and `unwrapToUA` reverts `UALegNotLedger` (its legs are
+    /// outside tokens): the rule let them through.
     function test_everyListedSelectorRuns_underlyingZether() public {
         _shielded(70, 0);
         _public(tok, payer, 100 * SCALE);
@@ -552,21 +591,27 @@ contract ZetherUnderlyingTest is ZetherFixture {
         vm.prank(payer);
         usd.approve(address(w), type(uint256).max);
         (bytes4[] memory s,,) = w.mtxSelectors();
-        assertEq(s.length, 14);
+        assertEq(s.length, 16);
+        signer = _signingUA();
         uint256 bal = 70;
         for (uint256 i; i < s.length; ++i) {
             bytes memory data = _k3Call(s[i], bal, w.envelopeBinding(_envOf(300 + i)));
             uint256 sc = w.accountState(alice.ua).sendCounter;
             bool single = s[i] == bytes4(keccak256("wrap(uint256)")) || s[i] == bytes4(keccak256("unwrap(uint256,address,uint256)"));
-            _relay(data, 300 + i, single ? abi.encodeWithSelector(IUnderlyingToken.UnderlyingRequired.selector) : bytes(""));
+            bytes memory err = single ? abi.encodeWithSelector(IUnderlyingToken.UnderlyingRequired.selector) : bytes("");
+            if (s[i] == UnderlyingToken.unwrapToUA.selector) {
+                err = abi.encodeWithSelector(IUALedger.UALegNotLedger.selector, address(usd));
+            }
+            _relay(data, 300 + i, err);
             if (w.accountState(alice.ua).sendCounter != sc) bal -= 10;
         }
+        assertEq(w.balanceOfUA(signer), SCALE, "wrapToUA");
         assertEq(bal, 10, "four transfers, an unshield, an unshield-unwrap");
         assertTrue(_holds(tok, alice, 10, true));
         assertTrue(_holds(tok, bob, 3 + 4 * 10 + 1, false), "shield; transfers; wrap-shield");
         assertEq(w.mtxNonce(payer, 55), 1, "cancelNonce");
         assertEq(w.balanceOf(payer), (100 + 10 - 5 - 3) * SCALE, "wrap; unwrap; shield");
-        assertEq(usd.balanceOf(payer), (100 - 10 + 5 - 1 - 1) * SCALE, "wrap; unwrap; wrap-shield; addReserve");
+        assertEq(usd.balanceOf(payer), (100 - 10 + 5 - 1 - 1 - 1) * SCALE, "wrap; unwrap; wrap-shield; addReserve; wrapToUA");
         assertEq(w.balanceOf(address(0xB0C)), 10 * SCALE, "unshield");
         assertEq(usd.balanceOf(address(0xB0C)), 10 * SCALE, "unshield-unwrap");
     }
@@ -593,6 +638,10 @@ contract ZetherUnderlyingTest is ZetherFixture {
         }
         if (sel == bytes4(keccak256("addReserve(address,uint256)"))) {
             return abi.encodeWithSignature("addReserve(address,uint256)", address(usd), SCALE);
+        }
+        if (sel == UnderlyingToken.wrapToUA.selector) return abi.encodeCall(UnderlyingToken.wrapToUA, (address(usd), SCALE, signer));
+        if (sel == UnderlyingToken.unwrapToUA.selector) {
+            return abi.encodeCall(UnderlyingToken.unwrapToUA, (address(usd), SCALE, signer, 0));
         }
         if (sel == UnderlyingZetherToken.zetherWrapShield.selector) {
             return abi.encodeCall(UnderlyingZetherToken.zetherWrapShield, (address(usd), SCALE, bob.ua));

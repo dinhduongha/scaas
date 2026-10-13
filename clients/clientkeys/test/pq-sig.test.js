@@ -94,3 +94,24 @@ test('metatx3 rows: typed data → digest, one call and one transfer per PQ kind
     }
   }
 });
+
+test('metatx3 receiverFee (UA-5a): an mldsa65 payer and an mldsa65 payee, both signatures verify with noble', () => {
+  const [r] = V.metatx3.receiverFee;
+  assert.equal(V.metatx3.receiverFee.length, 1);
+  const payer = V.kinds.find((k) => k.name === 'mldsa65');
+  const payee = V.extraKeys.find((x) => x.name === 'mldsa65' && x.index === 1);
+  assert.deepEqual([r.transfer.message.from, r.transfer.message.to], [payer.ua, payee.ua]);
+  assert.equal(hex(hashTypedData(r.transfer)), r.paymentDigest);
+  assert.equal(r.receiverFee.message.paymentDigest, r.paymentDigest);
+  assert.equal(hex(hashTypedData(r.receiverFee)), r.receiverFeeDigest);
+  // abi.encode(bytes(""), sig): heads 0x40, 0x60; keyData length 0; sig length; sig
+  const sigOf = (auth) => { const b = fromHex(auth); return hex(b.subarray(128, 128 + Number(BigInt(hex(b.subarray(96, 128)))))); };
+  for (const [auth, purpose, digest, k] of [[r.payerAuth, 'metatx', r.paymentDigest, payer],
+    [r.payeeAuth, 'receiver-fee', r.receiverFeeDigest, payee]]) {
+    assert.ok(auth.startsWith(`0x${'0'.repeat(62)}40`), 'abi.encode(bytes(""), sig)');
+    const m = hex(ua.uaMessage(0x0131, tag(purpose), fromHex(digest)));
+    assert.ok(ok(0x0131, k.keyData, m, sigOf(auth)), purpose);
+    assert.ok(!ok(0x0131, k.keyData, hex(ua.uaMessage(0x0131, tag(purpose === 'metatx' ? 'receiver-fee' : 'metatx'),
+      fromHex(digest))), sigOf(auth)), `${purpose}: the other purpose fails`);
+  }
+});

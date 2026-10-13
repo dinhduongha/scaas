@@ -3122,6 +3122,8 @@ Change (2026-10-13): owner — the UA allowlist grows with parity: `unwrapToUA` 
 ### CTR-UA-28 — A native caller credits a derived UA in one call
 - old: — · status: current · owner: yes · date: 2026-10-13 · normative: contracts/accounts.md#CTR-UA-28 · superseded-by: —
 
+Change (2026-10-13): built as ruled (UA-5a): `_uaMint`, `wrapToUA`, `unwrapToUA`, `mintToUA`, `payWithFeeToUA`, `burn` and `unwrapToUA` on the UA allowlist (CTR-UA-26) and `uaPayReceiverFee` (CTR-MTX-05) are BUILT; the spike's controller rulings C5a-1…C5a-14 settle build details (task split, one wrap body, check order, fixtures, gas method, vector parameters) and change no rule. Source add: plan `superpowers/plans/2026-10-13-ua5a-receivers-wrap.md`.
+
 **Why.** Every `address` receiver of a direct path gets a `bytes32` form (`wrapToUA`, `unwrapToUA`, `mintToUA`, `payWithFeeToUA`, beside `transferToUA`), each crediting through `_uaMove` (a mint is a move from 0), so a wrap reaches a UA in one call instead of `wrap` + `transferToUA` and a mandate can pay a UA payee. `wrapToUA` is on the address allowlist only (a UA holds no outside underlying); `unwrapToUA` pays a SCaaS ledger leg by `transferToUA` and is on both allowlists. The `UnwrappedToUA` event and the ERC-165 test for a ledger leg were controller rulings, accepted by the owner on 2026-10-13.
 **Cost if wrong.** Four more entry points per kind; a leg that falsely reports `IUALedger` can only cheat the unwrapper who chose it (the exact balance delta still holds the wrapper's reserve).
 **Source.** owner, 2026-10-13 (Q9); `history/specs/2026-10-13-ua-parity-design.md` §4.2, §4.3, §4.5 (UP-9).

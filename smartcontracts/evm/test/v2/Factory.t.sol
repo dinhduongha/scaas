@@ -300,10 +300,11 @@ contract FactoryTest is Test {
     }
 
     function test_sizes() public view {
-        // owner: size later (Glamsterdam); budget 20,480 (P2a ruling); +8.7 KB for the UA ledger (UA-4)
-        assertLe(address(noneImpl).code.length, 32_768);
+        // owner: size later (Glamsterdam); budget 20,480 (P2a ruling); +8.7 KB for the UA ledger (UA-4); +1.2 / +2.5 KB
+        // for the UA-5a receivers (size-baseline.json holds the exact ratchet)
+        assertLe(address(noneImpl).code.length, 36_864);
         assertLe(address(f).code.length, 24_576);
         // Transitional (P1d D2): over EIP-170 until the size work
-        assertLe(address(underlyingImpl).code.length, 40_960);
+        assertLe(address(underlyingImpl).code.length, 45_056);
     }
 }

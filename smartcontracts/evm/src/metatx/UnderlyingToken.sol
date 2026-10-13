@@ -24,6 +24,8 @@ contract UnderlyingToken is MetaTokenBase, IUnderlyingToken {
     bytes4 internal constant SEL_WRAP_LEG = bytes4(keccak256("wrap(address,uint256)"));
     bytes4 internal constant SEL_UNWRAP_LEG = bytes4(keccak256("unwrap(address,uint256,address,uint256)"));
     bytes4 internal constant SEL_ADD_RESERVE = bytes4(keccak256("addReserve(address,uint256)"));
+    bytes4 internal constant SEL_WRAP_TO_UA = bytes4(keccak256("wrapToUA(address,uint256,bytes32)"));
+    bytes4 internal constant SEL_UNWRAP_TO_UA = bytes4(keccak256("unwrapToUA(address,uint256,bytes32,uint256)"));
 
     constructor(address factory_, address smartKeyAccountImpl_, bytes32 chainUid_, address registry_, bool isHedera_)
         MetaTokenBase(factory_, smartKeyAccountImpl_, chainUid_, registry_, isHedera_)
@@ -43,11 +45,18 @@ contract UnderlyingToken is MetaTokenBase, IUnderlyingToken {
 
     /// @notice Single-asset ABI. Mints the MEASURED amount received at the leg's rate, rounded down.
     function wrap(uint256 amount) external payable nonReentrant returns (uint256) {
-        return _wrap(UnderlyingLib.sole(), amount);
+        return _wrap(UnderlyingLib.sole(), amount, 0);
     }
 
     function wrap(address u, uint256 amount) external payable nonReentrant returns (uint256) {
-        return _wrap(UnderlyingLib.indexOf(u), amount);
+        return _wrap(UnderlyingLib.indexOf(u), amount, 0);
+    }
+
+    /// @notice `wrap(u, amount)` minted into the registered SIGNING UA `to` (CTR-UA-28), the receiver checked first.
+    ///         Address allowlist `ABSOLUTE`: relayed, the native leg reverts (no coin in a self-call).
+    function wrapToUA(address u, uint256 amount, bytes32 to) external payable nonReentrant returns (uint256) {
+        _requireDerivedReceiver(to);
+        return _wrap(UnderlyingLib.indexOf(u), amount, to);
     }
 
     /// @notice Single-asset ABI, `minOut = 0`; not allowlisted.
@@ -63,6 +72,19 @@ contract UnderlyingToken is MetaTokenBase, IUnderlyingToken {
         external nonReentrant returns (uint256 out, uint256 burned)
     {
         return _unwrap(UnderlyingLib.indexOf(u), wrapped, recipient, minOut);
+    }
+
+    /// @notice `unwrap(u, …)` paid into `to` in leg `u`'s UA ledger (CTR-UA-28): burns from the subject (a native, or a
+    ///         UA through `UA_POOL` under `uaExecute`) before the one outside call, the leg's `transferToUA`.
+    function unwrapToUA(address u, uint256 wrapped, bytes32 to, uint256 minOut)
+        external nonReentrant returns (uint256 out, uint256 burned)
+    {
+        uint256 i = UnderlyingLib.indexOf(u);
+        (out, burned) = UnderlyingLib.quoteUnwrapToUA(i, wrapped, minOut);
+        address from = _msgSender();
+        _burn(from, burned);
+        UnderlyingLib.payOutToUA(i, to, out);
+        emit UnwrappedToUA(from, u, to, burned, out);
     }
 
     /// @notice Anyone; no mint. Over-collateralises before a rate decrease; otherwise a donation to every holder.
@@ -84,11 +106,15 @@ contract UnderlyingToken is MetaTokenBase, IUnderlyingToken {
         emit Wrapped(o.from, u, received, minted);
     }
 
-    function _wrap(uint256 i, uint256 amount) private returns (uint256 minted) {
+    /// @dev `to == 0` is a sentinel, "mint to the caller", not a receiver; any other `to` is minted into that derived UA
+    ///      as a move from 0, unchecked here: a caller passing a `to` must validate it first (`wrapToUA`:
+    ///      `_requireDerivedReceiver`, which also refuses 0 as a native id).
+    function _wrap(uint256 i, uint256 amount, bytes32 to) private returns (uint256 minted) {
         address account = _msgSender();
         (address u, uint256 received, uint256 m) = UnderlyingLib.wrap(i, amount, account, msg.value);
         minted = m;
-        _mint(account, minted);
+        if (to == 0) _mint(account, minted);
+        else _uaMove(0, to, minted);
         emit Wrapped(account, u, received, minted);
     }
 
@@ -131,25 +157,29 @@ contract UnderlyingToken is MetaTokenBase, IUnderlyingToken {
 
     /// @notice `cancelNonce` (base); `wrap(uint256)`, `wrap(address,uint256)`, `addReserve` `ABSOLUTE` (fee from the
     ///         minted units or the caller's balance); `unwrap(uint256,address,uint256)` `AMOUNT(0)`,
-    ///         `unwrap(address,uint256,address,uint256)` `AMOUNT(1)` (gasless unwrap, CTR-MTX-12). The two-argument
-    ///         `unwrap` is not listed (same intent, second digest, no `minOut`).
+    ///         `unwrap(address,uint256,address,uint256)` `AMOUNT(1)` (gasless unwrap, CTR-MTX-12); UA-5a (CTR-UA-28)
+    ///         `wrapToUA` `ABSOLUTE`, `unwrapToUA` `AMOUNT(1)`. The two-argument `unwrap` is not listed (same intent,
+    ///         second digest, no `minOut`).
     function mtxSelectors()
         public pure virtual override(IMetaTx, MetaTxBase) returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
     {
-        s = new bytes4[](6);
-        c = new uint8[](6);
-        a = new uint8[](6);
+        s = new bytes4[](8);
+        c = new uint8[](8);
+        a = new uint8[](8);
         (s[0], c[0]) = (this.cancelNonce.selector, FEE_CLASS_ABSOLUTE);
         (s[1], c[1]) = (SEL_WRAP, FEE_CLASS_ABSOLUTE);
         (s[2], c[2]) = (SEL_UNWRAP_MIN, FEE_CLASS_AMOUNT);
         (s[3], c[3]) = (SEL_WRAP_LEG, FEE_CLASS_ABSOLUTE);
         (s[4], c[4], a[4]) = (SEL_UNWRAP_LEG, FEE_CLASS_AMOUNT, 1);
         (s[5], c[5]) = (SEL_ADD_RESERVE, FEE_CLASS_ABSOLUTE);
+        (s[6], c[6]) = (SEL_WRAP_TO_UA, FEE_CLASS_ABSOLUTE);
+        (s[7], c[7], a[7]) = (SEL_UNWRAP_TO_UA, FEE_CLASS_AMOUNT, 1);
     }
 
-    /// @notice The UA allowlist (CTR-UA-26): the two `unwrap`s with `minOut` (a derived signer burns its UA balance).
+    /// @notice The UA allowlist (CTR-UA-26): the two `unwrap`s with `minOut` and `unwrapToUA` (a derived signer burns
+    ///         its UA balance).
     function _uaAllowed(bytes4 sel) internal view virtual override returns (bool) {
-        return sel == SEL_UNWRAP_MIN || sel == SEL_UNWRAP_LEG;
+        return sel == SEL_UNWRAP_MIN || sel == SEL_UNWRAP_LEG || sel == SEL_UNWRAP_TO_UA;
     }
 
     function _mtxRule(bytes4 sel) internal view virtual override returns (MtxRule memory) {
@@ -158,6 +188,8 @@ contract UnderlyingToken is MetaTokenBase, IUnderlyingToken {
         if (sel == SEL_WRAP_LEG) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 68);
         if (sel == SEL_UNWRAP_LEG) return MtxRule(FEE_CLASS_AMOUNT, 1, 132);
         if (sel == SEL_ADD_RESERVE) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 68);
+        if (sel == SEL_WRAP_TO_UA) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 100);
+        if (sel == SEL_UNWRAP_TO_UA) return MtxRule(FEE_CLASS_AMOUNT, 1, 132);
         return super._mtxRule(sel);
     }
 

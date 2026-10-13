@@ -32,6 +32,12 @@ contract NoUnderlyingToken is MetaTokenBase {
         _mint(to, amount);
     }
 
+    /// @notice `mint` into the registered SIGNING UA `to` (CTR-UA-28): the same flag and role; never allowlisted.
+    function mintToUA(bytes32 to, uint256 amount) external {
+        AdminLib.requireRole(AdminLib.MINTABLE, _msgSender());
+        _uaMint(to, amount);
+    }
+
     /// @notice Allowlisted `AMOUNT(0)` (CTR-MTX-19): gasless through `mtxExecute`.
     function burn(uint256 amount) external nonReentrant {
         AdminLib.requireFeature(AdminLib.BURNABLE);
@@ -47,6 +53,11 @@ contract NoUnderlyingToken is MetaTokenBase {
         a = new uint8[](2);
         (s[0], c[0]) = (this.cancelNonce.selector, FEE_CLASS_ABSOLUTE);
         (s[1], c[1]) = (this.burn.selector, FEE_CLASS_AMOUNT);
+    }
+
+    /// @notice The UA allowlist (CTR-UA-26): `burn` (a derived signer burns its UA balance through `UA_POOL`).
+    function _uaAllowed(bytes4 sel) internal view virtual override returns (bool) {
+        return sel == this.burn.selector;
     }
 
     function _mtxRule(bytes4 sel) internal view virtual override returns (MtxRule memory) {

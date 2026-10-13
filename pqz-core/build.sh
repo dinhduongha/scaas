@@ -61,7 +61,7 @@ wasm() {
   ./check_symbols.sh $objs
   ${CLANG:-clang} $W $CFLAGS_LIB -DPQZ_WASM -c test/pqz_bench.c -o $B/wasm/pqz_bench.o
   ex=""
-  for e in step_init step_prove_reg step_prove_tx step_len step_verify step_verify_bad step_hash step_arena_peak step_set_fast __heap_base; do
+  for e in step_init step_prove step_len step_verify step_verify_bad step_hash step_arena_peak step_peak_reset step_set_fast __heap_base; do
     ex="$ex --export=$e"
   done
   ${WASM_LD:-wasm-ld-18} --no-entry $ex -z stack-size=8388608 --stack-first --max-memory=4294967296 \

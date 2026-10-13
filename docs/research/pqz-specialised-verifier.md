@@ -5,7 +5,7 @@
 Written 2026-10-13 for the owner's P6-SV spike (TODO P6-SV), after the verifier-floor analysis
 (`pqz-verifier-floor.md`). Question: can a verifier written for our two fixed statements accept exactly the proofs
 LaZer's generic `tbox` verifier accepts, and how close does it get to the floor and to the 50 ms p99 verify limit
-(CTR-PQZ-09)? Branch `pqz-sv` (not merged); code `pqz-core/src/pqz_sv.c`, tests `pqz-core/test/pqz_sv_diff.c`,
+(CTR-PQZ-09)? Code on branch `pqz-sv` (not merged yet): `pqz-core/src/pqz_sv.c`, tests `pqz-core/test/pqz_sv_diff.c`,
 `pqz-core/test/pqz_sv_fuzz.c`, runs `pqz-core/sv/`. **No decision is recorded here.**
 
 **[measured]** marks a number from a run in this note (machine in §2). **[estimate]** marks a number computed from
