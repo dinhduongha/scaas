@@ -359,6 +359,20 @@ For a ciphertext encrypted to `pk_t = A·s_t + e_t`, decryption by `s_t` gives `
 B_FRESH = β_e·β_s + β_s·β_e + β_2 = 164·36 + 36·164 + 64 = 11,872      (< 2^13.54)
 ```
 
+B_FRESH needs each bound **per block**: every exact-ℓ2 bound is its own equation of the proof with its own
+Schwartz–Zippel challenges (`proofSystemId` v2, [CTR-PQZ-09](#CTR-PQZ-09)). A proof of only the sums
+(`‖s_t‖² + ‖e_t‖² ≤ 36² + 164²`, and so on) would let a sender and a recipient under one control reach
+`√(28,192 + 1) · √68,672 ≈ 44,001` per credit.
+
+**Note (2026-10-13): PQZL v1 did not enforce the per-block bounds.** v1 (LaZer `tbox` as released,
+[lazer#25](https://github.com/lazer-crypto/lazer/issues/25)) gave all exact-ℓ2 equations of a proof one
+Schwartz–Zippel challenge domain, so the verifier checked only the sum of the block norms (`R_REG` 28,192, `R_TX`
+68,672). For accounts whose keys the attacker controls that allowed ≈ 44,001 of noise per credit (3.7 × B_FRESH) and
+≈ 45.0 M over `K_MAX` units, beyond `2^24` and `Δ/2`: such an account could fail to debit or decrypt wrongly. The
+mint threshold below was not reached, but its margin fell from 4.1× to ≈ 1.12×; honest accounts stayed inside `2^24`.
+v2 checks each bound on its own, so the numbers in this section hold as written; v1 is retired and was never deployed
+(analysis and proof of concept: `docs/research/pqz-l2-domain.md`; regression check `pqz-core/check_tbox_fixes.sh`).
+
 The trivial plain term has noise 0. A sum of at most `K_MAX = 1024` units has
 `|noise| ≤ 1024 · 11,872 = 12,156,928 < 2^24 = 16,777,216`, and digit sums `M_i ≤ 1024 · 15 = 15,360 < 2^14`. The debit
 proof shows `e_T[i] ∈ [−2^24, 2^24)` and `0 ≤ M_i < 2^14` (complete for every honest state). Honest decryption rounds correctly
@@ -371,7 +385,7 @@ equation, `|Δ(M − M')| < Δ`, hence `M = M'`.
 **Soundness depends on accounting, not only liveness.** Uniqueness assumes that the *true* noise of `T` is inside the
 range the cap guarantees. If an accounting bug let it grow to `|e| ≥ Δ − 2^24 ≈ 3·2^24 ≈ 50.3 M`, a malicious prover
 could claim `M' = M + 1` with an in-range `e' = e − Δ`, which mints. That threshold is **4.1×** the cap's bound
-(12.16 M). The cap is therefore enforced twice: at every credit ([CTR-PQZ-06](#CTR-PQZ-06)) and at every debit
+(12.16 M) with per-block norm proofs (v2; ≈ 1.12× in v1, note above). The cap is therefore enforced twice: at every credit ([CTR-PQZ-06](#CTR-PQZ-06)) and at every debit
 (`unitsOf(T) ≤ K_MAX`, [transfer](#transfer)), and a forge invariant checks that every reachable `T` has ≤ `K_MAX`
 units. The key is unique too: two short preimages `(s, e) ≠ (s', e')` of the same `pk` give a non-zero kernel vector
 of `[A | I]` of norm ≤ `2·√(36² + 164²) ≈ 336`, while the Gaussian-heuristic shortest vector of that 4096-dimensional
@@ -1034,7 +1048,9 @@ fixes are merged by hand. **Versioning:** `proofSystemId = keccak256("scaas/pqz/
 serialization change bumps it; the token stores it at `initialize` and the precompile accepts only ids it implements.
 v1 → v2 (2026-10-13): the two LaZer `tbox` Schwartz–Zippel fixes
 ([lazer#24](https://github.com/lazer-crypto/lazer/issues/24), [lazer#25](https://github.com/lazer-crypto/lazer/issues/25);
-`pqz-core/sz/README.md`) change the transcript; v1 is retired.
+`pqz-core/sz/README.md`) change the transcript; v1 is retired. lazer#24: v1 drew one challenge pair for all λ/2
+evaluation accumulators (2 independent tests, soundness ≈ 2^-84 against the stated 2^-127); lazer#25: v1 used one
+challenge domain for all exact-ℓ2 equations, so only the sum of the block norms was checked ([noise](#noise)).
 
 - **Origin.** Fork of LaZer at a pinned commit (`main` was `3330e48`, 2026-09-28; the pin is recorded), MIT, repo path
   `scaas/pqz-core/`. Kept: LNP22 protocol logic, codegen (`scripts/lin-codegen.sage` with lattice-estimator), parameter
@@ -1396,7 +1412,7 @@ service is the user's (or the organization's key oracle), never a third party's 
 | T2 | Quantum forgery of validity proofs (mint) | MSIS/MLWE-based LNP22; no pairing or DL anywhere in PQZ proofs |
 | T3 | Quantum forgery of authorization | ML-DSA-65; a hybrid `msig` only adds a classical check, never replaces it |
 | T4 | Malformed ciphertexts (out-of-range coefficients, wrong lengths, huge noise) | `< q` checks in Solidity and precompile; every ciphertext comes with a proof of exact norms; the only trivial term (the plain term of `T`) is built by the contract |
-| T5 | Noise growth ⇒ wrong decryption or failure oracle | worst-case bound + `K_MAX`, enforced at credit **and** at debit (`unitsOf(T)`), 4.1× margin before soundness is at risk; no bootstrapping needed; a failure is impossible, not merely unlikely ([2024/127](https://eprint.iacr.org/2024/127)) |
+| T5 | Noise growth ⇒ wrong decryption or failure oracle | worst-case bound + `K_MAX`, enforced at credit **and** at debit (`unitsOf(T)`), 4.1× margin before soundness is at risk (per-block ℓ2 bounds, `proofSystemId` v2; v1 checked only their sum, ≈ 1.12×, [noise](#noise)); no bootstrapping needed; a failure is impossible, not merely unlikely ([2024/127](https://eprint.iacr.org/2024/127)) |
 | T6 | Decryption-noise leakage (IND-CPA^D style) | noise never leaves `pqz_dec`; disclosure is ZK ([CTR-PQZ-14](#CTR-PQZ-14)); no "decrypt and publish" API |
 | T7 | Credit flood to hit `K_MAX` | `pqzShield` and fees go to `plainPending` and take no slot, so only proven transfers fill the cap: ≈ 2.8 M each, ≈ 2.9 G gas for 1022 (≈ 36 full blocks). Recovery = rolling all but the last ≤ 16 credits (64 rollovers ≈ 0.57 G) **plus** a refresh (≈ 2.6 M); a refresh alone does not free the cap while unrolled credits remain. Defender ≈ 5× cheaper; relayer fee UAs never fill. Gas is free on chain 7622, so permissioned submitters and node rate limits remain the real control; rollover is public |
 | T8 | Rollover grief against in-flight proofs | impossible by construction ([CTR-PQZ-08](#CTR-PQZ-08)); > 16 attacker transfer credits rolled past `p` force a re-prove only; honest keepers roll only credits older than `KEEPER_AGE`, clients retry once |

@@ -259,7 +259,16 @@ No published LNP22 verifier specialised to a fixed statement was found. The floo
 - **Second implementation risk.** A specialised verifier that omits or mis-orders one check is a soundness bug
   that honest-proof tests will not catch. It needs the differential tests above and a review of every equation
   against LNP22 / the `tbox` derivation.
-- **A protocol-level point is under review** (TODO P6-SZ). Its outcome does not change the floor.
+- **Two challenge-derivation bugs in LaZer's `tbox` were found during this work and are fixed** (correction
+  2026-10-13; this caveat first said only that a protocol-level point was under review). (1)
+  `__schwartz_zippel_accumulate2` drew one pair of Z_q challenge rows and reused it for all λ/2 evaluation
+  accumulators: 2 independent Schwartz–Zippel tests instead of λ = 4, soundness ≈ 2^-84 instead of the stated 2^-127
+  ([lazer#24](https://github.com/lazer-crypto/lazer/issues/24), `pqz-tbox-soundness.md`). (2)
+  `__schwartz_zippel_accumulate_l2` gave all exact-ℓ2 equations one domain, so only the sum of the block norms was
+  checked ([lazer#25](https://github.com/lazer-crypto/lazer/issues/25), `pqz-l2-domain.md`). Both are fixed in
+  `pqz-core` under `proofSystemId` v2 (merged `98695de`) and in the specialised verifier (merged `dcf0da3`). The
+  counts in this note are for the v1 transcript; the fixes do not change the floor: (1) adds (λ − 2)·M challenge
+  values per evaluation call, (2) changes only a domain index (measured on v2: `pqz-specialised-verifier.md` §0).
 - **Counts are this R_TX.** A different relation (more evaluation equations, larger witness, a second JL) changes
   them linearly. The model (`floor/model.py`) takes the dimensions as inputs.
 - **The model is not an implementation.** Only the two biggest terms were prototyped. The smaller ones use counts ×
