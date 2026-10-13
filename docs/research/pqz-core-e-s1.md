@@ -15,7 +15,9 @@ from the codegen or the estimator, not a run. **[inference]** marks a conclusion
 ## 1. Result
 
 **Two of the roadmap's four kill criteria are missed: verify by ≈ 300× and prove by ≈ 6×. The kill decision is pending: the
-owner ordered an upstream timing cross-check first** (§8). The proof size and the forbidden-symbol scan pass.
+owner ordered an upstream timing cross-check first** (§9). The proof size and the forbidden-symbol scan pass. The
+browser budgets of CTR-PQZ-18 are missed too: `R_TX` wasm prove time and wasm memory are both above the hard limits
+(§7).
 
 | Kill criterion (CTR-PQZ-09, roadmap P6d row) | Limit | `R_TX` | |
 |---|---|---|---|
@@ -31,7 +33,7 @@ spike ran on a desktop, not the chain host; a 300× gap does not depend on that 
 
 The size criterion has room: 42.7 KB is inside the spec's 30–50 KB estimate and under half the kill line. The time
 criteria are where the spike fails. Whether the gap comes from the fork's rewrite (portable C, a 128-bit reduction
-per product term) or is inherent to the statement under LaZer's protocol (§7: verify costs as much as prove) is not
+per product term) or is inherent to the statement under LaZer's protocol (§8: verify costs as much as prove) is not
 known yet; that is what the upstream cross-check decides.
 
 ## 2. What ran
@@ -170,7 +172,23 @@ Medians [measured]; native 7 proves and 7 + 7 honest verifies, wasm 3 proves and
   instructions, and the wasm objects no `f32` / `f64` operations (llvm-objdump 18 prints the untyped `select`, opcode
   0x1b, as `f32.select`).
 
-## 7. Where the time goes
+## 7. Browser budgets (CTR-PQZ-18)
+
+The spec's prover budgets (`docs/contracts/pq-zether.md` §11, CTR-PQZ-18; p95 per transfer on reference devices) are
+not kill criteria; the spike's wasm numbers against them [measured; node, not a browser; medians, not p95]:
+
+| Budget | Desktop browser | Phone | Hard limit | Measured (wasm32) | |
+|---|---|---|---|---|---|
+| Prove `R_TX` | ≤ 5 s | ≤ 15 s | 30 s ⇒ fallback | 39.3 s | above the hard limit; ≈ 8× the desktop budget |
+| Peak WASM memory | ≤ 128 MiB | ≤ 128 MiB | 256 MiB (iOS WebKit) | `R_TX` arena peak 476 MB (`R_REG` 113 MB) | `R_TX` ≈ 1.8× the hard limit |
+| Module size | ≤ 1.0 MB gzip | same | — | `pqz.wasm` 337 KB uncompressed (with the bench steps) | inside |
+
+**wasm / native ratio 2.3–2.7×** [measured]: prove `R_TX` 39.3 / 17.0 s = 2.3, `R_REG` 3.27 / 1.20 s = 2.7; verify
+2.2 and 2.6. At that ratio the engine exit target of prove ≤ 3 s native (CTR-PQZ-18) maps to ≈ 7–8 s in wasm, above
+the 5 s desktop-browser budget [inference]. The spike's wasm build has no `-msimd128` (the spec's build target names
+it); the phone was not measured.
+
+## 8. Where the time goes
 
 gprof on `R_TX` (native):
 
@@ -188,11 +206,13 @@ Candidate work, not done and not to start before the cross-check: lazy reduction
 `pqz_qsort`, fewer `R_TX` equations (for example merging the 16 per-digit evaluation equations), and reuse of the
 accumulated matrices on the verifier side.
 
-## 8. Open
+## 9. Open
 
 - **Kill decision pending the upstream cross-check (owner).** Build upstream LaZer `3330e48` (AVX2 build), run the
   same `R_TX` statement with the same parameters, and measure prove and verify. This tells whether the gap is the
   fork's rewrite or inherent to the statement. Optimisation only after that.
+- **Browser budgets.** `R_TX` wasm prove (39.3 s) and wasm memory (476 MB) are above CTR-PQZ-18's hard limits; no
+  browser or phone run yet (§7).
 - **Golden dump on real AVX-512.** One run of the `v4` dump binary on AVX-512 hardware, diffed against
   `kat/lazer-3330e48.json`.
 - **Arena exhaustion is not graceful.** Once the arena is exhausted the sink block is shared by every later

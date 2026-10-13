@@ -1,6 +1,6 @@
 # P6d (E-S1 `pqz-core` spike) — status (2026-10-13)
 
-Branch `p6d-pqz-core`. Not merged. No README / research note / roadmap / TODO written yet (controller's job).
+Branch `p6d-pqz-core`. Not merged. README, research note `docs/research/pqz-core-e-s1.md`, roadmap and TODO rows written.
 
 ## Done
 
@@ -70,6 +70,10 @@ full verify. Init (A expansion + ABDLOP keys) 0.33 s native, 0.49 s wasm. Reject
 loops (z3/z4 and z1/z2), so they are not directly the codegen's "total" attempts. Native timings vary ±20 %
 between runs on this machine (R_TX prove 13.7–17.0 s).
 
+Browser budgets (pq-zether.md CTR-PQZ-18): R_TX wasm prove 39.3 s against 5 s desktop / 30 s hard limit; wasm arena
+peak 476 MB against 128 MiB / 256 MiB hard (≈ 1.8×); wasm/native 2.3–2.7× (R_TX 39.3/17.0, R_REG 3.27/1.20), so
+the 3 s native target maps to ≈ 7–8 s in wasm. No decision (owner).
+
 Profile (gprof, R_TX): ~55 % in the ring arithmetic (`pqz_red128` 3.6·10^9 calls + `basemul16` 5.9·10^7: a
 128-bit reduction per product term), 8 % `spolymat_sort` (insertion sort `pqz_qsort`), the rest LaZer's
 sparse-matrix Schwartz–Zippel bookkeeping. Verify costs about as much as prove: the verifier redoes the same
@@ -89,7 +93,7 @@ equations).
    run (node only); 4 GiB max memory, needs ~0.5 GB for R_TX.
 4. UBSan nits left as upstream: zero-length VLAs when M = 0 / nbin = 0 (`lnp-tbox.c` 223, 875, 3358),
    null + 0 in `aes256ctr.c:212`.
-5. Docs: README, research note `docs/research/pqz-core-e-s1.md`, roadmap P6d row + TODO P6 row, docs_check.
+5. ~~Docs: README, research note, roadmap P6d row + TODO P6 row, docs_check.~~ (done)
 
 Scratch (not needed to resume, re-creatable): LaZer and lattice-estimator clones, the upstream tbox harness and
 debug builds under the session scratchpad `p6d/`.
