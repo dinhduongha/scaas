@@ -614,6 +614,9 @@ pf_alloc (pf_t *F, const lnp_tbox_params_struct *P)
    Z blocks into the last block's upsilon (upsilon_z = 0 for z < Z-1), so a block may exceed its own B_z as long
    as sum_z ||x_z||^2 <= sum_z B_z^2. Checks whether the verifier enforces each exact-l2 equation separately. */
 int pqz_l2dom_poc;
+#define POC_IGNORE_ERR pqz_l2dom_poc /* and emit the proof although the prover's own self-checks fail */
+#else
+#define POC_IGNORE_ERR 0
 #endif
 
 /* s1 slack polys: upsilon_i = binexp(B_i^2 - ||x_i||^2) */
@@ -681,7 +684,7 @@ do_prove (sys_t *S, pf_t *F, const uint8_t hash0[32], const uint8_t rnd32[32], u
   lnp_tbox_prove (hash, F->tB, F->h, F->c, F->z1, F->z21, F->hint, F->z3, F->z4, F->s1, F->m, F->s2, F->tA2,
                   S->R->A1, S->R->A2p, S->R->Bp, S->R2, S->r1, S->N, S->R2p, S->r1p, S->r0p, S->M, S->Es, NULL,
                   NULL, S->Ps, NULL, NULL, S->Ds, NULL, NULL, ex + 32, P);
-  if (pqz_err)
+  if (pqz_err && !POC_IGNORE_ERR)
     return pqz_err;
   encproof (buf, &len, F->tA1, F->tB, F->h, F->c, F->z1, F->z21, F->hint, F->z3, F->z4, P);
   if (len > PQZ_MAX_PROOF || len > *proof_len)
@@ -836,7 +839,7 @@ pqz_prove (uint8_t op, const uint8_t *stmt, size_t stmt_len, const uint8_t *wit,
             rc = do_prove (&S, &F, h, rnd32, proof, proof_len);
         }
     }
-  if (pqz_err)
+  if (pqz_err && !POC_IGNORE_ERR)
     rc = pqz_err;
   pqz_arena_release (&base);
   return rc;

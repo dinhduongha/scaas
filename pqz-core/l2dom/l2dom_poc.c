@@ -16,6 +16,9 @@
 
 #ifdef PQZ_L2DOM_POC
 extern int pqz_l2dom_poc;
+extern int pqz_err;
+extern const char *pqz_err_file;
+extern int pqz_err_line;
 #endif
 
 static uint64_t xs = 0x9E3779B97F4A7C15ULL;
@@ -106,8 +109,9 @@ main (int argc, char **argv)
           pqz_l2dom_poc = 1;
           pl = sizeof proof;
           int rc = pqz_prove (PQZ_OP_REGISTER, stmt, sl, wit, sizeof wit, rnd32, proof, &pl);
-          printf ("  pooled-slack prover rc=%d proof %zu B\n", rc, pl);
-          if (rc)
+          printf ("  pooled-slack prover rc=%d proof %zu B; prover self-checks: %s%s:%d\n", rc, pl,
+                  pqz_err ? "FAIL (ignored), first at " : "pass", pqz_err ? pqz_err_file : "", pqz_err ? pqz_err_line : 0);
+          if (rc && !(rc == pqz_err && pl < sizeof proof)) /* rc = the ignored self-check error, proof emitted */
             continue;
           rw (argv[2], cases[c], "stmt", stmt, &sl, 1);
           rw (argv[2], cases[c], "proof", proof, &pl, 1);
