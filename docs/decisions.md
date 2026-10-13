@@ -3203,6 +3203,7 @@ Change (2026-10-13): owner — the parameters section records (dated note) that 
 Change (2026-10-13): owner — `proofSystemId` v1 → v2 for the two LaZer `tbox` Schwartz–Zippel fixes (lazer#24: λ × M evaluation challenges instead of one pair reused, soundness ≈ 2^-84 → the stated 2^-127; lazer#25: one challenge domain per exact-ℓ2 equation); v1 retired. Source add: `research/pqz-tbox-soundness.md`, `research/pqz-l2-domain.md`.
 
 Change (2026-10-13): owner — §8 states that a v2 verifier bounds the whole `z2 = (z21, z22)` (lazer#26, P6-Z21): an accepted-set change only (no transcript, format or honest-proof change, nothing deployed); `proofSystemId` stays v2 for now, bump or not is an open owner decision. Source add: `research/pqz-z21-norm.md`.
+Change (2026-10-14): owner — no `proofSystemId` bump for the z21 fix: v2 stays `keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v2")`, and every v2 verifier must check ‖z21‖² + ‖w − γ·w1‖² ≤ Bsq (merged `a8b5b66`). Source: `research/pqz-z21-norm.md` §6.3.
 
 **Why.** LNP22 via a LaZer fork with six rewritten layers runs portably and deterministically in the node, the prover and WASM; one implementation, no Solidity verifier; kill criterion on size and verify time.
 **Cost if wrong.** We own a C fork; upstream fixes are merged by hand.

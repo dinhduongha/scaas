@@ -191,7 +191,7 @@ within host noise (the fix draws 2 M more challenge coefficients per evaluation 
 native p50 prove / verify `R_TX` 949 / 620 → 1,061 / 648 ms, `R_BURN` 683 / 526 → 755 / 544 ms, `R_REG` 228 / 165 →
 252 / 177 ms, `R_DS` 271 / 195 → 314 / 211 ms, `R_DR` 295 / 194 → 323 / 212 ms; wasm verify p50 `R_TX` 761 → 818 ms.
 
-## z21 norm check P6-Z21 (branch `pqz-z21`, not merged)
+## z21 norm check P6-Z21 (branch `pqz-z21`, merged 2026-10-14 `a8b5b66`; no `proofSystemId` bump)
 
 Third LaZer finding, from the independent SV review (finding 1), public as
 [lazer#26](https://github.com/lazer-crypto/lazer/issues/26): `lnp_quad_verify` / `abdlop_verify` bounded ‖w − γ·w1‖

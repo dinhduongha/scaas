@@ -7,8 +7,8 @@ PQZL verifier work; the first two are `pqz-tbox-soundness.md` (lazer#24) and `pq
 the independent review of the specialised verifier (finding 1 of the review of `pqz_sv.c`, 2026-10-13; the review
 document is kept locally, its reproducers are `pqz-core/sv/review/`). Upstream issue:
 [lazer-crypto/lazer#26](https://github.com/lazer-crypto/lazer/issues/26) (public, filed 2026-10-13, owner). Fixed in
-`pqz-core` on branch `pqz-z21` (not merged). **No decision is recorded here**; the `proofSystemId` question is a
-recommendation (§6.3).
+`pqz-core` on branch `pqz-z21`, merged 2026-10-14 (`a8b5b66`). Owner decision 2026-10-14: no `proofSystemId` bump
+(the §6.3 recommendation; recorded in `docs/decisions.md`, CTR-PQZ-03).
 
 **[measured]** marks a number from a run (the run file is named). **[code]** marks a statement read in the source
 at the given lines. **[paper]** marks a statement of LNP22 ([eprint 2022/284](https://eprint.iacr.org/2022/284),
