@@ -1,0 +1,4 @@
+{"rel": "R_REG", "case": "honest verify", "result": 1, "ms": 1076.1, "ntt_fwd": 22240, "ntt_inv": 13706, "pointwise": 296277, "red128_outside_ntt": 11358560}
+{"rel": "R_REG", "case": "truncated proof (statement + decode)", "result": 0, "ms": 3.9, "ntt_fwd": 0, "ntt_inv": 0, "pointwise": 0, "red128_outside_ntt": 0}
+{"rel": "R_TX", "case": "honest verify", "result": 1, "ms": 14552.8, "ntt_fwd": 111111, "ntt_inv": 194693, "pointwise": 3274603, "red128_outside_ntt": 160469152}
+{"rel": "R_TX", "case": "truncated proof (statement + decode)", "result": 0, "ms": 13.1, "ntt_fwd": 0, "ntt_inv": 0, "pointwise": 0, "red128_outside_ntt": 0}

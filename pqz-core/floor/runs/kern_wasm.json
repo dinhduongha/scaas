@@ -1,0 +1,12 @@
+{"build":"wasm32 (node v26.8.1, no SIMD)"}
+{"op":"wasm fork pqz_ntt_basemul (pointwise product, 4 x 16x16 schoolbook)","unit":"per product","ns":6783.7}
+{"op":"wasm fork pqz_ntt_fwd (mod q, 2 layers, 4 x 16 blocks)","unit":"per poly","ns":671}
+{"op":"wasm fork pqz_ntt_inv","unit":"per poly","ns":1182.4}
+{"op":"wasm crt30 ntt_fwd, one prime (scalar)","unit":"per poly per prime","ns":400.4}
+{"op":"wasm crt30 ntt_inv, one prime (scalar)","unit":"per poly per prime","ns":485.1}
+{"op":"wasm crt30 pointwise multiply-accumulate, one prime (scalar)","unit":"per product per prime","ns":74.5}
+{"op":"wasm R_TX JL fold vR = V^T R, 4 x 256 x 9792 ternary, scalar branchless","unit":"per fold","ns":7395644}
+{"op":"wasm fork AES-256-CTR stream (bitsliced, LaZer rng_urandom)","unit":"per MiB","ns":69394609.8}
+{"op":"wasm fork rng_init + 16 B + clear (AES key schedule per challenge domain)","unit":"per call","ns":17101.1}
+{"op":"wasm fork SHAKE128 squeeze","unit":"per MiB","ns":2099500.8}
+{"op":"wasm fork SHAKE128 absorb 64 KiB + squeeze 32 B","unit":"per 64 KiB","ns":129333}

@@ -22,6 +22,9 @@ phases P1–P5 (P0 = the docs, done); each phase ends with the size gate (CTR-TO
 
 - [ ] **P6-PQZH spike (E-S1H)** (owner 2026-10-13): PQZL (lattice, `pqz-core`) and PQZH (hash-based proof) as two kinds of one PQZ — shared MLWE encryption, state, keys (`pqz-mlwe`), disclosure; only the proof system differs. Spike: `R_TX` / `R_REG` as a STARK circuit (Plonky3 first, Ligero if the mod-q emulation is too costly); measure proof bytes, prove native + wasm, p99 adversarial verify, memory, zero-knowledge mode; then settle the token kinds (eight `*_PQZL` / `*_PQZH` or four + `proofSystemId`) in pq-zether.md. Research: `docs/research/pqz-proof-alternatives.md` §6.
 
+- [ ] **P6-SZ protocol review** (owner 2026-10-13, first): a point in LaZer `tbox` found by the verifier-floor analysis is being checked before PQZL is used anywhere; details kept out of the repo until it is settled.
+- [ ] **P6-SV specialised PQZL verifier spike** (owner 2026-10-13, after P6-SZ): verify `R_REG` / `R_TX` by evaluating the statement directly instead of LaZer's generic sparse matrices, same transcript and proofs; complete NTT over 3 × 30-bit CRT primes, table-based AES (public data) or AES-NI for the JL matrix, vectorised JL fold; floor ≈ 9.1 ms portable / 2.5 ms AVX2 / 12.8 ms wasm against the 50 ms limit; differential tests against the generic verifier on honest and mutated proofs.
+
 **P1 start checklist (owner decisions 2026-10-08):**
 - [x] Keep the old code for reference: git tag `ref/pre-token-tree` on the last commit before P1, and copy the v1/v2 token
       sources and the old `ZetherToken` to `smartcontracts/evm/legacy/` (not built, not tested; a README says "reference only").
