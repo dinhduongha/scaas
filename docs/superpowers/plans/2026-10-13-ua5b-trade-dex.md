@@ -141,7 +141,9 @@ CTR-TOK-20 (`uaWrap`); `docs/contracts/metatx.md` CTR-MTX-18 (the `msg.sender` s
 - **C5b-13 clientkeys.** `uaTradeOrderTypedData`, `uaInvalidateNoncesTypedData`; the UA cancel is
   `orderCancelTypedData({orderHash})` over the UA order hash (unchanged); `checkTradeOrder` gains `ua: true` (the order
   is a `UATradeOrder`, `account` an id).
-- **C5b-14 Sizes.** `SCaaSDex` joins `size-baseline.json` (over 24,576, as the design estimated).
+- **C5b-14 Sizes.** Measured after Task 4: `SCaaSDex` 23,493 (+1,627) stays under 24,576, so it does not join
+  `size-baseline.json` (the design estimated + 4–6 K); the token implementations ratchet in `size-baseline.json`;
+  the `UNDERLYING` pin in `Factory.t.sol` / `HederaV2.t.sol` 45,056 → 49,152 (as C5a-9).
 
 ## File map
 
@@ -199,7 +201,7 @@ CTR-TOK-20 (`uaWrap`); `docs/contracts/metatx.md` CTR-MTX-18 (the `msg.sender` s
   ledger-off token), `UAReceiveNotLedger`, a derived destination unregistered (`MatchFailed`), Path B refund to a UA,
   fee shares, `UALegSettled` fields, `LegShapeUnknown`, `UAVerifyGas` re-raised (whole call), `uaTrade` refused in an
   interaction, the exchange path with a UA leg receiving surplus (`UAExchangeLegSettled`), conservation.
-- [ ] Code; sizes into `size-baseline.json`.
+- [ ] Code; sizes into `size-baseline.json` (tokens; the DEX fits, C5b-14).
 - [ ] Commit `feat(ua5b): SCaaSDex tagged legs — UA orders in one book, UA payouts and refunds, UAVerifyGas re-raised`.
 
 ### Task 5: DEX conservation invariant with UA handlers

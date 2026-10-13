@@ -3,11 +3,11 @@ pragma solidity ^0.8.24;
 
 import {ITradeToken} from "../trade/ITradeToken.sol";
 
-/// @title The DEX side of `TradeOrder` (CTR-DEX-16, -17, -11, -03, -24, -18, -22, -08, -20, -21, -23): one taker against
-///        many makers per settlement, or a plan of orders against AMM routes (the exchange path); every leg pulled into
-///        the DEX (a SCaaS token through its `mtxTrade`, an outside token through the `DexPuller` against a `DexOrder`),
-///        every party, fee share, surplus and refund paid in the same call, and the DEX's balance of every token
-///        unchanged at the end.
+/// @title The DEX side of `TradeOrder` and `UATradeOrder` (CTR-DEX-16, -17, -11, -03, -24, -18, -22, -08, -20, -21,
+///        -23, -26): one taker against many makers per settlement, or a plan of orders against AMM routes (the exchange
+///        path); every leg pulled into the DEX (a SCaaS token through its `mtxTrade` or `uaTrade`, an outside token
+///        through the `DexPuller` against a `DexOrder`), every party, fee share, surplus and refund paid in the same
+///        call (a derived UA by `transferToUA`), and the DEX's balance of every token unchanged at the end.
 interface ISCaaSDex {
     /// @notice Written once by `initialize` (CTR-DEX-24). `relayerSharePpm` of every fee goes to the submitter, the
     ///         rest to `treasury`. `listedOnly`: every exchange target or executor must be listed (CTR-DEX-23).
@@ -18,10 +18,13 @@ interface ISCaaSDex {
         bool listedOnly;
     }
 
-    /// @notice One order in one settlement; `fill` = its `sellFill` in this call (Path B: the matched part).
+    /// @notice One order in one settlement; `fill` = its `sellFill` in this call (Path B: the matched part). Tagged
+    ///         (CTR-DEX-26): `shape` 0 = `order` is `abi.encode(TradeOrder)`, 1 = `abi.encode(UATradeOrder)` (`sig` the
+    ///         registry auth of a derived signer, or a native id's own signature).
     struct Leg {
         address sellToken;
-        ITradeToken.TradeOrder o;
+        uint8 shape;
+        bytes order;
         bytes sig;
         uint256 fill;
     }
@@ -45,7 +48,8 @@ interface ISCaaSDex {
     ///         of the surplus (CTR-DEX-21).
     struct ExchangeLeg {
         address sellToken;
-        ITradeToken.TradeOrder o;
+        uint8 shape;
+        bytes order;
         bytes sig;
         uint256 sellFill;
         uint256 receiveFill;
@@ -71,6 +75,9 @@ interface ISCaaSDex {
     ///         and `relayerShare + treasuryShare == dexFee`. `destination` is where `received` went.
     event LegSettled(bytes32 indexed ref, bytes32 indexed orderHash, address indexed from, address destination,
         uint256 sold, uint256 received, uint256 dexFee, uint256 refund, uint256 relayerShare, uint256 treasuryShare);
+    /// @notice `LegSettled` of a shape-1 leg (CTR-DEX-26): ids; `destination` is where `received` went.
+    event UALegSettled(bytes32 indexed ref, bytes32 indexed orderHash, bytes32 indexed from, bytes32 destination,
+        uint256 sold, uint256 received, uint256 dexFee, uint256 refund, uint256 relayerShare, uint256 treasuryShare);
     /// @notice `reason` = the failed settlement's revert data, at most its first 256 bytes.
     event MatchFailed(bytes32 indexed ref, bytes reason);
     /// @notice Raised by `TradeLib` on outside-token legs and DEX-side cancels (same as `ITradeToken`), listed for the ABI.
@@ -84,6 +91,10 @@ interface ISCaaSDex {
     ///         `limitReceive = ceil(sold · receiveAmount / amount)` is what the signed price guarantees for `sold`.
     event ExchangeLegSettled(bytes32 indexed ref, bytes32 indexed orderHash, address indexed from, address destination,
         uint256 sold, uint256 receivedFloor, uint256 surplus, uint256 dexFee, uint256 refund, uint256 limitReceive);
+    /// @notice `ExchangeLegSettled` of a shape-1 leg (CTR-DEX-26).
+    event UAExchangeLegSettled(bytes32 indexed ref, bytes32 indexed orderHash, bytes32 indexed from,
+        bytes32 destination, uint256 sold, uint256 receivedFloor, uint256 surplus, uint256 dexFee, uint256 refund,
+        uint256 limitReceive);
 
     error NotFactory();
     error AlreadyInitialized();
@@ -95,7 +106,14 @@ interface ISCaaSDex {
     error WrongRelayer(address submitter);
     error DexMismatch(address dex);
     error TokenMismatch();
-    error SelfTrade(address from);
+    /// @notice Over ids: a native order and its zero-padded id are one party (CTR-DEX-26).
+    error SelfTrade(bytes32 from);
+    /// @notice A leg tag other than 0 (`TradeOrder`) or 1 (`UATradeOrder`).
+    error LegShapeUnknown(uint8 shape);
+    /// @notice A shape-1 leg whose sell token is not a SCaaS token with its UA ledger on (a UA holds no other token).
+    error UALegNotLedger(address token);
+    /// @notice A payout or refund to a derived UA in a token that is not a SCaaS token with its UA ledger on.
+    error UAReceiveNotLedger(address token);
     error DuplicateOrder(bytes32 orderHash);
     error MarketNotListed(address tokenA, address tokenB);
     /// @notice An outside leg or a DEX-side cancel whose signature does not verify (ECDSA, or ERC-1271 under its cap);
@@ -119,8 +137,10 @@ interface ISCaaSDex {
     error MinNonceNotIncreasing(uint256 current, uint256 requested);
     error MinNonceAboveCap(uint256 requested);
     /// @notice `SigCheck`'s: the submitter left too little gas for a capped ERC-1271 call (CTR-DEX-08); it reverts the
-    ///         whole `mtxSettle`, never only one settlement.
+    ///         whole `mtxSettle`, never only one settlement. The registry's `UAVerifyGas()` (a UA leg's verify could
+    ///         not get its cap) does the same (CTR-DEX-26).
     error SigCheckGasStarved(uint256 cap, uint256 gasLeft);
+    error UAVerifyGas();
     error FillMismatch(uint256 expected, uint256 got);
     /// @notice Path B checks the DEX makes on the matched part (the token checks Path A itself).
     error BelowMinFill(bytes32 orderHash);
