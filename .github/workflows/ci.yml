@@ -24,7 +24,9 @@ on:
     paths: ['smartcontracts/**', 'scaas-node/**', 'clients/**', 'docs/**', 'scripts/docs_check.py', 'scripts/test_docs_check.py', 'scripts/size_gate.py', '.github/workflows/ci.yml']
 
 env:
-  OZ_TAG: v5.2.0
+  # OpenZeppelin master fda6b85f (2025-03-13, after v5.2.0, before v5.3.0): the checkout every local build and
+  # deployment compiles against. The code uses Math.saturatingAdd / Math.mul512 (not in v5.2.0); v5.3.0 changes P256.
+  OZ_REF: fda6b85f2c65d146b86d513a604554d15abd6679
   FORGE_STD_TAG: v1.16.2
 
 jobs:
@@ -40,7 +42,7 @@ jobs:
       - name: Libraries at pinned tags
         run: |
           forge install --no-git foundry-rs/forge-std@${FORGE_STD_TAG}
-          forge install --no-git OpenZeppelin/openzeppelin-contracts@${OZ_TAG}
+          forge install --no-git OpenZeppelin/openzeppelin-contracts@${OZ_REF}
       - name: forge test (default profile)
         run: forge test
       - name: size gate (CTR-TOK-24, ratchet)
@@ -69,7 +71,7 @@ jobs:
         working-directory: smartcontracts/evm
         run: |
           forge install --no-git foundry-rs/forge-std@${FORGE_STD_TAG}
-          forge install --no-git OpenZeppelin/openzeppelin-contracts@${OZ_TAG}
+          forge install --no-git OpenZeppelin/openzeppelin-contracts@${OZ_REF}
       - name: clippy
         run: cargo clippy --all-targets -- -D warnings
       - name: unit + proptest

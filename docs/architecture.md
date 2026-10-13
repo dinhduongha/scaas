@@ -249,7 +249,7 @@ agent signs, a relayer pays gas); Zether keeps commercial amounts confidential w
 | `clientkeys` | `clients/clientkeys/` (ESM, `@noble` / `@scure`) | Passkey signer, 24-word seed vault, Zether keys and balance cache | BUILT (EVM-centric); vault v2, non-EVM signers, `fam/*`, `wallets/*` and `UAKey` SPECIFIED ([clients/signers-clientkeys.md](clients/signers-clientkeys.md)) |
 | `clients/app/` | `scaas/clients/app/` (React + Vite) | Console and dApp over every family: contracts, wallets, DEX book, Zether, node administration (built-in login or OIDC) | SPECIFIED ([clients/app.md](clients/app.md)) |
 | ERP connectors | in the client's codebase | Outbox, push and sync jobs, payment provider, portal, DEX accounting | one worked example: [integration-odoo-example.md](integration-odoo-example.md) |
-| CI | `.github/workflows/ci.yml` (`scaas-ci`) | forge tests (pinned OpenZeppelin v5.2.0, forge-std v1.16.2), `private7622` build, cargo clippy `-D warnings`, cargo test, EVM end-to-end on anvil | BUILT; CI for the prover, clientkeys and non-EVM end-to-end PLANNED |
+| CI | `.github/workflows/ci.yml` (`scaas-ci`) | forge tests (pinned OpenZeppelin master `fda6b85f` (post-v5.2.0), forge-std v1.16.2), `private7622` build, cargo clippy `-D warnings`, cargo test, EVM end-to-end on anvil | BUILT; CI for the prover, clientkeys and non-EVM end-to-end PLANNED |
 
 </details>
 

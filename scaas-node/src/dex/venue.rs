@@ -354,7 +354,7 @@ impl Venue {
         let Some(raw) = err.as_error_resp().and_then(|r| r.as_revert_data()) else { return vec![] };
         let legs: Vec<B256> = p.makers.iter().map(|(m, _, _)| m.hash).chain([p.taker.hash]).collect();
         let mut named: Vec<B256> = vec![];
-        for w in raw.get(4..).unwrap_or_default().chunks_exact(32).map(B256::from_slice) {
+        for w in raw.get(4..).unwrap_or_default().as_chunks::<32>().0.iter().copied().map(B256::from) {
             if legs.contains(&w) && !named.contains(&w) {
                 named.push(w);
             }
