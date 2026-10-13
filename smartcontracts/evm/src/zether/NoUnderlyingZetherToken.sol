@@ -69,4 +69,9 @@ contract NoUnderlyingZetherToken is NoUnderlyingToken, ZetherLayer {
         if (_isZetherOp(sel)) return MtxRule(FEE_CLASS_ABSOLUTE, 0, 0);
         return NoUnderlyingToken._mtxRule(sel);
     }
+
+    /// @notice `NoUnderlyingToken`'s UA allowlist (`burn`); the Zether ops join it in UA-5c (CTR-ZTH-51).
+    function _uaAllowed(bytes4 sel) internal view override(NoUnderlyingToken, ERC20MetaTx) returns (bool) {
+        return NoUnderlyingToken._uaAllowed(sel);
+    }
 }

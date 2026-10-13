@@ -23,6 +23,8 @@ import {UARegistryBase} from "./UARegistryBase.sol";
 /// address on context A with the real UA-2a/UA-2b verifiers. Every row's struct (built from the file's typed data)
 /// hashes to the file's digest here, every auth passes (native: ECDSA over the digest; derived: `requireAuthorized`
 /// under `metatx`), and every `UAMetaTransfer` row really executes. Gas of `uaExecuteTransfer` per signer is logged.
+/// UA-5a (accounts.md CTR-UA-26/28, metatx.md CTR-MTX-05/06): the `burn` rows execute under `uaExecute`, the
+/// `unwrapToUA` rows are checked as the `call` rows, every `receiverFee` row executes `uaPayReceiverFee` (gas logged).
 contract UAMetaTx3VectorsTest is UARegistryBase {
     string internal sj;
     string internal vj;
@@ -86,18 +88,23 @@ contract UAMetaTx3VectorsTest is UARegistryBase {
         m.feeRecipient = vm.parseJsonAddress(vj, _f(r, "feeRecipient"));
     }
 
-    function _transfer(string memory r) internal view returns (MetaTxLib.UAMetaTransfer memory t) {
-        t.from = vm.parseJsonBytes32(vj, _f(r, "from"));
-        t.to = vm.parseJsonBytes32(vj, _f(r, "to"));
-        t.value = vm.parseJsonUint(vj, _f(r, "value"));
-        t.entryRef = vm.parseJsonBytes32(vj, _f(r, "entryRef"));
-        t.batch = vm.parseJsonUint(vj, _f(r, "batch"));
-        t.nonce = vm.parseJsonUint(vj, _f(r, "nonce"));
-        t.validUntil = vm.parseJsonUint(vj, _f(r, "validUntil"));
-        t.mode = uint32(vm.parseJsonUint(vj, _f(r, "mode")));
-        t.relayer = vm.parseJsonAddress(vj, _f(r, "relayer"));
-        t.fee = vm.parseJsonUint(vj, _f(r, "fee"));
-        t.feeRecipient = vm.parseJsonAddress(vj, _f(r, "feeRecipient"));
+    function _transfer(string memory r) internal view returns (MetaTxLib.UAMetaTransfer memory) {
+        return _transferAt(string.concat(r, "typedData.message."));
+    }
+
+    /// A `UAMetaTransfer` from the message at path prefix `p`.
+    function _transferAt(string memory p) internal view returns (MetaTxLib.UAMetaTransfer memory t) {
+        t.from = vm.parseJsonBytes32(vj, string.concat(p, "from"));
+        t.to = vm.parseJsonBytes32(vj, string.concat(p, "to"));
+        t.value = vm.parseJsonUint(vj, string.concat(p, "value"));
+        t.entryRef = vm.parseJsonBytes32(vj, string.concat(p, "entryRef"));
+        t.batch = vm.parseJsonUint(vj, string.concat(p, "batch"));
+        t.nonce = vm.parseJsonUint(vj, string.concat(p, "nonce"));
+        t.validUntil = vm.parseJsonUint(vj, string.concat(p, "validUntil"));
+        t.mode = uint32(vm.parseJsonUint(vj, string.concat(p, "mode")));
+        t.relayer = vm.parseJsonAddress(vj, string.concat(p, "relayer"));
+        t.fee = vm.parseJsonUint(vj, string.concat(p, "fee"));
+        t.feeRecipient = vm.parseJsonAddress(vj, string.concat(p, "feeRecipient"));
     }
 
     function test_typeHashesAndDomain() public view {
@@ -149,6 +156,78 @@ contract UAMetaTx3VectorsTest is UARegistryBase {
         assertEq(tok.balanceOf(address(0x5409)), 9 * 100_000_000);
         assertEq(tok.balanceOf(address(0xFEE)), 9 * 100_000);
         assertEq(tok.balanceOf(MetaTxLib.UA_POOL), 0);
+    }
+
+    /// `burn` rows: each signer burns 1,000,000 under `uaExecute` (fee PERCENT 0.5 % of it, `AMOUNT(0)`), executed.
+    function test_vectors_burn() public {
+        uint256 n;
+        for (uint256 i; vm.keyExistsJson(vj, string.concat(".burn[", vm.toString(i), "]")); ++i) {
+            string memory r = string.concat(".burn[", vm.toString(i), "].");
+            MetaTxLib.UAMetaTransaction memory m = _call(r);
+            assertEq(MetaTxLib.hashStruct(m), vm.parseJsonBytes32(vj, string.concat(r, "structHash")));
+            assertEq(tok.uaDigest(m), vm.parseJsonBytes32(vj, string.concat(r, "digest")));
+            _fund(m.from, 1_005_000);
+            uint256 supply = tok.totalSupply();
+            bytes memory auth = vm.parseJsonBytes(vj, string.concat(r, "auth"));
+            vm.prank(m.relayer);
+            uint256 g = gasleft();
+            tok.uaExecute(m, auth);
+            g -= gasleft();
+            emit log_named_uint(string.concat("uaExecute(burn) ", vm.parseJsonString(vj, string.concat(r, "name"))), g);
+            assertEq(tok.balanceOfUA(m.from), 0);
+            assertEq(tok.totalSupply(), supply - 1_000_000);
+            ++n;
+        }
+        assertEq(n, 9);
+        assertEq(tok.balanceOf(address(0xFEE)), 9 * 5_000);
+        assertEq(tok.balanceOf(MetaTxLib.UA_POOL), 0);
+    }
+
+    /// `unwrapToUA` rows: digest and auth (the call is not on the `NONE` kind's allowlist; it runs in UAAllowlist5a).
+    function test_vectors_unwrapToUA() public view {
+        uint256 n;
+        for (uint256 i; vm.keyExistsJson(vj, string.concat(".unwrapToUA[", vm.toString(i), "]")); ++i) {
+            string memory r = string.concat(".unwrapToUA[", vm.toString(i), "].");
+            MetaTxLib.UAMetaTransaction memory m = _call(r);
+            bytes32 digest = vm.parseJsonBytes32(vj, string.concat(r, "digest"));
+            assertEq(bytes4(m.data), bytes4(keccak256("unwrapToUA(address,uint256,bytes32,uint256)")));
+            assertEq(MetaTxLib.hashStruct(m), vm.parseJsonBytes32(vj, string.concat(r, "structHash")));
+            assertEq(tok.uaDigest(m), digest);
+            _authorized(m.from, digest, vm.parseJsonBytes(vj, string.concat(r, "auth")));
+            ++n;
+        }
+        assertEq(n, 9);
+    }
+
+    /// `receiverFee` rows: the payment digest and the `ReceiverFee` digest recomputed by the token, then
+    /// `uaPayReceiverFee` executed with the row's two auth blobs (a derived payee under `receiver-fee`).
+    function test_vectors_receiverFee() public {
+        uint256 n;
+        for (uint256 i; vm.keyExistsJson(vj, string.concat(".receiverFee[", vm.toString(i), "]")); ++i) {
+            string memory r = string.concat(".receiverFee[", vm.toString(i), "].");
+            MetaTxLib.UAMetaTransfer memory t = _transferAt(string.concat(r, "transfer.message."));
+            bytes32 d = vm.parseJsonBytes32(vj, string.concat(r, "paymentDigest"));
+            assertEq(tok.uaTransferDigest(t), d);
+            uint256 fee = vm.parseJsonUint(vj, string.concat(r, "receiverFee.message.fee"));
+            address feeTo = vm.parseJsonAddress(vj, string.concat(r, "receiverFee.message.feeRecipient"));
+            uint256 until = vm.parseJsonUint(vj, string.concat(r, "receiverFee.message.validUntil"));
+            assertEq(vm.parseJsonBytes32(vj, string.concat(r, "receiverFee.message.paymentDigest")), d);
+            assertEq(tok.receiverFeeDigest(d, fee, feeTo, until), vm.parseJsonBytes32(vj, string.concat(r, "receiverFeeDigest")));
+            _fund(t.from, t.value);
+            uint256 before = tok.balanceOfUA(t.to);
+            bytes memory payerAuth = vm.parseJsonBytes(vj, string.concat(r, "payerAuth"));
+            bytes memory payeeAuth = vm.parseJsonBytes(vj, string.concat(r, "payeeAuth"));
+            vm.prank(t.relayer);
+            uint256 g = gasleft();
+            tok.uaPayReceiverFee(t, payerAuth, fee, feeTo, until, payeeAuth);
+            g -= gasleft();
+            emit log_named_uint(string.concat("uaPayReceiverFee ", vm.parseJsonString(vj, string.concat(r, "payer")), " > ",
+                vm.parseJsonString(vj, string.concat(r, "payee"))), g);
+            assertEq(tok.balanceOfUA(t.to), before + t.value - fee);
+            ++n;
+        }
+        assertEq(n, 9);
+        assertEq(tok.balanceOf(address(0xFEE)), 9 * 300_000);
     }
 
     function _authorized(bytes32 from, bytes32 digest, bytes memory auth) internal view {

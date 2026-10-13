@@ -6,7 +6,8 @@ import {
   hashTypedData, hashStruct, secpSubjectKey, accountSalt, predictAccount, accountSignature, merkleBatch, processProof,
   batchLeaf, evmAddress, passkeySubjectKey, addKeyCalldata, ownerCallTypedData, checkOwnerCall, checkPayment,
   keyProofMessage, metaTxTypedData, metaTransferTypedData, checkCall, tradeOrderTypedData, orderCancelTypedData,
-  checkTradeOrder, checkCancel, payLane,
+  checkTradeOrder, checkCancel, payLane, receiverFeeTypedData, wrapToUACalldata, unwrapToUACalldata,
+  payWithFeeToUACalldata,
 } from '../src/evm.js';
 import { abiEncode, hex, fromHex, keccak_256, utf8ToBytes } from '../src/bytes.js';
 
@@ -508,4 +509,48 @@ const KEY_PROOF_ZERO = '0xfa7987471ecf88572865d4f53880fda17e67fadcae78beb98eb395
 
 test('key proof message = keccak256("scaas-subject-key-proof-v1" ‖ challenge) (pinned with Odoo)', () => {
   assert.equal(hex(keyProofMessage(new Uint8Array(32))), KEY_PROOF_ZERO);
+});
+
+test('UA-5a: ReceiverFee typed data and the receivers\' calldata (`cast calldata`, foundry 1.3.5); checkCall', () => {
+  // ReceiverPays.t.sol test_receiverFeeDigestIsPinned: the typehash and the salted domain of the token
+  const fields = (td) => td.types[td.primaryType].map((f) => `${f.type} ${f.name}`).join(',');
+  const contract = '0x' + 'a1'.repeat(20);
+  const chainUid = '0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464';
+  const paymentDigest = hex(keccak_256(utf8ToBytes('payment')));
+  const td = receiverFeeTypedData({ contract, chainId: 7622, chainUid, paymentDigest, fee: 3000000,
+    feeRecipient: '0x0000000000000000000000000000000000000fee', validUntil: 1800000060 });
+  assert.equal(hex(keccak_256(utf8ToBytes(`ReceiverFee(${fields(td)})`))),
+    '0x0128f09c9f096f23f7540465cf85cf756ab725cb552bf61e040433a9b20a9bdf');
+  const ds = hashStruct(td.types, 'EIP712Domain', td.domain);
+  const sh = keccak_256(abiEncode(['bytes32', 'bytes32', 'uint256', 'address', 'uint256'],
+    ['0x0128f09c9f096f23f7540465cf85cf756ab725cb552bf61e040433a9b20a9bdf', paymentDigest, 3000000n,
+      '0x0000000000000000000000000000000000000fee', 1800000060n]));
+  assert.equal(hex(hashTypedData(td)), hex(keccak_256(new Uint8Array([0x19, 0x01, ...ds, ...sh]))));
+  // cast calldata "wrapToUA(address,uint256,bytes32)" 0x5ca0…b1 1000000 0xabab…ab (likewise below)
+  const U = '0x5ca00000000000000000000000000000000000b1';
+  const TO = '0x' + 'ab'.repeat(32);
+  const W = (n) => n.toString(16).padStart(64, '0');
+  assert.equal(hex(wrapToUACalldata(U, 1000000n, TO)), '0x1b0237ad' + W(BigInt(U)) + W(1000000n) + 'ab'.repeat(32));
+  assert.equal(hex(unwrapToUACalldata(U, 1000000n, TO, 990000n)),
+    '0xe4a9f766' + W(BigInt(U)) + W(1000000n) + 'ab'.repeat(32) + W(990000n));
+  assert.equal(hex(payWithFeeToUACalldata(TO, 100000000n, 2, 100000n, '0x0000000000000000000000000000000000000fee',
+    '0x' + 'cd'.repeat(32))), '0x18c3a777' + 'ab'.repeat(32) + W(100000000n) + W(2n) + W(100000n) + W(0xfeen)
+    + 'cd'.repeat(32));
+  // checkCall decodes the two allowlisted receivers; payWithFeeToUA is never signed as a call (as payWithFee)
+  const k = read('metatx_kat.json');
+  const allowlist = [{ selector: '0x1b0237ad', name: 'wrapToUA', feeClass: 1 },
+    { selector: '0xe4a9f766', name: 'unwrapToUA', feeClass: 2, amountArg: 1 },
+    { selector: '0x18c3a777', name: 'payWithFeeToUA', feeClass: 1 }];
+  const run = (data, over = {}) => {
+    const t = metaTxTypedData({ name: k.domain_name, contract: k.verifying_contract, chainId: 7622, chainUid: k.salt,
+      message: { from: k.from, data, batch: k.batch, nonce: k.nonce, validUntil: k.valid_until, mode: 1, relayer: k.relayer,
+        ...over } });
+    return checkCall(t, { account: k.from, chainId: 7622, chainUid: k.salt, allowlist, maxFee: 10000,
+      call: { contract: k.verifying_contract, data }, now: NOW });
+  };
+  assert.equal(run(hex(wrapToUACalldata(U, 1000000n, TO))).name, 'wrapToUA');
+  const unwrap = hex(unwrapToUACalldata(U, 1000000n, TO, 0n));
+  assert.equal(run(unwrap, { mode: 0x11, fee: '10000' }).fee, 10000n);   // PERCENT on wrapped (argument 1): 1 %
+  assert.throws(() => run(hex(wrapToUACalldata(U, 1000000n, TO)), { mode: 0x11, fee: '1' }), /a percentage fee/);
+  assert.throws(() => run(hex(payWithFeeToUACalldata(TO, 1n, 0, 0n, '0x' + '00'.repeat(20), TO))), /never signed as a call/);
 });

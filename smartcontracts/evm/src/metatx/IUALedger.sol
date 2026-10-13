@@ -26,6 +26,8 @@ interface IUALedger {
     error UAInsufficientBalance(bytes32 ua, uint256 balance, uint256 needed);
     error UACancelUsed();
     error MetaTxUnknownOp(bytes4 selector);
+    /// @notice A leg or receive token that is not a SCaaS token with its UA ledger on (accounts.md CTR-UA-27).
+    error UALegNotLedger(address token);
 
     function registry() external view returns (address);
     function balanceOfUA(bytes32 ua) external view returns (uint256);

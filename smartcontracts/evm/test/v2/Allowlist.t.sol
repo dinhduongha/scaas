@@ -3,7 +3,7 @@ pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
-import {MockERC20} from "../helpers/Mocks.sol";
+import {MockERC20, StubUARegistry} from "../helpers/Mocks.sol";
 import {MetaTokenBase} from "../../src/metatx/MetaTokenBase.sol";
 import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
 import {UnderlyingToken} from "../../src/metatx/UnderlyingToken.sol";
@@ -42,6 +42,12 @@ contract AllowlistTest is Test {
     UnderlyingToken internal multi;
     MockERC20 internal u;
     MockERC20 internal u2;
+    /// UA-5a (CTR-UA-28): the wrappers run the UA ledger on a stub registry (every derived id a `p256` UA); `ledgered`
+    /// is a one-leg 1:1 wrapper of `pts`, a SCaaS ledger token, so `unwrapToUA` can pay out.
+    StubUARegistry internal stub;
+    NoUnderlyingToken internal pts;
+    UnderlyingToken internal ledgered;
+    bytes32 internal constant UA = keccak256("scaas.allowlist.ua");
 
     function setUp() public {
         vm.chainId(7622);
@@ -50,8 +56,9 @@ contract AllowlistTest is Test {
         u2 = new MockERC20("U2", "U2", 6);
         none = NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(address(this), address(0), UID, address(0), false))));
         none.initialize(address(this), 1, noneInit("P", "P", 6, 0, address(this), address(this)));
+        stub = new StubUARegistry(UID);
         single = UnderlyingToken(
-            Clones.clone(address(new UnderlyingToken(address(this), address(0), UID, address(0), false))));
+            Clones.clone(address(new UnderlyingToken(address(this), address(0), UID, address(stub), false))));
         Rate memory cfg;
         address[] memory one = new address[](1);
         one[0] = address(u);
@@ -59,12 +66,22 @@ contract AllowlistTest is Test {
         r1[0] = 1;
         single.initialize(address(this), 1, underlyingInit(one, r1, r1, 6, cfg, address(0), address(0)));
         multi = UnderlyingToken(
-            Clones.clone(address(new UnderlyingToken(address(this), address(0), UID, address(0), false))));
+            Clones.clone(address(new UnderlyingToken(address(this), address(0), UID, address(stub), false))));
         address[] memory two = new address[](2);
         (two[0], two[1]) = (address(u), address(u2));
         uint256[] memory r = new uint256[](2);
         (r[0], r[1]) = (1, 1);
         multi.initialize(address(this), 1, underlyingInit(two, r, r, 6, cfg, address(0), address(0)));
+        pts = NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(address(this), address(0), UID, address(stub), false))));
+        pts.initialize(address(this), 1, noneInit("PTS", "PTS", 6, 0, address(this), address(this)));
+        ledgered = UnderlyingToken(
+            Clones.clone(address(new UnderlyingToken(address(this), address(0), UID, address(stub), false))));
+        one[0] = address(pts);
+        ledgered.initialize(address(this), 1, underlyingInit(one, r1, r1, 6, cfg, address(0), address(0)));
+        pts.mint(address(this), 10e6); // this fixture is a contract, so it may approve (CTR-TOK-01)
+        pts.approve(address(ledgered), 10e6);
+        ledgered.wrap(10e6);
+        ledgered.transfer(alice, 10e6);
         none.mint(alice, 1_000e6);
         u.mint(alice, 1_000e6);
         u2.mint(alice, 1_000e6);
@@ -122,17 +139,20 @@ contract AllowlistTest is Test {
         _pin(address(none), s, c, new uint8[](2));
     }
 
-    /// P1d: one implementation for 1–8 legs, so one list (the single-asset ABI and the per-leg ABI).
+    /// P1d: one implementation for 1–8 legs, so one list (the single-asset ABI and the per-leg ABI); UA-5a appends
+    /// `wrapToUA` `ABSOLUTE` and `unwrapToUA` `AMOUNT(1)`.
     function _pinUnderlying(address t) internal view {
-        bytes4[] memory s = new bytes4[](6);
-        uint8[] memory c = new uint8[](6);
-        uint8[] memory a = new uint8[](6);
+        bytes4[] memory s = new bytes4[](8);
+        uint8[] memory c = new uint8[](8);
+        uint8[] memory a = new uint8[](8);
         (s[0], c[0]) = (IMetaTx.cancelNonce.selector, 1);
         (s[1], c[1]) = (bytes4(keccak256("wrap(uint256)")), 1);
         (s[2], c[2]) = (bytes4(keccak256("unwrap(uint256,address,uint256)")), 2);
         (s[3], c[3]) = (bytes4(keccak256("wrap(address,uint256)")), 1);
         (s[4], c[4], a[4]) = (bytes4(keccak256("unwrap(address,uint256,address,uint256)")), 2, 1);
         (s[5], c[5]) = (bytes4(keccak256("addReserve(address,uint256)")), 1);
+        (s[6], c[6]) = (bytes4(keccak256("wrapToUA(address,uint256,bytes32)")), 1);
+        (s[7], c[7], a[7]) = (bytes4(keccak256("unwrapToUA(address,uint256,bytes32,uint256)")), 2, 1);
         _pin(t, s, c, a);
     }
 
@@ -159,8 +179,14 @@ contract AllowlistTest is Test {
         _run(address(single), abi.encodeWithSignature("wrap(address,uint256)", address(u), 10e6));
         _run(address(single), abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", address(u), 1e6, alice, 0));
         _run(address(single), abi.encodeWithSignature("addReserve(address,uint256)", address(u), 1e6));
+        _run(address(single), abi.encodeCall(UnderlyingToken.wrapToUA, (address(u), 10e6, UA)));
         assertEq(single.balanceOf(alice), 36e6);
-        assertEq(u.balanceOf(address(single)), 38e6);       // 40 wrapped − 4 unwrapped + 2 by addReserve
+        assertEq(single.balanceOfUA(UA), 20e6);
+        assertEq(u.balanceOf(address(single)), 58e6);       // 60 wrapped − 4 unwrapped + 2 by addReserve
+        // `unwrapToUA` needs a ledger leg: the same implementation, one leg `pts`
+        _run(address(ledgered), abi.encodeCall(UnderlyingToken.unwrapToUA, (address(pts), 1e6, UA, 1e6)));
+        assertEq(pts.balanceOfUA(UA), 2e6);
+        assertEq(ledgered.balanceOf(alice), 8e6);
     }
 
     /// The single-asset entries are listed but revert `UnderlyingRequired` with two legs.
@@ -169,9 +195,11 @@ contract AllowlistTest is Test {
         _run(address(multi), abi.encodeWithSignature("wrap(address,uint256)", address(u2), 10e6));
         _run(address(multi), abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", address(u2), 1e6, alice, 0));
         _run(address(multi), abi.encodeWithSignature("addReserve(address,uint256)", address(u), 1e6));
+        _run(address(multi), abi.encodeCall(UnderlyingToken.wrapToUA, (address(u2), 10e6, UA)));
         assertEq(multi.balanceOf(alice), 18e6);
+        assertEq(multi.balanceOfUA(UA), 20e6);
         assertEq(u.balanceOf(address(multi)), 2e6);         // addReserve(u) twice
-        assertEq(u2.balanceOf(address(multi)), 18e6);
+        assertEq(u2.balanceOf(address(multi)), 38e6);
     }
 
     // ------------------------------------------------------------------ published list vs enforced rule
@@ -207,21 +235,22 @@ contract AllowlistTest is Test {
         _crossCheck(address(none), k, b);
     }
 
-    /// P1d: one implementation, so one rule for every leg count; all six entries need a one-leg token (with more
-    /// legs the single-asset rows revert `UnderlyingRequired` before the AMOUNT cap is checked).
+    /// P1d: one implementation, so one rule for every leg count; all eight entries need a one-leg token (with more
+    /// legs the single-asset rows revert `UnderlyingRequired` before the AMOUNT cap is checked) whose leg is a ledger
+    /// token (`unwrapToUA` reaches the cap only after its pay-out).
     function test_underlying_classAndBasisMatchTheRule() public {
-        vm.prank(alice);
-        single.wrap(10e6);
-        bytes[] memory k = new bytes[](6);
-        uint256[] memory b = new uint256[](6);
+        bytes[] memory k = new bytes[](8);
+        uint256[] memory b = new uint256[](8);
         k[0] = abi.encodeCall(IMetaTx.cancelNonce, (99));
         k[1] = abi.encodeWithSignature("wrap(uint256)", 10e6);
         (k[2], b[2]) = (abi.encodeWithSignature("unwrap(uint256,address,uint256)", 3e6, alice, 1e6), 3e6);
-        k[3] = abi.encodeWithSignature("wrap(address,uint256)", address(u), 10e6);
+        k[3] = abi.encodeWithSignature("wrap(address,uint256)", address(pts), 10e6);
         // basis = arg 1 (`wrapped`), not arg 0 (an address) or arg 3 (`minOut`)
-        (k[4], b[4]) = (abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", address(u), 3e6, alice, 1e6), 3e6);
-        k[5] = abi.encodeWithSignature("addReserve(address,uint256)", address(u), 1e6);
-        _crossCheck(address(single), k, b);
+        (k[4], b[4]) = (abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", address(pts), 3e6, alice, 1e6), 3e6);
+        k[5] = abi.encodeWithSignature("addReserve(address,uint256)", address(pts), 1e6);
+        k[6] = abi.encodeCall(UnderlyingToken.wrapToUA, (address(pts), 10e6, UA));
+        (k[7], b[7]) = (abi.encodeCall(UnderlyingToken.unwrapToUA, (address(pts), 3e6, UA, 1e6)), 3e6);
+        _crossCheck(address(ledgered), k, b);
     }
 
     // ------------------------------------------------------------------ never allowlisted
@@ -247,8 +276,11 @@ contract AllowlistTest is Test {
             _refused(t, abi.encodeWithSelector(IERC20MetaTx.mtxExecuteTransfer.selector));
             _refused(t, abi.encodeWithSelector(IERC20MetaTx.mtxBatchTransfer.selector));
             _refused(t, abi.encodeWithSelector(MetaTokenBase.mtxPayReceiverFee.selector));
+            _refused(t, abi.encodeWithSelector(MetaTokenBase.payWithFeeToUA.selector));
+            _refused(t, abi.encodeWithSelector(MetaTokenBase.uaPayReceiverFee.selector));
         }
         _refused(address(none), abi.encodeCall(NoUnderlyingToken.mint, (alice, 1)));
+        _refused(address(none), abi.encodeCall(NoUnderlyingToken.mintToUA, (UA, 1)));
         _refused(address(none), abi.encodeCall(ITokenAdmin.renounceRole, (1)));
         _refused(address(single), abi.encodeWithSignature("unwrap(uint256,address)", 1, alice));
         _refused(address(single), abi.encodeWithSignature("proposeRate(address,uint96,uint96)", address(u), 1, 1));

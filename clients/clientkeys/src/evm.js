@@ -151,7 +151,8 @@ const DEX_ORDER_TYPES = { EIP712Domain: SALTED_DOMAIN_TYPE, DexOrder: fields(['s
 const sel = (sig) => hex(keccak_256(utf8ToBytes(sig)).subarray(0, 4));
 // Never inside a `MetaTransaction` (CLI-SGN-34): moving funds is a `MetaTransfer`, and EOAs never approve (CLI-SGN-36).
 const NEVER_CALLED = new Set(['transfer(address,uint256)', 'transferFrom(address,address,uint256)',
-  'approve(address,uint256)', 'payWithFee(address,uint256,uint8,uint256,address,bytes32)', 'pay(bytes32)'].map(sel));
+  'approve(address,uint256)', 'payWithFee(address,uint256,uint8,uint256,address,bytes32)', 'pay(bytes32)',
+  'payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32)'].map(sel));
 export const ADD_KEY_SELECTOR = keccak_256(utf8ToBytes(`addKey(${KEY_TUPLE})`)).subarray(0, 4);
 const KEY_PROOF_PREFIX = utf8ToBytes('scaas-subject-key-proof-v1');
 
@@ -286,6 +287,32 @@ export function uaMetaTransferTypedData({ name = 'SCaaS MetaToken', contract, ch
       relayer: mode & 1n ? m.relayer : ZERO_ADDRESS, feeRecipient: mode & 2n ? m.feeRecipient : ZERO_ADDRESS },
   };
 }
+
+// The payee's co-signature of receiver-pays (CTR-MTX-05/06), over the payer's payment digest: `MetaTransfer`'s on the
+// address path (`mtxPayReceiverFee`), `UAMetaTransfer`'s on the UA path (`uaPayReceiverFee`). A native payee signs its
+// digest; a derived one `ua_msg(kind, receiver-fee, digest)` through the registry.
+const RECEIVER_FEE_TYPES = { EIP712Domain: SALTED_DOMAIN_TYPE, ReceiverFee: fields(['paymentDigest:bytes32', 'fee:uint256',
+  'feeRecipient:address', 'validUntil:uint256']) };
+
+/** A token's `ReceiverFee(paymentDigest, fee, feeRecipient, validUntil)` in its salted domain (both paths). */
+export function receiverFeeTypedData({ name = 'SCaaS MetaToken', contract, chainId, chainUid, paymentDigest, fee,
+  feeRecipient, validUntil }) {
+  return { types: RECEIVER_FEE_TYPES, primaryType: 'ReceiverFee', domain: salted({ name, contract, chainId, chainUid }),
+    message: { paymentDigest: hex(bytes32(paymentDigest)), fee: String(fee), feeRecipient, validUntil: String(validUntil) } };
+}
+
+// The UA-5a receivers (accounts.md CTR-UA-28): a native caller credits a derived UA `to` (32 bytes) in one call.
+const abiCall = (sig, types, values) => concatBytes(fromHex(sel(sig)), abiEncode(types, values));
+/** `wrapToUA(underlying, amount, to)`: direct (payable on the native leg), or inside a `MetaTransaction` (`ABSOLUTE`). */
+export const wrapToUACalldata = (underlying, amount, to) =>
+  abiCall('wrapToUA(address,uint256,bytes32)', ['address', 'uint256', 'bytes32'], [underlying, amount, to]);
+/** `unwrapToUA(underlying, wrapped, to, minOut)`: direct, in a `MetaTransaction` or a `UAMetaTransaction` (`AMOUNT(1)`). */
+export const unwrapToUACalldata = (underlying, wrapped, to, minOut) => abiCall('unwrapToUA(address,uint256,bytes32,uint256)',
+  ['address', 'uint256', 'bytes32', 'uint256'], [underlying, wrapped, to, minOut]);
+/** `payWithFeeToUA(to, amount, feeMode, fee, feeRecipient, entryRef)`: direct only (never a call, as `payWithFee`). */
+export const payWithFeeToUACalldata = (to, amount, feeMode, fee, feeRecipient, entryRef) =>
+  abiCall('payWithFeeToUA(bytes32,uint256,uint8,uint256,address,bytes32)',
+    ['bytes32', 'uint256', 'uint8', 'uint256', 'address', 'bytes32'], [to, amount, feeMode, fee, feeRecipient, entryRef]);
 
 /** The lane of a payment request, `keccak256("scaas.pay.lane" ‖ entryRef)` with nonce 0 (CTR-MTX-03; on chain `payLane`). */
 export function payLane(entryRef) {
