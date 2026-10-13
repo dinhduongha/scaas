@@ -498,9 +498,12 @@ async fn create(rpc: &str, from: &PrivateKeySigner, to: Address, data: Vec<u8>) 
     Address::abi_decode(&out).unwrap()
 }
 
-/// A plain ERC-20 the factory never made (an "outside" token): `MockERC20` from the forge build the deploy just ran.
+/// A plain ERC-20 the factory never made (an "outside" token): `MockERC20` from `test/helpers/Mocks.sol`, built here
+/// (`forge script` compiles only the script's own sources, so the deploy leaves no test artifacts).
 async fn deploy_outside_token(rpc: &str, from: &PrivateKeySigner) -> Address {
     let sc = concat!(env!("CARGO_MANIFEST_DIR"), "/../smartcontracts/evm");
+    let built = Command::new("forge").current_dir(sc).args(["build", "test/helpers/Mocks.sol"]).env("FOUNDRY_PROFILE", "private7622").status();
+    assert!(built.expect("forge in PATH").success(), "forge build test/helpers/Mocks.sol failed");
     let raw = std::fs::read_to_string(format!("{sc}/out/Mocks.sol/MockERC20.json")).expect("forge build output of test/helpers/Mocks.sol");
     let v: Value = serde_json::from_str(&raw).unwrap();
     let mut code = alloy::hex::decode(v["bytecode"]["object"].as_str().unwrap()).unwrap();
