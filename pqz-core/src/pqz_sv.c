@@ -1252,20 +1252,25 @@ typedef struct
   poly_t c;
 } lzpf_t;
 
-static int
-l2_le (const int64_t *a, unsigned n, uint64_t bnd) /* sum a_i^2 <= bnd < 2^62, |a_i| < 2^62 */
+static uint64_t
+l2_sum (const int64_t *a, unsigned n, uint64_t bnd) /* sum a_i^2 if <= bnd, else bnd + 1; bnd < 2^62, |a_i| < 2^62 */
 {
   uint64_t s = 0;
   for (unsigned i = 0; i < n; i++)
     {
       uint64_t x = (uint64_t)(a[i] < 0 ? -a[i] : a[i]);
-      if (x >= ((uint64_t)1 << 31))
-        return 0;
+      if (x >= ((uint64_t)1 << 31)) /* x^2 >= 2^62 > bnd */
+        return bnd + 1;
       s += x * x;
       if (s > bnd)
-        return 0;
+        return bnd + 1;
     }
-  return 1;
+  return s;
+}
+static int
+l2_le (const int64_t *a, unsigned n, uint64_t bnd) /* sum a_i^2 <= bnd < 2^62, |a_i| < 2^62 */
+{
+  return l2_sum (a, n, bnd) <= bnd;
 }
 static void
 lz_get (int64_t *r, polyvec_t v, unsigned n) /* n polys of a LaZer polyvec -> coefficients */
@@ -1827,8 +1832,10 @@ verify_body (const svrel_t *S, uint8_t op, const uint8_t hash_stmt[32], const ui
     if (!eq)
       return 0;
   }
-  /* ||w - gamma w1||^2 <= B^2 */
-  if (!l2_le (wl, DEG * km, S->Bsq))
+  /* ||(z21, w - gamma w1)||^2 <= B^2: the whole z2, as LNP22 Fig. 18 and the honest prover (P6-Z21, lazer#26;
+     lnp_quad_verify does the same). Upstream bounded only the w - gamma w1 (z22) part. */
+  const uint64_t s21 = l2_sum (z21, DEG * m2r, S->Bsq);
+  if (s21 > S->Bsq || !l2_le (wl, DEG * km, S->Bsq - s21))
     return 0;
   return pqz_err == PQZ_OK;
 #undef F
