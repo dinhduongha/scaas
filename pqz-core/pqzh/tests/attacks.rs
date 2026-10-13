@@ -91,3 +91,14 @@ fn tx_overspend() {
     assert!(prove(OP_TRANSFER, &s.tx_stmt, &w, [1; 32], &p()).is_err());
     assert!(rejected(OP_TRANSFER, &s.tx_stmt, &w));
 }
+
+#[test]
+fn tx_fee_word_above_2_64() {
+    // the fee is a be32 word that must be < 2^64 (pq-zether.md §7.7, pqz_rel.c rd_word64)
+    let s = setup();
+    let pt = prove(OP_TRANSFER, &s.tx_stmt, &s.tx_wit, [2; 32], &p()).unwrap();
+    let mut st = s.tx_stmt.clone();
+    st[pqzh::rel::HDR_FEE + 23] = 1;
+    assert!(prove(OP_TRANSFER, &st, &s.tx_wit, [2; 32], &p()).is_err());
+    assert!(!verify(OP_TRANSFER, &st, &pt, &p()));
+}

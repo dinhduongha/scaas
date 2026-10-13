@@ -13,14 +13,40 @@ use crate::ring::*;
 pub const OP_TRANSFER: u8 = 1;
 pub const OP_REGISTER: u8 = 3;
 pub const PREFIX: usize = 64;
+/// Debit statements (pq-zether.md §7.7, pqz.h PQZ_HEADER_BYTES): 640-byte header of 32-byte words; the relation reads
+/// only the fee word (offset 256, be32 < 2^64); opTag, proofSystemId and the other words are only hashed.
+pub const HEADER: usize = 640;
+pub const HDR_FEE: usize = 256;
 pub const POLYVEC: usize = 16384;
 pub const VB: usize = 128;
 pub const REG_STMT: usize = PREFIX + 32 + POLYVEC;
 pub const REG_WIT: usize = 2048 + 4096;
-pub const TX_STMT: usize = PREFIX + 3 * POLYVEC + (POLYVEC + VB) + (POLYVEC + 3 * VB) + 8;
+pub const TX_STMT: usize = HEADER + 3 * POLYVEC + (POLYVEC + VB) + (POLYVEC + 3 * VB);
 pub const TX_WIT: usize = 2048 + 4096 + 2048 + 4096 + 3 * 32 + 16 + 16;
 /// Proof limit of the PQZH kind (owner, TODO P6-PQZH): 160 KB.
 pub const MAX_PROOF: usize = 160 * 1024;
+/// proofSystemId (statement bytes 32..63) of PQZH, proposed in the style of pqz.h's PQZ_PROOF_SYSTEM_ID:
+/// keccak256("scaas/pqz/pqzh/stark-d1-goldilocks5-fri-keccak256-zk/v1"). Like pqz-core, the relation only hashes it
+/// (the precompile dispatches on it). Provisional until the FRI parameters (soundness regime) are fixed.
+pub const PQZH_PROOF_SYSTEM_ID: [u8; 32] = hex32("aa1f92ddc5763201c2582c8387bd6513842e52779310d6bcf39a7fec99284304");
+/// PQZL's id as pqz-core v2 writes it (pqz.h PQZ_PROOF_SYSTEM_ID = keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v2")),
+/// used only for the byte cross-check against pqz_bench.c.
+pub const PQZL_PROOF_SYSTEM_ID: [u8; 32] = hex32("2e07e6ed1fd303a08c89b3eab6e8423fdfb8f31202958dd682a0619313798c2f");
+
+const fn nib(c: u8) -> u8 {
+    if c <= b'9' { c - b'0' } else { c - b'a' + 10 }
+}
+
+const fn hex32(h: &str) -> [u8; 32] {
+    let b = h.as_bytes();
+    let mut out = [0u8; 32];
+    let mut i = 0;
+    while i < 64 {
+        out[i / 2] = nib(b[i]) << 4 | nib(b[i + 1]);
+        i += 2;
+    }
+    out
+}
 
 const BS: i64 = 36 * 36;
 const BE: i64 = 164 * 164;
@@ -182,7 +208,13 @@ struct TxSt {
 }
 
 fn parse_tx(stmt: &[u8]) -> Option<TxSt> {
-    let mut p = PREFIX;
+    // fee: a be32 word that must be < 2^64 (pqz_rel.c rd_word64)
+    let fw = &stmt[HDR_FEE..HDR_FEE + 32];
+    if fw[..24].iter().any(|&b| b != 0) {
+        return None;
+    }
+    let fee = u64::from_be_bytes(fw[24..].try_into().unwrap());
+    let mut p = HEADER;
     let mut pv = || {
         let r = rd_polyvec(&stmt[p..]);
         p += POLYVEC;
@@ -194,8 +226,6 @@ fn parse_tx(stmt: &[u8]) -> Option<TxSt> {
     let u = rd_polyvec(&stmt[p..])?;
     p += POLYVEC;
     let v = [rd_poly(&stmt[p..], 16)?, rd_poly(&stmt[p + VB..], 16)?, rd_poly(&stmt[p + 2 * VB..], 16)?];
-    p += 3 * VB;
-    let fee = u64::from_be_bytes(stmt[p..p + 8].try_into().unwrap());
     Some(TxSt { pkf, pkt, pka, ut, vt_, u, v, fee })
 }
 
