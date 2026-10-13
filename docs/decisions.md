@@ -3156,6 +3156,8 @@ Change (2026-10-08): owner — PQZ is meant for public chains too; the route is 
 
 Change (2026-10-13): owner — the noise budget (§4.3) states that it needs each norm bound proven per block, and records that PQZL v1 did not enforce them (all exact-ℓ2 equations shared one Schwartz–Zippel domain, lazer#25): attacker-controlled accounts could reach ≈ 44,001 noise per credit, ≈ 45.0 M over `K_MAX`, mint margin ≈ 1.12× instead of 4.1×; v2 restores the per-block bounds, so the budget, the 4.1× margin (threat T5) and `K_MAX = 1024` stand unchanged. Source add: `research/pqz-l2-domain.md`.
 
+Change (2026-10-13): owner — the parameters section records (dated note) that the v2 verifiers, generic and specialised, did not bound `z21` (lazer#26), so the proof's MSIS instances as enforced were β 286–311 (core-SVP classical 2^83.5–2^90.8) instead of β ≥ 450; both verifiers now check `‖z21‖² + ‖w − γ·w1‖² ≤ B²` (LNP22 Fig. 18), honest proofs and the transcript unchanged, parameters and β stand; threat T2 names the check; `proofSystemId` stays v2 pending the owner's decision (recommendation: no bump). Source add: `research/pqz-z21-norm.md`.
+
 **Why.** Parameters at or above Kyber-512 under classical and quantum core-SVP (β ≈ 476) with worst-case noise bounds, so an accepted state never fails to decrypt.
 **Cost if wrong.** Any change needs a new `proofSystemId` and a recomputed noise budget.
 **Source.** `history/specs/2026-10-06-pq-zether-design.md:230`
@@ -3199,6 +3201,8 @@ Change (2026-10-13): owner — the noise budget (§4.3) states that it needs eac
 - old: R278 · status: current · owner: no · date: 2026-10-07 · normative: contracts/pq-zether.md#CTR-PQZ-09 · superseded-by: —
 
 Change (2026-10-13): owner — `proofSystemId` v1 → v2 for the two LaZer `tbox` Schwartz–Zippel fixes (lazer#24: λ × M evaluation challenges instead of one pair reused, soundness ≈ 2^-84 → the stated 2^-127; lazer#25: one challenge domain per exact-ℓ2 equation); v1 retired. Source add: `research/pqz-tbox-soundness.md`, `research/pqz-l2-domain.md`.
+
+Change (2026-10-13): owner — §8 states that a v2 verifier bounds the whole `z2 = (z21, z22)` (lazer#26, P6-Z21): an accepted-set change only (no transcript, format or honest-proof change, nothing deployed); `proofSystemId` stays v2 for now, bump or not is an open owner decision. Source add: `research/pqz-z21-norm.md`.
 
 **Why.** LNP22 via a LaZer fork with six rewritten layers runs portably and deterministically in the node, the prover and WASM; one implementation, no Solidity verifier; kill criterion on size and verify time.
 **Cost if wrong.** We own a C fork; upstream fixes are merged by hand.

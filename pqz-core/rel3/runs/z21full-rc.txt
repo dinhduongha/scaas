@@ -1,0 +1,3 @@
+relfix rc=0
+check_sv_fixes rc=0
+diff (sv/diff.sh z21, defaults 40 20 3 20) stopped after 29 min of the portable step (10x the v2 sample); rerun as z21s with the v2-sized sample

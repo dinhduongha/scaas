@@ -49,6 +49,7 @@ output) are kept while the repository is private and are dropped before a public
 | [pqz-specialised-verifier.md](pqz-specialised-verifier.md) | PQZL specialised verifier: the five PQZ relations without LaZer's generic machinery, on the fixed v2 transcript (P6-SV) (2026-10-13) |
 | [pqz-tbox-soundness.md](pqz-tbox-soundness.md) | LaZer `tbox`: one Schwartz–Zippel challenge pair for all λ/2 evaluation accumulators (lazer#24, P6-SZ) (2026-10-13) |
 | [pqz-l2-domain.md](pqz-l2-domain.md) | LaZer `tbox`: all exact-ℓ2 equations share one Schwartz–Zippel domain, so only the sum of block norms is checked (lazer#25, P6-L2) (2026-10-13) |
+| [pqz-z21-norm.md](pqz-z21-norm.md) | LaZer `lnp-quad` / `abdlop` verify: `z21` never norm-checked, only ‖w − γ·w1‖ bounded; MSIS β 452–461 → 286–311 before the fix (lazer#26, P6-Z21) (2026-10-13) |
 | [pqzh-design.md](pqzh-design.md) | PQZH design study: the hash-based proof kind of PQ Zether (P6-PQZH, E-S1H) (2026-10-13) |
 | [pqz-relations-burn-disclose.md](pqz-relations-burn-disclose.md) | PQZ relations `R_BURN`, `R_DS`, `R_DR`: burn / refresh and disclosure proofs in `pqz-core` (P6) (2026-10-13) |
 | [pqzh-prototype.md](pqzh-prototype.md) | PQZH prototype: `R_REG` and `R_TX` as a Plonky3 STARK — sizes, timings, wasm32, ZK, soundness sweep (P6-PQZH) (2026-10-13) |

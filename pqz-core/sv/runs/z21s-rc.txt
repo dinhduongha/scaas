@@ -1,0 +1,6 @@
+diff portable rc=0 (pqz_sv_diff 4 4 2 1 10 12 12 12)
+zdiff rc=0 (review.sh zdiff 2 31; earlier attempts were killed before writing output)
+asan zdiff rc=143 (review.sh zdiff 1 31, all five relations in one ASan + UBSan malloc-path process: SIGTERM at R_BURN k = 2, twice at the same point; the malloc path does not free the per-prove statement objects (STATUS Open 4), so the process most likely hits the 4 GB cap of scripts/capped [inference]; R_REG / R_TX complete in z21s-asan-z21diff-all-killed.jsonl; then one process per relation)
+asan zdiff mask 4 rc=0
+asan zdiff mask 8 rc=0
+asan zdiff mask 16 rc=0

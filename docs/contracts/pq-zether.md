@@ -269,6 +269,15 @@ accepted state never fails to decrypt. An earlier `q = 2^50 − 1791` reached on
 Kyber-512, and split fully, which defeats LNP22's challenge invertibility. Parameters change **only** with a new
 `proofSystemId` and a recomputed noise budget.
 
+**Note (2026-10-13): the v2 verifiers did not enforce the MSIS bound the β ≥ 450 above is for, until the z21 fix.**
+LaZer's verifier ([lazer#26](https://github.com/lazer-crypto/lazer/issues/26)), and `pqz_verify_fast` with it, never
+bounded `z21`, the part of the commitment opening the proof carries; LNP22 (Fig. 18) and the parameters bound the
+whole `z2 = (z21, z22)`. Bounded only by `MAX_PROOF`, `z21` let the extracted MSIS solution grow from ≈ 2^35.3–2^36.0
+to ≈ 2^41: the proof's MSIS instances fell to β 286–311 (core-SVP classical 2^83.5–2^90.8), below Kyber-512. No known
+attack, nothing deployed; the guarantees that rest on the proofs' knowledge soundness (key uniqueness, the noise
+budget, no mint) held only at that weaker level. Both verifiers now check `‖z21‖² + ‖w − γ·w1‖² ≤ B²`; honest proofs
+and the transcript are unchanged, so the parameters and the β above stand.
+
 | Name | Value | Note |
 |---|---|---|
 | Ring | `R_q = Z_q[X]/(X^64 + 1)`, module rank `k = 32` | LWE dimension `n = 2048` |
@@ -1050,7 +1059,10 @@ v1 → v2 (2026-10-13): the two LaZer `tbox` Schwartz–Zippel fixes
 ([lazer#24](https://github.com/lazer-crypto/lazer/issues/24), [lazer#25](https://github.com/lazer-crypto/lazer/issues/25);
 `pqz-core/sz/README.md`) change the transcript; v1 is retired. lazer#24: v1 drew one challenge pair for all λ/2
 evaluation accumulators (2 independent tests, soundness ≈ 2^-84 against the stated 2^-127); lazer#25: v1 used one
-challenge domain for all exact-ℓ2 equations, so only the sum of the block norms was checked ([noise](#noise)).
+challenge domain for all exact-ℓ2 equations, so only the sum of the block norms was checked ([noise](#noise)). A v2
+verifier bounds the whole `z2 = (z21, z22)` ([lazer#26](https://github.com/lazer-crypto/lazer/issues/26), 2026-10-13):
+it changes which proofs are accepted, not the transcript or any honest proof, and no verifier without it was deployed.
+The id stays v2 for now; whether this needs a bump is an open owner decision (recommendation: no).
 
 - **Origin.** Fork of LaZer at a pinned commit (`main` was `3330e48`, 2026-09-28; the pin is recorded), MIT, repo path
   `scaas/pqz-core/`. Kept: LNP22 protocol logic, codegen (`scripts/lin-codegen.sage` with lattice-estimator), parameter
@@ -1409,7 +1421,7 @@ service is the user's (or the organization's key oracle), never a third party's 
 | # | Threat | Control |
 |---|---|---|
 | T1 | **HNDL on ciphertexts** (archive the chain, decrypt in 2035+) | MLWE ciphertexts at β ≈ 476, core-SVP 139 / 126 (target ≥ Kyber-512 under classical and quantum core-SVP); no classical encryption of amounts in PQZ; transports already X25519MLKEM768 |
-| T2 | Quantum forgery of validity proofs (mint) | MSIS/MLWE-based LNP22; no pairing or DL anywhere in PQZ proofs |
+| T2 | Quantum forgery of validity proofs (mint) | MSIS/MLWE-based LNP22; no pairing or DL anywhere in PQZ proofs; the verifier enforces the norm bounds the MSIS estimate assumes, incl. the whole `z2` (lazer#26, [parameters](#CTR-PQZ-03)) |
 | T3 | Quantum forgery of authorization | ML-DSA-65; a hybrid `msig` only adds a classical check, never replaces it |
 | T4 | Malformed ciphertexts (out-of-range coefficients, wrong lengths, huge noise) | `< q` checks in Solidity and precompile; every ciphertext comes with a proof of exact norms; the only trivial term (the plain term of `T`) is built by the contract |
 | T5 | Noise growth ⇒ wrong decryption or failure oracle | worst-case bound + `K_MAX`, enforced at credit **and** at debit (`unitsOf(T)`), 4.1× margin before soundness is at risk (per-block ℓ2 bounds, `proofSystemId` v2; v1 checked only their sum, ≈ 1.12×, [noise](#noise)); no bootstrapping needed; a failure is impossible, not merely unlikely ([2024/127](https://eprint.iacr.org/2024/127)) |

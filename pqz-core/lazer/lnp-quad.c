@@ -355,6 +355,7 @@ lnp_quad_verify (uint8_t hash[32], poly_t c, polyvec_t z1, polyvec_t z21,
   const unsigned int log2m = dcompress_get_log2m (dcomp_param);
   int_srcptr m_ = dcompress_get_m (dcomp_param);
   INT_T (l2sqr, nlimbs * 2);
+  INT_T (l2z21, nlimbs * 2);
   INT_T (bnd, nlimbs * 2);
   INT_T (linf, nlimbs);
   INT_T (tmp, 1);
@@ -503,8 +504,16 @@ lnp_quad_verify (uint8_t hash[32], poly_t c, polyvec_t z1, polyvec_t z21,
     goto ret;
   }
 
+  /* PQZ (P6-Z21): bound the whole z2 = (z21, z22), not z22 alone. Upstream checks only
+     ||w - gamma w1||^2 (the z22 part) and never bounds z21, which the proof carries. LNP22 (eprint 2022/284,
+     Fig. 18, Thm A.2) checks ||(z21, A1 z1 + A2' z21 - c 2^D tA1 - gamma w1)|| <= B with B = Bound_() of the
+     codegen (Bsqr = floor(B^2)); the extractor and the MSIS bound (B2 = 2 B) rely on it, and the honest prover
+     rejects on exactly this sum (||y2||^2 <= Bsqr), so honest proofs are unaffected. Not a transcript change.
+     Upstream: https://github.com/lazer-crypto/lazer/issues/26 */
   polyvec_subscale (tmp1, gamma, w1, 0);
   polyvec_l2sqr (l2sqr, tmp1);
+  polyvec_l2sqr (l2z21, z21);
+  int_add (l2sqr, l2sqr, l2z21);
   b = int_le (l2sqr, params->Bsqr);
   if (!b) {
     //printf("norm bound check failed.");

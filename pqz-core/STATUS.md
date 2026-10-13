@@ -1,4 +1,4 @@
-# P6d (E-S1 `pqz-core` spike) and P6d-2 (optimisation) — status (2026-10-13)
+# P6d (E-S1 `pqz-core` spike) and P6d-2 (optimisation) — status (2026-10-14)
 
 Spike: branch `p6d-pqz-core`, merged to main. Optimisation P6d-2 (owner: "optimise the fork"): branch `p6d2-opt`, not
 merged. README, research note `docs/research/pqz-core-e-s1.md` (§11 = P6d-2), roadmap and TODO rows written for the
@@ -191,6 +191,27 @@ within host noise (the fix draws 2 M more challenge coefficients per evaluation 
 native p50 prove / verify `R_TX` 949 / 620 → 1,061 / 648 ms, `R_BURN` 683 / 526 → 755 / 544 ms, `R_REG` 228 / 165 →
 252 / 177 ms, `R_DS` 271 / 195 → 314 / 211 ms, `R_DR` 295 / 194 → 323 / 212 ms; wasm verify p50 `R_TX` 761 → 818 ms.
 
+## z21 norm check P6-Z21 (branch `pqz-z21`, not merged)
+
+Third LaZer finding, from the independent SV review (finding 1), public as
+[lazer#26](https://github.com/lazer-crypto/lazer/issues/26): `lnp_quad_verify` / `abdlop_verify` bounded ‖w − γ·w1‖
+(the z22 part) but never `z21`; LNP22 Fig. 18, the codegen's `Bound_` / `Bsq` and the honest prover bound the whole
+z2. Both verifiers (`lazer/lnp-quad.c`, `lazer/abdlop.c`, `src/pqz_sv.c`) now check ‖z21‖² + ‖w − γ·w1‖² ≤ Bsq.
+Verifier only: transcript and honest proofs unchanged, `proofSystemId` stays v2 (recommendation: no bump; owner).
+Before the fix the enforced MSIS instances were β 286–311 instead of 452–461 (`params/estimator-z21.txt`). Write-up
+`docs/research/pqz-z21-norm.md`. Regression: `check_tbox_fixes.sh` runs `sv/review/review.sh norm` (z21_big
+rejected by both verifiers, accepted by the control without the z21 term); `sv/diff.sh` runs the z21 differential
+`sv/review/review.sh zdiff`. SV hardening from the review folded in (findings 2, 4–7; finding 8 is Open 6).
+
+Run `NP=10 NV=30 NPW=5 NVW=10 rel3/relfix.sh z21full` + `sv/check_sv_fixes.sh` + `ZN=2 sv/diff.sh z21` + ASan
+z21 differential [measured]: KAT 19/19; `check_tbox_fixes: ok`; `check_sv_fixes: ok`; `fails 0` (native, wasm,
+ASan + UBSan with only the Open 4 nits); `proofs_fnv` of all five relations unchanged from v2 (native 5 / 10 seeds,
+wasm 3 / 5 seeds); PoC `z21_big` ACCEPT / ACCEPT before (`rel3/runs/z21-before-norm.txt`) → REJECT / REJECT
+(`z21full-norm.txt`), PoC proofs byte-identical; differential test (v2-sized sample) 2,710 cases, 0 mismatches
+(`sv/runs/z21s-diff-portable.jsonl`); z21 differential 290 z21-inflated proofs, 0 disagreements, verdict = (‖z2‖² ≤
+Bsq) in every case (`sv/runs/z21s-z21diff.jsonl`); the same under ASan + UBSan 145 cases, 0 disagreements, no sanitizer report (`sv/runs/z21s-asan-*`). Generic verify p50 native `R_TX` 677 ms, `R_REG` 184 ms
+(v2 648 / 177, noise).
+
 ## Measured (2026-10-13, this machine, single thread)
 
 Native: clang -O2, `pqz_bench 5 5` under `scripts/capped` (5 proves, 5 + 5 honest verifies, 10 adversarial). wasm32:
@@ -239,6 +260,12 @@ rest bookkeeping; the zero entries of the selection matrices' Gram matrices were
    layer's statement objects (`pqz_rel.c` frees them by arena release), on main as well; `opt/asan.sh` runs with
    `detect_leaks=0`.
 5. ~~Docs: README, research note, roadmap P6d row + TODO P6 row, docs_check.~~ (done)
+6. **Global library state (SV review finding 8, for P6f).** `pqz_sv.c` keeps per-call bookkeeping in statics (`svb`,
+   `nsvb`) and its tables in `SR` / `SA`; `pqz_rel.c` has one arena, one base mark and the sticky `pqz_err`; `pqz.h`
+   says single-threaded. The node can enter the precompile concurrently (eth_call, tracing, parallel import): two
+   concurrent calls would release each other's arena and reset each other's error (expected failure: a crash or a
+   wrong reject; a wrong accept would still need the final hash to match). The P6f cgo wrapper must serialise every
+   libpqz call (one process-wide lock) or move to per-thread contexts. Status: open, P6f.
 
 Scratch (not needed to resume, re-creatable): LaZer and lattice-estimator clones, the upstream tbox harness and
 debug builds under the session scratchpad `p6d/`.
