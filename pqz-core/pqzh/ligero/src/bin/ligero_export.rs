@@ -1,7 +1,7 @@
 //! Fixtures for the EVM verifier (smartcontracts/evm/test/pqzh/ligero/): the same bytes the Rust verifier takes.
 //!   ligero_export <dir> [preset ...]      presets: proven (radix 431), conj (radix 431), johnson, conj-n<N>-k<K> (any n, k)
 //! Writes a.bin (A as 32 x 32 x 64 canonical F_q, 6 bytes big-endian, order (i, j, coefficient)), and per relation
-//! and preset: <rel>-<preset>.stmt / .proof / .other (a valid proof of the statement with byte 64 flipped, a hashed-only header byte) / .params
+//! (reg, tx; tx0 at proven only) and preset: <rel>-<preset>.stmt / .proof / .other (a valid proof of the statement with byte 64 flipped, a hashed-only header byte) / .params
 //! (n, k, l, t, grinding bits: five 32-byte big-endian words). neg-<case>.stmt / .proof: invalid witnesses proved without the honest prover's checks
 //! (conjectured preset), each must be rejected. A JSON line per file on stdout.
 
@@ -30,7 +30,10 @@ fn main() {
 
     let s = setup();
     for pre in &presets {
-        for (op, rel, st, w) in [(OP_REGISTER, "reg", &s.reg_stmt, &s.reg_wit), (OP_TRANSFER, "tx", &s.tx_stmt, &s.tx_wit)] {
+        // R_TX0 (op 1, the 66,560-byte statement) at THE preset only
+        let tx0 = [(OP_TRANSFER, "tx0", &s.tx0_stmt, &s.tx0_wit)];
+        let rels = [(OP_REGISTER, "reg", &s.reg_stmt, &s.reg_wit), (OP_TRANSFER, "tx", &s.tx_stmt, &s.tx_wit)];
+        for (op, rel, st, w) in rels.into_iter().chain(if pre == "proven" { tx0.to_vec() } else { vec![] }) {
             let p = match pre.as_str() {
                 "proven" => Params::preset(op, true, true),
                 "conj" => Params::preset(op, false, true),

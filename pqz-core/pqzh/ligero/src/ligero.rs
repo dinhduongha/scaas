@@ -675,6 +675,7 @@ mod tests {
             (Form::Burn, 234_744),
             (Form::DiscloseSender, 190_458),
             (Form::DiscloseReceiver, 190_458),
+            (Form::Transfer0, 234_744),
         ];
         assert_eq!(expect.map(|e| e.0), RELS);
         for (f, max) in expect {

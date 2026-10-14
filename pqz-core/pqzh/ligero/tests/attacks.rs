@@ -117,7 +117,9 @@ fn other_ids_and_length_bound_rejected() {
             }
         }
         if op == OP_TRANSFER {
-            for (i, v) in [(31, 0u8), (31, 2), (0, 1)] {
+            // R_TX needs 1, R_TX0 0 (R6): the other value, 2, a high byte
+            let other = (f == Form::Transfer0) as u8;
+            for (i, v) in [(31, other), (31, 2), (0, 1)] {
                 let mut st2 = st.clone();
                 st2[HDR_AUDITOR_ON + i] = v;
                 bad.push((format!("auditorOn byte {i} = {v}"), st2));
@@ -208,7 +210,7 @@ fn e2_65() -> Vec<i64> {
 #[test]
 fn norm_exceeded_small_coefficients() {
     let s = setup_with(&Tweak { s_f: Some(small_but_long()), ..Default::default() });
-    for f in [Form::Register, Form::Transfer, Form::Burn] {
+    for f in [Form::Register, Form::Transfer, Form::Transfer0, Form::Burn] {
         assert!(refused(f, &s), "{}", rel_name(f));
     }
     let s = setup_with(&Tweak { s_t: Some(small_but_long()), ..Default::default() });
@@ -242,7 +244,7 @@ fn randomness_norm_and_range() {
         ("e1 range", Tweak { e1: Some(e1_large), ..Default::default() }),
     ] {
         let s = setup_with(&tw);
-        for f in [Form::Transfer, Form::Burn, Form::DiscloseSender] {
+        for f in [Form::Transfer, Form::Transfer0, Form::Burn, Form::DiscloseSender] {
             assert!(refused(f, &s), "{} {name}", rel_name(f));
         }
     }
@@ -292,6 +294,7 @@ fn hedged_proofs() {
 fn digit_out_of_range() {
     let s = setup_with(&Tweak { d: Some(bad_digits(123_456)), ..Default::default() });
     assert!(refused(Form::Transfer, &s));
+    assert!(refused(Form::Transfer0, &s));
     let s = setup_with(&Tweak { burn_dp: Some(bad_digits(1_000_000 - 123_456 - 7)), ..Default::default() });
     assert!(refused(Form::Burn, &s));
 }
@@ -301,6 +304,7 @@ fn e2_norm_exceeded() {
     // R_TX's e2_t is R_DS's e2
     let s = setup_with(&Tweak { e2_t: Some(e2_65()), ..Default::default() });
     assert!(refused(Form::Transfer, &s));
+    assert!(refused(Form::Transfer0, &s));
     assert!(refused(Form::DiscloseSender, &s));
     let s = setup_with(&Tweak { burn_e2: Some(e2_65()), ..Default::default() });
     assert!(refused(Form::Burn, &s));
@@ -310,7 +314,7 @@ fn e2_norm_exceeded() {
 fn overspend() {
     // claim new balance digits all 15 (2^64 - 1): the carry chain cannot close
     let s = setup();
-    for (f, off) in [(Form::Transfer, 12400), (Form::Burn, 12320)] {
+    for (f, off) in [(Form::Transfer, 12400), (Form::Transfer0, 12368), (Form::Burn, 12320)] {
         let (op, (st, w)) = (f.op(), s.rel(f));
         let mut w = w.clone();
         w[off..off + 16].fill(15);
@@ -339,7 +343,7 @@ fn wrong_public_amount() {
 #[test]
 fn scalar_word_above_2_64() {
     let s = setup();
-    for (f, off) in [(Form::Transfer, HDR_FEE), (Form::Burn, HDR_FEE), (Form::Burn, HDR_AMOUNT), (Form::DiscloseSender, DISC_AMOUNT), (Form::DiscloseReceiver, DISC_AMOUNT)] {
+    for (f, off) in [(Form::Transfer, HDR_FEE), (Form::Transfer0, HDR_FEE), (Form::Burn, HDR_FEE), (Form::Burn, HDR_AMOUNT), (Form::DiscloseSender, DISC_AMOUNT), (Form::DiscloseReceiver, DISC_AMOUNT)] {
         let (op, (st, w)) = (f.op(), s.rel(f));
         let pf = prove(op, st, w, [2; 32], &p(op)).unwrap();
         let mut st = st.clone();
@@ -353,13 +357,49 @@ fn scalar_word_above_2_64() {
 fn wrong_witness_ring_row() {
     // one coefficient of a CBD(20) vector changed (still short): its R_q row no longer holds mod q
     let s = setup();
-    for (f, off) in [(Form::Transfer, 8192), (Form::Burn, 8192), (Form::DiscloseSender, 2048), (Form::DiscloseReceiver, 2048)] {
+    for (f, off) in [(Form::Transfer, 8192), (Form::Transfer0, 8192), (Form::Burn, 8192), (Form::DiscloseSender, 2048), (Form::DiscloseReceiver, 2048)] {
         let (op, (st, w)) = (f.op(), s.rel(f));
         let mut w = w.clone();
         w[off] = w[off].wrapping_add(1);
         assert!(prove(op, st, &w, [1; 32], &p(op)).is_err());
         assert!(rejected(op, st, &w), "{}", rel_name(f));
     }
+}
+
+/// op 1's two forms (R6, D8): an R_TX proof against the R_TX0 statement of the same transfer and vice versa; the
+/// R_TX0 statement padded with pk_a / v_a to R_TX's length (auditorOn 1) and R_TX's cut to R_TX0's (auditorOn 0):
+/// each is a well-formed statement of the other form, and neither proof verifies against it; a witness of the other
+/// form is refused by its length
+#[test]
+fn transfer_forms_cross_rejected() {
+    let s = setup();
+    let pp = p(OP_TRANSFER);
+    let (tx, tx0) = (&s.tx_stmt, &s.tx0_stmt);
+    let a = prove(OP_TRANSFER, tx, &s.tx_wit, [6; 32], &pp).unwrap();
+    let b = prove(OP_TRANSFER, tx0, &s.tx0_wit, [6; 32], &pp).unwrap();
+    assert!(verify(OP_TRANSFER, tx, &a, &pp) && verify(OP_TRANSFER, tx0, &b, &pp));
+    assert!(!verify(OP_TRANSFER, tx0, &a, &pp), "R_TX proof, R_TX0 statement");
+    assert!(!verify(OP_TRANSFER, tx, &b, &pp), "R_TX0 proof, R_TX statement");
+    // header || pk_f || pk_t || [pk_a] || T || u || v_t || v_f || [v_a]
+    let (h, pk) = (640, PK_BYTES);
+    let mut up = tx0[..h + 2 * pk].to_vec();
+    up.extend_from_slice(&tx[h + 2 * pk..h + 3 * pk]); // pk_a
+    up.extend_from_slice(&tx0[h + 2 * pk..]);
+    up.extend_from_slice(&tx[tx.len() - 128..]); // v_a
+    up[HDR_AUDITOR_ON + 31] = 1;
+    assert_eq!(&up, tx, "R_TX0 + pk_a + v_a = R_TX");
+    let mut down = tx[..h + 2 * pk].to_vec();
+    down.extend_from_slice(&tx[h + 3 * pk..tx.len() - 128]);
+    down[HDR_AUDITOR_ON + 31] = 0;
+    assert_eq!(&down, tx0, "R_TX - pk_a - v_a = R_TX0");
+    assert_eq!(cs::form_of(OP_TRANSFER, tx.len()), Some(Form::Transfer));
+    assert_eq!(cs::form_of(OP_TRANSFER, tx0.len()), Some(Form::Transfer0));
+    for (st, w) in [(tx, &s.tx0_wit), (tx0, &s.tx_wit)] {
+        assert_eq!(prove(OP_TRANSFER, st, w, [6; 32], &pp), Err("length"));
+        assert_eq!(prove_unchecked(OP_TRANSFER, st, w, [6; 32], &pp), Err("length"));
+    }
+    // the length gate is the form's: R_TX0's bound is R_BURN's (same m), below R_TX's
+    assert!(pp.max_proof_len(Form::Transfer0) < pp.max_proof_len(Form::Transfer));
 }
 
 /// the EVM fixtures (ligero_export) verify natively: honest and other-statement proofs accepted, negative witnesses
@@ -377,6 +417,12 @@ fn evm_fixtures() {
             assert!(verify(op, &st2, &rd(&format!("{rel}-{pre}.other")), &pp), "{rel}-{pre} other");
         }
     }
+    let st = rd("tx0-proven.stmt");
+    assert_eq!(st.len(), Form::Transfer0.stmt_len());
+    assert!(verify(OP_TRANSFER, &st, &rd("tx0-proven.proof"), &p(OP_TRANSFER)), "tx0-proven");
+    let mut st2 = st.clone();
+    st2[64] ^= 0x80;
+    assert!(verify(OP_TRANSFER, &st2, &rd("tx0-proven.other"), &p(OP_TRANSFER)), "tx0-proven other");
     for n in ["reg-norm", "reg-coef", "tx-norm", "tx-digit", "tx-e2", "tx-overspend", "tx-ring"] {
         let op = if n.starts_with("reg") { OP_REGISTER } else { OP_TRANSFER };
         assert_eq!(rd(&format!("neg-{n}.stmt"))[32..64], PQZH_ID, "{n}: D3 id");

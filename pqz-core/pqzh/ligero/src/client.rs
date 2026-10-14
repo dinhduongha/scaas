@@ -1,5 +1,5 @@
 //! Test and bench inputs (feature `bench`): the same keys, ciphertexts, statements and witnesses as pqz-core's
-//! test/pqz_bench.c setup() (same xorshift stream, same samplers, all five relations), so the bytes can be compared
+//! test/pqz_bench.c setup() (same xorshift stream, same samplers, all six forms), so the bytes can be compared
 //! with pqz-core's (xcheck/ligero.sh); the mutations of the benches and tests. Layout constants and the coefficient
 //! codec are pqz-stmt's.
 
@@ -90,6 +90,8 @@ pub struct Setup {
     pub reg_wit: Vec<u8>,
     pub tx_stmt: Vec<u8>,
     pub tx_wit: Vec<u8>,
+    pub tx0_stmt: Vec<u8>,
+    pub tx0_wit: Vec<u8>,
     pub burn_stmt: Vec<u8>,
     pub burn_wit: Vec<u8>,
     pub ds_stmt: Vec<u8>,
@@ -107,7 +109,7 @@ impl Setup {
             Form::Burn | Form::Refresh => (&self.burn_stmt, &self.burn_wit),
             Form::DiscloseSender => (&self.ds_stmt, &self.ds_wit),
             Form::DiscloseReceiver | Form::DiscloseAuditor => (&self.dr_stmt, &self.dr_wit),
-            Form::Transfer0 => panic!("R_TX0: Task 8"),
+            Form::Transfer0 => (&self.tx0_stmt, &self.tx0_wit),
         }
     }
 }
@@ -239,6 +241,21 @@ pub fn setup_with(tw: &Tweak) -> Setup {
     w.extend_from_slice(&m[1]);
     assert_eq!((tx.len(), w.len()), (Form::Transfer.stmt_len(), Form::Transfer.wit_len()));
 
+    // R_TX0 (auditor off, pqz_bench.c): the transfer without pk_a and v_a (same r, e1, e2_t, e2_f, so u, v_t, v_f
+    // are R_TX's), R_TX's header with auditorOn 0; witness R_TX's without e2_a
+    let mut tx0 = tx[..HEADER_BYTES].to_vec();
+    tx0[HDR_AUDITOR_ON + 31] = 0;
+    for x in [&kf.pk, &kt.pk, &ut] {
+        wr_vec(&mut tx0, x);
+    }
+    wr_v(&mut tx0, &vt[0]);
+    wr_vec(&mut tx0, &u);
+    wr_v(&mut tx0, &vs[0]);
+    wr_v(&mut tx0, &vs[1]);
+    let mut w0 = w[..12288 + 64].to_vec();
+    w0.extend_from_slice(&w[12288 + 96..]);
+    assert_eq!((tx0.len(), w0.len()), (Form::Transfer0.stmt_len(), Form::Transfer0.wit_len()));
+
     // R_DS / R_DR: header words chainId .. entryRef = (i * 7), amount v, kind 0 / 1; pk_t, u, v_t
     let disc = |k: u8| {
         let mut st = [Form::DiscloseSender, Form::DiscloseReceiver][k as usize].op_tag().to_vec();
@@ -297,7 +314,7 @@ pub fn setup_with(tw: &Tweak) -> Setup {
     bw.extend_from_slice(&mb);
     assert_eq!((burn.len(), bw.len()), (Form::Burn.stmt_len(), Form::Burn.wit_len()));
 
-    Setup { reg_stmt, reg_wit, tx_stmt: tx, tx_wit: w, burn_stmt: burn, burn_wit: bw, ds_stmt, ds_wit, dr_stmt, dr_wit }
+    Setup { reg_stmt, reg_wit, tx_stmt: tx, tx_wit: w, tx0_stmt: tx0, tx0_wit: w0, burn_stmt: burn, burn_wit: bw, ds_stmt, ds_wit, dr_stmt, dr_wit }
 }
 
 // ---- adversarial inputs (bench native and wasm) ----

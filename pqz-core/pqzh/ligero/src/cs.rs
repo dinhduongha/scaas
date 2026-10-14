@@ -1,4 +1,4 @@
-//! R_REG, R_TX, R_BURN, R_DS and R_DR as Ligero constraint systems over F_q (docs/research/pqzh-ligero.md §3, §12):
+//! R_REG, R_TX, R_TX0, R_BURN, R_DS and R_DR as Ligero constraint systems over F_q (docs/research/pqzh-ligero.md §3, §12):
 //! statement parsing (`pqz-stmt`'s decoder with every D15 / R6 rule, then PQZH's id), the row layout, the witness
 //! rows, the quadratic triples and the linear test's combination vectors.
 //!
@@ -6,6 +6,7 @@
 //!   R_REG  pk = A s + e
 //!   R_TX   rows 1-7: pk_f = A s_f + e_f; u = A^T r + e1; v_x = pk_x^T r + e2_x + Delta digit_x (x = t, f, a; digits
 //!          d, d', d); u_T^T s_f + Delta M + e_T = v_T; M_i + c_{i-1} - d'_i - d_i - 16 c_i = fee_i, c_15 = 0
+//!   R_TX0  R_TX without the auditor (CTR-PQZ-24, plan D8): rows 1-4, 6, 7, legs t and f only (no pk_a, v_a, e2_a)
 //!   R_BURN R_TX rows 1, 2, 4, 6, 7 with d public (one leg: pk_f, v_f, e2_f, d')
 //!   R_DS   u = A^T r + e1; pk^T r + e2 = v - Delta d (k < 16)
 //!   R_DR   pk = A s + e; u^T s + e' = v - Delta d (k < 16), e' + 2^24 in 25 bits
@@ -190,7 +191,7 @@ pub struct Leg {
     pub dp: bool,
 }
 
-/// R_TX (legs t, f, a) and R_BURN (leg f only, amount public)
+/// R_TX (legs t, f, a), R_TX0 (t, f) and R_BURN (leg f only, amount public)
 pub struct Debit {
     pub burn: bool,
     pub pkf: Vec<Poly>,
@@ -217,8 +218,9 @@ pub enum Stmt {
     Dr(Disc),
 }
 
-/// Every relation the crate proves, in pqz_bench.c's order (R_REG, R_TX, R_BURN, R_DS, R_DR).
-pub const RELS: [Form; 5] = [Form::Register, Form::Transfer, Form::Burn, Form::DiscloseSender, Form::DiscloseReceiver];
+/// Every relation the crate proves, in pqz_bench.c's order (R_REG, R_TX, R_BURN, R_DS, R_DR, R_TX0).
+pub const RELS: [Form; 6] =
+    [Form::Register, Form::Transfer, Form::Burn, Form::DiscloseSender, Form::DiscloseReceiver, Form::Transfer0];
 
 /// The relation a statement of `op` with `len` bytes is proved in, from the op and the length alone (op 1: R_TX0 by
 /// length, R6; REFRESH and AUDITOR, other opTags of op 2 / op 5, share BURN's and DISCLOSE-RECEIVER's). The verifier
@@ -248,12 +250,9 @@ pub fn parse(op: u8, stmt: &[u8]) -> Option<Stmt> {
     Some(match s {
         pqz_stmt::Stmt::Register(r) => Stmt::Reg(vec(r.pk)),
         pqz_stmt::Stmt::Debit(d) => {
-            if d.form == Form::Transfer0 {
-                return None; // R_TX0: Task 8
-            }
             let burn = matches!(d.form, Form::Burn | Form::Refresh);
             let pkf = vec(d.pk_f);
-            // legs in witness order: t (d), f (d'), a (d)
+            // legs in witness order: t (d), f (d'), a (d; R_TX only)
             let mut legs = vec![];
             if let (Some(pk), Some(vt)) = (d.pk_t, d.v_t) {
                 legs.push(Leg { pk: vec(pk), v: v(vt), dp: false });

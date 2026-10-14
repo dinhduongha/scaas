@@ -1,4 +1,4 @@
-//! Dump client::setup()'s statements and witnesses (all five relations) for the byte cross-check with pqz-core
+//! Dump client::setup()'s statements and witnesses (all six forms) for the byte cross-check with pqz-core
 //! (../xcheck/ligero.sh, which patches pqz_bench.c's statements to the same opTag, PQZH id (D3) and auditorOn):
 //! `cargo run --release --example dump_setup -- DIR`.
 use pqzh_ligero::RELS;

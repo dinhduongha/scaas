@@ -1,6 +1,6 @@
 //! PQZH-Ligero bench: proof bytes and breakdown, soundness bits per term, prove time, peak heap, honest and
 //! adversarial verify p50 / p99 (as pqzh_bench).
-//!   ligero_bench [--rel reg|tx|burn|ds|dr|both|all] [--regime proven|conj|johnson] [--r431 0|1] [--n N --k K] [--np N] [--nv N] [--nadv N]
+//!   ligero_bench [--rel reg|tx|tx0|burn|ds|dr|both|all] [--regime proven|conj|johnson] [--r431 0|1] [--n N --k K] [--np N] [--nv N] [--nadv N]
 //!                [--dump DIR]
 //! Prints JSON lines. Run under scripts/capped.
 

@@ -747,10 +747,9 @@ verifier still covers `R_REG` / `R_TX` only.
 
 ### 12.4 Left for later
 
-- Task 8: `R_TX0` (auditor off) once PQZL Task 2 fixes its statement (66,560 B) and witness (12,384 B); xcheck of the
-  sixth form.
-- Task 6: the switch to `pqz-stmt` (§12.1), `soundness` / `breakdown` (floats) behind `bench`, then
-  `runs/measure.sh` byte-identical to these hedged proofs.
+- Task 8: `R_TX0` (auditor off) and the xcheck of the sixth form: done on `p6e-b3`, §14.
+- Task 6: the switch to `pqz-stmt` (§12.1), `soundness` / `breakdown` (floats) behind `bench`, proofs byte-identical:
+  done on `p6e-b3`, §14.
 - Task 9: done on `p6e-b2`, §13.
 
 ### 12.5 Rerun
@@ -816,7 +815,7 @@ kept), `runs/l11-*` (`runs/limits.sh`, one capped session; xcheck and forge reru
 | `R_DR` | 33,184 | 190,458 | 185,462–187,226 | 223,647 | yes / yes |
 
 The largest input any PQZH proof allows is 318,547 B (`R_TX`); `MAX_INPUT` is sized for 5 + 83,072 + 262,144 = 345,221 B.
-`R_TX0` (auditor off, 66,560 B) is not built (Task 8, after PQZL Task 2).
+`R_TX0` (auditor off, 66,560 B): built on `p6e-b3`, exact maximum 234,744 B (§14.3).
 
 ### 13.3 Runs [measured]
 
@@ -848,4 +847,102 @@ The largest input any PQZH proof allows is 318,547 B (`R_TX`); `MAX_INPUT` is si
 
 ```sh
 scripts/capped pqz-core/pqzh/ligero/runs/limits.sh l12   # fixtures, tests, --no-default-features, wasm32 build, native bench, xcheck, forge
+```
+
+## 14. P6e Tasks 6 and 8: the crate on `pqz-stmt`, `R_TX0`
+
+Branch `p6e-b3` (from main `9f55013`), plan Task 6 (R2, D11) and the rest of Task 8 (`R_TX0`, G1 / D8). Results, not
+decisions (the decision lines are in `docs/decisions.md`: D11 under CTR-PQZ-09, the PQZH `R_TX0` under CTR-PQZ-24).
+Runs `runs/l14-base-fnv*` (the base commit's seed-1 proofs, before any change), `runs/l14-*` (`runs/stmt.sh l14`,
+Task 6) and `runs/l14-tx0-*` (`runs/tx0.sh l14-tx0`, Task 8), each one capped session.
+
+### 14.1 What changed
+
+- **On `pqz-stmt` (Task 6).** `src/stmt.rs` is gone; `cs::parse` is `pqz_stmt::parse` (every D15 / R6 rule: length,
+  the op's opTag, a known id, fee / amount < 2^64, the salt form, `auditorOn` by length, the zero words, coefficients
+  < q) followed by PQZH's own id check (D3, kept on the Ligero side: `pqz-stmt` knows both ids). `ring.rs` keeps A,
+  the integer products and the honest prover's `keypair` / `encrypt` / `digits` (moved from `client.rs`, which the
+  production build no longer has); the coefficient codec, layout constants, ids and opTags are `pqz-stmt`'s. The
+  Ligero verifier therefore accepts what `pqz-stmt` accepts and no more: an accepted-set tightening (e.g. a non-zero
+  high half of the salt word, a non-zero zero-word) before any deployment, no proof byte changes.
+- **Relations keyed by form.** `Layout`, `max_len_exact`, `max_proof_len`, `proof_len_ok` take a `pqz_stmt::Form`;
+  `cs::form_of(op, len)` gives the form from the op and the statement length alone (op 1: `R_TX0` iff 66,560 B), so
+  the verifier's length gate still runs before anything is parsed. `prove` / `verify` keep `(op, stmt, …)`;
+  `RELS` (six forms, `pqz_bench.c`'s order) replaces `OPS`.
+- **Feature `bench` (D11).** `client.rs`, `Params::new` / `preset` / `johnson` / `johnson_preset`, `factor*`,
+  `soundness`, `breakdown` are behind `bench`; `Params::proven()` is written out as a `const fn` (unit test
+  `proven_is_the_model`: equal to `Params::new(32756, 817, true)`). The production build (`--no-default-features`)
+  depends on `sha3` and `pqz-stmt` only and contains no scalar float instruction: `runs/l14-deps.txt` (`cargo tree`,
+  and `objdump -d` of the production rlib: 0 `cvt*` / `add|sub|mul|div|sqrt s[sd]`, against 55 in the `bench` rlibs).
+  `#![deny(clippy::float_arithmetic)]` applies without `bench`, but clippy is not installed for the pinned toolchain,
+  so the scan is the evidence.
+- **`R_TX0` (Task 8).** `R_TX` without the auditor (`pqz_rel.c`, D8): rows 1–4, 6, 7, legs t and f (no `pk_a`, `v_a`,
+  `e2_a`), every norm and range of `R_TX`; same constraint-system code, `Layout` with two e2 legs. Statement 66,560 B
+  and witness 12,384 B as pqz-core; `client::setup` builds them as `pqz_bench.c` does (`R_TX`'s transfer without
+  `pk_a` / `v_a`, header with `auditorOn` 0). m = 124 rows, as `R_BURN`, so its exact bound equals `R_BURN`'s.
+- **Cross-check.** `xcheck/ligero.sh` and `kat_stmt.py` cover the sixth form (`runs/l14-tx0-xcheck.txt`: 12 of 12
+  files equal to `pqz_bench.c`'s; `pqz_kat.py` parses and rebuilds all six, `kat_stmt: ok`).
+- **EVM (test-only).** `LigeroVerifier.sol` takes `R_TX0` (op 1 by length; `auditorOn` 0; two legs; `maxProofLen`
+  now takes the statement length), `ligero_export` writes `tx0-proven.*`, the forge test adds gas, 108 mutations,
+  statement / length checks and the cross-form check. Its `stmtOk` still checks only id, opTag, `auditorOn`, fee and
+  coefficients, not every D15 rule (the Rust verifier does, through `pqz-stmt`).
+
+### 14.2 Task 6: proofs byte-identical [measured]
+
+Same statements, same `rnd32`: FNV-1a of the proofs, `runs/l14-proven.jsonl` `fnv_by_seed` against the base commit
+(`runs/l14-base-fnv.jsonl`, seed 1) and `runs/l13-proven.jsonl` (seed 4).
+
+| Relation | seed 1: base `9f55013` = `l14` | seed 4: `l13` = `l14` |
+|---|---|---|
+| `R_REG` | `36b1d3e5` | `b6215ec2` |
+| `R_TX` | `720b94e0` | `f8c936d9` |
+| `R_BURN` | `e270d5c8` | `e6464eb5` |
+| `R_DS` | `020286c2` | `e62e8079` |
+| `R_DR` | `c5f5fb23` | `d83e24fc` |
+
+Sizes and times are `l13`'s within noise (`R_TX` prove p50 636 / 639 ms, verify p50 over 10 samples 9.99 / 9.69 ms;
+over 1,000 in `l14-tx0` 9.78 ms). Tests (`runs/l14-tests.txt`): 13 unit and 15 integration tests pass, 4,800
+mutations 0 accepted / 0 panics; `runs/l14-nobench.txt`: 11 unit tests without `bench`; wasm32 builds
+(`runs/l14-wasm-build.txt`).
+
+### 14.3 Task 8: `R_TX0` at THE preset [measured]
+
+Native: `runs/l14-tx0-proven.jsonl` (+ `-time.txt`), all six forms in one process, 5 proofs (seeds 0–4), 1,000 honest
+verifies, 12 × 80 mutations each. wasm32 (gate-B method, §12.3): `runs/l14-tx0-proven-wasm.jsonl`, node v26.8.1,
+module 275,535 B, 2 proofs made in wasm32, 1,000 honest verifies, 12 × 4 mutations each, `fails` 0. Limit 60 ms p99.
+
+| Relation | m | Proof B (5 seeds) | Exact max | Prove p50 native / wasm32 mean | Peak heap prove / verify | Verify p50 / p99 native | Verify p50 / p99 wasm32 | Mutations accepted / panics |
+|---|---|---|---|---|---|---|---|---|
+| **`R_TX0`** | 124 | 229,672–231,800 | 234,744 | 614 / 1,310 ms | 42.9 / 1.2 MB | 9.48 / 11.10 ms | 16.75 / **22.33** ms | 0 / 0 of 960 |
+| `R_TX` | 125 | 230,584–232,302 | 235,470 | 646 / 1,295 ms | 43.2 / 1.2 MB | 9.78 / 10.65 ms | 17.12 / 21.03 ms | 0 / 0 of 960 |
+| `R_BURN` | 124 | 231,256–232,632 | 234,744 | 632 / 1,277 ms | 42.9 / 1.1 MB | 9.24 / 12.02 ms | 16.36 / 24.02 ms | 0 / 0 of 960 |
+| `R_REG` | 63 | 186,232–187,674 | 190,458 | 381 / 784 ms | 25.9 / 0.8 MB | 7.01 / 8.05 ms | 11.28 / 16.37 ms | 0 / 0 of 960 |
+| `R_DS` | 63 | 187,354–187,802 | 190,458 | 384 / 737 ms | 25.9 / 0.8 MB | 7.28 / 7.92 ms | 11.97 / 13.57 ms | 0 / 0 of 960 |
+| `R_DR` | 63 | 185,462–187,226 | 190,458 | 373 / 741 ms | 25.9 / 0.8 MB | 7.17 / 8.04 ms | 11.53 / 13.36 ms | 0 / 0 of 960 |
+
+Soundness at THE preset is `R_TX`'s for `R_TX0` (query 128.5, proximity 145.0, linear 154.4 bits, total 127.2).
+Process max RSS 47 MB native (six forms), wasm32 linear memory 48.1 MiB; adversarial verify p99 ≤ 1.4 ms native,
+≤ 2.0 ms wasm32. The wasm32 seed-1 proofs equal the native ones for all six forms (`R_TX0` `a69e9010`). `R_TX0` limits:
+5 + 66,560 + 234,744 = 301,309 B ≤ `MAX_INPUT` 393,216; 234,744 ≤ 262,144 (unit test `limits_exact`).
+
+**Tests** (`runs/l14-tx0-tests.txt`): 13 unit and 16 integration tests pass; 6 × 960 mutations 0 accepted /
+0 panics (`R_TX0` 960). `R_TX0` gets every negative witness `R_TX` has, each refused by the honest prover and, proved
+without its checks, rejected: ℓ2 norm of s_f exceeded with coefficients in [−1, 1]; r and e1 ℓ2 bound and bit range;
+digit out of range (d); e2_t norm 65; overspend (d′ all 15); fee word ≥ 2^64 (honest proof rejected too); a wrong ring
+row (e1). Statement checks: the PQZL, STARK and zero ids, opTag byte 0 and every other op's opTag, `auditorOn` 1 / 2 /
+high byte (`R_TX`: 0 / 2 / high byte) — none parsed, proved or verified. `transfer_forms_cross_rejected`: an `R_TX`
+proof against the `R_TX0` statement of the same transfer and vice versa are rejected (the two statements convert into
+each other by adding / removing `pk_a`, `v_a` and flipping `auditorOn`), a witness of the other form is refused by its
+length, and `R_TX0`'s bound is below `R_TX`'s. `runs/l14-tx0-nobench.txt`: 11 unit tests without `bench`.
+
+**EVM** (`runs/l14-tx0-forge.txt`, fixtures `runs/l14-tx0-export.jsonl`; the existing fixture files re-exported
+byte-identical): 20 tests pass; proven `R_TX0` verifies at 516.3 M gas (`R_TX` 526.8 M), 108 mutations 0 accepted /
+0 reverts, `maxProofLen` 234,744 B as Rust, `MAX + 1` rejected at 1.64 M against 9.05 M for `MAX` padded, and the two
+cross-form inputs rejected. §11's conclusion (no EVM verification without the precompile) holds for `R_TX0`.
+
+### 14.4 Rerun
+
+```sh
+scripts/capped pqz-core/pqzh/ligero/runs/stmt.sh l14      # Task 6: tests, --no-default-features, deps / float scan, wasm32 build, native FNV
+scripts/capped pqz-core/pqzh/ligero/runs/tx0.sh l14-tx0   # Task 8: fixtures, tests, native + wasm32 (1,000 verifies), xcheck, forge
 ```

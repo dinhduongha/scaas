@@ -1,5 +1,5 @@
 //! PQZH-Ligero bench steps exported to JS (wasm32-unknown-unknown, single-threaded, panic = abort), as pqzh/wasm.
-//! Timing on the JS side (run_wasm.mjs). `rel` indexes RELS: 0 R_REG, 1 R_TX, 2 R_BURN, 3 R_DS, 4 R_DR.
+//! Timing on the JS side (run_wasm.mjs). `rel` indexes RELS: 0 R_REG, 1 R_TX, 2 R_BURN, 3 R_DS, 4 R_DR, 5 R_TX0.
 
 use std::cell::RefCell;
 
