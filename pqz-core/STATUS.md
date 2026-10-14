@@ -312,6 +312,26 @@ the prover); symbol scan clean; native and wasm proofs equal byte for byte (nati
 Every `R_TX0` number is within host noise of `R_TX` or just under it (one key and one ciphertext slot fewer); SV p99
 ≤ 15.2 ms against the 60 ms limit on every build.
 
+## `pqz-stmt`, the statement codec P6e Task 5 (branch `p6e-a2`; plan R2, D15, R6, D5 limits, D2 / D3 ids)
+
+`stmt/` (Rust 1.97.1, `no_std` + `alloc`, no dependencies, no `unsafe`, no floats): `parse(op, stmt)` for every form
+(`TRANSFER` 83,072 B, `TRANSFER0` 66,560 B by length, `BURN` / `REFRESH`, `REGISTER`, `DISCLOSE-SENDER` /
+`-RECEIVER` / `-AUDITOR`, `SELFTEST` empty) with the D15 / R6 rules in `pqz_kat.py`'s order (opTag of the op, known
+`proofSystemId`, length, `fee` / `amount` < 2^64, `auditorOn` by length, coefficients < q), borrowing (no allocation);
+`Stmt::encode` (`encode(parse(x)) = x`); `pk` / ciphertext / coefficient codecs; bundle (16,688 / 16,560 B) and the
+canonical `abi.encode(bytes, bytes)` opening; `decode_input` for the precompile (`≤ MAX_INPUT` 393,216, `1 ≤
+len(proof) ≤ MAX_PROOF(id)`: PQZL 98,304, PQZH 262,144; SELFTEST exactly `06 00000000`); the opTags, both ids, the
+form lengths and the prover-API witness lengths. Not in it (they need Keccak): `ctHash`, `authDigest`, `entryRef` (in
+`pqz_kat.py`; `pqz-ffi` later). Run `scripts/capped pqz-core/stmt/xcheck.sh stmt1` (`stmt/runs/stmt1-*`) [measured]:
+7 unit tests (round trip of every form under both ids, field offsets, 28 rejection cases one per D15 / R6 rule incl.
+coefficient = q / = 2^42, fee = 2^64, `auditorOn` 2 / 0 on 83,072 B / 1 on 66,560 B, length ± 1, foreign opTag,
+unknown id; bundle, opening, input) ok; cross-check ok: the six C statements of `pqz_bench.c` (`pqzh/xcheck/
+dump_setup`, opTag word set to the form's: the bench writes a marker there) parse, re-encode and rebuild from their
+fields byte for byte, and `pqz_kat.py` rebuilds the same six; 32 random statements built by `pqz_kat.py` (both ids)
+parse to the same fields and are built back to the same bytes; 178 mutations `pqz_kat.py` rejects are rejected for
+the same reason; `cargo build --target wasm32-unknown-unknown` ok, `cargo tree`: no dependency. The Ligero crate moves
+onto it in Part B Task 6.
+
 ## Measured (2026-10-13, this machine, single thread)
 
 Native: clang -O2, `pqz_bench 5 5` under `scripts/capped` (5 proves, 5 + 5 honest verifies, 10 adversarial). wasm32:
