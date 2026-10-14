@@ -562,7 +562,10 @@ parse_debit (txst_t *T, polyring_srcptr Rq, const uint8_t *stmt, int kind)
   if (burn)
     ok &= rd_word64 (&T->amount, stmt + PQZ_HDR_AMOUNT);
   else /* R6: the word says what the length says, 1 with pk_a and v_a, 0 without */
-    ok &= rd_word64 (&on, stmt + PQZ_HDR_AUDITOR_ON) & (on == (uint64_t)aud);
+    {
+      ok &= rd_word64 (&on, stmt + PQZ_HDR_AUDITOR_ON); /* two statements: on is read after the call */
+      ok &= on == (uint64_t)aud;
+    }
   T->pkf = new_vec (Rq), T->uT = new_vec (Rq), T->u = new_vec (Rq);
   poly_alloc (T->vT, Rq), poly_alloc (T->vf, Rq);
   ok &= rd_polyvec (T->pkf, p), p += PQZ_POLYVEC_BYTES;

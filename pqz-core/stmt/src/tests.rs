@@ -210,6 +210,18 @@ fn bundle_and_opening() {
             }
         }
     }
+    // length words near 2^64: rejected, no overflow (debug builds check arithmetic)
+    for n in [u64::MAX, u64::MAX - 31, u64::MAX - 63, (usize::MAX - 40) as u64, 1 << 40] {
+        let mut op = opening(&[1; 33], &[2; 5]);
+        op[64..96].copy_from_slice(&u64_word(n));
+        assert_eq!(parse_opening(&op).err(), Some(Reject::Opening), "bundle length {n}");
+        let mut op = opening(&[1; 33], &[2; 5]);
+        op[160..192].copy_from_slice(&u64_word(n));
+        assert_eq!(parse_opening(&op).err(), Some(Reject::Opening), "proof length {n}");
+        let mut op = opening(&[1; 33], &[2; 5]);
+        op[32..64].copy_from_slice(&u64_word(n));
+        assert_eq!(parse_opening(&op).err(), Some(Reject::Opening), "second offset {n}");
+    }
     // the opening layout of pqz_kat.py's self-test: bundle 33 B, proof 5 B
     let op = opening(&[1; 33], &[2; 5]);
     assert_eq!(op.len(), 64 + 32 + 64 + 32 + 32);

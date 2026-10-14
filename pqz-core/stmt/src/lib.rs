@@ -601,15 +601,16 @@ pub fn opening(bundle: &[u8], proof: &[u8]) -> Vec<u8> {
 /// The canonical `abi.encode(bytes, bytes)`: head offsets 64 and 96 + padded length, zero padding, nothing after.
 pub fn parse_opening(b: &[u8]) -> Result<(&[u8], &[u8]), Reject> {
     let w = |i: usize| -> Result<usize, Reject> {
-        let s = b.get(i..i + 32).ok_or(Reject::Opening)?;
+        let s = b.get(i..i.checked_add(32).ok_or(Reject::Opening)?).ok_or(Reject::Opening)?;
         let v = word_u64(s.try_into().map_err(|_| Reject::Opening)?).ok_or(Reject::Opening)?;
         usize::try_from(v).map_err(|_| Reject::Opening)
     };
     let tail = |at: usize| -> Result<(&[u8], usize), Reject> {
-        let n = w(at)?;
-        let end = at.checked_add(32).and_then(|s| s.checked_add(n)).ok_or(Reject::Opening)?;
-        let padded = at + 32 + n.div_ceil(32) * 32;
-        let data = b.get(at + 32..end).ok_or(Reject::Opening)?;
+        let n = w(at)?; // input-derived: every sum below is checked
+        let start = at.checked_add(32).ok_or(Reject::Opening)?;
+        let end = start.checked_add(n).ok_or(Reject::Opening)?;
+        let padded = n.checked_next_multiple_of(32).and_then(|p| start.checked_add(p)).ok_or(Reject::Opening)?;
+        let data = b.get(start..end).ok_or(Reject::Opening)?;
         let pad = b.get(end..padded).ok_or(Reject::Opening)?;
         if pad.iter().any(|&x| x != 0) {
             return Err(Reject::Opening);

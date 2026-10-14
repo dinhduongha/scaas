@@ -1114,7 +1114,10 @@ parse_stmt (stmt_t *T, uint8_t op, const uint8_t *stmt, size_t len)
         if (burn)
           ok &= rd_word64 (&T->amount, stmt + PQZ_HDR_AMOUNT);
         else /* P6e R6: 1 with pk_a and v_a, 0 without */
-          ok &= rd_word64 (&on, stmt + PQZ_HDR_AUDITOR_ON) & (on == (uint64_t)aud);
+          {
+            ok &= rd_word64 (&on, stmt + PQZ_HDR_AUDITOR_ON); /* two statements: on is read after the call */
+            ok &= on == (uint64_t)aud;
+          }
         p = stmt + PQZ_HEADER_BYTES;
         ok &= rd_vec (T->vec[V_PKF], p), p += PQZ_POLYVEC_BYTES;
         if (!burn)
