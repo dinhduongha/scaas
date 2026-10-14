@@ -5,10 +5,12 @@ decision D9): every consumer (the precompile and its fuzz targets, the contracts
 files **in place**; no copies (the copies to `smartcontracts/evm/test/vectors/pqz/` and
 `clients/zether-prover/vectors/pq/` of [pq-zether.md](../../../docs/contracts/pq-zether.md) §14 are dropped).
 
-- **Generator:** [`pqz-core/vecgen/`](../../../pqz-core/vecgen/src/main.rs) (`pqz-vectors`, plan R4). Every PQZL value
-  is computed by the C core (`libpqz.a` of `pqz-core/build.sh`: KeyGen, Enc, Dec, the matrix, proofs, both verifiers),
-  every PQZH proof by the Ligero crate (THE proven preset, production build); the binary only drives them and writes
-  JSON. It writes all files of this directory except this README and `pqz_kat.py`.
+- **Generator:** `pqz-ffi`'s binary [`pqz-vectors`](../../../pqz-core/ffi/src/bin/pqz-vectors.rs) (feature `prove`,
+  plan R4). Every value comes from the crate's API: the C core (KeyGen, Enc, Dec, the matrix, `encrypt` with chosen
+  vectors, PQZL proofs), Ligero (PQZH proofs, THE proven preset); every expected output from the C ABI
+  `pqz_precompile` (P6f's entry) and `selftest::selftest()`, and for PQZL the generic verifier must agree with the
+  precompile's specialised one. It writes all files of this directory except this README and `pqz_kat.py`. `pqz-ffi`'s
+  `build.rs` compiles the self-test's `R_REG` proofs in from the REGISTER rows of `proof_*.json` (no copy).
 - **Independent check:** [`pqz_kat.py`](pqz_kat.py) (Python 3 stdlib) recomputes every non-proof field of every file
   from the seeds; a `*.json` here without a checker fails (by design).
 - **Frozen.** Proof bytes for a fixed `rnd32` are part of the vectors: a change that alters them is a
@@ -17,16 +19,16 @@ files **in place**; no copies (the copies to `smartcontracts/evm/test/vectors/pq
 ## Run
 
 ```sh
-scripts/capped pqz-core/vecgen/run.sh <label> [write]       # pqz-core/vecgen/runs/<label>-*.txt
-python3 -I smartcontracts/vectors/pqz/pqz_kat.py --check    # light: ≈ 18 s, no build needed
+scripts/capped pqz-core/ffi/vectors/run.sh <label> [write]  # pqz-core/ffi/vectors/runs/<label>-*.txt; exit 1 on a failure
+python3 -I smartcontracts/vectors/pqz/pqz_kat.py --check     # light: ≈ 22 s, no build needed
 ```
 
-`run.sh` builds the C core (native and freestanding wasm32), the generator and the wasm32 Ligero module, then:
-`write` regenerates the files; `pqz-vectors --check` (a second generation, byte for byte; every honest proof and every
-negative input through the precompile path: `pqz-stmt` `decode_input`, then the specialised **and** the generic PQZL
-verifier, which must agree, or Ligero); `pqz_kat.py --check`; `tamper.py` (leaves spread over each file are changed one
-at a time in a copy; each must make that file's checker fail); `replay_wasm.mjs` (every proof proved again in wasm32,
-PQZL from the freestanding C core, PQZH from the Ligero crate: byte-equal with the files, and verifies).
+`run.sh` builds `pqz-ffi` with `pqz-vectors`; `write` regenerates the files and rebuilds (the self-test's proofs);
+then `pqz-vectors --check` (a second generation, byte for byte; every honest proof and every negative input through
+`pqz_precompile`, PQZL also through the generic verifier, which must agree; the self-test hash through `pqz_precompile`
+on `06 00000000`; stale compiled-in self-test proofs fail); `pqz_kat.py --check`; `tamper.py` (leaves spread over each
+file are changed one at a time in a copy; each must make that file's checker fail); `pqz-ffi`'s tests; `replay_wasm.mjs`
+(every proof proved again by `pqz-ffi` in wasm32: byte-equal with the files, valid through its precompile).
 
 ## Files
 
@@ -36,21 +38,22 @@ are KeyGen seeds (`keygen.json`) and Enc objects are `{seed_enc, recipients (Key
 
 | File | Bytes | Content | Checked by `pqz_kat.py` |
 |---|---|---|---|
-| `matrix.json` | 1,045 | `keccak256(A)` (A[0][0], A[0][1], …, 64 `be8` coefficients each), first / last 8 coefficients of `A[0][0]`, `A[31][31]` | A from SHAKE128 |
-| `cbd.json` | 4,287 | CBD_1 / CBD_20 samples of the C core's KeyGen (2 seeds) and Enc (3 recipients) streams at given bit offsets | samples from SHAKE256 |
-| `keygen.json` | 2,891 | 8 seeds → counter, `keccak256(pk)`, first 4 coefficients, ‖s‖², ‖e‖². No searched-resample row (≈ 2^-70 per seed; dropped by the controller 2026-10-14): the resample path and the counter-64 error are pinned by the test-hook KATs (`pqz-core/test/pqz_keys_kat.c`, `pqz_kat.py --c-keys`) | KeyGen |
-| `enc.json` | 7,891 | 6 Enc rows (ctr, `keccak256(u)`, each `v_j`, Dec by each recipient: M, value; noise omitted, §14); Trivial; Add / Sub with Trivial and with a ciphertext | Enc, Dec, Add / Sub |
-| `statement_transfer.json` | 304,693 | `TRANSFER` (auditor on, 83,072 B) and `TRANSFER0` (off, 66,560 B): header fields, objects (keys, `T` = Enc + Trivial(`plainUsed`), `out`), statement bytes, per id `keccak256(stmt)` and `authDigest`; `entryRef`; the disclosure bundle (16,688 / 16,560 B) | rebuilt from the seeds |
-| `statement_burn.json`, `statement_refresh.json` | 102,680, 102,604 | `BURN`, `REFRESH` (50,048 B) the same way | rebuilt |
-| `statement_register.json` | 34,415 | `REGISTER` (16,480 B): the self-test's statement (key `0x51…`, message `keccak256("SCAAS-PQZ-SELFTEST-V1")`) | rebuilt |
-| `statement_disclose.json` | 203,870 | `DISCLOSE-SENDER` / `-RECEIVER` / `-AUDITOR` (33,184 B) of the transfer's receiver and auditor legs | rebuilt |
-| `proof_pqzl.json` | 721,986 | PQZL (id v2, D2), 8 rows = the six relations + REFRESH + AUDITOR: statement reference, witness (prover API, R3), `rnd32`, proof, `keccak256`, FNV-1a, disclosures' `opening = abi.encode(bundle, proof)`, `expect: true` | statement hash, witness from the seeds, framing (length, final coder byte), hashes, opening, decoder accepts |
-| `proof_pqzh.json` | 3,499,045 | PQZH (Ligero, id D3), the same 8 rows; preset parameters; the verifier's exact bound per form | as above; F_q elements of `w`, `q`, `h` canonical; preset and bounds |
-| `negative.json` | 108,407 | 337 precompile inputs that give `0` (or revert: `MAX_INPUT + 1`) as edits of an honest input: every D15 / R6 decoder rule, op / opTag / id confusion (each form under every other op byte, swapped opTags, unknown and the other system's id), lengths ± 1, `MAX_PROOF(id) + 1`, framing, SELFTEST misuse, truncated / extended / bit-flipped proofs, statement bits the decoder accepts, another form's proof; per row the reason (`pqz-stmt` `Reject`, or `verify`) and `SHA3-256(input)` | edits replayed, Python decoder gives the same reason; no edit yields an honest input |
-| `selftest.json` | 2,305 | `OP_SELFTEST` (D13): every input of the hash and the hash | the whole hash (A, KeyGen, Enc, Dec, a mixed-radix DFT over 1,634 points); proof references |
-| `worstcase_noise.json` | 818,747 | `K_MAX − 1` = 1,023 aligned credits to a known receiver key (seeds, per-credit `ctHash`, the aggregate `T`), the debit `R_TX` over `T` with both proofs | alignment, every credit through `T` (linearity), `ctHash` of every 32nd credit, `T`, noise, debit statement and witness |
+| `matrix.json` | 1,051 | `keccak256(A)` (A[0][0], A[0][1], …, 64 `be8` coefficients each), first / last 8 coefficients of `A[0][0]`, `A[31][31]` | A from SHAKE128 |
+| `cbd.json` | 4,293 | CBD_1 / CBD_20 samples of the C core's KeyGen (2 seeds) and Enc (3 recipients) streams at given bit offsets | samples from SHAKE256 |
+| `keygen.json` | 2,897 | 8 seeds → counter, `keccak256(pk)`, first 4 coefficients, ‖s‖², ‖e‖². No searched-resample row (≈ 2^-70 per seed; dropped by the controller 2026-10-14): the resample path and the counter-64 error are pinned by the test-hook KATs (`pqz-core/test/pqz_keys_kat.c`, `pqz_kat.py --c-keys`) | KeyGen |
+| `enc.json` | 7,897 | 6 Enc rows (ctr, `keccak256(u)`, each `v_j`, Dec by each recipient: M, value; noise omitted, §14); Trivial; Add / Sub with Trivial and with a ciphertext | Enc, Dec, Add / Sub |
+| `statement_transfer.json` | 304,699 | `TRANSFER` (auditor on, 83,072 B) and `TRANSFER0` (off, 66,560 B): header fields, objects (keys, `T` = Enc + Trivial(`plainUsed`), `out`), statement bytes, per id `keccak256(stmt)` and `authDigest`; `entryRef`; the disclosure bundle (16,688 / 16,560 B) | rebuilt from the seeds |
+| `statement_burn.json`, `statement_refresh.json` | 102,686, 102,610 | `BURN`, `REFRESH` (50,048 B) the same way | rebuilt |
+| `statement_register.json` | 34,421 | `REGISTER` (16,480 B): the self-test's statement (key `0x51…`, message `keccak256("SCAAS-PQZ-SELFTEST-V1")`) | rebuilt |
+| `statement_disclose.json` | 203,876 | `DISCLOSE-SENDER` / `-RECEIVER` / `-AUDITOR` (33,184 B) of the transfer's receiver and auditor legs | rebuilt |
+| `proof_pqzl.json` | 721,992 | PQZL (id v2, D2), 8 rows = the six relations + REFRESH + AUDITOR: statement reference, witness (prover API, R3), `rnd32`, proof, `keccak256`, FNV-1a, disclosures' `opening = abi.encode(bundle, proof)`, `expect: true` | statement hash, witness from the seeds, framing (length, final coder byte), hashes, opening, decoder accepts |
+| `proof_pqzh.json` | 3,499,051 | PQZH (Ligero, id D3), the same 8 rows; preset parameters; the verifier's exact bound per form | as above; F_q elements of `w`, `q`, `h` canonical; preset; the bounds equal the values recorded in decisions.md (`LIGERO_MAX`) |
+| `fee0.json` | 2,796,209 | fee = 0 (owner 2026-10-14: accepted for PQZ and classical Zether): an honest `TRANSFER`, `TRANSFER0`, `BURN` and `REFRESH` with fee word 0 and no beneficiary, as statement rows plus witness, `rnd32` and both ids' proofs | statements and witnesses rebuilt, fee 0, hashes, framing, decoder accepts |
+| `negative.json` | 127,497 | 389 precompile inputs that give `0` (or revert: `MAX_INPUT + 1`) as edits of an honest input: every D15 / R6 decoder rule, op / opTag / id confusion (each form under every other op byte, swapped opTags, unknown and the other system's id), lengths ± 1, the limits (`MAX_PROOF(id)` exactly: decoder accepts, verifier rejects; `MAX_PROOF(id) + 1`; `MAX_INPUT` exactly: `ProofLength`, not a revert; PQZH `max_proof_len(form) + 1`), framing, SELFTEST misuse, truncated / extended / bit-flipped proofs, proof encodings (D15: PQZH element = q in `w` and in an opened column, opened columns swapped or repeated; PQZL coder padding bit set after the final 1-bit), statement bits the decoder accepts, another form's proof; per row the reason (`pqz-stmt` `Reject`, or `verify`) and `SHA3-256(input)`; plus 9 disclosure openings (`abi.encode(bundle, proof)`: the canonical one and 8 `Opening` rejections) | edits replayed, Python decoder gives the same reason, no edit yields an honest input; every `Reject` variant present, and per form and id the lengths ± 1, every other op byte, both id cases, the five proof edits; openings by a Python `parse_opening` |
+| `selftest.json` | 2,356 | `OP_SELFTEST` (D13): every input of the hash and the hash (from `pqz-ffi`'s `selftest::report()` and `pqz_precompile(06 00000000)`) | the whole hash (A, KeyGen, Enc, Dec, a mixed-radix DFT over 1,634 points); proof references; `fft_ok` and the four results are generator-pinned |
+| `worstcase_noise.json` | 3,459,894 | `bound`: the worst the verifier accepts (below); `illustrative`: an honest key with aligned credits | `bound`: key, `R_REG` statement, credit, the sender statements and witness, `T`, noise, margins, debit; `illustrative`: alignment, every credit through `T` (linearity), `ctHash` of every 32nd credit, `T`, noise, debit |
 
-Total 5,914,866 B of JSON (`proof_pqzh.json` alone 59 %, with the worst-case PQZH proof 67 %); the plan expected ≈ 7–8 MB.
+Total 11,371,429 B of JSON (`proof_pqzh.json` 31 %, `worstcase_noise.json` 30 %, `fee0.json` 25 %; PQZH proof hex is most of each); the plan expected ≈ 7–8 MB before the bound case (owner review) and the fee-0 rows (owner 2026-10-14) were added.
 
 ### Scenario
 
@@ -60,28 +63,48 @@ fee 7 to T, auditor A: `out = Enc({T: 123,456, F: 877,537, A: 123,456}; 0x62…)
 seed, so `u`, `v_t`, `v_f` are equal). Burn 123,456 (fee 7): `Enc_F(877,537; 0x64…)`; refresh (fee 7): `Enc_F(1,000,993;
 0x65…)`. Disclosures of the transfer's receiver leg (sender, receiver) and auditor leg. Header: chain id 22,776, the
 other words fixed filler that the decoder accepts (D15). `rnd32`: `0x53…` for REGISTER (the self-test's), `0x80 + i`
-repeated for the i-th form of `pqz-stmt`'s `FORMS`, `0x90…` for the worst-case debit.
+repeated for the i-th form of `pqz-stmt`'s `FORMS`, `0x90…` for the worst-case debit. `fee0.json`: the same with fee
+0 and no beneficiary (`out` from `0x72…`, burn `0x74…`, refresh `0x75…`; `rnd32` `0xA0 + i`).
 
 ### Worst-case noise
 
-The receiver key is KeyGen(`0x57…`). A credit's decryption noise in coefficient 0 is `⟨rot(e), r⟩ − ⟨rot(s), e1⟩ +
-e2[0]`; `r` (the same for every credit) maximises the first term under ‖r‖² ≤ 36² (greedy over integer increments),
-`e1` the second under ‖e1‖² ≤ 164² (a level on the support of `rot(s)`, a seeded choice of which coordinates get one
-more: so every credit is a different ciphertext), `e2 = (64, 0, …)`. Each credit carries digits 15 in its low 12
-digits, the plain unit the same, so `M_i` = 1,024 · 15 = 15,360 < 2^14. Measured: noise 10,024 per credit, `T`'s
-noise 10,254,552 in coefficient 0 (= 1,023 · 10,024) against the proven range 2^24 = 16,777,216 (margin 1.64×)
-and the cap bound `K_MAX · B_FRESH` = 12,156,928 (which assumes the worst key; this key's ‖e‖ is below the 164 the
-bound uses). The debit proves and verifies in both systems (PQZL 42,750 B, PQZH 233,166 B).
+`bound` is the worst case the **verifier** accepts (controller 2026-10-14): a receiver key at the norm bounds, `s` = 36
+at coefficient 0 of poly 1 (poly 0 carries `R_REG`'s approximate ℓ∞ filler, |coefficients| ≤ 1) and `e` = 164 at
+coefficient 0 of poly 0, registered (its `R_REG` proves and verifies in both systems). A credit's decryption noise in
+coefficient 0 is `⟨rot(e), r⟩ − ⟨rot(s), e1⟩ + e2[0]`; with `r` = 36 along `rot(e)`, `e1` = −164 against `rot(s)` and
+`e2_t = (64, 0, …)` it is B_FRESH = 11,872 exactly (the maximum is unique, so every credit is the same ciphertext). The
+sender's `R_TX` of that credit (`e2_t` at PQZL's B′ = 64 filler) proves and verifies in both systems (credit 0 and the
+last, `sendCounter` 0 and 1,022). `T` = 1,023 credits + the plain unit (noise 0): noise 1,023 · 11,872 = **12,145,056**
+in coefficient 0 (the analytic 12,156,928 of pq-zether.md §4.3 counts 1,024 units), 1.38× below the proven range
+2^24 = 16,777,216 and 4.14× below the mint threshold Δ − 2^24 = 50,331,647; `M_i` = 1,024 · 15 = 15,360 < 2^14 (credits
+and plain unit carry digits 15 in their low 12 digits). The receiver's debit `R_TX` over `T` proves and verifies in
+both systems.
+
+`illustrative` keeps the first construction: an honest key, KeyGen(`0x57…`), `r` the same for every credit (greedy max
+of `⟨rot(e), r⟩` under ‖r‖² ≤ 36²), `e1` a level on the support of `rot(s)` with a seeded choice of which coordinates
+get one more (every credit a different ciphertext); noise 10,024 per credit, `T` 10,254,552 (margin 1.63× to 2^24).
 
 ### Self-test (D13)
 
-`selftest.json` follows the derivation of `pqz-ffi`'s `selftest.rs` (branch `p6e-a3`): `keccak256(kat_digest ‖
+`selftest.json` is `pqz-ffi`'s `selftest::report()` (`src/selftest.rs`): `keccak256(kat_digest ‖
 u8(pqzl_valid) ‖ u8(pqzl_invalid) ‖ u8(pqzh_valid) ‖ u8(pqzh_invalid))`, `kat_digest = keccak256(A digest ‖
 keccak256(pk) ‖ keccak256(u ‖ v) ‖ M ‖ keccak256(fft) ‖ u8(fft_ok))`; the compiled-in `R_REG` proofs are the
-REGISTER rows of `proof_pqzl.json` / `proof_pqzh.json`. Hash ``ed910a2c…1333d205``, equal to the value `p6e-a3` measured, and the
-REGISTER proofs are byte-identical to its `ffi/selftest/{pqzl,pqzh}_reg.hex` (`pqz-core/vecgen/runs/vec1-selftest-xcheck-p6e-a3.txt`).
+REGISTER rows of `proof_pqzl.json` / `proof_pqzh.json` (`pqz-ffi`'s `build.rs` reads them). Hash
+`ed910a2c…1333d205`, unchanged since `p6e-a3` measured it (`pqz-core/ffi/vectors/runs/vec1-selftest-xcheck-p6e-a3.txt`).
+
+## What `pqz_kat.py` pins and what only the generator pins
+
+Python recomputes everything except proof validity. Generator-pinned (checked by `pqz-vectors --check` only): proof
+bytes beyond framing and hashes (validity: `pqz_precompile`, the generic PQZL verifier, Ligero, the wasm32 replay); the
+PQZH exact bounds (`LIGERO_MAX` in `pqz_kat.py` copies the values decisions.md records, it does not derive them); the
+self-test's `fft_ok` and four results (Python checks the hash over them, not the verifies); `rnd32` of the non-REGISTER
+rows (any `rnd32` gives a valid proof); in `illustrative`, the `ctHash` of the credits Python does not sample (every
+32nd is hashed; every credit enters `T`, and `credits_keccak` binds the list). `cbd.json`'s streams are checked
+indirectly: Python re-derives the samples from the recorded stream bytes, and KeyGen / Enc (`keygen.json`, `enc.json`,
+the statements) re-derive the same streams from the seeds.
 
 ## Native = wasm32
 
-Every proof of `proof_pqzl.json`, `proof_pqzh.json` and the worst-case debit (18) is proved again in wasm32 (node) from
-the same statement, witness and `rnd32`: byte-equal, and it verifies (`pqz-core/vecgen/runs/vec1-wasm.txt`).
+Every proof of `proof_pqzl.json`, `proof_pqzh.json`, `fee0.json` and `worstcase_noise.json` (34) is proved again in wasm32 by
+`pqz-ffi` (node) from the same statement, witness and `rnd32`: byte-equal, and valid through its precompile
+(`pqz-core/ffi/vectors/runs/vec3-wasm.txt`).

@@ -1,7 +1,7 @@
 {
  "file": "matrix.json",
  "description": "The public matrix A (CTR-PQZ-03; SHAKE128 SCAAS-PQZ-A-V2, rejection to [0, q)): keccak256 of its bytes (A[0][0], A[0][1], ..., 64 be8 coefficients each), first / last 8 coefficients of A[0][0] and A[31][31]. From the C core: column j = pqz_keypair_from_secret(unit vector at poly j, 0).",
- "generator": "pqz-core/vecgen (pqz-vectors), P6e Task 11",
+ "generator": "pqz-core/ffi src/bin/pqz-vectors.rs, P6e Task 11",
  "a_bytes": 524288,
  "a_keccak": "f176b313331c898e11230c6addae3d44821413361e1416a6aedf9f26a7be3df0",
  "A_0_0_first8": [1436751487992, 4087755970977, 2385038671546, 3131735498301, 2144192967721, 3318787399830, 435206750244, 3443588291361],

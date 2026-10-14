@@ -1,7 +1,7 @@
 {
  "file": "negative.json",
- "description": "Precompile inputs that must give 0 (expect 0) or revert (input over MAX_INPUT, P6f): each is the honest input u8(op) || be32(len) || stmt || proof of (form, id) (statements: statement_*.json under the id; proofs: proof_<id>.json) with edits applied in order: op = the op byte; proof_from = another form's proof (same id); stmt_set [offset, hex] overwrites; stmt_resize / proof_resize truncate or zero-extend; stmt_flip / proof_flip [byte, bit]; len_field replaces be32(len); raw = the whole input; input_resize truncates or zero-extends the built input. input_sha3 = SHA3-256 of the input (FIPS 202, not Keccak: Python checks it fast). reason: the pqz-stmt decoder's Reject (D5, D15, R6), or verify (the decoder accepts and the verifier of the id rejects: PQZL specialised and generic agree).",
- "generator": "pqz-core/vecgen (pqz-vectors), P6e Task 11",
+ "description": "Precompile inputs that must give 0 (expect 0) or revert (input over MAX_INPUT, P6f): each is the honest input u8(op) || be32(len) || stmt || proof of (form, id) (statements: statement_*.json under the id; proofs: proof_<id>.json) with edits applied in order: op = the op byte; proof_from = another form's proof (same id); stmt_set / proof_set [offset, hex] overwrite; proof_copy [src, dst, len], proof_swap [a, b, len] move bytes; stmt_resize / proof_resize truncate or zero-extend; stmt_flip / proof_flip [byte, bit]; len_field replaces be32(len); raw = the whole input; input_resize truncates or zero-extends the built input. input_sha3 = SHA3-256 of the input (FIPS 202, not Keccak: Python checks it fast). reason: the pqz-stmt decoder's Reject (D5, D15, R6), or verify (the decoder accepts and the verifier of the id rejects: PQZL specialised and generic agree). Expected outputs from pqz_precompile (C ABI). openings: the disclosure opening abi.encode(bytes bundle, bytes proof) (TRANSFER bundle, PQZL DISCLOSE-SENDER proof) with set [offset, hex] / resize edits, and pqz-stmt parse_opening's result (ok or Opening).",
+ "generator": "pqz-core/ffi src/bin/pqz-vectors.rs, P6e Task 11",
  "max_input": 393216,
  "rows": [
   {
@@ -2343,6 +2343,146 @@
    "reason": "Input"
   },
   {
+   "name": "TRANSFER: proof of exactly MAX_PROOF(id) bytes",
+   "form": "TRANSFER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_resize": 98304
+    }
+   ],
+   "input_bytes": 181381,
+   "input_sha3": "7d2e85cae56493743b61a28694678f0eff0bcfff36459a875bc9702e396b46c0",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "TRANSFER: input of exactly MAX_INPUT bytes (not a revert)",
+   "form": "TRANSFER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "input_resize": 393216
+    }
+   ],
+   "input_bytes": 393216,
+   "input_sha3": "74696405344bee3e303971f9d444b009941b513bd8139283f9115dc5a6c4943c",
+   "expect": "0",
+   "reason": "ProofLength"
+  },
+  {
+   "name": "TRANSFER: coder padding bit 7 set after the final 1-bit",
+   "form": "TRANSFER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [42761, 7]
+    }
+   ],
+   "input_bytes": 125839,
+   "input_sha3": "c29ab54deb349ec1bb486e5e39c777e52509f413b27602cb0ccd5d72f8485ba9",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "TRANSFER0: coder padding bit 7 set after the final 1-bit",
+   "form": "TRANSFER0",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [42430, 7]
+    }
+   ],
+   "input_bytes": 108996,
+   "input_sha3": "d7caeeb7fb670b84d77409268a383f739075843c1ab687db0cea4373fb80575a",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "BURN: coder padding bit 7 set after the final 1-bit",
+   "form": "BURN",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [41903, 7]
+    }
+   ],
+   "input_bytes": 91957,
+   "input_sha3": "762a42550b8084039dd68d9e4221296a7544adf9c658ad93958bee941f934567",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "REFRESH: coder padding bit 7 set after the final 1-bit",
+   "form": "REFRESH",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [41914, 7]
+    }
+   ],
+   "input_bytes": 91968,
+   "input_sha3": "093990cc386dc4957ee96c7381465a79154ccdf5a38839f35cad19d4ec844cb7",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "REGISTER: coder padding bit 7 set after the final 1-bit",
+   "form": "REGISTER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [28092, 7]
+    }
+   ],
+   "input_bytes": 44578,
+   "input_sha3": "e977ab17785186d60b1bf9636d8a2308f7078d0bed20c1abc16feab3a90069a5",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "DISCLOSE-SENDER: coder padding bit 7 set after the final 1-bit",
+   "form": "DISCLOSE-SENDER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [28976, 7]
+    }
+   ],
+   "input_bytes": 62166,
+   "input_sha3": "bad82dfd4dd4bd8ad6ff85e73337739912b3306e24938de3f065d23c05858478",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "DISCLOSE-RECEIVER: coder padding bit 7 set after the final 1-bit",
+   "form": "DISCLOSE-RECEIVER",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [28995, 7]
+    }
+   ],
+   "input_bytes": 62185,
+   "input_sha3": "70060bfe11a4b6ba7b99d4b0a036c225e1365a1e9f0a62229b6be30afb66bb13",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "DISCLOSE-AUDITOR: coder padding bit 7 set after the final 1-bit",
+   "form": "DISCLOSE-AUDITOR",
+   "id": "pqzl",
+   "edits": [
+    {
+     "proof_flip": [28985, 7]
+    }
+   ],
+   "input_bytes": 62175,
+   "input_sha3": "9efa10e2e45cdc1a59bfd49df51c113e950c9fe7d41b98fadd014474ef4b5735",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
    "name": "TRANSFER: statement length - 1",
    "form": "TRANSFER",
    "id": "pqzh",
@@ -4681,6 +4821,594 @@
    "reason": "Input"
   },
   {
+   "name": "TRANSFER: proof of exactly MAX_PROOF(id) bytes",
+   "form": "TRANSFER",
+   "id": "pqzh",
+   "edits": [
+    {
+     "proof_resize": 262144
+    }
+   ],
+   "input_bytes": 345221,
+   "input_sha3": "2e003589eb1cd4747389d66028c0ac7610611ff8a166a645d128300812420717",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "TRANSFER: input of exactly MAX_INPUT bytes (not a revert)",
+   "form": "TRANSFER",
+   "id": "pqzh",
+   "edits": [
+    {
+     "input_resize": 393216
+    }
+   ],
+   "input_bytes": 393216,
+   "input_sha3": "3c40b2fdd545428e37efeea552e21a036780a2ecdc4c457966947adc7131c4d4",
+   "expect": "0",
+   "reason": "ProofLength"
+  },
+  {
+   "name": "TRANSFER: proof of max_proof_len(form) + 1 bytes",
+   "form": "TRANSFER",
+   "id": "pqzh",
+   "edits": [
+    {
+     "proof_resize": 235471
+    }
+   ],
+   "input_bytes": 318548,
+   "input_sha3": "4dd4fbea6c0b3ec8f57a359ef53a4d772b8dc6ba8ab7593b4ae3b5f3141f553a",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "TRANSFER: w coefficient 0 element = q",
+   "form": "TRANSFER",
+   "id": "pqzh",
+   "edits": [
+    {
+     "proof_set": [32, "03ffffffff29"]
+    }
+   ],
+   "input_bytes": 314023,
+   "input_sha3": "24bcb906e1ac4514c17260b1f44faea79f8a21a7d3781bd24f1ea6a441352e03",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "TRANSFER: first opened column element 0 = q",
+   "form": "TRANSFER",
+   "id": "pqzh",
+   "edits": [
+    {
+     "proof_set": [100968, "03ffffffff29"]
+    }
+   ],
+   "input_bytes": 314023,
+   "input_sha3": "9976a15d6e36bc9e28b23012f884fa141e4f685a1c82dea9bd099cc4330de5de",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "TRANSFER: opened columns 0 and 1 swapped (not increasing)",
+   "form": "TRANSFER",
+   "id": "pqzh",
+   "edits": [
+    {
+     "proof_swap": [100936, 101790, 854]
+    }
+   ],
+   "input_bytes": 314023,
+   "input_sha3": "ca990ad398bccb6f4333688b945875189e1f0410e24a88b84907c1a555024fc3",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "TRANSFER: opened column 0 repeated as column 1",
+   "form": "TRANSFER",
+   "id": "pqzh",
+   "edits": [
+    {
+     "proof_copy": [100936, 101790, 854]
+    }
+   ],
+   "input_bytes": 314023,
+   "input_sha3": "06e3efcd9ea5a20185482cb2c75e17613898a56ba5f333dc25b68e43f1ffbeda",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "TRANSFER0: proof of max_proof_len(form) + 1 bytes",
+   "form": "TRANSFER0",
+   "id": "pqzh",
+   "edits": [
+    {
+     "proof_resize": 234745
+    }
+   ],
+   "input_bytes": 301310,
+   "input_sha3": "6ff99d68afba748cbab205fbbd1525a9dff97435d5839e5357d99602427ebd65",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "TRANSFER0: w coefficient 0 element = q",
+   "form": "TRANSFER0",
+   "id": "pqzh",
+   "edits": [
+    {
+     "proof_set": [32, "03ffffffff29"]
+    }
+   ],
+   "input_bytes": 298045,
+   "input_sha3": "898a0c78d32f1e7112cda7dd08dbe9f75dd0f3be9e490fe934288c46edb7a81d",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "TRANSFER0: first opened column element 0 = q",
+   "form": "TRANSFER0",
+   "id": "pqzh",
+   "edits": [
+    {
+     "proof_set": [100968, "03ffffffff29"]
+    }
+   ],
+   "input_bytes": 298045,
+   "input_sha3": "279e601765a30b8e79afc35369525c55b406a1e5f6ee8f2abda4841be3315ffa",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "TRANSFER0: opened columns 0 and 1 swapped (not increasing)",
+   "form": "TRANSFER0",
+   "id": "pqzh",
+   "edits": [
+    {
+     "proof_swap": [100936, 101784, 848]
+    }
+   ],
+   "input_bytes": 298045,
+   "input_sha3": "9ecc7aa321982260ba882ab33a702c22a12170c38bb3807312b3f47fe4823109",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "TRANSFER0: opened column 0 repeated as column 1",
+   "form": "TRANSFER0",
+   "id": "pqzh",
+   "edits": [
+    {
+     "proof_copy": [100936, 101784, 848]
+    }
+   ],
+   "input_bytes": 298045,
+   "input_sha3": "b73d37357f77d8c00d5565f742cf17e1ec701338053605503c5f5e1be1d0dfdf",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "BURN: proof of max_proof_len(form) + 1 bytes",
+   "form": "BURN",
+   "id": "pqzh",
+   "edits": [
+    {
+     "proof_resize": 234745
+    }
+   ],
+   "input_bytes": 284798,
+   "input_sha3": "f57e2b40425fcc59fbb56d5b6c07afb8c9b88ffbd00a94352c0adf82ade3903d",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "BURN: w coefficient 0 element = q",
+   "form": "BURN",
+   "id": "pqzh",
+   "edits": [
+    {
+     "proof_set": [32, "03ffffffff29"]
+    }
+   ],
+   "input_bytes": 282237,
+   "input_sha3": "73414cae4d81b2daaceb55ab23c9d2de2c42336aa42420c50743cdd06e9ca6af",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "BURN: first opened column element 0 = q",
+   "form": "BURN",
+   "id": "pqzh",
+   "edits": [
+    {
+     "proof_set": [100968, "03ffffffff29"]
+    }
+   ],
+   "input_bytes": 282237,
+   "input_sha3": "150e00a6d0ba1f5e9b11d9ec369256e3be67ae70d7d66800da3186b1b5dbef4f",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "BURN: opened columns 0 and 1 swapped (not increasing)",
+   "form": "BURN",
+   "id": "pqzh",
+   "edits": [
+    {
+     "proof_swap": [100936, 101784, 848]
+    }
+   ],
+   "input_bytes": 282237,
+   "input_sha3": "cf1f68d28410736212d6d326af5a019eac3bd53b7c91f4be59c6a2b0f417ec9c",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "BURN: opened column 0 repeated as column 1",
+   "form": "BURN",
+   "id": "pqzh",
+   "edits": [
+    {
+     "proof_copy": [100936, 101784, 848]
+    }
+   ],
+   "input_bytes": 282237,
+   "input_sha3": "6f2a7a6ebba836311c157111eb532bf210c1da68c2a35445fea2912e7f34151e",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "REFRESH: proof of max_proof_len(form) + 1 bytes",
+   "form": "REFRESH",
+   "id": "pqzh",
+   "edits": [
+    {
+     "proof_resize": 234745
+    }
+   ],
+   "input_bytes": 284798,
+   "input_sha3": "0766a0120ae896acfe2a8fab1634cc750a10c06c6ea72018e5e11d57c484bf91",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "REFRESH: w coefficient 0 element = q",
+   "form": "REFRESH",
+   "id": "pqzh",
+   "edits": [
+    {
+     "proof_set": [32, "03ffffffff29"]
+    }
+   ],
+   "input_bytes": 280333,
+   "input_sha3": "7a6ee3150f0bc4f438b0032fa6913e88643d7e7e9e429da478cf3b2b02201d07",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "REFRESH: first opened column element 0 = q",
+   "form": "REFRESH",
+   "id": "pqzh",
+   "edits": [
+    {
+     "proof_set": [100968, "03ffffffff29"]
+    }
+   ],
+   "input_bytes": 280333,
+   "input_sha3": "b7c3266e610c2a7b3167bdabcfa804ecdf1147570a19f039137b8a25180a7c9a",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "REFRESH: opened columns 0 and 1 swapped (not increasing)",
+   "form": "REFRESH",
+   "id": "pqzh",
+   "edits": [
+    {
+     "proof_swap": [100936, 101784, 848]
+    }
+   ],
+   "input_bytes": 280333,
+   "input_sha3": "68f335f872444b57e8cc20187173f17868f664d85ee0908e9b1b39fe4dc532fc",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "REFRESH: opened column 0 repeated as column 1",
+   "form": "REFRESH",
+   "id": "pqzh",
+   "edits": [
+    {
+     "proof_copy": [100936, 101784, 848]
+    }
+   ],
+   "input_bytes": 280333,
+   "input_sha3": "f3c78e9221dcf3ebf783c8df3cbcf128c227dbc4e2e4e169924f1b9a1c39cfb5",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "REGISTER: proof of max_proof_len(form) + 1 bytes",
+   "form": "REGISTER",
+   "id": "pqzh",
+   "edits": [
+    {
+     "proof_resize": 190459
+    }
+   ],
+   "input_bytes": 206944,
+   "input_sha3": "ee03ae1d7d57cbe71bce09233c2ad487de6107c16ece93c3efdada13ab695eac",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "REGISTER: w coefficient 0 element = q",
+   "form": "REGISTER",
+   "id": "pqzh",
+   "edits": [
+    {
+     "proof_set": [32, "03ffffffff29"]
+    }
+   ],
+   "input_bytes": 203263,
+   "input_sha3": "b3ebb1b082786e73419ee7ea05210567a363948fdb2cfdad2c1895b99e66210f",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "REGISTER: first opened column element 0 = q",
+   "form": "REGISTER",
+   "id": "pqzh",
+   "edits": [
+    {
+     "proof_set": [100968, "03ffffffff29"]
+    }
+   ],
+   "input_bytes": 203263,
+   "input_sha3": "101b45b394c3f8698f79701dbc9ada70d1caa2bce8229185474f3e0d26479ba2",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "REGISTER: opened columns 0 and 1 swapped (not increasing)",
+   "form": "REGISTER",
+   "id": "pqzh",
+   "edits": [
+    {
+     "proof_swap": [100936, 101418, 482]
+    }
+   ],
+   "input_bytes": 203263,
+   "input_sha3": "6cf3193dbdc9115a61a0912392541c8336cf051bc076d83ddb7ff0fb8559e249",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "REGISTER: opened column 0 repeated as column 1",
+   "form": "REGISTER",
+   "id": "pqzh",
+   "edits": [
+    {
+     "proof_copy": [100936, 101418, 482]
+    }
+   ],
+   "input_bytes": 203263,
+   "input_sha3": "9b6c4bad591cf8d438b4ee18c4a209f0341056e9f407fbbeb1e8b21bddf8bd25",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "DISCLOSE-SENDER: proof of max_proof_len(form) + 1 bytes",
+   "form": "DISCLOSE-SENDER",
+   "id": "pqzh",
+   "edits": [
+    {
+     "proof_resize": 190459
+    }
+   ],
+   "input_bytes": 223648,
+   "input_sha3": "630f7c7124b2b8c9d0e89a92796bc8502968078abcda9a643d8d58859303793c",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "DISCLOSE-SENDER: w coefficient 0 element = q",
+   "form": "DISCLOSE-SENDER",
+   "id": "pqzh",
+   "edits": [
+    {
+     "proof_set": [32, "03ffffffff29"]
+    }
+   ],
+   "input_bytes": 219645,
+   "input_sha3": "824ba905f63079830797b23b0ec8b1c8ff3d43de4cadef737e6c8e0cfaa16ead",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "DISCLOSE-SENDER: first opened column element 0 = q",
+   "form": "DISCLOSE-SENDER",
+   "id": "pqzh",
+   "edits": [
+    {
+     "proof_set": [100968, "03ffffffff29"]
+    }
+   ],
+   "input_bytes": 219645,
+   "input_sha3": "0abd1532059f4f45a2f9969ef1b0a2be9a586981c173871c2bc189d9f0c01c73",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "DISCLOSE-SENDER: opened columns 0 and 1 swapped (not increasing)",
+   "form": "DISCLOSE-SENDER",
+   "id": "pqzh",
+   "edits": [
+    {
+     "proof_swap": [100936, 101418, 482]
+    }
+   ],
+   "input_bytes": 219645,
+   "input_sha3": "f75401be0358976dc45e021bf3809973f9faedca96a9fa3e88aa241f94a6b41f",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "DISCLOSE-SENDER: opened column 0 repeated as column 1",
+   "form": "DISCLOSE-SENDER",
+   "id": "pqzh",
+   "edits": [
+    {
+     "proof_copy": [100936, 101418, 482]
+    }
+   ],
+   "input_bytes": 219645,
+   "input_sha3": "b1053b0b65dd2ab3ddd7f7688c26dfb77a15ff1e5bce1a91a81fdfa8d793788f",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "DISCLOSE-RECEIVER: proof of max_proof_len(form) + 1 bytes",
+   "form": "DISCLOSE-RECEIVER",
+   "id": "pqzh",
+   "edits": [
+    {
+     "proof_resize": 190459
+    }
+   ],
+   "input_bytes": 223648,
+   "input_sha3": "6d6b480e4bf55c6e8662c184acf34e084476564b741d298e73926e95b9c419f7",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "DISCLOSE-RECEIVER: w coefficient 0 element = q",
+   "form": "DISCLOSE-RECEIVER",
+   "id": "pqzh",
+   "edits": [
+    {
+     "proof_set": [32, "03ffffffff29"]
+    }
+   ],
+   "input_bytes": 220415,
+   "input_sha3": "f2af2302ea3dd374006427d7db4225c8713c96fbc1670be0b90886b400bc75ad",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "DISCLOSE-RECEIVER: first opened column element 0 = q",
+   "form": "DISCLOSE-RECEIVER",
+   "id": "pqzh",
+   "edits": [
+    {
+     "proof_set": [100968, "03ffffffff29"]
+    }
+   ],
+   "input_bytes": 220415,
+   "input_sha3": "be408f4edb106cf82a45bb8724932a70a718ab0ed10f19f96cf815b5ed25e7ac",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "DISCLOSE-RECEIVER: opened columns 0 and 1 swapped (not increasing)",
+   "form": "DISCLOSE-RECEIVER",
+   "id": "pqzh",
+   "edits": [
+    {
+     "proof_swap": [100936, 101418, 482]
+    }
+   ],
+   "input_bytes": 220415,
+   "input_sha3": "4e559fa2ea932e086538d18b7de20c4c773e6c1ba4ef7231cee264addd82da56",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "DISCLOSE-RECEIVER: opened column 0 repeated as column 1",
+   "form": "DISCLOSE-RECEIVER",
+   "id": "pqzh",
+   "edits": [
+    {
+     "proof_copy": [100936, 101418, 482]
+    }
+   ],
+   "input_bytes": 220415,
+   "input_sha3": "107bb11b78633dbc26552878ff7de43952dc75f433c3935fcc7bb32110e49774",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "DISCLOSE-AUDITOR: proof of max_proof_len(form) + 1 bytes",
+   "form": "DISCLOSE-AUDITOR",
+   "id": "pqzh",
+   "edits": [
+    {
+     "proof_resize": 190459
+    }
+   ],
+   "input_bytes": 223648,
+   "input_sha3": "65b552dfffd70019138dfa7607a8f85fd03ed99d5856d3244a4b73a5a2ec804f",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "DISCLOSE-AUDITOR: w coefficient 0 element = q",
+   "form": "DISCLOSE-AUDITOR",
+   "id": "pqzh",
+   "edits": [
+    {
+     "proof_set": [32, "03ffffffff29"]
+    }
+   ],
+   "input_bytes": 220383,
+   "input_sha3": "6b92bee657682dd57c4eaf03c8322862a635db586fea06d0b8a382ca98b585c3",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "DISCLOSE-AUDITOR: first opened column element 0 = q",
+   "form": "DISCLOSE-AUDITOR",
+   "id": "pqzh",
+   "edits": [
+    {
+     "proof_set": [100968, "03ffffffff29"]
+    }
+   ],
+   "input_bytes": 220383,
+   "input_sha3": "dfe0647d85908e9ab82aab7f2dba5169dc8806997533d389ba20f5d7a02491a5",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "DISCLOSE-AUDITOR: opened columns 0 and 1 swapped (not increasing)",
+   "form": "DISCLOSE-AUDITOR",
+   "id": "pqzh",
+   "edits": [
+    {
+     "proof_swap": [100936, 101418, 482]
+    }
+   ],
+   "input_bytes": 220383,
+   "input_sha3": "2ff08b75488c6292a4c1da9e7d9fda42993642415d12017f2b44030217f8288a",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
+   "name": "DISCLOSE-AUDITOR: opened column 0 repeated as column 1",
+   "form": "DISCLOSE-AUDITOR",
+   "id": "pqzh",
+   "edits": [
+    {
+     "proof_copy": [100936, 101418, 482]
+    }
+   ],
+   "input_bytes": 220383,
+   "input_sha3": "6d497eead9abaf062104b91d6520bdf06e03e75d8c28071b84834bf038268d39",
+   "expect": "0",
+   "reason": "verify"
+  },
+  {
    "name": "SELFTEST with a 1-byte proof",
    "form": "-",
    "id": "-",
@@ -4721,6 +5449,85 @@
    "input_sha3": "f539ba122394c3dc16cda997ef6396713276f5922b246851fe9aea01d18ce050",
    "expect": "0",
    "reason": "Input"
+  }
+ ],
+ "openings": [
+  {
+   "name": "the canonical opening",
+   "edits": [],
+   "reason": "ok"
+  },
+  {
+   "name": "head word 0 = 65",
+   "edits": [
+    {
+     "set": [0, "0000000000000000000000000000000000000000000000000000000000000041"]
+    }
+   ],
+   "reason": "Opening"
+  },
+  {
+   "name": "head word 1 off by 32",
+   "edits": [
+    {
+     "set": [32, "00000000000000000000000000000000000000000000000000000000000041c0"]
+    }
+   ],
+   "reason": "Opening"
+  },
+  {
+   "name": "bundle length word >= 2^64",
+   "edits": [
+    {
+     "set": [64, "01"]
+    }
+   ],
+   "reason": "Opening"
+  },
+  {
+   "name": "bundle padding byte non-zero",
+   "edits": [
+    {
+     "set": [16799, "01"]
+    }
+   ],
+   "reason": "Opening"
+  },
+  {
+   "name": "proof length word = 2^63",
+   "edits": [
+    {
+     "set": [16800, "0000000000000000000000000000000000000000000000008000000000000000"]
+    }
+   ],
+   "reason": "Opening"
+  },
+  {
+   "name": "proof padding byte non-zero",
+   "edits": [
+    {
+     "set": [45823, "01"]
+    }
+   ],
+   "reason": "Opening"
+  },
+  {
+   "name": "one trailing zero byte",
+   "edits": [
+    {
+     "resize": 45825
+    }
+   ],
+   "reason": "Opening"
+  },
+  {
+   "name": "truncated by 1 byte",
+   "edits": [
+    {
+     "resize": 45823
+    }
+   ],
+   "reason": "Opening"
   }
  ]
 }

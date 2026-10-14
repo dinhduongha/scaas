@@ -1,7 +1,7 @@
 {
  "file": "proof_pqzh.json",
  "description": "PQZH proofs (Ligero over F_q, proofSystemId D3) of every statement form, from pqzh-ligero (THE proven preset, params), fixed rnd32: deterministic, byte-exact native = wasm32. Fields as proof_pqzl.json; max_proof_len = the verifier's exact bound for the form. Validity: pqz-vectors --check (Ligero verify).",
- "generator": "pqz-core/vecgen (pqz-vectors), P6e Task 11",
+ "generator": "pqz-core/ffi src/bin/pqz-vectors.rs, P6e Task 11",
  "proof_system_id": "0a47a7689250ba178a52ad5972cdd9153358c022cb694c08d2389e82de2fead4",
  "params": {
   "n": 32756,

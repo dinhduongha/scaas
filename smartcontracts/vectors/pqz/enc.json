@@ -1,7 +1,7 @@
 {
  "file": "enc.json",
  "description": "Enc({(pk_j, m_j)}, seed_enc) of pq-zether.md 4.2 by the C core (pqz_enc_seed): SHAKE256(SCAAS-PQZ-ENC-V1 || seed_enc || be4(ctr)), r <- CBD_1, e1 <- CBD_20, e2_j <- CBD_20^16; u = A^T r + e1, v_j = pk_j^T r + e2_j + Delta digits(m_j). Recipients are keygen.json seeds; legs[j] = v_j and Dec by recipient j (pqz_dec: M, value; noise omitted, pq-zether.md 14). ops: Add / Sub (coefficient-wise mod q) with Trivial(m) (u = 0, v = Delta digits(m)) or another ciphertext, decrypted with dec_key.",
- "generator": "pqz-core/vecgen (pqz-vectors), P6e Task 11",
+ "generator": "pqz-core/ffi src/bin/pqz-vectors.rs, P6e Task 11",
  "rows": [
   {
    "seed_enc": "6161616161616161616161616161616161616161616161616161616161616161",

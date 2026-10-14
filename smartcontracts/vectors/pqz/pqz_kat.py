@@ -671,7 +671,7 @@ def decode_input(b):
 
 
 # ---------------------------------------------------------------- vector files (P6e Task 11): one checker per file
-# Everything but proof validity is recomputed here from seeds; proof validity is the generator's (pqz-core/vecgen,
+# Everything but proof validity is recomputed here from seeds; proof validity is the generator's (pqz-ffi's pqz-vectors,
 # the C verifiers and Ligero) and the wasm32 replay's. A file without a checker fails --check.
 IDS = {"pqzl": PQZL_ID, "pqzh": PQZH_ID}
 STATEMENT_FILES = ["statement_transfer.json", "statement_burn.json", "statement_refresh.json",
@@ -946,6 +946,15 @@ def apply_edits(r, stmts, proofs):
             op = v
         elif k == "proof_from":
             p = bytearray(proofs[v, r["id"]])
+        elif k == "proof_set":
+            b = bytes.fromhex(v[1])
+            p[v[0]:v[0] + len(b)] = b
+        elif k == "proof_copy":
+            p[v[1]:v[1] + v[2]] = p[v[0]:v[0] + v[2]]
+        elif k == "proof_swap":
+            x = p[v[0]:v[0] + v[2]]
+            p[v[0]:v[0] + v[2]] = p[v[1]:v[1] + v[2]]
+            p[v[1]:v[1] + v[2]] = x
         elif k == "stmt_set":
             b = bytes.fromhex(v[1])
             s[v[0]:v[0] + len(b)] = b
@@ -967,6 +976,30 @@ def apply_edits(r, stmts, proofs):
     if size is not None:
         b = b[:size] + bytes(max(0, size - len(b)))
     return b
+
+
+def parse_opening(b):
+    """pqz-stmt parse_opening: the one canonical abi.encode(bytes, bytes) -> (bundle, proof), else Rejected(Opening)."""
+    def w(i):
+        if i + 32 > len(b) or int.from_bytes(b[i:i + 32], "big") >= 2**64:
+            raise Rejected("Opening")
+        return int.from_bytes(b[i:i + 32], "big")
+
+    def tail(at):
+        n = w(at)
+        start, padded = at + 32, at + 32 + -(-n // 32) * 32
+        if padded > len(b) or any(b[start + n:padded]):
+            raise Rejected("Opening")
+        return b[start:start + n], padded
+    if w(0) != 64:
+        raise Rejected("Opening")
+    bnd, nxt = tail(64)
+    if w(32) != nxt:
+        raise Rejected("Opening")
+    proof, end = tail(nxt)
+    if end != len(b):
+        raise Rejected("Opening")
+    return bnd, proof
 
 
 def check_negative(j, d):
@@ -994,9 +1027,46 @@ def check_negative(j, d):
             why = x.args[0]
         cmp(bad, f"{r['name']} ({r['id']}) reason", r["reason"], why)
         cmp(bad, f"{r['name']} ({r['id']}) expect", r["expect"], "revert" if len(b) > MAX_INPUT else "0")
-    nv = sum(r["reason"] == "verify" for r in j["rows"])
-    if nv < 16 or len(j["rows"]) - nv < 50:
-        bad.append(f"too few rows: {nv} verifier, {len(j['rows']) - nv} decoder")
+    # the required coverage: every decoder reason (pqz-stmt Reject), verifier rejections, the revert, and per (form, id)
+    # lengths +- 1, every other op byte, an unknown and the other id, the proof edits
+    need = {"Op", "OpTag", "ProofSystemId", "Length", "Fee", "Amount", "Salt", "AuditorOn", "Coefficient", "Input",
+            "ProofLength", "verify"} | {f"MustBeZero({f})" for f in ("amount", "recipient", "toUA", "auditorOn", "salt")}
+    got = {r["reason"] for r in j["rows"]}
+    if need - got or "revert" not in {r["expect"] for r in j["rows"]}:
+        bad.append(f"missing reasons: {sorted(need - got)}")
+    for f in STMT_BYTES:
+        op = OP_BYTE[f.rstrip("0")]
+        want = [f"{f}: statement length - 1", f"{f}: statement length + 1", f"{f}: unknown proofSystemId (zero word)",
+                f"{f}: the other system's proofSystemId", f"{f}: proof truncated by 1 byte",
+                f"{f}: proof extended by 1 zero byte", f"{f}: proof byte 0 bit 0 flipped",
+                f"{f}: proof middle byte bit 3 flipped", f"{f}: proof last byte bit 7 flipped"]
+        want += [f"{f}: under op {o}" for o in range(1, 6) if o != op]
+        for n in IDS:
+            have = {r["name"] for r in j["rows"] if r["id"] == n}
+            if set(want) - have:
+                bad.append(f"{f} {n}: missing rows {sorted(set(want) - have)}")
+    # the disclosure opening codec (pqz-stmt parse_opening)
+    tx = statement_rows(d)["TRANSFER"]
+    f = parse(1, bytes.fromhex(tx["stmt"]))
+    bnd = bundle(bytes.fromhex(tx["header"]["salt"]), f["u"], f["v_t"], f["v_a"], bytes.fromhex(tx["header"]["toUA"]))
+    base = opening(bnd, proofs["DISCLOSE-SENDER", "pqzl"])
+    for r in j["openings"]:
+        b = bytearray(base)
+        for e in r["edits"]:
+            (k, v), = e.items()
+            if k == "set":
+                x = bytes.fromhex(v[1])
+                b[v[0]:v[0] + len(x)] = x
+            else:
+                del b[v:]
+                b += bytes(v - len(b))
+        try:
+            got = "ok" if parse_opening(bytes(b)) == (bnd, proofs["DISCLOSE-SENDER", "pqzl"]) else "different"
+        except Rejected as x:
+            got = x.args[0]
+        cmp(bad, "opening " + r["name"], r["reason"], got)
+    if sorted({r["reason"] for r in j["openings"]}) != ["Opening", "ok"]:
+        bad.append("openings: need the canonical one and Opening rejections")
     return bad
 
 
@@ -1072,11 +1142,98 @@ def align_e1(z, gen, k, b=B_E * B_E):
     return e1
 
 
-def check_worstcase(j, d):
-    bad = []
-    pk, s, e, _ = key(j["receiver_seed"])
-    gen, nc, credit = bytes.fromhex(j["generator_seed"]), j["credits_n"], j["credit_value"]
-    cmp(bad, "credits_n = K_MAX - 1", (nc, j["k_max"], len(j["credits_ct_keccak"])), (1023, 1024, 1023))
+def from_sparse(sp, n=N):
+    v = [0] * n
+    for poly, c, x in sp:
+        v[64 * poly + c] = x
+    return v
+
+
+def ratio(a, b):  # as the generator writes it: truncated to 2 decimals
+    return f"{a // b}.{a * 100 // b % 100:02d}"
+
+
+def proofs_ok(bad, what, o, op, st):
+    """both ids' proof objects of a statement (PQZL-id bytes): hashes, framing, the decoder accepts."""
+    for n, idb in IDS.items():
+        sn = with_id(st, idb)
+        cmp(bad, f"{what} {n} stmt_keccak", o["stmt_keccak"][n], kec(sn).hex())
+        proof = bytes.fromhex(o[n]["proof"])
+        cmp(bad, f"{what} {n} proof", (o[n]["proof_bytes"], o[n]["proof_keccak"], o[n]["proof_fnv"]),
+            (len(proof), kec(proof).hex(), fnv(proof)))
+        try:
+            decode_input(precompile_input(op, sn, proof))
+        except Rejected as x:
+            bad.append(f"{what} {n} rejected: {x}")
+        bad += proof_framing(n, what, proof, dict(LIGERO))
+
+
+def check_debit(bad, what, db, T):
+    cmp(bad, f"{what} debit form / op / T", (db["form"], db["op"], db["objects"]["T"]),
+        ("TRANSFER", 1, "the aggregate T above"))
+    row = dict(db, objects=dict(db["objects"], T=T))
+    st = build_stmt(row)
+    cmp(bad, f"{what} debit stmt", (db["stmt"], db["stmt_bytes"]), (st.hex(), len(st)))
+    wt = build_wit(row)
+    cmp(bad, f"{what} debit wit", (db["wit"], db["wit_keccak"]), (wt.hex(), keccak256(wt).hex()))
+    proofs_ok(bad, what + " debit", db, 1, st)
+
+
+def check_bound(bad, j, b):
+    """the worst case the verifier accepts: an attacker key at the norm bounds, credits at B_FRESH exactly."""
+    s, e = from_sparse(b["receiver"]["s"]), from_sparse(b["receiver"]["e"])
+    if not (sq(s) <= B_S**2 and sq(e) <= B_E**2 and all(abs(x) <= 1 for x in s[:64]) and abs(min(s)) <= 127):
+        bad.append("bound receiver key outside R_REG's norms")
+    t = mul_A(polys(s))
+    pk = enc_vec([[(t[i][k] + e[D * i + k]) % Q for k in range(D)] for i in range(K)])
+    _memo[("key", "receiver")] = (pk, s, e, 0)  # the label the statements' objects use
+    cmp(bad, "bound pk", b["receiver"]["pk_keccak"], kec(pk).hex())
+    rg = b["receiver"]["register"]
+    reg = build_register(bytes.fromhex(rg["message"]), pk)
+    cmp(bad, "bound register wit", rg["wit"], (i8(s) + i16(e)).hex())
+    proofs_ok(bad, "bound register", rg, 3, reg)
+    c = b["credit"]
+    r, e1, e2 = from_sparse(c["r"]), from_sparse(c["e1"]), c["e2"]
+    if not (sq(r) <= B_S**2 and sq(e1) <= B_E**2 and sq(e2) <= B_2**2 and len(e2) == 16):
+        bad.append("bound credit vectors outside R_TX's norms")
+    u, vs = encrypt([pk], [digits(c["value"])], r, e1, [e2])
+    ct = u + vs[0]
+    noise = dec(s, ct)[1]
+    cmp(bad, "bound credit", (c["ct_keccak"], c["noise0"]), (kec(ct).hex(), noise[0]))
+    cmp(bad, "bound credit noise = B_FRESH", c["noise0"], j["b_fresh"])
+    sd = b["sender"]
+    T_s = ct_add(enc_of(sd["T"])[0] + enc_of(sd["T"])[1][0], trivial(digits(sd["T"]["plus_trivial"])))
+    pk_f, pk_a = key(sd["key"]["keygen"])[0], key(sd["auditor"]["keygen"])[0]
+    u2, vs2 = encrypt([pk, pk_f, pk_a], [digits(x) for x in sd["out_values"]], r, e1, [e2, [0] * 16, [0] * 16])
+    cmp(bad, "bound sender out = the credit", (u2 + vs2[0]).hex(), ct.hex())
+    sw = key_wit(sd["key"]["keygen"]) + i8(r) + i16(e1) + i16(e2) + i16([0] * 32) + bytes(digits(sd["out_values"][0])) \
+        + bytes(digits(sd["out_values"][1]))
+    cmp(bad, "bound sender wit", (sd["wit"], sd["wit_keccak"]), (sw.hex(), keccak256(sw).hex()))
+    cmp(bad, "bound sender rows", [x["credit"] for x in sd["rows"]], [0, j["credits_n"] - 1])
+    for x in sd["rows"]:
+        f = {k: fval(v) for k, v in sd["header"].items()}
+        f["sendCounter"] = x["sendCounter"]
+        st = build_debit("TRANSFER", f, pk_f, T_s, u2 + b"".join(vs2), pk_t=pk, pk_a=pk_a)
+        cmp(bad, f"bound sender stmt {x['credit']}", x["stmt"], st.hex())
+        proofs_ok(bad, f"bound sender {x['credit']}", x, 1, st)
+    nc = j["credits_n"]
+    T = ct_add(b"".join(x.to_bytes(8, "big") for x in [(nc * c) % Q for c in dec_coeffs(ct)]),
+               trivial(digits(b["plain_used"])))
+    M, tn, val = dec(s, T)
+    mx = max(map(abs, tn))
+    cmp(bad, "bound T", (b["T_keccak"], b["T_M"], b["T_noise"], b["max_abs_noise"]), (kec(T).hex(), M, tn, mx))
+    cmp(bad, "bound T noise = 1,023 * B_FRESH", mx, nc * j["b_fresh"])
+    cmp(bad, "bound value", val, (nc + 1) * c["value"])
+    cmp(bad, "bound margins", (b["margin_2_24"], b["margin_mint"]), (ratio(2**24, mx), ratio(j["mint_threshold"], mx)))
+    if not (mx < 2**24 and max(M) < 2**14):
+        bad.append(f"bound T outside the proven ranges: noise {mx}, M {max(M)}")
+    check_debit(bad, "bound", b["debit"], T)
+
+
+def check_illustrative(bad, j, b):
+    pk, s, e, _ = key(b["receiver_seed"])
+    gen, nc, credit = bytes.fromhex(b["generator_seed"]), j["credits_n"], b["credit_value"]
+    cmp(bad, "illustrative credits", len(b["credits_ct_keccak"]), nc)
     w, z = rot(e), rot(s)
     r = align_r(w)
     e2 = [64] + [0] * 15
@@ -1092,50 +1249,55 @@ def check_worstcase(j, d):
         se1 = [x + y for x, y in zip(se1, e1)]
         if k % 32 == 0 or k == nc - 1:  # ctHash on a sample (pure-Python Keccak); the aggregate T covers every credit
             ct = enc_vec(polys([(x + y) % Q for x, y in zip(ur, e1)])) + enc_poly(v1, 16)
-            cmp(bad, f"credit {k} ctHash", j["credits_ct_keccak"][k], kec(ct).hex())
+            cmp(bad, f"credit {k} ctHash", b["credits_ct_keccak"][k], kec(ct).hex())
             if k == 0:
-                cmp(bad, "credit noise0", dec(s, ct)[1][0], j["credit_noise0"])
+                cmp(bad, "credit noise0", dec(s, ct)[1][0], b["credit_noise0"])
     e10 = align_e1(z, gen, 0)
-    cmp(bad, "credit_norms_sq", j["credit_norms_sq"], {"r": sq(r), "e1": e1sq.pop() if len(e1sq) == 1 else -1,
+    cmp(bad, "credit_norms_sq", b["credit_norms_sq"], {"r": sq(r), "e1": e1sq.pop() if len(e1sq) == 1 else -1,
                                                        "e2": 4096})
-    cmp(bad, "credit noise0 formula", j["credit_noise0"],
+    cmp(bad, "credit noise0 formula", b["credit_noise0"],
         sum(x * y for x, y in zip(w, r)) - sum(x * y for x, y in zip(z, e10)) + 64)
-    cmp(bad, "credits_keccak", j["credits_keccak"], keccak256(b"".join(bytes.fromhex(h) for h in j["credits_ct_keccak"])).hex())
+    cmp(bad, "credits_keccak", b["credits_keccak"],
+        keccak256(b"".join(bytes.fromhex(h) for h in b["credits_ct_keccak"])).hex())
     uT = [(nc * x + y) % Q for x, y in zip(ur, se1)]
-    vT = [(nc * x + DELTA * m) % Q for x, m in zip(v1, digits(j["plain_used"]))]
+    vT = [(nc * x + DELTA * m) % Q for x, m in zip(v1, digits(b["plain_used"]))]
     T = enc_vec(polys(uT)) + enc_poly(vT, 16)
     M, noise, val = dec(s, T)
-    cmp(bad, "T", (j["T_keccak"], j["T_M"], j["T_noise"]), (kec(T).hex(), M, noise))
-    cmp(bad, "T value", val, (nc + 1) * credit)
     mx = max(map(abs, noise))
-    cmp(bad, "bound", j["bound"], {"b_fresh": B_FRESH, "k_max_times_b_fresh": 1024 * B_FRESH, "e_T_range": 2**24,
-                                   "max_abs_noise": mx})
+    cmp(bad, "T", (b["T_keccak"], b["T_M"], b["T_noise"], b["max_abs_noise"]), (kec(T).hex(), M, noise, mx))
+    cmp(bad, "T value", val, (nc + 1) * credit)
+    cmp(bad, "margin", b["margin_2_24"], ratio(2**24, mx))
     if not (mx < 2**24 and max(M) < 2**14):
         bad.append(f"T outside the proven ranges: noise {mx}, M {max(M)}")
-    db = j["debit"]
-    cmp(bad, "debit form / op / T", (db["form"], db["op"], db["objects"]["T"]), ("TRANSFER", 1, "the aggregate T above"))
-    row = dict(db, objects=dict(db["objects"], T=T))
-    st = build_stmt(row)
-    cmp(bad, "debit stmt", db["stmt"], st.hex())
-    wt = build_wit(row)
-    cmp(bad, "debit wit", (db["wit"], db["wit_keccak"]), (wt.hex(), keccak256(wt).hex()))
-    for n, idb in IDS.items():
-        sn = with_id(st, idb)
-        cmp(bad, f"debit {n} stmt_keccak", db["stmt_keccak"][n], kec(sn).hex())
-        proof = bytes.fromhex(db[n]["proof"])
-        cmp(bad, f"debit {n} proof", (db[n]["proof_bytes"], db[n]["proof_keccak"], db[n]["proof_fnv"]),
-            (len(proof), kec(proof).hex(), fnv(proof)))
-        try:
-            decode_input(precompile_input(1, sn, proof))
-        except Rejected as x:
-            bad.append(f"debit {n} rejected: {x}")
-        bad += proof_framing(n, "debit", proof, load(d, "proof_pqzh.json")["params"])
+    check_debit(bad, "illustrative", b["debit"], T)
+
+
+def check_fee0(j, d):
+    """fee = 0 (owner 2026-10-14): every debit form with a fee word, honest, both ids."""
+    bad = check_statement(j, d)
+    for r in j["rows"]:
+        form = r["form"]
+        cmp(bad, f"{form} fee / beneficiary", (r["header"].get("fee"), "beneficiaryUA" in r["header"]), (0, False))
+        st = build_stmt(r)
+        w = build_wit(r)
+        cmp(bad, f"{form} wit", (r["wit"], r["wit_keccak"]), (w.hex(), keccak256(w).hex()))
+        proofs_ok(bad, form, r, OP_BYTE[form.rstrip("0")], st)
+    cmp(bad, "forms", sorted(r["form"] for r in j["rows"]), ["BURN", "REFRESH", "TRANSFER", "TRANSFER0"])
+    return bad
+
+
+def check_worstcase(j, d):
+    bad = []
+    cmp(bad, "constants", (j["k_max"], j["credits_n"], j["b_fresh"], j["e_T_range"], j["mint_threshold"]),
+        (1024, 1023, B_FRESH, 2**24, DELTA - 2**24))
+    check_bound(bad, j, j["bound"])
+    check_illustrative(bad, j, j["illustrative"])
     return bad
 
 
 CHECKERS = {"matrix.json": check_matrix, "cbd.json": check_cbd, "keygen.json": check_keygen, "enc.json": check_enc,
             "statement_*": check_statement, "proof_*": check_proofs, "negative.json": check_negative,
-            "selftest.json": check_selftest, "worstcase_noise.json": check_worstcase}
+            "selftest.json": check_selftest, "fee0.json": check_fee0, "worstcase_noise.json": check_worstcase}
 
 
 def check_files(paths, log):

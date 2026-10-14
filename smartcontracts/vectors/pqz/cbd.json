@@ -1,7 +1,7 @@
 {
  "file": "cbd.json",
  "description": "CBD_eta samples of the C core's KeyGen / Enc streams (pq-zether.md 4.2): stream = the SHAKE256 input (tag || seed || be4(ctr)); bits LSB-first; a sample = (sum of eta bits) - (sum of the next eta bits) from bit_offset. KeyGen: s (CBD_1, 2048) then e (CBD_20, 2048); Enc (3 recipients): r, e1, then e2_j (16 each).",
- "generator": "pqz-core/vecgen (pqz-vectors), P6e Task 11",
+ "generator": "pqz-core/ffi src/bin/pqz-vectors.rs, P6e Task 11",
  "rows": [
   {
    "stream": "53434141532d50515a2d4b455947454e2d5631000000000000000000000000000000000000000000000000000000000000000000000000",

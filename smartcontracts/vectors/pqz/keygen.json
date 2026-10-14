@@ -1,7 +1,7 @@
 {
  "file": "keygen.json",
  "description": "KeyGen(seed32) of pq-zether.md 4.2 by the C core (pqz_keygen): SHAKE256(SCAAS-PQZ-KEYGEN-V1 || seed || be4(ctr)), s <- CBD_1, e <- CBD_20, resample above 36 / 164, pk = A s + e. ctr = the counter used. The searched-resample row was dropped (probability about 2^-70 per seed); the resample path and the counter-64 error are pinned by the test-hook KATs (pqz-core test/pqz_keys_kat.c, pqz_kat.py --c-keys).",
- "generator": "pqz-core/vecgen (pqz-vectors), P6e Task 11",
+ "generator": "pqz-core/ffi src/bin/pqz-vectors.rs, P6e Task 11",
  "rows": [
   {
    "seed": "0000000000000000000000000000000000000000000000000000000000000000",

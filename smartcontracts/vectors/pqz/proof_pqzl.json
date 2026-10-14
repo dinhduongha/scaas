@@ -1,7 +1,7 @@
 {
  "file": "proof_pqzl.json",
  "description": "PQZL proofs (proofSystemId v2, D2) of every statement form, from the C core (pqz_prove, hedged: CTR-PQZ-19), fixed rnd32: deterministic, byte-exact on every build (native = wasm32). statement: the row of that file, under this id. wit: the prover-API witness (pqz.h, R3; not consensus), rebuilt by pqz_kat.py from the seeds. proof_fnv = FNV-1a 32 of the proof. Disclosures: opening = abi.encode(bytes bundle, bytes proof) with the TRANSFER bundle. Validity: pqz-vectors --check (specialised and generic verifier).",
- "generator": "pqz-core/vecgen (pqz-vectors), P6e Task 11",
+ "generator": "pqz-core/ffi src/bin/pqz-vectors.rs, P6e Task 11",
  "proof_system_id": "2e07e6ed1fd303a08c89b3eab6e8423fdfb8f31202958dd682a0619313798c2f",
  "params": {
   "max_proof": 98304

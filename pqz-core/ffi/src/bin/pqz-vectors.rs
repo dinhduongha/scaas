@@ -1,20 +1,21 @@
 //! pqz-vectors (P6e Task 11; plan R4, D9, D13): writes every vector file of `smartcontracts/vectors/pqz/` (the one
-//! canonical directory, read in place). PQZL values come from the C core (`libpqz.a` of `../build.sh`: KeyGen, Enc,
-//! Dec, the matrix, proofs, both verifiers), PQZH proofs from the Ligero crate (THE preset `Params::proven()`); this
-//! binary only drives them and writes JSON. Every honest proof is replayed through the precompile path (`pqz-stmt`
-//! `decode_input`, then the specialised and the generic PQZL verifier, which must agree, or Ligero), every negative
-//! input too.
+//! canonical directory, read in place). Every value comes from this crate: `pqzl` (the C core: KeyGen, Enc, Dec, the
+//! matrix, `encrypt` with chosen vectors), `prove` (PQZL by the C core, PQZH by Ligero); every expected output from the
+//! C ABI `pqz_precompile` (and `selftest::selftest()`); for PQZL the generic verifier must agree with it. This binary
+//! only drives them and writes JSON.
 //!
 //!   pqz-vectors [DIR]           write the files (default: ../../smartcontracts/vectors/pqz)
-//!   pqz-vectors --check [DIR]   regenerate in memory and compare byte for byte; exit 1 on any difference or on a
-//!                               *.json in DIR that this generator does not write
+//!   pqz-vectors --check [DIR]   regenerate in memory and compare byte for byte; exit 1 on any difference, on a
+//!                               *.json in DIR that this generator does not write, or on stale self-test proofs
 //!
-//! Independent checks: `pqz_kat.py --check` (Python, everything but proof validity), `replay_wasm.mjs` (the same
-//! proofs from wasm32 builds), `run.sh` (all of it under one label).
+//! The self-test's compiled-in proofs are the REGISTER rows of the files (build.rs): after a write that changes them,
+//! rebuild and run --check (vectors/run.sh does). Independent checks: `pqz_kat.py --check` (Python),
+//! `vectors/tamper.py`, `vectors/replay_wasm.mjs` (the same proofs from wasm32).
 use std::path::PathBuf;
 use std::time::Instant;
 
-use pqz_stmt::{self as st, Bundle, Debit, Disclose, Form, Register, Reject, Stmt, Word, FORMS, PQZH_ID, PQZL_ID};
+use pqz_ffi::stmt::{self as st, Bundle, Debit, Disclose, Form, Register, Stmt, FORMS};
+use pqz_ffi::{pqz_precompile, pqzl, selftest, Reject, Word, INVALID, PQZH_ID, PQZL_ID, VALID};
 use pqzh_ligero::Params;
 use sha3::digest::{ExtendableOutput, Update, XofReader};
 use sha3::{Keccak256, Sha3_256, Shake256};
@@ -23,36 +24,10 @@ const Q: u64 = st::Q;
 const DELTA: u64 = (1 << 26) - 1;
 const PK: usize = st::PK_BYTES;
 
-// ---------------------------------------------------------------- C core (pqz.h)
-extern "C" {
-    fn pqz_init(arena: *mut u8, len: usize) -> i32;
-    fn pqz_prove(
-        op: u8, stmt: *const u8, sl: usize, wit: *const u8, wl: usize, rnd: *const u8, proof: *mut u8, pl: *mut usize,
-    ) -> i32;
-    fn pqz_verify(op: u8, stmt: *const u8, sl: usize, proof: *const u8, pl: usize) -> i32;
-    fn pqz_verify_fast(op: u8, stmt: *const u8, sl: usize, proof: *const u8, pl: usize) -> i32;
-    fn pqz_keypair_from_secret(s: *const i8, e: *const i16, pk: *mut u8) -> i32;
-    fn pqz_encrypt(
-        pks: *const *const u8, n: u32, msgs: *const [u8; 16], r: *const i8, e1: *const i16, e2: *const [i16; 16],
-        u: *mut u8, vs: *mut [u8; 128],
-    ) -> i32;
-    fn pqz_keygen(seed: *const u8, pk: *mut u8, s: *mut i8, e: *mut i16, ctr: *mut u32) -> i32;
-    fn pqz_enc_seed(
-        pks: *const *const u8, n: u32, msgs: *const [u8; 16], seed: *const u8, u: *mut u8, vs: *mut [u8; 128],
-        r: *mut i8, e1: *mut i16, e2: *mut [i16; 16], ctr: *mut u32,
-    ) -> i32;
-    fn pqz_dec(s: *const i8, ct: *const u8, m: *mut i64, noise: *mut i64) -> i32;
-}
-
-const ARENA: usize = 768 << 20; // as pqz_bench.c; R_TX prove peaks at 304 MB (STATUS.md)
-
-fn init() {
-    let arena: &'static mut [u8] = Box::leak(vec![0u8; ARENA].into_boxed_slice());
-    assert_eq!(unsafe { pqz_init(arena.as_mut_ptr(), arena.len()) }, 0, "pqz_init");
-}
-
+// ---------------------------------------------------------------- the crate's API (pqzl, prove, pqz_precompile)
 struct Key {
-    seed: [u8; 32],
+    /// KeyGen seed (hex in the files), or a label for a key built from chosen (s, e)
+    label: String,
     pk: Vec<u8>,
     s: Vec<i8>,
     e: Vec<i16>,
@@ -60,10 +35,14 @@ struct Key {
 }
 
 fn keygen(seed: [u8; 32]) -> Key {
-    let (mut pk, mut s, mut e, mut ctr) = (vec![0u8; PK], vec![0i8; 2048], vec![0i16; 2048], 0u32);
-    let rc = unsafe { pqz_keygen(seed.as_ptr(), pk.as_mut_ptr(), s.as_mut_ptr(), e.as_mut_ptr(), &mut ctr) };
-    assert_eq!(rc, 0, "pqz_keygen");
-    Key { seed, pk, s, e, ctr }
+    let k = pqzl::keygen(&seed).expect("pqz keygen");
+    Key { label: hex(&seed), pk: k.pk.to_vec(), s: k.s.to_vec(), e: k.e.to_vec(), ctr: k.ctr }
+}
+
+/// pk = A s + e from chosen short vectors (no norm check: the caller keeps them inside the proven norms)
+fn key_from(label: &str, s: Vec<i8>, e: Vec<i16>) -> Key {
+    let pk = pqzl::keypair_from_secret(&s[..].try_into().unwrap(), &e[..].try_into().unwrap()).expect("keypair");
+    Key { label: label.into(), pk: pk.to_vec(), s, e, ctr: 0 }
 }
 
 impl Key {
@@ -75,9 +54,13 @@ impl Key {
     }
 }
 
+fn pk_ref(pk: &[u8]) -> &[u8; PK] {
+    pk.try_into().unwrap()
+}
+
 struct Enc {
     seed: [u8; 32],
-    recips: Vec<[u8; 32]>,
+    recips: Vec<String>,
     values: Vec<u64>,
     u: Vec<u8>,
     vs: Vec<[u8; 128]>,
@@ -88,19 +71,28 @@ struct Enc {
 }
 
 fn enc(keys: &[&Key], values: &[u64], seed: [u8; 32]) -> Enc {
-    let n = keys.len();
-    let pks: Vec<*const u8> = keys.iter().map(|k| k.pk.as_ptr()).collect();
+    let pks: Vec<&[u8; PK]> = keys.iter().map(|k| pk_ref(&k.pk)).collect();
     let msgs: Vec<[u8; 16]> = values.iter().map(|&v| digits(v)).collect();
-    let (mut u, mut vs, mut r, mut e1, mut e2, mut ctr) =
-        (vec![0u8; PK], vec![[0u8; 128]; n], vec![0i8; 2048], vec![0i16; 2048], vec![[0i16; 16]; n], 0u32);
-    let rc = unsafe {
-        pqz_enc_seed(
-            pks.as_ptr(), n as u32, msgs.as_ptr(), seed.as_ptr(), u.as_mut_ptr(), vs.as_mut_ptr(), r.as_mut_ptr(),
-            e1.as_mut_ptr(), e2.as_mut_ptr(), &mut ctr,
-        )
-    };
-    assert_eq!(rc, 0, "pqz_enc_seed");
-    Enc { seed, recips: keys.iter().map(|k| k.seed).collect(), values: values.to_vec(), u, vs, r, e1, e2, ctr }
+    let c = pqzl::enc(&pks, &msgs, &seed).expect("pqz enc");
+    Enc {
+        seed,
+        recips: keys.iter().map(|k| k.label.clone()).collect(),
+        values: values.to_vec(),
+        u: c.u.to_vec(),
+        vs: c.vs,
+        r: c.r.to_vec(),
+        e1: c.e1.to_vec(),
+        e2: c.e2,
+        ctr: c.ctr,
+    }
+}
+
+/// encryption with chosen (r, e1, e2_j): (u, [v_j])
+fn encrypt(keys: &[&Key], values: &[u64], r: &[i8], e1: &[i16], e2: &[[i16; 16]]) -> (Vec<u8>, Vec<[u8; 128]>) {
+    let pks: Vec<&[u8; PK]> = keys.iter().map(|k| pk_ref(&k.pk)).collect();
+    let msgs: Vec<[u8; 16]> = values.iter().map(|&v| digits(v)).collect();
+    let (u, vs) = pqzl::encrypt(&pks, &msgs, r.try_into().unwrap(), e1.try_into().unwrap(), e2).expect("pqz encrypt");
+    (u.to_vec(), vs)
 }
 
 impl Enc {
@@ -117,16 +109,14 @@ impl Enc {
     fn json(&self) -> J {
         o(vec![
             ("seed_enc", hx(&self.seed)),
-            ("recipients", J::A(self.recips.iter().map(|s| hx(s)).collect())),
+            ("recipients", J::A(self.recips.iter().map(|s| J::from(s.as_str())).collect())),
             ("values", J::A(self.values.iter().map(|&v| J::from(v)).collect())),
         ])
     }
 }
 
 fn dec(s: &[i8], ct: &[u8]) -> ([i64; 16], [i64; 16]) {
-    let (mut m, mut nz) = ([0i64; 16], [0i64; 16]);
-    assert_eq!(unsafe { pqz_dec(s.as_ptr(), ct.as_ptr(), m.as_mut_ptr(), nz.as_mut_ptr()) }, 0, "pqz_dec");
-    (m, nz)
+    pqzl::dec(s.try_into().unwrap(), ct.try_into().unwrap()).expect("pqz dec")
 }
 
 fn value(m: &[i64; 16]) -> i128 {
@@ -135,41 +125,35 @@ fn value(m: &[i64; 16]) -> i128 {
 
 fn prove(id: &Word, op: u8, stmt: &[u8], wit: &[u8], rnd: &[u8; 32]) -> Vec<u8> {
     assert_eq!(&stmt[32..64], id);
-    if *id == PQZH_ID {
-        return pqzh_ligero::prove(op, stmt, wit, *rnd, &Params::proven()).expect("Ligero prove");
-    }
-    let mut p = vec![0u8; st::MAX_PROOF_PQZL];
-    let mut n = p.len();
-    let rc = unsafe {
-        pqz_prove(op, stmt.as_ptr(), stmt.len(), wit.as_ptr(), wit.len(), rnd.as_ptr(), p.as_mut_ptr(), &mut n)
-    };
-    assert_eq!(rc, 0, "pqz_prove op {op}");
-    p.truncate(n);
-    p
+    pqz_ffi::prove(op, stmt, wit, rnd).unwrap_or_else(|e| panic!("prove op {op}: {e:?}"))
 }
 
-/// The precompile path as pqz-ffi runs it (P6e Task 7): over MAX_INPUT ⇒ revert; `decode_input` (D5, D15, R6); then
-/// the id's verifier. PQZL: the specialised verifier (R5) and, as the reference, the generic one; they must agree.
-/// Returns (output, reason): output "1" / "0" / "revert"; reason = the decoder's `Reject`, or "verify".
+/// The precompile through the C ABI (`pqz_precompile`, P6f's entry): (output, reason). Output "1" / "0" / "revert";
+/// reason = the decoder's `Reject`, or "verify" (decoded; the id's verifier decided). PQZL: the generic verifier must
+/// agree with the precompile's specialised one (R5).
 fn precompile(input: &[u8]) -> (&'static str, String) {
-    if input.len() > st::MAX_INPUT {
-        return ("revert", "Input".into());
+    let mut out = [0u8; 32];
+    let rc = unsafe { pqz_precompile(input.as_ptr(), input.len(), out.as_mut_ptr(), 32) };
+    match rc {
+        pqz_ffi::PQZ_FFI_REVERT => return ("revert", "Input".into()),
+        pqz_ffi::PQZ_FFI_OK => {}
+        rc => panic!("pqz_precompile status {rc}"),
     }
-    let inp = match st::decode_input(input) {
-        Err(r) => return ("0", rname(r)),
-        Ok(i) => i,
+    let res = if out == VALID { "1" } else if out == INVALID { "0" } else { "selftest" };
+    let reason = match pqz_ffi::decode(input) {
+        Err(r) => {
+            assert_eq!(res, "0");
+            rname(r)
+        }
+        Ok(inp) => {
+            if inp.stmt.proof_system_id() == Some(&PQZL_ID) {
+                let g = pqzl::verify_generic(inp.op, inp.stmt_bytes, inp.proof).expect("generic verify");
+                assert_eq!(g, res == "1", "specialised and generic PQZL verifiers disagree");
+            }
+            "verify".into()
+        }
     };
-    let id = *inp.stmt.proof_system_id().expect("not a selftest input");
-    let (op, s, p) = (inp.op, inp.stmt_bytes, inp.proof);
-    let ok = if id == PQZL_ID {
-        let fast = unsafe { pqz_verify_fast(op, s.as_ptr(), s.len(), p.as_ptr(), p.len()) } == 1;
-        let generic = unsafe { pqz_verify(op, s.as_ptr(), s.len(), p.as_ptr(), p.len()) } == 1;
-        assert_eq!(fast, generic, "specialised and generic PQZL verifiers disagree");
-        fast
-    } else {
-        pqzh_ligero::verify(op, s, p, &Params::proven())
-    };
-    (if ok { "1" } else { "0" }, "verify".into())
+    (res, reason)
 }
 
 fn rname(r: Reject) -> String {
@@ -366,7 +350,7 @@ fn file(name: &str, desc: &str, mut body: Vec<(&str, J)>) -> (String, String) {
     let mut kv = vec![
         ("file", J::from(name)),
         ("description", J::from(desc)),
-        ("generator", J::from("pqz-core/vecgen (pqz-vectors), P6e Task 11")),
+        ("generator", J::from("pqz-core/ffi src/bin/pqz-vectors.rs, P6e Task 11")),
     ];
     kv.append(&mut body);
     let mut s = String::new();
@@ -447,7 +431,7 @@ fn stmt_json(form: Form, stmt: &[u8], fields: J, objects: J, mut extra: Vec<(&'s
 }
 
 fn keyref(k: &Key) -> J {
-    o(vec![("keygen", hx(&k.seed))])
+    o(vec![("keygen", J::from(k.label.as_str()))])
 }
 
 struct Scenario {
@@ -459,10 +443,10 @@ const SEED_F: [u8; 32] = [0x46; 32];
 const SEED_T: [u8; 32] = [0x54; 32];
 const SEED_A: [u8; 32] = [0x41; 32];
 /// the self-test key, message, Enc seed and rnd32 (D13; pqz-ffi `selftest.rs`): the REGISTER rows are its proofs
-const SEED_KEY: [u8; 32] = [0x51; 32];
-const SEED_ENC_ST: [u8; 32] = [0x52; 32];
-const RND_ST: [u8; 32] = [0x53; 32];
-const ST_VALUE: u64 = 123_456;
+const SEED_KEY: [u8; 32] = selftest::SEED_KEY;
+const SEED_ENC_ST: [u8; 32] = selftest::SEED_ENC;
+const RND_ST: [u8; 32] = selftest::RND;
+const ST_VALUE: u64 = selftest::MSG_VALUE;
 
 fn rnd_of(f: Form) -> [u8; 32] {
     if f == Form::Register {
@@ -472,17 +456,22 @@ fn rnd_of(f: Form) -> [u8; 32] {
     }
 }
 
-fn scenario() -> Scenario {
+/// The scenario with `fee` 7 (the main rows) or 0 (owner 2026-10-14: fee 0 is accepted; fee0.json's debit rows: no
+/// beneficiary, Enc seeds and rnd32 of their own).
+fn scenario(fee: u64) -> Scenario {
     let (kf, kt, ka, kr) = (keygen(SEED_F), keygen(SEED_T), keygen(SEED_A), keygen(SEED_KEY));
-    let (bal0, plain, v, fee) = (1_000_000u64, 1_000u64, 123_456u64, 7u64);
+    let (bal0, plain, v) = (1_000_000u64, 1_000u64, 123_456u64);
+    let off: u8 = if fee == 0 { 0x10 } else { 0 };
+    let ben: Vec<(&str, V)> = if fee == 0 { vec![] } else { vec![("beneficiaryUA", V::B(vec![0xA3; 32]))] };
     let acc = enc(&[&kf], &[bal0], [0x61; 32]);
     let t = ct_add(&acc.ct(0), &trivial(plain), false);
     let bal = bal0 + plain;
     let bp = bal - v - fee;
-    let out = enc(&[&kt, &kf, &ka], &[v, bp, v], [0x62; 32]);
-    let out0 = enc(&[&kt, &kf], &[v, bp], [0x62; 32]);
-    let bout = enc(&[&kf], &[bp], [0x64; 32]);
-    let rout = enc(&[&kf], &[bal - fee], [0x65; 32]);
+    let out = enc(&[&kt, &kf, &ka], &[v, bp, v], [0x62 + off; 32]);
+    let out0 = enc(&[&kt, &kf], &[v, bp], [0x62 + off; 32]);
+    let bout = enc(&[&kf], &[bp], [0x64 + off; 32]);
+    let rout = enc(&[&kf], &[bal - fee], [0x65 + off; 32]);
+    let rnd = |f: Form| if fee == 0 { [0xA0 + fidx(f) as u8; 32] } else { rnd_of(f) };
     let tjson = |e: &Enc| {
         let J::O(mut kv) = e.json() else { unreachable!() };
         kv.push(("plus_trivial".into(), J::from(plain)));
@@ -504,12 +493,14 @@ fn scenario() -> Scenario {
         ("envelopeBinding", V::B(vec![0xE1; 32])),
     ];
     let mut txf = common.clone();
-    txf.extend([("toUA", V::B(vec![0xA2; 32])), ("beneficiaryUA", V::B(vec![0xA3; 32])), ("fee", V::I(fee))]);
+    txf.push(("toUA", V::B(vec![0xA2; 32])));
+    txf.extend(ben.clone());
+    txf.push(("fee", V::I(fee)));
     txf.extend(tail.clone());
     txf.extend([("salt", V::B(vec![0x5A; 16])), ("memoHash", V::B(vec![0xD1; 32]))]);
     let mut burnf = common.clone();
+    burnf.extend(ben.clone());
     burnf.extend([
-        ("beneficiaryUA", V::B(vec![0xA3; 32])),
         ("fee", V::I(fee)),
         ("amount", V::I(v)),
         ("recipient", V::B(vec![0x33; 20])),
@@ -517,7 +508,8 @@ fn scenario() -> Scenario {
     burnf.extend(tail.clone());
     burnf.push(("memoHash", V::B(vec![0xD1; 32])));
     let mut reff = common.clone();
-    reff.extend([("beneficiaryUA", V::B(vec![0xA3; 32])), ("fee", V::I(fee))]);
+    reff.extend(ben.clone());
+    reff.push(("fee", V::I(fee)));
     reff.extend(tail);
     reff.push(("memoHash", V::B(vec![0xD1; 32])));
 
@@ -566,7 +558,7 @@ fn scenario() -> Scenario {
         if aud {
             bundle = b;
         }
-        rows.push(Row { form, json: stmt_json(form, &s, fields_json(&txf), o(objs), extra), stmt: s, wit: w, rnd: rnd_of(form) });
+        rows.push(Row { form, json: stmt_json(form, &s, fields_json(&txf), o(objs), extra), stmt: s, wit: w, rnd: rnd(form) });
     }
     for (form, f, e, newbal) in [(Form::Burn, &burnf, &bout, bp), (Form::Refresh, &reff, &rout, bal - fee)] {
         let s = debit(form, f, e);
@@ -574,7 +566,7 @@ fn scenario() -> Scenario {
         let mut w = kf.wit();
         w.extend(e.wit(&[0]));
         w.extend(digits(newbal));
-        rows.push(Row { form, json: stmt_json(form, &s, fields_json(f), objs, vec![]), stmt: s, wit: w, rnd: rnd_of(form) });
+        rows.push(Row { form, json: stmt_json(form, &s, fields_json(f), objs, vec![]), stmt: s, wit: w, rnd: rnd(form) });
     }
     {
         let msg = keccak(&[b"SCAAS-PQZ-SELFTEST-V1"]);
@@ -614,20 +606,7 @@ fn scenario() -> Scenario {
 
 // ---------------------------------------------------------------- keys, CBD, matrix, encryption files
 fn a_bytes() -> Vec<u8> {
-    let cols: Vec<Vec<u8>> = (0..32)
-        .map(|j| {
-            let mut s = [0i8; 2048];
-            s[64 * j] = 1;
-            let mut pk = vec![0u8; PK];
-            assert_eq!(unsafe { pqz_keypair_from_secret(s.as_ptr(), [0i16; 2048].as_ptr(), pk.as_mut_ptr()) }, 0);
-            pk
-        })
-        .collect();
-    let mut a = Vec::with_capacity(32 * PK);
-    for i in 0..32 {
-        cols.iter().for_each(|c| a.extend_from_slice(&c[512 * i..512 * (i + 1)]));
-    }
-    a
+    selftest::a_bytes().expect("A") // column j = pqz_keypair_from_secret(unit vector at poly j, 0)
 }
 
 fn matrix_file() -> (String, String) {
@@ -739,7 +718,7 @@ fn part(what: &str, eta: u32, bit: usize, v: &[i64]) -> J {
 
 fn enc_file() -> (String, String) {
     let (kf, kt, ka) = (keygen(SEED_F), keygen(SEED_T), keygen(SEED_A));
-    let key = |s: &[u8; 32]| [&kf, &kt, &ka].into_iter().find(|k| k.seed == *s).unwrap();
+    let key = |s: &str| [&kf, &kt, &ka].into_iter().find(|k| k.label == s).unwrap();
     let (v, bp, bal) = (123_456u64, 877_537u64, 1_001_000u64);
     let es = [
         enc(&[&kf], &[1_000_000], [0x61; 32]),
@@ -816,6 +795,11 @@ enum E {
     ProofResize(usize),
     StmtFlip(usize, u8),
     ProofFlip(usize, u8),
+    ProofSet(usize, Vec<u8>),
+    /// copy proof[src..src + len] over proof[dst..dst + len]
+    ProofCopy(usize, usize, usize),
+    /// swap proof[a..a + len] and proof[b..b + len]
+    ProofSwap(usize, usize, usize),
     LenField(u32),
     InputResize(usize),
     Raw(Vec<u8>),
@@ -832,6 +816,9 @@ impl E {
             E::ProofResize(n) => o(vec![("proof_resize", J::from(*n))]),
             E::StmtFlip(at, b) => pair("stmt_flip", *at, J::from(*b)),
             E::ProofFlip(at, b) => pair("proof_flip", *at, J::from(*b)),
+            E::ProofSet(at, b) => pair("proof_set", *at, hx(b)),
+            E::ProofCopy(a, b, n) => o(vec![("proof_copy", J::A(vec![J::from(*a), J::from(*b), J::from(*n)]))]),
+            E::ProofSwap(a, b, n) => o(vec![("proof_swap", J::A(vec![J::from(*a), J::from(*b), J::from(*n)]))]),
             E::LenField(n) => o(vec![("len_field", J::from(*n))]),
             E::InputResize(n) => o(vec![("input_resize", J::from(*n))]),
             E::Raw(b) => o(vec![("raw", hx(b))]),
@@ -856,6 +843,13 @@ fn apply(edits: &[E], form: Option<Form>, id: usize, stmts: &[Vec<u8>], proofs: 
             E::ProofResize(n) => p.resize(*n, 0),
             E::StmtFlip(at, b) => s[*at] ^= 1 << b,
             E::ProofFlip(at, b) => p[*at] ^= 1 << b,
+            E::ProofSet(at, b) => p[*at..*at + b.len()].copy_from_slice(b),
+            E::ProofCopy(a, b, n) => p.copy_within(*a..*a + n, *b),
+            E::ProofSwap(a, b, n) => {
+                let x = p[*a..*a + n].to_vec();
+                p.copy_within(*b..*b + n, *a);
+                p[*b..*b + n].copy_from_slice(&x);
+            }
             E::LenField(n) => lenf = Some(*n),
             E::InputResize(n) => size = Some(*n),
             E::Raw(b) => raw = Some(b.clone()),
@@ -964,9 +958,38 @@ fn negatives(proofs: &[[Vec<u8>; 8]; 2]) -> Vec<(String, Option<Form>, Option<us
             ("length field = statement + proof + 1", Transfer, vec![E::LenField((83072 + pl(Transfer) + 1) as u32)]),
             ("length field = statement + 1", Transfer, vec![E::LenField(83073)]),
             ("input of 4 bytes", Transfer, vec![E::InputResize(4)]),
+            ("proof of exactly MAX_PROOF(id) bytes", Transfer, vec![E::ProofResize(st::max_proof(&IDS[id].1).unwrap())]),
+            ("input of exactly MAX_INPUT bytes (not a revert)", Transfer, vec![E::InputResize(st::MAX_INPUT)]),
         ];
         for (name, f, e) in d15 {
             add(format!("{}: {name}", fname(f)), f, e);
+        }
+        if IDS[id].1 == PQZH_ID {
+            // D15 for PQZH proofs: canonical F_q elements (6-byte BE < q), opened columns in strictly increasing index
+            // order without repeats (the indices come from the transcript, so a swapped or repeated column block is
+            // the encoding-level form), the exact length bound
+            let pp = Params::proven();
+            let fe = 4 * (2 * (2 * pp.k - 1) + (2 * pp.k - 1 - pp.ell)); // F_q elements of w, q, h
+            let col0 = 32 + 6 * fe + 8;
+            let q6 = Q.to_be_bytes()[2..].to_vec();
+            for f in FORMS {
+                let nm = fname(f);
+                let blk = 32 + 6 * (pqzh_ligero::cs::Layout::new(f, pp.ell).m + 12);
+                add(format!("{nm}: proof of max_proof_len(form) + 1 bytes"), f, vec![E::ProofResize(pp.max_proof_len(f) + 1)]);
+                add(format!("{nm}: w coefficient 0 element = q"), f, vec![E::ProofSet(32, q6.clone())]);
+                add(format!("{nm}: first opened column element 0 = q"), f, vec![E::ProofSet(col0 + 32, q6.clone())]);
+                add(format!("{nm}: opened columns 0 and 1 swapped (not increasing)"), f, vec![E::ProofSwap(col0, col0 + blk, blk)]);
+                add(format!("{nm}: opened column 0 repeated as column 1"), f, vec![E::ProofCopy(col0, col0 + blk, blk)]);
+            }
+        } else {
+            // D15 for PQZL proofs: the LaZer coder's final 1-bit then zero padding (bits LSB-first): a padding bit set
+            for f in FORMS {
+                let p = &proofs[id][fidx(f)];
+                let last = *p.last().unwrap();
+                if last < 0x80 {
+                    add(format!("{}: coder padding bit 7 set after the final 1-bit", fname(f)), f, vec![E::ProofFlip(p.len() - 1, 7)]);
+                }
+            }
         }
     }
     v.push(("SELFTEST with a 1-byte proof".into(), None, None, vec![E::Raw(vec![6, 0, 0, 0, 0, 0])]));
@@ -984,6 +1007,7 @@ const K_MAX: usize = 1024;
 const B_R: i64 = 36 * 36;
 const B_E1: i64 = 164 * 164;
 const CREDIT: u64 = (1 << 48) - 1;
+const B_FRESH: i64 = 164 * 36 + 36 * 164 + 64;
 
 /// coefficient-0 weights: (x·y)[0] = Σ_k rot(x)_k y_k in Z[X]/(X^64 + 1), per poly
 fn rot(x: &[i64]) -> Vec<i64> {
@@ -1027,34 +1051,251 @@ fn align_e1(z: &[i64], k: u32) -> Vec<i64> {
     e1
 }
 
-struct Worst {
-    json: Vec<(&'static str, J)>,
-    stmt: Vec<u8>,
-    wit: Vec<u8>,
-    proofs: [Vec<u8>; 2],
+fn ids_keccak(stmt: &[u8]) -> J {
+    J::O(IDS.iter().map(|(n, id)| (n.to_string(), hx(&keccak(&[&with_id(stmt, id)])))).collect())
 }
 
-fn worstcase() -> Worst {
+/// both ids' proofs of `stmt` (PQZL-id bytes), each valid through pqz_precompile (and the generic PQZL verifier)
+fn proofs_json(op: u8, stmt: &[u8], wit: &[u8], rnd: &[u8; 32]) -> Vec<(&'static str, J)> {
+    (0..2)
+        .map(|i| {
+            let s = with_id(stmt, &IDS[i].1);
+            let p = prove(&IDS[i].1, op, &s, wit, rnd);
+            assert_eq!(precompile(&st::input(op, &s, &p)), ("1", "verify".to_string()), "worst case {}", IDS[i].0);
+            let j = o(vec![("proof_bytes", J::from(p.len())), ("proof_keccak", hx(&keccak(&[&p]))), ("proof_fnv", J::from(fnv(&p))), ("proof", hx(&p))]);
+            (IDS[i].0, j)
+        })
+        .collect()
+}
+
+fn ratio(a: i64, b: i64) -> String {
+    format!("{}.{:02}", a / b, a * 100 / b % 100)
+}
+
+/// T = n·ct + Trivial(plain) mod q
+fn aggregate(ct: &[u8], n: u64, plain: u64) -> Vec<u8> {
+    let c: Vec<u64> = coeffs(ct).iter().map(|&x| ((x as u128 * n as u128) % Q as u128) as u64).collect();
+    ct_add(&from_coeffs(&c), &trivial(plain), false)
+}
+
+/// The receiver's debit R_TX over T: out = Enc({T: v, receiver: bp, A: v}, WC_OUT), v = 1,000,000, fee 7.
+fn debit(kr: &Key, kt: &Key, ka: &Key, t: &[u8], bal: u64, plain: u64, from: u8, rnd: [u8; 32]) -> J {
+    let (v, fee) = (1_000_000u64, 7u64);
+    let bp = bal - v - fee;
+    let out = enc(&[kt, kr, ka], &[v, bp, v], WC_OUT);
+    let f = vec![
+        ("chainId", V::I(22776)),
+        ("token", V::B(vec![0x11; 20])),
+        ("registry", V::B(vec![0x22; 20])),
+        ("fromUA", V::B(vec![from; 32])),
+        ("toUA", V::B(vec![0xA2; 32])),
+        ("fee", V::I(fee)),
+        ("sendCounter", V::I(1)),
+        ("p", V::I(K_MAX as u64 - 1)),
+        ("validUntilBlock", V::I(1_000_000)),
+        ("plainUsed", V::I(plain)),
+        ("chainUid", V::B(vec![0xC1; 32])),
+        ("salt", V::B(vec![0x5B; 16])),
+    ];
+    let mut header = Debit::header(Form::Transfer, &PQZL_ID);
+    set_words(&mut header, &HNAMES, &f);
+    let d = Debit {
+        form: Form::Transfer,
+        header,
+        pk_f: &kr.pk,
+        pk_t: Some(&kt.pk),
+        pk_a: Some(&ka.pk),
+        t,
+        u: &out.u,
+        v_t: Some(&out.vs[0]),
+        v_f: &out.vs[1],
+        v_a: Some(&out.vs[2]),
+    };
+    let stmt = Stmt::Debit(d).encode().unwrap();
+    let mut wit = kr.wit();
+    wit.extend(out.wit(&[0, 1, 2]));
+    wit.extend(digits(v));
+    wit.extend(digits(bp));
+    let mut kv = vec![
+        ("form", J::from("TRANSFER")),
+        ("op", J::from(1u8)),
+        ("header", fields_json(&f)),
+        ("objects", o(vec![
+            ("pk_f", keyref(kr)),
+            ("pk_t", keyref(kt)),
+            ("pk_a", keyref(ka)),
+            ("T", J::from("the aggregate T above")),
+            ("out", out.json()),
+        ])),
+        ("stmt_bytes", J::from(stmt.len())),
+        ("stmt", hx(&stmt)),
+        ("stmt_keccak", ids_keccak(&stmt)),
+        ("wit", hx(&wit)),
+        ("wit_keccak", hx(&keccak(&[&wit]))),
+        ("rnd32", hx(&rnd)),
+    ];
+    kv.extend(proofs_json(1, &stmt, &wit, &rnd));
+    o(kv)
+}
+
+fn sparse<T: Copy + Into<i64>>(v: &[T]) -> J {
+    J::A(v.iter().enumerate().filter(|x| (*x.1).into() != 0).map(|(i, &x)| nums(&[(i / 64) as i64, (i % 64) as i64, x.into()])).collect())
+}
+
+/// The worst the verifier accepts (controller 2026-10-14): an attacker-registered receiver key at the norm bounds, its
+/// R_REG proved; each credit at B_FRESH exactly; the sender's R_TX of a credit proved (credit 0 and the last).
+fn bound_case(kf: &Key, kt: &Key, ka: &Key) -> J {
+    let mut s = vec![0i8; 2048];
+    s[64] = 36; // poly 1, coefficient 0 (poly 0 carries R_REG's approximate l_inf filler, |s[0]| <= 1)
+    let mut e = vec![0i16; 2048];
+    e[0] = 164; // poly 0, coefficient 0
+    let kr = key_from("receiver", s, e);
+    let msg = keccak(&[b"SCAAS-PQZ-WORSTCASE-KEY-V1"]);
+    let reg = Stmt::Register(Register { words: [Form::Register.op_tag(), PQZL_ID, msg], pk: &kr.pk }).encode().unwrap();
+    let rrnd = [0x91u8; 32];
+    let mut regj = vec![
+        ("message", hx(&msg)),
+        ("stmt_keccak", ids_keccak(&reg)),
+        ("wit", hx(&kr.wit())),
+        ("rnd32", hx(&rrnd)),
+    ];
+    regj.extend(proofs_json(3, &reg, &kr.wit(), &rrnd));
+
+    let w = rot(&kr.e.iter().map(|&x| x as i64).collect::<Vec<_>>());
+    let z = rot(&kr.s.iter().map(|&x| x as i64).collect::<Vec<_>>());
+    let mut r = vec![0i8; 2048];
+    r[0] = 36; // along rot(e)
+    let mut e1 = vec![0i16; 2048];
+    e1[64] = -164; // against rot(s)
+    let mut e2 = [0i16; 16];
+    e2[0] = 64;
+    let wr: i64 = w.iter().zip(&r).map(|(a, &b)| a * b as i64).sum();
+    let ze: i64 = -z.iter().zip(&e1).map(|(a, &b)| a * b as i64).sum::<i64>();
+    assert_eq!((wr, ze), (164 * 36, 36 * 164));
+    let (u1, v1) = encrypt(&[&kr], &[CREDIT], &r, &e1, &[e2]);
+    let ct = [&u1[..], &v1[0][..]].concat();
+    let (_, nz) = dec(&kr.s, &ct);
+    assert_eq!(nz[0], B_FRESH, "credit noise = B_FRESH");
+
+    // the sender (F) proves the credit: R_TX with r, e1, e2_t as above (e2_f = e2_a = 0)
+    let acc = enc(&[kf], &[CREDIT + 7], [0x6A; 32]);
+    let ts = ct_add(&acc.ct(0), &trivial(1000), false);
+    let (u, vs) = encrypt(&[&kr, kf, ka], &[CREDIT, 1000, CREDIT], &r, &e1, &[e2, [0; 16], [0; 16]]);
+    assert_eq!([&u[..], &vs[0][..]].concat(), ct);
+    let sf = vec![
+        ("chainId", V::I(22776)),
+        ("token", V::B(vec![0x11; 20])),
+        ("registry", V::B(vec![0x22; 20])),
+        ("fromUA", V::B(vec![0xA1; 32])),
+        ("toUA", V::B(vec![0xB2; 32])),
+        ("beneficiaryUA", V::B(vec![0xA3; 32])),
+        ("fee", V::I(7)),
+        ("p", V::I(5)),
+        ("validUntilBlock", V::I(1_000_000)),
+        ("plainUsed", V::I(1000)),
+        ("chainUid", V::B(vec![0xC1; 32])),
+        ("salt", V::B(vec![0x5C; 16])),
+    ];
+    let mut sw = kf.wit();
+    sw.extend(r.iter().map(|&x| x as u8));
+    le16(&mut sw, &e1);
+    for x in [e2, [0; 16], [0; 16]] {
+        le16(&mut sw, &x);
+    }
+    sw.extend(digits(CREDIT));
+    sw.extend(digits(1000));
+    let rows: Vec<J> = [(0u64, [0x92u8; 32]), (K_MAX as u64 - 2, [0x93; 32])]
+        .into_iter()
+        .map(|(k, rnd)| {
+            let mut f = sf.clone();
+            f.push(("sendCounter", V::I(k)));
+            let mut header = Debit::header(Form::Transfer, &PQZL_ID);
+            set_words(&mut header, &HNAMES, &f);
+            let d = Debit {
+                form: Form::Transfer,
+                header,
+                pk_f: &kf.pk,
+                pk_t: Some(&kr.pk),
+                pk_a: Some(&ka.pk),
+                t: &ts,
+                u: &u,
+                v_t: Some(&vs[0]),
+                v_f: &vs[1],
+                v_a: Some(&vs[2]),
+            };
+            let stmt = Stmt::Debit(d).encode().unwrap();
+            let mut kv = vec![("credit", J::from(k)), ("sendCounter", J::from(k)), ("stmt", hx(&stmt)), ("stmt_keccak", ids_keccak(&stmt)), ("rnd32", hx(&rnd))];
+            kv.extend(proofs_json(1, &stmt, &sw, &rnd));
+            o(kv)
+        })
+        .collect();
+
+    let ncr = K_MAX as u64 - 1;
+    let t = aggregate(&ct, ncr, CREDIT);
+    let (tm, tn) = dec(&kr.s, &t);
+    assert_eq!((value(&tm), tn[0]), (K_MAX as i128 * CREDIT as i128, ncr as i64 * B_FRESH));
+    let maxn = tn.iter().map(|x| x.abs()).max().unwrap();
+    let mint = DELTA as i64 - (1 << 24);
+    o(vec![
+        ("note", J::from(
+            "The worst case the verifier accepts: a receiver key at the norm bounds (s = 36 at one coefficient outside poly 0, \
+             whose |coefficients| <= 1 R_REG's approximate l_inf filler proves; e = 164 at one coefficient), registered \
+             (its R_REG proves and verifies in both systems), every credit at noise B_FRESH = 164*36 + 36*164 + 64 in \
+             coefficient 0 (r = 36 along rot(e), e1 = -164 against rot(s), e2_t = (64, 0, ...)), each credit the same \
+             ciphertext (the maximum is unique), proved by its sender's R_TX (credit 0 and the last shown, both systems), \
+             plus the plain unit (noise 0): T noise = 1,023 * 11,872 = 12,145,056.",
+        )),
+        ("receiver", o(vec![("s", sparse(&kr.s)), ("e", sparse(&kr.e)), ("pk_keccak", hx(&keccak(&[&kr.pk]))), ("register", o(regj))])),
+        ("credit", o(vec![
+            ("r", sparse(&r)),
+            ("e1", sparse(&e1)),
+            ("e2", nums(&e2)),
+            ("value", J::from(CREDIT)),
+            ("ct_keccak", hx(&keccak(&[&ct]))),
+            ("noise0", J::from(nz[0])),
+        ])),
+        ("sender", o(vec![
+            ("key", keyref(kf)),
+            ("auditor", keyref(ka)),
+            ("T", {
+                let J::O(mut kv) = acc.json() else { unreachable!() };
+                kv.push(("plus_trivial".into(), J::from(1000u64)));
+                J::O(kv)
+            }),
+            ("out_values", nums(&[CREDIT, 1000, CREDIT])),
+            ("header", fields_json(&sf)),
+            ("wit", hx(&sw)),
+            ("wit_keccak", hx(&keccak(&[&sw]))),
+            ("rows", J::A(rows)),
+        ])),
+        ("plain_used", J::from(CREDIT)),
+        ("T_keccak", hx(&keccak(&[&t]))),
+        ("T_M", nums(&tm)),
+        ("T_noise", nums(&tn)),
+        ("max_abs_noise", J::from(maxn)),
+        ("margin_2_24", J::from(ratio(1 << 24, maxn))),
+        ("margin_mint", J::from(ratio(mint, maxn))),
+        ("debit", debit(&kr, kt, ka, &t, K_MAX as u64 * CREDIT, CREDIT, 0xB2, [0x94; 32])),
+    ])
+}
+
+/// An honest receiver key (KeyGen) with credits aligned to it: illustrative (below the bound, which assumes the worst
+/// key); every credit a different ciphertext.
+fn illustrative_case(kt: &Key, ka: &Key) -> J {
     let kr = keygen(WC_RECV);
-    let (kt, ka) = (keygen(SEED_T), keygen(SEED_A));
     let w = rot(&kr.e.iter().map(|&x| x as i64).collect::<Vec<_>>());
     let z = rot(&kr.s.iter().map(|&x| x as i64).collect::<Vec<_>>());
     let r = align_r(&w, B_R);
     let r8: Vec<i8> = r.iter().map(|&x| x as i8).collect();
     let mut e2 = [0i16; 16];
     e2[0] = 64;
-    let msg = digits(CREDIT);
     let mut t = vec![0u8; st::CT_BYTES];
     let (mut hashes, mut cat) = (Vec::new(), Vec::new());
     let ncr = K_MAX - 1;
     let (mut e1sq, mut noise0) = (None, None);
     for k in 0..ncr as u32 {
         let e1: Vec<i16> = align_e1(&z, k).iter().map(|&x| x as i16).collect();
-        let (mut u, mut vs) = (vec![0u8; PK], [[0u8; 128]; 1]);
-        let rc = unsafe {
-            pqz_encrypt([kr.pk.as_ptr()].as_ptr(), 1, [msg].as_ptr(), r8.as_ptr(), e1.as_ptr(), [e2].as_ptr(), u.as_mut_ptr(), vs.as_mut_ptr())
-        };
-        assert_eq!(rc, 0, "pqz_encrypt");
+        let (u, vs) = encrypt(&[&kr], &[CREDIT], &r8, &e1, &[e2]);
         let ct = [&u[..], &vs[0][..]].concat();
         let h = keccak(&[&ct]);
         cat.extend_from_slice(&h);
@@ -1081,51 +1322,8 @@ fn worstcase() -> Worst {
     assert_eq!(tn[0], ncr as i64 * noise0.unwrap());
     let maxn = tn.iter().map(|x| x.abs()).max().unwrap();
     assert!(maxn < 1 << 24);
-
-    let (v, fee) = (1_000_000u64, 7u64);
-    let bp = bal - v - fee;
-    let out = enc(&[&kt, &kr, &ka], &[v, bp, v], WC_OUT);
-    let f = vec![
-        ("chainId", V::I(22776)),
-        ("token", V::B(vec![0x11; 20])),
-        ("registry", V::B(vec![0x22; 20])),
-        ("fromUA", V::B(vec![0xB1; 32])),
-        ("toUA", V::B(vec![0xA2; 32])),
-        ("fee", V::I(fee)),
-        ("sendCounter", V::I(1)),
-        ("p", V::I(ncr as u64)),
-        ("validUntilBlock", V::I(1_000_000)),
-        ("plainUsed", V::I(plain)),
-        ("chainUid", V::B(vec![0xC1; 32])),
-        ("salt", V::B(vec![0x5B; 16])),
-    ];
-    let mut header = Debit::header(Form::Transfer, &PQZL_ID);
-    set_words(&mut header, &HNAMES, &f);
-    let d = Debit {
-        form: Form::Transfer,
-        header,
-        pk_f: &kr.pk,
-        pk_t: Some(&kt.pk),
-        pk_a: Some(&ka.pk),
-        t: &t,
-        u: &out.u,
-        v_t: Some(&out.vs[0]),
-        v_f: &out.vs[1],
-        v_a: Some(&out.vs[2]),
-    };
-    let stmt = Stmt::Debit(d).encode().unwrap();
-    let mut wit = kr.wit();
-    wit.extend(out.wit(&[0, 1, 2]));
-    wit.extend(digits(v));
-    wit.extend(digits(bp));
-    let proofs: [Vec<u8>; 2] = std::array::from_fn(|i| prove(&IDS[i].1, 1, &with_id(&stmt, &IDS[i].1), &wit, &WC_RND));
-    let pj = |i: usize| {
-        let p = &proofs[i];
-        o(vec![("proof_bytes", J::from(p.len())), ("proof_keccak", hx(&keccak(&[p]))), ("proof_fnv", J::from(fnv(p))), ("proof", hx(p))])
-    };
-    let json = vec![
-        ("k_max", J::from(K_MAX)),
-        ("credits_n", J::from(ncr)),
+    o(vec![
+        ("note", J::from("Illustrative: an honest receiver key (KeyGen), credits aligned to it; below the bound case.")),
         ("receiver_seed", hx(&WC_RECV)),
         ("generator_seed", hx(&WC_GEN)),
         ("credit_value", J::from(CREDIT)),
@@ -1146,43 +1344,33 @@ fn worstcase() -> Worst {
         ("T_keccak", hx(&keccak(&[&t]))),
         ("T_M", nums(&tm)),
         ("T_noise", nums(&tn)),
-        ("bound", o(vec![
-            ("b_fresh", J::from(11_872u64)),
-            ("k_max_times_b_fresh", J::from(11_872u64 * K_MAX as u64)),
-            ("e_T_range", J::from(1u64 << 24)),
-            ("max_abs_noise", J::from(maxn)),
-        ])),
-        ("debit", o(vec![
-            ("form", J::from("TRANSFER")),
-            ("op", J::from(1u8)),
-            ("header", fields_json(&f)),
-            ("objects", o(vec![
-                ("pk_f", keyref(&kr)),
-                ("pk_t", keyref(&kt)),
-                ("pk_a", keyref(&ka)),
-                ("T", J::from("the aggregate T above")),
-                ("out", out.json()),
-            ])),
-            ("stmt_bytes", J::from(stmt.len())),
-            ("stmt", hx(&stmt)),
-            ("stmt_keccak", J::O(IDS.iter().map(|(n, id)| (n.to_string(), hx(&keccak(&[&with_id(&stmt, id)])))).collect())),
-            ("wit", hx(&wit)),
-            ("wit_keccak", hx(&keccak(&[&wit]))),
-            ("rnd32", hx(&WC_RND)),
-            ("pqzl", pj(0)),
-            ("pqzh", pj(1)),
-        ])),
-    ];
-    Worst { json, stmt, wit, proofs }
+        ("max_abs_noise", J::from(maxn)),
+        ("margin_2_24", J::from(ratio(1 << 24, maxn))),
+        ("debit", debit(&kr, kt, ka, &t, bal, plain, 0xB1, WC_RND)),
+    ])
+}
+
+fn worstcase() -> Vec<(&'static str, J)> {
+    let (kf, kt, ka) = (keygen(SEED_F), keygen(SEED_T), keygen(SEED_A));
+    vec![
+        ("k_max", J::from(K_MAX)),
+        ("credits_n", J::from(K_MAX - 1)),
+        ("b_fresh", J::from(B_FRESH)),
+        ("e_T_range", J::from(1u64 << 24)),
+        ("mint_threshold", J::from(DELTA as i64 - (1 << 24))),
+        ("bound", bound_case(&kf, &kt, &ka)),
+        ("illustrative", illustrative_case(&kt, &ka)),
+    ]
 }
 
 // ---------------------------------------------------------------- everything
-fn generate() -> Vec<(String, String)> {
+fn generate() -> (Vec<(String, String)>, bool) {
+    let stale;
     let t0 = Instant::now();
     let mut files = vec![matrix_file(), cbd_file(), keygen_file(), enc_file()];
     eprintln!("keys / cbd / matrix / enc: {:.1} s", t0.elapsed().as_secs_f64());
 
-    let sc = scenario();
+    let sc = scenario(7);
     for name in ["statement_transfer.json", "statement_burn.json", "statement_refresh.json", "statement_register.json", "statement_disclose.json"] {
         let rows = sc.rows.iter().filter(|r| sfile(r.form) == name).map(|r| o(r.json.clone())).collect();
         files.push(file(
@@ -1293,35 +1481,67 @@ fn generate() -> Vec<(String, String)> {
         ]));
     }
     eprintln!("negative: {} rows ({ndec} decoder, {nver} verifier): {:.1} s", negs.len(), t0.elapsed().as_secs_f64());
+    // the disclosure opening's codec (pqz-stmt parse_opening, D15: the one canonical abi.encode(bytes, bytes)); base =
+    // the TRANSFER bundle with the PQZL DISCLOSE-SENDER proof
+    let ob = st::opening(&sc.bundle, &proofs[0][fidx(Form::DiscloseSender)]);
+    let (bl, n) = (sc.bundle.len(), ob.len());
+    let pad1 = 96 + bl.div_ceil(32) * 32; // end of the padded bundle = the proof's length word
+    let w = |x: u64| st::u64_word(x).to_vec();
+    let oedits: Vec<(&str, Vec<(usize, Vec<u8>)>, Option<usize>)> = vec![
+        ("the canonical opening", vec![], None),
+        ("head word 0 = 65", vec![(0, w(65))], None),
+        ("head word 1 off by 32", vec![(32, w(pad1 as u64 + 32))], None),
+        ("bundle length word >= 2^64", vec![(64, vec![1])], None),
+        ("bundle padding byte non-zero", vec![(pad1 - 1, vec![1])], None),
+        ("proof length word = 2^63", vec![(pad1, w(1 << 63))], None),
+        ("proof padding byte non-zero", vec![(n - 1, vec![1])], None),
+        ("one trailing zero byte", vec![], Some(n + 1)),
+        ("truncated by 1 byte", vec![], Some(n - 1)),
+    ];
+    assert!(bl % 32 != 0 && ob[n - 1] == 0, "the padding rows need padding");
+    let orows: Vec<J> = oedits
+        .into_iter()
+        .map(|(name, sets, size)| {
+            let mut b = ob.clone();
+            let mut ej = Vec::new();
+            for (at, x) in &sets {
+                b[*at..*at + x.len()].copy_from_slice(x);
+                ej.push(o(vec![("set", J::A(vec![J::from(*at), hx(x)]))]));
+            }
+            if let Some(m) = size {
+                b.resize(m, 0);
+                ej.push(o(vec![("resize", J::from(m))]));
+            }
+            let reason = match st::parse_opening(&b) {
+                Ok((x, y)) => {
+                    assert!(x == &sc.bundle[..] && y == &proofs[0][fidx(Form::DiscloseSender)][..]);
+                    "ok".to_string()
+                }
+                Err(r) => rname(r),
+            };
+            assert_eq!(reason == "ok", sets.is_empty() && size.is_none(), "{name}");
+            o(vec![("name", J::from(name)), ("edits", J::A(ej)), ("reason", J::from(reason))])
+        })
+        .collect();
     files.push(file(
         "negative.json",
         "Precompile inputs that must give 0 (expect 0) or revert (input over MAX_INPUT, P6f): each is the honest input \
          u8(op) || be32(len) || stmt || proof of (form, id) (statements: statement_*.json under the id; proofs: \
-         proof_<id>.json) with edits applied in order: op = the op byte; proof_from = another form's proof (same id); stmt_set [offset, hex] overwrites; stmt_resize / proof_resize truncate or zero-extend; \
+         proof_<id>.json) with edits applied in order: op = the op byte; proof_from = another form's proof (same id); stmt_set / proof_set [offset, hex] overwrite; proof_copy [src, dst, len], proof_swap [a, b, len] move bytes; stmt_resize / proof_resize truncate or zero-extend; \
          stmt_flip / proof_flip [byte, bit]; len_field replaces be32(len); raw = the whole input; input_resize truncates or \
          zero-extends the built input. input_sha3 = SHA3-256 of the input (FIPS 202, not Keccak: Python checks it \
          fast). reason: the pqz-stmt decoder's Reject (D5, D15, R6), or verify (the decoder accepts \
-         and the verifier of the id rejects: PQZL specialised and generic agree).",
-        vec![("max_input", J::from(st::MAX_INPUT)), ("rows", J::A(nrows))],
+         and the verifier of the id rejects: PQZL specialised and generic agree). Expected outputs from pqz_precompile (C ABI). \
+         openings: the disclosure opening abi.encode(bytes bundle, bytes proof) (TRANSFER bundle, PQZL DISCLOSE-SENDER \
+         proof) with set [offset, hex] / resize edits, and pqz-stmt parse_opening's result (ok or Opening).",
+        vec![("max_input", J::from(st::MAX_INPUT)), ("rows", J::A(nrows)), ("openings", J::A(orows))],
     ));
 
     // self-test (D13), as pqz-ffi computes it
     {
-        let a_digest = keccak(&[&a_bytes()]);
-        let key = keygen(SEED_KEY);
-        let c = enc(&[&key], &[ST_VALUE], SEED_ENC_ST);
-        let ct = c.ct(0);
-        let (m, _) = dec(&key.s, &ct);
-        let m8: Vec<u8> = m.iter().map(|&x| x as u8).collect();
-        let n = 2 * 19 * 43;
-        let d = pqzh_ligero::fft::Domain::new(n);
-        let a: Vec<pqzh_ligero::fq::Fq> =
-            (0..n as u64).map(|i| pqzh_ligero::fq::Fq((i * i * 0x9E37_79B9 + 1) % pqzh_ligero::fq::Q)).collect();
-        let fv = d.fft(&a);
-        let mut fb = Vec::new();
-        fv.iter().for_each(|x| x.put(&mut fb));
-        let fft_ok = d.ifft(&fv) == a;
-        let kat = keccak(&[&a_digest, &keccak(&[&key.pk]), &keccak(&[&ct]), &m8, &keccak(&[&fb]), &[fft_ok as u8]]);
+        let rep = selftest::report().expect("self-test report");
+        let (a_digest, kat, m, fft_ok) = (rep.a_digest, rep.kat_digest, rep.m, rep.fft_ok);
+        assert_eq!(a_digest, keccak(&[&a_bytes()]));
         let reg = fidx(Form::Register);
         let mut res = Vec::new();
         let mut per = Vec::new();
@@ -1339,6 +1559,15 @@ fn generate() -> Vec<(String, String)> {
         }
         assert_eq!(res, [1, 0, 1, 0]);
         let hash = keccak(&[&kat, &res]);
+        // the compiled-in proofs (build.rs: the REGISTER rows of the files) must be these; after a write that changed
+        // them the crate must be rebuilt (stale: --check fails)
+        stale = selftest::proofs() != [&proofs[0][reg][..], &proofs[1][reg][..]];
+        if !stale {
+            let mut out = [0u8; 32];
+            let rc = unsafe { pqz_precompile([6u8, 0, 0, 0, 0].as_ptr(), 5, out.as_mut_ptr(), 32) };
+            assert_eq!((rc, out, rep.hash), (pqz_ffi::PQZ_FFI_OK, hash, hash), "OP_SELFTEST through pqz_precompile");
+            assert_eq!(selftest::selftest(), Ok(hash));
+        }
         files.push(file(
             "selftest.json",
             "OP_SELFTEST (P6e D13; pq-zether.md 9.1): input exactly 06 00000000, output keccak256(kat_digest || \
@@ -1348,8 +1577,9 @@ fn generate() -> Vec<(String, String)> {
              forward FFT over the 1,634-point domain (omega = 3^((q-1)/1634)) of a_i = (i^2 * 0x9E3779B9 + 1) mod q, 6-byte \
              BE elements, fft_ok = the inverse gives a back. The four results: the precompile path on the REGISTER \
              statement (opTag || id || keccak256(SCAAS-PQZ-SELFTEST-V1) || pk) with the REGISTER proof of each id (rnd32 = \
-             0x53 x 32), and the same proof with the last message byte flipped (statement byte 95 bit 0). The derivation of \
-             pqz-ffi's selftest.rs (branch p6e-a3); its compiled-in proofs must equal these.",
+             0x53 x 32), and the same proof with the last message byte flipped (statement byte 95 bit 0). Computed by pqz-ffi \
+             (selftest::report, the hash also through pqz_precompile on 06 00000000), whose build.rs compiles in these \
+             REGISTER proofs.",
             vec![
                 ("input", J::from("0600000000")),
                 ("seed_key", hx(&SEED_KEY)),
@@ -1358,10 +1588,10 @@ fn generate() -> Vec<(String, String)> {
                 ("msg_value", J::from(ST_VALUE)),
                 ("message", hx(&keccak(&[b"SCAAS-PQZ-SELFTEST-V1"]))),
                 ("a_digest", hx(&a_digest)),
-                ("pk_keccak", hx(&keccak(&[&key.pk]))),
-                ("ct_keccak", hx(&keccak(&[&ct]))),
-                ("M", nums(&m)),
-                ("fft", o(vec![("n", J::from(n)), ("keccak", hx(&keccak(&[&fb]))), ("ok", J::from(fft_ok))])),
+                ("pk_keccak", hx(&rep.pk_hash)),
+                ("ct_keccak", hx(&rep.ct_hash)),
+                ("M", nums(&m.map(|x| x as i64))),
+                ("fft", o(vec![("n", J::from(1634u32)), ("keccak", hx(&rep.fft_hash)), ("ok", J::from(fft_ok))])),
                 ("kat_digest", hx(&kat)),
                 ("register", J::O(per)),
                 ("results", nums(&res)),
@@ -1371,22 +1601,40 @@ fn generate() -> Vec<(String, String)> {
     }
 
     let wc = worstcase();
-    for (i, (nm, id)) in IDS.iter().enumerate() {
-        let s = with_id(&wc.stmt, id);
-        assert_eq!(precompile(&st::input(1, &s, &wc.proofs[i])), ("1", "verify".to_string()), "worst case {nm}");
-        assert_eq!(wc.proofs[i], prove(id, 1, &s, &wc.wit, &WC_RND));
-    }
     eprintln!("worst case: {:.1} s", t0.elapsed().as_secs_f64());
     files.push(file(
         "worstcase_noise.json",
         "Completeness at the noise cap (pq-zether.md 4.3, 14; P6e D9): K_MAX - 1 = 1,023 proven-norm credits to a known \
          receiver key, aligned to maximise the decryption noise in coefficient 0, plus the plain unit, summed into T; the \
          receiver's debit R_TX over T proves and verifies in both systems. Stored as seeds, per-credit ctHash and the \
-         aggregate (not 1,023 ciphertexts). The noise stays under the proven range 2^24 and the K_MAX * B_FRESH bound.",
-        wc.json,
+         aggregate (not 1,023 ciphertexts). bound: the worst case the verifier accepts (attacker-registered key at the \
+         norm bounds, T noise 1,023 * B_FRESH, the plain unit has noise 0); illustrative: an honest key. Margins against \
+         the proven range 2^24 and the mint threshold Delta - 2^24 (pq-zether.md 4.3).",
+        wc,
+    ));
+    // fee = 0 (owner 2026-10-14: accepted for PQZ): an honest debit of every form with a fee word, both ids
+    let sc0 = scenario(0);
+    let rows0: Vec<J> = sc0
+        .rows
+        .iter()
+        .filter(|r| r.form.op() <= st::OP_BURN)
+        .map(|r| {
+            let mut kv = r.json.clone();
+            kv.extend([("wit", hx(&r.wit)), ("wit_keccak", hx(&keccak(&[&r.wit]))), ("rnd32", hx(&r.rnd))]);
+            kv.extend(proofs_json(r.form.op(), &r.stmt, &r.wit, &r.rnd));
+            o(kv)
+        })
+        .collect();
+    assert_eq!(rows0.len(), 4);
+    files.push(file(
+        "fee0.json",
+        "fee = 0 (owner 2026-10-14: accepted for PQZ and classical Zether): an honest TRANSFER, TRANSFER0, BURN and \
+         REFRESH with fee word 0 and no beneficiary, statement rows as statement_*.json (the scenario's keys and T, Enc \
+         seeds 0x72 / 0x74 / 0x75), the witness, rnd32, and both ids' proofs (valid through pqz_precompile).",
+        vec![("rows", J::A(rows0))],
     ));
     eprintln!("total: {:.1} s", t0.elapsed().as_secs_f64());
-    files
+    (files, stale)
 }
 
 fn main() {
@@ -1397,16 +1645,10 @@ fn main() {
         .find(|a| !a.starts_with("--"))
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../smartcontracts/vectors/pqz"));
-    // the C prover keeps a ~100 KB proof buffer on the stack: one worker with a large stack
-    let files = std::thread::Builder::new()
-        .stack_size(64 << 20)
-        .spawn(|| {
-            init();
-            generate()
-        })
-        .unwrap()
-        .join()
-        .expect("generator panicked");
+    let (files, stale) = generate();
+    if stale {
+        println!("self-test proofs compiled into this binary differ from the REGISTER rows: rebuild, then --check");
+    }
     let total: usize = files.iter().map(|f| f.1.len()).sum();
     if !check {
         for (n, s) in &files {
@@ -1416,7 +1658,7 @@ fn main() {
         println!("pqz-vectors: {} files, {total} B", files.len());
         return;
     }
-    let mut bad = 0;
+    let mut bad = stale as usize;
     for (n, s) in &files {
         let ok = std::fs::read(dir.join(n)).is_ok_and(|b| b == s.as_bytes());
         println!("{} {n} {} B", if ok { "same" } else { "DIFF" }, s.len());
