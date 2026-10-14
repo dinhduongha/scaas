@@ -760,6 +760,11 @@ void shake128_init (shake128_state_t state);
 void shake128_absorb (shake128_state_t state, const uint8_t *in, size_t len);
 void shake128_squeeze (shake128_state_t state, uint8_t *out, size_t len);
 void shake128_clear (shake128_state_t state);
+/* PQZ: SHAKE256 (rate 136) on the same state type, lazer/shake128.c */
+void shake256_init (shake128_state_t state);
+void shake256_absorb (shake128_state_t state, const uint8_t *in, size_t len);
+void shake256_squeeze (shake128_state_t state, uint8_t *out, size_t len);
+void shake256_clear (shake128_state_t state);
 
 void rng_init (rng_state_t state, const uint8_t seed[32], uint64_t dom);
 void rng_urandom (rng_state_t state, uint8_t *out, size_t outlen);

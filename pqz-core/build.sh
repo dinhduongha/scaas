@@ -21,7 +21,7 @@ lazer_h() {
 # SV=0: leave the specialised verifier (src/pqz_sv.c, pqz_verify_fast, its tables) out, e.g. the wallet's prover
 # wasm (SV=0 B=build/wasm-nosv ./build.sh wasm); the default builds it (PQZ_SV). native-x86v3 needs it.
 SV=${SV:-1}
-LIBSRC="src/pqz_lazer.c src/pqz_ntt.c src/pqz_arena.c src/pqz_rel.c"
+LIBSRC="src/pqz_lazer.c src/pqz_ntt.c src/pqz_arena.c src/pqz_rel.c src/pqz_keys.c"
 SVDEF=""
 if [ "$SV" = 1 ]; then
   LIBSRC="$LIBSRC src/pqz_sv.c"
@@ -45,6 +45,8 @@ native() {
   $CC -std=gnu11 -O2 $WARN $SVDEF -Isrc -o $B/native/pqz_bench test/pqz_bench.c $B/native/libpqz.a
   $CC -std=gnu11 -O2 -DPQZ_BACKEND -DBUILD_FLAGS='"pqz-core native"' -I$B/include -Isrc -Ilazer -Iparams \
     -o $B/native/kat_dump kat/lazer_dump.c $B/native/libpqz.a
+  $CC -std=gnu11 -O2 $WARN -I$B/include -Isrc -Ilazer -Iparams -o $B/native/pqz_keys_kat test/pqz_keys_kat.c \
+    $B/native/libpqz.a
   [ "$SV" = 1 ] || return 0
   # P6-SV differential test: the relation and specialised-verifier objects again, with the test hooks
   mkdir -p $B/native/hooks
@@ -86,7 +88,7 @@ native_x86v3() {
   mkdir -p $B/native-x86v3
   cp $B/native/*.o $B/native-x86v3/
   $CC $CFLAGS_LIB -O3 -march=x86-64-v3 -maes -fPIC -fstack-protector-strong -c src/pqz_sv.c -o $B/native-x86v3/pqz_sv.o
-  objs="$B/native-x86v3/pqz_lazer.o $B/native-x86v3/pqz_ntt.o $B/native-x86v3/pqz_arena.o $B/native-x86v3/pqz_rel.o"
+  objs="$B/native-x86v3/pqz_lazer.o $B/native-x86v3/pqz_ntt.o $B/native-x86v3/pqz_arena.o $B/native-x86v3/pqz_rel.o $B/native-x86v3/pqz_keys.o"
   objs="$objs $B/native-x86v3/pqz_sv.o"
   ar rcs $B/native-x86v3/libpqz.a $objs
   ./check_symbols.sh $objs

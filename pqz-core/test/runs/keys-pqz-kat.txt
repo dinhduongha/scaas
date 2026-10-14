@@ -1,0 +1,3 @@
+     C keys KAT pqz-core/test/runs/keys-kat.jsonl: {'shake256': 10, 'keygen': 20, 'enc': 20, 'roundtrip': 1000}
+pqz_kat: ok
+rc=0

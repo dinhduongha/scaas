@@ -243,6 +243,21 @@ without SV). Per-op arena peaks identical to v2 (wasm `R_TX` 231,858,048 B), lar
 | `R_DS` | `46c77f3e` → `dac15c76` | `216b75fc` → `3c9cde98` | `f4b59d4b` → `4f4a10ab` | `d7fbc082` → `3f530c3f` | `10639246` → `4075f5f5` |
 | `R_DR` | `84a15cd2` → `37a226ae` | `e0d2deda` → `78688027` | `ea72ce2d` → `2da4e9b2` | `22be6479` → `2d06acff` | `82621a18` → `7db4b018` |
 
+## KeyGen / Enc / Dec from seeds P6e Task 3 (branch `p6e-a1`; pq-zether.md §4.2, P6e plan gap G4)
+
+`src/pqz_keys.c` (ABI in `pqz.h`): `pqz_keygen(seed32, pk, s, e, &ctr)`, `pqz_enc_seed(pks, n, msgs, seed_enc, u, vs,
+r, e1, e2, &ctr)`, `pqz_dec(s, ct, M, noise)`, §4.2 literally: one SHAKE256 stream per counter (`SCAAS-PQZ-KEYGEN-V1`
+/ `SCAAS-PQZ-ENC-V1` ‖ seed ‖ be4(ctr)), CBD bits LSB-first, `s` then `e` (`r`, `e1`, then `e2_j` in recipient order),
+resample above 36 / 164 / 64, error at counter 64; pk / ciphertext coefficients ≥ q and digits > 15 rejected; the ring
+work is `pqz_rel.c`'s. SHAKE256 = LaZer's Keccak core at rate 136 (`lazer/shake128.c`, `PQZ:`). Independent check:
+`smartcontracts/vectors/pqz/pqz_kat.py` (Python stdlib, Task 4). Run [measured] (`test/runs/keys-*`, `./build.sh all`
++ wasm without SV + x86-64-v3 under one capped job): symbol scan clean on all five object sets; `pqz_keys_kat 1000`:
+SHAKE256 on 10 inputs (absorb and squeeze split in two), KeyGen on 20 seeds, Enc to two recipients and Dec on 20 seeds
+all equal to `pqz_kat.py --c-keys` (`keys-pqz-kat.txt`: ok; a tampered copy fails on each changed field); round trip
+1,000 seeds `Dec(Enc(m)) = m`, max |noise| 543 ≤ B_FRESH 11,872, every counter 0, 3 / 3 non-canonical inputs rejected;
+1.9 s, 5.7 MB RSS. Not measured: wasm (P6e Task 7, `pqz-ffi` `prove` feature); the resample branch (unreachable by
+search, see Open 7).
+
 ## Measured (2026-10-13, this machine, single thread)
 
 Native: clang -O2, `pqz_bench 5 5` under `scripts/capped` (5 proves, 5 + 5 honest verifies, 10 adversarial). wasm32:
@@ -297,6 +312,12 @@ rest bookkeeping; the zero entries of the selection matrices' Gram matrices were
    concurrent calls would release each other's arena and reset each other's error (expected failure: a crash or a
    wrong reject; a wrong accept would still need the final hash to match). The P6f cgo wrapper must serialise every
    libpqz call (one process-wide lock) or move to per-thread contexts. Status: open, P6f.
+
+7. **`keygen.json` "one seed with ≥ 1 resample (searched)" (P6e plan Task 11) cannot be searched**: the thresholds
+   sit ≥ 10 s.d. above the mean norms (‖s‖² mean 1,024, s.d. 22.6, bound 1,296 = 12 s.d.; ‖e‖² mean 20,480, s.d.
+   ≈ 632, bound 26,896 ≈ 10 s.d.), so a counter ≥ 1 has probability ≈ 2^-70 or less per seed. The resample path can
+   only be pinned with lowered thresholds in a test build (`pqz_kat.py` has the knob, `keygen_sample(..., bs, be)`;
+   the C core has none yet). Owner / Task 11 input: drop that row or add the test-build knob.
 
 Scratch (not needed to resume, re-creatable): LaZer and lattice-estimator clones, the upstream tbox harness and
 debug builds under the session scratchpad `p6d/`.
