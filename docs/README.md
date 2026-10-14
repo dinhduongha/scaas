@@ -133,7 +133,7 @@ See [architecture.md](architecture.md#profiles).
    families, economics, data protection, glossary.
 3. The component docs for your role (map below). Integrators: [integration.md](integration.md). Node operators:
    [node/README.md](node/README.md) then [node/runbooks.md](node/runbooks.md). Contract reviewers:
-   [contracts/README.md](contracts/README.md). Wallet and app developers: [clients/](clients/signers-clientkeys.md).
+   [contracts/README.md](contracts/README.md). Wallet and app developers: [clients/](clients/signers-clientkeys.md). Game and loyalty builders: [guides/item-economies.md](guides/item-economies.md) (items as tokens, crafting recipes).
 4. [decisions.md](decisions.md) — why each rule holds, and the old-id alias index.
 
 ## 7. Map
