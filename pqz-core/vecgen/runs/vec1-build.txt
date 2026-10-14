@@ -1,0 +1,7 @@
+symbols ok: only memcpy memset __stack_chk_fail __stack_pointer outside the library objects
+symbols ok: only memcpy memset __stack_chk_fail __stack_pointer outside the library objects
+   Compiling pqz-vectors v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/p6ea4/pqz-core/vecgen)
+    Finished `release` profile [optimized + debuginfo] target(s) in 2.92s
+    Finished `release` profile [optimized] target(s) in 0.02s
+-rwxrwxr-x 1 ha ha 353183 Oct 14 19:40 ../build/wasm/vec_pqzl.wasm
+-rwxrwxr-x 2 ha ha 240113 Oct 14 19:34 wasm/target/wasm32-unknown-unknown/release/pqz_vectors_wasm.wasm

@@ -1,0 +1,35 @@
+{
+ "file": "selftest.json",
+ "description": "OP_SELFTEST (P6e D13; pq-zether.md 9.1): input exactly 06 00000000, output keccak256(kat_digest || u8(pqzl_valid) || u8(pqzl_invalid) || u8(pqzh_valid) || u8(pqzh_invalid)); kat_digest = keccak256(a_digest || keccak256(pk) || keccak256(u || v) || M (16 bytes) || keccak256(fft) || u8(fft_ok)): a_digest = matrix.json a_keccak; pk = KeyGen(seed_key); u || v = Enc(pk, digits(msg_value), seed_enc); M = Dec; fft = Ligero's forward FFT over the 1,634-point domain (omega = 3^((q-1)/1634)) of a_i = (i^2 * 0x9E3779B9 + 1) mod q, 6-byte BE elements, fft_ok = the inverse gives a back. The four results: the precompile path on the REGISTER statement (opTag || id || keccak256(SCAAS-PQZ-SELFTEST-V1) || pk) with the REGISTER proof of each id (rnd32 = 0x53 x 32), and the same proof with the last message byte flipped (statement byte 95 bit 0). The derivation of pqz-ffi's selftest.rs (branch p6e-a3); its compiled-in proofs must equal these.",
+ "generator": "pqz-core/vecgen (pqz-vectors), P6e Task 11",
+ "input": "0600000000",
+ "seed_key": "5151515151515151515151515151515151515151515151515151515151515151",
+ "seed_enc": "5252525252525252525252525252525252525252525252525252525252525252",
+ "rnd32": "5353535353535353535353535353535353535353535353535353535353535353",
+ "msg_value": 123456,
+ "message": "a24ed67f5a86fbe2b694db8e3d826fc7c93cde94f0cb2ad2fb724c744f872275",
+ "a_digest": "f176b313331c898e11230c6addae3d44821413361e1416a6aedf9f26a7be3df0",
+ "pk_keccak": "e68c652b28cc02660e85b3777de58b0feea9f46138b1042b961dfebebbac4520",
+ "ct_keccak": "d44287241ed3cbcd4123004baf1efaef31d0bf281b4037ed1e120ff7acbf63d1",
+ "M": [0, 4, 2, 14, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+ "fft": {
+  "n": 1634,
+  "keccak": "2ede3efd92db3a7a88c35eff92488868943cecf88f66ac692bcc7667a6832788",
+  "ok": true
+ },
+ "kat_digest": "f7c772d6467c84e1c143004017d3594d57dfbde49097e9d3fd9b382e03680776",
+ "register": {
+  "pqzl": {
+   "proof_keccak": "c85ef63558cd1e8c304637c1a99471b43259548736c1b8e47bd07301621c6785",
+   "valid": 1,
+   "invalid": 0
+  },
+  "pqzh": {
+   "proof_keccak": "d7e6cdb531a4cc4263a1b5f158c7f7c6ab54a47d47d6bd73ef972d9357d8c9ae",
+   "valid": 1,
+   "invalid": 0
+  }
+ },
+ "results": [1, 0, 1, 0],
+ "hash": "ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205"
+}

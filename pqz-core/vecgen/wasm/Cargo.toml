@@ -1,0 +1,22 @@
+[package]
+name = "pqz-vectors-wasm"
+version = "0.1.0"
+edition = "2021"
+license-file = "../../../LICENSE"
+publish = false
+
+# wasm32-unknown-unknown module for the vectors' PQZH replay (../replay_wasm.mjs): the production Ligero build (no
+# bench feature) behind raw C-ABI exports, no wasm-bindgen.
+[lib]
+crate-type = ["cdylib"]
+path = "lib.rs"
+
+[dependencies]
+pqzh-ligero = { path = "../../pqzh/ligero", default-features = false }
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+
+[workspace]

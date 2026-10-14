@@ -1,0 +1,59 @@
+keys / cbd / matrix / enc: 0.0 s
+pqzl TRANSFER           proof  42762 B  prove+verify 3.06 s
+pqzl TRANSFER0          proof  42431 B  prove+verify 2.29 s
+pqzl BURN               proof  41904 B  prove+verify 2.49 s
+pqzl REFRESH            proof  41915 B  prove+verify 2.34 s
+pqzl REGISTER           proof  28093 B  prove+verify 0.74 s
+pqzl DISCLOSE-SENDER    proof  28977 B  prove+verify 0.89 s
+pqzl DISCLOSE-RECEIVER  proof  28996 B  prove+verify 0.79 s
+pqzl DISCLOSE-AUDITOR   proof  28986 B  prove+verify 0.87 s
+pqzh TRANSFER           proof 230946 B  prove+verify 1.34 s
+pqzh TRANSFER0          proof 231480 B  prove+verify 1.29 s
+pqzh BURN               proof 232184 B  prove+verify 1.28 s
+pqzh REFRESH            proof 230280 B  prove+verify 1.30 s
+pqzh REGISTER           proof 186778 B  prove+verify 0.75 s
+pqzh DISCLOSE-SENDER    proof 186456 B  prove+verify 0.88 s
+pqzh DISCLOSE-RECEIVER  proof 187226 B  prove+verify 0.85 s
+pqzh DISCLOSE-AUDITOR   proof 187194 B  prove+verify 0.81 s
+proofs: 22.1 s
+negative: 337 rows (219 decoder, 118 verifier): 33.4 s
+worst case: 38.6 s
+total: 38.6 s
+same matrix.json 1045 B
+same cbd.json 4287 B
+same keygen.json 2891 B
+same enc.json 7891 B
+same statement_transfer.json 304693 B
+same statement_burn.json 102680 B
+same statement_refresh.json 102604 B
+same statement_register.json 34415 B
+same statement_disclose.json 203870 B
+same proof_pqzl.json 721986 B
+same proof_pqzh.json 3499045 B
+same negative.json 108407 B
+same selftest.json 2305 B
+same worstcase_noise.json 818747 B
+pqz-vectors --check: 14 files, 5914866 B: ok
+	Command being timed: "target/release/pqz-vectors --check"
+	User time (seconds): 38.32
+	System time (seconds): 0.27
+	Percent of CPU this job got: 99%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:38.61
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 434808
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 109976
+	Voluntary context switches: 2
+	Involuntary context switches: 640
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 16
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0

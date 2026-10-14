@@ -381,6 +381,37 @@ DIR pqzh` (real opTags and the PQZH id, no rewrite); 7 unit tests ok in release 
 6 equal, 32 `pqz_kat.py` statements equal, 210 rejections with the same reason, wasm32 ok. The Ligero crate moves
 onto it in Part B Task 6.
 
+## Vectors P6e Task 11 (branch `p6e-a4`; plan R4, D9, D13)
+
+`smartcontracts/vectors/pqz/` (the one canonical directory, D9; `README.md` there: every file, schema, scenario) is
+written by `vecgen/` (`pqz-vectors`, Rust; links `build/native/libpqz.a` for KeyGen / Enc / Dec / A / PQZL proofs and
+both PQZL verifiers, `pqzh-ligero` without `bench` for PQZH): 14 files, 5,914,866 B of JSON — `matrix`, `cbd`, `keygen`,
+`enc`, five `statement_*` (8 forms; PQZL-id bytes, both ids' hashes and `authDigest`), `proof_pqzl` / `proof_pqzh` (8
+rows each: six relations + REFRESH + AUDITOR; witness, `rnd32`, proof, keccak, FNV-1a; disclosures' opening),
+`negative` (337 inputs: 219 decoder rejections with `pqz-stmt`'s reason, 118 verifier rejections, 2 reverts at
+`MAX_INPUT + 1`), `selftest` (D13), `worstcase_noise`. The plan put the generator in `pqz-ffi` (`src/bin/pqz-vectors.rs`);
+that crate is on `p6e-a3`, so it is its own crate here (it can move once both merge). The plan's `test/pqz_worstcase.c`
+is not needed: the generator builds the aligned credits through `pqz_encrypt`.
+
+Run `scripts/capped pqz-core/vecgen/run.sh vec1 write` [measured] (`vecgen/runs/vec1-*`): generation 39.8 s, 435 MB
+RSS; `pqz-vectors --check` (a second generation) byte-identical, 14 / 14 files, every honest proof valid through
+`decode_input` + `pqz_verify_fast` = `pqz_verify` (PQZL) / Ligero, provers deterministic (each proof made twice), all
+337 negative inputs `0` or revert with the specialised and generic verifiers agreeing; `pqz_kat.py --check` ok in 18.1 s
+(every file has a checker: keys, CBD, A, Enc / Dec, statements and witnesses rebuilt from the seeds, proof framing and
+hashes, the decoder's reason for each negative input, the self-test hash incl. a mixed-radix DFT, the worst case through
+`T`); `tamper.py` 167 / 167 changed leaves caught; wasm32 replay (node v26.8.1; PQZL from the freestanding C core,
+PQZH from the Ligero crate) 18 / 18 proofs byte-equal with native and valid. The self-test hash `ed910a2c…1333d205` and
+the two REGISTER proofs equal `pqz-ffi`'s on `p6e-a3` (`vec1-selftest-xcheck-p6e-a3.txt`).
+
+| Proof bytes [measured] | TRANSFER | TRANSFER0 | BURN | REFRESH | REGISTER | DS | DR | AUDITOR | worst-case debit |
+|---|---|---|---|---|---|---|---|---|---|
+| PQZL | 42,762 | 42,431 | 41,904 | 41,915 | 28,093 | 28,977 | 28,996 | 28,986 | 42,750 |
+| PQZH | 230,946 | 231,480 | 232,184 | 230,280 | 186,778 | 186,456 | 187,226 | 187,194 | 233,166 |
+
+Worst case [measured]: 1,023 credits aligned to the receiver key (‖r‖² = 1,296, ‖e1‖² = 26,887, e2 = (64, 0, …)), noise
+10,024 per credit in coefficient 0, `T` noise 10,254,552 < 2^24 (margin 1.64×; the cap bound 12,156,928 assumes a
+key with ‖e‖ = 164), `M_i` = 15,360 < 2^14; the debit `R_TX` over `T` proves and verifies in both systems.
+
 ## Measured (2026-10-13, this machine, single thread)
 
 Native: clang -O2, `pqz_bench 5 5` under `scripts/capped` (5 proves, 5 + 5 honest verifies, 10 adversarial). wasm32:
