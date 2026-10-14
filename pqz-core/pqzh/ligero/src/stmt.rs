@@ -16,6 +16,8 @@ pub const PREFIX: usize = 64;
 pub const HEADER: usize = 640;
 pub const HDR_FEE: usize = 256;
 pub const HDR_AMOUNT: usize = 288;
+/// auditorOn word (R_TX: 1 for the 83,072-byte statement, plan R6; only hashed by the relation)
+pub const HDR_AUDITOR_ON: usize = 448;
 pub const POLYVEC: usize = 16384;
 pub const VB: usize = 128;
 pub const REG_STMT: usize = PREFIX + 32 + POLYVEC;
@@ -37,12 +39,21 @@ pub const DS_WIT: usize = 2048 + 4096 + 32;
 /// R_DR: s || e
 pub const DR_WIT: usize = 2048 + 4096;
 
-/// proofSystemId (statement bytes 32..63) the bench statements carry: still the STARK's provisional
-/// keccak256("scaas/pqz/pqzh/stark-d1-goldilocks5-fri-keccak256-zk/v1"); the relations only hash it. The Ligero id
-/// (plan D3) replaces it in Task 9.
-pub const PQZH_PROOF_SYSTEM_ID: [u8; 32] = hex32("aa1f92ddc5763201c2582c8387bd6513842e52779310d6bcf39a7fec99284304");
-/// PQZL's id as pqz-core v2 writes it, used only for the byte cross-check against pqz_bench.c.
+/// proofSystemId (statement bytes 32..63) of PQZH-Ligero, plan D3:
+/// keccak256("scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1"). `cs::parse` (prover and verifier) rejects
+/// every other id. The STARK's provisional id keccak256("scaas/pqz/pqzh/stark-d1-goldilocks5-fri-keccak256-zk/v1")
+/// = 0xaa1f92dd... is retired unused.
+pub const PQZH_PROOF_SYSTEM_ID: [u8; 32] = hex32("0a47a7689250ba178a52ad5972cdd9153358c022cb694c08d2389e82de2fead4");
+/// PQZL's id as pqz-core v2 writes it (pqz.h PQZ_PROOF_SYSTEM_ID, plan D2); a PQZH statement carrying it is rejected.
 pub const PQZL_PROOF_SYSTEM_ID: [u8; 32] = hex32("2e07e6ed1fd303a08c89b3eab6e8423fdfb8f31202958dd682a0619313798c2f");
+
+/// Proof and input limits (plan D5): per-id MAX_PROOF, and the precompile input u8(op) || be32(len(stmt)) || stmt ||
+/// proof (INPUT_HEADER = 5 bytes) <= MAX_INPUT. PQZH's verifier bound is `Params::max_proof_len(op)` (the exact
+/// maximum, <= PQZH_MAX_PROOF at THE preset). Moved to pqz-stmt with Task 6.
+pub const PQZL_MAX_PROOF: usize = 98_304;
+pub const PQZH_MAX_PROOF: usize = 262_144;
+pub const MAX_INPUT: usize = 393_216;
+pub const INPUT_HEADER: usize = 5;
 
 const fn nib(c: u8) -> u8 {
     if c <= b'9' { c - b'0' } else { c - b'a' + 10 }
@@ -69,5 +80,21 @@ mod tests {
         assert_eq!([REG_STMT, TX_STMT, BURN_STMT, DISC_STMT], [16480, 83072, 50048, 33184]);
         assert_eq!([REG_WIT, TX_WIT, BURN_WIT, DS_WIT, DR_WIT], [6144, 12416, 12336, 6176, 6144]);
         assert_eq!((DISC_AMOUNT, DISC_PK), (224, 288));
+        // auditorOn is the 15th header word (pq-zether.md §7.7)
+        assert_eq!(HDR_AUDITOR_ON, 14 * 32);
+    }
+
+    /// D3: the id is the keccak256 of its string
+    #[test]
+    fn pqzh_id_d3() {
+        let h = crate::merkle::keccak(&[b"scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1"]);
+        assert_eq!(h, PQZH_PROOF_SYSTEM_ID);
+    }
+
+    /// D5: the largest input, a PQZH transfer with a proof at the limit, fits MAX_INPUT
+    #[test]
+    fn input_limit() {
+        assert_eq!(INPUT_HEADER + TX_STMT + PQZH_MAX_PROOF, 345_221);
+        assert!(INPUT_HEADER + TX_STMT + PQZH_MAX_PROOF.max(PQZL_MAX_PROOF) <= MAX_INPUT);
     }
 }

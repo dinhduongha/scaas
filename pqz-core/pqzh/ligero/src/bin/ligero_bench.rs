@@ -117,7 +117,7 @@ fn main() {
             lens.iter().min().unwrap(),
             lens.iter().max().unwrap(),
             p.max_len_exact(op),
-            p.max_len(op),
+            p.max_proof_len(op),
             pt.iter().fold(2166136261u32, |h, &b| (h ^ b as u32).wrapping_mul(16777619)),
             bd.join(", ")
         );

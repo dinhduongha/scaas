@@ -751,8 +751,7 @@ verifier still covers `R_REG` / `R_TX` only.
   sixth form.
 - Task 6: the switch to `pqz-stmt` (§12.1), `soundness` / `breakdown` (floats) behind `bench`, then
   `runs/measure.sh` byte-identical to these hedged proofs.
-- Task 9: the D3 id in the statements, `max_len_exact` as the verifier's bound with the "reject `MAX + 1` before
-  parsing" test, the prover retry if a proof would exceed it.
+- Task 9: done on `p6e-b2`, §13.
 
 ### 12.5 Rerun
 
@@ -760,4 +759,77 @@ verifier still covers `R_REG` / `R_TX` only.
 scripts/capped pqz-core/pqzh/ligero/runs/rel5.sh l7   # tests, native both presets, wasm32, xcheck, fixtures, forge
 scripts/capped pqz-core/pqzh/xcheck/ligero.sh         # statement / witness bytes vs pqz_bench.c, all five relations
 scripts/capped pqz-core/pqzh/ligero/runs/gateb.sh l9  # tests, --no-default-features, native FNV, wasm32 1,000 verifies
+```
+
+## 13. P6e Task 9: the PQZH id, the exact length bound, the limits
+
+Branch `p6e-b2` (from main `99ad859`), plan Task 9 (D3, D5, G7) without `pqz-stmt` (Task 6). Results, not decisions
+(the decision lines, D3 under CTR-PQZ-09 and D5 under CTR-PQZ-10, are in `docs/decisions.md`). Runs `runs/l10-*` (failed,
+kept), `runs/l11-*` (`runs/limits.sh`, one capped session; xcheck and forge rerun after the `kat_stmt.py` fix below).
+
+### 13.1 What changed
+
+- **Id (D3).** `stmt.rs` `PQZH_PROOF_SYSTEM_ID` = `keccak256("scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1")`
+  = `0x0a47a7689250ba178a52ad5972cdd9153358c022cb694c08d2389e82de2fead4` (unit test `pqzh_id_d3` hashes the string),
+  replacing the STARK's provisional `0xaa1f92dd…`. `cs::parse`, which both prover and verifier call first, returns
+  nothing for a statement whose bytes 32..63 carry another id, so such a statement is neither proved nor verified
+  (`tests/attacks.rs` `other_ids_and_length_bound_rejected`: PQZL's id, the STARK id and zeros, all five relations).
+  The Solidity port (`LigeroVerifier.sol` `stmtOk`) checks the id too.
+- **Statements as the precompile takes them.** `client::setup` writes each op's opTag `keccak256("SCAAS-PQZ-OP-<NAME>-V1")`
+  at bytes 0..31 (was pqz_bench.c's filler) and, for `R_TX`, the auditorOn word = 1 (R6); the relations only hash those
+  bytes. `xcheck/dump_setup.c pqzh` patches pqz_bench.c's statements the same way (pqz_bench.c itself, PQZL's, is
+  unchanged), and `xcheck/kat_stmt.py` makes pqz_kat.py parse every Ligero statement under its D15 / R6 rules with
+  PQZH's id only (PQZL's id: rejected) and rebuild it byte for byte from the parsed fields with its own builders.
+- **Exact length bound (G7).** The verifier's first check, before the statement or the proof is parsed, is
+  `Params::proof_len_ok(op, len)`: `1 ≤ len ≤ max_proof_len(op)` = `max_len_exact(op)` (§12.1). It rejects nothing the
+  parser would accept (a longer proof cannot be consumed exactly); it rejects early. Unit tests: `limits_exact` (the
+  table below; `MAX` passes the gate, `MAX + 1` and 0 do not), `max_len_exact_multiproof_tight` (the bound equals the
+  proof grammar at t evenly spread columns: root, polynomials, nonce, t columns, that set's multiproof). Integration: an
+  honest proof zero-padded to `MAX` passes the gate and is rejected as not consumed exactly, `MAX + 1` is rejected by
+  the gate. The bound is not capped at 262,144 B: run `l10` capped it and the reference preset "proven without radix
+  431" (n = 6,536, t = 166, not the id) then refused every `R_TX` proof (`runs/l10-tests-failed-cap.txt`); D5's limit
+  holds at THE preset, which is what the id fixes.
+- **Prover retry.** `prove_inner` proves again with the RNG stream continued (fresh masks and salts, so a fresh
+  commitment, query set and multiproof) if a proof is longer than the verifier's bound, at most 16 attempts, then
+  `Err("proof length")`. It is a guard: every proof is ≤ `max_len_exact` by construction, so the first attempt always
+  returns and proof bytes are unchanged from a prover without it. Unit test `prover_retries_over_limit`: the first
+  attempt equals `prove`'s proof; with the limit set one byte below it the retry returns a shorter proof with another
+  commitment, which verifies; an impossible limit gives `Err("proof length")`.
+- **Limits (D5).** `stmt.rs` `PQZL_MAX_PROOF` 98,304, `PQZH_MAX_PROOF` 262,144, `MAX_INPUT` 393,216, `INPUT_HEADER` 5
+  (move to `pqz-stmt` with Task 6); unit test `input_limit`: 5 + 83,072 + 262,144 = 345,221 ≤ 393,216.
+
+### 13.2 Limits at THE preset [measured: unit test `limits_exact`, `runs/l11-proven.jsonl` 5 proofs per relation]
+
+| Relation | Statement B | Exact max proof B (verifier bound) | Proofs measured (5 seeds) | 5 + statement + max | ≤ 262,144 / ≤ 393,216 |
+|---|---|---|---|---|---|
+| `R_REG` | 16,480 | 190,458 | 186,232–187,674 | 206,943 | yes / yes |
+| `R_TX` | 83,072 | 235,470 | 231,854–232,462 | 318,547 | yes / yes |
+| `R_BURN` | 50,048 | 234,744 | 230,568–231,896 | 284,797 | yes / yes |
+| `R_DS` | 33,184 | 190,458 | 187,354–187,802 | 223,647 | yes / yes |
+| `R_DR` | 33,184 | 190,458 | 185,462–187,226 | 223,647 | yes / yes |
+
+The largest input any PQZH proof allows is 318,547 B (`R_TX`); `MAX_INPUT` is sized for 5 + 83,072 + 262,144 = 345,221 B.
+`R_TX0` (auditor off, 66,560 B) is not built (Task 8, after PQZL Task 2).
+
+### 13.3 Runs [measured]
+
+- `runs/l11-tests.txt`: 13 unit tests and 15 integration tests pass (`l9`: 9 and 14), 4,800 mutations 0 accepted /
+  0 panics; `evm_fixtures` passes on the re-exported fixtures. `runs/l11-nobench.txt`: the production build
+  (`--no-default-features`) lib and its 13 unit tests.
+- `runs/l11-proven.jsonl`: native, proven, 5 proofs, 10 honest verifies, 12 × 4 mutations per relation, 0 accepted,
+  0 panics; verify p50 7.1–9.7 ms (`R_TX` 9.73 ms, `l7` 9.72 ms). No wasm32 run: the verifier changed by an O(1)
+  length gate and a 32-byte compare, nothing per column, so the gate-B wasm32 numbers of §12.3 (`l9`) stand.
+- `runs/l11-xcheck.txt`: statements and witnesses of all five relations equal to the patched pqz_bench.c bytes, and
+  pqz_kat.py parses and rebuilds all five (`ok`). The first try (`runs/l11-xcheck-failed-burn-rebuild.txt`) failed
+  on `R_BURN` in `kat_stmt.py` itself: it dropped the auditorOn word for every debit op, while pqz_kat.py's builder
+  sets it only for TRANSFER; fixed in the script.
+- EVM: `ligero_export` re-wrote the fixtures (`runs/l10-export.jsonl` = `runs/l11-export.jsonl`; statements now carry
+  the opTags, the D3 id and auditorOn, so every statement and proof file changed); `runs/l11-forge.txt`: 14 tests pass,
+  the six honest proofs accepted, 6 × 108 mutations 0 accepted / 0 reverts, the 7 negative witnesses rejected; verify gas
+  of proven `R_TX` 530.3 M (`l7` 530.3 M), so §11 stands.
+
+### 13.4 Rerun
+
+```sh
+scripts/capped pqz-core/pqzh/ligero/runs/limits.sh l11   # fixtures, tests, --no-default-features, native bench, xcheck, forge
 ```

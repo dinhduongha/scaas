@@ -23,6 +23,8 @@ contract LigeroVerifier {
     uint8 internal constant OP_REGISTER = 3;
     uint256 internal constant TX_STMT = 83_072;
     uint256 internal constant REG_STMT = 16_480;
+    /// proofSystemId, statement bytes 32..63 (plan D3): keccak256("scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1")
+    bytes32 internal constant PQZH_ID = 0x0a47a7689250ba178a52ad5972cdd9153358c022cb694c08d2389e82de2fead4;
     // R_TX small items (Layout::small indices) and the slack base
     uint256 internal constant E2 = 0;
     uint256 internal constant DD = 1;
@@ -417,6 +419,7 @@ contract LigeroVerifier {
     function stmtOk(V memory v, bytes calldata s) internal pure returns (bool ok) {
         uint256 o;
         uint256 nco;
+        if (s.length < 64 || bytes32(s[32:64]) != PQZH_ID) return false;
         if (v.op == OP_REGISTER) {
             if (s.length != REG_STMT) return false;
             (o, nco) = (96, 2048);

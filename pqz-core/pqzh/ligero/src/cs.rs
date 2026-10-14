@@ -235,8 +235,12 @@ impl Rd<'_> {
     }
 }
 
-/// pqz-core's statement checks: exact length, canonical coefficients, read words < 2^64 (pqz_rel.c build)
+/// pqz-core's statement checks: exact length, canonical coefficients, read words < 2^64 (pqz_rel.c build); plus
+/// proofSystemId = PQZH's (D3, bytes 32..63 of every form): a statement of another id is no PQZH statement
 pub fn parse(op: u8, stmt: &[u8]) -> Option<Stmt> {
+    if stmt.get(32..64)? != PQZH_PROOF_SYSTEM_ID {
+        return None;
+    }
     match op {
         OP_REGISTER if stmt.len() == REG_STMT => Some(Stmt::Reg(rd_polyvec(&stmt[PREFIX + 32..])?)),
         OP_TRANSFER | OP_BURN if stmt.len() == (if op == OP_BURN { BURN_STMT } else { TX_STMT }) => {
