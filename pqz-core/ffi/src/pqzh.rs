@@ -1,12 +1,9 @@
 //! PQZH: the Ligero crate (pure Rust, no global state, so no lock), behind this thin adapter. Everything that names
-//! the Ligero API is here: when the crate moves onto `pqz-stmt` and gains `R_TX0` (P6e Tasks 6, 8, branch `p6e-b3`),
-//! only this file changes.
+//! the Ligero API is here (on `pqz-stmt` with all six forms since P6e Tasks 6, 8).
 use pqzh_ligero::Params;
 
-/// THE preset of the D3 id (proven, radix 431, n = 32,756, k = 817, t = 121, l = 695), written out: `Params::proven()`
-/// derives t with f64 arithmetic, and the verify path has no floats (plan Global Constraints). The unit test
-/// `pqzh_params_are_the_preset` pins it to `Params::proven()`.
-pub const PARAMS: Params = Params { n: 32756, k: 817, ell: 695, t: 121, pow_bits: 16, proven: true, johnson: false };
+/// THE preset of the D3 id (proven, radix 431, n = 32,756, k = 817, t = 121, l = 695): a `const fn`, no floats.
+pub const PARAMS: Params = Params::proven();
 
 /// The Ligero verifier (it catches its own panics; `crate::precompile` catches any other).
 pub fn verify(op: u8, stmt: &[u8], proof: &[u8]) -> bool {
@@ -32,12 +29,4 @@ pub fn fft_kat() -> (Vec<u8>, bool) {
     let mut out = Vec::with_capacity(6 * n);
     f.iter().for_each(|x| x.put(&mut out));
     (out, d.ifft(&f) == a)
-}
-
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn pqzh_params_are_the_preset() {
-        assert_eq!(super::PARAMS, pqzh_ligero::Params::proven());
-    }
 }

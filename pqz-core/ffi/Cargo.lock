@@ -99,6 +99,7 @@ version = "0.1.0"
 name = "pqzh-ligero"
 version = "0.1.0"
 dependencies = [
+ "pqz-stmt",
  "sha3",
 ]
 

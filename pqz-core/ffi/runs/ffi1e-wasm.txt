@@ -1,0 +1,23 @@
+# wasm32: the verify-only lib, then the prove harness (wasm/) and the digest diff against native
+$ cargo build --release --offline --lib --target wasm32-unknown-unknown
+   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/p6ea3/pqz-core/pqzh/ligero)
+   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/p6ea3/pqz-core/ffi)
+    Finished `release` profile [optimized + debuginfo] target(s) in 1.83s
+[rc=0]
+$ cargo build --release --offline --target wasm32-unknown-unknown
+   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/p6ea3/pqz-core/pqzh/ligero)
+   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/p6ea3/pqz-core/ffi)
+   Compiling pqz-ffi-wasm v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/p6ea3/pqz-core/ffi/wasm)
+    Finished `release` profile [optimized] target(s) in 2.97s
+[rc=0]
+$ sha256sum wasm/target/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm
+181fb8608987af168140a8a053f5b088ea7056a0fb1cf6dd7a4379f94be45497  wasm/target/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm
+[rc=0]
+wasm bytes 845574
+$ llvm-nm-18 --undefined-only wasm/target/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm (imports)
+strings /gmp|mpfr|hexl/i: 0
+node rc=0
+wasm run 16067 ms, memory 622919680 B
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:16.13
+	Maximum resident set size (kbytes): 375608
+native = wasm32: 17 lines equal

@@ -435,6 +435,12 @@ LaZer's key generation is not graceful (Open 2); 14–20 MiB fails gracefully, �
 (`ffi/runs/ffi1d-arena-probe.txt`, `ffi/runs/arena-probe.sh`). Status 4 therefore covers the exhaustion the core survives;
 the production arena (136 MiB, 1.5 × the six-form peak) keeps it out of reach. All other `ffi1d` checks as `ffi1c`.
 
+**After `p6e-b3` (merged into `p6e-a3`), run `ffi1e`:** the adapter takes `Params::proven()` (now a `const fn`) instead
+of the written-out preset; PQZH gets `R_TX0` (Ligero Task 8), so both ids run all 8 forms: round trips 8 + 8, the
+digest lines 16 + the self-test equal native = wasm32 (17 lines), the PQZH self-test proof byte-identical (no
+regeneration, hash still `ed910a2c…`); all other checks green as `ffi1d`. PQZH `R_TX0` through the FFI [measured]: proof
+231,064 B, p50 / p99 direct 9.44 / 10.13 ms, C ABI 9.41 / 10.71 ms.
+
 ## Measured (2026-10-13, this machine, single thread)
 
 Native: clang -O2, `pqz_bench 5 5` under `scripts/capped` (5 proves, 5 + 5 honest verifies, 10 adversarial). wasm32:

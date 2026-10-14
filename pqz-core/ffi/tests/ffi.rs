@@ -24,17 +24,13 @@ impl Honest {
     }
 }
 
-/// Every form of both ids, proved once per process. PQZH `R_TX0` is left out until Ligero has the relation (P6e Task 8,
-/// branch `p6e-b3`); `pqzh_tx0_pending` pins today's behaviour.
+/// Every form of both ids, proved once per process.
 fn honest() -> &'static [Honest] {
     static H: OnceLock<Vec<Honest>> = OnceLock::new();
     H.get_or_init(|| {
         let mut v = Vec::new();
         for id in [PQZL_ID, PQZH_ID] {
             for case in fixture::cases(&id).expect("fixture") {
-                if id == PQZH_ID && case.form == Form::Transfer0 {
-                    continue;
-                }
                 let proof = prove(case.op(), &case.stmt, &case.wit, &RND)
                     .unwrap_or_else(|e| panic!("prove {:?} {:?}: {e:?}", id[0], case.form));
                 v.push(Honest { id, case, proof });
@@ -57,17 +53,7 @@ fn round_trip_every_form() {
         assert_eq!(precompile(&h.input()), Ok(VALID), "same input twice");
     }
     assert_eq!(honest().iter().filter(|h| h.pqzl()).count(), 8);
-    assert_eq!(honest().iter().filter(|h| !h.pqzl()).count(), 7);
-}
-
-#[test]
-fn pqzh_tx0_pending() {
-    // Ligero has no R_TX0 yet (Task 8): its prover refuses, and a PQZH auditor-off input is invalid
-    let c = fixture::cases(&PQZH_ID).unwrap().into_iter().find(|c| c.form == Form::Transfer0).unwrap();
-    match prove(1, &c.stmt, &c.wit, &RND) {
-        Err(e) => eprintln!("PQZH R_TX0 prove: {e:?} (pending Task 8)"),
-        Ok(p) => assert_eq!(precompile(&stmt::input(1, &c.stmt, &p)), Ok(VALID)),
-    }
+    assert_eq!(honest().iter().filter(|h| !h.pqzl()).count(), 8);
 }
 
 /// (name, mutated input, expected decoder verdict: Some(reason) or None = decodes, rejected by the verifier)
@@ -351,7 +337,7 @@ fn one_mib_stack() {
 #[test]
 fn digest_lines() {
     let s = fixture::digest_lines(&PQZL_ID) + &fixture::digest_lines(&PQZH_ID) + &fixture::selftest_line();
-    assert_eq!(s.matches("\"valid\": true").count(), 15, "{s}");
+    assert_eq!(s.matches("\"valid\": true").count(), 16, "{s}");
     if let Ok(p) = std::env::var("PQZ_FFI_DIGESTS") {
         std::fs::write(p, s).unwrap();
     }

@@ -80,7 +80,7 @@ node wasm/run_wasm.mjs wasm/target/wasm32-unknown-unknown/release/pqz_ffi_wasm.w
 ```
 
 Tests (`tests/ffi.rs`): honest round trip of every form of both ids (PQZL 8 forms = six relations + REFRESH +
-AUDITOR; PQZH 7, `R_TX0` pending in Ligero); every decoder rejection (each D15 / R6 rule with its `Reject`, op /
+AUDITOR; PQZH the same 8); every decoder rejection (each D15 / R6 rule with its `Reject`, op /
 opTag / id confusion, lengths ± 1, `MAX_PROOF + 1`, truncated / extended / bit-flipped proofs, the other system's
 id, framing, `MAX_INPUT + 1` = revert); the PQZL differential test (SV vs generic through the FFI on honest and
 mutated proofs); abort-freedom (10,240 random / random-proof / edited inputs through the C ABI, serial and from 8
@@ -88,11 +88,10 @@ threads: identical results, status 3 never, only unedited honest inputs valid); 
 (A digest = `pqz_kat.py`); the compiled-in self-test proofs equal a fresh prove; the precompile path on a 1 MiB
 caller stack; `pqz_ffi.h`'s constants; node faults (`tests/fault.rs`: an 8 MiB arena and a failing worker give status 4 with `out` untouched, verify again afterwards); the digest lines (native half of the wasm32 byte-equality check).
 
-## PQZH: the switch after `p6e-b3`
+## PQZH adapter
 
-Everything that names the Ligero API is `src/pqzh.rs` (`PARAMS`, `verify`, `prove`, `fft_kat`). When Ligero moves onto
-`pqz-stmt` (Task 6) and gains `R_TX0` (Task 8): adjust those calls if their signatures change, drop the `Transfer0`
-skip in `tests/ffi.rs` (`honest`, `pqzh_tx0_pending`) and the PQZH count (7 → 8) there and in `digest_lines`
-(15 → 16), and regenerate `selftest/pqzh_reg.hex` if the proof format changed.
+Everything that names the Ligero API is `src/pqzh.rs` (`PARAMS = Params::proven()`, `verify`, `prove`, `fft_kat`).
+Since `p6e-b3` (merged, run `ffi1e`) Ligero decodes through `pqz-stmt` and has all six relations, so PQZH covers every
+form; its proof bytes for the self-test vector were unchanged by the switch (`selftest_vectors`).
 
 Results: [STATUS.md](../STATUS.md) §"`pqz-ffi`", runs in `runs/`.
