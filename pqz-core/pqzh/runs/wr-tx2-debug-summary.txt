@@ -1,0 +1,40 @@
+busy_s  count  span  [module]  (nested spans are counted inside their parents too)
+   217.00       1  prove_batch  [p3_batch_stark::prover]
+   177.04       4  compute quotient  [p3_batch_stark::prover]
+   176.70       4  compute quotient polynomial  [p3_batch_stark::prover]
+    62.04  689865  batch_multiplicative_inverse  [p3_field::batch_inverse]
+    48.42  689796  columnwise_dot_product  [p3_matrix]
+    30.43       4  prove  [p3_whir::pcs::zk::prover]
+    15.30      78  build merkle tree  [p3_merkle_tree::merkle_tree]
+     1.23      16  into_zk_sumcheck  [p3_sumcheck::zk::prover::residual]
+     1.06     124  reverse_matrix_index_bits  [p3_matrix::util]
+     0.31      12  combine_packed  [p3_sumcheck::constraints::statement::select]
+     0.04       1  verify_batch  [p3_batch_stark::verifier]
+     0.03       4  verify  [p3_whir::pcs::zk::verifier]
+     0.02       4  generate lookup permutation  [p3_lookup::logup]
+     0.01       4  Compute Selectors  [p3_batch_stark::prover]
+     0.00       4  verify constraints  [p3_batch_stark::verifier]
+     0.00      16  evals  [p3_sumcheck::strategy]
+     0.00      16  infer constraint degree  [p3_batch_stark::symbolic]
+     0.00      16  evaluate constraints symbolically  [p3_batch_stark::symbolic]
+     0.00       4  infer log of constraint degree  [p3_batch_stark::prover]
+     0.00       4  infer log of constraint degree  [p3_batch_stark::verifier]
+     0.00       4  compute constraint layout with lookups  [p3_batch_stark::symbolic]
+--- spans closing with >= 0.5 s busy, in order
+    1.72  prove_batch:build merkle tree{dimensions="[20x2097152]"}
+    0.85  prove_batch:build merkle tree{dimensions="[20x1048576]"}
+    0.67  prove_batch:compute quotient{air_idx=0}:compute quotient polynomial
+    1.00  prove_batch:compute quotient{air_idx=0}
+  176.00  prove_batch:compute quotient{air_idx=1}:compute quotient polynomial
+  176.00  prove_batch:compute quotient{air_idx=1}
+    1.65  prove_batch:build merkle tree{dimensions="[20x2097152]"}
+    1.96  prove_batch:prove:build merkle tree{dimensions="[84x1048576]"}
+    0.97  prove_batch:prove:build merkle tree{dimensions="[84x524288]"}
+   10.00  prove_batch:prove
+    1.98  prove_batch:prove:build merkle tree{dimensions="[84x1048576]"}
+    0.97  prove_batch:prove:build merkle tree{dimensions="[84x524288]"}
+   13.40  prove_batch:prove
+    2.02  prove_batch:prove
+    0.97  prove_batch:prove:build merkle tree{dimensions="[84x524288]"}
+    5.01  prove_batch:prove
+  217.00  prove_batch

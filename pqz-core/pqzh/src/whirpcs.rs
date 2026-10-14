@@ -512,6 +512,17 @@ where
         Ok(())
     }
 
+    /// Periodic columns on the quotient domain by DFT, as p3-fri's PCSs do. The trait default interpolates point by
+    /// point (O(quotient size × period)): 164 of the 206 s of an `R_TX` proof (docs/research/pqzh-zk-whir.md §10.3).
+    fn build_periodic_lde_table(
+        &self,
+        periodic_cols: &[Vec<F>],
+        trace_domain: Domain,
+        quotient_domain: Domain,
+    ) -> p3_commit::PeriodicLdeTable<F> {
+        p3_fri::build_periodic_lde_table_two_adic(&self.dft, periodic_cols, &trace_domain, &quotient_domain)
+    }
+
     fn get_opt_randomization_poly_commitment(
         &self,
         domains: impl IntoIterator<Item = Domain>,

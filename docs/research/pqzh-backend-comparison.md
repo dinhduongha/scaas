@@ -26,7 +26,7 @@ The FRI + ZK STARK and ZK WHIR lose to it on every axis except native verify, wh
 | Proof bytes | 231,000–232,430 (5 seeds), exact max 235,470 [measured, `ligero/runs/l7-proven.jsonl`] | 92,072 [measured, `ligero/runs/l2-conj-r431-*.jsonl`] | 257,592 [measured, `ligero/runs/l4-johnson.jsonl`] | 622,448 (worst ≈ 672 KB) [measured, `pqzh-zk-ext5.md` §7] | 340,431 (worst ≈ 365 KB) [measured, same] | 1,948,901 [measured, `runs/w2-zkwhir5-r3.jsonl`] |
 | ≤ 160 KB (owner line 2026-10-13) | no | yes | no | no | no | no |
 | ≤ 256 KB (controller proposal) | yes | yes | no (worst case 273,288) | no | no | no |
-| Prove native | 0.65 s, 43 MB [measured, l7] | 0.93 s, 50 MB | 0.61 s | 20.4 s, 2.82 GB | 20.3 s, 2.82 GB | 206 s, 2.42 GB |
+| Prove native | 0.65 s, 43 MB [measured, l7] | 0.93 s, 50 MB | 0.61 s | 20.4 s, 2.82 GB | 20.3 s, 2.82 GB | 43.0 s after the adapter fix (206 s before: a point-by-point periodic LDE in our adapter, fixed in the re-examination) [measured, `runs/wr-tx3.jsonl`], 2.42 GB |
 | Verify p99 native | 10.8 ms [measured, l7] | 3.5 ms | 12.2 ms | 19.1 ms | 15.5 ms | 46.5 ms |
 | Verify p99 wasm32 (limit 60 ms) | **18.7 ms** over 1,000 verifies [measured, `ligero/runs/l9-proven-wasm.jsonl`; 59.7 ms before the 21-bit multiply, `l8-*`] | 16.8 ms (before the 21-bit multiply) | 60.3 ms (before the 21-bit multiply) | 28.7 ms | 24.1 ms | 93.5 ms |
 | Relations built | 5 of 5 (+ `R_TX0` pending P6e Task 8) | 5 (bench feature only) | 2 (bench feature only) | 2 of 5 | 2 of 5 | 2 of 5 |
@@ -34,9 +34,18 @@ The FRI + ZK STARK and ZK WHIR lose to it on every axis except native verify, wh
 | EVM, one tx, no precompile (cap 16,777,216) | 534.6 M gas (31.9×) [measured, `ligero/runs/l6-forge.txt`]; ≈ 124 M at the opcode floor [estimate, `e1-evm-model.txt`] | 179.0 M | 649.7 M | 21.4 M calldata floor alone (`pqzh-solidity-verifier.md`) | ≈ 15 M with a tuned verifier [estimate] | not measured |
 | EVM split over several txs (StarkEx style) | 19 txs, ≈ 319 M [estimate, `pqz-core/pqzh/sol/starkex_split.txt`] | — | — | ≈ 21.4 M over 4 txs with a tuned Yul verifier, ≈ 38.5 M as test-level code [estimate, same] | — | — |
 
-Sources: `pqzh-ligero.md` §6, §11, §12; `pqzh-zk-ext5.md` §7; `pqzh-zk-whir.md` §7–§9 (and §10, the re-examination,
-when it lands); `pqzh-solidity-verifier.md`; `pqzh-starkex-verifier.md` §6. Non-ZK WHIR (`p3-multi-stark`, 257,530 B at
+Sources: `pqzh-ligero.md` §6, §11, §12; `pqzh-zk-ext5.md` §7; `pqzh-zk-whir.md` §7–§9 and §10 (the re-examination); `pqzh-solidity-verifier.md`; `pqzh-starkex-verifier.md` §6. Non-ZK WHIR (`p3-multi-stark`, 257,530 B at
 125.3 bits, `pqzh-zk-ext5.md` §8) is left out: zero knowledge is required (owner 2026-10-13).
+
+**ZK WHIR re-examined (owner "Xem lại WHIR", 2026-10-14; `pqzh-zk-whir.md` §10, merged):** the 1.95 MB measurement is
+right (a fresh proof's byte breakdown sums exactly; ≈ 357–363 KB masked base case + 111–121 KB rounds per opening, four
+openings); the ≈ 360 KB per opening is inherent to HVZK WHIR as ePrint 2026/391 defines it (the paper gives only an
+asymptotic Õ(k·λ) overhead; its Construction 7.2 built as written gives the same size); p3-whir's soundness counting
+(eight list sizes multiplied) is why Goldilocks² shows 0 bits. The 206 s prove was an adapter bug (now 43.0 s, same
+proof bytes). Best untried route — ZK at the STARK layer with plain WHIR, a coset domain and a full-size random
+polynomial in one batched opening — is ≈ 270–330 KB and ≈ 15–25 s [estimate], 2–3 weeks, ZK argued only by analogy;
+non-ZK WHIR alone is already 238,932–257,530 B. No WHIR variant matches Ligero proven; recommendation: build no more
+ZK WHIR (adapter kept with the fix as the record).
 
 ## 3. Proven vs conjectured vs Johnson [inference, from the notes' §5 analyses]
 
