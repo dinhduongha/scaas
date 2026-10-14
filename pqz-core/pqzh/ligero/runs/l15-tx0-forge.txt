@@ -1,0 +1,177 @@
+Compiling 3 files with Solc 0.8.37
+Solc 0.8.37 finished in 1.37s
+Compiler run successful with warnings:
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/pqzh/ligero/LigeroTest.t.sol:275:13:
+    |
+275 |             uint8[3] memory at = [31, 31, 0];
+    |             ^^^^^^^^^^^^^^^^^^
+
+Warning (2319): This declaration shadows a builtin symbol.
+   --> test/pqzh/ligero/LigeroTest.t.sol:324:9:
+    |
+324 |         bytes memory tx = file("tx-proven.stmt");
+    |         ^^^^^^^^^^^^^^^
+
+Warning (2018): Function state mutability can be restricted to view
+  --> test/pqzh/ligero/LigeroTest.t.sol:52:5:
+   |
+52 |     function measure(string memory rel, string memory pre) internal {
+   |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to view
+   --> test/pqzh/ligero/LigeroTest.t.sol:256:5:
+    |
+256 |     function stmtAndLength(string memory rel, uint256 expectMax) internal {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to view
+   --> test/pqzh/ligero/LigeroTest.t.sol:322:5:
+    |
+322 |     function test_cross_form_tx_tx0() public {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to view
+   --> test/pqzh/ligero/LigeroTest.t.sol:331:5:
+    |
+331 |     function test_negative_witnesses() public {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+
+Ran 1 test for test/pqzh/ligero/LigeroUnits.t.sol:LigeroUnitsTest
+[PASS] test_units() (gas: 29602664)
+Logs:
+  {"unit": "own_mac_this_code", "gas": 180.00}
+  {"unit": "own_mac_tuned_8x", "gas": 159.87}
+  {"unit": "poly_coeff_eval", "gas": 213.00}
+  {"unit": "power", "gas": 88.00}
+  {"unit": "lagrange_slot", "gas": 346.00}
+  {"unit": "dotU_row", "gas": 194.00}
+  {"unit": "quad_triple", "gas": 380.00}
+  {"unit": "ext_mul", "gas": 598.00}
+  {"unit": "ext_add_sub_pair", "gas": 681.00}
+  {"unit": "a_pass_term", "gas": 284.39}
+  {"unit": "ring_step_k64", "gas": 3923.07}
+
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 112.95ms (111.98ms CPU time)
+
+Ran 19 tests for test/pqzh/ligero/LigeroTest.t.sol:LigeroTest
+[PASS] test_cross_form_tx_tx0() (gas: 8705924)
+[PASS] test_gas_reg_conj() (gas: 79423237)
+Logs:
+  {"rel": "reg", "preset": "conj", "n": 18533, "k": 172, "t": 20, "distinct": 20, "proof_bytes": 62912, "verify_gas": 64909802
+    "stages": {"stmt_seed": 367593, "transcript_pow_indices": 2391180, "columns_merkle": 747893, "a_copy": 723913, "comb_ring": 30927397, "comb_rest_sum": 836087, "column_checks": 28915200}
+    "tx": {"proof_tokens": 243773, "proof_floor_7623": 2437730, "other_tokens": 67000, "other_exec": 3450000, "tx_std_2028": 69623894, "tx_eip7623": 69623894, "cap": 16777216, "fits": false}}
+
+[PASS] test_gas_reg_johnson() (gas: 450248526)
+Logs:
+  {"rel": "reg", "preset": "johnson", "n": 6536, "k": 862, "t": 152, "distinct": 150, "proof_bytes": 201908, "verify_gas": 403303896
+    "stages": {"stmt_seed": 232099, "transcript_pow_indices": 4610275, "columns_merkle": 2082131, "a_copy": 860540, "comb_ring": 31064033, "comb_rest_sum": 1825818, "column_checks": 362628461}
+    "tx": {"proof_tokens": 784169, "proof_floor_7623": 7841690, "other_tokens": 67000, "other_exec": 3450000, "tx_std_2028": 410179572, "tx_eip7623": 410179572, "cap": 16777216, "fits": false}}
+
+[PASS] test_gas_reg_proven() (gas: 364725653)
+Logs:
+  {"rel": "reg", "preset": "proven", "n": 32756, "k": 817, "t": 121, "distinct": 120, "proof_bytes": 186904, "verify_gas": 321310657
+    "stages": {"stmt_seed": 233104, "transcript_pow_indices": 3580530, "columns_merkle": 2068410, "a_copy": 865780, "comb_ring": 31054035, "comb_rest_sum": 1756336, "column_checks": 281751923}
+    "tx": {"proof_tokens": 726775, "proof_floor_7623": 7267750, "other_tokens": 67000, "other_exec": 3450000, "tx_std_2028": 327956757, "tx_eip7623": 327956757, "cap": 16777216, "fits": false}}
+
+[PASS] test_gas_tx0_proven() (gas: 570728720)
+Logs:
+  {"rel": "tx0", "preset": "proven", "n": 32756, "k": 817, "t": 121, "distinct": 121, "proof_bytes": 231320, "verify_gas": 516339926
+    "stages": {"stmt_seed": 830155, "transcript_pow_indices": 4161767, "columns_merkle": 2701342, "a_copy": 973672, "comb_ring": 89822378, "comb_rest_sum": 4746510, "column_checks": 413103563}
+    "tx": {"proof_tokens": 897926, "proof_floor_7623": 8979260, "other_tokens": 119000, "other_exec": 310000, "tx_std_2028": 520738630, "tx_eip7623": 520738630, "cap": 16777216, "fits": false}}
+
+[PASS] test_gas_tx_conj() (gas: 198349933)
+Logs:
+  {"rel": "tx", "preset": "conj", "n": 18533, "k": 344, "t": 24, "distinct": 24, "proof_bytes": 92104, "verify_gas": 176718552
+    "stages": {"stmt_seed": 1114741, "transcript_pow_indices": 2781508, "columns_merkle": 895623, "a_copy": 865121, "comb_ring": 98639885, "comb_rest_sum": 4933431, "column_checks": 67487704}
+    "tx": {"proof_tokens": 356695, "proof_floor_7623": 3566950, "other_tokens": 119000, "other_exec": 310000, "tx_std_2028": 178952332, "tx_eip7623": 178952332, "cap": 16777216, "fits": false}}
+
+[PASS] test_gas_tx_johnson() (gas: 709488634)
+Logs:
+  {"rel": "tx", "preset": "johnson", "n": 6536, "k": 862, "t": 152, "distinct": 152, "proof_bytes": 259080, "verify_gas": 648272079
+    "stages": {"stmt_seed": 1013168, "transcript_pow_indices": 5225357, "columns_merkle": 2920943, "a_copy": 997374, "comb_ring": 98697445, "comb_rest_sum": 5163244, "column_checks": 534254009}
+    "tx": {"proof_tokens": 1004754, "proof_floor_7623": 10047540, "other_tokens": 119000, "other_exec": 310000, "tx_std_2028": 653098095, "tx_eip7623": 653098095, "cap": 16777216, "fits": false}}
+
+[PASS] test_gas_tx_proven() (gas: 581362546)
+Logs:
+  {"rel": "tx", "preset": "proven", "n": 32756, "k": 817, "t": 121, "distinct": 120, "proof_bytes": 231416, "verify_gas": 526767793
+    "stages": {"stmt_seed": 1014680, "transcript_pow_indices": 4124491, "columns_merkle": 2714789, "a_copy": 999969, "comb_ring": 98770343, "comb_rest_sum": 5361306, "column_checks": 413781676}
+    "tx": {"proof_tokens": 898223, "proof_floor_7623": 8982230, "other_tokens": 119000, "other_exec": 310000, "tx_std_2028": 531167685, "tx_eip7623": 531167685, "cap": 16777216, "fits": false}}
+
+[PASS] test_mutations_reg_conj() (gas: 576558043)
+Logs:
+  {"rel": "reg", "preset": "conj", "mutations": 108, "accepted": 0, "reverts": 0}
+
+[PASS] test_mutations_reg_johnson() (gas: 2858692914)
+Logs:
+  {"rel": "reg", "preset": "johnson", "mutations": 108, "accepted": 0, "reverts": 0}
+
+[PASS] test_mutations_reg_proven() (gas: 2452194212)
+Logs:
+  {"rel": "reg", "preset": "proven", "mutations": 108, "accepted": 0, "reverts": 0}
+
+[PASS] test_mutations_tx0_proven() (gas: 4586948627)
+Logs:
+  {"rel": "tx0", "preset": "proven", "mutations": 108, "accepted": 0, "reverts": 0}
+
+[PASS] test_mutations_tx_conj() (gas: 1604456308)
+Logs:
+  {"rel": "tx", "preset": "conj", "mutations": 108, "accepted": 0, "reverts": 0}
+
+[PASS] test_mutations_tx_johnson() (gas: 5900311528)
+Logs:
+  {"rel": "tx", "preset": "johnson", "mutations": 108, "accepted": 0, "reverts": 0}
+
+[PASS] test_mutations_tx_proven() (gas: 4933541089)
+Logs:
+  {"rel": "tx", "preset": "proven", "mutations": 108, "accepted": 0, "reverts": 0}
+
+[PASS] test_negative_witnesses() (gas: 628109477)
+Logs:
+  {"negative": "reg-norm", "rejected": true, "revert": false}
+  {"negative": "reg-coef", "rejected": true, "revert": false}
+  {"negative": "tx-norm", "rejected": true, "revert": false}
+  {"negative": "tx-digit", "rejected": true, "revert": false}
+  {"negative": "tx-e2", "rejected": true, "revert": false}
+  {"negative": "tx-overspend", "rejected": true, "revert": false}
+  {"negative": "tx-ring", "rejected": true, "revert": false}
+
+[PASS] test_stmt_and_length_reg() (gas: 329906820)
+Logs:
+  {"rel": "reg", "max_proof_len": 190458, "gas_reject_max_padded": 6496667, "gas_reject_max_plus_1": 789467}
+
+[PASS] test_stmt_and_length_tx() (gas: 545640425)
+Logs:
+  {"rel": "tx", "max_proof_len": 235470, "gas_reject_max_padded": 9598262, "gas_reject_max_plus_1": 2012668}
+
+[PASS] test_stmt_and_length_tx0() (gas: 533387558)
+Logs:
+  {"rel": "tx0", "max_proof_len": 234744, "gas_reject_max_padded": 9238092, "gas_reject_max_plus_1": 1823556}
+
+Suite result: ok. 19 passed; 0 failed; 0 skipped; finished in 9.78s (59.52s CPU time)
+
+Ran 2 test suites in 9.78s (9.89s CPU time): 20 tests passed, 0 failed, 0 skipped (20 total tests)
+	Command being timed: "forge test --match-path test/pqzh/ligero/* -vv --gas-limit 9000000000000000000"
+	User time (seconds): 56.06
+	System time (seconds): 1.29
+	Percent of CPU this job got: 390%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:14.69
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 926340
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 455384
+	Voluntary context switches: 1546
+	Involuntary context switches: 16511
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 2000
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0

@@ -1,16 +1,22 @@
-//! R_q = Z_q[X]/(X^64 + 1) as pqz-core uses it (pqz_rel.c): the public matrix A, the statement coefficient codec and
-//! exact integer products. Copied from the Plonky3 crate's `pqzh/src/ring.rs` without its Goldilocks NTT (P6e Task 6
-//! prep: no path dependency on that crate; the copy there stays). Moves to `pqz-stmt` with Task 5 / 6.
+//! R_q = Z_q[X]/(X^64 + 1) as pqz-core uses it (pqz_rel.c): the public matrix A, exact integer products, and the
+//! honest prover's key / ciphertext equations. The statement codec is `pqz-stmt` (plan R2, P6e Task 6); this module
+//! only turns its canonical coefficients into centred polynomials.
 
 use sha3::digest::{ExtendableOutput, Update, XofReader};
 use std::sync::OnceLock;
 
 pub use crate::fq::Q;
-pub const D: usize = 64;
-pub const K: usize = 32;
+pub use pqz_stmt::{D, K};
 pub const DELTA: i64 = (1 << 26) - 1;
 
+const _: () = assert!(pqz_stmt::Q == Q);
+
 pub type Poly = [i64; D];
+
+/// a canonical coefficient (< q) centred into (-q/2, q/2]
+pub fn centre(v: u64) -> i64 {
+    if v > (Q - 1) / 2 { v as i64 - Q as i64 } else { v as i64 }
+}
 
 /// A[i][j] from SHAKE128("SCAAS-PQZ-A-V2" || u8(i) || u8(j)): 8-byte BE words, low 42 bits, accept if < q, centred
 /// (pqz_rel.c expand_A).
@@ -30,7 +36,7 @@ pub fn a_matrix() -> &'static Vec<Poly> {
                     r.read(&mut w);
                     let v = u64::from_be_bytes(w) & ((1u64 << 42) - 1);
                     if v < Q {
-                        out[i * K + j][k] = if v > (Q - 1) / 2 { v as i64 - Q as i64 } else { v as i64 };
+                        out[i * K + j][k] = centre(v);
                         k += 1;
                     }
                 }
@@ -40,28 +46,20 @@ pub fn a_matrix() -> &'static Vec<Poly> {
     })
 }
 
-/// coefficients (be8, each < q) into a centred polynomial; None if a value is >= q (pqz_rel.c rd_poly)
-pub fn rd_poly(b: &[u8], n: usize) -> Option<Poly> {
-    let mut p = [0i64; D];
-    for k in 0..n {
-        let v = u64::from_be_bytes(b[8 * k..8 * k + 8].try_into().unwrap());
-        if v >= Q {
-            return None;
-        }
-        p[k] = if v > (Q - 1) / 2 { v as i64 - Q as i64 } else { v as i64 };
-    }
-    Some(p)
+/// The centred polynomials of a statement object already checked by `pqz_stmt::parse` (`n` coefficients per
+/// polynomial: 64 for pk / u, 16 for v): pk or u (16,384 B) gives 32, v (128 B) one with 16 coefficients.
+pub fn polys_of(b: &[u8], n: usize) -> Vec<Poly> {
+    b.chunks(8 * n)
+        .map(|c| {
+            let mut v = [0u64; D];
+            pqz_stmt::read_coeffs(c, &mut v[..n]).expect("pqz_stmt::parse checked the coefficients");
+            v.map(centre)
+        })
+        .collect()
 }
 
-pub fn rd_polyvec(b: &[u8]) -> Option<Vec<Poly>> {
-    (0..K).map(|i| rd_poly(&b[i * 512..], D)).collect()
-}
-
-pub fn wr_poly(out: &mut [u8], p: &Poly, n: usize) {
-    for k in 0..n {
-        let v = p[k].rem_euclid(Q as i64) as u64;
-        out[8 * k..8 * k + 8].copy_from_slice(&v.to_be_bytes());
-    }
+pub fn polys(v: &[i64]) -> Vec<Poly> {
+    v.chunks(D).map(|c| c.try_into().unwrap()).collect()
 }
 
 /// exact integer negacyclic product sum: sum_j a[j] * b[j] in Z[X]/(X^64 + 1) (|result| < 2^63 assumed)
@@ -84,4 +82,44 @@ pub fn dot_int(a: &[&Poly], b: &[&Poly]) -> Poly {
 pub fn modq(v: i64) -> i64 {
     let r = v.rem_euclid(Q as i64);
     if r > (Q as i64 - 1) / 2 { r - Q as i64 } else { r }
+}
+
+/// pk = A s + e mod q
+pub fn keypair(s: &[Poly], e: &[Poly]) -> Vec<Poly> {
+    let a = a_matrix();
+    (0..K)
+        .map(|i| {
+            let row: Vec<&Poly> = (0..K).map(|j| &a[i * K + j]).collect();
+            let y = dot_int(&row, &s.iter().collect::<Vec<_>>());
+            std::array::from_fn(|m| modq(y[m] + e[i][m]))
+        })
+        .collect()
+}
+
+/// u = A^T r + e1; v_k[i] = (pk_k^T r)[i] + e2_k[i] + Delta m_k[i] (i < 16)
+pub fn encrypt(pks: &[&Vec<Poly>], msgs: &[[u8; 16]], r: &[Poly], e1: &[Poly], e2: &[Vec<i64>]) -> (Vec<Poly>, Vec<Poly>) {
+    let a = a_matrix();
+    let rr: Vec<&Poly> = r.iter().collect();
+    let u = (0..K)
+        .map(|i| {
+            let col: Vec<&Poly> = (0..K).map(|j| &a[j * K + i]).collect();
+            let y = dot_int(&col, &rr);
+            std::array::from_fn(|m| modq(y[m] + e1[i][m]))
+        })
+        .collect();
+    let vs = pks
+        .iter()
+        .zip(msgs)
+        .zip(e2)
+        .map(|((pk, msg), e2)| {
+            let y = dot_int(&pk.iter().collect::<Vec<_>>(), &rr);
+            std::array::from_fn(|i| if i < 16 { modq(y[i] + e2[i] + DELTA * msg[i] as i64) } else { 0 })
+        })
+        .collect();
+    (u, vs)
+}
+
+/// the 16 base-16 digits of x, least significant first
+pub fn digits(x: u64) -> [u8; 16] {
+    std::array::from_fn(|i| ((x >> (4 * i)) & 15) as u8)
 }
