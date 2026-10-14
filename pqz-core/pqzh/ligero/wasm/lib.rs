@@ -55,13 +55,13 @@ pub extern "C" fn step_prove(rel: u32, seed: u32) -> u32 {
     })
 }
 
-/// a valid proof of another statement (prefix byte 0 flipped), for the "other_proof" kind
+/// a valid proof of another statement (byte 64 flipped, hashed only), for the "other_proof" kind
 #[no_mangle]
 pub extern "C" fn step_prove_other(rel: u32) -> u32 {
     with(|st| {
         let (s, w) = st.s.rel(op(rel));
         let mut s2 = s.to_vec();
-        s2[0] ^= 0x80;
+        s2[64] ^= 0x80;
         let pf = prove(op(rel), &s2, w, [9; 32], &st.p[rel as usize]).unwrap_or_default();
         let n = pf.len() as u32;
         st.other[rel as usize] = pf;

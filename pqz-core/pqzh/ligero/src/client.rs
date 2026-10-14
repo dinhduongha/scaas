@@ -190,11 +190,6 @@ pub fn setup() -> Setup {
     setup_with(&Tweak::default())
 }
 
-/// opTag = keccak256("SCAAS-PQZ-OP-<NAME>-V1") (pq-zether.md §7, plan Serialization v1)
-pub fn op_tag(name: &str) -> [u8; 32] {
-    crate::merkle::keccak(&[b"SCAAS-PQZ-OP-", name.as_bytes(), b"-V1"])
-}
-
 /// Statements as the precompile takes them (plan D15 / R6): bytes 0..63 = the op's opTag and the id (pqz_bench.c
 /// writes filler before the id), R_TX's auditorOn word 1 (pqz_bench.c: the header pattern there).
 /// xcheck/dump_setup.c applies the same patch to pqz_bench.c's statements; pqz_kat.py parses and rebuilds them.
@@ -214,7 +209,7 @@ pub fn setup_with(tw: &Tweak) -> Setup {
     let _kx = keygen(&mut rng);
 
     let psid = tw.psid.unwrap_or(PQZH_PROOF_SYSTEM_ID);
-    let mut reg_stmt = op_tag("REGISTER").to_vec();
+    let mut reg_stmt = TAG_REGISTER.to_vec();
     reg_stmt.extend_from_slice(&psid);
     reg_stmt.extend((0..32u8).collect::<Vec<_>>());
     wr_vec(&mut reg_stmt, &kf.pk);
@@ -244,7 +239,7 @@ pub fn setup_with(tw: &Tweak) -> Setup {
     let (u, vs) = encrypt(&[&kt.pk, &kf.pk, &ka.pk], &m, &polys(&r), &polys(&e1), &e2);
 
     let mut tx: Vec<u8> = (0..HEADER).map(|i| if i < PREFIX { 0x5A } else { (i * 3) as u8 }).collect();
-    tx[..32].copy_from_slice(&op_tag("TRANSFER"));
+    tx[..32].copy_from_slice(&TAG_TRANSFER);
     tx[32..64].copy_from_slice(&psid);
     tx[HDR_AUDITOR_ON..HDR_AUDITOR_ON + 32].fill(0);
     tx[HDR_AUDITOR_ON + 31] = 1;
@@ -272,7 +267,7 @@ pub fn setup_with(tw: &Tweak) -> Setup {
 
     // R_DS / R_DR: header words chainId .. entryRef = (i * 7), amount v, kind 0 / 1; pk_t, u, v_t
     let disc = |k: u8| {
-        let mut st = op_tag(["DISCLOSE-SENDER", "DISCLOSE-RECEIVER"][k as usize]).to_vec();
+        let mut st = [TAG_DISCLOSE_SENDER, TAG_DISCLOSE_RECEIVER][k as usize].to_vec();
         st.extend_from_slice(&psid);
         st.extend((PREFIX..DISC_AMOUNT).map(|i| (i * 7) as u8));
         st.extend([0u8; 64]);
@@ -303,7 +298,7 @@ pub fn setup_with(tw: &Tweak) -> Setup {
     let mb = tw.burn_dp.unwrap_or(digits(bp));
     let (ub, vb) = encrypt(&[&kf.pk], &[mb], &polys(&rb), &polys(&e1b), &[e2b.clone()]);
     let mut burn: Vec<u8> = (0..HEADER).map(|i| if i < PREFIX { 0xB2 } else { (i * 5) as u8 }).collect();
-    burn[..32].copy_from_slice(&op_tag("BURN"));
+    burn[..32].copy_from_slice(&TAG_BURN);
     burn[32..64].copy_from_slice(&psid);
     burn[HDR_FEE..HDR_FEE + 64].fill(0);
     burn[HDR_FEE + 24..HDR_FEE + 32].copy_from_slice(&fee.to_be_bytes());

@@ -25,6 +25,9 @@ contract LigeroVerifier {
     uint256 internal constant REG_STMT = 16_480;
     /// proofSystemId, statement bytes 32..63 (plan D3): keccak256("scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1")
     bytes32 internal constant PQZH_ID = 0x0a47a7689250ba178a52ad5972cdd9153358c022cb694c08d2389e82de2fead4;
+    /// opTags keccak256("SCAAS-PQZ-OP-<NAME>-V1"), statement bytes 0..31
+    bytes32 internal constant TAG_TRANSFER = 0xef22f3d1c1fc2edc565522eb73ca8cb782e8780eaf9b1f677965dd0cd5275414;
+    bytes32 internal constant TAG_REGISTER = 0x69562a9cd615eb3d906cb1934ad56c788c30228d2faf7c517e33d65b4a03c088;
     // R_TX small items (Layout::small indices) and the slack base
     uint256 internal constant E2 = 0;
     uint256 internal constant DD = 1;
@@ -319,6 +322,29 @@ contract LigeroVerifier {
         return _verify(op, stmt, proof, p);
     }
 
+    /// ligero.rs max_len_exact: t distinct columns and the largest pruned multiproof, sum_(0<l<d) min(t, ceil(n / 2^l))
+    /// + 2 - t digests
+    function maxLen(V memory v, uint256 polyBytes, uint256 depth) internal pure returns (uint256) {
+        uint256 mid;
+        for (uint256 l = 1; l < depth; ++l) {
+            uint256 a = (v.n + (1 << l) - 1) >> l;
+            mid += a < v.t ? a : v.t;
+        }
+        return 32 + polyBytes + 8 + v.t * v.cw + (mid + 2 - v.t) * 32;
+    }
+
+    /// the verifier's length bound for (op, p) (tests)
+    function maxProofLen(uint8 op, Params calldata p) external pure returns (uint256) {
+        V memory v;
+        (v.op, v.n, v.k, v.ell, v.t) = (op, p.n, p.k, p.ell, p.t);
+        v.d2 = 2 * p.k - 1;
+        mkLayout(v);
+        v.cw = 32 + (v.m + 12) * 6;
+        uint256 depth;
+        while ((1 << depth) < v.n) ++depth;
+        return maxLen(v, (2 * v.d2 + v.d2 - v.ell) * 24, depth);
+    }
+
     function _verify(uint8 op, bytes calldata stmt, bytes calldata proof, Params calldata p)
         internal
         view
@@ -329,19 +355,19 @@ contract LigeroVerifier {
         V memory v;
         (v.op, v.n, v.k, v.ell, v.t) = (op, p.n, p.k, p.ell, p.t);
         v.d2 = 2 * p.k - 1;
-        if (!stmtOk(v, stmt)) return (false, g);
-        v.st = keccak256(abi.encodePacked("SCAAS-PQZH-LIGERO-V1", op, uint32(stmt.length), stmt));
-        v.hpos = 4;
-        (g[0], gl) = (gl - gasleft(), gasleft());
-
+        // the length gate first, before the statement or the proof is parsed (ligero.rs proof_len_ok)
+        if (op != OP_REGISTER && op != OP_TRANSFER) return (false, g);
         mkLayout(v);
         uint256 polyBytes = (2 * v.d2 + v.d2 - v.ell) * 24;
         v.cw = 32 + (v.m + 12) * 6;
         uint256 depth;
         while ((1 << depth) < v.n) ++depth;
-        if (proof.length > 32 + polyBytes + 8 + v.t * v.cw + v.t * depth * 32 || proof.length < 32 + polyBytes + 8) {
-            return (false, g);
-        }
+        if (proof.length > maxLen(v, polyBytes, depth) || proof.length < 32 + polyBytes + 8) return (false, g);
+        if (!stmtOk(v, stmt)) return (false, g);
+        v.st = keccak256(abi.encodePacked("SCAAS-PQZH-LIGERO-V1", op, uint32(stmt.length), stmt));
+        v.hpos = 4;
+        (g[0], gl) = (gl - gasleft(), gasleft());
+
         v.pOff = pOffOf(proof);
         v.wOff = v.pOff + 32;
         v.qOff = v.wOff + v.d2 * 24;
@@ -419,12 +445,15 @@ contract LigeroVerifier {
     function stmtOk(V memory v, bytes calldata s) internal pure returns (bool ok) {
         uint256 o;
         uint256 nco;
+        // id (D3) and opTag, in depth as cs.rs parse
         if (s.length < 64 || bytes32(s[32:64]) != PQZH_ID) return false;
+        if (bytes32(s[0:32]) != (v.op == OP_REGISTER ? TAG_REGISTER : TAG_TRANSFER)) return false;
         if (v.op == OP_REGISTER) {
             if (s.length != REG_STMT) return false;
             (o, nco) = (96, 2048);
         } else if (v.op == OP_TRANSFER) {
             if (s.length != TX_STMT) return false;
+            if (uint256(bytes32(s[448:480])) != 1) return false; // auditorOn = 1 (R6)
             if (uint256(bytes32(s[256:288])) >> 64 != 0) return false;
             (o, nco) = (640, 10304); // 4 x 2048 + 16 + 2048 + 3 x 16 coefficients, contiguous
         } else {

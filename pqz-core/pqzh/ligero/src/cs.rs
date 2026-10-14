@@ -235,16 +235,20 @@ impl Rd<'_> {
     }
 }
 
-/// pqz-core's statement checks: exact length, canonical coefficients, read words < 2^64 (pqz_rel.c build); plus
-/// proofSystemId = PQZH's (D3, bytes 32..63 of every form): a statement of another id is no PQZH statement
+/// pqz-core's statement checks: exact length, canonical coefficients, read words < 2^64 (pqz_rel.c build); plus,
+/// in depth (the pqz-ffi decoder checks them too, Task 7): proofSystemId = PQZH's (D3, bytes 32..63), opTag one of
+/// the op's (bytes 0..31), R_TX's auditorOn word = 1 (R6, the 83,072-byte form)
 pub fn parse(op: u8, stmt: &[u8]) -> Option<Stmt> {
-    if stmt.get(32..64)? != PQZH_PROOF_SYSTEM_ID {
+    if stmt.get(32..64)? != PQZH_PROOF_SYSTEM_ID || !op_tags(op).iter().any(|t| stmt[..32] == t[..]) {
         return None;
     }
     match op {
         OP_REGISTER if stmt.len() == REG_STMT => Some(Stmt::Reg(rd_polyvec(&stmt[PREFIX + 32..])?)),
         OP_TRANSFER | OP_BURN if stmt.len() == (if op == OP_BURN { BURN_STMT } else { TX_STMT }) => {
             let burn = op == OP_BURN;
+            if !burn && (stmt[HDR_AUDITOR_ON..HDR_AUDITOR_ON + 31].iter().any(|&b| b != 0) || stmt[HDR_AUDITOR_ON + 31] != 1) {
+                return None;
+            }
             let fee = word64(stmt, HDR_FEE)?;
             let amount = if burn { word64(stmt, HDR_AMOUNT)? } else { 0 };
             let mut r = Rd(stmt, HEADER);

@@ -774,14 +774,22 @@ kept), `runs/l11-*` (`runs/limits.sh`, one capped session; xcheck and forge reru
   replacing the STARK's provisional `0xaa1f92dd…`. `cs::parse`, which both prover and verifier call first, returns
   nothing for a statement whose bytes 32..63 carry another id, so such a statement is neither proved nor verified
   (`tests/attacks.rs` `other_ids_and_length_bound_rejected`: PQZL's id, the STARK id and zeros, all five relations).
-  The Solidity port (`LigeroVerifier.sol` `stmtOk`) checks the id too.
+- **opTag and auditorOn in depth (review of `p6e-b2`, controller).** `cs::parse` also requires bytes 0..31 to be one
+  of the op's opTags (`stmt.rs` `op_tags`: op 2 BURN or REFRESH, op 5 DISCLOSE-RECEIVER or AUDITOR) and, for the
+  83,072-byte `R_TX`, the auditorOn word = 1 (bytes 448..478 zero, 479 = 1, R6); the pqz-ffi decoder (Task 7) checks
+  them as well, and this keeps PQZH's own checks after Task 6. The test above adds byte 0 flipped, every other op's
+  opTag and auditorOn 0 / 2 / high byte set; REFRESH and AUDITOR statements parse. The Solidity port
+  (`LigeroVerifier.sol` `stmtOk`) checks id, opTag and auditorOn (forge `test_stmt_and_length_reg` / `_tx`). The
+  "other statement" of the mutation sets, the benches and the EVM `.other` fixtures now flips byte 64 (chainId, or
+  `R_REG`'s message word: hashed only) instead of byte 0.
 - **Statements as the precompile takes them.** `client::setup` writes each op's opTag `keccak256("SCAAS-PQZ-OP-<NAME>-V1")`
-  at bytes 0..31 (was pqz_bench.c's filler) and, for `R_TX`, the auditorOn word = 1 (R6); the relations only hash those
-  bytes. `xcheck/dump_setup.c pqzh` patches pqz_bench.c's statements the same way (pqz_bench.c itself, PQZL's, is
+  at bytes 0..31 (was pqz_bench.c's filler) and, for `R_TX`, the auditorOn word = 1 (R6). `xcheck/dump_setup.c pqzh` patches pqz_bench.c's statements the same way (pqz_bench.c itself, PQZL's, is
   unchanged), and `xcheck/kat_stmt.py` makes pqz_kat.py parse every Ligero statement under its D15 / R6 rules with
   PQZH's id only (PQZL's id: rejected) and rebuild it byte for byte from the parsed fields with its own builders.
 - **Exact length bound (G7).** The verifier's first check, before the statement or the proof is parsed, is
-  `Params::proof_len_ok(op, len)`: `1 ≤ len ≤ max_proof_len(op)` = `max_len_exact(op)` (§12.1). It rejects nothing the
+  `Params::proof_len_ok(op, len)`: `1 ≤ len ≤ max_proof_len(op)` = `max_len_exact(op)` (§12.1); the Solidity port
+  runs the same exact bound (`maxLen`) first in `_verify`, before `stmtOk` (forge: `maxProofLen` = the Rust values,
+  `MAX` padded and `MAX + 1` rejected, the latter far cheaper). It rejects nothing the
   parser would accept (a longer proof cannot be consumed exactly); it rejects early. Unit tests: `limits_exact` (the
   table below; `MAX` passes the gate, `MAX + 1` and 0 do not), `max_len_exact_multiproof_tight` (the bound equals the
   proof grammar at t evenly spread columns: root, polynomials, nonce, t columns, that set's multiproof). Integration: an
@@ -792,9 +800,8 @@ kept), `runs/l11-*` (`runs/limits.sh`, one capped session; xcheck and forge reru
 - **Prover retry.** `prove_inner` proves again with the RNG stream continued (fresh masks and salts, so a fresh
   commitment, query set and multiproof) if a proof is longer than the verifier's bound, at most 16 attempts, then
   `Err("proof length")`. It is a guard: every proof is ≤ `max_len_exact` by construction, so the first attempt always
-  returns and proof bytes are unchanged from a prover without it. Unit test `prover_retries_over_limit`: the first
-  attempt equals `prove`'s proof; with the limit set one byte below it the retry returns a shorter proof with another
-  commitment, which verifies; an impossible limit gives `Err("proof length")`.
+  returns. Unit test `prover_retries_over_limit`: with the limit set one byte below `prove`'s proof the retry returns a
+  shorter proof with another commitment, which verifies; an impossible limit gives `Err("proof length")`.
 - **Limits (D5).** `stmt.rs` `PQZL_MAX_PROOF` 98,304, `PQZH_MAX_PROOF` 262,144, `MAX_INPUT` 393,216, `INPUT_HEADER` 5
   (move to `pqz-stmt` with Task 6); unit test `input_limit`: 5 + 83,072 + 262,144 = 345,221 ≤ 393,216.
 
@@ -828,8 +835,17 @@ The largest input any PQZH proof allows is 318,547 B (`R_TX`); `MAX_INPUT` is si
   the six honest proofs accepted, 6 × 108 mutations 0 accepted / 0 reverts, the 7 negative witnesses rejected; verify gas
   of proven `R_TX` 530.3 M (`l7` 530.3 M), so §11 stands.
 
+- After the review's fixes (opTag / auditorOn in depth, the exact bound first in Solidity, the "other statement" on
+  byte 64), `runs/l12-*` (`runs/limits.sh l12`, now with a wasm32 compile check): 14 unit and 15 integration tests
+  pass, also `--no-default-features` (14); 4,800 mutations 0 accepted / 0 panics; xcheck and `kat_stmt` equal / ok;
+  fixtures re-exported (`.other` files changed, honest proofs byte-identical with `l11`: same statements); forge 16
+  tests pass (`l12-forge.txt`), mutations 0 accepted, negatives rejected, `maxProofLen` 190,458 / 235,470 B as Rust,
+  `MAX + 1` rejected at 0.79 M (`R_REG`) / 1.79 M (`R_TX`) test-call gas against 6.50 M / 9.50 M for `MAX` padded
+  (the caller's copies of statement and proof included). Honest verify gas moved by −0.04 % (proven `R_TX` 530.34 →
+  530.10 M, `R_REG` 321.30 → 321.25 M: the layout now runs before the statement checks).
+
 ### 13.4 Rerun
 
 ```sh
-scripts/capped pqz-core/pqzh/ligero/runs/limits.sh l11   # fixtures, tests, --no-default-features, native bench, xcheck, forge
+scripts/capped pqz-core/pqzh/ligero/runs/limits.sh l12   # fixtures, tests, --no-default-features, wasm32 build, native bench, xcheck, forge
 ```
