@@ -472,3 +472,12 @@ the number is the round; each round is one agent on its own branch, reviewed bef
 
 Left: Task 10 (fuzzing, after `pqz-ffi` merges), Task 12 (docs), then gate A / gate B and the P6-PUB freeze. Owner
 2026-10-14: one `PQZ` precompile verifies both proof systems (CTR-PQZ-10).
+
+**One implementation per proof system (owner question 2026-10-14, answer recorded).** PQZL stays in C (the LaZer fork;
+porting LNP22's protocol logic to Rust is months of work and the class of subtle bug found in lazer#24 / #25 / #26),
+PQZH (Ligero) stays in Rust (`sha3` + `pqz-stmt` only), and `pqz-ffi` (Rust, exporting a C ABI) wraps both: Nethermind
+calls it via P/Invoke, the node via Rust, wallets via wasm32. No second production implementation of either: every node
+must run the same code (two implementations in consensus risk a chain split on any divergence) and the cryptographic
+audit would double. Second implementations exist only as test oracles: PQZL generic vs specialised verifier
+(differential), `pqz_kat.py` (keys, encryption, statements), the test-only Solidity Ligero verifier, `pqz-stmt` vs
+`pqz_kat.py`, and the Task 10 fuzzers.
