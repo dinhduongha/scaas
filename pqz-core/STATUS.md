@@ -384,7 +384,8 @@ onto it in Part B Task 6.
 ## `pqz-ffi`, the precompile boundary P6e Task 7 (branch `p6e-a3`; plan D10, R5, D13; CTR-PQZ-10)
 
 `ffi/` (Rust 1.97.1; `ffi/README.md`): `pqz_precompile(input, len, out, out_len) -> status` (`ffi/pqz_ffi.h`, for P6f's
-P/Invoke: 0 ok, 1 revert = input over `MAX_INPUT` 393,216 B, 2 bad arguments, 3 caught panic / core fault ⇒ `…00`),
+P/Invoke: 0 ok, 1 revert = input over `MAX_INPUT` 393,216 B, 2 bad arguments, 3 input-caused panic ⇒ `…00`, 4 node
+fault ⇒ no result; see the fault split below),
 `precompile` / `decode` / `verify_input` in Rust, feature `prove` (PQZL `pqz_prove` / PQZH Ligero by the statement's
 id, keygen / enc / dec, the witness layouts, a seeded fixture of every form). Input → `pqz_stmt::decode_input` (D5,
 D15, R6) → `proofSystemId`: PQZL to `pqz_verify_fast` (the generic verifier only in tests, R5), PQZH to Ligero
@@ -394,7 +395,8 @@ D15, R6) → `proofSystemId`: PQZL to `pqz_verify_fast` (the generic verifier on
 **Open 6 closed at this layer**: every libpqz call runs under one process-wide lock, on one worker thread with a fixed
 16 MiB stack (found by the first run `ffi1`: a test thread's 2 MiB overflows in the prover, so the core's stack must not
 depend on the caller's thread); a poisoned lock re-initialises the core. Arenas allocated once: verify-only 136 MiB =
-1.5 × the measured peak 94,615,600 B (all six forms' ABDLOP keys and SV tables kept, plus the self-test), prove /
+1.5 × the measured peak 94,615,600 B (all six forms' ABDLOP keys and SV tables kept, plus the self-test; 144 MiB since
+`ffi1f2`, below), prove /
 generic verify 448 MiB. Self-test: `keccak256(kat_digest ‖ 1 ‖ 0 ‖ 1 ‖ 0)` =
 `ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205` (A digest = `pqz_kat.py`'s `f176b313…`, KeyGen,
 Enc / Dec, a Ligero FFT round trip; one compiled-in `R_REG` proof per id, `ffi/selftest/*.hex`), cold 83 ms.
@@ -433,13 +435,29 @@ failing worker give status 4 with `out` untouched for verify and the self-test, 
 **Finding:** a fixed arena of 4–12 MiB crashes the process (SIGSEGV) instead of reporting exhaustion: exhaustion inside
 LaZer's key generation is not graceful (Open 2); 14–20 MiB fails gracefully, ≥ 24 MiB verifies `R_TX`
 (`ffi/runs/ffi1d-arena-probe.txt`, `ffi/runs/arena-probe.sh`). Status 4 therefore covers the exhaustion the core survives;
-the production arena (136 MiB, 1.5 × the six-form peak) keeps it out of reach. All other `ffi1d` checks as `ffi1c`.
+the production arena (144 MiB since `ffi1f2`, 1.59 × the adversarial peak) keeps it out of reach. All other `ffi1d` checks as `ffi1c`.
 
 **After `p6e-b3` (merged into `p6e-a3`), run `ffi1e`:** the adapter takes `Params::proven()` (now a `const fn`) instead
 of the written-out preset; PQZH gets `R_TX0` (Ligero Task 8), so both ids run all 8 forms: round trips 8 + 8, the
 digest lines 16 + the self-test equal native = wasm32 (17 lines), the PQZH self-test proof byte-identical (no
 regeneration, hash still `ed910a2c…`); all other checks green as `ffi1d`. PQZH `R_TX0` through the FFI [measured]: proof
 231,064 B, p50 / p99 direct 9.44 / 10.13 ms, C ABI 9.41 / 10.71 ms.
+
+**Review fixes (controller 2026-10-14), runs `ffi1f` (136 MiB) and `ffi1f2` (final, 144 MiB):** any failed core call
+drops the core (also arena exhaustion; the fault test re-verifies `R_REG` at the same fixed 18 MiB after an `R_TX`
+fault); `pqz_err` read as a `static mut` through `addr_of!(..).read_volatile()`; a native build with `panic = "abort"`
+is a compile error; arena reserved with `div_ceil(16)`; the fault and measurement hooks behind feature `test-hooks`
+(0 hook names in the production cdylib); the C ABI reverts before building a slice over an oversized input.
+New evidence, `tests/verify_only.rs` [measured]: a fresh process that never proves, on the verify-only arena, runs
+the whole corpus (10,698 inputs: every rejection and framing case, the 16 honest inputs, the self-test, the 10,240-input
+generator) serially, the generator again from 8 threads and on a 1 MiB caller stack, and 5,000 repeated mixed calls:
+identical results, status 3 / 4 never, 174 valid = the unedited honest inputs, `arena_used()` 93,498,368 B after every
+call, `arena_peak()` unchanged. **Finding:** the adversarial corpus peaks at 95,169,680 B, above the honest-only
+94,615,600 B, so 136 MiB was 1.498 × (`ffi1f`); `ARENA_SMALL` is now 144 MiB (1.59 ×, the test asserts ≥ 1.5 ×).
+Arenas filled with 0x00 / 0xA5 / 0x5A before `pqz_init` (child processes; prove and verify arenas) give identical
+digest lines (16 forms' proofs, verdicts, self-test) and 2,506 corpus results (`ffi/runs/ffi1f-fill.txt`): the core
+reads no arena byte it did not write. MSan / valgrind not run: valgrind is not installed, MSan needs an instrumented
+Rust std (nightly).
 
 ## Measured (2026-10-13, this machine, single thread)
 
@@ -481,8 +499,8 @@ rest bookkeeping; the zero entries of the selection matrices' Gram matrices were
 2. **Arena exhaustion is not graceful.** On exhaustion the sink block is shared by every later allocation;
    sparse structures in it then hold garbage pointers and the call can crash instead of returning
    PQZ_ERR_ARENA. Size the arena from the measured peaks (bench uses 768 MiB; P6d-2 peaks 316 MB native) or make
-   exhaustion abort the call. `pqz-ffi` (P6e Task 7) sizes both from measurement (verify-only 136 MiB =
-   1.5 × 94.6 MB, prove 448 MiB); its first run `ffi1` used 64 MiB for verify-only and the core, out of arena, rejected
+   exhaustion abort the call. `pqz-ffi` (P6e Task 7) sizes both from measurement (verify-only 144 MiB =
+   1.59 × the adversarial-corpus peak 95.2 MB, prove 448 MiB); its first run `ffi1` used 64 MiB for verify-only and the core, out of arena, rejected
    honest proofs (`ffi/runs/ffi1-bench.jsonl`, `all_valid: false`) without crashing, and `ffi/runs/ffi1d-arena-probe.txt`
    shows the crash: a 4–12 MiB arena (exhaustion in the relation's key generation) segfaults. `pqz-ffi` reports the
    exhaustion the core survives as a node fault (status 4). The core's behaviour is unchanged.

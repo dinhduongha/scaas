@@ -23,18 +23,25 @@ cc = "1"
 [features]
 # prover side for clients (P6h): keygen, enc, dec, prove (PQZL and PQZH), witness layouts, test fixtures
 prove = []
+# fault-injection and measurement hooks (pqzl::TEST_*, reinit, arena_bytes): tests and the bench only, never in a
+# production build
+test-hooks = []
 
 [[example]]
 name = "ffi_bench"
-required-features = ["prove"]
+required-features = ["prove", "test-hooks"]
 
 [[test]]
 name = "ffi"
-required-features = ["prove"]
+required-features = ["prove", "test-hooks"]
 
 [[test]]
 name = "fault"
-required-features = ["prove"]
+required-features = ["prove", "test-hooks"]
+
+[[test]]
+name = "verify_only"
+required-features = ["prove", "test-hooks"]
 
 [profile.release]
 debug = 1

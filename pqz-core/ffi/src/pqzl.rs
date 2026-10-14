@@ -3,7 +3,9 @@
 //! takes the lock, and runs the call on one worker thread with a fixed 16 MiB stack (natively; wasm32 runs it in
 //! place, its stack is the module's): the core's stack use (the prover's frames exceed a test thread's 2 MiB) never
 //! depends on the caller's thread, e.g. a .NET thread-pool thread of 1.5 MiB. The worker is created at the first
-//! call and kept; nothing is allocated per call.
+//! call and kept; if it dies (a job panicked past its catch, or the channel broke) the call is a node fault and the
+//! next call creates a new one. Per call only the job's box and its channel messages are allocated (small, fixed
+//! size); the arena is never re-allocated on the verify path.
 //!
 //! Arenas (allocated once, kept for the process): `ARENA_SMALL` for the precompile path (the specialised verifier of
 //! all six forms, keygen / enc / dec, the self-test), measured; `ARENA_BIG` for the prover and the generic verifier. A
@@ -15,7 +17,8 @@
 //! are not properties of the input: `with_core` returns `Err(NodeFault)` (and drops the core, re-initialised at the
 //! next call), which the precompile entry reports as `PQZ_FFI_NODE_FAULT` with no output.
 use std::sync::Mutex;
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering::Relaxed};
+#[cfg(feature = "test-hooks")]
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicUsize, Ordering::Relaxed};
 
 /// A fault of this node, not of the input: no result (the host must not treat the input as invalid).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -23,17 +26,19 @@ pub struct NodeFault;
 
 const PQZ_ERR_ARENA: i32 = 2; // pqz_rt.h
 
-/// Test hooks (fault injection; never set in production): a fixed arena size for every (re)initialisation, and a
-/// worker that refuses every job.
-#[doc(hidden)]
+/// Test hooks (feature `test-hooks`, never in a production build): a fixed arena size for every (re)initialisation, a
+/// worker that refuses every job, and a byte pattern written over the arena before `pqz_init` (`0x100 | byte`; 0 = none).
+#[cfg(feature = "test-hooks")]
 pub static TEST_ARENA_BYTES: AtomicUsize = AtomicUsize::new(0);
-#[doc(hidden)]
+#[cfg(feature = "test-hooks")]
 pub static TEST_FAIL_WORKER: AtomicBool = AtomicBool::new(false);
+#[cfg(feature = "test-hooks")]
+pub static TEST_ARENA_FILL: AtomicU32 = AtomicU32::new(0);
 
-/// Verify-only arena: 1.5 × the measured peak of the specialised verifier over all six forms (relation keys and
-/// tables of every form kept, as in a long-running node) plus the self-test: 94,615,600 B → 136 MiB
-/// (`runs/ffi1-bench.jsonl`, `arena`).
-pub const ARENA_SMALL: usize = 136 << 20;
+/// Verify-only arena: ≥ 1.5 × the measured peak of the precompile path over the whole adversarial corpus with every
+/// form's relation keys and SV tables kept, as in a long-running node (`tests/verify_only.rs`, run `ffi1f`:
+/// 95,169,680 B; honest inputs and the self-test alone 94,615,600 B) = 136.1 MiB, rounded up to 144 MiB (1.59 ×).
+pub const ARENA_SMALL: usize = 144 << 20;
 /// Prover and generic-verifier arena (plan D10: ≥ 320 MiB; R_TX prove peak 304 MB alone, STATUS.md).
 pub const ARENA_BIG: usize = 448 << 20;
 /// The worker thread's stack (pqz_bench runs the core on an 8 MiB main thread, the wasm builds on an 8 MiB stack).
@@ -41,9 +46,11 @@ pub const STACK: usize = 16 << 20;
 
 pub const MAX_PROOF: usize = 98_304;
 extern "C" {
-    static pqz_err: i32;
+    /// written by the core (sticky error of the last call); read only through `addr_of!(..).read_volatile()`
+    static mut pqz_err: i32;
     fn pqz_init(arena: *mut u8, len: usize) -> i32;
     fn pqz_arena_peak_bytes() -> usize;
+    fn pqz_arena_used() -> usize;
     fn pqz_verify(op: u8, stmt: *const u8, stmt_len: usize, proof: *const u8, proof_len: usize) -> i32;
     fn pqz_verify_fast(op: u8, stmt: *const u8, stmt_len: usize, proof: *const u8, proof_len: usize) -> i32;
     fn pqz_keypair_from_secret(s: *const i8, e: *const i16, pk: *mut u8) -> i32;
@@ -102,6 +109,7 @@ static STATE: Mutex<State> = Mutex::new(State { core: None, worker: None });
 fn on_worker<R: Send>(w: &mut Option<Worker>, f: impl FnOnce() -> R + Send) -> Option<R> {
     use std::panic::{AssertUnwindSafe, catch_unwind};
     use std::sync::mpsc::channel;
+    #[cfg(feature = "test-hooks")]
     if TEST_FAIL_WORKER.load(Relaxed) {
         return None;
     }
@@ -152,6 +160,7 @@ fn with_core<T: Send>(need: usize, f: impl FnOnce() -> T + Send) -> Result<T, No
     });
     let State { core, worker } = &mut *g;
     let r = on_worker(worker, || -> Option<T> {
+        #[cfg(feature = "test-hooks")]
         let need = match TEST_ARENA_BYTES.load(Relaxed) {
             0 => need,
             n => n,
@@ -159,7 +168,12 @@ fn with_core<T: Send>(need: usize, f: impl FnOnce() -> T + Send) -> Result<T, No
         if core.as_ref().is_none_or(|c| c.arena.capacity() * 16 < need) {
             *core = None; // drop the old arena first
             let mut arena: Vec<u128> = Vec::new();
-            arena.try_reserve_exact(need / 16).ok()?;
+            arena.try_reserve_exact(need.div_ceil(16)).ok()?;
+            #[cfg(feature = "test-hooks")]
+            if let f @ 0x100.. = TEST_ARENA_FILL.load(Relaxed) {
+                // SAFETY: within the reserved capacity; the bytes stay the core's (Rust never reads them)
+                unsafe { arena.as_mut_ptr().cast::<u8>().write_bytes(f as u8, need) };
+            }
             // SAFETY: the arena outlives every libpqz call (it is replaced only here, under the lock, after pqz_init
             // on the new one resets every pointer the core held into the old one)
             if unsafe { pqz_init(arena.as_mut_ptr().cast(), need) } != 0 {
@@ -168,18 +182,18 @@ fn with_core<T: Send>(need: usize, f: impl FnOnce() -> T + Send) -> Result<T, No
             *core = Some(Core { arena });
         }
         let out = f();
-        // SAFETY: read on the thread that ran the call, under the lock
-        (unsafe { pqz_err } != PQZ_ERR_ARENA).then_some(out)
+        // SAFETY: read on the thread that ran the call, under the lock (the core wrote it during `f`)
+        (unsafe { std::ptr::addr_of!(pqz_err).read_volatile() } != PQZ_ERR_ARENA).then_some(out)
     });
-    if r.is_none() {
-        g.core = None; // a failed call: start over on a fresh core
+    if !matches!(r, Some(Some(_))) {
+        g.core = None; // any failure (init, worker, arena exhaustion, panic): start over on a fresh core
     }
     r.flatten().ok_or(NodeFault)
 }
 
 /// Re-initialise the core on a fresh arena of `bytes` (measurement: the verify-only peak needs a core that has never
 /// proved). Test and bench hook.
-#[doc(hidden)]
+#[cfg(feature = "test-hooks")]
 pub fn reinit(bytes: usize) -> bool {
     STATE.lock().unwrap_or_else(|e| e.into_inner()).core = None;
     with_core(bytes, || ()).is_ok()
@@ -188,6 +202,18 @@ pub fn reinit(bytes: usize) -> bool {
 /// Arena high-water mark since the core was initialised (bytes).
 pub fn arena_peak() -> usize {
     with_core(ARENA_SMALL, || unsafe { pqz_arena_peak_bytes() }).unwrap_or(0)
+}
+
+/// Arena in use between calls (bytes): the A matrix, and every relation's keys and SV tables built so far, below the
+/// base mark; each call releases back to it.
+pub fn arena_used() -> usize {
+    with_core(ARENA_SMALL, || unsafe { pqz_arena_used() }).unwrap_or(0)
+}
+
+/// The size of the arena the core runs on (0 before the first call). Test hook.
+#[cfg(feature = "test-hooks")]
+pub fn arena_bytes() -> usize {
+    STATE.lock().unwrap_or_else(|e| e.into_inner()).core.as_ref().map_or(0, |c| c.arena.capacity() * 16)
 }
 
 /// The precompile path (plan R5): the specialised verifier. `stmt` / `proof` are passed through as given; the caller

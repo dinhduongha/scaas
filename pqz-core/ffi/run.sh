@@ -11,12 +11,14 @@ OUT() { echo "\$ $*"; "$@"; echo "[rc=$?]"; }
 
 {
   OUT cargo test --release --offline --lib
-  PQZ_FFI_DIGESTS=$X/native.jsonl OUT cargo test --release --offline --features prove -- --nocapture --test-threads 4
+  PQZ_FFI_DIGESTS=$X/native.jsonl PQZ_FFI_FILL_OUT=$X/fill.txt OUT cargo test --release --offline --features prove,test-hooks -- --nocapture --test-threads 4
 } > "$L-test.txt" 2>&1
+cp "$X/fill.txt" "$L-fill.txt" 2>/dev/null
 
 {
   echo "# verify-only build (default features): libpqz_ffi.so, and the C core archive build.rs compiled"
   OUT cargo build --release --offline
+  echo "test hooks in the production cdylib (must be 0): $(strings -a target/release/libpqz_ffi.so | grep -c TEST_ARENA)"
   A=$(pwd)/$(ls -t target/release/build/pqz-ffi-*/out/libpqz.a | head -1)
   OUT ../check_symbols.sh "$A"
   SO=target/release/libpqz_ffi.so
@@ -32,7 +34,7 @@ OUT() { echo "\$ $*"; "$@"; echo "[rc=$?]"; }
   OUT clang -std=c11 -Wall -Wextra -o "$X/c_abi" tests/c_abi.c -Ltarget/release -lpqz_ffi -Wl,-rpath,"$(pwd)/target/release"
   OUT "$X/c_abi"
   echo "# clippy (stable toolchain: 1.97.1 has no clippy): no float arithmetic in the crate"
-  OUT cargo +stable clippy --release --offline --features prove --lib -- -D clippy::float_arithmetic
+  OUT cargo +stable clippy --release --offline --features prove,test-hooks --lib -- -D clippy::float_arithmetic
 } > "$L-native.txt" 2>&1
 
 {
@@ -50,10 +52,10 @@ OUT() { echo "\$ $*"; "$@"; echo "[rc=$?]"; }
   if diff "$X/native.jsonl" "$X/wasm.jsonl"; then echo "native = wasm32: $(wc -l < "$X/wasm.jsonl") lines equal"; else echo "native != wasm32"; fi
 } > "$L-wasm.txt" 2>&1
 
-/usr/bin/time -v cargo run --release --offline --features prove --example ffi_bench "${N:-200}" > "$L-bench.jsonl" 2> "$L-bench-time.txt"
+/usr/bin/time -v cargo run --release --offline --features prove,test-hooks --example ffi_bench "${N:-200}" > "$L-bench.jsonl" 2> "$L-bench-time.txt"
 echo "bench rc=$?" >> "$L-bench-time.txt"
 
-grep -hE "^test result|FAILED|panicked|^test .* (ok|FAILED)$|rejection cases|differential:|abort-freedom:|selftest hash|node faults:" "$L-test.txt"
+grep -hE "^test result|FAILED|panicked|^test .* (ok|FAILED)$|rejection cases|differential:|abort-freedom:|selftest hash|node faults:|verify-only |fill determinism:" "$L-test.txt"
 grep -hE "^c_abi|symbols ok|forbidden|NEEDED|/gmp|libm-style|\[rc=[1-9]" "$L-native.txt"
 grep -hE "native|wasm bytes|wasm run|\[rc=[1-9]" "$L-wasm.txt"
 tail -2 "$L-bench.jsonl"; grep -E "bench rc|Maximum resident" "$L-bench-time.txt"

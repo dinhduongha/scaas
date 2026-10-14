@@ -8,7 +8,8 @@
  *          non-canonical encoding, failed check), or the self-test hash for op 6
  *
  * Thread-safe (the C core's calls are serialised inside, one process-wide lock, and run on one worker thread with
- * its own 16 MiB stack); never unwinds, aborts or exits (except Rust's abort on a failed heap allocation). The
+ * its own 16 MiB stack); never unwinds, aborts or exits (native builds;
+ * except Rust's abort on a failed heap allocation; a panic = abort build does not compile). The
  * caller's stack: 1 MiB suffices (test one_mib_stack).
  */
 #ifndef PQZ_FFI_H
@@ -23,7 +24,7 @@
 #define PQZ_FFI_INTERNAL 3 /* a panic in the decode / verify logic was caught: input-caused, the same on every
                               node; out = ...00 (the input is invalid); log it */
 #define PQZ_FFI_NODE_FAULT 4 /* a fault of this node, not of the input (arena exhaustion, worker or core unavailable,
-                                allocation): no result, out untouched; abort block processing, never treat the
+                                arena reservation failure): no result, out untouched; abort block processing, never treat the
                                 input as invalid (controller 2026-10-14) */
 
 #define PQZ_FFI_MAX_INPUT 393216 /* P6e D5: 5 + 83,072 + 262,144 = 345,221 <= 393,216 */

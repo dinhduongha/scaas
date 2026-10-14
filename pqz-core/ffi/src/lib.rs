@@ -15,6 +15,11 @@
 //! fixtures in [`fixture`].
 #![deny(clippy::float_arithmetic)]
 
+// catch_unwind is the never-crash boundary (CTR-PQZ-10): a native build with panic = "abort" would turn every caught
+// panic into a process abort. wasm32 (clients, P6h) is panic = abort by design.
+#[cfg(all(panic = "abort", not(target_arch = "wasm32")))]
+compile_error!("pqz-ffi needs panic = \"unwind\" on native targets (catch_unwind is the precompile's never-crash boundary)");
+
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
 pub use pqz_stmt::{self as stmt, Input, MAX_INPUT, PQZH_ID, PQZL_ID, Reject, Word};
@@ -120,6 +125,11 @@ pub const PQZ_FFI_NODE_FAULT: i32 = 4;
 pub unsafe extern "C" fn pqz_precompile(input: *const u8, len: usize, out: *mut u8, out_len: usize) -> i32 {
     if (input.is_null() && len > 0) || out.is_null() || out_len < 32 {
         return PQZ_FFI_BAD_ARGS;
+    }
+    if len > MAX_INPUT {
+        // revert before any slice is built over the caller's buffer
+        std::ptr::write_bytes(out, 0, 32);
+        return PQZ_FFI_REVERT;
     }
     let inp = if len == 0 { &[][..] } else { std::slice::from_raw_parts(input, len) };
     // a panic outside run()'s own catch (framing, the outcome match) cannot be classified: a node fault
