@@ -31,8 +31,9 @@ inputs accepted, 0 verifier panics** [measured, `runs/l2-*`]. Against the FRI+ZK
 
 - **Ligero beats the STARK on every axis except wasm32 verify**: proven `R_TX` −63 % bytes (−73 % conjectured),
   30× faster to prove, 65× less prover memory, native verify p99 −45 %; wasm32 verify is ≈ 2× slower (the verifier's
-  u128 products are emulated on wasm32) and the proven `R_TX` p99 (55.9 ms) is above a 50 ms budget if that budget
-  applies to wasm32 (it holds natively with a 5× margin).
+  u128 products are emulated on wasm32); the proven `R_TX` p99 (55.9 ms) is within the 60 ms verify limit (owner
+  2026-10-14, CTR-PQZ-09: 60 ms p99 on the chain host, also bounding wasm32; it was 50 ms), with a 7 % margin;
+  natively 10.5 ms (5.7× margin).
 - **Radix 431 lowers the proven size**: `R_TX` 305,080 → 230,392 B (−24.5 %), `R_REG` 224,360 → 186,970 B
   (−16.7 %); conjectured −19 / −21 % [measured]. It lowers the rate from 1/8 to 1/40, which brings t from 166 to 121
   columns; the cost is prove time (0.29 → 0.67 s for `R_TX` proven) — affordable only because the 431 stage is
@@ -314,7 +315,8 @@ vectors at 120 columns, ≈ 2 M for evaluating w, q, h — u64 × u64 → u128 p
 **Ligero over F_q with the radix-431 domains is the better PQZH backend on this evidence**: at equal 128-bit (per term)
 soundness and with zero knowledge it is 2.7× smaller proven (3.7× conjectured), 30× faster and 65× leaner to prove
 (a wallet can prove in wasm32 in 1.4 s within 46 MiB), and faster to verify natively; the code is ≈ 1,700 lines of
-own Rust (library incl. unit tests) over F_q with Keccak only (no Plonky3). Its one weak axis is wasm32 verify (55.9 ms p99 proven `R_TX`).
+own Rust (library incl. unit tests) over F_q with Keccak only (no Plonky3). Its one weak axis is wasm32 verify (55.9 ms p99 proven `R_TX`, inside the 60 ms limit of CTR-PQZ-09 with 7 % to
+spare).
 
 What it does not do: **reach 160 KB proven** — 230 KB, of which ≈ 101 KB are the three test polynomials that no rate
 change shrinks. The conjectured proofs (92 / 63 KB) are well under the line. Suggested defaults if the owner adopts
@@ -344,8 +346,9 @@ arithmetic, `mulmod`-friendly [inference]), a proofSystemId for the Ligero kind,
 2. Proven `R_TX` is 230 KB, over the 160 KB line: raise the line, accept the conjectured regime (92 KB), or try the
    remaining reductions — 24 grinding bits (t 121 → 112, ≈ −9.5 KB [estimate]), 16-byte salts (≈ −1.9 KB), a smaller
    test-polynomial encoding (not explored)?
-3. Does the 50 ms verify budget apply to wasm32? Native p99 is 10.5 ms; wasm32 55.9 ms (proven `R_TX`). A wasm-specific
-   32-bit-limb product could close it (not done).
+3. ~~Does the 50 ms verify budget apply to wasm32?~~ **Resolved** by the owner's ruling of 2026-10-14 (CTR-PQZ-09,
+   `docs/contracts/pq-zether.md`, `docs/decisions.md`): the verify limit is 60 ms p99 on the chain host and also bounds
+   wasm32. Ligero's proven `R_TX` (55.9 ms wasm32, 10.5 ms native) passes; no wasm-specific multiply is needed.
 4. proofSystemId for the Ligero kind (the bench statements carry the STARK's id, which the relation only hashes).
 5. An external review of the modified ZK construction's argument (§4.1) before adoption.
 
