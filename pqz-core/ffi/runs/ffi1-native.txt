@@ -1,0 +1,101 @@
+# verify-only build (default features): libpqz_ffi.so, and the C core archive build.rs compiled
+$ cargo build --release --offline
+   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/p6ea3/pqz-core/ffi)
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.43s
+[rc=0]
+$ ../check_symbols.sh target/release/build/pqz-ffi-41fd7d50365e74ac/out/libpqz.a
+/usr/bin/llvm-nm-18: error: target/release/build/pqz-ffi-41fd7d50365e74ac/out/libpqz.a: No such file or directory
+/usr/bin/llvm-nm-18: error: target/release/build/pqz-ffi-41fd7d50365e74ac/out/libpqz.a: No such file or directory
+symbols ok: only memcpy memset __stack_chk_fail __stack_pointer outside the library objects
+[rc=0]
+$ sha256sum target/release/libpqz_ffi.so
+773ef8390d9a18b8e1237e14ddb5783f4c3fdedba7ec40bfc8bb1c0de6f3ccb6  target/release/libpqz_ffi.so
+[rc=0]
+$ readelf -d target/release/libpqz_ffi.so | grep NEEDED
+ 0x0000000000000001 (NEEDED)             Shared library: [libgcc_s.so.1]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+ 0x0000000000000001 (NEEDED)             Shared library: [ld-linux-x86-64.so.2]
+$ nm -D --undefined-only target/release/libpqz_ffi.so
+                 U abort@GLIBC_2.2.5
+                 U bcmp@GLIBC_2.2.5
+                 U calloc@GLIBC_2.2.5
+                 U close@GLIBC_2.2.5
+                 w __cxa_finalize@GLIBC_2.2.5
+                 w __cxa_thread_atexit_impl@GLIBC_2.18
+                 U dl_iterate_phdr@GLIBC_2.2.5
+                 U __errno_location@GLIBC_2.2.5
+                 U free@GLIBC_2.2.5
+                 U fstat64@GLIBC_2.33
+                 U getcwd@GLIBC_2.2.5
+                 U getenv@GLIBC_2.2.5
+                 w gettid@GLIBC_2.30
+                 w __gmon_start__
+                 w _ITM_deregisterTMCloneTable
+                 w _ITM_registerTMCloneTable
+                 U lseek64@GLIBC_2.2.5
+                 U malloc@GLIBC_2.2.5
+                 U memcpy@GLIBC_2.14
+                 U memmove@GLIBC_2.2.5
+                 U memset@GLIBC_2.2.5
+                 U mmap64@GLIBC_2.2.5
+                 U munmap@GLIBC_2.2.5
+                 U open64@GLIBC_2.2.5
+                 U posix_memalign@GLIBC_2.2.5
+                 U pthread_key_create@GLIBC_2.34
+                 U pthread_key_delete@GLIBC_2.34
+                 U pthread_setspecific@GLIBC_2.34
+                 U read@GLIBC_2.2.5
+                 U readlink@GLIBC_2.2.5
+                 U realloc@GLIBC_2.2.5
+                 U realpath@GLIBC_2.3
+                 U __stack_chk_fail@GLIBC_2.4
+                 U stat64@GLIBC_2.33
+                 w statx@GLIBC_2.28
+                 U strlen@GLIBC_2.2.5
+                 U syscall@GLIBC_2.2.5
+                 U __tls_get_addr@GLIBC_2.3
+                 U _Unwind_Backtrace@GCC_3.3
+                 U _Unwind_DeleteException@GCC_3.0
+                 U _Unwind_GetDataRelBase@GCC_3.0
+                 U _Unwind_GetIP@GCC_3.0
+                 U _Unwind_GetIPInfo@GCC_4.2.0
+                 U _Unwind_GetLanguageSpecificData@GCC_3.0
+                 U _Unwind_GetRegionStart@GCC_3.0
+                 U _Unwind_GetTextRelBase@GCC_3.0
+                 U _Unwind_RaiseException@GCC_3.0
+                 U _Unwind_Resume@GCC_3.0
+                 U _Unwind_SetGR@GCC_3.0
+                 U _Unwind_SetIP@GCC_3.0
+                 U write@GLIBC_2.2.5
+                 U writev@GLIBC_2.2.5
+$ nm -D --defined-only target/release/libpqz_ffi.so | grep ' T '
+0000000000056400 T pqz_precompile
+# GMP / MPFR / HEXL names or strings (glic/absence.sh's pattern), libm and float imports
+symbols /gmp|mpfr|hexl/i: 0
+strings /gmp|mpfr|hexl/i: 0
+libm-style imports: 0
+# C smoke test against pqz_ffi.h
+$ clang -std=c11 -Wall -Wextra -o /home/ha/work/ainative/scaas/.claude/worktrees/p6ea3/pqz-core/ffi/target/run/c_abi tests/c_abi.c -Ltarget/release -lpqz_ffi -Wl,-rpath,/home/ha/work/ainative/scaas/.claude/worktrees/p6ea3/pqz-core/ffi/target/release
+[rc=0]
+$ /home/ha/work/ainative/scaas/.claude/worktrees/p6ea3/pqz-core/ffi/target/run/c_abi
+c_abi: selftest ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205
+c_abi: ok (0 failures)
+[rc=0]
+# clippy (stable toolchain: 1.97.1 has no clippy): no float arithmetic in the crate
+$ cargo +stable clippy --release --offline --features prove --lib -- -D clippy::float_arithmetic
+   Compiling version_check v0.9.5
+    Checking typenum v1.20.1
+   Compiling find-msvc-tools v0.1.14
+   Compiling shlex v2.0.1
+    Checking keccak v0.1.6
+    Checking pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/p6ea3/pqz-core/stmt)
+   Compiling cc v1.8.0
+   Compiling generic-array v0.14.7
+    Checking crypto-common v0.1.7
+    Checking block-buffer v0.10.4
+    Checking digest v0.10.7
+    Checking sha3 v0.10.8
+   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/p6ea3/pqz-core/ffi)
+    Checking pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/p6ea3/pqz-core/pqzh/ligero)
+    Finished `release` profile [optimized + debuginfo] target(s) in 11.89s
+[rc=0]

@@ -1,0 +1,39 @@
+[package]
+name = "pqz-ffi"
+version = "0.1.0"
+edition = "2021"
+license-file = "../../LICENSE"
+publish = false
+
+# The one boundary in front of both PQZ verifiers (P6e plan D10, R5; pq-zether.md §9.1, CTR-PQZ-10): the precompile
+# decoder (pqz-stmt), PQZL = the C core (libpqz, built here by build.rs from ../src, ../lazer, ../params with
+# build.sh's flags), PQZH = the Ligero crate without its bench feature; the C ABI pqz_precompile (pqz_ffi.h) for P6f;
+# the Rust API for the node; feature `prove` (keygen / enc / dec / prove of both systems) for P6h.
+[lib]
+crate-type = ["rlib", "cdylib", "staticlib"]
+
+[dependencies]
+pqz-stmt = { path = "../stmt" }
+pqzh-ligero = { path = "../pqzh/ligero", default-features = false }
+sha3 = "=0.10.8"
+
+[build-dependencies]
+cc = "1"
+
+[features]
+# prover side for clients (P6h): keygen, enc, dec, prove (PQZL and PQZH), witness layouts, test fixtures
+prove = []
+
+[[example]]
+name = "ffi_bench"
+required-features = ["prove"]
+
+[[test]]
+name = "ffi"
+required-features = ["prove"]
+
+[profile.release]
+debug = 1
+panic = "unwind"
+
+[workspace]

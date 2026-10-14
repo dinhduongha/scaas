@@ -1,0 +1,21 @@
+# wasm32: the verify-only lib, then the prove harness (wasm/) and the digest diff against native
+$ cargo build --release --offline --lib --target wasm32-unknown-unknown
+   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/p6ea3/pqz-core/ffi)
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.38s
+[rc=0]
+$ cargo build --release --offline --target wasm32-unknown-unknown
+   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/p6ea3/pqz-core/ffi)
+   Compiling pqz-ffi-wasm v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/p6ea3/pqz-core/ffi/wasm)
+    Finished `release` profile [optimized] target(s) in 0.58s
+[rc=0]
+$ sha256sum wasm/target/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm
+23232f5673f5ef2eb7fcbcfda620725e1968551d01fae1603e0ff23590f50199  wasm/target/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm
+[rc=0]
+wasm bytes 849703
+$ llvm-nm-18 --undefined-only wasm/target/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm (imports)
+strings /gmp|mpfr|hexl/i: 0
+node rc=0
+wasm run 14665 ms, memory 622919680 B
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:14.73
+	Maximum resident set size (kbytes): 371408
+native = wasm32: 17 lines equal

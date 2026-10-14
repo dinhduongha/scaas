@@ -381,6 +381,48 @@ DIR pqzh` (real opTags and the PQZH id, no rewrite); 7 unit tests ok in release 
 6 equal, 32 `pqz_kat.py` statements equal, 210 rejections with the same reason, wasm32 ok. The Ligero crate moves
 onto it in Part B Task 6.
 
+## `pqz-ffi`, the precompile boundary P6e Task 7 (branch `p6e-a3`; plan D10, R5, D13; CTR-PQZ-10)
+
+`ffi/` (Rust 1.97.1; `ffi/README.md`): `pqz_precompile(input, len, out, out_len) -> status` (`ffi/pqz_ffi.h`, for P6f's
+P/Invoke: 0 ok, 1 revert = input over `MAX_INPUT` 393,216 B, 2 bad arguments, 3 caught panic / core fault ⇒ `…00`),
+`precompile` / `decode` / `verify_input` in Rust, feature `prove` (PQZL `pqz_prove` / PQZH Ligero by the statement's
+id, keygen / enc / dec, the witness layouts, a seeded fixture of every form). Input → `pqz_stmt::decode_input` (D5,
+D15, R6) → `proofSystemId`: PQZL to `pqz_verify_fast` (the generic verifier only in tests, R5), PQZH to Ligero
+(`default-features = false`, behind `src/pqzh.rs` only: the Ligero API moves in `p6e-b3`), op 6 to the cached self-test
+(D13). libpqz is compiled by `build.rs` from `src/`, `lazer/`, `params/` with `build.sh`'s flags and
+`check_symbols.sh` on the archive (wasm32: `pqz_wasm_rt.c`'s branch-free 128-bit helpers kept, Rust provides `mem*`).
+**Open 6 closed at this layer**: every libpqz call runs under one process-wide lock, on one worker thread with a fixed
+16 MiB stack (found by the first run `ffi1`: a test thread's 2 MiB overflows in the prover, so the core's stack must not
+depend on the caller's thread); a poisoned lock re-initialises the core. Arenas allocated once: verify-only 136 MiB =
+1.5 × the measured peak 94,615,600 B (all six forms' ABDLOP keys and SV tables kept, plus the self-test), prove /
+generic verify 448 MiB. Self-test: `keccak256(kat_digest ‖ 1 ‖ 0 ‖ 1 ‖ 0)` =
+`ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205` (A digest = `pqz_kat.py`'s `f176b313…`, KeyGen,
+Enc / Dec, a Ligero FFT round trip; one compiled-in `R_REG` proof per id, `ffi/selftest/*.hex`), cold 83 ms.
+
+Runs [measured] `scripts/capped pqz-core/ffi/run.sh ffi1c` (`ffi/runs/ffi1c-*`; `ffi1` stack overflow and too small an
+arena, `ffi1b` one wrong expectation in the test, both kept): 11 + 1 tests ok — round trip of every form (PQZL 8 = six
+relations + REFRESH + AUDITOR, PQZH 7; PQZH `R_TX0` pending Ligero Task 8), 412 rejection cases (each D15 / R6 rule
+with its `Reject`, op / opTag / id confusion, lengths ± 1, `MAX_PROOF + 1`, truncated / extended / flipped proofs, the
+other system's id, framing; `MAX_INPUT + 1` = revert), PQZL differential SV vs generic through the FFI 56 cases / 0
+disagreements, abort-freedom 10,240 inputs serial and from 8 threads through the C ABI (identical results, status 3
+never, 158 valid = exactly the unedited honest ones, Ligero panics 0), C ABI arguments, self-test, compiled-in proofs =
+a fresh prove, the precompile path on a 1 MiB caller stack, `pqz_ffi.h` constants; C smoke test against the header
+ok; `libpqz_ffi.so` needs only libc / libgcc_s, 0 GMP / MPFR / HEXL names or strings, 0 libm imports; clippy
+`float_arithmetic` clean; wasm32: verify-only lib builds, the prove harness (`ffi/wasm/`, 850 KB) proves every form
+of both ids in node (15.6 s) and prints the same 17 digest lines as native (fixtures, proofs byte-equal, verdicts,
+self-test hash).
+
+| verify through the FFI [measured] p50 / p99 ms, native, n = 200 | direct (bare call) | `precompile` | C ABI | adversarial (C ABI, one flipped proof bit) |
+|---|---|---|---|---|
+| PQZL `R_TX` / `R_TX0` | 7.91 / 9.71; 7.80 / 11.18 | 7.91 / 8.65; 7.90 / 12.13 | 7.93 / 9.28; 7.94 / 12.18 | 8.11 / 9.27; 7.72 / 8.50 |
+| PQZL `R_BURN` / REFRESH | 7.49 / 7.82; 7.49 / 8.47 | 7.59 / 8.67; 7.55 / 8.83 | 7.64 / 8.92; 7.56 / 8.23 | 7.60 / 9.04; 7.59 / 8.37 |
+| PQZL `R_REG` / `R_DS` / `R_DR` / AUDITOR | 3.98–4.55 / 4.78–5.39 | 4.02–4.58 / 4.71–5.76 | 4.04–4.59 / 4.88–5.33 | 4.03–4.61 / 4.82–6.20 |
+| PQZH `R_TX` / `R_BURN` / REFRESH | 9.21–9.71 / 9.98–10.50 | 9.22–9.73 / 9.97–11.96 | 9.23–9.78 / 9.76–12.21 | 0.57–1.26 / 0.64–1.73 (rejected early) |
+| PQZH `R_REG` / `R_DS` / `R_DR` / AUDITOR | 6.95–7.21 / 7.37–8.52 | 6.95–7.23 / 7.32–9.14 | 6.93–7.23 / 7.21–8.16 | 0.37–0.41 / 0.44–0.53 |
+
+The boundary (decode ≤ 0.01 ms p99, `catch_unwind`, the lock, the worker hop) adds ≤ 0.1 ms at p50; the p99 columns
+differ by host noise (± 3 ms between runs of the same call). Every op ≤ 12.2 ms p99 against the 60 ms limit.
+
 ## Measured (2026-10-13, this machine, single thread)
 
 Native: clang -O2, `pqz_bench 5 5` under `scripts/capped` (5 proves, 5 + 5 honest verifies, 10 adversarial). wasm32:
@@ -421,7 +463,9 @@ rest bookkeeping; the zero entries of the selection matrices' Gram matrices were
 2. **Arena exhaustion is not graceful.** On exhaustion the sink block is shared by every later allocation;
    sparse structures in it then hold garbage pointers and the call can crash instead of returning
    PQZ_ERR_ARENA. Size the arena from the measured peaks (bench uses 768 MiB; P6d-2 peaks 316 MB native) or make
-   exhaustion abort the call.
+   exhaustion abort the call. `pqz-ffi` (P6e Task 7) sizes both from measurement (verify-only 136 MiB =
+   1.5 × 94.6 MB, prove 448 MiB); its first run `ffi1` used 64 MiB for verify-only and the core, out of arena, rejected
+   honest proofs (`ffi/runs/ffi1-bench.jsonl`, `all_valid: false`) without crashing. The core's behaviour is unchanged.
 3. **wasm.** Proofs equal byte for byte with native (P6d-2, seeds 0..2); no browser run (node only); R_TX needs
    ~0.23 GB of the 4 GiB wasm32 memory (fix-ups, one op per process).
 4. UBSan nits left as upstream: zero-length VLAs when M = 0 / nbin = 0 (`lnp-tbox.c` 223, 875, 3451),
@@ -434,7 +478,7 @@ rest bookkeeping; the zero entries of the selection matrices' Gram matrices were
    says single-threaded. The node can enter the precompile concurrently (eth_call, tracing, parallel import): two
    concurrent calls would release each other's arena and reset each other's error (expected failure: a crash or a
    wrong reject; a wrong accept would still need the final hash to match). The P6f cgo wrapper must serialise every
-   libpqz call (one process-wide lock) or move to per-thread contexts. Status: open, P6f.
+   libpqz call (one process-wide lock) or move to per-thread contexts. Status: **closed at the `pqz-ffi` layer** (P6e Task 7: one process-wide lock around every libpqz call, one worker thread; P6f calls `pqz_precompile` and needs no lock of its own); per-thread contexts not done.
 
 7. ~~`keygen.json` "one seed with ≥ 1 resample (searched)" cannot be searched (≈ 2^-70 per seed).~~ Settled
    (controller 2026-10-14): the row is dropped from the plan's Task 11; the resample path and the counter-64 error are
@@ -443,6 +487,11 @@ rest bookkeeping; the zero entries of the selection matrices' Gram matrices were
    the keys `pqz_keygen` writes live in the arena (or the caller's buffers) until overwritten; `pqz_arena_release`
    does not clear them. `do_prove` zeroes its seeds, `pqz_keys.c` its SHAKE state, bit buffer and `w`. Zeroing on
    release (or per call) is open, for P6f / P6h (cost: one memset of the used arena per prove).
+
+9. **`check_symbols.sh` passes when its files are missing** (found in P6e Task 7, run `ffi1`): it `cd`s to its own
+   directory, so relative paths from elsewhere name nothing, `llvm-nm` errors inside the command substitution and the
+   script still prints "symbols ok". `build.sh` and `pqz-ffi` pass existing paths (absolute in `ffi/`), so no scan so far
+   was empty; a fix is `set -o pipefail`-style checking of `nm`'s status. Open.
 
 Scratch (not needed to resume, re-creatable): LaZer and lattice-estimator clones, the upstream tbox harness and
 debug builds under the session scratchpad `p6d/`.
