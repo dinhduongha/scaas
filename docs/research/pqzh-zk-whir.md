@@ -1,43 +1,63 @@
 > **Research note — background and rationale only, not normative; the current rules are in docs/ (see decisions.md).**
 
-# PQZH with zero-knowledge WHIR: options, choice, design (P6-PQZH, next step)
+# PQZH with zero-knowledge WHIR: options, choice, design, measurement (P6-PQZH)
 
 Written 2026-10-14 for the owner's decision of the same day (TODO P6-PQZH: "PQZH is NOT shelved; build and measure a
 zero-knowledge WHIR path, Goldilocks⁵ and Goldilocks², Johnson-bound bits"). Follows `pqzh-zk-ext5.md` (§7: WHIR does
 not plug into Plonky3's uni/batch STARK; the multilinear `p3-multi-stark` takes only non-hiding WHIR and is not ZK;
 non-ZK WHIR Goldilocks⁵ Johnson `R_TX` 257,530 B at 125.3 composed bits), `pqzh-prototype.md` and `pqzh-design.md`.
-Code: crate `pqz-core/pqzh/` on branch `pqzh-zkwhir` (from main `79924cf`, not merged). **No decision is recorded
-here**; §8 lists the owner questions.
+Code: crate `pqz-core/pqzh/` on branch `pqzh-zkwhir` (from main `79924cf`, not merged); raw runs
+`pqz-core/pqzh/runs/w*` (every file named below).
 
-**Status: design note only. The work was paused on the owner's request of 2026-10-14 (machine shutdown after the
-Docker package job) before any implementation or measurement; nothing in this note is [measured].** §7 says exactly
-where to resume.
+**Status: built and measured (2026-10-14, session 4). The FRI fallback of owner decision (2) triggered: `R_TX` with ZK
+WHIR at 128 bits is 1,948,901 B, above FRI + ZK conjectured (340,431 B) — record: settle on FRI.** §7–§9 hold the
+measurements, §10 the recommendation, §12 the open questions.
 
 Tags as in `pqzh-zk-ext5.md`: **[source]** read from the Plonky3 0.9.0-rc.1 crate sources in `~/.cargo/registry`
-(file named), **[paper]** from the cited paper, **[estimate]** a computed or reasoned bound, **[inference]** a
-conclusion drawn here.
+(file named), **[paper]** from the cited paper, **[measured]** from a run file named next to it (machine as in
+`pqzh-prototype.md` §2: AMD Ryzen 5 7235HS, single thread, every run alone under `scripts/capped`, 4 GB memory cap,
+2 GB swap), **[model]** bits computed from the configuration (no proof needed), **[probe]** a single run (n = 1),
+**[estimate]** a computed or reasoned bound, **[inference]** a conclusion drawn here.
+
+## 0. Owner decisions of 2026-10-14 (recorded in full, as given for this step)
+
+1. **Accept option (b-uni) as the ZK WHIR path** — Plonky3's zero-knowledge batch STARK (`p3-batch-stark`, `ZK =
+   true`, unchanged) plus an adapter `src/whirpcs.rs` implementing `UnivariateStarkPcs` over `p3-whir`'s
+   `HidingWhirPcs` (HVZK-WHIR, ePrint 2026/391); **no** ZK variant of `p3-multi-stark` (option (a)). Status: applied —
+   the adapter is built, tested and measured on branch `pqzh-zkwhir` (§5, §7).
+2. **If `R_TX` with ZK WHIR at 128 bits lands above FRI + ZK conjectured (340,431 B), stop and record "settle on
+   FRI"**; do **not** build a batched multi-round WHIR opening (§6). Status: triggered — `R_TX` is 1,948,901 B
+   (5.7× the threshold) at the best setting within the 4 GB cap (`runs/w2-zkwhir5-r3.jsonl`); no batched opening was
+   built; recorded here as "settle on FRI" (§10).
+3. **Goldilocks² is reported only at its reachable per-term targets of 96–100 bits** (128 is refused by WHIR's
+   grinding budget). Status: applied — measured at target 96 / 16 grinding bits and 100 / 20 (§8); the measurement
+   also shows that HVZK-WHIR's masked base case has no security over Goldilocks² by p3's own accounting (§8).
 
 ## 1. Result
 
-- **Chosen option (b-uni): Plonky3's hiding batch STARK with an HVZK-WHIR commitment.** A new PCS adapter in the
-  crate implements `UnivariateStarkPcs` (`ZK = true`) on top of p3-whir's `HidingWhirPcs` (HVZK-WHIR, ePrint
-  2026/391). Each trace / quotient / permutation column is committed in coefficient form inside one stacked
-  multilinear polynomial per commitment round; an out-of-domain opening `p(ζ)` is a multilinear evaluation of that
-  polynomial at a point built from `ζ, ζ², ζ⁴, …`. The STARK side keeps Plonky3's existing ZK layout unchanged
-  (trace randomised to degree `2n`, quotient chunks masked as in ePrint 2024/1037 §4.2).
-- **Why this one**: it is the only option whose zero-knowledge argument is a composition of two existing, published
-  arguments with existing code on both sides (the STARK-level masking of 2024/1037 already in `p3-batch-stark`, the
-  PCS-level HVZK of 2026/391 already in `p3-whir`). The new code is the adapter only (≈ 600–900 lines [estimate]),
-  with no change to Plonky3. The alternative of making `p3-multi-stark` zero-knowledge (§3, option a) is a protocol
-  change across its zerocheck, fractional-GKR LogUp and opening code (≈ 63,600 lines in the crate [source]), with no
-  published ZK analysis of that exact protocol: weeks, plus a security review.
-- **Feasibility**: within the 2-week bound the brief set [estimate: 3–5 days adapter + tests, 1–2 days measurement and
-  bit accounting]. Not abandoned.
-- **Expected size (not measured)**: four HVZK-WHIR openings per proof (main, LogUp permutation, quotient,
-  preprocessed) where `p3-multi-stark` had two plain ones. If each opening costs about what one plain opening cost in
-  `pqzh-zk-ext5.md` §7 (≈ 100–120 KB at Goldilocks⁵, rate 4), `R_TX` lands at ≈ 400–500 KB [estimate, rough]: likely
-  **above** conjectured FRI + ZK (340,431 B) and below proven FRI + ZK (622,448 B). This has to be measured; §6
-  lists how to bring it down if it holds (one batched opening for all rounds).
+- **Built** (`src/whirpcs.rs`, ≈ 600 lines incl. tests; `config.rs` `WhirParams` / `WhirCfg`; `rel.rs` dispatch and
+  per-opening breakdown; bench / security / wasm flags): Plonky3's hiding batch STARK runs unchanged over an
+  HVZK-WHIR PCS. `R_REG` and `R_TX` prove and verify natively and in wasm32; **0 of 1,440 native and 0 of 480 wasm32
+  mutated inputs accepted, 0 panics** (`runs/w2-*`, `runs/w3-*`); unit tests of the embedding, the masking and the
+  rejections pass (`runs/w1-tests.txt`); the C cross-check of statement / witness bytes is unchanged
+  (`runs/w7-xcheck.txt`).
+- **Measured, Goldilocks⁵, Johnson bound, 128-bit per-term target** (starting rate 3 = blowup 8, fold 4, 16 grinding
+  bits, mask code rate 1/16), `R_TX`: **1,948,901 B, prove 206 s, 2.42 GB peak heap, verify p50 / p99 43.7 / 46.5 ms
+  native and 83.8 / 93.5 ms wasm32, 124.2 bits composed** (union bound; binding: the four WHIR openings at 126.3 bits
+  each, then the 128-bit Keccak collision term) [measured, `runs/w2-zkwhir5-r3*.jsonl`]. Against FRI + ZK at the same
+  128 bits: 5.7× conjectured (340,431 B) and 3.1× proven (622,448 B); 10× the prove time; verify 3× native and over
+  the 50 ms p99 line in wasm32.
+- **Why** [measured breakdown, §9]: each HVZK-WHIR opening costs ≈ 470–490 KB whatever the committed size (2^20 to 2^22
+  coefficients), of which ≈ 360 KB is the masked base case (Construction 7.2: blinded mask messages and randomness, and
+  paired spot checks of every mask oracle) and ≈ 110–120 KB the code-switching rounds; the batch STARK needs four
+  openings (main, quotient, preprocessed, LogUp). **One opening alone is above 340,431 B**, so even the batched single
+  opening of §6 would not reach FRI + ZK conjectured [inference].
+- **Goldilocks²** (96 / 100-bit per-term targets): `R_TX` 1,015,469 / 1,028,925 B, prove 179 / 181 s, verify p99 24.7 /
+  26.5 ms [measured, `runs/w3-*`]; but the base case's shared-γ round has **0 bits** at this mask rate and at most 27.5
+  bits at any mask rate over a 2^128 field [model, `runs/w6-ext2-mask-bits.jsonl`]: no ZK WHIR configuration over
+  Goldilocks² has a meaningful bound by p3-whir's accounting.
+- **Recommendation: settle on FRI for PQZH** (owner decision 2 triggered): FRI + ZK over Goldilocks⁵ (`pqzh-zk-ext5.md`
+  §4) stays the PQZH proof system; the ZK WHIR code stays on branch `pqzh-zkwhir` as a measured negative result (§10).
 
 ## 2. What Plonky3 0.9.0-rc.1 provides [source]
 
@@ -143,7 +163,7 @@ the programmable random-oracle model, provided the prover's masks come from a CS
   "This approach is only statistically ZK") [source]; the failure event is ζ hitting the trace domain, ≤ `2n/|F|`.
 - **Not claimed**: a full machine-checked proof; ZK against a malicious verifier beyond what Fiat–Shamir gives.
 
-## 5. Design of the adapter (to build, `src/whirpcs.rs`)
+## 5. Design of the adapter (`src/whirpcs.rs`; as built, deviations in §5.6)
 
 ### 5.1 Commit
 
@@ -204,7 +224,42 @@ labelled conjectured (the capacity conjecture is the one ePrint 2025/2046 dispro
 the configuration, 42–50 grinding bits, `pqzh-zk-ext5.md` §7); measure at the per-term targets of `runs/t13`
 (96 / 16 bits and 100 / 20 bits).
 
-## 6. If the four openings make it too large
+### 5.6 As built: deviations and additions to §5.1–§5.5
+
+- **Salted Merkle trees.** `HidingWhirPcs` runs over `HidingValMmcs` (Keccak-256 Merkle tree with 4 random salt
+  elements per leaf, the tree FRI + ZK uses), not the plain tree of p3-whir's tests: the Merkle compiler of a ZK IOP
+  needs hiding leaf commitments (sibling digests of unopened leaves are sent) [inference, standard BCS argument]. Cost:
+  32 B of salt per opened leaf.
+- **Trace masking by `t + Z_H·r` on coefficients** (as §5.1), the same distribution as `HidingFriPcs`'s interleaved
+  random rows (a uniform polynomial of degree < 2n agreeing with the trace on H) [inference]; the quotient masks are
+  §5.1's, with `v_{H_i}(X) = (X/s_i)^h − 1` in the plain monomial basis; unit-tested: the masked trace equals the
+  trace on H, the masked chunks equal the chunks on their domains, and the masks cancel in the Lagrange recombination
+  (`whirpcs::tests::coefficient_forms`).
+- **Claims**: per matrix (not per height class) and per point, one claim per aligned dyadic block of its columns;
+  β is drawn once after every opened value of every round is absorbed. The embedding of §5.2 is exact (unit test
+  `embedding_matches_direct_evaluation`; p3's `eval_base` is the standard `eq`, the doc formula is a typo). `R_TX`:
+  24 / 60 / 5 / 24 claims for main / quotient / preprocessed / LogUp.
+- **Variable count**: the stacked size rounded up to a power of two, raised until `ZkWhirConfig::new` accepts it (its
+  per-oracle randomness must fit the codeword slack); a function of the public shapes only. `R_TX`: 2^22 / 2^22 / 2^20
+  / 2^21 coefficients.
+- **Preprocessed round**: committed with a fixed seed (`PRE_SEED`, salts and encoding randomness), recommitted at open
+  (same root, checked), opened with the prover's fresh randomness. A private round opened twice is refused (its data
+  is taken at the first open).
+- **Mask code**: `ell_zk = 4`, mask code rate 1/16 (`WhirParams::DEFAULT`). Rate 1/2 (p3-whir's test value) needs
+  305 mask spot checks at 128 bits and gave `R_REG` 4.73 MB; 1/4, 1/8, 1/16: 2.76 / 2.16 / 1.91 MB; 1/64: 1.64 MB but
+  the base case's γ round drops to 49.5 bits [probe, `runs/w0-mask-probe.log`, `runs/w0-probe-*`]. 1/32 gives 115
+  bits for that round [model, `runs/w6-ext2-mask-bits.jsonl`]. 1/16 is the smallest proof with every term at target.
+- **Bits** (`pqzh_security --whir`): union bound of — ALI (`p3-security` `composition_error`), DEEP (`deep_ali_error`)
+  and LogUp (`logup::security_term`) at list size 1 (the extracted polynomials of a PCS opening are unique; the WHIR
+  terms carry the decoding regime, as `p3-multi-stark`'s report composes its PCS); the β claim batching
+  (`log2|F| − log2(opened values)`); each HVZK-WHIR opening = union of the initial-claims term, every fold's
+  proximity-gap and sumcheck term (Johnson, p3-whir's one-bit reserve), every round's OOD, query and
+  query-combination term (+ its grinding), the base case's γ round and its query round with grinding
+  (`hiding_base_case_security_report`, which p3-whir calls "diagnostic only"; no commitment OOD term under HVZK);
+  Keccak-256 collision 128. Re-implemented from p3-whir's crate-private `prescribed_security`
+  (`src/pcs/security.rs`), so it is this note's composition, not a p3 certificate.
+
+## 6. If the four openings make it too large (not built: owner decision 2)
 
 [estimate, not built] (1) Batch all rounds into one WHIR opening: the rounds are committed at different times, but
 all are opened at ζ after the last commitment, so a batched-WHIR (random linear combination of the four committed
@@ -213,43 +268,145 @@ pipeline, which `p3-whir` 0.9.0-rc.1 does not expose. (2) Rounds cannot be merge
 order main → LogUp challenges → permutation → α → quotient fixes four commitments); `R` already costs nothing.
 (3) Rate / fold sweep as in `pqzh-zk-ext5.md` §7.
 
-## 7. Status / resume (2026-10-14)
+## 7. Measurements: Goldilocks⁵, Johnson bound, 128-bit per-term target
 
-- **Done**: sources read (§2); options and choice (§3, §4); adapter design (§5). No code, no runs; no background
-  jobs left running.
-- **In progress**: nothing half-written in the crate (the branch has only this note, the README index row and the
-  TODO entry).
-- **Next exact steps** (worktree `.claude/worktrees/zkwhir`, branch `pqzh-zkwhir`, crate `pqz-core/pqzh`):
-  1. `src/whirpcs.rs`: the adapter of §5 (`WhirUniPcs<EF>` over `HidingWhirPcs<EF, F, Radix2DFTSmallBatch<F>,
-     ValMmcs, BeChallenger, StdRng>`), unit tests: §5.2 embedding vs direct evaluation; commit / open / verify round
-     trip on random matrices; a wrong opened value and a wrong `evals` entry rejected.
-  2. `src/config.rs`: `Params.whir: Option<WhirParams { rate, fold, pow, target, unique: bool, ell_zk, mask_rate }>`
-     (Copy/Hash), `WhirZkCfg<EF> = StarkConfig<WhirUniPcs<EF>, EF, BeChallenger>`; `rel.rs`: two more dispatch arms
-     in `prove_inner`, `verify`, `setup_cfg!`, `breakdown` (per-round proof bytes); `digit_height` = 16 under WHIR
-     (no FRI query budget to cover). FRI paths untouched.
-  3. `src/bin/pqzh_bench.rs`: flags `--whir-rate R --whir-fold K --whir-pow B --whir-target T [--whir-unique]`;
-     `src/bin/pqzh_security.rs` or a new `--whir` mode for the bits of §5.5; `wasm/lib.rs`: a `step_init3` taking
-     the WHIR parameters.
-  4. ZK sanity test (`tests/smoke.rs`): two witnesses of the same statement shape (`client::setup` with two seeds),
-     proofs with fixed masks; assert no witness field element appears verbatim among the opened values / proof
-     words, and that the opened values of the two proofs pass the same coarse distribution check (a test of the
-     plumbing, not a proof of ZK).
-  5. Tests, then runs, one at a time under the lock (each a committed run file, `runs/w*`):
-     `scripts/capped sh -c 'cargo test --release --offline > runs/w1-tests.txt 2>&1'`;
-     `scripts/capped runs/bench.sh w2-zkwhir5-r3 --rel both --np 3 --nv 100 --nadv 10 --max-proof 4000000 --whir-rate 3 --ext5`
-     and `-r4` (check memory against the 4 GB cap first with `--np 1 --sizes-only`); Goldilocks²
-     `w3-zkwhir2-r3-t96` / `-t100-pow20`; wasm verify of the dumped proofs as `runs/t6-zk5.sh` does; `xcheck/run.sh`
-     unchanged (`runs/s5-xcheck.txt`) and the wasm32 build.
-  6. Fill the comparison table (ZK WHIR Goldilocks⁵ / ², FRI + ZK conjectured / proven, non-ZK WHIR), update §1,
-     the TODO P6-PQZH entry, `python3 scripts/docs_check.py check`.
+Setting (`runs/w2-zkwhir5.sh`): starting rate 3 (blowup 8), fold 4 (3 code-switching rounds: 79 / 39 / 26 queries,
+base case 21–23 queries, 68 mask spot checks), 16 grinding bits, mask code rate 1/16; n = 3 proofs, 100 honest
+verifies, 12 mutation kinds × 40 per relation; wasm32 verify of the natively made proofs (n = 100, 12 × 10)
+[measured, `runs/w2-zkwhir5-r3.jsonl`, `-time.txt`, `-bits.jsonl`, `-wasm.jsonl`; the first wasm attempt trapped on a
+32-bit shift in `claims`, `runs/w2-zkwhir5.log`; fixed, rerun `runs/w2-wasm-rerun.sh`]:
 
-## 8. Open questions for the owner
+| | `R_REG` | `R_TX` |
+|---|---|---|
+| Proof | 1,913,510 B | 1,948,901 B |
+| Prove p50 | 34.9 s | 205.9 s |
+| Peak heap (prove) / process max RSS | 1,213 MB | 2,424 MB / 2.52 GB |
+| Verify honest p50 / p99, native | 38.4 / 40.7 ms | 43.7 / 46.5 ms |
+| Verify adversarial p99, native | 33.1 ms | 36.2 ms |
+| Mutated inputs accepted / panics, native | 0 / 0 of 480 | 0 / 0 of 480 |
+| Verify honest p50 / p99, wasm32 (memory) | 73.4 / 91.6 ms (82 MiB) | 83.8 / 93.5 ms (161 MiB) |
+| Mutated accepted, wasm32 | 0 of 120 | 0 of 120 |
+| Bits composed (union) | 124.24 | 124.22 |
 
-1. Accept option (b-uni) as the ZK WHIR path (HVZK-WHIR under Plonky3's hiding batch STARK), with option (a), a ZK
-   `p3-multi-stark`, left out as weeks of protocol work without a published analysis?
-2. If the measured `R_TX` is above conjectured FRI + ZK (the [estimate] of §1), is a batched-opening WHIR (§6, needs
-   a `p3-whir` change or our own batch layer) worth building, or does that settle "FRI for PQZH"?
-3. Goldilocks²: report it at the reachable per-term targets (96–100 bits) only, as in `pqzh-zk-ext5.md` §7?
+Soundness terms of `R_TX` (bits) [model, `runs/w2-zkwhir5-r3-bits.jsonl`]: WHIR openings main 126.31 (2^22, 24
+claims), quotient 126.31 (2^22, 60), LogUp 126.31 (2^21, 24), preprocessed 126.41 (2^20, 5) — inside each the weakest
+are the base-case query round 128.02 (with its 14 grinding bits) and the code-switching queries 128.17–128.94; Keccak
+collision 128.0; LogUp fingerprint 299.0; DEEP 299.8; β claim batching 309.9; ALI 311.8. `R_REG` the same within
+0.1 bit. As with non-ZK WHIR (`pqzh-zk-ext5.md` §7) a per-term target of 128 composes to ≈ 124–125, because the
+union bound sums four openings and the collision term; FRI's 128 is `p3-security`'s weakest term, not a sum.
+
+Starting rate 2 and 4 [probe, one proof each, `runs/w4-rate-probe.log`, `runs/w4-probe-zkwhir5-r*.jsonl`, `-time.txt`]:
+
+| Starting rate (blowup) | `R_REG` | `R_TX` | `R_TX` prove | `R_TX` peak heap |
+|---|---|---|---|---|
+| 2 (4) | 2,034,976 B | 2,074,279 B | 191 s | 1,480 MB |
+| 3 (8), §7 table | 1,913,510 B | 1,948,901 B | 206 s | 2,424 MB |
+| 4 (16) | 1,830,394 B | 1,856,665 B | 234 s | 4,312 MB (over the 4 GB cap: max RSS 4.18 GB, swapped) |
+
+A higher rate shrinks only the code-switching rounds (143 → 116 → 100 KB per opening); the base case stays at
+≈ 355–365 KB per opening at every rate [measured breakdowns].
+
+## 8. Measurements: Goldilocks² at 96 and 100 bits
+
+Starting rate 3, fold 4, mask code rate 1/16; per-term target 96 with 16 grinding bits, 100 with 20 (the settings of
+`pqzh-zk-ext5.md` §7 `runs/t13`); n = 3 / 100 / 12 × 10 [measured, `runs/w3-zkwhir2-r3-t96-pow16*`,
+`-t100-pow20*`]:
+
+| | `R_REG` 96 / 100 | `R_TX` 96 / 100 |
+|---|---|---|
+| Proof | 999,610 / 1,018,602 B | 1,015,469 / 1,028,925 B |
+| Prove p50 | 23.8 / 25.2 s | 179.4 / 181.2 s |
+| Peak heap | 723 MB | 1,445 MB (max RSS 1.50 GB) |
+| Verify honest p50 / p99 | 18.1 / 19.3, 18.1 / 21.1 ms | 21.5 / 24.7, 21.8 / 26.5 ms |
+| Mutated accepted / panics | 0 / 0 of 120 each | 0 / 0 of 120 each |
+
+**Bits**: every WHIR round term reaches its target (code-switching queries 96.03–96.16 / 100.03–100.16, base-case
+queries 96.44 / 100.44), and the STARK terms are LogUp 107–108, DEEP 107.8–108.8, β 118.5–119.1, ALI 119.8–120.2,
+collision 128; **but the masked base case's shared-γ round is vacuous (0 bits)**, so the composed bound is 0
+[model, `runs/w3-*-bits.jsonl`]. Over mask code rates 1/2 … 1/64 that round gives at most 27.5 bits (1/2), 13.5 (1/4)
+and 0 from 1/8 on, at both targets; over Goldilocks⁵ the same round gives 219.5 … 49.5 bits [model,
+`runs/w6-ext2-mask-bits.jsonl`, `runs/w6-ext2-mask-bits.sh`]. The term is the sum of the source and mask groups' MCA
+errors plus the product of all old / fresh candidate-list bounds divided by |F| (p3-security `whir/hiding.rs`
+`HidingGammaRoundReport`); with seven mask groups the product list exceeds 2^128 [inference from the report fields].
+So **HVZK-WHIR over Goldilocks² has no meaningful soundness bound in p3-whir 0.9.0-rc.1's accounting**; the 96–100-bit
+figures hold only for the non-base-case terms. Goldilocks² at a 128-bit target: refused by WHIR's configuration
+(48 grinding bits needed against a 16-bit budget, `runs/w6-ext2-mask-bits.jsonl`), as for non-ZK WHIR.
+
+## 9. Comparison and where the bytes go
+
+`R_TX`, zero knowledge, the smallest proof within the 4 GB prover cap per row:
+
+| `R_TX`, ZK | Bits | Proof | Prove | Peak heap | Verify p99 native / wasm32 | Source |
+|---|---|---|---|---|---|---|
+| FRI + ZK, Goldilocks⁵, conjectured, blowup 16 | 128 (weakest term) | 340,431 B | 20.3 s | 2.82 GB | 15.5 / 24.1 ms | `pqzh-zk-ext5.md` §4, `runs/t6-zk5-conj-b4-q29*` |
+| FRI + ZK, Goldilocks⁵, proven, blowup 16 | 128 (weakest term) | 622,448 B | 20.4 s | 2.82 GB | 19.1 / 28.7 ms | `runs/t6-zk5-proven-b4-q57*` |
+| **ZK WHIR, Goldilocks⁵, Johnson, rate 3** | 124.2 (union) | **1,948,901 B** | 205.9 s | 2.42 GB | 46.5 / 93.5 ms | `runs/w2-zkwhir5-r3*` |
+| ZK WHIR, Goldilocks², Johnson, target 100 | 0 (base-case γ) | 1,028,925 B | 181.2 s | 1.45 GB | 26.5 ms / — | `runs/w3-zkwhir2-r3-t100-pow20*` |
+| Non-ZK WHIR (`p3-multi-stark`), Goldilocks⁵, rate 4 — not ZK, lower bound | 125.3 (union) | 257,530 B | 11.4 s | 1.12 GB | 20.1 ms / — | `pqzh-zk-ext5.md` §7, `runs/t12-whir-ext5-r4*` |
+
+`R_TX` bytes per opening at rate 3 [measured, `runs/w2-zkwhir5-r3.jsonl` breakdown]: main 487,754 (rounds 120,537,
+base case 364,018), quotient 486,026, preprocessed 474,174, LogUp 477,770; commitments, opened values and lookup
+terminals 23,126. The base case carries, per opening, the blinded messages and randomness of every mask (the
+sumcheck masks of 16–18 folded variables and 3 code-switch masks, 68 randomness coefficients each) and 68 paired spot
+checks (carried + fresh oracle, each with salts and a pruned Merkle path) of 7 mask groups, plus the source and fresh
+main-mask openings [inference from `ZkWhirProof` / `BaseCaseZkProof` and the config numbers in `-bits.jsonl`].
+
+- **ZK costs WHIR 7.6×** (257,530 → 1,948,901 B), against FRI's ≈ 1.7× (FRI plain proven `R_TX` 358,874 B at blowup
+  16 → 622,448 B ZK, `pqzh-zk-ext5.md` §7). The HVZK base case is a fixed ≈ 360 KB per opening at 128 bits.
+- **Why far above the §1 design estimate of ≈ 400–500 KB** (four openings at ≈ 100–120 KB each, as one plain WHIR
+  opening in `pqzh-zk-ext5.md` §7): the plain part of each hiding opening (the code-switching rounds, 111–121 KB at
+  rate 3) matched that estimate; what the estimate missed is the masked base case, ≈ 360 KB per opening. ePrint 2026/391
+  calls the ZK overhead negligible against the non-ZK state of the art, which is asymptotic in the witness size; at
+  128 bits the base case is a constant set by the mask spot-check count (68) times the mask groups (7, two per
+  code-switching round plus one) and the per-mask randomness, and at 2^20–2^22 coefficients that constant dominates
+  [inference]. The mask code rate trades it against the γ round's bits (§5.6), and the starting rate barely moves it
+  (§7).
+- **Batching the four openings (§6) would not fix it** [inference]: one opening alone is ≈ 470 KB at rate 3 (450 KB at
+  rate 4), above 340,431 B before the STARK's own 23 KB.
+- **Prove time** 206 s against FRI's 20 s. Not profiled (a `perf` probe was not permitted in the sandbox, so it was
+  dropped); the per-claim equality tables of the HVZK prover over 2^22 points (24–60 claims per round) are the likely
+  cost [inference, unverified]. It does not change the size result.
+- **wasm32 verify** 93.5 ms p99 for `R_TX`, over the 50 ms line; native 46.5 ms.
+
+## 10. Recommendation
+
+**Settle on FRI for PQZH** (owner decision 2 triggered, 2026-10-14): FRI + ZK over Goldilocks⁵ (`pqzh-zk-ext5.md`
+§4) stays the PQZH proof system; the soundness regime / proof limit questions of `pqzh-zk-ext5.md` §9 remain the open
+ones. ZK WHIR is 3.1–5.7× larger, 10× slower to prove, 3× slower to verify, and over Goldilocks² has no bound.
+For context (reported by the controller on 2026-10-14 from the parallel Ligero branch, not measured in this note):
+the Ligero backend gave `R_TX` with ZK at 128 bits 230 KB proven / 92 KB conjectured, below both FRI + ZK rows of §9,
+so it is the likely PQZH backend; that comparison belongs to the Ligero note. Measurements here stopped on the
+controller's instruction once the stop condition was clear (no further tuning probes).
+Keep the ZK WHIR adapter on branch `pqzh-zkwhir` (code, tests, runs) as the measured negative result; revisit only if
+p3-whir ships a cheaper hiding base case (the ≈ 360 KB per opening) or a batched hiding opening and one opening falls
+well under 340 KB.
+
+## 11. Status / reruns (2026-10-14)
+
+- **Done**: §5 adapter built and tested; §7–§9 measured; the owner's stop rule applied (no batched opening). No
+  background jobs left running.
+- **Not done**: a batched multi-round opening (owner decision 2); a profile of the prove time (§9); ZK sanity test of
+  §5 step 4 beyond "two proofs differ, both verify" (`tests/smoke.rs` `zk_whir_honest_and_hiding`) — not needed once
+  WHIR is not chosen.
+- Reruns, from `pqz-core/pqzh/`, each alone under the machine lock:
+
+```sh
+scripts/capped sh -c 'cargo test --release --offline > runs/w1-tests.txt 2>&1'   # unit + smoke + attacks
+scripts/capped runs/w0-mask-probe.sh > runs/w0-mask-probe.log                    # §5.6 mask code rate [probe]
+scripts/capped runs/w2-zkwhir5.sh > runs/w2-zkwhir5.log; scripts/capped runs/w2-wasm-rerun.sh   # §7
+scripts/capped runs/w3-zkwhir2.sh > runs/w3-zkwhir2.log                          # §8
+scripts/capped runs/w4-rate-probe.sh > runs/w4-rate-probe.log                    # §7 rates 2 / 4 [probe]
+scripts/capped sh -c 'runs/w6-ext2-mask-bits.sh > runs/w6-ext2-mask-bits.jsonl' # §8 base-case γ bits [model]
+scripts/capped sh -c 'xcheck/run.sh > runs/w7-xcheck.txt'                        # statement / witness bytes vs C
+```
+
+## 12. Open questions for the owner
+
+1. Close the ZK WHIR line for PQZH (settle on FRI + ZK, Goldilocks⁵, or Ligero once its note is in) and keep branch `pqzh-zkwhir` unmerged as the
+   record, or merge the adapter to main as a backup path (it touches only `whirpcs.rs` and dispatch arms; FRI paths
+   unchanged)? Recommendation: merge the code and runs (backup, not delete) without changing the PQZH configuration.
+2. The FRI questions of `pqzh-zk-ext5.md` §9 (soundness regime conjectured / proven, proof limit, prover memory) are
+   now the deciding ones for PQZH.
 
 ## References
 

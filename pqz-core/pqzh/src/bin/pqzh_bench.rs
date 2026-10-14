@@ -1,6 +1,7 @@
 //! PQZH bench: proof bytes and breakdown, prove time, honest and adversarial verify p50 / p99, peak heap.
 //!   pqzh_bench [--rel reg|tx|both] [--np N] [--nv N] [--nadv N] [--blowup L] [--queries Q] [--arity A]
 //!              [--final F] [--pow B] [--cap H] [--mvw W] [--zk] [--ext5] [--max-proof N] [--sizes-only] [--dump DIR]
+//!              [--whir-rate R [--whir-fold K] [--whir-pow B] [--whir-target T] [--whir-unique] [--whir-ell L] [--whir-mask-rate M]]  (ZK WHIR; implies --zk)
 //! Prints JSON lines. Run under scripts/capped.
 
 use std::alloc::{GlobalAlloc, Layout, System};
@@ -73,6 +74,19 @@ fn main() {
     p.mv_width = num("--mvw", p.mv_width);
     p.zk = a.iter().any(|x| x == "--zk");
     p.ext5 = a.iter().any(|x| x == "--ext5");
+    if get("--whir-rate").is_some() {
+        let d = pqzh::config::WhirParams::DEFAULT;
+        p.zk = true;
+        p.whir = Some(pqzh::config::WhirParams {
+            rate: num("--whir-rate", d.rate),
+            fold: num("--whir-fold", d.fold),
+            pow: num("--whir-pow", d.pow),
+            target: num("--whir-target", d.target),
+            unique: a.iter().any(|x| x == "--whir-unique"),
+            ell_zk: num("--whir-ell", d.ell_zk),
+            mask_rate: num("--whir-mask-rate", d.mask_rate),
+        });
+    }
     p.max_proof = num("--max-proof", p.max_proof); // measurement only: verify proofs above the 160 KB limit
     let sizes_only = a.iter().any(|x| x == "--sizes-only");
     let (np, nv, nadv) = (num("--np", 3), num("--nv", 50), num("--nadv", 4));
@@ -82,8 +96,8 @@ fn main() {
         _ => vec![(OP_REGISTER, "R_REG"), (OP_TRANSFER, "R_TX")],
     };
     println!(
-        "{{\"params\": {{\"log_blowup\": {}, \"queries\": {}, \"max_log_arity\": {}, \"log_final_poly_len\": {}, \"query_pow_bits\": {}, \"cap_height\": {}, \"mv_width\": {}, \"zk\": {}, \"ext5\": {}}}}}",
-        p.log_blowup, p.num_queries, p.max_log_arity, p.log_final_poly_len, p.query_pow_bits, p.cap_height, p.mv_width, p.zk, p.ext5
+        "{{\"params\": {{\"log_blowup\": {}, \"queries\": {}, \"max_log_arity\": {}, \"log_final_poly_len\": {}, \"query_pow_bits\": {}, \"cap_height\": {}, \"mv_width\": {}, \"zk\": {}, \"ext5\": {}, \"whir\": \"{:?}\"}}}}",
+        p.log_blowup, p.num_queries, p.max_log_arity, p.log_final_poly_len, p.query_pow_bits, p.cap_height, p.mv_width, p.zk, p.ext5, p.whir
     );
     std::panic::set_hook(Box::new(|_| {})); // verify counts caught panics; keep stderr quiet
     let s = client::setup();

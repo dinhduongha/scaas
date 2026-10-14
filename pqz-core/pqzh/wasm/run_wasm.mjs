@@ -1,6 +1,7 @@
 // PQZH wasm32 runner: prove / verify / adversarial verify timed on the JS side, linear-memory high-water vs 256 MiB.
 //   node wasm/run_wasm.mjs [n_prove] [n_verify] [n_adv per kind] [log_blowup] [queries] [zk] [max_proof] [ext5] [cap]
 //                          [log_arity] [pow]   (0 = default)
+// PQZH_WHIR="rate,fold,pow,target": zero-knowledge WHIR (step_init3; zk implied, FRI arguments unused).
 // PQZH_PROOFS=DIR: verify only, proofs made natively by `pqzh_bench --dump DIR` with the same parameters.
 // Build first: (cd wasm && cargo build --release --offline --target wasm32-unknown-unknown). Prints JSON lines.
 import { readFileSync } from 'node:fs';
@@ -23,9 +24,11 @@ const stats = (v) => {
            max_ms: r3(v[n - 1]) };
 };
 
-out({ wasm_bytes: bytes.length, node: process.version, args: { np, nv, nadv, lb, q, zk, maxp, ext5, cap, ar, pow, proofs } });
+out({ wasm_bytes: bytes.length, node: process.version, args: { np, nv, nadv, lb, q, zk, maxp, ext5, cap, ar, pow, proofs, whir: process.env.PQZH_WHIR } });
 let t0 = performance.now();
-const kinds = x.step_init2(lb, q, zk, maxp, ext5, cap, ar, pow);
+const whir = process.env.PQZH_WHIR;
+const kinds = whir ? x.step_init3(maxp, ext5, ...whir.split(',').map(Number))
+                   : x.step_init2(lb, q, zk, maxp, ext5, cap, ar, pow);
 const load = (tx, which, file) => {
   const b = readFileSync(file);
   const p = x.step_alloc(b.length);

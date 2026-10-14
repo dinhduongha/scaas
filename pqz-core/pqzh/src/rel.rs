@@ -7,7 +7,7 @@ use p3_matrix::dense::RowMajorMatrix;
 use sha3::Digest;
 
 use crate::air::{DigitAir, MvAir, MvOut, PolyAir, PolySpec, PqzhAir, RANGE_N, RangeAir, dc};
-use crate::config::{Challenge5, Params, Plain5Config, PlainConfig, Zk5Config, ZkConfig};
+use crate::config::{Challenge, Challenge5, Params, Plain5Config, PlainConfig, Whir2Config, Whir5Config, Zk5Config, ZkConfig};
 use crate::enc;
 use crate::ring::*;
 
@@ -231,10 +231,10 @@ fn parse_tx(stmt: &[u8]) -> Option<TxSt> {
     Some(TxSt { pkf, pkt, pka, ut, vt_, u, v, fee })
 }
 
-/// Digit table height: 16 rows, or enough for the hiding PCS's masking budget (2 (queries + extension degree * 2
-/// opening points) rows).
+/// Digit table height: 16 rows, or enough for the hiding FRI PCS's masking budget (2 (queries + extension degree * 2
+/// opening points) rows). HVZK-WHIR budgets its own query openings: 16.
 pub fn digit_height(p: &Params) -> usize {
-    if p.zk { (2 * (p.num_queries + 2 * p.ext_degree())).next_power_of_two().max(16) } else { 16 }
+    if p.zk && p.whir.is_none() { (2 * (p.num_queries + 2 * p.ext_degree())).next_power_of_two().max(16) } else { 16 }
 }
 
 /// R_TX rows 1-7 (pq-zether.md §7.4, pqz_rel.c build_tx).
@@ -466,6 +466,8 @@ setup_cfg!(PlainConfig, |p: &Params| p.plain(&[0; 32]));
 setup_cfg!(Plain5Config, |p: &Params| p.plain_ext(&[0; 32]));
 setup_cfg!(ZkConfig, |p: &Params| p.zk(&[0; 32], [0; 32]));
 setup_cfg!(Zk5Config, |p: &Params| p.zk_ext(&[0; 32], [0; 32]));
+setup_cfg!(Whir2Config, |p: &Params| p.whir_ext::<Challenge>(&[0; 32], [0; 32]));
+setup_cfg!(Whir5Config, |p: &Params| p.whir_ext::<Challenge5>(&[0; 32], [0; 32]));
 
 macro_rules! verify_with {
     ($cfg:expr, $ty:ty, $b:expr, $proof:expr, $zk:expr, $op:expr, $p:expr) => {{
@@ -494,7 +496,14 @@ pub fn prove_unchecked(op: u8, stmt: &[u8], wit: &[u8], rnd32: [u8; 32], p: &Par
 fn prove_inner(op: u8, stmt: &[u8], wit: &[u8], rnd32: [u8; 32], p: &Params, check: bool) -> Result<Vec<u8>, &'static str> {
     let b = build(op, stmt, Some(wit), check, p)?;
     let seed = stmt_digest(op, stmt);
-    let proof = if p.zk && p.ext5 {
+    if p.whir.is_some() && !p.zk {
+        return Err("whir requires zk");
+    }
+    let proof = if p.whir.is_some() && p.ext5 {
+        prove_with!(p.whir_ext::<Challenge5>(&seed, rnd32), p.whir_ext::<Challenge5>(&[0; 32], [0; 32]), b)
+    } else if p.whir.is_some() {
+        prove_with!(p.whir_ext::<Challenge>(&seed, rnd32), p.whir_ext::<Challenge>(&[0; 32], [0; 32]), b)
+    } else if p.zk && p.ext5 {
         prove_with!(p.zk_ext::<Challenge5>(&seed, rnd32), p.zk_ext::<Challenge5>(&[0; 32], [0; 32]), b)
     } else if p.zk {
         prove_with!(p.zk(&seed, rnd32), p.zk(&[0; 32], [0; 32]), b)
@@ -517,7 +526,13 @@ pub fn verify(op: u8, stmt: &[u8], proof: &[u8], p: &Params) -> bool {
     std::panic::catch_unwind(|| {
         let Ok(b) = build(op, stmt, None, false, p) else { return false };
         let seed = stmt_digest(op, stmt);
-        if p.zk && p.ext5 {
+        if p.whir.is_some() && !p.zk {
+            false
+        } else if p.whir.is_some() && p.ext5 {
+            verify_with!(p.whir_ext::<Challenge5>(&seed, [0; 32]), Whir5Config, b, proof, true, op, p)
+        } else if p.whir.is_some() {
+            verify_with!(p.whir_ext::<Challenge>(&seed, [0; 32]), Whir2Config, b, proof, true, op, p)
+        } else if p.zk && p.ext5 {
             verify_with!(p.zk_ext::<Challenge5>(&seed, [0; 32]), Zk5Config, b, proof, true, op, p)
         } else if p.zk {
             verify_with!(p.zk(&seed, [0; 32]), ZkConfig, b, proof, true, op, p)
@@ -575,6 +590,9 @@ macro_rules! breakdown_as {
 /// Byte breakdown of a proof: commitments, out-of-domain values, per-round input openings (opened rows / Merkle
 /// multiproof), FRI layers, final polynomial; hiding proofs also list the random codewords' opened values.
 pub fn breakdown(proof: &[u8], p: &Params) -> Vec<(String, usize)> {
+    if p.whir.is_some() {
+        return if p.ext5 { whir_breakdown::<Challenge5>(proof) } else { whir_breakdown::<Challenge>(proof) };
+    }
     match (p.zk, p.ext5) {
         (false, false) => breakdown_as!(PlainConfig, proof, |f, _o| f),
         (false, true) => breakdown_as!(Plain5Config, proof, |f, _o| f),
@@ -587,4 +605,29 @@ pub fn breakdown(proof: &[u8], p: &Params) -> Vec<(String, usize)> {
             &f.1
         }),
     }
+}
+
+/// ZK WHIR proofs: commitments, opened values, then per opened round (main, quotient, preprocessed, permutation) the
+/// HVZK-WHIR opening, split into claims, sumcheck transcripts and mask commitments, code-switching rounds, base case.
+fn whir_breakdown<EF>(proof: &[u8]) -> Vec<(String, usize)>
+where
+    EF: p3_field::ExtensionField<F> + p3_field::TwoAdicField,
+    rand::distr::StandardUniform: rand::distr::Distribution<EF>,
+{
+    type SC<EF> = crate::config::WhirCfg<EF>;
+    let Ok((p, _)) = enc::take_from_bytes::<BatchProof<SC<EF>>>(proof) else { return vec![] };
+    let mut out = vec![
+        ("total".into(), proof.len()),
+        ("commitments".into(), sz(&p.commitments)),
+        ("ood_values".into(), sz(&p.opened_values)),
+        ("lookup_terminals".into(), sz(&p.lookup_terminals)),
+    ];
+    for (i, w) in p.opening_proof.iter().enumerate() {
+        out.push((format!("whir{i}_total"), sz(w)));
+        out.push((format!("whir{i}_evals"), sz(&w.evals)));
+        out.push((format!("whir{i}_sumchecks"), sz(&w.sumchecks) + sz(&w.sumcheck_mask_commitments)));
+        out.push((format!("whir{i}_rounds"), sz(&w.rounds)));
+        out.push((format!("whir{i}_base_case"), sz(&w.base_case)));
+    }
+    out
 }

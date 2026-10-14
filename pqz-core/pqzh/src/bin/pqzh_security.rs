@@ -4,6 +4,10 @@
 //! --measure, the proof bytes at the smallest query count reaching the target in each regime.
 //!   pqzh_security [--target 128] [--pow 16] [--ext 2|5] [--zk] [--measure] [--batch-pow B] [--ood-pow B] [--lookup-pow B]
 //! --ext 5: Goldilocks^5 challenge field (Params::ext5; plain mode). Prints JSON lines. Run under scripts/capped.
+//!   pqzh_security --whir --ext 2|5 --rate R [--fold K] [--pow B] [--target T] [--unique] [--ell L] [--mask-rate M]
+//! With --vars N --claims C: the terms of one HVZK-WHIR opening of that shape only (no proof).
+//! ZK WHIR (src/whirpcs.rs): proves each relation once to read the openings' shapes, then prints every soundness
+//! term (bits) and their union bound (docs/research/pqzh-zk-whir.md §5.5).
 
 use p3_air::BaseAir;
 use p3_air::symbolic::AirLayout;
@@ -18,7 +22,7 @@ use p3_security::grinding::GrindingSites;
 use p3_security::logup::{LogUpAir, security_term};
 use p3_security::shape::{InstanceShape, StarkAirParams};
 use p3_security::stark::{conjectured_security_report, proven_security_report};
-use p3_uni_stark::OpeningShape;
+use p3_uni_stark::{OpeningShape, StarkGenericConfig};
 
 use pqzh::config::Challenge;
 use pqzh::ring::F;
@@ -83,8 +87,91 @@ fn reports(s: &Shape, ext: usize, lb: usize, arity: usize, q: usize, pow: usize,
     [(pr.security_bits(), pr.binding().1.label), (cr.security_bits(), cr.binding().label)]
 }
 
+/// ZK WHIR bits per term, union-composed: STARK terms (ALI, DEEP, LogUp) as Schwartz-Zippel over the extracted
+/// polynomials (list size 1: the WHIR openings carry the decoding regime, as a PCS-compiled PIOP), the claim batching
+/// β, each HVZK-WHIR opening (`WhirUniPcs::opening_terms`), Keccak-256 collision.
+fn whir_bits<EF: p3_field::ExtensionField<F> + p3_field::TwoAdicField>(p: &Params, ext: usize)
+where
+    rand::distr::StandardUniform: rand::distr::Distribution<EF>,
+{
+    use p3_security::air::composition_error;
+    use p3_security::deep::deep_ali_error;
+
+    use pqzh::whirpcs::{LAST_OPENINGS, union_bits};
+    let fb = EF::bits() - 1;
+    let cfg = p.whir_ext::<EF>(&[0; 32], [0; 32]);
+    let s = client::setup();
+    for (op, name, st, w) in [(OP_REGISTER, "R_REG", &s.reg_stmt, &s.reg_wit), (OP_TRANSFER, "R_TX", &s.tx_stmt, &s.tx_wit)] {
+        let sh = shape(op, st, p, ext);
+        prove(op, st, w, [1; 32], p).expect("prove");
+        let opens = LAST_OPENINGS.lock().unwrap().clone();
+        let inst = InstanceShape { log_trace_length: sh.log_n, modulus_bits: fb, collision_resistance: 128, num_batched_functions: 1 };
+        let mut terms: Vec<(String, f64)> = vec![
+            ("ali".into(), composition_error(sh.air.num_constraints, 1.0, fb).bits()),
+            ("deep".into(), deep_ali_error(&sh.air, &inst, 1.0).bits()),
+            ("collision".into(), 128.0),
+        ];
+        if let Some(t) = security_term(&sh.logup, &inst, &GrindingSites::NONE) {
+            terms.push(("logup".into(), t.bits.bits()));
+        }
+        let values: usize = opens.iter().map(|o| o.2).sum();
+        terms.push(("claim-beta".into(), fb as f64 - (values as f64).log2()));
+        let mut rows = vec![];
+        for (i, &(n, claims, _)) in opens.iter().enumerate() {
+            let t = cfg.pcs().opening_terms(n, claims).expect("terms");
+            let u = union_bits(t.iter().map(|x| x.1));
+            let mut tt: Vec<_> = t.iter().filter(|x| x.1.is_finite()).cloned().collect();
+            tt.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+            rows.push(format!("{{\"round\": {i}, \"vars\": {n}, \"claims\": {claims}, \"bits\": {u:.2}, \"weakest\": {:?}, \"{}\": 0}}", &tt[..tt.len().min(4)], t.iter().find(|x| !x.1.is_finite()).unwrap().0));
+            terms.push((format!("whir-opening-{i}"), u));
+        }
+        let total = union_bits(terms.iter().map(|x| x.1));
+        terms.sort_by(|a, b| a.1.partial_cmp(&b.1).unwrap());
+        println!(
+            "{{\"rel\": \"{name}\", \"ext\": {ext}, \"whir\": \"{:?}\", \"bits_composed\": {total:.2}, \"terms\": {:?}, \"openings\": [{}]}}",
+            p.whir.unwrap(), terms.iter().map(|(k, v)| (k.as_str(), (v * 100.0).round() / 100.0)).collect::<Vec<_>>(), rows.join(", ")
+        );
+    }
+}
+
 fn main() {
     let a: Vec<String> = std::env::args().collect();
+    if a.iter().any(|x| x == "--whir") {
+        let get = |k: &str| a.iter().position(|x| x == k).and_then(|i| a.get(i + 1)).map(|s| s.parse::<usize>().unwrap());
+        let d = pqzh::config::WhirParams::DEFAULT;
+        let mut p = Params::DEFAULT;
+        let ext = get("--ext").unwrap_or(5);
+        (p.zk, p.ext5, p.max_proof) = (true, ext == 5, usize::MAX);
+        p.whir = Some(pqzh::config::WhirParams {
+            rate: get("--rate").unwrap_or(d.rate),
+            fold: get("--fold").unwrap_or(d.fold),
+            pow: get("--pow").unwrap_or(d.pow),
+            target: get("--target").unwrap_or(d.target),
+            unique: a.iter().any(|x| x == "--unique"),
+            ell_zk: get("--ell").unwrap_or(d.ell_zk),
+            mask_rate: get("--mask-rate").unwrap_or(d.mask_rate),
+        });
+        // one opening's terms only (no proof): --vars N --claims C
+        if let (Some(n), Some(c)) = (get("--vars"), get("--claims")) {
+            let t = if ext == 5 {
+                p.whir_ext::<pqzh::config::Challenge5>(&[0; 32], [0; 32]).pcs().opening_terms(n, c)
+            } else {
+                p.whir_ext::<Challenge>(&[0; 32], [0; 32]).pcs().opening_terms(n, c)
+            };
+            match t {
+                Ok(t) => println!(
+                    "{{\"ext\": {ext}, \"whir\": \"{:?}\", \"vars\": {n}, \"claims\": {c}, \"bits\": {:.2}, \"terms\": {:?}}}",
+                    p.whir.unwrap(),
+                    pqzh::whirpcs::union_bits(t.iter().map(|x| x.1)),
+                    t
+                ),
+                Err(e) => println!("{{\"ext\": {ext}, \"whir\": \"{:?}\", \"vars\": {n}, \"error\": {e:?}}}", p.whir.unwrap()),
+            }
+            return;
+        }
+        if ext == 5 { whir_bits::<pqzh::config::Challenge5>(&p, 5) } else { whir_bits::<Challenge>(&p, 2) }
+        return;
+    }
     let get = |k: &str| a.iter().position(|x| x == k).and_then(|i| a.get(i + 1)).map(|s| s.parse::<usize>().unwrap());
     let target = get("--target").unwrap_or(128) as f64;
     let pow = get("--pow").unwrap_or(16);

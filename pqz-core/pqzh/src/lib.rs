@@ -7,6 +7,7 @@ pub mod config;
 pub mod enc;
 pub mod rel;
 pub mod ring;
+pub mod whirpcs;
 
 pub use config::Params;
 pub use rel::{MAX_PROOF, OP_REGISTER, OP_TRANSFER, prove, verify};

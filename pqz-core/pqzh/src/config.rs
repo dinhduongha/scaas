@@ -22,6 +22,7 @@ use rand::rngs::StdRng;
 use sha3::Digest;
 
 use crate::ring::F;
+use crate::whirpcs::WhirUniPcs;
 
 pub type Challenge = BinomialExtensionField<F, 2>;
 /// Quintic extension (≈ 2^320): the PQZH challenge field (owner 2026-10-13; pqzh-prototype.md §7).
@@ -48,7 +49,7 @@ pub type ValMmcs = MerkleTreeMmcs<F, u8, BeKeccak, Compress, 2, 32>;
 pub fn mmcs(cap_height: usize) -> ValMmcs {
     ValMmcs::new(BeKeccak, Compress::new(Keccak256Hash {}), cap_height)
 }
-type HidingValMmcs = MerkleTreeHidingMmcs<F, u8, BeKeccak, Compress, StdRng, 2, 32, 4>;
+pub type HidingValMmcs = MerkleTreeHidingMmcs<F, u8, BeKeccak, Compress, StdRng, 2, 32, 4>;
 type Dft = Radix2DitParallel<F>;
 
 /// Plonky3's SerializingChallenger64 over a Keccak-256 HashChallenger, with big-endian words: a field element is
@@ -149,6 +150,9 @@ pub type Plain5Config = PlainCfg<Challenge5>;
 pub type ZkCfg<EF> =
     StarkConfig<HidingFriPcs<F, Dft, HidingValMmcs, ExtensionMmcs<F, EF, HidingValMmcs>, StdRng>, EF, BeChallenger>;
 pub type ZkConfig = ZkCfg<Challenge>;
+pub type WhirCfg<EF> = StarkConfig<WhirUniPcs<EF>, EF, BeChallenger>;
+pub type Whir2Config = WhirCfg<Challenge>;
+pub type Whir5Config = WhirCfg<Challenge5>;
 pub type Zk5Config = ZkCfg<Challenge5>;
 
 /// FRI parameters, fixed per proofSystemId and never read from the proof.
@@ -168,6 +172,35 @@ pub struct Params {
     pub max_proof: usize,
     /// layout, not FRI: accumulator columns of the MV AIR (outputs per stacked group)
     pub mv_width: usize,
+    /// Some: the zero-knowledge WHIR path (HVZK-WHIR under the hiding batch STARK, src/whirpcs.rs) instead of
+    /// FRI; the FRI fields above are then unused. Requires `zk`.
+    pub whir: Option<WhirParams>,
+}
+
+/// HVZK-WHIR parameters (p3-whir ProtocolParameters + ZkParameters), fixed per proofSystemId.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct WhirParams {
+    /// starting log inverse rate (log blowup)
+    pub rate: usize,
+    /// constant folding factor
+    pub fold: usize,
+    /// grinding bits per phase
+    pub pow: usize,
+    /// per-term security target (bits)
+    pub target: usize,
+    /// unique-decoding regime instead of the Johnson bound
+    pub unique: bool,
+    /// sumcheck mask length (>= 3) and mask code log inverse rate (>= 1)
+    pub ell_zk: usize,
+    pub mask_rate: usize,
+}
+
+impl WhirParams {
+    /// Goldilocks^5, Johnson bound, 128-bit per-term target, fold 4, 16 grinding bits; mask code rate 1/16 (the
+    /// smallest proofs with every term at the target, runs/w0-mask-probe.log: rate 1/2 gives 305 mask spot checks,
+    /// 1/64 drops the base case's gamma round to 49 bits).
+    pub const DEFAULT: WhirParams =
+        WhirParams { rate: 3, fold: 4, pow: 16, target: 128, unique: false, ell_zk: 4, mask_rate: 4 };
 }
 
 impl Params {
@@ -187,6 +220,7 @@ impl Params {
         ext5: false,
         max_proof: crate::rel::MAX_PROOF,
         mv_width: 9,
+        whir: None,
     };
 
     fn fri<M>(&self, mmcs: M) -> FriParameters<M> {
@@ -237,5 +271,10 @@ impl Params {
 
     pub fn zk(&self, seed: &[u8; 32], rnd: [u8; 32]) -> ZkConfig {
         self.zk_ext(seed, rnd)
+    }
+
+    /// The zero-knowledge WHIR configuration (`self.whir` must be set); `rnd` seeds the masks and salts.
+    pub fn whir_ext<EF: ExtensionField<F> + TwoAdicField>(&self, seed: &[u8; 32], rnd: [u8; 32]) -> WhirCfg<EF> {
+        StarkConfig::new(WhirUniPcs::new(self.whir.expect("whir parameters"), rnd), BeChallenger::new(seed))
     }
 }

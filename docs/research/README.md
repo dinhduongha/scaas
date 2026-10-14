@@ -56,6 +56,6 @@ output) are kept while the repository is private and are dropped before a public
 | [pqzh-solidity-verifier.md](pqzh-solidity-verifier.md) | PQZH Solidity verifier: gas without the precompile (P6-PQZH-SOL) (2026-10-13) |
 | [pqz-licence-inventory.md](pqz-licence-inventory.md) | PQZ licence inventory: third-party code, GMP / MPFR / HEXL absence, open questions (G-LIC step 1) (2026-10-14) |
 | [pqzh-zk-ext5.md](pqzh-zk-ext5.md) | PQZH with zero knowledge over Goldilocks⁵ at 128 bits: EVM-friendly configuration, proven / conjectured sizes, Merkle caps, WHIR (P6-PQZH) (2026-10-14) |
-| [pqzh-zk-whir.md](pqzh-zk-whir.md) | PQZH with zero-knowledge WHIR: options (hiding WHIR in a ZK multilinear STARK, HVZK-WHIR under the hiding batch STARK, wrappers), choice and adapter design; paused before implementation (P6-PQZH) (2026-10-14) |
+| [pqzh-zk-whir.md](pqzh-zk-whir.md) | PQZH with zero-knowledge WHIR: options, HVZK-WHIR adapter under the hiding batch STARK built and measured; `R_TX` 1.95 MB at 128 bits (Goldilocks⁵), above FRI + ZK: owner's stop rule triggered, settle on FRI (P6-PQZH) (2026-10-14) |
 | [node-ai-agents.md](node-ai-agents.md) | scaas-node and AI agents — direction (2026-10-11) |
 | [zether-disclosure.md](zether-disclosure.md) | Zether disclosure — who can reveal what, under which conditions (2026-10-11) |
