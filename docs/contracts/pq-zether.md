@@ -1,6 +1,8 @@
 # Post-quantum Zether (PQZ) on private/PoA chains
 
-Status: **SPECIFIED, UNAUDITED — NOT FOR PRODUCTION FUNDS**; nothing of PQZ is built (classical Zether is BUILT on
+Status: **SPECIFIED, UNAUDITED — NOT FOR PRODUCTION FUNDS**; nothing of PQZ is deployed; the proof engine (`pqz-core`,
+both proof systems), the precompile boundary `pqz-ffi` and the frozen vectors are built (P6d, P6e; byte layouts in
+[serialization v1](#serialization)), the contracts, node integration and clients are not (classical Zether is BUILT on
 dev chains, [zether.md](zether.md)). Every size, proof length and gas figure below marked *estimate* is replaced by
 measurement before the parameters freeze. Notation: `R = Z[X]/(X^64 + 1)`, `R_q = R/qR`; `s`, `r`, `e` are vectors in
 `R^32` (2048 integer coefficients); `a^T b` for vectors in `R_q^32` is `Σ_j a_j·b_j ∈ R_q`; `x[i]` is coefficient `i`
@@ -33,6 +35,7 @@ big-endian; everything else as in [zether.md](zether.md) (`‖`, `be32`, `u8`, A
    - 7.10 [Authorization check](#authorization-check)
    - 7.11 [Meta-transactions](#711-meta-transactions)
 8. [Proof engine `pqz-core`](#8-proof-engine-pqz-core)
+   - 8.1 [Serialization v1](#serialization)
 9. [On-chain verifier](#9-on-chain-verifier)
    - 9.1 [Precompile `PQZ` (`0x…0F01`)](#91-precompile-pqz-0x0f01)
    - 9.2 [Precompile `MLDSA65` (`0x…0F10`)](#92-precompile-mldsa65-0x0f10)
@@ -64,9 +67,11 @@ module-lattice assumptions:
 | State | points in storage | ciphertext **hashes** in storage, bytes in calldata + events; public amounts (`pqzShield`, fees) as a public `plainPending` integer; public keys in SSTORE2 ([CTR-PQZ-07](#CTR-PQZ-07), [CTR-PQZ-06](#CTR-PQZ-06)) |
 | Chains | dev allowlist 31337/1337 | allowlist 31337/1337/**7622** **and** a constructor self-test through the precompile **and** the registry's `chain_uid` in every statement ([CTR-PQZ-01](#CTR-PQZ-01), [NET-ALL-22](../networks/README.md#NET-ALL-22)) |
 
-**Cost.** Ciphertext 16,512 B, public key 16,384 B, transfer proof ≈ 30–50 KB (estimate; the E-S1 spike's `R_TX` measured 42.7 KB). A transfer is ≈ 77 KB of
+**Cost.** Ciphertext 16,512 B, public key 16,384 B, transfer proof 42,762 B in PQZL and ≈ 231 KB in PQZH (the
+frozen vectors, [sizes](#44-sizes)). A PQZL transfer is ≈ 77 KB of
 calldata and ≈ **2.8 M gas** while the p99 verify time stays under ≈ 11 ms (the EIP-7623 calldata floor binds,
-[gas](#gas)), rising to ≈ 7.5 M at the 50 ms kill threshold — the same order as classical Zether's measured 3.29–3.36 M.
+[gas](#gas)), rising to ≈ 7.5 M at the former 50 ms kill threshold (the limit is 60 ms since 2026-10-14; gas is
+recalibrated in P6f) — the same order as classical Zether's measured 3.29–3.36 M.
 Consuming each received credit later costs ≈ 0.52 M gas more (its ciphertext enters calldata once more,
 [rollover](#rollover-op)). Security of the encryption: primal-uSVP block size β ≈ 476 (core-SVP 139 classical / 126
 quantum; Kyber-512 is 406 → 118 / 107 under the same script, [parameters](#parameters)).
@@ -416,12 +421,21 @@ multiplied by `γ` in this derivation, `K_MAX` is recomputed, and the change is 
 | PQZ secret | 32 (seed) | never leaves the device / key oracle |
 | PQZ public key `pk` | **16,384** | 32 polys × 64 coeffs × `be8`, coefficient 0 first, poly 0 first; each `< q` |
 | Ciphertext `ct = u ‖ v` | **16,512** | `u` as `pk`; `v` = 16 × `be8` |
-| Transfer outputs `u ‖ v_t ‖ v_f ‖ v_a` | 16,768 | `v_a` absent (0 bytes) when the auditor is off |
-| Transfer proof | ≈ 30–50 KB (**estimate**; kill at 96 KB; E-S1 `R_TX` measured 42.7 KB, `docs/research/pqz-core-e-s1.md`) | `pqz-core` serialization v1 |
-| Burn / refresh proof | ≈ same as transfer minus one recipient | |
-| Registration PoP proof | ≈ 15–25 KB (estimate; E-S1 `R_REG` measured 28.1 KB) | |
-| Disclosure proof | ≈ 15–25 KB (estimate) | |
+| Transfer outputs `u ‖ v_t ‖ v_f ‖ v_a` | 16,768 | `v_a` absent (0 bytes, 16,640 in all) when the auditor is off |
+| Statements | 83,072 (`R_TX`), 66,560 (`R_TX0`), 50,048 (`R_BURN`), 16,480 (`R_REG`), 33,184 (disclosure) | [serialization v1](#serialization) |
 | ML-DSA-65 pk / sig | 1,952 / 3,309 | FIPS 204 |
+
+Proofs ([serialization v1](#serialization)), measured on the frozen vectors (`smartcontracts/vectors/pqz/proof_pqzl.json`,
+`proof_pqzh.json`, one proof per form at a fixed `rnd32`; lengths vary slightly with `rnd32`); the bound is what
+the verifier accepts:
+
+| Form | PQZL v2 proof | PQZH Ligero v1 proof | PQZH exact maximum |
+|---|---|---|---|
+| Transfer `R_TX` / auditor off `R_TX0` | 42,762 / 42,431 | 230,946 / 231,480 | 235,470 / 234,744 |
+| Burn / refresh `R_BURN` | 41,904 / 41,915 | 232,184 / 230,280 | 234,744 |
+| Registration PoP `R_REG` | 28,093 | 186,778 | 190,458 |
+| Disclosure `R_DS` / `R_DR` (receiver, auditor) | 28,977 / 28,996, 28,986 | 186,456 / 187,226, 187,194 | 190,458 |
+| Limit `MAX_PROOF(id)` | 98,304 (kill criterion 96 KB, [CTR-PQZ-09](#CTR-PQZ-09)) | 262,144 | — |
 
 `be8` coefficients waste 22 bits each (≈ 34 %) against tight 42-bit packing; accepted: the Solidity `Add` works on
 aligned 64-bit lanes, and bytes 0–1 of each word are zero (cheap calldata tokens: ≈ 25.2 tokens per coefficient
@@ -471,7 +485,8 @@ change is a new `proofSystemId`. Hints then open only ciphertexts of amounts the
 <a id="encodings"></a>
 
 - Integers in statements: `be32` (`uint256` ABI words) unless stated; coefficients `be8`, in normal form (`< q`); any
-  other value ⇒ reject (`NonCanonical`).
+  other value ⇒ reject (`NonCanonical`). Every byte layout and the canonical rules of the precompile decoder:
+  [serialization v1](#serialization).
 - `ctHash(ct) = keccak256(ct)` over the 16,512 bytes.
 - Polynomial vectors are never compressed. Lengths are fixed by the op; no length fields inside the cryptographic
   objects.
@@ -479,10 +494,27 @@ change is a new `proofSystemId`. Hints then open only ciphertexts of amounts the
   `opTag = keccak256("SCAAS-PQZ-OP-<NAME>-V1")` for `TRANSFER`, `BURN`, `REFRESH`, `REGISTER`, `DISCLOSE-SENDER`,
   `DISCLOSE-RECEIVER`, `DISCLOSE-AUDITOR`. The precompile requires the `opTag` to belong to the input's `op` byte and
   the `proofSystemId` to be one it implements, for every op.
-- Transcript (inside `pqz-core`): SHAKE256, initialized with `"SCAAS-PQZ-TRANSCRIPT-V1"`, then `absorb("op", u8(op))`
-  and `absorb("statement", be32(len) ‖ statement)` **before** any prover message (strong Fiat–Shamir, as classical);
-  every later message is absorbed with a 1-byte label length, label, `be32` length, bytes. Challenges are derived,
-  never sent.
+- <a id="transcript"></a>**Transcripts (as implemented; P6e D7, 2026-10-14).** Both proof systems absorb `op` and the
+  whole statement (with its `opTag ‖ proofSystemId` prefix) **before** any prover message (strong Fiat–Shamir, as
+  classical); challenges are derived, never sent. `op` is the input's op byte (1 for both `R_TX` and `R_TX0`).
+  - **PQZL v2** (`pqz_rel.c` `pqz_stmt_hash`, then LaZer's `tbox`): `hash0 = SHAKE128("SCAAS-PQZ-TRANSCRIPT-V1" ‖
+    u8(op) ‖ be32(len(stmt)) ‖ stmt)`, 32 bytes (the tag's ASCII bytes, no length prefix). `hash0` seeds LaZer's tbox
+    transcript unchanged: each prover message (including the ones the verifier recomputes instead of reading from the
+    proof), encoded with LaZer's coder as the proof fields are ([serialization v1](#serialization)), is absorbed as
+    `hash ← SHAKE128(hash ‖ encoded message)[0..32)`, first the commitment `tA1 ‖ tB` (`abdlop_hashcomm`), and every
+    challenge is expanded from the current `hash`; there are no labels or length fields.
+  - **PQZH Ligero v1** (`pqz-core/pqzh/ligero/src/transcript.rs`): a Keccak-256 chain, `state =
+    keccak256("SCAAS-PQZH-LIGERO-V1" ‖ u8(op) ‖ be32(len(stmt)) ‖ stmt)`; `absorb(x)`: `state = keccak256(state ‖ x)`;
+    squeeze: `keccak256(state ‖ 0xff ‖ be64(ctr))` (`ctr` from 0 after each absorb) gives four 8-byte big-endian
+    words, first word first; an `F_q` element is a word masked to 42 bits, drawn again if `≥ q`; an index in
+    `[0, n)` is a word masked to `2^⌈log2 n⌉ − 1`, drawn again if `≥ n`. Order: absorb the Merkle root; draw `a_i`,
+    `b_i` (one `F_{q^4}` per witness row each), `c_lin`, `c_quad`, `ρ`, `r_t` (one per multiplication triple); absorb
+    the bytes of `w ‖ q ‖ h`; grinding: `keccak256(state ‖ "PoW" ‖ be64(nonce))` must start with 16 zero bits; absorb
+    the 8 nonce bytes; draw `t` column indices.
+
+  Earlier text here described a labelled SHAKE256 transcript (a 1-byte label length, label and `be32` length per
+  message) that was never implemented; the v2 code and the frozen vectors are normative (P6e gap G3: changing the
+  code instead would be a `proofSystemId` bump).
 - **Round-by-round soundness.** LNP22 has several challenge rounds (commitment, JL projection, the amortization or
   "garbage" challenges, the final challenge). Under Fiat–Shamir a prover can grind each round separately, so the
   soundness of the non-interactive proof is about `Q ×` the **worst single round** error, not the product.
@@ -743,13 +775,13 @@ classical `C_deb` disappears. The proof carries a decryption relation, which the
 in another form.
 
 <a id="derived-randomness"></a>
-<a id="CTR-PQZ-19"></a>**CTR-PQZ-19** — **Encryption randomness is derived from the seed and a published salt**, so the sender can re-create it for disclosure (owner 2026-10-11: the classical salt rule, [CTR-ZTH-30](zether.md#CTR-ZTH-30), applies to PQZ): `seed_enc = HKDF-SHA256(ikm = pqzKeySeed, salt = "SCAAS-PQZ-ENC-V2" (controller ruling, pending the owner), info = chainUid ‖ token(20) ‖ fromUA ‖ be32(sendCounter) ‖ salt)`, with `salt` = 16 fresh random bytes per build, carried in the payload and the statement header, hence in `PqzTransfer`, the stored bundle, the commitment and the no-bundle calldata; the contract does not check it. A fresh salt per build means a re-proof at the same counter never reuses `r` (reusing `r` across two messages leaks `Δ·(m − m')` up to small noise), and the sender remembers no amount. Masking randomness *inside* the proof is hedged (`H(secret ‖ statement ‖ 32 B CSPRNG)`). **Burn and refresh are outside this derivation** (owner 2026-10-13): their encryption randomness `r, e1, e2_f` is fresh CSPRNG output (hedging it with `pqzKeySeed` is allowed), never `seed_enc` or any other value fixed by the counter. Their header salt is 0 ([statement](#statement)), so a counter-derived seed would give two burns or refreshes built at one `sendCounter` for different balances `b' ≠ b''` (a re-proof after `InlineTooFar`, another `plainUsed`) the same `r` and `e2_f`, and `v_f − v_f'` would be `Δ·(b' − b'')` exactly. No disclosure re-derives them: the burned amount is public and `v_f` is the sender's own balance. Replaces the message-bound form (`info = be32(chainId) ‖ token ‖ fromUA ‖ be8(sendCounter) ‖ toUA ‖ be8(v) ‖ be8(b') ‖ u8(auditorOn)`, never built).
+<a id="CTR-PQZ-19"></a>**CTR-PQZ-19** — **Encryption randomness is derived from the seed and a published salt**, so the sender can re-create it for disclosure (owner 2026-10-11: the classical salt rule, [CTR-ZTH-30](zether.md#CTR-ZTH-30), applies to PQZ): `seed_enc = HKDF-SHA256(ikm = pqzKeySeed, salt = "SCAAS-PQZ-ENC-V2" (controller ruling, pending the owner), info = chainUid ‖ token(20) ‖ fromUA ‖ be32(sendCounter) ‖ salt)`, with `salt` = 16 fresh random bytes per build, carried in the payload and the statement header, hence in `PqzTransfer`, the stored bundle, the commitment and the no-bundle calldata; the contract does not check it. A fresh salt per build means a re-proof at the same counter never reuses `r` (reusing `r` across two messages leaks `Δ·(m − m')` up to small noise), and the sender remembers no amount. Masking randomness *inside* the proof is hedged (`H(secret ‖ statement ‖ 32 B CSPRNG)`), as implemented (P6e D6): PQZL seeds the commitment randomness from `SHAKE128("SCAAS-PQZ-PROVER-RND-V2" ‖ rnd32 ‖ wh ‖ hash0)[0..32)` and every mask from the same with `"SCAAS-PQZ-PROVER-SUB-V2"`, `wh = SHAKE128("SCAAS-PQZ-PROVER-WIT-V2" ‖ wit)[0..32)`, `hash0` the statement digest ([transcript](#transcript)); PQZH draws all prover randomness from `SHAKE256("SCAAS-PQZH-LIGERO-RNG-V2" ‖ rnd32 ‖ u8(op) ‖ be32(len(stmt)) ‖ stmt ‖ wit)` (`wit` the prover-API witness bytes, [serialization v1](#serialization)); a repeated `rnd32` with another witness or statement gives unrelated masks, equal inputs give equal proofs. **Burn and refresh are outside this derivation** (owner 2026-10-13): their encryption randomness `r, e1, e2_f` is fresh CSPRNG output (hedging it with `pqzKeySeed` is allowed), never `seed_enc` or any other value fixed by the counter. Their header salt is 0 ([statement](#statement)), so a counter-derived seed would give two burns or refreshes built at one `sendCounter` for different balances `b' ≠ b''` (a re-proof after `InlineTooFar`, another `plainUsed`) the same `r` and `e2_f`, and `v_f − v_f'` would be `Δ·(b' − b'')` exactly. No disclosure re-derives them: the burned amount is public and `v_f` is the sender's own balance. Replaces the message-bound form (`info = be32(chainId) ‖ token ‖ fromUA ‖ be8(sendCounter) ‖ toUA ‖ be8(v) ‖ be8(b') ‖ u8(auditorOn)`, never built).
 
 <a id="pqz-storage-modes"></a>
 <a id="CTR-PQZ-23"></a>**CTR-PQZ-23** — **Storage modes and the sender memo as classical** (owner, 2026-10-11; spec only): `disclosureMode ∈ {BUNDLE, COMPACT}` at `initialize`, immutable ([CTR-ZTH-48](zether.md#CTR-ZTH-48)). The bundle is `R = salt ‖ u ‖ v_t ‖ v_a ‖ toUA` (16,688 B with the auditor, 16,560 B without). Entries as [CTR-ZTH-38](zether.md#CTR-ZTH-38), the plain name being the mode's default: `pqzTransfer` stores `R` with SSTORE2 on a BUNDLE token (≈ 3.4 M gas at 200 gas per code byte, **estimate**, against ≈ 0.52 M of calldata) and is commit-reveal on a COMPACT token; `pqzTransferCompact` is commit-reveal on both (`entry[entryRef] = keccak256(R)` plus the sender memo); `pqzTransferNoBundle` stores nothing and reverts `TransferEntryDisabled` on a COMPACT token. Salt and memo travel inside `payload`. The memo is [CTR-ZTH-50](zether.md#CTR-ZTH-50) with `pqzKeySeed` and `info = "PQZ/memo/v1" ‖ chainUid ‖ token(20) ‖ fromUA ‖ be32(sendCounter) ‖ salt`: `memo = salt ‖ ((flags ‖ be8(v) ‖ toUA) XOR ks)` (`flags` bit0 = `auditorOn`; `ks` of 41 B), 57 B for the one recipient (owner 2026-10-13: `be32` counter, as classical Zether — it only enters the off-chain HKDF, so it costs nothing; `be8` amount, because amounts are `< 2^64` by the plaintext encoding and a wider field would only add calldata) (labels `"PQZ/memo/v1"`, `"SCAAS-PQZ-ENC-V2"`: controller ruling, pending the owner), `memoHash` in the statement header. The sender recovers from storage alone: `sendCounter` → `entryRef` → memo → `seed_enc` → `r, e1, e2_t, e2_a` → `u ‖ v_t ‖ v_a` with `pk_t` from the registry → the hash check → a `SENDER_S` proof. Receiver and auditor read `R` from storage (full record) or from `PqzTransfer` logs / calldata.
 
 <a id="pqz-auditor-mode"></a>
-<a id="CTR-PQZ-24"></a>**CTR-PQZ-24** — **Auditor modes as classical** (owner, 2026-10-11; spec only): `auditorMode ∈ {NONE, FULL, OPTIONAL}` at `initialize`, immutable ([CTR-ZTH-49](zether.md#CTR-ZTH-49)), with `auditorUA`. NONE: `auditorUA = 0`, `auditorOn = 0` and no `v_a`. FULL: `auditorOn = 1` on every transfer, else `AuditorRequired`; the auditor reads every transfer from creation and can rebuild balances by bookkeeping. OPTIONAL: the sender's per-transfer choice, publicly visible as `auditorOn = 0` (no `v_a`), statement row 5 skipped. The factory refuses FULL or OPTIONAL without `auditorUA`, NONE with one and unknown values (`BadAuditorMode`).
+<a id="CTR-PQZ-24"></a>**CTR-PQZ-24** — **Auditor modes as classical** (owner, 2026-10-11; spec only): `auditorMode ∈ {NONE, FULL, OPTIONAL}` at `initialize`, immutable ([CTR-ZTH-49](zether.md#CTR-ZTH-49)), with `auditorUA`. NONE: `auditorUA = 0`, `auditorOn = 0` and no `v_a`. FULL: `auditorOn = 1` on every transfer, else `AuditorRequired`; the auditor reads every transfer from creation and can rebuild balances by bookkeeping. OPTIONAL: the sender's per-transfer choice, publicly visible as `auditorOn = 0` (no `v_a`), statement row 5 skipped. The auditor-off transfer is its own relation `R_TX0` (P6e D8): `R_TX` without `pk_a`, `v_a`, `e2_a`, every other row and norm kept; op 1 with a 66,560-byte statement, and the `auditorOn` word must be what the length says (1 for 83,072 B, 0 for 66,560 B; [serialization v1](#serialization)). The factory refuses FULL or OPTIONAL without `auditorUA`, NONE with one and unknown values (`BadAuditorMode`).
 
 ### 7.5 Burn and refresh
 
@@ -815,8 +847,10 @@ Header (640 bytes; `salt` and `memoHash` per [CTR-PQZ-23](#CTR-PQZ-23)):
 | 608 | `memoHash` (`keccak256(memo)` on commit-reveal, else 0) |
 
 Body: `pk_f ‖ [pk_t] ‖ [pk_a] ‖ T ‖ out` (`T` already includes the plain term). Transfer with auditor:
-640 + 3·16,384 + 16,512 + 16,768 = **83,072 B**; burn: 640 + 16,384 + 16,512 + 16,512 = **50,048 B**. (Before the salt and memo rows, with the 576-byte header: 83,008 B and 49,984 B.) The contract
-builds it from storage, SSTORE2 reads and calldata; the prover builds it identically (vector `statement_*.json`).
+640 + 3·16,384 + 16,512 + 16,768 = **83,072 B**; without auditor: 640 + 2·16,384 + 16,512 + 16,640 = **66,560 B**;
+burn: 640 + 16,384 + 16,512 + 16,512 = **50,048 B**. (Before the salt and memo rows, with the 576-byte header: 83,008 B and 49,984 B.) The contract
+builds it from storage, SSTORE2 reads and calldata; the prover builds it identically (`smartcontracts/vectors/pqz/statement_*.json`).
+Byte offsets of every object and the decoder's rule per header word: [serialization v1](#serialization).
 
 `authDigest = keccak256("SCAAS-PQZ-AUTH-V1" ‖ keccak256(statement))`. The authorization signature is over these 32
 bytes, wrapped as the UA `ua_msg` and signed by ML-DSA as `pq_msg` with the empty context, as EIP-8355 requires ([CTR-UA-23](accounts.md#CTR-UA-23), SPECIFIED (P6); transitional: `ua_msg` with `ctx = kind_tag`).
@@ -1054,9 +1088,17 @@ LaBRADOR/Greyhound deferred to aggregation work. **Kill criterion**: stop and re
 the transfer proof exceeds 96 KB, if p99 adversarial verify exceeds 60 ms on the chain host (50 ms until 2026-10-14; owner raised it to 60 ms, which also bounds wasm32 verify, so the PQZH Ligero backend's measured 55.9 ms wasm32 p99 passes; the gas figures below quoted "at 50 ms" are the old threshold and are recalibrated on measured p99 in P6f), or if the rewritten layers
 cannot reach arithmetic-layer KAT equality with upstream. Single implementation; LaZer is MIT and protocol logic stays
 upstream-shaped. We own a C fork with six rewritten layers, a rewrite rather than a kernel swap; upstream protocol
-fixes are merged by hand. **Versioning:** `proofSystemId = keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v2")`
-(`0x2e07e6ed…798c2f`, `PQZ_PROOF_SYSTEM_ID` in `pqz-core/src/pqz.h`); every parameter, relation, transcript or
-serialization change bumps it; the token stores it at `initialize` and the precompile accepts only ids it implements.
+fixes are merged by hand. **Versioning:** two proof systems, one `proofSystemId` word with two values
+([serialization v1](#serialization)): PQZL `keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v2")` (`0x2e07e6ed…798c2f`,
+`PQZ_PROOF_SYSTEM_ID` in `pqz-core/src/pqz.h`; P6e D2: stays v2 across the auditor-off form and the hedged prover,
+frozen at gate A) and PQZH (Ligero over F_q) `keccak256("scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1")`
+(`0x0a47a768…2fead4`; P6e D3, frozen at gate B), `MAX_PROOF` 98,304 B and 262,144 B. The token stores its id at
+`initialize` and the precompile accepts only ids it implements. **Bump rule** (P6e D4): any change, after a
+deployment, to the parameters, presets, relation rows or statement layout of an existing form, the transcript, the
+proof encoding or the accepted set ⇒ a new id. Prover-only changes must keep the frozen vectors' proof bytes
+(`pqz-vectors --check`, the `proofs_fnv` lines); adding a statement form before the first deployment and tightening
+the accepted set before any deployment need no bump (recorded case by case in decisions.md). The precompile may
+implement several ids; retiring one is a chain activation (P6f), never silent.
 v1 → v2 (2026-10-13): the two LaZer `tbox` Schwartz–Zippel fixes
 ([lazer#24](https://github.com/lazer-crypto/lazer/issues/24), [lazer#25](https://github.com/lazer-crypto/lazer/issues/25);
 `pqz-core/sz/README.md`) change the transcript; v1 is retired. lazer#24: v1 drew one challenge pair for all λ/2
@@ -1064,7 +1106,7 @@ evaluation accumulators (2 independent tests, soundness ≈ 2^-84 against the st
 challenge domain for all exact-ℓ2 equations, so only the sum of the block norms was checked ([noise](#noise)). A v2
 verifier bounds the whole `z2 = (z21, z22)` ([lazer#26](https://github.com/lazer-crypto/lazer/issues/26), 2026-10-13):
 it changes which proofs are accepted, not the transcript or any honest proof, and no verifier without it was deployed.
-The id stays v2 for now; whether this needs a bump is an open owner decision (recommendation: no).
+The id stays v2 (owner 2026-10-14: no bump for the z21 fix).
 
 - **Origin.** Fork of LaZer at a pinned commit (`main` was `3330e48`, 2026-09-28; the pin is recorded), MIT, repo path
   `scaas/pqz-core/`. Kept: LNP22 protocol logic, codegen (`scripts/lin-codegen.sage` with lattice-estimator), parameter
@@ -1076,7 +1118,8 @@ The id stays v2 for now; whether this needs a bump is an open owner decision (re
     integer rejection if the proof-size cost is acceptable; no `double`;
   - rejection: the acceptance test in fixed-point integer arithmetic with a constant-time exp approximation whose error
     is inside the proof's statistical-distance budget; no MPFR;
-  - memory and errors: a caller-provided arena of compile-time size, every `ERR`/`ASSERT` an error return; no `malloc`,
+  - memory and errors: a caller-provided arena (`pqz_init(arena, len)`; `pqz-ffi` reserves it once at run time,
+    144 MiB verify-only, 448 MiB for proving), every `ERR`/`ASSERT` an error return; no `malloc`,
     no `abort`, no stdio;
   - PRNG: AES-NI replaced by a bit-exact constant-time software AES (bitsliced; the T-table form is forbidden for
     secret-keyed streams) or by SHAKE where the fork changes the stream (then all KATs are fork-generated).
@@ -1090,8 +1133,12 @@ The id stays v2 for now; whether this needs a bump is an open owner decision (re
   on real AVX-512 hardware). CI asserts
   that `libpqz.so`, the WASM module and the mobile libraries link no GMP, MPFR, libstdc++ or libm symbols and contain no
   floating-point instructions on the verify and prove paths (`nm`/`objdump` check).
-- **Relations.** `R_TX`, `R_BURN` (also REFRESH), `R_REG`, `R_DS`, `R_DR` written as LaZer specifications
-  (`pqz-core/params/*.py`) → generated `*params.h` checked in, regenerated only on purpose (codegen takes minutes).
+- **Relations.** `R_TX`, `R_TX0` (transfer without the auditor), `R_BURN` (also REFRESH), `R_REG`, `R_DS`, `R_DR`
+  (also AUDITOR) written as LaZer specifications (`pqz-core/params/<rel>_params.sage`) → generated
+  `pqz_<rel>_params.h` checked in, regenerated only on purpose (`params/regen.sh` reproduces every header byte for
+  byte, P6e D1); the statement → equation builders are hand-written in `pqz_rel.c` / `pqz_sv.c` and pinned by the
+  KATs and the generic-vs-specialised differential test. PQZH implements the same six as Ligero constraint systems
+  (`pqz-core/pqzh/ligero/src/cs.rs`) on the same statement and witness bytes.
 - **Proof modulus = `q`.** `q` was chosen for the proof system first: `q ≡ 2l + 1 mod 4l` with `l = 4` keeps differences
   of small challenges invertible, so the relation modulus is the proof modulus and no row is lifted. A lift to `q·q₁`
   would have added ≈ 4096 quotient witnesses of 11–12 bits, each range-proven, growing the binary witness from hundreds
@@ -1103,19 +1150,214 @@ The id stays v2 for now; whether this needs a bump is an open owner decision (re
                 const uint8_t rnd32[32], uint8_t *proof, size_t *proof_len);   /* 0 = ok */
   int pqz_verify(uint8_t op, const uint8_t *stmt, size_t stmt_len, const uint8_t *proof, size_t proof_len);
                                                                                /* 1 = valid, 0 = anything else */
-  int pqz_keygen(const uint8_t seed32[32], uint8_t pk[16384]);
-  int pqz_enc(...); int pqz_dec(const uint8_t seed32[32], const uint8_t ct[16512], uint64_t M[16], int64_t noise[16]);
+  int pqz_verify_fast(uint8_t op, const uint8_t *stmt, size_t stmt_len, const uint8_t *proof, size_t proof_len);
+                                        /* the specialised verifier: accepts exactly what pqz_verify accepts */
+  int pqz_keygen(const uint8_t seed32[32], uint8_t pk[16384], int8_t s[2048], int16_t e[2048], unsigned *ctr_used);
+  int pqz_enc_seed(const uint8_t *const pks[], unsigned npk, const uint8_t msgs[][16], const uint8_t seed_enc[32],
+                   uint8_t u[16384], uint8_t vs[][128], int8_t r[2048], int16_t e1[2048], int16_t e2[][16],
+                   unsigned *ctr_used);
+  int pqz_dec(const int8_t s[2048], const uint8_t ct[16512], int64_t M[16], int64_t noise[16]);
   ```
-  `pqz_verify` never crashes ([CTR-PQZ-10](#CTR-PQZ-10)): it is reached only through a bounds-checked Rust decoder that
-  accepts exactly the fixed lengths of the sizes and statement tables and coefficients `< q`; it uses a compile-time
-  arena and a fixed stack, has no recursion and no unbounded loop, and returns 0 on any malformed input or internal
-  error.
-- **Proof serialization v1** = the engine's own (polynomials as packed integers of the generated widths), versioned by
-  `proofSystemId`. The contract never parses a proof; only its length is bounded (`MAX_PROOF = 98,304`).
-- **Fiat–Shamir.** Transcript per [encodings](#encodings): `op` and the statement (with its `opTag ‖ proofSystemId`
+  (`pqz-core/src/pqz.h`; `pqz_init(arena, len)` first.) The core never sees untrusted bytes directly
+  ([CTR-PQZ-10](#CTR-PQZ-10)): the node, the clients and the wallets reach it only through `pqz-ffi`
+  (`pqz-core/ffi/`, C ABI `pqz_precompile` for the node, a Rust API, a `prove` feature for clients, wasm32), whose
+  bounds-checked decoder `pqz-stmt` accepts exactly the encodings of [serialization v1](#serialization) before any C
+  runs; the precompile path verifies PQZL with `pqz_verify_fast` only, and `pqz_verify` stays the reference in tests.
+  The core uses a fixed arena reserved once at run time and a fixed stack (`pqz-ffi` runs every core call on one worker
+  thread with a 16 MiB stack), has no recursion and no unbounded loop, and returns 0 on any malformed input or
+  internal error.
+- **Proof serialization v1**: [serialization v1](#serialization) (PQZL = LaZer's coder format, PQZH = the Ligero
+  format), versioned by `proofSystemId`. The contract never parses a proof; it bounds its length by the token's id
+  (`MAX_PROOF = 98,304` B for PQZL, 262,144 B for PQZH).
+- **Fiat–Shamir.** Transcript per [transcripts](#transcript): `op` and the statement (with its `opTag ‖ proofSystemId`
   prefix) are absorbed first; every challenge round must be ≥ 128-bit sound on its own (round-by-round), listed in
   `estimator.txt`. Soundness of multi-round Fiat–Shamir with aborts in the quantum random-oracle model is less settled
   than for 3-move Σ-protocols; this is an explicit assumption of the threat model (T10).
+
+### 8.1 Serialization v1
+
+<a id="serialization"></a>
+
+Every byte the precompile, the contracts and the clients exchange, frozen by P6e (gate A for PQZL, gate B for PQZH).
+Normative sources, which agree byte for byte: the precompile decoder `pqz-core/stmt/src/lib.rs` (`pqz-stmt`), the C
+core `pqz-core/src/pqz.h` / `pqz_rel.c`, the Ligero crate `pqz-core/pqzh/ligero/src/` (`ligero.rs`, `merkle.rs`,
+`fq.rs`, `transcript.rs`; design notes `docs/research/pqzh-ligero.md` §4, §13), the vectors
+`smartcontracts/vectors/pqz/` and their independent checker `pqz_kat.py`. Where older text in this file disagreed,
+the code and the vectors win (changes listed at the end of this section). All integers are big-endian; a *word* is 32
+bytes; `be8` and `‖` as in the notation at the top.
+
+**Proof systems** (the `proofSystemId` word, statement bytes 32..63; bump rule: [CTR-PQZ-09](#CTR-PQZ-09)):
+
+| `proofSystemId` | System | `MAX_PROOF(id)` | Verifier on the precompile path | Freeze |
+|---|---|---|---|---|
+| `keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v2")` = `0x2e07e6ed1fd303a08c89b3eab6e8423fdfb8f31202958dd682a0619313798c2f` | PQZL v2: LNP22 through LaZer's `tbox` (`pqz-core`, C) | 98,304 B | `pqz_verify_fast` | gate A (P6e D2) |
+| `keccak256("scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1")` = `0x0a47a7689250ba178a52ad5972cdd9153358c022cb694c08d2389e82de2fead4` | PQZH Ligero v1: Ligero over F_q, radix-431 domains, Keccak-256 Merkle tree and transcript, zero knowledge, proven preset (`pqzh-ligero`, Rust) | 262,144 B | `pqzh_ligero::verify` | gate B (P6e D3) |
+
+Retired, never deployed: PQZL `…/v1` (2026-10-13) and the STARK's provisional
+`keccak256("scaas/pqz/pqzh/stark-d1-goldilocks5-fri-keccak256-zk/v1")` (`0xaa1f92dd…`). Any other id ⇒ `0`.
+
+**Precompile input** (`pqz-stmt` `decode_input`, run by `pqz-ffi` before any proof code):
+
+```text
+input = u8(op) ‖ be32(L) ‖ stmt (L bytes) ‖ proof (all remaining bytes)
+```
+
+1. `len(input) > MAX_INPUT = 393,216` ⇒ revert (the only revert; `pqz-ffi` status 1, nothing parsed). The largest
+   input the decoder can pass is 5 + 83,072 + 262,144 = 345,221 B (a transfer statement with a PQZH proof at
+   `MAX_PROOF`; P6e D5).
+2. `len(input) < 5`, or `L > len(input) − 5` ⇒ `0`.
+3. `op = 6`: the input must be exactly `06 00000000` (self-test, below); `op = 6` with any statement or proof byte ⇒ `0`.
+4. `op ∉ {1, …, 5}` ⇒ `0` (op 7 is reserved, below).
+5. The statement must decode under the rules below: its `opTag` one of the op's, its `proofSystemId` one of the two,
+   its length the form's, then the canonical rules of the form; else `0`.
+6. `1 ≤ len(proof) ≤ MAX_PROOF(id)`, else `0`.
+7. Dispatch on the id: PQZL to `pqz_verify_fast(op, stmt, proof)`, PQZH to Ligero, whose first check is its exact
+   per-form length bound (below).
+
+**Output** (32 bytes): `0x00…01` valid; `0x00…00` for everything else, including a panic caught in the decode or
+verify logic (`pqz-ffi` status 3, the same on every node); for op 6 the self-test hash. A fault of the node itself
+(status 4: arena exhaustion, worker or core unavailable) gives no output, and the node stops processing the block
+([CTR-PQZ-10](#CTR-PQZ-10)).
+
+**Ops and statement forms.** `opTag = keccak256("SCAAS-PQZ-OP-<NAME>-V1")`; op 1 is `R_TX` or `R_TX0` by the length,
+op 2 BURN or REFRESH and op 5 RECEIVER or AUDITOR by the `opTag`.
+
+| op | `<NAME>` | Relation | `opTag` | Statement |
+|---|---|---|---|---|
+| 1 | `TRANSFER` | `R_TX` (auditor on) / `R_TX0` (off) | `ef22f3d1c1fc2edc565522eb73ca8cb782e8780eaf9b1f677965dd0cd5275414` | 83,072 / 66,560 B |
+| 2 | `BURN` | `R_BURN` | `7383374d83fbb89f84ee079bff7a2742e4acb70f64b0b1e2ef40c34fb4cc1407` | 50,048 B |
+| 2 | `REFRESH` | `R_BURN` | `f118f2df0f018062e2d4c296a01707dcd7ad7c85f6981d68517ac8b2cd75eede` | 50,048 B |
+| 3 | `REGISTER` | `R_REG` | `69562a9cd615eb3d906cb1934ad56c788c30228d2faf7c517e33d65b4a03c088` | 16,480 B |
+| 4 | `DISCLOSE-SENDER` | `R_DS` | `868cc07c6ac389251ad6573f65fe35ee4dad66ee305f90c711af904bf5ceef3f` | 33,184 B |
+| 5 | `DISCLOSE-RECEIVER` | `R_DR` | `d8356cfbd875acb80fe8a8127a57b5c549d20fd65b9acca8672186a1a4296456` | 33,184 B |
+| 5 | `DISCLOSE-AUDITOR` | `R_DR` | `d6019aa47e04fe91c11df386ddc5bda2178a3f2506c46cdd59b16ef1d21daf81` | 33,184 B |
+| 6 | `SELFTEST` | — | — | empty |
+| 7 | **placeholder** — `TRANSFER-MULTI` (`OP_TRANSFER_MULTI`) | `R_TXM` | per [P6-ANON plan](../superpowers/plans/2026-10-14-p6-anon.md) D6 | layout of that plan's §4, written here when its Task S2 freezes it; until then op 7 ⇒ `0` |
+
+**Debit header** (`R_TX`, `R_TX0`, `R_BURN`: 20 words, 640 B; §7.7). "Hashed" = any 32 bytes: the decoder and the core
+do not read the word, it binds the proof through the [transcript](#transcript) and the contract writes it (e.g. an
+address as 12 zero bytes ‖ address).
+
+| Word | Offset | Field | Decoder rule |
+|---|---|---|---|
+| 0 | 0 | `opTag` | the op's (table above) |
+| 1 | 32 | `proofSystemId` | PQZL v2 or PQZH Ligero v1 |
+| 2–5 | 64, 96, 128, 160 | `chainId`, `token`, `registry`, `fromUA` | hashed |
+| 6 | 192 | `toUA` | BURN, REFRESH: 0; transfers: hashed |
+| 7 | 224 | `beneficiaryUA` | hashed |
+| 8 | 256 | `fee` | `< 2^64` (read by every debit relation) |
+| 9 | 288 | `amount` | `< 2^64` on every form; transfers and REFRESH: 0; BURN: read by `R_BURN` |
+| 10 | 320 | `recipient` | transfers and REFRESH: 0; BURN: hashed |
+| 11–13 | 352, 384, 416 | `sendCounter`, `p`, `validUntilBlock` | hashed |
+| 14 | 448 | `auditorOn` | op 1: 1 with 83,072 B, 0 with 66,560 B, any other word ⇒ `0` (read by both relations); BURN, REFRESH: 0 |
+| 15–17 | 480, 512, 544 | `plainUsed`, `chainUid`, `envelopeBinding` | hashed |
+| 18 | 576 | `salt` | bytes 576..591 zero (16 zero bytes ‖ the 16-byte salt); BURN, REFRESH: the whole word 0 |
+| 19 | 608 | `memoHash` | hashed |
+
+**Debit bodies** (offsets in the statement; `T = u_T ‖ v_T`):
+
+| Form | Objects at offset | Length |
+|---|---|---|
+| `R_TX` | `pk_f` 640, `pk_t` 17,024, `pk_a` 33,408, `u_T` 49,792, `v_T` 66,176, `u` 66,304, `v_t` 82,688, `v_f` 82,816, `v_a` 82,944 | 83,072 |
+| `R_TX0` | `pk_f` 640, `pk_t` 17,024, `u_T` 33,408, `v_T` 49,792, `u` 49,920, `v_t` 66,304, `v_f` 66,432 | 66,560 |
+| `R_BURN` (BURN, REFRESH) | `pk_f` 640, `u_T` 17,024, `v_T` 33,408, `u` 33,536, `v_f` 49,920 | 50,048 |
+
+**`R_REG`** (16,480 B): `opTag` 0, `proofSystemId` 32, `message` 64 (hashed; §7.2 step 6 fixes its value), `pk` 96.
+
+**Disclosure** (`R_DS`, `R_DR`; 33,184 B; §7.9): `opTag` 0, `proofSystemId` 32, `chainId` 64, `chainUid` 96, `token`
+128, `registry` 160, `entryRef` 192 (hashed), `amount` 224 (`< 2^64`, read by both relations), `kind` 256 (hashed: the
+contract writes `SENDER_S` 0, `RECEIVER_X` 1, `AUDITOR` 2, as the vectors do; the `opTag` names the relation, and no
+decoder compares the two), `pk` 288, `u` 16,672, `v` 33,056.
+
+**Objects** (every polynomial byte of every statement is a coefficient and is checked `< q`):
+
+- `pk`, `u`: 16,384 B = 32 polynomials × 64 coefficients × `be8`, polynomial 0 and coefficient 0 first, each `< q`;
+  `v`: 128 B = coefficients 0..15 as `be8`, each `< q`.
+- Ciphertext `ct = u ‖ v`, 16,512 B (also `acc`, the inline credits and `T = u_T ‖ v_T`); `ctHash = keccak256(ct)`.
+- `out = u ‖ v_t ‖ v_f ‖ v_a`, 16,768 B, 16,640 B without `v_a`; burn / refresh `u ‖ v_f`, 16,512 B.
+- Secret: the 32-byte KeyGen seed ([algorithms](#42-algorithms)); never on the wire.
+- Disclosure bundle `R = salt(16) ‖ u ‖ v_t ‖ v_a ‖ toUA(word)`, 16,688 B; without `v_a` 16,560 B (the length says
+  which); `u`, `v_t`, `v_a` coefficients `< q` (`pqz-stmt` `parse_bundle`).
+- Opening `abi.encode(bytes bundle, bytes proof)`, canonical only: `word(64) ‖ word(96 + P1) ‖ word(len(bundle)) ‖
+  bundle ‖ zero bytes to P1 ‖ word(len(proof)) ‖ proof ‖ zero bytes to P2`, with `P1`, `P2` the two lengths rounded
+  up to a multiple of 32, nothing after (`parse_opening`; `negative.json` has 8 rejected openings).
+- `entryRef = keccak256(keccak256("SCAAS-PQZ-ENTRY-V1") ‖ word(chainId) ‖ word(chainUid) ‖ word(token) ‖ word(fromUA)
+  ‖ word(sendCounter))` (= the `abi.encode` of §7.4); `authDigest = keccak256("SCAAS-PQZ-AUTH-V1" ‖ keccak256(stmt))`.
+
+**Canonical encodings (P6e D15).** Every decoder accepts exactly one encoding of a given value: fixed lengths per form,
+coefficients `< q` as `be8`, the scalars above `< 2^64`, `auditorOn` and the zero words as the tables say, the op's
+`opTag`, a known id; the proof rules below; and for every accepted input `encode(decode(x)) = x` (`pqz-stmt`'s round
+trip; fuzzed by the P6e Task 10 codec target). **The decoder is stricter than the core**: the C core checks the
+form's length, every coefficient, `fee`, a BURN's `amount`, a disclosure's `amount` and `auditorOn` against the
+length, but not `opTag`, `proofSystemId`, the salt form or the zero words, and it only hashes them; nothing reaches it
+except through `pqz-stmt`. Ligero decodes every statement with `pqz-stmt` (same rules), then checks its own id.
+Rejection order (the reason `negative.json` records): framing, op, `opTag`, id, length, `fee`, `amount`, salt, `auditorOn`, the
+zero words in header order, coefficients, then the proof length.
+
+**Prover API (not consensus).** Witness bytes are never on chain; `pqz-ffi` `prove` passes the same bytes to both
+provers. `int8` and `int16` little-endian, `u8` digits (`pqz.h`): `R_REG` `s` (2,048 × `int8`) ‖ `e` (2,048 ×
+`int16`) = 6,144 B; `R_TX` `s_f ‖ e_f ‖ r ‖ e1 ‖ e2_t ‖ e2_f ‖ e2_a` (16 × `int16` each) `‖ d ‖ d'` (16 × `u8`
+each) = 12,416 B; `R_TX0` the same without `e2_a` = 12,384 B; `R_BURN` `s_f ‖ e_f ‖ r ‖ e1 ‖ e2_f ‖ d'` = 12,336 B;
+`R_DS` `r ‖ e1 ‖ e2_t` = 6,176 B; `R_DR` `s ‖ e` = 6,144 B. `rnd32`: 32 bytes of CSPRNG output, hedged per
+[CTR-PQZ-19](#CTR-PQZ-19).
+
+**PQZL proof (v2)** (`pqz_rel.c` `encproof` / `pqz_decproof`, `lazer/coder.c`). One bit string, bits filled from the
+least significant bit of each byte; polynomials in order, coefficient 0 first; counts per relation from
+`params/pqz_<rel>_params.h`:
+
+1. `tB`, then `h`: each coefficient `< q` in 42 bits;
+2. `tA1`: each coefficient in `42 − D` bits (`D` = 9 `R_REG`, 11 `R_TX` / `R_TX0` / `R_BURN`, 7 `R_DS`, 12 `R_DR`);
+3. `c`: 64 challenge coefficients in `[−8, 8]`, each as `c mod 17` in 5 bits, `< 17`;
+4. `hint`: per coefficient `00` = 0, `01` = 1, `10` = −1 (first bit written first); otherwise `11`, `j` zero bits,
+   a one bit: `(j + 4)/2` for even `j`, `−(j + 3)/2` for odd `j`;
+5. `z1`, `z21`, `z3`, `z4`: per coefficient `z = 2^(g+1)·z_hi + z_lo` with `z_lo ∈ [−2^g, 2^g)`: `z_hi` in unary
+   (`2·z_hi − 1` one bits if `z_hi > 0`, `−2·z_hi` if `z_hi ≤ 0`, then a zero bit), then `z_lo` in `g + 1` bits two's
+   complement; `g` = `log2(stdev/1.55)` of the vector: 18 for `z1` and 12 for `z21` in every relation; for `z3` 13
+   (`R_REG`, `R_DS`, `R_DR`) or 14 (`R_TX`, `R_TX0`, `R_BURN`); for `z4` 6 (`R_REG`, `R_DR`) or 12 (the others);
+6. end: one 1 bit, then zero bits to the byte boundary.
+
+Canonical: fixed-width values `< ` their modulus; the last byte holds the end bit with nothing above it; the proof is
+exactly the bytes consumed (no trailing byte); `≤ 98,304` B, which also keeps every decoded `|z|` below `q/2` (at most
+786,432 unary bits, `|z| < 2^38`), so the verifier's reduction mod `q` never changes a decoded value.
+
+**PQZH proof (Ligero v1)** (`ligero.rs`). Parameters fixed by the id, never read from the proof: `n = 32,756`,
+`k = 817`, `ℓ = 695`, `t = 121`, 16 grinding bits (`Params::proven()`, every op); `m` witness rows per form
+(`cs::Layout`) plus 12 blinding rows. `F_q` element: 6 bytes, `< q`; `F_{q^4} = F_q[X]/(X^4 − 3)`: 4 `F_q` elements,
+`X^0` first (24 B).
+
+```text
+proof = root (32)
+      ‖ w: 2k − 1 = 1,633 F_{q^4} coefficients
+      ‖ q: 1,633 F_{q^4} coefficients
+      ‖ h: 2k − 1 − ℓ = 938 F_{q^4} coefficients
+      ‖ nonce (be64)
+      ‖ for each distinct queried column j, in increasing j: salt_j (32) ‖ (m + 12) F_q values
+      ‖ Merkle multiproof: sibling digests (32 each)
+```
+
+Merkle tree: leaf `j = keccak256(salt_j ‖ column j's m + 12 values)`, `n` leaves padded with zero digests to 2^15,
+node `= keccak256(left ‖ right)`. The `t` column indices come from the [transcript](#transcript), sorted with
+duplicates dropped; the proof carries no index. Multiproof order: level by level from the leaves, within a level by
+increasing node index, a sibling sent only when the verifier cannot compute it. Canonical: every element `< q`, the
+proof consumed exactly; before parsing, `1 ≤ len ≤` the exact per-form maximum (`max_proof_len`: 190,458 B `R_REG`,
+`R_DS`, `R_DR`; 235,470 B `R_TX`; 234,744 B `R_TX0`, `R_BURN`), all below `MAX_PROOF` 262,144.
+
+**`OP_SELFTEST`** (P6e D13; `pqz-core/ffi/src/selftest.rs`): input exactly `06 00000000`; output
+`keccak256(kat_digest ‖ u8(pqzl_valid) ‖ u8(pqzl_invalid) ‖ u8(pqzh_valid) ‖ u8(pqzh_invalid))` with `kat_digest =
+keccak256(a_digest ‖ keccak256(pk) ‖ keccak256(u ‖ v) ‖ M ‖ keccak256(fft) ‖ u8(fft_ok))`: `a_digest` over `A[i][j]`
+row by row (64 `be8` each), `pk` = KeyGen(`0x51` × 32), `u ‖ v` = Enc(`pk`, digits(123,456), `0x52` × 32), `M` = Dec as
+16 bytes, `fft` a forward / inverse Ligero FFT over 1,634 points; the four results are the precompile path on
+`opTag(REGISTER) ‖ id ‖ keccak256("SCAAS-PQZ-SELFTEST-V1") ‖ pk` with each id's compiled-in `R_REG` proof (the REGISTER
+rows of `proof_pqzl.json` / `proof_pqzh.json`, `rnd32` = `0x53` × 32), valid, and under the statement with byte 95
+flipped. Frozen value `0xed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205` (results 1, 0, 1, 0;
+`selftest.json`). Computed once per process, cached.
+
+**Changes against earlier text of this file** (code and vectors win): §5's labelled SHAKE256 transcript → the v2
+transcripts; §7.7's "amount (burn; else 0)", "recipient (burn; else 0)", `toUA` and salt notes are decoder rules now
+(`pqz-stmt`'s zero words; the core only hashes those words); §8's C API (`pqz_keygen(seed32, pk)`, `pqz_enc(...)`, `pqz_dec(seed32, …)`) → the `pqz.h` signatures, and its
+"compile-time arena" → an arena reserved once at run time; §8's "the engine's own" proof format and the one
+`MAX_PROOF` → the two formats above and `MAX_PROOF(id)`; §9.1's `MAX_INPUT` 262,144 → 393,216; §14's vector
+directories → the one directory `smartcontracts/vectors/pqz/` (P6e D9).
 
 ## 9. On-chain verifier
 
@@ -1150,7 +1392,9 @@ path never crashes the node**: `pqz_verify` runs in-process, chain 7622 has one 
 input is a chain halt, not a split. Requirements: every upstream `ERR`/`ASSERT` becomes `return 0`; a bounds-checked
 decoder (Rust, in front of the C core) accepts only the fixed lengths before any C code runs; fixed-size stack, no
 recursion, a fixed arena reserved once at run time (`pqz-ffi`: 144 MiB verify-only, from measurement); no timeouts (non-deterministic), only bounded loops; continuous ASan/UBSan fuzzing in
-CI. Operationally a follower node serves all public RPC and pre-simulation, so `eth_call` never reaches the signer
+CI (P6e D12: clang 18 libFuzzer on stable Rust, the C core under ASan + UBSan, `pqz-ffi` and Ligero with sancov;
+targets through `pqz_precompile`, over edited honest inputs of every form and id, and the codec round trip; a CI smoke
+run per target from the committed corpora plus long runs on the owner's machine under `scripts/capped`; P6e Task 10). Operationally a follower node serves all public RPC and pre-simulation, so `eth_call` never reaches the signer
 process; a crashing input inside a transaction would still reach every node at its block, so never-crash is the
 requirement and the follower is only defence in depth. Every node of chain 7622 must run the PQZ client build.
 
@@ -1161,7 +1405,7 @@ cryptographic failure; reverts (consumes all gas) only on input `> MAX_INPUT = 3
 
 | op | Name | `stmt` |
 |---|---|---|
-| 1 | `OP_TRANSFER` | [statement](#statement) |
+| 1 | `OP_TRANSFER` | [statement](#statement): 83,072 B with the auditor (`R_TX`), 66,560 B without (`R_TX0`), told apart by the length |
 | 2 | `OP_BURN` | [statement](#statement) (also REFRESH: `opTag` differs) |
 | 3 | `OP_REGISTER` | `opTag ‖ proofSystemId ‖ message ‖ pk` |
 | 4 | `OP_DISCLOSE_SENDER` | [disclosure](#disclosure) |
@@ -1169,8 +1413,9 @@ cryptographic failure; reverts (consumes all gas) only on input `> MAX_INPUT = 3
 | 6 | `OP_SELFTEST` | empty: the whole input is exactly `u8(6) ‖ be32(0)`, anything else ⇒ `0` at the same price; computed at the first call in a process and cached for the process's life (same binary ⇒ same output, so caching keeps determinism and turns repeated calls into a lookup); the first call recomputes the fixed KATs (matrix digest, keygen, enc/dec, one PQZH FFT round trip) **and** verifies two pairs of compiled-in `R_REG` vectors, one valid and one invalid per `proofSystemId` (PQZL, PQZH); returns `keccak256(kat_digest ‖ u8(pqzl_valid) ‖ u8(pqzl_invalid) ‖ u8(pqzh_valid) ‖ u8(pqzh_invalid))` (P6e D13, `pqz-core/ffi/src/selftest.rs`) |
 
 For **every** op except 6 the precompile checks, before any cryptography, that `stmt` starts with an `opTag` that
-belongs to `op` and a `proofSystemId` it implements, and that the total length is one of the op's fixed lengths;
-anything else returns `0`. `pqz-core` does not repeat these checks (nor the disclosure `kind`): it reads only the
+belongs to `op` and a `proofSystemId` it implements, that the total length is one of the op's fixed lengths, every
+canonical rule of [serialization v1](#serialization), and `1 ≤ len(proof) ≤ MAX_PROOF(id)` (98,304 B PQZL, 262,144 B
+PQZH); anything else returns `0`. It then dispatches on the `proofSystemId`. `pqz-core` does not repeat these checks (nor the disclosure `kind`): it reads only the
 fields its equations use, and `opTag`, `proofSystemId` and `kind` bind the proof because the whole statement is hashed
 into the transcript.
 
@@ -1246,6 +1491,11 @@ byte, ≈ 1.5 k tokens of ABI and header (scratch Python, 2026-10-06):
 | `register` | ≈ 4.7–5.2 M once | SSTORE2 of a 16 KB pk ≈ 3.3 M + PoP verify + `UARegistered` log ≈ 0.13 M + standard calldata ≈ 0.59 M incl. the ≈ 3.4 KB ML-DSA `authPop` + its verify ≈ 0.01 M (above its ≈ 1.46 M floor) |
 | Classical reference (measured) | 3.33 M / 3.41 M transfer, 0.115 M rollover | [zether.md](zether.md#gas-measured) |
 
+**Note (2026-10-14).** Every "50 ms" figure in this section (and the "+16 inline at 50 ms" requirement) is at the
+former verify kill threshold; the limit is 60 ms p99 since 2026-10-14 (owner, [CTR-PQZ-09](#CTR-PQZ-09)), and all
+prices are recalibrated on measured p99 in P6f. The estimates are for PQZL; a PQZH transfer's ≈ 231 KB proof adds
+≈ 9.2 M gas of EIP-7623 calldata floor (P6e D5), so its `INLINE_MAX` is a P6g question.
+
 Per received payment PQZ costs ≈ 3.3 M (transfer plus the later roll of its credit) against classical ≈ 3.4–3.5 M,
 while the floor binds. At the 80 M block target: ≈ 28 transfers per 5 s block (≈ 10 at the 50 ms threshold). **Archive
 growth** at sustained full load: ≈ 430 KB/s of calldata plus ≈ 95 KB/s of logs, ≈ 45 GB/day; operators size archive
@@ -1291,8 +1541,9 @@ Errors (plus
   keep the invariant checks as error returns (upstream's `ASSERT_ERR` compiles to nothing). CI runs libFuzzer on ASan +
   UBSan builds of the decoder + core continuously, plus a P/Invoke harness under the .NET host, not a one-off pass
   before review.
-- Nethermind integration `Nethermind.Pqz` (C#): two precompile classes calling `pqz_verify` / `mldsa65_verify` through
-  P/Invoke, gas per [gas](#gas), activated at `pqzTransitionTimestamp` from the chainspec. Either a plugin (the
+- Nethermind integration `Nethermind.Pqz` (C#): two precompile classes calling `pqz_precompile` (`pqz-ffi`'s C ABI,
+  `pqz-core/ffi/pqz_ffi.h`: the whole input, status and 32-byte output; [serialization v1](#serialization)) /
+  `mldsa65_verify` through P/Invoke, gas per [gas](#gas), activated at `pqzTransitionTimestamp` from the chainspec. Either a plugin (the
   Nethermind Arbitrum plugin, which adds 16 precompiles, shows plugins can extend the EVM —
   [nethermind-arbitrum](https://github.com/NethermindEth/nethermind-arbitrum)) or a minimal patch of the precompile table
   on a pinned 1.39.x tag. Either way it ships as image `scaas/nethermind-pqz:<nethermind>-pqz<n>`.
@@ -1487,19 +1738,30 @@ chains feasible later (a Go module calling `libpqz` via cgo); Hedera, Soroban, S
 
 <a id="vectors"></a>
 
-**KATs** (`pqz-core/vectors/`, copied to `smartcontracts/evm/test/vectors/pqz/` and `clients/zether-prover/vectors/pq/`):
+**KATs** in one canonical directory, `smartcontracts/vectors/pqz/` (P6e D9), read in place by every consumer (the
+precompile and its fuzz targets, the forge tests, the clients; no copies). Written by one generator, `pqz-ffi`'s
+`pqz-vectors` (`--check` regenerates and compares byte for byte), and checked file by file by the independent
+`pqz_kat.py`; the directory's `README.md` documents every field. Built in P6e:
 
 | File | Content |
 |---|---|
 | `matrix.json` | `keccak256` of `A` coefficient bytes + first/last 8 coefficients of `A[0][0]`, `A[31][31]` |
 | `cbd.json` | SHAKE inputs → CBD(1), CBD(20) samples |
-| `keygen.json` | seed32 → `pk`, `ua`, ctr used; plus a seed forcing ≥ 1 resample (searched offline) |
+| `keygen.json` | seed32 → ctr used, `keccak256(pk)`, norms (no searched-resample row: ≈ 2^-70 per seed; the resample path and the ctr-64 error are pinned by test-hook KATs, `pqz-core/test/pqz_keys_kat.c`) |
 | `enc.json` | `seed_enc`, recipients, messages → `u`, `v_j`; `Add`/`Sub`/`Trivial`; `Dec` → `M`, value (noise omitted from public vectors) |
+| `statement_{transfer,burn,refresh,register,disclose}.json` | header fields and objects → statement bytes ([serialization v1](#serialization); transfer with and without the auditor), `keccak256(statement)`, `authDigest` per id, `entryRef`, the disclosure bundle |
+| `proof_pqzl.json`, `proof_pqzh.json` | per id the six relations + REFRESH + AUDITOR: statement, prover-API witness, `rnd32`, proof, `expect: true` (fixed `rnd32`, so byte-exact across native and wasm32), disclosure openings |
+| `fee0.json` | fee = 0 (owner 2026-10-14) for `TRANSFER`, auditor off, `BURN`, `REFRESH`, both ids |
+| `negative.json` | precompile inputs that must give `0` (or revert at `MAX_INPUT + 1`): every canonical-encoding rule with its decoder reason, op / `opTag` / id confusion, lengths ± 1, the limits, framing, self-test misuse, truncated / extended / bit-flipped proofs, proof-encoding edits; non-canonical openings |
+| `selftest.json` | the `OP_SELFTEST` hash and every input of it, including its valid and invalid `R_REG` verify per id |
+| `worstcase_noise.json` | completeness KAT: a receiver key at the norm bounds; `K_MAX − 1` credits whose `e2`, `e1`, `r` are aligned to maximise `e_t^T r − s_t^T e1 + e2` within the proven norms (noise 1,023 · 11,872 = 12,145,056); the debit over all of them proves and verifies in both systems |
+
+Later phases add, in the same directory: `derive.json` (P6h), `register_pqz.json`, `auth_*.json`, `metatx_pqz.json`
+(P6g), `mldsa65.json`, and the constructor vector with `SELFTEST_VECTOR_HASH` (P6g):
+
+| File | Content |
+|---|---|
 | `derive.json` | BIP-39 seed → derivation seeds, PQZ pk, ML-DSA pk, UAs, keyHashes (rows also in the UA `kinds.json`) |
-| `statement_{transfer,burn,refresh}.json` | inputs → statement bytes, `keccak256(statement)`, `authDigest`, `entryRef` |
-| `proof_{transfer,burn,refresh,register,disclose_*}.json` | statement, proof, `expect: true` (fixed `rnd32`, so byte-exact across backends) |
-| `selftest.json` | the `OP_SELFTEST` hash, the vectors it covers (including its valid and invalid `R_REG` verify), and the constructor vector with `SELFTEST_VECTOR_HASH` |
-| `worstcase_noise.json` | completeness KAT: the harness knows the receiver key; a malicious-but-valid prover builds `K_MAX − 1` credits whose `e2`, `e1`, `r` are aligned to maximise `e_t^T r − s_t^T e1 + e2` within the proven norms; the debit over all of them must still prove and verify |
 | `mldsa65.json` | NIST ACVP-style vectors via the chosen implementation |
 | `auth_{mldsa65,mldsa44,msig}.json` | `authDigest` → the UA `ua_msg` (with `MSG_TAG`, `TAG(authKind)`, `PURPOSE_ZETHER_AUTH`) → signature, for an `mldsa65`, an `mldsa44` and a hybrid `msig {mldsa65 w1, p256 w1} t=2` `authRef`; each verifies through `requireZetherAuthorized` **and** directly through `UARegistry.requireAuthorized(authRef, PURPOSE_ZETHER_AUTH, …)`; rows shared with the UA vectors |
 | `register_pqz.json` | `popDigest(ua, authRef)` (with `chainKeyHash`, `chainUid`), the `R_REG` PoP and the `authRef` co-sign `authPop` |
@@ -1558,13 +1820,18 @@ clientkeys (derivation, ML-DSA, `authDigest`); a pure-Python `pqz_kat.py` (no nu
   in-flight op; v1 and v3 share one nonce per native id; v3 `from` = a `pqz-mlwe` UA ⇒ `UAKindNotAccepted`; a broken-key
   simulation (the test owns the v1 envelope key, not the `authRef` key) can drain the public float and burn nonces but
   every confidential op it builds reverts; envelope `pqzShield` debits the public balance and keeps the escrow invariant;
-  relayed `+16` inline transfer at the mocked 50 ms price stays ≤ 16.78 M gas;
+  relayed `+16` inline transfer at the mocked price of the verify limit (50 ms when written, 60 ms since 2026-10-14;
+  recalibrated in P6f) stays ≤ 16.78 M gas;
 - precompile absent (call an empty address) ⇒ `ProofRejected` / `SelfTestFailed`;
 - determinism: 10^4 random valid and invalid inputs give identical outputs on portable, AVX2 and aarch64 builds; gas
   equals the formula for every input length;
-- fuzzing: libFuzzer/`cargo fuzz` on ASan + UBSan builds of the Rust decoder + C core, and a harness through the .NET
-  P/Invoke boundary, **continuously in CI** (corpus kept, crashes block merges), plus forge invariant tests of the
-  Solidity decoders; any crash, sanitizer report or non-`0`/`1` output is a release blocker;
+- fuzzing (P6e D12): clang 18 libFuzzer on stable Rust (not `cargo fuzz`, which needs nightly; that stays the
+  fallback) over ASan + UBSan builds of the C core with `pqz-ffi` and
+  Ligero instrumented (sancov), targets through `pqz_precompile`, over edited honest inputs of every form and id (PQZL
+  also generic vs specialised verifier) and over the codecs (`encode(decode(x)) = x`), **continuously** (a CI smoke run
+  per target from the committed corpora, long runs on the owner's machine; crash inputs committed as regression
+  cases, crashes block merges), plus a harness through the .NET P/Invoke boundary (P6f) and forge invariant tests of
+  the Solidity decoders; any crash, sanitizer report or non-`0`/`1` output is a release blocker;
 - self-test input other than `u8(6) ‖ be32(0)` ⇒ 0 at the same fixed `G_6`; 10^4 repeated self-test `eth_call`s give
   identical output and gas (cache hit), and the cold first call stays within the calibrated `G_6`;
 - self-test: a precompile build whose valid-vector verify returns 0 (or whose invalid returns 1) fails `OP_SELFTEST`

@@ -4,8 +4,11 @@ The PQ Zether proof engine ([pq-zether.md](../docs/contracts/pq-zether.md) §8, 
 [LaZer](https://github.com/lazer-crypto/lazer) at commit `3330e48` (MIT, IBM) with six layers rewritten, so the
 prover and verifier run without GMP, MPFR, HEXL, floating point, `malloc`, `abort` or stdio. This is the E-S1 spike
 (P6d): `R_REG` and a first `R_TX`, built natively and as freestanding `wasm32`; then `R_BURN` (also REFRESH), `R_DS`
-and `R_DR` (also the auditor), `docs/research/pqz-relations-burn-disclose.md`. State, measured numbers and what is
-open: [STATUS.md](STATUS.md); write-up: `docs/research/pqz-core-e-s1.md`.
+and `R_DR` (also the auditor), `docs/research/pqz-relations-burn-disclose.md`; P6e added `R_TX0`, the statement
+codec `stmt/`, the precompile boundary `ffi/` and the frozen vectors (`smartcontracts/vectors/pqz/`). Every byte
+layout (statements, objects, both proof formats, the precompile input and `OP_SELFTEST`):
+[pq-zether.md §8.1 "Serialization v1"](../docs/contracts/pq-zether.md#serialization). State, measured numbers and what
+is open: [STATUS.md](STATUS.md); write-up: `docs/research/pqz-core-e-s1.md`.
 
 ## Layout
 
