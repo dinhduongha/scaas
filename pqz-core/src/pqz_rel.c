@@ -827,9 +827,29 @@ set_upsilon (const lnp_tbox_params_struct *P, polyvec_t s1, const unsigned *star
   return 1;
 }
 
+/* Hedged prover seeds (pq-zether.md CTR-PQZ-19; P6e D6): ex[0..32) seeds the commitment randomness s2, ex[32..64)
+   every mask of lnp_tbox_prove; each = SHAKE128(tag || rnd32 || wh || hash0) with tag "SCAAS-PQZ-PROVER-RND-V2" /
+   "...-SUB-V2" and wh = SHAKE128("SCAAS-PQZ-PROVER-WIT-V2" || wit)[0..32). A repeated or weak rnd32 for two witnesses
+   or two statements still gives unrelated masks (V1 hashed rnd32 alone). Not static: the tests check it directly. */
+void
+pqz_prover_seeds (uint8_t ex[64], const uint8_t rnd32[32], const uint8_t *wit, size_t wit_len,
+                  const uint8_t hash0[32])
+{
+  uint8_t wh[64];
+  shake_tag (wh, "SCAAS-PQZ-PROVER-WIT-V2", wit, wit_len, NULL, 0);
+  memcpy (wh + 32, hash0, 32);
+  shake_tag (ex, "SCAAS-PQZ-PROVER-RND-V2", rnd32, 32, wh, 64);
+  shake_tag (ex + 32, "SCAAS-PQZ-PROVER-SUB-V2", rnd32, 32, wh, 64);
+  explicit_bzero (wh, sizeof wh);
+}
+
+#ifdef PQZ_TEST_HOOKS
+uint8_t pqz_test_last_ex[64]; /* the seeds the last do_prove used (test/pqz_sv_diff.c compares them) */
+#endif
+
 static int
-do_prove (sys_t *S, pf_t *F, const uint8_t hash0[32], const uint8_t rnd32[32], uint8_t *proof,
-          size_t *proof_len)
+do_prove (sys_t *S, pf_t *F, const uint8_t hash0[32], const uint8_t *wit, size_t wit_len,
+          const uint8_t rnd32[32], uint8_t *proof, size_t *proof_len)
 {
   const lnp_tbox_params_struct *P = S->R->P;
   abdlop_params_srcptr tb = P->tbox;
@@ -839,8 +859,10 @@ do_prove (sys_t *S, pf_t *F, const uint8_t hash0[32], const uint8_t rnd32[32], u
   uint8_t buf[PQZ_MAX_PROOF + 4096];
   size_t len;
 
-  shake_tag (ex, "SCAAS-PQZ-PROVER-RND-V1", rnd32, 32, NULL, 0);
-  shake_tag (ex + 32, "SCAAS-PQZ-PROVER-SUB-V1", rnd32, 32, NULL, 0);
+  pqz_prover_seeds (ex, rnd32, wit, wit_len, hash0);
+#ifdef PQZ_TEST_HOOKS
+  memcpy (pqz_test_last_ex, ex, 64);
+#endif
   int_set_i64 (lo, -tb->nu);
   int_set_i64 (hi, tb->nu);
   polyvec_urandom_bnd (F->s2, lo, hi, ex, 0);
@@ -850,6 +872,7 @@ do_prove (sys_t *S, pf_t *F, const uint8_t hash0[32], const uint8_t rnd32[32], u
   lnp_tbox_prove (hash, F->tB, F->h, F->c, F->z1, F->z21, F->hint, F->z3, F->z4, F->s1, F->m, F->s2, F->tA2,
                   S->R->A1, S->R->A2p, S->R->Bp, S->R2, S->r1, S->N, S->R2p, S->r1p, S->r0p, S->M, S->Es, NULL,
                   NULL, S->Ps, NULL, NULL, S->Ds, NULL, NULL, ex + 32, P);
+  explicit_bzero (ex, sizeof ex); /* secret-derived; the arena's witness copies are not zeroed (STATUS Open 8) */
   if (pqz_err && !POC_IGNORE_ERR)
     return pqz_err;
   encproof (buf, &len, F->tA1, F->tB, F->h, F->c, F->z1, F->z21, F->hint, F->z3, F->z4, P);
@@ -1110,7 +1133,7 @@ pqz_prove (uint8_t op, const uint8_t *stmt, size_t stmt_len, const uint8_t *wit,
     polyvec_alloc (pk, REG.P->tbox->ring, K);
   pf_alloc (&F, R->P);
   if (build (&S, &T, op, stmt, stmt_len, pk) && witness (&T, op, wit, wit_len, F.s1))
-    rc = do_prove (&S, &F, h, rnd32, proof, proof_len);
+    rc = do_prove (&S, &F, h, wit, wit_len, rnd32, proof, proof_len);
   if (pqz_err && !POC_IGNORE_ERR)
     rc = pqz_err;
   pqz_arena_release (&base);
@@ -1194,6 +1217,8 @@ pqz_keypair_from_secret (const int8_t s[2048], const int16_t e[2048], uint8_t pk
 {
   polyring_srcptr Rq = REG.P->tbox->ring;
   polyvec_t sv, ev, t;
+  if (!ready)
+    return PQZ_ERR_INTERNAL; /* before pqz_init: no A */
   pqz_err = PQZ_OK;
   pqz_arena_release (&base);
   polyvec_alloc (sv, Rq, K), polyvec_alloc (ev, Rq, K), polyvec_alloc (t, Rq, K);
@@ -1216,6 +1241,8 @@ pqz_encrypt (const uint8_t *const pks[], unsigned npk, const uint8_t msgs[][16],
   polyring_srcptr Rq = REG.P->tbox->ring;
   polyvec_t rv, ev, t, pk, row;
   poly_t acc;
+  if (!ready)
+    return PQZ_ERR_INTERNAL; /* before pqz_init: no A */
   pqz_err = PQZ_OK;
   pqz_arena_release (&base);
   polyvec_alloc (rv, Rq, K), polyvec_alloc (ev, Rq, K), polyvec_alloc (t, Rq, K), polyvec_alloc (pk, Rq, K);
@@ -1254,6 +1281,8 @@ pqz_decrypt_raw (const int8_t s[2048], const uint8_t u[PQZ_POLYVEC_BYTES], const
   polyring_srcptr Rq = REG.P->tbox->ring;
   polyvec_t sv, uv;
   poly_t acc, vv;
+  if (!ready)
+    return PQZ_ERR_INTERNAL; /* before pqz_init: no A */
   pqz_err = PQZ_OK;
   pqz_arena_release (&base);
   polyvec_alloc (sv, Rq, K), polyvec_alloc (uv, Rq, K);

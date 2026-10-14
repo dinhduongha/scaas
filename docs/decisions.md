@@ -3283,6 +3283,8 @@ Change (2026-10-11): owner — the seed is bound to a fresh published 16-byte sa
 
 Change (2026-10-13): owner — burn and refresh take fresh CSPRNG randomness (hedging with the key seed allowed), never the counter-derived seed: their salt is 0, so two burns at one `sendCounter` for different balances would reveal `Δ·(b' − b'')`; no disclosure re-derives it. Source add: owner, 2026-10-13 (`research/pqz-relations-burn-disclose.md` §5).
 
+Change (2026-10-14): controller proposal (owner may override) — the PQZL prover's masks are hedged as this entry requires (`H(secret ‖ statement ‖ 32 B CSPRNG)`; P6e gap G2, decision D6): `pqz_rel.c` seeds the commitment randomness and every mask from `SHAKE128("SCAAS-PQZ-PROVER-RND-V2" ‖ rnd32 ‖ wh ‖ hash0)` and `…-SUB-V2` with `wh = SHAKE128("SCAAS-PQZ-PROVER-WIT-V2" ‖ wit)` (32 B; the inner tag added after review, controller 2026-10-14, before the gate-A freeze) (was `rnd32` alone, `…-V1`), `hash0` the statement digest; a repeated `rnd32` for two witnesses or two statements no longer repeats the masks. Prover only: verifiers, transcript and proof format unchanged, honest proofs change once (new `proofs_fnv`), `proofSystemId` stays v2 (D2). The Ligero (PQZH) half of D6 is P6e Part B. Source add: plan `superpowers/plans/2026-10-14-p6e-relations.md` D6, Task 1; branch `p6e-a1`.
+
 **Why.** Encryption randomness is derived from a message-bound seed, so the sender can re-derive it for disclosure and a re-proof never reuses `r`.
 **Cost if wrong.** Reusing `r` across two messages leaks `Δ·(m − m')` up to noise.
 **Source.** `history/specs/2026-10-06-pq-zether-design.md:376`

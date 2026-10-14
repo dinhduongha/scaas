@@ -377,7 +377,7 @@ proof_pqzh.json,negative.json,selftest.json,worstcase_noise.json}`.
 |---|---|
 | `matrix.json` | `keccak256(A bytes)`, first / last 8 coefficients of `A[0][0]`, `A[31][31]` |
 | `cbd.json` | SHAKE inputs → CBD(1), CBD(20) samples |
-| `keygen.json` | seed → `pk` hash, counter used; one seed with ≥ 1 resample (searched) |
+| `keygen.json` | seed → `pk` hash, counter used (no searched resample seed: probability ≈ 2^-70, row dropped by the controller 2026-10-14; the resample path and the counter-64 error are pinned by the Task 3 test-hook KATs with lowered thresholds, `pqz_keys_kat` / `pqz_kat.py --c-keys`) |
 | `enc.json` | `seed_enc`, recipients, messages → `u`, `v_j`; `Add` / `Sub` / `Trivial`; `Dec` → `M`, value (noise omitted) |
 | `statement_*.json` | header fields + objects → statement bytes, `keccak256(stmt)`, `authDigest`, `entryRef`, bundle, opening; auditor on / off |
 | `proof_pqzl.json`, `proof_pqzh.json` | per form (6) + REFRESH + AUDITOR (8 rows each): statement, witness, `rnd32`, proof, `expect: true` |

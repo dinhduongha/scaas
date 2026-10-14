@@ -1,0 +1,4 @@
+check_sv_fixes tree: cases mismatches = 10 0
+check_sv_fixes sz: cases mismatches = 10 10
+check_sv_fixes l2: cases mismatches = 10 10
+check_sv_fixes: ok

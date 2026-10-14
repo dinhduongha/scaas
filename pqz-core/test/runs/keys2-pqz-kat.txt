@@ -1,0 +1,6 @@
+     C's own claim (not recomputed here): {"before_init_rejected": 6, "of": 6}
+     C's own claim (not recomputed here): {"lowered": {"keygen_resampled": 4, "enc_resampled": 3, "ctr64_errors": 2}}
+     C's own claim (not recomputed here): {"roundtrip": 1000, "max_abs_noise": 543, "bound": 11872, "max_ctr": 0, "noncanonical_rejected": 3, "fails": 0}
+     C keys KAT pqz-core/test/runs/keys2-kat.jsonl: {'shake256': 10, 'keygen': 20, 'enc': 20, 'dec': 40, 'keygen_lowered': 6, 'enc_lowered': 6, 'keygen_resampled': 4, 'enc_resampled': 3, 'ctr64_errors': 2}
+pqz_kat: ok
+rc=0

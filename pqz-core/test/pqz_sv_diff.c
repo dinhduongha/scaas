@@ -24,6 +24,10 @@
 int pqz_test_mutate (uint8_t op, const uint8_t *proof, size_t len, unsigned kind, uint64_t r1, uint64_t r2,
                      uint8_t *out, size_t *outlen);
 int pqz_sv_test_prg (unsigned iters);
+extern uint8_t pqz_test_last_ex[64]; /* hook: the seeds of the last pqz_prove */
+void pqz_prover_seeds (uint8_t ex[64], const uint8_t rnd32[32], const uint8_t *wit, size_t wit_len,
+                       const uint8_t hash0[32]);
+void pqz_stmt_hash (uint8_t h[32], uint8_t op, const uint8_t *stmt, size_t len);
 size_t pqz_arena_used (void);
 size_t pqz_arena_peak (void);
 void pqz_arena_peak_reset (void);
@@ -504,6 +508,15 @@ main (int argc, char **argv)
               printf ("{\"prove_rc\": %d, \"rel\": \"%s\", \"i\": %d}\n", rc, RN[rel], i);
               fails++;
               continue;
+            }
+          if (i == 0) /* the prove used exactly the hedged seeds of CTR-PQZ-19 (P6e D6) */
+            {
+              uint8_t h[32], ex[64];
+              pqz_stmt_hash (h, op, st, stlen);
+              pqz_prover_seeds (ex, r32, WIT[rel], WLEN[rel], h);
+              int same = memcmp (ex, pqz_test_last_ex, 64) == 0;
+              printf ("{\"rel\": \"%s\", \"prover_seeds_match\": %d}\n", RN[rel], same);
+              fails += !same;
             }
           if (i == 0) /* arena working set of one verify above the base mark (A, the op's keys; the fast verifier's
                          tables for the op are built by its first call and stay below the mark) */

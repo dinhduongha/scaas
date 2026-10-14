@@ -436,6 +436,48 @@ stats (const char *name, double *v, int n)
           name, n, s / n, v[n / 2], v[(int)(0.99 * (n - 1))], v[n - 1]);
 }
 
+/* P6e Task 1 (CTR-PQZ-19 hedging, D6): the mask seeds of two valid R_REG witnesses (keys KF, KT) under the same rnd32
+   and statement digest are unrelated (Hamming distance of the 512 seed bits near 256), as are those of one witness
+   under two statements; equal inputs give equal seeds, and proving twice with one rnd32 gives the same proof. */
+void pqz_prover_seeds (uint8_t ex[64], const uint8_t rnd32[32], const uint8_t *wit, size_t wit_len,
+                       const uint8_t hash0[32]);
+void pqz_stmt_hash (uint8_t h[32], uint8_t op, const uint8_t *stmt, size_t len);
+
+static int
+hamming (const uint8_t *a, const uint8_t *b, int n)
+{
+  int d = 0;
+  for (int i = 0; i < n; i++)
+    d += __builtin_popcount (a[i] ^ b[i]);
+  return d;
+}
+
+static int
+hedge_check (void)
+{
+  uint8_t r[32], h0[32], h1[32], exA[64], exA2[64], exB[64], exA1[64], first[PQZ_MAX_PROOF];
+  size_t n0;
+  memset (r, 0x42, 32);
+  pqz_stmt_hash (h0, PQZ_OP_REGISTER, reg_stmt, sizeof reg_stmt);
+  reg_stmt[PQZ_PREFIX_BYTES] ^= 1; /* another message: another statement for the same witness */
+  pqz_stmt_hash (h1, PQZ_OP_REGISTER, reg_stmt, sizeof reg_stmt);
+  reg_stmt[PQZ_PREFIX_BYTES] ^= 1;
+  pqz_prover_seeds (exA, r, reg_wit, sizeof reg_wit, h0);
+  pqz_prover_seeds (exA2, r, reg_wit, sizeof reg_wit, h0);
+  pqz_prover_seeds (exB, r, dr_wit, sizeof dr_wit, h0); /* dr_wit = KT's (s, e): R_REG witness layout */
+  pqz_prover_seeds (exA1, r, reg_wit, sizeof reg_wit, h1);
+  int dw = hamming (exA, exB, 64), ds = hamming (exA, exA1, 64), same = memcmp (exA, exA2, 64) == 0;
+  int rc1 = step_prove (0, 0);
+  memcpy (first, proofs[0], n0 = lens[0]);
+  int rc2 = step_prove (0, 0);
+  int det = rc1 == 0 && rc2 == 0 && n0 == lens[0] && memcmp (first, proofs[0], n0) == 0;
+  int ok = same && det && dw >= 160 && dw <= 352 && ds >= 160 && ds <= 352;
+  printf ("{\"hedge\": %s, \"seed_bits_diff_witness\": %d, \"seed_bits_diff_statement\": %d, "
+          "\"same_inputs_same_seeds\": %d, \"same_rnd32_same_proof\": %d}\n",
+          ok ? "true" : "false", dw, ds, same, det);
+  return !ok;
+}
+
 int
 main (int argc, char **argv)
 {
@@ -458,6 +500,9 @@ main (int argc, char **argv)
     }
   printf ("{\"init_ms\": %.1f, \"init_arena\": %zu, \"verify\": \"%s\"}\n", now_ms () - t0, step_arena_peak (),
           fast ? "fast" : "generic");
+
+  if (rels & 1)
+    fails += hedge_check ();
 
   for (int tx = 0; tx < NREL; tx++)
     {
