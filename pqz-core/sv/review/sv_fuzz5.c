@@ -69,7 +69,7 @@ LLVMFuzzerTestOneInput (const uint8_t *data, size_t size)
     {
       size_t n = sizeof fb;
       const uint64_t r1 = size > 3 ? le64 (data + 3, size - 3) : 0, r2 = size > 11 ? le64 (data + 11, size - 11) : 0;
-      if (!pqz_test_mutate (op, hp[rel], hl[rel], data[2] % 14, r1, r2, fb, &n))
+      if (!pqz_test_mutate (MOP[rel], hp[rel], hl[rel], data[2] % 14, r1, r2, fb, &n))
         return 0;
       len = n;
       i = size < 19 ? size : 19;

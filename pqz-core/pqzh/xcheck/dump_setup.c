@@ -1,9 +1,10 @@
-/* Dump pqz_bench.c setup()'s statements and witnesses (R_REG, R_TX; R_BURN, R_DS, R_DR for ligero.sh) for the PQZH
-   byte cross-checks (xcheck/run.sh: the Plonky3 crate, R_REG / R_TX; xcheck/ligero.sh: the Ligero crate, all five).
+/* Dump pqz_bench.c setup()'s statements and witnesses, all six forms (reg, tx, burn, ds, dr, tx0), for the PQZH byte
+   cross-checks (xcheck/run.sh: the Plonky3 crate, R_REG / R_TX; xcheck/ligero.sh: the Ligero crate) and the pqz-stmt
+   codec check (pqz-core/stmt/xcheck.sh, P6e Task 5).
    pqz_bench.c is included whole so its static buffers are visible; its main() is renamed away.
-   `dump_setup DIR pqzh` (ligero.sh) writes PQZH statements as the Ligero crate's client::setup_with does: bytes 0..63
-   = the op's opTag keccak256("SCAAS-PQZ-OP-<NAME>-V1") and PQZH's proofSystemId (plan D3) instead of pqz_bench.c's
-   filler and PQZL's id, and R_TX's auditorOn word = 1 (plan R6). Without it (run.sh) the bytes are pqz_bench.c's. */
+   `dump_setup DIR pqzh` (ligero.sh, stmt/xcheck.sh) writes PQZH statements as the Ligero crate's client::setup_with
+   does: bytes 0..63 = the op's opTag keccak256("SCAAS-PQZ-OP-<NAME>-V1") and PQZH's proofSystemId (plan D3) instead of
+   pqz_bench.c's filler and PQZL's id (R_TX0 gets op 1's tag). Without it (run.sh) the bytes are pqz_bench.c's. */
 #define main pqz_bench_main
 #include "../../test/pqz_bench.c"
 #undef main
@@ -45,14 +46,15 @@ main (int argc, char **argv)
   if (argc == 3)
     {
       pqzh_prefix (reg_stmt, TAG_REG), pqzh_prefix (tx_stmt, TAG_TX), pqzh_prefix (burn_stmt, TAG_BURN);
-      pqzh_prefix (ds_stmt, TAG_DS), pqzh_prefix (dr_stmt, TAG_DR);
-      memset (tx_stmt + 448, 0, 32); /* auditorOn, the 15th header word */
-      tx_stmt[448 + 31] = 1;
+      pqzh_prefix (ds_stmt, TAG_DS), pqzh_prefix (dr_stmt, TAG_DR), pqzh_prefix (tx0_stmt, TAG_TX);
     }
-  return dump (argv[1], "reg_stmt.bin", reg_stmt, sizeof reg_stmt) | dump (argv[1], "reg_wit.bin", reg_wit, sizeof reg_wit)
-         | dump (argv[1], "tx_stmt.bin", tx_stmt, sizeof tx_stmt) | dump (argv[1], "tx_wit.bin", tx_wit, sizeof tx_wit)
-         | dump (argv[1], "burn_stmt.bin", burn_stmt, sizeof burn_stmt)
-         | dump (argv[1], "burn_wit.bin", burn_wit, sizeof burn_wit) | dump (argv[1], "ds_stmt.bin", ds_stmt, sizeof ds_stmt)
-         | dump (argv[1], "ds_wit.bin", ds_wit, sizeof ds_wit) | dump (argv[1], "dr_stmt.bin", dr_stmt, sizeof dr_stmt)
-         | dump (argv[1], "dr_wit.bin", dr_wit, sizeof dr_wit);
+  static const char *const N[NREL] = { "reg", "tx", "burn", "ds", "dr", "tx0" };
+  int rc = 0;
+  for (int r = 0; r < NREL; r++)
+    {
+      char a[32], b[32];
+      snprintf (a, sizeof a, "%s_stmt.bin", N[r]), snprintf (b, sizeof b, "%s_wit.bin", N[r]);
+      rc |= dump (argv[1], a, STMT[r], STLEN[r]) | dump (argv[1], b, WIT[r], WLEN[r]);
+    }
+  return rc;
 }

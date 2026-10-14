@@ -9,7 +9,24 @@ write-up: `docs/research/pqz-parameters-e-s0.md`. The E-S1 files (P6d) are the c
 `e_s1_proof.sage` → `estimator-e-s1.txt` (rerun `run_e_s1.sh`); write-up `docs/research/pqz-core-e-s1.md`.
 `burn_params.sage`, `ds_params.sage`, `dr_params.sage` → `pqz_{burn,ds,dr}_params.h` are the `R_BURN` / `R_DS` / `R_DR`
 specs (`docs/research/pqz-relations-burn-disclose.md`); `run_e_s1.sh <LaZer> <estimator> burn ds dr` sizes them
-(`estimator-e-s1-rel3.txt`).
+(`estimator-e-s1-rel3.txt`). `tx0_params.sage` → `pqz_tx0_params.h` is `R_TX0`, the transfer without the auditor
+(CTR-PQZ-24, P6e plan D8: `R_TX` without `pk_a` / `v_a` / `e2_a`, row 5 skipped; op 1 with the 66,560-byte statement),
+sized by `run_e_s1.sh <LaZer> <estimator> tx0` (`estimator-e-s1-tx0.txt`).
+
+## Codegen reproducibility (P6e D1, 2026-10-14)
+
+`regen.sh <LaZer 3330e48> <out dir> tx0 reg tx burn ds dr` reruns LaZer's codegen (`codegen/run.sh`, pinned Sage image,
+no network) on every spec and compares each output with the checked-in header. Run under `scripts/capped`, output
+`codegen-tx0.txt`: the five existing headers (`reg`, `tx`, `burn`, `ds`, `dr`) came out **byte-identical**; `tx0` is
+new (copied from the run, sha256 `bdf886541e7fafac…`). About 30 s per spec.
+
+| Relation | kmsis | kmlwe | m1 + m2 | MSIS β (classical / quantum) | MLWE uSVP β (dual_hybrid β) | knowledge error | codegen proof estimate |
+|---|---|---|---|---|---|---|---|
+| `R_TX0` (`estimator-e-s1-tx0.txt`) | 23 | 33 | 145 + 68 | 457 (2^133.4 / 2^121.1) | 470 (462) | ≤ 2^−127 | ≈ 44,286 B |
+| for reference `R_TX` | 23 | 33 | 146 + 68 | 456 (2^133.2) | 470 (462) | ≤ 2^−127 | ≈ 44,638 B |
+
+`R_TX0` meets CTR-PQZ-03's β ≥ 450 at LaZer's default `pqz_delta` 1.00366 and the MLWE rank floor 33 on the first
+try, as the other relations did.
 
 | Pin | Value |
 |---|---|

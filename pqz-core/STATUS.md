@@ -266,6 +266,121 @@ Python (40 Decs); the resample path and the counter-64 error pinned with lowered
 zeroed with the SHAKE state (`keys2-pqz-kat.txt`: ok; a tampered copy fails on each changed field). Not measured: wasm
 (P6e Task 7, `pqz-ffi` `prove` feature).
 
+## Auditor-off transfer `R_TX0` P6e Task 2 (branch `p6e-a2`; CTR-PQZ-24, P6e plan gap G1 / decision D8, ruling R6; no `proofSystemId` bump)
+
+`R_TX` without the auditor: no `pk_a`, `v_a`, `e2_a`, row 5 skipped, every other row and norm of `R_TX` kept (the same
+917 bits). Op 1 with the 66,560-byte statement (header ‖ `pk_f ‖ pk_t ‖ T ‖ u ‖ v_t ‖ v_f`), witness 12,384 B
+(`PQZ_TX0_STMT_BYTES`, `PQZ_TX0_WIT_BYTES`); `pqz_rel.c` picks `R_TX` / `R_TX0` by the length and both verifiers and the
+prover require the `auditorOn` word (offset 448, `PQZ_HDR_AUDITOR_ON`) = 1 on the 83,072-byte form and 0 on the
+66,560-byte one (R6). Spec `params/tx0_params.sage` → `params/pqz_tx0_params.h` by LaZer's codegen: kmsis 23, kmlwe 33,
+m1 145 + m2 68, MSIS β 457 (2^133.4 classical / 2^121.1 quantum), MLWE uSVP β 470 (dual_hybrid 462), knowledge error
+≤ 2^-127 (`params/estimator-e-s1-tx0.txt`). D1: the codegen rerun reproduces the five checked-in headers byte for byte
+(`params/codegen-tx0.txt`, `params/regen.sh`). ABDLOP keys of its own, `SCAAS-PQZ-ABDLOP-PP-V1 ‖ 0x81` (run
+`tx0b`; the first run `tx0` shared op 1's tag); the specialised verifier names it by the same internal code
+`PQZ_REL_TX0` (0x81, never on the wire). Bench / diff / fuzz
+relation 5 (`pqz_bench` mask 32), from the bench's `R_TX` transfer without the auditor leg.
+
+**The bench's `R_TX` statement changed** (R6): its header word 448 was filler (`i·3`), now 1; so `R_TX`'s proofs and
+`proofs_fnv` change (native 5 / 10 seeds `ca69759d` → `604111c6` / `cabd8270` → `79b9326d`, wasm 3 seeds `177e6806` →
+`6780efdd`, 1 seed `e2cf9721` → `a092f2ff`); proof bytes, times and peaks the same. `R_REG`, `R_BURN`, `R_DS`, `R_DR`
+proofs byte-identical to `hedge2`. Also set to 1 in `test/pqz_sv_diff.c`, `test/pqz_sv_fuzz.c` (input byte 0 now picks
+`R_REG` / `R_TX` / `R_TX0`), `l2dom/l2dom_tx.c`, `xcheck/shim/bench.c`. The Ligero crate's `client::setup` writes
+the same header (auditorOn 1 since `p6e-b2`; the salt word and the zero words of D15 since the merge, run `tx0c`, so
+`xcheck/ligero.sh` stays byte-equal); the Plonky3 crate's `pqzh/src/client.rs` (backup, unbuilt by P6e) still writes
+the filler.
+
+Runs [measured] (`NP=10 NV=30 NPW=5 NVW=10 rel3/relfix.sh tx0`, `sv/rel3.sh tx0`, `sv/review/review.sh zdiff 1`, one
+capped job each; `rel3/runs/tx0-*`, `sv/runs/tx0-*`): KAT 19/19; `check_tbox_fixes: ok`; `check_sv_fixes: ok` (tree 0 /
+12, either fix reverted 12 / 12); differential test 3,484 portable + 1,736 x86-64-v3 cases over six relations, 0
+mismatches (`R_TX0` 766 + 382, incl. 24 + 12 `stmt_auditor` cases: `auditorOn` changed on `R_TX` / `R_TX0`, both
+verifiers reject every one), PRG 0; wasm `PQZ_VERIFY=both` 0 mismatches; z21 differential 174 cases over six relations,
+0 disagreements; `fails 0` everywhere (native, wasm, ASan + UBSan with only the Open 4 nits), including all six tamper
+kinds on `R_TX0` and `auditor_check` (9 cases: `R_TX` with `auditorOn` 0 — the dummy-auditor form —, 2, a high byte;
+`R_TX0` with 1, 2, a high byte; each proof under the other form's statement: rejected by both verifiers, refused by
+the prover); symbol scan clean; native and wasm proofs equal byte for byte (native 5 seeds `64ce6572` = wasm 5 seeds;
+1 seed `bdf2a395` native = wasm generic = wasm fast = wasm without SV). `pqz.wasm` 411,419 B (without SV 356,523 B).
+
+| `R_TX0` [measured] | value | for reference `R_TX` (same runs) |
+|---|---|---|
+| proof bytes, max of 10 native seeds (codegen estimate) | 42,448 (44,286) | 42,799 (44,638) |
+| prove p50 / p99 native; p50 wasm | 857 / 1,002 ms; 1,272 ms | 862 / 1,062 ms; 1,235 ms |
+| generic verify p50 / p99 native (adversarial p99); p50 wasm | 592 / 637 ms (669); 771 ms | 633 / 696 ms (663); 795 ms |
+| SV p50 / p99 portable (adversarial p99) | 8.23 / 9.36 ms (9.60) | 7.86 / 8.61 ms (8.05) |
+| SV p50 / p99 x86-64-v3 (adversarial p99) | 4.81 / 5.28 ms (5.65) | 4.71 / 5.00 ms (5.44) |
+| SV p50 / p99 wasm (adversarial p99) | 13.5 / 15.2 ms (14.3) | 13.4 / 13.9 ms (14.1) |
+| arena peak, one op, native / wasm | 298.0 / 227.3 MB (216.7 MiB, 15.3 % under 256 MiB) | 304.2 / 231.9 MB |
+| SV tables / SV verify working set / generic verify working set | 5.17 / 1.66 / 267 MB | 5.22 / 1.67 / 273 MB |
+
+Every `R_TX0` number is within host noise of `R_TX` or just under it (one key and one ciphertext slot fewer); SV p99
+≤ 15.2 ms against the 60 ms limit on every build.
+
+**After review (controller 2026-10-14), run `tx0b`** (`rel3/runs/tx0b-*`, `sv/runs/tx0b-*`; `tx0` kept): `R_TX0` gets
+its own ABDLOP keys (tag byte 0x81), and the bench's debit statements carry the canonical salt word (16 zero bytes ‖
+salt, CTR-PQZ-19; `R_TX` / `R_TX0` keep the filler as the 16-byte salt, `R_BURN` salt 0), which the decoder (`pqz-stmt`,
+`pqz_kat.py`) now enforces (pqz-core only hashes the word). So `R_TX`, `R_TX0` and `R_BURN` proofs change once;
+`R_REG`, `R_DS`, `R_DR` stay byte-identical to `hedge2`. Same checks, all green [measured]: KAT 19/19,
+`check_tbox_fixes: ok`, `check_sv_fixes: ok`, differential 3,484 + 1,736 cases 0 mismatches (24 + 12 `stmt_auditor`
+on `R_TX0`, 0 accepted), wasm both 0, z21 differential 174 / 0, `fails 0` native, wasm, ASan + UBSan, `auditor_check`
+9 / 9, native = wasm proofs. `R_TX0` in `tx0b`: proof ≤ 42,456 B, prove p50 / p99 native 917 / 1,256 ms, wasm 1,047
+ms, generic verify p50 / p99 native 574 / 594 ms (adversarial 656), wasm 766 ms, SV p50 / p99 portable 8.01 / 9.25
+(adversarial 8.63), x86-64-v3 4.83 / 6.49 (4.93), wasm 13.3 / 15.5 (16.8) ms, peaks as `tx0` (298.0 / 227.3 MB).
+`../artifact/expected-results.json` regenerated from `tx0b` (provisional, 69 / 69).
+
+**Second review (controller 2026-10-14), run `tx0c`** (`tx0`, `tx0b` kept), after merging `main` (`p6e-b2`): the
+`auditorOn` read in `parse_debit` / the SV's `parse_stmt` split into two statements (it was read unsequenced with the
+call, C11 6.5.2.2p10; no other such read in `src/` or `lazer/`); D15 now also pins the header words §7.7 / §7.5 fix to 0
+(a transfer's `amount` / `recipient`, a burn's `toUA` / `auditorOn` / whole `salt`, a refresh's `toUA` / `amount` /
+`recipient` / `auditorOn` / `salt`; decoder only, `pqz-stmt` and `pqz_kat.py`), and the bench writes them so (`R_TX`
+recipient 0; `R_BURN` toUA, auditorOn 0), so `R_TX`, `R_TX0`, `R_BURN` proofs change once more; `R_REG`, `R_DS`,
+`R_DR` still byte-identical to `hedge2`. All green [measured]: KAT 19/19, `check_tbox_fixes: ok`, `check_sv_fixes:
+ok`, differential 3,484 + 1,736 cases 0 mismatches, wasm both 0, z21 differential 174 / 0, `fails 0` native, wasm,
+ASan + UBSan, `auditor_check` 9 / 9, native = wasm proofs (5 and 1 seeds). `R_TX0` in `tx0c`: proof ≤ 42,441 B, prove
+p50 / p99 native 827 / 1,128 ms, wasm 1,398 ms, generic verify p50 / p99 native 577 / 627 ms (adversarial 627), wasm
+760 ms, SV p50 / p99 portable 8.03 / 8.49 (adversarial 8.82), x86-64-v3 4.68 / 5.53 (4.92), wasm 13.4 / 14.7 (14.4)
+ms. `../artifact/expected-results.json` regenerated from `tx0c` (provisional, 69 / 69). The Ligero crate's
+`client::setup` writes the same header words: `pqzh/ligero/runs/l13-*` (EVM fixtures re-exported, `cargo test` 15 +
+14 ok, `--no-default-features` ok, wasm32 build ok, `xcheck/ligero.sh` all ten files equal + `kat_stmt: ok`, forge
+16 / 16 passed on the re-exported fixtures; its first try failed only because this worktree had no `lib/`,
+`l13-forge-failed-nolib.txt`).
+
+| `proofs_fnv` hedge2 → tx0 → tx0b → **tx0c** | native 5 seeds (= wasm 5) | wasm 3 seeds | native 10 seeds | 2 seeds (SV runs) | 1 seed (alone) |
+|---|---|---|---|---|---|
+| `R_REG` | **`8bd69f2d`** (unchanged) | **`e70b5dc4`** | **`b82d49f8`** | **`1af59837`** | **`25074bbb`** |
+| `R_TX` | `ca69759d` → `604111c6` → `239c8b8d` → **`b9bbf854`** | `177e6806` → `6780efdd` → `ced8bcc3` → **`9304299b`** | `cabd8270` → `79b9326d` → `e55b1313` → **`0b786555`** | `1d42a571` → `3ef1da5b` → `09b11092` → **`559b3c44`** | `e2cf9721` → `a092f2ff` → `0e0026f2` → **`008d4495`** |
+| `R_BURN` | `bfb900f9` → `bfb900f9` → `d94216dd` → **`0a5976da`** | `37654486` → `37654486` → `07fbdc5c` → **`0ea1c7a6`** | `049029ff` → `049029ff` → `801e15c2` → **`c7e99b6b`** | `12f45572` → `12f45572` → `73ad9a0a` → **`7694fd9f`** | `d8180c60` → `d8180c60` → `780a00bb` → **`ad3e8a12`** |
+| `R_DS` | **`b4aa2e26`** (unchanged) | **`f39a8e64`** | **`5429242c`** | **`9eb44281`** | **`478a0d94`** |
+| `R_DR` | **`c800f2c6`** (unchanged) | **`96a6e906`** | **`e53ad440`** | **`5bb0078c`** | **`cb2f3ced`** |
+| `R_TX0` (new) | `64ce6572` → `17bbacad` → **`a29a5747`** | `2ae5a78d` → `ac79db76` → **`a0afafc7`** | `8721892b` → `30b085ff` → **`a2759b37`** | `a41428e2` → `b10b632d` → **`8b99b979`** | `bdf2a395` → `0fe80168` → **`bfdc29df`** |
+
+## `pqz-stmt`, the statement codec P6e Task 5 (branch `p6e-a2`; plan R2, D15, R6, D5 limits, D2 / D3 ids)
+
+`stmt/` (Rust 1.97.1, `no_std` + `alloc`, no dependencies, no `unsafe`, no floats): `parse(op, stmt)` for every form
+(`TRANSFER` 83,072 B, `TRANSFER0` 66,560 B by length, `BURN` / `REFRESH`, `REGISTER`, `DISCLOSE-SENDER` /
+`-RECEIVER` / `-AUDITOR`, `SELFTEST` empty) with the D15 / R6 rules in `pqz_kat.py`'s order (opTag of the op, known
+`proofSystemId`, length, `fee` / `amount` < 2^64, `auditorOn` by length, coefficients < q), borrowing (no allocation);
+`Stmt::encode` (`encode(parse(x)) = x`); `pk` / ciphertext / coefficient codecs; bundle (16,688 / 16,560 B) and the
+canonical `abi.encode(bytes, bytes)` opening; `decode_input` for the precompile (`≤ MAX_INPUT` 393,216, `1 ≤
+len(proof) ≤ MAX_PROOF(id)`: PQZL 98,304, PQZH 262,144; SELFTEST exactly `06 00000000`); the opTags, both ids, the
+form lengths and the prover-API witness lengths. Not in it (they need Keccak): `ctHash`, `authDigest`, `entryRef` (in
+`pqz_kat.py`; `pqz-ffi` later). Run `scripts/capped pqz-core/stmt/xcheck.sh stmt1` (`stmt/runs/stmt1-*`) [measured]:
+7 unit tests (round trip of every form under both ids, field offsets, 32 rejection cases one per D15 / R6 rule incl.
+coefficient = q / = 2^42, fee = 2^64, `auditorOn` 2 / 0 on 83,072 B / 1 on 66,560 B, length ± 1, foreign opTag,
+unknown id; bundle, opening, input) ok; cross-check ok: the six C statements of `pqz_bench.c` (`pqzh/xcheck/
+dump_setup`, opTag word set to the form's: the bench writes a marker there) parse, re-encode and rebuild from their
+fields byte for byte, and `pqz_kat.py` rebuilds the same six; 32 random statements built by `pqz_kat.py` (both ids)
+parse to the same fields and are built back to the same bytes; 178 mutations `pqz_kat.py` rejects are rejected for
+the same reason; `cargo build --target wasm32-unknown-unknown` ok, `cargo tree`: no dependency. After review (run
+`stmt2`, `stmt1` kept): `fee` / `amount` < 2^64 checked on every debit form (stricter than the relations, which read
+`amount` only for BURN), and the salt word must be 16 zero bytes ‖ salt (`Reject::Salt`; pqz-core only hashes it, so
+the decoder is where it is enforced), in `pqz-stmt` and `pqz_kat.py` alike; 7 unit tests ok (32 rejection cases), C 6
+/ 6 equal (the bench statements now canonical, no salt rewrite), 32 `pqz_kat.py` statements equal, 186 rejections
+with the same reason, wasm32 ok. Second review (run `stmt3`): `parse_opening` checks every sum on a length word
+(`checked_next_multiple_of` / `checked_add`; unit cases with length words near 2^64), the D15 zero words above
+(`Reject::MustBeZero(field)`, `pqz_kat.py` "<field> must be 0", same order), the C statements now come from `dump_setup
+DIR pqzh` (real opTags and the PQZH id, no rewrite); 7 unit tests ok in release and in debug (overflow checks on), C 6 /
+6 equal, 32 `pqz_kat.py` statements equal, 210 rejections with the same reason, wasm32 ok. The Ligero crate moves
+onto it in Part B Task 6.
+
 ## Measured (2026-10-13, this machine, single thread)
 
 Native: clang -O2, `pqz_bench 5 5` under `scripts/capped` (5 proves, 5 + 5 honest verifies, 10 adversarial). wasm32:

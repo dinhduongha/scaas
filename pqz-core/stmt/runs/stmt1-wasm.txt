@@ -1,0 +1,4 @@
+   Compiling pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/pqz-core/stmt)
+    Finished `release` profile [optimized] target(s) in 0.29s
+rlib bytes 140922
+pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/pqz-core/stmt)

@@ -7,6 +7,11 @@
 
 #include "lazer.h"
 
+/* internal relation code of R_TX0 (op 1 with the 66,560-byte statement), where pqz_rel.c and pqz_sv.c name a relation
+   by its op, and the tag byte of R_TX0's ABDLOP keys (SCAAS-PQZ-ABDLOP-PP-V1 || 0x81); never an op on the wire (the
+   transcript hashes op 1) */
+#define PQZ_REL_TX0 0x81
+
 /* statement digest: SHAKE128("SCAAS-PQZ-TRANSCRIPT-V1" || op || be32(len) || stmt) */
 void pqz_stmt_hash (uint8_t h[32], uint8_t op, const uint8_t *stmt, size_t len);
 
@@ -15,13 +20,14 @@ int pqz_decproof (size_t len, const uint8_t *in, polyvec_t tA1, polyvec_t tB, po
                   polyvec_t z1, polyvec_t z21, polyvec_t hint, polyvec_t z3, polyvec_t z4,
                   const lnp_tbox_params_t params);
 
-/* pqz_sv.c (builds with PQZ_SV): per-relation tables, built at the first pqz_verify_fast of the op (PQZ_OK at once
-   if built; the caller moves the arena base mark above them), the verify body (called by pqz_verify_fast with the
-   arena released to the base mark), and the reset at pqz_init (the arena they lived in is gone) */
+/* pqz_sv.c (builds with PQZ_SV): per-relation tables (rel = the op, or PQZ_REL_TX0), built at the relation's first
+   pqz_verify_fast (PQZ_OK at once if built; the caller moves the arena base mark above them), the verify body (called
+   by pqz_verify_fast with the arena released to the base mark; hash is the statement digest under the real op), and
+   the reset at pqz_init (the arena they lived in is gone) */
 void pqz_sv_reset (void);
-int pqz_sv_setup (uint8_t op, const lnp_tbox_params_struct *P, polymat_t A, polymat_t A1, polymat_t A2p,
+int pqz_sv_setup (uint8_t rel, const lnp_tbox_params_struct *P, polymat_t A, polymat_t A1, polymat_t A2p,
                   polymat_t Bp);
-int pqz_sv_verify (uint8_t op, const uint8_t hash[32], const uint8_t *stmt, size_t stmt_len,
+int pqz_sv_verify (uint8_t rel, const uint8_t hash[32], const uint8_t *stmt, size_t stmt_len,
                    const uint8_t *proof, size_t proof_len);
 
 #endif

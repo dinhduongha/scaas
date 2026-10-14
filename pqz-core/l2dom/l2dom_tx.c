@@ -146,6 +146,8 @@ main (int argc, char **argv)
   for (int b = 7; b >= 0; b--)
     p[PQZ_HDR_FEE + 31 - b] = (uint8_t)(fee >> (8 * b));
   memset (p + PQZ_HDR_FEE, 0, 24), memset (p + PQZ_HDR_AMOUNT, 0, 32);
+  memset (p + PQZ_HDR_AUDITOR_ON, 0, 32), p[PQZ_HDR_AUDITOR_ON + 31] = 1; /* P6e R6: auditorOn 1 on this form */
+  memset (p + PQZ_HDR_SALT, 0, 16), memset (p + PQZ_HDR_RECIPIENT, 0, 32); /* canonical (P6e D15) */
   p += PQZ_HEADER_BYTES;
   memcpy (p, pkf, PQZ_POLYVEC_BYTES), p += PQZ_POLYVEC_BYTES;
   memcpy (p, pkt, PQZ_POLYVEC_BYTES), p += PQZ_POLYVEC_BYTES;

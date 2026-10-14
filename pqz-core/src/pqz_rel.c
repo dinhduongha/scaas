@@ -11,6 +11,10 @@
  * Rows 1, 2 are R_q-linear equations (quadeqs with no quadratic part); rows 3-7 are Z_q-linear equations
  * on single coefficients: ct(X^-i * (...)) = 0 (tbox evaleqs). Norms: 7 exact l2 proofs, 1 binary proof.
  *
+ * R_TX0 = R_TX without the auditor (CTR-PQZ-24: no pk_a / v_a, row 5 skipped; m1 = 145 + Z = 6), op 1 with the
+ *   66,560-byte statement, the same bit layout as R_TX:
+ *   0..31 s_f | 32..63 e_f | 64..95 r | 96..127 e1 | 128 e2_t | 129 e2_f | 130..144 bits
+ *   Op 1 is R_TX or R_TX0 by the statement length; the auditorOn header word must be 1 / 0 (P6e plan R6).
  * R_BURN = R_TX rows 1, 2, 4, 6, 7 with d = digits(amount) public (m1 = 143 + Z = 5):
  *   0..31 s_f | 32..63 e_f | 64..95 r | 96..127 e1 | 128 e2_f | 129..142 bits
  *   d'_i: 4i+b | M_i: 64+14i+b | c_i + 64: 288+11i+b (i < 15) | e_T[i] + 2^24: 453+25i+b
@@ -29,6 +33,7 @@
 #include "pqz_dr_params.h"
 #include "pqz_ds_params.h"
 #include "pqz_reg_params.h"
+#include "pqz_tx0_params.h"
 #include "pqz_tx_params.h"
 
 #define K 32
@@ -40,14 +45,19 @@
 typedef struct
 {
   const lnp_tbox_params_struct *P;
-  uint8_t op;
-  int ready; /* ABDLOP keys built (at the first prove / verify of this op) */
+  uint8_t op;   /* the op the relation serves */
+  uint8_t code; /* the op, or PQZ_REL_TX0: names the relation in pqz_sv.c and the test hook, and is the byte of its
+                   ABDLOP keys' tag (R_TX0: 0x81, its own keys; REFRESH / AUDITOR share their op's relation) */
+  int ready;    /* ABDLOP keys built (at the first prove / verify of this relation) */
   polymat_t A1, A2p, Bp;
 } rel_t;
 
-static rel_t REG = { .P = pqz_reg, .op = PQZ_OP_REGISTER }, TX = { .P = pqz_tx, .op = PQZ_OP_TRANSFER },
-             BURN = { .P = pqz_burn, .op = PQZ_OP_BURN }, DS = { .P = pqz_ds, .op = PQZ_OP_DISCLOSE_SENDER },
-             DR = { .P = pqz_dr, .op = PQZ_OP_DISCLOSE_RECEIVER };
+static rel_t REG = { .P = pqz_reg, .op = PQZ_OP_REGISTER, .code = PQZ_OP_REGISTER },
+             TX = { .P = pqz_tx, .op = PQZ_OP_TRANSFER, .code = PQZ_OP_TRANSFER },
+             TX0 = { .P = pqz_tx0, .op = PQZ_OP_TRANSFER, .code = PQZ_REL_TX0 },
+             BURN = { .P = pqz_burn, .op = PQZ_OP_BURN, .code = PQZ_OP_BURN },
+             DS = { .P = pqz_ds, .op = PQZ_OP_DISCLOSE_SENDER, .code = PQZ_OP_DISCLOSE_SENDER },
+             DR = { .P = pqz_dr, .op = PQZ_OP_DISCLOSE_RECEIVER, .code = PQZ_OP_DISCLOSE_RECEIVER };
 static polymat_t A; /* public, the same for every relation */
 static int ready;
 static pqz_arena_mark_t base;
@@ -108,7 +118,7 @@ expand_A (polymat_t A)
       }
 }
 
-/* ABDLOP keys of R from SHAKE128("SCAAS-PQZ-ABDLOP-PP-V1" || op), built at the relation's first use and kept below
+/* ABDLOP keys of R from SHAKE128("SCAAS-PQZ-ABDLOP-PP-V1" || code), code = the op (R_TX0: 0x81), built at the relation's first use and kept below
    the arena base mark, so an op never carries the keys of relations it does not use. Call with the arena released
    to the base mark (start of pqz_prove / pqz_verify); moves the mark above the keys. */
 static int
@@ -123,7 +133,7 @@ rel_keys (rel_t *R)
   polymat_alloc (R->A1, Rq, tb->kmsis, tb->m1);
   polymat_alloc (R->A2p, Rq, tb->kmsis, tb->m2 - tb->kmsis);
   polymat_alloc (R->Bp, Rq, tb->l + tb->lext, tb->m2 - tb->kmsis);
-  shake_tag (pp, "SCAAS-PQZ-ABDLOP-PP-V1", &R->op, 1, NULL, 0);
+  shake_tag (pp, "SCAAS-PQZ-ABDLOP-PP-V1", &R->code, 1, NULL, 0);
   abdlop_keygen (R->A1, R->A2p, R->Bp, pp, tb);
   /* NTT form now: a crtrep created lazily inside a call would sit above the arena mark and be dropped */
   polymat_tocrt (R->A1);
@@ -140,7 +150,7 @@ int
 pqz_init (void *arena, size_t len)
 {
   pqz_err = PQZ_OK;
-  REG.ready = TX.ready = BURN.ready = DS.ready = DR.ready = 0;
+  REG.ready = TX.ready = TX0.ready = BURN.ready = DS.ready = DR.ready = 0;
 #ifdef PQZ_SV
   pqz_sv_reset ();
 #endif
@@ -426,8 +436,14 @@ build_reg (sys_t *S, const uint8_t *stmt, polyvec_t pk)
   return 1;
 }
 
-#define TX_BITS 131
-/* ---- R_TX and R_BURN (the debit relations) ---- */
+/* ---- R_TX, R_TX0 and R_BURN (the debit relations) ---- */
+
+enum
+{
+  DEB_TX,  /* R_TX, auditor on */
+  DEB_TX0, /* R_TX0, auditor off: no pk_a / v_a / e2_a, row 5 skipped */
+  DEB_BURN /* R_BURN: d public, rows 3 and 5 skipped */
+};
 
 /* bit slots: base of each group (slot = base + width * i + b), -1 if the group is absent (R_BURN: d public) */
 typedef struct
@@ -532,24 +548,37 @@ new_vec (polyring_srcptr Rq)
   return v;
 }
 
-/* R_TX: header || pk_f || pk_t || pk_a || u_T || v_T || u || v_t || v_f || v_a; R_BURN: header || pk_f || u_T || v_T
-   || u || v_f (pq-zether.md §7.7). Reads fee and (R_BURN) amount from the header; the rest of it is hashed only. */
+/* R_TX: header || pk_f || pk_t || pk_a || u_T || v_T || u || v_t || v_f || v_a; R_TX0: the same without pk_a and
+   v_a; R_BURN: header || pk_f || u_T || v_T || u || v_f (pq-zether.md §7.7). Reads fee, (R_BURN) amount and (R_TX,
+   R_TX0) the auditorOn word from the header; the rest of it is hashed only. */
 static int
-parse_debit (txst_t *T, polyring_srcptr Rq, const uint8_t *stmt, int burn)
+parse_debit (txst_t *T, polyring_srcptr Rq, const uint8_t *stmt, int kind)
 {
   const uint8_t *p = stmt + PQZ_HEADER_BYTES;
+  const int burn = kind == DEB_BURN, aud = kind == DEB_TX;
+  uint64_t on = 0;
   int ok = rd_word64 (&T->fee, stmt + PQZ_HDR_FEE);
   T->amount = 0;
   if (burn)
     ok &= rd_word64 (&T->amount, stmt + PQZ_HDR_AMOUNT);
+  else /* R6: the word says what the length says, 1 with pk_a and v_a, 0 without */
+    {
+      ok &= rd_word64 (&on, stmt + PQZ_HDR_AUDITOR_ON); /* two statements: on is read after the call */
+      ok &= on == (uint64_t)aud;
+    }
   T->pkf = new_vec (Rq), T->uT = new_vec (Rq), T->u = new_vec (Rq);
   poly_alloc (T->vT, Rq), poly_alloc (T->vf, Rq);
   ok &= rd_polyvec (T->pkf, p), p += PQZ_POLYVEC_BYTES;
   if (!burn)
     {
-      T->pkt = new_vec (Rq), T->pka = new_vec (Rq);
-      poly_alloc (T->vt, Rq), poly_alloc (T->va, Rq);
+      T->pkt = new_vec (Rq);
+      poly_alloc (T->vt, Rq);
       ok &= rd_polyvec (T->pkt, p), p += PQZ_POLYVEC_BYTES;
+    }
+  if (aud)
+    {
+      T->pka = new_vec (Rq);
+      poly_alloc (T->va, Rq);
       ok &= rd_polyvec (T->pka, p), p += PQZ_POLYVEC_BYTES;
     }
   ok &= rd_polyvec (T->uT, p), p += PQZ_POLYVEC_BYTES;
@@ -558,29 +587,30 @@ parse_debit (txst_t *T, polyring_srcptr Rq, const uint8_t *stmt, int burn)
   if (!burn)
     ok &= rd_poly (T->vt, p, 16), p += PQZ_V_BYTES;
   ok &= rd_poly (T->vf, p, 16), p += PQZ_V_BYTES;
-  if (!burn)
+  if (aud)
     ok &= rd_poly (T->va, p, 16);
   return ok;
 }
 
-/* R_TX (burn = 0) or R_BURN (burn = 1): the rows of pq-zether.md §7.4; R_BURN skips rows 3 and 5 and moves
+/* R_TX, R_TX0 or R_BURN: the rows of pq-zether.md §7.4; R_TX0 skips row 5; R_BURN skips rows 3 and 5 and moves
    Delta d_i (row 4 has none: d' is the witness) and d_i (row 7) into the constant term */
 static int
-build_debit (sys_t *S, txst_t *T, const uint8_t *stmt, int burn)
+build_debit (sys_t *S, txst_t *T, const uint8_t *stmt, int kind)
 {
-  rel_t *R = burn ? &BURN : &TX;
+  const int burn = kind == DEB_BURN, aud = kind == DEB_TX;
+  rel_t *R = burn ? &BURN : aud ? &TX : &TX0;
   const lay_t *L = burn ? &LAY_BURN : &LAY_TX;
   polyring_srcptr Rq = R->P->tbox->ring;
-  const unsigned m1 = burn ? 143 : 146, e2f = burn ? 128 : 129;
+  const unsigned m1 = burn ? 143 : aud ? 146 : 145, e2f = burn ? 128 : 129;
   poly_ptr acc[15];
   unsigned i, b, e = 0;
 
   S->R = R;
   S->N = NTXQ;
-  S->M = burn ? 48 : NTXE;
-  S->bits = burn ? 129 : TX_BITS;
+  S->M = burn ? 48 : aud ? NTXE : 64;
+  S->bits = burn ? 129 : aud ? 131 : 130;
   S->nbin = burn ? 14 : 15;
-  if (!parse_debit (T, Rq, stmt, burn))
+  if (!parse_debit (T, Rq, stmt, kind))
     return 0;
   for (b = 0; b < 15; b++)
     acc[b] = new_poly (Rq);
@@ -606,7 +636,7 @@ build_debit (sys_t *S, txst_t *T, const uint8_t *stmt, int burn)
       for (b = 0; b < 4; b++)
         add_bit (acc, SLOT (L->dp, 4, i, b), DELTA << b);
       evaleq (S, e++, T->pkf, 64, i, e2f, acc, -cval (T->vf, i));
-      if (!burn)
+      if (aud)
         {
           acc_zero (acc);
           for (b = 0; b < 4; b++)
@@ -652,12 +682,11 @@ build_debit (sys_t *S, txst_t *T, const uint8_t *stmt, int burn)
   S->Es[3] = new_sel (Rq, 32, m1, 96);
   S->Es[4] = new_sel (Rq, 1, m1, 128);
   if (!burn)
-    {
-      S->Es[5] = new_sel (Rq, 1, m1, 129);
-      S->Es[6] = new_sel (Rq, 1, m1, 130);
-    }
+    S->Es[5] = new_sel (Rq, 1, m1, 129);
+  if (aud)
+    S->Es[6] = new_sel (Rq, 1, m1, 130);
   S->Ps = new_sel (Rq, S->nbin, m1, S->bits);
-  S->Ds = new_sel (Rq, 1, m1, 128); /* e2_t (R_TX) / e2_f (R_BURN), |coefficients| <= 20 < 64 (Bprime) */
+  S->Ds = new_sel (Rq, 1, m1, 128); /* e2_t (R_TX, R_TX0) / e2_f (R_BURN), |coefficients| <= 20 < 64 (Bprime) */
   return 1;
 }
 
@@ -937,13 +966,15 @@ dec_w (polyring_srcptr Rq, polyvec_ptr u, poly_ptr v, polyvec_t s1, int64_t w[16
   poly_free (acc);
 }
 
-/* R_TX / R_BURN witness -> s1 (incl. derived M, carries, e_T); returns 0 if inconsistent */
+/* R_TX / R_TX0 / R_BURN witness -> s1 (incl. derived M, carries, e_T); returns 0 if inconsistent */
 static int
-debit_witness (txst_t *T, const uint8_t *w, polyvec_t s1, int burn)
+debit_witness (txst_t *T, const uint8_t *w, polyvec_t s1, int kind)
 {
-  polyring_srcptr Rq = (burn ? BURN.P : TX.P)->tbox->ring;
+  const int burn = kind == DEB_BURN;
+  /* the relation's own ring object: LaZer asserts operands share the ring pointer */
+  polyring_srcptr Rq = (burn ? BURN.P : kind == DEB_TX ? TX.P : TX0.P)->tbox->ring;
   const lay_t *L = burn ? &LAY_BURN : &LAY_TX;
-  const unsigned bits = burn ? 129 : TX_BITS, ne2 = burn ? 1 : 3;
+  const unsigned bits = burn ? 129 : kind == DEB_TX ? 131 : 130, ne2 = burn ? 1 : kind == DEB_TX ? 3 : 2;
   const uint8_t *p = w;
   unsigned i, j, b;
   int64_t d[16], dp[16], M[16], eT[16], c[16];
@@ -1024,18 +1055,20 @@ dr_witness (txst_t *T, const uint8_t *w, polyvec_t s1)
   return 1;
 }
 
-/* the statement of op (stmt_len checked); 0 if the op is unknown or the statement malformed */
+/* the statement of relation R (its length checked); 0 if the statement is malformed */
 static int
-build (sys_t *S, txst_t *T, uint8_t op, const uint8_t *stmt, size_t stmt_len, polyvec_t pk)
+build (sys_t *S, txst_t *T, const rel_t *R, const uint8_t *stmt, size_t stmt_len, polyvec_t pk)
 {
-  switch (op)
+  switch (R->code)
     {
     case PQZ_OP_REGISTER:
       return stmt_len == PQZ_REG_STMT_BYTES && build_reg (S, stmt, pk);
     case PQZ_OP_TRANSFER:
-      return stmt_len == PQZ_TX_STMT_BYTES && build_debit (S, T, stmt, 0);
+      return stmt_len == PQZ_TX_STMT_BYTES && build_debit (S, T, stmt, DEB_TX);
+    case PQZ_REL_TX0:
+      return stmt_len == PQZ_TX0_STMT_BYTES && build_debit (S, T, stmt, DEB_TX0);
     case PQZ_OP_BURN:
-      return stmt_len == PQZ_BURN_STMT_BYTES && build_debit (S, T, stmt, 1);
+      return stmt_len == PQZ_BURN_STMT_BYTES && build_debit (S, T, stmt, DEB_BURN);
     case PQZ_OP_DISCLOSE_SENDER:
       return stmt_len == PQZ_DISC_STMT_BYTES && build_ds (S, T, stmt);
     case PQZ_OP_DISCLOSE_RECEIVER:
@@ -1044,15 +1077,16 @@ build (sys_t *S, txst_t *T, uint8_t op, const uint8_t *stmt, size_t stmt_len, po
   return 0;
 }
 
+/* the relation of op; op 1 is R_TX0 with the 66,560-byte statement, else R_TX (whose builder then checks the length) */
 static rel_t *
-rel_of (uint8_t op)
+rel_of (uint8_t op, size_t stmt_len)
 {
   switch (op)
     {
     case PQZ_OP_REGISTER:
       return &REG;
     case PQZ_OP_TRANSFER:
-      return &TX;
+      return stmt_len == PQZ_TX0_STMT_BYTES ? &TX0 : &TX;
     case PQZ_OP_BURN:
       return &BURN;
     case PQZ_OP_DISCLOSE_SENDER:
@@ -1065,13 +1099,13 @@ rel_of (uint8_t op)
 
 /* witness -> s1 and the l2 slack (upsilon); 0 if the witness is malformed, inconsistent or above a bound */
 static int
-witness (txst_t *T, uint8_t op, const uint8_t *wit, size_t wit_len, polyvec_t s1)
+witness (txst_t *T, const rel_t *R, const uint8_t *wit, size_t wit_len, polyvec_t s1)
 {
   static const unsigned st_reg[2] = { 0, 32 }, ln_reg[2] = { 32, 32 };
   static const unsigned st_tx[7] = { 0, 32, 64, 96, 128, 129, 130 }, ln_tx[7] = { 32, 32, 32, 32, 1, 1, 1 };
   static const unsigned st_ds[3] = { 0, 32, 64 }, ln_ds[3] = { 32, 32, 1 };
   const unsigned *st = st_reg, *ln = ln_reg;
-  switch (op)
+  switch (R->code)
     {
     case PQZ_OP_REGISTER:
       if (wit_len != PQZ_REG_WIT_BYTES)
@@ -1079,11 +1113,19 @@ witness (txst_t *T, uint8_t op, const uint8_t *wit, size_t wit_len, polyvec_t s1
       wit_vec (s1, 32, wit_vec (s1, 0, wit, 0), 1);
       break;
     case PQZ_OP_TRANSFER:
-    case PQZ_OP_BURN:
-      if (wit_len != (op == PQZ_OP_BURN ? PQZ_BURN_WIT_BYTES : PQZ_TX_WIT_BYTES)
-          || !debit_witness (T, wit, s1, op == PQZ_OP_BURN))
+      if (wit_len != PQZ_TX_WIT_BYTES || !debit_witness (T, wit, s1, DEB_TX))
         return 0;
-      st = st_tx, ln = ln_tx; /* R_BURN: the first 5 blocks */
+      st = st_tx, ln = ln_tx;
+      break;
+    case PQZ_REL_TX0:
+      if (wit_len != PQZ_TX0_WIT_BYTES || !debit_witness (T, wit, s1, DEB_TX0))
+        return 0;
+      st = st_tx, ln = ln_tx; /* the first 6 blocks (Z = 6) */
+      break;
+    case PQZ_OP_BURN:
+      if (wit_len != PQZ_BURN_WIT_BYTES || !debit_witness (T, wit, s1, DEB_BURN))
+        return 0;
+      st = st_tx, ln = ln_tx; /* the first 5 blocks */
       break;
     case PQZ_OP_DISCLOSE_SENDER:
       if (wit_len != PQZ_DS_WIT_BYTES)
@@ -1100,7 +1142,7 @@ witness (txst_t *T, uint8_t op, const uint8_t *wit, size_t wit_len, polyvec_t s1
     default:
       return 0;
     }
-  return set_upsilon (rel_of (op)->P, s1, st, ln);
+  return set_upsilon (R->P, s1, st, ln);
 }
 
 int
@@ -1113,7 +1155,7 @@ pqz_prove (uint8_t op, const uint8_t *stmt, size_t stmt_len, const uint8_t *wit,
   polyvec_t pk;
   uint8_t h[32];
   int rc = PQZ_ERR_INPUT;
-  rel_t *R = rel_of (op);
+  rel_t *R = rel_of (op, stmt_len);
 
   if (!ready)
     return PQZ_ERR_INTERNAL;
@@ -1132,7 +1174,7 @@ pqz_prove (uint8_t op, const uint8_t *stmt, size_t stmt_len, const uint8_t *wit,
   if (op == PQZ_OP_REGISTER)
     polyvec_alloc (pk, REG.P->tbox->ring, K);
   pf_alloc (&F, R->P);
-  if (build (&S, &T, op, stmt, stmt_len, pk) && witness (&T, op, wit, wit_len, F.s1))
+  if (build (&S, &T, R, stmt, stmt_len, pk) && witness (&T, R, wit, wit_len, F.s1))
     rc = do_prove (&S, &F, h, wit, wit_len, rnd32, proof, proof_len);
   if (pqz_err && !POC_IGNORE_ERR)
     rc = pqz_err;
@@ -1149,7 +1191,7 @@ pqz_verify (uint8_t op, const uint8_t *stmt, size_t stmt_len, const uint8_t *pro
   polyvec_t pk;
   uint8_t h[32];
   int ok = 0;
-  rel_t *R = rel_of (op);
+  rel_t *R = rel_of (op, stmt_len);
 
   if (!ready || R == NULL)
     return 0;
@@ -1165,7 +1207,7 @@ pqz_verify (uint8_t op, const uint8_t *stmt, size_t stmt_len, const uint8_t *pro
   if (op == PQZ_OP_REGISTER)
     polyvec_alloc (pk, REG.P->tbox->ring, K);
   pf_alloc (&F, R->P);
-  if (build (&S, &T, op, stmt, stmt_len, pk))
+  if (build (&S, &T, R, stmt, stmt_len, pk))
     ok = do_verify (&S, &F, h, proof, proof_len);
   if (pqz_err)
     ok = 0;
@@ -1182,20 +1224,20 @@ pqz_verify_fast (uint8_t op, const uint8_t *stmt, size_t stmt_len, const uint8_t
 {
   uint8_t h[32];
   int ok;
-  rel_t *R = rel_of (op);
+  rel_t *R = rel_of (op, stmt_len);
 
   if (!ready || R == NULL)
     return 0;
   pqz_err = PQZ_OK;
   pqz_arena_release (&base);
-  if (rel_keys (R) || pqz_sv_setup (op, R->P, A, R->A1, R->A2p, R->Bp))
+  if (rel_keys (R) || pqz_sv_setup (R->code, R->P, A, R->A1, R->A2p, R->Bp))
     {
       pqz_arena_release (&base);
       return 0;
     }
   pqz_arena_mark (&base); /* the tables just built, if any, stay */
   pqz_stmt_hash (h, op, stmt, stmt_len);
-  ok = pqz_sv_verify (op, h, stmt, stmt_len, proof, proof_len) == 1;
+  ok = pqz_sv_verify (R->code, h, stmt, stmt_len, proof, proof_len) == 1;
   if (pqz_err)
     ok = 0;
   pqz_arena_release (&base);
@@ -1301,8 +1343,9 @@ pqz_decrypt_raw (const int8_t s[2048], const uint8_t u[PQZ_POLYVEC_BYTES], const
 
 #ifdef PQZ_TEST_HOOKS
 /* ---------------------------------------------------------------- test hook (P6-SV diff harness only; not in
-   libpqz): decode a proof, change one field, re-encode. kind / r1 / r2 pick the field and the change. Returns 1
-   and the new proof in out, or 0 if the input does not decode. */
+   libpqz): decode a proof, change one field, re-encode. kind / r1 / r2 pick the field and the change. op names the
+   relation: an op, or PQZ_REL_TX0 (0x81) for R_TX0. Returns 1 and the new proof in out, or 0 if the input does not
+   decode. */
 static void
 mut_swap (poly_ptr a, poly_ptr b)
 {
@@ -1318,7 +1361,7 @@ int
 pqz_test_mutate (uint8_t op, const uint8_t *proof, size_t len, unsigned kind, uint64_t r1, uint64_t r2,
                  uint8_t *out, size_t *outlen)
 {
-  rel_t *R = rel_of (op);
+  rel_t *R = op == PQZ_REL_TX0 ? &TX0 : rel_of (op, 0);
   const lnp_tbox_params_struct *P = R != NULL ? R->P : REG.P;
   abdlop_params_srcptr tb = P->tbox;
   static uint8_t buf[2 * PQZ_MAX_PROOF];

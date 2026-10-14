@@ -1,11 +1,11 @@
 /*
  * P6-SV differential test: the generic verifier (pqz_verify, the reference) against the specialised one
- * (pqz_verify_fast) on honest and mutated proofs of R_REG, R_TX, R_BURN, R_DS and R_DR. Every case must get the
- * same accept / reject from both. Deterministic: everything derives from the seed argument.
+ * (pqz_verify_fast) on honest and mutated proofs of R_REG, R_TX, R_BURN, R_DS, R_DR and R_TX0. Every case must get
+ * the same accept / reject from both. Deterministic: everything derives from the seed argument.
  *
- *   pqz_sv_diff [n_reg] [n_tx] [muts] [seed] [fuzz] [n_burn] [n_ds] [n_dr]
+ *   pqz_sv_diff [n_reg] [n_tx] [muts] [seed] [fuzz] [n_burn] [n_ds] [n_dr] [n_tx0]
  *     n_*           honest proofs per relation, each on a fresh statement (new keys, amounts, fee); n_burn,
- *                   n_ds, n_dr default to n_tx
+ *                   n_ds, n_dr, n_tx0 default to n_tx
  *     muts          rounds of the mutation list per proof (each round runs every kind once)
  *     fuzz          random multi-edit mutations per proof
  *
@@ -102,33 +102,32 @@ keygen (key_t_ *k)
 
 static uint8_t reg_stmt[PQZ_REG_STMT_BYTES], reg_wit[PQZ_REG_WIT_BYTES];
 static uint8_t tx_stmt[PQZ_TX_STMT_BYTES], tx_wit[PQZ_TX_WIT_BYTES];
+static uint8_t tx0_stmt[PQZ_TX0_STMT_BYTES], tx0_wit[PQZ_TX0_WIT_BYTES];
 static uint8_t burn_stmt[PQZ_BURN_STMT_BYTES], burn_wit[PQZ_BURN_WIT_BYTES];
 static uint8_t ds_stmt[PQZ_DISC_STMT_BYTES], ds_wit[PQZ_DS_WIT_BYTES];
 static uint8_t dr_stmt[PQZ_DISC_STMT_BYTES], dr_wit[PQZ_DR_WIT_BYTES];
 
-#define NREL 5
-static const char *const RN[NREL] = { "R_REG", "R_TX", "R_BURN", "R_DS", "R_DR" };
+#define NREL 6 /* R_TX0 is op 1 with the 66,560-byte statement: relations are named by index, not by op */
+static const char *const RN[NREL] = { "R_REG", "R_TX", "R_BURN", "R_DS", "R_DR", "R_TX0" };
 static const uint8_t OPS[NREL] = { PQZ_OP_REGISTER, PQZ_OP_TRANSFER, PQZ_OP_BURN, PQZ_OP_DISCLOSE_SENDER,
-                                   PQZ_OP_DISCLOSE_RECEIVER };
-static uint8_t *const STMT[NREL] = { reg_stmt, tx_stmt, burn_stmt, ds_stmt, dr_stmt };
+                                   PQZ_OP_DISCLOSE_RECEIVER, PQZ_OP_TRANSFER };
+/* the relation code of pqz_test_mutate: the op, or PQZ_REL_TX0 (pqz_int.h) */
+static const uint8_t MOP[NREL] = { PQZ_OP_REGISTER, PQZ_OP_TRANSFER, PQZ_OP_BURN, PQZ_OP_DISCLOSE_SENDER,
+                                   PQZ_OP_DISCLOSE_RECEIVER, 0x81 };
+static uint8_t *const STMT[NREL] = { reg_stmt, tx_stmt, burn_stmt, ds_stmt, dr_stmt, tx0_stmt };
 static const size_t STLEN[NREL] = { sizeof reg_stmt, sizeof tx_stmt, sizeof burn_stmt, sizeof ds_stmt,
-                                    sizeof dr_stmt };
-static const uint8_t *const WIT[NREL] = { reg_wit, tx_wit, burn_wit, ds_wit, dr_wit };
-static const size_t WLEN[NREL] = { sizeof reg_wit, sizeof tx_wit, sizeof burn_wit, sizeof ds_wit, sizeof dr_wit };
+                                    sizeof dr_stmt, sizeof tx0_stmt };
+static const uint8_t *const WIT[NREL] = { reg_wit, tx_wit, burn_wit, ds_wit, dr_wit, tx0_wit };
+static const size_t WLEN[NREL] = { sizeof reg_wit, sizeof tx_wit, sizeof burn_wit, sizeof ds_wit, sizeof dr_wit,
+                                   sizeof tx0_wit };
 /* first coefficient byte of the polynomial part of each statement, and its length in coefficients */
 static const size_t POLY0[NREL] = { PQZ_PREFIX_BYTES + 32, PQZ_HEADER_BYTES, PQZ_HEADER_BYTES, PQZ_DISC_PK,
-                                    PQZ_DISC_PK };
+                                    PQZ_DISC_PK, PQZ_HEADER_BYTES };
 static const size_t NCOEF[NREL] = { 2048, (PQZ_TX_STMT_BYTES - PQZ_HEADER_BYTES) / 8,
                                     (PQZ_BURN_STMT_BYTES - PQZ_HEADER_BYTES) / 8,
-                                    (PQZ_DISC_STMT_BYTES - PQZ_DISC_PK) / 8, (PQZ_DISC_STMT_BYTES - PQZ_DISC_PK) / 8 };
+                                    (PQZ_DISC_STMT_BYTES - PQZ_DISC_PK) / 8, (PQZ_DISC_STMT_BYTES - PQZ_DISC_PK) / 8,
+                                    (PQZ_TX0_STMT_BYTES - PQZ_HEADER_BYTES) / 8 };
 static const uint8_t PSID[32] = PQZ_PROOF_SYSTEM_ID; /* statement bytes 32..63 (hashed only) */
-static int rel_of_op (uint8_t op)
-{
-  for (int r = 0; r < NREL; r++)
-    if (OPS[r] == op)
-      return r;
-  return 0;
-}
 static void
 be8 (uint8_t *p, uint64_t v)
 {
@@ -151,7 +150,8 @@ make_reg (void)
     reg_wit[j] = (uint8_t)K.s[j], le16 (reg_wit + 2048 + 2 * j, K.e[j]);
 }
 
-/* a fresh R_TX statement (as pqz_bench.c setup): new keys, balance, amount, fee */
+/* a fresh R_TX statement (as pqz_bench.c setup): new keys, balance, amount, fee; and the R_TX0 statement of the same
+   transfer without the auditor (no pk_a, v_a, e2_a; auditorOn 0) */
 static void
 make_tx (void)
 {
@@ -174,12 +174,16 @@ make_tx (void)
   const uint8_t *pks[3] = { KT.pk, KF.pk, KA.pk };
   pqz_encrypt (pks, 3, (const uint8_t (*)[16])m, r, e1, (const int16_t (*)[16])e2, u, vs);
 
-  uint8_t *p = tx_stmt; /* header (pq-zether.md §7.7): random bytes, proofSystemId, fee word, amount word 0 */
+  uint8_t *p = tx_stmt; /* header (pq-zether.md §7.7): random bytes, proofSystemId, fee word, amount word 0,
+                           auditorOn 1 (P6e R6) */
   for (int i = 0; i < PQZ_HEADER_BYTES; i++)
     p[i] = (uint8_t)rnd ();
   memcpy (p + 32, PSID, 32);
   memset (p + PQZ_HDR_FEE, 0, 64);
   be8 (p + PQZ_HDR_FEE + 24, fee);
+  memset (p + PQZ_HDR_AUDITOR_ON, 0, 32);
+  p[PQZ_HDR_AUDITOR_ON + 31] = 1;
+  memset (p + PQZ_HDR_SALT, 0, 16), memset (p + PQZ_HDR_RECIPIENT, 0, 32); /* canonical (P6e D15) */
   p += PQZ_HEADER_BYTES;
   memcpy (p, KF.pk, PQZ_POLYVEC_BYTES), p += PQZ_POLYVEC_BYTES;
   memcpy (p, KT.pk, PQZ_POLYVEC_BYTES), p += PQZ_POLYVEC_BYTES;
@@ -209,6 +213,19 @@ make_tx (void)
   p += 96;
   for (int i = 0; i < 16; i++)
     p[i] = m[0][i], p[16 + i] = m[1][i];
+
+  memcpy (tx0_stmt, tx_stmt, PQZ_HEADER_BYTES);
+  tx0_stmt[PQZ_HDR_AUDITOR_ON + 31] = 0;
+  p = tx0_stmt + PQZ_HEADER_BYTES;
+  memcpy (p, KF.pk, PQZ_POLYVEC_BYTES), p += PQZ_POLYVEC_BYTES;
+  memcpy (p, KT.pk, PQZ_POLYVEC_BYTES), p += PQZ_POLYVEC_BYTES;
+  memcpy (p, uT, PQZ_POLYVEC_BYTES), p += PQZ_POLYVEC_BYTES;
+  memcpy (p, vT[0], PQZ_V_BYTES), p += PQZ_V_BYTES;
+  memcpy (p, u, PQZ_POLYVEC_BYTES), p += PQZ_POLYVEC_BYTES;
+  memcpy (p, vs[0], PQZ_V_BYTES), p += PQZ_V_BYTES;
+  memcpy (p, vs[1], PQZ_V_BYTES);
+  memcpy (tx0_wit, tx_wit, 12288 + 64); /* s_f, e_f, r, e1, e2_t, e2_f */
+  memcpy (tx0_wit + 12288 + 64, tx_wit + 12288 + 96, 32); /* d, d' */
 }
 
 /* a fresh R_BURN statement: new key, balance in T, amount, fee; fresh (r, e1, e2_f) for the new balance; random
@@ -237,6 +254,8 @@ make_burn (void)
   memcpy (p + 32, PSID, 32);
   memset (p + PQZ_HDR_FEE, 0, 64);
   be8 (p + PQZ_HDR_FEE + 24, fee), be8 (p + PQZ_HDR_AMOUNT + 24, v);
+  memset (p + PQZ_HDR_SALT, 0, 32); /* burn salt 0, toUA 0, auditorOn 0 (P6e D15) */
+  memset (p + PQZ_HDR_TO_UA, 0, 32), memset (p + PQZ_HDR_AUDITOR_ON, 0, 32);
   p += PQZ_HEADER_BYTES;
   memcpy (p, KF.pk, PQZ_POLYVEC_BYTES), p += PQZ_POLYVEC_BYTES;
   memcpy (p, uT, PQZ_POLYVEC_BYTES), p += PQZ_POLYVEC_BYTES;
@@ -298,7 +317,7 @@ static const char *KIND[] = {
   "extend",        "stmt_coeff",     "stmt_oob",      "stmt_prefix",   "stmt_scalar",     "other_proof",
   "bench_k4_unary", "m_swap_z1",     "m_swap_z21",    "m_swap_z3z4",   "m_z1_pm1",     "m_z1_large",
   "m_z4_bound",    "m_z3_large",     "m_h",           "m_hint",        "m_c",          "m_tB",
-  "m_tA1",         "m_z21_pm1",      "m_swap_h",      "fuzz",
+  "m_tA1",         "m_z21_pm1",      "m_swap_h",      "stmt_auditor",  "fuzz",
 };
 #define NK (int)(sizeof KIND / sizeof KIND[0])
 #define K_M0 13 /* first decoded-field kind = pqz_test_mutate kind 0 */
@@ -314,14 +333,19 @@ now_ms (void)
   return t.tv_sec * 1e3 + t.tv_nsec / 1e6;
 }
 
+#define K_AUD (NK - 2) /* stmt_auditor: the auditorOn word of R_TX / R_TX0 changed (P6e R6), must be rejected */
+static long aud_accepted; /* generic accepts of stmt_auditor cases (must be 0) */
+
 static void
-check (int kind, uint8_t op, const uint8_t *st, size_t stlen, const uint8_t *pf, size_t len)
+check (int kind, int rel, const uint8_t *st, size_t stlen, const uint8_t *pf, size_t len)
 {
+  const uint8_t op = OPS[rel];
   int a = pqz_verify (op, st, stlen, pf, len);
   double t0 = now_ms ();
   int b = pqz_verify_fast (op, st, stlen, pf, len);
   double t = now_ms () - t0;
-  const int rel = rel_of_op (op);
+  if (kind == K_AUD)
+    aud_accepted += a | b;
   tf[rel][kind != 0][ntf[rel][kind != 0]++] = t;
   cases[rel][kind]++;
   acc_gen[rel][kind] += a;
@@ -355,28 +379,28 @@ static size_t prevlen[NREL];
 static uint8_t st2[PQZ_TX_STMT_BYTES]; /* the longest statement */
 
 static void
-mutate_round (uint8_t op, const uint8_t *st, size_t stlen, size_t len, int fuzz)
+mutate_round (int rel, const uint8_t *st, size_t stlen, size_t len, int fuzz)
 {
-  const int rel = rel_of_op (op);
+  const uint8_t op = OPS[rel];
   size_t n;
   /* byte level */
   memcpy (bad, pf, len);
   uint64_t bit = rnd () % (8 * len);
   bad[bit / 8] ^= (uint8_t)(1u << (bit % 8));
-  check (2, op, st, stlen, bad, len);
+  check (2, rel, st, stlen, bad, len);
   memcpy (bad, pf, len);
   bad[rnd () % len] = (uint8_t)rnd ();
-  check (3, op, st, stlen, bad, len);
+  check (3, rel, st, stlen, bad, len);
   for (size_t i = 0; i < len; i++)
     bad[i] = (uint8_t)rnd ();
-  check (4, op, st, stlen, bad, len);
+  check (4, rel, st, stlen, bad, len);
   memcpy (bad, pf, len);
-  check (5, op, st, stlen, bad, rnd () & 1 ? len - 1 - rnd () % 64 : rnd () % len);
+  check (5, rel, st, stlen, bad, rnd () & 1 ? len - 1 - rnd () % 64 : rnd () % len);
   memcpy (bad, pf, len);
   n = 1 + rnd () % 16;
   for (size_t i = 0; i < n; i++)
     bad[len + i] = rnd () & 1 ? 0 : (uint8_t)rnd ();
-  check (6, op, st, stlen, bad, len + n);
+  check (6, rel, st, stlen, bad, len + n);
   /* statement */
   memcpy (st2, st, stlen);
   size_t off = POLY0[rel] + 8 * (rnd () % NCOEF[rel]);
@@ -386,36 +410,52 @@ mutate_round (uint8_t op, const uint8_t *st, size_t stlen, size_t len, int fuzz)
   v = v < Q ? (v + 1 + rnd () % 7) % Q : v;
   for (int b = 7; b >= 0; b--)
     st2[off + b] = (uint8_t)v, v >>= 8;
-  check (7, op, st2, stlen, pf, len);
+  check (7, rel, st2, stlen, pf, len);
   memcpy (st2, st, stlen);
   v = Q + rnd () % 1000;
   for (int b = 7; b >= 0; b--)
     st2[off + b] = (uint8_t)v, v >>= 8;
-  check (8, op, st2, stlen, pf, len);
+  check (8, rel, st2, stlen, pf, len);
   memcpy (st2, st, stlen);
   st2[rnd () % PQZ_PREFIX_BYTES] ^= (uint8_t)(1 + rnd () % 255);
-  check (9, op, st2, stlen, pf, len);
-  if (op != PQZ_OP_REGISTER) /* the public scalars, be32 words (1 in 4 times a high byte set: non-canonical): R_TX
-                                 fee, R_BURN fee / amount, disclosure amount */
+  check (9, rel, st2, stlen, pf, len);
+  if (op != PQZ_OP_REGISTER) /* the public scalars, be32 words (1 in 4 times a high byte set: non-canonical): R_TX /
+                                 R_TX0 fee, R_BURN fee / amount, disclosure amount */
     {
       memcpy (st2, st, stlen);
       size_t w = op == PQZ_OP_TRANSFER ? PQZ_HDR_FEE
                  : op == PQZ_OP_BURN   ? (rnd () & 1 ? PQZ_HDR_FEE : PQZ_HDR_AMOUNT)
                                        : PQZ_DISC_AMOUNT;
       st2[w + (rnd () % 4 == 0 ? rnd () % 24 : 30 + rnd () % 2)] ^= (uint8_t)(1 + rnd () % 15);
-      check (10, op, st2, stlen, pf, len);
+      check (10, rel, st2, stlen, pf, len);
+    }
+  if (op == PQZ_OP_TRANSFER) /* the auditorOn word: the other form's value, 2, or a random high byte set */
+    {
+      memcpy (st2, st, stlen);
+      switch (rnd () % 3)
+        {
+        case 0:
+          st2[PQZ_HDR_AUDITOR_ON + 31] ^= 1;
+          break;
+        case 1:
+          st2[PQZ_HDR_AUDITOR_ON + 31] = 2;
+          break;
+        default:
+          st2[PQZ_HDR_AUDITOR_ON + rnd () % 31] ^= (uint8_t)(1 + rnd () % 255);
+        }
+      check (K_AUD, rel, st2, stlen, pf, len);
     }
   if (prevlen[rel])
-    check (11, op, st, stlen, prev[rel], prevlen[rel]);
+    check (11, rel, st, stlen, prev[rel], prevlen[rel]);
   memcpy (bad, pf, len);
   memset (bad + len / 2, 0xff, len - len / 2);
-  check (12, op, st, stlen, bad, len);
+  check (12, rel, st, stlen, bad, len);
   /* decoded fields, re-encoded */
   for (unsigned k = 0; k < 14; k++)
     {
       n = sizeof bad;
-      if (pqz_test_mutate (op, pf, len, k, rnd (), rnd (), bad, &n))
-        check (K_M0 + (int)k, op, st, stlen, bad, n);
+      if (pqz_test_mutate (MOP[rel], pf, len, k, rnd (), rnd (), bad, &n))
+        check (K_M0 + (int)k, rel, st, stlen, bad, n);
     }
   /* fuzz: 1..8 random edits */
   for (int f = 0; f < fuzz; f++)
@@ -452,7 +492,7 @@ mutate_round (uint8_t op, const uint8_t *st, size_t stlen, size_t len, int fuzz)
                 memmove (bad + b, bad + a, c);
             }
           }
-      check (NK - 1, op, st, stlen, bad, l);
+      check (NK - 1, rel, st, stlen, bad, l);
     }
 }
 
@@ -463,7 +503,7 @@ main (int argc, char **argv)
   const int muts = argc > 3 ? atoi (argv[3]) : 2, fuzz = argc > 5 ? atoi (argv[5]) : 10;
   const unsigned long seed = argc > 4 ? strtoul (argv[4], NULL, 0) : 1;
   const int nps[NREL] = { nreg, ntx, argc > 6 ? atoi (argv[6]) : ntx, argc > 7 ? atoi (argv[7]) : ntx,
-                          argc > 8 ? atoi (argv[8]) : ntx };
+                          argc > 8 ? atoi (argv[8]) : ntx, argc > 9 ? atoi (argv[9]) : ntx };
   void *arena = malloc (ARENA_BYTES);
   int fails = 0;
 
@@ -496,8 +536,8 @@ main (int argc, char **argv)
             r32[b] = (uint8_t)rnd ();
           if (rel == 0)
             make_reg ();
-          else if (rel == 1)
-            make_tx ();
+          else if (rel == 1 || rel == 5)
+            make_tx (); /* both transfer forms */
           else if (rel == 2)
             make_burn ();
           else
@@ -533,14 +573,14 @@ main (int argc, char **argv)
               printf ("{\"rel\": \"%s\", \"arena_base\": %zu, \"sv_tables\": %zu, \"verify_peak_generic\": %zu, "
                       "\"verify_peak_fast\": %zu}\n", RN[rel], base, tab, pg, pfst);
             }
-          check (0, op, st, stlen, pf, len);
+          check (0, rel, st, stlen, pf, len);
           {
             size_t n = sizeof bad;
-            if (pqz_test_mutate (op, pf, len, 99, rnd (), rnd (), bad, &n))
-              check (1, op, st, stlen, bad, n);
+            if (pqz_test_mutate (MOP[rel], pf, len, 99, rnd (), rnd (), bad, &n))
+              check (1, rel, st, stlen, bad, n);
           }
           for (int m = 0; m < muts; m++)
-            mutate_round (op, st, stlen, len, m == 0 ? fuzz : 0);
+            mutate_round (rel, st, stlen, len, m == 0 ? fuzz : 0);
           memcpy (prev[rel], pf, len), prevlen[rel] = len;
         }
     }
@@ -561,6 +601,9 @@ main (int argc, char **argv)
       snprintf (nm, sizeof nm, "%s fast adversarial", RN[rel]);
       stats (nm, tf[rel][1], ntf[rel][1]);
     }
+  if (aud_accepted)
+    printf ("{\"stmt_auditor_accepted\": %ld}\n", aud_accepted);
+  fails += aud_accepted != 0;
   printf ("{\"seed\": %lu, \"cases\": %ld, \"mismatches\": %ld, \"other_fails\": %d}\n", seed, tot, totm, fails);
   return totm != 0 || fails != 0;
 }

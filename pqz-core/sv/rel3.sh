@@ -1,7 +1,8 @@
 #!/bin/sh
 # P6-SV for R_BURN / R_DS / R_DR (and R_REG / R_TX again): the whole set under ONE scripts/capped job,
 #   scripts/capped pqz-core/sv/rel3.sh <label>
-# 1. differential test, portable and x86-64-v3 (pqz_sv_diff; per relation: n_reg n_tx muts seed fuzz n_burn n_ds n_dr)
+# 1. differential test, portable and x86-64-v3 (pqz_sv_diff; per relation: n_reg n_tx muts seed fuzz n_burn n_ds n_dr
+#    n_tx0; R_TX0 since P6e Task 2)
 # 2. bench: fast verifier native portable / x86-64-v3 / wasm32, generic for reference (pqz_bench, run_wasm.mjs)
 # 3. wasm PQZ_VERIFY=both: every wasm verify with both verifiers, disagreements counted
 # 4. ASan + UBSan on the libc-heap path: pqz_bench with the fast verifier, all five relations
@@ -13,7 +14,7 @@
 set -eu
 cd "$(dirname "$0")/.."
 L=$1 R=sv/runs/$1
-DIFF=${DIFF:-"4 4 2 1 10 12 12 12"} DIFF3=${DIFF3:-"2 2 2 2 10 6 6 6"} NF=${NF:-200} NG=${NG:-10}
+DIFF=${DIFF:-"4 4 2 1 10 12 12 12 12"} DIFF3=${DIFF3:-"2 2 2 2 10 6 6 6 6"} NF=${NF:-200} NG=${NG:-10}
 ./build.sh native > "$R-build.txt" 2>&1
 ./build.sh native-x86v3 >> "$R-build.txt" 2>&1
 ./build.sh wasm >> "$R-build.txt" 2>&1
@@ -40,7 +41,7 @@ cp build/svfix/l2.jsonl "$R-sv-fixes-l2-reverted.jsonl"
 SV=0 B=build/wasm-nosv ./build.sh wasm >> "$R-build.txt" 2>&1
 wc -c build/wasm/pqz.wasm build/wasm-nosv/wasm/pqz.wasm >> "$R-build.txt"
 : > "$R-alone.jsonl"
-for m in 1 2 4 8 16; do
+for m in 1 2 4 8 16 32; do
   PQZ_WASM_FILE=build/wasm-nosv/wasm/pqz.wasm node test/run_wasm.mjs 1 0 $m | sed 's/^{/{"backend": "wasm-nosv", /' >> "$R-alone.jsonl" || echo "alone wasm-nosv $m rc=$?"
   node test/run_wasm.mjs 1 0 $m | sed 's/^{/{"backend": "wasm-generic", /' >> "$R-alone.jsonl" || echo "alone wasm $m rc=$?"
   PQZ_VERIFY=fast node test/run_wasm.mjs 1 0 $m | sed 's/^{/{"backend": "wasm-fast", /' >> "$R-alone.jsonl" || echo "alone wasm-fast $m rc=$?"

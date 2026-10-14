@@ -191,7 +191,8 @@ pub fn setup() -> Setup {
 }
 
 /// Statements as the precompile takes them (plan D15 / R6): bytes 0..63 = the op's opTag and the id (pqz_bench.c
-/// writes filler before the id), R_TX's auditorOn word 1 (pqz_bench.c: the header pattern there).
+/// writes filler before the id); the header words D15 pins as pqz_bench.c sets them (R_TX auditorOn 1, recipient 0,
+/// salt word 16 zero bytes || salt; R_BURN toUA, auditorOn, salt 0).
 /// xcheck/dump_setup.c applies the same patch to pqz_bench.c's statements; pqz_kat.py parses and rebuilds them.
 pub fn setup_with(tw: &Tweak) -> Setup {
     let mut rng = Rng::new();
@@ -245,6 +246,10 @@ pub fn setup_with(tw: &Tweak) -> Setup {
     tx[HDR_AUDITOR_ON + 31] = 1;
     tx[HDR_FEE..HDR_FEE + 64].fill(0);
     tx[HDR_FEE + 24..HDR_FEE + 32].copy_from_slice(&fee.to_be_bytes());
+    // the canonical header the decoder (pqz-stmt, plan D15) accepts, as pqz_bench.c writes it: recipient (word at
+    // 320) 0 on a transfer, salt word (576) = 16 zero bytes || salt
+    tx[320..352].fill(0);
+    tx[576..592].fill(0);
     for x in [&kf.pk, &kt.pk, &ka.pk, &ut] {
         wr_vec(&mut tx, x);
     }
@@ -303,6 +308,10 @@ pub fn setup_with(tw: &Tweak) -> Setup {
     burn[HDR_FEE..HDR_FEE + 64].fill(0);
     burn[HDR_FEE + 24..HDR_FEE + 32].copy_from_slice(&fee.to_be_bytes());
     burn[HDR_AMOUNT + 24..HDR_AMOUNT + 32].copy_from_slice(&v.to_be_bytes());
+    // canonical (D15, as pqz_bench.c): toUA (192), auditorOn and the whole salt word (576) 0 on a burn
+    burn[192..224].fill(0);
+    burn[HDR_AUDITOR_ON..HDR_AUDITOR_ON + 32].fill(0);
+    burn[576..608].fill(0);
     wr_vec(&mut burn, &kf.pk);
     wr_vec(&mut burn, &ut);
     wr_v(&mut burn, &vt[0]);

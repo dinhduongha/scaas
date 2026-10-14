@@ -1,0 +1,12 @@
+[package]
+name = "pqz-stmt"
+version = "0.1.0"
+edition = "2021"
+license-file = "../../LICENSE"
+publish = false
+
+# The one PQZ statement codec (P6e plan R2 / D15): statements of both proof systems, pk / ciphertext, bundle, opening,
+# precompile input. no_std + alloc, no dependencies; builds for wasm32-unknown-unknown.
+[dependencies]
+
+[workspace]
