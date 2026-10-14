@@ -1,0 +1,344 @@
+## cargo clippy --no-default-features -- -D clippy::float_arithmetic
+    Checking typenum v1.20.1
+    Checking keccak v0.1.6
+    Checking pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/p6eb3/pqz-core/stmt)
+    Checking generic-array v0.14.7
+    Checking crypto-common v0.1.7
+    Checking block-buffer v0.10.4
+    Checking digest v0.10.7
+    Checking sha3 v0.10.8
+    Checking pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/p6eb3/pqz-core/pqzh/ligero)
+warning: very complex type used. Consider factoring parts into `type` definitions
+   --> src/cs.rs:114:34
+    |
+114 |         let (bigs, smalls, sig): (Vec<(usize, i64, i64)>, Vec<(usize, usize, i64)>, usize) = match form {
+    |                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#type_complexity
+    = note: `#[warn(clippy::type_complexity)]` on by default
+
+warning: unnecessary use of `clone` to create a slice from a reference
+   --> src/cs.rs:390:95
+    |
+390 |                 let (u, vs) = encrypt(&[&t.pk], &[digits(t.amount)], &polys(&r), &polys(&e1), &[e2.clone()]);
+    |                                                                                               ^^^^^^^^^^^^^ help: try: `std::slice::from_ref(&e2)`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#cloned_ref_to_slice_refs
+    = note: `#[warn(clippy::cloned_ref_to_slice_refs)]` on by default
+
+warning: the loop variable `k` is used to index `a`
+   --> src/cs.rs:510:22
+    |
+510 |             for k in 0..kk {
+    |                      ^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#needless_range_loop
+    = note: `#[warn(clippy::needless_range_loop)]` on by default
+help: consider using an iterator and enumerate()
+    |
+510 -             for k in 0..kk {
+510 +             for (k, <item>) in a.iter().enumerate().take(kk) {
+    |
+
+warning: the loop variable `k` is used to index `p`
+   --> src/cs.rs:526:18
+    |
+526 |         for k in 0..kk {
+    |                  ^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#needless_range_loop
+help: consider using an iterator and enumerate()
+    |
+526 -         for k in 0..kk {
+526 +         for (k, <item>) in p.iter().enumerate().take(kk) {
+    |
+
+warning: the loop variable `k` is used to index `dpub`
+   --> src/cs.rs:587:22
+    |
+587 |             for k in 0..16 {
+    |                      ^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#needless_range_loop
+help: consider using an iterator and enumerate()
+    |
+587 -             for k in 0..16 {
+587 +             for (k, <item>) in dpub.iter().enumerate() {
+    |
+
+warning: manual implementation of `.is_multiple_of()`
+  --> src/fft.rs:14:15
+   |
+14 |         while m % r == 0 {
+   |               ^^^^^^^^^^ help: replace with: `m.is_multiple_of(r)`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#manual_is_multiple_of
+   = note: `#[warn(clippy::manual_is_multiple_of)]` on by default
+
+warning: manual implementation of `.is_multiple_of()`
+  --> src/fft.rs:35:19
+   |
+35 |             while m % r == 0 {
+   |                   ^^^^^^^^^^ help: replace with: `m.is_multiple_of(r)`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#manual_is_multiple_of
+
+warning: the loop variable `i` is used to index `pe`
+   --> src/ligero.rs:337:14
+    |
+337 |     for i in 0..m {
+    |              ^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#needless_range_loop
+help: consider using an iterator and enumerate()
+    |
+337 -     for i in 0..m {
+337 +     for (i, <item>) in pe.iter().enumerate().take(m) {
+    |
+
+warning: the loop variable `i` is used to index `u`
+   --> src/ligero.rs:541:18
+    |
+541 |         for i in 0..m {
+    |                  ^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#needless_range_loop
+help: consider using an iterator and enumerate()
+    |
+541 -         for i in 0..m {
+541 +         for (i, <item>) in u.iter().enumerate().take(m) {
+    |
+
+warning: manual implementation of `.is_multiple_of()`
+  --> src/merkle.rs:47:20
+   |
+47 |                 if x % 2 == 0 && i + 1 < cur.len() && cur[i + 1] == x + 1 {
+   |                    ^^^^^^^^^^ help: replace with: `x.is_multiple_of(2)`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#manual_is_multiple_of
+
+warning: `pqzh-ligero` (lib) generated 10 warnings (run `cargo clippy --fix --lib -p pqzh-ligero -- -D clippy::float_arithmetic` to apply 4 suggestions)
+    Finished `release` profile [optimized + debuginfo] target(s) in 1.45s
+rc=0
+## cargo clippy --all-targets (default features, the crate's own lints)
+    Checking pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/p6eb3/pqz-core/pqzh/ligero)
+warning: method `next` can be confused for the standard trait method `std::iter::Iterator::next`
+  --> src/client.rs:25:5
+   |
+25 | /     pub fn next(&mut self) -> u64 {
+26 | |         let mut x = self.0;
+27 | |         x ^= x >> 12;
+28 | |         x ^= x << 25;
+...  |
+31 | |         x.wrapping_mul(2685821657736338717)
+32 | |     }
+   | |_____^
+   |
+   = help: consider implementing the trait `std::iter::Iterator` or choosing a less ambiguous method name
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#should_implement_trait
+   = note: `#[warn(clippy::should_implement_trait)]` on by default
+
+warning: method `next` can be confused for the standard trait method `std::iter::Iterator::next`
+   --> src/client.rs:336:5
+    |
+336 | /     pub fn next(&mut self) -> u64 {
+337 | |         self.0 ^= self.0 << 13;
+338 | |         self.0 ^= self.0 >> 7;
+339 | |         self.0 ^= self.0 << 17;
+340 | |         self.0
+341 | |     }
+    | |_____^
+    |
+    = help: consider implementing the trait `std::iter::Iterator` or choosing a less ambiguous method name
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#should_implement_trait
+
+warning: very complex type used. Consider factoring parts into `type` definitions
+   --> src/cs.rs:114:34
+    |
+114 |         let (bigs, smalls, sig): (Vec<(usize, i64, i64)>, Vec<(usize, usize, i64)>, usize) = match form {
+    |                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#type_complexity
+    = note: `#[warn(clippy::type_complexity)]` on by default
+
+warning: unnecessary use of `clone` to create a slice from a reference
+   --> src/cs.rs:390:95
+    |
+390 |                 let (u, vs) = encrypt(&[&t.pk], &[digits(t.amount)], &polys(&r), &polys(&e1), &[e2.clone()]);
+    |                                                                                               ^^^^^^^^^^^^^ help: try: `std::slice::from_ref(&e2)`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#cloned_ref_to_slice_refs
+    = note: `#[warn(clippy::cloned_ref_to_slice_refs)]` on by default
+
+warning: the loop variable `k` is used to index `a`
+   --> src/cs.rs:510:22
+    |
+510 |             for k in 0..kk {
+    |                      ^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#needless_range_loop
+    = note: `#[warn(clippy::needless_range_loop)]` on by default
+help: consider using an iterator and enumerate()
+    |
+510 -             for k in 0..kk {
+510 +             for (k, <item>) in a.iter().enumerate().take(kk) {
+    |
+
+warning: the loop variable `k` is used to index `p`
+   --> src/cs.rs:526:18
+    |
+526 |         for k in 0..kk {
+    |                  ^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#needless_range_loop
+help: consider using an iterator and enumerate()
+    |
+526 -         for k in 0..kk {
+526 +         for (k, <item>) in p.iter().enumerate().take(kk) {
+    |
+
+warning: the loop variable `k` is used to index `dpub`
+   --> src/cs.rs:587:22
+    |
+587 |             for k in 0..16 {
+    |                      ^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#needless_range_loop
+help: consider using an iterator and enumerate()
+    |
+587 -             for k in 0..16 {
+587 +             for (k, <item>) in dpub.iter().enumerate() {
+    |
+
+warning: manual implementation of `.is_multiple_of()`
+  --> src/fft.rs:14:15
+   |
+14 |         while m % r == 0 {
+   |               ^^^^^^^^^^ help: replace with: `m.is_multiple_of(r)`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#manual_is_multiple_of
+   = note: `#[warn(clippy::manual_is_multiple_of)]` on by default
+
+warning: manual implementation of `.is_multiple_of()`
+  --> src/fft.rs:35:19
+   |
+35 |             while m % r == 0 {
+   |                   ^^^^^^^^^^ help: replace with: `m.is_multiple_of(r)`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#manual_is_multiple_of
+
+warning: manually reimplementing `div_ceil`
+  --> src/ligero.rs:65:17
+   |
+65 |         let e = (n - 2 * k + 1) / 2;
+   |                 ^^^^^^^^^^^^^^^^^^^ help: consider using `.div_ceil()`: `(n - 2 * k).div_ceil(2)`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#manual_div_ceil
+   = note: `#[warn(clippy::manual_div_ceil)]` on by default
+
+warning: the loop variable `i` is used to index `pe`
+   --> src/ligero.rs:337:14
+    |
+337 |     for i in 0..m {
+    |              ^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#needless_range_loop
+help: consider using an iterator and enumerate()
+    |
+337 -     for i in 0..m {
+337 +     for (i, <item>) in pe.iter().enumerate().take(m) {
+    |
+
+warning: the loop variable `i` is used to index `u`
+   --> src/ligero.rs:541:18
+    |
+541 |         for i in 0..m {
+    |                  ^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#needless_range_loop
+help: consider using an iterator and enumerate()
+    |
+541 -         for i in 0..m {
+541 +         for (i, <item>) in u.iter().enumerate().take(m) {
+    |
+
+warning: manual implementation of `.is_multiple_of()`
+   --> src/ligero.rs:596:57
+    |
+596 | ...|&d| d * cw <= rest && (rest - d * cw) % 32 == 0 && (rest - d * cw) / 32 <= p.t * depth(p.n)).unwrap_or(0);
+    |                           ^^^^^^^^^^^^^^^^^^^^^^^^^ help: replace with: `(rest - d * cw).is_multiple_of(32)`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#manual_is_multiple_of
+
+warning: manual implementation of `.is_multiple_of()`
+  --> src/merkle.rs:47:20
+   |
+47 |                 if x % 2 == 0 && i + 1 < cur.len() && cur[i + 1] == x + 1 {
+   |                    ^^^^^^^^^^ help: replace with: `x.is_multiple_of(2)`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#manual_is_multiple_of
+
+warning: `pqzh-ligero` (lib) generated 14 warnings (run `cargo clippy --fix --lib -p pqzh-ligero -- ` to apply 6 suggestions)
+warning: the loop variable `k` is used to index `sv`
+  --> src/bin/ligero_export.rs:66:14
+   |
+66 |     for k in 0..1300 {
+   |              ^^^^^^^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#needless_range_loop
+   = note: `#[warn(clippy::needless_range_loop)]` on by default
+help: consider using an iterator and enumerate()
+   |
+66 -     for k in 0..1300 {
+66 +     for (k, <item>) in sv.iter_mut().enumerate().take(1300) {
+   |
+
+warning: `pqzh-ligero` (bin "ligero_export" test) generated 1 warning
+warning: `pqzh-ligero` (bin "ligero_export") generated 1 warning (1 duplicate)
+warning: `pqzh-ligero` (lib test) generated 14 warnings (14 duplicates)
+warning: the loop variable `k` is used to index `KINDS`
+   --> src/bin/ligero_bench.rs:145:18
+    |
+145 |         for k in 0..KINDS.len() {
+    |                  ^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#needless_range_loop
+    = note: `#[warn(clippy::needless_range_loop)]` on by default
+help: consider using an iterator and enumerate()
+    |
+145 -         for k in 0..KINDS.len() {
+145 +         for (k, <item>) in KINDS.iter().enumerate() {
+    |
+
+warning: `pqzh-ligero` (bin "ligero_bench" test) generated 1 warning
+warning: `pqzh-ligero` (bin "ligero_bench") generated 1 warning (1 duplicate)
+warning: the loop variable `k` is used to index `KINDS`
+   --> tests/attacks.rs:167:18
+    |
+167 |         for k in 0..KINDS.len() {
+    |                  ^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#needless_range_loop
+    = note: `#[warn(clippy::needless_range_loop)]` on by default
+help: consider using an iterator and enumerate()
+    |
+167 -         for k in 0..KINDS.len() {
+167 +         for (k, <item>) in KINDS.iter().enumerate() {
+    |
+
+warning: the loop variable `k` is used to index `sv`
+   --> tests/attacks.rs:182:14
+    |
+182 |     for k in 0..1300 {
+    |              ^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#needless_range_loop
+help: consider using an iterator and enumerate()
+    |
+182 -     for k in 0..1300 {
+182 +     for (k, <item>) in sv.iter_mut().enumerate().take(1300) {
+    |
+
+warning: `pqzh-ligero` (test "attacks") generated 2 warnings
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.63s
+rc=0

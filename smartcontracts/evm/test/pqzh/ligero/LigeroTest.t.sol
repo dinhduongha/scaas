@@ -92,6 +92,10 @@ contract LigeroTest is Test {
         measure("tx", "proven");
     }
 
+    function test_gas_tx0_proven() public {
+        measure("tx0", "proven");
+    }
+
     function test_gas_reg_conj() public {
         measure("reg", "conj");
     }
@@ -223,6 +227,10 @@ contract LigeroTest is Test {
         mutations("tx", "proven", 9);
     }
 
+    function test_mutations_tx0_proven() public {
+        mutations("tx0", "proven", 9);
+    }
+
     function test_mutations_reg_conj() public {
         mutations("reg", "conj", 9);
     }
@@ -243,7 +251,7 @@ contract LigeroTest is Test {
         (r,) = rejects(o, s, p, pp);
     }
 
-    /// statement checks in depth (cs.rs parse): id, opTag, R_TX auditorOn = 1; the exact length gate (ligero.rs
+    /// statement checks in depth (cs.rs parse): id, opTag, auditorOn = 1 (R_TX) / 0 (R_TX0); the exact length gate (ligero.rs
     /// max_len_exact, the same numbers as the Rust unit test limits_exact) runs before the statement is parsed
     function stmtAndLength(string memory rel, uint256 expectMax) internal {
         uint8 o = op(rel);
@@ -265,14 +273,22 @@ contract LigeroTest is Test {
         assertTrue(rejected(o, s2, pf, pp), "other op's opTag");
         if (o == 1) {
             uint8[3] memory at = [31, 31, 0];
-            uint8[3] memory val = [0, 2, 1];
+            uint8[3] memory val = [st.length == 83_072 ? 0 : 1, 2, 1];
             for (uint256 j; j < 3; ++j) {
                 s2 = bytes.concat(st);
                 s2[448 + uint256(at[j])] = bytes1(val[j]);
                 assertTrue(rejected(o, s2, pf, pp), "auditorOn");
             }
+            // D15 (pqz-stmt): amount (288), recipient (320) 0; salt word high half (576..591) 0
+            uint16[3] memory zw = [319, 351, 576];
+            string[3] memory zn = ["amount", "recipient", "salt high half"];
+            for (uint256 j; j < 3; ++j) {
+                s2 = bytes.concat(st);
+                s2[zw[j]] = 0x01;
+                assertTrue(rejected(o, s2, pf, pp), zn[j]);
+            }
         }
-        uint256 max = ver.maxProofLen(o, pp);
+        uint256 max = ver.maxProofLen(o, st.length, pp);
         assertEq(max, expectMax, "max_len_exact");
         assertLe(pf.length, max);
         bytes memory atMax = bytes.concat(pf, new bytes(max - pf.length));
@@ -296,6 +312,19 @@ contract LigeroTest is Test {
 
     function test_stmt_and_length_tx() public {
         stmtAndLength("tx", 235_470);
+    }
+
+    function test_stmt_and_length_tx0() public {
+        stmtAndLength("tx0", 234_744);
+    }
+
+    /// op 1's two forms (R6): an R_TX proof against the R_TX0 statement of the same transfer and vice versa
+    function test_cross_form_tx_tx0() public {
+        LigeroVerifier.Params memory pp = params("tx", "proven");
+        bytes memory tx = file("tx-proven.stmt");
+        bytes memory tx0 = file("tx0-proven.stmt");
+        assertTrue(rejected(1, tx0, file("tx-proven.proof"), pp), "R_TX proof, R_TX0 statement");
+        assertTrue(rejected(1, tx, file("tx0-proven.proof"), pp), "R_TX0 proof, R_TX statement");
     }
 
     /// invalid witnesses proved without the honest prover's checks (Rust tests/attacks.rs), conjectured preset

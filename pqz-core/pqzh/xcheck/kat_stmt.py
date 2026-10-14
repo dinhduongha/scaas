@@ -28,7 +28,7 @@ def rebuild(d):
 
 def main(dirname):
     bad = 0
-    for rel, op in (("reg", 3), ("tx", 1), ("burn", 2), ("ds", 4), ("dr", 5)):
+    for rel, op in (("reg", 3), ("tx", 1), ("burn", 2), ("ds", 4), ("dr", 5), ("tx0", 1)):
         st = open(os.path.join(dirname, rel + "_stmt.bin"), "rb").read()
         d = K.parse(op, st, ids=(K.PQZH_ID,))
         try:

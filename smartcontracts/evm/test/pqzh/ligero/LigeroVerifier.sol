@@ -2,7 +2,8 @@
 pragma solidity ^0.8.24;
 
 /// PQZH-Ligero verifier (test-only, never deployed): a full Solidity/Yul port of pqz-core/pqzh/ligero/src/ligero.rs
-/// verify + cs.rs comb for R_REG (op 3) and R_TX (op 1), docs/research/pqzh-ligero.md §4 and §11.
+/// verify + cs.rs comb for R_REG (op 3), R_TX and R_TX0 (op 1; R_TX0, the transfer without the auditor, by the
+/// 66,560-byte statement length, plan R6), docs/research/pqzh-ligero.md §4, §11 and §14.
 ///
 /// F_q, q = 2^42 - 215; F_q^4 = F_q[Y]/(Y^4 - 3) packed in one word, lane s (coefficient of Y^s) at bits 64s..64s+63,
 /// every lane canonical. Lazy sums of F_q^4 x F_q products use two words of two 128-bit lanes: (lane 0, lane 2) and
@@ -22,6 +23,7 @@ contract LigeroVerifier {
     uint8 internal constant OP_TRANSFER = 1;
     uint8 internal constant OP_REGISTER = 3;
     uint256 internal constant TX_STMT = 83_072;
+    uint256 internal constant TX0_STMT = 66_560;
     uint256 internal constant REG_STMT = 16_480;
     /// proofSystemId, statement bytes 32..63 (plan D3): keccak256("scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1")
     bytes32 internal constant PQZH_ID = 0x0a47a7689250ba178a52ad5972cdd9153358c022cb694c08d2389e82de2fead4;
@@ -53,6 +55,7 @@ contract LigeroVerifier {
 
     struct V {
         uint256 op;
+        uint256 legs; // op 1: ciphertext legs (R_TX 3: t, f, a; R_TX0 2: t, f)
         uint256 n;
         uint256 k;
         uint256 ell;
@@ -234,7 +237,7 @@ contract LigeroVerifier {
     function mkLayout(V memory v) internal pure {
         uint256 ell = v.ell;
         uint256 nb = v.op == OP_REGISTER ? 2 : 4;
-        uint256 ns = v.op == OP_REGISTER ? 2 : 13;
+        uint256 ns = v.op == OP_REGISTER ? 2 : 10 + v.legs;
         v.bBase = new uint256[](nb);
         v.bBits = new uint256[](nb);
         v.bOff = new uint256[](nb);
@@ -272,11 +275,12 @@ contract LigeroVerifier {
                 1 << 64 | 13 << 32,
                 1 << 64 | 13 << 32
             ];
-            for (uint256 i; i < 13; ++i) {
+            for (uint256 i; i < ns; ++i) {
                 v.sCount[i] = uint256(spec[i] >> 64);
                 v.sBits[i] = uint256(spec[i] >> 32) & 0xffffffff;
                 v.sOff[i] = uint256(spec[i]) & 0xffffffff;
             }
+            v.sCount[0] = 16 * v.legs; // e2 of each leg
         }
         (uint256 v0, uint256 b0) = (0, 0);
         for (uint256 i; i < ns; ++i) {
@@ -333,10 +337,11 @@ contract LigeroVerifier {
         return 32 + polyBytes + 8 + v.t * v.cw + (mid + 2 - v.t) * 32;
     }
 
-    /// the verifier's length bound for (op, p) (tests)
-    function maxProofLen(uint8 op, Params calldata p) external pure returns (uint256) {
+    /// the verifier's length bound for (op, statement length, p) (tests)
+    function maxProofLen(uint8 op, uint256 stmtLen, Params calldata p) external pure returns (uint256) {
         V memory v;
         (v.op, v.n, v.k, v.ell, v.t) = (op, p.n, p.k, p.ell, p.t);
+        v.legs = stmtLen == TX0_STMT ? 2 : 3;
         v.d2 = 2 * p.k - 1;
         mkLayout(v);
         v.cw = 32 + (v.m + 12) * 6;
@@ -354,6 +359,7 @@ contract LigeroVerifier {
         uint256 gl = g0;
         V memory v;
         (v.op, v.n, v.k, v.ell, v.t) = (op, p.n, p.k, p.ell, p.t);
+        v.legs = stmt.length == TX0_STMT ? 2 : 3; // op 1: the form by length (R6), as cs.rs form_of
         v.d2 = 2 * p.k - 1;
         // the length gate first, before the statement or the proof is parsed (ligero.rs proof_len_ok)
         if (op != OP_REGISTER && op != OP_TRANSFER) return (false, g);
@@ -452,10 +458,14 @@ contract LigeroVerifier {
             if (s.length != REG_STMT) return false;
             (o, nco) = (96, 2048);
         } else if (v.op == OP_TRANSFER) {
-            if (s.length != TX_STMT) return false;
-            if (uint256(bytes32(s[448:480])) != 1) return false; // auditorOn = 1 (R6)
+            if (s.length != (v.legs == 3 ? TX_STMT : TX0_STMT)) return false;
+            if (uint256(bytes32(s[448:480])) != v.legs - 2) return false; // auditorOn = 1 (R_TX) / 0 (R_TX0), R6
             if (uint256(bytes32(s[256:288])) >> 64 != 0) return false;
-            (o, nco) = (640, 10304); // 4 x 2048 + 16 + 2048 + 3 x 16 coefficients, contiguous
+            // D15 as pqz-stmt: a transfer's amount and recipient words are 0, the salt word is 16 zero bytes || salt
+            if (uint256(bytes32(s[288:320])) != 0 || uint256(bytes32(s[320:352])) != 0) return false;
+            if (bytes16(s[576:592]) != 0) return false;
+            // (legs + 1) x 2048 + 16 + 2048 + legs x 16 coefficients, contiguous (R_TX 10,304, R_TX0 8,240)
+            (o, nco) = (640, (v.legs + 2) * 2048 + 16 + 16 * v.legs);
         } else {
             return false;
         }
@@ -720,10 +730,13 @@ contract LigeroVerifier {
         } else {
             uint256[] memory gam = ring(v, 0, 0, 64, 0);
             eTerms(v, gam, 1, 640);
+            // header 640 || pk_f || pk_t || [pk_a] || u_T || v_T || u || v_t || v_f || [v_a]
+            uint256 uT = 640 + 16384 * v.legs;
+            uint256 uo = uT + 16512;
             gam = ring(v, 1, 0, 64, 2);
-            eTerms(v, gam, 3, 66304);
-            for (uint256 x; x < 3; ++x) {
-                // rows 3-5: pk_t, pk_f, pk_a at 640 + 16384 (1, 0, 2)
+            eTerms(v, gam, 3, uo);
+            for (uint256 x; x < v.legs; ++x) {
+                // rows 3-5 (R_TX0: 3, 4): pk_t, pk_f, pk_a at 640 + 16384 (1, 0, 2)
                 uint256 pko = 640 + 16384 * (x == 0 ? 1 : (x == 1 ? 0 : 2));
                 gam = ring(v, 2, pko, 16, 2);
                 for (uint256 k; k < 16; ++k) {
@@ -731,16 +744,16 @@ contract LigeroVerifier {
                     addS(v, E2, 16 * x + k, w);
                     addS(v, x == 1 ? DP : DD, k, eb(w, DELTA));
                 }
-                v.rhs = ea(v.rhs, em(gam[0], rsum(v, 82688 + 128 * x, 16)));
+                v.rhs = ea(v.rhs, em(gam[0], rsum(v, uo + 16384 + 128 * x, 16)));
             }
             // row 6: u_T^T s_f + Delta M + e_T = v_T
-            gam = ring(v, 2, 640 + 3 * 16384, 16, 0);
+            gam = ring(v, 2, uT, 16, 0);
             for (uint256 k; k < 16; ++k) {
                 uint256 w = em(gam[0], v.rp[k]);
                 addS(v, MM, k, eb(w, DELTA));
                 addS(v, ET, k, w);
             }
-            v.rhs = ea(v.rhs, em(gam[0], rsum(v, 66176, 16)));
+            v.rhs = ea(v.rhs, em(gam[0], rsum(v, uT + 16384, 16)));
         }
     }
 
@@ -773,7 +786,7 @@ contract LigeroVerifier {
                 v.rhs = ea(v.rhs, eb(w, (fee >> (4 * k)) & 15));
             }
             addS(v, CC, 15, take(v, 1));
-            for (uint256 x; x < 3; ++x) {
+            for (uint256 x; x < v.legs; ++x) {
                 uint256 w = take(v, 1);
                 for (uint256 k; k < 16; ++k) {
                     (uint256 r, uint256 s) = sqpos(v, E2, 16 * x + k);

@@ -1,11 +1,12 @@
-//! R_REG, R_TX, R_BURN, R_DS and R_DR as Ligero constraint systems over F_q (docs/research/pqzh-ligero.md §3, §12):
-//! statement parsing (the same bytes and checks as pqz-core's pqz_rel.c), the row layout, the witness rows, the
-//! quadratic triples and the linear test's combination vectors.
+//! R_REG, R_TX, R_TX0, R_BURN, R_DS and R_DR as Ligero constraint systems over F_q (docs/research/pqzh-ligero.md §3, §12):
+//! statement parsing (`pqz-stmt`'s decoder with every D15 / R6 rule, then PQZH's id), the row layout, the witness
+//! rows, the quadratic triples and the linear test's combination vectors.
 //!
 //! Relations (pqz_rel.c, pq-zether.md §7.4 / §7.5 / §7.9; d = digits(amount) public where marked):
 //!   R_REG  pk = A s + e
 //!   R_TX   rows 1-7: pk_f = A s_f + e_f; u = A^T r + e1; v_x = pk_x^T r + e2_x + Delta digit_x (x = t, f, a; digits
 //!          d, d', d); u_T^T s_f + Delta M + e_T = v_T; M_i + c_{i-1} - d'_i - d_i - 16 c_i = fee_i, c_15 = 0
+//!   R_TX0  R_TX without the auditor (CTR-PQZ-24, plan D8): rows 1-4, 6, 7, legs t and f only (no pk_a, v_a, e2_a)
 //!   R_BURN R_TX rows 1, 2, 4, 6, 7 with d public (one leg: pk_f, v_f, e2_f, d')
 //!   R_DS   u = A^T r + e1; pk^T r + e2 = v - Delta d (k < 16)
 //!   R_DR   pk = A s + e; u^T s + e' = v - Delta d (k < 16), e' + 2^24 in 25 bits
@@ -25,9 +26,9 @@
 //! shared vector beta = (rho^c)_c; the l2 norms use the all-ones vector on the square rows. The verifier interpolates
 //! only the "own" vectors (big value rows, small rows) and the two shared ones.
 
-use crate::client::{digits, encrypt, keypair, polys};
-use crate::ring::{D, DELTA, Poly, a_matrix, dot_int, modq, rd_poly, rd_polyvec};
-use crate::stmt::*;
+use pqz_stmt::{Form, OP_BURN, OP_DISCLOSE_RECEIVER, OP_DISCLOSE_SENDER, OP_REGISTER, OP_TRANSFER, PK_BYTES, PQZH_ID};
+
+use crate::ring::{D, DELTA, Poly, a_matrix, digits, dot_int, encrypt, keypair, modq, polys, polys_of};
 
 use crate::fq::{Acc4, F4, Fq};
 
@@ -92,7 +93,8 @@ fn debit_items(burn: bool) -> (Option<usize>, usize, usize, usize, usize) {
 }
 
 impl Layout {
-    pub fn new(op: u8, ell: usize) -> Layout {
+    /// the layout of a relation (REFRESH = BURN, AUDITOR = DISCLOSE-RECEIVER)
+    pub fn new(form: Form, ell: usize) -> Layout {
         assert!(ell >= 1);
         // big groups (bits, off, B^2) of a CBD(1) / CBD(20) pair; small items (count, bits, off)
         let se = [(7, 64, BS), (9, 256, BE)];
@@ -109,13 +111,15 @@ impl Layout {
             v.extend(vec![(1, 13, 0); legs]);
             v
         };
-        let (bigs, smalls, sig): (Vec<(usize, i64, i64)>, Vec<(usize, usize, i64)>, usize) = match op {
-            OP_REGISTER => (se.to_vec(), sl.to_vec(), 0),
-            OP_TRANSFER => ([se, se].concat(), debit(3, true), 6),
-            OP_BURN => ([se, se].concat(), debit(1, false), 5),
-            OP_DISCLOSE_SENDER => (se.to_vec(), [vec![e2(1)], sl.to_vec(), vec![(1, 13, 0)]].concat(), 1),
-            OP_DISCLOSE_RECEIVER => (se.to_vec(), [vec![(16, 25, 1 << 24)], sl.to_vec()].concat(), 1),
-            _ => panic!("no relation for op {op}"),
+        let (bigs, smalls, sig): (Vec<(usize, i64, i64)>, Vec<(usize, usize, i64)>, usize) = match form {
+            Form::Register => (se.to_vec(), sl.to_vec(), 0),
+            Form::Transfer => ([se, se].concat(), debit(3, true), 6),
+            Form::Transfer0 => ([se, se].concat(), debit(2, true), 6),
+            Form::Burn | Form::Refresh => ([se, se].concat(), debit(1, false), 5),
+            Form::DiscloseSender => (se.to_vec(), [vec![e2(1)], sl.to_vec(), vec![(1, 13, 0)]].concat(), 1),
+            Form::DiscloseReceiver | Form::DiscloseAuditor => {
+                (se.to_vec(), [vec![(16, 25, 1 << 24)], sl.to_vec()].concat(), 1)
+            }
         };
         let mut cur = 0;
         let nr = N.div_ceil(ell);
@@ -187,7 +191,7 @@ pub struct Leg {
     pub dp: bool,
 }
 
-/// R_TX (legs t, f, a) and R_BURN (leg f only, amount public)
+/// R_TX (legs t, f, a), R_TX0 (t, f) and R_BURN (leg f only, amount public)
 pub struct Debit {
     pub burn: bool,
     pub pkf: Vec<Poly>,
@@ -214,63 +218,59 @@ pub enum Stmt {
     Dr(Disc),
 }
 
-/// a be32 statement word that must be < 2^64 (pqz_rel.c rd_word64)
-fn word64(stmt: &[u8], off: usize) -> Option<u64> {
-    let w = &stmt[off..off + 32];
-    if w[..24].iter().any(|&b| b != 0) {
-        return None;
-    }
-    Some(u64::from_be_bytes(w[24..].try_into().unwrap()))
+/// Every relation the crate proves, in pqz_bench.c's order (R_REG, R_TX, R_BURN, R_DS, R_DR, R_TX0).
+pub const RELS: [Form; 6] =
+    [Form::Register, Form::Transfer, Form::Burn, Form::DiscloseSender, Form::DiscloseReceiver, Form::Transfer0];
+
+/// The relation a statement of `op` with `len` bytes is proved in, from the op and the length alone (op 1: R_TX0 by
+/// length, R6; REFRESH and AUDITOR, other opTags of op 2 / op 5, share BURN's and DISCLOSE-RECEIVER's). The verifier
+/// takes its length bound from it before anything is parsed; `parse` then checks the statement.
+pub fn form_of(op: u8, len: usize) -> Option<Form> {
+    Some(match op {
+        OP_TRANSFER if len == Form::Transfer0.stmt_len() => Form::Transfer0,
+        OP_TRANSFER => Form::Transfer,
+        OP_BURN => Form::Burn,
+        OP_REGISTER => Form::Register,
+        OP_DISCLOSE_SENDER => Form::DiscloseSender,
+        OP_DISCLOSE_RECEIVER => Form::DiscloseReceiver,
+        _ => return None,
+    })
 }
 
-struct Rd<'a>(&'a [u8], usize);
-impl Rd<'_> {
-    fn vec(&mut self) -> Option<Vec<Poly>> {
-        self.1 += POLYVEC;
-        rd_polyvec(&self.0[self.1 - POLYVEC..])
-    }
-    fn v(&mut self) -> Option<Poly> {
-        self.1 += VB;
-        rd_poly(&self.0[self.1 - VB..], 16)
-    }
-}
-
-/// pqz-core's statement checks: exact length, canonical coefficients, read words < 2^64 (pqz_rel.c build); plus,
-/// in depth (the pqz-ffi decoder checks them too, Task 7): proofSystemId = PQZH's (D3, bytes 32..63), opTag one of
-/// the op's (bytes 0..31), R_TX's auditorOn word = 1 (R6, the 83,072-byte form)
+/// `pqz_stmt::parse` (every D15 / R6 rule: length, the op's opTag, a known id, fee / amount < 2^64, the salt form,
+/// auditorOn by length, the zero words, coefficients < q), then PQZH's own check (D3): the id is PQZH's, not PQZL's.
+/// Prover and verifier call it first.
 pub fn parse(op: u8, stmt: &[u8]) -> Option<Stmt> {
-    if stmt.get(32..64)? != PQZH_PROOF_SYSTEM_ID || !op_tags(op).iter().any(|t| stmt[..32] == t[..]) {
+    let s = pqz_stmt::parse(op, stmt).ok()?;
+    if *s.proof_system_id()? != PQZH_ID {
         return None;
     }
-    match op {
-        OP_REGISTER if stmt.len() == REG_STMT => Some(Stmt::Reg(rd_polyvec(&stmt[PREFIX + 32..])?)),
-        OP_TRANSFER | OP_BURN if stmt.len() == (if op == OP_BURN { BURN_STMT } else { TX_STMT }) => {
-            let burn = op == OP_BURN;
-            if !burn && (stmt[HDR_AUDITOR_ON..HDR_AUDITOR_ON + 31].iter().any(|&b| b != 0) || stmt[HDR_AUDITOR_ON + 31] != 1) {
-                return None;
+    let vec = |b: &[u8]| polys_of(b, D);
+    let v = |b: &[u8]| polys_of(b, 16)[0];
+    Some(match s {
+        pqz_stmt::Stmt::Register(r) => Stmt::Reg(vec(r.pk)),
+        pqz_stmt::Stmt::Debit(d) => {
+            let burn = matches!(d.form, Form::Burn | Form::Refresh);
+            let pkf = vec(d.pk_f);
+            // legs in witness order: t (d), f (d'), a (d; R_TX only)
+            let mut legs = vec![];
+            if let (Some(pk), Some(vt)) = (d.pk_t, d.v_t) {
+                legs.push(Leg { pk: vec(pk), v: v(vt), dp: false });
             }
-            let fee = word64(stmt, HDR_FEE)?;
-            let amount = if burn { word64(stmt, HDR_AMOUNT)? } else { 0 };
-            let mut r = Rd(stmt, HEADER);
-            let pkf = r.vec()?;
-            let (pkt, pka) = if burn { (vec![], vec![]) } else { (r.vec()?, r.vec()?) };
-            let (ut, vt, u) = (r.vec()?, r.v()?, r.vec()?);
-            let legs = if burn {
-                vec![Leg { pk: pkf.clone(), v: r.v()?, dp: true }]
-            } else {
-                let (vt_, vf, va) = (r.v()?, r.v()?, r.v()?);
-                vec![Leg { pk: pkt, v: vt_, dp: false }, Leg { pk: pkf.clone(), v: vf, dp: true }, Leg { pk: pka, v: va, dp: false }]
-            };
-            Some(Stmt::Debit(Debit { burn, pkf, legs, ut, vt, u, fee, amount }))
+            legs.push(Leg { pk: pkf.clone(), v: v(d.v_f), dp: true });
+            if let (Some(pk), Some(va)) = (d.pk_a, d.v_a) {
+                legs.push(Leg { pk: vec(pk), v: v(va), dp: false });
+            }
+            let (ut, vt) = d.t.split_at(PK_BYTES);
+            let amount = if burn { d.amount() } else { 0 };
+            Stmt::Debit(Debit { burn, pkf, legs, ut: vec(ut), vt: v(vt), u: vec(d.u), fee: d.fee(), amount })
         }
-        OP_DISCLOSE_SENDER | OP_DISCLOSE_RECEIVER if stmt.len() == DISC_STMT => {
-            let amount = word64(stmt, DISC_AMOUNT)?;
-            let mut r = Rd(stmt, DISC_PK);
-            let d = Disc { pk: r.vec()?, u: r.vec()?, v: r.v()?, amount };
-            Some(if op == OP_DISCLOSE_SENDER { Stmt::Ds(d) } else { Stmt::Dr(d) })
+        pqz_stmt::Stmt::Disclose(d) => {
+            let x = Disc { pk: vec(d.pk), u: vec(d.u), v: v(d.v), amount: d.amount() };
+            if d.form == Form::DiscloseSender { Stmt::Ds(x) } else { Stmt::Dr(x) }
         }
-        _ => None,
-    }
+        pqz_stmt::Stmt::SelfTest => return None,
+    })
 }
 
 /// v - Delta digits(amount) (the public side of R_DS / R_DR's evaluation rows)
@@ -296,15 +296,15 @@ fn l2(v: &[i64]) -> i64 {
     v.iter().map(|x| x * x).sum()
 }
 
-/// Witness values from pqz-core's witness bytes. `check` = the honest prover's checks (as pqz_rel.c's witness
-/// builders plus the key / ciphertext equations); without them an invalid witness is laid out anyway (bits wrap), for
-/// the negative tests.
-pub fn witness(st: &Stmt, wit: &[u8], check: bool) -> Result<Wit, &'static str> {
+/// Witness values from pqz-core's witness bytes (`form`'s length, pqz.h). `check` = the honest prover's checks (as
+/// pqz_rel.c's witness builders plus the key / ciphertext equations); without them an invalid witness is laid out
+/// anyway (bits wrap), for the negative tests.
+pub fn witness(form: Form, st: &Stmt, wit: &[u8], check: bool) -> Result<Wit, &'static str> {
+    if wit.len() != form.wit_len() {
+        return Err("length");
+    }
     match st {
         Stmt::Reg(pk) => {
-            if wit.len() != REG_WIT {
-                return Err("length");
-            }
             let s = rd_i8(wit, N);
             let e = rd_i16(&wit[N..], N);
             if check && (l2(&s) > BS || l2(&e) > BE) {
@@ -317,10 +317,6 @@ pub fn witness(st: &Stmt, wit: &[u8], check: bool) -> Result<Wit, &'static str> 
             Ok(Wit { big: vec![s, e], small })
         }
         Stmt::Debit(t) => {
-            let want = if t.burn { BURN_WIT } else { TX_WIT };
-            if wit.len() != want {
-                return Err("length");
-            }
             let nl = t.legs.len();
             let sf = rd_i8(wit, N);
             let ef = rd_i16(&wit[2048..], N);
@@ -384,9 +380,6 @@ pub fn witness(st: &Stmt, wit: &[u8], check: bool) -> Result<Wit, &'static str> 
             Ok(Wit { big: vec![sf, ef, r, e1], small })
         }
         Stmt::Ds(t) => {
-            if wit.len() != DS_WIT {
-                return Err("length");
-            }
             let r = rd_i8(wit, N);
             let e1 = rd_i16(&wit[2048..], N);
             let e2 = rd_i16(&wit[6144..], 16);
@@ -404,9 +397,6 @@ pub fn witness(st: &Stmt, wit: &[u8], check: bool) -> Result<Wit, &'static str> 
             Ok(Wit { big: vec![r, e1], small })
         }
         Stmt::Dr(t) => {
-            if wit.len() != DR_WIT {
-                return Err("length");
-            }
             let s = rd_i8(wit, N);
             let e = rd_i16(&wit[N..], N);
             if check && (l2(&s) > BS || l2(&e) > BE) {
@@ -689,10 +679,34 @@ pub fn comb(lay: &Layout, st: &Stmt, rho: F4) -> Comb {
 mod tests {
     use super::*;
 
+    /// D3: PQZH's id is the keccak256 of its string, and it is pqz-stmt's
+    #[test]
+    fn pqzh_id_d3() {
+        let h = crate::merkle::keccak(&[b"scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1"]);
+        assert_eq!(h, PQZH_ID);
+    }
+
+    /// pqz-stmt's opTags are the keccak256 of their names
+    #[test]
+    fn op_tags_hash() {
+        for (f, n) in [
+            (Form::Transfer, "TRANSFER"),
+            (Form::Transfer0, "TRANSFER"),
+            (Form::Burn, "BURN"),
+            (Form::Refresh, "REFRESH"),
+            (Form::Register, "REGISTER"),
+            (Form::DiscloseSender, "DISCLOSE-SENDER"),
+            (Form::DiscloseReceiver, "DISCLOSE-RECEIVER"),
+            (Form::DiscloseAuditor, "DISCLOSE-AUDITOR"),
+        ] {
+            assert_eq!(f.op_tag(), crate::merkle::keccak(&[b"SCAAS-PQZ-OP-", n.as_bytes(), b"-V1"]), "{n}");
+        }
+    }
+
     /// f_m(a) recurrence against sum_k rho^k (X^m a mod X^64 + 1)_k, for K = 64 and K = 16
     #[test]
     fn ring_recurrence_matches_naive() {
-        let lay = Layout::new(OP_REGISTER, 700);
+        let lay = Layout::new(Form::Register, 700);
         let rho = F4([Fq(3), Fq(5), Fq(7), Fq(11)]);
         let mut rp = vec![F4::ONE; D + 1];
         for k in 1..=D {

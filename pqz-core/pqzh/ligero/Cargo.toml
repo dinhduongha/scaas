@@ -5,13 +5,15 @@ edition = "2021"
 license-file = "../../../LICENSE"
 publish = false
 
-# PQZH over Ligero (docs/research/pqzh-ligero.md). sha3 only: no path dependency on the Plonky3 crate pqzh (P6e Task 6
-# prep; pqz-stmt replaces src/stmt.rs and src/ring.rs with Task 5 / 6).
+# PQZH over Ligero (docs/research/pqzh-ligero.md). sha3 and the statement codec pqz-stmt only (plan R2, D11): no path
+# dependency on the Plonky3 crate pqzh.
 [dependencies]
 sha3 = "=0.10.8"
+pqz-stmt = { path = "../../stmt" }
 
-# bench (default on): the reference presets (conjectured, proven without radix 431, Johnson). Production users
-# (pqz-ffi, Task 7) depend with default-features = false and get Params::proven() only.
+# bench (default on): the reference presets (conjectured, proven without radix 431, Johnson), the parameter model's
+# float code (Params::new, soundness, breakdown) and the test client (client.rs: pqz_bench.c's setup, mutations).
+# Production users (pqz-ffi, Task 7) depend with default-features = false and get Params::proven() only, no floats.
 [features]
 default = ["bench"]
 bench = []
@@ -24,6 +26,10 @@ required-features = ["bench"]
 [[bin]]
 name = "ligero_export"
 path = "src/bin/ligero_export.rs"
+required-features = ["bench"]
+
+[[example]]
+name = "dump_setup"
 required-features = ["bench"]
 
 [profile.release]

@@ -14,10 +14,11 @@ use crate::fft::{Domain, GEN, smooth};
 use crate::fq::{Acc4, EB, F4, Fq, batch_inv};
 use crate::merkle::{H, Tree, depth, keccak, root_from};
 use crate::transcript::Tr;
-use crate::stmt::OPS;
+use pqz_stmt::Form;
 #[cfg(feature = "bench")]
-use crate::stmt::{OP_DISCLOSE_RECEIVER, OP_DISCLOSE_SENDER, OP_REGISTER};
+use pqz_stmt::{OP_DISCLOSE_RECEIVER, OP_DISCLOSE_SENDER, OP_REGISTER};
 
+#[cfg(feature = "bench")]
 pub const LAMBDA: f64 = 128.0;
 pub const POW_BITS: u32 = 16;
 const FB: usize = 4 * EB; // bytes per F_q^4 element
@@ -39,11 +40,13 @@ pub struct Params {
 }
 
 /// BCIKS20 list-decoding parameter m (m = 3: the smallest the theorem allows, the best field term)
+#[cfg(feature = "bench")]
 pub const JOHNSON_M: usize = 3;
 
 /// Johnson regime, RS[n, 2k-1] of rate r = (2k-1)/n: delta = 1 - sqrt(r) - eta, eta = sqrt(r)/(2m); per query
 /// max(1 - delta, (2k-2)/n) (assumes mutual correlated agreement up to delta for the consistency tests,
 /// docs/research/pqzh-ligero.md §5.3). Returns (factor, BCIKS20 error eps = (m+1/2)^7/(3 r^1.5) n^2 / |F| as log2 bits).
+#[cfg(feature = "bench")]
 pub fn factor_johnson(n: usize, k: usize) -> (f64, f64) {
     let r = (2 * k - 1) as f64 / n as f64;
     let m = JOHNSON_M as f64;
@@ -56,6 +59,7 @@ pub fn factor_johnson(n: usize, k: usize) -> (f64, f64) {
 /// Per-query acceptance of a cheating prover. Proven: one proximity test over RS[n, 2k-1] at its unique-decoding
 /// radius e and consistency terms (e + 2k - 2)/n (Ligero Thm 4.7 / App. C form). Conjectured: (2k - 1)/n, the rate
 /// of RS[n, 2k-1] (ethSTARK-style), reported only for comparison with the STARK's conjectured numbers.
+#[cfg(feature = "bench")]
 pub fn factor(n: usize, k: usize, proven: bool) -> f64 {
     if proven {
         let e = (n - 2 * k + 1) / 2;
@@ -66,7 +70,9 @@ pub fn factor(n: usize, k: usize, proven: bool) -> f64 {
 }
 
 impl Params {
-    /// t from 112 query bits + 16 grinding bits; l = k - t - 1 (zero knowledge: t openings < k - l)
+    /// t from 112 query bits + 16 grinding bits; l = k - t - 1 (zero knowledge: t openings < k - l). The parameter
+    /// model (floats): feature `bench`; production takes `proven()`.
+    #[cfg(feature = "bench")]
     pub fn new(n: usize, k: usize, proven: bool) -> Params {
         let f = factor(n, k, proven);
         let t = ((LAMBDA - POW_BITS as f64) / -f.log2()).ceil() as usize;
@@ -75,6 +81,7 @@ impl Params {
     }
 
     /// Johnson-bound proven parameters (reference only); requires (1 - delta) n >= 3k - 2 (degree correction)
+    #[cfg(feature = "bench")]
     pub fn johnson(n: usize, k: usize) -> Params {
         let (f, _) = factor_johnson(n, k);
         let t = ((LAMBDA - POW_BITS as f64) / -f.log2()).ceil() as usize;
@@ -82,9 +89,11 @@ impl Params {
         Params { n, k, ell: k - t - 1, t, pow_bits: POW_BITS, proven: true, johnson: true }
     }
 
-    /// THE preset (owner 2026-10-14 (a)): proven, radix 431, n = 32,756, k = 817, t = 121, l = 695, every op
-    pub fn proven() -> Params {
-        Params::new(32756, 817, true)
+    /// THE preset (owner 2026-10-14 (a)): proven, radix 431, n = 32,756, k = 817, t = 121, l = 695, every op; the
+    /// parameter model's `Params::new(32756, 817, true)` (unit test `proven_is_the_model`), written out so that the
+    /// production build has no float code
+    pub const fn proven() -> Params {
+        Params { n: 32756, k: 817, ell: 695, t: 121, pow_bits: POW_BITS, proven: true, johnson: false }
     }
 
     /// the model's smallest Johnson preset with the field term >= 128 bits (charged once): runs/p1-params.txt.
@@ -122,8 +131,8 @@ impl Params {
 
     /// loose upper bound on the proof length (t distinct columns, full paths): the verifier's check before Task 9,
     /// kept for the bench's comparison
-    pub fn max_len(&self, op: u8) -> usize {
-        let m = Layout::new(op, self.ell).m;
+    pub fn max_len(&self, form: Form) -> usize {
+        let m = Layout::new(form, self.ell).m;
         32 + self.poly_bytes() + 8 + self.t * (32 + (m + BLIND) * EB) + self.t * depth(self.n) * 32
     }
 
@@ -131,23 +140,24 @@ impl Params {
     /// column costs more than any number of digests it saves) and the largest pruned multiproof for t leaves of the
     /// first n in a depth-d tree. With a_l distinct nodes on level l (a_0 = t, a_d = 1), level l sends 2 a_(l+1) - a_l
     /// siblings, so the total is sum_(0 < l < d) a_l + 2 - t, maximal at a_l = min(t, ceil(n / 2^l)).
-    pub fn max_len_exact(&self, op: u8) -> usize {
-        let m = Layout::new(op, self.ell).m;
+    pub fn max_len_exact(&self, form: Form) -> usize {
+        let m = Layout::new(form, self.ell).m;
         let d = depth(self.n);
         let mid: usize = (1..d).map(|l| self.t.min(self.n.div_ceil(1 << l))).sum();
         32 + self.poly_bytes() + 8 + self.t * (32 + (m + BLIND) * EB) + (mid + 2 - self.t) * 32
     }
 
-    /// The verifier's length bound (plan Task 9): the exact maximum. At THE preset (the D3 id) it is <= PQZH_MAX_PROOF
-    /// (D5) for every op (R_TX 235,470 B; unit test `limits_exact`). Not capped at PQZH_MAX_PROOF: the reference
-    /// presets are not the id, and proven without radix 431 has every R_TX / R_BURN proof above it.
-    pub fn max_proof_len(&self, op: u8) -> usize {
-        self.max_len_exact(op)
+    /// The verifier's length bound (plan Task 9): the exact maximum. At THE preset (the D3 id) it is
+    /// <= pqz_stmt::MAX_PROOF_PQZH (D5) for every relation (R_TX 235,470 B; unit test `limits_exact`). Not capped at
+    /// MAX_PROOF_PQZH: the reference presets are not the id, and proven without radix 431 has every R_TX / R_BURN
+    /// proof above it.
+    pub fn max_proof_len(&self, form: Form) -> usize {
+        self.max_len_exact(form)
     }
 
-    /// The verifier's first check, before the statement or the proof is parsed: 1 <= len <= max_proof_len(op)
-    pub fn proof_len_ok(&self, op: u8, len: usize) -> bool {
-        OPS.contains(&op) && (1..=self.max_proof_len(op)).contains(&len)
+    /// The verifier's first check, before the statement or the proof is parsed: 1 <= len <= max_proof_len(form)
+    pub fn proof_len_ok(&self, form: Form, len: usize) -> bool {
+        (1..=self.max_proof_len(form)).contains(&len)
     }
 }
 
@@ -234,12 +244,16 @@ fn draw(tr: &mut Tr, m: usize, ntri: usize) -> (Vec<F4>, Vec<F4>, F4, F4, F4, Ve
 }
 
 pub fn prove(op: u8, stmt: &[u8], wit: &[u8], rnd: [u8; 32], p: &Params) -> Result<Vec<u8>, &'static str> {
-    prove_inner(op, stmt, wit, rnd, p, true, p.max_proof_len(op))
+    let form = cs::form_of(op, stmt.len()).ok_or("op")?;
+    prove_inner(op, stmt, wit, rnd, p, true, p.max_proof_len(form))
 }
 
-/// Test hook: skips the honest prover's checks so that invalid witnesses reach the proof system.
+/// Test hook: skips the honest prover's checks so that invalid witnesses reach the proof system (tests and `bench`
+/// only: not in the production build).
+#[cfg(any(test, feature = "bench"))]
 pub fn prove_unchecked(op: u8, stmt: &[u8], wit: &[u8], rnd: [u8; 32], p: &Params) -> Result<Vec<u8>, &'static str> {
-    prove_inner(op, stmt, wit, rnd, p, false, p.max_proof_len(op))
+    let form = cs::form_of(op, stmt.len()).ok_or("op")?;
+    prove_inner(op, stmt, wit, rnd, p, false, p.max_proof_len(form))
 }
 
 /// Proves; if the proof is longer than `limit` (the verifier's bound) it proves again with the RNG stream continued
@@ -259,8 +273,9 @@ fn prove_inner(op: u8, stmt: &[u8], wit: &[u8], rnd: [u8; 32], p: &Params, check
 
 fn prove_once(op: u8, stmt: &[u8], wit: &[u8], p: &Params, check: bool, rng: &mut Rng) -> Result<Vec<u8>, &'static str> {
     let st = cs::parse(op, stmt).ok_or("statement")?;
-    let lay = Layout::new(op, p.ell);
-    let w = cs::witness(&st, wit, check)?;
+    let form = cs::form_of(op, stmt.len()).ok_or("op")?;
+    let lay = Layout::new(form, p.ell);
+    let w = cs::witness(form, &st, wit, check)?;
     let rows = cs::rows(&lay, &w);
     let (n, k, ell, m) = (p.n, p.k, p.ell, lay.m);
     let (hk, hn, h2) = (Domain::new(k), Domain::new(n), Domain::new(p.n2()));
@@ -430,11 +445,12 @@ fn eval4(c: &[F4], xp: &[Fq]) -> F4 {
 }
 
 fn verify_inner(op: u8, stmt: &[u8], proof: &[u8], p: &Params) -> Option<()> {
-    if !p.proof_len_ok(op, proof.len()) {
+    let form = cs::form_of(op, stmt.len())?;
+    if !p.proof_len_ok(form, proof.len()) {
         return None;
     }
     let st = cs::parse(op, stmt)?;
-    let lay = Layout::new(op, p.ell);
+    let lay = Layout::new(form, p.ell);
     let (n, k, ell, m) = (p.n, p.k, p.ell, lay.m);
     let d2 = 2 * k - 1;
     let mut rd = Rd(proof);
@@ -544,8 +560,9 @@ fn verify_inner(op: u8, stmt: &[u8], proof: &[u8], p: &Params) -> Option<()> {
 }
 
 /// soundness bits per term: (name, bits); "total" combines them
+#[cfg(feature = "bench")]
 pub fn soundness(op: u8, stmt: &[u8], p: &Params) -> Vec<(&'static str, f64)> {
-    let lay = Layout::new(op, p.ell);
+    let lay = Layout::new(cs::form_of(op, stmt.len()).expect("op"), p.ell);
     let nw = cs::parse(op, stmt).map(|st| cs::comb(&lay, &st, F4::ONE).nweights).unwrap_or(0);
     let fbits = 4.0 * ((crate::fq::Q) as f64).log2();
     let (f, prox) = if p.johnson {
@@ -569,8 +586,9 @@ pub fn soundness(op: u8, stmt: &[u8], p: &Params) -> Vec<(&'static str, f64)> {
 }
 
 /// byte breakdown of a proof
-pub fn breakdown(op: u8, proof: &[u8], p: &Params) -> Vec<(&'static str, usize)> {
-    let m = Layout::new(op, p.ell).m;
+#[cfg(feature = "bench")]
+pub fn breakdown(form: Form, proof: &[u8], p: &Params) -> Vec<(&'static str, usize)> {
+    let m = Layout::new(form, p.ell).m;
     let polys = p.poly_bytes();
     let rest = proof.len().saturating_sub(32 + polys + 8);
     let cw = 32 + (m + BLIND) * EB;
@@ -590,7 +608,14 @@ pub fn breakdown(op: u8, proof: &[u8], p: &Params) -> Vec<(&'static str, usize)>
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::stmt::OP_REGISTER;
+    use crate::cs::RELS;
+
+    /// THE preset written out is the parameter model's
+    #[cfg(feature = "bench")]
+    #[test]
+    fn proven_is_the_model() {
+        assert_eq!(Params::proven(), Params::new(32756, 817, true));
+    }
 
     /// D6: the same rnd32, op and statement with another witness give unrelated masks; equal inputs, equal masks
     #[test]
@@ -630,43 +655,48 @@ mod tests {
             idx.dedup();
             assert!(tree.multiproof(&idx).len() <= worst);
         }
-        for op in OPS {
-            assert!(p.max_len_exact(op) < p.max_len(op));
+        for f in RELS {
+            assert!(p.max_len_exact(f) < p.max_len(f));
             // the bound is the proof grammar at t evenly spread columns: root, polynomials, nonce, t columns, the
             // spread set's multiproof
-            let cw = 32 + (Layout::new(op, p.ell).m + BLIND) * EB;
-            assert_eq!(32 + p.poly_bytes() + 8 + t * cw + 32 * tree.multiproof(&spread).len(), p.max_len_exact(op));
+            let cw = 32 + (Layout::new(f, p.ell).m + BLIND) * EB;
+            assert_eq!(32 + p.poly_bytes() + 8 + t * cw + 32 * tree.multiproof(&spread).len(), p.max_len_exact(f));
         }
     }
 
-    /// Task 9 / D5: the verifier's bound is the exact maximum, <= PQZH_MAX_PROOF at THE preset, every input fits MAX_INPUT, and the
-    /// length gate admits MAX and rejects MAX + 1 (and 0) before the statement or the proof is parsed
+    /// Task 9 / D5: the verifier's bound is the exact maximum, <= MAX_PROOF_PQZH at THE preset, every input fits
+    /// MAX_INPUT, and the length gate admits MAX and rejects MAX + 1 (and 0) before the statement or the proof is
+    /// parsed; ops without a relation have no form
     #[test]
     fn limits_exact() {
-        use crate::stmt::*;
+        use pqz_stmt::{MAX_INPUT, MAX_PROOF_PQZH};
         let p = Params::proven();
         let expect = [
-            (OP_REGISTER, REG_STMT, 190_458),
-            (OP_TRANSFER, TX_STMT, 235_470),
-            (OP_BURN, BURN_STMT, 234_744),
-            (OP_DISCLOSE_SENDER, DISC_STMT, 190_458),
-            (OP_DISCLOSE_RECEIVER, DISC_STMT, 190_458),
+            (Form::Register, 190_458),
+            (Form::Transfer, 235_470),
+            (Form::Burn, 234_744),
+            (Form::DiscloseSender, 190_458),
+            (Form::DiscloseReceiver, 190_458),
+            (Form::Transfer0, 234_744),
         ];
-        for (op, stmt_len, max) in expect {
-            assert_eq!((p.max_len_exact(op), p.max_proof_len(op)), (max, max));
-            assert!(max <= PQZH_MAX_PROOF && INPUT_HEADER + stmt_len + max <= MAX_INPUT);
-            assert!(p.proof_len_ok(op, max) && p.proof_len_ok(op, 1));
-            assert!(!p.proof_len_ok(op, max + 1) && !p.proof_len_ok(op, 0));
+        assert_eq!(expect.map(|e| e.0), RELS);
+        for (f, max) in expect {
+            assert_eq!((p.max_len_exact(f), p.max_proof_len(f)), (max, max));
+            assert!(max <= MAX_PROOF_PQZH && 5 + f.stmt_len() + max <= MAX_INPUT);
+            assert!(p.proof_len_ok(f, max) && p.proof_len_ok(f, 1));
+            assert!(!p.proof_len_ok(f, max + 1) && !p.proof_len_ok(f, 0));
+            assert_eq!(cs::form_of(f.op(), f.stmt_len()), Some(f));
         }
-        assert!(!p.proof_len_ok(0, 1) && !p.proof_len_ok(6, 1));
+        assert!([0, 6, 7, 255].iter().all(|&op| cs::form_of(op, 0).is_none()));
     }
 
     /// Task 9: a proof over the limit is proved again from the continued RNG stream; the first attempt is `prove`'s
+    #[cfg(feature = "bench")]
     #[test]
     fn prover_retries_over_limit() {
         let s = crate::client::setup();
-        let (op, st, w, p) = (OP_REGISTER, &s.reg_stmt, &s.reg_wit, Params::proven());
-        let a = prove_inner(op, st, w, [1; 32], &p, true, p.max_proof_len(op)).unwrap();
+        let (op, st, w, p) = (pqz_stmt::OP_REGISTER, &s.reg_stmt, &s.reg_wit, Params::proven());
+        let a = prove_inner(op, st, w, [1; 32], &p, true, p.max_proof_len(Form::Register)).unwrap();
         assert_eq!(a, prove(op, st, w, [1; 32], &p).unwrap());
         let b = prove_inner(op, st, w, [1; 32], &p, true, a.len() - 1).unwrap();
         assert!(b.len() < a.len() && b[..32] != a[..32]);
