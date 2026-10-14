@@ -1,19 +1,29 @@
 #!/usr/bin/env python3
 """Ligero over F_q for PQZH (docs/research/pqzh-ligero.md §2-§5): field checks, soundness per regime, and the
-parameter choice (rate, k, l, t) with a proof-size and verifier-work model. Stdlib only; every number printed is an
+parameter choice (n, k, l, t) with a proof-size and verifier-work model. Stdlib only; every number printed is an
 [estimate] from the layout model below, nothing is measured here.
 
-  python3 pqz-core/pqzh/ligero/ligero_params.py   > pqz-core/pqzh/ligero/runs/p0-params.txt
+  python3 pqz-core/pqzh/ligero/ligero_params.py          > runs/p1-params.txt   (layout of the crate, radices 2/19/43
+                                                                                  and 2/19/43/431 side by side)
+  python3 pqz-core/pqzh/ligero/ligero_params.py --p0     > runs/p0-params.txt   (the first model, kept for reference)
+
+p1 (2026-10-14, crate layout): blinding rows in F_q^4 (3 polynomials = 12 base rows, needed for ZK since w, q, h have
+F_q^4 coefficients), small values packed as the crate does (cs.rs), k need not divide n (the encoding is an inverse
+FFT on H_k and a coset FFT on 3 H_n; 3 H_n and H_k are always disjoint because 3 generates F_q^*), n >= 4k (degree
+correction, §5.1), exact proven factor of RS[n, 2k-1] at its unique-decoding radius.
 """
 import math
+import sys
 
 Q = 2**42 - 215
 EXT = 4                      # F_{q^4} = F_q[X]/(X^4 - 3)
 W = 3
 LAMBDA, POW = 128, 16        # target bits, grinding bits before the column query (as the STARK config)
 EB, DIG, SALT = 6, 32, 32    # bytes per F_q element (42 bits in 6), Keccak-256 digest, per-column salt
-# FFT-friendly sizes: divisors of q - 1 built from 2^3 * 19 * 43 (431 and 1,561,243 are too large as radices)
-SMOOTH = sorted({2**a * 19**b * 43**c for a in range(4) for b in range(2) for c in range(2)})
+SMOOTH3 = sorted({2**a * 19**b * 43**c for a in range(4) for b in range(2) for c in range(2)})
+SMOOTH4 = sorted({s * 431**d for s in SMOOTH3 for d in range(2)})
+NMAX = 2**21                 # prover memory: (m + 12) rows x n x 8 B stays under ~0.3 GB
+PMAX = 4e9                   # prover budget, base-field products (FFT + products), ~ seconds native
 
 
 def factor(n):
@@ -34,26 +44,127 @@ def checks():
     return f
 
 
-# Groups of R_REG / R_TX witness values: (values, bits per value, normed). Bits: x + 2^b' in [0, 2^(b'+1)) with
-# 2^b' > the l2 bound (36 -> 7 bits, 164 -> 9, 64 -> 8); "normed" groups also get a squares row.
-BIG = {'R_REG': [(2048, 7, True), (2048, 9, True)],
-       'R_TX': [(2048, 7, True), (2048, 9, True), (2048, 7, True), (2048, 9, True)]}
-# small values packed horizontally (values + their bits): e2 (48 x 8 bits, squared), d, d' (32 x 4), M (16 x 14),
-# c + 64 (16 x 11), e_T + 2^24 (16 x 25), l2 slacks (s 11, e 15, e2 13 bits)
-SMALL = {'R_REG': 2 + 11 + 15,
-         'R_TX': (48 * (2 + 8)) + 32 * 5 + 16 * 15 + 16 * 12 + 16 * 26 + 7 + 2 * 11 + 2 * 15 + 3 * 13}
-BLINDS = 3                   # u_0 (proximity), u_lin (sum 0 on H_k), u_quad (0 on the message points)
+# ---- p1: the crate's layout (cs.rs) ----
+# big groups: 2048 values, bits per value; rows per group = ceil(2048 / l) * (value + square + bits)
+BIG = {'R_REG': [7, 9], 'R_TX': [7, 9, 7, 9]}
+# small values (one value row, an aligned square row, packed bit rows): count and total bits
+SMALL = {'R_REG': (2, 11 + 15),
+         'R_TX': (135, 48 * 8 + 32 * 4 + 16 * 14 + 16 * 11 + 16 * 25 + 11 + 15 + 11 + 15 + 3 * 13)}
+BLIND_ROWS = 12              # u_0, u_lin, u_quad in F_q^4, 4 base rows each
+
+
+def rows1(rel, ell):
+    r = sum(math.ceil(2048 / ell) * (2 + b) for b in BIG[rel])
+    nv, nb = SMALL[rel]
+    return r + 2 * math.ceil(nv / ell) + math.ceil(nb / ell)
+
+
+def own_rows(rel, ell):
+    """rows whose linear-test vector the verifier interpolates itself (big value rows, small rows) + 2 shared"""
+    nv, nb = SMALL[rel]
+    return len(BIG[rel]) * math.ceil(2048 / ell) + 2 * math.ceil(nv / ell) + math.ceil(nb / ell) + 2
+
+
+def factor_proven(n, k):
+    """per-query acceptance of a cheating prover, proven: one proximity test over RS[n, 2k-1] at its unique-decoding
+    radius e, consistency terms (e + 2k - 2)/n (Ligero Thm 4.7 / App. C form)"""
+    e = (n - 2 * k + 1) // 2
+    return max(1 - e / n, (e + 2 * k - 2) / n)
+
+
+def factor_conj(n, k):
+    return (2 * k - 1) / n                   # rate of RS[n, 2k-1], the ethSTARK-style analogue
+
+
+def t_of(f):
+    return math.ceil((LAMBDA - POW) / -math.log2(f))
+
+
+def n2_of(k, smooth):
+    return min(s for s in smooth if s >= 2 * k - 1) if 2 * k - 1 <= smooth[-1] else None
+
+
+def fft_cost(n):
+    return n * sum(r + 1 for r in factor(n))
+
+
+def model1(rel, n, k, t, smooth):
+    ell = k - t - 1                          # ZK: t distinct openings < k - l (Ligero Lemma 4.15)
+    if ell < 16:
+        return None
+    m = rows1(rel, ell)
+    dist = n * (1 - (1 - 1 / n) ** t)
+    npad = 1 << (n - 1).bit_length()
+    polys = (2 * (2 * k - 1) + (2 * k - 1 - ell)) * EXT * EB
+    cols = dist * ((m + BLIND_ROWS) * EB + SALT)
+    merkle = dist * max(0.0, math.log2(npad) - math.log2(dist)) * DIG
+    size = 32 + 8 + polys + cols + merkle
+    ver = own_rows(rel, ell) * ell * dist * EXT + 3 * (2 * k) * dist * EXT
+    n2 = n2_of(k, smooth)
+    if n2 is None:
+        return None
+    prover = (m + BLIND_ROWS) * (fft_cost(k) + fft_cost(n)) + (m + 40) * fft_cost(n2)
+    return dict(ell=ell, m=m, dist=round(dist), size=round(size), polys=polys, cols=round(cols),
+                merkle=round(merkle), ver=round(ver), prover=round(prover), n2=n2)
+
+
+def search1(rel, reg, smooth):
+    out = []
+    for n in smooth:
+        if n > NMAX:
+            continue
+        for k in smooth:
+            if 4 * k > n or k < 64:
+                continue
+            f = factor_proven(n, k) if reg == 'proven' else factor_conj(n, k)
+            t = t_of(f)
+            r = model1(rel, n, k, t, smooth)
+            if r and r['prover'] <= PMAX:
+                out.append((r['size'], n, k, t, f, r))
+    out.sort(key=lambda x: x[0])
+    return out
+
+
+def main1():
+    f = checks()
+    print('## Field\n')
+    print(f'- q = 2^42 - 215 = {Q}; q - 1 = {" * ".join(map(str, f))} (2-adicity 3)')
+    print(f'- F_q^4 = F_q[X]/(X^4 - {W}) ({W} is a non-square, q = 1 mod 4); |F_q^4| = 2^{4 * math.log2(Q):.2f}')
+    print(f'- radices 2/19/43 sizes: {SMOOTH3}')
+    print(f'- with radix 431 (<= {NMAX:,}): {[s for s in SMOOTH4 if s <= NMAX]}')
+    print(f'- prover budget: modelled FFT + product work <= {PMAX:.0e} base products (rejects n/k in the thousands)\n')
+    print('Layout (cs.rs): rows m = sum over big groups ceil(2048/l) (2 + bits) + 2 ceil(n_small/l) + ceil(bits_small/l);'
+          ' 12 blinding base rows; proof = root + w, q (2k-1 coeffs) + h (2k-1-l) in F_q^4 + nonce + distinct columns'
+          ' (salt + (m + 12) x 6 B) + pruned Keccak multiproof. t from 112 query bits + 16 grinding bits.\n')
+    print('| relation | regime | radices | n | k | n/k | factor | t | l | m | N2 | dist cols | test polys B | columns B '
+          '| Merkle B | proof B | verifier mults | prover mults |')
+    print('|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|---|')
+    for rel in ['R_REG', 'R_TX']:
+        for reg in ['proven', 'conj']:
+            for name, sm in [('2/19/43', SMOOTH3), ('2/19/43/431', SMOOTH4)]:
+                for size, n, k, t, fac, r in search1(rel, reg, sm)[:3]:
+                    print(f"| {rel} | {reg} | {name} | {n} | {k} | {n / k:.1f} | {fac:.4f} | {t} | {r['ell']} | "
+                          f"{r['m']} | {r['n2']} | {r['dist']} | {r['polys']:,} | {r['cols']:,} | {r['merkle']:,} | "
+                          f"{size:,} | {r['ver']:,} | {r['prover']:,} |")
+
+
+# ---- p0: the first model (kept so that runs/p0-params.txt can be regenerated) ----
+SMOOTH = SMOOTH3
+BIG0 = {'R_REG': [(2048, 7, True), (2048, 9, True)],
+        'R_TX': [(2048, 7, True), (2048, 9, True), (2048, 7, True), (2048, 9, True)]}
+SMALL0 = {'R_REG': 2 + 11 + 15,
+          'R_TX': (48 * (2 + 8)) + 32 * 5 + 16 * 15 + 16 * 12 + 16 * 26 + 7 + 2 * 11 + 2 * 15 + 3 * 13}
+BLINDS = 3
 
 
 def per_column(rho, regime):
-    """log2 of 1/(per-column acceptance probability of a cheating prover)."""
-    if regime == 'proven':       # one proximity test over RS[n, 2k-1] (rate 2 rho, unique decoding, BCIKS20 Thm 1.2 =
-        r2 = 2 * rho             # Ligero Lemma 4.6), consistency terms as Ligero App. C: max((1 + 2rho)/2, 2rho)
+    if regime == 'proven':
+        r2 = 2 * rho
         f = max((1 + r2) / 2, r2)
-    elif regime == 'theorem':    # Ligero Thm 4.7 form: (1 - e/n)^t + 2((e + 2k)/n)^t, e < d/2 of RS[n, 2k-1]
+    elif regime == 'theorem':
         r2 = 2 * rho
         f = min(max(1 - d, d + r2) for d in [i / 1000 * (1 - r2) / 2 for i in range(1, 1000)])
-    else:                        # conjectured: proximity up to capacity of RS[n, 2k-1], consistency 2k/n
+    else:
         f = 2 * rho
     return -math.log2(f)
 
@@ -63,28 +174,28 @@ def t_for(rho, regime):
 
 
 def rows(rel, ell):
-    m = sum(math.ceil(v / ell) * (1 + b + (1 if nm else 0)) for v, b, nm in BIG[rel])
-    return m + math.ceil(SMALL[rel] / ell)
+    m = sum(math.ceil(v / ell) * (1 + b + (1 if nm else 0)) for v, b, nm in BIG0[rel])
+    return m + math.ceil(SMALL0[rel] / ell)
 
 
 def model(rel, n, k, t):
-    ell = k - t - 1                       # k > l + t (Ligero Lemma 4.15)
+    ell = k - t - 1
     if ell < 64:
         return None
     m = rows(rel, ell)
-    tu = n * (1 - (1 - 1 / n) ** t)        # distinct opened columns
-    lin, quad, prox = 2 * k - 1, 2 * k - 1, 2 * k - 1 - ell  # quad sent as h = p_0 / Z_msg
+    tu = n * (1 - (1 - 1 / n) ** t)
+    lin, quad, prox = 2 * k - 1, 2 * k - 1, 2 * k - 1 - ell
     polys = (prox + lin + quad) * EXT * EB
     cols = tu * ((m + BLINDS) * EB + SALT)
     merkle = tu * max(0, math.log2(n) - math.log2(tu)) * DIG
     size = 32 + 8 + polys + cols + merkle
-    distinct = sum(math.ceil(v / ell) * 2 for v, _, _ in BIG[rel]) + math.ceil(SMALL[rel] / ell) + 2
-    ver = distinct * ell * tu * EXT + 3 * (m + BLINDS) * tu * EXT   # base x base products (u128, lazy reduction)
+    distinct = sum(math.ceil(v / ell) * 2 for v, _, _ in BIG0[rel]) + math.ceil(SMALL0[rel] / ell) + 2
+    ver = distinct * ell * tu * EXT + 3 * (m + BLINDS) * tu * EXT
     return dict(ell=ell, m=m, tu=round(tu), size=round(size), polys=polys, cols=round(cols), merkle=round(merkle),
                 ver_mults=round(ver))
 
 
-def main():
+def main0():
     f = checks()
     print('## Field\n')
     print(f'- q = 2^42 - 215 = {Q}; q - 1 = {" * ".join(map(str, f))} (2-adicity 3)')
@@ -118,4 +229,4 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    main0() if '--p0' in sys.argv else main1()

@@ -1,0 +1,495 @@
+//! Ligero prover and verifier over F_q with F_q^4 challenges (docs/research/pqzh-ligero.md §4): one Keccak-256 Merkle
+//! commitment to the m witness rows and 12 blinding rows (u_0, u_lin, u_quad in F_q^4, full degree < 2k - 1, all
+//! inside the one proximity test: owner decision 2026-10-14, the modified ZK construction), three test polynomials
+//! w, q, h, grinding, t column queries.
+//!
+//! Proof bytes: root (32) | w: 2k-1 F_q^4 coefficients | q: 2k-1 | h: 2k-1-l | nonce (be64) | per distinct opened
+//! column in increasing index order: salt (32) and m + 12 F_q values | pruned multiproof digests. F_q^4 = 4 F_q
+//! elements, F_q = 6 bytes big-endian, canonical. Every length follows from the parameters and the transcript.
+
+use sha3::digest::{ExtendableOutput, Update, XofReader};
+
+use crate::cs::{self, Comb, Layout};
+use crate::fft::{Domain, GEN, smooth};
+use crate::fq::{Acc4, EB, F4, Fq, batch_inv};
+use crate::merkle::{H, Tree, depth, keccak, root_from};
+use crate::transcript::Tr;
+use pqzh::rel::{OP_REGISTER, OP_TRANSFER};
+
+pub const LAMBDA: f64 = 128.0;
+pub const POW_BITS: u32 = 16;
+const FB: usize = 4 * EB; // bytes per F_q^4 element
+const BLIND: usize = 12;
+
+/// Fixed per proofSystemId; never read from the proof.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct Params {
+    pub n: usize,
+    pub k: usize,
+    pub ell: usize,
+    pub t: usize,
+    pub pow_bits: u32,
+    pub proven: bool,
+}
+
+/// Per-query acceptance of a cheating prover. Proven: one proximity test over RS[n, 2k-1] at its unique-decoding
+/// radius e and consistency terms (e + 2k - 2)/n (Ligero Thm 4.7 / App. C form). Conjectured: (2k - 1)/n, the rate
+/// of RS[n, 2k-1] (ethSTARK-style), reported only for comparison with the STARK's conjectured numbers.
+pub fn factor(n: usize, k: usize, proven: bool) -> f64 {
+    if proven {
+        let e = (n - 2 * k + 1) / 2;
+        f64::max(1.0 - e as f64 / n as f64, (e + 2 * k - 2) as f64 / n as f64)
+    } else {
+        (2 * k - 1) as f64 / n as f64
+    }
+}
+
+impl Params {
+    /// t from 112 query bits + 16 grinding bits; l = k - t - 1 (zero knowledge: t openings < k - l)
+    pub fn new(n: usize, k: usize, proven: bool) -> Params {
+        let f = factor(n, k, proven);
+        let t = ((LAMBDA - POW_BITS as f64) / -f.log2()).ceil() as usize;
+        assert!(k > t + 1 && smooth(n) && smooth(k) && n >= 4 * k, "bad parameters n {n} k {k} t {t}");
+        Params { n, k, ell: k - t - 1, t, pow_bits: POW_BITS, proven }
+    }
+
+    /// the parameter model's choice (ligero_params.py, runs/p1-params.txt); r431 = false: radices 2/19/43 only
+    pub fn preset(op: u8, proven: bool, r431: bool) -> Params {
+        let (n, k) = match (proven, r431, op == OP_REGISTER) {
+            (true, true, _) => (32756, 817),
+            (true, false, _) => (6536, 817),
+            (false, true, true) => (18533, 172),
+            (false, true, false) => (18533, 344),
+            (false, false, true) => (6536, 172),
+            (false, false, false) => (6536, 344),
+        };
+        Params::new(n, k, proven)
+    }
+
+    pub fn n2(&self) -> usize {
+        (2 * self.k - 1..).find(|&x| smooth(x)).unwrap()
+    }
+
+    fn poly_bytes(&self) -> usize {
+        (2 * (2 * self.k - 1) + (2 * self.k - 1 - self.ell)) * FB
+    }
+
+    /// upper bound on the proof length (t distinct columns, full paths)
+    pub fn max_len(&self, op: u8) -> usize {
+        let m = Layout::new(op, self.ell).m;
+        32 + self.poly_bytes() + 8 + self.t * (32 + (m + BLIND) * EB) + self.t * depth(self.n) * 32
+    }
+}
+
+/// prover randomness: SHAKE256("SCAAS-PQZH-LIGERO-RNG" || rnd32 || u8(op) || stmt)
+struct Rng(sha3::Shake256Reader);
+impl Rng {
+    fn new(rnd: [u8; 32], op: u8, stmt: &[u8]) -> Rng {
+        let mut h = sha3::Shake256::default();
+        h.update(b"SCAAS-PQZH-LIGERO-RNG");
+        h.update(&rnd);
+        h.update(&[op]);
+        h.update(stmt);
+        Rng(h.finalize_xof())
+    }
+    fn fq(&mut self) -> Fq {
+        loop {
+            let mut w = [0u8; 8];
+            self.0.read(&mut w);
+            let v = u64::from_be_bytes(w) & ((1 << 42) - 1);
+            if v < crate::fq::Q {
+                return Fq(v);
+            }
+        }
+    }
+    fn vec(&mut self, n: usize) -> Vec<Fq> {
+        (0..n).map(|_| self.fq()).collect()
+    }
+    fn salt(&mut self) -> H {
+        let mut s = [0u8; 32];
+        self.0.read(&mut s);
+        s
+    }
+}
+
+type P4 = [Vec<Fq>; 4]; // F_q^4 polynomial, component-major
+
+fn get4(p: &P4, i: usize) -> F4 {
+    F4([p[0][i], p[1][i], p[2][i], p[3][i]])
+}
+
+/// Z_zeta = prod_{c < l} (X - omega_k^c), monic, l + 1 coefficients
+fn zeta_poly(hk: &Domain, ell: usize) -> Vec<Fq> {
+    let mut z = vec![Fq::ONE];
+    for c in 0..ell {
+        let r = hk.w[c];
+        let mut nz = vec![Fq::ZERO; z.len() + 1];
+        for (i, &v) in z.iter().enumerate() {
+            nz[i + 1] += v;
+            nz[i] -= v * r;
+        }
+        z = nz;
+    }
+    z
+}
+
+fn mul_poly(a: &[Fq], b: &[Fq]) -> Vec<Fq> {
+    let mut out = vec![Fq::ZERO; a.len() + b.len() - 1];
+    for (i, &x) in a.iter().enumerate() {
+        for (j, &y) in b.iter().enumerate() {
+            out[i + j] += x * y;
+        }
+    }
+    out
+}
+
+/// interpolant (degree < k, F_q^4) of v on the first l points of H_k and 0 on the other k - l
+fn interp(hk: &Domain, v: &[F4]) -> P4 {
+    std::array::from_fn(|s| {
+        let mut e: Vec<Fq> = v.iter().map(|x| x.0[s]).collect();
+        e.resize(hk.n, Fq::ZERO);
+        hk.ifft(&e)
+    })
+}
+
+fn draw(tr: &mut Tr, m: usize, ntri: usize) -> (Vec<F4>, Vec<F4>, F4, F4, F4, Vec<F4>) {
+    let a: Vec<F4> = (0..m).map(|_| tr.f4()).collect();
+    let b: Vec<F4> = (0..m).map(|_| tr.f4()).collect();
+    let (cl, cq, rho) = (tr.f4(), tr.f4(), tr.f4());
+    let r: Vec<F4> = (0..ntri).map(|_| tr.f4()).collect();
+    (a, b, cl, cq, rho, r)
+}
+
+pub fn prove(op: u8, stmt: &[u8], wit: &[u8], rnd: [u8; 32], p: &Params) -> Result<Vec<u8>, &'static str> {
+    prove_inner(op, stmt, wit, rnd, p, true)
+}
+
+/// Test hook: skips the honest prover's checks so that invalid witnesses reach the proof system.
+pub fn prove_unchecked(op: u8, stmt: &[u8], wit: &[u8], rnd: [u8; 32], p: &Params) -> Result<Vec<u8>, &'static str> {
+    prove_inner(op, stmt, wit, rnd, p, false)
+}
+
+fn prove_inner(op: u8, stmt: &[u8], wit: &[u8], rnd: [u8; 32], p: &Params, check: bool) -> Result<Vec<u8>, &'static str> {
+    let st = cs::parse(op, stmt).ok_or("statement")?;
+    let lay = Layout::new(op, p.ell);
+    let w = cs::witness(&st, wit, check)?;
+    let rows = cs::rows(&lay, &w);
+    let (n, k, ell, m) = (p.n, p.k, p.ell, lay.m);
+    let (hk, hn, h2) = (Domain::new(k), Domain::new(n), Domain::new(p.n2()));
+    let mut rng = Rng::new(rnd, op, stmt);
+
+    // witness rows: message on the first l points of H_k, uniform on the other k - l
+    let pc: Vec<Vec<Fq>> = rows
+        .iter()
+        .map(|r| {
+            let mut v = r.clone();
+            v.extend(rng.vec(k - ell));
+            hk.ifft(&v)
+        })
+        .collect();
+    // blinding rows: u_0 uniform; u_lin uniform with sum over H_k = k (c_0 + c_k) = 0; u_quad = Z_zeta h_0
+    let d2 = 2 * k - 1;
+    let z = zeta_poly(&hk, ell);
+    let u0: P4 = std::array::from_fn(|_| rng.vec(d2));
+    let ul: P4 = std::array::from_fn(|_| {
+        let mut v = rng.vec(d2);
+        v[0] = -v[k];
+        v
+    });
+    let h0: P4 = std::array::from_fn(|_| rng.vec(d2 - ell));
+    let uq: P4 = std::array::from_fn(|s| mul_poly(&z, &h0[s]));
+
+    // commit: rows evaluated on the coset 3 H_n; leaf j = keccak(salt_j || column j)
+    let enc: Vec<Vec<Fq>> =
+        pc.iter().chain(u0.iter()).chain(ul.iter()).chain(uq.iter()).map(|c| hn.coset_fft(c, GEN)).collect();
+    let salts: Vec<H> = (0..n).map(|_| rng.salt()).collect();
+    let col = |j: usize| {
+        let mut b = Vec::with_capacity((m + BLIND) * EB);
+        for r in &enc {
+            r[j].put(&mut b);
+        }
+        b
+    };
+    let tree = Tree::new((0..n).map(|j| keccak(&[&salts[j], &col(j)])).collect());
+    let root = tree.root();
+
+    let mut tr = Tr::new(op, stmt);
+    tr.absorb(&root);
+    let (ca, cb, cl, cq, rho, rq) = draw(&mut tr, m, lay.triples.len());
+
+    // proximity: w = sum_i (a_i + b_i X^(k-1)) p_i + c_lin u_lin + c_quad u_quad + u_0
+    let mut wp: Vec<F4> = (0..d2).map(|i| cl * get4(&ul, i) + cq * get4(&uq, i) + get4(&u0, i)).collect();
+    for i in 0..m {
+        for c in 0..k {
+            wp[c] += ca[i] * pc[i][c];
+            wp[c + k - 1] += cb[i] * pc[i][c];
+        }
+    }
+
+    // linear: q = sum_i R_i p_i + u_lin, products on H_N2 (N2 >= 2k - 1)
+    let comb = cs::comb(&lay, &st, rho);
+    let n2 = h2.n;
+    let pe: Vec<Vec<Fq>> = pc.iter().map(|c| h2.fft(c)).collect();
+    let mut qe = vec![Acc4::default(); n2];
+    let fft4 = |c: &P4| -> P4 { std::array::from_fn(|s| h2.fft(&c[s])) };
+    for i in 0..m {
+        if let Some(v) = &comb.own[i] {
+            let re = fft4(&interp(&hk, v));
+            for x in 0..n2 {
+                qe[x].add(&get4(&re, x), pe[i][x]);
+            }
+        }
+    }
+    let mut beta = vec![F4::ONE; ell];
+    for c in 1..ell {
+        beta[c] = beta[c - 1] * rho;
+    }
+    let mut qe: Vec<F4> = qe.iter().map(|a| a.get()).collect();
+    for (vec, sc) in [(beta, &comb.beta), (vec![F4::ONE; ell], &comb.ones)] {
+        let re = fft4(&interp(&hk, &vec));
+        let mut s = vec![Acc4::default(); n2];
+        for i in (0..m).filter(|&i| sc[i] != F4::ZERO) {
+            for x in 0..n2 {
+                s[x].add(&sc[i], pe[i][x]);
+            }
+        }
+        for x in 0..n2 {
+            qe[x] += get4(&re, x) * s[x].get();
+        }
+    }
+    let ifft4 = |e: &[F4]| -> P4 { std::array::from_fn(|s| h2.ifft(&e.iter().map(|v| v.0[s]).collect::<Vec<_>>())) };
+    let qc = ifft4(&qe);
+    let qp: Vec<F4> = (0..d2).map(|i| get4(&qc, i) + get4(&ul, i)).collect();
+    if check && (qp[0] + qp[k]) * Fq(k as u64) != comb.rhs {
+        return Err("linear constraints");
+    }
+
+    // quadratic: (sum_t r_t (p_x p_y - p_z) + u_quad) / Z_zeta = h' + h_0
+    let mut pq = vec![Acc4::default(); n2];
+    for (t, &(x, y, zr)) in lay.triples.iter().enumerate() {
+        for i in 0..n2 {
+            pq[i].add(&rq[t], pe[x][i] * pe[y][i] - pe[zr][i]);
+        }
+    }
+    let pq: Vec<F4> = pq.iter().map(|a| a.get()).collect();
+    let pc0 = ifft4(&pq);
+    let mut rem: Vec<F4> = (0..d2).map(|i| get4(&pc0, i)).collect();
+    let mut hp = vec![F4::ZERO; d2 - ell];
+    for i in (0..d2 - ell).rev() {
+        let c = rem[i + ell];
+        hp[i] = c + get4(&h0, i);
+        for (j, &zj) in z.iter().enumerate() {
+            rem[i + j] -= c * zj;
+        }
+    }
+    if check && rem.iter().any(|&v| v != F4::ZERO) {
+        return Err("quadratic constraints");
+    }
+
+    let mut out = root.to_vec();
+    for v in wp.iter().chain(&qp).chain(&hp) {
+        v.put(&mut out);
+    }
+    tr.absorb(&out[32..]);
+    let nonce = (0u64..).find(|&x| tr.pow_ok(x, p.pow_bits)).unwrap();
+    out.extend_from_slice(&nonce.to_be_bytes());
+    tr.absorb(&nonce.to_be_bytes());
+    let mut idx: Vec<usize> = (0..p.t).map(|_| tr.index(n)).collect();
+    idx.sort_unstable();
+    idx.dedup();
+    for &j in &idx {
+        out.extend_from_slice(&salts[j]);
+        out.extend_from_slice(&col(j));
+    }
+    for h in tree.multiproof(&idx) {
+        out.extend_from_slice(&h);
+    }
+    Ok(out)
+}
+
+struct Rd<'a>(&'a [u8]);
+impl<'a> Rd<'a> {
+    fn take(&mut self, n: usize) -> Option<&'a [u8]> {
+        if self.0.len() < n {
+            return None;
+        }
+        let (a, b) = self.0.split_at(n);
+        self.0 = b;
+        Some(a)
+    }
+    fn f4s(&mut self, n: usize) -> Option<Vec<F4>> {
+        (0..n).map(|_| F4::get(self.take(FB)?)).collect()
+    }
+}
+
+/// Panics caught by `verify` (diagnostics; wasm32 aborts on panic instead).
+pub static VERIFY_PANICS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+
+/// true = valid; anything else (malformed, wrong length, failed check, panic) = false
+pub fn verify(op: u8, stmt: &[u8], proof: &[u8], p: &Params) -> bool {
+    std::panic::catch_unwind(|| verify_inner(op, stmt, proof, p).is_some()).unwrap_or_else(|_| {
+        VERIFY_PANICS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+        false
+    })
+}
+
+/// evaluations at x of polynomials with F_q^4 coefficients, lazily accumulated against the powers of x
+fn eval4(c: &[F4], xp: &[Fq]) -> F4 {
+    let mut a = Acc4::default();
+    for (v, &x) in c.iter().zip(xp) {
+        a.add(v, x);
+    }
+    a.get()
+}
+
+fn verify_inner(op: u8, stmt: &[u8], proof: &[u8], p: &Params) -> Option<()> {
+    if op != OP_REGISTER && op != OP_TRANSFER || proof.len() > p.max_len(op) {
+        return None;
+    }
+    let st = cs::parse(op, stmt)?;
+    let lay = Layout::new(op, p.ell);
+    let (n, k, ell, m) = (p.n, p.k, p.ell, lay.m);
+    let d2 = 2 * k - 1;
+    let mut rd = Rd(proof);
+    let root: H = rd.take(32)?.try_into().ok()?;
+    let polys = &proof[32..32 + p.poly_bytes().min(proof.len() - 32)];
+    let wp = rd.f4s(d2)?;
+    let qp = rd.f4s(d2)?;
+    let hp = rd.f4s(d2 - ell)?;
+    let nonce = rd.take(8)?;
+
+    let mut tr = Tr::new(op, stmt);
+    tr.absorb(&root);
+    let (ca, cb, cl, cq, rho, rq) = draw(&mut tr, m, lay.triples.len());
+    tr.absorb(polys);
+    if !tr.pow_ok(u64::from_be_bytes(nonce.try_into().ok()?), p.pow_bits) {
+        return None;
+    }
+    tr.absorb(nonce);
+    let mut idx: Vec<usize> = (0..p.t).map(|_| tr.index(n)).collect();
+    idx.sort_unstable();
+    idx.dedup();
+
+    let w = m + BLIND;
+    let mut cols = Vec::with_capacity(idx.len());
+    let mut leaves = Vec::with_capacity(idx.len());
+    for &j in &idx {
+        let salt = rd.take(32)?;
+        let b = rd.take(w * EB)?;
+        let c: Vec<Fq> = b.chunks(EB).map(Fq::get).collect::<Option<_>>()?;
+        leaves.push((j, keccak(&[salt, b])));
+        cols.push(c);
+    }
+    if root_from(leaves, depth(n), || rd.take(32).map(|h| h.try_into().unwrap()))? != root || !rd.0.is_empty() {
+        return None;
+    }
+
+    // linear test: sum over H_k of q = k (q_0 + q_k) = r^T b
+    let comb: Comb = cs::comb(&lay, &st, rho);
+    if (qp[0] + qp[k]) * Fq(k as u64) != comb.rhs {
+        return None;
+    }
+    let (hk, hn) = (Domain::new(k), Domain::new(n));
+    let own: Vec<(usize, &Vec<F4>)> = comb.own.iter().enumerate().filter_map(|(i, v)| v.as_ref().map(|v| (i, v))).collect();
+    let mut beta = vec![F4::ONE; ell];
+    for c in 1..ell {
+        beta[c] = beta[c - 1] * rho;
+    }
+    let k_inv = Fq(k as u64).inv();
+    for (&j, u) in idx.iter().zip(&cols) {
+        let eta = GEN * hn.w[j];
+        let mut xp = Vec::with_capacity(d2);
+        let mut x = Fq::ONE;
+        for _ in 0..d2 {
+            xp.push(x);
+            x = x * eta;
+        }
+        let (we, qe, he) = (eval4(&wp, &xp), eval4(&qp, &xp), eval4(&hp, &xp));
+        let blind = |b: usize| F4([u[m + 4 * b], u[m + 4 * b + 1], u[m + 4 * b + 2], u[m + 4 * b + 3]]);
+        let (b0, bl, bq) = (blind(0), blind(1), blind(2));
+
+        // proximity
+        let (mut sa, mut sb) = (Acc4::default(), Acc4::default());
+        for i in 0..m {
+            sa.add(&ca[i], u[i]);
+            sb.add(&cb[i], u[i]);
+        }
+        if we != sa.get() + sb.get() * xp[k - 1] + cl * bl + cq * bq + b0 {
+            return None;
+        }
+
+        // Lagrange basis of H_k at eta: L_c = omega^c (eta^k - 1) / (k (eta - omega^c)); Z_zeta(eta) on the way
+        let dif: Vec<Fq> = (0..ell).map(|c| eta - hk.w[c]).collect();
+        let (inv, zeta) = batch_inv(&dif);
+        let s = (xp[k] - Fq::ONE) * k_inv;
+        let lc: Vec<Fq> = (0..ell).map(|c| hk.w[c] * inv[c] * s).collect();
+        let r_at = |v: &[F4]| {
+            let mut a = Acc4::default();
+            for (x, &l) in v.iter().zip(&lc) {
+                a.add(x, l);
+            }
+            a.get()
+        };
+        let mut acc = F4::ZERO;
+        for &(i, v) in &own {
+            acc += r_at(v) * u[i];
+        }
+        let (mut sbeta, mut sones) = (Acc4::default(), Acc4::default());
+        for i in 0..m {
+            sbeta.add(&comb.beta[i], u[i]);
+            sones.add(&comb.ones[i], u[i]);
+        }
+        let ones_at = lc.iter().fold(Fq::ZERO, |a, &l| a + l);
+        if qe != acc + r_at(&beta) * sbeta.get() + sones.get() * ones_at + bl {
+            return None;
+        }
+
+        // quadratic
+        let mut qa = Acc4::default();
+        for (t, &(x, y, z)) in lay.triples.iter().enumerate() {
+            qa.add(&rq[t], u[x] * u[y] - u[z]);
+        }
+        if he * zeta != qa.get() + bq {
+            return None;
+        }
+    }
+    Some(())
+}
+
+/// soundness bits per term: (name, bits); "total" combines them
+pub fn soundness(op: u8, stmt: &[u8], p: &Params) -> Vec<(&'static str, f64)> {
+    let lay = Layout::new(op, p.ell);
+    let nw = cs::parse(op, stmt).map(|st| cs::comb(&lay, &st, F4::ONE).nweights).unwrap_or(0);
+    let fbits = 4.0 * ((crate::fq::Q) as f64).log2();
+    let q = p.t as f64 * -factor(p.n, p.k, p.proven).log2() + p.pow_bits as f64;
+    let terms = vec![
+        ("query", q),
+        ("proximity_field", fbits - ((2 * lay.m + 3) as f64 * p.n as f64).log2()),
+        ("linear_field", fbits - (nw as f64).log2()),
+        ("quadratic_field", fbits),
+        ("keccak_collision", 128.0),
+    ];
+    let tot = -terms.iter().map(|(_, b)| (-b).exp2()).sum::<f64>().log2();
+    let mut out = terms;
+    out.push(("total", tot));
+    out
+}
+
+/// byte breakdown of a proof
+pub fn breakdown(op: u8, proof: &[u8], p: &Params) -> Vec<(&'static str, usize)> {
+    let m = Layout::new(op, p.ell).m;
+    let polys = p.poly_bytes();
+    let rest = proof.len().saturating_sub(32 + polys + 8);
+    let cw = 32 + (m + BLIND) * EB;
+    // columns are a multiple of cw, the multiproof of 32: d columns with d cw + 32 s = rest, d <= t
+    let d = (0..=p.t).rev().find(|&d| d * cw <= rest && (rest - d * cw) % 32 == 0 && (rest - d * cw) / 32 <= p.t * depth(p.n)).unwrap_or(0);
+    vec![
+        ("total", proof.len()),
+        ("root_nonce", 40),
+        ("test_polys", polys),
+        ("columns", d * cw),
+        ("distinct_columns", d),
+        ("rows_m", m),
+        ("merkle", rest - d * cw),
+    ]
+}

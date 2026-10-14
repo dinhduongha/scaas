@@ -1,0 +1,47 @@
+   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ligero/pqz-core/pqzh/ligero)
+    Finished `release` profile [optimized + debuginfo] target(s) in 2.62s
+     Running unittests src/lib.rs (target/release/deps/pqzh_ligero-6598880c35069306)
+
+running 5 tests
+test cs::tests::ring_recurrence_matches_naive ... ok
+test fft::tests::fft_matches_naive_all_radices ... 
+thread 'fft::tests::fft_matches_naive_all_radices' (758970) panicked at src/fft.rs:172:30:
+index out of bounds: the len is 1 but the index is 1
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+test fq::tests::field_facts_and_ext ... ok
+test fq::tests::mul_and_red_match_naive ... ok
+test merkle::tests::multiproof_roundtrip ... ok
+
+failures:
+
+failures:
+    fft::tests::fft_matches_naive_all_radices
+
+test result: FAILED. 4 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `--lib`
+Command exited with non-zero status 101
+	Command being timed: "cargo test --release --offline -- --nocapture --test-threads 1"
+	User time (seconds): 7.80
+	System time (seconds): 1.06
+	Percent of CPU this job got: 332%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:02.66
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 226956
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 3536
+	Minor (reclaiming a frame) page faults: 211314
+	Voluntary context switches: 5853
+	Involuntary context switches: 2871
+	Swaps: 0
+	File system inputs: 416968
+	File system outputs: 376056
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 101

@@ -1,0 +1,17 @@
+[package]
+name = "pqzh-ligero"
+version = "0.1.0"
+edition = "2021"
+license-file = "../../../LICENSE"
+publish = false
+
+# PQZH over Ligero (docs/research/pqzh-ligero.md). pqzh for the statement / witness bytes (client, ring, rel).
+[dependencies]
+pqzh = { path = ".." }
+sha3 = "=0.10.8"
+
+[profile.release]
+debug = 1
+panic = "unwind"
+
+[workspace]
