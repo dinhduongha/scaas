@@ -580,7 +580,8 @@ python3 pqz-core/pqzh/ligero/evm_model.py > pqz-core/pqzh/ligero/runs/e1-evm-mod
 Branch `p6e-b1` (from main `9e7cd20`), plan `docs/superpowers/plans/2026-10-14-p6e-relations.md` Task 8 (G6) without
 `R_TX0`, the Ligero half of D6, and the part of Task 6 that does not need `pqz-stmt`. Results, not decisions (the
 decision lines are in `docs/decisions.md`, CTR-PQZ-09 and CTR-PQZ-19). Runs `runs/l7-*` (`runs/rel5.sh l7`, one capped
-session) and one probe, `runs/l7-probe-wasm-tx-repeat.jsonl`.
+session) and one probe, `runs/l7-probe-wasm-tx-repeat.jsonl`; after the controller's review, `runs/l8-*` and `runs/l9-*`
+(`runs/gateb.sh`, `l8` before its native-FNV step was added: the added tests, the gate-B wasm32 measurement before and after the wasm32 multiply, §12.3).
 
 ### 12.1 What changed
 
@@ -611,8 +612,21 @@ session) and one probe, `runs/l7-probe-wasm-tx-repeat.jsonl`.
   replace `stmt.rs` and the codec half of `ring.rs` (`rd_poly`, `rd_polyvec`, `wr_poly`, the layout constants, both
   ids) by `pqz-stmt`; keep `a_matrix` / `dot_int` / `modq` (or take them from `pqz-stmt` if it carries A); move
   `client.rs` to test support (`tests/support.rs`) — the bench binaries, `ligero_export`, the wasm module and the
-  `dump_setup` example use it too, so it must stay reachable from them (a `bench` feature is the obvious place, with
-  the conjectured preset and `soundness()`, D11).
+  `dump_setup` example use it too, so it must stay reachable from them (the `bench` feature below is the obvious place,
+  with `soundness()`, D11).
+- **Feature `bench` (review item 5).** `Params::proven()` is THE preset and the only one without the feature;
+  `Params::preset` (conjectured, proven without radix 431) and `Params::johnson_preset` are behind `bench`, as are the
+  two bench binaries and `tests/attacks.rs`. `bench` is a default feature; a production user (`pqz-ffi`, Task 7)
+  depends with `default-features = false`. The library and its unit tests build and pass that way
+  (`runs/l8-nobench.txt`, `l9-nobench.txt`). `Params::new(n, k, proven)` stays public.
+- **wasm32 multiply (review item 3, after `l8`).** wasm32 has no 64 × 64 → 128-bit multiply, so every u128 product
+  was a `__multi3` call. On wasm32 the F_q product, the F_{q^4} product and the lazy sums (`Acc4`) now use 21-bit
+  pieces in u64 (`fq.rs` `limb`: a b = h 2^42 + m 2^21 + l, reduced with 2^42 = 215; a lazy sum holds at most 2^20
+  terms, the largest in use is 1,633); native keeps the u128 path. Same canonical values, so the proofs are
+  byte-identical: unit test `limb_matches_u128` (20,000 products and F_{q^4} products, sums of 1 to 2^20 terms, edge
+  values) and the FNV of the seed-1 proofs of all five relations, native (`runs/l9-native-fnv.jsonl`) = wasm32
+  (`runs/l9-proven-wasm.jsonl`) = the wasm32 proofs before the change (`runs/l8-proven-wasm.jsonl`): `b68d0484`,
+  `47ead576`, `4801b383`, `a1d5885d`, `9da9d5d5`. The FFT (prover only) still uses u128.
 - **Exact maximum (G7, measured here, the verifier's bound is Task 9).** `Params::max_len_exact(op)`: t distinct
   columns and the largest pruned multiproof. With a_l distinct nodes on tree level l (a_0 = t, a_d = 1) level l sends
   2 a_{l+1} − a_l siblings, so the total is Σ_{0<l<d} a_l + 2 − t, largest at a_l = min(t, ⌈n / 2^l⌉): 975 digests at
@@ -621,9 +635,9 @@ session) and one probe, `runs/l7-probe-wasm-tx-repeat.jsonl`.
 - **Cross-check.** `pqz-core/pqzh/xcheck/ligero.sh`: the Ligero crate's statements and witnesses of all five relations
   equal pqz-core's `pqz_bench.c` setup byte for byte (`runs/l7-xcheck.txt`, 10 of 10 equal).
 
-### 12.2 Tests [measured, `runs/l7-tests.txt`]
+### 12.2 Tests [measured, `runs/l7-tests.txt`; with the review's additions `runs/l8-tests.txt`, `l9-tests.txt`]
 
-8 unit tests and 11 integration tests (`tests/attacks.rs`), all pass. Integration: honest proofs of all five relations
+9 unit tests and 14 integration tests (`tests/attacks.rs`), all pass (`l9`; `l7` had 8 and 11). Integration: honest proofs of all five relations
 verify at the proven and conjectured presets with and without radix 431 and at the Johnson preset, each proof
 ≤ `max_len_exact`; equal inputs give equal proofs, other seeds other proofs; every proof is rejected under each of the
 other four ops (`R_DS` / `R_DR` share the statement length) and under ops 0, 6, 255; **960 mutated inputs per
@@ -638,9 +652,19 @@ prover and, proved without its checks, rejected by the verifier:
 | digit out of range, same value | — | yes (d) | yes (d′) | — | — |
 | e2 norm exceeded (one coefficient 65) | — | yes | yes (e2_f) | yes | — |
 | overspend (new-balance digits all 15) | — | yes | yes | — | — |
-| public amount + 1 with the honest witness | — | — | yes | yes | yes |
+| public amount ± 1 with the honest witness (`R_DR`: − 1 puts +Δ into e′) | — | — | yes (also fee ± 1) | yes | yes |
+| r ℓ2 bound exceeded (‖r‖² = 1,300 > 36², coefficients in [−1, 1]) | — | yes | yes | yes | — |
+| r coefficient outside its 7 bits (r_5 = 100) | — | yes | yes | yes | — |
+| e1 ℓ2 bound exceeded (all ±4: ‖e1‖² = 32,768 > 164²) | — | yes | yes | yes | — |
+| e1 coefficient outside its 9 bits (e1_5 = 300) | — | yes | yes | yes | — |
 | fee / amount word ≥ 2^64 (also: the honest proof rejected) | — | yes | yes (both words) | yes | yes |
 | wrong ring row (one CBD(20) coefficient + 1) | — | yes | yes | yes (e1) | yes (e) |
+
+(r and e1 are the transfer's for `R_TX` / `R_DS` and the burn's for `R_BURN`, set by `Tweak { r, e1 }` and
+re-encrypted, so only the norm and range proofs can catch them.) `dr_noise_range_edges`: v_0 crafted so that e′_0 =
+2^24 − 1 and −2^24 prove and verify, while e′_0 = 2^24 and −2^24 − 1 are refused and, proved without the checks,
+rejected. `hedged_proofs`: for every relation, two `prove_unchecked` on one statement with the same `rnd32` and
+witnesses differing in one byte give different commitments (proof bytes 0..32); equal inputs give equal proofs.
 
 The benches add 2 × 4,800 mutations (§12.3, 0 accepted, 0 panics) and the wasm32 runs 2 × 240.
 
@@ -685,13 +709,30 @@ verifies, 12 × 4 mutations per relation, all five relations in one module insta
 | `R_DS` | conjectured (reference) | 1,614 ms | 6.05 / 10.1 ms | 0.80 ms | 0 |
 | `R_DR` | conjectured (reference) | 1,680 ms | 6.06 / 8.15 ms | 0.71 ms | 0 |
 
-Linear memory 46.6 MiB proven / 51.9 MiB conjectured (the high-water mark of the module, all five relations). **The
-proven `R_TX` p99 of this run, 66.5 ms, is above the 60 ms limit**: two of 100 verifies took 66–70 ms against a p50
+Linear memory 46.6 MiB proven / 51.9 MiB conjectured (the high-water mark of the module, all five relations). The
+proven `R_TX` p99 of this run, 66.5 ms, was above the 60 ms limit: two of 100 verifies took 66–70 ms against a p50
 of 48.9 ms. A repeat in a fresh process (`runs/l7-probe-wasm-tx-repeat.jsonl` [probe]: `R_TX`, `R_BURN`, `R_TX`,
 200 honest verifies each) gave `R_TX` p99 54.4 / 53.1 ms (max 56.7 / 57.3) and `R_BURN` p99 56.0 ms with one 78.0 ms
 outlier; §6.2 had 55.9 ms (50 verifies). The p50 is unchanged since §6.2 (48.7 → 48.9 ms) and the verifier code path
 is the same, so the tail is this noisy host [inference]; but proven `R_TX` / `R_BURN` sit within ≈ 10 % of the limit at
 p99 in wasm32, and a single run can cross it. Native p99 is ≤ 10.8 ms for every relation.
+
+**Gate-B measurement (controller decision of the review: wasm32 verify p99 over ≥ 1,000 honest verifies per relation,
+under `scripts/capped`, proven preset).** `runs/gateb.sh`: 2 proofs, 1,000 honest verifies, 12 × 4 mutations per
+relation, all made in wasm32, `fails` 0 in both runs.
+
+| wasm32, proven | `l8`: u128 products (as `l7`) — prove mean | verify p50 / p99 / max | `l9`: 21-bit pieces — prove mean | verify p50 / p99 / max | p99 adversarial (`l9`) |
+|---|---|---|---|---|---|
+| `R_REG` | 846 ms | 31.2 / 42.9 / 51.7 ms | 746 ms | 11.4 / 16.9 / 18.1 ms | 1.03 ms |
+| `R_TX` | 1,469 ms | 48.6 / **59.7** / 73.5 ms | 1,331 ms | 17.1 / **18.7** / 22.7 ms | 1.57 ms |
+| `R_BURN` | 1,460 ms | 45.8 / 55.8 / 69.0 ms | 1,323 ms | 17.0 / 19.9 / 23.7 ms | 1.51 ms |
+| `R_DS` | 834 ms | 32.9 / 48.7 / 74.0 ms | 738 ms | 11.9 / 17.0 / 18.8 ms | 1.08 ms |
+| `R_DR` | 829 ms | 31.3 / 35.1 / 44.3 ms | 735 ms | 11.4 / 13.3 / 16.3 ms | 1.09 ms |
+
+`l8` put proven `R_TX` at 59.7 ms, within 5 % of the limit, which by the same decision triggers the wasm32 multiply
+(§12.1). With it (`l9`) every relation verifies at p99 ≤ 19.9 ms in wasm32, 2.7–2.8× faster at p50 (`R_TX`
+p99 3.2×) and a third of the limit; module 280,804 → 257,055 B; linear memory unchanged (46.6 MiB). Native code and
+timings are unchanged (`runs/l9-native-fnv.jsonl`: verify 7.2–10.0 ms, one sample each).
 
 **Exact maximum vs the 256 KB proposal.** At THE preset the largest acceptable proofs are 235,470 B (`R_TX`), 234,744 B
 (`R_BURN`), 190,458 B (`R_REG`, `R_DS`, `R_DR`): all under 262,144 B. The verifier's current bound (t full paths) is
@@ -707,18 +748,16 @@ verifier still covers `R_REG` / `R_TX` only.
 ### 12.4 Left for later
 
 - Task 8: `R_TX0` (auditor off) once PQZL Task 2 fixes its statement (66,560 B) and witness (12,384 B); xcheck of the
-  sixth form; a byte-for-byte native-vs-wasm32 proof check of the new relations (the seed-1 proof lengths of
-  `runs/l7-tests.txt` and the wasm32 runs agree for all five relations; FNV not compared in this round).
-- Task 6: the switch to `pqz-stmt` (§12.1), the `bench` feature (conjectured preset, `soundness`, `breakdown`), then
+  sixth form.
+- Task 6: the switch to `pqz-stmt` (§12.1), `soundness` / `breakdown` (floats) behind `bench`, then
   `runs/measure.sh` byte-identical to these hedged proofs.
 - Task 9: the D3 id in the statements, `max_len_exact` as the verifier's bound with the "reject `MAX + 1` before
   parsing" test, the prover retry if a proof would exceed it.
-- Open: the wasm32 p99 margin of proven `R_TX` / `R_BURN` (above); gate B needs a decision on how p99 is measured
-  (sample size, quiet host) or a faster wasm verifier.
 
 ### 12.5 Rerun
 
 ```sh
 scripts/capped pqz-core/pqzh/ligero/runs/rel5.sh l7   # tests, native both presets, wasm32, xcheck, fixtures, forge
 scripts/capped pqz-core/pqzh/xcheck/ligero.sh         # statement / witness bytes vs pqz_bench.c, all five relations
+scripts/capped pqz-core/pqzh/ligero/runs/gateb.sh l9  # tests, --no-default-features, native FNV, wasm32 1,000 verifies
 ```
