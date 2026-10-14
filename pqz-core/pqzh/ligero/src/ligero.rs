@@ -14,7 +14,9 @@ use crate::fft::{Domain, GEN, smooth};
 use crate::fq::{Acc4, EB, F4, Fq, batch_inv};
 use crate::merkle::{H, Tree, depth, keccak, root_from};
 use crate::transcript::Tr;
-use crate::stmt::{OP_DISCLOSE_RECEIVER, OP_DISCLOSE_SENDER, OP_REGISTER, OPS};
+use crate::stmt::OPS;
+#[cfg(feature = "bench")]
+use crate::stmt::{OP_DISCLOSE_RECEIVER, OP_DISCLOSE_SENDER, OP_REGISTER};
 
 pub const LAMBDA: f64 = 128.0;
 pub const POW_BITS: u32 = 16;
@@ -78,14 +80,23 @@ impl Params {
         Params { n, k, ell: k - t - 1, t, pow_bits: POW_BITS, proven: true, johnson: true }
     }
 
-    /// the model's smallest Johnson preset with the field term >= 128 bits (charged once): runs/p1-params.txt
+    /// THE preset (owner 2026-10-14 (a)): proven, radix 431, n = 32,756, k = 817, t = 121, l = 695, every op
+    pub fn proven() -> Params {
+        Params::new(32756, 817, true)
+    }
+
+    /// the model's smallest Johnson preset with the field term >= 128 bits (charged once): runs/p1-params.txt.
+    /// Reference only (owner 2026-10-14 (b)): feature `bench`.
+    #[cfg(feature = "bench")]
     pub fn johnson_preset() -> Params {
         Params::johnson(6536, 862)
     }
 
     /// the parameter model's choice (ligero_params.py, runs/p1-params.txt); r431 = false: radices 2/19/43 only.
-    /// Proven: one preset for every op (owner 2026-10-14 (a)). Conjectured (reference only): R_REG's for the
-    /// disclosures (about R_REG's size), R_TX's for R_BURN; the model was not rerun for them.
+    /// Proven with radix 431 = `proven()`. The other three (proven 2/19/43, conjectured with and without 431) are
+    /// reference only, so the whole function is behind feature `bench` (production code takes `proven()`).
+    /// Conjectured: R_REG's for the disclosures (about R_REG's size), R_TX's for R_BURN; the model was not rerun.
+    #[cfg(feature = "bench")]
     pub fn preset(op: u8, proven: bool, r431: bool) -> Params {
         let small = matches!(op, OP_REGISTER | OP_DISCLOSE_SENDER | OP_DISCLOSE_RECEIVER);
         let (n, k) = match (proven, r431, small) {
@@ -569,7 +580,7 @@ mod tests {
     /// max_len_exact: the multiproof term is reached (evenly spread columns) and never exceeded (random sets)
     #[test]
     fn max_len_exact_multiproof_tight() {
-        let p = Params::preset(OP_REGISTER, true, true);
+        let p = Params::proven();
         let (n, t) = (p.n, p.t);
         let tree = Tree::new((0..n as u32).map(|i| keccak(&[&i.to_be_bytes()])).collect());
         let worst = (1..depth(n)).map(|l| t.min(n.div_ceil(1 << l))).sum::<usize>() + 2 - t;

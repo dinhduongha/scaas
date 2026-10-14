@@ -168,6 +168,9 @@ pub struct Tweak {
     pub s_f: Option<Vec<i64>>,
     /// secret of key T (R_DR; the transfer and the disclosures use the recomputed pk_t)
     pub s_t: Option<Vec<i64>>,
+    /// encryption randomness r and e1 of the transfer (R_TX, R_DS) and of the burn (R_BURN); ciphertexts re-encrypted
+    pub r: Option<Vec<i64>>,
+    pub e1: Option<Vec<i64>>,
     /// R_TX amount digits (v_t, v_a)
     pub d: Option<[u8; 16]>,
     /// R_TX e2_t (also R_DS's e2)
@@ -219,6 +222,8 @@ pub fn setup_with(tw: &Tweak) -> Setup {
     let (ut, vt) = encrypt(&[&kf.pk], &[digits(bal)], &polys(&r0), &polys(&e10), &[e20]);
     let r = rng.short(2048, 1, 36);
     let e1 = rng.short(2048, 20, 164);
+    let r = tw.r.clone().unwrap_or(r);
+    let e1 = tw.e1.clone().unwrap_or(e1);
     let mut e2: Vec<Vec<i64>> = (0..3).map(|_| rng.short(16, 20, 64)).collect();
     let mut m = [digits(v), digits(bp), digits(v)];
     if let Some(e) = &tw.e2_t {
@@ -278,6 +283,8 @@ pub fn setup_with(tw: &Tweak) -> Setup {
     // R_BURN: fresh (r, e1, e2_f) for the new balance
     let rb = rng.short(2048, 1, 36);
     let e1b = rng.short(2048, 20, 164);
+    let rb = tw.r.clone().unwrap_or(rb);
+    let e1b = tw.e1.clone().unwrap_or(e1b);
     let mut e2b = rng.short(16, 20, 64);
     if let Some(e) = &tw.burn_e2 {
         e2b = e.clone();

@@ -1,11 +1,14 @@
 //! Honest proofs verify; mutated proofs / statements and invalid witnesses do not (run with --release).
+//! Needs feature `bench` (default) for the reference presets.
+#![cfg(feature = "bench")]
 use pqzh_ligero::client::{KINDS, R, Setup, Tweak, digits, mutate, rel_name, setup, setup_with};
 use pqzh_ligero::ligero::VERIFY_PANICS;
-use pqzh_ligero::stmt::{DISC_AMOUNT, HDR_AMOUNT, HDR_FEE};
+use pqzh_ligero::ring::{DELTA, Poly, Q, dot_int, modq, rd_polyvec};
+use pqzh_ligero::stmt::{DISC_AMOUNT, DISC_PK, HDR_AMOUNT, HDR_FEE, POLYVEC};
 use pqzh_ligero::{OP_BURN, OP_DISCLOSE_RECEIVER, OP_DISCLOSE_SENDER, OP_REGISTER, OP_TRANSFER, OPS, Params, prove, prove_unchecked, verify};
 
-fn p(op: u8) -> Params {
-    Params::preset(op, true, true)
+fn p(_op: u8) -> Params {
+    Params::proven()
 }
 
 /// a cheating prover gets either no proof or one that does not verify
@@ -140,10 +143,74 @@ fn norm_exceeded_small_coefficients() {
 #[test]
 fn coefficient_out_of_range() {
     let s = setup_with(&Tweak { s_f: Some(one_large()), ..Default::default() });
-    assert!(rejected(OP_REGISTER, &s.reg_stmt, &s.reg_wit));
-    assert!(rejected(OP_BURN, &s.burn_stmt, &s.burn_wit));
+    assert!(refused(OP_REGISTER, &s));
+    assert!(refused(OP_BURN, &s));
     let s = setup_with(&Tweak { s_t: Some(one_large()), ..Default::default() });
-    assert!(rejected(OP_DISCLOSE_RECEIVER, &s.dr_stmt, &s.dr_wit));
+    assert!(refused(OP_DISCLOSE_RECEIVER, &s));
+}
+
+/// the encryption randomness r (CBD(1), 7 bits, ||r|| <= 36) and e1 (CBD(20), 9 bits, ||e1|| <= 164) of R_TX, R_DS
+/// (the transfer's) and R_BURN (the burn's): l2 bound exceeded with in-range coefficients, and one coefficient
+/// outside the bit range; ciphertexts re-encrypted, so only the norm / range proofs can catch them
+#[test]
+fn randomness_norm_and_range() {
+    let mut e1_long = vec![0i64; 2048];
+    for (k, x) in e1_long.iter_mut().enumerate() {
+        *x = if k % 2 == 0 { 4 } else { -4 }; // ||e1||^2 = 32,768 > 164^2 = 26,896
+    }
+    let mut e1_large = vec![0i64; 2048];
+    e1_large[5] = 300; // outside the 9 bits of e1 + 256
+    for (name, tw) in [
+        ("r l2", Tweak { r: Some(small_but_long()), ..Default::default() }),
+        ("r range", Tweak { r: Some(one_large()), ..Default::default() }),
+        ("e1 l2", Tweak { e1: Some(e1_long), ..Default::default() }),
+        ("e1 range", Tweak { e1: Some(e1_large), ..Default::default() }),
+    ] {
+        let s = setup_with(&tw);
+        for op in [OP_TRANSFER, OP_BURN, OP_DISCLOSE_SENDER] {
+            assert!(refused(op, &s), "{} {name}", rel_name(op));
+        }
+    }
+}
+
+/// R_DR's e' range [-2^24, 2^24): v_0 crafted so that e'_0 sits on each side of each edge
+#[test]
+fn dr_noise_range_edges() {
+    let s = setup();
+    let (st, w) = s.rel(OP_DISCLOSE_RECEIVER);
+    let u = rd_polyvec(&st[DISC_PK + POLYVEC..]).unwrap();
+    let sv: Vec<Poly> = w[..2048].chunks(64).map(|c| std::array::from_fn(|i| c[i] as i8 as i64)).collect();
+    let y = dot_int(&u.iter().collect::<Vec<_>>(), &sv.iter().collect::<Vec<_>>());
+    let d0 = (123_456u64 & 15) as i64;
+    for (e, ok) in [((1 << 24) - 1, true), (1 << 24, false), (-(1 << 24), true), (-(1 << 24) - 1, false)] {
+        let mut st = st.clone();
+        let v0 = modq(y[0] + DELTA * d0 + e).rem_euclid(Q as i64) as u64;
+        let o = DISC_PK + 2 * POLYVEC;
+        st[o..o + 8].copy_from_slice(&v0.to_be_bytes());
+        if ok {
+            let pf = prove(OP_DISCLOSE_RECEIVER, &st, w, [1; 32], &p(OP_DISCLOSE_RECEIVER)).unwrap();
+            assert!(verify(OP_DISCLOSE_RECEIVER, &st, &pf, &p(OP_DISCLOSE_RECEIVER)), "e' = {e}");
+        } else {
+            assert!(prove(OP_DISCLOSE_RECEIVER, &st, w, [1; 32], &p(OP_DISCLOSE_RECEIVER)).is_err(), "e' = {e}");
+            assert!(rejected(OP_DISCLOSE_RECEIVER, &st, w), "e' = {e}");
+        }
+    }
+}
+
+/// D6 at the proof level: one statement, witnesses differing in one byte, same rnd32 -> the commitments (bytes 0..32)
+/// differ; equal inputs -> equal proofs
+#[test]
+fn hedged_proofs() {
+    let s = setup();
+    for op in OPS {
+        let (st, w) = s.rel(op);
+        let mut w2 = w.clone();
+        w2[0] ^= 1;
+        let a = prove_unchecked(op, st, w, [5; 32], &p(op)).unwrap();
+        let b = prove_unchecked(op, st, &w2, [5; 32], &p(op)).unwrap();
+        assert_ne!(a[..32], b[..32], "{}", rel_name(op));
+        assert_eq!(a, prove_unchecked(op, st, w, [5; 32], &p(op)).unwrap(), "{}", rel_name(op));
+    }
 }
 
 #[test]
@@ -179,14 +246,18 @@ fn overspend() {
 
 #[test]
 fn wrong_public_amount() {
-    // the statement claims amount + 1 with the honest witness
+    // the statement claims amount (or R_BURN's fee) +- 1 with the honest witness; for R_DR, amount - 1 puts +Delta
+    // into e'
     let s = setup();
-    for (op, off) in [(OP_BURN, HDR_AMOUNT), (OP_DISCLOSE_SENDER, DISC_AMOUNT), (OP_DISCLOSE_RECEIVER, DISC_AMOUNT)] {
-        let (st, w) = s.rel(op);
-        let mut st = st.clone();
-        st[off + 31] ^= 1; // 123,456 = 0x1e240: + 1
-        assert!(prove(op, &st, w, [1; 32], &p(op)).is_err());
-        assert!(rejected(op, &st, w), "{}", rel_name(op));
+    for (op, off) in [(OP_BURN, HDR_AMOUNT), (OP_BURN, HDR_FEE), (OP_DISCLOSE_SENDER, DISC_AMOUNT), (OP_DISCLOSE_RECEIVER, DISC_AMOUNT)] {
+        for delta in [1i64, -1] {
+            let (st, w) = s.rel(op);
+            let mut st = st.clone();
+            let x = u64::from_be_bytes(st[off + 24..off + 32].try_into().unwrap()).wrapping_add_signed(delta);
+            st[off + 24..off + 32].copy_from_slice(&x.to_be_bytes());
+            assert!(prove(op, &st, w, [1; 32], &p(op)).is_err(), "{} word {off} {delta:+}", rel_name(op));
+            assert!(rejected(op, &st, w), "{} word {off} {delta:+}", rel_name(op));
+        }
     }
 }
 
