@@ -700,6 +700,7 @@ dependencies = [
  "p3-matrix",
  "p3-merkle-tree",
  "p3-multi-stark",
+ "p3-multilinear-util",
  "p3-security",
  "p3-sumcheck",
  "p3-symmetric",

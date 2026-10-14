@@ -1,0 +1,23 @@
+	Command being timed: "target/release/pqzh_bench --rel reg --np 1 --sizes-only --ext5 --whir-rate 3 --whir-mask-rate 3 --whir-ell 4 --max-proof 100000000"
+	User time (seconds): 33.47
+	System time (seconds): 1.42
+	Percent of CPU this job got: 99%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:34.91
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 1254700
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 743162
+	Voluntary context switches: 9
+	Involuntary context switches: 643
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 16
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0

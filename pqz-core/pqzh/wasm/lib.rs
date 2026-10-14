@@ -60,6 +60,25 @@ pub extern "C" fn step_init2(log_blowup: u32, queries: u32, zk: u32, max_proof: 
     KINDS.len() as u32
 }
 
+/// zero-knowledge WHIR (src/whirpcs.rs): proof limit, Goldilocks^5, WHIR starting rate, folding factor, grinding
+/// bits, per-term target (0 = default)
+#[no_mangle]
+pub extern "C" fn step_init3(max_proof: u32, ext5: u32, rate: u32, fold: u32, pow: u32, target: u32) -> u32 {
+    let n = step_init2(0, 0, 1, max_proof, ext5, 0, 0, 0);
+    let d = pqzh::config::WhirParams::DEFAULT;
+    let or = |v: u32, d: usize| if v != 0 { v as usize } else { d };
+    with(|st| {
+        st.p.whir = Some(pqzh::config::WhirParams {
+            rate: or(rate, d.rate),
+            fold: or(fold, d.fold),
+            pow: or(pow, d.pow),
+            target: or(target, d.target),
+            ..d
+        })
+    });
+    n
+}
+
 fn stmt_wit(st: &St, tx: u32) -> (&[u8], &[u8]) {
     if tx != 0 { (&st.s.tx_stmt, &st.s.tx_wit) } else { (&st.s.reg_stmt, &st.s.reg_wit) }
 }
