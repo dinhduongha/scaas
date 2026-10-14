@@ -1,0 +1,22 @@
+[package]
+name = "pqz-ffi-wasm"
+version = "0.1.0"
+edition = "2021"
+license-file = "../../../LICENSE"
+publish = false
+
+# wasm32-unknown-unknown harness for pqz-ffi's prove feature (P6e Task 7): builds the fixture, proves every form of both
+# ids, verifies through the precompile, and prints the same digest lines as the native test `digest_lines`
+# (run_wasm.mjs; ../run.sh diffs them). Raw exports, no wasm-bindgen.
+[lib]
+crate-type = ["cdylib"]
+path = "lib.rs"
+
+[dependencies]
+pqz-ffi = { path = "..", features = ["prove"] }
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+
+[workspace]

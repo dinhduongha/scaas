@@ -454,3 +454,30 @@ of the ZK argument done, D3 recorded. Then merge and push per the mandate.
 P6f (`Nethermind.Pqz`, P/Invoke fuzz harness, gas calibration, image), P6g (contracts, `auth_*` / `register_pqz` /
 `metatx_pqz` vectors), P6h (`zether-prover --features pq`, `derive.json`, the wasm-bindgen wallet module on
 `pqz-ffi`'s `prove` feature), P6-PUB, the PQZH Solidity verifier, LaBRADOR, `pqz-cli serve`.
+
+## Progress (2026-10-14, session 4)
+
+Execution labels used in the session: the letter is the plan's part (A = PQZL, gate A; B = PQZH / Ligero, gate B),
+the number is the round; each round is one agent on its own branch, reviewed before merge.
+
+| Label | Branch | Plan tasks | Content | Status |
+|---|---|---|---|---|
+| A1 | `p6e-a1` | 1, 4, 3 | hedged PQZL prover (G2, D6, witness tag `SCAAS-PQZ-PROVER-WIT-V2`); `pqz_kat.py`; KeyGen / Enc / Dec from seeds + SHAKE256 in C (G4) | merged `09b9cc3` |
+| A2 | `p6e-a2` | 2, 5 | `R_TX0` (G1 / D8, own ABDLOP tag 0x81, R6); `pqz-stmt` (D15 tightened: salt, zero words); review fixes (unsequenced read in both verifiers) | merged `9f55013` |
+| A3 | `p6e-a3` | 7 | `pqz-ffi`: decode via `pqz-stmt`, dispatch on `proofSystemId` (PQZL C core / PQZH Ligero), C ABI `pqz_precompile`, never-crash, one lock + fixed-stack worker, status 3 (input fault → …00) vs 4 (node fault → host aborts block), `OP_SELFTEST` for both ids, `prove` feature + wasm32 | in review |
+| A4 | `p6e-a4` | 11 | vectors for both ids in `smartcontracts/vectors/pqz/` (D9), generator with `--check`, a `pqz_kat.py` checker per file | in progress |
+| B1 | `p6e-b1` | 8 (part), D6 | Ligero `R_BURN` / `R_DS` / `R_DR`; hedged Ligero prover; wasm32 21-bit multiply (`R_TX` p99 59.7 → 18.7 ms) | merged `99ad859` |
+| B2 | `p6e-b2` | 9 | PQZH D3 id; exact length bound first (Rust + Solidity); opTag / auditorOn checks; retry guard; D5 limits | merged `7347a0b` |
+| B3 | `p6e-b3` | 6, 8 | Ligero on `pqz-stmt` (bench-only client / presets, 0 floats); Ligero `R_TX0` | merged `28a17d1` |
+
+Left: Task 10 (fuzzing, after `pqz-ffi` merges), Task 12 (docs), then gate A / gate B and the P6-PUB freeze. Owner
+2026-10-14: one `PQZ` precompile verifies both proof systems (CTR-PQZ-10).
+
+**One implementation per proof system (owner question 2026-10-14, answer recorded).** PQZL stays in C (the LaZer fork;
+porting LNP22's protocol logic to Rust is months of work and the class of subtle bug found in lazer#24 / #25 / #26),
+PQZH (Ligero) stays in Rust (`sha3` + `pqz-stmt` only), and `pqz-ffi` (Rust, exporting a C ABI) wraps both: Nethermind
+calls it via P/Invoke, the node via Rust, wallets via wasm32. No second production implementation of either: every node
+must run the same code (two implementations in consensus risk a chain split on any divergence) and the cryptographic
+audit would double. Second implementations exist only as test oracles: PQZL generic vs specialised verifier
+(differential), `pqz_kat.py` (keys, encryption, statements), the test-only Solidity Ligero verifier, `pqz-stmt` vs
+`pqz_kat.py`, and the Task 10 fuzzers.

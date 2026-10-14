@@ -1,0 +1,32 @@
+$ cargo test --release --offline --lib
+   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/p6ea3/pqz-core/ffi)
+    Finished `release` profile [optimized + debuginfo] target(s) in 10.58s
+     Running unittests src/lib.rs (target/release/deps/pqz_ffi-b65d3950df13a859)
+
+running 1 test
+test pqzh::tests::pqzh_params_are_the_preset ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+[rc=0]
+$ cargo test --release --offline --features prove -- --nocapture --test-threads 4
+   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/p6ea3/pqz-core/ffi)
+    Finished `release` profile [optimized + debuginfo] target(s) in 11.68s
+     Running unittests src/lib.rs (target/release/deps/pqz_ffi-f6a571120719e8c7)
+
+running 1 test
+test pqzh::tests::pqzh_params_are_the_preset ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/ffi.rs (target/release/deps/ffi-4f372f505b98525d)
+
+running 11 tests
+
+thread 'abort_freedom' (2559422) has overflowed its stack
+fatal runtime error: stack overflow, aborting
+error: test failed, to rerun pass `--test ffi`
+
+Caused by:
+  process didn't exit successfully: `/home/ha/work/ainative/scaas/.claude/worktrees/p6ea3/pqz-core/ffi/target/release/deps/ffi-4f372f505b98525d --nocapture --test-threads 4` (signal: 6, SIGABRT: process abort signal)
+[rc=101]

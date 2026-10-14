@@ -1130,12 +1130,16 @@ The id stays v2 for now; whether this needs a bump is an open owner decision (re
 
 <a id="precompile"></a>
 <a id="CTR-PQZ-10"></a>**CTR-PQZ-10** — **On-chain verification is a native precompile on chain 7622**: `PQZ` at
-`0x0000000000000000000000000000000000000F01` (first input byte = op) and `MLDSA65` at `…0F10` (EIP-8355's layout from
+`0x0000000000000000000000000000000000000F01` (first input byte = op) — one precompile for both proof systems, PQZL and PQZH (Ligero), dispatched on the statement's `proofSystemId` (owner 2026-10-14) and `MLDSA65` at `…0F10` (EIP-8355's layout from
 P6; transitional: plus a context string; moving both out of the EIP-1352 range is a P6 item). **v1 runs only on our Nethermind chain** (owner). Other private chains (customer-run Besu/geth/reth)
 get the off-chain co-processor attestation seam later; **no client ports in v1**; the co-processor is rejected on chain
-7622 itself. **Determinism and probing:** integer-only code, no threads, no floating point, no CPU-feature-dependent
+7622 itself. **Determinism and probing:** integer-only code, no threads in the computation (`pqz-ffi` runs every core
+call serially on one worker thread, only for a fixed stack), no floating point, no CPU-feature-dependent
 results, bounded loops (a capped rejection loop that hits its cap ⇒ invalid); any parse error, panic or failed check ⇒
-output `0x00…00`; gas by formula regardless of validity; activation by `pqzTransitionTimestamp`; contracts self-test and
+output `0x00…00`; a fault of the node itself, not of the input (arena exhaustion, the worker or the core unavailable,
+failure to reserve the arena) gives no result at all: the node aborts processing the block and never treats the input
+as invalid (`pqz-ffi` status `PQZ_FFI_NODE_FAULT`, controller 2026-10-14); a failed Rust heap allocation or an OOM kill
+aborts the process (not reportable); gas by formula regardless of validity; activation by `pqzTransitionTimestamp`; contracts self-test and
 the node probes (`has_pqz_precompile`), because a missing transition key looks exactly like an enabled one.
 
 **The verify
@@ -1143,7 +1147,7 @@ path never crashes the node**: `pqz_verify` runs in-process, chain 7622 has one 
 `eth_call`/`eth_estimateGas` reaches the precompile, so one abort, out-of-bounds access or stack overflow on crafted
 input is a chain halt, not a split. Requirements: every upstream `ERR`/`ASSERT` becomes `return 0`; a bounds-checked
 decoder (Rust, in front of the C core) accepts only the fixed lengths before any C code runs; fixed-size stack, no
-recursion, a compile-time arena; no timeouts (non-deterministic), only bounded loops; continuous ASan/UBSan fuzzing in
+recursion, a fixed arena reserved once at run time (`pqz-ffi`: 144 MiB verify-only, from measurement); no timeouts (non-deterministic), only bounded loops; continuous ASan/UBSan fuzzing in
 CI. Operationally a follower node serves all public RPC and pre-simulation, so `eth_call` never reaches the signer
 process; a crashing input inside a transaction would still reach every node at its block, so never-crash is the
 requirement and the follower is only defence in depth. Every node of chain 7622 must run the PQZ client build.
@@ -1151,7 +1155,7 @@ requirement and the follower is only defence in depth. Every node of chain 7622 
 ### 9.1 Precompile `PQZ` (`0x…0F01`)
 
 Input `u8(op) ‖ be32(len(stmt)) ‖ stmt ‖ proof`; output 32 bytes, `…01` valid, `…00` otherwise; never reverts on
-cryptographic failure; reverts (consumes all gas) only on input `> MAX_INPUT = 262,144` bytes.
+cryptographic failure; reverts (consumes all gas) only on input `> MAX_INPUT = 393,216` bytes (P6e D5: 5 + 83,072 + 262,144 = 345,221 for a PQZH transfer).
 
 | op | Name | `stmt` |
 |---|---|---|
@@ -1160,7 +1164,7 @@ cryptographic failure; reverts (consumes all gas) only on input `> MAX_INPUT = 2
 | 3 | `OP_REGISTER` | `opTag ‖ proofSystemId ‖ message ‖ pk` |
 | 4 | `OP_DISCLOSE_SENDER` | [disclosure](#disclosure) |
 | 5 | `OP_DISCLOSE_RECEIVER` | [disclosure](#disclosure) (also auditor: `opTag` differs) |
-| 6 | `OP_SELFTEST` | empty: the whole input is exactly `u8(6) ‖ be32(0)`, anything else ⇒ `0` at the same price; computed at the first call in a process and cached for the process's life (same binary ⇒ same output, so caching keeps determinism and turns repeated calls into a lookup); the first call recomputes the engine's fixed KATs (matrix digest, keygen, enc/dec) **and** verifies one compiled-in valid and one invalid `R_REG` vector; returns `keccak256` of the KAT outputs ‖ `u8(valid result)` ‖ `u8(invalid result)` |
+| 6 | `OP_SELFTEST` | empty: the whole input is exactly `u8(6) ‖ be32(0)`, anything else ⇒ `0` at the same price; computed at the first call in a process and cached for the process's life (same binary ⇒ same output, so caching keeps determinism and turns repeated calls into a lookup); the first call recomputes the fixed KATs (matrix digest, keygen, enc/dec, one PQZH FFT round trip) **and** verifies two pairs of compiled-in `R_REG` vectors, one valid and one invalid per `proofSystemId` (PQZL, PQZH); returns `keccak256(kat_digest ‖ u8(pqzl_valid) ‖ u8(pqzl_invalid) ‖ u8(pqzh_valid) ‖ u8(pqzh_invalid))` (P6e D13, `pqz-core/ffi/src/selftest.rs`) |
 
 For **every** op except 6 the precompile checks, before any cryptography, that `stmt` starts with an `opTag` that
 belongs to `op` and a `proofSystemId` it implements, and that the total length is one of the op's fixed lengths;

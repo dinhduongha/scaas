@@ -1024,3 +1024,6 @@ src/{common,metatx,factory,dex,wallet,account,registry,zether,hedera,chains}	ren
 . The contract loads 	extraction-artifact	contracts/pq-zether.md §7.9: the disclosure statement is now a byte-offset table (CTR-PQZ-14)
 abs(e'_i) < 2^24	obsolete	contracts/pq-zether.md §7.9 RECEIVER_X: e'_i in [-2^24, 2^24), the range R_DR proves; uniqueness unchanged (CTR-PQZ-14, owner 2026-10-13)
 proofSystemId = keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v1")	obsolete	PQZL proofSystemId v1 retired by v2 (2026-10-13, LaZer tbox Schwartz-Zippel fixes lazer#24 / #25): contracts/pq-zether.md §8 Versioning, CTR-PQZ-09
+> MAX_INPUT = 262,144	obsolete	MAX_INPUT raised to 393,216 B (P6e D5: a PQZH transfer input is 5 + 83,072 + 262,144 B): contracts/pq-zether.md §9.1, CTR-PQZ-10
+u8(valid result)	obsolete	OP_SELFTEST covers both proofSystemIds: u8(pqzl_valid) ‖ u8(pqzl_invalid) ‖ u8(pqzh_valid) ‖ u8(pqzh_invalid) (P6e D13): contracts/pq-zether.md §9.1
+u8(invalid result)	obsolete	as u8(valid result): contracts/pq-zether.md §9.1 OP_SELFTEST (P6e D13)
