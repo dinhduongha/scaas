@@ -27,7 +27,7 @@ conclusion drawn here. Paper references are to the extended Ligero paper, Ames, 
   mutation, but proven `R_TX` costs 530 M gas to verify (534.6 M per transaction with the EIP-7623 calldata floor,
   31.9× the 16,777,216 cap); a hand-scheduled verifier would still need ≈ 124 M [estimate]. The precompile is
   required; with the proposed 256 KB proof limit / `MAX_INPUT` 262,144 B (proposal (c)) the proven preset fits it
-  (worst case 243,150 B).
+  (worst case 243,150 B as first bounded here; the exact maximum is 235,470 B, §12.3).
 
 **Ligero over F_q builds, proves and verifies `R_REG` and `R_TX` with zero knowledge at 128 bits (per term). With the
 radix-431 domains (owner decision (1), §9) `R_TX` is 230,392 B proven / 92,072 B conjectured, proving in 0.67 /
@@ -381,7 +381,9 @@ What it does not do: **reach 160 KB proven** — 230 KB, of which ≈ 101 KB are
 change shrinks. With the owner's decision (a) (proven regime, THE preset n = 32,756, k = 817, t = 121, ℓ = 695 for both
 relations) the controller's proposal (c) — PQZH proof limit 160 KB → 256 KB, precompile `MAX_INPUT` 262,144 B — fits
 it: the largest possible proven proof (t distinct columns, every multiproof level at its maximum) is 243,150 B for
-`R_TX` and 198,138 B for `R_REG`; measured 230,392 / 186,970 B. (The Johnson reference preset could exceed it: worst
+`R_TX` and 198,138 B for `R_REG`; measured 230,392 / 186,970 B. (Those two are upper bounds: a level of the
+multiproof cannot send t siblings once its distinct nodes start to pair up; the exact maxima are 235,470 / 190,458 B,
+§12.3.) (The Johnson reference preset could exceed it: worst
 case 273,288 B for `R_TX`.)
 
 **It needs the precompile**: without it (§11) proven `R_TX` costs ≈ 32× the transaction cap as measured and ≈ 7× at
@@ -437,8 +439,8 @@ proofSystemId for the Ligero kind and an independent review of §4.1.
 
 ## 10. Files and how to rerun
 
-Crate `pqz-core/pqzh/ligero/` (own `Cargo.toml` / `[workspace]`, path dependency on `pqzh` for `client`, `ring`,
-`rel`; `sha3` 0.10.8): `fq.rs` (F_q, F_{q^4}, lazy sums, batch inversion), `fft.rs`, `merkle.rs`, `transcript.rs`,
+Crate `pqz-core/pqzh/ligero/` (own `Cargo.toml` / `[workspace]`; until P6e branch `p6e-b1` a path dependency on
+`pqzh` for `client`, `ring`, `rel`, since then only `sha3` 0.10.8, §12.1): `fq.rs` (F_q, F_{q^4}, lazy sums, batch inversion), `fft.rs`, `merkle.rs`, `transcript.rs`,
 `cs.rs`, `ligero.rs` (`Params::preset`, `prove`, `prove_unchecked`, `verify`, `soundness`, `breakdown`),
 `src/bin/ligero_bench.rs`, `tests/attacks.rs`, `wasm/` (`lib.rs`, `run_wasm.mjs`). Runs, each alone under the lock:
 `scripts/capped sh -c 'cd pqz-core/pqzh/ligero && cargo test --release --offline'`, then
@@ -571,4 +573,152 @@ test polynomials evaluated at every column, at the price of more rows per column
 scripts/capped pqz-core/pqzh/ligero/runs/evm.sh l4      # Rust tests, Johnson bench + wasm32, fixtures, forge
 scripts/capped pqz-core/pqzh/ligero/runs/forge.sh l6    # forge only (verifier + unit costs)
 python3 pqz-core/pqzh/ligero/evm_model.py > pqz-core/pqzh/ligero/runs/e1-evm-model.txt
+```
+
+## 12. P6e Part B: all five relations, the hedged prover, no Plonky3 dependency
+
+Branch `p6e-b1` (from main `9e7cd20`), plan `docs/superpowers/plans/2026-10-14-p6e-relations.md` Task 8 (G6) without
+`R_TX0`, the Ligero half of D6, and the part of Task 6 that does not need `pqz-stmt`. Results, not decisions (the
+decision lines are in `docs/decisions.md`, CTR-PQZ-09 and CTR-PQZ-19). Runs `runs/l7-*` (`runs/rel5.sh l7`, one capped
+session) and one probe, `runs/l7-probe-wasm-tx-repeat.jsonl`.
+
+### 12.1 What changed
+
+- **Relations (`cs.rs`).** `R_BURN`, `R_DS`, `R_DR` as Ligero constraint systems on pqz-core's statement and witness
+  bytes (`pqz_rel.c`, `pq-zether.md` §7.5 / §7.9), with every exact ℓ2 bound and bit range pqz-core proves:
+
+  | Relation | Equations | Big groups | Small values (count, bits) | m at THE preset |
+  |---|---|---|---|---|
+  | `R_BURN` (op 2, also REFRESH) | `R_TX` rows 1, 2, 4, 6, 7 with d = digits(amount) public: pk_f = A s_f + e_f; u = Aᵀr + e1; v_f = pk_fᵀr + e2_f + Δ d′; u_Tᵀs_f + Δ M + e_T = v_T; M_i + c_{i−1} − d′_i − 16 c_i = f_i + d_i, c_15 = 0 | s_f, e_f, r, e1 | e2_f (16, 8), d′ (16, 4), M (16, 14), c (16, 11), e_T (16, 25), 5 ℓ2 slacks | 124 |
+  | `R_DS` (op 4) | u = Aᵀr + e1; pkᵀr + e2 = v − Δ d (16 coefficients) | r, e1 | e2 (16, 8), 3 ℓ2 slacks | 63 |
+  | `R_DR` (op 5, also AUDITOR) | pk = A s + e; uᵀs + e′ = v − Δ d (16 coefficients), e′ + 2^24 in 25 bits | s, e | e′ (16, 25), 2 ℓ2 slacks | 63 |
+
+  The statement checks are pqz-core's: exact length, canonical coefficients, fee / amount words < 2^64 (`R_BURN` reads
+  fee at 256 and amount at 288, the disclosures amount at 224); the rest of a statement (opTag, id, `kind`, the other
+  header words) is only hashed into the transcript. `R_TX` and `R_BURN` share one builder (as `build_debit` in C); the
+  combination vectors of `R_REG` and `R_TX` are unchanged, so the earlier `R_REG` / `R_TX` proofs (the EVM fixtures of
+  §11) still verify (`tests/attacks.rs` `evm_fixtures`, run before the re-export). REFRESH and AUDITOR differ from
+  op 2 / op 5 only in hashed bytes and need no relation of their own. `R_TX0` (auditor off, G1) is not built: its
+  statement layout comes with PQZL Task 2.
+- **Hedging (D6).** The prover RNG is `SHAKE256("SCAAS-PQZH-LIGERO-RNG-V2" ‖ rnd32 ‖ u8(op) ‖ be32(len(stmt)) ‖ stmt
+  ‖ wit)` (was `"SCAAS-PQZH-LIGERO-RNG" ‖ rnd32 ‖ u8(op) ‖ stmt`). The verifier is unchanged; every PQZH proof byte
+  changes once. Unit test `rng_hedged_with_witness`: equal inputs give equal masks; a witness differing in one bit
+  gives 256 masks of which none agrees; the statement length is framed.
+- **No Plonky3 dependency (Task 6 prep).** The crate's only dependency is `sha3` (`Cargo.toml`, `wasm/Cargo.toml`;
+  neither `Cargo.lock` lists a `p3-*` crate). It carries copies of the Plonky3 crate's `ring` (without the Goldilocks NTT),
+  statement constants (`stmt.rs`, extended to the five relations) and test client (`client.rs`: the `pqz_bench.c`
+  setup for all five, `mutate`, `Tweak`); the Plonky3 crate is untouched. Left for Task 6 once `pqz-stmt` exists:
+  replace `stmt.rs` and the codec half of `ring.rs` (`rd_poly`, `rd_polyvec`, `wr_poly`, the layout constants, both
+  ids) by `pqz-stmt`; keep `a_matrix` / `dot_int` / `modq` (or take them from `pqz-stmt` if it carries A); move
+  `client.rs` to test support (`tests/support.rs`) — the bench binaries, `ligero_export`, the wasm module and the
+  `dump_setup` example use it too, so it must stay reachable from them (a `bench` feature is the obvious place, with
+  the conjectured preset and `soundness()`, D11).
+- **Exact maximum (G7, measured here, the verifier's bound is Task 9).** `Params::max_len_exact(op)`: t distinct
+  columns and the largest pruned multiproof. With a_l distinct nodes on tree level l (a_0 = t, a_d = 1) level l sends
+  2 a_{l+1} − a_l siblings, so the total is Σ_{0<l<d} a_l + 2 − t, largest at a_l = min(t, ⌈n / 2^l⌉): 975 digests at
+  THE preset, against t·d = 1,815 in the verifier's current bound. Unit test `max_len_exact_multiproof_tight`: evenly
+  spread columns reach it, 300 random column sets never exceed it.
+- **Cross-check.** `pqz-core/pqzh/xcheck/ligero.sh`: the Ligero crate's statements and witnesses of all five relations
+  equal pqz-core's `pqz_bench.c` setup byte for byte (`runs/l7-xcheck.txt`, 10 of 10 equal).
+
+### 12.2 Tests [measured, `runs/l7-tests.txt`]
+
+8 unit tests and 11 integration tests (`tests/attacks.rs`), all pass. Integration: honest proofs of all five relations
+verify at the proven and conjectured presets with and without radix 431 and at the Johnson preset, each proof
+≤ `max_len_exact`; equal inputs give equal proofs, other seeds other proofs; every proof is rejected under each of the
+other four ops (`R_DS` / `R_DR` share the statement length) and under ops 0, 6, 255; **960 mutated inputs per
+relation** (12 kinds × 80, `client::mutate`; the public scalar of kind `stmt_tail` is the fee for `R_TX`, the amount
+for `R_BURN` / `R_DS` / `R_DR`) **— 4,800, 0 accepted, 0 panics**. Negative witnesses, each refused by the honest
+prover and, proved without its checks, rejected by the verifier:
+
+| Case | `R_REG` | `R_TX` | `R_BURN` | `R_DS` | `R_DR` |
+|---|---|---|---|---|---|
+| ℓ2 norm exceeded with coefficients in [−1, 1] (‖s‖² = 1,300 > 36²) | yes | yes | yes | — | yes (s_t) |
+| a coefficient out of range (s_5 = 100) | yes | — | yes | — | yes |
+| digit out of range, same value | — | yes (d) | yes (d′) | — | — |
+| e2 norm exceeded (one coefficient 65) | — | yes | yes (e2_f) | yes | — |
+| overspend (new-balance digits all 15) | — | yes | yes | — | — |
+| public amount + 1 with the honest witness | — | — | yes | yes | yes |
+| fee / amount word ≥ 2^64 (also: the honest proof rejected) | — | yes | yes (both words) | yes | yes |
+| wrong ring row (one CBD(20) coefficient + 1) | — | yes | yes | yes (e1) | yes (e) |
+
+The benches add 2 × 4,800 mutations (§12.3, 0 accepted, 0 panics) and the wasm32 runs 2 × 240.
+
+### 12.3 Measurements [measured]
+
+Native: `runs/l7-proven.jsonl` / `l7-conj.jsonl` (+ `-time.txt`), 5 proofs (seeds 0–4), 100 honest verifies, 12 × 80
+mutations per relation, every relation in one process. Proof B is the range over the 5 seeds; "max exact" is
+`max_len_exact`, "bound" the verifier's current length check (`max_len`, t full paths). Max RSS is the whole process
+(five relations): 47 MB proven, 54 MB conjectured.
+
+| Relation | Preset | n, k, t, ℓ, m | Proof B (5 seeds) | Max exact / bound | Prove p50 | Peak heap prove / verify | Verify p50 / p99 honest | p99 adversarial | Accepted / panics of 960 | Bits query / prox / lin |
+|---|---|---|---|---|---|---|---|---|---|---|
+| `R_REG` | proven | 32,756, 817, 121, 695, 63 | 186,008–187,802 | 190,458 / 217,338 | 375 ms | 25.9 / 0.8 MB | 6.98 / 7.68 ms | 1.06 ms | 0 / 0 | 128.5 / 146.0 / 155.4 |
+| `R_TX` | proven | 32,756, 817, 121, 695, 125 | 231,000–232,430 | 235,470 / 262,350 | 648 ms | 43.2 / 1.2 MB | 9.72 / 10.79 ms | 1.32 ms | 0 / 0 | 128.5 / 145.0 / 154.4 |
+| `R_BURN` | proven | 32,756, 817, 121, 695, 124 | 230,584–231,512 | 234,744 / 261,624 | 616 ms | 42.9 / 1.1 MB | 9.25 / 9.82 ms | 1.46 ms | 0 / 0 | 128.5 / 145.0 / 154.4 |
+| `R_DS` | proven | 32,756, 817, 121, 695, 63 | 186,360–187,546 | 190,458 / 217,338 | 363 ms | 25.9 / 0.8 MB | 7.39 / 9.75 ms | 1.24 ms | 0 / 0 | 128.5 / 146.0 / 155.4 |
+| `R_DR` | proven | 32,756, 817, 121, 695, 63 | 185,878–187,962 | 190,458 / 217,338 | 398 ms | 25.9 / 0.8 MB | 7.16 / 7.49 ms | 0.96 ms | 0 / 0 | 128.5 / 146.0 / 155.4 |
+| `R_REG` | conjectured (reference) | 18,533, 172, 20, 151, 283 | 61,142–63,104 | 63,584 / 66,752 | 831 ms | 46.5 / 0.5 MB | 1.46 / 1.76 ms | 0.67 ms | 0 / 0 | 131.1 / 144.7 / 155.4 |
+| `R_TX` | conjectured (reference) | 18,533, 344, 24, 319, 287 | 92,520–92,616 | 93,128 / 97,192 | 946 ms | 49.5 / 0.8 MB | 3.17 / 3.27 ms | 0.87 ms | 0 / 0 | 130.1 / 144.6 / 154.3 |
+| `R_BURN` | conjectured (reference) | 18,533, 344, 24, 319, 286 | 92,120–92,536 | 92,984 / 97,048 | 933 ms | 49.3 / 0.8 MB | 2.86 / 3.59 ms | 0.75 ms | 0 / 0 | 130.1 / 144.7 / 154.3 |
+| `R_DS` | conjectured (reference) | 18,533, 172, 20, 151, 284 | 62,776–63,384 | 63,704 / 66,872 | 835 ms | 46.7 / 0.5 MB | 1.64 / 1.73 ms | 0.62 ms | 0 / 0 | 131.1 / 144.7 / 155.4 |
+| `R_DR` | conjectured (reference) | 18,533, 172, 20, 151, 285 | 62,960–63,504 | 63,824 / 66,992 | 821 ms | 46.8 / 0.5 MB | 1.64 / 2.04 ms | 0.65 ms | 0 / 0 | 131.1 / 144.7 / 155.4 |
+
+All presets keep the total ≥ 127.2 bits (proven) / 127.7 (conjectured) as in §5. Every op uses THE proven preset
+(owner decision (a)); the plan's "per-op preset by the p1 model" was not done (THE preset is not to be changed here),
+and the conjectured presets of the new relations are borrowed from `R_REG` (disclosures) and `R_TX` (`R_BURN`), not
+re-optimised. `R_REG` / `R_TX` match §6.1 within noise (the hedge changes bytes, not sizes or work).
+
+wasm32 (node v26.8.1, module 280,242 B; `runs/l7-proven-wasm.jsonl`, `l7-conj-wasm.jsonl`): 2 proofs, 100 honest
+verifies, 12 × 4 mutations per relation, all five relations in one module instance, proofs made in wasm.
+
+| Relation | Preset | Prove mean | Verify p50 / p99 honest | p99 adversarial | Fails |
+|---|---|---|---|---|---|
+| `R_REG` | proven | 845 ms | 32.2 / 50.6 ms | 1.05 ms | 0 |
+| `R_TX` | proven | 1,473 ms | 48.9 / **66.5 ms** (max 69.6) | 1.49 ms | 0 |
+| `R_BURN` | proven | 1,447 ms | 45.8 / 48.0 ms | 1.39 ms | 0 |
+| `R_DS` | proven | 808 ms | 33.2 / 37.2 ms | 1.15 ms | 0 |
+| `R_DR` | proven | 835 ms | 31.9 / 34.7 ms | 1.09 ms | 0 |
+| `R_REG` | conjectured (reference) | 1,622 ms | 5.29 / 5.84 ms | 0.67 ms | 0 |
+| `R_TX` | conjectured (reference) | 1,925 ms | 13.6 / 15.5 ms | 0.96 ms | 0 |
+| `R_BURN` | conjectured (reference) | 1,882 ms | 12.1 / 16.0 ms | 0.86 ms | 0 |
+| `R_DS` | conjectured (reference) | 1,614 ms | 6.05 / 10.1 ms | 0.80 ms | 0 |
+| `R_DR` | conjectured (reference) | 1,680 ms | 6.06 / 8.15 ms | 0.71 ms | 0 |
+
+Linear memory 46.6 MiB proven / 51.9 MiB conjectured (the high-water mark of the module, all five relations). **The
+proven `R_TX` p99 of this run, 66.5 ms, is above the 60 ms limit**: two of 100 verifies took 66–70 ms against a p50
+of 48.9 ms. A repeat in a fresh process (`runs/l7-probe-wasm-tx-repeat.jsonl` [probe]: `R_TX`, `R_BURN`, `R_TX`,
+200 honest verifies each) gave `R_TX` p99 54.4 / 53.1 ms (max 56.7 / 57.3) and `R_BURN` p99 56.0 ms with one 78.0 ms
+outlier; §6.2 had 55.9 ms (50 verifies). The p50 is unchanged since §6.2 (48.7 → 48.9 ms) and the verifier code path
+is the same, so the tail is this noisy host [inference]; but proven `R_TX` / `R_BURN` sit within ≈ 10 % of the limit at
+p99 in wasm32, and a single run can cross it. Native p99 is ≤ 10.8 ms for every relation.
+
+**Exact maximum vs the 256 KB proposal.** At THE preset the largest acceptable proofs are 235,470 B (`R_TX`), 234,744 B
+(`R_BURN`), 190,458 B (`R_REG`, `R_DS`, `R_DR`): all under 262,144 B. The verifier's current bound (t full paths) is
+262,350 B for `R_TX`, above it; Task 9 replaces it by `max_len_exact`. §8's 243,150 / 198,138 B were upper bounds
+(t siblings on every level).
+
+**EVM fixtures.** Hedging changes every proof, so `ligero_export` re-wrote the 19 proof files of
+`smartcontracts/evm/test/vectors/pqzh-ligero/` (statements, A and parameters byte-identical; `runs/l7-export.jsonl`)
+and the forge test passed again (`runs/l7-forge.txt`: 14 tests, all six honest proofs accepted, 6 × 108 mutations
+0 accepted / 0 reverts, the 7 negative witnesses rejected; gas within 0.6 % of `l6`, so §11's tables stand). The EVM
+verifier still covers `R_REG` / `R_TX` only.
+
+### 12.4 Left for later
+
+- Task 8: `R_TX0` (auditor off) once PQZL Task 2 fixes its statement (66,560 B) and witness (12,384 B); xcheck of the
+  sixth form; a byte-for-byte native-vs-wasm32 proof check of the new relations (the seed-1 proof lengths of
+  `runs/l7-tests.txt` and the wasm32 runs agree for all five relations; FNV not compared in this round).
+- Task 6: the switch to `pqz-stmt` (§12.1), the `bench` feature (conjectured preset, `soundness`, `breakdown`), then
+  `runs/measure.sh` byte-identical to these hedged proofs.
+- Task 9: the D3 id in the statements, `max_len_exact` as the verifier's bound with the "reject `MAX + 1` before
+  parsing" test, the prover retry if a proof would exceed it.
+- Open: the wasm32 p99 margin of proven `R_TX` / `R_BURN` (above); gate B needs a decision on how p99 is measured
+  (sample size, quiet host) or a faster wasm verifier.
+
+### 12.5 Rerun
+
+```sh
+scripts/capped pqz-core/pqzh/ligero/runs/rel5.sh l7   # tests, native both presets, wasm32, xcheck, fixtures, forge
+scripts/capped pqz-core/pqzh/xcheck/ligero.sh         # statement / witness bytes vs pqz_bench.c, all five relations
 ```
