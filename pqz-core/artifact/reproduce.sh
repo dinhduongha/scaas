@@ -53,6 +53,17 @@ if [ $MODE = upstream ]; then
   [ -d "$SRC/.git" ] || git clone -q https://github.com/lazer-crypto/lazer "$SRC"
   [ "$(git -C "$SRC" rev-parse "$PIN^{commit}")" = $PIN ] || { echo "no LaZer $PIN in $SRC" >&2; exit 1; }
   P=$(pwd)
+  # Same relation on both sides: the upstream bench compiles the fork's own src/pqz_rel.c (the R_REG / R_TX statement
+  # builder and witness of libpqz), not a copy, with two upstream-API substitutions (no bounded decoder, no coder err
+  # flag). The check: exactly those two lines differ; the diff goes to upstream-relation.txt.
+  mkdir -p "$U"
+  sed -e 's#coder_dec_begin_len (cstate, in, len);#coder_dec_begin (cstate, in); /* xcheck: upstream has no bounded decoder */#' \
+      -e 's#if (cstate->err || coder_dec_end#if (0 /* xcheck: upstream coder has no err flag */ || coder_dec_end#' \
+      src/pqz_rel.c > "$U/up_rel.c"
+  { echo "diff src/pqz_rel.c build/upstream/up_rel.c (the upstream bench's relation source):"
+    diff src/pqz_rel.c "$U/up_rel.c" || true; } > "$OUT/upstream-relation.txt"
+  [ "$(diff src/pqz_rel.c "$U/up_rel.c" | grep -c '^[<>]')" = 4 ] \
+    || { cat "$OUT/upstream-relation.txt"; echo "up_rel.c: expected exactly 2 substituted lines" >&2; exit 1; }
   for V in v3 v4; do
     case $V in
       v3) MARCH="-march=x86-64-v3 -maes -mpclmul" ;;
@@ -73,8 +84,9 @@ if [ $MODE = upstream ]; then
       make lazer.h liblazer.a CFLAGS="-Wall -O3 -g $MARCH -fomit-frame-pointer -DFALCON_FPNATIVE -DFALCON_AVX2 -DFALCON_FMA -DNDEBUG -fno-strict-aliasing" > "$U/lazer-build-$V.log" 2>&1
       LIBS="$L/liblazer.a $L/third_party/hexl-development/build/hexl/lib/libhexl.a -lmpfr -lgmp -lstdc++ -lm -lpthread"
       CF="-std=gnu11 -O3 $MARCH -fomit-frame-pointer -fno-strict-aliasing -DNDEBUG -w"
-      # R_REG / R_TX bench: the fork's statement builder and bench through the cross-check shim (xcheck/README.md)
-      gcc $CF -I"$P/xcheck/shim" -I"$L" -I"$L/src" -I"$P/src" -I"$P/params" -c "$P/xcheck/shim/up_rel.c" -o "$U/up_rel-$V.o"
+      # R_REG / R_TX bench: the fork's relation source ($U/up_rel.c, above) and bench through the cross-check shim
+      # (xcheck/README.md: libc heap instead of the arena)
+      gcc $CF -I"$P/xcheck/shim" -I"$L" -I"$L/src" -I"$P/src" -I"$P/params" -c "$U/up_rel.c" -o "$U/up_rel-$V.o"
       gcc $CF -c "$P/xcheck/shim/shim.c" -o "$U/up_shim-$V.o"
       gcc $CF -I"$P/src" -c "$P/xcheck/shim/bench.c" -o "$U/up_bench-$V.o"
       mkdir -p "$U/bin"

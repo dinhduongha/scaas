@@ -1,0 +1,9 @@
+diff src/pqz_rel.c build/upstream/up_rel.c (the upstream bench's relation source):
+323c323
+<   coder_dec_begin_len (cstate, in, len);
+---
+>   coder_dec_begin (cstate, in); /* xcheck: upstream has no bounded decoder */
+339c339
+<   if (cstate->err || coder_dec_end (cstate) != 1)
+---
+>   if (0 /* xcheck: upstream coder has no err flag */ || coder_dec_end (cstate) != 1)

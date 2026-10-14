@@ -15,27 +15,44 @@ everything on your own machine, and the package compares your results with `expe
   - Image build `runs/docker-build-2.txt`: ok, no Dockerfile change after the `ca-certificates` fix (first failure:
     `runs/docker-build-1-failed.txt`, `snapshot.ubuntu.com` is HTTPS only). The log shows the pinned versions
     installed: clang-18 / lld-18 1:18.1.3-1ubuntu1, gcc-13 / g++-13 13.3.0-6ubuntu2~24.04.1, cmake 3.28.3-1build7;
-    node 26.8.1 sha256 ok; LaZer `3330e48`. Image 1.08 GB. `runs/docker-build-3.txt` is the rebuild after the shim
-    fix below (only the `COPY` layer changed).
+    node 26.8.1 sha256 ok; LaZer `3330e48`. Image 1.08 GB. `runs/docker-build-3.txt` and `-4.txt` are the rebuilds
+    after the shim and `reproduce.sh` changes below (only the `COPY` layer changed).
   - Quick mode `runs/docker-quick/` (`summary.txt`): RESULT PASS, 66 ok / 0 FAIL against the provisional
     `expected-results.json`. Every `proofs_fnv` equal (5 relations x 7 run files, native, x86-64-v3, wasm, wasm
     `both`, wasm without SV); proof sizes and wasm prove peaks equal to the byte (only `R_REG` max 28,085 vs 28,108,
     within 0.5 %); KAT 19/19, `check_tbox_fixes: ok`, `check_sv_fixes: ok`, differential 2,710 cases 0 mismatches.
     About 15 min.
-  - `--upstream --network none` `runs/docker-upstream/`: ok. Upstream v3 and v4 (IFMA) build; KAT upstream v3 19/19;
-    v4 is built only (this CPU has no avx512ifma, so the v4 KAT and bench are skipped, as designed). Bench N=3 medians
-    (ms): upstream v3 `R_REG` 581 prove / 549 verify, `R_TX` 6,454 / 6,701; fork 249 / 167, 999 / 676; fails 0.
-    The first run `runs/docker-upstream-1-failed/` compiled, but the fork bench failed `R_TX` (prove rc 3):
-    `../xcheck/shim/bench.c` built the `b2402b5` statement (prefix || body || be8 fee), and rel3 moved to the 640 B
-    header (fee a be32 word at 256). Fixed in `bench.c` and `up_rel.c` (`parse_tx`) under `#ifdef PQZ_HEADER_BYTES`,
-    so the shim still builds against the `b2402b5` headers of the older `xcheck/` scripts. Upstream and fork now prove
-    the same statement bytes. The shim keeps the `b2402b5` `R_TX` relation for upstream, so this is a timing
-    cross-check, not a relation-equality check.
+  - `--upstream --network none` `runs/docker-upstream/` (image `runs/docker-build-4.txt`): ok, upstream and the fork
+    on the same relation. The upstream bench now compiles the fork's own `../src/pqz_rel.c` (not a copy), with the
+    two upstream-API substitutions of the original cross-check (no bounded decoder, no coder `err` flag);
+    `runs/docker-upstream/upstream-relation.txt` is the check: exactly those two lines differ, and `reproduce.sh`
+    stops otherwise. Both sides prove and verify the same statement and witness (`../xcheck/shim/bench.c`). Proofs
+    do not cross-verify, by design: the fork's tbox fixes P6-SZ / P6-L2 change the transcript (`proofSystemId` v2).
+    Upstream v3 and v4 (IFMA) build; KAT upstream v3 19/19; v4 is built only (no avx512ifma on this CPU, so the v4
+    KAT and bench are skipped, as designed). Bench N=3 medians, fails 0 on both sides:
+
+    | binary | `R_REG` prove | `R_REG` verify | `R_TX` prove | `R_TX` verify | `R_REG` / `R_TX` bytes |
+    |---|---|---|---|---|---|
+    | upstream `3330e48` x86-64-v3 | 548 ms | 513 ms | 6,581 ms | 6,403 ms | 28,106 / 42,756 |
+    | fork (portable build) | 247 ms | 178 ms | 1,012 ms | 613 ms | 28,086 / 42,771 |
+
+    Relation differences `b2402b5` -> now (`git diff b2402b5..HEAD -- src/pqz_rel.c`; `params/pqz_reg_params.h` and
+    `pqz_tx_params.h` unchanged): the `R_TX` statement layout (640 B header, fee a be32 word at 256 that must be
+    < 2^64, was a be8 after the body); `build_tx` / `tx_witness` became `build_debit` / `debit_witness` (shared with
+    `R_BURN`; `LAY_TX` = the old slot bases, same rows, same selectors); relation keys built at first use; `A` global;
+    `#ifdef` code not compiled here (l2dom PoC, SV, test hooks); the new relations. No `R_REG` / `R_TX` equation
+    changed. Earlier runs, kept: `runs/docker-upstream-1-failed/` (the shim bench built the `b2402b5` statement
+    layout, fork `R_TX` prove rc 3) and `runs/docker-upstream-2-oldrel/` (after the layout fix in
+    `../xcheck/shim/bench.c` and `up_rel.c`, upstream still on the `b2402b5` relation copy: every median within
+    10 % of the table above, run-to-run noise at N=3). `../xcheck/shim/up_rel.c` stays the `b2402b5` copy for the
+    older `../xcheck/` scripts.
   - `--serve` `runs/docker-serve-*.txt`: `/` 200 `text/html`, `pqz.wasm` 200 `Content-type: application/wasm`
-    (405,882 B, wasm magic). No change needed: Python 3.12 maps `.wasm` itself. `docker stop` ends it with 137 after
-    the grace period (`http.server` as PID 1 ignores SIGTERM); Ctrl-C on `docker run` stops it.
+    (405,882 B, wasm magic). No change needed: Python 3.12 maps `.wasm` itself. Without `--init`, `docker stop` ended
+    it with 137 after the grace period (`http.server` as PID 1 ignores SIGTERM); the `--serve` command lines here and
+    in the `Dockerfile` now use `docker run --init`, and `docker stop` takes 0.2 s (`runs/docker-serve-init.txt`).
   - `docker image rm pqz-core-artifact` done; no image kept or pushed.
-- **Not tested:** `--full` in Docker, and every mode on the host toolchain (the freeze below is the first host run).
+- **Not tested:** `--full` in Docker (controller decision 2026-10-14: no Docker `--full` run; the freeze stays on the
+  host toolchain), and every mode on the host toolchain (the freeze below is the first host run).
 - **`expected-results.json` is PROVISIONAL.** It was built from `rel3/runs/v2full-*` + `sv/runs/v2-*` (2026-10-13,
   before the z21 merge). z21 changed only the verifier, and the post-z21 `rel3/runs/final-*` gives the same
   `proofs_fnv`, as does the Docker quick run above. Its times are pre-z21.
@@ -81,7 +98,7 @@ mkdir -p pqz-out
 docker run --rm -u "$(id -u):$(id -g)" -v "$PWD/pqz-out:/out" -e OUT=/out/quick pqz-core-artifact
 docker run --rm -u "$(id -u):$(id -g)" -v "$PWD/pqz-out:/out" -e OUT=/out/full pqz-core-artifact --full
 docker run --rm -u "$(id -u):$(id -g)" -v "$PWD/pqz-out:/out" -e OUT=/out/upstream pqz-core-artifact --upstream
-docker run --rm -p 127.0.0.1:8000:8000 pqz-core-artifact --serve      # open http://127.0.0.1:8000/
+docker run --rm --init -p 127.0.0.1:8000:8000 pqz-core-artifact --serve # open http://127.0.0.1:8000/
 docker image rm pqz-core-artifact                                     # when done
 ```
 
