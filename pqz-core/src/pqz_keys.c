@@ -3,7 +3,8 @@
  * Enc({(pk_j, m_j)}, seed_enc), Dec. Each attempt reads one SHAKE256 stream, tag || seed || be4(ctr), bits LSB-first
  * (FIPS 203 style): s then e (KeyGen), r, e1, then e2_j in recipient order (Enc); an attempt above a norm threshold
  * is resampled with the next counter, counter 64 is an error. The ring work is pqz_rel.c's (pqz_keypair_from_secret,
- * pqz_encrypt, pqz_decrypt_raw), so pqz_init must have run. No malloc, no stdio; the arena only through pqz_rel.c.
+ * pqz_encrypt, pqz_decrypt_raw), so pqz_init must have run (else PQZ_ERR_INTERNAL). No malloc, no stdio; the arena
+ * only through pqz_rel.c.
  */
 #include "lazer.h"
 
@@ -13,11 +14,31 @@
 #define DELTA ((int64_t)((1 << 26) - 1))
 #define MAXCTR 64
 
+#ifdef PQZ_TEST_HOOKS
+/* test-only norm thresholds (never in libpqz): test/pqz_keys_kat.c lowers them to pin the resample path and the
+   counter-64 error, which the real thresholds (>= 10 s.d. above the mean norms) never reach */
+int pqz_test_bs = 36, pqz_test_be = 164, pqz_test_b2 = 64;
+#define BS pqz_test_bs
+#define BE pqz_test_be
+#define B2 pqz_test_b2
+#else
+#define BS 36
+#define BE 164
+#define B2 64
+#endif
+
 typedef struct
 {
   shake128_state_t st; /* SHAKE256 on the same state type (lazer/shake128.c) */
   unsigned byte, nbits;
 } bits_t;
+
+static void
+stream_clear (bits_t *b)
+{
+  shake128_clear (b->st);
+  b->byte = b->nbits = 0;
+}
 
 static void
 stream (bits_t *b, const char *tag, unsigned taglen, const uint8_t seed[32], uint32_t ctr)
@@ -98,8 +119,8 @@ pqz_keygen (const uint8_t seed32[32], uint8_t pk[PQZ_POLYVEC_BYTES], int8_t s[20
     {
       stream (&b, "SCAAS-PQZ-KEYGEN-V1", 19, seed32, ctr);
       int64_t ns = cbd8 (&b, s, N), ne = cbd16 (&b, e, N);
-      shake128_clear (b.st);
-      if (ns <= 36 * 36 && ne <= 164 * 164)
+      stream_clear (&b);
+      if (ns <= BS * BS && ne <= BE * BE)
         {
           if (ctr_used)
             *ctr_used = ctr;
@@ -126,11 +147,11 @@ pqz_enc_seed (const uint8_t *const pks[], unsigned npk, const uint8_t msgs[][16]
   for (uint32_t ctr = 0; ctr < MAXCTR; ctr++)
     {
       stream (&b, "SCAAS-PQZ-ENC-V1", 16, seed_enc, ctr);
-      int ok = cbd8 (&b, r, N) <= 36 * 36;
-      ok &= cbd16 (&b, e1, N) <= 164 * 164;
+      int ok = cbd8 (&b, r, N) <= BS * BS;
+      ok &= cbd16 (&b, e1, N) <= BE * BE;
       for (unsigned k = 0; k < npk; k++)
-        ok &= cbd16 (&b, e2[k], 16) <= 64 * 64;
-      shake128_clear (b.st);
+        ok &= cbd16 (&b, e2[k], 16) <= B2 * B2;
+      stream_clear (&b);
       if (ok)
         {
           if (ctr_used)
@@ -148,11 +169,16 @@ pqz_dec (const int8_t s[2048], const uint8_t ct[PQZ_POLYVEC_BYTES + PQZ_V_BYTES]
   if (!canonical (ct, PQZ_POLYVEC_BYTES + PQZ_V_BYTES))
     return PQZ_ERR_INPUT;
   int rc = pqz_decrypt_raw (s, ct, ct + PQZ_POLYVEC_BYTES, w);
+  if (rc)
+    return rc;
   for (unsigned i = 0; i < 16; i++)
     {
-      /* M = round(w / Delta) = floor((2w + Delta) / (2 Delta)); no ties, Delta is odd */
-      int64_t t = 2 * w[i] + DELTA, m = t >= 0 ? t / (2 * DELTA) : -((-t + 2 * DELTA - 1) / (2 * DELTA));
+      /* M = round(w / Delta) = floor((2w + Delta) / (2 Delta)), no ties (Delta odd); branch-free: |w| < q/2 < 2^41, so
+         t = 2w + Delta + 2 Delta 2^17 > 0, and floor(t / (2 Delta)) = M + 2^17 (one unsigned division by a constant) */
+      uint64_t t = (uint64_t)(2 * w[i] + DELTA + 2 * DELTA * ((int64_t)1 << 17));
+      int64_t m = (int64_t)(t / (uint64_t)(2 * DELTA)) - ((int64_t)1 << 17);
       M[i] = m, noise[i] = w[i] - DELTA * m;
     }
-  return rc;
+  explicit_bzero (w, sizeof w);
+  return PQZ_OK;
 }

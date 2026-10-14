@@ -216,32 +216,34 @@ Bsq) in every case (`sv/runs/z21s-z21diff.jsonl`); the same under ASan + UBSan 1
 
 `do_prove` derived the commitment randomness and every mask from `rnd32` alone (`SCAAS-PQZ-PROVER-RND-V1` /
 `…-SUB-V1`): a repeated `rnd32` (a weak browser RNG) for two witnesses repeated the masks. Now
-`pqz_prover_seeds` (`src/pqz_rel.c`) = `SHAKE128("SCAAS-PQZ-PROVER-RND-V2" ‖ rnd32 ‖ SHAKE128(wit)[0..32) ‖ hash0)`
-and `…-SUB-V2`, `hash0` the statement digest. Prover only: verifiers, transcript, proof format, sizes and arena
-unchanged; honest proofs change once. Test (`pqz_bench`, every run with `R_REG`): the seeds of two valid `R_REG`
-witnesses (keys `KF`, `KT`) under one `rnd32` and statement differ in 269 / 512 bits, one witness under two statements
-in 259 / 512, equal inputs give equal seeds, two proves with one `rnd32` give the same proof (`{"hedge": true}`).
-The Ligero (PQZH) half of D6 is Part B.
+`pqz_prover_seeds` (`src/pqz_rel.c`) = `SHAKE128("SCAAS-PQZ-PROVER-RND-V2" ‖ rnd32 ‖ wh ‖ hash0)` and `…-SUB-V2`, with
+`wh = SHAKE128("SCAAS-PQZ-PROVER-WIT-V2" ‖ wit)[0..32)` (inner tag added after review, run `hedge2`) and `hash0` the
+statement digest; `do_prove` zeroes the seeds after use. Prover only: verifiers, transcript, proof format unchanged;
+honest proofs change. Tests: `pqz_bench` (every run with `R_REG`): the seeds of two valid `R_REG` witnesses (keys
+`KF`, `KT`) under one `rnd32` and statement differ in 245 / 512 bits, one witness under two statements in 248 / 512,
+equal inputs give equal seeds, two proves with one `rnd32` give the same proof (`{"hedge": true}`); `pqz_sv_diff`
+(test hooks): the seeds `do_prove` used equal `pqz_prover_seeds(rnd32, wit, hash0)` for one prove per relation
+(`"prover_seeds_match": 1`, all five, portable and x86-64-v3). The Ligero (PQZH) half of D6 is Part B.
 
-Runs [measured]: `NP=10 NV=30 NPW=5 NVW=10 rel3/relfix.sh hedge` (`rel3/runs/hedge-*`, summary
-`hedge-relfix-summary.txt`) and `sv/rel3.sh hedge` + `sv/review/review.sh zdiff 1` under one capped job
-(`sv/runs/hedge-*`, summary `hedge-summary.txt`): KAT 19/19; `check_tbox_fixes: ok`; `check_sv_fixes: ok` (tree
-0 / 10, either fix reverted 10 / 10); differential test 2,710 portable + 1,350 x86-64-v3 cases, 0 mismatches, PRG 0;
-wasm `PQZ_VERIFY=both` 0 mismatches; z21 differential 145 cases, 0 disagreements; `fails 0` everywhere (native, wasm,
-ASan + UBSan with only the Open 4 nits); symbol scan clean (native, x86-64-v3, wasm, wasm without SV). Native and wasm
-proofs equal byte for byte (native 5 seeds = wasm 5 seeds; one seed alone: native = wasm generic = wasm fast = wasm
-without SV). Per-op arena peaks identical to v2 (wasm `R_TX` 231,858,048 B), largest proofs 28,114 / 42,753 / 41,946 /
-28,989 / 28,997 B; times within host noise (native generic p50 prove / verify `R_TX` 862 / 651 ms, SV p50 `R_TX`
-8.07 ms portable, 4.67 ms x86-64-v3, 13.4 ms wasm). `../artifact/expected-results.json` regenerated (provisional,
-69 / 69 checks ok).
+Runs [measured], current = `hedge2` (the first run without the inner tag, `hedge`, is kept):
+`NP=10 NV=30 NPW=5 NVW=10 rel3/relfix.sh hedge2` (`rel3/runs/hedge2-*`, summary `hedge2-relfix-summary.txt`) and
+`sv/rel3.sh hedge2` + `sv/review/review.sh zdiff 1` (`sv/runs/hedge2-*`, summary `hedge2-summary.txt`), one capped
+job: KAT 19/19; `check_tbox_fixes: ok`; `check_sv_fixes: ok` (tree 0 / 10, either fix reverted 10 / 10); differential
+test 2,710 portable + 1,350 x86-64-v3 cases, 0 mismatches, PRG 0; wasm `PQZ_VERIFY=both` 0 mismatches; z21
+differential 145 cases, 0 disagreements; `fails 0` everywhere (native, wasm, ASan + UBSan with only the Open 4 nits);
+symbol scan clean (native, x86-64-v3, wasm, wasm without SV). Native and wasm proofs equal byte for byte (native 5
+seeds = wasm 5 seeds; one seed alone: native = wasm generic = wasm fast = wasm without SV). Proof sizes within noise
+(largest proof ±30 B: 28,113 / 42,797 / 41,939 / 28,995 / 28,996 B against v2's 28,108 / 42,770 / 41,940 / 28,976 /
+28,999); arena and wasm prove peaks identical (wasm `R_TX` 231,858,048 B); times within host noise.
+`../artifact/expected-results.json` regenerated from `hedge2` (provisional, 69 / 69 checks ok).
 
-| `proofs_fnv` v2 → hedged | native 5 seeds (= wasm 5) | wasm 3 seeds | native 10 seeds | 2 seeds (SV runs) | 1 seed (alone) |
+| `proofs_fnv` v2 → hedge → **hedge2** | native 5 seeds (= wasm 5) | wasm 3 seeds | native 10 seeds | 2 seeds (SV runs) | 1 seed (alone) |
 |---|---|---|---|---|---|
-| `R_REG` | `5124b5f8` → `edf1b937` | `e23b746d` → `3e34faff` | `e2a4ba8d` → `d4d4ef83` | `a0faa73c` → `95c626e4` | `a4477f23` → `04429652` |
-| `R_TX` | `fa87fff6` → `4ec9c6e9` | `762dacd2` → `98fa56d9` | `b69bb773` → `41fd0d94` | `71396f48` → `785a380d` | `6ffad36b` → `451d28c1` |
-| `R_BURN` | `8df6b744` → `242a6785` | `3d80d4a8` → `c32fe93d` | `626710cc` → `9c5da57f` | `330c19fd` → `496c53b7` | `478eb819` → `819bba23` |
-| `R_DS` | `46c77f3e` → `dac15c76` | `216b75fc` → `3c9cde98` | `f4b59d4b` → `4f4a10ab` | `d7fbc082` → `3f530c3f` | `10639246` → `4075f5f5` |
-| `R_DR` | `84a15cd2` → `37a226ae` | `e0d2deda` → `78688027` | `ea72ce2d` → `2da4e9b2` | `22be6479` → `2d06acff` | `82621a18` → `7db4b018` |
+| `R_REG` | `5124b5f8` → `edf1b937` → **`8bd69f2d`** | `e23b746d` → `3e34faff` → **`e70b5dc4`** | `e2a4ba8d` → `d4d4ef83` → **`b82d49f8`** | `a0faa73c` → `95c626e4` → **`1af59837`** | `a4477f23` → `04429652` → **`25074bbb`** |
+| `R_TX` | `fa87fff6` → `4ec9c6e9` → **`ca69759d`** | `762dacd2` → `98fa56d9` → **`177e6806`** | `b69bb773` → `41fd0d94` → **`cabd8270`** | `71396f48` → `785a380d` → **`1d42a571`** | `6ffad36b` → `451d28c1` → **`e2cf9721`** |
+| `R_BURN` | `8df6b744` → `242a6785` → **`bfb900f9`** | `3d80d4a8` → `c32fe93d` → **`37654486`** | `626710cc` → `9c5da57f` → **`049029ff`** | `330c19fd` → `496c53b7` → **`12f45572`** | `478eb819` → `819bba23` → **`d8180c60`** |
+| `R_DS` | `46c77f3e` → `dac15c76` → **`b4aa2e26`** | `216b75fc` → `3c9cde98` → **`f39a8e64`** | `f4b59d4b` → `4f4a10ab` → **`5429242c`** | `d7fbc082` → `3f530c3f` → **`9eb44281`** | `10639246` → `4075f5f5` → **`478a0d94`** |
+| `R_DR` | `84a15cd2` → `37a226ae` → **`c800f2c6`** | `e0d2deda` → `78688027` → **`96a6e906`** | `ea72ce2d` → `2da4e9b2` → **`e53ad440`** | `22be6479` → `2d06acff` → **`5bb0078c`** | `82621a18` → `7db4b018` → **`cb2f3ced`** |
 
 ## KeyGen / Enc / Dec from seeds P6e Task 3 (branch `p6e-a1`; pq-zether.md §4.2, P6e plan gap G4)
 
@@ -255,8 +257,14 @@ work is `pqz_rel.c`'s. SHAKE256 = LaZer's Keccak core at rate 136 (`lazer/shake1
 SHAKE256 on 10 inputs (absorb and squeeze split in two), KeyGen on 20 seeds, Enc to two recipients and Dec on 20 seeds
 all equal to `pqz_kat.py --c-keys` (`keys-pqz-kat.txt`: ok; a tampered copy fails on each changed field); round trip
 1,000 seeds `Dec(Enc(m)) = m`, max |noise| 543 ≤ B_FRESH 11,872, every counter 0, 3 / 3 non-canonical inputs rejected;
-1.9 s, 5.7 MB RSS. Not measured: wasm (P6e Task 7, `pqz-ffi` `prove` feature); the resample branch (unreachable by
-search, see Open 7).
+1.9 s, 5.7 MB RSS. After review (`test/runs/keys2-*`, built in the `hedge2` job): Dec by both recipients checked in
+Python (40 Decs); the resample path and the counter-64 error pinned with lowered thresholds through test hooks
+(`PQZ_TEST_HOOKS` object of `pqz_keys.c`, never in libpqz; `‖s‖ ≤ 32`, `‖e‖ ≤ 143`, `‖e2_j‖ ≤ 12`, and a threshold 0):
+6 + 6 lowered KeyGen / Enc lines, 4 KeyGen and 3 Enc resampled (counter ≥ 1), 2 counter-64 errors, all equal to
+`pqz_kat.py`; every keys entry point and the three `pqz_rel.c` helpers return `PQZ_ERR_INTERNAL` before `pqz_init`
+(6 / 6); `pqz_dec` rounds branch-free (one unsigned division by the constant 2Δ) and zeroes `w`; the CBD bit buffer is
+zeroed with the SHAKE state (`keys2-pqz-kat.txt`: ok; a tampered copy fails on each changed field). Not measured: wasm
+(P6e Task 7, `pqz-ffi` `prove` feature).
 
 ## Measured (2026-10-13, this machine, single thread)
 
@@ -313,11 +321,13 @@ rest bookkeeping; the zero entries of the selection matrices' Gram matrices were
    wrong reject; a wrong accept would still need the final hash to match). The P6f cgo wrapper must serialise every
    libpqz call (one process-wide lock) or move to per-thread contexts. Status: open, P6f.
 
-7. **`keygen.json` "one seed with ≥ 1 resample (searched)" (P6e plan Task 11) cannot be searched**: the thresholds
-   sit ≥ 10 s.d. above the mean norms (‖s‖² mean 1,024, s.d. 22.6, bound 1,296 = 12 s.d.; ‖e‖² mean 20,480, s.d.
-   ≈ 632, bound 26,896 ≈ 10 s.d.), so a counter ≥ 1 has probability ≈ 2^-70 or less per seed. The resample path can
-   only be pinned with lowered thresholds in a test build (`pqz_kat.py` has the knob, `keygen_sample(..., bs, be)`;
-   the C core has none yet). Owner / Task 11 input: drop that row or add the test-build knob.
+7. ~~`keygen.json` "one seed with ≥ 1 resample (searched)" cannot be searched (≈ 2^-70 per seed).~~ Settled
+   (controller 2026-10-14): the row is dropped from the plan's Task 11; the resample path and the counter-64 error are
+   pinned by the test-hook KATs of Task 3 (`test/runs/keys2-*`).
+8. **Secret material in the arena is not zeroed** (project-wide): the witness copies in `s1`, the masks `y`, `s2` and
+   the keys `pqz_keygen` writes live in the arena (or the caller's buffers) until overwritten; `pqz_arena_release`
+   does not clear them. `do_prove` zeroes its seeds, `pqz_keys.c` its SHAKE state, bit buffer and `w`. Zeroing on
+   release (or per call) is open, for P6f / P6h (cost: one memset of the used arena per prove).
 
 Scratch (not needed to resume, re-creatable): LaZer and lattice-estimator clones, the upstream tbox harness and
 debug builds under the session scratchpad `p6d/`.

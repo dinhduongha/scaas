@@ -245,15 +245,15 @@ def keygen_sample(seed32, max_ctr=64, bs=B_S, be=B_E):
     raise ValueError("KeyGen: counter 64 reached")
 
 
-def keygen(seed32):
-    """(pk bytes, s, e, ctr); pk = A·s + e."""
-    s, e, ctr = keygen_sample(seed32)
+def keygen(seed32, bs=B_S, be=B_E):
+    """(pk bytes, s, e, ctr); pk = A·s + e. bs, be: the norm thresholds (lowered only to test the resample path)."""
+    s, e, ctr = keygen_sample(seed32, bs=bs, be=be)
     t = mul_A(polys(s))
     pk = [[(t[i][k] + e[D * i + k]) % Q for k in range(D)] for i in range(K)]
     return enc_vec(pk), s, e, ctr
 
 
-def enc_sample(seed_enc, n, max_ctr=64):
+def enc_sample(seed_enc, n, max_ctr=64, bs=B_S, be=B_E, b2=B_2):
     """(r, e1, [e2_j], ctr) from SHAKE256("SCAAS-PQZ-ENC-V1" || seed_enc || be4(ctr)), one stream in that order."""
     assert len(seed_enc) == 32
     for ctr in range(max_ctr):
@@ -265,7 +265,7 @@ def enc_sample(seed_enc, n, max_ctr=64):
         for _ in range(n):
             x, p = cbd(bits, p, 20, 16)
             e2.append(x)
-        if sq(r) <= B_S**2 and sq(e1) <= B_E**2 and all(sq(x) <= B_2**2 for x in e2):
+        if sq(r) <= bs * bs and sq(e1) <= be * be and all(sq(x) <= b2 * b2 for x in e2):
             return r, e1, e2, ctr
     raise ValueError("Enc: counter 64 reached")
 
@@ -282,9 +282,9 @@ def encrypt(pks, msgs, r, e1, e2):
     return u, vs
 
 
-def enc_seed(pks, msgs, seed_enc):
+def enc_seed(pks, msgs, seed_enc, bs=B_S, be=B_E, b2=B_2):
     """(u, [v_j], ctr) = Enc({(pk_j, m_j)}, seed_enc)."""
-    r, e1, e2, ctr = enc_sample(seed_enc, len(pks))
+    r, e1, e2, ctr = enc_sample(seed_enc, len(pks), bs=bs, be=be, b2=b2)
     u, vs = encrypt(pks, msgs, r, e1, e2)
     return u, vs, ctr
 
@@ -494,26 +494,38 @@ def selftest(log):
         p = parse(OP_BYTE[op], st)
         ok(len(st) == STMT_BYTES[name] and p["op"] == op and p.get("pk", p.get("pk_f")) == pk, f"statement {name}")
 
-    def rejects(st, op_byte, what):
+    def rejects(st, op_byte, what, why):
         try:
             parse(op_byte, st)
-            ok(False, "reject: " + what)
-        except ValueError:
-            ok(True, "reject: " + what)
+            ok(False, f"reject: {what} (accepted)")
+        except ValueError as x:
+            ok(str(x) == why, f"reject: {what}: {x}")
 
     t = forms["TRANSFER"]
-    rejects(t[:-1], 1, "length - 1")
-    rejects(t + b"\0", 1, "length + 1")
-    rejects(t[:448] + word(0) + t[480:], 1, "auditorOn 0 on the 83,072-byte form")
-    rejects(forms["TRANSFER0"][:448] + word(1) + forms["TRANSFER0"][480:], 1, "auditorOn 1 on the 66,560-byte form")
-    rejects(t[:448] + word(2) + t[480:], 1, "auditorOn 2")
-    rejects(t[:256] + word(2**64) + t[288:], 1, "fee >= 2^64")
-    rejects(t[:640] + Q.to_bytes(8, "big") + t[648:], 1, "coefficient = q")
-    rejects(t[:640] + (2**42).to_bytes(8, "big") + t[648:], 1, "coefficient = 2^42")
-    rejects(t, 2, "TRANSFER statement under op 2")
-    rejects(t[:32] + bytes(32) + t[64:], 1, "unknown proofSystemId")
+    rejects(t[:-1], 1, "length - 1", "length")
+    rejects(t + b"\0", 1, "length + 1", "length")
+    rejects(t[:448] + word(0) + t[480:], 1, "auditorOn 0 on the 83,072-byte form", "auditorOn does not match the length")
+    rejects(forms["TRANSFER0"][:448] + word(1) + forms["TRANSFER0"][480:], 1, "auditorOn 1 on the 66,560-byte form",
+            "auditorOn does not match the length")
+    rejects(t[:448] + word(2) + t[480:], 1, "auditorOn 2", "auditorOn does not match the length")
+    rejects(t[:256] + word(2**64) + t[288:], 1, "fee >= 2^64", "fee >= 2^64")
+    rejects(t[:640] + Q.to_bytes(8, "big") + t[648:], 1, "coefficient = q", "coefficient >= q")
+    rejects(t[:640] + (2**42).to_bytes(8, "big") + t[648:], 1, "coefficient = 2^42", "coefficient >= q")
+    rejects(t, 2, "TRANSFER statement under op 2", "opTag does not belong to op")
+    rejects(t[:32] + bytes(32) + t[64:], 1, "unknown proofSystemId", "unknown proofSystemId")
     d = forms["DISCLOSE-SENDER"]
-    rejects(d[:224] + word(2**64) + d[256:], 4, "disclosure amount >= 2^64")
+    rejects(d[:224] + word(2**64) + d[256:], 4, "disclosure amount >= 2^64", "amount >= 2^64")
+    # the resample path and the counter-64 error, with lowered thresholds (the real ones are never exceeded)
+    ctrs = [keygen_sample(bytes([i]) * 32, bs=32, be=143)[2] for i in range(4)]
+    ok(any(c >= 1 for c in ctrs), f"KeyGen resamples with ||s|| <= 32, ||e|| <= 143: counters {ctrs}")
+    ctrs = [enc_sample(bytes([i]) * 32, 2, bs=32, be=143, b2=12)[3] for i in range(4)]
+    ok(any(c >= 1 for c in ctrs), f"Enc resamples with 32 / 143 / 12: counters {ctrs}")
+    for what, f in (("KeyGen", lambda: keygen_sample(bytes(32), bs=0)), ("Enc", lambda: enc_sample(bytes(32), 1, b2=0))):
+        try:
+            f()
+            ok(False, f"{what}: counter 64 error")
+        except ValueError as x:
+            ok("counter 64" in str(x), f"{what}: counter 64 error")
     # bundle / opening sizes, entryRef / ctHash / authDigest shapes
     ok(len(bundle(bytes(16), u, vs[0], vs[2], 1)) == 16688 and len(bundle(bytes(16), u, vs[0], None, 1)) == 16560,
        "bundle 16,688 / 16,560 B")
@@ -527,7 +539,8 @@ def selftest(log):
 def check_c_keys(path, log):
     bad = []
     pks = {}
-    n = {"shake256": 0, "keygen": 0, "enc": 0, "roundtrip": 0}
+    n = dict.fromkeys(["shake256", "keygen", "enc", "dec", "keygen_lowered", "enc_lowered", "keygen_resampled",
+                       "enc_resampled", "ctr64_errors"], 0)
     for line in open(path):
         line = line.strip()
         if not line.startswith("{"):
@@ -543,24 +556,50 @@ def check_c_keys(path, log):
             n["keygen"] += 1
             pk, s, e, ctr = keygen(bytes.fromhex(x["seed"]))
             pks[x["seed"]] = (pk, s)
-            if ctr != x["ctr"] or shake256(pk, 32).hex() != x["pk_shake256"]:
+            if x["rc"] != 0 or ctr != x["ctr"] or shake256(pk, 32).hex() != x["pk_shake256"]:
                 bad.append(f"KeyGen seed {x['seed']}")
-        elif "enc" in r:
-            x = r["enc"]
-            n["enc"] += 1
+        elif "keygen_lowered" in r:  # test-hook thresholds: the resample path, or the counter-64 error (rc 4)
+            x = r["keygen_lowered"]
+            n["keygen_lowered"] += 1
+            try:
+                pk, s, e, ctr = keygen(bytes.fromhex(x["seed"]), bs=x["bs"], be=x["be"])
+                if x["rc"] != 0 or ctr != x["ctr"] or shake256(pk, 32).hex() != x["pk_shake256"]:
+                    bad.append(f"KeyGen lowered {x['bs']} / {x['be']} seed {x['seed']}")
+                n["keygen_resampled"] += ctr >= 1
+            except ValueError:
+                if x["rc"] != 4:
+                    bad.append(f"KeyGen lowered {x['bs']} / {x['be']}: C rc {x['rc']}, Python counter-64 error")
+                n["ctr64_errors"] += 1
+        elif "enc" in r or "enc_lowered" in r:
+            low = "enc_lowered" in r
+            x = r["enc_lowered" if low else "enc"]
+            n["enc_lowered" if low else "enc"] += 1
+            th = {k: x[k] for k in ("bs", "be", "b2")} if low else {}
             rec = [pks[sd] for sd in x["recipients"]]
-            u, vs, ctr = enc_seed([p[0] for p in rec], [digits(v) for v in x["values"]], bytes.fromhex(x["seed_enc"]))
-            if ctr != x["ctr"] or shake256(u, 32).hex() != x["u_shake256"] or [v.hex() for v in vs] != x["v"]:
+            try:
+                u, vs, ctr = enc_seed([p[0] for p in rec], [digits(v) for v in x["values"]],
+                                      bytes.fromhex(x["seed_enc"]), **th)
+            except ValueError:
+                if not low or x["rc"] != 4:
+                    bad.append(f"Enc seed_enc {x['seed_enc']}: C rc {x['rc']}, Python counter-64 error")
+                n["ctr64_errors"] += 1
+                continue
+            if x["rc"] != 0 or ctr != x["ctr"] or shake256(u, 32).hex() != x["u_shake256"] or \
+                    [v.hex() for v in vs] != x["v"]:
                 bad.append(f"Enc seed_enc {x['seed_enc']}")
-            M, noise, val = dec(rec[0][1], u + vs[0])
-            if M != x["dec"]["M"] or noise != x["dec"]["noise"] or val != x["values"][0]:
-                bad.append(f"Dec seed_enc {x['seed_enc']}")
-        elif "roundtrip" in r:
-            n["roundtrip"] = r["roundtrip"]
-            if r.get("fails", 1) != 0:
-                bad.append(f"C round trip: {r}")
+            n["enc_resampled"] += low and ctr >= 1
+            for j, d in enumerate(x.get("dec", [])):  # Dec by each recipient
+                M, noise, val = dec(rec[j][1], u + vs[j])
+                if M != d["M"] or noise != d["noise"] or val != x["values"][j]:
+                    bad.append(f"Dec seed_enc {x['seed_enc']} recipient {j}")
+                n["dec"] += 1
+        elif "roundtrip" in r or "before_init_rejected" in r or "lowered" in r:
+            log(f"     C's own claim (not recomputed here): {line}")
+            if r.get("fails", 0) != 0 or r.get("before_init_rejected", 6) != 6:
+                bad.append(f"C reports: {line}")
     log(f"     C keys KAT {path}: {n}")
-    if n["shake256"] < 10 or n["keygen"] < 20 or n["enc"] < 20:
+    if n["shake256"] < 10 or n["keygen"] < 20 or n["enc"] < 20 or n["dec"] < 40 or n["keygen_resampled"] < 1 \
+            or n["enc_resampled"] < 1 or n["ctr64_errors"] < 2:
         bad.append(f"too few cases: {n}")
     return bad
 

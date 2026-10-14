@@ -63,7 +63,7 @@ everything on your own machine, and the package compares your results with `expe
 
 **Freeze postponed (controller 2026-10-14):** a first `--full` run was stopped after the KAT, fix checks and part of the differential test (`runs/freeze-2026-10-14-interrupted-console.txt`), because P6e found that the PQZL prover's masks are not hedged as CTR-PQZ-19 requires (P6e plan gap G2, Task 1). The fix changes every honest proof (`proofs_fnv`), so the freeze runs after P6e gate A (PQZL vectors and `proofSystemId` frozen), with a new date in the paths below.
 
-**Provisional expected results after P6e Task 1 (2026-10-14, branch `p6e-a1`):** `expected-results.json` is regenerated with `results.py freeze` from the hedged-prover runs `../rel3/runs/hedge-*` and `../sv/runs/hedge-*` (69 / 69 checks ok, `runs/hedge-provisional-freeze.md`): new `proofs_fnv` for every relation and n, proof sizes and wasm prove peaks unchanged. Still provisional; the freeze after gate A replaces it. The Docker runs in `runs/docker-*` predate it (v2 hashes).
+**Provisional expected results after P6e Task 1 (2026-10-14, branch `p6e-a1`):** `expected-results.json` is regenerated with `results.py freeze` from the hedged-prover runs `../rel3/runs/hedge2-*` and `../sv/runs/hedge2-*` (69 / 69 checks ok, `runs/hedge2-provisional-freeze.md`; the first hedge run without the inner witness tag, `runs/hedge-provisional-freeze.md`, is superseded): new `proofs_fnv` for every relation and n, proof sizes within noise (largest proof ±30 B), arena and wasm prove peaks identical. Still provisional; the freeze after gate A replaces it. The Docker runs in `runs/docker-*` predate it (v2 hashes).
 
 Next (heavy step under the machine-wide lock): the freeze, through the package on the host toolchain.
 

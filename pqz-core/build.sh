@@ -45,8 +45,11 @@ native() {
   $CC -std=gnu11 -O2 $WARN $SVDEF -Isrc -o $B/native/pqz_bench test/pqz_bench.c $B/native/libpqz.a
   $CC -std=gnu11 -O2 -DPQZ_BACKEND -DBUILD_FLAGS='"pqz-core native"' -I$B/include -Isrc -Ilazer -Iparams \
     -o $B/native/kat_dump kat/lazer_dump.c $B/native/libpqz.a
+  # keys KAT: pqz_keys.c again with the test hooks (lowered thresholds), before the library's own object
+  mkdir -p $B/native/hooks
+  $CC $CFLAGS_LIB -DPQZ_TEST_HOOKS -c src/pqz_keys.c -o $B/native/hooks/pqz_keys.o
   $CC -std=gnu11 -O2 $WARN -I$B/include -Isrc -Ilazer -Iparams -o $B/native/pqz_keys_kat test/pqz_keys_kat.c \
-    $B/native/libpqz.a
+    $B/native/hooks/pqz_keys.o $B/native/libpqz.a
   [ "$SV" = 1 ] || return 0
   # P6-SV differential test: the relation and specialised-verifier objects again, with the test hooks
   mkdir -p $B/native/hooks
