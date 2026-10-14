@@ -5,39 +5,48 @@ Source and scripts to rebuild pqz-core (PQZL: the LaZer fork with the five relat
 measurements in `../STATUS.md`. Nothing built is published: no image, no wasm, no binaries. You build and run
 everything on your own machine, and the package compares your results with `expected-results.json`.
 
-## Status / resume (2026-10-14, WIP, machine shut down)
+## Status / resume (2026-10-14, WIP: Docker tests done, freeze not run)
 
 - **Done (source, committed):** `Dockerfile`, `Dockerfile.dockerignore`, `reproduce.sh` (quick, `--full`, `--serve`,
   `--upstream`), `results.py` (`check`, `freeze`), `web/index.html`, this README, `.gitignore` entry `artifact/out/`.
-- **Tested:** `results.py freeze` on the v2 runs (`rel3/runs/v2full-*` + `sv/runs/v2-*`): 69 / 69 checks ok, and
-  the table it prints matches the v2 numbers in `../STATUS.md`. `sh -n reproduce.sh`. In a plain `ubuntu:24.04`
-  container (same digest), the apt snapshot `20261013T000000Z` offers exactly the pinned versions (clang-18 / lld-18
-  1:18.1.3-1ubuntu1, gcc-13 / g++-13 13.3.0-6ubuntu2~24.04.1, cmake 3.28.3-1build7).
-- **Untested:** the image build after the fix, and every `reproduce.sh` mode (quick, `--full`, `--serve`,
-  `--upstream`), in Docker and on the host. In particular, nobody has yet checked that `--upstream` compiles
-  `../xcheck/shim` (written at `b2402b5`) against the current headers, or that `http.server` serves `pqz.wasm` as
-  `application/wasm`.
-- **Why the first image build failed** (`runs/docker-build-1-failed.txt`): `snapshot.ubuntu.com` is HTTPS only,
-  and the base image has no `ca-certificates`, so `apt-get update --snapshot` fetched nothing. Fixed in the
-  `Dockerfile`: `ca-certificates` now comes from the live archive first. Not rebuilt (owner: no further runs).
+- **Tested before the Docker runs:** `results.py freeze` on the v2 runs (`rel3/runs/v2full-*` + `sv/runs/v2-*`):
+  69 / 69 checks ok, and the table it prints matches the v2 numbers in `../STATUS.md`. `sh -n reproduce.sh`.
+- **Docker tests (2026-10-14, AMD Ryzen 5 7235HS, no avx512ifma; logs and outputs in `runs/`):**
+  - Image build `runs/docker-build-2.txt`: ok, no Dockerfile change after the `ca-certificates` fix (first failure:
+    `runs/docker-build-1-failed.txt`, `snapshot.ubuntu.com` is HTTPS only). The log shows the pinned versions
+    installed: clang-18 / lld-18 1:18.1.3-1ubuntu1, gcc-13 / g++-13 13.3.0-6ubuntu2~24.04.1, cmake 3.28.3-1build7;
+    node 26.8.1 sha256 ok; LaZer `3330e48`. Image 1.08 GB. `runs/docker-build-3.txt` is the rebuild after the shim
+    fix below (only the `COPY` layer changed).
+  - Quick mode `runs/docker-quick/` (`summary.txt`): RESULT PASS, 66 ok / 0 FAIL against the provisional
+    `expected-results.json`. Every `proofs_fnv` equal (5 relations x 7 run files, native, x86-64-v3, wasm, wasm
+    `both`, wasm without SV); proof sizes and wasm prove peaks equal to the byte (only `R_REG` max 28,085 vs 28,108,
+    within 0.5 %); KAT 19/19, `check_tbox_fixes: ok`, `check_sv_fixes: ok`, differential 2,710 cases 0 mismatches.
+    About 15 min.
+  - `--upstream --network none` `runs/docker-upstream/`: ok. Upstream v3 and v4 (IFMA) build; KAT upstream v3 19/19;
+    v4 is built only (this CPU has no avx512ifma, so the v4 KAT and bench are skipped, as designed). Bench N=3 medians
+    (ms): upstream v3 `R_REG` 581 prove / 549 verify, `R_TX` 6,454 / 6,701; fork 249 / 167, 999 / 676; fails 0.
+    The first run `runs/docker-upstream-1-failed/` compiled, but the fork bench failed `R_TX` (prove rc 3):
+    `../xcheck/shim/bench.c` built the `b2402b5` statement (prefix || body || be8 fee), and rel3 moved to the 640 B
+    header (fee a be32 word at 256). Fixed in `bench.c` and `up_rel.c` (`parse_tx`) under `#ifdef PQZ_HEADER_BYTES`,
+    so the shim still builds against the `b2402b5` headers of the older `xcheck/` scripts. Upstream and fork now prove
+    the same statement bytes. The shim keeps the `b2402b5` `R_TX` relation for upstream, so this is a timing
+    cross-check, not a relation-equality check.
+  - `--serve` `runs/docker-serve-*.txt`: `/` 200 `text/html`, `pqz.wasm` 200 `Content-type: application/wasm`
+    (405,882 B, wasm magic). No change needed: Python 3.12 maps `.wasm` itself. `docker stop` ends it with 137 after
+    the grace period (`http.server` as PID 1 ignores SIGTERM); Ctrl-C on `docker run` stops it.
+  - `docker image rm pqz-core-artifact` done; no image kept or pushed.
+- **Not tested:** `--full` in Docker, and every mode on the host toolchain (the freeze below is the first host run).
 - **`expected-results.json` is PROVISIONAL.** It was built from `rel3/runs/v2full-*` + `sv/runs/v2-*` (2026-10-13,
   before the z21 merge). z21 changed only the verifier, and the post-z21 `rel3/runs/final-*` gives the same
-  `proofs_fnv`. Its times are pre-z21.
+  `proofs_fnv`, as does the Docker quick run above. Its times are pre-z21.
 - **Phase 1 runs on disk:** `rel3/runs/final-*` is a complete `rel3/relfix.sh` run with the v2full sample sizes,
   post z21: rc 0, KAT 19/19, `check_tbox_fixes: ok`, `fails 0`, and `proofs_fnv` = v2 for all five relations.
   `sv/runs/final-*` was interrupted (see `final-rc.txt`). Only the portable differential is complete there: 2,710
   cases, 0 mismatches. Neither is the freeze.
 
-Next, in order (each heavy step under the machine-wide lock):
+Next (heavy step under the machine-wide lock): the freeze, through the package on the host toolchain.
 
 ```sh
-# 1. image build + Docker tests (from the repo root); keep logs in pqz-core/artifact/runs/
-scripts/capped docker build --progress=plain -t pqz-core-artifact -f pqz-core/artifact/Dockerfile pqz-core
-scripts/capped docker run --rm --memory=4g -u "$(id -u):$(id -g)" -v "$PWD/pqz-core/artifact/runs/docker-quick:/out" -e OUT=/out pqz-core-artifact
-scripts/capped docker run --rm --memory=4g --network none -u "$(id -u):$(id -g)" -v "$PWD/pqz-core/artifact/runs/docker-upstream:/out" -e OUT=/out pqz-core-artifact --upstream
-docker run --rm -p 127.0.0.1:8000:8000 pqz-core-artifact --serve     # open http://127.0.0.1:8000/, then Ctrl-C
-docker image rm pqz-core-artifact
-# 2. the freeze, through the package on the host toolchain
 OUT=pqz-core/artifact/runs/freeze-2026-10-14 scripts/capped pqz-core/artifact/reproduce.sh --full
 cd pqz-core && python3 -I artifact/results.py freeze "frozen 2026-10-14 (post z21)" artifact/runs/freeze-2026-10-14 \
   > artifact/expected-results.json      # prints the frozen table (Markdown) on stderr

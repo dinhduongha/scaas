@@ -1,0 +1,7 @@
+== 04:20:44 build upstream v3 (-march=x86-64-v3 -maes -mpclmul)
+== 04:21:10 build upstream v4 (-march=x86-64-v4 -mavx512ifma -mavx512vbmi2 -maes -mpclmul)
+== 04:21:48 build fork bench (shim bench.c against build/native/libpqz.a)
+== 04:22:01 KAT upstream v3 against kat/lazer-3330e48.json
+== 04:22:01 KAT upstream v4: skipped, no avx512ifma in /proc/cpuinfo (built only; running needs an AVX-512 IFMA CPU or Intel SDE)
+== 04:22:01 bench upstream vs fork, N=3 (xcheck/static/run.sh; skips bench_up_v4 without avx512ifma)
+== 04:23:14 done: /out

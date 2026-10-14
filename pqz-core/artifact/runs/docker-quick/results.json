@@ -1,0 +1,697 @@
+{
+ "relations": {
+  "R_REG": {
+   "fnv": {
+    "3": "e23b746d",
+    "2": "a0faa73c",
+    "1": "a4477f23"
+   },
+   "fnv_seen": [
+    [
+     "native-generic.jsonl",
+     3,
+     "e23b746d"
+    ],
+    [
+     "wasm-generic.jsonl",
+     3,
+     "e23b746d"
+    ],
+    [
+     "native-fast.jsonl",
+     2,
+     "a0faa73c"
+    ],
+    [
+     "x86v3-fast.jsonl",
+     2,
+     "a0faa73c"
+    ],
+    [
+     "wasm-fast.jsonl",
+     2,
+     "a0faa73c"
+    ],
+    [
+     "wasm-both.jsonl",
+     2,
+     "a0faa73c"
+    ],
+    [
+     "alone-wasm-nosv.jsonl",
+     1,
+     "a4477f23"
+    ]
+   ],
+   "proof_bytes_max": 28085,
+   "prove_p50_ms_native": 247.631,
+   "generic_verify_p50_ms_native": 154.687,
+   "prove_p50_ms_wasm": 381.952,
+   "generic_verify_p50_ms_wasm": 227.353,
+   "sv_p50_ms_native": 3.877,
+   "sv_p99_ms_native": 3.957,
+   "sv_p50_ms_x86v3": 2.366,
+   "sv_p99_ms_x86v3": 2.686,
+   "sv_p50_ms_wasm": 6.749,
+   "sv_p99_ms_wasm": 7.055,
+   "wasm_prove_peak_bytes": 73692688,
+   "ratios": {
+    "sv_speedup": 39.9,
+    "wasm_over_native_prove": 1.54
+   }
+  },
+  "R_TX": {
+   "fnv": {
+    "3": "762dacd2",
+    "2": "71396f48",
+    "1": "6ffad36b"
+   },
+   "fnv_seen": [
+    [
+     "native-generic.jsonl",
+     3,
+     "762dacd2"
+    ],
+    [
+     "wasm-generic.jsonl",
+     3,
+     "762dacd2"
+    ],
+    [
+     "native-fast.jsonl",
+     2,
+     "71396f48"
+    ],
+    [
+     "x86v3-fast.jsonl",
+     2,
+     "71396f48"
+    ],
+    [
+     "wasm-fast.jsonl",
+     2,
+     "71396f48"
+    ],
+    [
+     "wasm-both.jsonl",
+     2,
+     "71396f48"
+    ],
+    [
+     "alone-wasm-nosv.jsonl",
+     1,
+     "6ffad36b"
+    ]
+   ],
+   "proof_bytes_max": 42770,
+   "prove_p50_ms_native": 971.16,
+   "generic_verify_p50_ms_native": 607.119,
+   "prove_p50_ms_wasm": 1573.752,
+   "generic_verify_p50_ms_wasm": 808.1,
+   "sv_p50_ms_native": 7.846,
+   "sv_p99_ms_native": 8.485,
+   "sv_p50_ms_x86v3": 4.583,
+   "sv_p99_ms_x86v3": 4.856,
+   "sv_p50_ms_wasm": 13.379,
+   "sv_p99_ms_wasm": 13.585,
+   "wasm_prove_peak_bytes": 231858048,
+   "ratios": {
+    "sv_speedup": 77.4,
+    "wasm_over_native_prove": 1.62
+   }
+  },
+  "R_BURN": {
+   "fnv": {
+    "3": "3d80d4a8",
+    "2": "330c19fd",
+    "1": "478eb819"
+   },
+   "fnv_seen": [
+    [
+     "native-generic.jsonl",
+     3,
+     "3d80d4a8"
+    ],
+    [
+     "wasm-generic.jsonl",
+     3,
+     "3d80d4a8"
+    ],
+    [
+     "native-fast.jsonl",
+     2,
+     "330c19fd"
+    ],
+    [
+     "x86v3-fast.jsonl",
+     2,
+     "330c19fd"
+    ],
+    [
+     "wasm-fast.jsonl",
+     2,
+     "330c19fd"
+    ],
+    [
+     "wasm-both.jsonl",
+     2,
+     "330c19fd"
+    ],
+    [
+     "alone-wasm-nosv.jsonl",
+     1,
+     "478eb819"
+    ]
+   ],
+   "proof_bytes_max": 41940,
+   "prove_p50_ms_native": 698.695,
+   "generic_verify_p50_ms_native": 576.022,
+   "prove_p50_ms_wasm": 992.966,
+   "generic_verify_p50_ms_wasm": 753.305,
+   "sv_p50_ms_native": 7.545,
+   "sv_p99_ms_native": 7.85,
+   "sv_p50_ms_x86v3": 4.879,
+   "sv_p99_ms_x86v3": 5.826,
+   "sv_p50_ms_wasm": 12.905,
+   "sv_p99_ms_wasm": 14.298,
+   "wasm_prove_peak_bytes": 220431120,
+   "ratios": {
+    "sv_speedup": 76.3,
+    "wasm_over_native_prove": 1.42
+   }
+  },
+  "R_DS": {
+   "fnv": {
+    "3": "216b75fc",
+    "2": "d7fbc082",
+    "1": "10639246"
+   },
+   "fnv_seen": [
+    [
+     "native-generic.jsonl",
+     3,
+     "216b75fc"
+    ],
+    [
+     "wasm-generic.jsonl",
+     3,
+     "216b75fc"
+    ],
+    [
+     "native-fast.jsonl",
+     2,
+     "d7fbc082"
+    ],
+    [
+     "x86v3-fast.jsonl",
+     2,
+     "d7fbc082"
+    ],
+    [
+     "wasm-fast.jsonl",
+     2,
+     "d7fbc082"
+    ],
+    [
+     "wasm-both.jsonl",
+     2,
+     "d7fbc082"
+    ],
+    [
+     "alone-wasm-nosv.jsonl",
+     1,
+     "10639246"
+    ]
+   ],
+   "proof_bytes_max": 28976,
+   "prove_p50_ms_native": 301.336,
+   "generic_verify_p50_ms_native": 206.043,
+   "prove_p50_ms_wasm": 431.026,
+   "generic_verify_p50_ms_wasm": 258.828,
+   "sv_p50_ms_native": 4.123,
+   "sv_p99_ms_native": 4.36,
+   "sv_p50_ms_x86v3": 2.886,
+   "sv_p99_ms_x86v3": 3.222,
+   "sv_p50_ms_wasm": 7.204,
+   "sv_p99_ms_wasm": 8.062,
+   "wasm_prove_peak_bytes": 76888880,
+   "ratios": {
+    "sv_speedup": 50.0,
+    "wasm_over_native_prove": 1.43
+   }
+  },
+  "R_DR": {
+   "fnv": {
+    "3": "e0d2deda",
+    "2": "22be6479",
+    "1": "82621a18"
+   },
+   "fnv_seen": [
+    [
+     "native-generic.jsonl",
+     3,
+     "e0d2deda"
+    ],
+    [
+     "wasm-generic.jsonl",
+     3,
+     "e0d2deda"
+    ],
+    [
+     "native-fast.jsonl",
+     2,
+     "22be6479"
+    ],
+    [
+     "x86v3-fast.jsonl",
+     2,
+     "22be6479"
+    ],
+    [
+     "wasm-fast.jsonl",
+     2,
+     "22be6479"
+    ],
+    [
+     "wasm-both.jsonl",
+     2,
+     "22be6479"
+    ],
+    [
+     "alone-wasm-nosv.jsonl",
+     1,
+     "82621a18"
+    ]
+   ],
+   "proof_bytes_max": 28999,
+   "prove_p50_ms_native": 298.906,
+   "generic_verify_p50_ms_native": 210.568,
+   "prove_p50_ms_wasm": 433.137,
+   "generic_verify_p50_ms_wasm": 251.98,
+   "sv_p50_ms_native": 4.429,
+   "sv_p99_ms_native": 4.719,
+   "sv_p50_ms_x86v3": 2.869,
+   "sv_p99_ms_x86v3": 3.04,
+   "sv_p50_ms_wasm": 7.49,
+   "sv_p99_ms_wasm": 8.464,
+   "wasm_prove_peak_bytes": 82951488,
+   "ratios": {
+    "sv_speedup": 47.5,
+    "wasm_over_native_prove": 1.45
+   }
+  }
+ },
+ "checks": {
+  "kat": "ok",
+  "tbox_fixes": "ok",
+  "sv_fixes": "ok",
+  "diff-portable": {
+   "cases": 2710,
+   "mismatches": 0,
+   "other_fails": 0,
+   "prg_mismatches": 0
+  }
+ },
+ "runs": {
+  "native-generic.jsonl": {
+   "fails": 0,
+   "mismatches": 0,
+   "file": "/out/native-generic.jsonl"
+  },
+  "wasm-generic.jsonl": {
+   "fails": 0,
+   "mismatches": 0,
+   "file": "/out/wasm-generic.jsonl"
+  },
+  "native-fast.jsonl": {
+   "fails": 0,
+   "mismatches": 0,
+   "file": "/out/native-fast.jsonl"
+  },
+  "x86v3-fast.jsonl": {
+   "fails": 0,
+   "mismatches": 0,
+   "file": "/out/x86v3-fast.jsonl"
+  },
+  "wasm-fast.jsonl": {
+   "fails": 0,
+   "mismatches": 0,
+   "file": "/out/wasm-fast.jsonl"
+  },
+  "wasm-both.jsonl": {
+   "fails": 0,
+   "mismatches": 0,
+   "file": "/out/wasm-both.jsonl"
+  },
+  "alone-wasm-nosv.jsonl": {
+   "fails": 0,
+   "mismatches": 0,
+   "file": "/out/alone-wasm-nosv.jsonl"
+  }
+ },
+ "mode": "quick",
+ "machine": {
+  "cpu": "AMD Ryzen 5 7235HS",
+  "flags": "aes vaes avx2",
+  "threads": 8,
+  "os": "Ubuntu 24.04.5 LTS",
+  "kernel": "7.0.0-34-generic",
+  "cc": "Ubuntu clang version 18.1.3 (1ubuntu1)",
+  "wasm_ld": "Ubuntu LLD 18.1.3",
+  "node": "v26.8.1",
+  "python": "3.12.3",
+  "docker": true
+ },
+ "compare": [
+  [
+   "ok",
+   "kat",
+   "ok"
+  ],
+  [
+   "ok",
+   "tbox_fixes",
+   "ok"
+  ],
+  [
+   "ok",
+   "sv_fixes",
+   "ok"
+  ],
+  [
+   "ok",
+   "diff-portable",
+   "2710 cases, 0 mismatches, 0 other fails, PRG 0"
+  ],
+  [
+   "ok",
+   "native-generic.jsonl fails",
+   "fails 0, verifier disagreements 0"
+  ],
+  [
+   "ok",
+   "wasm-generic.jsonl fails",
+   "fails 0, verifier disagreements 0"
+  ],
+  [
+   "ok",
+   "native-fast.jsonl fails",
+   "fails 0, verifier disagreements 0"
+  ],
+  [
+   "ok",
+   "x86v3-fast.jsonl fails",
+   "fails 0, verifier disagreements 0"
+  ],
+  [
+   "ok",
+   "wasm-fast.jsonl fails",
+   "fails 0, verifier disagreements 0"
+  ],
+  [
+   "ok",
+   "wasm-both.jsonl fails",
+   "fails 0, verifier disagreements 0"
+  ],
+  [
+   "ok",
+   "alone-wasm-nosv.jsonl fails",
+   "fails 0, verifier disagreements 0"
+  ],
+  [
+   "ok",
+   "R_REG proofs_fnv native-generic.jsonl n=3",
+   "e23b746d, expected e23b746d"
+  ],
+  [
+   "ok",
+   "R_REG proofs_fnv wasm-generic.jsonl n=3",
+   "e23b746d, expected e23b746d"
+  ],
+  [
+   "ok",
+   "R_REG proofs_fnv native-fast.jsonl n=2",
+   "a0faa73c, expected a0faa73c"
+  ],
+  [
+   "ok",
+   "R_REG proofs_fnv x86v3-fast.jsonl n=2",
+   "a0faa73c, expected a0faa73c"
+  ],
+  [
+   "ok",
+   "R_REG proofs_fnv wasm-fast.jsonl n=2",
+   "a0faa73c, expected a0faa73c"
+  ],
+  [
+   "ok",
+   "R_REG proofs_fnv wasm-both.jsonl n=2",
+   "a0faa73c, expected a0faa73c"
+  ],
+  [
+   "ok",
+   "R_REG proofs_fnv alone-wasm-nosv.jsonl n=1",
+   "a4477f23, expected a4477f23"
+  ],
+  [
+   "ok",
+   "R_REG proof_bytes_max",
+   "28085, frozen 28108 (0.08%, tol 0.5%)"
+  ],
+  [
+   "ok",
+   "R_REG wasm_prove_peak_bytes",
+   "73692688, frozen 73692688 (0.00%, tol 1.0%)"
+  ],
+  [
+   "ok",
+   "R_REG ratio sv_speedup",
+   "39.9, frozen 40.9 (2%, tol 50%; machine-dependent)"
+  ],
+  [
+   "ok",
+   "R_REG ratio wasm_over_native_prove",
+   "1.54, frozen 1.64 (6%, tol 50%; machine-dependent)"
+  ],
+  [
+   "ok",
+   "R_TX proofs_fnv native-generic.jsonl n=3",
+   "762dacd2, expected 762dacd2"
+  ],
+  [
+   "ok",
+   "R_TX proofs_fnv wasm-generic.jsonl n=3",
+   "762dacd2, expected 762dacd2"
+  ],
+  [
+   "ok",
+   "R_TX proofs_fnv native-fast.jsonl n=2",
+   "71396f48, expected 71396f48"
+  ],
+  [
+   "ok",
+   "R_TX proofs_fnv x86v3-fast.jsonl n=2",
+   "71396f48, expected 71396f48"
+  ],
+  [
+   "ok",
+   "R_TX proofs_fnv wasm-fast.jsonl n=2",
+   "71396f48, expected 71396f48"
+  ],
+  [
+   "ok",
+   "R_TX proofs_fnv wasm-both.jsonl n=2",
+   "71396f48, expected 71396f48"
+  ],
+  [
+   "ok",
+   "R_TX proofs_fnv alone-wasm-nosv.jsonl n=1",
+   "6ffad36b, expected 6ffad36b"
+  ],
+  [
+   "ok",
+   "R_TX proof_bytes_max",
+   "42770, frozen 42770 (0.00%, tol 0.5%)"
+  ],
+  [
+   "ok",
+   "R_TX wasm_prove_peak_bytes",
+   "231858048, frozen 231858048 (0.00%, tol 1.0%)"
+  ],
+  [
+   "ok",
+   "R_TX ratio sv_speedup",
+   "77.4, frozen 79.8 (3%, tol 50%; machine-dependent)"
+  ],
+  [
+   "ok",
+   "R_TX ratio wasm_over_native_prove",
+   "1.62, frozen 1.55 (5%, tol 50%; machine-dependent)"
+  ],
+  [
+   "ok",
+   "R_BURN proofs_fnv native-generic.jsonl n=3",
+   "3d80d4a8, expected 3d80d4a8"
+  ],
+  [
+   "ok",
+   "R_BURN proofs_fnv wasm-generic.jsonl n=3",
+   "3d80d4a8, expected 3d80d4a8"
+  ],
+  [
+   "ok",
+   "R_BURN proofs_fnv native-fast.jsonl n=2",
+   "330c19fd, expected 330c19fd"
+  ],
+  [
+   "ok",
+   "R_BURN proofs_fnv x86v3-fast.jsonl n=2",
+   "330c19fd, expected 330c19fd"
+  ],
+  [
+   "ok",
+   "R_BURN proofs_fnv wasm-fast.jsonl n=2",
+   "330c19fd, expected 330c19fd"
+  ],
+  [
+   "ok",
+   "R_BURN proofs_fnv wasm-both.jsonl n=2",
+   "330c19fd, expected 330c19fd"
+  ],
+  [
+   "ok",
+   "R_BURN proofs_fnv alone-wasm-nosv.jsonl n=1",
+   "478eb819, expected 478eb819"
+  ],
+  [
+   "ok",
+   "R_BURN proof_bytes_max",
+   "41940, frozen 41940 (0.00%, tol 0.5%)"
+  ],
+  [
+   "ok",
+   "R_BURN wasm_prove_peak_bytes",
+   "220431120, frozen 220431120 (0.00%, tol 1.0%)"
+  ],
+  [
+   "ok",
+   "R_BURN ratio sv_speedup",
+   "76.3, frozen 69.2 (10%, tol 50%; machine-dependent)"
+  ],
+  [
+   "ok",
+   "R_BURN ratio wasm_over_native_prove",
+   "1.42, frozen 1.31 (8%, tol 50%; machine-dependent)"
+  ],
+  [
+   "ok",
+   "R_DS proofs_fnv native-generic.jsonl n=3",
+   "216b75fc, expected 216b75fc"
+  ],
+  [
+   "ok",
+   "R_DS proofs_fnv wasm-generic.jsonl n=3",
+   "216b75fc, expected 216b75fc"
+  ],
+  [
+   "ok",
+   "R_DS proofs_fnv native-fast.jsonl n=2",
+   "d7fbc082, expected d7fbc082"
+  ],
+  [
+   "ok",
+   "R_DS proofs_fnv x86v3-fast.jsonl n=2",
+   "d7fbc082, expected d7fbc082"
+  ],
+  [
+   "ok",
+   "R_DS proofs_fnv wasm-fast.jsonl n=2",
+   "d7fbc082, expected d7fbc082"
+  ],
+  [
+   "ok",
+   "R_DS proofs_fnv wasm-both.jsonl n=2",
+   "d7fbc082, expected d7fbc082"
+  ],
+  [
+   "ok",
+   "R_DS proofs_fnv alone-wasm-nosv.jsonl n=1",
+   "10639246, expected 10639246"
+  ],
+  [
+   "ok",
+   "R_DS proof_bytes_max",
+   "28976, frozen 28976 (0.00%, tol 0.5%)"
+  ],
+  [
+   "ok",
+   "R_DS wasm_prove_peak_bytes",
+   "76888880, frozen 76888880 (0.00%, tol 1.0%)"
+  ],
+  [
+   "ok",
+   "R_DS ratio sv_speedup",
+   "50.0, frozen 45.8 (9%, tol 50%; machine-dependent)"
+  ],
+  [
+   "ok",
+   "R_DS ratio wasm_over_native_prove",
+   "1.43, frozen 1.67 (14%, tol 50%; machine-dependent)"
+  ],
+  [
+   "ok",
+   "R_DR proofs_fnv native-generic.jsonl n=3",
+   "e0d2deda, expected e0d2deda"
+  ],
+  [
+   "ok",
+   "R_DR proofs_fnv wasm-generic.jsonl n=3",
+   "e0d2deda, expected e0d2deda"
+  ],
+  [
+   "ok",
+   "R_DR proofs_fnv native-fast.jsonl n=2",
+   "22be6479, expected 22be6479"
+  ],
+  [
+   "ok",
+   "R_DR proofs_fnv x86v3-fast.jsonl n=2",
+   "22be6479, expected 22be6479"
+  ],
+  [
+   "ok",
+   "R_DR proofs_fnv wasm-fast.jsonl n=2",
+   "22be6479, expected 22be6479"
+  ],
+  [
+   "ok",
+   "R_DR proofs_fnv wasm-both.jsonl n=2",
+   "22be6479, expected 22be6479"
+  ],
+  [
+   "ok",
+   "R_DR proofs_fnv alone-wasm-nosv.jsonl n=1",
+   "82621a18, expected 82621a18"
+  ],
+  [
+   "ok",
+   "R_DR proof_bytes_max",
+   "28999, frozen 28999 (0.00%, tol 0.5%)"
+  ],
+  [
+   "ok",
+   "R_DR wasm_prove_peak_bytes",
+   "82951488, frozen 82951488 (0.00%, tol 1.0%)"
+  ],
+  [
+   "ok",
+   "R_DR ratio sv_speedup",
+   "47.5, frozen 44.8 (6%, tol 50%; machine-dependent)"
+  ],
+  [
+   "ok",
+   "R_DR ratio wasm_over_native_prove",
+   "1.45, frozen 1.49 (3%, tol 50%; machine-dependent)"
+  ]
+ ]
+}
