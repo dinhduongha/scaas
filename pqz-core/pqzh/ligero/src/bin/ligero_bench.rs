@@ -94,7 +94,7 @@ fn main() {
             p.n, p.k, p.ell, p.t, p.n2(), p.pow_bits, p.proven, p.johnson, p.k as f64 / p.n as f64, bits.join(", ")
         );
         let mut st2 = st.clone();
-        st2[0] ^= 0x80; // same witness, other statement prefix: a valid proof of a different statement
+        st2[64] ^= 0x80; // same witness, other hashed-only header byte (chainId / R_REG message): a valid proof of a different statement
         let mut pt = Vec::new();
         let mut tp = Vec::new();
         let mut peak_p = 0;
@@ -117,7 +117,7 @@ fn main() {
             lens.iter().min().unwrap(),
             lens.iter().max().unwrap(),
             p.max_len_exact(op),
-            p.max_len(op),
+            p.max_proof_len(op),
             pt.iter().fold(2166136261u32, |h, &b| (h ^ b as u32).wrapping_mul(16777619)),
             bd.join(", ")
         );

@@ -1,12 +1,12 @@
 //! Dump client::setup()'s statements and witnesses (all five relations) for the byte cross-check with pqz-core
-//! (../xcheck/ligero.sh): `cargo run --release --example dump_setup -- DIR`.
-use pqzh_ligero::client::{Tweak, rel_name, setup_with};
-use pqzh_ligero::{OPS, stmt::PQZL_PROOF_SYSTEM_ID};
+//! (../xcheck/ligero.sh, which patches pqz_bench.c's statements to the same opTag, PQZH id (D3) and auditorOn):
+//! `cargo run --release --example dump_setup -- DIR`.
+use pqzh_ligero::OPS;
+use pqzh_ligero::client::{rel_name, setup};
 
 fn main() {
     let dir = std::env::args().nth(1).expect("DIR");
-    // PQZL's proofSystemId, as pqz_bench.c writes it; PQZH statements differ only in bytes 32..63
-    let s = setup_with(&Tweak { psid: Some(PQZL_PROOF_SYSTEM_ID), ..Default::default() });
+    let s = setup();
     for op in OPS {
         let n = rel_name(op)[2..].to_lowercase();
         let (st, w) = s.rel(op);

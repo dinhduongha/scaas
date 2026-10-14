@@ -22,6 +22,8 @@ pub const LAMBDA: f64 = 128.0;
 pub const POW_BITS: u32 = 16;
 const FB: usize = 4 * EB; // bytes per F_q^4 element
 const BLIND: usize = 12;
+/// prover attempts before "proof length" (see `prove_inner`); one in practice: no proof exceeds max_proof_len
+const ATTEMPTS: usize = 16;
 
 /// Fixed per proofSystemId; never read from the proof.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -118,13 +120,14 @@ impl Params {
         (2 * (2 * self.k - 1) + (2 * self.k - 1 - self.ell)) * FB
     }
 
-    /// upper bound on the proof length (t distinct columns, full paths); the verifier's length check
+    /// loose upper bound on the proof length (t distinct columns, full paths): the verifier's check before Task 9,
+    /// kept for the bench's comparison
     pub fn max_len(&self, op: u8) -> usize {
         let m = Layout::new(op, self.ell).m;
         32 + self.poly_bytes() + 8 + self.t * (32 + (m + BLIND) * EB) + self.t * depth(self.n) * 32
     }
 
-    /// The largest proof the verifier can accept (G7; Task 9 makes it the verifier's bound): t distinct columns (a
+    /// The largest proof the verifier can parse (G7): t distinct columns (a
     /// column costs more than any number of digests it saves) and the largest pruned multiproof for t leaves of the
     /// first n in a depth-d tree. With a_l distinct nodes on level l (a_0 = t, a_d = 1), level l sends 2 a_(l+1) - a_l
     /// siblings, so the total is sum_(0 < l < d) a_l + 2 - t, maximal at a_l = min(t, ceil(n / 2^l)).
@@ -133,6 +136,18 @@ impl Params {
         let d = depth(self.n);
         let mid: usize = (1..d).map(|l| self.t.min(self.n.div_ceil(1 << l))).sum();
         32 + self.poly_bytes() + 8 + self.t * (32 + (m + BLIND) * EB) + (mid + 2 - self.t) * 32
+    }
+
+    /// The verifier's length bound (plan Task 9): the exact maximum. At THE preset (the D3 id) it is <= PQZH_MAX_PROOF
+    /// (D5) for every op (R_TX 235,470 B; unit test `limits_exact`). Not capped at PQZH_MAX_PROOF: the reference
+    /// presets are not the id, and proven without radix 431 has every R_TX / R_BURN proof above it.
+    pub fn max_proof_len(&self, op: u8) -> usize {
+        self.max_len_exact(op)
+    }
+
+    /// The verifier's first check, before the statement or the proof is parsed: 1 <= len <= max_proof_len(op)
+    pub fn proof_len_ok(&self, op: u8, len: usize) -> bool {
+        OPS.contains(&op) && (1..=self.max_proof_len(op)).contains(&len)
     }
 }
 
@@ -219,22 +234,36 @@ fn draw(tr: &mut Tr, m: usize, ntri: usize) -> (Vec<F4>, Vec<F4>, F4, F4, F4, Ve
 }
 
 pub fn prove(op: u8, stmt: &[u8], wit: &[u8], rnd: [u8; 32], p: &Params) -> Result<Vec<u8>, &'static str> {
-    prove_inner(op, stmt, wit, rnd, p, true)
+    prove_inner(op, stmt, wit, rnd, p, true, p.max_proof_len(op))
 }
 
 /// Test hook: skips the honest prover's checks so that invalid witnesses reach the proof system.
 pub fn prove_unchecked(op: u8, stmt: &[u8], wit: &[u8], rnd: [u8; 32], p: &Params) -> Result<Vec<u8>, &'static str> {
-    prove_inner(op, stmt, wit, rnd, p, false)
+    prove_inner(op, stmt, wit, rnd, p, false, p.max_proof_len(op))
 }
 
-fn prove_inner(op: u8, stmt: &[u8], wit: &[u8], rnd: [u8; 32], p: &Params, check: bool) -> Result<Vec<u8>, &'static str> {
+/// Proves; if the proof is longer than `limit` (the verifier's bound) it proves again with the RNG stream continued
+/// (fresh masks and salts, so a fresh commitment, columns and multiproof), up to ATTEMPTS times (plan Task 9). A guard:
+/// every proof is <= max_len_exact by construction (fixed polynomials, <= t distinct columns, the largest multiproof),
+/// so with `limit` = max_proof_len the first attempt always returns; the unit test forces a lower limit.
+fn prove_inner(op: u8, stmt: &[u8], wit: &[u8], rnd: [u8; 32], p: &Params, check: bool, limit: usize) -> Result<Vec<u8>, &'static str> {
+    let mut rng = Rng::new(rnd, op, stmt, wit);
+    for _ in 0..ATTEMPTS {
+        let pf = prove_once(op, stmt, wit, p, check, &mut rng)?;
+        if pf.len() <= limit {
+            return Ok(pf);
+        }
+    }
+    Err("proof length")
+}
+
+fn prove_once(op: u8, stmt: &[u8], wit: &[u8], p: &Params, check: bool, rng: &mut Rng) -> Result<Vec<u8>, &'static str> {
     let st = cs::parse(op, stmt).ok_or("statement")?;
     let lay = Layout::new(op, p.ell);
     let w = cs::witness(&st, wit, check)?;
     let rows = cs::rows(&lay, &w);
     let (n, k, ell, m) = (p.n, p.k, p.ell, lay.m);
     let (hk, hn, h2) = (Domain::new(k), Domain::new(n), Domain::new(p.n2()));
-    let mut rng = Rng::new(rnd, op, stmt, wit);
 
     // witness rows: message on the first l points of H_k, uniform on the other k - l
     let pc: Vec<Vec<Fq>> = rows
@@ -401,7 +430,7 @@ fn eval4(c: &[F4], xp: &[Fq]) -> F4 {
 }
 
 fn verify_inner(op: u8, stmt: &[u8], proof: &[u8], p: &Params) -> Option<()> {
-    if !OPS.contains(&op) || proof.len() > p.max_len(op) {
+    if !p.proof_len_ok(op, proof.len()) {
         return None;
     }
     let st = cs::parse(op, stmt)?;
@@ -561,6 +590,7 @@ pub fn breakdown(op: u8, proof: &[u8], p: &Params) -> Vec<(&'static str, usize)>
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::stmt::OP_REGISTER;
 
     /// D6: the same rnd32, op and statement with another witness give unrelated masks; equal inputs, equal masks
     #[test]
@@ -602,6 +632,45 @@ mod tests {
         }
         for op in OPS {
             assert!(p.max_len_exact(op) < p.max_len(op));
+            // the bound is the proof grammar at t evenly spread columns: root, polynomials, nonce, t columns, the
+            // spread set's multiproof
+            let cw = 32 + (Layout::new(op, p.ell).m + BLIND) * EB;
+            assert_eq!(32 + p.poly_bytes() + 8 + t * cw + 32 * tree.multiproof(&spread).len(), p.max_len_exact(op));
         }
+    }
+
+    /// Task 9 / D5: the verifier's bound is the exact maximum, <= PQZH_MAX_PROOF at THE preset, every input fits MAX_INPUT, and the
+    /// length gate admits MAX and rejects MAX + 1 (and 0) before the statement or the proof is parsed
+    #[test]
+    fn limits_exact() {
+        use crate::stmt::*;
+        let p = Params::proven();
+        let expect = [
+            (OP_REGISTER, REG_STMT, 190_458),
+            (OP_TRANSFER, TX_STMT, 235_470),
+            (OP_BURN, BURN_STMT, 234_744),
+            (OP_DISCLOSE_SENDER, DISC_STMT, 190_458),
+            (OP_DISCLOSE_RECEIVER, DISC_STMT, 190_458),
+        ];
+        for (op, stmt_len, max) in expect {
+            assert_eq!((p.max_len_exact(op), p.max_proof_len(op)), (max, max));
+            assert!(max <= PQZH_MAX_PROOF && INPUT_HEADER + stmt_len + max <= MAX_INPUT);
+            assert!(p.proof_len_ok(op, max) && p.proof_len_ok(op, 1));
+            assert!(!p.proof_len_ok(op, max + 1) && !p.proof_len_ok(op, 0));
+        }
+        assert!(!p.proof_len_ok(0, 1) && !p.proof_len_ok(6, 1));
+    }
+
+    /// Task 9: a proof over the limit is proved again from the continued RNG stream; the first attempt is `prove`'s
+    #[test]
+    fn prover_retries_over_limit() {
+        let s = crate::client::setup();
+        let (op, st, w, p) = (OP_REGISTER, &s.reg_stmt, &s.reg_wit, Params::proven());
+        let a = prove_inner(op, st, w, [1; 32], &p, true, p.max_proof_len(op)).unwrap();
+        assert_eq!(a, prove(op, st, w, [1; 32], &p).unwrap());
+        let b = prove_inner(op, st, w, [1; 32], &p, true, a.len() - 1).unwrap();
+        assert!(b.len() < a.len() && b[..32] != a[..32]);
+        assert!(verify(op, st, &a, &p) && verify(op, st, &b, &p));
+        assert_eq!(prove_inner(op, st, w, [1; 32], &p, true, 32), Err("proof length"));
     }
 }

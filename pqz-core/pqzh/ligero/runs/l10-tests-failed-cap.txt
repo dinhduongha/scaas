@@ -1,0 +1,95 @@
+   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/p6eb2/pqz-core/pqzh/ligero)
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.79s
+     Running unittests src/lib.rs (target/release/deps/pqzh_ligero-701cd2354c0416d9)
+
+running 13 tests
+test cs::tests::ring_recurrence_matches_naive ... ok
+test fft::tests::fft_matches_naive_all_radices ... ok
+test fq::tests::field_facts_and_ext ... ok
+test fq::tests::limb_matches_u128 ... ok
+test fq::tests::mul_and_red_match_naive ... ok
+test ligero::tests::limits_exact ... ok
+test ligero::tests::max_len_exact_multiproof_tight ... ok
+test ligero::tests::prover_retries_over_limit ... ok
+test ligero::tests::rng_hedged_with_witness ... ok
+test merkle::tests::multiproof_roundtrip ... ok
+test stmt::tests::input_limit ... ok
+test stmt::tests::pqzh_id_d3 ... ok
+test stmt::tests::sizes ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 11.17s
+
+     Running unittests src/bin/ligero_bench.rs (target/release/deps/ligero_bench-b50cd4d86927d148)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/ligero_export.rs (target/release/deps/ligero_export-d51089f2a3b6f309)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/attacks.rs (target/release/deps/attacks-08a7b177bc8e9531)
+
+running 15 tests
+test coefficient_out_of_range ... ok
+test digit_out_of_range ... ok
+test dr_noise_range_edges ... ok
+test e2_norm_exceeded ... ok
+test evm_fixtures ... ok
+test hedged_proofs ... ok
+test honest_all_presets_cross_and_hiding ... R_REG Params { n: 32756, k: 817, ell: 695, t: 121, pow_bits: 16, proven: true, johnson: false }: 186904 B, 432.042283ms
+R_TX Params { n: 32756, k: 817, ell: 695, t: 121, pow_bits: 16, proven: true, johnson: false }: 232078 B, 688.17133ms
+R_BURN Params { n: 32756, k: 817, ell: 695, t: 121, pow_bits: 16, proven: true, johnson: false }: 230808 B, 642.243554ms
+R_DS Params { n: 32756, k: 817, ell: 695, t: 121, pow_bits: 16, proven: true, johnson: false }: 187482 B, 384.349654ms
+R_DR Params { n: 32756, k: 817, ell: 695, t: 121, pow_bits: 16, proven: true, johnson: false }: 185462 B, 381.071293ms
+R_REG Params { n: 6536, k: 817, ell: 650, t: 166, pow_bits: 16, proven: true, johnson: false }: 224904 B, 163.703581ms
+
+thread 'honest_all_presets_cross_and_hiding' (1809528) panicked at tests/attacks.rs:38:56:
+called `Result::unwrap()` on an `Err` value: "proof length"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+FAILED
+test mutations_960_per_relation_rejected ... 5 x 960 mutated inputs rejected, 0 verifier panics caught
+ok
+test norm_exceeded_small_coefficients ... ok
+test other_ids_and_length_bound_rejected ... ok
+test overspend ... ok
+test randomness_norm_and_range ... ok
+test scalar_word_above_2_64 ... ok
+test wrong_public_amount ... ok
+test wrong_witness_ring_row ... ok
+
+failures:
+
+failures:
+    honest_all_presets_cross_and_hiding
+
+test result: FAILED. 14 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 50.16s
+
+error: test failed, to rerun pass `--test attacks`
+Command exited with non-zero status 101
+	Command being timed: "cargo test --release --offline -- --nocapture --test-threads 1"
+	User time (seconds): 62.88
+	System time (seconds): 0.83
+	Percent of CPU this job got: 102%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 1:02.17
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 153360
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 231
+	Minor (reclaiming a frame) page faults: 264100
+	Voluntary context switches: 2661
+	Involuntary context switches: 1637
+	Swaps: 0
+	File system inputs: 16008
+	File system outputs: 74088
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 101

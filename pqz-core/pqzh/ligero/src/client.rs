@@ -179,7 +179,7 @@ pub struct Tweak {
     pub burn_dp: Option<[u8; 16]>,
     /// R_BURN e2_f
     pub burn_e2: Option<Vec<i64>>,
-    /// proofSystemId written at statement bytes 32..63 (default PQZH's; xcheck passes PQZL's to match pqz_bench.c)
+    /// proofSystemId written at statement bytes 32..63 (default PQZH's, D3; any other is rejected by `cs::parse`)
     pub psid: Option<[u8; 32]>,
 }
 
@@ -190,6 +190,9 @@ pub fn setup() -> Setup {
     setup_with(&Tweak::default())
 }
 
+/// Statements as the precompile takes them (plan D15 / R6): bytes 0..63 = the op's opTag and the id (pqz_bench.c
+/// writes filler before the id), R_TX's auditorOn word 1 (pqz_bench.c: the header pattern there).
+/// xcheck/dump_setup.c applies the same patch to pqz_bench.c's statements; pqz_kat.py parses and rebuilds them.
 pub fn setup_with(tw: &Tweak) -> Setup {
     let mut rng = Rng::new();
     let mut kf = keygen(&mut rng);
@@ -206,8 +209,8 @@ pub fn setup_with(tw: &Tweak) -> Setup {
     let _kx = keygen(&mut rng);
 
     let psid = tw.psid.unwrap_or(PQZH_PROOF_SYSTEM_ID);
-    let mut reg_stmt = vec![0xA5u8; PREFIX];
-    reg_stmt[32..64].copy_from_slice(&psid);
+    let mut reg_stmt = TAG_REGISTER.to_vec();
+    reg_stmt.extend_from_slice(&psid);
     reg_stmt.extend((0..32u8).collect::<Vec<_>>());
     wr_vec(&mut reg_stmt, &kf.pk);
     let mut reg_wit: Vec<u8> = kf.s.iter().map(|&x| x as i8 as u8).collect();
@@ -236,7 +239,10 @@ pub fn setup_with(tw: &Tweak) -> Setup {
     let (u, vs) = encrypt(&[&kt.pk, &kf.pk, &ka.pk], &m, &polys(&r), &polys(&e1), &e2);
 
     let mut tx: Vec<u8> = (0..HEADER).map(|i| if i < PREFIX { 0x5A } else { (i * 3) as u8 }).collect();
+    tx[..32].copy_from_slice(&TAG_TRANSFER);
     tx[32..64].copy_from_slice(&psid);
+    tx[HDR_AUDITOR_ON..HDR_AUDITOR_ON + 32].fill(0);
+    tx[HDR_AUDITOR_ON + 31] = 1;
     tx[HDR_FEE..HDR_FEE + 64].fill(0);
     tx[HDR_FEE + 24..HDR_FEE + 32].copy_from_slice(&fee.to_be_bytes());
     for x in [&kf.pk, &kt.pk, &ka.pk, &ut] {
@@ -261,8 +267,8 @@ pub fn setup_with(tw: &Tweak) -> Setup {
 
     // R_DS / R_DR: header words chainId .. entryRef = (i * 7), amount v, kind 0 / 1; pk_t, u, v_t
     let disc = |k: u8| {
-        let mut st = vec![0xD4 + k; PREFIX];
-        st[32..64].copy_from_slice(&psid);
+        let mut st = [TAG_DISCLOSE_SENDER, TAG_DISCLOSE_RECEIVER][k as usize].to_vec();
+        st.extend_from_slice(&psid);
         st.extend((PREFIX..DISC_AMOUNT).map(|i| (i * 7) as u8));
         st.extend([0u8; 64]);
         st[DISC_AMOUNT + 24..DISC_AMOUNT + 32].copy_from_slice(&v.to_be_bytes());
@@ -292,6 +298,7 @@ pub fn setup_with(tw: &Tweak) -> Setup {
     let mb = tw.burn_dp.unwrap_or(digits(bp));
     let (ub, vb) = encrypt(&[&kf.pk], &[mb], &polys(&rb), &polys(&e1b), &[e2b.clone()]);
     let mut burn: Vec<u8> = (0..HEADER).map(|i| if i < PREFIX { 0xB2 } else { (i * 5) as u8 }).collect();
+    burn[..32].copy_from_slice(&TAG_BURN);
     burn[32..64].copy_from_slice(&psid);
     burn[HDR_FEE..HDR_FEE + 64].fill(0);
     burn[HDR_FEE + 24..HDR_FEE + 32].copy_from_slice(&fee.to_be_bytes());

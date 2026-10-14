@@ -4,7 +4,10 @@
 use pqzh_ligero::client::{KINDS, R, Setup, Tweak, digits, mutate, rel_name, setup, setup_with};
 use pqzh_ligero::ligero::VERIFY_PANICS;
 use pqzh_ligero::ring::{DELTA, Poly, Q, dot_int, modq, rd_polyvec};
-use pqzh_ligero::stmt::{DISC_AMOUNT, DISC_PK, HDR_AMOUNT, HDR_FEE, POLYVEC};
+use pqzh_ligero::cs;
+use pqzh_ligero::stmt::{
+    DISC_AMOUNT, DISC_PK, HDR_AMOUNT, HDR_AUDITOR_ON, HDR_FEE, PQZH_PROOF_SYSTEM_ID, PQZL_PROOF_SYSTEM_ID, POLYVEC, op_tags,
+};
 use pqzh_ligero::{OP_BURN, OP_DISCLOSE_RECEIVER, OP_DISCLOSE_SENDER, OP_REGISTER, OP_TRANSFER, OPS, Params, prove, prove_unchecked, verify};
 
 fn p(_op: u8) -> Params {
@@ -37,7 +40,8 @@ fn honest_all_presets_cross_and_hiding() {
                 let a = prove(op, st, w, [1; 32], &pp).unwrap();
                 eprintln!("{} {pp:?}: {} B, {:?}", rel_name(op), a.len(), t.elapsed());
                 assert!(verify(op, st, &a, &pp));
-                assert!(a.len() <= pp.max_len_exact(op) && pp.max_len_exact(op) <= pp.max_len(op));
+                assert!(a.len() <= pp.max_proof_len(op) && pp.max_proof_len(op) <= pp.max_len_exact(op));
+                assert!(pp.max_len_exact(op) <= pp.max_len(op));
             }
         }
     }
@@ -73,6 +77,68 @@ fn honest_all_presets_cross_and_hiding() {
     }
 }
 
+/// D3: a statement of any other proofSystemId, another op's opTag or (R_TX) auditorOn != 1 is no PQZH statement (not
+/// parsed, not proved, its proof rejected);
+/// Task 9: an honest proof zero-padded to the bound passes the length gate and is rejected as not consumed exactly,
+/// one byte more is rejected by the gate
+#[test]
+fn other_ids_and_length_bound_rejected() {
+    let s = setup();
+    let stark = [
+        0xaa, 0x1f, 0x92, 0xdd, 0xc5, 0x76, 0x32, 0x01, 0xc2, 0x58, 0x2c, 0x83, 0x87, 0xbd, 0x65, 0x13, 0x84, 0x2e, 0x52,
+        0x77, 0x93, 0x10, 0xd6, 0xbc, 0xf3, 0x9a, 0x7f, 0xec, 0x99, 0x28, 0x43, 0x04,
+    ];
+    for op in OPS {
+        let (st, w) = s.rel(op);
+        let pp = p(op);
+        assert_eq!(st[32..64], PQZH_PROOF_SYSTEM_ID);
+        let pf = prove(op, st, w, [4; 32], &pp).unwrap();
+        assert!(verify(op, st, &pf, &pp));
+        // other ids; byte 0 of the opTag flipped; every other op's opTag; R_TX: auditorOn 0, 2, high byte set
+        let mut bad: Vec<(String, Vec<u8>)> = vec![];
+        for (i, id) in [PQZL_PROOF_SYSTEM_ID, stark, [0; 32]].iter().enumerate() {
+            let mut st2 = st.clone();
+            st2[32..64].copy_from_slice(id);
+            bad.push((format!("id {i}"), st2));
+        }
+        let mut st2 = st.clone();
+        st2[0] ^= 0x80;
+        bad.push(("opTag byte 0".into(), st2));
+        for o2 in OPS.iter().filter(|&&o| o != op) {
+            for t in op_tags(*o2) {
+                let mut st2 = st.clone();
+                st2[..32].copy_from_slice(t);
+                bad.push((format!("opTag of op {o2}"), st2));
+            }
+        }
+        if op == OP_TRANSFER {
+            for (i, v) in [(31, 0u8), (31, 2), (0, 1)] {
+                let mut st2 = st.clone();
+                st2[HDR_AUDITOR_ON + i] = v;
+                bad.push((format!("auditorOn byte {i} = {v}"), st2));
+            }
+        }
+        for (what, st2) in &bad {
+            assert!(cs::parse(op, st2).is_none(), "{} {what} parsed", rel_name(op));
+            assert!(prove(op, st2, w, [4; 32], &pp).is_err() && prove_unchecked(op, st2, w, [4; 32], &pp).is_err());
+            assert!(!verify(op, st2, &pf, &pp), "{} proof accepted with {what}", rel_name(op));
+        }
+        // REFRESH (op 2) and AUDITOR (op 5) share their op's relation
+        for t in op_tags(op) {
+            let mut st2 = st.clone();
+            st2[..32].copy_from_slice(t);
+            assert!(cs::parse(op, &st2).is_some());
+        }
+        let max = pp.max_proof_len(op);
+        assert!(pf.len() <= max && pp.proof_len_ok(op, max) && !pp.proof_len_ok(op, max + 1));
+        let mut long = pf.clone();
+        long.resize(max, 0);
+        assert!(!verify(op, st, &long, &pp));
+        long.push(0);
+        assert!(!verify(op, st, &long, &pp));
+    }
+}
+
 #[test]
 fn mutations_960_per_relation_rejected() {
     let s = setup();
@@ -82,7 +148,7 @@ fn mutations_960_per_relation_rejected() {
         let pp = p(op);
         let pf = prove(op, st, w, [3; 32], &pp).unwrap();
         let mut st2 = st.clone();
-        st2[0] ^= 0x80;
+        st2[64] ^= 0x80;
         let other = prove(op, &st2, w, [9; 32], &pp).unwrap();
         assert!(verify(op, &st2, &other, &pp));
         let mut r = R(0x9E3779B97F4A7C15 ^ op as u64);
@@ -298,12 +364,13 @@ fn evm_fixtures() {
             let st = rd(&format!("{rel}-{pre}.stmt"));
             assert!(verify(op, &st, &rd(&format!("{rel}-{pre}.proof")), &pp), "{rel}-{pre}");
             let mut st2 = st.clone();
-            st2[0] ^= 0x80;
+            st2[64] ^= 0x80;
             assert!(verify(op, &st2, &rd(&format!("{rel}-{pre}.other")), &pp), "{rel}-{pre} other");
         }
     }
     for n in ["reg-norm", "reg-coef", "tx-norm", "tx-digit", "tx-e2", "tx-overspend", "tx-ring"] {
         let op = if n.starts_with("reg") { OP_REGISTER } else { OP_TRANSFER };
+        assert_eq!(rd(&format!("neg-{n}.stmt"))[32..64], PQZH_PROOF_SYSTEM_ID, "{n}: D3 id");
         assert!(!verify(op, &rd(&format!("neg-{n}.stmt")), &rd(&format!("neg-{n}.proof")), &Params::preset(op, false, true)), "{n}");
     }
 }

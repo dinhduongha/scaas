@@ -202,9 +202,9 @@ contract LigeroTest is Test {
                 if (rev) ++reverts;
             }
         }
-        // the other statement's proof verifies against its own statement (st with byte 0 flipped)
+        // the other statement's proof verifies against its own statement (st with byte 64 flipped, hashed only)
         bytes memory st2 = bytes.concat(st);
-        st2[0] ^= 0x80;
+        st2[64] ^= 0x80;
         assertTrue(ver.verify(o, st2, other, pp), "other statement's proof");
         // wrong op
         (bool r2,) = rejects(o == 1 ? 3 : 1, st, pf, pp);
@@ -237,6 +237,65 @@ contract LigeroTest is Test {
 
     function test_mutations_tx_johnson() public {
         mutations("tx", "johnson", 9);
+    }
+
+    function rejected(uint8 o, bytes memory s, bytes memory p, LigeroVerifier.Params memory pp) internal view returns (bool r) {
+        (r,) = rejects(o, s, p, pp);
+    }
+
+    /// statement checks in depth (cs.rs parse): id, opTag, R_TX auditorOn = 1; the exact length gate (ligero.rs
+    /// max_len_exact, the same numbers as the Rust unit test limits_exact) runs before the statement is parsed
+    function stmtAndLength(string memory rel, uint256 expectMax) internal {
+        uint8 o = op(rel);
+        LigeroVerifier.Params memory pp = params(rel, "proven");
+        bytes memory st = file(string.concat(rel, "-proven.stmt"));
+        bytes memory pf = file(string.concat(rel, "-proven.proof"));
+        assertTrue(ver.verify(o, st, pf, pp), "honest");
+        bytes memory s2 = bytes.concat(st);
+        s2[0] ^= 0x80;
+        assertTrue(rejected(o, s2, pf, pp), "opTag byte 0");
+        s2 = bytes.concat(st);
+        s2[40] ^= 0x01;
+        assertTrue(rejected(o, s2, pf, pp), "proofSystemId");
+        s2 = bytes.concat(st);
+        bytes32 other = o == 3
+            ? bytes32(0xef22f3d1c1fc2edc565522eb73ca8cb782e8780eaf9b1f677965dd0cd5275414)
+            : bytes32(0x69562a9cd615eb3d906cb1934ad56c788c30228d2faf7c517e33d65b4a03c088);
+        for (uint256 i; i < 32; ++i) s2[i] = other[i];
+        assertTrue(rejected(o, s2, pf, pp), "other op's opTag");
+        if (o == 1) {
+            uint8[3] memory at = [31, 31, 0];
+            uint8[3] memory val = [0, 2, 1];
+            for (uint256 j; j < 3; ++j) {
+                s2 = bytes.concat(st);
+                s2[448 + uint256(at[j])] = bytes1(val[j]);
+                assertTrue(rejected(o, s2, pf, pp), "auditorOn");
+            }
+        }
+        uint256 max = ver.maxProofLen(o, pp);
+        assertEq(max, expectMax, "max_len_exact");
+        assertLe(pf.length, max);
+        bytes memory atMax = bytes.concat(pf, new bytes(max - pf.length));
+        uint256 g1 = gasleft();
+        assertTrue(rejected(o, st, atMax, pp), "MAX (padded) not consumed exactly");
+        g1 -= gasleft();
+        bytes memory over = bytes.concat(atMax, new bytes(1));
+        uint256 g2 = gasleft();
+        assertTrue(rejected(o, st, over, pp), "MAX + 1");
+        g2 -= gasleft();
+        assertLt(g2, g1);
+        console2.log(string.concat(
+            '{"rel": "', rel, '", "max_proof_len": ', vm.toString(max), ', "gas_reject_max_padded": ', vm.toString(g1),
+            ', "gas_reject_max_plus_1": ', vm.toString(g2), "}"
+        ));
+    }
+
+    function test_stmt_and_length_reg() public {
+        stmtAndLength("reg", 190_458);
+    }
+
+    function test_stmt_and_length_tx() public {
+        stmtAndLength("tx", 235_470);
     }
 
     /// invalid witnesses proved without the honest prover's checks (Rust tests/attacks.rs), conjectured preset
