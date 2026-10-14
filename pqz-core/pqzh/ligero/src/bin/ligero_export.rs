@@ -5,8 +5,8 @@
 //! (n, k, l, t, grinding bits: five 32-byte big-endian words). neg-<case>.stmt / .proof: invalid witnesses proved without the honest prover's checks
 //! (conjectured preset), each must be rejected. A JSON line per file on stdout.
 
-use pqzh::client::{Tweak, digits, setup, setup_with};
-use pqzh::ring::{Q, a_matrix};
+use pqzh_ligero::client::{Tweak, digits, setup, setup_with};
+use pqzh_ligero::ring::{Q, a_matrix};
 use pqzh_ligero::{OP_REGISTER, OP_TRANSFER, Params, prove, prove_unchecked, verify};
 
 fn put(dir: &str, name: &str, b: &[u8]) {

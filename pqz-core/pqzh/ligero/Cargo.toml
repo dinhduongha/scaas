@@ -5,9 +5,9 @@ edition = "2021"
 license-file = "../../../LICENSE"
 publish = false
 
-# PQZH over Ligero (docs/research/pqzh-ligero.md). pqzh for the statement / witness bytes (client, ring, rel).
+# PQZH over Ligero (docs/research/pqzh-ligero.md). sha3 only: no path dependency on the Plonky3 crate pqzh (P6e Task 6
+# prep; pqz-stmt replaces src/stmt.rs and src/ring.rs with Task 5 / 6).
 [dependencies]
-pqzh = { path = ".." }
 sha3 = "=0.10.8"
 
 [profile.release]
