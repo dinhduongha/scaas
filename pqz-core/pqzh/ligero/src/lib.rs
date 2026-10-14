@@ -17,7 +17,7 @@ pub mod ring;
 pub mod transcript;
 
 pub use cs::{RELS, form_of};
-pub use ligero::{Params, prove, prove_unchecked, verify};
+pub use ligero::{Params, prove, verify};
 #[cfg(feature = "bench")]
-pub use ligero::{breakdown, soundness};
+pub use ligero::{breakdown, prove_unchecked, soundness};
 pub use pqz_stmt::{self, Form, OP_BURN, OP_DISCLOSE_RECEIVER, OP_DISCLOSE_SENDER, OP_REGISTER, OP_TRANSFER};

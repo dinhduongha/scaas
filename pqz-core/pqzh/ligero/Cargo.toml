@@ -28,6 +28,10 @@ name = "ligero_export"
 path = "src/bin/ligero_export.rs"
 required-features = ["bench"]
 
+[[example]]
+name = "dump_setup"
+required-features = ["bench"]
+
 [profile.release]
 debug = 1
 panic = "unwind"

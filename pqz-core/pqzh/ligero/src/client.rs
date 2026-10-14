@@ -146,6 +146,10 @@ pub struct Tweak {
     pub d: Option<[u8; 16]>,
     /// R_TX e2_t (also R_DS's e2)
     pub e2_t: Option<Vec<i64>>,
+    /// R_TX / R_TX0 e2_f (the sender's new-balance leg)
+    pub e2_f: Option<Vec<i64>>,
+    /// error of key F (R_REG, R_TX, R_TX0, R_BURN), pk_f recomputed
+    pub e_f: Option<Vec<i64>>,
     /// R_BURN new-balance digits d' (v_f)
     pub burn_dp: Option<[u8; 16]>,
     /// R_BURN e2_f
@@ -170,6 +174,10 @@ pub fn setup_with(tw: &Tweak) -> Setup {
     let mut kf = keygen(&mut rng);
     if let Some(s) = &tw.s_f {
         kf.s = s.clone();
+        kf.pk = keypair(&polys(&kf.s), &polys(&kf.e));
+    }
+    if let Some(e) = &tw.e_f {
+        kf.e = e.clone();
         kf.pk = keypair(&polys(&kf.s), &polys(&kf.e));
     }
     let mut kt = keygen(&mut rng);
@@ -203,6 +211,9 @@ pub fn setup_with(tw: &Tweak) -> Setup {
     let mut m = [digits(v), digits(bp), digits(v)];
     if let Some(e) = &tw.e2_t {
         e2[0] = e.clone();
+    }
+    if let Some(e) = &tw.e2_f {
+        e2[1] = e.clone();
     }
     if let Some(d) = tw.d {
         m[0] = d;

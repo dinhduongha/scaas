@@ -279,6 +279,14 @@ contract LigeroTest is Test {
                 s2[448 + uint256(at[j])] = bytes1(val[j]);
                 assertTrue(rejected(o, s2, pf, pp), "auditorOn");
             }
+            // D15 (pqz-stmt): amount (288), recipient (320) 0; salt word high half (576..591) 0
+            uint16[3] memory zw = [319, 351, 576];
+            string[3] memory zn = ["amount", "recipient", "salt high half"];
+            for (uint256 j; j < 3; ++j) {
+                s2 = bytes.concat(st);
+                s2[zw[j]] = 0x01;
+                assertTrue(rejected(o, s2, pf, pp), zn[j]);
+            }
         }
         uint256 max = ver.maxProofLen(o, st.length, pp);
         assertEq(max, expectMax, "max_len_exact");

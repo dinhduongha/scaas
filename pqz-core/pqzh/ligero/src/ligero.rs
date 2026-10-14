@@ -248,7 +248,9 @@ pub fn prove(op: u8, stmt: &[u8], wit: &[u8], rnd: [u8; 32], p: &Params) -> Resu
     prove_inner(op, stmt, wit, rnd, p, true, p.max_proof_len(form))
 }
 
-/// Test hook: skips the honest prover's checks so that invalid witnesses reach the proof system.
+/// Test hook: skips the honest prover's checks so that invalid witnesses reach the proof system (tests and `bench`
+/// only: not in the production build).
+#[cfg(any(test, feature = "bench"))]
 pub fn prove_unchecked(op: u8, stmt: &[u8], wit: &[u8], rnd: [u8; 32], p: &Params) -> Result<Vec<u8>, &'static str> {
     let form = cs::form_of(op, stmt.len()).ok_or("op")?;
     prove_inner(op, stmt, wit, rnd, p, false, p.max_proof_len(form))

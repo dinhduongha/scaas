@@ -873,9 +873,8 @@ Task 6) and `runs/l14-tx0-*` (`runs/tx0.sh l14-tx0`, Task 8), each one capped se
   `soundness`, `breakdown` are behind `bench`; `Params::proven()` is written out as a `const fn` (unit test
   `proven_is_the_model`: equal to `Params::new(32756, 817, true)`). The production build (`--no-default-features`)
   depends on `sha3` and `pqz-stmt` only and contains no scalar float instruction: `runs/l14-deps.txt` (`cargo tree`,
-  and `objdump -d` of the production rlib: 0 `cvt*` / `add|sub|mul|div|sqrt s[sd]`, against 55 in the `bench` rlibs).
-  `#![deny(clippy::float_arithmetic)]` applies without `bench`, but clippy is not installed for the pinned toolchain,
-  so the scan is the evidence.
+  and `objdump -d` of the production rlib: 0 `cvt*` / `add|sub|mul|div|sqrt s[sd]`; the default-feature rlib's 55 are
+  in `runs/l15-deps.txt`). `#![deny(clippy::float_arithmetic)]` applies without `bench`; clippy passes it (§14.4).
 - **`R_TX0` (Task 8).** `R_TX` without the auditor (`pqz_rel.c`, D8): rows 1–4, 6, 7, legs t and f (no `pk_a`, `v_a`,
   `e2_a`), every norm and range of `R_TX`; same constraint-system code, `Layout` with two e2 legs. Statement 66,560 B
   and witness 12,384 B as pqz-core; `client::setup` builds them as `pqz_bench.c` does (`R_TX`'s transfer without
@@ -940,7 +939,32 @@ byte-identical): 20 tests pass; proven `R_TX0` verifies at 516.3 M gas (`R_TX` 5
 0 reverts, `maxProofLen` 234,744 B as Rust, `MAX + 1` rejected at 1.64 M against 9.05 M for `MAX` padded, and the two
 cross-form inputs rejected. §11's conclusion (no EVM verification without the precompile) holds for `R_TX0`.
 
-### 14.4 Rerun
+### 14.4 Review fixes (`runs/l15-*`, `runs/l15-tx0-*`) [measured]
+
+After the controller's review of `p6e-b3`: `runs/stmt.sh l15` then `runs/tx0.sh l15-tx0`, one capped session.
+
+- **Negative witnesses for every debit condition.** New `Tweak` fields `e2_f` (the transfer's sender leg) and `e_f`
+  (key F's error). `e2_norm_exceeded`: e2_f = 65 for `R_TX` and `R_TX0`. `coefficient_out_of_range`: s_f_5 = 100 and
+  e_f_5 = 300 (outside the 7 / 9 bits) for `R_REG`, `R_TX`, `R_TX0`, `R_BURN`. `wrong_witness_ring_row`: one e_f
+  coefficient changed (row 1) for `R_REG`, `R_TX`, `R_TX0`, `R_BURN`, besides e1. New `debit_noise_range_edges`
+  (row 6, as `dr_noise_range_edges`): v_T_0 crafted so that e_T_0 = 2^24 − 1 and −2^24 prove and verify while 2^24
+  and −2^24 − 1 are refused and, proved without the checks, rejected, for `R_TX`, `R_TX0` and `R_BURN`. Each case is
+  refused by the honest prover and rejected by the verifier.
+- **Production surface.** `prove_unchecked` exists only in tests and with `bench`; the `dump_setup` example requires
+  `bench`. `runs/l15-nobench.txt`: `cargo test --no-default-features` (all targets: 11 unit tests, the integration
+  test and the bins / example skipped) and `cargo build --no-default-features --examples --bins` succeed.
+- **clippy** (now installed for 1.97.1), `runs/l15-clippy.txt`: `cargo clippy --no-default-features -- -D
+  clippy::float_arithmetic` passes (rc 0); `cargo clippy --all-targets` with the default lints reports style
+  warnings only (needless range loops, `is_multiple_of` / `div_ceil`, a method named `next`, two complex types), no
+  error. `runs/l15-deps.txt` scans both rlibs: 55 scalar float instructions with `bench`, 0 without.
+- **EVM.** `LigeroVerifier.sol` `stmtOk` also requires a transfer's amount and recipient words 0 and the salt word's
+  high half 0 (D15, as `pqz-stmt`); the forge statement tests set each to non-zero and expect a rejection, for `R_TX`
+  and `R_TX0` (`runs/l15-tx0-forge.txt`, 20 tests pass).
+- **Rerun results.** `runs/l15-tx0-tests.txt`: 13 unit and 17 integration tests pass, 6 × 960 mutations 0 accepted /
+  0 panics; xcheck 12 / 12 equal, `kat_stmt: ok`; fixtures re-exported byte-identical; wasm32 `fails` 0. Verify p50 /
+  p99 over 1,000: `R_TX0` 9.38 / 11.36 ms native, 16.60 / 20.88 ms wasm32 (§14.3: 11.10 / 22.33 ms p99).
+
+### 14.5 Rerun
 
 ```sh
 scripts/capped pqz-core/pqzh/ligero/runs/stmt.sh l14      # Task 6: tests, --no-default-features, deps / float scan, wasm32 build, native FNV

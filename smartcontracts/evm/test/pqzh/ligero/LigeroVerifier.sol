@@ -461,6 +461,9 @@ contract LigeroVerifier {
             if (s.length != (v.legs == 3 ? TX_STMT : TX0_STMT)) return false;
             if (uint256(bytes32(s[448:480])) != v.legs - 2) return false; // auditorOn = 1 (R_TX) / 0 (R_TX0), R6
             if (uint256(bytes32(s[256:288])) >> 64 != 0) return false;
+            // D15 as pqz-stmt: a transfer's amount and recipient words are 0, the salt word is 16 zero bytes || salt
+            if (uint256(bytes32(s[288:320])) != 0 || uint256(bytes32(s[320:352])) != 0) return false;
+            if (bytes16(s[576:592]) != 0) return false;
             // (legs + 1) x 2048 + 16 + 2048 + legs x 16 coefficients, contiguous (R_TX 10,304, R_TX0 8,240)
             (o, nco) = (640, (v.legs + 2) * 2048 + 16 + 16 * v.legs);
         } else {

@@ -219,9 +219,15 @@ fn norm_exceeded_small_coefficients() {
 
 #[test]
 fn coefficient_out_of_range() {
-    let s = setup_with(&Tweak { s_f: Some(one_large()), ..Default::default() });
-    assert!(refused(Form::Register, &s));
-    assert!(refused(Form::Burn, &s));
+    // s_f_5 = 100 (outside the 7 bits of s + 64), e_f_5 = 300 (outside the 9 bits of e + 256); pk_f recomputed
+    let mut e_large = vec![0i64; 2048];
+    e_large[5] = 300;
+    for tw in [Tweak { s_f: Some(one_large()), ..Default::default() }, Tweak { e_f: Some(e_large), ..Default::default() }] {
+        let s = setup_with(&tw);
+        for f in [Form::Register, Form::Transfer, Form::Transfer0, Form::Burn] {
+            assert!(refused(f, &s), "{} s_f {}", rel_name(f), tw.s_f.is_some());
+        }
+    }
     let s = setup_with(&Tweak { s_t: Some(one_large()), ..Default::default() });
     assert!(refused(Form::DiscloseReceiver, &s));
 }
@@ -308,6 +314,42 @@ fn e2_norm_exceeded() {
     assert!(refused(Form::DiscloseSender, &s));
     let s = setup_with(&Tweak { burn_e2: Some(e2_65()), ..Default::default() });
     assert!(refused(Form::Burn, &s));
+    // e2_f, the transfer's sender leg (R_TX, R_TX0)
+    let s = setup_with(&Tweak { e2_f: Some(e2_65()), ..Default::default() });
+    assert!(refused(Form::Transfer, &s));
+    assert!(refused(Form::Transfer0, &s));
+}
+
+/// row 6 (u_T^T s_f + Delta M + e_T = v_T) of R_TX, R_TX0, R_BURN: e_T's range [-2^24, 2^24); v_T_0 crafted so that
+/// e_T_0 sits on each side of each edge with the honest M_0 (rounding keeps M_0: |e_T_0| < Delta / 2)
+#[test]
+fn debit_noise_range_edges() {
+    let s = setup();
+    for f in [Form::Transfer, Form::Transfer0, Form::Burn] {
+        let (op, (st, w)) = (f.op(), s.rel(f));
+        // header || pk_f || [pk_t] || [pk_a] || u_T || v_T || ...
+        let npk = match f { Form::Transfer => 3, Form::Transfer0 => 2, _ => 1 };
+        let ut_at = 640 + npk * PK_BYTES;
+        let vt_at = ut_at + PK_BYTES;
+        let ut = polys_of(&st[ut_at..vt_at], 64);
+        let sf: Vec<Poly> = w[..2048].chunks(64).map(|c| std::array::from_fn(|i| c[i] as i8 as i64)).collect();
+        let y = dot_int(&ut.iter().collect::<Vec<_>>(), &sf.iter().collect::<Vec<_>>());
+        let v0 = polys_of(&st[vt_at..vt_at + 128], 16)[0][0];
+        let wv = modq(v0 - y[0]);
+        let m0 = (wv + DELTA / 2).div_euclid(DELTA);
+        for (e, ok) in [((1 << 24) - 1, true), (1 << 24, false), (-(1 << 24), true), (-(1 << 24) - 1, false)] {
+            let mut st = st.clone();
+            let nv = modq(y[0] + DELTA * m0 + e).rem_euclid(Q as i64) as u64;
+            st[vt_at..vt_at + 8].copy_from_slice(&nv.to_be_bytes());
+            if ok {
+                let pf = prove(op, &st, w, [1; 32], &p(op)).unwrap();
+                assert!(verify(op, &st, &pf, &p(op)), "{} e_T = {e}", rel_name(f));
+            } else {
+                assert!(prove(op, &st, w, [1; 32], &p(op)).is_err(), "{} e_T = {e}", rel_name(f));
+                assert!(rejected(op, &st, w), "{} e_T = {e}", rel_name(f));
+            }
+        }
+    }
 }
 
 #[test]
@@ -357,7 +399,18 @@ fn scalar_word_above_2_64() {
 fn wrong_witness_ring_row() {
     // one coefficient of a CBD(20) vector changed (still short): its R_q row no longer holds mod q
     let s = setup();
-    for (f, off) in [(Form::Transfer, 8192), (Form::Transfer0, 8192), (Form::Burn, 8192), (Form::DiscloseSender, 2048), (Form::DiscloseReceiver, 2048)] {
+    // e1 at 8192 (R_TX, R_TX0, R_BURN), e_f at 2048 (R_REG, R_TX, R_TX0, R_BURN), R_DS's e1 / R_DR's e at 2048
+    for (f, off) in [
+        (Form::Transfer, 8192),
+        (Form::Transfer0, 8192),
+        (Form::Burn, 8192),
+        (Form::Register, 2048),
+        (Form::Transfer, 2048),
+        (Form::Transfer0, 2048),
+        (Form::Burn, 2048),
+        (Form::DiscloseSender, 2048),
+        (Form::DiscloseReceiver, 2048),
+    ] {
         let (op, (st, w)) = (f.op(), s.rel(f));
         let mut w = w.clone();
         w[off] = w[off].wrapping_add(1);
