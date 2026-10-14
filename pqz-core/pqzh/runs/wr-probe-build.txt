@@ -1,0 +1,102 @@
+     Locking 5 packages to latest compatible versions
+      Adding lazy_static v1.5.1
+      Adding once_cell v1.21.4
+      Adding sharded-slab v0.1.7
+      Adding thread_local v1.1.10
+      Adding tracing-subscriber v0.3.23
+   Compiling proc-macro2 v1.0.107
+   Compiling unicode-ident v1.0.27
+   Compiling quote v1.0.47
+   Compiling serde_core v1.0.229
+   Compiling autocfg v1.5.1
+   Compiling cfg-if v1.0.5
+   Compiling serde v1.0.229
+   Compiling once_cell v1.21.4
+   Compiling rand_core v0.10.1
+   Compiling cpufeatures v0.3.1
+   Compiling paste v1.0.15
+   Compiling chacha20 v0.10.2
+   Compiling tracing-core v0.1.36
+   Compiling pin-project-lite v0.2.17
+   Compiling p3-maybe-rayon v0.9.0-rc.1
+   Compiling either v1.19.0
+   Compiling thiserror v2.0.21
+   Compiling num-traits v0.2.19
+   Compiling itertools v0.15.0
+   Compiling rand v0.10.3
+   Compiling scopeguard v1.2.0
+   Compiling lock_api v0.4.14
+   Compiling spin v0.12.3
+   Compiling syn v3.0.9
+   Compiling syn v2.0.119
+   Compiling crunchy v0.2.4
+   Compiling tiny-keccak v2.0.2
+   Compiling num-integer v0.1.47
+   Compiling libm v0.2.16
+   Compiling version_check v0.9.5
+   Compiling num-bigint v0.5.1
+   Compiling generic-array v0.14.7
+   Compiling typenum v1.20.1
+   Compiling allocator-api2 v0.2.21
+   Compiling foldhash v0.2.0
+   Compiling equivalent v1.0.2
+   Compiling keccak v0.1.6
+   Compiling hashbrown v0.17.1
+   Compiling lazy_static v1.5.1
+   Compiling sharded-slab v0.1.7
+   Compiling block-buffer v0.10.4
+   Compiling crypto-common v0.1.7
+   Compiling digest v0.10.7
+   Compiling thread_local v1.1.10
+   Compiling sha3 v0.10.8
+   Compiling tracing-subscriber v0.3.23
+   Compiling serde_derive v1.0.229
+   Compiling thiserror-impl v2.0.21
+   Compiling cobs v0.3.0
+   Compiling tracing-attributes v0.1.31
+   Compiling tracing v0.1.44
+   Compiling p3-util v0.9.0-rc.1
+   Compiling postcard v1.1.3
+   Compiling p3-field v0.9.0-rc.1
+   Compiling p3-matrix v0.9.0-rc.1
+   Compiling p3-symmetric v0.9.0-rc.1
+   Compiling p3-keccak v0.9.0-rc.1
+   Compiling p3-challenger v0.9.0-rc.1
+   Compiling p3-dft v0.9.0-rc.1
+   Compiling p3-air v0.9.0-rc.1
+   Compiling p3-multilinear-util v0.9.0-rc.1
+   Compiling p3-commit v0.9.0-rc.1
+   Compiling p3-zk-codes v0.9.0-rc.1
+   Compiling p3-mds v0.9.0-rc.1
+   Compiling p3-binary-field v0.9.0-rc.1
+   Compiling p3-poseidon1 v0.9.0-rc.1
+   Compiling p3-poseidon2 v0.9.0-rc.1
+   Compiling p3-merkle-tree v0.9.0-rc.1
+   Compiling p3-security v0.9.0-rc.1
+   Compiling p3-lookup v0.9.0-rc.1
+   Compiling p3-goldilocks v0.9.0-rc.1
+   Compiling p3-uni-stark v0.9.0-rc.1
+   Compiling p3-fri v0.9.0-rc.1
+   Compiling p3-batch-stark v0.9.0-rc.1
+   Compiling p3-sumcheck v0.9.0-rc.1
+   Compiling p3-bus v0.9.0-rc.1
+   Compiling p3-whir v0.9.0-rc.1
+   Compiling p3-multi-stark v0.9.0-rc.1
+   Compiling pqzh v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/whirrev/pqz-core/pqzh)
+   Compiling wr-probe v0.0.0 (/home/ha/work/ainative/scaas/.claude/worktrees/whirrev/pqz-core/pqzh/runs/wr-probe)
+warning: unused `ExtField` that must be used
+   --> src/main.rs:155:13
+    |
+155 |             std::hint::black_box(poly.eval_base(p));
+    |             ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = note: `#[warn(unused_must_use)]` (part of `#[warn(unused)]`) on by default
+help: use `let _ = ...` to ignore the resulting value
+    |
+155 |             let _ = std::hint::black_box(poly.eval_base(p));
+    |             +++++++
+
+warning: `wr-probe` (bin "wr-probe") generated 1 warning
+    Finished `release` profile [optimized + debuginfo] target(s) in 58.55s
+   Compiling wr-probe v0.0.0 (/home/ha/work/ainative/scaas/.claude/worktrees/whirrev/pqz-core/pqzh/runs/wr-probe)
+    Finished `release` profile [optimized + debuginfo] target(s) in 8.66s

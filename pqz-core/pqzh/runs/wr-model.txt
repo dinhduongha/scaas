@@ -1,0 +1,12 @@
+measured (wr-tx.jsonl opening 0): base case 361,394 B = reveals 63,560 + mask openings 265,248 + source/fresh-main 32,270 + commitments 265
+calibration: digests for 68 of 2^11 / 68 of 2^12 / 79 of 2^21: [277, 344, 1090] (measured 267-292 / 331-353 / 1,026-1,102)
+A p3-whir as built: 7 trees (k masks per sumcheck batch, 1 per round), own code each, own pads and positions: {'trees': 7, 'masks': 19, 'reveals': 63520, 'mask_openings': 262375, 'total': 358421}
+B Construction 7.2 as written: one C_zk (message 80) for all 19 masks, one pad oracle, shared positions: {'trees': 7, 'masks': 19, 'reveals': 115880, 'mask_openings': 208779, 'total': 356993}
+C all 16 sumcheck masks as one 64-coefficient mask committed up front + 3 switch masks; own codes, own pads: {'trees': 4, 'masks': 4, 'reveals': 22720, 'mask_openings': 118718, 'total': 173868}
+D = C with one C_zk (message 80), one pad oracle, shared positions: {'trees': 4, 'masks': 4, 'reveals': 27080, 'mask_openings': 87661, 'total': 147075}
+round-0 queries of one more tree: rate 3, 79 queries, 2^20 coefficients: 42488 B
+round-0 queries of one more tree: rate 3, 79 queries, 2^21 coefficients: 45000 B
+round-0 queries of one more tree: rate 3, 79 queries, 2^22 coefficients: 47562 B
+round-0 queries of one more tree: rate 4, 58 queries, 2^20 coefficients: 33916 B
+round-0 queries of one more tree: rate 4, 58 queries, 2^21 coefficients: 35746 B
+round-0 queries of one more tree: rate 4, 58 queries, 2^22 coefficients: 37607 B

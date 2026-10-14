@@ -1,0 +1,1248 @@
+=== ext5 vars 22 target 128 pow 16 mask_rate 1/2^4: mask_queries 68 groups [MaskGroupShape { shape: MaskCodeShape { message_len: 4, randomness_len: 68, domain_size: 2048 }, width: 4 }, MaskGroupShape { shape: MaskCodeShape { message_len: 80, randomness_len: 68, domain_size: 4096 }, width: 1 }, MaskGroupShape { shape: MaskCodeShape { message_len: 4, randomness_len: 68, domain_size: 2048 }, width: 4 }, MaskGroupShape { shape: MaskCodeShape { message_len: 40, randomness_len: 68, domain_size: 2048 }, width: 1 }, MaskGroupShape { shape: MaskCodeShape { message_len: 4, randomness_len: 68, domain_size: 2048 }, width: 4 }, MaskGroupShape { shape: MaskCodeShape { message_len: 27, randomness_len: 68, domain_size: 2048 }, width: 1 }, MaskGroupShape { shape: MaskCodeShape { message_len: 4, randomness_len: 68, domain_size: 2048 }, width: 4 }]
+HidingBaseCaseSecurityReport {
+    target_bits: 128,
+    assumption: JohnsonBound,
+    field_order_log2_estimate: 319.9999999983205,
+    field_order_log2_floor: 319,
+    source: HidingCodeSecurityReport {
+        role: Source,
+        message_len: 64,
+        randomness_len: 21,
+        randomized_dimension: 85,
+        dyadic_dimension: 128,
+        domain_size: 262144,
+        randomized_rate: 0.000324249267578125,
+        analysis_log_inv_rate: Some(
+            11,
+        ),
+        analysis_radius: Some(
+            0.9767980587423164,
+        ),
+        width: 1,
+        requested_queries: 21,
+        effective_queries: 21,
+        query_miss: HidingErrorBound {
+            bits: Some(
+                114.02182411428063,
+            ),
+            classification: Proven,
+            vacuous: false,
+        },
+        mca: HidingErrorBound {
+            bits: Some(
+                278.396694919157,
+            ),
+            classification: Proven,
+            vacuous: false,
+        },
+        paired_list: HidingListBound {
+            log2_size: Some(
+                28.643856189774723,
+            ),
+            classification: Proven,
+        },
+    },
+    mask_groups: [
+        HidingCodeSecurityReport {
+            role: SumcheckMask {
+                round: 0,
+            },
+            message_len: 4,
+            randomness_len: 68,
+            randomized_dimension: 72,
+            dyadic_dimension: 128,
+            domain_size: 2048,
+            randomized_rate: 0.03515625,
+            analysis_log_inv_rate: Some(
+                4,
+            ),
+            analysis_radius: Some(
+                0.7375,
+            ),
+            width: 4,
+            requested_queries: 68,
+            effective_queries: 68,
+            query_miss: HidingErrorBound {
+                bits: Some(
+                    131.21352570338493,
+                ),
+                classification: Proven,
+                vacuous: false,
+            },
+            mca: HidingErrorBound {
+                bits: Some(
+                    290.396694919157,
+                ),
+                classification: Proven,
+                vacuous: false,
+            },
+            paired_list: HidingListBound {
+                log2_size: Some(
+                    27.095067301607052,
+                ),
+                classification: Proven,
+            },
+        },
+        HidingCodeSecurityReport {
+            role: CodeSwitchMask {
+                round: 0,
+            },
+            message_len: 80,
+            randomness_len: 68,
+            randomized_dimension: 148,
+            dyadic_dimension: 256,
+            domain_size: 4096,
+            randomized_rate: 0.0361328125,
+            analysis_log_inv_rate: Some(
+                4,
+            ),
+            analysis_radius: Some(
+                0.7375,
+            ),
+            width: 1,
+            requested_queries: 68,
+            effective_queries: 68,
+            query_miss: HidingErrorBound {
+                bits: Some(
+                    131.21352570338493,
+                ),
+                classification: Proven,
+                vacuous: false,
+            },
+            mca: HidingErrorBound {
+                bits: Some(
+                    291.40236366924375,
+                ),
+                classification: Proven,
+                vacuous: false,
+            },
+            paired_list: HidingListBound {
+                log2_size: Some(
+                    14.643856189774723,
+                ),
+                classification: Proven,
+            },
+        },
+        HidingCodeSecurityReport {
+            role: SumcheckMask {
+                round: 1,
+            },
+            message_len: 4,
+            randomness_len: 68,
+            randomized_dimension: 72,
+            dyadic_dimension: 128,
+            domain_size: 2048,
+            randomized_rate: 0.03515625,
+            analysis_log_inv_rate: Some(
+                4,
+            ),
+            analysis_radius: Some(
+                0.7375,
+            ),
+            width: 4,
+            requested_queries: 68,
+            effective_queries: 68,
+            query_miss: HidingErrorBound {
+                bits: Some(
+                    131.21352570338493,
+                ),
+                classification: Proven,
+                vacuous: false,
+            },
+            mca: HidingErrorBound {
+                bits: Some(
+                    290.396694919157,
+                ),
+                classification: Proven,
+                vacuous: false,
+            },
+            paired_list: HidingListBound {
+                log2_size: Some(
+                    27.095067301607052,
+                ),
+                classification: Proven,
+            },
+        },
+        HidingCodeSecurityReport {
+            role: CodeSwitchMask {
+                round: 1,
+            },
+            message_len: 40,
+            randomness_len: 68,
+            randomized_dimension: 108,
+            dyadic_dimension: 128,
+            domain_size: 2048,
+            randomized_rate: 0.052734375,
+            analysis_log_inv_rate: Some(
+                4,
+            ),
+            analysis_radius: Some(
+                0.7375,
+            ),
+            width: 1,
+            requested_queries: 68,
+            effective_queries: 68,
+            query_miss: HidingErrorBound {
+                bits: Some(
+                    131.21352570338493,
+                ),
+                classification: Proven,
+                vacuous: false,
+            },
+            mca: HidingErrorBound {
+                bits: Some(
+                    292.396694919157,
+                ),
+                classification: Proven,
+                vacuous: false,
+            },
+            paired_list: HidingListBound {
+                log2_size: Some(
+                    14.643856189774723,
+                ),
+                classification: Proven,
+            },
+        },
+        HidingCodeSecurityReport {
+            role: SumcheckMask {
+                round: 2,
+            },
+            message_len: 4,
+            randomness_len: 68,
+            randomized_dimension: 72,
+            dyadic_dimension: 128,
+            domain_size: 2048,
+            randomized_rate: 0.03515625,
+            analysis_log_inv_rate: Some(
+                4,
+            ),
+            analysis_radius: Some(
+                0.7375,
+            ),
+            width: 4,
+            requested_queries: 68,
+            effective_queries: 68,
+            query_miss: HidingErrorBound {
+                bits: Some(
+                    131.21352570338493,
+                ),
+                classification: Proven,
+                vacuous: false,
+            },
+            mca: HidingErrorBound {
+                bits: Some(
+                    290.396694919157,
+                ),
+                classification: Proven,
+                vacuous: false,
+            },
+            paired_list: HidingListBound {
+                log2_size: Some(
+                    27.095067301607052,
+                ),
+                classification: Proven,
+            },
+        },
+        HidingCodeSecurityReport {
+            role: CodeSwitchMask {
+                round: 2,
+            },
+            message_len: 27,
+            randomness_len: 68,
+            randomized_dimension: 95,
+            dyadic_dimension: 128,
+            domain_size: 2048,
+            randomized_rate: 0.04638671875,
+            analysis_log_inv_rate: Some(
+                4,
+            ),
+            analysis_radius: Some(
+                0.7375,
+            ),
+            width: 1,
+            requested_queries: 68,
+            effective_queries: 68,
+            query_miss: HidingErrorBound {
+                bits: Some(
+                    131.21352570338493,
+                ),
+                classification: Proven,
+                vacuous: false,
+            },
+            mca: HidingErrorBound {
+                bits: Some(
+                    292.396694919157,
+                ),
+                classification: Proven,
+                vacuous: false,
+            },
+            paired_list: HidingListBound {
+                log2_size: Some(
+                    14.643856189774723,
+                ),
+                classification: Proven,
+            },
+        },
+        HidingCodeSecurityReport {
+            role: SumcheckMask {
+                round: 3,
+            },
+            message_len: 4,
+            randomness_len: 68,
+            randomized_dimension: 72,
+            dyadic_dimension: 128,
+            domain_size: 2048,
+            randomized_rate: 0.03515625,
+            analysis_log_inv_rate: Some(
+                4,
+            ),
+            analysis_radius: Some(
+                0.7375,
+            ),
+            width: 4,
+            requested_queries: 68,
+            effective_queries: 68,
+            query_miss: HidingErrorBound {
+                bits: Some(
+                    131.21352570338493,
+                ),
+                classification: Proven,
+                vacuous: false,
+            },
+            mca: HidingErrorBound {
+                bits: Some(
+                    290.396694919157,
+                ),
+                classification: Proven,
+                vacuous: false,
+            },
+            paired_list: HidingListBound {
+                log2_size: Some(
+                    27.095067301607052,
+                ),
+                classification: Proven,
+            },
+        },
+    ],
+    query_round: HidingQueryRoundReport {
+        source_before_pow_bits: Some(
+            114.02182411428063,
+        ),
+        masks_before_pow_bits: [
+            Some(
+                131.21352570338493,
+            ),
+            Some(
+                131.21352570338493,
+            ),
+            Some(
+                131.21352570338493,
+            ),
+            Some(
+                131.21352570338493,
+            ),
+            Some(
+                131.21352570338493,
+            ),
+            Some(
+                131.21352570338493,
+            ),
+            Some(
+                131.21352570338493,
+            ),
+        ],
+        weakest_before_pow_bits: Some(
+            114.02182411428063,
+        ),
+        before_pow: HidingErrorBound {
+            bits: Some(
+                114.02182411428063,
+            ),
+            classification: Proven,
+            vacuous: false,
+        },
+        shared_pow_bits: 14,
+        source_with_pow: HidingErrorBound {
+            bits: Some(
+                128.02182411428063,
+            ),
+            classification: Conditional,
+            vacuous: false,
+        },
+        with_pow: HidingErrorBound {
+            bits: Some(
+                128.02182411428063,
+            ),
+            classification: Conditional,
+            vacuous: false,
+        },
+    },
+    gamma_round: HidingGammaRoundReport {
+        mca_sum: HidingErrorBound {
+            bits: Some(
+                278.39493558061633,
+            ),
+            classification: Proven,
+            vacuous: false,
+        },
+        product_list: HidingListBound {
+            log2_size: Some(
+                180.95569396552713,
+            ),
+            classification: Proven,
+        },
+        product_list_over_field: HidingErrorBound {
+            bits: Some(
+                138.04430603447287,
+            ),
+            classification: Proven,
+            vacuous: false,
+        },
+        combined: HidingErrorBound {
+            bits: Some(
+                138.04430603447287,
+            ),
+            classification: Proven,
+            vacuous: false,
+        },
+    },
+    round_by_round: HidingErrorBound {
+        bits: Some(
+            114.02182411428063,
+        ),
+        classification: Proven,
+        vacuous: false,
+    },
+}
+=== ext2 vars 22 target 96 pow 16 mask_rate 1/2^4: mask_queries 52 groups [MaskGroupShape { shape: MaskCodeShape { message_len: 4, randomness_len: 52, domain_size: 1024 }, width: 4 }, MaskGroupShape { shape: MaskCodeShape { message_len: 58, randomness_len: 52, domain_size: 2048 }, width: 1 }, MaskGroupShape { shape: MaskCodeShape { message_len: 4, randomness_len: 52, domain_size: 1024 }, width: 4 }, MaskGroupShape { shape: MaskCodeShape { message_len: 30, randomness_len: 52, domain_size: 2048 }, width: 1 }, MaskGroupShape { shape: MaskCodeShape { message_len: 4, randomness_len: 52, domain_size: 1024 }, width: 4 }, MaskGroupShape { shape: MaskCodeShape { message_len: 21, randomness_len: 52, domain_size: 2048 }, width: 1 }, MaskGroupShape { shape: MaskCodeShape { message_len: 4, randomness_len: 52, domain_size: 1024 }, width: 4 }]
+HidingBaseCaseSecurityReport {
+    target_bits: 96,
+    assumption: JohnsonBound,
+    field_order_log2_estimate: 127.9999999993282,
+    field_order_log2_floor: 127,
+    source: HidingCodeSecurityReport {
+        role: Source,
+        message_len: 64,
+        randomness_len: 15,
+        randomized_dimension: 79,
+        dyadic_dimension: 128,
+        domain_size: 262144,
+        randomized_rate: 0.000301361083984375,
+        analysis_log_inv_rate: Some(
+            11,
+        ),
+        analysis_radius: Some(
+            0.9767980587423164,
+        ),
+        width: 1,
+        requested_queries: 15,
+        effective_queries: 15,
+        query_miss: HidingErrorBound {
+            bits: Some(
+                81.44416008162904,
+            ),
+            classification: Proven,
+            vacuous: false,
+        },
+        mca: HidingErrorBound {
+            bits: Some(
+                86.39669491915704,
+            ),
+            classification: Proven,
+            vacuous: false,
+        },
+        paired_list: HidingListBound {
+            log2_size: Some(
+                28.643856189774723,
+            ),
+            classification: Proven,
+        },
+    },
+    mask_groups: [
+        HidingCodeSecurityReport {
+            role: SumcheckMask {
+                round: 0,
+            },
+            message_len: 4,
+            randomness_len: 52,
+            randomized_dimension: 56,
+            dyadic_dimension: 64,
+            domain_size: 1024,
+            randomized_rate: 0.0546875,
+            analysis_log_inv_rate: Some(
+                4,
+            ),
+            analysis_radius: Some(
+                0.7375,
+            ),
+            width: 4,
+            requested_queries: 52,
+            effective_queries: 52,
+            query_miss: HidingErrorBound {
+                bits: Some(
+                    100.3397549496473,
+                ),
+                classification: Proven,
+                vacuous: false,
+            },
+            mca: HidingErrorBound {
+                bits: Some(
+                    99.38529015588479,
+                ),
+                classification: Proven,
+                vacuous: false,
+            },
+            paired_list: HidingListBound {
+                log2_size: Some(
+                    27.095067301607052,
+                ),
+                classification: Proven,
+            },
+        },
+        HidingCodeSecurityReport {
+            role: CodeSwitchMask {
+                round: 0,
+            },
+            message_len: 58,
+            randomness_len: 52,
+            randomized_dimension: 110,
+            dyadic_dimension: 128,
+            domain_size: 2048,
+            randomized_rate: 0.0537109375,
+            analysis_log_inv_rate: Some(
+                4,
+            ),
+            analysis_radius: Some(
+                0.7375,
+            ),
+            width: 1,
+            requested_queries: 52,
+            effective_queries: 52,
+            query_miss: HidingErrorBound {
+                bits: Some(
+                    100.3397549496473,
+                ),
+                classification: Proven,
+                vacuous: false,
+            },
+            mca: HidingErrorBound {
+                bits: Some(
+                    100.39669491915704,
+                ),
+                classification: Proven,
+                vacuous: false,
+            },
+            paired_list: HidingListBound {
+                log2_size: Some(
+                    14.643856189774723,
+                ),
+                classification: Proven,
+            },
+        },
+        HidingCodeSecurityReport {
+            role: SumcheckMask {
+                round: 1,
+            },
+            message_len: 4,
+            randomness_len: 52,
+            randomized_dimension: 56,
+            dyadic_dimension: 64,
+            domain_size: 1024,
+            randomized_rate: 0.0546875,
+            analysis_log_inv_rate: Some(
+                4,
+            ),
+            analysis_radius: Some(
+                0.7375,
+            ),
+            width: 4,
+            requested_queries: 52,
+            effective_queries: 52,
+            query_miss: HidingErrorBound {
+                bits: Some(
+                    100.3397549496473,
+                ),
+                classification: Proven,
+                vacuous: false,
+            },
+            mca: HidingErrorBound {
+                bits: Some(
+                    99.38529015588479,
+                ),
+                classification: Proven,
+                vacuous: false,
+            },
+            paired_list: HidingListBound {
+                log2_size: Some(
+                    27.095067301607052,
+                ),
+                classification: Proven,
+            },
+        },
+        HidingCodeSecurityReport {
+            role: CodeSwitchMask {
+                round: 1,
+            },
+            message_len: 30,
+            randomness_len: 52,
+            randomized_dimension: 82,
+            dyadic_dimension: 128,
+            domain_size: 2048,
+            randomized_rate: 0.0400390625,
+            analysis_log_inv_rate: Some(
+                4,
+            ),
+            analysis_radius: Some(
+                0.7375,
+            ),
+            width: 1,
+            requested_queries: 52,
+            effective_queries: 52,
+            query_miss: HidingErrorBound {
+                bits: Some(
+                    100.3397549496473,
+                ),
+                classification: Proven,
+                vacuous: false,
+            },
+            mca: HidingErrorBound {
+                bits: Some(
+                    100.39669491915704,
+                ),
+                classification: Proven,
+                vacuous: false,
+            },
+            paired_list: HidingListBound {
+                log2_size: Some(
+                    14.643856189774723,
+                ),
+                classification: Proven,
+            },
+        },
+        HidingCodeSecurityReport {
+            role: SumcheckMask {
+                round: 2,
+            },
+            message_len: 4,
+            randomness_len: 52,
+            randomized_dimension: 56,
+            dyadic_dimension: 64,
+            domain_size: 1024,
+            randomized_rate: 0.0546875,
+            analysis_log_inv_rate: Some(
+                4,
+            ),
+            analysis_radius: Some(
+                0.7375,
+            ),
+            width: 4,
+            requested_queries: 52,
+            effective_queries: 52,
+            query_miss: HidingErrorBound {
+                bits: Some(
+                    100.3397549496473,
+                ),
+                classification: Proven,
+                vacuous: false,
+            },
+            mca: HidingErrorBound {
+                bits: Some(
+                    99.38529015588479,
+                ),
+                classification: Proven,
+                vacuous: false,
+            },
+            paired_list: HidingListBound {
+                log2_size: Some(
+                    27.095067301607052,
+                ),
+                classification: Proven,
+            },
+        },
+        HidingCodeSecurityReport {
+            role: CodeSwitchMask {
+                round: 2,
+            },
+            message_len: 21,
+            randomness_len: 52,
+            randomized_dimension: 73,
+            dyadic_dimension: 128,
+            domain_size: 2048,
+            randomized_rate: 0.03564453125,
+            analysis_log_inv_rate: Some(
+                4,
+            ),
+            analysis_radius: Some(
+                0.7375,
+            ),
+            width: 1,
+            requested_queries: 52,
+            effective_queries: 52,
+            query_miss: HidingErrorBound {
+                bits: Some(
+                    100.3397549496473,
+                ),
+                classification: Proven,
+                vacuous: false,
+            },
+            mca: HidingErrorBound {
+                bits: Some(
+                    100.39669491915704,
+                ),
+                classification: Proven,
+                vacuous: false,
+            },
+            paired_list: HidingListBound {
+                log2_size: Some(
+                    14.643856189774723,
+                ),
+                classification: Proven,
+            },
+        },
+        HidingCodeSecurityReport {
+            role: SumcheckMask {
+                round: 3,
+            },
+            message_len: 4,
+            randomness_len: 52,
+            randomized_dimension: 56,
+            dyadic_dimension: 64,
+            domain_size: 1024,
+            randomized_rate: 0.0546875,
+            analysis_log_inv_rate: Some(
+                4,
+            ),
+            analysis_radius: Some(
+                0.7375,
+            ),
+            width: 4,
+            requested_queries: 52,
+            effective_queries: 52,
+            query_miss: HidingErrorBound {
+                bits: Some(
+                    100.3397549496473,
+                ),
+                classification: Proven,
+                vacuous: false,
+            },
+            mca: HidingErrorBound {
+                bits: Some(
+                    99.38529015588479,
+                ),
+                classification: Proven,
+                vacuous: false,
+            },
+            paired_list: HidingListBound {
+                log2_size: Some(
+                    27.095067301607052,
+                ),
+                classification: Proven,
+            },
+        },
+    ],
+    query_round: HidingQueryRoundReport {
+        source_before_pow_bits: Some(
+            81.44416008162904,
+        ),
+        masks_before_pow_bits: [
+            Some(
+                100.3397549496473,
+            ),
+            Some(
+                100.3397549496473,
+            ),
+            Some(
+                100.3397549496473,
+            ),
+            Some(
+                100.3397549496473,
+            ),
+            Some(
+                100.3397549496473,
+            ),
+            Some(
+                100.3397549496473,
+            ),
+            Some(
+                100.3397549496473,
+            ),
+        ],
+        weakest_before_pow_bits: Some(
+            81.44416008162904,
+        ),
+        before_pow: HidingErrorBound {
+            bits: Some(
+                81.44416008162904,
+            ),
+            classification: Proven,
+            vacuous: false,
+        },
+        shared_pow_bits: 15,
+        source_with_pow: HidingErrorBound {
+            bits: Some(
+                96.44416008162904,
+            ),
+            classification: Conditional,
+            vacuous: false,
+        },
+        with_pow: HidingErrorBound {
+            bits: Some(
+                96.44416008162904,
+            ),
+            classification: Conditional,
+            vacuous: false,
+        },
+    },
+    gamma_round: HidingGammaRoundReport {
+        mca_sum: HidingErrorBound {
+            bits: Some(
+                86.39572105083741,
+            ),
+            classification: Proven,
+            vacuous: false,
+        },
+        product_list: HidingListBound {
+            log2_size: Some(
+                180.95569396552713,
+            ),
+            classification: Proven,
+        },
+        product_list_over_field: HidingErrorBound {
+            bits: Some(
+                0.0,
+            ),
+            classification: Proven,
+            vacuous: true,
+        },
+        combined: HidingErrorBound {
+            bits: Some(
+                0.0,
+            ),
+            classification: Proven,
+            vacuous: true,
+        },
+    },
+    round_by_round: HidingErrorBound {
+        bits: Some(
+            0.0,
+        ),
+        classification: Proven,
+        vacuous: true,
+    },
+}
+=== ext2 vars 22 target 96 pow 16 mask_rate 1/2^1: mask_queries 231 groups [MaskGroupShape { shape: MaskCodeShape { message_len: 4, randomness_len: 231, domain_size: 512 }, width: 4 }, MaskGroupShape { shape: MaskCodeShape { message_len: 58, randomness_len: 231, domain_size: 1024 }, width: 1 }, MaskGroupShape { shape: MaskCodeShape { message_len: 4, randomness_len: 231, domain_size: 512 }, width: 4 }, MaskGroupShape { shape: MaskCodeShape { message_len: 30, randomness_len: 231, domain_size: 1024 }, width: 1 }, MaskGroupShape { shape: MaskCodeShape { message_len: 4, randomness_len: 231, domain_size: 512 }, width: 4 }, MaskGroupShape { shape: MaskCodeShape { message_len: 21, randomness_len: 231, domain_size: 512 }, width: 1 }, MaskGroupShape { shape: MaskCodeShape { message_len: 4, randomness_len: 231, domain_size: 512 }, width: 4 }]
+HidingBaseCaseSecurityReport {
+    target_bits: 96,
+    assumption: JohnsonBound,
+    field_order_log2_estimate: 127.9999999993282,
+    field_order_log2_floor: 127,
+    source: HidingCodeSecurityReport {
+        role: Source,
+        message_len: 64,
+        randomness_len: 15,
+        randomized_dimension: 79,
+        dyadic_dimension: 128,
+        domain_size: 262144,
+        randomized_rate: 0.000301361083984375,
+        analysis_log_inv_rate: Some(
+            11,
+        ),
+        analysis_radius: Some(
+            0.9767980587423164,
+        ),
+        width: 1,
+        requested_queries: 15,
+        effective_queries: 15,
+        query_miss: HidingErrorBound {
+            bits: Some(
+                81.44416008162904,
+            ),
+            classification: Proven,
+            vacuous: false,
+        },
+        mca: HidingErrorBound {
+            bits: Some(
+                86.39669491915704,
+            ),
+            classification: Proven,
+            vacuous: false,
+        },
+        paired_list: HidingListBound {
+            log2_size: Some(
+                28.643856189774723,
+            ),
+            classification: Proven,
+        },
+    },
+    mask_groups: [
+        HidingCodeSecurityReport {
+            role: SumcheckMask {
+                round: 0,
+            },
+            message_len: 4,
+            randomness_len: 231,
+            randomized_dimension: 235,
+            dyadic_dimension: 256,
+            domain_size: 512,
+            randomized_rate: 0.458984375,
+            analysis_log_inv_rate: Some(
+                1,
+            ),
+            analysis_radius: Some(
+                0.257537879754125,
+            ),
+            width: 4,
+            requested_queries: 231,
+            effective_queries: 231,
+            query_miss: HidingErrorBound {
+                bits: Some(
+                    99.24006525708705,
+                ),
+                classification: Proven,
+                vacuous: false,
+            },
+            mca: HidingErrorBound {
+                bits: Some(
+                    103.40236366924373,
+                ),
+                classification: Proven,
+                vacuous: false,
+            },
+            paired_list: HidingListBound {
+                log2_size: Some(
+                    11.22881869049588,
+                ),
+                classification: Proven,
+            },
+        },
+        HidingCodeSecurityReport {
+            role: CodeSwitchMask {
+                round: 0,
+            },
+            message_len: 58,
+            randomness_len: 231,
+            randomized_dimension: 289,
+            dyadic_dimension: 512,
+            domain_size: 1024,
+            randomized_rate: 0.2822265625,
+            analysis_log_inv_rate: Some(
+                1,
+            ),
+            analysis_radius: Some(
+                0.257537879754125,
+            ),
+            width: 1,
+            requested_queries: 231,
+            effective_queries: 231,
+            query_miss: HidingErrorBound {
+                bits: Some(
+                    99.24006525708705,
+                ),
+                classification: Proven,
+                vacuous: false,
+            },
+            mca: HidingErrorBound {
+                bits: Some(
+                    104.4051897133225,
+                ),
+                classification: Proven,
+                vacuous: false,
+            },
+            paired_list: HidingListBound {
+                log2_size: Some(
+                    8.643856189774723,
+                ),
+                classification: Proven,
+            },
+        },
+        HidingCodeSecurityReport {
+            role: SumcheckMask {
+                round: 1,
+            },
+            message_len: 4,
+            randomness_len: 231,
+            randomized_dimension: 235,
+            dyadic_dimension: 256,
+            domain_size: 512,
+            randomized_rate: 0.458984375,
+            analysis_log_inv_rate: Some(
+                1,
+            ),
+            analysis_radius: Some(
+                0.257537879754125,
+            ),
+            width: 4,
+            requested_queries: 231,
+            effective_queries: 231,
+            query_miss: HidingErrorBound {
+                bits: Some(
+                    99.24006525708705,
+                ),
+                classification: Proven,
+                vacuous: false,
+            },
+            mca: HidingErrorBound {
+                bits: Some(
+                    103.40236366924373,
+                ),
+                classification: Proven,
+                vacuous: false,
+            },
+            paired_list: HidingListBound {
+                log2_size: Some(
+                    11.22881869049588,
+                ),
+                classification: Proven,
+            },
+        },
+        HidingCodeSecurityReport {
+            role: CodeSwitchMask {
+                round: 1,
+            },
+            message_len: 30,
+            randomness_len: 231,
+            randomized_dimension: 261,
+            dyadic_dimension: 512,
+            domain_size: 1024,
+            randomized_rate: 0.2548828125,
+            analysis_log_inv_rate: Some(
+                1,
+            ),
+            analysis_radius: Some(
+                0.257537879754125,
+            ),
+            width: 1,
+            requested_queries: 231,
+            effective_queries: 231,
+            query_miss: HidingErrorBound {
+                bits: Some(
+                    99.24006525708705,
+                ),
+                classification: Proven,
+                vacuous: false,
+            },
+            mca: HidingErrorBound {
+                bits: Some(
+                    104.4051897133225,
+                ),
+                classification: Proven,
+                vacuous: false,
+            },
+            paired_list: HidingListBound {
+                log2_size: Some(
+                    8.643856189774723,
+                ),
+                classification: Proven,
+            },
+        },
+        HidingCodeSecurityReport {
+            role: SumcheckMask {
+                round: 2,
+            },
+            message_len: 4,
+            randomness_len: 231,
+            randomized_dimension: 235,
+            dyadic_dimension: 256,
+            domain_size: 512,
+            randomized_rate: 0.458984375,
+            analysis_log_inv_rate: Some(
+                1,
+            ),
+            analysis_radius: Some(
+                0.257537879754125,
+            ),
+            width: 4,
+            requested_queries: 231,
+            effective_queries: 231,
+            query_miss: HidingErrorBound {
+                bits: Some(
+                    99.24006525708705,
+                ),
+                classification: Proven,
+                vacuous: false,
+            },
+            mca: HidingErrorBound {
+                bits: Some(
+                    103.40236366924373,
+                ),
+                classification: Proven,
+                vacuous: false,
+            },
+            paired_list: HidingListBound {
+                log2_size: Some(
+                    11.22881869049588,
+                ),
+                classification: Proven,
+            },
+        },
+        HidingCodeSecurityReport {
+            role: CodeSwitchMask {
+                round: 2,
+            },
+            message_len: 21,
+            randomness_len: 231,
+            randomized_dimension: 252,
+            dyadic_dimension: 256,
+            domain_size: 512,
+            randomized_rate: 0.4921875,
+            analysis_log_inv_rate: Some(
+                1,
+            ),
+            analysis_radius: Some(
+                0.257537879754125,
+            ),
+            width: 1,
+            requested_queries: 231,
+            effective_queries: 231,
+            query_miss: HidingErrorBound {
+                bits: Some(
+                    99.24006525708705,
+                ),
+                classification: Proven,
+                vacuous: false,
+            },
+            mca: HidingErrorBound {
+                bits: Some(
+                    105.40236366924373,
+                ),
+                classification: Proven,
+                vacuous: false,
+            },
+            paired_list: HidingListBound {
+                log2_size: Some(
+                    8.643856189774723,
+                ),
+                classification: Proven,
+            },
+        },
+        HidingCodeSecurityReport {
+            role: SumcheckMask {
+                round: 3,
+            },
+            message_len: 4,
+            randomness_len: 231,
+            randomized_dimension: 235,
+            dyadic_dimension: 256,
+            domain_size: 512,
+            randomized_rate: 0.458984375,
+            analysis_log_inv_rate: Some(
+                1,
+            ),
+            analysis_radius: Some(
+                0.257537879754125,
+            ),
+            width: 4,
+            requested_queries: 231,
+            effective_queries: 231,
+            query_miss: HidingErrorBound {
+                bits: Some(
+                    99.24006525708705,
+                ),
+                classification: Proven,
+                vacuous: false,
+            },
+            mca: HidingErrorBound {
+                bits: Some(
+                    103.40236366924373,
+                ),
+                classification: Proven,
+                vacuous: false,
+            },
+            paired_list: HidingListBound {
+                log2_size: Some(
+                    11.22881869049588,
+                ),
+                classification: Proven,
+            },
+        },
+    ],
+    query_round: HidingQueryRoundReport {
+        source_before_pow_bits: Some(
+            81.44416008162904,
+        ),
+        masks_before_pow_bits: [
+            Some(
+                99.24006525708705,
+            ),
+            Some(
+                99.24006525708705,
+            ),
+            Some(
+                99.24006525708705,
+            ),
+            Some(
+                99.24006525708705,
+            ),
+            Some(
+                99.24006525708705,
+            ),
+            Some(
+                99.24006525708705,
+            ),
+            Some(
+                99.24006525708705,
+            ),
+        ],
+        weakest_before_pow_bits: Some(
+            81.44416008162904,
+        ),
+        before_pow: HidingErrorBound {
+            bits: Some(
+                81.44416008162904,
+            ),
+            classification: Proven,
+            vacuous: false,
+        },
+        shared_pow_bits: 15,
+        source_with_pow: HidingErrorBound {
+            bits: Some(
+                96.44416008162904,
+            ),
+            classification: Conditional,
+            vacuous: false,
+        },
+        with_pow: HidingErrorBound {
+            bits: Some(
+                96.44416008162904,
+            ),
+            classification: Conditional,
+            vacuous: false,
+        },
+    },
+    gamma_round: HidingGammaRoundReport {
+        mca_sum: HidingErrorBound {
+            bits: Some(
+                86.39663738220156,
+            ),
+            classification: Proven,
+            vacuous: false,
+        },
+        product_list: HidingListBound {
+            log2_size: Some(
+                99.49069952108242,
+            ),
+            classification: Proven,
+        },
+        product_list_over_field: HidingErrorBound {
+            bits: Some(
+                27.50930047891758,
+            ),
+            classification: Proven,
+            vacuous: false,
+        },
+        combined: HidingErrorBound {
+            bits: Some(
+                27.50930047891758,
+            ),
+            classification: Proven,
+            vacuous: false,
+        },
+    },
+    round_by_round: HidingErrorBound {
+        bits: Some(
+            27.50930047891758,
+        ),
+        classification: Proven,
+        vacuous: false,
+    },
+}

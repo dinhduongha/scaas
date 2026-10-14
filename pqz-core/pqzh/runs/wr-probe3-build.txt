@@ -1,0 +1,3 @@
+   Compiling pqzh v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/whirrev/pqz-core/pqzh)
+   Compiling wr-probe v0.0.0 (/home/ha/work/ainative/scaas/.claude/worktrees/whirrev/pqz-core/pqzh/runs/wr-probe)
+    Finished `release` profile [optimized + debuginfo] target(s) in 36.97s
