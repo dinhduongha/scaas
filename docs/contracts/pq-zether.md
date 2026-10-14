@@ -1130,7 +1130,7 @@ The id stays v2 for now; whether this needs a bump is an open owner decision (re
 
 <a id="precompile"></a>
 <a id="CTR-PQZ-10"></a>**CTR-PQZ-10** — **On-chain verification is a native precompile on chain 7622**: `PQZ` at
-`0x0000000000000000000000000000000000000F01` (first input byte = op) and `MLDSA65` at `…0F10` (EIP-8355's layout from
+`0x0000000000000000000000000000000000000F01` (first input byte = op) — one precompile for both proof systems, PQZL and PQZH (Ligero), dispatched on the statement's `proofSystemId` (owner 2026-10-14) and `MLDSA65` at `…0F10` (EIP-8355's layout from
 P6; transitional: plus a context string; moving both out of the EIP-1352 range is a P6 item). **v1 runs only on our Nethermind chain** (owner). Other private chains (customer-run Besu/geth/reth)
 get the off-chain co-processor attestation seam later; **no client ports in v1**; the co-processor is rejected on chain
 7622 itself. **Determinism and probing:** integer-only code, no threads, no floating point, no CPU-feature-dependent
