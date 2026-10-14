@@ -45,8 +45,9 @@
 typedef struct
 {
   const lnp_tbox_params_struct *P;
-  uint8_t op;   /* the ABDLOP keys' tag byte (R_TX0 shares op 1's tag, as REFRESH / AUDITOR share their op's) */
-  uint8_t code; /* the op, or PQZ_REL_TX0: names the relation in pqz_sv.c and the test hook */
+  uint8_t op;   /* the op the relation serves */
+  uint8_t code; /* the op, or PQZ_REL_TX0: names the relation in pqz_sv.c and the test hook, and is the byte of its
+                   ABDLOP keys' tag (R_TX0: 0x81, its own keys; REFRESH / AUDITOR share their op's relation) */
   int ready;    /* ABDLOP keys built (at the first prove / verify of this relation) */
   polymat_t A1, A2p, Bp;
 } rel_t;
@@ -117,7 +118,7 @@ expand_A (polymat_t A)
       }
 }
 
-/* ABDLOP keys of R from SHAKE128("SCAAS-PQZ-ABDLOP-PP-V1" || op), built at the relation's first use and kept below
+/* ABDLOP keys of R from SHAKE128("SCAAS-PQZ-ABDLOP-PP-V1" || code), code = the op (R_TX0: 0x81), built at the relation's first use and kept below
    the arena base mark, so an op never carries the keys of relations it does not use. Call with the arena released
    to the base mark (start of pqz_prove / pqz_verify); moves the mark above the keys. */
 static int
@@ -132,7 +133,7 @@ rel_keys (rel_t *R)
   polymat_alloc (R->A1, Rq, tb->kmsis, tb->m1);
   polymat_alloc (R->A2p, Rq, tb->kmsis, tb->m2 - tb->kmsis);
   polymat_alloc (R->Bp, Rq, tb->l + tb->lext, tb->m2 - tb->kmsis);
-  shake_tag (pp, "SCAAS-PQZ-ABDLOP-PP-V1", &R->op, 1, NULL, 0);
+  shake_tag (pp, "SCAAS-PQZ-ABDLOP-PP-V1", &R->code, 1, NULL, 0);
   abdlop_keygen (R->A1, R->A2p, R->Bp, pp, tb);
   /* NTT form now: a crtrep created lazily inside a call would sit above the arena mark and be dropped */
   polymat_tocrt (R->A1);

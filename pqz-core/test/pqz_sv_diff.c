@@ -183,6 +183,7 @@ make_tx (void)
   be8 (p + PQZ_HDR_FEE + 24, fee);
   memset (p + PQZ_HDR_AUDITOR_ON, 0, 32);
   p[PQZ_HDR_AUDITOR_ON + 31] = 1;
+  memset (p + PQZ_HDR_SALT, 0, 16); /* canonical salt word (P6e D15) */
   p += PQZ_HEADER_BYTES;
   memcpy (p, KF.pk, PQZ_POLYVEC_BYTES), p += PQZ_POLYVEC_BYTES;
   memcpy (p, KT.pk, PQZ_POLYVEC_BYTES), p += PQZ_POLYVEC_BYTES;
@@ -253,6 +254,7 @@ make_burn (void)
   memcpy (p + 32, PSID, 32);
   memset (p + PQZ_HDR_FEE, 0, 64);
   be8 (p + PQZ_HDR_FEE + 24, fee), be8 (p + PQZ_HDR_AMOUNT + 24, v);
+  memset (p + PQZ_HDR_SALT, 0, 32); /* burn salt 0 */
   p += PQZ_HEADER_BYTES;
   memcpy (p, KF.pk, PQZ_POLYVEC_BYTES), p += PQZ_POLYVEC_BYTES;
   memcpy (p, uT, PQZ_POLYVEC_BYTES), p += PQZ_POLYVEC_BYTES;

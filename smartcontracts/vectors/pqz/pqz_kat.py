@@ -370,7 +370,9 @@ def _scalar(b, name):  # a header word the relations read: < 2^64
 def parse(op_byte, stmt, ids=(PQZL_ID, PQZH_ID)):
     """Statement -> dict (op name, words, objects), or NonCanonical / ValueError for every D15 / R6 rule: length of
     the op (op 1 by length: 83,072 auditor on, 66,560 off), opTag of the op, a known proofSystemId, coefficients < q,
-    fee / amount < 2^64, auditorOn equal to the length's value."""
+    fee / amount < 2^64 (every debit form: the decoder is stricter than the relations, which read amount only for
+    BURN), the salt word = 16 zero bytes || salt (CTR-PQZ-19; pqz-core only hashes it, the decoder enforces it),
+    auditorOn equal to the length's value."""
     tag = stmt[:32]
     names = [n for n in OP_NAMES if OP_TAG[n] == tag and OP_BYTE[n] == op_byte]
     if not names:
@@ -408,6 +410,8 @@ def parse(op_byte, stmt, ids=(PQZL_ID, PQZH_ID)):
         out[k] = stmt[32 * i:32 * i + 32]
     _scalar(out["fee"], "fee")
     _scalar(out["amount"], "amount")
+    if out["salt"][:16] != bytes(16):
+        raise NonCanonical("salt word not 16 zero bytes || salt")
     a = int.from_bytes(out["auditorOn"], "big")
     if op == "TRANSFER" and a != aud:
         raise ValueError("auditorOn does not match the length")
@@ -509,6 +513,11 @@ def selftest(log):
             "auditorOn does not match the length")
     rejects(t[:448] + word(2) + t[480:], 1, "auditorOn 2", "auditorOn does not match the length")
     rejects(t[:256] + word(2**64) + t[288:], 1, "fee >= 2^64", "fee >= 2^64")
+    rejects(t[:576] + b"\1" + t[577:], 1, "salt word top byte set", "salt word not 16 zero bytes || salt")
+    b = forms["BURN"]
+    rejects(b[:591] + b"\x80" + b[592:], 2, "burn salt word byte 15 set", "salt word not 16 zero bytes || salt")
+    rejects(b[:288] + word(2**64) + b[320:], 2, "burn amount >= 2^64", "amount >= 2^64")
+    rejects(t[:288] + word(2**64) + t[320:], 1, "transfer amount >= 2^64 (decoder stricter than R_TX)", "amount >= 2^64")
     rejects(t[:640] + Q.to_bytes(8, "big") + t[648:], 1, "coefficient = q", "coefficient >= q")
     rejects(t[:640] + (2**42).to_bytes(8, "big") + t[648:], 1, "coefficient = 2^42", "coefficient >= q")
     rejects(t, 2, "TRANSFER statement under op 2", "opTag does not belong to op")

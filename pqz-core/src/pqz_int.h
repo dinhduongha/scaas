@@ -8,7 +8,8 @@
 #include "lazer.h"
 
 /* internal relation code of R_TX0 (op 1 with the 66,560-byte statement), where pqz_rel.c and pqz_sv.c name a relation
-   by its op; never an op on the wire (the transcript hashes op 1) */
+   by its op, and the tag byte of R_TX0's ABDLOP keys (SCAAS-PQZ-ABDLOP-PP-V1 || 0x81); never an op on the wire (the
+   transcript hashes op 1) */
 #define PQZ_REL_TX0 0x81
 
 /* statement digest: SHAKE128("SCAAS-PQZ-TRANSCRIPT-V1" || op || be32(len) || stmt) */

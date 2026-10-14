@@ -38,6 +38,9 @@
 #define PQZ_HEADER_BYTES 640
 #define PQZ_HDR_FEE 256
 #define PQZ_HDR_AMOUNT 288
+/* salt word (§7.7 offset 576, CTR-PQZ-19): 16 zero bytes || salt; pqz-core only hashes it, the precompile decoder
+   (pqz-stmt, P6e D15) rejects any other form */
+#define PQZ_HDR_SALT 576
 /* auditorOn word (§7.7 offset 448; CTR-PQZ-24): op 1 is R_TX with an 83,072-byte statement, which requires the word
    = 1, and R_TX0 with a 66,560-byte one, which requires 0; anything else is rejected (P6e plan R6) */
 #define PQZ_HDR_AUDITOR_ON 448

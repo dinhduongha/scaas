@@ -29,6 +29,7 @@ fn reason(r: Reject) -> &'static str {
         Reject::Length => "length",
         Reject::Fee => "fee_>=_2^64",
         Reject::Amount => "amount_>=_2^64",
+        Reject::Salt => "salt_word_not_16_zero_bytes_||_salt",
         Reject::AuditorOn => "auditorOn_does_not_match_the_length",
         Reject::Coefficient => "coefficient_>=_q",
         _ => "other",

@@ -4,7 +4,8 @@
   xcheck.py <C dump dir> <out.txt> [n]
 
 1. The C core's statements (pqz-core/pqzh/xcheck/dump_setup: pqz_bench.c setup(), all six forms), with bytes 0..31
-   set to the form's opTag (the bench fills them with a marker byte; pqz-core never reads them, the precompile does):
+   set to the form's opTag (the bench fills them with a marker byte; pqz-core never reads them, the precompile does;
+   the salt word is canonical in the bench since P6e stmt2):
    pqz_kat.py must accept each and rebuild it byte for byte from the parsed fields with its own builders.
 2. n random statements per form (both ids, random header words, coefficients < q) built by pqz_kat.py, each written
    with its fields ("ok" lines), and every D15 / R6 mutation of some of them with pqz_kat.py's reason ("bad" lines).
@@ -59,7 +60,7 @@ def rebuild(form, st):
         f = {k: p[k] for k in kat.DISC if k != "opTag"}
         return kat.build_disclose(op, f, p["pk"], p["u"], p["v"])
     f = {k: p[k] for k in kat.HEADER if k != "opTag"}
-    f["salt"] = int.from_bytes(f["salt"], "big")  # the whole word (the bench's is not 16 zero bytes || salt)
+    f["salt"] = f["salt"][16:]  # 16 zero bytes || salt (parse enforces it)
     out = p["u"] + b"".join(p[k] for k in ("v_t", "v_f", "v_a") if k in p)
     return kat.build_debit(op, f, p["pk_f"], p["T"], out, pk_t=p.get("pk_t"), pk_a=p.get("pk_a"))
 
@@ -129,7 +130,11 @@ def main(argv):
             i = 224 + rng.randrange(24)
             bad(op, st[:i] + bytes([st[i] | (1 + rng.randrange(255))]) + st[i + 1:], "amount")
         elif form != "REGISTER":
-            for w, what in ((256, "fee"), (288, "amount")):
+            for w, what in ((256, "fee"), (288, "amount"), (576, "salt")):
+                if what == "salt":
+                    i = w + rng.randrange(16)
+                    bad(op, st[:i] + bytes([st[i] | (1 + rng.randrange(255))]) + st[i + 1:], what)
+                    continue
                 i = w + rng.randrange(24)
                 bad(op, st[:i] + bytes([st[i] | (1 + rng.randrange(255))]) + st[i + 1:], what)
             if op == 1:

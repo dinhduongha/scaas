@@ -275,8 +275,9 @@ prover require the `auditorOn` word (offset 448, `PQZ_HDR_AUDITOR_ON`) = 1 on th
 66,560-byte one (R6). Spec `params/tx0_params.sage` → `params/pqz_tx0_params.h` by LaZer's codegen: kmsis 23, kmlwe 33,
 m1 145 + m2 68, MSIS β 457 (2^133.4 classical / 2^121.1 quantum), MLWE uSVP β 470 (dual_hybrid 462), knowledge error
 ≤ 2^-127 (`params/estimator-e-s1-tx0.txt`). D1: the codegen rerun reproduces the five checked-in headers byte for byte
-(`params/codegen-tx0.txt`, `params/regen.sh`). ABDLOP keys from op 1's tag (as REFRESH / AUDITOR share their op's);
-the specialised verifier names it by the internal code `PQZ_REL_TX0` (0x81, never on the wire). Bench / diff / fuzz
+(`params/codegen-tx0.txt`, `params/regen.sh`). ABDLOP keys of its own, `SCAAS-PQZ-ABDLOP-PP-V1 ‖ 0x81` (run
+`tx0b`; the first run `tx0` shared op 1's tag); the specialised verifier names it by the same internal code
+`PQZ_REL_TX0` (0x81, never on the wire). Bench / diff / fuzz
 relation 5 (`pqz_bench` mask 32), from the bench's `R_TX` transfer without the auditor leg.
 
 **The bench's `R_TX` statement changed** (R6): its header word 448 was filler (`i·3`), now 1; so `R_TX`'s proofs and
@@ -312,6 +313,27 @@ the prover); symbol scan clean; native and wasm proofs equal byte for byte (nati
 Every `R_TX0` number is within host noise of `R_TX` or just under it (one key and one ciphertext slot fewer); SV p99
 ≤ 15.2 ms against the 60 ms limit on every build.
 
+**After review (controller 2026-10-14), run `tx0b`** (`rel3/runs/tx0b-*`, `sv/runs/tx0b-*`; `tx0` kept): `R_TX0` gets
+its own ABDLOP keys (tag byte 0x81), and the bench's debit statements carry the canonical salt word (16 zero bytes ‖
+salt, CTR-PQZ-19; `R_TX` / `R_TX0` keep the filler as the 16-byte salt, `R_BURN` salt 0), which the decoder (`pqz-stmt`,
+`pqz_kat.py`) now enforces (pqz-core only hashes the word). So `R_TX`, `R_TX0` and `R_BURN` proofs change once;
+`R_REG`, `R_DS`, `R_DR` stay byte-identical to `hedge2`. Same checks, all green [measured]: KAT 19/19,
+`check_tbox_fixes: ok`, `check_sv_fixes: ok`, differential 3,484 + 1,736 cases 0 mismatches (24 + 12 `stmt_auditor`
+on `R_TX0`, 0 accepted), wasm both 0, z21 differential 174 / 0, `fails 0` native, wasm, ASan + UBSan, `auditor_check`
+9 / 9, native = wasm proofs. `R_TX0` in `tx0b`: proof ≤ 42,456 B, prove p50 / p99 native 917 / 1,256 ms, wasm 1,047
+ms, generic verify p50 / p99 native 574 / 594 ms (adversarial 656), wasm 766 ms, SV p50 / p99 portable 8.01 / 9.25
+(adversarial 8.63), x86-64-v3 4.83 / 6.49 (4.93), wasm 13.3 / 15.5 (16.8) ms, peaks as `tx0` (298.0 / 227.3 MB).
+`../artifact/expected-results.json` regenerated from `tx0b` (provisional, 69 / 69).
+
+| `proofs_fnv` hedge2 → tx0 → **tx0b** | native 5 seeds (= wasm 5) | wasm 3 seeds | native 10 seeds | 2 seeds (SV runs) | 1 seed (alone) |
+|---|---|---|---|---|---|
+| `R_REG` | **`8bd69f2d`** (unchanged) | **`e70b5dc4`** | **`b82d49f8`** | **`1af59837`** | **`25074bbb`** |
+| `R_TX` | `ca69759d` → `604111c6` → **`239c8b8d`** | `177e6806` → `6780efdd` → **`ced8bcc3`** | `cabd8270` → `79b9326d` → **`e55b1313`** | `1d42a571` → `3ef1da5b` → **`09b11092`** | `e2cf9721` → `a092f2ff` → **`0e0026f2`** |
+| `R_BURN` | `bfb900f9` → `bfb900f9` → **`d94216dd`** | `37654486` → `37654486` → **`07fbdc5c`** | `049029ff` → `049029ff` → **`801e15c2`** | `12f45572` → `12f45572` → **`73ad9a0a`** | `d8180c60` → `d8180c60` → **`780a00bb`** |
+| `R_DS` | **`b4aa2e26`** (unchanged) | **`f39a8e64`** | **`5429242c`** | **`9eb44281`** | **`478a0d94`** |
+| `R_DR` | **`c800f2c6`** (unchanged) | **`96a6e906`** | **`e53ad440`** | **`5bb0078c`** | **`cb2f3ced`** |
+| `R_TX0` (new) | `64ce6572` → **`17bbacad`** | `2ae5a78d` → **`ac79db76`** | `8721892b` → **`30b085ff`** | `a41428e2` → **`b10b632d`** | `bdf2a395` → **`0fe80168`** |
+
 ## `pqz-stmt`, the statement codec P6e Task 5 (branch `p6e-a2`; plan R2, D15, R6, D5 limits, D2 / D3 ids)
 
 `stmt/` (Rust 1.97.1, `no_std` + `alloc`, no dependencies, no `unsafe`, no floats): `parse(op, stmt)` for every form
@@ -323,13 +345,18 @@ canonical `abi.encode(bytes, bytes)` opening; `decode_input` for the precompile 
 len(proof) ≤ MAX_PROOF(id)`: PQZL 98,304, PQZH 262,144; SELFTEST exactly `06 00000000`); the opTags, both ids, the
 form lengths and the prover-API witness lengths. Not in it (they need Keccak): `ctHash`, `authDigest`, `entryRef` (in
 `pqz_kat.py`; `pqz-ffi` later). Run `scripts/capped pqz-core/stmt/xcheck.sh stmt1` (`stmt/runs/stmt1-*`) [measured]:
-7 unit tests (round trip of every form under both ids, field offsets, 28 rejection cases one per D15 / R6 rule incl.
+7 unit tests (round trip of every form under both ids, field offsets, 32 rejection cases one per D15 / R6 rule incl.
 coefficient = q / = 2^42, fee = 2^64, `auditorOn` 2 / 0 on 83,072 B / 1 on 66,560 B, length ± 1, foreign opTag,
 unknown id; bundle, opening, input) ok; cross-check ok: the six C statements of `pqz_bench.c` (`pqzh/xcheck/
 dump_setup`, opTag word set to the form's: the bench writes a marker there) parse, re-encode and rebuild from their
 fields byte for byte, and `pqz_kat.py` rebuilds the same six; 32 random statements built by `pqz_kat.py` (both ids)
 parse to the same fields and are built back to the same bytes; 178 mutations `pqz_kat.py` rejects are rejected for
-the same reason; `cargo build --target wasm32-unknown-unknown` ok, `cargo tree`: no dependency. The Ligero crate moves
+the same reason; `cargo build --target wasm32-unknown-unknown` ok, `cargo tree`: no dependency. After review (run
+`stmt2`, `stmt1` kept): `fee` / `amount` < 2^64 checked on every debit form (stricter than the relations, which read
+`amount` only for BURN), and the salt word must be 16 zero bytes ‖ salt (`Reject::Salt`; pqz-core only hashes it, so
+the decoder is where it is enforced), in `pqz-stmt` and `pqz_kat.py` alike; 7 unit tests ok (32 rejection cases), C 6
+/ 6 equal (the bench statements now canonical, no salt rewrite), 32 `pqz_kat.py` statements equal, 186 rejections
+with the same reason, wasm32 ok. The Ligero crate moves
 onto it in Part B Task 6.
 
 ## Measured (2026-10-13, this machine, single thread)

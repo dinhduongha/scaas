@@ -3,8 +3,10 @@
 //! Parses and builds every statement form of both proof systems (the statement bytes are the same for PQZL and PQZH;
 //! the `proofSystemId` word says which verifier runs), the `pk` / ciphertext objects, the disclosure bundle and
 //! opening, and the precompile input. Every decoder accepts exactly one encoding (D15): fixed lengths, coefficients
-//! `< q` as `be8`, the header scalars the relations read (`fee`, `amount`) `< 2^64`, `auditorOn` equal to what the
-//! length says (op 1: 83,072 B auditor on = 1, 66,560 B off = 0; R6), the opTag of the op, a known `proofSystemId`.
+//! `< q` as `be8`, `fee` and `amount` `< 2^64` on every debit form (stricter than the relations, which read `amount`
+//! only for BURN), the `salt` word = 16 zero bytes ‖ salt (CTR-PQZ-19; pqz-core only hashes it, so this decoder is
+//! where it is enforced), `auditorOn` equal to what the length says (op 1: 83,072 B auditor on = 1, 66,560 B off =
+//! 0; R6), the opTag of the op, a known `proofSystemId`.
 //! For every accepted input `encode(parse(x)) == x`.
 //!
 //! `no_std` + `alloc`, no dependencies, no `unsafe`, no floats; parsing borrows (no allocation), only the builders
@@ -194,6 +196,8 @@ pub enum Reject {
     Fee,
     /// amount word ≥ 2^64
     Amount,
+    /// salt word not 16 zero bytes ‖ salt
+    Salt,
     /// auditorOn word is not what the length says
     AuditorOn,
     /// a coefficient ≥ q
@@ -431,7 +435,7 @@ impl<'a> Stmt<'a> {
 }
 
 /// Decode the statement of `op` with every D15 / R6 rule, in the order of `pqz_kat.py parse` (opTag, id, length,
-/// scalars, auditorOn, coefficients), so both name the same reason. Borrows `stmt`; allocates nothing.
+/// scalars, salt, auditorOn, coefficients), so both name the same reason. Borrows `stmt`; allocates nothing.
 pub fn parse(op: u8, stmt: &[u8]) -> Result<Stmt<'_>, Reject> {
     if op == OP_SELFTEST {
         return if stmt.is_empty() { Ok(Stmt::SelfTest) } else { Err(Reject::Op) };
@@ -496,6 +500,9 @@ pub fn parse(op: u8, stmt: &[u8]) -> Result<Stmt<'_>, Reject> {
             }
             if word_u64(&header[H_AMOUNT]).is_none() {
                 return Err(Reject::Amount);
+            }
+            if header[H_SALT][..16].iter().any(|&b| b != 0) {
+                return Err(Reject::Salt);
             }
             let (tr, aud) = (matches!(form, Form::Transfer | Form::Transfer0), form == Form::Transfer);
             if tr && word_u64(&header[H_AUDITOR_ON]) != Some(aud as u64) {

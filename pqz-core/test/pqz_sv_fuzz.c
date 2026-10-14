@@ -51,6 +51,7 @@ setup (void)
   uint8_t *p = tx_stmt;
   memset (p, 0x5A, PQZ_HEADER_BYTES); /* pq-zether.md §7.7 header; fee and amount words 0, auditorOn 1 (P6e R6) */
   memset (p + PQZ_HDR_FEE, 0, 64), memset (p + PQZ_HDR_AUDITOR_ON, 0, 32), p[PQZ_HDR_AUDITOR_ON + 31] = 1;
+  memset (p + PQZ_HDR_SALT, 0, 16); /* canonical salt word (P6e D15) */
   p += PQZ_HEADER_BYTES;
   for (int k = 0; k < 3; k++)
     memcpy (p, pk, PQZ_POLYVEC_BYTES), p += PQZ_POLYVEC_BYTES;
