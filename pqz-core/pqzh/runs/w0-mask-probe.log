@@ -1,0 +1,25 @@
+
+thread 'main' (799087) panicked at /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library/std/src/io/stdio.rs:1166:9:
+failed printing to stdout: Broken pipe (os error 32)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+w0-probe-mask1-ell4 "proof_bytes": 4725290 "bits_composed": 124.25
+
+thread 'main' (818033) panicked at /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library/std/src/io/stdio.rs:1166:9:
+failed printing to stdout: Broken pipe (os error 32)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+w0-probe-mask2-ell4 "proof_bytes": 2763370 "bits_composed": 124.25
+
+thread 'main' (835354) panicked at /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library/std/src/io/stdio.rs:1166:9:
+failed printing to stdout: Broken pipe (os error 32)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+w0-probe-mask3-ell4 "proof_bytes": 2162438 "bits_composed": 124.25
+
+thread 'main' (852963) panicked at /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library/std/src/io/stdio.rs:1166:9:
+failed printing to stdout: Broken pipe (os error 32)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+w0-probe-mask4-ell4 "proof_bytes": 1912102 "bits_composed": 124.24
+
+thread 'main' (870514) panicked at /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library/std/src/io/stdio.rs:1166:9:
+failed printing to stdout: Broken pipe (os error 32)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+w0-probe-mask6-ell4 "proof_bytes": 1635310 "bits_composed": 48.15

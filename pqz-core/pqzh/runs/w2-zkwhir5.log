@@ -1,0 +1,20 @@
+w2-zkwhir5-r3 	Elapsed (wall clock) time (h:mm:ss or m:ss): 16:17.86
+	Maximum resident set size (kbytes): 2516544
+wasm://wasm/pqzh_wasm.wasm-00b8c712:1
+
+
+RuntimeError: unreachable
+    at pqzh_wasm.wasm._RNvCs9wFQrvczXsK_7___rustc10rust_panic (wasm://wasm/pqzh_wasm.wasm-00b8c712:wasm-function[1206]:0x2743f0)
+    at pqzh_wasm.wasm._RNvNtCsdl5sGgnNXvY_3std9panicking15panic_with_hook (wasm://wasm/pqzh_wasm.wasm-00b8c712:wasm-function[1205]:0x2743e6)
+    at pqzh_wasm.wasm._RNCNvNtCsdl5sGgnNXvY_3std9panicking13panic_handler0B5_ (wasm://wasm/pqzh_wasm.wasm-00b8c712:wasm-function[1212]:0x2744c0)
+    at pqzh_wasm.wasm._RINvNtNtCsdl5sGgnNXvY_3std3sys9backtrace26___rust_end_short_backtraceNCNvNtB6_9panicking13panic_handler0zEB6_ (wasm://wasm/pqzh_wasm.wasm-00b8c712:wasm-function[1211]:0x27445f)
+    at pqzh_wasm.wasm._RNvCs9wFQrvczXsK_7___rustc17rust_begin_unwind (wasm://wasm/pqzh_wasm.wasm-00b8c712:wasm-function[46]:0x198e9)
+    at pqzh_wasm.wasm._RNvNtCsdkdt1aaAg1T_4core9panicking9panic_fmt (wasm://wasm/pqzh_wasm.wasm-00b8c712:wasm-function[30]:0x18abb)
+    at pqzh_wasm.wasm._RNvNtCsewWLk9TkM7w_5alloc7raw_vec17capacity_overflow (wasm://wasm/pqzh_wasm.wasm-00b8c712:wasm-function[2]:0x1dcd)
+    at pqzh_wasm.wasm._RINvNtCsbkWKYeZSAp8_4pqzh7whirpcs6claimsINtNtCs9ugwc2yFEDj_8p3_field9extension8ExtFieldNtNtCs9S46mRTsbSM_13p3_goldilocks10goldilocks10GoldilocksKj5_INtBF_8BinomialB1n_EEEB4_ (wasm://wasm/pqzh_wasm.wasm-00b8c712:wasm-function[767]:0x162f8c)
+    at pqzh_wasm.wasm._RINvMs0_NtCsf34NWAfkT2h_14p3_batch_stark10transcriptINtB6_23BatchVerifierTranscriptNtNtCsbkWKYeZSAp8_4pqzh6config12BeChallengerNtNtCs9S46mRTsbSM_13p3_goldilocks10goldilocks10GoldilocksINtNtCs9ugwc2yFEDj_8p3_field9extension8ExtFieldB21_Kj5_INtB2Z_8BinomialB21_EEINtNtCsdDgBHwdOveh_12p3_symmetric4hash9MerkleCapB21_Ahj20_EE8delegateINtNtCsdkdt1aaAg1T_4core6result6ResultuNtNtCsewWLk9TkM7w_5alloc6string6StringENCINvNtB8_8verifier12verify_batchINtNtCsiu6r3FZmD3_12p3_uni_stark6config11StarkConfigINtNtB1n_7whirpcs10WhirUniPcsB2W_EB2W_B1j_ENtNtB1n_3air7PqzhAirEs9_0EB1n_ (wasm://wasm/pqzh_wasm.wasm-00b8c712:wasm-function[992]:0x200b23)
+    at pqzh_wasm.wasm._RINvNtCsf34NWAfkT2h_14p3_batch_stark8verifier12verify_batchINtNtCsiu6r3FZmD3_12p3_uni_stark6config11StarkConfigINtNtCsbkWKYeZSAp8_4pqzh7whirpcs10WhirUniPcsINtNtCs9ugwc2yFEDj_8p3_field9extension8ExtFieldNtNtCs9S46mRTsbSM_13p3_goldilocks10goldilocks10GoldilocksKj5_INtB2w_8BinomialB3e_EEEB2t_NtNtB1Q_6config12BeChallengerENtNtB1Q_3air7PqzhAirEB1Q_ (wasm://wasm/pqzh_wasm.wasm-00b8c712:wasm-function[947]:0x1ee8e2)
+
+Node.js v26.8.1
+wasm failed: 1
+done

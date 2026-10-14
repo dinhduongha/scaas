@@ -35,7 +35,7 @@ Tags as in `pqzh-zk-ext5.md`: **[source]** read from the Plonky3 0.9.0-rc.1 crat
 
 ## 1. Result
 
-- **Built** (`src/whirpcs.rs`, ≈ 600 lines incl. tests; `config.rs` `WhirParams` / `WhirCfg`; `rel.rs` dispatch and
+- **Built** (`src/whirpcs.rs`, 721 lines incl. tests; `config.rs` `WhirParams` / `WhirCfg`; `rel.rs` dispatch and
   per-opening breakdown; bench / security / wasm flags): Plonky3's hiding batch STARK runs unchanged over an
   HVZK-WHIR PCS. `R_REG` and `R_TX` prove and verify natively and in wasm32; **0 of 1,440 native and 0 of 480 wasm32
   mutated inputs accepted, 0 panics** (`runs/w2-*`, `runs/w3-*`); unit tests of the embedding, the masking and the
