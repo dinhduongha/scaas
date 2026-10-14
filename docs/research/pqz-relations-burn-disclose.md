@@ -46,12 +46,12 @@ relation's keys are built at its first use (§4). Each relation's first prove in
 
 **`R_TX0`, the transfer without the auditor (P6e Task 2, 2026-10-14; CTR-PQZ-24, plan D8 / R6).** `R_TX` without
 `pk_a`, `v_a`, `e2_a` (row 5 skipped), op 1 with a 66,560-byte statement; the `auditorOn` header word must say the same
-as the length; its own ABDLOP keys (tag byte 0x81). Run `tx0b` (`rel3/runs/tx0b-*`, `sv/runs/tx0b-*`; the first run
-`tx0` is kept; `pqz-core/STATUS.md` has the full record) [measured]:
+as the length; its own ABDLOP keys (tag byte 0x81). Run `tx0c` (`rel3/runs/tx0c-*`, `sv/runs/tx0c-*`; the earlier runs
+`tx0`, `tx0b` are kept; `pqz-core/STATUS.md` has the full record) [measured]:
 
 | `R_TX0` | proof bytes | prove p50 / p99 native | verify p50 / p99 native (generic) | p99 adversarial native | prove p50 wasm | verify p50 wasm (generic) | SV p50 / p99 portable, x86-64-v3, wasm | arena peak native / wasm, one op |
 |---|---|---|---|---|---|---|---|---|
-| `R_TX0` | ≤ 42,456 | 917 / 1,256 ms | 574 / 594 ms | 656 ms | 1,047 ms | 766 ms | 8.01 / 9.25, 4.83 / 6.49, 13.3 / 15.5 ms | 298 / 227 MB |
+| `R_TX0` | ≤ 42,441 | 827 / 1,128 ms | 577 / 627 ms | 627 ms | 1,398 ms | 760 ms | 8.03 / 8.49, 4.68 / 5.53, 13.4 / 14.7 ms | 298 / 227 MB |
 
 Sizing (`pqz-core/params/estimator-e-s1-tx0.txt`): MSIS(23, 213, 2^35.96) β 457 (2^133.4 / 2^121.1), MLWE(33, 35) uSVP
 β 470, knowledge error ≤ 2^−127; within noise of `R_TX`, as expected for one key and one ciphertext slot fewer.

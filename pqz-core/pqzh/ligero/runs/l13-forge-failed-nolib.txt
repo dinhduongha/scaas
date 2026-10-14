@@ -1,0 +1,1418 @@
+[2m2026-10-14T11:26:38.159497Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Script.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.160223Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Script.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.160264Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.160413Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Script.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.160431Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/StdJson.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.160480Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Script.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.160505Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.160521Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/utils/cryptography/P256.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.160538Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/utils/cryptography/MerkleProof.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.160554Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/interfaces/IERC1271.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.160594Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/proxy/Clones.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.160649Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.160664Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/interfaces/IERC5267.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.160678Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/utils/cryptography/MessageHashUtils.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.160699Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/utils/ShortStrings.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.160727Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.160743Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/interfaces/IERC1271.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.160758Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/utils/Base64.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.160773Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.160788Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.160809Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.160824Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.160839Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/utils/math/Math.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.160854Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/utils/ReentrancyGuardTransient.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.160924Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/proxy/Clones.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.160997Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.161012Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.161026Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/utils/Context.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.161099Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.161153Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/utils/introspection/IERC165.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.161165Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.161213Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/utils/Context.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.161250Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.161261Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.161272Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.161282Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/utils/Address.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.161293Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/utils/math/Math.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.161303Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/utils/introspection/ERC165Checker.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.161385Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/interfaces/IERC5267.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.161428Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/utils/Strings.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.161447Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.161467Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/interfaces/IERC1271.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.161568Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/utils/cryptography/P256.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.161630Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.161648Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/interfaces/IERC1271.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.161901Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.161932Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.161956Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.161979Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.161998Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.162028Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/proxy/Clones.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.162068Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/utils/Base64.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.162092Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/utils/cryptography/Hashes.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.162108Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/proxy/Clones.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.162122Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/utils/cryptography/P256.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.162142Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/interfaces/IERC1271.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.162187Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.162236Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/proxy/Clones.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.162263Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.162333Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.162345Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.162368Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.162382Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.162407Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/interfaces/draft-IERC6093.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.162485Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.162501Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.162513Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.162523Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/proxy/Clones.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.162534Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/utils/ShortStrings.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.162552Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.162563Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.162578Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.162589Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/proxy/Clones.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.162613Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.162623Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/proxy/Clones.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.162661Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.162679Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.162693Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.162720Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.162750Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.162774Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.162787Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.162809Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/proxy/Clones.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.162823Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.162868Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.162896Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.162906Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.162948Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.162961Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.162971Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/utils/math/Math.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.163004Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.163047Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.163079Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Vm.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.163092Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/proxy/Clones.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.163105Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.163145Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/proxy/Clones.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.163182Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.163192Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Vm.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.163247Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/proxy/Clones.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.163296Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.163337Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/proxy/Clones.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.163348Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.163395Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/proxy/Clones.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.163406Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.163416Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/utils/introspection/IERC165.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.163468Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Vm.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.163479Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/proxy/Clones.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.163503Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.163513Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.163580Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.163623Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Vm.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.163633Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/console.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.163666Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/proxy/Clones.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.163707Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.163785Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/proxy/Clones.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.163817Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.163827Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/utils/Base64.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.163837Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/utils/cryptography/P256.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.163862Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.163885Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Vm.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.163909Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.163929Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.163939Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/proxy/Clones.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.163978Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/proxy/Clones.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.164015Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.164046Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/interfaces/draft-IERC6093.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.164078Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.164093Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.164104Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/interfaces/draft-IERC6093.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.164114Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/utils/ReentrancyGuardTransient.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.164153Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.164192Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.164207Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/proxy/Clones.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.164221Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/interfaces/draft-IERC6093.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.164265Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.164299Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.164338Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.164349Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/proxy/Clones.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.164359Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/utils/introspection/IERC165.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.164369Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.164414Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/StdJson.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.164440Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.164537Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/utils/Errors.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.164574Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/utils/math/Math.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.164600Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.164611Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/proxy/Clones.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.164652Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.164692Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/proxy/Clones.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.164752Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/StdJson.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.164787Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.164798Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/interfaces/draft-IERC6093.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.164830Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.164840Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/StdInvariant.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.164850Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/utils/math/Math.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.164865Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/interfaces/draft-IERC6093.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.164892Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.164902Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/proxy/Clones.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.164973Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.165027Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.165051Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.165088Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.165101Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/StdJson.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.165123Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.165174Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.165198Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.165231Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/StdJson.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.165268Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.165280Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/StdJson.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.165324Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/proxy/Clones.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.165385Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.165395Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/StdJson.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.165482Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.165505Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/forge-std/src/Test.sol": No such file or directory (os error 2)
+[2m2026-10-14T11:26:38.165575Z[0m [31mERROR[0m [2mfoundry_compilers_artifacts_solc::sources[0m[2m:[0m [3merror[0m[2m=[0m"/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm/lib/openzeppelin-contracts/contracts/utils/Strings.sol": No such file or directory (os error 2)
+Compiler run failed:
+Error (6275): Source "lib/forge-std/src/Script.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Script.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> script/Deploy.s.sol:4:1:
+  |
+4 | import {console} from "forge-std/Script.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Script.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Script.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> script/DeployBase.sol:4:1:
+  |
+4 | import {Script} from "forge-std/Script.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> script/DeployBase.sol:9:1:
+  |
+9 | import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Script.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Script.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> script/ZetherE2E.s.sol:4:1:
+  |
+4 | import {Script, console} from "forge-std/Script.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/StdJson.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/StdJson.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> script/ZetherE2E.s.sol:5:1:
+  |
+5 | import {stdJson} from "forge-std/StdJson.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Script.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Script.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> script/hedera/DeployHedera.s.sol:4:1:
+  |
+4 | import {console} from "forge-std/Script.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> src/account/SmartKeyAccount.sol:4:1:
+  |
+4 | import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/utils/cryptography/P256.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/utils/cryptography/P256.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> src/account/SmartKeyAccount.sol:5:1:
+  |
+5 | import {P256} from "@openzeppelin/contracts/utils/cryptography/P256.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/utils/cryptography/MerkleProof.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/utils/cryptography/MerkleProof.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> src/account/SmartKeyAccount.sol:6:1:
+  |
+6 | import {MerkleProof} from "@openzeppelin/contracts/utils/cryptography/MerkleProof.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/interfaces/IERC1271.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/interfaces/IERC1271.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> src/account/SmartKeyAccount.sol:7:1:
+  |
+7 | import {IERC1271} from "@openzeppelin/contracts/interfaces/IERC1271.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/proxy/Clones.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/proxy/Clones.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> src/account/SmartKeyAccountFactory.sol:4:1:
+  |
+4 | import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> src/common/MultiSig.sol:4:1:
+  |
+4 | import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/interfaces/IERC5267.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/interfaces/IERC5267.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> src/common/SaltedEIP712.sol:4:1:
+  |
+4 | import {IERC5267} from "@openzeppelin/contracts/interfaces/IERC5267.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/utils/cryptography/MessageHashUtils.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/utils/cryptography/MessageHashUtils.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> src/common/SaltedEIP712.sol:5:1:
+  |
+5 | import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/utils/ShortStrings.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/utils/ShortStrings.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> src/common/SaltedEIP712.sol:6:1:
+  |
+6 | import {ShortString, ShortStrings} from "@openzeppelin/contracts/utils/ShortStrings.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> src/common/SigCheck.sol:4:1:
+  |
+4 | import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/interfaces/IERC1271.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/interfaces/IERC1271.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> src/common/SigCheck.sol:5:1:
+  |
+5 | import {IERC1271} from "@openzeppelin/contracts/interfaces/IERC1271.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/utils/Base64.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/utils/Base64.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> src/common/WebAuthnClientData.sol:4:1:
+  |
+4 | import {Base64} from "@openzeppelin/contracts/utils/Base64.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> src/dex/DexPuller.sol:4:1:
+  |
+4 | import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> src/dex/DexPuller.sol:5:1:
+  |
+5 | import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> src/dex/SCaaSDex.sol:4:1:
+  |
+4 | import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> src/dex/SCaaSDex.sol:5:1:
+  |
+5 | import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/utils/math/Math.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/utils/math/Math.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> src/dex/SCaaSDex.sol:6:1:
+  |
+6 | import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/utils/ReentrancyGuardTransient.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/utils/ReentrancyGuardTransient.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> src/dex/SCaaSDex.sol:7:1:
+  |
+7 | import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/ReentrancyGuardTransient.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/proxy/Clones.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/proxy/Clones.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> src/factory/OpenFactory.sol:4:1:
+  |
+4 | import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> src/metatx/ERC20MetaTx.sol:4:1:
+  |
+4 | import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> src/metatx/ERC20MetaTx.sol:5:1:
+  |
+5 | import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/utils/Context.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/utils/Context.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> src/metatx/ERC20MetaTx.sol:6:1:
+  |
+6 | import {Context} from "@openzeppelin/contracts/utils/Context.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> src/metatx/IERC20MetaTx.sol:4:1:
+  |
+4 | import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/utils/introspection/IERC165.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/utils/introspection/IERC165.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> src/metatx/MetaTokenBase.sol:4:1:
+  |
+4 | import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> src/metatx/MetaTokenBase.sol:5:1:
+  |
+5 | import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/utils/Context.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/utils/Context.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> src/metatx/MetaTxBase.sol:4:1:
+  |
+4 | import {Context} from "@openzeppelin/contracts/utils/Context.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> src/metatx/UnderlyingLib.sol:4:1:
+  |
+4 | import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/token/ERC20/extensions/IERC20Metadata.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> src/metatx/UnderlyingLib.sol:5:1:
+  |
+5 | import {IERC20Metadata} from "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/token/ERC20/utils/SafeERC20.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> src/metatx/UnderlyingLib.sol:6:1:
+  |
+6 | import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/utils/Address.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/utils/Address.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> src/metatx/UnderlyingLib.sol:7:1:
+  |
+7 | import {Address} from "@openzeppelin/contracts/utils/Address.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/utils/math/Math.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/utils/math/Math.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> src/metatx/UnderlyingLib.sol:8:1:
+  |
+8 | import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/utils/introspection/ERC165Checker.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/utils/introspection/ERC165Checker.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> src/metatx/UnderlyingLib.sol:9:1:
+  |
+9 | import {ERC165Checker} from "@openzeppelin/contracts/utils/introspection/ERC165Checker.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/interfaces/IERC5267.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/interfaces/IERC5267.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> src/ua/IUARegistry.sol:4:1:
+  |
+4 | import {IERC5267} from "@openzeppelin/contracts/interfaces/IERC5267.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/utils/Strings.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/utils/Strings.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> src/ua/UAKinds.sol:4:1:
+  |
+4 | import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> src/ua/UARegistry.sol:4:1:
+  |
+4 | import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/interfaces/IERC1271.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/interfaces/IERC1271.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> src/ua/UARegistry.sol:5:1:
+  |
+5 | import {IERC1271} from "@openzeppelin/contracts/interfaces/IERC1271.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/utils/cryptography/P256.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/utils/cryptography/P256.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> src/ua/verifiers/P256Precompile.sol:4:1:
+  |
+4 | import {P256} from "@openzeppelin/contracts/utils/cryptography/P256.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> src/wallet/MandateWallet.sol:4:1:
+  |
+4 | import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/interfaces/IERC1271.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/interfaces/IERC1271.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> src/wallet/MandateWallet.sol:5:1:
+  |
+5 | import {IERC1271} from "@openzeppelin/contracts/interfaces/IERC1271.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/BlsKat.t.sol:4:1:
+  |
+4 | import {Test} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/FeePolicy.t.sol:4:1:
+  |
+4 | import {Test} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/HashToCurve.t.sol:4:1:
+  |
+4 | import {Test} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/MultiSig.t.sol:4:1:
+  |
+4 | import {Test} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/account/AccountKat.t.sol:4:1:
+  |
+4 | import {Test} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/proxy/Clones.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/proxy/Clones.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/account/AccountKat.t.sol:8:1:
+  |
+8 | import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/utils/Base64.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/utils/Base64.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/account/SmartKeyAccount.t.sol:4:1:
+  |
+4 | import {Base64} from "@openzeppelin/contracts/utils/Base64.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/utils/cryptography/Hashes.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/utils/cryptography/Hashes.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/account/SmartKeyAccount.t.sol:5:1:
+  |
+5 | import {Hashes} from "@openzeppelin/contracts/utils/cryptography/Hashes.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/proxy/Clones.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/proxy/Clones.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/account/SmartKeyAccount.t.sol:6:1:
+  |
+6 | import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/utils/cryptography/P256.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/utils/cryptography/P256.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/account/SmartKeyAccount.t.sol:7:1:
+  |
+7 | import {P256} from "@openzeppelin/contracts/utils/cryptography/P256.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/interfaces/IERC1271.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/interfaces/IERC1271.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/account/SmartKeyAccount.t.sol:8:1:
+  |
+8 | import {IERC1271} from "@openzeppelin/contracts/interfaces/IERC1271.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/hedera/HederaKat.t.sol:4:1:
+  |
+4 | import {Test} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/proxy/Clones.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/proxy/Clones.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/hedera/HederaKat.t.sol:5:1:
+  |
+5 | import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/hedera/HederaV2.t.sol:4:1:
+  |
+4 | import {Test} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/token/ERC20/ERC20.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/helpers/Mocks.sol:4:1:
+  |
+4 | import {ERC20} from "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/helpers/MtxFixture.sol:4:1:
+  |
+4 | import {Test} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/helpers/WalletMocks.sol:4:1:
+  |
+4 | import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/metatx/AdminLib.t.sol:4:1:
+  |
+4 | import {Test} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/interfaces/draft-IERC6093.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/interfaces/draft-IERC6093.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/metatx/ERC20MetaTx.t.sol:4:1:
+  |
+4 | import {IERC20Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/metatx/MetaTxLib.t.sol:4:1:
+  |
+4 | import {Test} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/metatx/MsgSenderLint.t.sol:4:1:
+  |
+4 | import {Test} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/metatx/SaltedEIP712.t.sol:4:1:
+  |
+4 | import {Test} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/proxy/Clones.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/proxy/Clones.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/metatx/SaltedEIP712.t.sol:5:1:
+  |
+5 | import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/utils/ShortStrings.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/utils/ShortStrings.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/metatx/SaltedEIP712.t.sol:6:1:
+  |
+6 | import {ShortStrings} from "@openzeppelin/contracts/utils/ShortStrings.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/metatx/SigCheck.t.sol:4:1:
+  |
+4 | import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/metatx/SigCheck.t.sol:5:1:
+  |
+5 | import {Test} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/metatx/TokenKat.t.sol:4:1:
+  |
+4 | import {Test} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/proxy/Clones.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/proxy/Clones.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/metatx/TokenKat.t.sol:5:1:
+  |
+5 | import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/metatx/TradeKat.t.sol:4:1:
+  |
+4 | import {Test} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/proxy/Clones.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/proxy/Clones.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/metatx/TradeKat.t.sol:5:1:
+  |
+5 | import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/pqzh/PqzhTest.t.sol:4:1:
+  |
+4 | import {Test, console2} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/pqzh/ligero/LigeroTest.t.sol:4:1:
+  |
+4 | import {Test, console2} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/pqzh/ligero/LigeroUnits.t.sol:4:1:
+  |
+4 | import {Test, console2} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/ua/GroupFixtures.sol:4:1:
+  |
+4 | import {Test, Vm} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/ua/PqGas.t.sol:4:1:
+  |
+4 | import {Test, console2} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/ua/PqVectors.sol:4:1:
+  |
+4 | import {Test} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/ua/SSTORE2.t.sol:4:1:
+  |
+4 | import {Test} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/proxy/Clones.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/proxy/Clones.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/ua/UAAllowlist5a.t.sol:4:1:
+  |
+4 | import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/ua/UAAllowlist5a.t.sol:5:1:
+  |
+5 | import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/ua/UADeploy.t.sol:4:1:
+  |
+4 | import {Test} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/ua/UADex.t.sol:4:1:
+  |
+4 | import {Vm} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/ua/UADex.t.sol:5:1:
+  |
+5 | import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/ua/UADexInvariant.t.sol:4:1:
+  |
+4 | import {Test} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/ua/UADexInvariant.t.sol:5:1:
+  |
+5 | import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/utils/math/Math.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/utils/math/Math.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/ua/UADexInvariant.t.sol:6:1:
+  |
+6 | import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/ua/UAFrost.t.sol:4:1:
+  |
+4 | import {Test, console} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/ua/UAKinds.t.sol:4:1:
+  |
+4 | import {Test} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Vm.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Vm.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/ua/UALedger.t.sol:4:1:
+  |
+4 | import {Vm} from "forge-std/Vm.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/proxy/Clones.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/proxy/Clones.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/ua/UALedger.t.sol:5:1:
+  |
+5 | import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/ua/UALedger.t.sol:6:1:
+  |
+6 | import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/proxy/Clones.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/proxy/Clones.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/ua/UALedgerBase.sol:4:1:
+  |
+4 | import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/ua/UALedgerInvariant.t.sol:4:1:
+  |
+4 | import {Test} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Vm.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Vm.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/ua/UALedgerInvariant.t.sol:5:1:
+  |
+5 | import {Vm} from "forge-std/Vm.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/proxy/Clones.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/proxy/Clones.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+  --> test/ua/UALedgerNamed.t.sol:10:1:
+   |
+10 | import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/ua/UAMetaTx3Vectors.t.sol:4:1:
+  |
+4 | import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/proxy/Clones.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/proxy/Clones.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/ua/UAReceiverFee.t.sol:4:1:
+  |
+4 | import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/ua/UAReceiverFee.t.sol:5:1:
+  |
+5 | import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/proxy/Clones.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/proxy/Clones.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/ua/UAReceivers.t.sol:4:1:
+  |
+4 | import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/ua/UAReceivers.t.sol:5:1:
+  |
+5 | import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/utils/introspection/IERC165.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/utils/introspection/IERC165.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/ua/UAReceivers.t.sol:6:1:
+  |
+6 | import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Vm.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Vm.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/ua/UARegistry.t.sol:4:1:
+  |
+4 | import {Vm} from "forge-std/Vm.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/proxy/Clones.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/proxy/Clones.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/ua/UARegistry.t.sol:5:1:
+  |
+5 | import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/ua/UARegistryBase.sol:4:1:
+  |
+4 | import {Test} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/ua/UARegistryBase.sol:5:1:
+  |
+5 | import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+  --> test/ua/UARegistryPq.t.sol:11:1:
+   |
+11 | import {console2} from "forge-std/Test.sol";
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Vm.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Vm.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/ua/UARegistryZether.t.sol:4:1:
+  |
+4 | import {Vm} from "forge-std/Vm.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/console.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/console.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/ua/UARegistryZether.t.sol:5:1:
+  |
+5 | import {console} from "forge-std/console.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/proxy/Clones.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/proxy/Clones.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/ua/UATrade.t.sol:4:1:
+  |
+4 | import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/ua/UATrade.t.sol:5:1:
+  |
+5 | import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/proxy/Clones.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/proxy/Clones.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/ua/UAWrap.t.sol:4:1:
+  |
+4 | import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/ua/verifiers/EccVerifiers.t.sol:4:1:
+  |
+4 | import {Test, Vm, console} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/utils/Base64.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/utils/Base64.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/ua/verifiers/EccVerifiers.t.sol:5:1:
+  |
+5 | import {Base64} from "@openzeppelin/contracts/utils/Base64.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/utils/cryptography/P256.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/utils/cryptography/P256.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/ua/verifiers/EccVerifiers.t.sol:6:1:
+  |
+6 | import {P256} from "@openzeppelin/contracts/utils/cryptography/P256.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/ua/verifiers/Ed25519Verifier.t.sol:4:1:
+  |
+4 | import {Test} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Vm.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Vm.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/ua/verifiers/Musig2Verifiers.t.sol:4:1:
+  |
+4 | import {Vm} from "forge-std/Vm.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/ua/verifiers/PairingVerifiers.t.sol:4:1:
+  |
+4 | import {Test, console} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/v2/Allowlist.t.sol:4:1:
+  |
+4 | import {Test} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/proxy/Clones.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/proxy/Clones.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/v2/Allowlist.t.sol:5:1:
+  |
+5 | import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/proxy/Clones.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/proxy/Clones.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/v2/Base.t.sol:4:1:
+  |
+4 | import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/v2/Dex.t.sol:4:1:
+  |
+4 | import {Test, Vm} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/interfaces/draft-IERC6093.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/interfaces/draft-IERC6093.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+  --> test/v2/Dex.t.sol:13:1:
+   |
+13 | import {IERC20Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/v2/DexExchange.t.sol:4:1:
+  |
+4 | import {Test, Vm} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/v2/DexExchange.t.sol:5:1:
+  |
+5 | import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/interfaces/draft-IERC6093.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/interfaces/draft-IERC6093.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/v2/DexExchange.t.sol:6:1:
+  |
+6 | import {IERC20Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/utils/ReentrancyGuardTransient.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/utils/ReentrancyGuardTransient.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/v2/DexExchange.t.sol:7:1:
+  |
+7 | import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/ReentrancyGuardTransient.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/v2/DexKat.t.sol:4:1:
+  |
+4 | import {Test} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/v2/DexOutside.t.sol:4:1:
+  |
+4 | import {Test, Vm} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/proxy/Clones.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/proxy/Clones.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/v2/DexOutside.t.sol:5:1:
+  |
+5 | import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/interfaces/draft-IERC6093.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/interfaces/draft-IERC6093.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/v2/DexOutside.t.sol:6:1:
+  |
+6 | import {IERC20Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/v2/Factory.t.sol:4:1:
+  |
+4 | import {Test, Vm} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/v2/FactoryZether.t.sol:4:1:
+  |
+4 | import {Test, Vm} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/v2/Features.t.sol:4:1:
+  |
+4 | import {Test} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/proxy/Clones.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/proxy/Clones.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/v2/Features.t.sol:5:1:
+  |
+5 | import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/utils/introspection/IERC165.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/utils/introspection/IERC165.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/v2/Features.t.sol:6:1:
+  |
+6 | import {IERC165} from "@openzeppelin/contracts/utils/introspection/IERC165.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/v2/Features.t.sol:7:1:
+  |
+7 | import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/StdJson.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/StdJson.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/v2/Layout.t.sol:4:1:
+  |
+4 | import {stdJson} from "forge-std/StdJson.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/v2/MetaTxGasV2.t.sol:4:1:
+  |
+4 | import {Test, console} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/utils/Errors.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/utils/Errors.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/v2/NativeLeg.t.sol:4:1:
+  |
+4 | import {Errors} from "@openzeppelin/contracts/utils/Errors.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/utils/math/Math.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/utils/math/Math.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/v2/Rates.t.sol:4:1:
+  |
+4 | import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/v2/ReceiverPays.t.sol:4:1:
+  |
+4 | import {Test} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/proxy/Clones.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/proxy/Clones.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/v2/ReceiverPays.t.sol:5:1:
+  |
+5 | import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/v2/Tier1.t.sol:4:1:
+  |
+4 | import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/proxy/Clones.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/proxy/Clones.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/v2/Tier2.t.sol:4:1:
+  |
+4 | import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/StdJson.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/StdJson.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/v2/Underlying.t.sol:4:1:
+  |
+4 | import {stdJson} from "forge-std/StdJson.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/token/ERC20/IERC20.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/v2/UnwrapOp.t.sol:4:1:
+  |
+4 | import {IERC20} from "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/interfaces/draft-IERC6093.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/interfaces/draft-IERC6093.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/v2/UnwrapOp.t.sol:5:1:
+  |
+5 | import {IERC20Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/v2/WrapperInvariant.t.sol:4:1:
+  |
+4 | import {Test} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/StdInvariant.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/StdInvariant.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/v2/WrapperInvariant.t.sol:5:1:
+  |
+5 | import {StdInvariant} from "forge-std/StdInvariant.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/utils/math/Math.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/utils/math/Math.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/v2/WrapperInvariant.t.sol:6:1:
+  |
+6 | import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/interfaces/draft-IERC6093.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/interfaces/draft-IERC6093.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/v2/WrapperInvariant.t.sol:7:1:
+  |
+7 | import {IERC20Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/v2/helpers/V2Fixture.sol:4:1:
+  |
+4 | import {Test} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/proxy/Clones.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/proxy/Clones.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/v2/helpers/V2Fixture.sol:5:1:
+  |
+5 | import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/zether/ZetherDeploy.t.sol:4:1:
+  |
+4 | import {Test} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/zether/ZetherGasLimit.t.sol:4:1:
+  |
+4 | import {console2} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/zether/ZetherInvariant.t.sol:4:1:
+  |
+4 | import {Test} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/zether/ZetherKat.t.sol:4:1:
+  |
+4 | import {Test} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/StdJson.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/StdJson.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/zether/ZetherKat.t.sol:5:1:
+  |
+5 | import {stdJson} from "forge-std/StdJson.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/zether/ZetherModes.t.sol:4:1:
+  |
+4 | import {Vm} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/zether/ZetherMulti.t.sol:4:1:
+  |
+4 | import {console2} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/zether/ZetherNone.t.sol:4:1:
+  |
+4 | import {console2} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/StdJson.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/StdJson.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/zether/ZetherProverCross.t.sol:4:1:
+  |
+4 | import {stdJson} from "forge-std/StdJson.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/zether/ZetherRelay.t.sol:4:1:
+  |
+4 | import {console2} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/StdJson.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/StdJson.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/zether/ZetherRelay.t.sol:5:1:
+  |
+5 | import {stdJson} from "forge-std/StdJson.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/proxy/Clones.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/proxy/Clones.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/zether/ZetherRevertPaths.t.sol:4:1:
+  |
+4 | import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/zether/ZetherS3Vectors.t.sol:4:1:
+  |
+4 | import {Test} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/StdJson.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/StdJson.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/zether/ZetherS3Vectors.t.sol:5:1:
+  |
+5 | import {stdJson} from "forge-std/StdJson.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/zether/ZetherVerifier.t.sol:4:1:
+  |
+4 | import {Test, console2} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/forge-std/src/Test.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/zether/helpers/ZetherFixture.sol:4:1:
+  |
+4 | import {Test} from "forge-std/Test.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error (6275): Source "lib/openzeppelin-contracts/contracts/utils/Strings.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ParserError: Source "lib/openzeppelin-contracts/contracts/utils/Strings.sol" not found: File not found. Searched the following locations: "/home/ha/work/ainative/scaas/.claude/worktrees/p6ea2/smartcontracts/evm".
+ --> test/zether/helpers/ZetherProver.sol:6:1:
+  |
+6 | import {Strings} from "@openzeppelin/contracts/utils/Strings.sol";
+  | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Error: Compilation failed
+Command exited with non-zero status 1
+	Command being timed: "forge test --match-path test/pqzh/ligero/* -vv --gas-limit 9000000000000000000"
+	User time (seconds): 0.30
+	System time (seconds): 0.10
+	Percent of CPU this job got: 111%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:00.36
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 68748
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 4
+	Minor (reclaiming a frame) page faults: 27288
+	Voluntary context switches: 916
+	Involuntary context switches: 460
+	Swaps: 0
+	File system inputs: 6256
+	File system outputs: 304
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 1

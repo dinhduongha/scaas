@@ -22,8 +22,9 @@ fn form_of(name: &str) -> Form {
 }
 
 /// pqz_kat.py's reason strings
-fn reason(r: Reject) -> &'static str {
-    match r {
+fn reason(r: Reject) -> String {
+    String::from(match r {
+        Reject::MustBeZero(f) => return format!("{f}_must_be_0"),
         Reject::OpTag | Reject::Op => "opTag_does_not_belong_to_op",
         Reject::ProofSystemId => "unknown_proofSystemId",
         Reject::Length => "length",
@@ -33,7 +34,7 @@ fn reason(r: Reject) -> &'static str {
         Reject::AuditorOn => "auditorOn_does_not_match_the_length",
         Reject::Coefficient => "coefficient_>=_q",
         _ => "other",
-    }
+    })
 }
 
 fn words<const N: usize>(b: &[u8]) -> [Word; N] {
@@ -105,7 +106,7 @@ fn xcheck_c_and_pqz_kat() {
         eprintln!("PQZ_STMT_XCHECK not set: cross-check skipped (xcheck.sh sets it)");
         return;
     };
-    // 1. the C core's statements (bench setup), opTag word set to the form's
+    // 1. the C core's statements (bench setup, as `dump_setup DIR pqzh` writes them: opTag, PQZH id)
     let mut nc = 0;
     for (name, form) in [
         ("reg", Form::Register),
@@ -115,12 +116,11 @@ fn xcheck_c_and_pqz_kat() {
         ("dr", Form::DiscloseReceiver),
         ("tx0", Form::Transfer0),
     ] {
-        let mut st = std::fs::read(format!("{dir}/c/{name}_stmt.bin")).unwrap();
+        let st = std::fs::read(format!("{dir}/c/{name}_stmt.bin")).unwrap();
         assert_eq!(st.len(), form.stmt_len(), "{name}");
-        st[..32].copy_from_slice(&form.op_tag());
         let s = parse(form.op(), &st).unwrap_or_else(|e| panic!("C {name}: {e:?}"));
         assert_eq!(s.form(), Some(form), "C {name}");
-        assert_eq!(s.proof_system_id(), Some(&PQZL_ID), "C {name}");
+        assert_eq!(s.proof_system_id(), Some(&PQZH_ID), "C {name}"); // dump_setup pqzh: real opTag, D3 id
         assert_eq!(s.encode().unwrap(), st, "C {name}: encode(parse(x)) != x");
         // built from the objects (fields) again: the same bytes
         let f: std::collections::HashMap<&str, Vec<u8>> = fields(&s).into_iter().collect();

@@ -3,9 +3,8 @@
 
   xcheck.py <C dump dir> <out.txt> [n]
 
-1. The C core's statements (pqz-core/pqzh/xcheck/dump_setup: pqz_bench.c setup(), all six forms), with bytes 0..31
-   set to the form's opTag (the bench fills them with a marker byte; pqz-core never reads them, the precompile does;
-   the salt word is canonical in the bench since P6e stmt2):
+1. The C core's statements (pqz-core/pqzh/xcheck/dump_setup DIR pqzh: pqz_bench.c setup(), all six forms, with the
+   real opTag and the PQZH id in bytes 0..63; the bench's header words are canonical since P6e stmt3):
    pqz_kat.py must accept each and rebuild it byte for byte from the parsed fields with its own builders.
 2. n random statements per form (both ids, random header words, coefficients < q) built by pqz_kat.py, each written
    with its fields ("ok" lines), and every D15 / R6 mutation of some of them with pqz_kat.py's reason ("bad" lines).
@@ -72,7 +71,6 @@ def main(argv):
     lines = []
     for name, form in C_FORMS.items():
         st = open(os.path.join(cdir, f"{name}_stmt.bin"), "rb").read()
-        st = kat.OP_TAG[form.rstrip("0")] + st[32:]
         assert len(st) == kat.STMT_BYTES[form], name
         assert rebuild(form, st) == st, f"pqz_kat.py rebuild of the C {name} statement differs"
         lines.append(f"c {name} {form} ok")
@@ -97,6 +95,8 @@ def main(argv):
                 f.update(proofSystemId=psid, fee=rng.getrandbits(64), amount=rng.getrandbits(64),
                          salt=rng.randbytes(16))
                 f.pop("auditorOn")
+                for k in kat.ZERO_WORDS[op]:
+                    f[k] = 0
                 tr, aud = op == "TRANSFER", form == "TRANSFER"
                 out = coeffs(2048 + 16 * (2 + aud if tr else 1))
                 st = kat.build_debit(op, f, coeffs(2048), coeffs(2048 + 16), out, pk_t=coeffs(2048) if tr else None,
@@ -130,6 +130,9 @@ def main(argv):
             i = 224 + rng.randrange(24)
             bad(op, st[:i] + bytes([st[i] | (1 + rng.randrange(255))]) + st[i + 1:], "amount")
         elif form != "REGISTER":
+            for k in kat.ZERO_WORDS[form.rstrip("0")]:
+                i = 32 * kat.HEADER.index(k) + 16 + rng.randrange(16)  # the low half: the salt form still holds
+                bad(op, st[:i] + bytes([st[i] ^ (1 + rng.randrange(255))]) + st[i + 1:], k)
             for w, what in ((256, "fee"), (288, "amount"), (576, "salt")):
                 if what == "salt":
                     i = w + rng.randrange(16)

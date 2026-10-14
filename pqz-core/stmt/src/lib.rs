@@ -6,7 +6,8 @@
 //! `< q` as `be8`, `fee` and `amount` `< 2^64` on every debit form (stricter than the relations, which read `amount`
 //! only for BURN), the `salt` word = 16 zero bytes ‖ salt (CTR-PQZ-19; pqz-core only hashes it, so this decoder is
 //! where it is enforced), `auditorOn` equal to what the length says (op 1: 83,072 B auditor on = 1, 66,560 B off =
-//! 0; R6), the opTag of the op, a known `proofSystemId`.
+//! 0; R6), the header words §7.7 / §7.5 fix to 0 for the form (`zero_words`), the opTag of the op, a known
+//! `proofSystemId`.
 //! For every accepted input `encode(parse(x)) == x`.
 //!
 //! `no_std` + `alloc`, no dependencies, no `unsafe`, no floats; parsing borrows (no allocation), only the builders
@@ -198,6 +199,8 @@ pub enum Reject {
     Amount,
     /// salt word not 16 zero bytes ‖ salt
     Salt,
+    /// a header word the form fixes to 0 is not (the field name, as `pqz_kat.py` names it)
+    MustBeZero(&'static str),
     /// auditorOn word is not what the length says
     AuditorOn,
     /// a coefficient ≥ q
@@ -208,6 +211,24 @@ pub enum Reject {
     ProofLength,
     /// ABI encoding of the opening not canonical
     Opening,
+}
+
+/// The header words the contract always writes as 0 for a debit form, in header order (§7.7: `toUA` 0 for burn /
+/// refresh, `amount` and `recipient` burn-only, `salt` 0 for burn / refresh; §7.5: refresh amount = recipient = 0; a
+/// burn has no auditor). Checked after the scalars, the salt form and `auditorOn` (P6e D15, controller 2026-10-14).
+pub fn zero_words(form: Form) -> &'static [(usize, &'static str)] {
+    match form {
+        Form::Transfer | Form::Transfer0 => &[(H_AMOUNT, "amount"), (H_RECIPIENT, "recipient")],
+        Form::Burn => &[(H_TO, "toUA"), (H_AUDITOR_ON, "auditorOn"), (H_SALT, "salt")],
+        Form::Refresh => &[
+            (H_TO, "toUA"),
+            (H_AMOUNT, "amount"),
+            (H_RECIPIENT, "recipient"),
+            (H_AUDITOR_ON, "auditorOn"),
+            (H_SALT, "salt"),
+        ],
+        _ => &[],
+    }
 }
 
 /// A 32-byte big-endian word as u64 if it is `< 2^64`.
@@ -435,7 +456,7 @@ impl<'a> Stmt<'a> {
 }
 
 /// Decode the statement of `op` with every D15 / R6 rule, in the order of `pqz_kat.py parse` (opTag, id, length,
-/// scalars, salt, auditorOn, coefficients), so both name the same reason. Borrows `stmt`; allocates nothing.
+/// scalars, salt, auditorOn, zero words, coefficients), so both name the same reason. Borrows `stmt`; allocates nothing.
 pub fn parse(op: u8, stmt: &[u8]) -> Result<Stmt<'_>, Reject> {
     if op == OP_SELFTEST {
         return if stmt.is_empty() { Ok(Stmt::SelfTest) } else { Err(Reject::Op) };
@@ -507,6 +528,11 @@ pub fn parse(op: u8, stmt: &[u8]) -> Result<Stmt<'_>, Reject> {
             let (tr, aud) = (matches!(form, Form::Transfer | Form::Transfer0), form == Form::Transfer);
             if tr && word_u64(&header[H_AUDITOR_ON]) != Some(aud as u64) {
                 return Err(Reject::AuditorOn);
+            }
+            for &(i, name) in zero_words(form) {
+                if header[i].iter().any(|&b| b != 0) {
+                    return Err(Reject::MustBeZero(name));
+                }
             }
             let body = &stmt[HEADER_BYTES..];
             if !coeffs_ok(body) {

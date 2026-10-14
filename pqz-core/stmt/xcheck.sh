@@ -8,13 +8,14 @@ R=runs/$1 X=$(pwd)/target/xcheck
 mkdir -p runs "$X/c"
 (cd .. && ./build.sh native) > "$R-build.txt" 2>&1
 ${CC:-clang} -std=gnu11 -O2 -I../src -o "$X/dump_setup" ../pqzh/xcheck/dump_setup.c ../build/native/libpqz.a
-"$X/dump_setup" "$X/c"
+"$X/dump_setup" "$X/c" pqzh
 sha256sum "$X"/c/*_stmt.bin | sed "s#$X/##" > "$R-c-stmts.txt"
 python3 -I xcheck.py "$X/c" "$X/py.txt" "${N:-4}" > "$R-xcheck-py.txt"
 PQZ_STMT_XCHECK=$X cargo test --release --offline -- --nocapture > "$R-test.txt" 2>&1 || echo "cargo test rc=$?"
+PQZ_STMT_XCHECK=$X cargo test --offline > "$R-test-debug.txt" 2>&1 || echo "cargo test (debug, overflow checks) rc=$?"
 cargo build --release --offline --lib --target wasm32-unknown-unknown > "$R-wasm.txt" 2>&1 || echo "wasm rc=$?"
 ls -l target/wasm32-unknown-unknown/release/libpqz_stmt.rlib | awk '{print "rlib bytes", $5}' >> "$R-wasm.txt"
 cargo tree --offline >> "$R-wasm.txt" 2>&1
 cat "$R-xcheck-py.txt"
-grep -h -e "test result" -e "^xcheck" -e panicked -e FAILED "$R-test.txt"
+grep -h -e "test result" -e "^xcheck" -e panicked -e FAILED "$R-test.txt" "$R-test-debug.txt"
 tail -4 "$R-wasm.txt"

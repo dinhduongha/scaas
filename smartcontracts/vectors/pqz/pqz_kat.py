@@ -360,6 +360,13 @@ def build_disclose(op, f, pk, u, v):
     return b"".join(word(w.get(k, 0)) for k in DISC) + pk + u + v
 
 
+# header words the contract always writes as 0 for the form (§7.7 "toUA (0 for burn/refresh)", "amount (burn; else
+# 0)", "recipient (burn; else 0)", "salt (burn/refresh 0)"; §7.5 refresh: amount = 0 and recipient = 0; a burn has no
+# auditor); checked in HEADER order after the scalars, the salt form and auditorOn (P6e D15, controller 2026-10-14)
+ZERO_WORDS = {"TRANSFER": ("amount", "recipient"), "BURN": ("toUA", "auditorOn", "salt"),
+              "REFRESH": ("toUA", "amount", "recipient", "auditorOn", "salt")}
+
+
 def _scalar(b, name):  # a header word the relations read: < 2^64
     x = int.from_bytes(b, "big")
     if x >= 2**64:
@@ -372,7 +379,8 @@ def parse(op_byte, stmt, ids=(PQZL_ID, PQZH_ID)):
     the op (op 1 by length: 83,072 auditor on, 66,560 off), opTag of the op, a known proofSystemId, coefficients < q,
     fee / amount < 2^64 (every debit form: the decoder is stricter than the relations, which read amount only for
     BURN), the salt word = 16 zero bytes || salt (CTR-PQZ-19; pqz-core only hashes it, the decoder enforces it),
-    auditorOn equal to the length's value."""
+    auditorOn equal to the length's value, and the words §7.7 / §7.5 fix to 0 (ZERO_WORDS: a transfer's amount and
+    recipient, a burn's toUA / auditorOn / salt, a refresh's toUA / amount / recipient / auditorOn / salt)."""
     tag = stmt[:32]
     names = [n for n in OP_NAMES if OP_TAG[n] == tag and OP_BYTE[n] == op_byte]
     if not names:
@@ -415,6 +423,9 @@ def parse(op_byte, stmt, ids=(PQZL_ID, PQZH_ID)):
     a = int.from_bytes(out["auditorOn"], "big")
     if op == "TRANSFER" and a != aud:
         raise ValueError("auditorOn does not match the length")
+    for k in HEADER:
+        if k in ZERO_WORDS[op] and any(out[k]):
+            raise NonCanonical(k + " must be 0")
     body = stmt[HEADER_BYTES:]
     dec_coeffs(body)
     keys = ["pk_f"] + (["pk_t"] + (["pk_a"] if aud else []) if op == "TRANSFER" else [])
@@ -486,8 +497,8 @@ def selftest(log):
     forms = {
         "TRANSFER": build_debit("TRANSFER", hdr, pk, ct, out4, pk_t=pk, pk_a=pk),
         "TRANSFER0": build_debit("TRANSFER", hdr, pk, ct, out3, pk_t=pk),
-        "BURN": build_debit("BURN", dict(hdr, amount=9), pk, ct, ct),
-        "REFRESH": build_debit("REFRESH", hdr, pk, ct, ct),
+        "BURN": build_debit("BURN", dict(hdr, amount=9, recipient=0xBEEF, salt=0), pk, ct, ct),
+        "REFRESH": build_debit("REFRESH", dict(hdr, salt=0), pk, ct, ct),
         "REGISTER": build_register(bytes(range(32)), pk),
         "DISCLOSE-SENDER": build_disclose("DISCLOSE-SENDER", {"amount": 5, "kind": 0}, pk, u, vs[0]),
         "DISCLOSE-RECEIVER": build_disclose("DISCLOSE-RECEIVER", {"amount": 5, "kind": 1}, pk, u, vs[0]),
@@ -518,6 +529,12 @@ def selftest(log):
     rejects(b[:591] + b"\x80" + b[592:], 2, "burn salt word byte 15 set", "salt word not 16 zero bytes || salt")
     rejects(b[:288] + word(2**64) + b[320:], 2, "burn amount >= 2^64", "amount >= 2^64")
     rejects(t[:288] + word(2**64) + t[320:], 1, "transfer amount >= 2^64 (decoder stricter than R_TX)", "amount >= 2^64")
+    for form, at, name in (("TRANSFER", 288, "amount"), ("TRANSFER", 320, "recipient"), ("TRANSFER0", 320, "recipient"),
+                           ("BURN", 192, "toUA"), ("BURN", 448, "auditorOn"), ("BURN", 576, "salt"),
+                           ("REFRESH", 192, "toUA"), ("REFRESH", 288, "amount"), ("REFRESH", 320, "recipient"),
+                           ("REFRESH", 448, "auditorOn"), ("REFRESH", 576, "salt")):
+        st, w = forms[form], word(0x0101)  # low bytes only: the salt word keeps its 16-zero-byte form
+        rejects(st[:at] + w + st[at + 32:], OP_BYTE[form.rstrip("0")], f"{form} {name} != 0", name + " must be 0")
     rejects(t[:640] + Q.to_bytes(8, "big") + t[648:], 1, "coefficient = q", "coefficient >= q")
     rejects(t[:640] + (2**42).to_bytes(8, "big") + t[648:], 1, "coefficient = 2^42", "coefficient >= q")
     rejects(t, 2, "TRANSFER statement under op 2", "opTag does not belong to op")

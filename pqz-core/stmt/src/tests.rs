@@ -54,7 +54,12 @@ fn build(form: Form, o: &Objs, id: &Word) -> Vec<u8> {
             let mut header = Debit::header(form, id);
             header[H_FEE] = u64_word(7);
             header[H_AMOUNT] = u64_word(if form == Form::Burn { 99 } else { 0 });
-            header[H_SALT][16..].copy_from_slice(&[0xA5; 16]);
+            if matches!(form, Form::Transfer | Form::Transfer0) {
+                header[H_SALT][16..].copy_from_slice(&[0xA5; 16]);
+                header[H_TO] = [0x77; 32];
+            } else if form == Form::Burn {
+                header[H_RECIPIENT] = u64_word(0xBEEF);
+            }
             let (tr, aud) = (matches!(form, Form::Transfer | Form::Transfer0), form == Form::Transfer);
             Stmt::Debit(Debit {
                 form,
@@ -144,6 +149,7 @@ fn every_d15_r6_rule_rejects() {
     let t = build(Form::Transfer, &o, &PQZL_ID);
     let t0 = build(Form::Transfer0, &o, &PQZL_ID);
     let bu = build(Form::Burn, &o, &PQZL_ID);
+    let rf = build(Form::Refresh, &o, &PQZH_ID);
     let ds = build(Form::DiscloseSender, &o, &PQZL_ID);
     let rg = build(Form::Register, &o, &PQZH_ID);
     let cases: Vec<(&str, u8, Vec<u8>, Reject)> = vec![
@@ -161,6 +167,17 @@ fn every_d15_r6_rule_rejects() {
         ("salt word top byte set", 1, with(&t, 576, &[1]), Reject::Salt),
         ("salt word byte 15 set (R_TX0)", 1, with(&t0, 591, &[0x80]), Reject::Salt),
         ("burn salt word byte 0 set", 2, with(&bu, 576, &[0xff]), Reject::Salt),
+        ("transfer amount != 0", 1, with(&t, 288 + 31, &[1]), Reject::MustBeZero("amount")),
+        ("transfer recipient != 0", 1, with(&t, 320 + 12, &[1]), Reject::MustBeZero("recipient")),
+        ("R_TX0 recipient != 0", 1, with(&t0, 351, &[1]), Reject::MustBeZero("recipient")),
+        ("burn toUA != 0", 2, with(&bu, 192 + 31, &[1]), Reject::MustBeZero("toUA")),
+        ("burn auditorOn != 0", 2, with(&bu, 448 + 31, &[1]), Reject::MustBeZero("auditorOn")),
+        ("burn salt != 0 (low half)", 2, with(&bu, 607, &[1]), Reject::MustBeZero("salt")),
+        ("refresh toUA != 0", 2, with(&rf, 200, &[1]), Reject::MustBeZero("toUA")),
+        ("refresh amount != 0", 2, with(&rf, 319, &[1]), Reject::MustBeZero("amount")),
+        ("refresh recipient != 0", 2, with(&rf, 340, &[1]), Reject::MustBeZero("recipient")),
+        ("refresh auditorOn != 0", 2, with(&rf, 479, &[1]), Reject::MustBeZero("auditorOn")),
+        ("refresh salt != 0 (low half)", 2, with(&rf, 600, &[1]), Reject::MustBeZero("salt")),
         ("auditorOn = 2", 1, with(&t, 448 + 31, &[2]), Reject::AuditorOn),
         ("auditorOn = 0 on 83,072 B (dummy auditor)", 1, with(&t, 448 + 31, &[0]), Reject::AuditorOn),
         ("auditorOn = 1 on 66,560 B", 1, with(&t0, 448 + 31, &[1]), Reject::AuditorOn),
