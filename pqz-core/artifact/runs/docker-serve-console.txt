@@ -1,0 +1,5 @@
+== 04:30:58 build wasm
+== 04:31:05 serving artifact/out/serve-20261014T043058Z/web on http://0.0.0.0:8000/ (Ctrl-C to stop)
+172.17.0.1 - - [14/Oct/2026 04:31:06] "GET / HTTP/1.1" 200 -
+172.17.0.1 - - [14/Oct/2026 04:31:06] "GET / HTTP/1.1" 200 -
+172.17.0.1 - - [14/Oct/2026 04:31:06] "GET /pqz.wasm HTTP/1.1" 200 -

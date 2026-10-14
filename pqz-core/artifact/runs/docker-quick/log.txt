@@ -1,0 +1,10 @@
+== 03:50:33 build (native, wasm, wasm without SV, native-x86v3)
+== 03:51:17 KAT
+== 03:51:17 check_tbox_fixes.sh
+== 03:52:27 sv/check_sv_fixes.sh
+== 03:53:00 differential test pqz_verify vs pqz_verify_fast, portable: pqz_sv_diff 4 4 2 1 10 12 12 12
+== 04:03:35 five relations, generic verifier: native pqz_bench 3 3, wasm run_wasm.mjs 3 1
+== 04:04:26 five relations, specialised verifier: pqz_bench 2 50 (portable, x86-64-v3), wasm 2 25, wasm both
+== 04:05:25 wasm prove memory, one relation per process (the prover build without SV)
+== 04:05:38 tables and comparison
+== 04:05:38 done: /out

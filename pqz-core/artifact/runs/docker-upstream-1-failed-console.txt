@@ -1,0 +1,23 @@
+== 04:06:35 build upstream v3 (-march=x86-64-v3 -maes -mpclmul)
+== 04:07:02 build upstream v4 (-march=x86-64-v4 -mavx512ifma -mavx512vbmi2 -maes -mpclmul)
+== 04:07:40 build fork bench (shim bench.c against build/native/libpqz.a)
+v3: -march=x86-64-v3 -maes -mpclmul; HEXL: Compile flag not found: HEXL_HAS_AVX512DQ;Compile flag not found: HEXL_HAS_AVX512IFMA;Compile flag not found: HEXL_HAS_AVX512VBMI2;Setting HEXL_HAS_AVX256;
+v4: -march=x86-64-v4 -mavx512ifma -mavx512vbmi2 -maes -mpclmul; HEXL: Setting HEXL_HAS_AVX512DQ;Setting HEXL_HAS_AVX512IFMA;Setting HEXL_HAS_AVX512VBMI2;Setting HEXL_HAS_AVX256;
+gcc (Ubuntu 13.3.0-6ubuntu2~24.04.1) 13.3.0
+cmake version 3.28.3
+libgmp-dev:amd64	2:6.3.0+dfsg-2ubuntu6.1
+libmpfr-dev:amd64	4.2.1-1build1.1
+HEXL AVX-512 IFMA kernels in bench_up_v4: 14
+== 04:07:53 KAT upstream v3 against kat/lazer-3330e48.json
+19/19 cases equal; golden: lazer-3330e48 (lazer 3330e48 static v4: -march=x86-64-v4 -mavx512ifma -mavx512vbmi2 -maes -mpclmul, avx512f=1); checked: lazer-3330e48
+== 04:07:53 KAT upstream v4: skipped, no avx512ifma in /proc/cpuinfo (built only; running needs an AVX-512 IFMA CPU or Intel SDE)
+== 04:07:53 bench upstream vs fork, N=3 (xcheck/static/run.sh; skips bench_up_v4 without avx512ifma)
+cpu:   AMD Ryzen 5 7235HS (8 threads, 23 GB)
+flags: aes avx2 vaes
+N=3, pinned to CPU 1; medians in ms
+binary          reg_prove reg_verify   tx_prove  tx_verify reg_bytes  tx_bytes
+bench_up_v3       548.939    514.186   6740.746   6406.182     28106     42756
+bench_up_v4    skipped: no avx512ifma on this CPU
+bench_fork        241.709    154.683      0.243      0.228     28086         0  FAILED (exit 1, fails 6; see raw-20261014T040753Z/bench_fork.txt)
+wrote results-20261014T040753Z.json (raw output in raw-20261014T040753Z/)
+== 04:08:59 done: /out

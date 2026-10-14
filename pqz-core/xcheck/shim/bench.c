@@ -136,7 +136,14 @@ setup (void)
   pqz_encrypt (pks, 3, (const uint8_t (*)[16])m, r, e1, (const int16_t (*)[16])e2, u, vs);
 
   uint8_t *p = tx_stmt;
+#ifdef PQZ_HEADER_BYTES /* rel3 layout (pq-zether.md §7.7): 640 B header, fee a be32 word at PQZ_HDR_FEE */
+  memset (p, 0x5A, PQZ_PREFIX_BYTES);
+  for (int b = 0; b < 8; b++)
+    p[PQZ_HDR_FEE + 24 + b] = (uint8_t)(fee >> (8 * (7 - b)));
+  p += PQZ_HEADER_BYTES;
+#else /* b2402b5 layout: prefix || body || be8 fee */
   memset (p, 0x5A, PQZ_PREFIX_BYTES), p += PQZ_PREFIX_BYTES;
+#endif
   memcpy (p, KF.pk, PQZ_POLYVEC_BYTES), p += PQZ_POLYVEC_BYTES;
   memcpy (p, KT.pk, PQZ_POLYVEC_BYTES), p += PQZ_POLYVEC_BYTES;
   memcpy (p, KA.pk, PQZ_POLYVEC_BYTES), p += PQZ_POLYVEC_BYTES;
@@ -145,8 +152,10 @@ setup (void)
   memcpy (p, u, PQZ_POLYVEC_BYTES), p += PQZ_POLYVEC_BYTES;
   for (int k = 0; k < 3; k++)
     memcpy (p, vs[k], PQZ_V_BYTES), p += PQZ_V_BYTES;
+#ifndef PQZ_HEADER_BYTES
   for (int b = 7; b >= 0; b--)
     *p++ = (uint8_t)(fee >> (8 * b));
+#endif
 
   p = tx_wit;
   for (int j = 0; j < 2048; j++)

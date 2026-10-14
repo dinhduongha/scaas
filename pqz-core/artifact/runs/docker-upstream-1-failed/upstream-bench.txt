@@ -1,0 +1,8 @@
+cpu:   AMD Ryzen 5 7235HS (8 threads, 23 GB)
+flags: aes avx2 vaes
+N=3, pinned to CPU 1; medians in ms
+binary          reg_prove reg_verify   tx_prove  tx_verify reg_bytes  tx_bytes
+bench_up_v3       548.939    514.186   6740.746   6406.182     28106     42756
+bench_up_v4    skipped: no avx512ifma on this CPU
+bench_fork        241.709    154.683      0.243      0.228     28086         0  FAILED (exit 1, fails 6; see raw-20261014T040753Z/bench_fork.txt)
+wrote results-20261014T040753Z.json (raw output in raw-20261014T040753Z/)

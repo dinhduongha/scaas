@@ -1,0 +1,5 @@
+{"bundle": "bin", "date": "20261014T040753Z", "cpu": "AMD Ryzen 5 7235HS", "flags": "aes avx2 vaes", "threads": 8, "mem_gb": 23, "kernel": "7.0.0-34-generic", "n": 3, "pinned_cpu": "1", "results": [
+  {"bin": "bench_up_v3", "reg_prove_ms": 548.939, "reg_verify_ms": 514.186, "tx_prove_ms": 6740.746, "tx_verify_ms": 6406.182, "reg_bytes_max": 28106, "tx_bytes_max": 42756, "fails": 0, "exit": 0},
+  {"bin": "bench_up_v4", "skipped": "no avx512ifma on this CPU"},
+  {"bin": "bench_fork", "reg_prove_ms": 241.709, "reg_verify_ms": 154.683, "tx_prove_ms": 0.243, "tx_verify_ms": 0.228, "reg_bytes_max": 28086, "tx_bytes_max": 0, "fails": 6, "exit": 1}
+]}

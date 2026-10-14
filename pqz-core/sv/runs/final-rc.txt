@@ -1,0 +1,2 @@
+sv rel3 rc=143
+INTERRUPTED: stopped by the controller (SIGTERM) at 06:08 in the x86-64-v3 differential; only final-build.txt and final-diff-portable.jsonl (2,710 cases, 0 mismatches) are complete; empty files removed. Not a freeze run.

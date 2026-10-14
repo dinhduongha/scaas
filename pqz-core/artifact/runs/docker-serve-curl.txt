@@ -1,0 +1,16 @@
+$ curl -sS -D - -o index.html http://127.0.0.1:8000/
+HTTP/1.0 200 OK
+Server: SimpleHTTP/0.6 Python/3.12.3
+Date: Wed, 14 Oct 2026 04:31:06 GMT
+Content-type: text/html
+Content-Length: 3473
+Last-Modified: Wed, 14 Oct 2026 04:31:05 GMT
+$ curl -sS -D - -o pqz.wasm http://127.0.0.1:8000/pqz.wasm
+HTTP/1.0 200 OK
+Server: SimpleHTTP/0.6 Python/3.12.3
+Date: Wed, 14 Oct 2026 04:31:06 GMT
+Content-type: application/wasm
+Content-Length: 405882
+Last-Modified: Wed, 14 Oct 2026 04:31:05 GMT
+index.html: 3473 B, <title>: <title>pqz-core R_TX demo
+pqz.wasm: 405882 B, magic:  00 61 73 6d

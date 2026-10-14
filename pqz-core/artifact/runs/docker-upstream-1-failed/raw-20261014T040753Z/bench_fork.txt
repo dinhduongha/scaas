@@ -1,0 +1,14 @@
+{"init_ms": 8.5}
+{"run": "R_REG", "i": 0, "prove_ms": 295.7, "len": 28070, "fnv": "d27c0e88bb3f3d0b", "tries": 4}
+{"run": "R_REG", "i": 1, "prove_ms": 241.7, "len": 28084, "fnv": "c2e1d0e16e33488c", "tries": 5}
+{"run": "R_REG", "i": 2, "prove_ms": 196.7, "len": 28086, "fnv": "681f9837fdbac491", "tries": 2}
+{"timing": "R_REG prove", "n": 3, "mean_ms": 244.685, "p50_ms": 241.709, "p99_ms": 241.709, "max_ms": 295.665}
+{"rel": "R_REG", "proof_bytes_last": 28086, "proof_bytes_max": 28086, "arena_peak": 95502736, "rej_tries_mean": 3.67}
+{"timing": "R_REG verify valid", "n": 3, "mean_ms": 154.807, "p50_ms": 154.683, "p99_ms": 154.683, "max_ms": 155.300}
+{"rel": "R_TX", "prove_rc": 3, "at": ":0"}
+{"rel": "R_TX", "prove_rc": 3, "at": ":0"}
+{"rel": "R_TX", "prove_rc": 3, "at": ":0"}
+{"timing": "R_TX prove", "n": 3, "mean_ms": 17.013, "p50_ms": 0.243, "p99_ms": 0.243, "max_ms": 50.567}
+{"rel": "R_TX", "proof_bytes_last": 98304, "proof_bytes_max": 0, "arena_peak": 95502736, "rej_tries_mean": 0.00}
+{"timing": "R_TX verify valid", "n": 3, "mean_ms": 0.236, "p50_ms": 0.228, "p99_ms": 0.228, "max_ms": 0.255}
+{"fails": 6}
