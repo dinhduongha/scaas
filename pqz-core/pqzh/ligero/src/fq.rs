@@ -1,5 +1,8 @@
 //! F_q, q = 2^42 - 215 (the PQZ modulus), and F_q^4 = F_q[X]/(X^4 - 3). Elements are canonical u64 (< q); a
 //! product (< 2^84) and sums of up to 2^44 products are reduced once from u128 (lazy accumulation in hot loops).
+//! wasm32 has no 64 x 64 -> 128 multiply (u128 products become `__multi3` calls), so there products, F_q^4 products and
+//! the lazy sums use 21-bit pieces in u64 (`limb`); the results are the same canonical values, so proofs stay
+//! byte-identical with native (unit test `limb_matches_u128`, and the wasm32 runs' FNV).
 
 use std::ops::{Add, AddAssign, Mul, Neg, Sub, SubAssign};
 
@@ -7,6 +10,54 @@ pub const Q: u64 = (1 << 42) - 215;
 const M42: u64 = (1 << 42) - 1;
 /// bytes per F_q element in proofs (big-endian, 42 bits in 6 bytes, canonical)
 pub const EB: usize = 6;
+
+/// 21-bit-piece arithmetic for wasm32 (compiled everywhere so the native tests check it against the u128 path)
+pub(crate) mod limb {
+    use super::{M42, Q};
+    const M21: u64 = (1 << 21) - 1;
+
+    /// a b = h 2^42 + m 2^21 + l for a, b < 2^42: l, h < 2^42, m < 2^43
+    #[inline(always)]
+    pub fn mul3(a: u64, b: u64) -> [u64; 3] {
+        let (a0, a1, b0, b1) = (a & M21, a >> 21, b & M21, b >> 21);
+        [a0 * b0, a0 * b1 + a1 * b0, a1 * b1]
+    }
+
+    #[inline(always)]
+    fn fold(x: u64) -> u64 {
+        (x & M42) + (x >> 42) * 215 // < 2^42 + 2^30
+    }
+
+    /// h 2^42 + m 2^21 + l mod q, canonical, for any u64 l, m, h
+    #[inline(always)]
+    pub fn red3([l, m, h]: [u64; 3]) -> u64 {
+        let (l, m, h) = (fold(l), fold(m), fold(h));
+        // m 2^21 = (m >> 21) 2^42 + (m & M21) 2^21; 2^42 = 215: s < 2^42 + 2^43 + 2^51
+        let s = fold(l + ((m & M21) << 21) + ((m >> 21) + h) * 215); // < 2^42 + 2^18
+        if s >= Q { s - Q } else { s }
+    }
+
+    /// w += k a b (a, b < q; the sum of k over all terms of one accumulator at most 2^20)
+    #[inline(always)]
+    pub fn mac(w: &mut [u64; 3], a: u64, b: u64, k: u64) {
+        let p = mul3(a, b);
+        for i in 0..3 {
+            w[i] += k * p[i];
+        }
+    }
+
+    /// F_q^4 product, X^4 = 3 (as `Mul for F4`)
+    #[inline(always)]
+    pub fn f4_mul(a: [u64; 4], b: [u64; 4]) -> [u64; 4] {
+        let mut c = [[0u64; 3]; 4];
+        for i in 0..4 {
+            for j in 0..4 {
+                if i + j < 4 { mac(&mut c[i + j], a[i], b[j], 1) } else { mac(&mut c[i + j - 4], a[i], b[j], 3) }
+            }
+        }
+        c.map(red3)
+    }
+}
 
 /// reduce any u128 to [0, q): 2^42 = 215 mod q, folded three times
 #[inline(always)]
@@ -78,6 +129,9 @@ impl Mul for Fq {
     type Output = Fq;
     #[inline(always)]
     fn mul(self, o: Fq) -> Fq {
+        if cfg!(target_arch = "wasm32") {
+            return Fq(limb::red3(limb::mul3(self.0, o.0)));
+        }
         Fq(red(self.0 as u128 * o.0 as u128))
     }
 }
@@ -164,6 +218,9 @@ impl Mul for F4 {
     type Output = F4;
     #[inline(always)]
     fn mul(self, o: F4) -> F4 {
+        if cfg!(target_arch = "wasm32") {
+            return F4(limb::f4_mul(self.0.map(|x| x.0), o.0.map(|x| x.0)).map(Fq));
+        }
         let a = self.0.map(|x| x.0 as u128);
         let b = o.0.map(|x| x.0 as u128);
         let c0 = a[0] * b[0] + 3 * (a[1] * b[3] + a[2] * b[2] + a[3] * b[1]);
@@ -174,9 +231,11 @@ impl Mul for F4 {
     }
 }
 
-/// lazy sum of F4 x Fq products (at most 2^40 terms)
+/// lazy sum of F4 x Fq products (at most 2^40 terms; wasm32: 2^20, `limb::mac`)
+#[cfg(not(target_arch = "wasm32"))]
 #[derive(Default, Clone, Copy)]
 pub struct Acc4([u128; 4]);
+#[cfg(not(target_arch = "wasm32"))]
 impl Acc4 {
     #[inline(always)]
     pub fn add(&mut self, a: &F4, x: Fq) {
@@ -187,6 +246,23 @@ impl Acc4 {
     }
     pub fn get(&self) -> F4 {
         F4(self.0.map(|v| Fq(red(v))))
+    }
+}
+
+/// wasm32: (l, m, h) pieces per component, x split once
+#[cfg(target_arch = "wasm32")]
+#[derive(Default, Clone, Copy)]
+pub struct Acc4([[u64; 3]; 4]);
+#[cfg(target_arch = "wasm32")]
+impl Acc4 {
+    #[inline(always)]
+    pub fn add(&mut self, a: &F4, x: Fq) {
+        for i in 0..4 {
+            limb::mac(&mut self.0[i], a.0[i].0, x.0, 1);
+        }
+    }
+    pub fn get(&self) -> F4 {
+        F4(self.0.map(|w| Fq(limb::red3(w))))
     }
 }
 
@@ -225,6 +301,42 @@ mod tests {
         }
         assert_eq!(red(u128::MAX) as u128, u128::MAX % Q as u128);
         assert_eq!(Fq(12345).inv() * Fq(12345), Fq::ONE);
+    }
+
+    /// the wasm32 piece arithmetic gives the u128 path's values (products, F_q^4 products, long lazy sums, edges)
+    #[test]
+    fn limb_matches_u128() {
+        let mut s = 0x0fed_cba9_8765_4321u64;
+        let mut nx = || {
+            s = s.wrapping_mul(6364136223846793005).wrapping_add(1442695040888963407);
+            match s % 5 {
+                0 => Q - 1 - (s >> 60),
+                1 => s >> 60,
+                _ => (s >> 3) % Q,
+            }
+        };
+        for _ in 0..20_000 {
+            let (a, b) = (nx(), nx());
+            assert_eq!(limb::red3(limb::mul3(a, b)), red(a as u128 * b as u128));
+            let (x, y) = (F4([Fq(nx()), Fq(nx()), Fq(nx()), Fq(nx())]), F4([Fq(nx()), Fq(nx()), Fq(nx()), Fq(nx())]));
+            assert_eq!(F4(limb::f4_mul(x.0.map(|v| v.0), y.0.map(|v| v.0)).map(Fq)), x * y);
+        }
+        for n in [1usize, 1000, 1 << 20] {
+            let (mut w, mut u) = ([0u64; 3], 0u128);
+            for _ in 0..n {
+                let (a, b) = (nx(), nx());
+                limb::mac(&mut w, a, b, 1);
+                u += a as u128 * b as u128;
+            }
+            assert_eq!(limb::red3(w), red(u), "{n} terms");
+        }
+        let m = Q - 1;
+        let mut w = [0u64; 3];
+        for _ in 0..1 << 18 {
+            limb::mac(&mut w, m, m, 3);
+        }
+        assert_eq!(limb::red3(w), red(3 * (1u128 << 18) * (m as u128 * m as u128)));
+        assert_eq!(limb::red3([u64::MAX; 3]), red((u64::MAX as u128) * ((1 << 42) + (1 << 21) + 1)));
     }
 
     #[test]

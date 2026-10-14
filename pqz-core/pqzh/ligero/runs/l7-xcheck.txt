@@ -1,0 +1,10 @@
+reg_stmt 16480 B c=191aaefa0841d7a0 rust=191aaefa0841d7a0 equal
+reg_wit 6144 B c=17c7a9f62fa77af1 rust=17c7a9f62fa77af1 equal
+tx_stmt 83072 B c=be45138690990f31 rust=be45138690990f31 equal
+tx_wit 12416 B c=258e15b72416daa6 rust=258e15b72416daa6 equal
+burn_stmt 50048 B c=2af25bdc7d148c12 rust=2af25bdc7d148c12 equal
+burn_wit 12336 B c=b30116021402c8f4 rust=b30116021402c8f4 equal
+ds_stmt 33184 B c=e92c71476e9356e1 rust=e92c71476e9356e1 equal
+ds_wit 6176 B c=ca851999be80c88c rust=ca851999be80c88c equal
+dr_stmt 33184 B c=399004823a033f9f rust=399004823a033f9f equal
+dr_wit 6144 B c=36ad37fb60e003ad rust=36ad37fb60e003ad equal

@@ -5,10 +5,26 @@ edition = "2021"
 license-file = "../../../LICENSE"
 publish = false
 
-# PQZH over Ligero (docs/research/pqzh-ligero.md). pqzh for the statement / witness bytes (client, ring, rel).
+# PQZH over Ligero (docs/research/pqzh-ligero.md). sha3 only: no path dependency on the Plonky3 crate pqzh (P6e Task 6
+# prep; pqz-stmt replaces src/stmt.rs and src/ring.rs with Task 5 / 6).
 [dependencies]
-pqzh = { path = ".." }
 sha3 = "=0.10.8"
+
+# bench (default on): the reference presets (conjectured, proven without radix 431, Johnson). Production users
+# (pqz-ffi, Task 7) depend with default-features = false and get Params::proven() only.
+[features]
+default = ["bench"]
+bench = []
+
+[[bin]]
+name = "ligero_bench"
+path = "src/bin/ligero_bench.rs"
+required-features = ["bench"]
+
+[[bin]]
+name = "ligero_export"
+path = "src/bin/ligero_export.rs"
+required-features = ["bench"]
 
 [profile.release]
 debug = 1

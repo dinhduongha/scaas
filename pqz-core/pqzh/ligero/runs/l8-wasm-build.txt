@@ -1,0 +1,3 @@
+   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/p6eb1/pqz-core/pqzh/ligero)
+   Compiling pqzh-ligero-wasm v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/p6eb1/pqz-core/pqzh/ligero/wasm)
+    Finished `release` profile [optimized] target(s) in 3.98s

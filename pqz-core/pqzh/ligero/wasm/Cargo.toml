@@ -12,7 +12,6 @@ path = "lib.rs"
 
 [dependencies]
 pqzh-ligero = { path = ".." }
-pqzh = { path = "../.." }
 
 [profile.release]
 panic = "abort"

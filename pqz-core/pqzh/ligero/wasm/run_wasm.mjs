@@ -1,12 +1,14 @@
 // PQZH-Ligero wasm32 runner (copy of pqzh/wasm/run_wasm.mjs): prove / verify / adversarial verify timed on the JS side, linear-memory high-water vs 256 MiB.
-//   node wasm/run_wasm.mjs [n_prove] [n_verify] [n_adv per kind] [proven 1/0] [r431 1/0]
-//   (parameters: the presets of Params::preset)
+//   node wasm/run_wasm.mjs [n_prove] [n_verify] [n_adv per kind] [proven 1/0/2] [r431 1/0] [rels, default 0,1]
+//   (parameters: the presets of Params::preset, 2 = Johnson; rels: 0 R_REG, 1 R_TX, 2 R_BURN, 3 R_DS, 4 R_DR)
 // PQZH_PROOFS=DIR: verify only, proofs made natively by `ligero_bench --dump DIR` with the same parameters.
 // Build first: (cd wasm && cargo build --release --offline --target wasm32-unknown-unknown). Prints JSON lines.
 import { readFileSync } from 'node:fs';
 
 const [np = 3, nv = 50, nadv = 4, proven = 1, r431 = 1] =
-  process.argv.slice(2).map(Number);
+  process.argv.slice(2, 7).map(Number);
+const rels = (process.argv[7] || '0,1').split(',').map(Number);
+const NAMES = ['R_REG', 'R_TX', 'R_BURN', 'R_DS', 'R_DR'];
 const proofs = process.env.PQZH_PROOFS;
 const file = process.env.PQZH_WASM_FILE || new URL('target/wasm32-unknown-unknown/release/pqzh_ligero_wasm.wasm', import.meta.url);
 const bytes = readFileSync(file);
@@ -23,7 +25,7 @@ const stats = (v) => {
            max_ms: r3(v[n - 1]) };
 };
 
-out({ wasm_bytes: bytes.length, node: process.version, args: { np, nv, nadv, proven, r431, proofs } });
+out({ wasm_bytes: bytes.length, node: process.version, args: { np, nv, nadv, proven, r431, rels, proofs } });
 let t0 = performance.now();
 const kinds = x.step_init(proven, r431);
 const load = (tx, which, file) => {
@@ -35,8 +37,8 @@ const load = (tx, which, file) => {
 };
 out({ init_ms: r3(performance.now() - t0), memory_mib: mem() });
 let fails = 0;
-for (const tx of [0, 1]) {
-  const rel = tx ? 'R_TX' : 'R_REG';
+for (const tx of rels) {
+  const rel = NAMES[tx];
   const tp = [];
   let len = 0;
   if (proofs) {
