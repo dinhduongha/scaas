@@ -1,6 +1,7 @@
 /*
- * pqz-core C ABI (pq-zether.md §8, CTR-PQZ-09), E-S1 spike subset: R_REG (OP_REGISTER), R_TX (OP_TRANSFER),
- * R_BURN (OP_BURN, also REFRESH), R_DS (OP_DISCLOSE_SENDER), R_DR (OP_DISCLOSE_RECEIVER, also AUDITOR).
+ * pqz-core C ABI (pq-zether.md §8, CTR-PQZ-09): R_REG (OP_REGISTER), R_TX and R_TX0 (OP_TRANSFER, auditor on / off,
+ * told apart by the statement length), R_BURN (OP_BURN, also REFRESH), R_DS (OP_DISCLOSE_SENDER), R_DR
+ * (OP_DISCLOSE_RECEIVER, also AUDITOR).
  * Single-threaded; all memory comes from the arena given to pqz_init (no malloc), errors are return codes.
  */
 #ifndef PQZ_H
@@ -37,6 +38,9 @@
 #define PQZ_HEADER_BYTES 640
 #define PQZ_HDR_FEE 256
 #define PQZ_HDR_AMOUNT 288
+/* auditorOn word (§7.7 offset 448; CTR-PQZ-24): op 1 is R_TX with an 83,072-byte statement, which requires the word
+   = 1, and R_TX0 with a 66,560-byte one, which requires 0; anything else is rejected (P6e plan R6) */
+#define PQZ_HDR_AUDITOR_ON 448
 /* R_TX (auditor on): header || pk_f || pk_t || pk_a || T = u_T || v_T || out = u || v_t || v_f || v_a */
 #define PQZ_TX_STMT_BYTES                                                                                   \
   (PQZ_HEADER_BYTES + 3 * PQZ_POLYVEC_BYTES + (PQZ_POLYVEC_BYTES + PQZ_V_BYTES)                            \
@@ -44,6 +48,15 @@
 /* R_TX witness: s_f (int8) || e_f (int16) || r (int8) || e1 (int16) || e2_t, e2_f, e2_a (16 x int16 each)
    || d (16 x u8) || d' (16 x u8)   [M, carries and e_T are derived by the prover] */
 #define PQZ_TX_WIT_BYTES (2048 + 4096 + 2048 + 4096 + 3 * 32 + 16 + 16)
+
+/* R_TX0 (auditor off, CTR-PQZ-24: no pk_a / v_a, row 5 skipped; P6e D8): header || pk_f || pk_t || T = u_T || v_T
+   || out = u || v_t || v_f */
+#define PQZ_TX0_STMT_BYTES                                                                                  \
+  (PQZ_HEADER_BYTES + 2 * PQZ_POLYVEC_BYTES + (PQZ_POLYVEC_BYTES + PQZ_V_BYTES)                            \
+   + (PQZ_POLYVEC_BYTES + 2 * PQZ_V_BYTES))
+/* R_TX0 witness: s_f (int8) || e_f (int16) || r (int8) || e1 (int16) || e2_t, e2_f (16 x int16 each) || d (16 x u8)
+   || d' (16 x u8) */
+#define PQZ_TX0_WIT_BYTES (2048 + 4096 + 2048 + 4096 + 2 * 32 + 16 + 16)
 
 /* R_BURN (§7.5): header || pk_f || T = u_T || v_T || out = u || v_f */
 #define PQZ_BURN_STMT_BYTES (PQZ_HEADER_BYTES + PQZ_POLYVEC_BYTES + 2 * (PQZ_POLYVEC_BYTES + PQZ_V_BYTES))

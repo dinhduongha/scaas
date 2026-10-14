@@ -140,6 +140,9 @@ setup (void)
   memset (p, 0x5A, PQZ_PREFIX_BYTES);
   for (int b = 0; b < 8; b++)
     p[PQZ_HDR_FEE + 24 + b] = (uint8_t)(fee >> (8 * (7 - b)));
+#ifdef PQZ_HDR_AUDITOR_ON /* P6e R6: the 83,072-byte form requires auditorOn = 1 */
+  p[PQZ_HDR_AUDITOR_ON + 31] = 1;
+#endif
   p += PQZ_HEADER_BYTES;
 #else /* b2402b5 layout: prefix || body || be8 fee */
   memset (p, 0x5A, PQZ_PREFIX_BYTES), p += PQZ_PREFIX_BYTES;

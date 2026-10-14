@@ -65,6 +65,8 @@ everything on your own machine, and the package compares your results with `expe
 
 **Provisional expected results after P6e Task 1 (2026-10-14, branch `p6e-a1`):** `expected-results.json` is regenerated with `results.py freeze` from the hedged-prover runs `../rel3/runs/hedge2-*` and `../sv/runs/hedge2-*` (69 / 69 checks ok, `runs/hedge2-provisional-freeze.md`; the first hedge run without the inner witness tag, `runs/hedge-provisional-freeze.md`, is superseded): new `proofs_fnv` for every relation and n, proof sizes within noise (largest proof ±30 B), arena and wasm prove peaks identical. Still provisional; the freeze after gate A replaces it. The Docker runs in `runs/docker-*` predate it (v2 hashes).
 
+**Provisional expected results after P6e Task 2 (2026-10-14, branch `p6e-a2`):** regenerated with `results.py freeze` from `../rel3/runs/tx0-*` and `../sv/runs/tx0-*` (69 / 69 checks ok, `runs/tx0-provisional-freeze.md`). Only `R_TX` changes: its bench statement now carries `auditorOn = 1` in the header word at 448 (P6e ruling R6: the 83,072-byte form requires it; the word was filler before), so its proofs and every `R_TX` `proofs_fnv` change; `R_REG`, `R_BURN`, `R_DS`, `R_DR` are byte-identical to `hedge2`. The new relation `R_TX0` (transfer without the auditor) is not in this package's runs yet (`reproduce.sh` passes the relation mask 31; `results.py` skips relations it does not list).
+
 Next (heavy step under the machine-wide lock): the freeze, through the package on the host toolchain.
 
 ```sh

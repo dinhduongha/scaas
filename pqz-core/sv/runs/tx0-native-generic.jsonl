@@ -1,0 +1,28 @@
+{"init_ms": 9.5, "init_arena": 3116288, "verify": "generic"}
+{"hedge": true, "seed_bits_diff_witness": 245, "seed_bits_diff_statement": 248, "same_inputs_same_seeds": 1, "same_rnd32_same_proof": 1}
+{"timing": "R_REG prove", "n": 2, "mean_ms": 239.889, "p50_ms": 246.585, "p99_ms": 233.194, "max_ms": 246.585}
+{"rel": "R_REG", "proof_bytes_last": 28080, "proof_bytes_max": 28113, "arena_peak": 95502736, "rej_tries_mean": 4.50, "proofs_fnv": "1af59837"}
+{"timing": "R_REG verify valid", "n": 10, "mean_ms": 165.014, "p50_ms": 166.957, "p99_ms": 171.316, "max_ms": 177.531}
+{"timing": "R_REG verify adversarial", "n": 18, "mean_ms": 76.524, "p50_ms": 2.882, "p99_ms": 173.753, "max_ms": 178.824}
+{"timing": "R_TX prove", "n": 2, "mean_ms": 1007.528, "p50_ms": 1099.321, "p99_ms": 915.734, "max_ms": 1099.321}
+{"rel": "R_TX", "proof_bytes_last": 42766, "proof_bytes_max": 42766, "arena_peak": 312151904, "rej_tries_mean": 10.50, "proofs_fnv": "3ef1da5b"}
+{"timing": "R_TX verify valid", "n": 10, "mean_ms": 641.446, "p50_ms": 642.030, "p99_ms": 651.021, "max_ms": 680.784}
+{"timing": "R_TX verify adversarial", "n": 18, "mean_ms": 329.155, "p50_ms": 630.091, "p99_ms": 656.332, "max_ms": 660.927}
+{"timing": "R_BURN prove", "n": 2, "mean_ms": 871.778, "p50_ms": 1061.667, "p99_ms": 681.888, "max_ms": 1061.667}
+{"rel": "R_BURN", "proof_bytes_last": 41923, "proof_bytes_max": 41932, "arena_peak": 310304688, "rej_tries_mean": 11.00, "proofs_fnv": "12f45572"}
+{"timing": "R_BURN verify valid", "n": 10, "mean_ms": 518.723, "p50_ms": 514.041, "p99_ms": 523.210, "max_ms": 577.021}
+{"timing": "R_BURN verify adversarial", "n": 18, "mean_ms": 258.606, "p50_ms": 501.086, "p99_ms": 506.611, "max_ms": 514.434}
+{"timing": "R_DS prove", "n": 2, "mean_ms": 374.049, "p50_ms": 387.072, "p99_ms": 361.027, "max_ms": 387.072}
+{"rel": "R_DS", "proof_bytes_last": 28951, "proof_bytes_max": 28974, "arena_peak": 134431568, "rej_tries_mean": 11.50, "proofs_fnv": "9eb44281"}
+{"timing": "R_DS verify valid", "n": 10, "mean_ms": 198.732, "p50_ms": 197.781, "p99_ms": 205.133, "max_ms": 207.806}
+{"timing": "R_DS verify adversarial", "n": 18, "mean_ms": 97.151, "p50_ms": 188.348, "p99_ms": 194.268, "max_ms": 196.384}
+{"timing": "R_DR prove", "n": 2, "mean_ms": 275.548, "p50_ms": 318.912, "p99_ms": 232.185, "max_ms": 318.912}
+{"rel": "R_DR", "proof_bytes_last": 28975, "proof_bytes_max": 28981, "arena_peak": 150447264, "rej_tries_mean": 4.00, "proofs_fnv": "5bb0078c"}
+{"timing": "R_DR verify valid", "n": 10, "mean_ms": 193.482, "p50_ms": 196.827, "p99_ms": 197.561, "max_ms": 199.525}
+{"timing": "R_DR verify adversarial", "n": 18, "mean_ms": 100.637, "p50_ms": 195.859, "p99_ms": 199.791, "max_ms": 202.201}
+{"timing": "R_TX0 prove", "n": 2, "mean_ms": 771.328, "p50_ms": 774.627, "p99_ms": 768.029, "max_ms": 774.627}
+{"rel": "R_TX0", "proof_bytes_last": 42441, "proof_bytes_max": 42441, "arena_peak": 349390528, "rej_tries_mean": 4.00, "proofs_fnv": "a41428e2"}
+{"timing": "R_TX0 verify valid", "n": 10, "mean_ms": 605.859, "p50_ms": 602.907, "p99_ms": 619.850, "max_ms": 625.784}
+{"timing": "R_TX0 verify adversarial", "n": 18, "mean_ms": 297.003, "p50_ms": 555.036, "p99_ms": 594.572, "max_ms": 606.504}
+{"auditor_check": true, "cases": 9, "fails": 0}
+{"fails": 0}

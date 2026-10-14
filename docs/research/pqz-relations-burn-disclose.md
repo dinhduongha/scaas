@@ -44,6 +44,17 @@ relation's keys are built at its first use (§4). Each relation's first prove in
 | browser prove 5 s desktop / 15 s phone / 30 s hard (wasm, node, max of 5) | 1.10 s, inside | 0.65 s, inside | 0.65 s, inside |
 | browser memory 128 MiB budget / 256 MiB hard (wasm arena peak, one op) | 210 MiB: over the budget, inside the hard limit | 73 MiB, inside | 79 MiB, inside |
 
+**`R_TX0`, the transfer without the auditor (P6e Task 2, 2026-10-14; CTR-PQZ-24, plan D8 / R6).** `R_TX` without
+`pk_a`, `v_a`, `e2_a` (row 5 skipped), op 1 with a 66,560-byte statement; the `auditorOn` header word must say the same
+as the length. Run `tx0` (`rel3/runs/tx0-*`, `sv/runs/tx0-*`; `pqz-core/STATUS.md` has the full record) [measured]:
+
+| `R_TX0` | proof bytes | prove p50 / p99 native | verify p50 / p99 native (generic) | p99 adversarial native | prove p50 wasm | verify p50 wasm (generic) | SV p50 / p99 portable, x86-64-v3, wasm | arena peak native / wasm, one op |
+|---|---|---|---|---|---|---|---|---|
+| `R_TX0` | ≤ 42,448 | 857 / 1,002 ms | 592 / 637 ms | 669 ms | 1,272 ms | 771 ms | 8.23 / 9.36, 4.81 / 5.28, 13.5 / 15.2 ms | 298 / 227 MB |
+
+Sizing (`pqz-core/params/estimator-e-s1-tx0.txt`): MSIS(23, 213, 2^35.96) β 457 (2^133.4 / 2^121.1), MLWE(33, 35) uSVP
+β 470, knowledge error ≤ 2^−127; within noise of `R_TX`, as expected for one key and one ciphertext slot fewer.
+
 The 50 ms verify limit is met by the specialised verifier (`pqz-specialised-verifier.md` §0: p99 ≤ 11.1 ms portable,
 ≤ 16.0 ms wasm32 for all five relations on v2), not by the generic one above.
 

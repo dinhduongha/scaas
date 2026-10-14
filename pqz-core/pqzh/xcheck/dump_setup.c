@@ -1,4 +1,5 @@
-/* Dump pqz_bench.c setup()'s statements and witnesses (R_REG, R_TX) for the PQZH byte cross-check (xcheck/run.sh).
+/* Dump pqz_bench.c setup()'s statements and witnesses for the PQZH byte cross-check (xcheck/run.sh: R_REG, R_TX) and
+   the pqz-stmt codec check (pqz-core/stmt, all six forms; P6e Task 5).
    pqz_bench.c is included whole so its static buffers are visible; its main() is renamed away. */
 #define main pqz_bench_main
 #include "../../test/pqz_bench.c"
@@ -23,6 +24,13 @@ main (int argc, char **argv)
   void *arena = malloc (ARENA_BYTES);
   if (!arena || step_init (arena, ARENA_BYTES) != 0)
     return 1;
-  return dump (argv[1], "reg_stmt.bin", reg_stmt, sizeof reg_stmt) | dump (argv[1], "reg_wit.bin", reg_wit, sizeof reg_wit)
-         | dump (argv[1], "tx_stmt.bin", tx_stmt, sizeof tx_stmt) | dump (argv[1], "tx_wit.bin", tx_wit, sizeof tx_wit);
+  static const char *const N[NREL] = { "reg", "tx", "burn", "ds", "dr", "tx0" };
+  int rc = 0;
+  for (int r = 0; r < NREL; r++)
+    {
+      char a[32], b[32];
+      snprintf (a, sizeof a, "%s_stmt.bin", N[r]), snprintf (b, sizeof b, "%s_wit.bin", N[r]);
+      rc |= dump (argv[1], a, STMT[r], STLEN[r]) | dump (argv[1], b, WIT[r], WLEN[r]);
+    }
+  return rc;
 }

@@ -1,13 +1,13 @@
 // pqz-core wasm32 runner: the same steps as the native pqz_bench main(), timed on the JS side.
 //   node test/run_wasm.mjs [n_prove] [n_verify] [rel]  (after ./build.sh wasm; prints JSON lines)
-//   rel: bit mask as pqz_bench (1 R_REG, 2 R_TX, 4 R_BURN, 8 R_DS, 16 R_DR; default 31)
+//   rel: bit mask as pqz_bench (1 R_REG, 2 R_TX, 4 R_BURN, 8 R_DS, 16 R_DR, 32 R_TX0; default 63)
 //   PQZ_VERIFY=fast: time pqz_verify_fast (P6-SV); PQZ_VERIFY=both: also run every verify with both verifiers
 //   and count disagreements (honest proofs and n_verify seeds of each of the six tamper kinds); both need a pqz.wasm
 //   with the specialised verifier (the default; SV=0 ./build.sh wasm leaves it out)
 import { readFileSync } from 'node:fs';
 
-const [np = 3, nv = 3, rels = 31] = process.argv.slice(2).map(Number);
-const NAMES = ['R_REG', 'R_TX', 'R_BURN', 'R_DS', 'R_DR'];
+const [np = 3, nv = 3, rels = 63] = process.argv.slice(2).map(Number);
+const NAMES = ['R_REG', 'R_TX', 'R_BURN', 'R_DS', 'R_DR', 'R_TX0'];
 const NKIND = 6; // tamper kinds of step_verify_bad
 const ARENA = 768 * 2 ** 20; // as ARENA_BYTES in pqz_bench.c
 const wasm = readFileSync(process.env.PQZ_WASM_FILE || new URL('../build/wasm/pqz.wasm', import.meta.url));

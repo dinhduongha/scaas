@@ -240,7 +240,8 @@ def main(a):
         res = summarize(files)
         # every n with a frozen hash: the rel3 per-op runs (n = 1, native) too
         for rel, r in (bench(f"{r3}-alone.jsonl", "native")[0] if sv else {}).items():
-            res["relations"][rel]["fnv"].setdefault(str(r["np"]), r["fnv"])
+            if rel in RELS:  # the package's five relations (R_TX0, P6e Task 2, is not in its runs)
+                res["relations"][rel]["fnv"].setdefault(str(r["np"]), r["fnv"])
         res["machine"] = machine()
         res["mode"] = f"frozen run {label}"
         ok = compare(res, {"relations": {k: {**v, "ratios": {}} for k, v in res["relations"].items()}})

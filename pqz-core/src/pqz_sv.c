@@ -1,5 +1,5 @@
 /*
- * pqz-core specialised verifier for R_REG, R_TX, R_BURN, R_DS, R_DR (spike P6-SV,
+ * pqz-core specialised verifier for R_REG, R_TX, R_TX0, R_BURN, R_DS, R_DR (spike P6-SV,
  * docs/research/pqz-specialised-verifier.md).
  *
  * pqz_verify_fast accepts exactly the proofs pqz_verify accepts: the same decoder, the same Fiat-Shamir transcript
@@ -780,7 +780,8 @@ typedef struct
   unsigned D, log2m;
 } svrel_t;
 
-static svrel_t SR[5];
+#define NSR 6
+static svrel_t SR[NSR];
 static nt_t *SA; /* A (32 x 32), shared by all relations */
 
 /* statement vectors (stmt_t.vec) */
@@ -796,9 +797,9 @@ enum
 };
 
 static int
-sv_idx (uint8_t op)
+sv_idx (uint8_t rel) /* rel: the op, or PQZ_REL_TX0 */
 {
-  switch (op)
+  switch (rel)
     {
     case PQZ_OP_REGISTER:
       return 0;
@@ -810,6 +811,8 @@ sv_idx (uint8_t op)
       return 3;
     case PQZ_OP_DISCLOSE_RECEIVER:
       return 4;
+    case PQZ_REL_TX0:
+      return 5;
     }
   return -1;
 }
@@ -893,7 +896,7 @@ pqz_sv_setup (uint8_t op, const lnp_tbox_params_struct *P, polymat_t A, polymat_
 {
   abdlop_params_srcptr tb = P->tbox, qm = P->quad_eval->quad_many;
   dcompress_params_srcptr dc = qm->dcompress;
-  const int idx = sv_idx (op);
+  const int idx = sv_idx (op); /* op: the relation code (the op, or PQZ_REL_TX0) */
   int ok = 1;
 
   if (idx < 0) /* before any slot is touched: the fail path below would clear SR[0] (R_REG) and could drop SA */
@@ -927,7 +930,9 @@ pqz_sv_setup (uint8_t op, const lnp_tbox_params_struct *P, polymat_t A, polymat_
         S->nrb = 1, S->rb[0].tr = 0, S->rb[0].ox = 0, S->rb[0].oy = 32, S->rb[0].rhs = V_PK;
         break;
       case PQZ_OP_TRANSFER:
-      case PQZ_OP_BURN: /* rows 1, 2; R_TX products: pk_t, pk_f, pk_a (rows 3-5), u_T (row 6); R_BURN: pk_f, u_T */
+      case PQZ_REL_TX0:
+      case PQZ_OP_BURN: /* rows 1, 2; R_TX products: pk_t, pk_f, pk_a (rows 3-5), u_T (row 6); R_TX0: pk_t, pk_f, u_T;
+                           R_BURN: pk_f, u_T */
         if (op == PQZ_OP_TRANSFER)
           {
             S->N = 64, S->M = 80, S->nblk = 7, S->dsel = 128, S->pstart = 131, S->nprod = 4;
@@ -935,6 +940,14 @@ pqz_sv_setup (uint8_t op, const lnp_tbox_params_struct *P, polymat_t A, polymat_
             for (int k = 0; k < 3; k++)
               S->pr[k].ox = 64, S->pr[k].e2 = 128 + k;
             S->pr[3].ox = 0, S->pr[3].e2 = -1;
+          }
+        else if (op == PQZ_REL_TX0)
+          {
+            S->N = 64, S->M = 64, S->nblk = 6, S->dsel = 128, S->pstart = 130, S->nprod = 3;
+            S->pr[0].v = V_PKT, S->pr[1].v = V_PKF, S->pr[2].v = V_UT;
+            for (int k = 0; k < 2; k++)
+              S->pr[k].ox = 64, S->pr[k].e2 = 128 + k;
+            S->pr[2].ox = 0, S->pr[2].e2 = -1;
           }
         else
           {
@@ -1013,8 +1026,13 @@ pqz_sv_setup (uint8_t op, const lnp_tbox_params_struct *P, polymat_t A, polymat_
   return PQZ_OK;
 fail:
   /* the caller releases the arena to the mark before this call: a shared table built here goes with it */
-  if (SA != NULL && !SR[0].ready && !SR[1].ready && !SR[2].ready && !SR[3].ready && !SR[4].ready)
-    sv_ready = 0, SA = NULL;
+  {
+    int any = 0;
+    for (int i = 0; i < NSR; i++)
+      any |= SR[i].ready;
+    if (SA != NULL && !any)
+      sv_ready = 0, SA = NULL;
+  }
   memset (S, 0, sizeof *S);
   pqz_err_set (PQZ_ERR_INTERNAL);
   return pqz_err;
@@ -1083,30 +1101,33 @@ parse_stmt (stmt_t *T, uint8_t op, const uint8_t *stmt, size_t len)
     case PQZ_OP_REGISTER:
       return len == PQZ_REG_STMT_BYTES && rd_vec (T->vec[V_PK], p + 32);
     case PQZ_OP_TRANSFER:
-    case PQZ_OP_BURN: /* pqz_rel.c parse_debit: header || pk_f (|| pk_t || pk_a) || u_T || v_T || u (|| v_t) || v_f
-                         (|| v_a), fee (and the R_BURN amount) from the header */
+    case PQZ_REL_TX0:
+    case PQZ_OP_BURN: /* pqz_rel.c parse_debit: header || pk_f (|| pk_t (|| pk_a)) || u_T || v_T || u (|| v_t) || v_f
+                         (|| v_a), fee (and the R_BURN amount, the R_TX / R_TX0 auditorOn word) from the header */
       {
-        const int burn = op == PQZ_OP_BURN;
-        if (len != (burn ? PQZ_BURN_STMT_BYTES : PQZ_TX_STMT_BYTES))
+        const int burn = op == PQZ_OP_BURN, aud = op == PQZ_OP_TRANSFER;
+        uint64_t on = 0;
+        if (len != (burn ? PQZ_BURN_STMT_BYTES : aud ? PQZ_TX_STMT_BYTES : PQZ_TX0_STMT_BYTES))
           return 0;
         ok &= rd_word64 (&T->fee, stmt + PQZ_HDR_FEE);
         T->amount = 0;
         if (burn)
           ok &= rd_word64 (&T->amount, stmt + PQZ_HDR_AMOUNT);
+        else /* P6e R6: 1 with pk_a and v_a, 0 without */
+          ok &= rd_word64 (&on, stmt + PQZ_HDR_AUDITOR_ON) & (on == (uint64_t)aud);
         p = stmt + PQZ_HEADER_BYTES;
         ok &= rd_vec (T->vec[V_PKF], p), p += PQZ_POLYVEC_BYTES;
         if (!burn)
-          {
-            ok &= rd_vec (T->vec[V_PKT], p), p += PQZ_POLYVEC_BYTES;
-            ok &= rd_vec (T->vec[V_PKA], p), p += PQZ_POLYVEC_BYTES;
-          }
+          ok &= rd_vec (T->vec[V_PKT], p), p += PQZ_POLYVEC_BYTES;
+        if (aud)
+          ok &= rd_vec (T->vec[V_PKA], p), p += PQZ_POLYVEC_BYTES;
         ok &= rd_vec (T->vec[V_UT], p), p += PQZ_POLYVEC_BYTES;
         ok &= rd_coeffs (T->vT, p, 16), p += PQZ_V_BYTES;
         ok &= rd_vec (T->vec[V_U], p), p += PQZ_POLYVEC_BYTES;
         if (!burn)
           ok &= rd_coeffs (T->vt, p, 16), p += PQZ_V_BYTES;
         ok &= rd_coeffs (T->vf, p, 16), p += PQZ_V_BYTES;
-        if (!burn)
+        if (aud)
           ok &= rd_coeffs (T->va, p, 16);
         return ok;
       }
@@ -1159,13 +1180,16 @@ digit (uint64_t x, unsigned i)
 {
   return (unsigned)((x >> (4 * i)) & 15);
 }
-/* R_TX (burn = 0) and R_BURN (burn = 1, d = digits(amount) public, rows 3 and 5 absent) */
+/* R_TX (rel PQZ_OP_TRANSFER), R_TX0 (PQZ_REL_TX0: row 5 absent) and R_BURN (PQZ_OP_BURN: d = digits(amount)
+   public, rows 3 and 5 absent) */
 static void
 debit_eval_fold (int64_t Gm[4][DEG], int64_t Ab[15][DEG], uint64_t *rho, const uint64_t *g, const stmt_t *T,
-                 int burn)
+                 uint8_t rel)
 {
+  const int burn = rel == PQZ_OP_BURN, aud = rel == PQZ_OP_TRANSFER;
   const lay_t *L = burn ? &LAY_BURN : &LAY_TX;
-  const unsigned kf = burn ? 0 : 1, kT = burn ? 1 : 3; /* product index of pk_f (row 4) and u_T (row 6) */
+  /* product index of pk_f (row 4) and u_T (row 6): svrel_t.pr of the relation */
+  const unsigned kf = burn ? 0 : 1, kT = burn ? 1 : aud ? 3 : 2;
   unsigned i, b, e = 0;
   uint64_t r = 0;
   memset (Gm, 0, sizeof (int64_t) * 4 * DEG);
@@ -1185,7 +1209,7 @@ debit_eval_fold (int64_t Gm[4][DEG], int64_t Ab[15][DEG], uint64_t *rho, const u
       for (b = 0; b < 4; b++)
         tx_bit (Ab, SLOT (L->dp, 4, i, b), TX_DELTA << b, g[e]);
       r = addq (r, mulq (g[e], negq ((uint64_t)T->vf[i]))), e++;
-      if (!burn)
+      if (aud)
         {
           tx_xinv (Gm[2], i, g[e]);
           for (b = 0; b < 4; b++)
@@ -1246,8 +1270,8 @@ disc_eval_fold (int64_t Gm[4][DEG], int64_t Ab[15][DEG], uint64_t *rho, const ui
 static void
 eval_fold (uint8_t op, int64_t Gm[4][DEG], int64_t Ab[15][DEG], uint64_t *rho, const uint64_t *g, const stmt_t *T)
 {
-  if (op == PQZ_OP_TRANSFER || op == PQZ_OP_BURN)
-    debit_eval_fold (Gm, Ab, rho, g, T, op == PQZ_OP_BURN);
+  if (op == PQZ_OP_TRANSFER || op == PQZ_REL_TX0 || op == PQZ_OP_BURN)
+    debit_eval_fold (Gm, Ab, rho, g, T, op);
   else
     disc_eval_fold (Gm, Ab, rho, g, T, op == PQZ_OP_DISCLOSE_RECEIVER);
 }

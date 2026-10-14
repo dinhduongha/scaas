@@ -12,8 +12,8 @@ open: [STATUS.md](STATUS.md); write-up: `docs/research/pqz-core-e-s1.md`.
 | Path | Content |
 |---|---|
 | `lazer/` | LaZer `3330e48` subset. The pristine copy is commit `c91b3ab`; changes are in place, marked `PQZ:`. Licence: `lazer/LICENSE` |
-| `src/` | The rewritten layers and the C ABI (`pqz.h`): integers without GMP (`pqz_mpn.h`), incomplete NTT mod q = 2^42 − 215 with l = 4 (`pqz_ntt.c`), fixed-point exp for the sampler and rejection (`pqz_fixexp.h`), arena (`pqz_arena.c`), sticky error returns (`pqz_rt.h`), bitsliced software AES-256-CTR (`pqz_aes_gen.h`, from `gen_aes.py`), relations `R_REG`, `R_TX`, `R_BURN`, `R_DS`, `R_DR` (`pqz_rel.c`; hedged prover masks, CTR-PQZ-19), KeyGen / Enc / Dec from seeds (`pqz_keys.c`, §4.2; SHAKE256 added to `lazer/shake128.c`), wasm runtime (`pqz_wasm_rt.c`) |
-| `params/` | LaZer codegen (`codegen/`), relation specs (`{reg,tx,burn,ds,dr}_params.sage`), generated headers `pqz_*_params.h`, E-S0 and E-S1 sizing (`e_s0.py`, `e_s1_proof.sage`, `estimator*.txt`; see `params/README.md`) |
+| `src/` | The rewritten layers and the C ABI (`pqz.h`): integers without GMP (`pqz_mpn.h`), incomplete NTT mod q = 2^42 − 215 with l = 4 (`pqz_ntt.c`), fixed-point exp for the sampler and rejection (`pqz_fixexp.h`), arena (`pqz_arena.c`), sticky error returns (`pqz_rt.h`), bitsliced software AES-256-CTR (`pqz_aes_gen.h`, from `gen_aes.py`), relations `R_REG`, `R_TX`, `R_TX0` (transfer without the auditor, CTR-PQZ-24; op 1 by statement length), `R_BURN`, `R_DS`, `R_DR` (`pqz_rel.c`; hedged prover masks, CTR-PQZ-19), KeyGen / Enc / Dec from seeds (`pqz_keys.c`, §4.2; SHAKE256 added to `lazer/shake128.c`), wasm runtime (`pqz_wasm_rt.c`) |
+| `params/` | LaZer codegen (`codegen/`), relation specs (`{reg,tx,tx0,burn,ds,dr}_params.sage`), generated headers `pqz_*_params.h`, `regen.sh` (rerun the codegen on every spec and diff, P6e D1), E-S0 and E-S1 sizing (`e_s0.py`, `e_s1_proof.sage`, `estimator*.txt`; see `params/README.md`) |
 | `kat/` | Arithmetic-layer KAT: `lazer_dump.c` (one source, upstream or pqz-core backend), golden `lazer-3330e48.json`, `check.py`, `build-lazer-dump.sh` |
 | `test/` | `pqz_bench.c` (prove, verify, tamper checks, the hedging check, timings, a hash of the proofs), `run_wasm.mjs` (the same steps under node), `pqz_keys_kat.c` (SHAKE256 / KeyGen / Enc / Dec KAT and round trip, checked by `smartcontracts/vectors/pqz/pqz_kat.py --c-keys`), runs `runs/` |
 | `opt/` | P6d-2 optimisation: `bench.sh` (native + wasm bench under `scripts/capped`), `prof.sh` (gprof), `asan.sh` (ASan + UBSan, malloc path), microbenches `micro_basemul.c` / `micro_aes.c`, raw results `runs/` (STATUS.md) |
@@ -42,7 +42,7 @@ GMP, MPFR, `getentropy`).
 ```sh
 build/native/pqz_bench 7 7                                  # 7 proves, 7 + 7 honest verifies per relation (JSON lines)
 build/native/pqz_bench 1 0 2                                # R_TX only (3rd argument, bit mask: 1 R_REG, 2 R_TX,
-                                                            #   4 R_BURN, 8 R_DS, 16 R_DR; default 31 = all)
+                                                            #   4 R_BURN, 8 R_DS, 16 R_DR, 32 R_TX0; default 63 = all)
 opt/bench.sh <label>                                        # pqz_bench 5 5 + run_wasm.mjs 3 1 -> opt/runs/<label>-*.jsonl
 node test/run_wasm.mjs 3 1                                  # the same under node
 PQZ_VERIFY=fast build/native/pqz_bench 2 200                # time pqz_verify_fast (wasm: PQZ_VERIFY=fast|both node ...)
@@ -66,6 +66,7 @@ Debug build with the libc heap instead of the arena (for ASan/LSan only): `-DPQZ
 
 ```sh
 params/codegen/run.sh <LaZer 3330e48 checkout> params/tx_params.sage > params/pqz_tx_params.h   # also reg
+params/regen.sh <LaZer 3330e48 checkout> <out dir> > params/codegen-<label>.txt   # every spec, diffed against git (D1)
 params/run_e_s1.sh <LaZer 3330e48 checkout> <lattice-estimator 53da598 checkout> > params/estimator-e-s1.txt
 kat/build-lazer-dump.sh <work dir> v4      # upstream golden dump (v3 = AVX2 build); needs docker and network
 ```

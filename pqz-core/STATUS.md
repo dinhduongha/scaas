@@ -266,6 +266,52 @@ Python (40 Decs); the resample path and the counter-64 error pinned with lowered
 zeroed with the SHAKE state (`keys2-pqz-kat.txt`: ok; a tampered copy fails on each changed field). Not measured: wasm
 (P6e Task 7, `pqz-ffi` `prove` feature).
 
+## Auditor-off transfer `R_TX0` P6e Task 2 (branch `p6e-a2`; CTR-PQZ-24, P6e plan gap G1 / decision D8, ruling R6; no `proofSystemId` bump)
+
+`R_TX` without the auditor: no `pk_a`, `v_a`, `e2_a`, row 5 skipped, every other row and norm of `R_TX` kept (the same
+917 bits). Op 1 with the 66,560-byte statement (header ‖ `pk_f ‖ pk_t ‖ T ‖ u ‖ v_t ‖ v_f`), witness 12,384 B
+(`PQZ_TX0_STMT_BYTES`, `PQZ_TX0_WIT_BYTES`); `pqz_rel.c` picks `R_TX` / `R_TX0` by the length and both verifiers and the
+prover require the `auditorOn` word (offset 448, `PQZ_HDR_AUDITOR_ON`) = 1 on the 83,072-byte form and 0 on the
+66,560-byte one (R6). Spec `params/tx0_params.sage` → `params/pqz_tx0_params.h` by LaZer's codegen: kmsis 23, kmlwe 33,
+m1 145 + m2 68, MSIS β 457 (2^133.4 classical / 2^121.1 quantum), MLWE uSVP β 470 (dual_hybrid 462), knowledge error
+≤ 2^-127 (`params/estimator-e-s1-tx0.txt`). D1: the codegen rerun reproduces the five checked-in headers byte for byte
+(`params/codegen-tx0.txt`, `params/regen.sh`). ABDLOP keys from op 1's tag (as REFRESH / AUDITOR share their op's);
+the specialised verifier names it by the internal code `PQZ_REL_TX0` (0x81, never on the wire). Bench / diff / fuzz
+relation 5 (`pqz_bench` mask 32), from the bench's `R_TX` transfer without the auditor leg.
+
+**The bench's `R_TX` statement changed** (R6): its header word 448 was filler (`i·3`), now 1; so `R_TX`'s proofs and
+`proofs_fnv` change (native 5 / 10 seeds `ca69759d` → `604111c6` / `cabd8270` → `79b9326d`, wasm 3 seeds `177e6806` →
+`6780efdd`, 1 seed `e2cf9721` → `a092f2ff`); proof bytes, times and peaks the same. `R_REG`, `R_BURN`, `R_DS`, `R_DR`
+proofs byte-identical to `hedge2`. Also set to 1 in `test/pqz_sv_diff.c`, `test/pqz_sv_fuzz.c` (input byte 0 now picks
+`R_REG` / `R_TX` / `R_TX0`), `l2dom/l2dom_tx.c`, `xcheck/shim/bench.c`. The Rust setups that mirror `pqz_bench.c`
+(`pqzh/src/client.rs`, the Ligero crate's) still write the filler: their `xcheck` of `tx_stmt` differs until they set
+the word (coordination, Part B).
+
+Runs [measured] (`NP=10 NV=30 NPW=5 NVW=10 rel3/relfix.sh tx0`, `sv/rel3.sh tx0`, `sv/review/review.sh zdiff 1`, one
+capped job each; `rel3/runs/tx0-*`, `sv/runs/tx0-*`): KAT 19/19; `check_tbox_fixes: ok`; `check_sv_fixes: ok` (tree 0 /
+12, either fix reverted 12 / 12); differential test 3,484 portable + 1,736 x86-64-v3 cases over six relations, 0
+mismatches (`R_TX0` 766 + 382, incl. 24 + 12 `stmt_auditor` cases: `auditorOn` changed on `R_TX` / `R_TX0`, both
+verifiers reject every one), PRG 0; wasm `PQZ_VERIFY=both` 0 mismatches; z21 differential 174 cases over six relations,
+0 disagreements; `fails 0` everywhere (native, wasm, ASan + UBSan with only the Open 4 nits), including all six tamper
+kinds on `R_TX0` and `auditor_check` (9 cases: `R_TX` with `auditorOn` 0 — the dummy-auditor form —, 2, a high byte;
+`R_TX0` with 1, 2, a high byte; each proof under the other form's statement: rejected by both verifiers, refused by
+the prover); symbol scan clean; native and wasm proofs equal byte for byte (native 5 seeds `64ce6572` = wasm 5 seeds;
+1 seed `bdf2a395` native = wasm generic = wasm fast = wasm without SV). `pqz.wasm` 411,419 B (without SV 356,523 B).
+
+| `R_TX0` [measured] | value | for reference `R_TX` (same runs) |
+|---|---|---|
+| proof bytes, max of 10 native seeds (codegen estimate) | 42,448 (44,286) | 42,799 (44,638) |
+| prove p50 / p99 native; p50 wasm | 857 / 1,002 ms; 1,272 ms | 862 / 1,062 ms; 1,235 ms |
+| generic verify p50 / p99 native (adversarial p99); p50 wasm | 592 / 637 ms (669); 771 ms | 633 / 696 ms (663); 795 ms |
+| SV p50 / p99 portable (adversarial p99) | 8.23 / 9.36 ms (9.60) | 7.86 / 8.61 ms (8.05) |
+| SV p50 / p99 x86-64-v3 (adversarial p99) | 4.81 / 5.28 ms (5.65) | 4.71 / 5.00 ms (5.44) |
+| SV p50 / p99 wasm (adversarial p99) | 13.5 / 15.2 ms (14.3) | 13.4 / 13.9 ms (14.1) |
+| arena peak, one op, native / wasm | 298.0 / 227.3 MB (216.7 MiB, 15.3 % under 256 MiB) | 304.2 / 231.9 MB |
+| SV tables / SV verify working set / generic verify working set | 5.17 / 1.66 / 267 MB | 5.22 / 1.67 / 273 MB |
+
+Every `R_TX0` number is within host noise of `R_TX` or just under it (one key and one ciphertext slot fewer); SV p99
+≤ 15.2 ms against the 60 ms limit on every build.
+
 ## Measured (2026-10-13, this machine, single thread)
 
 Native: clang -O2, `pqz_bench 5 5` under `scripts/capped` (5 proves, 5 + 5 honest verifies, 10 adversarial). wasm32:

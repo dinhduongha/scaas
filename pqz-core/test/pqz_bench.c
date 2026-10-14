@@ -1,11 +1,11 @@
 /*
- * pqz-core test and benchmark: R_REG, R_TX, R_BURN, R_DS, R_DR prove / verify, negative cases, timing.
+ * pqz-core test and benchmark: R_REG, R_TX, R_BURN, R_DS, R_DR, R_TX0 prove / verify, negative cases, timing.
  * Same source for native (build/native/pqz_bench) and wasm32 (build/wasm/pqz.wasm, driven by test/run_wasm.mjs):
  * PQZ_WASM builds export the steps instead of main() and time on the JS side.
  *
  *   pqz_bench [n_prove] [n_verify] [rel]   prints JSON lines: sizes, times (ms), check results
- *   rel: bit mask, 1 = R_REG, 2 = R_TX, 4 = R_BURN, 8 = R_DS, 16 = R_DR (default 31 = all); n_verify = 0 also
- *   skips the adversarial verifies
+ *   rel: bit mask, 1 = R_REG, 2 = R_TX, 4 = R_BURN, 8 = R_DS, 16 = R_DR, 32 = R_TX0 (default 63 = all); n_verify = 0
+ *   also skips the adversarial verifies
  *   PQZ_VERIFY=fast (native) / step_set_fast (wasm): time pqz_verify_fast instead of pqz_verify (P6-SV; builds with
  *   PQZ_SV only, the default of build.sh)
  */
@@ -105,11 +105,12 @@ keygen (pqzkey_t *k)
 static pqzkey_t KF, KT, KA, KX;
 static uint8_t reg_stmt[PQZ_REG_STMT_BYTES], reg_wit[PQZ_REG_WIT_BYTES];
 static uint8_t tx_stmt[PQZ_TX_STMT_BYTES], tx_wit[PQZ_TX_WIT_BYTES];
+static uint8_t tx0_stmt[PQZ_TX0_STMT_BYTES], tx0_wit[PQZ_TX0_WIT_BYTES];
 static uint8_t burn_stmt[PQZ_BURN_STMT_BYTES], burn_wit[PQZ_BURN_WIT_BYTES];
 static uint8_t ds_stmt[PQZ_DISC_STMT_BYTES], ds_wit[PQZ_DS_WIT_BYTES];
 static uint8_t dr_stmt[PQZ_DISC_STMT_BYTES], dr_wit[PQZ_DR_WIT_BYTES];
-static uint8_t proofs[5][PQZ_MAX_PROOF], bad[PQZ_MAX_PROOF];
-static size_t lens[5];
+static uint8_t proofs[6][PQZ_MAX_PROOF], bad[PQZ_MAX_PROOF];
+static size_t lens[6];
 static uint8_t rnd32[32];
 static int fast; /* 1: verify with pqz_verify_fast */
 
@@ -135,23 +136,24 @@ step_set_fast (int on)
   return 0;
 }
 
-/* relation index: 0 R_REG, 1 R_TX, 2 R_BURN, 3 R_DS, 4 R_DR */
-#define NREL 5
+/* relation index: 0 R_REG, 1 R_TX, 2 R_BURN, 3 R_DS, 4 R_DR, 5 R_TX0 (op 1, told apart from R_TX by the length) */
+#define NREL 6
 static const uint8_t OPS[NREL] = { PQZ_OP_REGISTER, PQZ_OP_TRANSFER, PQZ_OP_BURN, PQZ_OP_DISCLOSE_SENDER,
-                                   PQZ_OP_DISCLOSE_RECEIVER };
-static uint8_t *const STMT[NREL] = { reg_stmt, tx_stmt, burn_stmt, ds_stmt, dr_stmt };
+                                   PQZ_OP_DISCLOSE_RECEIVER, PQZ_OP_TRANSFER };
+static uint8_t *const STMT[NREL] = { reg_stmt, tx_stmt, burn_stmt, ds_stmt, dr_stmt, tx0_stmt };
 static const size_t STLEN[NREL] = { sizeof reg_stmt, sizeof tx_stmt, sizeof burn_stmt, sizeof ds_stmt,
-                                    sizeof dr_stmt };
-static const uint8_t *const WIT[NREL] = { reg_wit, tx_wit, burn_wit, ds_wit, dr_wit };
-static const size_t WLEN[NREL] = { sizeof reg_wit, sizeof tx_wit, sizeof burn_wit, sizeof ds_wit, sizeof dr_wit };
-static const unsigned SEEDMUL[NREL] = { 31, 17, 13, 11, 7 };
+                                    sizeof dr_stmt, sizeof tx0_stmt };
+static const uint8_t *const WIT[NREL] = { reg_wit, tx_wit, burn_wit, ds_wit, dr_wit, tx0_wit };
+static const size_t WLEN[NREL] = { sizeof reg_wit, sizeof tx_wit, sizeof burn_wit, sizeof ds_wit, sizeof dr_wit,
+                                   sizeof tx0_wit };
+static const unsigned SEEDMUL[NREL] = { 31, 17, 13, 11, 7, 19 };
 static const uint8_t PSID[32] = PQZ_PROOF_SYSTEM_ID; /* statement bytes 32..63 */
 /* tamper kind 2: first byte of a 2048-coefficient key in the statement (R_REG pk, R_TX / R_BURN pk_f, disclosure
-   pk); kind 5: the last byte of a public scalar (R_REG message, R_TX fee, R_BURN / disclosure amount) */
+   pk); kind 5: the last byte of a public scalar (R_REG message, R_TX / R_TX0 fee, R_BURN / disclosure amount) */
 static const size_t KEYOFF[NREL] = { PQZ_PREFIX_BYTES + 32, PQZ_HEADER_BYTES, PQZ_HEADER_BYTES, PQZ_DISC_PK,
-                                     PQZ_DISC_PK };
+                                     PQZ_DISC_PK, PQZ_HEADER_BYTES };
 static const size_t SCALOFF[NREL] = { PQZ_PREFIX_BYTES + 31, PQZ_HDR_FEE + 31, PQZ_HDR_AMOUNT + 31,
-                                      PQZ_DISC_AMOUNT + 31, PQZ_DISC_AMOUNT + 31 };
+                                      PQZ_DISC_AMOUNT + 31, PQZ_DISC_AMOUNT + 31, PQZ_HDR_FEE + 31 };
 
 static void
 be8 (uint8_t *p, uint64_t v)
@@ -191,7 +193,8 @@ setup (void)
   const uint8_t *pks[3] = { KT.pk, KF.pk, KA.pk };
   pqz_encrypt (pks, 3, (const uint8_t (*)[16])m, r, e1, (const int16_t (*)[16])e2, u, vs);
 
-  /* header (pq-zether.md §7.7): opTag, proofSystemId, then words hashed only, fee at 256, amount 0 */
+  /* header (pq-zether.md §7.7): opTag, proofSystemId, then words hashed only, fee at 256, amount 0, auditorOn 1
+     (P6e R6: the 83,072-byte form requires it; was hashed only before P6e Task 2) */
   uint8_t *p = tx_stmt;
   memset (p, 0x5A, PQZ_PREFIX_BYTES);
   memcpy (p + 32, PSID, 32);
@@ -199,6 +202,8 @@ setup (void)
     p[i] = (uint8_t)(i * 3);
   memset (p + PQZ_HDR_FEE, 0, 64);
   be8 (p + PQZ_HDR_FEE + 24, fee);
+  memset (p + PQZ_HDR_AUDITOR_ON, 0, 32);
+  p[PQZ_HDR_AUDITOR_ON + 31] = 1;
   p += PQZ_HEADER_BYTES;
   memcpy (p, KF.pk, PQZ_POLYVEC_BYTES), p += PQZ_POLYVEC_BYTES;
   memcpy (p, KT.pk, PQZ_POLYVEC_BYTES), p += PQZ_POLYVEC_BYTES;
@@ -294,6 +299,22 @@ setup (void)
     p += 32;
     memcpy (p, mb[0], 16);
   }
+
+  /* R_TX0 (auditor off, CTR-PQZ-24): the R_TX transfer without pk_a and v_a (the same r, e1, e2_t, e2_f, so u, v_t,
+     v_f are R_TX's), header as R_TX's with auditorOn 0; no draws from the test RNG (the other setups are unchanged) */
+  memcpy (tx0_stmt, tx_stmt, PQZ_HEADER_BYTES);
+  tx0_stmt[PQZ_HDR_AUDITOR_ON + 31] = 0;
+  p = tx0_stmt + PQZ_HEADER_BYTES;
+  memcpy (p, KF.pk, PQZ_POLYVEC_BYTES), p += PQZ_POLYVEC_BYTES;
+  memcpy (p, KT.pk, PQZ_POLYVEC_BYTES), p += PQZ_POLYVEC_BYTES;
+  memcpy (p, uT, PQZ_POLYVEC_BYTES), p += PQZ_POLYVEC_BYTES;
+  memcpy (p, vT[0], PQZ_V_BYTES), p += PQZ_V_BYTES;
+  memcpy (p, u, PQZ_POLYVEC_BYTES), p += PQZ_POLYVEC_BYTES;
+  memcpy (p, vs[0], PQZ_V_BYTES), p += PQZ_V_BYTES;
+  memcpy (p, vs[1], PQZ_V_BYTES);
+  /* witness: s_f || e_f || r || e1 || e2_t || e2_f || d || d' (R_TX's without e2_a) */
+  memcpy (tx0_wit, tx_wit, 12288 + 64);
+  memcpy (tx0_wit + 12288 + 64, tx_wit + 12288 + 96, 32);
 }
 
 /* exported steps (wasm) / called from main (native) */
@@ -406,7 +427,7 @@ step_arena_peak (void)
 }
 
 #ifndef PQZ_WASM
-static const char *const NAMES[NREL] = { "R_REG", "R_TX", "R_BURN", "R_DS", "R_DR" };
+static const char *const NAMES[NREL] = { "R_REG", "R_TX", "R_BURN", "R_DS", "R_DR", "R_TX0" };
 
 static double
 now_ms (void)
@@ -478,11 +499,64 @@ hedge_check (void)
   return !ok;
 }
 
+/* P6e R6 / D8 (CTR-PQZ-24): op 1 is R_TX with the 83,072-byte statement and R_TX0 with the 66,560-byte one, and the
+   auditorOn word must say the same (1 / 0). With the honest proofs of the last prove: the R_TX statement with the word
+   0 (the "dummy auditor" form: pk_a, v_a present, auditor off), 2, or a high byte set, and the R_TX0 statement with
+   the word 1 or 2, are rejected by both verifiers and refused by the prover; each proof is rejected under the other
+   form's statement. rel: the relations proved (bit 2 R_TX, bit 32 R_TX0). */
+static int
+auditor_check (int rels)
+{
+  static const struct
+  {
+    int rel;
+    unsigned at; /* byte of the auditorOn word changed */
+    uint8_t val;
+  } C[] = { { 1, 31, 0 }, { 1, 31, 2 }, { 1, 0, 1 }, { 1, 24, 1 }, { 5, 31, 1 }, { 5, 31, 2 }, { 5, 7, 0x80 } };
+  int fails = 0, n = 0;
+  for (unsigned k = 0; k < sizeof C / sizeof C[0]; k++)
+    {
+      const int rel = C[k].rel;
+      if (!(rels >> rel & 1) || lens[rel] == 0)
+        continue;
+      uint8_t *st = STMT[rel], old = st[PQZ_HDR_AUDITOR_ON + C[k].at];
+      uint8_t pf[PQZ_MAX_PROOF];
+      size_t pl = sizeof pf;
+      st[PQZ_HDR_AUDITOR_ON + C[k].at] = C[k].val;
+      int g = pqz_verify (OPS[rel], st, STLEN[rel], proofs[rel], lens[rel]), f = 0;
+#ifdef PQZ_SV
+      f = pqz_verify_fast (OPS[rel], st, STLEN[rel], proofs[rel], lens[rel]);
+#endif
+      int prc = pqz_prove (OPS[rel], st, STLEN[rel], WIT[rel], WLEN[rel], rnd32, pf, &pl);
+      st[PQZ_HDR_AUDITOR_ON + C[k].at] = old;
+      n++;
+      if (g != 0 || f != 0 || prc == 0)
+        {
+          printf ("{\"auditor_check\": \"%s byte %u = %u\", \"generic\": %d, \"fast\": %d, \"prove_rc\": %d}\n",
+                  NAMES[rel], C[k].at, C[k].val, g, f, prc);
+          fails++;
+        }
+    }
+  if ((rels & 34) == 34 && lens[1] && lens[5]) /* each proof under the other form's statement */
+    {
+      int x = pqz_verify (OPS[1], tx0_stmt, sizeof tx0_stmt, proofs[1], lens[1])
+              | pqz_verify (OPS[5], tx_stmt, sizeof tx_stmt, proofs[5], lens[5]);
+#ifdef PQZ_SV
+      x |= pqz_verify_fast (OPS[1], tx0_stmt, sizeof tx0_stmt, proofs[1], lens[1])
+           | pqz_verify_fast (OPS[5], tx_stmt, sizeof tx_stmt, proofs[5], lens[5]);
+#endif
+      n += 2;
+      fails += x != 0;
+    }
+  printf ("{\"auditor_check\": %s, \"cases\": %d, \"fails\": %d}\n", fails ? "false" : "true", n, fails);
+  return fails;
+}
+
 int
 main (int argc, char **argv)
 {
   int np = argc > 1 ? atoi (argv[1]) : 10, nv = argc > 2 ? atoi (argv[2]) : 100, fails = 0;
-  int rels = argc > 3 ? atoi (argv[3]) : 31;
+  int rels = argc > 3 ? atoi (argv[3]) : 63;
   void *arena = malloc (ARENA_BYTES);
   const char *ve = getenv ("PQZ_VERIFY");
   if (step_set_fast (ve != NULL && strcmp (ve, "fast") == 0) != 0)
@@ -570,6 +644,8 @@ main (int argc, char **argv)
       snprintf (nm, sizeof nm, "%s verify adversarial", rel);
       stats (nm, tp, n);
     }
+  if (rels & 34)
+    fails += auditor_check (rels);
   printf ("{\"fails\": %d}\n", fails);
   return fails != 0;
 }
