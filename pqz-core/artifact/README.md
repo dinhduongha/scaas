@@ -61,6 +61,8 @@ everything on your own machine, and the package compares your results with `expe
   `sv/runs/final-*` was interrupted (see `final-rc.txt`). Only the portable differential is complete there: 2,710
   cases, 0 mismatches. Neither is the freeze.
 
+**Freeze postponed (controller 2026-10-14):** a first `--full` run was stopped after the KAT, fix checks and part of the differential test (`runs/freeze-2026-10-14-interrupted-console.txt`), because P6e found that the PQZL prover's masks are not hedged as CTR-PQZ-19 requires (P6e plan gap G2, Task 1). The fix changes every honest proof (`proofs_fnv`), so the freeze runs after P6e gate A (PQZL vectors and `proofSystemId` frozen), with a new date in the paths below.
+
 Next (heavy step under the machine-wide lock): the freeze, through the package on the host toolchain.
 
 ```sh
