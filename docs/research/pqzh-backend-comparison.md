@@ -1,3 +1,5 @@
+> **Research note — background and rationale only, not normative; the current rules are in docs/ (see decisions.md).**
+
 # PQZH backend comparison and soundness regimes (2026-10-14)
 
 Status: research summary, written 2026-10-14 (session 4) at the owner's request ("lưu tất cả thông tin nghiên cứu
