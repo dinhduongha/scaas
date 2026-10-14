@@ -1,0 +1,52 @@
+# wasm32: the verify-only lib, then the prove harness (wasm/) and the digest diff against native
+$ cargo build --release --offline --lib --target wasm32-unknown-unknown
+   Compiling version_check v0.9.5
+   Compiling typenum v1.20.1
+   Compiling shlex v2.0.1
+   Compiling find-msvc-tools v0.1.14
+   Compiling keccak v0.1.6
+   Compiling pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/p6ea3/pqz-core/stmt)
+   Compiling cc v1.8.0
+   Compiling generic-array v0.14.7
+   Compiling block-buffer v0.10.4
+   Compiling crypto-common v0.1.7
+   Compiling digest v0.10.7
+   Compiling sha3 v0.10.8
+   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/p6ea3/pqz-core/ffi)
+   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/p6ea3/pqz-core/pqzh/ligero)
+    Finished `release` profile [optimized + debuginfo] target(s) in 9.28s
+[rc=0]
+$ cargo build --release --offline --target wasm32-unknown-unknown
+     Locking 16 packages to latest compatible versions
+      Adding generic-array v0.14.7 (available: v0.14.9)
+      Adding sha3 v0.10.8 (available: v0.10.9)
+   Compiling version_check v0.9.5
+   Compiling typenum v1.20.1
+   Compiling find-msvc-tools v0.1.14
+   Compiling shlex v2.0.1
+   Compiling keccak v0.1.6
+   Compiling pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/p6ea3/pqz-core/stmt)
+   Compiling cc v1.8.0
+   Compiling generic-array v0.14.7
+   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/p6ea3/pqz-core/ffi)
+   Compiling crypto-common v0.1.7
+   Compiling block-buffer v0.10.4
+   Compiling digest v0.10.7
+   Compiling sha3 v0.10.8
+   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/p6ea3/pqz-core/pqzh/ligero)
+   Compiling pqz-ffi-wasm v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/p6ea3/pqz-core/ffi/wasm)
+    Finished `release` profile [optimized] target(s) in 8.78s
+[rc=0]
+$ sha256sum wasm/target/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm
+6d8217a075c3f1afda64b45fe4395623ca1afa82d26acf06fd725cc8a6b3ef57  wasm/target/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm
+[rc=0]
+wasm bytes 849514
+$ llvm-nm-18 --undefined-only wasm/target/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm (imports)
+strings /gmp|mpfr|hexl/i: 0
+node rc=0
+wasm run 15088 ms, memory 547422208 B
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:15.15
+	Maximum resident set size (kbytes): 375572
+cp: cannot stat '/home/ha/work/ainative/scaas/.claude/worktrees/p6ea3/pqz-core/ffi/target/run/native.jsonl': No such file or directory
+diff: /home/ha/work/ainative/scaas/.claude/worktrees/p6ea3/pqz-core/ffi/target/run/native.jsonl: No such file or directory
+native != wasm32
