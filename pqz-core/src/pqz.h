@@ -68,6 +68,9 @@ int pqz_init (void *arena, size_t arena_len);
 size_t pqz_arena_peak_bytes (void);
 void pqz_arena_peak_reset (void); /* diagnostics: the next pqz_arena_peak_bytes covers the calls that follow */
 
+/* rnd32: 32 bytes of CSPRNG output. The masks are hedged (CTR-PQZ-19): derived from rnd32, a hash of the witness and
+   the statement digest, so a repeated rnd32 never repeats masks across witnesses or statements; equal inputs give
+   equal proofs (deterministic, the KATs fix rnd32) */
 int pqz_prove (uint8_t op, const uint8_t *stmt, size_t stmt_len, const uint8_t *wit, size_t wit_len,
                const uint8_t rnd32[32], uint8_t *proof, size_t *proof_len); /* 0 = ok */
 int pqz_verify (uint8_t op, const uint8_t *stmt, size_t stmt_len, const uint8_t *proof,

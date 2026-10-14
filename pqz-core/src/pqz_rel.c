@@ -827,9 +827,29 @@ set_upsilon (const lnp_tbox_params_struct *P, polyvec_t s1, const unsigned *star
   return 1;
 }
 
+/* Hedged prover seeds (pq-zether.md CTR-PQZ-19; P6e D6): ex[0..32) seeds the commitment randomness s2, ex[32..64)
+   every mask of lnp_tbox_prove; each = SHAKE128(tag || rnd32 || SHAKE128(wit)[0..32) || hash0) with tag
+   "SCAAS-PQZ-PROVER-RND-V2" / "...-SUB-V2". A repeated or weak rnd32 for two witnesses or two statements still gives
+   unrelated masks (V1 hashed rnd32 alone). Not static: test/pqz_bench.c checks it directly. */
+void
+pqz_prover_seeds (uint8_t ex[64], const uint8_t rnd32[32], const uint8_t *wit, size_t wit_len,
+                  const uint8_t hash0[32])
+{
+  shake128_state_t st;
+  uint8_t wh[64];
+  shake128_init (st);
+  shake128_absorb (st, wit, wit_len);
+  shake128_squeeze (st, wh, 32);
+  shake128_clear (st);
+  memcpy (wh + 32, hash0, 32);
+  shake_tag (ex, "SCAAS-PQZ-PROVER-RND-V2", rnd32, 32, wh, 64);
+  shake_tag (ex + 32, "SCAAS-PQZ-PROVER-SUB-V2", rnd32, 32, wh, 64);
+  explicit_bzero (wh, sizeof wh);
+}
+
 static int
-do_prove (sys_t *S, pf_t *F, const uint8_t hash0[32], const uint8_t rnd32[32], uint8_t *proof,
-          size_t *proof_len)
+do_prove (sys_t *S, pf_t *F, const uint8_t hash0[32], const uint8_t *wit, size_t wit_len,
+          const uint8_t rnd32[32], uint8_t *proof, size_t *proof_len)
 {
   const lnp_tbox_params_struct *P = S->R->P;
   abdlop_params_srcptr tb = P->tbox;
@@ -839,8 +859,7 @@ do_prove (sys_t *S, pf_t *F, const uint8_t hash0[32], const uint8_t rnd32[32], u
   uint8_t buf[PQZ_MAX_PROOF + 4096];
   size_t len;
 
-  shake_tag (ex, "SCAAS-PQZ-PROVER-RND-V1", rnd32, 32, NULL, 0);
-  shake_tag (ex + 32, "SCAAS-PQZ-PROVER-SUB-V1", rnd32, 32, NULL, 0);
+  pqz_prover_seeds (ex, rnd32, wit, wit_len, hash0);
   int_set_i64 (lo, -tb->nu);
   int_set_i64 (hi, tb->nu);
   polyvec_urandom_bnd (F->s2, lo, hi, ex, 0);
@@ -1110,7 +1129,7 @@ pqz_prove (uint8_t op, const uint8_t *stmt, size_t stmt_len, const uint8_t *wit,
     polyvec_alloc (pk, REG.P->tbox->ring, K);
   pf_alloc (&F, R->P);
   if (build (&S, &T, op, stmt, stmt_len, pk) && witness (&T, op, wit, wit_len, F.s1))
-    rc = do_prove (&S, &F, h, rnd32, proof, proof_len);
+    rc = do_prove (&S, &F, h, wit, wit_len, rnd32, proof, proof_len);
   if (pqz_err && !POC_IGNORE_ERR)
     rc = pqz_err;
   pqz_arena_release (&base);

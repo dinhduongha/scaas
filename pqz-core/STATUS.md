@@ -1,4 +1,4 @@
-# P6d (E-S1 `pqz-core` spike) and P6d-2 (optimisation) — status (2026-10-14)
+# P6d (E-S1 `pqz-core` spike), P6d-2 (optimisation) and P6e — status (2026-10-14)
 
 Spike: branch `p6d-pqz-core`, merged to main. Optimisation P6d-2 (owner: "optimise the fork"): branch `p6d2-opt`, not
 merged. README, research note `docs/research/pqz-core-e-s1.md` (§11 = P6d-2), roadmap and TODO rows written for the
@@ -211,6 +211,37 @@ wasm 3 / 5 seeds); PoC `z21_big` ACCEPT / ACCEPT before (`rel3/runs/z21-before-n
 (`sv/runs/z21s-diff-portable.jsonl`); z21 differential 290 z21-inflated proofs, 0 disagreements, verdict = (‖z2‖² ≤
 Bsq) in every case (`sv/runs/z21s-z21diff.jsonl`); the same under ASan + UBSan 145 cases, 0 disagreements, no sanitizer report (`sv/runs/z21s-asan-*`). Generic verify p50 native `R_TX` 677 ms, `R_REG` 184 ms
 (v2 648 / 177, noise).
+
+## Hedged prover P6e Task 1 (branch `p6e-a1`; CTR-PQZ-19, P6e plan gap G2 / decision D6; no `proofSystemId` bump)
+
+`do_prove` derived the commitment randomness and every mask from `rnd32` alone (`SCAAS-PQZ-PROVER-RND-V1` /
+`…-SUB-V1`): a repeated `rnd32` (a weak browser RNG) for two witnesses repeated the masks. Now
+`pqz_prover_seeds` (`src/pqz_rel.c`) = `SHAKE128("SCAAS-PQZ-PROVER-RND-V2" ‖ rnd32 ‖ SHAKE128(wit)[0..32) ‖ hash0)`
+and `…-SUB-V2`, `hash0` the statement digest. Prover only: verifiers, transcript, proof format, sizes and arena
+unchanged; honest proofs change once. Test (`pqz_bench`, every run with `R_REG`): the seeds of two valid `R_REG`
+witnesses (keys `KF`, `KT`) under one `rnd32` and statement differ in 269 / 512 bits, one witness under two statements
+in 259 / 512, equal inputs give equal seeds, two proves with one `rnd32` give the same proof (`{"hedge": true}`).
+The Ligero (PQZH) half of D6 is Part B.
+
+Runs [measured]: `NP=10 NV=30 NPW=5 NVW=10 rel3/relfix.sh hedge` (`rel3/runs/hedge-*`, summary
+`hedge-relfix-summary.txt`) and `sv/rel3.sh hedge` + `sv/review/review.sh zdiff 1` under one capped job
+(`sv/runs/hedge-*`, summary `hedge-summary.txt`): KAT 19/19; `check_tbox_fixes: ok`; `check_sv_fixes: ok` (tree
+0 / 10, either fix reverted 10 / 10); differential test 2,710 portable + 1,350 x86-64-v3 cases, 0 mismatches, PRG 0;
+wasm `PQZ_VERIFY=both` 0 mismatches; z21 differential 145 cases, 0 disagreements; `fails 0` everywhere (native, wasm,
+ASan + UBSan with only the Open 4 nits); symbol scan clean (native, x86-64-v3, wasm, wasm without SV). Native and wasm
+proofs equal byte for byte (native 5 seeds = wasm 5 seeds; one seed alone: native = wasm generic = wasm fast = wasm
+without SV). Per-op arena peaks identical to v2 (wasm `R_TX` 231,858,048 B), largest proofs 28,114 / 42,753 / 41,946 /
+28,989 / 28,997 B; times within host noise (native generic p50 prove / verify `R_TX` 862 / 651 ms, SV p50 `R_TX`
+8.07 ms portable, 4.67 ms x86-64-v3, 13.4 ms wasm). `../artifact/expected-results.json` regenerated (provisional,
+69 / 69 checks ok).
+
+| `proofs_fnv` v2 → hedged | native 5 seeds (= wasm 5) | wasm 3 seeds | native 10 seeds | 2 seeds (SV runs) | 1 seed (alone) |
+|---|---|---|---|---|---|
+| `R_REG` | `5124b5f8` → `edf1b937` | `e23b746d` → `3e34faff` | `e2a4ba8d` → `d4d4ef83` | `a0faa73c` → `95c626e4` | `a4477f23` → `04429652` |
+| `R_TX` | `fa87fff6` → `4ec9c6e9` | `762dacd2` → `98fa56d9` | `b69bb773` → `41fd0d94` | `71396f48` → `785a380d` | `6ffad36b` → `451d28c1` |
+| `R_BURN` | `8df6b744` → `242a6785` | `3d80d4a8` → `c32fe93d` | `626710cc` → `9c5da57f` | `330c19fd` → `496c53b7` | `478eb819` → `819bba23` |
+| `R_DS` | `46c77f3e` → `dac15c76` | `216b75fc` → `3c9cde98` | `f4b59d4b` → `4f4a10ab` | `d7fbc082` → `3f530c3f` | `10639246` → `4075f5f5` |
+| `R_DR` | `84a15cd2` → `37a226ae` | `e0d2deda` → `78688027` | `ea72ce2d` → `2da4e9b2` | `22be6479` → `2d06acff` | `82621a18` → `7db4b018` |
 
 ## Measured (2026-10-13, this machine, single thread)
 
