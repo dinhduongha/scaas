@@ -383,7 +383,9 @@ v2 checks each bound on its own, so the numbers in this section hold as written;
 (analysis and proof of concept: `docs/research/pqz-l2-domain.md`; regression check `pqz-core/check_tbox_fixes.sh`).
 
 The trivial plain term has noise 0. A sum of at most `K_MAX = 1024` units has
-`|noise| ≤ 1024 · 11,872 = 12,156,928 < 2^24 = 16,777,216`, and digit sums `M_i ≤ 1024 · 15 = 15,360 < 2^14`. The debit
+`|noise| ≤ 1024 · 11,872 = 12,156,928 < 2^24 = 16,777,216`, and digit sums `M_i ≤ 1024 · 15 = 15,360 < 2^14`. Since the plain term has noise 0, the reachable maximum is 1,023 · 11,872 = 12,145,056 (an
+attacker-registered key at the norm bounds; `smartcontracts/vectors/pqz/worstcase_noise.json` proves and verifies the
+debit over it in both proof systems: 1.38× below `2^24`, 4.14× below the mint threshold below). The debit
 proof shows `e_T[i] ∈ [−2^24, 2^24)` and `0 ≤ M_i < 2^14` (complete for every honest state). Honest decryption rounds correctly
 because `2^24 < Δ/2`, and `Δ·M_i + e < q/4 + 2^24 < q/2` stays inside the centred range.
 

@@ -1,0 +1,6 @@
+# self-test cross-check against pqz-ffi on branch p6e-a3 (read only; P6e Task 7's agent owns pqz-core/ffi/)
+p6e-a3 commit 981d39a6f290c01c6920eb44bd4e702b4500ba40
+selftest.json hash ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205 | in p6e-a3 STATUS.md: True
+selftest.json a_digest f176b313331c898e11230c6addae3d44821413361e1416a6aedf9f26a7be3df0
+pqzl: ffi/selftest/pqzl_reg.hex 28093 B, proof_pqzl.json REGISTER 28093 B, byte-identical: True
+pqzh: ffi/selftest/pqzh_reg.hex 186778 B, proof_pqzh.json REGISTER 186778 B, byte-identical: True

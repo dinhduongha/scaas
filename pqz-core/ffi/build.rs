@@ -2,9 +2,9 @@
 //! -ffp-contract=off`, the specialised verifier (`-DPQZ_SV`), native with `-fstack-protector-strong`; wasm32
 //! freestanding (`-DPQZ_FREESTANDING`, src/freestanding) with pqz_wasm_rt.c's 128-bit helpers only (their shifts are
 //! branch-free, the prover shifts by secret amounts; Rust's compiler_builtins provides mem*). Then the symbol scan
-//! (../check_symbols.sh) on the archive: no malloc, stdio, libm, GMP, MPFR. Also turns the self-test proofs
-//! (selftest/*.hex) into bytes for include_bytes!.
-use std::path::{Path, PathBuf};
+//! (../check_symbols.sh) on the archive: no malloc, stdio, libm, GMP, MPFR. Also takes the self-test proofs
+//! from the REGISTER rows of smartcontracts/vectors/pqz/proof_{pqzl,pqzh}.json (bytes for include_bytes!).
+use std::path::PathBuf;
 use std::{env, fs};
 
 fn main() {
@@ -56,13 +56,18 @@ fn main() {
         panic!("check_symbols.sh: {}", String::from_utf8_lossy(&st.stderr));
     }
 
-    for name in ["pqzl_reg", "pqzh_reg"] {
-        let src = Path::new("selftest").join(format!("{name}.hex"));
-        let hex = fs::read_to_string(&src).unwrap_or_default();
-        let hex: Vec<u8> = hex.bytes().filter(|c| !c.is_ascii_whitespace()).collect();
-        let nib = |c: u8| (c as char).to_digit(16).expect("selftest hex") as u8;
-        let bin: Vec<u8> = hex.chunks(2).map(|p| nib(p[0]) << 4 | nib(p[1])).collect();
-        fs::write(out.join(format!("{name}.bin")), bin).unwrap();
+    // the self-test's compiled-in R_REG proofs (D13): the REGISTER rows of the canonical vectors (D9: read in place,
+    // no copy here); written by this crate's pqz-vectors binary
+    let vec = core.join("../smartcontracts/vectors/pqz");
+    for id in ["pqzl", "pqzh"] {
+        let src = vec.join(format!("proof_{id}.json"));
+        let j = fs::read_to_string(&src).unwrap_or_else(|e| panic!("{}: {e}", src.display()));
+        let row = &j[j.find("\"form\": \"REGISTER\"").expect("REGISTER row")..];
+        let hex = &row[row.find("\"proof\": \"").expect("proof field") + 10..];
+        let hex = &hex[..hex.find('"').unwrap()];
+        let nib = |c: u8| (c as char).to_digit(16).expect("proof hex") as u8;
+        let bin: Vec<u8> = hex.as_bytes().chunks(2).map(|p| nib(p[0]) << 4 | nib(p[1])).collect();
+        fs::write(out.join(format!("{id}_reg.bin")), bin).unwrap();
         println!("cargo:rerun-if-changed={}", src.display());
     }
     for d in ["src", "lazer", "params", "check_symbols.sh"] {

@@ -458,6 +458,42 @@ Arenas filled with 0x00 / 0xA5 / 0x5A before `pqz_init` (child processes; prove 
 digest lines (16 forms' proofs, verdicts, self-test) and 2,506 corpus results (`ffi/runs/ffi1f-fill.txt`): the core
 reads no arena byte it did not write. MSan / valgrind not run: valgrind is not installed, MSan needs an instrumented
 Rust std (nightly).
+## Vectors P6e Task 11 (branch `p6e-a4`; plan R4, D9, D13)
+
+`smartcontracts/vectors/pqz/` (the one canonical directory, D9; `README.md` there: every file, schema, scenario, what
+Python pins and what only the generator pins) is written by `pqz-ffi`'s binary `pqz-vectors` (`ffi/src/bin/`, feature
+`prove`): every value from the crate's API, every expected output from `pqz_precompile` (and `selftest()`), the
+generic PQZL verifier agreeing on every decoded PQZL input. 15 files, 11,371,429 B of JSON: `matrix`, `cbd`, `keygen`,
+`enc`, five `statement_*` (8 forms), `proof_pqzl` / `proof_pqzh` (8 rows each: six relations + REFRESH + AUDITOR),
+`fee0` (fee = 0, owner 2026-10-14: TRANSFER, TRANSFER0, BURN, REFRESH, both ids), `negative` (389 inputs: 221 decoder
+rejections with `pqz-stmt`'s reason, 168 verifier rejections, the revert at `MAX_INPUT + 1`; the limits exactly; PQZH
+encodings: element = q, opened columns swapped / repeated; PQZL coder padding; plus 9 openings for `parse_opening`),
+`selftest` (D13; `pqz-ffi`'s `build.rs` compiles the REGISTER rows' proofs in, its `selftest/*.hex` copies are
+removed), `worstcase_noise`. First built as its own crate `vecgen/` (run `vec1`; `pqz-ffi` was then on `p6e-a3`), moved
+into `pqz-ffi` after the merge (review 2026-10-14).
+
+**Worst case the verifier accepts** (review 2026-10-14, `worstcase_noise.json` `bound`) [measured]: a receiver key at
+the norm bounds (s = 36 at poly 1 coefficient 0, e = 164 at poly 0 coefficient 0) registers (`R_REG` proves and verifies
+in both systems); a credit with r = 36 along rot(e), e1 = −164 against rot(s), e2_t = (64, 0, …) has noise exactly
+B_FRESH = 11,872, and its sender's `R_TX` (e2_t at PQZL's B′ = 64 filler) proves and verifies in both systems (credit 0
+and the last); `T` = 1,023 such credits + the plain unit (noise 0): noise 12,145,056, margin 1.38× to 2^24, 4.14× to the
+mint threshold Δ − 2^24; the receiver's debit over `T` proves and verifies in both systems. pq-zether.md §4.3 notes the
+reachable maximum (12,156,928 counts 1,024 units). The honest-key construction stays as `illustrative` (10,254,552).
+
+Run `scripts/capped pqz-core/ffi/vectors/run.sh vec3 write` [measured] (`ffi/vectors/runs/vec3-*`; `vec1-*` = the
+first build, `vec2-*` = the same as `vec3` before the files' generator field named the new location): generation
+52.2 s, 440 MB RSS; `pqz-vectors --check` byte-identical, 15 / 15 files, compiled-in self-test
+proofs current, `OP_SELFTEST` through `pqz_precompile` = `ed910a2c…1333d205`; `pqz_kat.py --check` ok in 26.7 s;
+`tamper.py` 179 / 179 changed leaves caught; `pqz-ffi` tests (`--features prove,test-hooks`) all ok, incl.
+`selftest_vectors`; wasm32 replay through `pqz-ffi` (node v26.8.1) 34 / 34 proofs byte-equal with native and valid
+through its precompile.
+
+| Proof bytes [measured] | TRANSFER | TRANSFER0 | BURN | REFRESH | REGISTER | DS | DR | AUDITOR |
+|---|---|---|---|---|---|---|---|---|
+| PQZL | 42,762 | 42,431 | 41,904 | 41,915 | 28,093 | 28,977 | 28,996 | 28,986 |
+| PQZH | 230,946 | 231,480 | 232,184 | 230,280 | 186,778 | 186,456 | 187,226 | 187,194 |
+| PQZL fee 0 | 42,756 | 42,427 | 41,908 | 41,926 | | | | |
+| PQZH fee 0 | 232,142 | 231,384 | 229,608 | 231,544 | | | | |
 
 ## Measured (2026-10-13, this machine, single thread)
 

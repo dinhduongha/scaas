@@ -1,0 +1,7 @@
+   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/p6ea4/pqz-core/ffi)
+    Finished `release` profile [optimized + debuginfo] target(s) in 3.85s
+   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/p6ea4/pqz-core/ffi)
+    Finished `release` profile [optimized + debuginfo] target(s) in 14.41s
+   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/p6ea4/pqz-core/ffi)
+   Compiling pqz-ffi-wasm v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/p6ea4/pqz-core/ffi/wasm)
+    Finished `release` profile [optimized] target(s) in 8.09s
