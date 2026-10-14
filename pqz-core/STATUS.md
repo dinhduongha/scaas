@@ -495,6 +495,18 @@ through its precompile.
 | PQZL fee 0 | 42,756 | 42,427 | 41,908 | 41,926 | | | | |
 | PQZH fee 0 | 232,142 | 231,384 | 229,608 | 231,544 | | | | |
 
+## Spec: serialization v1, P6e Task 12 (branch `p6e-a6`; plan D2, D4, D7, D12, D14, D15)
+
+Docs only, no code change. [pq-zether.md §8.1 "Serialization v1"](../docs/contracts/pq-zether.md#serialization) now
+specifies every byte this core, `pqz-stmt`, `pqz-ffi` and the Ligero crate exchange: the precompile framing and its
+check order, both ids and `MAX_PROOF(id)`, the 640-byte header word by word with the decoder's rule per form, every
+statement body with offsets (checked against `pqz_kat.py`'s `parse` on the vector statements), objects, bundle,
+opening, `entryRef`, `authDigest`, the witness layouts (prover API), the PQZL coder format (field order, widths, `D`
+and `log2(stdev/1.55)` per relation from `params/pqz_<rel>_params.h`, end bit), the Ligero proof format and Merkle
+order, `OP_SELFTEST`. §5 states the implemented transcripts (D7), §8 the bump rule (D4), §4.4 the proof sizes above.
+Spec text that disagreed with the code was changed to the code (list at the end of §8.1); decisions.md has the D2, D4,
+D7, D12, D14 and D15 (proof half) lines.
+
 ## Measured (2026-10-13, this machine, single thread)
 
 Native: clang -O2, `pqz_bench 5 5` under `scripts/capped` (5 proves, 5 + 5 honest verifies, 10 adversarial). wasm32:
