@@ -5,8 +5,10 @@
 Written 2026-10-14 at the owner's request (owner decision 2026-10-14: build and measure a Ligero backend for PQZH
 as the alternative to the Plonky3 STARK of `pqzh-prototype.md` / `pqzh-zk-ext5.md`). Branch `pqzh-ligero` (from main
 `79924cf`, not merged). **Status: built and measured** (crate `pqz-core/pqzh/ligero/`, raw runs
-`pqz-core/pqzh/ligero/runs/`, every file named below). The two owner decisions of 2026-10-14 on this design are
-recorded in full in §9; **no other decision is recorded here** (§9 lists the open questions).
+`pqz-core/pqzh/ligero/runs/`, every file named below), **including a full EVM verifier** (test-only Solidity/Yul,
+§11). The owner decisions of 2026-10-14 on this design (radix 431, the modified ZK construction, the proven regime
+with THE preset, the Johnson-bound reference preset) are recorded in full in §9, with the controller's 256 KB proposal;
+**no other decision is recorded here** (§9 lists the open questions).
 
 **[measured]** marks a number from a run in `runs/` (machine as in `pqzh-prototype.md` §2: AMD Ryzen 5 7235HS, single
 thread, every timed run alone under `scripts/capped`, 4 GB memory cap). **[estimate]** marks a number from the
@@ -16,6 +18,16 @@ conclusion drawn here. Paper references are to the extended Ligero paper, Ames, 
 *Ligero: Lightweight Sublinear Arguments Without a Trusted Setup*, ePrint 2022/1608.
 
 ## 1. Result
+
+- **Owner decision 2026-10-14 (a): the PQZH soundness regime is PROVEN** (unique decoding, Ligero Thm 4.7 form), and
+  the radix-431 preset n = 32,756, k = 817, t = 121 is THE preset: `R_TX` 230,392 B, `R_REG` 186,970 B. Conjectured
+  numbers below are reference only; the Johnson-bound preset (decision (b), §5.3) is reference only and is *larger*
+  in F_q^4 (`R_TX` 257,592 B).
+- **Without the precompile (EVM, §11): no.** A full Solidity/Yul verifier accepts the real proofs and rejects every
+  mutation, but proven `R_TX` costs 530 M gas to verify (534.6 M per transaction with the EIP-7623 calldata floor,
+  31.9× the 16,777,216 cap); a hand-scheduled verifier would still need ≈ 124 M [estimate]. The precompile is
+  required; with the proposed 256 KB proof limit / `MAX_INPUT` 262,144 B (proposal (c)) the proven preset fits it
+  (worst case 243,150 B).
 
 **Ligero over F_q builds, proves and verifies `R_REG` and `R_TX` with zero knowledge at 128 bits (per term). With the
 radix-431 domains (owner decision (1), §9) `R_TX` is 230,392 B proven / 92,072 B conjectured, proving in 0.67 /
@@ -221,6 +233,44 @@ rate ≈ 1/40 because t → 112 as the rate → 0 (factor → 1/2) and the test 
 shrink with the rate. The first model (`runs/p0-params.txt`) had 3 base blinding rows and k | n; its
 298 / 112 KB `R_TX` estimates were 2 % / 1 % below the measured 2/19/43 build (305 / 113 KB).
 
+### 5.3 Johnson-bound proven preset — reference only (owner decision (b))
+
+**What it rests on.**
+
+1. *Proximity:* BCIKS20 (Ben-Sasson, Carmon, Ishai, Kopparty, Saraf, *Proximity Gaps for Reed–Solomon Codes*, FOCS
+   2020 / JACM 2023), correlated agreement in the list-decoding regime: Theorem 1.5 (lines) in its affine-space form
+   (Theorem 1.6), the bound ethSTARK and Plonky3's `p3-security` call "Johnson". For RS[n, 2k − 1] over F_{q^4}
+   (evaluation points in F_q), rate r = (2k − 1)/n, δ = 1 − √r − η, m = max(⌈√r/(2η)⌉, 3): if a random element of
+   the tested affine space is δ-close with probability above ε = (m + ½)^7 / (3 r^{3/2}) · n² / |F_{q^4}|, all
+   spanning words agree with codewords on one set S, |S| ≥ (1 − δ) n. Charged **once** for the affine space of the
+   2m + 3 words, the best F_q^4 parameters reach 128.7 bits; charged **per spanning word** (the conservative
+   accounting this note uses for the unique-decoding term) **no F_q^4 parameter reaches 128 bits** (best 124.4,
+   `runs/p1-params.txt`, Johnson table).
+2. *Interleaving and ZK:* the committed rows (witness rows, their degree-correction words X^{k−1} p_i, the F_q^4
+   blinding rows) are one interleaved RS code tested by one random combination, as in §4.1. ZK is unchanged: it uses
+   only t ≤ k − ℓ − 1 and the blinds' spaces, not δ. The degree correction needs (1 − δ) n ≥ 3k − 2 (holds:
+   0.599 · 6,536 = 3,915 ≥ 2,584).
+3. *Consistency tests (linear, quadratic):* the per-query factor max(1 − δ, (2k − 2)/n) needs **mutual correlated
+   agreement** up to δ: every codeword δ-close to the tested combination must agree with the combination of the
+   decoded rows on S, so that a prover who sends w ≠ ŵ is caught at a rate ≥ δ. In the unique-decoding regime that
+   is automatic; up to the Johnson radius it is a newer kind of statement (the notion WHIR, Arnon–Chiesa–Fenzi–Yogev,
+   ePrint 2024/1586, works with). **Gap:** I did not verify a proof of it up to the Johnson radius for Reed–Solomon
+   codes, and none specific to Ligero's interleaved tests with ZK blinding rows. Without it the per-query term is
+   δ + (2k − 2)/n (a second codeword close to the combination can match corrupted columns), and
+   max(1 − δ, δ + (2k − 2)/n) is smallest at the unique-decoding radius: the Johnson regime then gains nothing.
+
+**Preset** (`Params::johnson_preset`, `ligero_params.py` `johnson`): n = 6,536, k = 862 (rate ≈ 1/7.6), m = 3,
+η = √r/6, per-query factor 0.599, t = 152, ℓ = 709; field term 128.7 bits (once), query 128.4 bits. Measured
+[`runs/l4-johnson*.jsonl`]: `R_TX` 257,592 B, prove 608 ms, verify p99 12.2 ms native / 60.3 ms wasm32; `R_REG`
+203,768 B; 960 mutations, 0 accepted (§6).
+
+**Why reference only:** (i) in F_q^4 it is *larger* than the unique-decoding preset (257.6 vs 230.4 KB for `R_TX`):
+the list-decoding error grows as n² (m + ½)^7 / r^{3/2}, so 128 bits force a short code (n = 6,536) at a high rate,
+and t stays at 152; (ii) its field term clears 128 bits only when the BCIKS20 error is charged once for the whole
+affine space; (iii) it relies on mutual correlated agreement up to the Johnson radius for Ligero's consistency tests
+with ZK blinds — newer, with larger error terms, and less vetted for interleaved Ligero with ZK than the
+unique-decoding argument of §4.1. A larger challenge field (F_{q^5} / F_{q^6}) would relax (i)–(ii); not built.
+
 ## 6. Measurements [measured]
 
 ### 6.1 Native (`runs/l2-<regime>-r431-<0|1>.jsonl`, `-time.txt`; 3 proofs, 100 honest verifies, 12 mutation kinds × 40 per relation)
@@ -235,6 +285,11 @@ shrink with the rate. The first model (`runs/p0-params.txt`) had 3 base blinding
 | `R_TX` | conjectured | +431 | 18,533, 344, 24, 319, 287 | 92,072 (41,808 / 43,824 / 6,400) | 932 ms | 49.5 MB / 54 MB | 3.18 / 3.51 ms | 0.82 ms | 0 / 0 | 130.1 / 144.6 / 154.3 |
 | `R_REG` | conjectured | 2/19/43 | 6,536, 172, 27, 144, 303 | 79,478 (21,240 / 51,894 / 6,304) | 247 ms | 18.8 MB / 24 MB | 1.63 / 1.74 ms | 0.66 ms | 0 / 0 | 130.8 / 146.1 / 155.4 |
 | `R_TX` | conjectured | 2/19/43 | 6,536, 344, 35, 308, 287 | 113,414 (42,072 / 63,910 / 7,392) | 295 ms | 20.1 MB / 24 MB | 3.59 / 4.31 ms | 1.08 ms | 0 / 0 | 129.8 / 146.2 / 154.3 |
+| `R_REG` | Johnson (reference) | 2/19/43/431 | 6,536, 862, 152, 709, 63 | 203,768 (107,040 / 73,264 / 23,424) | 342 ms | 7.7 MB / 17 MB | 8.62 / 9.56 ms | 1.08 ms | 0 / 0 | 128.4 / 128.7 (BCIKS once) / 155.4 |
+| `R_TX` | Johnson (reference) | 2/19/43/431 | 6,536, 862, 152, 709, 124 | 257,592 (107,040 / 128,048 / 22,464) | 608 ms | 12.5 MB / 17 MB | 11.57 / 12.21 ms | 1.34 ms | 0 / 0 | 128.4 / 128.7 (BCIKS once) / 154.4 |
+
+The Johnson rows are `runs/l4-johnson.jsonl` / `-time.txt` (same bench settings); their proximity term is the BCIKS20
+list-decoding error (§5.3), not (2m + 3) n / |F|.
 
 Max RSS is the whole bench process (both relations). Sizes vary by up to ≈ 1.5 KB with the prover's randomness (the
 number of distinct opened columns and the multiproof depend on the transcript): `R_TX` proven 230,392 B here,
@@ -253,6 +308,10 @@ number of distinct opened columns and the multiproof depend on the transcript): 
 | `R_TX` | conjectured | +431 | 1,878 ms | 14.7 / 16.8 ms | 1.06 ms | 52 MiB | 0 |
 | `R_REG` | conjectured | 2/19/43 | 537 ms | 6.15 / 7.29 ms | 0.75 ms | 21 MiB | 0 |
 | `R_TX` | conjectured | 2/19/43 | 674 ms | 16.2 / 17.6 ms | 1.03 ms | 22 MiB | 0 |
+| `R_REG` | Johnson (reference) | 2/19/43/431 | 713 ms | 39.2 / 57.4 ms | 1.31 ms | 10 MiB | 0 |
+| `R_TX` | Johnson (reference) | 2/19/43/431 | 1,259 ms | 57.8 / 60.3 ms (above the 60 ms limit) | 1.51 ms | 15 MiB | 0 |
+
+Johnson rows: `runs/l4-johnson-wasm.jsonl`.
 
 wasm32 module 252,947 B (`wasm_bytes` in the run files; build log `runs/l2-wasm-build.txt`). The wasm32 proofs for seed 1 have the same lengths as the native
 seed-1 proofs of `runs/l1-tests.txt` (187,994 / 231,950 B proven, 63,008 / 92,552 B conjectured, radix 431), and
@@ -319,12 +378,15 @@ own Rust (library incl. unit tests) over F_q with Keccak only (no Plonky3). Its 
 spare).
 
 What it does not do: **reach 160 KB proven** — 230 KB, of which ≈ 101 KB are the three test polynomials that no rate
-change shrinks. The conjectured proofs (92 / 63 KB) are well under the line. Suggested defaults if the owner adopts
-it: the radix-431 proven preset (n = 32,756, k = 817, t = 121, ℓ = 695) for both relations; the conjectured preset
-only if the owner accepts the conjectured regime (§5.1 caveat).
+change shrinks. With the owner's decision (a) (proven regime, THE preset n = 32,756, k = 817, t = 121, ℓ = 695 for both
+relations) the controller's proposal (c) — PQZH proof limit 160 KB → 256 KB, precompile `MAX_INPUT` 262,144 B — fits
+it: the largest possible proven proof (t distinct columns, every multiproof level at its maximum) is 243,150 B for
+`R_TX` and 198,138 B for `R_REG`; measured 230,392 / 186,970 B. (The Johnson reference preset could exceed it: worst
+case 273,288 B for `R_TX`.)
 
-Not covered here and needed before adoption: an EVM verifier gas estimate (the verify is Keccak plus 42-bit modular
-arithmetic, `mulmod`-friendly [inference]), a proofSystemId for the Ligero kind, and an independent review of §4.1.
+**It needs the precompile**: without it (§11) proven `R_TX` costs ≈ 32× the transaction cap as measured and ≈ 7× at
+an opcode floor; no tuning, parameter choice or local protocol change closes that. Still needed before adoption: a
+proofSystemId for the Ligero kind and an independent review of §4.1.
 
 ## 9. Owner decisions 2026-10-14 and open questions
 
@@ -339,18 +401,39 @@ arithmetic, `mulmod`-friendly [inference]), a proofSystemId for the Ligero kind,
    paper's §4.7 text; write the argument why it is HVZK and sound. *Status: done* — built in `ligero.rs` (with the
    blinds in F_{q^4}, 12 base rows, which ZK needs because w, q, h have F_{q^4} coefficients), argument in §4.1,
    tests in `tests/attacks.rs`.
+3. **(a) Soundness regime = PROVEN** (owner, 2026-10-14), using the unique-decoding analysis of §4.1 / §5.1 (Ligero
+   Thm 4.7 form): the radix-431 preset n = 32,756, k = 817, t = 121 is THE preset (`R_TX` 230,392 B, `R_REG`
+   186,970 B). Conjectured is not used (it rests on the up-to-capacity conjecture, disproved in general by
+   Crites–Stewart, ePrint 2025/2046); its numbers stay as reference. *Status: recorded; `Params::preset(op, true,
+   true)` is that preset; the note's tables mark conjectured as reference.*
+4. **(b) Johnson-bound proven preset — add as documentation / reference only**: soundness from the list-decoding
+   proximity gaps (BCIKS20-style, field-size error terms in F_q^4), stating exactly the theorem and the interleaved /
+   ZK conditions relied on and any gap in applying it to Ligero's tests; extend `ligero_params.py`; measure it like
+   the others (sizes, prove, verify native + wasm32, 960 mutations) and include it in the EVM gas table; say why it is
+   reference only (newer, larger error terms, less vetted for interleaved Ligero with ZK). *Status: done* — §5.3
+   (theorem, conditions, the mutual-correlated-agreement gap), `ligero_params.py` Johnson table,
+   `Params::johnson_preset` (n = 6,536, k = 862, t = 152), `runs/l4-johnson*` (960 mutations, 0 accepted), EVM rows
+   in §11.
+5. **(c) Controller proposal (not an owner decision): PQZH proof limit 160 KB → 256 KB, precompile `MAX_INPUT`
+   262,144 B**, so that the proven preset fits. Recorded as a proposal; the proven worst cases are 243,150 B (`R_TX`)
+   and 198,138 B (`R_REG`) (§8).
+6. **EVM verifier (owner correction 2026-10-14):** the 2026-10-13 ruling "no chain needs PQZH without the precompile,
+   build no Solidity verifier" is **withdrawn**; if PQZH fits the limits on a chain without the precompile it will be
+   used there. *Status: measured* (§11): it does not fit, in any regime.
 
 **Open questions for the owner** (none blocks further work):
 
 1. Adopt Ligero over F_q as the PQZH backend in place of the FRI (or WHIR) STARK?
-2. Proven `R_TX` is 230 KB, over the 160 KB line: raise the line, accept the conjectured regime (92 KB), or try the
-   remaining reductions — 24 grinding bits (t 121 → 112, ≈ −9.5 KB [estimate]), 16-byte salts (≈ −1.9 KB), a smaller
-   test-polynomial encoding (not explored)?
+2. The 160 KB line: adopt proposal (c) (256 KB / `MAX_INPUT` 262,144 B)? Remaining size reductions if wanted:
+   24 grinding bits (t 121 → 112, ≈ −9.5 KB [estimate]), 16-byte salts (≈ −1.9 KB).
 3. ~~Does the 50 ms verify budget apply to wasm32?~~ **Resolved** by the owner's ruling of 2026-10-14 (CTR-PQZ-09,
    `docs/contracts/pq-zether.md`, `docs/decisions.md`): the verify limit is 60 ms p99 on the chain host and also bounds
    wasm32. Ligero's proven `R_TX` (55.9 ms wasm32, 10.5 ms native) passes; no wasm-specific multiply is needed.
 4. proofSystemId for the Ligero kind (the bench statements carry the STARK's id, which the relation only hashes).
 5. An external review of the modified ZK construction's argument (§4.1) before adoption.
+6. PQZH on chains without the precompile: §11 says Ligero cannot serve them (nor, for proven + ZK, the STARK of
+   `pqzh-solidity-verifier.md`). Accept that PQZH needs the precompile, or fund a different design for such chains
+   (e.g. a succinct-verifier proof system or recursion)?
 
 ## 10. Files and how to rerun
 
@@ -361,3 +444,131 @@ Crate `pqz-core/pqzh/ligero/` (own `Cargo.toml` / `[workspace]`, path dependency
 `scripts/capped sh -c 'cd pqz-core/pqzh/ligero && cargo test --release --offline'`, then
 `scripts/capped pqz-core/pqzh/ligero/runs/measure.sh l2` (4 native presets, wasm32 build and 4 wasm runs, `xcheck`).
 The STARK crate `pqz-core/pqzh/` is unchanged on this branch (`measure.sh` reruns its `xcheck`, which builds it; its tests were not rerun since no file of it changed).
+EVM (§11): `src/bin/ligero_export.rs` (fixtures), `evm_model.py`, `runs/evm.sh` (tests, Johnson bench + wasm32,
+fixtures, forge), `runs/forge.sh`; Solidity in `smartcontracts/evm/test/pqzh/ligero/`, fixtures in
+`smartcontracts/evm/test/vectors/pqzh-ligero/`.
+
+## 11. EVM verifier without the precompile
+
+Owner correction 2026-10-14 (§9, item 6): the 2026-10-13 ruling "build no Solidity verifier" is withdrawn; if PQZH fits
+the limits on a chain without the precompile it will be used there. The question measured here: **does one transaction
+carrying a Ligero proof verify under the EIP-7825 cap of 16,777,216 gas**, with the EIP-7623 calldata floor? Layout as
+`pqzh-solidity-verifier.md`: test-only code, never deployed; the transaction model is that note's (21,000 + max(4
+tokens + execution, 10 tokens), with the operation's other calldata and execution from pq-zether.md §9.3: transfer
+119 k tokens and 0.31 M, register 67 k tokens and 3.45 M including the SSTORE2 of the key).
+
+### 11.1 Result: no, in any regime
+
+| Relation | Preset | t | Proof B | Verify gas [measured] | Proof calldata floor (EIP-7623) | Tx gas (EIP-7623) | × cap | Tx gas at the opcode floor [estimate] | × cap |
+|---|---|---|---|---|---|---|---|---|---|
+| `R_TX` | **proven (THE preset)** | 121 | 231,950 | 530.2 M | 9.00 M | 534.6 M | 31.9 | 124.2 M | 7.4 |
+| `R_REG` | **proven (THE preset)** | 121 | 187,994 | 323.8 M | 7.31 M | 330.5 M | 19.7 | 79.9 M | 4.8 |
+| `R_TX` | conjectured (reference) | 24 | 92,552 | 176.7 M | 3.59 M | 179.0 M | 10.7 | 35.4 M | 2.1 |
+| `R_REG` | conjectured (reference) | 20 | 63,008 | 64.9 M | 2.44 M | 69.6 M | 4.1 | 17.7 M | 1.05 |
+| `R_TX` | Johnson (reference) | 152 | 258,264 | 644.9 M | 10.01 M | 649.7 M | 38.7 | 152.8 M | 9.1 |
+| `R_REG` | Johnson (reference) | 152 | 201,588 | 403.4 M | 7.83 M | 410.3 M | 24.5 | 98.8 M | 5.9 |
+
+[measured: `runs/l6-forge.txt` (`test_gas_*`: verify gas inside `verify`, proof tokens, the transaction line);
+floor: `runs/e1-evm-model.txt`.] Proofs are the seed-1 fixtures (`ligero_export`), so sizes differ by ≤ 1.6 KB from
+§6's seed-2 benches.
+
+Decide-ready [inference]:
+
+- **Proven `R_TX` does not fit without the precompile**: 31.9× the cap as measured; even a hand-scheduled verifier
+  (every value on the stack) needs ≈ 124 M, 7.4× the cap. The proof's calldata floor alone is 9.0 M (54 % of the
+  cap), 10.2 M with the transfer's other calldata, which leaves ≈ 12.4 M of execution for the verifier.
+- **Proven `R_REG` does not fit either**: 19.7× measured, ≈ 4.8× at the floor.
+- The reference presets do not fit: conjectured `R_REG` is the closest (≈ 17.7 M at the floor, 5 % over; 69.6 M as
+  measured); Johnson is worse than proven.
+- **PQZH-Ligero therefore needs the precompile.** The STARK route does not fill the gap for the decided regime: proven
+  + ZK `R_TX` was ≈ 21.4 M even at its floor (`pqzh-solidity-verifier.md` §1).
+
+### 11.2 What was built [measured]
+
+- `smartcontracts/evm/test/pqzh/ligero/LigeroVerifier.sol`: a full port of `ligero.rs` verify and `cs.rs` comb —
+  Keccak-256 transcript and seed, the 16-bit proof of work, query indices, canonical checks of every field element,
+  salted leaves and the pruned Keccak multiproof, statement parsing as rel.rs (length, canonical coefficients, fee
+  word < 2^64), the layout, the linear test's combination (ring blocks with the `f_m` recurrence, e-terms, rows 3–7,
+  norms, bit decompositions), the sum check, and per opened column the proximity, linear and quadratic identities with
+  the twelve ZK blinding rows. F_q^4 is one packed word (four 64-bit lanes); lazy sums use two words of 128-bit
+  lanes. Runtime code 18,177 B (under EIP-170). `scripts/size_gate.py` checks `forge build src` only, so it does not
+  apply to these test contracts. The matrix A (393,216 B, canonical 6-byte coefficients) sits in 16 data contracts of
+  24,576 B (EIP-170-sized, so valid on mainnet-style chains too) and is copied to memory once per verify.
+- Fixtures: `ligero_export` writes the same statement and proof bytes the Rust verifier takes
+  (`smartcontracts/evm/test/vectors/pqzh-ligero/`, 3.8 MB): A, the six honest proofs (+ a proof of the statement with
+  byte 0 flipped, for the `other_proof` kind), and seven invalid-witness proofs made with `prove_unchecked`.
+- `LigeroTest.t.sol` [`runs/l6-forge.txt`]: all six honest proofs accepted. 12 mutation kinds (pqzh
+  `client::mutate`, adapted to this proof format) × 9 per relation and preset = **648 mutated inputs, 0 accepted,
+  0 reverts**. The **7 invalid witnesses** (`R_REG`: ℓ2 norm exceeded with small coefficients, a coefficient out of
+  range; `R_TX`: ℓ2 norm, digit out of range, e2 norm, overspend, a wrong ring row) are **all rejected**, each by the
+  linear or quadratic test after a full verification. Earlier forge runs are kept as `runs/l4-forge-failed-compile.txt`
+  and `runs/l5-forge-failed-test-overflow.txt` (a uint8 overflow in the test's own mutation code, fixed).
+
+### 11.3 Where the gas goes [measured, `runs/l6-forge.txt`]
+
+| Stage (M gas) | `R_TX` proven | `R_REG` proven | `R_TX` conjectured | `R_REG` conjectured |
+|---|---|---|---|---|
+| statement checks + Keccak seed | 0.90 | 0.18 | 0.90 | 0.18 |
+| transcript, proof of work, query indices | 4.20 | 3.77 | 2.98 | 2.57 |
+| columns (canonical checks, leaves) + Merkle multiproof | 2.71 | 2.09 | 0.91 | 0.75 |
+| copy of A from the data contracts | 1.00 | 0.87 | 0.87 | 0.72 |
+| combination, ring blocks (the statement-matrix work) | 98.77 | 31.06 | 98.64 | 30.93 |
+| combination, rest + linear sum check | 5.36 | 1.76 | 4.93 | 0.84 |
+| **per-column checks** | **417.21** | **284.09** | 67.49 | 28.92 |
+| total | 530.16 | 323.82 | 176.72 | 64.90 |
+
+Unit costs (`LigeroUnits.t.sol`, same file): F_q^4 × F_q multiply-accumulate 180 gas (an 8×-unrolled pointer loop:
+160), test-polynomial coefficient 213, power 88, Lagrange slot 346, column row sum 194, quadratic triple 380, F_q^4
+product 598, A-pass term 284, ring recurrence step 3,923. The model built from these counts reproduces every measured
+verify within −4.5 to −7 % (`runs/e1-evm-model.txt`).
+
+- **Dominant: the per-column checks** (79 % of proven `R_TX`, 88 % of proven `R_REG`). At each opened column the
+  verifier evaluates the linear test's combination vectors at η_j (one multiply-accumulate per witness value that has
+  a statement coefficient: ≈ 10,500 for `R_TX`, ≈ 4,800 for `R_REG`) and the three test polynomials (4,204
+  coefficients), for 121 columns: 1.78 M (`R_TX`) / 1.09 M (`R_REG`) multiply-accumulates. At ≥ 40 gas each, that is
+  ≥ 71 M / 44 M gas whatever the code. This is Ligero's verifier — linear in the circuit times t — meeting an EVM
+  where a 42-bit multiply-accumulate costs tens of gas.
+- **Second: the statement matrix** (19 % of `R_TX`): two passes over A (2 × 65,536 multiply-accumulates) and 12,288
+  recurrence steps — ≈ 15.6 M even at the floor for `R_TX` (5.3 M for `R_REG`), more than the 12.4 M of execution the
+  cap leaves next to the proven `R_TX` calldata.
+- Keccak (transcript, leaves, multiproof) is ≤ 1.5 %.
+
+### 11.4 Fixes considered [estimate, `evm_model.py`]
+
+| Fix | What it changes | Proven `R_TX` tx gas | Fits? |
+|---|---|---|---|
+| None (this code) | — | 534.6 M | no |
+| Hand-scheduled Yul/Huff (opcode floor) | ÷ 4.4 on execution | 124.2 M | no |
+| Parameter choice (the cheapest (n, k) over the grid) | fewer test-polynomial coefficients per column (k = 431) against more bytes | 110.5 M (floor), n = 18,533, k = 431, t = 120, 304 KB | no |
+| Preprocessed statement commitment for A | at most the A passes (≈ 6.6 M at the floor) | ≥ 118 M | no |
+| Protocol variant: the prover sends R_i(η_j) for the 19 interpolated vectors; one batched tensor check replaces the witness-sized term per column | −1.27 M multiply-accumulates; +55 KB of calldata (+2.2 M floor) | ≈ 60 M (floor: 40 M per-column, 15.6 M statement, 4.9 M calldata) | no |
+| + a polynomial commitment for w, q, h (an FRI / WHIR opening instead of evaluating them at t points) | removes the 4,204-coefficient term; a different proof system | statement ≈ 15.6 M > the 12.4 M left by the calldata | no |
+
+No change inside this design brings proven `R_TX` under the cap; the decided regime puts t ≥ 112 for every rate,
+and each opened column costs work linear in the witness. Execution the cap can absorb is bounded by the calldata: under
+EIP-7623, 4 tokens per proof byte leave ≈ 12.4 M of execution for proven `R_TX`.
+
+### 11.5 Which preset minimises the total
+
+From the grid of `runs/e1-evm-model.txt` (smallest transaction per regime; size model p1, units of §11.3):
+
+| Relation | Regime | Verifier | n | k | t | Proof B | Tx gas |
+|---|---|---|---|---|---|---|---|
+| `R_TX` | proven | this code | 18,533 | 344 | 119 | 378,347 | 443.7 M |
+| `R_TX` | proven | floor | 18,533 | 431 | 120 | 304,006 | 110.5 M |
+| `R_REG` | proven | this code / floor | 32,756 | 344 | 116 | 227,319 | 221.7 / 59.4 M |
+| `R_TX` | conjectured | this code / floor | 18,533 | 344 | 24 | 93,639 | 167.0 / 35.4 M |
+| `R_REG` | conjectured | floor | 18,533 | 152 | 19 | 64,002 | 17.4 M |
+| `R_TX` / `R_REG` | Johnson | floor | 3,448 | 172 / 152 | 78 / 74 | 479,715 / 279,784 | 87.0 / 44.2 M |
+
+The gas-optimal presets are smaller-k, larger-proof versions of the size-optimal ones (a smaller k shortens the three
+test polynomials evaluated at every column, at the price of more rows per column). The best gives 110 M against
+124 M for THE preset. **The choice of preset does not change the conclusion.**
+
+### 11.6 Rerun
+
+```sh
+scripts/capped pqz-core/pqzh/ligero/runs/evm.sh l4      # Rust tests, Johnson bench + wasm32, fixtures, forge
+scripts/capped pqz-core/pqzh/ligero/runs/forge.sh l6    # forge only (verifier + unit costs)
+python3 pqz-core/pqzh/ligero/evm_model.py > pqz-core/pqzh/ligero/runs/e1-evm-model.txt
+```
