@@ -1,0 +1,25 @@
+# PROBE (pqzh-zk-whir.md §10, 2026-10-14 re-examination): byte breakdown of one ZK WHIR R_TX proof field by field,
+# span timings of its prover (tracing), and HidingWhirPcs micro-timings. Not part of the PQZH build.
+[package]
+name = "wr-probe"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+pqzh = { path = "../.." }
+p3-batch-stark = "=0.9.0-rc.1"
+p3-whir = "=0.9.0-rc.1"
+p3-commit = "=0.9.0-rc.1"
+p3-multilinear-util = "=0.9.0-rc.1"
+p3-field = "=0.9.0-rc.1"
+p3-keccak = "=0.9.0-rc.1"
+rand = { version = "=0.10.3", default-features = false, features = ["std_rng"] }
+serde = { version = "=1.0.229", default-features = false }
+tracing-subscriber = { version = "0.3", default-features = false, features = ["fmt", "std"] }
+
+[profile.release]
+debug = 1
+panic = "unwind"
+
+[workspace]

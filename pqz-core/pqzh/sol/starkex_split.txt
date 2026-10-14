@@ -1,0 +1,44 @@
+## SHARP proof on Ethereum mainnet, 2026-10-14 (blocks 26,189,667-26,189,669) [measured: receipts]
+
+| tx | method | gasUsed | calldata B | EIP-7623 floor | at floor? |
+|---|---|---|---|---|---|
+| 0x3dee0aac | verifyMerkle | 320,720 | 10,724 | 320,720 | yes |
+| 0x22de0f81 | verifyMerkle | 320,720 | 10,724 | 320,720 | yes |
+| 0xc2253f4d | verifyMerkle | 320,870 | 10,724 | 320,870 | yes |
+| 0x38b28397 | verifyFRI | 408,260 | 12,548 | 408,260 | yes |
+| 0x5b7b04bf | verifyFRI | 377,210 | 11,492 | 377,210 | yes |
+| 0x483cd96f | verifyFRI | 347,150 | 10,436 | 347,150 | yes |
+| 0x26c4d508 | verifyFRI | 316,610 | 9,380 | 316,610 | yes |
+| 0xaf7d668d | verifyFRI | 285,860 | 8,324 | 285,860 | yes |
+| 0xaaa51690 | verifyFRI | 256,250 | 7,268 | 256,250 | yes |
+| 0x6c078c41 | verifyFRI | 179,480 | 5,156 | 179,480 | yes |
+| 0xb04c1fa8 | registerContinuousPageBatch | 1,044,686 | 24,964 | 631,180 | no |
+| 0xe548d9a3 | verifyProofAndRegister | 3,055,832 | 23,396 | 751,970 | no |
+| **12 txs** | | **7,233,648** | **145,136** | | |
+
+Cost at 0.1 / 1 / 10 gwei: $1.82 / $18.19 / $181.93 (ETH = $2,515)
+
+## PQZH split, R_TX (21,000 + max(4 tok + exec, 10 tok) per tx, <= 16,777,216 gas, <= 128 KB) [estimate]
+
+| case | proof B | verify M | mempool <= 128 KB | txs | total M gas | per tx M | $ at 0.1 / 1 / 10 gwei |
+|---|---|---|---|---|---|---|---|
+| FRI+ZK R_TX proven, this code | 506,000 | 29.3 | no | 3 | 38.4 | 12.79 | 10 / 96 / 965 |
+| FRI+ZK R_TX proven, this code | 506,000 | 29.3 | yes | 4 | 38.5 | 9.63 | 10 / 97 / 969 |
+| FRI+ZK R_TX proven, floor | 506,000 | 6.2 | no | 2 | 21.1 | 10.55 | 5 / 53 / 531 |
+| FRI+ZK R_TX proven, floor | 506,000 | 6.2 | yes | 4 | 21.4 | 5.34 | 5 / 54 / 538 |
+| FRI+ZK R_TX proven, 2x floor | 506,000 | 12.4 | no | 2 | 21.3 | 10.66 | 5 / 54 / 536 |
+| FRI+ZK R_TX proven, 2x floor | 506,000 | 12.4 | yes | 4 | 21.6 | 5.40 | 5 / 54 / 543 |
+| FRI+ZK R_TX conjectured, this code | 282,000 | 19.8 | no | 2 | 25.2 | 12.62 | 6 / 63 / 635 |
+| FRI+ZK R_TX conjectured, this code | 282,000 | 19.8 | yes | 3 | 25.4 | 8.46 | 6 / 64 / 639 |
+| FRI+ZK R_TX conjectured, 2x floor | 282,000 | 8.4 | no | 1 | 13.6 | 13.58 | 3 / 34 / 342 |
+| FRI+ZK R_TX conjectured, 2x floor | 282,000 | 8.4 | yes | 3 | 14.0 | 4.66 | 4 / 35 / 352 |
+| Ligero R_TX proven, as built, this code | 231,950 | 530.2 | no | 55 | 921.4 | 16.75 | 232 / 2,317 / 23,174 |
+| Ligero R_TX proven, as built, this code | 231,950 | 530.2 | yes | none fits | | | |
+| Ligero R_TX proven, as built, floor | 231,950 | 119.8 | no | 19 | 318.7 | 16.78 | 80 / 802 / 8,016 |
+| Ligero R_TX proven, as built, floor | 231,950 | 119.8 | yes | none fits | | | |
+| Ligero R_TX proven, recompute per piece, floor | 231,950 | 119.8 | no | none fits | | | |
+| Ligero R_TX proven, recompute per piece, floor | 231,950 | 119.8 | yes | none fits | | | |
+| Ligero R_TX proven, R_i(eta_j) variant, floor | 287,000 | 56.2 | no | 5 | 70.0 | 14.00 | 18 / 176 / 1,761 |
+| Ligero R_TX proven, R_i(eta_j) variant, floor | 287,000 | 56.2 | yes | 10 | 78.6 | 7.86 | 20 / 198 / 1,976 |
+| Ligero R_TX proven, R_i(eta_j) variant, 2x floor | 287,000 | 112.4 | no | 8 | 132.1 | 16.52 | 33 / 332 / 3,324 |
+| Ligero R_TX proven, R_i(eta_j) variant, 2x floor | 287,000 | 112.4 | yes | 10 | 135.8 | 13.58 | 34 / 341 / 3,415 |

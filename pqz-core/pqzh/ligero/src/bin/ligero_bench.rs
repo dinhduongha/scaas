@@ -1,6 +1,6 @@
 //! PQZH-Ligero bench: proof bytes and breakdown, soundness bits per term, prove time, peak heap, honest and
 //! adversarial verify p50 / p99 (as pqzh_bench).
-//!   ligero_bench [--rel reg|tx|both] [--regime proven|conj|johnson] [--r431 0|1] [--n N --k K] [--np N] [--nv N] [--nadv N]
+//!   ligero_bench [--rel reg|tx|burn|ds|dr|both|all] [--regime proven|conj|johnson] [--r431 0|1] [--n N --k K] [--np N] [--nv N] [--nadv N]
 //!                [--dump DIR]
 //! Prints JSON lines. Run under scripts/capped.
 
@@ -8,9 +8,9 @@ use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicBool, AtomicIsize, AtomicUsize, Ordering};
 use std::time::Instant;
 
-use pqzh::client::{self, KINDS, R, mutate};
+use pqzh_ligero::client::{self, KINDS, R, mutate, rel_name};
 use pqzh_ligero::ligero::VERIFY_PANICS;
-use pqzh_ligero::{OP_REGISTER, OP_TRANSFER, Params, breakdown, prove, soundness, verify};
+use pqzh_ligero::{OP_BURN, OP_DISCLOSE_RECEIVER, OP_DISCLOSE_SENDER, OP_REGISTER, OP_TRANSFER, OPS, Params, breakdown, prove, soundness, verify};
 
 struct Track;
 static LIVE: AtomicIsize = AtomicIsize::new(0);
@@ -69,30 +69,36 @@ fn main() {
     let proven = regime != "conj";
     let r431 = num("--r431", 1) != 0;
     let (np, nv, nadv) = (num("--np", 3), num("--nv", 100), num("--nadv", 40));
-    let rels: Vec<(u8, &str)> = match get("--rel").unwrap_or("both") {
-        "reg" => vec![(OP_REGISTER, "R_REG")],
-        "tx" => vec![(OP_TRANSFER, "R_TX")],
-        _ => vec![(OP_REGISTER, "R_REG"), (OP_TRANSFER, "R_TX")],
+    let ops: Vec<u8> = match get("--rel").unwrap_or("both") {
+        "reg" => vec![OP_REGISTER],
+        "tx" => vec![OP_TRANSFER],
+        "burn" => vec![OP_BURN],
+        "ds" => vec![OP_DISCLOSE_SENDER],
+        "dr" => vec![OP_DISCLOSE_RECEIVER],
+        "all" => OPS.to_vec(),
+        _ => vec![OP_REGISTER, OP_TRANSFER],
     };
     std::panic::set_hook(Box::new(|_| {})); // verify counts caught panics; keep stderr quiet
     let s = client::setup();
-    for (op, name) in rels {
+    for op in ops {
+        let name = rel_name(op);
         let p = match (get("--n"), get("--k")) {
             (Some(n), Some(k)) => Params::new(n.parse().unwrap(), k.parse().unwrap(), proven),
             _ if regime == "johnson" => Params::johnson_preset(),
             _ => Params::preset(op, proven, r431),
         };
-        let (st, w) = if op == OP_REGISTER { (&s.reg_stmt, &s.reg_wit) } else { (&s.tx_stmt, &s.tx_wit) };
+        let (st, w) = s.rel(op);
         let bits: Vec<String> = soundness(op, st, &p).iter().map(|(k, v)| format!("\"{k}\": {v:.1}")).collect();
         println!(
             "{{\"rel\": \"{name}\", \"params\": {{\"n\": {}, \"k\": {}, \"ell\": {}, \"t\": {}, \"n2\": {}, \"pow_bits\": {}, \"proven\": {}, \"johnson\": {}, \"rate\": {:.5}}}, \"soundness_bits\": {{{}}}}}",
             p.n, p.k, p.ell, p.t, p.n2(), p.pow_bits, p.proven, p.johnson, p.k as f64 / p.n as f64, bits.join(", ")
         );
         let mut st2 = st.clone();
-        st2[0] ^= 0x80; // same witness, other statement prefix: a valid proof of a different statement
+        st2[64] ^= 0x80; // same witness, other hashed-only header byte (chainId / R_REG message): a valid proof of a different statement
         let mut pt = Vec::new();
         let mut tp = Vec::new();
         let mut peak_p = 0;
+        let mut lens = Vec::new();
         for i in 0..np.max(1) {
             arm();
             let t = Instant::now();
@@ -102,11 +108,16 @@ fn main() {
             });
             tp.push(t.elapsed().as_secs_f64() * 1e3);
             peak_p = peak_p.max(disarm());
+            lens.push(pt.len());
         }
         let bd: Vec<String> = breakdown(op, &pt, &p).iter().map(|(k, v)| format!("\"{k}\": {v}")).collect();
         println!(
-            "{{\"rel\": \"{name}\", \"proof_bytes\": {}, \"fnv_last\": \"{:08x}\", \"breakdown\": {{{}}}}}",
+            "{{\"rel\": \"{name}\", \"proof_bytes\": {}, \"proof_bytes_min\": {}, \"proof_bytes_max\": {}, \"max_len_exact\": {}, \"max_len_verifier\": {}, \"fnv_last\": \"{:08x}\", \"breakdown\": {{{}}}}}",
             pt.len(),
+            lens.iter().min().unwrap(),
+            lens.iter().max().unwrap(),
+            p.max_len_exact(op),
+            p.max_proof_len(op),
             pt.iter().fold(2166136261u32, |h, &b| (h ^ b as u32).wrapping_mul(16777619)),
             bd.join(", ")
         );

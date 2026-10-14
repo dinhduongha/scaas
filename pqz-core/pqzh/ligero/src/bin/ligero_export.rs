@@ -1,12 +1,12 @@
 //! Fixtures for the EVM verifier (smartcontracts/evm/test/pqzh/ligero/): the same bytes the Rust verifier takes.
 //!   ligero_export <dir> [preset ...]      presets: proven (radix 431), conj (radix 431), johnson, conj-n<N>-k<K> (any n, k)
 //! Writes a.bin (A as 32 x 32 x 64 canonical F_q, 6 bytes big-endian, order (i, j, coefficient)), and per relation
-//! and preset: <rel>-<preset>.stmt / .proof / .other (a valid proof of the statement with byte 0 flipped) / .params
+//! and preset: <rel>-<preset>.stmt / .proof / .other (a valid proof of the statement with byte 64 flipped, a hashed-only header byte) / .params
 //! (n, k, l, t, grinding bits: five 32-byte big-endian words). neg-<case>.stmt / .proof: invalid witnesses proved without the honest prover's checks
 //! (conjectured preset), each must be rejected. A JSON line per file on stdout.
 
-use pqzh::client::{Tweak, digits, setup, setup_with};
-use pqzh::ring::{Q, a_matrix};
+use pqzh_ligero::client::{Tweak, digits, setup, setup_with};
+use pqzh_ligero::ring::{Q, a_matrix};
 use pqzh_ligero::{OP_REGISTER, OP_TRANSFER, Params, prove, prove_unchecked, verify};
 
 fn put(dir: &str, name: &str, b: &[u8]) {
@@ -43,7 +43,7 @@ fn main() {
             let pf = prove(op, st, w, [1; 32], &p).unwrap();
             assert!(verify(op, st, &pf, &p));
             let mut st2 = st.clone();
-            st2[0] ^= 0x80;
+            st2[64] ^= 0x80;
             let other = prove(op, &st2, w, [9; 32], &p).unwrap();
             put(&dir, &format!("{rel}-{pre}.stmt"), st);
             put(&dir, &format!("{rel}-{pre}.proof"), &pf);

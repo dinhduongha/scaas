@@ -1,0 +1,65 @@
+2026-10-14T09:34:04.985654Z  INFO prove_batch:infer log of constraint degree{air_idx=0}: p3_batch_stark::prover: close time.busy=67.4µs time.idle=360ns
+2026-10-14T09:34:04.985720Z  INFO prove_batch:infer log of constraint degree{air_idx=1}: p3_batch_stark::prover: close time.busy=18.0µs time.idle=260ns
+2026-10-14T09:34:04.985813Z  INFO prove_batch:infer log of constraint degree{air_idx=2}: p3_batch_stark::prover: close time.busy=86.1µs time.idle=190ns
+2026-10-14T09:34:04.985826Z  INFO prove_batch:infer log of constraint degree{air_idx=3}: p3_batch_stark::prover: close time.busy=4.34µs time.idle=370ns
+2026-10-14T09:34:09.742544Z  INFO prove_batch:compute quotient{air_idx=0}: p3_batch_stark::prover: close time.busy=579ms time.idle=1.28µs
+2026-10-14T09:34:09.984450Z  INFO prove_batch:compute quotient{air_idx=1}: p3_batch_stark::prover: close time.busy=242ms time.idle=922ns
+2026-10-14T09:34:09.985652Z  INFO prove_batch:compute quotient{air_idx=2}: p3_batch_stark::prover: close time.busy=1.16ms time.idle=442ns
+2026-10-14T09:34:10.012023Z  INFO prove_batch:compute quotient{air_idx=3}: p3_batch_stark::prover: close time.busy=26.3ms time.idle=1.27µs
+2026-10-14T09:34:16.318856Z  INFO prove_batch:prove:into_zk_sumcheck: p3_sumcheck::zk::prover::residual: close time.busy=409ms time.idle=1.85µs
+2026-10-14T09:34:20.802217Z  INFO prove_batch:prove:into_zk_sumcheck: p3_sumcheck::zk::prover::residual: close time.busy=29.5ms time.idle=1.71µs
+2026-10-14T09:34:22.933234Z  INFO prove_batch:prove:into_zk_sumcheck: p3_sumcheck::zk::prover::residual: close time.busy=4.63ms time.idle=1.46µs
+2026-10-14T09:34:24.073835Z  INFO prove_batch:prove:into_zk_sumcheck: p3_sumcheck::zk::prover::residual: close time.busy=3.05ms time.idle=1.42µs
+2026-10-14T09:34:24.332244Z  INFO prove_batch:prove: p3_whir::pcs::zk::prover: close time.busy=10.7s time.idle=1.33µs
+2026-10-14T09:34:31.487902Z  INFO prove_batch:prove:into_zk_sumcheck: p3_sumcheck::zk::prover::residual: close time.busy=410ms time.idle=1.62µs
+2026-10-14T09:34:35.694971Z  INFO prove_batch:prove:into_zk_sumcheck: p3_sumcheck::zk::prover::residual: close time.busy=28.6ms time.idle=1.45µs
+2026-10-14T09:34:37.727085Z  INFO prove_batch:prove:into_zk_sumcheck: p3_sumcheck::zk::prover::residual: close time.busy=4.55ms time.idle=1.53µs
+2026-10-14T09:34:38.836883Z  INFO prove_batch:prove:into_zk_sumcheck: p3_sumcheck::zk::prover::residual: close time.busy=3.38ms time.idle=2.02µs
+2026-10-14T09:34:39.104861Z  INFO prove_batch:prove: p3_whir::pcs::zk::prover: close time.busy=13.5s time.idle=1.75µs
+2026-10-14T09:34:40.013082Z  INFO prove_batch:prove:into_zk_sumcheck: p3_sumcheck::zk::prover::residual: close time.busy=104ms time.idle=1.66µs
+2026-10-14T09:34:41.056959Z  INFO prove_batch:prove:into_zk_sumcheck: p3_sumcheck::zk::prover::residual: close time.busy=9.27ms time.idle=1.23µs
+2026-10-14T09:34:41.541485Z  INFO prove_batch:prove:into_zk_sumcheck: p3_sumcheck::zk::prover::residual: close time.busy=3.37ms time.idle=1.05µs
+2026-10-14T09:34:41.802034Z  INFO prove_batch:prove:into_zk_sumcheck: p3_sumcheck::zk::prover::residual: close time.busy=3.00ms time.idle=1.16µs
+2026-10-14T09:34:41.877793Z  INFO prove_batch:prove: p3_whir::pcs::zk::prover: close time.busy=2.12s time.idle=1.35µs
+2026-10-14T09:34:43.481448Z  INFO prove_batch:prove:into_zk_sumcheck: p3_sumcheck::zk::prover::residual: close time.busy=206ms time.idle=2.52µs
+2026-10-14T09:34:45.560739Z  INFO prove_batch:prove:into_zk_sumcheck: p3_sumcheck::zk::prover::residual: close time.busy=15.7ms time.idle=1.23µs
+2026-10-14T09:34:46.561584Z  INFO prove_batch:prove:into_zk_sumcheck: p3_sumcheck::zk::prover::residual: close time.busy=3.79ms time.idle=1.25µs
+2026-10-14T09:34:47.117812Z  INFO prove_batch:prove:into_zk_sumcheck: p3_sumcheck::zk::prover::residual: close time.busy=3.02ms time.idle=1.20µs
+2026-10-14T09:34:47.268343Z  INFO prove_batch:prove: p3_whir::pcs::zk::prover: close time.busy=5.14s time.idle=1.14µs
+2026-10-14T09:34:47.273365Z  INFO prove_batch: p3_batch_stark::prover: close time.busy=42.3s time.idle=2.63µs
+2026-10-14T09:34:47.901442Z  INFO verify_batch:infer log of constraint degree{air_idx=0}: p3_batch_stark::verifier: close time.busy=69.1µs time.idle=421ns
+2026-10-14T09:34:47.901554Z  INFO verify_batch:infer log of constraint degree{air_idx=1}: p3_batch_stark::verifier: close time.busy=32.3µs time.idle=420ns
+2026-10-14T09:34:47.901649Z  INFO verify_batch:infer log of constraint degree{air_idx=2}: p3_batch_stark::verifier: close time.busy=84.3µs time.idle=302ns
+2026-10-14T09:34:47.901658Z  INFO verify_batch:infer log of constraint degree{air_idx=3}: p3_batch_stark::verifier: close time.busy=3.13µs time.idle=231ns
+2026-10-14T09:34:47.910137Z  INFO verify_batch:verify: p3_whir::pcs::zk::verifier: close time.busy=8.05ms time.idle=981ns
+2026-10-14T09:34:47.918843Z  INFO verify_batch:verify: p3_whir::pcs::zk::verifier: close time.busy=8.19ms time.idle=731ns
+2026-10-14T09:34:47.926522Z  INFO verify_batch:verify: p3_whir::pcs::zk::verifier: close time.busy=7.56ms time.idle=611ns
+2026-10-14T09:34:47.934840Z  INFO verify_batch:verify: p3_whir::pcs::zk::verifier: close time.busy=8.05ms time.idle=1.34µs
+2026-10-14T09:34:47.935020Z  INFO verify_batch:verify constraints{air_idx=0}: p3_batch_stark::verifier: close time.busy=119µs time.idle=451ns
+2026-10-14T09:34:47.939046Z  INFO verify_batch:verify constraints{air_idx=1}: p3_batch_stark::verifier: close time.busy=4.01ms time.idle=350ns
+2026-10-14T09:34:47.939129Z  INFO verify_batch:verify constraints{air_idx=2}: p3_batch_stark::verifier: close time.busy=51.1µs time.idle=391ns
+2026-10-14T09:34:47.939149Z  INFO verify_batch:verify constraints{air_idx=3}: p3_batch_stark::verifier: close time.busy=11.6µs time.idle=190ns
+2026-10-14T09:34:47.939156Z  INFO verify_batch: p3_batch_stark::verifier: close time.busy=37.8ms time.idle=631ns
+	Command being timed: "/home/ha/work/ainative/scaas/.claude/worktrees/whirrev/pqz-core/pqzh/runs/wr-probe/../../target/release/wr-probe tx"
+	User time (seconds): 39.90
+	System time (seconds): 3.80
+	Percent of CPU this job got: 99%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:43.72
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 2494444
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 0
+	Minor (reclaiming a frame) page faults: 2545781
+	Voluntary context switches: 1
+	Involuntary context switches: 436
+	Swaps: 0
+	File system inputs: 0
+	File system outputs: 40
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0

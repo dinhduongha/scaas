@@ -1,0 +1,38 @@
+   Compiling tracing-core v0.1.36
+   Compiling tracing v0.1.44
+   Compiling p3-field v0.9.0-rc.1
+   Compiling p3-matrix v0.9.0-rc.1
+   Compiling p3-symmetric v0.9.0-rc.1
+   Compiling p3-keccak v0.9.0-rc.1
+   Compiling p3-challenger v0.9.0-rc.1
+   Compiling p3-dft v0.9.0-rc.1
+   Compiling p3-air v0.9.0-rc.1
+   Compiling p3-multilinear-util v0.9.0-rc.1
+   Compiling p3-commit v0.9.0-rc.1
+   Compiling p3-zk-codes v0.9.0-rc.1
+   Compiling p3-mds v0.9.0-rc.1
+   Compiling p3-binary-field v0.9.0-rc.1
+   Compiling p3-lookup v0.9.0-rc.1
+   Compiling p3-poseidon1 v0.9.0-rc.1
+   Compiling p3-poseidon2 v0.9.0-rc.1
+   Compiling p3-security v0.9.0-rc.1
+   Compiling p3-merkle-tree v0.9.0-rc.1
+   Compiling p3-goldilocks v0.9.0-rc.1
+   Compiling p3-uni-stark v0.9.0-rc.1
+   Compiling p3-fri v0.9.0-rc.1
+   Compiling p3-batch-stark v0.9.0-rc.1
+   Compiling p3-sumcheck v0.9.0-rc.1
+   Compiling p3-bus v0.9.0-rc.1
+   Compiling p3-whir v0.9.0-rc.1
+   Compiling p3-multi-stark v0.9.0-rc.1
+   Compiling pqzh v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/whirrev/pqz-core/pqzh)
+    Finished `release` profile [optimized + debuginfo] target(s) in 24.46s
+     Running unittests src/lib.rs (runs/wr-probe/../../target/release/deps/pqzh-ea0569fe0c9f63fd)
+
+running 3 tests
+test whirpcs::tests::coefficient_forms ... ok
+test whirpcs::tests::embedding_matches_direct_evaluation ... ok
+test whirpcs::tests::open_verify_and_rejections ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.06s
+

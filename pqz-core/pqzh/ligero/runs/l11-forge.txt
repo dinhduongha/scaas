@@ -1,0 +1,189 @@
+Compiling 129 files with Solc 0.8.37
+Solc 0.8.37 finished in 10.03s
+Compiler run successful with warnings:
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+  --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:92:29:
+   |
+92 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, signature);
+   |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:119:29:
+    |
+119 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, r, vs);
+    |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:161:29:
+    |
+161 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, v, r, s);
+    |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:169:26:
+    |
+169 |     function _throwError(RecoverError error, bytes32 errorArg) private pure {
+    |                          ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+  --> src/common/Bls12381.sol:60:28:
+   |
+60 |     error PrecompileFailed(address at);
+   |                            ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> src/zether/ZetherVerifier.sol:127:9:
+    |
+127 |         uint256 at = HEADER + 6 * p;
+    |         ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> src/zether/ZetherVerifier.sol:454:13:
+    |
+454 |             uint256 at = 4 + 2 * n + 2 * j;
+    |             ^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+  --> src/ua/verifiers/Musig2Secp256k1Verifier.sol:43:14:
+   |
+43 |             (bool ok, uint256 hx, uint256 hy) = _hint(keyData, h, l, i);
+   |              ^^^^^^^
+Note: The shadowed declaration is here:
+  --> src/ua/verifiers/Musig2Secp256k1Verifier.sol:51:10:
+   |
+51 |         (bool ok, uint256 qy) = Bip340.liftX(qx);
+   |          ^^^^^^^
+
+Warning (2018): Function state mutability can be restricted to pure
+  --> src/ua/verifiers/Musig2Secp256k1Verifier.sol:82:5:
+   |
+82 |     function _coef(bytes32 l, bytes calldata pk) private view returns (uint256) {
+   |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to view
+  --> test/pqzh/ligero/LigeroTest.t.sol:52:5:
+   |
+52 |     function measure(string memory rel, string memory pre) internal {
+   |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to view
+   --> test/pqzh/ligero/LigeroTest.t.sol:243:5:
+    |
+243 |     function test_negative_witnesses() public {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+
+Ran 1 test for test/pqzh/ligero/LigeroUnits.t.sol:LigeroUnitsTest
+[PASS] test_units() (gas: 29602636)
+Logs:
+  {"unit": "own_mac_this_code", "gas": 180.00}
+  {"unit": "own_mac_tuned_8x", "gas": 159.87}
+  {"unit": "poly_coeff_eval", "gas": 213.00}
+  {"unit": "power", "gas": 88.00}
+  {"unit": "lagrange_slot", "gas": 346.00}
+  {"unit": "dotU_row", "gas": 194.00}
+  {"unit": "quad_triple", "gas": 380.00}
+  {"unit": "ext_mul", "gas": 598.00}
+  {"unit": "ext_add_sub_pair", "gas": 681.00}
+  {"unit": "a_pass_term", "gas": 284.39}
+  {"unit": "ring_step_k64", "gas": 3923.07}
+
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 118.42ms (114.60ms CPU time)
+
+Ran 13 tests for test/pqzh/ligero/LigeroTest.t.sol:LigeroTest
+[PASS] test_gas_reg_conj() (gas: 79416729)
+Logs:
+  {"rel": "reg", "preset": "conj", "n": 18533, "k": 172, "t": 20, "distinct": 20, "proof_bytes": 62912, "verify_gas": 64903429
+    "stages": {"stmt_seed": 178945, "transcript_pow_indices": 2574172, "columns_merkle": 747891, "a_copy": 723865, "comb_ring": 30927375, "comb_rest_sum": 836086, "column_checks": 28914556}
+    "tx": {"proof_tokens": 243773, "proof_floor_7623": 2437730, "other_tokens": 67000, "other_exec": 3450000, "tx_std_2028": 69617521, "tx_eip7623": 69617521, "cap": 16777216, "fits": false}}
+
+[PASS] test_gas_reg_johnson() (gas: 450238680)
+Logs:
+  {"rel": "reg", "preset": "johnson", "n": 6536, "k": 862, "t": 152, "distinct": 150, "proof_bytes": 201908, "verify_gas": 403294118
+    "stages": {"stmt_seed": 178945, "transcript_pow_indices": 4658555, "columns_merkle": 2082120, "a_copy": 860492, "comb_ring": 31064006, "comb_rest_sum": 1825818, "column_checks": 362623643}
+    "tx": {"proof_tokens": 784169, "proof_floor_7623": 7841690, "other_tokens": 67000, "other_exec": 3450000, "tx_std_2028": 410169794, "tx_eip7623": 410169794, "cap": 16777216, "fits": false}}
+
+[PASS] test_gas_reg_proven() (gas: 364715991)
+Logs:
+  {"rel": "reg", "preset": "proven", "n": 32756, "k": 817, "t": 121, "distinct": 120, "proof_bytes": 186904, "verify_gas": 321301075
+    "stages": {"stmt_seed": 178945, "transcript_pow_indices": 3629051, "columns_merkle": 2068397, "a_copy": 865732, "comb_ring": 31054010, "comb_rest_sum": 1756335, "column_checks": 281748066}
+    "tx": {"proof_tokens": 726775, "proof_floor_7623": 7267750, "other_tokens": 67000, "other_exec": 3450000, "tx_std_2028": 327947175, "tx_eip7623": 327947175, "cap": 16777216, "fits": false}}
+
+[PASS] test_gas_tx_conj() (gas: 198509527)
+Logs:
+  {"rel": "tx", "preset": "conj", "n": 18533, "k": 344, "t": 24, "distinct": 24, "proof_bytes": 92680, "verify_gas": 176741740
+    "stages": {"stmt_seed": 902680, "transcript_pow_indices": 2990071, "columns_merkle": 917619, "a_copy": 867814, "comb_ring": 98642026, "comb_rest_sum": 4933403, "column_checks": 67487588}
+    "tx": {"proof_tokens": 359407, "proof_floor_7623": 3594070, "other_tokens": 119000, "other_exec": 310000, "tx_std_2028": 178986368, "tx_eip7623": 178986368, "cap": 16777216, "fits": false}}
+
+[PASS] test_gas_tx_johnson() (gas: 705810659)
+Logs:
+  {"rel": "tx", "preset": "johnson", "n": 6536, "k": 862, "t": 152, "distinct": 151, "proof_bytes": 257784, "verify_gas": 644903840
+    "stages": {"stmt_seed": 902680, "transcript_pow_indices": 5512849, "columns_merkle": 2888204, "a_copy": 995355, "comb_ring": 98694820, "comb_rest_sum": 5163204, "column_checks": 530746189}
+    "tx": {"proof_tokens": 1000182, "proof_floor_7623": 10001820, "other_tokens": 119000, "other_exec": 310000, "tx_std_2028": 649711568, "tx_eip7623": 649711568, "cap": 16777216, "fits": false}}
+
+[PASS] test_gas_tx_proven() (gas: 585088755)
+Logs:
+  {"rel": "tx", "preset": "proven", "n": 32756, "k": 817, "t": 121, "distinct": 121, "proof_bytes": 232078, "verify_gas": 530335442
+    "stages": {"stmt_seed": 902680, "transcript_pow_indices": 4373648, "columns_merkle": 2716369, "a_copy": 999296, "comb_ring": 98769033, "comb_rest_sum": 5361270, "column_checks": 417212607}
+    "tx": {"proof_tokens": 900889, "proof_floor_7623": 9008890, "other_tokens": 119000, "other_exec": 310000, "tx_std_2028": 534745998, "tx_eip7623": 534745998, "cap": 16777216, "fits": false}}
+
+[PASS] test_mutations_reg_conj() (gas: 583381357)
+Logs:
+  {"rel": "reg", "preset": "conj", "mutations": 108, "accepted": 0, "reverts": 0}
+
+[PASS] test_mutations_reg_johnson() (gas: 2863969515)
+Logs:
+  {"rel": "reg", "preset": "johnson", "mutations": 108, "accepted": 0, "reverts": 0}
+
+[PASS] test_mutations_reg_proven() (gas: 2453055435)
+Logs:
+  {"rel": "reg", "preset": "proven", "mutations": 108, "accepted": 0, "reverts": 0}
+
+[PASS] test_mutations_tx_conj() (gas: 1627915843)
+Logs:
+  {"rel": "tx", "preset": "conj", "mutations": 108, "accepted": 0, "reverts": 0}
+
+[PASS] test_mutations_tx_johnson() (gas: 5850154417)
+Logs:
+  {"rel": "tx", "preset": "johnson", "mutations": 108, "accepted": 0, "reverts": 0}
+
+[PASS] test_mutations_tx_proven() (gas: 4957389688)
+Logs:
+  {"rel": "tx", "preset": "proven", "mutations": 108, "accepted": 0, "reverts": 0}
+
+[PASS] test_negative_witnesses() (gas: 628099991)
+Logs:
+  {"negative": "reg-norm", "rejected": true, "revert": false}
+  {"negative": "reg-coef", "rejected": true, "revert": false}
+  {"negative": "tx-norm", "rejected": true, "revert": false}
+  {"negative": "tx-digit", "rejected": true, "revert": false}
+  {"negative": "tx-e2", "rejected": true, "revert": false}
+  {"negative": "tx-overspend", "rejected": true, "revert": false}
+  {"negative": "tx-ring", "rejected": true, "revert": false}
+
+Suite result: ok. 13 passed; 0 failed; 0 skipped; finished in 7.86s (44.86s CPU time)
+
+Ran 2 test suites in 7.87s (7.98s CPU time): 14 tests passed, 0 failed, 0 skipped (14 total tests)
+	Command being timed: "forge test --match-path test/pqzh/ligero/* -vv --gas-limit 9000000000000000000"
+	User time (seconds): 47.18
+	System time (seconds): 1.39
+	Percent of CPU this job got: 224%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:21.63
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 925808
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 139
+	Minor (reclaiming a frame) page faults: 508282
+	Voluntary context switches: 2386
+	Involuntary context switches: 15103
+	Swaps: 0
+	File system inputs: 25056
+	File system outputs: 19664
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
