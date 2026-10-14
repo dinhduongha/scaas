@@ -1,6 +1,6 @@
 //! PQZH-Ligero bench: proof bytes and breakdown, soundness bits per term, prove time, peak heap, honest and
 //! adversarial verify p50 / p99 (as pqzh_bench).
-//!   ligero_bench [--rel reg|tx|both] [--regime proven|conj] [--r431 0|1] [--n N --k K] [--np N] [--nv N] [--nadv N]
+//!   ligero_bench [--rel reg|tx|both] [--regime proven|conj|johnson] [--r431 0|1] [--n N --k K] [--np N] [--nv N] [--nadv N]
 //!                [--dump DIR]
 //! Prints JSON lines. Run under scripts/capped.
 
@@ -65,7 +65,8 @@ fn main() {
     let a: Vec<String> = std::env::args().collect();
     let get = |k: &str| a.iter().position(|x| x == k).and_then(|i| a.get(i + 1)).map(|s| s.as_str());
     let num = |k: &str, d: usize| get(k).map_or(d, |s| s.parse().unwrap());
-    let proven = get("--regime").unwrap_or("proven") == "proven";
+    let regime = get("--regime").unwrap_or("proven");
+    let proven = regime != "conj";
     let r431 = num("--r431", 1) != 0;
     let (np, nv, nadv) = (num("--np", 3), num("--nv", 100), num("--nadv", 40));
     let rels: Vec<(u8, &str)> = match get("--rel").unwrap_or("both") {
@@ -78,13 +79,14 @@ fn main() {
     for (op, name) in rels {
         let p = match (get("--n"), get("--k")) {
             (Some(n), Some(k)) => Params::new(n.parse().unwrap(), k.parse().unwrap(), proven),
+            _ if regime == "johnson" => Params::johnson_preset(),
             _ => Params::preset(op, proven, r431),
         };
         let (st, w) = if op == OP_REGISTER { (&s.reg_stmt, &s.reg_wit) } else { (&s.tx_stmt, &s.tx_wit) };
         let bits: Vec<String> = soundness(op, st, &p).iter().map(|(k, v)| format!("\"{k}\": {v:.1}")).collect();
         println!(
-            "{{\"rel\": \"{name}\", \"params\": {{\"n\": {}, \"k\": {}, \"ell\": {}, \"t\": {}, \"n2\": {}, \"pow_bits\": {}, \"proven\": {}, \"rate\": {:.5}}}, \"soundness_bits\": {{{}}}}}",
-            p.n, p.k, p.ell, p.t, p.n2(), p.pow_bits, p.proven, p.k as f64 / p.n as f64, bits.join(", ")
+            "{{\"rel\": \"{name}\", \"params\": {{\"n\": {}, \"k\": {}, \"ell\": {}, \"t\": {}, \"n2\": {}, \"pow_bits\": {}, \"proven\": {}, \"johnson\": {}, \"rate\": {:.5}}}, \"soundness_bits\": {{{}}}}}",
+            p.n, p.k, p.ell, p.t, p.n2(), p.pow_bits, p.proven, p.johnson, p.k as f64 / p.n as f64, bits.join(", ")
         );
         let mut st2 = st.clone();
         st2[0] ^= 0x80; // same witness, other statement prefix: a valid proof of a different statement

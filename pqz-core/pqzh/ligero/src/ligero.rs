@@ -30,6 +30,23 @@ pub struct Params {
     pub t: usize,
     pub pow_bits: u32,
     pub proven: bool,
+    /// Johnson-bound proven regime (reference only, owner 2026-10-14 (b)): t from `factor_johnson`
+    pub johnson: bool,
+}
+
+/// BCIKS20 list-decoding parameter m (m = 3: the smallest the theorem allows, the best field term)
+pub const JOHNSON_M: usize = 3;
+
+/// Johnson regime, RS[n, 2k-1] of rate r = (2k-1)/n: delta = 1 - sqrt(r) - eta, eta = sqrt(r)/(2m); per query
+/// max(1 - delta, (2k-2)/n) (assumes mutual correlated agreement up to delta for the consistency tests,
+/// docs/research/pqzh-ligero.md §5.3). Returns (factor, BCIKS20 error eps = (m+1/2)^7/(3 r^1.5) n^2 / |F| as log2 bits).
+pub fn factor_johnson(n: usize, k: usize) -> (f64, f64) {
+    let r = (2 * k - 1) as f64 / n as f64;
+    let m = JOHNSON_M as f64;
+    let omd = r.sqrt() * (1.0 + 1.0 / (2.0 * m));
+    let f = f64::max(omd, (2 * k - 2) as f64 / n as f64);
+    let eps = (m + 0.5).powi(7) / (3.0 * r.powf(1.5)) * (n as f64).powi(2);
+    (f, 4.0 * (crate::fq::Q as f64).log2() - eps.log2())
 }
 
 /// Per-query acceptance of a cheating prover. Proven: one proximity test over RS[n, 2k-1] at its unique-decoding
@@ -50,7 +67,20 @@ impl Params {
         let f = factor(n, k, proven);
         let t = ((LAMBDA - POW_BITS as f64) / -f.log2()).ceil() as usize;
         assert!(k > t + 1 && smooth(n) && smooth(k) && n >= 4 * k, "bad parameters n {n} k {k} t {t}");
-        Params { n, k, ell: k - t - 1, t, pow_bits: POW_BITS, proven }
+        Params { n, k, ell: k - t - 1, t, pow_bits: POW_BITS, proven, johnson: false }
+    }
+
+    /// Johnson-bound proven parameters (reference only); requires (1 - delta) n >= 3k - 2 (degree correction)
+    pub fn johnson(n: usize, k: usize) -> Params {
+        let (f, _) = factor_johnson(n, k);
+        let t = ((LAMBDA - POW_BITS as f64) / -f.log2()).ceil() as usize;
+        assert!(k > t + 1 && smooth(n) && smooth(k) && n >= 4 * k && f * n as f64 >= (3 * k - 2) as f64);
+        Params { n, k, ell: k - t - 1, t, pow_bits: POW_BITS, proven: true, johnson: true }
+    }
+
+    /// the model's smallest Johnson preset with the field term >= 128 bits (charged once): runs/p1-params.txt
+    pub fn johnson_preset() -> Params {
+        Params::johnson(6536, 862)
     }
 
     /// the parameter model's choice (ligero_params.py, runs/p1-params.txt); r431 = false: radices 2/19/43 only
@@ -461,10 +491,16 @@ pub fn soundness(op: u8, stmt: &[u8], p: &Params) -> Vec<(&'static str, f64)> {
     let lay = Layout::new(op, p.ell);
     let nw = cs::parse(op, stmt).map(|st| cs::comb(&lay, &st, F4::ONE).nweights).unwrap_or(0);
     let fbits = 4.0 * ((crate::fq::Q) as f64).log2();
-    let q = p.t as f64 * -factor(p.n, p.k, p.proven).log2() + p.pow_bits as f64;
+    let (f, prox) = if p.johnson {
+        let (f, jb) = factor_johnson(p.n, p.k);
+        (f, jb) // BCIKS20 list-decoding error charged once for the affine space (per word: jb - log2(2m + 3))
+    } else {
+        (factor(p.n, p.k, p.proven), fbits - ((2 * lay.m + 3) as f64 * p.n as f64).log2())
+    };
+    let q = p.t as f64 * -f.log2() + p.pow_bits as f64;
     let terms = vec![
         ("query", q),
-        ("proximity_field", fbits - ((2 * lay.m + 3) as f64 * p.n as f64).log2()),
+        ("proximity_field", prox),
         ("linear_field", fbits - (nw as f64).log2()),
         ("quadratic_field", fbits),
         ("keccak_collision", 128.0),

@@ -76,6 +76,26 @@ def factor_conj(n, k):
     return (2 * k - 1) / n                   # rate of RS[n, 2k-1], the ethSTARK-style analogue
 
 
+FBITS = EXT * math.log2(Q)                   # |F_q^4| = 2^168
+
+
+def johnson(n, k, m=3):
+    """Johnson-bound proven regime (reference only, owner 2026-10-14 (b)). Proximity: BCIKS20 Thm 1.5/1.6 list-decoding
+    regime for RS[n, 2k-1] (rate r = (2k-1)/n): delta = 1 - sqrt(r) - eta, m = max(ceil(sqrt(r)/(2 eta)), 3), error
+    eps = (m + 1/2)^7 / (3 r^1.5) n^2 / |F|. Consistency tests: per query max(1 - delta, (2k-2)/n), which needs mutual
+    correlated agreement up to delta (without it the per-query term is delta + (2k-2)/n and the Johnson radius gains
+    nothing over unique decoding). Returns (per-query factor, field bits charged once, field bits per spanning word
+    of the m_rows-row affine space is done by the caller), or None if the degree correction fails ((1-delta) n < 3k - 2)."""
+    r = (2 * k - 1) / n
+    eta = math.sqrt(r) / (2 * m)
+    one_minus_delta = math.sqrt(r) + eta
+    if one_minus_delta * n < 3 * k - 2:
+        return None
+    f = max(one_minus_delta, (2 * k - 2) / n)
+    eps = (m + 0.5) ** 7 / (3 * r ** 1.5) * n * n
+    return f, FBITS - math.log2(eps)
+
+
 def t_of(f):
     return math.ceil((LAMBDA - POW) / -math.log2(f))
 
@@ -123,6 +143,43 @@ def search1(rel, reg, smooth):
                 out.append((r['size'], n, k, t, f, r))
     out.sort(key=lambda x: x[0])
     return out
+
+
+def search_johnson(rel, smooth):
+    out = []
+    for n in smooth:
+        if n > NMAX:
+            continue
+        for k in smooth:
+            if 4 * k > n or k < 64:
+                continue
+            for m in range(3, 12):
+                j = johnson(n, k, m)
+                if not j:
+                    continue
+                f, jb = j
+                t = t_of(f)
+                r = model1(rel, n, k, t, smooth)
+                if r and r['prover'] <= PMAX:
+                    per_word = jb - math.log2(2 * r['m'] + 3)
+                    out.append((r['size'], n, k, t, f, m, jb, per_word, r))
+    return out
+
+
+def main_johnson():
+    print('\n## Johnson-bound proven regime (reference only; owner 2026-10-14 (b))\n')
+    print('Field term: BCIKS20 list-decoding error (m + 1/2)^7 / (3 r^1.5) n^2 / 2^168, r = (2k-1)/n, charged once for the')
+    print('affine space ("once") or once per spanning word, 2m + 3 words ("per word"). Per query max(sqrt(r) + eta,')
+    print('(2k-2)/n), eta = sqrt(r)/(2m): assumes mutual correlated agreement up to the Johnson radius.\n')
+    print('| relation | selection | n | k | m (BCIKS) | factor | t | l | rows | proof B | field bits once / per word |')
+    print('|---|---|---|---|---|---|---|---|---|---|---|')
+    for rel in ['R_REG', 'R_TX']:
+        res = search_johnson(rel, SMOOTH4)
+        picks = [('smallest, any field bits', min(res, key=lambda x: x[0])),
+                 ('smallest with once >= 128', min((x for x in res if x[6] >= 128), key=lambda x: x[0])),
+                 ('most field bits (per word)', max(res, key=lambda x: x[7]))]
+        for name, (size, n, k, t, f, m, jb, pw, r) in picks:
+            print(f"| {rel} | {name} | {n} | {k} | {m} | {f:.4f} | {t} | {r['ell']} | {r['m']} | {size:,} | {jb:.1f} / {pw:.1f} |")
 
 
 def main1():
@@ -229,4 +286,8 @@ def main0():
 
 
 if __name__ == '__main__':
-    main0() if '--p0' in sys.argv else main1()
+    if '--p0' in sys.argv:
+        main0()
+    else:
+        main1()
+        main_johnson()

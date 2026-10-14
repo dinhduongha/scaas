@@ -34,3 +34,18 @@ Layout (cs.rs): rows m = sum over big groups ceil(2048/l) (2 + bits) + 2 ceil(n_
 | R_TX | conj | 2/19/43/431 | 18533 | 344 | 53.9 | 0.0371 | 24 | 319 | 287 | 817 | 24 | 41,808 | 43,797 | 7,994 | 93,639 | 1,330,406 | 2,660,240,236 |
 | R_TX | conj | 2/19/43/431 | 16378 | 344 | 47.6 | 0.0419 | 25 | 318 | 287 | 817 | 25 | 41,832 | 45,617 | 7,480 | 94,969 | 1,381,987 | 2,250,694,554 |
 | R_TX | conj | 2/19/43/431 | 18533 | 431 | 43.0 | 0.0465 | 26 | 404 | 246 | 862 | 26 | 52,296 | 41,052 | 8,564 | 101,953 | 1,612,368 | 2,431,279,620 |
+
+## Johnson-bound proven regime (reference only; owner 2026-10-14 (b))
+
+Field term: BCIKS20 list-decoding error (m + 1/2)^7 / (3 r^1.5) n^2 / 2^168, r = (2k-1)/n, charged once for the
+affine space ("once") or once per spanning word, 2m + 3 words ("per word"). Per query max(sqrt(r) + eta,
+(2k-2)/n), eta = sqrt(r)/(2m): assumes mutual correlated agreement up to the Johnson radius.
+
+| relation | selection | n | k | m (BCIKS) | factor | t | l | rows | proof B | field bits once / per word |
+|---|---|---|---|---|---|---|---|---|---|---|
+| R_REG | smallest, any field bits | 37066 | 344 | 10 | 0.1429 | 40 | 303 | 143 | 94,353 | 106.9 / 98.7 |
+| R_REG | smallest with once >= 128 | 6536 | 862 | 3 | 0.5990 | 152 | 709 | 63 | 207,241 | 128.7 / 121.7 |
+| R_REG | most field bits (per word) | 3268 | 817 | 3 | 0.8247 | 403 | 413 | 103 | 423,144 | 132.1 / 124.4 |
+| R_TX | smallest, any field bits | 18533 | 344 | 8 | 0.2046 | 49 | 294 | 287 | 146,506 | 112.5 / 103.3 |
+| R_TX | smallest with once >= 128 | 6536 | 862 | 3 | 0.5990 | 152 | 709 | 124 | 262,236 | 128.7 / 120.7 |
+| R_TX | most field bits (per word) | 3268 | 817 | 3 | 0.8247 | 403 | 413 | 206 | 657,487 | 132.1 / 123.4 |

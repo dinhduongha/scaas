@@ -27,10 +27,10 @@ fn with<T>(f: impl FnOnce(&mut St) -> T) -> T {
 }
 
 /// statements and witnesses of pqz_bench.c setup(); the parameter model's presets (proven / conjectured, with or
-/// without the radix-431 domains)
+/// without the radix-431 domains); proven = 2: the Johnson-bound reference preset
 #[no_mangle]
 pub extern "C" fn step_init(proven: u32, r431: u32) -> u32 {
-    let p = [0, 1].map(|tx| Params::preset(op(tx), proven != 0, r431 != 0));
+    let p = [0, 1].map(|tx| if proven == 2 { Params::johnson_preset() } else { Params::preset(op(tx), proven != 0, r431 != 0) });
     ST.with(|c| *c.borrow_mut() = Some(St { s: setup(), p, proof: [vec![], vec![]], other: [vec![], vec![]], r: R(0x9E3779B97F4A7C15) }));
     KINDS.len() as u32
 }

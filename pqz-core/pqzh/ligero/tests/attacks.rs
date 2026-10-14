@@ -30,6 +30,13 @@ fn honest_all_presets_cross_and_hiding() {
             }
         }
     }
+    for (op, st, w) in [(OP_REGISTER, &s.reg_stmt, &s.reg_wit), (OP_TRANSFER, &s.tx_stmt, &s.tx_wit)] {
+        let pj = Params::johnson_preset();
+        let a = prove(op, st, w, [1; 32], &pj).unwrap();
+        eprintln!("op {op} {pj:?}: {} B", a.len());
+        assert!(verify(op, st, &a, &pj));
+        assert!(!verify(op, st, &a, &Params::preset(op, true, false)));
+    }
     let (pr, pt) = (p(OP_REGISTER), p(OP_TRANSFER));
     let a = prove(OP_REGISTER, &s.reg_stmt, &s.reg_wit, [1; 32], &pr).unwrap();
     let b = prove(OP_REGISTER, &s.reg_stmt, &s.reg_wit, [2; 32], &pr).unwrap();
