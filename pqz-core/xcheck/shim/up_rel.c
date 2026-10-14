@@ -477,8 +477,16 @@ cval (poly_ptr p, unsigned k)
 static int
 parse_tx (txst_t *T, polyring_srcptr Rq, const uint8_t *stmt)
 {
+#ifdef PQZ_HEADER_BYTES /* rel3 layout, as the fork's parse_debit: header || body, fee a be32 word < 2^64 */
+  const uint8_t *p = stmt + PQZ_HEADER_BYTES;
+  int ok = 1;
+  for (unsigned b = 0; b < 24; b++)
+    ok &= stmt[PQZ_HDR_FEE + b] == 0;
+  T->fee = rd_be8 (stmt + PQZ_HDR_FEE + 24);
+#else
   const uint8_t *p = stmt + PQZ_PREFIX_BYTES;
   int ok = 1;
+#endif
   T->pkf = _alloc (sizeof (polyvec_t)), polyvec_alloc (T->pkf, Rq, K);
   T->pkt = _alloc (sizeof (polyvec_t)), polyvec_alloc (T->pkt, Rq, K);
   T->pka = _alloc (sizeof (polyvec_t)), polyvec_alloc (T->pka, Rq, K);
@@ -494,7 +502,9 @@ parse_tx (txst_t *T, polyring_srcptr Rq, const uint8_t *stmt)
   ok &= rd_poly (T->vt, p, 16), p += PQZ_V_BYTES;
   ok &= rd_poly (T->vf, p, 16), p += PQZ_V_BYTES;
   ok &= rd_poly (T->va, p, 16), p += PQZ_V_BYTES;
+#ifndef PQZ_HEADER_BYTES
   T->fee = rd_be8 (p);
+#endif
   return ok;
 }
 
