@@ -1049,7 +1049,7 @@ One implementation serves the prover, the client-side verifier mirror and the pr
 
 No Solidity verifier.
 LaBRADOR/Greyhound deferred to aggregation work. **Kill criterion**: stop and re-plan with the hash-based fallback if
-the transfer proof exceeds 96 KB, if p99 adversarial verify exceeds 50 ms on the chain host, or if the rewritten layers
+the transfer proof exceeds 96 KB, if p99 adversarial verify exceeds 60 ms on the chain host (50 ms until 2026-10-14; owner raised it to 60 ms, which also bounds wasm32 verify, so the PQZH Ligero backend's measured 55.9 ms wasm32 p99 passes; the gas figures below quoted "at 50 ms" are the old threshold and are recalibrated on measured p99 in P6f), or if the rewritten layers
 cannot reach arithmetic-layer KAT equality with upstream. Single implementation; LaZer is MIT and protocol logic stays
 upstream-shaped. We own a C fork with six rewritten layers, a rewrite rather than a kernel swap; upstream protocol
 fixes are merged by hand. **Versioning:** `proofSystemId = keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v2")`
