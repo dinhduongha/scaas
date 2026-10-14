@@ -1,0 +1,9 @@
+{"wasm_bytes":252947,"node":"v26.8.1","args":{"np":2,"nv":50,"nadv":4,"proven":0,"r431":0}}
+{"init_ms":57.505,"memory_mib":2.1875}
+{"rel":"R_REG","proof_bytes":79126,"fnv_last":"bec5d4e6","timing":"prove","stats":{"n":2,"mean_ms":536.778,"p50_ms":556.424,"p99_ms":517.132,"max_ms":556.424},"memory_mib":20.75,"within_256mib":true}
+{"rel":"R_REG","timing":"verify_honest","stats":{"n":50,"mean_ms":6.321,"p50_ms":6.148,"p99_ms":7.292,"max_ms":8.5},"memory_mib":20.75}
+{"rel":"R_REG","timing":"verify_adversarial","stats":{"n":48,"mean_ms":0.465,"p50_ms":0.472,"p99_ms":0.746,"max_ms":0.749},"memory_mib":20.75}
+{"rel":"R_TX","proof_bytes":113478,"fnv_last":"54361ada","timing":"prove","stats":{"n":2,"mean_ms":673.626,"p50_ms":689.7,"p99_ms":657.551,"max_ms":689.7},"memory_mib":22.25,"within_256mib":true}
+{"rel":"R_TX","timing":"verify_honest","stats":{"n":50,"mean_ms":16.29,"p50_ms":16.192,"p99_ms":17.646,"max_ms":18.348},"memory_mib":22.4375}
+{"rel":"R_TX","timing":"verify_adversarial","stats":{"n":48,"mean_ms":0.647,"p50_ms":0.704,"p99_ms":1.033,"max_ms":1.056},"memory_mib":22.4375}
+{"fails":0,"memory_mib_final":22.4375}

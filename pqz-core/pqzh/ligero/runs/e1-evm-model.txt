@@ -1,0 +1,51 @@
+## Model against the measured verifies (runs/l6-forge.txt)
+
+| relation | preset | column checks measured / model | statement (A copy + ring) measured / model | verify measured / model | error |
+|---|---|---|---|---|---|
+| R_REG | conj | 28.9 / 27.2 M | 31.7 / 28.5 M | 64.9 / 62.0 M | -4.5 % |
+| R_REG | johnson | 362.6 / 343.8 M | 31.9 / 28.5 M | 403.4 / 376.5 M | -6.7 % |
+| R_REG | proven | 284.1 / 268.9 M | 31.9 / 28.5 M | 323.8 / 301.4 M | -6.9 % |
+| R_TX | conj | 67.5 / 64.4 M | 99.5 / 89.2 M | 176.7 / 164.7 M | -6.8 % |
+| R_TX | johnson | 530.7 / 510.0 M | 99.7 / 89.2 M | 644.9 / 609.5 M | -5.5 % |
+| R_TX | proven | 417.2 / 400.4 M | 99.8 / 89.2 M | 530.2 / 499.6 M | -5.8 % |
+
+## Opcode floor of the measured presets [estimate]
+
+| relation | preset | t | proof B | verify, this code (measured) | verify, floor | of which per-column | statement | proof calldata floor (EIP-7623) | tx, floor | <= cap |
+|---|---|---|---|---|---|---|---|---|---|---|
+| R_REG | conj | 20 | 63,008 | 64.9 M | 13.0 M | 7.1 M | 5.3 M | 2.44 M | 17.7 M | no |
+| R_REG | johnson | 152 | 201,588 | 403.4 M | 92.0 M | 86.1 M | 5.3 M | 7.82 M | 98.8 M | no |
+| R_REG | proven | 121 | 187,994 | 323.8 M | 73.3 M | 67.4 M | 5.3 M | 7.29 M | 79.9 M | no |
+| R_TX | conj | 24 | 92,552 | 176.7 M | 33.2 M | 17.0 M | 15.6 M | 3.59 M | 35.4 M | no |
+| R_TX | johnson | 152 | 258,264 | 644.9 M | 148.0 M | 131.8 M | 15.6 M | 10.02 M | 152.8 M | no |
+| R_TX | proven | 121 | 231,950 | 530.2 M | 119.8 M | 103.6 M | 15.6 M | 9.00 M | 124.2 M | no |
+
+## Per-column work, the code-independent part (F_q^4 x F_q multiply-accumulates per opened column)
+
+| relation | preset | witness-vector MACs | test-polynomial MACs | total x t | at 40 gas / MAC |
+|---|---|---|---|---|---|
+| R_REG | conj | 4,275 | 878 | 0.10 M | 4 M gas |
+| R_REG | johnson | 4,833 | 4,460 | 1.39 M | 56 M gas |
+| R_REG | proven | 4,819 | 4,204 | 1.09 M | 44 M gas |
+| R_TX | conj | 10,097 | 1,742 | 0.28 M | 11 M gas |
+| R_TX | johnson | 10,487 | 4,460 | 2.26 M | 90 M gas |
+| R_TX | proven | 10,473 | 4,204 | 1.78 M | 71 M gas |
+
+## Cheapest transaction per regime over (n, k) [estimate]
+
+Search: n, k smooth (radices 2/19/43/431), n >= 4k, n <= 2^21, modelled prover work <= 4e9 (ligero_params p1), t from the regime, distinct columns = expected n(1 - (1 - 1/n)^t), proof bytes from the p1 size model.
+
+| relation | regime | verifier | n | k | t | proof B | verify | tx (EIP-7623) | <= cap |
+|---|---|---|---|---|---|---|---|---|---|
+| R_REG | proven | this code | 32756 | 344 | 116 | 227,319 | 214.4 M | 221.7 M | no |
+| R_REG | proven | floor | 32756 | 344 | 116 | 227,319 | 52.1 M | 59.4 M | no |
+| R_REG | johnson | this code | 3448 | 152 | 74 | 279,784 | 156.9 M | 165.0 M | no |
+| R_REG | johnson | floor | 3448 | 152 | 74 | 279,784 | 36.1 M | 44.2 M | no |
+| R_REG | conj | this code | 18533 | 152 | 19 | 64,002 | 61.3 M | 66.0 M | no |
+| R_REG | conj | floor | 18533 | 152 | 19 | 64,002 | 12.7 M | 17.4 M | no |
+| R_TX | proven | this code | 18533 | 344 | 119 | 378,347 | 437.0 M | 443.7 M | no |
+| R_TX | proven | floor | 18533 | 431 | 120 | 304,006 | 105.0 M | 110.5 M | no |
+| R_TX | johnson | this code | 3448 | 172 | 78 | 479,715 | 350.7 M | 359.0 M | no |
+| R_TX | johnson | floor | 3448 | 172 | 78 | 479,715 | 78.8 M | 87.0 M | no |
+| R_TX | conj | this code | 18533 | 344 | 24 | 93,639 | 164.7 M | 167.0 M | no |
+| R_TX | conj | floor | 18533 | 344 | 24 | 93,639 | 33.2 M | 35.4 M | no |

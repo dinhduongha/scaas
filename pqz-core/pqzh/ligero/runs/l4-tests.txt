@@ -1,0 +1,80 @@
+   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/ligero/pqz-core/pqzh/ligero)
+    Finished `release` profile [optimized + debuginfo] target(s) in 2.63s
+     Running unittests src/lib.rs (target/release/deps/pqzh_ligero-6598880c35069306)
+
+running 5 tests
+test cs::tests::ring_recurrence_matches_naive ... ok
+test fft::tests::fft_matches_naive_all_radices ... ok
+test fq::tests::field_facts_and_ext ... ok
+test fq::tests::mul_and_red_match_naive ... ok
+test merkle::tests::multiproof_roundtrip ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.21s
+
+     Running unittests src/bin/ligero_bench.rs (target/release/deps/ligero_bench-d29f0340acddac1c)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/ligero_export.rs (target/release/deps/ligero_export-f8841837802034b2)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/attacks.rs (target/release/deps/attacks-a573f346fc6a21be)
+
+running 9 tests
+test honest_all_presets_cross_and_hiding ... op 3 Params { n: 32756, k: 817, ell: 695, t: 121, pow_bits: 16, proven: true, johnson: false }: 187994 B, 397.37824ms
+op 1 Params { n: 32756, k: 817, ell: 695, t: 121, pow_bits: 16, proven: true, johnson: false }: 231950 B, 629.72073ms
+op 3 Params { n: 6536, k: 817, ell: 650, t: 166, pow_bits: 16, proven: true, johnson: false }: 223752 B, 174.842578ms
+op 1 Params { n: 6536, k: 817, ell: 650, t: 166, pow_bits: 16, proven: true, johnson: false }: 302898 B, 258.628528ms
+op 3 Params { n: 18533, k: 172, ell: 151, t: 20, pow_bits: 16, proven: false, johnson: false }: 63008 B, 826.04777ms
+op 1 Params { n: 18533, k: 344, ell: 319, t: 24, pow_bits: 16, proven: false, johnson: false }: 92552 B, 946.104271ms
+op 3 Params { n: 6536, k: 172, ell: 144, t: 27, pow_bits: 16, proven: false, johnson: false }: 79126 B, 292.748628ms
+op 1 Params { n: 6536, k: 344, ell: 308, t: 35, pow_bits: 16, proven: false, johnson: false }: 113478 B, 327.674645ms
+op 3 Params { n: 6536, k: 862, ell: 709, t: 152, pow_bits: 16, proven: true, johnson: true }: 201588 B
+op 1 Params { n: 6536, k: 862, ell: 709, t: 152, pow_bits: 16, proven: true, johnson: true }: 258264 B
+ok
+test mutations_960_rejected ... 960 mutated inputs rejected, 0 verifier panics caught
+ok
+test reg_coefficient_out_of_range ... ok
+test reg_norm_exceeded_small_coefficients ... ok
+test tx_digit_out_of_range ... ok
+test tx_e2_norm_exceeded ... ok
+test tx_fee_word_above_2_64 ... ok
+test tx_overspend ... ok
+test tx_wrong_witness_ring_row ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 13.86s
+
+   Doc-tests pqzh_ligero
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+	Command being timed: "cargo test --release --offline -- --nocapture --test-threads 1"
+	User time (seconds): 22.56
+	System time (seconds): 1.47
+	Percent of CPU this job got: 143%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:16.80
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 227144
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 2853
+	Minor (reclaiming a frame) page faults: 339638
+	Voluntary context switches: 5696
+	Involuntary context switches: 4287
+	Swaps: 0
+	File system inputs: 299424
+	File system outputs: 502744
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
