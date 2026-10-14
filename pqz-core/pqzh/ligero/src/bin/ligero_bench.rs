@@ -10,7 +10,7 @@ use std::time::Instant;
 
 use pqzh_ligero::client::{self, KINDS, R, mutate, rel_name};
 use pqzh_ligero::ligero::VERIFY_PANICS;
-use pqzh_ligero::{OP_BURN, OP_DISCLOSE_RECEIVER, OP_DISCLOSE_SENDER, OP_REGISTER, OP_TRANSFER, OPS, Params, breakdown, prove, soundness, verify};
+use pqzh_ligero::{Form, Params, RELS, breakdown, prove, soundness, verify};
 
 struct Track;
 static LIVE: AtomicIsize = AtomicIsize::new(0);
@@ -61,6 +61,10 @@ fn stats(v: &mut [f64]) -> String {
     )
 }
 
+fn fnv(b: &[u8]) -> u32 {
+    b.iter().fold(2166136261u32, |h, &x| (h ^ x as u32).wrapping_mul(16777619))
+}
+
 fn main() {
     let a: Vec<String> = std::env::args().collect();
     let get = |k: &str| a.iter().position(|x| x == k).and_then(|i| a.get(i + 1)).map(|s| s.as_str());
@@ -69,25 +73,21 @@ fn main() {
     let proven = regime != "conj";
     let r431 = num("--r431", 1) != 0;
     let (np, nv, nadv) = (num("--np", 3), num("--nv", 100), num("--nadv", 40));
-    let ops: Vec<u8> = match get("--rel").unwrap_or("both") {
-        "reg" => vec![OP_REGISTER],
-        "tx" => vec![OP_TRANSFER],
-        "burn" => vec![OP_BURN],
-        "ds" => vec![OP_DISCLOSE_SENDER],
-        "dr" => vec![OP_DISCLOSE_RECEIVER],
-        "all" => OPS.to_vec(),
-        _ => vec![OP_REGISTER, OP_TRANSFER],
+    let forms: Vec<Form> = match get("--rel").unwrap_or("both") {
+        "all" => RELS.to_vec(),
+        "both" => vec![Form::Register, Form::Transfer],
+        r => vec![*RELS.iter().find(|&&f| rel_name(f)[2..].eq_ignore_ascii_case(r)).expect("--rel")],
     };
     std::panic::set_hook(Box::new(|_| {})); // verify counts caught panics; keep stderr quiet
     let s = client::setup();
-    for op in ops {
-        let name = rel_name(op);
+    for f in forms {
+        let (op, name) = (f.op(), rel_name(f));
         let p = match (get("--n"), get("--k")) {
             (Some(n), Some(k)) => Params::new(n.parse().unwrap(), k.parse().unwrap(), proven),
             _ if regime == "johnson" => Params::johnson_preset(),
             _ => Params::preset(op, proven, r431),
         };
-        let (st, w) = s.rel(op);
+        let (st, w) = s.rel(f);
         let bits: Vec<String> = soundness(op, st, &p).iter().map(|(k, v)| format!("\"{k}\": {v:.1}")).collect();
         println!(
             "{{\"rel\": \"{name}\", \"params\": {{\"n\": {}, \"k\": {}, \"ell\": {}, \"t\": {}, \"n2\": {}, \"pow_bits\": {}, \"proven\": {}, \"johnson\": {}, \"rate\": {:.5}}}, \"soundness_bits\": {{{}}}}}",
@@ -99,6 +99,7 @@ fn main() {
         let mut tp = Vec::new();
         let mut peak_p = 0;
         let mut lens = Vec::new();
+        let mut fnvs = Vec::new();
         for i in 0..np.max(1) {
             arm();
             let t = Instant::now();
@@ -109,16 +110,18 @@ fn main() {
             tp.push(t.elapsed().as_secs_f64() * 1e3);
             peak_p = peak_p.max(disarm());
             lens.push(pt.len());
+            fnvs.push(format!("\"{:08x}\"", fnv(&pt)));
         }
-        let bd: Vec<String> = breakdown(op, &pt, &p).iter().map(|(k, v)| format!("\"{k}\": {v}")).collect();
+        let bd: Vec<String> = breakdown(f, &pt, &p).iter().map(|(k, v)| format!("\"{k}\": {v}")).collect();
         println!(
-            "{{\"rel\": \"{name}\", \"proof_bytes\": {}, \"proof_bytes_min\": {}, \"proof_bytes_max\": {}, \"max_len_exact\": {}, \"max_len_verifier\": {}, \"fnv_last\": \"{:08x}\", \"breakdown\": {{{}}}}}",
+            "{{\"rel\": \"{name}\", \"proof_bytes\": {}, \"proof_bytes_min\": {}, \"proof_bytes_max\": {}, \"max_len_exact\": {}, \"max_len_verifier\": {}, \"fnv_last\": \"{:08x}\", \"fnv_by_seed\": [{}], \"breakdown\": {{{}}}}}",
             pt.len(),
             lens.iter().min().unwrap(),
             lens.iter().max().unwrap(),
-            p.max_len_exact(op),
-            p.max_proof_len(op),
-            pt.iter().fold(2166136261u32, |h, &b| (h ^ b as u32).wrapping_mul(16777619)),
+            p.max_len_exact(f),
+            p.max_proof_len(f),
+            fnv(&pt),
+            fnvs.join(", "),
             bd.join(", ")
         );
         println!("{{\"rel\": \"{name}\", \"timing\": \"prove\", \"stats\": {}, \"peak_heap_mb\": {:.1}}}", stats(&mut tp), peak_p as f64 / 1048576.0);
@@ -144,7 +147,7 @@ fn main() {
             let mut acc = 0;
             let p0 = VERIFY_PANICS.load(Ordering::Relaxed);
             for _ in 0..nadv {
-                let (ms, mp) = mutate(k, op, st, &pt, &other, &mut r);
+                let (ms, mp) = mutate(k, f, st, &pt, &other, &mut r);
                 let t = Instant::now();
                 acc += verify(op, &ms, &mp, &p) as usize;
                 tk.push(t.elapsed().as_secs_f64() * 1e3);
