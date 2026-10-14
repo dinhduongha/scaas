@@ -1,0 +1,18 @@
+# runs/arena-probe.sh (first version of tests/fault.rs): rc and the first failure per fixed arena size.
+# 4-12 MiB: SIGSEGV (exhaustion inside the relation's key generation crashes the core, STATUS.md Open 2).
+# 14-20 MiB: the arena-exhaustion part passed (status 4); line 46 was the test's own bug (it built the PQZH case
+#   through KeyGen while the worker was failed; fixed, then ffi1d green with 16 MiB).
+# 24 MiB and up: no exhaustion, R_TX verifies (left: Ok(...01)).
+  Executable tests/fault.rs (target/release/deps/fault-5ab6768a5ba05deb)
+arena 4 MiB: rc=101 SIGSEGV 
+arena 8 MiB: rc=101 SIGSEGV 
+arena 10 MiB: rc=101 SIGSEGV 
+arena 12 MiB: rc=101 SIGSEGV 
+arena 14 MiB: rc=101 panicked at tests/fault.rs:46:38: 
+arena 16 MiB: rc=101 panicked at tests/fault.rs:46:38: 
+arena 18 MiB: rc=101 panicked at tests/fault.rs:46:38: 
+arena 20 MiB: rc=101 panicked at tests/fault.rs:46:38: 
+arena 24 MiB: rc=101 panicked at tests/fault.rs:29:5: left: Ok([0, 
+arena 32 MiB: rc=101 panicked at tests/fault.rs:29:5: left: Ok([0, 
+arena 48 MiB: rc=101 panicked at tests/fault.rs:29:5: left: Ok([0, 
+arena 64 MiB: rc=101 panicked at tests/fault.rs:29:5: left: Ok([0, 

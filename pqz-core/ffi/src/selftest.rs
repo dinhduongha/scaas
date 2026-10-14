@@ -92,10 +92,10 @@ pub fn report() -> Option<Report> {
     for (i, (id, proof)) in [(PQZL_ID, PQZL_PROOF), (PQZH_ID, PQZH_PROOF)].into_iter().enumerate() {
         let mut st = reg_statement(&id, &key.pk[..]);
         let mut input = pqz_stmt::input(3, &st, proof);
-        results[2 * i] = crate::verify_input(&input);
+        results[2 * i] = crate::verify_input(&input).ok()?;
         st[95] ^= 1;
         input = pqz_stmt::input(3, &st, proof);
-        results[2 * i + 1] = crate::verify_input(&input);
+        results[2 * i + 1] = crate::verify_input(&input).ok()?;
     }
     let r = results.map(|b| b as u8);
     let hash = keccak(&[&kat_digest, &r]);
@@ -104,13 +104,14 @@ pub fn report() -> Option<Report> {
 
 static CACHE: OnceLock<Word> = OnceLock::new();
 
-/// The `OP_SELFTEST` output (cached for the process; a failed computation returns the zero word and is retried).
-pub fn selftest() -> Word {
+/// The `OP_SELFTEST` output, cached for the process. A computation that fails (a core call failed or panicked: its
+/// inputs are fixed, so never the caller's input) is a node fault, not cached, retried at the next call.
+pub fn selftest() -> Result<Word, crate::NodeFault> {
     if let Some(h) = CACHE.get() {
-        return *h;
+        return Ok(*h);
     }
     match std::panic::catch_unwind(report) {
-        Ok(Some(r)) => *CACHE.get_or_init(|| r.hash),
-        _ => [0; 32],
+        Ok(Some(r)) => Ok(*CACHE.get_or_init(|| r.hash)),
+        _ => Err(crate::NodeFault),
     }
 }

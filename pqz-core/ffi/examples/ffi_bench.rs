@@ -44,7 +44,7 @@ fn main() {
             let direct = |s: &[u8], p: &[u8]| {
                 if id == PQZL_ID { pqzl::verify_fast_on_caller(c.op(), s, p) } else { pqzh::verify(c.op(), s, p) }
             };
-            assert!(verify_input(&input)); // warm on the worker (relation keys, SV tables)
+            assert!(verify_input(&input).unwrap()); // warm on the worker (relation keys, SV tables)
             let mut out = [0u8; 32];
             let row = [
                 ("direct", time(n, || assert!(direct(&c.stmt, &proof)))),

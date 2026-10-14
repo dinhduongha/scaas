@@ -5,7 +5,10 @@
 //! length, every D15 / R6 rule, `1 ≤ len(proof) ≤ MAX_PROOF(id)`) → dispatch on the `proofSystemId` word: PQZL to the
 //! C core's specialised verifier (`pqzl`, one process-wide lock), PQZH to Ligero (`pqzh`); op 6 to the cached
 //! self-test (`selftest`). Output: 32 bytes, `…01` valid, `…00` anything else; the one revert is an input over
-//! `MAX_INPUT`. Every entry catches panics; nothing here aborts.
+//! `MAX_INPUT`. Every entry catches panics; nothing here aborts. Faults (controller 2026-10-14): a panic in the
+//! decode / verify logic is a property of the input (every node hits it on the same input) ⇒ `…00`
+//! (`PQZ_FFI_INTERNAL`); a fault of this node (arena exhaustion, worker or core unavailable, allocation) ⇒ no result
+//! ([`Error::NodeFault`], `PQZ_FFI_NODE_FAULT`), which the host must not treat as an invalid input.
 //!
 //! Rust API for the node: [`precompile`], [`verify_input`], [`decode`]. C ABI for P6f: [`pqz_precompile`]
 //! (`pqz_ffi.h`). Feature `prove` (P6h): [`prove`], keygen / enc / dec in [`pqzl`], witness layouts and test
@@ -22,9 +25,17 @@ pub mod pqzh;
 pub mod pqzl;
 pub mod selftest;
 
-/// The input is longer than `MAX_INPUT`: the precompile reverts (consumes all gas), pq-zether.md §9.1.
+pub use pqzl::NodeFault;
+
+/// Why the precompile has no 32-byte result.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
-pub struct Revert;
+pub enum Error {
+    /// the input is longer than `MAX_INPUT`: the precompile reverts (consumes all gas), pq-zether.md §9.1
+    Revert,
+    /// a fault of this node, not of the input: no result; the host stops processing (P6f), never treats the input
+    /// as invalid
+    NodeFault,
+}
 
 /// `…01`
 pub const VALID: Word = {
@@ -42,19 +53,21 @@ pub fn decode(input: &[u8]) -> Result<Input<'_>, Reject> {
 
 /// Decode and verify one input of op 1..5: true only for a canonical input whose proof the id's verifier accepts.
 /// Op 6 (self-test) and anything undecodable is false. Panics propagate (callers: [`precompile`] catches them).
-pub fn verify_input(input: &[u8]) -> bool {
-    let Ok(inp) = decode(input) else { return false };
+pub fn verify_input(input: &[u8]) -> Result<bool, NodeFault> {
+    let Ok(inp) = decode(input) else { return Ok(false) };
     match inp.stmt.proof_system_id() {
         Some(id) if *id == PQZL_ID => pqzl::verify_fast(inp.op, inp.stmt_bytes, inp.proof),
-        Some(id) if *id == PQZH_ID => pqzh::verify(inp.op, inp.stmt_bytes, inp.proof),
-        _ => false,
+        Some(id) if *id == PQZH_ID => Ok(pqzh::verify(inp.op, inp.stmt_bytes, inp.proof)),
+        _ => Ok(false),
     }
 }
 
 enum Outcome {
     Word(Word),
     Revert,
+    /// a panic in the decode / verify logic (input-caused)
     Panic,
+    NodeFault,
 }
 
 fn run(input: &[u8]) -> Outcome {
@@ -64,24 +77,24 @@ fn run(input: &[u8]) -> Outcome {
     match catch_unwind(|| {
         if input == [6, 0, 0, 0, 0] {
             selftest::selftest()
-        } else if verify_input(input) {
-            VALID
         } else {
-            INVALID
+            verify_input(input).map(|ok| if ok { VALID } else { INVALID })
         }
     }) {
-        Ok(w) => Outcome::Word(w),
+        Ok(Ok(w)) => Outcome::Word(w),
+        Ok(Err(NodeFault)) => Outcome::NodeFault,
         Err(_) => Outcome::Panic,
     }
 }
 
-/// The precompile: `Ok(…01 / …00 / the self-test hash)`, `Err(Revert)` only for an input over `MAX_INPUT`. A panic
-/// anywhere below gives `…00` (CTR-PQZ-10).
-pub fn precompile(input: &[u8]) -> Result<Word, Revert> {
+/// The precompile: `Ok(…01 / …00 / the self-test hash)`; `Err(Revert)` for an input over `MAX_INPUT`,
+/// `Err(NodeFault)` for a fault of this node. A panic in the decode / verify logic gives `…00` (CTR-PQZ-10).
+pub fn precompile(input: &[u8]) -> Result<Word, Error> {
     match run(input) {
         Outcome::Word(w) => Ok(w),
-        Outcome::Revert => Err(Revert),
+        Outcome::Revert => Err(Error::Revert),
         Outcome::Panic => Ok(INVALID),
+        Outcome::NodeFault => Err(Error::NodeFault),
     }
 }
 
@@ -91,8 +104,12 @@ pub const PQZ_FFI_OK: i32 = 0;
 pub const PQZ_FFI_REVERT: i32 = 1;
 /// `input` null with `len > 0`, `out` null, or `out_len < 32`; nothing written
 pub const PQZ_FFI_BAD_ARGS: i32 = 2;
-/// a panic was caught below the entry; `out` = `…00` (the result is invalid, CTR-PQZ-10); worth a log line
+/// a panic in the decode / verify logic was caught (input-caused, the same on every node); `out` = `…00`
+/// (CTR-PQZ-10); worth a log line
 pub const PQZ_FFI_INTERNAL: i32 = 3;
+/// a fault of this node, not of the input (arena exhaustion, worker or core unavailable, allocation): no result,
+/// nothing written; the host must abort block processing, never treat the input as invalid
+pub const PQZ_FFI_NODE_FAULT: i32 = 4;
 
 /// C ABI for the node (P6f, P/Invoke): see `pqz_ffi.h`. Thread-safe (libpqz calls are serialised inside); never
 /// unwinds or aborts.
@@ -105,13 +122,14 @@ pub unsafe extern "C" fn pqz_precompile(input: *const u8, len: usize, out: *mut 
         return PQZ_FFI_BAD_ARGS;
     }
     let inp = if len == 0 { &[][..] } else { std::slice::from_raw_parts(input, len) };
-    let out = std::slice::from_raw_parts_mut(out, 32);
-    let (w, rc) = match catch_unwind(AssertUnwindSafe(|| run(inp))).unwrap_or(Outcome::Panic) {
+    // a panic outside run()'s own catch (framing, the outcome match) cannot be classified: a node fault
+    let (w, rc) = match catch_unwind(AssertUnwindSafe(|| run(inp))).unwrap_or(Outcome::NodeFault) {
         Outcome::Word(w) => (w, PQZ_FFI_OK),
         Outcome::Revert => (INVALID, PQZ_FFI_REVERT),
         Outcome::Panic => (INVALID, PQZ_FFI_INTERNAL),
+        Outcome::NodeFault => return PQZ_FFI_NODE_FAULT,
     };
-    out.copy_from_slice(&w);
+    std::slice::from_raw_parts_mut(out, 32).copy_from_slice(&w);
     rc
 }
 
@@ -121,7 +139,7 @@ pub unsafe extern "C" fn pqz_precompile(input: *const u8, len: usize, out: *mut 
 pub enum ProveError {
     /// the statement does not decode (`pqz_stmt::parse`)
     Statement(Reject),
-    /// PQZL: the core's error code (pqz_rt.h: 3 input, 4 reject, 5 arena, …)
+    /// PQZL: the core's error code (pqz_rt.h: 1 internal, 2 arena, 3 input, 4 rejection cap; -1 node fault)
     Pqzl(i32),
     /// PQZH: Ligero's message
     Pqzh(&'static str),

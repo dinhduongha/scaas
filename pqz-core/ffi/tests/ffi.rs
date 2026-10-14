@@ -161,7 +161,7 @@ fn every_rejection() {
         assert_eq!(precompile(&input), Ok(INVALID), "{name}");
         n += 1;
     }
-    assert_eq!(precompile(&vec![1; MAX_INPUT + 1]), Err(Revert));
+    assert_eq!(precompile(&vec![1; MAX_INPUT + 1]), Err(Error::Revert));
     assert_eq!(precompile(&vec![1; MAX_INPUT]), Ok(INVALID));
     eprintln!("rejection cases: {}", n + 2);
 }
@@ -193,8 +193,8 @@ fn pqzl_differential() {
             proofs.push(p);
         }
         for p in proofs {
-            let fast = verify_input(&stmt::input(op, &h.case.stmt, &p));
-            let generic = pqzl::verify_generic(op, &h.case.stmt, &p);
+            let fast = verify_input(&stmt::input(op, &h.case.stmt, &p)).unwrap();
+            let generic = pqzl::verify_generic(op, &h.case.stmt, &p).unwrap();
             assert_eq!(fast, generic, "{:?}", h.case.form);
             cases += 1;
             accepted += fast as usize;
@@ -369,6 +369,7 @@ fn header_matches() {
     assert_eq!(def("PQZ_FFI_REVERT"), PQZ_FFI_REVERT as i64);
     assert_eq!(def("PQZ_FFI_BAD_ARGS"), PQZ_FFI_BAD_ARGS as i64);
     assert_eq!(def("PQZ_FFI_INTERNAL"), PQZ_FFI_INTERNAL as i64);
+    assert_eq!(def("PQZ_FFI_NODE_FAULT"), PQZ_FFI_NODE_FAULT as i64);
     assert_eq!(def("PQZ_FFI_MAX_INPUT"), MAX_INPUT as i64);
     assert_eq!(def("PQZ_FFI_OUT_BYTES"), 32);
     assert!(h.contains("int pqz_precompile (const uint8_t *input, size_t len, uint8_t *out, size_t out_len);"));

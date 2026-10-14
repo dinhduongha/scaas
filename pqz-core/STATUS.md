@@ -423,6 +423,18 @@ self-test hash).
 The boundary (decode ≤ 0.01 ms p99, `catch_unwind`, the lock, the worker hop) adds ≤ 0.1 ms at p50; the p99 columns
 differ by host noise (± 3 ms between runs of the same call). Every op ≤ 12.2 ms p99 against the 60 ms limit.
 
+**Fault split (controller 2026-10-14), run `ffi1d`** (`ffi/runs/ffi1d-*`; its first attempt crashed in the injection,
+below): status 3 (`…00`) only for a panic in the decode / verify logic (input-caused, the same on every node); status 4
+`PQZ_FFI_NODE_FAULT` = no result, `out` untouched, for a fault of the node (arena or `pqz_init` failure, worker not
+created or a job on it panicked, `pqz_err == PQZ_ERR_ARENA` after a call — the core is then dropped and re-initialised —,
+a failed self-test computation, an unclassified panic); Rust `Error::{Revert, NodeFault}`, `verify_input` /
+`pqzl::verify_fast` return `Result<bool, NodeFault>`. `tests/fault.rs` (own process, test hooks): a 16 MiB arena and a
+failing worker give status 4 with `out` untouched for verify and the self-test, PQZH unaffected, and the core recovers.
+**Finding:** a fixed arena of 4–12 MiB crashes the process (SIGSEGV) instead of reporting exhaustion: exhaustion inside
+LaZer's key generation is not graceful (Open 2); 14–20 MiB fails gracefully, ≥ 24 MiB verifies `R_TX`
+(`ffi/runs/ffi1d-arena-probe.txt`, `ffi/runs/arena-probe.sh`). Status 4 therefore covers the exhaustion the core survives;
+the production arena (136 MiB, 1.5 × the six-form peak) keeps it out of reach. All other `ffi1d` checks as `ffi1c`.
+
 ## Measured (2026-10-13, this machine, single thread)
 
 Native: clang -O2, `pqz_bench 5 5` under `scripts/capped` (5 proves, 5 + 5 honest verifies, 10 adversarial). wasm32:
@@ -465,7 +477,9 @@ rest bookkeeping; the zero entries of the selection matrices' Gram matrices were
    PQZ_ERR_ARENA. Size the arena from the measured peaks (bench uses 768 MiB; P6d-2 peaks 316 MB native) or make
    exhaustion abort the call. `pqz-ffi` (P6e Task 7) sizes both from measurement (verify-only 136 MiB =
    1.5 × 94.6 MB, prove 448 MiB); its first run `ffi1` used 64 MiB for verify-only and the core, out of arena, rejected
-   honest proofs (`ffi/runs/ffi1-bench.jsonl`, `all_valid: false`) without crashing. The core's behaviour is unchanged.
+   honest proofs (`ffi/runs/ffi1-bench.jsonl`, `all_valid: false`) without crashing, and `ffi/runs/ffi1d-arena-probe.txt`
+   shows the crash: a 4–12 MiB arena (exhaustion in the relation's key generation) segfaults. `pqz-ffi` reports the
+   exhaustion the core survives as a node fault (status 4). The core's behaviour is unchanged.
 3. **wasm.** Proofs equal byte for byte with native (P6d-2, seeds 0..2); no browser run (node only); R_TX needs
    ~0.23 GB of the 4 GiB wasm32 memory (fix-ups, one op per process).
 4. UBSan nits left as upstream: zero-length VLAs when M = 0 / nbin = 0 (`lnp-tbox.c` 223, 875, 3451),

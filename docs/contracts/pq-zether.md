@@ -1133,9 +1133,12 @@ The id stays v2 for now; whether this needs a bump is an open owner decision (re
 `0x0000000000000000000000000000000000000F01` (first input byte = op) and `MLDSA65` at `…0F10` (EIP-8355's layout from
 P6; transitional: plus a context string; moving both out of the EIP-1352 range is a P6 item). **v1 runs only on our Nethermind chain** (owner). Other private chains (customer-run Besu/geth/reth)
 get the off-chain co-processor attestation seam later; **no client ports in v1**; the co-processor is rejected on chain
-7622 itself. **Determinism and probing:** integer-only code, no threads, no floating point, no CPU-feature-dependent
+7622 itself. **Determinism and probing:** integer-only code, no threads in the computation (`pqz-ffi` runs every core
+call serially on one worker thread, only for a fixed stack), no floating point, no CPU-feature-dependent
 results, bounded loops (a capped rejection loop that hits its cap ⇒ invalid); any parse error, panic or failed check ⇒
-output `0x00…00`; gas by formula regardless of validity; activation by `pqzTransitionTimestamp`; contracts self-test and
+output `0x00…00`; a fault of the node itself, not of the input (arena exhaustion, the worker or the core unavailable,
+allocation failure) gives no result at all: the node aborts processing the block and never treats the input as invalid
+(`pqz-ffi` status `PQZ_FFI_NODE_FAULT`, controller 2026-10-14); gas by formula regardless of validity; activation by `pqzTransitionTimestamp`; contracts self-test and
 the node probes (`has_pqz_precompile`), because a missing transition key looks exactly like an enabled one.
 
 **The verify

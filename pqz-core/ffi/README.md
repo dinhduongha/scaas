@@ -22,10 +22,10 @@ flowchart LR
 
 | Entry | What |
 |---|---|
-| `pqz_precompile(input, len, out, out_len) -> int` (`pqz_ffi.h`) | C ABI for P/Invoke. Status 0 = `out[0..32]` holds `…01` / `…00` / the self-test hash; 1 = revert (input over `MAX_INPUT` = 393,216 B); 2 = bad arguments (nothing written); 3 = a panic was caught (`out` = `…00`, log it). Thread-safe, never unwinds or aborts |
-| `precompile(&[u8]) -> Result<[u8; 32], Revert>` | the same in Rust (a caught panic gives `…00`) |
+| `pqz_precompile(input, len, out, out_len) -> int` (`pqz_ffi.h`) | C ABI for P/Invoke. Status 0 = `out[0..32]` holds `…01` / `…00` / the self-test hash; 1 = revert (input over `MAX_INPUT` = 393,216 B); 2 = bad arguments (nothing written); 3 = a panic in the decode / verify logic was caught (input-caused, the same on every node: `out` = `…00`, log it); 4 = node fault (below: no result, `out` untouched). Thread-safe, never unwinds or aborts |
+| `precompile(&[u8]) -> Result<[u8; 32], Error>` | the same in Rust: `Error::Revert`, `Error::NodeFault`; a caught input-caused panic gives `…00` |
 | `decode(&[u8])` | `pqz_stmt::decode_input` (the crate re-exports `pqz_stmt` as `stmt`) |
-| `verify_input(&[u8]) -> bool` | decode + the id's verifier (op 1..5) |
+| `verify_input(&[u8]) -> Result<bool, NodeFault>` | decode + the id's verifier (op 1..5) |
 | `pqzl::verify_fast` / `pqzl::verify_generic` / `pqzh::verify` | the verifiers on decoded parts; the generic PQZL verifier is the differential reference, never on the precompile path (R5) |
 | `selftest::selftest()`, `selftest::report()` | `OP_SELFTEST` (D13), below |
 | feature `prove`: `prove(op, stmt, wit, rnd32)` | PQZL (`pqz_prove`) or PQZH (Ligero) by the statement's id; deterministic, hedged (CTR-PQZ-19) |
@@ -38,6 +38,20 @@ once: `ARENA_SMALL` (verify-only: 1.5 × the measured peak of the specialised ve
 form's keys and tables kept, plus the self-test) for the precompile path; the first prove or generic verify moves it
 once to `ARENA_BIG` (448 MiB; `R_TX` prove alone peaks at 304 MB). A poisoned lock is recovered and the core
 re-initialised. The arena's pages are reserved, not touched, until the core uses them.
+
+**Faults (controller 2026-10-14).** Input-caused: a panic in the decode / verify logic (any node hits it on the
+same input) ⇒ `…00`, status 3. Node-local, not a property of the input ⇒ `NodeFault`, status 4, no result: the arena
+allocation or `pqz_init` fails, the worker cannot be created or a job on it panicked, the core runs out of arena
+(`pqz_err == PQZ_ERR_ARENA` after a call; the core is then dropped and re-initialised at the next call), the
+self-test's computation fails (its inputs are fixed), a panic outside the classified region. The host (P6f) aborts
+block processing on status 4 and never records the input as invalid. Ligero catches its own verifier panics and
+returns false (input-caused, `…00`, counted in `pqzh_ligero::ligero::VERIFY_PANICS`). A failed Rust heap allocation
+aborts the process (Rust's allocator; the arenas are reserved fallibly). Test hooks `pqzl::TEST_ARENA_BYTES` /
+`TEST_FAIL_WORKER` inject both kinds (`tests/fault.rs`, its own process).
+
+**Integration.** The C ABI needs no lock and at most 1 MiB of the caller's stack. A wasm32 wallet that embeds the
+`prove` feature must link with an 8 MiB stack (`-zstack-size=8388608`, as `wasm/.cargo/config.toml`): wasm32 has no
+worker thread, the core runs on the module's stack.
 
 **Self-test (D13).** `keccak256(kat_digest ‖ u8(pqzl_valid) ‖ u8(pqzl_invalid) ‖ u8(pqzh_valid) ‖ u8(pqzh_invalid))`
 with `kat_digest = keccak256(A digest ‖ keccak256(pk) ‖ keccak256(u ‖ v) ‖ M ‖ keccak256(fft) ‖ u8(fft_ok))`: A read
@@ -72,7 +86,7 @@ id, framing, `MAX_INPUT + 1` = revert); the PQZL differential test (SV vs generi
 mutated proofs); abort-freedom (10,240 random / random-proof / edited inputs through the C ABI, serial and from 8
 threads: identical results, status 3 never, only unedited honest inputs valid); the C ABI's arguments; the self-test
 (A digest = `pqz_kat.py`); the compiled-in self-test proofs equal a fresh prove; the precompile path on a 1 MiB
-caller stack; `pqz_ffi.h`'s constants; the digest lines (native half of the wasm32 byte-equality check).
+caller stack; `pqz_ffi.h`'s constants; node faults (`tests/fault.rs`: an 8 MiB arena and a failing worker give status 4 with `out` untouched, verify again afterwards); the digest lines (native half of the wasm32 byte-equality check).
 
 ## PQZH: the switch after `p6e-b3`
 

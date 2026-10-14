@@ -8,9 +8,27 @@
 //! Arenas (allocated once, kept for the process): `ARENA_SMALL` for the precompile path (the specialised verifier of
 //! all six forms, keygen / enc / dec, the self-test), measured; `ARENA_BIG` for the prover and the generic verifier. A
 //! call that needs `ARENA_BIG` re-initialises the core once on it (the core's caches are rebuilt lazily); the core
-//! then stays there. A core or worker that cannot be set up (allocation, thread creation) is a node fault: the verify
-//! functions panic, which the precompile entry reports as `PQZ_FFI_INTERNAL`.
+//! then stays there.
+//!
+//! Node faults (controller 2026-10-14): a core or worker that cannot be set up (arena allocation, `pqz_init`, thread
+//! creation), a worker job that panicked, and the core running out of arena (`pqz_err == PQZ_ERR_ARENA` after a call)
+//! are not properties of the input: `with_core` returns `Err(NodeFault)` (and drops the core, re-initialised at the
+//! next call), which the precompile entry reports as `PQZ_FFI_NODE_FAULT` with no output.
 use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering::Relaxed};
+
+/// A fault of this node, not of the input: no result (the host must not treat the input as invalid).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct NodeFault;
+
+const PQZ_ERR_ARENA: i32 = 2; // pqz_rt.h
+
+/// Test hooks (fault injection; never set in production): a fixed arena size for every (re)initialisation, and a
+/// worker that refuses every job.
+#[doc(hidden)]
+pub static TEST_ARENA_BYTES: AtomicUsize = AtomicUsize::new(0);
+#[doc(hidden)]
+pub static TEST_FAIL_WORKER: AtomicBool = AtomicBool::new(false);
 
 /// Verify-only arena: 1.5 × the measured peak of the specialised verifier over all six forms (relation keys and
 /// tables of every form kept, as in a long-running node) plus the self-test: 94,615,600 B → 136 MiB
@@ -23,6 +41,7 @@ pub const STACK: usize = 16 << 20;
 
 pub const MAX_PROOF: usize = 98_304;
 extern "C" {
+    static pqz_err: i32;
     fn pqz_init(arena: *mut u8, len: usize) -> i32;
     fn pqz_arena_peak_bytes() -> usize;
     fn pqz_verify(op: u8, stmt: *const u8, stmt_len: usize, proof: *const u8, proof_len: usize) -> i32;
@@ -83,6 +102,9 @@ static STATE: Mutex<State> = Mutex::new(State { core: None, worker: None });
 fn on_worker<R: Send>(w: &mut Option<Worker>, f: impl FnOnce() -> R + Send) -> Option<R> {
     use std::panic::{AssertUnwindSafe, catch_unwind};
     use std::sync::mpsc::channel;
+    if TEST_FAIL_WORKER.load(Relaxed) {
+        return None;
+    }
     if w.is_none() {
         let (jobs, rx) = channel::<Job>();
         let (tx, done) = channel();
@@ -118,9 +140,10 @@ fn on_worker<R: Send>(_: &mut Option<Worker>, f: impl FnOnce() -> R + Send) -> O
     Some(f())
 }
 
-/// Runs `f` under the lock, on the worker, with the core initialised on an arena of at least `need` bytes. `None` if
-/// the core or the worker cannot be set up, or `f` panicked. A poisoned lock is recovered and the core re-initialised.
-fn with_core<T: Send>(need: usize, f: impl FnOnce() -> T + Send) -> Option<T> {
+/// Runs `f` under the lock, on the worker, with the core initialised on an arena of at least `need` bytes.
+/// `Err(NodeFault)` if the core or the worker cannot be set up, `f` panicked, or the core ran out of arena; the core is
+/// then dropped (re-initialised at the next call). A poisoned lock is recovered and the core re-initialised.
+fn with_core<T: Send>(need: usize, f: impl FnOnce() -> T + Send) -> Result<T, NodeFault> {
     let mut g = STATE.lock().unwrap_or_else(|e| {
         STATE.clear_poison();
         let mut g = e.into_inner();
@@ -129,6 +152,10 @@ fn with_core<T: Send>(need: usize, f: impl FnOnce() -> T + Send) -> Option<T> {
     });
     let State { core, worker } = &mut *g;
     let r = on_worker(worker, || -> Option<T> {
+        let need = match TEST_ARENA_BYTES.load(Relaxed) {
+            0 => need,
+            n => n,
+        };
         if core.as_ref().is_none_or(|c| c.arena.capacity() * 16 < need) {
             *core = None; // drop the old arena first
             let mut arena: Vec<u128> = Vec::new();
@@ -140,12 +167,14 @@ fn with_core<T: Send>(need: usize, f: impl FnOnce() -> T + Send) -> Option<T> {
             }
             *core = Some(Core { arena });
         }
-        Some(f())
+        let out = f();
+        // SAFETY: read on the thread that ran the call, under the lock
+        (unsafe { pqz_err } != PQZ_ERR_ARENA).then_some(out)
     });
     if r.is_none() {
-        g.core = None; // a failed or panicked call: start over on a fresh core
+        g.core = None; // a failed call: start over on a fresh core
     }
-    r.flatten()
+    r.flatten().ok_or(NodeFault)
 }
 
 /// Re-initialise the core on a fresh arena of `bytes` (measurement: the verify-only peak needs a core that has never
@@ -153,7 +182,7 @@ fn with_core<T: Send>(need: usize, f: impl FnOnce() -> T + Send) -> Option<T> {
 #[doc(hidden)]
 pub fn reinit(bytes: usize) -> bool {
     STATE.lock().unwrap_or_else(|e| e.into_inner()).core = None;
-    with_core(bytes, || ()).is_some()
+    with_core(bytes, || ()).is_ok()
 }
 
 /// Arena high-water mark since the core was initialised (bytes).
@@ -163,12 +192,11 @@ pub fn arena_peak() -> usize {
 
 /// The precompile path (plan R5): the specialised verifier. `stmt` / `proof` are passed through as given; the caller
 /// (`crate::verify`) has decoded them.
-pub fn verify_fast(op: u8, stmt: &[u8], proof: &[u8]) -> bool {
+pub fn verify_fast(op: u8, stmt: &[u8], proof: &[u8]) -> Result<bool, NodeFault> {
     with_core(ARENA_SMALL, || unsafe {
         pqz_verify_fast(op, stmt.as_ptr(), stmt.len(), proof.as_ptr(), proof.len())
     })
-    .expect("pqz core unavailable (arena or worker)")
-        == 1
+    .map(|r| r == 1)
 }
 
 /// `verify_fast` on the caller's thread, without the worker hop (bench: the FFI's overhead against the bare call;
@@ -180,10 +208,9 @@ pub fn verify_fast_on_caller(op: u8, stmt: &[u8], proof: &[u8]) -> bool {
 }
 
 /// The generic verifier (LaZer's), the reference for differential tests; never on the precompile path.
-pub fn verify_generic(op: u8, stmt: &[u8], proof: &[u8]) -> bool {
+pub fn verify_generic(op: u8, stmt: &[u8], proof: &[u8]) -> Result<bool, NodeFault> {
     with_core(ARENA_BIG, || unsafe { pqz_verify(op, stmt.as_ptr(), stmt.len(), proof.as_ptr(), proof.len()) })
-        .expect("pqz core unavailable (arena or worker)")
-        == 1
+        .map(|r| r == 1)
 }
 
 pub const PK_BYTES: usize = 16_384;
@@ -192,7 +219,7 @@ pub const CT_BYTES: usize = PK_BYTES + 128;
 /// pk = A·s + e (`pqz_keypair_from_secret`; no norm check): the self-test reads the columns of A with it.
 pub fn keypair_from_secret(s: &[i8; 2048], e: &[i16; 2048]) -> Option<Box<[u8; PK_BYTES]>> {
     let mut pk = Box::new([0u8; PK_BYTES]);
-    let rc = with_core(ARENA_SMALL, || unsafe { pqz_keypair_from_secret(s.as_ptr(), e.as_ptr(), pk.as_mut_ptr()) })?;
+    let rc = with_core(ARENA_SMALL, || unsafe { pqz_keypair_from_secret(s.as_ptr(), e.as_ptr(), pk.as_mut_ptr()) }).ok()?;
     (rc == 0).then_some(pk)
 }
 
@@ -207,7 +234,8 @@ pub fn keygen(seed32: &[u8; 32]) -> Option<Key> {
     let mut k = Key { pk: Box::new([0; PK_BYTES]), s: Box::new([0; 2048]), e: Box::new([0; 2048]) };
     let rc = with_core(ARENA_SMALL, || unsafe {
         pqz_keygen(seed32.as_ptr(), k.pk.as_mut_ptr(), k.s.as_mut_ptr(), k.e.as_mut_ptr(), std::ptr::null_mut())
-    })?;
+    })
+    .ok()?;
     (rc == 0).then_some(k)
 }
 
@@ -247,7 +275,8 @@ pub fn enc(pks: &[&[u8; PK_BYTES]], msgs: &[[u8; 16]], seed_enc: &[u8; 32]) -> O
             c.e2.as_mut_ptr(),
             std::ptr::null_mut(),
         )
-    })?;
+    })
+    .ok()?;
     (rc == 0).then_some(c)
 }
 
@@ -255,11 +284,11 @@ pub fn enc(pks: &[&[u8; PK_BYTES]], msgs: &[[u8; 16]], seed_enc: &[u8; 32]) -> O
 pub fn dec(s: &[i8; 2048], ct: &[u8; CT_BYTES]) -> Option<([i64; 16], [i64; 16])> {
     let (mut m, mut noise) = ([0i64; 16], [0i64; 16]);
     let rc =
-        with_core(ARENA_SMALL, || unsafe { pqz_dec(s.as_ptr(), ct.as_ptr(), m.as_mut_ptr(), noise.as_mut_ptr()) })?;
+        with_core(ARENA_SMALL, || unsafe { pqz_dec(s.as_ptr(), ct.as_ptr(), m.as_mut_ptr(), noise.as_mut_ptr()) }).ok()?;
     (rc == 0).then_some((m, noise))
 }
 
-/// `pqz_prove`: the proof, or the core's error code.
+/// `pqz_prove`: the proof, or the core's error code (-1: a node fault, `with_core`).
 #[cfg(feature = "prove")]
 pub fn prove(op: u8, stmt: &[u8], wit: &[u8], rnd32: &[u8; 32]) -> Result<Vec<u8>, i32> {
     let mut proof = vec![0u8; MAX_PROOF];

@@ -32,6 +32,10 @@ required-features = ["prove"]
 name = "ffi"
 required-features = ["prove"]
 
+[[test]]
+name = "fault"
+required-features = ["prove"]
+
 [profile.release]
 debug = 1
 panic = "unwind"

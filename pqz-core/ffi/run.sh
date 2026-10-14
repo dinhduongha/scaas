@@ -53,7 +53,7 @@ OUT() { echo "\$ $*"; "$@"; echo "[rc=$?]"; }
 /usr/bin/time -v cargo run --release --offline --features prove --example ffi_bench "${N:-200}" > "$L-bench.jsonl" 2> "$L-bench-time.txt"
 echo "bench rc=$?" >> "$L-bench-time.txt"
 
-grep -hE "^test result|FAILED|panicked|^test .* (ok|FAILED)$|rejection cases|differential:|abort-freedom:|selftest hash" "$L-test.txt"
+grep -hE "^test result|FAILED|panicked|^test .* (ok|FAILED)$|rejection cases|differential:|abort-freedom:|selftest hash|node faults:" "$L-test.txt"
 grep -hE "^c_abi|symbols ok|forbidden|NEEDED|/gmp|libm-style|\[rc=[1-9]" "$L-native.txt"
 grep -hE "native|wasm bytes|wasm run|\[rc=[1-9]" "$L-wasm.txt"
 tail -2 "$L-bench.jsonl"; grep -E "bench rc|Maximum resident" "$L-bench-time.txt"
