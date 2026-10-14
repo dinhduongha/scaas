@@ -59,5 +59,6 @@ output) are kept while the repository is private and are dropped before a public
 | [pqzh-zk-ext5.md](pqzh-zk-ext5.md) | PQZH with zero knowledge over Goldilocks⁵ at 128 bits: EVM-friendly configuration, proven / conjectured sizes, Merkle caps, WHIR (P6-PQZH) (2026-10-14) |
 | [pqz-anonymity.md](pqz-anonymity.md) | PQZ with hidden identities: ring anonymity (Anonymous Zether paradigm, Lether) vs one-time receiver accounts, cost estimate, no code (2026-10-14) |
 | [pqzh-zk-whir.md](pqzh-zk-whir.md) | PQZH with zero-knowledge WHIR: options, HVZK-WHIR adapter under the hiding batch STARK built and measured; `R_TX` 1.95 MB at 128 bits (Goldilocks⁵), above FRI + ZK: owner's stop rule triggered, settle on FRI (P6-PQZH) (2026-10-14) |
+| [pqzh-starkex-verifier.md](pqzh-starkex-verifier.md) | The StarkWare (SHARP / StarkEx) Ethereum STARK verifier — multi-tx split with fact registries, Stark252, 160-bit digests, 96-bit conjectured, not ZK; one mainnet proof 7.23 M gas in 12 txs; applied to PQZH: FRI + ZK proven `R_TX` splits into 4 txs ≈ 21.4 M, Ligero does not split (2026-10-14) |
 | [node-ai-agents.md](node-ai-agents.md) | scaas-node and AI agents — direction (2026-10-11) |
 | [zether-disclosure.md](zether-disclosure.md) | Zether disclosure — who can reveal what, under which conditions (2026-10-11) |
