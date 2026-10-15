@@ -338,8 +338,9 @@ setup (void)
   memcpy (tx0_wit + 12288 + 64, tx_wit + 12288 + 96, 32);
 }
 
-/* ---- R_TXM (op 7, P6-ANON L1): keys from pqz_keygen and encryptions from pqz_enc_seed with the group seeds of D13,
-   so nothing here draws from the test RNG and the other relations' statements and proofs are unchanged ---- */
+/* ---- R_TXM (op 7, P6-ANON L1): keys and encryption randomness from the test RNG reseeded per statement (xs saved and
+   restored), so the other relations' statements and proofs are unchanged; client helpers of pqz_rel.c only (no
+   pqz_keys.c, which several builds of this file do not link) ---- */
 #define MAXL PQZ_TXM_MAX_LEGS
 #define MAXG PQZ_TXM_GROUPS (PQZ_TXM_MAX_LEGS)
 static pqzkey_t KTS, KTR[MAXL], KTA; /* sender, recipients (leg j: KTR[j]), auditor */
@@ -379,12 +380,11 @@ txm_build (const txspec_t *X, uint8_t *st, size_t *stlen, uint8_t *wt, size_t *w
 {
   const unsigned m = X->m, a = X->a, G = PQZ_TXM_GROUPS (m);
   static int8_t r[MAXG][2048], rT[2048];
-  static int16_t e1[MAXG][2048], e1T[2048], e2T[1][16], e2g[2 * 4 + 1][16], e2l[MAXL][16], e2f[16], e2a[MAXL][16];
+  static int16_t e1[MAXG][2048], e1T[2048], e2T[1][16], e2l[MAXL][16], e2f[16], e2a[MAXL][16], zero16[1][16];
   static uint8_t u[MAXG][PQZ_POLYVEC_BYTES], uT[PQZ_POLYVEC_BYTES], vT[1][PQZ_V_BYTES], utmp[PQZ_POLYVEC_BYTES];
-  static uint8_t v[MAXL][PQZ_V_BYTES], vf[1][PQZ_V_BYTES], va[MAXL][PQZ_V_BYTES], vs[2 * 4 + 1][PQZ_V_BYTES];
-  static uint8_t zero[2 * 4 + 1][16];
-  uint8_t dg[MAXL][16], dpg[1][16], mT[1][16], seed[32] = { X->tag, 'E' }, sg[32], P[MAXL];
-  const uint8_t *pks[2 * 4 + 1];
+  static uint8_t v[MAXL][PQZ_V_BYTES], vf[1][PQZ_V_BYTES], va[MAXL][PQZ_V_BYTES], vs[1][PQZ_V_BYTES];
+  static uint8_t zero[1][16];
+  uint8_t dg[MAXL][16], dpg[1][16], mT[1][16], P[MAXL];
   uint64_t sum = X->fee;
   unsigned j, g, k;
   int rc = 0;
@@ -395,33 +395,24 @@ txm_build (const txspec_t *X, uint8_t *st, size_t *stlen, uint8_t *wt, size_t *w
   dg[0][0] += (uint8_t)X->add0;
   if (X->swap)
     P[3] = 4, P[4] = 3;
-  /* T = Enc(pk_f, balance) */
+  /* T = Enc(pk_f, balance); per group r_g, e1_g (u_g = A^T r_g + e1_g); e2 per leg, v_f, auditor copy */
+  const uint64_t xs0 = xs;
+  xs = 0x7E57AB1E00000000ULL ^ ((uint64_t)X->tag * 0x9E3779B97F4A7C15ULL);
   digits (mT[0], X->balance);
+  short8 (rT, 2048, 1, 36), short16 (e1T, 2048, 20, 164), short16 (e2T[0], 16, 20, 64);
   {
-    uint8_t sT[32] = { X->tag, 'T' };
     const uint8_t *p1[1] = { KTS.pk };
-    rc |= pqz_enc_seed (p1, 1, (const uint8_t (*)[16])mT, sT, uT, vT, rT, e1T, e2T, NULL);
+    rc |= pqz_encrypt (p1, 1, (const uint8_t (*)[16])mT, rT, e1T, (const int16_t (*)[16])e2T, uT, vT);
+    for (g = 0; g < G; g++)
+      {
+        short8 (r[g], 2048, 1, 36), short16 (e1[g], 2048, 20, 164);
+        rc |= pqz_encrypt (p1, 1, (const uint8_t (*)[16])zero, r[g], e1[g], (const int16_t (*)[16])zero16, u[g], vs);
+      }
   }
-  /* group g: Enc as the client draws it (legs, then (g = 0) pk_f, then the auditor copies) for r_g, e1_g, e2 */
-  for (g = 0; g < G; g++)
-    {
-      unsigned n = 0, j0 = 4 * g, j1 = j0 + 4 < m ? j0 + 4 : m;
-      for (j = j0; j < j1; j++)
-        pks[n++] = KTR[j].pk;
-      if (g == 0)
-        pks[n++] = KTS.pk;
-      for (j = j0; j < j1 && a; j++)
-        pks[n++] = KTA.pk;
-      pqz_enc_group_seed (seed, g, sg);
-      rc |= pqz_enc_seed (pks, n, (const uint8_t (*)[16])zero, sg, u[g], vs, r[g], e1[g], e2g, NULL);
-      k = 0;
-      for (j = j0; j < j1; j++)
-        memcpy (e2l[j], e2g[k++], 32);
-      if (g == 0)
-        memcpy (e2f, e2g[k++], 32);
-      for (j = j0; j < j1 && a; j++)
-        memcpy (e2a[j], e2g[k++], 32);
-    }
+  for (j = 0; j < m; j++)
+    short16 (e2l[j], 16, 20, 64), short16 (e2a[j], 16, 20, 64);
+  short16 (e2f, 16, 20, 64);
+  xs = xs0;
   if (X->big0)
     for (k = 0; k < 16; k++)
       e2l[0][k] = 30;
@@ -499,12 +490,13 @@ txm_build (const txspec_t *X, uint8_t *st, size_t *stlen, uint8_t *wt, size_t *w
 static int
 setup_txm (void)
 {
-  uint8_t sd[32] = { 'S' };
-  int ok = pqz_keygen (sd, KTS.pk, KTS.s, KTS.e, NULL) == 0;
-  sd[0] = 'A';
-  ok &= pqz_keygen (sd, KTA.pk, KTA.s, KTA.e, NULL) == 0;
+  const uint64_t xs0 = xs;
+  int ok = 1;
+  xs = 0x7E57AB1EBEEF0001ULL;
+  keygen (&KTS), keygen (&KTA);
   for (unsigned j = 0; j < MAXL; j++)
-    sd[0] = 'R', sd[1] = (uint8_t)j, ok &= pqz_keygen (sd, KTR[j].pk, KTR[j].s, KTR[j].e, NULL) == 0;
+    keygen (&KTR[j]);
+  xs = xs0;
   for (unsigned t = 0; t < NTXB; t++)
     {
       txspec_t X;
