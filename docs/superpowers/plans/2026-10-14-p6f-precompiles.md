@@ -278,7 +278,7 @@ by a second Dockerfile target `calib`, not into the node image), `chain/engine-p
   P6g note (contract-built statements are smaller).
 - [ ] Heavy, capped: `docker build --target calib`, `docker run --rm --memory 4g --cpus 4 … calibrate` (≈ 1 h incl.
   fresh proofs).
-- **Acceptance:** table and JSON written from **one** calibration run (owner 2026-10-15: "P6f đo gas một lần";
+- **Acceptance:** table and JSON written from **one** calibration run (owner 2026-10-15;
   the earlier two-runs-on-different-days rule is withdrawn — re-calibrate before 22776 or if a later measurement
   disagrees by more than 15 %).
 
