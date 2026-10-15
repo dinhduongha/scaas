@@ -17,6 +17,9 @@ pqz-stmt = { path = "../../stmt" }
 [features]
 default = ["bench"]
 bench = []
+# bench only (P6-ANON plan, global constraints): op 7 also at M = 8, 16 (pqz-stmt's `oversize`), proofs above
+# MAX_PROOF_PQZH; never in a production build (pqz-ffi refuses pqz-stmt's `oversize`)
+oversize = ["pqz-stmt/oversize"]
 
 [[bin]]
 name = "ligero_bench"

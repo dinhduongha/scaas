@@ -1,10 +1,15 @@
 //! Test and bench inputs (feature `bench`): the same keys, ciphertexts, statements and witnesses as pqz-core's
 //! test/pqz_bench.c setup() (same xorshift stream, same samplers, all six forms), so the bytes can be compared
-//! with pqz-core's (xcheck/ligero.sh); the mutations of the benches and tests. Layout constants and the coefficient
-//! codec are pqz-stmt's.
+//! with pqz-core's (xcheck/ligero.sh); op 7 `R_TXM` statements and witnesses per shape (`setup_multi`; pqz-core has
+//! no op 7 yet, so xcheck/kat_multi.py checks them against pqz_kat.py); the mutations of the benches and tests.
+//! Layout constants and the coefficient codec are pqz-stmt's.
 
-use pqz_stmt::{DISC_WORDS, DW_AMOUNT, DW_KIND, Form, H_AMOUNT, H_AUDITOR_ON, H_FEE, HEADER_BYTES, PQZH_ID};
+use pqz_stmt::{
+    DISC_WORDS, DW_AMOUNT, DW_KIND, Form, H_AMOUNT, H_AUDITOR_ON, H_FEE, H_LEGS, H_RECIPIENTS_HASH, H_SALT,
+    HEADER_BYTES, LEGS_PER_GROUP, Multi, PQZH_ID, groups, u64_word,
+};
 
+use crate::cs::Rel;
 use crate::ring::*;
 
 /// byte offsets of the statement words the tests and mutations touch (pq-zether.md §7.7, §7.9)
@@ -12,6 +17,9 @@ pub const PREFIX: usize = 64;
 pub const HDR_FEE: usize = 32 * H_FEE;
 pub const HDR_AMOUNT: usize = 32 * H_AMOUNT;
 pub const HDR_AUDITOR_ON: usize = 32 * H_AUDITOR_ON;
+/// op 7: the `M` word (op 1's `recipient`) and `recipientsHash` (op 1's `toUA`)
+pub const HDR_LEGS: usize = 32 * H_LEGS;
+pub const HDR_RECIPIENTS_HASH: usize = 32 * H_RECIPIENTS_HASH;
 pub const DISC_AMOUNT: usize = 32 * DW_AMOUNT;
 pub const DISC_KIND: usize = 32 * DW_KIND;
 pub const DISC_PK: usize = 32 * DISC_WORDS;
@@ -114,15 +122,19 @@ impl Setup {
     }
 }
 
-/// relation names as the benches print them
-pub fn rel_name(f: Form) -> &'static str {
-    match f {
-        Form::Register => "R_REG",
-        Form::Transfer => "R_TX",
-        Form::Transfer0 => "R_TX0",
-        Form::Burn | Form::Refresh => "R_BURN",
-        Form::DiscloseSender => "R_DS",
-        Form::DiscloseReceiver | Form::DiscloseAuditor => "R_DR",
+/// relation names as the benches print them (op 7: R_TXM<M> auditor on, R_TXM<M>_0 off)
+pub fn rel_name(r: impl Into<Rel>) -> String {
+    match r.into() {
+        Rel::Form(f) => match f {
+            Form::Register => "R_REG",
+            Form::Transfer => "R_TX",
+            Form::Transfer0 => "R_TX0",
+            Form::Burn | Form::Refresh => "R_BURN",
+            Form::DiscloseSender => "R_DS",
+            Form::DiscloseReceiver | Form::DiscloseAuditor => "R_DR",
+        }
+        .into(),
+        Rel::Multi { m, aud } => format!("R_TXM{m}{}", if aud { "" } else { "_0" }),
     }
 }
 
@@ -328,6 +340,193 @@ pub fn setup_with(tw: &Tweak) -> Setup {
     Setup { reg_stmt, reg_wit, tx_stmt: tx, tx_wit: w, tx0_stmt: tx0, tx0_wit: w0, burn_stmt: burn, burn_wit: bw, ds_stmt, ds_wit, dr_stmt, dr_wit }
 }
 
+// ---- op 7 R_TXM ----
+
+/// Overrides of `setup_multi` for negative tests (an honest prover refuses these witnesses). Vectors are indexed in
+/// witness order: e2 x < M is leg x, x = M is v_f, x = M + 1 + j the auditor copy of leg j.
+#[derive(Default, Clone)]
+pub struct MultiTweak {
+    /// leg amounts (default: 123,456 on leg M / 2, 0 on every other leg: decoys)
+    pub amounts: Option<Vec<u64>>,
+    /// the fee word (default 7)
+    pub fee: Option<u64>,
+    /// leg j's digits (v_j, v_{a,j} and the witness)
+    pub d: Option<(usize, [u8; 16])>,
+    /// the new-balance digits d' (v_f and the witness); default digits(balance - sum - fee), wrapping
+    pub dp: Option<[u8; 16]>,
+    /// e2 vector x
+    pub e2: Option<(usize, Vec<i64>)>,
+    /// r_g, e1_g of group g (ciphertexts re-encrypted)
+    pub r: Option<(usize, Vec<i64>)>,
+    pub e1: Option<(usize, Vec<i64>)>,
+    /// sender key F's secret / error (pk_f recomputed)
+    pub s_f: Option<Vec<i64>>,
+    pub e_f: Option<Vec<i64>>,
+    /// leg j encrypted under recipient k's key (k >= M: the auditor's); the statement keeps pk_j
+    pub key: Option<(usize, usize)>,
+    /// leg j encrypted with group h's (r_h, e1_h); statement and witness keep group j / 4
+    pub group: Option<(usize, usize)>,
+    /// the auditor copy of leg j encrypts these digits; the witness keeps d_j
+    pub aud_d: Option<(usize, [u8; 16])>,
+    /// proofSystemId (default PQZH's)
+    pub psid: Option<[u8; 32]>,
+}
+
+/// UA of recipient j (a 20-byte address as a 32-byte word): 0x1000 + j
+pub fn multi_ua(j: usize) -> [u8; 32] {
+    u64_word(0x1000 + j as u64)
+}
+
+/// v = pk^T r + e2 + Delta m (16 coefficients)
+fn enc_v(pk: &[Poly], m: &[u8; 16], r: &[i64], e2: &[i64]) -> Poly {
+    let rp = polys(r);
+    let y = dot_int(&pk.iter().collect::<Vec<_>>(), &rp.iter().collect::<Vec<_>>());
+    std::array::from_fn(|i| if i < 16 { modq(y[i] + e2[i] + DELTA * m[i] as i64) } else { 0 })
+}
+
+/// An op 7 statement and witness of shape (m, aud): sender F with balance 1,000,000 in T (as `setup`), leg amounts
+/// and fee per `tw`, recipients j with UA `multi_ua(j)`, keys and randomness from a deterministic xorshift stream
+/// (seed by shape); header words as the contract writes them (P6-ANON §4: recipientsHash, M, auditorOn, amount 0,
+/// salt word 16 zero bytes || salt). One code path for real and decoy legs (R6).
+pub fn setup_multi(m: usize, aud: bool, tw: &MultiTweak) -> (Vec<u8>, Vec<u8>) {
+    let mut rng = Rng(0x243F6A8885A308D3 ^ ((m as u64) << 8 | aud as u64));
+    let mut kf = keygen(&mut rng);
+    if let Some(s) = &tw.s_f {
+        kf.s = s.clone();
+    }
+    if let Some(e) = &tw.e_f {
+        kf.e = e.clone();
+    }
+    kf.pk = keypair(&polys(&kf.s), &polys(&kf.e));
+    let ka = keygen(&mut rng);
+    let ks: Vec<Key> = (0..m).map(|_| keygen(&mut rng)).collect();
+    let g = groups(m);
+
+    let bal = 1_000_000u64;
+    let amounts = tw.amounts.clone().unwrap_or_else(|| (0..m).map(|j| if j == m / 2 { 123_456 } else { 0 }).collect());
+    let fee = tw.fee.unwrap_or(7);
+    let sum: u64 = amounts.iter().sum();
+    let mut d: Vec<[u8; 16]> = amounts.iter().map(|&a| digits(a)).collect();
+    if let Some((j, x)) = tw.d {
+        d[j] = x;
+    }
+    let dp = tw.dp.unwrap_or(digits(bal.wrapping_sub(sum).wrapping_sub(fee)));
+    let r0 = rng.short(2048, 1, 36);
+    let e10 = rng.short(2048, 20, 164);
+    let e20 = rng.short(16, 20, 64);
+    let (ut, vt) = encrypt(&[&kf.pk], &[digits(bal)], &polys(&r0), &polys(&e10), &[e20]);
+    let mut rs: Vec<Vec<i64>> = vec![];
+    let mut e1s: Vec<Vec<i64>> = vec![];
+    for _ in 0..g {
+        rs.push(rng.short(2048, 1, 36));
+        e1s.push(rng.short(2048, 20, 164));
+    }
+    if let Some((i, x)) = &tw.r {
+        rs[*i] = x.clone();
+    }
+    if let Some((i, x)) = &tw.e1 {
+        e1s[*i] = x.clone();
+    }
+    let nv = m + 1 + aud as usize * m;
+    let mut e2: Vec<Vec<i64>> = (0..nv).map(|_| rng.short(16, 20, 64)).collect();
+    if let Some((x, v)) = &tw.e2 {
+        e2[*x] = v.clone();
+    }
+    let us: Vec<Vec<Poly>> = (0..g).map(|i| encrypt(&[], &[], &polys(&rs[i]), &polys(&e1s[i]), &[]).0).collect();
+    let grp = |j: usize| match tw.group {
+        Some((jj, h)) if jj == j => h,
+        _ => j / LEGS_PER_GROUP,
+    };
+    let vs: Vec<Poly> = (0..m)
+        .map(|j| {
+            let pk = match tw.key {
+                Some((jj, k)) if jj == j => ks.get(k).map_or(&ka.pk, |x| &x.pk),
+                _ => &ks[j].pk,
+            };
+            enc_v(pk, &d[j], &rs[grp(j)], &e2[j])
+        })
+        .collect();
+    let vf = enc_v(&kf.pk, &dp, &rs[0], &e2[m]);
+    let vas: Vec<Poly> = (0..m * aud as usize)
+        .map(|j| {
+            let x = match tw.aud_d {
+                Some((jj, x)) if jj == j => x,
+                _ => d[j],
+            };
+            enc_v(&ka.pk, &x, &rs[j / LEGS_PER_GROUP], &e2[m + 1 + j])
+        })
+        .collect();
+
+    let mut header = Multi::header(&tw.psid.unwrap_or(PQZH_ID), m, aud);
+    let uas: Vec<u8> = (0..m).flat_map(multi_ua).collect();
+    for (i, w) in header.iter_mut().enumerate().skip(2) {
+        *w = u64_word(0x5A00 + i as u64);
+    }
+    header[H_RECIPIENTS_HASH] = crate::merkle::keccak(&[&uas]);
+    header[H_FEE] = u64_word(fee);
+    header[H_AMOUNT] = [0; 32];
+    header[H_LEGS] = u64_word(m as u64);
+    header[H_AUDITOR_ON] = u64_word(aud as u64);
+    header[H_SALT] = [0; 32];
+    header[H_SALT][16..].copy_from_slice(&[0xC5; 16]);
+    let enc = |v: &[Poly]| {
+        let mut o = vec![];
+        wr_vec(&mut o, v);
+        o
+    };
+    let enc_vs = |v: &[Poly]| {
+        let mut o = vec![];
+        v.iter().for_each(|p| wr_v(&mut o, p));
+        o
+    };
+    let (pk_f, pk_a) = (enc(&kf.pk), enc(&ka.pk));
+    let pks: Vec<u8> = ks.iter().flat_map(|k| enc(&k.pk)).collect();
+    let mut t = enc(&ut);
+    wr_v(&mut t, &vt[0]);
+    let us_b: Vec<u8> = us.iter().flat_map(|u| enc(u)).collect();
+    let (vs_b, vf_b, vas_b) = (enc_vs(&vs), enc_vs(&[vf]), enc_vs(&vas));
+    let st = Multi {
+        header,
+        m,
+        pk_f: &pk_f,
+        pks: &pks,
+        pk_a: aud.then_some(&pk_a[..]),
+        t: &t,
+        us: &us_b,
+        vs: &vs_b,
+        v_f: &vf_b,
+        v_as: aud.then_some(&vas_b[..]),
+    }
+    .encode()
+    .expect("op 7 statement");
+
+    let mut w: Vec<u8> = kf.s.iter().map(|&x| x as i8 as u8).collect();
+    le16(&mut w, &kf.e);
+    for i in 0..g {
+        w.extend(rs[i].iter().map(|&x| x as i8 as u8));
+        le16(&mut w, &e1s[i]);
+    }
+    for e in &e2 {
+        le16(&mut w, e);
+    }
+    d.iter().for_each(|x| w.extend_from_slice(x));
+    w.extend_from_slice(&dp);
+    let rel = Rel::Multi { m, aud };
+    assert_eq!((st.len(), w.len()), (rel.stmt_len(), rel.wit_len()));
+    (st, w)
+}
+
+/// (statement, witness) of any relation: the six forms from `setup`, op 7 shapes from `setup_multi` (default tweak)
+pub fn inputs(s: &Setup, r: Rel) -> (Vec<u8>, Vec<u8>) {
+    match r {
+        Rel::Form(f) => {
+            let (st, w) = s.rel(f);
+            (st.clone(), w.clone())
+        }
+        Rel::Multi { m, aud } => setup_multi(m, aud, &MultiTweak::default()),
+    }
+}
+
 // ---- adversarial inputs (bench native and wasm) ----
 
 /// xorshift for mutations (independent of the setup stream)
@@ -347,9 +546,14 @@ pub const KINDS: [&str; 12] = [
 ];
 
 /// mutated (statement, proof) of kind k
-pub fn mutate(k: usize, f: Form, st: &[u8], pf: &[u8], other: &[u8], r: &mut R) -> (Vec<u8>, Vec<u8>) {
+pub fn mutate(k: usize, rel: impl Into<Rel>, st: &[u8], pf: &[u8], other: &[u8], r: &mut R) -> (Vec<u8>, Vec<u8>) {
     let (mut s, mut p) = (st.to_vec(), pf.to_vec());
-    // first coefficient byte; the public scalar the relation reads (low 8 bytes of its word)
+    let rel = rel.into();
+    let f = match rel {
+        Rel::Form(f) => f,
+        Rel::Multi { .. } => Form::Transfer,
+    };
+    // first coefficient byte; the public scalar the relation reads (low 8 bytes of its word; op 7: the fee)
     let (body, tail) = match f {
         Form::Register => (PREFIX + 32, PREFIX),
         Form::Transfer | Form::Transfer0 => (HEADER_BYTES, HDR_FEE + 24),
@@ -382,7 +586,7 @@ pub fn mutate(k: usize, f: Form, st: &[u8], pf: &[u8], other: &[u8], r: &mut R) 
         }
         "stmt_prefix" => s[(r.next() % PREFIX as u64) as usize] ^= 1 << (r.next() % 8),
         "stmt_tail" => {
-            // R_REG: message byte; R_TX: fee; R_BURN, R_DS, R_DR: amount
+            // R_REG: message byte; R_TX, R_TX0, R_TXM: fee; R_BURN, R_DS, R_DR: amount
             let n = if f == Form::Register { 32 } else { 8 };
             s[tail + (r.next() % n) as usize] ^= 1 << (r.next() % 8);
         }

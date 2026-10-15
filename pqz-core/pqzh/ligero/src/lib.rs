@@ -1,4 +1,4 @@
-//! PQZH over Ligero (P6-PQZH, Ligero backend): R_REG, R_TX, R_TX0, R_BURN, R_DS and R_DR of PQ Zether proved by
+//! PQZH over Ligero (P6-PQZH, Ligero backend): R_REG, R_TX, R_TX0, R_BURN, R_DS, R_DR and R_TXM (op 7) of PQ Zether proved by
 //! Ligero over F_q itself (q = 2^42 - 215), challenges in F_q^4, Keccak-256 Merkle tree and transcript, zero knowledge.
 //! See docs/research/pqzh-ligero.md. Statements are decoded by `pqz-stmt` (plan R2, D15); witness bytes as pqz-core
 //! (pqz.h). Depends on `sha3` and `pqz-stmt` only (D11). Feature `bench` (default): the reference presets, the float
@@ -16,8 +16,8 @@ pub mod merkle;
 pub mod ring;
 pub mod transcript;
 
-pub use cs::{RELS, form_of};
+pub use cs::{RELS, Rel, form_of, multi_rels, rel_of};
 pub use ligero::{Params, prove, verify};
 #[cfg(feature = "bench")]
 pub use ligero::{breakdown, prove_unchecked, soundness};
-pub use pqz_stmt::{self, Form, OP_BURN, OP_DISCLOSE_RECEIVER, OP_DISCLOSE_SENDER, OP_REGISTER, OP_TRANSFER};
+pub use pqz_stmt::{self, Form, OP_BURN, OP_DISCLOSE_RECEIVER, OP_DISCLOSE_SENDER, OP_REGISTER, OP_TRANSFER, OP_TRANSFER_MULTI};
