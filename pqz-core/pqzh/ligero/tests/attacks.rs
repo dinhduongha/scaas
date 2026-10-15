@@ -19,11 +19,19 @@ fn op_tags(op: u8) -> Vec<[u8; 32]> {
     t
 }
 
-/// a cheating prover gets either no proof or one that does not verify
+/// a cheating prover (no witness checks) makes a proof and the verifier rejects it. A prover error or panic is NOT a
+/// rejection (pre-review H-2): it returns false, so the caller's assert names the case
 fn rejected(op: u8, stmt: &[u8], wit: &[u8]) -> bool {
     match std::panic::catch_unwind(|| prove_unchecked(op, stmt, wit, [7; 32], &p(op))) {
         Ok(Ok(pf)) => !verify(op, stmt, &pf, &p(op)),
-        _ => true,
+        Ok(Err(e)) => {
+            eprintln!("unchecked prover error: {e}");
+            false
+        }
+        Err(_) => {
+            eprintln!("unchecked prover panicked");
+            false
+        }
     }
 }
 

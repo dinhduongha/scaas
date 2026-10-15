@@ -1,0 +1,98 @@
+   Compiling pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/anonh/pqz-core/stmt)
+   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/anonh/pqz-core/pqzh/ligero)
+    Finished `release` profile [optimized + debuginfo] target(s) in 5.95s
+     Running tests/multi.rs (target/release/deps/multi-4ca5b895deb1c168)
+
+running 8 tests
+test hedged_and_deterministic ... ok
+test honest_every_shape ... R_TXM1 default: 231598 B (bound 235470)
+R_TXM1 fee 0, all legs 0: 231758 B (bound 235470)
+R_TXM1 two real legs: 231758 B (bound 235470)
+R_TXM1 real leg at j: 233038 B (bound 235470)
+R_TXM1 whole balance: 232078 B (bound 235470)
+R_TXM2 default: 232462 B (bound 235470)
+R_TXM2 fee 0, all legs 0: 232558 B (bound 235470)
+R_TXM2 two real legs: 232110 B (bound 235470)
+R_TXM2 real leg at j: 231534 B (bound 235470)
+R_TXM2 real leg at j: 232494 B (bound 235470)
+R_TXM2 whole balance: 231758 B (bound 235470)
+R_TXM4 default: 231944 B (bound 236196)
+R_TXM4 fee 0, all legs 0: 232804 B (bound 236196)
+R_TXM4 two real legs: 233732 B (bound 236196)
+R_TXM4 real leg at j: 233412 B (bound 236196)
+R_TXM4 real leg at j: 232388 B (bound 236196)
+R_TXM4 real leg at j: 232420 B (bound 236196)
+R_TXM4 whole balance: 231180 B (bound 236196)
+R_TXM8 default: 278072 B (bound 281208)
+R_TXM8 fee 0, all legs 0: 276488 B (bound 281208)
+R_TXM8 two real legs: 276584 B (bound 281208)
+R_TXM8 real leg at j: 276328 B (bound 281208)
+R_TXM8 real leg at j: 277368 B (bound 281208)
+R_TXM8 real leg at j: 277688 B (bound 281208)
+R_TXM8 real leg at j: 278232 B (bound 281208)
+R_TXM8 whole balance: 276488 B (bound 281208)
+R_TXM16 default: 368940 B (bound 372684)
+R_TXM16 fee 0, all legs 0: 369996 B (bound 372684)
+R_TXM16 two real legs: 370252 B (bound 372684)
+R_TXM16 real leg at j: 369836 B (bound 372684)
+R_TXM16 real leg at j: 369260 B (bound 372684)
+R_TXM16 real leg at j: 369292 B (bound 372684)
+R_TXM16 real leg at j: 369516 B (bound 372684)
+R_TXM16 real leg at j: 369644 B (bound 372684)
+R_TXM16 whole balance: 369612 B (bound 372684)
+R_TXM1_0 default: 231304 B (bound 234744)
+R_TXM1_0 fee 0, all legs 0: 230872 B (bound 234744)
+R_TXM1_0 two real legs: 231608 B (bound 234744)
+R_TXM1_0 real leg at j: 231416 B (bound 234744)
+R_TXM1_0 whole balance: 231736 B (bound 234744)
+R_TXM2_0 default: 231438 B (bound 235470)
+R_TXM2_0 fee 0, all legs 0: 232078 B (bound 235470)
+R_TXM2_0 two real legs: 232494 B (bound 235470)
+R_TXM2_0 real leg at j: 233102 B (bound 235470)
+R_TXM2_0 real leg at j: 231854 B (bound 235470)
+R_TXM2_0 whole balance: 232526 B (bound 235470)
+R_TXM4_0 default: 230872 B (bound 235470)
+R_TXM4_0 fee 0, all legs 0: 232174 B (bound 235470)
+R_TXM4_0 two real legs: 230968 B (bound 235470)
+R_TXM4_0 real leg at j: 231854 B (bound 235470)
+R_TXM4_0 real leg at j: 231288 B (bound 235470)
+R_TXM4_0 real leg at j: 232238 B (bound 235470)
+R_TXM4_0 whole balance: 231566 B (bound 235470)
+R_TXM8_0 default: 276428 B (bound 279756)
+R_TXM8_0 fee 0, all legs 0: 276172 B (bound 279756)
+R_TXM8_0 two real legs: 276268 B (bound 279756)
+R_TXM8_0 real leg at j: 276908 B (bound 279756)
+R_TXM8_0 real leg at j: 276076 B (bound 279756)
+R_TXM8_0 real leg at j: 277420 B (bound 279756)
+R_TXM8_0 real leg at j: 276172 B (bound 279756)
+R_TXM8_0 whole balance: 276812 B (bound 279756)
+R_TXM16_0 default: 365982 B (bound 369054)
+R_TXM16_0 fee 0, all legs 0: 366046 B (bound 369054)
+R_TXM16_0 two real legs: 365886 B (bound 369054)
+R_TXM16_0 real leg at j: 365918 B (bound 369054)
+R_TXM16_0 real leg at j: 363288 B (bound 369054)
+R_TXM16_0 real leg at j: 365502 B (bound 369054)
+R_TXM16_0 real leg at j: 365726 B (bound 369054)
+R_TXM16_0 real leg at j: 366014 B (bound 369054)
+R_TXM16_0 whole balance: 366366 B (bound 369054)
+ok
+test mutations_960_per_shape_rejected ... 10 x 960 mutated op 7 inputs rejected, 0 verifier panics caught
+ok
+test negative_witnesses ... R_TXM1: 20 negative witnesses + 3 ring rows refused and rejected
+R_TXM2: 21 negative witnesses + 3 ring rows refused and rejected
+R_TXM4: 22 negative witnesses + 3 ring rows refused and rejected
+R_TXM8: 29 negative witnesses + 3 ring rows refused and rejected
+R_TXM16: 30 negative witnesses + 3 ring rows refused and rejected
+R_TXM1_0: 18 negative witnesses + 3 ring rows refused and rejected
+R_TXM2_0: 19 negative witnesses + 3 ring rows refused and rejected
+R_TXM4_0: 20 negative witnesses + 3 ring rows refused and rejected
+R_TXM8_0: 27 negative witnesses + 3 ring rows refused and rejected
+R_TXM16_0: 28 negative witnesses + 3 ring rows refused and rejected
+ok
+test noise_range_edges ... ok
+test op1_op7_and_shapes_separated ... ok
+test rel_of_words ... ok
+test statement_changes_rejected ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 452.00s
+

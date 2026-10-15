@@ -970,3 +970,146 @@ After the controller's review of `p6e-b3`: `runs/stmt.sh l15` then `runs/tx0.sh 
 scripts/capped pqz-core/pqzh/ligero/runs/stmt.sh l14      # Task 6: tests, --no-default-features, deps / float scan, wasm32 build, native FNV
 scripts/capped pqz-core/pqzh/ligero/runs/tx0.sh l14-tx0   # Task 8: fixtures, tests, native + wasm32 (1,000 verifies), xcheck, forge
 ```
+
+## 15. P6-ANON Track H: op 7 `R_TXM` in Ligero (H1, H2) [measured]
+
+Plan `docs/superpowers/plans/2026-10-14-p6-anon.md` Tasks H1 / H2, branch `p6-anon-h`. One capped round
+`runs/txm.sh l16-txm` (all ten steps ran: tests, oversize tests, `--no-default-features`, native FNV of the six forms,
+native bench, oversize native bench, wasm32, oversize wasm32, `xcheck` + `kat_multi.py`, `pqz-ffi` check), raw files
+`runs/l16-txm-*`; the pre-review fixes of §15.5 reran the tests (`runs/l16-txm-fix-*`).
+
+### 15.1 Relation, layout and the e2 rule
+
+- **Shape before size.** `cs::rel_of` reads the `auditorOn` and `M` header words and admits only PQZH's built set
+  (`pqz_stmt::built_legs(PQZH_ID)`: {1, 2, 4}; feature `oversize` adds 8, 16) before any `Layout` is sized; then
+  `pqz_stmt::parse_multi` with every D15 / R6 rule, then PQZH's id. (1, on) and (2, off) are both 83,072 B and are told
+  apart by the words.
+- **Rows** (plan §3): `R_TX` with M receiver legs, one randomness group (r_g, e1_g, u_g) per 4 legs (g(j) = ⌊j/4⌋,
+  v_f in group 0), auditor on: one copy v_{a,j} per leg under pk_a with the leg's digits d_j, row 7 with Σ_j d_j.
+  Witness (prover API) `s_f ‖ e_f ‖ (r_g ‖ e1_g)_g ‖ e2 (legs, f, auditor copies) ‖ d_j ‖ d′`; M = 1 is `R_TX`'s
+  (`R_TX0`'s) witness and rows (op 7 keeps its own op byte and opTag in the transcript).
+- **e2 bound: per vector ≤ 64 (ℓ2) — the decided rule.** Every e2 vector (each leg, v_f, each auditor copy) is proven
+  ‖e2‖ ≤ 64, exactly as the single-recipient forms (pq-zether.md §4.3). The plan's §3 / R3 / D5 text first proposed
+  one ℓ2 block per kind of leg noise with bound 64·√M; the pre-review (finding X-1) found PQZL and PQZH proving
+  different bounds, and the **owner decided on 2026-10-15: per vector ≤ 64** (decisions.md CTR-PQZ-03 Change
+  2026-10-15, TODO.md). PQZH already implemented it, so no row changed here; PQZL (`p6-anon-l`) moves to per-vector
+  bounds. The per-vector bound implies the block bound, honest encryptions meet it (CTR-PQZ-19 resamples each e2 to
+  ≤ 64), and a leg credit's noise stays `R_TX`'s 2·36·164 + 64 = 11,872 per unit (K_MAX · 11,872 = 12,156,928 < 2^24,
+  mint margin 4.14× as §4.3), independent of M. Negative test: one e2 vector with ‖e2‖² = 5,120 (> 64², < 64²·M for
+  M ≥ 2), so only the per-vector rule rejects it (§15.5).
+- **Rows per shape** (`m`): (1, on) 125 (= `R_TX`), (1, off) 124 (= `R_TX0`), (2, on) 125, (2, off) 125, (4, on) 126,
+  (4, off) 125; oversize (8, on) 188, (8, off) 186, (16, on) 314, (16, off) 309.
+
+### 15.2 Sizes and limits (THE preset: n 32,756, k 817, ℓ 695, t 121, proven)
+
+Exact bound = `max_len_exact` = the verifier's `max_proof_len`, pinned in unit test `limits_exact` for all ten shapes
+(equal to the pre-review's table, H-3). Input = 5 + statement + exact bound. Proof min–max over 10 seeds (built) or 3
+seeds (oversize, `runs/l16-txm-oversize.jsonl`).
+
+| Shape (M, auditor) | Statement B | Witness B | Proof B min–max | Exact bound B | Input B | ≤ `MAX_PROOF_PQZH` 262,144 and ≤ `MAX_INPUT` 393,216 |
+|---|---|---|---|---|---|---|
+| (1, on) | 83,072 | 12,416 | 230,242–233,102 | 235,470 | 318,547 | yes |
+| (1, off) | 66,560 | 12,384 | 230,408–232,440 | 234,744 | 301,309 | yes |
+| (2, on) | 99,712 | 12,496 | 231,128–232,526 | 235,470 | 335,187 | yes |
+| (2, off) | 83,072 | 12,432 | 231,150–232,590 | 235,470 | 318,547 | yes |
+| **(4, on)** | 132,992 | 12,656 | 231,944–233,604 | **236,196** | **369,193** | yes |
+| (4, off) | 116,096 | 12,528 | 230,872–232,654 | 235,470 | 351,571 | yes |
+| (8, on) oversize | 215,936 | 19,120 | 276,584–278,456 | 281,208 | 497,149 | no, both |
+| (8, off) oversize | 198,528 | 18,864 | 276,428–276,780 | 279,756 | 478,289 | no, both |
+| (16, on) oversize | 381,824 | 32,048 | 368,588–369,420 | 372,684 | 754,513 | no, both |
+| (16, off) oversize | 363,392 | 31,536 | 365,022–366,078 | 369,054 | 732,451 | no, both |
+
+The S3 note's worry for (4, on) (5 + 132,992 + 262,144 = 395,141 > `MAX_INPUT`; a proof over 260,219 B would not fit)
+is settled: Ligero's exact bound for this shape is 236,196 B, so every valid (4, on) input is ≤ 369,193 B.
+
+**Soundness** per term, every shape: query 128.5, proximity 145.0 (M = 8: 144.4, M = 16: 143.7), linear 154.4 (4, on:
+154.3; M = 8: 153.8; M = 16: 153.0), quadratic 168.0, Keccak collision 128.0, total 127.2 bits — as the six forms.
+
+### 15.3 Time and memory
+
+Native: `runs/l16-txm-proven.jsonl` (10 proofs, 1,000 honest verifies, 12 × 80 mutations per shape) and
+`runs/l16-txm-oversize.jsonl` (3 proofs, 100 verifies, 12 × 10 mutations). wasm32 (gate-B method, node v26.8.1):
+`runs/l16-txm-proven-wasm.jsonl` (module 315,724 B; 2 proofs made in wasm32, 1,000 verifies, 12 × 4 mutations) and
+`runs/l16-txm-oversize-wasm.jsonl` (312,660 B; 2 proofs, 100 verifies). Limit: verify p99 ≤ 60 ms.
+
+| Shape | Prove p50 / p99 native | Prove mean wasm32 | Prove heap native | Verify p50 / p99 native | Verify p50 / p99 wasm32 | Adversarial p99 native / wasm32 | Mutations accepted / panics |
+|---|---|---|---|---|---|---|---|
+| (1, on) | 698 / 715 ms | 1,527 ms | 43.2 MB | 10.04 / 14.03 ms | 19.29 / 26.88 ms | 2.28 / 2.11 ms | 0 / 0 of 960 |
+| (1, off) | 677 / 730 ms | 1,606 ms | 42.9 MB | 9.75 / 13.92 ms | 17.70 / 24.40 ms | 2.35 / 2.03 ms | 0 / 0 of 960 |
+| (2, on) | 677 / 699 ms | 1,530 ms | 43.2 MB | 10.24 / 15.03 ms | 19.18 / 28.62 ms | 2.15 / 1.68 ms | 0 / 0 of 960 |
+| (2, off) | 663 / 680 ms | 1,444 ms | 43.2 MB | 10.08 / 14.23 ms | 18.14 / 25.57 ms | 2.08 / 2.33 ms | 0 / 0 of 960 |
+| (4, on) | 680 / 707 ms | 1,531 ms | 43.6 MB | 11.13 / 16.05 ms | 20.89 / **28.85** ms | 2.31 / 1.78 ms | 0 / 0 of 960 |
+| (4, off) | 695 / 747 ms | 1,426 ms | 43.2 MB | 10.39 / 15.29 ms | 18.76 / 27.01 ms | 2.17 / 2.83 ms | 0 / 0 of 960 |
+| (8, on) oversize | 986 ms (3) | 2,094 ms | 61.4 MB | 14.20 / 17.82 ms | 26.67 / 36.06 ms | 3.36 / 2.30 ms | 0 / 0 of 120 |
+| (8, off) oversize | 993 ms (3) | 1,989 ms | 60.6 MB | 12.83 / 17.42 ms | 24.09 / 30.20 ms | 3.24 / 2.30 ms | 0 / 0 of 120 |
+| (16, on) oversize | 1,532 ms (3) | 3,217 ms | 96.6 MB | 22.56 / 31.28 ms | 39.98 / 50.65 ms | 4.27 / 3.46 ms | 0 / 0 of 120 |
+| (16, off) oversize | 1,572 ms (3) | 3,380 ms | 94.9 MB | 18.57 / 21.77 ms | 38.58 / **54.57** ms | 2.97 / 3.57 ms | 0 / 0 of 120 |
+
+Verify heap 1.2–1.3 MB (M ≤ 4), 1.5–1.6 MB (M = 8), 2.2–2.6 MB (M = 16). wasm32 linear memory (cumulative, one
+process) 48.75 MiB after the six built shapes, 105.75 MiB after all ten — far below 256 MiB. Process max RSS: native
+bench 48.4 MB, oversize 102.6 MB, wasm32 119.0 MB, wasm32 oversize 174.5 MB (`-time.txt`). wasm32 `fails` 0 in both
+runs; the wasm32 proofs equal the native seed-1 proofs for all ten shapes (FNV `22dcbad4`, `4cadc229`, `5f5c03ab`,
+`7facbac3`, `b875ae1e`, `7fe7b355`, `8a9f68a5`, `b76b59c6`, `24a6b91c`, `6464b4f3`).
+
+**One M-leg transfer vs M op 1 transfers** [inference from the numbers above]: (4, on) is one input of ≤ 369,193 B and
+one verify (p50 11.13 ms native), against 4 × 318,547 = 1,274,188 B and 4 × `R_TX` verifies (§14.3 p50 9.78 ms →
+≈ 39 ms) — 3.5× fewer bytes and ≈ 3.5× less verify time; the Ligero proof hardly grows with M ≤ 4 (one row more at
+(4, on)). Gas by the calldata model (`anon_sizes.py`) is S3's, not run here.
+
+### 15.4 D3 verdict for PQZH
+
+- **Built: M = 1, 2, 4, auditor on and off** — every bound within `MAX_PROOF_PQZH` and `MAX_INPUT`, verify p99 ≤
+  28.85 ms wasm32 (60 ms limit), prove peak ≤ 43.6 MB native, ≤ 48.75 MiB wasm32.
+- **Not built: M = 8, 16** — the exact bound (279,756–372,684 B) exceeds `MAX_PROOF_PQZH` 262,144 and the input
+  (478,289–754,513 B) exceeds `MAX_INPUT` 393,216 (D8 / D20: no limit raise). Time is not what excludes them (wasm32
+  p99 ≤ 54.57 ms at M = 16) but it is close to the limit at M = 16. They stay behind feature `oversize` (bench only;
+  pqz-ffi refuses the feature).
+- This is the plan's expected set PQZH {1, 2, 4}; `pqz_stmt::built_legs(PQZH_ID)` already says so.
+
+### 15.5 Tests and cross-checks
+
+- **`runs/l16-txm-tests.txt`**: 13 unit, 17 `attacks`, 8 `multi` tests pass; `runs/l16-txm-tests-oversize.txt`:
+  `multi` with the ten shapes, 8 pass (10 × 960 mutated op 7 inputs rejected, 0 verifier panics);
+  `runs/l16-txm-nobench.txt`: 11 unit tests without `bench`.
+- **Pre-review fixes, rerun `runs/l16-txm-fix-*`** (all pass: 13 unit + 17 `attacks` + 8 `multi`; oversize `multi`
+  8; `limits_exact` with `oversize`; 11 without `bench`). **H-2:** `rejected()` (in `multi.rs` and the same helper in
+  `attacks.rs`) no longer counts an error or panic of the unchecked prover as a rejection — the cheating prover must
+  return a proof and the verifier must reject it; in the rerun every negative case did. **H-3:** `limits_exact` pins
+  the ten op 7 bounds of §15.2 and the built set. **X-1:** the per-vector e2 negative (‖e2‖² = 5,120) for each of
+  four e2 vectors per shape. Negative witnesses per shape now 24 / 25 / 26 (auditor on, M = 1 / 2 / 4), 22 / 23 / 24
+  (off), 33 / 34 and 31 / 32 at M = 8 / 16 (on / off), each + 3 ring rows.
+- **`multi.rs`**: honest proofs of every shape (default, fee 0 with every leg 0, two real legs, the real leg at 0,
+  M/2, M − 1 and the group boundary 3 / 4, the whole balance spent); 960 mutations per shape; per shape 22–34 negative
+  witnesses (s_f, e_f, r_g, e1_g ℓ2 and bit range per group, a leg digit ≥ 16 with the same value, e2 per vector,
+  overspend, Σ a_j + fee = balance + 1, d′ = b′ + 1, a leg under another key or the auditor's key, an auditor copy of
+  amount + 1, legs moved between groups) + 3 ring rows; statement changes (fee ± 1 and 0, fee ≥ 2^64, amount ≠ 0, the
+  M word, `auditorOn`, PQZL id, opTag, length ± 1, `recipientsHash`, legs swapped within and across groups); op 1 /
+  op 7 separation at M = 1 and (1, on) / (2, off) separation; e_T range edges; hedging.
+- **Six P6e forms unchanged** (`runs/l16-txm-native-fnv.jsonl`, seeds 0–4, equal to `runs/l15-tx0-proven.jsonl`):
+
+  | Form | FNV seeds 0–4 |
+  |---|---|
+  | `R_REG` | `0ecf451a` `36b1d3e5` `bd7e088c` `e1019551` `b6215ec2` |
+  | `R_TX` | `534b3a74` `720b94e0` `f5bb1d99` `b28db0b7` `f8c936d9` |
+  | `R_BURN` | `f4fef37e` `e270d5c8` `400f16e3` `37999f9a` `e6464eb5` |
+  | `R_DS` | `0a7acf34` `020286c2` `59182207` `0c0d5a95` `e62e8079` |
+  | `R_DR` | `e42aa3da` `c5f5fb23` `f8cd4b87` `caa4fc89` `d83e24fc` |
+  | `R_TX0` | `360216a0` `a69e9010` `4820dd60` `6db6d5aa` `d1b4f175` |
+
+- **Cross-checks.** `runs/l16-txm-xcheck.txt`: the six forms' statements and witnesses 12 / 12 equal to
+  `pqz_bench.c`'s, `kat_stmt: ok`. `runs/l16-txm-kat-multi.txt`: 18 op 7 statements (every built shape × default, fee
+  0, two legs) parse under `pqz_kat.py`'s op 7 rules with PQZH's id only, rebuild byte for byte, carry the right
+  `recipientsHash` and words, and their witnesses reproduce every u_g, v_j, v_f, v_{a,j} and the debit — `ok`.
+  `runs/l16-txm-ffi-check.txt`: pqz-ffi `cargo check --all-targets` against the crate passes.
+- **C ↔ Rust for op 7 (plan H1 "statements byte-identical with C", pre-review LH-2): not done on this branch.**
+  pqz-core's C has no op 7 here (it is Track L's, `p6-anon-l`), and L's bench statements carry a filler opTag and
+  recipientsHash, so they are not valid pqz-stmt statements. H's op 7 statements are checked against `pqz-stmt`
+  (`parse_multi`, used by the crate itself) and `pqz_kat.py` (an independent Python codec). The C check belongs after
+  L merges: feed `dump_setup`'s `txm*_{stmt,wit}.bin` to `pqz_prove(7, …)` / `pqz_verify` / `pqz_verify_fast`, and a
+  C-made op 7 (stmt, wit) with a real opTag and recipientsHash to Ligero `prove` / `verify` (S4).
+
+### 15.6 Rerun
+
+```sh
+CARGO_BUILD_JOBS=2 scripts/capped pqz-core/pqzh/ligero/runs/txm.sh l16-txm   # H1 + H2: tests, oversize, FNV, native + wasm32 benches, xcheck, ffi
+```

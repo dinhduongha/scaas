@@ -1,7 +1,8 @@
 //! PQZH-Ligero bench: proof bytes and breakdown, soundness bits per term, prove time, peak heap, honest and
 //! adversarial verify p50 / p99 (as pqzh_bench).
-//!   ligero_bench [--rel reg|tx|tx0|burn|ds|dr|both|all] [--regime proven|conj|johnson] [--r431 0|1] [--n N --k K] [--np N] [--nv N] [--nadv N]
-//!                [--dump DIR]
+//!   ligero_bench [--rel reg|tx|tx0|burn|ds|dr|both|all|txm|txm<M>|txm<M>_0] [--regime proven|conj|johnson] [--r431 0|1]
+//!                [--n N --k K] [--np N] [--nv N] [--nadv N] [--dump DIR]
+//! (txm: every op 7 shape PQZH builds, auditor on and off; with feature `oversize` also M = 8, 16)
 //! Prints JSON lines. Run under scripts/capped.
 
 use std::alloc::{GlobalAlloc, Layout, System};
@@ -10,7 +11,7 @@ use std::time::Instant;
 
 use pqzh_ligero::client::{self, KINDS, R, mutate, rel_name};
 use pqzh_ligero::ligero::VERIFY_PANICS;
-use pqzh_ligero::{Form, Params, RELS, breakdown, prove, soundness, verify};
+use pqzh_ligero::{Params, RELS, Rel, breakdown, multi_rels, prove, soundness, verify};
 
 struct Track;
 static LIVE: AtomicIsize = AtomicIsize::new(0);
@@ -73,10 +74,12 @@ fn main() {
     let proven = regime != "conj";
     let r431 = num("--r431", 1) != 0;
     let (np, nv, nadv) = (num("--np", 3), num("--nv", 100), num("--nadv", 40));
-    let forms: Vec<Form> = match get("--rel").unwrap_or("both") {
-        "all" => RELS.to_vec(),
-        "both" => vec![Form::Register, Form::Transfer],
-        r => vec![*RELS.iter().find(|&&f| rel_name(f)[2..].eq_ignore_ascii_case(r)).expect("--rel")],
+    let all: Vec<Rel> = RELS.iter().map(|&f| Rel::Form(f)).chain(multi_rels()).collect();
+    let forms: Vec<Rel> = match get("--rel").unwrap_or("both") {
+        "all" => RELS.iter().map(|&f| Rel::Form(f)).collect(),
+        "both" => all[..2].to_vec(),
+        "txm" => multi_rels(),
+        r => vec![*all.iter().find(|&&f| rel_name(f)[2..].eq_ignore_ascii_case(r)).expect("--rel")],
     };
     std::panic::set_hook(Box::new(|_| {})); // verify counts caught panics; keep stderr quiet
     let s = client::setup();
@@ -87,7 +90,8 @@ fn main() {
             _ if regime == "johnson" => Params::johnson_preset(),
             _ => Params::preset(op, proven, r431),
         };
-        let (st, w) = s.rel(f);
+        let (st, w) = client::inputs(&s, f);
+        let (st, w) = (&st, &w);
         let bits: Vec<String> = soundness(op, st, &p).iter().map(|(k, v)| format!("\"{k}\": {v:.1}")).collect();
         println!(
             "{{\"rel\": \"{name}\", \"params\": {{\"n\": {}, \"k\": {}, \"ell\": {}, \"t\": {}, \"n2\": {}, \"pow_bits\": {}, \"proven\": {}, \"johnson\": {}, \"rate\": {:.5}}}, \"soundness_bits\": {{{}}}}}",
@@ -123,6 +127,13 @@ fn main() {
             fnv(&pt),
             fnvs.join(", "),
             bd.join(", ")
+        );
+        println!(
+            "{{\"rel\": \"{name}\", \"stmt_bytes\": {}, \"wit_bytes\": {}, \"m_rows\": {}, \"input_max\": {}}}",
+            st.len(),
+            w.len(),
+            pqzh_ligero::cs::Layout::new(f, p.ell).m,
+            5 + st.len() + p.max_len_exact(f)
         );
         println!("{{\"rel\": \"{name}\", \"timing\": \"prove\", \"stats\": {}, \"peak_heap_mb\": {:.1}}}", stats(&mut tp), peak_p as f64 / 1048576.0);
         let other = prove(op, &st2, w, [9; 32], &p).expect("prove other");

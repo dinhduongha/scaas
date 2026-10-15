@@ -9,12 +9,11 @@
 
 use sha3::digest::{ExtendableOutput, Update, XofReader};
 
-use crate::cs::{self, Comb, Layout};
+use crate::cs::{self, Comb, Layout, Rel};
 use crate::fft::{Domain, GEN, smooth};
 use crate::fq::{Acc4, EB, F4, Fq, batch_inv};
 use crate::merkle::{H, Tree, depth, keccak, root_from};
 use crate::transcript::Tr;
-use pqz_stmt::Form;
 #[cfg(feature = "bench")]
 use pqz_stmt::{OP_DISCLOSE_RECEIVER, OP_DISCLOSE_SENDER, OP_REGISTER};
 
@@ -131,8 +130,8 @@ impl Params {
 
     /// loose upper bound on the proof length (t distinct columns, full paths): the verifier's check before Task 9,
     /// kept for the bench's comparison
-    pub fn max_len(&self, form: Form) -> usize {
-        let m = Layout::new(form, self.ell).m;
+    pub fn max_len(&self, rel: impl Into<Rel>) -> usize {
+        let m = Layout::new(rel, self.ell).m;
         32 + self.poly_bytes() + 8 + self.t * (32 + (m + BLIND) * EB) + self.t * depth(self.n) * 32
     }
 
@@ -140,24 +139,26 @@ impl Params {
     /// column costs more than any number of digests it saves) and the largest pruned multiproof for t leaves of the
     /// first n in a depth-d tree. With a_l distinct nodes on level l (a_0 = t, a_d = 1), level l sends 2 a_(l+1) - a_l
     /// siblings, so the total is sum_(0 < l < d) a_l + 2 - t, maximal at a_l = min(t, ceil(n / 2^l)).
-    pub fn max_len_exact(&self, form: Form) -> usize {
-        let m = Layout::new(form, self.ell).m;
+    pub fn max_len_exact(&self, rel: impl Into<Rel>) -> usize {
+        let m = Layout::new(rel, self.ell).m;
         let d = depth(self.n);
         let mid: usize = (1..d).map(|l| self.t.min(self.n.div_ceil(1 << l))).sum();
         32 + self.poly_bytes() + 8 + self.t * (32 + (m + BLIND) * EB) + (mid + 2 - self.t) * 32
     }
 
     /// The verifier's length bound (plan Task 9): the exact maximum. At THE preset (the D3 id) it is
-    /// <= pqz_stmt::MAX_PROOF_PQZH (D5) for every relation (R_TX 235,470 B; unit test `limits_exact`). Not capped at
-    /// MAX_PROOF_PQZH: the reference presets are not the id, and proven without radix 431 has every R_TX / R_BURN
-    /// proof above it.
-    pub fn max_proof_len(&self, form: Form) -> usize {
-        self.max_len_exact(form)
+    /// <= pqz_stmt::MAX_PROOF_PQZH (D5) for every relation: the six forms (R_TX 235,470 B) and every built op 7 R_TXM
+    /// shape (largest (M = 4, auditor on) 236,196 B, 5 + statement + bound 369,193 B <= MAX_INPUT); unit test
+    /// `limits_exact` pins all of them. Not capped at MAX_PROOF_PQZH: the reference
+    /// presets are not the id, proven without radix 431 has every R_TX / R_BURN proof above it, and the bench-only
+    /// oversize R_TXM shapes (M = 8, 16) are above it by design.
+    pub fn max_proof_len(&self, rel: impl Into<Rel>) -> usize {
+        self.max_len_exact(rel)
     }
 
-    /// The verifier's first check, before the statement or the proof is parsed: 1 <= len <= max_proof_len(form)
-    pub fn proof_len_ok(&self, form: Form, len: usize) -> bool {
-        (1..=self.max_proof_len(form)).contains(&len)
+    /// The verifier's first check, before the statement or the proof is parsed: 1 <= len <= max_proof_len(rel)
+    pub fn proof_len_ok(&self, rel: impl Into<Rel>, len: usize) -> bool {
+        (1..=self.max_proof_len(rel)).contains(&len)
     }
 }
 
@@ -244,16 +245,16 @@ fn draw(tr: &mut Tr, m: usize, ntri: usize) -> (Vec<F4>, Vec<F4>, F4, F4, F4, Ve
 }
 
 pub fn prove(op: u8, stmt: &[u8], wit: &[u8], rnd: [u8; 32], p: &Params) -> Result<Vec<u8>, &'static str> {
-    let form = cs::form_of(op, stmt.len()).ok_or("op")?;
-    prove_inner(op, stmt, wit, rnd, p, true, p.max_proof_len(form))
+    let rel = cs::rel_of(op, stmt).ok_or("op")?;
+    prove_inner(op, stmt, wit, rnd, p, true, p.max_proof_len(rel))
 }
 
 /// Test hook: skips the honest prover's checks so that invalid witnesses reach the proof system (tests and `bench`
 /// only: not in the production build).
 #[cfg(any(test, feature = "bench"))]
 pub fn prove_unchecked(op: u8, stmt: &[u8], wit: &[u8], rnd: [u8; 32], p: &Params) -> Result<Vec<u8>, &'static str> {
-    let form = cs::form_of(op, stmt.len()).ok_or("op")?;
-    prove_inner(op, stmt, wit, rnd, p, false, p.max_proof_len(form))
+    let rel = cs::rel_of(op, stmt).ok_or("op")?;
+    prove_inner(op, stmt, wit, rnd, p, false, p.max_proof_len(rel))
 }
 
 /// Proves; if the proof is longer than `limit` (the verifier's bound) it proves again with the RNG stream continued
@@ -273,9 +274,9 @@ fn prove_inner(op: u8, stmt: &[u8], wit: &[u8], rnd: [u8; 32], p: &Params, check
 
 fn prove_once(op: u8, stmt: &[u8], wit: &[u8], p: &Params, check: bool, rng: &mut Rng) -> Result<Vec<u8>, &'static str> {
     let st = cs::parse(op, stmt).ok_or("statement")?;
-    let form = cs::form_of(op, stmt.len()).ok_or("op")?;
-    let lay = Layout::new(form, p.ell);
-    let w = cs::witness(form, &st, wit, check)?;
+    let rel = cs::rel_of(op, stmt).ok_or("op")?;
+    let lay = Layout::new(rel, p.ell);
+    let w = cs::witness(rel, &st, wit, check)?;
     let rows = cs::rows(&lay, &w);
     let (n, k, ell, m) = (p.n, p.k, p.ell, lay.m);
     let (hk, hn, h2) = (Domain::new(k), Domain::new(n), Domain::new(p.n2()));
@@ -445,12 +446,12 @@ fn eval4(c: &[F4], xp: &[Fq]) -> F4 {
 }
 
 fn verify_inner(op: u8, stmt: &[u8], proof: &[u8], p: &Params) -> Option<()> {
-    let form = cs::form_of(op, stmt.len())?;
-    if !p.proof_len_ok(form, proof.len()) {
+    let rel = cs::rel_of(op, stmt)?;
+    if !p.proof_len_ok(rel, proof.len()) {
         return None;
     }
     let st = cs::parse(op, stmt)?;
-    let lay = Layout::new(form, p.ell);
+    let lay = Layout::new(rel, p.ell);
     let (n, k, ell, m) = (p.n, p.k, p.ell, lay.m);
     let d2 = 2 * k - 1;
     let mut rd = Rd(proof);
@@ -562,7 +563,7 @@ fn verify_inner(op: u8, stmt: &[u8], proof: &[u8], p: &Params) -> Option<()> {
 /// soundness bits per term: (name, bits); "total" combines them
 #[cfg(feature = "bench")]
 pub fn soundness(op: u8, stmt: &[u8], p: &Params) -> Vec<(&'static str, f64)> {
-    let lay = Layout::new(cs::form_of(op, stmt.len()).expect("op"), p.ell);
+    let lay = Layout::new(cs::rel_of(op, stmt).expect("op"), p.ell);
     let nw = cs::parse(op, stmt).map(|st| cs::comb(&lay, &st, F4::ONE).nweights).unwrap_or(0);
     let fbits = 4.0 * ((crate::fq::Q) as f64).log2();
     let (f, prox) = if p.johnson {
@@ -587,8 +588,8 @@ pub fn soundness(op: u8, stmt: &[u8], p: &Params) -> Vec<(&'static str, f64)> {
 
 /// byte breakdown of a proof
 #[cfg(feature = "bench")]
-pub fn breakdown(form: Form, proof: &[u8], p: &Params) -> Vec<(&'static str, usize)> {
-    let m = Layout::new(form, p.ell).m;
+pub fn breakdown(rel: impl Into<Rel>, proof: &[u8], p: &Params) -> Vec<(&'static str, usize)> {
+    let m = Layout::new(rel, p.ell).m;
     let polys = p.poly_bytes();
     let rest = proof.len().saturating_sub(32 + polys + 8);
     let cw = 32 + (m + BLIND) * EB;
@@ -609,6 +610,7 @@ pub fn breakdown(form: Form, proof: &[u8], p: &Params) -> Vec<(&'static str, usi
 mod tests {
     use super::*;
     use crate::cs::RELS;
+    use pqz_stmt::Form;
 
     /// THE preset written out is the parameter model's
     #[cfg(feature = "bench")]
@@ -688,6 +690,33 @@ mod tests {
             assert_eq!(cs::form_of(f.op(), f.stmt_len()), Some(f));
         }
         assert!([0, 6, 7, 255].iter().all(|&op| cs::form_of(op, 0).is_none()));
+        // op 7 R_TXM, (M, auditorOn): exact bounds (= the pre-review H-3 table, measured max_len_exact in
+        // runs/l16-txm-*); the built shapes (M <= 4) within MAX_PROOF_PQZH and MAX_INPUT, the oversize ones above
+        let multi = [
+            ((1, true), 235_470, 318_547),
+            ((1, false), 234_744, 301_309),
+            ((2, true), 235_470, 335_187),
+            ((2, false), 235_470, 318_547),
+            ((4, true), 236_196, 369_193),
+            ((4, false), 235_470, 351_571),
+            ((8, true), 281_208, 497_149),
+            ((8, false), 279_756, 478_289),
+            ((16, true), 372_684, 754_513),
+            ((16, false), 369_054, 732_451),
+        ];
+        for ((m, aud), max, input) in multi {
+            let r = Rel::Multi { m, aud };
+            assert_eq!((p.max_len_exact(r), p.max_proof_len(r), 5 + r.stmt_len() + max), (max, max, input), "M {m} {aud}");
+            assert_eq!(max <= MAX_PROOF_PQZH && input <= MAX_INPUT, m <= 4, "M {m} {aud}");
+            assert!(p.proof_len_ok(r, max) && !p.proof_len_ok(r, max + 1) && !p.proof_len_ok(r, 0));
+        }
+        let built = cs::multi_rels();
+        let want: Vec<Rel> = multi
+            .iter()
+            .filter(|e| e.0.0 <= 4 || cfg!(feature = "oversize"))
+            .map(|&((m, aud), _, _)| Rel::Multi { m, aud })
+            .collect();
+        assert!(built.len() == want.len() && want.iter().all(|r| built.contains(r)));
     }
 
     /// Task 9: a proof over the limit is proved again from the continued RNG stream; the first attempt is `prove`'s

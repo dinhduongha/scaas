@@ -13,6 +13,9 @@ path = "lib.rs"
 [dependencies]
 pqzh-ligero = { path = ".." }
 
+[features]
+oversize = ["pqzh-ligero/oversize"]
+
 [profile.release]
 panic = "abort"
 codegen-units = 1

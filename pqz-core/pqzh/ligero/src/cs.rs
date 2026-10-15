@@ -1,4 +1,5 @@
-//! R_REG, R_TX, R_TX0, R_BURN, R_DS and R_DR as Ligero constraint systems over F_q (docs/research/pqzh-ligero.md §3, §12):
+//! R_REG, R_TX, R_TX0, R_BURN, R_DS, R_DR and R_TXM (op 7) as Ligero constraint systems over F_q
+//! (docs/research/pqzh-ligero.md §3, §12, §15):
 //! statement parsing (`pqz-stmt`'s decoder with every D15 / R6 rule, then PQZH's id), the row layout, the witness
 //! rows, the quadratic triples and the linear test's combination vectors.
 //!
@@ -10,7 +11,13 @@
 //!   R_BURN R_TX rows 1, 2, 4, 6, 7 with d public (one leg: pk_f, v_f, e2_f, d')
 //!   R_DS   u = A^T r + e1; pk^T r + e2 = v - Delta d (k < 16)
 //!   R_DR   pk = A s + e; u^T s + e' = v - Delta d (k < 16), e' + 2^24 in 25 bits
-//! with every exact l2 bound of pqz-core (36 / 164 for CBD(1) / CBD(20) vectors, 64 for e2) and the bit ranges.
+//!   R_TXM  op 7 (P6-ANON plan §3): R_TX with M receiver legs j (digits d_j) and one randomness group (r_g, e1_g, u_g)
+//!          per 4 legs, g(j) = j / 4, v_f in group 0; auditor on: one copy v_{a,j} of every leg under pk_a (digits d_j,
+//!          group g(j)); row 7 with sum_j d_j. R_TX is R_TXM's M = 1 (one builder; op 1 keeps its own bytes).
+//! with every exact l2 bound of pqz-core (36 / 164 for CBD(1) / CBD(20) vectors, 64 for e2) and the bit ranges. R_TXM
+//! bounds every e2 vector by 64 (legs, v_f, auditor copies), as R_TX's legs: the owner's rule for op 7 (2026-10-15,
+//! decisions.md CTR-PQZ-03, pre-review X-1; the plan's first draft had one block bound 64 sqrt(M), which this implies).
+//! Honest encryptions (CTR-PQZ-19 resamples each e2 to <= 64) meet it.
 //!
 //! Layout (§3.3). Rows have l slots. A big group (2048 values of one short vector) has value rows, slot-aligned square
 //! rows and one row per bit of x + off (off = 2^(bits-1)); the bit decomposition covers every slot of the group's rows
@@ -26,7 +33,10 @@
 //! shared vector beta = (rho^c)_c; the l2 norms use the all-ones vector on the square rows. The verifier interpolates
 //! only the "own" vectors (big value rows, small rows) and the two shared ones.
 
-use pqz_stmt::{Form, OP_BURN, OP_DISCLOSE_RECEIVER, OP_DISCLOSE_SENDER, OP_REGISTER, OP_TRANSFER, PK_BYTES, PQZH_ID};
+use pqz_stmt::{
+    Form, H_AUDITOR_ON, H_LEGS, OP_BURN, OP_DISCLOSE_RECEIVER, OP_DISCLOSE_SENDER, OP_REGISTER, OP_TRANSFER,
+    OP_TRANSFER_MULTI, PK_BYTES, PQZH_ID, V_BYTES, built_legs, groups, multi_len, word_u64,
+};
 
 use crate::ring::{D, DELTA, Poly, a_matrix, digits, dot_int, encrypt, keypair, modq, polys, polys_of};
 
@@ -36,6 +46,44 @@ const BS: i64 = 36 * 36;
 const BE: i64 = 164 * 164;
 const B2: i64 = 64 * 64;
 const N: usize = 2048;
+
+/// A relation the crate proves: a pqz-stmt form (ops 1-5) or an op 7 `R_TXM` shape (M legs, auditor on / off; the
+/// header words pick it, plan R4: the length alone does not).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Rel {
+    Form(Form),
+    Multi { m: usize, aud: bool },
+}
+
+impl From<Form> for Rel {
+    fn from(f: Form) -> Rel {
+        Rel::Form(f)
+    }
+}
+
+impl Rel {
+    pub fn op(self) -> u8 {
+        match self {
+            Rel::Form(f) => f.op(),
+            Rel::Multi { .. } => OP_TRANSFER_MULTI,
+        }
+    }
+    pub fn stmt_len(self) -> usize {
+        match self {
+            Rel::Form(f) => f.stmt_len(),
+            Rel::Multi { m, aud } => multi_len(m, aud),
+        }
+    }
+    /// witness bytes (prover API, not consensus, plan §4 / R3): R_TX's layout with (r_g, e1_g) per group after e1_0
+    /// and the leg digits in leg order: s_f (i8) || e_f (le16) || (r_g (i8) || e1_g (le16))_g || e2_j (le16, j < M) ||
+    /// e2_f || [e2_{a,j}, j < M] || d_j (j < M, 16 digits each) || d'. M = 1 is R_TX's (R_TX0's) witness.
+    pub fn wit_len(self) -> usize {
+        match self {
+            Rel::Form(f) => f.wit_len(),
+            Rel::Multi { m, aud } => 6144 * (1 + groups(m)) + 32 * (m + 1 + aud as usize * m) + 16 * (m + 1),
+        }
+    }
+}
 
 pub struct Big {
     pub bits: usize,
@@ -94,31 +142,39 @@ fn debit_items(burn: bool) -> (Option<usize>, usize, usize, usize, usize) {
 
 impl Layout {
     /// the layout of a relation (REFRESH = BURN, AUDITOR = DISCLOSE-RECEIVER)
-    pub fn new(form: Form, ell: usize) -> Layout {
+    pub fn new(rel: impl Into<Rel>, ell: usize) -> Layout {
         assert!(ell >= 1);
         // big groups (bits, off, B^2) of a CBD(1) / CBD(20) pair; small items (count, bits, off)
         let se = [(7, 64, BS), (9, 256, BE)];
         let sl = [(1, 11, 0), (1, 15, 0)];
         let e2 = |legs: usize| (16 * legs, 8, 128);
-        let debit = |legs: usize, d: bool| -> Vec<(usize, usize, i64)> {
+        // a debit with `legs` e2 vectors, `nd` secret digit vectors (d_j; R_BURN 0: d public) and `pairs` big pairs
+        // (s_f, e_f) and (r_g, e1_g)
+        let debit = |legs: usize, nd: usize, pairs: usize| -> Vec<(usize, usize, i64)> {
             let mut v = vec![e2(legs)];
-            if d {
-                v.push((16, 4, 0));
+            if nd > 0 {
+                v.push((16 * nd, 4, 0));
             }
             v.extend([(16, 4, 0), (16, 14, 0), (16, 11, 64), (16, 25, 1 << 24)]);
-            v.extend(sl);
-            v.extend(sl);
+            for _ in 0..pairs {
+                v.extend(sl);
+            }
             v.extend(vec![(1, 13, 0); legs]);
             v
         };
-        let (bigs, smalls, sig): (Vec<(usize, i64, i64)>, Vec<(usize, usize, i64)>, usize) = match form {
-            Form::Register => (se.to_vec(), sl.to_vec(), 0),
-            Form::Transfer => ([se, se].concat(), debit(3, true), 6),
-            Form::Transfer0 => ([se, se].concat(), debit(2, true), 6),
-            Form::Burn | Form::Refresh => ([se, se].concat(), debit(1, false), 5),
-            Form::DiscloseSender => (se.to_vec(), [vec![e2(1)], sl.to_vec(), vec![(1, 13, 0)]].concat(), 1),
-            Form::DiscloseReceiver | Form::DiscloseAuditor => {
+        let (bigs, smalls, sig): (Vec<(usize, i64, i64)>, Vec<(usize, usize, i64)>, usize) = match rel.into() {
+            Rel::Form(Form::Register) => (se.to_vec(), sl.to_vec(), 0),
+            Rel::Form(Form::Transfer) => ([se, se].concat(), debit(3, 1, 2), 6),
+            Rel::Form(Form::Transfer0) => ([se, se].concat(), debit(2, 1, 2), 6),
+            Rel::Form(Form::Burn | Form::Refresh) => ([se, se].concat(), debit(1, 0, 2), 5),
+            Rel::Form(Form::DiscloseSender) => (se.to_vec(), [vec![e2(1)], sl.to_vec(), vec![(1, 13, 0)]].concat(), 1),
+            Rel::Form(Form::DiscloseReceiver | Form::DiscloseAuditor) => {
                 (se.to_vec(), [vec![(16, 25, 1 << 24)], sl.to_vec()].concat(), 1)
+            }
+            // legs j, f, [a_j]; pairs (s_f, e_f), (r_g, e1_g) for g < G
+            Rel::Multi { m, aud } => {
+                let pairs = 1 + groups(m);
+                (vec![se; pairs].concat(), debit(m + 1 + aud as usize * m, m, pairs), 6)
             }
         };
         let mut cur = 0;
@@ -183,22 +239,27 @@ impl Layout {
 
 // ---- statement ----
 
-/// one ciphertext leg of a debit statement: v = pk^T r + e2 + Delta digits
+/// one ciphertext leg of a debit statement: v = pk^T r_g + e2 + Delta digits
 pub struct Leg {
     pub pk: Vec<Poly>,
     pub v: Poly,
-    /// the leg carries d' (the new balance); otherwise d (the amount)
-    pub dp: bool,
+    /// the digits it carries: None = d' (the new balance), Some(j) = d_j (leg j's amount)
+    pub dig: Option<usize>,
+    /// its randomness group g (r_g, e1_g, u_g)
+    pub g: usize,
 }
 
-/// R_TX (legs t, f, a), R_TX0 (t, f) and R_BURN (leg f only, amount public)
+/// R_TX (legs t, f, a), R_TX0 (t, f), R_BURN (leg f only, amount public) and R_TXM (legs 0..M, f, [a_0..a_M])
 pub struct Debit {
     pub burn: bool,
     pub pkf: Vec<Poly>,
     pub legs: Vec<Leg>,
     pub ut: Vec<Poly>,
     pub vt: Poly,
-    pub u: Vec<Poly>,
+    /// u_g per randomness group
+    pub us: Vec<Vec<Poly>>,
+    /// secret digit vectors d_j (R_TX 1, R_TXM M, R_BURN 0)
+    pub nd: usize,
     pub fee: u64,
     pub amount: u64,
 }
@@ -222,6 +283,13 @@ pub enum Stmt {
 pub const RELS: [Form; 6] =
     [Form::Register, Form::Transfer, Form::Burn, Form::DiscloseSender, Form::DiscloseReceiver, Form::Transfer0];
 
+/// The op 7 `R_TXM` shapes PQZH builds (P6-ANON D3 / D20: M in {1, 2, 4}, auditor on and off; feature `oversize`,
+/// bench only, adds M = 8, 16), auditor on first.
+pub fn multi_rels() -> Vec<Rel> {
+    let legs = built_legs(&PQZH_ID);
+    [true, false].iter().flat_map(|&aud| legs.iter().map(move |&m| Rel::Multi { m, aud })).collect()
+}
+
 /// The relation a statement of `op` with `len` bytes is proved in, from the op and the length alone (op 1: R_TX0 by
 /// length, R6; REFRESH and AUDITOR, other opTags of op 2 / op 5, share BURN's and DISCLOSE-RECEIVER's). The verifier
 /// takes its length bound from it before anything is parsed; `parse` then checks the statement.
@@ -237,10 +305,33 @@ pub fn form_of(op: u8, len: usize) -> Option<Form> {
     })
 }
 
+/// The relation of a statement of `op`: `form_of` for ops 1-5; op 7 from its auditorOn and `M` words (plan R4; read
+/// without validation, as the gas schedule does, D19), `M` in PQZH's built set, so no layout is sized from an
+/// unchecked word. The verifier takes its length bound from it before anything is parsed; `parse` then checks the
+/// statement, its length = multi_len(M, auditorOn) included.
+pub fn rel_of(op: u8, stmt: &[u8]) -> Option<Rel> {
+    if op != OP_TRANSFER_MULTI {
+        return form_of(op, stmt.len()).map(Rel::Form);
+    }
+    let word = |i: usize| word_u64(stmt.get(32 * i..32 * i + 32)?.try_into().ok()?);
+    let aud = match word(H_AUDITOR_ON)? {
+        0 => false,
+        1 => true,
+        _ => return None,
+    };
+    let m = word(H_LEGS)?;
+    let m = built_legs(&PQZH_ID).iter().copied().find(|&b| b as u64 == m)?;
+    Some(Rel::Multi { m, aud })
+}
+
 /// `pqz_stmt::parse` (every D15 / R6 rule: length, the op's opTag, a known id, fee / amount < 2^64, the salt form,
-/// auditorOn by length, the zero words, coefficients < q), then PQZH's own check (D3): the id is PQZH's, not PQZL's.
-/// Prover and verifier call it first.
+/// auditorOn by length, the zero words, coefficients < q), op 7: `pqz_stmt::parse_multi` (every D15 / R4 rule: opTag,
+/// id, auditorOn and M words, length, fee / amount < 2^64, salt form, amount 0, coefficients), then PQZH's own check
+/// (D3): the id is PQZH's, not PQZL's. Prover and verifier call it first.
 pub fn parse(op: u8, stmt: &[u8]) -> Option<Stmt> {
+    if op == OP_TRANSFER_MULTI {
+        return parse_multi(stmt);
+    }
     let s = pqz_stmt::parse(op, stmt).ok()?;
     if *s.proof_system_id()? != PQZH_ID {
         return None;
@@ -252,18 +343,19 @@ pub fn parse(op: u8, stmt: &[u8]) -> Option<Stmt> {
         pqz_stmt::Stmt::Debit(d) => {
             let burn = matches!(d.form, Form::Burn | Form::Refresh);
             let pkf = vec(d.pk_f);
-            // legs in witness order: t (d), f (d'), a (d; R_TX only)
+            // legs in witness order: t (d), f (d'), a (d; R_TX only); one group
             let mut legs = vec![];
             if let (Some(pk), Some(vt)) = (d.pk_t, d.v_t) {
-                legs.push(Leg { pk: vec(pk), v: v(vt), dp: false });
+                legs.push(Leg { pk: vec(pk), v: v(vt), dig: Some(0), g: 0 });
             }
-            legs.push(Leg { pk: pkf.clone(), v: v(d.v_f), dp: true });
+            legs.push(Leg { pk: pkf.clone(), v: v(d.v_f), dig: None, g: 0 });
             if let (Some(pk), Some(va)) = (d.pk_a, d.v_a) {
-                legs.push(Leg { pk: vec(pk), v: v(va), dp: false });
+                legs.push(Leg { pk: vec(pk), v: v(va), dig: Some(0), g: 0 });
             }
             let (ut, vt) = d.t.split_at(PK_BYTES);
             let amount = if burn { d.amount() } else { 0 };
-            Stmt::Debit(Debit { burn, pkf, legs, ut: vec(ut), vt: v(vt), u: vec(d.u), fee: d.fee(), amount })
+            let nd = !burn as usize;
+            Stmt::Debit(Debit { burn, pkf, legs, ut: vec(ut), vt: v(vt), us: vec![vec(d.u)], nd, fee: d.fee(), amount })
         }
         pqz_stmt::Stmt::Disclose(d) => {
             let x = Disc { pk: vec(d.pk), u: vec(d.u), v: v(d.v), amount: d.amount() };
@@ -271,6 +363,30 @@ pub fn parse(op: u8, stmt: &[u8]) -> Option<Stmt> {
         }
         pqz_stmt::Stmt::SelfTest => return None,
     })
+}
+
+/// op 7: legs 0..M (d_j, group j / 4), f (d', group 0), auditor copies a_j (d_j, group j / 4), in witness order
+fn parse_multi(stmt: &[u8]) -> Option<Stmt> {
+    let s = pqz_stmt::parse_multi(stmt).ok()?;
+    if s.header[1] != PQZH_ID {
+        return None;
+    }
+    let vec = |b: &[u8]| polys_of(b, D);
+    let v = |b: &[u8]| polys_of(b, 16)[0];
+    let g = |j: usize| j / pqz_stmt::LEGS_PER_GROUP;
+    let pkf = vec(s.pk_f);
+    let mut legs: Vec<Leg> = (0..s.m).map(|j| Leg { pk: vec(s.pk(j)), v: v(s.v(j)), dig: Some(j), g: g(j) }).collect();
+    legs.push(Leg { pk: pkf.clone(), v: v(s.v_f), dig: None, g: 0 });
+    if let Some(pk_a) = s.pk_a {
+        let pka = vec(pk_a);
+        for j in 0..s.m {
+            legs.push(Leg { pk: pka.clone(), v: v(s.v_a(j)?), dig: Some(j), g: g(j) });
+        }
+    }
+    let (ut, vt) = s.t.split_at(PK_BYTES);
+    let us = (0..s.groups()).map(|i| vec(s.u(i))).collect();
+    debug_assert_eq!(s.vs.len(), s.m * V_BYTES);
+    Some(Stmt::Debit(Debit { burn: false, pkf, legs, ut: vec(ut), vt: v(vt), us, nd: s.m, fee: s.fee(), amount: 0 }))
 }
 
 /// v - Delta digits(amount) (the public side of R_DS / R_DR's evaluation rows)
@@ -299,8 +415,8 @@ fn l2(v: &[i64]) -> i64 {
 /// Witness values from pqz-core's witness bytes (`form`'s length, pqz.h). `check` = the honest prover's checks (as
 /// pqz_rel.c's witness builders plus the key / ciphertext equations); without them an invalid witness is laid out
 /// anyway (bits wrap), for the negative tests.
-pub fn witness(form: Form, st: &Stmt, wit: &[u8], check: bool) -> Result<Wit, &'static str> {
-    if wit.len() != form.wit_len() {
+pub fn witness(rel: impl Into<Rel>, st: &Stmt, wit: &[u8], check: bool) -> Result<Wit, &'static str> {
+    if wit.len() != rel.into().wit_len() {
         return Err("length");
     }
     match st {
@@ -317,33 +433,49 @@ pub fn witness(form: Form, st: &Stmt, wit: &[u8], check: bool) -> Result<Wit, &'
             Ok(Wit { big: vec![s, e], small })
         }
         Stmt::Debit(t) => {
-            let nl = t.legs.len();
+            let (nl, ng, nd) = (t.legs.len(), t.us.len(), t.nd);
             let sf = rd_i8(wit, N);
             let ef = rd_i16(&wit[2048..], N);
-            let r = rd_i8(&wit[6144..], N);
-            let e1 = rd_i16(&wit[8192..], N);
-            let e2: Vec<Vec<i64>> = (0..nl).map(|x| rd_i16(&wit[12288 + 32 * x..], 16)).collect();
-            let p = 12288 + 32 * nl;
-            let (d, dp): ([u8; 16], [u8; 16]) = if t.burn {
-                (digits(t.amount), wit[p..p + 16].try_into().unwrap())
+            // (r_g, e1_g) per group
+            let rs: Vec<Vec<i64>> = (0..ng).map(|g| rd_i8(&wit[6144 * (1 + g)..], N)).collect();
+            let e1s: Vec<Vec<i64>> = (0..ng).map(|g| rd_i16(&wit[6144 * (1 + g) + 2048..], N)).collect();
+            let p0 = 6144 * (1 + ng);
+            let e2: Vec<Vec<i64>> = (0..nl).map(|x| rd_i16(&wit[p0 + 32 * x..], 16)).collect();
+            let p = p0 + 32 * nl;
+            // d_j (R_BURN: digits(amount), public) and d'
+            let ds: Vec<[u8; 16]> = if t.burn {
+                vec![digits(t.amount)]
             } else {
-                (wit[p..p + 16].try_into().unwrap(), wit[p + 16..p + 32].try_into().unwrap())
+                (0..nd).map(|j| wit[p + 16 * j..p + 16 * j + 16].try_into().unwrap()).collect()
             };
-            if check && (l2(&sf) > BS || l2(&ef) > BE || l2(&r) > BS || l2(&e1) > BE || e2.iter().any(|x| l2(x) > B2)) {
+            let q = p + 16 * nd;
+            let dp: [u8; 16] = wit[q..q + 16].try_into().unwrap();
+            if check
+                && (l2(&sf) > BS
+                    || l2(&ef) > BE
+                    || rs.iter().any(|r| l2(r) > BS)
+                    || e1s.iter().any(|e| l2(e) > BE)
+                    || e2.iter().any(|x| l2(x) > B2))
+            {
                 return Err("witness norm");
             }
             if check && keypair(&polys(&sf), &polys(&ef)) != t.pkf {
                 return Err("pk_f != A s_f + e_f");
             }
             if check {
-                let pks: Vec<&Vec<Poly>> = t.legs.iter().map(|l| &l.pk).collect();
-                let msgs: Vec<[u8; 16]> = t.legs.iter().map(|l| if l.dp { dp } else { d }).collect();
-                let (u, vs) = encrypt(&pks, &msgs, &polys(&r), &polys(&e1), &e2);
-                if u != t.u || vs.iter().zip(&t.legs).any(|(v, l)| *v != l.v) {
-                    return Err("ciphertext");
+                // every group's legs encrypted under its (r_g, e1_g)
+                for g in 0..ng {
+                    let x: Vec<usize> = (0..nl).filter(|&x| t.legs[x].g == g).collect();
+                    let pks: Vec<&Vec<Poly>> = x.iter().map(|&x| &t.legs[x].pk).collect();
+                    let msgs: Vec<[u8; 16]> = x.iter().map(|&x| t.legs[x].dig.map_or(dp, |j| ds[j])).collect();
+                    let e2g: Vec<Vec<i64>> = x.iter().map(|&x| e2[x].clone()).collect();
+                    let (u, vs) = encrypt(&pks, &msgs, &polys(&rs[g]), &polys(&e1s[g]), &e2g);
+                    if u != t.us[g] || vs.iter().zip(&x).any(|(v, &x)| *v != t.legs[x].v) {
+                        return Err("ciphertext");
+                    }
                 }
             }
-            // M, e_T by rounding, carries (pqz_rel.c debit_witness)
+            // M, e_T by rounding, carries (pqz_rel.c debit_witness), with the leg sum sum_j d_j
             let y = dot_int(&t.ut.iter().collect::<Vec<_>>(), &polys(&sf).iter().collect::<Vec<_>>());
             let (mut mv, mut et, mut cv) = (vec![0i64; 16], vec![0i64; 16], vec![0i64; 16]);
             let mut cprev = 0i64;
@@ -351,9 +483,14 @@ pub fn witness(form: Form, st: &Stmt, wit: &[u8], check: bool) -> Result<Wit, &'
                 let wv = modq(t.vt[i] - y[i]);
                 let m = (if wv >= 0 { wv + DELTA / 2 } else { wv - DELTA / 2 }) / DELTA;
                 let e = wv - DELTA * m;
-                let s = m + cprev - dp[i] as i64 - d[i] as i64 - ((t.fee >> (4 * i)) & 15) as i64;
+                let dsum: i64 = ds.iter().map(|d| d[i] as i64).sum();
+                let s = m + cprev - dp[i] as i64 - dsum - ((t.fee >> (4 * i)) & 15) as i64;
                 if check
-                    && (s % 16 != 0 || d[i] > 15 || dp[i] > 15 || !(0..1 << 14).contains(&m) || !(-(1 << 24)..1 << 24).contains(&e))
+                    && (s % 16 != 0
+                        || ds.iter().any(|d| d[i] > 15)
+                        || dp[i] > 15
+                        || !(0..1 << 14).contains(&m)
+                        || !(-(1 << 24)..1 << 24).contains(&e))
                 {
                     return Err("digits");
                 }
@@ -369,15 +506,22 @@ pub fn witness(form: Form, st: &Stmt, wit: &[u8], check: bool) -> Result<Wit, &'
             }
             let mut small: Vec<i64> = e2.iter().flatten().copied().collect();
             if !t.burn {
-                small.extend(d.iter().map(|&x| x as i64));
+                small.extend(ds.iter().flatten().map(|&x| x as i64));
             }
             small.extend(dp.iter().map(|&x| x as i64));
             small.extend(mv);
             small.extend(cv);
             small.extend(et);
-            small.extend([BS - l2(&sf), BE - l2(&ef), BS - l2(&r), BE - l2(&e1)]);
+            small.extend([BS - l2(&sf), BE - l2(&ef)]);
+            for g in 0..ng {
+                small.extend([BS - l2(&rs[g]), BE - l2(&e1s[g])]);
+            }
             small.extend(e2.iter().map(|x| B2 - l2(x)));
-            Ok(Wit { big: vec![sf, ef, r, e1], small })
+            let mut big = vec![sf, ef];
+            for (r, e1) in rs.into_iter().zip(e1s) {
+                big.extend([r, e1]);
+            }
+            Ok(Wit { big, small })
         }
         Stmt::Ds(t) => {
             let r = rd_i8(wit, N);
@@ -560,16 +704,22 @@ pub fn comb(lay: &Layout, st: &Stmt, rho: F4) -> Comb {
         Stmt::Reg(pk) => b.ring_rows(false, 0, 1, pk), // pk = A s + e
         Stmt::Debit(t) => {
             let (dd, dp, mm, cc, et) = debit_items(t.burn);
-            // row 1: pk_f = A s_f + e_f; row 2: u = A^T r + e1
+            // row 1: pk_f = A s_f + e_f; row 2: u_g = A^T r_g + e1_g (big groups 2 + 2g, 3 + 2g)
             b.ring_rows(false, 0, 1, &t.pkf);
-            b.ring_rows(true, 2, 3, &t.u);
-            // rows 3-5 (R_BURN: row 4 only): v_x = pk_x^T r + e2_x + Delta digit_x (k < 16)
+            for (g, u) in t.us.iter().enumerate() {
+                b.ring_rows(true, 2 + 2 * g, 3 + 2 * g, u);
+            }
+            // rows 3-5 (R_BURN: row 4 only): v_x = pk_x^T r_g(x) + e2_x + Delta digit_x (k < 16)
             for (x, leg) in t.legs.iter().enumerate() {
-                let gam = b.ring(&|_, j| &leg.pk[j], 1, 32, 16, 2);
+                let gam = b.ring(&|_, j| &leg.pk[j], 1, 32, 16, 2 + 2 * leg.g);
                 for k in 0..16 {
                     let w = gam[0] * b.rp[k];
                     b.add(lay.spos(E2, 16 * x + k), w);
-                    b.add(lay.spos(if leg.dp { dp } else { dd.expect("R_TX d") }, k), w * delta);
+                    let at = match leg.dig {
+                        None => lay.spos(dp, k),
+                        Some(j) => lay.spos(dd.expect("R_TX d"), 16 * j + k),
+                    };
+                    b.add(at, w * delta);
                 }
                 b.c.rhs += gam[0] * b.rsum(&leg.v, 16);
             }
@@ -581,7 +731,7 @@ pub fn comb(lay: &Layout, st: &Stmt, rho: F4) -> Comb {
                 b.add(lay.spos(et, k), w);
             }
             b.c.rhs += gam[0] * b.rsum(&t.vt, 16);
-            // row 7 (integers): M_k + c_{k-1} - d'_k - d_k - 16 c_k = fee digit k (+ d_k if public); c_15 = 0
+            // row 7 (integers): M_k + c_{k-1} - d'_k - sum_j d_{j,k} - 16 c_k = fee digit k (+ d_k if public); c_15 = 0
             let w0 = b.take(16);
             let dpub = if t.burn { digits(t.amount) } else { [0; 16] };
             for k in 0..16 {
@@ -592,7 +742,9 @@ pub fn comb(lay: &Layout, st: &Stmt, rho: F4) -> Comb {
                 }
                 b.add(lay.spos(dp, k), -w);
                 if let Some(dd) = dd {
-                    b.add(lay.spos(dd, k), -w);
+                    for j in 0..t.nd {
+                        b.add(lay.spos(dd, 16 * j + k), -w);
+                    }
                 }
                 b.add(lay.spos(cc, k), -(w * Fq(16)));
                 b.c.rhs += w * Fq(((t.fee >> (4 * k)) & 15) + dpub[k] as u64);
@@ -605,7 +757,7 @@ pub fn comb(lay: &Layout, st: &Stmt, rho: F4) -> Comb {
                 for k in 0..16 {
                     b.add(lay.sqpos(E2, 16 * x + k), w);
                 }
-                b.add(lay.spos(lay.sig + 4 + x, 0), w);
+                b.add(lay.spos(lay.sig + lay.big.len() + x, 0), w);
                 b.c.rhs += w * Fq(B2 as u64);
             }
         }

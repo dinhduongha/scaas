@@ -1,31 +1,48 @@
 //! PQZH-Ligero bench steps exported to JS (wasm32-unknown-unknown, single-threaded, panic = abort), as pqzh/wasm.
-//! Timing on the JS side (run_wasm.mjs). `rel` indexes RELS: 0 R_REG, 1 R_TX, 2 R_BURN, 3 R_DS, 4 R_DR, 5 R_TX0.
+//! Timing on the JS side (run_wasm.mjs). `rel` indexes RELS then multi_rels(): 0 R_REG, 1 R_TX, 2 R_BURN, 3 R_DS,
+//! 4 R_DR, 5 R_TX0, 6.. the op 7 R_TXM shapes (auditor on, then off; `step_shape`).
 
 use std::cell::RefCell;
 
-use pqzh_ligero::client::{KINDS, R, Setup, mutate, setup};
-use pqzh_ligero::{Form, Params, RELS, prove, verify};
-
-const NREL: usize = RELS.len();
+use pqzh_ligero::client::{KINDS, R, inputs, mutate, setup};
+use pqzh_ligero::{Params, RELS, Rel, multi_rels, prove, verify};
 
 struct St {
-    s: Setup,
-    p: [Params; NREL],
-    proof: [Vec<u8>; NREL],
-    other: [Vec<u8>; NREL],
+    ins: Vec<(Vec<u8>, Vec<u8>)>,
+    p: Vec<Params>,
+    proof: Vec<Vec<u8>>,
+    other: Vec<Vec<u8>>,
     r: R,
+}
+
+fn rels() -> Vec<Rel> {
+    RELS.iter().map(|&f| Rel::Form(f)).chain(multi_rels()).collect()
 }
 
 thread_local! {
     static ST: RefCell<Option<St>> = const { RefCell::new(None) };
 }
 
-fn form(rel: u32) -> Form {
-    RELS[rel as usize]
+fn form(rel: u32) -> Rel {
+    rels()[rel as usize]
 }
 
 fn op(rel: u32) -> u8 {
     form(rel).op()
+}
+
+/// 0 for ops 1-5; op 7: 2 M + auditorOn (names on the JS side)
+#[no_mangle]
+pub extern "C" fn step_shape(rel: u32) -> u32 {
+    match form(rel) {
+        Rel::Multi { m, aud } => 2 * m as u32 + aud as u32,
+        Rel::Form(_) => 0,
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn step_nrel() -> u32 {
+    rels().len() as u32
 }
 
 fn with<T>(f: impl FnOnce(&mut St) -> T) -> T {
@@ -36,10 +53,12 @@ fn with<T>(f: impl FnOnce(&mut St) -> T) -> T {
 /// without the radix-431 domains); proven = 2: the Johnson-bound reference preset
 #[no_mangle]
 pub extern "C" fn step_init(proven: u32, r431: u32) -> u32 {
-    let p = RELS.map(|f| if proven == 2 { Params::johnson_preset() } else { Params::preset(f.op(), proven != 0, r431 != 0) });
-    ST.with(|c| {
-        *c.borrow_mut() = Some(St { s: setup(), p, proof: Default::default(), other: Default::default(), r: R(0x9E3779B97F4A7C15) })
-    });
+    let rs = rels();
+    let p = rs.iter().map(|f| if proven == 2 { Params::johnson_preset() } else { Params::preset(f.op(), proven != 0, r431 != 0) }).collect();
+    let s = setup();
+    let ins = rs.iter().map(|&r| inputs(&s, r)).collect();
+    let n = rs.len();
+    ST.with(|c| *c.borrow_mut() = Some(St { ins, p, proof: vec![vec![]; n], other: vec![vec![]; n], r: R(0x9E3779B97F4A7C15) }));
     KINDS.len() as u32
 }
 
@@ -47,7 +66,7 @@ pub extern "C" fn step_init(proven: u32, r431: u32) -> u32 {
 #[no_mangle]
 pub extern "C" fn step_prove(rel: u32, seed: u32) -> u32 {
     with(|st| {
-        let (s, w) = st.s.rel(form(rel));
+        let (s, w) = &st.ins[rel as usize];
         match prove(op(rel), s, w, [seed as u8; 32], &st.p[rel as usize]) {
             Ok(pf) => {
                 let n = pf.len() as u32;
@@ -63,7 +82,7 @@ pub extern "C" fn step_prove(rel: u32, seed: u32) -> u32 {
 #[no_mangle]
 pub extern "C" fn step_prove_other(rel: u32) -> u32 {
     with(|st| {
-        let (s, w) = st.s.rel(form(rel));
+        let (s, w) = &st.ins[rel as usize];
         let mut s2 = s.to_vec();
         s2[64] ^= 0x80;
         let pf = prove(op(rel), &s2, w, [9; 32], &st.p[rel as usize]).unwrap_or_default();
@@ -75,14 +94,14 @@ pub extern "C" fn step_prove_other(rel: u32) -> u32 {
 
 #[no_mangle]
 pub extern "C" fn step_verify(rel: u32) -> u32 {
-    with(|st| verify(op(rel), st.s.rel(form(rel)).0, &st.proof[rel as usize], &st.p[rel as usize]) as u32)
+    with(|st| verify(op(rel), &st.ins[rel as usize].0, &st.proof[rel as usize], &st.p[rel as usize]) as u32)
 }
 
 /// mutated input of `kind` (client::KINDS order); 1 = accepted (must not happen)
 #[no_mangle]
 pub extern "C" fn step_verify_bad(rel: u32, kind: u32) -> u32 {
     with(|st| {
-        let stmt = st.s.rel(form(rel)).0;
+        let stmt = &st.ins[rel as usize].0;
         let (s, p) = mutate(kind as usize, form(rel), stmt, &st.proof[rel as usize], &st.other[rel as usize], &mut st.r);
         verify(op(rel), &s, &p, &st.p[rel as usize]) as u32
     })
