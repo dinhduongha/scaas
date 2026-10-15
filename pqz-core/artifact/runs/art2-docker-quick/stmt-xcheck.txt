@@ -1,0 +1,13 @@
+xcheck.py: 6 C statements rebuilt by pqz_kat.py, 32 random statements, 210 rejections -> py.txt
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+xcheck: C 6 / 6 forms equal; pqz_kat.py: 32 statements equal (fields and bytes), 210 rejections with the same reason
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.06s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.55s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+   Compiling pqz-stmt v0.1.0 (/src/pqz-core/stmt)
+    Finished `release` profile [optimized] target(s) in 0.41s
+rlib bytes 149182
+pqz-stmt v0.1.0 (/src/pqz-core/stmt)
+rc=0

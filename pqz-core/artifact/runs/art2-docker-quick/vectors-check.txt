@@ -1,0 +1,38 @@
+keys / cbd / matrix / enc: 0.1 s
+pqzl TRANSFER           proof  42762 B  prove+verify 3.09 s
+pqzl TRANSFER0          proof  42431 B  prove+verify 2.25 s
+pqzl BURN               proof  41904 B  prove+verify 2.70 s
+pqzl REFRESH            proof  41915 B  prove+verify 2.29 s
+pqzl REGISTER           proof  28093 B  prove+verify 0.73 s
+pqzl DISCLOSE-SENDER    proof  28977 B  prove+verify 0.88 s
+pqzl DISCLOSE-RECEIVER  proof  28996 B  prove+verify 0.74 s
+pqzl DISCLOSE-AUDITOR   proof  28986 B  prove+verify 0.92 s
+pqzh TRANSFER           proof 230946 B  prove+verify 1.38 s
+pqzh TRANSFER0          proof 231480 B  prove+verify 1.27 s
+pqzh BURN               proof 232184 B  prove+verify 1.27 s
+pqzh REFRESH            proof 230280 B  prove+verify 1.31 s
+pqzh REGISTER           proof 186778 B  prove+verify 0.76 s
+pqzh DISCLOSE-SENDER    proof 186456 B  prove+verify 0.82 s
+pqzh DISCLOSE-RECEIVER  proof 187226 B  prove+verify 0.81 s
+pqzh DISCLOSE-AUDITOR   proof 187194 B  prove+verify 0.73 s
+proofs: 22.1 s
+negative: 389 rows (221 decoder, 168 verifier): 34.1 s
+worst case: 45.8 s
+total: 54.9 s
+same matrix.json 1051 B
+same cbd.json 4293 B
+same keygen.json 2897 B
+same enc.json 7897 B
+same statement_transfer.json 304699 B
+same statement_burn.json 102686 B
+same statement_refresh.json 102610 B
+same statement_register.json 34421 B
+same statement_disclose.json 203876 B
+same proof_pqzl.json 721992 B
+same proof_pqzh.json 3499051 B
+same negative.json 127497 B
+same selftest.json 2356 B
+same worstcase_noise.json 3459894 B
+same fee0.json 2796209 B
+pqz-vectors --check: 15 files, 11371429 B: ok
+rc=0
