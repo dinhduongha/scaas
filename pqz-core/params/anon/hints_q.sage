@@ -22,6 +22,16 @@ from functools import lru_cache
 _compute_delta = compute_delta
 compute_delta = lru_cache(maxsize=None)(lambda k: RR(_compute_delta(k)))  # pure; memoized as in hints.sage
 import numpy.linalg as nla  # after the loads: `from fpylll import *` rebinds the name `numpy`
+_cannonical_param = cannonical_param
+
+
+def cannonical_param(v):
+    """geometry.sage's cannonical_param; with RDF covariances the q-vector arrives as RDF, and the tool's lattice check
+    `vi % can_constraints[i]` needs it back as the integer it is"""
+    i, vi = _cannonical_param(v)
+    return (i, ZZ(round(vi))) if abs(vi - round(vi)) < 1e-6 else (i, vi)
+
+
 _logdet = logdet
 
 
