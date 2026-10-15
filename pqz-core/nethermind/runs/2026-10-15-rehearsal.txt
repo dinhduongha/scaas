@@ -92,3 +92,54 @@ block 3506: 7 PQZ transfers, calldata 2,135,253 B, gasUsed 79,242,510 / gasLimit
 fill: all checks passed
 pqzcopy-signer processing: 3502=0.2ms 3503=12.3ms 3504=46.4ms 3505=0.2ms 3506=44.9ms 3507=0.1ms 
 pqzcopy-follower processing: 3502=2.8ms 3503=30.0ms 3504=45.9ms 3505=0.3ms 3506=54.3ms 3507=1.0ms 
+
+## rollback rehearsal (17:44:04Z): the live runbook's rollback on the copy — down, restore the pre-step-1 backup, stock image
+$ copy.sh down && copy.sh restore pre
+ Network pqzcopy_net Removed 
+2096	/c/data-signer
+$ copy.sh up nethermind/nethermind:1.39.0 genesis.stock.json
+ Container pqzcopy-follower Started 
+recorded rollback head (copy-stock-history, before step 1): 415 0x91b880e381bf90cb8c7f08c2e8f876ecca56571b02f177a5bbbbd44b3ca32891
+block 415 now: 0x91b880e381bf90cb8c7f08c2e8f876ecca56571b02f177a5bbbbd44b3ca32891
+block 416 parent: 0x91b880e381bf90cb8c7f08c2e8f876ecca56571b02f177a5bbbbd44b3ca32891
+head 429 0x335f1b753cceb395d34eec2d26af6061b854324e82bf4898a8cf9a3551934df4 gasLimit 25501356 gasUsed 0 ts 1792086315
+head: all checks passed
+PQZ- lines in the stock signer log: 0
+stock image after rollback: OP_SELFTEST eth_call = {"jsonrpc":"2.0","result":"0x","id":1}
+rollback rehearsal: PASS (head = the recorded head, the stock image continues it, the precompiles are gone)
+
+## GATE (plan "Gate (on the copy)") — all ticked
+[x] §10 step 1: image pqz1 (c53359a69bfa); copy started with a future first timestamp (path A, T = start + 10 min): PQZ-START on
+    signer + follower; before T the three addresses empty (code, balance, nonce) and eth_call / probe answer nothing  (copy-pathA)
+[x] §10 step 2: genesis hash checked (path B: = the replica's, unchanged by engine.Pqz and the reset params), chain id 0x1dc6,
+    self-test hash ed910a2c…d205, gas = formula for every row and equal for valid / invalid, every vector 1 / 0, misses at the
+    smallest row, MAX_INPUT + 1 fails, ML-DSA-44 / -65 (EIP-8355, ACVP, UA rows), UAMldsaVerifier at both levels picks the
+    precompile and verifies  (copy-pathA 111 + 53 checks; copy-pathB 112 + 53 checks)
+[x] §10 step 5: signer without published RPC/p2p, follower only behind nginx (10 r/s, burst 20, 8 conns): burst 200 -> 22 x …01,
+    178 x 429, block interval 5 s
+[x] stock image with engine.Pqz: precompiles absent after T, probe fails (copy-g2-stock)
+[x] e2e incl. direct transactions > 128 KiB (315,219 / 314,023 B; gasUsed = the EIP-7623 floor)
+[x] 80 M ramp (reached 15:00:48Z) and a full block: 7 PQZH transfers, 79,242,510 gas, 2.1 MB, accepted; processing 45-54 ms
+[x] kill drill: SIGKILL during PQZ transfers, restart, chain continues, signer = follower on every hash, no PQZ-NODE-FAULT
+[x] rollback rehearsal: restore the pre-step-1 backup, stock image, head = recorded head
+[x] path B (Task 10's reset): engine.Pqz from block 0 + --testnet-reset, genesis hash unchanged, follower syncs, probe + e2e
+    green, 64 KiB code from block 0
+Open observations for the owner: (1) a follower needs eip4895 + maximumExtraDataSize (done by --testnet-reset);
+(2) Network.FilterPeersByRecentIp refused a restarted follower for minutes; (3) follower->signer tx gossip stalled once after
+~3 h (follower restart cleared it); pending txs are not re-sent to a restarted signer; (4) base fee sticks at >= 1 wei and
+Mining.MinGasPrice is not a Nethermind key (clients price >= baseFee + 1).
+## teardown (17:45:40Z): copy.sh down (containers and network removed; data under scratchpad/p6f-copy kept until Task 10 is accepted)
+ Container pqzcopy-follower Stopping 
+ Container pqzcopy-rpc Stopping 
+ Container pqzcopy-signer Stopping 
+ Container pqzcopy-rpc Stopped 
+ Container pqzcopy-rpc Removing 
+ Container pqzcopy-rpc Removed 
+ Container pqzcopy-follower Stopped 
+ Container pqzcopy-follower Removing 
+ Container pqzcopy-follower Removed 
+ Container pqzcopy-signer Stopped 
+ Container pqzcopy-signer Removing 
+ Container pqzcopy-signer Removed 
+ Network pqzcopy_net Removing 
+ Network pqzcopy_net Removed 
