@@ -757,7 +757,7 @@ jl_fold (int64_t *acc, unsigned ncols, uint64_t V[LAMBDA][JLR], const prg_t *g, 
 
 #define SVL 16                       /* legs of R_TXM (the oversize M = 16 included) */
 #define SVG 4                        /* randomness groups */
-#define SVZ (5 + 2 * SVG)            /* exact l2 blocks */
+#define SVZ (3 + 2 * SVG + 2 * SVL) /* exact l2 blocks: s_f, e_f, r_g, e1_g, one per e2 vector (X-1) */
 #define SVPR (2 + 2 * SVL)           /* evaluation-equation products */
 #define SVBIN ((853 + 64 * SVL + 63) / 64) /* binary polys */
 typedef struct
@@ -976,7 +976,7 @@ pqz_sv_setup (uint8_t op, const lnp_tbox_params_struct *P, polymat_t A, polymat_
         S->debit = 1, S->legs = M, S->groups = G, S->aud = A;
         S->nvec = NVEC + (M > 0 ? M - 1 : 0) + (G - 1);
         S->N = 32 * (1 + G), S->M = 16 * (M + 1 + A * M + 2);
-        S->nblk = 2 + 2 * G + (M > 0) + 1 + (A * M > 0), S->dsel = E, S->pstart = e2f + 1 + A * M;
+        S->nblk = 2 + 2 * G + M + 1 + A * M, S->dsel = E, S->pstart = e2f + 1 + A * M;
         S->nrb = 1 + G;
         S->rb[0].tr = 0, S->rb[0].ox = 0, S->rb[0].oy = 32, S->rb[0].rhs = V_PKF;
         for (unsigned g = 0; g < G; g++)
@@ -1014,10 +1014,12 @@ pqz_sv_setup (uint8_t op, const lnp_tbox_params_struct *P, polymat_t A, polymat_
     ok &= S->log2m <= 42; /* the final-round transcript buffer in pqz_sv_verify is sized from log2m */
     S->inv2 = pqz_int_modq (tb->ring->inv2), S->inv4 = pqz_int_modq (P->inv4);
     ok &= mulq (S->inv2, 2) == 1 && mulq (S->inv4, 4) == 1 && S->qm1 == Q - 1;
-    /* lnp_quad_verify: ||z1||^2 <= 2 m1 d 962 2^(2 log2stdev1) / 400 */
+    /* lnp_quad_verify: ||z1||^2 <= floor(2 m1 d 962 2^(2 log2stdev1) / 400) = floor(t 2^(2 log2stdev1 - 4) / 25)
+       (400 = 2^4 25; exact). The 2^-4 keeps t 2^(2 log2stdev1 - 4) < 2^63 at log2stdev1 19 (R_TXM M = 8, 16; the
+       earlier form t 2^(2 log2stdev1) < 2^62 refused those shapes at setup, so the SV rejected their honest proofs) */
     t = (uint64_t)2 * S->mq * DEG * 962;
-    ok &= qm->log2stdev1 <= 20 && t < ((uint64_t)1 << (62 - 2 * qm->log2stdev1)); /* t 2^(2 log2stdev1) < 2^62 */
-    S->z1bnd = ok ? (t << (2 * qm->log2stdev1)) / 400 : 0;
+    ok &= qm->log2stdev1 >= 2 && qm->log2stdev1 <= 20 && t < ((uint64_t)1 << (67 - 2 * qm->log2stdev1));
+    S->z1bnd = ok ? (t << (2 * qm->log2stdev1 - 4)) / 25 : 0;
     /* l2_le / l2_sum need bnd < 2^62 (no wrap of the running sum); actual 2^36.7 .. 2^51.5 */
     ok &= S->Bz3sqr < ((uint64_t)1 << 62) && S->Bsq < ((uint64_t)1 << 62) && S->z1bnd < ((uint64_t)1 << 62);
     for (unsigned i = 0; ok && i < S->Z; i++)
@@ -1545,7 +1547,7 @@ verify_body (const svrel_t *S, uint8_t op, const uint8_t hash_stmt[32], const ui
   nt_t *PKe = sv_alloc (sizeof (nt_t) * (S->nprod ? S->nprod : 1));
   if (PKe == NULL)
     return 0;
-  /* upsilon: sum_j o(u_j) (u_j - c J)   (|.| < 7 * 2^91) */
+  /* upsilon: sum_j o(u_j) (u_j - c J)   (Z <= 43 terms with X-1: |.| < 43 * 2^91) */
   memset (&acc, 0, sizeof acc);
   for (j = 0; j < Z; j++)
     nt_sub (&t1, &W.Z[m1s + j], &W.cJ), acc_mul (&acc, &W.SZ[m1s + j], &t1);
@@ -1635,7 +1637,7 @@ verify_body (const svrel_t *S, uint8_t op, const uint8_t hash_stmt[32], const ui
     for (k = 0; k < LAMBDA; k++)
       {
         unsigned col = 0;
-        memset (&acc, 0, sizeof acc); /* nex <= 397 terms (R_TXM, 16 legs): |.| < 397 2^90 */
+        memset (&acc, 0, sizeof acc); /* nex <= 426 terms (R_TXM, 16 legs, X-1 blocks): |.| < 426 2^90 */
 #define W3MAC(slot)                                                                                          \
   do                                                                                                         \
     {                                                                                                        \
@@ -1832,7 +1834,7 @@ verify_body (const svrel_t *S, uint8_t op, const uint8_t hash_stmt[32], const ui
   int64_t v[DEG];
   red (v, Qa); /* |.| < 2^97 */
 
-  /* ---- w = A1 z1 + A2' z21 - c 2^D tA1 (|.| < (mq + m2r + 1) 2^90 <= 443 2^90), w1 = UseHint (hint, w) ---- */
+  /* ---- w = A1 z1 + A2' z21 - c 2^D tA1 (|.| < (mq + m2r + 1) 2^90 <= 472 2^90), w1 = UseHint (hint, w) ---- */
   int64_t *w1 = sv_alloc (sizeof (int64_t) * DEG * km), *wl = sv_alloc (sizeof (int64_t) * DEG * km);
   if (wl == NULL)
     return 0;

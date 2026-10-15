@@ -1,0 +1,61 @@
+{"init_ms": 85.4, "init_arena": 3116288, "verify": "generic"}
+{"timing": "R_TXM1 prove", "n": 2, "mean_ms": 1125.803, "p50_ms": 1205.132, "p99_ms": 1046.475, "max_ms": 1205.132}
+{"rel": "R_TXM1", "proof_bytes_last": 42748, "proof_bytes_max": 42761, "arena_peak": 304231664, "rej_tries_mean": 12.50, "proofs_fnv": "ee87e7a4"}
+{"timing": "R_TXM1 verify valid", "n": 2, "mean_ms": 662.454, "p50_ms": 667.732, "p99_ms": 657.175, "max_ms": 667.732}
+{"timing": "R_TXM1 verify adversarial", "n": 6, "mean_ms": 334.711, "p50_ms": 647.656, "p99_ms": 657.235, "max_ms": 663.461}
+{"timing": "R_TXM2 prove", "n": 2, "mean_ms": 933.771, "p50_ms": 989.970, "p99_ms": 877.571, "max_ms": 989.970}
+{"rel": "R_TXM2", "proof_bytes_last": 43583, "proof_bytes_max": 43583, "arena_peak": 333529008, "rej_tries_mean": 3.00, "proofs_fnv": "4294a892"}
+{"timing": "R_TXM2 verify valid", "n": 2, "mean_ms": 748.297, "p50_ms": 769.871, "p99_ms": 726.723, "max_ms": 769.871}
+{"timing": "R_TXM2 verify adversarial", "n": 6, "mean_ms": 388.027, "p50_ms": 734.372, "p99_ms": 768.045, "max_ms": 774.794}
+{"timing": "R_TXM4 prove", "n": 2, "mean_ms": 1304.128, "p50_ms": 1490.907, "p99_ms": 1117.348, "max_ms": 1490.907}
+{"rel": "R_TXM4", "proof_bytes_last": 45295, "proof_bytes_max": 45295, "arena_peak": 380269536, "rej_tries_mean": 8.00, "proofs_fnv": "4ff8974f"}
+{"timing": "R_TXM4 verify valid", "n": 2, "mean_ms": 970.727, "p50_ms": 973.011, "p99_ms": 968.443, "max_ms": 973.011}
+{"timing": "R_TXM4 verify adversarial", "n": 6, "mean_ms": 499.366, "p50_ms": 976.747, "p99_ms": 979.961, "max_ms": 989.122}
+{"timing": "R_TXM8 prove", "n": 2, "mean_ms": 2688.249, "p50_ms": 2827.600, "p99_ms": 2548.898, "max_ms": 2827.600}
+{"rel": "R_TXM8", "proof_bytes_last": 61794, "proof_bytes_max": 61794, "arena_peak": 729266080, "rej_tries_mean": 5.00, "proofs_fnv": "cd21b056"}
+{"timing": "R_TXM8 verify valid", "n": 2, "mean_ms": 2275.695, "p50_ms": 2286.827, "p99_ms": 2264.562, "max_ms": 2286.827}
+{"timing": "R_TXM8 verify adversarial", "n": 6, "mean_ms": 1167.437, "p50_ms": 2274.125, "p99_ms": 2295.630, "max_ms": 2312.314}
+{"timing": "R_TXM1_0 prove", "n": 2, "mean_ms": 757.216, "p50_ms": 768.249, "p99_ms": 746.183, "max_ms": 768.249}
+{"rel": "R_TXM1_0", "proof_bytes_last": 42434, "proof_bytes_max": 42442, "arena_peak": 361135312, "rej_tries_mean": 2.50, "proofs_fnv": "bba9cd96"}
+{"timing": "R_TXM1_0 verify valid", "n": 2, "mean_ms": 610.906, "p50_ms": 626.842, "p99_ms": 594.970, "max_ms": 626.842}
+{"timing": "R_TXM1_0 verify adversarial", "n": 6, "mean_ms": 314.113, "p50_ms": 605.248, "p99_ms": 613.580, "max_ms": 624.725}
+{"timing": "R_TXM2_0 prove", "n": 2, "mean_ms": 991.309, "p50_ms": 1083.740, "p99_ms": 898.879, "max_ms": 1083.740}
+{"rel": "R_TXM2_0", "proof_bytes_last": 42936, "proof_bytes_max": 42936, "arena_peak": 383940192, "rej_tries_mean": 10.00, "proofs_fnv": "2fef961b"}
+{"timing": "R_TXM2_0 verify valid", "n": 2, "mean_ms": 669.641, "p50_ms": 680.507, "p99_ms": 658.774, "max_ms": 680.507}
+{"timing": "R_TXM2_0 verify adversarial", "n": 6, "mean_ms": 340.968, "p50_ms": 653.518, "p99_ms": 668.915, "max_ms": 675.370}
+{"timing": "R_TXM4_0 prove", "n": 2, "mean_ms": 1326.764, "p50_ms": 1637.281, "p99_ms": 1016.247, "max_ms": 1637.281}
+{"rel": "R_TXM4_0", "proof_bytes_last": 43943, "proof_bytes_max": 43943, "arena_peak": 416965808, "rej_tries_mean": 15.50, "proofs_fnv": "74c6be73"}
+{"timing": "R_TXM4_0 verify valid", "n": 2, "mean_ms": 794.468, "p50_ms": 795.099, "p99_ms": 793.838, "max_ms": 795.099}
+{"timing": "R_TXM4_0 verify adversarial", "n": 6, "mean_ms": 396.877, "p50_ms": 756.233, "p99_ms": 783.532, "max_ms": 794.424}
+{"timing": "R_TXM8_0 prove", "n": 2, "mean_ms": 2019.936, "p50_ms": 2211.660, "p99_ms": 1828.213, "max_ms": 2211.660}
+{"rel": "R_TXM8_0", "proof_bytes_last": 59026, "proof_bytes_max": 59026, "arena_peak": 722783680, "rej_tries_mean": 5.50, "proofs_fnv": "90c8fc70"}
+{"timing": "R_TXM8_0 verify valid", "n": 2, "mean_ms": 1638.830, "p50_ms": 1644.009, "p99_ms": 1633.651, "max_ms": 1644.009}
+{"timing": "R_TXM8_0 verify adversarial", "n": 6, "mean_ms": 839.599, "p50_ms": 1595.893, "p99_ms": 1655.549, "max_ms": 1682.457}
+{"txm_check": "M 4 on: real leg 0", "expect": "accept", "prove_rc": 0, "generic": 1, "fast": 1, "ok": true}
+{"txm_check": "M 8 on: real legs 3 and 4 (group boundary), fee 0", "expect": "accept", "prove_rc": 0, "generic": 1, "fast": 1, "ok": true}
+{"txm_check": "M 8 off: all legs decoys, fee 0", "expect": "accept", "prove_rc": 0, "generic": 1, "fast": 1, "ok": true}
+{"txm_check": "M 2 off: two real legs", "expect": "accept", "prove_rc": 0, "generic": 1, "fast": 1, "ok": true}
+{"txm_check": "M 8 on: sum + fee = balance", "expect": "accept", "prove_rc": 0, "generic": 1, "fast": 1, "ok": true}
+{"txm_check": "leg digit 16", "expect": "reject", "prove_rc": 3, "generic": 0, "fast": 0, "cheat_prove_rc": 0, "cheat_generic": 0, "cheat_fast": 0, "ok": true}
+{"txm_check": "sum + fee = balance + 1", "expect": "reject", "prove_rc": 3, "generic": 0, "fast": 0, "cheat_prove_rc": 0, "cheat_generic": 0, "cheat_fast": 0, "ok": true}
+{"txm_check": "v_1 encrypted to another recipient's key", "expect": "reject", "prove_rc": 1, "generic": 0, "fast": 0, "cheat_prove_rc": 0, "cheat_generic": 0, "cheat_fast": 0, "ok": true}
+{"txm_check": "leg 4 under group 0's randomness", "expect": "reject", "prove_rc": 1, "generic": 0, "fast": 0, "cheat_prove_rc": 0, "cheat_generic": 0, "cheat_fast": 0, "ok": true}
+{"txm_check": "legs 3 and 4 moved between groups", "expect": "reject", "prove_rc": 1, "generic": 0, "fast": 0, "cheat_prove_rc": 0, "cheat_generic": 0, "cheat_fast": 0, "ok": true}
+{"txm_check": "auditor copy of leg 0 of another amount", "expect": "reject", "prove_rc": 1, "generic": 0, "fast": 0, "cheat_prove_rc": 0, "cheat_generic": 0, "cheat_fast": 0, "ok": true}
+{"txm_check": "leg 0's e2 norm 120 (over 64 and over 64 sqrt(2))", "expect": "reject", "prove_rc": 3, "generic": 0, "fast": 0, "cheat_prove_rc": 0, "cheat_generic": 0, "cheat_fast": 0, "ok": true}
+{"txm_check": "leg 0's ||e2||^2 5120 > 4096, legs' block 5120 < 8192 (X-1)", "expect": "reject", "prove_rc": 3, "generic": 0, "fast": 0, "cheat_prove_rc": 0, "cheat_generic": 0, "cheat_fast": 0, "ok": true}
+{"txm_check": "auditor copy 0's ||e2||^2 5120 > 4096, block 5120 < 8192 (X-1)", "expect": "reject", "prove_rc": 3, "generic": 0, "fast": 0, "cheat_prove_rc": 0, "cheat_generic": 0, "cheat_fast": 0, "ok": true}
+{"txm_check": "M 8 off: leg 0's ||e2||^2 5120 > 4096, block 5120 < 32768 (X-1)", "expect": "reject", "prove_rc": 3, "generic": 0, "fast": 0, "cheat_prove_rc": 0, "cheat_generic": 0, "cheat_fast": 0, "ok": true}
+{"txm_check": "M word 8 -> 4", "expect": "reject", "generic": 0, "fast": 0, "ok": true}
+{"txm_check": "M word 8 -> 3 (not built)", "expect": "reject", "generic": 0, "fast": 0, "ok": true}
+{"txm_check": "M word 8 -> 264", "expect": "reject", "generic": 0, "fast": 0, "ok": true}
+{"txm_check": "auditorOn 1 -> 0", "expect": "reject", "generic": 0, "fast": 0, "ok": true}
+{"txm_check": "recipientsHash changed", "expect": "reject", "generic": 0, "fast": 0, "ok": true}
+{"txm_check": "legs 3 and 4 swapped in the statement", "expect": "reject", "generic": 0, "fast": 0, "ok": true}
+{"txm_check": "u_0 and u_1 swapped", "expect": "reject", "generic": 0, "fast": 0, "ok": true}
+{"txm_check": "(2, off) read as (1, on)", "expect": "reject", "generic": 0, "fast": 0, "ok": true}
+{"txm_check": "R_TXM 1 proof as op 1", "expect": "reject", "generic": 0, "fast": 0, "ok": true}
+{"txm_check": "R_TXM 1 proof, op 7 statement, op 1", "expect": "reject", "generic": 0, "fast": 0, "ok": true}
+{"txm_check": "R_TX proof as op 7", "expect": "reject", "generic": 0, "fast": 0, "ok": true}
+{"txm_check": true, "cases": 26, "fails": 0}
+{"fails": 0}

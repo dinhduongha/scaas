@@ -64,6 +64,9 @@ native() {
   done
   $CC -std=gnu11 -O2 $WARN $SVDEF -Isrc -o $B/native/pqz_sv_diff test/pqz_sv_diff.c $B/native/hooks/pqz_rel.o \
     $B/native/hooks/pqz_sv.o $B/native/pqz_lazer.o $B/native/pqz_ntt.o $B/native/pqz_arena.o
+  # the bench with the test-only cheating prover (pqz_bench_hooks n_p n_v mask 1: R_TXM negatives reach the verifiers)
+  $CC -std=gnu11 -O2 $WARN $SVDEF -DPQZ_TEST_HOOKS -Isrc -o $B/native/pqz_bench_hooks test/pqz_bench.c \
+    $B/native/hooks/pqz_rel.o $B/native/hooks/pqz_sv.o $B/native/pqz_lazer.o $B/native/pqz_ntt.o $B/native/pqz_arena.o
 }
 
 # wasm32: freestanding (no libc, no compiler-rt; src/pqz_wasm_rt.c), 8 MiB stack below the data, arena from

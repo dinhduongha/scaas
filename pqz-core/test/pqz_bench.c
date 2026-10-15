@@ -111,8 +111,7 @@ static uint8_t tx0_stmt[PQZ_TX0_STMT_BYTES], tx0_wit[PQZ_TX0_WIT_BYTES];
 static uint8_t burn_stmt[PQZ_BURN_STMT_BYTES], burn_wit[PQZ_BURN_WIT_BYTES];
 static uint8_t ds_stmt[PQZ_DISC_STMT_BYTES], ds_wit[PQZ_DS_WIT_BYTES];
 static uint8_t dr_stmt[PQZ_DISC_STMT_BYTES], dr_wit[PQZ_DR_WIT_BYTES];
-static uint8_t proofs[16][PQZ_MAX_PROOF], bad[PQZ_MAX_PROOF]; /* >= NREL (6 + the R_TXM shapes) */
-static size_t lens[16];
+static uint8_t bad[PQZ_MAX_PROOF];
 static uint8_t rnd32[32];
 static int fast; /* 1: verify with pqz_verify_fast */
 
@@ -151,6 +150,8 @@ static const struct
 };
 #define NTXB (sizeof TXB / sizeof TXB[0])
 #define NREL (6 + (int)NTXB)
+static uint8_t proofs[NREL][PQZ_MAX_PROOF];
+static size_t lens[NREL]; /* 0: no proof (the last prove failed) */
 #define TXM_ST_MAX PQZ_TXM_STMT_BYTES (PQZ_TXM_MAX_LEGS, 1)
 #define TXM_WIT_MAX PQZ_TXM_WIT_BYTES (PQZ_TXM_MAX_LEGS, 1)
 static uint8_t txm_stmt[NTXB][TXM_ST_MAX], txm_wit[NTXB][TXM_WIT_MAX];
@@ -343,7 +344,10 @@ setup (void)
    pqz_keys.c, which several builds of this file do not link) ---- */
 #define MAXL PQZ_TXM_MAX_LEGS
 #define MAXG PQZ_TXM_GROUPS (PQZ_TXM_MAX_LEGS)
-static pqzkey_t KTS, KTR[MAXL], KTA; /* sender, recipients (leg j: KTR[j]), auditor */
+static pqzkey_t KTS, KTR[MAXL], KTA;
+#ifdef PQZ_TEST_HOOKS
+extern int pqz_test_cheat; /* pqz_rel.c: the test-only cheating prover (txm_check negatives) */
+#endif /* sender, recipients (leg j: KTR[j]), auditor */
 
 typedef struct
 {
@@ -351,9 +355,11 @@ typedef struct
   uint64_t amount[MAXL], fee, balance;
   /* negatives: leg j is encrypted under KTR[key[j]] with group grp[j]'s randomness; add0 is added to leg 0's digit 0
      in v_0, v_{a,0} and the witness, aud0 in v_{a,0} only; big0: leg 0's e2 set to 30 in every coefficient (the
-     legs' block norm over 64 sqrt(M) for M < 7); swap: the statement and witness positions 3 and 4 exchanged after
+     norm 120 > 64); over0 (X-1, owner 2026-10-15: ||e2||^2 <= 64^2 = 4096 per e2 vector): bit 0 leg 0's e2,
+     bit 1 the auditor copy 0's e2 set to (64, 32, 0, ..., 0) (||e2||^2 = 5120) and the other legs' / copies' e2 to 0,
+     so the old one-block bound (||.||^2 <= 4096 M) holds for M >= 2; swap: the statement and witness positions 3 and 4 exchanged after
      encryption (a leg moved between groups) */
-  unsigned key[MAXL], grp[MAXL], add0, aud0, big0, swap;
+  unsigned key[MAXL], grp[MAXL], add0, aud0, big0, over0, swap;
   uint8_t tag; /* seed tag */
 } txspec_t;
 
@@ -416,6 +422,15 @@ txm_build (const txspec_t *X, uint8_t *st, size_t *stlen, uint8_t *wt, size_t *w
   if (X->big0)
     for (k = 0; k < 16; k++)
       e2l[0][k] = 30;
+  for (j = 0; j < m && X->over0; j++)
+    for (k = 0; k < 16; k++)
+      {
+        const int16_t x = j ? 0 : k == 0 ? 64 : k == 1 ? 32 : 0;
+        if (X->over0 & 1)
+          e2l[j][k] = x;
+        if (X->over0 & 2)
+          e2a[j][k] = x;
+      }
   /* the ciphertexts, leg by leg (the honest case equals the group encryption) */
   for (j = 0; j < m; j++)
     {
@@ -529,7 +544,10 @@ step_prove (int rel, unsigned seed)
   for (int i = 0; i < 32; i++)
     rnd32[i] = (uint8_t)(seed * SEEDMUL[rel] + i);
   lens[rel] = sizeof (proofs[rel]);
-  return pqz_prove (OPS[rel], STMT[rel], STLEN[rel], WIT[rel], WLEN[rel], rnd32, proofs[rel], &lens[rel]);
+  const int rc = pqz_prove (OPS[rel], STMT[rel], STLEN[rel], WIT[rel], WLEN[rel], rnd32, proofs[rel], &lens[rel]);
+  if (rc != 0)
+    lens[rel] = 0; /* pqz_prove leaves *proof_len as it was on failure */
+  return rc;
 }
 
 size_t
@@ -768,8 +786,9 @@ txm_case (const char *name, const txspec_t *X, int expect)
 {
   static uint8_t st[TXM_ST_MAX], wt[TXM_WIT_MAX], pf[PQZ_MAX_PROOF];
   size_t sl = 0, wl = 0, pl = sizeof pf;
-  int g = 0, f = 0, prc = -1;
-  if (txm_build (X, st, &sl, wt, &wl))
+  int g = 0, f = 0, prc = -1, ok;
+  const int built = txm_build (X, st, &sl, wt, &wl);
+  if (built)
     prc = pqz_prove (PQZ_OP_TRANSFER_MULTI, st, sl, wt, wl, rnd32, pf, &pl);
   if (prc == 0)
     {
@@ -780,9 +799,38 @@ txm_case (const char *name, const txspec_t *X, int expect)
       f = g;
 #endif
     }
-  const int ok = expect ? prc == 0 && g == 1 && f == 1 : g == 0 && f == 0;
-  printf ("{\"txm_check\": \"%s\", \"expect\": \"%s\", \"prove_rc\": %d, \"generic\": %d, \"fast\": %d, \"ok\": %s}\n",
-          name, expect ? "accept" : "reject", prc, g, f, ok ? "true" : "false");
+  if (expect)
+    {
+      ok = prc == 0 && g == 1 && f == 1;
+      printf ("{\"txm_check\": \"%s\", \"expect\": \"accept\", \"prove_rc\": %d, \"generic\": %d, \"fast\": %d, "
+              "\"ok\": %s}\n",
+              name, prc, g, f, ok ? "true" : "false");
+      return !ok;
+    }
+  /* a false witness: the honest prover refuses (or its proof is rejected), and the cheating prover's proof (rc 0
+     required) is rejected by both verifiers (pre-review L-1: a refusal alone never counts as a verifier reject;
+     without PQZ_TEST_HOOKS the case fails) */
+  const int honest_ok = prc != 0 || (g == 0 && f == 0);
+  int crc = -1, cg = -1, cf = -1;
+#ifdef PQZ_TEST_HOOKS
+  pl = sizeof pf;
+  pqz_test_cheat = 1;
+  crc = built ? pqz_prove (PQZ_OP_TRANSFER_MULTI, st, sl, wt, wl, rnd32, pf, &pl) : -1;
+  pqz_test_cheat = 0;
+  if (crc == 0)
+    {
+      cg = pqz_verify (PQZ_OP_TRANSFER_MULTI, st, sl, pf, pl);
+#ifdef PQZ_SV
+      cf = pqz_verify_fast (PQZ_OP_TRANSFER_MULTI, st, sl, pf, pl);
+#else
+      cf = cg;
+#endif
+    }
+#endif
+  ok = honest_ok && crc == 0 && cg == 0 && cf == 0;
+  printf ("{\"txm_check\": \"%s\", \"expect\": \"reject\", \"prove_rc\": %d, \"generic\": %d, \"fast\": %d, "
+          "\"cheat_prove_rc\": %d, \"cheat_generic\": %d, \"cheat_fast\": %d, \"ok\": %s}\n",
+          name, prc, g, f, crc, cg, cf, ok ? "true" : "false");
   return !ok;
 }
 
@@ -858,7 +906,13 @@ txm_check (int rels)
   txspec (&X, 8, 1, 115), X.aud0 = 1;
   fails += txm_case ("auditor copy of leg 0 of another amount", &X, 0), n++;
   txspec (&X, 2, 1, 116), X.big0 = 1;
-  fails += txm_case ("legs' e2 block over 64 sqrt(M)", &X, 0), n++;
+  fails += txm_case ("leg 0's e2 norm 120 (over 64 and over 64 sqrt(2))", &X, 0), n++;
+  txspec (&X, 2, 1, 117), X.over0 = 1;
+  fails += txm_case ("leg 0's ||e2||^2 5120 > 4096, legs' block 5120 < 8192 (X-1)", &X, 0), n++;
+  txspec (&X, 2, 1, 118), X.over0 = 2;
+  fails += txm_case ("auditor copy 0's ||e2||^2 5120 > 4096, block 5120 < 8192 (X-1)", &X, 0), n++;
+  txspec (&X, 8, 0, 119), X.over0 = 1;
+  fails += txm_case ("M 8 off: leg 0's ||e2||^2 5120 > 4096, block 5120 < 32768 (X-1)", &X, 0), n++;
 
   /* honest proofs under changed statements */
   if (r81 >= 0)

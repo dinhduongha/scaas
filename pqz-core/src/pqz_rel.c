@@ -57,7 +57,7 @@
 #define NTXQ (K * (1 + MAXG))                 /* R_q-linear rows: row 1, row 2 per group */
 #define NTXE (16 * (3 + 2 * MAXL))            /* evaleqs: 16 per leg, auditor copy, v_f, row 6, row 7 */
 #define NBIN ((853 + 64 * MAXL + 63) / 64)    /* binary polys: 853 + 64 M bits */
-#define NZ (5 + 2 * MAXG)                     /* exact l2 blocks */
+#define NZ (3 + 2 * MAXG + 2 * MAXL)  /* exact l2 blocks: s_f, e_f, r_g, e1_g, one per e2 vector */
 
 typedef struct
 {
@@ -292,8 +292,46 @@ pqz_stmt_hash (uint8_t h[32], uint8_t op, const uint8_t *stmt, size_t len)
 
 /* ---------------------------------------------------------------- proof encoding (LaZer lin-proofs.c) */
 
-static void
-encproof (uint8_t *out, size_t *len, polyvec_t tA1, polyvec_t tB, polyvec_t h, poly_t c, polyvec_t z1,
+/* bits of coder_enc_grandom3 (v, log2o): per coefficient a unary part (nones ones + a zero) and log2o + 1 bits */
+static size_t
+grandom_bits (polyvec_t v, unsigned log2o)
+{
+  const unsigned la = log2o + 1;
+  const int64_t ao = (int64_t)1 << la;
+  size_t n = 0;
+  for (unsigned i = 0; i < v->nelems; i++)
+    for (unsigned k = 0; k < PQZ_D; k++)
+      {
+        const int64_t z = int_get_i64 (poly_get_coeff (polyvec_get_elem (v, i), k));
+        int64_t z0 = z - (z & ~(ao - 1));
+        if (z0 >= ao / 2)
+          z0 -= ao;
+        else if (z0 < -ao / 2)
+          z0 += ao;
+        const int64_t z1 = (z - z0) >> la;
+        n += (size_t)(z1 <= 0 ? -2 * z1 : 2 * z1 - 1) + 1 + la;
+      }
+  return n;
+}
+
+/* bits of coder_enc_ghint3 (v) */
+static size_t
+ghint_bits (polyvec_t v)
+{
+  size_t n = 0;
+  for (unsigned i = 0; i < v->nelems; i++)
+    for (unsigned k = 0; k < PQZ_D; k++)
+      {
+        const int64_t e = int_get_i64 (poly_get_coeff (polyvec_get_elem (v, i), k));
+        n += e >= -1 && e <= 1 ? 2 : (size_t)(e >= 2 ? 2 * e - 1 : -2 * e);
+      }
+  return n;
+}
+
+/* the proof into out[0 .. cap); 0 if it would not fit (nothing written past cap: L-5, the entropy-coded parts are
+   data-dependent), or if the encoder's length differs from the predicted one */
+static int
+encproof (uint8_t *out, size_t cap, size_t *len, polyvec_t tA1, polyvec_t tB, polyvec_t h, poly_t c, polyvec_t z1,
           polyvec_t z21, polyvec_t hint, polyvec_t z3, polyvec_t z4, const lnp_tbox_params_t params)
 {
   polyring_srcptr Rq = params->tbox->ring;
@@ -306,7 +344,26 @@ encproof (uint8_t *out, size_t *len, polyvec_t tA1, polyvec_t tB, polyvec_t h, p
   const int64_t omega = params->quad_eval->quad_many->omega;
   coder_state_t cstate;
   INT_T (mod, q->nlimbs);
+  size_t bits;
 
+  polyvec_fromcrt (z1);
+  polyvec_fromcrt (z21);
+  polyvec_fromcrt (z3);
+  polyvec_fromcrt (z4); /* the nprime = 1 approximate l_inf filler */
+  polyvec_mod (z1, z1);
+  polyvec_mod (z21, z21);
+  polyvec_mod (z3, z3);
+  polyvec_mod (z4, z4);
+  polyvec_redc (z1, z1);
+  polyvec_redc (z21, z21);
+  polyvec_redc (z3, z3);
+  polyvec_redc (z4, z4);
+  bits = (size_t)d * ((tB->nelems + h->nelems) * log2q + tA1->nelems * (log2q - D) + log2omega) + ghint_bits (hint)
+         + grandom_bits (z1, params->quad_eval->quad_many->log2stdev1)
+         + grandom_bits (z21, params->quad_eval->quad_many->log2stdev2) + grandom_bits (z3, params->log2stdev3)
+         + grandom_bits (z4, params->log2stdev4);
+  if (bits / 8 + 1 > cap) /* coder_enc_end: one pad bit, then the byte count */
+    return 0;
   coder_enc_begin (cstate, out);
   polyvec_fromcrt (tB);
   polyvec_mod (tB, tB);
@@ -328,24 +385,13 @@ encproof (uint8_t *out, size_t *len, polyvec_t tA1, polyvec_t tB, polyvec_t h, p
   intvec_redp (coeffs, coeffs, mod);
   coder_enc_urandom (cstate, coeffs, mod, log2omega);
   coder_enc_ghint3 (cstate, hint);
-  polyvec_fromcrt (z1);
-  polyvec_fromcrt (z21);
-  polyvec_fromcrt (z3);
-  polyvec_mod (z1, z1);
-  polyvec_mod (z21, z21);
-  polyvec_mod (z3, z3);
-  polyvec_redc (z1, z1);
-  polyvec_redc (z21, z21);
-  polyvec_redc (z3, z3);
   coder_enc_grandom3 (cstate, z1, params->quad_eval->quad_many->log2stdev1);
   coder_enc_grandom3 (cstate, z21, params->quad_eval->quad_many->log2stdev2);
   coder_enc_grandom3 (cstate, z3, params->log2stdev3);
-  polyvec_fromcrt (z4); /* the nprime = 1 approximate l_inf filler */
-  polyvec_mod (z4, z4);
-  polyvec_redc (z4, z4);
   coder_enc_grandom3 (cstate, z4, params->log2stdev4);
   coder_enc_end (cstate);
   *len = coder_get_offset (cstate) >> 3;
+  return *len == bits / 8 + 1;
 }
 
 int
@@ -501,11 +547,10 @@ shape_of (const rel_t *R, shape_t *H)
       H->bst[z] = 64 + 64 * g, H->bln[z++] = 32;
       H->bst[z] = 96 + 64 * g, H->bln[z++] = 32;
     }
-  if (M > 0)
-    H->bst[z] = H->E, H->bln[z++] = M; /* the legs' e2: one block, bound 64 sqrt(M) (plan D5) */
-  H->bst[z] = H->e2f, H->bln[z++] = 1;
-  if (A * M > 0)
-    H->bst[z] = H->e2f + 1, H->bln[z++] = M; /* the auditor copies' e2: one block */
+  /* every e2 vector its own block, bound 64 (pq-zether.md §4.3; owner 2026-10-15, X-1: not one 64 sqrt(M) block):
+     the legs' e2_j, e2_f, the auditor copies' e2_{a,j}, contiguous from E */
+  for (unsigned k = 0; k < M + 1 + A * M; k++)
+    H->bst[z] = H->E + k, H->bln[z++] = 1;
   H->nblk = z;
 }
 
@@ -881,15 +926,26 @@ pf_alloc (pf_t *F, const lnp_tbox_params_struct *P)
   polyvec_set_zero (F->m);
 }
 
+#ifdef PQZ_TEST_HOOKS
+/* Test-only cheating prover (bench txm_check, P6-ANON pre-review L-1; never in libpqz): when set, the debit witness's
+   carry / range checks and the l2 slack refusal are skipped (a block over its bound gets upsilon 0), and the proof is
+   emitted although LaZer's prover self-checks fail (rc 0 then; a rejection-loop cap still fails). The verifiers
+   must reject every such proof of a false witness. */
+int pqz_test_cheat;
+#define CHEAT pqz_test_cheat
+#else
+#define CHEAT 0
+#endif
+
 #ifdef PQZ_L2DOM_POC
 /* Test-only cheating prover (pqz-core/l2dom/, never in a production build): when set, pool the l2 slack of all
    Z blocks, sum_z (B_z^2 - ||x_z||^2), and spread it greedily over the upsilon_z (each holds bitlen(B_z^2) bits), so a
    block may exceed its own B_z as long as sum_z ||x_z||^2 <= sum_z B_z^2. Checks whether the verifier enforces each
    exact-l2 equation separately. */
 int pqz_l2dom_poc;
-#define POC_IGNORE_ERR pqz_l2dom_poc /* and emit the proof although the prover's own self-checks fail */
+#define POC_IGNORE_ERR (pqz_l2dom_poc || CHEAT) /* and emit the proof although the prover's own self-checks fail */
 #else
-#define POC_IGNORE_ERR 0
+#define POC_IGNORE_ERR CHEAT
 #endif
 
 /* s1 slack polys: upsilon_i = binexp(B_i^2 - ||x_i||^2) */
@@ -936,7 +992,11 @@ set_upsilon (const lnp_tbox_params_struct *P, polyvec_t s1, const unsigned *star
       int_set_i64 (n2t, n2);
       int_sub (d, d, n2t);
       if (int_sgn (d) < 0)
-        return 0; /* witness above its norm bound */
+        {
+          if (!CHEAT)
+            return 0; /* witness above its norm bound */
+          int_set_i64 (d, 0);
+        }
       int_binexp (polyvec_get_elem (s1, m1 + z), NULL, d);
     }
   return 1;
@@ -990,12 +1050,12 @@ do_prove (sys_t *S, pf_t *F, const uint8_t hash0[32], const uint8_t *wit, size_t
   explicit_bzero (ex, sizeof ex); /* secret-derived; the arena's witness copies are not zeroed (STATUS Open 8) */
   if (pqz_err && !POC_IGNORE_ERR)
     return pqz_err;
-  encproof (buf, &len, F->tA1, F->tB, F->h, F->c, F->z1, F->z21, F->hint, F->z3, F->z4, P);
-  if (len > PQZ_MAX_PROOF || len > *proof_len)
+  if (!encproof (buf, sizeof buf, &len, F->tA1, F->tB, F->h, F->c, F->z1, F->z21, F->hint, F->z3, F->z4, P)
+      || len > PQZ_MAX_PROOF || len > *proof_len)
     return PQZ_ERR_INPUT;
   memcpy (proof, buf, len);
   *proof_len = len;
-  return pqz_err;
+  return CHEAT && pqz_err == PQZ_ERR_INTERNAL ? PQZ_OK : pqz_err;
 }
 
 static int
@@ -1102,12 +1162,12 @@ debit_witness (txst_t *T, const uint8_t *w, polyvec_t s1, const rel_t *R)
   for (i = 0; i < 16; i++)
     {
       int64_t s = M[i] + cprev - dp[i] - dsum[i] - (int64_t)digit (T->fee, i);
-      if (s % 16 != 0)
+      if (s % 16 != 0 && !CHEAT)
         return 0;
       c[i] = s / 16;
       cprev = c[i];
     }
-  if (c[15] != 0)
+  if (c[15] != 0 && !CHEAT)
     return 0;
   /* ranges (the proof shows them; an honest prover checks first) */
   for (i = 0; i < 16; i++)
@@ -1116,7 +1176,7 @@ debit_witness (txst_t *T, const uint8_t *w, polyvec_t s1, const rel_t *R)
                 || eT[i] >= (1 << 24);
       for (j = 0; j < L; j++)
         bad |= d[j][i] > 15;
-      if (bad)
+      if (bad && !CHEAT)
         return 0;
     }
   for (i = 0; i < 16; i++)
@@ -1564,8 +1624,8 @@ pqz_test_mutate (uint8_t op, const uint8_t *proof, size_t len, unsigned kind, ui
     default: /* re-encode only */
       break;
     }
-  encproof (buf, &n, F.tA1, F.tB, F.h, F.c, F.z1, F.z21, F.hint, F.z3, F.z4, P);
-  if (pqz_err == PQZ_OK && n <= *outlen)
+  if (encproof (buf, sizeof buf, &n, F.tA1, F.tB, F.h, F.c, F.z1, F.z21, F.hint, F.z3, F.z4, P) && pqz_err == PQZ_OK
+      && n <= *outlen)
     {
       memcpy (out, buf, n);
       *outlen = n;
