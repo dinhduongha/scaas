@@ -52,7 +52,8 @@ Runtime ≈ 1 h.
 - **Hints (DDGR20).** The leaky-LWE-Estimator is a separate repository, not part of lattice-estimator `53da598`.
   `e_s0.py` implements its predictive perfect-hint update (dimension −1, normalized log-volume `+½ ln vᵀΣv`) and the
   same ADPS16/GSA uSVP condition, calibrated against the estimator's `primal_usvp` on Kyber-512 and on the PQZ
-  instance (both printed).
+  instance (both printed). P6-ANON S1 runs the leaky-LWE-Estimator itself (commit `0a9caf8`, pinned in
+  `anon/run_hints.sh`) on the multi-recipient hint counts: `anon/hints.sage` → `anon/hints-anon.txt`.
 - **Proof instances.** The spec does not fix the ABDLOP ranks (LaZer's codegen does, in P6d). `e_s0.py` derives the
   smallest MSIS rank and randomness length that reach `β ≥ 450` for `R_TX` from the LNP22 bounds with conservative
   choices (Rej0 `γ = 11`, ternary randomness scored as CBD(1)); P6d's codegen must use at least these ranks.

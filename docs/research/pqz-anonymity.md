@@ -308,7 +308,31 @@ with `v_f` in group 0 — CTR-PQZ-04's own split-randomness fallback, extended p
 confirm 80 hints before any freeze. (Classical Z3 accepted that one shared `s` opens every leg *when handed over*;
 here nothing is handed over, but malicious keys can extract — a lattice-specific limit with no classical analogue.)
 
+**DDGR20 run (P6-ANON S1, 2026-10-14) — corrects the table above.** `pqz-core/params/anon/hints.sage` runs the
+leaky-LWE-Estimator (DDGR20, `lducas/leaky-LWE-Estimator` `0a9caf8`, `DBDD_predict_diag` with its q-vector
+optimisation) next to lattice-estimator `53da598` in the pinned Sage image (`run_hints.sh` → `hints-anon.txt`,
+74 min). Calibration: Kyber-512 405.5 (estimator 406), PQZ `(u, v_f)` without hints 475.8 (476); the closed-form
+update for a general perfect hint matches the tool's full-covariance `DBDD_predict` to 0 on a small instance.
+[measured]
+
+| Hints on one `(r, e1)` | 16 | 32 | 48 | 64 | 80 | 96 | 144 | 272 |
+|---|---|---|---|---|---|---|---|---|
+| unit hints on `r` | 470.8 | 465.8 | 460.8 | 455.8 | 450.9 | 445.9 | 431.0 | 391.8 |
+| unit hints on `e1` | 470.6 | 465.3 | 460.0 | 454.8 | 449.5 | 444.3 | 428.6 | 387.3 |
+| **orthogonal maximal-norm mixed forms (worst case)** | 469.8 | 463.9 | 457.9 | **451.9** | **446.0** | 440.0 | 422.3 | 375.6 |
+| estimator `primal_usvp`, n − h (the approximation above) | 471 | 466 | 461 | 456 | 451 | 446 | 432 | 392 |
+
+The approximation matched the unit-hint case, but a malicious key chooses mixed forms (`e^T r − s^T e1`, `‖e‖ ≤ 164`,
+`‖s‖ ≤ 36`): at 80 hints the worst case is **446.0 < 450**. A group therefore holds **at most 64 hints: 3 legs with
+the auditor (48 + 16), 4 without** (β 451.9 both); `R_TX` (32 hints) keeps 463.9, as `e_s0.py`'s 464. Groups of 2
+are not needed. Plan D4 / R2 and the op 7 layout follow this (`G = ⌈M/3⌉` with the auditor, `⌈M/4⌉` without).
+
 ### 8.3 Size, time, calldata and gas (M = 1, 2, 4, 8, 16)
+
+*The tables below use groups of 4 legs (the pre-S1 grouping). With S1's grouping (3 legs with the auditor, 4 without)
+the sizes are `anon_sizes.py` `s1_grouping()` and the plan's §8 table: PQZL M = 4 / 8 with the auditor take 2 / 3
+groups (input 206,670 / 304,434 B, still fit); PQZH M = 4 with the auditor takes 2 groups and is over `MAX_PROOF` and
+`MAX_INPUT` by the model, without the auditor it fits (347,945 B) [estimate].*
 
 PQZL proof sizes: LaZer's codegen on the sketch specs `pqz-core/params/anon/txm*_params.sage` (`R_TX`'s witness with
 M legs and G randomness groups, auditor on), sized against the pinned lattice-estimator `53da598` (ADPS16) by

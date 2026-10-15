@@ -129,7 +129,30 @@ def limits():
                   f"{'fits' if not need else 'does not fit'} | {'; '.join(need) if need else 'none'} |")
 
 
+def s1_grouping():
+    """P6-ANON S1 (hints-anon.txt, DDGR20 worst case): <= 3 legs per randomness group with the auditor (64 hints, beta
+    451.9), <= 4 without (64 hints); 4 legs + the auditor (80 hints) give 446.0 < 450. Sizes per (system, M, auditor)."""
+    t = open(os.path.join(HERE, 'hints-anon.txt')).read()
+    mixed = {int(h): float(b) for h, b in re.findall(r'^\s*(\d+)\s+[\d.]+\s+[\d.]+\s+([\d.]+)\s+\d+\s*$', t, re.M)}
+    print('| system | M | auditor | groups | statement B | proof B | input B | gas | fits | hints → β (DDGR20, worst) |')
+    print('|---|---|---|---|---|---|---|---|---|---|')
+    for system in ('PQZL', 'PQZH'):
+        for m in (1, 2, 4, 8, 16):
+            for aud in (1, 0):
+                lpg = 3 if aud else 4
+                g = -(-m // lpg)
+                r = one(system, m, g, aud)
+                h = 16 * min(m, lpg) + 16 * aud
+                why = [x for x, bad in (('input', r['inp'] > MAX_INPUT), ('MAX_PROOF', r['proof'] > MAX_PROOF[system]),
+                                        ('gas cap', r['gas'] > TX_CAP)) if bad]
+                print(f"| {system} | {m} | {'on' if aud else 'off'} | {g} | {r['stmt']:,} | {r['proof']:,} | "
+                      f"{r['inp']:,} | {r['gas']/1e6:.2f} M | {'no: ' + ', '.join(why) if why else 'yes'} | "
+                      f"{h} → {mixed[h]:.1f} |")
+
+
 if __name__ == '__main__':
     main()
     print()
     limits()
+    print()
+    s1_grouping()
