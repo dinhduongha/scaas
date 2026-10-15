@@ -225,3 +225,7 @@ branch `pqz-readme`.
 sections), **0 moved out, 0 dropped**. Additional homes that already held the same facts: STATUS.md ("Done", "Optimisation
 P6d-2", "R_BURN, R_DS, R_DR", "proofSystemId v2", "z21 norm check", "`pqz-stmt`", "`pqz-ffi`", "Vectors"),
 `ffi/README.md`, `artifact/README.md`, `params/README.md`, `sz/README.md`.
+
+## Owner ruling (2026-10-15)
+
+Approved with one change: the measurement / spike directory is `research/` instead of `bench/` (`research/{rel3,opt,floor,upstream}`). Everything else as proposed; executed after `p6e-a5`, `pqz-artifact2`, `p6-anon-s` and `p6f` merge, before gates A / B and the freeze.
