@@ -1,3 +1,37 @@
+## Session 2026-10-16 (shutdown ~06:30 +07) — resume here
+
+**State:** main `dee0a21`+ pushed, clean. Merged / done this session (all pushed):
+- `p6-anon-h` (`67e5cca`) — Track H, PQZH Ligero `R_TXM` op 7, built M ∈ {1, 2, 4} auditor on / off (exact max 236,196 B, input 369,193 B at (4, on); verify p99 ≤ 16.05 ms native / 28.85 ms wasm32; 127.2 bits); M = 8 / 16 oversize only. pqzh-ligero.md §15.
+- `p6-anon-l` (`13870e5`) — Track L, PQZL `R_TXM` op 7, built M ∈ {1, 2, 4, 8}; per-vector ℓ2 e2 ≤ 64 (owner X-1); MSIS β 452–459, MLWE β 470; proofs 42.8–61.8 KB; SV verify p50 7.9–12.9 ms native; fixed SV refusing every honest M = 8 proof (`z1bnd`); ASan + UBSan clean; SV vs generic 0 mismatches; fuzz smoke only (275 runs).
+- `p6f` (`a243650`) + **Task 10 live** (`a4fb6f0`): chain 7622 RESET 2026-10-16 with `engine.Pqz` from block 0 (path B), image `scaas/nethermind-pqz:1.39.0-pqz1` (`c53359a69bfa`, local only), genesis hash unchanged `0x24e43dcb…c464`; PQZ-START ok, probes + e2e pass (`pqz-core/nethermind/runs/2026-10-16-live.txt`). Backup `/home/dockers/mba-chain-nethermind-backups/pqz-20261016-004736` (+ old `data/nethermind_data.bak-20260831-090830`) kept. Gas limit ramps 16.8 M → 80 M by itself.
+- `pqz-core/README.md` updated (`dee0a21`): live precompiles, op 7 table §5.4, `nethermind/`.
+
+**Owner decisions 2026-10-16** (TODO.md, decisions.md CTR-PQZ-10 and CTR-PQZ-03 Change 2026-10-16): controller ran Task 10; the five P6f proposals accepted (3 reset chainspec params; drop bogus `Mining.MinGasPrice` → clients pay baseFee + tip; follower gossip stall = known issue; keep backups, copy scratch deleted; ML-DSA 49k / 68k on 7622, re-measure before 22776); **node verify arena `ARENA_SMALL` 144 → 512 MiB when op 7 lands in pqz-ffi**. Controller proposals with it: `ARENA_BIG` 448 MiB → 1 GiB; wasm PQZL `R_TXM` M ≤ 4 only.
+
+**After power-on:** the 7622 node has NO restart policy — `cd /home/dockers/mba-chain-nethermind && docker compose up -d blockchain-node`, then `python3 -I pqz-core/nethermind/chain/e2e.py head --rpc http://127.0.0.1:8545` (head advancing, `PQZ-START` in `docker logs`). Hourly 24-h watch (RUNBOOK step 5) was not automated.
+
+**Branches waiting (both = `dee0a21`, no commits; agents stopped at shutdown after reading only; worktrees gone — re-create):**
+- `p6-anon-s3` — P6-ANON S3 (op 7 into pqz-stmt / pqz-ffi). Resume plan from the agent:
+  1. pqz-stmt: add `Stmt::Multi(Multi)`, route op 7 in `parse` / `decode_input` to `parse_multi` (S2 left `Reject::Op`), `proof_system_id()` = word 1; new arms in Ligero `cs.rs::parse` (~l.342) and pqz-ffi; fix `Honest::from_input` (`form().unwrap()`) and the `negatives()` "op 7 ⇒ Reject::Op" expectation.
+  2. pqz-ffi dispatch is nearly free (C `pqz_verify_fast(7,…)` and Ligero `verify(7,…)` exist); no `decode.rs` (decoder lives in pqz-stmt) — record as plan deviation; `OVERSIZE` const assert keeps oversize ⇒ `…00`.
+  3. Arenas in `pqzl.rs`: native `ARENA_SMALL` 512 MiB, `ARENA_BIG` 1 GiB (R_TXM8 prove ≤ 836 MB with all relations loaded); wasm32 single arena ≈ 448–512 MiB (to decide; L3 wasm `R_TXM4_0` all-loaded 432.7 MB); `prove` refuses PQZL op 7 M = 8 on wasm32 via `ProveError::Statement(Reject::Legs)`.
+  4. `prove` feature: multi-group Enc wrapper (closes L-6; extern `pqz_enc_group_seed`), op 7 witness layout `s_f ‖ e_f ‖ (r_g ‖ e1_g)_g ‖ e2_j ‖ e2_f ‖ [e2_{a,j}] ‖ d_j ‖ d′`, `recipientsHash` + memo (HKDF-SHA256 per CTR-PQZ-23 / CTR-ZTH-50 — pqz-ffi has only `sha3`; check offline crates), fixtures for every built (M, A) of both ids.
+  5. Tests: built op 7 ⇒ `…01`; S2 negatives ⇒ `…00`; max input ≤ `MAX_INPUT`; 8-thread determinism + new arena margin (`verify_only.rs`); wasm32 digest incl. smallest `R_TXM`; bench rows; frozen vectors unchanged (`vectors/run.sh`, `pqz_kat.py --check`, selftest `ed910a2c…d205`). One capped `pqz-core/ffi/run.sh s3a`.
+  6. D3 verdict (record): PQZL {1, 2, 4, 8} (M = 16 input ≈ 469 KB > 393,216); PQZH {1, 2, 4} (M = 8 bound 281,208 > 262,144 and input 497,149 > `MAX_INPUT`; M = 16 likewise) — matches `built_legs`.
+  7. `params/anon/anon_sizes.py` reads measured numbers; STATUS.md entry; plan S3 results; decisions.md lines. LH-2 stays S4.
+- `p6g` — P6g contracts + 7622 deploy (owner mandate: deploy on 7622 without per-step approval). Plan NOT written yet: `docs/superpowers/plans/2026-10-16-p6g-contracts.md`. Still to read: decisions.md CTR-PQZ-*, accounts.md, P6c / P6f plans. Agent's design notes (to become D1…, controller proposals):
+  1. Mirror the Zether layer: `PqzLayer` (abstract, on `MetaTokenBase`) + `PqzLib` (external, ERC-7201) + kinds `NoUnderlyingPqzToken` (`NONE_PQZ`, 4) and `UnderlyingPqzToken` (`UNDERLYING_PQZ`, 5); `pqzShield` burns public units like `zetherShield` (spec §7.3 `transferFrom` predates the token tree — record); `pqzWrapShield` / `pqzUnshieldUnwrap` on UNDERLYING (CTR-PQZ-22); `NONE_ZETHER_PQZ` / `UNDERLYING_ZETHER_PQZ` stay reserved; `OpenFactory.pqzEnabled` + `setPqzEnabled` (gated by `PqzSafety`), `KindReserved` up to 5.
+  2. `PqzSafety`: allowlist {31337, 1337, 7622} + `selfTest()` (STATICCALL op 6 on `0x…0f01`, exactly 32 B = `0xed910a2c…1333d205`).
+  3. `UAPqzVerifier`: op 3 on `opTag(REGISTER) ‖ psid ‖ message ‖ pk`, psid immutable (PQZL v2); constructor self-test + R_REG vector (1, bit-flip 0); registry slot `_CFG18` exists; kind cap ≈ 2.8–3 M measured, `verifyBudget` ≥ it.
+  4. v3 UA path: virtual `_uaEnvelopeBinding(m)` hook (default 0) in `ERC20MetaTx._uaExecute`, PQZ overrides with `SCAAS-PQZ-UA-ENVELOPE-V1`; PQZ selectors refused in `mtxBatch` / `uaBatch`.
+  5. 7622 code size limit 64 KiB from block 0: no size work; record sizes in `size-baseline.json`.
+  6. Forge: `vm.mockCall` on PQZ with a real `PqzCt`.
+  7. E2E with real proofs: small `pqz-ffi` example under `--features prove` (stdin op, stmt, wit, rnd → proof), statements from the token's views, `pqz_kat.py` for keys / Enc; ML-DSA signing via `@noble/post-quantum` 0.7.1 (`clients/clientkeys/node_modules`).
+  8. Op 7 entry points later (after S3–S8).
+  Then deploy on 7622: registry gen 1 with the PQZ + ML-DSA precompile verifiers, factory, tokens; logs in `runs/`. Funded test keys in genesis: 0x…01–0x…04 (P6f e2e used 4).
+
+**Resume:** start a session, say "resume"; start the node (above); re-dispatch S3 and P6g agents from the two notes above (capped 2 slots, never `timeout … scripts/capped`, `-j2`, docker `--memory`, commit per task, stop at branch). Agent tooling notes: in worktrees use literal absolute paths (no globs / `$VAR`), `/usr/bin/git -C <worktree>` for git, `rtk proxy grep` for raw grep. Then S4–S9, layout move + spec rename, gates A / B, freeze, P6h–P6j, publication drafts.
+
 ## Session 2026-10-15 (shutdown at 12:00) — resume here
 
 **State:** main `7c497b6`+ pushed. Merged today: `pqz-readme` (README rewrite), `pqz-artifact2` (Docker package for PQZL + PQZH, quick PASS 148 / host 159), `p6e-a5` (fuzzing: ≈ 3.2 M inputs, no finding), `p6-anon-s` (`R_TXM` S1 hint estimate + S2 op-7 codec). Owner decisions today (all in TODO.md / decisions.md): β 446 accepted for `R_TXM` shared-randomness hints (groups of 4); PQZ = Post-Quantum Zero-knowledge (spec file → `pq-zero-knowledge.md` in the layout move); pqz-core layout approved with `research/` (`rel3/` → `research/pqzl-measure/`); 7622 = testnet (resettable), 22776 = future mainnet; fee = 0 valid; general-purpose circuits on Ligero = research only (`docs/research/pqz-general-purpose.md`).
