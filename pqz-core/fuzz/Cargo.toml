@@ -1,0 +1,25 @@
+[package]
+name = "pqz-fuzz"
+version = "0.1.0"
+edition = "2021"
+license-file = "../../LICENSE"
+publish = false
+
+# The oracles of the libFuzzer targets (P6e plan Task 10, D12, D15): a staticlib linked by build.sh with
+# targets/<target>.c and clang 18's libFuzzer. Built only by build.sh (sancov RUSTFLAGS, feature `fuzz` of pqz-ffi:
+# the C core with ASan + UBSan). See README.md.
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+pqz-ffi = { path = "../ffi", features = ["prove", "fuzz"] }
+
+[profile.release]
+debug = 1
+# pqz-ffi's catch_unwind boundary needs unwind; the panic hook (src/lib.rs) aborts on any panic instead
+panic = "unwind"
+# arithmetic overflow and debug_assert! become panics, i.e. findings (as cargo-fuzz does)
+overflow-checks = true
+debug-assertions = true
+
+[workspace]

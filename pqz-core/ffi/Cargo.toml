@@ -26,6 +26,10 @@ prove = []
 # fault-injection and measurement hooks (pqzl::TEST_*, reinit, arena_bytes): tests and the bench only, never in a
 # production build
 test-hooks = []
+# the libFuzzer build (pqz-core/fuzz, plan Task 10 / D12): the C core with ASan + UBSan + sanitizer coverage and
+# pqz_rel.c's test hooks (pqz_test_mutate: decode a PQZL proof, change a field, re-encode); no symbol scan (the
+# sanitizer runtime is outside the library). Never in a production build.
+fuzz = ["test-hooks"]
 
 [[example]]
 name = "ffi_bench"

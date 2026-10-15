@@ -49,11 +49,22 @@ fn main() {
             b.flag(f);
         }
     }
+    // feature `fuzz` (pqz-core/fuzz): ASan + UBSan (minus the upstream nits of STATUS.md Open 4, as sv/fuzz.sh),
+    // libFuzzer coverage, the test hooks; the sanitizer runtime is linked by the fuzz target, so no symbol scan
+    let fuzz = env::var_os("CARGO_FEATURE_FUZZ").is_some();
+    if fuzz {
+        for f in ["-g", "-fno-omit-frame-pointer", "-DPQZ_TEST_HOOKS", "-fsanitize=address,undefined,fuzzer-no-link",
+                  "-fno-sanitize=vla-bound,pointer-overflow", "-fno-sanitize-recover=all"] {
+            b.flag(f);
+        }
+    }
     b.compile("pqz");
 
-    let st = std::process::Command::new(core.join("check_symbols.sh")).arg(out.join("libpqz.a")).output().unwrap();
-    if !st.status.success() {
-        panic!("check_symbols.sh: {}", String::from_utf8_lossy(&st.stderr));
+    if !fuzz {
+        let st = std::process::Command::new(core.join("check_symbols.sh")).arg(out.join("libpqz.a")).output().unwrap();
+        if !st.status.success() {
+            panic!("check_symbols.sh: {}", String::from_utf8_lossy(&st.stderr));
+        }
     }
 
     for name in ["pqzl_reg", "pqzh_reg"] {

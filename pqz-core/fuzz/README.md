@@ -1,0 +1,79 @@
+# pqz-core/fuzz
+
+Continuous fuzzing of the PQZ precompile (P6e plan Task 10, decision D12; CTR-PQZ-10 "never crash, never wrong-accept
+at the boundary"). Three libFuzzer targets drive `pqz-ffi` — the decoder (`pqz-stmt`), the PQZL C core's specialised
+verifier and the PQZH Ligero verifier — in the precompile's production configuration. Local runs only: no CI job
+(controller 2026-10-14; the plan's CI `pqz` job is not built).
+
+```mermaid
+flowchart LR
+  S["edit script / raw bytes"] --> T["targets/&lt;target&gt;.c<br/>(libFuzzer)"]
+  T --> O["src/lib.rs oracles"]
+  O --> A["pqz_precompile (C ABI) ×2"]
+  A --> D["pqz-stmt decode"]
+  D --> L["PQZL: C core, ASan + UBSan<br/>verify-only arena 144 MiB"]
+  D --> H["PQZH: Ligero (Rust)"]
+  O --> G["sampled: generic PQZL verifier"]
+  O --> C["codecs: parse ⇒ encode = input"]
+```
+
+## Targets
+
+| Target | Input | Checks (besides the common ones below) |
+|---|---|---|
+| `precompile` | raw bytes into `pqz_precompile` (`targets/precompile.c` calls the C ABI itself), `-max_len=400000` (over `MAX_INPUT`, so the revert path is reached); seeds: the 16 honest inputs and `06 00000000`, written at run time | — |
+| `mutate` | edit script ≤ 512 B over one of the 16 honest inputs (PQZL and PQZH × 8 forms): byte 0 the input, byte 1 the mode (edits anywhere incl. op and length field / one decoded PQZL proof field changed and re-encoded by `pqz_test_mutate`, then edits / statement only / proof only), then `[off lo, mid, hi, xor]` edits and an optional truncate / extend | the PQZL specialised verifier (the precompile's verdict) = the generic verifier on every 256th mutated PQZL input that decodes (then the core is put back on the verify-only arena) |
+| `codec` | edit script ≤ 512 B over an honest statement / precompile input / bundle / opening / PQZL proof | D15: accepted ⇒ re-encoding equals the input — `pqz_stmt::parse` ⇒ `encode`, the form's op and length; `decode_input` ⇒ `input(op, stmt, proof)` and `parse` agree; `parse_bundle` ⇒ `encode`; `parse_opening` ⇒ `opening`; the PQZL proof decoder `pqz_decproof` ⇒ `encproof` gives the same bytes; each decoder twice, equal results |
+
+Common oracle (every target, every input; `src/lib.rs`), a violation aborts (libFuzzer crash):
+
+- **No panic anywhere**: the panic hook aborts, so the panics `pqz-ffi`'s `catch_unwind` (status 3) and Ligero's own
+  catch would hide are findings; overflow checks and debug assertions are on in the fuzz build.
+- **Status**: never 3 (input-caused panic) or 4 (node fault: arena exhaustion, worker); 1 (revert) exactly for inputs
+  over `MAX_INPUT`.
+- **Determinism**: every precompile input runs twice, same status and output.
+- **Verdict**: `…01` exactly for the 16 unmodified honest inputs, the self-test hash (`ed910a2c…`) for `06 00000000`,
+  `…00` for everything else: a modified input that verifies is a wrong accept or a malleable encoding.
+- **Arena bound**: the C core runs on the verify-only arena (`ARENA_SMALL` = 144 MiB) with every form's keys and
+  tables built by a warm-up pass, as in a long-running node; its high-water mark must stay ≤ 96 MiB (= 144 MiB / 1.5,
+  the margin the arena was sized with; the maximum seen is printed, see `STATUS.md` Open 2: the peak is
+  input-dependent).
+
+The honest inputs (every form of both ids from `pqz_ffi::fixture`, `rnd32` = 0x33…) are proved once by the first
+run and cached in `pqz-core/build/fuzz/honest.bin` (`build.sh` deletes the cache).
+
+## Build (D12)
+
+`build.sh` — stable Rust 1.97.1 and clang 18, no nightly, no cargo-fuzz:
+
+- the oracles (this crate, a `staticlib`), `pqz-ffi`, `pqz-stmt` and `pqzh-ligero` are instrumented by rustc's
+  sanitizer-coverage pass on stable flags (`-C passes=sancov-module` with `-sanitizer-coverage-level=4`, inline 8-bit
+  counters, PC table, trace-compares); `--target` keeps the flags off build scripts; `panic = "unwind"` stays (pqz-ffi
+  refuses `panic = "abort"` natively) and the panic hook turns every panic into an abort;
+- the C core is compiled by `pqz-ffi`'s `build.rs` with its feature `fuzz`: ASan + UBSan (`-fno-sanitize-recover=all`,
+  without the upstream nits of `STATUS.md` Open 4, as `sv/fuzz.sh`), `-fsanitize=fuzzer-no-link`, and `PQZ_TEST_HOOKS`
+  (`pqz_test_mutate`); the symbol scan is skipped in that build only (the sanitizer runtime is outside the library);
+- `targets/<target>.c` + the staticlib are linked by `clang-18 -fsanitize=fuzzer,address,undefined`.
+
+The arena build (not `PQZ_DEBUG_MALLOC`): ASan sees the arena as one block, so overflows inside it are not caught
+here (the malloc-path ASan runs are `opt/asan.sh`, `sv/fuzz.sh`); the arena bound is measured instead.
+
+## Run
+
+```sh
+scripts/capped pqz-core/fuzz/build.sh
+scripts/capped pqz-core/fuzz/run.sh <precompile|mutate|codec> <seconds> [label]   # log: runs/<label>-<target>.txt
+```
+
+`run.sh` fuzzes on a work corpus (`pqz-core/build/fuzz/work/<target>/`, kept between runs) plus the committed
+`corpus/<target>/`, the regression inputs `regress/<target>/` and the run-time seeds, with `-rss_limit_mb=3500`
+(`scripts/capped` caps at 4 GB), then merges the work corpus into a minimal covering set and commits its inputs of
+≤ 512 B to `corpus/<target>/` (all of `mutate` and `codec`; the large `precompile` inputs stay in the work corpus and
+are rebuilt from the honest inputs). A crash input lands in `pqz-core/build/fuzz/crash-<target>-*`; it goes to
+`regress/<target>/` with its fix. One campaign at a time (the machine-wide lock of `scripts/capped`).
+
+Continuous = the owner reruns the three targets, e.g. nightly, one after the other (owner step 2 of the plan).
+
+## Results
+
+RESULTS
