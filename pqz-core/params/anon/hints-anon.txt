@@ -114,3 +114,17 @@ hints  unit on r  unit on e1  mixed (worst)  estimator n-h
 ====================================================================================================
 auditor on : legs per (r, e1) <= 3
 auditor off: legs per (r, e1) <= 4
+
+====================================================================================================
+5. Finding 8: the mixed-hint shortcut against the full-covariance DBDD_predict after integrate_q_vectors
+====================================================================================================
+n = m = 256, q = 4096, var_s 0.500000000000000, var_e 10.0000000000000, hint norms r part 164, e1 part 36; Python random seed 20261015
+no hints: beta 171.32
+hints                 kind  full model  (dim, used)  shortcut, same W  shortcut, V_max  conservative
+   10        dense e1 part      155.67    (503, 10)            154.88           154.87           yes
+   10    one e1 coordinate      154.88    (473, 10)            154.88           154.87           yes
+   10          r part only      155.33    (474, 10)            155.33           154.87           yes
+   80        dense e1 part       67.44    (433, 80)             36.60            36.05           yes
+   80    one e1 coordinate       36.60    (257, 80)             36.34            36.05           yes
+   80          r part only       42.23    (255, 80)             42.23            36.05           yes
+shortcut conservative (shortcut beta <= full-model beta in every case): YES
