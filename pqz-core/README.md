@@ -37,9 +37,12 @@ flowchart LR
 | Proof size | ≈ 42.8 KB | ≈ 232 KB |
 | Prove, native / wasm32 | ≈ 1.0 s / 1.3 s | ≈ 0.65 s / 1.3 s |
 | Verify p99, native / wasm32 | 8.7 ms / 14.8 ms | 10.5 ms / 19.4 ms |
+| Prover memory, native / wasm32 | 304 MB / 232 MB (arena peak) | 43 MB / 48 MiB (heap; wasm module with all six forms) |
+| Verifier memory | 1.7 MB working set + 5.2 MB tables (specialised verifier) | 1.2 MB heap |
+| Precompile memory (`pqz-ffi`, both systems) | one 144 MiB arena reserved at start (measured peak 95 MB, keys and tables of every form kept) | — |
 | Security rests on | MSIS / MLWE (lattices) | hash functions only |
 
-Both stay far under the 60 ms verify limit. One precompile verifies both, chosen by the `proofSystemId` in the
+Both stay far under the 60 ms verify limit, and both provers fit the 256 MiB browser (wasm32) memory limit. One precompile verifies both, chosen by the `proofSystemId` in the
 statement.
 
 ## What PQZ is
