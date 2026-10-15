@@ -10,18 +10,18 @@ systems behind **one precompile**.
 
 ## Contents
 
-1. [At a glance](#at-a-glance) — the picture and the key numbers
-2. [What PQZ is](#what-pqz-is) — encryption, accounts, what each proof shows
-3. [Two proof systems, one precompile](#two-proof-systems-one-precompile) — PQZL, PQZH and the shared parts
-4. [Statement forms, ids, limits](#statement-forms-ids-limits) — the operations and their sizes
-5. [Measurements](#measurements-provisional) — proof sizes, prove and verify times
-6. [Build, test, run](#build-test-run) — commands
-7. [Directory map](#directory-map) — what each folder holds
-8. [Licences](#licences)
-9. [Status and what's next](#status-and-whats-next)
-10. [Further reading](#further-reading)
+1. [At a glance](#1-at-a-glance) — the picture and the key numbers
+2. [What PQZ is](#2-what-pqz-is) — encryption, accounts, what each proof shows
+3. [Two proof systems, one precompile](#3-two-proof-systems-one-precompile) — PQZL, PQZH and the shared parts
+4. [Statement forms, ids, limits](#4-statement-forms-ids-limits) — the operations and their sizes
+5. [Measurements](#5-measurements-provisional) — proof sizes, prove and verify times
+6. [Build, test, run](#6-build-test-run) — commands
+7. [Directory map](#7-directory-map) — what each folder holds
+8. [Licences](#8-licences)
+9. [Status and what's next](#9-status-and-whats-next)
+10. [Further reading](#10-further-reading)
 
-## At a glance
+## 1. At a glance
 
 ```mermaid
 flowchart LR
@@ -45,7 +45,7 @@ flowchart LR
 Both stay far under the 60 ms verify limit, and both provers fit the 256 MiB browser (wasm32) memory limit. One precompile verifies both, chosen by the `proofSystemId` in the
 statement.
 
-## What PQZ is
+## 2. What PQZ is
 
 PQZ keeps the classical Zether shape — identities visible, **amounts and balances encrypted**, the fee a public number,
 sender / receiver / auditor disclosure — but rebuilt on module-lattice assumptions, so a quantum adversary can neither
@@ -64,7 +64,7 @@ read balances later nor forge proofs and mint ([overview](../docs/contracts/pq-z
   - burn / refresh — `R_BURN`;
   - decryption for disclosure — `R_DS`, `R_DR`.
 
-## Two proof systems, one precompile
+## 3. Two proof systems, one precompile
 
 | | **PQZL** (lattice) | **PQZH** (hash-based) |
 |---|---|---|
@@ -110,7 +110,7 @@ only).
 On chain 7622 (the testnet) the node runs this precompile from a Nethermind plugin (see the
 [precompile plan](../docs/superpowers/plans/2026-10-14-p6f-precompiles.md)): address `0x5caa5…0f01`; status 4 → process exit 120.
 
-## Statement forms, ids, limits
+## 4. Statement forms, ids, limits
 
 Every statement starts with `opTag ‖ proofSystemId` (64 bytes) and a 640-byte header ([statement layout](../docs/contracts/pq-zether.md#77-statement-layout)). Every byte
 layout — statements, objects, both proof formats, the precompile input and `OP_SELFTEST` — is in
@@ -143,14 +143,14 @@ receive Enc(0); PQZL M ≤ 8, PQZH M ≤ 4; joins the frozen set before gates A 
 | Proof length | `1 ≤ len(proof) ≤ MAX_PROOF(id)` |
 | Verify time | **≤ 60 ms p99** on the chain host, also bounding wasm32 (owner decision 2026-10-14) |
 
-## Measurements (provisional)
+## 5. Measurements (provisional)
 
 **Reference machine:** AMD Ryzen 5 7235HS (Zen 3+, AVX2, AES-NI, no AVX-512), 8 threads, 23 GB, Linux 7.0. Single
 thread, every run under `scripts/capped`, other services running (± 20 % noise). Native: clang 18 `-O2` portable unless
 marked x86-64-v3; wasm32: node v26.8.1. **Provisional:** the freeze after gates A / B (with op 7) replaces these
 numbers; `artifact/expected-results.json` is regenerated from the same runs. Units are given in every column header (bytes, ms, MB; p50 = median, p99 = 99th percentile).
 
-### PQZL (runs `tx0c`, 2026-10-14)
+### 5.1 PQZL (runs `tx0c`, 2026-10-14)
 
 "SV" = the specialised verifier `pqz_verify_fast`; "generic" = `pqz_verify`.
 
@@ -188,7 +188,7 @@ Sources: `rel3/runs/tx0c-native.jsonl` (10 proves, 30 honest verifies per relati
 
 </details>
 
-### PQZH Ligero, proven preset (runs `l15-tx0`, 2026-10-14, gate-B method: 1,000 verifies)
+### 5.2 PQZH Ligero, proven preset (runs `l15-tx0`, 2026-10-14, gate-B method: 1,000 verifies)
 
 | Relation | Proof size, 5 seeds (bytes) | Exact max (bytes) | Prove, native / wasm32 (ms) | Verify p99, native / wasm32 (ms) |
 |---|---|---|---|---|
@@ -226,7 +226,7 @@ are `l11` / `l12` ([pqzh-ligero.md](../docs/research/pqzh-ligero.md), "exact len
 
 </details>
 
-### The `PQZ` precompile path (`pqz-ffi`, run `ffi1f2`)
+### 5.3 The `PQZ` precompile path (`pqz-ffi`, run `ffi1f2`)
 
 Through the C ABI `pqz_precompile`, as the node calls it (verify-only arena 144 MiB):
 
@@ -265,7 +265,7 @@ Source: `ffi/runs/ffi1f2-bench.jsonl` (native, n = 200 per cell, one proof per f
 
 </details>
 
-### Comparisons
+### 5.4 Comparisons
 
 **vs upstream LaZer.** Same statement, witness and relation source; upstream built from source by
 `artifact/reproduce.sh --upstream` (`artifact/runs/docker-upstream/upstream-bench.txt`, N = 3 medians).
@@ -293,7 +293,7 @@ security, measured on the reference machine (details: [pqzh-backend-comparison.m
 
 The rejected backends' code and runs are kept in `pqzh/` (top) as the record.
 
-## Build, test, run
+## 6. Build, test, run
 
 **Requirements:** clang / lld 18 (`wasm-ld-18`), node ≥ 26 for wasm32, Rust 1.97.1 (pinned per crate by
 `rust-toolchain.toml`), Python 3 (stdlib only, run with `-I`).
@@ -412,7 +412,7 @@ run with `expected-results.json` (provisional).
 
 </details>
 
-## Directory map
+## 7. Directory map
 
 **Kind:** **core** = shipped code · **tool** = build / test / check scripts the core relies on · **measurement** = spike
 or benchmark harness kept with its runs (experiment code stays in the repository) · **backup** = superseded, kept, never
@@ -474,7 +474,7 @@ applied yet.
 
 </details>
 
-## Licences
+## 8. Licences
 
 - **Notices:** third-party notices for a source or binary distribution are in [`NOTICE`](NOTICE); inventory and gaps:
   `docs/research/pqz-licence-inventory.md`.
@@ -490,7 +490,7 @@ applied yet.
   it is not vendored and not needed to build or test pqz-core.
 - **Nothing built is published** (no release assets, hosted wasm or pushed images); `artifact/` rebuilds from source.
 
-## Status and what's next
+## 9. Status and what's next
 
 **Done so far:** the first spike (`R_REG`, a first `R_TX`, native and freestanding wasm32), an optimisation round, then
 `R_BURN` (also REFRESH), `R_DS` and `R_DR` (also the auditor) (`docs/research/pqz-relations-burn-disclose.md`), the
@@ -510,7 +510,7 @@ PQZH on Ligero with all six forms, `pqz-ffi`, the frozen vectors (`smartcontract
 Open items (arena exhaustion, global state, secret zeroing, `check_symbols.sh` on missing files, …):
 [STATUS.md "Open"](STATUS.md#open).
 
-## Further reading
+## 10. Further reading
 
 | Topic | Read |
 |---|---|
