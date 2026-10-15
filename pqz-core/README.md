@@ -45,7 +45,9 @@ flowchart LR
 | Security rests on | MSIS / MLWE (lattices) | hash functions only |
 
 Both stay far under the 60 ms verify limit, and both provers fit the 256 MiB browser (wasm32) memory limit. One precompile verifies both, chosen by the `proofSystemId` in the
-statement.
+statement. **Live:** the precompile runs on chain 7622 (the testnet) since 2026-10-16 ([§3](#3-two-proof-systems-one-precompile)).
+With op 7 (multi-recipient transfer, [§5.4](#54-op-7-r_txm-multi-recipient-transfer-provisional)) the node's verify arena
+grows to 512 MiB (owner 2026-10-16).
 
 ## 2. What PQZ is
 
@@ -109,8 +111,20 @@ only).
   - feature `prove` adds keygen / enc / dec / prove of both systems (wasm32 byte-equal with native);
   - `src/bin/pqz-vectors.rs` generates the frozen vectors `smartcontracts/vectors/pqz/`.
 
-On chain 7622 (the testnet) the node runs this precompile from a Nethermind plugin (see the
-[precompile plan](../docs/superpowers/plans/2026-10-14-p6f-precompiles.md)): address `0x5caa5…0f01`; status 4 → process exit 120.
+**Live on chain 7622** (the testnet, reset 2026-10-16 with the precompiles from block 0; genesis hash unchanged
+`0x24e43dcb…c464`): the Nethermind plugin `Nethermind.Pqz` ([nethermind/README.md](nethermind/README.md), image
+`scaas/nethermind-pqz:1.39.0-pqz1`, built locally, never pushed) loads `libpqz_ffi.so` and adds three precompiles:
+
+| Precompile | Address | Gas (calibrated once, 0.359 M gas / ms) |
+|---|---|---|
+| `PQZ` (ops 1–6, both systems) | `0x5caa500000000000000000000000000000000f01` | per (op, `proofSystemId`, statement length) row: 2,567,000–5,409,000 + 3 per input word; `OP_SELFTEST` 2,567,000 |
+| `MLDSA44` (EIP-8355 layout) | `0x5caa500000000000000000000000000000000012` | 49,000 + 6 per message word |
+| `MLDSA65` (EIP-8355 layout) | `0x5caa500000000000000000000000000000000013` | 68,000 + 6 per message word |
+
+The prices live in the chainspec section `engine.Pqz` (a re-price or op 7 = a new schedule); status 4 (node fault) ⇒
+log `PQZ-NODE-FAULT` and process exit 120, never a verdict. Live run: probes and e2e pass
+(`nethermind/runs/2026-10-16-live.txt`); roll-out and rollback: [nethermind/chain/RUNBOOK.md](nethermind/chain/RUNBOOK.md).
+Chain 22776 (the future mainnet) gets the same addresses only after the audit and the licence clearance.
 
 ## 4. Statement forms, ids, limits
 
@@ -127,10 +141,13 @@ layout — statements, objects, both proof formats, the precompile input and `OP
 | 4 | DISCLOSE-SENDER | `R_DS` | 33,184 | the sender's encryption of an amount |
 | 5 | DISCLOSE-RECEIVER, DISCLOSE-AUDITOR | `R_DR` | 33,184 | decryption of a ciphertext |
 | 6 | SELFTEST | — | 0 | input exactly `06 00000000`; returns the self-test hash `ed910a2c…1333d205` |
-| 7 | multi-recipient transfer | `R_TXM` | — | **in progress** — see below |
+| 7 | multi-recipient transfer (M legs, auditor on / off) | `R_TXM` | 83,072–215,936 | sender debit, M receiver credits (decoys receive Enc(0)), per-leg auditor copies, fee |
 
-**op 7 `R_TXM`** ([multi-recipient plan](../docs/superpowers/plans/2026-10-14-p6-anon.md)): one proof, M recipients, decoys
-receive Enc(0); PQZL M ≤ 8, PQZH M ≤ 4; joins the frozen set before gates A / B.
+**op 7 `R_TXM`** ([multi-recipient plan](../docs/superpowers/plans/2026-10-14-p6-anon.md)): one proof, M recipients;
+built PQZL M ∈ {1, 2, 4, 8}, PQZH M ∈ {1, 2, 4} (M = 8 / 16 exceed PQZH's `MAX_PROOF` and `MAX_INPUT`). Every e2
+vector is bounded by 64 in ℓ2, per vector (owner 2026-10-15). Done in PQZL (C), PQZH (Rust) and `pqz-stmt`; **not yet in
+`pqz-ffi` or on chain** (P6-ANON S3–S8). Statement: 83,072 B (M = 1, on) to 215,936 B (M = 8, on); joins the frozen
+set before gates A / B.
 
 | `proofSystemId` | keccak256 of | Value | Frozen at |
 |---|---|---|---|
@@ -283,7 +300,26 @@ Source: `ffi/runs/ffi1f2-bench.jsonl` (native, n = 200 per cell, one proof per f
 
 </details>
 
-### 5.4 Comparisons
+### 5.4 op 7 `R_TXM`, multi-recipient transfer (provisional)
+
+Built shapes only, auditor on (auditor off is a little smaller). PQZL: runs `rel3/runs/l3a-*` (P6-ANON L3,
+`params/estimator-e-s1-txm.txt`: MSIS β 452–459, MLWE β 470, knowledge error ≤ 2^−127); PQZH: runs
+`pqzh/ligero/runs/l16-txm-*` ([pqzh-ligero.md §15](../docs/research/pqzh-ligero.md)).
+
+| M | PQZL proof max (bytes) | PQZL SV verify p50 native (ms) | PQZL prove arena native / wasm (MiB) | PQZH exact max (bytes) | PQZH verify p99 native / wasm32 (ms) |
+|---|---|---|---|---|---|
+| 1 | 42,784 | 7.9 | = `R_TX` | 235,470 | 14.03 / 26.88 |
+| 2 | 43,616 | 8.1 | — | 235,470 | 15.03 / 28.62 |
+| 4 | 45,295 | 8.8 | 342.9 / 255.6 | 236,196 | 16.05 / 28.85 |
+| 8 | 61,822 | 12.9 | 664.4 / 495.3 | not built | — |
+
+- PQZL SV verify wasm p50 12.7–21.5 ms; prove 1.1–2.6 s native. PQZH prove ≈ 0.7 s native, 1.5 s wasm32, heap ≤ 43.6 MB.
+- Memory: with all 14 PQZL relations' keys loaded, verify needs 193.8–253.4 MiB (node arena: 144 → 512 MiB in S3,
+  owner 2026-10-16); prove of M = 8 needs ≈ 0.66 GiB (native clients: 1 GiB arena). In the browser (256 MiB) PQZL
+  offers M ≤ 4; M = 8 is for native / desktop clients (controller proposal).
+- One (4, on) transfer vs 4 op 1 transfers: ≈ 3.5× fewer bytes and verify time (PQZH, pqzh-ligero.md §15.3).
+
+### 5.5 Comparisons
 
 **vs upstream LaZer.** Same statement, witness and relation source; upstream built from source by
 `artifact/reproduce.sh --upstream` (`artifact/runs/docker-upstream/upstream-bench.txt`, N = 3 medians).
@@ -316,7 +352,7 @@ The rejected backends' code and runs are kept in `pqzh/` (top) as the record.
 **Requirements:** clang / lld 18 (`wasm-ld-18`), node ≥ 26 for wasm32, Rust 1.97.1 (pinned per crate by
 `rust-toolchain.toml`), Python 3 (stdlib only, run with `-I`).
 
-> **Run every heavy step under `scripts/capped`** — the machine-wide lock, one heavy job at a time. Paths are relative to
+> **Run every heavy step under `scripts/capped`** — the machine-wide lock, at most two heavy jobs at a time. Paths are relative to
 > `pqz-core/` unless they start with `pqz-core/` (repository root).
 
 **The usual checks in one place:**
@@ -329,6 +365,7 @@ The rejected backends' code and runs are kept in `pqzh/` (top) as the record.
 | test the precompile boundary | `scripts/capped pqz-core/ffi/run.sh <label>` |
 | check every vector file | `scripts/capped pqz-core/ffi/vectors/run.sh <label>` |
 | reproduce the published numbers | `OUT=<dir> scripts/capped pqz-core/artifact/reproduce.sh [--full]` |
+| build / test the node plugin and image | `scripts/capped pqz-core/nethermind/run-tests.sh`, `scripts/capped pqz-core/nethermind/build-image.sh pqz<n>` ([nethermind/README.md](nethermind/README.md)) |
 
 <details>
 <summary><b>PQZL core (C)</b> — builds, bench, KAT, fix checks, keys</summary>
@@ -461,6 +498,7 @@ applied yet.
 | `artifact/` | both | tool | reproducibility package, source only |
 | `glic/` | both | tool | licence step 1: GMP / MPFR / HEXL absence scans |
 | `fuzz/` | both | tool | continuous fuzzing: targets `precompile`, `mutate`, `codec` (ASan + UBSan, libFuzzer) |
+| `nethermind/` | both | core + tool | `Nethermind.Pqz` plugin (PQZ + ML-DSA precompiles), tests, P/Invoke harness, calibration, image build, chain runbook and runs |
 | `NOTICE`, `STATUS.md` | — | — | third-party notices; the detailed status log |
 
 <details>
@@ -515,15 +553,19 @@ applied yet.
 tbox fixes (v2) and z21, the specialised verifier, then the relations round: hedged provers, keys from seeds, `R_TX0`, `pqz-stmt`,
 PQZH on Ligero with all six forms, `pqz-ffi`, the frozen vectors (`smartcontracts/vectors/pqz/`) and serialization v1.
 
+Then (2026-10-15 / 16): op 7 `R_TXM` in both systems and `pqz-stmt` (P6-ANON tracks L and H, §5.4), and the
+precompile **live on chain 7622** (P6f, §3).
+
 **Next, in order:**
 
-1. **op 7 `R_TXM`** (the [multi-recipient plan](../docs/superpowers/plans/2026-10-14-p6-anon.md), PQZL and PQZH tracks) into both systems, `pqz-stmt`, `pqz-ffi` and the vectors.
+1. **op 7 into `pqz-ffi`** (S3, with the 512 MiB verify arena), the vectors (S4), fuzzing (S5), the artifact stage (S6),
+   op 7 gas on the node (S8) — the [multi-recipient plan](../docs/superpowers/plans/2026-10-14-p6-anon.md).
 2. **Gate A (PQZL)** and **gate B (PQZH)** ([relations plan](../docs/superpowers/plans/2026-10-14-p6e-relations.md)): KAT 19/19, fix checks, differential 0 disagreements,
    `pqz-vectors --check` and `pqz_kat.py --check`, wasm32 replay byte-equal, `pqz-ffi` tests, fuzz first runs clean (done 2026-10-15: no finding);
    gate B also every PQZH op ≤ 262,144 B and ≤ 60 ms p99 native and wasm32 and the review of the modified Ligero ZK
    construction. Both ids freeze there.
 3. **The freeze:** `artifact/reproduce.sh --full` → `expected-results.json` (replaces every provisional number here).
-4. **Precompile live:** the `PQZ` precompile on chain 7622 (the testnet) after the throwaway-copy gate ([precompile plan](../docs/superpowers/plans/2026-10-14-p6f-precompiles.md)).
+4. **Contracts on 7622** (P6g): `PqzToken`, `UAPqzVerifier`, `UAMldsaVerifier` on the live precompiles.
 
 **Possible extension (research only, not planned): zero knowledge for arbitrary circuits on Ligero.** Today each
 operation has its own hand-written relation. Ligero can prove any arithmetic circuit, so PQZ could become
@@ -549,5 +591,6 @@ Open items (arena exhaustion, global state, secret zeroing, `check_symbols.sh` o
 | Spec | [pq-zether.md](../docs/contracts/pq-zether.md) — [encryption](../docs/contracts/pq-zether.md#encryption), [protocol](../docs/contracts/pq-zether.md#protocol), [proof engine](../docs/contracts/pq-zether.md#proof-engine), [serialization](../docs/contracts/pq-zether.md#serialization) |
 | PQZL | `docs/research/pqz-core-e-s1.md` (the spike write-up), `pqz-specialised-verifier.md`, `pqz-verifier-floor.md`, `pqz-relations-burn-disclose.md`, `pqz-tbox-soundness.md`, `pqz-l2-domain.md`, `pqz-z21-norm.md`, `pqz-parameters-e-s0.md` |
 | PQZH | `docs/research/pqzh-ligero.md`, `pqzh-backend-comparison.md`, `pqzh-design.md`, `pqzh-prototype.md`, `pqzh-zk-ext5.md`, `pqzh-zk-whir.md`, `pqzh-solidity-verifier.md`, `pqzh-starkex-verifier.md` |
+| Node | [nethermind/README.md](nethermind/README.md) (plugin, image, gas), [nethermind/chain/RUNBOOK.md](nethermind/chain/RUNBOOK.md) (copy gate, live roll-out, rollback) |
 | Plans | [relations and serialization](../docs/superpowers/plans/2026-10-14-p6e-relations.md), [multi-recipient transfer](../docs/superpowers/plans/2026-10-14-p6-anon.md), [precompiles on chain 7622](../docs/superpowers/plans/2026-10-14-p6f-precompiles.md), [pqz-core layout](../docs/superpowers/plans/2026-10-15-pqz-core-layout.md) |
 | Other | anonymity research `docs/research/pqz-anonymity.md`; general-purpose circuits `docs/research/pqz-general-purpose.md`; licences `docs/research/pqz-licence-inventory.md` |
