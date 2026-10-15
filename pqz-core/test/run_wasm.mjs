@@ -1,18 +1,21 @@
 // pqz-core wasm32 runner: the same steps as the native pqz_bench main(), timed on the JS side.
 //   node test/run_wasm.mjs [n_prove] [n_verify] [rel]  (after ./build.sh wasm; prints JSON lines)
-//   rel: bit mask as pqz_bench (1 R_REG, 2 R_TX, 4 R_BURN, 8 R_DS, 16 R_DR, 32 R_TX0; default 63)
+//   rel: bit mask as pqz_bench (1 R_REG, 2 R_TX, 4 R_BURN, 8 R_DS, 16 R_DR, 32 R_TX0, 64 << t R_TXM shape t; default 63)
+//   PQZ_ARENA_MB: arena size (default 768 MiB, as pqz_bench)
 //   PQZ_VERIFY=fast: time pqz_verify_fast (P6-SV); PQZ_VERIFY=both: also run every verify with both verifiers
 //   and count disagreements (honest proofs and n_verify seeds of each of the six tamper kinds); both need a pqz.wasm
 //   with the specialised verifier (the default; SV=0 ./build.sh wasm leaves it out)
 import { readFileSync } from 'node:fs';
 
 const [np = 3, nv = 3, rels = 63] = process.argv.slice(2).map(Number);
-const NAMES = ['R_REG', 'R_TX', 'R_BURN', 'R_DS', 'R_DR', 'R_TX0'];
+const ALL = ['R_REG', 'R_TX', 'R_BURN', 'R_DS', 'R_DR', 'R_TX0', 'R_TXM1', 'R_TXM2', 'R_TXM4', 'R_TXM8', 'R_TXM1_0',
+  'R_TXM2_0', 'R_TXM4_0', 'R_TXM8_0', 'R_TXM16', 'R_TXM16_0']; // pqz_bench's order (TXB; the last two: oversize builds)
 const NKIND = 6; // tamper kinds of step_verify_bad
-const ARENA = 768 * 2 ** 20; // as ARENA_BYTES in pqz_bench.c
+const ARENA = Number(process.env.PQZ_ARENA_MB || 768) * 2 ** 20; // as ARENA_BYTES / PQZ_ARENA_MB in pqz_bench.c
 const wasm = readFileSync(process.env.PQZ_WASM_FILE || new URL('../build/wasm/pqz.wasm', import.meta.url));
 const { instance } = await WebAssembly.instantiate(wasm, {});
 const x = instance.exports;
+const NAMES = ALL.slice(0, x.step_nrel());
 const heap = x.__heap_base.value;
 const grow = Math.ceil((heap + ARENA - x.memory.buffer.byteLength) / 65536);
 if (grow > 0) x.memory.grow(grow);

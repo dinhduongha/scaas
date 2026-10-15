@@ -1,5 +1,5 @@
 /*
- * pqz-core relations: R_REG, R_TX (E-S1 spike), R_BURN, R_DS and R_DR as LaZer tbox statements
+ * pqz-core relations: R_REG, R_TX (E-S1 spike), R_BURN, R_DS, R_DR and R_TXM as LaZer tbox statements
  * (pq-zether.md §7.2 step 6, §7.4, §7.5, §7.9), the C ABI of pqz.h, proof encoding (LaZer lin-proofs.c's
  * lnp_tbox_encproof / decproof, MIT, with the bounded decoder), and the A / ABDLOP-key caches (A at pqz_init,
  * each relation's keys at its first use).
@@ -18,6 +18,9 @@
  * R_BURN = R_TX rows 1, 2, 4, 6, 7 with d = digits(amount) public (m1 = 143 + Z = 5):
  *   0..31 s_f | 32..63 e_f | 64..95 r | 96..127 e1 | 128 e2_f | 129..142 bits
  *   d'_i: 4i+b | M_i: 64+14i+b | c_i + 64: 288+11i+b (i < 15) | e_T[i] + 2^24: 453+25i+b
+ * R_TXM (op 7, P6-ANON) = R_TX with M legs and G = ceil(M / 4) randomness groups (layout at shape_t below; M = 1
+ *   is R_TX / R_TX0 byte for byte, with its own ABDLOP keys); the relation is named by the header's M and auditorOn
+ *   words, the length must be that shape's.
  * R_DS (SENDER_S): u = A^T r + e1 (R_q rows), (pk_t^T r)_i + e2_t,i + Delta d_i - v_i = 0 (evaleqs), d public;
  *   s1 = 0..31 r | 32..63 e1 | 64 e2_t (m1 = 65 + Z = 3), no binary part.
  * R_DR (RECEIVER_X, AUDITOR): pk = A s + e (R_q rows), (u^T s)_i + (e'_i + 2^24) - 2^24 + Delta d_i - v_i = 0
@@ -35,29 +38,55 @@
 #include "pqz_reg_params.h"
 #include "pqz_tx0_params.h"
 #include "pqz_tx_params.h"
+#include "pqz_txm20_params.h"
+#include "pqz_txm2_params.h"
+#include "pqz_txm40_params.h"
+#include "pqz_txm4_params.h"
+#include "pqz_txm80_params.h"
+#include "pqz_txm8_params.h"
+#ifdef PQZ_TXM_OVERSIZE
+#include "pqz_txm160_params.h"
+#include "pqz_txm16_params.h"
+#endif
 
 #define K 32
 #define DELTA ((int64_t)((1 << 26) - 1))
 #define NREG 32
-#define NTXQ 64
-#define NTXE 80
+#define MAXL PQZ_TXM_MAX_LEGS                 /* legs */
+#define MAXG PQZ_TXM_GROUPS (PQZ_TXM_MAX_LEGS) /* randomness groups */
+#define NTXQ (K * (1 + MAXG))                 /* R_q-linear rows: row 1, row 2 per group */
+#define NTXE (16 * (3 + 2 * MAXL))            /* evaleqs: 16 per leg, auditor copy, v_f, row 6, row 7 */
+#define NBIN ((853 + 64 * MAXL + 63) / 64)    /* binary polys: 853 + 64 M bits */
+#define NZ (5 + 2 * MAXG)                     /* exact l2 blocks */
 
 typedef struct
 {
   const lnp_tbox_params_struct *P;
   uint8_t op;   /* the op the relation serves */
-  uint8_t code; /* the op, or PQZ_REL_TX0: names the relation in pqz_sv.c and the test hook, and is the byte of its
-                   ABDLOP keys' tag (R_TX0: 0x81, its own keys; REFRESH / AUDITOR share their op's relation) */
-  int ready;    /* ABDLOP keys built (at the first prove / verify of this relation) */
+  uint8_t code; /* the op, PQZ_REL_TX0 or PQZ_REL_TXM (M, A): names the relation in pqz_sv.c and the test hook, and is
+                   the byte of its ABDLOP keys' tag (R_TX0: 0x81, its own keys; REFRESH / AUDITOR share their op's
+                   relation; every R_TXM shape its own, also M = 1, which shares R_TX's / R_TX0's parameters) */
+  uint8_t legs, aud; /* debit shape: legs (R_TX, R_TX0: 1; R_BURN: 0, d public; R_TXM: M), auditor copies (0 / 1) */
+  int ready;         /* ABDLOP keys built (at the first prove / verify of this relation) */
   polymat_t A1, A2p, Bp;
 } rel_t;
 
 static rel_t REG = { .P = pqz_reg, .op = PQZ_OP_REGISTER, .code = PQZ_OP_REGISTER },
-             TX = { .P = pqz_tx, .op = PQZ_OP_TRANSFER, .code = PQZ_OP_TRANSFER },
-             TX0 = { .P = pqz_tx0, .op = PQZ_OP_TRANSFER, .code = PQZ_REL_TX0 },
+             TX = { .P = pqz_tx, .op = PQZ_OP_TRANSFER, .code = PQZ_OP_TRANSFER, .legs = 1, .aud = 1 },
+             TX0 = { .P = pqz_tx0, .op = PQZ_OP_TRANSFER, .code = PQZ_REL_TX0, .legs = 1 },
              BURN = { .P = pqz_burn, .op = PQZ_OP_BURN, .code = PQZ_OP_BURN },
              DS = { .P = pqz_ds, .op = PQZ_OP_DISCLOSE_SENDER, .code = PQZ_OP_DISCLOSE_SENDER },
              DR = { .P = pqz_dr, .op = PQZ_OP_DISCLOSE_RECEIVER, .code = PQZ_OP_DISCLOSE_RECEIVER };
+/* R_TXM (op 7) by (M, auditorOn); M = 1 on R_TX's / R_TX0's parameters (P6-ANON F6) */
+#define TXM_REL(p, m, lg, a) { .P = p, .op = PQZ_OP_TRANSFER_MULTI, .code = PQZ_REL_TXM (lg, a), .legs = m, .aud = a }
+static rel_t TXM[] = { TXM_REL (pqz_tx, 1, 0, 1),     TXM_REL (pqz_txm2, 2, 1, 1),  TXM_REL (pqz_txm4, 4, 2, 1),
+                       TXM_REL (pqz_txm8, 8, 3, 1),   TXM_REL (pqz_tx0, 1, 0, 0),   TXM_REL (pqz_txm20, 2, 1, 0),
+                       TXM_REL (pqz_txm40, 4, 2, 0),  TXM_REL (pqz_txm80, 8, 3, 0),
+#ifdef PQZ_TXM_OVERSIZE
+                       TXM_REL (pqz_txm16, 16, 4, 1), TXM_REL (pqz_txm160, 16, 4, 0),
+#endif
+};
+#define NTXM (sizeof TXM / sizeof TXM[0])
 static polymat_t A; /* public, the same for every relation */
 static int ready;
 static pqz_arena_mark_t base;
@@ -151,6 +180,8 @@ pqz_init (void *arena, size_t len)
 {
   pqz_err = PQZ_OK;
   REG.ready = TX.ready = TX0.ready = BURN.ready = DS.ready = DR.ready = 0;
+  for (unsigned t = 0; t < NTXM; t++)
+    TXM[t].ready = 0;
 #ifdef PQZ_SV
   pqz_sv_reset ();
 #endif
@@ -361,7 +392,7 @@ typedef struct
   spolymat_ptr R2[NTXQ], R2p[NTXE];
   spolyvec_ptr r1[NTXQ], r1p[NTXE];
   poly_ptr r0[NTXQ], r0p[NTXE];
-  polymat_ptr Es[7];
+  polymat_ptr Es[NZ];
   polymat_ptr Ps;
   polymat_ptr Ds; /* nprime = 1 approximate l_inf filler: one witness poly, u = 0 */
 } sys_t;
@@ -436,33 +467,71 @@ build_reg (sys_t *S, const uint8_t *stmt, polyvec_t pk)
   return 1;
 }
 
-/* ---- R_TX, R_TX0 and R_BURN (the debit relations) ---- */
+/* ---- R_TX, R_TX0, R_BURN and R_TXM (the debit relations) ---- */
 
-enum
-{
-  DEB_TX,  /* R_TX, auditor on */
-  DEB_TX0, /* R_TX0, auditor off: no pk_a / v_a / e2_a, row 5 skipped */
-  DEB_BURN /* R_BURN: d public, rows 3 and 5 skipped */
-};
-
-/* bit slots: base of each group (slot = base + width * i + b), -1 if the group is absent (R_BURN: d public) */
+/* The debit shape of a relation: M legs (R_TX / R_TX0: 1; R_BURN: 0 with d = digits(amount) public; R_TXM: M), G
+   randomness groups of <= 4 legs (leg j in group j / 4, v_f in group 0), A auditor copies on / off. One layout serves
+   all (P6-ANON R1); at M = 1, G = 1 it is R_TX's / R_TX0's, at M = 0 R_BURN's:
+     s1: 0..31 s_f | 32..63 e_f | 64 + 64 g r_g | 96 + 64 g e1_g | E = 64 + 64 G: e2_j at E + j | e2_f at E + M
+         | e2_{a,j} at E + M + 1 + j | bits at E + M + 1 + A M (nbin polys, 853 + 64 M bits)
+     bits: d_j at 64 j + 4 i + b | d' at 64 M + 4 i + b | M_i at 64 M + 64 + 14 i + b | c_i + 64 at 64 M + 288 + 11 i
+         + b (i < 15) | e_T[i] + 2^24 at 64 M + 453 + 25 i + b */
 typedef struct
 {
-  int d, dp, m, c, e;
-} lay_t;
-static const lay_t LAY_TX = { 0, 64, 128, 352, 517 }, LAY_BURN = { -1, 0, 64, 288, 453 };
+  unsigned legs, groups, aud, burn, txm;
+  unsigned E, e2f, bits, nbin, m1;      /* s1 slots (m1 without the Z slack polys) */
+  unsigned dp, m, c, e;                 /* bit bases; d_j at 64 j */
+  unsigned nblk, bst[NZ], bln[NZ];      /* exact-l2 blocks: s1 slots [bst, bst + bln) */
+} shape_t;
 #define SLOT(base, w, i, b) ((unsigned)(base) + (w) * (i) + (b))
 
+static void
+shape_of (const rel_t *R, shape_t *H)
+{
+  const unsigned M = R->legs, G = R->op == PQZ_OP_BURN ? 1 : PQZ_TXM_GROUPS (M), A = R->aud;
+  unsigned g, z = 0;
+  H->legs = M, H->groups = G, H->aud = A, H->burn = R->op == PQZ_OP_BURN, H->txm = R->op == PQZ_OP_TRANSFER_MULTI;
+  H->E = 64 + 64 * G, H->e2f = H->E + M, H->bits = H->e2f + 1 + A * M;
+  H->nbin = (853 + 64 * M + 63) / 64, H->m1 = H->bits + H->nbin;
+  H->dp = 64 * M, H->m = H->dp + 64, H->c = H->dp + 288, H->e = H->dp + 453;
+  H->bst[z] = 0, H->bln[z++] = 32;
+  H->bst[z] = 32, H->bln[z++] = 32;
+  for (g = 0; g < G; g++)
+    {
+      H->bst[z] = 64 + 64 * g, H->bln[z++] = 32;
+      H->bst[z] = 96 + 64 * g, H->bln[z++] = 32;
+    }
+  if (M > 0)
+    H->bst[z] = H->E, H->bln[z++] = M; /* the legs' e2: one block, bound 64 sqrt(M) (plan D5) */
+  H->bst[z] = H->e2f, H->bln[z++] = 1;
+  if (A * M > 0)
+    H->bst[z] = H->e2f + 1, H->bln[z++] = M; /* the auditor copies' e2: one block */
+  H->nblk = z;
+}
+
+/* the shape agrees with the relation's generated parameters (spec file and builder written together) */
+static int
+shape_ok (const rel_t *R, const shape_t *H)
+{
+  const lnp_tbox_params_struct *P = R->P;
+  int ok = H->nbin == P->nbin && H->nblk == P->Z && H->m1 + P->Z == P->tbox->m1 && H->legs <= MAXL
+           && H->groups <= MAXG && K * (1 + H->groups) <= NTXQ && 16 * (H->legs + 1 + H->aud * H->legs + 2) <= NTXE;
+  for (unsigned z = 0; ok && z < H->nblk; z++)
+    ok &= P->n[z] == H->bln[z];
+  return ok;
+}
+
 typedef struct
 {
-  polyvec_ptr pkf, pkt, pka, uT, u; /* R_DS / R_DR: pkt = pk, u = u */
-  poly_t vT, vt, vf, va;            /* R_DS / R_DR: vt = v */
-  uint64_t fee, amount;             /* amount: R_BURN, R_DS, R_DR */
+  polyvec_ptr pkf, pka, uT;           /* debit */
+  polyvec_ptr pk[MAXL], u[MAXG];      /* debit: leg keys, group u; R_DS / R_DR: pk[0] = pk, u[0] = u */
+  poly_t vT, vf, v[MAXL], va[MAXL];   /* debit; R_DS / R_DR: v[0] = v */
+  uint64_t fee, amount;               /* amount: R_BURN, R_DS, R_DR */
 } txst_t;
 
 /* coefficient term coef * bit(slot) into the evaleq vector accumulators (one poly per bit poly) */
 static void
-add_bit (poly_ptr acc[15], unsigned slot, int64_t coef)
+add_bit (poly_ptr acc[], unsigned slot, int64_t coef)
 {
   poly_ptr p = acc[slot / 64];
   unsigned a = slot % 64; /* ct(X^-a * P) = P_a */
@@ -476,7 +545,7 @@ add_bit (poly_ptr acc[15], unsigned slot, int64_t coef)
 }
 
 static void
-evaleq (sys_t *S, unsigned idx, polyvec_ptr pkrow, unsigned off_x, unsigned i, int e2idx, poly_ptr acc[15],
+evaleq (sys_t *S, unsigned idx, polyvec_ptr pkrow, unsigned off_x, unsigned i, int e2idx, poly_ptr acc[],
         int64_t rhs)
 {
   rel_t *R = S->R;
@@ -511,9 +580,9 @@ evaleq (sys_t *S, unsigned idx, polyvec_ptr pkrow, unsigned off_x, unsigned i, i
 }
 
 static void
-acc_zero (poly_ptr acc[15])
+acc_zero (poly_ptr acc[], unsigned n)
 {
-  for (unsigned b = 0; b < 15; b++)
+  for (unsigned b = 0; b < n; b++)
     poly_set_zero (acc[b]);
 }
 
@@ -549,144 +618,161 @@ new_vec (polyring_srcptr Rq)
 }
 
 /* R_TX: header || pk_f || pk_t || pk_a || u_T || v_T || u || v_t || v_f || v_a; R_TX0: the same without pk_a and
-   v_a; R_BURN: header || pk_f || u_T || v_T || u || v_f (pq-zether.md §7.7). Reads fee, (R_BURN) amount and (R_TX,
-   R_TX0) the auditorOn word from the header; the rest of it is hashed only. */
+   v_a; R_BURN: header || pk_f || u_T || v_T || u || v_f (pq-zether.md §7.7); R_TXM: header || pk_f || pk_0 .. pk_{M-1}
+   || [pk_a] || u_T || v_T || u_0 .. u_{G-1} || v_0 .. v_{M-1} || v_f || [v_{a,0} .. v_{a,M-1}] (the same order with
+   M legs and G groups). Reads fee, (R_BURN) amount, (the transfers) the auditorOn word and (R_TXM) the M word from
+   the header; the rest of it is hashed only. */
 static int
-parse_debit (txst_t *T, polyring_srcptr Rq, const uint8_t *stmt, int kind)
+parse_debit (txst_t *T, polyring_srcptr Rq, const uint8_t *stmt, const shape_t *H)
 {
   const uint8_t *p = stmt + PQZ_HEADER_BYTES;
-  const int burn = kind == DEB_BURN, aud = kind == DEB_TX;
-  uint64_t on = 0;
+  const unsigned M = H->legs, A = H->aud;
+  uint64_t on = 0, legs = 0;
+  unsigned j, g;
   int ok = rd_word64 (&T->fee, stmt + PQZ_HDR_FEE);
   T->amount = 0;
-  if (burn)
+  if (H->burn)
     ok &= rd_word64 (&T->amount, stmt + PQZ_HDR_AMOUNT);
   else /* R6: the word says what the length says, 1 with pk_a and v_a, 0 without */
     {
       ok &= rd_word64 (&on, stmt + PQZ_HDR_AUDITOR_ON); /* two statements: on is read after the call */
-      ok &= on == (uint64_t)aud;
+      ok &= on == (uint64_t)A;
     }
-  T->pkf = new_vec (Rq), T->uT = new_vec (Rq), T->u = new_vec (Rq);
+  if (H->txm) /* R4: the M word names the relation (pqz_verify picked it by the word, so this holds) */
+    {
+      ok &= rd_word64 (&legs, stmt + PQZ_HDR_LEGS);
+      ok &= legs == (uint64_t)M;
+    }
+  T->pkf = new_vec (Rq), T->uT = new_vec (Rq);
   poly_alloc (T->vT, Rq), poly_alloc (T->vf, Rq);
   ok &= rd_polyvec (T->pkf, p), p += PQZ_POLYVEC_BYTES;
-  if (!burn)
+  for (j = 0; j < M; j++)
     {
-      T->pkt = new_vec (Rq);
-      poly_alloc (T->vt, Rq);
-      ok &= rd_polyvec (T->pkt, p), p += PQZ_POLYVEC_BYTES;
+      T->pk[j] = new_vec (Rq);
+      ok &= rd_polyvec (T->pk[j], p), p += PQZ_POLYVEC_BYTES;
     }
-  if (aud)
+  if (A)
     {
       T->pka = new_vec (Rq);
-      poly_alloc (T->va, Rq);
       ok &= rd_polyvec (T->pka, p), p += PQZ_POLYVEC_BYTES;
     }
   ok &= rd_polyvec (T->uT, p), p += PQZ_POLYVEC_BYTES;
   ok &= rd_poly (T->vT, p, 16), p += PQZ_V_BYTES;
-  ok &= rd_polyvec (T->u, p), p += PQZ_POLYVEC_BYTES;
-  if (!burn)
-    ok &= rd_poly (T->vt, p, 16), p += PQZ_V_BYTES;
+  for (g = 0; g < H->groups; g++)
+    {
+      T->u[g] = new_vec (Rq);
+      ok &= rd_polyvec (T->u[g], p), p += PQZ_POLYVEC_BYTES;
+    }
+  for (j = 0; j < M; j++)
+    {
+      poly_alloc (T->v[j], Rq);
+      ok &= rd_poly (T->v[j], p, 16), p += PQZ_V_BYTES;
+    }
   ok &= rd_poly (T->vf, p, 16), p += PQZ_V_BYTES;
-  if (aud)
-    ok &= rd_poly (T->va, p, 16);
+  for (j = 0; j < A * M; j++)
+    {
+      poly_alloc (T->va[j], Rq);
+      ok &= rd_poly (T->va[j], p, 16), p += PQZ_V_BYTES;
+    }
   return ok;
 }
 
-/* R_TX, R_TX0 or R_BURN: the rows of pq-zether.md §7.4; R_TX0 skips row 5; R_BURN skips rows 3 and 5 and moves
-   Delta d_i (row 4 has none: d' is the witness) and d_i (row 7) into the constant term */
+/* The rows of pq-zether.md §7.4 with M legs (P6-ANON plan §3): row 1 pk_f = A s_f + e_f; row 2 u_g = A^T r_g + e1_g
+   per group; per coefficient i < 16, in this order: row 3 per leg j (pk_j^T r_{g(j)})_i + e2_j,i + Delta d_j,i - v_j,i,
+   row 4 (pk_f^T r_0)_i + e2_f,i + Delta d'_i - v_f,i, row 5 per leg (auditor on) the same under pk_a with e2_{a,j},
+   row 6 (u_T^T s_f)_i + Delta M_i + (e_T,i + 2^24) - 2^24 - v_T,i, row 7 (over Z, all terms < 2^15) M_i + c_{i-1}
+   - d'_i - sum_j d_j,i - f_i - 16 c_i = 0. R_TX is M = 1 with the auditor, R_TX0 without (row 5 skipped); R_BURN is
+   M = 0 with Delta d_i (row 4 has none: d' is the witness) and d_i (row 7) public in the constant term. One code
+   path for every amount: a decoy is a leg whose digits are 0 (plan R6). */
 static int
-build_debit (sys_t *S, txst_t *T, const uint8_t *stmt, int kind)
+build_debit (sys_t *S, txst_t *T, const uint8_t *stmt, rel_t *R)
 {
-  const int burn = kind == DEB_BURN, aud = kind == DEB_TX;
-  rel_t *R = burn ? &BURN : aud ? &TX : &TX0;
-  const lay_t *L = burn ? &LAY_BURN : &LAY_TX;
+  shape_t H;
   polyring_srcptr Rq = R->P->tbox->ring;
-  const unsigned m1 = burn ? 143 : aud ? 146 : 145, e2f = burn ? 128 : 129;
-  poly_ptr acc[15];
-  unsigned i, b, e = 0;
+  poly_ptr acc[NBIN];
+  unsigned i, j, b, g, e = 0;
 
-  S->R = R;
-  S->N = NTXQ;
-  S->M = burn ? 48 : aud ? NTXE : 64;
-  S->bits = burn ? 129 : aud ? 131 : 130;
-  S->nbin = burn ? 14 : 15;
-  if (!parse_debit (T, Rq, stmt, kind))
+  shape_of (R, &H);
+  if (!shape_ok (R, &H))
     return 0;
-  for (b = 0; b < 15; b++)
+  const unsigned M = H.legs, A = H.aud, nbin = H.nbin, m1 = H.m1;
+  S->R = R;
+  S->N = K * (1 + H.groups);
+  S->M = 16 * (M + 1 + A * M + 2);
+  S->bits = H.bits;
+  S->nbin = nbin;
+  if (!parse_debit (T, Rq, stmt, &H))
+    return 0;
+  for (b = 0; b < nbin; b++)
     acc[b] = new_poly (Rq);
 
-  /* row 1: pk_f = A s_f + e_f ; row 2: u = A^T r + e1 */
+  /* row 1: pk_f = A s_f + e_f ; row 2: u_g = A^T r_g + e1_g */
   for (i = 0; i < K; i++)
     add_lin_row (S, i, 0, i, 0, 32, polyvec_get_elem (T->pkf, i));
-  for (i = 0; i < K; i++)
-    add_lin_row (S, K + i, 1, i, 64, 96, polyvec_get_elem (T->u, i));
+  for (g = 0; g < H.groups; g++)
+    for (i = 0; i < K; i++)
+      add_lin_row (S, K * (1 + g) + i, 1, i, 64 + 64 * g, 96 + 64 * g, polyvec_get_elem (T->u[g], i));
 
   for (i = 0; i < 16; i++)
     {
-      const int64_t dpub = burn ? digit (T->amount, i) : 0;
+      const int64_t dpub = H.burn ? digit (T->amount, i) : 0;
       /* rows 3-5: (pk^T r)_i + e2_i + Delta * digit_i - v_i = 0 */
-      if (!burn)
+      for (j = 0; j < M; j++)
         {
-          acc_zero (acc);
+          acc_zero (acc, nbin);
           for (b = 0; b < 4; b++)
-            add_bit (acc, SLOT (L->d, 4, i, b), DELTA << b);
-          evaleq (S, e++, T->pkt, 64, i, 128, acc, -cval (T->vt, i));
+            add_bit (acc, SLOT (64 * j, 4, i, b), DELTA << b);
+          evaleq (S, e++, T->pk[j], 64 + 64 * (j / 4), i, (int)(H.E + j), acc, -cval (T->v[j], i));
         }
-      acc_zero (acc);
+      acc_zero (acc, nbin);
       for (b = 0; b < 4; b++)
-        add_bit (acc, SLOT (L->dp, 4, i, b), DELTA << b);
-      evaleq (S, e++, T->pkf, 64, i, e2f, acc, -cval (T->vf, i));
-      if (aud)
+        add_bit (acc, SLOT (H.dp, 4, i, b), DELTA << b);
+      evaleq (S, e++, T->pkf, 64, i, (int)H.e2f, acc, -cval (T->vf, i));
+      for (j = 0; j < A * M; j++)
         {
-          acc_zero (acc);
+          acc_zero (acc, nbin);
           for (b = 0; b < 4; b++)
-            add_bit (acc, SLOT (L->d, 4, i, b), DELTA << b);
-          evaleq (S, e++, T->pka, 64, i, 130, acc, -cval (T->va, i));
+            add_bit (acc, SLOT (64 * j, 4, i, b), DELTA << b);
+          evaleq (S, e++, T->pka, 64 + 64 * (j / 4), i, (int)(H.e2f + 1 + j), acc, -cval (T->va[j], i));
         }
       /* row 6: (u_T^T s_f)_i + Delta M_i + (e_T,i + 2^24) - 2^24 - v_T,i = 0 */
-      acc_zero (acc);
+      acc_zero (acc, nbin);
       for (b = 0; b < 14; b++)
-        add_bit (acc, SLOT (L->m, 14, i, b), DELTA << b);
+        add_bit (acc, SLOT (H.m, 14, i, b), DELTA << b);
       for (b = 0; b < 25; b++)
-        add_bit (acc, SLOT (L->e, 25, i, b), (int64_t)1 << b);
+        add_bit (acc, SLOT (H.e, 25, i, b), (int64_t)1 << b);
       evaleq (S, e++, T->uT, 0, i, -1, acc, -cval (T->vT, i) - ((int64_t)1 << 24));
-      /* row 7 (over Z, all terms < 2^15): M_i + c_{i-1} - d'_i - d_i - f_i - 16 c_i = 0, c = cbits - 64 */
-      acc_zero (acc);
+      /* row 7 (over Z, all terms < 2^15): M_i + c_{i-1} - d'_i - sum_j d_j,i - f_i - 16 c_i = 0, c = cbits - 64 */
+      acc_zero (acc, nbin);
       int64_t rhs = -(int64_t)digit (T->fee, i) - dpub;
       for (b = 0; b < 14; b++)
-        add_bit (acc, SLOT (L->m, 14, i, b), (int64_t)1 << b);
+        add_bit (acc, SLOT (H.m, 14, i, b), (int64_t)1 << b);
       if (i >= 1)
         {
           for (b = 0; b < 11; b++)
-            add_bit (acc, SLOT (L->c, 11, i - 1, b), (int64_t)1 << b);
+            add_bit (acc, SLOT (H.c, 11, i - 1, b), (int64_t)1 << b);
           rhs -= 64;
         }
       for (b = 0; b < 4; b++)
         {
-          add_bit (acc, SLOT (L->dp, 4, i, b), -((int64_t)1 << b));
-          if (!burn)
-            add_bit (acc, SLOT (L->d, 4, i, b), -((int64_t)1 << b));
+          add_bit (acc, SLOT (H.dp, 4, i, b), -((int64_t)1 << b));
+          for (j = 0; j < M; j++)
+            add_bit (acc, SLOT (64 * j, 4, i, b), -((int64_t)1 << b));
         }
       if (i <= 14)
         {
           for (b = 0; b < 11; b++)
-            add_bit (acc, SLOT (L->c, 11, i, b), -((int64_t)16 << b));
+            add_bit (acc, SLOT (H.c, 11, i, b), -((int64_t)16 << b));
           rhs += 16 * 64;
         }
       evaleq (S, e++, NULL, 0, i, -1, acc, rhs);
     }
 
-  S->Es[0] = new_sel (Rq, 32, m1, 0);
-  S->Es[1] = new_sel (Rq, 32, m1, 32);
-  S->Es[2] = new_sel (Rq, 32, m1, 64);
-  S->Es[3] = new_sel (Rq, 32, m1, 96);
-  S->Es[4] = new_sel (Rq, 1, m1, 128);
-  if (!burn)
-    S->Es[5] = new_sel (Rq, 1, m1, 129);
-  if (aud)
-    S->Es[6] = new_sel (Rq, 1, m1, 130);
-  S->Ps = new_sel (Rq, S->nbin, m1, S->bits);
-  S->Ds = new_sel (Rq, 1, m1, 128); /* e2_t (R_TX, R_TX0) / e2_f (R_BURN), |coefficients| <= 20 < 64 (Bprime) */
+  for (unsigned z = 0; z < H.nblk; z++)
+    S->Es[z] = new_sel (Rq, H.bln[z], m1, H.bst[z]);
+  S->Ps = new_sel (Rq, nbin, m1, H.bits);
+  /* e2_0 (the first leg; R_TX, R_TX0: e2_t) / e2_f (R_BURN), |coefficients| <= 20 < 64 (Bprime) */
+  S->Ds = new_sel (Rq, 1, m1, H.E);
   return 1;
 }
 
@@ -699,11 +785,11 @@ parse_disc (txst_t *T, polyring_srcptr Rq, const uint8_t *stmt)
 {
   const uint8_t *p = stmt + PQZ_DISC_PK;
   int ok = rd_word64 (&T->amount, stmt + PQZ_DISC_AMOUNT);
-  T->pkt = new_vec (Rq), T->u = new_vec (Rq);
-  poly_alloc (T->vt, Rq);
-  ok &= rd_polyvec (T->pkt, p), p += PQZ_POLYVEC_BYTES;
-  ok &= rd_polyvec (T->u, p), p += PQZ_POLYVEC_BYTES;
-  ok &= rd_poly (T->vt, p, 16);
+  T->pk[0] = new_vec (Rq), T->u[0] = new_vec (Rq);
+  poly_alloc (T->v[0], Rq);
+  ok &= rd_polyvec (T->pk[0], p), p += PQZ_POLYVEC_BYTES;
+  ok &= rd_polyvec (T->u[0], p), p += PQZ_POLYVEC_BYTES;
+  ok &= rd_poly (T->v[0], p, 16);
   return ok;
 }
 
@@ -721,9 +807,9 @@ build_ds (sys_t *S, txst_t *T, const uint8_t *stmt)
   if (!parse_disc (T, Rq, stmt))
     return 0;
   for (unsigned i = 0; i < K; i++)
-    add_lin_row (S, i, 1, i, 0, 32, polyvec_get_elem (T->u, i));
+    add_lin_row (S, i, 1, i, 0, 32, polyvec_get_elem (T->u[0], i));
   for (unsigned i = 0; i < 16; i++)
-    evaleq (S, i, T->pkt, 0, i, 64, NULL, DELTA * digit (T->amount, i) - cval (T->vt, i));
+    evaleq (S, i, T->pk[0], 0, i, 64, NULL, DELTA * digit (T->amount, i) - cval (T->v[0], i));
   S->Es[0] = new_sel (Rq, 32, 65, 0);
   S->Es[1] = new_sel (Rq, 32, 65, 32);
   S->Es[2] = new_sel (Rq, 1, 65, 64);
@@ -749,13 +835,13 @@ build_dr (sys_t *S, txst_t *T, const uint8_t *stmt)
   for (unsigned b = 0; b < 15; b++)
     acc[b] = new_poly (Rq);
   for (unsigned i = 0; i < K; i++)
-    add_lin_row (S, i, 0, i, 0, 32, polyvec_get_elem (T->pkt, i));
+    add_lin_row (S, i, 0, i, 0, 32, polyvec_get_elem (T->pk[0], i));
   for (unsigned i = 0; i < 16; i++)
     {
-      acc_zero (acc);
+      acc_zero (acc, 15);
       for (unsigned b = 0; b < 25; b++)
         add_bit (acc, 25 * i + b, (int64_t)1 << b);
-      evaleq (S, i, T->u, 0, i, -1, acc, DELTA * digit (T->amount, i) - cval (T->vt, i) - ((int64_t)1 << 24));
+      evaleq (S, i, T->u[0], 0, i, -1, acc, DELTA * digit (T->amount, i) - cval (T->v[0], i) - ((int64_t)1 << 24));
     }
   S->Es[0] = new_sel (Rq, 32, 71, 0);
   S->Es[1] = new_sel (Rq, 32, 71, 32);
@@ -966,32 +1052,39 @@ dec_w (polyring_srcptr Rq, polyvec_ptr u, poly_ptr v, polyvec_t s1, int64_t w[16
   poly_free (acc);
 }
 
-/* R_TX / R_TX0 / R_BURN witness -> s1 (incl. derived M, carries, e_T); returns 0 if inconsistent */
+/* debit witness (R_TX, R_TX0, R_BURN, R_TXM; the layout of pqz.h) -> s1 (incl. derived M, carries, e_T); returns 0
+   if inconsistent */
 static int
-debit_witness (txst_t *T, const uint8_t *w, polyvec_t s1, int kind)
+debit_witness (txst_t *T, const uint8_t *w, polyvec_t s1, const rel_t *R)
 {
-  const int burn = kind == DEB_BURN;
+  shape_t H;
   /* the relation's own ring object: LaZer asserts operands share the ring pointer */
-  polyring_srcptr Rq = (burn ? BURN.P : kind == DEB_TX ? TX.P : TX0.P)->tbox->ring;
-  const lay_t *L = burn ? &LAY_BURN : &LAY_TX;
-  const unsigned bits = burn ? 129 : kind == DEB_TX ? 131 : 130, ne2 = burn ? 1 : kind == DEB_TX ? 3 : 2;
+  polyring_srcptr Rq = R->P->tbox->ring;
   const uint8_t *p = w;
-  unsigned i, j, b;
-  int64_t d[16], dp[16], M[16], eT[16], c[16];
+  unsigned i, j, b, g;
+  int64_t d[MAXL][16], dp[16], dsum[16], M[16], eT[16], c[16];
 
+  shape_of (R, &H);
+  const unsigned L = H.legs, ne2 = L + 1 + H.aud * L;
   p = wit_vec (s1, 0, p, 0);
   p = wit_vec (s1, 32, p, 1);
-  p = wit_vec (s1, 64, p, 0);
-  p = wit_vec (s1, 96, p, 1);
+  for (g = 0; g < H.groups; g++)
+    {
+      p = wit_vec (s1, 64 + 64 * g, p, 0);
+      p = wit_vec (s1, 96 + 64 * g, p, 1);
+    }
   for (i = 0; i < ne2; i++)
     for (j = 0; j < 16; j++)
-      set_c (polyvec_get_elem (s1, 128 + i), j, rd_le16 (p + 32 * i + 2 * j));
+      set_c (polyvec_get_elem (s1, H.E + i), j, rd_le16 (p + 32 * i + 2 * j));
   p += 32 * ne2;
+  /* the legs' digits (R_BURN: d = digits(amount), public), d'; one path for every amount (plan R6) */
   for (i = 0; i < 16; i++)
-    if (burn)
-      d[i] = digit (T->amount, i), dp[i] = p[i];
-    else
-      d[i] = p[i], dp[i] = p[16 + i];
+    {
+      dsum[i] = H.burn ? digit (T->amount, i) : 0;
+      for (j = 0; j < L; j++)
+        d[j][i] = p[16 * j + i], dsum[i] += d[j][i];
+      dp[i] = p[16 * L + i];
+    }
 
   /* decrypt T with s_f: w_i = centre(v_T,i - (u_T^T s_f)_i), M_i = round(w_i / Delta), e_T = w - Delta M */
   {
@@ -1004,11 +1097,11 @@ debit_witness (txst_t *T, const uint8_t *w, polyvec_t s1, int kind)
         eT[i] = wv[i] - DELTA * m;
       }
   }
-  /* carries: c_i = (M_i + c_{i-1} - d'_i - d_i - f_i) / 16, exact, c_15 = 0 */
+  /* carries: c_i = (M_i + c_{i-1} - d'_i - sum_j d_j,i - f_i) / 16, exact, c_15 = 0 (so sum_j a_j + fee <= balance) */
   int64_t cprev = 0;
   for (i = 0; i < 16; i++)
     {
-      int64_t s = M[i] + cprev - dp[i] - d[i] - (int64_t)digit (T->fee, i);
+      int64_t s = M[i] + cprev - dp[i] - dsum[i] - (int64_t)digit (T->fee, i);
       if (s % 16 != 0)
         return 0;
       c[i] = s / 16;
@@ -1018,21 +1111,31 @@ debit_witness (txst_t *T, const uint8_t *w, polyvec_t s1, int kind)
     return 0;
   /* ranges (the proof shows them; an honest prover checks first) */
   for (i = 0; i < 16; i++)
-    if (d[i] > 15 || dp[i] > 15 || M[i] < 0 || M[i] >= (1 << 14) || c[i] < -64 || c[i] >= 1984
-        || eT[i] < -(1 << 24) || eT[i] >= (1 << 24))
-      return 0;
+    {
+      int bad = dp[i] > 15 || M[i] < 0 || M[i] >= (1 << 14) || c[i] < -64 || c[i] >= 1984 || eT[i] < -(1 << 24)
+                || eT[i] >= (1 << 24);
+      for (j = 0; j < L; j++)
+        bad |= d[j][i] > 15;
+      if (bad)
+        return 0;
+    }
   for (i = 0; i < 16; i++)
     for (b = 0; b < 25; b++)
       {
-        int base[5] = { L->d, L->dp, L->m, L->c, L->e };
-        int64_t vals[5] = { d[i], dp[i], M[i], c[i] + 64, eT[i] + (1 << 24) };
-        unsigned widths[5] = { 4, 4, 14, 11, 25 }, n[5] = { 4, 4, 14, i < 15 ? 11u : 0u, 25 };
-        for (unsigned k = 0; k < 5; k++)
-          if (base[k] >= 0 && b < n[k])
+        unsigned base[4] = { H.dp, H.m, H.c, H.e };
+        int64_t vals[4] = { dp[i], M[i], c[i] + 64, eT[i] + (1 << 24) };
+        unsigned widths[4] = { 4, 14, 11, 25 }, n[4] = { 4, 14, i < 15 ? 11u : 0u, 25 };
+        for (unsigned k = 0; k < 4; k++)
+          if (b < n[k])
             {
               unsigned slot = SLOT (base[k], widths[k], i, b);
-              set_c (polyvec_get_elem (s1, bits + slot / 64), slot % 64, (vals[k] >> b) & 1);
+              set_c (polyvec_get_elem (s1, H.bits + slot / 64), slot % 64, (vals[k] >> b) & 1);
             }
+        for (j = 0; j < L && b < 4; j++)
+          {
+            unsigned slot = SLOT (64 * j, 4, i, b);
+            set_c (polyvec_get_elem (s1, H.bits + slot / 64), slot % 64, (d[j][i] >> b) & 1);
+          }
       }
   return 1;
 }
@@ -1043,7 +1146,7 @@ dr_witness (txst_t *T, const uint8_t *w, polyvec_t s1)
 {
   int64_t wv[16];
   wit_vec (s1, 32, wit_vec (s1, 0, w, 0), 1);
-  dec_w (DR.P->tbox->ring, T->u, T->vt, s1, wv);
+  dec_w (DR.P->tbox->ring, T->u[0], T->v[0], s1, wv);
   for (unsigned i = 0; i < 16; i++)
     {
       int64_t e = wv[i] - DELTA * digit (T->amount, i);
@@ -1064,22 +1167,42 @@ build (sys_t *S, txst_t *T, const rel_t *R, const uint8_t *stmt, size_t stmt_len
     case PQZ_OP_REGISTER:
       return stmt_len == PQZ_REG_STMT_BYTES && build_reg (S, stmt, pk);
     case PQZ_OP_TRANSFER:
-      return stmt_len == PQZ_TX_STMT_BYTES && build_debit (S, T, stmt, DEB_TX);
+      return stmt_len == PQZ_TX_STMT_BYTES && build_debit (S, T, stmt, &TX);
     case PQZ_REL_TX0:
-      return stmt_len == PQZ_TX0_STMT_BYTES && build_debit (S, T, stmt, DEB_TX0);
+      return stmt_len == PQZ_TX0_STMT_BYTES && build_debit (S, T, stmt, &TX0);
     case PQZ_OP_BURN:
-      return stmt_len == PQZ_BURN_STMT_BYTES && build_debit (S, T, stmt, DEB_BURN);
+      return stmt_len == PQZ_BURN_STMT_BYTES && build_debit (S, T, stmt, &BURN);
     case PQZ_OP_DISCLOSE_SENDER:
       return stmt_len == PQZ_DISC_STMT_BYTES && build_ds (S, T, stmt);
     case PQZ_OP_DISCLOSE_RECEIVER:
       return stmt_len == PQZ_DISC_STMT_BYTES && build_dr (S, T, stmt);
     }
+  if (R->op == PQZ_OP_TRANSFER_MULTI)
+    return stmt_len == PQZ_TXM_STMT_BYTES (R->legs, R->aud) && build_debit (S, T, stmt, (rel_t *)R);
   return 0;
 }
 
-/* the relation of op; op 1 is R_TX0 with the 66,560-byte statement, else R_TX (whose builder then checks the length) */
+/* op 7: the R_TXM shape named by the header's M word and auditorOn word (R4: the length alone does not fix it; the
+   builder then requires the length of that shape). NULL without a header, for a non-canonical word or an M that is
+   not built. */
 static rel_t *
-rel_of (uint8_t op, size_t stmt_len)
+txm_rel (const uint8_t *stmt, size_t stmt_len)
+{
+  uint64_t m, a;
+  if (stmt == NULL || stmt_len < PQZ_HEADER_BYTES)
+    return NULL;
+  int ok = rd_word64 (&m, stmt + PQZ_HDR_LEGS);
+  ok &= rd_word64 (&a, stmt + PQZ_HDR_AUDITOR_ON);
+  for (unsigned t = 0; ok && t < NTXM; t++)
+    if (TXM[t].legs == m && TXM[t].aud == a)
+      return &TXM[t];
+  return NULL;
+}
+
+/* the relation of op; op 1 is R_TX0 with the 66,560-byte statement, else R_TX (whose builder then checks the length);
+   op 7 by its header words */
+static rel_t *
+rel_of (uint8_t op, const uint8_t *stmt, size_t stmt_len)
 {
   switch (op)
     {
@@ -1093,6 +1216,8 @@ rel_of (uint8_t op, size_t stmt_len)
       return &DS;
     case PQZ_OP_DISCLOSE_RECEIVER:
       return &DR;
+    case PQZ_OP_TRANSFER_MULTI:
+      return txm_rel (stmt, stmt_len);
     }
   return NULL;
 }
@@ -1102,30 +1227,15 @@ static int
 witness (txst_t *T, const rel_t *R, const uint8_t *wit, size_t wit_len, polyvec_t s1)
 {
   static const unsigned st_reg[2] = { 0, 32 }, ln_reg[2] = { 32, 32 };
-  static const unsigned st_tx[7] = { 0, 32, 64, 96, 128, 129, 130 }, ln_tx[7] = { 32, 32, 32, 32, 1, 1, 1 };
   static const unsigned st_ds[3] = { 0, 32, 64 }, ln_ds[3] = { 32, 32, 1 };
   const unsigned *st = st_reg, *ln = ln_reg;
+  shape_t H;
   switch (R->code)
     {
     case PQZ_OP_REGISTER:
       if (wit_len != PQZ_REG_WIT_BYTES)
         return 0;
       wit_vec (s1, 32, wit_vec (s1, 0, wit, 0), 1);
-      break;
-    case PQZ_OP_TRANSFER:
-      if (wit_len != PQZ_TX_WIT_BYTES || !debit_witness (T, wit, s1, DEB_TX))
-        return 0;
-      st = st_tx, ln = ln_tx;
-      break;
-    case PQZ_REL_TX0:
-      if (wit_len != PQZ_TX0_WIT_BYTES || !debit_witness (T, wit, s1, DEB_TX0))
-        return 0;
-      st = st_tx, ln = ln_tx; /* the first 6 blocks (Z = 6) */
-      break;
-    case PQZ_OP_BURN:
-      if (wit_len != PQZ_BURN_WIT_BYTES || !debit_witness (T, wit, s1, DEB_BURN))
-        return 0;
-      st = st_tx, ln = ln_tx; /* the first 5 blocks */
       break;
     case PQZ_OP_DISCLOSE_SENDER:
       if (wit_len != PQZ_DS_WIT_BYTES)
@@ -1139,8 +1249,16 @@ witness (txst_t *T, const rel_t *R, const uint8_t *wit, size_t wit_len, polyvec_
       if (wit_len != PQZ_DR_WIT_BYTES || !dr_witness (T, wit, s1))
         return 0;
       break;
-    default:
-      return 0;
+    default: /* the debit relations (R_TX, R_TX0, R_BURN, R_TXM): pqz.h's layout, one l2 slack per block */
+      if (R->code != PQZ_OP_TRANSFER && R->code != PQZ_REL_TX0 && R->code != PQZ_OP_BURN
+          && R->op != PQZ_OP_TRANSFER_MULTI)
+        return 0;
+      shape_of (R, &H);
+      if (wit_len != (1 + H.groups) * (2048 + 4096) + 32 * (H.legs + 1 + H.aud * H.legs) + 16 * H.legs + 16
+          || !debit_witness (T, wit, s1, R))
+        return 0;
+      st = H.bst, ln = H.bln;
+      break;
     }
   return set_upsilon (R->P, s1, st, ln);
 }
@@ -1155,7 +1273,7 @@ pqz_prove (uint8_t op, const uint8_t *stmt, size_t stmt_len, const uint8_t *wit,
   polyvec_t pk;
   uint8_t h[32];
   int rc = PQZ_ERR_INPUT;
-  rel_t *R = rel_of (op, stmt_len);
+  rel_t *R = rel_of (op, stmt, stmt_len);
 
   if (!ready)
     return PQZ_ERR_INTERNAL;
@@ -1191,7 +1309,7 @@ pqz_verify (uint8_t op, const uint8_t *stmt, size_t stmt_len, const uint8_t *pro
   polyvec_t pk;
   uint8_t h[32];
   int ok = 0;
-  rel_t *R = rel_of (op, stmt_len);
+  rel_t *R = rel_of (op, stmt, stmt_len);
 
   if (!ready || R == NULL)
     return 0;
@@ -1224,7 +1342,7 @@ pqz_verify_fast (uint8_t op, const uint8_t *stmt, size_t stmt_len, const uint8_t
 {
   uint8_t h[32];
   int ok;
-  rel_t *R = rel_of (op, stmt_len);
+  rel_t *R = rel_of (op, stmt, stmt_len);
 
   if (!ready || R == NULL)
     return 0;
@@ -1344,7 +1462,7 @@ pqz_decrypt_raw (const int8_t s[2048], const uint8_t u[PQZ_POLYVEC_BYTES], const
 #ifdef PQZ_TEST_HOOKS
 /* ---------------------------------------------------------------- test hook (P6-SV diff harness only; not in
    libpqz): decode a proof, change one field, re-encode. kind / r1 / r2 pick the field and the change. op names the
-   relation: an op, or PQZ_REL_TX0 (0x81) for R_TX0. Returns 1 and the new proof in out, or 0 if the input does not
+   relation: an op, PQZ_REL_TX0 (0x81) for R_TX0 or PQZ_REL_TXM (M, A) for an R_TXM shape. Returns 1 and the new proof in out, or 0 if the input does not
    decode. */
 static void
 mut_swap (poly_ptr a, poly_ptr b)
@@ -1357,11 +1475,24 @@ mut_swap (poly_ptr a, poly_ptr b)
     }
 }
 
+static rel_t *
+rel_by_code (uint8_t code)
+{
+  rel_t *all[] = { &REG, &TX, &TX0, &BURN, &DS, &DR };
+  for (unsigned t = 0; t < sizeof all / sizeof all[0]; t++)
+    if (all[t]->code == code)
+      return all[t];
+  for (unsigned t = 0; t < NTXM; t++)
+    if (TXM[t].code == code)
+      return &TXM[t];
+  return NULL;
+}
+
 int
 pqz_test_mutate (uint8_t op, const uint8_t *proof, size_t len, unsigned kind, uint64_t r1, uint64_t r2,
                  uint8_t *out, size_t *outlen)
 {
-  rel_t *R = op == PQZ_REL_TX0 ? &TX0 : rel_of (op, 0);
+  rel_t *R = rel_by_code (op);
   const lnp_tbox_params_struct *P = R != NULL ? R->P : REG.P;
   abdlop_params_srcptr tb = P->tbox;
   static uint8_t buf[2 * PQZ_MAX_PROOF];

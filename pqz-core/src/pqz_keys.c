@@ -162,6 +162,21 @@ pqz_enc_seed (const uint8_t *const pks[], unsigned npk, const uint8_t msgs[][16]
   return PQZ_ERR_REJECT;
 }
 
+/* group seed of R_TXM (P6-ANON D13): g = 0 -> seed_enc, else SHAKE256("SCAAS-PQZ-ENC-GROUP-V1" || seed_enc || be4(g)) */
+void
+pqz_enc_group_seed (const uint8_t seed_enc[32], unsigned g, uint8_t out[32])
+{
+  bits_t b;
+  if (g == 0)
+    {
+      memcpy (out, seed_enc, 32);
+      return;
+    }
+  stream (&b, "SCAAS-PQZ-ENC-GROUP-V1", 22, seed_enc, g);
+  shake256_squeeze (b.st, out, 32);
+  stream_clear (&b);
+}
+
 int
 pqz_dec (const int8_t s[2048], const uint8_t ct[PQZ_POLYVEC_BYTES + PQZ_V_BYTES], int64_t M[16], int64_t noise[16])
 {

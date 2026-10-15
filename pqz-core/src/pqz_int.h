@@ -11,6 +11,12 @@
    by its op, and the tag byte of R_TX0's ABDLOP keys (SCAAS-PQZ-ABDLOP-PP-V1 || 0x81); never an op on the wire (the
    transcript hashes op 1) */
 #define PQZ_REL_TX0 0x81
+/* internal relation codes of R_TXM (op 7, P6-ANON), one per (M, auditorOn): 0x70 | A << 3 | log2(M), e.g. M = 8 with
+   the auditor 0x7b; the tag byte of the shape's own ABDLOP keys, never on the wire (the transcript hashes op 7) */
+#define PQZ_REL_TXM(log2m, aud) ((uint8_t)(0x70 | ((aud) << 3) | (log2m)))
+#define PQZ_REL_IS_TXM(code) (((code) & 0xf0) == 0x70)
+#define PQZ_REL_TXM_LEGS(code) (1u << ((code) & 7))
+#define PQZ_REL_TXM_AUD(code) (((code) >> 3) & 1u)
 
 /* statement digest: SHAKE128("SCAAS-PQZ-TRANSCRIPT-V1" || op || be32(len) || stmt) */
 void pqz_stmt_hash (uint8_t h[32], uint8_t op, const uint8_t *stmt, size_t len);

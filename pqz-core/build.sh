@@ -28,6 +28,12 @@ if [ "$SV" = 1 ]; then
   SVDEF="-DPQZ_SV"
   CFLAGS_LIB="$CFLAGS_LIB $SVDEF"
 fi
+# OVERSIZE=1: also the R_TXM shapes that do not fit MAX_INPUT (M = 16, P6-ANON D3 / D20), for measurement only; never
+# in a precompile build (pqz-ffi compiles the core itself, without -DPQZ_TXM_OVERSIZE)
+if [ "${OVERSIZE:-0}" = 1 ]; then
+  SVDEF="$SVDEF -DPQZ_TXM_OVERSIZE"
+  CFLAGS_LIB="$CFLAGS_LIB -DPQZ_TXM_OVERSIZE"
+fi
 
 native() {
   lazer_h
@@ -56,7 +62,7 @@ native() {
   for f in pqz_rel pqz_sv; do
     $CC $CFLAGS_LIB -DPQZ_TEST_HOOKS -c src/$f.c -o $B/native/hooks/$f.o
   done
-  $CC -std=gnu11 -O2 $WARN -Isrc -o $B/native/pqz_sv_diff test/pqz_sv_diff.c $B/native/hooks/pqz_rel.o \
+  $CC -std=gnu11 -O2 $WARN $SVDEF -Isrc -o $B/native/pqz_sv_diff test/pqz_sv_diff.c $B/native/hooks/pqz_rel.o \
     $B/native/hooks/pqz_sv.o $B/native/pqz_lazer.o $B/native/pqz_ntt.o $B/native/pqz_arena.o
 }
 
@@ -76,7 +82,7 @@ wasm() {
   ./check_symbols.sh $objs
   ${CLANG:-clang} $W $CFLAGS_LIB -DPQZ_WASM -c test/pqz_bench.c -o $B/wasm/pqz_bench.o
   ex=""
-  for e in step_init step_prove step_len step_verify step_verify_bad step_hash step_arena_peak step_peak_reset step_set_fast __heap_base; do
+  for e in step_init step_prove step_len step_verify step_verify_bad step_hash step_arena_peak step_peak_reset step_set_fast step_nrel __heap_base; do
     ex="$ex --export=$e"
   done
   ${WASM_LD:-wasm-ld-18} --no-entry $ex -z stack-size=8388608 --stack-first --max-memory=4294967296 \
@@ -97,7 +103,7 @@ native_x86v3() {
   ./check_symbols.sh $objs
   $CC -std=gnu11 -O2 $WARN $SVDEF -Isrc -o $B/native-x86v3/pqz_bench test/pqz_bench.c $B/native-x86v3/libpqz.a
   $CC $CFLAGS_LIB -O3 -march=x86-64-v3 -maes -DPQZ_TEST_HOOKS -c src/pqz_sv.c -o $B/native-x86v3/pqz_sv_hooks.o
-  $CC -std=gnu11 -O2 $WARN -Isrc -o $B/native-x86v3/pqz_sv_diff test/pqz_sv_diff.c $B/native/hooks/pqz_rel.o \
+  $CC -std=gnu11 -O2 $WARN $SVDEF -Isrc -o $B/native-x86v3/pqz_sv_diff test/pqz_sv_diff.c $B/native/hooks/pqz_rel.o \
     $B/native-x86v3/pqz_sv_hooks.o $B/native/pqz_lazer.o $B/native/pqz_ntt.o $B/native/pqz_arena.o
 }
 
