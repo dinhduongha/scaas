@@ -55,7 +55,9 @@ PY
   echo "copy at $COPY: signer $ADDR (throwaway key, $COPY/signer.json), enode $PUB"
   ;;
 up)
-  IMAGE=$1 GENESIS=$2 $DC up -d
+  # signer first, then the follower (configs set Network.FilterPeersByRecentIp false: with the default the signer
+  # dropped a restarted follower's reconnects from the same IP for minutes, seen on the copy 2026-10-15)
+  IMAGE=$1 GENESIS=$2 $DC up -d signer && sleep 20 && IMAGE=$1 GENESIS=$2 $DC up -d
   ;;
 down)
   IMAGE=x GENESIS=x $DC down --timeout 60

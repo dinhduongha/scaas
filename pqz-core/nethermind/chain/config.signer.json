@@ -14,17 +14,42 @@
     "Host": "0.0.0.0",
     "Port": 8545,
     "WebSocketsPort": 8546,
-    "EnabledModules": ["eth", "trace", "net", "web3", "clique", "personal", "parity", "admin"]
+    "EnabledModules": [
+      "eth",
+      "trace",
+      "net",
+      "web3",
+      "clique",
+      "personal",
+      "parity",
+      "admin"
+    ]
   },
   "KeyStore": {
     "KeyStoreDirectory": "/nethermind/keystore",
-    "PasswordFiles": ["/nethermind/password.txt"],
+    "PasswordFiles": [
+      "/nethermind/password.txt"
+    ],
     "EnodeAccount": "@SIGNER@",
-    "UnlockAccounts": ["@SIGNER@"]
+    "UnlockAccounts": [
+      "@SIGNER@"
+    ]
   },
-  "Mining": { "Enabled": true, "MinGasPrice": 0 },
-  "Merge": { "Enabled": false },
-  "TxPool": { "MaxTxSize": 1048576 },
-  "Blocks": { "TargetBlockGasLimit": 80000000 },
-  "Plugins": {}
+  "Mining": {
+    "Enabled": true,
+    "MinGasPrice": 0
+  },
+  "Merge": {
+    "Enabled": false
+  },
+  "TxPool": {
+    "MaxTxSize": 1048576
+  },
+  "Blocks": {
+    "TargetBlockGasLimit": 80000000
+  },
+  "Plugins": {},
+  "Network": {
+    "FilterPeersByRecentIp": false
+  }
 }
