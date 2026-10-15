@@ -3,58 +3,102 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>pqz-core R_TX demo</title>
+<title>pqz-core PQZL / PQZH demo</title>
 <style>
   :root { --bg: #fff; --fg: #1a1a1a; --muted: #666; --line: #ddd; }
   @media (prefers-color-scheme: dark) { :root { --bg: #161616; --fg: #e8e8e8; --muted: #999; --line: #333; } }
-  body { background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, sans-serif; max-width: 44rem; margin: 2rem auto; padding: 0 16px; }
-  table { border-collapse: collapse; width: 100%; margin-top: 1rem; }
+  body { background: var(--bg); color: var(--fg); font: 15px/1.5 system-ui, sans-serif; max-width: 48rem; margin: 2rem auto; padding: 0 16px; }
+  table { border-collapse: collapse; width: 100%; margin-top: 1rem; display: block; overflow-x: auto; }
   td, th { border-bottom: 1px solid var(--line); padding: .35rem .5rem; text-align: left; }
   td:nth-child(n+2) { text-align: right; font-variant-numeric: tabular-nums; }
   p.note { color: var(--muted); font-size: 13px; }
-  button { font: inherit; padding: .4rem 1rem; }
+  button, select { font: inherit; padding: .4rem 1rem; }
 </style>
 </head>
 <body>
-<h1>pqz-core: R_TX in the browser</h1>
-<p>Proves and verifies the bench statement of <code>R_TX</code> (seed = run number) with this machine's wasm32 build of
-pqz-core (<code>build/wasm/pqz.wasm</code>, served locally by <code>artifact/reproduce.sh --serve</code>), then verifies it
-with the generic verifier (<code>pqz_verify</code>) and the specialised one (<code>pqz_verify_fast</code>). The page runs
-on the main thread, so it freezes while it proves.</p>
+<h1>pqz-core in the browser: PQZL and PQZH</h1>
+<p>Both proof systems, built on this machine and served locally by <code>artifact/reproduce.sh --serve</code>. Each
+page action proves the bench statement (seed = run number) and verifies it. The page runs on the main thread, so it
+freezes while it proves.</p>
+
+<h2>PQZL (LaZer fork, C): <code>R_TX</code></h2>
+<p><code>build/wasm/pqz.wasm</code>; verified with the generic verifier (<code>pqz_verify</code>) and the specialised
+one (<code>pqz_verify_fast</code>).</p>
 <button id="run">Prove + verify</button> <span id="status">loading pqz.wasm…</span>
 <table><thead><tr><th>run</th><th>prove ms</th><th>proof bytes</th><th>verify ms (generic)</th><th>verify ms (SV)</th><th>arena peak MiB</th></tr></thead>
 <tbody id="rows"></tbody></table>
 <p class="note">R_TX = 1, as in <code>test/run_wasm.mjs</code>; the first run also builds R_TX's keys (and, on the first
-SV verify, its tables). Times from <code>performance.now()</code>; compare with <code>wasm-generic.jsonl</code> /
-<code>wasm-fast.jsonl</code> of a reproduce.sh run under node.</p>
+SV verify, its tables). Compare with <code>wasm-generic.jsonl</code> / <code>wasm-fast.jsonl</code> of a reproduce.sh run.</p>
+
+<h2>PQZH (Ligero, Rust): the proven preset</h2>
+<p><code>pqzh_ligero_wasm.wasm</code> (<code>pqzh/ligero/wasm</code>), <code>Params::preset</code> proven with the
+radix-431 domains, as <code>pqzh/ligero/wasm/run_wasm.mjs … 1 1</code>.</p>
+<select id="lform" aria-label="PQZH form">
+  <option value="0">R_REG</option><option value="1" selected>R_TX</option><option value="2">R_BURN</option>
+  <option value="3">R_DS</option><option value="4">R_DR</option><option value="5">R_TX0</option>
+</select>
+<button id="lrun">Prove + verify</button> <span id="lstatus">loading pqzh_ligero_wasm.wasm…</span>
+<table><thead><tr><th>form</th><th>seed</th><th>prove ms</th><th>proof bytes</th><th>verify ms</th><th>proof fnv</th><th>memory MiB</th></tr></thead>
+<tbody id="lrows"></tbody></table>
+<p class="note">The proof fnv of seed 1 equals <code>fnv_last</code> of <code>pqzh-wasm.jsonl</code> and seed <i>s</i>
+the <code>fnv_by_seed</code> entry of <code>pqzh-native.jsonl</code> (byte-identical proofs). Memory: the linear memory
+high-water mark.</p>
 <script type="module">
-const TX = 1, ARENA = 768 * 2 ** 20; // as test/run_wasm.mjs
 const $ = (id) => document.getElementById(id);
-const { instance } = await WebAssembly.instantiateStreaming(fetch('pqz.wasm'), {});
-const x = instance.exports, heap = x.__heap_base.value;
-const grow = Math.ceil((heap + ARENA - x.memory.buffer.byteLength) / 65536);
-if (grow > 0) x.memory.grow(grow);
-let t = performance.now();
-if (x.step_init(heap, ARENA) !== 0) throw new Error('step_init failed');
-$('status').textContent = `ready (init ${(performance.now() - t).toFixed(1)} ms)`;
-let seed = 0;
 const timed = (f) => { const t0 = performance.now(); const r = f(); return [r, performance.now() - t0]; };
-$('run').onclick = () => {
-  $('status').textContent = 'proving…';
-  setTimeout(() => {
-    x.step_peak_reset();
-    const [rc, tp] = timed(() => x.step_prove(TX, seed));
-    if (rc !== 0) { $('status').textContent = `prove failed rc=${rc}`; return; }
-    x.step_set_fast(0); const [okg, tg] = timed(() => x.step_verify(TX));
-    x.step_set_fast(1); const [okf, tf] = timed(() => x.step_verify(TX));
-    x.step_set_fast(0);
-    const row = [seed, tp.toFixed(0), x.step_len(TX), `${tg.toFixed(0)} ${okg === 1 ? '✓' : '✗'}`,
-                 `${tf.toFixed(1)} ${okf === 1 ? '✓' : '✗'}`, (x.step_arena_peak() / 2 ** 20).toFixed(1)];
-    $('rows').insertAdjacentHTML('beforeend', `<tr>${row.map((c) => `<td>${c}</td>`).join('')}</tr>`);
-    $('status').textContent = okg === 1 && okf === 1 ? 'verified by both' : 'VERIFY FAILED';
-    seed++;
-  }, 30);
-};
+const row = (id, cells) => $(id).insertAdjacentHTML('beforeend', `<tr>${cells.map((c) => `<td>${c}</td>`).join('')}</tr>`);
+
+async function pqzl() {
+  const TX = 1, ARENA = 768 * 2 ** 20; // as test/run_wasm.mjs
+  const { instance } = await WebAssembly.instantiateStreaming(fetch('pqz.wasm'), {});
+  const x = instance.exports, heap = x.__heap_base.value;
+  const grow = Math.ceil((heap + ARENA - x.memory.buffer.byteLength) / 65536);
+  if (grow > 0) x.memory.grow(grow);
+  const [rc, ti] = timed(() => x.step_init(heap, ARENA));
+  if (rc !== 0) throw new Error('step_init failed');
+  $('status').textContent = `ready (init ${ti.toFixed(1)} ms)`;
+  let seed = 0;
+  $('run').onclick = () => {
+    $('status').textContent = 'proving…';
+    setTimeout(() => {
+      x.step_peak_reset();
+      const [rc, tp] = timed(() => x.step_prove(TX, seed));
+      if (rc !== 0) { $('status').textContent = `prove failed rc=${rc}`; return; }
+      x.step_set_fast(0); const [okg, tg] = timed(() => x.step_verify(TX));
+      x.step_set_fast(1); const [okf, tf] = timed(() => x.step_verify(TX));
+      x.step_set_fast(0);
+      row('rows', [seed, tp.toFixed(0), x.step_len(TX), `${tg.toFixed(0)} ${okg === 1 ? '✓' : '✗'}`,
+                   `${tf.toFixed(1)} ${okf === 1 ? '✓' : '✗'}`, (x.step_arena_peak() / 2 ** 20).toFixed(1)]);
+      $('status').textContent = okg === 1 && okf === 1 ? 'verified by both' : 'VERIFY FAILED';
+      seed++;
+    }, 30);
+  };
+}
+
+async function pqzh() {
+  const { instance } = await WebAssembly.instantiateStreaming(fetch('pqzh_ligero_wasm.wasm'), {});
+  const x = instance.exports;
+  const [, ti] = timed(() => x.step_init(1, 1)); // proven, radix 431
+  $('lstatus').textContent = `ready (init ${ti.toFixed(1)} ms)`;
+  let seed = 0;
+  $('lrun').onclick = () => {
+    $('lstatus').textContent = 'proving…';
+    setTimeout(() => {
+      const rel = Number($('lform').value);
+      const [len, tp] = timed(() => x.step_prove(rel, seed));
+      if (!len) { $('lstatus').textContent = 'prove failed'; return; }
+      const [ok, tv] = timed(() => x.step_verify(rel));
+      const fnv = (x.step_hash(rel) >>> 0).toString(16).padStart(8, '0');
+      row('lrows', [$('lform').selectedOptions[0].text, seed, tp.toFixed(0), len, `${tv.toFixed(1)} ${ok === 1 ? '✓' : '✗'}`,
+                    fnv, (x.memory.buffer.byteLength / 2 ** 20).toFixed(1)]);
+      $('lstatus').textContent = ok === 1 ? 'verified' : 'VERIFY FAILED';
+      seed = (seed + 1) % 256; // the seed is one byte ([seed; 32])
+    }, 30);
+  };
+}
+
+pqzl().catch((e) => { $('status').textContent = `PQZL: ${e.message}`; });
+pqzh().catch((e) => { $('lstatus').textContent = `PQZH: ${e.message}`; });
 </script>
 </body>
 </html>

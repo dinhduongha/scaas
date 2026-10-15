@@ -1,0 +1,23 @@
+== 00:51:09 build (native, wasm, wasm without SV, native-x86v3)
+== 00:51:58 KAT
+== 00:51:58 check_tbox_fixes.sh
+== 00:53:13 sv/check_sv_fixes.sh
+== 00:53:55 differential test pqz_verify vs pqz_verify_fast, portable: pqz_sv_diff 4 4 2 1 10 12 12 12
+== 01:06:55 five relations, generic verifier: native pqz_bench 3 3, wasm run_wasm.mjs 3 1
+== 01:07:50 five relations, specialised verifier: pqz_bench 2 50 (portable, x86-64-v3), wasm 2 25, wasm both
+== 01:09:14 wasm prove memory, one relation per process (the prover build without SV)
+== 01:09:29 PQZH: cargo test (default features: 6 x 960 mutations, negative witnesses, cross-form, EVM fixtures)
+== 01:11:22 PQZH: the production build (--no-default-features): tests, examples / bins, clippy -D clippy::float_arithmetic
+== 01:11:28 PQZH: C <-> Rust cross-check (pqzh/xcheck/ligero.sh: statement + witness bytes, then kat_stmt.py)
+== 01:11:43 pqz-stmt: stmt/xcheck.sh (unit tests, C and pqz_kat.py cross-check, wasm32 build)
+== 01:12:01 PQZH: native ligero_bench, six forms: 2 proofs, 20 verifies, 12 x 2 mutations each
+== 01:12:11 PQZH: wasm32 (node), six forms: 2 proofs, 20 verifies, 12 x 1 mutations each
+== 01:12:37 pqz-ffi: cargo test --features prove,test-hooks (native digest lines, self-test, rejections, differential, faults)
+== 01:14:21 pqz-ffi: unit tests without prove, verify-only cdylib, symbol scan, C smoke test, clippy -D clippy::float_arithmetic
+== 01:14:45 pqz-ffi: wasm32 builds and digest lines (must equal native)
+== 01:15:22 pqz-ffi: ffi_bench 20
+== 01:15:43 vectors: pqz-vectors --check (a second generation, byte for byte, every proof and negative input through pqz_precompile)
+== 01:16:53 vectors: pqz_kat.py --check (independent Python)
+== 01:17:21 vectors: wasm32 replay (every proof proved again by pqz-ffi in wasm32: byte-equal, valid)
+== 01:18:01 tables and comparison
+== 01:18:01 done: /out

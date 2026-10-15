@@ -574,10 +574,13 @@ rest bookkeeping; the zero entries of the selection matrices' Gram matrices were
    does not clear them. `do_prove` zeroes its seeds, `pqz_keys.c` its SHAKE state, bit buffer and `w`. Zeroing on
    release (or per call) is open, for P6f / P6h (cost: one memset of the used arena per prove).
 
-9. **`check_symbols.sh` passes when its files are missing** (found in P6e Task 7, run `ffi1`): it `cd`s to its own
-   directory, so relative paths from elsewhere name nothing, `llvm-nm` errors inside the command substitution and the
-   script still prints "symbols ok". `build.sh` and `pqz-ffi` pass existing paths (absolute in `ffi/`), so no scan so far
-   was empty; a fix is `set -o pipefail`-style checking of `nm`'s status. Open.
+9. ~~**`check_symbols.sh` passes when its files are missing**~~ (found in P6e Task 7, run `ffi1`; seen again in the
+   reproducibility package, `artifact/runs/art2-docker-quick-1-probe-*`): it `cd`'d to its own directory, so relative
+   paths from elsewhere named nothing, `llvm-nm` errors were lost in the pipe and the script still printed "symbols ok".
+   **Closed 2026-10-15 (branch `pqz-artifact2`):** paths are now relative to the caller (it `cd`s only for its default
+   object list), every given file must exist, and `nm`'s status is checked; `test/check_symbols_neg.sh` (a missing file
+   and a non-object exit non-zero, the library objects named from another directory pass) and `./build.sh native` +
+   `glic/absence.sh` on the real files: `artifact/runs/art2-check-symbols.txt`, `glic/runs/absence-2026-10-15.txt`.
 
 Scratch (not needed to resume, re-creatable): LaZer and lattice-estimator clones, the upstream tbox harness and
 debug builds under the session scratchpad `p6d/`.

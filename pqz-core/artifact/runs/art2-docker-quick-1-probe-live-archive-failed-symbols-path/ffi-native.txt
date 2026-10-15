@@ -1,0 +1,28 @@
+   Compiling pqz-ffi v0.1.0 (/src/pqz-core/ffi)
+    Finished `release` profile [optimized + debuginfo] target(s) in 10.87s
+     Running unittests src/lib.rs (target/release/deps/pqz_ffi-ff1d2d2bef60386f)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Compiling pqz-ffi v0.1.0 (/src/pqz-core/ffi)
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.82s
+test hooks in the production cdylib (must be 0): 0
+/usr/bin/llvm-nm-18: error: target/release/build/pqz-ffi-66cee2e81f56df3a/out/libpqz.a: No such file or directory
+/usr/bin/llvm-nm-18: error: target/release/build/pqz-ffi-66cee2e81f56df3a/out/libpqz.a: No such file or directory
+symbols ok: only memcpy memset __stack_chk_fail __stack_pointer outside the library objects
+c_abi: selftest ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205
+c_abi: ok (0 failures)
+    Checking typenum v1.20.1
+    Checking keccak v0.1.6
+    Checking pqz-stmt v0.1.0 (/src/pqz-core/stmt)
+   Compiling pqz-ffi v0.1.0 (/src/pqz-core/ffi)
+    Checking generic-array v0.14.7
+    Checking crypto-common v0.1.7
+    Checking block-buffer v0.10.4
+    Checking digest v0.10.7
+    Checking sha3 v0.10.8
+    Checking pqzh-ligero v0.1.0 (/src/pqz-core/pqzh/ligero)
+    Finished `release` profile [optimized + debuginfo] target(s) in 10.47s
+rc=0

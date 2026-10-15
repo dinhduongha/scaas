@@ -1,7 +1,14 @@
-build
-artifact/out
-xcheck/static/raw-*
-xcheck/static/results-*.json
+# Build context = the repository root; only what the package reads (allowlist): pqz-core/, the PQZ vectors and
+# pqz_kat.py (pqzh/xcheck/kat_stmt.py, stmt/xcheck.py), the PQZH EVM fixtures (the Ligero crate's evm_fixtures test)
+*
+!pqz-core
+!smartcontracts/vectors/pqz
+!smartcontracts/evm/test/vectors/pqzh-ligero
+pqz-core/build
+pqz-core/artifact/out
+pqz-core/xcheck/static/raw-*
+pqz-core/xcheck/static/results-*.json
+**/target
 **/*.o
 **/*.a
 **/*.so

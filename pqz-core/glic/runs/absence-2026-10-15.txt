@@ -1,0 +1,169 @@
+# pqz-core G-LIC absence check, 2026-10-15T03:58Z, commit cb04808 (dirty)
+$ clang --version
+Ubuntu clang version 18.1.3 (1ubuntu1)
+Target: x86_64-pc-linux-gnu
+Thread model: posix
+InstalledDir: /usr/bin
+[rc=0]
+
+$ wasm-ld-18 --version
+Ubuntu LLD 18.1.3
+[rc=0]
+
+$ llvm-nm-18 --version
+llvm-nm, compatible with GNU nm
+Ubuntu LLVM version 18.1.3
+  Optimized build.
+[rc=0]
+
+$ env B=build/glic ./build.sh all
+symbols ok: only memcpy memset __stack_chk_fail __stack_pointer outside the library objects
+symbols ok: only memcpy memset __stack_chk_fail __stack_pointer outside the library objects
+[rc=0]
+
+$ env SV=0 B=build/glic/wasm-nosv ./build.sh wasm
+symbols ok: only memcpy memset __stack_chk_fail __stack_pointer outside the library objects
+[rc=0]
+
+$ sha256sum build/glic/native/libpqz.a build/glic/native/libpqz.so build/glic/native/pqz_bench build/glic/native/kat_dump build/glic/native/pqz_sv_diff build/glic/wasm/pqz.wasm build/glic/wasm-nosv/wasm/pqz.wasm
+066123bd0028fc37c8b8bd83f22599d8fb4eef7ab2c5ff08c323f03aaea52182  build/glic/native/libpqz.a
+14f8c2e14a057e2eed30e294cac85a40eb525fe2ae145c54cfaba3df9809309b  build/glic/native/libpqz.so
+88ac81030a197912742faf90a266736fdeffcf8a9ef96921f871ff30b70ff4fa  build/glic/native/pqz_bench
+5d12a609ddbfc22e7bdb5346fc430fffdb0ddcd41ded161179d719209e7e8bb5  build/glic/native/kat_dump
+aa4bdc4cf06dd1f7f9fb728777c328eded0a1b2b41c8575b5ffd40ac97ef47f8  build/glic/native/pqz_sv_diff
+6b43e54aebe737866f47aef8fb2a0d25644205ae3e449c9fe45fa3b92b0ffbc6  build/glic/wasm/pqz.wasm
+ebd11364be146f37fcde094153ba92bb7b77b078cc33f32aa8929b3f3cbc46c0  build/glic/wasm-nosv/wasm/pqz.wasm
+[rc=0]
+
+## 1. symbol names (defined and undefined, every object / binary)
+$ llvm-nm-18 -A build/glic/native/libpqz.a | grep -ciE 'gmp|mpfr|hexl'
+build/glic/native/libpqz.a: 0 names matching /gmp|mpfr|hexl/i
+
+$ llvm-nm-18 -A build/glic/native/libpqz.so | grep -ciE 'gmp|mpfr|hexl'
+build/glic/native/libpqz.so: 0 names matching /gmp|mpfr|hexl/i
+
+$ llvm-nm-18 -A build/glic/native/pqz_bench | grep -ciE 'gmp|mpfr|hexl'
+build/glic/native/pqz_bench: 0 names matching /gmp|mpfr|hexl/i
+
+$ llvm-nm-18 -A build/glic/native/kat_dump | grep -ciE 'gmp|mpfr|hexl'
+build/glic/native/kat_dump: 0 names matching /gmp|mpfr|hexl/i
+
+$ llvm-nm-18 -A build/glic/native/pqz_sv_diff | grep -ciE 'gmp|mpfr|hexl'
+build/glic/native/pqz_sv_diff: 0 names matching /gmp|mpfr|hexl/i
+
+$ llvm-nm-18 -A build/glic/wasm/pqz.wasm | grep -ciE 'gmp|mpfr|hexl'
+build/glic/wasm/pqz.wasm: 0 names matching /gmp|mpfr|hexl/i
+
+$ llvm-nm-18 -A build/glic/wasm-nosv/wasm/pqz.wasm | grep -ciE 'gmp|mpfr|hexl'
+build/glic/wasm-nosv/wasm/pqz.wasm: 0 names matching /gmp|mpfr|hexl/i
+
+$ llvm-nm-18 -D --undefined-only build/glic/native/libpqz.so   (dynamic imports of the shared library)
+                 w _ITM_deregisterTMCloneTable
+                 w _ITM_registerTMCloneTable
+                 w __cxa_finalize@GLIBC_2.2.5
+                 w __gmon_start__
+                 U __stack_chk_fail@GLIBC_2.4
+                 U memcpy@GLIBC_2.14
+                 U memset@GLIBC_2.2.5
+
+## 2. linked libraries (ELF DT_NEEDED)
+$ readelf -d build/glic/native/libpqz.so | grep NEEDED
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+
+$ readelf -d build/glic/native/pqz_bench | grep NEEDED
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+
+$ readelf -d build/glic/native/kat_dump | grep NEEDED
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+
+$ readelf -d build/glic/native/pqz_sv_diff | grep NEEDED
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+
+$ ar t build/glic/native/libpqz.a   (archive members)
+pqz_lazer.o
+pqz_ntt.o
+pqz_arena.o
+pqz_rel.o
+pqz_keys.o
+pqz_sv.o
+
+## 3. wasm imports and exports (no import = nothing linked in at run time)
+$ llvm-objdump-18 --section-headers build/glic/wasm/pqz.wasm
+
+build/glic/wasm/pqz.wasm:	file format wasm
+
+Sections:
+Idx Name            Size     VMA      Type
+  0 TYPE            00000215 00000000 
+  1 FUNCTION        00000112 00000000 
+  2 TABLE           00000005 00000000 
+  3 MEMORY          00000007 00000000 
+  4 GLOBAL          00000011 00000000 
+  5 EXPORT          000000a5 00000000 
+  6 ELEM            0000000a 00000000 
+  7 CODE            000608fc 00000000 TEXT
+  8 DATA            0000293b 00000000 DATA
+  9 name            000010bc 00000000 
+ 10 producers       0000002e 00000000 
+ 11 target_features 0000001c 00000000 
+[rc=0]
+
+$ llvm-nm-18 --undefined-only build/glic/wasm/pqz.wasm
+
+$ llvm-objdump-18 --section-headers build/glic/wasm-nosv/wasm/pqz.wasm
+
+build/glic/wasm-nosv/wasm/pqz.wasm:	file format wasm
+
+Sections:
+Idx Name            Size     VMA      Type
+  0 TYPE            000001f0 00000000 
+  1 FUNCTION        000000eb 00000000 
+  2 TABLE           00000005 00000000 
+  3 MEMORY          00000007 00000000 
+  4 GLOBAL          00000011 00000000 
+  5 EXPORT          000000a5 00000000 
+  6 ELEM            0000000a 00000000 
+  7 CODE            0005349f 00000000 TEXT
+  8 DATA            0000293b 00000000 DATA
+  9 name            00000ef2 00000000 
+ 10 producers       0000002e 00000000 
+ 11 target_features 0000001c 00000000 
+[rc=0]
+
+$ llvm-nm-18 --undefined-only build/glic/wasm-nosv/wasm/pqz.wasm
+
+## 4. embedded strings (library version banners, e.g. 'GNU MP', 'MPFR', 'HEXL')
+$ strings -a build/glic/native/libpqz.a | grep -iE 'gmp|mpfr|hexl'
+build/glic/native/libpqz.a: 0 names matching /gmp|mpfr|hexl/i
+
+$ strings -a build/glic/native/libpqz.so | grep -iE 'gmp|mpfr|hexl'
+build/glic/native/libpqz.so: 0 names matching /gmp|mpfr|hexl/i
+
+$ strings -a build/glic/native/pqz_bench | grep -iE 'gmp|mpfr|hexl'
+build/glic/native/pqz_bench: 0 names matching /gmp|mpfr|hexl/i
+
+$ strings -a build/glic/native/kat_dump | grep -iE 'gmp|mpfr|hexl'
+build/glic/native/kat_dump: 0 names matching /gmp|mpfr|hexl/i
+
+$ strings -a build/glic/native/pqz_sv_diff | grep -iE 'gmp|mpfr|hexl'
+build/glic/native/pqz_sv_diff: 0 names matching /gmp|mpfr|hexl/i
+
+$ strings -a build/glic/wasm/pqz.wasm | grep -iE 'gmp|mpfr|hexl'
+build/glic/wasm/pqz.wasm: 0 names matching /gmp|mpfr|hexl/i
+
+$ strings -a build/glic/wasm-nosv/wasm/pqz.wasm | grep -iE 'gmp|mpfr|hexl'
+build/glic/wasm-nosv/wasm/pqz.wasm: 0 names matching /gmp|mpfr|hexl/i
+
+## 5. positive control: the same scans find GMP / MPFR where they are (system shared libraries, if installed)
+$ llvm-nm-18 -D --defined-only /usr/lib/x86_64-linux-gnu/libgmp.so.10 | grep -ciE 'gmp|mpfr|hexl'
+/usr/lib/x86_64-linux-gnu/libgmp.so.10: 620 names matching /gmp|mpfr|hexl/i
+$ strings -a /usr/lib/x86_64-linux-gnu/libgmp.so.10 | grep -ciE 'gmp|mpfr|hexl'
+/usr/lib/x86_64-linux-gnu/libgmp.so.10: 623 names matching /gmp|mpfr|hexl/i
+
+$ llvm-nm-18 -D --defined-only /usr/lib/x86_64-linux-gnu/libmpfr.so.6 | grep -ciE 'gmp|mpfr|hexl'
+/usr/lib/x86_64-linux-gnu/libmpfr.so.6: 560 names matching /gmp|mpfr|hexl/i
+$ strings -a /usr/lib/x86_64-linux-gnu/libmpfr.so.6 | grep -ciE 'gmp|mpfr|hexl'
+/usr/lib/x86_64-linux-gnu/libmpfr.so.6: 737 names matching /gmp|mpfr|hexl/i
+
+# end
+absence rc=0

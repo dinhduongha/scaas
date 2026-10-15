@@ -1,0 +1,6 @@
+$ ./build.sh native
+symbols ok: only memcpy memset __stack_chk_fail __stack_pointer outside the library objects
+rc=0
+$ test/check_symbols_neg.sh
+check_symbols_neg: ok
+rc=0

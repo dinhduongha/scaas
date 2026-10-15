@@ -1,0 +1,10 @@
+$ docker run -d --rm --memory=4g --memory-swap=4g --init -p 127.0.0.1:18000:8000 pqz-core-artifact --serve  -> 81cd18447473
+== 01:37:51 serving /src/pqz-core/artifact/out/serve-20261015T013737Z/web on http://0.0.0.0:8000/ (Ctrl-C to stop)
+$ curl -sI http://127.0.0.1:18000/
+$ curl -sI http://127.0.0.1:18000/pqz.wasm
+$ curl -sI http://127.0.0.1:18000/pqzh_ligero_wasm.wasm
+pqz.wasm magic: 
+pqzh_ligero_wasm.wasm magic: 
+page references pqzh_ligero_wasm.wasm: 0 lines
+docker stop: 267 ms
+rc=0

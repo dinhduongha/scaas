@@ -1,0 +1,36 @@
+   Compiling pqz-ffi v0.1.0 (/src/pqz-core/ffi)
+    Finished `release` profile [optimized + debuginfo] target(s) in 12.04s
+     Running unittests src/lib.rs (target/release/deps/pqz_ffi-ff1d2d2bef60386f)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Compiling pqz-ffi v0.1.0 (/src/pqz-core/ffi)
+    Finished `release` profile [optimized + debuginfo] target(s) in 1.11s
+test hooks in the production cdylib (must be 0): 0
+symbols ok: only memcpy memset __stack_chk_fail __stack_pointer outside the library objects
+c_abi: selftest ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205
+c_abi: ok (0 failures)
+    Checking typenum v1.20.1
+    Checking keccak v0.1.6
+   Compiling pqz-ffi v0.1.0 (/src/pqz-core/ffi)
+    Checking pqz-stmt v0.1.0 (/src/pqz-core/stmt)
+    Checking generic-array v0.14.7
+    Checking crypto-common v0.1.7
+    Checking block-buffer v0.10.4
+    Checking digest v0.10.7
+    Checking sha3 v0.10.8
+    Checking pqzh-ligero v0.1.0 (/src/pqz-core/pqzh/ligero)
+warning: very complex type used. Consider factoring parts into `type` definitions
+   --> src/pqzl.rs:358:6
+    |
+358 | ) -> Option<(Box<[u8; PK_BYTES]>, Vec<[u8; 128]>)> {
+    |      ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.97.0/index.html#type_complexity
+    = note: `#[warn(clippy::type_complexity)]` on by default
+
+warning: `pqz-ffi` (lib) generated 1 warning
+    Finished `release` profile [optimized + debuginfo] target(s) in 10.43s
+rc=0
