@@ -1,3 +1,0 @@
-# P6f harness (1h), 2026-10-15T05:16:32Z, image nethermind/nethermind:1.39.0@sha256:8af90a30989c16cb15e087bd250c623c98585e490a25950a75642460d497eae6, commit dc90654
-runtime .NET 10.0.9, Ubuntu 26.04 LTS, MLDsa.IsSupported=True
-harness: ffi /home/ha/work/ainative/scaas/.claude/worktrees/p6f/pqz-core/ffi/target/release/libpqz_ffi.so sha256 2867c29b6f82ff8259ccd6b0d5539e8c7775a821e6c1170d57ec4c2f78cf22aa; corpus 414 PQZ inputs (24 valid), 38 ML-DSA inputs (7 valid); 8 threads (1 MiB stacks) + 1 GC-pressure thread; 60 min; seed 7622
