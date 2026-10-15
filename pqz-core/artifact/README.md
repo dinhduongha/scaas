@@ -10,7 +10,60 @@ machine, and the package compares your results with `expected-results.json`.
 
 ## Status / resume (2026-10-14, branch `pqz-artifact2`: both systems; Docker quick PASS; freeze not run)
 
-ART2_STATUS_PLACEHOLDER
+- **Done (source, commits on `pqz-artifact2`):** `Dockerfile` (build context = the repository root through the
+  allowlist `Dockerfile.dockerignore`; Rust 1.97.1 by `rustup-init` sha256, `cargo fetch --locked` into the image,
+  apt retries, `CARGO_BUILD_JOBS=2` / `RUST_TEST_THREADS=2`), `reproduce.sh` (PQZH, `pqz-stmt`, pqz-ffi and vector
+  stages in quick and `--full`; `--serve` builds both wasm modules), `results.py` (PQZH, pqz-ffi and vector checks,
+  three tables; `freeze` takes the Ligero and pqz-ffi run prefixes), `expected-results.json` (PROVISIONAL, below),
+  `web/index.html` (PQZH prove / verify of any form next to PQZL `R_TX`), this README.
+- **Provisional expected results:** `results.py freeze` from `../rel3/runs/tx0c` + `../sv/runs/tx0c` (PQZL, unchanged:
+  its five relations byte-identical to the previous file), `../pqzh/ligero/runs/l15-tx0-proven` (PQZH, `d58e20a`,
+  1,000 verifies native and wasm32) and `../ffi/runs/ffi1f2` (pqz-ffi): `runs/art2-provisional-freeze.md`.
+- **Docker tests (2026-10-14/15, AMD Ryzen 5 7235HS, no avx512ifma; logs in `runs/art2-*`):**
+  - Image: `runs/art2-docker-build-6.txt`, pinned snapshot `20261013T000000Z` (its apt layer is the one built in
+    `runs/art2-docker-build-4.txt`: 42 min, because snapshot.ubuntu.com kept answering 500 / 502 / 503; builds 1 and
+    2, `runs/art2-docker-build-{1,2}-failed-snapshot-502.txt`, failed on that before `Acquire::Retries` was added).
+    Same pinned toolchain as before plus rustc / cargo 1.97.1; image 1.92 GB (was 1.08 GB; the Rust layer is
+    762 MB). Build 3, `runs/art2-docker-build-3-probe-live-archive.txt`, was a probe only: the live archive with
+    the same pinned versions (`runs/art2-live-archive-versions.txt`), not cited.
+  - Quick mode `runs/art2-docker-quick/` (`summary.txt`, `results.md`), `docker run --network none --memory=4g
+    --memory-swap=4g -u`: **RESULT PASS, 148 ok / 0 FAIL / 0 warn**, 27 min. PQZL as before (every `proofs_fnv`,
+    KAT 19/19, both fix checks, differential 2,710 cases 0 mismatches). PQZH: 13 + 17 tests (6 × 960 mutations, 0
+    accepted / 0 panics), `--no-default-features` tests and clippy float lint, xcheck 12 / 12 equal + `kat_stmt: ok`,
+    `pqz-stmt` xcheck, every proof hash and length of seeds 0, 1 native and seed 1 wasm32 equal to `l15-tx0`, native
+    = wasm32, every `max_len_exact` equal, wasm32 ≤ 48.1 MiB. pqz-ffi: self-test `ed910a2c…`, 443 rejection cases,
+    differential 0 disagreements, symbols ok, C smoke test ok, 17 digest lines native = wasm32 = `ffi1f2`. Vectors:
+    `pqz-vectors --check: 15 files, 11371429 B: ok`, `pqz_kat: ok`, wasm32 replay 34 / 34 byte-equal and valid.
+  - A first quick run on the probe image, `runs/art2-docker-quick-1-probe-live-archive-failed-symbols-path/`, passed
+    at the time but showed a false pass: `../check_symbols.sh` got a relative archive path, `llvm-nm` said "No such
+    file", and the script still printed `symbols ok` (its `nm` errors are lost in a pipe). `reproduce.sh` now passes
+    an absolute path, and `results.py` fails `ffi-native.txt` on "No such file" (re-checked: that run now FAILs).
+  - `--serve` `runs/art2-docker-serve.txt`: `/` 200 `text/html` (the PQZL / PQZH page), `pqz.wasm` 200
+    `application/wasm` (411,510 B) and `pqzh_ligero_wasm.wasm` 200 `application/wasm` (276,022 B), both with the wasm
+    magic; `docker stop` 0.23 s with `--init`. The page's JavaScript was not exercised in a browser (only the HTTP
+    side). Two earlier attempts (`runs/art2-docker-serve-{1,2}-*.txt`) curled before the server had bound (docker's
+    port proxy resets the connection), which `curl --retry-all-errors` fixed.
+  - `docker image rm pqz-core-artifact` done; no image kept or pushed.
+- **Not tested:** `--full` in Docker (as before: the freeze runs on the host toolchain), `--upstream` after this
+  change (the Dockerfile kept every LaZer / GMP / HEXL pin; only `cmake --build -j2` changed).
+
+**Pending for the freeze (after P6e gates A / B):**
+
+1. One `--full` run, the frozen numbers from it, on the host toolchain under the machine lock (both systems,
+   pqz-ffi, the vectors incl. `tamper.py`):
+
+   ```sh
+   OUT=pqz-core/artifact/runs/freeze-<date> scripts/capped pqz-core/artifact/reproduce.sh --full
+   cd pqz-core && python3 -I artifact/results.py freeze "frozen <date>" artifact/runs/freeze-<date> \
+     > artifact/expected-results.json      # prints the three tables (Markdown) on stderr
+   ```
+2. Write the frozen tables and the reference machine into `../STATUS.md` and `../README.md`; remove the
+   PROVISIONAL notes here.
+3. PQZL `R_TX0` is still outside the package's PQZL runs (`pqz_bench` mask 31, five relations; PQZH covers six forms
+   and the vectors cover `TRANSFER0` for both ids). Adding it needs the mask and `results.py`'s `RELS` changed
+   together, before the freeze.
+
+Earlier freeze notes (PQZL only, kept for the record) are in the section below.
 
 ### Earlier status (PQZL only, 2026-10-14, before the scope change)
 
@@ -206,9 +259,12 @@ PQZL checks:
 `reproduce.sh` exits 0 only when no check fails (`RESULT: PASS`).
 
 **Hardware and time.** The package targets x86-64. Without AVX2 + AES-NI the x86-64-v3 runs are skipped. Peak
-memory is about 0.8 GB, because the bench reserves a 768 MiB arena. Wall time on the reference machine (Ryzen 5
-7235HS): image build and quick run as in `runs/`; `--full` takes about the time of `rel3/relfix.sh` plus
-`sv/rel3.sh` (tens of minutes). `--upstream` builds HEXL and LaZer twice, which takes several minutes.
+memory is about 0.8 GB, because the PQZL bench reserves a 768 MiB arena (pqz-ffi's wasm32 digest run about 0.6 GB);
+the documented `docker run --memory=4g` leaves headroom. Wall time on the reference machine (Ryzen 5 7235HS): image
+build a few minutes plus the apt snapshot download (which took 42 min while snapshot.ubuntu.com was failing); quick
+27 min (PQZL 18, PQZH 4, pqz-ffi 4, vectors 2); `--full` takes about the time of `rel3/relfix.sh` plus `sv/rel3.sh`
+(tens of minutes) plus PQZH's 1,000-verify benches and `tamper.py`. `--upstream` builds HEXL and LaZer twice, which
+takes several minutes.
 
 ## `--upstream`: upstream LaZer and AVX-512
 

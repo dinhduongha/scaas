@@ -1,0 +1,21 @@
+$ docker run -d --rm --memory=4g --memory-swap=4g --init -p 127.0.0.1:18000:8000 pqz-core-artifact --serve  -> e9ac563f36e1
+== 03:10:10 serving /src/pqz-core/artifact/out/serve-20261015T030957Z/web on http://0.0.0.0:8000/ (Ctrl-C to stop)
+curl: (56) Recv failure: Connection reset by peer
+server up
+$ curl -sSI http://127.0.0.1:18000/
+HTTP/1.0 200 OK
+Content-type: text/html
+Content-Length: 5883
+$ curl -sSI http://127.0.0.1:18000/pqz.wasm
+HTTP/1.0 200 OK
+Content-type: application/wasm
+Content-Length: 411510
+$ curl -sSI http://127.0.0.1:18000/pqzh_ligero_wasm.wasm
+HTTP/1.0 200 OK
+Content-type: application/wasm
+Content-Length: 276022
+pqz.wasm magic:  00 61 73 6d
+pqzh_ligero_wasm.wasm magic:  00 61 73 6d
+page references pqzh_ligero_wasm.wasm: 3 lines; <title>: <title>pqz-core PQZL / PQZH demo
+docker stop: 231 ms
+rc=0
