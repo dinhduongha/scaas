@@ -138,13 +138,13 @@ receive Enc(0); PQZL M ≤ 8, PQZH M ≤ 4; joins the frozen set before gates A 
 **Reference machine:** AMD Ryzen 5 7235HS (Zen 3+, AVX2, AES-NI, no AVX-512), 8 threads, 23 GB, Linux 7.0. Single
 thread, every run under `scripts/capped`, other services running (± 20 % noise). Native: clang 18 `-O2` portable unless
 marked x86-64-v3; wasm32: node v26.8.1. **Provisional:** the freeze after gates A / B (with op 7) replaces these
-numbers; `artifact/expected-results.json` is regenerated from the same runs. Times in ms unless noted.
+numbers; `artifact/expected-results.json` is regenerated from the same runs. Units are given in every column header (bytes, ms, MB; p50 = median, p99 = 99th percentile).
 
 ### PQZL (runs `tx0c`, 2026-10-14)
 
 "SV" = the specialised verifier `pqz_verify_fast`; "generic" = `pqz_verify`.
 
-| Relation | Proof B (max) | Prove native / wasm | SV verify p99: portable / x86-64-v3 / wasm |
+| Relation | Proof size, max (bytes) | Prove, native / wasm (ms) | SV verify p99, portable / x86-64-v3 / wasm (ms) |
 |---|---|---|---|
 | `R_REG` | 28,113 | 295 / 484 | 4.48 / 3.10 / 6.91 |
 | `R_TX` | 42,785 | 965 / 1,304 | 8.73 / 5.40 / 14.76 |
@@ -160,14 +160,14 @@ Sources: `rel3/runs/tx0c-native.jsonl` (10 proves, 30 honest verifies per relati
 (5 / 10), `rel3/runs/tx0c-alone.jsonl` (one relation per process, arena peak), `sv/runs/tx0c-native-fast.jsonl`,
 `sv/runs/tx0c-x86v3-fast.jsonl` (200 honest verifies), `sv/runs/tx0c-wasm-fast.jsonl` (100).
 
-| Relation | Proof B (max, 10 seeds) | Prove p50 native / wasm | Generic verify p50 / p99 native; p50 wasm | SV p50 / p99 portable | SV p50 / p99 x86-64-v3 | SV p50 / p99 wasm | Arena peak, one op, native / wasm |
+| Relation | Proof size, max of 10 seeds (bytes) | Prove p50, native / wasm (ms) | Generic verify p50 / p99 native; p50 wasm (ms) | SV p50 / p99, portable (ms) | SV p50 / p99, x86-64-v3 (ms) | SV p50 / p99, wasm (ms) | Arena peak, one op, native / wasm (MB) |
 |---|---|---|---|---|---|---|---|
-| `R_REG` | 28,113 | 295 / 484 | 161 / 169; 223 | 3.85 / 4.48 | 2.37 / 3.10 | 6.61 / 6.91 | 95.5 / 73.7 MB |
-| `R_TX` | 42,785 | 965 / 1,304 | 648 / 760; 762 | 7.98 / 8.73 | 4.76 / 5.40 | 13.36 / 14.76 | 304.2 / 231.9 MB |
-| `R_TX0` | 42,441 | 827 / 1,398 | 577 / 627; 760 | 8.03 / 8.49 | 4.68 / 5.53 | 13.36 / 14.73 | 298.0 / 227.3 MB |
-| `R_BURN` | 41,938 | 874 / 1,158 | 556 / 584; 693 | 7.75 / 8.35 | 4.63 / 4.74 | 12.88 / 14.21 | 288.9 / 220.4 MB |
-| `R_DS` | 28,995 | 331 / 646 | 200 / 214; 270 | 4.42 / 4.94 | 2.86 / 3.91 | 7.27 / 8.70 | 99.8 / 76.9 MB |
-| `R_DR` | 28,996 | 395 / 504 | 206 / 218; 254 | 4.50 / 4.89 | 2.69 / 2.82 | 7.52 / 7.92 | 107.7 / 83.0 MB |
+| `R_REG` | 28,113 | 295 / 484 | 161 / 169; 223 | 3.85 / 4.48 | 2.37 / 3.10 | 6.61 / 6.91 | 95.5 / 73.7 |
+| `R_TX` | 42,785 | 965 / 1,304 | 648 / 760; 762 | 7.98 / 8.73 | 4.76 / 5.40 | 13.36 / 14.76 | 304.2 / 231.9 |
+| `R_TX0` | 42,441 | 827 / 1,398 | 577 / 627; 760 | 8.03 / 8.49 | 4.68 / 5.53 | 13.36 / 14.73 | 298.0 / 227.3 |
+| `R_BURN` | 41,938 | 874 / 1,158 | 556 / 584; 693 | 7.75 / 8.35 | 4.63 / 4.74 | 12.88 / 14.21 | 288.9 / 220.4 |
+| `R_DS` | 28,995 | 331 / 646 | 200 / 214; 270 | 4.42 / 4.94 | 2.86 / 3.91 | 7.27 / 8.70 | 99.8 / 76.9 |
+| `R_DR` | 28,996 | 395 / 504 | 206 / 218; 254 | 4.50 / 4.89 | 2.69 / 2.82 | 7.52 / 7.92 | 107.7 / 83.0 |
 
 - Adversarial SV p99 (246 native / 600 wasm mutated inputs per relation): ≤ 8.9 ms portable, ≤ 5.7 ms x86-64-v3,
   ≤ 14.4 ms wasm.
@@ -180,7 +180,7 @@ Sources: `rel3/runs/tx0c-native.jsonl` (10 proves, 30 honest verifies per relati
 
 ### PQZH Ligero, proven preset (runs `l15-tx0`, 2026-10-14, gate-B method: 1,000 verifies)
 
-| Relation | Proof B (5 seeds) | Exact max B | Prove native / wasm32 | Verify p99 native / wasm32 |
+| Relation | Proof size, 5 seeds (bytes) | Exact max (bytes) | Prove, native / wasm32 (ms) | Verify p99, native / wasm32 (ms) |
 |---|---|---|---|---|
 | `R_REG` | 186,232–187,674 | 190,458 | 366 / 769 | 7.83 / 14.89 |
 | `R_TX` | 230,584–232,302 | 235,470 | 652 / 1,309 | 10.49 / 19.44 |
@@ -198,14 +198,14 @@ wasm32, **1,000** honest verifies, 12 × 4 mutations, `fails` 0). The gate-B rou
 multiply is `l9` (five relations, `pqzh/ligero/runs/l9-proven-wasm.jsonl`, `R_TX` p99 18.7 ms); the exact-length limits
 are `l11` / `l12` ([pqzh-ligero.md](../docs/research/pqzh-ligero.md), "exact length bounds"). Prove: p50 native / mean wasm32.
 
-| Relation | m | Proof B (5 seeds) | Exact max B | Prove p50 native / mean wasm32 | Peak heap prove / verify native | Verify p50 / p99 native | Verify p50 / p99 wasm32 | Adversarial p99 native / wasm32 |
+| Relation | m (rows) | Proof size, 5 seeds (bytes) | Exact max (bytes) | Prove p50 native / mean wasm32 (ms) | Peak heap prove / verify, native (MB) | Verify p50 / p99, native (ms) | Verify p50 / p99, wasm32 (ms) | Adversarial p99, native / wasm32 (ms) |
 |---|---|---|---|---|---|---|---|---|
-| `R_REG` | 63 | 186,232–187,674 | 190,458 | 366 / 769 | 25.9 / 0.8 MB | 7.00 / 7.83 | 11.32 / 14.89 | 0.91 / 1.04 |
-| `R_TX` | 125 | 230,584–232,302 | 235,470 | 652 / 1,309 | 43.2 / 1.2 MB | 9.75 / 10.49 | 17.14 / 19.44 | 1.53 / 1.50 |
-| `R_TX0` | 124 | 229,672–231,800 | 234,744 | 637 / 1,333 | 42.9 / 1.2 MB | 9.38 / 11.36 | 16.60 / 20.88 | 1.25 / 1.56 |
-| `R_BURN` | 124 | 231,256–232,632 | 234,744 | 629 / 1,286 | 42.9 / 1.1 MB | 9.23 / 10.63 | 16.25 / 20.76 | 1.23 / 1.42 |
-| `R_DS` | 63 | 187,354–187,802 | 190,458 | 376 / 748 | 25.9 / 0.8 MB | 7.34 / 8.16 | 12.04 / 13.71 | 0.96 / 1.09 |
-| `R_DR` | 63 | 185,462–187,226 | 190,458 | 358 / 758 | 25.9 / 0.8 MB | 7.18 / 8.33 | 11.53 / 14.31 | 0.98 / 1.14 |
+| `R_REG` | 63 | 186,232–187,674 | 190,458 | 366 / 769 | 25.9 / 0.8 | 7.00 / 7.83 | 11.32 / 14.89 | 0.91 / 1.04 |
+| `R_TX` | 125 | 230,584–232,302 | 235,470 | 652 / 1,309 | 43.2 / 1.2 | 9.75 / 10.49 | 17.14 / 19.44 | 1.53 / 1.50 |
+| `R_TX0` | 124 | 229,672–231,800 | 234,744 | 637 / 1,333 | 42.9 / 1.2 | 9.38 / 11.36 | 16.60 / 20.88 | 1.25 / 1.56 |
+| `R_BURN` | 124 | 231,256–232,632 | 234,744 | 629 / 1,286 | 42.9 / 1.1 | 9.23 / 10.63 | 16.25 / 20.76 | 1.23 / 1.42 |
+| `R_DS` | 63 | 187,354–187,802 | 190,458 | 376 / 748 | 25.9 / 0.8 | 7.34 / 8.16 | 12.04 / 13.71 | 0.96 / 1.09 |
+| `R_DR` | 63 | 185,462–187,226 | 190,458 | 358 / 758 | 25.9 / 0.8 | 7.18 / 8.33 | 11.53 / 14.31 | 0.98 / 1.14 |
 
 - Process max RSS 47 MB native (six forms); wasm32 linear memory 48.1 MiB (all six forms in one module, module
   276,406 B).
@@ -220,7 +220,7 @@ are `l11` / `l12` ([pqzh-ligero.md](../docs/research/pqzh-ligero.md), "exact len
 
 Through the C ABI `pqz_precompile`, as the node calls it (verify-only arena 144 MiB):
 
-| Form (op) | PQZL p50 / p99 | PQZH p50 / p99 |
+| Form (op) | PQZL verify p50 / p99 (ms) | PQZH verify p50 / p99 (ms) |
 |---|---|---|
 | TRANSFER (1) | 8.21 / 10.42 | 9.78 / 10.76 |
 | TRANSFER0 (1) | 7.93 / 9.40 | 9.42 / 10.20 |
@@ -237,7 +237,7 @@ Through the C ABI `pqz_precompile`, as the node calls it (verify-only arena 144 
 Source: `ffi/runs/ffi1f2-bench.jsonl` (native, n = 200 per cell, one proof per form, verify-only arena 144 MiB).
 `precompile` = the Rust entry point, C ABI = `pqz_precompile` as the node calls it; ms.
 
-| Form (op) | PQZL proof B | PQZL `precompile` p50 / p99 | PQZL C ABI p50 / p99 | PQZH proof B | PQZH `precompile` p50 / p99 | PQZH C ABI p50 / p99 |
+| Form (op) | PQZL proof (bytes) | PQZL `precompile` p50 / p99 (ms) | PQZL C ABI p50 / p99 (ms) | PQZH proof (bytes) | PQZH `precompile` p50 / p99 (ms) | PQZH C ABI p50 / p99 (ms) |
 |---|---|---|---|---|---|---|
 | TRANSFER (1) | 42,759 | 7.97 / 9.26 | 8.21 / 10.42 | 231,022 | 9.74 / 11.19 | 9.78 / 10.76 |
 | TRANSFER0 (1) | 42,387 | 7.94 / 9.08 | 7.93 / 9.40 | 231,064 | 9.39 / 10.22 | 9.42 / 10.20 |
