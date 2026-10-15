@@ -8,7 +8,7 @@
 - `p6f` (WIP `0881759`) — Tasks 1–3 done (`0a155da`): plugin, strict `engine.Pqz`, PQZ + ML-DSA-44/65 precompiles; 36/36 tests in the pinned SDK image; ML-DSA via .NET `MLDsa` / OpenSSL 3.5.5 in the node image (host OpenSSL 3.0 lacks it — fine); precompiles may activate from block 0 (fresh 7622 genesis allowed). Written, not run: image build (T5), calibration (T6), copy-chain scripts + probes (T7), Task 10 runbook draft `pqz-core/nethermind/chain/RUNBOOK.md`. Next: 10-min harness smoke (first run's failures were a harness bug, fixed; its log will be overwritten), 1-h harness, image, calibration ×2, T7–T8 on the copy (both activation paths), T9 docs. Deviation (controller accepts): the copy is a replica from the live chainspec parameters with a throwaway signer key, not the live data / key. Task 10 (live 7622) NOT started; live container stopped and untouched.
 **Resume:** start a session, say "resume", re-dispatch the three agents from their WIP commits (each briefs: capped heavy jobs queued once, NO `timeout … scripts/capped`, `-j2` / `CARGO_BUILD_JOBS=2`, containers with `--memory`, commit after each task). Then: review + merge each; S3–S9 (pqz-ffi op 7, vectors, fuzz, artifact, 7622 precompile, spec); layout move + spec rename; gates A / B; freeze; P6f Task 10 live on 7622; P6g → P6j; publication drafts.
 
-**Open owner questions:** allow 2 concurrent capped jobs (faster; needs background services stopped)? P6f gas calibration on two days (plan) or one?
+**Owner answers 2026-10-15:** P6f gas calibration = one run. Two concurrent capped jobs: read as "no" (one at a time stays) — confirm with the owner.
 
 ## Session 2026-10-14/15 (session 4: P6 mandate, PQZH = Ligero, P6e nearly done, P6-ANON R_TXM, P6f) — resume here
 

@@ -278,8 +278,9 @@ by a second Dockerfile target `calib`, not into the node image), `chain/engine-p
   P6g note (contract-built statements are smaller).
 - [ ] Heavy, capped: `docker build --target calib`, `docker run --rm --memory 4g --cpus 4 … calibrate` (≈ 1 h incl.
   fresh proofs).
-- **Acceptance:** table and JSON written; two runs on different days agree within 15 % on every `gas` (else a third
-  run and the max is taken).
+- **Acceptance:** table and JSON written from **one** calibration run (owner 2026-10-15: "P6f đo gas một lần";
+  the earlier two-runs-on-different-days rule is withdrawn — re-calibrate before 22776 or if a later measurement
+  disagrees by more than 15 %).
 
 ### Task 7: Throwaway copy, probes, probe contract, e2e (D10, §10 steps 1–2) — heavy (long runs)
 
@@ -378,7 +379,7 @@ heavy runs stay serial machine-wide. Task 9 may start after Task 6 (numbers) and
 | 3 ML-DSA | 1 (+1 if fallback) | dotnet |
 | 4 harness | 1 | 1 h run |
 | 5 image | 1 | docker build ≈ 20 min |
-| 6 calibration | 1.5 | ≈ 1 h × 2 days |
+| 6 calibration | 1.5 | ≈ 1 h (one run, owner 2026-10-15) |
 | 7 copy, probes, e2e | 2.5 | copies, containers |
 | 8 rehearsal (gate) | 1 | ≈ 3 h wall (ramp) |
 | 9 docs | 1 | — |
