@@ -329,7 +329,9 @@ exception), so groups stay at **4 legs per `(r_g, e1_g)` with or without the aud
 interim proposal of 3 legs with the auditor (64 hints, β 451.9) is withdrawn. `R_TX` (32 hints) keeps 463.9, as
 `e_s0.py`'s 464. The shortcut used for mixed hints (a perfect hint's volume `½ ln(w^T Σ w)` put on an `r` coordinate)
 is checked against the tool's full-covariance `DBDD_predict` after its q-vector step in `hints_q.sage` (section 5 of
-`hints-anon.txt`).
+`hints-anon.txt`; n = m = 256, real mixed hints with a dense e1 part, one e1 coordinate, or an r part only, at 10 and
+80 hints): the shortcut's β is never above the full model's (e.g. 80 hints, one e1 coordinate: 36.3 vs 36.6), so it is
+conservative [measured].
 
 ### 8.2a What β means and why 450
 
