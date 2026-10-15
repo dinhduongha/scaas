@@ -1,0 +1,50 @@
+# P6f D10: the throwaway copy of chain 7622 (project pqzcopy, its own network, never peers with the live node):
+# signer (no published port, mining), follower (static peer = signer), nginx (127.0.0.1:18545 → follower, rate
+# limits). Data under $COPY (scratchpad/p6f-copy, git-ignored). Memory: 1700 + 1700 + 64 MiB ≤ 4 GB (the host).
+# Run through copy.sh, which sets COPY, IMAGE, GENESIS.
+name: pqzcopy
+networks:
+  net:
+    ipam:
+      config:
+        - subnet: 10.76.22.0/24
+services:
+  signer:
+    image: ${IMAGE}
+    container_name: pqzcopy-signer
+    mem_limit: 1700m
+    cpus: 2
+    command: --config /nethermind/config.json --datadir /nethermind/nethermind_datadir
+    volumes:
+      - ${COPY}/data-signer:/nethermind/nethermind_datadir
+      - ${COPY}/${GENESIS}:/nethermind/genesis.json:ro
+      - ${COPY}/config.signer.json:/nethermind/config.json:ro
+      - ${COPY}/password.txt:/nethermind/password.txt:ro
+      - ${COPY}/keystore:/nethermind/keystore:ro
+    networks:
+      net:
+        ipv4_address: 10.76.22.10
+  follower:
+    image: ${IMAGE}
+    container_name: pqzcopy-follower
+    mem_limit: 1700m
+    cpus: 2
+    command: --config /nethermind/config.json --datadir /nethermind/nethermind_datadir
+    volumes:
+      - ${COPY}/data-follower:/nethermind/nethermind_datadir
+      - ${COPY}/${GENESIS}:/nethermind/genesis.json:ro
+      - ${COPY}/config.follower.json:/nethermind/config.json:ro
+    networks:
+      net:
+        ipv4_address: 10.76.22.11
+  rpc:
+    image: nginx:1.27-alpine
+    container_name: pqzcopy-rpc
+    mem_limit: 64m
+    volumes:
+      - ./nginx-rpc.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "127.0.0.1:18545:8545"
+    networks:
+      net:
+        ipv4_address: 10.76.22.12

@@ -1,0 +1,7 @@
+<Project>
+  <!-- tools (UseNethermindRuntime=true) reference every managed assembly of the base image, copied to the output -->
+  <ItemGroup Condition="'$(UseNethermindRuntime)' == 'true'">
+    <Reference Include="$(RefDir)*.dll" Private="true" />
+    <None Include="$(RefDir)*.so" CopyToOutputDirectory="PreserveNewest" Visible="false" />
+  </ItemGroup>
+</Project>

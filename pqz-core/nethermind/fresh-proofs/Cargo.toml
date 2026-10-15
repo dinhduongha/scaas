@@ -1,0 +1,15 @@
+[package]
+name = "pqz-fresh-proofs"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# P6f Task 6 (D7): N fresh honest proofs per form and id (pqz-ffi's prove feature and fixtures), as precompile inputs
+# for the calibration. Built into the image's calib target only, never the node image.
+[dependencies]
+pqz-ffi = { path = "../../ffi", features = ["prove"] }
+
+[profile.release]
+panic = "unwind"
+
+[workspace]

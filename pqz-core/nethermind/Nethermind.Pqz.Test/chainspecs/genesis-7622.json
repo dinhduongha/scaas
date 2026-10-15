@@ -1,0 +1,110 @@
+{
+ "name": "MBANetwork",
+ "engine": {
+  "Clique": {
+   "params": {
+    "period": 5,
+    "epoch": 30000
+   }
+  }
+ },
+ "params": {
+  "gasLimitBoundDivisor": "0x400",
+  "minimumGasLimit": "0x1388",
+  "chainId": "0x1dc6",
+  "networkID": "0x1dc6",
+  "clique": {
+   "period": 5,
+   "epoch": 30000
+  },
+  "eip140Transition": 0,
+  "eip145Transition": 0,
+  "eip150Transition": 0,
+  "eip155Transition": 0,
+  "eip160Transition": 0,
+  "eip161abcTransition": 0,
+  "eip161dTransition": 0,
+  "eip211Transition": 0,
+  "eip214Transition": 0,
+  "eip658Transition": 0,
+  "eip1014Transition": 0,
+  "eip1052Transition": 0,
+  "eip1344Transition": 0,
+  "eip1884Transition": 0,
+  "eip2028Transition": 0,
+  "eip152Transition": 0,
+  "eip2565Transition": 0,
+  "eip2929Transition": 0,
+  "eip2930Transition": 0,
+  "eip1559Transition": 0,
+  "eip3198Transition": 0,
+  "eip3529Transition": 0,
+  "eip3541Transition": 0,
+  "eip1559BaseFeeMaxChangeDenominator": "0x8",
+  "eip1559ElasticityMultiplier": "0x2",
+  "eip3651TransitionTimestamp": 0,
+  "eip3855TransitionTimestamp": 0,
+  "eip3860TransitionTimestamp": 0,
+  "eip1153TransitionTimestamp": 0,
+  "eip5656TransitionTimestamp": 0,
+  "eip6780TransitionTimestamp": 0,
+  "eip2537TransitionTimestamp": 0,
+  "eip7623TransitionTimestamp": 0,
+  "maxCodeSize": "0x10000",
+  "maxCodeSizeTransition": 6432,
+  "eip2935TransitionTimestamp": 0,
+  "eip7702TransitionTimestamp": 0,
+  "eip4844TransitionTimestamp": 0,
+  "eip7594TransitionTimestamp": 0,
+  "eip7823TransitionTimestamp": 0,
+  "eip7825TransitionTimestamp": 0,
+  "eip7883TransitionTimestamp": 0,
+  "eip7918TransitionTimestamp": 0,
+  "eip7934TransitionTimestamp": 0,
+  "eip7939TransitionTimestamp": 0,
+  "eip7951TransitionTimestamp": 0,
+  "blobSchedule": [
+   {
+    "name": "prague",
+    "timestamp": 0,
+    "target": 6,
+    "max": 9,
+    "baseFeeUpdateFraction": "0x4c6964"
+   },
+   {
+    "name": "bpo1",
+    "timestamp": 0,
+    "target": 10,
+    "max": 15,
+    "baseFeeUpdateFraction": "0x7f5a51"
+   },
+   {
+    "name": "bpo2",
+    "timestamp": 0,
+    "target": 14,
+    "max": 21,
+    "baseFeeUpdateFraction": "0xb24b3f"
+   }
+  ],
+  "eip1108Transition": 0,
+  "eip2200Transition": 0
+ },
+ "genesis": {
+  "nonce": "0x0000000000000000",
+  "timestamp": "0x0",
+  "extraData": "0x0000000000000000000000000000000000000000000000000000000000000000dE36845Cc887783397b2808c13f2Ed95DC2646BB0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+  "gasLimit": "0x1000000",
+  "difficulty": "0x1",
+  "mixHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+  "coinbase": "0x0000000000000000000000000000000000000000",
+  "number": "0x0",
+  "gasUsed": "0x0",
+  "parentHash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+  "baseFeePerGas": "0x0"
+ },
+ "accounts": {
+  "0xdE36845Cc887783397b2808c13f2Ed95DC2646BB": {
+   "balance": "0x1"
+  }
+ }
+}

@@ -1,0 +1,21 @@
+scaas/nethermind-pqz — notices for the files SCaaS adds to the Nethermind image (P6f, /nethermind/plugins/)
+
+This image is the unmodified Nethermind 1.39.0 image
+  nethermind/nethermind:1.39.0@sha256:8af90a30989c16cb15e087bd250c623c98585e490a25950a75642460d497eae6
+(Nethermind: LGPL-3.0-only, Demerzel Solutions Limited; .NET runtime: MIT, Microsoft; Ubuntu 26.04 packages incl.
+OpenSSL: Apache-2.0 — their own notices are in the base image) plus three files in /nethermind/plugins/:
+
+  Nethermind.Pqz.dll      SCaaS's plugin (pqz-core/nethermind/Nethermind.Pqz), repository licence (Vegan Community
+                          License 1.0, ../LICENSE in the source repository). It links only against the assemblies of
+                          the base image (dynamically, at run time; nothing of Nethermind is copied into it) and uses
+                          .NET's System.Security.Cryptography.MLDsa (OpenSSL) for ML-DSA.
+  libpqz_ffi.so           pqz-ffi (pqz-core/ffi): SCaaS code under the repository licence, the pqz-core C core with
+                          the third-party code listed in NOTICE-pqz-core.txt (LaZer, MIT; Keccak public domain;
+                          BearSSL notice), and the Rust crates of pqz-core/ffi/Cargo.lock (all MIT and/or Apache-2.0;
+                          list: pqz-core/nethermind/runs/*-image-licences.txt). No GMP, MPFR or HEXL code
+                          (checked on this very file by build-image.sh).
+  NOTICE-pqz.txt          this file; NOTICE-pqz-core.txt = pqz-core/NOTICE; LICENSE-lazer.txt = pqz-core/lazer/LICENSE.
+
+The image is built locally from source (pqz-core/nethermind/build-image.sh) and is never pushed to a registry.
+Inventory and gate: docs/research/pqz-licence-inventory.md (G-LIC); written clearance is an owner step before any
+public or commercial use.

@@ -1,0 +1,14 @@
+<Project>
+  <!-- P6f: every project here builds against the base image's assemblies (ref/, ref.sh). Tools that run outside the
+       node (tests, harness, calibration) copy them into their output; the plugin never does. -->
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>14</LangVersion>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <ImplicitUsings>disable</ImplicitUsings>
+    <Deterministic>true</Deterministic>
+    <RefDir>$(MSBuildThisFileDirectory)ref/</RefDir>
+  </PropertyGroup>
+</Project>

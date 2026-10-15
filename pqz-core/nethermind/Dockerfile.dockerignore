@@ -1,0 +1,26 @@
+# context = the repo root; only what the Dockerfile copies
+*
+!LICENSE
+!pqz-core/check_symbols.sh
+!pqz-core/NOTICE
+!pqz-core/src
+!pqz-core/lazer
+!pqz-core/params
+!pqz-core/stmt
+!pqz-core/pqzh/ligero
+!pqz-core/ffi
+!pqz-core/nethermind/fresh-proofs
+!pqz-core/nethermind/Directory.Build.props
+!pqz-core/nethermind/Directory.Build.targets
+!pqz-core/nethermind/Nethermind.Pqz
+!pqz-core/nethermind/Calibrate
+!pqz-core/nethermind/NOTICE-pqz.txt
+!pqz-core/nethermind/bin/corpus.jsonl
+!smartcontracts/vectors/pqz/proof_pqzl.json
+!smartcontracts/vectors/pqz/proof_pqzh.json
+!smartcontracts/vectors/ua/pq_external.json
+**/target
+**/bin/Release
+**/bin/Debug
+**/obj
+pqz-core/ffi/runs

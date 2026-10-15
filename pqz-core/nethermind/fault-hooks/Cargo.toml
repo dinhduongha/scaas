@@ -1,0 +1,19 @@
+[package]
+name = "pqz-ffi-fault-hooks"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+# P6f Task 2: the status-4 path through the C# host. pqz-ffi with its test hooks (never in a production build) plus one
+# C entry to switch TEST_FAIL_WORKER on; copied to bin/test-hooks/libpqz_ffi.so for the fault child process only.
+# Never in the image (build-image.sh scans the image's library for these names).
+[lib]
+crate-type = ["cdylib"]
+
+[dependencies]
+pqz-ffi = { path = "../../ffi", features = ["test-hooks"] }
+
+[profile.release]
+panic = "unwind"
+
+[workspace]

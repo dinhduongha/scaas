@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- P6f (plan D1, R1): the plugin compiles against the assemblies of the pinned base image (ref/, from ref.sh), never
+       a Nethermind source build; nothing of Nethermind is copied into the output (Private=false). -->
+  <ItemGroup>
+    <Reference Include="Autofac" HintPath="$(RefDir)Autofac.dll" Private="false" />
+    <Reference Include="Nethermind.Api" HintPath="$(RefDir)Nethermind.Api.dll" Private="false" />
+    <Reference Include="Nethermind.Blockchain" HintPath="$(RefDir)Nethermind.Blockchain.dll" Private="false" />
+    <Reference Include="Nethermind.Config" HintPath="$(RefDir)Nethermind.Config.dll" Private="false" />
+    <Reference Include="Nethermind.Core" HintPath="$(RefDir)Nethermind.Core.dll" Private="false" />
+    <Reference Include="Nethermind.Crypto" HintPath="$(RefDir)Nethermind.Crypto.dll" Private="false" />
+    <Reference Include="Nethermind.Evm" HintPath="$(RefDir)Nethermind.Evm.dll" Private="false" />
+    <Reference Include="Nethermind.Evm.Precompiles" HintPath="$(RefDir)Nethermind.Evm.Precompiles.dll" Private="false" />
+    <Reference Include="Nethermind.Logging" HintPath="$(RefDir)Nethermind.Logging.dll" Private="false" />
+    <Reference Include="Nethermind.Specs" HintPath="$(RefDir)Nethermind.Specs.dll" Private="false" />
+  </ItemGroup>
+</Project>
