@@ -30,4 +30,13 @@ for t in 0 1 2 3 4 5 6 7 8 9; do
   PQZ_WASM_FILE=build/ov-nosv/wasm/pqz.wasm node test/run_wasm.mjs 1 0 $m >> "$R-wasm-nosv.jsonl" \
     || echo "wasm nosv $t rc=$?"
 done
-grep -h -e proof_bytes -e timing -e fails "$R"-*.jsonl
+# all relations loaded in one process: the six P6e forms then the eight built R_TXM shapes (prove + verify each); the
+# last relation's arena_peak is the cumulative peak, arena_resident_end the base mark with every op's keys / SV tables
+ALL=$((63 + 64 * 255))
+build/ov/native/pqz_bench 1 1 $ALL > "$R-all-native-generic.jsonl" || echo "all native generic rc=$?"
+PQZ_VERIFY=fast build/ov/native/pqz_bench 1 1 $ALL > "$R-all-native-fast.jsonl" || echo "all native fast rc=$?"
+PQZ_WASM_FILE=build/ov/wasm/pqz.wasm node test/run_wasm.mjs 1 1 $ALL > "$R-all-wasm-generic.jsonl" || echo "all wasm rc=$?"
+PQZ_WASM_FILE=build/ov/wasm/pqz.wasm PQZ_VERIFY=fast node test/run_wasm.mjs 1 1 $ALL > "$R-all-wasm-fast.jsonl" \
+  || echo "all wasm fast rc=$?"
+PQZ_WASM_FILE=build/ov-nosv/wasm/pqz.wasm node test/run_wasm.mjs 1 0 $ALL > "$R-all-wasm-nosv.jsonl" || echo "all wasm nosv rc=$?"
+grep -h -e proof_bytes -e timing -e fails -e arena_resident_end "$R"-*.jsonl

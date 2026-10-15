@@ -1061,6 +1061,10 @@ main (int argc, char **argv)
     fails += auditor_check (rels);
   if (checks)
     fails += txm_check (rels);
+  {
+    extern size_t pqz_arena_used (void); /* pqz_arena.c: the base mark = A, the keys (and SV tables) of every op touched */
+    printf ("{\"arena_resident_end\": %zu}\n", pqz_arena_used ());
+  }
   printf ("{\"fails\": %d}\n", fails);
   return fails != 0;
 }
