@@ -5,6 +5,7 @@
  * 1. SHAKE256 (lazer/shake128.c, rate 136) on 10 inputs, absorbed and squeezed in two parts each;
  * 2. KeyGen on 20 seeds (seed_i[j] = 31 i + j), the pk as SHAKE256(pk) (32 B); Enc of two values to recipients i and
  *    i + 1 (seed_enc_i[j] = 17 i + j + 1), u as SHAKE256(u), both v in full, Dec by recipient i (M, noise);
+ *    the R_TXM group seeds of seed_enc_0..3 for g = 0..3 (P6-ANON D13, pqz_enc_group_seed);
  * 3. Dec(Enc(m)) = m with |noise| <= B_FRESH = 11,872 (pq-zether.md §4.3) for n_roundtrip seeds;
  * 4. the resample path and the counter-64 error with lowered thresholds (PQZ_TEST_HOOKS build of pqz_keys.c: the real
  *    thresholds are never exceeded in practice);
@@ -179,6 +180,21 @@ main (int argc, char **argv)
         }
       printf ("]}}\n");
     }
+  /* 2b. R_TXM group seeds (P6-ANON D13): seed_enc_i (as in 2), g = 0 .. 3 (g = 0 is seed_enc itself) */
+  for (int i = 0; i < 4; i++)
+    for (unsigned g = 0; g < 4; g++)
+      {
+        uint8_t gs[32];
+        for (int j = 0; j < 32; j++)
+          se[j] = (uint8_t)(17 * i + j + 1);
+        pqz_enc_group_seed (se, g, gs);
+        fails += g == 0 && memcmp (gs, se, 32) != 0;
+        printf ("{\"enc_group_seed\": {\"seed_enc\": \"");
+        hex (se, 32);
+        printf ("\", \"g\": %u, \"out\": \"", g);
+        hex (gs, 32);
+        printf ("\"}}\n");
+      }
   /* 4. lowered thresholds (test hooks): KeyGen ||s|| <= 32, ||e|| <= 143 (each passes about half the time), Enc also
      ||e2_j|| <= 12; then a threshold no sample meets (0): the counter-64 error */
   {

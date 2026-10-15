@@ -1,7 +1,7 @@
 /*
  * pqz-core C ABI (pq-zether.md §8, CTR-PQZ-09): R_REG (OP_REGISTER), R_TX and R_TX0 (OP_TRANSFER, auditor on / off,
  * told apart by the statement length), R_BURN (OP_BURN, also REFRESH), R_DS (OP_DISCLOSE_SENDER), R_DR
- * (OP_DISCLOSE_RECEIVER, also AUDITOR).
+ * (OP_DISCLOSE_RECEIVER, also AUDITOR), R_TXM (OP_TRANSFER_MULTI, op 7: M legs, P6-ANON).
  * Single-threaded; all memory comes from the arena given to pqz_init (no malloc), errors are return codes.
  */
 #ifndef PQZ_H
@@ -65,6 +65,31 @@
    || d' (16 x u8) */
 #define PQZ_TX0_WIT_BYTES (2048 + 4096 + 2048 + 4096 + 2 * 32 + 16 + 16)
 
+/* R_TXM (op 7, OP_TRANSFER_MULTI; P6-ANON plan §3, §4): M legs (a decoy is a leg of amount 0), G = ceil(M / 4)
+   randomness groups (leg j in group j / 4, v_f in group 0), auditor on (A = 1, one copy v_{a,j} per leg) or off.
+   Header: §7.7's with word 192 = recipientsHash (hashed only) and word 320 = M; the core picks the relation by the
+   M word (PQZ_TXM_BUILT) and the auditorOn word (0 / 1) and requires the length PQZ_TXM_STMT_BYTES(M, A) (the length
+   alone does not fix (M, A): (1, on) and (2, off) are both 83,072 B). Body: pk_f || pk_0 .. pk_{M-1} || [pk_a] ||
+   T = u_T || v_T || u_0 .. u_{G-1} || v_0 .. v_{M-1} || v_f || [v_{a,0} .. v_{a,M-1}]; at M = 1 that is R_TX's /
+   R_TX0's body, and the relation uses R_TX's / R_TX0's parameters with ABDLOP keys of its own. Built M: 1, 2, 4, 8;
+   M = 16 only with -DPQZ_TXM_OVERSIZE (bench builds; it does not fit MAX_INPUT, plan D3 / D20). */
+#define PQZ_OP_TRANSFER_MULTI 7
+#define PQZ_HDR_LEGS 320 /* op 7: M (op 1's recipient word) */
+#define PQZ_TXM_GROUPS(m) (((m) + 3) / 4)
+#ifdef PQZ_TXM_OVERSIZE
+#define PQZ_TXM_MAX_LEGS 16
+#else
+#define PQZ_TXM_MAX_LEGS 8
+#endif
+#define PQZ_TXM_STMT_BYTES(m, a)                                                                            \
+  (PQZ_HEADER_BYTES + (1 + (m) + (a)) * PQZ_POLYVEC_BYTES + (PQZ_POLYVEC_BYTES + PQZ_V_BYTES)               \
+   + PQZ_TXM_GROUPS (m) * PQZ_POLYVEC_BYTES + ((m) + 1 + (a) * (m)) * PQZ_V_BYTES)
+/* R_TXM witness (R_TX's layout with a group's r_g, e1_g after the previous group's, M leg noises and digit vectors):
+   s_f (int8) || e_f (int16) || (r_g (int8) || e1_g (int16)) for g < G || e2_j (16 x int16) for j < M || e2_f
+   || [e2_{a,j} for j < M] || d_j (16 x u8) for j < M || d' (16 x u8); at M = 1 R_TX's / R_TX0's witness */
+#define PQZ_TXM_WIT_BYTES(m, a)                                                                             \
+  ((1 + PQZ_TXM_GROUPS (m)) * (2048 + 4096) + 32 * ((m) + 1 + (a) * (m)) + 16 * (m) + 16)
+
 /* R_BURN (§7.5): header || pk_f || T = u_T || v_T || out = u || v_f */
 #define PQZ_BURN_STMT_BYTES (PQZ_HEADER_BYTES + PQZ_POLYVEC_BYTES + 2 * (PQZ_POLYVEC_BYTES + PQZ_V_BYTES))
 /* R_BURN witness: s_f (int8) || e_f (int16) || r (int8) || e1 (int16) || e2_f (16 x int16) || d' (16 x u8)
@@ -119,6 +144,10 @@ int pqz_keygen (const uint8_t seed32[32], uint8_t pk[PQZ_POLYVEC_BYTES], int8_t 
 int pqz_enc_seed (const uint8_t *const pks[], unsigned int npk, const uint8_t msgs[][16], const uint8_t seed_enc[32],
                   uint8_t u[PQZ_POLYVEC_BYTES], uint8_t vs[][PQZ_V_BYTES], int8_t r[2048], int16_t e1[2048],
                   int16_t e2[][16], unsigned *ctr_used);
+/* R_TXM group seeds (CTR-PQZ-19 extended, P6-ANON D13): group 0 uses seed_enc itself, group g >= 1
+   SHAKE256("SCAAS-PQZ-ENC-GROUP-V1" || seed_enc || be4(g))[0..32); pqz_enc_seed then encrypts the group's legs, then
+   (group 0) pk_f, then the group's auditor copies, in that order. Pure hashing: no pqz_init needed. */
+void pqz_enc_group_seed (const uint8_t seed_enc[32], unsigned g, uint8_t out[32]);
 /* Dec of ct = u || v: M_i = round(w_i / Delta), noise_i = w_i - Delta M_i; value = sum M_i 16^i (the caller's) */
 int pqz_dec (const int8_t s[2048], const uint8_t ct[PQZ_POLYVEC_BYTES + PQZ_V_BYTES], int64_t M[16],
              int64_t noise[16]);

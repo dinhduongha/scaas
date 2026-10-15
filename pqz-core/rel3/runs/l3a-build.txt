@@ -1,0 +1,8 @@
+symbols ok: only memcpy memset __stack_chk_fail __stack_pointer outside the library objects
+symbols ok: only memcpy memset __stack_chk_fail __stack_pointer outside the library objects
+symbols ok: only memcpy memset __stack_chk_fail __stack_pointer outside the library objects
+symbols ok: only memcpy memset __stack_chk_fail __stack_pointer outside the library objects
+symbols ok: only memcpy memset __stack_chk_fail __stack_pointer outside the library objects
+439882 build/ov/wasm/pqz.wasm
+383872 build/ov-nosv/wasm/pqz.wasm
+823754 total

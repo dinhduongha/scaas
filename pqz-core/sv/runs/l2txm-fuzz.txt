@@ -1,0 +1,48 @@
+INFO: Running with entropic power schedule (0xFF, 100).
+INFO: Seed: 1
+INFO: Loaded 1 modules   (13220 inline 8-bit counters): 13220 [0x5c5bf7b161b0, 0x5c5bf7b19554), 
+INFO: Loaded 1 PC tables (13220 PCs): 13220 [0x5c5bf7b19558,0x5c5bf7b4cf98), 
+INFO:        0 files found in build/sv-san/corpus
+INFO: A corpus is not provided, starting from an empty corpus
+#2	INITED cov: 1973 ft: 1974 corp: 1/1b exec/s: 2 rss: 684Mb
+#4	pulse  cov: 1973 ft: 2882 corp: 1/1b lim: 4 exec/s: 0 rss: 684Mb
+	NEW_FUNC[1/13]: 0x5c5bf799b148 in int_absgt /home/ha/work/ainative/scaas/.claude/worktrees/anonl/pqz-core/build/include/lazer.h:2502
+	NEW_FUNC[2/13]: 0x5c5bf799cc48 in int_eq /home/ha/work/ainative/scaas/.claude/worktrees/anonl/pqz-core/build/include/lazer.h:2518
+#4	NEW    cov: 2241 ft: 2882 corp: 2/2b lim: 4 exec/s: 0 rss: 685Mb L: 1/1 MS: 2 ShuffleBytes-ChangeBit-
+#6	NEW    cov: 2266 ft: 3170 corp: 3/3b lim: 4 exec/s: 0 rss: 686Mb L: 1/1 MS: 2 CrossOver-ChangeByte-
+#8	pulse  cov: 2266 ft: 3507 corp: 3/3b lim: 4 exec/s: 0 rss: 686Mb
+#8	NEW    cov: 2299 ft: 3507 corp: 4/4b lim: 4 exec/s: 0 rss: 686Mb L: 1/1 MS: 2 CrossOver-ChangeBinInt-
+#11	NEW    cov: 2307 ft: 3576 corp: 5/6b lim: 4 exec/s: 0 rss: 686Mb L: 2/2 MS: 3 CrossOver-ChangeByte-CrossOver-
+#16	pulse  cov: 2307 ft: 3587 corp: 5/6b lim: 4 exec/s: 0 rss: 687Mb
+#16	NEW    cov: 2307 ft: 3587 corp: 6/8b lim: 4 exec/s: 0 rss: 687Mb L: 2/2 MS: 5 ChangeBit-ChangeBit-CrossOver-ChangeBinInt-InsertByte-
+#21	NEW    cov: 2307 ft: 3598 corp: 7/10b lim: 4 exec/s: 0 rss: 687Mb L: 2/2 MS: 5 ShuffleBytes-EraseBytes-CopyPart-CrossOver-CrossOver-
+#24	NEW    cov: 2309 ft: 3602 corp: 8/14b lim: 4 exec/s: 0 rss: 687Mb L: 4/4 MS: 3 CopyPart-ShuffleBytes-CopyPart-
+#25	NEW    cov: 2309 ft: 3604 corp: 9/16b lim: 4 exec/s: 0 rss: 687Mb L: 2/4 MS: 1 CopyPart-
+#29	NEW    cov: 2309 ft: 3606 corp: 10/18b lim: 4 exec/s: 0 rss: 687Mb L: 2/4 MS: 4 CopyPart-ShuffleBytes-EraseBytes-ChangeByte-
+Slowest unit: 12 s:
+artifact_prefix='./'; Test unit written to ./slow-unit-58668e7669fd564d99db5d581fcdb6a5618440b5
+Base64: Sg==
+#30	NEW    cov: 2315 ft: 3903 corp: 11/19b lim: 4 exec/s: 0 rss: 687Mb L: 1/4 MS: 1 ChangeBit-
+#31	NEW    cov: 2315 ft: 3921 corp: 12/21b lim: 4 exec/s: 0 rss: 687Mb L: 2/4 MS: 1 CrossOver-
+#32	pulse  cov: 2315 ft: 3923 corp: 12/21b lim: 4 exec/s: 0 rss: 687Mb
+#32	NEW    cov: 2315 ft: 3923 corp: 13/23b lim: 4 exec/s: 0 rss: 687Mb L: 2/4 MS: 1 ChangeBit-
+#34	NEW    cov: 2315 ft: 3931 corp: 14/26b lim: 4 exec/s: 0 rss: 687Mb L: 3/4 MS: 2 InsertByte-ChangeBinInt-
+#45	NEW    cov: 2315 ft: 3932 corp: 15/28b lim: 4 exec/s: 0 rss: 688Mb L: 2/4 MS: 1 ChangeByte-
+#60	NEW    cov: 2315 ft: 3933 corp: 16/30b lim: 4 exec/s: 0 rss: 688Mb L: 2/4 MS: 5 CrossOver-CopyPart-ChangeBinInt-ShuffleBytes-EraseBytes-
+#64	pulse  cov: 2315 ft: 3933 corp: 16/30b lim: 4 exec/s: 0 rss: 688Mb
+#65	NEW    cov: 2315 ft: 3934 corp: 17/32b lim: 4 exec/s: 0 rss: 688Mb L: 2/4 MS: 5 CrossOver-CrossOver-InsertByte-EraseBytes-CopyPart-
+#70	NEW    cov: 2315 ft: 3935 corp: 18/34b lim: 4 exec/s: 0 rss: 688Mb L: 2/4 MS: 5 ChangeBit-ChangeByte-ChangeBinInt-ChangeBit-CopyPart-
+#78	NEW    cov: 2315 ft: 3936 corp: 19/36b lim: 4 exec/s: 0 rss: 688Mb L: 2/4 MS: 3 ShuffleBytes-CrossOver-ChangeByte-
+#82	NEW    cov: 2315 ft: 3937 corp: 20/38b lim: 4 exec/s: 0 rss: 689Mb L: 2/4 MS: 4 CMP-ChangeBinInt-CopyPart-EraseBytes- DE: "\377\020"-
+#83	NEW    cov: 2315 ft: 3938 corp: 21/40b lim: 4 exec/s: 0 rss: 689Mb L: 2/4 MS: 1 CrossOver-
+#113	NEW    cov: 2315 ft: 3939 corp: 22/42b lim: 4 exec/s: 0 rss: 689Mb L: 2/4 MS: 5 CrossOver-ChangeByte-CrossOver-ChangeBit-EraseBytes-
+#119	NEW    cov: 2315 ft: 3940 corp: 23/44b lim: 4 exec/s: 0 rss: 689Mb L: 2/4 MS: 1 ChangeBinInt-
+#128	pulse  cov: 2315 ft: 3940 corp: 23/44b lim: 4 exec/s: 0 rss: 690Mb
+#206	REDUCE cov: 2315 ft: 3940 corp: 23/43b lim: 4 exec/s: 0 rss: 690Mb L: 3/3 MS: 2 ChangeBinInt-EraseBytes-
+#256	pulse  cov: 2315 ft: 3940 corp: 23/43b lim: 4 exec/s: 0 rss: 690Mb
+#275	NEW    cov: 2315 ft: 3941 corp: 24/45b lim: 4 exec/s: 0 rss: 690Mb L: 2/3 MS: 4 EraseBytes-CopyPart-CopyPart-ChangeBinInt-
+#275	DONE   cov: 2315 ft: 3941 corp: 24/45b lim: 4 exec/s: 0 rss: 690Mb
+###### Recommended dictionary. ######
+"\377\020" # Uses: 13
+###### End of recommended dictionary. ######
+Done 275 runs in 612 second(s)

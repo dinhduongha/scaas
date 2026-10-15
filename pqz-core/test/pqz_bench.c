@@ -1,11 +1,13 @@
 /*
- * pqz-core test and benchmark: R_REG, R_TX, R_BURN, R_DS, R_DR, R_TX0 prove / verify, negative cases, timing.
+ * pqz-core test and benchmark: R_REG, R_TX, R_BURN, R_DS, R_DR, R_TX0, R_TXM prove / verify, negative cases, timing.
  * Same source for native (build/native/pqz_bench) and wasm32 (build/wasm/pqz.wasm, driven by test/run_wasm.mjs):
  * PQZ_WASM builds export the steps instead of main() and time on the JS side.
  *
- *   pqz_bench [n_prove] [n_verify] [rel]   prints JSON lines: sizes, times (ms), check results
- *   rel: bit mask, 1 = R_REG, 2 = R_TX, 4 = R_BURN, 8 = R_DS, 16 = R_DR, 32 = R_TX0 (default 63 = all); n_verify = 0
- *   also skips the adversarial verifies
+ *   pqz_bench [n_prove] [n_verify] [rel] [checks]   prints JSON lines: sizes, times (ms), check results
+ *   rel: bit mask, 1 = R_REG, 2 = R_TX, 4 = R_BURN, 8 = R_DS, 16 = R_DR, 32 = R_TX0 (default 63), 64 << t = R_TXM
+ *   (op 7) shape TXB[t] (64 (1, on), 128 (2, on), 256 (4, on), 512 (8, on), 1024 .. 8192 the same off; with
+ *   -DPQZ_TXM_OVERSIZE 16384 (16, on), 32768 (16, off)); n_verify = 0 also skips the adversarial verifies;
+ *   checks = 1: the R_TXM variants and negatives (txm_check). PQZ_ARENA_MB: arena size (default 768 MiB)
  *   PQZ_VERIFY=fast (native) / step_set_fast (wasm): time pqz_verify_fast instead of pqz_verify (P6-SV; builds with
  *   PQZ_SV only, the default of build.sh)
  */
@@ -24,7 +26,7 @@ void *memcpy (void *d, const void *s, size_t n);
 void *memset (void *d, int c, size_t n);
 #endif
 
-#define ARENA_BYTES ((size_t)768 << 20) /* measured peaks well below (STATUS.md) */
+#define ARENA_BYTES ((size_t)768 << 20) /* measured peaks well below (STATUS.md); native: PQZ_ARENA_MB overrides */
 
 static uint64_t xs = 0x243F6A8885A308D3ULL;
 static uint64_t
@@ -109,8 +111,7 @@ static uint8_t tx0_stmt[PQZ_TX0_STMT_BYTES], tx0_wit[PQZ_TX0_WIT_BYTES];
 static uint8_t burn_stmt[PQZ_BURN_STMT_BYTES], burn_wit[PQZ_BURN_WIT_BYTES];
 static uint8_t ds_stmt[PQZ_DISC_STMT_BYTES], ds_wit[PQZ_DS_WIT_BYTES];
 static uint8_t dr_stmt[PQZ_DISC_STMT_BYTES], dr_wit[PQZ_DR_WIT_BYTES];
-static uint8_t proofs[6][PQZ_MAX_PROOF], bad[PQZ_MAX_PROOF];
-static size_t lens[6];
+static uint8_t bad[PQZ_MAX_PROOF];
 static uint8_t rnd32[32];
 static int fast; /* 1: verify with pqz_verify_fast */
 
@@ -136,24 +137,41 @@ step_set_fast (int on)
   return 0;
 }
 
-/* relation index: 0 R_REG, 1 R_TX, 2 R_BURN, 3 R_DS, 4 R_DR, 5 R_TX0 (op 1, told apart from R_TX by the length) */
-#define NREL 6
-static const uint8_t OPS[NREL] = { PQZ_OP_REGISTER, PQZ_OP_TRANSFER, PQZ_OP_BURN, PQZ_OP_DISCLOSE_SENDER,
-                                   PQZ_OP_DISCLOSE_RECEIVER, PQZ_OP_TRANSFER };
-static uint8_t *const STMT[NREL] = { reg_stmt, tx_stmt, burn_stmt, ds_stmt, dr_stmt, tx0_stmt };
-static const size_t STLEN[NREL] = { sizeof reg_stmt, sizeof tx_stmt, sizeof burn_stmt, sizeof ds_stmt,
-                                    sizeof dr_stmt, sizeof tx0_stmt };
-static const uint8_t *const WIT[NREL] = { reg_wit, tx_wit, burn_wit, ds_wit, dr_wit, tx0_wit };
-static const size_t WLEN[NREL] = { sizeof reg_wit, sizeof tx_wit, sizeof burn_wit, sizeof ds_wit, sizeof dr_wit,
-                                   sizeof tx0_wit };
-static const unsigned SEEDMUL[NREL] = { 31, 17, 13, 11, 7, 19 };
+/* relation index: 0 R_REG, 1 R_TX, 2 R_BURN, 3 R_DS, 4 R_DR, 5 R_TX0 (op 1, told apart from R_TX by the length),
+   6 + t R_TXM shape TXB[t] (op 7; P6-ANON L1): (M, auditorOn) = (1, on), (2, on), (4, on), (8, on), (1, off), (2, off),
+   (4, off), (8, off), with -DPQZ_TXM_OVERSIZE also (16, on), (16, off) */
+static const struct
+{
+  unsigned m, a;
+} TXB[] = { { 1, 1 }, { 2, 1 }, { 4, 1 }, { 8, 1 }, { 1, 0 }, { 2, 0 }, { 4, 0 }, { 8, 0 },
+#ifdef PQZ_TXM_OVERSIZE
+            { 16, 1 }, { 16, 0 },
+#endif
+};
+#define NTXB (sizeof TXB / sizeof TXB[0])
+#define NREL (6 + (int)NTXB)
+static uint8_t proofs[NREL][PQZ_MAX_PROOF];
+static size_t lens[NREL]; /* 0: no proof (the last prove failed) */
+#define TXM_ST_MAX PQZ_TXM_STMT_BYTES (PQZ_TXM_MAX_LEGS, 1)
+#define TXM_WIT_MAX PQZ_TXM_WIT_BYTES (PQZ_TXM_MAX_LEGS, 1)
+static uint8_t txm_stmt[NTXB][TXM_ST_MAX], txm_wit[NTXB][TXM_WIT_MAX];
+static uint8_t OPS[NREL] = { PQZ_OP_REGISTER, PQZ_OP_TRANSFER, PQZ_OP_BURN, PQZ_OP_DISCLOSE_SENDER,
+                             PQZ_OP_DISCLOSE_RECEIVER, PQZ_OP_TRANSFER };
+static uint8_t *STMT[NREL] = { reg_stmt, tx_stmt, burn_stmt, ds_stmt, dr_stmt, tx0_stmt };
+static size_t STLEN[NREL] = { sizeof reg_stmt, sizeof tx_stmt, sizeof burn_stmt, sizeof ds_stmt, sizeof dr_stmt,
+                              sizeof tx0_stmt };
+static const uint8_t *WIT[NREL] = { reg_wit, tx_wit, burn_wit, ds_wit, dr_wit, tx0_wit };
+static size_t WLEN[NREL] = { sizeof reg_wit, sizeof tx_wit, sizeof burn_wit, sizeof ds_wit, sizeof dr_wit,
+                             sizeof tx0_wit };
+static unsigned SEEDMUL[NREL] = { 31, 17, 13, 11, 7, 19 };
 static const uint8_t PSID[32] = PQZ_PROOF_SYSTEM_ID; /* statement bytes 32..63 */
-/* tamper kind 2: first byte of a 2048-coefficient key in the statement (R_REG pk, R_TX / R_BURN pk_f, disclosure
-   pk); kind 5: the last byte of a public scalar (R_REG message, R_TX / R_TX0 fee, R_BURN / disclosure amount) */
-static const size_t KEYOFF[NREL] = { PQZ_PREFIX_BYTES + 32, PQZ_HEADER_BYTES, PQZ_HEADER_BYTES, PQZ_DISC_PK,
-                                     PQZ_DISC_PK, PQZ_HEADER_BYTES };
-static const size_t SCALOFF[NREL] = { PQZ_PREFIX_BYTES + 31, PQZ_HDR_FEE + 31, PQZ_HDR_AMOUNT + 31,
-                                      PQZ_DISC_AMOUNT + 31, PQZ_DISC_AMOUNT + 31, PQZ_HDR_FEE + 31 };
+/* tamper kind 2: first byte of a 2048-coefficient key in the statement (R_REG pk, R_TX / R_BURN / R_TXM pk_f,
+   disclosure pk); kind 5: the last byte of a public scalar (R_REG message, R_TX / R_TX0 / R_TXM fee, R_BURN /
+   disclosure amount) */
+static size_t KEYOFF[NREL] = { PQZ_PREFIX_BYTES + 32, PQZ_HEADER_BYTES, PQZ_HEADER_BYTES, PQZ_DISC_PK, PQZ_DISC_PK,
+                               PQZ_HEADER_BYTES };
+static size_t SCALOFF[NREL] = { PQZ_PREFIX_BYTES + 31, PQZ_HDR_FEE + 31, PQZ_HDR_AMOUNT + 31, PQZ_DISC_AMOUNT + 31,
+                                PQZ_DISC_AMOUNT + 31, PQZ_HDR_FEE + 31 };
 
 static void
 be8 (uint8_t *p, uint64_t v)
@@ -321,13 +339,202 @@ setup (void)
   memcpy (tx0_wit + 12288 + 64, tx_wit + 12288 + 96, 32);
 }
 
+/* ---- R_TXM (op 7, P6-ANON L1): keys and encryption randomness from the test RNG reseeded per statement (xs saved and
+   restored), so the other relations' statements and proofs are unchanged; client helpers of pqz_rel.c only (no
+   pqz_keys.c, which several builds of this file do not link) ---- */
+#define MAXL PQZ_TXM_MAX_LEGS
+#define MAXG PQZ_TXM_GROUPS (PQZ_TXM_MAX_LEGS)
+static pqzkey_t KTS, KTR[MAXL], KTA;
+#ifdef PQZ_TEST_HOOKS
+extern int pqz_test_cheat; /* pqz_rel.c: the test-only cheating prover (txm_check negatives) */
+#endif /* sender, recipients (leg j: KTR[j]), auditor */
+
+typedef struct
+{
+  unsigned m, a;
+  uint64_t amount[MAXL], fee, balance;
+  /* negatives: leg j is encrypted under KTR[key[j]] with group grp[j]'s randomness; add0 is added to leg 0's digit 0
+     in v_0, v_{a,0} and the witness, aud0 in v_{a,0} only; big0: leg 0's e2 set to 30 in every coefficient (the
+     norm 120 > 64); over0 (X-1, owner 2026-10-15: ||e2||^2 <= 64^2 = 4096 per e2 vector): bit 0 leg 0's e2,
+     bit 1 the auditor copy 0's e2 set to (64, 32, 0, ..., 0) (||e2||^2 = 5120) and the other legs' / copies' e2 to 0,
+     so the old one-block bound (||.||^2 <= 4096 M) holds for M >= 2; swap: the statement and witness positions 3 and 4 exchanged after
+     encryption (a leg moved between groups) */
+  unsigned key[MAXL], grp[MAXL], add0, aud0, big0, over0, swap;
+  uint8_t tag; /* seed tag */
+} txspec_t;
+
+static void
+txspec (txspec_t *X, unsigned m, unsigned a, uint8_t tag)
+{
+  memset (X, 0, sizeof *X);
+  X->m = m, X->a = a, X->tag = tag, X->balance = 1000000, X->fee = a ? 7 : 0; /* fee 0 allowed (owner 2026-10-14) */
+  for (unsigned j = 0; j < MAXL; j++)
+    X->key[j] = j, X->grp[j] = j / 4;
+  X->amount[m - 1] = 123456; /* one real leg, the last; the rest decoys (amount 0) */
+}
+
+static void
+wr_word (uint8_t *p, uint64_t v)
+{
+  memset (p, 0, 24);
+  be8 (p + 24, v);
+}
+
+/* the op 7 statement and witness of X (layouts of pqz.h); returns 0 if an encryption call failed */
+static int
+txm_build (const txspec_t *X, uint8_t *st, size_t *stlen, uint8_t *wt, size_t *wtlen)
+{
+  const unsigned m = X->m, a = X->a, G = PQZ_TXM_GROUPS (m);
+  static int8_t r[MAXG][2048], rT[2048];
+  static int16_t e1[MAXG][2048], e1T[2048], e2T[1][16], e2l[MAXL][16], e2f[16], e2a[MAXL][16], zero16[1][16];
+  static uint8_t u[MAXG][PQZ_POLYVEC_BYTES], uT[PQZ_POLYVEC_BYTES], vT[1][PQZ_V_BYTES], utmp[PQZ_POLYVEC_BYTES];
+  static uint8_t v[MAXL][PQZ_V_BYTES], vf[1][PQZ_V_BYTES], va[MAXL][PQZ_V_BYTES], vs[1][PQZ_V_BYTES];
+  static uint8_t zero[1][16];
+  uint8_t dg[MAXL][16], dpg[1][16], mT[1][16], P[MAXL];
+  uint64_t sum = X->fee;
+  unsigned j, g, k;
+  int rc = 0;
+
+  for (j = 0; j < m; j++)
+    digits (dg[j], X->amount[j]), sum += X->amount[j], P[j] = (uint8_t)j;
+  digits (dpg[0], X->balance - sum); /* wraps when overspent: the prover must refuse */
+  dg[0][0] += (uint8_t)X->add0;
+  if (X->swap)
+    P[3] = 4, P[4] = 3;
+  /* T = Enc(pk_f, balance); per group r_g, e1_g (u_g = A^T r_g + e1_g); e2 per leg, v_f, auditor copy */
+  const uint64_t xs0 = xs;
+  xs = 0x7E57AB1E00000000ULL ^ ((uint64_t)X->tag * 0x9E3779B97F4A7C15ULL);
+  digits (mT[0], X->balance);
+  short8 (rT, 2048, 1, 36), short16 (e1T, 2048, 20, 164), short16 (e2T[0], 16, 20, 64);
+  {
+    const uint8_t *p1[1] = { KTS.pk };
+    rc |= pqz_encrypt (p1, 1, (const uint8_t (*)[16])mT, rT, e1T, (const int16_t (*)[16])e2T, uT, vT);
+    for (g = 0; g < G; g++)
+      {
+        short8 (r[g], 2048, 1, 36), short16 (e1[g], 2048, 20, 164);
+        rc |= pqz_encrypt (p1, 1, (const uint8_t (*)[16])zero, r[g], e1[g], (const int16_t (*)[16])zero16, u[g], vs);
+      }
+  }
+  for (j = 0; j < m; j++)
+    short16 (e2l[j], 16, 20, 64), short16 (e2a[j], 16, 20, 64);
+  short16 (e2f, 16, 20, 64);
+  xs = xs0;
+  if (X->big0)
+    for (k = 0; k < 16; k++)
+      e2l[0][k] = 30;
+  for (j = 0; j < m && X->over0; j++)
+    for (k = 0; k < 16; k++)
+      {
+        const int16_t x = j ? 0 : k == 0 ? 64 : k == 1 ? 32 : 0;
+        if (X->over0 & 1)
+          e2l[j][k] = x;
+        if (X->over0 & 2)
+          e2a[j][k] = x;
+      }
+  /* the ciphertexts, leg by leg (the honest case equals the group encryption) */
+  for (j = 0; j < m; j++)
+    {
+      const uint8_t *pk1[1] = { KTR[X->key[j]].pk }, *pa1[1] = { KTA.pk };
+      uint8_t ma[1][16];
+      rc |= pqz_encrypt (pk1, 1, (const uint8_t (*)[16])dg[j], r[X->grp[j]], e1[X->grp[j]],
+                         (const int16_t (*)[16])e2l[j], utmp, &v[j]);
+      memcpy (ma[0], dg[j], 16);
+      if (j == 0)
+        ma[0][0] += (uint8_t)X->aud0;
+      if (a)
+        rc |= pqz_encrypt (pa1, 1, (const uint8_t (*)[16])ma, r[X->grp[j]], e1[X->grp[j]],
+                           (const int16_t (*)[16])e2a[j], utmp, &va[j]);
+    }
+  {
+    const uint8_t *p1[1] = { KTS.pk };
+    rc |= pqz_encrypt (p1, 1, (const uint8_t (*)[16])dpg, r[0], e1[0], (const int16_t (*)[16])e2f, utmp, vf);
+  }
+
+  /* header: filler words hashed only; fee, amount 0, M, auditorOn, canonical salt; recipientsHash (192) filler */
+  uint8_t *p = st;
+  memset (p, 0x77, PQZ_PREFIX_BYTES);
+  memcpy (p + 32, PSID, 32);
+  for (unsigned i = PQZ_PREFIX_BYTES; i < PQZ_HEADER_BYTES; i++)
+    p[i] = (uint8_t)(i * 11 + X->tag);
+  wr_word (p + PQZ_HDR_FEE, X->fee);
+  wr_word (p + PQZ_HDR_AMOUNT, 0);
+  wr_word (p + PQZ_HDR_LEGS, m);
+  wr_word (p + PQZ_HDR_AUDITOR_ON, a);
+  memset (p + PQZ_HDR_SALT, 0, 16);
+  p += PQZ_HEADER_BYTES;
+  memcpy (p, KTS.pk, PQZ_POLYVEC_BYTES), p += PQZ_POLYVEC_BYTES;
+  for (j = 0; j < m; j++)
+    memcpy (p, KTR[P[j]].pk, PQZ_POLYVEC_BYTES), p += PQZ_POLYVEC_BYTES;
+  if (a)
+    memcpy (p, KTA.pk, PQZ_POLYVEC_BYTES), p += PQZ_POLYVEC_BYTES;
+  memcpy (p, uT, PQZ_POLYVEC_BYTES), p += PQZ_POLYVEC_BYTES;
+  memcpy (p, vT[0], PQZ_V_BYTES), p += PQZ_V_BYTES;
+  for (g = 0; g < G; g++)
+    memcpy (p, u[g], PQZ_POLYVEC_BYTES), p += PQZ_POLYVEC_BYTES;
+  for (j = 0; j < m; j++)
+    memcpy (p, v[P[j]], PQZ_V_BYTES), p += PQZ_V_BYTES;
+  memcpy (p, vf[0], PQZ_V_BYTES), p += PQZ_V_BYTES;
+  for (j = 0; j < m && a; j++)
+    memcpy (p, va[P[j]], PQZ_V_BYTES), p += PQZ_V_BYTES;
+  *stlen = (size_t)(p - st);
+
+  /* witness: s_f || e_f || (r_g || e1_g) || e2_j || e2_f || [e2_{a,j}] || d_j || d' */
+  p = wt;
+  for (k = 0; k < 2048; k++)
+    p[k] = (uint8_t)KTS.s[k], le16 (p + 2048 + 2 * k, KTS.e[k]);
+  p += 6144;
+  for (g = 0; g < G; g++, p += 6144)
+    for (k = 0; k < 2048; k++)
+      p[k] = (uint8_t)r[g][k], le16 (p + 2048 + 2 * k, e1[g][k]);
+  for (j = 0; j < m; j++, p += 32)
+    for (k = 0; k < 16; k++)
+      le16 (p + 2 * k, e2l[P[j]][k]);
+  for (k = 0; k < 16; k++)
+    le16 (p + 2 * k, e2f[k]);
+  p += 32;
+  for (j = 0; j < m && a; j++, p += 32)
+    for (k = 0; k < 16; k++)
+      le16 (p + 2 * k, e2a[P[j]][k]);
+  for (j = 0; j < m; j++, p += 16)
+    memcpy (p, dg[P[j]], 16);
+  memcpy (p, dpg[0], 16), p += 16;
+  *wtlen = (size_t)(p - wt);
+  return rc == 0 && *stlen == PQZ_TXM_STMT_BYTES (m, a) && *wtlen == PQZ_TXM_WIT_BYTES (m, a);
+}
+
+static int
+setup_txm (void)
+{
+  const uint64_t xs0 = xs;
+  int ok = 1;
+  xs = 0x7E57AB1EBEEF0001ULL;
+  keygen (&KTS), keygen (&KTA);
+  for (unsigned j = 0; j < MAXL; j++)
+    keygen (&KTR[j]);
+  xs = xs0;
+  for (unsigned t = 0; t < NTXB; t++)
+    {
+      txspec_t X;
+      const int rel = 6 + (int)t;
+      txspec (&X, TXB[t].m, TXB[t].a, (uint8_t)t);
+      OPS[rel] = PQZ_OP_TRANSFER_MULTI, STMT[rel] = txm_stmt[t], WIT[rel] = txm_wit[t];
+      SEEDMUL[rel] = 23 + 2 * t, KEYOFF[rel] = PQZ_HEADER_BYTES, SCALOFF[rel] = PQZ_HDR_FEE + 31;
+      ok &= txm_build (&X, txm_stmt[t], &STLEN[rel], txm_wit[t], &WLEN[rel]);
+    }
+  return ok;
+}
+
 /* exported steps (wasm) / called from main (native) */
 int
 step_init (void *arena, size_t len)
 {
   int rc = pqz_init (arena, len);
   if (rc == 0)
-    setup ();
+    {
+      setup ();
+      if (!setup_txm ())
+        rc = -2;
+    }
   return rc;
 }
 
@@ -337,7 +544,10 @@ step_prove (int rel, unsigned seed)
   for (int i = 0; i < 32; i++)
     rnd32[i] = (uint8_t)(seed * SEEDMUL[rel] + i);
   lens[rel] = sizeof (proofs[rel]);
-  return pqz_prove (OPS[rel], STMT[rel], STLEN[rel], WIT[rel], WLEN[rel], rnd32, proofs[rel], &lens[rel]);
+  const int rc = pqz_prove (OPS[rel], STMT[rel], STLEN[rel], WIT[rel], WLEN[rel], rnd32, proofs[rel], &lens[rel]);
+  if (rc != 0)
+    lens[rel] = 0; /* pqz_prove leaves *proof_len as it was on failure */
+  return rc;
 }
 
 size_t
@@ -430,8 +640,16 @@ step_arena_peak (void)
   return pqz_arena_peak_bytes ();
 }
 
+/* number of bench relations (wasm: run_wasm.mjs reads it) */
+int
+step_nrel (void)
+{
+  return NREL;
+}
+
 #ifndef PQZ_WASM
-static const char *const NAMES[NREL] = { "R_REG", "R_TX", "R_BURN", "R_DS", "R_DR", "R_TX0" };
+static const char *NAMES[NREL] = { "R_REG", "R_TX", "R_BURN", "R_DS", "R_DR", "R_TX0" };
+static char TXM_NAMES[NTXB][16];
 
 static double
 now_ms (void)
@@ -556,12 +774,213 @@ auditor_check (int rels)
   return fails;
 }
 
+/* P6-ANON L1: R_TXM variants and negatives (pqz_bench n_p n_v mask 1). Variants (both verifiers accept): the real leg
+   at other positions, two real legs across the group boundary, all legs decoys, fee 0. Negatives: a false witness or
+   statement, expected = the prover refuses or both verifiers reject its proof (leg digit 16, sum + fee over the
+   balance, a leg under another key or another group's randomness, legs moved between groups, an auditor copy of another
+   amount, the legs' noise block over its bound), and the honest proofs of the bench statements under changed
+   statements (M word, auditorOn, recipientsHash, legs or groups swapped, (2, off) read as (1, on), op 7 against op 1
+   both ways). */
+/* PQZ_TXM_CASE=k: run only witness case k (0..14, in txm_check's order) or, k = 15, the statement tampers (one
+   process per case keeps the ASan + libc-heap build under scripts/capped's 4 GB); unset: all */
+static int txm_sel = -1, txm_k;
+#define TXM_RUN(k) (txm_sel < 0 || txm_sel == (k))
+
+static int
+txm_case (const char *name, const txspec_t *X, int expect)
+{
+  if (!TXM_RUN (txm_k++))
+    return 0;
+  static uint8_t st[TXM_ST_MAX], wt[TXM_WIT_MAX], pf[PQZ_MAX_PROOF];
+  size_t sl = 0, wl = 0, pl = sizeof pf;
+  int g = 0, f = 0, prc = -1, ok;
+  const int built = txm_build (X, st, &sl, wt, &wl);
+  if (built)
+    prc = pqz_prove (PQZ_OP_TRANSFER_MULTI, st, sl, wt, wl, rnd32, pf, &pl);
+  if (prc == 0)
+    {
+      g = pqz_verify (PQZ_OP_TRANSFER_MULTI, st, sl, pf, pl);
+#ifdef PQZ_SV
+      f = pqz_verify_fast (PQZ_OP_TRANSFER_MULTI, st, sl, pf, pl);
+#else
+      f = g;
+#endif
+    }
+  if (expect)
+    {
+      ok = prc == 0 && g == 1 && f == 1;
+      printf ("{\"txm_check\": \"%s\", \"expect\": \"accept\", \"prove_rc\": %d, \"generic\": %d, \"fast\": %d, "
+              "\"ok\": %s}\n",
+              name, prc, g, f, ok ? "true" : "false");
+      return !ok;
+    }
+  /* a false witness: the honest prover refuses (or its proof is rejected), and the cheating prover's proof (rc 0
+     required) is rejected by both verifiers (pre-review L-1: a refusal alone never counts as a verifier reject;
+     without PQZ_TEST_HOOKS the case fails) */
+  const int honest_ok = prc != 0 || (g == 0 && f == 0);
+  int crc = -1, cg = -1, cf = -1;
+#ifdef PQZ_TEST_HOOKS
+  pl = sizeof pf;
+  pqz_test_cheat = 1;
+  crc = built ? pqz_prove (PQZ_OP_TRANSFER_MULTI, st, sl, wt, wl, rnd32, pf, &pl) : -1;
+  pqz_test_cheat = 0;
+  if (crc == 0)
+    {
+      cg = pqz_verify (PQZ_OP_TRANSFER_MULTI, st, sl, pf, pl);
+#ifdef PQZ_SV
+      cf = pqz_verify_fast (PQZ_OP_TRANSFER_MULTI, st, sl, pf, pl);
+#else
+      cf = cg;
+#endif
+    }
+#endif
+  ok = honest_ok && crc == 0 && cg == 0 && cf == 0;
+  printf ("{\"txm_check\": \"%s\", \"expect\": \"reject\", \"prove_rc\": %d, \"generic\": %d, \"fast\": %d, "
+          "\"cheat_prove_rc\": %d, \"cheat_generic\": %d, \"cheat_fast\": %d, \"ok\": %s}\n",
+          name, prc, g, f, crc, cg, cf, ok ? "true" : "false");
+  return !ok;
+}
+
+static int
+txm_rel (unsigned m, unsigned a)
+{
+  for (unsigned t = 0; t < NTXB; t++)
+    if (TXB[t].m == m && TXB[t].a == a)
+      return 6 + (int)t;
+  return -1;
+}
+
+/* the honest proof of rel under a changed copy of a statement (op, st, sl): both verifiers must reject */
+static int
+txm_tamper (const char *name, int rel, uint8_t op, const uint8_t *st, size_t sl)
+{
+  int g = pqz_verify (op, st, sl, proofs[rel], lens[rel]), f = 0;
+#ifdef PQZ_SV
+  f = pqz_verify_fast (op, st, sl, proofs[rel], lens[rel]);
+#endif
+  const int ok = lens[rel] > 0 && g == 0 && f == 0;
+  printf ("{\"txm_check\": \"%s\", \"expect\": \"reject\", \"generic\": %d, \"fast\": %d, \"ok\": %s}\n", name, g, f,
+          ok ? "true" : "false");
+  return !ok;
+}
+
+static void
+swap_bytes (uint8_t *a, uint8_t *b, size_t n)
+{
+  for (size_t i = 0; i < n; i++)
+    {
+      uint8_t t = a[i];
+      a[i] = b[i], b[i] = t;
+    }
+}
+
+static int
+txm_check (int rels)
+{
+  static uint8_t st[TXM_ST_MAX];
+  txspec_t X;
+  int fails = 0, n = 0;
+  const int r81 = txm_rel (8, 1), r20 = txm_rel (2, 0), r11 = txm_rel (1, 1);
+  const char *sel = getenv ("PQZ_TXM_CASE");
+  txm_sel = sel != NULL ? atoi (sel) : -1, txm_k = 0;
+  for (int r = 6; r < NREL && TXM_RUN (15); r++) /* the honest proofs the tampers need */
+    if ((r == r81 || r == r20 || r == r11) && lens[r] == 0)
+      fails += step_prove (r, 0) != 0;
+  if (lens[1] == 0 && TXM_RUN (15))
+    fails += step_prove (1, 0) != 0;
+
+  /* variants */
+  txspec (&X, 4, 1, 100), X.amount[3] = 0, X.amount[0] = 5000;
+  fails += txm_case ("M 4 on: real leg 0", &X, 1), n++;
+  txspec (&X, 8, 1, 101), X.amount[7] = 0, X.amount[3] = 1111, X.amount[4] = 2222, X.fee = 0;
+  fails += txm_case ("M 8 on: real legs 3 and 4 (group boundary), fee 0", &X, 1), n++;
+  txspec (&X, 8, 0, 102), X.amount[7] = 0, X.fee = 0;
+  fails += txm_case ("M 8 off: all legs decoys, fee 0", &X, 1), n++;
+  txspec (&X, 2, 0, 103), X.amount[0] = 77, X.amount[1] = 88;
+  fails += txm_case ("M 2 off: two real legs", &X, 1), n++;
+  txspec (&X, 8, 1, 104), X.amount[7] = X.balance - X.fee; /* the whole balance: b' = 0 */
+  fails += txm_case ("M 8 on: sum + fee = balance", &X, 1), n++;
+
+  /* false witnesses / statements */
+  txspec (&X, 8, 1, 110), X.add0 = 16;
+  fails += txm_case ("leg digit 16", &X, 0), n++;
+  txspec (&X, 8, 1, 111), X.amount[7] = X.balance - X.fee + 1;
+  fails += txm_case ("sum + fee = balance + 1", &X, 0), n++;
+  txspec (&X, 8, 1, 112), X.key[1] = 2, X.amount[1] = 9;
+  fails += txm_case ("v_1 encrypted to another recipient's key", &X, 0), n++;
+  txspec (&X, 8, 1, 113), X.grp[4] = 0, X.amount[4] = 9;
+  fails += txm_case ("leg 4 under group 0's randomness", &X, 0), n++;
+  txspec (&X, 8, 1, 114), X.swap = 1, X.amount[3] = 5;
+  fails += txm_case ("legs 3 and 4 moved between groups", &X, 0), n++;
+  txspec (&X, 8, 1, 115), X.aud0 = 1;
+  fails += txm_case ("auditor copy of leg 0 of another amount", &X, 0), n++;
+  txspec (&X, 2, 1, 116), X.big0 = 1;
+  fails += txm_case ("leg 0's e2 norm 120 (over 64 and over 64 sqrt(2))", &X, 0), n++;
+  txspec (&X, 2, 1, 117), X.over0 = 1;
+  fails += txm_case ("leg 0's ||e2||^2 5120 > 4096, legs' block 5120 < 8192 (X-1)", &X, 0), n++;
+  txspec (&X, 2, 1, 118), X.over0 = 2;
+  fails += txm_case ("auditor copy 0's ||e2||^2 5120 > 4096, block 5120 < 8192 (X-1)", &X, 0), n++;
+  txspec (&X, 8, 0, 119), X.over0 = 1;
+  fails += txm_case ("M 8 off: leg 0's ||e2||^2 5120 > 4096, block 5120 < 32768 (X-1)", &X, 0), n++;
+
+  /* honest proofs under changed statements */
+  if (r81 >= 0 && TXM_RUN (15))
+    {
+      const size_t sl = STLEN[r81];
+      const unsigned m = 8, G = 2;
+      const size_t pk0 = PQZ_HEADER_BYTES + PQZ_POLYVEC_BYTES, u0 = pk0 + (m + 1) * PQZ_POLYVEC_BYTES + 16512,
+                   v0 = u0 + G * PQZ_POLYVEC_BYTES, va0 = v0 + (m + 1) * PQZ_V_BYTES;
+      memcpy (st, STMT[r81], sl), st[PQZ_HDR_LEGS + 31] = 4;
+      fails += txm_tamper ("M word 8 -> 4", r81, 7, st, sl), n++;
+      st[PQZ_HDR_LEGS + 31] = 3;
+      fails += txm_tamper ("M word 8 -> 3 (not built)", r81, 7, st, sl), n++;
+      memcpy (st, STMT[r81], sl), st[PQZ_HDR_LEGS + 30] = 1;
+      fails += txm_tamper ("M word 8 -> 264", r81, 7, st, sl), n++;
+      memcpy (st, STMT[r81], sl), st[PQZ_HDR_AUDITOR_ON + 31] = 0;
+      fails += txm_tamper ("auditorOn 1 -> 0", r81, 7, st, sl), n++;
+      memcpy (st, STMT[r81], sl), st[192 + 31] ^= 1;
+      fails += txm_tamper ("recipientsHash changed", r81, 7, st, sl), n++;
+      memcpy (st, STMT[r81], sl);
+      swap_bytes (st + pk0 + 3 * PQZ_POLYVEC_BYTES, st + pk0 + 4 * PQZ_POLYVEC_BYTES, PQZ_POLYVEC_BYTES);
+      swap_bytes (st + v0 + 3 * PQZ_V_BYTES, st + v0 + 4 * PQZ_V_BYTES, PQZ_V_BYTES);
+      swap_bytes (st + va0 + 3 * PQZ_V_BYTES, st + va0 + 4 * PQZ_V_BYTES, PQZ_V_BYTES);
+      fails += txm_tamper ("legs 3 and 4 swapped in the statement", r81, 7, st, sl), n++;
+      memcpy (st, STMT[r81], sl);
+      swap_bytes (st + u0, st + u0 + PQZ_POLYVEC_BYTES, PQZ_POLYVEC_BYTES);
+      fails += txm_tamper ("u_0 and u_1 swapped", r81, 7, st, sl), n++;
+    }
+  if (r20 >= 0 && TXM_RUN (15)) /* 83,072 B: also the length of (1, on) */
+    {
+      memcpy (st, STMT[r20], STLEN[r20]), st[PQZ_HDR_LEGS + 31] = 1, st[PQZ_HDR_AUDITOR_ON + 31] = 1;
+      fails += txm_tamper ("(2, off) read as (1, on)", r20, 7, st, STLEN[r20]), n++;
+    }
+  if (r11 >= 0 && TXM_RUN (15)) /* op 7 at M = 1 against op 1 (R_TX), both ways */
+    {
+      memcpy (st, STMT[r11], STLEN[r11]), wr_word (st + PQZ_HDR_LEGS, 0);
+      fails += txm_tamper ("R_TXM 1 proof as op 1", r11, 1, st, STLEN[r11]), n++;
+      fails += txm_tamper ("R_TXM 1 proof, op 7 statement, op 1", r11, 1, STMT[r11], STLEN[r11]), n++;
+      memcpy (st, tx_stmt, sizeof tx_stmt), wr_word (st + PQZ_HDR_LEGS, 1);
+      fails += txm_tamper ("R_TX proof as op 7", 1, 7, st, sizeof tx_stmt), n++;
+    }
+  printf ("{\"txm_check\": %s, \"cases\": %d, \"only\": %d, \"fails\": %d}\n", fails ? "false" : "true", n, txm_sel,
+          fails);
+  (void)rels;
+  return fails;
+}
+
 int
 main (int argc, char **argv)
 {
   int np = argc > 1 ? atoi (argv[1]) : 10, nv = argc > 2 ? atoi (argv[2]) : 100, fails = 0;
-  int rels = argc > 3 ? atoi (argv[3]) : 63;
-  void *arena = malloc (ARENA_BYTES);
+  int rels = argc > 3 ? atoi (argv[3]) : 63, checks = argc > 4 ? atoi (argv[4]) : 0;
+  const char *amb = getenv ("PQZ_ARENA_MB");
+  const size_t arena_bytes = amb != NULL ? (size_t)atoi (amb) << 20 : ARENA_BYTES;
+  void *arena = malloc (arena_bytes);
+  for (unsigned t = 0; t < NTXB; t++)
+    {
+      snprintf (TXM_NAMES[t], sizeof TXM_NAMES[t], "R_TXM%u%s", TXB[t].m, TXB[t].a ? "" : "_0");
+      NAMES[6 + t] = TXM_NAMES[t];
+    }
   const char *ve = getenv ("PQZ_VERIFY");
   if (step_set_fast (ve != NULL && strcmp (ve, "fast") == 0) != 0)
     {
@@ -571,7 +990,7 @@ main (int argc, char **argv)
   double t0, *tp = malloc (sizeof (double) * (np > nv ? np : nv) * 7 + 64);
 
   t0 = now_ms ();
-  if (step_init (arena, ARENA_BYTES) != 0)
+  if (step_init (arena, arena_bytes) != 0)
     {
       printf ("{\"error\": \"init\"}\n");
       return 1;
@@ -650,6 +1069,12 @@ main (int argc, char **argv)
     }
   if (rels & 34)
     fails += auditor_check (rels);
+  if (checks)
+    fails += txm_check (rels);
+  {
+    extern size_t pqz_arena_used (void); /* pqz_arena.c: the base mark = A, the keys (and SV tables) of every op touched */
+    printf ("{\"arena_resident_end\": %zu}\n", pqz_arena_used ());
+  }
   printf ("{\"fails\": %d}\n", fails);
   return fails != 0;
 }

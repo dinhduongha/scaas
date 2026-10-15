@@ -1,0 +1,4 @@
+check_sv_fixes tree: cases mismatches = 28 0
+check_sv_fixes sz: cases mismatches = 28 28
+check_sv_fixes l2: cases mismatches = 28 28
+check_sv_fixes: ok

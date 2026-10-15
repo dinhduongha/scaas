@@ -1,0 +1,34 @@
+{"init_ms": 88.7, "init_arena": 3116288, "verify": "fast"}
+{"timing": "R_TXM1 prove", "n": 2, "mean_ms": 1130.586, "p50_ms": 1230.699, "p99_ms": 1030.474, "max_ms": 1230.699}
+{"rel": "R_TXM1", "proof_bytes_last": 42748, "proof_bytes_max": 42761, "arena_peak": 310496560, "rej_tries_mean": 12.50, "proofs_fnv": "ee87e7a4"}
+{"timing": "R_TXM1 verify valid", "n": 20, "mean_ms": 8.590, "p50_ms": 7.837, "p99_ms": 11.454, "max_ms": 11.553}
+{"timing": "R_TXM1 verify adversarial", "n": 30, "mean_ms": 4.537, "p50_ms": 7.602, "p99_ms": 10.593, "max_ms": 12.154}
+{"timing": "R_TXM2 prove", "n": 2, "mean_ms": 930.356, "p50_ms": 1000.933, "p99_ms": 859.779, "max_ms": 1000.933}
+{"rel": "R_TXM2", "proof_bytes_last": 43583, "proof_bytes_max": 43583, "arena_peak": 345127968, "rej_tries_mean": 3.00, "proofs_fnv": "4294a892"}
+{"timing": "R_TXM2 verify valid", "n": 20, "mean_ms": 8.831, "p50_ms": 8.491, "p99_ms": 10.560, "max_ms": 10.726}
+{"timing": "R_TXM2 verify adversarial", "n": 30, "mean_ms": 4.537, "p50_ms": 8.038, "p99_ms": 10.420, "max_ms": 10.718}
+{"timing": "R_TXM4 prove", "n": 2, "mean_ms": 1288.104, "p50_ms": 1482.976, "p99_ms": 1093.231, "max_ms": 1482.976}
+{"rel": "R_TXM4", "proof_bytes_last": 45295, "proof_bytes_max": 45295, "arena_peak": 397438080, "rej_tries_mean": 8.00, "proofs_fnv": "4ff8974f"}
+{"timing": "R_TXM4 verify valid", "n": 20, "mean_ms": 9.256, "p50_ms": 8.936, "p99_ms": 10.989, "max_ms": 11.898}
+{"timing": "R_TXM4 verify adversarial", "n": 30, "mean_ms": 5.569, "p50_ms": 8.846, "p99_ms": 11.884, "max_ms": 11.972}
+{"timing": "R_TXM8 prove", "n": 2, "mean_ms": 2752.728, "p50_ms": 2896.928, "p99_ms": 2608.528, "max_ms": 2896.928}
+{"rel": "R_TXM8", "proof_bytes_last": 61794, "proof_bytes_max": 61794, "arena_peak": 754642032, "rej_tries_mean": 5.00, "proofs_fnv": "cd21b056"}
+{"timing": "R_TXM8 verify valid", "n": 20, "mean_ms": 14.391, "p50_ms": 13.108, "p99_ms": 17.610, "max_ms": 18.023}
+{"timing": "R_TXM8 verify adversarial", "n": 30, "mean_ms": 8.174, "p50_ms": 13.047, "p99_ms": 18.241, "max_ms": 18.380}
+{"timing": "R_TXM1_0 prove", "n": 2, "mean_ms": 763.392, "p50_ms": 772.002, "p99_ms": 754.781, "max_ms": 772.002}
+{"rel": "R_TXM1_0", "proof_bytes_last": 42434, "proof_bytes_max": 42442, "arena_peak": 391680464, "rej_tries_mean": 2.50, "proofs_fnv": "bba9cd96"}
+{"timing": "R_TXM1_0 verify valid", "n": 20, "mean_ms": 8.606, "p50_ms": 7.820, "p99_ms": 10.529, "max_ms": 10.699}
+{"timing": "R_TXM1_0 verify adversarial", "n": 30, "mean_ms": 4.348, "p50_ms": 7.689, "p99_ms": 8.997, "max_ms": 10.841}
+{"timing": "R_TXM2_0 prove", "n": 2, "mean_ms": 998.781, "p50_ms": 1090.999, "p99_ms": 906.562, "max_ms": 1090.999}
+{"rel": "R_TXM2_0", "proof_bytes_last": 42936, "proof_bytes_max": 42936, "arena_peak": 419725200, "rej_tries_mean": 10.00, "proofs_fnv": "2fef961b"}
+{"timing": "R_TXM2_0 verify valid", "n": 20, "mean_ms": 8.871, "p50_ms": 8.416, "p99_ms": 10.691, "max_ms": 10.983}
+{"timing": "R_TXM2_0 verify adversarial", "n": 30, "mean_ms": 5.050, "p50_ms": 7.988, "p99_ms": 11.255, "max_ms": 11.391}
+{"timing": "R_TXM4_0 prove", "n": 2, "mean_ms": 1245.918, "p50_ms": 1569.048, "p99_ms": 922.788, "max_ms": 1569.048}
+{"rel": "R_TXM4_0", "proof_bytes_last": 43943, "proof_bytes_max": 43943, "arena_peak": 458131984, "rej_tries_mean": 15.50, "proofs_fnv": "74c6be73"}
+{"timing": "R_TXM4_0 verify valid", "n": 20, "mean_ms": 9.130, "p50_ms": 8.670, "p99_ms": 11.772, "max_ms": 11.807}
+{"timing": "R_TXM4_0 verify adversarial", "n": 30, "mean_ms": 5.185, "p50_ms": 8.387, "p99_ms": 11.722, "max_ms": 11.850}
+{"timing": "R_TXM8_0 prove", "n": 2, "mean_ms": 2054.310, "p50_ms": 2227.218, "p99_ms": 1881.402, "max_ms": 2227.218}
+{"rel": "R_TXM8_0", "proof_bytes_last": 59026, "proof_bytes_max": 59026, "arena_peak": 771747664, "rej_tries_mean": 5.50, "proofs_fnv": "90c8fc70"}
+{"timing": "R_TXM8_0 verify valid", "n": 20, "mean_ms": 13.644, "p50_ms": 12.421, "p99_ms": 16.917, "max_ms": 16.957}
+{"timing": "R_TXM8_0 verify adversarial", "n": 30, "mean_ms": 7.229, "p50_ms": 12.183, "p99_ms": 16.956, "max_ms": 16.964}
+{"fails": 0}

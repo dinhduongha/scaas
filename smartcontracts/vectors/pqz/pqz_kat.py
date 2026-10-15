@@ -707,7 +707,7 @@ def check_c_keys(path, log):
     bad = []
     pks = {}
     n = dict.fromkeys(["shake256", "keygen", "enc", "dec", "keygen_lowered", "enc_lowered", "keygen_resampled",
-                       "enc_resampled", "ctr64_errors"], 0)
+                       "enc_resampled", "ctr64_errors", "enc_group_seed"], 0)
     for line in open(path):
         line = line.strip()
         if not line.startswith("{"):
@@ -725,6 +725,13 @@ def check_c_keys(path, log):
             pks[x["seed"]] = (pk, s)
             if x["rc"] != 0 or ctr != x["ctr"] or shake256(pk, 32).hex() != x["pk_shake256"]:
                 bad.append(f"KeyGen seed {x['seed']}")
+        elif "enc_group_seed" in r:  # P6-ANON D13: g = 0 -> seed_enc, else SHAKE256(tag || seed_enc || be4(g))[0..32)
+            x = r["enc_group_seed"]
+            n["enc_group_seed"] += 1
+            se, g = bytes.fromhex(x["seed_enc"]), x["g"]
+            want = se if g == 0 else shake256(b"SCAAS-PQZ-ENC-GROUP-V1" + se + g.to_bytes(4, "big"), 32)
+            if want.hex() != x["out"]:
+                bad.append(f"Enc group seed {x['seed_enc']} g {g}")
         elif "keygen_lowered" in r:  # test-hook thresholds: the resample path, or the counter-64 error (rc 4)
             x = r["keygen_lowered"]
             n["keygen_lowered"] += 1
@@ -766,7 +773,7 @@ def check_c_keys(path, log):
                 bad.append(f"C reports: {line}")
     log(f"     C keys KAT {path}: {n}")
     if n["shake256"] < 10 or n["keygen"] < 20 or n["enc"] < 20 or n["dec"] < 40 or n["keygen_resampled"] < 1 \
-            or n["enc_resampled"] < 1 or n["ctr64_errors"] < 2:
+            or n["enc_resampled"] < 1 or n["ctr64_errors"] < 2 or n["enc_group_seed"] < 16:
         bad.append(f"too few cases: {n}")
     return bad
 

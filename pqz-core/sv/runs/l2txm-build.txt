@@ -1,0 +1,4 @@
+symbols ok: only memcpy memset __stack_chk_fail __stack_pointer outside the library objects
+symbols ok: only memcpy memset __stack_chk_fail __stack_pointer outside the library objects
+symbols ok: only memcpy memset __stack_chk_fail __stack_pointer outside the library objects
+symbols ok: only memcpy memset __stack_chk_fail __stack_pointer outside the library objects

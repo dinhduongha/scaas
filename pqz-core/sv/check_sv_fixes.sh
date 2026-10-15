@@ -6,11 +6,13 @@
 #   L2 (P6-L2, lazer-crypto/lazer#25): every exact-l2 equation back to the one domain M + 2 (d - 1) + 2.
 # Each reverted build must show mismatches (honest proofs the generic verifier accepts and it rejects); the tree's
 # own build must show none. Needs build/native (./build.sh native). Heavy: run under scripts/capped.
-#   sv/check_sv_fixes.sh [pqz_sv_diff args]     (default "1 1 0 1 0 1 1 1": one honest proof per relation)
+#   sv/check_sv_fixes.sh [pqz_sv_diff args]     (default "1 1 0 1 0 1 1 1 1 1": one honest proof per relation, every
+#                                               built R_TXM shape included; PQZ_ARENA_MB 2048 for its M = 8)
 # Exit 0 = both fixes in place and both reversions detected.
 set -eu
 cd "$(dirname "$0")/.."
-A=${1:-"1 1 0 1 0 1 1 1"}
+A=${1:-"1 1 0 1 0 1 1 1 1 1"}
+export PQZ_ARENA_MB=${PQZ_ARENA_MB:-2048}
 B=build/svfix
 mkdir -p $B
 CC=${CC:-clang}

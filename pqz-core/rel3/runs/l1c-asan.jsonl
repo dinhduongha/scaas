@@ -1,0 +1,33 @@
+{"init_ms": 298.1, "init_arena": 0, "verify": "generic"}
+{"hedge": true, "seed_bits_diff_witness": 245, "seed_bits_diff_statement": 248, "same_inputs_same_seeds": 1, "same_rnd32_same_proof": 1}
+{"timing": "R_REG prove", "n": 1, "mean_ms": 1160.065, "p50_ms": 1160.065, "p99_ms": 1160.065, "max_ms": 1160.065}
+{"rel": "R_REG", "proof_bytes_last": 28113, "proof_bytes_max": 28113, "arena_peak": 0, "rej_tries_mean": 4.00, "proofs_fnv": "25074bbb"}
+{"timing": "R_REG verify valid", "n": 1, "mean_ms": 976.691, "p50_ms": 976.691, "p99_ms": 976.691, "max_ms": 976.691}
+{"timing": "R_REG verify adversarial", "n": 6, "mean_ms": 486.546, "p50_ms": 944.337, "p99_ms": 947.851, "max_ms": 989.207}
+{"timing": "R_TX prove", "n": 1, "mean_ms": 4740.838, "p50_ms": 4740.838, "p99_ms": 4740.838, "max_ms": 4740.838}
+{"rel": "R_TX", "proof_bytes_last": 42780, "proof_bytes_max": 42780, "arena_peak": 0, "rej_tries_mean": 5.00, "proofs_fnv": "008d4495"}
+{"timing": "R_TX verify valid", "n": 1, "mean_ms": 3790.102, "p50_ms": 3790.102, "p99_ms": 3790.102, "max_ms": 3790.102}
+{"timing": "R_TX verify adversarial", "n": 6, "mean_ms": 2053.259, "p50_ms": 3873.270, "p99_ms": 4095.240, "max_ms": 4168.368}
+{"timing": "R_TX0 prove", "n": 1, "mean_ms": 4778.534, "p50_ms": 4778.534, "p99_ms": 4778.534, "max_ms": 4778.534}
+{"rel": "R_TX0", "proof_bytes_last": 42432, "proof_bytes_max": 42432, "arena_peak": 0, "rej_tries_mean": 4.00, "proofs_fnv": "bfdc29df"}
+{"timing": "R_TX0 verify valid", "n": 1, "mean_ms": 3601.264, "p50_ms": 3601.264, "p99_ms": 3601.264, "max_ms": 3601.264}
+{"timing": "R_TX0 verify adversarial", "n": 6, "mean_ms": 1921.147, "p50_ms": 3736.275, "p99_ms": 3749.582, "max_ms": 3866.427}
+{"timing": "R_TXM1 prove", "n": 1, "mean_ms": 4612.615, "p50_ms": 4612.615, "p99_ms": 4612.615, "max_ms": 4612.615}
+{"rel": "R_TXM1", "proof_bytes_last": 42761, "proof_bytes_max": 42761, "arena_peak": 0, "rej_tries_mean": 4.00, "proofs_fnv": "403c3945"}
+{"timing": "R_TXM1 verify valid", "n": 1, "mean_ms": 4151.934, "p50_ms": 4151.934, "p99_ms": 4151.934, "max_ms": 4151.934}
+{"timing": "R_TXM1 verify adversarial", "n": 6, "mean_ms": 2034.515, "p50_ms": 3933.871, "p99_ms": 3943.645, "max_ms": 4132.807}
+{"timing": "R_TXM2 prove", "n": 1, "mean_ms": 5214.131, "p50_ms": 5214.131, "p99_ms": 5214.131, "max_ms": 5214.131}
+{"rel": "R_TXM2", "proof_bytes_last": 43569, "proof_bytes_max": 43569, "arena_peak": 0, "rej_tries_mean": 4.00, "proofs_fnv": "349f138b"}
+{"timing": "R_TXM2 verify valid", "n": 1, "mean_ms": 4468.771, "p50_ms": 4468.771, "p99_ms": 4468.771, "max_ms": 4468.771}
+{"timing": "R_TXM2 verify adversarial", "n": 6, "mean_ms": 2377.465, "p50_ms": 4557.310, "p99_ms": 4672.325, "max_ms": 4808.278}
+{"timing": "R_TXM4 prove", "n": 1, "mean_ms": 7375.739, "p50_ms": 7375.739, "p99_ms": 7375.739, "max_ms": 7375.739}
+{"rel": "R_TXM4", "proof_bytes_last": 45268, "proof_bytes_max": 45268, "arena_peak": 0, "rej_tries_mean": 14.00, "proofs_fnv": "c7686ccb"}
+{"timing": "R_TXM4 verify valid", "n": 1, "mean_ms": 5466.262, "p50_ms": 5466.262, "p99_ms": 5466.262, "max_ms": 5466.262}
+{"timing": "R_TXM4 verify adversarial", "n": 6, "mean_ms": 2879.035, "p50_ms": 5477.279, "p99_ms": 5646.305, "max_ms": 5876.862}
+{"timing": "R_TXM8 prove", "n": 1, "mean_ms": 14121.309, "p50_ms": 14121.309, "p99_ms": 14121.309, "max_ms": 14121.309}
+{"rel": "R_TXM8", "proof_bytes_last": 61791, "proof_bytes_max": 61791, "arena_peak": 0, "rej_tries_mean": 6.00, "proofs_fnv": "fe0743b0"}
+{"timing": "R_TXM8 verify valid", "n": 1, "mean_ms": 12022.266, "p50_ms": 12022.266, "p99_ms": 12022.266, "max_ms": 12022.266}
+{"timing": "R_TXM8 verify adversarial", "n": 6, "mean_ms": 13325.301, "p50_ms": 12295.509, "p99_ms": 21295.348, "max_ms": 45724.419}
+{"timing": "R_TXM1_0 prove", "n": 1, "mean_ms": 4608.721, "p50_ms": 4608.721, "p99_ms": 4608.721, "max_ms": 4608.721}
+{"rel": "R_TXM1_0", "proof_bytes_last": 42442, "proof_bytes_max": 42442, "arena_peak": 0, "rej_tries_mean": 2.00, "proofs_fnv": "d323d812"}
+{"timing": "R_TXM1_0 verify valid", "n": 1, "mean_ms": 3798.543, "p50_ms": 3798.543, "p99_ms": 3798.543, "max_ms"

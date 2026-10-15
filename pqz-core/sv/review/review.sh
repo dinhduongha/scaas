@@ -5,7 +5,8 @@
 #   sv/review/review.sh norm         cheating provers past the final hash: z1 / w / z21 norms (both verifiers must
 #                                    reject, and accept once that one check is removed). z21 was finding 1 (no bound,
 #                                    both accepted; lazer#26), fixed as P6-Z21: check_tbox_fixes.sh runs this mode
-#   sv/review/review.sh zdiff [N J M] P6-Z21 differential: z21-inflated proofs of all six relations (k = 1.25^0..J,
+#   sv/review/review.sh zdiff [N J M] P6-Z21 differential: z21-inflated proofs of all six relations and the eight
+#                                    built R_TXM shapes (mask M, default 16383; k = 1.25^0..J,
 #                                    N seeds), generic and fast must agree and accept iff ||(z21, z22)||^2 <= Bsq
 #   sv/review/review.sh fuzz SECS    libFuzzer, fast verifier alone, six relations, ASan + UBSan
 set -eu
@@ -81,10 +82,10 @@ norm)
   $B/normpoc_verify_noz21 verify $B/norm-out
   ;;
 zdiff)
-  # P6-Z21 differential: z21-inflated proofs of all five relations, both verifiers in-process (sv/review/z21diff.c)
+  # P6-Z21 differential: z21-inflated proofs of every relation, both verifiers in-process (sv/review/z21diff.c)
   poc
   $CC -std=gnu11 -O2 -w -Isrc -o $B/z21diff sv/review/z21diff.c $B/poc/libpqz.a -lm
-  $B/z21diff "${2:-1}" "${3:-31}" "${4:-63}"
+  PQZ_ARENA_MB=${PQZ_ARENA_MB:-2048} $B/z21diff "${2:-1}" "${3:-31}" "${4:-16383}" # mask: six P6e forms + eight R_TXM
   ;;
 fuzz)
   T=${2:-600}

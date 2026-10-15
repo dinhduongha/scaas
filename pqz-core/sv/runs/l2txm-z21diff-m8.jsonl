@@ -1,0 +1,88 @@
+prover patch: 57 lines added or changed
+{"rel": "R_TXM8", "k": 1, "seed": 0, "proof_bytes": 61817, "z21sq": 116750738972, "z2sq": 1336132567145476, "bsq": 7393984317519398, "z2sq_over_bsq": 0.180705, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8", "k": 2, "seed": 0, "proof_bytes": 61788, "z21sq": 120642627115, "z2sq": 1332258332468011, "bsq": 7393984317519398, "z2sq_over_bsq": 0.180181, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8", "k": 3, "seed": 0, "proof_bytes": 61808, "z21sq": 133271297181, "z2sq": 1295275669356808, "bsq": 7393984317519398, "z2sq_over_bsq": 0.175180, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8", "k": 4, "seed": 0, "proof_bytes": 61860, "z21sq": 157337613233, "z2sq": 1306073799903114, "bsq": 7393984317519398, "z2sq_over_bsq": 0.176640, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8", "k": 5, "seed": 0, "proof_bytes": 61804, "z21sq": 162220033926, "z2sq": 1316170147422707, "bsq": 7393984317519398, "z2sq_over_bsq": 0.178006, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8", "k": 6, "seed": 0, "proof_bytes": 61860, "z21sq": 212718150696, "z2sq": 1316023143068374, "bsq": 7393984317519398, "z2sq_over_bsq": 0.177986, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8", "k": 7, "seed": 0, "proof_bytes": 61889, "z21sq": 275667084499, "z2sq": 1361402838637217, "bsq": 7393984317519398, "z2sq_over_bsq": 0.184123, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8", "k": 9, "seed": 0, "proof_bytes": 61877, "z21sq": 384111344332, "z2sq": 1311622312383639, "bsq": 7393984317519398, "z2sq_over_bsq": 0.177390, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8", "k": 12, "seed": 0, "proof_bytes": 61937, "z21sq": 648808520445, "z2sq": 1305111546460717, "bsq": 7393984317519398, "z2sq_over_bsq": 0.176510, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8", "k": 15, "seed": 0, "proof_bytes": 61894, "z21sq": 777541243314, "z2sq": 1318985266412391, "bsq": 7393984317519398, "z2sq_over_bsq": 0.178386, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8", "k": 18, "seed": 0, "proof_bytes": 61961, "z21sq": 933371513553, "z2sq": 1289143720258973, "bsq": 7393984317519398, "z2sq_over_bsq": 0.174350, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8", "k": 23, "seed": 0, "proof_bytes": 61964, "z21sq": 1177058215061, "z2sq": 1348132515526114, "bsq": 7393984317519398, "z2sq_over_bsq": 0.182328, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8", "k": 28, "seed": 0, "proof_bytes": 62112, "z21sq": 2831209906700, "z2sq": 1332144688864064, "bsq": 7393984317519398, "z2sq_over_bsq": 0.180166, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8", "k": 36, "seed": 0, "proof_bytes": 62144, "z21sq": 3809860154087, "z2sq": 1279790143031766, "bsq": 7393984317519398, "z2sq_over_bsq": 0.173085, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8", "k": 44, "seed": 0, "proof_bytes": 62230, "z21sq": 4911909710561, "z2sq": 1280597604928429, "bsq": 7393984317519398, "z2sq_over_bsq": 0.173195, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8", "k": 56, "seed": 0, "proof_bytes": 62345, "z21sq": 8057351869415, "z2sq": 1342026121311477, "bsq": 7393984317519398, "z2sq_over_bsq": 0.181502, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8", "k": 69, "seed": 0, "proof_bytes": 62492, "z21sq": 13851954084342, "z2sq": 1309493921281758, "bsq": 7393984317519398, "z2sq_over_bsq": 0.177103, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8", "k": 87, "seed": 0, "proof_bytes": 62592, "z21sq": 17405156465083, "z2sq": 1276390783950279, "bsq": 7393984317519398, "z2sq_over_bsq": 0.172626, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8", "k": 108, "seed": 0, "proof_bytes": 62815, "z21sq": 28898413801943, "z2sq": 1369639112091506, "bsq": 7393984317519398, "z2sq_over_bsq": 0.185237, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8", "k": 136, "seed": 0, "proof_bytes": 63336, "z21sq": 55189804249988, "z2sq": 1357214131137217, "bsq": 7393984317519398, "z2sq_over_bsq": 0.183557, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8", "k": 169, "seed": 0, "proof_bytes": 63551, "z21sq": 83860489271097, "z2sq": 1392960003499289, "bsq": 7393984317519398, "z2sq_over_bsq": 0.188391, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8", "k": 212, "seed": 0, "proof_bytes": 63887, "z21sq": 110935531111608, "z2sq": 1379880288370603, "bsq": 7393984317519398, "z2sq_over_bsq": 0.186622, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8", "k": 265, "seed": 0, "proof_bytes": 65344, "z21sq": 324736623571717, "z2sq": 1645288417768454, "bsq": 7393984317519398, "z2sq_over_bsq": 0.222517, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8", "k": 331, "seed": 0, "proof_bytes": 64759, "z21sq": 256051269568283, "z2sq": 1573442199973880, "bsq": 7393984317519398, "z2sq_over_bsq": 0.212800, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8", "k": 414, "seed": 0, "proof_bytes": 66093, "z21sq": 455857987188778, "z2sq": 1767563462328216, "bsq": 7393984317519398, "z2sq_over_bsq": 0.239054, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8", "k": 517, "seed": 0, "proof_bytes": 66871, "z21sq": 692892961024911, "z2sq": 1990202633816696, "bsq": 7393984317519398, "z2sq_over_bsq": 0.269165, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8", "k": 646, "seed": 0, "proof_bytes": 68365, "z21sq": 1062156582759770, "z2sq": 2362505107456759, "bsq": 7393984317519398, "z2sq_over_bsq": 0.319517, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8", "k": 808, "seed": 0, "proof_bytes": 70181, "z21sq": 1825178247537325, "z2sq": 3110884401052980, "bsq": 7393984317519398, "z2sq_over_bsq": 0.420732, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8", "k": 1010, "seed": 0, "proof_bytes": 71871, "z21sq": 2932838210912599, "z2sq": 4224990634420083, "bsq": 7393984317519398, "z2sq_over_bsq": 0.571409, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8", "k": 1262, "seed": 0, "proof_bytes": 73118, "z21sq": 3424139136274355, "z2sq": 4750176703028759, "bsq": 7393984317519398, "z2sq_over_bsq": 0.642438, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8", "k": 1578, "seed": 0, "proof_bytes": 76284, "z21sq": 5389561392361333, "z2sq": 6701376307001165, "bsq": 7393984317519398, "z2sq_over_bsq": 0.906328, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8", "k": 1972, "seed": 0, "proof_bytes": 80892, "z21sq": 9016041974671836, "z2sq": 10327454929594676, "bsq": 7393984317519398, "z2sq_over_bsq": 1.396737, "expect": "REJECT", "generic": "REJECT", "fast": "REJECT"}
+{"rel": "R_TXM8", "k": 2465, "seed": 0, "proof_bytes": 86417, "z21sq": 16017881350262324, "z2sq": 17322629991927304, "bsq": 7393984317519398, "z2sq_over_bsq": 2.342800, "expect": "REJECT", "generic": "REJECT", "fast": "REJECT"}
+{"rel": "R_TXM8", "k": 3081, "seed": 0, "proof_bytes": 95033, "z21sq": 28993674914057033, "z2sq": 30332585852130094, "bsq": 7393984317519398, "z2sq_over_bsq": 4.102333, "expect": "REJECT", "generic": "REJECT", "fast": "REJECT"}
+{"rel": "R_TXM8", "k": 3852, "seed": 0, "prove_rc": 3}
+{"rel": "R_TXM8", "k": 4815, "seed": 0, "prove_rc": 3}
+{"rel": "R_TXM8_0", "k": 1, "seed": 0, "proof_bytes": 58985, "z21sq": 117222041815, "z2sq": 1363870179586710, "bsq": 7393984317519398, "z2sq_over_bsq": 0.184457, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8_0", "k": 2, "seed": 0, "proof_bytes": 59017, "z21sq": 124509063500, "z2sq": 1309479434511722, "bsq": 7393984317519398, "z2sq_over_bsq": 0.177101, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8_0", "k": 3, "seed": 0, "proof_bytes": 58985, "z21sq": 126983888973, "z2sq": 1346339130223989, "bsq": 7393984317519398, "z2sq_over_bsq": 0.182086, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8_0", "k": 4, "seed": 0, "proof_bytes": 59033, "z21sq": 164907538663, "z2sq": 1327504014828732, "bsq": 7393984317519398, "z2sq_over_bsq": 0.179538, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8_0", "k": 5, "seed": 0, "proof_bytes": 59062, "z21sq": 218927249080, "z2sq": 1257145429447066, "bsq": 7393984317519398, "z2sq_over_bsq": 0.170023, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8_0", "k": 6, "seed": 0, "proof_bytes": 59067, "z21sq": 222879456593, "z2sq": 1260984009535370, "bsq": 7393984317519398, "z2sq_over_bsq": 0.170542, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8_0", "k": 7, "seed": 0, "proof_bytes": 59066, "z21sq": 273003060689, "z2sq": 1291304947318735, "bsq": 7393984317519398, "z2sq_over_bsq": 0.174643, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8_0", "k": 9, "seed": 0, "proof_bytes": 59081, "z21sq": 282785460840, "z2sq": 1286156064742984, "bsq": 7393984317519398, "z2sq_over_bsq": 0.173946, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8_0", "k": 12, "seed": 0, "proof_bytes": 59084, "z21sq": 440642998248, "z2sq": 1316247560379675, "bsq": 7393984317519398, "z2sq_over_bsq": 0.178016, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8_0", "k": 15, "seed": 0, "proof_bytes": 59136, "z21sq": 820687290039, "z2sq": 1285406079046226, "bsq": 7393984317519398, "z2sq_over_bsq": 0.173845, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8_0", "k": 18, "seed": 0, "proof_bytes": 59147, "z21sq": 949007407006, "z2sq": 1334397630183994, "bsq": 7393984317519398, "z2sq_over_bsq": 0.180471, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8_0", "k": 23, "seed": 0, "proof_bytes": 59196, "z21sq": 1325390418546, "z2sq": 1307808417482257, "bsq": 7393984317519398, "z2sq_over_bsq": 0.176875, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8_0", "k": 28, "seed": 0, "proof_bytes": 59269, "z21sq": 2217750610725, "z2sq": 1349178540267813, "bsq": 7393984317519398, "z2sq_over_bsq": 0.182470, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8_0", "k": 36, "seed": 0, "proof_bytes": 59379, "z21sq": 4601547539628, "z2sq": 1369627449144077, "bsq": 7393984317519398, "z2sq_over_bsq": 0.185235, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8_0", "k": 44, "seed": 0, "proof_bytes": 59341, "z21sq": 3187940735969, "z2sq": 1290135253311674, "bsq": 7393984317519398, "z2sq_over_bsq": 0.174484, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8_0", "k": 56, "seed": 0, "proof_bytes": 59505, "z21sq": 7817568204088, "z2sq": 1343582254250499, "bsq": 7393984317519398, "z2sq_over_bsq": 0.181713, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8_0", "k": 69, "seed": 0, "proof_bytes": 59756, "z21sq": 17479042164934, "z2sq": 1335062502135465, "bsq": 7393984317519398, "z2sq_over_bsq": 0.180561, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8_0", "k": 87, "seed": 0, "proof_bytes": 59803, "z21sq": 17814043574106, "z2sq": 1331625693868420, "bsq": 7393984317519398, "z2sq_over_bsq": 0.180096, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8_0", "k": 108, "seed": 0, "proof_bytes": 60101, "z21sq": 33164050183156, "z2sq": 1398984448358290, "bsq": 7393984317519398, "z2sq_over_bsq": 0.189206, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8_0", "k": 136, "seed": 0, "proof_bytes": 60201, "z21sq": 38447653796859, "z2sq": 1331599299789620, "bsq": 7393984317519398, "z2sq_over_bsq": 0.180092, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8_0", "k": 169, "seed": 0, "proof_bytes": 60565, "z21sq": 68444447476836, "z2sq": 1353621286227882, "bsq": 7393984317519398, "z2sq_over_bsq": 0.183071, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8_0", "k": 212, "seed": 0, "proof_bytes": 60675, "z21sq": 86644946451228, "z2sq": 1426685630493311, "bsq": 7393984317519398, "z2sq_over_bsq": 0.192952, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8_0", "k": 265, "seed": 0, "proof_bytes": 61638, "z21sq": 185428366692076, "z2sq": 1455501870933395, "bsq": 7393984317519398, "z2sq_over_bsq": 0.196849, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8_0", "k": 331, "seed": 0, "proof_bytes": 62175, "z21sq": 271274255180079, "z2sq": 1605383534641736, "bsq": 7393984317519398, "z2sq_over_bsq": 0.217120, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8_0", "k": 414, "seed": 0, "proof_bytes": 64161, "z21sq": 704720658201495, "z2sq": 1987947330917160, "bsq": 7393984317519398, "z2sq_over_bsq": 0.268860, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8_0", "k": 517, "seed": 0, "proof_bytes": 64213, "z21sq": 720477259428223, "z2sq": 2037882667924287, "bsq": 7393984317519398, "z2sq_over_bsq": 0.275614, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8_0", "k": 646, "seed": 0, "proof_bytes": 65295, "z21sq": 993750524181782, "z2sq": 2303284403556730, "bsq": 7393984317519398, "z2sq_over_bsq": 0.311508, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8_0", "k": 808, "seed": 0, "proof_bytes": 65424, "z21sq": 1202153802177739, "z2sq": 2451434576338894, "bsq": 7393984317519398, "z2sq_over_bsq": 0.331544, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8_0", "k": 1010, "seed": 0, "proof_bytes": 69534, "z21sq": 2909106359352606, "z2sq": 4221715201626967, "bsq": 7393984317519398, "z2sq_over_bsq": 0.570966, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8_0", "k": 1262, "seed": 0, "proof_bytes": 70428, "z21sq": 3448687242968890, "z2sq": 4734803999463933, "bsq": 7393984317519398, "z2sq_over_bsq": 0.640359, "expect": "ACCEPT", "generic": "ACCEPT", "fast": "ACCEPT"}
+{"rel": "R_TXM8_0", "k": 1578, "seed": 0, "proof_bytes": 74276, "z21sq": 6307339829166422, "z2sq": 7632986185153200, "bsq": 7393984317519398, "z2sq_over_bsq": 1.032324, "expect": "REJECT", "generic": "REJECT", "fast": "REJECT"}
+{"rel": "R_TXM8_0", "k": 1972, "seed": 0, "proof_bytes": 76447, "z21sq": 8421711785381144, "z2sq": 9736481393500779, "bsq": 7393984317519398, "z2sq_over_bsq": 1.316811, "expect": "REJECT", "generic": "REJECT", "fast": "REJECT"}
+{"rel": "R_TXM8_0", "k": 2465, "seed": 0, "proof_bytes": 85369, "z21sq": 17497848935062121, "z2sq": 18775074245039290, "bsq": 7393984317519398, "z2sq_over_bsq": 2.539236, "expect": "REJECT", "generic": "REJECT", "fast": "REJECT"}
+{"rel": "R_TXM8_0", "k": 3081, "seed": 0, "proof_bytes": 87702, "z21sq": 21946820207530055, "z2sq": 23232889165779476, "bsq": 7393984317519398, "z2sq_over_bsq": 3.142134, "expect": "REJECT", "generic": "REJECT", "fast": "REJECT"}
+{"rel": "R_TXM8_0", "k": 3852, "seed": 0, "proof_bytes": 91550, "z21sq": 30269830212266111, "z2sq": 31639769410059353, "bsq": 7393984317519398, "z2sq_over_bsq": 4.279123, "expect": "REJECT", "generic": "REJECT", "fast": "REJECT"}
+{"rel": "R_TXM8_0", "k": 4815, "seed": 0, "prove_rc": 3}
+{"rel": "R_REG", "accepted": 0, "rejected": 0}
+{"rel": "R_TX", "accepted": 0, "rejected": 0}
+{"rel": "R_BURN", "accepted": 0, "rejected": 0}
+{"rel": "R_DS", "accepted": 0, "rejected": 0}
+{"rel": "R_DR", "accepted": 0, "rejected": 0}
+{"rel": "R_TX0", "accepted": 0, "rejected": 0}
+{"rel": "R_TXM1", "accepted": 0, "rejected": 0}
+{"rel": "R_TXM2", "accepted": 0, "rejected": 0}
+{"rel": "R_TXM4", "accepted": 0, "rejected": 0}
+{"rel": "R_TXM8", "accepted": 31, "rejected": 3}
+{"rel": "R_TXM1_0", "accepted": 0, "rejected": 0}
+{"rel": "R_TXM2_0", "accepted": 0, "rejected": 0}
+{"rel": "R_TXM4_0", "accepted": 0, "rejected": 0}
+{"rel": "R_TXM8_0", "accepted": 30, "rejected": 5}
+{"z21diff": 1, "cases": 69, "disagreements": 0, "expect_mismatches": 0, "prove_errors": 3, "closest_z2sq_over_bsq": 1.032324, "both_verdicts_every_relation": 1}

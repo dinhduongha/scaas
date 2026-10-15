@@ -2,7 +2,7 @@
 # P6-SV for R_BURN / R_DS / R_DR (and R_REG / R_TX again): the whole set under ONE scripts/capped job,
 #   scripts/capped pqz-core/sv/rel3.sh <label>
 # 1. differential test, portable and x86-64-v3 (pqz_sv_diff; per relation: n_reg n_tx muts seed fuzz n_burn n_ds n_dr
-#    n_tx0; R_TX0 since P6e Task 2)
+#    n_tx0 n_txm; R_TX0 since P6e Task 2, every built R_TXM shape since P6-ANON L2)
 # 2. bench: fast verifier native portable / x86-64-v3 / wasm32, generic for reference (pqz_bench, run_wasm.mjs)
 # 3. wasm PQZ_VERIFY=both: every wasm verify with both verifiers, disagreements counted
 # 4. ASan + UBSan on the libc-heap path: pqz_bench with the fast verifier, all five relations
@@ -14,7 +14,8 @@
 set -eu
 cd "$(dirname "$0")/.."
 L=$1 R=sv/runs/$1
-DIFF=${DIFF:-"4 4 2 1 10 12 12 12 12"} DIFF3=${DIFF3:-"2 2 2 2 10 6 6 6 6"} NF=${NF:-200} NG=${NG:-10}
+DIFF=${DIFF:-"4 4 2 1 10 12 12 12 12 2"} DIFF3=${DIFF3:-"2 2 2 2 10 6 6 6 6 1"} NF=${NF:-200} NG=${NG:-10}
+export PQZ_ARENA_MB=${PQZ_ARENA_MB:-2048} # R_TXM M = 8 (P6-ANON L2)
 ./build.sh native > "$R-build.txt" 2>&1
 ./build.sh native-x86v3 >> "$R-build.txt" 2>&1
 ./build.sh wasm >> "$R-build.txt" 2>&1

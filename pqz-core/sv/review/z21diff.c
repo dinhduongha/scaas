@@ -8,8 +8,10 @@
  * that same vector). Linked only against the patched-prover library of review.sh (build/review/poc), never into a
  * production build.
  *   z21diff [nseeds = 1] [jmax = 31] [mask = 63]  JSON lines (mask: 1 R_REG, 2 R_TX, 4 R_BURN, 8 R_DS, 16 R_DR,
- *                                             32 R_TX0); exit 0 = no disagreement, no expectation mismatch, and
- *                                             both verdicts seen for every relation
+ *                                             32 R_TX0, 64 << t the R_TXM shape TXD[t] of pqz_sv_diff.c: 64 (1, on),
+ *                                             128 (2, on), 256 (4, on), 512 (8, on), 1024 .. 8192 the same off);
+ *                                             exit 0 = no disagreement, no expectation mismatch, and both verdicts
+ *                                             seen for every relation; PQZ_ARENA_MB as pqz_sv_diff
  */
 #define main pqz_sv_diff_main
 #include "../../test/pqz_sv_diff.c"
@@ -19,9 +21,16 @@
 extern int pqz_poc_mode;
 extern int64_t pqz_poc_k, pqz_poc_z21sq, pqz_poc_z2sq;
 
-/* params/pqz_{reg,tx,burn,ds,dr,tx0}_params.h: <name>_Bsq = floor(Bound_()^2) */
-static const int64_t BSQ[NREL] = { 22226101053479LL, 384257620087633LL, 384257620087633LL, 4636547823165LL,
-                                   1490938094717228LL, 384257620087633LL };
+/* params/pqz_{reg,tx,burn,ds,dr,tx0}_params.h, then the R_TXM shapes' headers (M = 1: tx / tx0, txm2, txm4, txm8,
+   txm20, txm40, txm80, oversize txm16, txm160): <name>_Bsq = floor(Bound_()^2) */
+static const int64_t BSQ[NREL] = { 22226101053479LL,   384257620087633LL,  384257620087633LL,  4636547823165LL,
+                                   1490938094717228LL, 384257620087633LL,  384257620087633LL,  384257620087633LL,
+                                   384257620087633LL,  7393984317519398LL, 384257620087633LL,  384257620087633LL,
+                                   384257620087633LL,  7393984317519398LL,
+#ifdef PQZ_TXM_OVERSIZE
+                                   416994374581420LL, 1619251171041139LL,
+#endif
+};
 
 int
 main (int argc, char **argv)
@@ -31,10 +40,16 @@ main (int argc, char **argv)
   const int mask = argc > 3 ? atoi (argv[3]) : 63; /* one relation per process keeps an ASan malloc build small */
   long cases = 0, dis = 0, mis = 0, err = 0, acc[NREL] = { 0 }, rej[NREL] = { 0 };
   double closest = 1e9;
+  const char *amb = getenv ("PQZ_ARENA_MB");
+  const size_t arena_bytes = amb != NULL ? (size_t)atoi (amb) << 20 : ARENA_BYTES;
   xs = 0x5A21D1FF00000001ULL;
-  if (pqz_init (malloc (ARENA_BYTES), ARENA_BYTES) != 0)
+  if (pqz_init (malloc (arena_bytes), arena_bytes) != 0)
     return 2;
+  txm_tables ();
   make_reg (), make_tx (), make_burn (), make_disc ();
+  for (int t = 0; t < NTXD; t++)
+    if (mask >> (6 + t) & 1)
+      make_txm (t);
   for (int rel = 0; rel < NREL; rel++)
     {
       int64_t last = 0;
