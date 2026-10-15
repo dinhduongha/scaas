@@ -1,0 +1,28 @@
+# P6f calibration (2026-10-15-calib) 2026-10-15 13:11:55Z  host 1ba513d89da1  cpus 4  .NET 10.0.9
+# libpqz_ffi.so /opt/pqz-calibrate/libpqz_ffi.so sha256 12495e8b9cdcf95b932761bae8843e499ee7b4bdd2b240869ed461fc7a257d87; n = 1000 per set; cold self-test 200 processes
+# model name	: AMD Ryzen 5 7235HS
+t_ecMul median 0.017 ms (p99 0.023, n 10000) ⇒ 0.359 M gas per ms
+
+| op | id | stmtLen | forms | valid n | p50 valid ms | p99 valid ms | p99 adversarial ms | worst adversarial set | t_row ms | gas | + calldata floor of the largest honest input (direct tx) |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | pqzh | 83072 | TRANSFER | 22 (20 fresh) | 9.685 | 11.759 | 1.983 | negative.json (31) | 11.759 | 4,225,000 | 11,670,200 (315,923 B) |
+| 1 | pqzh | 66560 | TRANSFER0 | 22 (20 fresh) | 9.343 | 11.191 | 1.552 | proof bit flips (1000) | 11.191 | 4,021,000 | 11,111,040 (298,653 B) |
+| 1 | pqzl | 83072 | TRANSFER | 22 (20 fresh) | 8.507 | 11.495 | 15.053 | stmt last word (22) | 15.053 | 5,409,000 | 7,163,326 (125,857 B) |
+| 1 | pqzl | 66560 | TRANSFER0 | 22 (20 fresh) | 11.728 | 14.535 | 12.259 | stmt last word (22) | 14.535 | 5,223,000 | 6,762,049 (109,018 B) |
+| 2 | pqzh | 50048 | BURN+REFRESH | 44 (40 fresh) | 9.173 | 10.403 | 1.265 | negative.json (39) | 10.403 | 3,738,000 | 10,616,430 (282,621 B) |
+| 2 | pqzl | 50048 | BURN+REFRESH | 44 (40 fresh) | 8.168 | 9.212 | 10.361 | proof bit flips (1000) | 10.361 | 3,723,000 | 5,044,024 (92,011 B) |
+| 3 | pqzh | 16480 | REGISTER | 21 (20 fresh) | 6.986 | 9.246 | 1.416 | proof bit flips (1000) | 9.246 | 3,322,000 | 7,866,080 (204,959 B) |
+| 3 | pqzl | 16480 | REGISTER | 21 (20 fresh) | 4.516 | 7.499 | 6.932 | negative.json (12) | 7.499 | 2,695,000 | 3,373,242 (44,585 B) |
+| 4 | pqzh | 33184 | DISCLOSE-SENDER | 21 (20 fresh) | 7.253 | 9.137 | 0.998 | proof bit flips (1000) | 9.137 | 3,283,000 | 8,354,830 (220,927 B) |
+| 4 | pqzl | 33184 | DISCLOSE-SENDER | 21 (20 fresh) | 4.686 | 7.237 | 6.853 | proof bit flips (1000) | 7.237 | 2,601,000 | 3,503,653 (62,167 B) |
+| 5 | pqzh | 33184 | DISCLOSE-AUDITOR+DISCLOSE-RECEIVER | 42 (40 fresh) | 7.140 | 8.018 | 1.069 | proof bit flips (1000) | 8.018 | 2,881,000 | 8,386,170 (221,631 B) |
+| 5 | pqzl | 33184 | DISCLOSE-AUDITOR+DISCLOSE-RECEIVER | 42 (40 fresh) | 4.920 | 5.361 | 7.144 | proof bit flips (1000) | 7.144 | 2,567,000 | 3,469,820 (62,196 B) |
+
+OP_SELFTEST cold (first call in a fresh process, 200 processes): p50 96.826 ms, p99 108.641 ms ⇒ cold price would be 39,033,000 gas
+OP_SELFTEST warm (cached): p50 0.000 ms, p99 0.001 ms; selftestGas = the smallest row = 2,567,000 (D6, R3)
+ML-DSA-44: 15 ACVP inputs, p50 0.110 ms, p99 0.135 ms ⇒ calibrated 49,000, EIP-8355 BASE 6,500 ⇒ mldsa44Gas 49,000
+ML-DSA-65: 15 ACVP inputs, p50 0.163 ms, p99 0.189 ms ⇒ calibrated 68,000, EIP-8355 BASE 9,000 ⇒ mldsa65Gas 68,000
+
+sanity: every t_row ≤ 60 ms; every honest and MAX_PROOF input fits a direct transaction
+# image scaas/nethermind-pqz:1.39.0-pqz1-calib sha256:3b20d7430f6d472b388950bae6a850a921b6652e71f66e2fb0df2dfc4ce51959; host load before: 2.74 3.79 3.81, after: 2.72 3.83 3.88
+# conditions: the copy chain stopped; the other capped slot was held by another agent's job for the whole run (load avg 2.7-3.9 on 8 cores; this run --cpus 4). One run (owner 2026-10-15); re-calibrate before 22776 or if a later measurement differs by > 15 %.
