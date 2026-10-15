@@ -85,7 +85,7 @@ flowchart LR
   subgraph Check["Where it is checked"]
     SIG["SigCheck<br/>ECDSA or 1271 (50 k / 400 k)"]
     REG["UA registry<br/>per-kind verifier"]
-    PRE["precompile probe<br/>7622: 0x…0F10"]
+    PRE["precompile probe<br/>7622: 0x5caa5…0012 / …0013"]
     SOL["pure-Solidity<br/>ML-DSA / FN-DSA"]
   end
   EOA --> SIG
@@ -117,7 +117,8 @@ flowchart LR
 - **Confidentiality.** Classical Zether is dev-only ([CTR-ZTH-02](../contracts/zether.md#CTR-ZTH-02)); a quantum
   adversary could read balances and forge proofs. PQ Zether (`PqzToken`, MLWE encryption, LNP22 proofs) is specified
   for chain 7622 only, behind an allowlist and a precompile self-test; precompiles `PQZ` at `0x…0F01` and `MLDSA65` at
-  `0x…0F10` ("EIP-8355's layout plus a context field"), placed off 0x12/0x13 on purpose
+  `0x…0F10` ("EIP-8355's layout plus a context field"), placed off 0x12/0x13 on purpose (2026-10-15, P6f: moved to
+  `0x5caa5…0f01` / `…0012` / `…0013`, EIP-8355 layout with the empty context, `MLDSA44` added; Q6)
   ([CTR-PQZ-01](../contracts/pq-zether.md#CTR-PQZ-01), [CTR-PQZ-10](../contracts/pq-zether.md#CTR-PQZ-10)). Public
   chains: wait for a lattice-verification precompile there; no Solidity split, no STARK wrap, no appchain. Its
   authorization is a PQ `authRef` ([CTR-PQZ-12](../contracts/pq-zether.md#CTR-PQZ-12)). Token kinds `*_PQZ` are
@@ -208,7 +209,7 @@ Watch; it follows (1) and (2). On chain 7622 the private `MLDSA65` precompile co
 not signature verification; no draft offers it. EIP-7885's NTT and vector ops are the only generic building blocks
 and are not proposed for any fork; even with them a Solidity LNP22 verifier would be multi-million gas
 **[inference]**. 8288's recursive STARK verifies leanSPHINCS and reserves leanSTARK; arbitrary programs are not in
-scope yet. The chain-7622 design stays; its addresses `0x…0F01`/`0x…0F10` avoid the 0x12–0x15 contest but sit inside
+scope yet. The chain-7622 design stays; its first addresses `0x…0F01`/`0x…0F10` avoided the 0x12–0x15 contest but sat inside
 the EIP-1352 precompile range (Q6).
 
 **(7) Node and relayer keys.** Key exchange: already PQ, ahead of the drafts. Identity: Ed25519 with a stated ML-DSA
@@ -274,8 +275,10 @@ Kept open; none blocks the current contract phase (DEX, then Zether kinds) or th
 - **Q5 Solidity cost basis.** Fireblocks' 1.23 M is **ML-DSA-44**, while `pq-zether.md` §3 and the CTR-UA-23
   estimates attribute it to ML-DSA-65; the ML-DSA-65 worst case is likely higher **[inference]**. The per-chain
   T-GAS measurement settles it before any cap is set.
-- **Q6 Private precompile addresses.** `0x…0F01`/`0x…0F10` lie in the EIP-1352 reserved range; a future upstream
-  precompile there would collide on chain 7622. The self-test catches a wrong answer, not a shadowed address.
+- **Q6 Private precompile addresses — closed (P6f D3, 2026-10-15).** The old `0x…0F01`/`0x…0F10` lay in the EIP-1352
+  reserved range. Chain 7622 now uses `PQZ` `0x5caa500000000000000000000000000000000f01`, `MLDSA44` `…0012` and `MLDSA65`
+  `…0013` under the `0x5caa5` prefix: above `0xffff`, outside RIP-7587's `0x100`–`0x1ff` and the OP / Taiko / Arbitrum
+  system ranges ([CTR-PQZ-10](../contracts/pq-zether.md#CTR-PQZ-10); controller proposal, owner may override).
 - **Q7 PQ makers and 1271 wallets on public chains.** Until a precompile exists, a PQ wallet can sign UA-path intents
   but not v1/v2 intents or DEX orders. Acceptable as a stated gap, or does a known PQ wallet codehash deserve its own
   cap the way `SmartKeyAccount` clones got 400 k?

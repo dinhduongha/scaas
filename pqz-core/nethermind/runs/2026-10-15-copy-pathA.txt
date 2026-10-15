@@ -1,0 +1,217 @@
+# P6f T7 path A (transition timestamp) on the copy, 2026-10-15T13:19:12Z, commit 7a0fe0b, image sha256:c53359a69bfae32a48412940fa98c744d06f55ab3e8da41e0b5ac82d2e8bea4f
+$ copy.sh patch pqz-core/nethermind/chain/engine-pqz.json 1792070952   # T = start + 10 min
+/home/ha/work/ainative/scaas/.claude/worktrees/p6f/scratchpad/p6f-copy/genesis.pqz.json: engine.Pqz added (first timestamp 1792070952 = 0x6ad0d528, 1 schedule(s), 12 rows); diff: 84 added lines, 0 removed
+$ copy.sh up scaas/nethermind-pqz:1.39.0-pqz1 genesis.pqz.json
+ Container pqzcopy-rpc Started 
+## step 1: PQZ-START (signer):
+PQZ-START sha256=12495e8b9cdcf95b932761bae8843e499ee7b4bdd2b240869ed461fc7a257d87 selftest=ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205 addresses=PQZ:0x5caa500000000000000000000000000000000f01,MLDSA44:0x5caa500000000000000000000000000000000012,MLDSA65:0x5caa500000000000000000000000000000000013 schedules=[{ts 1792070952, rows 12 [op1/0a47a768/83072=4225000, op1/0a47a768/66560=4021000, op1/2e07e6ed/83072=5409000, op1/2e07e6ed/66560=5223000, op2/0a47a768/50048=3738000, op2/2e07e6ed/50048=3723000, op3/0a47a768/16480=3322000, op3/2e07e6ed/16480=2695000, op4/0a47a768/33184=3283000, op4/2e07e6ed/33184=2601000, op5/0a47a768/33184=2881000, op5/2e07e6ed/33184=2567000], selftest 2567000, mldsa44 49000, mldsa65 68000}]
+## PQZ-START (follower): 2 line(s)
+head 415 0x91b880e381bf90cb8c7f08c2e8f876ecca56571b02f177a5bbbbd44b3ca32891 gasLimit 25155267 gasUsed 0 ts 1792069905
+head: all checks passed
+$ BEFORE=1 probe.sh pqz-core/nethermind/chain/engine-pqz.json   (13:20:32Z, T - 520 s)
+ok    before T: eth_getCode 0x5caa500000000000000000000000000000000f01 empty
+ok    before T: balance 0x5caa500000000000000000000000000000000f01 0
+ok    before T: nonce 0x5caa500000000000000000000000000000000f01 0
+ok    before T: eth_call 0x5caa500000000000000000000000000000000f01 answers nothing (0x)
+ok    before T: probe.call(0x5caa500000000000000000000000000000000f01) rlen 0 (word 0, gas 2622)
+ok    before T: eth_getCode 0x5caa500000000000000000000000000000000012 empty
+ok    before T: balance 0x5caa500000000000000000000000000000000012 0
+ok    before T: nonce 0x5caa500000000000000000000000000000000012 0
+ok    before T: eth_call 0x5caa500000000000000000000000000000000012 answers nothing (0x)
+ok    before T: probe.call(0x5caa500000000000000000000000000000000012) rlen 0 (word 0, gas 2622)
+ok    before T: eth_getCode 0x5caa500000000000000000000000000000000013 empty
+ok    before T: balance 0x5caa500000000000000000000000000000000013 0
+ok    before T: nonce 0x5caa500000000000000000000000000000000013 0
+ok    before T: eth_call 0x5caa500000000000000000000000000000000013 answers nothing (0x)
+ok    before T: probe.call(0x5caa500000000000000000000000000000000013) rlen 0 (word 0, gas 2622)
+before: all checks passed
+rc=0
+## follower would not peer after copy.sh restore pre + up (signer producing, follower 'Waiting for peers'; a debug container
+   from another IP peered at once). Cause: Nethermind's Network.FilterPeersByRecentIp (default true) drops incoming
+   connections from an IP that connected recently; the follower's restarts from 10.76.22.11 kept tripping it. Fix: both
+   copy configs set FilterPeersByRecentIp false; copy.sh up starts the signer first. Follower data wiped and re-synced
+   from genesis through T (it re-executes every block with the plugin). Signer recreated at 13:30:51Z (data kept).
+head 554 0xf941081e9c80987b9eb7240978ba79f8a77413ceac91847421f8f20da0fa602f gasLimit 28810370 gasUsed 0 ts 1792071050
+head: all checks passed
+
+## step 2: probe.sh after T (13:30:51Z, now - T = 99 s), through nginx -> follower
+ok    eth_chainId = 0x1dc6
+genesis hash 0x5044f9961ad1c8cb780d030366f1ee4355b0e8d028a04056706d7a3ed9b26d5d
+ok    OP_SELFTEST eth_call = ed910a2c…d205 (got 0xed910a2cf4…)
+probe overhead (identity precompile) = 22 gas
+ok    PQZ honest   BURN pqzh                                      pqzh: word 1 (want 1), gas 3764460 = formula 3764460
+ok    PQZ honest   BURN pqzl                                      pqzl: word 1 (want 1), gas 3731622 = formula 3731622
+ok    PQZ honest   DISCLOSE-AUDITOR pqzh                          pqzh: word 1 (want 1), gas 2901661 = formula 2901661
+ok    PQZ honest   DISCLOSE-AUDITOR pqzl                          pqzl: word 1 (want 1), gas 2572829 = formula 2572829
+ok    PQZ honest   DISCLOSE-RECEIVER pqzh                         pqzh: word 1 (want 1), gas 2901664 = formula 2901664
+ok    PQZ honest   DISCLOSE-RECEIVER pqzl                         pqzl: word 1 (want 1), gas 2572832 = formula 2572832
+ok    PQZ honest   DISCLOSE-SENDER pqzh                           pqzh: word 1 (want 1), gas 3303592 = formula 3303592
+ok    PQZ honest   DISCLOSE-SENDER pqzl                           pqzl: word 1 (want 1), gas 2606829 = formula 2606829
+ok    PQZ honest   REFRESH pqzh                                   pqzh: word 1 (want 1), gas 3764283 = formula 3764283
+ok    PQZ honest   REFRESH pqzl                                   pqzl: word 1 (want 1), gas 3731622 = formula 3731622
+ok    PQZ honest   REGISTER pqzh                                  pqzh: word 1 (want 1), gas 3341056 = formula 3341056
+ok    PQZ honest   REGISTER pqzl                                  pqzl: word 1 (want 1), gas 2699182 = formula 2699182
+ok    PQZ honest   TRANSFER pqzh                                  pqzh: word 1 (want 1), gas 4254442 = formula 4254442
+ok    PQZ honest   TRANSFER pqzl                                  pqzl: word 1 (want 1), gas 5420799 = formula 5420799
+ok    PQZ honest   TRANSFER0 pqzh                                 pqzh: word 1 (want 1), gas 4048942 = formula 4048942
+ok    PQZ honest   TRANSFER0 pqzl                                 pqzl: word 1 (want 1), gas 5233221 = formula 5233221
+ok    PQZ flip     TRANSFER: proof middle byte bit 3 flipped      pqzl: word 0 (want 0), gas 5420799 = formula 5420799
+ok    PQZ flip     TRANSFER0: proof middle byte bit 3 flipped     pqzl: word 0 (want 0), gas 5233221 = formula 5233221
+ok    PQZ flip     BURN: proof middle byte bit 3 flipped          pqzl: word 0 (want 0), gas 3731622 = formula 3731622
+ok    PQZ flip     REFRESH: proof middle byte bit 3 flipped       pqzl: word 0 (want 0), gas 3731622 = formula 3731622
+ok    PQZ flip     REGISTER: proof middle byte bit 3 flipped      pqzl: word 0 (want 0), gas 2699182 = formula 2699182
+ok    PQZ flip     DISCLOSE-SENDER: proof middle byte bit 3 flipp pqzl: word 0 (want 0), gas 2606829 = formula 2606829
+ok    PQZ flip     DISCLOSE-RECEIVER: proof middle byte bit 3 fli pqzl: word 0 (want 0), gas 2572832 = formula 2572832
+ok    PQZ flip     DISCLOSE-AUDITOR: proof middle byte bit 3 flip pqzl: word 0 (want 0), gas 2572829 = formula 2572829
+ok    PQZ flip     TRANSFER: proof middle byte bit 3 flipped      pqzh: word 0 (want 0), gas 4254442 = formula 4254442
+ok    PQZ flip     TRANSFER0: proof middle byte bit 3 flipped     pqzh: word 0 (want 0), gas 4048942 = formula 4048942
+ok    PQZ flip     BURN: proof middle byte bit 3 flipped          pqzh: word 0 (want 0), gas 3764460 = formula 3764460
+ok    PQZ flip     REFRESH: proof middle byte bit 3 flipped       pqzh: word 0 (want 0), gas 3764283 = formula 3764283
+ok    PQZ flip     REGISTER: proof middle byte bit 3 flipped      pqzh: word 0 (want 0), gas 3341056 = formula 3341056
+ok    PQZ flip     DISCLOSE-SENDER: proof middle byte bit 3 flipp pqzh: word 0 (want 0), gas 3303592 = formula 3303592
+ok    PQZ flip     DISCLOSE-RECEIVER: proof middle byte bit 3 fli pqzh: word 0 (want 0), gas 2901664 = formula 2901664
+ok    PQZ flip     DISCLOSE-AUDITOR: proof middle byte bit 3 flip pqzh: word 0 (want 0), gas 2901661 = formula 2901661
+ok    PQZ fee0     fee0 TRANSFER pqzl                             pqzl: word 1 (want 1), gas 5420799 = formula 5420799
+ok    PQZ fee0     fee0 TRANSFER pqzh                             pqzh: word 1 (want 1), gas 4254553 = formula 4254553
+ok    PQZ fee0     fee0 TRANSFER0 pqzl                            pqzl: word 1 (want 1), gas 5233218 = formula 5233218
+ok    PQZ fee0     fee0 TRANSFER0 pqzh                            pqzh: word 1 (want 1), gas 4048933 = formula 4048933
+ok    PQZ fee0     fee0 BURN pqzl                                 pqzl: word 1 (want 1), gas 3731622 = formula 3731622
+ok    PQZ fee0     fee0 BURN pqzh                                 pqzh: word 1 (want 1), gas 3764220 = formula 3764220
+ok    PQZ fee0     fee0 REFRESH pqzl                              pqzl: word 1 (want 1), gas 3731625 = formula 3731625
+ok    PQZ fee0     fee0 REFRESH pqzh                              pqzh: word 1 (want 1), gas 3764400 = formula 3764400
+ok    PQZ selftest OP_SELFTEST                                    -: word 0xed910a2c (want hash), gas 2567000 = formula 2567000
+ok    gas valid = invalid ('pqzh', 'BURN'): 3764460 / 3764460
+ok    gas valid = invalid ('pqzh', 'DISCLOSE-AUDITOR'): 2901661 / 2901661
+ok    gas valid = invalid ('pqzh', 'DISCLOSE-RECEIVER'): 2901664 / 2901664
+ok    gas valid = invalid ('pqzh', 'DISCLOSE-SENDER'): 3303592 / 3303592
+ok    gas valid = invalid ('pqzh', 'REFRESH'): 3764283 / 3764283
+ok    gas valid = invalid ('pqzh', 'REGISTER'): 3341056 / 3341056
+ok    gas valid = invalid ('pqzh', 'TRANSFER'): 4254442 / 4254442
+ok    gas valid = invalid ('pqzh', 'TRANSFER0'): 4048942 / 4048942
+ok    gas valid = invalid ('pqzl', 'BURN'): 3731622 / 3731622
+ok    gas valid = invalid ('pqzl', 'DISCLOSE-AUDITOR'): 2572829 / 2572829
+ok    gas valid = invalid ('pqzl', 'DISCLOSE-RECEIVER'): 2572832 / 2572832
+ok    gas valid = invalid ('pqzl', 'DISCLOSE-SENDER'): 2606829 / 2606829
+ok    gas valid = invalid ('pqzl', 'REFRESH'): 3731622 / 3731622
+ok    gas valid = invalid ('pqzl', 'REGISTER'): 2699182 / 2699182
+ok    gas valid = invalid ('pqzl', 'TRANSFER'): 5420799 / 5420799
+ok    gas valid = invalid ('pqzl', 'TRANSFER0'): 5233221 / 5233221
+ok    PQZ miss unknown id: …00, gas 2593460 = smallest row + length term 2593460
+ok    PQZ miss short (68 B): …00, gas 2567009 = smallest row + length term 2567009
+ok    PQZ miss empty: …00, gas 2567000 = smallest row + length term 2567000
+ok    PQZ miss unknown op 9: …00, gas 2593460 = smallest row + length term 2593460
+ok    PQZ input of MAX_INPUT + 1: failed call (word 0xffff, rlen 0)
+ok    MLDSA44 eip8355 wycheproof/mldsa_44_verify_test.json: word 1 (want 1), gas 49006 = 49006
+ok    MLDSA44 eip8355 wycheproof/mldsa_44_ve sig bit flipped: 0, same gas
+ok    MLDSA44 eip8355 wycheproof/mldsa_44_verify_test.json: word 0 (want 0), gas 49006 = 49006
+ok    MLDSA44 eip8355 input shorter than PK_LEN + SIG_LEN : word 0 (want 0), gas 49000 = 49000
+ok    MLDSA65 eip8355 input shorter than PK_LEN + SIG_LEN : word 0 (want 0), gas 68000 = 68000
+ok    MLDSA44 acvp ML-DSA-44 tc 1                         : word 0 (want 0), gas 50374 = 50374
+ok    MLDSA44 acvp ML-DSA-44 tc 2                         : word 0 (want 0), gas 50494 = 50494
+ok    MLDSA44 acvp ML-DSA-44 tc 3                         : word 0 (want 0), gas 49468 = 49468
+ok    MLDSA44 acvp ML-DSA-44 tc 4                         : word 0 (want 0), gas 50404 = 50404
+ok    MLDSA44 acvp ML-DSA-44 tc 5                         : word 0 (want 0), gas 49684 = 49684
+ok    MLDSA44 acvp ML-DSA-44 tc 6                         : word 0 (want 0), gas 50536 = 50536
+ok    MLDSA44 acvp ML-DSA-44 tc 7                         : word 0 (want 0), gas 50128 = 50128
+ok    MLDSA44 acvp ML-DSA-44 tc 8                         : word 0 (want 0), gas 49210 = 49210
+ok    MLDSA44 acvp ML-DSA-44 tc 9                         : word 0 (want 0), gas 49006 = 49006
+ok    MLDSA44 acvp ML-DSA-44 tc 10                        : word 0 (want 0), gas 49894 = 49894
+ok    MLDSA44 acvp ML-DSA-44 tc 11                        : word 0 (want 0), gas 49108 = 49108
+ok    MLDSA44 acvp ML-DSA-44 tc 12                        : word 0 (want 0), gas 49726 = 49726
+ok    MLDSA44 acvp ML-DSA-44 tc 13                        : word 0 (want 0), gas 49870 = 49870
+ok    MLDSA44 acvp ML-DSA-44 tc 14                        : word 0 (want 0), gas 49588 = 49588
+ok    MLDSA44 acvp ML-DSA-44 tc 15                        : word 0 (want 0), gas 49582 = 49582
+ok    MLDSA65 acvp ML-DSA-65 tc 31                        : word 0 (want 0), gas 68654 = 68654
+ok    MLDSA65 acvp ML-DSA-65 tc 32                        : word 0 (want 0), gas 68282 = 68282
+ok    MLDSA65 acvp ML-DSA-65 tc 33                        : word 0 (want 0), gas 68282 = 68282
+ok    MLDSA65 acvp ML-DSA-65 tc 34                        : word 0 (want 0), gas 68144 = 68144
+ok    MLDSA65 acvp ML-DSA-65 tc 35                        : word 0 (want 0), gas 68396 = 68396
+ok    MLDSA65 acvp ML-DSA-65 tc 36                        : word 0 (want 0), gas 69272 = 69272
+ok    MLDSA65 acvp ML-DSA-65 tc 37                        : word 0 (want 0), gas 69512 = 69512
+ok    MLDSA65 acvp ML-DSA-65 tc 38                        : word 0 (want 0), gas 68006 = 68006
+ok    MLDSA65 acvp ML-DSA-65 tc 39                        : word 0 (want 0), gas 68684 = 68684
+ok    MLDSA65 acvp ML-DSA-65 tc 40                        : word 0 (want 0), gas 69536 = 69536
+ok    MLDSA65 acvp ML-DSA-65 tc 41                        : word 0 (want 0), gas 68090 = 68090
+ok    MLDSA65 acvp ML-DSA-65 tc 42                        : word 0 (want 0), gas 68714 = 68714
+ok    MLDSA65 acvp ML-DSA-65 tc 43                        : word 0 (want 0), gas 68036 = 68036
+ok    MLDSA65 acvp ML-DSA-65 tc 44                        : word 0 (want 0), gas 68552 = 68552
+ok    MLDSA65 acvp ML-DSA-65 tc 45                        : word 0 (want 0), gas 68522 = 68522
+ok    MLDSA44 ua mldsa44 pop                              : word 1 (want 1), gas 49006 = 49006
+ok    MLDSA44 ua mldsa44 pop sig bit flipped: 0, same gas
+ok    MLDSA44 ua mldsa44 popOther                         : word 1 (want 1), gas 49006 = 49006
+ok    MLDSA44 ua mldsa44 popOther sig bit flipped: 0, same gas
+ok    MLDSA65 ua mldsa65 pop                              : word 1 (want 1), gas 68006 = 68006
+ok    MLDSA65 ua mldsa65 pop sig bit flipped: 0, same gas
+ok    MLDSA65 ua mldsa65 popOther                         : word 1 (want 1), gas 68006 = 68006
+ok    MLDSA65 ua mldsa65 popOther sig bit flipped: 0, same gas
+ok    MLDSA65 ua mldsa65 pop                              : word 1 (want 1), gas 68006 = 68006
+ok    MLDSA65 ua mldsa65 pop sig bit flipped: 0, same gas
+ok    MLDSA65 ua mldsa65 pop                              : word 1 (want 1), gas 68006 = 68006
+ok    MLDSA65 ua mldsa65 pop sig bit flipped: 0, same gas
+probe: all checks passed
+
+## e2e attempts 1-2 stalled (no receipt): EIP-1559 base fee 0 -> 1 wei after block 568 passed the target, never back to 0 (decrease
+   rounds to 0); gas price 1 => priority fee 0 => 'Rejected tx (False)' by the min-gas-price filter (signer --log DEBUG).
+   7622's config key Mining.MinGasPrice is reported 'Invalid configuration settings' (not a Nethermind key; Blocks.MinGasPrice
+   defaults to 1 wei), so live 7622 behaves the same. e2e.py now prices max(2·baseFee + 1, 1 gwei); pools cleared by restarts.
+## e2e (13:46:53Z), through nginx -> follower, mined by the signer; key = the copy's throwaway signer key; gas price max(2·baseFee + 1, 1 gwei)
+sender 0x85c06b28a3b434ef7473fc1ff2d21abf57b1f23b nonce 20
+ok    probe deployed at 0x0ef9fe3be8abea2019c24c09692cd743b99b8c7e (block 747, gas 182195)
+ok    tx check() honest BURN pqzh                                pqzh: event word 1 (want 1), call gas 3764582, tx gas 10606720, block 749
+ok    tx check() honest BURN pqzl                                pqzl: event word 1 (want 1), call gas 3731744, tx gas 5166481, block 749
+ok    tx check() honest DISCLOSE-AUDITOR pqzh                    pqzh: event word 1 (want 1), call gas 2901783, tx gas 8336990, block 750
+ok    tx check() honest DISCLOSE-AUDITOR pqzl                    pqzl: event word 1 (want 1), call gas 2572951, tx gas 3538578, block 750
+ok    tx check() honest DISCLOSE-RECEIVER pqzh                   pqzh: event word 1 (want 1), call gas 2901786, tx gas 8341660, block 751
+ok    tx check() honest DISCLOSE-RECEIVER pqzl                   pqzl: event word 1 (want 1), call gas 2572954, tx gas 3538361, block 751
+ok    tx check() honest DISCLOSE-SENDER pqzh                     pqzh: event word 1 (want 1), call gas 3303714, tx gas 8313820, block 752
+ok    tx check() honest DISCLOSE-SENDER pqzl                     pqzl: event word 1 (want 1), call gas 2606951, tx gas 3572494, block 752
+ok    tx check() honest REFRESH pqzh                             pqzh: event word 1 (want 1), call gas 3764405, tx gas 10537860, block 754
+ok    tx check() honest REFRESH pqzl                             pqzl: event word 1 (want 1), call gas 3731744, tx gas 5166337, block 754
+ok    tx check() honest REGISTER pqzh                            pqzh: event word 1 (want 1), call gas 3341178, tx gas 7801230, block 755
+ok    tx check() honest REGISTER pqzl                            pqzl: event word 1 (want 1), call gas 2699304, tx gas 3417390, block 755
+ok    tx check() honest TRANSFER pqzh                            pqzh: event word 1 (want 1), call gas 4254564, tx gas 11606670, block 756
+ok    tx check() honest TRANSFER pqzl                            pqzl: event word 1 (want 1), call gas 5420921, tx gas 7361215, block 756
+ok    tx check() honest TRANSFER0 pqzh                           pqzh: event word 1 (want 1), call gas 4049064, tx gas 11100440, block 757
+ok    tx check() honest TRANSFER0 pqzl                           pqzl: event word 1 (want 1), call gas 5233343, tx gas 6920241, block 757
+ok    tx check() flip   TRANSFER: proof middle byte bit 3 flippe pqzl: event word 0 (want 0), call gas 5420921, tx gas 7361215, block 758
+ok    tx check() flip   TRANSFER0: proof middle byte bit 3 flipp pqzl: event word 0 (want 0), call gas 5233343, tx gas 6920241, block 758
+ok    tx check() flip   BURN: proof middle byte bit 3 flipped    pqzl: event word 0 (want 0), call gas 3731744, tx gas 5166481, block 759
+ok    tx check() flip   REFRESH: proof middle byte bit 3 flipped pqzl: event word 0 (want 0), call gas 3731744, tx gas 5166337, block 759
+ok    tx check() flip   REGISTER: proof middle byte bit 3 flippe pqzl: event word 0 (want 0), call gas 2699304, tx gas 3417390, block 759
+ok    tx check() flip   DISCLOSE-SENDER: proof middle byte bit 3 pqzl: event word 0 (want 0), call gas 2606951, tx gas 3572494, block 760
+ok    tx check() flip   DISCLOSE-RECEIVER: proof middle byte bit pqzl: event word 0 (want 0), call gas 2572954, tx gas 3538361, block 760
+ok    tx check() flip   DISCLOSE-AUDITOR: proof middle byte bit  pqzl: event word 0 (want 0), call gas 2572951, tx gas 3538578, block 760
+ok    tx check() flip   TRANSFER: proof middle byte bit 3 flippe pqzh: event word 0 (want 0), call gas 4254564, tx gas 11606670, block 762
+ok    tx check() flip   TRANSFER0: proof middle byte bit 3 flipp pqzh: event word 0 (want 0), call gas 4049064, tx gas 11100440, block 762
+ok    tx check() flip   BURN: proof middle byte bit 3 flipped    pqzh: event word 0 (want 0), call gas 3764582, tx gas 10606720, block 763
+ok    tx check() flip   REFRESH: proof middle byte bit 3 flipped pqzh: event word 0 (want 0), call gas 3764405, tx gas 10537860, block 763
+ok    tx check() flip   REGISTER: proof middle byte bit 3 flippe pqzh: event word 0 (want 0), call gas 3341178, tx gas 7801230, block 765
+ok    tx check() flip   DISCLOSE-SENDER: proof middle byte bit 3 pqzh: event word 0 (want 0), call gas 3303714, tx gas 8313820, block 765
+ok    tx check() flip   DISCLOSE-RECEIVER: proof middle byte bit pqzh: event word 0 (want 0), call gas 2901786, tx gas 8341660, block 766
+ok    tx check() flip   DISCLOSE-AUDITOR: proof middle byte bit  pqzh: event word 0 (want 0), call gas 2901783, tx gas 8336990, block 766
+ok    tx check() fee0   fee0 TRANSFER pqzl                       pqzl: event word 1 (want 1), call gas 5420921, tx gas 7360339, block 767
+ok    tx check() fee0   fee0 TRANSFER pqzh                       pqzh: event word 1 (want 1), call gas 4254675, tx gas 11648090, block 767
+ok    tx check() fee0   fee0 TRANSFER0 pqzl                      pqzl: event word 1 (want 1), call gas 5233340, tx gas 6919487, block 768
+ok    tx check() fee0   fee0 TRANSFER0 pqzh                      pqzh: event word 1 (want 1), call gas 4049055, tx gas 11095340, block 768
+ok    tx check() fee0   fee0 BURN pqzl                           pqzl: event word 1 (want 1), call gas 3731744, tx gas 5166577, block 770
+ok    tx check() fee0   fee0 BURN pqzh                           pqzh: event word 1 (want 1), call gas 3764342, tx gas 10505490, block 770
+ok    tx check() fee0   fee0 REFRESH pqzl                        pqzl: event word 1 (want 1), call gas 3731747, tx gas 5166567, block 772
+ok    tx check() fee0   fee0 REFRESH pqzh                        pqzh: event word 1 (want 1), call gas 3764522, tx gas 10579740, block 772
+check() transactions in blocks [749, 750, 751, 752, 754, 755, 756, 757, 758, 759, 760, 762, 763, 765, 766, 767, 768, 770, 772]
+ok    direct tx to PQZ, fee0 TRANSFER pqzh (315,219 B > 131,072): gasUsed 11,646,570 = max(standard 8,925,781, EIP-7623 floor 11,646,570), block 774
+ok    direct tx to PQZ, TRANSFER pqzh (314,023 B > 131,072): gasUsed 11,605,030 = max(standard 8,909,054, EIP-7623 floor 11,605,030), block 776
+ok    UAMldsaVerifier(0x0130) at 0x07e4458b241699b84c6ff089d377f6dab0166518: PRECOMPILE() = 0x5caa500000000000000000000000000000000012 (deploy gas 2,718,147)
+ok    UAMldsaVerifier mldsa44.verify(metatx) = True (estimateGas 174,769)
+ok    UAMldsaVerifier mldsa44.verify(metatx, sig flipped) = False (estimateGas 174,769)
+ok    UAMldsaVerifier mldsa44.verify(member) = True (estimateGas 174,617)
+ok    UAMldsaVerifier mldsa44.verify(member, sig flipped) = False (estimateGas 174,617)
+ok    UAMldsaVerifier(0x0131) at 0xc1b491b36db5ac1036831229c3fca8050354edca: PRECOMPILE() = 0x5caa500000000000000000000000000000000013 (deploy gas 2,806,681)
+ok    UAMldsaVerifier mldsa65.verify(metatx) = True (estimateGas 236,548)
+ok    UAMldsaVerifier mldsa65.verify(metatx, sig flipped) = False (estimateGas 236,548)
+ok    UAMldsaVerifier mldsa65.verify(member) = True (estimateGas 236,156)
+ok    UAMldsaVerifier mldsa65.verify(member, sig flipped) = False (estimateGas 236,156)
+e2e: all checks passed
+rc=0
+
+## block processing on the follower (blocks 749-778, 1-3 PQZ transactions each; slot 5 s):
+749 24.8 ms;750 23.0 ms;751 27.0 ms;752 18.8 ms;753 0.6 ms;754 22.9 ms;755 20.3 ms;756 23.9 ms;757 22.3 ms;758 22.1 ms;759 27.4 ms;760 21.1 ms;761 0.3 ms;762 6.0 ms;763 5.2 ms;764 2.8 ms;765 3.6 ms;766 4.8 ms;767 25.6 ms;768 21.5 ms;769 0.4 ms;770 19.9 ms;771 0.6 ms;772 23.0 ms;773 0.1 ms;774 11.4 ms;775 0.3 ms;776 10.9 ms;777 0.6 ms;778 4.6 ms;779 0.7 ms;

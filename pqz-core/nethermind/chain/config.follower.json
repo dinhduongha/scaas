@@ -1,0 +1,43 @@
+{
+  "Init": {
+    "ChainSpecPath": "/nethermind/genesis.json",
+    "BaseDbPath": "/nethermind/nethermind_datadir",
+    "EnableUnsecuredDevWallet": false,
+    "DiscoveryEnabled": false,
+    "IsMining": false,
+    "KzgSetupPath": "/nethermind/kzg_trusted_setup.txt",
+    "PeerManagerEnabled": true,
+    "MemoryHint": 768000000
+  },
+  "JsonRpc": {
+    "Enabled": true,
+    "Host": "0.0.0.0",
+    "Port": 8545,
+    "EnabledModules": [
+      "eth",
+      "net",
+      "web3",
+      "clique",
+      "admin"
+    ]
+  },
+  "Network": {
+    "StaticPeers": "enode://@ENODE@@10.76.22.10:30303",
+    "OnlyStaticPeers": true,
+    "FilterPeersByRecentIp": false
+  },
+  "Mining": {
+    "Enabled": false,
+    "MinGasPrice": 0
+  },
+  "Merge": {
+    "Enabled": false
+  },
+  "TxPool": {
+    "MaxTxSize": 1048576
+  },
+  "Blocks": {
+    "TargetBlockGasLimit": 80000000
+  },
+  "Plugins": {}
+}

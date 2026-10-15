@@ -1,0 +1,77 @@
+# syntax=docker/dockerfile:1
+# P6f D13: scaas/nethermind-pqz:1.39.0-pqz<n> = the pinned Nethermind 1.39.0 image + /nethermind/plugins/{Nethermind.Pqz.dll,
+# libpqz_ffi.so, NOTICE-pqz.txt, NOTICE-pqz-core.txt, LICENSE-lazer.txt}. Built locally by build-image.sh (context = the repo root), never pushed. Targets:
+#   ffi   - libpqz_ffi.so (release, default features: no prove, no test-hooks)
+#   node  - the node image (default)
+#   calib - the node image + /opt/pqz-calibrate (Calibrate.dll, fresh proofs, the corpus): Task 6 only, never run as a node
+# BuildKit runs outside scripts/capped, so the stages cap themselves: cargo -j 2, dotnet -m:2.
+ARG BASE=nethermind/nethermind:1.39.0@sha256:8af90a30989c16cb15e087bd250c623c98585e490a25950a75642460d497eae6
+ARG RUST=rust:1.97.1-bookworm@sha256:0e2bcaef56d041a486784e54104a81aebe0da44bd03019bd70bc0401e42e4a97
+ARG SDK=mcr.microsoft.com/dotnet/sdk:10.0.301-resolute@sha256:196f61c6262aa890f41dd654ff52d3b995187124a37778fb990ed0c31c26da44
+
+FROM ${BASE} AS base
+
+FROM ${RUST} AS rust
+RUN apt-get update && apt-get install -y --no-install-recommends clang && rm -rf /var/lib/apt/lists/*
+# the toolchain file names wasm32 too; the image's 1.97.1 is the toolchain, nothing to install
+ENV RUSTUP_TOOLCHAIN=1.97.1 CARGO_BUILD_JOBS=2
+WORKDIR /src
+COPY LICENSE ./
+COPY pqz-core/check_symbols.sh pqz-core/
+COPY pqz-core/src pqz-core/src
+COPY pqz-core/lazer pqz-core/lazer
+COPY pqz-core/params pqz-core/params
+COPY pqz-core/stmt pqz-core/stmt
+COPY pqz-core/pqzh/ligero pqz-core/pqzh/ligero
+COPY pqz-core/ffi pqz-core/ffi
+COPY smartcontracts/vectors/pqz/proof_pqzl.json smartcontracts/vectors/pqz/proof_pqzh.json smartcontracts/vectors/pqz/
+
+FROM rust AS ffi
+RUN cd pqz-core/ffi && cargo build --release --locked -j 2 && mkdir /out && cp target/release/libpqz_ffi.so /out/ \
+ && sha256sum /out/libpqz_ffi.so
+
+FROM scratch AS ffi-export
+COPY --from=ffi /out/ /
+
+FROM rust AS fresh
+COPY pqz-core/nethermind/fresh-proofs pqz-core/nethermind/fresh-proofs
+ARG FRESH=20
+RUN cd pqz-core/nethermind/fresh-proofs && cargo build --release --locked -j 2 \
+ && mkdir /out && ./target/release/pqz-fresh-proofs ${FRESH} > /out/fresh.jsonl
+
+FROM ${SDK} AS plugin
+WORKDIR /src/pqz-core/nethermind
+COPY --from=base /nethermind ref
+COPY pqz-core/nethermind/Directory.Build.props pqz-core/nethermind/Directory.Build.targets ./
+COPY pqz-core/nethermind/Nethermind.Pqz Nethermind.Pqz
+RUN dotnet build Nethermind.Pqz/Nethermind.Pqz.csproj -c Release -m:2 -o /out \
+ && ls -la /out
+
+FROM plugin AS calibtool
+COPY pqz-core/nethermind/Calibrate Calibrate
+RUN dotnet build Calibrate/Calibrate.csproj -c Release -m:2 -o /opt/pqz-calibrate
+
+FROM ${BASE} AS node
+ARG COMMIT=unknown
+ARG FFI_SHA256
+COPY --from=plugin /out/Nethermind.Pqz.dll /nethermind/plugins/
+COPY --from=ffi /out/libpqz_ffi.so /nethermind/plugins/
+COPY pqz-core/nethermind/NOTICE-pqz.txt /nethermind/plugins/
+COPY pqz-core/NOTICE /nethermind/plugins/NOTICE-pqz-core.txt
+COPY pqz-core/lazer/LICENSE /nethermind/plugins/LICENSE-lazer.txt
+RUN echo "${FFI_SHA256}  /nethermind/plugins/libpqz_ffi.so" | sha256sum -c -
+LABEL scaas.pqz.commit="${COMMIT}" \
+      scaas.pqz.ffi.sha256="${FFI_SHA256}" \
+      scaas.pqz.selftest="ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205" \
+      org.opencontainers.image.title="scaas/nethermind-pqz" \
+      org.opencontainers.image.description="Nethermind 1.39.0 + the SCaaS PQZ / ML-DSA precompile plugin (local only, never pushed)"
+
+FROM node AS calib
+COPY --from=calibtool /opt/pqz-calibrate /opt/pqz-calibrate
+COPY --from=fresh /out/fresh.jsonl /opt/pqz-calibrate/data/
+COPY pqz-core/nethermind/bin/corpus.jsonl /opt/pqz-calibrate/data/
+COPY smartcontracts/vectors/ua/pq_external.json /opt/pqz-calibrate/data/ua/
+RUN cp /nethermind/plugins/libpqz_ffi.so /opt/pqz-calibrate/
+ENTRYPOINT ["dotnet", "/opt/pqz-calibrate/Calibrate.dll"]
+
+FROM node

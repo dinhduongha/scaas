@@ -39,8 +39,8 @@ big-endian; everything else as in [zether.md](zether.md) (`‖`, `be32`, `u8`, A
 8. [Proof engine `pqz-core`](#8-proof-engine-pqz-core)
    - 8.1 [Serialization v1](#serialization)
 9. [On-chain verifier](#9-on-chain-verifier)
-   - 9.1 [Precompile `PQZ` (`0x…0F01`)](#91-precompile-pqz-0x0f01)
-   - 9.2 [Precompile `MLDSA65` (`0x…0F10`)](#92-precompile-mldsa65-0x0f10)
+   - 9.1 [Precompile `PQZ`](#91-precompile-pqz)
+   - 9.2 [Precompiles `MLDSA44` and `MLDSA65`](#92-precompiles-mldsa44-and-mldsa65)
    - 9.3 [Gas model](#93-gas-model)
    - 9.4 [Contracts](#94-contracts)
 10. [Chain integration (Nethermind precompile on chain 7622)](#10-chain-integration-nethermind-precompile-on-chain-7622)
@@ -62,7 +62,7 @@ module-lattice assumptions:
 |---|---|---|
 | Balance encryption | lifted ElGamal on bn254 / BLS12-381 G1 | additive module-LWE, BFV-style scaling `Δ`, digit-packed plaintext ([encryption](#encryption)) |
 | Validity proofs | Σ-protocol + 2 Bulletproofs (`n_v = n_b = 64`) | one LNP22 lattice proof per op ([proof engine](#proof-engine)): key, encryption, decryption and integer-carry relations with exact norms |
-| Verification | Solidity + bn254/BLS precompiles | native precompile on chain 7622 (`0x…0F01`), same C core as the prover ([CTR-PQZ-09](#CTR-PQZ-09), [CTR-PQZ-10](#CTR-PQZ-10)) |
+| Verification | Solidity + bn254/BLS precompiles | native precompile on chain 7622 (`PQZ`, `0x5caa5…0f01`), same C core as the prover ([CTR-PQZ-09](#CTR-PQZ-09), [CTR-PQZ-10](#CTR-PQZ-10)) |
 | Authorization | 8 `AuthScheme`s in the legacy registry (`legacy/ua3/`); the UA registry replaces them by `authRef` | UA `authRef` = `mldsa65` UA (default) or a PQ-dominant UA `msig` (hybrid, t-of-n), verified via precompile `0x…0F10` ([CTR-PQZ-12](#CTR-PQZ-12)) |
 | Relaying | ERC-20 on the one base `ERC20MetaTx`: allowlisted self-calls through `mtxExecute`, outer fee `NONE`/`FIXED` from the public balance, `envelopeBinding` in the statement ([CTR-ZTH-34](zether.md#CTR-ZTH-34); built: `ZetherMetaTx` with `OP_ZTRANSFER`/`OP_ZBURN`) | the same base, self-call and rules ([CTR-PQZ-15](#CTR-PQZ-15), [CTR-PQZ-21](#CTR-PQZ-21)), plus the UA path's `UAMetaTransaction` so a PQ UA pays the outer fee |
 | Decryption | BSGS discrete log, device cache, `zether-read-balance` | direct rounding, microseconds, exact; no BSGS, no cache needed ([CTR-PQZ-16](#CTR-PQZ-16)) |
@@ -1391,8 +1391,16 @@ directories → the one directory `smartcontracts/vectors/pqz/` (P6e D9).
 
 <a id="precompile"></a>
 <a id="CTR-PQZ-10"></a>**CTR-PQZ-10** — **On-chain verification is a native precompile on chain 7622**: `PQZ` at
-`0x0000000000000000000000000000000000000F01` (first input byte = op) — one precompile for both proof systems, PQZL and PQZH (Ligero), dispatched on the statement's `proofSystemId` (owner 2026-10-14) and `MLDSA65` at `…0F10` (EIP-8355's layout from
-P6; transitional: plus a context string; moving both out of the EIP-1352 range is a P6 item). **v1 runs only on our Nethermind chain** (owner). Other private chains (customer-run Besu/geth/reth)
+`0x5caa500000000000000000000000000000000f01` (first input byte = op) — one precompile for both proof systems, PQZL and PQZH (Ligero), dispatched on the statement's `proofSystemId` (owner 2026-10-14) — and the ML-DSA precompiles
+`MLDSA44` at `0x5caa500000000000000000000000000000000012` and `MLDSA65` at `0x5caa500000000000000000000000000000000013`
+(EIP-8355's layout, empty context; [§9.2](#92-precompiles-mldsa44-and-mldsa65)). The addresses lie above `0xffff`
+(outside EIP-1352), outside RIP-7587's `0x100`–`0x1ff` and the OP / Taiko / Arbitrum system ranges; the same addresses
+on 22776 (P6f D3, controller proposal, owner may override). They come from a Nethermind **plugin** `Nethermind.Pqz`
+(no Nethermind patch: P6f D1) in the image `scaas/nethermind-pqz:1.39.0-pqz<n>` (built locally, never pushed: D13).
+**Status mapping (D4):** `pqz-ffi` status 0 ⇒ the 32 bytes; 1 ⇒ a failed call (all gas, the §9.1 revert); 3 ⇒ `…00`
+plus a `PQZ-INPUT-PANIC keccak(input)` warning; 2, 4 or any other ⇒ `PQZ-NODE-FAULT` (critical) and the process exits
+with code 120 — the block in progress is never sealed or imported and nothing is marked invalid; a restart
+re-processes it. **v1 runs only on our Nethermind chain** (owner). Other private chains (customer-run Besu/geth/reth)
 get the off-chain co-processor attestation seam later; **no client ports in v1**; the co-processor is rejected on chain
 7622 itself. **Determinism and probing:** integer-only code, no threads in the computation (`pqz-ffi` runs every core
 call serially on one worker thread, only for a fixed stack), no floating point, no CPU-feature-dependent
@@ -1400,7 +1408,8 @@ results, bounded loops (a capped rejection loop that hits its cap ⇒ invalid); 
 output `0x00…00`; a fault of the node itself, not of the input (arena exhaustion, the worker or the core unavailable,
 failure to reserve the arena) gives no result at all: the node aborts processing the block and never treats the input
 as invalid (`pqz-ffi` status `PQZ_FFI_NODE_FAULT`, controller 2026-10-14); a failed Rust heap allocation or an OOM kill
-aborts the process (not reportable); gas by formula regardless of validity; activation by `pqzTransitionTimestamp`; contracts self-test and
+aborts the process (not reportable); gas by formula regardless of validity; activation by the chainspec's `engine.Pqz` schedules (the first schedule's
+timestamp; [CTR-PQZ-11](#CTR-PQZ-11)); contracts self-test and
 the node probes (`has_pqz_precompile`), because a missing transition key looks exactly like an enabled one.
 
 **The verify
@@ -1415,7 +1424,9 @@ the owner's machine under `scripts/capped`, no CI job for now (controller 2026-1
 process; a crashing input inside a transaction would still reach every node at its block, so never-crash is the
 requirement and the follower is only defence in depth. Every node of chain 7622 must run the PQZ client build.
 
-### 9.1 Precompile `PQZ` (`0x…0F01`)
+### 9.1 Precompile `PQZ`
+
+Address `0x5caa500000000000000000000000000000000f01` ([CTR-PQZ-10](#CTR-PQZ-10)).
 
 Input `u8(op) ‖ be32(len(stmt)) ‖ stmt ‖ proof`; output 32 bytes, `…01` valid, `…00` otherwise; never reverts on
 cryptographic failure; reverts (consumes all gas) only on input `> MAX_INPUT = 393,216` bytes (P6e D5: 5 + 83,072 + 262,144 = 345,221 for a PQZH transfer).
@@ -1436,27 +1447,34 @@ PQZH); anything else returns `0`. It then dispatches on the `proofSystemId`. `pq
 fields its equations use, and `opTag`, `proofSystemId` and `kind` bind the proof because the whole statement is hashed
 into the transcript.
 
-### 9.2 Precompile `MLDSA65` (`0x…0F10`)
+### 9.2 Precompiles `MLDSA44` and `MLDSA65`
 
-Input `pk(1952) ‖ sig(3309) ‖ msg`, FIPS 204 `ML-DSA.Verify(pk, msg, sig)` with the empty context (pure ML-DSA); output `…01`/`…00`:
-exactly EIP-8355's layout, because the UA signs the 32-byte `pq_msg` with the empty context ([CTR-UA-23](accounts.md#CTR-UA-23), SPECIFIED (P6)). *Transitional:* the
-current spec and prototype take `pk(1952) ‖ sig(3309) ‖ u8(len(ctx)) ‖ ctx ‖ msg` and run `ML-DSA.Verify(pk, msg, sig, ctx)` with `ctx = kind_tag`. Moving `0x…0F10`/`0x…0F01` outside the EIP-1352 range is a P6 item. A private address because EIP-8051 and EIP-8355 both claim `0x12/0x13`. The UA
-`mldsa44`/`mldsa65` verifier for chain 7622 (`UAMldsaVerifier`, an `IUAKindVerifier`) calls it; the address is an
-immutable constructor argument checked by self-test, so a later standard precompile means a new verifier in a new
-registry generation. Elsewhere the UA PQ kinds use a pure-Solidity verifier ([CTR-UA-23](accounts.md#CTR-UA-23)).
+`MLDSA44` at `0x5caa500000000000000000000000000000000012`, `MLDSA65` at `0x5caa500000000000000000000000000000000013`:
+EIP-8355's layout and semantics. Input `pk ‖ sig ‖ msg` (`pk` 1,312 / 1,952 B, `sig` 2,420 / 3,309 B), FIPS 204
+`ML-DSA.Verify(pk, msg, sig)` with the **empty context** (pure ML-DSA); a shorter input than `pk ‖ sig` ⇒ `…00`;
+output always 32 bytes, `…01` / `…00`. The UA signs the 32-byte `pq_msg` with the empty context
+([CTR-UA-23](accounts.md#CTR-UA-23)). Implementation: .NET 10 `MLDsa` on the OpenSSL 3.5 of the pinned base image
+(`MLDsa.IsSupported` checked at start-up; P6f D5). The low address bytes repeat EIP-8355's own `0x12` / `0x13`; the
+`0x5caa5` prefix keeps them off the contested `0x12`–`0x15` (EIP-8051 / EIP-8355). The UA `mldsa44` / `mldsa65`
+verifier for chain 7622 (`UAMldsaVerifier`, an `IUAKindVerifier`) calls it; the address is an immutable constructor
+argument checked by self-test, so a later standard precompile means a new verifier in a new registry generation.
+Elsewhere the UA PQ kinds use a pure-Solidity verifier ([CTR-UA-23](accounts.md#CTR-UA-23)). Gas:
+[CTR-PQZ-11](#CTR-PQZ-11).
 
 ### 9.3 Gas model
 
 <a id="gas"></a>
 <a id="CTR-PQZ-11"></a>**CTR-PQZ-11** — **Gas.** Precompile prices are deterministic functions of the op and input length,
-calibrated on the p99 verify time over adversarial inputs against `ecMul` on the chain host, frozen in the chainspec;
+calibrated on the p99 verify time over adversarial inputs against `ecMul` on the chain host, frozen in the chainspec
+(`engine.Pqz.schedules`: per schedule an activation timestamp, the `pqz` rows `(op, id, stmtLen, gas)`, `selftestGas`,
+`mldsa44Gas`, `mldsa65Gas`; parsed strictly, a new price or op 7 is a new schedule with a later timestamp: P6f D2);
 `OP_SELFTEST` has a fixed price of its own and is computed once per process. EIP-7623 and EIP-7825 stay enabled.
 Operator change: Clique `TargetBlockGasLimit` **80,000,000** on chain 7622 (no data reset): at the calldata floor a
 block then carries at most 8.0 MB of calldata, under EIP-7934's 8,388,608-byte RLP limit even for all-zero calldata, so
 no block the producer builds can be oversized.
 
 Node and client limits on chain 7622: Nethermind `TxPool.MaxTxSize`
-≥ 1 MiB (or the key the precompile work finds), node `max_gas_per_tx = 16_000_000`, gateway body limit 1 MiB on job
+1,048,576 and `Blocks.TargetBlockGasLimit` 80,000,000 in the node's `config.json`, JSON-RPC defaults kept (P6f D8), node `max_gas_per_tx = 16_000_000`, gateway body limit 1 MiB on job
 submissions to the `pqz` chain profile only (64 KiB elsewhere) — recommendations to node operators
 ([NODE-OPS-15](../node/ops.md#NODE-OPS-15)). This keeps gas an honest capacity meter: ≈ 28 transfers per 5 s block while
 the floor binds, ≈ 10 at the 50 ms verify kill threshold; ≈ 45 GB/day of archive growth at sustained full load. The
@@ -1474,12 +1492,44 @@ G_op = 1000·⌈ 6000 · t_op / t_ecMul / 1000 ⌉
 **adversarial** inputs that pass decoding and fail only at the last check (the most work a caller can force), not the
 median of valid KATs; `t_ecMul` = median of `0x07` (priced 6,000) on the same host and build — so the price is relative
 to work the chain already meters. With `t_ecMul ≈ 50 µs` (to be measured) that is ≈ 0.12 M gas per ms. Inputs rejected
-by the decoder or the prefix check cost the same formula (gas never depends on validity). `OP_SELFTEST` has a **fixed**
-price `G_6` (no length term; its input length is fixed), set from the p99 of its **cold** (first-in-process, uncached)
-time, so a block that happens to hit it first is paid for; repeated calls are cache hits but pay the same `G_6`.
+by the decoder or the prefix check cost the same formula (gas never depends on validity). **The rows are the
+allowlist:** `G_op` is per `(op, proofSystemId, stmtLen)` row of the active schedule; an input with no row (short,
+unknown op / id / length) returns `…00` at the smallest row's price without calling `pqz-ffi` (P6f D6). `OP_SELFTEST`
+has a **fixed** price `G_6` = `selftestGas` (no length term) = the smallest row's gas, not the cold price: the plugin
+computes the self-test at node start-up, so every call in a block is a cache hit; the cold time is measured and recorded
+(P6f D6, amended from "cold p99": priced cold it would be 39.0 M gas, above EIP-7825's per-transaction cap).
 Contracts call it once at construction. Gas does not protect `eth_call`, which costs the caller nothing on any chain,
-so CPU spam through the RPC is bounded by the follower's rate limits, for every op, not only op 6. `MLDSA65`: 9,000 + 6
-per message word (EIP-8355 numbers) unless calibration says more.
+so CPU spam through the RPC is bounded by the follower's rate limits, for every op, not only op 6. `MLDSA44` /
+`MLDSA65`: `max(EIP-8355 BASE, calibrated) + 6·⌈max(0, L − PK − SIG) / 32⌉`.
+
+**Measured (P6f Task 6, 2026-10-15, one run, owner):** inside the built image on the chain host (AMD Ryzen 5 7235HS,
+`--cpus 4`, `pqz1` library `12495e8b…7d87`), through `PqzPrecompile.Run` (the P/Invoke hop included); 1,000 calls per
+set; valid = the vectors + 20 fresh proofs per form; adversarial = 1,000 distinct proof bit flips, the form's
+`negative.json` rows and (PQZH) the statement's last word changed. `t_ecMul` = **17 µs** (Nethermind's own BN254 mul,
+median of 10,000) ⇒ **0.359 M gas per ms** (not the ≈ 0.12 M estimated above). Log `pqz-core/nethermind/runs/2026-10-15-calib.txt`;
+chainspec section `pqz-core/nethermind/chain/engine-pqz.json`.
+
+| op | Form | id | `stmtLen` | p99 valid ms | p99 adversarial ms | `G_op` (gas) | Direct tx, largest honest input |
+|---|---|---|---|---|---|---|---|
+| 1 | TRANSFER | PQZL | 83,072 | 11.50 | 15.05 | 5,409,000 | 7,163,326 |
+| 1 | TRANSFER0 | PQZL | 66,560 | 14.54 | 12.26 | 5,223,000 | 6,762,049 |
+| 2 | BURN + REFRESH | PQZL | 50,048 | 9.21 | 10.36 | 3,723,000 | 5,044,024 |
+| 3 | REGISTER | PQZL | 16,480 | 7.50 | 6.93 | 2,695,000 | 3,373,242 |
+| 4 | DISCLOSE-SENDER | PQZL | 33,184 | 7.24 | 6.85 | 2,601,000 | 3,503,653 |
+| 5 | DISCLOSE-RECEIVER + AUDITOR | PQZL | 33,184 | 5.36 | 7.14 | 2,567,000 | 3,469,820 |
+| 1 | TRANSFER | PQZH | 83,072 | 11.76 | 1.98 | 4,225,000 | 11,670,200 |
+| 1 | TRANSFER0 | PQZH | 66,560 | 11.19 | 1.55 | 4,021,000 | 11,111,040 |
+| 2 | BURN + REFRESH | PQZH | 50,048 | 10.40 | 1.27 | 3,738,000 | 10,616,430 |
+| 3 | REGISTER | PQZH | 16,480 | 9.25 | 1.42 | 3,322,000 | 7,866,080 |
+| 4 | DISCLOSE-SENDER | PQZH | 33,184 | 9.14 | 1.00 | 3,283,000 | 8,354,830 |
+| 5 | DISCLOSE-RECEIVER + AUDITOR | PQZH | 33,184 | 8.02 | 1.07 | 2,881,000 | 8,386,170 |
+
+Every `t_row` ≤ 60 ms (largest 15.05 ms, PQZL transfer under an adversarial statement); every honest input and every
+input at `MAX_PROOF` fits a direct transaction under 16,777,216 (largest honest: PQZH transfer 11.67 M, bound by the
+EIP-7623 floor). `selftestGas` = **2,567,000**; `OP_SELFTEST` cold p50 / p99 = 96.8 / 108.6 ms over 200 fresh
+processes. ML-DSA p99 0.135 ms (44) / 0.189 ms (65) ⇒ `mldsa44Gas` **49,000**, `mldsa65Gas` **68,000** (EIP-8355 BASE
+6,500 / 9,000 is lower). Re-calibrate before chain 22776 or when a later measurement differs by more than 15 %. The
+estimates below predate this table.
 
 Estimates for a typical transfer (auditor on, no inline credits, 40 KB proof), **to be replaced by measurements**.
 Calldata: `out` 16,768 + `acc` 16,512 B at ≈ 25.2 tokens per `be8` coefficient, proof and signature at ≈ 3.99 tokens per
@@ -1550,43 +1600,56 @@ Errors (plus
 
 **Build.**
 
-- Library `libpqz.so` = `pqz-core` (portable build, `-O2`, no `-march=native`) + ML-DSA-65 implementation, C ABI. One
-  build artifact for every node; its SHA-256 is pinned in the image and printed at start.
+- Library `libpqz_ffi.so` = `pqz-ffi` (`pqz-core/ffi/`, both proof systems, C ABI `pqz_precompile`; release build,
+  no `prove`, no `test-hooks`, `cargo build --release --locked`), built inside the image from a pinned Rust image. Its
+  SHA-256 is an image label (`scaas.pqz.ffi.sha256`) and printed at start (`PQZ-START`). ML-DSA is not in it: .NET 10
+  `MLDsa` on the base image's OpenSSL 3.5 (P6f D5).
 - **Never crash.** The C core sits behind a Rust decoder (`pqz-ffi`: no `unsafe` except the one FFI call; built with
   `panic = "unwind"` and every entry point wrapped in `catch_unwind` → output 0) that checks op, prefix, every length and
   every coefficient before any C code runs. The C core is built with stack-protector and a fixed arena; release builds
-  keep the invariant checks as error returns (upstream's `ASSERT_ERR` compiles to nothing). CI runs libFuzzer on ASan +
-  UBSan builds of the decoder + core continuously, plus a P/Invoke harness under the .NET host, not a one-off pass
-  before review.
-- Nethermind integration `Nethermind.Pqz` (C#): two precompile classes calling `pqz_precompile` (`pqz-ffi`'s C ABI,
-  `pqz-core/ffi/pqz_ffi.h`: the whole input, status and 32-byte output; [serialization v1](#serialization)) /
-  `mldsa65_verify` through P/Invoke, gas per [gas](#gas), activated at `pqzTransitionTimestamp` from the chainspec. Either a plugin (the
-  Nethermind Arbitrum plugin, which adds 16 precompiles, shows plugins can extend the EVM —
-  [nethermind-arbitrum](https://github.com/NethermindEth/nethermind-arbitrum)) or a minimal patch of the precompile table
-  on a pinned 1.39.x tag. Either way it ships as image `scaas/nethermind-pqz:<nethermind>-pqz<n>`.
+  keep the invariant checks as error returns (upstream's `ASSERT_ERR` compiles to nothing). Fuzzing: P6e Task 10
+  (local runs). P/Invoke harness under the .NET host (P6f Task 4): 1 h, 8 threads + a GC-pressure thread, 1 MiB stacks,
+  6,955,371 inputs through `PqzPrecompile.Run` / `MlDsa*.Run`, no fault, status 3 = 0, `…01` exactly for the inputs
+  byte-equal to an honest one (`pqz-core/nethermind/runs/2026-10-15-harness-1h.txt`).
+- Nethermind integration: the **plugin** `Nethermind.Pqz` (`pqz-core/nethermind/`, P6f D1): it registers an
+  `IPrecompileProvider` (the Ethereum table + the three addresses) and an `ISpecProvider` (the Taiko pattern), and
+  reads the strict chainspec section `engine.Pqz` ([CTR-PQZ-11](#CTR-PQZ-11)); `PQZ` calls `pqz_precompile` through
+  P/Invoke, `MLDSA44` / `MLDSA65` call .NET `MLDsa`. No Nethermind patch. It ships as image
+  `scaas/nethermind-pqz:1.39.0-pqz<n>` (local only, never pushed): `pqz1` = id
+  `sha256:c53359a69bfae32a48412940fa98c744d06f55ab3e8da41e0b5ac82d2e8bea4f` (P6f Task 5,
+  `pqz-core/nethermind/runs/2026-10-15-image-pqz1.txt`). A stock Nethermind image ignores `engine.Pqz` (the
+  addresses stay empty accounts — shown on the copy), which is why contracts self-test and nodes probe.
 - `reth` would make this trivial (Rust, `PrecompilesMap`) but has no Clique; switching clients is not in scope.
 
 **Consensus rules.** Every node of chain 7622 runs the same image ([CTR-PQZ-10](#CTR-PQZ-10)). A node without the
-precompile executes a `STATICCALL` to `0x…0F01` as a call to an empty account: success with empty output. `PqzToken`
+precompile executes a `STATICCALL` to `PQZ` as a call to an empty account: success with empty output. `PqzToken`
 requires `returndata.length == 32` and value 1, so such a node reverts where others succeed — a visible state-root
 split, never a silent acceptance (fail closed).
 
 **Operational steps.**
 
-1. Build the image; start a throwaway copy of chain 7622 (same chainspec + `pqzTransitionTimestamp` in the future).
+1. Build the image; start a throwaway copy of chain 7622 (the same chainspec parameters + `engine.Pqz` with a future
+   first timestamp — path A — or from genesis — path B); runbook `pqz-core/nethermind/chain/RUNBOOK.md`.
 2. Probe: `eth_getBlockByNumber(0).hash` equals the profile's genesis hash and the registry's `chainUid()` (chain id
-   7622 alone is not assumed unique); `eth_call` to `0x…0F01` with `OP_SELFTEST` returns the KAT hash; `eth_estimateGas`
-   matches the gas formula; a valid and a one-bit-flipped transfer vector give 1 / 0; same for `0x…0F10`. Compare with
+   7622 alone is not assumed unique); `eth_call` to `PQZ` with `OP_SELFTEST` returns the KAT hash; `eth_estimateGas`
+   matches the gas formula; a valid and a one-bit-flipped transfer vector give 1 / 0; same for `MLDSA44` / `MLDSA65`. Compare with
    the formula, not with "it answered" (the `eip1108` lesson).
-3. Roll the signer and every follower to the image before the timestamp; then repeat step 2 on the live chain.
-4. Raise `TargetBlockGasLimit` to 80 M and `TxPool.MaxTxSize` ([CTR-PQZ-11](#CTR-PQZ-11)).
+3. Roll the signer and every follower to the image before the timestamp (or reset the testnet with `engine.Pqz` from
+   genesis, owner 2026-10-15); then repeat step 2 on the live chain.
+4. Raise `TargetBlockGasLimit` to 80 M and `TxPool.MaxTxSize` to 1 MiB ([CTR-PQZ-11](#CTR-PQZ-11)).
 5. **RPC topology.** The signer exposes no public RPC; a follower node serves all public `eth_call`, `eth_estimateGas`
    and node pre-simulation, and the signer peers only with our followers. A crash on a crafted `eth_call` then takes
    down a follower, not block production (defence in depth only, since an included transaction runs on every node).
    **Rate limits:** `eth_call` and `eth_estimateGas` are free to the caller, so each verify-class call (any op of
-   `0x…0F01`, `0x…0F10`) is CPU the follower gives away. The follower's RPC sits behind a reverse proxy (or the node
+   `PQZ`, `MLDSA44`, `MLDSA65`) is CPU the follower gives away. The follower's RPC sits behind a reverse proxy (or the node
    gateway) with per-client rate limits and a concurrency cap on `eth_call`/`eth_estimateGas` (Nethermind's own JSON-RPC
    concurrency and gas-cap keys to be confirmed); public RPC is authenticated where the deployment allows it.
+   Rehearsed on the copy (P6f Task 8): nginx `limit_req` 10 r/s, burst 20, `limit_conn` 8 in front of the follower;
+   a burst of 200 PQZH-transfer `eth_call`s from 4 clients got 22 answers (all `…01`) and 178 × 429, and the signer kept
+   its 5 s interval. **Chainspec for a follower:** with chain 7622's parameters as they are no follower can sync (P6f
+   copy, 2026-10-15): `eip4844` from 0 without `eip4895` makes a syncing peer reject every block
+   (`InvalidWithdrawalsRoot`), and without `maximumExtraDataSize` (default 32 B) it rejects every Clique header (97 B
+   `extraData`); a follower needs `eip4895TransitionTimestamp` and `maximumExtraDataSize` `0xffff` in the chainspec.
 
 <a id="self-test"></a>**Contract self-test.** The constructor of `UAPqzVerifier` and
 `PqzToken.initialize` call `OP_SELFTEST` and require the expected hash (a constant compiled into the contract; it folds

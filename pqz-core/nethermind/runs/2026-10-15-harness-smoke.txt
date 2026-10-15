@@ -1,0 +1,42 @@
+# P6f harness (smoke), 2026-10-15T05:06:13Z, image nethermind/nethermind:1.39.0@sha256:8af90a30989c16cb15e087bd250c623c98585e490a25950a75642460d497eae6, commit ddd2da3
+runtime .NET 10.0.9, Ubuntu 26.04 LTS, MLDsa.IsSupported=True
+harness: ffi /home/ha/work/ainative/scaas/.claude/worktrees/p6f/pqz-core/ffi/target/release/libpqz_ffi.so sha256 2867c29b6f82ff8259ccd6b0d5539e8c7775a821e6c1170d57ec4c2f78cf22aa; corpus 414 PQZ inputs (24 valid), 38 ML-DSA inputs (7 valid); 8 threads (1 MiB stacks) + 1 GC-pressure thread; 10 min; seed 7622
+elapsed 10.0 min; inputs 1040292 (1734/s); per thread [129686, 129997, 129788, 130009, 130705, 128715, 131732, 129660]
+  mldsa44 01 unedited-valid            2012
+  mldsa44 gen bitflips                 12837
+  mldsa44 gen extend                   13142
+  mldsa44 gen random                   13090
+  mldsa44 gen truncate                 13195
+  mldsa44 gen unedited                 12852
+  mldsa44 out 00                       63104
+  mldsa44 out 01                       2012
+  mldsa65 01 unedited-valid            2770
+  mldsa65 gen bitflips                 13029
+  mldsa65 gen extend                   12853
+  mldsa65 gen random                   13056
+  mldsa65 gen truncate                 12970
+  mldsa65 gen unedited                 13013
+  mldsa65 out 00                       62151
+  mldsa65 out 01                       2770
+  pqz 01 honest                        8076
+  pqz edit restored an honest input    5409
+  pqz gen bitflips                     94158
+  pqz gen byterun                      94019
+  pqz gen extend                       93724
+  pqz gen idswap                       92481
+  pqz gen lenfield                     92630
+  pqz gen opswap                       83552
+  pqz gen random                       27098
+  pqz gen stmtflip                     92574
+  pqz gen tailflip                     92703
+  pqz gen truncate                     94309
+  pqz gen unedited                     53007
+  pqz out 00                           896808
+  pqz out 01                           8076
+  pqz out revert                       4376
+  pqz out selftest                     995
+  status 3 (PQZ-INPUT-PANIC)            0
+  GC collections gen0/1/2               305284/305283/305282
+  …01 = inputs byte-equal to an honest input: 8076 = 8076: yes
+harness: CLEAN
+rc=0

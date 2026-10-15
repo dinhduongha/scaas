@@ -714,6 +714,17 @@ Above the rated load: a second node on **different chains**, not a bigger store.
   ciphertexts from logs (anyone may; it is harmless). A proof in flight chose `p ≥` every credit older than its own
   state read, so the keeper never pushes `rolled` more than 16 past it. Clients prove at `p = pendingCount` and, on
   `InlineTooFar`, refresh state and re-prove once.
+- **The PQZ node** (P6f, [chain integration](../contracts/pq-zether.md#chain-integration)): image
+  `scaas/nethermind-pqz:1.39.0-pqz1`; `config.json` `TxPool.MaxTxSize` 1,048,576 (a PQZH transfer is 345,221 B with
+  framing) and `Blocks.TargetBlockGasLimit` 80,000,000 (Clique moves the limit ≈ 0.1 % per block: 16.78 M → 80 M in
+  ≈ 1,600 blocks ≈ 2.2 h); the chainspec carries `engine.Pqz`. Health after any start: the log line `PQZ-START`
+  (library SHA-256 = the image label `scaas.pqz.ffi.sha256`, self-test hash `ed910a2c…d205`, the schedules, the
+  addresses), no `PQZ-REFUSE`. A node fault (D4: arena, worker) logs `PQZ-NODE-FAULT` and **exits with code 120**: the
+  block in progress is never sealed, nothing is marked invalid, and a restart re-processes it; `PQZ-INPUT-PANIC` is an
+  input-caused panic answered `…00` (should never appear). `pqz-core/nethermind/chain/watch.sh <container> <rpc>
+  [since]` prints the head (height, age, `gasLimit`), the container state and last exit code and counts those tags; run
+  it from cron or by hand. There is no restart policy on chain 7622 today (owner step), so an exit 120 stops the chain
+  visibly until restarted. Clients price transactions at least `baseFee + 1` ([evm.md](../networks/evm.md#private-chain)).
 - The node never holds a PQZ secret or an ML-DSA key of a user (as for classical Zether: "the node never needs the
   confidential key"); it holds no envelope key either — envelopes arrive signed.
 - Indexer: `MetaTransactionExecuted`, `UAMetaTransactionExecuted`, `Transfer` and `UATransfer` of a PQZ token are

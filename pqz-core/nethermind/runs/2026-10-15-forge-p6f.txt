@@ -1,0 +1,23 @@
+# P6f forge test --match-path 'test/p6f/*', 2026-10-15T12:12:16Z, commit ba6ed71 + address checksum fix
+Compiling 128 files with Solc 0.8.37
+Solc 0.8.37 finished in 11.35s
+Compiler run successful with warnings:
+
+
+
+
+
+
+
+
+
+
+Ran 4 tests for test/p6f/PqzPrecompileProbe.t.sol:PqzPrecompileProbeTest
+[PASS] test_answers() (gas: 275731)
+[PASS] test_check_emits() (gas: 80135)
+[PASS] test_empty_account_answers_nothing() (gas: 8823)
+[PASS] test_identity_precompile_gas() (gas: 6873)
+Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 4.65ms (2.72ms CPU time)
+
+Ran 1 test suite in 16.69ms (4.65ms CPU time): 4 tests passed, 0 failed, 0 skipped (4 total tests)
+rc=0

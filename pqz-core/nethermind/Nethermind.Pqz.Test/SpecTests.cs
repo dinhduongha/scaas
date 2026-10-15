@@ -1,0 +1,167 @@
+using System;
+using System.Collections.Frozen;
+using System.IO;
+using System.Linq;
+using System.Text;
+using System.Text.Json.Nodes;
+using Nethermind.Core;
+using Nethermind.Core.Specs;
+using Nethermind.Logging;
+using Nethermind.Serialization.Json;
+using Nethermind.Specs.ChainSpecStyle;
+using NUnit.Framework;
+
+namespace Nethermind.Pqz.Test;
+
+/// <summary>P6f Task 1: the chainspec section (D2), the release spec and both providers (D1, R2).</summary>
+public class SpecTests
+{
+    private const ulong T1 = 1_000_000, T2 = 2_000_000;
+
+    public static JsonObject Schedule(ulong ts, long selftestGas = 1000) => new()
+    {
+        ["timestamp"] = "0x" + ts.ToString("x"),
+        ["pqz"] = Corpus.Rows12(),
+        ["selftestGas"] = selftestGas,
+        ["mldsa44Gas"] = 6500,
+        ["mldsa65Gas"] = 9000,
+    };
+
+    public static ChainSpec Load(Action<JsonObject>? edit = null)
+    {
+        JsonObject g = JsonNode.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "chainspecs", "genesis-7622.json")))!.AsObject();
+        edit?.Invoke(g);
+        return new ChainSpecLoader(new EthereumJsonSerializer(), LimboLogs.Instance).Load(new MemoryStream(Encoding.UTF8.GetBytes(g.ToJsonString())));
+    }
+
+    public static ChainSpec WithPqz(params JsonObject[] schedules) =>
+        Load(g => g["engine"]!["Pqz"] = new JsonObject { ["schedules"] = new JsonArray(schedules.Select(s => (JsonNode)s).ToArray()) });
+
+    public static ISpecProvider Provider(ChainSpec cs) => new PqzChainSpecBasedSpecProvider(cs, LimboLogs.Instance);
+
+    private static FrozenSet<AddressAsKey> Set(ISpecProvider p, ulong ts) => p.GetSpec(new ForkActivation(10_000, ts)).Precompiles;
+
+    private static readonly AddressAsKey[] Three = [PqzAddresses.Pqz, PqzAddresses.MlDsa44, PqzAddresses.MlDsa65];
+
+    [Test]
+    public void Before_T_stock_set_from_T_three_more()
+    {
+        ISpecProvider stock = new ChainSpecBasedSpecProvider(Load(), LimboLogs.Instance);
+        ISpecProvider pqz = Provider(WithPqz(Schedule(T1)));
+        Assert.That(Set(pqz, T1 - 1).SetEquals(Set(stock, T1 - 1)), "before T: the stock set");
+        Assert.That(Set(pqz, 0).SetEquals(Set(stock, 0)), "genesis: the stock set");
+        foreach (ulong ts in new[] { T1, T1 + 1, T2 * 10 })
+        {
+            FrozenSet<AddressAsKey> s = Set(pqz, ts);
+            Assert.That(s.Except(Set(stock, ts)).OrderBy(a => a.Value.ToString()), Is.EqualTo(Three.OrderBy(a => a.Value.ToString())), $"at {ts}");
+            Assert.That(Set(stock, ts).All(s.Contains));
+        }
+        Assert.That(PqzReleaseSpec.ScheduleOf(pqz.GetSpec(new ForkActivation(10_000, T1 - 1))), Is.Null);
+        Assert.That(PqzReleaseSpec.ScheduleOf(pqz.GetSpec(new ForkActivation(10_000, T1)))!.Timestamp, Is.EqualTo(T1));
+    }
+
+    [Test]
+    public void Genesis_activation_from_block_0()
+    {
+        // a new chain (the 7622 testnet reset, owner 2026-10-15): the schedule at the genesis timestamp is active in
+        // every block, genesis included; not a fork transition
+        ISpecProvider stock = new ChainSpecBasedSpecProvider(Load(), LimboLogs.Instance);
+        ISpecProvider p = Provider(WithPqz(Schedule(0)));
+        foreach (var (b, ts) in new[] { (0L, 0UL), (1L, 5UL), (10_000L, T1) })
+        {
+            FrozenSet<AddressAsKey> s = Set(p, ts);
+            Assert.That(s.Except(Set(stock, ts)).Count(), Is.EqualTo(3), $"block {b}");
+            Assert.That(PqzReleaseSpec.ScheduleOf(p.GetSpec(new ForkActivation(b, ts))), Is.Not.Null);
+        }
+        Assert.That(PqzReleaseSpec.ScheduleOf(p.GenesisSpec), Is.Not.Null, "genesis spec");
+        Assert.That(p.TransitionActivations.Select(a => a.Timestamp), Does.Not.Contain((ulong?)0));
+    }
+
+    [Test]
+    public void Two_schedules_switch_at_the_second_timestamp_and_are_fork_transitions()
+    {
+        ISpecProvider p = Provider(WithPqz(Schedule(T1, 1000), Schedule(T2, 2000)));
+        Assert.That(PqzReleaseSpec.ScheduleOf(p.GetSpec(new ForkActivation(1, T2 - 1)))!.SelftestGas, Is.EqualTo(1000));
+        Assert.That(PqzReleaseSpec.ScheduleOf(p.GetSpec(new ForkActivation(1, T2)))!.SelftestGas, Is.EqualTo(2000));
+        ulong?[] ts = p.TransitionActivations.Select(a => a.Timestamp).ToArray();
+        Assert.That(ts, Does.Contain(T1).And.Contain(T2), "fork-id transitions include every schedule timestamp");
+    }
+
+    [Test]
+    public void The_schedule_is_found_through_a_decorator()
+    {
+        IReleaseSpec spec = Provider(WithPqz(Schedule(T1))).GetSpec(new ForkActivation(1, T1));
+        IReleaseSpec wrapped = new ReleaseSpecDecorator(spec);
+        Assert.That(PqzReleaseSpec.ScheduleOf(wrapped), Is.SameAs(PqzReleaseSpec.ScheduleOf(spec)));
+    }
+
+    private static JsonObject Without(JsonObject s, string key) { s.Remove(key); return s; }
+
+    private static JsonObject With(JsonObject s, string key, JsonNode v) { s[key] = v; return s; }
+
+    public static readonly (string, Func<ChainSpec>)[] Bad =
+    [
+        ("unknown key in a schedule", () => WithPqz(With(Schedule(T1), "mldsa87Gas", 1))),
+        ("unknown key at the top", () => Load(g => g["engine"]!["Pqz"] = new JsonObject { ["schedules"] = new JsonArray(Schedule(T1)), ["x"] = 1 })),
+        ("unknown key in a row", () => WithPqz(With(Schedule(T1), "pqz", new JsonArray(new JsonObject { ["op"] = 1, ["id"] = "0x" + Corpus.Ids["pqzl"], ["stmtLen"] = 83072, ["gas"] = 1, ["x"] = 1 })))),
+        ("missing selftestGas", () => WithPqz(Without(Schedule(T1), "selftestGas"))),
+        ("missing timestamp", () => WithPqz(Without(Schedule(T1), "timestamp"))),
+        ("missing pqz", () => WithPqz(Without(Schedule(T1), "pqz"))),
+        ("missing schedules", () => Load(g => g["engine"]!["Pqz"] = new JsonObject())),
+        ("no schedules", () => WithPqz()),
+        ("empty rows", () => WithPqz(With(Schedule(T1), "pqz", new JsonArray()))),
+        ("unsorted", () => WithPqz(Schedule(T2), Schedule(T1))),
+        ("duplicate timestamp", () => WithPqz(Schedule(T1), Schedule(T1))),
+        ("timestamp before genesis", () => Load(g =>
+        {
+            g["genesis"]!["timestamp"] = "0x10";
+            g["engine"]!["Pqz"] = new JsonObject { ["schedules"] = new JsonArray(Schedule(5)) };
+        })),
+        ("duplicate row", () => WithPqz(With(Schedule(T1), "pqz", new JsonArray(Corpus.Rows12()[0]!.DeepClone(), Corpus.Rows12()[0]!.DeepClone())))),
+        ("op 6 row", () => WithPqz(With(Schedule(T1), "pqz", new JsonArray(new JsonObject { ["op"] = 6, ["id"] = "0x" + Corpus.Ids["pqzl"], ["stmtLen"] = 0, ["gas"] = 1 })))),
+        ("id of 31 bytes", () => WithPqz(With(Schedule(T1), "pqz", new JsonArray(new JsonObject { ["op"] = 1, ["id"] = "0x" + Corpus.Ids["pqzl"][2..], ["stmtLen"] = 1, ["gas"] = 1 })))),
+        ("mldsa44Gas below EIP-8355", () => WithPqz(With(Schedule(T1), "mldsa44Gas", 6499))),
+        ("mldsa65Gas below EIP-8355", () => WithPqz(With(Schedule(T1), "mldsa65Gas", 8999))),
+    ];
+
+    [TestCaseSource(nameof(Bad))]
+    public void Strict_section_is_a_start_up_error((string name, Func<ChainSpec> make) c)
+    {
+        Exception? e = Assert.Throws(Is.InstanceOf<Exception>(), () => Provider(c.make()), c.name);
+        string m = e!.ToString();
+        TestContext.Progress.WriteLine($"{c.name}: {e.GetType().Name}: {(e.InnerException ?? e).Message}");
+        Assert.That(m, Does.Not.Contain("Could not load file").And.Not.Contain("No seal engine"), "fails for the section, not for the test set-up");
+    }
+
+    [Test]
+    public void Stock_provider_with_the_section_fails_closed()
+    {
+        ChainSpec cs = WithPqz(Schedule(T1));
+        Exception? e = Assert.Throws(Is.InstanceOf<Exception>(), () => new ChainSpecBasedSpecProvider(cs, LimboLogs.Instance));
+        Assert.That(e!.ToString(), Does.Contain("not PqzReleaseSpec"));
+    }
+
+    [Test]
+    public void Plugin_enabled_iff_the_section_is_present()
+    {
+        Assert.That(new PqzPlugin(Load()).Enabled, Is.False);
+        Assert.That(new PqzPlugin(WithPqz(Schedule(T1))).Enabled, Is.True);
+        Assert.DoesNotThrow(() => new ChainSpecBasedSpecProvider(Load(), LimboLogs.Instance), "without engine.Pqz the stock provider is untouched");
+    }
+}
+
+public class AssemblyTests
+{
+    [Test]
+    public void Plugin_references_only_base_image_assemblies_and_the_framework()
+    {
+        string refDir = Repo.Path_("pqz-core", "nethermind", "ref");
+        string fw = Path.GetDirectoryName(typeof(object).Assembly.Location)!;
+        var refs = typeof(PqzPlugin).Assembly.GetReferencedAssemblies().Select(a => a.Name!).OrderBy(n => n).ToList();
+        TestContext.Progress.WriteLine("Nethermind.Pqz.dll references: " + string.Join(", ", refs));
+        foreach (string n in refs)
+            Assert.That(File.Exists(Path.Combine(refDir, n + ".dll")) || File.Exists(Path.Combine(fw, n + ".dll")), n);
+        string outDir = Path.GetDirectoryName(typeof(PqzPlugin).Assembly.Location)!;
+        Assert.That(File.Exists(Path.Combine(Repo.Path_("pqz-core", "nethermind", "Nethermind.Pqz", "bin", "Release", "net10.0"), "Nethermind.Core.dll")), Is.False, "nothing of Nethermind in the plugin's own output");
+    }
+}

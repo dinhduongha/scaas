@@ -1,0 +1,57 @@
+# P6f T7 copy: stock-image history, 2026-10-15T12:24:42Z, commit 500b0d4
+$ copy.sh up nethermind/nethermind:1.39.0 genesis.stock.json
+ Network pqzcopy_net Creating 
+ Network pqzcopy_net Created 
+ Container pqzcopy-signer Creating 
+ Container pqzcopy-follower Creating 
+ Container pqzcopy-rpc Creating 
+ Container pqzcopy-rpc Created 
+ Container pqzcopy-follower Created 
+ Container pqzcopy-signer Created 
+ Container pqzcopy-signer Starting 
+ Container pqzcopy-follower Starting 
+ Container pqzcopy-rpc Starting 
+ Container pqzcopy-follower Started 
+ Container pqzcopy-rpc Started 
+ Container pqzcopy-signer Started 
+
+## first start failed: the signer exited 1 —
+ ---> System.IO.IOException: Read-only file system : '/nethermind/keystore/protection_keys'
+ ---> System.IO.IOException: Read-only file system : '/nethermind/keystore/protection_keys'
+## fix: the copy's (throwaway) keystore mounted read-write; down, wipe, up again
+ Network pqzcopy_net Removing 
+ Network pqzcopy_net Removed 
+$ copy.sh up nethermind/nethermind:1.39.0 genesis.stock.json  (2026-10-15T12:26:06Z)
+ Container pqzcopy-signer Started 
+ Container pqzcopy-rpc Started 
+ Container pqzcopy-follower Started 
+## follower never peered (Network.StaticPeers is a string in 1.39: the array was read as one literal string); fixed to a plain string, follower restarted (2026-10-15T12:27:28Z)
+ Container pqzcopy-follower Started 
+
+## FINDING (2026-10-15T12:32:46Z): the follower (peered, eth68) rejects every block of the signer:
+   'Invalid downloaded block from [Peer|eth68|63|10.76.22.10], InvalidWithdrawalsRoot: expected 0x0000…0000, got <null>' (--log DEBUG)
+   cause: the 7622 params enable eip4844TransitionTimestamp 0 without eip4895 (withdrawals): headers carry blobGasUsed, no withdrawalsRoot;
+   on the wire the withdrawalsRoot slot is a zero hash, so a syncing peer expects withdrawals in the body. A follower cannot sync 7622's params.
+   copy deviation: genesis.stock.json += params.eip4895TransitionTimestamp 0 (new replica genesis); data wiped; restarted.
+## FINDING 2 (2026-10-15T12:34:39Z): with eip4895 the follower then rejects every header:
+   'Invalid block header (0x8641fe83…) - DAO extra data not valid. MaximumExtraDataSize 32, ExtraDataLength 97'
+   cause: the 7622 params lack maximumExtraDataSize (default 32 B < Clique's 97 B extraData); Nethermind's bundled Clique
+   chainspecs (linea-sepolia, joc-testnet) set 0xffff. The live signer never validates its own headers this way, so it never showed.
+   copy deviation 2: params.maximumExtraDataSize 0xffff; data wiped; restarted.
+## check (2026-10-15T12:37:09Z): maximumExtraDataSize alone (no eip4895): follower stays at head 0 (genesis hash 0x02a5c9aa…5046 = the faithful one) -> both needed.
+## final copy genesis: 7622 params + eip4895TransitionTimestamp 0 + maximumExtraDataSize 0xffff (copy.sh init applies both); data wiped; history:
+$ copy.sh up nethermind/nethermind:1.39.0 genesis.stock.json  (2026-10-15T12:37:09Z)
+ Container pqzcopy-rpc Started 
+ Container pqzcopy-signer Started 
+ Container pqzcopy-follower Started 
+head 8 0x5a724d366ac1a27fd76e0c2f605e8d18d02d064e83fcadf7389c9390e3c48aba gasLimit 16908727 gasUsed 0 ts 1792067870
+head: all checks passed
+## end of stock history (2026-10-15T13:11:46Z)
+head 415 0x91b880e381bf90cb8c7f08c2e8f876ecca56571b02f177a5bbbbd44b3ca32891 gasLimit 25155267 gasUsed 0 ts 1792069905
+head: all checks passed
+signer head: 415 0x91b880e381bf90cb8c7f08c2e8f876ecca56571b02f177a5bbbbd44b3ca32891
+$ copy.sh down
+ Network pqzcopy_net Removed 
+$ copy.sh backup pre
+2100	/c/data-signer
+2096	/c/bak-pre/data-signer

@@ -1034,3 +1034,9 @@ pqz-core/params/*.py	renamed	the relation specs are LaZer Sage files pqz-core/pa
 pqz-core/vectors/	renamed	one canonical vector directory smartcontracts/vectors/pqz/, no copies (P6e D9): contracts/pq-zether.md §14
 statement_{transfer,burn,refresh}.json	renamed	statement_{transfer,burn,refresh,register,disclose}.json in smartcontracts/vectors/pqz/ (P6e D9): contracts/pq-zether.md §14
 proof_{transfer,burn,refresh,register,disclose_*}.json	renamed	proof_pqzl.json and proof_pqzh.json, one file per proofSystemId with every form (P6e D9): contracts/pq-zether.md §14
+0x0000000000000000000000000000000000000F01	renamed	PQZ moved outside EIP-1352 to 0x5caa500000000000000000000000000000000f01 (P6f D3): contracts/pq-zether.md#CTR-PQZ-10
+pk(1952) ‖ sig(3309) ‖ u8(len(ctx)) ‖ ctx ‖ msg	obsolete	transitional ML-DSA layout with a context field, replaced by EIP-8355 pk ‖ sig ‖ msg with the empty context (P6f D5): contracts/pq-zether.md §9.2
+ML-DSA.Verify(pk, msg, sig, ctx)	obsolete	verify with ctx = kind_tag dropped: empty context, EIP-8355 (P6f D5): contracts/pq-zether.md §9.2
+pqzTransitionTimestamp	renamed	the first timestamp of the chainspec section engine.Pqz.schedules (P6f D2): contracts/pq-zether.md#CTR-PQZ-11
+mldsa65_verify	obsolete	ML-DSA runs on .NET MLDsa (OpenSSL 3.5) in the plugin, no C entry point (P6f D5): contracts/pq-zether.md §10
+scaas/nethermind-pqz:<nethermind>-pqz<n>	renamed	scaas/nethermind-pqz:1.39.0-pqz<n> (P6f D13): contracts/pq-zether.md §10

@@ -1,0 +1,465 @@
+# NOTE: failed image build (CALIB=1, 2026-10-15T11:40Z, commit c86c8ea). ffi-export and the node target built
+# (rc=0; node image 830b9fabc692, labelled <commit>-dirty); the calib target's fresh stage failed with exit 101:
+# 'cannot create the lock file .../fresh-proofs/Cargo.lock because --locked was passed' -- the crate had no
+# Cargo.lock. Fixed in 574729f (lock seeded from pqz-ffi's; 'cargo tree --locked --offline' resolves) and the
+# dirty label fixed by the top-relative ':(top,exclude)' pathspec. Superseded by 2026-10-15-image-pqz1.txt.
+# P6f image scaas/nethermind-pqz:1.39.0-pqz1, 2026-10-15T11:40Z, commit c86c8ea (dirty)
+$ ./ref.sh
+ref/ from nethermind/nethermind:1.39.0@sha256:8af90a30989c16cb15e087bd250c623c98585e490a25950a75642460d497eae6 (sha256:c510c7fb5f1bdff1ef0ee11bac6193ade9d54567f2f46585dfba529a1dad3566): 185 dlls
+[rc=0]
+
+$ python3 -I corpus.py bin/corpus.jsonl
+corpus bin/corpus.jsonl: 414 inputs {'honest': 16, 'negative': 373, 'flip': 16, 'fee0': 8, 'selftest': 1}
+[rc=0]
+
+$ docker build -f Dockerfile --progress plain --target ffi-export -o bin/ffi-out /home/ha/work/ainative/scaas/.claude/worktrees/p6f
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 4.63kB done
+#1 DONE 0.0s
+
+#2 resolve image config for docker-image://docker.io/docker/dockerfile:1
+#2 DONE 2.4s
+
+#3 docker-image://docker.io/docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
+#3 resolve docker.io/docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e 0.0s done
+#3 sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e 9.08kB / 9.08kB done
+#3 sha256:7b32114e84ca21aeb2d6f871a0b62b3a0762193f75d9afd048ee4cbe889f3148 1.13kB / 1.13kB done
+#3 sha256:528c92d70d7e39dbb3dd1c6681f6750c565c7e45b70527cda47c1a61495c1b6a 1.41kB / 1.41kB done
+#3 sha256:9d2b4f57f9e20f33279375ce25c6ff14f30f64270ed5c7b613b2b30256754f62 0B / 14.28MB 0.1s
+#3 sha256:9d2b4f57f9e20f33279375ce25c6ff14f30f64270ed5c7b613b2b30256754f62 6.29MB / 14.28MB 0.4s
+#3 sha256:9d2b4f57f9e20f33279375ce25c6ff14f30f64270ed5c7b613b2b30256754f62 11.53MB / 14.28MB 0.5s
+#3 extracting sha256:9d2b4f57f9e20f33279375ce25c6ff14f30f64270ed5c7b613b2b30256754f62
+#3 sha256:9d2b4f57f9e20f33279375ce25c6ff14f30f64270ed5c7b613b2b30256754f62 14.28MB / 14.28MB 0.5s done
+#3 extracting sha256:9d2b4f57f9e20f33279375ce25c6ff14f30f64270ed5c7b613b2b30256754f62 0.1s done
+#3 DONE 0.7s
+
+#4 [internal] load metadata for docker.io/library/rust:1.97.1-bookworm@sha256:0e2bcaef56d041a486784e54104a81aebe0da44bd03019bd70bc0401e42e4a97
+#4 DONE 0.0s
+
+#5 [rust  1/12] FROM docker.io/library/rust:1.97.1-bookworm@sha256:0e2bcaef56d041a486784e54104a81aebe0da44bd03019bd70bc0401e42e4a97
+#5 DONE 0.1s
+
+#6 [internal] load build context
+#6 transferring context: 6.34MB 0.1s done
+#6 DONE 0.1s
+
+#7 [rust  2/12] RUN apt-get update && apt-get install -y --no-install-recommends clang && rm -rf /var/lib/apt/lists/*
+#7 0.473 Get:1 http://deb.debian.org/debian bookworm InRelease [151 kB]
+#7 0.620 Get:2 http://deb.debian.org/debian bookworm-updates InRelease [55.4 kB]
+#7 0.690 Get:3 http://deb.debian.org/debian-security bookworm-security InRelease [34.8 kB]
+#7 0.748 Get:4 http://deb.debian.org/debian bookworm/main amd64 Packages [8790 kB]
+#7 1.135 Get:5 http://deb.debian.org/debian bookworm-updates/main amd64 Packages [6924 B]
+#7 1.138 Get:6 http://deb.debian.org/debian-security bookworm-security/main amd64 Packages [353 kB]
+#7 1.792 Fetched 9392 kB in 1s (6293 kB/s)
+#7 1.792 Reading package lists...
+#7 2.325 Reading package lists...
+#7 2.822 Building dependency tree...
+#7 2.988 Reading state information...
+#7 3.217 The following additional packages will be installed:
+#7 3.217   clang-14 libclang-common-14-dev libclang-cpp14 libclang1-14 libgc1 libllvm14
+#7 3.218   libobjc-12-dev libobjc4 libz3-4 llvm-14-linker-tools
+#7 3.221 Suggested packages:
+#7 3.221   clang-14-doc wasi-libc
+#7 3.221 Recommended packages:
+#7 3.221   llvm-14-dev libclang-rt-14-dev
+#7 3.316 The following NEW packages will be installed:
+#7 3.317   clang clang-14 libclang-common-14-dev libclang-cpp14 libclang1-14 libgc1
+#7 3.318   libllvm14 libobjc-12-dev libobjc4 libz3-4 llvm-14-linker-tools
+#7 3.521 0 upgraded, 11 newly installed, 0 to remove and 43 not upgraded.
+#7 3.521 Need to get 49.0 MB of archives.
+#7 3.521 After this operation, 250 MB of additional disk space will be used.
+#7 3.521 Get:1 http://deb.debian.org/debian bookworm/main amd64 libz3-4 amd64 4.8.12-3.1 [7216 kB]
+#7 4.027 Get:2 http://deb.debian.org/debian bookworm/main amd64 libllvm14 amd64 1:14.0.6-12 [21.8 MB]
+#7 4.487 Get:3 http://deb.debian.org/debian bookworm/main amd64 libclang-cpp14 amd64 1:14.0.6-12 [11.1 MB]
+#7 4.671 Get:4 http://deb.debian.org/debian bookworm/main amd64 libgc1 amd64 1:8.2.2-3 [245 kB]
+#7 4.688 Get:5 http://deb.debian.org/debian bookworm/main amd64 libobjc4 amd64 12.2.0-14+deb12u1 [43.2 kB]
+#7 4.688 Get:6 http://deb.debian.org/debian bookworm/main amd64 libobjc-12-dev amd64 12.2.0-14+deb12u1 [170 kB]
+#7 4.689 Get:7 http://deb.debian.org/debian bookworm/main amd64 libclang-common-14-dev all 1:14.0.6-12 [890 kB]
+#7 4.709 Get:8 http://deb.debian.org/debian bookworm/main amd64 llvm-14-linker-tools amd64 1:14.0.6-12 [1288 kB]
+#7 4.728 Get:9 http://deb.debian.org/debian bookworm/main amd64 libclang1-14 amd64 1:14.0.6-12 [6157 kB]
+#7 4.836 Get:10 http://deb.debian.org/debian bookworm/main amd64 clang-14 amd64 1:14.0.6-12 [102 kB]
+#7 4.837 Get:11 http://deb.debian.org/debian bookworm/main amd64 clang amd64 1:14.0-55.7~deb12u1 [5144 B]
+#7 5.030 debconf: delaying package configuration, since apt-utils is not installed
+#7 5.077 Fetched 49.0 MB in 2s (32.5 MB/s)
+#7 5.119 Selecting previously unselected package libz3-4:amd64.
+#7 5.119 (Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 23256 files and directories currently installed.)
+#7 5.198 Preparing to unpack .../00-libz3-4_4.8.12-3.1_amd64.deb ...
+#7 5.204 Unpacking libz3-4:amd64 (4.8.12-3.1) ...
+#7 5.635 Selecting previously unselected package libllvm14:amd64.
+#7 5.638 Preparing to unpack .../01-libllvm14_1%3a14.0.6-12_amd64.deb ...
+#7 5.641 Unpacking libllvm14:amd64 (1:14.0.6-12) ...
+#7 6.277 Selecting previously unselected package libclang-cpp14.
+#7 6.279 Preparing to unpack .../02-libclang-cpp14_1%3a14.0.6-12_amd64.deb ...
+#7 6.282 Unpacking libclang-cpp14 (1:14.0.6-12) ...
+#7 6.672 Selecting previously unselected package libgc1:amd64.
+#7 6.675 Preparing to unpack .../03-libgc1_1%3a8.2.2-3_amd64.deb ...
+#7 6.678 Unpacking libgc1:amd64 (1:8.2.2-3) ...
+#7 6.715 Selecting previously unselected package libobjc4:amd64.
+#7 6.718 Preparing to unpack .../04-libobjc4_12.2.0-14+deb12u1_amd64.deb ...
+#7 6.720 Unpacking libobjc4:amd64 (12.2.0-14+deb12u1) ...
+#7 6.744 Selecting previously unselected package libobjc-12-dev:amd64.
+#7 6.747 Preparing to unpack .../05-libobjc-12-dev_12.2.0-14+deb12u1_amd64.deb ...
+#7 6.750 Unpacking libobjc-12-dev:amd64 (12.2.0-14+deb12u1) ...
+#7 6.787 Selecting previously unselected package libclang-common-14-dev.
+#7 6.789 Preparing to unpack .../06-libclang-common-14-dev_1%3a14.0.6-12_all.deb ...
+#7 6.792 Unpacking libclang-common-14-dev (1:14.0.6-12) ...
+#7 6.899 Selecting previously unselected package llvm-14-linker-tools.
+#7 6.903 Preparing to unpack .../07-llvm-14-linker-tools_1%3a14.0.6-12_amd64.deb ...
+#7 6.905 Unpacking llvm-14-linker-tools (1:14.0.6-12) ...
+#7 7.010 Selecting previously unselected package libclang1-14.
+#7 7.015 Preparing to unpack .../08-libclang1-14_1%3a14.0.6-12_amd64.deb ...
+#7 7.017 Unpacking libclang1-14 (1:14.0.6-12) ...
+#7 7.377 Selecting previously unselected package clang-14.
+#7 7.380 Preparing to unpack .../09-clang-14_1%3a14.0.6-12_amd64.deb ...
+#7 7.382 Unpacking clang-14 (1:14.0.6-12) ...
+#7 7.419 Selecting previously unselected package clang.
+#7 7.422 Preparing to unpack .../10-clang_1%3a14.0-55.7~deb12u1_amd64.deb ...
+#7 7.424 Unpacking clang (1:14.0-55.7~deb12u1) ...
+#7 7.463 Setting up libz3-4:amd64 (4.8.12-3.1) ...
+#7 7.470 Setting up libgc1:amd64 (1:8.2.2-3) ...
+#7 7.478 Setting up libllvm14:amd64 (1:14.0.6-12) ...
+#7 7.485 Setting up llvm-14-linker-tools (1:14.0.6-12) ...
+#7 7.492 Setting up libclang1-14 (1:14.0.6-12) ...
+#7 7.499 Setting up libobjc4:amd64 (12.2.0-14+deb12u1) ...
+#7 7.506 Setting up libclang-common-14-dev (1:14.0.6-12) ...
+#7 7.513 Setting up libclang-cpp14 (1:14.0.6-12) ...
+#7 7.520 Setting up libobjc-12-dev:amd64 (12.2.0-14+deb12u1) ...
+#7 7.527 Setting up clang-14 (1:14.0.6-12) ...
+#7 7.534 Setting up clang (1:14.0-55.7~deb12u1) ...
+#7 7.564 Processing triggers for libc-bin (2.36-9+deb12u14) ...
+#7 DONE 11.1s
+
+#8 [rust  3/12] WORKDIR /src
+#8 DONE 0.0s
+
+#9 [rust  4/12] COPY LICENSE ./
+#9 DONE 0.1s
+
+#10 [rust  5/12] COPY pqz-core/check_symbols.sh pqz-core/
+#10 DONE 0.0s
+
+#11 [rust  6/12] COPY pqz-core/src pqz-core/src
+#11 DONE 0.1s
+
+#12 [rust  7/12] COPY pqz-core/lazer pqz-core/lazer
+#12 DONE 0.1s
+
+#13 [rust  8/12] COPY pqz-core/params pqz-core/params
+#13 DONE 0.1s
+
+#14 [rust  9/12] COPY pqz-core/stmt pqz-core/stmt
+#14 DONE 0.0s
+
+#15 [rust 10/12] COPY pqz-core/pqzh/ligero pqz-core/pqzh/ligero
+#15 DONE 0.1s
+
+#16 [rust 11/12] COPY pqz-core/ffi pqz-core/ffi
+#16 DONE 0.1s
+
+#17 [rust 12/12] COPY smartcontracts/vectors/pqz/proof_pqzl.json smartcontracts/vectors/pqz/proof_pqzh.json smartcontracts/vectors/pqz/
+#17 DONE 0.1s
+
+#18 [ffi 1/1] RUN cd pqz-core/ffi && cargo build --release --locked -j 2 && mkdir /out && cp target/release/libpqz_ffi.so /out/  && sha256sum /out/libpqz_ffi.so
+#18 0.441     Updating crates.io index
+#18 1.245  Downloading crates ...
+#18 1.489   Downloaded crypto-common v0.1.7
+#18 1.519   Downloaded find-msvc-tools v0.1.14
+#18 1.558   Downloaded block-buffer v0.10.4
+#18 1.571   Downloaded generic-array v0.14.7
+#18 1.577   Downloaded version_check v0.9.5
+#18 1.604   Downloaded keccak v0.1.6
+#18 1.622   Downloaded digest v0.10.7
+#18 1.685   Downloaded shlex v2.0.1
+#18 1.687   Downloaded typenum v1.20.1
+#18 1.692   Downloaded cc v1.8.0
+#18 1.758   Downloaded sha3 v0.10.8
+#18 1.802    Compiling version_check v0.9.5
+#18 1.803    Compiling typenum v1.20.1
+#18 2.270    Compiling generic-array v0.14.7
+#18 2.430    Compiling shlex v2.0.1
+#18 2.556    Compiling find-msvc-tools v0.1.14
+#18 2.708    Compiling cc v1.8.0
+#18 2.997    Compiling block-buffer v0.10.4
+#18 3.083    Compiling crypto-common v0.1.7
+#18 3.154    Compiling digest v0.10.7
+#18 3.305    Compiling keccak v0.1.6
+#18 4.122    Compiling sha3 v0.10.8
+#18 4.382    Compiling pqz-ffi v0.1.0 (/src/pqz-core/ffi)
+#18 4.556    Compiling pqz-stmt v0.1.0 (/src/pqz-core/stmt)
+#18 5.242    Compiling pqzh-ligero v0.1.0 (/src/pqz-core/pqzh/ligero)
+#18 20.21     Finished `release` profile [optimized + debuginfo] target(s) in 19.93s
+#18 20.25 12495e8b9cdcf95b932761bae8843e499ee7b4bdd2b240869ed461fc7a257d87  /out/libpqz_ffi.so
+#18 DONE 20.3s
+
+#19 [ffi-export 1/1] COPY --from=ffi /out/ /
+#19 DONE 0.0s
+
+#20 exporting to client directory
+#20 copying files 7.56MB 0.0s done
+#20 DONE 0.0s
+[rc=0]
+
+libpqz_ffi.so sha256 12495e8b9cdcf95b932761bae8843e499ee7b4bdd2b240869ed461fc7a257d87
+$ docker build -f Dockerfile --progress plain --target node --build-arg COMMIT=c86c8ead66df413f6a6cb90cb2eda47e180d53cf-dirty --build-arg FFI_SHA256=12495e8b9cdcf95b932761bae8843e499ee7b4bdd2b240869ed461fc7a257d87 -t scaas/nethermind-pqz:1.39.0-pqz1 /home/ha/work/ainative/scaas/.claude/worktrees/p6f
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 4.63kB done
+#1 DONE 0.0s
+
+#2 resolve image config for docker-image://docker.io/docker/dockerfile:1
+#2 DONE 0.9s
+
+#3 docker-image://docker.io/docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
+#3 CACHED
+
+#4 [internal] load metadata for docker.io/library/rust:1.97.1-bookworm@sha256:0e2bcaef56d041a486784e54104a81aebe0da44bd03019bd70bc0401e42e4a97
+#4 DONE 0.0s
+
+#5 [internal] load metadata for mcr.microsoft.com/dotnet/sdk:10.0.301-resolute@sha256:196f61c6262aa890f41dd654ff52d3b995187124a37778fb990ed0c31c26da44
+#5 DONE 0.0s
+
+#6 [internal] load metadata for docker.io/nethermind/nethermind:1.39.0@sha256:8af90a30989c16cb15e087bd250c623c98585e490a25950a75642460d497eae6
+#6 DONE 0.0s
+
+#7 [rust  1/12] FROM docker.io/library/rust:1.97.1-bookworm@sha256:0e2bcaef56d041a486784e54104a81aebe0da44bd03019bd70bc0401e42e4a97
+#7 DONE 0.0s
+
+#8 [internal] load build context
+#8 transferring context: 57.67kB 0.0s done
+#8 DONE 0.1s
+
+#9 [base 1/1] FROM docker.io/nethermind/nethermind:1.39.0@sha256:8af90a30989c16cb15e087bd250c623c98585e490a25950a75642460d497eae6
+#9 DONE 0.1s
+
+#10 [plugin 1/6] FROM mcr.microsoft.com/dotnet/sdk:10.0.301-resolute@sha256:196f61c6262aa890f41dd654ff52d3b995187124a37778fb990ed0c31c26da44
+#10 DONE 0.2s
+
+#11 [rust 11/12] COPY pqz-core/ffi pqz-core/ffi
+#11 CACHED
+
+#12 [rust  2/12] RUN apt-get update && apt-get install -y --no-install-recommends clang && rm -rf /var/lib/apt/lists/*
+#12 CACHED
+
+#13 [rust  3/12] WORKDIR /src
+#13 CACHED
+
+#14 [rust  6/12] COPY pqz-core/src pqz-core/src
+#14 CACHED
+
+#15 [rust  7/12] COPY pqz-core/lazer pqz-core/lazer
+#15 CACHED
+
+#16 [rust  5/12] COPY pqz-core/check_symbols.sh pqz-core/
+#16 CACHED
+
+#17 [rust 12/12] COPY smartcontracts/vectors/pqz/proof_pqzl.json smartcontracts/vectors/pqz/proof_pqzh.json smartcontracts/vectors/pqz/
+#17 CACHED
+
+#18 [rust  4/12] COPY LICENSE ./
+#18 CACHED
+
+#19 [rust  9/12] COPY pqz-core/stmt pqz-core/stmt
+#19 CACHED
+
+#20 [rust  8/12] COPY pqz-core/params pqz-core/params
+#20 CACHED
+
+#21 [rust 10/12] COPY pqz-core/pqzh/ligero pqz-core/pqzh/ligero
+#21 CACHED
+
+#22 [ffi 1/1] RUN cd pqz-core/ffi && cargo build --release --locked -j 2 && mkdir /out && cp target/release/libpqz_ffi.so /out/  && sha256sum /out/libpqz_ffi.so
+#22 CACHED
+
+#23 [plugin 2/6] WORKDIR /src/pqz-core/nethermind
+#23 DONE 0.0s
+
+#24 [plugin 3/6] COPY --from=base /nethermind ref
+#24 DONE 0.3s
+
+#25 [plugin 4/6] COPY pqz-core/nethermind/Directory.Build.props pqz-core/nethermind/Directory.Build.targets ./
+#25 DONE 0.0s
+
+#26 [plugin 5/6] COPY pqz-core/nethermind/Nethermind.Pqz Nethermind.Pqz
+#26 DONE 0.0s
+
+#27 [plugin 6/6] RUN dotnet build Nethermind.Pqz/Nethermind.Pqz.csproj -c Release -m:2 -o /out  && ls -la /out
+#27 0.738   Determining projects to restore...
+#27 1.110   Restored /src/pqz-core/nethermind/Nethermind.Pqz/Nethermind.Pqz.csproj (in 80 ms).
+#27 3.364   Nethermind.Pqz -> /out/Nethermind.Pqz.dll
+#27 3.381 
+#27 3.381 Build succeeded.
+#27 3.381     0 Warning(s)
+#27 3.381     0 Error(s)
+#27 3.381 
+#27 3.381 Time Elapsed 00:00:03.01
+#27 3.411 total 60
+#27 3.411 drwxr-xr-x 2 root root  4096 Oct 15 11:41 .
+#27 3.411 drwxr-xr-x 1 root root  4096 Oct 15 11:41 ..
+#27 3.411 -rw-r--r-- 1 root root   414 Oct 15 11:41 Nethermind.Pqz.deps.json
+#27 3.411 -rw-r--r-- 1 root root 26112 Oct 15 11:41 Nethermind.Pqz.dll
+#27 3.411 -rw-r--r-- 1 root root 16840 Oct 15 11:41 Nethermind.Pqz.pdb
+#27 DONE 3.5s
+
+#28 [node 2/7] COPY --from=plugin /out/Nethermind.Pqz.dll /nethermind/plugins/
+#28 DONE 0.0s
+
+#29 [node 3/7] COPY --from=ffi /out/libpqz_ffi.so /nethermind/plugins/
+#29 DONE 0.0s
+
+#30 [node 4/7] COPY pqz-core/nethermind/NOTICE-pqz.txt /nethermind/plugins/
+#30 DONE 0.0s
+
+#31 [node 5/7] COPY pqz-core/NOTICE /nethermind/plugins/NOTICE-pqz-core.txt
+#31 DONE 0.0s
+
+#32 [node 6/7] COPY pqz-core/lazer/LICENSE /nethermind/plugins/LICENSE-lazer.txt
+#32 DONE 0.0s
+
+#33 [node 7/7] RUN echo "12495e8b9cdcf95b932761bae8843e499ee7b4bdd2b240869ed461fc7a257d87  /nethermind/plugins/libpqz_ffi.so" | sha256sum -c -
+#33 0.201 /nethermind/plugins/libpqz_ffi.so: OK
+#33 DONE 0.2s
+
+#34 exporting to image
+#34 exporting layers 0.1s done
+#34 writing image sha256:830b9fabc692691766f6e9ddccccaab3d77cc8132b2401c7f95bfe3f42cd579c done
+#34 naming to docker.io/scaas/nethermind-pqz:1.39.0-pqz1 done
+#34 DONE 0.1s
+[rc=0]
+
+$ docker build -f Dockerfile --progress plain --target calib --build-arg COMMIT=c86c8ead66df413f6a6cb90cb2eda47e180d53cf-dirty --build-arg FFI_SHA256=12495e8b9cdcf95b932761bae8843e499ee7b4bdd2b240869ed461fc7a257d87 -t scaas/nethermind-pqz:1.39.0-pqz1-calib /home/ha/work/ainative/scaas/.claude/worktrees/p6f
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 4.63kB done
+#1 DONE 0.0s
+
+#2 resolve image config for docker-image://docker.io/docker/dockerfile:1
+#2 DONE 0.3s
+
+#3 docker-image://docker.io/docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
+#3 CACHED
+
+#4 [internal] load metadata for docker.io/nethermind/nethermind:1.39.0@sha256:8af90a30989c16cb15e087bd250c623c98585e490a25950a75642460d497eae6
+#4 DONE 0.0s
+
+#5 [internal] load metadata for docker.io/library/rust:1.97.1-bookworm@sha256:0e2bcaef56d041a486784e54104a81aebe0da44bd03019bd70bc0401e42e4a97
+#5 DONE 0.0s
+
+#6 [internal] load metadata for mcr.microsoft.com/dotnet/sdk:10.0.301-resolute@sha256:196f61c6262aa890f41dd654ff52d3b995187124a37778fb990ed0c31c26da44
+#6 DONE 0.0s
+
+#7 [rust  1/12] FROM docker.io/library/rust:1.97.1-bookworm@sha256:0e2bcaef56d041a486784e54104a81aebe0da44bd03019bd70bc0401e42e4a97
+#7 DONE 0.0s
+
+#8 [base 1/1] FROM docker.io/nethermind/nethermind:1.39.0@sha256:8af90a30989c16cb15e087bd250c623c98585e490a25950a75642460d497eae6
+#8 DONE 0.0s
+
+#9 [plugin 1/6] FROM mcr.microsoft.com/dotnet/sdk:10.0.301-resolute@sha256:196f61c6262aa890f41dd654ff52d3b995187124a37778fb990ed0c31c26da44
+#9 DONE 0.0s
+
+#10 [internal] load build context
+#10 transferring context: 24.92MB 0.1s
+#10 transferring context: 152.28MB 0.7s done
+#10 DONE 0.7s
+
+#11 [node 2/7] COPY --from=plugin /out/Nethermind.Pqz.dll /nethermind/plugins/
+#11 CACHED
+
+#12 [rust  9/12] COPY pqz-core/stmt pqz-core/stmt
+#12 CACHED
+
+#13 [node 3/7] COPY --from=ffi /out/libpqz_ffi.so /nethermind/plugins/
+#13 CACHED
+
+#14 [plugin 3/6] COPY --from=base /nethermind ref
+#14 CACHED
+
+#15 [node 5/7] COPY pqz-core/NOTICE /nethermind/plugins/NOTICE-pqz-core.txt
+#15 CACHED
+
+#16 [rust 11/12] COPY pqz-core/ffi pqz-core/ffi
+#16 CACHED
+
+#17 [rust  7/12] COPY pqz-core/lazer pqz-core/lazer
+#17 CACHED
+
+#18 [node 6/7] COPY pqz-core/lazer/LICENSE /nethermind/plugins/LICENSE-lazer.txt
+#18 CACHED
+
+#19 [rust  8/12] COPY pqz-core/params pqz-core/params
+#19 CACHED
+
+#20 [rust  3/12] WORKDIR /src
+#20 CACHED
+
+#21 [plugin 5/6] COPY pqz-core/nethermind/Nethermind.Pqz Nethermind.Pqz
+#21 CACHED
+
+#22 [node 4/7] COPY pqz-core/nethermind/NOTICE-pqz.txt /nethermind/plugins/
+#22 CACHED
+
+#23 [rust  2/12] RUN apt-get update && apt-get install -y --no-install-recommends clang && rm -rf /var/lib/apt/lists/*
+#23 CACHED
+
+#24 [plugin 4/6] COPY pqz-core/nethermind/Directory.Build.props pqz-core/nethermind/Directory.Build.targets ./
+#24 CACHED
+
+#25 [rust  6/12] COPY pqz-core/src pqz-core/src
+#25 CACHED
+
+#26 [ffi 1/1] RUN cd pqz-core/ffi && cargo build --release --locked -j 2 && mkdir /out && cp target/release/libpqz_ffi.so /out/  && sha256sum /out/libpqz_ffi.so
+#26 CACHED
+
+#27 [rust  4/12] COPY LICENSE ./
+#27 CACHED
+
+#28 [plugin 2/6] WORKDIR /src/pqz-core/nethermind
+#28 CACHED
+
+#29 [rust 10/12] COPY pqz-core/pqzh/ligero pqz-core/pqzh/ligero
+#29 CACHED
+
+#30 [rust  5/12] COPY pqz-core/check_symbols.sh pqz-core/
+#30 CACHED
+
+#31 [node 7/7] RUN echo "12495e8b9cdcf95b932761bae8843e499ee7b4bdd2b240869ed461fc7a257d87  /nethermind/plugins/libpqz_ffi.so" | sha256sum -c -
+#31 CACHED
+
+#32 [plugin 6/6] RUN dotnet build Nethermind.Pqz/Nethermind.Pqz.csproj -c Release -m:2 -o /out  && ls -la /out
+#32 CACHED
+
+#33 [rust 12/12] COPY smartcontracts/vectors/pqz/proof_pqzl.json smartcontracts/vectors/pqz/proof_pqzh.json smartcontracts/vectors/pqz/
+#33 CACHED
+
+#34 [calibtool 1/2] COPY pqz-core/nethermind/Calibrate Calibrate
+#34 DONE 0.1s
+
+#35 [fresh 1/2] COPY pqz-core/nethermind/fresh-proofs pqz-core/nethermind/fresh-proofs
+#35 DONE 0.1s
+
+#36 [fresh 2/2] RUN cd pqz-core/nethermind/fresh-proofs && cargo build --release --locked -j 2  && mkdir /out && ./target/release/pqz-fresh-proofs 20 > /out/fresh.jsonl
+#36 0.276     Updating crates.io index
+#36 0.944 error: cannot create the lock file /src/pqz-core/nethermind/fresh-proofs/Cargo.lock because --locked was passed to prevent this
+#36 0.944 help: to generate the lock file without accessing the network, remove the --locked flag and use --offline instead.
+#36 ERROR: process "/bin/sh -c cd pqz-core/nethermind/fresh-proofs && cargo build --release --locked -j 2  && mkdir /out && ./target/release/pqz-fresh-proofs ${FRESH} > /out/fresh.jsonl" did not complete successfully: exit code: 101
+
+#37 [calibtool 2/2] RUN dotnet build Calibrate/Calibrate.csproj -c Release -m:2 -o /opt/pqz-calibrate
+#37 0.797   Determining projects to restore...
+#37 CANCELED
+------
+ > [fresh 2/2] RUN cd pqz-core/nethermind/fresh-proofs && cargo build --release --locked -j 2  && mkdir /out && ./target/release/pqz-fresh-proofs 20 > /out/fresh.jsonl:
+0.276     Updating crates.io index
+0.944 error: cannot create the lock file /src/pqz-core/nethermind/fresh-proofs/Cargo.lock because --locked was passed to prevent this
+0.944 help: to generate the lock file without accessing the network, remove the --locked flag and use --offline instead.
+------
+Dockerfile:39
+--------------------
+  38 |     ARG FRESH=20
+  39 | >>> RUN cd pqz-core/nethermind/fresh-proofs && cargo build --release --locked -j 2 \
+  40 | >>>  && mkdir /out && ./target/release/pqz-fresh-proofs ${FRESH} > /out/fresh.jsonl
+  41 |     
+--------------------
+ERROR: failed to build: failed to solve: process "/bin/sh -c cd pqz-core/nethermind/fresh-proofs && cargo build --release --locked -j 2  && mkdir /out && ./target/release/pqz-fresh-proofs ${FRESH} > /out/fresh.jsonl" did not complete successfully: exit code: 101

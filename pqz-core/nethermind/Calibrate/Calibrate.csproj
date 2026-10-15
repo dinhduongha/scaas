@@ -1,0 +1,13 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!-- P6f Task 6 (D7): built into the image's calib target (/opt/pqz-calibrate), never into the node image -->
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <UseNethermindRuntime>true</UseNethermindRuntime>
+    <NoWarn>$(NoWarn);MSB3277;MSB3243</NoWarn>
+    <ServerGarbageCollection>false</ServerGarbageCollection>
+    <TieredPGO>true</TieredPGO>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Nethermind.Pqz/Nethermind.Pqz.csproj" />
+  </ItemGroup>
+</Project>

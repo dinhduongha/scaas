@@ -1,0 +1,77 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Linq;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using NUnit.Framework;
+
+namespace Nethermind.Pqz.Test;
+
+/// <summary>Paths and the shared vectors: the flat PQZ corpus (corpus.py over smartcontracts/vectors/pqz), the UA
+/// ML-DSA vectors, and the library under test (PQZ_FFI_DIR, default pqz-core/ffi/target/release).</summary>
+public static class Repo
+{
+    public static readonly string Root = Find();
+
+    private static string Find()
+    {
+        for (DirectoryInfo? d = new(AppContext.BaseDirectory); d is not null; d = d.Parent)
+            if (Directory.Exists(Path.Combine(d.FullName, "pqz-core", "nethermind"))) return d.FullName;
+        throw new DirectoryNotFoundException("repo root (pqz-core/nethermind) above " + AppContext.BaseDirectory);
+    }
+
+    public static string Path_(params string[] parts) => Path.Combine([Root, .. parts]);
+    public static string FfiDir => Environment.GetEnvironmentVariable("PQZ_FFI_DIR") ?? Path_("pqz-core", "ffi", "target", "release");
+    public static string HooksDir => Path_("pqz-core", "nethermind", "bin", "test-hooks");
+    public static string CorpusPath => Environment.GetEnvironmentVariable("PQZ_CORPUS") ?? Path_("pqz-core", "nethermind", "bin", "corpus.jsonl");
+}
+
+public sealed record CorpusRow(string Kind, string Name, string Id, string Form, int Op, long StmtLen, byte[] Input, string Expect);
+
+public static class Corpus
+{
+    private static List<CorpusRow>? _rows;
+
+    public static List<CorpusRow> Rows => _rows ??= File.ReadLines(Repo.CorpusPath).Select(l =>
+    {
+        JsonObject o = JsonNode.Parse(l)!.AsObject();
+        return new CorpusRow((string)o["kind"]!, (string)o["name"]!, (string)o["id"]!, (string)o["form"]!, (int)o["op"]!,
+            (long)o["stmt_len"]!, Convert.FromHexString((string)o["input"]!), (string)o["expect"]!);
+    }).ToList();
+
+    public static readonly Dictionary<string, string> Ids = new()
+    {
+        ["pqzl"] = "2e07e6ed1fd303a08c89b3eab6e8423fdfb8f31202958dd682a0619313798c2f",
+        ["pqzh"] = "0a47a7689250ba178a52ad5972cdd9153358c022cb694c08d2389e82de2fead4",
+    };
+
+    /// <summary>One row per distinct (op, id, stmtLen) of the honest inputs: the 12 rows of pqz1 (D12), with gas
+    /// 1,000,000 + 1,000 · index (distinct, so a wrong lookup shows).</summary>
+    public static JsonArray Rows12()
+    {
+        JsonArray a = [];
+        int i = 0;
+        foreach (var g in Rows.Where(r => r.Kind == "honest").GroupBy(r => (r.Op, r.Id, r.StmtLen)).OrderBy(g => g.Key))
+            a.Add(new JsonObject { ["op"] = g.Key.Op, ["id"] = "0x" + Ids[g.Key.Id], ["stmtLen"] = g.Key.StmtLen, ["gas"] = 1_000_000L + 1_000L * i++ });
+        return a;
+    }
+}
+
+public static class Hex
+{
+    public static byte[] B(string s) => Convert.FromHexString(s.StartsWith("0x") ? s[2..] : s);
+}
+
+[SetUpFixture]
+public class Setup
+{
+    [OneTimeSetUp]
+    public void Library()
+    {
+        // the node loads Clique as a plugin before the chainspec; here TypeDiscovery must see it too
+        _ = typeof(Nethermind.Consensus.Clique.CliqueChainSpecEngineParameters).Assembly;
+        PqzNative.LibraryDirectory = Repo.FfiDir;
+        TestContext.Progress.WriteLine($"libpqz_ffi.so: {PqzNative.LibraryPath} sha256 {SelfTest.LibrarySha256()}");
+    }
+}
