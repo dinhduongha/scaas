@@ -29,3 +29,31 @@ blocks 880..971: signer = follower on every block hash: yes (batch eth_getBlockB
 pqzcopy-signer: PQZ-NODE-FAULT 0, PQZ-INPUT-PANIC 0
 pqzcopy-follower: PQZ-NODE-FAULT 0, PQZ-INPUT-PANIC 0
 kill drill: PASS
+
+## D9 prewarm comparison (14:10:29Z): fill --n 6 (PQZH op 1) with the default (PreWarmStateOnBlockProcessing on)
+ok    fill tx 0xffca2cf841 314,023 B ok in block 1027
+ok    fill tx 0xcb1c549f7b 298,045 B ok in block 1028
+ok    fill tx 0x4753fa2736 315,219 B ok in block 1028
+ok    fill tx 0x24e53d40d8 297,949 B ok in block 1028
+ok    fill tx 0xcfaf01d165 314,023 B ok in block 1030
+ok    fill tx 0x7994857bb2 298,045 B ok in block 1030
+block 1027: 1 PQZ transfers, calldata 314,023 B, gasUsed 11,605,030 / gasLimit 45,713,983, size 314,785 B
+block 1028: 3 PQZ transfers, calldata 911,213 B, gasUsed 33,839,510 / gasLimit 45,758,624, size 912,194 B
+block 1030: 2 PQZ transfers, calldata 612,068 B, gasUsed 22,704,050 / gasLimit 45,848,037, size 612,940 B
+fill: all checks passed
+pqzcopy-signer: 1026=0.1ms 1027=11.8ms 1028=32.8ms 1029=0.2ms 1030=21.9ms 1031=0.2ms 
+pqzcopy-follower: 1026=3.0ms 1027=12.5ms 1028=33.8ms 1029=0.5ms 1030=21.9ms 1031=0.2ms 
+## the same with Blocks.PreWarmStateOnBlockProcessing false (signer + follower restarted, 14:12:34Z)
+ok    fill tx 0x2141b9922a 314,023 B ok in block 1052
+ok    fill tx 0x83d7310a7a 298,045 B ok in block 1052
+ok    fill tx 0xc786693a86 315,219 B ok in block 1052
+ok    fill tx 0xb5d5a8eece 297,949 B ok in block 1053
+ok    fill tx 0x724ade61ef 314,023 B ok in block 1054
+ok    fill tx 0x7281cf32af 298,045 B ok in block 1054
+block 1052: 3 PQZ transfers, calldata 927,287 B, gasUsed 34,350,620 / gasLimit 46,843,186, size 928,268 B
+block 1053: 1 PQZ transfers, calldata 297,949 B, gasUsed 11,093,920 / gasLimit 46,888,930, size 298,711 B
+block 1054: 2 PQZ transfers, calldata 612,068 B, gasUsed 22,704,050 / gasLimit 46,934,718, size 612,940 B
+fill: all checks passed
+pqzcopy-signer: 1050=0.2ms 1051=0.2ms 1052=32.4ms 1053=12.3ms 1054=23.3ms 1055=0.3ms 
+pqzcopy-follower: 1050=0.7ms 1051=2.5ms 1052=34.7ms 1053=11.2ms 1054=21.7ms 1055=0.5ms 
+D9: no material difference for PQZ blocks (≈ 11 ms per PQZH transfer verify either way; the prewarmer's verify is cached for the block). Prewarming kept on (default). Configs restored, nodes restarted.

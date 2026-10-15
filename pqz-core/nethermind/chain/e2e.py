@@ -8,8 +8,8 @@ smartcontracts/evm/out. Requests are paced (the proxy allows 10 r/s, burst 20) a
   e2e.py probe   --engine E [--genesis-hash H]   step 2: chain id, genesis hash, OP_SELFTEST, every vector 1 / 0,
                                             gas = formula for every row (valid = invalid), misses, ML-DSA both levels
   e2e.py stock   --engine E                 the stock image after T: the probe must FAIL (G2 demonstration)
-  e2e.py e2e     --engine E --key K         transactions: probe contract, check() per row, direct > 128 KiB inputs,
-                                            UAMldsaVerifier at both levels
+  e2e.py e2e     --engine E --key K [--no-ua]  transactions: probe contract, check() per row, direct > 128 KiB
+                                            inputs, UAMldsaVerifier at both levels (not with --no-ua: live 7622)
   e2e.py burst   [--clients 4 --calls 50]   step 5: eth_call spam at PQZ; counts 200 / 429; block interval
   e2e.py fill    --engine E --key K [--n 8] PQZH transfers sent straight to PQZ, to fill a block
   e2e.py head                               number, hash, gasLimit, timestamp of the head
@@ -331,6 +331,9 @@ def cmd_e2e(a):
         got = int(rc["gasUsed"], 16)
         check(rc["status"] == "0x1" and got == max(std, floor),
               f"direct tx to PQZ, {row['name']} ({len(b):,} B > 131,072): gasUsed {got:,} = max(standard {std:,}, EIP-7623 floor {floor:,}), block {int(rc['blockNumber'], 16)}")
+    if a.no_ua:
+        log("UAMldsaVerifier skipped (--no-ua: on 7622 it is deployed with the registry in P6g, plan R5)")
+        return
     # UAMldsaVerifier(kind, MLDSAxx, valid, flipped) on the copy (R5): the probe must pick the precompile
     vcode, _ = artifact("MlDsa.sol", "UAMldsaVerifier")
     ua = ua_rows()
@@ -423,6 +426,7 @@ def main():
     p.add_argument("--clients", type=int, default=4)
     p.add_argument("--calls", type=int, default=50)
     p.add_argument("--n", type=int, default=8)
+    p.add_argument("--no-ua", action="store_true")
     a = p.parse_args()
     RPC = a.rpc
     {"head": cmd_head, "before": cmd_before, "probe": cmd_probe, "stock": cmd_stock, "e2e": cmd_e2e,
