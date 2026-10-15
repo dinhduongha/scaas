@@ -257,19 +257,31 @@ Source: `ffi/runs/ffi1f2-bench.jsonl` (native, n = 200 per cell, one proof per f
 
 ### Comparisons
 
-- **vs upstream LaZer** (same statement, witness and relation source; `artifact/reproduce.sh --upstream`,
-  `artifact/runs/docker-upstream/upstream-bench.txt`, N = 3 medians):
+**vs upstream LaZer.** Same statement, witness and relation source; upstream built from source by
+`artifact/reproduce.sh --upstream` (`artifact/runs/docker-upstream/upstream-bench.txt`, N = 3 medians).
 
-  | | upstream `3330e48` x86-64-v3 | the fork, portable | speed-up |
-  |---|---|---|---|
-  | `R_TX` prove / verify | 6,581 / 6,403 ms | 1,012 / 613 ms | 6.5× / 10.4× |
-  | `R_REG` prove / verify | 548 / 513 ms | 247 / 178 ms | — |
+| | upstream LaZer `3330e48` (x86-64-v3 = AVX2 build) | this fork, portable (no AVX2 / AVX-512 needed) | fork faster by |
+|---|---|---|---|
+| `R_TX` prove / verify | 6,581 / 6,403 ms | 1,012 / 613 ms | 6.5× / 10.4× |
+| `R_REG` prove / verify | 548 / 513 ms | 247 / 178 ms | 2.2× / 2.9× |
+| `R_TX` verify, specialised verifier | — | ≈ 8 ms | ≈ 800× |
 
-  The specialised verifier (≈ 8 ms) is ≈ 800× under upstream's `R_TX` verify. Method and the earlier 2026-10-13
-  cross-check: [xcheck/RESULTS.md](xcheck/RESULTS.md).
-- **vs the rejected PQZH backends** ([pqzh-backend-comparison.md](../docs/research/pqzh-backend-comparison.md), proven
-  `R_TX`, ZK, 128 bits): FRI + ZK STARK over Goldilocks⁵ 622,448 B, 20.4 s prove, 2.82 GB; ZK WHIR 1,948,901 B;
-  Ligero 231 KB, 0.65 s, 43 MB.
+- **The fork needs no AVX-512** (and no AVX2): every number in this README comes from the portable build on a CPU
+  without AVX-512; x86-64-v3 (AVX2 + AES-NI) is an optional, faster build of the specialised verifier only.
+- Upstream LaZer's fastest path needs AVX-512 IFMA (its HEXL backend). That variant builds here but cannot run on the
+  reference CPU, so the comparison uses upstream's AVX2 build; running the AVX-512 variant on an AVX-512 machine is an
+  owner step. Method and the earlier cross-check: [xcheck/RESULTS.md](xcheck/RESULTS.md).
+
+**vs the PQZH backends that were tried and rejected.** Same statement (`R_TX`), zero knowledge, 128 bits, proven
+security, measured on the reference machine (details: [pqzh-backend-comparison.md](../docs/research/pqzh-backend-comparison.md)).
+
+| Backend | Proof | Prove | Prover memory | Verify p99 native | Outcome |
+|---|---|---|---|---|---|
+| **Ligero over F_q** (this directory) | **≈ 231 KB** | **0.65 s** | **43 MB** | 10.5 ms | **chosen** |
+| STARK (Plonky3, FRI + ZK, Goldilocks⁵) | 622 KB | 20.4 s | 2.8 GB | 19.1 ms | rejected: 2.7× larger, 30× slower to prove, 65× more memory |
+| ZK WHIR (Plonky3 WHIR with hiding) | 1.95 MB | 43 s | 2.4 GB | 46.5 ms | rejected: 8× larger, reaches only ≈ 124 bits |
+
+The rejected backends' code and runs are kept in `pqzh/` (top) as the record.
 
 ## Build, test, run
 
@@ -409,7 +421,7 @@ applied yet.
 | `test/` | PQZL | tool | bench, wasm runner, keys KAT, SV differential and fuzz targets |
 | `sv/` | PQZL | tool + measurement | specialised-verifier checks, bench, review reproducers |
 | `sz/`, `l2dom/` | PQZL | tool (spike origin) | the two LaZer tbox findings' reproducers |
-| `rel3/` | PQZL | measurement | the PQZL measurement round (`relfix.sh`) and its runs |
+| `rel3/` | PQZL | measurement | the PQZL measurement round (`relfix.sh`) and its runs — to be renamed `research/pqzl-measure/` |
 | `opt/` | PQZL | measurement | optimisation round: bench, profiling, microbenches |
 | `floor/` | PQZL | measurement | verifier-floor microbenchmarks and cost model |
 | `xcheck/` | PQZL | measurement | upstream LaZer vs the fork on the same statements |
