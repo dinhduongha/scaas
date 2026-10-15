@@ -1395,8 +1395,8 @@ input is a chain halt, not a split. Requirements: every upstream `ERR`/`ASSERT` 
 decoder (Rust, in front of the C core) accepts only the fixed lengths before any C code runs; fixed-size stack, no
 recursion, a fixed arena reserved once at run time (`pqz-ffi`: 144 MiB verify-only, from measurement); no timeouts (non-deterministic), only bounded loops; continuous ASan/UBSan fuzzing in
 CI (P6e D12: clang 18 libFuzzer on stable Rust, the C core under ASan + UBSan, `pqz-ffi` and Ligero with sancov;
-targets through `pqz_precompile`, over edited honest inputs of every form and id, and the codec round trip; a CI smoke
-run per target from the committed corpora plus long runs on the owner's machine under `scripts/capped`; P6e Task 10). Operationally a follower node serves all public RPC and pre-simulation, so `eth_call` never reaches the signer
+targets through `pqz_precompile`, over edited honest inputs of every form and id, and the codec round trip; long runs on
+the owner's machine under `scripts/capped`, no CI job for now (controller 2026-10-14); P6e Task 10, `pqz-core/fuzz/`). Operationally a follower node serves all public RPC and pre-simulation, so `eth_call` never reaches the signer
 process; a crashing input inside a transaction would still reach every node at its block, so never-crash is the
 requirement and the follower is only defence in depth. Every node of chain 7622 must run the PQZ client build.
 
@@ -1830,9 +1830,9 @@ clientkeys (derivation, ML-DSA, `authDigest`); a pure-Python `pqz_kat.py` (no nu
 - fuzzing (P6e D12): clang 18 libFuzzer on stable Rust (not `cargo fuzz`, which needs nightly; that stays the
   fallback) over ASan + UBSan builds of the C core with `pqz-ffi` and
   Ligero instrumented (sancov), targets through `pqz_precompile`, over edited honest inputs of every form and id (PQZL
-  also generic vs specialised verifier) and over the codecs (`encode(decode(x)) = x`), **continuously** (a CI smoke run
-  per target from the committed corpora, long runs on the owner's machine; crash inputs committed as regression
-  cases, crashes block merges), plus a harness through the .NET P/Invoke boundary (P6f) and forge invariant tests of
+  also generic vs specialised verifier) and over the codecs (`encode(decode(x)) = x`), **continuously** (long runs on
+  the owner's machine, `pqz-core/fuzz/run.sh`; no CI job for now, controller 2026-10-14; crash inputs committed as
+  regression cases, crashes block merges), plus a harness through the .NET P/Invoke boundary (P6f) and forge invariant tests of
   the Solidity decoders; any crash, sanitizer report or non-`0`/`1` output is a release blocker;
 - self-test input other than `u8(6) ‖ be32(0)` ⇒ 0 at the same fixed `G_6`; 10^4 repeated self-test `eth_call`s give
   identical output and gas (cache hit), and the cold first call stays within the calibrated `G_6`;

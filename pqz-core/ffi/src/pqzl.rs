@@ -79,6 +79,8 @@ extern "C" {
         vs: *mut [u8; 128],
     ) -> i32;
     fn pqz_dec(s: *const i8, ct: *const u8, m: *mut i64, noise: *mut i64) -> i32;
+    #[cfg(feature = "fuzz")]
+    fn pqz_test_mutate(op: u8, proof: *const u8, len: usize, kind: u32, r1: u64, r2: u64, out: *mut u8, outlen: *mut usize) -> i32;
     #[cfg(feature = "prove")]
     fn pqz_prove(
         op: u8,
@@ -242,6 +244,20 @@ pub fn verify_fast(op: u8, stmt: &[u8], proof: &[u8]) -> Result<bool, NodeFault>
 pub fn verify_fast_on_caller(op: u8, stmt: &[u8], proof: &[u8]) -> bool {
     let g = STATE.lock().unwrap_or_else(|e| e.into_inner());
     g.core.is_some() && unsafe { pqz_verify_fast(op, stmt.as_ptr(), stmt.len(), proof.as_ptr(), proof.len()) } == 1
+}
+
+/// `pqz_test_mutate` (pqz_rel.c test hook, feature `fuzz` only): decode `proof` for relation `rel` (an op, or 0x81
+/// for `R_TX0`) with the precompile's decoder, change one field (`kind` 0..13 with `r1` / `r2`; any other kind changes
+/// nothing) and re-encode. `Ok(None)`: the proof does not decode.
+#[cfg(feature = "fuzz")]
+pub fn test_mutate(rel: u8, proof: &[u8], kind: u32, r1: u64, r2: u64) -> Result<Option<Vec<u8>>, NodeFault> {
+    let mut out = vec![0u8; 2 * MAX_PROOF];
+    let mut n = out.len();
+    let ok = with_core(ARENA_SMALL, || unsafe {
+        pqz_test_mutate(rel, proof.as_ptr(), proof.len(), kind, r1, r2, out.as_mut_ptr(), &mut n)
+    })?;
+    out.truncate(n);
+    Ok((ok == 1).then_some(out))
 }
 
 /// The generic verifier (LaZer's), the reference for differential tests; never on the precompile path.
