@@ -31,6 +31,11 @@ test-hooks = []
 # sanitizer runtime is outside the library). Never in a production build.
 fuzz = ["test-hooks"]
 
+[[bin]]
+name = "pqz-vectors"
+path = "src/bin/pqz-vectors.rs"
+required-features = ["prove"]
+
 [[example]]
 name = "ffi_bench"
 required-features = ["prove", "test-hooks"]

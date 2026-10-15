@@ -1,3 +1,28 @@
+## Session 2026-10-14/15 (session 4: P6 mandate, PQZH = Ligero, P6e nearly done, P6-ANON R_TXM, P6f) — resume here
+
+**State:** main `1783ea8` pushed. Merged this session (all pushed): ZK WHIR negative result + re-examination; Ligero
+(PQZH backend, proven, + EVM verifier measured 534.6 M gas → needs the precompile); StarkEx study; `pqz-artifact`
+(Docker package, freeze postponed); P6e plan + tasks 1–9, 11, 12 (`p6e-a1`…`a4`, `p6e-a6`, `p6e-b1`…`b3`: hedged
+provers, keys from seeds, R_TX0, `pqz-stmt`, Ligero six forms, D3 id, exact bounds, `pqz-ffi` (one precompile for both
+ids, status 3 / 4, 144 MiB arena), vectors (15 files, generator in `pqz-core/ffi/src/bin/pqz-vectors.rs`), pq-zether
+§8.1 Serialization v1); P6-ANON plan (`docs/superpowers/plans/2026-10-14-p6-anon.md`); P6f plan
+(`docs/superpowers/plans/2026-10-14-p6f-precompiles.md`); README §16 use cases (prepaid service passes, item / credit
+conversion recipes) + `docs/guides/item-economies.md`; `docs/research/pqzh-backend-comparison.md`.
+
+**Owner decisions this session:** all in TODO.md (mandate: carry P6 to its end, merge + push per sub-phase after review;
+controller proposals recorded in decisions.md "owner may override"; PQZH proven Ligero; verify limit 60 ms; one PQZ
+precompile for PQZL + PQZH; no PQZH without the precompile; Docker package covers both systems; P6-ANON = PQZ
+multi-recipient transfer `R_TXM` (sender visible, one proof, decoys Enc(0)), USED by SCaaS, both paths kept (op 7 multi +
+op 1 single), D21 freeze once after op 7, D20 no limit raise (PQZL M ≤ 8, PQZH M ≤ 4), D16/D17 no on-chain decoy rule;
+fee = 0 valid for Zether and PQZ; P6f precompiles run LIVE on 7622 (controller procedure: copy first, backups, rollback);
+publication drafts (ePrint + ethresear.ch, kept private in `scratchpad/pub/`) after P6 + P6-ANON + live 7622).
+
+**WIP branches (worktrees under `.claude/worktrees/`, agents resumed after the 2026-10-15 restart):**
+`p6e-a5` (Task 10 fuzzing), `pqz-artifact2` (Docker for both systems; pinned apt snapshot required), `p6-anon-s`
+(S1 hint estimate + S2 `pqz-stmt` op 7), `p6f` (Tasks 1–9 on a throwaway copy; Task 10 live NOT started — the live
+7622 container is stopped and untouched). Next: review + merge each; P6-ANON tracks L / H; gates A / B and the freeze;
+P6f Task 10 live after the copy gate; P6g → P6j; publication drafts.
+
 # HANDOFF — scaas
 
 ## Session 2026-10-14 (shutdown 3: z21 merged, PQZH next steps, artifact WIP) — resume here

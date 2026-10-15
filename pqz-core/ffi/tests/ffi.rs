@@ -126,23 +126,14 @@ fn selftest_report() {
 }
 
 /// The compiled-in self-test proofs: regenerated (same RND, deterministic provers) they equal the embedded ones.
-/// `PQZ_FFI_WRITE_SELFTEST=1` writes selftest/*.hex instead (then rebuild).
+/// They are the REGISTER rows of smartcontracts/vectors/pqz/proof_*.json (build.rs); pqz-vectors rewrites them.
 #[test]
 fn selftest_vectors() {
     let key = pqzl::keygen(&selftest::SEED_KEY).unwrap();
-    for (id, name) in [(PQZL_ID, "pqzl_reg"), (PQZH_ID, "pqzh_reg")] {
+    for (i, id) in [PQZL_ID, PQZH_ID].into_iter().enumerate() {
         let st = selftest::reg_statement(&id, &key.pk[..]);
         let proof = prove(3, &st, &fixture::wit_key(&key), &selftest::RND).unwrap();
-        let hex: String = proof.iter().map(|b| format!("{b:02x}")).collect();
-        let path = format!("{}/selftest/{name}.hex", env!("CARGO_MANIFEST_DIR"));
-        if std::env::var("PQZ_FFI_WRITE_SELFTEST").is_ok() {
-            let lines: Vec<&str> = hex.as_bytes().chunks(128).map(|c| std::str::from_utf8(c).unwrap()).collect();
-            std::fs::write(&path, lines.join("\n") + "\n").unwrap();
-            eprintln!("wrote {path}: {} B proof", proof.len());
-        } else {
-            let have: String = std::fs::read_to_string(&path).unwrap().split_whitespace().collect();
-            assert_eq!(have, hex, "{name}: regenerate with PQZ_FFI_WRITE_SELFTEST=1");
-        }
+        assert_eq!(proof, selftest::proofs()[i], "self-test proof {i}: regenerate the vectors (pqz-vectors), then rebuild");
     }
 }
 

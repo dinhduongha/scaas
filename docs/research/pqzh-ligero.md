@@ -131,7 +131,7 @@ absorb R, draw the challenges, absorb w ‖ q ‖ h, check the nonce, absorb it,
 (state ‖ 0xff ‖ be64(counter)) → 8-byte big-endian words; a field element is a word masked to 42 bits, rejected if
 ≥ q. The parameters (n, k, ℓ, t, grinding bits) are fixed per proofSystemId (`Params::preset`) and never read from
 the proof; the proof length is bounded before parsing and must be consumed exactly. Prover randomness:
-SHAKE256("SCAAS-PQZH-LIGERO-RNG" ‖ rnd32 ‖ op ‖ stmt).
+SHAKE256("SCAAS-PQZH-LIGERO-RNG" ‖ rnd32 ‖ op ‖ stmt) (since §12, hedged with the witness: `SHAKE256("SCAAS-PQZH-LIGERO-RNG-V2" ‖ rnd32 ‖ u8(op) ‖ be32(len) ‖ stmt ‖ wit)`; the frozen byte layout is pq-zether.md §8.1).
 
 **Proof bytes**: R (32) ‖ w ‖ q ‖ h (F_{q^4} coefficients, 24 B each) ‖ nonce (8) ‖ per distinct opened column: salt
 (32) and m + 12 F_q values (6 B) ‖ multiproof digests (32 B each).

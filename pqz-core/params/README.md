@@ -28,6 +28,28 @@ new (copied from the run, sha256 `bdf886541e7fafac…`). About 30 s per spec.
 `R_TX0` meets CTR-PQZ-03's β ≥ 450 at LaZer's default `pqz_delta` 1.00366 and the MLWE rank floor 33 on the first
 try, as the other relations did.
 
+## Relations v2 (frozen, P6e plan R1)
+
+The relation specification is the LaZer spec file, the generated header and `src/pqz_rel.c`'s builder (header comment),
+frozen by the KATs (`smartcontracts/vectors/pqz/`) and the generic-vs-specialised differential test. Every relation
+also hashes the whole statement into the transcript (`docs/contracts/pq-zether.md` §5, byte layouts §8.1). Columns
+from the generated headers' comments and `pqz_rel.c`; `Z` = one slack polynomial per exact ℓ2 block.
+
+| Relation (op) | Spec → header | Statement fields read | Witness slots in `s1` | Equations (pq-zether.md) | Exact ℓ2 blocks (polys: bound) | Binary polys | Approx. ℓ∞ filler | Knowledge error, MSIS |
+|---|---|---|---|---|---|---|---|---|
+| `R_REG` (3) | `reg_params.sage` → `pqz_reg_params.h` | `pk` | 0..31 `s`, 32..63 `e` (m1 64, Z 2) | `pk = A·s + e` (§7.2) | 32: 36, 32: 164 | — | 1 poly, bound 1 | ≤ 2^−127, MSIS(22, 131, 2^35.30) |
+| `R_TX` (1, 83,072 B) | `tx_params.sage` → `pqz_tx_params.h` | `fee`, `auditorOn` (= 1), `pk_f`, `pk_t`, `pk_a`, `T`, `u`, `v_t`, `v_f`, `v_a` | 0..31 `s_f`, 32..63 `e_f`, 64..95 `r`, 96..127 `e1`, 128 `e2_t`, 129 `e2_f`, 130 `e2_a`, 131..145 bits (m1 146, Z 7) | rows 1–7 (§7.4) | 32: 36, 32: 164, 32: 36, 32: 164, 1: 64 (× 3) | 15 | 1 poly, bound 64 | ≤ 2^−127, MSIS(23, 214, 2^35.97) |
+| `R_TX0` (1, 66,560 B) | `tx0_params.sage` → `pqz_tx0_params.h` | as `R_TX` without `pk_a`, `v_a`; `auditorOn` (= 0) | as `R_TX` without `e2_a`: 130..144 bits (m1 145, Z 6) | rows 1–4, 6, 7 | as `R_TX`, 1: 64 (× 2) | 15 | 1 poly, bound 64 | ≤ 2^−127, MSIS(23, 213, 2^35.96) |
+| `R_BURN` (2: BURN, REFRESH) | `burn_params.sage` → `pqz_burn_params.h` | `fee`, `amount` (`d = digits(amount)` public), `pk_f`, `T`, `u`, `v_f` | 0..31 `s_f`, 32..63 `e_f`, 64..95 `r`, 96..127 `e1`, 128 `e2_f`, 129..142 bits (m1 143, Z 5) | rows 1, 2, 4, 6, 7 (§7.5) | 32: 36, 32: 164, 32: 36, 32: 164, 1: 64 | 14 | 1 poly, bound 64 | ≤ 2^−127, MSIS(23, 211, 2^35.95) |
+| `R_DS` (4) | `ds_params.sage` → `pqz_ds_params.h` | `amount` (`d` public), `pk`, `u`, `v` | 0..31 `r`, 32..63 `e1`, 64 `e2_t` (m1 65, Z 3) | `u = Aᵀ·r + e1`, `v[i] = (pkᵀ·r)[i] + e2_t[i] + Δ·d_i` (§7.9) | 32: 36, 32: 164, 1: 64 | — | 1 poly, bound 64 | ≤ 2^−127, MSIS(22, 132, 2^35.31) |
+| `R_DR` (5: RECEIVER, AUDITOR) | `dr_params.sage` → `pqz_dr_params.h` | `amount` (`d` public), `pk`, `u`, `v` | 0..31 `s`, 32..63 `e`, 64..70 bits (m1 71, Z 2) | `pk = A·s + e`, `v[i] − (uᵀ·s)[i] = Δ·d_i + e'_i`, `e'_i + 2^24 ∈ [0, 2^25)` (§7.9) | 32: 36, 32: 164 | 7 | 1 poly, bound 1 | ≤ 2^−127, MSIS(23, 139, 2^35.84) |
+
+Bit slots (slot `k` = coefficient `k mod 64` of binary poly `k / 64`; `b` the bit index): `R_TX` / `R_TX0`: `d_i` at
+`4i + b`, `d'_i` at `64 + 4i + b`, `M_i` at `128 + 14i + b`, `c_i + 64` at `352 + 11i + b` (`i < 15`), `e_T[i] + 2^24`
+at `517 + 25i + b`; `R_BURN`: `d'_i` at `4i + b`, `M_i` at `64 + 14i + b`, `c_i + 64` at `288 + 11i + b`,
+`e_T[i] + 2^24` at `453 + 25i + b`; `R_DR`: `e'_i + 2^24` at `25i + b`. PQZH (Ligero) implements the same six
+relations as constraint systems in `pqz-core/pqzh/ligero/src/cs.rs` on the same statement and witness bytes.
+
 | Pin | Value |
 |---|---|
 | lattice-estimator | <https://github.com/malb/lattice-estimator> commit `53da5982597709ba0fdf94ea37a84d822310fd84` (main, 2026-08-19) |

@@ -94,3 +94,13 @@ production: external review of the Ligero ZK argument (`pqzh-ligero.md` §4.1) w
 `pqzh-design.md` (study), `pqzh-prototype.md` (first STARK), `pqzh-zk-ext5.md` (FRI + ZK, Goldilocks⁵, non-ZK
 WHIR), `pqzh-zk-whir.md` (ZK WHIR), `pqzh-ligero.md` (Ligero, EVM verifier, P6e Part B), `pqzh-solidity-verifier.md`
 (STARK on the EVM), `pqzh-starkex-verifier.md` (StarkWare's split verifier).
+
+## 6. Where each confidential kind can run (owner question 2026-10-14)
+
+| | Classical Zether | PQZ (PQZL / PQZH) |
+|---|---|---|
+| Verifier | Solidity on existing precompiles (bn254 `0x06`/`0x07`, BLS12-381 EIP-2537) | native precompile (`pqz-ffi`, one address for both proof systems, CTR-PQZ-10) |
+| Gas per transfer | ≈ 3.6 M (bn254) / ≈ 4.3 M (BLS12-381) minimum gas limit, single recipient (`docs/contracts/zether.md`, node gas cap row) | precompile priced per id in P6f; without the precompile: PQZL has no Solidity verifier, PQZH Ligero 534.6 M (§2), StarkEx-style split FRI + ZK ≈ 21.4 M over 4 txs not built (owner) |
+| Ethereum mainnet / public L2 | possible once the token contracts fit (31,162 / 40,706 B runtime > EIP-170 24,576 B; owner: size waits for Glamsterdam) and after an audit; today `ZetherSafety` allows dev chains only (31337 / 1337) | no, unless that chain adds the PQZ precompile |
+| Private chains 7622 / 22776 (64 KiB code limit) | yes | yes, once P6f deploys the precompile (owner: live on 7622) |
+| Post-quantum | no (ElGamal over elliptic curves: a quantum adversary decrypts amounts and balances) | yes (MLWE encryption; PQZL lattice / PQZH hash-based proofs) |
