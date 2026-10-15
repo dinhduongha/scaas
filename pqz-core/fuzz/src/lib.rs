@@ -11,8 +11,8 @@
 //!   everything else (a modified input that verifies is a wrong accept or a malleable encoding);
 //! - the arena high-water mark stays ≤ `ARENA_BOUND` = `ARENA_SMALL` / 1.5 = 96 MiB (the maximum seen is printed).
 //!
-//! The honest inputs (every form of both ids, `pqz_ffi::fixture`, `rnd32` = 0x33…) are proved once and cached in
-//! `$PQZ_FUZZ_HONEST`; the core is then re-initialised on the verify-only arena.
+//! The honest inputs (every form of both ids and the fee-0 forms) come from the frozen vectors
+//! (`smartcontracts/vectors/pqz/`, written to `$PQZ_FUZZ_HONEST` by `seeds.py`); the core never proves.
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering::Relaxed};
 
@@ -57,33 +57,20 @@ fn record(input: Vec<u8>) -> Honest {
     Honest { form, pqzl, stmt, proof, input }
 }
 
-/// Every form of both ids, proved, from the cache file (`be32(len) ‖ input` records) or proved here and cached.
-fn load_or_prove(path: &str) -> Vec<Honest> {
-    if let Ok(mut b) = std::fs::read(path).as_deref() {
-        let mut v = Vec::new();
-        while b.len() >= 4 {
-            let n = u32::from_be_bytes(b[..4].try_into().unwrap()) as usize;
-            v.push(record(b[4..4 + n].to_vec()));
-            b = &b[4 + n..];
-        }
-        if v.len() == 16 {
-            return v;
-        }
-    }
-    let t = std::time::Instant::now();
+/// The honest inputs from `seeds.py`'s file (`be32(len) ‖ input` records, built from the frozen vectors): PQZL's 8
+/// forms in `FORMS` order, PQZH's 8, then the fee-0 rows of both ids.
+fn load(path: &str) -> Vec<Honest> {
+    let mut b = &std::fs::read(path).unwrap_or_else(|e| die(&format!("{path}: {e} (run seeds.py)")))[..];
     let mut v = Vec::new();
-    let mut file = Vec::new();
-    for id in [PQZL_ID, PQZH_ID] {
-        for c in fixture::cases(&id).unwrap_or_else(|| die("fixture")) {
-            let p = prove(c.op(), &c.stmt, &c.wit, &[0x33; 32]).unwrap_or_else(|e| die(&format!("prove {:?}: {e:?}", c.form)));
-            let inp = stmt::input(c.op(), &c.stmt, &p);
-            file.extend_from_slice(&(inp.len() as u32).to_be_bytes());
-            file.extend_from_slice(&inp);
-            v.push(record(inp));
-        }
+    while b.len() >= 4 {
+        let n = u32::from_be_bytes(b[..4].try_into().unwrap()) as usize;
+        v.push(record(b[4..4 + n].to_vec()));
+        b = &b[4 + n..];
     }
-    eprintln!("pqz-fuzz: proved the 16 honest inputs in {:.1} s, cached in {path}", t.elapsed().as_secs_f64());
-    let _ = std::fs::write(path, file);
+    let order = v.len() >= 16 && v.iter().take(16).enumerate().all(|(i, h)| h.pqzl == (i < 8) && h.form == stmt::FORMS[i % 8]);
+    if !order {
+        die(&format!("{path}: expected PQZL then PQZH in FORMS order first"));
+    }
     v
 }
 
@@ -161,7 +148,7 @@ extern "C" {
 }
 
 /// `LLVMFuzzerInitialize`: the panic hook, the honest inputs, the verify-only core, a warm-up pass (every honest input
-/// valid, the self-test), the seeds of `target` into `$PQZ_FUZZ_SEEDS` if set.
+/// valid, the self-test).
 ///
 /// # Safety
 /// `target` is a NUL-terminated string.
@@ -171,7 +158,7 @@ pub unsafe extern "C" fn pqz_fuzz_init(target: *const std::ffi::c_char) {
     TARGET.set(target.clone()).ok();
     std::panic::set_hook(Box::new(|i| die(&format!("panic: {i}"))));
     let path = std::env::var("PQZ_FUZZ_HONEST").unwrap_or_else(|_| "honest.bin".into());
-    HONEST.set(load_or_prove(&path)).ok();
+    HONEST.set(load(&path)).ok();
     if !pqzl::reinit(pqzl::ARENA_SMALL) {
         die("reinit on the verify-only arena");
     }
@@ -186,23 +173,9 @@ pub unsafe extern "C" fn pqz_fuzz_init(target: *const std::ffi::c_char) {
         }
     }
     arena_check();
-    if let Ok(dir) = std::env::var("PQZ_FUZZ_SEEDS") {
-        let _ = std::fs::create_dir_all(&dir);
-        let mut seeds: Vec<Vec<u8>> = Vec::new();
-        match target.as_str() {
-            "precompile" => {
-                seeds.extend(honest().iter().map(|h| h.input.clone()));
-                seeds.push(vec![6, 0, 0, 0, 0]);
-            }
-            "mutate" => seeds.extend((0..16u8).flat_map(|c| (0..4u8).map(move |m| vec![c, m]))),
-            _ => seeds.extend((0..5u8).flat_map(|k| (0..16u8).map(move |c| vec![k, c]))),
-        }
-        for (i, s) in seeds.iter().enumerate() {
-            let _ = std::fs::write(format!("{dir}/seed-{i:03}"), s);
-        }
-    }
     eprintln!(
-        "pqz-fuzz init ({target}): 16 honest inputs valid, self-test {}, verify-only arena {} MiB, arena used {} B, peak {} B",
+        "pqz-fuzz init ({target}): {} honest inputs valid, self-test {}, verify-only arena {} MiB, arena used {} B, peak {} B",
+        honest().len(),
         hex(&st.1),
         pqzl::ARENA_SMALL >> 20,
         pqzl::arena_used(),
@@ -256,7 +229,8 @@ fn rel(f: Form) -> u8 {
 /// and a re-initialisation back to the verify-only one, ≈ 100× a fast verify)
 const DIFF_EVERY: u64 = 256;
 
-/// `mutate` target. Input: byte 0 % 16 = the honest input (PQZL forms 0..7, PQZH 8..15, `pqz_stmt::FORMS` order);
+/// `mutate` target. Input: byte 0 = the honest input (mod their number: PQZL forms 0..7, PQZH 8..15 in
+/// `pqz_stmt::FORMS` order, then the fee-0 rows);
 /// byte 1 % 4 = mode: 0 edits anywhere in the precompile input (op, length field, statement, proof), 1 PQZL: one
 /// decoded proof field changed and re-encoded (`pqz_test_mutate` kind byte 2 % 14, r1 / r2 from bytes 3..19; PQZH:
 /// as mode 3) then edits in the proof, 2 edits in the statement, 3 edits in the proof; then the edit script (`edit`).
@@ -270,7 +244,7 @@ pub unsafe extern "C" fn pqz_fuzz_mutate(data: *const u8, len: usize) {
         return;
     }
     let d = std::slice::from_raw_parts(data, len);
-    let h = &honest()[d[0] as usize % 16];
+    let h = &honest()[d[0] as usize % honest().len()];
     let (mut mode, mut script) = (d[1] % 4, &d[2..]);
     let mut inp = h.input.clone();
     let (s0, p0) = (5, 5 + h.stmt.len());

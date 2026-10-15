@@ -1,0 +1,134 @@
+seeds.py: 24 honest inputs -> honest.bin; 414 precompile seeds (389 negative.json rows)
+# fuzz precompile, 90 s, 2026-10-15T07:40:19+07:00, commit 2459b26, Ubuntu clang version 18.1.3 (1ubuntu1), rustc 1.97.1 (8bab26f4f 2026-07-14)
+pqz-fuzz: arena peak 95169680 B (bound 100663296 B)
+pqz-fuzz init (precompile): 24 honest inputs valid, self-test ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205, verify-only arena 144 MiB, arena used 93498368 B, peak 95169680 B
+INFO: Running with entropic power schedule (0xFF, 100).
+INFO: Seed: 3416398267
+INFO: Loaded 1 modules   (25591 inline 8-bit counters): 25591 [0x5818172de648, 0x5818172e4a3f), 
+INFO: Loaded 1 PC tables (25591 PCs): 25591 [0x5818172e4a40,0x5818173489b0), 
+INFO:      875 files found in /home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/build/fuzz/work/precompile
+INFO:        9 files found in corpus/precompile
+INFO:        0 files found in regress/precompile
+INFO:      431 files found in /home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/build/fuzz/seeds/precompile
+INFO: seed corpus: files: 1315 min: 1b max: 393217b total: 163625496b rss: 244Mb
+pqz-fuzz FINDING (precompile): verdict 0000000000000000000000000000000000000000000000000000000000000001 for an input that should give 0000000000000000000000000000000000000000000000000000000000000000 (44553 B)
+==1376878== ERROR: libFuzzer: deadly signal
+    #0 0x581816f38dc5 in __sanitizer_print_stack_trace (/home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/build/fuzz/precompile+0x1eadc5) (BuildId: 6498a0601768e922897a91d3c260ad987a4c5690)
+    #1 0x581816e928dc in fuzzer::PrintStackTrace() (/home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/build/fuzz/precompile+0x1448dc) (BuildId: 6498a0601768e922897a91d3c260ad987a4c5690)
+    #2 0x581816e78967 in fuzzer::Fuzzer::CrashCallback() (/home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/build/fuzz/precompile+0x12a967) (BuildId: 6498a0601768e922897a91d3c260ad987a4c5690)
+    #3 0x77f2a844532f  (/lib/x86_64-linux-gnu/libc.so.6+0x4532f) (BuildId: a4a7992a8e66555c8141ab2a08a8465ff6e0ea65)
+    #4 0x77f2a849ec0b in __pthread_kill_implementation nptl/pthread_kill.c:43:17
+    #5 0x77f2a849ec0b in __pthread_kill_internal nptl/pthread_kill.c:78:10
+    #6 0x77f2a849ec0b in pthread_kill nptl/pthread_kill.c:89:10
+    #7 0x77f2a844527d in raise signal/../sysdeps/posix/raise.c:26:13
+    #8 0x77f2a84288fe in abort stdlib/abort.c:79:7
+    #9 0x581816e5c639 in std::sys::pal::unix::abort_internal /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library/std/src/sys/pal/unix/mod.rs:303:14
+    #10 0x581816e5c3e8 in std::process::abort /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library/std/src/process.rs:2605:5
+    #11 0x581816e54c78 in pqz_fuzz::die /home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/fuzz/src/lib.rs:46:5
+    #12 0x581816f6e4d6 in pqz_fuzz::check /home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/fuzz/src/lib.rs:119:9
+    #13 0x581816f6f518 in pqz_fuzz_check /home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/fuzz/src/lib.rs:195:5
+    #14 0x581816f6c756 in LLVMFuzzerTestOneInput /home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/fuzz/targets/precompile.c:24:3
+    #15 0x581816e79f34 in fuzzer::Fuzzer::ExecuteCallback(unsigned char const*, unsigned long) (/home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/build/fuzz/precompile+0x12bf34) (BuildId: 6498a0601768e922897a91d3c260ad987a4c5690)
+    #16 0x581816e79629 in fuzzer::Fuzzer::RunOne(unsigned char const*, unsigned long, bool, fuzzer::InputInfo*, bool, bool*) (/home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/build/fuzz/precompile+0x12b629) (BuildId: 6498a0601768e922897a91d3c260ad987a4c5690)
+    #17 0x581816e7b246 in fuzzer::Fuzzer::ReadAndExecuteSeedCorpora(std::vector<fuzzer::SizedFile, std::allocator<fuzzer::SizedFile>>&) (/home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/build/fuzz/precompile+0x12d246) (BuildId: 6498a0601768e922897a91d3c260ad987a4c5690)
+    #18 0x581816e7b757 in fuzzer::Fuzzer::Loop(std::vector<fuzzer::SizedFile, std::allocator<fuzzer::SizedFile>>&) (/home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/build/fuzz/precompile+0x12d757) (BuildId: 6498a0601768e922897a91d3c260ad987a4c5690)
+    #19 0x581816e68c4f in fuzzer::FuzzerDriver(int*, char***, int (*)(unsigned char const*, unsigned long)) (/home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/build/fuzz/precompile+0x11ac4f) (BuildId: 6498a0601768e922897a91d3c260ad987a4c5690)
+    #20 0x581816e932d6 in main (/home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/build/fuzz/precompile+0x1452d6) (BuildId: 6498a0601768e922897a91d3c260ad987a4c5690)
+    #21 0x77f2a842a1c9 in __libc_start_call_main csu/../sysdeps/nptl/libc_start_call_main.h:58:16
+    #22 0x77f2a842a28a in __libc_start_main csu/../csu/libc-start.c:360:3
+    #23 0x581816e5dc34 in _start (/home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/build/fuzz/precompile+0x10fc34) (BuildId: 6498a0601768e922897a91d3c260ad987a4c5690)
+
+NOTE: libFuzzer has rudimentary signal handlers.
+      Combine libFuzzer with AddressSanitizer or similar for better crash reports.
+SUMMARY: libFuzzer: deadly signal
+MS: 0 ; base unit: 0000000000000000000000000000000000000000
+artifact_prefix='/home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/build/fuzz/crash-precompile-'; Test unit written to /home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/build/fuzz/crash-precompile-crash-0d452c2a0523e5393a8b56bae82bd7134b78d182
+stat::number_of_executed_units: 237
+stat::average_exec_per_sec:     2
+stat::new_units_added:          0
+stat::slowest_unit_time_sec:    0
+stat::peak_rss_mb:              268
+[fuzz rc=77]
+pqz-fuzz: arena peak 95169680 B (bound 100663296 B)
+pqz-fuzz init (precompile): 24 honest inputs valid, self-test ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205, verify-only arena 144 MiB, arena used 93498368 B, peak 95169680 B
+INFO: Running with entropic power schedule (0xFF, 100).
+INFO: Seed: 2326437945
+INFO: Loaded 1 modules   (25591 inline 8-bit counters): 25591 [0x5ee4b9c2a648, 0x5ee4b9c30a3f), 
+INFO: Loaded 1 PC tables (25591 PCs): 25591 [0x5ee4b9c30a40,0x5ee4b9c949b0), 
+MERGE-OUTER: 884 files, 0 in the initial corpus, 0 processed earlier
+MERGE-OUTER: attempt 1
+pqz-fuzz: arena peak 95169680 B (bound 100663296 B)
+pqz-fuzz init (precompile): 24 honest inputs valid, self-test ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205, verify-only arena 144 MiB, arena used 93498368 B, peak 95169680 B
+INFO: Running with entropic power schedule (0xFF, 100).
+INFO: Seed: 669941999
+INFO: Loaded 1 modules   (25591 inline 8-bit counters): 25591 [0x64980b107648, 0x64980b10da3f), 
+INFO: Loaded 1 PC tables (25591 PCs): 25591 [0x64980b10da40,0x64980b1719b0), 
+MERGE-INNER: using the control file '/tmp/libFuzzerTemp.Merge1384091.txt'
+MERGE-INNER: 884 total files; 0 processed earlier; will process 884 files now
+#1	pulse  cov: 122 ft: 122 exec/s: 0 rss: 242Mb
+#2	pulse  cov: 122 ft: 122 exec/s: 0 rss: 242Mb
+#4	pulse  cov: 122 ft: 122 exec/s: 0 rss: 242Mb
+#8	pulse  cov: 136 ft: 136 exec/s: 0 rss: 242Mb
+#16	pulse  cov: 156 ft: 160 exec/s: 0 rss: 243Mb
+#32	pulse  cov: 159 ft: 163 exec/s: 0 rss: 243Mb
+#64	pulse  cov: 169 ft: 176 exec/s: 0 rss: 245Mb
+#128	pulse  cov: 481 ft: 691 exec/s: 0 rss: 249Mb
+#256	pulse  cov: 1091 ft: 1669 exec/s: 0 rss: 266Mb
+pqz-fuzz FINDING (precompile): verdict 0000000000000000000000000000000000000000000000000000000000000001 for an input that should give 0000000000000000000000000000000000000000000000000000000000000000 (62179 B)
+==1384258== ERROR: libFuzzer: deadly signal
+    #0 0x64980ad61dc5 in __sanitizer_print_stack_trace (/home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/build/fuzz/precompile+0x1eadc5) (BuildId: 6498a0601768e922897a91d3c260ad987a4c5690)
+    #1 0x64980acbb8dc in fuzzer::PrintStackTrace() (/home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/build/fuzz/precompile+0x1448dc) (BuildId: 6498a0601768e922897a91d3c260ad987a4c5690)
+    #2 0x64980aca1967 in fuzzer::Fuzzer::CrashCallback() (/home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/build/fuzz/precompile+0x12a967) (BuildId: 6498a0601768e922897a91d3c260ad987a4c5690)
+    #3 0x79864da4532f  (/lib/x86_64-linux-gnu/libc.so.6+0x4532f) (BuildId: a4a7992a8e66555c8141ab2a08a8465ff6e0ea65)
+    #4 0x79864da9ec0b in __pthread_kill_implementation nptl/pthread_kill.c:43:17
+    #5 0x79864da9ec0b in __pthread_kill_internal nptl/pthread_kill.c:78:10
+    #6 0x79864da9ec0b in pthread_kill nptl/pthread_kill.c:89:10
+    #7 0x79864da4527d in raise signal/../sysdeps/posix/raise.c:26:13
+    #8 0x79864da288fe in abort stdlib/abort.c:79:7
+    #9 0x64980ac85639 in std::sys::pal::unix::abort_internal /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library/std/src/sys/pal/unix/mod.rs:303:14
+    #10 0x64980ac853e8 in std::process::abort /rustc/8bab26f4f68e0e26f0bb7960be334d5b520ea452/library/std/src/process.rs:2605:5
+    #11 0x64980ac7dc78 in pqz_fuzz::die /home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/fuzz/src/lib.rs:46:5
+    #12 0x64980ad974d6 in pqz_fuzz::check /home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/fuzz/src/lib.rs:119:9
+    #13 0x64980ad98518 in pqz_fuzz_check /home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/fuzz/src/lib.rs:195:5
+    #14 0x64980ad95756 in LLVMFuzzerTestOneInput /home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/fuzz/targets/precompile.c:24:3
+    #15 0x64980aca2f34 in fuzzer::Fuzzer::ExecuteCallback(unsigned char const*, unsigned long) (/home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/build/fuzz/precompile+0x12bf34) (BuildId: 6498a0601768e922897a91d3c260ad987a4c5690)
+    #16 0x64980acacb04 in fuzzer::Fuzzer::CrashResistantMergeInternalStep(std::__cxx11::basic_string<char, std::char_traits<char>, std::allocator<char>> const&, bool) (/home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/build/fuzz/precompile+0x135b04) (BuildId: 6498a0601768e922897a91d3c260ad987a4c5690)
+    #17 0x64980ac91bfa in fuzzer::FuzzerDriver(int*, char***, int (*)(unsigned char const*, unsigned long)) (/home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/build/fuzz/precompile+0x11abfa) (BuildId: 6498a0601768e922897a91d3c260ad987a4c5690)
+    #18 0x64980acbc2d6 in main (/home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/build/fuzz/precompile+0x1452d6) (BuildId: 6498a0601768e922897a91d3c260ad987a4c5690)
+    #19 0x79864da2a1c9 in __libc_start_call_main csu/../sysdeps/nptl/libc_start_call_main.h:58:16
+    #20 0x79864da2a28a in __libc_start_main csu/../csu/libc-start.c:360:3
+    #21 0x64980ac86c34 in _start (/home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/build/fuzz/precompile+0x10fc34) (BuildId: 6498a0601768e922897a91d3c260ad987a4c5690)
+
+NOTE: libFuzzer has rudimentary signal handlers.
+      Combine libFuzzer with AddressSanitizer or similar for better crash reports.
+SUMMARY: libFuzzer: deadly signal
+MS: 0 ; base unit: 0000000000000000000000000000000000000000
+artifact_prefix='./'; Test unit written to ./crash-b9881dfc28970147ad55024620ea154c845493cb
+MERGE-OUTER: attempt 2
+pqz-fuzz: arena peak 95169680 B (bound 100663296 B)
+pqz-fuzz init (precompile): 24 honest inputs valid, self-test ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205, verify-only arena 144 MiB, arena used 93498368 B, peak 95169680 B
+INFO: Running with entropic power schedule (0xFF, 100).
+INFO: Seed: 1374973500
+INFO: Loaded 1 modules   (25591 inline 8-bit counters): 25591 [0x57910b1b6648, 0x57910b1bca3f), 
+INFO: Loaded 1 PC tables (25591 PCs): 25591 [0x57910b1bca40,0x57910b2209b0), 
+MERGE-INNER: using the control file '/tmp/libFuzzerTemp.Merge1384091.txt'
+MERGE-INNER: '/home/ha/work/ainative/scaas/.claude/worktrees/p6ea5/pqz-core/build/fuzz/work/precompile/b9881dfc28970147ad55024620ea154c845493cb' caused a failure at the previous merge step
+MERGE-INNER: 884 total files; 373 processed earlier; will process 511 files now
+#1	pulse  cov: 464 ft: 464 exec/s: 0 rss: 243Mb
+#2	pulse  cov: 841 ft: 937 exec/s: 0 rss: 243Mb
+#4	pulse  cov: 859 ft: 973 exec/s: 0 rss: 244Mb
+#8	pulse  cov: 863 ft: 1052 exec/s: 0 rss: 244Mb
+#16	pulse  cov: 888 ft: 1229 exec/s: 0 rss: 246Mb
+#32	pulse  cov: 1155 ft: 1663 exec/s: 0 rss: 250Mb
+#64	pulse  cov: 1181 ft: 1755 exec/s: 0 rss: 256Mb
+#128	pulse  cov: 1231 ft: 1980 exec/s: 128 rss: 274Mb
+#256	pulse  cov: 1277 ft: 2220 exec/s: 85 rss: 314Mb
+#511	DONE   cov: 1525 ft: 3076 exec/s: 85 rss: 608Mb
+pqz-fuzz summary (precompile): 511 inputs checked, 446 decoded, 0 valid (= unmodified honest; mutate skips those), 0 differential SV = generic, 0 PQZL proof re-encodings equal, arena peak max 95169680 B = 90.76 MiB (bound 96 MiB, ARENA_SMALL 144 MiB)
+MERGE-OUTER: successful in 2 attempt(s)
+MERGE-OUTER: the control file has 191706 bytes
+MERGE-OUTER: consumed 0Mb (245Mb rss) to parse the control file
+MERGE-OUTER: 285 new files with 3263 new features added; 1598 new coverage edges
+pqz-fuzz summary (precompile): 0 inputs checked, 0 decoded, 0 valid (= unmodified honest; mutate skips those), 0 differential SV = generic, 0 PQZL proof re-encodings equal, arena peak max 95169680 B = 90.76 MiB (bound 96 MiB, ARENA_SMALL 144 MiB)
+[merge rc=0]
+corpus/precompile: 9 inputs, 42 B (merged set 285 inputs, 25668198 B)

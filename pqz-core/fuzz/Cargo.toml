@@ -12,7 +12,7 @@ publish = false
 crate-type = ["staticlib"]
 
 [dependencies]
-pqz-ffi = { path = "../ffi", features = ["prove", "fuzz"] }
+pqz-ffi = { path = "../ffi", features = ["fuzz"] }
 
 [profile.release]
 debug = 1

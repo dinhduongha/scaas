@@ -19,5 +19,4 @@ LIB=$B/target/$TRIPLE/release/libpqz_fuzz.a
 for t in precompile mutate codec; do
   clang-18 -g -O1 -fsanitize=fuzzer,address,undefined -o "$B/$t" "targets/$t.c" "$LIB" -lpthread -ldl -lm -lrt -lgcc_s
 done
-rm -f "$B/honest.bin" # the cached honest proofs: re-proved by the first run (the prover may have changed)
 ls -l "$B/precompile" "$B/mutate" "$B/codec"
