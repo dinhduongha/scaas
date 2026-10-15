@@ -11,7 +11,8 @@
 import os
 import math
 import random as pyrandom
-import numpy
+import time
+T0 = time.time()
 
 assert os.environ.get("LK_COMMIT", "").startswith("0a9caf8"), "leaky-LWE-Estimator must be at 0a9caf8"
 os.chdir("/lk/framework")
@@ -20,12 +21,21 @@ load("/lk/framework/DBDD_predict.sage")
 from functools import lru_cache
 _compute_delta = compute_delta
 compute_delta = lru_cache(maxsize=None)(lambda k: RR(_compute_delta(k)))  # pure; memoized as in hints.sage
+import numpy.linalg as nla  # after the loads: `from fpylll import *` rebinds the name `numpy`
+_logdet = logdet
+
+
+def logdet(M, exact=False):
+    """geometry.sage's logdet (numpy slogdet of the float matrix), without its element-wise conversion of RDF matrices"""
+    if not exact and M.base_ring() is RDF:
+        return float(nla.slogdet(M.numpy())[1])
+    return _logdet(M, exact)
 
 N = M = 256
 Q = 4096
 VAR_S, VAR_E = 0.5, 10.0
 NR, NE = 164, 36
-RNG = pyrandom.Random(20261015)
+RNG = pyrandom.Random(int(20261015))
 
 
 def rounded(vals, norm):
@@ -73,7 +83,7 @@ def short_beta(W, worst=False):
         inst.integrate_perfect_hint(v, 0)
     Wm = matrix(RDF, W)
     Sg = diagonal_matrix(RDF, [VAR_E] * M + [VAR_S] * N)
-    gain = (h / 2) * math.log(VAR_E * NE**2 + VAR_S * NR**2) if worst else 0.5 * float(numpy.linalg.slogdet((Wm * Sg * Wm.T).numpy())[1])
+    gain = (h / 2) * math.log(VAR_E * NE**2 + VAR_S * NR**2) if worst else 0.5 * float(nla.slogdet((Wm * Sg * Wm.T).numpy())[1])
     inst.Bvol += gain - (h / 2) * math.log(VAR_S)
     inst.integrate_q_vectors(Q)
     return float(inst.beta)
@@ -97,6 +107,7 @@ for h in (10, 80):
         bf, dim, used = full_beta(W)
         bs, bw = short_beta(W), short_beta(W, worst=True)
         good = bs <= bf + 1e-6 and bw <= bf + 1e-6
+        print(f"  [{kind}, {h} hints: {time.time() - T0:.0f} s since start]", flush=True)
         ok &= good
         print(f"{h:5d} {kind:>20s} {bf:11.2f} {str((dim, used)):>12s} {bs:17.2f} {bw:16.2f} {'yes' if good else 'NO':>13s}",
               flush=True)
