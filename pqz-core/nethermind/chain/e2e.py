@@ -270,7 +270,11 @@ class Sender:
         self.nonce = int(rpc("eth_getTransactionCount", [self.addr, "pending"]), 16)
 
     def send(self, to, data_hex, gas):
-        raw = legacy_tx(self.key, self.nonce, 1, gas, to, 0, bytes.fromhex(data_hex.removeprefix("0x")), CHAIN_ID)
+        # gas price max(2·baseFee + 1, 1 gwei) (full blocks raise the base fee by ≥ 1 wei each): once a block passes the EIP-1559 target the base fee is ≥ 1 wei for good (the
+        # decrease rounds to 0), and a priority fee of 0 is rejected by the min-gas-price filter (7622's config key
+        # Mining.MinGasPrice is not a Nethermind key; Blocks.MinGasPrice defaults to 1 wei)
+        fee = int(rpc("eth_getBlockByNumber", ["latest", False])["baseFeePerGas"], 16)
+        raw = legacy_tx(self.key, self.nonce, max(2 * fee + 1, 10**9), gas, to, 0, bytes.fromhex(data_hex.removeprefix("0x")), CHAIN_ID)
         self.nonce += 1
         return rpc("eth_sendRawTransaction", ["0x" + raw.hex()])
 

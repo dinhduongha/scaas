@@ -149,3 +149,69 @@ ok    MLDSA65 ua mldsa65 pop sig bit flipped: 0, same gas
 ok    MLDSA65 ua mldsa65 pop                              : word 1 (want 1), gas 68006 = 68006
 ok    MLDSA65 ua mldsa65 pop sig bit flipped: 0, same gas
 probe: all checks passed
+
+## e2e attempts 1-2 stalled (no receipt): EIP-1559 base fee 0 -> 1 wei after block 568 passed the target, never back to 0 (decrease
+   rounds to 0); gas price 1 => priority fee 0 => 'Rejected tx (False)' by the min-gas-price filter (signer --log DEBUG).
+   7622's config key Mining.MinGasPrice is reported 'Invalid configuration settings' (not a Nethermind key; Blocks.MinGasPrice
+   defaults to 1 wei), so live 7622 behaves the same. e2e.py now prices max(2·baseFee + 1, 1 gwei); pools cleared by restarts.
+## e2e (13:46:53Z), through nginx -> follower, mined by the signer; key = the copy's throwaway signer key; gas price max(2·baseFee + 1, 1 gwei)
+sender 0x85c06b28a3b434ef7473fc1ff2d21abf57b1f23b nonce 20
+ok    probe deployed at 0x0ef9fe3be8abea2019c24c09692cd743b99b8c7e (block 747, gas 182195)
+ok    tx check() honest BURN pqzh                                pqzh: event word 1 (want 1), call gas 3764582, tx gas 10606720, block 749
+ok    tx check() honest BURN pqzl                                pqzl: event word 1 (want 1), call gas 3731744, tx gas 5166481, block 749
+ok    tx check() honest DISCLOSE-AUDITOR pqzh                    pqzh: event word 1 (want 1), call gas 2901783, tx gas 8336990, block 750
+ok    tx check() honest DISCLOSE-AUDITOR pqzl                    pqzl: event word 1 (want 1), call gas 2572951, tx gas 3538578, block 750
+ok    tx check() honest DISCLOSE-RECEIVER pqzh                   pqzh: event word 1 (want 1), call gas 2901786, tx gas 8341660, block 751
+ok    tx check() honest DISCLOSE-RECEIVER pqzl                   pqzl: event word 1 (want 1), call gas 2572954, tx gas 3538361, block 751
+ok    tx check() honest DISCLOSE-SENDER pqzh                     pqzh: event word 1 (want 1), call gas 3303714, tx gas 8313820, block 752
+ok    tx check() honest DISCLOSE-SENDER pqzl                     pqzl: event word 1 (want 1), call gas 2606951, tx gas 3572494, block 752
+ok    tx check() honest REFRESH pqzh                             pqzh: event word 1 (want 1), call gas 3764405, tx gas 10537860, block 754
+ok    tx check() honest REFRESH pqzl                             pqzl: event word 1 (want 1), call gas 3731744, tx gas 5166337, block 754
+ok    tx check() honest REGISTER pqzh                            pqzh: event word 1 (want 1), call gas 3341178, tx gas 7801230, block 755
+ok    tx check() honest REGISTER pqzl                            pqzl: event word 1 (want 1), call gas 2699304, tx gas 3417390, block 755
+ok    tx check() honest TRANSFER pqzh                            pqzh: event word 1 (want 1), call gas 4254564, tx gas 11606670, block 756
+ok    tx check() honest TRANSFER pqzl                            pqzl: event word 1 (want 1), call gas 5420921, tx gas 7361215, block 756
+ok    tx check() honest TRANSFER0 pqzh                           pqzh: event word 1 (want 1), call gas 4049064, tx gas 11100440, block 757
+ok    tx check() honest TRANSFER0 pqzl                           pqzl: event word 1 (want 1), call gas 5233343, tx gas 6920241, block 757
+ok    tx check() flip   TRANSFER: proof middle byte bit 3 flippe pqzl: event word 0 (want 0), call gas 5420921, tx gas 7361215, block 758
+ok    tx check() flip   TRANSFER0: proof middle byte bit 3 flipp pqzl: event word 0 (want 0), call gas 5233343, tx gas 6920241, block 758
+ok    tx check() flip   BURN: proof middle byte bit 3 flipped    pqzl: event word 0 (want 0), call gas 3731744, tx gas 5166481, block 759
+ok    tx check() flip   REFRESH: proof middle byte bit 3 flipped pqzl: event word 0 (want 0), call gas 3731744, tx gas 5166337, block 759
+ok    tx check() flip   REGISTER: proof middle byte bit 3 flippe pqzl: event word 0 (want 0), call gas 2699304, tx gas 3417390, block 759
+ok    tx check() flip   DISCLOSE-SENDER: proof middle byte bit 3 pqzl: event word 0 (want 0), call gas 2606951, tx gas 3572494, block 760
+ok    tx check() flip   DISCLOSE-RECEIVER: proof middle byte bit pqzl: event word 0 (want 0), call gas 2572954, tx gas 3538361, block 760
+ok    tx check() flip   DISCLOSE-AUDITOR: proof middle byte bit  pqzl: event word 0 (want 0), call gas 2572951, tx gas 3538578, block 760
+ok    tx check() flip   TRANSFER: proof middle byte bit 3 flippe pqzh: event word 0 (want 0), call gas 4254564, tx gas 11606670, block 762
+ok    tx check() flip   TRANSFER0: proof middle byte bit 3 flipp pqzh: event word 0 (want 0), call gas 4049064, tx gas 11100440, block 762
+ok    tx check() flip   BURN: proof middle byte bit 3 flipped    pqzh: event word 0 (want 0), call gas 3764582, tx gas 10606720, block 763
+ok    tx check() flip   REFRESH: proof middle byte bit 3 flipped pqzh: event word 0 (want 0), call gas 3764405, tx gas 10537860, block 763
+ok    tx check() flip   REGISTER: proof middle byte bit 3 flippe pqzh: event word 0 (want 0), call gas 3341178, tx gas 7801230, block 765
+ok    tx check() flip   DISCLOSE-SENDER: proof middle byte bit 3 pqzh: event word 0 (want 0), call gas 3303714, tx gas 8313820, block 765
+ok    tx check() flip   DISCLOSE-RECEIVER: proof middle byte bit pqzh: event word 0 (want 0), call gas 2901786, tx gas 8341660, block 766
+ok    tx check() flip   DISCLOSE-AUDITOR: proof middle byte bit  pqzh: event word 0 (want 0), call gas 2901783, tx gas 8336990, block 766
+ok    tx check() fee0   fee0 TRANSFER pqzl                       pqzl: event word 1 (want 1), call gas 5420921, tx gas 7360339, block 767
+ok    tx check() fee0   fee0 TRANSFER pqzh                       pqzh: event word 1 (want 1), call gas 4254675, tx gas 11648090, block 767
+ok    tx check() fee0   fee0 TRANSFER0 pqzl                      pqzl: event word 1 (want 1), call gas 5233340, tx gas 6919487, block 768
+ok    tx check() fee0   fee0 TRANSFER0 pqzh                      pqzh: event word 1 (want 1), call gas 4049055, tx gas 11095340, block 768
+ok    tx check() fee0   fee0 BURN pqzl                           pqzl: event word 1 (want 1), call gas 3731744, tx gas 5166577, block 770
+ok    tx check() fee0   fee0 BURN pqzh                           pqzh: event word 1 (want 1), call gas 3764342, tx gas 10505490, block 770
+ok    tx check() fee0   fee0 REFRESH pqzl                        pqzl: event word 1 (want 1), call gas 3731747, tx gas 5166567, block 772
+ok    tx check() fee0   fee0 REFRESH pqzh                        pqzh: event word 1 (want 1), call gas 3764522, tx gas 10579740, block 772
+check() transactions in blocks [749, 750, 751, 752, 754, 755, 756, 757, 758, 759, 760, 762, 763, 765, 766, 767, 768, 770, 772]
+ok    direct tx to PQZ, fee0 TRANSFER pqzh (315,219 B > 131,072): gasUsed 11,646,570 = max(standard 8,925,781, EIP-7623 floor 11,646,570), block 774
+ok    direct tx to PQZ, TRANSFER pqzh (314,023 B > 131,072): gasUsed 11,605,030 = max(standard 8,909,054, EIP-7623 floor 11,605,030), block 776
+ok    UAMldsaVerifier(0x0130) at 0x07e4458b241699b84c6ff089d377f6dab0166518: PRECOMPILE() = 0x5caa500000000000000000000000000000000012 (deploy gas 2,718,147)
+ok    UAMldsaVerifier mldsa44.verify(metatx) = True (estimateGas 174,769)
+ok    UAMldsaVerifier mldsa44.verify(metatx, sig flipped) = False (estimateGas 174,769)
+ok    UAMldsaVerifier mldsa44.verify(member) = True (estimateGas 174,617)
+ok    UAMldsaVerifier mldsa44.verify(member, sig flipped) = False (estimateGas 174,617)
+ok    UAMldsaVerifier(0x0131) at 0xc1b491b36db5ac1036831229c3fca8050354edca: PRECOMPILE() = 0x5caa500000000000000000000000000000000013 (deploy gas 2,806,681)
+ok    UAMldsaVerifier mldsa65.verify(metatx) = True (estimateGas 236,548)
+ok    UAMldsaVerifier mldsa65.verify(metatx, sig flipped) = False (estimateGas 236,548)
+ok    UAMldsaVerifier mldsa65.verify(member) = True (estimateGas 236,156)
+ok    UAMldsaVerifier mldsa65.verify(member, sig flipped) = False (estimateGas 236,156)
+e2e: all checks passed
+rc=0
+
+## block processing on the follower (blocks 749-778, 1-3 PQZ transactions each; slot 5 s):
+749 24.8 ms;750 23.0 ms;751 27.0 ms;752 18.8 ms;753 0.6 ms;754 22.9 ms;755 20.3 ms;756 23.9 ms;757 22.3 ms;758 22.1 ms;759 27.4 ms;760 21.1 ms;761 0.3 ms;762 6.0 ms;763 5.2 ms;764 2.8 ms;765 3.6 ms;766 4.8 ms;767 25.6 ms;768 21.5 ms;769 0.4 ms;770 19.9 ms;771 0.6 ms;772 23.0 ms;773 0.1 ms;774 11.4 ms;775 0.3 ms;776 10.9 ms;777 0.6 ms;778 4.6 ms;779 0.7 ms;
