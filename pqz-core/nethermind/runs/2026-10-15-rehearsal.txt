@@ -9,3 +9,23 @@ ok    burst: every answered call = …01
 ok    burst: signer block interval 5 s ± 1 s
 burst: all checks passed
 rc=0
+
+## kill drill (14:01:27Z): e2e.py fill --n 12 in the background, docker kill -s KILL pqzcopy-signer 12 s in, restart
+head 920 0x29ae79f524b31c897bb79342736c17e69aff1b3b840bb914d07dbb3659be1fd4 gasLimit 41180575 gasUsed 0 ts 1792072885
+head: all checks passed
+$ docker kill -s KILL pqzcopy-signer (14:01:39Z)
+pqzcopy-signer
+signer state exited exit=137
+$ docker start pqzcopy-signer (14:01:50Z)
+pqzcopy-signer
+fill (12 PQZH transfers) output:
+ok    fill tx 0x79f689aa3e 314,023 B ok in block 922
+ok    fill tx 0xda4b85534f 298,045 B ok in block 922
+the other 10 were in the signer's pool at the kill (lost there) and stayed in the follower's pool without being re-sent to
+the restarted signer for 180 s (no receipt) -- a client must resubmit after a signer crash; the follower then answers 'already known'
+until its pool drops them (here: follower restarted to clear it).
+after the kill:
+blocks 880..971: signer = follower on every block hash: yes (batch eth_getBlockByNumber on both); largest block interval 21 s = the kill + restart; chain continued
+pqzcopy-signer: PQZ-NODE-FAULT 0, PQZ-INPUT-PANIC 0
+pqzcopy-follower: PQZ-NODE-FAULT 0, PQZ-INPUT-PANIC 0
+kill drill: PASS
