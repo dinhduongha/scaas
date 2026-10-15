@@ -1,0 +1,73 @@
+{"init_ms": 111.8, "init_arena": 3116288, "verify": "generic"}
+{"timing": "ýð@Û’bØe+Ã¦`ØBUaåE#~ã”õœ¤ prove", "n": 2, "mean_ms": 1247.430, "p50_ms": 1364.859, "p99_ms": 1130.000, "max_ms": 1364.859}
+{"rel": "ýð@Û’bØe+Ã¦`ØBUaåE#~ã”õœ¤", "proof_bytes_last": 42748, "proof_bytes_max": 42761, "arena_peak": 304231664, "rej_tries_mean": 12.50, "proofs_fnv": "ee87e7a4"}
+{"timing": "ýð@Û’bØe+Ã¦`ØBUaåE#~ã”õœ¤ verify valid", "n": 2, "mean_ms": 840.242, "p50_ms": 913.278, "p99_ms": 767.207, "max_ms": 913.278}
+{"timing": "ýð@Û’bØe+Ã¦`ØBUaåE#~ã”õœ¤ verify adversarial", "n": 6, "mean_ms": 433.670, "p50_ms": 796.322, "p99_ms": 813.888, "max_ms": 931.133}
+{"timing": "aåE#~ã”õœ¤ prove", "n": 2, "mean_ms": 1063.352, "p50_ms": 1208.164, "p99_ms": 918.539, "max_ms": 1208.164}
+{"rel": "aåE#~ã”õœ¤", "proof_bytes_last": 43249, "proof_bytes_max": 43249, "arena_peak": 329704448, "rej_tries_mean": 3.00, "proofs_fnv": "6c2a0199"}
+{"timing": "aåE#~ã”õœ¤ verify valid", "n": 2, "mean_ms": 1009.781, "p50_ms": 1088.116, "p99_ms": 931.447, "max_ms": 1088.116}
+{"timing": "aåE#~ã”õœ¤ verify adversarial", "n": 6, "mean_ms": 288.970, "p50_ms": 21.068, "p99_ms": 816.182, "max_ms": 846.562}
+{"timing": "¦Ì>ØÌŽŒ¦½ºFíà«.û›+M¿/è‚‰¬~Hd"ø¯Ë!žB>‡n5ãV*°®'¨ÅÅ5", "n": 2, "mean_ms": 1275.218, "p50_ms": 1548.776, "p99_ms": 1001.660, "max_ms": 1548.776}
+{"rel": "¦Ì>ØÌŽŒ¦½ºFíà«.û›+M¿/è‚‰¬~Hd"ø¯Ë!žB>‡n5ãV*°®'¨ÅÅ5Œ÷ÏƒOaì€â×‡³W¬`³JïŒ¯+C…$„áÏÄ»•ý%y
+Ê·’¯µ™U)Ýÿ'B>‘ÿîJ0ÝÜÝ…´Õ´Èˆ­~rPÄûÊB/º£‡}BNêVH&Å/ßB¦ÏQTF9I²•3BIàR–ý!·`«¦àioDN¸Ì‰Ô^þ²Ãæìš"S:«£Úû¢ÑG>þÞ¨z\Yb•Òí‘{¦tLJÎI+ÄÉ"p8&XRØ‘Ü9¾:AÚòˆ$†8í­þÑ¾*,[Ë½¥ˆÉ3¡×ÚçFº@", "proof_bytes_last": 44292, "proof_bytes_max": 44292, "arena_peak": 368452240, "rej_tries_mean": 8.00, "proofs_fnv": "c41afd97"}
+{"timing": "¦Ì>ØÌŽŒ¦½ºFíà«.û›+M¿/è‚‰¬~Hd"ø¯Ë!žB>‡n5ãV*°®'¨ÅÅ5", "n": 2, "mean_ms": 950.231, "p50_ms": 955.806, "p99_ms": 944.656, "max_ms": 955.806}
+{"timing": "¦Ì>ØÌŽŒ¦½ºFíà«.û›+M¿/è‚‰¬~Hd"ø¯Ë!žB>‡n5ãV*°®'¨ÅÅ5", "n": 6, "mean_ms": 518.944, "p50_ms": 911.235, "p99_ms": 927.970, "max_ms": 1195.128}
+{"timing": "à«.û›+M¿/è‚‰¬~Hd"ø¯Ë!žB>‡n5ãV*°®'¨ÅÅ5Œ÷ÏƒOaì€â×‡³W", "n": 2, "mean_ms": 2638.705, "p50_ms": 2834.040, "p99_ms": 2443.370, "max_ms": 2834.040}
+{"rel": "à«.û›+M¿/è‚‰¬~Hd"ø¯Ë!žB>‡n5ãV*°®'¨ÅÅ5Œ÷ÏƒOaì€â×‡³W¬`³JïŒ¯+C…$„áÏÄ»•ý%y
+Ê·’¯µ™U)Ýÿ'B>‘ÿîJ0ÝÜÝ…´Õ´Èˆ­~rPÄûÊB/º£‡}BNêVH&Å/ßB¦ÏQTF9I²•3BIàR–ý!·`«¦àioDN¸Ì‰Ô^þ²Ãæìš"S:«£Úû¢ÑG>þÞ¨z\Yb•Òí‘{¦tLJÎI+ÄÉ"p8&XRØ‘Ü9¾:AÚòˆ$†8í­þÑ¾*,[Ë½¥ˆÉ3¡×ÚçFº@", "proof_bytes_last": 59338, "proof_bytes_max": 59341, "arena_peak": 691198816, "rej_tries_mean": 5.00, "proofs_fnv": "be8e7c02"}
+{"timing": "à«.û›+M¿/è‚‰¬~Hd"ø¯Ë!žB>‡n5ãV*°®'¨ÅÅ5Œ÷ÏƒOaì€â×‡³W", "n": 2, "mean_ms": 2303.193, "p50_ms": 2372.606, "p99_ms": 2233.780, "max_ms": 2372.606}
+{"timing": "à«.û›+M¿/è‚‰¬~Hd"ø¯Ë!žB>‡n5ãV*°®'¨ÅÅ5Œ÷ÏƒOaì€â×‡³W", "n": 6, "mean_ms": 1064.341, "p50_ms": 2002.992, "p99_ms": 2028.649, "max_ms": 2199.705}
+{"timing": "¬~Hd"ø¯Ë!žB>‡n5ãV*°®'¨ÅÅ5Œ÷ÏƒOaì€â×‡³W¬`³JïŒ¯+C…$„áÏÄ»", "n": 2, "mean_ms": 935.441, "p50_ms": 959.492, "p99_ms": 911.389, "max_ms": 959.492}
+{"rel": "¬~Hd"ø¯Ë!žB>‡n5ãV*°®'¨ÅÅ5Œ÷ÏƒOaì€â×‡³W¬`³JïŒ¯+C…$„áÏÄ»•ý%y
+Ê·’¯µ™U)Ýÿ'B>‘ÿîJ0ÝÜÝ…´Õ´Èˆ­~rPÄûÊB/º£‡}BNêVH&Å/ßB¦ÏQTF9I²•3BIàR–ý!·`«¦àioDN¸Ì‰Ô^þ²Ãæìš"S:«£Úû¢ÑG>þÞ¨z\Yb•Òí‘{¦tLJÎI+ÄÉ"p8&XRØ‘Ü9¾:AÚòˆ$†8í­þÑ¾*,[Ë½¥ˆÉ3¡×ÚçFº@", "proof_bytes_last": 42434, "proof_bytes_max": 42442, "arena_peak": 359717008, "rej_tries_mean": 2.50, "proofs_fnv": "bba9cd96"}
+{"timing": "¬~Hd"ø¯Ë!žB>‡n5ãV*°®'¨ÅÅ5Œ÷ÏƒOaì€â×‡³W¬`³JïŒ¯+C…$„áÏÄ»", "n": 2, "mean_ms": 744.246, "p50_ms": 753.082, "p99_ms": 735.410, "max_ms": 753.082}
+{"timing": "¬~Hd"ø¯Ë!žB>‡n5ãV*°®'¨ÅÅ5Œ÷ÏƒOaì€â×‡³W¬`³JïŒ¯+C…$„áÏÄ»", "n": 6, "mean_ms": 403.111, "p50_ms": 760.410, "p99_ms": 772.632, "max_ms": 829.634}
+{"timing": "‡n5ãV*°®'¨ÅÅ5Œ÷ÏƒOaì€â×‡³W¬`³JïŒ¯+C…$„áÏÄ»•ý%y
+Ê·’¯µ™U)Ýÿ", "n": 2, "mean_ms": 1162.082, "p50_ms": 1288.487, "p99_ms": 1035.677, "max_ms": 1288.487}
+{"rel": "‡n5ãV*°®'¨ÅÅ5Œ÷ÏƒOaì€â×‡³W¬`³JïŒ¯+C…$„áÏÄ»•ý%y
+Ê·’¯µ™U)Ýÿ'B>‘ÿîJ0ÝÜÝ…´Õ´Èˆ­~rPÄûÊB/º£‡}BNêVH&Å/ßB¦ÏQTF9I²•3BIàR–ý!·`«¦àioDN¸Ì‰Ô^þ²Ãæìš"S:«£Úû¢ÑG>þÞ¨z\Yb•Òí‘{¦tLJÎI+ÄÉ"p8&XRØ‘Ü9¾:AÚòˆ$†8í­þÑ¾*,[Ë½¥ˆÉ3¡×ÚçFº@", "proof_bytes_last": 42765, "proof_bytes_max": 42765, "arena_peak": 380636960, "rej_tries_mean": 10.00, "proofs_fnv": "e3a3e114"}
+{"timing": "‡n5ãV*°®'¨ÅÅ5Œ÷ÏƒOaì€â×‡³W¬`³JïŒ¯+C…$„áÏÄ»•ý%y
+Ê·’¯µ™U)Ýÿ", "n": 2, "mean_ms": 786.732, "p50_ms": 808.244, "p99_ms": 765.221, "max_ms": 808.244}
+{"timing": "‡n5ãV*°®'¨ÅÅ5Œ÷ÏƒOaì€â×‡³W¬`³JïŒ¯+C…$„áÏÄ»•ý%y
+Ê·’¯µ™U)Ýÿ", "n": 6, "mean_ms": 400.682, "p50_ms": 775.420, "p99_ms": 780.100, "max_ms": 785.806}
+{"timing": "÷ÏƒOaì€â×‡³W¬`³JïŒ¯+C…$„áÏÄ»•ý%y
+Ê·’¯µ™U)Ýÿ'B>‘ÿîJ0ÝÜÝ…´Õ´", "n": 2, "mean_ms": 1476.640, "p50_ms": 1880.520, "p99_ms": 1072.761, "max_ms": 1880.520}
+{"rel": "÷ÏƒOaì€â×‡³W¬`³JïŒ¯+C…$„áÏÄ»•ý%y
+Ê·’¯µ™U)Ýÿ'B>‘ÿîJ0ÝÜÝ…´Õ´Èˆ­~rPÄûÊB/º£‡}BNêVH&Å/ßB¦ÏQTF9I²•3BIàR–ý!·`«¦àioDN¸Ì‰Ô^þ²Ãæìš"S:«£Úû¢ÑG>þÞ¨z\Yb•Òí‘{¦tLJÎI+ÄÉ"p8&XRØ‘Ü9¾:AÚòˆ$†8í­þÑ¾*,[Ë½¥ˆÉ3¡×ÚçFº@", "proof_bytes_last": 43443, "proof_bytes_max": 43443, "arena_peak": 409793168, "rej_tries_mean": 15.00, "proofs_fnv": "9ae78cb2"}
+{"timing": "÷ÏƒOaì€â×‡³W¬`³JïŒ¯+C…$„áÏÄ»•ý%y
+Ê·’¯µ™U)Ýÿ'B>‘ÿîJ0ÝÜÝ…´Õ´", "n": 2, "mean_ms": 746.455, "p50_ms": 757.833, "p99_ms": 735.077, "max_ms": 757.833}
+{"timing": "÷ÏƒOaì€â×‡³W¬`³JïŒ¯+C…$„áÏÄ»•ý%y
+Ê·’¯µ™U)Ýÿ'B>‘ÿîJ0ÝÜÝ…´Õ´", "n": 6, "mean_ms": 393.459, "p50_ms": 747.855, "p99_ms": 767.929, "max_ms": 789.956}
+{"timing": "`³JïŒ¯+C…$„áÏÄ»•ý%y
+Ê·’¯µ™U)Ýÿ'B>‘ÿîJ0ÝÜÝ…´Õ´Èˆ­~rPÄûÊB/º£‡", "n": 2, "mean_ms": 1978.518, "p50_ms": 2101.346, "p99_ms": 1855.690, "max_ms": 2101.346}
+{"rel": "`³JïŒ¯+C…$„áÏÄ»•ý%y
+Ê·’¯µ™U)Ýÿ'B>‘ÿîJ0ÝÜÝ…´Õ´Èˆ­~rPÄûÊB/º£‡}BNêVH&Å/ßB¦ÏQTF9I²•3BIàR–ý!·`«¦àioDN¸Ì‰Ô^þ²Ãæìš"S:«£Úû¢ÑG>þÞ¨z\Yb•Òí‘{¦tLJÎI+ÄÉ"p8&XRØ‘Ü9¾:AÚòˆ$†8í­þÑ¾*,[Ë½¥ˆÉ3¡×ÚçFº@", "proof_bytes_last": 57797, "proof_bytes_max": 57797, "arena_peak": 702478976, "rej_tries_mean": 5.50, "proofs_fnv": "6209d0ff"}
+{"timing": "`³JïŒ¯+C…$„áÏÄ»•ý%y
+Ê·’¯µ™U)Ýÿ'B>‘ÿîJ0ÝÜÝ…´Õ´Èˆ­~rPÄûÊB/º£‡", "n": 2, "mean_ms": 1571.853, "p50_ms": 1586.707, "p99_ms": 1556.999, "max_ms": 1586.707}
+{"timing": "`³JïŒ¯+C…$„áÏÄ»•ý%y
+Ê·’¯µ™U)Ýÿ'B>‘ÿîJ0ÝÜÝ…´Õ´Èˆ­~rPÄûÊB/º£‡", "n": 6, "mean_ms": 829.561, "p50_ms": 1556.845, "p99_ms": 1630.334, "max_ms": 1663.046}
+{"txm_check": "M 4 on: real leg 0", "expect": "accept", "prove_rc": 3, "generic": 0, "fast": 0, "ok": false}
+{"txm_check": "M 8 on: real legs 3 and 4 (group boundary), fee 0", "expect": "accept", "prove_rc": 3, "generic": 0, "fast": 0, "ok": false}
+{"txm_check": "M 8 off: all legs decoys, fee 0", "expect": "accept", "prove_rc": 3, "generic": 0, "fast": 0, "ok": false}
+{"txm_check": "M 2 off: two real legs", "expect": "accept", "prove_rc": 3, "generic": 0, "fast": 0, "ok": false}
+{"txm_check": "M 8 on: sum + fee = balance", "expect": "accept", "prove_rc": 3, "generic": 0, "fast": 0, "ok": false}
+{"txm_check": "leg digit 16", "expect": "reject", "prove_rc": 3, "generic": 0, "fast": 0, "ok": true}
+{"txm_check": "sum + fee = balance + 1", "expect": "reject", "prove_rc": 3, "generic": 0, "fast": 0, "ok": true}
+{"txm_check": "v_1 encrypted to another recipient's key", "expect": "reject", "prove_rc": 3, "generic": 0, "fast": 0, "ok": true}
+{"txm_check": "leg 4 under group 0's randomness", "expect": "reject", "prove_rc": 3, "generic": 0, "fast": 0, "ok": true}
+{"txm_check": "legs 3 and 4 moved between groups", "expect": "reject", "prove_rc": 3, "generic": 0, "fast": 0, "ok": true}
+{"txm_check": "auditor copy of leg 0 of another amount", "expect": "reject", "prove_rc": 3, "generic": 0, "fast": 0, "ok": true}
+{"txm_check": "legs' e2 block over 64 sqrt(M)", "expect": "reject", "prove_rc": 3, "generic": 0, "fast": 0, "ok": true}
+{"txm_check": "M word 8 -> 4", "expect": "reject", "generic": 0, "fast": 0, "ok": true}
+{"txm_check": "M word 8 -> 3 (not built)", "expect": "reject", "generic": 0, "fast": 0, "ok": true}
+{"txm_check": "M word 8 -> 264", "expect": "reject", "generic": 0, "fast": 0, "ok": true}
+{"txm_check": "auditorOn 1 -> 0", "expect": "reject", "generic": 0, "fast": 0, "ok": true}
+{"txm_check": "recipientsHash changed", "expect": "reject", "generic": 0, "fast": 0, "ok": true}
+{"txm_check": "legs 3 and 4 swapped in the statement", "expect": "reject", "generic": 0, "fast": 0, "ok": true}
+{"txm_check": "u_0 and u_1 swapped", "expect": "reject", "generic": 0, "fast": 0, "ok": true}
+{"txm_check": "(2, off) read as (1, on)", "expect": "reject", "generic": 0, "fast": 0, "ok": true}
+{"txm_check": "R_TXM 1 proof as op 1", "expect": "reject", "generic": 0, "fast": 0, "ok": true}
+{"txm_check": "R_TXM 1 proof, op 7 statement, op 1", "expect": "reject", "generic": 0, "fast": 0, "ok": true}
+{"txm_check": "R_TX proof as op 7", "expect": "reject", "generic": 0, "fast": 0, "ok": true}
+{"txm_check": false, "cases": 23, "fails": 6}
+{"fails": 6}

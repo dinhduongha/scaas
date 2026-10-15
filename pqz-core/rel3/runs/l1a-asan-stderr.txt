@@ -1,0 +1,1 @@
+test/pqz_bench.c:531:3: runtime error: index 7 out of bounds for type 'size_t[6]' (aka 'unsigned long[6]')
