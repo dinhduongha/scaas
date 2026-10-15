@@ -45,6 +45,21 @@ module lattices, but has no natural front-end for arbitrary circuits [inference]
 5. **Tooling and assurance.** Developer SDK (compile, prove in wasm32 / native), test vectors per circuit, fuzzing of
    the front-end and of the generic verifier, a bigger audit scope (the compiler is now part of the trusted base).
 
+**One precompile for every circuit (owner question 2026-10-15: "does each circuit need its own precompile?" — no).**
+Circuits are **data, not node code**:
+
+1. *Register* a circuit once, by a transaction: the compiled constraint system goes into an on-chain registry; its id
+   is the hash of that constraint system (the circuit's "verification key").
+2. *Prove*: the precompile input is `circuit id ‖ public inputs ‖ proof`.
+3. *Verify*: the precompile reads the id, loads the circuit's constraint system (cached), and runs the same generic
+   Ligero verifier; gas is priced by circuit size.
+
+Adding a circuit therefore needs **no node update and no fork** — unlike today, where the six relations are compiled
+into the precompile and a new one (e.g. op 7 `R_TXM`) means a new precompile build. Two design points: where the
+constraint system lives (a large circuit can be megabytes — store it once on chain, e.g. in SSTORE2 data contracts the
+precompile reads by id, rather than resending it with every proof as calldata), and a maximum circuit size so
+verification stays under 60 ms and inputs stay within the limits.
+
 **Costs and limits [estimate, scaled from the measured Ligero relations]:**
 
 | Item | Estimate |
