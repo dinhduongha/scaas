@@ -525,6 +525,20 @@ PQZH on Ligero with all six forms, `pqz-ffi`, the frozen vectors (`smartcontract
 3. **The freeze:** `artifact/reproduce.sh --full` → `expected-results.json` (replaces every provisional number here).
 4. **Precompile live:** the `PQZ` precompile on chain 7622 (the testnet) after the throwaway-copy gate ([precompile plan](../docs/superpowers/plans/2026-10-14-p6f-precompiles.md)).
 
+**Possible extension (research only, not planned): zero knowledge for arbitrary circuits on Ligero.** Today each
+operation has its own hand-written relation. Ligero can prove any arithmetic circuit, so PQZ could become
+general-purpose:
+
+- a **circuit front-end** (R1CS, Plonkish or Noir's ACIR) compiles a circuit into Ligero's constraints over F_q;
+- circuits are **data, not node code**: each is registered once on chain under an id (the hash of its constraint
+  system), and **the same `PQZ` precompile** verifies a proof for any registered circuit — no node update per circuit;
+- gas is priced by circuit size, and a maximum circuit size keeps verification under 60 ms;
+- estimate: ≈ 1–2 months; proofs grow roughly with √(circuit size) (231 KB for `R_TX` → ≈ 0.6–1 MB at 10^6
+  constraints); still post-quantum and zero-knowledge.
+
+Uses: private voting, auctions, credential checks, confidential matching. Details, and why a zkVM or zkEVM is out of
+scope: [pqz-general-purpose.md](../docs/research/pqz-general-purpose.md).
+
 Open items (arena exhaustion, global state, secret zeroing, `check_symbols.sh` on missing files, …):
 [STATUS.md "Open"](STATUS.md#open).
 
@@ -536,4 +550,4 @@ Open items (arena exhaustion, global state, secret zeroing, `check_symbols.sh` o
 | PQZL | `docs/research/pqz-core-e-s1.md` (the spike write-up), `pqz-specialised-verifier.md`, `pqz-verifier-floor.md`, `pqz-relations-burn-disclose.md`, `pqz-tbox-soundness.md`, `pqz-l2-domain.md`, `pqz-z21-norm.md`, `pqz-parameters-e-s0.md` |
 | PQZH | `docs/research/pqzh-ligero.md`, `pqzh-backend-comparison.md`, `pqzh-design.md`, `pqzh-prototype.md`, `pqzh-zk-ext5.md`, `pqzh-zk-whir.md`, `pqzh-solidity-verifier.md`, `pqzh-starkex-verifier.md` |
 | Plans | [relations and serialization](../docs/superpowers/plans/2026-10-14-p6e-relations.md), [multi-recipient transfer](../docs/superpowers/plans/2026-10-14-p6-anon.md), [precompiles on chain 7622](../docs/superpowers/plans/2026-10-14-p6f-precompiles.md), [pqz-core layout](../docs/superpowers/plans/2026-10-15-pqz-core-layout.md) |
-| Other | anonymity research `docs/research/pqz-anonymity.md`; licences `docs/research/pqz-licence-inventory.md` |
+| Other | anonymity research `docs/research/pqz-anonymity.md`; general-purpose circuits `docs/research/pqz-general-purpose.md`; licences `docs/research/pqz-licence-inventory.md` |
