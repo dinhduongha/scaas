@@ -495,6 +495,23 @@ through its precompile.
 | PQZL fee 0 | 42,756 | 42,427 | 41,908 | 41,926 | | | | |
 | PQZH fee 0 | 232,142 | 231,384 | 229,608 | 231,544 | | | | |
 
+## Fuzzing P6e Task 10 (branch `p6e-a5`; plan D12, D15; CTR-PQZ-10)
+
+`fuzz/` ([fuzz/README.md](fuzz/README.md)): three libFuzzer targets on `pqz-ffi` in the production configuration
+(verify-only 144 MiB arena, warmed with every form): `precompile` (raw bytes into the C ABI), `mutate` (edit scripts
+over the 24 honest inputs of the vectors, PQZL decoded-field mutations through `pqz_test_mutate`, the specialised vs
+the generic verifier on every 256th mutated PQZL input that decodes), `codec` (D15: `pqz-stmt` parse ⇒ encode,
+`decode_input`, bundle, opening, and the PQZL proof coder `pqz_decproof` ⇒ `encproof`). Every input: no panic (a
+panic hook aborts, so even the panics status 3 and Ligero's own catch would hide count), no status 3 / 4,
+deterministic, `…01` only for the unmodified honest inputs, arena peak ≤ 96 MiB. Stable Rust sancov links with
+clang 18's libFuzzer (no nightly); the C core runs with ASan + UBSan (`pqz-ffi` feature `fuzz`). No CI job (controller
+2026-10-14): local runs only.
+
+First campaigns [measured]: `precompile` 60 min (1,464,429 execs, pre-vector seeds) and 45 min on the vector seeds
+(1,043,633 execs), `mutate` 45 min (86,923 execs, 197 differentials), `codec` 45 min (367,237 execs, 56,597 PQZL
+proofs re-encoded byte-equal): **no finding**. Arena high-water mark over all runs 95,169,680 B, the adversarial peak
+already known (Open 2).
+
 ## Spec: serialization v1, P6e Task 12 (branch `p6e-a6`; plan D2, D4, D7, D12, D14, D15)
 
 Docs only, no code change. [pq-zether.md §8.1 "Serialization v1"](../docs/contracts/pq-zether.md#serialization) now
@@ -551,7 +568,9 @@ rest bookkeeping; the zero entries of the selection matrices' Gram matrices were
    1.59 × the adversarial-corpus peak 95.2 MB, prove 448 MiB); its first run `ffi1` used 64 MiB for verify-only and the core, out of arena, rejected
    honest proofs (`ffi/runs/ffi1-bench.jsonl`, `all_valid: false`) without crashing, and `ffi/runs/ffi1d-arena-probe.txt`
    shows the crash: a 4–12 MiB arena (exhaustion in the relation's key generation) segfaults. `pqz-ffi` reports the
-   exhaustion the core survives as a node fault (status 4). The core's behaviour is unchanged.
+   exhaustion the core survives as a node fault (status 4). The core's behaviour is unchanged. The fuzz targets (P6e Task
+   10) check the peak on every input against 96 MiB (144 MiB / 1.5): over ≈ 3 M inputs the maximum seen is the known
+   adversarial 95,169,680 B, no input raised it.
 3. **wasm.** Proofs equal byte for byte with native (P6d-2, seeds 0..2); no browser run (node only); R_TX needs
    ~0.23 GB of the 4 GiB wasm32 memory (fix-ups, one op per process).
 4. UBSan nits left as upstream: zero-length VLAs when M = 0 / nbin = 0 (`lnp-tbox.c` 223, 875, 3451),

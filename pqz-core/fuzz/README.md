@@ -79,4 +79,24 @@ Continuous = the owner reruns the three targets, e.g. nightly, one after the oth
 
 ## Results
 
-RESULTS
+First campaigns [measured] (this machine, one process per target under `scripts/capped`, ASan + UBSan; logs in
+`runs/`): **no finding** — no crash, sanitizer report, panic, status 3 / 4, nondeterminism, wrong verdict,
+differential disagreement or non-canonical encoding.
+
+| Run | Target | Time | Execs (exec/s) | Coverage (edges / features) at end | Other |
+|---|---|---|---|---|---|
+| `2026-10-14-precompile` | precompile (seeds: the fixture's 16 honest inputs, before the vectors) | 60 min | 1,464,429 (406) | 2,122 / 4,133, 349 inputs (32 MB) | 564 valid = unmodified honest |
+| `2026-10-15-precompile` | precompile (seeds: vectors, 414) | 45 min | 1,043,633 (386) | 2,124 / 4,219, 346 inputs (31 MB) | 307,654 decoded, 434 valid = unmodified honest |
+| `2026-10-15-mutate` | mutate | 45 min | 86,923 (32) | 3,314 / 6,877, 532 inputs | 69,718 decoded; 197 SV = generic differentials |
+| `2026-10-15-codec` | codec | 45 min | 367,237 (135) | 856 / 1,553, 277 inputs | 120,328 accepted and round-tripped, 56,597 of them PQZL proofs (`decproof` ⇒ `encproof` = input) |
+
+**Arena:** the verify-only arena's high-water mark over every run is **95,169,680 B (90.76 MiB)**, the adversarial
+peak `pqz-ffi`'s `tests/verify_only.rs` measured (the honest inputs alone: 94,615,600 B); bound 96 MiB, `ARENA_SMALL`
+144 MiB (1.59 ×).
+
+Committed corpora after the merge step: `precompile` 9 inputs (42 B; the large ones are rebuilt), `mutate` 392
+inputs (5,578 B), `codec` 231 inputs (2,259 B). Other logs: `smoke*` (short runs while building the harness),
+`2026-10-15-precompile-stale-seed` and the false finding of `smoke3-precompile` (a seed proved by the harness's
+earlier fixture: a valid proof the oracle did not know; `seeds.py` and `run.sh` now drop stale seeds and work
+corpora), `2026-10-15-precompile-interrupted` (the process was killed with the session after ≈ 248k execs, no
+finding).
