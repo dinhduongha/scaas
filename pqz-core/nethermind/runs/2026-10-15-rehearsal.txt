@@ -57,3 +57,38 @@ fill: all checks passed
 pqzcopy-signer: 1050=0.2ms 1051=0.2ms 1052=32.4ms 1053=12.3ms 1054=23.3ms 1055=0.3ms 
 pqzcopy-follower: 1050=0.7ms 1051=2.5ms 1052=34.7ms 1053=11.2ms 1054=21.7ms 1055=0.5ms 
 D9: no material difference for PQZ blocks (≈ 11 ms per PQZH transfer verify either way; the prewarmer's verify is cached for the block). Prewarming kept on (default). Configs restored, nodes restarted.
+
+## ramp: gasLimit 16,777,216 at block 0 -> 80,000,000 reached at 2026-10-15T15:00:48Z (log lines every 5 min):
+## ramp start 13:50:46Z: container pqzcopy-signer: running exit=0 started=2026-10-15T13:45:45.458661487Z restarts=0;13:55:47Z gasLimit 36344132;14:00:47Z gasLimit 38536101;14:05:47Z gasLimit 40860274;14:10:47Z gasLimit 43197956;14:15:47Z gasLimit 45803309;14:20:47Z gasLimit 48518418;14:25:47Z gasLimit 51444671;14:30:47Z gasLimit 54547418;14:35:47Z gasLimit 57837303;14:40:47Z gasLimit 61325609;14:45:48Z gasLimit 65024311;14:50:48Z gasLimit 68946100;14:55:48Z gasLimit 73104425;15:00:48Z gasLimit 77513558;## ramp reached 80,000,000 at 15:00:48Z:;
+(watch.sh's head line had a Python f-string bug, fixed; output after the fix:)
+head 3448 age 0s gasLimit 80,000,000 gasUsed 0 hash 0x36af38180d3530e3521dd02519aa6adf3392a422a5068c2c822dbcdeeeda9c5a
+
+## fill at 80 M (17:32:26Z): e2e.py fill --n 14 (PQZH op 1, straight to PQZ)
+    main()
+    {"head": cmd_head, "before": cmd_before, "probe": cmd_probe, "stock": cmd_stock, "e2e": cmd_e2e,
+    rc = receipt(h)
+         ^^^^^^^^^^
+    raise RuntimeError(f"no receipt for {h}")
+RuntimeError: no receipt for 0xaeb6a1e1361a9658c0973d6790de2a3b4bfbd54a94f93181a497785a8836b124
+OBSERVED: no receipt — the follower held all 14 transactions (pending nonce 0x5d) while the signer's pool stayed empty (pending = latest 0x4f), peers connected (inbound eth68) for ~3 h 20 min; follower restarted (pool cleared, reconnect), fill repeated:
+## fill at 80 M, retry (17:36:54Z): e2e.py fill --n 14
+ok    fill tx 0xaeb6a1e136 314,023 B ok in block 3503
+ok    fill tx 0x532cef2bff 298,045 B ok in block 3504
+ok    fill tx 0xd153acc731 315,219 B ok in block 3504
+ok    fill tx 0x79025e2cd0 297,949 B ok in block 3504
+ok    fill tx 0xe5f9c5ebaf 314,023 B ok in block 3504
+ok    fill tx 0xf36ea40360 298,045 B ok in block 3504
+ok    fill tx 0x8bdf387ea4 315,219 B ok in block 3504
+ok    fill tx 0x46e5d3ae89 297,949 B ok in block 3506
+ok    fill tx 0x559fb0fbac 314,023 B ok in block 3506
+ok    fill tx 0xc11cfd7132 298,045 B ok in block 3506
+ok    fill tx 0x2ffd3237fc 315,219 B ok in block 3506
+ok    fill tx 0x67a12777a8 297,949 B ok in block 3506
+ok    fill tx 0x6582db38e8 314,023 B ok in block 3506
+ok    fill tx 0x1d842b2899 298,045 B ok in block 3506
+block 3503: 1 PQZ transfers, calldata 314,023 B, gasUsed 11,605,030 / gasLimit 80,000,000, size 314,785 B
+block 3504: 6 PQZ transfers, calldata 1,838,500 B, gasUsed 68,190,130 / gasLimit 80,000,000, size 1,839,808 B
+block 3506: 7 PQZ transfers, calldata 2,135,253 B, gasUsed 79,242,510 / gasLimit 80,000,000, size 2,136,670 B
+fill: all checks passed
+pqzcopy-signer processing: 3502=0.2ms 3503=12.3ms 3504=46.4ms 3505=0.2ms 3506=44.9ms 3507=0.1ms 
+pqzcopy-follower processing: 3502=2.8ms 3503=30.0ms 3504=45.9ms 3505=0.3ms 3506=54.3ms 3507=1.0ms 

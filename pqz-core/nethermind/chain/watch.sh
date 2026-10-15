@@ -10,7 +10,8 @@ import json, sys, time
 try:
     b = json.loads(sys.argv[1])["result"]
     n, ts, gl, gu = (int(b[k], 16) for k in ("number", "timestamp", "gasLimit", "gasUsed"))
-    print(f"head {n} age {int(time.time()) - ts}s gasLimit {gl:,} gasUsed {gu:,} hash {b[\"hash\"]}")
+    h = b["hash"]
+    print(f"head {n} age {int(time.time()) - ts}s gasLimit {gl:,} gasUsed {gu:,} hash {h}")
 except Exception as e:
     print(f"head: no answer from the RPC ({e})")
 ' "$H"
