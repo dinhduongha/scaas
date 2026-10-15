@@ -8,11 +8,18 @@ systems behind **one precompile**.
 > gates A / B. The dated log of every change and run is [STATUS.md](STATUS.md); the spec is
 > [pq-zether.md, "Proof engine"](../docs/contracts/pq-zether.md#proof-engine).
 
-**Contents:** [At a glance](#at-a-glance) · [What PQZ is](#what-pqz-is) ·
-[Two proof systems, one precompile](#two-proof-systems-one-precompile) ·
-[Statement forms, ids, limits](#statement-forms-ids-limits) · [Measurements](#measurements-provisional) ·
-[Build, test, run](#build-test-run) · [Directory map](#directory-map) · [Licences](#licences) ·
-[Status and what's next](#status-and-whats-next) · [Further reading](#further-reading)
+## Contents
+
+1. [At a glance](#at-a-glance) — the picture and the key numbers
+2. [What PQZ is](#what-pqz-is) — encryption, accounts, what each proof shows
+3. [Two proof systems, one precompile](#two-proof-systems-one-precompile) — PQZL, PQZH and the shared parts
+4. [Statement forms, ids, limits](#statement-forms-ids-limits) — the operations and their sizes
+5. [Measurements](#measurements-provisional) — proof sizes, prove and verify times
+6. [Build, test, run](#build-test-run) — commands
+7. [Directory map](#directory-map) — what each folder holds
+8. [Licences](#licences)
+9. [Status and what's next](#status-and-whats-next)
+10. [Further reading](#further-reading)
 
 ## At a glance
 
