@@ -9,6 +9,7 @@ of negative.json (input rebuilt by pqz_kat.py's apply_edits); seeds/mutate/, see
 honest input and mode / codec and selector.
 """
 import os
+import shutil
 import sys
 
 V = os.path.join(os.path.dirname(os.path.abspath(__file__)), "../../smartcontracts/vectors/pqz")
@@ -25,6 +26,7 @@ honest += [k.precompile_input(r["op"], k.with_id(bytes.fromhex(r["stmt"]), k.IDS
 with open(os.path.join(out, "honest.bin"), "wb") as f:
     for b in honest:
         f.write(len(b).to_bytes(4, "big") + b)
+shutil.rmtree(os.path.join(out, "seeds"), ignore_errors=True)  # stale seeds could hold valid proofs the oracle does not know
 neg = [k.apply_edits(r, stmts, proofs) for r in k.load(V, "negative.json")["rows"]]
 d = os.path.join(out, "seeds", "precompile")
 os.makedirs(d, exist_ok=True)
