@@ -20,6 +20,10 @@
 #[cfg(all(panic = "abort", not(target_arch = "wasm32")))]
 compile_error!("pqz-ffi needs panic = \"unwind\" on native targets (catch_unwind is the precompile's never-crash boundary)");
 
+// P6-ANON: pqz-stmt's bench-only `oversize` (op 7 M = 8 / 16 for both ids) must never be in the precompile build;
+// feature unification would carry it in from any crate of the graph, so refuse to compile.
+const _: () = assert!(!pqz_stmt::OVERSIZE, "pqz-stmt feature `oversize` is bench only: not in pqz-ffi's build");
+
 use std::panic::{AssertUnwindSafe, catch_unwind};
 
 pub use pqz_stmt::{self as stmt, Input, MAX_INPUT, PQZH_ID, PQZL_ID, Reject, Word};

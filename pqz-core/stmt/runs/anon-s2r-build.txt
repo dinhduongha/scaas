@@ -1,0 +1,1 @@
+symbols ok: only memcpy memset __stack_chk_fail __stack_pointer outside the library objects

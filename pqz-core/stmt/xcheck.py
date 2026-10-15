@@ -8,6 +8,8 @@
    pqz_kat.py must accept each and rebuild it byte for byte from the parsed fields with its own builders.
 2. n random statements per form (both ids, random header words, coefficients < q) built by pqz_kat.py, each written
    with its fields ("ok" lines), and every D15 / R6 mutation of some of them with pqz_kat.py's reason ("bad" lines).
+3. Op 7 R_TXM (P6-ANON S2): one random statement per built (id, M, auditorOn), fee 0 on every other one, and the
+   op 7 rules' mutations (M word, auditorOn, length, amount = 0, ...); pqz-stmt reads them with parse_multi.
 pqz-stmt's tests/xcheck.rs reads the dump dir and out.txt (PQZ_STMT_XCHECK=<dir>): it must parse the same bytes into
 the same fields, build the same bytes from the fields, and reject each "bad" line for the same reason.
 Line format: ok <op> <form> <stmt hex> <field>=<hex>...  |  bad <op> <reason> <stmt hex>  |  c <name> <form> ok.
@@ -107,6 +109,33 @@ def main(argv):
             fl = " ".join(f"{k}={v.hex()}" for k, v in fields_of(form, st).items())
             lines.append(f"ok {op_of(form)} {form} {st.hex()} {fl}")
 
+    multi = []
+    i = 0
+    for psid in (kat.PQZL_ID, kat.PQZH_ID):
+        for aud in (1, 0):
+            for m in kat.BUILT_LEGS[psid]:
+                f = {k: rng.randbytes(32) for k in kat.MULTI_HEADER[2:] if k not in ("M", "auditorOn")}
+                f.update(proofSystemId=psid, fee=0 if i % 2 == 0 else rng.getrandbits(64), amount=0,
+                         salt=rng.randbytes(16))
+                i += 1
+                st = kat.build_multi(f, coeffs(2048), [coeffs(2048) for _ in range(m)], coeffs(2048 + 16),
+                                     [coeffs(2048) for _ in range(kat.groups(m))], [coeffs(16) for _ in range(m)],
+                                     coeffs(16), pk_a=coeffs(2048) if aud else None,
+                                     v_as=[coeffs(16) for _ in range(m)] if aud else None)
+                p = kat.parse(7, st)
+                back = kat.build_multi({k: p[k] for k in kat.MULTI_HEADER if k not in ("opTag", "M", "auditorOn")} |
+                                       {"salt": p["salt"][16:]}, p["pk_f"], p["pks"], p["T"], p["us"], p["vs"],
+                                       p["v_f"], pk_a=p.get("pk_a"), v_as=p.get("v_as"))
+                assert len(st) == kat.multi_len(m, aud) and back == st and p["legs"] == m
+                multi.append(st)
+                fl = {"hdr": st[:HB], "pk_f": p["pk_f"], "pks": b"".join(p["pks"])}
+                if aud:
+                    fl["pk_a"] = p["pk_a"]
+                fl.update(t=p["T"], us=b"".join(p["us"]), vs=b"".join(p["vs"]), v_f=p["v_f"])
+                if aud:
+                    fl["v_as"] = b"".join(p["v_as"])
+                lines.append(f"ok 7 TRANSFER-MULTI {st.hex()} " + " ".join(f"{k}={v.hex()}" for k, v in fl.items()))
+
     def bad(op, st, what):
         try:
             kat.parse(op, st)
@@ -144,9 +173,36 @@ def main(argv):
                 a = int.from_bytes(st[448:480], "big")
                 for v in (1 - a, 2, 2**64 + a):
                     bad(op, st[:448] + v.to_bytes(32, "big") + st[480:], "auditorOn")
+    w = kat.word
+    for st in sorted(multi, key=len)[:6] + [max(multi, key=len)]:
+        c = HB + 8 * rng.randrange((len(st) - HB) // 8)
+        for v in (kat.Q, 2**63 + 5):
+            bad(7, st[:c] + v.to_bytes(8, "big") + st[c + 8:], "coefficient")
+        bad(7, st[:-1], "length - 1")
+        bad(7, st + b"\0", "length + 1")
+        bad(7, st[:639], "header cut")
+        bad(7, rng.choice([kat.OP_TAG[m] for m in kat.OP_NAMES if m != "TRANSFER-MULTI"]) + st[32:], "opTag")
+        bad(1, st, "op 7 statement under op 1")
+        bad(7, st[:32] + rng.randbytes(32) + st[64:], "id")
+        bad(7, st[:256] + w(2**64 + rng.getrandbits(64)) + st[288:], "fee")
+        bad(7, st[:288] + w(2**64) + st[320:], "amount >= 2^64")
+        bad(7, st[:288] + w(1 + rng.getrandbits(63)) + st[320:], "amount = 0")
+        bad(7, st[:579] + bytes([st[579] | 1]) + st[580:], "salt")
+        for mm in (0, 3, 5, 16, 2**64 + 1):
+            bad(7, st[:320] + w(mm) + st[352:], "M word")
+        a = int.from_bytes(st[448:480], "big")
+        for v in (2, 2**64 + a):
+            bad(7, st[:448] + w(v) + st[480:], "auditorOn")
+        bad(7, st[:448] + w(1 - a) + st[480:], "auditorOn flipped")
+        m = int.from_bytes(st[320:352], "big")
+        other = [x for x in (1, 2, 4) if x != m][0]
+        bad(7, st[:320] + w(other) + st[352:], "another built M")
+    t1 = next(st for form, st in valid if form == "TRANSFER")
+    bad(7, t1, "op 1 statement under op 7")
     with open(out_path, "w") as fh:
         fh.write("\n".join(lines) + "\n")
     print(f"xcheck.py: {len(C_FORMS)} C statements rebuilt by pqz_kat.py, {len(valid)} random statements, "
+          f"{len(multi)} op 7 statements, "
           f"{sum(1 for l in lines if l.startswith('bad'))} rejections -> {os.path.basename(out_path)}")
 
 

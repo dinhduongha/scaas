@@ -1,0 +1,15 @@
+   Compiling version_check v0.9.5
+    Checking typenum v1.20.1
+   Compiling find-msvc-tools v0.1.14
+   Compiling shlex v2.0.1
+    Checking keccak v0.1.6
+    Checking pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/anons/pqz-core/stmt)
+   Compiling cc v1.8.0
+   Compiling generic-array v0.14.7
+    Checking crypto-common v0.1.7
+    Checking block-buffer v0.10.4
+    Checking digest v0.10.7
+    Checking sha3 v0.10.8
+   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/anons/pqz-core/ffi)
+    Checking pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/anons/pqz-core/pqzh/ligero)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 12.25s

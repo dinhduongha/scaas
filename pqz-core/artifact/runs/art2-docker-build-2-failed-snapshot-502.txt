@@ -1,0 +1,112 @@
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 5.07kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/ubuntu:24.04@sha256:534baea6a22c03a63003dbc8dbe78fe34bc0d7e595d9a9dc9834884ff530eb55
+#2 DONE 0.0s
+
+#3 [ 1/10] FROM docker.io/library/ubuntu:24.04@sha256:534baea6a22c03a63003dbc8dbe78fe34bc0d7e595d9a9dc9834884ff530eb55
+#3 CACHED
+
+#4 [internal] load build context
+#4 transferring context: 2.61MB 0.1s
+#4 transferring context: 2.62MB 0.1s done
+#4 DONE 0.1s
+
+#5 [ 2/10] RUN apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends ca-certificates  && apt-get update -qq --snapshot "20261013T000000Z"  && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends --snapshot "20261013T000000Z"       clang-18=1:18.1.3-1ubuntu1 lld-18=1:18.1.3-1ubuntu1 llvm-18=1:18.1.3-1ubuntu1       gcc-13=13.3.0-6ubuntu2~24.04.1 g++-13=13.3.0-6ubuntu2~24.04.1 build-essential make cmake=3.28.3-1build7       libgmp-dev libmpfr-dev python3 git unzip ca-certificates curl xz-utils  && ln -s /usr/bin/clang-18 /usr/local/bin/clang  && rm -rf /var/lib/apt/lists/*
+#5 12.73 debconf: delaying package configuration, since apt-utils is not installed
+#5 12.80 (Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 4381 files and directories currently installed.)
+#5 12.82 Preparing to unpack .../libssl3t64_3.0.13-0ubuntu3.16_amd64.deb ...
+#5 12.83 Unpacking libssl3t64:amd64 (3.0.13-0ubuntu3.16) over (3.0.13-0ubuntu3.15) ...
+#5 12.91 Setting up libssl3t64:amd64 (3.0.13-0ubuntu3.16) ...
+#5 12.94 Selecting previously unselected package openssl.
+#5 12.94 (Reading database ... (Reading database ... 5%(Reading database ... 10%(Reading database ... 15%(Reading database ... 20%(Reading database ... 25%(Reading database ... 30%(Reading database ... 35%(Reading database ... 40%(Reading database ... 45%(Reading database ... 50%(Reading database ... 55%(Reading database ... 60%(Reading database ... 65%(Reading database ... 70%(Reading database ... 75%(Reading database ... 80%(Reading database ... 85%(Reading database ... 90%(Reading database ... 95%(Reading database ... 100%(Reading database ... 4381 files and directories currently installed.)
+#5 12.95 Preparing to unpack .../openssl_3.0.13-0ubuntu3.16_amd64.deb ...
+#5 12.95 Unpacking openssl (3.0.13-0ubuntu3.16) ...
+#5 13.00 Selecting previously unselected package ca-certificates.
+#5 13.00 Preparing to unpack .../ca-certificates_20260601~24.04.1_all.deb ...
+#5 13.00 Unpacking ca-certificates (20260601~24.04.1) ...
+#5 13.05 Setting up openssl (3.0.13-0ubuntu3.16) ...
+#5 13.07 Setting up ca-certificates (20260601~24.04.1) ...
+#5 13.41 Updating certificates in /etc/ssl/certs...
+#5 13.84 121 added, 0 removed; done.
+#5 13.86 Processing triggers for libc-bin (2.39-0ubuntu8.9) ...
+#5 13.88 Processing triggers for ca-certificates (20260601~24.04.1) ...
+#5 13.88 Updating certificates in /etc/ssl/certs...
+#5 14.25 0 added, 0 removed; done.
+#5 14.25 Running hooks in /etc/ca-certificates/update.d...
+#5 14.25 done.
+#5 1805.2 [output clipped, log limit 2MiB reached]
+#5 1806.6 ntu/20261013T000000Z noble-updates/universe amd64 libobjc4 amd64 14.2.0-4ubuntu2~24.04.1, but failed
+#5 1806.6 E: Failed to fetch https://snapshot.ubuntu.com/ubuntu/20261013T000000Z/pool/main/m/media-types/media-types_10.1.0_all.deb  503  Service Unavailable [IP: 185.125.189.69 443]
+#5 1806.6 E: Failed to fetch https://snapshot.ubuntu.com/ubuntu/20261013T000000Z/pool/main/g/gdbm/libgdbm6t64_1.23-5.1build1_amd64.deb  500  Internal Server Error [IP: 185.125.189.69 443]
+#5 1806.6 E: Failed to fetch https://snapshot.ubuntu.com/ubuntu/20261013T000000Z/pool/main/p/perl/perl_5.38.2-3.2ubuntu0.6_amd64.deb  502  Bad Gateway [IP: 185.125.189.69 443]
+#5 1806.6 E: Failed to fetch https://snapshot.ubuntu.com/ubuntu/20261013T000000Z/pool/main/libb/libbsd/libbsd0_0.12.1-1build1.1_amd64.deb  502  Bad Gateway [IP: 185.125.189.69 443]
+#5 1806.6 E: Failed to fetch https://snapshot.ubuntu.com/ubuntu/20261013T000000Z/pool/main/j/jansson/libjansson4_2.14-2build2_amd64.deb  502  Bad Gateway [IP: 185.125.189.36 443]
+#5 1806.6 E: Failed to fetch https://snapshot.ubuntu.com/ubuntu/20261013T000000Z/pool/main/libu/libuv1/libuv1t64_1.48.0-1.1build1_amd64.deb  502  Bad Gateway [IP: 185.125.189.37 443]
+#5 1806.6 E: Failed to fetch https://snapshot.ubuntu.com/ubuntu/20261013T000000Z/pool/main/b/binutils/libgprofng0_2.42-4ubuntu2.10_amd64.deb  502  Bad Gateway [IP: 185.125.189.69 443]
+#5 1806.6 E: Failed to fetch https://snapshot.ubuntu.com/ubuntu/20261013T000000Z/pool/main/g/glibc/libc-dev-bin_2.39-0ubuntu8.9_amd64.deb  502  Bad Gateway [IP: 185.125.189.37 443]
+#5 1806.6 E: Failed to fetch https://snapshot.ubuntu.com/ubuntu/20261013T000000Z/pool/main/g/gcc-13/gcc-13-base_13.3.0-6ubuntu2%7e24.04.1_amd64.deb  502  Bad Gateway [IP: 185.125.189.37 443]
+#5 1806.6 E: Failed to fetch https://snapshot.ubuntu.com/ubuntu/20261013T000000Z/pool/main/g/gcc-13/cpp-13_13.3.0-6ubuntu2%7e24.04.1_amd64.deb  502  Bad Gateway [IP: 185.125.189.69 443]
+#5 1806.6 E: Failed to fetch https://snapshot.ubuntu.com/ubuntu/20261013T000000Z/pool/main/g/gcc-14/liblsan0_14.2.0-4ubuntu2%7e24.04.1_amd64.deb  502  Bad Gateway [IP: 185.125.189.69 443]
+#5 1806.6 E: Failed to fetch https://snapshot.ubuntu.com/ubuntu/20261013T000000Z/pool/main/g/gcc-13/libstdc%2b%2b-13-dev_13.3.0-6ubuntu2%7e24.04.1_amd64.deb  503  Service Unavailable [IP: 185.125.189.37 443]
+#5 1806.6 E: Failed to fetch https://snapshot.ubuntu.com/ubuntu/20261013T000000Z/pool/main/m/make-dfsg/make_4.3-4.1build2_amd64.deb  503  Service Unavailable [IP: 185.125.189.37 443]
+#5 1806.6 E: Failed to fetch https://snapshot.ubuntu.com/ubuntu/20261013T000000Z/pool/main/d/dpkg/libdpkg-perl_1.22.6ubuntu6.6_all.deb  503  Service Unavailable [IP: 185.125.189.37 443]
+#5 1806.6 E: Failed to fetch https://snapshot.ubuntu.com/ubuntu/20261013T000000Z/pool/main/b/bzip2/bzip2_1.0.8-5.1ubuntu0.1_amd64.deb  503  Service Unavailable [IP: 185.125.189.37 443]
+#5 1806.6 E: Failed to fetch https://snapshot.ubuntu.com/ubuntu/20261013T000000Z/pool/main/p/patch/patch_2.7.6-7build3_amd64.deb  503  Service Unavailable [IP: 185.125.189.37 443]
+#5 1806.6 E: Failed to fetch https://snapshot.ubuntu.com/ubuntu/20261013T000000Z/pool/main/l/lto-disabled-list/lto-disabled-list_47_all.deb  503  Service Unavailable [IP: 185.125.189.37 443]
+#5 1806.6 E: Failed to fetch https://snapshot.ubuntu.com/ubuntu/20261013T000000Z/pool/main/b/build-essential/build-essential_12.10ubuntu1_amd64.deb  503  Service Unavailable [IP: 185.125.189.37 443]
+#5 1806.6 E: Failed to fetch https://snapshot.ubuntu.com/ubuntu/20261013T000000Z/pool/main/l/llvm-toolchain-18/libllvm18_18.1.3-1ubuntu1_amd64.deb  503  Service Unavailable [IP: 185.125.189.37 443]
+#5 1806.6 E: Failed to fetch https://snapshot.ubuntu.com/ubuntu/20261013T000000Z/pool/universe/g/gcc-14/libobjc4_14.2.0-4ubuntu2%7e24.04.1_amd64.deb  502  Bad Gateway [IP: 185.125.189.37 443]
+#5 1806.6 E: Failed to fetch https://snapshot.ubuntu.com/ubuntu/20261013T000000Z/pool/universe/l/llvm-toolchain-18/clang-18_18.1.3-1ubuntu1_amd64.deb  503  Service Unavailable [IP: 185.125.189.37 443]
+#5 1806.6 E: Failed to fetch https://snapshot.ubuntu.com/ubuntu/20261013T000000Z/pool/main/b/brotli/libbrotli1_1.1.0-2build2_amd64.deb  503  Service Unavailable [IP: 185.125.189.37 443]
+#5 1806.6 E: Failed to fetch https://snapshot.ubuntu.com/ubuntu/20261013T000000Z/pool/main/c/cyrus-sasl2/libsasl2-modules-db_2.1.28%2bdfsg1-5ubuntu3.1_amd64.deb  503  Service Unavailable [IP: 185.125.189.37 443]
+#5 1806.6 E: Failed to fetch https://snapshot.ubuntu.com/ubuntu/20261013T000000Z/pool/main/c/cyrus-sasl2/libsasl2-2_2.1.28%2bdfsg1-5ubuntu3.1_amd64.deb  503  Service Unavailable [IP: 185.125.189.37 443]
+#5 1806.6 E: Failed to fetch https://snapshot.ubuntu.com/ubuntu/20261013T000000Z/pool/main/r/rtmpdump/librtmp1_2.4%2b20151223.gitfa8646d.1-2build7_amd64.deb  503  Service Unavailable [IP: 185.125.189.37 443]
+#5 1806.6 E: Failed to fetch https://snapshot.ubuntu.com/ubuntu/20261013T000000Z/pool/main/libs/libssh/libssh-4_0.10.6-2ubuntu0.5_amd64.deb  503  Service Unavailable [IP: 185.125.189.37 443]
+#5 1806.6 E: Failed to fetch https://snapshot.ubuntu.com/ubuntu/20261013T000000Z/pool/main/c/curl/libcurl4t64_8.5.0-2ubuntu10.15_amd64.deb  503  Service Unavailable [IP: 185.125.189.37 443]
+#5 1806.6 E: Failed to fetch https://snapshot.ubuntu.com/ubuntu/20261013T000000Z/pool/main/libj/libjsoncpp/libjsoncpp25_1.9.5-6build1_amd64.deb  503  Service Unavailable [IP: 185.125.189.37 443]
+#5 1806.6 E: Failed to fetch https://snapshot.ubuntu.com/ubuntu/20261013T000000Z/pool/main/r/rhash/librhash0_1.4.3-3build1_amd64.deb  503  Service Unavailable [IP: 185.125.189.37 443]
+#5 1806.6 E: Failed to fetch https://snapshot.ubuntu.com/ubuntu/20261013T000000Z/pool/main/c/cmake/cmake-data_3.28.3-1build7_all.deb  503  Service Unavailable [IP: 185.125.189.37 443]
+#5 1806.6 E: Failed to fetch https://snapshot.ubuntu.com/ubuntu/20261013T000000Z/pool/main/c/cmake/cmake_3.28.3-1build7_amd64.deb  503  Service Unavailable [IP: 185.125.189.37 443]
+#5 1806.6 E: Failed to fetch https://snapshot.ubuntu.com/ubuntu/20261013T000000Z/pool/main/c/curl/curl_8.5.0-2ubuntu10.15_amd64.deb  503  Service Unavailable [IP: 185.125.189.37 443]
+#5 1806.6 E: Failed to fetch https://snapshot.ubuntu.com/ubuntu/20261013T000000Z/pool/main/g/git/git-man_2.43.0-1ubuntu7.3_all.deb  500  Internal Server Error [IP: 185.125.189.37 443]
+#5 1806.6 E: Failed to fetch https://snapshot.ubuntu.com/ubuntu/20261013T000000Z/pool/main/g/git/git_2.43.0-1ubuntu7.3_amd64.deb  502  Bad Gateway [IP: 185.125.189.37 443]
+#5 1806.6 E: Failed to fetch https://snapshot.ubuntu.com/ubuntu/20261013T000000Z/pool/main/g/gmp/libgmpxx4ldbl_6.3.0%2bdfsg-2ubuntu6.1_amd64.deb  500  Internal Server Error [IP: 185.125.189.69 443]
+#5 1806.6 E: Failed to fetch https://snapshot.ubuntu.com/ubuntu/20261013T000000Z/pool/universe/l/llvm-toolchain-18/lld-18_18.1.3-1ubuntu1_amd64.deb  503  Service Unavailable [IP: 185.125.189.69 443]
+#5 1806.6 E: Failed to fetch https://snapshot.ubuntu.com/ubuntu/20261013T000000Z/pool/universe/l/llvm-toolchain-18/llvm-18-runtime_18.1.3-1ubuntu1_amd64.deb  503  Service Unavailable [IP: 185.125.189.69 443]
+#5 1806.6 E: Failed to fetch https://snapshot.ubuntu.com/ubuntu/20261013T000000Z/pool/universe/libp/libpfm4/libpfm4_4.13.0%2bgit32-g0d4ed0e-1ubuntu0.1_amd64.deb  503  Service Unavailable [IP: 185.125.189.69 443]
+#5 1806.6 E: Failed to fetch https://snapshot.ubuntu.com/ubuntu/20261013T000000Z/pool/main/u/unzip/unzip_6.0-28ubuntu4.1_amd64.deb  503  Service Unavailable [IP: 185.125.189.69 443]
+#5 1806.6 E: Unable to fetch some archives, maybe run apt-get update or try with --fix-missing?
+#5 ERROR: process "/bin/sh -c apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends ca-certificates  && apt-get update -qq --snapshot \"$APT_SNAPSHOT\"  && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends --snapshot \"$APT_SNAPSHOT\"       clang-18=1:18.1.3-1ubuntu1 lld-18=1:18.1.3-1ubuntu1 llvm-18=1:18.1.3-1ubuntu1       gcc-13=13.3.0-6ubuntu2~24.04.1 g++-13=13.3.0-6ubuntu2~24.04.1 build-essential make cmake=3.28.3-1build7       libgmp-dev libmpfr-dev python3 git unzip ca-certificates curl xz-utils  && ln -s /usr/bin/clang-18 /usr/local/bin/clang  && rm -rf /var/lib/apt/lists/*" did not complete successfully: exit code: 100
+------
+ > [ 2/10] RUN apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends ca-certificates  && apt-get update -qq --snapshot "20261013T000000Z"  && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends --snapshot "20261013T000000Z"       clang-18=1:18.1.3-1ubuntu1 lld-18=1:18.1.3-1ubuntu1 llvm-18=1:18.1.3-1ubuntu1       gcc-13=13.3.0-6ubuntu2~24.04.1 g++-13=13.3.0-6ubuntu2~24.04.1 build-essential make cmake=3.28.3-1build7       libgmp-dev libmpfr-dev python3 git unzip ca-certificates curl xz-utils  && ln -s /usr/bin/clang-18 /usr/local/bin/clang  && rm -rf /var/lib/apt/lists/*:
+1806.6 E: Failed to fetch https://snapshot.ubuntu.com/ubuntu/20261013T000000Z/pool/main/c/cmake/cmake_3.28.3-1build7_amd64.deb  503  Service Unavailable [IP: 185.125.189.37 443]
+1806.6 E: Failed to fetch https://snapshot.ubuntu.com/ubuntu/20261013T000000Z/pool/main/c/curl/curl_8.5.0-2ubuntu10.15_amd64.deb  503  Service Unavailable [IP: 185.125.189.37 443]
+1806.6 E: Failed to fetch https://snapshot.ubuntu.com/ubuntu/20261013T000000Z/pool/main/g/git/git-man_2.43.0-1ubuntu7.3_all.deb  500  Internal Server Error [IP: 185.125.189.37 443]
+1806.6 E: Failed to fetch https://snapshot.ubuntu.com/ubuntu/20261013T000000Z/pool/main/g/git/git_2.43.0-1ubuntu7.3_amd64.deb  502  Bad Gateway [IP: 185.125.189.37 443]
+1806.6 E: Failed to fetch https://snapshot.ubuntu.com/ubuntu/20261013T000000Z/pool/main/g/gmp/libgmpxx4ldbl_6.3.0%2bdfsg-2ubuntu6.1_amd64.deb  500  Internal Server Error [IP: 185.125.189.69 443]
+1806.6 E: Failed to fetch https://snapshot.ubuntu.com/ubuntu/20261013T000000Z/pool/universe/l/llvm-toolchain-18/lld-18_18.1.3-1ubuntu1_amd64.deb  503  Service Unavailable [IP: 185.125.189.69 443]
+1806.6 E: Failed to fetch https://snapshot.ubuntu.com/ubuntu/20261013T000000Z/pool/universe/l/llvm-toolchain-18/llvm-18-runtime_18.1.3-1ubuntu1_amd64.deb  503  Service Unavailable [IP: 185.125.189.69 443]
+1806.6 E: Failed to fetch https://snapshot.ubuntu.com/ubuntu/20261013T000000Z/pool/universe/libp/libpfm4/libpfm4_4.13.0%2bgit32-g0d4ed0e-1ubuntu0.1_amd64.deb  503  Service Unavailable [IP: 185.125.189.69 443]
+1806.6 E: Failed to fetch https://snapshot.ubuntu.com/ubuntu/20261013T000000Z/pool/main/u/unzip/unzip_6.0-28ubuntu4.1_amd64.deb  503  Service Unavailable [IP: 185.125.189.69 443]
+1806.6 E: Unable to fetch some archives, maybe run apt-get update or try with --fix-missing?
+------
+Dockerfile:26
+--------------------
+  25 |     # The snapshot archive is HTTPS-only, so ca-certificates (root certificates only) comes from the live archive first.
+  26 | >>> RUN apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends ca-certificates \
+  27 | >>>  && apt-get update -qq --snapshot "$APT_SNAPSHOT" \
+  28 | >>>  && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends --snapshot "$APT_SNAPSHOT" \
+  29 | >>>       clang-18=1:18.1.3-1ubuntu1 lld-18=1:18.1.3-1ubuntu1 llvm-18=1:18.1.3-1ubuntu1 \
+  30 | >>>       gcc-13=13.3.0-6ubuntu2~24.04.1 g++-13=13.3.0-6ubuntu2~24.04.1 build-essential make cmake=3.28.3-1build7 \
+  31 | >>>       libgmp-dev libmpfr-dev python3 git unzip ca-certificates curl xz-utils \
+  32 | >>>  && ln -s /usr/bin/clang-18 /usr/local/bin/clang \
+  33 | >>>  && rm -rf /var/lib/apt/lists/*
+  34 |     
+--------------------
+ERROR: failed to build: failed to solve: process "/bin/sh -c apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends ca-certificates  && apt-get update -qq --snapshot \"$APT_SNAPSHOT\"  && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends --snapshot \"$APT_SNAPSHOT\"       clang-18=1:18.1.3-1ubuntu1 lld-18=1:18.1.3-1ubuntu1 llvm-18=1:18.1.3-1ubuntu1       gcc-13=13.3.0-6ubuntu2~24.04.1 g++-13=13.3.0-6ubuntu2~24.04.1 build-essential make cmake=3.28.3-1build7       libgmp-dev libmpfr-dev python3 git unzip ca-certificates curl xz-utils  && ln -s /usr/bin/clang-18 /usr/local/bin/clang  && rm -rf /var/lib/apt/lists/*" did not complete successfully: exit code: 100
+build rc=1
+[art2: 15452 lines 'W: Tried to start delayed item ... but failed' removed from this log]

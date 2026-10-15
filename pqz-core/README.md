@@ -460,7 +460,7 @@ applied yet.
 | `ffi/` | both | core | `pqz-ffi`, the precompile boundary; vector generator |
 | `artifact/` | both | tool | reproducibility package, source only |
 | `glic/` | both | tool | licence step 1: GMP / MPFR / HEXL absence scans |
-| `fuzz/` | both | tool | continuous fuzzing (not on main yet, branch `p6e-a5`) |
+| `fuzz/` | both | tool | continuous fuzzing: targets `precompile`, `mutate`, `codec` (ASan + UBSan, libFuzzer) |
 | `NOTICE`, `STATUS.md` | — | — | third-party notices; the detailed status log |
 
 <details>
@@ -488,7 +488,7 @@ applied yet.
 | `ffi/` | `pqz-ffi`, the precompile boundary ([ffi/README.md](ffi/README.md)); `src/bin/pqz-vectors.rs` (feature `prove`) with `vectors/` (`run.sh`, `tamper.py`, `replay_wasm.mjs`, runs); `wasm/` prove harness; `run.sh`, runs `runs/` |
 | `artifact/` | reproducibility package, source only ([artifact/README.md](artifact/README.md)); Docker test logs `runs/`; PQZL runs today (PQZH stages on branch `pqz-artifact2`) |
 | `glic/` | licence check, step 1 (`docs/research/pqz-licence-inventory.md`): `absence.sh` (builds every artifact into `build/glic` and scans symbols, `DT_NEEDED`, wasm imports and strings for GMP / MPFR / HEXL), raw outputs and licence tables `runs/` |
-| `fuzz/` | not on main yet: continuous fuzzing (branch `p6e-a5`) |
+| `fuzz/` | continuous fuzzing ([fuzz/README.md](fuzz/README.md)): Rust oracles behind C shims (`src/lib.rs`, `targets/*.c`), `build.sh` (stable Rust with sancov + clang 18 libFuzzer, ASan + UBSan, `pqz-ffi` feature `fuzz`), `run.sh <target> <seconds>` under `scripts/capped`, `seeds.py` (seeds from the frozen vectors); targets `precompile` (raw bytes into `pqz_precompile`), `mutate` (edit scripts over honest inputs; any accepted change is a finding; specialised vs generic verifier), `codec` (accepted ⇒ re-encoding equals the input); first campaigns 2026-10-15: ≈ 3.2 M inputs, no finding, arena peak 95,169,680 B; corpora `corpus/`, logs `runs/` |
 
 </details>
 
@@ -519,7 +519,7 @@ PQZH on Ligero with all six forms, `pqz-ffi`, the frozen vectors (`smartcontract
 
 1. **op 7 `R_TXM`** (the [multi-recipient plan](../docs/superpowers/plans/2026-10-14-p6-anon.md), PQZL and PQZH tracks) into both systems, `pqz-stmt`, `pqz-ffi` and the vectors.
 2. **Gate A (PQZL)** and **gate B (PQZH)** ([relations plan](../docs/superpowers/plans/2026-10-14-p6e-relations.md)): KAT 19/19, fix checks, differential 0 disagreements,
-   `pqz-vectors --check` and `pqz_kat.py --check`, wasm32 replay byte-equal, `pqz-ffi` tests, fuzz first runs clean;
+   `pqz-vectors --check` and `pqz_kat.py --check`, wasm32 replay byte-equal, `pqz-ffi` tests, fuzz first runs clean (done 2026-10-15: no finding);
    gate B also every PQZH op ≤ 262,144 B and ≤ 60 ms p99 native and wasm32 and the review of the modified Ligero ZK
    construction. Both ids freeze there.
 3. **The freeze:** `artifact/reproduce.sh --full` → `expected-results.json` (replaces every provisional number here).

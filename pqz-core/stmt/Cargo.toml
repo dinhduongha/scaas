@@ -9,4 +9,8 @@ publish = false
 # precompile input. no_std + alloc, no dependencies; builds for wasm32-unknown-unknown.
 [dependencies]
 
+[features]
+# bench only (P6-ANON plan, global constraints): op 7 accepts M = 8, 16 for both ids; never in the precompile build
+oversize = []
+
 [workspace]

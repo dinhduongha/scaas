@@ -1,0 +1,32 @@
+   Compiling version_check v0.9.5
+   Compiling typenum v1.20.1
+   Compiling generic-array v0.14.7
+   Compiling shlex v2.0.1
+   Compiling find-msvc-tools v0.1.14
+   Compiling cc v1.8.0
+   Compiling crypto-common v0.1.7
+   Compiling block-buffer v0.10.4
+   Compiling digest v0.10.7
+   Compiling keccak v0.1.6
+   Compiling sha3 v0.10.8
+   Compiling pqz-stmt v0.1.0 (/src/pqz-core/stmt)
+   Compiling pqzh-ligero v0.1.0 (/src/pqz-core/pqzh/ligero)
+   Compiling pqz-ffi v0.1.0 (/src/pqz-core/ffi)
+    Finished `release` profile [optimized + debuginfo] target(s) in 10.06s
+   Compiling version_check v0.9.5
+   Compiling typenum v1.20.1
+   Compiling generic-array v0.14.7
+   Compiling shlex v2.0.1
+   Compiling find-msvc-tools v0.1.14
+   Compiling cc v1.8.0
+   Compiling crypto-common v0.1.7
+   Compiling block-buffer v0.10.4
+   Compiling digest v0.10.7
+   Compiling keccak v0.1.6
+   Compiling sha3 v0.10.8
+   Compiling pqz-stmt v0.1.0 (/src/pqz-core/stmt)
+   Compiling pqz-ffi v0.1.0 (/src/pqz-core/ffi)
+   Compiling pqzh-ligero v0.1.0 (/src/pqz-core/pqzh/ligero)
+   Compiling pqz-ffi-wasm v0.1.0 (/src/pqz-core/ffi/wasm)
+    Finished `release` profile [optimized] target(s) in 9.91s
+rc=0

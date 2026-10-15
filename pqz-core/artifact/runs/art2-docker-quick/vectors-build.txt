@@ -1,0 +1,3 @@
+   Compiling pqz-ffi v0.1.0 (/src/pqz-core/ffi)
+    Finished `release` profile [optimized + debuginfo] target(s) in 15.84s
+rc=0

@@ -1,7 +1,19 @@
 #!/bin/bash
 # Run a heavy command (cargo/forge/anvil/npm/odoo gate) in its own systemd
 # scope capped at 4 GB, so systemd-oomd kills this command, not the terminal.
-# ONE capped command at a time machine-wide (user cap after repeated OOM).
-exec {fd}>"$HOME/.cache/r3-locks/heavy"
-flock "$fd"
-exec systemd-run --user --scope --quiet -p MemoryMax=4G -p MemorySwapMax=2G -- "$@"
+# At most CAPPED_SLOTS (default 2, owner 2026-10-15; was 1 after repeated OOM)
+# capped commands run machine-wide; the rest wait for a free slot.
+# Slot 1 is the historical lock file `heavy`, so `fuser heavy` still finds a job.
+slots=${CAPPED_SLOTS:-2}
+dir="$HOME/.cache/r3-locks"
+while :; do
+  for ((i = 1; i <= slots; i++)); do
+    f="$dir/heavy"; ((i > 1)) && f="$dir/heavy.$i"
+    exec {fd}>"$f"
+    if flock -n "$fd"; then
+      exec systemd-run --user --scope --quiet -p MemoryMax=4G -p MemorySwapMax=2G -- "$@"
+    fi
+    exec {fd}>&-
+  done
+  sleep 2
+done
