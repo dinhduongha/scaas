@@ -1,0 +1,91 @@
+# P6f harness (smoke), 2026-10-15T04:33:56Z, image nethermind/nethermind:1.39.0@sha256:8af90a30989c16cb15e087bd250c623c98585e490a25950a75642460d497eae6, commit 0a155da
+runtime .NET 10.0.9, Ubuntu 26.04 LTS, MLDsa.IsSupported=True
+harness: ffi /home/ha/work/ainative/scaas/.claude/worktrees/p6f/pqz-core/ffi/target/release/libpqz_ffi.so sha256 2867c29b6f82ff8259ccd6b0d5539e8c7775a821e6c1170d57ec4c2f78cf22aa; corpus 414 PQZ inputs (24 valid), 38 ML-DSA inputs (7 valid); 8 threads (1 MiB stacks) + 1 GC-pressure thread; 10 min; seed 7622
+elapsed 10.0 min; inputs 1141036 (1902/s); per thread [142382, 143171, 141108, 143156, 143715, 140822, 144295, 142387]
+  FAIL                                 5933
+  mldsa44 01 unedited-valid            2212
+  mldsa44 gen bitflips                 14132
+  mldsa44 gen extend                   14356
+  mldsa44 gen random                   14396
+  mldsa44 gen truncate                 14429
+  mldsa44 gen unedited                 14096
+  mldsa44 out 00                       69197
+  mldsa44 out 01                       2212
+  mldsa65 01 unedited-valid            3034
+  mldsa65 gen bitflips                 14318
+  mldsa65 gen extend                   14120
+  mldsa65 gen random                   14316
+  mldsa65 gen truncate                 14221
+  mldsa65 gen unedited                 14348
+  mldsa65 out 00                       68289
+  mldsa65 out 01                       3034
+  pqz 01 unedited                      2924
+  pqz gen bitflips                     103318
+  pqz gen byterun                      103187
+  pqz gen extend                       102797
+  pqz gen idswap                       101502
+  pqz gen lenfield                     101671
+  pqz gen opswap                       91563
+  pqz gen random                       29747
+  pqz gen stmtflip                     101496
+  pqz gen tailflip                     101581
+  pqz gen truncate                     103376
+  pqz gen unedited                     58066
+  pqz out 00                           983591
+  pqz out 01                           8857
+  pqz out revert                       4759
+  pqz out selftest                     1097
+  status 3 (PQZ-INPUT-PANIC)            0
+  GC collections gen0/1/2               327041/327040/327039
+  …01 = unedited honest inputs: 8857 = 2924: NO
+FAILURE an edited input is valid len=282237 keccak=0x7a4f87ed4c5c05f7a4d4116667aa381237f06514b635df50e1d898a01849b1ca
+FAILURE an edited input is valid len=219645 keccak=0x896de8439385379e7b653b3bb661657c6d887b0a3def253e3aab84c1f3649cfd
+FAILURE an edited input is valid len=91968 keccak=0x259669fd9e49abfd5311bdc58ef0d69dc18676fdf8fa9b860170bf1411c87aec
+FAILURE an edited input is valid len=314023 keccak=0x4a94c2cb66d4c3db706bfbf92d6b3f3e66e01c64402a5d8829c9cd567d1e7b5b
+FAILURE an edited input is valid len=125839 keccak=0x3c459e22b8976289299702d8257110c31326ad4daacd5ac0046cc381e6a83d32
+FAILURE an edited input is valid len=62166 keccak=0x6c40fb9f140efca33fa06e58e8b32b5b6e2d52309a3f7110f10cf407c7ca6c68
+FAILURE an edited input is valid len=125839 keccak=0x3c459e22b8976289299702d8257110c31326ad4daacd5ac0046cc381e6a83d32
+FAILURE an edited input is valid len=91968 keccak=0x259669fd9e49abfd5311bdc58ef0d69dc18676fdf8fa9b860170bf1411c87aec
+FAILURE an edited input is valid len=219645 keccak=0x896de8439385379e7b653b3bb661657c6d887b0a3def253e3aab84c1f3649cfd
+FAILURE an edited input is valid len=219645 keccak=0x896de8439385379e7b653b3bb661657c6d887b0a3def253e3aab84c1f3649cfd
+FAILURE an edited input is valid len=282237 keccak=0x7a4f87ed4c5c05f7a4d4116667aa381237f06514b635df50e1d898a01849b1ca
+FAILURE an edited input is valid len=203263 keccak=0xc49bae88f183b967b558cdee4e4625f0b425ee3514f35ff1dc364da2a29c4bf6
+FAILURE an edited input is valid len=298045 keccak=0xa5803b53b294b17a2ada852868bf026c62bff4e5a5325838a4a5428183216cdc
+FAILURE an edited input is valid len=298045 keccak=0xa5803b53b294b17a2ada852868bf026c62bff4e5a5325838a4a5428183216cdc
+FAILURE an edited input is valid len=298045 keccak=0xa5803b53b294b17a2ada852868bf026c62bff4e5a5325838a4a5428183216cdc
+FAILURE an edited input is valid len=298045 keccak=0xa5803b53b294b17a2ada852868bf026c62bff4e5a5325838a4a5428183216cdc
+FAILURE an edited input is valid len=91968 keccak=0x259669fd9e49abfd5311bdc58ef0d69dc18676fdf8fa9b860170bf1411c87aec
+FAILURE an edited input is valid len=125839 keccak=0x3c459e22b8976289299702d8257110c31326ad4daacd5ac0046cc381e6a83d32
+FAILURE an edited input is valid len=203263 keccak=0xc49bae88f183b967b558cdee4e4625f0b425ee3514f35ff1dc364da2a29c4bf6
+FAILURE an edited input is valid len=220383 keccak=0xf13ab9be076e49b416d95ddade0322b29132ae57f05e0c64a61f1c7e7518f6c3
+FAILURE an edited input is valid len=220383 keccak=0xf13ab9be076e49b416d95ddade0322b29132ae57f05e0c64a61f1c7e7518f6c3
+FAILURE an edited input is valid len=62185 keccak=0x61d11e3a985862363aa6e2e4523d0be5d0078926018c6416ff81a75dfb4d0d74
+FAILURE an edited input is valid len=91968 keccak=0x259669fd9e49abfd5311bdc58ef0d69dc18676fdf8fa9b860170bf1411c87aec
+FAILURE an edited input is valid len=62185 keccak=0x61d11e3a985862363aa6e2e4523d0be5d0078926018c6416ff81a75dfb4d0d74
+FAILURE an edited input is valid len=125839 keccak=0x3c459e22b8976289299702d8257110c31326ad4daacd5ac0046cc381e6a83d32
+FAILURE an edited input is valid len=62166 keccak=0x6c40fb9f140efca33fa06e58e8b32b5b6e2d52309a3f7110f10cf407c7ca6c68
+FAILURE an edited input is valid len=125839 keccak=0x3c459e22b8976289299702d8257110c31326ad4daacd5ac0046cc381e6a83d32
+FAILURE an edited input is valid len=108996 keccak=0x4f09842248f7239e2dca8f97be6c89cb989a68a3bc9b303d928295a55cfd1390
+FAILURE an edited input is valid len=91957 keccak=0x31acda8fc9be4c2a4c47b34af2017e0e5e69e0bdd96d35c5d228856f0c31cc1e
+FAILURE an edited input is valid len=62175 keccak=0xab7146242afc126aaf9d95ad5155ffa65cf699618915676072a39617c02ce75b
+FAILURE an edited input is valid len=203263 keccak=0xc49bae88f183b967b558cdee4e4625f0b425ee3514f35ff1dc364da2a29c4bf6
+FAILURE an edited input is valid len=108996 keccak=0x4f09842248f7239e2dca8f97be6c89cb989a68a3bc9b303d928295a55cfd1390
+FAILURE an edited input is valid len=314023 keccak=0x4a94c2cb66d4c3db706bfbf92d6b3f3e66e01c64402a5d8829c9cd567d1e7b5b
+FAILURE an edited input is valid len=220383 keccak=0xf13ab9be076e49b416d95ddade0322b29132ae57f05e0c64a61f1c7e7518f6c3
+FAILURE an edited input is valid len=108996 keccak=0x4f09842248f7239e2dca8f97be6c89cb989a68a3bc9b303d928295a55cfd1390
+FAILURE an edited input is valid len=62175 keccak=0xab7146242afc126aaf9d95ad5155ffa65cf699618915676072a39617c02ce75b
+FAILURE an edited input is valid len=219645 keccak=0x896de8439385379e7b653b3bb661657c6d887b0a3def253e3aab84c1f3649cfd
+FAILURE an edited input is valid len=125839 keccak=0x3c459e22b8976289299702d8257110c31326ad4daacd5ac0046cc381e6a83d32
+FAILURE an edited input is valid len=219645 keccak=0x896de8439385379e7b653b3bb661657c6d887b0a3def253e3aab84c1f3649cfd
+FAILURE an edited input is valid len=44578 keccak=0x082d5f5bc97b34d7a5f891970e1c6b96055cf2d1cc59f601e0b8bebb1ef88a05
+FAILURE an edited input is valid len=108996 keccak=0x4f09842248f7239e2dca8f97be6c89cb989a68a3bc9b303d928295a55cfd1390
+FAILURE an edited input is valid len=220383 keccak=0xf13ab9be076e49b416d95ddade0322b29132ae57f05e0c64a61f1c7e7518f6c3
+FAILURE an edited input is valid len=62166 keccak=0x6c40fb9f140efca33fa06e58e8b32b5b6e2d52309a3f7110f10cf407c7ca6c68
+FAILURE an edited input is valid len=282237 keccak=0x7a4f87ed4c5c05f7a4d4116667aa381237f06514b635df50e1d898a01849b1ca
+FAILURE an edited input is valid len=314023 keccak=0x4a94c2cb66d4c3db706bfbf92d6b3f3e66e01c64402a5d8829c9cd567d1e7b5b
+FAILURE an edited input is valid len=62175 keccak=0xab7146242afc126aaf9d95ad5155ffa65cf699618915676072a39617c02ce75b
+FAILURE an edited input is valid len=280333 keccak=0x3b83cee65010eb639c326b3911c2ff3a7ec6eae3e72737931f7fcf5f89bfaa03
+FAILURE an edited input is valid len=125839 keccak=0x3c459e22b8976289299702d8257110c31326ad4daacd5ac0046cc381e6a83d32
+FAILURE an edited input is valid len=314023 keccak=0x4a94c2cb66d4c3db706bfbf92d6b3f3e66e01c64402a5d8829c9cd567d1e7b5b
+FAILURE an edited input is valid len=219645 keccak=0x896de8439385379e7b653b3bb661657c6d887b0a3def253e3aab84c1f3649cfd
+harness: FAILED

@@ -107,9 +107,13 @@ static class Run
         // PQZ bases: every corpus input; the honest ones (honest, fee0) are the only valid unedited inputs
         byte[][] pqz = corpus.Select(r => r.input).ToArray();
         bool[] pqzValid = corpus.Select(r => r.expect == "1").ToArray();
+        // an edit can turn a negative row back into its honest input (op, id, length edits undo the row's own edit):
+        // the oracle is "valid iff byte-equal to a valid corpus input", by SHA-256
+        HashSet<string> validSet = corpus.Where(r => r.expect == "1").Select(r => Convert.ToHexString(SHA256.HashData(r.input))).ToHashSet();
         // ML-DSA bases (EIP-8355 layout): eip8355, the ACVP external cases as pk ‖ sig ‖ msg, the UA rows
         var ml = MlDsaBases(root);
 
+        Console.WriteLine($"runtime .NET {Environment.Version}, {RuntimeInformation.OSDescription}, MLDsa.IsSupported={MLDsa.IsSupported}");
         Console.WriteLine($"harness: ffi {PqzNative.LibraryPath} sha256 {SelfTest.LibrarySha256()}; corpus {pqz.Length} PQZ inputs ({pqzValid.Count(v => v)} valid), {ml.Count} ML-DSA inputs ({ml.Count(m => m.valid)} valid); {threads} threads (1 MiB stacks) + 1 GC-pressure thread; {minutes} min; seed {seed}");
 
         long deadline = Stopwatch.GetTimestamp() + (long)(minutes * 60 * Stopwatch.Frequency);
@@ -166,6 +170,8 @@ static class Run
             else if (g < 7) { gen = "random"; x = new byte[r.Next(0, r.Next(8) == 0 ? MaxInput + 2 : 4096)]; r.NextBytes(x); }
             else { (gen, x) = Edit(r, pqz[pick]); if (x.AsSpan().SequenceEqual(pqz[pick])) { gen = "unedited"; unedited = true; } }
             Count("pqz gen " + gen);
+            bool honest = validSet.Contains(Convert.ToHexString(SHA256.HashData(x)));
+            if (honest && !unedited) Count("pqz edit restored an honest input");
             Result<byte[]> o1, o2;
             long g1, g2;
             try
@@ -192,11 +198,11 @@ static class Run
             if (o[31] == 1)
             {
                 Count("pqz out 01");
-                if (unedited) Count("pqz 01 unedited"); else Fail("an edited input is valid", x);
+                if (honest) Count("pqz 01 honest"); else Fail("a non-honest input is valid", x);
                 return;
             }
             Count("pqz out 00");
-            if (unedited && pqzValid[pick]) Fail("an honest input is invalid", x);
+            if (honest) Fail("an honest input is invalid", x);
         }
 
         void OneMlDsa(Random r)
@@ -234,8 +240,8 @@ static class Run
         foreach (var kv in counts.OrderBy(k => k.Key)) Console.WriteLine($"  {kv.Key,-36} {kv.Value}");
         Console.WriteLine($"  status 3 (PQZ-INPUT-PANIC)            {counter.Panics}");
         Console.WriteLine($"  GC collections gen0/1/2               {GC.CollectionCount(0)}/{GC.CollectionCount(1)}/{GC.CollectionCount(2)}");
-        long ok01 = counts.GetValueOrDefault("pqz out 01"), unedited01 = counts.GetValueOrDefault("pqz 01 unedited");
-        Console.WriteLine($"  …01 = unedited honest inputs: {ok01} = {unedited01}: {(ok01 == unedited01 ? "yes" : "NO")}");
+        long ok01 = counts.GetValueOrDefault("pqz out 01"), unedited01 = counts.GetValueOrDefault("pqz 01 honest");
+        Console.WriteLine($"  …01 = inputs byte-equal to an honest input: {ok01} = {unedited01}: {(ok01 == unedited01 ? "yes" : "NO")}");
         foreach (string f in failures) Console.WriteLine("FAILURE " + f);
         bool clean = !counts.ContainsKey("FAIL") && counter.Panics == 0 && ok01 == unedited01;
         Console.WriteLine(clean ? "harness: CLEAN" : "harness: FAILED");

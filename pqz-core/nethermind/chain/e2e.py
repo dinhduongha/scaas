@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """P6f Tasks 7-8 (pq-zether.md §10 steps 1-2, 5): probes and end-to-end transactions against a PQZ chain, through
 one JSON-RPC endpoint (the follower behind nginx on the copy; 127.0.0.1:8545 on 7622 in Task 10). Python stdlib
-(run with python3 -I) + Foundry's cast for signing (cast mktx, offline) and keccak; forge artifacts from
+(run with python3 -I) with eth.py (keccak, legacy EIP-155 signing); forge artifacts from
 smartcontracts/evm/out. Requests are paced (the proxy allows 10 r/s, burst 20) and retried on 429.
 
   e2e.py before  --engine E                 the three addresses empty (code, balance, nonce; eth_call answers nothing)
@@ -18,12 +18,14 @@ Common: --rpc URL (default http://127.0.0.1:18545). Exit 0 iff every check passe
 import argparse
 import json
 import os
-import subprocess
 import sys
 import threading
 import time
 import urllib.error
 import urllib.request
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from eth import address, keccak256, legacy_tx  # noqa: E402
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "../../.."))
@@ -73,16 +75,12 @@ def rpc(method, params=(), pace=0.11, url=None):
     raise RuntimeError(f"{method}: still 429")
 
 
-def sh(*a):
-    return subprocess.run(a, check=True, capture_output=True, text=True).stdout.strip()
-
-
 def keccak(hexdata):
-    return sh("cast", "keccak", hexdata)[2:]
+    return keccak256(bytes.fromhex(hexdata.removeprefix("0x"))).hex()
 
 
 def selector(sig):
-    return sh("cast", "sig", sig)[2:]
+    return keccak256(sig.encode()).hex()[:8]
 
 
 def artifact(path, name):
@@ -264,18 +262,17 @@ def cmd_stock(a):
 
 
 class Sender:
+    """Legacy EIP-155 transactions signed here (eth.py): calldata of 300+ KB cannot pass through cast's argv."""
+
     def __init__(self, key):
-        self.key = key
-        self.addr = sh("cast", "wallet", "address", "--private-key", key)
+        self.key = int(key.removeprefix("0x"), 16)
+        self.addr = address(self.key)
         self.nonce = int(rpc("eth_getTransactionCount", [self.addr, "pending"]), 16)
 
     def send(self, to, data_hex, gas):
-        args = ["cast", "mktx", "--private-key", self.key, "--nonce", str(self.nonce), "--gas-limit", str(gas),
-                "--gas-price", "1", "--priority-gas-price", "1", "--chain", str(CHAIN_ID)]
-        args += ["--create", data_hex] if to is None else [to, data_hex]
-        raw = sh(*args)
+        raw = legacy_tx(self.key, self.nonce, 1, gas, to, 0, bytes.fromhex(data_hex.removeprefix("0x")), CHAIN_ID)
         self.nonce += 1
-        return rpc("eth_sendRawTransaction", [raw])
+        return rpc("eth_sendRawTransaction", ["0x" + raw.hex()])
 
 
 def receipt(h, timeout=180):
@@ -301,7 +298,7 @@ def cmd_e2e(a):
     r = receipt(s.send(None, "0x" + code, 2_000_000))
     probe = r["contractAddress"]
     check(r["status"] == "0x1", f"probe deployed at {probe} (block {int(r['blockNumber'], 16)}, gas {int(r['gasUsed'], 16)})")
-    topic = sh("cast", "keccak", "Probed(address,bytes32,uint256,uint256,uint256)")
+    topic = "0x" + keccak256(b"Probed(address,bytes32,uint256,uint256,uint256)").hex()
     sel = selector("check(address,bytes)")
     rows = [r for r in corpus() if r["kind"] in ("honest", "flip", "fee0")]
     pending = []
