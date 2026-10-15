@@ -46,3 +46,12 @@ $ copy.sh up nethermind/nethermind:1.39.0 genesis.stock.json  (2026-10-15T12:37:
  Container pqzcopy-follower Started 
 head 8 0x5a724d366ac1a27fd76e0c2f605e8d18d02d064e83fcadf7389c9390e3c48aba gasLimit 16908727 gasUsed 0 ts 1792067870
 head: all checks passed
+## end of stock history (2026-10-15T13:11:46Z)
+head 415 0x91b880e381bf90cb8c7f08c2e8f876ecca56571b02f177a5bbbbd44b3ca32891 gasLimit 25155267 gasUsed 0 ts 1792069905
+head: all checks passed
+signer head: 415 0x91b880e381bf90cb8c7f08c2e8f876ecca56571b02f177a5bbbbd44b3ca32891
+$ copy.sh down
+ Network pqzcopy_net Removed 
+$ copy.sh backup pre
+2100	/c/data-signer
+2096	/c/bak-pre/data-signer

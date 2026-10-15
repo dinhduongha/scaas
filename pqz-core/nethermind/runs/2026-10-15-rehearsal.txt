@@ -1,0 +1,11 @@
+# P6f Task 8 rehearsal on the copy (path A chain, image sha256:c53359a69bfae32a48412940fa98c744d06f55ab3e8da41e0b5ac82d2e8bea4f), commit 828dc5d
+
+## step 5 (13:50:22Z): signer has no published port: {"30303/tcp":null,"8545/tcp":null,"8551/tcp":null}; follower: {"30303/tcp":null,"8545/tcp":null,"8551/tcp":null}; rpc (nginx): {"80/tcp":null,"8545/tcp":[{"HostIp":"127.0.0.1","HostPort":"18545"}]}
+$ e2e.py burst --clients 4 --calls 50
+burst: 4 clients × 50 eth_call (PQZH transfer, 314,023 B) in 0.2 s: {'200 …01': 22, '429': 178}
+blocks 787..789 during and after the burst: intervals [5, 5]
+ok    burst: requests beyond the limit get 429
+ok    burst: every answered call = …01
+ok    burst: signer block interval 5 s ± 1 s
+burst: all checks passed
+rc=0
