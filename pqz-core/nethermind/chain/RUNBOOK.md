@@ -1,4 +1,4 @@
-# P6f runbook — the copy (executed) and the live roll-out on chain 7622 (Task 10, not executed by Tasks 1–9)
+# P6f runbook — the copy (executed) and the live roll-out on chain 7622 (Task 10)
 
 Plan: [P6f](../../../docs/superpowers/plans/2026-10-14-p6f-precompiles.md) Tasks 7, 8, 10; spec:
 [pq-zether.md §10](../../../docs/contracts/pq-zether.md#chain-integration). Every command below was executed on the
@@ -25,6 +25,12 @@ The copy is a **replica** of chain 7622: the live chainspec's parameters, engine
 first produces its history. The live directory is never read (brief: read-only `cat` / `ls` / `docker image inspect`
 only; no copy of the live data or key material). Consequence: its genesis hash is the replica's own, not 7622's
 `0x24e43dcb…c464`; on the live chain step 2 checks the live hash.
+
+Copy deviations found necessary (runs `2026-10-1[56]-copy-*.txt`): the history chainspec `genesis.stock.json` adds
+`eip4895TransitionTimestamp` 0 and `maximumExtraDataSize` `0xffff` (with 7622's params as they are no follower can
+sync); path B starts from the faithful replica `genesis.faithful.json` with `--testnet-reset`, exactly as Task 10;
+both node configs set `Network.FilterPeersByRecentIp` false (a restarted follower was refused for minutes);
+`copy.sh up` starts the signer first.
 
 ```sh
 C=pqz-core/nethermind/chain
@@ -56,66 +62,87 @@ Task 8 (rehearsal, gate): step 5 (`e2e.py burst`), the 80 M ramp (`watch.sh` unt
 the rollback rehearsal (`copy.sh down`, `copy.sh restore pre`, stock image, head = the recorded head). Results:
 `../runs/*-copy-*.txt`, `../runs/*-rehearsal.txt`.
 
-## Live roll-out on chain 7622 (Task 10 — *live only*, owner grant 2026-10-14; NOT run by Tasks 1–9)
+## Live roll-out on chain 7622 (Task 10 — *live only*; owner 2026-10-15: back up, then reset 7622 with `engine.Pqz` from block 0)
+
+Owner 2026-10-15 (TODO.md, explicit): once the copy gate (Tasks 7–9) passes, back up the current 7622 chain data, then
+**reset** 7622 with a fresh genesis carrying the precompiles from block 0 (path B), keeping chain id 7622, the gas limit
+16,777,216, the ports and the signer. The genesis **block** stays byte-identical, so the genesis hash stays
+`0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464` (it is pinned in tests, vectors and
+`chain-uids.json`): `engine.Pqz` and the three `--testnet-reset` params (`eip4895TransitionTimestamp` 1,
+`maximumExtraDataSize` `0xffff`, `maxCodeSizeTransition` 0 — rehearsed as path B on the copy) are not part of the
+genesis header. The history is discarded (kept in the backup). Every command and its output goes into
+`pqz-core/nethermind/runs/<date>-live.txt`. If any step fails: the rollback below, then report — no improvising.
 
 Preconditions: the gate passed (`../runs/*-rehearsal.txt`); `docker image inspect scaas/nethermind-pqz:1.39.0-pqz1
 --format '{{.Id}}'` = the id the gate used; the live container stopped (`docker inspect -f '{{.State.Status}}'
-mba_chain_node_nethermind` = `exited`); bamboo-dms / scaas-node told the chain is stopped meanwhile. Every command
-and its output goes into `pqz-core/nethermind/runs/<date>-live.txt`.
+mba_chain_node_nethermind` = `exited`; stop it with `docker compose stop -t 120 blockchain-node` if not).
 
 ```sh
 L=/home/dockers/mba-chain-nethermind
-C=/home/ha/work/ainative/scaas/pqz-core/nethermind/chain
+C=<repo>/pqz-core/nethermind/chain
 E=$C/engine-pqz.json
 TS=$(date +%Y%m%d-%H%M%S)
+B=/home/dockers/mba-chain-nethermind-backups/pqz-$TS          # dated, outside the repo and outside $L
+A="docker run --rm --memory 512m -v $L:/l -v $(dirname $B):/b alpine:3"
 cd $L
 
-# 1. Backups (all four, timestamped; kept until the owner deletes them)
-cp -p genesis.json genesis.json.bak-pqz-$TS
-cp -p config.json config.json.bak-pqz-$TS
-cp -p docker-compose.yml docker-compose.yml.bak-pqz-$TS
-docker run --rm --memory 256m -v $L/data:/d alpine:3 cp -a /d/nethermind_data /d/nethermind_data.bak-pqz-$TS
-sha256sum genesis.json* config.json* docker-compose.yml*
-docker run --rm -v $L/data:/d alpine:3 du -s /d/nethermind_data /d/nethermind_data.bak-pqz-$TS
-# the rollback head: start nothing; read it from the last run's log, or after step 3 from block 0..head (recorded)
+# 1. Backup: chainspec, config, compose, password, keystore (keys), data dir; kept until the owner deletes it
+mkdir -p $B && cp -p genesis.json config.json docker-compose.yml password.txt $B/
+$A sh -c "cp -a /l/keystore /l/data/nethermind_data /b/pqz-$TS/"
+#    readable and identical: sha256 manifests of every file, live vs backup (paths relative), then sizes
+$A sh -c "cd /l/data/nethermind_data && find . -type f | sort | xargs sha256sum" > $B.live-data.sha256
+$A sh -c "cd /b/pqz-$TS/nethermind_data && find . -type f | sort | xargs sha256sum" > $B.backup-data.sha256
+cmp $B.live-data.sha256 $B.backup-data.sha256 && echo "data backup identical: $(wc -l < $B.live-data.sha256) files"
+(cd $B && sha256sum genesis.json config.json docker-compose.yml password.txt) ; diff <(cd $L && sha256sum genesis.json config.json docker-compose.yml password.txt) <(cd $B && sha256sum genesis.json config.json docker-compose.yml password.txt)
+$A du -s /l/data/nethermind_data /b/pqz-$TS/nethermind_data /b/pqz-$TS/keystore
+#    the rollback head, read from a scratch copy of the BACKUP by the stock image (no mining, no keys, no peers):
+#    also proves the backup opens
+S=<repo>/scratchpad/p6f-livecheck && mkdir -p $S
+docker run --rm --memory 512m -v $(dirname $B):/b -v $S:/s alpine:3 cp -a /b/pqz-$TS/nethermind_data /s/data
+python3 -I - $L/config.json $S/config.json <<'PY2'
+import json, sys
+c = json.load(open(sys.argv[1])); c["Init"]["IsMining"] = False; c["Mining"] = {"Enabled": False}; c.pop("KeyStore")
+c["JsonRpc"].pop("AdditionalRpcUrls", None); c["Network"] = {"MaxActivePeers": 0}
+json.dump(c, open(sys.argv[2], "w"), indent=2)
+PY2
+docker run -d --name p6f-livecheck --memory 2g -p 127.0.0.1:18547:8545 -v $S/data:/nethermind/nethermind_datadir \
+  -v $B/genesis.json:/nethermind/genesis.json:ro -v $S/config.json:/nethermind/config.json:ro \
+  nethermind/nethermind:1.39.0 --config /nethermind/config.json --datadir /nethermind/nethermind_datadir
+# (after ~30 s) the head of the old history = the rollback head; genesis hash = 0x24e43dcb…c464
+python3 -I $C/e2e.py head --rpc http://127.0.0.1:18547
+docker rm -f p6f-livecheck && docker run --rm -v $S:/s alpine:3 rm -rf /s/data
 
 # 2. Edits (diff of each against its backup into the log)
-#    Path B (testnet reset, owner 2026-10-15): engine.Pqz from block 0, fresh data dir (the old one stays as the backup)
-python3 -I $C/patch-chainspec.py genesis.json.bak-pqz-$TS $E 0 genesis.json
-docker run --rm -v $L/data:/d alpine:3 sh -c 'rm -rf /d/nethermind_data && mkdir /d/nethermind_data'
-#    Path A instead (keep history): T = start + 15 min
-#    python3 -I $C/patch-chainspec.py genesis.json.bak-pqz-$TS $E $(( $(date +%s) + 900 )) genesis.json
-python3 -I - config.json <<'PY'
+python3 -I $C/patch-chainspec.py $B/genesis.json $E 0 $L/genesis.json --testnet-reset
+python3 -I - config.json <<'PY2'
 import json, sys
 c = json.load(open(sys.argv[1]))
 c.setdefault("TxPool", {})["MaxTxSize"] = 1048576
 c.setdefault("Blocks", {})["TargetBlockGasLimit"] = 80000000
 json.dump(c, open(sys.argv[1], "w"), indent=2)
-PY
-sed -i 's#image: nethermind/nethermind:1.39.0#image: scaas/nethermind-pqz:1.39.0-pqz1#' docker-compose.yml
-diff genesis.json.bak-pqz-$TS genesis.json; diff config.json.bak-pqz-$TS config.json; diff docker-compose.yml.bak-pqz-$TS docker-compose.yml
+PY2
+sed -i 's#image: nethermind/nethermind:1.39.0#image: scaas/nethermind-pqz:1.39.0-pqz1\n    mem_limit: 4g#' docker-compose.yml
+diff $B/genesis.json genesis.json; diff $B/config.json config.json; diff $B/docker-compose.yml docker-compose.yml
+$A sh -c 'rm -rf /l/data/nethermind_data && mkdir /l/data/nethermind_data'     # fresh chain; the old data is in $B
 
 # 3. Start and health
 docker compose up -d blockchain-node
-docker logs mba_chain_node_nethermind 2>&1 | grep -E 'PQZ-START|PQZ-REFUSE'      # sha256 = image label, selftest, schedule, addresses
-$C/watch.sh mba_chain_node_nethermind http://127.0.0.1:8545 10m                  # new block every 5 s
-curl -s -H 'content-type: application/json' --data '{"jsonrpc":"2.0","id":1,"method":"eth_getBlockByNumber","params":["0x0",false]}' http://127.0.0.1:8545
-#    Path A only, before T: BEFORE=1 $C/probe.sh $E http://127.0.0.1:8545
+docker logs mba_chain_node_nethermind 2>&1 | grep -E '^PQZ-START|PQZ-REFUSE'   # sha256 = image label, selftest, schedule ts 0x0, addresses
+$C/watch.sh mba_chain_node_nethermind http://127.0.0.1:8545 10m                 # head advancing every 5 s
+python3 -I $C/e2e.py head --rpc http://127.0.0.1:8545
 
-# 4. Probes and e2e (after T; path B: at once). Genesis hash of 7622: 0x24e43dcb…c464 (the full hash from step 3)
-$C/probe.sh $E http://127.0.0.1:8545 <genesis hash>
-python3 -I $C/e2e.py e2e --engine $E --rpc http://127.0.0.1:8545 --key <a funded 7622 test key>
+# 4. Probes and e2e (path B: at once). Genesis hash unchanged: 0x24e43dcb…c464
+$C/probe.sh $E http://127.0.0.1:8545 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464
+python3 -I $C/e2e.py e2e --engine $E --rpc http://127.0.0.1:8545 --key <a test key funded in genesis> --no-ua
 
 # 5. Watch: hourly for 24 h (cron line or manual), until gasLimit = 80,000,000
 $C/watch.sh mba_chain_node_nethermind http://127.0.0.1:8545 1h
 
-# Rollback (only on a failed check): back to the four backups and the stock image
+# Rollback (on any failed check): back to the backup and the stock image, the old history
 docker compose down
-cp -p genesis.json.bak-pqz-$TS genesis.json
-cp -p config.json.bak-pqz-$TS config.json
-cp -p docker-compose.yml.bak-pqz-$TS docker-compose.yml
-docker run --rm -v $L/data:/d alpine:3 sh -c "rm -rf /d/nethermind_data && cp -a /d/nethermind_data.bak-pqz-$TS /d/nethermind_data"
-docker compose up -d blockchain-node      # head hash = the recorded rollback head
+cp -p $B/genesis.json $B/config.json $B/docker-compose.yml $L/
+$A sh -c "rm -rf /l/data/nethermind_data && cp -a /b/pqz-$TS/nethermind_data /l/data/nethermind_data"
+docker compose up -d blockchain-node      # head hash = the rollback head of step 1
 ```
 
 Health checks after any restart: `PQZ-START` present, no `PQZ-REFUSE` / `PQZ-NODE-FAULT`; head advancing every 5 s;

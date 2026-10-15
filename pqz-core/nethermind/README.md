@@ -7,8 +7,8 @@ spec: [pq-zether.md](../../docs/contracts/pq-zether.md) CTR-PQZ-10 / CTR-PQZ-11,
 | Address | Name | What | Gas |
 |---|---|---|---|
 | `0x5caa500000000000000000000000000000000f01` | `PQZ` | both proof systems (PQZL, PQZH) through `pqz-ffi`'s C ABI `pqz_precompile` (P/Invoke into `libpqz_ffi.so`) | the active schedule's row `(op, id, stmtLen)` + 3·⌈len/32⌉; a miss = the smallest row (and `…00`, no FFI call); op 6 = `selftestGas` |
-| `0x5caa500000000000000000000000000000000012` | `MLDSA44` | EIP-8355 layout `pk ‖ sig ‖ msg`, empty context, .NET 10 `MLDsa` (OpenSSL 3.5 of the base image) | `mldsa44Gas` (≥ 6,500) + 6·⌈max(0, L − 3,732)/32⌉ |
-| `0x5caa500000000000000000000000000000000013` | `MLDSA65` | the same, ML-DSA-65 | `mldsa65Gas` (≥ 9,000) + 6·⌈max(0, L − 5,261)/32⌉ |
+| `0x5caa500000000000000000000000000000000012` | `MLDSA44` | EIP-8355 layout `pk ‖ sig ‖ msg`, empty context, .NET 10 `MLDsa` (OpenSSL 3.5 of the base image) | `mldsa44Gas` (≥ 6,500; calibrated 49,000) + 6·⌈max(0, L − 3,732)/32⌉ |
+| `0x5caa500000000000000000000000000000000013` | `MLDSA65` | the same, ML-DSA-65 | `mldsa65Gas` (≥ 9,000; calibrated 68,000) + 6·⌈max(0, L − 5,261)/32⌉ |
 
 ```mermaid
 flowchart LR
@@ -49,10 +49,24 @@ scripts/capped sh -c 'cd pqz-core/ffi && cargo build --release --offline'       
 scripts/capped sh -c 'cd pqz-core/nethermind/fault-hooks && cargo build --release --offline && mkdir -p ../bin/test-hooks && cp target/release/libpqz_ffi_fault_hooks.so ../bin/test-hooks/libpqz_ffi.so'
 scripts/capped sh -c 'cd pqz-core/nethermind && dotnet test Nethermind.Pqz.Test -c Release -m:2'; dotnet build-server shutdown
 scripts/capped sh -c 'cd pqz-core/nethermind && dotnet Harness/bin/Release/net10.0/Harness.dll run ../ffi/target/release bin/corpus.jsonl ../.. --minutes 60'
-scripts/capped pqz-core/nethermind/build-image.sh pqz1                                      # runs/<date>-image-pqz1.txt
+scripts/capped pqz-core/nethermind/harness.sh 60 1h                                         # the same, in the base image's runtime
+CALIB=1 scripts/capped pqz-core/nethermind/build-image.sh pqz1                               # runs/<date>-image-pqz1.txt (+ calib target)
+scripts/capped pqz-core/nethermind/calibrate.sh pqz1                                       # ONE run: runs/<date>-calib.txt, chain/engine-pqz.json
 ```
 
 ## Runbook
 
-See [chain/RUNBOOK.md](chain/RUNBOOK.md): the copy (Tasks 7–8, executed) and the live roll-out on chain 7622
-(Task 10, written from what the copy executed, not run by P6f Tasks 1–9).
+See [chain/RUNBOOK.md](chain/RUNBOOK.md): the copy (Tasks 7–8, executed; gate passed 2026-10-16, checklist in
+`runs/2026-10-15-rehearsal.txt`) and the live roll-out on chain 7622 (Task 10: back up, then reset with `engine.Pqz`
+from block 0, owner 2026-10-15).
+
+## Results (2026-10-15 / 16)
+
+| Task | Result | Log |
+|---|---|---|
+| 1–3 tests | 36 / 36 in the pinned SDK image | `runs/2026-10-15-test.txt` |
+| 4 harness | 1 h clean: 6,955,371 inputs, 8 threads + GC pressure, status 3 = 0, `…01` = honest inputs | `runs/2026-10-15-harness-1h.txt` |
+| 5 image | `pqz1` = `sha256:c53359a69bfa…`, library `12495e8b…7d87`, no hooks / GMP / MPFR / HEXL, never pushed | `runs/2026-10-15-image-pqz1.txt` |
+| 6 calibration | `t_ecMul` 17 µs; rows 2.567–5.409 M gas; `selftestGas` 2,567,000; ML-DSA 49,000 / 68,000 | `runs/2026-10-15-calib.txt` |
+| 7 copy | stock image ignores `engine.Pqz`; path A before / after T, probe 111, e2e 53; path B probe 112, e2e 53 | `runs/2026-10-1[56]-copy-*.txt` |
+| 8 rehearsal | burst 429s, 80 M ramp + full block (79.24 M gas), kill drill, rollback | `runs/2026-10-15-rehearsal.txt` |
