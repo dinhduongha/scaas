@@ -44,6 +44,10 @@ import json, sys
 g = json.load(open(sys.argv[1]))
 g["genesis"]["extraData"] = "0x" + "00" * 32 + sys.argv[3] + "00" * 65
 g["accounts"] = {"0x" + sys.argv[3]: {"balance": hex(10**30)}}
+# copy deviations (runs/2026-10-15-copy-stock-history.txt): a follower cannot sync the 7622 params as they are --
+# eip4844 without eip4895 (InvalidWithdrawalsRoot) and no maximumExtraDataSize (default 32 B < Clique's 97 B)
+g["params"]["eip4895TransitionTimestamp"] = 0
+g["params"]["maximumExtraDataSize"] = "0xffff"
 json.dump(g, open(sys.argv[2], "w"), indent=1)
 PY
   sed "s/@SIGNER@/$ADDR/g" "$HERE/config.signer.json" > "$COPY/config.signer.json"

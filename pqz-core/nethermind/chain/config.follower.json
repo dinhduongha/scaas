@@ -15,7 +15,7 @@
     "Port": 8545,
     "EnabledModules": ["eth", "net", "web3", "clique", "admin"]
   },
-  "Network": { "StaticPeers": ["enode://@ENODE@@10.76.22.10:30303"], "OnlyStaticPeers": true },
+  "Network": { "StaticPeers": "enode://@ENODE@@10.76.22.10:30303", "OnlyStaticPeers": true },
   "Mining": { "Enabled": false, "MinGasPrice": 0 },
   "Merge": { "Enabled": false },
   "TxPool": { "MaxTxSize": 1048576 },

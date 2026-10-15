@@ -20,7 +20,7 @@ services:
       - ${COPY}/${GENESIS}:/nethermind/genesis.json:ro
       - ${COPY}/config.signer.json:/nethermind/config.json:ro
       - ${COPY}/password.txt:/nethermind/password.txt:ro
-      - ${COPY}/keystore:/nethermind/keystore:ro
+      - ${COPY}/keystore:/nethermind/keystore   # rw: Nethermind writes protection_keys/ and node.key.plain here (throwaway key)
     networks:
       net:
         ipv4_address: 10.76.22.10
