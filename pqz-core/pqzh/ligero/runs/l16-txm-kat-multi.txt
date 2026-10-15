@@ -1,0 +1,19 @@
+txm1_0_fee0_stmt 66560 B wit 12384 B M=1 auditorOn=0 legs [0] fee 0 balance 1000000 ok
+txm1_0_stmt 66560 B wit 12384 B M=1 auditorOn=0 legs [123456] fee 7 balance 1000000 ok
+txm1_0_two_stmt 66560 B wit 12384 B M=1 auditorOn=0 legs [1005] fee 7 balance 1000000 ok
+txm1_fee0_stmt 83072 B wit 12416 B M=1 auditorOn=1 legs [0] fee 0 balance 1000000 ok
+txm1_stmt 83072 B wit 12416 B M=1 auditorOn=1 legs [123456] fee 7 balance 1000000 ok
+txm1_two_stmt 83072 B wit 12416 B M=1 auditorOn=1 legs [1005] fee 7 balance 1000000 ok
+txm2_0_fee0_stmt 83072 B wit 12432 B M=2 auditorOn=0 legs [0, 0] fee 0 balance 1000000 ok
+txm2_0_stmt 83072 B wit 12432 B M=2 auditorOn=0 legs [0, 123456] fee 7 balance 1000000 ok
+txm2_0_two_stmt 83072 B wit 12432 B M=2 auditorOn=0 legs [5, 1000] fee 7 balance 1000000 ok
+txm2_fee0_stmt 99712 B wit 12496 B M=2 auditorOn=1 legs [0, 0] fee 0 balance 1000000 ok
+txm2_stmt 99712 B wit 12496 B M=2 auditorOn=1 legs [0, 123456] fee 7 balance 1000000 ok
+txm2_two_stmt 99712 B wit 12496 B M=2 auditorOn=1 legs [5, 1000] fee 7 balance 1000000 ok
+txm4_0_fee0_stmt 116096 B wit 12528 B M=4 auditorOn=0 legs [0, 0, 0, 0] fee 0 balance 1000000 ok
+txm4_0_stmt 116096 B wit 12528 B M=4 auditorOn=0 legs [0, 0, 123456, 0] fee 7 balance 1000000 ok
+txm4_0_two_stmt 116096 B wit 12528 B M=4 auditorOn=0 legs [5, 0, 0, 1000] fee 7 balance 1000000 ok
+txm4_fee0_stmt 132992 B wit 12656 B M=4 auditorOn=1 legs [0, 0, 0, 0] fee 0 balance 1000000 ok
+txm4_stmt 132992 B wit 12656 B M=4 auditorOn=1 legs [0, 0, 123456, 0] fee 7 balance 1000000 ok
+txm4_two_stmt 132992 B wit 12656 B M=4 auditorOn=1 legs [5, 0, 0, 1000] fee 7 balance 1000000 ok
+kat_multi: 18 statements, ok
