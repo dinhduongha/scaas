@@ -11,8 +11,8 @@ OUT=runs/$(date +%F)-image-$L.txt
 mkdir -p runs bin
 exec > "$OUT" 2>&1
 run() { echo "\$ $*"; "$@"; echo "[rc=$?]"; echo; }
-echo "# P6f image $TAG, $(date -u +%Y-%m-%dT%H:%MZ), commit $(git rev-parse --short HEAD)$(git diff --quiet HEAD -- "$ROOT/pqz-core" || echo ' (dirty)')"
-COMMIT=$(git rev-parse HEAD)$(git diff --quiet HEAD -- "$ROOT/pqz-core" || echo -dirty)
+echo "# P6f image $TAG, $(date -u +%Y-%m-%dT%H:%MZ), commit $(git rev-parse --short HEAD)$(git diff --quiet HEAD -- "$ROOT/pqz-core" ":!$ROOT/pqz-core/nethermind/runs" || echo ' (dirty)')"
+COMMIT=$(git rev-parse HEAD)$(git diff --quiet HEAD -- "$ROOT/pqz-core" ":!$ROOT/pqz-core/nethermind/runs" || echo -dirty)
 run ./ref.sh
 run python3 -I corpus.py bin/corpus.jsonl
 export DOCKER_BUILDKIT=1
