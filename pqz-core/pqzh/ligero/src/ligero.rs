@@ -147,8 +147,9 @@ impl Params {
     }
 
     /// The verifier's length bound (plan Task 9): the exact maximum. At THE preset (the D3 id) it is
-    /// <= pqz_stmt::MAX_PROOF_PQZH (D5) for every relation (R_TX 235,470 B; every built R_TXM shape too, and
-    /// 5 + statement + bound <= MAX_INPUT; unit test `limits_exact`). Not capped at MAX_PROOF_PQZH: the reference
+    /// <= pqz_stmt::MAX_PROOF_PQZH (D5) for every relation: the six forms (R_TX 235,470 B) and every built op 7 R_TXM
+    /// shape (largest (M = 4, auditor on) 236,196 B, 5 + statement + bound 369,193 B <= MAX_INPUT); unit test
+    /// `limits_exact` pins all of them. Not capped at MAX_PROOF_PQZH: the reference
     /// presets are not the id, proven without radix 431 has every R_TX / R_BURN proof above it, and the bench-only
     /// oversize R_TXM shapes (M = 8, 16) are above it by design.
     pub fn max_proof_len(&self, rel: impl Into<Rel>) -> usize {
@@ -689,6 +690,33 @@ mod tests {
             assert_eq!(cs::form_of(f.op(), f.stmt_len()), Some(f));
         }
         assert!([0, 6, 7, 255].iter().all(|&op| cs::form_of(op, 0).is_none()));
+        // op 7 R_TXM, (M, auditorOn): exact bounds (= the pre-review H-3 table, measured max_len_exact in
+        // runs/l16-txm-*); the built shapes (M <= 4) within MAX_PROOF_PQZH and MAX_INPUT, the oversize ones above
+        let multi = [
+            ((1, true), 235_470, 318_547),
+            ((1, false), 234_744, 301_309),
+            ((2, true), 235_470, 335_187),
+            ((2, false), 235_470, 318_547),
+            ((4, true), 236_196, 369_193),
+            ((4, false), 235_470, 351_571),
+            ((8, true), 281_208, 497_149),
+            ((8, false), 279_756, 478_289),
+            ((16, true), 372_684, 754_513),
+            ((16, false), 369_054, 732_451),
+        ];
+        for ((m, aud), max, input) in multi {
+            let r = Rel::Multi { m, aud };
+            assert_eq!((p.max_len_exact(r), p.max_proof_len(r), 5 + r.stmt_len() + max), (max, max, input), "M {m} {aud}");
+            assert_eq!(max <= MAX_PROOF_PQZH && input <= MAX_INPUT, m <= 4, "M {m} {aud}");
+            assert!(p.proof_len_ok(r, max) && !p.proof_len_ok(r, max + 1) && !p.proof_len_ok(r, 0));
+        }
+        let built = cs::multi_rels();
+        let want: Vec<Rel> = multi
+            .iter()
+            .filter(|e| e.0.0 <= 4 || cfg!(feature = "oversize"))
+            .map(|&((m, aud), _, _)| Rel::Multi { m, aud })
+            .collect();
+        assert!(built.len() == want.len() && want.iter().all(|r| built.contains(r)));
     }
 
     /// Task 9: a proof over the limit is proved again from the continued RNG stream; the first attempt is `prove`'s

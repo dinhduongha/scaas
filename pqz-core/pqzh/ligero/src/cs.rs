@@ -15,8 +15,9 @@
 //!          per 4 legs, g(j) = j / 4, v_f in group 0; auditor on: one copy v_{a,j} of every leg under pk_a (digits d_j,
 //!          group g(j)); row 7 with sum_j d_j. R_TX is R_TXM's M = 1 (one builder; op 1 keeps its own bytes).
 //! with every exact l2 bound of pqz-core (36 / 164 for CBD(1) / CBD(20) vectors, 64 for e2) and the bit ranges. R_TXM
-//! bounds every e2 vector by 64 (legs, v_f, auditor copies), as R_TX's legs: this implies the plan's block bounds
-//! ||(e2_j)_j|| <= 64 sqrt(M) (§3, R3 / D5), and honest encryptions (CTR-PQZ-19 resamples each e2 to <= 64) meet it.
+//! bounds every e2 vector by 64 (legs, v_f, auditor copies), as R_TX's legs: the owner's rule for op 7 (2026-10-15,
+//! decisions.md CTR-PQZ-03, pre-review X-1; the plan's first draft had one block bound 64 sqrt(M), which this implies).
+//! Honest encryptions (CTR-PQZ-19 resamples each e2 to <= 64) meet it.
 //!
 //! Layout (§3.3). Rows have l slots. A big group (2048 values of one short vector) has value rows, slot-aligned square
 //! rows and one row per bit of x + off (off = 2^(bits-1)); the bit decomposition covers every slot of the group's rows

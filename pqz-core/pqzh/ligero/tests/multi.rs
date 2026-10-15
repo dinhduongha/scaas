@@ -28,11 +28,19 @@ fn name(m: usize, aud: bool) -> String {
     rel_name(Rel::Multi { m, aud })
 }
 
-/// a cheating prover gets either no proof or one that does not verify
+/// a cheating prover (no witness checks) makes a proof and the verifier rejects it. A prover error or panic is NOT a
+/// rejection (pre-review H-2): it returns false, so the caller's assert names the case
 fn rejected(st: &[u8], w: &[u8]) -> bool {
     match std::panic::catch_unwind(|| prove_unchecked(OP7, st, w, [7; 32], &pp())) {
         Ok(Ok(pf)) => !verify(OP7, st, &pf, &pp()),
-        _ => true,
+        Ok(Err(e)) => {
+            eprintln!("unchecked prover error: {e}");
+            false
+        }
+        Err(_) => {
+            eprintln!("unchecked prover panicked");
+            false
+        }
     }
 }
 
@@ -70,6 +78,12 @@ fn bad_digits() -> [u8; 16] {
     d[0] += 16;
     d[1] -= 1;
     d
+}
+
+/// ||e2||^2 = 5 * 32^2 = 5,120: over the per-vector bound 64^2 = 4,096 (CTR-PQZ-03, owner 2026-10-15) but under the
+/// block bound 64^2 * M = 8,192 for M >= 2 (the plan's earlier 64 sqrt(M)), so only the per-vector rule rejects it
+fn e2_spread() -> Vec<i64> {
+    (0..16).map(|k| if k < 5 { 32 } else { 0 }).collect()
 }
 
 fn e2_65() -> Vec<i64> {
@@ -188,6 +202,7 @@ fn negative_witnesses() {
         }
         for x in [0, m - 1, m, nv - 1] {
             add(format!("e2 vector {x} norm 65"), MultiTweak { e2: Some((x, e2_65())), ..d() });
+            add(format!("e2 vector {x} norm^2 5,120 (block under 64^2 M)"), MultiTweak { e2: Some((x, e2_spread())), ..d() });
         }
         add("overspend: d' all 15".into(), MultiTweak { dp: Some([15; 16]), ..d() });
         let mut over = vec![0; m];
