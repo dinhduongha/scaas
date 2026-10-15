@@ -1232,7 +1232,7 @@ op 2 BURN or REFRESH and op 5 RECEIVER or AUDITOR by the `opTag`.
 | 5 | `DISCLOSE-RECEIVER` | `R_DR` | `d8356cfbd875acb80fe8a8127a57b5c549d20fd65b9acca8672186a1a4296456` | 33,184 B |
 | 5 | `DISCLOSE-AUDITOR` | `R_DR` | `d6019aa47e04fe91c11df386ddc5bda2178a3f2506c46cdd59b16ef1d21daf81` | 33,184 B |
 | 6 | `SELFTEST` | — | — | empty |
-| 7 | **placeholder** — `TRANSFER-MULTI` (`OP_TRANSFER_MULTI`) | `R_TXM` | per [P6-ANON plan](../superpowers/plans/2026-10-14-p6-anon.md) D6 | layout of that plan's §4, written here when its Task S2 freezes it; until then op 7 ⇒ `0` |
+| 7 | `TRANSFER-MULTI` | `R_TXM`, M legs ([P6-ANON plan](../superpowers/plans/2026-10-14-p6-anon.md) D6) | `6f6a773a4c94af3a446a226ef43f6f5403d6a00b95de446149f484cc02726b90` | `50,048 + 16,640·M + 16,384·⌈M/3⌉` B (auditor on) / `33,664 + 16,512·M + 16,384·⌈M/4⌉` B (off); decoded by `parse_multi`, op 7 ⇒ `0` in `decode_input` until P6-ANON S3 |
 
 **Debit header** (`R_TX`, `R_TX0`, `R_BURN`: 20 words, 640 B; §7.7). "Hashed" = any 32 bytes: the decoder and the core
 do not read the word, it binds the proof through the [transcript](#transcript) and the contract writes it (e.g. an
@@ -1261,6 +1261,16 @@ address as 12 zero bytes ‖ address).
 | `R_TX` | `pk_f` 640, `pk_t` 17,024, `pk_a` 33,408, `u_T` 49,792, `v_T` 66,176, `u` 66,304, `v_t` 82,688, `v_f` 82,816, `v_a` 82,944 | 83,072 |
 | `R_TX0` | `pk_f` 640, `pk_t` 17,024, `u_T` 33,408, `v_T` 49,792, `u` 49,920, `v_t` 66,304, `v_f` 66,432 | 66,560 |
 | `R_BURN` (BURN, REFRESH) | `pk_f` 640, `u_T` 17,024, `v_T` 33,408, `u` 33,536, `v_f` 49,920 | 50,048 |
+
+**Op 7 `R_TXM`** (P6-ANON S2; `pqz-stmt` `parse_multi` / `Multi::encode`, `pqz_kat.py` `build_multi` / `parse`). The
+debit header with word 6 (192) = `recipientsHash = keccak256(UA_0 ‖ … ‖ UA_{M−1})` (hashed), word 10 (320) = `M`,
+`amount` = 0, `fee` `< 2^64` (0 allowed); body `pk_f ‖ pk_0 … pk_{M−1} ‖ [pk_a] ‖ T ‖ u_0 … u_{G−1} ‖ v_0 … v_{M−1} ‖
+v_f ‖ [v_{a,0} … v_{a,M−1}]` (`pk_j` at 17,024 + 16,384·j, `u_g` at 33,536 + 16,384·(M + A + g), then the `v`s at
+128 B each), `G = ⌈M/3⌉` with the auditor and `⌈M/4⌉` without (≤ 64 hints per shared randomness, P6-ANON S1); at
+M = 1 the body is `R_TX`'s / `R_TX0`'s byte for byte. Built `M`: PQZL {1, 2, 4, 8}, PQZH {1, 2, 4} (owner D20; the
+decoder enforces the set of the statement's id). Order: `opTag`, id, `M` in the id's set, `auditorOn` ∈ {0, 1}, length
+= the `(M, auditorOn)` length (the words pick the shape: `(1, on)` and `(2, off)` are both 83,072 B), `fee`, `amount`,
+salt, `amount` = 0, coefficients.
 
 **`R_REG`** (16,480 B): `opTag` 0, `proofSystemId` 32, `message` 64 (hashed; §7.2 step 6 fixes its value), `pk` 96.
 

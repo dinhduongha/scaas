@@ -88,10 +88,11 @@ def shake256(data, n):
 # ---------------------------------------------------------------- ids, tags (§5, CTR-PQZ-09, P6e D2 / D3)
 PQZL_ID = keccak256(b"scaas/pqz/lnp22/mlwe-d64k32-q42l4/v2")
 PQZH_ID = keccak256(b"scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1")
-OP_NAMES = ["TRANSFER", "BURN", "REFRESH", "REGISTER", "DISCLOSE-SENDER", "DISCLOSE-RECEIVER", "DISCLOSE-AUDITOR"]
+OP_NAMES = ["TRANSFER", "BURN", "REFRESH", "REGISTER", "DISCLOSE-SENDER", "DISCLOSE-RECEIVER", "DISCLOSE-AUDITOR",
+            "TRANSFER-MULTI"]
 OP_TAG = {n: keccak256(b"SCAAS-PQZ-OP-" + n.encode() + b"-V1") for n in OP_NAMES}
 OP_BYTE = {"TRANSFER": 1, "BURN": 2, "REFRESH": 2, "REGISTER": 3, "DISCLOSE-SENDER": 4, "DISCLOSE-RECEIVER": 5,
-           "DISCLOSE-AUDITOR": 5}
+           "DISCLOSE-AUDITOR": 5, "TRANSFER-MULTI": 7}
 STMT_BYTES = {"TRANSFER": 83072, "TRANSFER0": 66560, "BURN": 50048, "REFRESH": 50048, "REGISTER": 16480,
               "DISCLOSE-SENDER": 33184, "DISCLOSE-RECEIVER": 33184, "DISCLOSE-AUDITOR": 33184}
 
@@ -388,6 +389,8 @@ def parse(op_byte, stmt, ids=(PQZL_ID, PQZH_ID)):
     op = names[0]
     if stmt[32:64] not in ids:
         raise ValueError("unknown proofSystemId")
+    if op == "TRANSFER-MULTI":
+        return parse_multi(stmt, stmt[32:64])
     n = len(stmt)
     out = {"op": op}
     if op == "REGISTER":
@@ -441,6 +444,80 @@ def parse(op_byte, stmt, ids=(PQZL_ID, PQZH_ID)):
     return out
 
 
+# ---------------------------------------------------------------- op 7 R_TXM (P6-ANON plan §4, D6, R4, D3 / D20)
+# legs per randomness group (r_g, e1_g, u_g): 3 with the auditor, 4 without (D4 as corrected by S1, DDGR20 worst case:
+# <= 64 hints per group for beta >= 450; pqz-core/params/anon/hints-anon.txt)
+LEGS_PER_GROUP = {1: 3, 0: 4}
+BUILT_LEGS = {PQZL_ID: (1, 2, 4, 8), PQZH_ID: (1, 2, 4)}  # the leg counts op 7 accepts per id (pqz-stmt built_legs)
+MULTI_HEADER = [{"toUA": "recipientsHash", "recipient": "M"}.get(k, k) for k in HEADER]
+
+
+def groups(m, aud):
+    return -(-m // LEGS_PER_GROUP[int(aud)])
+
+
+def multi_len(m, aud):
+    """640 || pk_f || pk_0..pk_{M-1} || [pk_a] || T || u_0..u_{G-1} || v_0..v_{M-1} || v_f || [v_{a,0}..v_{a,M-1}]"""
+    return HEADER_BYTES + (1 + m + aud) * PK_BYTES + CT_BYTES + groups(m, aud) * PK_BYTES + \
+        (m + 1 + aud * m) * V_BYTES
+
+
+def build_multi(f, pk_f, pks, T, us, vs, v_f, pk_a=None, v_as=None):
+    """Op 7 statement. f: header fields by MULTI_HEADER name (recipientsHash in word 192; M = len(pks) in word 320 and
+    auditorOn from pk_a are set here); pks / us / vs / v_as: lists of objects."""
+    m, aud = len(pks), pk_a is not None
+    assert len(us) == groups(m, aud) and len(vs) == m and (v_as is not None) == aud and (not aud or len(v_as) == m)
+    w = dict(f, M=m, auditorOn=int(aud), opTag=OP_TAG["TRANSFER-MULTI"])
+    w.setdefault("proofSystemId", PQZL_ID)
+    return b"".join(word(w.get(k, 0)) for k in MULTI_HEADER) + pk_f + b"".join(pks) + (pk_a or b"") + T + \
+        b"".join(us) + b"".join(vs) + v_f + b"".join(v_as or [])
+
+
+def parse_multi(stmt, psid):
+    """Op 7 after opTag and id (parse): the M word (one of BUILT_LEGS[id]) and the auditorOn word (0 / 1) fix the
+    length (R4; the length alone does not: (M = 1, on) and (M = 2, off) are both 83,072 B), then fee / amount < 2^64,
+    the salt form, amount = 0, coefficients < q."""
+    if len(stmt) < HEADER_BYTES:
+        raise ValueError("length")
+    out = {"op": "TRANSFER-MULTI"}
+    for i, k in enumerate(MULTI_HEADER):
+        out[k] = stmt[32 * i:32 * i + 32]
+    m, aud = int.from_bytes(out["M"], "big"), int.from_bytes(out["auditorOn"], "big")
+    if m not in BUILT_LEGS[psid]:
+        raise ValueError("M not a built leg count")
+    if aud not in (0, 1):
+        raise ValueError("auditorOn does not match the length")
+    if len(stmt) != multi_len(m, aud):
+        raise ValueError("length")
+    out["legs"], out["auditor"] = m, aud
+    _scalar(out["fee"], "fee")
+    _scalar(out["amount"], "amount")
+    if out["salt"][:16] != bytes(16):
+        raise NonCanonical("salt word not 16 zero bytes || salt")
+    if any(out["amount"]):
+        raise NonCanonical("amount must be 0")
+    body = stmt[HEADER_BYTES:]
+    dec_coeffs(body)
+    o = 0
+
+    def take(k):
+        nonlocal o
+        o += k
+        return body[o - k:o]
+    out["pk_f"] = take(PK_BYTES)
+    out["pks"] = [take(PK_BYTES) for _ in range(m)]
+    if aud:
+        out["pk_a"] = take(PK_BYTES)
+    out["T"] = take(CT_BYTES)
+    out["us"] = [take(PK_BYTES) for _ in range(groups(m, aud))]
+    out["vs"] = [take(V_BYTES) for _ in range(m)]
+    out["v_f"] = take(V_BYTES)
+    if aud:
+        out["v_as"] = [take(V_BYTES) for _ in range(m)]
+    assert o == len(body)
+    return out
+
+
 def bundle(salt16, u, v_t, v_a, to_ua):
     """R = salt(16) || u || v_t || v_a || toUA(32): 16,688 B, 16,560 B without v_a (CTR-PQZ-23)."""
     assert len(salt16) == 16
@@ -473,7 +550,8 @@ def selftest(log):
     ok(PQZL_ID.hex() == "2e07e6ed1fd303a08c89b3eab6e8423fdfb8f31202958dd682a0619313798c2f", "PQZL proofSystemId (D2)")
     ok(PQZH_ID.hex() == "0a47a7689250ba178a52ad5972cdd9153358c022cb694c08d2389e82de2fead4", "PQZH proofSystemId (D3)")
     plan = {"TRANSFER": "ef22f3d1", "BURN": "7383374d", "REFRESH": "f118f2df", "REGISTER": "69562a9c",
-            "DISCLOSE-SENDER": "868cc07c", "DISCLOSE-RECEIVER": "d8356cfb", "DISCLOSE-AUDITOR": "d6019aa4"}
+            "DISCLOSE-SENDER": "868cc07c", "DISCLOSE-RECEIVER": "d8356cfb", "DISCLOSE-AUDITOR": "d6019aa4",
+            "TRANSFER-MULTI": "6f6a773a"}
     for k, v in plan.items():
         ok(OP_TAG[k].hex().startswith(v), f"opTag {k} = {OP_TAG[k].hex()[:8]}...")
     log(f"     A digest keccak256(A bytes) = {keccak256(a_bytes()).hex()}")
@@ -541,6 +619,62 @@ def selftest(log):
     rejects(t[:32] + bytes(32) + t[64:], 1, "unknown proofSystemId", "unknown proofSystemId")
     d = forms["DISCLOSE-SENDER"]
     rejects(d[:224] + word(2**64) + d[256:], 4, "disclosure amount >= 2^64", "amount >= 2^64")
+    # op 7 R_TXM: every built shape of both ids (fee 0 too), round trip, op 1's body at M = 1, every rule
+    lens = {(m, a): multi_len(m, a) for m in (1, 2, 4, 8, 16) for a in (1, 0)}
+    ok(lens[1, 1] == 83072 and lens[1, 0] == 66560 and lens[2, 1] == 99712 and lens[2, 0] == 83072 and
+       lens[4, 1] == 149376 and lens[4, 0] == 116096 and lens[8, 1] == 232320 and lens[16, 0] == 363392 and
+       len(set(lens.values())) == 9,
+       "op 7 lengths (plan §4), distinct except (M = 1, on) = (M = 2, off) = 83,072")
+
+    def multi(psid, m, aud, fee):
+        f = dict(hdr, proofSystemId=psid, fee=fee, recipientsHash=keccak256(b"".join(word(i) for i in range(m))))
+        return build_multi(f, pk, [keys[j % 3][0] for j in range(m)], ct, [u] * groups(m, aud),
+                           [vs[j % 3] for j in range(m)], vs[1], pk_a=pk if aud else None,
+                           v_as=[vs[2]] * m if aud else None)
+    for psid, name in ((PQZL_ID, "PQZL"), (PQZH_ID, "PQZH")):
+        for m in BUILT_LEGS[psid]:
+            for aud in (1, 0):
+                st = multi(psid, m, aud, 0 if m % 2 else 7)
+                p = parse(7, st)
+                back = build_multi({k: p[k] for k in MULTI_HEADER if k not in ("opTag", "M", "auditorOn")} |
+                                   {"salt": p["salt"][16:]}, p["pk_f"], p["pks"], p["T"], p["us"], p["vs"], p["v_f"],
+                                   pk_a=p.get("pk_a"), v_as=p.get("v_as"))
+                ok(len(st) == multi_len(m, aud) and p["legs"] == m and back == st,
+                   f"op 7 {name} M = {m} auditor {'on' if aud else 'off'}: build(parse(x)) = x")
+    for aud in (1, 0):  # F6: M = 1 has op 1's body
+        st = multi(PQZL_ID, 1, aud, 7)
+        t1 = forms["TRANSFER" if aud else "TRANSFER0"]
+        ok(st[HEADER_BYTES:] == build_debit("TRANSFER", hdr, pk, ct, u + vs[0] + vs[1] + (vs[2] if aud else b""),
+                                              pk_t=keys[0][0], pk_a=pk if aud else None)[HEADER_BYTES:] and
+           len(st) == len(t1), f"op 7 M = 1 body = op 1 body, auditor {'on' if aud else 'off'}")
+    s2, s4 = multi(PQZL_ID, 2, 1, 0), multi(PQZH_ID, 4, 0, 5)
+    for st, op_byte, what, why in (
+            (s2[:-1], 7, "length - 1", "length"), (s2 + b"\0", 7, "length + 1", "length"),
+            (s2[:640] + bytes(multi_len(3, 1) - 640), 7, "M = 3 length, M word 2", "length"),
+            (s2[:640] + bytes(multi_len(0, 1) - 640), 7, "M = 0 length, M word 2", "length"),
+            (s2[:639], 7, "header cut", "length"),
+            (s2[:320] + word(0) + s2[352:], 7, "M word 0", "M not a built leg count"),
+            (s2[:320] + word(3) + s2[352:], 7, "M word 3", "M not a built leg count"),
+            (s4[:320] + word(8) + s4[352:], 7, "PQZH M word 8 (not built)", "M not a built leg count"),
+            (s2[:320] + word(16) + s2[352:], 7, "PQZL M word 16 (oversize only)", "M not a built leg count"),
+            (s2[:320] + word(2**64 + 2) + s2[352:], 7, "M word high bits", "M not a built leg count"),
+            (s2[:320] + word(4) + s2[352:], 7, "M word 4 on the M = 2 length", "length"),
+            (s2[:448] + word(0) + s2[480:], 7, "auditorOn 0 on an auditor-on statement", "length"),
+            (s4[:448] + word(1) + s4[480:], 7, "auditorOn 1 on an auditor-off statement", "length"),
+            (s4[:448] + word(2) + s4[480:], 7, "auditorOn 2", "auditorOn does not match the length"),
+            (s2[:288] + word(1) + s2[320:], 7, "amount 1", "amount must be 0"),
+            (s2[:288] + word(2**64) + s2[320:], 7, "amount >= 2^64", "amount >= 2^64"),
+            (s2[:256] + word(2**64) + s2[288:], 7, "fee >= 2^64", "fee >= 2^64"),
+            (s2[:579] + b"\1" + s2[580:], 7, "salt word high half", "salt word not 16 zero bytes || salt"),
+            (s2[:-8] + Q.to_bytes(8, "big"), 7, "coefficient = q in v_{a,M-1}", "coefficient >= q"),
+            (s2[:32] + bytes(32) + s2[64:], 7, "unknown proofSystemId", "unknown proofSystemId"),
+            (s2, 1, "op 7 statement under op 1", "opTag does not belong to op"),
+            (t, 7, "op 1 statement under op 7", "opTag does not belong to op")):
+        rejects(st, op_byte, f"op 7: {what}", why)
+    one = multi(PQZL_ID, 1, 1, 0)
+    two = parse(7, one[:320] + word(2) + one[352:448] + word(0) + one[480:])
+    ok(two["legs"] == 2 and not two["auditor"] and two["pks"][1] == pk and two["v_f"] == vs[2],
+       "op 7 at 83,072 B: the M / auditorOn words pick (1, on) or (2, off)")
     # the resample path and the counter-64 error, with lowered thresholds (the real ones are never exceeded)
     ctrs = [keygen_sample(bytes([i]) * 32, bs=32, be=143)[2] for i in range(4)]
     ok(any(c >= 1 for c in ctrs), f"KeyGen resamples with ||s|| <= 32, ||e|| <= 143: counters {ctrs}")
