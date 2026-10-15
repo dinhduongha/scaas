@@ -295,7 +295,7 @@ fn coefficient_codec() {
 
 /// A valid op 7 statement: M keys / legs, G groups, auditor on / off, the given fee.
 fn build_multi(id: &Word, m: usize, aud: bool, fee: u64) -> Vec<u8> {
-    let g = groups(m, aud);
+    let g = groups(m);
     let (pks, us, vs, v_as) =
         (poly_bytes(m * K * D, 11), poly_bytes(g * K * D, 12), poly_bytes(16 * m, 13), poly_bytes(16 * m, 14));
     let (pk_f, pk_a, t, v_f) = (poly_bytes(K * D, 1), poly_bytes(K * D, 3), poly_bytes(K * D + 16, 4), poly_bytes(16, 7));
@@ -323,17 +323,16 @@ fn multi_lengths_and_sets() {
     let want = [
         (1, 83_072, 66_560),
         (2, 99_712, 83_072),
-        (4, 149_376, 116_096),
-        (8, 232_320, 198_528),
-        (16, 414_592, 363_392),
+        (4, 132_992, 116_096),
+        (8, 215_936, 198_528),
+        (16, 381_824, 363_392),
     ];
     for (m, on, off) in want {
         assert_eq!((multi_len(m, true), multi_len(m, false)), (on, off), "M = {m}");
-        assert_eq!(multi_len(m, true), 50_048 + 16_640 * m + 16_384 * groups(m, true));
-        assert_eq!(multi_len(m, false), 33_664 + 16_512 * m + 16_384 * groups(m, false));
+        assert_eq!(multi_len(m, true), 50_048 + 16_640 * m + 16_384 * groups(m));
+        assert_eq!(multi_len(m, false), 33_664 + 16_512 * m + 16_384 * groups(m));
     }
-    assert_eq!([1, 2, 3, 4, 8, 16].map(|m| groups(m, true)), [1, 1, 1, 2, 3, 6]);
-    assert_eq!([1, 2, 4, 5, 8, 9, 16].map(|m| groups(m, false)), [1, 1, 1, 2, 2, 3, 4]);
+    assert_eq!([1, 2, 4, 5, 8, 9, 16].map(groups), [1, 1, 1, 2, 2, 3, 4]);
     // M = 1 has op 1's lengths (F6); the lengths of the union of built sets are distinct except (M = 1, on) =
     // (M = 2, off), whose object counts are equal: the header's M and auditorOn words pick the shape (R4 as built)
     assert_eq!((multi_len(1, true), multi_len(1, false)), (Form::Transfer.stmt_len(), Form::Transfer0.stmt_len()));
@@ -347,30 +346,32 @@ fn multi_lengths_and_sets() {
     #[cfg(not(feature = "oversize"))]
     assert_eq!((built_legs(&PQZL_ID), built_legs(&PQZH_ID)), (&[1, 2, 4, 8][..], &[1, 2, 4][..]));
     assert!(built_legs(&[0; 32]).is_empty());
-    // D8 / D20: every built op 7 shape leaves room for MAX_PROOF(id) within MAX_INPUT, except PQZH M = 4 with the
-    // auditor (2 groups after S1: 149,376 + 5 B leave 243,835 B for the proof; the model expects ~275 KB, S3 / H2 decide)
+    // D8 / D20: every built op 7 shape leaves room for MAX_PROOF(id) within MAX_INPUT except PQZH (4, on):
+    // 5 + 132,992 + 262,144 = 395,141 > 393,216 (a PQZH proof over 260,219 B makes that input exceed MAX_INPUT; the
+    // model expects ~232 KB, H2 measures Ligero's exact bound)
     #[cfg(not(feature = "oversize"))]
     for id in [PQZL_ID, PQZH_ID] {
-        for &m in built_legs(&id) {
-            for aud in [true, false] {
+        for aud in [true, false] {
+            for &m in built_legs(&id) {
                 let fits = 5 + multi_len(m, aud) + max_proof(&id).unwrap() <= MAX_INPUT;
                 assert_eq!(fits, !(id == PQZH_ID && m == 4 && aud), "M = {m}, A = {aud}");
             }
         }
     }
+    assert_eq!(MAX_INPUT - 5 - multi_len(4, true), 260_219);
     assert_eq!(OP_TAG_TRANSFER_MULTI[..4], [0x6f, 0x6a, 0x77, 0x3a]);
 }
 
 #[test]
 fn multi_round_trip_every_built_shape_fee_0() {
     for id in [PQZL_ID, PQZH_ID] {
-        for &m in built_legs(&id) {
-            for aud in [true, false] {
+        for aud in [true, false] {
+            for &m in built_legs(&id) {
                 for fee in [0, 7, u64::MAX] {
                     let b = build_multi(&id, m, aud, fee);
                     assert_eq!(b.len(), multi_len(m, aud));
                     let s = parse_multi(&b).unwrap_or_else(|e| panic!("M = {m}, A = {aud}: {e:?}"));
-                    let g = groups(m, aud);
+                    let g = groups(m);
                     assert_eq!((s.m, s.pk_a.is_some(), s.fee(), s.groups()), (m, aud, fee, g));
                     assert_eq!(s.encode().unwrap(), b, "encode(parse(x)) != x, M = {m}, A = {aud}");
                     // §4 offsets
@@ -430,7 +431,7 @@ fn multi_m1_body_is_op1_body() {
 fn multi_every_rule_rejects() {
     let l = build_multi(&PQZL_ID, 2, true, 0);
     let l0 = build_multi(&PQZL_ID, 4, false, 5);
-    let h = build_multi(&PQZH_ID, 4, true, 1);
+    let h = build_multi(&PQZH_ID, 4, false, 1);
     let word = |x: u64| u64_word(x);
     #[allow(unused_mut)]
     let mut cases: Vec<(&str, Vec<u8>, Reject)> = vec![
@@ -454,7 +455,7 @@ fn multi_every_rule_rejects() {
         ("salt word high half", with(&l0, 576 + 3, &[1]), Reject::Salt),
         ("coefficient = q in pk_f", with(&l, 640, &Q.to_be_bytes()), Reject::Coefficient),
         ("coefficient = q in pk_1", with(&l, 17_024 + PK_BYTES, &Q.to_be_bytes()), Reject::Coefficient),
-        ("coefficient = 2^42 in u_1", with(&h, 33_536 + 6 * PK_BYTES, &(1u64 << 42).to_be_bytes()), Reject::Coefficient),
+        ("coefficient = 2^42 in u_0", with(&h, 33_536 + 4 * PK_BYTES, &(1u64 << 42).to_be_bytes()), Reject::Coefficient),
         ("coefficient = q in v_{a,M-1}", with(&l, l.len() - 8, &Q.to_be_bytes()), Reject::Coefficient),
         ("coefficient = q in v_f (auditor off)", with(&l0, l0.len() - 8, &Q.to_be_bytes()), Reject::Coefficient),
         ("op 1 opTag", with(&l, 0, &Form::Transfer.op_tag()), Reject::OpTag),
@@ -464,7 +465,7 @@ fn multi_every_rule_rejects() {
     ];
     #[cfg(not(feature = "oversize"))]
     cases.extend([
-        ("PQZH M = 8 (not built)", with(&build_multi_len(&h, multi_len(8, true)), 320, &word(8)), Reject::Legs),
+        ("PQZH M = 8 (not built)", with(&build_multi_len(&h, multi_len(8, false)), 320, &word(8)), Reject::Legs),
         ("PQZL M = 16 (oversize only)", with(&build_multi_len(&l, multi_len(16, true)), 320, &word(16)), Reject::Legs),
         ("PQZH M = 8 length, M word 4", build_multi_len(&h, multi_len(8, false)), Reject::Length),
     ]);
@@ -488,7 +489,13 @@ fn multi_every_rule_rejects() {
     let s = parse_multi(&l).unwrap();
     assert_eq!(Multi { m: 3, ..s.clone() }.encode().err(), Some(Reject::Length));
     assert_eq!(Multi { v_as: None, ..s.clone() }.encode().err(), Some(Reject::Length));
-    assert_eq!(Multi { us: s.pks, ..s }.encode().err(), Some(Reject::Length));
+    assert_eq!(Multi { us: s.pks, ..s.clone() }.encode().err(), Some(Reject::Length));
+    let mut hm = s.header;
+    hm[H_LEGS] = word(4);
+    assert_eq!(Multi { header: hm, ..s.clone() }.encode().err(), Some(Reject::Legs));
+    let mut ha = s.header;
+    ha[H_AUDITOR_ON] = word(0);
+    assert_eq!(Multi { header: ha, ..s }.encode().err(), Some(Reject::AuditorOn));
 }
 
 /// `b`'s header with a body of zeros to length `n` (a statement of another shape, every rule before Length holds)
@@ -503,9 +510,11 @@ fn build_multi_len(b: &[u8], n: usize) -> Vec<u8> {
 fn multi_oversize_shapes() {
     for id in [PQZL_ID, PQZH_ID] {
         assert_eq!(built_legs(&id), &[1, 2, 4, 8, 16]);
-        for m in [8, 16] {
-            let b = build_multi(&id, m, true, 0);
-            assert_eq!(parse_multi(&b).unwrap().encode().unwrap(), b);
+        for aud in [true, false] {
+            for m in [4, 8, 16] {
+                let b = build_multi(&id, m, aud, 0);
+                assert_eq!(parse_multi(&b).unwrap().encode().unwrap(), b);
+            }
         }
     }
 }

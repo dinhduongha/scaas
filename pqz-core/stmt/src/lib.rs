@@ -11,7 +11,7 @@
 //! For every accepted input `encode(parse(x)) == x`.
 //!
 //! Op 7 `OP_TRANSFER_MULTI` (`R_TXM`, P6-ANON plan §4, D6, R4) has its own decoder `parse_multi` and builder
-//! `Multi::encode`: the `M` word (in the id's built set, `built_legs`) and the auditorOn word fix the length; word 192 is
+//! `Multi::encode`: the auditorOn word and the `M` word (in `built_legs(id)`) fix the length; word 192 is
 //! `recipientsHash`, word 320 is `M`, `amount` is 0. `parse` and `decode_input` still refuse op 7 (`Reject::Op`) until
 //! P6-ANON S3 wires it into `Stmt` together with pqz-ffi's dispatch and Ligero (whose matches on `Stmt` / `Form` are
 //! exhaustive).
@@ -573,14 +573,14 @@ pub const OP_TAG_TRANSFER_MULTI: Word = hex32("6f6a773a4c94af3a446a226ef43f6f540
 pub const H_RECIPIENTS_HASH: usize = H_TO;
 /// op 7 header: word 320 (op 1's `recipient`) = `M`
 pub const H_LEGS: usize = H_RECIPIENT;
-/// Legs per randomness group `(r_g, e1_g, u_g)` (P6-ANON D4 as corrected by S1, `params/anon/hints-anon.txt`: DDGR20
-/// worst case, 16 perfect hints per recipient key and 16 for the auditor's copies; β ≥ 450 needs ≤ 64 hints per
-/// group, i.e. 3 legs with the auditor (β 451.9), 4 without (451.9); 4 legs + auditor = 80 hints give β 446.0)
-pub const LEGS_PER_GROUP_AUDITOR: usize = 3;
+/// Legs per randomness group `(r_g, e1_g, u_g)`, with or without the auditor (P6-ANON D4; S1's DDGR20 run,
+/// `params/anon/hints-anon.txt`: 4 legs + the auditor's copies = 80 perfect hints give β 446.0 in the worst case,
+/// owner-accepted on 2026-10-15 as above Kyber-512's 406, an exception to CTR-PQZ-03's 450 margin)
 pub const LEGS_PER_GROUP: usize = 4;
 
-/// The leg counts op 7 accepts for `id` (P6-ANON D3 / D20: what fits MAX_INPUT, MAX_PROOF(id) and the hint budget);
-/// feature `oversize` (bench only, never in the precompile build) adds M = 8, 16 for both ids. Empty for an unknown id.
+/// The leg counts op 7 accepts for `id`, with or without the auditor (P6-ANON D3 / D20: PQZL {1, 2, 4, 8}, PQZH
+/// {1, 2, 4}); feature `oversize` (bench only, never in the precompile build: pqz-ffi refuses it) adds M = 8, 16 for
+/// both ids. Empty for an unknown id.
 pub fn built_legs(id: &Word) -> &'static [usize] {
     #[cfg(not(feature = "oversize"))]
     const SETS: [&[usize]; 2] = [&[1, 2, 4, 8], &[1, 2, 4]];
@@ -595,17 +595,21 @@ pub fn built_legs(id: &Word) -> &'static [usize] {
     }
 }
 
-/// `G = ⌈M / 3⌉` with the auditor, `⌈M / 4⌉` without; leg j is in group `⌊j / legs per group⌋`
-pub const fn groups(m: usize, aud: bool) -> usize {
-    m.div_ceil(if aud { LEGS_PER_GROUP_AUDITOR } else { LEGS_PER_GROUP })
+/// Whether the bench-only feature `oversize` is on (pqz-ffi refuses to build with it: no oversize shape may reach
+/// the precompile)
+pub const OVERSIZE: bool = cfg!(feature = "oversize");
+
+/// `G = ⌈M / 4⌉`; leg j is in group `⌊j / 4⌋`
+pub const fn groups(m: usize) -> usize {
+    m.div_ceil(LEGS_PER_GROUP)
 }
 
 /// Op 7 statement bytes, one value per `(M, A)` except `multi_len(1, true) == multi_len(2, false)` = 83,072:
 /// 640 ‖ `pk_f ‖ pk_0…pk_{M−1} ‖ [pk_a] ‖ T ‖ u_0…u_{G−1} ‖ v_0…v_{M−1} ‖ v_f ‖ [v_{a,0}…v_{a,M−1}]`
-/// = 50,048 + 16,640·M + 16,384·⌈M/3⌉ (auditor on) / 33,664 + 16,512·M + 16,384·⌈M/4⌉ (off).
+/// = 50,048 + 16,640·M + 16,384·⌈M/4⌉ (auditor on) / 33,664 + 16,512·M + 16,384·⌈M/4⌉ (off).
 pub const fn multi_len(m: usize, aud: bool) -> usize {
     let a = aud as usize;
-    HEADER_BYTES + (1 + m + a) * PK_BYTES + CT_BYTES + groups(m, aud) * PK_BYTES + (m + 1 + a * m) * V_BYTES
+    HEADER_BYTES + (1 + m + a) * PK_BYTES + CT_BYTES + groups(m) * PK_BYTES + (m + 1 + a * m) * V_BYTES
 }
 
 /// `R_TXM` (op 7): header ‖ `pk_f ‖ pks ‖ [pk_a] ‖ T ‖ us ‖ vs ‖ v_f ‖ [v_as]`; the per-leg / per-group objects are
@@ -641,7 +645,7 @@ impl<'a> Multi<'a> {
         h
     }
     pub fn groups(&self) -> usize {
-        groups(self.m, self.pk_a.is_some())
+        groups(self.m)
     }
     pub fn fee(&self) -> u64 {
         word_u64(&self.header[H_FEE]).unwrap_or(u64::MAX)
@@ -659,7 +663,8 @@ impl<'a> Multi<'a> {
         self.v_as.map(|v| &v[j * V_BYTES..(j + 1) * V_BYTES])
     }
     /// The statement bytes, fields concatenated as given (`encode(parse_multi(x)) == x`); `Err(Length)` if an object
-    /// has the wrong length for `m` or `pk_a` / `v_as` disagree. Values are not checked (as `Stmt::encode`).
+    /// has the wrong length for `m` or `pk_a` / `v_as` disagree, `Err(Legs)` / `Err(AuditorOn)` if the header's `M` /
+    /// auditorOn word is not `m` / `pk_a.is_some()`. Other values are not checked (as `Stmt::encode`).
     pub fn encode(&self) -> Result<Vec<u8>, Reject> {
         let (m, aud) = (self.m, self.pk_a.is_some());
         let lens = [
@@ -667,13 +672,19 @@ impl<'a> Multi<'a> {
             (self.pks.len(), m * PK_BYTES),
             (self.pk_a.map_or(0, <[u8]>::len), aud as usize * PK_BYTES),
             (self.t.len(), CT_BYTES),
-            (self.us.len(), groups(m, aud) * PK_BYTES),
+            (self.us.len(), groups(m) * PK_BYTES),
             (self.vs.len(), m * V_BYTES),
             (self.v_f.len(), V_BYTES),
             (self.v_as.map_or(0, <[u8]>::len), aud as usize * m * V_BYTES),
         ];
         if self.v_as.is_some() != aud || lens.iter().any(|(a, b)| a != b) {
             return Err(Reject::Length);
+        }
+        if self.header[H_LEGS] != u64_word(m as u64) {
+            return Err(Reject::Legs);
+        }
+        if self.header[H_AUDITOR_ON] != u64_word(aud as u64) {
+            return Err(Reject::AuditorOn);
         }
         let mut out = Vec::with_capacity(multi_len(m, aud));
         self.header.iter().for_each(|w| out.extend_from_slice(w));
@@ -688,11 +699,11 @@ impl<'a> Multi<'a> {
     }
 }
 
-/// Decode an op 7 statement with every D15 / R4 rule, in `pqz_kat.py parse` order: opTag, id, the `M` word (one of
-/// the id's built leg counts), the auditorOn word (0 or 1), the length = `multi_len(M, auditorOn)`, fee / amount
-/// `< 2^64`, salt form, `amount` = 0, coefficients. The words pick the shape because the length alone does not:
-/// `(M = 1, auditor on)` and `(M = 2, off)` are both 83,072 B (the same object counts). Borrows `stmt`; allocates
-/// nothing.
+/// Decode an op 7 statement with every D15 / R4 rule, in `pqz_kat.py parse` order: opTag, id, header present
+/// (`< 640` B ⇒ `Length`), the auditorOn word (0 or 1), the `M` word (in `built_legs(id)`), the length =
+/// `multi_len(M, auditorOn)`, fee / amount `< 2^64`, salt form, `amount` = 0, coefficients. The words pick the shape
+/// because the length alone does not: `(M = 1, auditor on)` and `(M = 2, off)` are both 83,072 B (the same object
+/// counts). Borrows `stmt`; allocates nothing.
 pub fn parse_multi(stmt: &[u8]) -> Result<Multi<'_>, Reject> {
     let n = stmt.len();
     if stmt[..n.min(32)] != OP_TAG_TRANSFER_MULTI[..] {
@@ -710,20 +721,16 @@ pub fn parse_multi(stmt: &[u8]) -> Result<Multi<'_>, Reject> {
     for (i, w) in header.iter_mut().enumerate() {
         *w = word_at(stmt, i);
     }
-    let m = word_u64(&header[H_LEGS])
-        .and_then(|m| built_legs(id).iter().copied().find(|&b| b as u64 == m))
-        .ok_or(Reject::Legs)?;
     let aud = match word_u64(&header[H_AUDITOR_ON]) {
         Some(0) => false,
         Some(1) => true,
         _ => return Err(Reject::AuditorOn),
     };
+    let m = word_u64(&header[H_LEGS])
+        .and_then(|m| built_legs(id).iter().copied().find(|&b| b as u64 == m))
+        .ok_or(Reject::Legs)?;
     if n != multi_len(m, aud) {
         return Err(Reject::Length);
-    }
-    let mut header = [[0u8; 32]; 20];
-    for (i, w) in header.iter_mut().enumerate() {
-        *w = word_at(stmt, i);
     }
     if word_u64(&header[H_FEE]).is_none() {
         return Err(Reject::Fee);
@@ -751,7 +758,7 @@ pub fn parse_multi(stmt: &[u8]) -> Result<Multi<'_>, Reject> {
     let pks = take(m * PK_BYTES);
     let pk_a = if aud { Some(take(PK_BYTES)) } else { None };
     let t = take(CT_BYTES);
-    let us = take(groups(m, aud) * PK_BYTES);
+    let us = take(groups(m) * PK_BYTES);
     let vs = take(m * V_BYTES);
     let v_f = take(V_BYTES);
     let v_as = if aud { Some(take(m * V_BYTES)) } else { None };

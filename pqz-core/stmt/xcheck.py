@@ -112,14 +112,14 @@ def main(argv):
     multi = []
     i = 0
     for psid in (kat.PQZL_ID, kat.PQZH_ID):
-        for m in kat.BUILT_LEGS[psid]:
-            for aud in (1, 0):
+        for aud in (1, 0):
+            for m in kat.BUILT_LEGS[psid]:
                 f = {k: rng.randbytes(32) for k in kat.MULTI_HEADER[2:] if k not in ("M", "auditorOn")}
                 f.update(proofSystemId=psid, fee=0 if i % 2 == 0 else rng.getrandbits(64), amount=0,
                          salt=rng.randbytes(16))
                 i += 1
                 st = kat.build_multi(f, coeffs(2048), [coeffs(2048) for _ in range(m)], coeffs(2048 + 16),
-                                     [coeffs(2048) for _ in range(kat.groups(m, aud))], [coeffs(16) for _ in range(m)],
+                                     [coeffs(2048) for _ in range(kat.groups(m))], [coeffs(16) for _ in range(m)],
                                      coeffs(16), pk_a=coeffs(2048) if aud else None,
                                      v_as=[coeffs(16) for _ in range(m)] if aud else None)
                 p = kat.parse(7, st)

@@ -445,28 +445,35 @@ def parse(op_byte, stmt, ids=(PQZL_ID, PQZH_ID)):
 
 
 # ---------------------------------------------------------------- op 7 R_TXM (P6-ANON plan §4, D6, R4, D3 / D20)
-# legs per randomness group (r_g, e1_g, u_g): 3 with the auditor, 4 without (D4 as corrected by S1, DDGR20 worst case:
-# <= 64 hints per group for beta >= 450; pqz-core/params/anon/hints-anon.txt)
-LEGS_PER_GROUP = {1: 3, 0: 4}
-BUILT_LEGS = {PQZL_ID: (1, 2, 4, 8), PQZH_ID: (1, 2, 4)}  # the leg counts op 7 accepts per id (pqz-stmt built_legs)
+# legs per randomness group (r_g, e1_g, u_g), with or without the auditor (D4; S1's DDGR20 run: 80 hints give beta
+# 446.0, owner-accepted 2026-10-15; pqz-core/params/anon/hints-anon.txt)
+LEGS_PER_GROUP = 4
+# op 7 leg counts per id, either auditor mode (pqz-stmt built_legs; D20)
+BUILT_LEGS = {PQZL_ID: (1, 2, 4, 8), PQZH_ID: (1, 2, 4)}
 MULTI_HEADER = [{"toUA": "recipientsHash", "recipient": "M"}.get(k, k) for k in HEADER]
 
 
-def groups(m, aud):
-    return -(-m // LEGS_PER_GROUP[int(aud)])
+def groups(m):
+    return -(-m // LEGS_PER_GROUP)
 
 
 def multi_len(m, aud):
     """640 || pk_f || pk_0..pk_{M-1} || [pk_a] || T || u_0..u_{G-1} || v_0..v_{M-1} || v_f || [v_{a,0}..v_{a,M-1}]"""
-    return HEADER_BYTES + (1 + m + aud) * PK_BYTES + CT_BYTES + groups(m, aud) * PK_BYTES + \
+    return HEADER_BYTES + (1 + m + aud) * PK_BYTES + CT_BYTES + groups(m) * PK_BYTES + \
         (m + 1 + aud * m) * V_BYTES
+
+
+def recipients_hash(uas):
+    """recipientsHash = keccak256 of the recipients' UAs in leg order, each a 32-byte word (12 zero bytes ||
+    address)."""
+    return keccak256(b"".join(word(a) for a in uas))
 
 
 def build_multi(f, pk_f, pks, T, us, vs, v_f, pk_a=None, v_as=None):
     """Op 7 statement. f: header fields by MULTI_HEADER name (recipientsHash in word 192; M = len(pks) in word 320 and
     auditorOn from pk_a are set here); pks / us / vs / v_as: lists of objects."""
     m, aud = len(pks), pk_a is not None
-    assert len(us) == groups(m, aud) and len(vs) == m and (v_as is not None) == aud and (not aud or len(v_as) == m)
+    assert len(us) == groups(m) and len(vs) == m and (v_as is not None) == aud and (not aud or len(v_as) == m)
     w = dict(f, M=m, auditorOn=int(aud), opTag=OP_TAG["TRANSFER-MULTI"])
     w.setdefault("proofSystemId", PQZL_ID)
     return b"".join(word(w.get(k, 0)) for k in MULTI_HEADER) + pk_f + b"".join(pks) + (pk_a or b"") + T + \
@@ -474,19 +481,19 @@ def build_multi(f, pk_f, pks, T, us, vs, v_f, pk_a=None, v_as=None):
 
 
 def parse_multi(stmt, psid):
-    """Op 7 after opTag and id (parse): the M word (one of BUILT_LEGS[id]) and the auditorOn word (0 / 1) fix the
-    length (R4; the length alone does not: (M = 1, on) and (M = 2, off) are both 83,072 B), then fee / amount < 2^64,
-    the salt form, amount = 0, coefficients < q."""
+    """Op 7 after opTag and id (parse): header present, the auditorOn word (0 / 1) and the M word (one of
+    BUILT_LEGS[id]) fix the length (R4; the length alone does not: (M = 1, on) and (M = 2, off) are both
+    83,072 B), then fee / amount < 2^64, the salt form, amount = 0, coefficients < q."""
     if len(stmt) < HEADER_BYTES:
         raise ValueError("length")
     out = {"op": "TRANSFER-MULTI"}
     for i, k in enumerate(MULTI_HEADER):
         out[k] = stmt[32 * i:32 * i + 32]
     m, aud = int.from_bytes(out["M"], "big"), int.from_bytes(out["auditorOn"], "big")
-    if m not in BUILT_LEGS[psid]:
-        raise ValueError("M not a built leg count")
     if aud not in (0, 1):
         raise ValueError("auditorOn does not match the length")
+    if m not in BUILT_LEGS[psid]:
+        raise ValueError("M not a built leg count")
     if len(stmt) != multi_len(m, aud):
         raise ValueError("length")
     out["legs"], out["auditor"] = m, aud
@@ -509,7 +516,7 @@ def parse_multi(stmt, psid):
     if aud:
         out["pk_a"] = take(PK_BYTES)
     out["T"] = take(CT_BYTES)
-    out["us"] = [take(PK_BYTES) for _ in range(groups(m, aud))]
+    out["us"] = [take(PK_BYTES) for _ in range(groups(m))]
     out["vs"] = [take(V_BYTES) for _ in range(m)]
     out["v_f"] = take(V_BYTES)
     if aud:
@@ -622,18 +629,18 @@ def selftest(log):
     # op 7 R_TXM: every built shape of both ids (fee 0 too), round trip, op 1's body at M = 1, every rule
     lens = {(m, a): multi_len(m, a) for m in (1, 2, 4, 8, 16) for a in (1, 0)}
     ok(lens[1, 1] == 83072 and lens[1, 0] == 66560 and lens[2, 1] == 99712 and lens[2, 0] == 83072 and
-       lens[4, 1] == 149376 and lens[4, 0] == 116096 and lens[8, 1] == 232320 and lens[16, 0] == 363392 and
+       lens[4, 1] == 132992 and lens[4, 0] == 116096 and lens[8, 1] == 215936 and lens[16, 0] == 363392 and
        len(set(lens.values())) == 9,
        "op 7 lengths (plan §4), distinct except (M = 1, on) = (M = 2, off) = 83,072")
 
     def multi(psid, m, aud, fee):
-        f = dict(hdr, proofSystemId=psid, fee=fee, recipientsHash=keccak256(b"".join(word(i) for i in range(m))))
-        return build_multi(f, pk, [keys[j % 3][0] for j in range(m)], ct, [u] * groups(m, aud),
+        f = dict(hdr, proofSystemId=psid, fee=fee, recipientsHash=recipients_hash(range(1, m + 1)))
+        return build_multi(f, pk, [keys[j % 3][0] for j in range(m)], ct, [u] * groups(m),
                            [vs[j % 3] for j in range(m)], vs[1], pk_a=pk if aud else None,
                            v_as=[vs[2]] * m if aud else None)
     for psid, name in ((PQZL_ID, "PQZL"), (PQZH_ID, "PQZH")):
-        for m in BUILT_LEGS[psid]:
-            for aud in (1, 0):
+        for aud in (1, 0):
+            for m in BUILT_LEGS[psid]:
                 st = multi(psid, m, aud, 0 if m % 2 else 7)
                 p = parse(7, st)
                 back = build_multi({k: p[k] for k in MULTI_HEADER if k not in ("opTag", "M", "auditorOn")} |
@@ -647,7 +654,7 @@ def selftest(log):
         ok(st[HEADER_BYTES:] == build_debit("TRANSFER", hdr, pk, ct, u + vs[0] + vs[1] + (vs[2] if aud else b""),
                                               pk_t=keys[0][0], pk_a=pk if aud else None)[HEADER_BYTES:] and
            len(st) == len(t1), f"op 7 M = 1 body = op 1 body, auditor {'on' if aud else 'off'}")
-    s2, s4 = multi(PQZL_ID, 2, 1, 0), multi(PQZH_ID, 4, 0, 5)
+    s2, s4, l4 = multi(PQZL_ID, 2, 1, 0), multi(PQZH_ID, 4, 0, 5), multi(PQZL_ID, 4, 0, 0)
     for st, op_byte, what, why in (
             (s2[:-1], 7, "length - 1", "length"), (s2 + b"\0", 7, "length + 1", "length"),
             (s2[:640] + bytes(multi_len(3, 1) - 640), 7, "M = 3 length, M word 2", "length"),
@@ -660,7 +667,7 @@ def selftest(log):
             (s2[:320] + word(2**64 + 2) + s2[352:], 7, "M word high bits", "M not a built leg count"),
             (s2[:320] + word(4) + s2[352:], 7, "M word 4 on the M = 2 length", "length"),
             (s2[:448] + word(0) + s2[480:], 7, "auditorOn 0 on an auditor-on statement", "length"),
-            (s4[:448] + word(1) + s4[480:], 7, "auditorOn 1 on an auditor-off statement", "length"),
+            (l4[:448] + word(1) + l4[480:], 7, "auditorOn 1 on an auditor-off statement", "length"),
             (s4[:448] + word(2) + s4[480:], 7, "auditorOn 2", "auditorOn does not match the length"),
             (s2[:288] + word(1) + s2[320:], 7, "amount 1", "amount must be 0"),
             (s2[:288] + word(2**64) + s2[320:], 7, "amount >= 2^64", "amount >= 2^64"),
