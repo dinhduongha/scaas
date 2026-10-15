@@ -1,3 +1,16 @@
+## Session 2026-10-15 (shutdown at 12:00) — resume here
+
+**State:** main `7c497b6`+ pushed. Merged today: `pqz-readme` (README rewrite), `pqz-artifact2` (Docker package for PQZL + PQZH, quick PASS 148 / host 159), `p6e-a5` (fuzzing: ≈ 3.2 M inputs, no finding), `p6-anon-s` (`R_TXM` S1 hint estimate + S2 op-7 codec). Owner decisions today (all in TODO.md / decisions.md): β 446 accepted for `R_TXM` shared-randomness hints (groups of 4); PQZ = Post-Quantum Zero-knowledge (spec file → `pq-zero-knowledge.md` in the layout move); pqz-core layout approved with `research/` (`rel3/` → `research/pqzl-measure/`); 7622 = testnet (resettable), 22776 = future mainnet; fee = 0 valid; general-purpose circuits on Ligero = research only (`docs/research/pqz-general-purpose.md`).
+
+**WIP branches (worktrees `.claude/worktrees/{anonl,anonh,p6f}`; WIP commits made just before shutdown):**
+- `p6-anon-l` — Track L, PQZL `R_TXM` (L1 spec/codegen/sizing/builder/verifiers, L2 SV + differential, L3 measurements); was running `params/regen.sh` (codegen) at shutdown → re-run it.
+- `p6-anon-h` — Track H, PQZH Ligero `R_TXM` (H1 constraint system + mutations, H2 gate-B measurements; check PQZH M = 4 with auditor: exact max proof ≤ 260,219 B or drop the shape).
+- `p6f` — P6f Tasks 1–3 done (Nethermind.Pqz plugin, engine.Pqz, PQZ + ML-DSA precompiles); Task 4 harness was running; Tasks 5–9 pending (image, calibration on two days, throwaway copy, rehearsal, docs). Task 10 (live 7622) NOT started; the live container is stopped and untouched.
+
+**Resume:** start a session, say "resume", re-dispatch the three agents from their WIP commits (each briefs: capped heavy jobs queued once, NO `timeout … scripts/capped`, `-j2` / `CARGO_BUILD_JOBS=2`, containers with `--memory`, commit after each task). Then: review + merge each; S3–S9 (pqz-ffi op 7, vectors, fuzz, artifact, 7622 precompile, spec); layout move + spec rename; gates A / B; freeze; P6f Task 10 live on 7622; P6g → P6j; publication drafts.
+
+**Open owner questions:** allow 2 concurrent capped jobs (faster; needs background services stopped)? P6f gas calibration on two days (plan) or one?
+
 ## Session 2026-10-14/15 (session 4: P6 mandate, PQZH = Ligero, P6e nearly done, P6-ANON R_TXM, P6f) — resume here
 
 **State:** main `1783ea8` pushed. Merged this session (all pushed): ZK WHIR negative result + re-examination; Ligero
