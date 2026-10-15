@@ -145,10 +145,26 @@ receive Enc(0); PQZL M ≤ 8, PQZH M ≤ 4; joins the frozen set before gates A 
 
 ## 5. Measurements (provisional)
 
-**Reference machine:** AMD Ryzen 5 7235HS (Zen 3+, AVX2, AES-NI, no AVX-512), 8 threads, 23 GB, Linux 7.0. Single
-thread, every run under `scripts/capped`, other services running (± 20 % noise). Native: clang 18 `-O2` portable unless
-marked x86-64-v3; wasm32: node v26.8.1. **Provisional:** the freeze after gates A / B (with op 7) replaces these
-numbers; `artifact/expected-results.json` is regenerated from the same runs. Units are given in every column header (bytes, ms, MB; p50 = median, p99 = 99th percentile).
+> **Provisional.** These numbers are replaced by the frozen run after gates A / B (with op 7);
+> `artifact/expected-results.json` is regenerated from the same runs.
+
+**How the numbers were measured**
+
+| | |
+|---|---|
+| Machine | AMD Ryzen 5 7235HS (Zen 3+, AVX2, AES-NI, no AVX-512), 8 threads, 23 GB RAM, Linux 7.0 |
+| Threads | one (every operation is single-threaded) |
+| Native build | clang 18 `-O2`, portable (no CPU-specific instructions) unless a column says x86-64-v3 (AVX2 + AES-NI) |
+| wasm32 | node v26.8.1 (as a browser would run it) |
+| Conditions | every run under `scripts/capped`, other services running on the machine: expect about ± 20 % noise |
+
+**How to read the tables**
+
+- Units are in every column header: bytes, ms (milliseconds), MB.
+- p50 = median; p99 = 99th percentile (1 run in 100 is slower) — the limits apply to p99.
+- "native / wasm" in one cell = the native value, then the wasm32 value.
+- Each table has a short version first; the full version with every column and its source files is in the
+  expandable block under it.
 
 ### 5.1 PQZL (runs `tx0c`, 2026-10-14)
 
