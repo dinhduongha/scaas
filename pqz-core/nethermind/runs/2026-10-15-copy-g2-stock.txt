@@ -1,0 +1,28 @@
+# P6f T7 G2 demonstration: the stock image with engine.Pqz, 2026-10-15T13:16:21Z, commit fd8eb9b
+$ copy.sh patch pqz-core/nethermind/chain/engine-pqz.json 1792070271
+/home/ha/work/ainative/scaas/.claude/worktrees/p6f/scratchpad/p6f-copy/genesis.pqz.json: engine.Pqz added (first timestamp 1792070271 = 0x6ad0d27f, 1 schedule(s), 12 rows); diff: 84 added lines, 0 removed
+$ copy.sh up nethermind/nethermind:1.39.0 genesis.pqz.json
+ Container pqzcopy-signer Started 
+head 441 0x6e5803538ae8e6430eae279e725a41520e072e86e0113e02871467042a788fe3 gasLimit 25801791 gasUsed 0 ts 1792070312
+head: all checks passed
+PQZ log tags in the stock signer: 0
+$ e2e.py stock --engine scratchpad/p6f-copy/genesis.pqz.json (after T)
+usage: e2e.py [-h] [--rpc RPC] [--engine ENGINE] [--genesis-hash GENESIS_HASH]
+              [--key KEY] [--clients CLIENTS] [--calls CALLS] [--n N]
+              cmd
+e2e.py: error: argument --engine: expected one argument
+rc=2
+$ e2e.py stock --engine pqz-core/nethermind/chain/engine-pqz.json (after T; the previous line was a shell slip, no --engine value)
+stock image after T: OP_SELFTEST eth_call = '0x'
+stock image after T: probe.call(0x5caa500000000000000000000000000000000f01) word 0 rlen 0 gas 2622
+ok    stock image: 0x5caa500000000000000000000000000000000f01 is an empty account (the probe fails, as it must)
+stock image after T: probe.call(0x5caa500000000000000000000000000000000f01) word 0 rlen 0 gas 2622
+ok    stock image: 0x5caa500000000000000000000000000000000f01 is an empty account (the probe fails, as it must)
+stock image after T: probe.call(0x5caa500000000000000000000000000000000012) word 0 rlen 0 gas 2622
+ok    stock image: 0x5caa500000000000000000000000000000000012 is an empty account (the probe fails, as it must)
+ok    stock image: OP_SELFTEST does NOT return the hash (probe failure recorded)
+stock: all checks passed
+rc=0
+$ copy.sh down && copy.sh restore pre
+ Network pqzcopy_net Removed 
+2096	/c/data-signer
