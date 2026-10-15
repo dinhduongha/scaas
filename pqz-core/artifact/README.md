@@ -1,11 +1,18 @@
-# pqz-core reproducibility package (PQZL)
+# pqz-core reproducibility package (PQZL and PQZH)
 
-Source and scripts to rebuild pqz-core (PQZL: the LaZer fork with the five relations `R_REG`, `R_TX`, `R_BURN`,
-`R_DS`, `R_DR`, the generic verifier `pqz_verify` and the specialised verifier `pqz_verify_fast`) and re-run the
-measurements in `../STATUS.md`. Nothing built is published: no image, no wasm, no binaries. You build and run
-everything on your own machine, and the package compares your results with `expected-results.json`.
+Source and scripts to rebuild both PQZ proof systems and re-run their measurements: **PQZL** (the LaZer fork, C: the
+relations `R_REG`, `R_TX`, `R_BURN`, `R_DS`, `R_DR`, the generic verifier `pqz_verify` and the specialised verifier
+`pqz_verify_fast`; `../STATUS.md`), **PQZH** (Ligero, Rust: `../pqzh/ligero/`, all six forms incl. `R_TX0`, at the
+proven preset; `docs/research/pqzh-ligero.md` §12–§14), the statement codec `pqz-stmt` (`../stmt/`) and **pqz-ffi**
+(`../ffi/`, the one precompile over both systems). Scope: both systems (owner 2026-10-14, superseding "PQZL only" of
+2026-10-13). Nothing built is published: no image, no wasm, no binaries. You build and run everything on your own
+machine, and the package compares your results with `expected-results.json`.
 
-## Status / resume (2026-10-14, WIP: Docker tests done, freeze not run)
+## Status / resume (2026-10-14, branch `pqz-artifact2`: both systems; Docker quick PASS; freeze not run)
+
+ART2_STATUS_PLACEHOLDER
+
+### Earlier status (PQZL only, 2026-10-14, before the scope change)
 
 - **Done (source, committed):** `Dockerfile`, `Dockerfile.dockerignore`, `reproduce.sh` (quick, `--full`, `--serve`,
   `--upstream`), `results.py` (`check`, `freeze`), `web/index.html`, this README, `.gitignore` entry `artifact/out/`.
@@ -91,31 +98,64 @@ of `../README.md`. Compare it with `rel3/runs/final-*` (a direct relfix run). Th
 | five relations, specialised verifier | p50 / p99 portable, x86-64-v3 + AES-NI, wasm32. In `PQZ_VERIFY=both`, every wasm verify runs both verifiers and must agree | 50 verifies | 200 (= `sv/rel3.sh`) |
 | wasm prove memory | arena peak of one relation per process, prover build without SV | yes | yes |
 
-`--full` takes the sample sizes of the frozen run, but not its ASan + UBSan build (`rel3/relfix.sh` and
+**PQZH (Ligero, Rust 1.97.1)**, at THE proven preset (`Params::preset`, `--regime proven --r431 1`), all six forms
+(`R_REG`, `R_TX`, `R_BURN`, `R_DS`, `R_DR`, `R_TX0`):
+
+| Step | What it shows | quick | `--full` |
+|---|---|---|---|
+| `cargo test` (`pqzh/ligero`) | 13 unit + 17 integration tests: 6 × 960 mutated inputs rejected, every negative witness, cross-form, hedged proofs, the EVM fixtures | yes | yes |
+| production build | `--no-default-features`: tests, examples / bins, `cargo clippy -- -D clippy::float_arithmetic` | yes | yes |
+| C ↔ Rust cross-check | `../pqzh/xcheck/ligero.sh`: statement and witness bytes of the Rust client = `pqz_bench.c`'s (12 files), then `kat_stmt.py` (each statement parses under `pqz_kat.py` with PQZH's id only and is rebuilt byte for byte) | yes | yes |
+| `pqz-stmt` | `../stmt/xcheck.sh`: unit tests (release and debug), C and `pqz_kat.py` cross-check, wasm32 build | yes | yes |
+| native bench | `ligero_bench`: proof bytes, `max_len_exact`, prove, prove heap peak, verify p50 / p99, 12 mutation kinds, FNV of the proofs of seeds 0..n-1 | 2 proofs, 20 verifies, 12 × 2 mutations | 5, 1,000, 12 × 80 (= `pqzh/ligero/runs/tx0.sh`) |
+| wasm32 bench | `run_wasm.mjs` under node: the same, linear memory ≤ 256 MiB, FNV of seed 1 (= native) | 2 proofs, 20 verifies, 12 × 1 | 2, 1,000, 12 × 4 (the gate-B method) |
+
+**pqz-ffi** (`../ffi/`, the one precompile over both systems): `cargo test --features prove,test-hooks` (self-test
+hash, every decoder rejection, the PQZL differential test, node faults, the verify-only process, fill determinism, and
+the native digest lines); `cargo test --lib` without `prove`; the verify-only cdylib, its symbol scan
+(`../check_symbols.sh`), no test hooks in it, the C smoke test against `pqz_ffi.h`; clippy
+`-D clippy::float_arithmetic`; the wasm32 builds and digest lines (must equal native); `ffi_bench` (20 quick, 200
+`--full`). This is `ffi/run.sh` minus its `cargo +stable clippy` (the image has 1.97.1's clippy) and `/usr/bin/time`.
+
+**Vectors (hook):** `smartcontracts/vectors/pqz/` and its generator (`vecgen/`, P6e Task 11) are not on main yet.
+`reproduce.sh` runs `vecgen/run.sh` (check mode) when it exists, and `results.py` lists it as info only until the
+freeze wires it in.
+
+`--full` takes the sample sizes of the frozen runs, but not PQZL's ASan + UBSan build (`rel3/relfix.sh` and
 `sv/rel3.sh` keep that).
 
 ## Run in Docker
 
-The build context is `pqz-core/`. Run from the repository root:
+The build context is the repository root, narrowed by `Dockerfile.dockerignore` to `pqz-core/`,
+`smartcontracts/vectors/pqz/` (`pqz_kat.py`, read by the PQZH and `pqz-stmt` cross-checks) and
+`smartcontracts/evm/test/vectors/pqzh-ligero/` (the Ligero crate's EVM fixture test), about 12 MB. Run from the
+repository root:
 
 ```sh
-docker build -t pqz-core-artifact -f pqz-core/artifact/Dockerfile pqz-core
+docker build -t pqz-core-artifact -f pqz-core/artifact/Dockerfile .
 mkdir -p pqz-out
-docker run --rm -u "$(id -u):$(id -g)" -v "$PWD/pqz-out:/out" -e OUT=/out/quick pqz-core-artifact
-docker run --rm -u "$(id -u):$(id -g)" -v "$PWD/pqz-out:/out" -e OUT=/out/full pqz-core-artifact --full
+docker run --rm --network none -u "$(id -u):$(id -g)" -v "$PWD/pqz-out:/out" -e OUT=/out/quick pqz-core-artifact
+docker run --rm --network none -u "$(id -u):$(id -g)" -v "$PWD/pqz-out:/out" -e OUT=/out/full pqz-core-artifact --full
 docker run --rm -u "$(id -u):$(id -g)" -v "$PWD/pqz-out:/out" -e OUT=/out/upstream pqz-core-artifact --upstream
 docker run --rm --init -p 127.0.0.1:8000:8000 pqz-core-artifact --serve # open http://127.0.0.1:8000/
 docker image rm pqz-core-artifact                                     # when done
 ```
 
 The image is pinned: `ubuntu:24.04` by digest, apt packages from the Ubuntu snapshot archive (`APT_SNAPSHOT`), with
-the measured toolchain pinned by version (clang / lld 18.1.3, gcc 13.3.0, cmake 3.28.3), node 26.8.1 by sha256, and
-LaZer `3330e48` by commit (source only, for `--upstream`). The image build needs network. The runs do not; add
-`--network none` if you like.
+the measured toolchain pinned by version (clang / lld 18.1.3, gcc 13.3.0, cmake 3.28.3), node 26.8.1 by sha256,
+LaZer `3330e48` by commit (source only, for `--upstream`), `rustup-init` 1.29.1 by sha256 and Rust 1.97.1 (minimal
+profile + `wasm32-unknown-unknown` + clippy; rustup checks every component against the 1.97.1 channel manifest's
+sha256), and the crates by their committed `Cargo.lock` (`cargo fetch --locked` into the image for `pqzh/ligero`,
+`pqzh/ligero/wasm`, `stmt`, `ffi`, `ffi/wasm`, and `vecgen` when present). The image build needs network. The runs
+do not (every cargo call is `--locked --offline`); `--network none` above. `--upstream` clones nothing either,
+since LaZer is in the image.
 
 ## Run on a local toolchain
 
-You need x86-64 Linux, clang 18, `wasm-ld-18` (lld 18), node, python3 and about 1 GB of free memory.
+You need x86-64 Linux, clang 18, `wasm-ld-18` (lld 18), node, python3, rustup with Rust 1.97.1
+(`../pqzh/rust-toolchain.toml` and `../ffi/rust-toolchain.toml` select it; `wasm32-unknown-unknown` and clippy
+installed), the crates in the cargo cache (`cargo fetch --locked` once in each crate directory: the runs are offline),
+binutils (`strings`) and about 1 GB of free memory.
 `--upstream` also needs gcc / g++, cmake, unzip, git, `libgmp-dev` and `libmpfr-dev`.
 
 ```sh
@@ -129,9 +169,24 @@ Results go to `pqz-core/artifact/out/<mode>-<UTC stamp>/` (git-ignored), or to `
 
 ## Reading the results
 
-`results.md` and `results.json` contain the per-relation table: proof bytes, prove p50 native / wasm, generic verify
-p50, SV p50 / p99 portable / x86-64-v3 / wasm, and wasm prove peak. They also list every check against
-`expected-results.json`:
+`results.md` and `results.json` contain three tables. PQZL per relation: proof bytes, prove p50 native / wasm, generic
+verify p50, SV p50 / p99 portable / x86-64-v3 / wasm, and wasm prove peak. PQZH per form: proof bytes (max),
+`max_len_exact`, prove p50 native / wasm32, verify p50 / p99 native and wasm32, prove memory (native heap peak, wasm32
+linear memory) and the number of verifies. pqz-ffi: the self-test hash and, per system and form, verify p50 / p99
+through the C ABI. They also list every check against `expected-results.json`.
+
+PQZH and pqz-ffi checks:
+
+- **exact:** the FNV-1a hash and the length of each PQZH proof, keyed by its seed (native seeds 0..n-1, wasm32 seed
+  1), and native = wasm32 for the same seed; `max_len_exact` per form, every proof ≤ `max_len_exact` = the
+  verifier's bound; wasm32 linear memory ≤ 256 MiB; every bench `fails 0` (0 mutations accepted, 0 panics) with all
+  six forms; the text stages end with `rc=0` and show their markers (`kat_stmt: ok`, `xcheck: C 6 / 6 forms equal`,
+  `0 verifier panics caught`, `c_abi: ok (0 failures)`, `symbols ok`, test hooks 0, `0 disagreements`); the pqz-ffi
+  self-test hash and digest lines equal the frozen ones, and the wasm32 digest lines equal native.
+- **within a tolerance:** wasm32 / native prove and verify (±50 %, warn only).
+- **informational:** times and memory.
+
+PQZL checks:
 
 - **exact:** `proofs_fnv` (an FNV-1a hash over the proofs of seeds 0..n-1, keyed by n). Native, x86-64-v3 and wasm
   must give the same hash, because the proofs are byte-identical across builds. The KAT must give 19/19. Both fix
@@ -176,6 +231,8 @@ its kernels from CPUID (`../xcheck/static/cpuf`), so `HEXL_DISABLE_AVX512IFMA=1`
   inside the container, or on your machine, from source. The binaries stay in `build/upstream/` (git-ignored).
   This package never ships them, and you should not distribute them: distributing a binary with GMP / MPFR linked in
   carries LGPL relinking duties.
+- PQZH and pqz-ffi use the crates in their `Cargo.lock` (`sha3` and its RustCrypto dependencies, MIT / Apache-2.0),
+  fetched from crates.io when you build the image.
 - No built artifact of any kind is published with this package.
 
 ## Files
@@ -184,7 +241,7 @@ its kernels from CPUID (`../xcheck/static/cpuf`), so `HEXL_DISABLE_AVX512IFMA=1`
 |---|---|
 | `Dockerfile`, `Dockerfile.dockerignore` | the pinned image (build context `pqz-core/`) |
 | `reproduce.sh` | every mode; works in Docker and on a local toolchain |
-| `results.py` | `check`: tables + comparison; `freeze`: `expected-results.json` from a frozen run |
+| `results.py` | `check`: tables + comparison; `freeze`: `expected-results.json` from a frozen run (both systems + pqz-ffi) |
 | `expected-results.json` | reference values (PROVISIONAL until the freeze run, see Status) |
-| `web/index.html` | the `--serve` page (loads the locally built `pqz.wasm`) |
+| `web/index.html` | the `--serve` page (loads the locally built `pqz.wasm` and `pqzh_ligero_wasm.wasm`) |
 | `runs/` | logs of the package's own test runs (text only) |

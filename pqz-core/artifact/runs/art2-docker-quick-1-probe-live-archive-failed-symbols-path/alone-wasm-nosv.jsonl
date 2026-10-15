@@ -1,0 +1,25 @@
+{"backend": "wasm-nosv", "init_ms":27,"init_arena":2471136,"verify":"generic"}
+{"backend": "wasm-nosv", "timing":"R_REG prove","n":1,"mean_ms":460.052,"p50_ms":460.052,"p99_ms":460.052,"max_ms":460.052}
+{"backend": "wasm-nosv", "rel":"R_REG","proof_bytes_last":28113,"proof_bytes_max":28113,"arena_peak":73692688,"proofs_fnv":"25074bbb"}
+{"backend": "wasm-nosv", "timing":"R_REG verify adversarial","n":6,"mean_ms":123.109,"p50_ms":228.429,"p99_ms":243.093,"max_ms":258.342}
+{"backend": "wasm-nosv", "fails":0}
+{"backend": "wasm-nosv", "init_ms":25.1,"init_arena":2471136,"verify":"generic"}
+{"backend": "wasm-nosv", "timing":"R_TX prove","n":1,"mean_ms":1441.029,"p50_ms":1441.029,"p99_ms":1441.029,"max_ms":1441.029}
+{"backend": "wasm-nosv", "rel":"R_TX","proof_bytes_last":42780,"proof_bytes_max":42780,"arena_peak":231858048,"proofs_fnv":"008d4495"}
+{"backend": "wasm-nosv", "timing":"R_TX verify adversarial","n":6,"mean_ms":383.117,"p50_ms":752.341,"p99_ms":752.698,"max_ms":757.769}
+{"backend": "wasm-nosv", "fails":0}
+{"backend": "wasm-nosv", "init_ms":26.5,"init_arena":2471136,"verify":"generic"}
+{"backend": "wasm-nosv", "timing":"R_BURN prove","n":1,"mean_ms":1265.046,"p50_ms":1265.046,"p99_ms":1265.046,"max_ms":1265.046}
+{"backend": "wasm-nosv", "rel":"R_BURN","proof_bytes_last":41915,"proof_bytes_max":41915,"arena_peak":220431120,"proofs_fnv":"ad3e8a12"}
+{"backend": "wasm-nosv", "timing":"R_BURN verify adversarial","n":6,"mean_ms":341.54,"p50_ms":668.116,"p99_ms":673.91,"max_ms":674.372}
+{"backend": "wasm-nosv", "fails":0}
+{"backend": "wasm-nosv", "init_ms":23.9,"init_arena":2471136,"verify":"generic"}
+{"backend": "wasm-nosv", "timing":"R_DS prove","n":1,"mean_ms":703.952,"p50_ms":703.952,"p99_ms":703.952,"max_ms":703.952}
+{"backend": "wasm-nosv", "rel":"R_DS","proof_bytes_last":28974,"proof_bytes_max":28974,"arena_peak":76888880,"proofs_fnv":"478a0d94"}
+{"backend": "wasm-nosv", "timing":"R_DS verify adversarial","n":6,"mean_ms":127.798,"p50_ms":248.667,"p99_ms":254.375,"max_ms":254.72}
+{"backend": "wasm-nosv", "fails":0}
+{"backend": "wasm-nosv", "init_ms":24.2,"init_arena":2471136,"verify":"generic"}
+{"backend": "wasm-nosv", "timing":"R_DR prove","n":1,"mean_ms":557.296,"p50_ms":557.296,"p99_ms":557.296,"max_ms":557.296}
+{"backend": "wasm-nosv", "rel":"R_DR","proof_bytes_last":28981,"proof_bytes_max":28981,"arena_peak":82951488,"proofs_fnv":"cb2f3ced"}
+{"backend": "wasm-nosv", "timing":"R_DR verify adversarial","n":6,"mean_ms":128.806,"p50_ms":252.224,"p99_ms":252.705,"max_ms":258.81}
+{"backend": "wasm-nosv", "fails":0}
