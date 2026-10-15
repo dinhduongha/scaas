@@ -130,8 +130,9 @@ def limits():
 
 
 def s1_grouping():
-    """P6-ANON S1 (hints-anon.txt, DDGR20 worst case): <= 3 legs per randomness group with the auditor (64 hints, beta
-    451.9), <= 4 without (64 hints); 4 legs + the auditor (80 hints) give 446.0 < 450. Sizes per (system, M, auditor)."""
+    """P6-ANON S1 (hints-anon.txt, DDGR20 worst case) with the owner's grouping (2026-10-15): 4 legs per randomness
+    group with or without the auditor; 4 legs + the auditor = 80 hints, beta 446.0 (CTR-PQZ-03's accepted exception).
+    Sizes per (system, M, auditor). (An interim 3-legs-with-auditor variant, beta >= 450, was withdrawn.)"""
     t = open(os.path.join(HERE, 'hints-anon.txt')).read()
     mixed = {int(h): float(b) for h, b in re.findall(r'^\s*(\d+)\s+[\d.]+\s+[\d.]+\s+([\d.]+)\s+\d+\s*$', t, re.M)}
     print('| system | M | auditor | groups | statement B | proof B | input B | gas | fits | hints → β (DDGR20, worst) |')
@@ -139,7 +140,7 @@ def s1_grouping():
     for system in ('PQZL', 'PQZH'):
         for m in (1, 2, 4, 8, 16):
             for aud in (1, 0):
-                lpg = 3 if aud else 4
+                lpg = 4
                 g = -(-m // lpg)
                 r = one(system, m, g, aud)
                 h = 16 * min(m, lpg) + 16 * aud

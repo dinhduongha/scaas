@@ -323,16 +323,41 @@ update for a general perfect hint matches the tool's full-covariance `DBDD_predi
 | estimator `primal_usvp`, n − h (the approximation above) | 471 | 466 | 461 | 456 | 451 | 446 | 432 | 392 |
 
 The approximation matched the unit-hint case, but a malicious key chooses mixed forms (`e^T r − s^T e1`, `‖e‖ ≤ 164`,
-`‖s‖ ≤ 36`): at 80 hints the worst case is **446.0 < 450**. A group therefore holds **at most 64 hints: 3 legs with
-the auditor (48 + 16), 4 without** (β 451.9 both); `R_TX` (32 hints) keeps 463.9, as `e_s0.py`'s 464. Groups of 2
-are not needed. Plan D4 / R2 and the op 7 layout follow this (`G = ⌈M/3⌉` with the auditor, `⌈M/4⌉` without).
+`‖s‖ ≤ 36`): at 80 hints (4 legs + the auditor copy) the worst case is **446.0**, below the self-imposed 450 margin
+and above Kyber-512's 406. The **owner accepted β 446 for `R_TXM` on 2026-10-15** (pq-zether.md CTR-PQZ-03, the one
+exception), so groups stay at **4 legs per `(r_g, e1_g)` with or without the auditor** (`G = ⌈M/4⌉`, plan D4); an
+interim proposal of 3 legs with the auditor (64 hints, β 451.9) is withdrawn. `R_TX` (32 hints) keeps 463.9, as
+`e_s0.py`'s 464. The shortcut used for mixed hints (a perfect hint's volume `½ ln(w^T Σ w)` put on an `r` coordinate)
+is checked against the tool's full-covariance `DBDD_predict` after its q-vector step in `hints_q.sage` (section 5 of
+`hints-anon.txt`).
+
+### 8.2a What β means and why 450
+
+- **β** is the BKZ block size the best known lattice attack (primal uSVP, here with the hints folded in) needs. Its
+  cost model is core-SVP: about 2^(0.292β) operations classically, 2^(0.265β) on a quantum computer.
+
+| β | instance | classical | quantum |
+|---|---|---|---|
+| 406 | Kyber-512 (NIST level 1, the floor) | 2^118.6 | 2^107.6 |
+| 446 | `R_TXM`: one `(r_g, e1_g)` with 80 adversarial hints (owner-accepted) | 2^130.2 | 2^118.2 |
+| 450 | PQZ's self-imposed margin (CTR-PQZ-03) | 2^131.4 | 2^119.3 |
+| 476 | PQZ encryption without hints | 2^139.0 | 2^126.1 |
+
+- **Why 450.** CTR-PQZ-03's floor is "every attack costs at least Kyber-512's" (β 406); 450 is the margin PQZ set on
+  top of it in block-size terms. 446 keeps the floor with ≈ 40 block sizes to spare instead of ≈ 44 — the reason the
+  owner accepted it for this one case (2026-10-15); every other instance keeps β ≥ 450.
+- **Hints.** Each recipient's key turns its ciphertext into 16 integer linear equations on the shared randomness
+  `(r, e1)` (`h_i = (e^T r − s^T e1)[i] + e2[i]`, CTR-PQZ-04); a malicious key picks their directions. Every equation
+  removes about one dimension from the attack lattice and, in the worst direction, adds volume, so β falls with the
+  number of hints on one `(r, e1)`: 16 per leg plus 16 for the auditor's copies.
+- **Both systems.** PQZL and PQZH share the encryption (keys, `u`, `v`), so the grouping and β 446 apply to both. PQZL
+  additionally has its proof's own MSIS / MLWE instances (MSIS β 452–464, MLWE 470, `sizing-anon.txt`); PQZH's Ligero
+  proof is measured in soundness bits instead, not in β.
 
 ### 8.3 Size, time, calldata and gas (M = 1, 2, 4, 8, 16)
 
-*The tables below use groups of 4 legs (the pre-S1 grouping). With S1's grouping (3 legs with the auditor, 4 without)
-the sizes are `anon_sizes.py` `s1_grouping()` and the plan's §8 table: PQZL M = 4 / 8 with the auditor take 2 / 3
-groups (input 206,670 / 304,434 B, still fit); PQZH M = 4 with the auditor takes 2 groups and is over `MAX_PROOF` and
-`MAX_INPUT` by the model, without the auditor it fits (347,945 B) [estimate].*
+*The tables below use groups of 4 legs, the grouping the owner kept on 2026-10-15 (β 446 accepted, §8.2); the "hints →
+β" column is the one-dimension-per-hint approximation — the DDGR20 worst case is in §8.2 (80 hints: 446.0).*
 
 PQZL proof sizes: LaZer's codegen on the sketch specs `pqz-core/params/anon/txm*_params.sage` (`R_TX`'s witness with
 M legs and G randomness groups, auditor on), sized against the pinned lattice-estimator `53da598` (ADPS16) by
