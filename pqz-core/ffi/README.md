@@ -2,7 +2,9 @@
 
 The one boundary in front of both PQZ verifiers (P6e plan Task 7, decisions D10 / R5; [pq-zether.md](../../docs/contracts/pq-zether.md)
 §9.1, CTR-PQZ-10): the precompile decoder, dispatch on `proofSystemId`, the C ABI for the node (P6f), the Rust API, and
-a `prove` feature for clients (P6h). Rust 1.97.1, safe code apart from the calls into the C core.
+a `prove` feature for clients (P6h). Rust 1.97.1, safe code apart from the calls into the C core. The input, output,
+decoder rules and both proof formats are specified byte by byte in
+[pq-zether.md §8.1 "Serialization v1"](../../docs/contracts/pq-zether.md#serialization).
 
 ```mermaid
 flowchart LR
@@ -58,10 +60,16 @@ worker thread, the core runs on the module's stack.
 with `kat_digest = keccak256(A digest ‖ keccak256(pk) ‖ keccak256(u ‖ v) ‖ M ‖ keccak256(fft) ‖ u8(fft_ok))`: A read
 from the core column by column (equal to `pqz_kat.py`'s A digest `f176b313…`), KeyGen(`0x51…`), Enc / Dec of 123,456,
 one forward / inverse Ligero FFT over 1,634 points; the four results are the precompile path on one compiled-in
-`R_REG` proof per id (`selftest/{pqzl,pqzh}_reg.hex`, proved with `rnd32 = 0x53…`; statement `opTag ‖ id ‖
-keccak256("SCAAS-PQZ-SELFTEST-V1") ‖ pk`) and the same proof under the statement with the last message byte flipped.
-Computed once per process. Regenerate the proofs after a prover change: `PQZ_FFI_WRITE_SELFTEST=1 cargo test --release
---offline --features prove,test-hooks selftest_vectors` (under `scripts/capped`), then rebuild.
+`R_REG` proof per id (the REGISTER rows of `smartcontracts/vectors/pqz/proof_{pqzl,pqzh}.json`, read by `build.rs`:
+plan D9, no copy; proved with `rnd32 = 0x53…`; statement `opTag ‖ id ‖ keccak256("SCAAS-PQZ-SELFTEST-V1") ‖ pk`) and
+the same proof under the statement with the last message byte flipped. Computed once per process. After a prover
+change: regenerate the vectors (`vectors/run.sh <label> write`), which rebuilds the crate; `selftest_vectors` checks a
+fresh prove equals the compiled-in proofs.
+
+**Vectors (P6e Task 11).** `src/bin/pqz-vectors.rs` (feature `prove`) writes `smartcontracts/vectors/pqz/` (D9, R4):
+every value from this crate (`pqzl` keygen / enc / dec / `encrypt`, `prove`), every expected output from
+`pqz_precompile` and `selftest::selftest()`; `--check` regenerates and compares byte for byte. `vectors/run.sh` runs it
+with `pqz_kat.py --check`, `vectors/tamper.py` and the wasm32 replay `vectors/replay_wasm.mjs` (through `wasm/`).
 
 **C core build.** `build.rs` compiles `../src/{pqz_lazer,pqz_ntt,pqz_arena,pqz_rel,pqz_keys,pqz_sv}.c` with
 `build.sh`'s flags (clang, `-std=gnu11 -O2 -fno-builtin -fno-math-errno -ffp-contract=off -DPQZ_SV`, native
