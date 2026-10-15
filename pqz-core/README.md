@@ -1,8 +1,10 @@
 # pqz-core
 
-The proof engine of **PQ Zether (PQZ)** — a confidential token whose amounts and balances stay secret even against a
-quantum computer. This directory holds everything needed to **prove and verify** PQZ statements: two independent proof
-systems behind **one precompile**.
+**PQZ — Post-Quantum Zero-knowledge.** This directory is a post-quantum zero-knowledge proof engine: two independent
+proof systems behind **one precompile**, everything needed to **prove and verify** PQZ statements. Its first application
+is a confidential token in the Zether model, whose amounts and balances stay secret even against a quantum computer
+("PQ Zether" was the historical name; Z stands for zero-knowledge). Each operation has its own fixed relation — it is
+not a general-purpose ZK system.
 
 > **Status:** built and measured, **unaudited, not for production funds**. Numbers are provisional until the freeze after
 > gates A / B. The dated log of every change and run is [STATUS.md](STATUS.md); the spec is

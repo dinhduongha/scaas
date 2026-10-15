@@ -3139,6 +3139,8 @@ Change (2026-10-13): built as ruled (UA-5a): `_uaMint`, `wrapToUA`, `unwrapToUA`
 ### CTR-PQZ-01 — Separate PQZ class gated to private chains
 - old: R270 · status: current · owner: yes · date: 2026-10-07 · normative: contracts/pq-zether.md#CTR-PQZ-01 · superseded-by: —
 
+Change (2026-10-15): owner — the name: **PQZ = Post-Quantum Zero-knowledge** (the proof engine: PQZL lattice + PQZH hash, one precompile); the confidential token in the Zether model is its first application and "PQ Zether" is the historical name. Code identifiers, opTags, `proofSystemId` strings and directory names keep `pqz` (they are hashed into proofs and vectors). The spec file `contracts/pq-zether.md` is renamed `contracts/pq-zero-knowledge.md` together with the pqz-core layout move (after the WIP branches merge; links rewritten by script, `docs/history/` left as recorded).
+
 **Why.** PQZ is a separate token class gated by a hard-coded allowlist, a constructor precompile self-test and the registry `chain_uid`, with two release gates before any production or commercial use (owner): the licence/patent gate **G-LIC** and the independent audit.
 **Cost if wrong.** Without the self-test a chain with the same id but another client would accept PQZ deployments.
 **Source.** `history/specs/2026-10-06-pq-zether-design.md:208`

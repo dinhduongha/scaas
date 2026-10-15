@@ -231,3 +231,5 @@ P6d-2", "R_BURN, R_DS, R_DR", "proofSystemId v2", "z21 norm check", "`pqz-stmt`"
 Approved with one change: the measurement / spike directory is `research/` instead of `bench/` (`research/{rel3,opt,floor,upstream}`). Everything else as proposed; executed after `p6e-a5`, `pqz-artifact2`, `p6-anon-s` and `p6f` merge, before gates A / B and the freeze.
 
 Owner 2026-10-15: the name `rel3/` ("relations, round 3") is meaningless; in the move it becomes **`research/pqzl-measure/`** (the PQZL measurement round: `relfix.sh`, `bench.sh`, runs). Controller's name choice; owner may override. Every reference to `rel3/` (artifact `reproduce.sh`, README, STATUS, research notes) is updated in the same move.
+
+Owner 2026-10-15: in the same move, rename `docs/contracts/pq-zether.md` → `docs/contracts/pq-zero-knowledge.md` (`git mv`; rewrite every link and every `normative: contracts/pq-zether.md#…` line by script, except `docs/history/`; `docs_check` 0 errors). PQZ now stands for Post-Quantum Zero-knowledge (decisions.md CTR-PQZ-01).

@@ -1,4 +1,6 @@
-# Post-quantum Zether (PQZ) on private/PoA chains
+# PQZ — Post-Quantum Zero-knowledge — on private/PoA chains
+
+**Name (owner 2026-10-15):** PQZ stands for **Post-Quantum Zero-knowledge**: a post-quantum zero-knowledge proof engine (two proof systems, PQZL on lattices and PQZH on hashes, behind one precompile). Its first application is the confidential token specified here, which follows the Zether model (encrypted balances and amounts, visible identities); "PQ Zether" was the historical name. The proof system is not a general-purpose ZK system: each operation has its own fixed relation. This file will be renamed `pq-zero-knowledge.md` together with the pqz-core layout move.
 
 Status: **SPECIFIED, UNAUDITED — NOT FOR PRODUCTION FUNDS**; nothing of PQZ is deployed; the proof engine (`pqz-core`,
 both proof systems), the precompile boundary `pqz-ffi` and the frozen vectors are built (P6d, P6e; byte layouts in
