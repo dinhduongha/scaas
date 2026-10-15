@@ -1027,3 +1027,10 @@ proofSystemId = keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v1")	obsolete	PQZL 
 > MAX_INPUT = 262,144	obsolete	MAX_INPUT raised to 393,216 B (P6e D5: a PQZH transfer input is 5 + 83,072 + 262,144 B): contracts/pq-zether.md §9.1, CTR-PQZ-10
 u8(valid result)	obsolete	OP_SELFTEST covers both proofSystemIds: u8(pqzl_valid) ‖ u8(pqzl_invalid) ‖ u8(pqzh_valid) ‖ u8(pqzh_invalid) (P6e D13): contracts/pq-zether.md §9.1
 u8(invalid result)	obsolete	as u8(valid result): contracts/pq-zether.md §9.1 OP_SELFTEST (P6e D13)
+absorb("op", u8(op))	obsolete	the labelled SHAKE256 transcript was never implemented; v2 is SHAKE128("SCAAS-PQZ-TRANSCRIPT-V1" ‖ u8(op) ‖ be32(len) ‖ stmt) then LaZer's tbox transcript (P6e D7): contracts/pq-zether.md §5 Transcripts
+absorb("statement", be32(len) ‖ statement)	obsolete	as absorb("op", u8(op)): the statement enters hash0 = SHAKE128(tag ‖ u8(op) ‖ be32(len) ‖ stmt) (P6e D7): contracts/pq-zether.md §5 Transcripts
+pqz-core/params/*.py	renamed	the relation specs are LaZer Sage files pqz-core/params/<rel>_params.sage (P6e D1): contracts/pq-zether.md §8 Relations
+*params.h	renamed	generated headers pqz-core/params/pqz_<rel>_params.h (P6e D1): contracts/pq-zether.md §8 Relations
+pqz-core/vectors/	renamed	one canonical vector directory smartcontracts/vectors/pqz/, no copies (P6e D9): contracts/pq-zether.md §14
+statement_{transfer,burn,refresh}.json	renamed	statement_{transfer,burn,refresh,register,disclose}.json in smartcontracts/vectors/pqz/ (P6e D9): contracts/pq-zether.md §14
+proof_{transfer,burn,refresh,register,disclose_*}.json	renamed	proof_pqzl.json and proof_pqzh.json, one file per proofSystemId with every form (P6e D9): contracts/pq-zether.md §14

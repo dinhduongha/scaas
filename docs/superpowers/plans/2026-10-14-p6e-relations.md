@@ -464,13 +464,15 @@ the number is the round; each round is one agent on its own branch, reviewed bef
 |---|---|---|---|---|
 | A1 | `p6e-a1` | 1, 4, 3 | hedged PQZL prover (G2, D6, witness tag `SCAAS-PQZ-PROVER-WIT-V2`); `pqz_kat.py`; KeyGen / Enc / Dec from seeds + SHAKE256 in C (G4) | merged `09b9cc3` |
 | A2 | `p6e-a2` | 2, 5 | `R_TX0` (G1 / D8, own ABDLOP tag 0x81, R6); `pqz-stmt` (D15 tightened: salt, zero words); review fixes (unsequenced read in both verifiers) | merged `9f55013` |
-| A3 | `p6e-a3` | 7 | `pqz-ffi`: decode via `pqz-stmt`, dispatch on `proofSystemId` (PQZL C core / PQZH Ligero), C ABI `pqz_precompile`, never-crash, one lock + fixed-stack worker, status 3 (input fault → …00) vs 4 (node fault → host aborts block), `OP_SELFTEST` for both ids, `prove` feature + wasm32 | in review |
-| A4 | `p6e-a4` | 11 | vectors for both ids in `smartcontracts/vectors/pqz/` (D9), generator with `--check`, a `pqz_kat.py` checker per file | in progress |
+| A3 | `p6e-a3` | 7 | `pqz-ffi`: decode via `pqz-stmt`, dispatch on `proofSystemId` (PQZL C core / PQZH Ligero), C ABI `pqz_precompile`, never-crash, one lock + fixed-stack worker, status 3 (input fault → …00) vs 4 (node fault → host aborts block), `OP_SELFTEST` for both ids, `prove` feature + wasm32 | merged `072bec1` |
+| A4 | `p6e-a4` | 11 | vectors for both ids in `smartcontracts/vectors/pqz/` (D9), generator with `--check`, a `pqz_kat.py` checker per file; fee-0 rows, the attacker-key worst case | merged `0807e41` |
 | B1 | `p6e-b1` | 8 (part), D6 | Ligero `R_BURN` / `R_DS` / `R_DR`; hedged Ligero prover; wasm32 21-bit multiply (`R_TX` p99 59.7 → 18.7 ms) | merged `99ad859` |
 | B2 | `p6e-b2` | 9 | PQZH D3 id; exact length bound first (Rust + Solidity); opTag / auditorOn checks; retry guard; D5 limits | merged `7347a0b` |
 | B3 | `p6e-b3` | 6, 8 | Ligero on `pqz-stmt` (bench-only client / presets, 0 floats); Ligero `R_TX0` | merged `28a17d1` |
+| A6 | `p6e-a6` | 12 | docs: pq-zether.md §8.1 "Serialization v1" (every byte layout, checked against the code and the vectors), §5 transcripts (D7), §8 ids and bump rule (D4), §4.4 sizes, §14 vectors (D9) and fuzzing (D12), stale text fixed; decisions.md lines D2, D4, D7, D12, D14, D15 (proof half); `params/README.md` relations table (R1); `pqz-core` README / STATUS / `ffi/README.md` links | this branch |
 
-Left: Task 10 (fuzzing, after `pqz-ffi` merges), Task 12 (docs), then gate A / gate B and the P6-PUB freeze. Owner
+Left: Task 10 (fuzzing, on its own branch), Task 12 (docs, `p6e-a6`), op 7 `R_TXM` (P6-ANON, branch `p6-anon-s`,
+into the frozen set and §8.1 before the freezes), then gate A / gate B and the P6-PUB freeze. Owner
 2026-10-14: one `PQZ` precompile verifies both proof systems (CTR-PQZ-10).
 
 **One implementation per proof system (owner question 2026-10-14, answer recorded).** PQZL stays in C (the LaZer fork;

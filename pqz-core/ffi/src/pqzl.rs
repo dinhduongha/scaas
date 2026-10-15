@@ -67,6 +67,17 @@ extern "C" {
         e2: *mut [i16; 16],
         ctr: *mut u32,
     ) -> i32;
+    #[cfg(feature = "prove")]
+    fn pqz_encrypt(
+        pks: *const *const u8,
+        npk: u32,
+        msgs: *const [u8; 16],
+        r: *const i8,
+        e1: *const i16,
+        e2: *const [i16; 16],
+        u: *mut u8,
+        vs: *mut [u8; 128],
+    ) -> i32;
     fn pqz_dec(s: *const i8, ct: *const u8, m: *mut i64, noise: *mut i64) -> i32;
     #[cfg(feature = "prove")]
     fn pqz_prove(
@@ -254,12 +265,14 @@ pub struct Key {
     pub pk: Box<[u8; PK_BYTES]>,
     pub s: Box<[i8; 2048]>,
     pub e: Box<[i16; 2048]>,
+    /// the counter of the accepted attempt (§4.2)
+    pub ctr: u32,
 }
 
 pub fn keygen(seed32: &[u8; 32]) -> Option<Key> {
-    let mut k = Key { pk: Box::new([0; PK_BYTES]), s: Box::new([0; 2048]), e: Box::new([0; 2048]) };
+    let mut k = Key { pk: Box::new([0; PK_BYTES]), s: Box::new([0; 2048]), e: Box::new([0; 2048]), ctr: 0 };
     let rc = with_core(ARENA_SMALL, || unsafe {
-        pqz_keygen(seed32.as_ptr(), k.pk.as_mut_ptr(), k.s.as_mut_ptr(), k.e.as_mut_ptr(), std::ptr::null_mut())
+        pqz_keygen(seed32.as_ptr(), k.pk.as_mut_ptr(), k.s.as_mut_ptr(), k.e.as_mut_ptr(), &mut k.ctr)
     })
     .ok()?;
     (rc == 0).then_some(k)
@@ -273,6 +286,8 @@ pub struct Enc {
     pub r: Box<[i8; 2048]>,
     pub e1: Box<[i16; 2048]>,
     pub e2: Vec<[i16; 16]>,
+    /// the counter of the accepted attempt (§4.2)
+    pub ctr: u32,
 }
 
 pub fn enc(pks: &[&[u8; PK_BYTES]], msgs: &[[u8; 16]], seed_enc: &[u8; 32]) -> Option<Enc> {
@@ -286,6 +301,7 @@ pub fn enc(pks: &[&[u8; PK_BYTES]], msgs: &[[u8; 16]], seed_enc: &[u8; 32]) -> O
         r: Box::new([0; 2048]),
         e1: Box::new([0; 2048]),
         e2: vec![[0; 16]; n],
+        ctr: 0,
     };
     let rc = with_core(ARENA_SMALL, || unsafe {
         let ptrs: Vec<*const u8> = pks.iter().map(|p| p.as_ptr()).collect();
@@ -299,7 +315,7 @@ pub fn enc(pks: &[&[u8; PK_BYTES]], msgs: &[[u8; 16]], seed_enc: &[u8; 32]) -> O
             c.r.as_mut_ptr(),
             c.e1.as_mut_ptr(),
             c.e2.as_mut_ptr(),
-            std::ptr::null_mut(),
+            &mut c.ctr,
         )
     })
     .ok()?;
@@ -328,4 +344,27 @@ pub fn prove(op: u8, stmt: &[u8], wit: &[u8], rnd32: &[u8; 32]) -> Result<Vec<u8
     }
     proof.truncate(len);
     Ok(proof)
+}
+
+/// Encryption with chosen short vectors (`pqz_encrypt`, no norm check): `u = A^T r + e1`, `v_j = pk_j^T r + e2_j +
+/// Delta m_j`. Vectors and tests only (the worst-case noise KAT builds aligned credits with it).
+#[cfg(feature = "prove")]
+pub fn encrypt(
+    pks: &[&[u8; PK_BYTES]],
+    msgs: &[[u8; 16]],
+    r: &[i8; 2048],
+    e1: &[i16; 2048],
+    e2: &[[i16; 16]],
+) -> Option<(Box<[u8; PK_BYTES]>, Vec<[u8; 128]>)> {
+    let n = pks.len();
+    if n == 0 || msgs.len() != n || e2.len() != n {
+        return None;
+    }
+    let (mut u, mut vs) = (Box::new([0u8; PK_BYTES]), vec![[0u8; 128]; n]);
+    let rc = with_core(ARENA_SMALL, || unsafe {
+        let ptrs: Vec<*const u8> = pks.iter().map(|p| p.as_ptr()).collect();
+        pqz_encrypt(ptrs.as_ptr(), n as u32, msgs.as_ptr(), r.as_ptr(), e1.as_ptr(), e2.as_ptr(), u.as_mut_ptr(), vs.as_mut_ptr())
+    })
+    .ok()?;
+    (rc == 0).then_some((u, vs))
 }

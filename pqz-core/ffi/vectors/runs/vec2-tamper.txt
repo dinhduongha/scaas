@@ -1,0 +1,16 @@
+cbd.json: 12 / 12 changes caught
+enc.json: 12 / 12 changes caught
+fee0.json: 12 / 12 changes caught
+keygen.json: 12 / 12 changes caught
+matrix.json: 12 / 12 changes caught
+negative.json: 12 / 12 changes caught
+proof_pqzh.json: 12 / 12 changes caught
+proof_pqzl.json: 12 / 12 changes caught
+selftest.json: 12 / 12 changes caught
+statement_burn.json: 12 / 12 changes caught
+statement_disclose.json: 12 / 12 changes caught
+statement_refresh.json: 12 / 12 changes caught
+statement_register.json: 11 / 11 changes caught
+statement_transfer.json: 12 / 12 changes caught
+worstcase_noise.json: 12 / 12 changes caught
+tamper: 179 / 179 caught: ok

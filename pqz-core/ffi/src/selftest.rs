@@ -8,9 +8,10 @@
 //! - `fft` = Ligero's forward FFT of a fixed vector over its 1,634-point domain, `fft_ok` = the inverse gives it back.
 //!
 //! The four results are the precompile's verify path on compiled-in `R_REG` vectors, one per id: the statement
-//! `opTag ‖ id ‖ MESSAGE ‖ pk` (pk from `SEED_KEY`), the proof from `selftest/<id>_reg.hex` (proved with `RND`;
-//! `tests/ffi.rs` `selftest_vectors` checks and, with `PQZ_FFI_WRITE_SELFTEST=1`, writes them); invalid = the same
-//! proof under the statement with the last message byte flipped. Frozen with the vectors (`selftest.json`, Task 11).
+//! `opTag ‖ id ‖ MESSAGE ‖ pk` (pk from `SEED_KEY`), the proof = the REGISTER row of
+//! `smartcontracts/vectors/pqz/proof_<id>.json` (proved with `RND`; build.rs reads it, plan D9: no copy; written by
+//! `pqz-vectors`, `tests/ffi.rs` `selftest_vectors` checks a fresh prove equals it); invalid = the same proof under the
+//! statement with the last message byte flipped. Frozen with the vectors (`selftest.json`, P6e Task 11).
 use std::sync::OnceLock;
 
 use pqz_stmt::{Form, Register, Stmt, Word, PQZH_ID, PQZL_ID};
@@ -29,6 +30,11 @@ pub fn message() -> Word {
 
 static PQZL_PROOF: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/pqzl_reg.bin"));
 static PQZH_PROOF: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/pqzh_reg.bin"));
+
+/// The compiled-in R_REG proofs (PQZL, PQZH).
+pub fn proofs() -> [&'static [u8]; 2] {
+    [PQZL_PROOF, PQZH_PROOF]
+}
 
 pub fn keccak(parts: &[&[u8]]) -> Word {
     let mut h = Keccak256::new();
