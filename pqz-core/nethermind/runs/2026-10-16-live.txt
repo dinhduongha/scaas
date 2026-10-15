@@ -20,3 +20,4 @@ files: backup = live (sha256 -c)
 head 22841 0x9176ec9b22944a267852a7ee620f65a47db1873c1325015fd3e914df94f04b73 gasLimit 16777216 gasUsed 0 ts 1791759848
 head: all checks passed
 genesis: 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464
+## 2. edits: NOT applied — the permission system refused the live edit step ('Production Deploy', 17:49:41Z). Live directory verified unchanged (sha256 -c of genesis.json, config.json, docker-compose.yml, password.txt against the backup: OK; data untouched); container mba_chain_node_nethermind still exited (130). Task 10 stops after step 1 pending the owner's permission.
