@@ -67,7 +67,9 @@ public class MlDsaTests
                 try
                 {
                     intl++;
+#pragma warning disable SYSLIB5006 // external-μ verify is [Experimental] in .NET 10 (test only; the plugin uses VerifyData)
                     if (key.VerifyMu(mu, sig) != want) bad.Add(id);
+#pragma warning restore SYSLIB5006
                 }
                 catch (Exception e) when (e is PlatformNotSupportedException or CryptographicException)
                 {
@@ -107,9 +109,8 @@ public class MlDsaTests
             byte[] In(JsonNode s) => [.. pk, .. Hex.B((string)s["sig"]!), .. Keccak.Compute([.. tag, .. Hex.B((string)s["message"]!)]).BytesToArray()];
             foreach (string p in new[] { "pop", "popOther" }) if (k[p] is { } s) yield return ($"{k["name"]} {p}", In(s), true);
             if (k["sigs"] is JsonArray sigs) foreach (JsonNode? s in sigs) yield return ($"{k["name"]} {s!["purpose"]}", In(s), true);
-            // the negatives are UA-level rejections; as raw signatures over pq_msg each is checked against its own
-            // expectation below (verifyPop false ⇒ the signature does not verify over this message)
-            if (k["negatives"] is JsonArray neg) foreach (JsonNode? s in neg) yield return ($"{k["name"]} negative {s!["name"]}", In(s), Valid(s["verifyPop"]));
+            // (the file's negatives are UA-level rejections — other chain, other registry — whose raw signatures can be
+            // valid; the invalid side is Every_length_and_one_bit_flips)
         }
     }
 

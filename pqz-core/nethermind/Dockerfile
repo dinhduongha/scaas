@@ -6,7 +6,7 @@
 #   calib - the node image + /opt/pqz-calibrate (Calibrate.dll, fresh proofs, the corpus): Task 6 only, never run as a node
 # BuildKit runs outside scripts/capped, so the stages cap themselves: cargo -j 2, dotnet -m:2.
 ARG BASE=nethermind/nethermind:1.39.0@sha256:8af90a30989c16cb15e087bd250c623c98585e490a25950a75642460d497eae6
-ARG RUST=rust:1.97.1-bookworm@sha256:RUST_DIGEST
+ARG RUST=rust:1.97.1-bookworm@sha256:0e2bcaef56d041a486784e54104a81aebe0da44bd03019bd70bc0401e42e4a97
 ARG SDK=mcr.microsoft.com/dotnet/sdk:10.0.301-resolute@sha256:196f61c6262aa890f41dd654ff52d3b995187124a37778fb990ed0c31c26da44
 
 FROM ${BASE} AS base

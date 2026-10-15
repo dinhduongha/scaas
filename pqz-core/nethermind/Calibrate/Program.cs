@@ -24,7 +24,7 @@ if (args[0] == "cold")
     Console.WriteLine(FormattableString.Invariant($"{ms:F3} {h}"));
     return h == SelfTest.ExpectedHash ? 0 : 1;
 }
-return Cal.Main(args);
+return Cal.Exec(args);
 
 static class Cal
 {
@@ -60,7 +60,7 @@ static class Cal
         return t;
     }
 
-    public static int Main(string[] a)
+    public static int Exec(string[] a)
     {
         string corpusPath = a[1], freshPath = a[2], uaDir = a[3], outDir = a[4];
         int Arg(string name, int def) { int i = Array.IndexOf(a, name); return i >= 0 ? int.Parse(a[i + 1]) : def; }

@@ -53,7 +53,7 @@ public static class Corpus
         JsonArray a = [];
         int i = 0;
         foreach (var g in Rows.Where(r => r.Kind == "honest").GroupBy(r => (r.Op, r.Id, r.StmtLen)).OrderBy(g => g.Key))
-            a.Add(new JsonObject { ["op"] = g.Key.Op, ["id"] = "0x" + Ids[g.Key.Id], ["stmtLen"] = g.Key.StmtLen, ["gas"] = 1_000_000 + 1_000 * i++ });
+            a.Add(new JsonObject { ["op"] = g.Key.Op, ["id"] = "0x" + Ids[g.Key.Id], ["stmtLen"] = g.Key.StmtLen, ["gas"] = 1_000_000L + 1_000L * i++ });
         return a;
     }
 }
@@ -69,6 +69,8 @@ public class Setup
     [OneTimeSetUp]
     public void Library()
     {
+        // the node loads Clique as a plugin before the chainspec; here TypeDiscovery must see it too
+        _ = typeof(Nethermind.Consensus.Clique.CliqueChainSpecEngineParameters).Assembly;
         PqzNative.LibraryDirectory = Repo.FfiDir;
         TestContext.Progress.WriteLine($"libpqz_ffi.so: {PqzNative.LibraryPath} sha256 {SelfTest.LibrarySha256()}");
     }

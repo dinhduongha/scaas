@@ -19,9 +19,9 @@ using Nethermind.Serialization.Json;
 // PqzPrecompile.Run / MlDsa*Precompile.Run, never the C ABI directly.
 //   Harness run   <ffiDir> <corpus.jsonl> <repoRoot> [--minutes N] [--threads 8] [--seed S]
 //   Harness fault <hooksDir> <corpus.jsonl>        (test child: status 4 through PqzPrecompile.Run ⇒ exit 120)
-return args.Length > 0 && args[0] == "fault" ? Fault.Main(args) : Run.Main(args);
+return args.Length > 0 && args[0] == "fault" ? Fault.Exec(args) : Run.Exec(args);
 
-static class Common
+static class Shared
 {
     public static List<(string kind, string id, byte[] input, string expect)> Corpus(string path) =>
         File.ReadLines(path).Select(l => JsonNode.Parse(l)!.AsObject()).Select(o =>
@@ -51,11 +51,11 @@ static class Fault
 {
     [DllImport("libdl.so.2")] private static extern IntPtr dlopen(string file, int mode);
 
-    public static int Main(string[] a)
+    public static int Exec(string[] a)
     {
         PqzNative.LibraryDirectory = a[1];
-        var corpus = Common.Corpus(a[2]);
-        PqzSchedule s = Common.Schedule(corpus);
+        var corpus = Shared.Corpus(a[2]);
+        PqzSchedule s = Shared.Schedule(corpus);
         byte[] input = corpus.First(r => r.kind == "honest" && r.id == "pqzl").input;
         Console.WriteLine($"fault child: before the hook {Convert.ToHexStringLower(PqzPrecompile.Run(input, s).Data!)}");
         IntPtr lib = NativeLibrary.Load(PqzNative.LibraryPath);
@@ -91,17 +91,17 @@ static class Run
 {
     const int MaxInput = PqzNative.MaxInput;
 
-    public static int Main(string[] a)
+    public static int Exec(string[] a)
     {
         PqzNative.LibraryDirectory = a[1];
-        var corpus = Common.Corpus(a[2]);
+        var corpus = Shared.Corpus(a[2]);
         string root = a[3];
         double minutes = Arg(a, "--minutes", 10);
         int threads = (int)Arg(a, "--threads", 8);
         int seed = (int)Arg(a, "--seed", 7622);
         CountingLogger counter = new();
         PqzPrecompile.Log = new ILogger(counter);
-        PqzSchedule sched = Common.Schedule(corpus);
+        PqzSchedule sched = Shared.Schedule(corpus);
         string selftest = SelfTest.ExpectedHash;
 
         // PQZ bases: every corpus input; the honest ones (honest, fee0) are the only valid unedited inputs
@@ -290,7 +290,7 @@ static class Run
                     if (x.Length < 69) return ("idswap", x);
                     string id = Convert.ToHexStringLower(x.AsSpan(37, 32));
                     byte[] other = r.Next(3) == 0 ? RandomNumberGenerator.GetBytes(32)
-                        : Convert.FromHexString(id == Common.Ids["pqzl"] ? Common.Ids["pqzh"] : Common.Ids["pqzl"]);
+                        : Convert.FromHexString(id == Shared.Ids["pqzl"] ? Shared.Ids["pqzh"] : Shared.Ids["pqzl"]);
                     other.CopyTo(x, 37);
                     return ("idswap", x);
                 }

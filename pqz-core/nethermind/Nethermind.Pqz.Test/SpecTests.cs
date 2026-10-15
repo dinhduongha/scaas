@@ -125,8 +125,13 @@ public class SpecTests
     ];
 
     [TestCaseSource(nameof(Bad))]
-    public void Strict_section_is_a_start_up_error((string name, Func<ChainSpec> make) c) =>
-        Assert.That(() => Provider(c.make()), Throws.Exception, c.name);
+    public void Strict_section_is_a_start_up_error((string name, Func<ChainSpec> make) c)
+    {
+        Exception? e = Assert.Throws(Is.InstanceOf<Exception>(), () => Provider(c.make()), c.name);
+        string m = e!.ToString();
+        TestContext.Progress.WriteLine($"{c.name}: {e.GetType().Name}: {(e.InnerException ?? e).Message}");
+        Assert.That(m, Does.Not.Contain("Could not load file").And.Not.Contain("No seal engine"), "fails for the section, not for the test set-up");
+    }
 
     [Test]
     public void Stock_provider_with_the_section_fails_closed()
