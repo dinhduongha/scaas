@@ -111,8 +111,8 @@ static uint8_t tx0_stmt[PQZ_TX0_STMT_BYTES], tx0_wit[PQZ_TX0_WIT_BYTES];
 static uint8_t burn_stmt[PQZ_BURN_STMT_BYTES], burn_wit[PQZ_BURN_WIT_BYTES];
 static uint8_t ds_stmt[PQZ_DISC_STMT_BYTES], ds_wit[PQZ_DS_WIT_BYTES];
 static uint8_t dr_stmt[PQZ_DISC_STMT_BYTES], dr_wit[PQZ_DR_WIT_BYTES];
-static uint8_t proofs[6][PQZ_MAX_PROOF], bad[PQZ_MAX_PROOF];
-static size_t lens[6];
+static uint8_t proofs[16][PQZ_MAX_PROOF], bad[PQZ_MAX_PROOF]; /* >= NREL (6 + the R_TXM shapes) */
+static size_t lens[16];
 static uint8_t rnd32[32];
 static int fast; /* 1: verify with pqz_verify_fast */
 
