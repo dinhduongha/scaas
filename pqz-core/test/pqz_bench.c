@@ -781,9 +781,16 @@ auditor_check (int rels)
    amount, the legs' noise block over its bound), and the honest proofs of the bench statements under changed
    statements (M word, auditorOn, recipientsHash, legs or groups swapped, (2, off) read as (1, on), op 7 against op 1
    both ways). */
+/* PQZ_TXM_CASE=k: run only witness case k (0..14, in txm_check's order) or, k = 15, the statement tampers (one
+   process per case keeps the ASan + libc-heap build under scripts/capped's 4 GB); unset: all */
+static int txm_sel = -1, txm_k;
+#define TXM_RUN(k) (txm_sel < 0 || txm_sel == (k))
+
 static int
 txm_case (const char *name, const txspec_t *X, int expect)
 {
+  if (!TXM_RUN (txm_k++))
+    return 0;
   static uint8_t st[TXM_ST_MAX], wt[TXM_WIT_MAX], pf[PQZ_MAX_PROOF];
   size_t sl = 0, wl = 0, pl = sizeof pf;
   int g = 0, f = 0, prc = -1, ok;
@@ -874,10 +881,12 @@ txm_check (int rels)
   txspec_t X;
   int fails = 0, n = 0;
   const int r81 = txm_rel (8, 1), r20 = txm_rel (2, 0), r11 = txm_rel (1, 1);
-  for (int r = 6; r < NREL; r++) /* the honest proofs the tampers need */
+  const char *sel = getenv ("PQZ_TXM_CASE");
+  txm_sel = sel != NULL ? atoi (sel) : -1, txm_k = 0;
+  for (int r = 6; r < NREL && TXM_RUN (15); r++) /* the honest proofs the tampers need */
     if ((r == r81 || r == r20 || r == r11) && lens[r] == 0)
       fails += step_prove (r, 0) != 0;
-  if (lens[1] == 0)
+  if (lens[1] == 0 && TXM_RUN (15))
     fails += step_prove (1, 0) != 0;
 
   /* variants */
@@ -915,7 +924,7 @@ txm_check (int rels)
   fails += txm_case ("M 8 off: leg 0's ||e2||^2 5120 > 4096, block 5120 < 32768 (X-1)", &X, 0), n++;
 
   /* honest proofs under changed statements */
-  if (r81 >= 0)
+  if (r81 >= 0 && TXM_RUN (15))
     {
       const size_t sl = STLEN[r81];
       const unsigned m = 8, G = 2;
@@ -940,12 +949,12 @@ txm_check (int rels)
       swap_bytes (st + u0, st + u0 + PQZ_POLYVEC_BYTES, PQZ_POLYVEC_BYTES);
       fails += txm_tamper ("u_0 and u_1 swapped", r81, 7, st, sl), n++;
     }
-  if (r20 >= 0) /* 83,072 B: also the length of (1, on) */
+  if (r20 >= 0 && TXM_RUN (15)) /* 83,072 B: also the length of (1, on) */
     {
       memcpy (st, STMT[r20], STLEN[r20]), st[PQZ_HDR_LEGS + 31] = 1, st[PQZ_HDR_AUDITOR_ON + 31] = 1;
       fails += txm_tamper ("(2, off) read as (1, on)", r20, 7, st, STLEN[r20]), n++;
     }
-  if (r11 >= 0) /* op 7 at M = 1 against op 1 (R_TX), both ways */
+  if (r11 >= 0 && TXM_RUN (15)) /* op 7 at M = 1 against op 1 (R_TX), both ways */
     {
       memcpy (st, STMT[r11], STLEN[r11]), wr_word (st + PQZ_HDR_LEGS, 0);
       fails += txm_tamper ("R_TXM 1 proof as op 1", r11, 1, st, STLEN[r11]), n++;
@@ -953,7 +962,8 @@ txm_check (int rels)
       memcpy (st, tx_stmt, sizeof tx_stmt), wr_word (st + PQZ_HDR_LEGS, 1);
       fails += txm_tamper ("R_TX proof as op 7", 1, 7, st, sizeof tx_stmt), n++;
     }
-  printf ("{\"txm_check\": %s, \"cases\": %d, \"fails\": %d}\n", fails ? "false" : "true", n, fails);
+  printf ("{\"txm_check\": %s, \"cases\": %d, \"only\": %d, \"fails\": %d}\n", fails ? "false" : "true", n, txm_sel,
+          fails);
   (void)rels;
   return fails;
 }

@@ -21,19 +21,7 @@ node test/run_wasm.mjs 3 1 63 > "$R-fnv-wasm.jsonl" || echo "fnv wasm rc=$?"
 build/native/pqz_bench_hooks ${NP:-2} ${NV:-2} $TXM 1 > "$R-txm-native.jsonl" || echo "txm native rc=$?"
 PQZ_VERIFY=fast build/native/pqz_bench ${NP:-2} ${NF:-20} $TXM > "$R-txm-native-fast.jsonl" || echo "txm native fast rc=$?"
 node test/run_wasm.mjs ${NPW:-1} ${NVW:-1} $TXM > "$R-txm-wasm.jsonl" || echo "txm wasm rc=$?"
-mkdir -p build/asan
-# known upstream UBSan nits (STATUS.md, sv/fuzz.sh): zero-length VLAs, null + 0 in aes256ctr.c; one process per shape
-F="-std=gnu11 -O1 -g -fsanitize=address,undefined -fno-sanitize=vla-bound,pointer-overflow -fno-omit-frame-pointer -DPQZ_DEBUG_MALLOC -DPQZ_SV -DPQZ_TEST_HOOKS -w -Ibuild/include -Isrc -Ilazer -Iparams"
-${CC:-clang} $F -o build/asan/pqz_bench src/pqz_lazer.c src/pqz_ntt.c src/pqz_arena.c src/pqz_rel.c src/pqz_keys.c src/pqz_sv.c test/pqz_bench.c
-: > "$R-asan.jsonl"; : > "$R-asan-stderr.txt"
-for m in 35 64 128 256 512 1024 2048 4096 8192 "0 1"; do # R_REG + R_TX + R_TX0, each R_TXM shape (generic and SV), txm_check
-  for v in generic fast; do
-    [ "$m" = "0 1" ] && [ $v = fast ] && continue
-    # shellcheck disable=SC2086
-    ASAN_OPTIONS=detect_leaks=0 UBSAN_OPTIONS=print_stacktrace=1 PQZ_VERIFY=$v build/asan/pqz_bench 1 1 $m >> "$R-asan.jsonl" \
-      2>> "$R-asan-stderr.txt" || echo "asan $m $v rc=$?"
-  done
-done
+rel3/txm-asan.sh "$1" || echo "txm-asan rc=$?"
 cat "$R-kat.txt"
 tail -2 "$R-keys-pqz-kat.txt"
 tail -3 "$R-tbox-fixes.txt"
