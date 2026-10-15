@@ -290,3 +290,231 @@ fn coefficient_codec() {
     assert_eq!(read_coeffs(&Q.to_be_bytes(), &mut back[..1]).err(), Some(Reject::Coefficient));
     assert_eq!(word_u64(&u64_word(u64::MAX)), Some(u64::MAX));
 }
+
+// ---- op 7 `R_TXM` (P6-ANON S2: plan §4, D6, R4)
+
+/// A valid op 7 statement: M keys / legs, G groups, auditor on / off, the given fee.
+fn build_multi(id: &Word, m: usize, aud: bool, fee: u64) -> Vec<u8> {
+    let g = groups(m);
+    let (pks, us, vs, v_as) =
+        (poly_bytes(m * K * D, 11), poly_bytes(g * K * D, 12), poly_bytes(16 * m, 13), poly_bytes(16 * m, 14));
+    let (pk_f, pk_a, t, v_f) = (poly_bytes(K * D, 1), poly_bytes(K * D, 3), poly_bytes(K * D + 16, 4), poly_bytes(16, 7));
+    let mut header = Multi::header(id, m, aud);
+    header[H_FEE] = u64_word(fee);
+    header[H_RECIPIENTS_HASH] = [0x5c; 32];
+    header[H_SALT][16..].copy_from_slice(&[0xA5; 16]);
+    let s = Multi {
+        header,
+        m,
+        pk_f: &pk_f,
+        pks: &pks,
+        pk_a: aud.then_some(&pk_a[..]),
+        t: &t,
+        us: &us,
+        vs: &vs,
+        v_f: &v_f,
+        v_as: aud.then_some(&v_as[..]),
+    };
+    s.encode().unwrap()
+}
+
+#[test]
+fn multi_lengths_and_sets() {
+    let want = [
+        (1, 83_072, 66_560),
+        (2, 99_712, 83_072),
+        (4, 132_992, 116_096),
+        (8, 215_936, 198_528),
+        (16, 381_824, 363_392),
+    ];
+    for (m, on, off) in want {
+        assert_eq!((multi_len(m, true), multi_len(m, false)), (on, off), "M = {m}");
+        assert_eq!(multi_len(m, true), 50_048 + 16_640 * m + 16_384 * groups(m));
+        assert_eq!(multi_len(m, false), 33_664 + 16_512 * m + 16_384 * groups(m));
+    }
+    assert_eq!([1, 2, 4, 5, 8, 9, 16].map(groups), [1, 1, 1, 2, 2, 3, 4]);
+    // M = 1 has op 1's lengths (F6); the lengths of the union of built sets are distinct except (M = 1, on) =
+    // (M = 2, off), whose object counts are equal: the header's M and auditorOn words pick the shape (R4 as built)
+    assert_eq!((multi_len(1, true), multi_len(1, false)), (Form::Transfer.stmt_len(), Form::Transfer0.stmt_len()));
+    let shapes: Vec<(usize, bool)> = [1, 2, 4, 8, 16].iter().flat_map(|&m| [(m, true), (m, false)]).collect();
+    for (i, &a) in shapes.iter().enumerate() {
+        for &b in &shapes[i + 1..] {
+            let same = multi_len(a.0, a.1) == multi_len(b.0, b.1);
+            assert_eq!(same, (a, b) == ((1, true), (2, false)), "{a:?} {b:?}");
+        }
+    }
+    #[cfg(not(feature = "oversize"))]
+    assert_eq!((built_legs(&PQZL_ID), built_legs(&PQZH_ID)), (&[1, 2, 4, 8][..], &[1, 2, 4][..]));
+    assert!(built_legs(&[0; 32]).is_empty());
+    // D8 / D20: every built op 7 shape leaves room for MAX_PROOF(id) within MAX_INPUT except PQZH (4, on):
+    // 5 + 132,992 + 262,144 = 395,141 > 393,216 (a PQZH proof over 260,219 B makes that input exceed MAX_INPUT; the
+    // model expects ~232 KB, H2 measures Ligero's exact bound)
+    #[cfg(not(feature = "oversize"))]
+    for id in [PQZL_ID, PQZH_ID] {
+        for aud in [true, false] {
+            for &m in built_legs(&id) {
+                let fits = 5 + multi_len(m, aud) + max_proof(&id).unwrap() <= MAX_INPUT;
+                assert_eq!(fits, !(id == PQZH_ID && m == 4 && aud), "M = {m}, A = {aud}");
+            }
+        }
+    }
+    assert_eq!(MAX_INPUT - 5 - multi_len(4, true), 260_219);
+    assert_eq!(OP_TAG_TRANSFER_MULTI[..4], [0x6f, 0x6a, 0x77, 0x3a]);
+}
+
+#[test]
+fn multi_round_trip_every_built_shape_fee_0() {
+    for id in [PQZL_ID, PQZH_ID] {
+        for aud in [true, false] {
+            for &m in built_legs(&id) {
+                for fee in [0, 7, u64::MAX] {
+                    let b = build_multi(&id, m, aud, fee);
+                    assert_eq!(b.len(), multi_len(m, aud));
+                    let s = parse_multi(&b).unwrap_or_else(|e| panic!("M = {m}, A = {aud}: {e:?}"));
+                    let g = groups(m);
+                    assert_eq!((s.m, s.pk_a.is_some(), s.fee(), s.groups()), (m, aud, fee, g));
+                    assert_eq!(s.encode().unwrap(), b, "encode(parse(x)) != x, M = {m}, A = {aud}");
+                    // §4 offsets
+                    let a = aud as usize;
+                    assert_eq!(s.pk(m - 1), &b[17_024 + PK_BYTES * (m - 1)..][..PK_BYTES]);
+                    let u0 = 33_536 + PK_BYTES * (m + a);
+                    assert_eq!(s.u(g - 1), &b[u0 + PK_BYTES * (g - 1)..][..PK_BYTES]);
+                    let v0 = u0 + PK_BYTES * g;
+                    assert_eq!(s.v(m - 1), &b[v0 + V_BYTES * (m - 1)..][..V_BYTES]);
+                    assert_eq!(s.v_f, &b[v0 + V_BYTES * m..][..V_BYTES]);
+                    if aud {
+                        assert_eq!(s.v_a(m - 1).unwrap(), &b[b.len() - V_BYTES..]);
+                    }
+                    assert_eq!(&b[H_LEGS * 32..][..32], &u64_word(m as u64));
+                    assert_eq!(&b[H_RECIPIENTS_HASH * 32..][..32], &[0x5c; 32]);
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn multi_m1_body_is_op1_body() {
+    // F6: at M = 1, G = 1 the body is op 1's (pk_f ‖ pk_t ‖ [pk_a] ‖ T ‖ u ‖ v_t ‖ v_f ‖ [v_a]); the header differs only
+    // in opTag, word 192 (toUA vs recipientsHash) and word 320 (0 vs M)
+    for aud in [true, false] {
+        let b = build_multi(&PQZL_ID, 1, aud, 7);
+        let s = parse_multi(&b).unwrap();
+        let mut h = s.header;
+        h[H_OPTAG] = Form::Transfer.op_tag();
+        h[H_TO] = [0x5c; 32];
+        h[H_RECIPIENT] = [0; 32];
+        let d = Debit {
+            form: if aud { Form::Transfer } else { Form::Transfer0 },
+            header: h,
+            pk_f: s.pk_f,
+            pk_t: Some(s.pk(0)),
+            pk_a: s.pk_a,
+            t: s.t,
+            u: s.u(0),
+            v_t: Some(s.v(0)),
+            v_f: s.v_f,
+            v_a: s.v_a(0),
+        };
+        let op1 = Stmt::Debit(d).encode().unwrap();
+        assert!(parse(OP_TRANSFER, &op1).is_ok());
+        assert_eq!(op1[HEADER_BYTES..], b[HEADER_BYTES..], "A = {aud}");
+        let diff: Vec<usize> = (0..20).filter(|&i| op1[32 * i..32 * i + 32] != b[32 * i..32 * i + 32]).collect();
+        assert_eq!(diff, [H_OPTAG, H_LEGS]); // word 192 equal here by construction
+        // the forms never decode as each other
+        assert_eq!(parse_multi(&op1).err(), Some(Reject::OpTag));
+        assert_eq!(parse(OP_TRANSFER, &b).err(), Some(Reject::OpTag));
+    }
+}
+
+#[test]
+fn multi_every_rule_rejects() {
+    let l = build_multi(&PQZL_ID, 2, true, 0);
+    let l0 = build_multi(&PQZL_ID, 4, false, 5);
+    let h = build_multi(&PQZH_ID, 4, false, 1);
+    let word = |x: u64| u64_word(x);
+    #[allow(unused_mut)]
+    let mut cases: Vec<(&str, Vec<u8>, Reject)> = vec![
+        ("length - 1", l[..l.len() - 1].to_vec(), Reject::Length),
+        ("length + 1", [&l[..], &[0]].concat(), Reject::Length),
+        ("M = 3 length, M word 2", build_multi_len(&l, multi_len(3, true)), Reject::Length),
+        ("M = 0 length (50,048 B), M word 2", build_multi_len(&l, multi_len(0, true)), Reject::Length),
+        ("header cut (639 B)", l[..639].to_vec(), Reject::Length),
+        ("M word 0", with(&build_multi(&PQZL_ID, 1, true, 0), 320, &word(0)), Reject::Legs),
+        ("M word 3", with(&l, 320, &word(3)), Reject::Legs),
+        ("M word high byte", with(&l, 320, &[1]), Reject::Legs),
+        ("M word 4 on the M = 2 length", with(&l, 320, &word(4)), Reject::Length),
+        ("M word 1 on the M = 2 length", with(&l, 320, &word(1)), Reject::Length),
+        ("auditorOn 0 on an auditor-on statement", with(&l, 448, &word(0)), Reject::Length),
+        ("auditorOn 1 on an auditor-off statement", with(&l0, 448, &word(1)), Reject::Length),
+        ("auditorOn 2", with(&h, 448, &word(2)), Reject::AuditorOn),
+        ("auditorOn high byte", with(&h, 448, &[1]), Reject::AuditorOn),
+        ("amount 1", with(&l, 288, &word(1)), Reject::MustBeZero("amount")),
+        ("amount >= 2^64", with(&l, 288 + 23, &[1]), Reject::Amount),
+        ("fee >= 2^64", with(&l, 256, &[1]), Reject::Fee),
+        ("salt word high half", with(&l0, 576 + 3, &[1]), Reject::Salt),
+        ("coefficient = q in pk_f", with(&l, 640, &Q.to_be_bytes()), Reject::Coefficient),
+        ("coefficient = q in pk_1", with(&l, 17_024 + PK_BYTES, &Q.to_be_bytes()), Reject::Coefficient),
+        ("coefficient = 2^42 in u_0", with(&h, 33_536 + 4 * PK_BYTES, &(1u64 << 42).to_be_bytes()), Reject::Coefficient),
+        ("coefficient = q in v_{a,M-1}", with(&l, l.len() - 8, &Q.to_be_bytes()), Reject::Coefficient),
+        ("coefficient = q in v_f (auditor off)", with(&l0, l0.len() - 8, &Q.to_be_bytes()), Reject::Coefficient),
+        ("op 1 opTag", with(&l, 0, &Form::Transfer.op_tag()), Reject::OpTag),
+        ("opTag bit", with(&l, 31, &[l[31] ^ 1]), Reject::OpTag),
+        ("unknown proofSystemId", with(&l, 32, &[0; 32]), Reject::ProofSystemId),
+        ("empty", vec![], Reject::OpTag),
+    ];
+    #[cfg(not(feature = "oversize"))]
+    cases.extend([
+        ("PQZH M = 8 (not built)", with(&build_multi_len(&h, multi_len(8, false)), 320, &word(8)), Reject::Legs),
+        ("PQZL M = 16 (oversize only)", with(&build_multi_len(&l, multi_len(16, true)), 320, &word(16)), Reject::Legs),
+        ("PQZH M = 8 length, M word 4", build_multi_len(&h, multi_len(8, false)), Reject::Length),
+    ]);
+    for (what, b, want) in cases {
+        assert_eq!(parse_multi(&b).err(), Some(want), "{what}");
+    }
+    // 83,072 B: (M = 1, on) relabelled (M = 2, off) is another valid statement; the words decide, the objects shift
+    let one = build_multi(&PQZL_ID, 1, true, 0);
+    let two = with(&with(&one, 320, &word(2)), 448, &word(0));
+    let (a, b) = (parse_multi(&one).unwrap(), parse_multi(&two).unwrap());
+    assert_eq!((a.m, a.pk_a.is_some(), b.m, b.pk_a.is_some()), (1, true, 2, false));
+    assert_eq!((b.pk(1), b.v(1), b.v_f), (a.pk_a.unwrap(), a.v_f, a.v_a(0).unwrap()));
+    assert_eq!(b.encode().unwrap(), two);
+    // op 7 stays outside parse / decode_input until S3 (pqz-ffi dispatch); limits unchanged (D8 / D20)
+    assert_eq!(parse(OP_TRANSFER_MULTI, &l).err(), Some(Reject::Op));
+    assert_eq!(decode_input(&input(OP_TRANSFER_MULTI, &l, &[1; 100])).err(), Some(Reject::Op));
+    // an op 1 statement under op 7's decoder
+    let o = objs();
+    assert_eq!(parse_multi(&build(Form::Transfer, &o, &PQZL_ID)).err(), Some(Reject::OpTag));
+    // encode refuses objects that do not fit M / the auditor flag
+    let s = parse_multi(&l).unwrap();
+    assert_eq!(Multi { m: 3, ..s.clone() }.encode().err(), Some(Reject::Length));
+    assert_eq!(Multi { v_as: None, ..s.clone() }.encode().err(), Some(Reject::Length));
+    assert_eq!(Multi { us: s.pks, ..s.clone() }.encode().err(), Some(Reject::Length));
+    let mut hm = s.header;
+    hm[H_LEGS] = word(4);
+    assert_eq!(Multi { header: hm, ..s.clone() }.encode().err(), Some(Reject::Legs));
+    let mut ha = s.header;
+    ha[H_AUDITOR_ON] = word(0);
+    assert_eq!(Multi { header: ha, ..s }.encode().err(), Some(Reject::AuditorOn));
+}
+
+/// `b`'s header with a body of zeros to length `n` (a statement of another shape, every rule before Length holds)
+fn build_multi_len(b: &[u8], n: usize) -> Vec<u8> {
+    let mut v = b[..HEADER_BYTES].to_vec();
+    v.resize(n, 0);
+    v
+}
+
+#[cfg(feature = "oversize")]
+#[test]
+fn multi_oversize_shapes() {
+    for id in [PQZL_ID, PQZH_ID] {
+        assert_eq!(built_legs(&id), &[1, 2, 4, 8, 16]);
+        for aud in [true, false] {
+            for m in [4, 8, 16] {
+                let b = build_multi(&id, m, aud, 0);
+                assert_eq!(parse_multi(&b).unwrap().encode().unwrap(), b);
+            }
+        }
+    }
+}

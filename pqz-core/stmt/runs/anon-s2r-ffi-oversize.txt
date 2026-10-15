@@ -1,0 +1,11 @@
+    Checking pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/anons/pqz-core/stmt)
+    Checking pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/anons/pqz-core/pqzh/ligero)
+    Checking pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/anons/pqz-core/ffi)
+error[E0080]: evaluation panicked: pqz-stmt feature `oversize` is bench only: not in pqz-ffi's build
+  --> src/lib.rs:25:15
+   |
+25 | const _: () = assert!(!pqz_stmt::OVERSIZE, "pqz-stmt feature `oversize` is bench only: not in pqz-ffi's build");
+   |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ evaluation of `_` failed here
+
+For more information about this error, try `rustc --explain E0080`.
+error: could not compile `pqz-ffi` (lib) due to 1 previous error

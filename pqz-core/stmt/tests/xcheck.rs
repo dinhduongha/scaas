@@ -33,6 +33,7 @@ fn reason(r: Reject) -> String {
         Reject::Salt => "salt_word_not_16_zero_bytes_||_salt",
         Reject::AuditorOn => "auditorOn_does_not_match_the_length",
         Reject::Coefficient => "coefficient_>=_q",
+        Reject::Legs => "M_not_a_built_leg_count",
         _ => "other",
     })
 }
@@ -71,6 +72,38 @@ fn build(form: Form, f: &std::collections::HashMap<&str, Vec<u8>>) -> Vec<u8> {
         }),
     };
     s.encode().unwrap()
+}
+
+/// Op 7: the statement pqz-stmt builds from pqz_kat.py's fields, and the fields it parses out
+fn build_multi(f: &std::collections::HashMap<&str, Vec<u8>>) -> Vec<u8> {
+    let header = words::<20>(&f["hdr"]);
+    let m = word_u64(&header[H_LEGS]).unwrap() as usize;
+    let g = |k: &str| f.get(k).map(|v| v.as_slice());
+    let s = Multi {
+        header,
+        m,
+        pk_f: &f["pk_f"],
+        pks: &f["pks"],
+        pk_a: g("pk_a"),
+        t: &f["t"],
+        us: &f["us"],
+        vs: &f["vs"],
+        v_f: &f["v_f"],
+        v_as: g("v_as"),
+    };
+    s.encode().unwrap()
+}
+
+fn fields_multi(s: &Multi) -> Vec<(&'static str, Vec<u8>)> {
+    let mut v = vec![("hdr", s.header.concat()), ("pk_f", s.pk_f.to_vec()), ("pks", s.pks.to_vec())];
+    if let Some(a) = s.pk_a {
+        v.push(("pk_a", a.to_vec()));
+    }
+    v.extend([("t", s.t.to_vec()), ("us", s.us.to_vec()), ("vs", s.vs.to_vec()), ("v_f", s.v_f.to_vec())]);
+    if let Some(a) = s.v_as {
+        v.push(("v_as", a.to_vec()));
+    }
+    v
 }
 
 /// The fields pqz-stmt parses out, by pqz_kat.py's names
@@ -129,11 +162,25 @@ fn xcheck_c_and_pqz_kat() {
     }
     // 2. pqz_kat.py's statements and rejections
     let py = std::fs::read_to_string(format!("{dir}/py.txt")).unwrap();
-    let (mut nok, mut nbad, mut npyc) = (0, 0, 0);
+    let (mut nok, mut nbad, mut npyc, mut nmulti, mut nbad7) = (0, 0, 0, 0, 0);
     for line in py.lines() {
         let t: Vec<&str> = line.split(' ').collect();
         match t[0] {
             "c" => npyc += 1,
+            "ok" if t[1] == "7" => {
+                let st = unhex(t[3]);
+                let f: std::collections::HashMap<&str, Vec<u8>> =
+                    t[4..].iter().map(|kv| kv.split_once('=').unwrap()).map(|(k, v)| (k, unhex(v))).collect();
+                let s = parse_multi(&st).unwrap_or_else(|e| panic!("op 7: {e:?}"));
+                let got = fields_multi(&s);
+                assert_eq!(got.len(), f.len(), "op 7 M = {}: field count", s.m);
+                for (k, v) in &got {
+                    assert_eq!(&f[k], v, "op 7 M = {}: field {k}", s.m);
+                }
+                assert_eq!(build_multi(&f), st, "op 7: build from pqz_kat.py's fields");
+                assert_eq!(s.encode().unwrap(), st);
+                nmulti += 1;
+            }
             "ok" => {
                 let (op, form, st) = (t[1].parse::<u8>().unwrap(), form_of(t[2]), unhex(t[3]));
                 let f: std::collections::HashMap<&str, Vec<u8>> =
@@ -151,7 +198,9 @@ fn xcheck_c_and_pqz_kat() {
             }
             "bad" => {
                 let (op, want, st) = (t[1].parse::<u8>().unwrap(), t[2], unhex(t[3]));
-                let got = parse(op, &st).err().unwrap_or_else(|| panic!("accepted, pqz_kat.py: {want}"));
+                let got = if op == OP_TRANSFER_MULTI { parse_multi(&st).err() } else { parse(op, &st).err() };
+                let got = got.unwrap_or_else(|| panic!("accepted, pqz_kat.py: {want}"));
+                nbad7 += (op == OP_TRANSFER_MULTI) as usize;
                 assert_eq!(reason(got), want, "{got:?}");
                 nbad += 1;
             }
@@ -160,5 +209,6 @@ fn xcheck_c_and_pqz_kat() {
     }
     assert_eq!(npyc, 6, "pqz_kat.py rebuilt the six C statements");
     assert!(nok >= 8 && nbad >= 8);
-    println!("xcheck: C {nc} / 6 forms equal; pqz_kat.py: {nok} statements equal (fields and bytes), {nbad} rejections with the same reason");
+    assert!(nmulti >= 14 && nbad7 >= 50, "op 7: {nmulti} statements, {nbad7} rejections");
+    println!("xcheck: C {nc} / 6 forms equal; pqz_kat.py: {nok} statements + {nmulti} op 7 statements equal (fields and bytes), {nbad} rejections ({nbad7} op 7) with the same reason");
 }

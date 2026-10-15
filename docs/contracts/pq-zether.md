@@ -318,7 +318,8 @@ by `σ_e/σ_s`, best number of samples `m`). Script output (scratch Python, 2026
 | review option A: n = 2560, q = 2^50 | 508 | 148.3 / 134.6 |
 | review option B: n = 2048, q = 2^41 | 492 | 143.7 / 130.4 |
 | **chosen: n = 2048, q = 2^42 − 215** | **476** | **139.0 / 126.1** |
-| chosen with 32 perfect hints on `(r, e1)` ([shared randomness](#shared-randomness), approximated as 32 dimensions removed, n = 2016) | 466 | 136.1 / 123.5 |
+| chosen with 32 perfect hints on `(r, e1)` ([shared randomness](#shared-randomness)), DDGR20 worst case (maximal-norm mixed forms; the 32-dimensions-removed approximation gave 466) | 463.9 | 135.5 / 122.9 |
+| `R_TXM` (op 7): ≤ 80 hints on one `(r_g, e1_g)` (4 legs + the auditor copy), DDGR20 worst case — owner-accepted exception to the 450 margin ([CTR-PQZ-03](#CTR-PQZ-03), 2026-10-15) | 446.0 | 130.2 / 118.2 |
 
 `q ≈ 2^42` rather than `2^41` buys a 4× accounting margin ([noise](#noise)) for 16 β-units. Option A keeps
 `K_MAX = 4096` but adds 25 % to every key and ciphertext; with public plain amounts ([CTR-PQZ-06](#CTR-PQZ-06)) the cap
@@ -446,7 +447,9 @@ against 32 for random bytes). Boring wins.
 ### 4.5 Shared randomness against malicious recipients
 
 <a id="shared-randomness"></a>
-<a id="CTR-PQZ-04"></a>**CTR-PQZ-04** — **Multi-recipient shared randomness.** One `(r, e1)` per operation: the transfer's `u` is shared by the receiver's credit, the sender's new balance and the auditor copy; only `v` differs per recipient. This saves two 16 KB `u` per transfer (mKEM). Revealing `r` would reveal the sender's new balance, so disclosure never reveals `r` ([CTR-PQZ-14](#CTR-PQZ-14)). The **auditor** is as classical ([CTR-ZTH-09](zether.md#CTR-ZTH-09)): one immutable registered PQZ UA per token, set at `initialize` (or none, by `auditorMode`, [CTR-PQZ-24](#CTR-PQZ-24)); it reads exactly the per-transfer `v_a`, never anyone's balance. The security of shared `r` against **malicious** recipients is an explicit assumption, not KKPP's honest-key theorem: MLWE with at most 16 adversarially chosen integer linear hints on the **joint** secret `(r, e1)` per recipient key, 32 when receiver and auditor collude. If the estimate misses the target, the fallback is **split randomness**: `(r, e1)` shared by `v_t` and `v_a` only, and the sender's `v_f` under its own `(r_f, e1_f)` and `u_f` (+16,384 B, ≈ +0.5 M gas per transfer), so hints only open ciphertexts of amounts the hinting parties already know.
+<a id="CTR-PQZ-04"></a>**CTR-PQZ-04** — **Multi-recipient shared randomness.** One `(r, e1)` per operation: the transfer's `u` is shared by the receiver's credit, the sender's new balance and the auditor copy; only `v` differs per recipient. This saves two 16 KB `u` per transfer (mKEM). Revealing `r` would reveal the sender's new balance, so disclosure never reveals `r` ([CTR-PQZ-14](#CTR-PQZ-14)). The **auditor** is as classical ([CTR-ZTH-09](zether.md#CTR-ZTH-09)): one immutable registered PQZ UA per token, set at `initialize` (or none, by `auditorMode`, [CTR-PQZ-24](#CTR-PQZ-24)); it reads exactly the per-transfer `v_a`, never anyone's balance. The security of shared `r` against **malicious** recipients is an explicit assumption, not KKPP's honest-key theorem: MLWE with at most 16 adversarially chosen integer linear hints on the **joint** secret `(r, e1)` per recipient key, 32 when receiver and auditor collude. For the multi-recipient transfer `R_TXM` (op 7) the bound is **≤ 80 hints per
+`(r_g, e1_g)`** (groups of 4 legs, auditor included): β 446.0 ≥ Kyber-512's 406, the owner-accepted exception to
+[CTR-PQZ-03](#CTR-PQZ-03)'s 450 margin (2026-10-15); every other instance keeps β ≥ 450. If the estimate misses the target, the fallback is **split randomness**: `(r, e1)` shared by `v_t` and `v_a` only, and the sender's `v_f` under its own `(r_f, e1_f)` and `u_f` (+16,384 B, ≈ +0.5 M gas per transfer), so hints only open ciphertexts of amounts the hinting parties already know.
 
 KKPP-style mKEM security holds for honestly generated keys. `R_REG` proves only the ℓ2 norms of `(s, e)`, not their
 distribution, and every recipient learns its own decryption-noise term. For a registered `pk = A s + e` the recipient
@@ -473,11 +476,11 @@ A colluding receiver and auditor register complementary keys and get 32 forms pe
 **Assumption (stated, tracked for the audit):** MLWE on `(A^T, u = A^T r + e1)` stays hard given ≤ 32 adversarially
 chosen **perfect** integer linear hints on `(r, e1)`. In the Dachman-Soled–Ducas–Gong–Rossi framework ("LWE with side
 information", 2020) a perfect hint on the embedding secret removes one dimension (plus a volume change that depends on
-the hint direction), whether it falls on `r`, on `e1` or on a mix; approximating 32 hints as 32 dimensions removed, the
-script above gives β ≈ 466 (136 / 123.5), still above the target. `r, e1` are fresh per operation, so hints do not
-accumulate across transfers. The parameter freeze reruns this with the DDGR20 `leaky-LWE-Estimator`: 32 perfect hints
-in the worst directions over unit vectors on `r`, unit vectors on `e1`, and maximal-norm mixed forms allowed by
-`β_s`/`β_e`, recorded in `estimator.txt`. **If any direction misses the target**, PQZ switches to split randomness:
+the hint direction), whether it falls on `r`, on `e1` or on a mix. The DDGR20 `leaky-LWE-Estimator` (`0a9caf8`,
+pinned beside lattice-estimator `53da598`; `pqz-core/params/anon/hints-anon.txt`, P6-ANON S1) gives, for the worst
+directions (orthogonal maximal-norm mixed forms allowed by `β_s`/`β_e`; unit hints on `r` or `e1` cost less), β 463.9
+at 32 hints (135.5 / 122.9; the 32-dimensions-removed approximation gave 466), 451.9 at 64 and 446.0 at 80 (`R_TXM`,
+the [CTR-PQZ-03](#CTR-PQZ-03) exception). `r, e1` are fresh per operation, so hints do not accumulate across transfers. **If any direction misses the target**, PQZ switches to split randomness:
 `(r, e1)` shared by `v_t` and `v_a` only (both encrypt the same `d`, which both holders know) and `v_f` under its own
 `(r_f, e1_f)`, `u_f`; `R_TX` gains rows 2'/4' for `u_f`, the transfer output grows by 16,384 B (≈ +0.5 M gas), and the
 change is a new `proofSystemId`. Hints then open only ciphertexts of amounts the hinting parties already know.
@@ -1234,7 +1237,7 @@ op 2 BURN or REFRESH and op 5 RECEIVER or AUDITOR by the `opTag`.
 | 5 | `DISCLOSE-RECEIVER` | `R_DR` | `d8356cfbd875acb80fe8a8127a57b5c549d20fd65b9acca8672186a1a4296456` | 33,184 B |
 | 5 | `DISCLOSE-AUDITOR` | `R_DR` | `d6019aa47e04fe91c11df386ddc5bda2178a3f2506c46cdd59b16ef1d21daf81` | 33,184 B |
 | 6 | `SELFTEST` | — | — | empty |
-| 7 | **placeholder** — `TRANSFER-MULTI` (`OP_TRANSFER_MULTI`) | `R_TXM` | per [P6-ANON plan](../superpowers/plans/2026-10-14-p6-anon.md) D6 | layout of that plan's §4, written here when its Task S2 freezes it; until then op 7 ⇒ `0` |
+| 7 | `TRANSFER-MULTI` | `R_TXM`, M legs ([P6-ANON plan](../superpowers/plans/2026-10-14-p6-anon.md) D6) | `6f6a773a4c94af3a446a226ef43f6f5403d6a00b95de446149f484cc02726b90` | `50,048 + 16,640·M + 16,384·⌈M/4⌉` B (auditor on) / `33,664 + 16,512·M + 16,384·⌈M/4⌉` B (off); decoded by `parse_multi`, op 7 ⇒ `0` in `decode_input` until P6-ANON S3 |
 
 **Debit header** (`R_TX`, `R_TX0`, `R_BURN`: 20 words, 640 B; §7.7). "Hashed" = any 32 bytes: the decoder and the core
 do not read the word, it binds the proof through the [transcript](#transcript) and the contract writes it (e.g. an
@@ -1263,6 +1266,18 @@ address as 12 zero bytes ‖ address).
 | `R_TX` | `pk_f` 640, `pk_t` 17,024, `pk_a` 33,408, `u_T` 49,792, `v_T` 66,176, `u` 66,304, `v_t` 82,688, `v_f` 82,816, `v_a` 82,944 | 83,072 |
 | `R_TX0` | `pk_f` 640, `pk_t` 17,024, `u_T` 33,408, `v_T` 49,792, `u` 49,920, `v_t` 66,304, `v_f` 66,432 | 66,560 |
 | `R_BURN` (BURN, REFRESH) | `pk_f` 640, `u_T` 17,024, `v_T` 33,408, `u` 33,536, `v_f` 49,920 | 50,048 |
+
+**Op 7 `R_TXM`** (P6-ANON S2; `pqz-stmt` `parse_multi` / `Multi::encode`, `pqz_kat.py` `build_multi` / `parse`). The
+debit header with word 6 (192) = `recipientsHash = keccak256(word(UA_0) ‖ … ‖ word(UA_{M−1}))` in leg order, each UA a
+32-byte word (12 zero bytes ‖ address; hashed by the decoder), word 10 (320) = `M`, `amount` = 0, `fee` `< 2^64` (0
+allowed); body `pk_f ‖ pk_0 … pk_{M−1} ‖ [pk_a] ‖ T ‖ u_0 … u_{G−1} ‖ v_0 … v_{M−1} ‖ v_f ‖ [v_{a,0} … v_{a,M−1}]`
+(`pk_j` at 17,024 + 16,384·j, `u_g` at 33,536 + 16,384·(M + A + g), then the `v`s at 128 B each), `G = ⌈M/4⌉` with or
+without the auditor (≤ 80 hints per shared randomness, the [CTR-PQZ-03](#CTR-PQZ-03) exception); leg j in group
+`⌊j/4⌋`; at M = 1 the body is `R_TX`'s / `R_TX0`'s byte for byte. Lengths (on / off): M = 1 83,072 / 66,560; 2 99,712 /
+83,072; 4 132,992 / 116,096; 8 215,936 / 198,528. Built `M` per id, either auditor mode: PQZL {1, 2, 4, 8}, PQZH {1, 2,
+4} (owner D20). Order: `opTag`, id, header present (`< 640` B ⇒ `0`, length), `auditorOn` ∈ {0, 1}, `M` in the id's
+set, length = the `(M, auditorOn)` length (the words pick the shape: `(1, on)` and `(2, off)` are both 83,072 B),
+`fee`, `amount`, salt, `amount` = 0, coefficients.
 
 **`R_REG`** (16,480 B): `opTag` 0, `proofSystemId` 32, `message` 64 (hashed; §7.2 step 6 fixes its value), `pk` 96.
 
@@ -1693,7 +1708,7 @@ service is the user's (or the organization's key oracle), never a third party's 
 | T12 | Randomness reuse | salted derivation for transfers, fresh CSPRNG randomness for burn / refresh ([CTR-PQZ-19](#CTR-PQZ-19)); hedged proof masks |
 | T13 | Precompile bug ⇒ consensus split or false accept | single C core shared with prover tests; continuous ASan/UBSan fuzzing of `pqz_verify`; fail-closed returndata check; deterministic integer code |
 | T13a | Precompile **crash** (abort, OOB, stack overflow) on crafted input ⇒ the single signer dies ⇒ chain halt | never-crash requirement: Rust bounds-checked decoder, error returns instead of `abort`, fixed arena and stack, bounded loops, no timeouts ([CTR-PQZ-10](#CTR-PQZ-10)); follower-only public RPC and pre-simulation |
-| T13b | Malicious recipient keys extract hints on the shared `(r, e1)` (forms `e^T r − s^T e1 + e2`) | assumption "MLWE with ≤ 32 adversarial perfect hints on `(r, e1)`", approximated at β ≈ 466, worst-direction estimate before the freeze; fresh `(r, e1)` per operation; split-randomness fallback ([CTR-PQZ-04](#CTR-PQZ-04)) |
+| T13b | Malicious recipient keys extract hints on the shared `(r, e1)` (forms `e^T r − s^T e1 + e2`) | assumption "MLWE with ≤ 32 adversarial perfect hints on `(r, e1)`" (DDGR20 worst case β 463.9), and for `R_TXM` ≤ 80 hints per `(r_g, e1_g)` with groups of 4 legs, auditor included (β 446.0 ≥ Kyber-512's 406, owner-accepted exception to [CTR-PQZ-03](#CTR-PQZ-03)'s 450 margin; `pqz-core/params/anon/hints-anon.txt`); fresh `(r, e1)` per operation; split-randomness fallback ([CTR-PQZ-04](#CTR-PQZ-04)) |
 | T13c | Chain-id collision (former id 9000 = Evmos Testnet; 7622 not assumed unique) | owner move to 7622; precompile self-test; `chainUid` (genesis hash) in every statement, `entryRef` and PoP; node binds genesis hash, registry `chainUid()` and token |
 | T14 | Rogue / stolen public key registration; naming a victim's ML-DSA UA as `authRef` | `R_REG` PoP over the UA `popDigest(ua, authRef)` (chain key, `chain_uid`, registry, UA, `authRef`) plus the `authRef` co-sign ([CTR-UA-07](accounts.md#CTR-UA-07)); keyHash group `pqz-mlwe`; front-running yields the identical record |
 | T15 | Leaked PQZ key | read-only breach (auth key separate, [CTR-PQZ-12](#CTR-PQZ-12)); move funds to a new UA |
