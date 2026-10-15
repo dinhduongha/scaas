@@ -1,0 +1,2452 @@
+{
+ "relations": {
+  "R_REG": {
+   "fnv": {
+    "3": "e70b5dc4",
+    "2": "1af59837",
+    "1": "25074bbb"
+   },
+   "fnv_seen": [
+    [
+     "native-generic.jsonl",
+     3,
+     "e70b5dc4"
+    ],
+    [
+     "wasm-generic.jsonl",
+     3,
+     "e70b5dc4"
+    ],
+    [
+     "native-fast.jsonl",
+     2,
+     "1af59837"
+    ],
+    [
+     "x86v3-fast.jsonl",
+     2,
+     "1af59837"
+    ],
+    [
+     "wasm-fast.jsonl",
+     2,
+     "1af59837"
+    ],
+    [
+     "wasm-both.jsonl",
+     2,
+     "1af59837"
+    ],
+    [
+     "alone-wasm-nosv.jsonl",
+     1,
+     "25074bbb"
+    ]
+   ],
+   "proof_bytes_max": 28113,
+   "prove_p50_ms_native": 251.424,
+   "generic_verify_p50_ms_native": 170.363,
+   "prove_p50_ms_wasm": 491.814,
+   "generic_verify_p50_ms_wasm": 229.741,
+   "sv_p50_ms_native": 3.859,
+   "sv_p99_ms_native": 3.949,
+   "sv_p50_ms_x86v3": 2.358,
+   "sv_p99_ms_x86v3": 2.521,
+   "sv_p50_ms_wasm": 6.716,
+   "sv_p99_ms_wasm": 7.504,
+   "wasm_prove_peak_bytes": 73692688,
+   "ratios": {
+    "sv_speedup": 44.1,
+    "wasm_over_native_prove": 1.96
+   }
+  },
+  "R_TX": {
+   "fnv": {
+    "3": "9304299b",
+    "2": "559b3c44",
+    "1": "008d4495"
+   },
+   "fnv_seen": [
+    [
+     "native-generic.jsonl",
+     3,
+     "9304299b"
+    ],
+    [
+     "wasm-generic.jsonl",
+     3,
+     "9304299b"
+    ],
+    [
+     "native-fast.jsonl",
+     2,
+     "559b3c44"
+    ],
+    [
+     "x86v3-fast.jsonl",
+     2,
+     "559b3c44"
+    ],
+    [
+     "wasm-fast.jsonl",
+     2,
+     "559b3c44"
+    ],
+    [
+     "wasm-both.jsonl",
+     2,
+     "559b3c44"
+    ],
+    [
+     "alone-wasm-nosv.jsonl",
+     1,
+     "008d4495"
+    ]
+   ],
+   "proof_bytes_max": 42780,
+   "prove_p50_ms_native": 897.81,
+   "generic_verify_p50_ms_native": 660.789,
+   "prove_p50_ms_wasm": 1205.126,
+   "generic_verify_p50_ms_wasm": 815.012,
+   "sv_p50_ms_native": 7.985,
+   "sv_p99_ms_native": 8.293,
+   "sv_p50_ms_x86v3": 4.611,
+   "sv_p99_ms_x86v3": 5.546,
+   "sv_p50_ms_wasm": 13.913,
+   "sv_p99_ms_wasm": 15.292,
+   "wasm_prove_peak_bytes": 231858048,
+   "ratios": {
+    "sv_speedup": 82.8,
+    "wasm_over_native_prove": 1.34
+   }
+  },
+  "R_BURN": {
+   "fnv": {
+    "3": "0ea1c7a6",
+    "2": "7694fd9f",
+    "1": "ad3e8a12"
+   },
+   "fnv_seen": [
+    [
+     "native-generic.jsonl",
+     3,
+     "0ea1c7a6"
+    ],
+    [
+     "wasm-generic.jsonl",
+     3,
+     "0ea1c7a6"
+    ],
+    [
+     "native-fast.jsonl",
+     2,
+     "7694fd9f"
+    ],
+    [
+     "x86v3-fast.jsonl",
+     2,
+     "7694fd9f"
+    ],
+    [
+     "wasm-fast.jsonl",
+     2,
+     "7694fd9f"
+    ],
+    [
+     "wasm-both.jsonl",
+     2,
+     "7694fd9f"
+    ],
+    [
+     "alone-wasm-nosv.jsonl",
+     1,
+     "ad3e8a12"
+    ]
+   ],
+   "proof_bytes_max": 41935,
+   "prove_p50_ms_native": 863.52,
+   "generic_verify_p50_ms_native": 547.004,
+   "prove_p50_ms_wasm": 1148.393,
+   "generic_verify_p50_ms_wasm": 713.254,
+   "sv_p50_ms_native": 7.651,
+   "sv_p99_ms_native": 8.667,
+   "sv_p50_ms_x86v3": 4.533,
+   "sv_p99_ms_x86v3": 4.939,
+   "sv_p50_ms_wasm": 12.953,
+   "sv_p99_ms_wasm": 14.159,
+   "wasm_prove_peak_bytes": 220431120,
+   "ratios": {
+    "sv_speedup": 71.5,
+    "wasm_over_native_prove": 1.33
+   }
+  },
+  "R_DS": {
+   "fnv": {
+    "3": "f39a8e64",
+    "2": "9eb44281",
+    "1": "478a0d94"
+   },
+   "fnv_seen": [
+    [
+     "native-generic.jsonl",
+     3,
+     "f39a8e64"
+    ],
+    [
+     "wasm-generic.jsonl",
+     3,
+     "f39a8e64"
+    ],
+    [
+     "native-fast.jsonl",
+     2,
+     "9eb44281"
+    ],
+    [
+     "x86v3-fast.jsonl",
+     2,
+     "9eb44281"
+    ],
+    [
+     "wasm-fast.jsonl",
+     2,
+     "9eb44281"
+    ],
+    [
+     "wasm-both.jsonl",
+     2,
+     "9eb44281"
+    ],
+    [
+     "alone-wasm-nosv.jsonl",
+     1,
+     "478a0d94"
+    ]
+   ],
+   "proof_bytes_max": 28974,
+   "prove_p50_ms_native": 363.825,
+   "generic_verify_p50_ms_native": 203.797,
+   "prove_p50_ms_wasm": 590.364,
+   "generic_verify_p50_ms_wasm": 280.215,
+   "sv_p50_ms_native": 4.256,
+   "sv_p99_ms_native": 4.563,
+   "sv_p50_ms_x86v3": 2.87,
+   "sv_p99_ms_x86v3": 3.661,
+   "sv_p50_ms_wasm": 7.349,
+   "sv_p99_ms_wasm": 8.186,
+   "wasm_prove_peak_bytes": 76888880,
+   "ratios": {
+    "sv_speedup": 47.9,
+    "wasm_over_native_prove": 1.62
+   }
+  },
+  "R_DR": {
+   "fnv": {
+    "3": "96a6e906",
+    "2": "5bb0078c",
+    "1": "cb2f3ced"
+   },
+   "fnv_seen": [
+    [
+     "native-generic.jsonl",
+     3,
+     "96a6e906"
+    ],
+    [
+     "wasm-generic.jsonl",
+     3,
+     "96a6e906"
+    ],
+    [
+     "native-fast.jsonl",
+     2,
+     "5bb0078c"
+    ],
+    [
+     "x86v3-fast.jsonl",
+     2,
+     "5bb0078c"
+    ],
+    [
+     "wasm-fast.jsonl",
+     2,
+     "5bb0078c"
+    ],
+    [
+     "wasm-both.jsonl",
+     2,
+     "5bb0078c"
+    ],
+    [
+     "alone-wasm-nosv.jsonl",
+     1,
+     "cb2f3ced"
+    ]
+   ],
+   "proof_bytes_max": 28994,
+   "prove_p50_ms_native": 270.129,
+   "generic_verify_p50_ms_native": 195.2,
+   "prove_p50_ms_wasm": 422.408,
+   "generic_verify_p50_ms_wasm": 266.772,
+   "sv_p50_ms_native": 4.561,
+   "sv_p99_ms_native": 5.037,
+   "sv_p50_ms_x86v3": 2.952,
+   "sv_p99_ms_x86v3": 3.903,
+   "sv_p50_ms_wasm": 7.633,
+   "sv_p99_ms_wasm": 8.822,
+   "wasm_prove_peak_bytes": 82951488,
+   "ratios": {
+    "sv_speedup": 42.8,
+    "wasm_over_native_prove": 1.56
+   }
+  },
+  "R_TX0": {
+   "fnv": {
+    "3": "a0afafc7",
+    "2": "8b99b979",
+    "1": "bfdc29df"
+   },
+   "fnv_seen": [
+    [
+     "native-generic.jsonl",
+     3,
+     "a0afafc7"
+    ],
+    [
+     "wasm-generic.jsonl",
+     3,
+     "a0afafc7"
+    ],
+    [
+     "native-fast.jsonl",
+     2,
+     "8b99b979"
+    ],
+    [
+     "x86v3-fast.jsonl",
+     2,
+     "8b99b979"
+    ],
+    [
+     "wasm-fast.jsonl",
+     2,
+     "8b99b979"
+    ],
+    [
+     "wasm-both.jsonl",
+     2,
+     "8b99b979"
+    ],
+    [
+     "alone-wasm-nosv.jsonl",
+     1,
+     "bfdc29df"
+    ]
+   ],
+   "proof_bytes_max": 42432,
+   "prove_p50_ms_native": 815.506,
+   "generic_verify_p50_ms_native": 593.256,
+   "prove_p50_ms_wasm": 1236.642,
+   "generic_verify_p50_ms_wasm": 724.175,
+   "sv_p50_ms_native": 8.022,
+   "sv_p99_ms_native": 9.055,
+   "sv_p50_ms_x86v3": 4.736,
+   "sv_p99_ms_x86v3": 5.545,
+   "sv_p50_ms_wasm": 13.492,
+   "sv_p99_ms_wasm": 16.123,
+   "wasm_prove_peak_bytes": 227275456,
+   "ratios": {
+    "sv_speedup": 74.0,
+    "wasm_over_native_prove": 1.52
+   }
+  }
+ },
+ "checks": {
+  "kat": "ok",
+  "tbox_fixes": "ok",
+  "sv_fixes": "ok",
+  "diff-portable": {
+   "cases": 3484,
+   "mismatches": 0,
+   "other_fails": 0,
+   "prg_mismatches": 0
+  }
+ },
+ "runs": {
+  "native-generic.jsonl": {
+   "fails": 0,
+   "mismatches": 0,
+   "file": "/home/ha/work/ainative/scaas/.claude/worktrees/artifact2/pqz-core/artifact/runs/art2-host-quick/native-generic.jsonl"
+  },
+  "wasm-generic.jsonl": {
+   "fails": 0,
+   "mismatches": 0,
+   "file": "/home/ha/work/ainative/scaas/.claude/worktrees/artifact2/pqz-core/artifact/runs/art2-host-quick/wasm-generic.jsonl"
+  },
+  "native-fast.jsonl": {
+   "fails": 0,
+   "mismatches": 0,
+   "file": "/home/ha/work/ainative/scaas/.claude/worktrees/artifact2/pqz-core/artifact/runs/art2-host-quick/native-fast.jsonl"
+  },
+  "x86v3-fast.jsonl": {
+   "fails": 0,
+   "mismatches": 0,
+   "file": "/home/ha/work/ainative/scaas/.claude/worktrees/artifact2/pqz-core/artifact/runs/art2-host-quick/x86v3-fast.jsonl"
+  },
+  "wasm-fast.jsonl": {
+   "fails": 0,
+   "mismatches": 0,
+   "file": "/home/ha/work/ainative/scaas/.claude/worktrees/artifact2/pqz-core/artifact/runs/art2-host-quick/wasm-fast.jsonl"
+  },
+  "wasm-both.jsonl": {
+   "fails": 0,
+   "mismatches": 0,
+   "file": "/home/ha/work/ainative/scaas/.claude/worktrees/artifact2/pqz-core/artifact/runs/art2-host-quick/wasm-both.jsonl"
+  },
+  "alone-wasm-nosv.jsonl": {
+   "fails": 0,
+   "mismatches": 0,
+   "file": "/home/ha/work/ainative/scaas/.claude/worktrees/artifact2/pqz-core/artifact/runs/art2-host-quick/alone-wasm-nosv.jsonl"
+  }
+ },
+ "pqzh": {
+  "forms": {
+   "R_REG": {
+    "fnv_seen": [
+     [
+      "pqzh-native.jsonl",
+      "0",
+      "0ecf451a"
+     ],
+     [
+      "pqzh-native.jsonl",
+      "1",
+      "36b1d3e5"
+     ],
+     [
+      "pqzh-wasm.jsonl",
+      "1",
+      "36b1d3e5"
+     ]
+    ],
+    "bytes_seen": [
+     [
+      "pqzh-native.jsonl",
+      "1",
+      186904
+     ],
+     [
+      "pqzh-wasm.jsonl",
+      "1",
+      186904
+     ]
+    ],
+    "max_len_exact": 190458,
+    "max_len_verifier": 190458,
+    "proof_bytes_max": 187098,
+    "prove_p50_ms_native": 437.127,
+    "prove_memory_mib_native": 25.9,
+    "verify_p50_ms_native": 6.929,
+    "verify_p99_ms_native": 7.015,
+    "verify_n_native": 20,
+    "mutations_native": 24,
+    "within_256mib": true,
+    "prove_p50_ms_wasm": 807.575,
+    "prove_memory_mib_wasm": 28.5625,
+    "verify_p50_ms_wasm": 11.488,
+    "verify_p99_ms_wasm": 12.091,
+    "verify_n_wasm": 20,
+    "ratios": {
+     "wasm_over_native_prove": 1.85,
+     "wasm_over_native_verify": 1.66
+    }
+   },
+   "R_TX": {
+    "fnv_seen": [
+     [
+      "pqzh-native.jsonl",
+      "0",
+      "534b3a74"
+     ],
+     [
+      "pqzh-native.jsonl",
+      "1",
+      "720b94e0"
+     ],
+     [
+      "pqzh-wasm.jsonl",
+      "1",
+      "720b94e0"
+     ]
+    ],
+    "bytes_seen": [
+     [
+      "pqzh-native.jsonl",
+      "1",
+      231416
+     ],
+     [
+      "pqzh-wasm.jsonl",
+      "1",
+      231416
+     ]
+    ],
+    "max_len_exact": 235470,
+    "max_len_verifier": 235470,
+    "proof_bytes_max": 231416,
+    "prove_p50_ms_native": 647.167,
+    "prove_memory_mib_native": 43.2,
+    "verify_p50_ms_native": 9.663,
+    "verify_p99_ms_native": 10.027,
+    "verify_n_native": 20,
+    "mutations_native": 24,
+    "within_256mib": true,
+    "prove_p50_ms_wasm": 1470.129,
+    "prove_memory_mib_wasm": 46.4375,
+    "verify_p50_ms_wasm": 17.195,
+    "verify_p99_ms_wasm": 18.281,
+    "verify_n_wasm": 20,
+    "ratios": {
+     "wasm_over_native_prove": 2.27,
+     "wasm_over_native_verify": 1.78
+    }
+   },
+   "R_BURN": {
+    "fnv_seen": [
+     [
+      "pqzh-native.jsonl",
+      "0",
+      "f4fef37e"
+     ],
+     [
+      "pqzh-native.jsonl",
+      "1",
+      "e270d5c8"
+     ],
+     [
+      "pqzh-wasm.jsonl",
+      "1",
+      "e270d5c8"
+     ]
+    ],
+    "bytes_seen": [
+     [
+      "pqzh-native.jsonl",
+      "1",
+      231256
+     ],
+     [
+      "pqzh-wasm.jsonl",
+      "1",
+      231256
+     ]
+    ],
+    "max_len_exact": 234744,
+    "max_len_verifier": 234744,
+    "proof_bytes_max": 232344,
+    "prove_p50_ms_native": 625.316,
+    "prove_memory_mib_native": 42.9,
+    "verify_p50_ms_native": 9.232,
+    "verify_p99_ms_native": 9.313,
+    "verify_n_native": 20,
+    "mutations_native": 24,
+    "within_256mib": true,
+    "prove_p50_ms_wasm": 1320.524,
+    "prove_memory_mib_wasm": 46.4375,
+    "verify_p50_ms_wasm": 16.455,
+    "verify_p99_ms_wasm": 16.729,
+    "verify_n_wasm": 20,
+    "ratios": {
+     "wasm_over_native_prove": 2.11,
+     "wasm_over_native_verify": 1.78
+    }
+   },
+   "R_DS": {
+    "fnv_seen": [
+     [
+      "pqzh-native.jsonl",
+      "0",
+      "0a7acf34"
+     ],
+     [
+      "pqzh-native.jsonl",
+      "1",
+      "020286c2"
+     ],
+     [
+      "pqzh-wasm.jsonl",
+      "1",
+      "020286c2"
+     ]
+    ],
+    "bytes_seen": [
+     [
+      "pqzh-native.jsonl",
+      "1",
+      187482
+     ],
+     [
+      "pqzh-wasm.jsonl",
+      "1",
+      187482
+     ]
+    ],
+    "max_len_exact": 190458,
+    "max_len_verifier": 190458,
+    "proof_bytes_max": 187546,
+    "prove_p50_ms_native": 377.292,
+    "prove_memory_mib_native": 25.9,
+    "verify_p50_ms_native": 7.305,
+    "verify_p99_ms_native": 7.389,
+    "verify_n_native": 20,
+    "mutations_native": 24,
+    "within_256mib": true,
+    "prove_p50_ms_wasm": 788.981,
+    "prove_memory_mib_wasm": 46.75,
+    "verify_p50_ms_wasm": 12.579,
+    "verify_p99_ms_wasm": 14.632,
+    "verify_n_wasm": 20,
+    "ratios": {
+     "wasm_over_native_prove": 2.09,
+     "wasm_over_native_verify": 1.72
+    }
+   },
+   "R_DR": {
+    "fnv_seen": [
+     [
+      "pqzh-native.jsonl",
+      "0",
+      "e42aa3da"
+     ],
+     [
+      "pqzh-native.jsonl",
+      "1",
+      "c5f5fb23"
+     ],
+     [
+      "pqzh-wasm.jsonl",
+      "1",
+      "c5f5fb23"
+     ]
+    ],
+    "bytes_seen": [
+     [
+      "pqzh-native.jsonl",
+      "1",
+      185462
+     ],
+     [
+      "pqzh-wasm.jsonl",
+      "1",
+      185462
+     ]
+    ],
+    "max_len_exact": 190458,
+    "max_len_verifier": 190458,
+    "proof_bytes_max": 185462,
+    "prove_p50_ms_native": 389.24,
+    "prove_memory_mib_native": 25.9,
+    "verify_p50_ms_native": 7.061,
+    "verify_p99_ms_native": 7.141,
+    "verify_n_native": 20,
+    "mutations_native": 24,
+    "within_256mib": true,
+    "prove_p50_ms_wasm": 782.689,
+    "prove_memory_mib_wasm": 46.75,
+    "verify_p50_ms_wasm": 11.379,
+    "verify_p99_ms_wasm": 11.744,
+    "verify_n_wasm": 20,
+    "ratios": {
+     "wasm_over_native_prove": 2.01,
+     "wasm_over_native_verify": 1.61
+    }
+   },
+   "R_TX0": {
+    "fnv_seen": [
+     [
+      "pqzh-native.jsonl",
+      "0",
+      "360216a0"
+     ],
+     [
+      "pqzh-native.jsonl",
+      "1",
+      "a69e9010"
+     ],
+     [
+      "pqzh-wasm.jsonl",
+      "1",
+      "a69e9010"
+     ]
+    ],
+    "bytes_seen": [
+     [
+      "pqzh-native.jsonl",
+      "1",
+      231320
+     ],
+     [
+      "pqzh-wasm.jsonl",
+      "1",
+      231320
+     ]
+    ],
+    "max_len_exact": 234744,
+    "max_len_verifier": 234744,
+    "proof_bytes_max": 231320,
+    "prove_p50_ms_native": 692.635,
+    "prove_memory_mib_native": 42.9,
+    "verify_p50_ms_native": 9.437,
+    "verify_p99_ms_native": 10.102,
+    "verify_n_native": 20,
+    "mutations_native": 24,
+    "within_256mib": true,
+    "prove_p50_ms_wasm": 1373.161,
+    "prove_memory_mib_wasm": 48.0625,
+    "verify_p50_ms_wasm": 16.877,
+    "verify_p99_ms_wasm": 17.13,
+    "verify_n_wasm": 20,
+    "ratios": {
+     "wasm_over_native_prove": 1.98,
+     "wasm_over_native_verify": 1.79
+    }
+   }
+  },
+  "runs": {
+   "pqzh-native.jsonl": {
+    "fails": 0,
+    "forms": [
+     "R_BURN",
+     "R_DR",
+     "R_DS",
+     "R_REG",
+     "R_TX",
+     "R_TX0"
+    ],
+    "file": "/home/ha/work/ainative/scaas/.claude/worktrees/artifact2/pqz-core/artifact/runs/art2-host-quick/pqzh-native.jsonl"
+   },
+   "pqzh-wasm.jsonl": {
+    "fails": 0,
+    "forms": [
+     "R_BURN",
+     "R_DR",
+     "R_DS",
+     "R_REG",
+     "R_TX",
+     "R_TX0"
+    ],
+    "file": "/home/ha/work/ainative/scaas/.claude/worktrees/artifact2/pqz-core/artifact/runs/art2-host-quick/pqzh-wasm.jsonl"
+   }
+  }
+ },
+ "ffi": {
+  "selftest": "ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205",
+  "digests_native": [
+   {
+    "sys": "PQZL",
+    "form": "Transfer",
+    "stmt": "96fdf8214dcab31ef3c9733bf6baff3fc69211c243ac376d37cfb080d14f006a",
+    "wit": "003e01ca97ef309c5e9798bd319281486cead3b28c854c39db1bf582f1b77bcb",
+    "proof": "b2e20752c77ebb0e8d0d7d5cc3370af87dbafc98ed25600c9013ef21a3e8c6fe",
+    "proof_len": 42759,
+    "valid": true
+   },
+   {
+    "sys": "PQZL",
+    "form": "Transfer0",
+    "stmt": "bfa63d9b5cff420b6a8a390bf424d1deb773ca432ed7122e87efa52622243ae2",
+    "wit": "6daf43bc215146a0e7115b92ff881f73f0e1b5d23118beb3e43018083b865c18",
+    "proof": "9859b10f943536111caa0d524ec37a77189869fc1dff82819e5123dcd3c51a72",
+    "proof_len": 42387,
+    "valid": true
+   },
+   {
+    "sys": "PQZL",
+    "form": "Burn",
+    "stmt": "ad3719a64445fb01b1e10842ea0bb69cc53758081b6b276a41ff460955f81d0e",
+    "wit": "e7444b9e8e6ee7ef427cded0a89769e521e7255efe5877925996c6ce76a1517b",
+    "proof": "1db863e5b1b1ce61b0ff539bb42efcf220123ec11b4f3ad11d017f585d90a96a",
+    "proof_len": 41914,
+    "valid": true
+   },
+   {
+    "sys": "PQZL",
+    "form": "Refresh",
+    "stmt": "04033a99243430e51c1745cb9c698e3d4d88a0d2be4bc253d413f189fcf7283d",
+    "wit": "50184bdbe946be7577a096a90a22ac53f6d6800f2f5182811ab69957bb387bd4",
+    "proof": "5f096e9ea3a024b3193f29ee710ab49a31b1598f92f15d0c74e0438ceb7067c2",
+    "proof_len": 41902,
+    "valid": true
+   },
+   {
+    "sys": "PQZL",
+    "form": "Register",
+    "stmt": "08521045ea661dc04f564429c81816c00545e4be8e105066ad5f327851af802d",
+    "wit": "2735d1ecdaa75f733e1e6c3f54e208bb214e3de88e1fdaddfcb3396d5b5580b4",
+    "proof": "2ef449a8940421aea883ed82370beea7804c0eb959bb314c1e881b993b6715d6",
+    "proof_len": 28068,
+    "valid": true
+   },
+   {
+    "sys": "PQZL",
+    "form": "DiscloseSender",
+    "stmt": "264041e23be23b96ed55dd4d09b73d3fa91199fef27c46e866508371101acffd",
+    "wit": "7f185c98b7fd21cb168c64c65985dbe96ac85cf5766e1c83e40f39fc17ed477d",
+    "proof": "b203a909c91e6c6f6793720819e7368de1b4bb35cd09cfefc3bd64a1aefc9174",
+    "proof_len": 28964,
+    "valid": true
+   },
+   {
+    "sys": "PQZL",
+    "form": "DiscloseReceiver",
+    "stmt": "50d2fc7b7c604d7d9dbf92e560023c8dcd7fac58160a41d81fdf44eb086b3ced",
+    "wit": "9ef2dc3dfa1bd57308a773f92477b59676a15db77018c4fce66e53dde7b84544",
+    "proof": "f5b0d3989100be882101db964f045e9c2b8de567b91a2a720d1247c38281cc7f",
+    "proof_len": 28990,
+    "valid": true
+   },
+   {
+    "sys": "PQZL",
+    "form": "DiscloseAuditor",
+    "stmt": "6389bf2157800d18146a4ed8bca12642225d922da41ea2c1d9a15a7854681f15",
+    "wit": "997556eea92115862052b9f62d1a3265b3573f9c1636ff9c73d77ede0ae525cb",
+    "proof": "30c6c219f2751d8c19f7fb3cfad0e5409f2e2e8154e0b9e51452d9567c324ed7",
+    "proof_len": 28995,
+    "valid": true
+   },
+   {
+    "sys": "PQZH",
+    "form": "Transfer",
+    "stmt": "afd9b89c3b34898e7f6e31817bea85cc79992ce5e0adddf7949016beb870fba3",
+    "wit": "003e01ca97ef309c5e9798bd319281486cead3b28c854c39db1bf582f1b77bcb",
+    "proof": "7d8f350f96e9e50ab9397c6a365c3db255f3ede4b023a23baad5d2b00efe507f",
+    "proof_len": 231022,
+    "valid": true
+   },
+   {
+    "sys": "PQZH",
+    "form": "Transfer0",
+    "stmt": "b679bf2c9e4311986b2cdfbbb4d7d62e9243fd915db3aa0cd30d4bb581aad36f",
+    "wit": "6daf43bc215146a0e7115b92ff881f73f0e1b5d23118beb3e43018083b865c18",
+    "proof": "279e05f9798e128f0c8d7a94fd17972f3a03b4fb57e4f3d6d8581ccf51b87ea5",
+    "proof_len": 231064,
+    "valid": true
+   },
+   {
+    "sys": "PQZH",
+    "form": "Burn",
+    "stmt": "24074e3c1b6c6d257ab95ba37e60020c8d8be328ad77b35f9a7919206981fbdd",
+    "wit": "e7444b9e8e6ee7ef427cded0a89769e521e7255efe5877925996c6ce76a1517b",
+    "proof": "3447117e915d2df74afe3558eab3ecfb47248c84ff037518318485c2f44187b4",
+    "proof_len": 231320,
+    "valid": true
+   },
+   {
+    "sys": "PQZH",
+    "form": "Refresh",
+    "stmt": "89752d4dc82a35eaca3e382c58fa4eddb38b78a4f6553e5fd4dff3f74ebca58a",
+    "wit": "50184bdbe946be7577a096a90a22ac53f6d6800f2f5182811ab69957bb387bd4",
+    "proof": "8fbf9752c7761d04baccfc7c0c9f1b452a79a547b96e422a5aaa623bc8a5cf6e",
+    "proof_len": 231928,
+    "valid": true
+   },
+   {
+    "sys": "PQZH",
+    "form": "Register",
+    "stmt": "535530c122669adc1ee56a2662e488043c8d6e5544f7ff5dc2b630889f564eb9",
+    "wit": "2735d1ecdaa75f733e1e6c3f54e208bb214e3de88e1fdaddfcb3396d5b5580b4",
+    "proof": "b41cc34e3d8817b9921440286cee59cfefc461d1c9a0363522b469c426035137",
+    "proof_len": 187738,
+    "valid": true
+   },
+   {
+    "sys": "PQZH",
+    "form": "DiscloseSender",
+    "stmt": "13e7caef50d5fcdd4eb68af72e0cac1254e160f993bbf2493d5a4ec0d2e99fd9",
+    "wit": "7f185c98b7fd21cb168c64c65985dbe96ac85cf5766e1c83e40f39fc17ed477d",
+    "proof": "02ef8524807709a076fed941285acc3b2f15fec34d4fb3ea4a2c6fa00f30dc9a",
+    "proof_len": 186842,
+    "valid": true
+   },
+   {
+    "sys": "PQZH",
+    "form": "DiscloseReceiver",
+    "stmt": "9d01d9a9c365efe67f14f84cc59dd4f3156320c1c5349dff03271aaa70679fa8",
+    "wit": "9ef2dc3dfa1bd57308a773f92477b59676a15db77018c4fce66e53dde7b84544",
+    "proof": "3e08100f18c049667aa25dbf7efc3c63bbc5f90edbc5be73e8e7891cf6e1230c",
+    "proof_len": 187098,
+    "valid": true
+   },
+   {
+    "sys": "PQZH",
+    "form": "DiscloseAuditor",
+    "stmt": "250d5b44fceb79339a7e995b2bd35eb82888978966b706d4ee355bab0d1718a5",
+    "wit": "997556eea92115862052b9f62d1a3265b3573f9c1636ff9c73d77ede0ae525cb",
+    "proof": "99f72da7307e0728d612c8ce7e8bdc473d0c22d00f534461c108f409a1ab7102",
+    "proof_len": 186778,
+    "valid": true
+   },
+   {
+    "selftest": "ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205",
+    "kat_digest": "f7c772d6467c84e1c143004017d3594d57dfbde49097e9d3fd9b382e03680776",
+    "a_digest": "f176b313331c898e11230c6addae3d44821413361e1416a6aedf9f26a7be3df0",
+    "results": [
+     true,
+     false,
+     true,
+     false
+    ],
+    "precompile": "ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205"
+   }
+  ],
+  "digests_wasm": [
+   {
+    "sys": "PQZL",
+    "form": "Transfer",
+    "stmt": "96fdf8214dcab31ef3c9733bf6baff3fc69211c243ac376d37cfb080d14f006a",
+    "wit": "003e01ca97ef309c5e9798bd319281486cead3b28c854c39db1bf582f1b77bcb",
+    "proof": "b2e20752c77ebb0e8d0d7d5cc3370af87dbafc98ed25600c9013ef21a3e8c6fe",
+    "proof_len": 42759,
+    "valid": true
+   },
+   {
+    "sys": "PQZL",
+    "form": "Transfer0",
+    "stmt": "bfa63d9b5cff420b6a8a390bf424d1deb773ca432ed7122e87efa52622243ae2",
+    "wit": "6daf43bc215146a0e7115b92ff881f73f0e1b5d23118beb3e43018083b865c18",
+    "proof": "9859b10f943536111caa0d524ec37a77189869fc1dff82819e5123dcd3c51a72",
+    "proof_len": 42387,
+    "valid": true
+   },
+   {
+    "sys": "PQZL",
+    "form": "Burn",
+    "stmt": "ad3719a64445fb01b1e10842ea0bb69cc53758081b6b276a41ff460955f81d0e",
+    "wit": "e7444b9e8e6ee7ef427cded0a89769e521e7255efe5877925996c6ce76a1517b",
+    "proof": "1db863e5b1b1ce61b0ff539bb42efcf220123ec11b4f3ad11d017f585d90a96a",
+    "proof_len": 41914,
+    "valid": true
+   },
+   {
+    "sys": "PQZL",
+    "form": "Refresh",
+    "stmt": "04033a99243430e51c1745cb9c698e3d4d88a0d2be4bc253d413f189fcf7283d",
+    "wit": "50184bdbe946be7577a096a90a22ac53f6d6800f2f5182811ab69957bb387bd4",
+    "proof": "5f096e9ea3a024b3193f29ee710ab49a31b1598f92f15d0c74e0438ceb7067c2",
+    "proof_len": 41902,
+    "valid": true
+   },
+   {
+    "sys": "PQZL",
+    "form": "Register",
+    "stmt": "08521045ea661dc04f564429c81816c00545e4be8e105066ad5f327851af802d",
+    "wit": "2735d1ecdaa75f733e1e6c3f54e208bb214e3de88e1fdaddfcb3396d5b5580b4",
+    "proof": "2ef449a8940421aea883ed82370beea7804c0eb959bb314c1e881b993b6715d6",
+    "proof_len": 28068,
+    "valid": true
+   },
+   {
+    "sys": "PQZL",
+    "form": "DiscloseSender",
+    "stmt": "264041e23be23b96ed55dd4d09b73d3fa91199fef27c46e866508371101acffd",
+    "wit": "7f185c98b7fd21cb168c64c65985dbe96ac85cf5766e1c83e40f39fc17ed477d",
+    "proof": "b203a909c91e6c6f6793720819e7368de1b4bb35cd09cfefc3bd64a1aefc9174",
+    "proof_len": 28964,
+    "valid": true
+   },
+   {
+    "sys": "PQZL",
+    "form": "DiscloseReceiver",
+    "stmt": "50d2fc7b7c604d7d9dbf92e560023c8dcd7fac58160a41d81fdf44eb086b3ced",
+    "wit": "9ef2dc3dfa1bd57308a773f92477b59676a15db77018c4fce66e53dde7b84544",
+    "proof": "f5b0d3989100be882101db964f045e9c2b8de567b91a2a720d1247c38281cc7f",
+    "proof_len": 28990,
+    "valid": true
+   },
+   {
+    "sys": "PQZL",
+    "form": "DiscloseAuditor",
+    "stmt": "6389bf2157800d18146a4ed8bca12642225d922da41ea2c1d9a15a7854681f15",
+    "wit": "997556eea92115862052b9f62d1a3265b3573f9c1636ff9c73d77ede0ae525cb",
+    "proof": "30c6c219f2751d8c19f7fb3cfad0e5409f2e2e8154e0b9e51452d9567c324ed7",
+    "proof_len": 28995,
+    "valid": true
+   },
+   {
+    "sys": "PQZH",
+    "form": "Transfer",
+    "stmt": "afd9b89c3b34898e7f6e31817bea85cc79992ce5e0adddf7949016beb870fba3",
+    "wit": "003e01ca97ef309c5e9798bd319281486cead3b28c854c39db1bf582f1b77bcb",
+    "proof": "7d8f350f96e9e50ab9397c6a365c3db255f3ede4b023a23baad5d2b00efe507f",
+    "proof_len": 231022,
+    "valid": true
+   },
+   {
+    "sys": "PQZH",
+    "form": "Transfer0",
+    "stmt": "b679bf2c9e4311986b2cdfbbb4d7d62e9243fd915db3aa0cd30d4bb581aad36f",
+    "wit": "6daf43bc215146a0e7115b92ff881f73f0e1b5d23118beb3e43018083b865c18",
+    "proof": "279e05f9798e128f0c8d7a94fd17972f3a03b4fb57e4f3d6d8581ccf51b87ea5",
+    "proof_len": 231064,
+    "valid": true
+   },
+   {
+    "sys": "PQZH",
+    "form": "Burn",
+    "stmt": "24074e3c1b6c6d257ab95ba37e60020c8d8be328ad77b35f9a7919206981fbdd",
+    "wit": "e7444b9e8e6ee7ef427cded0a89769e521e7255efe5877925996c6ce76a1517b",
+    "proof": "3447117e915d2df74afe3558eab3ecfb47248c84ff037518318485c2f44187b4",
+    "proof_len": 231320,
+    "valid": true
+   },
+   {
+    "sys": "PQZH",
+    "form": "Refresh",
+    "stmt": "89752d4dc82a35eaca3e382c58fa4eddb38b78a4f6553e5fd4dff3f74ebca58a",
+    "wit": "50184bdbe946be7577a096a90a22ac53f6d6800f2f5182811ab69957bb387bd4",
+    "proof": "8fbf9752c7761d04baccfc7c0c9f1b452a79a547b96e422a5aaa623bc8a5cf6e",
+    "proof_len": 231928,
+    "valid": true
+   },
+   {
+    "sys": "PQZH",
+    "form": "Register",
+    "stmt": "535530c122669adc1ee56a2662e488043c8d6e5544f7ff5dc2b630889f564eb9",
+    "wit": "2735d1ecdaa75f733e1e6c3f54e208bb214e3de88e1fdaddfcb3396d5b5580b4",
+    "proof": "b41cc34e3d8817b9921440286cee59cfefc461d1c9a0363522b469c426035137",
+    "proof_len": 187738,
+    "valid": true
+   },
+   {
+    "sys": "PQZH",
+    "form": "DiscloseSender",
+    "stmt": "13e7caef50d5fcdd4eb68af72e0cac1254e160f993bbf2493d5a4ec0d2e99fd9",
+    "wit": "7f185c98b7fd21cb168c64c65985dbe96ac85cf5766e1c83e40f39fc17ed477d",
+    "proof": "02ef8524807709a076fed941285acc3b2f15fec34d4fb3ea4a2c6fa00f30dc9a",
+    "proof_len": 186842,
+    "valid": true
+   },
+   {
+    "sys": "PQZH",
+    "form": "DiscloseReceiver",
+    "stmt": "9d01d9a9c365efe67f14f84cc59dd4f3156320c1c5349dff03271aaa70679fa8",
+    "wit": "9ef2dc3dfa1bd57308a773f92477b59676a15db77018c4fce66e53dde7b84544",
+    "proof": "3e08100f18c049667aa25dbf7efc3c63bbc5f90edbc5be73e8e7891cf6e1230c",
+    "proof_len": 187098,
+    "valid": true
+   },
+   {
+    "sys": "PQZH",
+    "form": "DiscloseAuditor",
+    "stmt": "250d5b44fceb79339a7e995b2bd35eb82888978966b706d4ee355bab0d1718a5",
+    "wit": "997556eea92115862052b9f62d1a3265b3573f9c1636ff9c73d77ede0ae525cb",
+    "proof": "99f72da7307e0728d612c8ce7e8bdc473d0c22d00f534461c108f409a1ab7102",
+    "proof_len": 186778,
+    "valid": true
+   },
+   {
+    "selftest": "ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205",
+    "kat_digest": "f7c772d6467c84e1c143004017d3594d57dfbde49097e9d3fd9b382e03680776",
+    "a_digest": "f176b313331c898e11230c6addae3d44821413361e1416a6aedf9f26a7be3df0",
+    "results": [
+     true,
+     false,
+     true,
+     false
+    ],
+    "precompile": "ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205"
+   }
+  ],
+  "bench": [
+   {
+    "sys": "PQZL",
+    "form": "Transfer",
+    "proof_bytes": 42759,
+    "direct": {
+     "n": 20,
+     "p50_ms": 8.403,
+     "p99_ms": 10.464,
+     "max_ms": 10.464
+    },
+    "rust": {
+     "n": 20,
+     "p50_ms": 8.045,
+     "p99_ms": 9.06,
+     "max_ms": 9.06
+    },
+    "c_abi": {
+     "n": 20,
+     "p50_ms": 8.035,
+     "p99_ms": 10.256,
+     "max_ms": 10.256
+    },
+    "adversarial": {
+     "n": 20,
+     "p50_ms": 8.123,
+     "p99_ms": 8.931,
+     "max_ms": 8.931
+    },
+    "decode": {
+     "n": 20,
+     "p50_ms": 0.005,
+     "p99_ms": 0.01,
+     "max_ms": 0.01
+    }
+   },
+   {
+    "sys": "PQZL",
+    "form": "Transfer0",
+    "proof_bytes": 42387,
+    "direct": {
+     "n": 20,
+     "p50_ms": 7.902,
+     "p99_ms": 8.648,
+     "max_ms": 8.648
+    },
+    "rust": {
+     "n": 20,
+     "p50_ms": 7.942,
+     "p99_ms": 8.145,
+     "max_ms": 8.145
+    },
+    "c_abi": {
+     "n": 20,
+     "p50_ms": 8.193,
+     "p99_ms": 11.602,
+     "max_ms": 11.602
+    },
+    "adversarial": {
+     "n": 20,
+     "p50_ms": 8.169,
+     "p99_ms": 10.169,
+     "max_ms": 10.169
+    },
+    "decode": {
+     "n": 20,
+     "p50_ms": 0.005,
+     "p99_ms": 0.011,
+     "max_ms": 0.011
+    }
+   },
+   {
+    "sys": "PQZL",
+    "form": "Burn",
+    "proof_bytes": 41914,
+    "direct": {
+     "n": 20,
+     "p50_ms": 7.729,
+     "p99_ms": 10.976,
+     "max_ms": 10.976
+    },
+    "rust": {
+     "n": 20,
+     "p50_ms": 7.832,
+     "p99_ms": 8.689,
+     "max_ms": 8.689
+    },
+    "c_abi": {
+     "n": 20,
+     "p50_ms": 7.767,
+     "p99_ms": 7.909,
+     "max_ms": 7.909
+    },
+    "adversarial": {
+     "n": 20,
+     "p50_ms": 7.946,
+     "p99_ms": 11.704,
+     "max_ms": 11.704
+    },
+    "decode": {
+     "n": 20,
+     "p50_ms": 0.002,
+     "p99_ms": 0.007,
+     "max_ms": 0.007
+    }
+   },
+   {
+    "sys": "PQZL",
+    "form": "Refresh",
+    "proof_bytes": 41902,
+    "direct": {
+     "n": 20,
+     "p50_ms": 7.761,
+     "p99_ms": 11.205,
+     "max_ms": 11.205
+    },
+    "rust": {
+     "n": 20,
+     "p50_ms": 8.216,
+     "p99_ms": 10.738,
+     "max_ms": 10.738
+    },
+    "c_abi": {
+     "n": 20,
+     "p50_ms": 7.995,
+     "p99_ms": 9.328,
+     "max_ms": 9.328
+    },
+    "adversarial": {
+     "n": 20,
+     "p50_ms": 7.822,
+     "p99_ms": 11.632,
+     "max_ms": 11.632
+    },
+    "decode": {
+     "n": 20,
+     "p50_ms": 0.002,
+     "p99_ms": 0.009,
+     "max_ms": 0.009
+    }
+   },
+   {
+    "sys": "PQZL",
+    "form": "Register",
+    "proof_bytes": 28068,
+    "direct": {
+     "n": 20,
+     "p50_ms": 4.441,
+     "p99_ms": 4.871,
+     "max_ms": 4.871
+    },
+    "rust": {
+     "n": 20,
+     "p50_ms": 4.422,
+     "p99_ms": 6.027,
+     "max_ms": 6.027
+    },
+    "c_abi": {
+     "n": 20,
+     "p50_ms": 4.5,
+     "p99_ms": 5.137,
+     "max_ms": 5.137
+    },
+    "adversarial": {
+     "n": 20,
+     "p50_ms": 4.199,
+     "p99_ms": 4.375,
+     "max_ms": 4.375
+    },
+    "decode": {
+     "n": 20,
+     "p50_ms": 0.001,
+     "p99_ms": 0.002,
+     "max_ms": 0.002
+    }
+   },
+   {
+    "sys": "PQZL",
+    "form": "DiscloseSender",
+    "proof_bytes": 28964,
+    "direct": {
+     "n": 20,
+     "p50_ms": 4.336,
+     "p99_ms": 4.53,
+     "max_ms": 4.53
+    },
+    "rust": {
+     "n": 20,
+     "p50_ms": 4.375,
+     "p99_ms": 5.141,
+     "max_ms": 5.141
+    },
+    "c_abi": {
+     "n": 20,
+     "p50_ms": 4.417,
+     "p99_ms": 6.117,
+     "max_ms": 6.117
+    },
+    "adversarial": {
+     "n": 20,
+     "p50_ms": 4.452,
+     "p99_ms": 5.314,
+     "max_ms": 5.314
+    },
+    "decode": {
+     "n": 20,
+     "p50_ms": 0.002,
+     "p99_ms": 0.006,
+     "max_ms": 0.006
+    }
+   },
+   {
+    "sys": "PQZL",
+    "form": "DiscloseReceiver",
+    "proof_bytes": 28990,
+    "direct": {
+     "n": 20,
+     "p50_ms": 4.552,
+     "p99_ms": 5.584,
+     "max_ms": 5.584
+    },
+    "rust": {
+     "n": 20,
+     "p50_ms": 4.606,
+     "p99_ms": 4.903,
+     "max_ms": 4.903
+    },
+    "c_abi": {
+     "n": 20,
+     "p50_ms": 4.817,
+     "p99_ms": 6.858,
+     "max_ms": 6.858
+    },
+    "adversarial": {
+     "n": 20,
+     "p50_ms": 4.619,
+     "p99_ms": 4.706,
+     "max_ms": 4.706
+    },
+    "decode": {
+     "n": 20,
+     "p50_ms": 0.003,
+     "p99_ms": 0.006,
+     "max_ms": 0.006
+    }
+   },
+   {
+    "sys": "PQZL",
+    "form": "DiscloseAuditor",
+    "proof_bytes": 28995,
+    "direct": {
+     "n": 20,
+     "p50_ms": 4.587,
+     "p99_ms": 5.236,
+     "max_ms": 5.236
+    },
+    "rust": {
+     "n": 20,
+     "p50_ms": 5.456,
+     "p99_ms": 6.338,
+     "max_ms": 6.338
+    },
+    "c_abi": {
+     "n": 20,
+     "p50_ms": 4.908,
+     "p99_ms": 5.477,
+     "max_ms": 5.477
+    },
+    "adversarial": {
+     "n": 20,
+     "p50_ms": 4.712,
+     "p99_ms": 5.516,
+     "max_ms": 5.516
+    },
+    "decode": {
+     "n": 20,
+     "p50_ms": 0.002,
+     "p99_ms": 0.004,
+     "max_ms": 0.004
+    }
+   },
+   {
+    "sys": "PQZH",
+    "form": "Transfer",
+    "proof_bytes": 231022,
+    "direct": {
+     "n": 20,
+     "p50_ms": 11.528,
+     "p99_ms": 13.603,
+     "max_ms": 13.603
+    },
+    "rust": {
+     "n": 20,
+     "p50_ms": 10.051,
+     "p99_ms": 12.791,
+     "max_ms": 12.791
+    },
+    "c_abi": {
+     "n": 20,
+     "p50_ms": 9.904,
+     "p99_ms": 10.712,
+     "max_ms": 10.712
+    },
+    "adversarial": {
+     "n": 20,
+     "p50_ms": 1.273,
+     "p99_ms": 1.308,
+     "max_ms": 1.308
+    },
+    "decode": {
+     "n": 20,
+     "p50_ms": 0.003,
+     "p99_ms": 0.01,
+     "max_ms": 0.01
+    }
+   },
+   {
+    "sys": "PQZH",
+    "form": "Transfer0",
+    "proof_bytes": 231064,
+    "direct": {
+     "n": 20,
+     "p50_ms": 9.831,
+     "p99_ms": 11.816,
+     "max_ms": 11.816
+    },
+    "rust": {
+     "n": 20,
+     "p50_ms": 10.636,
+     "p99_ms": 12.463,
+     "max_ms": 12.463
+    },
+    "c_abi": {
+     "n": 20,
+     "p50_ms": 9.746,
+     "p99_ms": 11.185,
+     "max_ms": 11.185
+    },
+    "adversarial": {
+     "n": 20,
+     "p50_ms": 1.251,
+     "p99_ms": 1.532,
+     "max_ms": 1.532
+    },
+    "decode": {
+     "n": 20,
+     "p50_ms": 0.002,
+     "p99_ms": 0.007,
+     "max_ms": 0.007
+    }
+   },
+   {
+    "sys": "PQZH",
+    "form": "Burn",
+    "proof_bytes": 231320,
+    "direct": {
+     "n": 20,
+     "p50_ms": 9.22,
+     "p99_ms": 9.381,
+     "max_ms": 9.381
+    },
+    "rust": {
+     "n": 20,
+     "p50_ms": 9.263,
+     "p99_ms": 9.598,
+     "max_ms": 9.598
+    },
+    "c_abi": {
+     "n": 20,
+     "p50_ms": 9.276,
+     "p99_ms": 9.376,
+     "max_ms": 9.376
+    },
+    "adversarial": {
+     "n": 20,
+     "p50_ms": 0.571,
+     "p99_ms": 0.597,
+     "max_ms": 0.597
+    },
+    "decode": {
+     "n": 20,
+     "p50_ms": 0.002,
+     "p99_ms": 0.003,
+     "max_ms": 0.003
+    }
+   },
+   {
+    "sys": "PQZH",
+    "form": "Refresh",
+    "proof_bytes": 231928,
+    "direct": {
+     "n": 20,
+     "p50_ms": 9.335,
+     "p99_ms": 10.087,
+     "max_ms": 10.087
+    },
+    "rust": {
+     "n": 20,
+     "p50_ms": 9.322,
+     "p99_ms": 11.093,
+     "max_ms": 11.093
+    },
+    "c_abi": {
+     "n": 20,
+     "p50_ms": 9.298,
+     "p99_ms": 9.48,
+     "max_ms": 9.48
+    },
+    "adversarial": {
+     "n": 20,
+     "p50_ms": 1.188,
+     "p99_ms": 1.292,
+     "max_ms": 1.292
+    },
+    "decode": {
+     "n": 20,
+     "p50_ms": 0.002,
+     "p99_ms": 0.004,
+     "max_ms": 0.004
+    }
+   },
+   {
+    "sys": "PQZH",
+    "form": "Register",
+    "proof_bytes": 187738,
+    "direct": {
+     "n": 20,
+     "p50_ms": 7.057,
+     "p99_ms": 8.291,
+     "max_ms": 8.291
+    },
+    "rust": {
+     "n": 20,
+     "p50_ms": 7.143,
+     "p99_ms": 9.258,
+     "max_ms": 9.258
+    },
+    "c_abi": {
+     "n": 20,
+     "p50_ms": 7.099,
+     "p99_ms": 7.265,
+     "max_ms": 7.265
+    },
+    "adversarial": {
+     "n": 20,
+     "p50_ms": 0.37,
+     "p99_ms": 0.388,
+     "max_ms": 0.388
+    },
+    "decode": {
+     "n": 20,
+     "p50_ms": 0.001,
+     "p99_ms": 0.001,
+     "max_ms": 0.001
+    }
+   },
+   {
+    "sys": "PQZH",
+    "form": "DiscloseSender",
+    "proof_bytes": 186842,
+    "direct": {
+     "n": 20,
+     "p50_ms": 7.324,
+     "p99_ms": 7.425,
+     "max_ms": 7.425
+    },
+    "rust": {
+     "n": 20,
+     "p50_ms": 7.317,
+     "p99_ms": 7.922,
+     "max_ms": 7.922
+    },
+    "c_abi": {
+     "n": 20,
+     "p50_ms": 7.278,
+     "p99_ms": 8.393,
+     "max_ms": 8.393
+    },
+    "adversarial": {
+     "n": 20,
+     "p50_ms": 0.411,
+     "p99_ms": 0.751,
+     "max_ms": 0.751
+    },
+    "decode": {
+     "n": 20,
+     "p50_ms": 0.001,
+     "p99_ms": 0.002,
+     "max_ms": 0.002
+    }
+   },
+   {
+    "sys": "PQZH",
+    "form": "DiscloseReceiver",
+    "proof_bytes": 187098,
+    "direct": {
+     "n": 20,
+     "p50_ms": 7.181,
+     "p99_ms": 8.416,
+     "max_ms": 8.416
+    },
+    "rust": {
+     "n": 20,
+     "p50_ms": 7.198,
+     "p99_ms": 7.473,
+     "max_ms": 7.473
+    },
+    "c_abi": {
+     "n": 20,
+     "p50_ms": 7.179,
+     "p99_ms": 7.753,
+     "max_ms": 7.753
+    },
+    "adversarial": {
+     "n": 20,
+     "p50_ms": 0.411,
+     "p99_ms": 0.428,
+     "max_ms": 0.428
+    },
+    "decode": {
+     "n": 20,
+     "p50_ms": 0.001,
+     "p99_ms": 0.004,
+     "max_ms": 0.004
+    }
+   },
+   {
+    "sys": "PQZH",
+    "form": "DiscloseAuditor",
+    "proof_bytes": 186778,
+    "direct": {
+     "n": 20,
+     "p50_ms": 7.185,
+     "p99_ms": 7.459,
+     "max_ms": 7.459
+    },
+    "rust": {
+     "n": 20,
+     "p50_ms": 7.17,
+     "p99_ms": 7.38,
+     "max_ms": 7.38
+    },
+    "c_abi": {
+     "n": 20,
+     "p50_ms": 7.126,
+     "p99_ms": 8.076,
+     "max_ms": 8.076
+    },
+    "adversarial": {
+     "n": 20,
+     "p50_ms": 0.408,
+     "p99_ms": 0.417,
+     "max_ms": 0.417
+    },
+    "decode": {
+     "n": 20,
+     "p50_ms": 0.001,
+     "p99_ms": 0.003,
+     "max_ms": 0.003
+    }
+   }
+  ]
+ },
+ "text_checks": {
+  "pqzh-test.txt": "ok",
+  "pqzh-nobench.txt": "ok",
+  "pqzh-xcheck.txt": "ok",
+  "stmt-xcheck.txt": "ok",
+  "ffi-test.txt": "ok",
+  "ffi-native.txt": "ok",
+  "ffi-wasm-build.txt": "ok",
+  "vectors-build.txt": "ok",
+  "vectors-check.txt": "ok",
+  "vectors-pqz-kat.txt": "ok"
+ },
+ "vectors": {
+  "rows": 34,
+  "cases": 34,
+  "fails": 0,
+  "equal_valid": 34
+ },
+ "mode": "quick",
+ "machine": {
+  "cpu": "AMD Ryzen 5 7235HS",
+  "flags": "aes vaes avx2",
+  "threads": 8,
+  "os": "Ubuntu 24.04.4 LTS",
+  "kernel": "7.0.0-34-generic",
+  "cc": "Ubuntu clang version 18.1.3 (1ubuntu1)",
+  "wasm_ld": "Ubuntu LLD 18.1.3",
+  "node": "v26.8.1",
+  "python": "3.12.3",
+  "docker": false,
+  "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)"
+ },
+ "compare": [
+  [
+   "ok",
+   "kat",
+   "ok"
+  ],
+  [
+   "ok",
+   "tbox_fixes",
+   "ok"
+  ],
+  [
+   "ok",
+   "sv_fixes",
+   "ok"
+  ],
+  [
+   "ok",
+   "diff-portable",
+   "3484 cases, 0 mismatches, 0 other fails, PRG 0"
+  ],
+  [
+   "ok",
+   "native-generic.jsonl fails",
+   "fails 0, verifier disagreements 0"
+  ],
+  [
+   "ok",
+   "wasm-generic.jsonl fails",
+   "fails 0, verifier disagreements 0"
+  ],
+  [
+   "ok",
+   "native-fast.jsonl fails",
+   "fails 0, verifier disagreements 0"
+  ],
+  [
+   "ok",
+   "x86v3-fast.jsonl fails",
+   "fails 0, verifier disagreements 0"
+  ],
+  [
+   "ok",
+   "wasm-fast.jsonl fails",
+   "fails 0, verifier disagreements 0"
+  ],
+  [
+   "ok",
+   "wasm-both.jsonl fails",
+   "fails 0, verifier disagreements 0"
+  ],
+  [
+   "ok",
+   "alone-wasm-nosv.jsonl fails",
+   "fails 0, verifier disagreements 0"
+  ],
+  [
+   "ok",
+   "R_REG proofs_fnv native-generic.jsonl n=3",
+   "e70b5dc4, expected e70b5dc4"
+  ],
+  [
+   "ok",
+   "R_REG proofs_fnv wasm-generic.jsonl n=3",
+   "e70b5dc4, expected e70b5dc4"
+  ],
+  [
+   "ok",
+   "R_REG proofs_fnv native-fast.jsonl n=2",
+   "1af59837, expected 1af59837"
+  ],
+  [
+   "ok",
+   "R_REG proofs_fnv x86v3-fast.jsonl n=2",
+   "1af59837, expected 1af59837"
+  ],
+  [
+   "ok",
+   "R_REG proofs_fnv wasm-fast.jsonl n=2",
+   "1af59837, expected 1af59837"
+  ],
+  [
+   "ok",
+   "R_REG proofs_fnv wasm-both.jsonl n=2",
+   "1af59837, expected 1af59837"
+  ],
+  [
+   "ok",
+   "R_REG proofs_fnv alone-wasm-nosv.jsonl n=1",
+   "25074bbb, expected 25074bbb"
+  ],
+  [
+   "ok",
+   "R_REG proof_bytes_max",
+   "28113, frozen 28113 (0.00%, tol 0.5%)"
+  ],
+  [
+   "ok",
+   "R_REG wasm_prove_peak_bytes",
+   "73692688, frozen 73692688 (0.00%, tol 1.0%)"
+  ],
+  [
+   "ok",
+   "R_REG ratio sv_speedup",
+   "44.1, frozen 41.8 (6%, tol 50%; machine-dependent)"
+  ],
+  [
+   "ok",
+   "R_REG ratio wasm_over_native_prove",
+   "1.96, frozen 1.64 (20%, tol 50%; machine-dependent)"
+  ],
+  [
+   "ok",
+   "R_TX proofs_fnv native-generic.jsonl n=3",
+   "9304299b, expected 9304299b"
+  ],
+  [
+   "ok",
+   "R_TX proofs_fnv wasm-generic.jsonl n=3",
+   "9304299b, expected 9304299b"
+  ],
+  [
+   "ok",
+   "R_TX proofs_fnv native-fast.jsonl n=2",
+   "559b3c44, expected 559b3c44"
+  ],
+  [
+   "ok",
+   "R_TX proofs_fnv x86v3-fast.jsonl n=2",
+   "559b3c44, expected 559b3c44"
+  ],
+  [
+   "ok",
+   "R_TX proofs_fnv wasm-fast.jsonl n=2",
+   "559b3c44, expected 559b3c44"
+  ],
+  [
+   "ok",
+   "R_TX proofs_fnv wasm-both.jsonl n=2",
+   "559b3c44, expected 559b3c44"
+  ],
+  [
+   "ok",
+   "R_TX proofs_fnv alone-wasm-nosv.jsonl n=1",
+   "008d4495, expected 008d4495"
+  ],
+  [
+   "ok",
+   "R_TX proof_bytes_max",
+   "42780, frozen 42785 (0.01%, tol 0.5%)"
+  ],
+  [
+   "ok",
+   "R_TX wasm_prove_peak_bytes",
+   "231858048, frozen 231858048 (0.00%, tol 1.0%)"
+  ],
+  [
+   "ok",
+   "R_TX ratio sv_speedup",
+   "82.8, frozen 81.3 (2%, tol 50%; machine-dependent)"
+  ],
+  [
+   "ok",
+   "R_TX ratio wasm_over_native_prove",
+   "1.34, frozen 1.35 (1%, tol 50%; machine-dependent)"
+  ],
+  [
+   "ok",
+   "R_BURN proofs_fnv native-generic.jsonl n=3",
+   "0ea1c7a6, expected 0ea1c7a6"
+  ],
+  [
+   "ok",
+   "R_BURN proofs_fnv wasm-generic.jsonl n=3",
+   "0ea1c7a6, expected 0ea1c7a6"
+  ],
+  [
+   "ok",
+   "R_BURN proofs_fnv native-fast.jsonl n=2",
+   "7694fd9f, expected 7694fd9f"
+  ],
+  [
+   "ok",
+   "R_BURN proofs_fnv x86v3-fast.jsonl n=2",
+   "7694fd9f, expected 7694fd9f"
+  ],
+  [
+   "ok",
+   "R_BURN proofs_fnv wasm-fast.jsonl n=2",
+   "7694fd9f, expected 7694fd9f"
+  ],
+  [
+   "ok",
+   "R_BURN proofs_fnv wasm-both.jsonl n=2",
+   "7694fd9f, expected 7694fd9f"
+  ],
+  [
+   "ok",
+   "R_BURN proofs_fnv alone-wasm-nosv.jsonl n=1",
+   "ad3e8a12, expected ad3e8a12"
+  ],
+  [
+   "ok",
+   "R_BURN proof_bytes_max",
+   "41935, frozen 41938 (0.01%, tol 0.5%)"
+  ],
+  [
+   "ok",
+   "R_BURN wasm_prove_peak_bytes",
+   "220431120, frozen 220431120 (0.00%, tol 1.0%)"
+  ],
+  [
+   "ok",
+   "R_BURN ratio sv_speedup",
+   "71.5, frozen 71.7 (0%, tol 50%; machine-dependent)"
+  ],
+  [
+   "ok",
+   "R_BURN ratio wasm_over_native_prove",
+   "1.33, frozen 1.32 (1%, tol 50%; machine-dependent)"
+  ],
+  [
+   "ok",
+   "R_DS proofs_fnv native-generic.jsonl n=3",
+   "f39a8e64, expected f39a8e64"
+  ],
+  [
+   "ok",
+   "R_DS proofs_fnv wasm-generic.jsonl n=3",
+   "f39a8e64, expected f39a8e64"
+  ],
+  [
+   "ok",
+   "R_DS proofs_fnv native-fast.jsonl n=2",
+   "9eb44281, expected 9eb44281"
+  ],
+  [
+   "ok",
+   "R_DS proofs_fnv x86v3-fast.jsonl n=2",
+   "9eb44281, expected 9eb44281"
+  ],
+  [
+   "ok",
+   "R_DS proofs_fnv wasm-fast.jsonl n=2",
+   "9eb44281, expected 9eb44281"
+  ],
+  [
+   "ok",
+   "R_DS proofs_fnv wasm-both.jsonl n=2",
+   "9eb44281, expected 9eb44281"
+  ],
+  [
+   "ok",
+   "R_DS proofs_fnv alone-wasm-nosv.jsonl n=1",
+   "478a0d94, expected 478a0d94"
+  ],
+  [
+   "ok",
+   "R_DS proof_bytes_max",
+   "28974, frozen 28995 (0.07%, tol 0.5%)"
+  ],
+  [
+   "ok",
+   "R_DS wasm_prove_peak_bytes",
+   "76888880, frozen 76888880 (0.00%, tol 1.0%)"
+  ],
+  [
+   "ok",
+   "R_DS ratio sv_speedup",
+   "47.9, frozen 45.2 (6%, tol 50%; machine-dependent)"
+  ],
+  [
+   "ok",
+   "R_DS ratio wasm_over_native_prove",
+   "1.62, frozen 1.95 (17%, tol 50%; machine-dependent)"
+  ],
+  [
+   "ok",
+   "R_DR proofs_fnv native-generic.jsonl n=3",
+   "96a6e906, expected 96a6e906"
+  ],
+  [
+   "ok",
+   "R_DR proofs_fnv wasm-generic.jsonl n=3",
+   "96a6e906, expected 96a6e906"
+  ],
+  [
+   "ok",
+   "R_DR proofs_fnv native-fast.jsonl n=2",
+   "5bb0078c, expected 5bb0078c"
+  ],
+  [
+   "ok",
+   "R_DR proofs_fnv x86v3-fast.jsonl n=2",
+   "5bb0078c, expected 5bb0078c"
+  ],
+  [
+   "ok",
+   "R_DR proofs_fnv wasm-fast.jsonl n=2",
+   "5bb0078c, expected 5bb0078c"
+  ],
+  [
+   "ok",
+   "R_DR proofs_fnv wasm-both.jsonl n=2",
+   "5bb0078c, expected 5bb0078c"
+  ],
+  [
+   "ok",
+   "R_DR proofs_fnv alone-wasm-nosv.jsonl n=1",
+   "cb2f3ced, expected cb2f3ced"
+  ],
+  [
+   "ok",
+   "R_DR proof_bytes_max",
+   "28994, frozen 28996 (0.01%, tol 0.5%)"
+  ],
+  [
+   "ok",
+   "R_DR wasm_prove_peak_bytes",
+   "82951488, frozen 82951488 (0.00%, tol 1.0%)"
+  ],
+  [
+   "ok",
+   "R_DR ratio sv_speedup",
+   "42.8, frozen 45.8 (7%, tol 50%; machine-dependent)"
+  ],
+  [
+   "ok",
+   "R_DR ratio wasm_over_native_prove",
+   "1.56, frozen 1.28 (22%, tol 50%; machine-dependent)"
+  ],
+  [
+   "ok",
+   "R_TX0 proofs_fnv native-generic.jsonl n=3",
+   "a0afafc7, expected a0afafc7"
+  ],
+  [
+   "ok",
+   "R_TX0 proofs_fnv wasm-generic.jsonl n=3",
+   "a0afafc7, expected a0afafc7"
+  ],
+  [
+   "ok",
+   "R_TX0 proofs_fnv native-fast.jsonl n=2",
+   "8b99b979, expected 8b99b979"
+  ],
+  [
+   "ok",
+   "R_TX0 proofs_fnv x86v3-fast.jsonl n=2",
+   "8b99b979, expected 8b99b979"
+  ],
+  [
+   "ok",
+   "R_TX0 proofs_fnv wasm-fast.jsonl n=2",
+   "8b99b979, expected 8b99b979"
+  ],
+  [
+   "ok",
+   "R_TX0 proofs_fnv wasm-both.jsonl n=2",
+   "8b99b979, expected 8b99b979"
+  ],
+  [
+   "ok",
+   "R_TX0 proofs_fnv alone-wasm-nosv.jsonl n=1",
+   "bfdc29df, expected bfdc29df"
+  ],
+  [
+   "ok",
+   "R_TX0 proof_bytes_max",
+   "42432, frozen 42441 (0.02%, tol 0.5%)"
+  ],
+  [
+   "ok",
+   "R_TX0 wasm_prove_peak_bytes",
+   "227275456, frozen 227275456 (0.00%, tol 1.0%)"
+  ],
+  [
+   "ok",
+   "R_TX0 ratio sv_speedup",
+   "74.0, frozen 71.9 (3%, tol 50%; machine-dependent)"
+  ],
+  [
+   "ok",
+   "R_TX0 ratio wasm_over_native_prove",
+   "1.52, frozen 1.69 (10%, tol 50%; machine-dependent)"
+  ],
+  [
+   "ok",
+   "pqzh-test.txt",
+   "rc 0 and its markers"
+  ],
+  [
+   "ok",
+   "pqzh-nobench.txt",
+   "rc 0 and its markers"
+  ],
+  [
+   "ok",
+   "pqzh-xcheck.txt",
+   "rc 0 and its markers"
+  ],
+  [
+   "ok",
+   "stmt-xcheck.txt",
+   "rc 0 and its markers"
+  ],
+  [
+   "ok",
+   "ffi-test.txt",
+   "rc 0 and its markers"
+  ],
+  [
+   "ok",
+   "ffi-native.txt",
+   "rc 0 and its markers"
+  ],
+  [
+   "ok",
+   "ffi-wasm-build.txt",
+   "rc 0 and its markers"
+  ],
+  [
+   "ok",
+   "vectors-build.txt",
+   "rc 0 and its markers"
+  ],
+  [
+   "ok",
+   "vectors-check.txt",
+   "rc 0 and its markers"
+  ],
+  [
+   "ok",
+   "vectors-pqz-kat.txt",
+   "rc 0 and its markers"
+  ],
+  [
+   "ok",
+   "PQZH pqzh-native.jsonl",
+   "fails 0, forms 6 / 6"
+  ],
+  [
+   "ok",
+   "PQZH pqzh-wasm.jsonl",
+   "fails 0, forms 6 / 6"
+  ],
+  [
+   "ok",
+   "PQZH R_REG fnv seed 0 pqzh-native.jsonl",
+   "0ecf451a, expected 0ecf451a"
+  ],
+  [
+   "ok",
+   "PQZH R_REG fnv seed 1 pqzh-native.jsonl",
+   "36b1d3e5, expected 36b1d3e5"
+  ],
+  [
+   "ok",
+   "PQZH R_REG fnv seed 1 pqzh-wasm.jsonl",
+   "36b1d3e5, expected 36b1d3e5"
+  ],
+  [
+   "ok",
+   "PQZH R_REG proof bytes seed 1 pqzh-native.jsonl",
+   "186904, expected 186904"
+  ],
+  [
+   "ok",
+   "PQZH R_REG proof bytes seed 1 pqzh-wasm.jsonl",
+   "186904, expected 186904"
+  ],
+  [
+   "ok",
+   "PQZH R_REG native = wasm32 seed 1",
+   "36b1d3e5"
+  ],
+  [
+   "ok",
+   "PQZH R_REG max_len_exact",
+   "190458, expected 190458"
+  ],
+  [
+   "ok",
+   "PQZH R_REG proofs within the bound",
+   "max 187098 <= max_len_exact 190458 = verifier bound 190458"
+  ],
+  [
+   "ok",
+   "PQZH R_REG wasm32 memory <= 256 MiB",
+   "28.5625 MiB"
+  ],
+  [
+   "ok",
+   "PQZH R_REG ratio wasm_over_native_prove",
+   "1.85, frozen 2.23 (17%, tol 50%; machine-dependent)"
+  ],
+  [
+   "ok",
+   "PQZH R_REG ratio wasm_over_native_verify",
+   "1.66, frozen 1.62 (2%, tol 50%; machine-dependent)"
+  ],
+  [
+   "ok",
+   "PQZH R_TX fnv seed 0 pqzh-native.jsonl",
+   "534b3a74, expected 534b3a74"
+  ],
+  [
+   "ok",
+   "PQZH R_TX fnv seed 1 pqzh-native.jsonl",
+   "720b94e0, expected 720b94e0"
+  ],
+  [
+   "ok",
+   "PQZH R_TX fnv seed 1 pqzh-wasm.jsonl",
+   "720b94e0, expected 720b94e0"
+  ],
+  [
+   "ok",
+   "PQZH R_TX proof bytes seed 1 pqzh-native.jsonl",
+   "231416, expected 231416"
+  ],
+  [
+   "ok",
+   "PQZH R_TX proof bytes seed 1 pqzh-wasm.jsonl",
+   "231416, expected 231416"
+  ],
+  [
+   "ok",
+   "PQZH R_TX native = wasm32 seed 1",
+   "720b94e0"
+  ],
+  [
+   "ok",
+   "PQZH R_TX max_len_exact",
+   "235470, expected 235470"
+  ],
+  [
+   "ok",
+   "PQZH R_TX proofs within the bound",
+   "max 231416 <= max_len_exact 235470 = verifier bound 235470"
+  ],
+  [
+   "ok",
+   "PQZH R_TX wasm32 memory <= 256 MiB",
+   "46.4375 MiB"
+  ],
+  [
+   "ok",
+   "PQZH R_TX ratio wasm_over_native_prove",
+   "2.27, frozen 2.02 (12%, tol 50%; machine-dependent)"
+  ],
+  [
+   "ok",
+   "PQZH R_TX ratio wasm_over_native_verify",
+   "1.78, frozen 1.76 (1%, tol 50%; machine-dependent)"
+  ],
+  [
+   "ok",
+   "PQZH R_BURN fnv seed 0 pqzh-native.jsonl",
+   "f4fef37e, expected f4fef37e"
+  ],
+  [
+   "ok",
+   "PQZH R_BURN fnv seed 1 pqzh-native.jsonl",
+   "e270d5c8, expected e270d5c8"
+  ],
+  [
+   "ok",
+   "PQZH R_BURN fnv seed 1 pqzh-wasm.jsonl",
+   "e270d5c8, expected e270d5c8"
+  ],
+  [
+   "ok",
+   "PQZH R_BURN proof bytes seed 1 pqzh-native.jsonl",
+   "231256, expected 231256"
+  ],
+  [
+   "ok",
+   "PQZH R_BURN proof bytes seed 1 pqzh-wasm.jsonl",
+   "231256, expected 231256"
+  ],
+  [
+   "ok",
+   "PQZH R_BURN native = wasm32 seed 1",
+   "e270d5c8"
+  ],
+  [
+   "ok",
+   "PQZH R_BURN max_len_exact",
+   "234744, expected 234744"
+  ],
+  [
+   "ok",
+   "PQZH R_BURN proofs within the bound",
+   "max 232344 <= max_len_exact 234744 = verifier bound 234744"
+  ],
+  [
+   "ok",
+   "PQZH R_BURN wasm32 memory <= 256 MiB",
+   "46.4375 MiB"
+  ],
+  [
+   "ok",
+   "PQZH R_BURN ratio wasm_over_native_prove",
+   "2.11, frozen 2.06 (2%, tol 50%; machine-dependent)"
+  ],
+  [
+   "ok",
+   "PQZH R_BURN ratio wasm_over_native_verify",
+   "1.78, frozen 1.76 (1%, tol 50%; machine-dependent)"
+  ],
+  [
+   "ok",
+   "PQZH R_DS fnv seed 0 pqzh-native.jsonl",
+   "0a7acf34, expected 0a7acf34"
+  ],
+  [
+   "ok",
+   "PQZH R_DS fnv seed 1 pqzh-native.jsonl",
+   "020286c2, expected 020286c2"
+  ],
+  [
+   "ok",
+   "PQZH R_DS fnv seed 1 pqzh-wasm.jsonl",
+   "020286c2, expected 020286c2"
+  ],
+  [
+   "ok",
+   "PQZH R_DS proof bytes seed 1 pqzh-native.jsonl",
+   "187482, expected 187482"
+  ],
+  [
+   "ok",
+   "PQZH R_DS proof bytes seed 1 pqzh-wasm.jsonl",
+   "187482, expected 187482"
+  ],
+  [
+   "ok",
+   "PQZH R_DS native = wasm32 seed 1",
+   "020286c2"
+  ],
+  [
+   "ok",
+   "PQZH R_DS max_len_exact",
+   "190458, expected 190458"
+  ],
+  [
+   "ok",
+   "PQZH R_DS proofs within the bound",
+   "max 187546 <= max_len_exact 190458 = verifier bound 190458"
+  ],
+  [
+   "ok",
+   "PQZH R_DS wasm32 memory <= 256 MiB",
+   "46.75 MiB"
+  ],
+  [
+   "ok",
+   "PQZH R_DS ratio wasm_over_native_prove",
+   "2.09, frozen 2.0 (4%, tol 50%; machine-dependent)"
+  ],
+  [
+   "ok",
+   "PQZH R_DS ratio wasm_over_native_verify",
+   "1.72, frozen 1.64 (5%, tol 50%; machine-dependent)"
+  ],
+  [
+   "ok",
+   "PQZH R_DR fnv seed 0 pqzh-native.jsonl",
+   "e42aa3da, expected e42aa3da"
+  ],
+  [
+   "ok",
+   "PQZH R_DR fnv seed 1 pqzh-native.jsonl",
+   "c5f5fb23, expected c5f5fb23"
+  ],
+  [
+   "ok",
+   "PQZH R_DR fnv seed 1 pqzh-wasm.jsonl",
+   "c5f5fb23, expected c5f5fb23"
+  ],
+  [
+   "ok",
+   "PQZH R_DR proof bytes seed 1 pqzh-native.jsonl",
+   "185462, expected 185462"
+  ],
+  [
+   "ok",
+   "PQZH R_DR proof bytes seed 1 pqzh-wasm.jsonl",
+   "185462, expected 185462"
+  ],
+  [
+   "ok",
+   "PQZH R_DR native = wasm32 seed 1",
+   "c5f5fb23"
+  ],
+  [
+   "ok",
+   "PQZH R_DR max_len_exact",
+   "190458, expected 190458"
+  ],
+  [
+   "ok",
+   "PQZH R_DR proofs within the bound",
+   "max 185462 <= max_len_exact 190458 = verifier bound 190458"
+  ],
+  [
+   "ok",
+   "PQZH R_DR wasm32 memory <= 256 MiB",
+   "46.75 MiB"
+  ],
+  [
+   "ok",
+   "PQZH R_DR ratio wasm_over_native_prove",
+   "2.01, frozen 2.13 (6%, tol 50%; machine-dependent)"
+  ],
+  [
+   "ok",
+   "PQZH R_DR ratio wasm_over_native_verify",
+   "1.61, frozen 1.61 (0%, tol 50%; machine-dependent)"
+  ],
+  [
+   "ok",
+   "PQZH R_TX0 fnv seed 0 pqzh-native.jsonl",
+   "360216a0, expected 360216a0"
+  ],
+  [
+   "ok",
+   "PQZH R_TX0 fnv seed 1 pqzh-native.jsonl",
+   "a69e9010, expected a69e9010"
+  ],
+  [
+   "ok",
+   "PQZH R_TX0 fnv seed 1 pqzh-wasm.jsonl",
+   "a69e9010, expected a69e9010"
+  ],
+  [
+   "ok",
+   "PQZH R_TX0 proof bytes seed 1 pqzh-native.jsonl",
+   "231320, expected 231320"
+  ],
+  [
+   "ok",
+   "PQZH R_TX0 proof bytes seed 1 pqzh-wasm.jsonl",
+   "231320, expected 231320"
+  ],
+  [
+   "ok",
+   "PQZH R_TX0 native = wasm32 seed 1",
+   "a69e9010"
+  ],
+  [
+   "ok",
+   "PQZH R_TX0 max_len_exact",
+   "234744, expected 234744"
+  ],
+  [
+   "ok",
+   "PQZH R_TX0 proofs within the bound",
+   "max 231320 <= max_len_exact 234744 = verifier bound 234744"
+  ],
+  [
+   "ok",
+   "PQZH R_TX0 wasm32 memory <= 256 MiB",
+   "48.0625 MiB"
+  ],
+  [
+   "ok",
+   "PQZH R_TX0 ratio wasm_over_native_prove",
+   "1.98, frozen 2.15 (8%, tol 50%; machine-dependent)"
+  ],
+  [
+   "ok",
+   "PQZH R_TX0 ratio wasm_over_native_verify",
+   "1.79, frozen 1.77 (1%, tol 50%; machine-dependent)"
+  ],
+  [
+   "ok",
+   "pqz-ffi selftest hash",
+   "ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205, expected ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205"
+  ],
+  [
+   "ok",
+   "pqz-ffi digest lines native = wasm32",
+   "17 / 17 lines"
+  ],
+  [
+   "ok",
+   "pqz-ffi digest lines = frozen",
+   "17 lines, 0 differ"
+  ],
+  [
+   "ok",
+   "vectors wasm32 replay",
+   "34 proofs, 34 byte-equal and valid, fails 0"
+  ]
+ ]
+}

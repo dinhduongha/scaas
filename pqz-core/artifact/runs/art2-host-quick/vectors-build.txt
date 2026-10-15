@@ -1,0 +1,3 @@
+   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/artifact2/pqz-core/ffi)
+    Finished `release` profile [optimized + debuginfo] target(s) in 14.41s
+rc=0

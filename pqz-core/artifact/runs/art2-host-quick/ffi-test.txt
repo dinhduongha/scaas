@@ -1,0 +1,119 @@
+   Compiling version_check v0.9.5
+   Compiling typenum v1.20.1
+   Compiling shlex v2.0.1
+   Compiling find-msvc-tools v0.1.14
+   Compiling keccak v0.1.6
+   Compiling pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/artifact2/pqz-core/stmt)
+   Compiling cc v1.8.0
+   Compiling generic-array v0.14.7
+   Compiling crypto-common v0.1.7
+   Compiling block-buffer v0.10.4
+   Compiling digest v0.10.7
+   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/artifact2/pqz-core/ffi)
+   Compiling sha3 v0.10.8
+   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/artifact2/pqz-core/pqzh/ligero)
+    Finished `release` profile [optimized + debuginfo] target(s) in 18.18s
+     Running unittests src/lib.rs (target/release/deps/pqz_ffi-e598e4d8ae49d351)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/pqz-vectors.rs (target/release/deps/pqz_vectors-859d76a8b0812cba)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/fault.rs (target/release/deps/fault-df2b20a5eede6936)
+
+running 1 test
+fault arena 18 MiB
+node faults: arena exhaustion and worker failure → status 4, out untouched; recovered
+test node_faults_are_status_4 ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.61s
+
+     Running tests/ffi.rs (target/release/deps/ffi-d51544e1bb0d6ed1)
+
+running 9 tests
+test c_abi_arguments ... ok
+test digest_lines ... ok
+test header_matches ... ok
+test one_mib_stack ... ok
+rejection cases: 443
+test every_rejection ... ok
+PQZL Transfer: proof 42759 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+PQZL Transfer0: proof 42387 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+PQZL Burn: proof 41914 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+PQZL Refresh: proof 41902 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+PQZL Register: proof 28068 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+PQZL DiscloseSender: proof 28964 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+PQZL DiscloseReceiver: proof 28990 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+PQZL DiscloseAuditor: proof 28995 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+PQZH Transfer: proof 231022 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+PQZH Transfer0: proof 231064 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+PQZH Burn: proof 231320 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+PQZH Refresh: proof 231928 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+PQZH Register: proof 187738 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+PQZH DiscloseSender: proof 186842 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+PQZH DiscloseReceiver: proof 187098 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+PQZH DiscloseAuditor: proof 186778 B, Ok([0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1])
+test round_trip_every_form ... ok
+selftest: Report { a_digest: [241, 118, 179, 19, 51, 28, 137, 142, 17, 35, 12, 106, 221, 174, 61, 68, 130, 20, 19, 54, 30, 20, 22, 166, 174, 223, 159, 38, 167, 190, 61, 240], pk_hash: [230, 140, 101, 43, 40, 204, 2, 102, 14, 133, 179, 119, 125, 229, 139, 15, 238, 169, 244, 97, 56, 177, 4, 43, 150, 29, 254, 190, 187, 172, 69, 32], ct_hash: [212, 66, 135, 36, 30, 211, 203, 205, 65, 35, 0, 75, 175, 30, 250, 239, 49, 208, 191, 40, 27, 64, 55, 237, 30, 18, 15, 247, 172, 191, 99, 209], m: [0, 4, 2, 14, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0], fft_hash: [46, 222, 62, 253, 146, 219, 58, 122, 136, 195, 94, 255, 146, 72, 136, 104, 148, 60, 236, 248, 143, 102, 172, 105, 43, 204, 118, 103, 166, 131, 39, 136], fft_ok: true, kat_digest: [247, 199, 114, 214, 70, 124, 132, 225, 193, 67, 0, 64, 23, 211, 89, 77, 87, 223, 189, 228, 144, 151, 233, 211, 253, 155, 56, 46, 3, 104, 7, 118], results: [true, false, true, false], hash: [237, 145, 10, 44, 244, 200, 247, 132, 94, 254, 82, 65, 81, 246, 143, 145, 7, 74, 64, 171, 143, 89, 223, 104, 126, 35, 60, 233, 19, 51, 210, 5] }
+selftest hash ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205
+test selftest_report ... ok
+test selftest_vectors ... ok
+differential: 56 cases, 8 accepted, 0 disagreements
+test pqzl_differential ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 30.98s
+
+     Running tests/verify_only.rs (target/release/deps/verify_only-b2a453e3b7a5a0a3)
+
+running 3 tests
+test child_task ... ok
+
+running 1 test
+test child_task ... 
+running 1 test
+test child_task ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 10.58s
+
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 11.07s
+
+
+running 1 test
+test child_task ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 13.20s
+
+
+running 1 test
+test child_task ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 12.37s
+
+
+running 1 test
+test child_task ... verify-only 144 MiB: corpus 10698 inputs (10240 generator), warm-up 10.3 s, 174 valid (= the unedited honest ones), status 3 / 4: 0; generator again from 8 threads and on a 1 MiB stack: equal; 5,000 mixed calls: equal; arena used 93498368 B after every call, peak 95169680 B = 0.63 of the arena (margin 1.59x), Ligero panics caught 0
+test verify_only_arena ... ok
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 12.32s
+
+fill determinism: arenas filled 0x00 / 0xA5 / 0x5A before pqz_init: 2523 result lines identical (digest lines of 16 forms incl. proofs, self-test, 2506 corpus results)
+test fill_determinism ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 49.05s
+
+   Doc-tests pqz_ffi
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+rc=0

@@ -1,4 +1,4 @@
-# pqz-core reproducibility run (frozen run PROVISIONAL (2026-10-14): PQZL from rel3/runs/tx0c + sv/runs/tx0c (P6e Tasks 2 / 5 after the second review); PQZH from pqzh/ligero/runs/l15-tx0-proven (+ -wasm; p6e-b3 review fixes, d58e20a); pqz-ffi from ffi/runs/ffi1f2 (P6e Task 7, 072bec1). Replace with the reproduce.sh --full freeze run after P6e gates A / B)
+# pqz-core reproducibility run (frozen run PROVISIONAL (2026-10-15): PQZL from rel3/runs/tx0c + sv/runs/tx0c (P6e Tasks 2 / 5 after the second review; six relations incl. R_TX0); PQZH from pqzh/ligero/runs/l15-tx0-proven (+ -wasm; p6e-b3 review fixes, d58e20a); pqz-ffi from ffi/runs/ffi1f2 (P6e Task 7, 072bec1). Replace with the reproduce.sh --full freeze run after P6e gates A / B)
 
 Machine: AMD Ryzen 5 7235HS (8 threads; flags aes vaes avx2), Ubuntu 24.04.4 LTS, kernel 7.0.0-34-generic, Ubuntu clang version 18.1.3 (1ubuntu1), Ubuntu LLD 18.1.3, node v26.8.1, Python 3.12.3, rustc 1.97.1 (8bab26f4f 2026-07-14), in Docker: False.
 
@@ -13,6 +13,7 @@ Times are informational (they depend on the machine); the proof hashes, the chec
 | `R_BURN` | 41,938 | 874 / 1,158 ms | 556 / 693 ms | 7.75 / 4.63 / 12.9 ms | 8.9 / 5.7 / 14.2 ms | 210.2 MiB |
 | `R_DS` | 28,995 | 331 / 646 ms | 200 / 270 ms | 4.42 / 2.86 / 7.3 ms | 4.9 / 3.9 / 8.7 ms | 73.3 MiB |
 | `R_DR` | 28,996 | 395 / 504 ms | 206 / 254 ms | 4.50 / 2.69 / 7.5 ms | 4.9 / 3.0 / 8.4 ms | 79.1 MiB |
+| `R_TX0` | 42,441 | 827 / 1,398 ms | 577 / 760 ms | 8.03 / 4.68 / 13.4 ms | 8.8 / 5.5 / 14.7 ms | 216.7 MiB |
 
 ## PQZH (Ligero, Rust; the proven preset)
 
@@ -48,7 +49,7 @@ Self-test hash: `ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d20
 | PQZH | DiscloseReceiver | 187,098 | 7.12 / 7.81 ms | 0.41 ms |
 | PQZH | DiscloseAuditor | 186,778 | 7.11 / 7.96 ms | 0.41 ms |
 
-## Against expected-results.json: 90 ok, 0 FAIL, 0 warn, 50 info
+## Against expected-results.json: 101 ok, 0 FAIL, 0 warn, 50 info
 
 | status | check | detail |
 |---|---|---|
@@ -121,6 +122,17 @@ Self-test hash: `ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d20
 | ok | R_DR proofs_fnv alone-wasm-nosv.jsonl n=1 | cb2f3ced, expected cb2f3ced |
 | ok | R_DR proof_bytes_max | 28996, frozen 28996 (0.00%, tol 0.5%) |
 | ok | R_DR wasm_prove_peak_bytes | 82951488, frozen 82951488 (0.00%, tol 1.0%) |
+| ok | R_TX0 proofs_fnv native-generic.jsonl n=10 | a2759b37, expected a2759b37 |
+| ok | R_TX0 proofs_fnv wasm-generic.jsonl n=5 | a29a5747, expected a29a5747 |
+| ok | R_TX0 proofs_fnv fnv-native.jsonl n=5 | a29a5747, expected a29a5747 |
+| ok | R_TX0 proofs_fnv fnv-wasm.jsonl n=3 | a0afafc7, expected a0afafc7 |
+| ok | R_TX0 proofs_fnv native-fast.jsonl n=2 | 8b99b979, expected 8b99b979 |
+| ok | R_TX0 proofs_fnv x86v3-fast.jsonl n=2 | 8b99b979, expected 8b99b979 |
+| ok | R_TX0 proofs_fnv wasm-fast.jsonl n=2 | 8b99b979, expected 8b99b979 |
+| ok | R_TX0 proofs_fnv wasm-both.jsonl n=2 | 8b99b979, expected 8b99b979 |
+| ok | R_TX0 proofs_fnv alone-wasm-nosv.jsonl n=1 | bfdc29df, expected bfdc29df |
+| ok | R_TX0 proof_bytes_max | 42441, frozen 42441 (0.00%, tol 0.5%) |
+| ok | R_TX0 wasm_prove_peak_bytes | 227275456, frozen 227275456 (0.00%, tol 1.0%) |
 | ok | PQZH pqzh-native.jsonl | fails 0, forms 6 / 6 |
 | ok | PQZH pqzh-wasm.jsonl | fails 0, forms 6 / 6 |
 | info | PQZH R_REG fnv seed 0 pqzh-native.jsonl | 0ecf451a (no frozen value for seed 0) |

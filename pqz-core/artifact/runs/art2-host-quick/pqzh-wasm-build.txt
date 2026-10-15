@@ -1,0 +1,13 @@
+   Compiling version_check v0.9.5
+   Compiling typenum v1.20.1
+   Compiling keccak v0.1.6
+   Compiling pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/artifact2/pqz-core/stmt)
+   Compiling generic-array v0.14.7
+   Compiling crypto-common v0.1.7
+   Compiling block-buffer v0.10.4
+   Compiling digest v0.10.7
+   Compiling sha3 v0.10.8
+   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/artifact2/pqz-core/pqzh/ligero)
+   Compiling pqzh-ligero-wasm v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/artifact2/pqz-core/pqzh/ligero/wasm)
+    Finished `release` profile [optimized] target(s) in 4.85s
+rc=0

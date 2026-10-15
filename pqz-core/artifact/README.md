@@ -1,7 +1,7 @@
 # pqz-core reproducibility package (PQZL and PQZH)
 
-Source and scripts to rebuild both PQZ proof systems and re-run their measurements: **PQZL** (the LaZer fork, C: the
-relations `R_REG`, `R_TX`, `R_BURN`, `R_DS`, `R_DR`, the generic verifier `pqz_verify` and the specialised verifier
+Source and scripts to rebuild both PQZ proof systems and re-run their measurements: **PQZL** (the LaZer fork, C: the six
+relations `R_REG`, `R_TX`, `R_BURN`, `R_DS`, `R_DR`, `R_TX0`, the generic verifier `pqz_verify` and the specialised verifier
 `pqz_verify_fast`; `../STATUS.md`), **PQZH** (Ligero, Rust: `../pqzh/ligero/`, all six forms incl. `R_TX0`, at the
 proven preset; `docs/research/pqzh-ligero.md` §12–§14), the statement codec `pqz-stmt` (`../stmt/`) and **pqz-ffi**
 (`../ffi/`, the one precompile over both systems). Scope: both systems (owner 2026-10-14, superseding "PQZL only" of
@@ -17,18 +17,18 @@ machine, and the package compares your results with `expected-results.json`.
   three tables; `freeze` takes the Ligero and pqz-ffi run prefixes), `expected-results.json` (PROVISIONAL, below),
   `web/index.html` (PQZH prove / verify of any form next to PQZL `R_TX`), this README.
 - **Provisional expected results:** `results.py freeze` from `../rel3/runs/tx0c` + `../sv/runs/tx0c` (PQZL, unchanged:
-  its five relations byte-identical to the previous file), `../pqzh/ligero/runs/l15-tx0-proven` (PQZH, `d58e20a`,
+  regenerated 2026-10-15 with `R_TX0`; the other five relations byte-identical to the previous file), `../pqzh/ligero/runs/l15-tx0-proven` (PQZH, `d58e20a`,
   1,000 verifies native and wasm32) and `../ffi/runs/ffi1f2` (pqz-ffi): `runs/art2-provisional-freeze.md`.
 - **Docker tests (2026-10-14/15, AMD Ryzen 5 7235HS, no avx512ifma; logs in `runs/art2-*`):**
   - Image: `runs/art2-docker-build-6.txt`, pinned snapshot `20261013T000000Z` (its apt layer is the one built in
     `runs/art2-docker-build-4.txt`: 42 min, because snapshot.ubuntu.com kept answering 500 / 502 / 503; builds 1 and
     2, `runs/art2-docker-build-{1,2}-failed-snapshot-502.txt`, failed on that before `Acquire::Retries` was added).
     Same pinned toolchain as before plus rustc / cargo 1.97.1; image 1.92 GB (was 1.08 GB; the Rust layer is
-    762 MB). Build 3, `runs/art2-docker-build-3-probe-live-archive.txt`, was a probe only: the live archive with
+    762 MB); accepted (controller 2026-10-15): the image is built locally and never pushed. Build 3, `runs/art2-docker-build-3-probe-live-archive.txt`, was a probe only: the live archive with
     the same pinned versions (`runs/art2-live-archive-versions.txt`), not cited.
   - Quick mode `runs/art2-docker-quick/` (`summary.txt`, `results.md`), `docker run --network none --memory=4g
     --memory-swap=4g -u`: **RESULT PASS, 148 ok / 0 FAIL / 0 warn**, 27 min. PQZL as before (every `proofs_fnv`,
-    KAT 19/19, both fix checks, differential 2,710 cases 0 mismatches). PQZH: 13 + 17 tests (6 × 960 mutations, 0
+    KAT 19/19, both fix checks, differential 2,972 cases 0 mismatches). PQZH: 13 + 17 tests (6 × 960 mutations, 0
     accepted / 0 panics), `--no-default-features` tests and clippy float lint, xcheck 12 / 12 equal + `kat_stmt: ok`,
     `pqz-stmt` xcheck, every proof hash and length of seeds 0, 1 native and seed 1 wasm32 equal to `l15-tx0`, native
     = wasm32, every `max_len_exact` equal, wasm32 ≤ 48.1 MiB. pqz-ffi: self-test `ed910a2c…`, 443 rejection cases,
@@ -59,9 +59,20 @@ machine, and the package compares your results with `expected-results.json`.
    ```
 2. Write the frozen tables and the reference machine into `../STATUS.md` and `../README.md`; remove the
    PROVISIONAL notes here.
-3. PQZL `R_TX0` is still outside the package's PQZL runs (`pqz_bench` mask 31, five relations; PQZH covers six forms
-   and the vectors cover `TRANSFER0` for both ids). Adding it needs the mask and `results.py`'s `RELS` changed
-   together, before the freeze.
+3. ~~PQZL `R_TX0` outside the package's PQZL runs~~ Done 2026-10-15 (controller): `pqz_bench` / `run_wasm.mjs`
+   mask 63, the `R_TX0` per-process run, `results.py` `RELS` with `R_TX0`, and the differential sample of
+   `sv/rel3.sh` (9 arguments, `n_tx0` = 12: 3,484 cases). The Docker quick run above predates it (five PQZL
+   relations, 2,972 differential cases: the 8-argument sample gave `R_TX0` the default 4); the host quick run below
+   has it.
+
+**Host quick run with `R_TX0` (2026-10-15)** `runs/art2-host-quick/` (`summary.txt`), the host toolchain under
+`scripts/capped` (no Docker: P6f needed it): **RESULT PASS, 159 ok / 0 FAIL / 0 warn**, 30 min. PQZL six relations:
+every `R_TX0` `proofs_fnv` equal to `tx0c` (n = 1, 2, 3; native, x86-64-v3, wasm, wasm `both`, wasm without SV), its
+largest proof 42,432 B (`tx0c` 42,441 B, 0.02 %), its wasm prove peak equal to the byte; differential 3,484 cases, 0
+mismatches. PQZH, pqz-ffi and the vectors as in the Docker run. Same commit: `../check_symbols.sh` fails on a missing
+file or an `nm` error (`../STATUS.md` Open 9, closed; `runs/art2-check-symbols.txt`: `./build.sh native` and
+`test/check_symbols_neg.sh` ok; `../glic/runs/absence-2026-10-15.txt`: the three real-file scans and the G-LIC
+absence check pass).
 
 Earlier freeze notes (PQZL only, kept for the record) are in the section below.
 
@@ -146,9 +157,9 @@ of `../README.md`. Compare it with `rel3/runs/final-*` (a direct relfix run). Th
 | KAT | arithmetic layer = upstream LaZer `3330e48`, 19/19 cases (`kat/lazer-3330e48.json`) | yes | yes |
 | `check_tbox_fixes.sh` | the three LaZer `tbox` fixes are in place: P6-SZ, P6-L2 (`proofSystemId` v2), and the verifier-only z21 norm check (P6-Z21). Each has a cheating-prover PoC and a control run | yes | yes |
 | `sv/check_sv_fixes.sh` | `pqz_verify_fast` follows both transcript fixes. With either fix reverted, the differential test must fail | yes | yes |
-| differential test | `pqz_verify` vs `pqz_verify_fast` on honest and mutated proofs, all five relations (2,710 cases, the v2-sized sample). `--full` also runs the x86-64-v3 build (1,350 cases) | portable | + x86-64-v3 |
-| five relations, generic verifier | prove, verify, six tamper kinds; native `pqz_bench`, wasm32 under node | 3 proves, 3 verifies | 10 / 100 native, 5 / 30 wasm (= `rel3/relfix.sh`) |
-| five relations, specialised verifier | p50 / p99 portable, x86-64-v3 + AES-NI, wasm32. In `PQZ_VERIFY=both`, every wasm verify runs both verifiers and must agree | 50 verifies | 200 (= `sv/rel3.sh`) |
+| differential test | `pqz_verify` vs `pqz_verify_fast` on honest and mutated proofs, all six relations (3,484 cases, the sample of `sv/rel3.sh`). `--full` also runs the x86-64-v3 build (1,350 cases) | portable | + x86-64-v3 |
+| six relations, generic verifier | prove, verify, six tamper kinds; native `pqz_bench`, wasm32 under node | 3 proves, 3 verifies | 10 / 100 native, 5 / 30 wasm (= `rel3/relfix.sh`) |
+| six relations, specialised verifier | p50 / p99 portable, x86-64-v3 + AES-NI, wasm32. In `PQZ_VERIFY=both`, every wasm verify runs both verifiers and must agree | 50 verifies | 200 (= `sv/rel3.sh`) |
 | wasm prove memory | arena peak of one relation per process, prover build without SV | yes | yes |
 
 **PQZH (Ligero, Rust 1.97.1)**, at THE proven preset (`Params::preset`, `--regime proven --r431 1`), all six forms

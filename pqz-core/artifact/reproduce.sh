@@ -5,7 +5,7 @@
 # cmake, unzip, git, libgmp-dev, libmpfr-dev).
 #
 #   artifact/reproduce.sh              quick: PQZL build, KAT, check_tbox_fixes.sh, sv/check_sv_fixes.sh, the
-#                                      differential test (v2-sized sample), five relations generic + SV, native + wasm,
+#                                      differential test (sv/rel3.sh sample), six relations generic + SV, native + wasm,
 #                                      wasm prove memory per op; PQZH cargo tests (+ --no-default-features, clippy),
 #                                      C <-> Rust cross-check, pqz-stmt xcheck, native + wasm32 bench of the six forms at
 #                                      the proven preset (small N); pqz-ffi tests, C ABI, native = wasm32 digests, bench;
@@ -139,11 +139,11 @@ fi
 
 # ---- quick / full
 if [ $MODE = full ]; then
-  NP=10 NV=100 NPW=5 NVW=30 NF=200 DIFF3="2 2 2 2 10 6 6 6"
+  NP=10 NV=100 NPW=5 NVW=30 NF=200 DIFF3="2 2 2 2 10 6 6 6 6"
 else
   NP=3 NV=3 NPW=3 NVW=1 NF=50 DIFF3=
 fi
-DIFF="4 4 2 1 10 12 12 12" # the v2-sized sample (sv/rel3.sh): 2,710 cases
+DIFF="4 4 2 1 10 12 12 12 12" # the sample of sv/rel3.sh (n_tx0 = 12 last): 3,484 cases
 X86=1
 cpu_has avx2 && cpu_has aes || { X86=0; echo "no avx2 / aes: the x86-64-v3 runs are skipped" | tee -a "$OUT/log.txt"; }
 
@@ -167,22 +167,22 @@ if [ -n "$DIFF3" ] && [ $X86 = 1 ]; then
   step "differential test, x86-64-v3: pqz_sv_diff $DIFF3"
   build/native-x86v3/pqz_sv_diff $DIFF3 > "$OUT/diff-x86v3.jsonl" || true
 fi
-step "five relations, generic verifier: native pqz_bench $NP $NV, wasm run_wasm.mjs $NPW $NVW"
-build/native/pqz_bench $NP $NV 31 > "$OUT/native-generic.jsonl" || true
-node test/run_wasm.mjs $NPW $NVW 31 > "$OUT/wasm-generic.jsonl" || true
+step "six relations, generic verifier: native pqz_bench $NP $NV, wasm run_wasm.mjs $NPW $NVW"
+build/native/pqz_bench $NP $NV 63 > "$OUT/native-generic.jsonl" || true
+node test/run_wasm.mjs $NPW $NVW 63 > "$OUT/wasm-generic.jsonl" || true
 if [ $MODE = full ]; then
   step "proofs_fnv: native pqz_bench 5 5, wasm run_wasm.mjs 3 1"
-  build/native/pqz_bench 5 5 31 > "$OUT/fnv-native.jsonl" || true
-  node test/run_wasm.mjs 3 1 31 > "$OUT/fnv-wasm.jsonl" || true
+  build/native/pqz_bench 5 5 63 > "$OUT/fnv-native.jsonl" || true
+  node test/run_wasm.mjs 3 1 63 > "$OUT/fnv-wasm.jsonl" || true
 fi
-step "five relations, specialised verifier: pqz_bench 2 $NF (portable$( [ $X86 = 1 ] && echo ', x86-64-v3')), wasm 2 $((NF / 2)), wasm both"
+step "six relations, specialised verifier: pqz_bench 2 $NF (portable$( [ $X86 = 1 ] && echo ', x86-64-v3')), wasm 2 $((NF / 2)), wasm both"
 PQZ_VERIFY=fast build/native/pqz_bench 2 $NF > "$OUT/native-fast.jsonl" || true
 [ $X86 = 0 ] || PQZ_VERIFY=fast build/native-x86v3/pqz_bench 2 $NF > "$OUT/x86v3-fast.jsonl" || true
 PQZ_VERIFY=fast node test/run_wasm.mjs 2 $((NF / 2)) > "$OUT/wasm-fast.jsonl" || true
 PQZ_VERIFY=both node test/run_wasm.mjs 2 $((NF / 20)) > "$OUT/wasm-both.jsonl" || true
 step "wasm prove memory, one relation per process (the prover build without SV)"
 : > "$OUT/alone-wasm-nosv.jsonl"
-for m in 1 2 4 8 16; do
+for m in 1 2 4 8 16 32; do
   PQZ_WASM_FILE=build/wasm-nosv/wasm/pqz.wasm node test/run_wasm.mjs 1 0 $m | sed 's/^{/{"backend": "wasm-nosv", /' \
     >> "$OUT/alone-wasm-nosv.jsonl" || true
 done

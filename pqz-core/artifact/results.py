@@ -17,7 +17,7 @@ seed (ligero_bench fnv_by_seed; run_wasm.mjs's fnv_last = seed n-1), native = wa
 """
 import json, os, platform, re, subprocess, sys
 
-RELS = ["R_REG", "R_TX", "R_BURN", "R_DS", "R_DR"]
+RELS = ["R_REG", "R_TX", "R_BURN", "R_DS", "R_DR", "R_TX0"]  # pqz_bench / run_wasm.mjs mask 63
 TOL = {"proof_bytes_rel": 0.005, "wasm_prove_peak_rel": 0.01, "ratio_rel": 0.5}
 # run file name in <out dir> -> (backend, verifier) for the per-relation table
 BENCH = {
@@ -452,7 +452,7 @@ def main(a):
             res["text_checks"] = {k: v for k, v in res["text_checks"].items() if sv is None}  # a direct run's text files differ
         # every n with a frozen hash: the rel3 per-op runs (n = 1, native) too
         for rel, r in (bench(f"{r3}-alone.jsonl", "native")[0] if sv else {}).items():
-            if rel in RELS:  # the package's five relations (R_TX0, P6e Task 2, is not in its runs)
+            if rel in RELS:
                 res["relations"][rel]["fnv"].setdefault(str(r["np"]), r["fnv"])
         res["machine"] = machine()
         res["mode"] = f"frozen run {label}"

@@ -1,5 +1,5 @@
 {
- "frozen": "PROVISIONAL (2026-10-14): PQZL from rel3/runs/tx0c + sv/runs/tx0c (P6e Tasks 2 / 5 after the second review); PQZH from pqzh/ligero/runs/l15-tx0-proven (+ -wasm; p6e-b3 review fixes, d58e20a); pqz-ffi from ffi/runs/ffi1f2 (P6e Task 7, 072bec1). Replace with the reproduce.sh --full freeze run after P6e gates A / B",
+ "frozen": "PROVISIONAL (2026-10-15): PQZL from rel3/runs/tx0c + sv/runs/tx0c (P6e Tasks 2 / 5 after the second review; six relations incl. R_TX0); PQZH from pqzh/ligero/runs/l15-tx0-proven (+ -wasm; p6e-b3 review fixes, d58e20a); pqz-ffi from ffi/runs/ffi1f2 (P6e Task 7, 072bec1). Replace with the reproduce.sh --full freeze run after P6e gates A / B",
  "source_runs": [
   "../ffi/runs/ffi1f2-bench.jsonl",
   "../ffi/runs/ffi1f2-digests-native.jsonl",
@@ -174,6 +174,33 @@
     "sv_p99_ms_x86v3": 2.986,
     "sv_p50_ms_wasm": 7.518,
     "sv_p99_ms_wasm": 8.392
+   }
+  },
+  "R_TX0": {
+   "fnv": {
+    "10": "a2759b37",
+    "5": "a29a5747",
+    "3": "a0afafc7",
+    "2": "8b99b979",
+    "1": "bfdc29df"
+   },
+   "proof_bytes_max": 42441,
+   "wasm_prove_peak_bytes": 227275456,
+   "ratios": {
+    "sv_speedup": 71.9,
+    "wasm_over_native_prove": 1.69
+   },
+   "times_ms_informational": {
+    "prove_p50_ms_native": 826.52,
+    "generic_verify_p50_ms_native": 577.455,
+    "prove_p50_ms_wasm": 1397.56,
+    "generic_verify_p50_ms_wasm": 759.723,
+    "sv_p50_ms_native": 8.031,
+    "sv_p99_ms_native": 8.818,
+    "sv_p50_ms_x86v3": 4.683,
+    "sv_p99_ms_x86v3": 5.526,
+    "sv_p50_ms_wasm": 13.361,
+    "sv_p99_ms_wasm": 14.731
    }
   }
  },
