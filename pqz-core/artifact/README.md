@@ -117,9 +117,12 @@ the native digest lines); `cargo test --lib` without `prove`; the verify-only cd
 `-D clippy::float_arithmetic`; the wasm32 builds and digest lines (must equal native); `ffi_bench` (20 quick, 200
 `--full`). This is `ffi/run.sh` minus its `cargo +stable clippy` (the image has 1.97.1's clippy) and `/usr/bin/time`.
 
-**Vectors (hook):** `smartcontracts/vectors/pqz/` and its generator (`vecgen/`, P6e Task 11) are not on main yet.
-`reproduce.sh` runs `vecgen/run.sh` (check mode) when it exists, and `results.py` lists it as info only until the
-freeze wires it in.
+**Vectors** (`smartcontracts/vectors/pqz/`, P6e Task 11; the generator is pqz-ffi's `pqz-vectors`): `pqz-vectors
+--check` (a second generation compared byte for byte; every honest proof and negative input through `pqz_precompile`,
+PQZL also through the generic verifier), `pqz_kat.py --check` (the independent Python checker) and the wasm32 replay
+(`ffi/vectors/replay_wasm.mjs`: every proof proved again in wasm32, byte-equal and valid), quick and `--full`;
+`tamper.py` (single-leaf edits, each must be caught) with `--full` only. As `ffi/vectors/run.sh` in check mode: the
+package never rewrites the vectors.
 
 `--full` takes the sample sizes of the frozen runs, but not PQZL's ASan + UBSan build (`rel3/relfix.sh` and
 `sv/rel3.sh` keep that).
@@ -127,17 +130,18 @@ freeze wires it in.
 ## Run in Docker
 
 The build context is the repository root, narrowed by `Dockerfile.dockerignore` to `pqz-core/`,
-`smartcontracts/vectors/pqz/` (`pqz_kat.py`, read by the PQZH and `pqz-stmt` cross-checks) and
+`smartcontracts/vectors/pqz/` (the vectors and `pqz_kat.py`: read by the vector checks, the PQZH and `pqz-stmt`
+cross-checks, and pqz-ffi's `build.rs` for the self-test proofs) and
 `smartcontracts/evm/test/vectors/pqzh-ligero/` (the Ligero crate's EVM fixture test), about 12 MB. Run from the
 repository root:
 
 ```sh
-docker build -t pqz-core-artifact -f pqz-core/artifact/Dockerfile .
+docker build -t pqz-core-artifact -f pqz-core/artifact/Dockerfile .   # needs network; cargo / cc capped at 2 jobs
 mkdir -p pqz-out
-docker run --rm --network none -u "$(id -u):$(id -g)" -v "$PWD/pqz-out:/out" -e OUT=/out/quick pqz-core-artifact
-docker run --rm --network none -u "$(id -u):$(id -g)" -v "$PWD/pqz-out:/out" -e OUT=/out/full pqz-core-artifact --full
-docker run --rm -u "$(id -u):$(id -g)" -v "$PWD/pqz-out:/out" -e OUT=/out/upstream pqz-core-artifact --upstream
-docker run --rm --init -p 127.0.0.1:8000:8000 pqz-core-artifact --serve # open http://127.0.0.1:8000/
+docker run --rm --memory=4g --memory-swap=4g --network none -u "$(id -u):$(id -g)" -v "$PWD/pqz-out:/out" -e OUT=/out/quick pqz-core-artifact
+docker run --rm --memory=4g --memory-swap=4g --network none -u "$(id -u):$(id -g)" -v "$PWD/pqz-out:/out" -e OUT=/out/full pqz-core-artifact --full
+docker run --rm --memory=4g --memory-swap=4g -u "$(id -u):$(id -g)" -v "$PWD/pqz-out:/out" -e OUT=/out/upstream pqz-core-artifact --upstream
+docker run --rm --memory=4g --memory-swap=4g --init -p 127.0.0.1:8000:8000 pqz-core-artifact --serve # open http://127.0.0.1:8000/
 docker image rm pqz-core-artifact                                     # when done
 ```
 
@@ -146,7 +150,7 @@ the measured toolchain pinned by version (clang / lld 18.1.3, gcc 13.3.0, cmake 
 LaZer `3330e48` by commit (source only, for `--upstream`), `rustup-init` 1.29.1 by sha256 and Rust 1.97.1 (minimal
 profile + `wasm32-unknown-unknown` + clippy; rustup checks every component against the 1.97.1 channel manifest's
 sha256), and the crates by their committed `Cargo.lock` (`cargo fetch --locked` into the image for `pqzh/ligero`,
-`pqzh/ligero/wasm`, `stmt`, `ffi`, `ffi/wasm`, and `vecgen` when present). The image build needs network. The runs
+`pqzh/ligero/wasm`, `stmt`, `ffi`, `ffi/wasm`). The image build needs network. The runs
 do not (every cargo call is `--locked --offline`); `--network none` above. `--upstream` clones nothing either,
 since LaZer is in the image.
 
@@ -182,7 +186,9 @@ PQZH and pqz-ffi checks:
   verifier's bound; wasm32 linear memory ≤ 256 MiB; every bench `fails 0` (0 mutations accepted, 0 panics) with all
   six forms; the text stages end with `rc=0` and show their markers (`kat_stmt: ok`, `xcheck: C 6 / 6 forms equal`,
   `0 verifier panics caught`, `c_abi: ok (0 failures)`, `symbols ok`, test hooks 0, `0 disagreements`); the pqz-ffi
-  self-test hash and digest lines equal the frozen ones, and the wasm32 digest lines equal native.
+  self-test hash and digest lines equal the frozen ones, and the wasm32 digest lines equal native; the vectors:
+  `pqz-vectors --check: … ok` (no `DIFF` / `EXTRA`), `pqz_kat: ok`, every wasm32 replay row byte-equal and valid,
+  `tamper: … caught: ok`.
 - **within a tolerance:** wasm32 / native prove and verify (±50 %, warn only).
 - **informational:** times and memory.
 

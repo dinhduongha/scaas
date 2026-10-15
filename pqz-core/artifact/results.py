@@ -35,9 +35,10 @@ TEXT = {"pqzh-test.txt": ["mutated inputs rejected, 0 verifier panics caught"], 
         "pqzh-xcheck.txt": ["kat_stmt: ok"], "stmt-xcheck.txt": ["xcheck: C 6 / 6 forms equal"],
         "ffi-test.txt": ["selftest hash", "0 disagreements"],
         "ffi-native.txt": ["c_abi: ok (0 failures)", "(must be 0): 0", "symbols ok", "!No such file"],
-        "ffi-wasm-build.txt": []}
+        "ffi-wasm-build.txt": [], "vectors-build.txt": [], "vectors-check.txt": [": ok", "!DIFF", "!EXTRA"],
+        "vectors-pqz-kat.txt": ["pqz_kat: ok"], "vectors-tamper.txt": ["caught: ok"]}
 FFI = ["ffi-digests-native.jsonl", "ffi-digests-wasm.jsonl", "ffi-bench.jsonl"]
-HOOKS = ["vectors.txt"]  # P6e Task 11, info only
+VECTORS = "vectors-wasm.jsonl"  # replay_wasm.mjs: one line per proof, then {"cases", "fails"}
 
 
 def jsonl(path, backend=None):
@@ -295,8 +296,11 @@ def compare_pqzh(res, exp):
         w = EF.get("digest_lines")
         add("info" if w is None else "ok" if n == w else "FAIL", "pqz-ffi digest lines = frozen",
             f"{len(n)} lines" + ("" if w is None else f", {sum(a != b for a, b in zip(n, w)) + abs(len(n) - len(w))} differ"))
-    for h in res.get("hooks", []):
-        add("info", f"HOOK {h}", "run (not compared until the freeze wires it in)")
+    if "vectors" in res:
+        v = res["vectors"]
+        good = v["cases"] > 0 and v["fails"] == 0 and v["rows"] == v["cases"] and v["equal_valid"] == v["rows"]
+        add("ok" if good else "FAIL", "vectors wasm32 replay",
+            f'{v["rows"]} proofs, {v["equal_valid"]} byte-equal and valid, fails {v["fails"]}')
 
 
 def compare(res, exp):
@@ -404,7 +408,12 @@ def add_pqzh(res, files):
     res["pqzh"] = pqzh_summary(files)
     res["ffi"] = ffi_summary(files)
     res["text_checks"] = {n: text_check(files[n], TEXT[n]) for n in TEXT if files.get(n) and os.path.exists(files[n])}
-    res["hooks"] = [n for n in HOOKS if files.get(n) and os.path.exists(files[n])]
+    p = files.get(VECTORS)
+    if p and os.path.exists(p):
+        rows = [o for o in jsonl(p) if "form" in o]
+        end = ([o for o in jsonl(p) if "cases" in o] or [{"cases": 0, "fails": 1}])[-1]
+        res["vectors"] = {"rows": len(rows), "cases": end["cases"], "fails": end["fails"],
+                          "equal_valid": sum(1 for o in rows if o.get("wasm_equal_native") is True and o.get("wasm_precompile") == 1)}
 
 
 def main(a):
@@ -412,7 +421,7 @@ def main(a):
     if len(a) >= 2 and a[0] == "check":
         d = a[1]
         exp = json.load(open(a[2] if len(a) > 2 else os.path.join(here, "expected-results.json")))
-        files = {n: os.path.join(d, n) for n in list(BENCH) + CHECKS + list(PQZH_RUNS) + list(TEXT) + FFI + HOOKS}
+        files = {n: os.path.join(d, n) for n in list(BENCH) + CHECKS + list(PQZH_RUNS) + list(TEXT) + FFI + [VECTORS]}
         res = summarize(files)
         add_pqzh(res, files)
         res["mode"] = open(os.path.join(d, "mode.txt")).read().strip() if os.path.exists(os.path.join(d, "mode.txt")) else "?"

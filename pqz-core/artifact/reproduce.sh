@@ -9,7 +9,8 @@
 #                                      wasm prove memory per op; PQZH cargo tests (+ --no-default-features, clippy),
 #                                      C <-> Rust cross-check, pqz-stmt xcheck, native + wasm32 bench of the six forms at
 #                                      the proven preset (small N); pqz-ffi tests, C ABI, native = wasm32 digests, bench;
-#                                      tables + comparison with expected-results.json
+#                                      the vectors: pqz-vectors --check, pqz_kat.py --check, wasm32 replay (--full: +
+#                                      tamper.py); tables + comparison with expected-results.json
 #   artifact/reproduce.sh --full       the same with the frozen run's sample sizes (PQZL: rel3/relfix.sh + sv/rel3.sh;
 #                                      PQZH: pqzh/ligero/runs/tx0.sh, the gate-B method, 1,000 verifies per form)
 #   artifact/reproduce.sh --serve      build both wasm modules and serve a browser demo (PQZL R_TX, PQZH any form: prove
@@ -30,7 +31,7 @@ case "${1:-}" in
   --full) MODE=full ;;
   --serve) MODE=serve ;;
   --upstream) MODE=upstream ;;
-  *) sed -n '2,25p' "$0"; exit 2 ;;
+  *) sed -n '2,27p' "$0"; exit 2 ;;
 esac
 OUT=${OUT:-artifact/out/$MODE-$(date -u +%Y%m%dT%H%M%SZ)}
 mkdir -p "$OUT"
@@ -93,7 +94,7 @@ if [ $MODE = upstream ]; then
       [ $V = v3 ] || sed -i "s/if (CAN_COMPILE AND CAN_RUN STREQUAL 0)/if (CAN_COMPILE)/" hexl-development/cmake/hexl/hexl-util.cmake
       cd hexl-development
       cmake -S . -B build -DHEXL_BENCHMARK=OFF -DHEXL_TESTING=OFF -DCpuFeatures_DIR="$P/xcheck/static/cpuf" > "$U/hexl-cmake-$V.log" 2>&1
-      cmake --build build -j4 > "$U/hexl-build-$V.log" 2>&1
+      cmake --build build -j2 > "$U/hexl-build-$V.log" 2>&1
       mkdir -p build/hexl/lib64 && cp build/hexl/lib/libhexl.a build/hexl/lib64/ && touch .
       cd "$L"
       make lazer.h liblazer.a CFLAGS="-Wall -O3 -g $MARCH -fomit-frame-pointer -DFALCON_FPNATIVE -DFALCON_AVX2 -DFALCON_FMA -DNDEBUG -fno-strict-aliasing" > "$U/lazer-build-$V.log" 2>&1
@@ -214,7 +215,7 @@ run pqzh-wasm.jsonl $L node wasm/run_wasm.mjs 2 $LWV $LWA 1 1 0,1,2,3,4,5
 # ---- pqz-ffi (P6e Task 7): the precompile over both systems; the subset of ffi/run.sh with this toolchain's clippy
 step "pqz-ffi: cargo test --features prove,test-hooks (native digest lines, self-test, rejections, differential, faults)"
 run ffi-test.txt ffi env PQZ_FFI_DIGESTS="$OUT/ffi-digests-native.jsonl" PQZ_FFI_FILL_OUT="$OUT/ffi-fill.txt" \
-  cargo test $C --features prove,test-hooks -- --nocapture --test-threads 4
+  cargo test $C --features prove,test-hooks -- --nocapture --test-threads 2
 step "pqz-ffi: unit tests without prove, verify-only cdylib, symbol scan, C smoke test, clippy -D clippy::float_arithmetic"
 run ffi-native.txt ffi sh -c "cargo test $C --lib && cargo build $C \
   && echo \"test hooks in the production cdylib (must be 0): \$(strings -a target/release/libpqz_ffi.so | grep -c TEST_ARENA)\" \
@@ -227,13 +228,19 @@ run ffi-digests-wasm.jsonl ffi node wasm/run_wasm.mjs wasm/target/wasm32-unknown
 step "pqz-ffi: ffi_bench $FN"
 run ffi-bench.jsonl ffi cargo run $C --features prove,test-hooks --example ffi_bench $FN
 
-# HOOK (P6e Task 11, branch p6e-a4, not on main yet): the vectors (smartcontracts/vectors/pqz/) and their generator
-# (vecgen/). When vecgen/run.sh lands, this runs it in check mode (pqz-vectors --check, pqz_kat.py --check, tamper.py,
-# the wasm32 replay); results.py lists it as info only until the freeze wires it into the comparison.
-if [ -x vecgen/run.sh ]; then
-  step "vectors: vecgen/run.sh (HOOK, info only)"
-  run vectors.txt . vecgen/run.sh artifact
-  for f in vecgen/runs/artifact-*; do [ ! -e "$f" ] || mv "$f" "$OUT/vectors-${f#vecgen/runs/artifact-}"; done
+# ---- the vectors (P6e Task 11): smartcontracts/vectors/pqz/, generator pqz-ffi's pqz-vectors (as ffi/vectors/run.sh,
+# check mode only: the image never rewrites them); tamper.py (179 single-leaf edits, each caught) with --full only
+V=../smartcontracts/vectors/pqz
+step "vectors: pqz-vectors --check (a second generation, byte for byte, every proof and negative input through pqz_precompile)"
+run vectors-build.txt ffi cargo build $C --features prove --bin pqz-vectors
+run vectors-check.txt ffi target/release/pqz-vectors --check
+step "vectors: pqz_kat.py --check (independent Python)"
+run vectors-pqz-kat.txt . python3 -I $V/pqz_kat.py --check
+step "vectors: wasm32 replay (every proof proved again by pqz-ffi in wasm32: byte-equal, valid)"
+run vectors-wasm.jsonl ffi node vectors/replay_wasm.mjs wasm/target/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm
+if [ $MODE = full ]; then
+  step "vectors: tamper.py (each checker catches changed leaves)"
+  run vectors-tamper.txt ffi python3 -I vectors/tamper.py
 fi
 
 step "tables and comparison"

@@ -1,10 +1,10 @@
 # pqz-core reproducibility image, PQZL and PQZH (README.md). Build context = the repository root, narrowed by
 # Dockerfile.dockerignore to pqz-core/ and the two vector directories the PQZH checks read:
 #   docker build -t pqz-core-artifact -f pqz-core/artifact/Dockerfile .
-#   docker run --rm --network none -v "$PWD/pqz-out:/out" -e OUT=/out/quick pqz-core-artifact   # quick
-#   docker run --rm -v "$PWD/pqz-out:/out" -e OUT=/out/full pqz-core-artifact --full
-#   docker run --rm --init -p 127.0.0.1:8000:8000 pqz-core-artifact --serve             # then http://127.0.0.1:8000/
-#   docker run --rm -v "$PWD/pqz-out:/out" -e OUT=/out/upstream pqz-core-artifact --upstream
+#   docker run --rm --memory=4g --memory-swap=4g --network none -v "$PWD/pqz-out:/out" -e OUT=/out/quick pqz-core-artifact   # quick
+#   docker run --rm --memory=4g --memory-swap=4g -v "$PWD/pqz-out:/out" -e OUT=/out/full pqz-core-artifact --full
+#   docker run --rm --memory=4g --memory-swap=4g --init -p 127.0.0.1:8000:8000 pqz-core-artifact --serve             # then http://127.0.0.1:8000/
+#   docker run --rm --memory=4g --memory-swap=4g -v "$PWD/pqz-out:/out" -e OUT=/out/upstream pqz-core-artifact --upstream
 # Built locally by the reader; no image is published. Pinned: the base image by digest, apt packages by version from
 # the Ubuntu snapshot archive (APT_SNAPSHOT), node by version + sha256, LaZer (for --upstream) by commit, rustup-init
 # by version + sha256 and the Rust toolchain by version (rustup checks each component against the channel manifest's
@@ -41,8 +41,10 @@ RUN curl -fsSLo /tmp/node.tar.xz "https://nodejs.org/dist/v$NODE_VERSION/node-v$
 # LaZer source for --upstream (source only; built at run time, never part of the image's pqz-core build)
 RUN git clone -q https://github.com/lazer-crypto/lazer /opt/lazer && git -C /opt/lazer checkout -q "$LAZER_COMMIT"
 
-# Rust (PQZH): rustup-init by sha256, the pinned toolchain, minimal profile; world-writable so docker run -u works
-ENV RUSTUP_HOME=/usr/local/rustup CARGO_HOME=/usr/local/cargo PATH=/usr/local/cargo/bin:$PATH
+# Rust (PQZH): rustup-init by sha256, the pinned toolchain, minimal profile; world-writable so docker run -u works.
+# Parallelism capped (2 cargo / cc jobs, 2 test threads): docker build work is not under the host's memory cap.
+ENV RUSTUP_HOME=/usr/local/rustup CARGO_HOME=/usr/local/cargo PATH=/usr/local/cargo/bin:$PATH \
+    CARGO_BUILD_JOBS=2 RUST_TEST_THREADS=2
 RUN curl -fsSLo /tmp/rustup-init "https://static.rust-lang.org/rustup/archive/$RUSTUP_VERSION/x86_64-unknown-linux-gnu/rustup-init" \
  && echo "$RUSTUP_SHA256  /tmp/rustup-init" | sha256sum -c - && chmod +x /tmp/rustup-init \
  && /tmp/rustup-init -y -q --no-modify-path --profile minimal --default-toolchain "$RUST_VERSION" \
@@ -51,8 +53,8 @@ RUN curl -fsSLo /tmp/rustup-init "https://static.rust-lang.org/rustup/archive/$R
 
 COPY . /src
 WORKDIR /src/pqz-core
-# the crates' dependencies by Cargo.lock, into the image (the runs use --offline); ffi/ and vecgen/ when present
-RUN for d in pqzh/ligero pqzh/ligero/wasm stmt ffi ffi/wasm vecgen vecgen/wasm; do \
+# the crates' dependencies by Cargo.lock, into the image (the runs use --offline)
+RUN for d in pqzh/ligero pqzh/ligero/wasm stmt ffi ffi/wasm; do \
       [ ! -f "$d/Cargo.lock" ] || (cd "$d" && cargo fetch --locked) || exit 1; done \
  && chmod -R a+rwX "$CARGO_HOME"
 # build once at image build time (the same build reproduce.sh repeats); world-writable so docker run -u works
