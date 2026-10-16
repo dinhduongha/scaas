@@ -75,7 +75,7 @@ contract AdminLibTest is Test {
         vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureInvalidForKind.selector, uint8(9)));
         h.init(AdminLib.KIND_NONE, 1 << 9, 0, address(0), none);
         vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureInvalidForKind.selector, uint8(0)));
-        h.init(4, PAYABLE, 0, address(0), none); // reserved PQZ kinds: nothing valid
+        h.init(6, PAYABLE, 0, address(0), none); // reserved *_ZETHER_PQZ kinds: nothing valid (P6g built 4, 5)
     }
 
     function test_lockedMustBeSubset_payableBurnableAlwaysLocked() public {

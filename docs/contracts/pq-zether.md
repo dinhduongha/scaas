@@ -696,11 +696,13 @@ No rotation ([CTR-UA-13](accounts.md#CTR-UA-13)): a new key is a new UA plus a c
 ### 7.3 Fund
 
 `pqzShield(bytes32 ua, uint256 amount)`: `ua` registered, `0 < amount`, `totalShielded + amount ≤ maxShielded`;
-`plainPending[ua] += amount`; `transferFrom(msg.sender, this, amount·shieldScale)` (spender is the token contract,
-[CTR-TOK-01](token-wrappers.md#CTR-TOK-01)); `totalShielded += amount`; emit `PqzPlainCredit(ua, amount, plainPending[ua])`.
-No ciphertext, no pending slot, no cap check, no proof, no later rollover. As an envelope op the only difference is the
-source: `amount·shieldScale` is burned from the envelope signer's **public** balance (ERC-20 ledger, or `_uaBalance` on
-the v3 path) instead of pulled with `transferFrom`, because the token cannot pull the signer's underlying.
+`plainPending[ua] += amount`; `amount·shieldScale` **public units of the caller are burned** (the signer's ERC-20
+balance, or its `_uaBalance` on the v3 path), exactly as `zetherShield`; `totalShielded += amount`; emit
+`PqzPlainCredit(ua, amount, plainPending[ua])`. No ciphertext, no pending slot, no cap check, no proof, no later
+rollover. On `UNDERLYING_PQZ`, `pqzWrapShield(u, amountIn, ua)` takes a leg's underlying straight into `plainPending`
+(nothing minted). BUILT (P6g plan D1): an earlier text pulled the underlying with `transferFrom`; in the token tree the
+public ERC-20 balance is the layer below the confidential one, so a direct call and an envelope op both burn public
+units.
 
 ### <a id="transfer"></a>7.4 Transfer
 
@@ -864,7 +866,8 @@ bytes, wrapped as the UA `ua_msg` and signed by ML-DSA as `pq_msg` with the empt
 
 `PqzCredit(bytes32 indexed ua, uint64 indexed index, bytes32 entryRef)` (the bytes `u ‖ v_t` are in that `PqzTransfer`),
 `PqzPlainCredit(bytes32 indexed ua, uint256 amount, uint256 plainPending)`, `PqzTransfer(bytes32 indexed entryRef,
-bytes32 indexed fromUA, bytes32 indexed toUA, bytes out)`, `PqzRolled(bytes32 indexed ua, uint64 rolled, bytes32
+bytes32 indexed fromUA, bytes32 indexed toUA, bytes16 salt, bytes out)` (with the salt, the bundle `R` is rebuildable
+from logs; P6g plan D14), `PqzRolled(bytes32 indexed ua, uint64 rolled, bytes32
 accHash)`, `PqzBurned(bytes32 indexed ua, uint256 amount, address recipient, bytes newAcc)`, `PqzRegistered(…)`. A
 client rebuilds `acc`, the pending list and `plainPending` of its UA from these logs alone and checks each against the
 stored hashes and values before proving. Logs cost 8 gas/byte (≈ 134 k per transfer) — the price of not trusting an
@@ -1531,6 +1534,30 @@ processes. ML-DSA p99 0.135 ms (44) / 0.189 ms (65) ⇒ `mldsa44Gas` **49,000**,
 6,500 / 9,000 is lower). Re-calibrate before chain 22776 or when a later measurement differs by more than 15 %. The
 estimates below predate this table.
 
+**Measured on chain 7622 (P6g e2e, 2026-10-16, real PQZL proofs, `gasUsed` of the transaction; log
+`smartcontracts/evm/runs/2026-10-16-p6g-7622.txt`).** Proofs from `pqz-ffi` (`examples/pqz_prove.rs`): transfer
+42.4–42.8 KB, burn / refresh 41.9 KB, `R_REG` 28.1 KB, disclosure 29.0 KB, each 0.3–1.9 s native.
+
+| Operation | Gas | Note |
+|---|---|---|
+| `register` `pqz-mlwe` (PoP `R_REG` + `mldsa65` co-sign) | 7,239,088 | 48.2 KB calldata; SSTORE2 of the 16 KB `pk` |
+| `register` `mldsa65` / `mldsa44` (PoP on the precompile) | 687,743 / 509,018 | |
+| `registry.requireAuthorized` `mldsa65` / `mldsa44` (`eth_estimateGas`) | 301,776 / 287,268 | incl. 21,000 and the 3.3 / 2.4 KB signature calldata |
+| `pqzShield` | 97,801 | public units burned |
+| `pqzWrapShield` (`UNDERLYING_PQZ`) | 159,757 | |
+| `pqzTransfer` BUNDLE, auditor on, fee | 10,720,732 | precompile row 5,409,000 + SSTORE2 of the 16.7 KB bundle + 80 KB calldata |
+| `pqzTransfer` BUNDLE, auditor on, 1 inline credit | 11,039,035 | +16.5 KB calldata |
+| `pqzTransfer` commit-reveal, auditor off (`R_TX0`) | 7,142,520 | no SSTORE2; the 57-byte memo |
+| `pqzTransfer` in a v1 envelope (FIXED outer fee) / v3 envelope (`mldsa65` fee UA) | 11,278,161 / 11,406,642 | both with 1 inline credit |
+| `pqzUnshield` burn / refresh | 5,548,745 / 5,529,570 | |
+| `pqzUnshieldUnwrap` (leg payout) | 5,594,862 | |
+| `pqzRollOver` (1 credit) | 710,370 | |
+| `verifyTransferAmount` `SENDER_S` / `RECEIVER_X` / `AUDITOR` (`eth_estimateGas`) | 3,650,832 / 3,616,461 / 3,618,801 | views; op 4 / op 5 rows 2,601,000 / 2,567,000 |
+| `setPqzEnabled(true)` (self-test) / `createToken` `NONE_PQZ` / `UNDERLYING_PQZ` | 2,612,253 / 3,022,079 / 3,192,615 | each creation runs the self-test |
+
+A BUNDLE transfer with many inline credits approaches the 16,777,216 cap (≈ +0.32 M per credit); clients roll first or
+use the commit-reveal form.
+
 Estimates for a typical transfer (auditor on, no inline credits, 40 KB proof), **to be replaced by measurements**.
 Calldata: `out` 16,768 + `acc` 16,512 B at ≈ 25.2 tokens per `be8` coefficient, proof and signature at ≈ 3.99 tokens per
 byte, ≈ 1.5 k tokens of ABI and header (scratch Python, 2026-10-06):
@@ -1572,12 +1599,12 @@ disks for that or prune ([NODE-OPS-15](../node/ops.md#NODE-OPS-15)).
 
 | Contract | Role | Notes |
 |---|---|---|
-| `PqzSafety` (library) | [CTR-PQZ-01](#CTR-PQZ-01) allowlist + self-test helper | |
-| `UAPqzVerifier` | UA `IUAKindVerifier` for `0x0142` | stateless; precompile address immutable |
+| `PqzSafety` (library) | [CTR-PQZ-01](#CTR-PQZ-01) allowlist + self-test helper | BUILT (P6g D2): {31337, 1337, 7622}; `selfTest` = op 6 answers exactly `0xed910a2c…d205` |
+| `UAPqzVerifier` | UA `IUAPopVerifier` for `0x0142` | BUILT (P6g D3): stateless; precompile and `proofSystemId` immutable; `pk < q` checked; constructor self-test + `R_REG` probe; also a token's `verifier` (D9) |
 | `UAMldsaVerifier` | UA verifier for `mldsa44`/`mldsa65` (BUILT, P6a: EIP-8355 precompile by probe, else Solidity) | stateless; used by the UA `UARegistry` |
 | `ERC20MetaTx` (the one token base) | ERC20 + EIP712 + `IERC20MetaTx`, both structs, the address and UA paths, UA ledger | [CTR-MTX-07](metatx.md#CTR-MTX-07); `PqzToken --sizes` ≤ 24,576 B, else the `ua*` entry points move to a `fallback` decoder as MetaToken v3 |
-| `PqzToken` | shield, transfer, unshield, refresh, rollover, disclosure, meta-tx, `ITransferDisclosure`, `wrap`/`unwrap` | clone per token via `OpenFactory.createPqzToken` (flag-gated); immutable |
-| `PqzCt` (library) | `add`/`sub` on 64-bit lanes, `addTrivial(digits)` for the plain term, the `< q` check, `ctHash` | pure Solidity, no precompile |
+| `PqzToken` | shield, transfer, unshield, refresh, rollover, disclosure, meta-tx, `wrap`/`unwrap` | BUILT (P6g D1) as the kinds `NONE_PQZ` (`NoUnderlyingPqzToken`) and `UNDERLYING_PQZ` (`UnderlyingPqzToken`): `PqzLayer` on `MetaTokenBase` + the external `PqzLib` (`scaas.pqz`); clones via `OpenFactory.createToken` behind `pqzEnabled`; disclosure `verifyTransferAmount` on the token (D11); sizes 50,483 / 62,572 B (chain 7622 allows 65,536) |
+| `PqzCt` (library) | `plus`/`minus` on 64-bit lanes, `addTrivial` for the plain term, `reduce`, the `< q` check | BUILT (P6g): pure Solidity, no precompile; checked on the P6e vectors |
 | `Sstore2` | existing pattern (classical generator blob) | reused |
 
 Selectors (normative ABI): `pqzShield(bytes32,uint256)`, `pqzTransfer(bytes,bytes,bytes[],bytes,bytes)` (payload, acc, inline,

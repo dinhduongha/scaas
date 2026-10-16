@@ -8,6 +8,7 @@ import {ISCaaSDex} from "../dex/ISCaaSDex.sol";
 import {ITokenAdmin} from "../metatx/ITokenAdmin.sol";
 import {IZetherVerifier} from "../zether/IZetherVerifier.sol";
 import {ZetherSafety} from "../zether/ZetherSafety.sol";
+import {PqzSafety} from "../pqz/PqzSafety.sol";
 
 /// @title `OpenFactory` (CTR-TOK-03, CTR-TOK-25): the one token factory of a chain.
 /// @notice Anyone creates tokens; the registrar only appends implementations to the catalogue (and marks versions
@@ -40,6 +41,7 @@ contract OpenFactory is IOpenFactory {
     uint64 private _latestDex;
     mapping(address => uint64) private _dexVersion; // 0 = not a DEX made here
     bool public zetherEnabled;
+    bool public pqzEnabled;
 
     constructor(address registrar_, bytes32 chainUid_) {
         if (chainUid_ == bytes32(0)) revert ChainUidZero();
@@ -84,6 +86,16 @@ contract OpenFactory is IOpenFactory {
         if (on) ZetherSafety.requireDevChain();
         zetherEnabled = on;
         emit ZetherEnabled(on);
+    }
+
+    function setPqzEnabled(bool on) external {
+        if (msg.sender != registrar) revert NotRegistrar();
+        if (on) {
+            PqzSafety.requireAllowedChain();
+            PqzSafety.requireSelfTest(PqzSafety.PQZ);
+        }
+        pqzEnabled = on;
+        emit PqzEnabled(on);
     }
 
     // ------------------------------------------------------------------ create
@@ -180,7 +192,7 @@ contract OpenFactory is IOpenFactory {
 
     /// @dev Code, `kind()`, `factory()`, `chainUid()`: each read by staticcall, a missing or short answer refused.
     function _checkImplementation(TokenKind kind, address implementation) private view {
-        if (uint8(kind) > uint8(TokenKind.UNDERLYING_ZETHER)) revert KindReserved(kind);
+        if (uint8(kind) > uint8(TokenKind.UNDERLYING_PQZ)) revert KindReserved(kind);
         if (implementation.code.length == 0) revert ImplementationNotAContract(implementation);
         (bool ok, uint256 got) = _word(implementation, IFactoryToken.kind.selector);
         if (!ok) got = type(uint256).max;
@@ -205,6 +217,15 @@ contract OpenFactory is IOpenFactory {
         revert VerifierUnsupportedOnThisChain(verifier, curve);
     }
 
+    /// @dev The PQZ gate, the chain, then the verifier's own check (chain and the precompile's self-test, now).
+    function _checkPqz(address verifier) private view {
+        if (!pqzEnabled) revert PqzDisabled();
+        PqzSafety.requireAllowedChain();
+        if (verifier == address(0)) revert VerifierRequiredForPqz();
+        (bool answered, uint256 w) = _word(verifier, IZetherVerifier.isSupportedOnThisChain.selector);
+        if (!answered || w != 1) revert PqzVerifierUnsupported(verifier);
+    }
+
     function _word(address target, bytes4 sel) private view returns (bool ok, uint256 w) {
         bytes memory ret;
         (ok, ret) = target.staticcall(abi.encodeWithSelector(sel));
@@ -220,8 +241,10 @@ contract OpenFactory is IOpenFactory {
         bytes32 salt) private returns (address token)
     {
         if (kind == TokenKind.NONE_ZETHER || kind == TokenKind.UNDERLYING_ZETHER) _checkZether(cfg.conf.verifier);
+        if (kind == TokenKind.NONE_PQZ || kind == TokenKind.UNDERLYING_PQZ) _checkPqz(cfg.conf.verifier);
         uint256 n = cfg.legs.length;
-        bool wrapper = kind == TokenKind.UNDERLYING || kind == TokenKind.UNDERLYING_ZETHER;
+        bool wrapper = kind == TokenKind.UNDERLYING || kind == TokenKind.UNDERLYING_ZETHER
+            || kind == TokenKind.UNDERLYING_PQZ;
         if (wrapper ? n == 0 || n > MAX_LEGS : n != 0) revert UnderlyingCountInvalid(n);
         bytes32 s = _salt(msg.sender, salt);
         address predicted = Clones.predictDeterministicAddress(impl, s);

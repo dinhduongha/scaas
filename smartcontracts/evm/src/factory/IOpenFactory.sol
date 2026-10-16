@@ -49,6 +49,12 @@ interface IOpenFactory {
     ///         can run (`isSupportedOnThisChain()`).
     event ZetherEnabled(bool enabled);
     error ZetherDisabled();
+    /// @notice The PQZ gate (CTR-PQZ-01, P6g plan D1/D2): off by default; on only on a `PqzSafety` chain whose `PQZ`
+    ///         precompile passes its self-test; a `*_PQZ` creation needs it on and a `UAPqzVerifier` this chain runs.
+    event PqzEnabled(bool enabled);
+    error PqzDisabled();
+    error VerifierRequiredForPqz();
+    error PqzVerifierUnsupported(address verifier);
     error VerifierRequiredForZether();
     /// @notice `curve` is the verifier's `curveName()`, empty when it has no code or no answer.
     error VerifierUnsupportedOnThisChain(address verifier, string curve);
@@ -56,6 +62,11 @@ interface IOpenFactory {
     function zetherEnabled() external view returns (bool);
     /// @notice Registrar only; `true` reverts `ZetherNotDevChain` outside chain ids 31337/1337, `false` always works.
     function setZetherEnabled(bool on) external;
+
+    /// @notice Registrar only; `true` needs `PqzSafety`'s chain and the precompile's self-test, `false` always works.
+    function setPqzEnabled(bool on) external;
+
+    function pqzEnabled() external view returns (bool);
 
     /// @notice DEX catalogue (CTR-DEX-24): append-only, versions from 1; the implementation must answer
     ///         `factory() == this` and `chainUid() == chainUid`.

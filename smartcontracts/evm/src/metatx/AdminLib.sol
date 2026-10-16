@@ -27,6 +27,8 @@ library AdminLib {
     uint8 internal constant KIND_UNDERLYING = 1;
     uint8 internal constant KIND_NONE_ZETHER = 2;
     uint8 internal constant KIND_UNDERLYING_ZETHER = 3;
+    uint8 internal constant KIND_NONE_PQZ = 4;
+    uint8 internal constant KIND_UNDERLYING_PQZ = 5;
 
     /// @dev Flags 5–8 (regulated controls, CTR-AS-17): valid on non-confidential kinds, not built yet (asset suite).
     uint256 internal constant REGULATED = (1 << FREEZE) | (1 << FORCE) | (1 << PAUSE) | (1 << ALLOWLIST);
@@ -193,8 +195,8 @@ library AdminLib {
         uint256 und = (1 << PAYABLE) | (1 << RATE_ADJUSTABLE) | (1 << WRAP_DISABLEABLE);
         if (kind == KIND_NONE) return none | REGULATED;
         if (kind == KIND_UNDERLYING) return und | REGULATED;
-        if (kind == KIND_NONE_ZETHER) return none;
-        if (kind == KIND_UNDERLYING_ZETHER) return und;
+        if (kind == KIND_NONE_ZETHER || kind == KIND_NONE_PQZ) return none;
+        if (kind == KIND_UNDERLYING_ZETHER || kind == KIND_UNDERLYING_PQZ) return und;
         return 0;
     }
 
