@@ -31,7 +31,7 @@ sender + receiver estimate) and adds:
 - §10 2A′ against 2B; §11 what leaks anyway; §12 status.
 
 The plan built on this note is `docs/superpowers/plans/2026-10-14-p6-anon.md`. Sizing inputs and outputs:
-`pqz-core/params/anon/` (codegen sketches, generated headers, `codegen-anon.txt`, `anon_sizes.py`, `usvp.py`).
+`pqz-core/pqzl/params/anon/` (codegen sketches, generated headers, `codegen-anon.txt`, `anon_sizes.py`, `usvp.py`).
 
 ## 1. Two options
 
@@ -295,7 +295,7 @@ CTR-PQZ-04 assumes MLWE on `(r, e1)` stays hard given ≤ 32 adversarial perfect
 In an M-leg transfer every recipient key yields 16 hints on the same `(r, e1)`, and a sender cannot know which
 registered keys were crafted (§4.5's examples pass `R_REG`): up to `16·M + 16` hints (the M auditor copies are under
 one key and repeat the same 16 linear forms). Recovering `(r, e1)` opens `v_f` (the sender's new balance) and every
-leg. Same approximation as §4.5 (one dimension per hint, ADPS16 primal uSVP; `pqz-core/params/anon/usvp.py` reproduces
+leg. Same approximation as §4.5 (one dimension per hint, ADPS16 primal uSVP; `pqz-core/pqzl/params/anon/usvp.py` reproduces
 406 / 476 / 466) [estimate]:
 
 | Hints on one `(r, e1)` | 32 (M = 1) | 48 (M = 2) | 80 (M = 4) | 144 (M = 8) | 272 (M = 16) |
@@ -308,7 +308,7 @@ with `v_f` in group 0 — CTR-PQZ-04's own split-randomness fallback, extended p
 confirm 80 hints before any freeze. (Classical Z3 accepted that one shared `s` opens every leg *when handed over*;
 here nothing is handed over, but malicious keys can extract — a lattice-specific limit with no classical analogue.)
 
-**DDGR20 run (P6-ANON S1, 2026-10-14) — corrects the table above.** `pqz-core/params/anon/hints.sage` runs the
+**DDGR20 run (P6-ANON S1, 2026-10-14) — corrects the table above.** `pqz-core/pqzl/params/anon/hints.sage` runs the
 leaky-LWE-Estimator (DDGR20, `lducas/leaky-LWE-Estimator` `0a9caf8`, `DBDD_predict_diag` with its q-vector
 optimisation) next to lattice-estimator `53da598` in the pinned Sage image (`run_hints.sh` → `hints-anon.txt`,
 74 min). Calibration: Kyber-512 405.5 (estimator 406), PQZ `(u, v_f)` without hints 475.8 (476); the closed-form
@@ -361,7 +361,7 @@ conservative [measured].
 *The tables below use groups of 4 legs, the grouping the owner kept on 2026-10-15 (β 446 accepted, §8.2); the "hints →
 β" column is the one-dimension-per-hint approximation — the DDGR20 worst case is in §8.2 (80 hints: 446.0).*
 
-PQZL proof sizes: LaZer's codegen on the sketch specs `pqz-core/params/anon/txm*_params.sage` (`R_TX`'s witness with
+PQZL proof sizes: LaZer's codegen on the sketch specs `pqz-core/pqzl/params/anon/txm*_params.sage` (`R_TX`'s witness with
 M legs and G randomness groups, auditor on), sized against the pinned lattice-estimator `53da598` (ADPS16) by
 `run_sizing.sh` → `sizing-anon.txt` [measured: codegen and estimator runs, 2026-10-14]: every spec reaches MSIS β 453–464
 and MLWE uSVP β 470 (≥ 450) with LaZer's root-Hermite target unchanged; codegen proof bytes `txm1` 44,638 (= `R_TX`'s),

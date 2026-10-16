@@ -1,9 +1,9 @@
 #!/bin/sh
 # P6-ANON L2: the specialised verifier on the R_TXM shapes, in parts that each fit one capped job (4 GB, < 30 min):
-#   scripts/capped pqz-core/sv/txm-l2.sh <label> diff     build native / x86v3 / wasm, pqz_sv_diff portable
-#   scripts/capped pqz-core/sv/txm-l2.sh <label> diff3    pqz_sv_diff x86-64-v3, check_sv_fixes.sh, wasm PQZ_VERIFY=both
-#   scripts/capped pqz-core/sv/txm-l2.sh <label> zdiff    sv/review/review.sh zdiff 1 (six forms + eight R_TXM shapes)
-#   scripts/capped pqz-core/sv/txm-l2.sh <label> fuzz     sv/fuzz.sh <label> 600 (byte 0: R_TXM M = 2 on, M = 8 off)
+#   scripts/capped pqz-core/pqzl/sv/txm-l2.sh <label> diff     build native / x86v3 / wasm, pqz_sv_diff portable
+#   scripts/capped pqz-core/pqzl/sv/txm-l2.sh <label> diff3    pqz_sv_diff x86-64-v3, check_sv_fixes.sh, wasm PQZ_VERIFY=both
+#   scripts/capped pqz-core/pqzl/sv/txm-l2.sh <label> zdiff    sv/review/review.sh zdiff 1 (six forms + eight R_TXM shapes)
+#   scripts/capped pqz-core/pqzl/sv/txm-l2.sh <label> fuzz     sv/fuzz.sh <label> 600 (byte 0: R_TXM M = 2 on, M = 8 off)
 # pqz_sv_diff args: n_reg n_tx muts seed fuzz n_burn n_ds n_dr n_tx0 n_txm (one proof per form, one per R_TXM shape).
 set -eu
 cd "$(dirname "$0")/.."

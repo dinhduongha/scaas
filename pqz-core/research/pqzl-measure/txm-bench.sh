@@ -1,14 +1,14 @@
 #!/bin/sh
 # P6-ANON L3: PQZL R_TXM measurements per shape, M = 1, 2, 4, 8 (built) and 16 (oversize), auditor on / off, one
 # process per shape and backend (so each arena peak is that shape's alone). One capped job:
-#   scripts/capped pqz-core/rel3/txm-bench.sh <label>        JSON lines into rel3/runs/<label>-*
+#   scripts/capped pqz-core/research/pqzl-measure/txm-bench.sh <label>        JSON lines into rel3/runs/<label>-*
 # Builds under build/ov with OVERSIZE=1 (bench only; the precompile build never has M = 16). Per shape:
 #   native generic: NP proves (proof bytes min / max, prove p50 / p99, arena peak), NV honest + adversarial verifies
 #   native / x86-64-v3 / wasm specialised verifier: NF honest + adversarial verifies
 #   wasm generic: NPW proves (prove p50, arena peak), NVW verifies; wasm without the SV (the wallet's prover): 1 prove
 set -eu
-cd "$(dirname "$0")/.."
-R=rel3/runs/$1
+cd "$(dirname "$0")/../../pqzl" # the PQZL core: build/, src/, test/, kat/
+R=../research/pqzl-measure/runs/$1
 export PQZ_ARENA_MB=${ARENA_MB:-3072}
 NP=${NP:-10} NV=${NV:-30} NF=${NF:-200} NPW=${NPW:-3} NVW=${NVW:-3}
 export B=build/ov OVERSIZE=1

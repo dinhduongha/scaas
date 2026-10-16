@@ -9,8 +9,8 @@ Plonky3's mixed-height injection (p3-merkle-tree mmcs/batch.rs verify_batch), FR
 sum m_i / (beta - k_i), a Horner fingerprint of the statement coefficients; and a synthetic proof for the
 end-to-end verifier skeleton (`Skeleton` below, the byte format `PqzhSkeleton.verify` reads).
 
-  python3 pqz-core/pqzh/sol/ref.py --selftest     # asserts only
-  python3 pqz-core/pqzh/sol/ref.py                # writes smartcontracts/evm/test/vectors/pqzh/*
+  python3 pqz-core/pqzh/stark-backup/sol/ref.py --selftest     # asserts only
+  python3 pqz-core/pqzh/stark-backup/sol/ref.py                # writes smartcontracts/evm/test/vectors/pqzh/*
 
 Field elements are 8-byte big-endian everywhere (EVM-friendly: calldataload + shr, no byte swap); an extension
 element is its E coefficients in order. Ext elements in the Solidity code are packed in one word, coefficient i at

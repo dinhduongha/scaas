@@ -5,7 +5,7 @@
 Written 2026-10-13 (TODO P6-Z21). Finding, proof of concept, impact on PQZ and fix for the third LaZer finding of the
 PQZL verifier work; the first two are `pqz-tbox-soundness.md` (lazer#24) and `pqz-l2-domain.md` (lazer#25). Found by
 the independent review of the specialised verifier (finding 1 of the review of `pqz_sv.c`, 2026-10-13; the review
-document is kept locally, its reproducers are `pqz-core/sv/review/`). Upstream issue:
+document is kept locally, its reproducers are `pqz-core/pqzl/sv/review/`). Upstream issue:
 [lazer-crypto/lazer#26](https://github.com/lazer-crypto/lazer/issues/26) (public, filed 2026-10-13, owner). Fixed in
 `pqz-core` on branch `pqz-z21`, merged 2026-10-14 (`a8b5b66`). Owner decision 2026-10-14: no `proofSystemId` bump
 (the §6.3 recommendation; recorded in `docs/decisions.md`, CTR-PQZ-03).
@@ -87,7 +87,7 @@ anyway; a hint coefficient of magnitude above m/2 needs ≈ m bits in the unary 
 
 ## 4. Proof of concept
 
-Harness `pqz-core/sv/review/` (imported from the review branch `pqz-sv-review`, `0aecc93`): `review.sh norm` builds a
+Harness `pqz-core/pqzl/sv/review/` (imported from the review branch `pqz-sv-review`, `0aecc93`): `review.sh norm` builds a
 copy of `lazer/lnp-quad.c` whose prover (lines 1–335 only) takes the hooks of `normpoc_hooks.h` and links it into a
 library variant under `build/review/`; `./build.sh` never compiles the hooks. Modes: honest; `z1_over` (y1 ≪ 3, z1
 rejection skipped); **`z21_big`** (y21 ≪ 7, the z2 rejection and the prover's ‖y2‖ check skipped); `w_over` (w1 + 2
@@ -101,8 +101,8 @@ removed from both verifiers.
 | **z21_big** (85,105; ‖z21‖² = 1.941·10^15 = 87.3 × Bsq) | **ACCEPT / ACCEPT** | **REJECT / REJECT** | ACCEPT / ACCEPT |
 | w_over (28,262) | REJECT / REJECT | REJECT / REJECT | REJECT / REJECT |
 
-Runs [measured]: before `pqz-core/rel3/runs/z21-before-norm.txt` (main `cd00ab2` + the harness, proof hashes
-`z21-before-norm-proofs.sha256`); after `pqz-core/rel3/runs/z21full-norm.txt` (same proof bytes: the prover is
+Runs [measured]: before `pqz-core/research/pqzl-measure/runs/z21-before-norm.txt` (main `cd00ab2` + the harness, proof hashes
+`z21-before-norm-proofs.sha256`); after `pqz-core/research/pqzl-measure/runs/z21full-norm.txt` (same proof bytes: the prover is
 unchanged, `z21full-norm-proofs.sha256`). The full table with all three controls is in those files.
 
 ## 5. Impact on PQZ before the fix
@@ -115,8 +115,8 @@ one coefficient; for a fixed bit budget one coefficient maximises ‖z21‖. Bud
 honest proof) + 3 bits per Gaussian-coded coefficient (the unary bits of an honest proof, an over-estimate), so
 Z21max = (E/2 + 1/2)·2^13 ≈ 2^30.9–2^31.2 (z21 is centred mod q, cap q/2 = 2^41, not reached). The z22 part stays
 bounded by B (that check exists), so the extractor gets ‖c̄·s̄2‖ ≤ 2·√(Z21max² + B²) instead of 2B. Computed by
-`pqz-core/params/z21_msis.sage` with the codegen itself and lattice-estimator `53da598` (`SIS.lattice`, `RC.ADPS16`,
-the pinned Sage image; `SCRIPT=z21_msis.sage params/run_e_s1.sh …`); output `pqz-core/params/estimator-z21.txt`, raw
+`pqz-core/pqzl/params/z21_msis.sage` with the codegen itself and lattice-estimator `53da598` (`SIS.lattice`, `RC.ADPS16`,
+the pinned Sage image; `SCRIPT=z21_msis.sage params/run_e_s1.sh …`); output `pqz-core/pqzl/params/estimator-z21.txt`, raw
 log `estimator-z21-raw.txt` [estimate]:
 
 | Relation | Bsq (‖z2‖ ≤ B) | Z21max | Z21max² / Bsq | MSIS bound `Bound()` designed → no z21 check | δ (codegen formula) | MSIS β / log2 rop (classical core-SVP) |
@@ -187,10 +187,10 @@ Owner decision.
 
 ### 7.1 The PoC as a check
 
-`pqz-core/check_tbox_fixes.sh` (run by `rel3/relfix.sh`) now also runs `sv/review/review.sh norm` and requires: the
+`pqz-core/pqzl/check_tbox_fixes.sh` (run by `rel3/relfix.sh`) now also runs `sv/review/review.sh norm` and requires: the
 `z21_big` proof is produced, the honest proof verifies, `z21_big`, `z1_over`, `w_over` are rejected by both production
 verifiers, and the control with the z21 term removed from both verifiers accepts `z21_big` (so a REJECT is the fix,
-not a broken PoC). Run `pqz-core/rel3/runs/z21full-tbox-fixes.txt` [measured].
+not a broken PoC). Run `pqz-core/research/pqzl-measure/runs/z21full-tbox-fixes.txt` [measured].
 
 ### 7.2 Differential test with z21-inflated proofs
 
@@ -223,8 +223,8 @@ x86-64-v3 and wasm differential builds were not re-run: `pqz_sv.c` changed only 
 guards, both build-independent C.
 Generic verify times are unchanged within host noise (the extra work is one ℓ2 norm of 45–46 polynomials): native
 p50 `R_TX` 648 → 677 ms, `R_REG` 177 → 184 ms (`z21full-native.jsonl` against the v2 row of `pqz-core/STATUS.md`).
-Command: `NP=10 NV=30 NPW=5 NVW=10 scripts/capped pqz-core/rel3/relfix.sh z21full`, then
-`scripts/capped pqz-core/sv/check_sv_fixes.sh`, `ZN=2 pqz-core/sv/diff.sh z21`, and the ASan + UBSan z21
+Command: `NP=10 NV=30 NPW=5 NVW=10 scripts/capped pqz-core/research/pqzl-measure/relfix.sh z21full`, then
+`scripts/capped pqz-core/pqzl/sv/check_sv_fixes.sh`, `ZN=2 pqz-core/pqzl/sv/diff.sh z21`, and the ASan + UBSan z21
 differential (`CC='clang -fsanitize=address,undefined … -DPQZ_DEBUG_MALLOC' sv/review/review.sh zdiff 1 31`).
 
 ## 8. SV hardening folded in (review findings 2, 4–7)
@@ -246,9 +246,9 @@ Finding 8 (all library state global; the P6f precompile wrapper must serialise l
 
 ## 9. Files
 
-- Fix: `pqz-core/lazer/lnp-quad.c`, `pqz-core/lazer/abdlop.c` (`PQZ (P6-Z21)`), `pqz-core/src/pqz_sv.c` (last check).
-- PoC and differential: `pqz-core/sv/review/` (`review.sh norm | zdiff`, `normpoc.c`, `normpoc_hooks.h`,
+- Fix: `pqz-core/pqzl/lazer/lnp-quad.c`, `pqz-core/pqzl/lazer/abdlop.c` (`PQZ (P6-Z21)`), `pqz-core/pqzl/src/pqz_sv.c` (last check).
+- PoC and differential: `pqz-core/pqzl/sv/review/` (`review.sh norm | zdiff`, `normpoc.c`, `normpoc_hooks.h`,
   `z21diff.c`); `./build.sh` never compiles them.
-- Regression: `pqz-core/check_tbox_fixes.sh` (run by `rel3/relfix.sh`), `pqz-core/sv/diff.sh` (runs `zdiff`).
-- Estimate: `pqz-core/params/z21_msis.sage`, `estimator-z21.txt`, `estimator-z21-raw.txt`.
-- Runs: `pqz-core/rel3/runs/z21-*`, `z21full-*`; `pqz-core/sv/runs/z21-*`.
+- Regression: `pqz-core/pqzl/check_tbox_fixes.sh` (run by `rel3/relfix.sh`), `pqz-core/pqzl/sv/diff.sh` (runs `zdiff`).
+- Estimate: `pqz-core/pqzl/params/z21_msis.sage`, `estimator-z21.txt`, `estimator-z21-raw.txt`.
+- Runs: `pqz-core/research/pqzl-measure/runs/z21-*`, `z21full-*`; `pqz-core/pqzl/sv/runs/z21-*`.

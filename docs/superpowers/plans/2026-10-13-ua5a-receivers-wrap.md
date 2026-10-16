@@ -6,7 +6,7 @@
 from `main` `82d7d7c`), in order, one commit each, and ran them green: Task 1 `2c767b4`, Task 2 `bd11f2a`, Task 3
 `0315e39`, Task 4 `4db008b`, Task 5 `419b6ab`, Task 6 `8542ef0`. The diffs below are those commits; the two vector files
 of Task 6 are generated, never applied. Checked on a clean checkout of `main` `e4e4340` (three unrelated commits after
-`82d7d7c`: `.gitignore`, PQZ verifier-floor docs and `pqz-core/floor`): the diffs, taken from this file, apply in sequence
+`82d7d7c`: `.gitignore`, PQZ verifier-floor docs and `pqz-core/research/floor`): the diffs, taken from this file, apply in sequence
 with `git apply --check --whitespace=error`; with the vectors generated, the tree equals `ua5a-spike` byte for byte; every
 command and count below was run there. Two ways to land it: merge `ua5a-spike` (then do Task 7), or execute Tasks 1–7 on a
 fresh branch. Rulings R5a-1…R5a-15 are kept; the spike's own choices are the controller rulings C5a-1…C5a-15 below.

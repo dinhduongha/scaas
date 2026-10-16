@@ -4,7 +4,7 @@
 # binaries. Builds from scratch into build/glic/, then prints every command and its output. Run under scripts/capped:
 #   scripts/capped pqz-core/glic/absence.sh > pqz-core/glic/runs/absence-<date>.txt 2>&1
 set -eu
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../pqzl" # the PQZL core
 B=build/glic   # git-ignored (build/)
 NM=llvm-nm-18
 PAT='gmp|mpfr|hexl'   # case-insensitive; the rewritten limb layer is pqz_mpn_* and does not match
@@ -14,7 +14,7 @@ hits() { # $1 = label; stdin = names; prints the matching names and their count
   echo "$1: $n names matching /$PAT/i"; [ -z "$m" ] || printf '%s\n' "$m"
 }
 
-echo "# pqz-core G-LIC absence check, $(date -u +%Y-%m-%dT%H:%MZ), commit $(git rev-parse --short HEAD)$(git diff --quiet HEAD -- . || echo ' (dirty)')"
+echo "# pqz-core G-LIC absence check, $(date -u +%Y-%m-%dT%H:%MZ), commit $(git rev-parse --short HEAD)$(git diff --quiet HEAD -- .. || echo ' (dirty)')"
 run clang --version
 run wasm-ld-18 --version
 run $NM --version

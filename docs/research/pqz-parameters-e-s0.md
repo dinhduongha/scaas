@@ -7,7 +7,7 @@ Written 2026-10-13 for P6b of the P6 roadmap (`docs/superpowers/plans/2026-10-12
 instances and on Kyber-512; DDGR20 perfect hints on the shared `(r, e1)`; the soundness of every Fiat–Shamir round.
 Gate: every instance ≥ Kyber-512 under both models, every round ≥ 128 bits. Nothing here changes a rule; the
 parameters are those of `docs/contracts/pq-zero-knowledge.md` (CTR-PQZ-03, CTR-PQZ-04, §5). The recorded run is
-`pqz-core/params/estimator.txt` (script `e_s0.py`, rerun with `run.sh`, see that directory's README).
+`pqz-core/pqzl/params/estimator.txt` (script `e_s0.py`, rerun with `run.sh`, see that directory's README).
 
 **[unverified]** marks a constant taken from a paper as recalled, not re-read for this note: the spike had no network
 access beyond the Sage image and the lattice-estimator clone, so LNP22 / LaZer / Lether / LS18 were not fetched.

@@ -2,7 +2,7 @@
 #include "lazer.h"
 #include "stopwatch.h"
 
-/* PQZ: P6-SZ trace hook (pqz-core/sz): reports how the Fiat-Shamir challenges of the evaluation step are derived.
+/* PQZ: P6-SZ trace hook (pqz-core/pqzl/sz): reports how the Fiat-Shamir challenges of the evaluation step are derived.
    Compiled only with -DPQZ_SZ_TRACE; production builds are unchanged. kind: 0 = begin (dom 0 prove, 1 verify),
    1 = challenge vector of one evaluation-equation call for accumulator acc (n = number of equations),
    2 / 3 = seed and dom of the z4 / z3 combination matrix V, 4 = seed and dom of a JL row (R or R'). */

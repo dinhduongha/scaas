@@ -3,7 +3,7 @@
 # LaZer's codegen picks the MSIS rank (kmsis) and the MLWE hiding rank (kmlwe) from a root-Hermite target
 # (delta <= 1.0044) and the old lwe-estimator. CTR-PQZ-03 asks every proof instance to reach the Kyber-512
 # margin in block-size terms (beta >= 450) under lattice-estimator 53da598, RC.ADPS16. This script runs the
-# real codegen (pqz-core/params/codegen, LaZer's formulas: B = 4 eta sqrt(B1^2 + B2^2), bimodal s2, the t_A /
+# real codegen (pqz-core/pqzl/params/codegen, LaZer's formulas: B = 4 eta sqrt(B1^2 + B2^2), bimodal s2, the t_A /
 # w compression terms) with floors kmsis_min / kmlwe_min, reads back its instances, and raises the floors until
 # both pass. Output: the floors per relation and the full estimates of the chosen instances.
 # Run: run_e_s1.sh (pinned Sage image, no network). Writes to stdout (recorded as estimator-e-s1.txt).

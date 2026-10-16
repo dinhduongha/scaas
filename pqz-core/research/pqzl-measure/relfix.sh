@@ -1,14 +1,14 @@
 #!/bin/sh
 # Owner decisions 2026-10-13 on pqz-relations-burn-disclose.md §5 (branch pqz-relfix): R_TX on the §7.7 layout,
 # disclosure kind word, relation keys built at first use. Run the whole script under scripts/capped (one heavy job):
-#   scripts/capped pqz-core/rel3/relfix.sh <label>
+#   scripts/capped pqz-core/research/pqzl-measure/relfix.sh <label>
 # Build native + wasm, KAT, the tbox-fix regression checks (check_tbox_fixes.sh, from v2), proof hashes (f2: R_REG
 # 12ec7452 native / 3bc7e9b3 wasm; proofSystemId v2 changes all five relations), arena peak of each
 # relation alone (one process per relation: what a prover for that op carries), ASan + UBSan, then the timings of all
 # relations (since P6e Task 2 six: R_TX0, mask 32; RELS / MASKS override); JSON lines into rel3/runs/<label>-*.
 set -eu
-cd "$(dirname "$0")/.."
-R=rel3/runs/$1
+cd "$(dirname "$0")/../../pqzl" # the PQZL core: build/, src/, test/, kat/
+R=../research/pqzl-measure/runs/$1
 ./build.sh all > "$R-build.txt" 2>&1
 build/native/kat_dump > build/native/kat-pqz.json
 python3 -I kat/check.py kat/lazer-3330e48.json build/native/kat-pqz.json > "$R-kat.txt"

@@ -7,7 +7,7 @@ zero knowledge is required (the ZK numbers are the real ones), the challenge fie
 bits measured both proven (Johnson bound) and conjectured, proving may be native-only, and the one PQZH configuration
 takes the EVM-friendly choices of `pqzh-solidity-verifier.md` §6. Follows `pqzh-prototype.md` (the prototype, its
 §10 questions) on branch `pqzh-next` (from main `dde1fa6`, not merged). Code: crate `pqz-core/pqzh/`; raw runs
-`pqz-core/pqzh/runs/` (every file named below). **No decision is recorded here**; §9 lists the owner questions.
+`pqz-core/pqzh/stark-backup/runs/` (every file named below). **No decision is recorded here**; §9 lists the owner questions.
 
 **[measured]** marks a number from a run in this note (machine as in `pqzh-prototype.md` §2: AMD Ryzen 5 7235HS,
 single thread, every timed run alone under `scripts/capped`, 4 GB memory cap, 2 GB swap). **[model]** marks bits from

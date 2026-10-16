@@ -3,11 +3,11 @@
 # test/pqz_bench.c setup() (C) for the same inputs; byte-identical or exit 1.
 # Run alone under the machine lock: scripts/capped pqz-core/pqzh/xcheck/run.sh  (output: runs/s5-xcheck.txt)
 set -eu
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/../stark-backup" # the STARK backup crate (dump_setup example)
 out=target/xcheck
 mkdir -p $out/c $out/rust
-(cd .. && ./build.sh native > /dev/null)
-${CC:-clang} -std=gnu11 -O2 -I../src -o $out/dump_setup xcheck/dump_setup.c ../build/native/libpqz.a
+(cd ../../pqzl && ./build.sh native > /dev/null)
+${CC:-clang} -std=gnu11 -O2 -I../../pqzl/src -o $out/dump_setup ../xcheck/dump_setup.c ../../pqzl/build/native/libpqz.a
 $out/dump_setup $out/c
 cargo run --release --offline --quiet --example dump_setup -- $out/rust
 rc=0

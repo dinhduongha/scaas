@@ -938,7 +938,7 @@ int pqz_test_cheat;
 #endif
 
 #ifdef PQZ_L2DOM_POC
-/* Test-only cheating prover (pqz-core/l2dom/, never in a production build): when set, pool the l2 slack of all
+/* Test-only cheating prover (pqz-core/pqzl/l2dom/, never in a production build): when set, pool the l2 slack of all
    Z blocks, sum_z (B_z^2 - ||x_z||^2), and spread it greedily over the upsilon_z (each holds bitlen(B_z^2) bits), so a
    block may exceed its own B_z as long as sum_z ||x_z||^2 <= sum_z B_z^2. Checks whether the verifier enforces each
    exact-l2 equation separately. */

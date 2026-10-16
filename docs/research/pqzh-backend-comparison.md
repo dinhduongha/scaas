@@ -32,7 +32,7 @@ The FRI + ZK STARK and ZK WHIR lose to it on every axis except native verify, wh
 | Relations built | 5 of 5 (+ `R_TX0` pending P6e Task 8) | 5 (bench feature only) | 2 (bench feature only) | 2 of 5 | 2 of 5 | 2 of 5 |
 | Mutated proofs accepted | 0 of 4,800 (+ 9,600 in benches) | 0 | 0 of 960 | 0 of 960 | 0 of 960 | 0 of 1,440 native / 240 wasm32 |
 | EVM, one tx, no precompile (cap 16,777,216) | 534.6 M gas (31.9×) [measured, `ligero/runs/l6-forge.txt`]; ≈ 124 M at the opcode floor [estimate, `e1-evm-model.txt`] | 179.0 M | 649.7 M | 21.4 M calldata floor alone (`pqzh-solidity-verifier.md`) | ≈ 15 M with a tuned verifier [estimate] | not measured |
-| EVM split over several txs (StarkEx style) | 19 txs, ≈ 319 M [estimate, `pqz-core/pqzh/sol/starkex_split.txt`] | — | — | ≈ 21.4 M over 4 txs with a tuned Yul verifier, ≈ 38.5 M as test-level code [estimate, same] | — | — |
+| EVM split over several txs (StarkEx style) | 19 txs, ≈ 319 M [estimate, `pqz-core/pqzh/stark-backup/sol/starkex_split.txt`] | — | — | ≈ 21.4 M over 4 txs with a tuned Yul verifier, ≈ 38.5 M as test-level code [estimate, same] | — | — |
 
 Sources: `pqzh-ligero.md` §6, §11, §12; `pqzh-zk-ext5.md` §7; `pqzh-zk-whir.md` §7–§9 and §10 (the re-examination); `pqzh-solidity-verifier.md`; `pqzh-starkex-verifier.md` §6. Non-ZK WHIR (`p3-multi-stark`, 257,530 B at
 125.3 bits, `pqzh-zk-ext5.md` §8) is left out: zero knowledge is required (owner 2026-10-13).

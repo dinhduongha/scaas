@@ -9,7 +9,7 @@
 # (var 10), q = 2^42 - 215, m = 2048 + 16 samples (u and the sender's own v_f in group 0; conservative for the other
 # groups). A recipient key pk = A s + e yields 16 hints <(e, -s), (r, e1)> per leg (one per coefficient of v); the M
 # auditor copies of a group repeat one key's 16 forms. Hints per group of L legs: 16 L (+ 16 with the auditor).
-# Three hint kinds: 16 h unit hints on r, unit hints on e1, and the worst case of pqz-core/params/e_s0.py part 2:
+# Three hint kinds: 16 h unit hints on r, unit hints on e1, and the worst case of pqz-core/pqzl/params/e_s0.py part 2:
 # h orthogonal maximal-norm mixed forms (V_max = var_s 164^2 + var_e 36^2 = 26408).
 import os
 import sys

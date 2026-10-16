@@ -2,13 +2,13 @@
 //! -ffp-contract=off`, the specialised verifier (`-DPQZ_SV`), native with `-fstack-protector-strong`; wasm32
 //! freestanding (`-DPQZ_FREESTANDING`, src/freestanding) with pqz_wasm_rt.c's 128-bit helpers only (their shifts are
 //! branch-free, the prover shifts by secret amounts; Rust's compiler_builtins provides mem*). Then the symbol scan
-//! (../check_symbols.sh) on the archive: no malloc, stdio, libm, GMP, MPFR. Also takes the self-test proofs
+//! (../pqzl/check_symbols.sh) on the archive: no malloc, stdio, libm, GMP, MPFR. Also takes the self-test proofs
 //! from the REGISTER rows of smartcontracts/vectors/pqz/proof_{pqzl,pqzh}.json (bytes for include_bytes!).
 use std::path::PathBuf;
 use std::{env, fs};
 
 fn main() {
-    let core = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join("..");
+    let core = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join("../pqzl"); // the PQZL C core
     let out = PathBuf::from(env::var("OUT_DIR").unwrap());
     let wasm = env::var("CARGO_CFG_TARGET_ARCH").unwrap() == "wasm32";
 
@@ -69,7 +69,7 @@ fn main() {
 
     // the self-test's compiled-in R_REG proofs (D13): the REGISTER rows of the canonical vectors (D9: read in place,
     // no copy here); written by this crate's pqz-vectors binary
-    let vec = core.join("../smartcontracts/vectors/pqz");
+    let vec = core.join("../../smartcontracts/vectors/pqz");
     for id in ["pqzl", "pqzh"] {
         let src = vec.join(format!("proof_{id}.json"));
         let j = fs::read_to_string(&src).unwrap_or_else(|e| panic!("{}: {e}", src.display()));

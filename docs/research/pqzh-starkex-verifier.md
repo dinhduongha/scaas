@@ -10,7 +10,7 @@ the floor, where the EIP-7623 calldata floor binds (`pqzh-solidity-verifier.md` 
 chain without the precompile, it is used there. Branch `pqzh-starkex-study`. **No decision is recorded here.**
 
 **[source]** marks a fact read from a repository file, a document or a chain explorer (§9). **[measured]** marks a number read
-from mainnet transaction receipts (§2.2; script `pqz-core/pqzh/sol/starkex_split.py`, output
+from mainnet transaction receipts (§2.2; script `pqz-core/pqzh/stark-backup/sol/starkex_split.py`, output
 `starkex_split.txt`). **[estimate]** marks a number from that script's split model or from the earlier notes' gas
 models. **[inference]** marks a conclusion drawn here.
 
@@ -363,16 +363,16 @@ work planned (TODO.md, `3e2675b`). Summary across all PQZH backends: `pqzh-backe
 
 ## 8. Files and rerun
 
-- `pqz-core/pqzh/sol/starkex_split.py`: recorded receipts of the SHARP proof (§2.2), the split model (§6.1),
+- `pqz-core/pqzh/stark-backup/sol/starkex_split.py`: recorded receipts of the SHARP proof (§2.2), the split model (§6.1),
   `--selftest` (asserts that the ten statement transactions pay exactly the floor and the two others do not; that
   the model reproduces the single-transaction 21.4 M of proven + ZK; that the 128 KB limit binds), `--fetch` (re-reads
   receipts over a public RPC).
-- `pqz-core/pqzh/sol/starkex_split.txt`: its output.
+- `pqz-core/pqzh/stark-backup/sol/starkex_split.txt`: its output.
 
 ```sh
-python3 pqz-core/pqzh/sol/starkex_split.py --selftest
-python3 pqz-core/pqzh/sol/starkex_split.py > pqz-core/pqzh/sol/starkex_split.txt
-python3 pqz-core/pqzh/sol/starkex_split.py --fetch 0xe548d9a38319c283f50b3879de776303a8b4a64004924391445b64d3d73b1f38
+python3 pqz-core/pqzh/stark-backup/sol/starkex_split.py --selftest
+python3 pqz-core/pqzh/stark-backup/sol/starkex_split.py > pqz-core/pqzh/stark-backup/sol/starkex_split.txt
+python3 pqz-core/pqzh/stark-backup/sol/starkex_split.py --fetch 0xe548d9a38319c283f50b3879de776303a8b4a64004924391445b64d3d73b1f38
 ```
 
 Public repositories were cloned as data only (no builds): `starkex-contracts` `f3b2506`, `stone-prover` `1414a54`,

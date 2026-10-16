@@ -36,7 +36,7 @@ lines. **[estimate]** marks a number computed from counts or bounds. **[inferenc
 LaZer `3330e48` (vendored pristine in `c91b3ab`) and upstream head `b958e24` have the same `src/lnp-tbox.c`; line
 numbers are the same in both [code]:
 
-| What | `b958e24` / `3330e48` | `pqz-core` v2 (`pqz-core/lazer/lnp-tbox.c`) |
+| What | `b958e24` / `3330e48` | `pqz-core` v2 (`pqz-core/pqzl/lazer/lnp-tbox.c`) |
 |---|---|---|
 | `__schwartz_zippel_accumulate_l2` | [2770](https://github.com/lazer-crypto/lazer/blob/b958e247a2fdb9593b3c25c9603c6c5305c19420/src/lnp-tbox.c#L2770) | 2896 |
 | loop `for (i = 0; i < Z; i++)` | [2823](https://github.com/lazer-crypto/lazer/blob/b958e247a2fdb9593b3c25c9603c6c5305c19420/src/lnp-tbox.c#L2823) | — |
@@ -88,13 +88,13 @@ the same gap in v1 [code].
 
 ## 4. Proof of concept
 
-Harness `pqz-core/l2dom/` (`pqz-core/sz/README.md`): under `-DPQZ_L2DOM_POC` (never defined by `./build.sh`),
-`set_upsilon` in `pqz-core/src/pqz_rel.c` pools the slack Σ_z (B_z² − ‖x_z‖²) of all blocks and spreads it greedily
+Harness `pqz-core/pqzl/l2dom/` (`pqz-core/pqzl/sz/README.md`): under `-DPQZ_L2DOM_POC` (never defined by `./build.sh`),
+`set_upsilon` in `pqz-core/pqzl/src/pqz_rel.c` pools the slack Σ_z (B_z² − ‖x_z‖²) of all blocks and spreads it greedily
 over the υ_z, and the PoC emits the proof even when the prover's own self-checks fail. `l2dom/build.sh` builds it
 twice: on a copy of `lnp-tbox.c` with the fix undone (control) and on the tree; the proofs are verified in-process and
 again by a separate binary linked against the production `build/native/libpqz.a` (`pqz_verify`). The honest prover
 refuses every over-bound witness (rc 3), so this is a verifier-side gap only. Output of the v2 full-sample run:
-`pqz-core/rel3/runs/v2full-l2dom.txt` [measured]:
+`pqz-core/research/pqzl-measure/runs/v2full-l2dom.txt` [measured]:
 
 | Case | Witness (‖·‖² against its own B²) | v1 verifier (fix undone) | v2 verifier (production lib) |
 |---|---|---|---|
@@ -163,12 +163,12 @@ does the same (`pqz_sv.c`, ℓ2 loop with `dom + i`; `pqz-specialised-verifier.m
 
 ## 7. Regression checks
 
-- `pqz-core/check_tbox_fixes.sh`: for each of the four l2dom cases the control (fix undone) must accept and the
+- `pqz-core/pqzl/check_tbox_fixes.sh`: for each of the four l2dom cases the control (fix undone) must accept and the
   production library must reject; exits 1 otherwise (and on the `pqz-tbox-soundness.md` trace). With this fix
   reverted, the production verifier accepts the four pooled-slack proofs and the check fails (`pqz-core/STATUS.md`).
-  Last runs `pqz-core/rel3/runs/v2-tbox-fixes.txt`, `v2full-tbox-fixes.txt`: 4 / 4 accepted by the control, 4 / 4
+  Last runs `pqz-core/research/pqzl-measure/runs/v2-tbox-fixes.txt`, `v2full-tbox-fixes.txt`: 4 / 4 accepted by the control, 4 / 4
   rejected by production, `check_tbox_fixes: ok` [measured].
-- `pqz-core/sv/check_sv_fixes.sh`: with the ℓ2 line reverted in a copy of `pqz_sv.c`, every honest v2 proof of the
+- `pqz-core/pqzl/sv/check_sv_fixes.sh`: with the ℓ2 line reverted in a copy of `pqz_sv.c`, every honest v2 proof of the
   five relations disagrees with the generic verifier (10 / 10) [measured].
 
 ## 8. Side observation: β4's last coefficient and υ share a domain (harmless)
@@ -186,9 +186,9 @@ change for no security gain, so v2 leaves it.
 
 ## 9. Files
 
-- Fix: `pqz-core/lazer/lnp-tbox.c` (`PQZ (P6-L2)`), `pqz-core/src/pqz_sv.c` (ℓ2 loop).
-- PoC: `pqz-core/l2dom/` (`l2dom_poc.c` `R_REG`, `l2dom_tx.c` `R_TX`, `build.sh`), `set_upsilon` in
-  `pqz-core/src/pqz_rel.c` under `-DPQZ_L2DOM_POC`; description `pqz-core/sz/README.md`.
-- Regression: `pqz-core/check_tbox_fixes.sh`, `pqz-core/sv/check_sv_fixes.sh`.
-- Runs: `pqz-core/rel3/runs/v2-*`, `v2full-*` (incl. `v2full-l2dom.txt`).
+- Fix: `pqz-core/pqzl/lazer/lnp-tbox.c` (`PQZ (P6-L2)`), `pqz-core/pqzl/src/pqz_sv.c` (ℓ2 loop).
+- PoC: `pqz-core/pqzl/l2dom/` (`l2dom_poc.c` `R_REG`, `l2dom_tx.c` `R_TX`, `build.sh`), `set_upsilon` in
+  `pqz-core/pqzl/src/pqz_rel.c` under `-DPQZ_L2DOM_POC`; description `pqz-core/pqzl/sz/README.md`.
+- Regression: `pqz-core/pqzl/check_tbox_fixes.sh`, `pqz-core/pqzl/sv/check_sv_fixes.sh`.
+- Runs: `pqz-core/research/pqzl-measure/runs/v2-*`, `v2full-*` (incl. `v2full-l2dom.txt`).
 - Rerun: `cd pqz-core && ../scripts/capped sh -c './build.sh native && ./check_tbox_fixes.sh'`.

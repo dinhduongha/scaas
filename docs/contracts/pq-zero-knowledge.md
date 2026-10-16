@@ -271,7 +271,7 @@ module form matches the LNP22 proof ring.
 CBD(1), errors CBD(20), norm thresholds 36 / 164 / 64, plaintext = 16 digits base 16, credit cap `K_MAX = 1024`.
 Security target, pinned cost model: every attack the pinned lattice-estimator runs on the encryption MLWE and on the
 proof's MSIS/MLWE instances costs at least Kyber-512's, under core-SVP **classical** (`0.292β`) **and quantum**
-(`0.265β`); in block-size terms β ≥ 450 (Kyber-512 is 406). **One owner-accepted exception (2026-10-15):** the shared encryption randomness `(r_g, e1_g)` of a multi-recipient transfer `R_TXM` (op 7) carries up to 80 adversarial hints (4 legs + the auditor copy, 16 per key) and reaches β 446.0 (core-SVP 2^130.2 classical / 2^118.2 quantum) — below the 450 margin, still above Kyber-512's 406; groups of 4 legs per randomness with or without the auditor. Every other instance keeps β ≥ 450 (encryption without hints 476, single-recipient `R_TX` 463.9 with 32 hints, the PQZL proof's MSIS 452–464). Evidence: `pqz-core/params/anon/hints-anon.txt`; explanation: `docs/research/pqz-anonymity.md`. Noise bounds are worst-case over proven norms, so an
+(`0.265β`); in block-size terms β ≥ 450 (Kyber-512 is 406). **One owner-accepted exception (2026-10-15):** the shared encryption randomness `(r_g, e1_g)` of a multi-recipient transfer `R_TXM` (op 7) carries up to 80 adversarial hints (4 legs + the auditor copy, 16 per key) and reaches β 446.0 (core-SVP 2^130.2 classical / 2^118.2 quantum) — below the 450 margin, still above Kyber-512's 406; groups of 4 legs per randomness with or without the auditor. Every other instance keeps β ≥ 450 (encryption without hints 476, single-recipient `R_TX` 463.9 with 32 hints, the PQZL proof's MSIS 452–464). Evidence: `pqz-core/pqzl/params/anon/hints-anon.txt`; explanation: `docs/research/pqz-anonymity.md`. Noise bounds are worst-case over proven norms, so an
 accepted state never fails to decrypt. An earlier `q = 2^50 − 1791` reached only β ≈ 374 (core-SVP 109 / 99), below
 Kyber-512, and split fully, which defeats LNP22's challenge invertibility. Parameters change **only** with a new
 `proofSystemId` and a recomputed noise budget.
@@ -329,7 +329,7 @@ a few percent of estimator generosity. Hybrid meet-in-the-middle does not apply 
 parameter freeze runs the [lattice-estimator](https://github.com/malb/lattice-estimator) pinned at `53da598` (main,
 2026-08-19) with `LWE.estimate` under `RC.ADPS16` classical and quantum on the encryption MLWE (key and `u` instances),
 on the proof's MSIS/MLWE instances, and on Kyber-512 through the same commit as the baseline, and records commands and
-output in `pqz-core/params/estimator.txt`. **Target:** every attack costs ≥ Kyber-512's under both models. A miss is a
+output in `pqz-core/pqzl/params/estimator.txt`. **Target:** every attack costs ≥ Kyber-512's under both models. A miss is a
 parameter ruling before vectors freeze.
 
 ### 4.2 Algorithms
@@ -388,7 +388,7 @@ Schwartz–Zippel challenge domain, so the verifier checked only the sum of the 
 ≈ 45.0 M over `K_MAX` units, beyond `2^24` and `Δ/2`: such an account could fail to debit or decrypt wrongly. The
 mint threshold below was not reached, but its margin fell from 4.1× to ≈ 1.12×; honest accounts stayed inside `2^24`.
 v2 checks each bound on its own, so the numbers in this section hold as written; v1 is retired and was never deployed
-(analysis and proof of concept: `docs/research/pqz-l2-domain.md`; regression check `pqz-core/check_tbox_fixes.sh`).
+(analysis and proof of concept: `docs/research/pqz-l2-domain.md`; regression check `pqz-core/pqzl/check_tbox_fixes.sh`).
 
 The trivial plain term has noise 0. A sum of at most `K_MAX = 1024` units has
 `|noise| ≤ 1024 · 11,872 = 12,156,928 < 2^24 = 16,777,216`, and digit sums `M_i ≤ 1024 · 15 = 15,360 < 2^14`. Since the plain term has noise 0, the reachable maximum is 1,023 · 11,872 = 12,145,056 (an
@@ -477,7 +477,7 @@ A colluding receiver and auditor register complementary keys and get 32 forms pe
 chosen **perfect** integer linear hints on `(r, e1)`. In the Dachman-Soled–Ducas–Gong–Rossi framework ("LWE with side
 information", 2020) a perfect hint on the embedding secret removes one dimension (plus a volume change that depends on
 the hint direction), whether it falls on `r`, on `e1` or on a mix. The DDGR20 `leaky-LWE-Estimator` (`0a9caf8`,
-pinned beside lattice-estimator `53da598`; `pqz-core/params/anon/hints-anon.txt`, P6-ANON S1) gives, for the worst
+pinned beside lattice-estimator `53da598`; `pqz-core/pqzl/params/anon/hints-anon.txt`, P6-ANON S1) gives, for the worst
 directions (orthogonal maximal-norm mixed forms allowed by `β_s`/`β_e`; unit hints on `r` or `e1` cost less), β 463.9
 at 32 hints (135.5 / 122.9; the 32-dimensions-removed approximation gave 466), 451.9 at 64 and 446.0 at 80 (`R_TXM`,
 the [CTR-PQZ-03](#CTR-PQZ-03) exception). `r, e1` are fresh per operation, so hints do not accumulate across transfers. **If any direction misses the target**, PQZ switches to split randomness:
@@ -1098,7 +1098,7 @@ cannot reach arithmetic-layer KAT equality with upstream. Single implementation;
 upstream-shaped. We own a C fork with six rewritten layers, a rewrite rather than a kernel swap; upstream protocol
 fixes are merged by hand. **Versioning:** two proof systems, one `proofSystemId` word with two values
 ([serialization v1](#serialization)): PQZL `keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v2")` (`0x2e07e6ed…798c2f`,
-`PQZ_PROOF_SYSTEM_ID` in `pqz-core/src/pqz.h`; P6e D2: stays v2 across the auditor-off form and the hedged prover,
+`PQZ_PROOF_SYSTEM_ID` in `pqz-core/pqzl/src/pqz.h`; P6e D2: stays v2 across the auditor-off form and the hedged prover,
 frozen at gate A) and PQZH (Ligero over F_q) `keccak256("scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1")`
 (`0x0a47a768…2fead4`; P6e D3, frozen at gate B), `MAX_PROOF` 98,304 B and 262,144 B. The token stores its id at
 `initialize` and the precompile accepts only ids it implements. **Bump rule** (P6e D4): any change, after a
@@ -1109,7 +1109,7 @@ the accepted set before any deployment need no bump (recorded case by case in de
 implement several ids; retiring one is a chain activation (P6f), never silent.
 v1 → v2 (2026-10-13): the two LaZer `tbox` Schwartz–Zippel fixes
 ([lazer#24](https://github.com/lazer-crypto/lazer/issues/24), [lazer#25](https://github.com/lazer-crypto/lazer/issues/25);
-`pqz-core/sz/README.md`) change the transcript; v1 is retired. lazer#24: v1 drew one challenge pair for all λ/2
+`pqz-core/pqzl/sz/README.md`) change the transcript; v1 is retired. lazer#24: v1 drew one challenge pair for all λ/2
 evaluation accumulators (2 independent tests, soundness ≈ 2^-84 against the stated 2^-127); lazer#25: v1 used one
 challenge domain for all exact-ℓ2 equations, so only the sum of the block norms was checked ([noise](#noise)). A v2
 verifier bounds the whole `z2 = (z21, z22)` ([lazer#26](https://github.com/lazer-crypto/lazer/issues/26), 2026-10-13):
@@ -1134,15 +1134,15 @@ The id stays v2 (owner 2026-10-14: no bump for the z21 fix).
 
   Upstream cannot produce our transcripts once the samplers and PRNG change, so the only cross-check against upstream
   is at the **arithmetic layer** (NTT, ring products, norms on the same inputs), as a **one-shot golden dump** (owner
-  2026-10-13): a static x86-64 harness `pqz-core/kat/lazer_dump` links upstream LaZer at the pinned commit, runs fixed
+  2026-10-13): a static x86-64 harness `pqz-core/pqzl/kat/lazer_dump` links upstream LaZer at the pinned commit, runs fixed
   seeded inputs through that layer once — on any AVX-512 machine or under Intel SDE emulation — and writes
-  `pqz-core/kat/lazer-<commit>.json`; `pqz-core`'s tests check byte equality against that file, so CI needs no
+  `pqz-core/pqzl/kat/lazer-<commit>.json`; `pqz-core`'s tests check byte equality against that file, so CI needs no
   AVX-512 runner. The dump is regenerated only when the LaZer pin changes (a dump made under SDE gets one cross-check
   on real AVX-512 hardware). CI asserts
   that `libpqz.so`, the WASM module and the mobile libraries link no GMP, MPFR, libstdc++ or libm symbols and contain no
   floating-point instructions on the verify and prove paths (`nm`/`objdump` check).
 - **Relations.** `R_TX`, `R_TX0` (transfer without the auditor), `R_BURN` (also REFRESH), `R_REG`, `R_DS`, `R_DR`
-  (also AUDITOR) written as LaZer specifications (`pqz-core/params/<rel>_params.sage`) → generated
+  (also AUDITOR) written as LaZer specifications (`pqz-core/pqzl/params/<rel>_params.sage`) → generated
   `pqz_<rel>_params.h` checked in, regenerated only on purpose (`params/regen.sh` reproduces every header byte for
   byte, P6e D1); the statement → equation builders are hand-written in `pqz_rel.c` / `pqz_sv.c` and pinned by the
   KATs and the generic-vs-specialised differential test. PQZH implements the same six as Ligero constraint systems
@@ -1166,7 +1166,7 @@ The id stays v2 (owner 2026-10-14: no bump for the z21 fix).
                    unsigned *ctr_used);
   int pqz_dec(const int8_t s[2048], const uint8_t ct[16512], int64_t M[16], int64_t noise[16]);
   ```
-  (`pqz-core/src/pqz.h`; `pqz_init(arena, len)` first.) The core never sees untrusted bytes directly
+  (`pqz-core/pqzl/src/pqz.h`; `pqz_init(arena, len)` first.) The core never sees untrusted bytes directly
   ([CTR-PQZ-10](#CTR-PQZ-10)): the node, the clients and the wallets reach it only through `pqz-ffi`
   (`pqz-core/ffi/`, C ABI `pqz_precompile` for the node, a Rust API, a `prove` feature for clients, wasm32), whose
   bounds-checked decoder `pqz-stmt` accepts exactly the encodings of [serialization v1](#serialization) before any C
@@ -1188,7 +1188,7 @@ The id stays v2 (owner 2026-10-14: no bump for the z21 fix).
 
 Every byte the precompile, the contracts and the clients exchange, frozen by P6e (gate A for PQZL, gate B for PQZH).
 Normative sources, which agree byte for byte: the precompile decoder `pqz-core/stmt/src/lib.rs` (`pqz-stmt`), the C
-core `pqz-core/src/pqz.h` / `pqz_rel.c`, the Ligero crate `pqz-core/pqzh/ligero/src/` (`ligero.rs`, `merkle.rs`,
+core `pqz-core/pqzl/src/pqz.h` / `pqz_rel.c`, the Ligero crate `pqz-core/pqzh/ligero/src/` (`ligero.rs`, `merkle.rs`,
 `fq.rs`, `transcript.rs`; design notes `docs/research/pqzh-ligero.md` §4, §13), the vectors
 `smartcontracts/vectors/pqz/` and their independent checker `pqz_kat.py`. Where older text in this file disagreed,
 the code and the vectors win (changes listed at the end of this section). All integers are big-endian; a *word* is 32
@@ -1798,7 +1798,7 @@ service is the user's (or the organization's key oracle), never a third party's 
 | T12 | Randomness reuse | salted derivation for transfers, fresh CSPRNG randomness for burn / refresh ([CTR-PQZ-19](#CTR-PQZ-19)); hedged proof masks |
 | T13 | Precompile bug ⇒ consensus split or false accept | single C core shared with prover tests; continuous ASan/UBSan fuzzing of `pqz_verify`; fail-closed returndata check; deterministic integer code |
 | T13a | Precompile **crash** (abort, OOB, stack overflow) on crafted input ⇒ the single signer dies ⇒ chain halt | never-crash requirement: Rust bounds-checked decoder, error returns instead of `abort`, fixed arena and stack, bounded loops, no timeouts ([CTR-PQZ-10](#CTR-PQZ-10)); follower-only public RPC and pre-simulation |
-| T13b | Malicious recipient keys extract hints on the shared `(r, e1)` (forms `e^T r − s^T e1 + e2`) | assumption "MLWE with ≤ 32 adversarial perfect hints on `(r, e1)`" (DDGR20 worst case β 463.9), and for `R_TXM` ≤ 80 hints per `(r_g, e1_g)` with groups of 4 legs, auditor included (β 446.0 ≥ Kyber-512's 406, owner-accepted exception to [CTR-PQZ-03](#CTR-PQZ-03)'s 450 margin; `pqz-core/params/anon/hints-anon.txt`); fresh `(r, e1)` per operation; split-randomness fallback ([CTR-PQZ-04](#CTR-PQZ-04)) |
+| T13b | Malicious recipient keys extract hints on the shared `(r, e1)` (forms `e^T r − s^T e1 + e2`) | assumption "MLWE with ≤ 32 adversarial perfect hints on `(r, e1)`" (DDGR20 worst case β 463.9), and for `R_TXM` ≤ 80 hints per `(r_g, e1_g)` with groups of 4 legs, auditor included (β 446.0 ≥ Kyber-512's 406, owner-accepted exception to [CTR-PQZ-03](#CTR-PQZ-03)'s 450 margin; `pqz-core/pqzl/params/anon/hints-anon.txt`); fresh `(r, e1)` per operation; split-randomness fallback ([CTR-PQZ-04](#CTR-PQZ-04)) |
 | T13c | Chain-id collision (former id 9000 = Evmos Testnet; 7622 not assumed unique) | owner move to 7622; precompile self-test; `chainUid` (genesis hash) in every statement, `entryRef` and PoP; node binds genesis hash, registry `chainUid()` and token |
 | T14 | Rogue / stolen public key registration; naming a victim's ML-DSA UA as `authRef` | `R_REG` PoP over the UA `popDigest(ua, authRef)` (chain key, `chain_uid`, registry, UA, `authRef`) plus the `authRef` co-sign ([CTR-UA-07](accounts.md#CTR-UA-07)); keyHash group `pqz-mlwe`; front-running yields the identical record |
 | T15 | Leaked PQZ key | read-only breach (auth key separate, [CTR-PQZ-12](#CTR-PQZ-12)); move funds to a new UA |
@@ -1854,7 +1854,7 @@ precompile and its fuzz targets, the forge tests, the clients; no copies). Writt
 |---|---|
 | `matrix.json` | `keccak256` of `A` coefficient bytes + first/last 8 coefficients of `A[0][0]`, `A[31][31]` |
 | `cbd.json` | SHAKE inputs → CBD(1), CBD(20) samples |
-| `keygen.json` | seed32 → ctr used, `keccak256(pk)`, norms (no searched-resample row: ≈ 2^-70 per seed; the resample path and the ctr-64 error are pinned by test-hook KATs, `pqz-core/test/pqz_keys_kat.c`) |
+| `keygen.json` | seed32 → ctr used, `keccak256(pk)`, norms (no searched-resample row: ≈ 2^-70 per seed; the resample path and the ctr-64 error are pinned by test-hook KATs, `pqz-core/pqzl/test/pqz_keys_kat.c`) |
 | `enc.json` | `seed_enc`, recipients, messages → `u`, `v_j`; `Add`/`Sub`/`Trivial`; `Dec` → `M`, value (noise omitted from public vectors) |
 | `statement_{transfer,burn,refresh,register,disclose}.json` | header fields and objects → statement bytes ([serialization v1](#serialization); transfer with and without the auditor), `keccak256(statement)`, `authDigest` per id, `entryRef`, the disclosure bundle |
 | `proof_pqzl.json`, `proof_pqzh.json` | per id the six relations + REFRESH + AUDITOR: statement, prover-API witness, `rnd32`, proof, `expect: true` (fixed `rnd32`, so byte-exact across native and wasm32), disclosure openings |
@@ -1879,7 +1879,7 @@ The UA `smartcontracts/vectors/ua/kinds.json` gains the `pqz-mlwe` row (seed →
 **Cross-language and cross-backend.** Same vectors through: `pqz-core` portable, AVX2, aarch64, freestanding `wasm32`
 (bit-exact samplers: the same `rnd32` gives the same masks, rejection decisions and proof bytes on native and WASM);
 upstream LaZer for the **arithmetic layer only** (NTT, ring products, norms) via the committed golden dump
-`pqz-core/kat/lazer-<commit>.json` ([CTR-PQZ-09](#CTR-PQZ-09); no AVX-512 runner in CI), since transcripts
+`pqz-core/pqzl/kat/lazer-<commit>.json` ([CTR-PQZ-09](#CTR-PQZ-09); no AVX-512 runner in CI), since transcripts
 differ once samplers and PRNG change; Rust reference `Enc/Dec`; Solidity `PqzCt` (add/sub/hash/`< q` check); JS
 clientkeys (derivation, ML-DSA, `authDigest`); a pure-Python `pqz_kat.py` (no numpy) for encoding, `A`, CBD, keygen,
 `Enc`/`Dec`, statements (`--check` reports drift, like classical `kat.py`).

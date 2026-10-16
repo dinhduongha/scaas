@@ -1,4 +1,4 @@
-# pqz-core/params — E-S0 parameter spike and E-S1 codegen
+# pqz-core/pqzl/params — E-S0 parameter spike and E-S1 codegen
 
 `estimator.txt` is the recorded output of `e_s0.py`: lattice-estimator runs under `RC.ADPS16` (core-SVP, classical
 `0.292β` and quantum `0.265β`) on the encryption MLWE instances, the proof's ABDLOP MSIS/MLWE instances and Kyber-512;
@@ -76,8 +76,8 @@ relations as constraint systems in `pqz-core/pqzh/ligero/src/cs.rs` on the same 
 
 ```sh
 git clone https://github.com/malb/lattice-estimator /tmp/le && git -C /tmp/le checkout 53da598
-pqz-core/params/run.sh /tmp/le > /tmp/estimator.txt     # one container, no network inside
-diff pqz-core/params/estimator.txt /tmp/estimator.txt   # must be empty
+pqz-core/pqzl/params/run.sh /tmp/le > /tmp/estimator.txt     # one container, no network inside
+diff pqz-core/pqzl/params/estimator.txt /tmp/estimator.txt   # must be empty
 ```
 
 `run.sh` refuses any other estimator commit and runs the pinned image with `--network none` and both mounts read-only.

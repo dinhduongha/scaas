@@ -153,7 +153,7 @@ def s1_grouping():
                       f"{h} → {mixed[h]:.1f} |")
 
 
-CORE = os.path.join(HERE, '..', '..')
+CORE = os.path.join(HERE, '..', '..', '..')  # pqz-core
 
 
 def jsonl(rel):
@@ -167,7 +167,7 @@ def multi_len(m, aud):
 
 def measured(bench='ffi/runs/s3a-bench.jsonl'):
     """P6-ANON S3, D3 with measured numbers: built op 7 shapes through pqz-ffi (`bench`: statement, proof, PQZH exact
-    bound, native p99 through `precompile`), wasm32 verify p99 from L3 (PQZL SV, rel3/runs/l3a-wasm-fast.jsonl) and H2
+    bound, native p99 through `precompile`), wasm32 verify p99 from L3 (PQZL SV, research/pqzl-measure/runs/l3a-wasm-fast.jsonl) and H2
     (Ligero, pqzh/ligero/runs/l16-txm-*-wasm.jsonl); the oversize shapes from L3 / H2's bench-only runs. Worst-case
     input = 5 + statement + the id's bound (PQZL MAX_PROOF, PQZH Ligero's exact max for the shape). Gas by this
     file's calldata model with the measured proof and native p99. D3: built iff worst-case input <= MAX_INPUT, bound
@@ -177,7 +177,7 @@ def measured(bench='ffi/runs/s3a-bench.jsonl'):
         if 'm' in r:
             rows[(r['sys'], r['m'], r['auditor'])] = dict(
                 stmt=r['stmt_bytes'], proof=r['proof_bytes'], bound=r['proof_bound'], p99=r['rust']['p99_ms'], src='S3 pqz-ffi')
-    for r in jsonl('rel3/runs/l3a-native-fast.jsonl'):
+    for r in jsonl('research/pqzl-measure/runs/l3a-native-fast.jsonl'):
         if r.get('rel', '').startswith('R_TXM16'):
             aud = not r['rel'].endswith('_0')
             rows[('PQZL', 16, aud)] = dict(stmt=multi_len(16, aud), proof=r['proof_bytes_max'], bound=MAX_PROOF['PQZL'], src='L3 oversize')
@@ -195,7 +195,7 @@ def measured(bench='ffi/runs/s3a-bench.jsonl'):
             if r.get('timing') == 'verify_honest':
                 row['p99'] = r['stats']['p99_ms']
     wasm = {}
-    for r in jsonl('rel3/runs/l3a-wasm-fast.jsonl'):
+    for r in jsonl('research/pqzl-measure/runs/l3a-wasm-fast.jsonl'):
         if r.get('timing', '').endswith('verify valid'):
             wasm[('PQZL', r['timing'].split()[0])] = r['p99_ms']
     for f in ('pqzh/ligero/runs/l16-txm-oversize-wasm.jsonl', 'pqzh/ligero/runs/l16-txm-proven-wasm.jsonl'):

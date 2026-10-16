@@ -6,8 +6,8 @@ Written 2026-10-13 for the owner's request to measure the three PQ Zether relati
 (`pqz-core-e-s1.md`) left out: `R_BURN` (`OP_BURN`, also `REFRESH`), `R_DS` (`OP_DISCLOSE_SENDER`) and `R_DR`
 (`OP_DISCLOSE_RECEIVER`, also the auditor). Question: what do they cost with the generic LaZer verifier, against
 CTR-PQZ-09 (proof ≤ 96 KB, p99 verify ≤ 50 ms, prove ≤ 6 s desktop) and the browser budgets of CTR-PQZ-18? Code on
-branch `pqz-rel3` (merged, `3ad4069`): `pqz-core/params/{burn,ds,dr}_params.sage` and the generated headers,
-`pqz-core/src/pqz_rel.c`, `pqz-core/test/pqz_bench.c`, runs `pqz-core/rel3/`. The owner's answers to the questions of
+branch `pqz-rel3` (merged, `3ad4069`): `pqz-core/pqzl/params/{burn,ds,dr}_params.sage` and the generated headers,
+`pqz-core/pqzl/src/pqz_rel.c`, `pqz-core/pqzl/test/pqz_bench.c`, runs `pqz-core/research/pqzl-measure/`. The owner's answers to the questions of
 §5 (2026-10-13) were built on branch `pqz-relfix` ("the fix-ups"); §1 and §4 give the numbers after them, with the
 change from the first run. **No decision is recorded here** (the decisions are in pq-zero-knowledge.md and decisions.md).
 
@@ -53,7 +53,7 @@ as the length; its own ABDLOP keys (tag byte 0x81). Run `tx0c` (`rel3/runs/tx0c-
 |---|---|---|---|---|---|---|---|---|
 | `R_TX0` | ≤ 42,441 | 827 / 1,128 ms | 577 / 627 ms | 627 ms | 1,398 ms | 760 ms | 8.03 / 8.49, 4.68 / 5.53, 13.4 / 14.7 ms | 298 / 227 MB |
 
-Sizing (`pqz-core/params/estimator-e-s1-tx0.txt`): MSIS(23, 213, 2^35.96) β 457 (2^133.4 / 2^121.1), MLWE(33, 35) uSVP
+Sizing (`pqz-core/pqzl/params/estimator-e-s1-tx0.txt`): MSIS(23, 213, 2^35.96) β 457 (2^133.4 / 2^121.1), MLWE(33, 35) uSVP
 β 470, knowledge error ≤ 2^−127; within noise of `R_TX`, as expected for one key and one ciphertext slot fewer.
 
 The 50 ms verify limit is met by the specialised verifier (`pqz-specialised-verifier.md` §0: p99 ≤ 11.1 ms portable,
@@ -89,7 +89,7 @@ not medians (as in the E-S1 note).
 |---|---|
 | Machine | AMD Ryzen 5 7235HS (Zen 3+), single thread, other services running (the host is noisy, ±20 %) |
 | Toolchain | clang 18.1.3 `-O2` portable (no `-march`), wasm-ld 18, node v26.8.1 |
-| Runs | Before the fix-ups: `scripts/capped pqz-core/rel3/bench.sh r1`: `./build.sh all`, KAT, the `R_REG` / `R_TX` proof hashes, then the timings. After: `scripts/capped pqz-core/rel3/relfix.sh f2`: build, KAT, proof hashes of all five relations, the arena peak of each relation alone (one process per relation), ASan + UBSan, then the timings of all five. Raw JSON lines and the build / KAT logs in `pqz-core/rel3/runs/` (`f1-*`: an earlier fix-up run stopped before its timings) |
+| Runs | Before the fix-ups: `scripts/capped pqz-core/research/pqzl-measure/bench.sh r1`: `./build.sh all`, KAT, the `R_REG` / `R_TX` proof hashes, then the timings. After: `scripts/capped pqz-core/research/pqzl-measure/relfix.sh f2`: build, KAT, proof hashes of all five relations, the arena peak of each relation alone (one process per relation), ASan + UBSan, then the timings of all five. Raw JSON lines and the build / KAT logs in `pqz-core/research/pqzl-measure/runs/` (`f1-*`: an earlier fix-up run stopped before its timings) |
 | Parameters | `params/{burn,ds,dr}_params.sage` → `params/pqz_{burn,ds,dr}_params.h` by `params/codegen/run.sh` (LaZer `3330e48`, pinned Sage image, ≈ 1 min each) |
 | Statistics | p50 / p99 over the stated number of runs on one machine; the bench's p99 is the 99th-percentile element of the sorted sample |
 

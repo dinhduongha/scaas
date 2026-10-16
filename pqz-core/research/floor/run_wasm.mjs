@@ -2,7 +2,7 @@
 // prefixed "wasm ". Usage: node floor/run_wasm.mjs   (after floor/build.sh; prints JSON lines, median of 7)
 import { readFileSync } from 'node:fs';
 
-const wasm = readFileSync(new URL('../build/floor/kern.wasm', import.meta.url));
+const wasm = readFileSync(new URL('../../pqzl/build/floor/kern.wasm', import.meta.url));
 const { instance } = await WebAssembly.instantiate(wasm, { env: { now: () => performance.now() * 1e6 } });
 const x = instance.exports;
 if (x.check() !== 1) { console.log(JSON.stringify({ error: 'wasm self-check failed' })); process.exit(1); }

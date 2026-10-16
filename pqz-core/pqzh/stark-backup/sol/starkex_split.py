@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """StarkEx-style multi-transaction split applied to PQZH (docs/research/pqzh-starkex-verifier.md). Stdlib only.
 
-  python3 pqz-core/pqzh/sol/starkex_split.py                # tables -> stdout (committed as starkex_split.txt)
-  python3 pqz-core/pqzh/sol/starkex_split.py --selftest     # asserts on the recorded receipts and the split model
-  python3 pqz-core/pqzh/sol/starkex_split.py --fetch HASH.. # re-read receipts from a public RPC (network)
+  python3 pqz-core/pqzh/stark-backup/sol/starkex_split.py                # tables -> stdout (committed as starkex_split.txt)
+  python3 pqz-core/pqzh/stark-backup/sol/starkex_split.py --selftest     # asserts on the recorded receipts and the split model
+  python3 pqz-core/pqzh/stark-backup/sol/starkex_split.py --fetch HASH.. # re-read receipts from a public RPC (network)
 
 1. SHARP: one proof as it landed on Ethereum mainnet (blocks 26,189,667-669, 2026-10-14), receipts recorded below
    (gasUsed, calldata bytes / zero bytes) from eth_getTransactionReceipt / eth_getTransactionByHash.

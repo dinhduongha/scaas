@@ -20,7 +20,7 @@ cp "$X/fill.txt" "$L-fill.txt" 2>/dev/null
   OUT cargo build --release --offline
   echo "test hooks in the production cdylib (must be 0): $(strings -a target/release/libpqz_ffi.so | grep -c TEST_ARENA)"
   A=$(pwd)/$(ls -t target/release/build/pqz-ffi-*/out/libpqz.a | head -1)
-  OUT ../check_symbols.sh "$A"
+  OUT ../pqzl/check_symbols.sh "$A"
   SO=target/release/libpqz_ffi.so
   OUT sha256sum "$SO"
   echo "\$ readelf -d $SO | grep NEEDED"; readelf -d "$SO" | grep NEEDED

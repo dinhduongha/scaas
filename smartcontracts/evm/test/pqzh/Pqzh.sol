@@ -4,7 +4,7 @@ pragma solidity ^0.8.24;
 /// @title PQZH verifier pieces for the Solidity gas study (test-only, never deployed)
 /// @notice Goldilocks p = 2^64 - 2^32 + 1, its extensions Fp2 (u^2 = 7) and Fp3 (x^3 = x + 1) as in Plonky3 0.8,
 ///         Keccak-256 Merkle paths, FRI folds, a LogUp public sum and a Horner fingerprint. Reference values:
-///         pqz-core/pqzh/sol/ref.py; study: docs/research/pqzh-solidity-verifier.md.
+///         pqz-core/pqzh/stark-backup/sol/ref.py; study: docs/research/pqzh-solidity-verifier.md.
 /// @dev An extension element is packed in one word, coefficient i at bits 64 i (E = 2 or 3). Field elements in
 ///      calldata are 8-byte big-endian. Straightforward Yul, not hand-scheduled: a tuned verifier is cheaper.
 library Pqzh {

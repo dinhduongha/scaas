@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """PQZH Solidity verifier study (docs/research/pqzh-solidity-verifier.md): proof shapes and the gas / calldata grid.
 
-  python3 pqz-core/pqzh/sol/model.py --selftest   # calibration against the prototype's measured proof sizes
-  python3 pqz-core/pqzh/sol/model.py > pqz-core/pqzh/sol/grid.txt
+  python3 pqz-core/pqzh/stark-backup/sol/model.py --selftest   # calibration against the prototype's measured proof sizes
+  python3 pqz-core/pqzh/stark-backup/sol/model.py > pqz-core/pqzh/stark-backup/sol/grid.txt
 
 Shapes. The prototype (branch pqzh-proto, crate pqz-core/pqzh, Plonky3 0.8.0) has four AIRs: Poly, Mv, Range,
 Digit (R_TX only). Its proof format was measured with `pqzh_bench --sizes-only` (PROTO below). An EVM verifier

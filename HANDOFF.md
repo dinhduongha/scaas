@@ -18,7 +18,7 @@
 
 ## Session 2026-10-16 (second, shutdown afternoon) — resume here
 
-**State:** main `b9327b6`+ pushed. Merged + pushed this session: `p6-anon-s9` (S9 node limits, all unchanged; `pqz-core/params/anon/s9_limits.py`), `p6-anon-s3` (op 7 in pqz-stmt / pqz-ffi; arenas 512 MiB / 1 GiB; D3 PQZL {1,2,4,8} PQZH {1,2,4}), `p6g` (PQZ contracts, deployed on 7622, e2e real PQZL proofs 89 checks 0 failures; addresses + gas in `smartcontracts/evm/runs/2026-10-16-p6g-7622*.txt`, pq-zero-knowledge.md §9.3), `p6-anon-s4` (op 7 vectors; frozen diff = only the two `negative.json` reasons `Op` → `OpTag`). Controller checks before merge: size gate 0 errors (90 contracts), docs_check 0 errors, Ligero crate tests 38/38, `pqz_prove` example builds on merged pqz-ffi, `pqz_kat.py --check` ok.
+**State:** main `b9327b6`+ pushed. Merged + pushed this session: `p6-anon-s9` (S9 node limits, all unchanged; `pqz-core/pqzl/params/anon/s9_limits.py`), `p6-anon-s3` (op 7 in pqz-stmt / pqz-ffi; arenas 512 MiB / 1 GiB; D3 PQZL {1,2,4,8} PQZH {1,2,4}), `p6g` (PQZ contracts, deployed on 7622, e2e real PQZL proofs 89 checks 0 failures; addresses + gas in `smartcontracts/evm/runs/2026-10-16-p6g-7622*.txt`, pq-zero-knowledge.md §9.3), `p6-anon-s4` (op 7 vectors; frozen diff = only the two `negative.json` reasons `Op` → `OpTag`). Controller checks before merge: size gate 0 errors (90 contracts), docs_check 0 errors, Ligero crate tests 38/38, `pqz_prove` example builds on merged pqz-ffi, `pqz_kat.py --check` ok.
 
 **Owner ruling 2026-10-16:** PQZL M = 8 on a BUNDLE token — NO automatic COMPACT; the user chooses the storage mode per transfer, the contract never switches (decisions.md CTR-PQZ-23 Change, plan S9 proposal 3). S9 proposal 2 (PQZH ≤ 10 inline credits) still a controller proposal.
 
@@ -217,7 +217,7 @@ Credit cap stays 1024 units for now.
    Decisions B, 1–5 done in code + spec; builds, KAT 19/19, tamper `fails 0`, ASan/UBSan clean, docs_check 0 errors.
    R_TX `proofs_fnv` changed by design (native `cb562b47` → `4690aaa0`, wasm `834d6853` → `f1c3e7f6`); R_REG unchanged.
    Lazy keys: wasm R_TX arena 251 → 221 MiB (13.6 % under 256 MiB); arena block-class rebuild fixed. Remaining: timing run
-   (`scripts/capped pqz-core/rel3/relfix.sh f2`, > 10 min, background), numbers into
+   (`scripts/capped pqz-core/research/pqzl-measure/relfix.sh f2`, > 10 min, background), numbers into
    `pqz-relations-burn-disclose.md` §1/§3/§4/§5 + `pqz-core/README.md` / `STATUS.md`, final non-WIP commit. Then the
    specialised-verifier part on its private branch (see the private notes).
 3. **PQZH prototype** — branch `pqzh-proto`, worktree `.claude/worktrees/pqzhp`, `e1fa752` WIP. Crate `pqz-core/pqzh/`,
@@ -231,7 +231,7 @@ Credit cap stays 1024 units for now.
 4. **PQZH Solidity verifier gas** — branch `pqzh-sol` (= main, nothing committed), worktree `.claude/worktrees/pqzhsol`
    (`smartcontracts/evm/lib` symlinked). Plan: stdlib Python references (Goldilocks, Fp2/Fp3, pure-Python keccak,
    depth-10 Merkle, FRI folds arity 2/8/16, LogUp sum) → `test/pqzh/Pqzh.sol` + `PqzhTest.t.sol` (test-only, per-component
-   gas, synthetic end-to-end skeleton with Merkle checks enforced) → `pqz-core/pqzh/sol/model.py` grid (blowup 4/8/16 ×
+   gas, synthetic end-to-end skeleton with Merkle checks enforced) → `pqz-core/pqzh/stark-backup/sol/model.py` grid (blowup 4/8/16 ×
    arity 2/8/16 × conjectured/Johnson, five relations) with calldata (EIP-2028 / EIP-7623) vs the 16,777,216 cap →
    `docs/research/pqzh-solidity-verifier.md`. Pre-measurement guess only: R_TX ≈ 2.3–4 M verify + ≈ 2 M calldata; risks:
    SHAKE over the statement in Solidity (≈ 15 M) — use the keccak opcode or a Horner fingerprint. Owner asked: measure,
@@ -276,7 +276,7 @@ the golden dump on real AVX-512 hardware (recommended).
 ## Session 2026-10-13 (P6b merged)
 
 **State:** P6b (E-S0 parameter spike) merged into main (`676366a`) and pushed; branch `p6b-estimator` kept. Outputs:
-`pqz-core/params/{estimator.txt,e_s0.py,run.sh,README.md}` (Sage `sagemath/sagemath:10.7` @ sha256:4f5589eb…d528,
+`pqz-core/pqzl/params/{estimator.txt,e_s0.py,run.sh,README.md}` (Sage `sagemath/sagemath:10.7` @ sha256:4f5589eb…d528,
 lattice-estimator `53da598`, `RC.ADPS16`) and `docs/research/pqz-parameters-e-s0.md`. **Gate met:** every PQZ instance
 beats Kyber-512 (115.5 / 106.3 bits classical / quantum) — key and encryption 136.1 / 124.3, with 32 hints 133.5 / 121.6
 (DDGR20 worst direction β 464 vs the spec's 466), proof ABDLOP MLWE 132.7 / 121.1, MSIS 132.6 / 120.3 — and every

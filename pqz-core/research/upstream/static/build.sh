@@ -1,7 +1,7 @@
 #!/bin/sh
 # Static benchmark bundle: upstream LaZer 3330e48 vs the pqz-core fork on R_REG / R_TX (README.md).
 #
-#   pqz-core/xcheck/static/build.sh <work dir> <LaZer clone at 3330e48>
+#   pqz-core/research/upstream/static/build.sh <work dir> <LaZer clone at 3330e48>
 #     -> <work dir>/pqz-bench-<sha>/  {bench_up_v3, bench_up_v4, bench_fork, bench_fork_v3, run.sh, README.md,
 #                                       build-info.txt}
 #        <work dir>/pqz-bench-<sha>.tar.gz
@@ -14,7 +14,7 @@ W=$(mkdir -p "$1" && cd "$1" && pwd)
 LZ=$(cd "$2" && pwd)
 HERE=$(cd "$(dirname "$0")" && pwd)
 XC=$(cd "$HERE/.." && pwd)
-PQZ=$(cd "$XC/.." && pwd)
+PQZ=$(cd "$XC/../../pqzl" && pwd) # the PQZL core (src/ params/ build.sh), copied as /w/src/pqz-core
 PIN=3330e487228f633eceb322807b13a596b516770f
 IMG=p6d-lazer-build:ubuntu24.04
 SHA=$(git -C "$PQZ" rev-parse --short HEAD)
@@ -25,7 +25,7 @@ rm -rf "$OUT" && mkdir -p "$OUT"
 # ---- inputs, copied into the work dir (the container sees only /w)
 rm -rf "$W/src" && mkdir -p "$W/src"
 cp -a "$XC/shim" "$HERE/cpuf" "$W/src/"
-cp -a "$PQZ" "$W/src/pqz-core" && rm -rf "$W/src/pqz-core/build" "$W/src/pqz-core/xcheck"
+cp -a "$PQZ" "$W/src/pqz-core" && rm -rf "$W/src/pqz-core/build"
 
 # ---- upstream: v3 = x86-64-v3 (AVX2; HEXL portable path), v4 = x86-64-v4 + IFMA / VBMI2 (HEXL AVX-512 kernels
 # compiled in; HEXL's own configure test would try_run them on the build host, which has no AVX-512, so the
@@ -63,7 +63,7 @@ for V in v3 v4; do
   mv "$W/bench_up_$V" "$OUT/"
 done
 
-# ---- fork: as shipped (pqz-core/build.sh native: clang -O2, generic x86-64, PQZ_ASSERT=1) and v3 (-O3
+# ---- fork: as shipped (pqz-core/pqzl/build.sh native: clang -O2, generic x86-64, PQZ_ASSERT=1) and v3 (-O3
 # -march=x86-64-v3, asserts off). The bench harness itself is -O2 generic in both (it times library calls only).
 for V in as v3; do
   rm -rf "$W/fork-$V" && cp -a "$W/src/pqz-core" "$W/fork-$V"

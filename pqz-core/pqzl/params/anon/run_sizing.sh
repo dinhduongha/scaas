@@ -1,7 +1,7 @@
 #!/bin/sh
 # P6-ANON: size the R_TXM sketches with the pinned lattice-estimator through ../e_s1_proof.sage (as ../run_e_s1.sh,
 # which reads specs from params/ only): MSIS / MLWE beta >= 450 floors, codegen proof bytes, per spec.
-#   scripts/capped pqz-core/params/anon/run_sizing.sh <LaZer 3330e48> <lattice-estimator 53da598> [specs] > pqz-core/params/anon/sizing-anon.txt
+#   scripts/capped pqz-core/pqzl/params/anon/run_sizing.sh <LaZer 3330e48> <lattice-estimator 53da598> [specs] > pqz-core/pqzl/params/anon/sizing-anon.txt
 set -eu
 IMG=sagemath/sagemath@sha256:4f5589eb6c565949a006f8665de2876b8414410daf5ac554f4434a15d4f3d528   # tag 10.7
 LZ=$(cd "$1" && pwd)

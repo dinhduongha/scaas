@@ -410,10 +410,10 @@ python3 -I ../smartcontracts/vectors/pqz/pqz_kat.py --check            # its sel
 Full measurement rounds (each one capped job; outputs `<dir>/runs/<label>-*`; the tables above):
 
 ```sh
-NP=10 NV=30 NPW=5 NVW=10 scripts/capped pqz-core/rel3/relfix.sh <label>   # build, KAT, tbox fixes, proofs_fnv, arena per
+NP=10 NV=30 NPW=5 NVW=10 scripts/capped pqz-core/research/pqzl-measure/relfix.sh <label>   # build, KAT, tbox fixes, proofs_fnv, arena per
                                                                           #   op, ASan + UBSan, generic timings, six relations
-scripts/capped pqz-core/sv/rel3.sh <label>     # SV: differential (portable, x86-64-v3, wasm), bench, fuzz, KAT, fix checks
-scripts/capped pqz-core/sv/diff.sh <label>     # differential test only; sv/bench.sh, sv/fuzz.sh (ASan + libFuzzer) likewise
+scripts/capped pqz-core/pqzl/sv/rel3.sh <label>     # SV: differential (portable, x86-64-v3, wasm), bench, fuzz, KAT, fix checks
+scripts/capped pqz-core/pqzl/sv/diff.sh <label>     # differential test only; sv/bench.sh, sv/fuzz.sh (ASan + libFuzzer) likewise
 ```
 
 </details>

@@ -14,7 +14,7 @@ OpenSSL: Apache-2.0 — their own notices are in the base image) plus three file
                           BearSSL notice), and the Rust crates of pqz-core/ffi/Cargo.lock (all MIT and/or Apache-2.0;
                           list: pqz-core/nethermind/runs/*-image-licences.txt). No GMP, MPFR or HEXL code
                           (checked on this very file by build-image.sh).
-  NOTICE-pqz.txt          this file; NOTICE-pqz-core.txt = pqz-core/NOTICE; LICENSE-lazer.txt = pqz-core/lazer/LICENSE.
+  NOTICE-pqz.txt          this file; NOTICE-pqz-core.txt = pqz-core/NOTICE; LICENSE-lazer.txt = pqz-core/pqzl/lazer/LICENSE.
 
 The image is built locally from source (pqz-core/nethermind/build-image.sh) and is never pushed to a registry.
 Inventory and gate: docs/research/pqz-licence-inventory.md (G-LIC); written clearance is an owner step before any

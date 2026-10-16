@@ -8,7 +8,7 @@ witness and seeds are the same as in the cross-check. Each binary runs `R_REG` a
 |---|---|
 | `bench_up_v3` | upstream LaZer `3330e48` through `../shim/`, gcc 13 `-O3 -march=x86-64-v3 -maes -mpclmul`. HEXL takes its AVX2 / scalar path. Runs on any x86-64-v3 CPU (Haswell / Zen 1 or later). |
 | `bench_up_v4` | upstream, `-O3 -march=x86-64-v4 -mavx512ifma -mavx512vbmi2 -maes -mpclmul`, with HEXL's AVX-512 kernels (DQ, IFMA, VBMI2) compiled in. Needs an AVX-512 IFMA CPU (Ice Lake / Sapphire Rapids, Zen 4 or later). `run.sh` skips it elsewhere. |
-| `bench_fork` | the fork as shipped: `pqz-core/build.sh native` (clang 18 `-O2`, generic x86-64, `PQZ_ASSERT=1`). |
+| `bench_fork` | the fork as shipped: `pqz-core/pqzl/build.sh native` (clang 18 `-O2`, generic x86-64, `PQZ_ASSERT=1`). |
 | `bench_fork_v3` | the fork with `-O3 -march=x86-64-v3 -DPQZ_ASSERT=0`. A compiler-flag comparison only, not a shipped build. |
 
 All four are `statically linked` (glibc, GMP, MPFR, libstdc++), single-threaded and not stripped.
@@ -37,8 +37,8 @@ vendored library, and the binary uses the real CPU's flags. The v4 HEXL build al
 ## Build (repo side)
 
 ```sh
-# once, needs network: docker build -t p6d-lazer-build:ubuntu24.04 pqz-core/xcheck
-scripts/capped pqz-core/xcheck/static/build.sh <work dir> <LaZer clone at 3330e48>
+# once, needs network: docker build -t p6d-lazer-build:ubuntu24.04 pqz-core/research/upstream
+scripts/capped pqz-core/research/upstream/static/build.sh <work dir> <LaZer clone at 3330e48>
 #  -> <work dir>/pqz-bench-<git short sha>/ and <work dir>/pqz-bench-<git short sha>.tar.gz  (~5.5 MB)
 ```
 
@@ -46,7 +46,7 @@ Requirements: docker with the `p6d-lazer-build:ubuntu24.04` image, a local LaZer
 `3330e48`, which includes `third_party/hexl-development.zip`), host clang and static glibc (`libc6-dev`).
 
 The build is offline. Upstream builds in the container with `--network none`. The fork builds on the host with
-clang, the compiler that `pqz-core/build.sh` uses, because the image has none. Never commit the binaries, the work
+clang, the compiler that `pqz-core/pqzl/build.sh` uses, because the image has none. Never commit the binaries, the work
 dir or the tarball (`.gitignore`).
 
 ## Run (any x86-64 Linux, no dependencies)

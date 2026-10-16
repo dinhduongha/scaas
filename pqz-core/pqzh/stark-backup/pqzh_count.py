@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """PQZH design study (docs/research/pqzh-design.md): constraint, lookup, trace-cell and proof-size estimates for
 the five PQZ relations as hash-based proofs. Stdlib only; nothing is proved or measured; every number printed is
-an [estimate] from the relation shapes of pqz-core/src/pqz_rel.c (build_reg, build_debit, build_ds, build_dr) and
+an [estimate] from the relation shapes of pqz-core/pqzl/src/pqz_rel.c (build_reg, build_debit, build_ds, build_dr) and
 pq-zero-knowledge.md (CTR-PQZ-03, §7.4, §7.5, §7.9).
 
-  python3 pqz-core/pqzh/pqzh_count.py              # all tables, markdown (output committed as counts.txt)
-  python3 pqz-core/pqzh/pqzh_count.py --selftest   # the bound checks the arithmetisation relies on
+  python3 pqz-core/pqzh/stark-backup/pqzh_count.py              # all tables, markdown (output committed as counts.txt)
+  python3 pqz-core/pqzh/stark-backup/pqzh_count.py --selftest   # the bound checks the arithmetisation relies on
 
 Designs counted (note §2):
   D1  challenge-free: R_q products in the NTT domain of the proof field (X^64 + 1 splits), public A as

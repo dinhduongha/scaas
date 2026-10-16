@@ -2,10 +2,10 @@
 # P6-ANON Track L: ASan + UBSan (libc heap, -DPQZ_DEBUG_MALLOC) of the bench with the test hooks: R_REG / R_TX / R_TX0
 # and every built R_TXM shape (generic and SV verifier), then txm_check one case per process (PQZ_TXM_CASE), so each
 # process stays under scripts/capped's 4 GB (txm_check in one process was OOM-killed). Called by txm.sh; alone:
-#   scripts/capped pqz-core/rel3/txm-asan.sh <label>        rel3/runs/<label>-asan.jsonl, -asan-stderr.txt
+#   scripts/capped pqz-core/research/pqzl-measure/txm-asan.sh <label>        rel3/runs/<label>-asan.jsonl, -asan-stderr.txt
 set -eu
-cd "$(dirname "$0")/.."
-R=rel3/runs/$1
+cd "$(dirname "$0")/../../pqzl" # the PQZL core: build/, src/, test/, kat/
+R=../research/pqzl-measure/runs/$1
 export PQZ_ARENA_MB=${ARENA_MB:-2048}
 mkdir -p build/asan
 # known upstream UBSan nits (STATUS.md, sv/fuzz.sh): zero-length VLAs, null + 0 in aes256ctr.c; one process per shape

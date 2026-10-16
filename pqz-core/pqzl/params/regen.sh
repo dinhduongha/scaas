@@ -1,7 +1,7 @@
 #!/bin/sh
 # Rerun LaZer's codegen on every relation spec into <out dir> and diff each header against the checked-in one
 # (P6e D1: the headers are reproducible; new specs, e.g. tx0, are generated there and copied by hand):
-#   scripts/capped pqz-core/params/regen.sh <LaZer 3330e48 checkout> <out dir> [specs] > pqz-core/params/codegen-<label>.txt
+#   scripts/capped pqz-core/pqzl/params/regen.sh <LaZer 3330e48 checkout> <out dir> [specs] > pqz-core/pqzl/params/codegen-<label>.txt
 set -u
 cd "$(dirname "$0")/.."
 LZ=$(cd "$1" && pwd) OUT=$2

@@ -8,8 +8,8 @@ proved by an independent proof system that rests only on hash assumptions. This 
 scripts; **nothing was built or measured for PQZH**, and **no decision is recorded here**. The prototype and its
 measurements come later (§7).
 
-**[estimate]** marks a number computed here from counts or a model (script `pqz-core/pqzh/pqzh_count.py`, output
-`pqz-core/pqzh/counts.txt`). **[measured by others]** marks a published number, with its source and the date it was
+**[estimate]** marks a number computed here from counts or a model (script `pqz-core/pqzh/stark-backup/pqzh_count.py`, output
+`pqz-core/pqzh/stark-backup/counts.txt`). **[measured by others]** marks a published number, with its source and the date it was
 read (§9). **[inference]** marks a conclusion drawn here. Numbers for PQZL come from the earlier notes
 (`pqz-core-e-s1.md`, `pqz-specialised-verifier.md`).
 
@@ -403,6 +403,6 @@ External numbers and statements, read 2026-10-13 unless stated:
 | Ligero; LogUp | [ePrint 2022/1608](https://eprint.iacr.org/2022/1608); Haböck, [ePrint 2022/1530](https://eprint.iacr.org/2022/1530) |
 
 ```sh
-python3 pqz-core/pqzh/pqzh_count.py --selftest              # the bounds of §3.1 (asserts)
-python3 pqz-core/pqzh/pqzh_count.py > pqz-core/pqzh/counts.txt   # every table of §1, §3.5, §5
+python3 pqz-core/pqzh/stark-backup/pqzh_count.py --selftest              # the bounds of §3.1 (asserts)
+python3 pqz-core/pqzh/stark-backup/pqzh_count.py > pqz-core/pqzh/stark-backup/counts.txt   # every table of §1, §3.5, §5
 ```

@@ -229,7 +229,7 @@ while True:
 
 # Find an appropriate Module-SIS dimension
 kmsis = 0   # dimension of the MSIS problem
-# PQZ: floors from the lattice-estimator check (pqz-core/params/e_s1_proof.py)
+# PQZ: floors from the lattice-estimator check (pqz-core/pqzl/params/e_s1_proof.py)
 if 'kmlwe_min' in globals() and kmlwe < kmlwe_min:
     kmlwe = kmlwe_min
 if 'kmsis_min' in globals():

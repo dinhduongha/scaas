@@ -58,7 +58,7 @@ RUN for d in pqzh/ligero pqzh/ligero/wasm stmt ffi ffi/wasm; do \
       [ ! -f "$d/Cargo.lock" ] || (cd "$d" && cargo fetch --locked) || exit 1; done \
  && chmod -R a+rwX "$CARGO_HOME"
 # build once at image build time (the same build reproduce.sh repeats); world-writable so docker run -u works
-RUN ./build.sh all && chmod -R a+rwX /src
+RUN pqzl/build.sh all && chmod -R a+rwX /src
 ENV LAZER_SRC=/opt/lazer BIND=0.0.0.0 HOME=/tmp
 RUN git config --system --add safe.directory '*'
 ENTRYPOINT ["artifact/reproduce.sh"]

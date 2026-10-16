@@ -2,7 +2,7 @@
 name = "pqzh"
 version = "0.1.0"
 edition = "2021"
-license-file = "../../LICENSE"
+license-file = "../../../LICENSE"
 publish = false
 
 [dependencies]
