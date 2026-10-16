@@ -105,8 +105,8 @@ contract FactoryTest is Test {
         address kindOnly = address(new KindOnly()); // no factory()
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ImplementationFactoryMismatch.selector, kindOnly));
         f.registerImplementation(NONE, 2, kindOnly);
-        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.KindReserved.selector, IOpenFactory.TokenKind.NONE_PQZ));
-        f.registerImplementation(IOpenFactory.TokenKind.NONE_PQZ, 1, address(noneImpl));
+        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.KindReserved.selector, IOpenFactory.TokenKind.NONE_ZETHER_PQZ));
+        f.registerImplementation(IOpenFactory.TokenKind.NONE_ZETHER_PQZ, 1, address(noneImpl)); // P6g built 4, 5
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VersionUnknown.selector, NONE, 0));
         f.registerImplementation(NONE, 0, address(noneImpl));
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VersionAlreadyRegistered.selector, NONE, 1,

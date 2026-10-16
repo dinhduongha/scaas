@@ -309,7 +309,10 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
         uint256 n = ms.length;
         if (n == 0) revert MtxBatchEmpty();
         if (n != auths.length) revert MtxBatchLengthMismatch();
-        for (uint256 i; i < n; ++i) _uaExecute(ms[i], auths[i]);
+        for (uint256 i; i < n; ++i) {
+            _requireBatchable(bytes4(ms[i].data));
+            _uaExecute(ms[i], auths[i]);
+        }
         return true;
     }
 
@@ -357,13 +360,18 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
         if (m.data.length < 4 || !_uaAllowed(sel)) revert MetaTxUnknownOp(sel);
         uint256 basis = _checkCall(m.data, m.mode);
         _useNonce(m.from, m.batch);                                                                    // 4
-        // ponytail: binding 0 is safe only while no confidential (Zether/PQZ) selector is on the UA allowlist (L4-4);
-        // when one joins (P6), write the envelope binding here as the address path does.
-        ret = _selfCall(m.from, m.data, bytes32(0));                                                   // 5
+        ret = _selfCall(m.from, m.data, _uaEnvelopeBinding(m));                                        // 5
         (uint256 fee, address feeTo) =                                                                 // 6
             _callFee(m.data, basis, m.mode, m.fee, m.feeRecipient == address(0) ? msg.sender : m.feeRecipient);
         if (fee != 0) _uaMove(m.from, MetaTxLib.pad(feeTo), fee);
         emit UAMetaTransactionExecuted(m.from, msg.sender, m.batch, m.nonce, digest, feeTo, fee);      // 7
+    }
+
+    /// @notice The envelope binding a proof inside the UA path's self-call carries (CTR-PQZ-15, P6g plan D4): 0 by
+    ///         default; the PQZ layer returns its own (tag `SCAAS-PQZ-UA-ENVELOPE-V1`), never 0, so step 5 writes it on
+    ///         every PQZ envelope (the address path's `_envelopeBinding` rule).
+    function _uaEnvelopeBinding(MetaTxLib.UAMetaTransaction memory) internal view virtual returns (bytes32) {
+        return bytes32(0);
     }
 
     /// @dev The typed UA pipeline (CTR-MTX-23 on ids): everything is checked before the nonce and the moves.

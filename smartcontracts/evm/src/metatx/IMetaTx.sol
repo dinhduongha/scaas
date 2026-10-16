@@ -20,6 +20,8 @@ interface IMetaTx {
     error Reentrancy();
     error SelfSender();
     error MtxBatchEmpty();
+    /// @notice The selector may not run inside `mtxBatch` / `uaBatch` (the PQZ ops, CTR-PQZ-21).
+    error MtxNotBatchable(bytes4 selector);
     error MtxBatchLengthMismatch();
 
     function mtxNonce(address from, uint256 batch) external view returns (uint256);

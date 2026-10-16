@@ -119,7 +119,10 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
         uint256 n = ms.length;
         if (n == 0) revert MtxBatchEmpty();
         if (n != signatures.length) revert MtxBatchLengthMismatch();
-        for (uint256 i; i < n; ++i) _execute(ms[i], signatures[i]);
+        for (uint256 i; i < n; ++i) {
+            _requireBatchable(bytes4(ms[i].data));
+            _execute(ms[i], signatures[i]);
+        }
         return true;
     }
 
@@ -225,6 +228,16 @@ abstract contract MetaTxBase is Context, SaltedEIP712, IMetaTx {
     /// @notice The rule of `sel`; feeClass 0 = not allowlisted. Overrides end with `return super._mtxRule(sel);`.
     function _mtxRule(bytes4 sel) internal view virtual returns (MtxRule memory r) {
         if (sel == IMetaTx.cancelNonce.selector) r = MtxRule(FEE_CLASS_ABSOLUTE, 0, 36);
+    }
+
+    /// @notice Whether `sel` may run as a `mtxBatch` / `uaBatch` item; every allowlisted selector by default, the PQZ ops
+    ///         never (CTR-PQZ-21: one op is ≈ 3–11 M gas and up to ≈ 340 KB).
+    function _batchable(bytes4) internal view virtual returns (bool) {
+        return true;
+    }
+
+    function _requireBatchable(bytes4 sel) internal view {
+        if (!_batchable(sel)) revert MtxNotBatchable(sel);
     }
 
     /// @notice Step 6, after the call. Default: no balance to charge => every mode but `NONE` reverts (CTR-MTX-22).
