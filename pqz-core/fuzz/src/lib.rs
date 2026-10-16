@@ -45,6 +45,10 @@ static VALIDS: AtomicU64 = AtomicU64::new(0);
 static DIFFS: AtomicU64 = AtomicU64::new(0);
 static CANON: AtomicU64 = AtomicU64::new(0);
 static PQZL_INPUTS: AtomicU64 = AtomicU64::new(0);
+/// op 7 (P6-ANON S5): inputs that decode as op 7 (precompile, mutate) / accepted over an op 7 base (codec), and
+/// differentials on op 7
+static MULTI: AtomicU64 = AtomicU64::new(0);
+static MULTI_DIFFS: AtomicU64 = AtomicU64::new(0);
 
 fn die(msg: &str) -> ! {
     eprintln!("pqz-fuzz FINDING ({}): {msg}", TARGET.get().map_or("?", |s| s.as_str()));
@@ -123,8 +127,9 @@ fn check(inp: &[u8], a: (i32, Word), b: (i32, Word)) -> bool {
     if a.1 != expect {
         die(&format!("verdict {} for an input that should give {} ({} B)", hex(&a.1), hex(&expect), inp.len()));
     }
-    if decode(inp).is_ok() {
+    if let Ok(i) = decode(inp) {
         DECODED.fetch_add(1, Relaxed);
+        MULTI.fetch_add((i.op == 7) as u64, Relaxed);
     }
     VALIDS.fetch_add((a.1 == VALID) as u64, Relaxed);
     arena_check();
@@ -133,13 +138,16 @@ fn check(inp: &[u8], a: (i32, Word), b: (i32, Word)) -> bool {
 
 extern "C" fn summary() {
     eprintln!(
-        "pqz-fuzz summary ({}): {} inputs checked, {} decoded, {} valid (= unmodified honest; mutate skips those), {} differential SV = generic, \
-         {} PQZL proof re-encodings equal, arena peak max {} B = {:.2} MiB (bound {} MiB, ARENA_SMALL {} MiB)",
+        "pqz-fuzz summary ({}): {} inputs checked, {} decoded ({} op 7), {} valid (= unmodified honest; mutate skips those), \
+         {} differential SV = generic ({} op 7), {} PQZL proof re-encodings equal, arena peak max {} B = {:.2} MiB (bound {} MiB, \
+         ARENA_SMALL {} MiB)",
         TARGET.get().map_or("?", |s| s.as_str()),
         INPUTS.load(Relaxed),
         DECODED.load(Relaxed),
+        MULTI.load(Relaxed),
         VALIDS.load(Relaxed),
         DIFFS.load(Relaxed),
+        MULTI_DIFFS.load(Relaxed),
         CANON.load(Relaxed),
         PEAK.load(Relaxed),
         PEAK.load(Relaxed) as f64 / (1 << 20) as f64,
@@ -289,6 +297,7 @@ pub unsafe extern "C" fn pqz_fuzz_mutate(data: *const u8, len: usize) {
                     die(&format!("differential: generic {g}, specialised {valid}"));
                 }
                 DIFFS.fetch_add(1, Relaxed);
+                MULTI_DIFFS.fetch_add((i.op == 7) as u64, Relaxed);
                 if !pqzl::reinit(pqzl::ARENA_SMALL) {
                     die("reinit on the verify-only arena");
                 }
@@ -412,6 +421,7 @@ pub unsafe extern "C" fn pqz_fuzz_codec(data: *const u8, len: usize) {
     };
     if ok {
         DECODED.fetch_add(1, Relaxed);
+        MULTI.fetch_add((if codec == 4 { hl.op } else { h.op } == 7) as u64, Relaxed);
     }
     arena_check();
 }
