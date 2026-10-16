@@ -1,3 +1,9 @@
+## Session 2026-10-17 (S6 done) — resume here
+
+**State:** main pushed. **S6 merged** (`p6-anon-s6b`; WIP branch `p6-anon-s6` kept as record): op 7 in the package's default stages, `expected-results.json` regenerated once (freeze-txm), Docker quick PASS 199 ok, `--multi-bench` Docker PASS (44 min). **PQZL Rust port plan merged** (`docs/superpowers/plans/2026-10-17-pqzl-rust-port.md`, owner-approved D1–D8, subagent-driven, after the freeze). Owner rulings today in TODO.md: Rust port in `pqzl/rust/`; bn254 MSM precompile cancelled; Zether BLS12-381 verifier precompile in Rust after the PQZL Rust port (precompile where a chain has it, Solidity elsewhere; `Nethermind.Pqz` build option, default off).
+
+**Next:** S8 — op 7 in the live precompile (Nethermind.Pqz op 7 gas entries per built (M, A), calibration p99 over 1,000 valid + adversarial inputs on the chain-host image, throwaway 7622 copy first, then activation on 7622; image rebuild: libpqz_ffi.so sha256 changes with the layout) → S7 (CTR-PQZ-25/-26, S9 proposals 1/2/4, plan gas tables) → op 7 in P6g tokens → gates A / B → freeze → Rust port.
+
 ## Session 2026-10-17 (morning) — resume here
 
 **State:** main pushed. **Layout move merged** (`pqz-layout`, merge `9f07324`): `pqz-core/pqzl/` (PQZL C core + tools), `pqzh/{ligero,xcheck,stark-backup}`, `research/{pqzl-measure,opt,floor,upstream}`, shared crates at the top; spec now `docs/contracts/pq-zero-knowledge.md`. Verified (plan §Applied): relfix `proofs_fnv` = `tx0c`, KAT 19/19, tbox / SV fix checks, ffi self-test `ed910a2c…d205`, vectors `--check` byte-identical, ligero tests, fuzz build, glic, docs_check 0 errors; two harness failures predate the move (STARK backup `tx_stmt` xcheck, `research/floor` `count.c`). The PQZL build output is now `pqzl/build/` (old `pqz-core/build/` holds only stale outputs + `build/fuzz`).
