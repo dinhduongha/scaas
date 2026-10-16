@@ -6,6 +6,9 @@
 S5 → layout move → S6 ∥ this plan → S8 → S7 → gates A / B → freeze → the port). Decisions D1–D8 below are controller
 proposals; the owner may override any of them.
 
+**Owner 2026-10-17:** plan approved (D1–D8 as proposed); execution subagent-driven (superpowers:subagent-driven-development:
+one implementer + one reviewer per task, then a whole-branch review), after the freeze.
+
 **Goal:** A pure-Rust crate `pqzl` that is byte-for-byte equivalent to the PQZL C core (`pqz-core/pqzl/src` +
 `pqzl/lazer`): same proofs for the same `(op, stmt, wit, rnd32)`, same verdicts on every input, same keys / Enc / Dec,
 native and wasm32 — so other chains and applications can use the LaZer proof system without the C build.
