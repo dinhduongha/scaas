@@ -1040,3 +1040,6 @@ ML-DSA.Verify(pk, msg, sig, ctx)	obsolete	verify with ctx = kind_tag dropped: em
 pqzTransitionTimestamp	renamed	the first timestamp of the chainspec section engine.Pqz.schedules (P6f D2): contracts/pq-zether.md#CTR-PQZ-11
 mldsa65_verify	obsolete	ML-DSA runs on .NET MLDsa (OpenSSL 3.5) in the plugin, no C entry point (P6f D5): contracts/pq-zether.md §10
 scaas/nethermind-pqz:<nethermind>-pqz<n>	renamed	scaas/nethermind-pqz:1.39.0-pqz<n> (P6f D13): contracts/pq-zether.md §10
+transferFrom(msg.sender, this, amount·shieldScale)	obsolete	pqzShield burns the signer's public units, as zetherShield (P6g plan D1): contracts/pq-zether.md §7.3
+OpenFactory.createPqzToken	renamed	OpenFactory.createToken with kind NONE_PQZ / UNDERLYING_PQZ behind pqzEnabled (P6g plan D1): contracts/pq-zether.md §9.4
+addTrivial(digits)	renamed	PqzCt.addTrivial(acc, amount) (P6g): contracts/pq-zether.md §9.4

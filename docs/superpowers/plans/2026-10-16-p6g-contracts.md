@@ -250,6 +250,32 @@ pinned layout changes (it must not).
   "built"; accounts.md `pqz-mlwe` row built and the 7622 gen 1; roadmap P6g row; decisions.md (D1–D16 as Change
   lines); `smartcontracts/evm/README.md` if it lists contracts; `scripts/docs_check.py check` and the size gate clean.
 
-## 4. Results
+## 4. Results (2026-10-16, branch `p6g`)
 
-(filled in per task)
+- **T1** plan + D1–D16 in decisions.md (`fdb36ee`). **T2** `PqzSafety`, `PqzCt` (`01230a7`): the vector's `T` =
+  `enc.json` ops[0], `T − Trivial(1000)` = rows[0], 16-term sums exact. **T3** `UAPqzVerifier` (`186f4a4`): constructor
+  self-test + `R_REG` probe, exact op-3 input, `pk < q`; a `pqz-mlwe` UA in a gen-1 registry (3,693,727 gas with a
+  mocked PoP). **T4** base hooks, kinds 4 / 5, factory gate (`5a24fdc`). **T5** `PqzLib`, `PqzLayer`,
+  `NoUnderlyingPqzToken` (`befc7d8`): the token-built transfer statement body equals `statement_transfer.json`'s byte
+  for byte. **T6** `UnderlyingPqzToken`, relay tests, sizes (`80d6ced`). **T7** tooling (`0bb7690`). **T8** 7622 (`8b5a322`).
+- **Forge:** 31 PQZ tests in `test/pqz/` (PqzCt 5, UAPqzVerifier 4, PqzNone 13, PqzUnderlying 2, PqzRelay 3) and the
+  whole suite (1,272 tests: 1,256 passed, 10 skipped) green except the six `test/pqzh/ligero` `test_mutations_*` (`MemoryOOG`), which fail the same on `main`
+  `b6185dd` (not touched here). Two existing tests updated for kinds 4 / 5 being built (`AdminLib.t.sol`,
+  `v2/Factory.t.sol`).
+- **Sizes** (runtime / init, B): `NoUnderlyingPqzToken` 50,483 / 52,073, `UnderlyingPqzToken` 62,572 / 64,169 (2,964 B
+  under 7622's 65,536), `PqzLib` 12,725, `UAPqzVerifier` 1,314; the four existing tokens +137 B each (the two hooks);
+  `size-baseline.json` ratchet entries, size gate 0 errors.
+- **Chain 7622** (log `smartcontracts/evm/runs/2026-10-16-p6g-7622.txt`, 89 checks, 0 failures, 479 s; the first run,
+  aborted at §6 because SCaaS tokens give EOAs no allowance (CTR-TOK-01), is kept as `…-run1-aborted.txt`; its contracts
+  stay on chain unused): `UARegistry` gen 1 `0xd3806d52cfc265ea6a8ae264dc3feda92cf1be84`, `UAMldsaVerifier` 44
+  `0xe120dcaba543fb54a37cc5dddcc11199f0d4073e` / 65 `0xf422e821237328257e9ae78d30a6081753cd67be` (`PRECOMPILE()` =
+  `…0012` / `…0013`), `UAPqzVerifier` (PQZL) `0x3423b8c21222aac7bcfaa3b330e651f74e0d6188`, `OpenFactory`
+  `0x61ff7446c5610cd99970e37b0f1dffea00789ca4`, `PqzLib` `0x2182c58ec11ca75831ae99ff04da3c3eb27de195`,
+  `NoUnderlyingPqzToken` `0x6a23b0bdbb88c34589366388194e403b78176248`, `UnderlyingPqzToken`
+  `0x0f39a5bcb7149ec90d9139d4437b7833b85bc802`, tokens pqUSD (`NONE_PQZ`, BUNDLE, FULL)
+  `0x802348c24edfbb3fabd9a1e3038eec225c3485ec`, pqW (`UNDERLYING_PQZ` over a MockERC20 tUSD, COMPACT, OPTIONAL)
+  `0xfb5b3b351c7aa91612bd6bd5989a4904589b9113`. Gas per path: pq-zether.md §9.3 "Measured on chain 7622 (P6g)".
+- **Open:** D16's PQZH token (not run; PQZH debit paths unmeasured on chain); the sender memo body is random filler
+  in the e2e (the CTR-ZTH-50 HKDF memo is the client's, P6h); op 7 entry points (D8); `pqzUnshield` to a `bytes32`
+  recipient (TODO.md, not in §9.4's selectors) not built; the classical kinds are not in 7622's gen 1 (D15);
+  storage-layout pins (`test/v2/layout`) not added for the PQZ tokens.
