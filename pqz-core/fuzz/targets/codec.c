@@ -1,6 +1,7 @@
 /*
- * libFuzzer target `codec` (P6e plan Task 10, D12, D15): structure-aware edit scripts (<= 512 B), the input format
- * and the oracle are pqz_fuzz_codec in src/lib.rs.
+ * libFuzzer target `codec` (P6e plan Task 10, D12, D15): structure-aware edit scripts (<= 512 B) over an honest
+ * statement (op 7's included, P6-ANON S5), precompile input, bundle, opening or PQZL proof; the input format and the
+ * oracle are pqz_fuzz_codec in src/lib.rs.
  */
 #include <stddef.h>
 #include <stdint.h>

@@ -1,7 +1,8 @@
 /*
  * libFuzzer target `precompile` (P6e plan Task 10, D12): raw bytes into the C ABI pqz_precompile (pqz_ffi.h), the
  * entry point the node calls (P6f), twice; src/lib.rs checks the two results (status, verdict, determinism, arena).
- * Seeds: the 16 honest inputs and the self-test, written at run time ($PQZ_FUZZ_SEEDS); -max_len=400000.
+ * Seeds (seeds.py, at run time): the honest inputs (P6e's 24 and every built op 7 (id, M, auditorOn), P6-ANON S5),
+ * the self-test and every negative.json row (op 7's included); -max_len=400000 (over MAX_INPUT).
  */
 #include "../../ffi/pqz_ffi.h"
 
