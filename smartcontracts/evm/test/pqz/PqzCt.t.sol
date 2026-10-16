@@ -4,23 +4,7 @@ pragma solidity ^0.8.24;
 import {PqzMock} from "./helpers/PqzMock.sol";
 import {PqzCt} from "../../src/pqz/PqzCt.sol";
 import {PqzSafety} from "../../src/pqz/PqzSafety.sol";
-
-/// Calldata entry to the library (its inputs are calldata on every token path).
-contract PqzCtHarness {
-    function sum(bytes calldata acc, bytes[] calldata plus_, bytes[] calldata minus_, uint256 plain)
-        external pure returns (bytes memory c)
-    {
-        c = PqzCt.load(acc);
-        for (uint256 i; i < plus_.length; ++i) PqzCt.plus(c, plus_[i]);
-        for (uint256 i; i < minus_.length; ++i) PqzCt.minus(c, minus_[i]);
-        PqzCt.addTrivial(c, plain);
-        PqzCt.reduce(c);
-    }
-
-    function canonical(bytes calldata b) external pure returns (bool) {
-        return PqzCt.isCanonical(b);
-    }
-}
+import {PqzCtHarness} from "./helpers/PqzCtHarness.sol";
 
 /// `PqzCt` on the P6e vectors (P6g plan Task 2, D6) and `PqzSafety`.
 contract PqzCtTest is PqzMock {
