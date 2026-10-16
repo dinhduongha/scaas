@@ -61,7 +61,7 @@ machine, and the package compares your results with `expected-results.json`.
    PROVISIONAL notes here.
 3. ~~PQZL `R_TX0` outside the package's PQZL runs~~ Done 2026-10-15 (controller): `pqz_bench` / `run_wasm.mjs`
    mask 63, the `R_TX0` per-process run, `results.py` `RELS` with `R_TX0`, and the differential sample of
-   `sv/rel3.sh` (9 arguments, `n_tx0` = 12: 3,484 cases). The Docker quick run above predates it (five PQZL
+   `pqzl/sv/rel3.sh` (9 arguments, `n_tx0` = 12: 3,484 cases). The Docker quick run above predates it (five PQZL
    relations, 2,972 differential cases: the 8-argument sample gave `R_TX0` the default 4); the host quick run below
    has it.
 
@@ -70,8 +70,8 @@ machine, and the package compares your results with `expected-results.json`.
 every `R_TX0` `proofs_fnv` equal to `tx0c` (n = 1, 2, 3; native, x86-64-v3, wasm, wasm `both`, wasm without SV), its
 largest proof 42,432 B (`tx0c` 42,441 B, 0.02 %), its wasm prove peak equal to the byte; differential 3,484 cases, 0
 mismatches. PQZH, pqz-ffi and the vectors as in the Docker run. Same commit: `../check_symbols.sh` fails on a missing
-file or an `nm` error (`../STATUS.md` Open 9, closed; `runs/art2-check-symbols.txt`: `./build.sh native` and
-`test/check_symbols_neg.sh` ok; `../glic/runs/absence-2026-10-15.txt`: the three real-file scans and the G-LIC
+file or an `nm` error (`../STATUS.md` Open 9, closed; `runs/art2-check-symbols.txt`: `pqzl/build.sh native` and
+`pqzl/test/check_symbols_neg.sh` ok; `../glic/runs/absence-2026-10-15.txt`: the three real-file scans and the G-LIC
 absence check pass).
 
 Earlier freeze notes (PQZL only, kept for the record) are in the section below.
@@ -80,7 +80,7 @@ Earlier freeze notes (PQZL only, kept for the record) are in the section below.
 
 - **Done (source, committed):** `Dockerfile`, `Dockerfile.dockerignore`, `reproduce.sh` (quick, `--full`, `--serve`,
   `--upstream`), `results.py` (`check`, `freeze`), `web/index.html`, this README, `.gitignore` entry `artifact/out/`.
-- **Tested before the Docker runs:** `results.py freeze` on the v2 runs (`rel3/runs/v2full-*` + `sv/runs/v2-*`):
+- **Tested before the Docker runs:** `results.py freeze` on the v2 runs (`research/pqzl-measure/runs/v2full-*` + `pqzl/sv/runs/v2-*`):
   69 / 69 checks ok, and the table it prints matches the v2 numbers in `../STATUS.md`. `sh -n reproduce.sh`.
 - **Docker tests (2026-10-14, AMD Ryzen 5 7235HS, no avx512ifma; logs and outputs in `runs/`):**
   - Image build `runs/docker-build-2.txt`: ok, no Dockerfile change after the `ca-certificates` fix (first failure:
@@ -107,7 +107,7 @@ Earlier freeze notes (PQZL only, kept for the record) are in the section below.
     | upstream `3330e48` x86-64-v3 | 548 ms | 513 ms | 6,581 ms | 6,403 ms | 28,106 / 42,756 |
     | fork (portable build) | 247 ms | 178 ms | 1,012 ms | 613 ms | 28,086 / 42,771 |
 
-    Relation differences `b2402b5` -> now (`git diff b2402b5..HEAD -- src/pqz_rel.c`; `params/pqz_reg_params.h` and
+    Relation differences `b2402b5` -> now (`git diff b2402b5..HEAD -- pqzl/src/pqz_rel.c`; `pqzl/params/pqz_reg_params.h` and
     `pqz_tx_params.h` unchanged): the `R_TX` statement layout (640 B header, fee a be32 word at 256 that must be
     < 2^64, was a be8 after the body); `build_tx` / `tx_witness` became `build_debit` / `debit_witness` (shared with
     `R_BURN`; `LAY_TX` = the old slot bases, same rows, same selectors); relation keys built at first use; `A` global;
@@ -124,12 +124,12 @@ Earlier freeze notes (PQZL only, kept for the record) are in the section below.
   - `docker image rm pqz-core-artifact` done; no image kept or pushed.
 - **Not tested:** `--full` in Docker (controller decision 2026-10-14: no Docker `--full` run; the freeze stays on the
   host toolchain), and every mode on the host toolchain (the freeze below is the first host run).
-- **`expected-results.json` is PROVISIONAL.** It was built from `rel3/runs/v2full-*` + `sv/runs/v2-*` (2026-10-13,
-  before the z21 merge). z21 changed only the verifier, and the post-z21 `rel3/runs/final-*` gives the same
+- **`expected-results.json` is PROVISIONAL.** It was built from `research/pqzl-measure/runs/v2full-*` + `pqzl/sv/runs/v2-*` (2026-10-13,
+  before the z21 merge). z21 changed only the verifier, and the post-z21 `research/pqzl-measure/runs/final-*` gives the same
   `proofs_fnv`, as does the Docker quick run above. Its times are pre-z21.
-- **Phase 1 runs on disk:** `rel3/runs/final-*` is a complete `rel3/relfix.sh` run with the v2full sample sizes,
+- **Phase 1 runs on disk:** `research/pqzl-measure/runs/final-*` is a complete `research/pqzl-measure/relfix.sh` run with the v2full sample sizes,
   post z21: rc 0, KAT 19/19, `check_tbox_fixes: ok`, `fails 0`, and `proofs_fnv` = v2 for all five relations.
-  `sv/runs/final-*` was interrupted (see `final-rc.txt`). Only the portable differential is complete there: 2,710
+  `pqzl/sv/runs/final-*` was interrupted (see `final-rc.txt`). Only the portable differential is complete there: 2,710
   cases, 0 mismatches. Neither is the freeze.
 
 **Freeze postponed (controller 2026-10-14):** a first `--full` run was stopped after the KAT, fix checks and part of the differential test (`runs/freeze-2026-10-14-interrupted-console.txt`), because P6e found that the PQZL prover's masks are not hedged as CTR-PQZ-19 requires (P6e plan gap G2, Task 1). The fix changes every honest proof (`proofs_fnv`), so the freeze runs after P6e gate A (PQZL vectors and `proofSystemId` frozen), with a new date in the paths below.
@@ -147,19 +147,19 @@ cd pqz-core && python3 -I artifact/results.py freeze "frozen 2026-10-14 (post z2
 ```
 
 After the freeze, write the frozen table and the reference machine into `../STATUS.md` and the five-relation table
-of `../README.md`. Compare it with `rel3/runs/final-*` (a direct relfix run). Then remove the PROVISIONAL notes.
+of `../README.md`. Compare it with `research/pqzl-measure/runs/final-*` (a direct relfix run). Then remove the PROVISIONAL notes.
 
 ## What is reproduced
 
 | Step | What it shows | quick | `--full` |
 |---|---|---|---|
-| build | `./build.sh all`, `native-x86v3`, wasm without SV (`SV=0`); the symbol scan rejects any libc / GMP / MPFR reference in the library objects | yes | yes |
-| KAT | arithmetic layer = upstream LaZer `3330e48`, 19/19 cases (`kat/lazer-3330e48.json`) | yes | yes |
-| `check_tbox_fixes.sh` | the three LaZer `tbox` fixes are in place: P6-SZ, P6-L2 (`proofSystemId` v2), and the verifier-only z21 norm check (P6-Z21). Each has a cheating-prover PoC and a control run | yes | yes |
-| `sv/check_sv_fixes.sh` | `pqz_verify_fast` follows both transcript fixes. With either fix reverted, the differential test must fail | yes | yes |
-| differential test | `pqz_verify` vs `pqz_verify_fast` on honest and mutated proofs, all six relations (3,484 cases, the sample of `sv/rel3.sh`). `--full` also runs the x86-64-v3 build (1,350 cases) | portable | + x86-64-v3 |
-| six relations, generic verifier | prove, verify, six tamper kinds; native `pqz_bench`, wasm32 under node | 3 proves, 3 verifies | 10 / 100 native, 5 / 30 wasm (= `rel3/relfix.sh`) |
-| six relations, specialised verifier | p50 / p99 portable, x86-64-v3 + AES-NI, wasm32. In `PQZ_VERIFY=both`, every wasm verify runs both verifiers and must agree | 50 verifies | 200 (= `sv/rel3.sh`) |
+| build | `pqzl/build.sh all`, `native-x86v3`, wasm without SV (`SV=0`); the symbol scan rejects any libc / GMP / MPFR reference in the library objects | yes | yes |
+| KAT | arithmetic layer = upstream LaZer `3330e48`, 19/19 cases (`pqzl/kat/lazer-3330e48.json`) | yes | yes |
+| `pqzl/check_tbox_fixes.sh` | the three LaZer `tbox` fixes are in place: P6-SZ, P6-L2 (`proofSystemId` v2), and the verifier-only z21 norm check (P6-Z21). Each has a cheating-prover PoC and a control run | yes | yes |
+| `pqzl/sv/check_sv_fixes.sh` | `pqz_verify_fast` follows both transcript fixes. With either fix reverted, the differential test must fail | yes | yes |
+| differential test | `pqz_verify` vs `pqz_verify_fast` on honest and mutated proofs, all six relations (3,484 cases, the sample of `pqzl/sv/rel3.sh`). `--full` also runs the x86-64-v3 build (1,350 cases) | portable | + x86-64-v3 |
+| six relations, generic verifier | prove, verify, six tamper kinds; native `pqz_bench`, wasm32 under node | 3 proves, 3 verifies | 10 / 100 native, 5 / 30 wasm (= `research/pqzl-measure/relfix.sh`) |
+| six relations, specialised verifier | p50 / p99 portable, x86-64-v3 + AES-NI, wasm32. In `PQZ_VERIFY=both`, every wasm verify runs both verifiers and must agree | 50 verifies | 200 (= `pqzl/sv/rel3.sh`) |
 | wasm prove memory | arena peak of one relation per process, prover build without SV | yes | yes |
 
 **PQZH (Ligero, Rust 1.97.1)**, at THE proven preset (`Params::preset`, `--regime proven --r431 1`), all six forms
@@ -188,8 +188,8 @@ PQZL also through the generic verifier), `pqz_kat.py --check` (the independent P
 `tamper.py` (single-leaf edits, each must be caught) with `--full` only. As `ffi/vectors/run.sh` in check mode: the
 package never rewrites the vectors.
 
-`--full` takes the sample sizes of the frozen runs, but not PQZL's ASan + UBSan build (`rel3/relfix.sh` and
-`sv/rel3.sh` keep that).
+`--full` takes the sample sizes of the frozen runs, but not PQZL's ASan + UBSan build (`research/pqzl-measure/relfix.sh` and
+`pqzl/sv/rel3.sh` keep that).
 
 ## Run in Docker
 
@@ -273,7 +273,7 @@ PQZL checks:
 memory is about 0.8 GB, because the PQZL bench reserves a 768 MiB arena (pqz-ffi's wasm32 digest run about 0.6 GB);
 the documented `docker run --memory=4g` leaves headroom. Wall time on the reference machine (Ryzen 5 7235HS): image
 build a few minutes plus the apt snapshot download (which took 42 min while snapshot.ubuntu.com was failing); quick
-27 min (PQZL 18, PQZH 4, pqz-ffi 4, vectors 2); `--full` takes about the time of `rel3/relfix.sh` plus `sv/rel3.sh`
+27 min (PQZL 18, PQZH 4, pqz-ffi 4, vectors 2); `--full` takes about the time of `research/pqzl-measure/relfix.sh` plus `pqzl/sv/rel3.sh`
 (tens of minutes) plus PQZH's 1,000-verify benches and `tamper.py`. `--upstream` builds HEXL and LaZer twice, which
 takes several minutes.
 
@@ -283,7 +283,7 @@ takes several minutes.
 AVX-512 IFMA / VBMI2. Each variant includes HEXL from LaZer's `third_party` zip, links the distribution's GMP /
 MPFR, and uses the flags of `../xcheck/static/build.sh`. Then it does three things:
 
-1. It checks the upstream KAT dump against the golden `kat/lazer-3330e48.json`.
+1. It checks the upstream KAT dump against the golden `pqzl/kat/lazer-3330e48.json`.
 2. It runs the `R_REG` / `R_TX` cross-check bench through `../xcheck/shim`. This compares upstream and the fork on
    the same statements, parameters and seeds (`../xcheck/README.md`).
 3. It runs the fork's bench (`bench_fork`).
@@ -301,7 +301,7 @@ its kernels from CPUID (`../xcheck/static/cpuf`), so `HEXL_DISABLE_AVX512IFMA=1`
   `../NOTICE`.
 - The pqz-core library links no GMP, MPFR or HEXL.
 - `--upstream` builds upstream LaZer with HEXL (Apache-2.0) and links GMP / MPFR (LGPL-3.0+). It does this only
-  inside the container, or on your machine, from source. The binaries stay in `build/upstream/` (git-ignored).
+  inside the container, or on your machine, from source. The binaries stay in `pqzl/build/upstream/` (git-ignored).
   This package never ships them, and you should not distribute them: distributing a binary with GMP / MPFR linked in
   carries LGPL relinking duties.
 - PQZH and pqz-ffi use the crates in their `Cargo.lock` (`sha3` and its RustCrypto dependencies, MIT / Apache-2.0),

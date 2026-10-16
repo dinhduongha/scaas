@@ -19,11 +19,11 @@ comments); together they change the transcript, hence `proofSystemId` v2 (`src/p
   bound, the sum within the pooled budget. `build.sh` builds it twice: on a copy of `lnp-tbox.c` with the P6-L2 fix
   undone (control: its verifier must accept the cheating proofs) and on the tree (the production `libpqz.a` must reject
   them).
-- `../check_tbox_fixes.sh`: runs both and exits 1 unless both fixes are in place (run by `rel3/relfix.sh`).
+- `../check_tbox_fixes.sh`: runs both and exits 1 unless both fixes are in place (run by `../research/pqzl-measure/relfix.sh`).
 
 The trace hook and the PoC are compiled only with `-DPQZ_SZ_TRACE` / `-DPQZ_L2DOM_POC`; `./build.sh native|wasm|all`
 defines neither, so the library objects are unchanged by them.
 
 ```sh
-../scripts/capped sh -c './build.sh native && ./check_tbox_fixes.sh'
+../../scripts/capped sh -c './build.sh native && ./check_tbox_fixes.sh'
 ```

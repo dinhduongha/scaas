@@ -9,7 +9,7 @@ and seeds. Results and method: `RESULTS.md`; summary: `docs/research/pqz-core-e-
   set those paths to rerun.
 - `shim/`: the fork's statement builder and bench compiled against upstream (`up_rel.c`, `bench.c`, `memory.h`,
   `shim.c`) and the microbenchmark (`micro.c`). `up_rel.c` is the `b2402b5` relation source, used by the scripts
-  here. `../artifact/reproduce.sh --upstream` does not use it: it compiles the current `../src/pqz_rel.c` with the
+  here. `../../artifact/reproduce.sh --upstream` does not use it: it compiles the current `../../pqzl/src/pqz_rel.c` with the
   same two substitutions (checked: exactly those two lines differ), so upstream and the fork run the same relation.
 - `stub/cpuf/`: header stub for HEXL's `cpu_features` (reports no AVX-512; no network fetch).
 - `static/`: a portable static benchmark bundle (upstream v3 / v4-IFMA and the fork) for measuring on other

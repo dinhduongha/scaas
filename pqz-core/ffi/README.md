@@ -75,8 +75,8 @@ every value from this crate (`pqzl` keygen / enc / dec / `encrypt`, `prove`), ev
 with `pqz_kat.py --check`, `vectors/tamper.py` and the wasm32 replay `vectors/replay_wasm.mjs` (through `wasm/`).
 
 **C core build.** `build.rs` compiles `../src/{pqz_lazer,pqz_ntt,pqz_arena,pqz_rel,pqz_keys,pqz_sv}.c` with
-`build.sh`'s flags (clang, `-std=gnu11 -O2 -fno-builtin -fno-math-errno -ffp-contract=off -DPQZ_SV`, native
-`-fstack-protector-strong`, no `-march`), assembles `lazer.h` as `build.sh` does, and runs `../check_symbols.sh` on the
+`pqzl/build.sh`'s flags (clang, `-std=gnu11 -O2 -fno-builtin -fno-math-errno -ffp-contract=off -DPQZ_SV`, native
+`-fstack-protector-strong`, no `-march`), assembles `lazer.h` as `pqzl/build.sh` does, and runs `../pqzl/check_symbols.sh` on the
 archive (the build fails on `malloc`, stdio, libm, GMP, MPFR). wasm32: freestanding, `csrc/wasm_ti3.c` adds the
 branch-free 128-bit helpers of `pqz_wasm_rt.c` (the prover shifts by secret amounts; they override
 `compiler_builtins`' weak ones), Rust provides `mem*`.

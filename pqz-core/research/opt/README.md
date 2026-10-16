@@ -1,15 +1,15 @@
 # P6d-2: pqz-core optimisation (2026-10-13)
 
-The owner asked to optimise the fork after the upstream cross-check (`../xcheck/`). Branch `p6d2-opt`, merged into
+The owner asked to optimise the fork after the upstream cross-check (`../upstream/`). Branch `p6d2-opt`, merged into
 main as `b87078a`. Only the implementation changed: parameters, relations, proof format and `proofSystemId` are the
-same. Summary and analysis: `docs/research/pqz-core-e-s1.md` §11; state: `../STATUS.md`.
+same. Summary and analysis: `docs/research/pqz-core-e-s1.md` §11; state: `../../STATUS.md`.
 
 ## Result
 
 Medians, one session on an AMD Ryzen 5 7235HS. Native is `pqz_bench 5 5` (clang `-O2`, portable). Wasm is
 `run_wasm.mjs 3 1` under node. Everything ran under `scripts/capped`.
 
-| | Before (main `fd8600f`) | After (P6d-2) | Upstream LaZer (AVX2, `../xcheck/`) |
+| | Before (main `fd8600f`) | After (P6d-2) | Upstream LaZer (AVX2, `../upstream/`) |
 |---|---|---|---|
 | `R_TX` prove / verify, native | 17.0 s / 14.9 s | **1.10 s / 0.72 s** | 6.6 s / 6.6 s |
 | `R_TX` prove / verify, wasm | 39.6 s / 34.5 s | **1.59 s / 0.82 s** | — |
@@ -58,7 +58,7 @@ Not done, and why:
 
 - **Same proofs.** For the same seeds, every step left the proofs byte-identical to main; the bench prints an FNV-1a
   hash of them. Native and wasm proofs are also equal byte for byte (seeds 0..2).
-- **KAT** 19/19 against `../kat/lazer-3330e48.json`.
+- **KAT** 19/19 against `../../pqzl/kat/lazer-3330e48.json`.
 - **Symbol scan** clean, native and wasm.
 - **Tampered proofs**: all five kinds rejected (`fails: 0`).
 - **ASan + UBSan** (`asan.sh`): nothing beyond the four known upstream UBSan findings.
@@ -67,10 +67,10 @@ Not done, and why:
 
 ```sh
 cd pqz-core
-./build.sh all                   # native + wasm
-opt/bench.sh <label>             # -> opt/runs/<label>-{native,wasm}.jsonl (5 proves, 5 + 5 verifies; wasm 3 / 1)
-opt/prof.sh <label> [1|2]        # gprof flat profile -> opt/runs/<label>-gprof.txt (1 = R_REG, 2 = R_TX)
-opt/asan.sh                      # ASan + UBSan on the malloc path -> opt/runs/asan.jsonl
+pqzl/build.sh all               # native + wasm
+research/opt/bench.sh <label>             # -> research/opt/runs/<label>-{native,wasm}.jsonl (5 proves, 5 + 5 verifies; wasm 3 / 1)
+research/opt/prof.sh <label> [1|2]        # gprof flat profile -> research/opt/runs/<label>-gprof.txt (1 = R_REG, 2 = R_TX)
+research/opt/asan.sh                      # ASan + UBSan on the malloc path -> research/opt/runs/asan.jsonl
 ```
 
 Microbenchmarks: `micro_basemul.c` (base multiplication kernels, Karatsuba) and `micro_aes.c` (PRNG throughput).

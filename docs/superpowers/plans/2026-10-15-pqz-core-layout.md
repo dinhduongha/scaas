@@ -233,3 +233,23 @@ Approved with one change: the measurement / spike directory is `research/` inste
 Owner 2026-10-15: the name `rel3/` ("relations, round 3") is meaningless; in the move it becomes **`research/pqzl-measure/`** (the PQZL measurement round: `relfix.sh`, `bench.sh`, runs). Controller's name choice; owner may override. Every reference to `rel3/` (artifact `reproduce.sh`, README, STATUS, research notes) is updated in the same move.
 
 Owner 2026-10-15: in the same move, rename `docs/contracts/pq-zero-knowledge.md` → `docs/contracts/pq-zero-knowledge.md` (`git mv`; rewrite every link and every `normative: contracts/pq-zero-knowledge.md#…` line by script, except `docs/history/`; `docs_check` 0 errors). PQZ now stands for Post-Quantum Zero-knowledge (decisions.md CTR-PQZ-01).
+
+## Applied (2026-10-17, branch `pqz-layout`)
+
+Executed after S5 merged (owner timing 2026-10-16), with the owner's `research/` and `research/pqzl-measure/` names
+and the spec rename. Deviations from §5, recorded:
+
+- `pqzh/rust-toolchain.toml` and `pqzh/.gitignore` stay in `pqzh/`: `pqzh/ligero/` has no toolchain file of its own
+  and inherits the pinned Rust 1.97.1 + wasm32 target from `pqzh/`; `stark-backup/` inherits it the same way.
+- New since this plan, unchanged paths: `nethermind/` (P6f), `fuzz/` (with `regress/`), `pqzl/params/anon/` (moved with
+  `params/`). The fuzz build output stays in `pqz-core/build/fuzz/` (its `run.sh` / `build.sh`); the PQZL build output
+  is `pqzl/build/`.
+- The frozen vectors (`smartcontracts/vectors/pqz/*.json`) and the description strings of their generator
+  (`ffi/src/bin/pqz-vectors.rs`) still say `pq-zether.md`, so `pqz-vectors --check` stays byte-identical; they change
+  with the next regeneration.
+- `research/upstream/build-{fork,micro,prof,up-bench}.sh` read a fork snapshot of the old layout (`fork/pqz-core` at
+  `b2402b5`, session scratch paths): unchanged. `research/upstream/static/build.sh` and `artifact/reproduce.sh
+  --upstream` use the current `pqzl/`.
+- Research notes: every `pqz-core/<path>` reference rewritten; bare relative mentions inside the notes are left as
+  written (records). Run files are never edited.
+- `docs/history/dropped-artifacts.tsv`: `pqz-core/params/estimator.txt` recorded as renamed (docs_check C7).
