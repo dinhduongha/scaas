@@ -1,0 +1,64 @@
+$ sh -c cd .. && ./build.sh native > /dev/null
+$ sh -c clang -std=gnu11 -O2 -I../src -o /home/ha/work/ainative/scaas/.claude/worktrees/s4/pqz-core/ffi/target/lh2/dump_setup ../pqzh/xcheck/dump_setup.c ../build/native/libpqz.a && /home/ha/work/ainative/scaas/.claude/worktrees/s4/pqz-core/ffi/target/lh2/dump_setup /home/ha/work/ainative/scaas/.claude/worktrees/s4/pqz-core/ffi/target/lh2/c txm
+$ sh -c cd ../pqzh/ligero && cargo run -j2 --release --offline --quiet --example dump_setup -- /home/ha/work/ainative/scaas/.claude/worktrees/s4/pqz-core/ffi/target/lh2/ligero
+$ cargo run -j2 --release --offline --quiet --features prove --example lh2 -- /home/ha/work/ainative/scaas/.claude/worktrees/s4/pqz-core/ffi/target/lh2/c /home/ha/work/ainative/scaas/.claude/worktrees/s4/pqz-core/ffi/target/lh2/ligero /home/ha/work/ainative/scaas/.claude/worktrees/s4/pqz-core/ffi/target/lh2/out
+{"src": "c", "stmt": "txm1", "id": "pqzl", "stmt_bytes": 83072, "parse_encode_equal": true, "proof_bytes": 42766, "valid": true, "generic": true, "recipientsHash_flip_rejected": true, "ok": true}
+{"src": "c", "stmt": "txm1", "id": "pqzh", "stmt_bytes": 83072, "parse_encode_equal": true, "proof_bytes": 232750, "valid": true, "generic": null, "recipientsHash_flip_rejected": true, "ok": true}
+{"src": "c", "stmt": "txm1_0", "id": "pqzl", "stmt_bytes": 66560, "parse_encode_equal": true, "proof_bytes": 42422, "valid": true, "generic": true, "recipientsHash_flip_rejected": true, "ok": true}
+{"src": "c", "stmt": "txm1_0", "id": "pqzh", "stmt_bytes": 66560, "parse_encode_equal": true, "proof_bytes": 230568, "valid": true, "generic": null, "recipientsHash_flip_rejected": true, "ok": true}
+{"src": "c", "stmt": "txm2", "id": "pqzl", "stmt_bytes": 99712, "parse_encode_equal": true, "proof_bytes": 43596, "valid": true, "generic": true, "recipientsHash_flip_rejected": true, "ok": true}
+{"src": "c", "stmt": "txm2", "id": "pqzh", "stmt_bytes": 99712, "parse_encode_equal": true, "proof_bytes": 231192, "valid": true, "generic": null, "recipientsHash_flip_rejected": true, "ok": true}
+{"src": "c", "stmt": "txm2_0", "id": "pqzl", "stmt_bytes": 83072, "parse_encode_equal": true, "proof_bytes": 42897, "valid": true, "generic": true, "recipientsHash_flip_rejected": true, "ok": true}
+{"src": "c", "stmt": "txm2_0", "id": "pqzh", "stmt_bytes": 83072, "parse_encode_equal": true, "proof_bytes": 230776, "valid": true, "generic": null, "recipientsHash_flip_rejected": true, "ok": true}
+{"src": "c", "stmt": "txm4", "id": "pqzl", "stmt_bytes": 132992, "parse_encode_equal": true, "proof_bytes": 45252, "valid": true, "generic": true, "recipientsHash_flip_rejected": true, "ok": true}
+{"src": "c", "stmt": "txm4", "id": "pqzh", "stmt_bytes": 132992, "parse_encode_equal": true, "proof_bytes": 232676, "valid": true, "generic": null, "recipientsHash_flip_rejected": true, "ok": true}
+{"src": "c", "stmt": "txm4_0", "id": "pqzl", "stmt_bytes": 116096, "parse_encode_equal": true, "proof_bytes": 43919, "valid": true, "generic": true, "recipientsHash_flip_rejected": true, "ok": true}
+{"src": "c", "stmt": "txm4_0", "id": "pqzh", "stmt_bytes": 116096, "parse_encode_equal": true, "proof_bytes": 229944, "valid": true, "generic": null, "recipientsHash_flip_rejected": true, "ok": true}
+{"src": "c", "stmt": "txm8", "id": "pqzl", "stmt_bytes": 215936, "parse_encode_equal": true, "proof_bytes": 61795, "valid": true, "generic": true, "recipientsHash_flip_rejected": true, "ok": true}
+{"src": "c", "stmt": "txm8_0", "id": "pqzl", "stmt_bytes": 198528, "parse_encode_equal": true, "proof_bytes": 59002, "valid": true, "generic": true, "recipientsHash_flip_rejected": true, "ok": true}
+{"src": "ligero", "stmt": "txm1", "id": "pqzl", "stmt_bytes": 83072, "parse_encode_equal": true, "proof_bytes": 42757, "valid": true, "generic": true, "recipientsHash_flip_rejected": true, "ok": true}
+{"src": "ligero", "stmt": "txm1", "id": "pqzh", "stmt_bytes": 83072, "parse_encode_equal": true, "proof_bytes": 232110, "valid": true, "generic": null, "recipientsHash_flip_rejected": true, "ok": true}
+{"src": "ligero", "stmt": "txm1_0", "id": "pqzl", "stmt_bytes": 66560, "parse_encode_equal": true, "proof_bytes": 42416, "valid": true, "generic": true, "recipientsHash_flip_rejected": true, "ok": true}
+{"src": "ligero", "stmt": "txm1_0", "id": "pqzh", "stmt_bytes": 66560, "parse_encode_equal": true, "proof_bytes": 230184, "valid": true, "generic": null, "recipientsHash_flip_rejected": true, "ok": true}
+{"src": "ligero", "stmt": "txm1_0_fee0", "id": "pqzl", "stmt_bytes": 66560, "parse_encode_equal": true, "proof_bytes": 42429, "valid": true, "generic": true, "recipientsHash_flip_rejected": true, "ok": true}
+{"src": "ligero", "stmt": "txm1_0_fee0", "id": "pqzh", "stmt_bytes": 66560, "parse_encode_equal": true, "proof_bytes": 231224, "valid": true, "generic": null, "recipientsHash_flip_rejected": true, "ok": true}
+{"src": "ligero", "stmt": "txm1_0_two", "id": "pqzl", "stmt_bytes": 66560, "parse_encode_equal": true, "proof_bytes": 42416, "valid": true, "generic": true, "recipientsHash_flip_rejected": true, "ok": true}
+{"src": "ligero", "stmt": "txm1_0_two", "id": "pqzh", "stmt_bytes": 66560, "parse_encode_equal": true, "proof_bytes": 231576, "valid": true, "generic": null, "recipientsHash_flip_rejected": true, "ok": true}
+{"src": "ligero", "stmt": "txm1_fee0", "id": "pqzl", "stmt_bytes": 83072, "parse_encode_equal": true, "proof_bytes": 42769, "valid": true, "generic": true, "recipientsHash_flip_rejected": true, "ok": true}
+{"src": "ligero", "stmt": "txm1_fee0", "id": "pqzh", "stmt_bytes": 83072, "parse_encode_equal": true, "proof_bytes": 231480, "valid": true, "generic": null, "recipientsHash_flip_rejected": true, "ok": true}
+{"src": "ligero", "stmt": "txm1_two", "id": "pqzl", "stmt_bytes": 83072, "parse_encode_equal": true, "proof_bytes": 42750, "valid": true, "generic": true, "recipientsHash_flip_rejected": true, "ok": true}
+{"src": "ligero", "stmt": "txm1_two", "id": "pqzh", "stmt_bytes": 83072, "parse_encode_equal": true, "proof_bytes": 232078, "valid": true, "generic": null, "recipientsHash_flip_rejected": true, "ok": true}
+{"src": "ligero", "stmt": "txm2", "id": "pqzl", "stmt_bytes": 99712, "parse_encode_equal": true, "proof_bytes": 43602, "valid": true, "generic": true, "recipientsHash_flip_rejected": true, "ok": true}
+{"src": "ligero", "stmt": "txm2", "id": "pqzh", "stmt_bytes": 99712, "parse_encode_equal": true, "proof_bytes": 231470, "valid": true, "generic": null, "recipientsHash_flip_rejected": true, "ok": true}
+{"src": "ligero", "stmt": "txm2_0", "id": "pqzl", "stmt_bytes": 83072, "parse_encode_equal": true, "proof_bytes": 42947, "valid": true, "generic": true, "recipientsHash_flip_rejected": true, "ok": true}
+{"src": "ligero", "stmt": "txm2_0", "id": "pqzh", "stmt_bytes": 83072, "parse_encode_equal": true, "proof_bytes": 232590, "valid": true, "generic": null, "recipientsHash_flip_rejected": true, "ok": true}
+{"src": "ligero", "stmt": "txm2_0_fee0", "id": "pqzl", "stmt_bytes": 83072, "parse_encode_equal": true, "proof_bytes": 42963, "valid": true, "generic": true, "recipientsHash_flip_rejected": true, "ok": true}
+{"src": "ligero", "stmt": "txm2_0_fee0", "id": "pqzh", "stmt_bytes": 83072, "parse_encode_equal": true, "proof_bytes": 231886, "valid": true, "generic": null, "recipientsHash_flip_rejected": true, "ok": true}
+{"src": "ligero", "stmt": "txm2_0_two", "id": "pqzl", "stmt_bytes": 83072, "parse_encode_equal": true, "proof_bytes": 42920, "valid": true, "generic": true, "recipientsHash_flip_rejected": true, "ok": true}
+{"src": "ligero", "stmt": "txm2_0_two", "id": "pqzh", "stmt_bytes": 83072, "parse_encode_equal": true, "proof_bytes": 231000, "valid": true, "generic": null, "recipientsHash_flip_rejected": true, "ok": true}
+{"src": "ligero", "stmt": "txm2_fee0", "id": "pqzl", "stmt_bytes": 99712, "parse_encode_equal": true, "proof_bytes": 43592, "valid": true, "generic": true, "recipientsHash_flip_rejected": true, "ok": true}
+{"src": "ligero", "stmt": "txm2_fee0", "id": "pqzh", "stmt_bytes": 99712, "parse_encode_equal": true, "proof_bytes": 233006, "valid": true, "generic": null, "recipientsHash_flip_rejected": true, "ok": true}
+{"src": "ligero", "stmt": "txm2_two", "id": "pqzl", "stmt_bytes": 99712, "parse_encode_equal": true, "proof_bytes": 43633, "valid": true, "generic": true, "recipientsHash_flip_rejected": true, "ok": true}
+{"src": "ligero", "stmt": "txm2_two", "id": "pqzh", "stmt_bytes": 99712, "parse_encode_equal": true, "proof_bytes": 231384, "valid": true, "generic": null, "recipientsHash_flip_rejected": true, "ok": true}
+{"src": "ligero", "stmt": "txm4", "id": "pqzl", "stmt_bytes": 132992, "parse_encode_equal": true, "proof_bytes": 45263, "valid": true, "generic": true, "recipientsHash_flip_rejected": true, "ok": true}
+{"src": "ligero", "stmt": "txm4", "id": "pqzh", "stmt_bytes": 132992, "parse_encode_equal": true, "proof_bytes": 233092, "valid": true, "generic": null, "recipientsHash_flip_rejected": true, "ok": true}
+{"src": "ligero", "stmt": "txm4_0", "id": "pqzl", "stmt_bytes": 116096, "parse_encode_equal": true, "proof_bytes": 43922, "valid": true, "generic": true, "recipientsHash_flip_rejected": true, "ok": true}
+{"src": "ligero", "stmt": "txm4_0", "id": "pqzh", "stmt_bytes": 116096, "parse_encode_equal": true, "proof_bytes": 231032, "valid": true, "generic": null, "recipientsHash_flip_rejected": true, "ok": true}
+{"src": "ligero", "stmt": "txm4_0_fee0", "id": "pqzl", "stmt_bytes": 116096, "parse_encode_equal": true, "proof_bytes": 43930, "valid": true, "generic": true, "recipientsHash_flip_rejected": true, "ok": true}
+{"src": "ligero", "stmt": "txm4_0_fee0", "id": "pqzh", "stmt_bytes": 116096, "parse_encode_equal": true, "proof_bytes": 232110, "valid": true, "generic": null, "recipientsHash_flip_rejected": true, "ok": true}
+{"src": "ligero", "stmt": "txm4_0_two", "id": "pqzl", "stmt_bytes": 116096, "parse_encode_equal": true, "proof_bytes": 43929, "valid": true, "generic": true, "recipientsHash_flip_rejected": true, "ok": true}
+{"src": "ligero", "stmt": "txm4_0_two", "id": "pqzh", "stmt_bytes": 116096, "parse_encode_equal": true, "proof_bytes": 232878, "valid": true, "generic": null, "recipientsHash_flip_rejected": true, "ok": true}
+{"src": "ligero", "stmt": "txm4_fee0", "id": "pqzl", "stmt_bytes": 132992, "parse_encode_equal": true, "proof_bytes": 45255, "valid": true, "generic": true, "recipientsHash_flip_rejected": true, "ok": true}
+{"src": "ligero", "stmt": "txm4_fee0", "id": "pqzh", "stmt_bytes": 132992, "parse_encode_equal": true, "proof_bytes": 231592, "valid": true, "generic": null, "recipientsHash_flip_rejected": true, "ok": true}
+{"src": "ligero", "stmt": "txm4_two", "id": "pqzl", "stmt_bytes": 132992, "parse_encode_equal": true, "proof_bytes": 45270, "valid": true, "generic": true, "recipientsHash_flip_rejected": true, "ok": true}
+{"src": "ligero", "stmt": "txm4_two", "id": "pqzh", "stmt_bytes": 132992, "parse_encode_equal": true, "proof_bytes": 233220, "valid": true, "generic": null, "recipientsHash_flip_rejected": true, "ok": true}
+{"lh2": "ok", "cases": 50, "fails": 0}
+$ python3 -I ../pqzh/xcheck/kat_multi.py /home/ha/work/ainative/scaas/.claude/worktrees/s4/pqz-core/ffi/target/lh2/out
+txm1_0_stmt 66560 B wit 12384 B M=1 auditorOn=0 legs [123456] fee 0 balance 1000000 ok
+txm1_stmt 83072 B wit 12416 B M=1 auditorOn=1 legs [123456] fee 7 balance 1000000 ok
+txm2_0_stmt 83072 B wit 12432 B M=2 auditorOn=0 legs [0, 123456] fee 0 balance 1000000 ok
+txm2_stmt 99712 B wit 12496 B M=2 auditorOn=1 legs [0, 123456] fee 7 balance 1000000 ok
+txm4_0_stmt 116096 B wit 12528 B M=4 auditorOn=0 legs [0, 0, 0, 123456] fee 0 balance 1000000 ok
+txm4_stmt 132992 B wit 12656 B M=4 auditorOn=1 legs [0, 0, 0, 123456] fee 7 balance 1000000 ok
+kat_multi: 6 statements, ok
+lh2.sh s4a: ok

@@ -41,6 +41,10 @@ path = "src/bin/pqz-vectors.rs"
 required-features = ["prove"]
 
 [[example]]
+name = "lh2"
+required-features = ["prove"]
+
+[[example]]
 name = "ffi_bench"
 required-features = ["prove", "test-hooks"]
 
