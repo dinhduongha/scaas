@@ -704,6 +704,6 @@
   }
  },
  "changes": [
-  "s6-quick: + txm (op 7 R_TXM vector replay, run /home/ha/work/ainative/scaas/scratchpad/s6-out/quick); ffi.digest_lines 17 -> 29 (added PQZL TransferMulti1, PQZL TransferMulti2, PQZL TransferMulti4, PQZL TransferMulti1_0, PQZL TransferMulti2_0, PQZL TransferMulti4_0, PQZH TransferMulti1, PQZH TransferMulti2, PQZH TransferMulti4, PQZH TransferMulti1_0, PQZH TransferMulti2_0, PQZH TransferMulti4_0); every other value unchanged"
+  "s6-quick: + txm (op 7 R_TXM vector replay, Docker quick run on the new layout, artifact/runs/s6-docker-quick); ffi.digest_lines 17 -> 29 (added PQZL TransferMulti1, PQZL TransferMulti2, PQZL TransferMulti4, PQZL TransferMulti1_0, PQZL TransferMulti2_0, PQZL TransferMulti4_0, PQZH TransferMulti1, PQZH TransferMulti2, PQZH TransferMulti4, PQZH TransferMulti1_0, PQZH TransferMulti2_0, PQZH TransferMulti4_0); every other value unchanged"
  ]
 }
