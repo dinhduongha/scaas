@@ -69,3 +69,15 @@ pub extern "C" fn precompile_v(input: *const u8, n: u32) -> u32 {
         _ => 2,
     }
 }
+
+/// P6-ANON S3: wasm32 refuses to prove PQZL op 7 above `WASM_PQZL_MAX_LEGS` (one client arena): 1 if
+/// `prove` of a PQZL (M = 8, auditor on) statement gives `Statement(Legs)` before any core work, 0 otherwise.
+#[no_mangle]
+pub extern "C" fn m8_refused() -> u32 {
+    use pqz_ffi::stmt::{multi_len, Multi, Reject};
+    let mut st = vec![0u8; multi_len(8, true)];
+    for (i, w) in Multi::header(&PQZL_ID, 8, true).iter().enumerate() {
+        st[32 * i..32 * i + 32].copy_from_slice(w);
+    }
+    (pqz_ffi::prove(7, &st, &[], &[0; 32]) == Err(pqz_ffi::ProveError::Statement(Reject::Legs))) as u32
+}

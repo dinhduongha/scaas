@@ -8,9 +8,10 @@
 //! size); the arena is never re-allocated on the verify path.
 //!
 //! Arenas (allocated once, kept for the process): `ARENA_SMALL` for the precompile path (the specialised verifier of
-//! all six forms, keygen / enc / dec, the self-test), measured; `ARENA_BIG` for the prover and the generic verifier. A
-//! call that needs `ARENA_BIG` re-initialises the core once on it (the core's caches are rebuilt lazily); the core
-//! then stays there.
+//! all six forms and every built op 7 shape, keygen / enc / dec, the self-test), measured; `ARENA_BIG` for the prover
+//! and the generic verifier. A call that needs `ARENA_BIG` re-initialises the core once on it (the core's caches are
+//! rebuilt lazily); the core then stays there. wasm32 (clients) has one arena for both, so linear memory never holds
+//! two, and proves PQZL op 7 only up to `WASM_PQZL_MAX_LEGS` legs.
 //!
 //! Node faults (controller 2026-10-14): a core or worker that cannot be set up (arena allocation, `pqz_init`, thread
 //! creation), a worker job that panicked, and the core running out of arena (`pqz_err == PQZ_ERR_ARENA` after a call)
@@ -35,12 +36,19 @@ pub static TEST_FAIL_WORKER: AtomicBool = AtomicBool::new(false);
 #[cfg(feature = "test-hooks")]
 pub static TEST_ARENA_FILL: AtomicU32 = AtomicU32::new(0);
 
-/// Verify-only arena: ≥ 1.5 × the measured peak of the precompile path over the whole adversarial corpus with every
-/// form's relation keys and SV tables kept, as in a long-running node (`tests/verify_only.rs`, run `ffi1f`:
-/// 95,169,680 B; honest inputs and the self-test alone 94,615,600 B) = 136.1 MiB, rounded up to 144 MiB (1.59 ×).
-pub const ARENA_SMALL: usize = 144 << 20;
-/// Prover and generic-verifier arena (plan D10: ≥ 320 MiB; R_TX prove peak 304 MB alone, STATUS.md).
-pub const ARENA_BIG: usize = 448 << 20;
+/// Verify-only arena: owner 2026-10-16 (decisions.md CTR-PQZ-10, P6-ANON L-3), 512 MiB once op 7 is in (S3); before
+/// it 144 MiB for the six forms (run `ffi1f2`: adversarial peak 95,169,680 B). `tests/verify_only.rs` measures the
+/// peak over the whole adversarial corpus with every form's and every op 7 shape's keys and SV tables kept, as in a
+/// long-running node, and asserts a margin ≥ 1.5 × (STATUS.md, run `s3a`).
+pub const ARENA_SMALL: usize = 512 << 20;
+/// Prover and generic-verifier arena: native 1 GiB (controller proposal 2026-10-16, owner may override; was 448 MiB:
+/// `R_TXM8` prove peaks at 836 MB with every relation's keys loaded, `rel3/runs/l3a-summary.txt`); wasm32 = `ARENA_SMALL`
+/// (one arena, `WASM_PQZL_MAX_LEGS`).
+pub const ARENA_BIG: usize = if cfg!(target_arch = "wasm32") { ARENA_SMALL } else { 1 << 30 };
+/// The largest PQZL op 7 M that `crate::prove` proves on wasm32 (controller proposal 2026-10-16, owner may override:
+/// `R_TXM4_0` with every relation loaded peaks at 432.7 MB in wasm32, M = 8 at 669 MB, `l3a-summary.txt`); M = 8 is
+/// for native clients. Verify has no such limit.
+pub const WASM_PQZL_MAX_LEGS: usize = 4;
 /// The worker thread's stack (pqz_bench runs the core on an 8 MiB main thread, the wasm builds on an 8 MiB stack).
 pub const STACK: usize = 16 << 20;
 
@@ -79,6 +87,7 @@ extern "C" {
         vs: *mut [u8; 128],
     ) -> i32;
     fn pqz_dec(s: *const i8, ct: *const u8, m: *mut i64, noise: *mut i64) -> i32;
+    fn pqz_enc_group_seed(seed_enc: *const u8, g: u32, out: *mut u8);
     #[cfg(feature = "fuzz")]
     fn pqz_test_mutate(op: u8, proof: *const u8, len: usize, kind: u32, r1: u64, r2: u64, out: *mut u8, outlen: *mut usize) -> i32;
     #[cfg(feature = "prove")]
@@ -336,6 +345,74 @@ pub fn enc(pks: &[&[u8; PK_BYTES]], msgs: &[[u8; 16]], seed_enc: &[u8; 32]) -> O
     })
     .ok()?;
     (rc == 0).then_some(c)
+}
+
+/// `seed_enc_g` of `R_TXM` group `g` (P6-ANON D13, `pqz_enc_group_seed`): `seed_enc` for g = 0, else
+/// `SHAKE256("SCAAS-PQZ-ENC-GROUP-V1" ‖ seed_enc ‖ be4(g))[0..32)`. Pure hashing (no core state, no lock).
+pub fn enc_group_seed(seed_enc: &[u8; 32], g: usize) -> [u8; 32] {
+    let mut out = [0u8; 32];
+    // SAFETY: fixed-size buffers; the function reads 32 bytes and writes 32 bytes, touches no global state
+    unsafe { pqz_enc_group_seed(seed_enc.as_ptr(), g as u32, out.as_mut_ptr()) };
+    out
+}
+
+/// One `R_TXM` encryption (P6-ANON §4, D13): per group `g < ⌈M/4⌉` one `enc` from `enc_group_seed(seed_enc, g)` to the
+/// group's legs, then (group 0) `pk_f`, then (auditor on) the group's auditor copies; the result re-sorted into the
+/// statement's and the witness's leg order.
+pub struct EncMulti {
+    /// `(u_g, r_g, e1_g)` per group (the `Enc` of group g; its `vs` / `e2` are also in `v`, `e2`, … below)
+    pub groups: Vec<Enc>,
+    /// `v_j`, `e2_j` per leg
+    pub v: Vec<[u8; 128]>,
+    pub e2: Vec<[i16; 16]>,
+    pub v_f: [u8; 128],
+    pub e2_f: [i16; 16],
+    /// auditor copies `v_{a,j}`, `e2_{a,j}` per leg (empty with the auditor off)
+    pub v_a: Vec<[u8; 128]>,
+    pub e2_a: Vec<[i16; 16]>,
+}
+
+/// `legs` = `(pk_j, digits of a_j)` in leg order, `d_f` = the new balance's digits.
+pub fn enc_multi(
+    pk_f: &[u8; PK_BYTES],
+    d_f: [u8; 16],
+    legs: &[(&[u8; PK_BYTES], [u8; 16])],
+    pk_a: Option<&[u8; PK_BYTES]>,
+    seed_enc: &[u8; 32],
+) -> Option<EncMulti> {
+    let m = legs.len();
+    let mut out = EncMulti {
+        groups: Vec::new(),
+        v: Vec::with_capacity(m),
+        e2: Vec::with_capacity(m),
+        v_f: [0; 128],
+        e2_f: [0; 16],
+        v_a: Vec::new(),
+        e2_a: Vec::new(),
+    };
+    for (g, grp) in legs.chunks(pqz_stmt::LEGS_PER_GROUP).enumerate() {
+        let n = grp.len();
+        let (mut pks, mut msgs): (Vec<&[u8; PK_BYTES]>, Vec<[u8; 16]>) = grp.iter().copied().unzip();
+        if g == 0 {
+            pks.push(pk_f);
+            msgs.push(d_f);
+        }
+        if let Some(a) = pk_a {
+            pks.extend(std::iter::repeat_n(a, n));
+            msgs.extend(grp.iter().map(|l| l.1));
+        }
+        let c = enc(&pks, &msgs, &enc_group_seed(seed_enc, g))?;
+        out.v.extend_from_slice(&c.vs[..n]);
+        out.e2.extend_from_slice(&c.e2[..n]);
+        let a0 = n + (g == 0) as usize;
+        if g == 0 {
+            (out.v_f, out.e2_f) = (c.vs[n], c.e2[n]);
+        }
+        out.v_a.extend_from_slice(&c.vs[a0..]);
+        out.e2_a.extend_from_slice(&c.e2[a0..]);
+        out.groups.push(c);
+    }
+    (m > 0).then_some(out)
 }
 
 /// Dec of `ct = u ‖ v` (16,512 B) with `s`: the 16 digits `M` and their noise (§4.2, `pqz_dec`).

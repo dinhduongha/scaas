@@ -16,13 +16,17 @@ crate-type = ["rlib", "cdylib", "staticlib"]
 pqz-stmt = { path = "../stmt" }
 pqzh-ligero = { path = "../pqzh/ligero", default-features = false }
 sha3 = "=0.10.8"
+# feature `prove` only: the op 7 sender memo (P6-ANON §5.4, CTR-PQZ-23 / CTR-ZTH-50: HKDF-SHA256)
+hkdf = { version = "=0.12.4", optional = true }
+sha2 = { version = "=0.10.9", optional = true }
 
 [build-dependencies]
 cc = "1"
 
 [features]
-# prover side for clients (P6h): keygen, enc, dec, prove (PQZL and PQZH), witness layouts, test fixtures
-prove = []
+# prover side for clients (P6h): keygen, enc, dec, prove (PQZL and PQZH), witness layouts, test fixtures, the op 7
+# memo
+prove = ["dep:hkdf", "dep:sha2"]
 # fault-injection and measurement hooks (pqzl::TEST_*, reinit, arena_bytes): tests and the bench only, never in a
 # production build
 test-hooks = []

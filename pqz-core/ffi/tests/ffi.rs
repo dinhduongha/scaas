@@ -21,12 +21,65 @@ fn honest() -> &'static [Honest] {
 fn round_trip_every_form() {
     for h in honest() {
         let r = precompile(&h.input());
-        eprintln!("{} {:?}: proof {} B, {:?}", if h.pqzl() { "PQZL" } else { "PQZH" }, h.form, h.proof.len(), r);
-        assert_eq!(r, Ok(VALID), "{:?}", h.form);
+        eprintln!("{} {}: proof {} B, input {} B, {:?}", if h.pqzl() { "PQZL" } else { "PQZH" }, h.name(), h.proof.len(), h.input().len(), r);
+        assert_eq!(r, Ok(VALID), "{}", h.name());
         assert_eq!(precompile(&h.input()), Ok(VALID), "same input twice");
     }
-    assert_eq!(honest().iter().filter(|h| h.pqzl()).count(), 8);
-    assert_eq!(honest().iter().filter(|h| !h.pqzl()).count(), 8);
+    // 8 forms each; op 7: PQZL M in {1, 2, 4, 8}, PQZH {1, 2, 4}, auditor on and off (P6-ANON D3 / D20)
+    assert_eq!(honest().iter().filter(|h| h.pqzl()).count(), 8 + 8);
+    assert_eq!(honest().iter().filter(|h| !h.pqzl()).count(), 8 + 6);
+}
+
+/// Op 7 (P6-ANON S3, D3): every built shape's input within `MAX_INPUT` with the id's worst-case proof (PQZL
+/// `MAX_PROOF`, PQZH Ligero's exact bound for the shape); the PQZH (4, on) boundary (`MAX_INPUT` exactly ⇒ decoded and
+/// rejected, one byte more ⇒ revert); the oversize shapes refused by the decoder; `recipientsHash` and the memo.
+#[test]
+fn multi_limits_and_memo() {
+    let mut largest = 0;
+    for h in honest().iter().filter(|h| h.multi.is_some()) {
+        let (m, aud) = h.multi.unwrap();
+        let bound = if h.pqzl() { stmt::MAX_PROOF_PQZL } else { pqzh::PARAMS.max_proof_len(pqzh_ligero::Rel::Multi { m, aud }) };
+        let worst = 5 + h.stmt.len() + bound;
+        eprintln!(
+            "op 7 {} {}: statement {} B, proof {} B (bound {bound}), input {} B, worst-case input {worst} B (MAX_INPUT {MAX_INPUT})",
+            if h.pqzl() { "PQZL" } else { "PQZH" },
+            h.name(),
+            h.stmt.len(),
+            h.proof.len(),
+            h.input().len()
+        );
+        assert!(h.proof.len() <= bound && worst <= MAX_INPUT, "{}", h.name());
+        largest = largest.max(worst);
+    }
+    eprintln!("op 7 largest worst-case input {largest} B of MAX_INPUT {MAX_INPUT}");
+    // PQZH (4, on): 5 + 132,992 + 260,219 = MAX_INPUT
+    let h = honest().iter().find(|h| !h.pqzl() && h.multi == Some((4, true))).unwrap();
+    let pad = |n: usize| stmt::input(7, &h.stmt, &[&h.proof[..], &vec![0; n - h.proof.len()]].concat());
+    assert_eq!(pad(260_219).len(), MAX_INPUT);
+    assert_eq!(precompile(&pad(260_219)), Ok(INVALID));
+    assert_eq!(precompile(&pad(260_220)), Err(Error::Revert));
+    // oversize shapes (bench builds only) never decode here: PQZL M = 16, PQZH M = 8
+    for (id, m) in [(PQZL_ID, 16), (PQZH_ID, 8)] {
+        let mut st = vec![0u8; stmt::multi_len(m, true)];
+        for (i, w) in stmt::Multi::header(&id, m, true).iter().enumerate() {
+            st[32 * i..32 * i + 32].copy_from_slice(w);
+        }
+        assert_eq!(decode(&stmt::input(7, &st, &[1])).err(), Some(Reject::Legs), "M = {m}");
+    }
+    // recipientsHash and the memo of the fixture
+    for (m, aud) in [(1, false), (8, true)] {
+        let c = fixture::multi_case(&PQZL_ID, m, aud).unwrap();
+        let s = stmt::parse_multi(&c.stmt).unwrap();
+        let uas: Vec<Word> = (0..m).map(fixture::leg_ua).collect();
+        assert_eq!(s.header[stmt::H_RECIPIENTS_HASH], fixture::recipients_hash(&uas));
+        assert_eq!(s.header[stmt::H_MEMO_HASH], selftest::keccak(&[&c.memo]));
+        assert_eq!(c.memo.len(), memo::memo_len(m));
+        let (a, legs) = memo::open(&fixture::MEMO_KEY_SEED, &s.header, &c.memo).unwrap();
+        let want: Vec<(u64, Word)> = (0..m).map(|j| (if j == m - 1 { fixture::VALUE } else { 0 }, uas[j])).collect();
+        assert_eq!((a, legs), (aud, want));
+        assert_ne!(memo::open(&[0x4e; 32], &s.header, &c.memo).map(|x| x.1), Some((0..m).map(|j| (0, uas[j])).collect()));
+        assert_eq!(memo::open(&fixture::MEMO_KEY_SEED, &s.header, &c.memo[..c.memo.len() - 1]), None);
+    }
 }
 
 #[test]
@@ -35,9 +88,9 @@ fn every_rejection() {
     for h in honest() {
         for (name, input, why) in negatives(h) {
             if let Some(r) = why {
-                assert_eq!(decode(&input).err(), Some(r), "{:?} {name}", h.form);
+                assert_eq!(decode(&input).err(), Some(r), "{} {name}", h.name());
             }
-            assert_eq!(precompile(&input), Ok(INVALID), "{:?} {name}", h.form);
+            assert_eq!(precompile(&input), Ok(INVALID), "{} {name}", h.name());
             n += 1;
         }
     }
@@ -51,7 +104,7 @@ fn every_rejection() {
     eprintln!("rejection cases: {}", n + 2);
 }
 
-/// Specialised vs generic PQZL verifier through the FFI on honest and mutated proofs of all six forms (plan R5): they
+/// Specialised vs generic PQZL verifier through the FFI on honest and mutated proofs of all six forms and every built op 7 shape (plan R5): they
 /// must agree on every input.
 #[test]
 fn pqzl_differential() {
@@ -80,13 +133,13 @@ fn pqzl_differential() {
         for p in proofs {
             let fast = verify_input(&stmt::input(op, &h.stmt, &p)).unwrap();
             let generic = pqzl::verify_generic(op, &h.stmt, &p).unwrap();
-            assert_eq!(fast, generic, "{:?}", h.form);
+            assert_eq!(fast, generic, "{}", h.name());
             cases += 1;
             accepted += fast as usize;
         }
     }
     eprintln!("differential: {cases} cases, {accepted} accepted, 0 disagreements");
-    assert_eq!(accepted, 8);
+    assert_eq!(accepted, 16);
 }
 
 #[test]
@@ -159,7 +212,8 @@ fn one_mib_stack() {
 #[test]
 fn digest_lines() {
     let s = fixture::digest_lines(&PQZL_ID) + &fixture::digest_lines(&PQZH_ID) + &fixture::selftest_line();
-    assert_eq!(s.matches("\"valid\": true").count(), 16, "{s}");
+    // 8 forms + the op 7 shapes with M <= 4 (what wasm32 proves), each id
+    assert_eq!(s.matches("\"valid\": true").count(), 2 * (8 + 6), "{s}");
     if let Ok(p) = std::env::var("PQZ_FFI_DIGESTS") {
         std::fs::write(p, s).unwrap();
     }
