@@ -1,3 +1,17 @@
+## Session 2026-10-16 (second, shutdown afternoon) — resume here
+
+**State:** main `b9327b6`+ pushed. Merged + pushed this session: `p6-anon-s9` (S9 node limits, all unchanged; `pqz-core/params/anon/s9_limits.py`), `p6-anon-s3` (op 7 in pqz-stmt / pqz-ffi; arenas 512 MiB / 1 GiB; D3 PQZL {1,2,4,8} PQZH {1,2,4}), `p6g` (PQZ contracts, deployed on 7622, e2e real PQZL proofs 89 checks 0 failures; addresses + gas in `smartcontracts/evm/runs/2026-10-16-p6g-7622*.txt`, pq-zether.md §9.3), `p6-anon-s4` (op 7 vectors; frozen diff = only the two `negative.json` reasons `Op` → `OpTag`). Controller checks before merge: size gate 0 errors (90 contracts), docs_check 0 errors, Ligero crate tests 38/38, `pqz_prove` example builds on merged pqz-ffi, `pqz_kat.py --check` ok.
+
+**Owner ruling 2026-10-16:** PQZL M = 8 on a BUNDLE token — NO automatic COMPACT; the user chooses the storage mode per transfer, the contract never switches (decisions.md CTR-PQZ-23 Change, plan S9 proposal 3). S9 proposal 2 (PQZH ≤ 10 inline credits) still a controller proposal.
+
+**Measured gas (7622, P6g):** `pqzTransfer` BUNDLE auditor on 10.72 M (spec's old ≈ 2.8 M was low: precompile 5.41 M + SSTORE2 bundle + ≈ 80 KB calldata); v3 envelope 11.41 M; unshield ≈ 5.55 M. S3's plan gas rows (2.9–4.6 M) use the old 0.12 M gas/ms; S9 re-based at live 0.359 M/ms (PQZL op 7 5.41–7.80 M est.) — S7 fixes the plan tables, S8 calibrates.
+
+**In flight at shutdown:** branch `fix-ligero-oog` (worktree `.claude/worktrees/oog`) — agent fixing the 6 pre-existing forge `test/pqzh/ligero` `test_mutations_*` `MemoryOOG` failures (confirmed on main; stop at ≈ 2^30 gas). If it did not report: check the branch for commits, re-dispatch from scratch (root cause first; don't weaken the checks; worktree needs a `smartcontracts/evm/lib` symlink to main's, not committed).
+
+**Next (owner: S5 / S6 not started because of shutdown):** S5 fuzz (op 7 seeds from S4 rows; 3 × 2 h capped) → S6 artifact (Docker, run alone, `--memory`) → S8 (op 7 into Nethermind.Pqz image, calibrate `G_7`, activate on 7622) → S7 (CTR-PQZ-25/-26, S9 proposals 1/2/4, gas tables) → op 7 entry points in P6g tokens; PQZH token on chain (no PQZH gas yet). Open from P6g: `UnderlyingPqzToken` 62,572 B (2.9 KB under 64 KiB), no pinned storage layouts for PQZ tokens, 7622 gen-1 registry has no classical kinds. Open from S4: op 7 disclosure-bundle / per-leg opening vectors (needs a pqz-stmt codec).
+
+**After power-on:** `cd /home/dockers/mba-chain-nethermind && docker compose up -d blockchain-node`; `python3 -I pqz-core/nethermind/chain/e2e.py head --rpc http://127.0.0.1:8545`. Stale worktrees from this session (s3, s9, s4, p6g) can be removed (`git worktree remove`), branches kept.
+
 ## Session 2026-10-16 (shutdown ~06:30 +07) — resume here
 
 **State:** main `dee0a21`+ pushed, clean. Merged / done this session (all pushed):
