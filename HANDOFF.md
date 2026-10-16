@@ -1,3 +1,13 @@
+## Session 2026-10-16 (evening) — resume here
+
+**State:** main `86a688e` (local, not pushed). 7622 node started after power-on (head advancing, `PQZ-START` selftest `ed910a2c…d205`). Stale worktrees s3 / s4 / s9 / p6g / oog removed (branches kept).
+
+**Running:** S5 fuzz on `p6-anon-s5` (worktree `.claude/worktrees/s5`): step 1 committed `b556499` (targets cover op 7; stray `fuzz/crash-b9881dfc…` = valid input, moved to `regress/valid/`); then smoke runs, 3 × 2 h campaigns one after another (precompile → mutate → codec), expected done ≈ 02:00 on 2026-10-17. Owner: wait (no shortened / parallel campaigns; RAM ≈ 7 GB free).
+
+**Owner rulings today (TODO.md l.32):** layout move after S5 merges, before S6's Docker run; S6 postponed entirely until after the layout move (written against the new layout). S6 WIP `fdfc3ce` on `p6-anon-s6` (worktree `.claude/worktrees/s6`): `--multi-bench`, op 7 checks, `freeze-txm` in results.py; remains: port paths (`rel3/txm-bench.sh`, `pqzh/ligero`), README, phase 2 Docker (quick 35–45 min + multi-bench ≈ 1 h, `--memory=4g`; M = 16 3 GiB arena untested in Docker). Finding: the artifact quick run on main fails today (wasm32 M = 8 verify-only rows — fixed in WIP; pqz-ffi digest lines 29 vs frozen 17 — needs the one-time regeneration).
+
+**Next:** S5 report → review → merge + push → layout move + spec rename (re-check the 2026-10-15 layout plan against today's tree: `nethermind/`, `params/anon/`, fuzz `regress/`) → S6 from `fdfc3ce` → S8 → S7 → gates A / B.
+
 ## Session 2026-10-16 (second, shutdown afternoon) — resume here
 
 **State:** main `b9327b6`+ pushed. Merged + pushed this session: `p6-anon-s9` (S9 node limits, all unchanged; `pqz-core/params/anon/s9_limits.py`), `p6-anon-s3` (op 7 in pqz-stmt / pqz-ffi; arenas 512 MiB / 1 GiB; D3 PQZL {1,2,4,8} PQZH {1,2,4}), `p6g` (PQZ contracts, deployed on 7622, e2e real PQZL proofs 89 checks 0 failures; addresses + gas in `smartcontracts/evm/runs/2026-10-16-p6g-7622*.txt`, pq-zether.md §9.3), `p6-anon-s4` (op 7 vectors; frozen diff = only the two `negative.json` reasons `Op` → `OpTag`). Controller checks before merge: size gate 0 errors (90 contracts), docs_check 0 errors, Ligero crate tests 38/38, `pqz_prove` example builds on merged pqz-ffi, `pqz_kat.py --check` ok.
