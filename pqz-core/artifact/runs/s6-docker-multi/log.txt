@@ -1,0 +1,6 @@
+== 23:05:23 PQZL R_TXM: research/pqzl-measure/txm-bench.sh (M = 1, 2, 4, 8, 16 on / off: 10 proves, 30 verifies, SV 200, wasm 3 / 3)
+== 23:43:24 PQZH R_TXM: native ligero_bench --rel txm (built M = 1, 2, 4): 10 proofs, 1,000 verifies, 12 x 80 mutations
+== 23:45:14 PQZH R_TXM oversize (M = 8, 16; feature oversize): 3 proofs, 100 verifies, 12 x 10 mutations
+== 23:46:06 PQZH R_TXM wasm32: 2 proofs, 1,000 verifies (oversize build: 100), 12 x 4 mutations
+== 23:49:40 op 7 table
+== 23:49:41 done: /out/multi

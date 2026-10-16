@@ -1,0 +1,486 @@
+{
+ "pqzl": {
+  "1,on": {
+   "m": 1,
+   "aud": true,
+   "proof_bytes_max_native": 42784,
+   "prove_p50_ms_native": 914.032,
+   "verify_p50_ms_native": 582.6,
+   "verify_p99_ms_native": 596.201,
+   "sv_p99_ms_native": 7.832,
+   "sv_p99_ms_x86v3": 4.807,
+   "sv_p99_ms_wasm": 13.197,
+   "proof_bytes_max_wasm": 42775,
+   "prove_p50_ms_wasm": 1296.123,
+   "verify_p50_ms_wasm": 760.91,
+   "verify_p99_ms_wasm": 760.91,
+   "wasm_prove_peak_bytes": 231858048
+  },
+  "2,on": {
+   "m": 2,
+   "aud": true,
+   "proof_bytes_max_native": 43616,
+   "prove_p50_ms_native": 978.423,
+   "verify_p50_ms_native": 673.997,
+   "verify_p99_ms_native": 935.814,
+   "sv_p99_ms_native": 8.574,
+   "sv_p99_ms_x86v3": 4.953,
+   "sv_p99_ms_wasm": 14.159,
+   "proof_bytes_max_wasm": 43591,
+   "prove_p50_ms_wasm": 1370.781,
+   "verify_p50_ms_wasm": 852.521,
+   "verify_p99_ms_wasm": 852.521,
+   "wasm_prove_peak_bytes": 243572800
+  },
+  "4,on": {
+   "m": 4,
+   "aud": true,
+   "proof_bytes_max_native": 45295,
+   "prove_p50_ms_native": 1353.893,
+   "verify_p50_ms_native": 865.196,
+   "verify_p99_ms_native": 879.939,
+   "sv_p99_ms_native": 9.094,
+   "sv_p99_ms_x86v3": 5.329,
+   "sv_p99_ms_wasm": 15.02,
+   "proof_bytes_max_wasm": 45295,
+   "prove_p50_ms_wasm": 1826.982,
+   "verify_p50_ms_wasm": 1047.834,
+   "verify_p99_ms_wasm": 1047.834,
+   "wasm_prove_peak_bytes": 268012304
+  },
+  "8,on": {
+   "m": 8,
+   "aud": true,
+   "proof_bytes_max_native": 61822,
+   "prove_p50_ms_native": 2398.432,
+   "verify_p50_ms_native": 2007.316,
+   "verify_p99_ms_native": 2137.831,
+   "sv_p99_ms_native": 13.569,
+   "sv_p99_ms_x86v3": 8.256,
+   "sv_p99_ms_wasm": 23.124,
+   "proof_bytes_max_wasm": 61820,
+   "prove_p50_ms_wasm": 2931.426,
+   "verify_p50_ms_wasm": 2245.681,
+   "verify_p99_ms_wasm": 2248.252,
+   "wasm_prove_peak_bytes": 519384160
+  },
+  "1,off": {
+   "m": 1,
+   "aud": false,
+   "proof_bytes_max_native": 42442,
+   "prove_p50_ms_native": 784.163,
+   "verify_p50_ms_native": 542.005,
+   "verify_p99_ms_native": 550.473,
+   "sv_p99_ms_native": 7.94,
+   "sv_p99_ms_x86v3": 4.708,
+   "sv_p99_ms_wasm": 12.895,
+   "proof_bytes_max_wasm": 42442,
+   "prove_p50_ms_wasm": 1111.994,
+   "verify_p50_ms_wasm": 708.46,
+   "verify_p99_ms_wasm": 708.46,
+   "wasm_prove_peak_bytes": 227275456
+  },
+  "2,off": {
+   "m": 2,
+   "aud": false,
+   "proof_bytes_max_native": 42936,
+   "prove_p50_ms_native": 1002.903,
+   "verify_p50_ms_native": 590.669,
+   "verify_p99_ms_native": 597.229,
+   "sv_p99_ms_native": 8.358,
+   "sv_p99_ms_x86v3": 4.812,
+   "sv_p99_ms_wasm": 13.189,
+   "proof_bytes_max_wasm": 42936,
+   "prove_p50_ms_wasm": 1649.954,
+   "verify_p50_ms_wasm": 767.905,
+   "verify_p99_ms_wasm": 800.596,
+   "wasm_prove_peak_bytes": 234280768
+  },
+  "4,off": {
+   "m": 4,
+   "aud": false,
+   "proof_bytes_max_native": 43956,
+   "prove_p50_ms_native": 1110.359,
+   "verify_p50_ms_native": 691.171,
+   "verify_p99_ms_native": 720.024,
+   "sv_p99_ms_native": 8.682,
+   "sv_p99_ms_x86v3": 4.913,
+   "sv_p99_ms_wasm": 13.798,
+   "proof_bytes_max_wasm": 43947,
+   "prove_p50_ms_wasm": 2605.062,
+   "verify_p50_ms_wasm": 877.524,
+   "verify_p99_ms_wasm": 877.524,
+   "wasm_prove_peak_bytes": 248768592
+  },
+  "8,off": {
+   "m": 8,
+   "aud": false,
+   "proof_bytes_max_native": 59048,
+   "prove_p50_ms_native": 1775.5,
+   "verify_p50_ms_native": 1444.171,
+   "verify_p99_ms_native": 1546.285,
+   "sv_p99_ms_native": 12.897,
+   "sv_p99_ms_x86v3": 7.208,
+   "sv_p99_ms_wasm": 21.919,
+   "proof_bytes_max_wasm": 59026,
+   "prove_p50_ms_wasm": 2370.046,
+   "verify_p50_ms_wasm": 1710.858,
+   "verify_p99_ms_wasm": 1710.858,
+   "wasm_prove_peak_bytes": 468698768
+  },
+  "16,on": {
+   "m": 16,
+   "aud": true,
+   "proof_bytes_max_native": 92367,
+   "prove_p50_ms_native": 7466.194,
+   "verify_p50_ms_native": 6229.968,
+   "verify_p99_ms_native": 6425.125,
+   "sv_p99_ms_native": 21.861,
+   "sv_p99_ms_x86v3": 12.605,
+   "sv_p99_ms_wasm": 35.674,
+   "proof_bytes_max_wasm": 92352,
+   "prove_p50_ms_wasm": 8335.862,
+   "verify_p50_ms_wasm": 6030.085,
+   "verify_p99_ms_wasm": 6030.085,
+   "wasm_prove_peak_bytes": 1257385152
+  },
+  "16,off": {
+   "m": 16,
+   "aud": false,
+   "proof_bytes_max_native": 86581,
+   "prove_p50_ms_native": 5167.282,
+   "verify_p50_ms_native": 4301.657,
+   "verify_p99_ms_native": 4498.068,
+   "sv_p99_ms_native": 20.288,
+   "sv_p99_ms_x86v3": 11.059,
+   "sv_p99_ms_wasm": 32.568,
+   "proof_bytes_max_wasm": 86556,
+   "prove_p50_ms_wasm": 5504.158,
+   "verify_p50_ms_wasm": 4265.787,
+   "verify_p99_ms_wasm": 4277.868,
+   "wasm_prove_peak_bytes": 1102178112
+  }
+ },
+ "pqzh": {
+  "1,on": {
+   "m": 1,
+   "aud": true,
+   "src_native": "native",
+   "max_len_exact": 235470,
+   "proof_bytes_max": 233102,
+   "prove_p50_ms_native": 631.312,
+   "prove_memory_mib_native": 43.2,
+   "verify_p50_ms_native": 9.601,
+   "verify_p99_ms_native": 9.859,
+   "src_wasm": "wasm",
+   "prove_p50_ms_wasm": 1340.089,
+   "prove_memory_mib_wasm": 46.3125,
+   "verify_p50_ms_wasm": 17.037,
+   "verify_p99_ms_wasm": 18.539
+  },
+  "2,on": {
+   "m": 2,
+   "aud": true,
+   "src_native": "native",
+   "max_len_exact": 235470,
+   "proof_bytes_max": 232526,
+   "prove_p50_ms_native": 634.659,
+   "prove_memory_mib_native": 43.2,
+   "verify_p50_ms_native": 9.83,
+   "verify_p99_ms_native": 10.122,
+   "src_wasm": "wasm",
+   "prove_p50_ms_wasm": 1345.635,
+   "prove_memory_mib_wasm": 46.9375,
+   "verify_p50_ms_wasm": 17.464,
+   "verify_p99_ms_wasm": 19.013
+  },
+  "4,on": {
+   "m": 4,
+   "aud": true,
+   "src_native": "native",
+   "max_len_exact": 236196,
+   "proof_bytes_max": 233604,
+   "prove_p50_ms_native": 625.663,
+   "prove_memory_mib_native": 43.6,
+   "verify_p50_ms_native": 10.645,
+   "verify_p99_ms_native": 10.903,
+   "src_wasm": "wasm",
+   "prove_p50_ms_wasm": 1296.783,
+   "prove_memory_mib_wasm": 47.8125,
+   "verify_p50_ms_wasm": 18.639,
+   "verify_p99_ms_wasm": 20.359
+  },
+  "1,off": {
+   "m": 1,
+   "aud": false,
+   "src_native": "native",
+   "max_len_exact": 234744,
+   "proof_bytes_max": 232440,
+   "prove_p50_ms_native": 618.037,
+   "prove_memory_mib_native": 42.9,
+   "verify_p50_ms_native": 9.299,
+   "verify_p99_ms_native": 9.831,
+   "src_wasm": "wasm",
+   "prove_p50_ms_wasm": 1271.911,
+   "prove_memory_mib_wasm": 47.8125,
+   "verify_p50_ms_wasm": 16.317,
+   "verify_p99_ms_wasm": 17.673
+  },
+  "2,off": {
+   "m": 2,
+   "aud": false,
+   "src_native": "native",
+   "max_len_exact": 235470,
+   "proof_bytes_max": 232590,
+   "prove_p50_ms_native": 627.197,
+   "prove_memory_mib_native": 43.2,
+   "verify_p50_ms_native": 9.631,
+   "verify_p99_ms_native": 10.05,
+   "src_wasm": "wasm",
+   "prove_p50_ms_wasm": 1305.256,
+   "prove_memory_mib_wasm": 48.4375,
+   "verify_p50_ms_wasm": 17.02,
+   "verify_p99_ms_wasm": 18.654
+  },
+  "4,off": {
+   "m": 4,
+   "aud": false,
+   "src_native": "native",
+   "max_len_exact": 235470,
+   "proof_bytes_max": 232654,
+   "prove_p50_ms_native": 652.191,
+   "prove_memory_mib_native": 43.2,
+   "verify_p50_ms_native": 9.961,
+   "verify_p99_ms_native": 10.718,
+   "src_wasm": "wasm",
+   "prove_p50_ms_wasm": 1280.979,
+   "prove_memory_mib_wasm": 48.75,
+   "verify_p50_ms_wasm": 17.448,
+   "verify_p99_ms_wasm": 18.604
+  },
+  "8,on": {
+   "m": 8,
+   "aud": true,
+   "src_native": "oversize",
+   "max_len_exact": 281208,
+   "proof_bytes_max": 278456,
+   "prove_p50_ms_native": 902.275,
+   "prove_memory_mib_native": 61.4,
+   "verify_p50_ms_native": 13.727,
+   "verify_p99_ms_native": 13.962,
+   "src_wasm": "oversize-wasm",
+   "prove_p50_ms_wasm": 1882.128,
+   "prove_memory_mib_wasm": 67.625,
+   "verify_p50_ms_wasm": 24.899,
+   "verify_p99_ms_wasm": 25.352
+  },
+  "16,on": {
+   "m": 16,
+   "aud": true,
+   "src_native": "oversize",
+   "max_len_exact": 372684,
+   "proof_bytes_max": 369420,
+   "prove_p50_ms_native": 1393.73,
+   "prove_memory_mib_native": 96.6,
+   "verify_p50_ms_native": 19.992,
+   "verify_p99_ms_native": 20.186,
+   "src_wasm": "oversize-wasm",
+   "prove_p50_ms_wasm": 2942.779,
+   "prove_memory_mib_wasm": 104,
+   "verify_p50_ms_wasm": 37.576,
+   "verify_p99_ms_wasm": 38.033
+  },
+  "8,off": {
+   "m": 8,
+   "aud": false,
+   "src_native": "oversize",
+   "max_len_exact": 279756,
+   "proof_bytes_max": 276780,
+   "prove_p50_ms_native": 876.605,
+   "prove_memory_mib_native": 60.6,
+   "verify_p50_ms_native": 12.345,
+   "verify_p99_ms_native": 13.304,
+   "src_wasm": "oversize-wasm",
+   "prove_p50_ms_wasm": 1798.498,
+   "prove_memory_mib_wasm": 104,
+   "verify_p50_ms_wasm": 22.555,
+   "verify_p99_ms_wasm": 22.927
+  },
+  "16,off": {
+   "m": 16,
+   "aud": false,
+   "src_native": "oversize",
+   "max_len_exact": 369054,
+   "proof_bytes_max": 366078,
+   "prove_p50_ms_native": 1361.421,
+   "prove_memory_mib_native": 94.9,
+   "verify_p50_ms_native": 17.39,
+   "verify_p99_ms_native": 18.613,
+   "src_wasm": "oversize-wasm",
+   "prove_p50_ms_wasm": 2884.111,
+   "prove_memory_mib_wasm": 105.75,
+   "verify_p50_ms_wasm": 32.997,
+   "verify_p99_ms_wasm": 33.78
+  }
+ },
+ "checks": [
+  [
+   "ok",
+   "pqzl-txm.txt",
+   "rc 0"
+  ],
+  [
+   "ok",
+   "pqzh-txm-build.txt",
+   "rc 0"
+  ],
+  [
+   "ok",
+   "pqzh-txm-oversize-build.txt",
+   "rc 0"
+  ],
+  [
+   "ok",
+   "pqzh-txm-wasm-build.txt",
+   "rc 0"
+  ],
+  [
+   "ok",
+   "pqzh-txm-oversize-wasm-build.txt",
+   "rc 0"
+  ],
+  [
+   "ok",
+   "pqzl-txm-native-generic.jsonl",
+   "fails 0, verifier disagreements 0"
+  ],
+  [
+   "ok",
+   "pqzl-txm-native-fast.jsonl",
+   "fails 0, verifier disagreements 0"
+  ],
+  [
+   "ok",
+   "pqzl-txm-x86v3-fast.jsonl",
+   "fails 0, verifier disagreements 0"
+  ],
+  [
+   "ok",
+   "pqzl-txm-wasm-fast.jsonl",
+   "fails 0, verifier disagreements 0"
+  ],
+  [
+   "ok",
+   "pqzl-txm-wasm-generic.jsonl",
+   "fails 0, verifier disagreements 0"
+  ],
+  [
+   "ok",
+   "pqzl-txm-wasm-nosv.jsonl",
+   "fails 0, verifier disagreements 0"
+  ],
+  [
+   "ok",
+   "pqzh-txm-native.jsonl",
+   "fails 0 (mutations accepted, panics, rc)"
+  ],
+  [
+   "ok",
+   "pqzh-txm-oversize.jsonl",
+   "fails 0 (mutations accepted, panics, rc)"
+  ],
+  [
+   "ok",
+   "pqzh-txm-wasm.jsonl",
+   "fails 0 (mutations accepted, panics, rc)"
+  ],
+  [
+   "ok",
+   "pqzh-txm-oversize-wasm.jsonl",
+   "fails 0 (mutations accepted, panics, rc)"
+  ],
+  [
+   "ok",
+   "pqzl R_TXM (1, on) measured",
+   "built shape"
+  ],
+  [
+   "ok",
+   "pqzl R_TXM (1, off) measured",
+   "built shape"
+  ],
+  [
+   "ok",
+   "pqzl R_TXM (2, on) measured",
+   "built shape"
+  ],
+  [
+   "ok",
+   "pqzl R_TXM (2, off) measured",
+   "built shape"
+  ],
+  [
+   "ok",
+   "pqzl R_TXM (4, on) measured",
+   "built shape"
+  ],
+  [
+   "ok",
+   "pqzl R_TXM (4, off) measured",
+   "built shape"
+  ],
+  [
+   "ok",
+   "pqzl R_TXM (8, on) measured",
+   "built shape"
+  ],
+  [
+   "ok",
+   "pqzl R_TXM (8, off) measured",
+   "built shape"
+  ],
+  [
+   "ok",
+   "pqzh R_TXM (1, on) measured",
+   "built shape"
+  ],
+  [
+   "ok",
+   "pqzh R_TXM (1, off) measured",
+   "built shape"
+  ],
+  [
+   "ok",
+   "pqzh R_TXM (2, on) measured",
+   "built shape"
+  ],
+  [
+   "ok",
+   "pqzh R_TXM (2, off) measured",
+   "built shape"
+  ],
+  [
+   "ok",
+   "pqzh R_TXM (4, on) measured",
+   "built shape"
+  ],
+  [
+   "ok",
+   "pqzh R_TXM (4, off) measured",
+   "built shape"
+  ]
+ ],
+ "machine": {
+  "cpu": "AMD Ryzen 5 7235HS",
+  "flags": "aes vaes avx2",
+  "threads": 8,
+  "os": "Ubuntu 24.04.5 LTS",
+  "kernel": "7.0.0-34-generic",
+  "cc": "Ubuntu clang version 18.1.3 (1ubuntu1)",
+  "wasm_ld": "Ubuntu LLD 18.1.3",
+  "node": "v26.8.1",
+  "python": "3.12.3",
+  "docker": true,
+  "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)"
+ }
+}

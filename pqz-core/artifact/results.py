@@ -9,6 +9,13 @@
   results.py freeze <label> <pqzl-measure run prefix> <sv run prefix> [<ligero run prefix> <ffi run prefix>]
       the same from direct runs: research/pqzl-measure/relfix.sh (research/pqzl-measure/runs/<x>-*), pqzl/sv/rel3.sh (pqzl/sv/runs/<x>-*), and for PQZH
       pqzh/ligero/runs/tx0.sh (<x>.jsonl native, <x>-wasm.jsonl wasm32) and for pqz-ffi ffi/run.sh (<x>-*).
+  results.py freeze-txm <label> <out dir> [expected-results.json]
+      P6-ANON S6: the current expected results (stdout) with only what op 7 changes taken from a quick / full run:
+      "txm" (the op 7 vector replay) and ffi.digest_lines (pqz-ffi's op 7 lines; refused unless the old lines are
+      kept, in order); every other value stays. Exit 1 if the run then fails a check.
+  results.py multi <out dir>
+      the op 7 R_TXM measurement table of a reproduce.sh --multi-bench run: results-multi.md / .json; exit 1 if a
+      bench failed (mutation accepted, panic, rc != 0) or a built shape is missing. Times are informational.
 
 PQZL: proofs_fnv is a hash over the proofs of seeds 0..n-1, so it is keyed by n (the number of proves); native and
 wasm proofs are byte-identical, so one table serves both. PQZH: one FNV-1a hash and length per proof, keyed by its
@@ -38,7 +45,15 @@ TEXT = {"pqzh-test.txt": ["mutated inputs rejected, 0 verifier panics caught"], 
         "ffi-wasm-build.txt": [], "vectors-build.txt": [], "vectors-check.txt": [": ok", "!DIFF", "!EXTRA"],
         "vectors-pqz-kat.txt": ["pqz_kat: ok"], "vectors-tamper.txt": ["caught: ok"]}
 FFI = ["ffi-digests-native.jsonl", "ffi-digests-wasm.jsonl", "ffi-bench.jsonl"]
-VECTORS = "vectors-wasm.jsonl"  # replay_wasm.mjs: one line per proof, then {"cases", "fails"}
+VECTORS = "vectors-wasm.jsonl"  # replay_wasm.mjs: one line per proof, then {"cases", "verify_only", "fails"}
+# op 7 R_TXM (P6-ANON S6, D14): the built leg counts per id (= pqz-stmt built_legs, plan D3 / S3), both auditorOn;
+# wasm32 proves PQZL op 7 up to M = 4 only (pqzl::WASM_PQZL_MAX_LEGS, one 512 MiB arena, S3), so its replay verifies
+# the native PQZL M = 8 proofs (S4)
+TXM_BUILT = {"pqzl": (1, 2, 4, 8), "pqzh": (1, 2, 4)}
+WASM_PQZL_MAX_LEGS = 4
+VERIFY_ONLY = "native proof (verify only)"
+NEGATIVE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "smartcontracts", "vectors", "pqz",
+                        "negative.json")
 
 
 def jsonl(path, backend=None):
@@ -298,9 +313,12 @@ def compare_pqzh(res, exp):
             f"{len(n)} lines" + ("" if w is None else f", {sum(a != b for a, b in zip(n, w)) + abs(len(n) - len(w))} differ"))
     if "vectors" in res:
         v = res["vectors"]
-        good = v["cases"] > 0 and v["fails"] == 0 and v["rows"] == v["cases"] and v["equal_valid"] == v["rows"]
+        good = v["cases"] > 0 and v["fails"] == 0 and v["rows"] == v["cases"] and v["equal_valid"] + v["verify_only"] == v["rows"]
         add("ok" if good else "FAIL", "vectors wasm32 replay",
-            f'{v["rows"]} proofs, {v["equal_valid"]} byte-equal and valid, fails {v["fails"]}')
+            f'{v["rows"]} proofs, {v["equal_valid"]} byte-equal and valid, {v["verify_only"]} native PQZL op 7 M > '
+            f'{WASM_PQZL_MAX_LEGS} proofs valid (verify only), fails {v["fails"]}')
+    if "txm" in res:
+        compare_txm(res, exp)
 
 
 def compare(res, exp):
@@ -412,8 +430,189 @@ def add_pqzh(res, files):
     if p and os.path.exists(p):
         rows = [o for o in jsonl(p) if "form" in o]
         end = ([o for o in jsonl(p) if "cases" in o] or [{"cases": 0, "fails": 1}])[-1]
-        res["vectors"] = {"rows": len(rows), "cases": end["cases"], "fails": end["fails"],
+        vo = [o for o in rows if verify_only_ok(o)]
+        res["vectors"] = {"rows": len(rows), "cases": end["cases"], "fails": end["fails"], "verify_only": len(vo),
                           "equal_valid": sum(1 for o in rows if o.get("wasm_equal_native") is True and o.get("wasm_precompile") == 1)}
+    if files.get("vectors-check.txt") and os.path.exists(files["vectors-check.txt"]):
+        res["txm"] = txm_summary(files)
+
+
+def txm_shape(case):
+    """'M8-on-boundary' -> (8, True); None if not an op 7 case name."""
+    m = re.match(r"M(\d+)-(on|off)\b", case)
+    return m and (int(m.group(1)), m.group(2) == "on")
+
+
+def verify_only_ok(o):
+    """A wasm32 replay row that may be verify-only: PQZL op 7 with M > WASM_PQZL_MAX_LEGS, verified through the wasm32
+    precompile."""
+    f = o.get("form", "").split()
+    s = len(f) == 2 and f[0] == "TRANSFER-MULTI" and txm_shape(f[1])
+    return bool(s) and o.get("id") == "pqzl" and s[0] > WASM_PQZL_MAX_LEGS and o.get("wasm_equal_native") == VERIFY_ONLY \
+        and o.get("wasm_precompile") == 1
+
+
+def txm_summary(files):
+    """Op 7 R_TXM in the vector stages. native: pqz-vectors --check's "<id> <case> proof <n> B" lines (each proof made
+    again, deterministic, ...01 through pqz_precompile, the files byte-equal); wasm: replay_wasm.mjs's TRANSFER-MULTI
+    rows; negatives: negative.json's op 7 rows per id (--check replayed each through the precompile and asserted
+    0 / revert, and found the file byte-equal: "same negative.json")."""
+    t = open(files["vectors-check.txt"], errors="replace").read()
+    out = {"native": {f"{i} {c}": int(n) for i, c, n in re.findall(r"^(pqzl|pqzh) (M\d+-\S+)\s+proof\s+(\d+) B", t, re.M)},
+           "wasm": {}, "negatives": {}, "negative_rejected": {}, "negative_same": "same negative.json" in t}
+    p = files.get(VECTORS)
+    for o in (jsonl(p) if p and os.path.exists(p) else []):
+        f = o.get("form", "").split()
+        if len(f) == 2 and f[0] == "TRANSFER-MULTI":
+            out["wasm"][f'{o["id"]} {f[1]}'] = {k: o.get(k) for k in ("proof_bytes", "wasm_equal_native", "wasm_precompile")}
+    if os.path.exists(NEGATIVE):
+        for r in json.load(open(NEGATIVE))["rows"]:
+            if r.get("form") == "TRANSFER-MULTI":
+                out["negatives"][r["id"]] = out["negatives"].get(r["id"], 0) + 1
+                out["negative_rejected"][r["id"]] = out["negative_rejected"].get(r["id"], 0) + (r["expect"] in ("0", "revert"))
+    return out
+
+
+def txm_expected(res):
+    """The "txm" section of expected-results.json from a run's txm summary."""
+    x = res["txm"]
+    return {"built_legs": {k: list(v) for k, v in TXM_BUILT.items()}, "proof_bytes": x["native"],
+            "wasm_verify_only": sorted(k for k, o in x["wasm"].items() if o["wasm_equal_native"] == VERIFY_ONLY),
+            "negatives": x["negatives"]}
+
+
+def compare_txm(res, exp):
+    """Every built (id, M, auditorOn) and every op 7 vector row: native and wasm32; the op 7 negatives."""
+    x, e = res["txm"], exp.get("txm", {})
+    add = lambda s, w, d: res["compare"].append([s, w, d])
+    ep = e.get("proof_bytes", {})
+    keys = {f"{i} M{m}-{a}" for i, ms in TXM_BUILT.items() for m in ms for a in ("on", "off")} | set(x["native"]) | set(ep)
+    for k in sorted(keys, key=lambda k: (k.split()[0], txm_shape(k.split()[1]) or (0, 0), k)):
+        n, w = x["native"].get(k), ep.get(k)
+        add("FAIL" if n is None else "info" if w is None else "ok" if n == w else "FAIL", f"op 7 {k} native",
+            "not in pqz-vectors --check" if n is None else f"proof {n} B, ...01 through pqz_precompile"
+            + (" (no frozen value)" if w is None else f", expected {w} B"))
+        o = x["wasm"].get(k)
+        vo = o is not None and verify_only_ok({"id": k.split()[0], "form": "TRANSFER-MULTI " + k.split()[1], **o})
+        good = o is not None and o["wasm_precompile"] == 1 and (o["wasm_equal_native"] is True or vo) \
+            and (not vo or k in e.get("wasm_verify_only", [k]))
+        add("ok" if good else "FAIL", f"op 7 {k} wasm32", "not replayed" if o is None else
+            f'{o["proof_bytes"]} B, {"native proof verified (wasm32 proves PQZL M <= 4)" if vo else "proved again, byte-equal"}'
+            f', precompile {o["wasm_precompile"]}')
+    for i in TXM_BUILT:
+        n, r, w = x["negatives"].get(i, 0), x["negative_rejected"].get(i, 0), e.get("negatives", {}).get(i)
+        good = n > 0 and r == n and x["negative_same"] and (w is None or n == w)
+        add(("ok" if w is not None else "info") if good else "FAIL", f"op 7 {i} negatives",
+            f"{n} rows of negative.json, {r} expect 0 / revert, replayed by pqz-vectors --check"
+            + (" (same negative.json)" if x["negative_same"] else " (NO 'same negative.json')")
+            + ("" if w is None else f", expected {w} rows"))
+
+
+# --multi-bench run files: PQZL research/pqzl-measure/txm-bench.sh (moved to pqzl-txm-*), PQZH ligero_bench / run_wasm.mjs txm
+TXM_PQZL = ["native-generic", "native-fast", "x86v3-fast", "wasm-fast", "wasm-generic", "wasm-nosv"]
+TXM_PQZH = ["native", "oversize", "wasm", "oversize-wasm"]  # the built runs first: an oversize run fills only what is missing
+TXM_TEXT = ["pqzl-txm.txt", "pqzh-txm-build.txt", "pqzh-txm-oversize-build.txt", "pqzh-txm-wasm-build.txt",
+            "pqzh-txm-oversize-wasm-build.txt"]
+
+
+def txm_rel(rel):
+    """'R_TXM8_0' -> (8, False)."""
+    m = re.fullmatch(r"R_TXM(\d+)(_0)?", rel or "")
+    return m and (int(m.group(1)), not m.group(2))
+
+
+def multi(d):
+    """The op 7 table of a --multi-bench run: {"pqzl": {"M,on": {...}}, "pqzh": {...}, "checks": [...]}."""
+    res = {"pqzl": {}, "pqzh": {}, "checks": [], "machine": machine()}
+    add = lambda s, w, x: res["checks"].append([s, w, x])
+    for n in TXM_TEXT:
+        p = os.path.join(d, n)
+        st = text_check(p, []) if os.path.exists(p) else "FAIL"
+        add(st, n, "rc 0" if st == "ok" else "see the file" if os.path.exists(p) else "missing")
+    for f in TXM_PQZL:
+        p = os.path.join(d, f"pqzl-txm-{f}.jsonl")
+        if not os.path.exists(p):
+            add("FAIL", f"pqzl-txm-{f}.jsonl", "missing")
+            continue
+        rels, fails, mism = bench(p)
+        add("ok" if fails == 0 and mism == 0 else "FAIL", f"pqzl-txm-{f}.jsonl", f"fails {fails}, verifier disagreements {mism}")
+        for rel, r in rels.items():
+            s = txm_rel(rel)
+            if not s:
+                continue
+            x = res["pqzl"].setdefault(f"{s[0]},{'on' if s[1] else 'off'}", {"m": s[0], "aud": s[1]})
+            if f == "wasm-nosv":
+                x["wasm_prove_peak_bytes"] = r.get("arena_peak")
+            elif f.endswith("generic"):
+                be = f.split("-")[0]
+                if "bytes_max" in r:
+                    x[f"proof_bytes_max_{be}"] = r["bytes_max"]
+                if "prove" in r:
+                    x[f"prove_p50_ms_{be}"] = r["prove"]["p50_ms"]
+                if "valid" in r:
+                    x[f"verify_p50_ms_{be}"], x[f"verify_p99_ms_{be}"] = r["valid"]["p50_ms"], p99(r)
+            elif "valid" in r:
+                x[f"sv_p99_ms_{f.split('-')[0]}"] = p99(r)
+    for f in TXM_PQZH:
+        p = os.path.join(d, f"pqzh-txm-{f}.jsonl")
+        if not os.path.exists(p):
+            add("FAIL", f"pqzh-txm-{f}.jsonl", "missing")
+            continue
+        forms, fails = pqzh_bench(p)
+        add("ok" if fails == 0 else "FAIL", f"pqzh-txm-{f}.jsonl", f"fails {fails} (mutations accepted, panics, rc)")
+        be = "wasm" if f.endswith("wasm") else "native"
+        for rel, r in forms.items():
+            s = txm_rel(rel)
+            if not s:
+                continue
+            x = res["pqzh"].setdefault(f"{s[0]},{'on' if s[1] else 'off'}", {"m": s[0], "aud": s[1]})
+            if f"src_{be}" in x:
+                continue  # measured by the built run already
+            x[f"src_{be}"] = f
+            for k in ("max_len_exact", "proof_bytes_max"):
+                if k in r:
+                    x[k] = r[k]
+            if "prove" in r:
+                x[f"prove_p50_ms_{be}"], x[f"prove_memory_mib_{be}"] = r["prove"]["p50_ms"], r.get("memory_mib")
+            if "verify_honest" in r:
+                x[f"verify_p50_ms_{be}"], x[f"verify_p99_ms_{be}"] = r["verify_honest"]["p50_ms"], r["verify_honest"]["p99_ms"]
+    for i in ("pqzl", "pqzh"):
+        for m in TXM_BUILT[i]:
+            for a in ("on", "off"):
+                add("ok" if f"{m},{a}" in res[i] else "FAIL", f"{i} R_TXM ({m}, {a}) measured", "built shape")
+    return res
+
+
+def multi_markdown(res):
+    k = lambda x: (not x["aud"], x["m"])
+    built = lambda i, x: "yes" if x["m"] in TXM_BUILT[i] else "no (oversize, bench build only)"
+    L = ["# Op 7 R_TXM measurements (reproduce.sh --multi-bench)", "",
+         "Machine: {cpu} ({threads} threads; flags {flags}), in Docker: {docker}. Times are informational.".format(**res["machine"]), "",
+         "## PQZL (research/pqzl-measure/txm-bench.sh, the L3 method)", "",
+         "| M | auditor | built | proof bytes (max) | prove p50 native / wasm32 | generic verify p50 / p99 native"
+         " | SV p99 portable / x86-64-v3 / wasm32 | wasm32 prove peak (no SV) |", "|---|---|---|---|---|---|---|---|"]
+    for x in sorted(res["pqzl"].values(), key=k):
+        g = lambda key, nd=1: fmt(x.get(key), nd)
+        pk = x.get("wasm_prove_peak_bytes")
+        L.append(f"| {x['m']} | {'on' if x['aud'] else 'off'} | {built('pqzl', x)} | {g('proof_bytes_max_native')}"
+                 f" | {g('prove_p50_ms_native', 0)} / {g('prove_p50_ms_wasm', 0)} ms"
+                 f" | {g('verify_p50_ms_native', 0)} / {g('verify_p99_ms_native', 0)} ms"
+                 f" | {g('sv_p99_ms_native', 1)} / {g('sv_p99_ms_x86v3', 1)} / {g('sv_p99_ms_wasm', 1)} ms"
+                 f" | {fmt(pk / 2**20 if pk else None)} MiB |")
+    L += ["", "## PQZH (Ligero, the proven preset; the H2 method of pqzh/ligero/runs/txm.sh)", "",
+          "| M | auditor | built | proof bytes (max) | max_len_exact | prove p50 native / wasm32 | verify p50 / p99 native"
+          " | verify p50 / p99 wasm32 | prove memory native heap / wasm32 linear |", "|---|---|---|---|---|---|---|---|---|"]
+    for x in sorted(res["pqzh"].values(), key=k):
+        g = lambda key, nd=1: fmt(x.get(key), nd)
+        L.append(f"| {x['m']} | {'on' if x['aud'] else 'off'} | {built('pqzh', x)} | {g('proof_bytes_max')}"
+                 f" | {g('max_len_exact')} | {g('prove_p50_ms_native', 0)} / {g('prove_p50_ms_wasm', 0)} ms"
+                 f" | {g('verify_p50_ms_native', 2)} / {g('verify_p99_ms_native', 2)} ms"
+                 f" | {g('verify_p50_ms_wasm', 2)} / {g('verify_p99_ms_wasm', 2)} ms"
+                 f" | {g('prove_memory_mib_native')} / {g('prove_memory_mib_wasm')} MiB |")
+    n = {s: sum(1 for c in res["checks"] if c[0] == s) for s in ("ok", "FAIL")}
+    L += ["", f"## Checks: {n['ok']} ok, {n['FAIL']} FAIL", "", "| status | check | detail |", "|---|---|---|"]
+    L += [f"| {s} | {w} | {x} |" for s, w, x in res["checks"]]
+    return "\n".join(L) + "\n"
 
 
 def main(a):
@@ -434,7 +633,7 @@ def main(a):
         return 0 if ok else 1
     if len(a) in (3, 4, 6) and a[0] == "freeze":
         label, r3, sv = a[1], a[2], a[3] if len(a) >= 4 else None
-        files = {n: os.path.join(r3, n) for n in list(BENCH) + CHECKS + list(PQZH_RUNS) + list(TEXT) + FFI} if sv is None else {"native-generic.jsonl": f"{r3}-native.jsonl", "wasm-generic.jsonl": f"{r3}-wasm.jsonl",
+        files = {n: os.path.join(r3, n) for n in list(BENCH) + CHECKS + list(PQZH_RUNS) + list(TEXT) + FFI + [VECTORS]} if sv is None else {"native-generic.jsonl": f"{r3}-native.jsonl", "wasm-generic.jsonl": f"{r3}-wasm.jsonl",
                  "fnv-native.jsonl": f"{r3}-fnv-native.jsonl", "fnv-wasm.jsonl": f"{r3}-fnv-wasm.jsonl",
                  "native-fast.jsonl": f"{sv}-native-fast.jsonl", "x86v3-fast.jsonl": f"{sv}-x86v3-fast.jsonl",
                  "wasm-fast.jsonl": f"{sv}-wasm-fast.jsonl", "wasm-both.jsonl": f"{sv}-wasm-both.jsonl",
@@ -465,6 +664,8 @@ def main(a):
                       "informational": {k: v for k, v in x.items() if k.startswith(("prove_", "verify_"))}}
                 for rel, x in res["pqzh"]["forms"].items()}}
             pq["ffi"] = {"selftest": res["ffi"].get("selftest"), "digest_lines": res["ffi"].get("digests_native")}
+        if "txm" in res:
+            pq["txm"] = txm_expected(res)
         exp = {"frozen": label, "source_runs": sorted(files.values()), "machine": res["machine"], "tolerance": TOL,
                "relations": {rel: {k: x.get(k) for k in ("fnv", "proof_bytes_max", "wasm_prove_peak_bytes", "ratios")}
                              | {"times_ms_informational": {k: v for k, v in x.items() if k.endswith("_ms_native")
@@ -473,6 +674,42 @@ def main(a):
         json.dump(exp, sys.stdout, indent=1)
         print()
         sys.stderr.write(markdown(res) + ("" if ok else "\nFROZEN RUN HAS FAILED CHECKS\n"))
+        return 0 if ok else 1
+    if len(a) in (3, 4) and a[0] == "freeze-txm":
+        label, d = a[1], a[2]
+        exp = json.load(open(a[3] if len(a) > 3 else os.path.join(here, "expected-results.json")))
+        files = {n: os.path.join(d, n) for n in list(BENCH) + CHECKS + list(PQZH_RUNS) + list(TEXT) + FFI + [VECTORS]}
+        res = summarize(files)
+        add_pqzh(res, files)
+        if "txm" not in res or not res["ffi"].get("digests_native"):
+            sys.stderr.write(f"freeze-txm: {d} has no vectors-check.txt or ffi-digests-native.jsonl\n")
+            return 1
+        old, new = exp["ffi"]["digest_lines"], res["ffi"]["digests_native"]
+        it = iter(new)
+        if not all(any(o == n for n in it) for o in old):  # old lines kept, in order: only op 7 lines added
+            sys.stderr.write("freeze-txm: the run changes existing pqz-ffi digest lines; not an op 7-only change\n")
+            return 1
+        added = [f'{n["sys"]} {n["form"]}' for n in new if n not in old]
+        exp["ffi"]["digest_lines"] = new
+        exp["txm"] = txm_expected(res)
+        exp.setdefault("changes", []).append(
+            f"{label}: + txm (op 7 R_TXM vector replay, run {os.path.normpath(d)}); ffi.digest_lines {len(old)} -> "
+            f"{len(new)} (added {', '.join(added)}); every other value unchanged")
+        res["mode"] = open(os.path.join(d, "mode.txt")).read().strip() if os.path.exists(os.path.join(d, "mode.txt")) else "?"
+        res["machine"] = machine()
+        ok = compare(res, exp)
+        json.dump(exp, sys.stdout, indent=1)
+        print()
+        sys.stderr.write(markdown(res) + ("" if ok else "\nRUN FAILS A CHECK AGAINST THE NEW EXPECTED RESULTS\n"))
+        return 0 if ok else 1
+    if len(a) == 2 and a[0] == "multi":
+        res = multi(a[1])
+        json.dump(res, open(os.path.join(a[1], "results-multi.json"), "w"), indent=1)
+        md = multi_markdown(res)
+        open(os.path.join(a[1], "results-multi.md"), "w").write(md)
+        print(md)
+        ok = not any(st == "FAIL" for st, _, _ in res["checks"])
+        print("RESULT:", "PASS" if ok else "FAIL")
         return 0 if ok else 1
     sys.stderr.write(__doc__)
     return 2
