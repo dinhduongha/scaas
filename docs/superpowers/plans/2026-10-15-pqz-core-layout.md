@@ -253,3 +253,15 @@ and the spec rename. Deviations from §5, recorded:
 - Research notes: every `pqz-core/<path>` reference rewritten; bare relative mentions inside the notes are left as
   written (records). Run files are never edited.
 - `docs/history/dropped-artifacts.tsv`: `pqz-core/params/estimator.txt` recorded as renamed (docs_check C7).
+
+**Verification (2026-10-17, each step under `scripts/capped`, fresh build directories):** `pqzl/build.sh all` ok; KAT
+19/19; `check_tbox_fixes: ok`; `pqzl/sv/check_sv_fixes.sh` ok; `research/pqzl-measure/relfix.sh layout` — `proofs_fnv`
+of all six relations equal to `tx0c`, native and wasm (`research/pqzl-measure/runs/layout-*`); `stmt/xcheck.sh layout`
+ok; `pqzh/xcheck/ligero.sh` ok; `ffi/run.sh layout` ok (self-test `ed910a2c…d205`, symbol scan ok, native = wasm32 29
+digest lines, arena peak 268,113,792 B); `ffi/vectors/run.sh layout` ok (`pqz-vectors --check` byte-identical);
+`pqzh/ligero` `cargo test` ok; STARK backup `cargo build --examples` ok; `fuzz/build.sh` ok; `glic/absence.sh` ok;
+`docs_check` 0 errors. Two failures that **predate the move** (same result on main before it): `pqzh/xcheck/run.sh`
+(the STARK backup's `tx_stmt` differs from the C statement — the backup's builder was not updated after the statement
+changes; `reg_stmt`, both witnesses equal) and `research/floor/build.sh` (`count.c` calls `step_prove_reg` /
+`step_prove_tx`, removed from `pqz_bench.c` in `95658a6`). Both are research / backup harnesses, not fixed here.
+`artifact/reproduce.sh` is validated by S6's Docker run on this layout; the node image is rebuilt in S8.
