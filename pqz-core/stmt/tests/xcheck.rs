@@ -129,7 +129,7 @@ fn fields(s: &Stmt) -> Vec<(&'static str, Vec<u8>)> {
             }
             v
         }
-        Stmt::SelfTest => vec![],
+        Stmt::Multi(_) | Stmt::SelfTest => vec![],
     }
 }
 

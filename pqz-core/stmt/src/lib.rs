@@ -12,9 +12,8 @@
 //!
 //! Op 7 `OP_TRANSFER_MULTI` (`R_TXM`, P6-ANON plan §4, D6, R4) has its own decoder `parse_multi` and builder
 //! `Multi::encode`: the auditorOn word and the `M` word (in `built_legs(id)`) fix the length; word 192 is
-//! `recipientsHash`, word 320 is `M`, `amount` is 0. `parse` and `decode_input` still refuse op 7 (`Reject::Op`) until
-//! P6-ANON S3 wires it into `Stmt` together with pqz-ffi's dispatch and Ligero (whose matches on `Stmt` / `Form` are
-//! exhaustive).
+//! `recipientsHash`, word 320 is `M`, `amount` is 0. `parse(7, …)` and `decode_input` return it as `Stmt::Multi`
+//! (P6-ANON S3); it has no `Form` (one length per `(M, A)`, not per op), so `Stmt::form()` is `None` for it.
 //!
 //! `no_std` + `alloc`, no dependencies, no `unsafe`, no floats; parsing borrows (no allocation), only the builders
 //! allocate. Hashes (`ctHash`, `authDigest`, `entryRef`) need Keccak and stay with the callers.
@@ -355,6 +354,8 @@ pub enum Stmt<'a> {
     Register(Register<'a>),
     Debit(Debit<'a>),
     Disclose(Disclose<'a>),
+    /// op 7 `R_TXM` (`parse_multi`)
+    Multi(Multi<'a>),
     /// op 6, empty statement
     SelfTest,
 }
@@ -397,7 +398,7 @@ impl<'a> Stmt<'a> {
             Stmt::Register(_) => Some(Form::Register),
             Stmt::Debit(d) => Some(d.form),
             Stmt::Disclose(d) => Some(d.form),
-            Stmt::SelfTest => None,
+            Stmt::Multi(_) | Stmt::SelfTest => None,
         }
     }
     pub fn proof_system_id(&self) -> Option<&Word> {
@@ -405,6 +406,7 @@ impl<'a> Stmt<'a> {
             Stmt::Register(r) => Some(&r.words[1]),
             Stmt::Debit(d) => Some(&d.header[H_ID]),
             Stmt::Disclose(d) => Some(&d.words[1]),
+            Stmt::Multi(m) => Some(&m.header[H_ID]),
             Stmt::SelfTest => None,
         }
     }
@@ -423,6 +425,7 @@ impl<'a> Stmt<'a> {
         };
         match self {
             Stmt::SelfTest => {}
+            Stmt::Multi(m) => return m.encode(),
             Stmt::Register(r) => {
                 out.reserve(Form::Register.stmt_len());
                 r.words.iter().for_each(|w| out.extend_from_slice(w));
@@ -466,10 +469,14 @@ impl<'a> Stmt<'a> {
 }
 
 /// Decode the statement of `op` with every D15 / R6 rule, in the order of `pqz_kat.py parse` (opTag, id, length,
-/// scalars, salt, auditorOn, zero words, coefficients), so both name the same reason. Borrows `stmt`; allocates nothing.
+/// scalars, salt, auditorOn, zero words, coefficients), so both name the same reason; op 7 by `parse_multi`. Borrows
+/// `stmt`; allocates nothing.
 pub fn parse(op: u8, stmt: &[u8]) -> Result<Stmt<'_>, Reject> {
     if op == OP_SELFTEST {
         return if stmt.is_empty() { Ok(Stmt::SelfTest) } else { Err(Reject::Op) };
+    }
+    if op == OP_TRANSFER_MULTI {
+        return parse_multi(stmt).map(Stmt::Multi);
     }
     if !(OP_TRANSFER..=OP_DISCLOSE_RECEIVER).contains(&op) {
         return Err(Reject::Op);
