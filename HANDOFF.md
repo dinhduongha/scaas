@@ -1,3 +1,11 @@
+## Session 2026-10-17 (morning) — resume here
+
+**State:** main pushed. **Layout move merged** (`pqz-layout`, merge `9f07324`): `pqz-core/pqzl/` (PQZL C core + tools), `pqzh/{ligero,xcheck,stark-backup}`, `research/{pqzl-measure,opt,floor,upstream}`, shared crates at the top; spec now `docs/contracts/pq-zero-knowledge.md`. Verified (plan §Applied): relfix `proofs_fnv` = `tx0c`, KAT 19/19, tbox / SV fix checks, ffi self-test `ed910a2c…d205`, vectors `--check` byte-identical, ligero tests, fuzz build, glic, docs_check 0 errors; two harness failures predate the move (STARK backup `tx_stmt` xcheck, `research/floor` `count.c`). The PQZL build output is now `pqzl/build/` (old `pqz-core/build/` holds only stale outputs + `build/fuzz`).
+
+**Owner 2026-10-17:** PQZL Rust port goes to `pqz-core/pqzl/rust/` (crate `pqzl`); TODO bn254 MSM precompile for classical Zether (later, MSM only, no full Zether precompile).
+
+**Next:** S6 from `fdfc3ce` on `p6-anon-s6` written against the new layout (paths `research/pqzl-measure/txm-bench.sh`, `pqzh/ligero`; README; regenerate the pqz-ffi digest lines 29 vs frozen 17 and `expected-results.json` once; Docker quick + multi-bench, `--memory=4g`, run alone) in parallel with the PQZL → Rust port plan (docs only) → S8 → S7 → gates A / B → freeze → Rust port.
+
 ## Session 2026-10-17 (early) — resume here
 
 **State:** main `b547e3d`+ pushed. **S5 merged** (`p6-anon-s5`): 2-hour campaigns per target with op 7, no finding — precompile 3,012,684 execs (205,263 op 7 decoded), mutate 192,360 (473 SV = generic differentials, 108 op 7), codec 1,103,090 (137,333 PQZL proofs re-encoded byte-equal); arena peak 268,240,256 B (ARENA_SMALL 512 MiB). A machine reboot (2026-10-16 20:07) stopped the first precompile campaign after ≈ 42 min (log `-interrupted`, no finding); re-run in full. docs_check 0 errors. 7622 node restarted after the reboot (head advancing, PQZ-START ok).
