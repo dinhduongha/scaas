@@ -6,7 +6,7 @@
 
 **Owner rulings today (TODO.md l.32):** layout move after S5 merges, before S6's Docker run; S6 postponed entirely until after the layout move (written against the new layout). S6 WIP `fdfc3ce` on `p6-anon-s6` (worktree `.claude/worktrees/s6`): `--multi-bench`, op 7 checks, `freeze-txm` in results.py; remains: port paths (`rel3/txm-bench.sh`, `pqzh/ligero`), README, phase 2 Docker (quick 35–45 min + multi-bench ≈ 1 h, `--memory=4g`; M = 16 3 GiB arena untested in Docker). Finding: the artifact quick run on main fails today (wasm32 M = 8 verify-only rows — fixed in WIP; pqz-ffi digest lines 29 vs frozen 17 — needs the one-time regeneration).
 
-**Next:** S5 report → review → merge + push → layout move + spec rename (re-check the 2026-10-15 layout plan against today's tree: `nethermind/`, `params/anon/`, fuzz `regress/`) → S6 from `fdfc3ce` → S8 → S7 → gates A / B.
+**Next:** S5 report → review → merge + push → layout move + spec rename (re-check the 2026-10-15 layout plan against today's tree: `nethermind/`, `params/anon/`, fuzz `regress/`) → S6 from `fdfc3ce` (in parallel: write the PQZL → Rust port plan, docs only; facts in `scratchpad/pqzl-rust-port-notes.md`; licence Vegan Community License) → S8 → S7 → gates A / B → freeze → Rust port (TODO.md l.32).
 
 ## Session 2026-10-16 (second, shutdown afternoon) — resume here
 
