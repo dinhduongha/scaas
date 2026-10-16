@@ -1,0 +1,10 @@
+# P6-ANON S3, vectors/run.sh s3a: pqz-vectors --check reported "DIFF negative.json" (14 of 15 files byte-equal).
+# A fresh `pqz-vectors <scratch dir>` and a JSON compare with smartcontracts/vectors/pqz/negative.json (frozen, left
+# unchanged) give exactly two differing fields, both expected from S3's decoder change (op 7 decodes now, so an op 1
+# statement under op byte 7 fails at the opTag instead of the op byte); expect "0" (…00) unchanged, every input
+# byte unchanged, openings unchanged, 389 / 389 rows:
+TRANSFER: under op 7 pqzl {'reason': ('Op', 'OpTag')}
+TRANSFER: under op 7 pqzh {'reason': ('Op', 'OpTag')}
+# pqz_kat.py --check: ok (its decode_input keeps S2's op 7 => Op until S4 extends it); tamper 179 / 179; pqz-ffi
+# tests ok; wasm32 replay 34 cases, 0 fails. Rewriting negative.json (with the op 7 rows) and pqz_kat.py's op 7
+# decoder is Task S4.

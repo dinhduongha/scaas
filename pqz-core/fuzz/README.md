@@ -11,7 +11,7 @@ flowchart LR
   T --> O["src/lib.rs oracles"]
   O --> A["pqz_precompile (C ABI) ×2"]
   A --> D["pqz-stmt decode"]
-  D --> L["PQZL: C core, ASan + UBSan<br/>verify-only arena 144 MiB"]
+  D --> L["PQZL: C core, ASan + UBSan<br/>verify-only arena 512 MiB"]
   D --> H["PQZH: Ligero (Rust)"]
   O --> G["sampled: generic PQZL verifier"]
   O --> C["codecs: parse ⇒ encode = input"]
@@ -34,8 +34,9 @@ Common oracle (every target, every input; `src/lib.rs`), a violation aborts (lib
 - **Determinism**: every precompile input runs twice, same status and output.
 - **Verdict**: `…01` exactly for the 24 unmodified honest inputs, the self-test hash (`ed910a2c…`) for `06 00000000`,
   `…00` for everything else: a modified input that verifies is a wrong accept or a malleable encoding.
-- **Arena bound**: the C core runs on the verify-only arena (`ARENA_SMALL` = 144 MiB) with every form's keys and
-  tables built by a warm-up pass, as in a long-running node; its high-water mark must stay ≤ 96 MiB (= 144 MiB / 1.5,
+- **Arena bound**: the C core runs on the verify-only arena (`ARENA_SMALL` = 512 MiB since P6-ANON S3; 144 MiB for
+  the campaigns below) with every form's keys and tables built by a warm-up pass, as in a long-running node; its
+  high-water mark must stay ≤ `ARENA_SMALL` / 1.5 (341 MiB now, 96 MiB in the campaigns below,
   the margin the arena was sized with; the maximum seen is printed, see `STATUS.md` Open 2: the peak is
   input-dependent).
 

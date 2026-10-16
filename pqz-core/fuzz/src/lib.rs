@@ -1,7 +1,7 @@
 //! The oracles of the libFuzzer targets (P6e plan Task 10, D12, D15), called from `targets/<target>.c`.
 //!
 //! Every target runs on the precompile's production configuration: the C core on the verify-only arena
-//! (`pqzl::ARENA_SMALL`, 144 MiB) with every form's keys and tables built by a warm-up pass, as in a long-running node.
+//! (`pqzl::ARENA_SMALL`, 512 MiB since P6-ANON S3) with every form's keys and tables built by a warm-up pass, as in a long-running node.
 //! On every input each target asserts (a failed assertion aborts: a libFuzzer crash):
 //! - no panic anywhere (the panic hook aborts, so even the panics `pqz-ffi` and Ligero would catch are findings);
 //! - the C ABI never returns status 3 (input-caused panic) or 4 (node fault); status 1 (revert) only above
@@ -9,7 +9,7 @@
 //! - the same input twice gives the same status and output;
 //! - the verdict: `…01` exactly for the unmodified honest inputs, the self-test hash for `06 00000000`, `…00` for
 //!   everything else (a modified input that verifies is a wrong accept or a malleable encoding);
-//! - the arena high-water mark stays ≤ `ARENA_BOUND` = `ARENA_SMALL` / 1.5 = 96 MiB (the maximum seen is printed).
+//! - the arena high-water mark stays ≤ `ARENA_BOUND` = `ARENA_SMALL` / 1.5 = 341 MiB (the maximum seen is printed).
 //!
 //! The honest inputs (every form of both ids and the fee-0 forms) come from the frozen vectors
 //! (`smartcontracts/vectors/pqz/`, written to `$PQZ_FUZZ_HONEST` by `seeds.py`); the core never proves.
@@ -328,9 +328,10 @@ pub unsafe extern "C" fn pqz_fuzz_codec(data: *const u8, len: usize) {
                 die("parse not deterministic");
             }
             r.map(|s| {
-                let shape = match s.form() {
-                    Some(f) => f.op() == op && f.stmt_len() == b.len(),
-                    None => op == 6 && b.is_empty(),
+                let shape = match (&s, s.form()) {
+                    (_, Some(f)) => f.op() == op && f.stmt_len() == b.len(),
+                    (stmt::Stmt::Multi(m), None) => op == 7 && stmt::multi_len(m.m, m.pk_a.is_some()) == b.len(),
+                    _ => op == 6 && b.is_empty(),
                 };
                 if s.encode().as_deref() != Ok(&b[..]) || !shape {
                     die(&format!("parse/encode round trip, op {op}, form {:?}, {} B", s.form(), b.len()));

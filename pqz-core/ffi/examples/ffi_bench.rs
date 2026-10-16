@@ -4,7 +4,10 @@
 //! `pqzh::verify`; `rust` =
 //! `precompile` (decode, dispatch, catch_unwind); `c_abi` = `pqz_precompile`; `adversarial` = `pqz_precompile` on the
 //! honest input with one proof bit flipped in the middle. Then `decode` alone, and the arena: a fresh core on the
-//! big arena that only runs the precompile path (all six PQZL forms, the self-test) and its peak.
+//! big arena that only runs the precompile path (all six PQZL forms, every op 7 shape, the self-test) and its peak.
+//! Op 7 (P6-ANON S3): every built `(M, auditorOn)` of both ids after the forms, with the statement / input bytes, the
+//! worst-case input (PQZL `MAX_PROOF`, PQZH Ligero's exact bound) and one prove's time; and the prove arena's peak
+//! with every relation loaded (the core that proved everything, `ARENA_BIG`).
 use std::time::Instant;
 
 use pqz_ffi::*;
@@ -31,23 +34,27 @@ fn main() {
     let mut pqzl_inputs = Vec::new();
     for id in [PQZL_ID, PQZH_ID] {
         let sys = if id == PQZL_ID { "PQZL" } else { "PQZH" };
-        for c in fixture::cases(&id).unwrap() {
-            let Ok(proof) = prove(c.op(), &c.stmt, &c.wit, &rnd) else {
-                println!("{{\"sys\": \"{sys}\", \"form\": \"{:?}\", \"skipped\": \"no prover\"}}", c.form);
+        let forms = fixture::cases(&id).unwrap().into_iter().map(|c| (format!("{:?}", c.form), c.op(), c.stmt, c.wit, None));
+        let multi = fixture::multi_cases(&id, usize::MAX).unwrap().into_iter().map(|c| (c.name(), c.op(), c.stmt, c.wit, Some((c.m, c.aud))));
+        for (name, op, st, wit, shape) in forms.chain(multi) {
+            let t = Instant::now();
+            let Ok(proof) = prove(op, &st, &wit, &rnd) else {
+                println!("{{\"sys\": \"{sys}\", \"form\": \"{name}\", \"skipped\": \"no prover\"}}");
                 continue;
             };
-            let input = stmt::input(c.op(), &c.stmt, &proof);
+            let prove_ms = t.elapsed().as_secs_f64() * 1e3;
+            let input = stmt::input(op, &st, &proof);
             let mut adv = input.clone();
-            let m = 5 + c.stmt.len() + proof.len() / 2;
+            let m = 5 + st.len() + proof.len() / 2;
             adv[m] ^= 4;
             assert_eq!(precompile(&input), Ok(VALID));
             let direct = |s: &[u8], p: &[u8]| {
-                if id == PQZL_ID { pqzl::verify_fast_on_caller(c.op(), s, p) } else { pqzh::verify(c.op(), s, p) }
+                if id == PQZL_ID { pqzl::verify_fast_on_caller(op, s, p) } else { pqzh::verify(op, s, p) }
             };
             assert!(verify_input(&input).unwrap()); // warm on the worker (relation keys, SV tables)
             let mut out = [0u8; 32];
             let row = [
-                ("direct", time(n, || assert!(direct(&c.stmt, &proof)))),
+                ("direct", time(n, || assert!(direct(&st, &proof)))),
                 ("rust", time(n, || assert_eq!(precompile(&input), Ok(VALID)))),
                 ("c_abi", time(n, || unsafe {
                     assert_eq!(pqz_precompile(input.as_ptr(), input.len(), out.as_mut_ptr(), 32), PQZ_FFI_OK);
@@ -56,18 +63,30 @@ fn main() {
                 ("decode", time(n, || assert!(decode(&input).is_ok()))),
             ];
             let body: Vec<String> = row.into_iter().map(|(k, v)| format!("\"{k}\": {}", stats(v))).collect();
-            println!(
-                "{{\"sys\": \"{sys}\", \"form\": \"{:?}\", \"proof_bytes\": {}, {}}}",
-                c.form,
-                proof.len(),
-                body.join(", ")
-            );
+            let multi = shape.map_or(String::new(), |(m, aud)| {
+                let bound = if id == PQZL_ID { stmt::MAX_PROOF_PQZL } else { pqzh::PARAMS.max_proof_len(pqzh_ligero::Rel::Multi { m, aud }) };
+                format!(
+                    "\"m\": {m}, \"auditor\": {aud}, \"stmt_bytes\": {}, \"input_bytes\": {}, \"proof_bound\": {bound}, \"worst_input_bytes\": {}, \"prove_ms\": {prove_ms:.0}, ",
+                    st.len(),
+                    input.len(),
+                    5 + st.len() + bound
+                )
+            });
+            println!("{{\"sys\": \"{sys}\", \"form\": \"{name}\", {multi}\"proof_bytes\": {}, {}}}", proof.len(), body.join(", "));
             if id == PQZL_ID {
                 pqzl_inputs.push(input);
             }
         }
     }
-    // verify-only arena: a core that has never proved, every PQZL form's keys and tables kept, plus the self-test
+    // the prove arena: the core that proved every form and op 7 shape (every relation's keys loaded), since its init
+    let prove_peak = pqzl::arena_peak();
+    println!(
+        "{{\"arena\": \"prove, every relation loaded\", \"peak_bytes\": {prove_peak}, \"ARENA_BIG_mib\": {}, \"margin\": {:.2}}}",
+        pqzl::ARENA_BIG >> 20,
+        pqzl::ARENA_BIG as f64 / prove_peak as f64
+    );
+    // verify-only arena: a core that has never proved, every PQZL form's and op 7 shape's keys and tables kept, plus
+    // the self-test
     assert!(pqzl::reinit(pqzl::ARENA_BIG));
     let t = Instant::now();
     let st = selftest::report().unwrap();
@@ -77,9 +96,10 @@ fn main() {
     }
     let peak = pqzl::arena_peak();
     println!(
-        "{{\"arena\": \"verify-only\", \"peak_bytes\": {peak}, \"x1.5_mib\": {}, \"ARENA_SMALL_mib\": {}, \"selftest_cold_ms\": {st_ms:.1}, \"selftest_results\": {:?}}}",
+        "{{\"arena\": \"verify-only\", \"peak_bytes\": {peak}, \"x1.5_mib\": {}, \"ARENA_SMALL_mib\": {}, \"margin\": {:.2}, \"selftest_cold_ms\": {st_ms:.1}, \"selftest_results\": {:?}}}",
         (peak * 3 / 2).div_ceil(1 << 20),
         pqzl::ARENA_SMALL >> 20,
+        pqzl::ARENA_SMALL as f64 / peak as f64,
         st.results
     );
     // and the precompile path on a fresh ARENA_SMALL core

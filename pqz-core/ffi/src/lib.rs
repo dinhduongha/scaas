@@ -2,7 +2,8 @@
 //! CTR-PQZ-10).
 //!
 //! Input `u8(op) ‖ be32(len(stmt)) ‖ stmt ‖ proof` → `pqz_stmt::decode_input` (MAX_INPUT, op, opTag, id, the form's
-//! length, every D15 / R6 rule, `1 ≤ len(proof) ≤ MAX_PROOF(id)`) → dispatch on the `proofSystemId` word: PQZL to the
+//! length — op 7: the `(id, M, auditorOn)` length of the header words, P6-ANON R4 —, every D15 / R6 rule, `1 ≤
+//! len(proof) ≤ MAX_PROOF(id)`) → dispatch on the `proofSystemId` word: PQZL to the
 //! C core's specialised verifier (`pqzl`, one process-wide lock), PQZH to Ligero (`pqzh`); op 6 to the cached
 //! self-test (`selftest`). Output: 32 bytes, `…01` valid, `…00` anything else; the one revert is an input over
 //! `MAX_INPUT`. Every entry catches panics; nothing here aborts. Faults (controller 2026-10-14): a panic in the
@@ -30,6 +31,8 @@ pub use pqz_stmt::{self as stmt, Input, MAX_INPUT, PQZH_ID, PQZL_ID, Reject, Wor
 
 #[cfg(feature = "prove")]
 pub mod fixture;
+#[cfg(feature = "prove")]
+pub mod memo;
 pub mod pqzh;
 pub mod pqzl;
 pub mod selftest;
@@ -60,7 +63,7 @@ pub fn decode(input: &[u8]) -> Result<Input<'_>, Reject> {
     pqz_stmt::decode_input(input)
 }
 
-/// Decode and verify one input of op 1..5: true only for a canonical input whose proof the id's verifier accepts.
+/// Decode and verify one input of op 1..5 or 7: true only for a canonical input whose proof the id's verifier accepts.
 /// Op 6 (self-test) and anything undecodable is false. Panics propagate (callers: [`precompile`] catches them).
 pub fn verify_input(input: &[u8]) -> Result<bool, NodeFault> {
     let Ok(inp) = decode(input) else { return Ok(false) };
@@ -162,12 +165,19 @@ pub enum ProveError {
 }
 
 /// Prove `stmt` (op `op`) with the prover-API witness `wit` (pqz.h layouts, [`fixture`]) and 32 bytes of CSPRNG
-/// output; the proof system is the statement's `proofSystemId`. Deterministic in its inputs (both provers hedge
+/// output; the proof system is the statement's `proofSystemId`. On wasm32 a PQZL op 7 statement with M >
+/// `pqzl::WASM_PQZL_MAX_LEGS` is refused (`Statement(Reject::Legs)`). Deterministic in its inputs (both provers hedge
 /// `rnd32` with the statement and the witness, CTR-PQZ-19). Panics are caught.
 #[cfg(feature = "prove")]
 pub fn prove(op: u8, stmt: &[u8], wit: &[u8], rnd32: &[u8; 32]) -> Result<Vec<u8>, ProveError> {
     let st = pqz_stmt::parse(op, stmt).map_err(ProveError::Statement)?;
     let id = *st.proof_system_id().ok_or(ProveError::Statement(Reject::Op))?;
+    // wasm32: PQZL op 7 up to WASM_PQZL_MAX_LEGS (the one client arena; M = 8 needs a native client)
+    if let pqz_stmt::Stmt::Multi(m) = &st {
+        if cfg!(target_arch = "wasm32") && id == PQZL_ID && m.m > pqzl::WASM_PQZL_MAX_LEGS {
+            return Err(ProveError::Statement(Reject::Legs));
+        }
+    }
     catch_unwind(|| {
         if id == PQZL_ID {
             pqzl::prove(op, stmt, wit, rnd32).map_err(ProveError::Pqzl)

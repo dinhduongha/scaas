@@ -193,7 +193,8 @@ fn every_d15_r6_rule_rejects() {
         ("unknown proofSystemId", 1, with(&t, 32, &[0; 32]), Reject::ProofSystemId),
         ("retired STARK id", 3, with(&rg, 32, &[0xaa; 32]), Reject::ProofSystemId),
         ("unknown op 0", 0, t.clone(), Reject::Op),
-        ("unknown op 7", 7, t.clone(), Reject::Op),
+        ("op 1 statement under op 7", 7, t.clone(), Reject::OpTag),
+        ("unknown op 8", 8, t.clone(), Reject::Op),
         ("SELFTEST with a statement", 6, vec![0], Reject::Op),
         ("empty statement op 1", 1, vec![], Reject::OpTag),
     ];
@@ -479,9 +480,26 @@ fn multi_every_rule_rejects() {
     assert_eq!((a.m, a.pk_a.is_some(), b.m, b.pk_a.is_some()), (1, true, 2, false));
     assert_eq!((b.pk(1), b.v(1), b.v_f), (a.pk_a.unwrap(), a.v_f, a.v_a(0).unwrap()));
     assert_eq!(b.encode().unwrap(), two);
-    // op 7 stays outside parse / decode_input until S3 (pqz-ffi dispatch); limits unchanged (D8 / D20)
-    assert_eq!(parse(OP_TRANSFER_MULTI, &l).err(), Some(Reject::Op));
-    assert_eq!(decode_input(&input(OP_TRANSFER_MULTI, &l, &[1; 100])).err(), Some(Reject::Op));
+    // S3: op 7 goes through parse / decode_input as Stmt::Multi (no Form); the decoder's reasons are parse_multi's
+    let s7 = parse(OP_TRANSFER_MULTI, &l).unwrap();
+    let want = Stmt::Multi(parse_multi(&l).unwrap());
+    assert_eq!((&s7, s7.form(), s7.proof_system_id()), (&want, None, Some(&PQZL_ID)));
+    assert_eq!(s7.encode().unwrap(), l);
+    let inp = input(OP_TRANSFER_MULTI, &l, &[1; 100]);
+    let d = decode_input(&inp).unwrap();
+    assert_eq!((d.op, d.stmt_bytes, d.proof.len()), (OP_TRANSFER_MULTI, &l[..], 100));
+    assert_eq!(decode_input(&input(OP_TRANSFER_MULTI, &l, &[])).err(), Some(Reject::ProofLength));
+    assert_eq!(decode_input(&input(OP_TRANSFER_MULTI, &l, &vec![1; MAX_PROOF_PQZL + 1])).err(), Some(Reject::ProofLength));
+    for (what, b, want) in [("M word 3", with(&l, 320, &word(3)), Reject::Legs), ("length + 1", [&l[..], &[0]].concat(), Reject::Length)] {
+        assert_eq!(parse(OP_TRANSFER_MULTI, &b).err(), Some(want), "{what}");
+        assert_eq!(decode_input(&input(OP_TRANSFER_MULTI, &b, &[1; 100])).err(), Some(want), "{what}");
+    }
+    // op 7 bytes under op 1 and op 1 bytes under op 7: OpTag both ways
+    assert_eq!(parse(OP_TRANSFER, &l).err(), Some(Reject::OpTag));
+    // PQZH (4, on) with a proof of MAX_INPUT − 5 − 132,992 = 260,219 B is exactly MAX_INPUT; one byte more is Input
+    let h4 = build_multi(&PQZH_ID, 4, true, 0);
+    assert!(decode_input(&input(OP_TRANSFER_MULTI, &h4, &vec![1; 260_219])).is_ok());
+    assert_eq!(decode_input(&input(OP_TRANSFER_MULTI, &h4, &vec![1; 260_220])).err(), Some(Reject::Input));
     // an op 1 statement under op 7's decoder
     let o = objs();
     assert_eq!(parse_multi(&build(Form::Transfer, &o, &PQZL_ID)).err(), Some(Reject::OpTag));

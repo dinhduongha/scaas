@@ -8,3 +8,4 @@ const n = e.run(Number(sel));
 const ms = performance.now() - t0;
 process.stdout.write(new TextDecoder().decode(new Uint8Array(e.memory.buffer, e.out_ptr(), n)));
 process.stderr.write(`wasm run ${ms.toFixed(0)} ms, memory ${e.memory.buffer.byteLength} B\n`);
+if (e.m8_refused) process.stderr.write(`wasm PQZL op 7 M = 8 prove refused (Statement(Legs)): ${e.m8_refused() === 1}\n`);

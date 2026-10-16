@@ -47,7 +47,7 @@ cp "$X/fill.txt" "$L-fill.txt" 2>/dev/null
   echo "\$ llvm-nm-18 --undefined-only $W (imports)"; llvm-nm-18 --undefined-only "$W"
   echo "strings /gmp|mpfr|hexl/i: $(strings -a "$W" | grep -ciE 'gmp|mpfr|hexl')"
   /usr/bin/time -v node wasm/run_wasm.mjs "$W" 3 > "$X/wasm.jsonl" 2> "$X/wasm-time.txt"
-  echo "node rc=$?"; grep -E "wasm run|Maximum resident|Elapsed" "$X/wasm-time.txt"
+  echo "node rc=$?"; grep -E "wasm run|wasm PQZL|Maximum resident|Elapsed" "$X/wasm-time.txt"
   cp "$X/native.jsonl" "$L-digests-native.jsonl"; cp "$X/wasm.jsonl" "$L-digests-wasm.jsonl"
   if diff "$X/native.jsonl" "$X/wasm.jsonl"; then echo "native = wasm32: $(wc -l < "$X/wasm.jsonl") lines equal"; else echo "native != wasm32"; fi
 } > "$L-wasm.txt" 2>&1
@@ -55,7 +55,7 @@ cp "$X/fill.txt" "$L-fill.txt" 2>/dev/null
 /usr/bin/time -v cargo run --release --offline --features prove,test-hooks --example ffi_bench "${N:-200}" > "$L-bench.jsonl" 2> "$L-bench-time.txt"
 echo "bench rc=$?" >> "$L-bench-time.txt"
 
-grep -hE "^test result|FAILED|panicked|^test .* (ok|FAILED)$|rejection cases|differential:|abort-freedom:|selftest hash|node faults:|verify-only |fill determinism:" "$L-test.txt"
+grep -hE "^test result|FAILED|panicked|^test .* (ok|FAILED)$|rejection cases|differential:|op 7 largest|abort-freedom:|selftest hash|node faults:|verify-only |fill determinism:" "$L-test.txt"
 grep -hE "^c_abi|symbols ok|forbidden|NEEDED|/gmp|libm-style|\[rc=[1-9]" "$L-native.txt"
 grep -hE "native|wasm bytes|wasm run|\[rc=[1-9]" "$L-wasm.txt"
 tail -2 "$L-bench.jsonl"; grep -E "bench rc|Maximum resident" "$L-bench-time.txt"

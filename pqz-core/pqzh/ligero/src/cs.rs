@@ -361,7 +361,8 @@ pub fn parse(op: u8, stmt: &[u8]) -> Option<Stmt> {
             let x = Disc { pk: vec(d.pk), u: vec(d.u), v: v(d.v), amount: d.amount() };
             if d.form == Form::DiscloseSender { Stmt::Ds(x) } else { Stmt::Dr(x) }
         }
-        pqz_stmt::Stmt::SelfTest => return None,
+        // op 7 returned above (parse_multi); op 6 has no relation
+        pqz_stmt::Stmt::Multi(_) | pqz_stmt::Stmt::SelfTest => return None,
     })
 }
 

@@ -9,8 +9,10 @@ until a sketch's run exists, a model (+330 B per leg, +13.5 KB per randomness gr
 plus 726 B per added row (t = 121 columns x 6 B), ~400 slots per extra leg (695 per row), +60 rows per extra
 randomness group. Gas as pq-zether.md §9.3: EIP-7623 floor 21,000 + 10 * tokens, 25.2 tokens per be8 coefficient,
 3.99 per random byte; precompile 0.12 M gas per ms of p99 verify. Stdlib only: python3 -I anon_sizes.py
+The last table (`measured`, P6-ANON S3) replaces the model by the measured numbers (pqz-ffi run s3a, L3, H2) and
+applies D3.
 """
-import math, os, re
+import json, math, os, re
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 MAX_INPUT, TX_CAP = 393_216, 16_777_216
@@ -151,9 +153,80 @@ def s1_grouping():
                       f"{h} → {mixed[h]:.1f} |")
 
 
+CORE = os.path.join(HERE, '..', '..')
+
+
+def jsonl(rel):
+    p = os.path.join(CORE, rel)
+    return [json.loads(x) for x in open(p) if x.lstrip().startswith('{')] if os.path.exists(p) else []
+
+
+def multi_len(m, aud):
+    return stmt(m, -(-m // 4), aud)
+
+
+def measured(bench='ffi/runs/s3a-bench.jsonl'):
+    """P6-ANON S3, D3 with measured numbers: built op 7 shapes through pqz-ffi (`bench`: statement, proof, PQZH exact
+    bound, native p99 through `precompile`), wasm32 verify p99 from L3 (PQZL SV, rel3/runs/l3a-wasm-fast.jsonl) and H2
+    (Ligero, pqzh/ligero/runs/l16-txm-*-wasm.jsonl); the oversize shapes from L3 / H2's bench-only runs. Worst-case
+    input = 5 + statement + the id's bound (PQZL MAX_PROOF, PQZH Ligero's exact max for the shape). Gas by this
+    file's calldata model with the measured proof and native p99. D3: built iff worst-case input <= MAX_INPUT, bound
+    <= MAX_PROOF, verify p99 <= 60 ms native and wasm32, gas <= the EIP-7825 cap."""
+    rows = {}
+    for r in jsonl(bench):
+        if 'm' in r:
+            rows[(r['sys'], r['m'], r['auditor'])] = dict(
+                stmt=r['stmt_bytes'], proof=r['proof_bytes'], bound=r['proof_bound'], p99=r['rust']['p99_ms'], src='S3 pqz-ffi')
+    for r in jsonl('rel3/runs/l3a-native-fast.jsonl'):
+        if r.get('rel', '').startswith('R_TXM16'):
+            aud = not r['rel'].endswith('_0')
+            rows[('PQZL', 16, aud)] = dict(stmt=multi_len(16, aud), proof=r['proof_bytes_max'], bound=MAX_PROOF['PQZL'], src='L3 oversize')
+        t = r.get('timing', '')
+        if t.startswith('R_TXM16') and t.endswith('verify valid'):
+            rows[('PQZL', 16, not t.split()[0].endswith('_0'))]['p99'] = r['p99_ms']
+    for r in jsonl('pqzh/ligero/runs/l16-txm-oversize.jsonl'):
+        rel = r.get('rel', '')
+        m = int(rel[5:].split('_')[0]) if rel.startswith('R_TXM') else 0
+        if m in (8, 16):
+            k = ('PQZH', m, not rel.endswith('_0'))
+            row = rows.setdefault(k, dict(stmt=multi_len(m, k[2]), src='H2 oversize'))
+            if 'max_len_exact' in r:
+                row.update(proof=r['proof_bytes_max'], bound=r['max_len_exact'])
+            if r.get('timing') == 'verify_honest':
+                row['p99'] = r['stats']['p99_ms']
+    wasm = {}
+    for r in jsonl('rel3/runs/l3a-wasm-fast.jsonl'):
+        if r.get('timing', '').endswith('verify valid'):
+            wasm[('PQZL', r['timing'].split()[0])] = r['p99_ms']
+    for f in ('pqzh/ligero/runs/l16-txm-oversize-wasm.jsonl', 'pqzh/ligero/runs/l16-txm-proven-wasm.jsonl'):
+        for r in jsonl(f):
+            if r.get('timing') == 'verify_honest':
+                wasm[('PQZH', r['rel'])] = r['stats']['p99_ms']
+    if not rows:
+        print(f'(no measured op 7 rows: {bench} missing)')
+        return
+    print('| system | M | auditor | statement B | proof B (measured) | proof bound | input B | worst-case input B | '
+          'verify p99 native / wasm32 ms | gas | D3 verdict | source |')
+    print('|---|---|---|---|---|---|---|---|---|---|---|---|')
+    for (system, m, aud), r in sorted(rows.items(), key=lambda x: (x[0][0] != 'PQZL', not x[0][2], x[0][1])):
+        g = -(-m // 4)
+        a = int(aud)
+        inp, worst = 5 + r['stmt'] + r['proof'], 5 + r['stmt'] + r['bound']
+        w = wasm.get((system, f"R_TXM{m}{'' if aud else '_0'}"))
+        cal_coef = CT + g * U + m * V + V + a * m * V
+        total, _ = gas(cal_coef, r['proof'] + MLDSA_SIG + 32 * m, inp, r['p99'], m + 1 + a, m, g * U + (1 + (1 + a) * m) * V)
+        why = [x for x, bad in (('input', worst > MAX_INPUT), ('MAX_PROOF', r['bound'] > MAX_PROOF[system]),
+                                ('p99', r['p99'] > 60 or (w or 0) > 60), ('gas cap', total > TX_CAP)) if bad]
+        print(f"| {system} | {m} | {'on' if aud else 'off'} | {r['stmt']:,} | {r['proof']:,} | {r['bound']:,} | {inp:,} | "
+              f"{worst:,} | {r['p99']:.2f} / {'-' if w is None else f'{w:.2f}'} | {total / 1e6:.2f} M | "
+              f"{'not built: > ' + ', '.join(why) if why else 'built'} | {r['src']} |")
+
+
 if __name__ == '__main__':
     main()
     print()
     limits()
     print()
     s1_grouping()
+    print()
+    measured()

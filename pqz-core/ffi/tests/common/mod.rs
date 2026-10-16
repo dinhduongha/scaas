@@ -3,20 +3,33 @@
 #![allow(dead_code)]
 use pqz_ffi::fixture;
 use pqz_ffi::stmt::{self, Form, Reject, H_AUDITOR_ON, H_FEE, H_SALT, H_TO, HEADER_BYTES, MAX_PROOF_PQZH, MAX_PROOF_PQZL};
+use pqz_ffi::stmt::{H_LEGS, H_RECIPIENTS_HASH, OP_TRANSFER_MULTI};
 use pqz_ffi::*;
 
 pub const RND: [u8; 32] = [0x33; 32];
 
 pub struct Honest {
     pub id: Word,
-    pub form: Form,
+    pub op: u8,
+    /// ops 1-5
+    pub form: Option<Form>,
+    /// op 7: (M, auditorOn)
+    pub multi: Option<(usize, bool)>,
     pub stmt: Vec<u8>,
     pub proof: Vec<u8>,
 }
 
 impl Honest {
     pub fn op(&self) -> u8 {
-        self.form.op()
+        self.op
+    }
+    /// the form (`Transfer`, …) or `TransferMulti<M>[_0]`
+    pub fn name(&self) -> String {
+        match (self.form, self.multi) {
+            (Some(f), _) => format!("{f:?}"),
+            (_, Some((m, a))) => format!("TransferMulti{m}{}", if a { "" } else { "_0" }),
+            _ => "?".into(),
+        }
     }
     pub fn input(&self) -> Vec<u8> {
         stmt::input(self.op(), &self.stmt, &self.proof)
@@ -27,17 +40,34 @@ impl Honest {
     /// from a precompile input (decoded: id, form)
     pub fn from_input(b: &[u8]) -> Honest {
         let i = decode(b).expect("honest input");
-        Honest { id: *i.stmt.proof_system_id().unwrap(), form: i.stmt.form().unwrap(), stmt: i.stmt_bytes.to_vec(), proof: i.proof.to_vec() }
+        let multi = match &i.stmt {
+            stmt::Stmt::Multi(m) => Some((m.m, m.pk_a.is_some())),
+            _ => None,
+        };
+        Honest {
+            id: *i.stmt.proof_system_id().unwrap(),
+            op: i.op,
+            form: i.stmt.form(),
+            multi,
+            stmt: i.stmt_bytes.to_vec(),
+            proof: i.proof.to_vec(),
+        }
     }
 }
 
-/// Every form of both ids, proved (fixture, rnd32 = RND).
+/// Every form of both ids, then every built op 7 shape of both ids, proved (fixture, rnd32 = RND).
 pub fn prove_all() -> Vec<Honest> {
     let mut v = Vec::new();
     for id in [PQZL_ID, PQZH_ID] {
         for c in fixture::cases(&id).expect("fixture") {
             let proof = prove(c.op(), &c.stmt, &c.wit, &RND).unwrap_or_else(|e| panic!("prove {:?} {:?}: {e:?}", id[0], c.form));
-            v.push(Honest { id, form: c.form, stmt: c.stmt, proof });
+            v.push(Honest { id, op: c.op(), form: Some(c.form), multi: None, stmt: c.stmt, proof });
+        }
+    }
+    for id in [PQZL_ID, PQZH_ID] {
+        for c in fixture::multi_cases(&id, usize::MAX).expect("fixture op 7") {
+            let proof = prove(c.op(), &c.stmt, &c.wit, &RND).unwrap_or_else(|e| panic!("prove {:?} {}: {e:?}", id[0], c.name()));
+            v.push(Honest { id, op: c.op(), form: None, multi: Some((c.m, c.aud)), stmt: c.stmt, proof });
         }
     }
     v
@@ -141,9 +171,13 @@ pub fn negatives(h: &Honest) -> Vec<(String, Vec<u8>, Option<Reject>)> {
         f(&mut s[off..]);
         s
     };
+    // an op 7 shape that fits MAX_PROOF + 1 within MAX_INPUT (all but PQZH (4, on): 5 + 132,992 + 262,145 > 393,216,
+    // whose boundary `multi_input_boundary` checks)
+    let over_fits = 5 + st.len() + max + 1 <= MAX_INPUT;
     let mut v: Vec<(String, Vec<u8>, Option<Reject>)> = vec![
         ("op 0".into(), inp(0, st, pf), Some(Reject::Op)),
-        ("op 7".into(), inp(7, st, pf), Some(Reject::Op)),
+        ("op 8".into(), inp(8, st, pf), Some(Reject::Op)),
+        ("op 1 <-> op 7".into(), inp(if op == OP_TRANSFER_MULTI { 1 } else { OP_TRANSFER_MULTI }, st, pf), Some(Reject::OpTag)),
         ("op 6 with the statement".into(), inp(6, st, pf), Some(Reject::Op)),
         ("other op".into(), inp(op % 5 + 1, st, pf), Some(Reject::OpTag)),
         ("opTag of another op".into(), inp(op, &with(0, &|s| {
@@ -160,7 +194,6 @@ pub fn negatives(h: &Honest) -> Vec<(String, Vec<u8>, Option<Reject>)> {
             Some(Reject::Coefficient)),
         ("coefficient top byte".into(), inp(op, &with(st.len() - 8, &|s| s[0] = 0x80), pf), Some(Reject::Coefficient)),
         ("empty proof".into(), inp(op, st, &[]), Some(Reject::ProofLength)),
-        ("MAX_PROOF + 1".into(), inp(op, st, &vec![0; max + 1]), Some(Reject::ProofLength)),
         ("proof truncated".into(), inp(op, st, &pf[..pf.len() - 1]), None),
         ("proof half".into(), inp(op, st, &pf[..pf.len() / 2]), None),
         ("proof + 1 byte".into(), inp(op, st, &[&pf[..], &[0]].concat()), None),
@@ -170,8 +203,43 @@ pub fn negatives(h: &Honest) -> Vec<(String, Vec<u8>, Option<Reject>)> {
         ("other system's id".into(), inp(op, &with(32, &|s| s[..32].copy_from_slice(if h.pqzl() { &PQZH_ID } else { &PQZL_ID })), pf), None),
         ("statement last coefficient - 1".into(), inp(op, &with(st.len() - 1, &|s| s[0] ^= 1), pf), None),
     ];
-    if let Form::Transfer | Form::Transfer0 | Form::Burn | Form::Refresh = h.form {
-        let tr = matches!(h.form, Form::Transfer | Form::Transfer0);
+    if over_fits {
+        v.push(("MAX_PROOF + 1".into(), inp(op, st, &vec![0; max + 1]), Some(Reject::ProofLength)));
+    }
+    if let Some((m, aud)) = h.multi {
+        let word = |x: u64| stmt::u64_word(x);
+        let set = |i: usize, w: stmt::Word| with(32 * i, &move |s| s[..32].copy_from_slice(&w));
+        let other_m = if m == 1 { 2 } else { 1 };
+        v.extend([
+            ("fee 2^64".into(), inp(op, &with(32 * H_FEE + 23, &|s| s[0] = 1), pf), Some(Reject::Fee)),
+            ("amount 1".into(), inp(op, &set(stmt::H_AMOUNT, word(1)), pf), Some(Reject::MustBeZero("amount"))),
+            ("amount 2^64".into(), inp(op, &with(32 * stmt::H_AMOUNT + 23, &|s| s[0] = 1), pf), Some(Reject::Amount)),
+            ("salt high half".into(), inp(op, &with(32 * H_SALT, &|s| s[0] = 1), pf), Some(Reject::Salt)),
+            ("fee + 1".into(), inp(op, &with(32 * H_FEE + 31, &|s| s[0] ^= 1), pf), None),
+            ("auditorOn 2".into(), inp(op, &set(H_AUDITOR_ON, word(2)), pf), Some(Reject::AuditorOn)),
+            ("auditorOn flipped".into(), inp(op, &set(H_AUDITOR_ON, word(!aud as u64)), pf), Some(Reject::Length)),
+            ("M word 0".into(), inp(op, &set(H_LEGS, word(0)), pf), Some(Reject::Legs)),
+            ("M word 3".into(), inp(op, &set(H_LEGS, word(3)), pf), Some(Reject::Legs)),
+            ("M word 16".into(), inp(op, &set(H_LEGS, word(16)), pf), Some(Reject::Legs)),
+            ("M word high byte".into(), inp(op, &with(32 * H_LEGS, &|s| s[0] = 1), pf), Some(Reject::Legs)),
+            ("M word another built M".into(), inp(op, &set(H_LEGS, word(other_m)), pf), Some(Reject::Length)),
+            ("recipientsHash changed".into(), inp(op, &with(32 * H_RECIPIENTS_HASH + 31, &|s| s[0] ^= 1), pf), None),
+            ("memoHash changed".into(), inp(op, &with(32 * stmt::H_MEMO_HASH, &|s| s[0] ^= 0x80), pf), None),
+            ("body coefficient = q".into(), inp(op, &with(HEADER_BYTES, &|s| s[..8].copy_from_slice(&stmt::Q.to_be_bytes())), pf),
+                Some(Reject::Coefficient)),
+        ]);
+        if !h.pqzl() {
+            v.push(("M word 8 (PQZH, not built)".into(), inp(op, &set(H_LEGS, word(8)), pf), Some(Reject::Legs)));
+        }
+        if (m, aud) == (1, true) {
+            // 83,072 B relabelled (M = 2, auditor off): decodes (the words pick the shape), the objects shift, rejected
+            let two = with(32 * H_LEGS, &|s| s[..32].copy_from_slice(&stmt::u64_word(2)));
+            let two = [&two[..32 * H_AUDITOR_ON], &word(0), &two[32 * H_AUDITOR_ON + 32..]].concat();
+            v.push(("(1, on) relabelled (2, off)".into(), inp(op, &two, pf), None));
+        }
+    }
+    if let Some(Form::Transfer | Form::Transfer0 | Form::Burn | Form::Refresh) = h.form {
+        let tr = matches!(h.form, Some(Form::Transfer | Form::Transfer0));
         v.extend([
             ("fee 2^64".into(), inp(op, &with(32 * H_FEE + 23, &|s| s[0] = 1), pf), Some(Reject::Fee)),
             ("amount 2^64".into(), inp(op, &with(32 * stmt::H_AMOUNT + 23, &|s| s[0] = 1), pf), Some(Reject::Amount)),
@@ -191,7 +259,7 @@ pub fn negatives(h: &Honest) -> Vec<(String, Vec<u8>, Option<Reject>)> {
         v.push(("body coefficient = q".into(), inp(op, &with(HEADER_BYTES, &|s| s[..8].copy_from_slice(&stmt::Q.to_be_bytes())), pf),
             Some(Reject::Coefficient)));
     }
-    if let Form::DiscloseSender | Form::DiscloseReceiver | Form::DiscloseAuditor = h.form {
+    if let Some(Form::DiscloseSender | Form::DiscloseReceiver | Form::DiscloseAuditor) = h.form {
         v.push(("disclosure amount 2^64".into(), inp(op, &with(32 * stmt::DW_AMOUNT + 23, &|s| s[0] = 1), pf), Some(Reject::Amount)));
         v.push(("disclosure kind changed".into(), inp(op, &with(32 * stmt::DW_KIND + 31, &|s| s[0] ^= 4), pf), None));
     }

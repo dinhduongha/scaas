@@ -1,5 +1,6 @@
 //! The precompile in its production configuration (review of p6e-a3, controller 2026-10-14): a fresh process whose
-//! core has never proved, on the verify-only arena (`ARENA_SMALL`, 144 MiB). The honest inputs are proved by a child process
+//! core has never proved, on the verify-only arena (`ARENA_SMALL`, 512 MiB since P6-ANON S3). The honest inputs (every
+//! form and every built op 7 shape of both ids) are proved by a child process
 //! (`child_task`), so this process only verifies.
 //!
 //! `verify_only_arena`: the full adversarial corpus (every decoder rejection and framing case, the 10,240-input
@@ -68,7 +69,7 @@ fn verify_only_arena() {
     let f = tmp("verify_only_inputs.bin");
     child("child_task", &format!("gen:{f}"));
     let hs = from_bytes(&std::fs::read(&f).unwrap());
-    assert_eq!(hs.len(), 16);
+    assert_eq!(hs.len(), 16 + 14);
     let honest: Vec<Vec<u8>> = hs.iter().map(|h| h.input()).collect();
     let c = corpus(&hs, N_GEN);
     let gen_from = c.len() - N_GEN;
@@ -125,10 +126,11 @@ fn verify_only_arena() {
     assert_eq!(pqzl::arena_bytes(), pqzl::ARENA_SMALL);
     let lp = pqzh_ligero::ligero::VERIFY_PANICS.load(Relaxed);
     eprintln!(
-        "verify-only {} MiB: corpus {} inputs ({} generator), warm-up {warm_s:.1} s, {valid} valid (= the unedited honest \
+        "verify-only {} MiB: {} honest inputs, corpus {} inputs ({} generator), warm-up {warm_s:.1} s, {valid} valid (= the unedited honest \
          ones), status 3 / 4: 0; generator again from 8 threads and on a 1 MiB stack: equal; 5,000 mixed calls: equal; \
          arena used {used0} B after every call, peak {peak0} B = {:.2} of the arena (margin {:.2}x), Ligero panics caught {lp}",
         pqzl::ARENA_SMALL >> 20,
+        hs.len(),
         c.len(),
         N_GEN,
         peak0 as f64 / pqzl::ARENA_SMALL as f64,
@@ -157,9 +159,9 @@ fn fill_determinism() {
     assert_eq!(outs[0], outs[2], "0x00 vs 0x5A");
     let lines = outs[0].lines().count();
     let valid = outs[0].matches("\"valid\": true").count();
-    assert_eq!(valid, 16);
+    assert_eq!(valid, 2 * (8 + 6));
     if let Ok(p) = std::env::var("PQZ_FFI_FILL_OUT") {
         std::fs::write(p, &outs[0]).unwrap();
     }
-    eprintln!("fill determinism: arenas filled 0x00 / 0xA5 / 0x5A before pqz_init: {lines} result lines identical (digest lines of 16 forms incl. proofs, self-test, {} corpus results)", lines - 17);
+    eprintln!("fill determinism: arenas filled 0x00 / 0xA5 / 0x5A before pqz_init: {lines} result lines identical (digest lines of 16 forms and 12 op 7 shapes incl. proofs, self-test, {} corpus results)", lines - 29);
 }
