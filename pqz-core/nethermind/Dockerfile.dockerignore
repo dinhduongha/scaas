@@ -1,11 +1,11 @@
 # context = the repo root; only what the Dockerfile copies
 *
 !LICENSE
-!pqz-core/check_symbols.sh
+!pqz-core/pqzl/check_symbols.sh
 !pqz-core/NOTICE
-!pqz-core/src
-!pqz-core/lazer
-!pqz-core/params
+!pqz-core/pqzl/src
+!pqz-core/pqzl/lazer
+!pqz-core/pqzl/params
 !pqz-core/stmt
 !pqz-core/pqzh/ligero
 !pqz-core/ffi

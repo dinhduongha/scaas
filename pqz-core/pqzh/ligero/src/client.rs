@@ -12,7 +12,7 @@ use pqz_stmt::{
 use crate::cs::Rel;
 use crate::ring::*;
 
-/// byte offsets of the statement words the tests and mutations touch (pq-zether.md §7.7, §7.9)
+/// byte offsets of the statement words the tests and mutations touch (pq-zero-knowledge.md §7.7, §7.9)
 pub const PREFIX: usize = 64;
 pub const HDR_FEE: usize = 32 * H_FEE;
 pub const HDR_AMOUNT: usize = 32 * H_AMOUNT;

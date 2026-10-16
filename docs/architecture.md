@@ -51,7 +51,7 @@ product; everything else is a way to reach them:
 - **Client-side signers** — `clientkeys` (passkey signer, 24-word seed vault, extension wallets) so that the subject
   signs on its own device ([clients/signers-clientkeys.md](clients/signers-clientkeys.md)).
 - **`zether-prover`** — proofs for confidential amounts ([contracts/zether.md](contracts/zether.md),
-  [contracts/pq-zether.md](contracts/pq-zether.md)).
+  [contracts/pq-zero-knowledge.md](contracts/pq-zero-knowledge.md)).
 - **The console and dApp** (`clients/app/`) — wallets, payments, DEX, Zether and node administration
   ([clients/app.md](clients/app.md)).
 
@@ -245,7 +245,7 @@ agent signs, a relayer pays gas); Zether keeps commercial amounts confidential w
 | Build and test scripts | `smartcontracts/scripts/{build,test,deploy,devnet}.sh <family>`; `scripts/capped` | One entry point per family; heavy runs capped at 4 GB, one at a time | BUILT |
 | `scaas-node` | `scaas-node/` | Rust relayer: gateway, submit lanes, indexer, drift, DEX venue, admin; mesh envelope library | BUILT with the legacy pull job source; store, job API, admin auth and gateway additions SPECIFIED; mesh transports SPECIFIED ([node/README.md](node/README.md)) |
 | Node store | (in `scaas-node`) | Jobs, feeds, configuration authority, credentials, audit, DEX book, mesh tables; SQLite, PostgreSQL or MySQL | SQLite store BUILT; the rest SPECIFIED ([node/store.md](node/store.md)) |
-| `zether-prover` | `clients/zether-prover/` (Rust, `cdylib` + `rlib`, WASM) | Key generation (EIP-2333 paths), ElGamal, Σ-protocol + Bulletproofs (n = 64), disclosure openings, BSGS, `zether-cli`, `zether-read-balance` | BUILT (unaudited); feature `pq` and `pqz-cli` SPECIFIED ([contracts/pq-zether.md](contracts/pq-zether.md)) |
+| `zether-prover` | `clients/zether-prover/` (Rust, `cdylib` + `rlib`, WASM) | Key generation (EIP-2333 paths), ElGamal, Σ-protocol + Bulletproofs (n = 64), disclosure openings, BSGS, `zether-cli`, `zether-read-balance` | BUILT (unaudited); feature `pq` and `pqz-cli` SPECIFIED ([contracts/pq-zero-knowledge.md](contracts/pq-zero-knowledge.md)) |
 | `clientkeys` | `clients/clientkeys/` (ESM, `@noble` / `@scure`) | Passkey signer, 24-word seed vault, Zether keys and balance cache | BUILT (EVM-centric); vault v2, non-EVM signers, `fam/*`, `wallets/*` and `UAKey` SPECIFIED ([clients/signers-clientkeys.md](clients/signers-clientkeys.md)) |
 | `clients/app/` | `scaas/clients/app/` (React + Vite) | Console and dApp over every family: contracts, wallets, DEX book, Zether, node administration (built-in login or OIDC) | SPECIFIED ([clients/app.md](clients/app.md)) |
 | ERP connectors | in the client's codebase | Outbox, push and sync jobs, payment provider, portal, DEX accounting | one worked example: [integration-odoo-example.md](integration-odoo-example.md) |
@@ -522,7 +522,7 @@ The other families implement the same three pieces — token, mandate, DEX — i
 
 | Family | Meta-tx mechanism (BUILT) | Account model | DEX settlement | Confidential |
 |---|---|---|---|---|
-| EVM, Hedera (reference) | `MetaTransaction` / `MetaTransfer` in the contract (EIP-712, `salt = chain_uid`) | native EOA or ERC-1271, Universal Account ledger in the token, `SmartKeyAccount` | `SCaaSDex` clone, token-verified `TradeOrder`s | Zether kinds (development chains); PQ Zether on chain 7622 ([contracts/pq-zether.md](contracts/pq-zether.md)) |
+| EVM, Hedera (reference) | `MetaTransaction` / `MetaTransfer` in the contract (EIP-712, `salt = chain_uid`) | native EOA or ERC-1271, Universal Account ledger in the token, `SmartKeyAccount` | `SCaaSDex` clone, token-verified `TradeOrder`s | Zether kinds (development chains); PQ Zether on chain 7622 ([contracts/pq-zero-knowledge.md](contracts/pq-zero-knowledge.md)) |
 | Cosmos | contract-level `Relay{payload, auth}` | CW20 balances per account; passkey owners as UA ids ([NET-ALL-21](networks/README.md#NET-ALL-21)) | CW20 `TransferFrom` under an allowance to the DEX contract | none |
 | Soroban (Stellar, Pi) | native Soroban authorization entries (nonce + ledger expiry) | native accounts or a custom account (`__check_auth`) | two `require_auth` in one call | none |
 | Move — Aptos | contract-level, one `Account` object per owner with lanes | the `Account` object holds any asset | legs moved inside one transaction | none |

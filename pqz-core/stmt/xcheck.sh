@@ -6,8 +6,8 @@ set -eu
 cd "$(dirname "$0")"
 R=runs/$1 X=$(pwd)/target/xcheck
 mkdir -p runs "$X/c"
-(cd .. && ./build.sh native) > "$R-build.txt" 2>&1
-${CC:-clang} -std=gnu11 -O2 -I../src -o "$X/dump_setup" ../pqzh/xcheck/dump_setup.c ../build/native/libpqz.a
+(cd ../pqzl && ./build.sh native) > "$R-build.txt" 2>&1
+${CC:-clang} -std=gnu11 -O2 -I../pqzl/src -o "$X/dump_setup" ../pqzh/xcheck/dump_setup.c ../pqzl/build/native/libpqz.a
 "$X/dump_setup" "$X/c" pqzh
 sha256sum "$X"/c/*_stmt.bin | sed "s#$X/##" > "$R-c-stmts.txt"
 python3 -I xcheck.py "$X/c" "$X/py.txt" "${N:-4}" > "$R-xcheck-py.txt"

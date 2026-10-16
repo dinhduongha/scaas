@@ -81,7 +81,7 @@ Pay lives in `MetaTokenBase`, **not** in
 Hedera is the immutable `IS_HEDERA` ([CTR-TOK-23](token-wrappers.md#CTR-TOK-23)), not a child contract.
 The v1 line (the built `ERC20MetaTxV1` mixin, `MetaToken`, `HederaMetaToken` and factory v1) is removed from the product; kept for reference under the tag `ref/pre-token-tree` and `smartcontracts/evm/legacy/` (not built): issuer tokens
 use `NoUnderlyingToken`, 1:1 wrappers use an `UnderlyingToken` with one leg and `num = den = 1`; Zether's separate mixin
-`ZetherMetaTx` disappears into the base, and so does `PqzToken`'s `PqzMetaTx` ([CTR-PQZ-21](pq-zether.md#CTR-PQZ-21)).
+`ZetherMetaTx` disappears into the base, and so does `PqzToken`'s `PqzMetaTx` ([CTR-PQZ-21](pq-zero-knowledge.md#CTR-PQZ-21)).
 One domain version, `"1"`, for every token.
 
 <a id="CTR-MTX-25"></a>**CTR-MTX-25** — One internal `SigCheck` (ECDSA low-s, ERC-1271 with the gas-cap rule, the HIP-632
@@ -331,7 +331,7 @@ it. Nothing else is reachable through `mtxExecute`.
 | | `zetherShield(bytes,uint256)`, `zetherWrapShield(address,uint256,bytes32)` (`UNDERLYING_ZETHER`) | `ABSOLUTE` |
 | | `zetherTransfer`, `…Bundle`, `…NoBundle`, `…Single` `(bytes,bytes,bytes,bytes32)`, `zetherUnshield(bytes,bytes,bytes,bytes32,address,uint256)`, `zetherUnshieldUnwrap` | `ABSOLUTE`; envelope binding through the ticket ([CTR-ZTH-34](zether.md#CTR-ZTH-34)) |
 | | `zetherUnshieldToUA`, `zetherUnshieldUnwrapToUA` (`UNDERLYING_ZETHER`) (SPECIFIED, UA-5c; [CTR-ZTH-51](zether.md#CTR-ZTH-51)) | `ABSOLUTE`; envelope binding as above |
-| `PqzToken` | `pqzTransfer(bytes,bytes,bytes[],bytes,bytes)`, `pqzUnshield(bytes,bytes,bytes[],uint256,address,bytes,bytes)`, `pqzShield(bytes32,uint256)`, `pqzRollOver(bytes32,bytes,bytes[])` | `ABSOLUTE`; not batchable ([CTR-PQZ-21](pq-zether.md#CTR-PQZ-21)) |
+| `PqzToken` | `pqzTransfer(bytes,bytes,bytes[],bytes,bytes)`, `pqzUnshield(bytes,bytes,bytes[],uint256,address,bytes,bytes)`, `pqzShield(bytes32,uint256)`, `pqzRollOver(bytes32,bytes,bytes[])` | `ABSOLUTE`; not batchable ([CTR-PQZ-21](pq-zero-knowledge.md#CTR-PQZ-21)) |
 | `MandateWallet` | delegate: `payUnderMandate(address,address,uint256,bytes32,uint64)`, `revoke(address,uint64)`; owner: `setMandate`, `setPayee`, `revoke(address)`, `execute` ([CTR-ACC-06](mandates.md#CTR-ACC-06)) | fee `NONE` only |
 | `SmartKeyAccount` | `addKey`, `removeKey`, `rotateKey`, `setGuardian`, `cancelRecovery`, `execute`, signed by the account itself ([CTR-ACC-10](accounts.md#CTR-ACC-10)) | fee `NONE` only |
 

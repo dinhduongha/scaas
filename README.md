@@ -286,7 +286,7 @@ heavy logic sits in external libraries ([CTR-TOK-21](docs/contracts/token-wrappe
 | Smart account (optional) | `SmartKeyAccount`, `SmartKeyAccountFactory` | `MetaTxBase` + `IERC1271`; P-256 passkeys; signs its own calls as itself ([CTR-ACC-10](docs/contracts/accounts.md#CTR-ACC-10)) | BUILT (on `MetaTxBase`, P4) | [accounts](docs/contracts/accounts.md#subjectaccount) |
 | Universal Accounts | the UA registry with one verifier per kind (`smartcontracts/evm/src/ua/UARegistry.sol`; the Zether kinds since UA-3; the old Zether-only registry is backed up in `smartcontracts/evm/legacy/ua3/`, not built); next MetaToken v3 with a UA ledger (UA-4) | the signature, multisig, BLS and hash-to-curve libraries | UA registry BUILT; MetaToken v3 / UA ledger (UA-4) SPECIFIED | [accounts](docs/contracts/accounts.md#universal-account) |
 | Zether | the `*_ZETHER` kinds (`ZetherLayer` + `ZetherLib`), `ZetherStatements`, `ZetherVerifierBn254`, `ZetherVerifierBls12381`, `ITransferDisclosure` | `MetaTokenBase`; EIP-196/197 and EIP-2537 precompiles | BUILT, unaudited (P3) | [zether](docs/contracts/zether.md) |
-| PQ Zether | `PqzToken` | `ERC20MetaTx`, relayed like Zether ([CTR-PQZ-21](docs/contracts/pq-zether.md#CTR-PQZ-21)); a lattice precompile on chain 7622 — public chains once they offer one | SPECIFIED | [pq-zether](docs/contracts/pq-zether.md) |
+| PQ Zether | `PqzToken` | `ERC20MetaTx`, relayed like Zether ([CTR-PQZ-21](docs/contracts/pq-zero-knowledge.md#CTR-PQZ-21)); a lattice precompile on chain 7622 — public chains once they offer one | SPECIFIED | [pq-zether](docs/contracts/pq-zero-knowledge.md) |
 | Asset suite | `ComplianceRegistry`, `VestingGrant`, `Distribution`, `ExchangeOffer` | regulated flags 5–8 on ordinary token kinds ([CTR-AS-17](docs/contracts/asset-suite.md#CTR-AS-17)); ERC-7201 namespaced storage | SPECIFIED | [asset-suite](docs/contracts/asset-suite.md) |
 | Tender | `SealedBidTender` | commit and reveal with deposits | SPECIFIED | [tender](docs/contracts/tender.md) |
 | Sponsorship | `SponsorshipPool` | opt-in gas sponsorship contract | PLANNED | [sponsorship](docs/node/sponsorship.md) |
@@ -765,7 +765,7 @@ named auditor opens any single transfer.
 | Where | Development chains only, until an independent audit | Private/PoA chains only (chain 7622), behind a precompile self-test |
 | Status | BUILT, **unaudited — not for production funds** | SPECIFIED, **unaudited** |
 
-Read more: [docs/contracts/zether.md](docs/contracts/zether.md), [docs/contracts/pq-zether.md](docs/contracts/pq-zether.md),
+Read more: [docs/contracts/zether.md](docs/contracts/zether.md), [docs/contracts/pq-zero-knowledge.md](docs/contracts/pq-zero-knowledge.md),
 [docs/contracts/accounts.md](docs/contracts/accounts.md).
 
 ---

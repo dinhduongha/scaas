@@ -8,7 +8,7 @@ proof systems through `pqz-ffi`'s C ABI) and the ML-DSA-44 / ML-DSA-65 precompil
 addresses outside the EIP-1352 range, priced by a calibrated deterministic table frozen in the chainspec; a local image
 `scaas/nethermind-pqz:1.39.0-pqz1` (never pushed); tested on a throwaway copy of chain 7622, then **run for real on
 the live chain 7622** with timestamped backups, health checks, the self-test and e2e on the live chain, and a rehearsed
-rollback. Gate: **pq-zether.md §10 steps 1–2 and 5 pass on the copy**, then the live roll-out (§10 steps 3–4).
+rollback. Gate: **pq-zero-knowledge.md §10 steps 1–2 and 5 pass on the copy**, then the live roll-out (§10 steps 3–4).
 Not here: `PqzToken`, `UAPqzVerifier`, the UA registry redeploy (P6g); the node's `pqz` profile and `pqz_call` (P6i);
 a follower node on the live chain (owner step, rehearsed here); chain 22776 (owner step).
 
@@ -39,7 +39,7 @@ pins), the plugin compiled against the **assemblies extracted from the pinned im
 NUnit for tests, `pqz-ffi` (Rust 1.97.1, merged on `main`), Docker (BuildKit, local only), Foundry `cast` / `forge`,
 Python 3 stdlib (`python3 -I`) for the e2e driver.
 
-**Spec:** [pq-zether.md](../../contracts/pq-zether.md) CTR-PQZ-10 (§9 precompile, never-crash, probing), §9.1 (input,
+**Spec:** [pq-zero-knowledge.md](../../contracts/pq-zero-knowledge.md) CTR-PQZ-10 (§9 precompile, never-crash, probing), §9.1 (input,
 ops, `OP_SELFTEST`), §9.2 (ML-DSA precompile), CTR-PQZ-11 (§9.3 gas model, block target 80 M within EIP-7934, node
 limits), §10 (build, consensus rules, operational steps 1–5, contract self-test); [accounts.md](../../contracts/accounts.md)
 CTR-UA-23 (ML-DSA by probe, empty context); [pq-eips-vs-scaas.md](../../research/pq-eips-vs-scaas.md) Q6 (private
@@ -334,7 +334,7 @@ PqzPrecompileProbe.t.sol}`, `runs/<date>-copy-*.txt`.
 
 ### Task 9: Docs and decisions — light
 
-**Files:** `docs/contracts/pq-zether.md` (CTR-PQZ-10: plugin, addresses D3, status mapping D4; §9.1 address; §9.2
+**Files:** `docs/contracts/pq-zero-knowledge.md` (CTR-PQZ-10: plugin, addresses D3, status mapping D4; §9.1 address; §9.2
 → "`MLDSA44` / `MLDSA65`, EIP-8355 layout and gas, empty context", transitional text removed; CTR-PQZ-11: per-row
 formula, schedules as allowlist, `selftestGas` D6, the measured table, limits D8; §10: plugin build, chainspec
 `engine.Pqz`, runbook link, step 5 status), `docs/contracts/accounts.md` (CTR-UA-23: 7622's ML-DSA addresses),

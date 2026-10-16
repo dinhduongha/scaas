@@ -16,8 +16,8 @@ rm -rf "$X" && mkdir -p "$X/c" "$X/ligero" "$X/out" vectors/runs
 fail=0
 step() { name=$1; shift; echo "\$ $*"; "$@" || { echo "FAILED: $name (rc=$?)"; fail=1; }; }
 {
-  step build-c sh -c "cd .. && ./build.sh native > /dev/null"
-  step dump-c sh -c "${CC:-clang} -std=gnu11 -O2 -I../src -o $X/dump_setup ../pqzh/xcheck/dump_setup.c ../build/native/libpqz.a && $X/dump_setup $X/c txm"
+  step build-c sh -c "cd ../pqzl && ./build.sh native > /dev/null"
+  step dump-c sh -c "${CC:-clang} -std=gnu11 -O2 -I../pqzl/src -o $X/dump_setup ../pqzh/xcheck/dump_setup.c ../pqzl/build/native/libpqz.a && $X/dump_setup $X/c txm"
   step dump-ligero sh -c "cd ../pqzh/ligero && cargo run -j2 --release --offline --quiet --example dump_setup -- $X/ligero"
   step lh2 cargo run -j2 --release --offline --quiet --features prove --example lh2 -- "$X/c" "$X/ligero" "$X/out"
   step kat_multi python3 -I ../pqzh/xcheck/kat_multi.py "$X/out"

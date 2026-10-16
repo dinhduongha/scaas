@@ -42,7 +42,7 @@ from calldata, to `s`, amounts, `R`, `SENDER_S` and every `SENDER_CP` opening.
 deploy check.
 
 **Spec (normative, on `main`):** `docs/contracts/zether.md` CTR-ZTH-30, -38, -42, -48, -49, -50, §7 (480-byte header),
-§9/§11 payloads, §14 "who can open what", §19 gas, §21 interface; `docs/contracts/pq-zether.md` CTR-PQZ-19, -23, -24
+§9/§11 payloads, §14 "who can open what", §19 gas, §21 interface; `docs/contracts/pq-zero-knowledge.md` CTR-PQZ-19, -23, -24
 (spec only, no code); `docs/contracts/token-wrappers.md` CTR-TOK-25 (`ConfidentialConfig`);
 `docs/research/zether-disclosure.md` (status block: R3 by FULL, G1/R7 by the salt, §7 by the memo, R6 open);
 `docs/decisions.md` (CTR-ZTH-48/49/50 entries); TODO.md P3b row; HANDOFF.md.
@@ -3565,7 +3565,7 @@ for name,f,a,b,path in muts:
 **Model:** Sonnet, effort medium.
 
 **Files:** `docs/contracts/{zether.md, settlement.md, token-wrappers.md}`, `docs/research/zether-disclosure.md`,
-`docs/decisions.md`, `docs/history/dropped-artifacts.tsv`, `TODO.md`, `HANDOFF.md` (no edit to `pq-zether.md`: PQZ
+`docs/decisions.md`, `docs/history/dropped-artifacts.tsv`, `TODO.md`, `HANDOFF.md` (no edit to `pq-zero-knowledge.md`: PQZ
 stays specified). Line deltas: zether.md 75/75, decisions.md 2/2, settlement/token-wrappers/research 1/1 (net 0 on
 every page over budget); dropped-artifacts +2; TODO 2/2; HANDOFF +9.
 
@@ -3605,12 +3605,12 @@ index c77dfc5..40f2795 100644
 +| P3 | `*_ZETHER` kinds: `ZetherLayer`, `ZetherLib`, `ZetherStatements`, shield / unshield paths; `ZetherToken` to `legacy/p3/` (owner: backup, not delete) (done, merged `dc9d219`; P3b modes done) | MT-6 |
  | P4 | `MandateWallet`, `SmartKeyAccount` (rename: EVM, Solana, Soroban) on `MetaTxBase`; the typed-struct line to `legacy/p4/` (done, merged `ebacaac`) | MT-7 (+ rename in NM-*) |
  | P5 | Node, clientkeys, encoders for the new ABI | MT-8, MT-9 |
- | P6 | PQ Zether after P5 (owner 2026-10-11): the E-S0…E-S8 stream ([pq-zether.md](docs/contracts/pq-zether.md)) on the finished token tree (`PqzToken` with CTR-PQZ-23/24 modes); PQ signatures as compatible as possible with the Ethereum drafts, both directions: ML-DSA ([EIP-8051](https://eips.ethereum.org/EIPS/eip-8051), [EIP-8355](https://eips.ethereum.org/EIPS/eip-8355): empty FIPS 204 context with domain separation in the message, the EIP key and message encodings incl. the expanded key) and Falcon/FN-DSA ([EIP-8052](https://eips.ethereum.org/EIPS/eip-8052): its hash variant and encoding); precompiles found by probe at the EIP addresses, the 7622 addresses moved out of the EIP-1352 range; see [pq-eips-vs-scaas.md](docs/research/pq-eips-vs-scaas.md) Q1–Q3, Q6; owner 2026-10-11 ([CTR-UA-23](docs/contracts/accounts.md#CTR-UA-23)): ML-DSA with the empty context and the kind tag in the message (`pq_msg = keccak256(TAG(kind) ‖ ua_msg)`), vectors regenerated; new kind `slhdsa128s` (0x0133, SLH-DSA-SHA2-128s, FIPS 205) with a gas-measurement gate before any public chain enables it | UA PQ kinds, E-S* |
+ | P6 | PQ Zether after P5 (owner 2026-10-11): the E-S0…E-S8 stream ([pq-zero-knowledge.md](docs/contracts/pq-zero-knowledge.md)) on the finished token tree (`PqzToken` with CTR-PQZ-23/24 modes); PQ signatures as compatible as possible with the Ethereum drafts, both directions: ML-DSA ([EIP-8051](https://eips.ethereum.org/EIPS/eip-8051), [EIP-8355](https://eips.ethereum.org/EIPS/eip-8355): empty FIPS 204 context with domain separation in the message, the EIP key and message encodings incl. the expanded key) and Falcon/FN-DSA ([EIP-8052](https://eips.ethereum.org/EIPS/eip-8052): its hash variant and encoding); precompiles found by probe at the EIP addresses, the 7622 addresses moved out of the EIP-1352 range; see [pq-eips-vs-scaas.md](docs/research/pq-eips-vs-scaas.md) Q1–Q3, Q6; owner 2026-10-11 ([CTR-UA-23](docs/contracts/accounts.md#CTR-UA-23)): ML-DSA with the empty context and the kind tag in the message (`pq_msg = keccak256(TAG(kind) ‖ ua_msg)`), vectors regenerated; new kind `slhdsa128s` (0x0133, SLH-DSA-SHA2-128s, FIPS 205) with a gas-measurement gate before any public chain enables it | UA PQ kinds, E-S* |
 @@ -77,7 +77,7 @@ phases P1–P5 (P0 = the docs, done); each phase ends with the size gate (CTR-TO
  - [ ] v1 line to backup (P5): `OpenFactoryV1`, `IOpenFactoryV1`, `IFactoryTokenV1` (and `MetaToken`/`HederaMetaToken`/`MetaTxDex`) wait for the node and clientkeys (the e2e deploys them); the Zether part moved in P3 (E1; owner: backup, not delete).
- - [ ] `mtxBatch` needs a not-batchable hook for PQZ selectors (`MtxNotBatchable(selector)`, pq-zether.md CTR-PQZ-21): with `PqzToken` (no PQZ selector exists yet; P3 left the room: the binding hook takes a PQZ tag).
+ - [ ] `mtxBatch` needs a not-batchable hook for PQZ selectors (`MtxNotBatchable(selector)`, pq-zero-knowledge.md CTR-PQZ-21): with `PqzToken` (no PQZ selector exists yet; P3 left the room: the binding hook takes a PQZ tag).
  - [~] **MT-6** Zether (done in P3: transient envelope binding, `zetherShield` from the public balance, `mtxWrap` inherited, the `zether*` renames, binding without `to`/`value`, prover `Header.chain_uid`, `HEADER_LEN` 416; open: `PqzToken` on the one base, PQZ selectors not batchable, CTR-PQZ-21, with the PQZ stream).
--- [ ] **P3b** Zether storage and auditor modes (owner 2026-10-11; spec: zether.md CTR-ZTH-30/38/42/48/49/50, pq-zether.md CTR-PQZ-19/23/24, already written): `ConfidentialConfig.disclosureMode`/`auditorMode` + factory and `initialize` validation (`BadDisclosureMode`, `BadAuditorMode`); entry renames (`zetherTransfer` = mode default, `zetherTransferCompact`, `zetherTransferNoBundle` BUNDLE-only, `zetherTransferBundle` to legacy) and guards (`TransferEntryDisabled`, `AuditorRequired`); auditor modes NONE/FULL/OPTIONAL; `s` v2 with the 16-byte salt in payload and the 480-byte header (new `proofSystemId`); sender memo + `memoHash` and a recovery helper in the prover (seed + storage → openings); relay allowlist and selectors; vectors/KATs regenerated; gas re-measured (§19). PQZ: spec only.
+-- [ ] **P3b** Zether storage and auditor modes (owner 2026-10-11; spec: zether.md CTR-ZTH-30/38/42/48/49/50, pq-zero-knowledge.md CTR-PQZ-19/23/24, already written): `ConfidentialConfig.disclosureMode`/`auditorMode` + factory and `initialize` validation (`BadDisclosureMode`, `BadAuditorMode`); entry renames (`zetherTransfer` = mode default, `zetherTransferCompact`, `zetherTransferNoBundle` BUNDLE-only, `zetherTransferBundle` to legacy) and guards (`TransferEntryDisabled`, `AuditorRequired`); auditor modes NONE/FULL/OPTIONAL; `s` v2 with the 16-byte salt in payload and the 480-byte header (new `proofSystemId`); sender memo + `memoHash` and a recovery helper in the prover (seed + storage → openings); relay allowlist and selectors; vectors/KATs regenerated; gas re-measured (§19). PQZ: spec only.
 +- P3b (done): `ConfidentialConfig.disclosureMode` (BUNDLE / COMPACT) and `auditorMode` (NONE / FULL / OPTIONAL) fixed at `initialize` (`BadDisclosureMode`, `BadAuditorMode`); `zetherTransfer` = the mode's default, `zetherTransferCompact` (commit-reveal), `zetherTransferNoBundle` and `zetherTransferSingle` BUNDLE-only (`TransferEntryDisabled`), `zetherTransferBundle` removed; `AuditorRequired` / `AuditorForbidden`; `s` v2 with the 16-byte salt, the 480-byte header (`…/v2` proof system id), the record `R = salt ‖ B_1 ‖ … ‖ B_M`, the sender memo next to the commitment (`transferEntry` = `keccak256(R) ‖ memo`), the registry's `keyOf`; prover `recoverTransfer` (seed + storage or calldata → `s`, amounts, `R`, `SENDER_S` / `SENDER_CP`), `disclosureMode` / `auditorMode` in requests; vectors regenerated; §19 re-measured. PQZ: spec only. Plan `docs/superpowers/plans/2026-10-11-p3b-zether-modes.md`.
  
  **P4 — MT-7**
@@ -3647,7 +3647,7 @@ index 81abf7a..7556a22 100644
 +++ b/docs/contracts/zether.md
 @@ -8,7 +8,7 @@ tests (P3; `smartcontracts/evm/src/zether/**`, `src/registry/**`). Every Zether
  deploy or initialize outside chain ids 31337/1337, and `OpenFactory.zetherEnabled` defaults to `false` ([safety
- gate](#safety-gate)). Post-quantum confidential balances are a separate class ([pq-zether.md](pq-zether.md)). Relaying is
+ gate](#safety-gate)). Post-quantum confidential balances are a separate class ([pq-zero-knowledge.md](pq-zero-knowledge.md)). Relaying is
  the generic self-call ([relaying](#envelope)), `chainUid` is in every chain-bound digest; the built `ZetherToken` with its
 -`ZetherMetaTx` envelope is backed up, not built, in `smartcontracts/evm/legacy/p3/`. **SPECIFIED, not built (P3b):** the storage and auditor modes, the salted `s` and the sender memo ([CTR-ZTH-38](#CTR-ZTH-38), [CTR-ZTH-48](#CTR-ZTH-48)–[CTR-ZTH-50](#CTR-ZTH-50), [CTR-ZTH-30](#CTR-ZTH-30)).
 +`ZetherMetaTx` envelope is backed up, not built, in `smartcontracts/evm/legacy/p3/`. **Built (P3b):** the storage and auditor modes, the salted `s` and the sender memo ([CTR-ZTH-38](#CTR-ZTH-38), [CTR-ZTH-48](#CTR-ZTH-48)–[CTR-ZTH-50](#CTR-ZTH-50), [CTR-ZTH-30](#CTR-ZTH-30)).
@@ -3759,7 +3759,7 @@ index 81abf7a..7556a22 100644
  
 -**Transitional (BUILT, P3):** no memo; HASH stores only the hash, so the sender needs calldata or logs.
 -
- **PQZ.** The PQZ encryption is already multi-recipient with shared randomness ([CTR-PQZ-04](pq-zether.md#CTR-PQZ-04)); an extra recipient there costs a full `u ‖ v_j` credit at rollover ([CTR-PQZ-11](pq-zether.md#CTR-PQZ-11)), and no PQZ multi-recipient proof exists yet. The storage and auditor modes, the salt and the sender memo carry over ([CTR-PQZ-23](pq-zether.md#CTR-PQZ-23), [CTR-PQZ-24](pq-zether.md#CTR-PQZ-24)).
+ **PQZ.** The PQZ encryption is already multi-recipient with shared randomness ([CTR-PQZ-04](pq-zero-knowledge.md#CTR-PQZ-04)); an extra recipient there costs a full `u ‖ v_j` credit at rollover ([CTR-PQZ-11](pq-zero-knowledge.md#CTR-PQZ-11)), and no PQZ multi-recipient proof exists yet. The storage and auditor modes, the salt and the sender memo carry over ([CTR-PQZ-23](pq-zero-knowledge.md#CTR-PQZ-23), [CTR-PQZ-24](pq-zero-knowledge.md#CTR-PQZ-24)).
  
  ## 12. Meta-transaction envelope and replay protection
 @@ -875,7 +873,7 @@ e = hashToScalar(keccak256("SCAAS-ZETHER-DISCLOSE-V1" ‖ be32(chainid) ‖ chai
@@ -3993,7 +3993,7 @@ index 83bc164..b142ed7 100644
 @@ -838,3 +838,5 @@ scaas-account.__check_auth	renamed	`SmartKeyAccount.__check_auth`, networks/soro
  ownerNonce	removed	the owner call is a MetaTransaction lane 0 (P4), networks/hedera.md#NET-HED-03
  subjectAccountFactory	renamed	`smartKeyAccountFactory` (P4), clients/app.md
- bundle = u ‖ v_t ‖ v_a ‖ toUA	renamed	the PQZ bundle gains the build salt: `R = salt ‖ u ‖ v_t ‖ v_a ‖ toUA`, contracts/pq-zether.md#CTR-PQZ-23
+ bundle = u ‖ v_t ‖ v_a ‖ toUA	renamed	the PQZ bundle gains the build salt: `R = salt ‖ u ‖ v_t ‖ v_a ‖ toUA`, contracts/pq-zero-knowledge.md#CTR-PQZ-23
 +keccak256("scaas/zether/sigma-bullets/bn254/n64-n64/v1")	renamed	the `…/n64-n64/v2` proof system id with the 480-byte header (P3b), contracts/zether.md#statement-byte-layout
 +keccak256("scaas/zether/sigma-bullets/bls12-381/n64-n64/v1")	renamed	the `…/n64-n64/v2` proof system id with the 480-byte header (P3b), contracts/zether.md#statement-byte-layout
 diff --git a/docs/research/zether-disclosure.md b/docs/research/zether-disclosure.md

@@ -95,10 +95,10 @@ Parameters:
 | Forks | live through Fusaka + BPO2: EIP-2537 (BLS12-381), EIP-7951 P-256 at `0x100`, EIP-7825 per-transaction gas cap 16,777,216, EIP-7623, EIP-7934 |
 | Base fee | 0 (gas free; `MinGasPrice` 0) |
 | Contract code size | 64 KiB (`maxCodeSize` `0x10000`, `maxCodeSizeTransition` 6432) since 2026-10-11, owner, ahead of Glamsterdam (cf. EIP-7954); 24,576 before. Probed at block 6434: 65,536 B code deploys (13.27 M gas), 65,537 B is refused, a 50,005 B init code is accepted (the init-code limit follows `maxCodeSize`). Public chains keep 24,576 |
-| Block gas limit | 16,777,216 today (`0x1000000`); 80 M `TargetBlockGasLimit` target for post-quantum Zether ([CTR-PQZ-11](../contracts/pq-zether.md#CTR-PQZ-11)) (SPECIFIED) |
+| Block gas limit | 16,777,216 today (`0x1000000`); 80 M `TargetBlockGasLimit` target for post-quantum Zether ([CTR-PQZ-11](../contracts/pq-zero-knowledge.md#CTR-PQZ-11)) (SPECIFIED) |
 | Finality | depth 1, quorum 1 (single-provider trust, reported as such) |
 | Classical Zether | not on the dev-chain allowlist ({31337, 1337}, [CTR-ZTH-02](../contracts/zether.md#CTR-ZTH-02)); whether 7622 becomes a dev chain for it is an open owner question |
-| Post-quantum Zether | the only PQZ chain: `PQZ` `0x5caa500000000000000000000000000000000f01`, `MLDSA44` `…0012`, `MLDSA65` `…0013` from the plugin in image `scaas/nethermind-pqz:1.39.0-pqz1` (local, never pushed), chainspec `engine.Pqz` ([chain integration](../contracts/pq-zether.md#chain-integration), [§3](#precompiles)) |
+| Post-quantum Zether | the only PQZ chain: `PQZ` `0x5caa500000000000000000000000000000000f01`, `MLDSA44` `…0012`, `MLDSA65` `…0013` from the plugin in image `scaas/nethermind-pqz:1.39.0-pqz1` (local, never pushed), chainspec `engine.Pqz` ([chain integration](../contracts/pq-zero-knowledge.md#chain-integration), [§3](#precompiles)) |
 
 Operator trap, measured on the earlier chain: **a Nethermind chainspec silently ignores Geth-style keys.** With
 `pragueBlock: 0` (and `londonBlock`, `cancunBlock`) in Geth form, the chain ran pre-London without a warning: the
@@ -108,7 +108,7 @@ Forks must be written with Nethermind's own keys (`eip1559TransitionTimestamp`, 
 and changing them changes the genesis hash (chain reset). The only detection is to inspect a block header or call
 the precompile — the deployment checklist does both. The chainspec was fixed on 2026-08-31 before the reset to
 7622. The 16,777,216 block gas limit admits only ~5 classical confidential transfers per block (3.33 M gas each,
-measured); post-quantum Zether raises the target to 80 M ([CTR-PQZ-11](../contracts/pq-zether.md#CTR-PQZ-11)).
+measured); post-quantum Zether raises the target to 80 M ([CTR-PQZ-11](../contracts/pq-zero-knowledge.md#CTR-PQZ-11)).
 
 Further operator traps, found on the P6f copy of 7622 (2026-10-15, `pqz-core/nethermind/runs/2026-10-15-copy-*.txt`):
 **no follower can sync 7622's chainspec as it is** — `eip4844TransitionTimestamp` 0 without
@@ -138,11 +138,11 @@ so a transaction priced at 1 wei is never mined; clients price at least `baseFee
   A missing precompile returns empty `0x`; an input-length error (`invalid input length` on Celo, `PrecompileError`
   on Gnosis) also proves the code exists. Live is not cheap: measured costs are in
   [contracts/zether](../contracts/zether.md).
-- **PQ precompiles on 7622** (P6f, plugin `Nethermind.Pqz`, [CTR-PQZ-10](../contracts/pq-zether.md#CTR-PQZ-10)):
+- **PQ precompiles on 7622** (P6f, plugin `Nethermind.Pqz`, [CTR-PQZ-10](../contracts/pq-zero-knowledge.md#CTR-PQZ-10)):
   `PQZ` `0x5caa500000000000000000000000000000000f01` (PQZL and PQZH proofs, per-row gas 2.57–5.41 M + 3 per word),
   `MLDSA44` `0x5caa500000000000000000000000000000000012` (49,000 + 6 per message word) and `MLDSA65`
   `0x5caa500000000000000000000000000000000013` (68,000 + 6 per word), EIP-8355 layout, empty context; prices frozen in
-  the chainspec's `engine.Pqz` ([CTR-PQZ-11](../contracts/pq-zether.md#CTR-PQZ-11)). A stock Nethermind image ignores
+  the chainspec's `engine.Pqz` ([CTR-PQZ-11](../contracts/pq-zero-knowledge.md#CTR-PQZ-11)). A stock Nethermind image ignores
   that section and the addresses stay empty accounts (shown on the copy), so contracts self-test and nodes probe.
   Runbook: `pqz-core/nethermind/chain/RUNBOOK.md`.
 - **P-256** (RIP-7212 / EIP-7951 at `0x100`): present on 7622; probed per chain (`has_p256_precompile`); without it

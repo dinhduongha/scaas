@@ -5,9 +5,10 @@
 !smartcontracts/vectors/pqz
 !smartcontracts/evm/test/vectors/pqzh-ligero
 pqz-core/build
+pqz-core/pqzl/build
 pqz-core/artifact/out
-pqz-core/xcheck/static/raw-*
-pqz-core/xcheck/static/results-*.json
+pqz-core/research/upstream/static/raw-*
+pqz-core/research/upstream/static/results-*.json
 **/target
 **/*.o
 **/*.a

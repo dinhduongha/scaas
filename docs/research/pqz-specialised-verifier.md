@@ -6,15 +6,15 @@ Written 2026-10-13 for the owner's P6-SV spike (TODO P6-SV), after the verifier-
 (`pqz-verifier-floor.md`). Question: can a verifier written for our fixed statements accept exactly the proofs
 LaZer's generic `tbox` verifier accepts, and how close does it get to the floor and to the 50 ms p99 verify limit
 (CTR-PQZ-09)? Code on branch `pqz-sv-relfix` (not merged yet; history `pqz-sv` → `pqz-sv-rel3` → `pqz-sv-relfix`):
-`pqz-core/src/pqz_sv.c`, tests `pqz-core/test/pqz_sv_diff.c`, `pqz-core/test/pqz_sv_fuzz.c`,
-`pqz-core/sv/check_sv_fixes.sh`, runs `pqz-core/sv/runs/`. **No decision is recorded here.**
+`pqz-core/pqzl/src/pqz_sv.c`, tests `pqz-core/pqzl/test/pqz_sv_diff.c`, `pqz-core/pqzl/test/pqz_sv_fuzz.c`,
+`pqz-core/pqzl/sv/check_sv_fixes.sh`, runs `pqz-core/pqzl/sv/runs/`. **No decision is recorded here.**
 
 **Current state (§0): the fixed transcript, `proofSystemId` v2, all five relations.** §1–§8 below were written on
 the pre-fix transcript (v1) and keep their numbers as the "before"; where the v2 run changed something, §0 says so.
 
 ## 0. On the fixed transcript (`proofSystemId` v2), all five relations
 
-`pqz-sv-relfix` = `pqz-sv-rel3` + main (the relation fix-ups: `R_TX` on the pq-zether.md §7.7 layout, the 32-byte
+`pqz-sv-relfix` = `pqz-sv-rel3` + main (the relation fix-ups: `R_TX` on the pq-zero-knowledge.md §7.7 layout, the 32-byte
 disclosure `kind` word, ABDLOP keys built at an op's first use; and `pqz-v2`: the two LaZer `tbox` Schwartz–Zippel
 fixes, [lazer#24](https://github.com/lazer-crypto/lazer/issues/24) P6-SZ and
 [lazer#25](https://github.com/lazer-crypto/lazer/issues/25) P6-L2, under `proofSystemId` v2). The specialised verifier
@@ -22,7 +22,7 @@ follows both fixes, each a one-line change: `sz_eval_challenges` draws λ × M c
 gives half h of accumulator pair i row 2i + h (P6-SZ; v1 drew 2M values and gave every pair the same two rows), and
 exact-ℓ2 equation i draws from domain dom + i (P6-L2; v1 used one domain for all Z equations, so only the sum of the
 block norms was checked). It parses the v2 statements (header with the fee word for `R_TX`, `kind` word) as
-`pqz_rel.c` does. Run `scripts/capped pqz-core/sv/rel3.sh v2` (`sv/runs/v2-*`), same machine as §2 [measured].
+`pqz_rel.c` does. Run `scripts/capped pqz-core/pqzl/sv/rel3.sh v2` (`sv/runs/v2-*`), same machine as §2 [measured].
 
 **Equivalence.** 0 disagreements in 4,420 cases; both fixes are needed and caught:
 
@@ -325,9 +325,9 @@ per-relation peaks are read from a run of that relation alone.
 | `R_REG` verify, native / wasm | 166 / 204 ms | 3.97 / 5.9 ms (p50) |
 | Arena per verify, `R_REG` / `R_TX` | 81 / 273 MB | 1.06 / 1.67 MB (+ 9.1 MB tables once) |
 | `R_BURN` / `R_DS` / `R_DR` verify, native p50 | 571 / 219 / 221 ms | 7.69 / 4.17 / 4.37 ms |
-| Relations | any, from the generated parameters | the five of pq-zether.md §9.1, hand-written (§3) |
+| Relations | any, from the generated parameters | the five of pq-zero-knowledge.md §9.1, hand-written (§3) |
 
-**Coverage of the precompile ops** (pq-zether.md §9.1). Rollover carries no proof.
+**Coverage of the precompile ops** (pq-zero-knowledge.md §9.1). Rollover carries no proof.
 
 | op | Relation | In `pqz-core` | Specialised verifier |
 |---|---|---|---|

@@ -38,7 +38,7 @@ precompiles (execution)" at fork **J\***, two forks after Hegotá, and "core PQ 
 **Bottom line for SCaaS.** SCaaS already designed for PQ where it matters and is ahead of Ethereum on paper: PQ
 signing kinds (`mldsa44`, `mldsa65`, `fndsa512`) are enabled for Universal Accounts on every EVM chain with a pure
 Solidity verifier and precompile **probing** ([CTR-UA-23](../contracts/accounts.md#CTR-UA-23)); PQ Zether runs on a
-private precompile of chain 7622 ([CTR-PQZ-10](../contracts/pq-zether.md#CTR-PQZ-10)); private mesh traffic uses
+private precompile of chain 7622 ([CTR-PQZ-10](../contracts/pq-zero-knowledge.md#CTR-PQZ-10)); private mesh traffic uses
 X25519MLKEM768 ([NODE-GSP-03](../node/gossip.md#NODE-GSP-03)). The drafts change no SCaaS decision. They expose four
 compatibility gaps worth keeping open (§7): the ML-DSA context string versus EIP-8355's empty context, EIP-8051's
 expanded key format, FN-DSA versus EIP-8052's Falcon hash variants, and the absence of a hash-based kind while
@@ -119,11 +119,11 @@ flowchart LR
   for chain 7622 only, behind an allowlist and a precompile self-test; precompiles `PQZ` at `0x…0F01` and `MLDSA65` at
   `0x…0F10` ("EIP-8355's layout plus a context field"), placed off 0x12/0x13 on purpose (2026-10-15, P6f: moved to
   `0x5caa5…0f01` / `…0012` / `…0013`, EIP-8355 layout with the empty context, `MLDSA44` added; Q6)
-  ([CTR-PQZ-01](../contracts/pq-zether.md#CTR-PQZ-01), [CTR-PQZ-10](../contracts/pq-zether.md#CTR-PQZ-10)). Public
+  ([CTR-PQZ-01](../contracts/pq-zero-knowledge.md#CTR-PQZ-01), [CTR-PQZ-10](../contracts/pq-zero-knowledge.md#CTR-PQZ-10)). Public
   chains: wait for a lattice-verification precompile there; no Solidity split, no STARK wrap, no appchain. Its
-  authorization is a PQ `authRef` ([CTR-PQZ-12](../contracts/pq-zether.md#CTR-PQZ-12)). Token kinds `*_PQZ` are
+  authorization is a PQ `authRef` ([CTR-PQZ-12](../contracts/pq-zero-knowledge.md#CTR-PQZ-12)). Token kinds `*_PQZ` are
   reserved in `IOpenFactory.TokenKind` ([CTR-TOK-21](../contracts/token-wrappers.md#CTR-TOK-21)).
-- **What stays classical, stated** ([list](../contracts/pq-zether.md#what-stays-classical)): the Clique block signer,
+- **What stays classical, stated** ([list](../contracts/pq-zero-knowledge.md#what-stays-classical)): the Clique block signer,
   relayer lane keys (gas only), public ERC-20 legs, a v1 envelope signer of its public balance.
 - **Node.** Admitted-peer traffic is PQ only (X25519MLKEM768 via `aws-lc-rs`); identity stays Ed25519, with a stated
   upgrade path to an ML-DSA-65 `pq_pubkey` signed by both keys ([NODE-GSP-02](../node/gossip.md#NODE-GSP-02),
@@ -166,7 +166,7 @@ measured-cap rule already prices this per chain, so none of it needs a rule chan
 | I\* | possible slot for a precompile re-proposal | no proposals listed yet **[inference]** |
 | J\* | "PQ signature precompiles (execution)" on the EF roadmap | pq.ethereum.org; at the strawmap's ~6-month cadence after Glamsterdam this is around 2028 **[inference]** |
 | L2s / public EVM chains SCaaS profiles | no RIP or L2 PQ precompile found | search 2026-10-11 **[unverified absence]** |
-| Chain 7622 | now, by our own client | [CTR-PQZ-10](../contracts/pq-zether.md#CTR-PQZ-10) |
+| Chain 7622 | now, by our own client | [CTR-PQZ-10](../contracts/pq-zero-knowledge.md#CTR-PQZ-10) |
 | Quantum threat | "early-to-mid 2030s" in most engineering roadmaps | pq.ethereum.org |
 
 ## 6. Applicability to SCaaS, component by component
@@ -203,7 +203,7 @@ as a PQ ERC-1271 wallet, which fits the cap only with a precompile, or later as 
 Watch; it follows (1) and (2). On chain 7622 the private `MLDSA65` precompile could serve a PQ 1271 wallet today.
 
 **(5) Classical Zether.** Not applicable: a quantum adversary reads and mints; the dev-only gate and the PQZ migration
-([migration](../contracts/pq-zether.md#migration)) are the answer, not an EIP.
+([migration](../contracts/pq-zero-knowledge.md#migration)) are the answer, not an EIP.
 
 **(6) PQ Zether.** Not applicable to any draft. PQZ needs LNP22 proof verification (key, encryption, carry relations),
 not signature verification; no draft offers it. EIP-7885's NTT and vector ops are the only generic building blocks
@@ -272,17 +272,17 @@ Kept open; none blocks the current contract phase (DEX, then Zether kinds) or th
   would need the leaf-state discipline of EIP-8310, which SCaaS clients do not have. *P6a:* SLH-DSA-SHA2-128s verifies in
   Solidity on SHA-256 `0x02` for 0.79 M gas (valid) and at most 1.32 M (the worst case any input can force) — the gas
   gate passes.
-- **Q5 Solidity cost basis.** Fireblocks' 1.23 M is **ML-DSA-44**, while `pq-zether.md` §3 and the CTR-UA-23
+- **Q5 Solidity cost basis.** Fireblocks' 1.23 M is **ML-DSA-44**, while `pq-zero-knowledge.md` §3 and the CTR-UA-23
   estimates attribute it to ML-DSA-65; the ML-DSA-65 worst case is likely higher **[inference]**. The per-chain
   T-GAS measurement settles it before any cap is set.
 - **Q6 Private precompile addresses — closed (P6f D3, 2026-10-15).** The old `0x…0F01`/`0x…0F10` lay in the EIP-1352
   reserved range. Chain 7622 now uses `PQZ` `0x5caa500000000000000000000000000000000f01`, `MLDSA44` `…0012` and `MLDSA65`
   `…0013` under the `0x5caa5` prefix: above `0xffff`, outside RIP-7587's `0x100`–`0x1ff` and the OP / Taiko / Arbitrum
-  system ranges ([CTR-PQZ-10](../contracts/pq-zether.md#CTR-PQZ-10); controller proposal, owner may override).
+  system ranges ([CTR-PQZ-10](../contracts/pq-zero-knowledge.md#CTR-PQZ-10); controller proposal, owner may override).
 - **Q7 PQ makers and 1271 wallets on public chains.** Until a precompile exists, a PQ wallet can sign UA-path intents
   but not v1/v2 intents or DEX orders. Acceptable as a stated gap, or does a known PQ wallet codehash deserve its own
   cap the way `SmartKeyAccount` clones got 400 k?
-- **Q8 Link rot.** The EF post cited in `pq-zether.md` (pq.ethereum.org/blog/pq-precompiles-eip-8051-8052/) returned
+- **Q8 Link rot.** The EF post cited in `pq-zero-knowledge.md` (pq.ethereum.org/blog/pq-precompiles-eip-8051-8052/) returned
   404 on 2026-10-11 although search engines still list it.
 
 ## 8. Recommendations

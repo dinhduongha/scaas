@@ -5,7 +5,7 @@ edition = "2021"
 license-file = "../../LICENSE"
 publish = false
 
-# The one boundary in front of both PQZ verifiers (P6e plan D10, R5; pq-zether.md §9.1, CTR-PQZ-10): the precompile
+# The one boundary in front of both PQZ verifiers (P6e plan D10, R5; pq-zero-knowledge.md §9.1, CTR-PQZ-10): the precompile
 # decoder (pqz-stmt), PQZL = the C core (libpqz, built here by build.rs from ../src, ../lazer, ../params with
 # build.sh's flags), PQZH = the Ligero crate without its bench feature; the C ABI pqz_precompile (pqz_ffi.h) for P6f;
 # the Rust API for the node; feature `prove` (keygen / enc / dec / prove of both systems) for P6h.

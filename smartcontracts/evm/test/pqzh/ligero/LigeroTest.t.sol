@@ -69,7 +69,7 @@ contract LigeroTest is Test {
     }
 
     /// tx = 21,000 + max(4 tokens + execution, 10 tokens) (EIP-7623), with the op's other calldata and execution
-    /// (pq-zether.md §9.3 as pqz-core/pqzh/sol/model.py: transfer 119 k tokens, 0.31 M; register 67 k tokens, 3.45 M
+    /// (pq-zero-knowledge.md §9.3 as pqz-core/pqzh/stark-backup/sol/model.py: transfer 119 k tokens, 0.31 M; register 67 k tokens, 3.45 M
     /// incl. the SSTORE2 of the key)
     function txLine(uint8 o, uint256 tk, uint256 verifyGas) internal pure {
         (uint256 otk, uint256 oex) = o == 1 ? (119_000, 310_000) : (67_000, 3_450_000);

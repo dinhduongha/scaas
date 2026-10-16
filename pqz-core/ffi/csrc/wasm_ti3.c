@@ -5,4 +5,4 @@
 #define memmove pqz_rt_memmove_unused
 #define memset pqz_rt_memset_unused
 #define memcmp pqz_rt_memcmp_unused
-#include "../../src/pqz_wasm_rt.c"
+#include "../../pqzl/src/pqz_wasm_rt.c"

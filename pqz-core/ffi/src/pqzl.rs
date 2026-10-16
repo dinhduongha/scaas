@@ -285,7 +285,7 @@ pub fn keypair_from_secret(s: &[i8; 2048], e: &[i16; 2048]) -> Option<Box<[u8; P
     (rc == 0).then_some(pk)
 }
 
-/// A key pair from a seed (pq-zether.md §4.2, `pqz_keygen`).
+/// A key pair from a seed (pq-zero-knowledge.md §4.2, `pqz_keygen`).
 pub struct Key {
     pub pk: Box<[u8; PK_BYTES]>,
     pub s: Box<[i8; 2048]>,

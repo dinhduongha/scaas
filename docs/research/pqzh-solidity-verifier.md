@@ -6,7 +6,7 @@ Written 2026-10-13 for the owner's question (TODO P6-PQZH-SOL: "measure, write i
 be verified by a Solidity contract on a chain without the PQZ precompile, and at what gas, against the EIP-7825
 transaction cap of 16,777,216?** Inputs: the design study `pqzh-design.md` and the prototype `pqzh-prototype.md`
 (Plonky3 0.8.0, Goldilocks, FRI, Keccak, LogUp; measured proof shapes). Code: test-only Solidity in
-`smartcontracts/evm/test/pqzh/` (never deployed), Python in `pqz-core/pqzh/sol/`. **No decision is recorded here.**
+`smartcontracts/evm/test/pqzh/` (never deployed), Python in `pqz-core/pqzh/stark-backup/sol/`. **No decision is recorded here.**
 
 **[measured]** marks a number from a forge run in this note (§2). **[estimate]** marks a number from the model
 (`model.py`), built from those measurements and the prototype's proof shapes. **[inference]** marks a conclusion drawn
@@ -29,7 +29,7 @@ costs 12–21 M gas.
 | Goldilocks⁵, 128 proven, **ZK** | 506 KB | 29.3 M | 5.4 M | 38.2 M | 21.4 M | **no / no** |
 
 [estimate; proofs in the EVM layout of §6 with 32-byte digests; tx = 21,000 + max(4·tokens + execution,
-10·tokens) (EIP-7623) with the transfer's non-proof calldata and execution from pq-zether.md §9.3.]
+10·tokens) (EIP-7623) with the transfer's non-proof calldata and execution from pq-zero-knowledge.md §9.3.]
 
 - **Proven + ZK (the owner's current target: ZK required, Goldilocks⁵, 128 bits) does not fit any EVM transaction
   under the cap**, whoever writes the verifier: the EIP-7623 calldata floor of the 506 KB `R_TX` proof plus the
@@ -67,9 +67,9 @@ which fit. Proven with ZK comes to 21.4 M and does not: the calldata floor still
 |---|---|
 | Toolchain | solc 0.8.37, EVM `osaka`, optimizer on (200 runs), legacy code generator (the repo's `foundry.toml`); forge; Python 3.12 stdlib |
 | Machine | AMD Ryzen 5 7235HS; gas is deterministic, the machine does not matter |
-| References | `pqz-core/pqzh/sol/ref.py`: Goldilocks, Fp2 (u² = 7), Fp3 (x³ = x + 1), Fp5 (x⁵ = 3), as in Plonky3 0.8 `p3-goldilocks`; pure-Python Keccak-256 / SHAKE256; Plonky3's mixed-height Merkle opening (`verify_batch`) and pruning count; FRI `fold_row` (closed form for arity 2, Lagrange interpolation otherwise); LogUp public sum; Horner fingerprint; the synthetic end-to-end proofs. `--selftest` asserts the field identities (x · x⁻¹ = 1, x^(pᴱ−1) = 1, x⁵ = 3), the Keccak empty-string digests, fold = interpolation and the pruning example of `pruning.rs` |
+| References | `pqz-core/pqzh/stark-backup/sol/ref.py`: Goldilocks, Fp2 (u² = 7), Fp3 (x³ = x + 1), Fp5 (x⁵ = 3), as in Plonky3 0.8 `p3-goldilocks`; pure-Python Keccak-256 / SHAKE256; Plonky3's mixed-height Merkle opening (`verify_batch`) and pruning count; FRI `fold_row` (closed form for arity 2, Lagrange interpolation otherwise); LogUp public sum; Horner fingerprint; the synthetic end-to-end proofs. `--selftest` asserts the field identities (x · x⁻¹ = 1, x^(pᴱ−1) = 1, x⁵ = 3), the Keccak empty-string digests, fold = interpolation and the pruning example of `pruning.rs` |
 | Solidity | `test/pqzh/Pqzh.sol`: library `Pqzh` (field, extension, Merkle walk, fold, LogUp, Horner, row combination), contract `PqzhSkeleton` (end-to-end verifier skeleton, `verify` and `profile`); `test/pqzh/PqzhTest.t.sol`: 15 tests. Vectors `test/vectors/pqzh/` (`components.json`, three `e2e_*.bin`) |
-| Model | `pqz-core/pqzh/sol/model.py` → `grid.txt`; `--selftest` checks the proof-size model against the prototype's measured sizes |
+| Model | `pqz-core/pqzh/stark-backup/sol/model.py` → `grid.txt`; `--selftest` checks the proof-size model against the prototype's measured sizes |
 | Checks | every component value equals the Python reference; every e2e proof verifies with all Merkle paths and the 16-bit proof of work enforced, and a flipped sibling byte reverts; the default `forge test` suite and the size gate are unaffected (test-only, `src/` unchanged) |
 
 ## 3. Per-component gas [measured]
@@ -255,7 +255,7 @@ Cheapest Goldilocks⁵ setting per relation and regime (by the total with this c
 Queries are the prototype's `p3-security` counts for 128 bits over Goldilocks⁵ with 24 grinding bits
 (`pqzh-prototype.md` §7). Blowup 32 wins every row: the proof shrinks with fewer queries, and so does the
 per-query verifier work. Its prover cost (12.4 s, 1.17 GB for `R_TX`, prototype §7) is a separate problem. The
-non-proof parts come from pq-zether.md §9.3 [estimate there]: `R_REG` includes the 3.3 M SSTORE2 of the key, and
+non-proof parts come from pq-zero-knowledge.md §9.3 [estimate there]: `R_REG` includes the 3.3 M SSTORE2 of the key, and
 `R_DS` / `R_DR` are views (`verifyTransferAmount`). Their totals are the gas of a contract calling the view in a
 transaction; the RPC gas cap of `eth_call` (geth's default 50 M) is not the binding limit [inference]. Arity 8 beats
 2 and 16 in every regime. Arity 16 forces arity-2 rounds at the input heights, and an arity-16 fold costs 2.3× an
@@ -281,10 +281,10 @@ arity-8 fold.
 ## 10. Reruns
 
 ```sh
-python3 pqz-core/pqzh/sol/ref.py --selftest             # field / Keccak / fold / pruning identities
-python3 pqz-core/pqzh/sol/ref.py                        # regenerates smartcontracts/evm/test/vectors/pqzh/* (~1 min)
-python3 pqz-core/pqzh/sol/model.py --selftest           # proof-size calibration against the prototype
-python3 pqz-core/pqzh/sol/model.py > pqz-core/pqzh/sol/grid.txt
+python3 pqz-core/pqzh/stark-backup/sol/ref.py --selftest             # field / Keccak / fold / pruning identities
+python3 pqz-core/pqzh/stark-backup/sol/ref.py                        # regenerates smartcontracts/evm/test/vectors/pqzh/* (~1 min)
+python3 pqz-core/pqzh/stark-backup/sol/model.py --selftest           # proof-size calibration against the prototype
+python3 pqz-core/pqzh/stark-backup/sol/model.py > pqz-core/pqzh/stark-backup/sol/grid.txt
 cd smartcontracts/evm && scripts/capped forge test --match-contract PqzhTest -vv   # values, gas, e2e profiles
 ```
 

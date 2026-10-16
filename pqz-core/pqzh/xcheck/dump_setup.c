@@ -9,7 +9,7 @@
    witnesses instead, every shape of TXB (txm<M>[_0]_{stmt,wit}.bin), bytes as pqz_bench.c builds them (filler opTag
    and recipientsHash, PQZL's id); lh2.sh's Rust side sets those words. */
 #define main pqz_bench_main
-#include "../../test/pqz_bench.c"
+#include "../../pqzl/test/pqz_bench.c"
 #undef main
 
 /* keccak256("scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1") */

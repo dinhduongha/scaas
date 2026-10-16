@@ -6,23 +6,23 @@ spike; the roadmap / TODO rows do not carry the P6d-2 numbers yet.
 
 ## Done
 
-- **Fork layout.** `lazer/` = LaZer `3330e48` subset (pristine copy in commit `c91b3ab`, MIT, IBM; licence in
-  `lazer/LICENSE`), modified in place with `PQZ:` comments; `src/` = the rewritten layers; `params/` = codegen,
-  sizing, generated headers; `kat/` = golden dump; `test/` = bench (native + wasm runner);
-  `./build.sh native|wasm|all`; `./check_symbols.sh` (run by every build).
-- **Six layers rewritten**: integers without GMP (`src/pqz_mpn.h`, constant-time limb ops); incomplete NTT mod
-  q = 2^42 − 215, l = 4, no HEXL / CRT / float (`src/pqz_ntt.c`); integer discrete Gaussian (`lazer/grandom.c`,
-  `src/pqz_fixexp.h`); fixed-point rejection (`lazer/rejection.c`, no MPFR); arena (`src/pqz_arena.c`,
-  `lazer/memory.h`); ERR/ASSERT → sticky error with file:line (`src/pqz_rt.h`); bitsliced software
+- **Fork layout.** `pqzl/lazer/` = LaZer `3330e48` subset (pristine copy in commit `c91b3ab`, MIT, IBM; licence in
+  `pqzl/lazer/LICENSE`), modified in place with `PQZ:` comments; `pqzl/src/` = the rewritten layers; `pqzl/params/` = codegen,
+  sizing, generated headers; `pqzl/kat/` = golden dump; `pqzl/test/` = bench (native + wasm runner);
+  `pqzl/build.sh native|wasm|all`; `pqzl/check_symbols.sh` (run by every build).
+- **Six layers rewritten**: integers without GMP (`pqzl/src/pqz_mpn.h`, constant-time limb ops); incomplete NTT mod
+  q = 2^42 − 215, l = 4, no HEXL / CRT / float (`pqzl/src/pqz_ntt.c`); integer discrete Gaussian (`pqzl/lazer/grandom.c`,
+  `pqzl/src/pqz_fixexp.h`); fixed-point rejection (`pqzl/lazer/rejection.c`, no MPFR); arena (`pqzl/src/pqz_arena.c`,
+  `pqzl/lazer/memory.h`); ERR/ASSERT → sticky error with file:line (`pqzl/src/pqz_rt.h`); bitsliced software
   AES-256-CTR; no stdio in the library; capped rejection loops; bounded proof decoder.
-- **Arithmetic-layer KAT = upstream, 19/19 cases** (`kat/lazer_dump.c`, `kat/check.py`; golden
-  `kat/lazer-3330e48.json` from a static upstream binary under Intel SDE 9.48.0 `-spr`, AVX2 build too).
+- **Arithmetic-layer KAT = upstream, 19/19 cases** (`pqzl/kat/lazer_dump.c`, `pqzl/kat/check.py`; golden
+  `pqzl/kat/lazer-3330e48.json` from a static upstream binary under Intel SDE 9.48.0 `-spr`, AVX2 build too).
   Re-run after all changes below: still 19/19. Upstream finding: `aes256ctr-amd64.c` strict-aliasing bug
   (dump builds with `-fno-strict-aliasing`).
 - **Parameters (nprime = 1).** LaZer's tbox needs nprime > 0 (nprime = 0 is broken upstream: beta at
   `l + 2·256/d` vs tbeta at `l + loff`), so both relations carry a one-poly approximate ℓ∞ filler:
   R_REG Ds selects s[0] (coefficients in [−1, 1], Bprime 1), R_TX Ds selects e2_t (|coeff| ≤ 20, Bprime 64),
-  u = 0. Headers `params/pqz_{reg,tx}_params.h` regenerated; sizing rerun `params/estimator-e-s1.txt`
+  u = 0. Headers `pqzl/params/pqz_{reg,tx}_params.h` regenerated; sizing rerun `pqzl/params/estimator-e-s1.txt`
   (lattice-estimator `53da598`, RC.ADPS16, pqz_delta 1.00366):
 
   | | kmsis | kmlwe | m2 | MSIS β | MLWE uSVP β (dual_hybrid β) | codegen proof size | expected attempts |
@@ -44,17 +44,17 @@ spike; the roadmap / TODO rows do not carry the P6d-2 numbers yet.
   `lnp-tbox-test.c` on q = 2^42 − 215 (scratch harness, params from `codegen/run.sh` on `lnp-tbox-params1.sage`
   + `q_fixed`, `pqz_L = 4`) passes with the arena (peak 43 MB over prove + 30 verifies) and with
   malloc + ASan/LSan/UBSan (`-DPQZ_DEBUG_MALLOC`, no leaks).
-- **R_REG / R_TX prove and verify (commit `2a47f5a`).** `build/native/pqz_bench` proves, verifies, and rejects
+- **R_REG / R_TX prove and verify (commit `2a47f5a`).** `pqzl/build/native/pqz_bench` proves, verifies, and rejects
   all five tampering kinds (bit flip, random bytes, statement coefficient changed, truncated, long unary run)
   for both relations; also clean under ASan/UBSan (malloc path). Fixes on the way: A1/A2'/B' converted to NTT
   form at init (below the arena mark), verifier asserts accept NULL Es/Em/v arrays, `__evaleq` scratch only
   for a quadratic part, z4 coded with `log2stdev4`.
-- **wasm32 (commit `9e63d9f`).** `./build.sh wasm` (clang 18 `--target=wasm32-unknown-unknown`, `wasm-ld-18`,
-  freestanding, `src/pqz_wasm_rt.c` for mem* and `__multi3` / branchless `__ashlti3` / `__lshrti3`, 8 MiB stack
-  first, `pqz.wasm` 337 KB) and `node test/run_wasm.mjs`. Two ILP32 bugs fixed: `int_lshift` loop index `long`
+- **wasm32 (commit `9e63d9f`).** `pqzl/build.sh wasm` (clang 18 `--target=wasm32-unknown-unknown`, `wasm-ld-18`,
+  freestanding, `pqzl/src/pqz_wasm_rt.c` for mem* and `__multi3` / branchless `__ashlti3` / `__lshrti3`, 8 MiB stack
+  first, `pqz.wasm` 337 KB) and `node pqzl/test/run_wasm.mjs`. Two ILP32 bugs fixed: `int_lshift` loop index `long`
   compared unsigned (wrote below the limbs), coder grandom used `long`. Same proof lengths as native for the
   same seeds; honest proofs verify, tampered ones are rejected.
-- **Symbols.** `check_symbols.sh`: native and wasm library objects reference only `memcpy`, `memset`,
+- **Symbols.** `pqzl/check_symbols.sh`: native and wasm library objects reference only `memcpy`, `memset`,
   `__stack_chk_fail` (+ wasm `__stack_pointer`) outside themselves. Passes on both.
 
 ## Optimisation P6d-2 (branch `p6d2-opt`)
@@ -77,23 +77,23 @@ byte). KAT 19/19 after every step, symbol scan clean (native and wasm), tampered
 | 8 `6717d5f` | Gram entries as dots over public operands that skip zero products | 1.10 / 0.75 | 1.72 / 0.95 | |
 | 9 `b8767b4` | z3 term: `V R` accumulated in int64 | **1.10 / 0.72** | **1.59 / 0.82** | 316 / 241 MB |
 
-Medians: native `pqz_bench 5 5`, wasm `run_wasm.mjs 3 1`, every run under `scripts/capped`; raw JSON in `opt/runs/`
-(`opt/bench.sh`, `opt/prof.sh` gprof, `opt/asan.sh`, microbenches `opt/micro_basemul.c`, `opt/micro_aes.c`). The steps
+Medians: native `pqz_bench 5 5`, wasm `run_wasm.mjs 3 1`, every run under `scripts/capped`; raw JSON in `research/opt/runs/`
+(`research/opt/bench.sh`, `research/opt/prof.sh` gprof, `research/opt/asan.sh`, microbenches `research/opt/micro_basemul.c`, `research/opt/micro_aes.c`). The steps
 were measured in one session, the host is noisy (±20 %), so differences under ~10 % are not resolved (steps 5, 9 native
-prove). Not done, with the reason: asserts stay on (pq-zether.md §10: release builds keep the invariant checks; ~4 %);
+prove). Not done, with the reason: asserts stay on (pq-zero-knowledge.md §10: release builds keep the invariant checks; ~4 %);
 `-O2` portable kept (§10); no AVX2 backend (the base multiplication is ~7 % of the R_TX profile now); no integer CRT
 multiplication and no Karatsuba on the polynomials (the microbench: Karatsuba with u128 sums is slower than the
 column kernel).
 
 ## Specialised verifier P6-SV (branch `pqz-sv-relfix`, not merged)
 
-**On v2, all five relations (branch `pqz-sv-relfix` = `pqz-sv-rel3` + main; run `sv/rel3.sh v2`, `sv/runs/v2-*`;
+**On v2, all five relations (branch `pqz-sv-relfix` = `pqz-sv-rel3` + main; run `pqzl/sv/rel3.sh v2`, `pqzl/sv/runs/v2-*`;
 note §0).** `pqz_sv.c` follows both tbox fixes (P6-SZ: λ × M rows in `sz_eval_challenges`; P6-L2: domain dom + i per
 exact-ℓ2 equation) and the v2 statements (§7.7 `R_TX` header, `kind` word). Differential test 2,710 portable + 1,350
-x86-64-v3 + 360 wasm cases over all five relations, **0 disagreements**; `sv/check_sv_fixes.sh` ok (either fix
-reverted in a copy of `pqz_sv.c`: 10 / 10 disagreements; the tree: 0 / 10); `check_tbox_fixes.sh` ok, KAT 19/19,
+x86-64-v3 + 360 wasm cases over all five relations, **0 disagreements**; `pqzl/sv/check_sv_fixes.sh` ok (either fix
+reverted in a copy of `pqz_sv.c`: 10 / 10 disagreements; the tree: 0 / 10); `pqzl/check_tbox_fixes.sh` ok, KAT 19/19,
 ASan + UBSan clean. Tables built per op at its first `pqz_verify_fast` (≤ 5.2 MB per op, init back to A alone);
-`SV=0 ./build.sh` leaves the specialised verifier out (`pqz.wasm` 404,755 → 350,585 B). wasm `R_TX` prover alone
+`SV=0 pqzl/build.sh` leaves the specialised verifier out (`pqz.wasm` 404,755 → 350,585 B). wasm `R_TX` prover alone
 221.1 MiB (13.6 % under 256 MiB), with or without the specialised verifier (v1 eager tables: 284 MB).
 
 | v2, ms [measured] | p50 portable | p99 portable (honest / adv.) | p50 x86-64-v3 | p50 / p99 wasm | generic p50 |
@@ -107,25 +107,25 @@ ASan + UBSan clean. Tables built per op at its first `pqz_verify_fast` (≤ 5.2 
 Same as v1 within host noise; every relation ≥ 3× under the 50 ms p99 limit on every build. The rest of this
 section is the v1 (pre-fix transcript) record.
 
-`pqz_verify_fast` (`src/pqz_sv.c`, ABI in `pqz.h`): same decoder, transcript, challenges and checks as
+`pqz_verify_fast` (`pqzl/src/pqz_sv.c`, ABI in `pqz.h`): same decoder, transcript, challenges and checks as
 `pqz_verify`, but v and w1 computed by evaluating each equation on the proof directly (selection blocks as identity
 blocks, no sparse matrices), 4 × 30-bit CRT primes with a complete NTT, table-based AES-256-CTR for the JL rows,
 8-row subset-sum tables for the JL fold. `pqz_verify` stays the reference. Write-up:
-`docs/research/pqz-specialised-verifier.md`; runs `sv/runs/`.
+`docs/research/pqz-specialised-verifier.md`; runs `pqzl/sv/runs/`.
 
 | | `R_TX` p50 honest | p99 adversarial | `R_REG` p50 | generic `R_TX` | working arena `R_TX` |
 |---|---|---|---|---|---|
 | native portable (`-O2`) | **7.85 ms** | 10.4 ms | 3.97 ms | 660 ms | 1.7 MB (generic 273 MB) |
-| native x86-64-v3 + AES-NI (`build.sh native-x86v3`) | 4.54 ms | 5.6 ms | 2.38 ms | | |
+| native x86-64-v3 + AES-NI (`pqzl/build.sh native-x86v3`) | 4.54 ms | 5.6 ms | 2.38 ms | | |
 | wasm32 (node) | 11.9 ms | 13.4 ms | 5.9 ms | 741 ms | |
 
-- Differential test (`sv/diff.sh`, `test/pqz_sv_diff.c`): 8,538 native cases (honest proofs on fresh statements, byte /
+- Differential test (`pqzl/sv/diff.sh`, `pqzl/test/pqz_sv_diff.c`): 8,538 native cases (honest proofs on fresh statements, byte /
   statement mutations, 14 re-encoded field mutations, random multi-edit fuzz) + 244 wasm cases, **0 disagreements**;
   PRG check against LaZer 0 mismatches; ASan + UBSan bench and 10 min libFuzzer: no findings.
 - Constraints: no malloc / GMP / MPFR / float / abort on the path, arena only (+9.1 MB of tables at init), invariant
   checks as error returns; symbol scan clean on native, x86-64-v3 and wasm objects. Prover unchanged (`proofs_fnv`
   `3bc7e9b3` / `834d6853`), KAT 19/19.
-- `R_BURN` / `R_DS` / `R_DR` (branch `pqz-sv-rel3` = `pqz-sv` + `pqz-rel3`, `sv/rel3.sh`, runs `sv/runs/r3-*`):
+- `R_BURN` / `R_DS` / `R_DR` (branch `pqz-sv-rel3` = `pqz-sv` + `pqz-rel3`, `pqzl/sv/rel3.sh`, runs `pqzl/sv/runs/r3-*`):
   native portable p50 7.69 / 4.17 / 4.37 ms (p99 adversarial ≤ 10.9 / 6.5 / 7.3 ms), x86-64-v3 4.47 / 2.82 / 2.67 ms,
   wasm 13.2 / 7.2 / 7.8 ms; differential test 2,710 portable + 1,350 x86-64-v3 + 360 wasm cases over all five
   relations, **0 disagreements**; ASan + UBSan bench clean. Tables for five relations: 20.8 MB (wasm `R_TX` prove
@@ -135,9 +135,9 @@ blocks, no sparse matrices), 4 × 30-bit CRT primes with a complete NTT, table-b
 
 ## R_BURN, R_DS, R_DR (branch `pqz-rel3`)
 
-The three remaining relations (pq-zether.md §7.5, §7.9) through the same `pqz_prove` / `pqz_verify`: specs
-`params/{burn,ds,dr}_params.sage`, builders in `src/pqz_rel.c` (`R_BURN` shares the `R_TX` builder), statements as
-§7.7 / §7.9 (burn 50,048 B, disclosure 33,153 B), runs `rel3/runs/`. All six tamper kinds rejected, KAT 19/19,
+The three remaining relations (pq-zero-knowledge.md §7.5, §7.9) through the same `pqz_prove` / `pqz_verify`: specs
+`pqzl/params/{burn,ds,dr}_params.sage`, builders in `pqzl/src/pqz_rel.c` (`R_BURN` shares the `R_TX` builder), statements as
+§7.7 / §7.9 (burn 50,048 B, disclosure 33,153 B), runs `research/pqzl-measure/runs/`. All six tamper kinds rejected, KAT 19/19,
 `R_REG` / `R_TX` `proofs_fnv` unchanged, symbol scan clean. The keys of all five relations lived in the arena base:
 +27 MB native / +21 MB wasm on every op (wasm `R_TX` peak 263 MB, 2 % under 256 MiB). Write-up:
 `docs/research/pqz-relations-burn-disclose.md`.
@@ -145,7 +145,7 @@ The three remaining relations (pq-zether.md §7.5, §7.9) through the same `pqz_
 **Fix-ups (branch `pqz-relfix`, owner 2026-10-13, note §5).** `R_TX` on the §7.7 layout (header 640 B, fee word at
 256; 83,072 B), disclosure `kind` a 32-byte word (33,184 B, pk at 288), burn / refresh randomness fresh (spec),
 e′ ∈ [−2^24, 2^24) (spec), ABDLOP keys built at a relation's first prove or verify (`pqz_init` expands A only), arena
-release rebuilds the size classes. Run `rel3/relfix.sh f2` (`rel3/runs/f2-*`) [measured]: KAT 19/19; `fails 0`
+release rebuilds the size classes. Run `research/pqzl-measure/relfix.sh f2` (`research/pqzl-measure/runs/f2-*`) [measured]: KAT 19/19; `fails 0`
 (honest + six tamper kinds, all five relations, native, wasm, ASan + UBSan with only the upstream nits of Open 4);
 `proofs_fnv` `R_REG` `12ec7452` / `3bc7e9b3` and `R_BURN` unchanged, `R_TX` changed by design (native
 `cb562b47` → `4690aaa0`, wasm `834d6853` → `f1c3e7f6`), `R_DS` / `R_DR` changed by design; native and wasm proofs
@@ -167,15 +167,15 @@ wasm, init arena 54.5 → 3.1 MB native. p99 verify (honest or adversarial, the 
 
 ## proofSystemId v2: the LaZer tbox soundness fixes (branch `pqz-v2`)
 
-Two Schwartz–Zippel findings in `lazer/lnp-tbox.c`, public as [lazer#24](https://github.com/lazer-crypto/lazer/issues/24)
+Two Schwartz–Zippel findings in `pqzl/lazer/lnp-tbox.c`, public as [lazer#24](https://github.com/lazer-crypto/lazer/issues/24)
 (P6-SZ: one challenge pair reused for all λ/2 evaluation accumulators; fix: the full λ × M matrix) and
 [lazer#25](https://github.com/lazer-crypto/lazer/issues/25) (P6-L2: one domain for all exact-ℓ2 equations, only the
 sum of the block norms checked; fix: `dom + i`). Both change the transcript, so one bump:
-`proofSystemId = keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v2")` (`PQZ_PROOF_SYSTEM_ID` in `src/pqz.h`; the bench
-statements now carry it at bytes 32..63). Harnesses and the regression check: `sz/README.md`, `check_tbox_fixes.sh`
+`proofSystemId = keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v2")` (`PQZ_PROOF_SYSTEM_ID` in `pqzl/src/pqz.h`; the bench
+statements now carry it at bytes 32..63). Harnesses and the regression check: `pqzl/sz/README.md`, `pqzl/check_tbox_fixes.sh`
 (with either fix reverted it exits 1: P6-L2 reverted, the production verifier accepts the 4 pooled-slack proofs;
-P6-SZ reverted, the trace reports 2 independent tests). Run `NP=10 NV=30 NPW=5 NVW=10 rel3/relfix.sh v2`
-(`rel3/runs/v2-*`) [measured]: KAT 19/19, `check_tbox_fixes: ok`, `fails 0` (native, wasm, ASan + UBSan with only
+P6-SZ reverted, the trace reports 2 independent tests). Run `NP=10 NV=30 NPW=5 NVW=10 research/pqzl-measure/relfix.sh v2`
+(`research/pqzl-measure/runs/v2-*`) [measured]: KAT 19/19, `check_tbox_fixes: ok`, `fails 0` (native, wasm, ASan + UBSan with only
 the upstream nits of Open 4), symbol scan clean; native and wasm proofs equal byte for byte (5-seed and 1-seed hashes).
 
 | `proofs_fnv` f2 → v2 | native 5 seeds | wasm 3 seeds | native 10 seeds | wasm 5 seeds (= native 5) |
@@ -196,27 +196,27 @@ native p50 prove / verify `R_TX` 949 / 620 → 1,061 / 648 ms, `R_BURN` 683 / 52
 Third LaZer finding, from the independent SV review (finding 1), public as
 [lazer#26](https://github.com/lazer-crypto/lazer/issues/26): `lnp_quad_verify` / `abdlop_verify` bounded ‖w − γ·w1‖
 (the z22 part) but never `z21`; LNP22 Fig. 18, the codegen's `Bound_` / `Bsq` and the honest prover bound the whole
-z2. Both verifiers (`lazer/lnp-quad.c`, `lazer/abdlop.c`, `src/pqz_sv.c`) now check ‖z21‖² + ‖w − γ·w1‖² ≤ Bsq.
+z2. Both verifiers (`pqzl/lazer/lnp-quad.c`, `pqzl/lazer/abdlop.c`, `pqzl/src/pqz_sv.c`) now check ‖z21‖² + ‖w − γ·w1‖² ≤ Bsq.
 Verifier only: transcript and honest proofs unchanged, `proofSystemId` stays v2 (recommendation: no bump; owner).
-Before the fix the enforced MSIS instances were β 286–311 instead of 452–461 (`params/estimator-z21.txt`). Write-up
-`docs/research/pqz-z21-norm.md`. Regression: `check_tbox_fixes.sh` runs `sv/review/review.sh norm` (z21_big
-rejected by both verifiers, accepted by the control without the z21 term); `sv/diff.sh` runs the z21 differential
-`sv/review/review.sh zdiff`. SV hardening from the review folded in (findings 2, 4–7; finding 8 is Open 6).
+Before the fix the enforced MSIS instances were β 286–311 instead of 452–461 (`pqzl/params/estimator-z21.txt`). Write-up
+`docs/research/pqz-z21-norm.md`. Regression: `pqzl/check_tbox_fixes.sh` runs `pqzl/sv/review/review.sh norm` (z21_big
+rejected by both verifiers, accepted by the control without the z21 term); `pqzl/sv/diff.sh` runs the z21 differential
+`pqzl/sv/review/review.sh zdiff`. SV hardening from the review folded in (findings 2, 4–7; finding 8 is Open 6).
 
-Run `NP=10 NV=30 NPW=5 NVW=10 rel3/relfix.sh z21full` + `sv/check_sv_fixes.sh` + `ZN=2 sv/diff.sh z21` + ASan
+Run `NP=10 NV=30 NPW=5 NVW=10 research/pqzl-measure/relfix.sh z21full` + `pqzl/sv/check_sv_fixes.sh` + `ZN=2 pqzl/sv/diff.sh z21` + ASan
 z21 differential [measured]: KAT 19/19; `check_tbox_fixes: ok`; `check_sv_fixes: ok`; `fails 0` (native, wasm,
 ASan + UBSan with only the Open 4 nits); `proofs_fnv` of all five relations unchanged from v2 (native 5 / 10 seeds,
-wasm 3 / 5 seeds); PoC `z21_big` ACCEPT / ACCEPT before (`rel3/runs/z21-before-norm.txt`) → REJECT / REJECT
+wasm 3 / 5 seeds); PoC `z21_big` ACCEPT / ACCEPT before (`research/pqzl-measure/runs/z21-before-norm.txt`) → REJECT / REJECT
 (`z21full-norm.txt`), PoC proofs byte-identical; differential test (v2-sized sample) 2,710 cases, 0 mismatches
-(`sv/runs/z21s-diff-portable.jsonl`); z21 differential 290 z21-inflated proofs, 0 disagreements, verdict = (‖z2‖² ≤
-Bsq) in every case (`sv/runs/z21s-z21diff.jsonl`); the same under ASan + UBSan 145 cases, 0 disagreements, no sanitizer report (`sv/runs/z21s-asan-*`). Generic verify p50 native `R_TX` 677 ms, `R_REG` 184 ms
+(`pqzl/sv/runs/z21s-diff-portable.jsonl`); z21 differential 290 z21-inflated proofs, 0 disagreements, verdict = (‖z2‖² ≤
+Bsq) in every case (`pqzl/sv/runs/z21s-z21diff.jsonl`); the same under ASan + UBSan 145 cases, 0 disagreements, no sanitizer report (`pqzl/sv/runs/z21s-asan-*`). Generic verify p50 native `R_TX` 677 ms, `R_REG` 184 ms
 (v2 648 / 177, noise).
 
 ## Hedged prover P6e Task 1 (branch `p6e-a1`; CTR-PQZ-19, P6e plan gap G2 / decision D6; no `proofSystemId` bump)
 
 `do_prove` derived the commitment randomness and every mask from `rnd32` alone (`SCAAS-PQZ-PROVER-RND-V1` /
 `…-SUB-V1`): a repeated `rnd32` (a weak browser RNG) for two witnesses repeated the masks. Now
-`pqz_prover_seeds` (`src/pqz_rel.c`) = `SHAKE128("SCAAS-PQZ-PROVER-RND-V2" ‖ rnd32 ‖ wh ‖ hash0)` and `…-SUB-V2`, with
+`pqz_prover_seeds` (`pqzl/src/pqz_rel.c`) = `SHAKE128("SCAAS-PQZ-PROVER-RND-V2" ‖ rnd32 ‖ wh ‖ hash0)` and `…-SUB-V2`, with
 `wh = SHAKE128("SCAAS-PQZ-PROVER-WIT-V2" ‖ wit)[0..32)` (inner tag added after review, run `hedge2`) and `hash0` the
 statement digest; `do_prove` zeroes the seeds after use. Prover only: verifiers, transcript, proof format unchanged;
 honest proofs change. Tests: `pqz_bench` (every run with `R_REG`): the seeds of two valid `R_REG` witnesses (keys
@@ -226,8 +226,8 @@ equal inputs give equal seeds, two proves with one `rnd32` give the same proof (
 (`"prover_seeds_match": 1`, all five, portable and x86-64-v3). The Ligero (PQZH) half of D6 is Part B.
 
 Runs [measured], current = `hedge2` (the first run without the inner tag, `hedge`, is kept):
-`NP=10 NV=30 NPW=5 NVW=10 rel3/relfix.sh hedge2` (`rel3/runs/hedge2-*`, summary `hedge2-relfix-summary.txt`) and
-`sv/rel3.sh hedge2` + `sv/review/review.sh zdiff 1` (`sv/runs/hedge2-*`, summary `hedge2-summary.txt`), one capped
+`NP=10 NV=30 NPW=5 NVW=10 research/pqzl-measure/relfix.sh hedge2` (`research/pqzl-measure/runs/hedge2-*`, summary `hedge2-relfix-summary.txt`) and
+`pqzl/sv/rel3.sh hedge2` + `pqzl/sv/review/review.sh zdiff 1` (`pqzl/sv/runs/hedge2-*`, summary `hedge2-summary.txt`), one capped
 job: KAT 19/19; `check_tbox_fixes: ok`; `check_sv_fixes: ok` (tree 0 / 10, either fix reverted 10 / 10); differential
 test 2,710 portable + 1,350 x86-64-v3 cases, 0 mismatches, PRG 0; wasm `PQZ_VERIFY=both` 0 mismatches; z21
 differential 145 cases, 0 disagreements; `fails 0` everywhere (native, wasm, ASan + UBSan with only the Open 4 nits);
@@ -245,19 +245,19 @@ seeds = wasm 5 seeds; one seed alone: native = wasm generic = wasm fast = wasm w
 | `R_DS` | `46c77f3e` → `dac15c76` → **`b4aa2e26`** | `216b75fc` → `3c9cde98` → **`f39a8e64`** | `f4b59d4b` → `4f4a10ab` → **`5429242c`** | `d7fbc082` → `3f530c3f` → **`9eb44281`** | `10639246` → `4075f5f5` → **`478a0d94`** |
 | `R_DR` | `84a15cd2` → `37a226ae` → **`c800f2c6`** | `e0d2deda` → `78688027` → **`96a6e906`** | `ea72ce2d` → `2da4e9b2` → **`e53ad440`** | `22be6479` → `2d06acff` → **`5bb0078c`** | `82621a18` → `7db4b018` → **`cb2f3ced`** |
 
-## KeyGen / Enc / Dec from seeds P6e Task 3 (branch `p6e-a1`; pq-zether.md §4.2, P6e plan gap G4)
+## KeyGen / Enc / Dec from seeds P6e Task 3 (branch `p6e-a1`; pq-zero-knowledge.md §4.2, P6e plan gap G4)
 
-`src/pqz_keys.c` (ABI in `pqz.h`): `pqz_keygen(seed32, pk, s, e, &ctr)`, `pqz_enc_seed(pks, n, msgs, seed_enc, u, vs,
+`pqzl/src/pqz_keys.c` (ABI in `pqz.h`): `pqz_keygen(seed32, pk, s, e, &ctr)`, `pqz_enc_seed(pks, n, msgs, seed_enc, u, vs,
 r, e1, e2, &ctr)`, `pqz_dec(s, ct, M, noise)`, §4.2 literally: one SHAKE256 stream per counter (`SCAAS-PQZ-KEYGEN-V1`
 / `SCAAS-PQZ-ENC-V1` ‖ seed ‖ be4(ctr)), CBD bits LSB-first, `s` then `e` (`r`, `e1`, then `e2_j` in recipient order),
 resample above 36 / 164 / 64, error at counter 64; pk / ciphertext coefficients ≥ q and digits > 15 rejected; the ring
-work is `pqz_rel.c`'s. SHAKE256 = LaZer's Keccak core at rate 136 (`lazer/shake128.c`, `PQZ:`). Independent check:
-`smartcontracts/vectors/pqz/pqz_kat.py` (Python stdlib, Task 4). Run [measured] (`test/runs/keys-*`, `./build.sh all`
+work is `pqz_rel.c`'s. SHAKE256 = LaZer's Keccak core at rate 136 (`pqzl/lazer/shake128.c`, `PQZ:`). Independent check:
+`smartcontracts/vectors/pqz/pqz_kat.py` (Python stdlib, Task 4). Run [measured] (`pqzl/test/runs/keys-*`, `pqzl/build.sh all`
 + wasm without SV + x86-64-v3 under one capped job): symbol scan clean on all five object sets; `pqz_keys_kat 1000`:
 SHAKE256 on 10 inputs (absorb and squeeze split in two), KeyGen on 20 seeds, Enc to two recipients and Dec on 20 seeds
 all equal to `pqz_kat.py --c-keys` (`keys-pqz-kat.txt`: ok; a tampered copy fails on each changed field); round trip
 1,000 seeds `Dec(Enc(m)) = m`, max |noise| 543 ≤ B_FRESH 11,872, every counter 0, 3 / 3 non-canonical inputs rejected;
-1.9 s, 5.7 MB RSS. After review (`test/runs/keys2-*`, built in the `hedge2` job): Dec by both recipients checked in
+1.9 s, 5.7 MB RSS. After review (`pqzl/test/runs/keys2-*`, built in the `hedge2` job): Dec by both recipients checked in
 Python (40 Decs); the resample path and the counter-64 error pinned with lowered thresholds through test hooks
 (`PQZ_TEST_HOOKS` object of `pqz_keys.c`, never in libpqz; `‖s‖ ≤ 32`, `‖e‖ ≤ 143`, `‖e2_j‖ ≤ 12`, and a threshold 0):
 6 + 6 lowered KeyGen / Enc lines, 4 KeyGen and 3 Enc resampled (counter ≥ 1), 2 counter-64 errors, all equal to
@@ -272,10 +272,10 @@ zeroed with the SHAKE state (`keys2-pqz-kat.txt`: ok; a tampered copy fails on e
 917 bits). Op 1 with the 66,560-byte statement (header ‖ `pk_f ‖ pk_t ‖ T ‖ u ‖ v_t ‖ v_f`), witness 12,384 B
 (`PQZ_TX0_STMT_BYTES`, `PQZ_TX0_WIT_BYTES`); `pqz_rel.c` picks `R_TX` / `R_TX0` by the length and both verifiers and the
 prover require the `auditorOn` word (offset 448, `PQZ_HDR_AUDITOR_ON`) = 1 on the 83,072-byte form and 0 on the
-66,560-byte one (R6). Spec `params/tx0_params.sage` → `params/pqz_tx0_params.h` by LaZer's codegen: kmsis 23, kmlwe 33,
+66,560-byte one (R6). Spec `pqzl/params/tx0_params.sage` → `pqzl/params/pqz_tx0_params.h` by LaZer's codegen: kmsis 23, kmlwe 33,
 m1 145 + m2 68, MSIS β 457 (2^133.4 classical / 2^121.1 quantum), MLWE uSVP β 470 (dual_hybrid 462), knowledge error
-≤ 2^-127 (`params/estimator-e-s1-tx0.txt`). D1: the codegen rerun reproduces the five checked-in headers byte for byte
-(`params/codegen-tx0.txt`, `params/regen.sh`). ABDLOP keys of its own, `SCAAS-PQZ-ABDLOP-PP-V1 ‖ 0x81` (run
+≤ 2^-127 (`pqzl/params/estimator-e-s1-tx0.txt`). D1: the codegen rerun reproduces the five checked-in headers byte for byte
+(`pqzl/params/codegen-tx0.txt`, `pqzl/params/regen.sh`). ABDLOP keys of its own, `SCAAS-PQZ-ABDLOP-PP-V1 ‖ 0x81` (run
 `tx0b`; the first run `tx0` shared op 1's tag); the specialised verifier names it by the same internal code
 `PQZ_REL_TX0` (0x81, never on the wire). Bench / diff / fuzz
 relation 5 (`pqz_bench` mask 32), from the bench's `R_TX` transfer without the auditor leg.
@@ -283,14 +283,14 @@ relation 5 (`pqz_bench` mask 32), from the bench's `R_TX` transfer without the a
 **The bench's `R_TX` statement changed** (R6): its header word 448 was filler (`i·3`), now 1; so `R_TX`'s proofs and
 `proofs_fnv` change (native 5 / 10 seeds `ca69759d` → `604111c6` / `cabd8270` → `79b9326d`, wasm 3 seeds `177e6806` →
 `6780efdd`, 1 seed `e2cf9721` → `a092f2ff`); proof bytes, times and peaks the same. `R_REG`, `R_BURN`, `R_DS`, `R_DR`
-proofs byte-identical to `hedge2`. Also set to 1 in `test/pqz_sv_diff.c`, `test/pqz_sv_fuzz.c` (input byte 0 now picks
-`R_REG` / `R_TX` / `R_TX0`), `l2dom/l2dom_tx.c`, `xcheck/shim/bench.c`. The Ligero crate's `client::setup` writes
+proofs byte-identical to `hedge2`. Also set to 1 in `pqzl/test/pqz_sv_diff.c`, `pqzl/test/pqz_sv_fuzz.c` (input byte 0 now picks
+`R_REG` / `R_TX` / `R_TX0`), `pqzl/l2dom/l2dom_tx.c`, `research/upstream/shim/bench.c`. The Ligero crate's `client::setup` writes
 the same header (auditorOn 1 since `p6e-b2`; the salt word and the zero words of D15 since the merge, run `tx0c`, so
-`xcheck/ligero.sh` stays byte-equal); the Plonky3 crate's `pqzh/src/client.rs` (backup, unbuilt by P6e) still writes
+`research/upstream/ligero.sh` stays byte-equal); the Plonky3 crate's `pqzh/src/client.rs` (backup, unbuilt by P6e) still writes
 the filler.
 
-Runs [measured] (`NP=10 NV=30 NPW=5 NVW=10 rel3/relfix.sh tx0`, `sv/rel3.sh tx0`, `sv/review/review.sh zdiff 1`, one
-capped job each; `rel3/runs/tx0-*`, `sv/runs/tx0-*`): KAT 19/19; `check_tbox_fixes: ok`; `check_sv_fixes: ok` (tree 0 /
+Runs [measured] (`NP=10 NV=30 NPW=5 NVW=10 research/pqzl-measure/relfix.sh tx0`, `pqzl/sv/rel3.sh tx0`, `pqzl/sv/review/review.sh zdiff 1`, one
+capped job each; `research/pqzl-measure/runs/tx0-*`, `pqzl/sv/runs/tx0-*`): KAT 19/19; `check_tbox_fixes: ok`; `check_sv_fixes: ok` (tree 0 /
 12, either fix reverted 12 / 12); differential test 3,484 portable + 1,736 x86-64-v3 cases over six relations, 0
 mismatches (`R_TX0` 766 + 382, incl. 24 + 12 `stmt_auditor` cases: `auditorOn` changed on `R_TX` / `R_TX0`, both
 verifiers reject every one), PRG 0; wasm `PQZ_VERIFY=both` 0 mismatches; z21 differential 174 cases over six relations,
@@ -314,7 +314,7 @@ the prover); symbol scan clean; native and wasm proofs equal byte for byte (nati
 Every `R_TX0` number is within host noise of `R_TX` or just under it (one key and one ciphertext slot fewer); SV p99
 ≤ 15.2 ms against the 60 ms limit on every build.
 
-**After review (controller 2026-10-14), run `tx0b`** (`rel3/runs/tx0b-*`, `sv/runs/tx0b-*`; `tx0` kept): `R_TX0` gets
+**After review (controller 2026-10-14), run `tx0b`** (`research/pqzl-measure/runs/tx0b-*`, `pqzl/sv/runs/tx0b-*`; `tx0` kept): `R_TX0` gets
 its own ABDLOP keys (tag byte 0x81), and the bench's debit statements carry the canonical salt word (16 zero bytes ‖
 salt, CTR-PQZ-19; `R_TX` / `R_TX0` keep the filler as the 16-byte salt, `R_BURN` salt 0), which the decoder (`pqz-stmt`,
 `pqz_kat.py`) now enforces (pqz-core only hashes the word). So `R_TX`, `R_TX0` and `R_BURN` proofs change once;
@@ -328,7 +328,7 @@ ms, generic verify p50 / p99 native 574 / 594 ms (adversarial 656), wasm 766 ms,
 
 **Second review (controller 2026-10-14), run `tx0c`** (`tx0`, `tx0b` kept), after merging `main` (`p6e-b2`): the
 `auditorOn` read in `parse_debit` / the SV's `parse_stmt` split into two statements (it was read unsequenced with the
-call, C11 6.5.2.2p10; no other such read in `src/` or `lazer/`); D15 now also pins the header words §7.7 / §7.5 fix to 0
+call, C11 6.5.2.2p10; no other such read in `pqzl/src/` or `pqzl/lazer/`); D15 now also pins the header words §7.7 / §7.5 fix to 0
 (a transfer's `amount` / `recipient`, a burn's `toUA` / `auditorOn` / whole `salt`, a refresh's `toUA` / `amount` /
 `recipient` / `auditorOn` / `salt`; decoder only, `pqz-stmt` and `pqz_kat.py`), and the bench writes them so (`R_TX`
 recipient 0; `R_BURN` toUA, auditorOn 0), so `R_TX`, `R_TX0`, `R_BURN` proofs change once more; `R_REG`, `R_DS`,
@@ -339,7 +339,7 @@ p50 / p99 native 827 / 1,128 ms, wasm 1,398 ms, generic verify p50 / p99 native 
 760 ms, SV p50 / p99 portable 8.03 / 8.49 (adversarial 8.82), x86-64-v3 4.68 / 5.53 (4.92), wasm 13.4 / 14.7 (14.4)
 ms. `../artifact/expected-results.json` regenerated from `tx0c` (provisional, 69 / 69). The Ligero crate's
 `client::setup` writes the same header words: `pqzh/ligero/runs/l13-*` (EVM fixtures re-exported, `cargo test` 15 +
-14 ok, `--no-default-features` ok, wasm32 build ok, `xcheck/ligero.sh` all ten files equal + `kat_stmt: ok`, forge
+14 ok, `--no-default-features` ok, wasm32 build ok, `research/upstream/ligero.sh` all ten files equal + `kat_stmt: ok`, forge
 16 / 16 passed on the re-exported fixtures; its first try failed only because this worktree had no `lib/`,
 `l13-forge-failed-nolib.txt`).
 
@@ -390,8 +390,8 @@ fault ⇒ no result; see the fault split below),
 id, keygen / enc / dec, the witness layouts, a seeded fixture of every form). Input → `pqz_stmt::decode_input` (D5,
 D15, R6) → `proofSystemId`: PQZL to `pqz_verify_fast` (the generic verifier only in tests, R5), PQZH to Ligero
 (`default-features = false`, behind `src/pqzh.rs` only: the Ligero API moves in `p6e-b3`), op 6 to the cached self-test
-(D13). libpqz is compiled by `build.rs` from `src/`, `lazer/`, `params/` with `build.sh`'s flags and
-`check_symbols.sh` on the archive (wasm32: `pqz_wasm_rt.c`'s branch-free 128-bit helpers kept, Rust provides `mem*`).
+(D13). libpqz is compiled by `build.rs` from `pqzl/src/`, `pqzl/lazer/`, `pqzl/params/` with `pqzl/build.sh`'s flags and
+`pqzl/check_symbols.sh` on the archive (wasm32: `pqz_wasm_rt.c`'s branch-free 128-bit helpers kept, Rust provides `mem*`).
 **Open 6 closed at this layer**: every libpqz call runs under one process-wide lock, on one worker thread with a fixed
 16 MiB stack (found by the first run `ffi1`: a test thread's 2 MiB overflows in the prover, so the core's stack must not
 depend on the caller's thread); a poisoned lock re-initialises the core. Arenas allocated once: verify-only 136 MiB =
@@ -477,7 +477,7 @@ the norm bounds (s = 36 at poly 1 coefficient 0, e = 164 at poly 0 coefficient 0
 in both systems); a credit with r = 36 along rot(e), e1 = −164 against rot(s), e2_t = (64, 0, …) has noise exactly
 B_FRESH = 11,872, and its sender's `R_TX` (e2_t at PQZL's B′ = 64 filler) proves and verifies in both systems (credit 0
 and the last); `T` = 1,023 such credits + the plain unit (noise 0): noise 12,145,056, margin 1.38× to 2^24, 4.14× to the
-mint threshold Δ − 2^24; the receiver's debit over `T` proves and verifies in both systems. pq-zether.md §4.3 notes the
+mint threshold Δ − 2^24; the receiver's debit over `T` proves and verifies in both systems. pq-zero-knowledge.md §4.3 notes the
 reachable maximum (12,156,928 counts 1,024 units). The honest-key construction stays as `illustrative` (10,254,552).
 
 Run `scripts/capped pqz-core/ffi/vectors/run.sh vec3 write` [measured] (`ffi/vectors/runs/vec3-*`; `vec1-*` = the
@@ -514,12 +514,12 @@ already known (Open 2).
 
 ## Spec: serialization v1, P6e Task 12 (branch `p6e-a6`; plan D2, D4, D7, D12, D14, D15)
 
-Docs only, no code change. [pq-zether.md §8.1 "Serialization v1"](../docs/contracts/pq-zether.md#serialization) now
+Docs only, no code change. [pq-zero-knowledge.md §8.1 "Serialization v1"](../docs/contracts/pq-zero-knowledge.md#serialization) now
 specifies every byte this core, `pqz-stmt`, `pqz-ffi` and the Ligero crate exchange: the precompile framing and its
 check order, both ids and `MAX_PROOF(id)`, the 640-byte header word by word with the decoder's rule per form, every
 statement body with offsets (checked against `pqz_kat.py`'s `parse` on the vector statements), objects, bundle,
 opening, `entryRef`, `authDigest`, the witness layouts (prover API), the PQZL coder format (field order, widths, `D`
-and `log2(stdev/1.55)` per relation from `params/pqz_<rel>_params.h`, end bit), the Ligero proof format and Merkle
+and `log2(stdev/1.55)` per relation from `pqzl/params/pqz_<rel>_params.h`, end bit), the Ligero proof format and Merkle
 order, `OP_SELFTEST`. §5 states the implemented transcripts (D7), §8 the bump rule (D4), §4.4 the proof sizes above.
 Spec text that disagreed with the code was changed to the code (list at the end of §8.1); decisions.md has the D2, D4,
 D7, D12, D14 and D15 (proof half) lines.
@@ -558,7 +558,7 @@ equal `ffi1f2`'s.
 | PQZH (4, on) / (4, off) | 132,992 / 116,096 | 232,708 / 230,904 | 365,705 / 347,005 | 369,193 / 351,571 | 647 / 701 | 10.83 / 13.07; 10.74 / 12.74 | 2.13 / 2.52 |
 
 Worst-case input = 5 + statement + the id's bound (PQZL `MAX_PROOF` 98,304; PQZH Ligero's exact bound). **D3**
-(`params/anon/anon-sizes-s3.txt`): PQZL {1, 2, 4, 8} built (M = 16: input 474,161 / 449,947 B > `MAX_INPUT`), PQZH
+(`pqzl/params/anon/anon-sizes-s3.txt`): PQZL {1, 2, 4, 8} built (M = 16: input 474,161 / 449,947 B > `MAX_INPUT`), PQZH
 {1, 2, 4} built (M = 8: bound 281,208 B > `MAX_PROOF_PQZH`, input 497,149 B > `MAX_INPUT`; M = 16 also over the gas
 cap); largest op 7 worst-case input 369,193 B (PQZH (4, on)) ≤ 393,216. Frozen vectors (`ffi/vectors/runs/s3a-*`):
 `pqz_kat.py --check` ok, tamper 179 / 179, wasm32 replay 34 / 0 fails; `pqz-vectors --check` differs only in the
@@ -591,7 +591,7 @@ proved byte-equal with native, the 3 PQZL M = 8 rows verify-only: wasm32 does no
 `WASM_PQZL_MAX_LEGS` = 4; `s4a-wasm.txt` re-run once after a counter fix in the script's summary line).
 
 **LH-2** (`ffi/vectors/lh2.sh`, `examples/lh2.rs`, run `s4a-lh2.txt`): pqz_bench.c's op 7 statements (C, every TXB
-shape, `xcheck/dump_setup.c` mode `txm`, opTag and recipientsHash set) and the Ligero crate's `setup_multi` ones
+shape, `research/upstream/dump_setup.c` mode `txm`, opTag and recipientsHash set) and the Ligero crate's `setup_multi` ones
 (default, fee 0 all decoys, two real legs) under each id that builds M: `pqz-stmt` parse + encode byte-equal, proved
 (PQZL by the C core, PQZH by Ligero), `…01` through the precompile, the PQZL generic verifier agreeing, a
 `recipientsHash` bit flip `…00`: 50 cases (C 14, Ligero 36), 0 failures; `kat_multi.py` (pqz_kat.py) rebuilds the 6
@@ -624,11 +624,11 @@ Kill criteria: **R_TX prove 1.10 s native meets the 6 s limit** (and the former 
 adversarial / honest verify ≈ 0.7 s against 50 ms, ≈ 14× (was ≈ 300×); upstream LaZer verifies the same R_TX in
 6.6 s (xcheck), so P6d-2 is ~9× faster than upstream there.
 
-Browser budgets (pq-zether.md CTR-PQZ-18, node not a browser, medians not p95): R_TX wasm prove 1.59 s against 5 s
+Browser budgets (pq-zero-knowledge.md CTR-PQZ-18, node not a browser, medians not p95): R_TX wasm prove 1.59 s against 5 s
 desktop / 15 s phone / 30 s hard limit (inside); wasm arena peak 241 MB = 230 MiB against 128 MiB budget (1.8×) /
 256 MiB hard limit (inside, 10 % margin); `pqz.wasm` 333 KB. wasm/native now 1.1–1.5×. No decision (owner).
 
-Profile after P6d-2 (gprof, R_TX 1 prove + 1 verify, `opt/runs/9-z3-gprof.txt`): flat; LaZer's generic sparse-matrix
+Profile after P6d-2 (gprof, R_TX 1 prove + 1 verify, `research/opt/runs/9-z3-gprof.txt`): flat; LaZer's generic sparse-matrix
 and int bookkeeping (`intvec_set` 17 %, `spolymat_insert_elem` 9 %, `int_mod` / `int_redc` 15 %, `polymat_alloc`
 9 %), the base multiplication 7 %, AES ~4 %. E-S1 profile (main): ~55 % ring arithmetic, 8 % insertion sort, the
 rest bookkeeping; the zero entries of the selection matrices' Gram matrices were most of that bookkeeping.
@@ -654,8 +654,8 @@ rest bookkeeping; the zero entries of the selection matrices' Gram matrices were
 3. **wasm.** Proofs equal byte for byte with native (P6d-2, seeds 0..2); no browser run (node only); R_TX needs
    ~0.23 GB of the 4 GiB wasm32 memory (fix-ups, one op per process).
 4. UBSan nits left as upstream: zero-length VLAs when M = 0 / nbin = 0 (`lnp-tbox.c` 223, 875, 3451),
-   null + 0 in `aes256ctr.c:339` (P6d-2 `opt/asan.sh`: nothing else). LSan on the malloc path reports the relation
-   layer's statement objects (`pqz_rel.c` frees them by arena release), on main as well; `opt/asan.sh` runs with
+   null + 0 in `aes256ctr.c:339` (P6d-2 `research/opt/asan.sh`: nothing else). LSan on the malloc path reports the relation
+   layer's statement objects (`pqz_rel.c` frees them by arena release), on main as well; `research/opt/asan.sh` runs with
    `detect_leaks=0`.
 5. ~~Docs: README, research note, roadmap P6d row + TODO P6 row, docs_check.~~ (done)
 6. **Global library state (SV review finding 8, for P6f).** `pqz_sv.c` keeps per-call bookkeeping in statics (`svb`,
@@ -667,18 +667,18 @@ rest bookkeeping; the zero entries of the selection matrices' Gram matrices were
 
 7. ~~`keygen.json` "one seed with ≥ 1 resample (searched)" cannot be searched (≈ 2^-70 per seed).~~ Settled
    (controller 2026-10-14): the row is dropped from the plan's Task 11; the resample path and the counter-64 error are
-   pinned by the test-hook KATs of Task 3 (`test/runs/keys2-*`).
+   pinned by the test-hook KATs of Task 3 (`pqzl/test/runs/keys2-*`).
 8. **Secret material in the arena is not zeroed** (project-wide): the witness copies in `s1`, the masks `y`, `s2` and
    the keys `pqz_keygen` writes live in the arena (or the caller's buffers) until overwritten; `pqz_arena_release`
    does not clear them. `do_prove` zeroes its seeds, `pqz_keys.c` its SHAKE state, bit buffer and `w`. Zeroing on
    release (or per call) is open, for P6f / P6h (cost: one memset of the used arena per prove).
 
-9. ~~**`check_symbols.sh` passes when its files are missing**~~ (found in P6e Task 7, run `ffi1`; seen again in the
+9. ~~**`pqzl/check_symbols.sh` passes when its files are missing**~~ (found in P6e Task 7, run `ffi1`; seen again in the
    reproducibility package, `artifact/runs/art2-docker-quick-1-probe-*`): it `cd`'d to its own directory, so relative
    paths from elsewhere named nothing, `llvm-nm` errors were lost in the pipe and the script still printed "symbols ok".
    **Closed 2026-10-15 (branch `pqz-artifact2`):** paths are now relative to the caller (it `cd`s only for its default
-   object list), every given file must exist, and `nm`'s status is checked; `test/check_symbols_neg.sh` (a missing file
-   and a non-object exit non-zero, the library objects named from another directory pass) and `./build.sh native` +
+   object list), every given file must exist, and `nm`'s status is checked; `pqzl/test/check_symbols_neg.sh` (a missing file
+   and a non-object exit non-zero, the library objects named from another directory pass) and `pqzl/build.sh native` +
    `glic/absence.sh` on the real files: `artifact/runs/art2-check-symbols.txt`, `glic/runs/absence-2026-10-15.txt`.
 
 Scratch (not needed to resume, re-creatable): LaZer and lattice-estimator clones, the upstream tbox harness and

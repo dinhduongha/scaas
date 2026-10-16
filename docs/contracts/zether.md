@@ -7,7 +7,7 @@
 `smartcontracts/evm/src/zether/**`); the accounts are UAs of the UA registry's Zether kinds (UA-3,
 [registry](#registry)). Every Zether contract and the Zether Schnorr verifiers of the registry refuse to deploy or
 initialize outside chain ids 31337/1337, and `OpenFactory.zetherEnabled` defaults to `false` ([safety
-gate](#safety-gate)). Post-quantum confidential balances are a separate class ([pq-zether.md](pq-zether.md)). Relaying is
+gate](#safety-gate)). Post-quantum confidential balances are a separate class ([pq-zero-knowledge.md](pq-zero-knowledge.md)). Relaying is
 the generic self-call ([relaying](#envelope)), `chainUid` is in every chain-bound digest; the built `ZetherToken` with its
 `ZetherMetaTx` envelope is backed up, not built, in `smartcontracts/evm/legacy/p3/`. **Built (P3b):** the storage and auditor modes, the salted `s` and the sender memo ([CTR-ZTH-38](#CTR-ZTH-38), [CTR-ZTH-48](#CTR-ZTH-48)–[CTR-ZTH-50](#CTR-ZTH-50), [CTR-ZTH-30](#CTR-ZTH-30)).
 
@@ -615,7 +615,7 @@ flowchart LR
     H -->|yes| O["SENDER_S / SENDER_CP openings"]
 ```
 
-**PQZ.** The PQZ encryption is already multi-recipient with shared randomness ([CTR-PQZ-04](pq-zether.md#CTR-PQZ-04)); an extra recipient there costs a full `u ‖ v_j` credit at rollover ([CTR-PQZ-11](pq-zether.md#CTR-PQZ-11)), and no PQZ multi-recipient proof exists yet. The storage and auditor modes, the salt and the sender memo carry over ([CTR-PQZ-23](pq-zether.md#CTR-PQZ-23), [CTR-PQZ-24](pq-zether.md#CTR-PQZ-24)).
+**PQZ.** The PQZ encryption is already multi-recipient with shared randomness ([CTR-PQZ-04](pq-zero-knowledge.md#CTR-PQZ-04)); an extra recipient there costs a full `u ‖ v_j` credit at rollover ([CTR-PQZ-11](pq-zero-knowledge.md#CTR-PQZ-11)), and no PQZ multi-recipient proof exists yet. The storage and auditor modes, the salt and the sender memo carry over ([CTR-PQZ-23](pq-zero-knowledge.md#CTR-PQZ-23), [CTR-PQZ-24](pq-zero-knowledge.md#CTR-PQZ-24)).
 
 ## 12. Meta-transaction envelope and replay protection
 
@@ -626,7 +626,7 @@ flowchart LR
 meta-transaction layer, not a parallel branch): Zether is a `ZetherLayer` on `MetaTokenBase`, kinds `NONE_ZETHER` /
 `UNDERLYING_ZETHER` ([CTR-TOK-21](token-wrappers.md#CTR-TOK-21)) — nonce, envelope, fee and ticket steps are the base's
 ([CTR-MTX-07](metatx.md#CTR-MTX-07)). Every confidential token is relayable through the same pipeline
-([metatx.md](metatx.md)); the post-quantum class follows the same rule ([CTR-PQZ-15](pq-zether.md#CTR-PQZ-15)). The
+([metatx.md](metatx.md)); the post-quantum class follows the same rule ([CTR-PQZ-15](pq-zero-knowledge.md#CTR-PQZ-15)). The
 envelope (`ZetherMetaTx`, `_executeOp`, `relayed*`) is gone: every Zether entry point is an allowlisted self-call of
 `mtxExecute` ([CTR-ZTH-34](#CTR-ZTH-34), [CTR-MTX-19](metatx.md#CTR-MTX-19)). **Built (P3)**; the old `ZetherToken` with
 its `ZetherMetaTx` mixin (own pipeline, envelope ops, salt-less domain) is in `legacy/p3/`, not built.
@@ -668,7 +668,7 @@ the real calldata of an allowlisted Zether function
 ([CTR-MTX-19](metatx.md#CTR-MTX-19)): `zetherTransfer(bytes,bytes,bytes,bytes32)`,
 `zetherUnshield(bytes,bytes,bytes,bytes32,address,uint256)`, `zetherShield(bytes,uint256)`, public `wrap(uint256)` and `unwrap(uint256,address)`;
 a public ERC-20 transfer is a `MetaTransfer` like on every token ([CTR-MTX-23](metatx.md#CTR-MTX-23)). `PqzToken`
-relays the same way ([CTR-PQZ-21](pq-zether.md#CTR-PQZ-21)). `zetherTransfer` and `zetherUnshield` compute
+relays the same way ([CTR-PQZ-21](pq-zero-knowledge.md#CTR-PQZ-21)). `zetherTransfer` and `zetherUnshield` compute
 `binding = (msg.sender == address(this) && ticket live) ? ticketBinding : 0`, so the statement tag is
 `ZTX_V1_RELAYED` with the envelope's binding inside `mtxExecute` and `ZTX_V1_DIRECT` with binding 0 otherwise: a proof
 lifted from a pending meta-tx fails as a direct call, and the envelope-stripping attack stays closed. Under a UA
@@ -967,7 +967,7 @@ leg may be the native coin like on every `UNDERLYING*` kind ([CTR-TOK-26](token-
   `_checkEscrow`, `UnsupportedUnderlying`, `ZetherMetaTx` and the envelope, the v1 init, `burn`, the prover views.
 
 <a id="CTR-ZTH-45"></a>**CTR-ZTH-45** — **Entry points and names** (owner, T5). Zether entry points carry the prefix
-`zether` (classical) or `pqz` ([CTR-PQZ-22](pq-zether.md#CTR-PQZ-22)); `shieldScale` as above.
+`zether` (classical) or `pqz` ([CTR-PQZ-22](pq-zero-knowledge.md#CTR-PQZ-22)); `shieldScale` as above.
 
 | Function | Effect |
 |---|---|
@@ -1001,7 +1001,7 @@ classical key to use a Zether token.
   `uaEnvelopeBinding(m) = keccak256(abi.encode(TAG_UA_ENVELOPE, chainid, chainUid, token, m.from, m.batch, m.nonce,
   m.validUntil, m.mode, canonRelayer, m.fee, canonFeeRecipient))` with `TAG_UA_ENVELOPE =
   keccak256("SCAAS-ZETHER-UA-ENVELOPE-V1")`, a tag distinct from the address envelope's (as PQZ's
-  `SCAAS-PQZ-UA-ENVELOPE-V1`, [CTR-PQZ-21](pq-zether.md#CTR-PQZ-21)): a proof lifted from a UA envelope into an address
+  `SCAAS-PQZ-UA-ENVELOPE-V1`, [CTR-PQZ-21](pq-zero-knowledge.md#CTR-PQZ-21)): a proof lifted from a UA envelope into an address
   envelope, or back, fails.
 - **Unshield to a UA.** `zetherUnshieldToUA(payload, proof, authSig, beneficiary, bytes32 to, uint256 amount)`: `to`
   registered SIGNING; the same `OP_BURN` statement, whose recipient word (header word 12 counting from 0, today
@@ -1040,7 +1040,7 @@ node's simulation gate).
 target for confidential payments (where gas is not a blocking constraint); the private reference chain is 7622, but
 classical Zether is gated to the dev chain ids 31337/1337 ([CTR-ZTH-02](#CTR-ZTH-02)) and whether 7622 counts as a dev
 chain is open ([CTR-ZTH-33](#CTR-ZTH-33)). Post-quantum Zether serves the private chain instead
-([pq-zether.md](pq-zether.md)).
+([pq-zero-knowledge.md](pq-zero-knowledge.md)).
 
 ## <a id="safety-gate"></a>16. Safety gate
 

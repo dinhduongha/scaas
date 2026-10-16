@@ -693,7 +693,7 @@ Above the rated load: a second node on **different chains**, not a bigger store.
 ## 13. Post-quantum Zether chains
 
 <a id="pqz"></a>Operator recommendations for a chain that runs post-quantum Zether tokens
-([contracts/pq-zether.md](../contracts/pq-zether.md)):
+([contracts/pq-zero-knowledge.md](../contracts/pq-zero-knowledge.md)):
 
 - Chain profile flag `pqz = { genesis_hash = "0x…", registry = "0x…", tokens = ["0x…"] }`; a start-up probe
   `has_pqz_precompile` (genesis hash first) — a chain that fails it refuses PQZ jobs. The node checks RPC genesis hash
@@ -711,7 +711,7 @@ Above the rated load: a second node on **different chains**, not a bigger store.
   `mtxBatch`). Gateway body limit 1 MiB on job submissions to the `pqz` chain profile only (a v3 transfer job is ≈ 170
   KB as hex; the gateway's global limit stays 64 KiB). **Checked for op 7 (P6-ANON S9, 2026-10-16) — all unchanged**, against the largest
   call of each id within 16 M gas [estimate: measured proof sizes, precompile gas scaled from the live op 1 rows,
-  `pqz-core/params/anon/s9_limits.py`]: PQZL M = 8 + 16 inline credits 383,108 B of calldata, ≈ 14.6 M gas; PQZH M = 4
+  `pqz-core/pqzl/params/anon/s9_limits.py`]: PQZL M = 8 + 16 inline credits 383,108 B of calldata, ≈ 14.6 M gas; PQZH M = 4
   + 10 inline 440,356 B, ≈ 15.9 M (floor-bound; 11 inline need 16.4 M, over this cap, under EIP-7825's 16,777,216). As
   hex the largest job is ≈ 0.88 MB (≈ 0.92 MB at 11 inline), under 1 MiB (1.19×). No inline credit: PQZL M = 8 ≈ 10.4
   M, PQZH M = 4 ≈ 10.7 M; ≥ 5 such calls per 80 M block.
@@ -736,7 +736,7 @@ Above the rated load: a second node on **different chains**, not a bigger store.
     `scaas_gas_cost_native_total{namespace}` ([NODE-OPS-11](#NODE-OPS-11)) carries it.
   - `pqz_call` pre-simulates op 7 on the follower like op 1 (above); the limits above already cover the largest op 7
     call of each id.
-- **The PQZ node** (P6f, [chain integration](../contracts/pq-zether.md#chain-integration)): image
+- **The PQZ node** (P6f, [chain integration](../contracts/pq-zero-knowledge.md#chain-integration)): image
   `scaas/nethermind-pqz:1.39.0-pqz1`; `config.json` `TxPool.MaxTxSize` 1,048,576 (a PQZH transfer is 345,221 B with
   framing; the largest op 7 transaction within 16 M gas ≈ 440 KB, 2.38× under it, S9; the follower proxy's
   `client_max_body_size` 2 MiB takes its hex raw transaction, ≈ 0.88 MB) and `Blocks.TargetBlockGasLimit` 80,000,000 (Clique moves the limit ≈ 0.1 % per block: 16.78 M → 80 M in

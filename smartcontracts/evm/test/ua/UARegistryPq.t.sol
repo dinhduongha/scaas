@@ -12,7 +12,7 @@ import {console2} from "forge-std/Test.sol";
 import {MockVerifier, UARegistryBase} from "./UARegistryBase.sol";
 import {BurnAll, GasProbe} from "./UAGas.t.sol";
 
-/// P6c: the PQ kinds in registry generation 1 (accounts.md CTR-UA-17, CTR-UA-23, §1.8, §1.9; pq-zether.md CTR-PQZ-12,
+/// P6c: the PQ kinds in registry generation 1 (accounts.md CTR-UA-17, CTR-UA-23, §1.8, §1.9; pq-zero-knowledge.md CTR-PQZ-12,
 /// CTR-PQZ-13). Mock verifiers for the slots, the stored keys, the cache refusals and the `pqz-mlwe` `authRef` rule; the
 /// real verifiers on smartcontracts/vectors/ua/pq_signatures.json (context A) for T-REG-1/2, T-AUTH-1, the expanded-key
 /// cache and T-GAS. Gas is logged (`-vv`).

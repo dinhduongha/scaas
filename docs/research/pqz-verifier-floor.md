@@ -7,7 +7,7 @@ generic `tbox` verifier takes 6.6 s (upstream) / 15 s (fork) on `R_TX`. Could a 
 statements get near the 50 ms p99 verify limit (CTR-PQZ-09), or is the floor of the protocol itself far above it? If
 the floor is far above, PQZL is off-chain / aggregation only and PQZH becomes the on-chain kind
 (`pqz-proof-alternatives.md` §6). **No decision is recorded here.** Branch `pqz-verifier-floor`; code
-`pqz-core/floor/`.
+`pqz-core/research/floor/`.
 
 **[measured]** marks a number from a run in this note (machine in §2). **[estimate]** marks a number computed from
 counts and measured unit costs, or a rough figure. **[inference]** marks a conclusion drawn here. **[unverified]**
@@ -61,7 +61,7 @@ norm-proof terms (156), the hashing (101 KB), the challenges, decoding and norm 
 |---|---|
 | Machine | AMD Ryzen 5 7235HS (Zen 3+, AVX2, AES-NI, SHA-NI, **no AVX-512**), single thread, other services running |
 | Fork | `pqz-core` at `main` (`06320d5`): `build.sh native` (clang 18 -O2 generic) and `build.sh wasm` |
-| Code | `pqz-core/floor/`: `kern.c` (unit costs and prototypes), `kern_core.h` (shared scalar kernels), `wasm.c` + `run_wasm.mjs` (the portable kernels in wasm32), `count.c` (operation counts of the fork's verifier), `model.py` (counts × unit costs → the tables here), `build.sh` |
+| Code | `pqz-core/research/floor/`: `kern.c` (unit costs and prototypes), `kern_core.h` (shared scalar kernels), `wasm.c` + `run_wasm.mjs` (the portable kernels in wasm32), `count.c` (operation counts of the fork's verifier), `model.py` (counts × unit costs → the tables here), `build.sh` |
 | Runs | `scripts/capped floor/build.sh run` → `floor/runs/{kern_portable,kern_native,kern_wasm,count}.json`, `floor/runs/model.md` |
 | Builds | `kern_portable`: clang -O2 generic x86-64, the fork's flags. `kern_native`: -O3 -march=native, AVX2 intrinsics, OpenSSL 3.0.13 (`libcrypto`, AES-NI). `kern.wasm`: clang 18 wasm32 freestanding, no SIMD, node v26.8.1 |
 | Statistics | Median of 7 repetitions per kernel. One machine, busy host |
@@ -164,7 +164,7 @@ in every column where one exists.
 ## 5. The floor
 
 Per term, ms, `R_TX` [estimate: §3 counts × §4 unit costs; the ABDLOP row is the measured prototype]. Full table
-with all columns and `R_REG`: `pqz-core/floor/runs/model.md`.
+with all columns and `R_REG`: `pqz-core/research/floor/runs/model.md`.
 
 | Term | Fork primitives, portable | Portable CRT + SHAKE128 | wasm32 CRT + SHAKE128 | AVX2 |
 |---|---|---|---|---|

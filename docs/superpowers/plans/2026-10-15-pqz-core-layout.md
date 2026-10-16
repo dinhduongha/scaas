@@ -108,7 +108,7 @@ most C / Python hits are comments. The functional ones:
 |---|---|---|
 | `pqz-core/**/*.md` (README, STATUS, `ffi/`, `artifact/`, `params/`, `sz/`, `xcheck/` READMEs) | ≈ 210 bare relative paths (`src/…`, `sv/…`, `rel3/runs/…`; STATUS 101, README 49, artifact 38, sz 11, ffi 6, params 1, xcheck 1) | rewrite with the mapping table of §5 |
 | `docs/research/pqz*.md`, `pqzh*.md` (17 notes) | ≈ 340 bare relative mentions (largest: z21 65, licence inventory 61, SV 34, l2-domain 33, tbox 24) + 17 notes with a `pqz-core/<moved path>` reference | research notes are records: rewrite the `pqz-core/…` prefixed ones, add one line "paths as of `4ab2180`; see the layout map" to the others rather than editing every mention (owner may prefer a full rewrite) |
-| `docs/contracts/pq-zether.md` | `pqz-core/{src,params,kat,test,sz,check_tbox_fixes.sh}` | normative spec: rewrite all; `docs_check` must stay 0 errors |
+| `docs/contracts/pq-zero-knowledge.md` | `pqz-core/{src,params,kat,test,sz,check_tbox_fixes.sh}` | normative spec: rewrite all; `docs_check` must stay 0 errors |
 | `docs/decisions.md`, `TODO.md`, `HANDOFF.md`, `docs/superpowers/plans/*.md` (p6-roadmap, p6e, p6-anon, ua5a) | `pqz-core/{params,src,lazer,sv,rel3,build.sh,check_tbox_fixes.sh,floor,test}` | rewrite in decisions / TODO; plans and HANDOFF are dated records (leave, or one note line) |
 | `smartcontracts/evm/test/pqzh/{Pqzh.sol,PqzhTest.t.sol,ligero/LigeroTest.t.sol}` | `pqz-core/pqzh/sol/…` (comments) | → `pqz-core/pqzh/stark-backup/sol/…`; `pqzh/ligero` comments unchanged |
 | `smartcontracts/vectors/pqz/` (README, `pqz_kat.py`, 15 JSON `generator` fields) | `pqz-core/ffi/…`, "pqz-core test/pqz_keys_kat.c" | `ffi/` does not move: only `pqz_kat.py`'s comment changes; the JSON files stay byte-identical (no vector regeneration) |
@@ -181,13 +181,13 @@ branch `pqz-readme`.
 
 | # | Old README item | Now |
 |---|---|---|
-| 1 | Title; "The PQ Zether proof engine", link pq-zether.md §8, CTR-PQZ-09 | kept, new README intro |
+| 1 | Title; "The PQ Zether proof engine", link pq-zero-knowledge.md §8, CTR-PQZ-09 | kept, new README intro |
 | 2 | Fork of LaZer at `3330e48` (MIT, IBM), link to the LaZer repo, six layers rewritten | kept, "Two proof systems, one precompile" (table + paragraph) |
 | 3 | Prover and verifier run without GMP, MPFR, HEXL, floating point, `malloc`, `abort`, stdio | kept, same section |
 | 4 | E-S1 spike (P6d): `R_REG` and a first `R_TX`, native and freestanding wasm32 | kept, "Status and what's next" (History) |
 | 5 | Then `R_BURN` (also REFRESH), `R_DS` and `R_DR` (also the auditor), `docs/research/pqz-relations-burn-disclose.md` | kept, History; forms table |
 | 6 | P6e added `R_TX0`, `stmt/`, `ffi/`, the frozen vectors `smartcontracts/vectors/pqz/` | kept, History |
-| 7 | Every byte layout (statements, objects, both proof formats, precompile input, `OP_SELFTEST`) → pq-zether.md §8.1 link | kept, "Statement forms, ids, limits" |
+| 7 | Every byte layout (statements, objects, both proof formats, precompile input, `OP_SELFTEST`) → pq-zero-knowledge.md §8.1 link | kept, "Statement forms, ids, limits" |
 | 8 | State, numbers, what is open → STATUS.md; write-up `docs/research/pqz-core-e-s1.md` | kept, intro + "Status and what's next" (Open link) + "Further reading" |
 | 9 | `lazer/`: subset, pristine copy commit `c91b3ab`, changes in place marked `PQZ:`, licence `lazer/LICENSE` | kept, directory map `lazer/` |
 | 10 | `src/`: rewritten layers and C ABI `pqz.h` | kept, map `src/` |
@@ -232,4 +232,36 @@ Approved with one change: the measurement / spike directory is `research/` inste
 
 Owner 2026-10-15: the name `rel3/` ("relations, round 3") is meaningless; in the move it becomes **`research/pqzl-measure/`** (the PQZL measurement round: `relfix.sh`, `bench.sh`, runs). Controller's name choice; owner may override. Every reference to `rel3/` (artifact `reproduce.sh`, README, STATUS, research notes) is updated in the same move.
 
-Owner 2026-10-15: in the same move, rename `docs/contracts/pq-zether.md` → `docs/contracts/pq-zero-knowledge.md` (`git mv`; rewrite every link and every `normative: contracts/pq-zether.md#…` line by script, except `docs/history/`; `docs_check` 0 errors). PQZ now stands for Post-Quantum Zero-knowledge (decisions.md CTR-PQZ-01).
+Owner 2026-10-15: in the same move, rename `docs/contracts/pq-zero-knowledge.md` → `docs/contracts/pq-zero-knowledge.md` (`git mv`; rewrite every link and every `normative: contracts/pq-zero-knowledge.md#…` line by script, except `docs/history/`; `docs_check` 0 errors). PQZ now stands for Post-Quantum Zero-knowledge (decisions.md CTR-PQZ-01).
+
+## Applied (2026-10-17, branch `pqz-layout`)
+
+Executed after S5 merged (owner timing 2026-10-16), with the owner's `research/` and `research/pqzl-measure/` names
+and the spec rename. Deviations from §5, recorded:
+
+- `pqzh/rust-toolchain.toml` and `pqzh/.gitignore` stay in `pqzh/`: `pqzh/ligero/` has no toolchain file of its own
+  and inherits the pinned Rust 1.97.1 + wasm32 target from `pqzh/`; `stark-backup/` inherits it the same way.
+- New since this plan, unchanged paths: `nethermind/` (P6f), `fuzz/` (with `regress/`), `pqzl/params/anon/` (moved with
+  `params/`). The fuzz build output stays in `pqz-core/build/fuzz/` (its `run.sh` / `build.sh`); the PQZL build output
+  is `pqzl/build/`.
+- The frozen vectors (`smartcontracts/vectors/pqz/*.json`) and the description strings of their generator
+  (`ffi/src/bin/pqz-vectors.rs`) still say `pq-zether.md`, so `pqz-vectors --check` stays byte-identical; they change
+  with the next regeneration.
+- `research/upstream/build-{fork,micro,prof,up-bench}.sh` read a fork snapshot of the old layout (`fork/pqz-core` at
+  `b2402b5`, session scratch paths): unchanged. `research/upstream/static/build.sh` and `artifact/reproduce.sh
+  --upstream` use the current `pqzl/`.
+- Research notes: every `pqz-core/<path>` reference rewritten; bare relative mentions inside the notes are left as
+  written (records). Run files are never edited.
+- `docs/history/dropped-artifacts.tsv`: `pqz-core/params/estimator.txt` recorded as renamed (docs_check C7).
+
+**Verification (2026-10-17, each step under `scripts/capped`, fresh build directories):** `pqzl/build.sh all` ok; KAT
+19/19; `check_tbox_fixes: ok`; `pqzl/sv/check_sv_fixes.sh` ok; `research/pqzl-measure/relfix.sh layout` — `proofs_fnv`
+of all six relations equal to `tx0c`, native and wasm (`research/pqzl-measure/runs/layout-*`); `stmt/xcheck.sh layout`
+ok; `pqzh/xcheck/ligero.sh` ok; `ffi/run.sh layout` ok (self-test `ed910a2c…d205`, symbol scan ok, native = wasm32 29
+digest lines, arena peak 268,113,792 B); `ffi/vectors/run.sh layout` ok (`pqz-vectors --check` byte-identical);
+`pqzh/ligero` `cargo test` ok; STARK backup `cargo build --examples` ok; `fuzz/build.sh` ok; `glic/absence.sh` ok;
+`docs_check` 0 errors. Two failures that **predate the move** (same result on main before it): `pqzh/xcheck/run.sh`
+(the STARK backup's `tx_stmt` differs from the C statement — the backup's builder was not updated after the statement
+changes; `reg_stmt`, both witnesses equal) and `research/floor/build.sh` (`count.c` calls `step_prove_reg` /
+`step_prove_tx`, removed from `pqz_bench.c` in `95658a6`). Both are research / backup harnesses, not fixed here.
+`artifact/reproduce.sh` is validated by S6's Docker run on this layout; the node image is rebuilt in S8.

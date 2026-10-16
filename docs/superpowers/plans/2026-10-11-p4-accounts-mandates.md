@@ -3734,7 +3734,7 @@ index c28e6ae..c2a2f90 100644
 +| Smart account (optional) | `SmartKeyAccount`, `SmartKeyAccountFactory` | `MetaTxBase` + `IERC1271`; P-256 passkeys; signs its own calls as itself ([CTR-ACC-10](docs/contracts/accounts.md#CTR-ACC-10)) | BUILT (on `MetaTxBase`, P4) | [accounts](docs/contracts/accounts.md#subjectaccount) |
  | Universal Accounts | today the Zether-only `UniversalAccountRegistry`; next the UA registry with one verifier per kind, and MetaToken v3 with a UA ledger | the signature, multisig, BLS and hash-to-curve libraries | legacy registry BUILT; UA registry and v3 SPECIFIED | [accounts](docs/contracts/accounts.md#universal-account) |
  | Zether | the `*_ZETHER` kinds (`ZetherLayer` + `ZetherLib`), `ZetherStatements`, `ZetherVerifierBn254`, `ZetherVerifierBls12381`, `ITransferDisclosure` | `MetaTokenBase`; EIP-196/197 and EIP-2537 precompiles | BUILT, unaudited (P3) | [zether](docs/contracts/zether.md) |
- | PQ Zether | `PqzToken` | `ERC20MetaTx`, relayed like Zether ([CTR-PQZ-21](docs/contracts/pq-zether.md#CTR-PQZ-21)); a lattice precompile on chain 7622 — public chains once they offer one | SPECIFIED | [pq-zether](docs/contracts/pq-zether.md) |
+ | PQ Zether | `PqzToken` | `ERC20MetaTx`, relayed like Zether ([CTR-PQZ-21](docs/contracts/pq-zero-knowledge.md#CTR-PQZ-21)); a lattice precompile on chain 7622 — public chains once they offer one | SPECIFIED | [pq-zether](docs/contracts/pq-zero-knowledge.md) |
 diff --git a/TODO.md b/TODO.md
 index a61503a..6315e38 100644
 --- a/TODO.md
@@ -4047,7 +4047,7 @@ index 77b1fdc..ff412fa 100644
  | 4 | Write `mtxNonce = expected + 1` | — |
 @@ -320,7 +320,7 @@ it. Nothing else is reachable through `mtxExecute`.
  | | `zetherTransfer`, `…Bundle`, `…NoBundle`, `…Single` `(bytes,bytes,bytes,bytes32)`, `zetherUnshield(bytes,bytes,bytes,bytes32,address,uint256)`, `zetherUnshieldUnwrap` | `ABSOLUTE`; envelope binding through the ticket ([CTR-ZTH-34](zether.md#CTR-ZTH-34)) |
- | `PqzToken` | `pqzTransfer(bytes,bytes,bytes[],bytes,bytes)`, `pqzUnshield(bytes,bytes,bytes[],uint256,address,bytes,bytes)`, `pqzShield(bytes32,uint256)`, `pqzRollOver(bytes32,bytes,bytes[])` | `ABSOLUTE`; not batchable ([CTR-PQZ-21](pq-zether.md#CTR-PQZ-21)) |
+ | `PqzToken` | `pqzTransfer(bytes,bytes,bytes[],bytes,bytes)`, `pqzUnshield(bytes,bytes,bytes[],uint256,address,bytes,bytes)`, `pqzShield(bytes32,uint256)`, `pqzRollOver(bytes32,bytes,bytes[])` | `ABSOLUTE`; not batchable ([CTR-PQZ-21](pq-zero-knowledge.md#CTR-PQZ-21)) |
  | `MandateWallet` | delegate: `payUnderMandate(address,address,uint256,bytes32)`, `revoke(address,uint64)`; owner: `setMandate`, `setPayee`, `revoke(address)`, `execute` ([CTR-ACC-06](mandates.md#CTR-ACC-06)) | fee `NONE` only |
 -| `SmartKeyAccount` | `addKey`, `removeKey`, `rotateKey`, `setGuardian`, `execute`, signed by the account itself ([CTR-ACC-10](accounts.md#CTR-ACC-10)) | fee `NONE` only |
 +| `SmartKeyAccount` | `addKey`, `removeKey`, `rotateKey`, `setGuardian`, `cancelRecovery`, `execute`, signed by the account itself ([CTR-ACC-10](accounts.md#CTR-ACC-10)) | fee `NONE` only |

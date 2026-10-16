@@ -140,7 +140,7 @@ contract PqzhHash {
 }
 
 /// PQZH Solidity verifier gas study (docs/research/pqzh-solidity-verifier.md): component values against
-/// pqz-core/pqzh/sol/ref.py, component gas, and the end-to-end skeleton on the shapes of model.py E2E.
+/// pqz-core/pqzh/stark-backup/sol/ref.py, component gas, and the end-to-end skeleton on the shapes of model.py E2E.
 /// `forge test --match-contract PqzhTest -vv` prints the numbers. Test-only, nothing here is deployed.
 contract PqzhTest is Test {
     PqzhBench internal b;

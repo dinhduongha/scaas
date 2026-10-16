@@ -3,7 +3,7 @@
 //! statement parsing (`pqz-stmt`'s decoder with every D15 / R6 rule, then PQZH's id), the row layout, the witness
 //! rows, the quadratic triples and the linear test's combination vectors.
 //!
-//! Relations (pqz_rel.c, pq-zether.md §7.4 / §7.5 / §7.9; d = digits(amount) public where marked):
+//! Relations (pqz_rel.c, pq-zero-knowledge.md §7.4 / §7.5 / §7.9; d = digits(amount) public where marked):
 //!   R_REG  pk = A s + e
 //!   R_TX   rows 1-7: pk_f = A s_f + e_f; u = A^T r + e1; v_x = pk_x^T r + e2_x + Delta digit_x (x = t, f, a; digits
 //!          d, d', d); u_T^T s_f + Delta M + e_T = v_T; M_i + c_{i-1} - d'_i - d_i - 16 c_i = fee_i, c_15 = 0

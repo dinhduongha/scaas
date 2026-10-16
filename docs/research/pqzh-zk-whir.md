@@ -7,7 +7,7 @@ zero-knowledge WHIR path, Goldilocks⁵ and Goldilocks², Johnson-bound bits"). 
 not plug into Plonky3's uni/batch STARK; the multilinear `p3-multi-stark` takes only non-hiding WHIR and is not ZK;
 non-ZK WHIR Goldilocks⁵ Johnson `R_TX` 257,530 B at 125.3 composed bits), `pqzh-prototype.md` and `pqzh-design.md`.
 Code: crate `pqz-core/pqzh/` on branch `pqzh-zkwhir` (from main `79924cf`, not merged); raw runs
-`pqz-core/pqzh/runs/w*` (every file named below).
+`pqz-core/pqzh/stark-backup/runs/w*` (every file named below).
 
 **Status: built and measured (2026-10-14, session 4). The FRI fallback of owner decision (2) triggered: `R_TX` with ZK
 WHIR at 128 bits is 1,948,901 B, above FRI + ZK conjectured (340,431 B) — record: settle on FRI.** §7–§9 hold the
@@ -382,7 +382,7 @@ micro-timings (probe crate `runs/wr-probe/`, runner `runs/wr-probe.sh`, outputs 
 `runs/wr-tx-spans.txt`, `runs/wr-micro.jsonl`, `runs/wr-report.txt`, build `runs/wr-probe-build.txt`; every number
 from them is a single run, n = 1, [probe]); (2) the full text of ePrint 2026/391 (version of 2026-02-25) read
 against p3-whir 0.9.0-rc.1; (3) a stdlib byte model of the masked base case, calibrated on (1)
-(`runs/wr-model.py` → `runs/wr-model.txt`) [estimate]. Nothing in the PQZH configuration, `pqz-core/src` or the
+(`runs/wr-model.py` → `runs/wr-model.txt`) [estimate]. Nothing in the PQZH configuration, `pqz-core/pqzl/src` or the
 Ligero crate was changed.
 
 ### 10.1 Is the measurement right?

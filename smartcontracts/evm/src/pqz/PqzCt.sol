@@ -1,9 +1,9 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
-/// @title PQZ ciphertext arithmetic (pq-zether.md §4.2, §8.1 "Objects"): `ct = u ‖ v`, 16,512 bytes = 2,064 coefficients
+/// @title PQZ ciphertext arithmetic (pq-zero-knowledge.md §4.2, §8.1 "Objects"): `ct = u ‖ v`, 16,512 bytes = 2,064 coefficients
 ///        `< q`, each `be8`, coefficient 0 first; `pk` / `u` 16,384 B, `v` 128 B (16 coefficients).
-/// @notice **UNAUDITED.** Pure Solidity, no precompile (pq-zether.md §9.4). A 32-byte word holds four coefficients in
+/// @notice **UNAUDITED.** Pure Solidity, no precompile (pq-zero-knowledge.md §9.4). A 32-byte word holds four coefficients in
 ///         64-bit lanes (the first coefficient in the top lane). Sums run lane-wise without reduction — every input lane
 ///         is `< q < 2^42`, so up to 2^22 terms never carry into the next lane — and `reduce` takes one `mod q` per
 ///         lane at the end. `minus` adds `q − x` per lane (no borrow, `x < q`). Callers pass only canonical ciphertexts

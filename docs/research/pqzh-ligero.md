@@ -61,7 +61,7 @@ inputs accepted, 0 verifier panics** [measured, `runs/l2-*`]. Against the FRI+ZK
 
 | Item | Choice | Why |
 |---|---|---|
-| Base field | F_q, q = 2^42 − 215 (pq-zether.md) | the relation's own field: every mod-q row is linear, no quotient witnesses, statement coefficients enter as they are |
+| Base field | F_q, q = 2^42 − 215 (pq-zero-knowledge.md) | the relation's own field: every mod-q row is linear, no quotient witnesses, statement coefficients enter as they are |
 | `q − 1` | `2^3 · 19 · 43 · 431 · 1,561,243`; generator 3 | checked by `ligero_params.py` and `fq.rs` tests |
 | Domains | subgroups H_n, n \| 2^3·19·43·431 (radices 2, 19, 43, **431**: owner decision (1)) | mixed-radix FFT `fft.rs`: each stage a direct r-point DFT with lazy u128 sums (r + 1 products per point and stage); the 431 stage is the deepest one and skips zero inputs (§6.3) |
 | Evaluation domain η | coset `3 · H_n` | disjoint from H_k for every k, n (3 generates F_q^*, so 3 ∉ H_lcm(k,n)); k need **not** divide n |
@@ -74,7 +74,7 @@ inputs accepted, 0 verifier panics** [measured, `runs/l2-*`]. Against the FRI+ZK
 
 ### 3.1 Witness and relation
 
-Exactly rel.rs' relation (pq-zether.md §7.4, pqz-core `pqz_rel.c`), read from pqz-core's statement and witness
+Exactly rel.rs' relation (pq-zero-knowledge.md §7.4, pqz-core `pqz_rel.c`), read from pqz-core's statement and witness
 bytes: `R_REG`: pk = A s + e mod q, ‖s‖ ≤ 36, ‖e‖ ≤ 164. `R_TX`: rows 1–6 mod q (pk_f = A s_f + e_f; u = A^T r + e1;
 v_x = pk_x^T r + e2_x + Δ·digit for x = t, f, a with digits d, d', d; v_T − u_T^T s_f = Δ M + e_T), row 7 over the
 integers (M_i + c_{i−1} = d'_i + d_i + f_i + 16 c_i, c_15 = 0, fee digits f from the statement), ‖s_f‖, ‖r‖ ≤ 36,
@@ -131,7 +131,7 @@ absorb R, draw the challenges, absorb w ‖ q ‖ h, check the nonce, absorb it,
 (state ‖ 0xff ‖ be64(counter)) → 8-byte big-endian words; a field element is a word masked to 42 bits, rejected if
 ≥ q. The parameters (n, k, ℓ, t, grinding bits) are fixed per proofSystemId (`Params::preset`) and never read from
 the proof; the proof length is bounded before parsing and must be consumed exactly. Prover randomness:
-SHAKE256("SCAAS-PQZH-LIGERO-RNG" ‖ rnd32 ‖ op ‖ stmt) (since §12, hedged with the witness: `SHAKE256("SCAAS-PQZH-LIGERO-RNG-V2" ‖ rnd32 ‖ u8(op) ‖ be32(len) ‖ stmt ‖ wit)`; the frozen byte layout is pq-zether.md §8.1).
+SHAKE256("SCAAS-PQZH-LIGERO-RNG" ‖ rnd32 ‖ op ‖ stmt) (since §12, hedged with the witness: `SHAKE256("SCAAS-PQZH-LIGERO-RNG-V2" ‖ rnd32 ‖ u8(op) ‖ be32(len) ‖ stmt ‖ wit)`; the frozen byte layout is pq-zero-knowledge.md §8.1).
 
 **Proof bytes**: R (32) ‖ w ‖ q ‖ h (F_{q^4} coefficients, 24 B each) ‖ nonce (8) ‖ per distinct opened column: salt
 (32) and m + 12 F_q values (6 B) ‖ multiproof digests (32 B each).
@@ -429,7 +429,7 @@ proofSystemId for the Ligero kind and an independent review of §4.1.
 2. The 160 KB line: adopt proposal (c) (256 KB / `MAX_INPUT` 262,144 B)? Remaining size reductions if wanted:
    24 grinding bits (t 121 → 112, ≈ −9.5 KB [estimate]), 16-byte salts (≈ −1.9 KB).
 3. ~~Does the 50 ms verify budget apply to wasm32?~~ **Resolved** by the owner's ruling of 2026-10-14 (CTR-PQZ-09,
-   `docs/contracts/pq-zether.md`, `docs/decisions.md`): the verify limit is 60 ms p99 on the chain host and also bounds
+   `docs/contracts/pq-zero-knowledge.md`, `docs/decisions.md`): the verify limit is 60 ms p99 on the chain host and also bounds
    wasm32. Ligero's proven `R_TX` (55.9 ms wasm32, 10.5 ms native) passes; no wasm-specific multiply is needed.
 4. proofSystemId for the Ligero kind (the bench statements carry the STARK's id, which the relation only hashes).
 5. An external review of the modified ZK construction's argument (§4.1) before adoption.
@@ -456,7 +456,7 @@ Owner correction 2026-10-14 (§9, item 6): the 2026-10-13 ruling "build no Solid
 the limits on a chain without the precompile it will be used there. The question measured here: **does one transaction
 carrying a Ligero proof verify under the EIP-7825 cap of 16,777,216 gas**, with the EIP-7623 calldata floor? Layout as
 `pqzh-solidity-verifier.md`: test-only code, never deployed; the transaction model is that note's (21,000 + max(4
-tokens + execution, 10 tokens), with the operation's other calldata and execution from pq-zether.md §9.3: transfer
+tokens + execution, 10 tokens), with the operation's other calldata and execution from pq-zero-knowledge.md §9.3: transfer
 119 k tokens and 0.31 M, register 67 k tokens and 3.45 M including the SSTORE2 of the key).
 
 ### 11.1 Result: no, in any regime
@@ -586,7 +586,7 @@ session) and one probe, `runs/l7-probe-wasm-tx-repeat.jsonl`; after the controll
 ### 12.1 What changed
 
 - **Relations (`cs.rs`).** `R_BURN`, `R_DS`, `R_DR` as Ligero constraint systems on pqz-core's statement and witness
-  bytes (`pqz_rel.c`, `pq-zether.md` §7.5 / §7.9), with every exact ℓ2 bound and bit range pqz-core proves:
+  bytes (`pqz_rel.c`, `pq-zero-knowledge.md` §7.5 / §7.9), with every exact ℓ2 bound and bit range pqz-core proves:
 
   | Relation | Equations | Big groups | Small values (count, bits) | m at THE preset |
   |---|---|---|---|---|
@@ -989,7 +989,7 @@ native bench, oversize native bench, wasm32, oversize wasm32, `xcheck` + `kat_mu
   Witness (prover API) `s_f ‖ e_f ‖ (r_g ‖ e1_g)_g ‖ e2 (legs, f, auditor copies) ‖ d_j ‖ d′`; M = 1 is `R_TX`'s
   (`R_TX0`'s) witness and rows (op 7 keeps its own op byte and opTag in the transcript).
 - **e2 bound: per vector ≤ 64 (ℓ2) — the decided rule.** Every e2 vector (each leg, v_f, each auditor copy) is proven
-  ‖e2‖ ≤ 64, exactly as the single-recipient forms (pq-zether.md §4.3). The plan's §3 / R3 / D5 text first proposed
+  ‖e2‖ ≤ 64, exactly as the single-recipient forms (pq-zero-knowledge.md §4.3). The plan's §3 / R3 / D5 text first proposed
   one ℓ2 block per kind of leg noise with bound 64·√M; the pre-review (finding X-1) found PQZL and PQZH proving
   different bounds, and the **owner decided on 2026-10-15: per vector ≤ 64** (decisions.md CTR-PQZ-03 Change
   2026-10-15, TODO.md). PQZH already implemented it, so no row changed here; PQZL (`p6-anon-l`) moves to per-vector

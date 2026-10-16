@@ -17,10 +17,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends clang && rm -rf
 ENV RUSTUP_TOOLCHAIN=1.97.1 CARGO_BUILD_JOBS=2
 WORKDIR /src
 COPY LICENSE ./
-COPY pqz-core/check_symbols.sh pqz-core/
-COPY pqz-core/src pqz-core/src
-COPY pqz-core/lazer pqz-core/lazer
-COPY pqz-core/params pqz-core/params
+COPY pqz-core/pqzl/check_symbols.sh pqz-core/pqzl/
+COPY pqz-core/pqzl/src pqz-core/pqzl/src
+COPY pqz-core/pqzl/lazer pqz-core/pqzl/lazer
+COPY pqz-core/pqzl/params pqz-core/pqzl/params
 COPY pqz-core/stmt pqz-core/stmt
 COPY pqz-core/pqzh/ligero pqz-core/pqzh/ligero
 COPY pqz-core/ffi pqz-core/ffi
@@ -58,7 +58,7 @@ COPY --from=plugin /out/Nethermind.Pqz.dll /nethermind/plugins/
 COPY --from=ffi /out/libpqz_ffi.so /nethermind/plugins/
 COPY pqz-core/nethermind/NOTICE-pqz.txt /nethermind/plugins/
 COPY pqz-core/NOTICE /nethermind/plugins/NOTICE-pqz-core.txt
-COPY pqz-core/lazer/LICENSE /nethermind/plugins/LICENSE-lazer.txt
+COPY pqz-core/pqzl/lazer/LICENSE /nethermind/plugins/LICENSE-lazer.txt
 RUN echo "${FFI_SHA256}  /nethermind/plugins/libpqz_ffi.so" | sha256sum -c -
 LABEL scaas.pqz.commit="${COMMIT}" \
       scaas.pqz.ffi.sha256="${FFI_SHA256}" \

@@ -63,12 +63,12 @@ the files of `regress/valid/` — and as `precompile` seeds those plus `06 00000
   counters, PC table, trace-compares); `--target` keeps the flags off build scripts; `panic = "unwind"` stays (pqz-ffi
   refuses `panic = "abort"` natively) and the panic hook turns every panic into an abort;
 - the C core is compiled by `pqz-ffi`'s `build.rs` with its feature `fuzz`: ASan + UBSan (`-fno-sanitize-recover=all`,
-  without the upstream nits of `STATUS.md` Open 4, as `sv/fuzz.sh`), `-fsanitize=fuzzer-no-link`, and `PQZ_TEST_HOOKS`
+  without the upstream nits of `STATUS.md` Open 4, as `pqzl/sv/fuzz.sh`), `-fsanitize=fuzzer-no-link`, and `PQZ_TEST_HOOKS`
   (`pqz_test_mutate`); the symbol scan is skipped in that build only (the sanitizer runtime is outside the library);
 - `targets/<target>.c` + the staticlib are linked by `clang-18 -fsanitize=fuzzer,address,undefined`.
 
 The arena build (not `PQZ_DEBUG_MALLOC`): ASan sees the arena as one block, so overflows inside it are not caught
-here (the malloc-path ASan runs are `opt/asan.sh`, `sv/fuzz.sh`); the arena bound is measured instead.
+here (the malloc-path ASan runs are `research/opt/asan.sh`, `pqzl/sv/fuzz.sh`); the arena bound is measured instead.
 
 ## Run
 

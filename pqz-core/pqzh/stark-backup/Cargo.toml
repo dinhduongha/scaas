@@ -1,0 +1,41 @@
+[package]
+name = "pqzh"
+version = "0.1.0"
+edition = "2021"
+license-file = "../../../LICENSE"
+publish = false
+
+[dependencies]
+p3-air = "=0.9.0-rc.1"
+p3-uni-stark = "=0.9.0-rc.1"
+p3-goldilocks = "=0.9.0-rc.1"
+p3-field = "=0.9.0-rc.1"
+p3-matrix = "=0.9.0-rc.1"
+p3-fri = "=0.9.0-rc.1"
+p3-keccak = "=0.9.0-rc.1"
+p3-symmetric = "=0.9.0-rc.1"
+p3-merkle-tree = "=0.9.0-rc.1"
+p3-commit = "=0.9.0-rc.1"
+p3-challenger = "=0.9.0-rc.1"
+p3-dft = "=0.9.0-rc.1"
+p3-lookup = "=0.9.0-rc.1"
+p3-batch-stark = "=0.9.0-rc.1"
+p3-security = "=0.9.0-rc.1"
+p3-whir = "=0.9.0-rc.1"
+p3-multi-stark = "=0.9.0-rc.1"
+p3-sumcheck = "=0.9.0-rc.1"
+p3-multilinear-util = "=0.9.0-rc.1"
+rand = { version = "=0.10.3", default-features = false, features = ["std_rng"] }
+sha3 = "=0.10.8"
+serde = { version = "=1.0.229", default-features = false }
+
+[profile.release]
+debug = 1
+panic = "unwind"
+
+[workspace]
+
+# release speed with debug assertions on: prove_batch then checks every constraint and lookup of the traces
+[profile.checked]
+inherits = "release"
+debug-assertions = true

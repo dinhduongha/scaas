@@ -33,12 +33,12 @@ flowchart LR
   S --> O
 ```
 
-**Tech stack:** C99 (clang 18, `pqz-core/build.sh`), LaZer `3330e48` codegen in the pinned Sage image
+**Tech stack:** C99 (clang 18, `pqz-core/pqzl/build.sh`), LaZer `3330e48` codegen in the pinned Sage image
 (`params/codegen/run.sh`, docker, no network), Rust 1.97.1 stable (`pqz-core/pqzh/rust-toolchain.toml`; `sha3`
 0.10.8, `cc`, `serde_json`, `hex`), libFuzzer from clang 18 (`libclang_rt.fuzzer-x86_64.a`, installed), node v26 for
 the wasm32 runs, Python 3 stdlib (+ `clients/ua-py/scaas_ua`'s Keccak) for the independent KAT script.
 
-**Spec:** [pq-zether.md](../../contracts/pq-zether.md) §4.1–§4.4 (parameters, algorithms, sizes), §5 (encodings,
+**Spec:** [pq-zero-knowledge.md](../../contracts/pq-zero-knowledge.md) §4.1–§4.4 (parameters, algorithms, sizes), §5 (encodings,
 transcript), §7.4 / §7.5 / §7.7 / §7.9 (relations, statement layouts, disclosure), §8 CTR-PQZ-09 (engine, versioning,
 API, serialization), §9.1 CTR-PQZ-10 (precompile, never-crash, decoder, fuzzing), CTR-PQZ-11 (gas, `MAX_INPUT`),
 CTR-PQZ-18 (prover platforms), CTR-PQZ-19 (randomness), CTR-PQZ-23 / -24 (bundle, auditor modes), §14 (vectors and
@@ -56,9 +56,9 @@ PQZH without precompile where it fits).
 
 | Item | State | Commit / file |
 |---|---|---|
-| Five PQZL relations, generic verifier, native + freestanding wasm32 | **Done.** `R_REG`, `R_TX` (auditor on), `R_BURN` (+REFRESH by `opTag`), `R_DS`, `R_DR` (+AUDITOR by `opTag`) through `pqz_prove` / `pqz_verify`; native and wasm proofs byte-identical | `132d5c2` (P6d), `b87078a` (P6d-2), `3ad4069` (rel3), `7e6e9b0` (relfix) — `pqz-core/src/pqz_rel.c` |
+| Five PQZL relations, generic verifier, native + freestanding wasm32 | **Done.** `R_REG`, `R_TX` (auditor on), `R_BURN` (+REFRESH by `opTag`), `R_DS`, `R_DR` (+AUDITOR by `opTag`) through `pqz_prove` / `pqz_verify`; native and wasm proofs byte-identical | `132d5c2` (P6d), `b87078a` (P6d-2), `3ad4069` (rel3), `7e6e9b0` (relfix) — `pqz-core/pqzl/src/pqz_rel.c` |
 | LaZer specifications + codegen | **Done in the LaZer sense**: each relation is a LaZer tbox spec `params/{reg,tx,burn,ds,dr}_params.sage` → generated `params/pqz_*_params.h` by LaZer's own `lnp-tbox-codegen.sage` (pinned image); the statement → tbox equations are hand-built in `pqz_rel.c` (`build_reg`, `build_debit`, `build_ds`, `build_dr`), as upstream LaZer users do; ranks sized by `params/run_e_s1.sh` (β 452–461) | `params/`, `params/README.md`, `estimator-e-s1*.txt` |
-| Statement layouts | **Done** for §7.7 (640-byte header, `R_TX` 83,072 B, `R_BURN` 50,048 B) and §7.9 (33,184 B, `kind` word); `R_REG` 16,480 B | `7e6e9b0`; `pqz-core/src/pqz.h` |
+| Statement layouts | **Done** for §7.7 (640-byte header, `R_TX` 83,072 B, `R_BURN` 50,048 B) and §7.9 (33,184 B, `kind` word); `R_REG` 16,480 B | `7e6e9b0`; `pqz-core/pqzl/src/pqz.h` |
 | Soundness fixes | **Done**: lazer#24/#25 (`proofSystemId` v2), lazer#26 z21 (no bump, owner) | `5361946`, `98695de`, `a8b5b66`; `check_tbox_fixes.sh` |
 | Specialised verifier (all five, v2) | **Done**: `pqz_verify_fast`, differential test 4,420 cases / 0 disagreements, p99 ≤ 16.0 ms (wasm `R_TX`) | `dcf0da3`; `sv/` |
 | Arithmetic-layer KAT vs upstream | **Done**: 19/19 against the golden dump | `kat/lazer-3330e48.json`, `kat/check.py` |
@@ -93,7 +93,7 @@ PQZH without precompile where it fits).
 ## Global Constraints
 
 - Paths relative to `/home/ha/work/ainative/scaas`; worktree `.claude/worktrees/p6e-impl` on branch `p6e-relations`.
-  Heavy commands — `pqz-core/build.sh`, `params/codegen/run.sh` and `run_e_s1.sh` (docker), `rel3/relfix.sh`,
+  Heavy commands — `pqz-core/pqzl/build.sh`, `params/codegen/run.sh` and `run_e_s1.sh` (docker), `rel3/relfix.sh`,
   `sv/*.sh`, every `cargo build|test|run`, node wasm runs, fuzz runs — only through `scripts/capped`, one at a time
   machine-wide. Python scripts, `cast keccak`, grep and the docs checker are light.
 - Task order below is fixed inside each part; Part B (Tasks 6, 8, 9) may interleave with Part A only between heavy runs.
@@ -114,8 +114,8 @@ PQZH without precompile where it fits).
 
 - **R1 Relation specification = the LaZer spec files + `pqz_rel.c` + a mapping table**, frozen by the KATs. The
   mapping (per relation: statement fields read, witness slots, equations → spec rows, norm bounds, binary slots, Z
-  slack, params header) goes into `pqz-core/params/README.md` §"Relations v2 (frozen)", lifted from the `pqz_rel.c`
-  header comment; pq-zether.md §8 links it. No new spec file.
+  slack, params header) goes into `pqz-core/pqzl/params/README.md` §"Relations v2 (frozen)", lifted from the `pqz_rel.c`
+  header comment; pq-zero-knowledge.md §8 links it. No new spec file.
 - **R2 Statement codec in one small crate `pqz-core/stmt` (`pqz-stmt`, no dependencies)**: parse and build every
   statement, `pk`, ciphertext, `T`, `out`, bundle and opening; used by `pqz-ffi`, `pqzh-ligero` and the generator. The
   Ligero crate drops its path dependency on the Plonky3 crate (`ring.rs` and the statement half of `rel.rs` move into
@@ -144,7 +144,7 @@ PQZH without precompile where it fits).
 | **D4** | Bump rule | **Any change to parameters, presets, relation rows or statement layout of an existing form, transcript, proof encoding, or the accepted set after a deployment ⇒ new id.** Prover-only changes must keep the frozen vectors' proof bytes; additions of a new statement form before the first deployment and accepted-set tightening before any deployment need no bump (recorded case by case). The precompile may implement several ids; retiring one is a chain activation (P6f), never silent | Makes "frozen" testable: `pqz-vectors --check` and the `proofs_fnv` lines fail on any byte change |
 | **D5** | Proof limits and `MAX_INPUT` | **Per-id `MAX_PROOF`: PQZL 98,304 B (unchanged), PQZH 262,144 B (the owner-session proposal, 256 KiB). `MAX_INPUT` 262,144 → 393,216 B (384 KiB)**: the largest input is 5 + 83,072 + 262,144 = 345,221 B. The contract bounds the proof by its token's id | The proposal "MAX_INPUT 262,144" forgot the statement. Consequence for P6g (not decided here): a PQZH transfer's proof is ≈ 9.2 M gas of EIP-7623 calldata floor, so 16 inline ciphertexts (≈ 0.54 M each) do not fit the 16,777,216 cap; `INLINE_MAX` per proof system (≈ 8 for PQZH) is a P6g question |
 | **D6** | Prover hedging | **Hedge both provers before vectors freeze**: PQZL masks from `SHAKE128("SCAAS-PQZ-PROVER-RND-V2" ‖ rnd32 ‖ SHAKE128(wit) ‖ hash0)` (and `…-SUB-V2`); Ligero `SHAKE256("SCAAS-PQZH-LIGERO-RNG-V2" ‖ rnd32 ‖ u8(op) ‖ be32(len) ‖ stmt ‖ wit)`. Verifiers unchanged | CTR-PQZ-19 requires it; G2. Proof bytes change once, before freezing |
-| **D7** | Transcript text | **Amend pq-zether.md §5 to the implemented v2 transcript** (G3), no code change | Changing the code is a bump and a LaZer transcript rewrite |
+| **D7** | Transcript text | **Amend pq-zero-knowledge.md §5 to the implemented v2 transcript** (G3), no code change | Changing the code is a bump and a LaZer transcript rewrite |
 | **D8** | Auditor-off transfer | **Build `R_TX` without the auditor in both systems** (statement 66,560 B, witness 12,384 B, op 1 dispatched by length, R6). Rejected: a dummy auditor key with a `v_a` (16.5 KB of calldata per transfer, a fake key in the registry's group) | CTR-PQZ-24 specifies "no `v_a`, row 5 skipped" |
 | **D9** | Vector location | **One canonical directory `smartcontracts/vectors/pqz/`** (as `smartcontracts/vectors/ua/`), read in place by every consumer; §14's copies to `smartcontracts/evm/test/vectors/pqz/` and `clients/zether-prover/vectors/pq/` dropped. `worstcase_noise.json` stores seeds, per-credit hashes and the aggregate `T`, not 1,023 ciphertexts (≈ 34 MB of hex) | One source of truth; copies drift |
 | **D10** | `pqz-ffi` scope | **Decode + verify for both systems (C ABI `pqz_precompile` for P6f, Rust API for the node), plus a `prove` feature (statement build, `prove`, `keygen`, `enc`, `dec`) for P6h**; one process-wide `Mutex` around every libpqz call (closes `STATUS.md` Open 6 at this layer for every consumer); `catch_unwind` on every entry → 0; fixed arenas sized from measurement (verify-only, prove); native x86-64 / aarch64 and `wasm32-unknown-unknown` (prove feature, byte-equal proofs with native); no GMP / MPFR anywhere | One audited boundary for precompile, node and clients. Cost if wrong: P6h wraps the C ABI itself |
@@ -154,7 +154,7 @@ PQZH without precompile where it fits).
 | **D14** | Gate staging | **P6e-A (PQZL: Tasks 1–5, 7, 10–12 for PQZL) freezes PQZL and unblocks P6f / P6g / P6h on PQZL; P6e-B (PQZH: Tasks 6, 8, 9 and the PQZH parts of 10–12) freezes PQZH after the Ligero Solidity-verifier measurement lands** (its format wishes, e.g. element width, must come before the freeze) and after a Claude-subagent review of the modified ZK argument (`pqzh-ligero.md` §4.1) | PQZL does not wait on PQZH; the PQZH format is frozen once |
 | **D15** | Canonical encodings | **Every decoder accepts exactly one encoding**: fixed lengths, coefficients `< q` as `be8`, header scalars that relations read `< 2^64`, `auditorOn` ∈ {0, 1} by length, PQZL proof = LaZer coder grammar with the final 1-bit then zero padding and no trailing byte, PQZH elements `< q` in 6 bytes, opened columns strictly increasing, proof consumed exactly; property: for every accepted input `encode(decode(x)) = x` (fuzzed, Task 10) | No malleable proofs or statements reach state or logs |
 
-## Serialization v1 (the byte layouts frozen by this plan; Task 12 writes them into pq-zether.md as §8.1)
+## Serialization v1 (the byte layouts frozen by this plan; Task 12 writes them into pq-zero-knowledge.md as §8.1)
 
 **Precompile input (both ids).** `u8(op) ‖ be32(len(stmt)) ‖ stmt ‖ proof`; `len(stmt)` must equal the op's length for
 the id; `proof` = the rest, `1 ≤ len(proof) ≤ MAX_PROOF(id)`; whole input ≤ `MAX_INPUT` = 393,216 B (D5).
@@ -209,7 +209,7 @@ stmt)` (32 B), then LaZer's tbox transcript seeded with `hash0`. PQZH: Keccak-25
 
 ### Task 1 (A): Hedge both provers (D6) — light code, heavy check
 
-**Files:** `pqz-core/src/pqz_rel.c` (`do_prove`: tags `…-RND-V2`, `…-SUB-V2`, absorb `SHAKE128(wit)` and `hash0`;
+**Files:** `pqz-core/pqzl/src/pqz_rel.c` (`do_prove`: tags `…-RND-V2`, `…-SUB-V2`, absorb `SHAKE128(wit)` and `hash0`;
 `pqz_prove` passes the witness hash), `pqz-core/pqzh/ligero/src/ligero.rs` (RNG derivation incl. `wit`),
 `pqz-core/STATUS.md` (new `proofs_fnv` line).
 
@@ -225,7 +225,7 @@ stmt)` (32 B), then LaZer's tbox transcript seeded with `hash0`. PQZH: Keccak-25
 
 ### Task 2 (A): `R_TX` without the auditor, PQZL (D8, R6) — heavy (codegen, sizing, runs)
 
-**Files:** `pqz-core/params/tx0_params.sage` (new: `n = [32, 32, 32, 32, 1, 1]`, `B = [36, 164, 36, 164, 64, 64]`,
+**Files:** `pqz-core/pqzl/params/tx0_params.sage` (new: `n = [32, 32, 32, 32, 1, 1]`, `B = [36, 164, 36, 164, 64, 64]`,
 `m1 = 32·4 + 2 + 15`, same binary part, `nprime = 1` on `e2_t`), `params/pqz_tx0_params.h` (generated),
 `params/estimator-e-s1-tx0.txt`, `src/pqz.h` (`PQZ_TX0_STMT_BYTES` 66,560, `PQZ_TX0_WIT_BYTES` 12,384,
 `PQZ_HDR_AUDITOR_ON` 448), `src/pqz_rel.c` (rel `TX0`, `parse_debit` / `build_debit` / `debit_witness` with an
@@ -246,8 +246,8 @@ auditor flag, row 5 skipped, R6 check), `src/pqz_sv.c` (the same flag in the `R_
 
 ### Task 3 (A): `KeyGen` / `Enc` / `Dec` from seeds in C (G4) — light code, heavy build
 
-**Files:** `pqz-core/lazer/shake128.c` / `.h` (a SHAKE256 entry on the same Keccak core: rate 136, `PQZ:` comment),
-`pqz-core/src/pqz_keys.c` (new: `CBD_η`, `pqz_keygen(seed32, pk, s, e)` with the ≤ 64-counter resampling,
+**Files:** `pqz-core/pqzl/lazer/shake128.c` / `.h` (a SHAKE256 entry on the same Keccak core: rate 136, `PQZ:` comment),
+`pqz-core/pqzl/src/pqz_keys.c` (new: `CBD_η`, `pqz_keygen(seed32, pk, s, e)` with the ≤ 64-counter resampling,
 `pqz_enc_seed(pks, n, msgs, seed_enc, u, vs, r, e1, e2)`, `pqz_dec(s, ct, M[16], noise[16])`), `src/pqz.h`,
 `build.sh` (source list), `test/pqz_bench.c` (a keygen / enc / dec round trip).
 
@@ -368,7 +368,7 @@ derived RNG if a proof would exceed it), `pqz-stmt` (`MAX_PROOF`, `MAX_INPUT`).
 
 ### Task 11 (A+B): Vectors and the generator (D9, D13, R4) — heavy
 
-**Files:** `pqz-core/ffi/src/bin/pqz-vectors.rs`, `pqz-core/test/pqz_worstcase.c` (new; C harness),
+**Files:** `pqz-core/ffi/src/bin/pqz-vectors.rs`, `pqz-core/pqzl/test/pqz_worstcase.c` (new; C harness),
 `smartcontracts/vectors/pqz/{README.md,matrix.json,cbd.json,keygen.json,enc.json,statement_transfer.json,
 statement_burn.json,statement_refresh.json,statement_register.json,statement_disclose.json,proof_pqzl.json,
 proof_pqzh.json,negative.json,selftest.json,worstcase_noise.json}`.
@@ -395,12 +395,12 @@ proof_pqzh.json,negative.json,selftest.json,worstcase_noise.json}`.
 
 ### Task 12 (A+B): Docs and freeze — light
 
-**Files:** `docs/contracts/pq-zether.md` (§5 transcript text (D7); new §8.1 "Serialization v1" from the section above;
+**Files:** `docs/contracts/pq-zero-knowledge.md` (§5 transcript text (D7); new §8.1 "Serialization v1" from the section above;
 CTR-PQZ-09 versioning: both ids, the bump rule (D4), PQZH limit; §9.1 `MAX_INPUT` (D5), the auditor-off length,
 dispatch by id, `OP_SELFTEST` (D13); §4.4 sizes (PQZH proof); §14 vector location (D9), fuzzing (D12)),
 `docs/decisions.md` (Change lines, each "status: controller proposal, owner may override": CTR-PQZ-09 — D1, D2, D3, D4,
 D6, D7, D11, D15; CTR-PQZ-10 — D5, D10, D12, D13; CTR-PQZ-24 — D8; CTR-PQZ-19 — D6 hedging text), `pqz-core/README.md`
-and `STATUS.md` (layout rows `stmt/`, `ffi/`, `fuzz/`; new numbers), `pqz-core/params/README.md` (R1 table),
+and `STATUS.md` (layout rows `stmt/`, `ffi/`, `fuzz/`; new numbers), `pqz-core/pqzl/params/README.md` (R1 table),
 `docs/research/pqzh-ligero.md` (§11, Task 8), roadmap P6e row (plan link, status).
 
 - [ ] `python3 scripts/docs_check.py check` → 0 errors; `facts check` clean.
@@ -469,7 +469,7 @@ the number is the round; each round is one agent on its own branch, reviewed bef
 | B1 | `p6e-b1` | 8 (part), D6 | Ligero `R_BURN` / `R_DS` / `R_DR`; hedged Ligero prover; wasm32 21-bit multiply (`R_TX` p99 59.7 → 18.7 ms) | merged `99ad859` |
 | B2 | `p6e-b2` | 9 | PQZH D3 id; exact length bound first (Rust + Solidity); opTag / auditorOn checks; retry guard; D5 limits | merged `7347a0b` |
 | B3 | `p6e-b3` | 6, 8 | Ligero on `pqz-stmt` (bench-only client / presets, 0 floats); Ligero `R_TX0` | merged `28a17d1` |
-| A6 | `p6e-a6` | 12 | docs: pq-zether.md §8.1 "Serialization v1" (every byte layout, checked against the code and the vectors), §5 transcripts (D7), §8 ids and bump rule (D4), §4.4 sizes, §14 vectors (D9) and fuzzing (D12), stale text fixed; decisions.md lines D2, D4, D7, D12, D14, D15 (proof half); `params/README.md` relations table (R1); `pqz-core` README / STATUS / `ffi/README.md` links | this branch |
+| A6 | `p6e-a6` | 12 | docs: pq-zero-knowledge.md §8.1 "Serialization v1" (every byte layout, checked against the code and the vectors), §5 transcripts (D7), §8 ids and bump rule (D4), §4.4 sizes, §14 vectors (D9) and fuzzing (D12), stale text fixed; decisions.md lines D2, D4, D7, D12, D14, D15 (proof half); `params/README.md` relations table (R1); `pqz-core` README / STATUS / `ffi/README.md` links | this branch |
 
 Left: Task 10 (fuzzing, on its own branch), Task 12 (docs, `p6e-a6`), op 7 `R_TXM` (P6-ANON, branch `p6-anon-s`,
 into the frozen set and §8.1 before the freezes), then gate A / gate B and the P6-PUB freeze. Owner

@@ -1,4 +1,4 @@
-//! `OP_SELFTEST` (plan D13, pq-zether.md §9.1): `keccak256(kat_digest ‖ u8(pqzl_valid) ‖ u8(pqzl_invalid) ‖
+//! `OP_SELFTEST` (plan D13, pq-zero-knowledge.md §9.1): `keccak256(kat_digest ‖ u8(pqzl_valid) ‖ u8(pqzl_invalid) ‖
 //! u8(pqzh_valid) ‖ u8(pqzh_invalid))`, computed at the first call in a process and cached.
 //!
 //! `kat_digest = keccak256(a_digest ‖ keccak256(pk) ‖ keccak256(u ‖ v) ‖ M ‖ keccak256(fft) ‖ u8(fft_ok))`:

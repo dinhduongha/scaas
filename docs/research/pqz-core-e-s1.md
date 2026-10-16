@@ -6,7 +6,7 @@ Written 2026-10-13 for P6d of the P6 roadmap (`docs/superpowers/plans/2026-10-12
 forked into `pqz-core/` with its six arithmetic layers rewritten (CTR-PQZ-09), the arithmetic-layer KAT against
 upstream, `R_REG` and a first `R_TX` proved and verified natively and as freestanding `wasm32`, and the result held
 against the kill criteria. Nothing here changes a rule; the relations and parameters are those of
-`docs/contracts/pq-zether.md` (CTR-PQZ-03, CTR-PQZ-09, §7.2 step 6, §7.4). Branch `p6d-pqz-core` (commits `c91b3ab` …
+`docs/contracts/pq-zero-knowledge.md` (CTR-PQZ-03, CTR-PQZ-09, §7.2 step 6, §7.4). Branch `p6d-pqz-core` (commits `c91b3ab` …
 `70314c8`); state and reruns: `pqz-core/STATUS.md`, `pqz-core/README.md`.
 
 **[measured]** marks a number from a run in this spike (machine and settings in §2). **[estimate]** marks a number
@@ -43,11 +43,11 @@ known yet; that is what the upstream cross-check decides.
 | Item | Value |
 |---|---|
 | Upstream | LaZer <https://github.com/lazer-crypto/lazer> commit `3330e487228f633eceb322807b13a596b516770f` (main, 2026-09-28), MIT, IBM |
-| Fork | `pqz-core/lazer/` (subset, pristine in `c91b3ab`, changes marked `PQZ:`), `pqz-core/src/` (rewritten layers, C ABI `pqz.h`) |
+| Fork | `pqz-core/pqzl/lazer/` (subset, pristine in `c91b3ab`, changes marked `PQZ:`), `pqz-core/pqzl/src/` (rewritten layers, C ABI `pqz.h`) |
 | Codegen | LaZer's `lnp-tbox-codegen.sage` in `sagemath/sagemath:10.7` (pinned digest), `--network none` |
 | Estimator | lattice-estimator `53da598`, `RC.ADPS16` (as P6b) |
 | Machine | AMD Ryzen 5 7235HS (8 threads, no AVX-512), single thread |
-| Native | clang 18.1.3 `-O2`, no `-march` (portable, pq-zether.md §10); `build/native/pqz_bench 7 7` under `scripts/capped` |
+| Native | clang 18.1.3 `-O2`, no `-march` (portable, pq-zero-knowledge.md §10); `build/native/pqz_bench 7 7` under `scripts/capped` |
 | wasm32 | clang 18 `--target=wasm32-unknown-unknown`, `wasm-ld-18`, freestanding, 8 MiB stack; node v26.8.1, `test/run_wasm.mjs 3 1` |
 
 The six rewritten layers, for the fixed parameters only (q = 2^42 − 215, d = 64, l = 4):
@@ -94,7 +94,7 @@ as filler: `R_REG` selects `s[0]` (coefficients in [−1, 1], `Bprime` 1), `R_TX
 
 LaZer's codegen sizes the ranks from a root-Hermite target. `params/e_s1_proof.sage` runs the real codegen with
 floors and raises them until lattice-estimator `53da598` (`RC.ADPS16`) gives β ≥ 450 on both instances (CTR-PQZ-03's
-target); `pqz_delta = 1.00366`. Record: `pqz-core/params/estimator-e-s1.txt` [estimate].
+target); `pqz_delta = 1.00366`. Record: `pqz-core/pqzl/params/estimator-e-s1.txt` [estimate].
 
 | | kmsis | kmlwe | m2 | MSIS β (classical / quantum) | MLWE uSVP β (best: dual hybrid β) | codegen proof size | expected attempts |
 |---|---|---|---|---|---|---|---|
@@ -170,7 +170,7 @@ Medians [measured]; native 7 proves and 7 + 7 honest verifies, wasm 3 proves and
 
 ## 7. Browser budgets (CTR-PQZ-18)
 
-The spec's prover budgets (`docs/contracts/pq-zether.md` §11, CTR-PQZ-18; p95 per transfer on reference devices) are
+The spec's prover budgets (`docs/contracts/pq-zero-knowledge.md` §11, CTR-PQZ-18; p95 per transfer on reference devices) are
 not kill criteria; the spike's wasm numbers against them [measured; node, not a browser; medians, not p95]:
 
 | Budget | Desktop browser | Phone | Hard limit | Measured (wasm32) | |
@@ -228,7 +228,7 @@ accumulated matrices on the verifier side.
 ## 10. Upstream cross-check
 
 Done 2026-10-13 at the owner's request, before any optimisation. Scripts, shim and the full write-up:
-`pqz-core/xcheck/` (`RESULTS.md`; the scripts name the session scratch paths they ran from).
+`pqz-core/research/upstream/` (`RESULTS.md`; the scripts name the session scratch paths they ran from).
 
 **Method.** The fork's own statement builder (`src/pqz_rel.c`) and bench, at `b2402b5`, compiled unchanged in logic
 against upstream LaZer `3330e48` through a small shim (malloc instead of the arena, no bounded decoder). Same params
@@ -291,7 +291,7 @@ parameters, the relations, the proof format and `proofSystemId` are unchanged. T
 (FNV-1a over the seeds): **every step left the proofs byte-identical** to main for the same seeds, and native and
 wasm proofs are equal byte for byte (seeds 0..2) [measured]. KAT 19/19, the symbol scan (native and wasm) and the five
 tamper kinds pass after every step; ASan + UBSan on the malloc path find nothing beyond the four known upstream
-UBSan nits [measured]. Steps, numbers and raw runs: `pqz-core/STATUS.md`, `pqz-core/opt/`.
+UBSan nits [measured]. Steps, numbers and raw runs: `pqz-core/STATUS.md`, `pqz-core/research/opt/`.
 
 Medians, same session, the setup of §2 [measured]:
 
@@ -313,8 +313,8 @@ What gave what (`R_TX` prove native, cumulative) [measured]:
 
 Tried and dropped: a `poly_scale` fast path (no measurable gain once the zero columns were gone), Karatsuba on the
 degree-16 products (slower than the column kernel with u128 sums, microbench) [measured]. Not done: asserts off
-(pq-zether.md §10 keeps the invariant checks in release builds; the cross-check measured ≈ 4 %), `-O3` /
-`-march=native` (pq-zether.md §10: portable `-O2`), an AVX2 backend and an integer CRT multiplication (the base
+(pq-zero-knowledge.md §10 keeps the invariant checks in release builds; the cross-check measured ≈ 4 %), `-O3` /
+`-march=native` (pq-zero-knowledge.md §10: portable `-O2`), an AVX2 backend and an integer CRT multiplication (the base
 multiplication is ≈ 7 % of the `R_TX` profile now).
 
 **Against the kill criteria.** `R_TX` prove 1.10 s meets the 6 s limit (and the former 3 s) [measured]. Verify

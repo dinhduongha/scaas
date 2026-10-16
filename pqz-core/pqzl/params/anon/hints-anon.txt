@@ -1,0 +1,130 @@
+
+====================================================================================================
+0. Environment and calibration
+====================================================================================================
+leaky-LWE-Estimator (DDGR20) commit: 0a9caf8bf0f80097724e0c6147194c52c6b90f86
+lattice-estimator commit: 53da5982597709ba0fdf94ea37a84d822310fd84
+SageMath 10.7, Python 3.12.5; DBDD_predict_diag, integrate_q_vectors, compute_beta_delta (non-probabilistic, interpolated)
+Kyber-512: DDGR20 beta = 405.53 (dim 1025); lattice-estimator primal_usvp beta = 406
+PQZ (u, v_f), no hints: DDGR20 beta = 475.83 (dim 4009); lattice-estimator primal_usvp beta = 476
+
+====================================================================================================
+1. A general (mixed) perfect hint w: the tool's DBDD_predict update equals dvol += (1/2) ln det(W Sigma W^T)
+====================================================================================================
+DBDD_predict_diag accepts hints on canonical directions only. For the mixed worst case the run applies the
+closed form of DBDD_predict's general update (Bvol += ln ||w||, Sigma projected: net dvol += (1/2) ln(w^T Sigma w) per
+orthogonal w), checked here against the tool's full-covariance DBDD_predict on a small instance (n = m = 32, q = 3329).
+6 random integer hints: tool dvol 257.975992053, closed form 257.975992053, difference 0.00e+00; dim 59 = 65 - 6
+
+====================================================================================================
+2. DDGR20 beta per number of perfect hints on one (r, e1)
+====================================================================================================
+V_max = 26408; target beta >= 450 (pq-zero-knowledge.md CTR-PQZ-03). Last column: lattice-estimator primal_usvp with the hints as removed secret dimensions (n - h), the approximation of pq-zero-knowledge.md §4.5 / params/anon/usvp.py.
+hints  unit on r  unit on e1  mixed (worst)  estimator n-h
+  [r 0: 475.83]
+  [r 16: 470.82]
+  [r 32: 465.82]
+  [r 48: 460.82]
+  [r 64: 455.84]
+  [r 80: 450.86]
+  [r 96: 445.89]
+  [r 112: 440.93]
+  [r 128: 435.98]
+  [r 144: 431.04]
+  [r 256: 396.67]
+  [r 272: 391.80]
+  [e1 0: 475.83]
+  [e1 16: 470.55]
+  [e1 32: 465.28]
+  [e1 48: 460.01]
+  [e1 64: 454.76]
+  [e1 80: 449.51]
+  [e1 96: 444.28]
+  [e1 112: 439.05]
+  [e1 128: 433.83]
+  [e1 144: 428.63]
+  [e1 256: 392.44]
+  [e1 272: 387.31]
+  [mixed 0: 475.83]
+  [mixed 16: 469.83]
+  [mixed 32: 463.85]
+  [mixed 48: 457.88]
+  [mixed 64: 451.92]
+  [mixed 80: 445.97]
+  [mixed 96: 440.03]
+  [mixed 112: 434.11]
+  [mixed 128: 428.20]
+  [mixed 144: 422.30]
+  [mixed 256: 381.34]
+  [mixed 272: 375.55]
+    0     475.83      475.83         475.83            476
+   16     470.82      470.55         469.83            471
+   32     465.82      465.28         463.85            466
+   48     460.82      460.01         457.88            461
+   64     455.84      454.76         451.92            456
+   80     450.86      449.51         445.97            451
+   96     445.89      444.28         440.03            446
+  112     440.93      439.05         434.11            441
+  128     435.98      433.83         428.20            436
+  144     431.04      428.63         422.30            432
+  256     396.67      392.44         381.34            397
+  272     391.80      387.31         375.55            392
+
+====================================================================================================
+3. Per M and leg grouping: the weakest group's hints (16 per leg + 16 with the auditor), worst-case beta
+====================================================================================================
+  M legs/group   G  auditor  hints  beta (mixed)  beta (unit r)  >= 450
+  1          1   1       on     32        463.85         465.82     yes
+  1          1   1      off     16        469.83         470.82     yes
+  2          1   2       on     32        463.85         465.82     yes
+  2          1   2      off     16        469.83         470.82     yes
+  2          2   1       on     48        457.88         460.82     yes
+  2          2   1      off     32        463.85         465.82     yes
+  4          1   4       on     32        463.85         465.82     yes
+  4          1   4      off     16        469.83         470.82     yes
+  4          2   2       on     48        457.88         460.82     yes
+  4          2   2      off     32        463.85         465.82     yes
+  4          3   2       on     64        451.92         455.84     yes
+  4          3   2      off     48        457.88         460.82     yes
+  4          4   1       on     80        445.97         450.86      NO
+  4          4   1      off     64        451.92         455.84     yes
+  8          1   8       on     32        463.85         465.82     yes
+  8          1   8      off     16        469.83         470.82     yes
+  8          2   4       on     48        457.88         460.82     yes
+  8          2   4      off     32        463.85         465.82     yes
+  8          3   3       on     64        451.92         455.84     yes
+  8          3   3      off     48        457.88         460.82     yes
+  8          4   2       on     80        445.97         450.86      NO
+  8          4   2      off     64        451.92         455.84     yes
+  8          8   1       on    144        422.30         431.04      NO
+  8          8   1      off    128        428.20         435.98      NO
+ 16          1  16       on     32        463.85         465.82     yes
+ 16          1  16      off     16        469.83         470.82     yes
+ 16          2   8       on     48        457.88         460.82     yes
+ 16          2   8      off     32        463.85         465.82     yes
+ 16          3   6       on     64        451.92         455.84     yes
+ 16          3   6      off     48        457.88         460.82     yes
+ 16          4   4       on     80        445.97         450.86      NO
+ 16          4   4      off     64        451.92         455.84     yes
+ 16         16   1       on    272        375.55         391.80      NO
+ 16         16   1      off    256        381.34         396.67      NO
+
+====================================================================================================
+4. Largest group size with beta >= 450 (worst-case mixed hints)
+====================================================================================================
+auditor on : legs per (r, e1) <= 3
+auditor off: legs per (r, e1) <= 4
+
+====================================================================================================
+5. Finding 8: the mixed-hint shortcut against the full-covariance DBDD_predict after integrate_q_vectors
+====================================================================================================
+n = m = 256, q = 4096, var_s 0.500000000000000, var_e 10.0000000000000, hint norms r part 164, e1 part 36; Python random seed 20261015
+no hints: beta 171.32
+hints                 kind  full model  (dim, used)  shortcut, same W  shortcut, V_max  conservative
+   10        dense e1 part      155.67    (503, 10)            154.88           154.87           yes
+   10    one e1 coordinate      154.88    (473, 10)            154.88           154.87           yes
+   10          r part only      155.33    (474, 10)            155.33           154.87           yes
+   80        dense e1 part       67.44    (433, 80)             36.60            36.05           yes
+   80    one e1 coordinate       36.60    (257, 80)             36.34            36.05           yes
+   80          r part only       42.23    (255, 80)             42.23            36.05           yes
+shortcut conservative (shortcut beta <= full-model beta in every case): YES

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Independent PQZ KAT (pq-zether.md §4, §5, §7; P6e plan Task 4). Python 3 stdlib only (hashlib SHAKE, an own
+"""Independent PQZ KAT (pq-zero-knowledge.md §4, §5, §7; P6e plan Task 4). Python 3 stdlib only (hashlib SHAKE, an own
 Keccak-256 checked against hashlib's SHA3 permutation): no numpy, no third-party package, runs under `python3 -I`.
 
 Implements everything of PQZL except the proofs: the matrix A (SHAKE128 "SCAAS-PQZ-A-V2"), CBD, KeyGen, Enc, Dec,
@@ -447,7 +447,7 @@ def parse(op_byte, stmt, ids=(PQZL_ID, PQZH_ID)):
 
 # ---------------------------------------------------------------- op 7 R_TXM (P6-ANON plan §4, D6, R4, D3 / D20)
 # legs per randomness group (r_g, e1_g, u_g), with or without the auditor (D4; S1's DDGR20 run: 80 hints give beta
-# 446.0, owner-accepted 2026-10-15; pqz-core/params/anon/hints-anon.txt)
+# 446.0, owner-accepted 2026-10-15; pqz-core/pqzl/params/anon/hints-anon.txt)
 LEGS_PER_GROUP = 4
 # op 7 leg counts per id, either auditor mode (pqz-stmt built_legs; D20)
 BUILT_LEGS = {PQZL_ID: (1, 2, 4, 8), PQZH_ID: (1, 2, 4)}

@@ -8,8 +8,8 @@ proved by an independent proof system that rests only on hash assumptions. This 
 scripts; **nothing was built or measured for PQZH**, and **no decision is recorded here**. The prototype and its
 measurements come later (§7).
 
-**[estimate]** marks a number computed here from counts or a model (script `pqz-core/pqzh/pqzh_count.py`, output
-`pqz-core/pqzh/counts.txt`). **[measured by others]** marks a published number, with its source and the date it was
+**[estimate]** marks a number computed here from counts or a model (script `pqz-core/pqzh/stark-backup/pqzh_count.py`, output
+`pqz-core/pqzh/stark-backup/counts.txt`). **[measured by others]** marks a published number, with its source and the date it was
 read (§9). **[inference]** marks a conclusion drawn here. Numbers for PQZL come from the earlier notes
 (`pqz-core-e-s1.md`, `pqz-specialised-verifier.md`).
 
@@ -57,7 +57,7 @@ features), `R_REG` then `R_TX`; then D2, the parameter sweep (blowup, arity, reg
 
 ## 2. What PQZH proves
 
-The same five statements as PQZL, byte for byte the same statement layouts (pq-zether.md §7.2, §7.4, §7.5, §7.7,
+The same five statements as PQZL, byte for byte the same statement layouts (pq-zero-knowledge.md §7.2, §7.4, §7.5, §7.7,
 §7.9), over the same MLWE ciphertexts, keys and state. Only the proof bytes, the verifier and the `proofSystemId` in
 the statement prefix differ. The relations below are those of `pqz_rel.c` on branch `pqz-rel3` (`build_reg`,
 `build_debit`, `build_ds`, `build_dr`).
@@ -71,10 +71,10 @@ the statement prefix differ. The relations below are those of `pqz_rel.c` on bra
 | 5 `OP_DISCLOSE_RECEIVER` (AUDITOR) | `R_DR` | `pk = A s + e`; `v[i] − (u^T s)[i] = Δ·d_i + e'_i`, `d` public | `s`, `e`: 4,096 | `e' + 2^24` (25 bits) |
 
 The norms are exact ℓ2 bounds (`‖s‖ ≤ 36` …) as in PQZL, so the noise budget, `K_MAX` and the uniqueness argument
-of pq-zether.md §4.3 carry over unchanged. A hash-based proof has no extraction slack on the norms (they are checked
+of pq-zero-knowledge.md §4.3 carry over unchanged. A hash-based proof has no extraction slack on the norms (they are checked
 exactly in the circuit), so §4.3's "γ > 1" clause does not apply [inference].
 
-**What stays shared** (pq-zether.md, `pqz-proof-alternatives.md` §6): MLWE encryption and its parameters, the state
+**What stays shared** (pq-zero-knowledge.md, `pqz-proof-alternatives.md` §6): MLWE encryption and its parameters, the state
 and contract checks, `pqz-mlwe` keys, disclosure semantics, the client wallet and decryption. Privacy of balances
 rests on MLWE under both kinds; PQZH gives the soundness of transfers (no mint, no overspend) a second, hash-only
 foundation.
@@ -140,7 +140,7 @@ fields [inference].
 
 ### 3.4 Public data: A, the statement
 
-A is global and fixed by `proofSystemId` (pq-zether.md §4.1): D1 commits `NTT(A)` once as preprocessed columns (the
+A is global and fixed by `proofSystemId` (pq-zero-knowledge.md §4.1): D1 commits `NTT(A)` once as preprocessed columns (the
 root is a constant of the verifier), D2 lets the verifier evaluate A at ρ. The statement (up to 10,304 coefficients for
 `R_TX`) enters the trace as a **public-memory table**: a LogUp argument whose public side
 `Σ_k 1/(β − (k + α·stmt_k))` the verifier computes from the statement bytes, as Cairo binds its public memory. Cost
@@ -205,13 +205,13 @@ free choice for the Merkle trees and the transcript, and only the verifier's spe
 
 | Hash for Merkle + transcript | For | Against |
 |---|---|---|
-| **Keccak-256 / SHAKE256** (recommended) | standard, already in the precompile and the PQZ transcript (SHAKE256, pq-zether.md §5) and in the EVM; Plonky3 has Keccak Merkle trees and challengers | slower than an algebraic hash only if PQZH proofs are ever verified inside another proof |
+| **Keccak-256 / SHAKE256** (recommended) | standard, already in the precompile and the PQZ transcript (SHAKE256, pq-zero-knowledge.md §5) and in the EVM; Plonky3 has Keccak Merkle trees and challengers | slower than an algebraic hash only if PQZH proofs are ever verified inside another proof |
 | Poseidon2 over the proof field | cheap inside a STARK: needed for recursion / aggregation of many PQZH proofs | a newer algebraic hash; slower in the native verifier; a second hash family to audit |
 | BLAKE3 | fastest native | not otherwise used in PQZ or the EVM |
 
-Recursion is not planned (aggregation is the spec's LaBRADOR path, pq-zether.md §8), so Keccak/SHAKE [inference].
+Recursion is not planned (aggregation is the spec's LaBRADOR path, pq-zero-knowledge.md §8), so Keccak/SHAKE [inference].
 
-**Transcript.** As pq-zether.md §5 (strong Fiat–Shamir): the challenger is seeded with
+**Transcript.** As pq-zero-knowledge.md §5 (strong Fiat–Shamir): the challenger is seeded with
 `SHAKE256("SCAAS-PQZH-TRANSCRIPT-V1" ‖ u8(op) ‖ be32(len) ‖ stmt)` before any commitment, so `opTag ‖ proofSystemId`
 (the first 64 bytes of every statement) and every statement byte are bound. The FRI parameters (blowup, queries,
 grinding bits, arity), the field and extension, the AIR version and the preprocessed root are fixed per
@@ -308,7 +308,7 @@ CTR-PQZ-09's 96 KB was set for a lattice proof of ≈ 30–50 KB. For PQZH the b
 | 179 KB | 8.33 M | 16.65 M | 262,077 B (= `MAX_INPUT`) |
 | 200 KB | 9.17 M | 17.5 M (over EIP-7825) | 283,077 B (over) |
 
-[estimate: EIP-7623 floor of 10 gas per token, ≈ 119 k tokens of non-proof calldata as pq-zether.md §9.3, ≈ 3.99
+[estimate: EIP-7623 floor of 10 gas per token, ≈ 119 k tokens of non-proof calldata as pq-zero-knowledge.md §9.3, ≈ 3.99
 tokens per proof byte]. So:
 
 - **Proof ≤ 160 KB** fits the precompile input, the +16 inline worst case under EIP-7825 and the token's statement
@@ -322,7 +322,7 @@ tokens per proof byte]. So:
 ## 6. Integration
 
 **Precompile.** Same address `0x…0F01`, same ops 1–6, same statement layouts; the prefix check already requires a
-`proofSystemId` the precompile implements (pq-zether.md §9.1), so dispatch by id is enough: PQZL ids go to
+`proofSystemId` the precompile implements (pq-zero-knowledge.md §9.1), so dispatch by id is enough: PQZL ids go to
 `pqz_verify`, PQZH ids to `pqzh_verify`. Proposed id form: `keccak256("scaas/pqz/pqzh-p3fri-gl-keccak/mlwe-d64k32-q42l4/v1")`,
 bumped by any change of the AIR, the FRI parameters, the field or the hash. `OP_SELFTEST` keeps its input and folds the
 PQZH KATs and one valid / one invalid PQZH `R_REG` proof into its hash, so a node without PQZH fails the contracts'
@@ -403,6 +403,6 @@ External numbers and statements, read 2026-10-13 unless stated:
 | Ligero; LogUp | [ePrint 2022/1608](https://eprint.iacr.org/2022/1608); Haböck, [ePrint 2022/1530](https://eprint.iacr.org/2022/1530) |
 
 ```sh
-python3 pqz-core/pqzh/pqzh_count.py --selftest              # the bounds of §3.1 (asserts)
-python3 pqz-core/pqzh/pqzh_count.py > pqz-core/pqzh/counts.txt   # every table of §1, §3.5, §5
+python3 pqz-core/pqzh/stark-backup/pqzh_count.py --selftest              # the bounds of §3.1 (asserts)
+python3 pqz-core/pqzh/stark-backup/pqzh_count.py > pqz-core/pqzh/stark-backup/counts.txt   # every table of §1, §3.5, §5
 ```

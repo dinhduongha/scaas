@@ -6,7 +6,7 @@ Written 2026-10-13 for the owner's P6-PQZH prototype (TODO P6-PQZH; design study
 §7). Question: what do `R_REG` and `R_TX`, proved by a hash-based STARK (Plonky3 0.8.0, Goldilocks, FRI, Keccak,
 LogUp, design D1), cost in proof bytes, prove and verify time, memory, wasm32 and zero-knowledge mode, and which FRI
 setting reaches 128 bits — provable and conjectured — within the 160 KB PQZH limit? Code: crate `pqz-core/pqzh/`
-(branch `pqzh-proto`, not merged yet); raw runs `pqz-core/pqzh/runs/`. **No decision is recorded here.**
+(branch `pqzh-proto`, not merged yet); raw runs `pqz-core/pqzh/stark-backup/runs/`. **No decision is recorded here.**
 
 **Follow-up (2026-10-14):** the next step — `R_TX` on the §7.7 layout, the EVM-friendly configuration, ZK +
 Goldilocks⁵ at 128 bits proven and conjectured, Merkle caps, WHIR — is in `pqzh-zk-ext5.md` (branch `pqzh-next`);

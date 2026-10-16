@@ -1,5 +1,5 @@
 /*
- * pqz-ffi C ABI (P6e Task 7, plan D10; pq-zether.md §9.1, CTR-PQZ-10): the PQZ precompile for the node (P6f,
+ * pqz-ffi C ABI (P6e Task 7, plan D10; pq-zero-knowledge.md §9.1, CTR-PQZ-10): the PQZ precompile for the node (P6f,
  * Nethermind P/Invoke). Hand-written; tests/c_abi.c compiles against it and links libpqz_ffi (run.sh), and the Rust
  * test `header_matches` checks every constant here against the crate.
  *

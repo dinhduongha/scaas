@@ -7,7 +7,7 @@ zero knowledge is required (the ZK numbers are the real ones), the challenge fie
 bits measured both proven (Johnson bound) and conjectured, proving may be native-only, and the one PQZH configuration
 takes the EVM-friendly choices of `pqzh-solidity-verifier.md` §6. Follows `pqzh-prototype.md` (the prototype, its
 §10 questions) on branch `pqzh-next` (from main `dde1fa6`, not merged). Code: crate `pqz-core/pqzh/`; raw runs
-`pqz-core/pqzh/runs/` (every file named below). **No decision is recorded here**; §9 lists the owner questions.
+`pqz-core/pqzh/stark-backup/runs/` (every file named below). **No decision is recorded here**; §9 lists the owner questions.
 
 **[measured]** marks a number from a run in this note (machine as in `pqzh-prototype.md` §2: AMD Ryzen 5 7235HS,
 single thread, every timed run alone under `scripts/capped`, 4 GB memory cap, 2 GB swap). **[model]** marks bits from
@@ -50,7 +50,7 @@ prototype's 160 KB line:
 
 ## 2. Statement layout and proofSystemId (task 1)
 
-`rel.rs` reads `R_TX` as pqz-core v2 does (pq-zether.md §7.7, `pqz.h`): header of 640 bytes (32-byte words), fee =
+`rel.rs` reads `R_TX` as pqz-core v2 does (pq-zero-knowledge.md §7.7, `pqz.h`): header of 640 bytes (32-byte words), fee =
 the be32 word at offset 256 that must be < 2^64 (as `pqz_rel.c` `rd_word64`; test `tx_fee_word_above_2_64`), body
 `pk_f ‖ pk_t ‖ pk_a ‖ u_T ‖ v_T ‖ u ‖ v_t ‖ v_f ‖ v_a` (83,072 B). The proofSystemId sits at statement bytes 32..63 and,
 as in pqz-core, is only hashed (the precompile dispatches on it).

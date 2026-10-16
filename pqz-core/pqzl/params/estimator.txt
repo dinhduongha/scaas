@@ -1,0 +1,163 @@
+
+====================================================================================================
+0. Environment and CTR-PQZ-03 parameter checks
+====================================================================================================
+lattice-estimator commit: 53da5982597709ba0fdf94ea37a84d822310fd84
+SageMath: 10.7   Python: 3.12.5   numpy: 2.2.4
+cost models: ADPS16 classical 0.292*beta, ADPS16 quantum 0.265*beta; shape model GSA (estimator default)
+q = 2^42 - 215 = 4398046510889: prime, q mod 16 = 9 (l = 4 factors), Delta = floor(q/2^16) = 67108863
+LS18 Cor. 1.2 invertibility bound q^(1/l)/sqrt(l) = 724.1 (l_inf)
+B_FRESH = 11872; K_MAX*B_FRESH = 12156928 < 2^24 = 16777216: True; 2^24 < Delta/2: True
+
+====================================================================================================
+1. LWE instances under LWE.estimate
+====================================================================================================
+
+# LWE.estimate(Kyber 512, red_cost_model=ADPS16('classical'), deny_list=('arora-gb', 'bkw'))
+usvp                 :: rop: ≈2^118.6, red: ≈2^118.6, δ: 1.003941, β: 406, d: 998, tag: usvp
+bdd                  :: rop: ≈2^119.4, red: ≈2^118.6, svp: ≈2^118.3, β: 406, η: 404, d: 1021, tag: bdd
+dual                 :: rop: ≈2^123.8, mem: ≈2^96.7, m: 512, β: 424, d: 1024, ↻: 1, tag: dual
+dual_hybrid          :: rop: ≈2^115.5, red: ≈2^115.3, guess: ≈2^112.3, β: 395, p: 5, ζ: 0, t: 40, β': 395, N: ≈2^81.4, m: 512
+
+# LWE.estimate(Kyber 512, red_cost_model=ADPS16('quantum'), deny_list=('arora-gb', 'bkw'))
+usvp                 :: rop: ≈2^107.6, red: ≈2^107.6, δ: 1.003941, β: 406, d: 998, tag: usvp
+bdd                  :: rop: ≈2^108.5, red: ≈2^107.6, svp: ≈2^107.3, β: 406, η: 404, d: 1021, tag: bdd
+dual                 :: rop: ≈2^112.4, mem: ≈2^96.7, m: 512, β: 424, d: 1024, ↻: 1, tag: dual
+dual_hybrid          :: rop: ≈2^106.3, red: ≈2^106.3, guess: ≈2^99.2, β: 401, p: 4, ζ: 0, t: 40, β': 401, N: ≈2^82.6, m: 512
+
+# LWE.estimate(PQZ key  pk = A s + e, red_cost_model=ADPS16('classical'), deny_list=('arora-gb', 'bkw'))
+usvp                 :: rop: ≈2^139.0, red: ≈2^139.0, δ: 1.003525, β: 476, d: 3945, tag: usvp
+bdd                  :: rop: ≈2^139.6, red: ≈2^139.3, svp: ≈2^137.2, β: 477, η: 469, d: 3969, tag: bdd
+dual                 :: rop: ≈2^141.0, mem: ≈2^109.1, m: 1982, β: 483, d: 4030, ↻: 1, tag: dual
+dual_hybrid          :: rop: ≈2^136.1, red: ≈2^136.1, guess: ≈2^131.5, β: 466, p: 3, ζ: 10, t: 60, β': 466, N: ≈2^94.5, m: ≈2^11.0
+
+# LWE.estimate(PQZ key  pk = A s + e, red_cost_model=ADPS16('quantum'), deny_list=('arora-gb', 'bkw', 'bdd_mitm_hybrid'))
+usvp                 :: rop: ≈2^126.1, red: ≈2^126.1, δ: 1.003525, β: 476, d: 3945, tag: usvp
+bdd                  :: rop: ≈2^126.8, red: ≈2^126.4, svp: ≈2^124.6, β: 477, η: 469, d: 3969, tag: bdd
+dual                 :: rop: ≈2^128.0, mem: ≈2^109.1, m: 1982, β: 483, d: 4030, ↻: 1, tag: dual
+dual_hybrid          :: rop: ≈2^124.3, red: ≈2^124.3, guess: ≈2^113.3, β: 469, p: 3, ζ: 0, t: 60, β': 469, N: ≈2^95.0, m: ≈2^11.0
+
+# LWE.estimate(PQZ enc  (u, v_t, v_f, v_a), red_cost_model=ADPS16('classical'), deny_list=('arora-gb', 'bkw', 'bdd_mitm_hybrid'))
+usvp                 :: rop: ≈2^139.0, red: ≈2^139.0, δ: 1.003525, β: 476, d: 3945, tag: usvp
+bdd                  :: rop: ≈2^139.6, red: ≈2^139.3, svp: ≈2^137.2, β: 477, η: 469, d: 3969, tag: bdd
+dual                 :: rop: ≈2^141.0, mem: ≈2^109.1, m: 1982, β: 483, d: 4030, ↻: 1, tag: dual
+dual_hybrid          :: rop: ≈2^136.1, red: ≈2^136.1, guess: ≈2^131.5, β: 466, p: 3, ζ: 10, t: 60, β': 466, N: ≈2^94.5, m: ≈2^11.0
+
+# LWE.estimate(PQZ enc  (u, v_t, v_f, v_a), red_cost_model=ADPS16('quantum'), deny_list=('arora-gb', 'bkw', 'bdd_mitm_hybrid'))
+usvp                 :: rop: ≈2^126.1, red: ≈2^126.1, δ: 1.003525, β: 476, d: 3945, tag: usvp
+bdd                  :: rop: ≈2^126.8, red: ≈2^126.4, svp: ≈2^124.6, β: 477, η: 469, d: 3969, tag: bdd
+dual                 :: rop: ≈2^128.0, mem: ≈2^109.1, m: 1982, β: 483, d: 4030, ↻: 1, tag: dual
+dual_hybrid          :: rop: ≈2^124.3, red: ≈2^124.3, guess: ≈2^113.3, β: 469, p: 3, ζ: 0, t: 60, β': 469, N: ≈2^95.0, m: ≈2^11.0
+
+# LWE.estimate(PQZ enc  32 hints (n - 32), red_cost_model=ADPS16('classical'), deny_list=('arora-gb', 'bkw', 'bdd_mitm_hybrid'))
+usvp                 :: rop: ≈2^136.1, red: ≈2^136.1, δ: 1.003578, β: 466, d: 3883, tag: usvp
+bdd                  :: rop: ≈2^136.7, red: ≈2^136.4, svp: ≈2^134.3, β: 467, η: 459, d: 3904, tag: bdd
+dual                 :: rop: ≈2^138.1, mem: ≈2^107.0, m: 1953, β: 473, d: 3969, ↻: 1, tag: dual
+dual_hybrid          :: rop: ≈2^133.5, red: ≈2^133.4, guess: ≈2^129.3, β: 457, p: 3, ζ: 0, t: 70, β': 457, N: ≈2^91.9, m: 2016
+
+# LWE.estimate(PQZ enc  32 hints (n - 32), red_cost_model=ADPS16('quantum'), deny_list=('arora-gb', 'bkw', 'bdd_mitm_hybrid'))
+usvp                 :: rop: ≈2^123.5, red: ≈2^123.5, δ: 1.003578, β: 466, d: 3883, tag: usvp
+bdd                  :: rop: ≈2^124.1, red: ≈2^123.8, svp: ≈2^121.9, β: 467, η: 459, d: 3904, tag: bdd
+dual                 :: rop: ≈2^125.3, mem: ≈2^107.0, m: 1953, β: 473, d: 3969, ↻: 1, tag: dual
+dual_hybrid          :: rop: ≈2^121.6, red: ≈2^121.6, guess: ≈2^113.3, β: 459, p: 3, ζ: 0, t: 60, β': 459, N: ≈2^92.9, m: 2016
+
+====================================================================================================
+2. DDGR20 perfect hints on the joint secret (r, e1): predictive DBDD (own implementation, see README)
+====================================================================================================
+Model (Dachman-Soled, Ducas, Gong, Rossi 2020, 'lightweight' DBDD prediction, perfect hints, primitive case):
+  embedding dimension dim = m' + n + 1, normalized log-volume lv = m' ln q - (m'/2) ln var_e - (n/2) ln var_s;
+  a perfect hint <v, (r, e1)> = l does dim -= 1 and lv += (1/2) ln(v^T Sigma v)  (Sigma = diag(var_s, var_e));
+  beta = min over m' of the least beta with sqrt(beta) <= delta(beta)^(2 beta - dim - 1) * exp(lv / dim)
+  (the ADPS16 uSVP condition on the isotropic lattice; the same GSA condition the estimator's primal_usvp uses).
+A larger lv makes the attack easier, so the most informative hint is the one with the largest v^T Sigma v. For k hints
+with integer matrix W, lv += (1/2) ln det(W Sigma W^T) <= (1/2) sum_i ln(w_i^T Sigma w_i) (Hadamard) <= (k/2) ln V_max,
+V_max = var_s*beta_e^2 + var_e*beta_s^2 for the forms e^T r - s^T e1 a registered key allows (||e|| <= 164,
+||s|| <= 36): k orthogonal maximal-norm mixed forms are the worst directions for any k perfect hints.
+
+calibration: Kyber-512 DBDD beta = 406 (estimator usvp: 406)
+calibration: PQZ enc DBDD beta = 476 (estimator usvp: 476)
+32 unit hints on r                                      beta =  466  (DBDD drop +10)  core-SVP 136.1 / 123.5
+32 unit hints on e1                                     beta =  466  (DBDD drop +10)  core-SVP 136.1 / 123.5
+16 on r + 16 on e1                                      beta =  466  (DBDD drop +10)  core-SVP 136.1 / 123.5
+32 maximal-norm mixed forms (V_max = 26408, worst case) beta =  464  (DBDD drop +12)  core-SVP 135.5 / 123.0
+
+====================================================================================================
+3. Proof instances: challenge space, ABDLOP MSIS (binding) and MLWE (hiding), sized for R_TX
+====================================================================================================
+kappa = 6: eta (99% quantile of s(c), 2e5 samples) = 105, |C| = 2^118.40, final-round error 2/|C| = 2^-117.40, 2*kappa = 12 < 724: True
+kappa = 7: eta (99% quantile of s(c), 2e5 samples) = 121, |C| = 2^125.01, final-round error 2/|C| = 2^-124.01, 2*kappa = 14 < 724: True
+kappa = 8: eta (99% quantile of s(c), 2e5 samples) = 137, |C| = 2^130.78, final-round error 2/|C| = 2^-129.78, 2*kappa = 16 < 724: True
+kappa = 9: eta (99% quantile of s(c), 2e5 samples) = 154, |C| = 2^135.92, final-round error 2/|C| = 2^-134.92, 2*kappa = 18 < 724: True
+=> kappa = 8, eta = 137 (smallest kappa with 2/|C| <= 2^-128)
+R_TX: m1 = 148 ring elements (9472 coefficients), ||s1|| <= alpha = 264.0; lambda = 4 (q^-4 = 2^-168.00; lambda = 3 gives 2^-126.00); t_B rows = 9; gamma = 11 (M = 3.39 per masked vector)
+
+sizing search (fast: primal_usvp for MLWE, SIS lattice attack for MSIS; target beta >= 450):
+  n =  8: MLWE rank 31 -> m2 = 48; B = 2^36.81; MSIS beta = 68
+  n =  9: MLWE rank 31 -> m2 = 49; B = 2^36.82; MSIS beta = 90
+  n = 10: MLWE rank 31 -> m2 = 50; B = 2^36.82; MSIS beta = 112
+  n = 11: MLWE rank 32 -> m2 = 52; B = 2^36.82; MSIS beta = 133
+  n = 12: MLWE rank 32 -> m2 = 53; B = 2^36.82; MSIS beta = 156
+  n = 13: MLWE rank 32 -> m2 = 54; B = 2^36.82; MSIS beta = 178
+  n = 14: MLWE rank 32 -> m2 = 55; B = 2^36.82; MSIS beta = 201
+  n = 15: MLWE rank 32 -> m2 = 56; B = 2^36.82; MSIS beta = 225
+  n = 16: MLWE rank 32 -> m2 = 57; B = 2^36.82; MSIS beta = 249
+  n = 17: MLWE rank 33 -> m2 = 59; B = 2^36.82; MSIS beta = 273
+  n = 18: MLWE rank 33 -> m2 = 60; B = 2^36.82; MSIS beta = 298
+  n = 19: MLWE rank 33 -> m2 = 61; B = 2^36.82; MSIS beta = 323
+  n = 20: MLWE rank 33 -> m2 = 62; B = 2^36.82; MSIS beta = 349
+  n = 21: MLWE rank 33 -> m2 = 63; B = 2^36.82; MSIS beta = 374
+  n = 22: MLWE rank 33 -> m2 = 64; B = 2^36.82; MSIS beta = 400
+  n = 23: MLWE rank 33 -> m2 = 65; B = 2^36.82; MSIS beta = 427
+  n = 24: MLWE rank 33 -> m2 = 66; B = 2^36.82; MSIS beta = 454
+=> MSIS rank n = 24, m2 = 66 (MLWE rank 33, 33 rows), B = 1.216e+11 = 2^36.82 (q = 2^42.00); t_A = 8064 B
+
+# LWE.estimate(proof MLWE (ABDLOP hiding, rank 33), red_cost_model=ADPS16('classical'), deny_list=('arora-gb', 'bkw', 'bdd_mitm_hybrid'))
+usvp                 :: rop: ≈2^135.5, red: ≈2^135.5, δ: 1.003589, β: 464, d: 4000, tag: usvp
+bdd                  :: rop: ≈2^135.9, red: ≈2^135.8, svp: ≈2^132.6, β: 465, η: 453, d: 4084, tag: bdd
+dual                 :: rop: ≈2^137.2, mem: ≈2^106.4, m: ≈2^11.0, β: 470, d: 4162, ↻: 1, tag: dual
+dual_hybrid          :: rop: ≈2^132.7, red: ≈2^132.6, guess: ≈2^129.3, β: 454, p: 3, ζ: 0, t: 70, β': 454, N: ≈2^93.9, m: ≈2^11.0
+
+# LWE.estimate(proof MLWE (ABDLOP hiding, rank 33), red_cost_model=ADPS16('quantum'), deny_list=('arora-gb', 'bkw', 'bdd_mitm_hybrid'))
+usvp                 :: rop: ≈2^123.0, red: ≈2^123.0, δ: 1.003589, β: 464, d: 4000, tag: usvp
+bdd                  :: rop: ≈2^123.4, red: ≈2^123.2, svp: ≈2^120.3, β: 465, η: 453, d: 4084, tag: bdd
+dual                 :: rop: ≈2^124.6, mem: ≈2^106.4, m: ≈2^11.0, β: 470, d: 4162, ↻: 1, tag: dual
+dual_hybrid          :: rop: ≈2^121.1, red: ≈2^121.1, guess: ≈2^113.3, β: 457, p: 3, ζ: 0, t: 60, β': 457, N: ≈2^91.4, m: ≈2^11.0
+
+# SIS.estimate(proof MSIS (ABDLOP binding, n = 24), red_cost_model=ADPS16('classical'))
+lattice  :: rop: ≈2^132.6, red: ≈2^132.6, δ: 1.003645, β: 454, d: 3503, tag: euclidean
+
+# SIS.estimate(proof MSIS (ABDLOP binding, n = 24), red_cost_model=ADPS16('quantum'))
+lattice  :: rop: ≈2^120.3, red: ≈2^120.3, δ: 1.003645, β: 454, d: 3503, tag: euclidean
+
+====================================================================================================
+4. Exactness of the norm proofs (no wrap-around mod q)
+====================================================================================================
+JL extracted bound b' = 2 sqrt(512) s3 / sqrt(30) = 4.405e+05 = 2^18.75
+exact l2: b'^2 + beta_e^2 = 2^37.50 < q = 2^42.00: True
+modular JL: 41 * N * b' = 2^37.32 < q: True
+binary rows: largest reconstructed integer 2^25 (e_T + 2^24) < q: True; row 7 terms < 2^15 < q: True
+
+====================================================================================================
+5. Per-round Fiat-Shamir soundness (LNP22 rounds, each on its own; section 5 of pq-zero-knowledge.md)
+====================================================================================================
+R1 JL projection R <- Bin^{256 x N} (LNP22 JL lemma, < 2^-128)             128.00 bits OK  unit-vector case exactly 2^-128.99
+R2 Z_q amortization, lambda = 4 repetitions (q^-lambda)                    168.00 bits OK  
+R3 R_q aggregation of quadratic relations (q^-(d/l) = q^-16)               672.00 bits OK  
+R4 final challenge c in C, kappa = 8, eta = 137 (2/|C|)                    129.78 bits OK  
+
+====================================================================================================
+6. Gate: every instance >= Kyber-512 under both models, every round >= 128 bits
+====================================================================================================
+instance                                                      classical                quantum  usvp beta
+Kyber 512                                          115.5 (  dual_hybrid)   106.3 (  dual_hybrid)   406  OK
+PQZ key  pk = A s + e                              136.1 (  dual_hybrid)   124.3 (  dual_hybrid)   476  OK
+PQZ enc  (u, v_t, v_f, v_a)                        136.1 (  dual_hybrid)   124.3 (  dual_hybrid)   476  OK
+PQZ enc  32 hints (n - 32)                         133.5 (  dual_hybrid)   121.6 (  dual_hybrid)   466  OK
+proof MLWE (ABDLOP hiding, rank 33)                132.7 (  dual_hybrid)   121.1 (  dual_hybrid)   464  OK
+proof MSIS (ABDLOP binding, n = 24)                132.6 (      lattice)   120.3 (      lattice)   454  OK
+DBDD 32 unit hints on r                            136.1 (         usvp)   123.5 (         usvp)   466  OK
+DBDD 32 unit hints on e1                           136.1 (         usvp)   123.5 (         usvp)   466  OK
+DBDD 16 on r + 16 on e1                            136.1 (         usvp)   123.5 (         usvp)   466  OK
+DBDD 32 maximal-norm mixed forms (V_max = 26408, worst case)   135.5 (         usvp)   123.0 (         usvp)   464  OK
+
+GATE: MET

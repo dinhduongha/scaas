@@ -8,8 +8,8 @@ set -eu
 cd "$(dirname "$0")/.."
 out=ligero/target/xcheck
 mkdir -p $out/c $out/rust
-(cd .. && ./build.sh native > /dev/null)
-${CC:-clang} -std=gnu11 -O2 -I../src -o $out/dump_setup xcheck/dump_setup.c ../build/native/libpqz.a
+(cd ../pqzl && ./build.sh native > /dev/null)
+${CC:-clang} -std=gnu11 -O2 -I../pqzl/src -o $out/dump_setup xcheck/dump_setup.c ../pqzl/build/native/libpqz.a
 $out/dump_setup $out/c pqzh
 (cd ligero && cargo run --release --offline --quiet --example dump_setup -- target/xcheck/rust)
 rc=0

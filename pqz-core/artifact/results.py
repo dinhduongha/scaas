@@ -6,8 +6,8 @@
       compares against the expected results; exit 1 on a failed check (correctness, proof hashes, sizes).
   results.py freeze <label> <out dir>
       builds expected-results.json (stdout) from a reproduce.sh --full run; prints the Markdown tables to stderr.
-  results.py freeze <label> <rel3 run prefix> <sv run prefix> [<ligero run prefix> <ffi run prefix>]
-      the same from direct runs: rel3/relfix.sh (rel3/runs/<x>-*), sv/rel3.sh (sv/runs/<x>-*), and for PQZH
+  results.py freeze <label> <pqzl-measure run prefix> <sv run prefix> [<ligero run prefix> <ffi run prefix>]
+      the same from direct runs: research/pqzl-measure/relfix.sh (research/pqzl-measure/runs/<x>-*), pqzl/sv/rel3.sh (pqzl/sv/runs/<x>-*), and for PQZH
       pqzh/ligero/runs/tx0.sh (<x>.jsonl native, <x>-wasm.jsonl wasm32) and for pqz-ffi ffi/run.sh (<x>-*).
 
 PQZL: proofs_fnv is a hash over the proofs of seeds 0..n-1, so it is keyed by n (the number of proves); native and
@@ -450,7 +450,7 @@ def main(a):
         if sv is None or len(a) == 6:
             add_pqzh(res, files)
             res["text_checks"] = {k: v for k, v in res["text_checks"].items() if sv is None}  # a direct run's text files differ
-        # every n with a frozen hash: the rel3 per-op runs (n = 1, native) too
+        # every n with a frozen hash: the pqzl-measure per-op runs (n = 1, native) too
         for rel, r in (bench(f"{r3}-alone.jsonl", "native")[0] if sv else {}).items():
             if rel in RELS:
                 res["relations"][rel]["fnv"].setdefault(str(r["np"]), r["fnv"])

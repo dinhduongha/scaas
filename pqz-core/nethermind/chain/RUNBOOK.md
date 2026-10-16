@@ -1,12 +1,12 @@
 # P6f runbook — the copy (executed) and the live roll-out on chain 7622 (Task 10)
 
 Plan: [P6f](../../../docs/superpowers/plans/2026-10-14-p6f-precompiles.md) Tasks 7, 8, 10; spec:
-[pq-zether.md §10](../../../docs/contracts/pq-zether.md#chain-integration). Every command below was executed on the
+[pq-zero-knowledge.md §10](../../../docs/contracts/pq-zero-knowledge.md#chain-integration). Every command below was executed on the
 copy except where a step says *live only*. Logs of the executed runs: [`../runs/`](../runs/).
 
 Chain roles (owner 2026-10-15): **7622 is the testnet** (its data may be reset); **22776 is the future mainnet** (not
 built). 22776 gets the precompiles only after the production gates — the external audit and G-LIC written
-clearance ([pq-zether.md CTR-PQZ-01](../../../docs/contracts/pq-zether.md), the licence inventory) — with
+clearance ([pq-zero-knowledge.md CTR-PQZ-01](../../../docs/contracts/pq-zero-knowledge.md), the licence inventory) — with
 `engine.Pqz` in its genesis from block 0 and the same addresses.
 
 ## Two activation paths (both tested on the copy)

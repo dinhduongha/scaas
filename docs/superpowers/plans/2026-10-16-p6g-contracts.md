@@ -37,7 +37,7 @@ driver (`python3 -I`; `eth.py` from P6f for legacy EIP-155 signing — calldata 
 argv), `pqz_kat.py` (P6e) for KeyGen / Enc / witnesses, a `pqz-ffi` example under `--features prove` for proofs,
 Node 26 with `@noble/post-quantum` 0.7.1 (`clients/clientkeys/node_modules`) for ML-DSA signatures.
 
-**Spec:** [pq-zether.md](../../contracts/pq-zether.md) §5 (encodings), CTR-PQZ-13 / -12 (kind, `authRef`), §7.1–7.11
+**Spec:** [pq-zero-knowledge.md](../../contracts/pq-zero-knowledge.md) §5 (encodings), CTR-PQZ-13 / -12 (kind, `authRef`), §7.1–7.11
 (state, register, fund, transfer, burn / refresh, rollover, statement layout, events, disclosure, authorization,
 meta-transactions), §8.1 (serialization v1: byte layouts, opTags, ids), §9.1–9.4 (precompile, gas, contracts list,
 selectors, errors); [accounts.md](../../contracts/accounts.md) §1.8 (register), CTR-UA-17/23 (verifiers, ML-DSA by probe);
@@ -68,7 +68,7 @@ plan only adds one example file there and touches nothing else.
 - **D1 — Mirror the Zether layer** (design note 1). `PqzLayer` (abstract, on `MetaTokenBase`) + `PqzLib` (external,
   ERC-7201 `scaas.pqz`) + kinds `NONE_PQZ` = 4 (`NoUnderlyingPqzToken`) and `UNDERLYING_PQZ` = 5 (`UnderlyingPqzToken`).
   `pqzShield(ua, amount)` **burns** `amount · shieldScale` public units of the signer, exactly as `zetherShield`
-  (pq-zether.md §7.3's `transferFrom` of the underlying predates the token tree, where the public ERC-20 balance is
+  (pq-zero-knowledge.md §7.3's `transferFrom` of the underlying predates the token tree, where the public ERC-20 balance is
   the layer below; §7.3 is amended). `pqzUnshield` mints public units to `recipient`; on `UNDERLYING_PQZ`,
   `pqzWrapShield` (a leg's underlying straight into `plainPending`) and `pqzUnshieldUnwrap` (straight out to a leg)
   follow `zetherWrapShield` / `zetherUnshieldUnwrap` (CTR-PQZ-22). `NONE_ZETHER_PQZ` / `UNDERLYING_ZETHER_PQZ` stay
@@ -129,7 +129,7 @@ plan only adds one example file there and touches nothing else.
 - **D14 — Entries** (CTR-PQZ-23): bundle `R = salt ‖ u ‖ v_t ‖ [v_a] ‖ word(toUA)`; BUNDLE ⇒ `SSTORE2(R)` pointer;
   commit-reveal ⇒ `keccak256(R)` plus the 57-byte memo as given (its first 16 bytes must equal the payload's salt,
   `MemoSaltMismatch`; `memoHash` in the header); no-bundle ⇒ nothing (`TransferEntryDisabled` on COMPACT).
-  `PqzTransfer` carries the salt (pq-zether.md §7.4 says the salt is "in `PqzTransfer`"; §7.8's event gains the field)
+  `PqzTransfer` carries the salt (pq-zero-knowledge.md §7.4 says the salt is "in `PqzTransfer`"; §7.8's event gains the field)
   so `R` is rebuildable from logs.
 - **D15 — 7622 deploy without `forge script`.** forge's EVM has neither `PQZ` nor `MLDSA*`, so its simulation of
   `UAPqzVerifier`'s constructor (self-test) and the token ops fails; the e2e driver deploys the forge artifacts with
@@ -191,7 +191,7 @@ pinned layout changes (it must not).
 `smartcontracts/evm/src/pqz/PqzLayer.sol`, `smartcontracts/evm/src/pqz/NoUnderlyingPqzToken.sol`,
 `smartcontracts/evm/test/pqz/helpers/PqzFixture.sol`, `smartcontracts/evm/test/pqz/PqzNone.t.sol`.
 
-- Entry points and views of pq-zether.md §9.4 (selectors normative): `pqzShield(bytes32,uint256)`,
+- Entry points and views of pq-zero-knowledge.md §9.4 (selectors normative): `pqzShield(bytes32,uint256)`,
   `pqzTransfer` / `pqzTransferCompact` / `pqzTransferNoBundle` `(bytes payload, bytes acc, bytes[] inline, bytes proof,
   bytes authSig)`, `pqzUnshield(bytes,bytes,bytes[],uint256,address,bytes,bytes)` (burn, and refresh with `amount = 0`,
   `recipient = 0`), `pqzRollOver(bytes32,bytes,bytes[])`; views `accountState`, `pendingHash`, `transferCiphertextHash`,
@@ -242,11 +242,11 @@ pinned layout changes (it must not).
   transfer with inline credits, burn, refresh, unshield-unwrap, disclosure views (all three kinds), a v1 and a v3
   relayed transfer; ML-DSA `requireAuthorized` gas both levels.
 - Log `smartcontracts/evm/runs/2026-10-16-p6g-7622.txt` and `smartcontracts/evm/deployments/7622-pqz.json`.
-- **Acceptance:** every step passes; gas of every PQZ / ML-DSA path recorded in pq-zether.md §9.3 (measured rows).
+- **Acceptance:** every step passes; gas of every PQZ / ML-DSA path recorded in pq-zero-knowledge.md §9.3 (measured rows).
 
 ### Task 9: Docs
 
-- pq-zether.md §7.3 (shield burns public units), §7.8 (`PqzTransfer` with the salt), §9.3 measured P6g rows, §9.4
+- pq-zero-knowledge.md §7.3 (shield burns public units), §7.8 (`PqzTransfer` with the salt), §9.3 measured P6g rows, §9.4
   "built"; accounts.md `pqz-mlwe` row built and the 7622 gen 1; roadmap P6g row; decisions.md (D1–D16 as Change
   lines); `smartcontracts/evm/README.md` if it lists contracts; `scripts/docs_check.py check` and the size gate clean.
 
@@ -274,7 +274,7 @@ pinned layout changes (it must not).
   `NoUnderlyingPqzToken` `0x6a23b0bdbb88c34589366388194e403b78176248`, `UnderlyingPqzToken`
   `0x0f39a5bcb7149ec90d9139d4437b7833b85bc802`, tokens pqUSD (`NONE_PQZ`, BUNDLE, FULL)
   `0x802348c24edfbb3fabd9a1e3038eec225c3485ec`, pqW (`UNDERLYING_PQZ` over a MockERC20 tUSD, COMPACT, OPTIONAL)
-  `0xfb5b3b351c7aa91612bd6bd5989a4904589b9113`. Gas per path: pq-zether.md §9.3 "Measured on chain 7622 (P6g)".
+  `0xfb5b3b351c7aa91612bd6bd5989a4904589b9113`. Gas per path: pq-zero-knowledge.md §9.3 "Measured on chain 7622 (P6g)".
 - **Open:** D16's PQZH token (not run; PQZH debit paths unmeasured on chain); the sender memo body is random filler
   in the e2e (the CTR-ZTH-50 HKDF memo is the client's, P6h); op 7 entry points (D8); `pqzUnshield` to a `bytes32`
   recipient (TODO.md, not in §9.4's selectors) not built; the classical kinds are not in 7622's gen 1 (D15);

@@ -28,9 +28,9 @@ lines. **[estimate]** marks a number computed from counts. **[inference]** marks
 
 | Copy | Function | Lines |
 |---|---|---|
-| LaZer `3330e48` (vendored pristine in `c91b3ab`, `pqz-core/lazer/`) and upstream head `b958e24` (the file is unchanged between them) | `__schwartz_zippel_accumulate2`, `src/lnp-tbox.c` | [2333–2366](https://github.com/lazer-crypto/lazer/blob/b958e247a2fdb9593b3c25c9603c6c5305c19420/src/lnp-tbox.c#L2333-L2366); `INTVEC_T (V, 2 * M, …)` at 2347 |
-| `pqz-core` v2 | the same function, fixed | `pqz-core/lazer/lnp-tbox.c` 2375–2416 (`PQZ (P6-SZ)` comment at 2389) |
-| `pqz-core` specialised verifier | `sz_eval_challenges` | `pqz-core/src/pqz_sv.c` (follows the fix, `pqz-specialised-verifier.md` §0) |
+| LaZer `3330e48` (vendored pristine in `c91b3ab`, `pqz-core/pqzl/lazer/`) and upstream head `b958e24` (the file is unchanged between them) | `__schwartz_zippel_accumulate2`, `src/lnp-tbox.c` | [2333–2366](https://github.com/lazer-crypto/lazer/blob/b958e247a2fdb9593b3c25c9603c6c5305c19420/src/lnp-tbox.c#L2333-L2366); `INTVEC_T (V, 2 * M, …)` at 2347 |
+| `pqz-core` v2 | the same function, fixed | `pqz-core/pqzl/lazer/lnp-tbox.c` 2375–2416 (`PQZ (P6-SZ)` comment at 2389) |
+| `pqz-core` specialised verifier | `sz_eval_challenges` | `pqz-core/pqzl/src/pqz_sv.c` (follows the fix, `pqz-specialised-verifier.md` §0) |
 
 The unfixed code [code]:
 
@@ -99,7 +99,7 @@ performance item [inference].
 
 ## 4. The fix
 
-Draw the full λ × M matrix from the same `(seed, dom)` and index two rows per pair (`pqz-core/lazer/lnp-tbox.c`,
+Draw the full λ × M matrix from the same `(seed, dom)` and index two rows per pair (`pqz-core/pqzl/lazer/lnp-tbox.c`,
 the change suggested in lazer#24):
 
 ```c
@@ -124,7 +124,7 @@ dimensions stay; only the number of challenges drawn from each domain grows from
 
 **Transcript change.** v1 and v2 proofs do not verify against each other (the challenges differ). The PQZL
 `proofSystemId` moved to `keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v2")` together with the second fix
-(`pqz-l2-domain.md`), one bump for both (pq-zether.md §8, CTR-PQZ-09; `pqz-core/STATUS.md` "proofSystemId v2" has the
+(`pqz-l2-domain.md`), one bump for both (pq-zero-knowledge.md §8, CTR-PQZ-09; `pqz-core/STATUS.md` "proofSystemId v2" has the
 `proofs_fnv` table, v1 → v2, for all five relations) [measured]. The specialised verifier (`pqz_sv.c`) follows the
 same derivation in `sz_eval_challenges` (`pqz-specialised-verifier.md` §0).
 
@@ -135,18 +135,18 @@ times moved within the host's noise (`pqz-core/STATUS.md`, v2 section) [measured
 
 ## 5. Evidence
 
-- **Trace harness** `pqz-core/sz/` (`sz/README.md`): one honest `R_REG` prove with the `-DPQZ_SZ_TRACE` hook in
+- **Trace harness** `pqz-core/pqzl/sz/` (`sz/README.md`): one honest `R_REG` prove with the `-DPQZ_SZ_TRACE` hook in
   `lnp-tbox.c` (compiled only with that macro; production builds do not define it), which records the Z_q challenge
   vector given to each of the four accumulator slots per transcript domain [measured]:
   - unfixed: in **all 127** evaluation domains slot 0 = slot 2 (`subv1` reused) and slot 1 = slot 3 (`subv2` reused),
     slot 0 ≠ slot 1: 2 distinct rows, verdict "2 independent tests";
   - fixed (v2): 128 domains (the two exact-ℓ2 equations now have one each, `pqz-l2-domain.md`), **0** reuse, all
-    four rows distinct, verdict "4 → ok". Output of the v2 full-sample run: `pqz-core/rel3/runs/v2full-sz-trace.txt`.
-- **Regression check** `pqz-core/check_tbox_fixes.sh` (run by `rel3/relfix.sh`): exits 1 unless the trace reports
+    four rows distinct, verdict "4 → ok". Output of the v2 full-sample run: `pqz-core/research/pqzl-measure/runs/v2full-sz-trace.txt`.
+- **Regression check** `pqz-core/pqzl/check_tbox_fixes.sh` (run by `rel3/relfix.sh`): exits 1 unless the trace reports
   λ = 4 independent tests **and** the ℓ2 check of `pqz-l2-domain.md` passes; with this fix reverted it reports 2
-  tests and fails (`pqz-core/STATUS.md`). Last results `pqz-core/rel3/runs/v2-tbox-fixes.txt`,
+  tests and fails (`pqz-core/STATUS.md`). Last results `pqz-core/research/pqzl-measure/runs/v2-tbox-fixes.txt`,
   `v2full-tbox-fixes.txt`: `check_tbox_fixes: ok` [measured].
-- **Specialised verifier**: `pqz-core/sv/check_sv_fixes.sh` reverts this line in a copy of `pqz_sv.c`; every honest v2
+- **Specialised verifier**: `pqz-core/pqzl/sv/check_sv_fixes.sh` reverts this line in a copy of `pqz_sv.c`; every honest v2
   proof of the five relations then disagrees with the generic verifier (10 / 10), the tree agrees (0 / 10)
   (`pqz-specialised-verifier.md` §0, merged `dcf0da3`) [measured].
 - Honest proofs verify and the bench's tamper cases are rejected on v2 (`fails 0`, KAT 19/19, ASan + UBSan, native
@@ -158,13 +158,13 @@ times moved within the host's noise (`pqz-core/STATUS.md`, v2 section) [measured
   is retired; the precompile accepts only the ids it implements (CTR-PQZ-09) [code].
 - **v1 proofs** were sound only to ≈ 2^-84 for the binary, digit, range, slack and norm equations of every relation,
   instead of ≈ 2^-127. No PQZ number other than the knowledge error depended on it: parameters, sizes and the noise
-  budget (pq-zether.md §4.3) are unchanged by this fix [inference].
+  budget (pq-zero-knowledge.md §4.3) are unchanged by this fix [inference].
 - **v2** restores the stated knowledge error; the codegen's figure is now correct for the code that runs.
 
 ## 7. Files
 
-- Fix: `pqz-core/lazer/lnp-tbox.c` (`PQZ (P6-SZ)`), `pqz-core/src/pqz_sv.c` (`sz_eval_challenges`).
-- Harness: `pqz-core/sz/` (`README.md`, `sz_trace.c`, `build.sh`); regression `pqz-core/check_tbox_fixes.sh`,
-  `pqz-core/sv/check_sv_fixes.sh`.
-- Runs: `pqz-core/rel3/runs/v2-*`, `v2full-*` (incl. `v2full-sz-trace.txt`).
+- Fix: `pqz-core/pqzl/lazer/lnp-tbox.c` (`PQZ (P6-SZ)`), `pqz-core/pqzl/src/pqz_sv.c` (`sz_eval_challenges`).
+- Harness: `pqz-core/pqzl/sz/` (`README.md`, `sz_trace.c`, `build.sh`); regression `pqz-core/pqzl/check_tbox_fixes.sh`,
+  `pqz-core/pqzl/sv/check_sv_fixes.sh`.
+- Runs: `pqz-core/research/pqzl-measure/runs/v2-*`, `v2full-*` (incl. `v2full-sz-trace.txt`).
 - Rerun: `cd pqz-core && ../scripts/capped sh -c './build.sh native && ./check_tbox_fixes.sh'`.
