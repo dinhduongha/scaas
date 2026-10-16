@@ -100,12 +100,17 @@ differential disagreement or non-canonical encoding.
 | `2026-10-15-precompile` | precompile (seeds: vectors, 414) | 45 min | 1,043,633 (386) | 2,124 / 4,219, 346 inputs (31 MB) | 307,654 decoded, 434 valid = unmodified honest |
 | `2026-10-15-mutate` | mutate | 45 min | 86,923 (32) | 3,314 / 6,877, 532 inputs | 69,718 decoded; 197 SV = generic differentials |
 | `2026-10-15-codec` | codec | 45 min | 367,237 (135) | 856 / 1,553, 277 inputs | 120,328 accepted and round-tripped, 56,597 of them PQZL proofs (`decproof` ⇒ `encproof` = input) |
+| `2026-10-16-s5-precompile` | precompile with op 7 (seeds: 776, 342 op 7; 44 honest, 19 op 7) | 120 min | 3,012,684 (418) | 2,269 / 4,697, 401 inputs (43 MB) | 879,386 decoded, 205,263 of them op 7; 3,461 valid = unmodified honest |
+| `2026-10-16-s5-mutate` | mutate with op 7 | 120 min | 192,360 (26) | 3,513 / 8,241, 600 inputs | 149,586 decoded, 42,191 op 7; 473 SV = generic differentials, 108 of them op 7 |
+| `2026-10-16-s5-codec` | codec with op 7 | 120 min | 1,103,090 (153) | 917 / 1,729, 294 inputs | 382,784 decoded, 130,232 op 7; 137,333 PQZL proofs re-encoded byte-equal |
 
-**Arena:** the verify-only arena's high-water mark over every run is **95,169,680 B (90.76 MiB)**, the adversarial
+**P6-ANON S5 (op 7, 2 h per target, 2026-10-16/17):** no finding. Arena high-water mark **268,240,256 B (255.81 MiB)** in every S5 run (the honest inputs' warm-up peak; bound 341 MiB, `ARENA_SMALL` 512 MiB since S3); peak RSS 901 / 1,055 / 679 MB; slowest mutate unit 15 s (the differential's generic re-initialisation, `-timeout=120`; the `crash-mutate-slow-unit-*` files libFuzzer writes for it are not findings). Committed corpora after the merge step: `precompile` 12 inputs (424 B), `mutate` 421 inputs (6,740 B), `codec` 246 inputs (1,727 B). `2026-10-16-s5-precompile-interrupted`: a machine reboot stopped the first precompile campaign after ≈ 42 min (867,956 execs, no finding, merge step not reached); the campaign was re-run in full.
+
+**P6e campaigns.** Arena: the verify-only arena's high-water mark over every run is **95,169,680 B (90.76 MiB)**, the adversarial
 peak `pqz-ffi`'s `tests/verify_only.rs` measured (the honest inputs alone: 94,615,600 B); bound 96 MiB, `ARENA_SMALL`
 144 MiB (1.59 ×).
 
-Committed corpora after the merge step: `precompile` 9 inputs (42 B; the large ones are rebuilt), `mutate` 392
+P6e committed corpora after the merge step: `precompile` 9 inputs (42 B; the large ones are rebuilt), `mutate` 392
 inputs (5,578 B), `codec` 231 inputs (2,259 B). Other logs: `smoke*` (short runs while building the harness),
 `2026-10-15-precompile-stale-seed` and the false finding of `smoke3-precompile` (a seed proved by the harness's
 earlier fixture: a valid proof the oracle did not know; `seeds.py` and `run.sh` now drop stale seeds and work
