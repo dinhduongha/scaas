@@ -41,7 +41,7 @@ flowchart LR
 | Verify p99, native / wasm32 | 8.7 ms / 14.8 ms | 10.5 ms / 19.4 ms |
 | Prover memory, native / wasm32 | 304 MB / 232 MB (arena peak) | 43 MB / 48 MiB (heap; wasm module with all six forms) |
 | Verifier memory | 1.7 MB working set + 5.2 MB tables (specialised verifier) | 1.2 MB heap |
-| Memory inside the precompile (`pqz-ffi`) | one 144 MiB arena reserved at start (measured peak 95 MB: keys and tables of every form kept) | ≈ 1.2 MB heap per verify, no arena |
+| Memory inside the precompile (`pqz-ffi`) | one 512 MiB arena reserved at start (owner 2026-10-16; measured peak 268 MB with keys and tables of every form and every op 7 shape kept, run `s3a`; 95 MB for the six forms alone) | ≈ 1.2 MB heap per verify, no arena |
 | Security rests on | MSIS / MLWE (lattices) | hash functions only |
 
 Both stay far under the 60 ms verify limit, and both provers fit the 256 MiB browser (wasm32) memory limit. One precompile verifies both, chosen by the `proofSystemId` in the
@@ -105,7 +105,7 @@ only).
   - input `u8(op) ‖ be32(len(stmt)) ‖ stmt ‖ proof` → `pqz_stmt::decode_input` → dispatch on the statement's
     `proofSystemId` to PQZL's `pqz_verify_fast` or to the Ligero crate; op 6 returns the cached self-test hash;
   - libpqz is built by `build.rs` with `build.sh`'s flags; one process-wide lock; one worker thread with a fixed
-    16 MiB stack; fixed arenas: verify-only 144 MiB, prove / generic verify 448 MiB;
+    16 MiB stack; fixed arenas: verify-only 512 MiB, prove / generic verify 1 GiB (wasm32: one 512 MiB arena; P6-ANON S3);
   - status 0 ok (`…01` / `…00`), 1 revert (input over `MAX_INPUT`), 2 bad arguments, 3 input-caused panic ⇒ `…00`,
     4 node fault ⇒ no result;
   - feature `prove` adds keygen / enc / dec / prove of both systems (wasm32 byte-equal with native);

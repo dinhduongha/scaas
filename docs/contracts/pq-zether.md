@@ -1124,7 +1124,7 @@ The id stays v2 (owner 2026-10-14: no bump for the z21 fix).
   - rejection: the acceptance test in fixed-point integer arithmetic with a constant-time exp approximation whose error
     is inside the proof's statistical-distance budget; no MPFR;
   - memory and errors: a caller-provided arena (`pqz_init(arena, len)`; `pqz-ffi` reserves it once at run time,
-    144 MiB verify-only, 448 MiB for proving), every `ERR`/`ASSERT` an error return; no `malloc`,
+    512 MiB verify-only, 1 GiB for proving since P6-ANON S3; wasm32 one 512 MiB arena), every `ERR`/`ASSERT` an error return; no `malloc`,
     no `abort`, no stdio;
   - PRNG: AES-NI replaced by a bit-exact constant-time software AES (bitsliced; the T-table form is forbidden for
     secret-keyed streams) or by SHAKE where the fork changes the stream (then all KATs are fork-generated).
@@ -1417,7 +1417,7 @@ path never crashes the node**: `pqz_verify` runs in-process, chain 7622 has one 
 `eth_call`/`eth_estimateGas` reaches the precompile, so one abort, out-of-bounds access or stack overflow on crafted
 input is a chain halt, not a split. Requirements: every upstream `ERR`/`ASSERT` becomes `return 0`; a bounds-checked
 decoder (Rust, in front of the C core) accepts only the fixed lengths before any C code runs; fixed-size stack, no
-recursion, a fixed arena reserved once at run time (`pqz-ffi`: 144 MiB verify-only, from measurement); no timeouts (non-deterministic), only bounded loops; continuous ASan/UBSan fuzzing in
+recursion, a fixed arena reserved once at run time (`pqz-ffi`: 512 MiB verify-only since op 7, owner 2026-10-16; measured peak 268 MB); no timeouts (non-deterministic), only bounded loops; continuous ASan/UBSan fuzzing in
 CI (P6e D12: clang 18 libFuzzer on stable Rust, the C core under ASan + UBSan, `pqz-ffi` and Ligero with sancov;
 targets through `pqz_precompile`, over edited honest inputs of every form and id, and the codec round trip; long runs on
 the owner's machine under `scripts/capped`, no CI job for now (controller 2026-10-14); P6e Task 10, `pqz-core/fuzz/`). Operationally a follower node serves all public RPC and pre-simulation, so `eth_call` never reaches the signer

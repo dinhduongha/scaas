@@ -27,18 +27,21 @@ flowchart LR
 | `pqz_precompile(input, len, out, out_len) -> int` (`pqz_ffi.h`) | C ABI for P/Invoke. Status 0 = `out[0..32]` holds `…01` / `…00` / the self-test hash; 1 = revert (input over `MAX_INPUT` = 393,216 B); 2 = bad arguments (nothing written); 3 = a panic in the decode / verify logic was caught (input-caused, the same on every node: `out` = `…00`, log it); 4 = node fault (below: no result, `out` untouched). Thread-safe; natively it never unwinds or aborts (wasm32 is `panic = abort`, client side only; a native build with `panic = abort` is a compile error) |
 | `precompile(&[u8]) -> Result<[u8; 32], Error>` | the same in Rust: `Error::Revert`, `Error::NodeFault`; a caught input-caused panic gives `…00` |
 | `decode(&[u8])` | `pqz_stmt::decode_input` (the crate re-exports `pqz_stmt` as `stmt`) |
-| `verify_input(&[u8]) -> Result<bool, NodeFault>` | decode + the id's verifier (op 1..5) |
+| `verify_input(&[u8]) -> Result<bool, NodeFault>` | decode + the id's verifier (op 1..5, 7) |
 | `pqzl::verify_fast` / `pqzl::verify_generic` / `pqzh::verify` | the verifiers on decoded parts; the generic PQZL verifier is the differential reference, never on the precompile path (R5) |
 | `selftest::selftest()`, `selftest::report()` | `OP_SELFTEST` (D13), below |
 | feature `prove`: `prove(op, stmt, wit, rnd32)` | PQZL (`pqz_prove`) or PQZH (Ligero) by the statement's id; deterministic, hedged (CTR-PQZ-19) |
 | `pqzl::keygen`, `pqzl::enc`, `pqzl::dec`, `pqzl::keypair_from_secret` | §4.2 from seeds (`pqz_keys.c`); in every build (the self-test uses them), not on the verify path |
 | feature `prove`: `fixture::{wit_key, wit_debit, wit_ds, cases, digest_lines}` | the prover-API witness layouts (R3) and one honest instance of every form from seeds (tests, bench, wasm32 run, the Task 11 generator) |
+| feature `prove`: `fixture::{wit_multi, multi_case, multi_cases, recipients_hash}`, `pqzl::{enc_group_seed, enc_multi}`, `memo::{seal, open}` | op 7 `R_TXM` (P6-ANON S3): the per-group Enc (D13: group seeds, legs then `pk_f` then the auditor copies), the `R_TXM` witness layout, `recipientsHash`, the §5.4 sender memo; one honest case per built `(M, auditorOn)` of each id |
 
 **Lock and arenas (STATUS.md Open 6, Open 2).** Every libpqz call runs under one process-wide `Mutex` (the core keeps
 its arena, base mark, sticky error and SV tables in globals); PQZH needs none. The core lives on one arena allocated
-once: `ARENA_SMALL` (verify-only: 1.5 × the measured peak of the specialised verifier over all six forms with every
-form's keys and tables kept, plus the self-test) for the precompile path; the first prove or generic verify moves it
-once to `ARENA_BIG` (448 MiB; `R_TX` prove alone peaks at 304 MB). A poisoned lock is recovered and the core
+once: `ARENA_SMALL` (verify-only, 512 MiB since op 7, owner 2026-10-16: 2.00 × the measured adversarial peak 268 MB
+of the specialised verifier over all six forms and every op 7 shape with their keys and tables kept, plus the
+self-test; run `s3a`) for the precompile path; the first prove or generic verify moves it once to `ARENA_BIG` (1 GiB
+native; the all-loaded prove peak is 854 MB, `R_TXM8_0`). wasm32 has one 512 MiB arena for both and `prove` refuses
+PQZL op 7 above M = 4 there (`ProveError::Statement(Reject::Legs)`); M = 8 is for native clients. A poisoned lock is recovered and the core
 re-initialised. The arena's pages are reserved, not touched, until the core uses them.
 
 **Faults (controller 2026-10-14).** Input-caused: a panic in the decode / verify logic (any node hits it on the
@@ -89,13 +92,14 @@ node wasm/run_wasm.mjs wasm/target/wasm32-unknown-unknown/release/pqz_ffi_wasm.w
 ```
 
 Tests (`tests/ffi.rs`): honest round trip of every form of both ids (PQZL 8 forms = six relations + REFRESH +
-AUDITOR; PQZH the same 8); every decoder rejection (each D15 / R6 rule with its `Reject`, op /
+AUDITOR; PQZH the same 8) and of every built op 7 shape (PQZL M ∈ {1, 2, 4, 8}, PQZH {1, 2, 4}, auditor on / off);
+`multi_limits_and_memo` (worst-case op 7 inputs vs `MAX_INPUT`, the PQZH (4, on) boundary, oversize M refused, the memo); every decoder rejection (each D15 / R6 rule with its `Reject`, op /
 opTag / id confusion, lengths ± 1, `MAX_PROOF + 1`, truncated / extended / bit-flipped proofs, the other system's
 id, framing, `MAX_INPUT + 1` = revert); the PQZL differential test (SV vs generic through the FFI on honest and
 mutated proofs); the C ABI's arguments; the self-test
 (A digest = `pqz_kat.py`); the compiled-in self-test proofs equal a fresh prove; the precompile path on a 1 MiB
 caller stack; `pqz_ffi.h`'s constants; node faults (`tests/fault.rs`: an 18 MiB fixed arena and a failing worker give status 4 with `out` untouched; at the same fixed size a fresh core verifies `R_REG` after the fault; everything verifies again afterwards); the digest lines (native half of the wasm32 byte-equality check).
-`tests/verify_only.rs`, the production configuration (a fresh process that never proves, on the 144 MiB arena; the
+`tests/verify_only.rs`, the production configuration (a fresh process that never proves, on the 512 MiB arena; the
 inputs come from a child process): the whole corpus (every rejection, framing, the honest inputs, the self-test, the
 10,240-input abort-freedom generator: random / random-proof / edited inputs) through the C ABI, the generator again
 from 8 threads and on a 1 MiB caller stack, 5,000 repeated mixed calls: identical results, no status 3 or 4, only the

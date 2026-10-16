@@ -524,6 +524,47 @@ order, `OP_SELFTEST`. §5 states the implemented transcripts (D7), §8 the bump 
 Spec text that disagreed with the code was changed to the code (list at the end of §8.1); decisions.md has the D2, D4,
 D7, D12, D14 and D15 (proof half) lines.
 
+## Op 7 `R_TXM` in `pqz-stmt` / `pqz-ffi`, P6-ANON S3 (branch `p6-anon-s3`; plan D3, D13, §5.4; CTR-PQZ-10 L-3)
+
+`pqz_stmt::parse(7, …)` / `decode_input` return op 7 as `Stmt::Multi` (S2's interim `Reject::Op` removed); `pqz-ffi`
+needed no new dispatch (PQZL `pqz_verify_fast(7, …)`, Ligero `verify(7, …)`; the `OVERSIZE` const assert keeps
+PQZH M = 8 / M = 16 out). Arenas: `ARENA_SMALL` 512 MiB (owner 2026-10-16), `ARENA_BIG` 1 GiB native, one 512 MiB
+arena on wasm32, where `prove` refuses PQZL op 7 with M > 4 (`Statement(Legs)`) (controller proposals). Feature
+`prove`: `pqzl::enc_group_seed` / `enc_multi` (D13 per-group Enc), `fixture::multi_case` (`R_TXM` witness layout,
+`recipientsHash`, memo hash), `memo::{seal, open}` (§5.4; labels in decisions.md CTR-PQZ-23).
+
+Run `scripts/capped pqz-core/ffi/run.sh s3a` [measured] (`ffi/runs/s3a-*`): every test green — round trip of the 8
+forms + 8 op 7 shapes (PQZL) and 8 + 6 (PQZH), 1,012 rejection cases (op 7: every S2 rule through the precompile,
+`recipientsHash` / `memoHash` changed, `(1, on)` relabelled `(2, off)`, op 1 ↔ op 7), PQZL differential SV vs generic
+112 cases / 16 accepted / 0 disagreements, the PQZH (4, on) boundary (input = `MAX_INPUT` ⇒ `…00`, + 1 B ⇒ revert),
+oversize M refused, memo round trip; self-test `ed910a2c…d205` unchanged; C ABI smoke, symbol scan, 0 GMP / libm,
+clippy `float_arithmetic` clean. `tests/verify_only.rs`: 30 honest inputs, corpus 11,281 (10,240 generator), 188 valid
+= the unedited honest ones, status 3 / 4 never, 8 threads and a 1 MiB caller stack equal to serial, 5,000 mixed calls
+equal, `arena_used` 265,693,696 B after every call, **verify-only peak 268,240,256 B = 2.00 × margin in 512 MiB**
+(144 MiB would not hold it); fill determinism 0x00 / 0xA5 / 0x5A: 3,118 lines identical. **Prove arena peak with every
+relation loaded 853,679,872 B in 1 GiB (1.26 ×)**. wasm32: the prove harness proves the 8 forms and the 6 op 7 shapes
+with M ≤ 4 of each id, 29 digest lines = native (fixtures, proofs, verdicts, self-test), 36.3 s, linear memory
+594,739,200 B (was 631 MB); PQZL M = 8 prove refused. The six P6e forms' digest lines (statements, witnesses, proofs)
+equal `ffi1f2`'s.
+
+| op 7 through the FFI [measured], native, n = 200 | statement B | proof B | input B | worst-case input B | prove ms | verify p50 / p99 ms | adversarial p99 ms |
+|---|---|---|---|---|---|---|---|
+| PQZL (1, on) / (1, off) | 83,072 / 66,560 | 42,766 / 42,409 | 125,843 / 108,974 | 181,381 / 164,869 | 848 / 966 | 8.19 / 11.27; 8.58 / 11.11 | 12.76 / 11.43 |
+| PQZL (2, on) / (2, off) | 99,712 / 83,072 | 43,603 / 42,951 | 143,320 / 126,028 | 198,021 / 181,381 | 1,109 / 1,846 | 8.63 / 10.80; 8.75 / 11.84 | 11.76 / 11.20 |
+| PQZL (4, on) / (4, off) | 132,992 / 116,096 | 45,274 / 43,922 | 178,271 / 160,023 | 231,301 / 214,405 | 2,050 / 915 | 9.59 / 14.78; 9.23 / 12.16 | 14.06 / 12.11 |
+| PQZL (8, on) / (8, off) | 215,936 / 198,528 | 61,802 / 58,998 | 277,743 / 257,531 | 314,245 / 296,837 | 2,641 / 2,093 | 13.81 / 16.87; 13.10 / 16.54 | 17.54 / 18.12 |
+| PQZH (1, on) / (1, off) | 83,072 / 66,560 | 232,174 / 230,968 | 315,251 / 297,533 | 318,547 / 301,309 | 623 / 724 | 9.95 / 12.33; 9.81 / 11.93 | 1.27 / 2.16 |
+| PQZH (2, on) / (2, off) | 99,712 / 83,072 | 232,174 / 231,918 | 331,891 / 314,995 | 335,187 / 318,547 | 672 / 714 | 9.99 / 10.49; 10.45 / 12.85 | 1.37 / 2.38 |
+| PQZH (4, on) / (4, off) | 132,992 / 116,096 | 232,708 / 230,904 | 365,705 / 347,005 | 369,193 / 351,571 | 647 / 701 | 10.83 / 13.07; 10.74 / 12.74 | 2.13 / 2.52 |
+
+Worst-case input = 5 + statement + the id's bound (PQZL `MAX_PROOF` 98,304; PQZH Ligero's exact bound). **D3**
+(`params/anon/anon-sizes-s3.txt`): PQZL {1, 2, 4, 8} built (M = 16: input 474,161 / 449,947 B > `MAX_INPUT`), PQZH
+{1, 2, 4} built (M = 8: bound 281,208 B > `MAX_PROOF_PQZH`, input 497,149 B > `MAX_INPUT`; M = 16 also over the gas
+cap); largest op 7 worst-case input 369,193 B (PQZH (4, on)) ≤ 393,216. Frozen vectors (`ffi/vectors/runs/s3a-*`):
+`pqz_kat.py --check` ok, tamper 179 / 179, wasm32 replay 34 / 0 fails; `pqz-vectors --check` differs only in the
+reason of the two `TRANSFER: under op 7` rows of `negative.json` (`Op` → `OpTag`, output `…00` unchanged;
+`s3a-negative-diff.txt`), the file left as frozen for S4.
+
 ## Measured (2026-10-13, this machine, single thread)
 
 Native: clang -O2, `pqz_bench 5 5` under `scripts/capped` (5 proves, 5 + 5 honest verifies, 10 adversarial). wasm32:
