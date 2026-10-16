@@ -565,6 +565,45 @@ cap); largest op 7 worst-case input 369,193 B (PQZH (4, on)) ≤ 393,216. Frozen
 reason of the two `TRANSFER: under op 7` rows of `negative.json` (`Op` → `OpTag`, output `…00` unchanged;
 `s3a-negative-diff.txt`), the file left as frozen for S4.
 
+## Op 7 vectors, P6-ANON S4 (branch `p6-anon-s4`; plan D15, LH-2)
+
+`smartcontracts/vectors/pqz/` (README there): **`statement_transfer_multi.json`** (11 op 7 statements: every built
+`(M, auditorOn)` of each id with one real leg at a position that varies by shape, a two-real-leg row, an all-decoy row
+with fee 0, a group-boundary row with real legs 3 and 4; multi-group Enc with each group's `seed_enc_g` and counter,
+`recipientsHash`, the §5.4 sender memo and its `memoHash`, 9 `memo_open` rows); `R_TXM` rows appended to
+`proof_pqzl.json` (11) and `proof_pqzh.json` (8, M ≤ 4); 342 op 7 rows appended to `negative.json` (pqzl 177, pqzh 165:
+`verify` 143, `OpTag` 70, `Length` 41, `Op` 28, `ProofSystemId` 14, `Legs` 11, `ProofLength` 11, `Coefficient` 10,
+`Salt` 4, two each of `AuditorOn`, `MustBeZero(amount)`, `Amount`, `Fee`, `Input`; two reverts at `MAX_INPUT + 1`).
+`pqz_kat.py` gained op 7 decoding (reason `Legs`), `enc_group_seed` / `enc_multi`, the memo (stdlib HMAC-SHA256) and a
+checker per new row; `replay_wasm.mjs` the op 7 rows.
+
+**Frozen files regenerated, and why:** S3 made op 7 decode, so `negative.json`'s two `TRANSFER: under op 7` rows
+(pqzl, pqzh) now fail at the opTag: reason `Op` → `OpTag`, output `…00` and input bytes unchanged (S3's
+`s3a-negative-diff.txt`). Everything else S4 changed is appended: the P6e rows of `proof_pqzl.json`, `proof_pqzh.json`
+and `negative.json` are byte-identical, the 12 other P6e files byte-unchanged, the self-test hash `ed910a2c…d205`
+unchanged (decisions.md CTR-PQZ-09, Change 2026-10-16).
+
+Run `scripts/capped pqz-core/ffi/vectors/run.sh s4a write` [measured] (`ffi/vectors/runs/s4a-*`): generation 150.0 s,
+998 MB RSS; `pqz-vectors --check` (second generation) byte-identical, 16 / 16 files, 19,650,288 B; every proof row and
+every negative through `pqz_precompile`, PQZL also through the generic verifier (agree); `pqz_kat.py --check` ok in
+42.7 s; `tamper.py` 191 / 191; `pqz-ffi` tests ok (incl. `selftest_vectors`); wasm32 replay 53 cases, 0 fails (50
+proved byte-equal with native, the 3 PQZL M = 8 rows verify-only: wasm32 does not prove PQZL op 7 above
+`WASM_PQZL_MAX_LEGS` = 4; `s4a-wasm.txt` re-run once after a counter fix in the script's summary line).
+
+**LH-2** (`ffi/vectors/lh2.sh`, `examples/lh2.rs`, run `s4a-lh2.txt`): pqz_bench.c's op 7 statements (C, every TXB
+shape, `xcheck/dump_setup.c` mode `txm`, opTag and recipientsHash set) and the Ligero crate's `setup_multi` ones
+(default, fee 0 all decoys, two real legs) under each id that builds M: `pqz-stmt` parse + encode byte-equal, proved
+(PQZL by the C core, PQZH by Ligero), `…01` through the precompile, the PQZL generic verifier agreeing, a
+`recipientsHash` bit flip `…00`: 50 cases (C 14, Ligero 36), 0 failures; `kat_multi.py` (pqz_kat.py) rebuilds the 6
+C statements with the PQZH id and re-encrypts every ciphertext from the C witnesses: ok.
+
+| op 7 proof bytes [measured] | (1, on) | (1, off) | (2, on) | (2, off) | (4, on) | (4, off) | (8, on) | (8, off) |
+|---|---|---|---|---|---|---|---|---|
+| PQZL | 42,716 | 42,426 | 43,604 | 42,919 | 45,275 | 43,932 | 61,794 | 58,975 |
+| PQZH (exact bound) | 232,494 (235,470) | 232,248 (234,744) | 231,256 (235,470) | 232,078 (235,470) | 232,708 (236,196) | 232,494 (235,470) | — | — |
+
+Open: no op 7 disclosure-bundle (§5.4) vectors, `pqz-stmt` has no codec for that bundle yet (S7 / P6g).
+
 ## Measured (2026-10-13, this machine, single thread)
 
 Native: clang -O2, `pqz_bench 5 5` under `scripts/capped` (5 proves, 5 + 5 honest verifies, 10 adversarial). wasm32:
