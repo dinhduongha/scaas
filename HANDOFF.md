@@ -1,3 +1,11 @@
+## Session 2026-10-17 (early) — resume here
+
+**State:** main `b547e3d`+ pushed. **S5 merged** (`p6-anon-s5`): 2-hour campaigns per target with op 7, no finding — precompile 3,012,684 execs (205,263 op 7 decoded), mutate 192,360 (473 SV = generic differentials, 108 op 7), codec 1,103,090 (137,333 PQZL proofs re-encoded byte-equal); arena peak 268,240,256 B (ARENA_SMALL 512 MiB). A machine reboot (2026-10-16 20:07) stopped the first precompile campaign after ≈ 42 min (log `-interrupted`, no finding); re-run in full. docs_check 0 errors. 7622 node restarted after the reboot (head advancing, PQZ-START ok).
+
+**Side discussion (owner, no decision):** cross-chain transfer by an attesting UA m-of-n group (lock / burn → group signs → anyone relays → mint), Zether / PQZ ciphertexts credited without a proof on the destination, on-chain `attest` + timeout refund, bonded signers (6-month exit, destination epochs expire). Private draft `scratchpad/crosschain-bridge-draft.md`; ordered after the freeze / gates / P6h–P6j.
+
+**Next:** layout move + spec rename (re-check `docs/superpowers/plans/2026-10-15-pqz-core-layout.md` against today's tree: `nethermind/`, `params/anon/`, fuzz `regress/`) → S6 from `fdfc3ce` written against the new layout, in parallel the PQZL → Rust port plan (docs only) → S8 → S7 → gates A / B → freeze → Rust port.
+
 ## Session 2026-10-16 (evening) — resume here
 
 **State:** main `86a688e` (local, not pushed). 7622 node started after power-on (head advancing, `PQZ-START` selftest `ed910a2c…d205`). Stale worktrees s3 / s4 / s9 / p6g / oog removed (branches kept).
