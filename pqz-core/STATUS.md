@@ -604,6 +604,10 @@ C statements with the PQZH id and re-encrypts every ciphertext from the C witnes
 
 Open: no op 7 disclosure-bundle (§5.4) vectors, `pqz-stmt` has no codec for that bundle yet (S7 / P6g).
 
+## Op 7 in the reproducibility package, P6-ANON S6 (branch `p6-anon-s6b`; plan D14, D21)
+
+`artifact/reproduce.sh` replays every built `R_TXM` of both ids in its default stages and has a new `--multi-bench` mode (the op 7 measurement table: PQZL by `research/pqzl-measure/txm-bench.sh`, PQZH by `ligero_bench` / `run_wasm.mjs` txm). `expected-results.json` regenerated once (`results.py freeze-txm`: only `txm` and `ffi.digest_lines`). Docker on the new layout (2026-10-17, AMD Ryzen 5 7235HS): quick PASS 199 ok after the regeneration; `--multi-bench` PASS (29 checks, 44 min) — PQZL proof max 42,784 / 43,616 / 45,295 / 61,822 B for M = 1 / 2 / 4 / 8 with the auditor, SV p99 portable 7.8–13.6 ms, wasm32 13.2–23.1 ms; PQZH proof max 233,102 / 232,526 / 233,604 B for M = 1 / 2 / 4, verify p99 native 9.9–10.9 ms, wasm32 18.5–20.4 ms (full table `artifact/README.md`, logs `artifact/runs/s6-docker-{quick,multi}/`).
+
 ## Measured (2026-10-13, this machine, single thread)
 
 Native: clang -O2, `pqz_bench 5 5` under `scripts/capped` (5 proves, 5 + 5 honest verifies, 10 adversarial). wasm32:
