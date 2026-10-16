@@ -704,19 +704,42 @@ Above the rated load: a second node on **different chains**, not a bigger store.
   `ua_metatx` (v3) jobs, with the node-computed digest over the token's domain, idempotency and lanes unchanged; the
   token row has `kind = pqz`. Job kind `pqz_call` is for **direct open calls** only: `{chain, contract, selector ∈
   {pqzTransfer, pqzUnshield, pqzRollOver}, calldata}` (direct `pqzShield` pulls the caller's underlying, so it is never a node
-  job). For all three: the contract must be a configured PQZ token; pre-simulation by `eth_estimateGas` on a
-  **follower**, never the signer (fails ⇒ job rejected, no gas spent); `max_gas_per_tx = 16_000_000` on chain 7622 (the
+  job; with the multi-recipient transfer, P6-ANON, `pqzTransfer*` is op 7 with M ≥ 1 recipients and the single-recipient
+  `pqzTransferSingle*` (op 1) joins the set, each with its `Compact` / `NoBundle` variants). For all: the contract must be a configured PQZ token; pre-simulation by `eth_estimateGas` on a
+  **follower**, never the signer (fails ⇒ job rejected, no gas spent; op 7 is pre-simulated the same way); `max_gas_per_tx = 16_000_000` on chain 7622 (the
   default 3,000,000 already rejects classical Zether transfers at 3.36 M); never batched (`PqzToken` has no
   `mtxBatch`). Gateway body limit 1 MiB on job submissions to the `pqz` chain profile only (a v3 transfer job is ≈ 170
-  KB as hex).
+  KB as hex; the gateway's global limit stays 64 KiB). **Checked for op 7 (P6-ANON S9, 2026-10-16) — all unchanged**, against the largest
+  call of each id within 16 M gas [estimate: measured proof sizes, precompile gas scaled from the live op 1 rows,
+  `pqz-core/params/anon/s9_limits.py`]: PQZL M = 8 + 16 inline credits 383,108 B of calldata, ≈ 14.6 M gas; PQZH M = 4
+  + 10 inline 440,356 B, ≈ 15.9 M (floor-bound; 11 inline need 16.4 M, over this cap, under EIP-7825's 16,777,216). As
+  hex the largest job is ≈ 0.88 MB (≈ 0.92 MB at 11 inline), under 1 MiB (1.19×). No inline credit: PQZL M = 8 ≈ 10.4
+  M, PQZH M = 4 ≈ 10.7 M; ≥ 5 such calls per 80 M block.
 - Optional rollover keeper: per configured PQZ token, when an account has ≥ 16 unrolled credits **older than
   `KEEPER_AGE = 24` blocks** (2 min) and the chain is idle, submit `pqzRollOver` of those old credits only, with
   ciphertexts from logs (anyone may; it is harmless). A proof in flight chose `p ≥` every credit older than its own
   state read, so the keeper never pushes `rolled` more than 16 past it. Clients prove at `p = pendingCount` and, on
   `InlineTooFar`, refresh state and re-prove once.
+- **P6i, multi-recipient transfer (op 7, P6-ANON; SPECIFIED):**
+  - Indexer: normalizes `PqzTransferMulti(entryRef, fromUA, recipientsHash, M, out)` and its M per-leg
+    `PqzCredit(ua, index, entryRef)` (`PqzTransfer` + one `PqzCredit` for op 1, as today). Leg j's credit ciphertext is
+    `u_{⌊j/4⌋} ‖ v_j` sliced from `out` (`out = u_0 … u_{G−1} ‖ v_0 … v_{M−1} ‖ v_f ‖ [v_{a,0} … v_{a,M−1}]`,
+    `G = ⌈M/4⌉`); legs are matched by log order (P6g emits the `PqzCredit`s in leg order), and the indexer checks
+    `keccak256` of the matched UAs (32-byte words in leg order) `== recipientsHash` and each
+    `keccak256(u_{g(j)} ‖ v_j)` against the pending slot it rebuilds; a mismatch is an integrity alert
+    ([NODE-OPS-12](#NODE-OPS-12)), never a silent skip. Decoy legs (`Enc(0)`) are indistinguishable and indexed like
+    real ones.
+  - Keeper: the age-gated rule above, unchanged, over **every** credit including decoy ones (it cannot tell them
+    apart): same `KEEPER_AGE = 24`, ≥ 16 old credits, idle chain, funded from the same lane budget as other roll-overs.
+    Load: a transfer with M legs adds M credits, so up to M later roll-over shares (≈ 0.55 M gas per credit, ≈ 8.9 M
+    per 16): PQZL M = 8 ≈ 4.4 M of keeper gas per transfer, PQZH M = 4 ≈ 2.2 M [estimate]; series
+    `scaas_gas_cost_native_total{namespace}` ([NODE-OPS-11](#NODE-OPS-11)) carries it.
+  - `pqz_call` pre-simulates op 7 on the follower like op 1 (above); the limits above already cover the largest op 7
+    call of each id.
 - **The PQZ node** (P6f, [chain integration](../contracts/pq-zether.md#chain-integration)): image
   `scaas/nethermind-pqz:1.39.0-pqz1`; `config.json` `TxPool.MaxTxSize` 1,048,576 (a PQZH transfer is 345,221 B with
-  framing) and `Blocks.TargetBlockGasLimit` 80,000,000 (Clique moves the limit ≈ 0.1 % per block: 16.78 M → 80 M in
+  framing; the largest op 7 transaction within 16 M gas ≈ 440 KB, 2.38× under it, S9; the follower proxy's
+  `client_max_body_size` 2 MiB takes its hex raw transaction, ≈ 0.88 MB) and `Blocks.TargetBlockGasLimit` 80,000,000 (Clique moves the limit ≈ 0.1 % per block: 16.78 M → 80 M in
   ≈ 1,600 blocks ≈ 2.2 h); the chainspec carries `engine.Pqz`. Health after any start: the log line `PQZ-START`
   (library SHA-256 = the image label `scaas.pqz.ffi.sha256`, self-test hash `ed910a2c…d205`, the schedules, the
   addresses), no `PQZ-REFUSE`. A node fault (D4: arena, worker) logs `PQZ-NODE-FAULT` and **exits with code 120**: the
