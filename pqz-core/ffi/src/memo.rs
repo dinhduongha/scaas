@@ -57,7 +57,7 @@ pub fn seal(key_seed: &[u8], header: &[Word; 20], aud: bool, legs: &[(u64, Word)
 /// [`seal`] backwards (the salt from the memo, the rest of the key's inputs from `header`): `(auditorOn, legs)`;
 /// `None` for a length that is not `18 + 40·M`, an M byte that disagrees with it, or a flags byte other than 0 / 1.
 pub fn open(key_seed: &[u8], header: &[Word; 20], memo: &[u8]) -> Option<(bool, Vec<(u64, Word)>)> {
-    if memo.len() < memo_len(1) || (memo.len() - 18) % 40 != 0 {
+    if memo.len() < memo_len(1) || !(memo.len() - 18).is_multiple_of(40) {
         return None;
     }
     let ks = stream(key_seed, header, &memo[..16], memo.len() - 16)?;
