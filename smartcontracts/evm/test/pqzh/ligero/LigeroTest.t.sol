@@ -124,7 +124,7 @@ contract LigeroTest is Test {
     }
 
     /// pqzh client::mutate kinds, adapted to this proof format (field_noncanon: an F_q element of the proof + q)
-    function mutate(uint256 kind, uint8 o, bytes memory st, bytes memory pf, bytes memory other)
+    function mutate(uint256 kind, uint8 o, bytes calldata st, bytes calldata pf, bytes calldata other)
         internal
         returns (bytes memory s, bytes memory p)
     {
@@ -190,6 +190,20 @@ contract LigeroTest is Test {
         }
     }
 
+    /// one mutation in its own call frame: EVM memory is never freed within a frame, so 108 copies of statement +
+    /// proof (up to ~0.33 MB each) in the test's frame cost quadratic memory gas (MemoryOOG at forge's 2^30 gas limit)
+    function mutateAndCheck(
+        uint256 kind,
+        uint8 o,
+        bytes calldata st,
+        bytes calldata pf,
+        bytes calldata other,
+        LigeroVerifier.Params memory pp
+    ) external returns (bool, bool) {
+        (bytes memory s, bytes memory p) = mutate(kind, o, st, pf, other);
+        return rejects(o, s, p, pp);
+    }
+
     function mutations(string memory rel, string memory pre, uint256 perKind) internal {
         uint8 o = op(rel);
         bytes memory st = file(string.concat(rel, "-", pre, ".stmt"));
@@ -200,23 +214,31 @@ contract LigeroTest is Test {
         uint256 reverts;
         for (uint256 kind; kind < 12; ++kind) {
             for (uint256 i; i < perKind; ++i) {
-                (bytes memory s, bytes memory p) = mutate(kind, o, st, pf, other);
-                (bool rej, bool rev) = rejects(o, s, p, pp);
+                (bool rej, bool rev) = this.mutateAndCheck(kind, o, st, pf, other, pp);
                 assertTrue(rej, string.concat("mutation accepted, kind ", vm.toString(kind)));
                 if (rev) ++reverts;
             }
         }
-        // the other statement's proof verifies against its own statement (st with byte 64 flipped, hashed only)
-        bytes memory st2 = bytes.concat(st);
-        st2[64] ^= 0x80;
-        assertTrue(ver.verify(o, st2, other, pp), "other statement's proof");
-        // wrong op
-        (bool r2,) = rejects(o == 1 ? 3 : 1, st, pf, pp);
-        assertTrue(r2);
         console2.log(string.concat(
             '{"rel": "', rel, '", "preset": "', pre, '", "mutations": ', vm.toString(12 * perKind),
             ', "accepted": 0, "reverts": ', vm.toString(reverts), "}"
         ));
+    }
+
+    /// kind 9's proof (the other statement's) is honest for its own statement, and the right proof under the wrong op
+    /// is rejected. A test of its own: the honest verify (up to 0.71 G gas) and the 108 mutations do not fit one
+    /// test under forge's default 2^30 gas limit.
+    function otherAndWrongOp(string memory rel, string memory pre) internal {
+        uint8 o = op(rel);
+        bytes memory st = file(string.concat(rel, "-", pre, ".stmt"));
+        LigeroVerifier.Params memory pp = params(rel, pre);
+        // the other statement's proof verifies against its own statement (st with byte 64 flipped, hashed only)
+        bytes memory st2 = bytes.concat(st);
+        st2[64] ^= 0x80;
+        assertTrue(ver.verify(o, st2, file(string.concat(rel, "-", pre, ".other")), pp), "other statement's proof");
+        // wrong op
+        (bool r2,) = rejects(o == 1 ? 3 : 1, st, file(string.concat(rel, "-", pre, ".proof")), pp);
+        assertTrue(r2);
     }
 
     function test_mutations_reg_proven() public {
@@ -245,6 +267,34 @@ contract LigeroTest is Test {
 
     function test_mutations_tx_johnson() public {
         mutations("tx", "johnson", 9);
+    }
+
+    function test_other_reg_proven() public {
+        otherAndWrongOp("reg", "proven");
+    }
+
+    function test_other_tx_proven() public {
+        otherAndWrongOp("tx", "proven");
+    }
+
+    function test_other_tx0_proven() public {
+        otherAndWrongOp("tx0", "proven");
+    }
+
+    function test_other_reg_conj() public {
+        otherAndWrongOp("reg", "conj");
+    }
+
+    function test_other_tx_conj() public {
+        otherAndWrongOp("tx", "conj");
+    }
+
+    function test_other_reg_johnson() public {
+        otherAndWrongOp("reg", "johnson");
+    }
+
+    function test_other_tx_johnson() public {
+        otherAndWrongOp("tx", "johnson");
     }
 
     function rejected(uint8 o, bytes memory s, bytes memory p, LigeroVerifier.Params memory pp) internal view returns (bool r) {
