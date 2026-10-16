@@ -14,7 +14,7 @@ the pre-fix transcript (v1) and keep their numbers as the "before"; where the v2
 
 ## 0. On the fixed transcript (`proofSystemId` v2), all five relations
 
-`pqz-sv-relfix` = `pqz-sv-rel3` + main (the relation fix-ups: `R_TX` on the pq-zether.md §7.7 layout, the 32-byte
+`pqz-sv-relfix` = `pqz-sv-rel3` + main (the relation fix-ups: `R_TX` on the pq-zero-knowledge.md §7.7 layout, the 32-byte
 disclosure `kind` word, ABDLOP keys built at an op's first use; and `pqz-v2`: the two LaZer `tbox` Schwartz–Zippel
 fixes, [lazer#24](https://github.com/lazer-crypto/lazer/issues/24) P6-SZ and
 [lazer#25](https://github.com/lazer-crypto/lazer/issues/25) P6-L2, under `proofSystemId` v2). The specialised verifier
@@ -325,9 +325,9 @@ per-relation peaks are read from a run of that relation alone.
 | `R_REG` verify, native / wasm | 166 / 204 ms | 3.97 / 5.9 ms (p50) |
 | Arena per verify, `R_REG` / `R_TX` | 81 / 273 MB | 1.06 / 1.67 MB (+ 9.1 MB tables once) |
 | `R_BURN` / `R_DS` / `R_DR` verify, native p50 | 571 / 219 / 221 ms | 7.69 / 4.17 / 4.37 ms |
-| Relations | any, from the generated parameters | the five of pq-zether.md §9.1, hand-written (§3) |
+| Relations | any, from the generated parameters | the five of pq-zero-knowledge.md §9.1, hand-written (§3) |
 
-**Coverage of the precompile ops** (pq-zether.md §9.1). Rollover carries no proof.
+**Coverage of the precompile ops** (pq-zero-knowledge.md §9.1). Rollover carries no proof.
 
 | op | Relation | In `pqz-core` | Specialised verifier |
 |---|---|---|---|

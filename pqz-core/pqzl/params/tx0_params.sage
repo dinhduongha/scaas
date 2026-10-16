@@ -1,4 +1,4 @@
-# R_TX0 (pq-zether.md §7.4, CTR-PQZ-24 auditor off: no pk_a / v_a, row 5 skipped; P6e D8): witness
+# R_TX0 (pq-zero-knowledge.md §7.4, CTR-PQZ-24 auditor off: no pk_a / v_a, row 5 skipped; P6e D8): witness
 # s1 = s_f, e_f, r, e1 (32 polys each), e2_t, e2_f (1 poly each, 16 used coefficients),
 # 15 binary polys (917 used bits: d, d', M, c, e_T, as R_TX).
 pqz_verbose = 1

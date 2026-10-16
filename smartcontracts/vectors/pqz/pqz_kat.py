@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Independent PQZ KAT (pq-zether.md §4, §5, §7; P6e plan Task 4). Python 3 stdlib only (hashlib SHAKE, an own
+"""Independent PQZ KAT (pq-zero-knowledge.md §4, §5, §7; P6e plan Task 4). Python 3 stdlib only (hashlib SHAKE, an own
 Keccak-256 checked against hashlib's SHA3 permutation): no numpy, no third-party package, runs under `python3 -I`.
 
 Implements everything of PQZL except the proofs: the matrix A (SHAKE128 "SCAAS-PQZ-A-V2"), CBD, KeyGen, Enc, Dec,

@@ -1,5 +1,5 @@
 /*
- * pqz-core keys and encryption from seeds (pq-zether.md §4.2; P6e gap G4): CBD_eta, KeyGen(seed32),
+ * pqz-core keys and encryption from seeds (pq-zero-knowledge.md §4.2; P6e gap G4): CBD_eta, KeyGen(seed32),
  * Enc({(pk_j, m_j)}, seed_enc), Dec. Each attempt reads one SHAKE256 stream, tag || seed || be4(ctr), bits LSB-first
  * (FIPS 203 style): s then e (KeyGen), r, e1, then e2_j in recipient order (Enc); an attempt above a norm threshold
  * is resampled with the next counter, counter 64 is an error. The ring work is pqz_rel.c's (pqz_keypair_from_secret,
@@ -95,7 +95,7 @@ cbd16 (bits_t *b, int16_t *x, unsigned n)
   return s;
 }
 
-/* every be8 coefficient < q (pq-zether.md §5: anything else is NonCanonical) */
+/* every be8 coefficient < q (pq-zero-knowledge.md §5: anything else is NonCanonical) */
 static int
 canonical (const uint8_t *p, size_t n)
 {

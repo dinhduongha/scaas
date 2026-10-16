@@ -124,7 +124,7 @@ dimensions stay; only the number of challenges drawn from each domain grows from
 
 **Transcript change.** v1 and v2 proofs do not verify against each other (the challenges differ). The PQZL
 `proofSystemId` moved to `keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v2")` together with the second fix
-(`pqz-l2-domain.md`), one bump for both (pq-zether.md §8, CTR-PQZ-09; `pqz-core/STATUS.md` "proofSystemId v2" has the
+(`pqz-l2-domain.md`), one bump for both (pq-zero-knowledge.md §8, CTR-PQZ-09; `pqz-core/STATUS.md` "proofSystemId v2" has the
 `proofs_fnv` table, v1 → v2, for all five relations) [measured]. The specialised verifier (`pqz_sv.c`) follows the
 same derivation in `sz_eval_challenges` (`pqz-specialised-verifier.md` §0).
 
@@ -158,7 +158,7 @@ times moved within the host's noise (`pqz-core/STATUS.md`, v2 section) [measured
   is retired; the precompile accepts only the ids it implements (CTR-PQZ-09) [code].
 - **v1 proofs** were sound only to ≈ 2^-84 for the binary, digit, range, slack and norm equations of every relation,
   instead of ≈ 2^-127. No PQZ number other than the knowledge error depended on it: parameters, sizes and the noise
-  budget (pq-zether.md §4.3) are unchanged by this fix [inference].
+  budget (pq-zero-knowledge.md §4.3) are unchanged by this fix [inference].
 - **v2** restores the stated knowledge error; the codegen's figure is now correct for the code that runs.
 
 ## 7. Files

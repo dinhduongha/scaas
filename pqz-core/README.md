@@ -8,7 +8,7 @@ not a general-purpose ZK system.
 
 > **Status:** built and measured, **unaudited, not for production funds**. Numbers are provisional until the freeze after
 > gates A / B. The dated log of every change and run is [STATUS.md](STATUS.md); the spec is
-> [pq-zether.md, "Proof engine"](../docs/contracts/pq-zether.md#proof-engine).
+> [pq-zero-knowledge.md, "Proof engine"](../docs/contracts/pq-zero-knowledge.md#proof-engine).
 
 ## Contents
 
@@ -53,15 +53,15 @@ grows to 512 MiB (owner 2026-10-16).
 
 PQZ keeps the classical Zether shape — identities visible, **amounts and balances encrypted**, the fee a public number,
 sender / receiver / auditor disclosure — but rebuilt on module-lattice assumptions, so a quantum adversary can neither
-read balances later nor forge proofs and mint ([overview](../docs/contracts/pq-zether.md#overview)).
+read balances later nor forge proofs and mint ([overview](../docs/contracts/pq-zero-knowledge.md#overview)).
 
-- **Encryption** ([spec](../docs/contracts/pq-zether.md#encryption)): additive module-LWE with BFV-style scaling Δ and digit-packed plaintext, over
+- **Encryption** ([spec](../docs/contracts/pq-zero-knowledge.md#encryption)): additive module-LWE with BFV-style scaling Δ and digit-packed plaintext, over
   `R_q = Z_q[X]/(X^64 + 1)` with q = 2^42 − 215 and vectors of 32 ring elements. Public key 16,384 B, ciphertext
-  16,512 B. KeyGen / Enc / Dec are deterministic from seeds (SHAKE256, [algorithms](../docs/contracts/pq-zether.md#42-algorithms)): in C (`src/pqz_keys.c`) and in Rust
+  16,512 B. KeyGen / Enc / Dec are deterministic from seeds (SHAKE256, [algorithms](../docs/contracts/pq-zero-knowledge.md#42-algorithms)): in C (`src/pqz_keys.c`) and in Rust
   (`pqz-ffi` feature `prove`), checked against the independent Python `smartcontracts/vectors/pqz/pqz_kat.py`.
-- **Accounts** ([protocol](../docs/contracts/pq-zether.md#protocol)): one registered public key per `(UA, token)`; balances as ciphertext hashes in storage,
+- **Accounts** ([protocol](../docs/contracts/pq-zero-knowledge.md#protocol)): one registered public key per `(UA, token)`; balances as ciphertext hashes in storage,
   ciphertext bytes in calldata and events.
-- **Relations** ([protocol](../docs/contracts/pq-zether.md#protocol)): each operation proves knowledge of the secrets behind a statement, with exact ℓ2 norms and
+- **Relations** ([protocol](../docs/contracts/pq-zero-knowledge.md#protocol)): each operation proves knowledge of the secrets behind a statement, with exact ℓ2 norms and
   bit ranges:
   - key well-formedness — `R_REG`;
   - a transfer's encryption, norms, digit carries and balance — `R_TX`, `R_TX0`;
@@ -128,9 +128,9 @@ Chain 22776 (the future mainnet) gets the same addresses only after the audit an
 
 ## 4. Statement forms, ids, limits
 
-Every statement starts with `opTag ‖ proofSystemId` (64 bytes) and a 640-byte header ([statement layout](../docs/contracts/pq-zether.md#77-statement-layout)). Every byte
+Every statement starts with `opTag ‖ proofSystemId` (64 bytes) and a 640-byte header ([statement layout](../docs/contracts/pq-zero-knowledge.md#77-statement-layout)). Every byte
 layout — statements, objects, both proof formats, the precompile input and `OP_SELFTEST` — is in
-[pq-zether.md, "Serialization v1"](../docs/contracts/pq-zether.md#serialization).
+[pq-zero-knowledge.md, "Serialization v1"](../docs/contracts/pq-zero-knowledge.md#serialization).
 
 | op | Form | Relation | Statement B | What it proves |
 |---|---|---|---|---|
@@ -588,7 +588,7 @@ Open items (arena exhaustion, global state, secret zeroing, `check_symbols.sh` o
 
 | Topic | Read |
 |---|---|
-| Spec | [pq-zether.md](../docs/contracts/pq-zether.md) — [encryption](../docs/contracts/pq-zether.md#encryption), [protocol](../docs/contracts/pq-zether.md#protocol), [proof engine](../docs/contracts/pq-zether.md#proof-engine), [serialization](../docs/contracts/pq-zether.md#serialization) |
+| Spec | [pq-zero-knowledge.md](../docs/contracts/pq-zero-knowledge.md) — [encryption](../docs/contracts/pq-zero-knowledge.md#encryption), [protocol](../docs/contracts/pq-zero-knowledge.md#protocol), [proof engine](../docs/contracts/pq-zero-knowledge.md#proof-engine), [serialization](../docs/contracts/pq-zero-knowledge.md#serialization) |
 | PQZL | `docs/research/pqz-core-e-s1.md` (the spike write-up), `pqz-specialised-verifier.md`, `pqz-verifier-floor.md`, `pqz-relations-burn-disclose.md`, `pqz-tbox-soundness.md`, `pqz-l2-domain.md`, `pqz-z21-norm.md`, `pqz-parameters-e-s0.md` |
 | PQZH | `docs/research/pqzh-ligero.md`, `pqzh-backend-comparison.md`, `pqzh-design.md`, `pqzh-prototype.md`, `pqzh-zk-ext5.md`, `pqzh-zk-whir.md`, `pqzh-solidity-verifier.md`, `pqzh-starkex-verifier.md` |
 | Node | [nethermind/README.md](nethermind/README.md) (plugin, image, gas), [nethermind/chain/RUNBOOK.md](nethermind/chain/RUNBOOK.md) (copy gate, live roll-out, rollback) |

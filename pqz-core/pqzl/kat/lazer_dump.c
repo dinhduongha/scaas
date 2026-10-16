@@ -1,5 +1,5 @@
 /*
- * Arithmetic-layer KAT dump (pq-zether.md CTR-PQZ-09: the cross-check against upstream LaZer).
+ * Arithmetic-layer KAT dump (pq-zero-knowledge.md CTR-PQZ-09: the cross-check against upstream LaZer).
  *
  * One source, two backends: built against upstream LaZer 3330e48 (build-lazer-dump.sh, static binary for any
  * AVX-512 machine or Intel SDE) it writes the golden file kat/lazer-3330e48.json; built against pqz-core

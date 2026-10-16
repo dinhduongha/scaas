@@ -3,7 +3,7 @@
 Skeleton code = the gas of test/pqzh/Pqzh.sol PqzhSkeleton on the shape (unpruned paths), from the units
 fitted to its three measured runs; floor = a hand-scheduled verifier counted by opcodes (model.py).
 Tx = 21,000 + max(4 tokens + execution, 10 tokens) (EIP-7623), execution = verify + the op's other
-execution (pq-zether.md §9.3); cap 16,777,216 (EIP-7825). Calldata incl. the op's non-proof bytes.
+execution (pq-zero-knowledge.md §9.3); cap 16,777,216 (EIP-7825). Calldata incl. the op's non-proof bytes.
 
 ## R_TX, every configuration
 

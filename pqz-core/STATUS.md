@@ -80,7 +80,7 @@ byte). KAT 19/19 after every step, symbol scan clean (native and wasm), tampered
 Medians: native `pqz_bench 5 5`, wasm `run_wasm.mjs 3 1`, every run under `scripts/capped`; raw JSON in `opt/runs/`
 (`opt/bench.sh`, `opt/prof.sh` gprof, `opt/asan.sh`, microbenches `opt/micro_basemul.c`, `opt/micro_aes.c`). The steps
 were measured in one session, the host is noisy (±20 %), so differences under ~10 % are not resolved (steps 5, 9 native
-prove). Not done, with the reason: asserts stay on (pq-zether.md §10: release builds keep the invariant checks; ~4 %);
+prove). Not done, with the reason: asserts stay on (pq-zero-knowledge.md §10: release builds keep the invariant checks; ~4 %);
 `-O2` portable kept (§10); no AVX2 backend (the base multiplication is ~7 % of the R_TX profile now); no integer CRT
 multiplication and no Karatsuba on the polynomials (the microbench: Karatsuba with u128 sums is slower than the
 column kernel).
@@ -135,7 +135,7 @@ blocks, no sparse matrices), 4 × 30-bit CRT primes with a complete NTT, table-b
 
 ## R_BURN, R_DS, R_DR (branch `pqz-rel3`)
 
-The three remaining relations (pq-zether.md §7.5, §7.9) through the same `pqz_prove` / `pqz_verify`: specs
+The three remaining relations (pq-zero-knowledge.md §7.5, §7.9) through the same `pqz_prove` / `pqz_verify`: specs
 `params/{burn,ds,dr}_params.sage`, builders in `src/pqz_rel.c` (`R_BURN` shares the `R_TX` builder), statements as
 §7.7 / §7.9 (burn 50,048 B, disclosure 33,153 B), runs `rel3/runs/`. All six tamper kinds rejected, KAT 19/19,
 `R_REG` / `R_TX` `proofs_fnv` unchanged, symbol scan clean. The keys of all five relations lived in the arena base:
@@ -245,7 +245,7 @@ seeds = wasm 5 seeds; one seed alone: native = wasm generic = wasm fast = wasm w
 | `R_DS` | `46c77f3e` → `dac15c76` → **`b4aa2e26`** | `216b75fc` → `3c9cde98` → **`f39a8e64`** | `f4b59d4b` → `4f4a10ab` → **`5429242c`** | `d7fbc082` → `3f530c3f` → **`9eb44281`** | `10639246` → `4075f5f5` → **`478a0d94`** |
 | `R_DR` | `84a15cd2` → `37a226ae` → **`c800f2c6`** | `e0d2deda` → `78688027` → **`96a6e906`** | `ea72ce2d` → `2da4e9b2` → **`e53ad440`** | `22be6479` → `2d06acff` → **`5bb0078c`** | `82621a18` → `7db4b018` → **`cb2f3ced`** |
 
-## KeyGen / Enc / Dec from seeds P6e Task 3 (branch `p6e-a1`; pq-zether.md §4.2, P6e plan gap G4)
+## KeyGen / Enc / Dec from seeds P6e Task 3 (branch `p6e-a1`; pq-zero-knowledge.md §4.2, P6e plan gap G4)
 
 `src/pqz_keys.c` (ABI in `pqz.h`): `pqz_keygen(seed32, pk, s, e, &ctr)`, `pqz_enc_seed(pks, n, msgs, seed_enc, u, vs,
 r, e1, e2, &ctr)`, `pqz_dec(s, ct, M, noise)`, §4.2 literally: one SHAKE256 stream per counter (`SCAAS-PQZ-KEYGEN-V1`
@@ -477,7 +477,7 @@ the norm bounds (s = 36 at poly 1 coefficient 0, e = 164 at poly 0 coefficient 0
 in both systems); a credit with r = 36 along rot(e), e1 = −164 against rot(s), e2_t = (64, 0, …) has noise exactly
 B_FRESH = 11,872, and its sender's `R_TX` (e2_t at PQZL's B′ = 64 filler) proves and verifies in both systems (credit 0
 and the last); `T` = 1,023 such credits + the plain unit (noise 0): noise 12,145,056, margin 1.38× to 2^24, 4.14× to the
-mint threshold Δ − 2^24; the receiver's debit over `T` proves and verifies in both systems. pq-zether.md §4.3 notes the
+mint threshold Δ − 2^24; the receiver's debit over `T` proves and verifies in both systems. pq-zero-knowledge.md §4.3 notes the
 reachable maximum (12,156,928 counts 1,024 units). The honest-key construction stays as `illustrative` (10,254,552).
 
 Run `scripts/capped pqz-core/ffi/vectors/run.sh vec3 write` [measured] (`ffi/vectors/runs/vec3-*`; `vec1-*` = the
@@ -514,7 +514,7 @@ already known (Open 2).
 
 ## Spec: serialization v1, P6e Task 12 (branch `p6e-a6`; plan D2, D4, D7, D12, D14, D15)
 
-Docs only, no code change. [pq-zether.md §8.1 "Serialization v1"](../docs/contracts/pq-zether.md#serialization) now
+Docs only, no code change. [pq-zero-knowledge.md §8.1 "Serialization v1"](../docs/contracts/pq-zero-knowledge.md#serialization) now
 specifies every byte this core, `pqz-stmt`, `pqz-ffi` and the Ligero crate exchange: the precompile framing and its
 check order, both ids and `MAX_PROOF(id)`, the 640-byte header word by word with the decoder's rule per form, every
 statement body with offsets (checked against `pqz_kat.py`'s `parse` on the vector statements), objects, bundle,
@@ -624,7 +624,7 @@ Kill criteria: **R_TX prove 1.10 s native meets the 6 s limit** (and the former 
 adversarial / honest verify ≈ 0.7 s against 50 ms, ≈ 14× (was ≈ 300×); upstream LaZer verifies the same R_TX in
 6.6 s (xcheck), so P6d-2 is ~9× faster than upstream there.
 
-Browser budgets (pq-zether.md CTR-PQZ-18, node not a browser, medians not p95): R_TX wasm prove 1.59 s against 5 s
+Browser budgets (pq-zero-knowledge.md CTR-PQZ-18, node not a browser, medians not p95): R_TX wasm prove 1.59 s against 5 s
 desktop / 15 s phone / 30 s hard limit (inside); wasm arena peak 241 MB = 230 MiB against 128 MiB budget (1.8×) /
 256 MiB hard limit (inside, 10 % margin); `pqz.wasm` 333 KB. wasm/native now 1.1–1.5×. No decision (owner).
 

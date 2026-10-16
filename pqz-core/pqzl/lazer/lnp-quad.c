@@ -149,7 +149,7 @@ lnp_quad_prove (uint8_t hash[32], polyvec_t tB, poly_t c, polyvec_t z1,
   rng_urandom (rngstate, yseed, 32);
 
   dom = 0;
-  /* PQZ: capped rejection loop (pq-zether.md CTR-PQZ-10: bounded loops; hitting the cap is an error) */
+  /* PQZ: capped rejection loop (pq-zero-knowledge.md CTR-PQZ-10: bounded loops; hitting the cap is an error) */
   for (unsigned int pqz_tries = 0;; pqz_tries++)
     {
       if (pqz_tries >= PQZ_REJ_MAX)

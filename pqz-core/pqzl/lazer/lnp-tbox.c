@@ -1622,7 +1622,7 @@ _lnp_tbox_compute_z34 (uint8_t hash[32], polyvec_t tB, polyvec_t z3,
   rng_init (rstate_rej, seed_tbox, dom++);
   rng_init (rstate_signs, seed_tbox, dom++);
 
-  /* PQZ: capped rejection loop (pq-zether.md CTR-PQZ-10: bounded loops; hitting the cap is an error) */
+  /* PQZ: capped rejection loop (pq-zero-knowledge.md CTR-PQZ-10: bounded loops; hitting the cap is an error) */
   for (unsigned int pqz_tries = 0;; pqz_tries++)
     {
       if (pqz_tries >= PQZ_REJ_MAX)

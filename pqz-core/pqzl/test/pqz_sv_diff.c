@@ -203,7 +203,7 @@ make_tx (void)
   const uint8_t *pks[3] = { KT.pk, KF.pk, KA.pk };
   pqz_encrypt (pks, 3, (const uint8_t (*)[16])m, r, e1, (const int16_t (*)[16])e2, u, vs);
 
-  uint8_t *p = tx_stmt; /* header (pq-zether.md §7.7): random bytes, proofSystemId, fee word, amount word 0,
+  uint8_t *p = tx_stmt; /* header (pq-zero-knowledge.md §7.7): random bytes, proofSystemId, fee word, amount word 0,
                            auditorOn 1 (P6e R6) */
   for (int i = 0; i < PQZ_HEADER_BYTES; i++)
     p[i] = (uint8_t)rnd ();

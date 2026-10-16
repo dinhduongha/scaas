@@ -813,7 +813,7 @@ seed) feeds the native prover or the organization's key oracle — PQ Zether pro
 existing `MetaTransaction` EIP-712 builder (address path, domain `("SCaaS PqzToken", "1", …)`) and the
 `UAMetaTransaction` builder (UA path, `salt = chainUid`) with `signUA('metatx', digest)` by the dedicated `mldsa65` fee UA — no new signing code; the UA kind
 vectors (`smartcontracts/vectors/ua/kinds.json`) gain the `pqz-mlwe` row (seed → pk, UA, keyHash). Protocol detail:
-[contracts/pq-zether](../contracts/pq-zether.md). SPECIFIED.
+[contracts/pq-zether](../contracts/pq-zero-knowledge.md). SPECIFIED.
 
 ## 12. Zether balance reading
 

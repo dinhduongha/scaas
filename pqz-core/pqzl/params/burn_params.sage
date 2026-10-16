@@ -1,4 +1,4 @@
-# R_BURN (pq-zether.md §7.5; also REFRESH): R_TX rows 1, 2, 4, 6, 7 with d = digits(amount) public.
+# R_BURN (pq-zero-knowledge.md §7.5; also REFRESH): R_TX rows 1, 2, 4, 6, 7 with d = digits(amount) public.
 # Witness s1 = s_f, e_f, r, e1 (32 polys each), e2_f (1 poly, 16 used coefficients),
 # 14 binary polys (853 used bits: d', M, c, e_T).
 pqz_verbose = 1

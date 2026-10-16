@@ -6,7 +6,7 @@
  * (upstream's) and accepted with probability exp(-x), x = ((k - c)^2 - (k - b)^2) / (2 * 1.55^2).
  * Changes: integer fixed-point x and exp (pqz_fixexp.h), a constant-time full scan of the CDF table,
  * per-iteration bits from the stream (upstream kept a static bit buffer across calls), a capped loop.
- * Upstream cannot reproduce these streams: KATs of masks are fork-generated (pq-zether.md CTR-PQZ-09).
+ * Upstream cannot reproduce these streams: KATs of masks are fork-generated (pq-zero-knowledge.md CTR-PQZ-09).
  */
 #include "grandom.h"
 #include "lazer.h"

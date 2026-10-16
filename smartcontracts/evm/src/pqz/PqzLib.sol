@@ -15,7 +15,7 @@ import {UAPqzVerifier} from "./UAPqzVerifier.sol";
 ///        `scaas.pqz`: statements, the precompile call, account updates, rollover, shield / burn, entries, disclosure.
 /// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** External library, run by `DELEGATECALL` (`address(this)` is the
 ///         token); the token keeps the public ERC-20 side and the entry points (`PqzLayer`). Byte layouts:
-///         pq-zether.md §7.4–§7.9 and §8.1. Ciphertexts are calldata and events, hashes in storage (CTR-PQZ-07). Every
+///         pq-zero-knowledge.md §7.4–§7.9 and §8.1. Ciphertexts are calldata and events, hashes in storage (CTR-PQZ-07). Every
 ///         statement is built once, in a buffer `u8(op) ‖ be32(len) ‖ stmt ‖ proof` that is the precompile input
 ///         (P6g D13); `authDigest = keccak256("SCAAS-PQZ-AUTH-V1" ‖ keccak256(stmt))` is checked by the registry
 ///         (`requireZetherAuthorized`, the `authRef`'s PQ signature) before the precompile.

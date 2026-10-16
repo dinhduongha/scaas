@@ -580,7 +580,7 @@ Aptos/Solana `PRUNE_DELAY_S`, Sui `LANE_HORIZON_S`, node `LANE_TTL_S`, the issue
 <a id="NODE-STO-10"></a>**NODE-STO-10** — `max_gas_per_tx` keeps its default of 3 000 000; registering a confidential
 token (classical Zether or post-quantum Zether) on a chain whose `max_gas_per_tx` is below that token kind's per-chain
 minimum (≥ 4 500 000 on classical Zether chains, relayed single-transfer gas limit 3 750 000 bn254 / 4 460 000 BLS12-381, [contracts/zether.md#gas-measured](../contracts/zether.md#gas-measured);
-16 000 000 on the post-quantum Zether chain, [contracts/pq-zether.md#verifier](../contracts/pq-zether.md#verifier)) is accepted with a warning
+16 000 000 on the post-quantum Zether chain, [contracts/pq-zero-knowledge.md#verifier](../contracts/pq-zero-knowledge.md#verifier)) is accepted with a warning
 and a `422`-free admin response field `warnings`, so the operator raises the cap before the first transfer.
 
 Also refused: an upgradeable program on a chain being activated ([NODE-STO-07](#NODE-STO-07)); the same public key in

@@ -25,7 +25,7 @@ lines. **[estimate]** marks a number computed from counts or bounds. **[inferenc
   carry the whole budget. Nothing else in the proof bounds the blocks tightly [inference].
 - PoC: a prover that pools the slack got over-bound `R_REG` and `R_TX` proofs accepted by the unmodified production
   verifier; with the fix the same proofs are rejected and honest proofs verify [measured].
-- PQZ before the fix (v1): the §4.3 noise budget (pq-zether.md) did not hold for accounts whose keys the attacker
+- PQZ before the fix (v1): the §4.3 noise budget (pq-zero-knowledge.md) did not hold for accounts whose keys the attacker
   controls; the minting margin of threat T5 shrank from 4.1× to ≈ 1.12×. No theft and no mint at the current
   parameters; honest accounts unaffected [estimate]. Nothing was deployed.
 - Fix: `dom + i` for equation i. With it, every exact-ℓ2 bound is checked on its own and the documented margins
@@ -107,13 +107,13 @@ The three `R_REG` cases were also accepted on the code before the first fix (`0d
 it [measured]. Proof sizes are those of honest proofs (28,071–28,085 B `R_REG`, 42,748 B `R_TX`).
 
 `tx_over` is the case that matters for PQZ: the sender aligns `(r, e1)` with a colluding recipient's key. The
-recipient's decryption noise on coefficient 0 is **36,861 = 3.10 × B_FRESH** (pq-zether.md §4.3 worst case 11,872);
+recipient's decryption noise on coefficient 0 is **36,861 = 3.10 × B_FRESH** (pq-zero-knowledge.md §4.3 worst case 11,872);
 over 1,023 credits that is 37.7 M, above the 2^24 = 16.78 M debit range and Δ/2 = 33.55 M [measured, ×1,023 an
 estimate].
 
 ## 5. Impact on PQZ before the fix (v1)
 
-The PQZ noise budget (pq-zether.md §4.3) is a worst case over **per-block** norms: registration proves ‖s‖ ≤ 36,
+The PQZ noise budget (pq-zero-knowledge.md §4.3) is a worst case over **per-block** norms: registration proves ‖s‖ ≤ 36,
 ‖e‖ ≤ 164, every encryption ‖r‖ ≤ 36, ‖e1‖ ≤ 164, ‖e2‖ ≤ 64, which gives
 B_FRESH = 164·36 + 36·164 + 64 = 11,872 per credit and ≤ 12.16 M over `K_MAX = 1024` units. In v1 only the sums
 were bound [estimate]:
@@ -124,7 +124,7 @@ were bound [estimate]:
   2^24 and beyond Δ/2. The spec's "an accepted state never fails to decrypt" was false for such accounts: their own
   funds could become undebitable or decrypt wrongly. Self-harm only; a decryption-failure oracle
   ([2024/127](https://eprint.iacr.org/2024/127)) would touch only keys the attacker owns.
-- **Minting stayed out of reach.** It needs |e| ≥ Δ − 2^24 ≈ 50.33 M (pq-zether.md §4.3, "soundness depends on
+- **Minting stayed out of reach.** It needs |e| ≥ Δ − 2^24 ≈ 50.33 M (pq-zero-knowledge.md §4.3, "soundness depends on
   accounting"); 45.0 M is below it. The documented margin of threat T5, 4.1× (50.33 M / 12.16 M), shrank to
   **≈ 1.12×** (50.33 M / 45.0 M). `K_MAX` ≳ 1,145, or about 5.3 M of other unaccounted noise, would have made a mint
   reachable [estimate].
@@ -133,7 +133,7 @@ were bound [estimate]:
   ≤ 262 · 20 per credit, ≤ ≈ 5.4 M over 1,023 credits, inside 2^24: honest accounts still decrypt and debit
   [inference].
 - **Registration.** A registered key could have ‖s‖ up to 167.9 (or ‖e‖ up to 167.9). Key uniqueness is unaffected:
-  its kernel argument (pq-zether.md §4.3) already uses the total 2·√(36² + 164²). The shared-randomness hint count
+  its kernel argument (pq-zero-knowledge.md §4.3) already uses the total 2·√(36² + 164²). The shared-randomness hint count
   (§4.5) is about the number of hints, not key shape, and is unchanged [inference].
 - **Proof-system claims.** MSIS and knowledge-error estimates are unchanged; they already use the total α.
 
@@ -158,7 +158,7 @@ in lazer#25):
 Shared by prove and verify. The ℓ2 domains become M + 2(d − 1) + 2 … M + 2(d − 1) + 1 + Z under `hash`: no collision
 (β3 / β4 / υ / binary are below; z4 / z3 use `hash0` and start at the reserved M + 2(d − 1) + 2 + Z) [code]. Cost: none
 measurable, the number of calls is the same. It changes the transcript; it shipped with the first fix as one
-`proofSystemId` bump to v2 (pq-zether.md §8; `proofs_fnv` table in `pqz-core/STATUS.md`). The specialised verifier
+`proofSystemId` bump to v2 (pq-zero-knowledge.md §8; `proofs_fnv` table in `pqz-core/STATUS.md`). The specialised verifier
 does the same (`pqz_sv.c`, ℓ2 loop with `dom + i`; `pqz-specialised-verifier.md` §0).
 
 ## 7. Regression checks

@@ -3,7 +3,7 @@
 Two Schwartz–Zippel findings in LaZer's `tbox` (`lazer/lnp-tbox.c`), confirmed by the LaZer maintainers and public as
 [lazer-crypto/lazer#24](https://github.com/lazer-crypto/lazer/issues/24) and
 [#25](https://github.com/lazer-crypto/lazer/issues/25). Both are fixed in the fork (`PQZ (P6-SZ)` / `PQZ (P6-L2)`
-comments); together they change the transcript, hence `proofSystemId` v2 (`src/pqz.h`, pq-zether.md §8).
+comments); together they change the transcript, hence `proofSystemId` v2 (`src/pqz.h`, pq-zero-knowledge.md §8).
 
 - **P6-SZ (#24).** `__schwartz_zippel_accumulate2` drew one challenge pair and reused it for all λ/2 accumulator pairs
   (2 independent tests instead of λ = 4). Fix: the full λ × M matrix, rows 2i / 2i+1 for pair i.

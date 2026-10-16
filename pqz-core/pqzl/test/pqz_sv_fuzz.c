@@ -91,7 +91,7 @@ setup (void)
   pqz_encrypt (pks, 1, (const uint8_t (*)[16])m, r, e1, (const int16_t (*)[16])e2, uT, vT);
   pqz_encrypt (pks, 3, (const uint8_t (*)[16])m, r, e1, (const int16_t (*)[16])e2, u, vs);
   uint8_t *p = tx_stmt;
-  memset (p, 0x5A, PQZ_HEADER_BYTES); /* pq-zether.md §7.7 header; fee and amount words 0, auditorOn 1 (P6e R6) */
+  memset (p, 0x5A, PQZ_HEADER_BYTES); /* pq-zero-knowledge.md §7.7 header; fee and amount words 0, auditorOn 1 (P6e R6) */
   memset (p + PQZ_HDR_FEE, 0, 64), memset (p + PQZ_HDR_AUDITOR_ON, 0, 32), p[PQZ_HDR_AUDITOR_ON + 31] = 1;
   memset (p + PQZ_HDR_SALT, 0, 16), memset (p + PQZ_HDR_RECIPIENT, 0, 32); /* canonical (P6e D15) */
   p += PQZ_HEADER_BYTES;

@@ -259,7 +259,7 @@ while True:       # searching for right gamma
 # Find exact values for q, q1 and gamma:
 done = false
 if 'q_fixed' in globals():
-    # PQZ: the proof modulus is the encryption modulus q (pq-zether.md CTR-PQZ-09
+    # PQZ: the proof modulus is the encryption modulus q (pq-zero-knowledge.md CTR-PQZ-09
     # "Proof modulus = q"), not a prime searched near 2^log2q. gamma: the largest
     # even divisor of q - 1 not above the MSIS-derived gamma.
     q = q1 = Integer(q_fixed)

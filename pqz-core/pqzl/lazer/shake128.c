@@ -50,7 +50,7 @@ shake128_clear (shake128_state_t state)
   _shake128_clear (state);
 }
 
-/* PQZ: SHAKE256 on the same Keccak core and state type (rate 136), for KeyGen / Enc from seeds (pq-zether.md §4.2,
+/* PQZ: SHAKE256 on the same Keccak core and state type (rate 136), for KeyGen / Enc from seeds (pq-zero-knowledge.md §4.2,
    src/pqz_keys.c); LaZer ships SHAKE128 only. */
 #define SHAKE256_RATE 136
 

@@ -12,7 +12,7 @@ Written 2026-10-11 for the owner: "With Zether, can the sender, the receiver and
 transaction, or every transaction of the token? This matters; it needs a document and a careful review. Give a table
 plus conditions." A follow-up asked whether there is an alternative to storing the 256-byte bundle, for example a
 per-transaction secret that can be recomputed later (§7). Review only: nothing here changes a rule. SCaaS facts cite
-rule ids of [contracts/zether.md](../contracts/zether.md) and [contracts/pq-zether.md](../contracts/pq-zether.md), and
+rule ids of [contracts/zether.md](../contracts/zether.md) and [contracts/pq-zero-knowledge.md](../contracts/pq-zero-knowledge.md), and
 code as `file:line` on `main` at `d85fc8b` (paths under `smartcontracts/evm/` unless stated). **[inference]** marks a
 conclusion drawn here, not stated by the spec or the code; **[estimate]** marks a gas figure not measured;
 **[unverified]** marks an outside claim not confirmed against a primary source.
@@ -401,7 +401,7 @@ CTR-ZTH-38 gas table, rev 6; BLS12-381 is in brackets.
 
 ## 8. Comparison
 
-### 8.1 PQ Zether (pq-zether.md) — short matrix
+### 8.1 PQ Zether (pq-zero-knowledge.md) — short matrix
 
 PQZ is SPECIFIED; nothing is built. It differs from classical where it matters for disclosure:
 
@@ -497,7 +497,7 @@ The bookkeeping inference of §4.5 applies to PQZ unchanged [inference].
 
 - Spec:
   - [contracts/zether.md](../contracts/zether.md): CTR-ZTH-09, -14, -20, -29, -30, -36…-46.
-  - [contracts/pq-zether.md](../contracts/pq-zether.md): CTR-PQZ-04, -07, -14, -19, -22.
+  - [contracts/pq-zero-knowledge.md](../contracts/pq-zero-knowledge.md): CTR-PQZ-04, -07, -14, -19, -22.
   - [contracts/accounts.md](../contracts/accounts.md): CTR-UA-13, -16.
   - [integration.md](../integration.md): INT-ERP-11, -22…-26.
 - Code (`main` at `d85fc8b`):

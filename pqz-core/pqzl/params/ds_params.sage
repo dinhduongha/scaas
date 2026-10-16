@@ -1,4 +1,4 @@
-# R_DS (pq-zether.md §7.9, SENDER_S): u = A^T r + e1, v_t[i] = (pk_t^T r)[i] + e2_t[i] + Delta digits(amount)_i.
+# R_DS (pq-zero-knowledge.md §7.9, SENDER_S): u = A^T r + e1, v_t[i] = (pk_t^T r)[i] + e2_t[i] + Delta digits(amount)_i.
 # Witness s1 = r, e1 (32 polys each), e2_t (1 poly, 16 used coefficients); no binary part.
 pqz_verbose = 1
 name = "pqz_ds"

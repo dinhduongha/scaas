@@ -3,7 +3,7 @@
 `estimator.txt` is the recorded output of `e_s0.py`: lattice-estimator runs under `RC.ADPS16` (core-SVP, classical
 `0.292β` and quantum `0.265β`) on the encryption MLWE instances, the proof's ABDLOP MSIS/MLWE instances and Kyber-512;
 the DDGR20 hint estimate on the shared `(r, e1)`; the proof challenge space; the exactness checks of the norm proofs;
-and the soundness of each Fiat–Shamir round. Spec: `docs/contracts/pq-zether.md` CTR-PQZ-03, CTR-PQZ-04 and §5;
+and the soundness of each Fiat–Shamir round. Spec: `docs/contracts/pq-zero-knowledge.md` CTR-PQZ-03, CTR-PQZ-04 and §5;
 write-up: `docs/research/pqz-parameters-e-s0.md`. The E-S1 files (P6d) are the codegen `codegen/` with
 `reg_params.sage` / `tx_params.sage` (rerun `codegen/run.sh`), the generated `pqz_{reg,tx}_params.h`, and the rank sizing
 `e_s1_proof.sage` → `estimator-e-s1.txt` (rerun `run_e_s1.sh`); write-up `docs/research/pqz-core-e-s1.md`.
@@ -47,10 +47,10 @@ on the first try; M = 16 (oversize, `-DPQZ_TXM_OVERSIZE` only) does not fit `MAX
 
 The relation specification is the LaZer spec file, the generated header and `src/pqz_rel.c`'s builder (header comment),
 frozen by the KATs (`smartcontracts/vectors/pqz/`) and the generic-vs-specialised differential test. Every relation
-also hashes the whole statement into the transcript (`docs/contracts/pq-zether.md` §5, byte layouts §8.1). Columns
+also hashes the whole statement into the transcript (`docs/contracts/pq-zero-knowledge.md` §5, byte layouts §8.1). Columns
 from the generated headers' comments and `pqz_rel.c`; `Z` = one slack polynomial per exact ℓ2 block.
 
-| Relation (op) | Spec → header | Statement fields read | Witness slots in `s1` | Equations (pq-zether.md) | Exact ℓ2 blocks (polys: bound) | Binary polys | Approx. ℓ∞ filler | Knowledge error, MSIS |
+| Relation (op) | Spec → header | Statement fields read | Witness slots in `s1` | Equations (pq-zero-knowledge.md) | Exact ℓ2 blocks (polys: bound) | Binary polys | Approx. ℓ∞ filler | Knowledge error, MSIS |
 |---|---|---|---|---|---|---|---|---|
 | `R_REG` (3) | `reg_params.sage` → `pqz_reg_params.h` | `pk` | 0..31 `s`, 32..63 `e` (m1 64, Z 2) | `pk = A·s + e` (§7.2) | 32: 36, 32: 164 | — | 1 poly, bound 1 | ≤ 2^−127, MSIS(22, 131, 2^35.30) |
 | `R_TX` (1, 83,072 B) | `tx_params.sage` → `pqz_tx_params.h` | `fee`, `auditorOn` (= 1), `pk_f`, `pk_t`, `pk_a`, `T`, `u`, `v_t`, `v_f`, `v_a` | 0..31 `s_f`, 32..63 `e_f`, 64..95 `r`, 96..127 `e1`, 128 `e2_t`, 129 `e2_f`, 130 `e2_a`, 131..145 bits (m1 146, Z 7) | rows 1–7 (§7.4) | 32: 36, 32: 164, 32: 36, 32: 164, 1: 64 (× 3) | 15 | 1 poly, bound 64 | ≤ 2^−127, MSIS(23, 214, 2^35.97) |
@@ -58,7 +58,7 @@ from the generated headers' comments and `pqz_rel.c`; `Z` = one slack polynomial
 | `R_BURN` (2: BURN, REFRESH) | `burn_params.sage` → `pqz_burn_params.h` | `fee`, `amount` (`d = digits(amount)` public), `pk_f`, `T`, `u`, `v_f` | 0..31 `s_f`, 32..63 `e_f`, 64..95 `r`, 96..127 `e1`, 128 `e2_f`, 129..142 bits (m1 143, Z 5) | rows 1, 2, 4, 6, 7 (§7.5) | 32: 36, 32: 164, 32: 36, 32: 164, 1: 64 | 14 | 1 poly, bound 64 | ≤ 2^−127, MSIS(23, 211, 2^35.95) |
 | `R_DS` (4) | `ds_params.sage` → `pqz_ds_params.h` | `amount` (`d` public), `pk`, `u`, `v` | 0..31 `r`, 32..63 `e1`, 64 `e2_t` (m1 65, Z 3) | `u = Aᵀ·r + e1`, `v[i] = (pkᵀ·r)[i] + e2_t[i] + Δ·d_i` (§7.9) | 32: 36, 32: 164, 1: 64 | — | 1 poly, bound 64 | ≤ 2^−127, MSIS(22, 132, 2^35.31) |
 | `R_DR` (5: RECEIVER, AUDITOR) | `dr_params.sage` → `pqz_dr_params.h` | `amount` (`d` public), `pk`, `u`, `v` | 0..31 `s`, 32..63 `e`, 64..70 bits (m1 71, Z 2) | `pk = A·s + e`, `v[i] − (uᵀ·s)[i] = Δ·d_i + e'_i`, `e'_i + 2^24 ∈ [0, 2^25)` (§7.9) | 32: 36, 32: 164 | 7 | 1 poly, bound 1 | ≤ 2^−127, MSIS(23, 139, 2^35.84) |
-| `R_TXM` (7, `M` legs, `G = ⌈M/4⌉` groups, auditor `A`) | `txm{M}[0]_params.sage` → `pqz_txm{M}[0]_params.h` (M = 1: `R_TX` / `R_TX0`'s) | header words `M` (320), `auditorOn` (448), `fee`; `pk_f`, `pk_j`, [`pk_a`], `T`, `u_g`, `v_j`, `v_f`, [`v_{a,j}`] (pq-zether.md §8.1 op 7) | 0..31 `s_f`, 32..63 `e_f`, `64 + 64g` `r_g`, `96 + 64g` `e1_g`, `E = 64 + 64G`: `e2_j` at `E + j`, `e2_f` at `E + M`, `e2_{a,j}` at `E + M + 1 + j`, then ⌈(853 + 64M)/64⌉ binary polys (Z = 3 + 2G + M + A·M) | rows 1–7 of the P6-ANON plan §3 (row 2 per group, rows 3 / 5 per leg, row 7 with Σ_j d_j) | 32: 36, 32: 164, (32: 36, 32: 164) per group, 1: 64 per e2 vector (M + 1 + A·M) | ⌈(853 + 64M)/64⌉ | 1 poly (`e2_0`), bound 64 | ≤ 2^−127, `estimator-e-s1-txm.txt` |
+| `R_TXM` (7, `M` legs, `G = ⌈M/4⌉` groups, auditor `A`) | `txm{M}[0]_params.sage` → `pqz_txm{M}[0]_params.h` (M = 1: `R_TX` / `R_TX0`'s) | header words `M` (320), `auditorOn` (448), `fee`; `pk_f`, `pk_j`, [`pk_a`], `T`, `u_g`, `v_j`, `v_f`, [`v_{a,j}`] (pq-zero-knowledge.md §8.1 op 7) | 0..31 `s_f`, 32..63 `e_f`, `64 + 64g` `r_g`, `96 + 64g` `e1_g`, `E = 64 + 64G`: `e2_j` at `E + j`, `e2_f` at `E + M`, `e2_{a,j}` at `E + M + 1 + j`, then ⌈(853 + 64M)/64⌉ binary polys (Z = 3 + 2G + M + A·M) | rows 1–7 of the P6-ANON plan §3 (row 2 per group, rows 3 / 5 per leg, row 7 with Σ_j d_j) | 32: 36, 32: 164, (32: 36, 32: 164) per group, 1: 64 per e2 vector (M + 1 + A·M) | ⌈(853 + 64M)/64⌉ | 1 poly (`e2_0`), bound 64 | ≤ 2^−127, `estimator-e-s1-txm.txt` |
 
 Bit slots (slot `k` = coefficient `k mod 64` of binary poly `k / 64`; `b` the bit index): `R_TX` / `R_TX0`: `d_i` at
 `4i + b`, `d'_i` at `64 + 4i + b`, `M_i` at `128 + 14i + b`, `c_i + 64` at `352 + 11i + b` (`i < 15`), `e_T[i] + 2^24`

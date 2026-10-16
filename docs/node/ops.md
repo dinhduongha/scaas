@@ -693,7 +693,7 @@ Above the rated load: a second node on **different chains**, not a bigger store.
 ## 13. Post-quantum Zether chains
 
 <a id="pqz"></a>Operator recommendations for a chain that runs post-quantum Zether tokens
-([contracts/pq-zether.md](../contracts/pq-zether.md)):
+([contracts/pq-zero-knowledge.md](../contracts/pq-zero-knowledge.md)):
 
 - Chain profile flag `pqz = { genesis_hash = "0x…", registry = "0x…", tokens = ["0x…"] }`; a start-up probe
   `has_pqz_precompile` (genesis hash first) — a chain that fails it refuses PQZ jobs. The node checks RPC genesis hash
@@ -736,7 +736,7 @@ Above the rated load: a second node on **different chains**, not a bigger store.
     `scaas_gas_cost_native_total{namespace}` ([NODE-OPS-11](#NODE-OPS-11)) carries it.
   - `pqz_call` pre-simulates op 7 on the follower like op 1 (above); the limits above already cover the largest op 7
     call of each id.
-- **The PQZ node** (P6f, [chain integration](../contracts/pq-zether.md#chain-integration)): image
+- **The PQZ node** (P6f, [chain integration](../contracts/pq-zero-knowledge.md#chain-integration)): image
   `scaas/nethermind-pqz:1.39.0-pqz1`; `config.json` `TxPool.MaxTxSize` 1,048,576 (a PQZH transfer is 345,221 B with
   framing; the largest op 7 transaction within 16 M gas ≈ 440 KB, 2.38× under it, S9; the follower proxy's
   `client_max_body_size` 2 MiB takes its hex raw transaction, ≈ 0.88 MB) and `Blocks.TargetBlockGasLimit` 80,000,000 (Clique moves the limit ≈ 0.1 % per block: 16.78 M → 80 M in

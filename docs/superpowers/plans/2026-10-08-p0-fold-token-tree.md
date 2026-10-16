@@ -31,7 +31,7 @@ and one register entry in `docs/decisions.md`; other docs link the anchor. Code 
 - A rule restated in a second doc instead of linked (drift source) — each task's grep step checks its new terms appear with one anchor only.
 - A link still pointing at a superseded rule as if current (e.g. `CTR-TOK-02`, `CTR-AS-01`, `CTR-ZTH-10`) — Task 7 Step 2 greps every superseded id outside `decisions.md` and `history/`.
 - Built code described as if already changed (a missing "Transitional (BUILT)" note) — each task lists the notes it must add.
-- PQZ decisions folded that the owner has not ruled (Z9/Z10/Z12 mirrors, multi-recipient) — Task 5 Step 4 greps `pq-zether.md`.
+- PQZ decisions folded that the owner has not ruled (Z9/Z10/Z12 mirrors, multi-recipient) — Task 5 Step 4 greps `pq-zero-knowledge.md`.
 - Old names left in normative text (`transferConfidential`, `burn` for Zether, `SubjectAccount`, `META_SINGLE`, `createTiered`) — Task 7 Step 2 greps them.
 
 ---
@@ -204,7 +204,7 @@ git commit -m "docs: factory-made DEX clones and an advisory DEX registry (T12)"
 
 **Files:**
 - Modify: `docs/contracts/zether.md` (*Scope* :20, *ElGamal state and lifecycle* :189, *Meta-transaction envelope and replay protection* :458, *Underlying, verifier gas, chains* :732, *Interfaces* :1002, and every `transferConfidential*` / `burn` / `fund` / `wrap` mention)
-- Modify: `docs/contracts/pq-zether.md` (the selector list near :1112 and the *Contracts* table :1100)
+- Modify: `docs/contracts/pq-zero-knowledge.md` (the selector list near :1112 and the *Contracts* table :1100)
 - Modify: `docs/integration.md`, `docs/node/job-api.md`, `docs/clients/signers-clientkeys.md` (Zether entry-point names)
 - Modify: `docs/decisions.md`
 
@@ -226,8 +226,8 @@ Add anchor `CTR-ZTH-46` (spec T14 + §6.1 sentence). Add register entries `CTR-Z
 
 - [ ] **Step 4: PQZ — names only**
 
-In `pq-zether.md`, add anchor `CTR-PQZ-22`: "PQZ entry points are `pqzShield`, `pqzWrapShield`, `pqzTransfer`, `pqzUnshield`, `pqzUnshieldUnwrap`, `pqzRollOver`; kinds `NONE_PQZ`, `UNDERLYING_PQZ` (and `*_ZETHER_PQZ`) are reserved (CTR-TOK-21)". Rename the selectors in the normative ABI line accordingly (`pqzBurn` → `pqzUnshield`, `fund` → `pqzShield`). Add one `open` sentence: "Disclosure changes Z9/Z10/Z12 and multi-recipient transfers are not ruled for PQZ (owner review pending)." Register `CTR-PQZ-22`.
-Run: `grep -n 'SENDER_CP\|attest\|opt-out\|MAX_RECIPIENTS' docs/contracts/pq-zether.md`
+In `pq-zero-knowledge.md`, add anchor `CTR-PQZ-22`: "PQZ entry points are `pqzShield`, `pqzWrapShield`, `pqzTransfer`, `pqzUnshield`, `pqzUnshieldUnwrap`, `pqzRollOver`; kinds `NONE_PQZ`, `UNDERLYING_PQZ` (and `*_ZETHER_PQZ`) are reserved (CTR-TOK-21)". Rename the selectors in the normative ABI line accordingly (`pqzBurn` → `pqzUnshield`, `fund` → `pqzShield`). Add one `open` sentence: "Disclosure changes Z9/Z10/Z12 and multi-recipient transfers are not ruled for PQZ (owner review pending)." Register `CTR-PQZ-22`.
+Run: `grep -n 'SENDER_CP\|attest\|opt-out\|MAX_RECIPIENTS' docs/contracts/pq-zero-knowledge.md`
 Expected: no new lines beyond the `open` sentence.
 
 - [ ] **Step 5: Verify and commit**

@@ -52,7 +52,7 @@ REL = {
                  stmt=4_112, stmt_bytes=233 + 32_896, calldata_tokens=54_000, exec_other=50_000, op=5),
 }
 # calldata_tokens: non-proof calldata (EIP-7623 tokens) and exec_other: execution besides the verifier, from
-# pq-zether.md §9.3 [estimate there]: transfer ≈ 119 k tokens and ≈ 0.31 M (statement build, storage, events,
+# pq-zero-knowledge.md §9.3 [estimate there]: transfer ≈ 119 k tokens and ≈ 0.31 M (statement build, storage, events,
 # auth); burn / refresh ≈ 258 k tokens with a 40 KB proof; register: the 16 KB pk (2,048 be8 coefficients at
 # ≈ 25.2 tokens) + the ≈ 3.4 KB ML-DSA authPop, and the SSTORE2 of the pk ≈ 3.3 M + log + auth; disclosure:
 # the bundle (u, v ≈ 16.5 KB) + ABI, a view (pk read from the registry).
@@ -477,7 +477,7 @@ def main():
     print('Skeleton code = the gas of test/pqzh/Pqzh.sol PqzhSkeleton on the shape (unpruned paths), from the units')
     print('fitted to its three measured runs; floor = a hand-scheduled verifier counted by opcodes (model.py).')
     print('Tx = 21,000 + max(4 tokens + execution, 10 tokens) (EIP-7623), execution = verify + the op\'s other')
-    print(f'execution (pq-zether.md §9.3); cap {CAP:,} (EIP-7825). Calldata incl. the op\'s non-proof bytes.\n')
+    print(f'execution (pq-zero-knowledge.md §9.3); cap {CAP:,} (EIP-7825). Calldata incl. the op\'s non-proof bytes.\n')
     print('## R_TX, every configuration\n')
     print(HDR)
     for e in grid():

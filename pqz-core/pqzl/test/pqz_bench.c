@@ -211,7 +211,7 @@ setup (void)
   const uint8_t *pks[3] = { KT.pk, KF.pk, KA.pk };
   pqz_encrypt (pks, 3, (const uint8_t (*)[16])m, r, e1, (const int16_t (*)[16])e2, u, vs);
 
-  /* header (pq-zether.md §7.7): opTag, proofSystemId, then words hashed only, fee at 256, amount 0, auditorOn 1
+  /* header (pq-zero-knowledge.md §7.7): opTag, proofSystemId, then words hashed only, fee at 256, amount 0, auditorOn 1
      (P6e R6: the 83,072-byte form requires it; was hashed only before P6e Task 2) */
   uint8_t *p = tx_stmt;
   memset (p, 0x5A, PQZ_PREFIX_BYTES);
@@ -282,7 +282,7 @@ setup (void)
   for (int j = 0; j < 2048; j++)
     dr_wit[j] = (uint8_t)KT.s[j], le16 (dr_wit + 2048 + 2 * j, KT.e[j]);
 
-  /* R_BURN: burn 123,456 with fee 7 from the same T; fresh (r, e1, e2_f) for the new balance (pq-zether.md
+  /* R_BURN: burn 123,456 with fee 7 from the same T; fresh (r, e1, e2_f) for the new balance (pq-zero-knowledge.md
      CTR-PQZ-19: burn / refresh randomness is fresh CSPRNG output, never derived from the counter; here the test RNG) */
   {
     static int8_t rb[2048];

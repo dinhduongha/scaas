@@ -1,4 +1,4 @@
-# R_REG (pq-zether.md §7.2 step 6): pk = A s + e, ||s|| <= 36, ||e|| <= 164.
+# R_REG (pq-zero-knowledge.md §7.2 step 6): pk = A s + e, ||s|| <= 36, ||e|| <= 164.
 # Witness s1 = (s, e): 64 polys of R_q, q = 2^42 - 215, d = 64.
 pqz_verbose = 1
 name = "pqz_reg"

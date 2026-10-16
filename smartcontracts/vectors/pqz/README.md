@@ -3,7 +3,7 @@
 The one canonical directory of the PQ Zether known-answer vectors ([P6e plan](../../../docs/superpowers/plans/2026-10-14-p6e-relations.md)
 decision D9): every consumer (the precompile and its fuzz targets, the contracts' forge tests, the clients) reads the
 files **in place**; no copies (the copies to `smartcontracts/evm/test/vectors/pqz/` and
-`clients/zether-prover/vectors/pq/` of [pq-zether.md](../../../docs/contracts/pq-zether.md) §14 are dropped).
+`clients/zether-prover/vectors/pq/` of [pq-zero-knowledge.md](../../../docs/contracts/pq-zero-knowledge.md) §14 are dropped).
 
 - **Generator:** `pqz-ffi`'s binary [`pqz-vectors`](../../../pqz-core/ffi/src/bin/pqz-vectors.rs) (feature `prove`,
   plan R4). Every value comes from the crate's API: the C core (KeyGen, Enc, Dec, the matrix, `encrypt` with chosen
@@ -92,7 +92,7 @@ coefficient 0 is `⟨rot(e), r⟩ − ⟨rot(s), e1⟩ + e2[0]`; with `r` = 36 a
 `e2_t = (64, 0, …)` it is B_FRESH = 11,872 exactly (the maximum is unique, so every credit is the same ciphertext). The
 sender's `R_TX` of that credit (`e2_t` at PQZL's B′ = 64 filler) proves and verifies in both systems (credit 0 and the
 last, `sendCounter` 0 and 1,022). `T` = 1,023 credits + the plain unit (noise 0): noise 1,023 · 11,872 = **12,145,056**
-in coefficient 0 (the analytic 12,156,928 of pq-zether.md §4.3 counts 1,024 units), 1.38× below the proven range
+in coefficient 0 (the analytic 12,156,928 of pq-zero-knowledge.md §4.3 counts 1,024 units), 1.38× below the proven range
 2^24 = 16,777,216 and 4.14× below the mint threshold Δ − 2^24 = 50,331,647; `M_i` = 1,024 · 15 = 15,360 < 2^14 (credits
 and plain unit carry digits 15 in their low 12 digits). The receiver's debit `R_TX` over `T` proves and verifies in
 both systems.

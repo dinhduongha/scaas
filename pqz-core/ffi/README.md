@@ -1,10 +1,10 @@
 # pqz-ffi
 
-The one boundary in front of both PQZ verifiers (P6e plan Task 7, decisions D10 / R5; [pq-zether.md](../../docs/contracts/pq-zether.md)
+The one boundary in front of both PQZ verifiers (P6e plan Task 7, decisions D10 / R5; [pq-zero-knowledge.md](../../docs/contracts/pq-zero-knowledge.md)
 §9.1, CTR-PQZ-10): the precompile decoder, dispatch on `proofSystemId`, the C ABI for the node (P6f), the Rust API, and
 a `prove` feature for clients (P6h). Rust 1.97.1, safe code apart from the calls into the C core. The input, output,
 decoder rules and both proof formats are specified byte by byte in
-[pq-zether.md §8.1 "Serialization v1"](../../docs/contracts/pq-zether.md#serialization).
+[pq-zero-knowledge.md §8.1 "Serialization v1"](../../docs/contracts/pq-zero-knowledge.md#serialization).
 
 ```mermaid
 flowchart LR

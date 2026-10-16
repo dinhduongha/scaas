@@ -6,7 +6,7 @@ Written 2026-10-13 for P6b of the P6 roadmap (`docs/superpowers/plans/2026-10-12
 `53da598` under `RC.ADPS16` (classical and quantum) on the encryption MLWE instances, on the proof's MSIS/MLWE
 instances and on Kyber-512; DDGR20 perfect hints on the shared `(r, e1)`; the soundness of every Fiat–Shamir round.
 Gate: every instance ≥ Kyber-512 under both models, every round ≥ 128 bits. Nothing here changes a rule; the
-parameters are those of `docs/contracts/pq-zether.md` (CTR-PQZ-03, CTR-PQZ-04, §5). The recorded run is
+parameters are those of `docs/contracts/pq-zero-knowledge.md` (CTR-PQZ-03, CTR-PQZ-04, §5). The recorded run is
 `pqz-core/params/estimator.txt` (script `e_s0.py`, rerun with `run.sh`, see that directory's README).
 
 **[unverified]** marks a constant taken from a paper as recalled, not re-read for this note: the spike had no network
@@ -45,7 +45,7 @@ conservative choices of §4 (bimodal rejection lowers both).
 
 ```mermaid
 flowchart LR
-  spec["pq-zether.md CTR-PQZ-03/04, §5"] --> enc["Encryption MLWE<br/>key, u ‖ v"]
+  spec["pq-zero-knowledge.md CTR-PQZ-03/04, §5"] --> enc["Encryption MLWE<br/>key, u ‖ v"]
   spec --> hints["32 perfect hints on (r, e1)"]
   spec --> proof["R_TX witness and norms"]
   enc --> est["lattice-estimator 53da598<br/>LWE.estimate, ADPS16 classical/quantum"]

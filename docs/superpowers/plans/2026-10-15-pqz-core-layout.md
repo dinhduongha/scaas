@@ -108,7 +108,7 @@ most C / Python hits are comments. The functional ones:
 |---|---|---|
 | `pqz-core/**/*.md` (README, STATUS, `ffi/`, `artifact/`, `params/`, `sz/`, `xcheck/` READMEs) | ≈ 210 bare relative paths (`src/…`, `sv/…`, `rel3/runs/…`; STATUS 101, README 49, artifact 38, sz 11, ffi 6, params 1, xcheck 1) | rewrite with the mapping table of §5 |
 | `docs/research/pqz*.md`, `pqzh*.md` (17 notes) | ≈ 340 bare relative mentions (largest: z21 65, licence inventory 61, SV 34, l2-domain 33, tbox 24) + 17 notes with a `pqz-core/<moved path>` reference | research notes are records: rewrite the `pqz-core/…` prefixed ones, add one line "paths as of `4ab2180`; see the layout map" to the others rather than editing every mention (owner may prefer a full rewrite) |
-| `docs/contracts/pq-zether.md` | `pqz-core/{src,params,kat,test,sz,check_tbox_fixes.sh}` | normative spec: rewrite all; `docs_check` must stay 0 errors |
+| `docs/contracts/pq-zero-knowledge.md` | `pqz-core/{src,params,kat,test,sz,check_tbox_fixes.sh}` | normative spec: rewrite all; `docs_check` must stay 0 errors |
 | `docs/decisions.md`, `TODO.md`, `HANDOFF.md`, `docs/superpowers/plans/*.md` (p6-roadmap, p6e, p6-anon, ua5a) | `pqz-core/{params,src,lazer,sv,rel3,build.sh,check_tbox_fixes.sh,floor,test}` | rewrite in decisions / TODO; plans and HANDOFF are dated records (leave, or one note line) |
 | `smartcontracts/evm/test/pqzh/{Pqzh.sol,PqzhTest.t.sol,ligero/LigeroTest.t.sol}` | `pqz-core/pqzh/sol/…` (comments) | → `pqz-core/pqzh/stark-backup/sol/…`; `pqzh/ligero` comments unchanged |
 | `smartcontracts/vectors/pqz/` (README, `pqz_kat.py`, 15 JSON `generator` fields) | `pqz-core/ffi/…`, "pqz-core test/pqz_keys_kat.c" | `ffi/` does not move: only `pqz_kat.py`'s comment changes; the JSON files stay byte-identical (no vector regeneration) |
@@ -181,13 +181,13 @@ branch `pqz-readme`.
 
 | # | Old README item | Now |
 |---|---|---|
-| 1 | Title; "The PQ Zether proof engine", link pq-zether.md §8, CTR-PQZ-09 | kept, new README intro |
+| 1 | Title; "The PQ Zether proof engine", link pq-zero-knowledge.md §8, CTR-PQZ-09 | kept, new README intro |
 | 2 | Fork of LaZer at `3330e48` (MIT, IBM), link to the LaZer repo, six layers rewritten | kept, "Two proof systems, one precompile" (table + paragraph) |
 | 3 | Prover and verifier run without GMP, MPFR, HEXL, floating point, `malloc`, `abort`, stdio | kept, same section |
 | 4 | E-S1 spike (P6d): `R_REG` and a first `R_TX`, native and freestanding wasm32 | kept, "Status and what's next" (History) |
 | 5 | Then `R_BURN` (also REFRESH), `R_DS` and `R_DR` (also the auditor), `docs/research/pqz-relations-burn-disclose.md` | kept, History; forms table |
 | 6 | P6e added `R_TX0`, `stmt/`, `ffi/`, the frozen vectors `smartcontracts/vectors/pqz/` | kept, History |
-| 7 | Every byte layout (statements, objects, both proof formats, precompile input, `OP_SELFTEST`) → pq-zether.md §8.1 link | kept, "Statement forms, ids, limits" |
+| 7 | Every byte layout (statements, objects, both proof formats, precompile input, `OP_SELFTEST`) → pq-zero-knowledge.md §8.1 link | kept, "Statement forms, ids, limits" |
 | 8 | State, numbers, what is open → STATUS.md; write-up `docs/research/pqz-core-e-s1.md` | kept, intro + "Status and what's next" (Open link) + "Further reading" |
 | 9 | `lazer/`: subset, pristine copy commit `c91b3ab`, changes in place marked `PQZ:`, licence `lazer/LICENSE` | kept, directory map `lazer/` |
 | 10 | `src/`: rewritten layers and C ABI `pqz.h` | kept, map `src/` |
@@ -232,4 +232,4 @@ Approved with one change: the measurement / spike directory is `research/` inste
 
 Owner 2026-10-15: the name `rel3/` ("relations, round 3") is meaningless; in the move it becomes **`research/pqzl-measure/`** (the PQZL measurement round: `relfix.sh`, `bench.sh`, runs). Controller's name choice; owner may override. Every reference to `rel3/` (artifact `reproduce.sh`, README, STATUS, research notes) is updated in the same move.
 
-Owner 2026-10-15: in the same move, rename `docs/contracts/pq-zether.md` → `docs/contracts/pq-zero-knowledge.md` (`git mv`; rewrite every link and every `normative: contracts/pq-zether.md#…` line by script, except `docs/history/`; `docs_check` 0 errors). PQZ now stands for Post-Quantum Zero-knowledge (decisions.md CTR-PQZ-01).
+Owner 2026-10-15: in the same move, rename `docs/contracts/pq-zero-knowledge.md` → `docs/contracts/pq-zero-knowledge.md` (`git mv`; rewrite every link and every `normative: contracts/pq-zero-knowledge.md#…` line by script, except `docs/history/`; `docs_check` 0 errors). PQZ now stands for Post-Quantum Zero-knowledge (decisions.md CTR-PQZ-01).

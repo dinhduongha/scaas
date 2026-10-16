@@ -75,7 +75,7 @@ def usd(gas, gwei):
 
 # PQZH inputs. FRI+ZK: pqzh-solidity-verifier.md §8 (EVM layout, Goldilocks^5, blowup 32, arity 8, 42 / 21 queries).
 # Ligero: pqzh-ligero.md §11.1 / §11.4 / runs/e1-evm-model.txt (proven R_TX, n = 32,756, k = 817, t = 121).
-OTHER_TX = (119_000, 310_000)   # the transfer's other calldata tokens and execution (pq-zether.md §9.3)
+OTHER_TX = (119_000, 310_000)   # the transfer's other calldata tokens and execution (pq-zero-knowledge.md §9.3)
 CASES = [
     # name, proof bytes, verify exec (M gas), dup bytes per extra piece, dup exec per piece (M gas)
     ('FRI+ZK R_TX proven, this code', 506_000, 29.3, 3_000, 0.05),

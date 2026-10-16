@@ -17,7 +17,7 @@
 #ifndef PQZ_ASSERT
 #define PQZ_ASSERT 1
 #endif
-#if PQZ_ASSERT /* PQZ: invariant checks stay on in release (error returns), pq-zether.md §10 */
+#if PQZ_ASSERT /* PQZ: invariant checks stay on in release (error returns), pq-zero-knowledge.md §10 */
 #define ASSERT ASSERT_ENABLED
 #else
 #define ASSERT ASSERT_DISABLED

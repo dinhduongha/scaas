@@ -244,7 +244,7 @@ nearly gives (one piece per tree or layer). Prices use ETH = $2,515.
   transactions' gas.
 - **Against the precompile path.** A transfer that calls the precompile is also bound by the EIP-7623 floor: the
   Ligero proof's 9.0 M (`pqzh-ligero.md` §11.1) plus the transfer's other 119 k tokens gives ≈ 10.2 M. The
-  precompile's own price is ≈ 1.3 M (10.5 ms p99 × ≈ 0.12 M gas/ms, CTR-PQZ-11 in pq-zether.md §9.3) and fits under
+  precompile's own price is ≈ 1.3 M (10.5 ms p99 × ≈ 0.12 M gas/ms, CTR-PQZ-11 in pq-zero-knowledge.md §9.3) and fits under
   the floor. The tuned FRI + ZK split is therefore ≈ 2.1× the precompile transaction, and the test-level code is
   ≈ 3.8× [estimate].
 
@@ -305,7 +305,7 @@ context [inference].
 - **Cost:** an outer proof at proven 128 bits with 256-bit digests needs ≈ 33 queries at blowup 64, against SHARP's
   11. That is ≈ 3× SHARP's 7.2 M, ≈ 20 M per batch [estimate]. The verification share per PQZ transaction is
   ≈ 20 M/N: 0.2 M at N = 100. The transfer's own non-proof calldata remains (≈ 119 k tokens: ciphertexts and envelope,
-  pq-zether.md §9.3): ≈ 1.2 M at the floor, or ≈ 30 KB of blob (§6.5). Per transfer that comes to ≈ 1.4 M with
+  pq-zero-knowledge.md §9.3): ≈ 1.2 M at the floor, or ≈ 30 KB of blob (§6.5). Per transfer that comes to ≈ 1.4 M with
   calldata, against 21.4 M split and ≈ 10.2 M through the precompile.
 - **What changes for a privacy token:**
   - **Latency:** batch interval plus outer proving time (minutes), instead of one block.

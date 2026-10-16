@@ -1,4 +1,4 @@
-//! `pqz-stmt`: the one PQZ statement codec (P6e plan R2, D15, R6; pq-zether.md §5, §7.2, §7.7, §7.9, §9.1).
+//! `pqz-stmt`: the one PQZ statement codec (P6e plan R2, D15, R6; pq-zero-knowledge.md §5, §7.2, §7.7, §7.9, §9.1).
 //!
 //! Parses and builds every statement form of both proof systems (the statement bytes are the same for PQZL and PQZH;
 //! the `proofSystemId` word says which verifier runs), the `pk` / ciphertext objects, the disclosure bundle and

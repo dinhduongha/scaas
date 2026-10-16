@@ -5,7 +5,7 @@
 # Run by run_hints.sh in the pinned Sage image with the pinned leaky-LWE-Estimator (DDGR20, lducas/leaky-LWE-Estimator
 # 0a9caf8) mounted at /lk and lattice-estimator 53da598 at /le; stdout is hints-anon.txt.
 #
-# Instance (pq-zether.md CTR-PQZ-03 / -04): u = A^T r + e1, r in R_q^32 CBD(1) (n = 2048, var 1/2), e1 CBD(20)
+# Instance (pq-zero-knowledge.md CTR-PQZ-03 / -04): u = A^T r + e1, r in R_q^32 CBD(1) (n = 2048, var 1/2), e1 CBD(20)
 # (var 10), q = 2^42 - 215, m = 2048 + 16 samples (u and the sender's own v_f in group 0; conservative for the other
 # groups). A recipient key pk = A s + e yields 16 hints <(e, -s), (r, e1)> per leg (one per coefficient of v); the M
 # auditor copies of a group repeat one key's 16 forms. Hints per group of L legs: 16 L (+ 16 with the auditor).
@@ -109,8 +109,8 @@ print(f"6 random integer hints: tool dvol {full.volumes()[2]:.9f}, closed form {
 assert abs(full.volumes()[2] - closed) < 1e-6
 
 hr("2. DDGR20 beta per number of perfect hints on one (r, e1)")
-print("V_max = %d; target beta >= %d (pq-zether.md CTR-PQZ-03). Last column: lattice-estimator primal_usvp with the "
-      "hints as removed secret dimensions (n - h), the approximation of pq-zether.md §4.5 / params/anon/usvp.py."
+print("V_max = %d; target beta >= %d (pq-zero-knowledge.md CTR-PQZ-03). Last column: lattice-estimator primal_usvp with the "
+      "hints as removed secret dimensions (n - h), the approximation of pq-zero-knowledge.md §4.5 / params/anon/usvp.py."
       % (int(V_MAX), int(TARGET)))
 print(f"{'hints':>5s} {'unit on r':>10s} {'unit on e1':>11s} {'mixed (worst)':>14s} {'estimator n-h':>14s}")
 rows = {}

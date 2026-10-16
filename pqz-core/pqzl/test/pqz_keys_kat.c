@@ -6,7 +6,7 @@
  * 2. KeyGen on 20 seeds (seed_i[j] = 31 i + j), the pk as SHAKE256(pk) (32 B); Enc of two values to recipients i and
  *    i + 1 (seed_enc_i[j] = 17 i + j + 1), u as SHAKE256(u), both v in full, Dec by recipient i (M, noise);
  *    the R_TXM group seeds of seed_enc_0..3 for g = 0..3 (P6-ANON D13, pqz_enc_group_seed);
- * 3. Dec(Enc(m)) = m with |noise| <= B_FRESH = 11,872 (pq-zether.md §4.3) for n_roundtrip seeds;
+ * 3. Dec(Enc(m)) = m with |noise| <= B_FRESH = 11,872 (pq-zero-knowledge.md §4.3) for n_roundtrip seeds;
  * 4. the resample path and the counter-64 error with lowered thresholds (PQZ_TEST_HOOKS build of pqz_keys.c: the real
  *    thresholds are never exceeded in practice);
  * 5. every keys entry point before pqz_init returns PQZ_ERR_INTERNAL (1).

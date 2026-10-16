@@ -4,7 +4,7 @@
 statement form of both proof systems (PQZL and PQZH read the same statement bytes; the `proofSystemId` word picks
 the verifier), the `pk` / ciphertext objects, the disclosure bundle and opening, and the precompile input
 `u8(op) ‖ be32(len) ‖ stmt ‖ proof`. Every decoder accepts exactly one encoding, and `encode(parse(x)) == x` for every
-accepted input. Spec: `docs/contracts/pq-zether.md` §5, §7.2, §7.7, §7.9, §9.1; the independent Python codec is
+accepted input. Spec: `docs/contracts/pq-zero-knowledge.md` §5, §7.2, §7.7, §7.9, §9.1; the independent Python codec is
 `smartcontracts/vectors/pqz/pqz_kat.py` (same rules, same rejection reasons).
 
 | op | form | statement bytes | decoder |

@@ -23,7 +23,7 @@ namespace Nethermind.Pqz;
 public class PqzPlugin(ChainSpec chainSpec) : INethermindPlugin
 {
     public string Name => "Pqz";
-    public string Description => "SCaaS PQZ (PQZL + PQZH) and ML-DSA-44 / -65 precompiles (pq-zether.md CTR-PQZ-10)";
+    public string Description => "SCaaS PQZ (PQZL + PQZH) and ML-DSA-44 / -65 precompiles (pq-zero-knowledge.md CTR-PQZ-10)";
     public string Author => "SCaaS";
     public bool MustInitialize => true;
 

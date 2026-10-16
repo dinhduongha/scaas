@@ -3,7 +3,7 @@
 # PQZ with hidden identities: what sender / receiver anonymity would cost (estimate, no code)
 
 Written 2026-10-14 at the owner's request ("PQZL hides only the amount; what if identities are hidden too — estimate,
-no code"). PQZ today hides amounts and balances; sender, receiver and auditor accounts are public (pq-zether.md, ring
+no code"). PQZ today hides amounts and balances; sender, receiver and auditor accounts are public (pq-zero-knowledge.md, ring
 size 2, no linkable tags). This note estimates two ways to hide identities. **No decision is recorded here and nothing
 was measured**: every number below is an estimate scaled from the measured PQZL figures (`pqz-core/STATUS.md`,
 `pqz-relations-burn-disclose.md` §1) and from published figures of others. Tags: [measured] our runs, [paper] a
@@ -73,7 +73,7 @@ Lether's ≈ 51 KB vs our measured 42.7 KB, the rest scales the measured PQZL fi
 | | today (amount hidden) | N = 4 | N = 8 | N = 16 |
 |---|---|---|---|---|
 | Proof | 42,770 B [measured] | ≈ 48–52 KB | ≈ 50–56 KB | ≈ 55–65 KB |
-| Transaction bytes | ≈ 77 KB (pq-zether.md cost line) | ≈ 120 KB | ≈ 185 KB | ≈ 320 KB |
+| Transaction bytes | ≈ 77 KB (pq-zero-knowledge.md cost line) | ≈ 120 KB | ≈ 185 KB | ≈ 320 KB |
 | Precompile input (N × (key + acc)) | < 262,144 B | ≈ 130 KB | ≈ 263 KB, at `MAX_INPUT` | over `MAX_INPUT` |
 | Prove native / wasm32 | 1.0 / 1.6 s [measured] | ≈ 1.5–2.5 / 2.5–4 s | ≈ 2–4 / 3–6 s | ≈ 4–8 / 6–12 s |
 | Specialised verify | ≈ 8 ms p50 [measured] | ≈ 12–20 ms | ≈ 20–40 ms | ≈ 50–80 ms, over the 50 ms budget |
@@ -106,7 +106,7 @@ The receiver publishes a scan key (ML-KEM-768, 1,184 B). The sender derives a sh
 re-randomised MLWE key `pk′ = pk + A·δ + e′` whose secret `s + δ` only the receiver can compute; the transfer credits a
 fresh account under `pk′`. No ring, no epoch.
 
-- Cost: a new account per receive, ≈ 3.3 M gas to store the 16 KB key with SSTORE2 (pq-zether.md record storage), on
+- Cost: a new account per receive, ≈ 3.3 M gas to store the 16 KB key with SSTORE2 (pq-zero-knowledge.md record storage), on
   top of the transfer [estimate]. (§8: carrying `pk′` in calldata instead costs ≈ 0.52 M.)
 - Open: the extra noise `e′` against the noise budget (B_FRESH, T5); key uniqueness today rests on `R_REG` proved by the
   key owner (§4.3), and here the sender creates the key, so the registration rule needs a new argument. (§9 answers
@@ -213,7 +213,7 @@ with N (≈ 3 KB from 2 to 8) is the only number that transfers, as a plausibili
 
 ## 7. How balances change in each mode
 
-Notation as pq-zether.md: an account has `acc` (one ciphertext, its hash in storage, its bytes in calldata when used),
+Notation as pq-zero-knowledge.md: an account has `acc` (one ciphertext, its hash in storage, its bytes in calldata when used),
 a pending list of proven credits (hashes), a public `plainPending`, `sendCounter`; anyone rolls pending credits into
 `acc` by homomorphic addition (`pqzRollOver`, ≈ 0.55 M gas per credit); a debit proves over
 `T = acc + Σ inline + plain` and **replaces** `acc` by a fresh encryption of the new balance (CTR-PQZ-05). `Enc(x)`
@@ -255,7 +255,7 @@ below is a credit under the shared randomness of the transfer.
 **Reframing (controller, 2026-10-14).** A receiver-only ring is not a new design: it is the multi-recipient transfer
 the owner already decided for classical Zether on 2026-10-08 (`docs/history/specs/2026-10-08-zether-multi-recipient-design.md`,
 Z1–Z13, folded into zether.md CTR-ZTH-37 … 43, measured on the merged spike): one transfer, `M ≥ 1` recipients, one
-proof, decoys receive an encryption of 0 (Z1), no sender ring (Z2). pq-zether.md left multi-recipient transfers
+proof, decoys receive an encryption of 0 (Z1), no sender ring (Z2). pq-zero-knowledge.md left multi-recipient transfers
 unruled for PQZ (CTR-PQZ-22 *Open*). So mode 2A′ is planned as **the PQZ multi-recipient transfer `R_TXM`**, following
 the Z-decisions where they carry over; §8.6 lists where PQZ differs. The owner's scope (2026-10-14): build only this
 mode, for PQZL and PQZH, measured, verified by the precompile on 7622, and used by SCaaS as the normal transfer; **both
@@ -279,7 +279,7 @@ per-group `(r_g, e1_g)`):
 | norms | `R_TX`'s; `d_{j,i} ∈ [0, 16)` (64 bits per leg); one exact-ℓ2 block over all `e2_j` with bound `64·√M`, one over all `e2_{a,j}` | binary part 917 − 64 + 64·M bits |
 
 A decoy is simply a leg with `a_j = 0`; the relation does not know which legs are decoys — there is no selector at all
-(simpler than a one-hot candidate selector, which an earlier draft of this note used). Soundness as classical CTR-ZTH-18 / pq-zether.md §7.4:
+(simpler than a one-hot candidate selector, which an earlier draft of this note used). Soundness as classical CTR-ZTH-18 / pq-zero-knowledge.md §7.4:
 every term of row 7 is `< 2^15`, so the identity holds over the integers and `b′ ≥ 0` (a digit property) gives
 `Σ a_j + fee ≤ balance`. Per-credit noise: `≤ 2·36·164 + 64·√M ≤ 12,064` for M ≤ 16, `K_MAX · 12,064 = 12.35 M < 2^24`
 (§4.3 holds with `K_MAX` unchanged; mint margin 4.07× instead of 4.14×).
@@ -324,7 +324,7 @@ update for a general perfect hint matches the tool's full-covariance `DBDD_predi
 
 The approximation matched the unit-hint case, but a malicious key chooses mixed forms (`e^T r − s^T e1`, `‖e‖ ≤ 164`,
 `‖s‖ ≤ 36`): at 80 hints (4 legs + the auditor copy) the worst case is **446.0**, below the self-imposed 450 margin
-and above Kyber-512's 406. The **owner accepted β 446 for `R_TXM` on 2026-10-15** (pq-zether.md CTR-PQZ-03, the one
+and above Kyber-512's 406. The **owner accepted β 446 for `R_TXM` on 2026-10-15** (pq-zero-knowledge.md CTR-PQZ-03, the one
 exception), so groups stay at **4 legs per `(r_g, e1_g)` with or without the auditor** (`G = ⌈M/4⌉`, plan D4); an
 interim proposal of 3 legs with the auditor (64 hints, β 451.9) is withdrawn. `R_TX` (32 hints) keeps 463.9, as
 `e_s0.py`'s 464. The shortcut used for mixed hints (a perfect hint's volume `½ ln(w^T Σ w)` put on an `r` coordinate)
@@ -368,7 +368,7 @@ and MLWE uSVP β 470 (≥ 450) with LaZer's root-Hermite target unchanged; codeg
 `txm2` 45,166, `txm4` 46,222, `txm8` 49,858, `txm16` 54,306, `txm8g2` 62,002, `txm16g4` 90,938 — scaled below by
 `R_TX`'s measured / codegen ratio (42,799 / 44,638). PQZH: `R_TX`'s measured 230,392 B plus 726 B per added Ligero row
 (t = 121 columns × 6 B; ≈ 400 slots per extra leg, 695 per row; +60 rows per extra randomness group) [estimate]. Gas
-per pq-zether.md §9.3 (EIP-7623 floor, 25.2 tokens per `be8` coefficient, 3.99 per random byte, precompile 0.12 M gas
+per pq-zero-knowledge.md §9.3 (EIP-7623 floor, 25.2 tokens per `be8` coefficient, 3.99 per random byte, precompile 0.12 M gas
 per p99 ms); every case is floor-bound. Auditor on. "fits" checks bytes and gas only; the last column is the hint
 budget of §8.2. Output of `anon_sizes.py`:
 
@@ -506,7 +506,7 @@ planned.*
   announcements with Kyber-768 and a one-byte tag (their §6.3) [paper].
 - **The account.** A stealth account is **not** a UA and is never registered: the token keeps a record keyed by
   `sid = keccak256("SCAAS-PQZ-STEALTH-ID-V1" ‖ pk′)` with `keyHash` and the usual per-account slots (§7.1 of
-  pq-zether.md); `pk′` is carried in calldata whenever it enters a statement (≈ 0.52 M, against ≈ 3.3 M for SSTORE2).
+  pq-zero-knowledge.md); `pk′` is carried in calldata whenever it enters a statement (≈ 0.52 M, against ≈ 3.3 M for SSTORE2).
   It spends with ordinary `R_TX` / `R_BURN`; **its spend authority is the proof alone** (no `authRef` exists — a
   deviation from CTR-PQZ-12 for these accounts).
 

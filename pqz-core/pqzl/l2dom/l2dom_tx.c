@@ -2,7 +2,7 @@
  * l2dom PoC, R_TX (P6-L2, https://github.com/lazer-crypto/lazer/issues/25). A sender and a colluding recipient (the sender knows the recipient key
  * (s_t, e_t)) build a transfer whose (r, e1) is aligned with (e_t, -s_t) and uses the whole pooled l2 budget
  * sum_z B_z^2 = 2*36^2 + 2*164^2 + 3*64^2 = 68672 (‖r‖ <= 36 and ‖e1‖ <= 164 are not respected). The recipient's
- * decryption noise on coefficient 0 then exceeds the spec's B_FRESH = 11,872 (pq-zether.md §4.3).
+ * decryption noise on coefficient 0 then exceeds the spec's B_FRESH = 11,872 (pq-zero-knowledge.md §4.3).
  *
  *   l2dom_tx prove DIR    (built with -DPQZ_L2DOM_POC) prove, verify in-process, write DIR/tx_over.{stmt,proof}
  *   l2dom_tx verify DIR   (linked against the production libpqz.a)

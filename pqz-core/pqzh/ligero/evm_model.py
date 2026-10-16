@@ -18,7 +18,7 @@ _spec.loader.exec_module(lp)
 
 CAP = 16_777_216
 TOKENS_PER_BYTE = 3.88           # measured on the six fixtures: 3.877-3.887 EIP-7623 tokens per proof byte
-OTHER = {'R_TX': (119_000, 310_000), 'R_REG': (67_000, 3_450_000)}   # pq-zether.md §9.3 via pqz-core/pqzh/sol/model.py
+OTHER = {'R_TX': (119_000, 310_000), 'R_REG': (67_000, 3_450_000)}   # pq-zero-knowledge.md §9.3 via pqz-core/pqzh/sol/model.py
 SMALL_VALS = {'R_REG': 2, 'R_TX': 135}
 SMALL_SQ_OWN = {'R_REG': 0, 'R_TX': 48}      # e2 squares carry the e2 norms
 SMALL_BITS = {'R_REG': 26, 'R_TX': 1403}

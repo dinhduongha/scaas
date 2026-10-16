@@ -1,6 +1,6 @@
 /*
  * pqz-core relations for the E-S1 spike: R_REG and R_TX as LaZer tbox statements
- * (pq-zether.md §7.2 step 6 and §7.4), the C ABI of pqz.h, proof encoding (LaZer lin-proofs.c's
+ * (pq-zero-knowledge.md §7.2 step 6 and §7.4), the C ABI of pqz.h, proof encoding (LaZer lin-proofs.c's
  * lnp_tbox_encproof / decproof, MIT, with the bounded decoder), and the A / ABDLOP-key caches.
  *
  * Witness layout in the tbox vector s1 (R_TX, m1 = 146 + Z = 7 slack polys):

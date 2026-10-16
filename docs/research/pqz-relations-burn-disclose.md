@@ -9,7 +9,7 @@ CTR-PQZ-09 (proof ≤ 96 KB, p99 verify ≤ 50 ms, prove ≤ 6 s desktop) and th
 branch `pqz-rel3` (merged, `3ad4069`): `pqz-core/params/{burn,ds,dr}_params.sage` and the generated headers,
 `pqz-core/src/pqz_rel.c`, `pqz-core/test/pqz_bench.c`, runs `pqz-core/rel3/`. The owner's answers to the questions of
 §5 (2026-10-13) were built on branch `pqz-relfix` ("the fix-ups"); §1 and §4 give the numbers after them, with the
-change from the first run. **No decision is recorded here** (the decisions are in pq-zether.md and decisions.md).
+change from the first run. **No decision is recorded here** (the decisions are in pq-zero-knowledge.md and decisions.md).
 
 **[measured]** marks a number from a run in this note (machine in §2). **[estimate]** marks a number computed from
 counts or a rough figure. **[inference]** marks a conclusion drawn here.
@@ -100,7 +100,7 @@ l = 4), written the way `build_reg` / `build_tx` write theirs: R_q-linear rows a
 quadratic part, single-coefficient rows as `tbox` evaluation equations ct(X^−i·(…)) = 0, exact ℓ2 norm proofs per
 witness block, one binary proof for all bits, and the one-poly approximate ℓ∞ filler LaZer's `tbox` needs.
 
-| | `R_BURN` (pq-zether.md §7.5) | `R_DS` (§7.9, `SENDER_S`) | `R_DR` (§7.9, `RECEIVER_X`, `AUDITOR`) |
+| | `R_BURN` (pq-zero-knowledge.md §7.5) | `R_DS` (§7.9, `SENDER_S`) | `R_DR` (§7.9, `RECEIVER_X`, `AUDITOR`) |
 |---|---|---|---|
 | Equations | `R_TX` rows 1, 2, 4, 6, 7 with d = digits(amount) public: pk_f = A s_f + e_f; u = Aᵀr + e1; v_f[i] = (pk_fᵀr)[i] + e2_f[i] + Δ d′_i; v_T[i] − (u_Tᵀs_f)[i] = Δ M_i + e_T[i]; M_i + c_{i−1} = d′_i + d_i + f_i + 16 c_i | u = Aᵀr + e1; v[i] = (pkᵀr)[i] + e2_t[i] + Δ·digits(amount)_i | pk = A s + e; v[i] − (uᵀs)[i] = Δ·digits(amount)_i + e′_i |
 | Rows | 64 R_q rows, 48 evaluation equations | 32 R_q rows, 16 evaluation equations | 32 R_q rows, 16 evaluation equations |
@@ -123,7 +123,7 @@ first prove or verify since the fix-ups (§4, §5 point 5); `REFRESH` shares op 
 first try under lattice-estimator `53da598`, RC.ADPS16 (`params/estimator-e-s1-rel3.txt`) [measured]. The public
 matrix A is expanded once at `pqz_init` and shared by all relations.
 
-**Statements** (`pqz.h`), as pq-zether.md lays them out:
+**Statements** (`pqz.h`), as pq-zero-knowledge.md lays them out:
 
 | Op | Statement | Bytes | Read by the relation |
 |---|---|---|---|
@@ -177,7 +177,7 @@ the NTT form of the keys (LaZer holds both forms), or derive the keys per call (
 
 The first version of this note left four choices open (statement layouts, what pqz-core checks, the disclosure noise
 bound, the arena base). The owner answered on 2026-10-13 (points A, B, 1–5, all accepted as proposed); branch
-`pqz-relfix` (merged `7e6e9b0`) carries B and 1–5 in code and in pq-zether.md / decisions.md:
+`pqz-relfix` (merged `7e6e9b0`) carries B and 1–5 in code and in pq-zero-knowledge.md / decisions.md:
 
 - **A. Merge `pqz-rel3`** (`R_BURN` / `R_DS` / `R_DR` with the generic verifier and the first version of this note)
   into main and push: done, `3ad4069`.
@@ -188,8 +188,8 @@ bound, the arena base). The owner answered on 2026-10-13 (points A, B, 1–5, al
    83,072 B (was the E-S1 prefix ‖ … ‖ be8(fee)); the debit header is parsed by the code `R_BURN` uses. `R_TX` proofs
    change, sizes and times do not (§1).
 2. **Disclosure `kind` is a 32-byte word**, so pk starts at 288; 33,184 B (was 33,153 B with a one-byte kind and pk at
-   257); byte-offset table in pq-zether.md §7.9. `R_DS` / `R_DR` proofs change, sizes and times do not (§1).
-3. **The precompile checks opTag / proofSystemId** (pq-zether.md §9.1); pqz-core does not repeat them, nor the `kind`:
+   257); byte-offset table in pq-zero-knowledge.md §7.9. `R_DS` / `R_DR` proofs change, sizes and times do not (§1).
+3. **The precompile checks opTag / proofSystemId** (pq-zero-knowledge.md §9.1); pqz-core does not repeat them, nor the `kind`:
    it reads only the fields its equations use, and those fields bind the proof because the whole statement is hashed
    into the transcript. `REFRESH` and `BURN` stay one relation under op 2, `RECEIVER_X` and `AUDITOR` one under op 5.
 4. **The disclosure noise bound** reads e′_i ∈ [−2^24, 2^24), the range a 25-bit decomposition proves (was

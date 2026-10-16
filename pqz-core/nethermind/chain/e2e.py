@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""P6f Tasks 7-8 (pq-zether.md §10 steps 1-2, 5): probes and end-to-end transactions against a PQZ chain, through
+"""P6f Tasks 7-8 (pq-zero-knowledge.md §10 steps 1-2, 5): probes and end-to-end transactions against a PQZ chain, through
 one JSON-RPC endpoint (the follower behind nginx on the copy; 127.0.0.1:8545 on 7622 in Task 10). Python stdlib
 (run with python3 -I) with eth.py (keccak, legacy EIP-155 signing); forge artifacts from
 smartcontracts/evm/out. Requests are paced (the proxy allows 10 r/s, burst 20) and retried on 429.

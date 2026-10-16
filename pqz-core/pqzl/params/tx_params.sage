@@ -1,4 +1,4 @@
-# R_TX (pq-zether.md §7.4): witness s1 = s_f, e_f, r, e1 (32 polys each), e2_t, e2_f, e2_a
+# R_TX (pq-zero-knowledge.md §7.4): witness s1 = s_f, e_f, r, e1 (32 polys each), e2_t, e2_f, e2_a
 # (1 poly each, 16 used coefficients), 15 binary polys (917 used bits: d, d', M, c, e_T).
 pqz_verbose = 1
 name = "pqz_tx"

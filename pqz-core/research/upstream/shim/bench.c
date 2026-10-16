@@ -136,7 +136,7 @@ setup (void)
   pqz_encrypt (pks, 3, (const uint8_t (*)[16])m, r, e1, (const int16_t (*)[16])e2, u, vs);
 
   uint8_t *p = tx_stmt;
-#ifdef PQZ_HEADER_BYTES /* rel3 layout (pq-zether.md §7.7): 640 B header, fee a be32 word at PQZ_HDR_FEE */
+#ifdef PQZ_HEADER_BYTES /* rel3 layout (pq-zero-knowledge.md §7.7): 640 B header, fee a be32 word at PQZ_HDR_FEE */
   memset (p, 0x5A, PQZ_PREFIX_BYTES);
   for (int b = 0; b < 8; b++)
     p[PQZ_HDR_FEE + 24 + b] = (uint8_t)(fee >> (8 * (7 - b)));

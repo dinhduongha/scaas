@@ -1,10 +1,10 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
-/// @title Events, errors and the account view of the PQZ layer (pq-zether.md §7.1, §7.8, §9.4).
+/// @title Events, errors and the account view of the PQZ layer (pq-zero-knowledge.md §7.1, §7.8, §9.4).
 /// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** `bytes32` ids are `pqz-mlwe` UAs (CTR-PQZ-13).
 interface IPqzToken {
-    /// @notice pq-zether.md §9.4 `accountState`: `accHash` is the zero ciphertext's hash for a new account (P6g D10).
+    /// @notice pq-zero-knowledge.md §9.4 `accountState`: `accHash` is the zero ciphertext's hash for a new account (P6g D10).
     struct AccountState {
         bytes32 accHash;
         uint16 accUnits;

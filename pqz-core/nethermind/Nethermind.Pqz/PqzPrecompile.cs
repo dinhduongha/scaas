@@ -9,7 +9,7 @@ using Nethermind.Logging;
 namespace Nethermind.Pqz;
 
 /// <summary>
-/// The one <c>PQZ</c> precompile (pq-zether.md §9.1, CTR-PQZ-10) at <see cref="PqzAddresses.Pqz"/>: both proof systems
+/// The one <c>PQZ</c> precompile (pq-zero-knowledge.md §9.1, CTR-PQZ-10) at <see cref="PqzAddresses.Pqz"/>: both proof systems
 /// through <c>pqz_precompile</c>. Gas (P6f D6) = the active schedule's row (op, id, stmtLen) + 3·⌈len/32⌉, a miss at
 /// the smallest row (and <c>…00</c> without calling pqz-ffi: the rows are the allowlist), op 6 at the fixed
 /// <c>selftestGas</c>. Statuses (D4): 0 ⇒ the 32 bytes; 1 ⇒ failed call (all gas); 3 ⇒ <c>…00</c> + Warn

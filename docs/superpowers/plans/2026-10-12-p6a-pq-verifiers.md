@@ -32,7 +32,7 @@ noble (an independent implementation) re-verifies, mutations included.
 **Spec:** `docs/contracts/accounts.md` CTR-UA-12 (`ua_msg`), CTR-UA-17 (verification through the registry, `IUAKindVerifier`,
 stored PQ keys), CTR-UA-23 (PQ kinds, `pq_msg`, empty context, probe, `UA_VERIFY_BUDGET`, the ~50 % bound, the
 `slhdsa128s` gas gate), the kind table (0x0130–0x0133), §1.9 verifiers and enablement, §1.15 gas, §1.16 vectors (T-FUZZ,
-T-GAS); `docs/contracts/pq-zether.md` §9.2 (`MLDSA65` in EIP-8355's layout), §9.4, the self-test paragraph;
+T-GAS); `docs/contracts/pq-zero-knowledge.md` §9.2 (`MLDSA65` in EIP-8355's layout), §9.4, the self-test paragraph;
 `docs/clients/signers-clientkeys.md` "PQ seeds"; `docs/research/pq-eips-vs-scaas.md` Q1–Q5; the EIP texts
 (EIP-8051, EIP-8052, EIP-8355, read at `ethereum/EIPs@3aea9f3`), FIPS 202/204/205, the Falcon specification v1.2.
 
@@ -79,7 +79,7 @@ of the call.
   optimisation later; open questions stay open unless blocking; no hybrid (classical + PQ) kind; rulings are P1–P12
   here, component docs say "controller ruling, pending the owner", never a P-id; `SmartKeyAccount` names contract
   accounts only.
-- Pages over their line budget (`accounts.md`, `pq-zether.md`, `signers-clientkeys.md`) change by net 0 lines;
+- Pages over their line budget (`accounts.md`, `pq-zero-knowledge.md`, `signers-clientkeys.md`) change by net 0 lines;
   `docs/history/` and `docs/decisions.md` are records (untouched).
 - Commit trailer (both lines): `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>` and
   `Claude-Session: https://claude.ai/code/session_01GBLbPyQuG5HXALewwBZ7Bb`. Never `git add claude-code-api.txt`.
@@ -147,8 +147,8 @@ of the call.
 - **P10 — ML-DSA on precompile-less chains.** On the FIPS 204 key the measured Solidity check is over CTR-UA-23's bound
   on every chain (ML-DSA-65 over EIP-7825's per-transaction cap), so under the spec as written `mldsa44/65` are disabled
   wherever no EIP-8355 precompile is probed; the expanded key would fit. The docs record this; the choice is P6c's.
-- **P11 — Docs.** accounts.md / pq-zether.md / signers-clientkeys.md say BUILT (P6a) for the verifiers and clientkeys,
-  replace the estimates by the measurements, drop the transitional `ctx = kind_tag` sentences; pq-zether.md's
+- **P11 — Docs.** accounts.md / pq-zero-knowledge.md / signers-clientkeys.md say BUILT (P6a) for the verifiers and clientkeys,
+  replace the estimates by the measurements, drop the transitional `ctx = kind_tag` sentences; pq-zero-knowledge.md's
   self-test paragraph no longer has `UAMldsaVerifier` call `OP_SELFTEST` (its probe is its self-test); the research
   note records the findings (EIP-8051's μ / `tr` / `2^d`, EIP-8052's gaps, the gas) and keeps its questions open.
 - **P12 — Test hooks.** `SlhDsaSha2128s.buf`, `forsPk`, `xmssPk` and the layout constants are `internal` (not `private`) so
@@ -2590,7 +2590,7 @@ The component docs take the built state and the measurements (net 0 lines on the
 note records the findings and keeps its questions open; TODO marks P6a.
 
 **Files:** modify `docs/contracts/accounts.md` (kind table 0x0130–0x0133, CTR-UA-23, §1.9 verifier and enablement rows,
-§1.15 gas rows and the cost paragraph, T-FUZZ), `docs/contracts/pq-zether.md` (§9.4 `UAMldsaVerifier`, the self-test
+§1.15 gas rows and the cost paragraph, T-FUZZ), `docs/contracts/pq-zero-knowledge.md` (§9.4 `UAMldsaVerifier`, the self-test
 paragraph), `docs/clients/signers-clientkeys.md` ("PQ seeds"), `docs/research/pq-eips-vs-scaas.md` (findings under Q1, Q2,
 Q3, Q4), `TODO.md` (row P6).
 
@@ -2609,8 +2609,8 @@ index 473d964..9dbb471 100644
  | P3 | `*_ZETHER` kinds: `ZetherLayer`, `ZetherLib`, `ZetherStatements`, shield / unshield paths; `ZetherToken` to `legacy/p3/` (owner: backup, not delete) (done, merged `dc9d219`; P3b modes done) | MT-6 |
  | P4 | `MandateWallet`, `SmartKeyAccount` (rename: EVM, Solana, Soroban) on `MetaTxBase`; the typed-struct line to `legacy/p4/` (done, merged `ebacaac`) | MT-7 (+ rename in NM-*) |
  | P5 | Node, clientkeys, encoders for the new ABI; the v1 line to `legacy/p5/` (done; plan `docs/superpowers/plans/2026-10-11-p5-node-clients-new-abi.md`) | MT-8, MT-9 |
--| P6 | PQ Zether after P5 (owner 2026-10-11) and PQ signatures as compatible as possible with the Ethereum drafts, both directions (ML-DSA [EIP-8051](https://eips.ethereum.org/EIPS/eip-8051) / [EIP-8355](https://eips.ethereum.org/EIPS/eip-8355): empty FIPS 204 context, `pq_msg = keccak256(TAG(kind) ‖ ua_msg)`, the EIP encodings incl. the expanded key; Falcon [EIP-8052](https://eips.ethereum.org/EIPS/eip-8052); `slhdsa128s` 0x0133 behind a gas gate; precompiles by probe at the EIP addresses, the 7622 addresses out of the EIP-1352 range; no hybrid kind, owner 2026-10-12; [CTR-UA-23](docs/contracts/accounts.md#CTR-UA-23), [pq-eips-vs-scaas.md](docs/research/pq-eips-vs-scaas.md) Q1–Q8). Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`: **P6a** PQ signature verifiers on the EIP formats + clientkeys PQ signing (plan `docs/superpowers/plans/2026-10-12-p6a-pq-verifiers.md`); **P6b** E-S0 parameter spike; **P6c** UA registry gen 1 with the PQ kinds (UA F0 + F1 core + F9; owner: scope, ML-DSA stored-key form); **P6d** E-S1 `pqz-core` spike (kill criteria); **P6e** E-S2 relations; **P6f** E-S3 Nethermind precompiles on 7622 (owner-approved chain changes); **P6g** E-S4 contracts (`PqzToken` with CTR-PQZ-23/24); **P6h** E-S5/E-S6 clients and WASM; **P6i** E-S7 node; **P6j** E-S8 review; G-LIC any time (release gate) ([pq-zether.md](docs/contracts/pq-zether.md)) | UA PQ kinds, E-S* |
-+| P6 | PQ Zether after P5 (owner 2026-10-11) and PQ signatures as compatible as possible with the Ethereum drafts, both directions (ML-DSA [EIP-8051](https://eips.ethereum.org/EIPS/eip-8051) / [EIP-8355](https://eips.ethereum.org/EIPS/eip-8355): empty FIPS 204 context, `pq_msg = keccak256(TAG(kind) ‖ ua_msg)`, the EIP encodings incl. the expanded key; Falcon [EIP-8052](https://eips.ethereum.org/EIPS/eip-8052); `slhdsa128s` 0x0133 behind a gas gate; precompiles by probe at the EIP addresses, the 7622 addresses out of the EIP-1352 range; no hybrid kind, owner 2026-10-12; [CTR-UA-23](docs/contracts/accounts.md#CTR-UA-23), [pq-eips-vs-scaas.md](docs/research/pq-eips-vs-scaas.md) Q1–Q8). Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`: **P6a** PQ signature verifiers on the EIP formats + clientkeys PQ signing (done: `UAMldsaVerifier`, `UAFndsaVerifier`, `UASlhdsaVerifier`, `src/pq.js`, vectors `smartcontracts/vectors/ua/`; SLH-DSA gate passed at 1.32 M worst case; plan `docs/superpowers/plans/2026-10-12-p6a-pq-verifiers.md`); **P6b** E-S0 parameter spike; **P6c** UA registry gen 1 with the PQ kinds (UA F0 + F1 core + F9; owner: scope, ML-DSA stored-key form); **P6d** E-S1 `pqz-core` spike (kill criteria); **P6e** E-S2 relations; **P6f** E-S3 Nethermind precompiles on 7622 (owner-approved chain changes); **P6g** E-S4 contracts (`PqzToken` with CTR-PQZ-23/24); **P6h** E-S5/E-S6 clients and WASM; **P6i** E-S7 node; **P6j** E-S8 review; G-LIC any time (release gate) ([pq-zether.md](docs/contracts/pq-zether.md)) | UA PQ kinds, E-S* |
+-| P6 | PQ Zether after P5 (owner 2026-10-11) and PQ signatures as compatible as possible with the Ethereum drafts, both directions (ML-DSA [EIP-8051](https://eips.ethereum.org/EIPS/eip-8051) / [EIP-8355](https://eips.ethereum.org/EIPS/eip-8355): empty FIPS 204 context, `pq_msg = keccak256(TAG(kind) ‖ ua_msg)`, the EIP encodings incl. the expanded key; Falcon [EIP-8052](https://eips.ethereum.org/EIPS/eip-8052); `slhdsa128s` 0x0133 behind a gas gate; precompiles by probe at the EIP addresses, the 7622 addresses out of the EIP-1352 range; no hybrid kind, owner 2026-10-12; [CTR-UA-23](docs/contracts/accounts.md#CTR-UA-23), [pq-eips-vs-scaas.md](docs/research/pq-eips-vs-scaas.md) Q1–Q8). Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`: **P6a** PQ signature verifiers on the EIP formats + clientkeys PQ signing (plan `docs/superpowers/plans/2026-10-12-p6a-pq-verifiers.md`); **P6b** E-S0 parameter spike; **P6c** UA registry gen 1 with the PQ kinds (UA F0 + F1 core + F9; owner: scope, ML-DSA stored-key form); **P6d** E-S1 `pqz-core` spike (kill criteria); **P6e** E-S2 relations; **P6f** E-S3 Nethermind precompiles on 7622 (owner-approved chain changes); **P6g** E-S4 contracts (`PqzToken` with CTR-PQZ-23/24); **P6h** E-S5/E-S6 clients and WASM; **P6i** E-S7 node; **P6j** E-S8 review; G-LIC any time (release gate) ([pq-zero-knowledge.md](docs/contracts/pq-zero-knowledge.md)) | UA PQ kinds, E-S* |
++| P6 | PQ Zether after P5 (owner 2026-10-11) and PQ signatures as compatible as possible with the Ethereum drafts, both directions (ML-DSA [EIP-8051](https://eips.ethereum.org/EIPS/eip-8051) / [EIP-8355](https://eips.ethereum.org/EIPS/eip-8355): empty FIPS 204 context, `pq_msg = keccak256(TAG(kind) ‖ ua_msg)`, the EIP encodings incl. the expanded key; Falcon [EIP-8052](https://eips.ethereum.org/EIPS/eip-8052); `slhdsa128s` 0x0133 behind a gas gate; precompiles by probe at the EIP addresses, the 7622 addresses out of the EIP-1352 range; no hybrid kind, owner 2026-10-12; [CTR-UA-23](docs/contracts/accounts.md#CTR-UA-23), [pq-eips-vs-scaas.md](docs/research/pq-eips-vs-scaas.md) Q1–Q8). Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`: **P6a** PQ signature verifiers on the EIP formats + clientkeys PQ signing (done: `UAMldsaVerifier`, `UAFndsaVerifier`, `UASlhdsaVerifier`, `src/pq.js`, vectors `smartcontracts/vectors/ua/`; SLH-DSA gate passed at 1.32 M worst case; plan `docs/superpowers/plans/2026-10-12-p6a-pq-verifiers.md`); **P6b** E-S0 parameter spike; **P6c** UA registry gen 1 with the PQ kinds (UA F0 + F1 core + F9; owner: scope, ML-DSA stored-key form); **P6d** E-S1 `pqz-core` spike (kill criteria); **P6e** E-S2 relations; **P6f** E-S3 Nethermind precompiles on 7622 (owner-approved chain changes); **P6g** E-S4 contracts (`PqzToken` with CTR-PQZ-23/24); **P6h** E-S5/E-S6 clients and WASM; **P6i** E-S7 node; **P6j** E-S8 review; G-LIC any time (release gate) ([pq-zero-knowledge.md](docs/contracts/pq-zero-knowledge.md)) | UA PQ kinds, E-S* |
  
  **P1 start checklist (owner decisions 2026-10-08):**
  - [x] Keep the old code for reference: git tag `ref/pre-token-tree` on the last commit before P1, and copy the v1/v2 token
@@ -2636,23 +2636,23 @@ index 9ee6785..c9b66f2 100644
  | `0x0120` | `msig` | `u16 threshold ‖ u16 count ‖ count × (u16 kind ‖ bytes32 id ‖ u16 weight)`, ids strictly increasing | — | none of its own; every member registered or native, kind ∈ MEMBER | inside the registry (members via their own kinds) | EVM → all |
  | `0x0121` | *reserved* (was `bls12381-multi`, cut) | — | — | — | — | — |
 -| `0x0130` | `mldsa44` | `pk` (1312) | `mldsa44` | ML-DSA-44 sign(`pq_msg`, empty ctx), SPECIFIED (P6); transitional: sign(`ua_msg`, ctx = `kind_tag`) ([CTR-UA-23](#CTR-UA-23)) | precompile where probed, else pure Solidity | every EVM chain |
--| `0x0131` | `mldsa65` | `pk` (1952) | `mldsa65` | as 0x0130 | chain 7622 precompile `0x…0F10` ([CTR-PQZ-10](pq-zether.md#CTR-PQZ-10)), else Solidity | every EVM chain |
+-| `0x0131` | `mldsa65` | `pk` (1952) | `mldsa65` | as 0x0130 | chain 7622 precompile `0x…0F10` ([CTR-PQZ-10](pq-zero-knowledge.md#CTR-PQZ-10)), else Solidity | every EVM chain |
 -| `0x0132` | `fndsa512` | `pk` (897) | `fndsa512` | FN-DSA-512 (Falcon), FIPS 206 draft encoding pinned by vectors | as 0x0130 | every EVM chain |
 -| `0x0133` | `slhdsa128s` | `pk` (32) | `slhdsa128s` | SLH-DSA-SHA2-128s (FIPS 205) sign(`pq_msg`, empty ctx), sig 7,856 B; SPECIFIED (P6) | pure Solidity on SHA-256 `0x02` (no EIP proposes an SLH-DSA precompile), precompile only if probed | EVM; public chains only after the P6 gas gate ([CTR-UA-23](#CTR-UA-23)) |
 +| `0x0130` | `mldsa44` | `pk` (1312) | `mldsa44` | ML-DSA-44 sign(`pq_msg`, empty ctx) ([CTR-UA-23](#CTR-UA-23)) | `UAMldsaVerifier` (BUILT, P6a): an EIP-8355 precompile where probed, else pure Solidity | every EVM chain where the measured cap fits |
-+| `0x0131` | `mldsa65` | `pk` (1952) | `mldsa65` | as 0x0130 | as 0x0130; chain 7622: its `MLDSA65` precompile in the EIP-8355 layout ([CTR-PQZ-10](pq-zether.md#CTR-PQZ-10)) | as 0x0130 |
++| `0x0131` | `mldsa65` | `pk` (1952) | `mldsa65` | as 0x0130 | as 0x0130; chain 7622: its `MLDSA65` precompile in the EIP-8355 layout ([CTR-PQZ-10](pq-zero-knowledge.md#CTR-PQZ-10)) | as 0x0130 |
 +| `0x0132` | `fndsa512` | `pk` (897: `0x09 ‖ h`) | `fndsa512` | Falcon-512 (specification v1.2, NIST third-round; EIP-8052 SHAKE256 hash-to-point) over `ua_msg`, padded sig 666 B | `UAFndsaVerifier` (BUILT, P6a), pure Solidity (EIP-8052 has no addresses) | every EVM chain |
 +| `0x0133` | `slhdsa128s` | `pk` (32) | `slhdsa128s` | SLH-DSA-SHA2-128s (FIPS 205) sign(`pq_msg`, empty ctx), sig 7,856 B | `UASlhdsaVerifier` (BUILT, P6a), pure Solidity on SHA-256 `0x02` (no EIP proposes an SLH-DSA precompile) | EVM; the P6 gas gate passed ([CTR-UA-23](#CTR-UA-23)) |
  | `0x0140` | `zether-bn254` | `Y` (64) | `bn254-g1` | scaas Schnorr by `x` under the **Zether** Schnorr tag (`SCAAS-ZETHER-SCHNORR-V1`) on `ua_msg` | existing Zether Schnorr | EVM |
  | `0x0141` | `zether-bls12381` | `Y` (128) | `bls12381-g1` | as 0x0140 on BLS12-381 | existing | EVM (EIP-2537 chains) |
- | `0x0142` | `pqz-mlwe` ([CTR-PQZ-13](pq-zether.md#CTR-PQZ-13)) | `pk` (16 384) | `pqz-mlwe` | `R_REG` lattice proof over `uaMessage(0x0142, POP_TAG, popDigest(ua, authRef))` + the `authRef` co-sign | `UAPqzVerifier` → PQZ precompile `0x…0F01` op 3 | chain 7622 only ([CTR-PQZ-01](pq-zether.md#CTR-PQZ-01)); `authRef` PQ-only ([CTR-PQZ-12](pq-zether.md#CTR-PQZ-12)); `keyPtr` = SSTORE2(pk) |
+ | `0x0142` | `pqz-mlwe` ([CTR-PQZ-13](pq-zero-knowledge.md#CTR-PQZ-13)) | `pk` (16 384) | `pqz-mlwe` | `R_REG` lattice proof over `uaMessage(0x0142, POP_TAG, popDigest(ua, authRef))` + the `authRef` co-sign | `UAPqzVerifier` → PQZ precompile `0x…0F01` op 3 | chain 7622 only ([CTR-PQZ-01](pq-zero-knowledge.md#CTR-PQZ-01)); `authRef` PQ-only ([CTR-PQZ-12](pq-zero-knowledge.md#CTR-PQZ-12)); `keyPtr` = SSTORE2(pk) |
 @@ -429,7 +429,7 @@ Which kind for whom (guidance for apps and client systems):
  
  <a id="pq-kinds"></a>
  <a id="CTR-UA-23"></a>**CTR-UA-23** — **PQ signing kinds (`mldsa44`, `mldsa65`, `fndsa512`) and `ed25519` are enabled on
 -every EVM chain** (owner). **Message (owner 2026-10-11, SPECIFIED (P6)):** ML-DSA and SLH-DSA kinds sign the 32-byte `pq_msg = keccak256(TAG(kind) ‖ ua_msg)` with the **empty** FIPS 204 / FIPS 205 context (pure signing, not the pre-hash variants): EIP-8051 takes exactly a 32-byte message and EIP-8355 takes the raw message with an always-empty context, so a 32-byte digest whose preimage starts with the kind tag is the one form both verify unchanged (`kind_tag ‖ ua_msg` would not fit 8051); key data, `TAG(kind)` and UA ids do not change, the vectors change in P6. *Transitional:* the current spec and prototype sign `ua_msg` with `ctx = kind_tag`. Verification uses a native precompile where one is probed (chain 7622: `MLDSA65` at
 +every EVM chain** (owner). **Message (owner 2026-10-11, SPECIFIED (P6)):** ML-DSA and SLH-DSA kinds sign the 32-byte `pq_msg = keccak256(TAG(kind) ‖ ua_msg)` with the **empty** FIPS 204 / FIPS 205 context (pure signing, not the pre-hash variants): EIP-8051 takes exactly a 32-byte message and EIP-8355 takes the raw message with an always-empty context, so a 32-byte digest whose preimage starts with the kind tag is the one form both verify unchanged (`kind_tag ‖ ua_msg` would not fit 8051); key data, `TAG(kind)` and UA ids do not change. Verifiers BUILT (P6a, `smartcontracts/evm/src/ua/`; vectors `smartcontracts/vectors/ua/pq_kat.json`, `pq_external.json`); the registry is SPECIFIED. Verification uses a native precompile where one is probed (chain 7622: `MLDSA65` at
- `0x…0F10`, [CTR-PQZ-10](pq-zether.md#CTR-PQZ-10); any future EIP-8051/8052/8355 address by probe, never by assumption)
+ `0x…0F10`, [CTR-PQZ-10](pq-zero-knowledge.md#CTR-PQZ-10); any future EIP-8051/8052/8355 address by probe, never by assumption)
  and a **pure-Solidity verifier** everywhere else. Every check, the registration PoP included, completes **in one
  transaction** within the chain's `UA_VERIFY_BUDGET = min(12,000,000, ⌊0.7 × chain per-transaction gas cap⌋)` (EIP-7825
 @@ -437,18 +437,18 @@ chains: 12 M ≈ 70 % of 16,777,216; Hedera, 15 M cap: 10.5 M), a constructor im
@@ -2687,7 +2687,7 @@ index 9ee6785..c9b66f2 100644
  | `msig` | `abi.encode(MemberSig[] sigs)`, `MemberSig{uint16 index; bytes keyData; bytes sig}` with strictly increasing `index`; the structure's key data is `auth.keyData` (not repeated) | for each: member `kind,id` from the structure; native ⇒ ECDSA/1271 over `uaAuthDigest(id, PURPOSE_MEMBER, member_digest)`; derived ⇒ `keccak(TAG(kind) ‖ keyData) == id` (stored kinds: `vk` from the member's `keyPtr`; no `kindOf` per member at verify: records are immutable and were checked at registration), verifier over `uaMessage(kind, PURPOSE_MEMBER, member_digest)`; `member_digest = keccak256(ua ‖ ua_msg)`; **stops at the threshold**: a `MemberSig` after Σ weight ≥ threshold ⇒ `UAUnauthorized` (keeps register step 4's bound sound) |
 -| `mldsa*` / `fndsa512` / `slhdsa128s` | raw signature | precompile if probed, else Solidity verifier (`slhdsa128s`: on SHA-256 `0x02`), `pk` from `keyPtr` (EXTCODECOPY); ML-DSA and SLH-DSA verify `pq_msg` with the empty context ([CTR-UA-23](#CTR-UA-23), SPECIFIED (P6); transitional: ML-DSA context string = `kind_tag` over `ua_msg`) |
 +| `mldsa*` / `fndsa512` / `slhdsa128s` | raw signature | ML-DSA: an EIP-8355 precompile if probed, else Solidity; FN-DSA, SLH-DSA (on SHA-256 `0x02`): Solidity; `pk` from `keyPtr` (EXTCODECOPY); ML-DSA and SLH-DSA verify `pq_msg` with the empty context, Falcon `ua_msg` ([CTR-UA-23](#CTR-UA-23); verifiers BUILT, P6a) |
- | `pqz-mlwe` | as [pq-zether.md](pq-zether.md) | proofs via the PQZ precompile; authorization via its PQ `authRef` |
+ | `pqz-mlwe` | as [pq-zero-knowledge.md](pq-zero-knowledge.md) | proofs via the PQZ precompile; authorization via its PQ `authRef` |
  | `zether-*` (self, owner ops) | `R ‖ z` | Zether Schnorr with tag `SCAAS-ZETHER-SCHNORR-V1` over `ua_msg` — never the UA Schnorr tag, so a Zether key never produces a `schnorr-*` signature |
  
 @@ -861,8 +861,8 @@ Per-chain enablement:
@@ -2698,7 +2698,7 @@ index 9ee6785..c9b66f2 100644
 -| `slhdsa128s` | SPECIFIED (P6): public chains only after P6 measures it ([CTR-UA-23](#CTR-UA-23)) | pure Solidity on SHA-256 `0x02`; SPHINCS- (Keccak, non-FIPS) estimated 94–276 k, SLH-DSA-SHA2-128s unmeasured |
 +| `mldsa44/65`, `fndsa512` | every EVM chain (owner); precompile where probed | Solidity (measured, P6a): ML-DSA-44 / -65 11.4 / 18.9 M (FIPS 204 key; 4.1 / 5.8 M on an expanded key), FN-DSA-512 2.3 M; measured cap ≤ ~50 % of the chain's `UA_VERIFY_BUDGET` on public chains, else disabled on that chain ([CTR-UA-23](#CTR-UA-23)) |
 +| `slhdsa128s` | every EVM chain: the P6 gas gate passed ([CTR-UA-23](#CTR-UA-23)) | pure Solidity on SHA-256 `0x02`: 0.79 M valid, 1.32 M worst case (measured, P6a) |
- | `pqz-mlwe` | chain 7622 only | [CTR-PQZ-01](pq-zether.md#CTR-PQZ-01), [CTR-PQZ-10](pq-zether.md#CTR-PQZ-10) |
+ | `pqz-mlwe` | chain 7622 only | [CTR-PQZ-01](pq-zero-knowledge.md#CTR-PQZ-01), [CTR-PQZ-10](pq-zero-knowledge.md#CTR-PQZ-10) |
  
  The enabled set, each kind's measured `verifyCap` and the chain's `verifyBudget` are constructor arguments (verifier
 @@ -1203,9 +1203,9 @@ measured worst case (T-GAS), published in the chain profile.
@@ -2734,10 +2734,10 @@ index 9ee6785..c9b66f2 100644
  | T-ZET-1 | the Zether suite green with tagged UAs; `authRef` 0/native/derived; same-curve BLS refused; `zkCovered` rules |
  | T-V3-1 | v3 equivalences (`uaTransfer ≡ uaExecute`, …) as for the v2 named functions; the v2 address-typed path and the `ua*` path share `_uaNonce[pad(addr)]` |
  | T-V3-2 | invariants: `totalSupply == Σ balanceOf(native incl. UA_POOL)`, `balanceOf(UA_POOL) == Σ _uaBalance`, replaying `Transfer` logs equals `balanceOf` for every native holder; `UATransfer` emitted iff a side is derived |
-diff --git a/docs/contracts/pq-zether.md b/docs/contracts/pq-zether.md
+diff --git a/docs/contracts/pq-zero-knowledge.md b/docs/contracts/pq-zero-knowledge.md
 index 27a1575..0c06754 100644
---- a/docs/contracts/pq-zether.md
-+++ b/docs/contracts/pq-zether.md
+--- a/docs/contracts/pq-zero-knowledge.md
++++ b/docs/contracts/pq-zero-knowledge.md
 @@ -1166,7 +1166,7 @@ disks for that or prune ([NODE-OPS-15](../node/ops.md#NODE-OPS-15)).
  |---|---|---|
  | `PqzSafety` (library) | [CTR-PQZ-01](#CTR-PQZ-01) allowlist + self-test helper | |
@@ -2805,7 +2805,7 @@ index 279d92c..7801fdf 100644
 +  would need the leaf-state discipline of EIP-8310, which SCaaS clients do not have. *P6a:* SLH-DSA-SHA2-128s verifies in
 +  Solidity on SHA-256 `0x02` for 0.79 M gas (valid) and at most 1.32 M (the worst case any input can force) — the gas
 +  gate passes.
- - **Q5 Solidity cost basis.** Fireblocks' 1.23 M is **ML-DSA-44**, while `pq-zether.md` §3 and the CTR-UA-23
+ - **Q5 Solidity cost basis.** Fireblocks' 1.23 M is **ML-DSA-44**, while `pq-zero-knowledge.md` §3 and the CTR-UA-23
    estimates attribute it to ML-DSA-65; the ML-DSA-65 worst case is likely higher **[inference]**. The per-chain
    T-GAS measurement settles it before any cap is set.
 ``````

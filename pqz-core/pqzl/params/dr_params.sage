@@ -1,4 +1,4 @@
-# R_DR (pq-zether.md §7.9, RECEIVER_X and AUDITOR): pk = A s + e,
+# R_DR (pq-zero-knowledge.md §7.9, RECEIVER_X and AUDITOR): pk = A s + e,
 # v[i] - (u^T s)[i] = Delta digits(amount)_i + e'_i, e'_i + 2^24 in [0, 2^25).
 # Witness s1 = s, e (32 polys each), 7 binary polys (400 used bits: e').
 pqz_verbose = 1

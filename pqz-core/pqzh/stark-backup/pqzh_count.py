@@ -2,7 +2,7 @@
 """PQZH design study (docs/research/pqzh-design.md): constraint, lookup, trace-cell and proof-size estimates for
 the five PQZ relations as hash-based proofs. Stdlib only; nothing is proved or measured; every number printed is
 an [estimate] from the relation shapes of pqz-core/src/pqz_rel.c (build_reg, build_debit, build_ds, build_dr) and
-pq-zether.md (CTR-PQZ-03, §7.4, §7.5, §7.9).
+pq-zero-knowledge.md (CTR-PQZ-03, §7.4, §7.5, §7.9).
 
   python3 pqz-core/pqzh/pqzh_count.py              # all tables, markdown (output committed as counts.txt)
   python3 pqz-core/pqzh/pqzh_count.py --selftest   # the bound checks the arithmetisation relies on
@@ -134,7 +134,7 @@ def stark_verify_perms(h, w, f, b, a, regime, final_log=5):
 
 
 def ligero(r, rho, regime, ext=3, eb=6, digest=32):
-    """Ligero over F_q (pq-zether.md q, 42-bit elements packed in 6 bytes); challenges in F_{q^ext}."""
+    """Ligero over F_q (pq-zero-knowledge.md q, 42-bit elements packed in 6 bytes); challenges in F_{q^ext}."""
     short = sum(n for _, n, _ in r['short'])
     bits = sum(n * (math.ceil(math.log2(b + 1)) + 1) for _, n, b in r['short'])     # x + 2^k in [0, 2^(k+1))
     bits += sum(c * b for c, b in r['digits']) + sum((b * b).bit_length() for _, _, b in r['short'])
@@ -165,7 +165,7 @@ def ligero(r, rho, regime, ext=3, eb=6, digest=32):
 
 
 def gas_floor(proof):
-    """EIP-7623 floor of a transfer: non-proof calldata as pq-zether.md §9.3 (≈ 119 k tokens), proof ≈ 3.99
+    """EIP-7623 floor of a transfer: non-proof calldata as pq-zero-knowledge.md §9.3 (≈ 119 k tokens), proof ≈ 3.99
     tokens/byte, 10 gas per token."""
     return 10 * (119_000 + 3.99 * proof)
 

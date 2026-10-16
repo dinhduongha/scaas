@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """P6-ANON estimate (docs/research/pqz-anonymity.md §7.2, §8.2): primal uSVP block size beta, ADPS16 2016 model as
-pq-zether.md §4.1 (scratch script of 2026-10-06 re-done; reproduces Kyber-512 406, PQZ 476, 32 hints 466).
-Hints approximated as dimensions removed (pq-zether.md §4.5). Not the pinned lattice-estimator. python3 -I usvp.py"""
+pq-zero-knowledge.md §4.1 (scratch script of 2026-10-06 re-done; reproduces Kyber-512 406, PQZ 476, 32 hints 466).
+Hints approximated as dimensions removed (pq-zero-knowledge.md §4.5). Not the pinned lattice-estimator. python3 -I usvp.py"""
 from math import log, pi, e, sqrt
 def delta(b): return ((pi*b)**(1/b) * b/(2*pi*e))**(1/(2*(b-1)))
 def beta(n, q, ss, se, mmax):

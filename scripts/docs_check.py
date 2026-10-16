@@ -36,12 +36,12 @@ BUDGET = {'README.md': 250, 'architecture.md': 900, 'decisions.md': 3000, 'integ
           'node/runbooks.md': 500, 'node/threat-model.md': 250, 'contracts/README.md': 250, 'contracts/metatx.md': 650,
           'contracts/token-wrappers.md': 650, 'contracts/mandates.md': 150, 'contracts/dex.md': 400,
           'contracts/tender.md': 400, 'contracts/asset-suite.md': 750, 'contracts/zether.md': 700,
-          'contracts/pq-zether.md': 950, 'contracts/accounts.md': 1100, 'networks/README.md': 400,
+          'contracts/pq-zero-knowledge.md': 950, 'contracts/accounts.md': 1100, 'networks/README.md': 400,
           'networks/evm.md': 200, 'networks/hedera.md': 250, 'networks/cosmos.md': 220, 'networks/soroban.md': 230,
           'networks/sui.md': 300, 'networks/aptos.md': 500, 'networks/solana.md': 550, 'networks/ton.md': 280,
           'clients/app.md': 750, 'clients/signers-clientkeys.md': 650}
 # Owner 2026-10-07: these overruns are accepted (reported as notes, not warnings).
-BUDGET_ACCEPTED = {'contracts/accounts.md', 'contracts/dex.md', 'contracts/metatx.md', 'contracts/pq-zether.md', 'contracts/zether.md', 'node/README.md', 'decisions.md'} | {
+BUDGET_ACCEPTED = {'contracts/accounts.md', 'contracts/dex.md', 'contracts/metatx.md', 'contracts/pq-zero-knowledge.md', 'contracts/zether.md', 'node/README.md', 'decisions.md'} | {
     f'networks/{x}.md' for x in ('README', 'evm', 'hedera', 'cosmos', 'soroban', 'sui', 'aptos', 'solana', 'ton')}
 BANNER = '> **Research note — background and rationale only, not normative; the current rules are in docs/ (see decisions.md).**'
 

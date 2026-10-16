@@ -10,7 +10,7 @@ import {PqzLib} from "./PqzLib.sol";
 import {PqzCt} from "./PqzCt.sol";
 
 /// @title The PQZ layer of the kinds `NONE_PQZ` and `UNDERLYING_PQZ` (CTR-PQZ-15, CTR-PQZ-22; P6g plan D1): the entry
-///        points and views of pq-zether.md §9.4; the state and the logic are `PqzLib` (`scaas.pqz`).
+///        points and views of pq-zero-knowledge.md §9.4; the state and the logic are `PqzLib` (`scaas.pqz`).
 /// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Chains 31337 / 1337 / 7622 only (`PqzSafety`). A layer over the
 ///         public ERC-20 balance: `pqzShield` burns public units into `plainPending`, `pqzUnshield` mints them; the
 ///         confidential layer keeps no underlying of its own. The verifier (precompile and proof system), the auditor

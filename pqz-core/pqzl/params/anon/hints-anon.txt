@@ -19,7 +19,7 @@ orthogonal w), checked here against the tool's full-covariance DBDD_predict on a
 ====================================================================================================
 2. DDGR20 beta per number of perfect hints on one (r, e1)
 ====================================================================================================
-V_max = 26408; target beta >= 450 (pq-zether.md CTR-PQZ-03). Last column: lattice-estimator primal_usvp with the hints as removed secret dimensions (n - h), the approximation of pq-zether.md §4.5 / params/anon/usvp.py.
+V_max = 26408; target beta >= 450 (pq-zero-knowledge.md CTR-PQZ-03). Last column: lattice-estimator primal_usvp with the hints as removed secret dimensions (n - h), the approximation of pq-zero-knowledge.md §4.5 / params/anon/usvp.py.
 hints  unit on r  unit on e1  mixed (worst)  estimator n-h
   [r 0: 475.83]
   [r 16: 470.82]

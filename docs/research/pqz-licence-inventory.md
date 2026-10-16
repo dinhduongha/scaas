@@ -3,7 +3,7 @@
 # PQZ licence inventory: third-party code, GMP / MPFR / HEXL absence, open questions (G-LIC step 1)
 
 Written 2026-10-14 (owner, 2026-10-13: G-LIC step 1, the technical part). Gate G-LIC is defined in
-`docs/contracts/pq-zether.md` (CTR-PQZ-01, "The licence gate **G-LIC**") and in the P6 roadmap
+`docs/contracts/pq-zero-knowledge.md` (CTR-PQZ-01, "The licence gate **G-LIC**") and in the P6 roadmap
 (`docs/superpowers/plans/2026-10-12-p6-roadmap.md`). This note lists what PQZ would ship, where each piece of
 third-party code comes from and under which licence, proves from the built artifacts that GMP, MPFR and HEXL are
 absent, and lists the gaps and the questions a lawyer must decide. **It draws no legal conclusion and records no
@@ -282,7 +282,7 @@ Questions only; nothing here is an answer.
 5. **ML-DSA (FIPS 204), FN-DSA / Falcon, SLH-DSA (FIPS 205).** What is the patent status of each scheme as SCaaS
    uses it (own Solidity verifiers; `@noble/post-quantum` for keys and signing), including any patent statements or
    licences NIST published for its PQC standards, and the status of Falcon before its FIPS (206) is final?
-6. **Lattice-based encryption in PQZ.** Do the PQZ encryption and relation design (pq-zether.md) raise patent
+6. **Lattice-based encryption in PQZ.** Do the PQZ encryption and relation design (pq-zero-knowledge.md) raise patent
    questions of their own beyond LaZer / LNP22?
 7. **AES S-box (gap 3).** If the circuit text came from BearSSL, is MIT attribution sufficient? Is a published
    gate-level circuit protectable as such?

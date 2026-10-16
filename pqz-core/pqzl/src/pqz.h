@@ -1,5 +1,5 @@
 /*
- * pqz-core C ABI (pq-zether.md §8, CTR-PQZ-09): R_REG (OP_REGISTER), R_TX and R_TX0 (OP_TRANSFER, auditor on / off,
+ * pqz-core C ABI (pq-zero-knowledge.md §8, CTR-PQZ-09): R_REG (OP_REGISTER), R_TX and R_TX0 (OP_TRANSFER, auditor on / off,
  * told apart by the statement length), R_BURN (OP_BURN, also REFRESH), R_DS (OP_DISCLOSE_SENDER), R_DR
  * (OP_DISCLOSE_RECEIVER, also AUDITOR), R_TXM (OP_TRANSFER_MULTI, op 7: M legs, P6-ANON).
  * Single-threaded; all memory comes from the arena given to pqz_init (no malloc), errors are return codes.
@@ -15,12 +15,12 @@
 #define PQZ_OP_REGISTER 3
 #define PQZ_OP_DISCLOSE_SENDER 4
 #define PQZ_OP_DISCLOSE_RECEIVER 5
-#define PQZ_MAX_PROOF 98304 /* MAX_PROOF (pq-zether.md §8) */
+#define PQZ_MAX_PROOF 98304 /* MAX_PROOF (pq-zero-knowledge.md §8) */
 
 #define PQZ_POLYVEC_BYTES 16384 /* 32 polys x 64 coeffs x be8 */
 #define PQZ_V_BYTES 128         /* 16 coeffs x be8 */
 #define PQZ_PREFIX_BYTES 64     /* opTag || proofSystemId */
-/* proofSystemId (statement bytes 32..63) = keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v2") (pq-zether.md §8,
+/* proofSystemId (statement bytes 32..63) = keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v2") (pq-zero-knowledge.md §8,
    CTR-PQZ-09). pqz-core only hashes it; the precompile accepts only ids it implements. v2 (was .../v1): the LaZer tbox
    Schwartz-Zippel fixes P6-SZ / P6-L2 (lazer/lnp-tbox.c; lazer-crypto/lazer issues 24, 25) change the transcript. */
 #define PQZ_PROOF_SYSTEM_ID                                                                                 \
@@ -32,7 +32,7 @@
 /* R_REG witness: s (2048 x int8) || e (2048 x int16 LE) */
 #define PQZ_REG_WIT_BYTES (2048 + 4096)
 
-/* Debit statements (pq-zether.md §7.7): header (640 B of 32-byte words) || body. The relations read fee (header
+/* Debit statements (pq-zero-knowledge.md §7.7): header (640 B of 32-byte words) || body. The relations read fee (header
    offset 256) and, for R_BURN, amount (288), each a be32 word that must be < 2^64; the rest of the header is only
    hashed (opTag, proofSystemId: the precompile checks them, §9.1). */
 #define PQZ_HEADER_BYTES 640
@@ -41,7 +41,7 @@
 /* salt word (§7.7 offset 576, CTR-PQZ-19): 16 zero bytes || salt; pqz-core only hashes it, the precompile decoder
    (pqz-stmt, P6e D15) rejects any other form */
 #define PQZ_HDR_SALT 576
-/* further header words the decoder pins to 0 (pq-zether.md §7.7 / §7.5, P6e D15): toUA on BURN / REFRESH, recipient
+/* further header words the decoder pins to 0 (pq-zero-knowledge.md §7.7 / §7.5, P6e D15): toUA on BURN / REFRESH, recipient
    on transfers and REFRESH (amount: transfers and REFRESH); auditorOn and the whole salt word on BURN / REFRESH */
 #define PQZ_HDR_TO_UA 192
 #define PQZ_HDR_RECIPIENT 320
@@ -96,7 +96,7 @@
    [M, carries and e_T are derived by the prover; d = digits(amount) is public] */
 #define PQZ_BURN_WIT_BYTES (2048 + 4096 + 2048 + 4096 + 32 + 16)
 
-/* Disclosure (pq-zether.md §7.9): opTag || proofSystemId || chainId || chainUid || token || registry || entryRef
+/* Disclosure (pq-zero-knowledge.md §7.9): opTag || proofSystemId || chainId || chainUid || token || registry || entryRef
    || amount || kind || pk || u || v, every scalar a 32-byte word (amount < 2^64; kind is hashed only), so pk starts
    at 288. Same layout for R_DS and R_DR; 33,184 B. */
 #define PQZ_DISC_AMOUNT (PQZ_PREFIX_BYTES + 5 * 32)
@@ -133,7 +133,7 @@ int pqz_encrypt (const uint8_t *const pks[], unsigned int npk, const uint8_t msg
 int pqz_decrypt_raw (const int8_t s[2048], const uint8_t u[PQZ_POLYVEC_BYTES], const uint8_t v[PQZ_V_BYTES],
                      int64_t w[16]); /* w_i = centre(v_i - (u^T s)_i) */
 
-/* keys and encryption from seeds (pq-zether.md §4.2, pqz_keys.c). 0 = ok; PQZ_ERR_INTERNAL (1) before pqz_init (as the
+/* keys and encryption from seeds (pq-zero-knowledge.md §4.2, pqz_keys.c). 0 = ok; PQZ_ERR_INTERNAL (1) before pqz_init (as the
    three helpers above); PQZ_ERR_REJECT (4) after 64 counters (never in practice: the thresholds sit >= 10 s.d. above the mean norms), PQZ_ERR_INPUT (3) on a pk or
    ciphertext coefficient >= q or a digit > 15. ctr_used (may be NULL): the counter of the accepted attempt.
    KeyGen: SHAKE256("SCAAS-PQZ-KEYGEN-V1" || seed32 || be4(ctr)), s <- CBD_1, e <- CBD_20, pk = A s + e. */

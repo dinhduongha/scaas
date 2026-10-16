@@ -180,7 +180,7 @@ Further events, same object, same filters (decoders for a new kind ship before t
   `UATransfer` of the same log batch and reported as the UA movement, never as a `UA_POOL` balance; balances feed
   `/v1/events` per canonical id; native ids keep today's form;
 - post-quantum Zether: `MetaTransactionExecuted`, `UAMetaTransactionExecuted`, `Transfer` and `UATransfer` of a PQZ
-  token normalized like any meta token's, beside the `Pqz*` events ([contracts/pq-zether.md](../contracts/pq-zether.md));
+  token normalized like any meta token's, beside the `Pqz*` events ([contracts/pq-zero-knowledge.md](../contracts/pq-zero-knowledge.md));
 - planned asset suite: `OrderRecorded`, `OrderRevoked`, `AccountFrozen`, `AccountUnfrozen`, `ForcedTransfer`, `Paused`,
   `Unpaused`, `FeatureDisabled`, `RoleGranted`, `RoleRevoked`, `Attested`, `AttesterSet`, `GrantCreated`, `Released`, `Revoked`,
   `RevocationRenounced`, `MilestoneApproved`, `ExcessSwept`, `DistributionCreated`, `Claimed`, `Cancelled`, `Swept`,

@@ -2,7 +2,7 @@
 """PQZ E-S0 parameter spike (P6b): security estimates and per-round Fiat-Shamir soundness.
 
 Run inside SageMath with lattice-estimator (commit 53da598) on PYTHONPATH; run.sh does that in a pinned container
-and its stdout is estimator.txt. Every parameter comes from docs/contracts/pq-zether.md (CTR-PQZ-03, -04, section 5)
+and its stdout is estimator.txt. Every parameter comes from docs/contracts/pq-zero-knowledge.md (CTR-PQZ-03, -04, section 5)
 or from a derivation printed next to it; docs/research/pqz-parameters-e-s0.md explains each step.
 """
 import math
@@ -244,7 +244,7 @@ print(f"binary rows: largest reconstructed integer 2^25 (e_T + 2^24) < q: {2**25
       f"row 7 terms < 2^15 < q: {2**15 < q}")
 
 # ---- 5. Per-round Fiat-Shamir soundness ---------------------------------------------------------------------------
-hr("5. Per-round Fiat-Shamir soundness (LNP22 rounds, each on its own; section 5 of pq-zether.md)")
+hr("5. Per-round Fiat-Shamir soundness (LNP22 rounds, each on its own; section 5 of pq-zero-knowledge.md)")
 jl_unit = log2(sum(comb(256, i) for i in range(30))) - 256
 rounds = [
     ("R1 JL projection R <- Bin^{256 x N} (LNP22 JL lemma, < 2^-128)", 128.0,

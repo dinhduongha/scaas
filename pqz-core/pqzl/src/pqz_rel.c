@@ -1,6 +1,6 @@
 /*
  * pqz-core relations: R_REG, R_TX (E-S1 spike), R_BURN, R_DS, R_DR and R_TXM as LaZer tbox statements
- * (pq-zether.md §7.2 step 6, §7.4, §7.5, §7.9), the C ABI of pqz.h, proof encoding (LaZer lin-proofs.c's
+ * (pq-zero-knowledge.md §7.2 step 6, §7.4, §7.5, §7.9), the C ABI of pqz.h, proof encoding (LaZer lin-proofs.c's
  * lnp_tbox_encproof / decproof, MIT, with the bounded decoder), and the A / ABDLOP-key caches (A at pqz_init,
  * each relation's keys at its first use).
  *
@@ -547,7 +547,7 @@ shape_of (const rel_t *R, shape_t *H)
       H->bst[z] = 64 + 64 * g, H->bln[z++] = 32;
       H->bst[z] = 96 + 64 * g, H->bln[z++] = 32;
     }
-  /* every e2 vector its own block, bound 64 (pq-zether.md §4.3; owner 2026-10-15, X-1: not one 64 sqrt(M) block):
+  /* every e2 vector its own block, bound 64 (pq-zero-knowledge.md §4.3; owner 2026-10-15, X-1: not one 64 sqrt(M) block):
      the legs' e2_j, e2_f, the auditor copies' e2_{a,j}, contiguous from E */
   for (unsigned k = 0; k < M + 1 + A * M; k++)
     H->bst[z] = H->E + k, H->bln[z++] = 1;
@@ -643,7 +643,7 @@ digit (uint64_t x, unsigned i)
   return (unsigned)((x >> (4 * i)) & 15);
 }
 
-/* a be32 statement word that must be < 2^64 (pq-zether.md §5: anything else is non-canonical) */
+/* a be32 statement word that must be < 2^64 (pq-zero-knowledge.md §5: anything else is non-canonical) */
 static int
 rd_word64 (uint64_t *v, const uint8_t *p)
 {
@@ -663,7 +663,7 @@ new_vec (polyring_srcptr Rq)
 }
 
 /* R_TX: header || pk_f || pk_t || pk_a || u_T || v_T || u || v_t || v_f || v_a; R_TX0: the same without pk_a and
-   v_a; R_BURN: header || pk_f || u_T || v_T || u || v_f (pq-zether.md §7.7); R_TXM: header || pk_f || pk_0 .. pk_{M-1}
+   v_a; R_BURN: header || pk_f || u_T || v_T || u || v_f (pq-zero-knowledge.md §7.7); R_TXM: header || pk_f || pk_0 .. pk_{M-1}
    || [pk_a] || u_T || v_T || u_0 .. u_{G-1} || v_0 .. v_{M-1} || v_f || [v_{a,0} .. v_{a,M-1}] (the same order with
    M legs and G groups). Reads fee, (R_BURN) amount, (the transfers) the auditorOn word and (R_TXM) the M word from
    the header; the rest of it is hashed only. */
@@ -722,7 +722,7 @@ parse_debit (txst_t *T, polyring_srcptr Rq, const uint8_t *stmt, const shape_t *
   return ok;
 }
 
-/* The rows of pq-zether.md §7.4 with M legs (P6-ANON plan §3): row 1 pk_f = A s_f + e_f; row 2 u_g = A^T r_g + e1_g
+/* The rows of pq-zero-knowledge.md §7.4 with M legs (P6-ANON plan §3): row 1 pk_f = A s_f + e_f; row 2 u_g = A^T r_g + e1_g
    per group; per coefficient i < 16, in this order: row 3 per leg j (pk_j^T r_{g(j)})_i + e2_j,i + Delta d_j,i - v_j,i,
    row 4 (pk_f^T r_0)_i + e2_f,i + Delta d'_i - v_f,i, row 5 per leg (auditor on) the same under pk_a with e2_{a,j},
    row 6 (u_T^T s_f)_i + Delta M_i + (e_T,i + 2^24) - 2^24 - v_T,i, row 7 (over Z, all terms < 2^15) M_i + c_{i-1}
@@ -821,7 +821,7 @@ build_debit (sys_t *S, txst_t *T, const uint8_t *stmt, rel_t *R)
   return 1;
 }
 
-/* ---- R_DS and R_DR (disclosure, pq-zether.md §7.9) ---- */
+/* ---- R_DS and R_DR (disclosure, pq-zero-knowledge.md §7.9) ---- */
 
 /* opTag || proofSystemId || chainId || chainUid || token || registry || entryRef || amount || kind (32-byte words)
    || pk || u || v; only amount, pk, u, v enter the equations, the rest is hashed */
@@ -1002,7 +1002,7 @@ set_upsilon (const lnp_tbox_params_struct *P, polyvec_t s1, const unsigned *star
   return 1;
 }
 
-/* Hedged prover seeds (pq-zether.md CTR-PQZ-19; P6e D6): ex[0..32) seeds the commitment randomness s2, ex[32..64)
+/* Hedged prover seeds (pq-zero-knowledge.md CTR-PQZ-19; P6e D6): ex[0..32) seeds the commitment randomness s2, ex[32..64)
    every mask of lnp_tbox_prove; each = SHAKE128(tag || rnd32 || wh || hash0) with tag "SCAAS-PQZ-PROVER-RND-V2" /
    "...-SUB-V2" and wh = SHAKE128("SCAAS-PQZ-PROVER-WIT-V2" || wit)[0..32). A repeated or weak rnd32 for two witnesses
    or two statements still gives unrelated masks (V1 hashed rnd32 alone). Not static: the tests check it directly. */

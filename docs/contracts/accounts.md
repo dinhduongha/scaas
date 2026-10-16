@@ -73,7 +73,7 @@ one UA (new key data = a new UA; users who need a stable address across rotation
 state sync of registrations (each chain has its own registry; the id is the same on every chain because it is a pure
 function); registry-level freeze, revocation or compliance status (compliance stays in the `ComplianceRegistry`,
 [CTR-AS-07](asset-suite.md#CTR-AS-07), and in token controls; the registry is monotonic); post-quantum confidential
-cryptography ([pq-zether.md](pq-zether.md) — this file defines only the PQ **signing** kinds and how a Zether UA points
+cryptography ([pq-zero-knowledge.md](pq-zero-knowledge.md) — this file defines only the PQ **signing** kinds and how a Zether UA points
 to an authorization UA); a DID method, a credential issuer, or an on-chain credential parser.
 
 ### 1.2 Model
@@ -270,7 +270,7 @@ recorded under security.
 <a id="keyhash"></a>
 <a id="CTR-UA-11"></a>**CTR-UA-11** — **`keyHash` is per group, not per kind**: `keccak256(GROUP(g) ‖ canonical_pubkey)`
 with `GROUP(g) = keccak256("scaas.ua.group." ‖ g ‖ ".v1")` (controller ruling, pending the owner: the spec named `group_tag` without defining it) and groups `secp256k1` (x-only), `p256` (x), `ed25519`, `bn254-g1`, `bls12381-g1`, `bls12381-g2`, `bn254-g2`, `mldsa44`,
-`mldsa65`, `fndsa512`, `slhdsa128s`, `pqz-mlwe` ([CTR-PQZ-13](pq-zether.md#CTR-PQZ-13)). All kinds over the same group share the
+`mldsa65`, `fndsa512`, `slhdsa128s`, `pqz-mlwe` ([CTR-PQZ-13](pq-zero-knowledge.md#CTR-PQZ-13)). All kinds over the same group share the
 namespace, so `schnorr-bn254`, `frost-bn254`, `musig2-bn254` and `zether-bn254` can never register the same point, nor
 `webauthn-p256` and `p256` the same key. For MuSig2/FROST the keyHash is over the **group key**; participant keys are
 not claimed (a participant key may sit in several groups; layer 1 gives it its own path). Key data must be the **unique
@@ -344,12 +344,12 @@ Derived kinds (registered; `d` = key data):
 | `0x0120` | `msig` | `u16 threshold ‖ u16 count ‖ count × (u16 kind ‖ bytes32 id ‖ u16 weight)`, ids strictly increasing | — | none of its own; every member registered or native, kind ∈ MEMBER | inside the registry (members via their own kinds) | EVM → all |
 | `0x0121` | *reserved* (was `bls12381-multi`, cut) | — | — | — | — | — |
 | `0x0130` | `mldsa44` | `pk` (1312) | `mldsa44` | ML-DSA-44 sign(`pq_msg`, empty ctx) ([CTR-UA-23](#CTR-UA-23)) | `UAMldsaVerifier` (BUILT, P6a): an EIP-8355 precompile where probed, else pure Solidity on the registry's cached EIP-8051 expanded key (P6c); `pk` from `keyPtr` | every EVM chain where the measured cap fits; deployed on the dev chains and 7622 (P6c), a public chain after an audit |
-| `0x0131` | `mldsa65` | `pk` (1952) | `mldsa65` | as 0x0130 | as 0x0130; chain 7622: its `MLDSA65` precompile `0x5caa500000000000000000000000000000000013` in the EIP-8355 layout ([CTR-PQZ-10](pq-zether.md#CTR-PQZ-10); P6f; registry in P6g) | as 0x0130 |
+| `0x0131` | `mldsa65` | `pk` (1952) | `mldsa65` | as 0x0130 | as 0x0130; chain 7622: its `MLDSA65` precompile `0x5caa500000000000000000000000000000000013` in the EIP-8355 layout ([CTR-PQZ-10](pq-zero-knowledge.md#CTR-PQZ-10); P6f; registry in P6g) | as 0x0130 |
 | `0x0132` | `fndsa512` | `pk` (897: `0x09 ‖ h`) | `fndsa512` | Falcon-512 (specification v1.2, NIST third-round; EIP-8052 SHAKE256 hash-to-point) over `ua_msg`, padded sig 666 B | `UAFndsaVerifier` (BUILT, P6a), pure Solidity (EIP-8052 has no addresses); `pk` from `keyPtr` | every EVM chain; deployed as 0x0130 |
 | `0x0133` | `slhdsa128s` | `pk` (32) | `slhdsa128s` | SLH-DSA-SHA2-128s (FIPS 205) sign(`pq_msg`, empty ctx), sig 7,856 B | `UASlhdsaVerifier` (BUILT, P6a), pure Solidity on SHA-256 `0x02` (no EIP proposes an SLH-DSA precompile); `pk` from `keyPtr` | EVM; the P6 gas gate passed ([CTR-UA-23](#CTR-UA-23)); deployed as 0x0130 |
 | `0x0140` | `zether-bn254` | `Y` (64) | `bn254-g1` | scaas Schnorr by `x` under the **Zether** Schnorr tag (`SCAAS-ZETHER-SCHNORR-V1`) on `ua_msg` | existing Zether Schnorr | EVM |
 | `0x0141` | `zether-bls12381` | `Y` (128) | `bls12381-g1` | as 0x0140 on BLS12-381 | existing | EVM (EIP-2537 chains) |
-| `0x0142` | `pqz-mlwe` ([CTR-PQZ-13](pq-zether.md#CTR-PQZ-13)) | `pk` (16 384) | `pqz-mlwe` | `R_REG` lattice proof over `uaMessage(0x0142, POP_TAG, popDigest(ua, authRef))` + the `authRef` co-sign | `UAPqzVerifier` → PQZ precompile `0x…0F01` op 3 (BUILT P6g, cap 3,000,000 on 7622; the registry slot, the stored `pk` and the `authRef` rule BUILT in P6c) | chain 7622 only ([CTR-PQZ-01](pq-zether.md#CTR-PQZ-01)); `authRef` PQ-only ([CTR-PQZ-12](pq-zether.md#CTR-PQZ-12)); `keyPtr` = SSTORE2(pk) |
+| `0x0142` | `pqz-mlwe` ([CTR-PQZ-13](pq-zero-knowledge.md#CTR-PQZ-13)) | `pk` (16 384) | `pqz-mlwe` | `R_REG` lattice proof over `uaMessage(0x0142, POP_TAG, popDigest(ua, authRef))` + the `authRef` co-sign | `UAPqzVerifier` → PQZ precompile `0x…0F01` op 3 (BUILT P6g, cap 3,000,000 on 7622; the registry slot, the stored `pk` and the `authRef` rule BUILT in P6c) | chain 7622 only ([CTR-PQZ-01](pq-zero-knowledge.md#CTR-PQZ-01)); `authRef` PQ-only ([CTR-PQZ-12](pq-zero-knowledge.md#CTR-PQZ-12)); `keyPtr` = SSTORE2(pk) |
 
 <a id="key-validation"></a>Validation at registration, all kinds: **key data must be the unique canonical encoding of
 its key, else `UAKeyData`** (one key ⇒ one id ⇒ one keyHash): coordinates and scalars `<` the field modulus / group
@@ -437,14 +437,14 @@ Which kind for whom (guidance for apps and client systems):
 | HSM-held corporate key | `p256` (HSMs do P-256) | native EOA (secp256k1 HSM) |
 | Confidential balances | `zether-*` with `authRef` = one of the above | `authRef = 0` (self) for single holders |
 | Long-lived PQ-ready authority | `mldsa65` (any EVM chain; cheapest on chain 7622) | `msig` mixing `mldsa65` and `p256` (hybrid; fits the caps on every chain) |
-| PQ confidential balances (chain 7622) | `pqz-mlwe` with `authRef` = `mldsa65` ([pq-zether.md](pq-zether.md)) | PQ-dominant `msig` (two or more PQ signers only where a PQ precompile exists) |
+| PQ confidential balances (chain 7622) | `pqz-mlwe` with `authRef` = `mldsa65` ([pq-zero-knowledge.md](pq-zero-knowledge.md)) | PQ-dominant `msig` (two or more PQ signers only where a PQ precompile exists) |
 
 <a id="pq-kinds"></a>
 <a id="CTR-UA-23"></a>**CTR-UA-23** — **PQ signing kinds (`mldsa44`, `mldsa65`, `fndsa512`) and `ed25519` are enabled on
 every EVM chain** (owner). **Message (owner 2026-10-11, SPECIFIED (P6)):** ML-DSA and SLH-DSA kinds sign the 32-byte `pq_msg = keccak256(TAG(kind) ‖ ua_msg)` with the **empty** FIPS 204 / FIPS 205 context (pure signing, not the pre-hash variants): EIP-8051 takes exactly a 32-byte message and EIP-8355 takes the raw message with an always-empty context, so a 32-byte digest whose preimage starts with the kind tag is the one form both verify unchanged (`kind_tag ‖ ua_msg` would not fit 8051); key data, `TAG(kind)` and UA ids do not change. Verifiers BUILT (P6a, `smartcontracts/evm/src/ua/`; vectors `smartcontracts/vectors/ua/pq_kat.json`, `pq_external.json`); the registry BUILT (P6c: stored keys, the ML-DSA expanded-key cache, the caps below; vectors `pq_signatures.json`). Verification uses a native precompile where one is probed (chain 7622: `MLDSA44` at
 `0x5caa500000000000000000000000000000000012` and `MLDSA65` at `0x5caa500000000000000000000000000000000013`, EIP-8355
-layout and empty context, gas 49,000 / 68,000 + 6 per message word (P6f, [CTR-PQZ-10](pq-zether.md#CTR-PQZ-10),
-[CTR-PQZ-11](pq-zether.md#CTR-PQZ-11)); on the P6f copy `UAMldsaVerifier(0x0130 / 0x0131, …)` picked the precompile
+layout and empty context, gas 49,000 / 68,000 + 6 per message word (P6f, [CTR-PQZ-10](pq-zero-knowledge.md#CTR-PQZ-10),
+[CTR-PQZ-11](pq-zero-knowledge.md#CTR-PQZ-11)); on the P6f copy `UAMldsaVerifier(0x0130 / 0x0131, …)` picked the precompile
 and `verify` cost ≈ 175 k / 236 k gas (`estimateGas`); any future EIP-8051/8052/8355 address by probe, never by assumption)
 and a **pure-Solidity verifier** everywhere else. Every check, the registration PoP included, completes **in one
 transaction** within the chain's `UA_VERIFY_BUDGET = min(12,000,000, ⌊0.7 × chain per-transaction gas cap⌋)` (EIP-7825
@@ -590,7 +590,7 @@ account or a registered SIGNING UA. `authRef` is covered by the PoP and co-signe
 ([CTR-UA-07](#CTR-UA-07)). `authRef` may not be a Zether UA; a BLS UA on the same curve as `Y` is refused (publishing
 `[x]G2` would make DDH on G1 decidable). The post-quantum Zether kind `pqz-mlwe` (`0x0142`) tightens this: its `authRef`
 must be an `mldsa*`/`fndsa512` UA or an `msig` whose non-PQ members' weight is below the threshold; `0`, native ids and
-classical-only kinds are refused ([CTR-PQZ-12](pq-zether.md#CTR-PQZ-12)). This supersedes the eight `AuthScheme` values
+classical-only kinds are refused ([CTR-PQZ-12](pq-zero-knowledge.md#CTR-PQZ-12)). This supersedes the eight `AuthScheme` values
 and `link_eth`/`links` of the legacy registry. The token derives the receiver UA from `Y` in the payload with one keccak
 and no lookup; spend authority stays separate from decryption (`survivesEncKeyLeak` for `authRef ≠ 0`). `authRef`
 cannot rotate ([CTR-UA-13](#CTR-UA-13)); a timelocked `rotateZetherAuth` was the rejected alternative.
@@ -641,7 +641,7 @@ both paths; native ids are zero-padded).
 `unwrapToUA` on the wrapper kinds and `burn` on `NONE` / `NONE_ZETHER` (UA-5a); SPECIFIED: `zetherShield` and the
 confidential ops under the UA envelope binding on
 the Zether kinds (UA-5c, [CTR-ZTH-51](zether.md#CTR-ZTH-51)); `PqzToken`'s four PQZ selectors,
-[CTR-PQZ-21](pq-zether.md#CTR-PQZ-21)) and a typed `UAMetaTransfer` (transfer with `entryRef = 0`, or
+[CTR-PQZ-21](pq-zero-knowledge.md#CTR-PQZ-21)) and a typed `UAMetaTransfer` (transfer with `entryRef = 0`, or
 payment). Both share the one nonce map `_uaNonce[bytes32][batch]` with the address path (native ids zero-padded). The
 `ua*` functions keep their signatures and build the struct of their kind; `uaExecuteTransfer` and `uaBatchTransfer`
 mirror `mtxExecuteTransfer` and `mtxBatchTransfer` ([CTR-MTX-23](metatx.md#CTR-MTX-23),
@@ -1040,7 +1040,7 @@ native   : ECDSA / 1271 over uaAuthDigest(ua, purposeTag, digest), classified by
 | `bls-bn254-minsig` | G1 sig (64) | `mapToG1("SCAAS-UA-BLS-BN254-SIG-V1" ‖ ua_msg)` (POP label for PoP); pairing `0x08` |
 | `msig` | `abi.encode(MemberSig[] sigs)`, `MemberSig{uint16 index; bytes keyData; bytes sig}` with strictly increasing `index`; the structure's key data is `auth.keyData` (not repeated) | for each: member `kind,id` from the structure; native ⇒ `MemberSig.keyData` empty (else `UAUnauthorized`), ECDSA/1271 over `uaAuthDigest(id, PURPOSE_MEMBER, member_digest)`; derived ⇒ `keccak(TAG(kind) ‖ keyData) == id` (stored kinds: `vk` from the member's `keyPtr`; no `kindOf` per member at verify: records are immutable and were checked at registration), verifier over `uaMessage(kind, PURPOSE_MEMBER, member_digest)`; `member_digest = keccak256(ua ‖ ua_msg)`; **stops at the threshold**: a `MemberSig` after Σ weight ≥ threshold ⇒ `UAUnauthorized` (keeps register step 4's bound sound); an `auth` or `MemberSig[]` that does not ABI-decode reverts without data (fails closed) |
 | `mldsa*` / `fndsa512` / `slhdsa128s` | raw signature | ML-DSA: an EIP-8355 precompile if probed, else Solidity on the cached expanded key (`verifyCached`, parts by EXTCODECOPY; P6c); FN-DSA, SLH-DSA (on SHA-256 `0x02`): Solidity; `pk` from `keyPtr` (EXTCODECOPY); ML-DSA and SLH-DSA verify `pq_msg` with the empty context, Falcon `ua_msg` ([CTR-UA-23](#CTR-UA-23); verifiers BUILT, P6a; registry BUILT, P6c) |
-| `pqz-mlwe` | as [pq-zether.md](pq-zether.md) | proofs via the PQZ precompile; authorization via its PQ `authRef` |
+| `pqz-mlwe` | as [pq-zero-knowledge.md](pq-zero-knowledge.md) | proofs via the PQZ precompile; authorization via its PQ `authRef` |
 | `zether-*` (self, owner ops) | `R ‖ z` | Zether Schnorr with tag `SCAAS-ZETHER-SCHNORR-V1` over `ua_msg` — never the UA Schnorr tag, so a Zether key never produces a `schnorr-*` signature |
 
 Members of `msig` (kinds ∈ MEMBER) may be native EOAs, native contracts (Safe, `SmartKeyAccount`), or registered
@@ -1059,7 +1059,7 @@ Per-chain enablement:
 | `zether-bn254`, `zether-bls12381` | dev chains only ([CTR-ZTH-02](zether.md#CTR-ZTH-02); their verifiers refuse to deploy elsewhere) | classical Zether |
 | `mldsa44/65`, `fndsa512` | every EVM chain (owner); only ML-DSA probes (EIP-8355); unaudited: audit before a public chain enables — `DeployBase` (P6c) enables them on the dev chains and 7622 only, ML-DSA without a precompile on the cached expanded key | Solidity (measured, P6a): ML-DSA-44 / -65 11.4 / 18.9 M (FIPS 204 key; 4.1 / 5.8 M on an expanded key), FN-DSA-512 2.3 M; measured cap ≤ ~50 % of the chain's `UA_VERIFY_BUDGET` on public chains, else disabled on that chain ([CTR-UA-23](#CTR-UA-23)) |
 | `slhdsa128s` | every EVM chain: the P6 gas gate passed; unaudited: audit before a public chain enables ([CTR-UA-23](#CTR-UA-23)); P6c: as `fndsa512` | pure Solidity on SHA-256 `0x02`: 0.79 M valid, 1.32 M worst case (measured, P6a) |
-| `pqz-mlwe` | chain 7622 only (enabled in 7622's gen 1 of 2026-10-16, P6g; `UAPqzVerifier` refuses other chains) | [CTR-PQZ-01](pq-zether.md#CTR-PQZ-01), [CTR-PQZ-10](pq-zether.md#CTR-PQZ-10) |
+| `pqz-mlwe` | chain 7622 only (enabled in 7622's gen 1 of 2026-10-16, P6g; `UAPqzVerifier` refuses other chains) | [CTR-PQZ-01](pq-zero-knowledge.md#CTR-PQZ-01), [CTR-PQZ-10](pq-zero-knowledge.md#CTR-PQZ-10) |
 
 The enabled set, each kind's measured `verifyCap` and the chain's `verifyBudget` are constructor arguments (verifier
 address 0 = disabled); the chain profile publishes them; clients read `kindEnabled` and the caps before offering a kind
@@ -1452,7 +1452,7 @@ Registration (execution gas, bn254 base):
 | `zether-bn254` / `zether-bls12381` | record + keyOwner + SSTORE2(`Y`) + authRef (if ≠ 0) | one Zether Schnorr + the authority's co-sign (`authPop`) | measured, cold: 165,126 / 205,059 self; 194,288 with a native `authRef` (bn254) |
 | `mldsa44` / `mldsa65` | 2 slots + SSTORE2 1 312 / 1 952 B ≈ 0.3 / 0.43 M; before it, the expanded-key cache: 12.76 M (one part) / 9.58 M + 13.41 M (two parts), one transaction each (measured P6c on an osaka anvil) | one verify on the cached key | ~0.35–0.5 M + verify; measured P6c: 4,485,024 / 6,312,492 |
 | `fndsa512` / `slhdsa128s` | 2 slots + SSTORE2 897 / 32 B | one verify | measured P6c: 2,746,484 / 927,577 |
-| `pqz-mlwe` | as [pq-zether.md](pq-zether.md#keys) (SSTORE2 16 KB, ~0.13 M log) | `R_REG` via precompile | [pq-zether.md](pq-zether.md#gas) |
+| `pqz-mlwe` | as [pq-zero-knowledge.md](pq-zero-knowledge.md#keys) (SSTORE2 16 KB, ~0.13 M log) | `R_REG` via precompile | [pq-zero-knowledge.md](pq-zero-knowledge.md#gas) |
 
 Calldata floor (EIP-7623): it binds when execution gas < 24 × non-zero bytes. With a precompile (execution small) a PQ
 check is floor-priced at 40 gas/byte: an ML-DSA-65 signature is ~132 k gas of calldata (~53 k at 16 gas/byte when a

@@ -607,7 +607,7 @@ keeps `x` and the BSGS table for the session and is terminated on lock, after 5 
 `tableBits 22, boundBits 44`; `allowLargeTable` only by explicit choice. Zether shows only on chains 31337/1337 with a
 configured ZetherToken ([CTR-ZTH-02](../contracts/zether.md#CTR-ZTH-02); whether chain 7622 joins is an open owner question).
 Post-quantum Zether (PQZ) tokens configured on the private chain 7622 run in the same worker
-([CTR-PQZ-18](../contracts/pq-zether.md#CTR-PQZ-18)).
+([CTR-PQZ-18](../contracts/pq-zero-knowledge.md#CTR-PQZ-18)).
 
 ### 10.1 Feature availability
 

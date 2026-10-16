@@ -29,7 +29,7 @@ costs 12–21 M gas.
 | Goldilocks⁵, 128 proven, **ZK** | 506 KB | 29.3 M | 5.4 M | 38.2 M | 21.4 M | **no / no** |
 
 [estimate; proofs in the EVM layout of §6 with 32-byte digests; tx = 21,000 + max(4·tokens + execution,
-10·tokens) (EIP-7623) with the transfer's non-proof calldata and execution from pq-zether.md §9.3.]
+10·tokens) (EIP-7623) with the transfer's non-proof calldata and execution from pq-zero-knowledge.md §9.3.]
 
 - **Proven + ZK (the owner's current target: ZK required, Goldilocks⁵, 128 bits) does not fit any EVM transaction
   under the cap**, whoever writes the verifier: the EIP-7623 calldata floor of the 506 KB `R_TX` proof plus the
@@ -255,7 +255,7 @@ Cheapest Goldilocks⁵ setting per relation and regime (by the total with this c
 Queries are the prototype's `p3-security` counts for 128 bits over Goldilocks⁵ with 24 grinding bits
 (`pqzh-prototype.md` §7). Blowup 32 wins every row: the proof shrinks with fewer queries, and so does the
 per-query verifier work. Its prover cost (12.4 s, 1.17 GB for `R_TX`, prototype §7) is a separate problem. The
-non-proof parts come from pq-zether.md §9.3 [estimate there]: `R_REG` includes the 3.3 M SSTORE2 of the key, and
+non-proof parts come from pq-zero-knowledge.md §9.3 [estimate there]: `R_REG` includes the 3.3 M SSTORE2 of the key, and
 `R_DS` / `R_DR` are views (`verifyTransferAmount`). Their totals are the gas of a contract calling the view in a
 transaction; the RPC gas cap of `eth_call` (geth's default 50 M) is not the binding limit [inference]. Arity 8 beats
 2 and 16 in every regime. Arity 16 forces arity-2 rounds at the input heights, and an arity-16 fold costs 2.3× an

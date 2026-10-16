@@ -50,7 +50,7 @@ Tried and dropped:
 - Karatsuba for the degree-16 products, which was slower than the column kernel in `micro_basemul.c`.
 
 Not done, and why:
-- **Asserts off**: pq-zether.md §10 keeps the invariant checks in release builds; the gain would be about 4 %.
+- **Asserts off**: pq-zero-knowledge.md §10 keeps the invariant checks in release builds; the gain would be about 4 %.
 - **`-O3` / `-march=native`**: §10 prescribes a portable `-O2` build.
 - **An AVX2 backend and integer CRT multiplication**: the base multiplication is now only about 7 % of the profile.
 

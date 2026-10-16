@@ -18,7 +18,7 @@
 
 ## Session 2026-10-16 (second, shutdown afternoon) — resume here
 
-**State:** main `b9327b6`+ pushed. Merged + pushed this session: `p6-anon-s9` (S9 node limits, all unchanged; `pqz-core/params/anon/s9_limits.py`), `p6-anon-s3` (op 7 in pqz-stmt / pqz-ffi; arenas 512 MiB / 1 GiB; D3 PQZL {1,2,4,8} PQZH {1,2,4}), `p6g` (PQZ contracts, deployed on 7622, e2e real PQZL proofs 89 checks 0 failures; addresses + gas in `smartcontracts/evm/runs/2026-10-16-p6g-7622*.txt`, pq-zether.md §9.3), `p6-anon-s4` (op 7 vectors; frozen diff = only the two `negative.json` reasons `Op` → `OpTag`). Controller checks before merge: size gate 0 errors (90 contracts), docs_check 0 errors, Ligero crate tests 38/38, `pqz_prove` example builds on merged pqz-ffi, `pqz_kat.py --check` ok.
+**State:** main `b9327b6`+ pushed. Merged + pushed this session: `p6-anon-s9` (S9 node limits, all unchanged; `pqz-core/params/anon/s9_limits.py`), `p6-anon-s3` (op 7 in pqz-stmt / pqz-ffi; arenas 512 MiB / 1 GiB; D3 PQZL {1,2,4,8} PQZH {1,2,4}), `p6g` (PQZ contracts, deployed on 7622, e2e real PQZL proofs 89 checks 0 failures; addresses + gas in `smartcontracts/evm/runs/2026-10-16-p6g-7622*.txt`, pq-zero-knowledge.md §9.3), `p6-anon-s4` (op 7 vectors; frozen diff = only the two `negative.json` reasons `Op` → `OpTag`). Controller checks before merge: size gate 0 errors (90 contracts), docs_check 0 errors, Ligero crate tests 38/38, `pqz_prove` example builds on merged pqz-ffi, `pqz_kat.py --check` ok.
 
 **Owner ruling 2026-10-16:** PQZL M = 8 on a BUNDLE token — NO automatic COMPACT; the user chooses the storage mode per transfer, the contract never switches (decisions.md CTR-PQZ-23 Change, plan S9 proposal 3). S9 proposal 2 (PQZH ≤ 10 inline credits) still a controller proposal.
 
@@ -182,7 +182,7 @@ with until/sleep or `pgrep -f`.
 confirmed), `ua-followups` (UA-2c follow-ups + clientkeys `checkReceiverFee`, `5c5b6f5`), `pqzh-design` (PQZH design
 study, `475b066`), `pqz-rel3` (`R_BURN` / `R_DS` / `R_DR` in pqz-core with the generic verifier, `3ad4069`), research:
 `pqz-specialised-verifier.md` (P6-SV results; code branch not merged yet), `pqz-proof-alternatives.md` §6 candidates and
-§7 prior art (Lether, MatRiCT+, backends), pq-zether.md "Why LaZer" refreshed. Private notes live in `scratchpad/`
+§7 prior art (Lether, MatRiCT+, backends), pq-zero-knowledge.md "Why LaZer" refreshed. Private notes live in `scratchpad/`
 (git-ignored); read them before touching PQZ branches.
 
 **Owner decisions this session (recorded in TODO):** PQZL not killed (P6-SV: specialised verifier `R_TX` ≈ 8 ms p50
@@ -246,7 +246,7 @@ the gas limit; PQ verifier audit; chain 22776 genesis; run the static bench tarb
 **State:** main pushed. Merged this session: UA-3, UA client dirs rename, the license rename (Vegan Community / Vegan
 Enterprise License), README (§10 relayer diagram, §13–§17, use cases grouped with fee payers, Free Pay), UA-4 (UA
 ledger), P6c (PQ kinds in registry gen 1), P6b (E-S0 estimator, gate met). Spec edits on main (owner 2026-10-13,
-pq-zether.md): why LaZer and no equivalent (`#why-lazer`); upstream cross-check = one-shot golden dump (no AVX-512 CI
+pq-zero-knowledge.md): why LaZer and no equivalent (`#why-lazer`); upstream cross-check = one-shot golden dump (no AVX-512 CI
 runner); no on-chain attestation for PQZ; three disclosure kinds, no `SENDER_CP`; `be32(sendCounter)` in the HKDF info,
 `be8(v)` amount kept (amounts < 2^64 by encoding; Zether's 2^54 is a token-wide BSGS cap, see `shieldScale`).
 

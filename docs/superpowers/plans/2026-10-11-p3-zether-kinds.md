@@ -31,7 +31,7 @@ envelope, disclosure, new ABI names) and regenerates its vectors.
 **Spec:** `docs/contracts/zether.md` (CTR-ZTH-01…47; §6 lifecycle, §7 header, §11 multi-recipient, §12 relaying
 CTR-ZTH-06/08/13/21/23/34, §14 disclosure, §15 CTR-ZTH-44…47, §16 gate, §20 CTR-ZTH-22, §21 interfaces),
 `docs/contracts/token-wrappers.md` (CTR-TOK-03/17/20/21/22/24/25/26), `docs/contracts/metatx.md` (CTR-MTX-02/12/15/17/18/19/20/25),
-`docs/contracts/pq-zether.md` (CTR-PQZ-15/21/22: room only), `docs/contracts/settlement.md` (Zether row, §3.7); TODO.md
+`docs/contracts/pq-zero-knowledge.md` (CTR-PQZ-15/21/22: room only), `docs/contracts/settlement.md` (Zether row, §3.7); TODO.md
 §00 P3 row, MT-1/MT-3/MT-4/MT-6 and the P1e follow-up (c); HANDOFF.md.
 
 **Base:** `main` at `cb5ebaf` (P2c merged as `d85fc8b`, then the disclosure review `docs/research/zether-disclosure.md`; 949 tests). Every code block below was applied task by task to a scratch worktree from `main` (`cb5ebaf`) and run green: full suite **969** (949 − 154 old Zether suites moved to `legacy/p3/` + 174), the Zether suites 248, `zether-prover` `cargo test` 52 and `wasm-smoke.sh` 16 checks, size gate 0 errors after each task, e2e 4/4 and 1/1, docs checkers 0 errors, mutation probe 80/80 killed.
@@ -6791,7 +6791,7 @@ index 0d2c57e..b93f2e4 100644
  | Universal Accounts | today the Zether-only `UniversalAccountRegistry`; next the UA registry with one verifier per kind, and MetaToken v3 with a UA ledger | the signature, multisig, BLS and hash-to-curve libraries | legacy registry BUILT; UA registry and v3 SPECIFIED | [accounts](docs/contracts/accounts.md#universal-account) |
 -| Zether | `ZetherToken`, `ZetherVerifierBn254`, `ZetherVerifierBls12381`, `ITransferDisclosure` | `ERC20MetaTx` (built: `ZetherMetaTx`); EIP-196/197 and EIP-2537 precompiles | BUILT, unaudited | [zether](docs/contracts/zether.md) |
 +| Zether | the `*_ZETHER` kinds (`ZetherLayer` + `ZetherLib`), `ZetherStatements`, `ZetherVerifierBn254`, `ZetherVerifierBls12381`, `ITransferDisclosure` | `MetaTokenBase`; EIP-196/197 and EIP-2537 precompiles | BUILT, unaudited (P3) | [zether](docs/contracts/zether.md) |
- | PQ Zether | `PqzToken` | `ERC20MetaTx`, relayed like Zether ([CTR-PQZ-21](docs/contracts/pq-zether.md#CTR-PQZ-21)); a lattice precompile on chain 7622 — public chains once they offer one | SPECIFIED | [pq-zether](docs/contracts/pq-zether.md) |
+ | PQ Zether | `PqzToken` | `ERC20MetaTx`, relayed like Zether ([CTR-PQZ-21](docs/contracts/pq-zero-knowledge.md#CTR-PQZ-21)); a lattice precompile on chain 7622 — public chains once they offer one | SPECIFIED | [pq-zether](docs/contracts/pq-zero-knowledge.md) |
  | Asset suite | `ComplianceRegistry`, `VestingGrant`, `Distribution`, `ExchangeOffer` | regulated flags 5–8 on ordinary token kinds ([CTR-AS-17](docs/contracts/asset-suite.md#CTR-AS-17)); ERC-7201 namespaced storage | SPECIFIED | [asset-suite](docs/contracts/asset-suite.md) |
  | Tender | `SealedBidTender` | commit and reveal with deposits | SPECIFIED | [tender](docs/contracts/tender.md) |
 diff --git a/docs/assets/token-axes.svg b/docs/assets/token-axes.svg
@@ -6917,7 +6917,7 @@ index 6c25ca5..4331aca 100644
 +| `NONE_ZETHER` / `UNDERLYING_ZETHER` (built, P3) | the kind's public entries (`burn`; or `UnderlyingToken`'s six, without `unwrap(uint256,address)`) | as above |
 +| | `zetherShield(bytes,uint256)`, `zetherWrapShield(address,uint256,bytes32)` (`UNDERLYING_ZETHER`) | `ABSOLUTE` |
 +| | `zetherTransfer`, `…Bundle`, `…NoBundle`, `…Single` `(bytes,bytes,bytes,bytes32)`, `zetherUnshield(bytes,bytes,bytes,bytes32,address,uint256)`, `zetherUnshieldUnwrap` | `ABSOLUTE`; envelope binding through the ticket ([CTR-ZTH-34](zether.md#CTR-ZTH-34)) |
- | `PqzToken` | `pqzTransfer(bytes,bytes,bytes[],bytes,bytes)`, `pqzUnshield(bytes,bytes,bytes[],uint256,address,bytes,bytes)`, `pqzShield(bytes32,uint256)`, `pqzRollOver(bytes32,bytes,bytes[])` | `ABSOLUTE`; not batchable ([CTR-PQZ-21](pq-zether.md#CTR-PQZ-21)) |
+ | `PqzToken` | `pqzTransfer(bytes,bytes,bytes[],bytes,bytes)`, `pqzUnshield(bytes,bytes,bytes[],uint256,address,bytes,bytes)`, `pqzShield(bytes32,uint256)`, `pqzRollOver(bytes32,bytes,bytes[])` | `ABSOLUTE`; not batchable ([CTR-PQZ-21](pq-zero-knowledge.md#CTR-PQZ-21)) |
  | `MandateWallet` | delegate: `payUnderMandate(address,address,uint256,bytes32)`, `revoke(address,uint64)`; owner: `setMandate`, `setPayee`, `revoke(address)`, `execute` ([CTR-ACC-06](mandates.md#CTR-ACC-06)) | fee `NONE` only |
  | `SmartKeyAccount` | `addKey`, `removeKey`, `rotateKey`, `setGuardian`, `execute`, signed by the account itself ([CTR-ACC-10](accounts.md#CTR-ACC-10)) | fee `NONE` only |
 @@ -339,7 +339,7 @@ sequential nonce lets only one variant execute.
@@ -6957,8 +6957,8 @@ index 73331d1..b2cdc5f 100644
  | Signature wrap | `mtxWrap` | holder signs a `TradeOrder` in the underlying's domain; any relayer | underlying and wrapper | order `fee` to the relayer, out of the minted units | tx | **BUILT** (P2a, `UnderlyingToken`) | [CTR-TOK-20](token-wrappers.md#CTR-TOK-20) |
  | DEX order book | `SCaaSDex.mtxSettle`, `mtxCancelOrders`, `mtxInvalidateNonces`; token side `mtxTrade` | each party signs a `TradeOrder`; the venue lane | token (Path A) or DEX (Path B, outside legs); DEX conservation | one signed rate, split relayer / treasury by the DEX | tx, then the DEX watcher | token side **BUILT** (P2a); `SCaaSDex` **BUILT** (P2b-1 SCaaS legs, P2b-2 outside legs); `SCaaSDexV1` pair `settle` **BUILT** | [CTR-DEX-13](dex.md#CTR-DEX-13) to [-19](dex.md#CTR-DEX-19), [-22](dex.md#CTR-DEX-22), [-24](dex.md#CTR-DEX-24) |
  | Exchange against AMMs | `mtxExchange`, `mtxExchangeVia` | the same signed orders; the venue lane | token or DEX, DEX conservation | signed rate on the floor; surplus to the signers | tx, then the DEX watcher | **BUILT** (P2c, `SCaaSDex`) | [CTR-DEX-20](dex.md#CTR-DEX-20) to [-23](dex.md#CTR-DEX-23) |
--| Confidential (Zether) | target `zetherTransfer*`, `zetherShield`, `zetherUnshield`, roll-over; built `transferConfidential*`, `fund`, `burn` | owner signs the call, the proof binds the envelope; any relayer | token verifier | outer NONE / FIXED (never PERCENT), inner `confidentialFee` | tx (dev chains) | **BUILT, UNAUDITED** (dev chains only); target kinds P3 **SPECIFIED**; PQZ **SPECIFIED** | [zether.md](zether.md), [pq-zether.md](pq-zether.md) |
-+| Confidential (Zether) | `zetherTransfer*`, `zetherShield`, `zetherUnshield`, roll-over; `zetherWrapShield`, `zetherUnshieldUnwrap` (`UNDERLYING_ZETHER`) | owner signs the call, the proof binds the envelope; any relayer | token verifier | outer NONE / FIXED (never PERCENT), inner `confidentialFee` | tx (dev chains) | **BUILT, UNAUDITED** (the `*_ZETHER` kinds, P3; dev chains only); PQZ **SPECIFIED** | [zether.md](zether.md), [pq-zether.md](pq-zether.md) |
+-| Confidential (Zether) | target `zetherTransfer*`, `zetherShield`, `zetherUnshield`, roll-over; built `transferConfidential*`, `fund`, `burn` | owner signs the call, the proof binds the envelope; any relayer | token verifier | outer NONE / FIXED (never PERCENT), inner `confidentialFee` | tx (dev chains) | **BUILT, UNAUDITED** (dev chains only); target kinds P3 **SPECIFIED**; PQZ **SPECIFIED** | [zether.md](zether.md), [pq-zero-knowledge.md](pq-zero-knowledge.md) |
++| Confidential (Zether) | `zetherTransfer*`, `zetherShield`, `zetherUnshield`, roll-over; `zetherWrapShield`, `zetherUnshieldUnwrap` (`UNDERLYING_ZETHER`) | owner signs the call, the proof binds the envelope; any relayer | token verifier | outer NONE / FIXED (never PERCENT), inner `confidentialFee` | tx (dev chains) | **BUILT, UNAUDITED** (the `*_ZETHER` kinds, P3; dev chains only); PQZ **SPECIFIED** | [zether.md](zether.md), [pq-zero-knowledge.md](pq-zero-knowledge.md) |
  | Mandate | `payUnderMandate` (named `mtxPayUnderMandate`), `revoke` | delegate signs; any relayer | `MandateWallet` | NONE; relayer pays gas | tx | **BUILT**; epoch and `mtx` names **SPECIFIED** | [CTR-ACC-06](mandates.md#CTR-ACC-06), [-07](mandates.md#CTR-ACC-07) |
  | Asset-suite action | forced transfer, freeze, `VestingGrant.release`, `Distribution` claim, `ExchangeOffer` | issuer / compliance role, or a permissionless claim | token or action contract | by action | tx | **SPECIFIED**, nothing built | [asset-suite.md](asset-suite.md) |
  | Tender | `commitBid` (deposit is a `MetaTransfer`), `revealBid`, `withdrawDeposit` | bidder signs only the deposit | tender and token | NONE | tx | **SPECIFIED**, nothing built | [CTR-TND-01](tender.md#CTR-TND-01), [-03](tender.md#CTR-TND-03) |
@@ -7144,7 +7144,7 @@ index eab8a28..edf1994 100644
 -form `smartcontracts/src/…` (e.g. `smartcontracts/src/zether/**`) and `smartcontracts/test/…` in older references now live under `smartcontracts/evm/`). Every
 -Zether contract and the registry refuse to deploy or initialize outside chain ids 31337/1337, and
 -`OpenFactoryV1.zetherEnabled` defaults to `false` ([safety gate](#safety-gate)). Post-quantum confidential balances are a
--separate class ([pq-zether.md](pq-zether.md)). The relaying target — `ZetherToken` on the one meta-transaction base,
+-separate class ([pq-zero-knowledge.md](pq-zero-knowledge.md)). The relaying target — `ZetherToken` on the one meta-transaction base,
 -confidential ops through the generic self-call, `zetherShield` from the public balance, `chainUid` in every chain-bound
 -digest — is **SPECIFIED** ([relaying](#envelope)); the built `ZetherMetaTx` envelope ops are its transitional form.
 +**Status: BUILT, UNAUDITED — NOT FOR PRODUCTION FUNDS.** The kinds `NONE_ZETHER` (`NoUnderlyingZetherToken`) and
@@ -7153,7 +7153,7 @@ index eab8a28..edf1994 100644
 +`ZetherTranscript`, `ZetherSafety`, the built `UniversalAccountRegistry` and the Rust prover `zether-prover` exist with
 +tests (P3; `smartcontracts/evm/src/zether/**`, `src/registry/**`). Every Zether contract and the registry refuse to
 +deploy or initialize outside chain ids 31337/1337, and `OpenFactory.zetherEnabled` defaults to `false` ([safety
-+gate](#safety-gate)). Post-quantum confidential balances are a separate class ([pq-zether.md](pq-zether.md)). Relaying is
++gate](#safety-gate)). Post-quantum confidential balances are a separate class ([pq-zero-knowledge.md](pq-zero-knowledge.md)). Relaying is
 +the generic self-call ([relaying](#envelope)), `chainUid` is in every chain-bound digest; the built `ZetherToken` with its
 +`ZetherMetaTx` envelope is backed up, not built, in `smartcontracts/evm/legacy/p3/`.
  
@@ -7218,7 +7218,7 @@ index eab8a28..edf1994 100644
  `D_out = [s]G`):
 @@ -606,10 +604,8 @@ meta-transaction layer, not a parallel branch): Zether is a `ZetherLayer` on `Me
  ([CTR-MTX-07](metatx.md#CTR-MTX-07)). Every confidential token is relayable through the same pipeline
- ([metatx.md](metatx.md)); the post-quantum class follows the same rule ([CTR-PQZ-15](pq-zether.md#CTR-PQZ-15)). The
+ ([metatx.md](metatx.md)); the post-quantum class follows the same rule ([CTR-PQZ-15](pq-zero-knowledge.md#CTR-PQZ-15)). The
  envelope (`ZetherMetaTx`, `_executeOp`, `relayed*`) is gone: every Zether entry point is an allowlisted self-call of
 -`mtxExecute` ([CTR-ZTH-34](#CTR-ZTH-34), [CTR-MTX-19](metatx.md#CTR-MTX-19)). **Transitional (BUILT, removed in P3):**
 -`ZetherToken` carries a separate `ZetherMetaTx` mixin that uses `MetaTxLib` read-only, with its own pipeline, domain
@@ -7359,7 +7359,7 @@ index eab8a28..edf1994 100644
 +  `_checkEscrow`, `UnsupportedUnderlying`, `ZetherMetaTx` and the envelope, the v1 init, `burn`, the prover views.
  
  <a id="CTR-ZTH-45"></a>**CTR-ZTH-45** — **Entry points and names** (owner, T5). Zether entry points carry the prefix
- `zether` (classical) or `pqz` ([CTR-PQZ-22](pq-zether.md#CTR-PQZ-22)); `shieldScale` as above.
+ `zether` (classical) or `pqz` ([CTR-PQZ-22](pq-zero-knowledge.md#CTR-PQZ-22)); `shieldScale` as above.
 @@ -955,18 +945,17 @@ leg may be the native coin like on every `UNDERLYING*` kind ([CTR-TOK-26](token-
  `NONE_ZETHER` has `zetherShield` / `zetherUnshield` only. Events follow the names (`ZetherShielded`, `ZetherUnshielded`,
  `ZetherTransfer`, `ZetherTransferMulti`, …). There is no `zetherRegister` / `pqzRegister` (T6): the registry's
@@ -7606,14 +7606,14 @@ index ad47067..8c075a6 100644
  
  **P3 — MT-6**
 -- [ ] v1 line to backup: when `ZetherToken`, `ZetherMetaTx`, `IZetherToken` and `LegacyMetaTransaction` move to the new base, `git mv` `OpenFactoryV1`, `IOpenFactoryV1`, `IFactoryTokenV1` (with `MetaToken`/`HederaMetaToken`/`MetaTxDex` if P5 is done) to `smartcontracts/evm/legacy/` (E1; owner: backup, not delete), and drop them from the deploy scripts.
--- [ ] `mtxBatch` needs a not-batchable hook for PQZ selectors (`MtxNotBatchable(selector)`, pq-zether.md CTR-PQZ-21): a batchable flag in `MtxRule` or a `_mtxBatchable(sel)` check in the loop.
+-- [ ] `mtxBatch` needs a not-batchable hook for PQZ selectors (`MtxNotBatchable(selector)`, pq-zero-knowledge.md CTR-PQZ-21): a batchable flag in `MtxRule` or a `_mtxBatchable(sel)` check in the loop.
 -- [ ] **MT-6** Zether: transient envelope binding, `zetherShield` from the public balance (CTR-ZTH-45), `mtxWrap`; renames (`zetherRollOverSigned`,
 -      `zetherSetRollOverMode`, CTR-ZTH-45; built: `rollOverSigned`, `setRollOverMode`); envelope binding without `to`/`value` (CTR-ZTH-06); `PqzToken` on the one base like Zether,
 -      no `PqzMetaTx`, PQZ selectors not batchable (CTR-PQZ-21); prover `Header` gains `chain_uid` as word 3,
 -      `HEADER_LEN` 384 → 416 (`clients/zether-prover/src/zether.rs`).
 +- P3 (done on branch `p3-zether`, merge pending the final review): `NoUnderlyingZetherToken` / `UnderlyingZetherToken` (`ZetherLayer is MetaTokenBase`, logic in the external `ZetherLib`, `scaas.zether`), `ZetherStatements`, `zetherShield` from the public balance, `zetherWrapShield` / `zetherUnshieldUnwrap` on `UNDERLYING_ZETHER` (nothing minted), relaying through `mtxExecute` with the envelope binding in the transient ticket (`MetaTxBase._envelopeBinding`), `chainUid` in every token-side digest and the 416-byte header, the Zether gate on `OpenFactory`, `DeployBase` registers kinds 2–3 on dev chains, the prover on the new header and ABI; the built `ZetherToken`, `ZetherMetaTx`, old `IZetherToken` and their tests in `smartcontracts/evm/legacy/p3/`; 969 tests. Plan `docs/superpowers/plans/2026-10-11-p3-zether-kinds.md`. Open: a real-passkey envelope test (CTR-ZTH-21), re-measuring the zether.md gas tables on the new kinds, the registry's `chainUid` (UA F1), client ABI (P5); disclosure questions for the disclosure review (plan header).
 +- [ ] v1 line to backup (P5): `OpenFactoryV1`, `IOpenFactoryV1`, `IFactoryTokenV1` (and `MetaToken`/`HederaMetaToken`/`MetaTxDex`) wait for the node and clientkeys (the e2e deploys them); the Zether part moved in P3 (E1; owner: backup, not delete).
-+- [ ] `mtxBatch` needs a not-batchable hook for PQZ selectors (`MtxNotBatchable(selector)`, pq-zether.md CTR-PQZ-21): with `PqzToken` (no PQZ selector exists yet; P3 left the room: the binding hook takes a PQZ tag).
++- [ ] `mtxBatch` needs a not-batchable hook for PQZ selectors (`MtxNotBatchable(selector)`, pq-zero-knowledge.md CTR-PQZ-21): with `PqzToken` (no PQZ selector exists yet; P3 left the room: the binding hook takes a PQZ tag).
 +- [~] **MT-6** Zether (done in P3: transient envelope binding, `zetherShield` from the public balance, `mtxWrap` inherited, the `zether*` renames, binding without `to`/`value`, prover `Header.chain_uid`, `HEADER_LEN` 416; open: `PqzToken` on the one base, PQZ selectors not batchable, CTR-PQZ-21, with the PQZ stream).
  
  **P4 — MT-7**

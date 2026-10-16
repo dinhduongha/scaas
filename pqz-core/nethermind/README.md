@@ -2,7 +2,7 @@
 
 A Nethermind 1.39.0 **plugin** (no Nethermind patch) that adds three precompiles, built into the local image
 `scaas/nethermind-pqz:1.39.0-pqz1` (never pushed). Plan: [P6f](../../docs/superpowers/plans/2026-10-14-p6f-precompiles.md);
-spec: [pq-zether.md](../../docs/contracts/pq-zether.md) CTR-PQZ-10 / CTR-PQZ-11, §9.1–§9.3, §10.
+spec: [pq-zero-knowledge.md](../../docs/contracts/pq-zero-knowledge.md) CTR-PQZ-10 / CTR-PQZ-11, §9.1–§9.3, §10.
 
 | Address | Name | What | Gas |
 |---|---|---|---|

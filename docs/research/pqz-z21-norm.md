@@ -176,7 +176,7 @@ both (its square alone exceeds every Bsq < 2^51) [code].
 ### 6.3 `proofSystemId`: recommendation, no bump
 
 The fix changes the accepted set, not the transcript, the proof format, the parameters or any honest proof
-(`proofs_fnv` unchanged, §7). pq-zether.md §8 bumps the id for "every parameter, relation, transcript or
+(`proofs_fnv` unchanged, §7). pq-zero-knowledge.md §8 bumps the id for "every parameter, relation, transcript or
 serialization change"; this is none of those. A bump would also retire nothing: no verifier with the gap was ever
 deployed (P6f not built), and every v2 proof an honest prover can make still verifies. If a verifier had been
 deployed, the change would be a consensus change (an activation point), which an id bump would not solve either.

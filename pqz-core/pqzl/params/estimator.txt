@@ -138,7 +138,7 @@ modular JL: 41 * N * b' = 2^37.32 < q: True
 binary rows: largest reconstructed integer 2^25 (e_T + 2^24) < q: True; row 7 terms < 2^15 < q: True
 
 ====================================================================================================
-5. Per-round Fiat-Shamir soundness (LNP22 rounds, each on its own; section 5 of pq-zether.md)
+5. Per-round Fiat-Shamir soundness (LNP22 rounds, each on its own; section 5 of pq-zero-knowledge.md)
 ====================================================================================================
 R1 JL projection R <- Bin^{256 x N} (LNP22 JL lemma, < 2^-128)             128.00 bits OK  unit-vector case exactly 2^-128.99
 R2 Z_q amortization, lambda = 4 repetitions (q^-lambda)                    168.00 bits OK  

@@ -74,7 +74,7 @@ is a per-chain variant, not a creator's choice ([CTR-TOK-23](#CTR-TOK-23)).
 | `UNDERLYING` | `UnderlyingToken` | wrapper of 1–8 ERC-20s or the native coin ([CTR-TOK-26](#CTR-TOK-26)) at per-leg rates |
 | `NONE_ZETHER` | `NoUnderlyingZetherToken` | standalone + Zether layer ([zether.md](zether.md)) |
 | `UNDERLYING_ZETHER` | `UnderlyingZetherToken` | wrapper + Zether layer, wrap-shield and unshield-unwrap |
-| `NONE_PQZ`, `UNDERLYING_PQZ`, `NONE_ZETHER_PQZ`, `UNDERLYING_ZETHER_PQZ` | — | **reserved, not built**: post-quantum layer ([pq-zether.md](pq-zether.md)); Zether and PQZ on one token have room in the kind ids only |
+| `NONE_PQZ`, `UNDERLYING_PQZ`, `NONE_ZETHER_PQZ`, `UNDERLYING_ZETHER_PQZ` | — | **reserved, not built**: post-quantum layer ([pq-zero-knowledge.md](pq-zero-knowledge.md)); Zether and PQZ on one token have room in the kind ids only |
 
 | Node | Role |
 |---|---|
@@ -84,7 +84,7 @@ is a per-chain variant, not a creator's choice ([CTR-TOK-23](#CTR-TOK-23)).
 | Zether verifiers (one per curve), the UA registry `UARegistry`, `ZetherDisclosure`, `ZetherStatements`, `OpenFactory` | outside the tokens; roles unchanged |
 
 Confidential tokens are kinds of the same tree, not a parallel branch: every one is relayable through the same
-envelope ([CTR-PQZ-15](pq-zether.md#CTR-PQZ-15)). Non-EVM families implement the same roles natively.
+envelope ([CTR-PQZ-15](pq-zero-knowledge.md#CTR-PQZ-15)). Non-EVM families implement the same roles natively.
 
 The `MetaTransaction` struct, its typehash and the digest rule are one for every kind; only the domain's
 `verifyingContract` differs per clone. Not covered: baskets (proportional, weighted multi-asset redemption), oracle

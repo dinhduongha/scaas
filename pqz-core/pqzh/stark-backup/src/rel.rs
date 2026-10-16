@@ -14,7 +14,7 @@ use crate::ring::*;
 pub const OP_TRANSFER: u8 = 1;
 pub const OP_REGISTER: u8 = 3;
 pub const PREFIX: usize = 64;
-/// Debit statements (pq-zether.md §7.7, pqz.h PQZ_HEADER_BYTES): 640-byte header of 32-byte words; the relation reads
+/// Debit statements (pq-zero-knowledge.md §7.7, pqz.h PQZ_HEADER_BYTES): 640-byte header of 32-byte words; the relation reads
 /// only the fee word (offset 256, be32 < 2^64); opTag, proofSystemId and the other words are only hashed.
 pub const HEADER: usize = 640;
 pub const HDR_FEE: usize = 256;
@@ -237,7 +237,7 @@ pub fn digit_height(p: &Params) -> usize {
     if p.zk && p.whir.is_none() { (2 * (p.num_queries + 2 * p.ext_degree())).next_power_of_two().max(16) } else { 16 }
 }
 
-/// R_TX rows 1-7 (pq-zether.md §7.4, pqz_rel.c build_tx).
+/// R_TX rows 1-7 (pq-zero-knowledge.md §7.4, pqz_rel.c build_tx).
 pub fn build_tx(stmt: &[u8], wit: Option<&[u8]>, check: bool, p: &Params) -> Result<Built, &'static str> {
     if stmt.len() != TX_STMT || wit.is_some_and(|w| w.len() != TX_WIT) {
         return Err("length");

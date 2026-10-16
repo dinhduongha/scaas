@@ -6,7 +6,7 @@ Written 2026-10-13 for P6d of the P6 roadmap (`docs/superpowers/plans/2026-10-12
 forked into `pqz-core/` with its six arithmetic layers rewritten (CTR-PQZ-09), the arithmetic-layer KAT against
 upstream, `R_REG` and a first `R_TX` proved and verified natively and as freestanding `wasm32`, and the result held
 against the kill criteria. Nothing here changes a rule; the relations and parameters are those of
-`docs/contracts/pq-zether.md` (CTR-PQZ-03, CTR-PQZ-09, §7.2 step 6, §7.4). Branch `p6d-pqz-core` (commits `c91b3ab` …
+`docs/contracts/pq-zero-knowledge.md` (CTR-PQZ-03, CTR-PQZ-09, §7.2 step 6, §7.4). Branch `p6d-pqz-core` (commits `c91b3ab` …
 `70314c8`); state and reruns: `pqz-core/STATUS.md`, `pqz-core/README.md`.
 
 **[measured]** marks a number from a run in this spike (machine and settings in §2). **[estimate]** marks a number
@@ -47,7 +47,7 @@ known yet; that is what the upstream cross-check decides.
 | Codegen | LaZer's `lnp-tbox-codegen.sage` in `sagemath/sagemath:10.7` (pinned digest), `--network none` |
 | Estimator | lattice-estimator `53da598`, `RC.ADPS16` (as P6b) |
 | Machine | AMD Ryzen 5 7235HS (8 threads, no AVX-512), single thread |
-| Native | clang 18.1.3 `-O2`, no `-march` (portable, pq-zether.md §10); `build/native/pqz_bench 7 7` under `scripts/capped` |
+| Native | clang 18.1.3 `-O2`, no `-march` (portable, pq-zero-knowledge.md §10); `build/native/pqz_bench 7 7` under `scripts/capped` |
 | wasm32 | clang 18 `--target=wasm32-unknown-unknown`, `wasm-ld-18`, freestanding, 8 MiB stack; node v26.8.1, `test/run_wasm.mjs 3 1` |
 
 The six rewritten layers, for the fixed parameters only (q = 2^42 − 215, d = 64, l = 4):
@@ -170,7 +170,7 @@ Medians [measured]; native 7 proves and 7 + 7 honest verifies, wasm 3 proves and
 
 ## 7. Browser budgets (CTR-PQZ-18)
 
-The spec's prover budgets (`docs/contracts/pq-zether.md` §11, CTR-PQZ-18; p95 per transfer on reference devices) are
+The spec's prover budgets (`docs/contracts/pq-zero-knowledge.md` §11, CTR-PQZ-18; p95 per transfer on reference devices) are
 not kill criteria; the spike's wasm numbers against them [measured; node, not a browser; medians, not p95]:
 
 | Budget | Desktop browser | Phone | Hard limit | Measured (wasm32) | |
@@ -313,8 +313,8 @@ What gave what (`R_TX` prove native, cumulative) [measured]:
 
 Tried and dropped: a `poly_scale` fast path (no measurable gain once the zero columns were gone), Karatsuba on the
 degree-16 products (slower than the column kernel with u128 sums, microbench) [measured]. Not done: asserts off
-(pq-zether.md §10 keeps the invariant checks in release builds; the cross-check measured ≈ 4 %), `-O3` /
-`-march=native` (pq-zether.md §10: portable `-O2`), an AVX2 backend and an integer CRT multiplication (the base
+(pq-zero-knowledge.md §10 keeps the invariant checks in release builds; the cross-check measured ≈ 4 %), `-O3` /
+`-march=native` (pq-zero-knowledge.md §10: portable `-O2`), an AVX2 backend and an integer CRT multiplication (the base
 multiplication is ≈ 7 % of the `R_TX` profile now).
 
 **Against the kill criteria.** `R_TX` prove 1.10 s meets the 6 s limit (and the former 3 s) [measured]. Verify

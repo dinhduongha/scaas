@@ -7,7 +7,7 @@ Inputs: PQZL proof sizes from LaZer's codegen on the sketches next to this file,
 (run_sizing.sh -> sizing-anon.txt, "codegen proof size ~N B" at beta >= 450), scaled by R_TX's measured / codegen ratio (42,799 / 44,638 B);
 until a sketch's run exists, a model (+330 B per leg, +13.5 KB per randomness group); PQZH (Ligero) from R_TX's measured 230,392 B
 plus 726 B per added row (t = 121 columns x 6 B), ~400 slots per extra leg (695 per row), +60 rows per extra
-randomness group. Gas as pq-zether.md §9.3: EIP-7623 floor 21,000 + 10 * tokens, 25.2 tokens per be8 coefficient,
+randomness group. Gas as pq-zero-knowledge.md §9.3: EIP-7623 floor 21,000 + 10 * tokens, 25.2 tokens per be8 coefficient,
 3.99 per random byte; precompile 0.12 M gas per ms of p99 verify. Stdlib only: python3 -I anon_sizes.py
 The last table (`measured`, P6-ANON S3) replaces the model by the measured numbers (pqz-ffi run s3a, L3, H2) and
 applies D3.
@@ -22,7 +22,7 @@ TOK_COEF, TOK_RAND = 25.2, 3.99
 RTX_MEAS, RTX_CODEGEN = 42_799, 44_638
 LIG_RTX, LIG_ROW = 230_392, 121 * 6
 MLDSA_SIG = 3_309
-ROLL = 0.55e6                       # one later roll-over per credit (pq-zether.md §9.3: 8.9 M / 16)
+ROLL = 0.55e6                       # one later roll-over per credit (pq-zero-knowledge.md §9.3: 8.9 M / 16)
 
 
 def codegen_bytes(name):
@@ -56,7 +56,7 @@ def gas(cal_coef, cal_rand, inp, p99_ms, n_keys, n_credits, log_bytes):
     return max(floor, 21_000 + 4 * tokens + exe), floor
 
 
-def beta(h):                        # usvp.py table, hints approximated as dimensions removed (pq-zether.md §4.5)
+def beta(h):                        # usvp.py table, hints approximated as dimensions removed (pq-zero-knowledge.md §4.5)
     t = {32: 466, 48: 461, 80: 451, 144: 432, 272: 392}
     ks = sorted(t)
     for a, b in zip(ks, ks[1:]):

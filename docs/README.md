@@ -48,7 +48,7 @@ suite and the confidential layer. The node (`scaas-node`). Clients: signers, wal
   legs, each an ERC-20 or the native coin), or the same two with the confidential layer, `NONE_ZETHER` and
   `UNDERLYING_ZETHER` ([CTR-TOK-21](contracts/token-wrappers.md#CTR-TOK-21)). The post-quantum confidential kinds
   `NONE_PQZ`, `UNDERLYING_PQZ`, `NONE_ZETHER_PQZ`, `UNDERLYING_ZETHER_PQZ` are reserved, not built
-  ([pq-zether.md](contracts/pq-zether.md)).
+  ([pq-zero-knowledge.md](contracts/pq-zero-knowledge.md)).
 - **Signing is not a kind.** Every token accepts the same intents from an EOA, a `SmartKeyAccount` (ERC-1271) or a
   Universal Account with a PQ key (`mldsa44`, `mldsa65`, `fndsa512`) through the UA ledger in the token base
   ([CTR-UA-18](contracts/accounts.md#CTR-UA-18), [CTR-UA-23](contracts/accounts.md#CTR-UA-23); specified, not built).
@@ -83,7 +83,7 @@ suite and the confidential layer. The node (`scaas-node`). Clients: signers, wal
 | Trading | A signed-order, price-time order book; settlement in one transaction; managed markets for regulated assets; DEX clones from the open factory | [contracts/dex.md](contracts/dex.md), [node/dex-venue.md](node/dex-venue.md) |
 | Procurement | Sealed-bid tenders with deposits, commit/reveal and refunds | [contracts/tender.md](contracts/tender.md) |
 | Asset tokenization | Regulated tokens, vesting and streaming, distributions, corporate actions, templates | [contracts/asset-suite.md](contracts/asset-suite.md) |
-| Confidential amounts | Zether: identities visible, amounts and balances hidden; shield, multi-recipient transfer with decoys, unshield; disclosure to an auditor through four openings. A post-quantum variant (PQZ) waits for a lattice precompile on public chains | [contracts/zether.md](contracts/zether.md), [contracts/pq-zether.md](contracts/pq-zether.md) |
+| Confidential amounts | Zether: identities visible, amounts and balances hidden; shield, multi-recipient transfer with decoys, unshield; disclosure to an auditor through four openings. A post-quantum variant (PQZ) waits for a lattice precompile on public chains | [contracts/zether.md](contracts/zether.md), [contracts/pq-zero-knowledge.md](contracts/pq-zero-knowledge.md) |
 | Many chains | Six families — EVM (including Hedera), Cosmos, Soroban (Stellar, Pi Network), Move (Aptos, Sui), TON, Solana — with one signing and relaying model | [networks/README.md](networks/README.md) |
 | The node | Job API for server-side clients, a public gateway, finality-gated event feeds, gas breakers, sponsorship policies, an admin API with built-in users or OIDC | [node/README.md](node/README.md) |
 | Relayer mesh | Relayers that share intents with admitted partners or an open gossip network; private chains never leave the admitted set | [node/mesh.md](node/mesh.md), [node/gossip.md](node/gossip.md) |
@@ -159,7 +159,7 @@ One table per area; ids in brackets are the rule prefixes each area owns.
 | [dex.md](contracts/dex.md) | `TradeOrder`, the DEX, AMM exchange path, `DexPuller` |
 | [tender.md](contracts/tender.md) | Sealed-bid tender |
 | [asset-suite.md](contracts/asset-suite.md) | Regulated flags, vesting, distributions, `ExchangeOffer`, templates |
-| [zether.md](contracts/zether.md) · [pq-zether.md](contracts/pq-zether.md) | Confidential layer: shield / transfer / unshield, proofs, disclosure; post-quantum variant (waits for a precompile) |
+| [zether.md](contracts/zether.md) · [pq-zero-knowledge.md](contracts/pq-zero-knowledge.md) | Confidential layer: shield / transfer / unshield, proofs, disclosure; post-quantum variant (waits for a precompile) |
 | [settlement.md](contracts/settlement.md) | Map of every settlement kind: entry points, who checks what, fees, finality |
 
 ### Node (`NODE-*`)

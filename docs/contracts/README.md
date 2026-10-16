@@ -15,7 +15,7 @@ the rules every one of them shares. Status tags (**BUILT**, **SPECIFIED**, **PLA
 | [tender.md](tender.md) | `SealedBidTender` | **SPECIFIED** |
 | [asset-suite.md](asset-suite.md) | regulated module, vesting, distributions, corporate actions, templates | **SPECIFIED** |
 | [zether.md](zether.md) | classical Zether, byte-exact; limits; decryption bound | **BUILT, UNAUDITED** (dev chains) |
-| [pq-zether.md](pq-zether.md) | post-quantum Zether on private/PoA chains | **SPECIFIED, UNAUDITED** |
+| [pq-zero-knowledge.md](pq-zero-knowledge.md) | post-quantum Zether on private/PoA chains | **SPECIFIED, UNAUDITED** |
 | [mandates.md](mandates.md) | `MandateWallet`: delegated, capped payment from the payer's own wallet; auto-pay client integration | **BUILT**; revocation epoch **SPECIFIED** |
 | [settlement.md](settlement.md) | map of every settlement kind: entry points, who checks what, fees, finality (adds no rules) | overview |
 
@@ -193,7 +193,7 @@ families carry stronger gates, enforced in code:
 | Production curve for classical Zether | bn254 vs BLS12-381; BLS12-381 is more secure and **not** cheaper ([CTR-ZTH-32](zether.md#CTR-ZTH-32)) | open |
 | Cryptographic audit | independent audit of the Σ-Bulletproofs protocol, the transcript, the inner-product argument and the registry PoP **before** any dev gate is lifted | open |
 | Gas before public chains | the bn254 transfer (3.33 M execution gas) exceeds the 2.5 M per-transfer kill criterion; optimization is required before a public chain | open |
-| PQ Zether gate | hard-coded allowlist (31337, 1337 and the private chain 7622) **and** a constructor precompile self-test; `OpenFactory.pqzEnabled = false` by default; release gates: **G-LIC** (licences/patents) and audit ([CTR-PQZ-01](pq-zether.md#CTR-PQZ-01)) | **SPECIFIED** |
+| PQ Zether gate | hard-coded allowlist (31337, 1337 and the private chain 7622) **and** a constructor precompile self-test; `OpenFactory.pqzEnabled = false` by default; release gates: **G-LIC** (licences/patents) and audit ([CTR-PQZ-01](pq-zero-knowledge.md#CTR-PQZ-01)) | **SPECIFIED** |
 | Clients | every Zether and PQ Zether contract carries **UNAUDITED — NOT FOR PRODUCTION FUNDS** in its NatSpec; client chain/token screens show an UNAUDITED warning | **BUILT** (NatSpec) |
 
 ## <a id="build-ci-and-pins"></a>5. Build, CI and pins

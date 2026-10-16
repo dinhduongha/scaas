@@ -7,7 +7,7 @@ B=${B:-build}
 mkdir -p $B/include
 CC=${CC:-clang}
 WARN="-Wall -Wextra -Wno-unused-parameter -Wno-unused-function -Wno-sign-compare"
-# portable: no -march=native (pq-zether.md §10), no libc in the library objects
+# portable: no -march=native (pq-zero-knowledge.md §10), no libc in the library objects
 CFLAGS_LIB="-std=gnu11 -O2 -fno-builtin -fno-math-errno -ffp-contract=off $WARN -I$B/include -Isrc -Ilazer -Iparams"
 
 lazer_h() {
@@ -75,7 +75,7 @@ wasm() {
   lazer_h
   mkdir -p $B/wasm
   W="--target=wasm32-unknown-unknown -ffreestanding -fno-builtin -DPQZ_FREESTANDING -Isrc/freestanding"
-  [ "${WASM_SIMD:-0}" = 1 ] && W="$W -msimd128" # P6-SV measurement: the spec's -msimd128 target (pq-zether.md 11)
+  [ "${WASM_SIMD:-0}" = 1 ] && W="$W -msimd128" # P6-SV measurement: the spec's -msimd128 target (pq-zero-knowledge.md 11)
   objs=""
   for f in $LIBSRC src/pqz_wasm_rt.c; do
     o=$B/wasm/$(basename "$f" .c).o

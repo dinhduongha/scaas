@@ -1,4 +1,4 @@
-//! `pqz-ffi`: the precompile boundary in front of both PQZ verifiers (P6e plan D10, R5; pq-zether.md §9.1,
+//! `pqz-ffi`: the precompile boundary in front of both PQZ verifiers (P6e plan D10, R5; pq-zero-knowledge.md §9.1,
 //! CTR-PQZ-10).
 //!
 //! Input `u8(op) ‖ be32(len(stmt)) ‖ stmt ‖ proof` → `pqz_stmt::decode_input` (MAX_INPUT, op, opTag, id, the form's
@@ -42,7 +42,7 @@ pub use pqzl::NodeFault;
 /// Why the precompile has no 32-byte result.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Error {
-    /// the input is longer than `MAX_INPUT`: the precompile reverts (consumes all gas), pq-zether.md §9.1
+    /// the input is longer than `MAX_INPUT`: the precompile reverts (consumes all gas), pq-zero-knowledge.md §9.1
     Revert,
     /// a fault of this node, not of the input: no result; the host stops processing (P6f), never treats the input
     /// as invalid
