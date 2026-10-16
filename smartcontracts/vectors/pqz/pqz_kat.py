@@ -16,6 +16,7 @@ together. Public data only: nothing here is constant-time.
 """
 import glob
 import hashlib
+import hmac
 import json
 import os
 import sys
@@ -525,6 +526,79 @@ def parse_multi(stmt, psid):
     return out
 
 
+def enc_group_seed(seed_enc, g):
+    """seed_enc_g of R_TXM group g (P6-ANON D13): seed_enc for g = 0, else SHAKE256("SCAAS-PQZ-ENC-GROUP-V1" ||
+    seed_enc || be4(g))[0..32)."""
+    return seed_enc if g == 0 else shake256(b"SCAAS-PQZ-ENC-GROUP-V1" + seed_enc + g.to_bytes(4, "big"), 32)
+
+
+def enc_multi(pk_f, d_f, legs, pk_a, seed_enc):
+    """The R_TXM encryption (P6-ANON §4, D13): group g (legs j with j // 4 = g) is one Enc from enc_group_seed(seed_enc,
+    g) to its legs, then (g = 0) pk_f with d_f, then (pk_a given) pk_a once per leg of the group with that leg's digits.
+    legs: [(pk_j, digits_j)]. -> dict: us, vs, v_f, v_as, and the witness parts rs, e1s, e2 (legs), e2_f, e2_a, ctrs."""
+    o = {k: [] for k in ("us", "vs", "v_as", "rs", "e1s", "e2", "e2_a", "ctrs")}
+    for g in range(groups(len(legs))):
+        grp = legs[LEGS_PER_GROUP * g:LEGS_PER_GROUP * (g + 1)]
+        n = len(grp)
+        pks = [x[0] for x in grp] + ([pk_f] if g == 0 else []) + ([pk_a] * n if pk_a is not None else [])
+        msgs = [x[1] for x in grp] + ([d_f] if g == 0 else []) + ([x[1] for x in grp] if pk_a is not None else [])
+        r, e1, e2, ctr = enc_sample(enc_group_seed(seed_enc, g), len(pks))
+        u, vs = encrypt(pks, msgs, r, e1, e2)
+        a0 = n + (g == 0)
+        o["us"].append(u), o["rs"].append(r), o["e1s"].append(e1), o["ctrs"].append(ctr)
+        o["vs"] += vs[:n]
+        o["e2"] += e2[:n]
+        if g == 0:
+            o["v_f"], o["e2_f"] = vs[n], e2[n]
+        o["v_as"] += vs[a0:]
+        o["e2_a"] += e2[a0:]
+    return o
+
+
+def hkdf_expand(prk, info, n):
+    """HKDF-Expand-SHA256 (RFC 5869)."""
+    out, t, i = b"", b"", 1
+    while len(out) < n:
+        t = hmac.new(prk, t + info + bytes([i]), hashlib.sha256).digest()
+        out, i = out + t, i + 1
+    return out[:n]
+
+
+def memo_stream(key_seed, hw, salt, n):
+    """the op 7 memo keystream (P6-ANON §5.4, CTR-PQZ-23): key = HKDF-SHA256(IKM key_seed, no salt, info "PQZ/memo/v1"
+    || chainUid || token (20 bytes) || fromUA || be4(sendCounter) || salt) (32 B); ks = HKDF-Expand-SHA256(key,
+    "PQZ/memo/ks/v1", n). hw: header words by MULTI_HEADER name. None if sendCounter >= 2^32."""
+    ctr = int.from_bytes(hw["sendCounter"], "big")
+    if ctr >= 2**32:
+        return None
+    prk = hmac.new(bytes(32), key_seed, hashlib.sha256).digest()
+    key = hkdf_expand(prk, b"PQZ/memo/v1" + hw["chainUid"] + hw["token"][12:] + hw["fromUA"] + ctr.to_bytes(4, "big") +
+                      salt, 32)
+    return hkdf_expand(key, b"PQZ/memo/ks/v1", n)
+
+
+def memo_seal(key_seed, hw, aud, legs):
+    """memo = salt || ((u8(auditorOn) || u8(M) || (be8(a_j) || UA_j)_{j<M}) XOR ks) (18 + 40 M bytes); legs: [(a_j,
+    UA_j word)]; salt = the low 16 bytes of the salt word."""
+    plain = bytes([int(aud), len(legs)]) + b"".join(a.to_bytes(8, "big") + ua for a, ua in legs)
+    salt = hw["salt"][16:]
+    return salt + bytes(x ^ y for x, y in zip(plain, memo_stream(key_seed, hw, salt, len(plain))))
+
+
+def memo_open(key_seed, hw, memo):
+    """memo_seal backwards: (auditorOn, [(a_j, UA_j)]), or None for a length other than 18 + 40 M, an M byte that
+    disagrees with it, or a flags byte other than 0 / 1 (pqz-ffi memo::open)."""
+    if len(memo) < 58 or (len(memo) - 18) % 40:
+        return None
+    ks = memo_stream(key_seed, hw, memo[:16], len(memo) - 16)
+    if ks is None:
+        return None
+    plain = bytes(x ^ y for x, y in zip(memo[16:], ks))
+    if plain[0] > 1 or 18 + 40 * plain[1] != len(memo):
+        return None
+    return plain[0] == 1, [(int.from_bytes(plain[i:i + 8], "big"), plain[i + 8:i + 40]) for i in range(2, len(plain), 40)]
+
+
 def bundle(salt16, u, v_t, v_a, to_ua):
     """R = salt(16) || u || v_t || v_a || toUA(32): 16,688 B, 16,560 B without v_a (CTR-PQZ-23)."""
     assert len(salt16) == 16
@@ -783,7 +857,8 @@ MAX_INPUT = 393216  # D5
 MAX_PROOF = {PQZL_ID: 98304, PQZH_ID: 262144}
 REASON = {"length": "Length", "opTag does not belong to op": "OpTag", "unknown proofSystemId": "ProofSystemId",
           "fee >= 2^64": "Fee", "amount >= 2^64": "Amount", "salt word not 16 zero bytes || salt": "Salt",
-          "auditorOn does not match the length": "AuditorOn", "coefficient >= q": "Coefficient"}
+          "auditorOn does not match the length": "AuditorOn", "coefficient >= q": "Coefficient",
+          "M not a built leg count": "Legs"}
 
 
 class Rejected(Exception):
@@ -806,7 +881,7 @@ def decode_input(b):
         if proof:
             raise Rejected("ProofLength")
         return op, None, stmt, proof
-    if not 1 <= op <= 5:
+    if not (1 <= op <= 5 or op == 7):
         raise Rejected("Op")
     try:
         f = parse(op, stmt)
@@ -1019,7 +1094,115 @@ def check_statement(j, d):
     return bad
 
 
-def proof_framing(idn, form, proof, params, row_max=None):
+# ---------------------------------------------------------------- op 7 R_TXM vectors (P6-ANON S4, plan D15)
+MULTI_FILE = "statement_transfer_multi.json"
+# (case, M, auditorOn): every built shape (one real leg, its position varying by shape), a two-real-leg row, an
+# all-decoy row, a group-boundary row (real legs 3 and 4: groups 0 and 1)
+MULTI_CASES = [(f"M{m}-{'on' if a else 'off'}", m, a) for a in (1, 0) for m in (1, 2, 4, 8)] + \
+    [("M2-off-two-real", 2, 0), ("M4-off-decoys", 4, 0), ("M8-on-boundary", 8, 1)]
+# the PQZH verifier's exact length bound per op 7 shape at THE preset (pqzh-ligero.md §15.2, H2)
+LIGERO_MAX_MULTI = {(1, 1): 235470, (1, 0): 234744, (2, 1): 235470, (2, 0): 235470, (4, 1): 236196, (4, 0): 235470}
+
+
+def multi_rows(d):
+    return {r["case"]: r for r in load(d, MULTI_FILE)["rows"]}
+
+
+def multi_ids(m):
+    return [n for n, idb in IDS.items() if m in BUILT_LEGS[idb]]
+
+
+def multi_build(r):
+    """(stmt (PQZL id), witness, memo, header words, enc) of a statement_transfer_multi.json row from its seeds: keys,
+    T, the multi-group Enc, recipientsHash of objects.uas, the memo under memo.key_seed and its memoHash."""
+    def f():
+        ob, out = r["objects"], r["objects"]["out"]
+        h = {k: fval(v) for k, v in r["header"].items()}
+        pk_f = key(ob["pk_f"]["keygen"])[0]
+        pks = [key(x["keygen"])[0] for x in ob["pks"]]
+        pk_a = key(ob["pk_a"]["keygen"])[0] if "pk_a" in ob else None
+        uT, vT, _ = enc_of(ob["T"])
+        T = ct_add(uT + vT[0], trivial(digits(ob["T"]["plus_trivial"])))
+        amounts = out["values"]
+        e = enc_multi(pk_f, digits(out["value_f"]), [(pk, digits(a)) for pk, a in zip(pks, amounts)], pk_a,
+                      bytes.fromhex(out["seed_enc"]))
+        uas = [word(bytes.fromhex(x)) for x in ob["uas"]]
+        h["recipientsHash"] = recipients_hash(uas)
+        hw = {k: word(h.get(k, 0)) for k in MULTI_HEADER}
+        mm = memo_seal(bytes.fromhex(r["memo"]["key_seed"]), hw, pk_a is not None, list(zip(amounts, uas)))
+        h["memoHash"] = keccak256(mm)
+        st = build_multi(h, pk_f, pks, T, e["us"], e["vs"], e["v_f"], pk_a=pk_a,
+                         v_as=e["v_as"] if pk_a is not None else None)
+        w = key_wit(ob["pk_f"]["keygen"]) + b"".join(i8(x) + i16(y) for x, y in zip(e["rs"], e["e1s"])) + \
+            b"".join(i16(x) for x in e["e2"] + [e["e2_f"]] + e["e2_a"]) + \
+            b"".join(bytes(digits(a)) for a in amounts + [out["value_f"]])
+        return st, w, mm, hw, e, h, T
+    return memo(("multi", json.dumps([r["header"], r["objects"], r["memo"]], sort_keys=True)), f)
+
+
+def check_multi(j, d):
+    bad = []
+    seen = []
+    for r in j["rows"]:
+        case, m, a = r["case"], r["M"], r["auditorOn"]
+        seen.append((case, m, a))
+        st, w, mm, hw, e, h, T = multi_build(r)
+        ob = r["objects"]
+        cmp(bad, f"{case} stmt", r["stmt"], st.hex())
+        cmp(bad, f"{case} form / op / bytes / M / auditorOn",
+            (r["form"], r["op"], r["stmt_bytes"], len(ob["pks"]), len(ob["uas"]), len(ob["out"]["values"]), "pk_a" in ob),
+            ("TRANSFER-MULTI", 7, multi_len(m, a), m, m, m, bool(a)))
+        cmp(bad, f"{case} header recipientsHash / memoHash", (r["header"]["recipientsHash"], r["header"]["memoHash"]),
+            (h["recipientsHash"].hex(), h["memoHash"].hex()))
+        cmp(bad, f"{case} memo", (r["memo"]["memo"], r["memo"]["memo_bytes"]), (mm.hex(), 18 + 40 * m))
+        legs = list(zip(ob["out"]["values"], [word(bytes.fromhex(x)) for x in ob["uas"]]))
+        cmp(bad, f"{case} memo opens", memo_open(bytes.fromhex(r["memo"]["key_seed"]), hw, mm), (a == 1, legs))
+        cmp(bad, f"{case} groups", r["objects"]["out"]["groups"],
+            [{"seed_enc_g": enc_group_seed(bytes.fromhex(ob["out"]["seed_enc"]), g).hex(), "ctr": c}
+             for g, c in enumerate(e["ctrs"])])
+        _, _, bal = dec(key(ob["pk_f"]["keygen"])[1], T)
+        cmp(bad, f"{case} debit: Dec(T) = value_f + sum + fee", bal,
+            ob["out"]["value_f"] + sum(ob["out"]["values"]) + r["header"].get("fee", 0))
+        cmp(bad, f"{case} ids", r["ids"], multi_ids(m))
+        for n, idb in IDS.items():
+            s = with_id(st, idb)
+            try:
+                p = parse(7, s)
+                got = (p["legs"], p["auditor"])
+            except ValueError as x:
+                got = REASON.get(str(x), str(x))
+            cmp(bad, f"{case} {n} parse", got, (m, a) if n in r["ids"] else "Legs")
+        cmp(bad, f"{case} stmt_keccak ids", sorted(r["stmt_keccak"]), sorted(r["ids"]))
+        cmp(bad, f"{case} auth_digest ids", sorted(r["auth_digest"]), sorted(r["ids"]))
+        for n in r["ids"]:
+            s = with_id(st, IDS[n])
+            cmp(bad, f"{case} {n} stmt_keccak", r["stmt_keccak"][n], kec(s).hex())
+            cmp(bad, f"{case} {n} auth_digest", r["auth_digest"][n], keccak256(b"SCAAS-PQZ-AUTH-V1", kec(s)).hex())
+        cmp(bad, f"{case} entry_ref", r["entry_ref"],
+            entry_ref(h["chainId"], h["chainUid"], h["token"], h["fromUA"], h["sendCounter"]).hex())
+    cmp(bad, "cases", seen, MULTI_CASES)
+    rows = multi_rows(d)
+    for o in j["memo_open"]:
+        r = rows[o["case"]]
+        b = bytearray(multi_build(r)[2])
+        for ed in o["edits"]:
+            (k, v), = ed.items()
+            if k == "resize":
+                del b[v:]
+                b += bytes(v - len(b))
+            elif k == "flip":
+                b[v[0]] ^= 1 << v[1]
+            else:
+                raise ValueError("edit " + k)
+        got = memo_open(bytes.fromhex(o["key_seed"]), multi_build(r)[3], bytes(b))
+        got = "none" if got is None else {"auditorOn": got[0], "legs": [[x, ua.hex()] for x, ua in got[1]]}
+        cmp(bad, "memo_open " + o["name"], o["result"], got)
+    if {type(o["result"]) for o in j["memo_open"]} != {str, dict}:
+        bad.append("memo_open: need opened and refused memos")
+    return bad
+
+
+def proof_framing(idn, form, proof, params, row_max=None, bound=None):
     """what can be checked of a proof without verifying it: length within MAX_PROOF(id), PQZL ends in the coder's
     final 1-bit (last byte != 0), PQZH: test polynomials w, q, h canonical (6-byte BE < q), the exact bound."""
     bad = []
@@ -1034,7 +1217,7 @@ def proof_framing(idn, form, proof, params, row_max=None):
         if len(proof) <= 32 + 6 * ne + 8 or any(int.from_bytes(proof[32 + 6 * i:38 + 6 * i], "big") >= Q
                                                  for i in range(ne)):
             bad.append(f"{form}: PQZH test polynomials not canonical")
-        if row_max is not None and not (len(proof) <= row_max == LIGERO_MAX[form] <= LIGERO["max_proof"]):
+        if row_max is not None and not (len(proof) <= row_max == (bound or LIGERO_MAX[form]) <= LIGERO["max_proof"]):
             bad.append(f"{form}: max_proof_len {row_max}")
     return bad
 
@@ -1050,9 +1233,29 @@ def check_proofs(j, d):
     f = parse(1, tx)
     h = srows["TRANSFER"]["header"]
     bnd = bundle(bytes.fromhex(h["salt"]), f["u"], f["v_t"], f["v_a"], bytes.fromhex(h["toUA"]))
-    seen = []
+    seen, seen_m = [], []
     for r in j["rows"]:
         form = r["form"]
+        if form == "TRANSFER-MULTI":  # op 7 (P6-ANON S4)
+            case = r["case"]
+            seen_m.append(case)
+            sr = multi_rows(d)[case]
+            cmp(bad, f"{case} statement", (r["statement"], r["op"]), ({"file": MULTI_FILE, "case": case}, 7))
+            st = with_id(bytes.fromhex(sr["stmt"]), IDS[idn])
+            cmp(bad, f"{case} stmt_keccak", r["stmt_keccak"], kec(st).hex())
+            w = multi_build(sr)[1]
+            cmp(bad, f"{case} wit", (r["wit"], r["wit_keccak"]), (w.hex(), keccak256(w).hex()))
+            proof = bytes.fromhex(r["proof"])
+            cmp(bad, f"{case} proof", (r["proof_bytes"], r["proof_keccak"], r["proof_fnv"]),
+                (len(proof), kec(proof).hex(), fnv(proof)))
+            try:
+                decode_input(precompile_input(7, st, proof))
+            except Rejected as x:
+                bad.append(f"{case}: the honest input is rejected: {x}")
+            bad += proof_framing(idn, case, proof, j["params"], r.get("max_proof_len"),
+                                 LIGERO_MAX_MULTI.get((sr["M"], sr["auditorOn"])))
+            cmp(bad, f"{case} expect", r["expect"], True)
+            continue
         sr = load(d, r["statement"]["file"])["rows"]
         sr = [x for x in sr if x["form"] == r["statement"]["form"] == form][0]
         st = with_id(bytes.fromhex(sr["stmt"]), IDS[idn])
@@ -1077,6 +1280,7 @@ def check_proofs(j, d):
         cmp(bad, f"{form} expect", r["expect"], True)
         seen.append(form)
     cmp(bad, "forms", sorted(seen), sorted(STMT_BYTES))
+    cmp(bad, "op 7 cases", seen_m, [c for c, m, _ in MULTI_CASES if idn in multi_ids(m)])
     return bad
 
 
@@ -1084,6 +1288,8 @@ def apply_edits(r, stmts, proofs):
     """negative.json: the honest input of (form, id) with the row's edits (see the file's description)."""
     if r["form"] == "-":
         op, s, p = 0, b"", b""
+    elif r["form"] == "TRANSFER-MULTI":
+        op, s, p = 7, with_id(stmts[r["case"]], IDS[r["id"]]), proofs[r["case"], r["id"]]
     else:
         op, s, p = OP_BYTE[r["form"].rstrip("0")], with_id(stmts[r["form"]], IDS[r["id"]]), proofs[r["form"], r["id"]]
     s, p = bytearray(s), bytearray(p)
@@ -1153,9 +1359,13 @@ def parse_opening(b):
 def check_negative(j, d):
     bad = []
     stmts = {f: bytes.fromhex(r["stmt"]) for f, r in statement_rows(d).items()}
-    proofs = {(r["form"], n): bytes.fromhex(r["proof"]) for n in IDS for r in load(d, f"proof_{n}.json")["rows"]}
+    stmts |= {c: bytes.fromhex(r["stmt"]) for c, r in multi_rows(d).items()}
+    proofs = {(r.get("case", r["form"]), n): bytes.fromhex(r["proof"]) for n in IDS
+              for r in load(d, f"proof_{n}.json")["rows"]}
     cmp(bad, "max_input", j["max_input"], MAX_INPUT)
     names = set()
+    # every honest input (a multi case name has op 7)
+    honest = {precompile_input(OP_BYTE.get(f.rstrip("0"), 7), with_id(stmts[f], IDS[n]), proofs[f, n]) for f, n in proofs}
     for r in j["rows"]:
         if r["name"] + r["id"] in names:
             bad.append("duplicate row " + r["name"])
@@ -1165,11 +1375,7 @@ def check_negative(j, d):
         try:
             decode_input(b)
             why = "verify"
-            honest = r["form"] != "-" and b == precompile_input(OP_BYTE[r["form"].rstrip("0")],
-                                                                with_id(stmts[r["form"]], IDS[r["id"]]),
-                                                                proofs[r["form"], r["id"]])
-            if honest or any(b == precompile_input(OP_BYTE[f.rstrip("0")], with_id(stmts[f], IDS[n]), proofs[f, n])
-                             for f, n in proofs):
+            if b in honest:
                 bad.append(r["name"] + ": the edits give an honest input")
         except Rejected as x:
             why = x.args[0]
@@ -1178,7 +1384,7 @@ def check_negative(j, d):
     # the required coverage: every decoder reason (pqz-stmt Reject), verifier rejections, the revert, and per (form, id)
     # lengths +- 1, every other op byte, an unknown and the other id, the proof edits
     need = {"Op", "OpTag", "ProofSystemId", "Length", "Fee", "Amount", "Salt", "AuditorOn", "Coefficient", "Input",
-            "ProofLength", "verify"} | {f"MustBeZero({f})" for f in ("amount", "recipient", "toUA", "auditorOn", "salt")}
+            "ProofLength", "Legs", "verify"} | {f"MustBeZero({f})" for f in ("amount", "recipient", "toUA", "auditorOn", "salt")}
     got = {r["reason"] for r in j["rows"]}
     if need - got or "revert" not in {r["expect"] for r in j["rows"]}:
         bad.append(f"missing reasons: {sorted(need - got)}")
@@ -1193,6 +1399,16 @@ def check_negative(j, d):
             have = {r["name"] for r in j["rows"] if r["id"] == n}
             if set(want) - have:
                 bad.append(f"{f} {n}: missing rows {sorted(set(want) - have)}")
+    for c, m, a in MULTI_CASES[:8]:  # op 7 (P6-ANON S4): per built shape and id
+        want = [f"{c}: {x}" for x in ("statement length - 1", "statement length + 1", "unknown proofSystemId (zero word)",
+                                      "the other system's proofSystemId", "proof truncated by 1 byte",
+                                      "proof extended by 1 zero byte", "proof byte 0 bit 0 flipped",
+                                      "proof middle byte bit 3 flipped", "proof last byte bit 7 flipped")]
+        want += [f"{c}: under op {o}" for o in range(7)]
+        for n in multi_ids(m):
+            have = {r["name"] for r in j["rows"] if r["id"] == n and r["form"] == "TRANSFER-MULTI" and r["case"] == c}
+            if set(want) - have:
+                bad.append(f"{c} {n}: missing rows {sorted(set(want) - have)}")
     # the disclosure opening codec (pqz-stmt parse_opening)
     tx = statement_rows(d)["TRANSFER"]
     f = parse(1, bytes.fromhex(tx["stmt"]))
@@ -1443,7 +1659,7 @@ def check_worstcase(j, d):
     return bad
 
 
-CHECKERS = {"matrix.json": check_matrix, "cbd.json": check_cbd, "keygen.json": check_keygen, "enc.json": check_enc,
+CHECKERS = {MULTI_FILE: check_multi, "matrix.json": check_matrix, "cbd.json": check_cbd, "keygen.json": check_keygen, "enc.json": check_enc,
             "statement_*": check_statement, "proof_*": check_proofs, "negative.json": check_negative,
             "selftest.json": check_selftest, "fee0.json": check_fee0, "worstcase_noise.json": check_worstcase}
 

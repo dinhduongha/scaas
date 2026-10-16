@@ -1,4 +1,4 @@
-# PQZ vectors (P6e Task 11)
+# PQZ vectors (P6e Task 11; op 7 `R_TXM`: P6-ANON Task S4)
 
 The one canonical directory of the PQ Zether known-answer vectors ([P6e plan](../../../docs/superpowers/plans/2026-10-14-p6e-relations.md)
 decision D9): every consumer (the precompile and its fuzz targets, the contracts' forge tests, the clients) reads the
@@ -20,7 +20,7 @@ files **in place**; no copies (the copies to `smartcontracts/evm/test/vectors/pq
 
 ```sh
 scripts/capped pqz-core/ffi/vectors/run.sh <label> [write]  # pqz-core/ffi/vectors/runs/<label>-*.txt; exit 1 on a failure
-python3 -I smartcontracts/vectors/pqz/pqz_kat.py --check     # light: ≈ 22 s, no build needed
+python3 -I smartcontracts/vectors/pqz/pqz_kat.py --check     # light: ≈ 43 s, no build needed
 ```
 
 `run.sh` builds `pqz-ffi` with `pqz-vectors`; `write` regenerates the files and rebuilds (the self-test's proofs);
@@ -46,14 +46,21 @@ are KeyGen seeds (`keygen.json`) and Enc objects are `{seed_enc, recipients (Key
 | `statement_burn.json`, `statement_refresh.json` | 102,686, 102,610 | `BURN`, `REFRESH` (50,048 B) the same way | rebuilt |
 | `statement_register.json` | 34,421 | `REGISTER` (16,480 B): the self-test's statement (key `0x51…`, message `keccak256("SCAAS-PQZ-SELFTEST-V1")`) | rebuilt |
 | `statement_disclose.json` | 203,876 | `DISCLOSE-SENDER` / `-RECEIVER` / `-AUDITOR` (33,184 B) of the transfer's receiver and auditor legs | rebuilt |
-| `proof_pqzl.json` | 721,992 | PQZL (id v2, D2), 8 rows = the six relations + REFRESH + AUDITOR: statement reference, witness (prover API, R3), `rnd32`, proof, `keccak256`, FNV-1a, disclosures' `opening = abi.encode(bundle, proof)`, `expect: true` | statement hash, witness from the seeds, framing (length, final coder byte), hashes, opening, decoder accepts |
-| `proof_pqzh.json` | 3,499,051 | PQZH (Ligero, id D3), the same 8 rows; preset parameters; the verifier's exact bound per form | as above; F_q elements of `w`, `q`, `h` canonical; preset; the bounds equal the values recorded in decisions.md (`LIGERO_MAX`) |
+| `statement_transfer_multi.json` | 2,861,546 | Op 7 `R_TXM` (P6-ANON plan §4, D15): 11 statements, every built `(M, auditorOn)` of each id (PQZL M ∈ {1, 2, 4, 8}, PQZH {1, 2, 4}) with one real leg at a position that varies by shape, plus a two-real-leg row (`M2-off-two-real`), an all-decoy row (`M4-off-decoys`, fee 0) and a group-boundary row (`M8-on-boundary`: real legs 3 and 4 in groups 0 and 1); per row `case`, `ids` (the ids that build M), header (word 192 `recipientsHash`, word 320 `M`), objects (leg keys, UAs, `T`, the multi-group Enc with each group's `seed_enc_g` and counter), the sender memo (§5.4), statement, per id `keccak256` / `authDigest`, `entryRef`; `memo_open`: 9 memos opened by the sender (the canonical one, another key, wrong lengths, flipped flags / M / amount / salt bytes) | rebuilt from the seeds (Enc per group, `recipientsHash`, memo by HKDF-SHA256, `memoHash`), the debit balance, `parse` under each id (PQZH M = 8: `Legs`), the memo opens |
+| `proof_pqzl.json` | 2,103,136 | PQZL (id v2, D2), 8 rows = the six relations + REFRESH + AUDITOR, then 11 op 7 rows (`form` TRANSFER-MULTI, `case`, statement = the row of `statement_transfer_multi.json`): statement reference, witness (prover API, R3), `rnd32`, proof, `keccak256`, FNV-1a, disclosures' `opening = abi.encode(bundle, proof)`, `expect: true` | statement hash, witness from the seeds, framing (length, final coder byte), hashes, opening, decoder accepts |
+| `proof_pqzh.json` | 7,417,141 | PQZH (Ligero, id D3), the same 8 rows, then the 8 op 7 rows with M ≤ 4; preset parameters; the verifier's exact bound per form and op 7 shape | as above; F_q elements of `w`, `q`, `h` canonical; preset; the bounds equal the values recorded in decisions.md (`LIGERO_MAX`) |
 | `fee0.json` | 2,796,209 | fee = 0 (owner 2026-10-14: accepted for PQZ and classical Zether): an honest `TRANSFER`, `TRANSFER0`, `BURN` and `REFRESH` with fee word 0 and no beneficiary, as statement rows plus witness, `rnd32` and both ids' proofs | statements and witnesses rebuilt, fee 0, hashes, framing, decoder accepts |
-| `negative.json` | 127,497 | 389 precompile inputs that give `0` (or revert: `MAX_INPUT + 1`) as edits of an honest input: every D15 / R6 decoder rule, op / opTag / id confusion (each form under every other op byte, swapped opTags, unknown and the other system's id), lengths ± 1, the limits (`MAX_PROOF(id)` exactly: decoder accepts, verifier rejects; `MAX_PROOF(id) + 1`; `MAX_INPUT` exactly: `ProofLength`, not a revert; PQZH `max_proof_len(form) + 1`), framing, SELFTEST misuse, truncated / extended / bit-flipped proofs, proof encodings (D15: PQZH element = q in `w` and in an opened column, opened columns swapped or repeated; PQZL coder padding bit set after the final 1-bit), statement bits the decoder accepts, another form's proof; per row the reason (`pqz-stmt` `Reject`, or `verify`) and `SHA3-256(input)`; plus 9 disclosure openings (`abi.encode(bundle, proof)`: the canonical one and 8 `Opening` rejections) | edits replayed, Python decoder gives the same reason, no edit yields an honest input; every `Reject` variant present, and per form and id the lengths ± 1, every other op byte, both id cases, the five proof edits; openings by a Python `parse_opening` |
+| `negative.json` | 245,576 | 731 precompile inputs (389 of ops 1–6, then 342 of op 7: `form` TRANSFER-MULTI and `case`; per built shape and id lengths ± 1, op bytes 0–6, both id cases (PQZL M = 8 under the PQZH id: `Legs`), the proof edits and the PQZH / PQZL proof encodings; the `M` word (0, 3, 16, 2^64 + 2, PQZH 8, another built M), `auditorOn` (2, flipped), header-only and cut statements, amount ≠ 0, fee / amount ≥ 2^64, salt, coefficients, `recipientsHash` / `memoHash` / fee / chainId / key bits, legs swapped within and across groups, `(1, on)` read as `(2, off)`, op 1's proof on M = 1, another shape's proof, the limits at the PQZH `(4, on)` boundary) that give `0` (or revert: `MAX_INPUT + 1`) as edits of an honest input: every D15 / R6 decoder rule, op / opTag / id confusion (each form under every other op byte, swapped opTags, unknown and the other system's id), lengths ± 1, the limits (`MAX_PROOF(id)` exactly: decoder accepts, verifier rejects; `MAX_PROOF(id) + 1`; `MAX_INPUT` exactly: `ProofLength`, not a revert; PQZH `max_proof_len(form) + 1`), framing, SELFTEST misuse, truncated / extended / bit-flipped proofs, proof encodings (D15: PQZH element = q in `w` and in an opened column, opened columns swapped or repeated; PQZL coder padding bit set after the final 1-bit), statement bits the decoder accepts, another form's proof; per row the reason (`pqz-stmt` `Reject`, or `verify`) and `SHA3-256(input)`; plus 9 disclosure openings (`abi.encode(bundle, proof)`: the canonical one and 8 `Opening` rejections) | edits replayed, Python decoder gives the same reason, no edit yields an honest input; every `Reject` variant present, and per form and id the lengths ± 1, every other op byte, both id cases, the five proof edits; openings by a Python `parse_opening` |
 | `selftest.json` | 2,356 | `OP_SELFTEST` (D13): every input of the hash and the hash (from `pqz-ffi`'s `selftest::report()` and `pqz_precompile(06 00000000)`) | the whole hash (A, KeyGen, Enc, Dec, a mixed-radix DFT over 1,634 points); proof references; `fft_ok` and the four results are generator-pinned |
 | `worstcase_noise.json` | 3,459,894 | `bound`: the worst the verifier accepts (below); `illustrative`: an honest key with aligned credits | `bound`: key, `R_REG` statement, credit, the sender statements and witness, `T`, noise, margins, debit; `illustrative`: alignment, every credit through `T` (linearity), `ctHash` of every 32nd credit, `T`, noise, debit |
 
-Total 11,371,429 B of JSON (`proof_pqzh.json` 31 %, `worstcase_noise.json` 30 %, `fee0.json` 25 %; PQZH proof hex is most of each); the plan expected ≈ 7–8 MB before the bound case (owner review) and the fee-0 rows (owner 2026-10-14) were added.
+Total 19,650,288 B of JSON (P6e: 11,371,429 B; S4 added `statement_transfer_multi.json` and the op 7 rows); PQZH proof hex is most of it.
+
+**S4 regeneration of frozen files** (P6-ANON S4, `pqz-core/ffi/vectors/runs/s4a-*`): every P6e file is byte-unchanged
+except `proof_pqzl.json`, `proof_pqzh.json` and `negative.json`, which gained rows **appended** after the P6e rows (the
+P6e rows byte-identical), and two `negative.json` reasons: `TRANSFER: under op 7` (pqzl, pqzh) now decode to `OpTag`
+instead of `Op`, because op 7 decodes since S3 (an op 1 statement under op byte 7 fails at its opTag); output `…00`,
+input bytes unchanged. The self-test hash is unchanged.
 
 ### Scenario
 
@@ -65,6 +72,16 @@ seed, so `u`, `v_t`, `v_f` are equal). Burn 123,456 (fee 7): `Enc_F(877,537; 0x6
 other words fixed filler that the decoder accepts (D15). `rnd32`: `0x53…` for REGISTER (the self-test's), `0x80 + i`
 repeated for the i-th form of `pqz-stmt`'s `FORMS`, `0x90…` for the worst-case debit. `fee0.json`: the same with fee
 0 and no beneficiary (`out` from `0x72…`, burn `0x74…`, refresh `0x75…`; `rnd32` `0xA0 + i`).
+
+### Op 7 (`R_TXM`)
+
+Sender F, auditor A and `T` as the scenario (`T = Enc_F(1,000,000; 0x61…) + Trivial(1,000)`); recipient j = KeyGen(`0x60
++ j`), UA j = the address `(0xB0 + j)` × 20; fee 7 with the auditor and 0 without (`M2-off-two-real`: 7, `M4-off-decoys`:
+0); real legs 123,456 (`M2-off-two-real` and `M8-on-boundary`: 123,456 and 7,000), decoys 0; row i has `seed_enc` `0x70 +
+i`, `sendCounter` 3 + i and `rnd32` `0xB0 + i`; memo key seed `0x4d…` (`pqz-ffi` `fixture::MEMO_KEY_SEED`). The
+statement is written once under the PQZL id; `ids` lists where M is built (M = 8: PQZL only). wasm32 does not prove PQZL
+M = 8 (`pqzl::WASM_PQZL_MAX_LEGS` = 4, one 512 MiB arena, S3): the replay verifies the native proof there. No op 7
+disclosure bundle (§5.4) vectors: `pqz-stmt` has no codec for it yet.
 
 ### Worst-case noise
 
@@ -105,6 +122,7 @@ the statements) re-derive the same streams from the seeds.
 
 ## Native = wasm32
 
-Every proof of `proof_pqzl.json`, `proof_pqzh.json`, `fee0.json` and `worstcase_noise.json` (34) is proved again in wasm32 by
-`pqz-ffi` (node) from the same statement, witness and `rnd32`: byte-equal, and valid through its precompile
-(`pqz-core/ffi/vectors/runs/vec3-wasm.txt`).
+Every proof of `proof_pqzl.json`, `proof_pqzh.json`, `fee0.json` and `worstcase_noise.json` (53) is proved again in
+wasm32 by `pqz-ffi` (node) from the same statement, witness and `rnd32`: byte-equal, and valid through its precompile;
+the three PQZL op 7 rows with M = 8 are verified only (the native proof through the wasm32 precompile)
+(`pqz-core/ffi/vectors/runs/s4a-wasm.txt`; P6e: `vec3-wasm.txt`, 34).

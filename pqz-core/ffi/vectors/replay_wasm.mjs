@@ -1,6 +1,8 @@
 // wasm32 replay of the vectors (P6e Task 11): every proof of proof_pqzl.json, proof_pqzh.json and
 // worstcase_noise.json proved again in wasm32 (pqz-ffi's prove feature, ../wasm: the C core freestanding, Ligero)
 // from the same statement, witness and rnd32 must give the same bytes and be valid through pqz_ffi::precompile.
+// Op 7 rows (P6-ANON S4, statement_transfer_multi.json): the same, except PQZL M > 4, which wasm32 does not prove
+// (pqzl::WASM_PQZL_MAX_LEGS, one 512 MiB arena; S3): the native proof is verified through the wasm32 precompile.
 // Prints JSON lines; exit 1 on any difference.
 //   node replay_wasm.mjs <pqz_ffi_wasm.wasm> [vector dir]
 import { readFileSync } from 'node:fs';
@@ -14,13 +16,19 @@ const withId = (s, id) => hex(s.slice(0, 64) + ID[id] + s.slice(128));
 const stmts = {};
 for (const f of ['statement_transfer.json', 'statement_burn.json', 'statement_refresh.json', 'statement_register.json',
   'statement_disclose.json']) for (const r of J(f).rows) stmts[r.form] = r.stmt;
+const multi = {};
+for (const r of J('statement_transfer_multi.json').rows) multi[r.case] = r;
+const WASM_PQZL_MAX_LEGS = 4;
 
 const cases = [];
 const add = (name, op, stmt, wit, rnd, o) => { for (const id of ['pqzl', 'pqzh'])
   cases.push({ id, form: name, op, stmt: withId(stmt, id), wit: hex(wit), rnd: hex(rnd), proof: o[id].proof }); };
 for (const id of ['pqzl', 'pqzh'])
-  for (const r of J(`proof_${id}.json`).rows)
-    cases.push({ id, form: r.form, op: r.op, stmt: withId(stmts[r.form], id), wit: hex(r.wit), rnd: hex(r.rnd32), proof: r.proof });
+  for (const r of J(`proof_${id}.json`).rows) {
+    const m = r.case && multi[r.case];
+    cases.push({ id, form: r.case ? `${r.form} ${r.case}` : r.form, op: r.op, stmt: withId(m ? m.stmt : stmts[r.form], id),
+      wit: hex(r.wit), rnd: hex(r.rnd32), proof: r.proof, verifyOnly: !!m && id === 'pqzl' && m.M > WASM_PQZL_MAX_LEGS });
+  }
 const w = J('worstcase_noise.json');
 // the register statement: opTag || id || message || pk; pk comes from the receiver's R_REG witness only in C, so take
 // it from the bound debit's statement (pk_f at 640)
@@ -39,10 +47,13 @@ for (const r of J('fee0.json').rows) add(`fee 0 ${r.form}`, r.op, r.stmt, r.wit,
 const x = (await WebAssembly.instantiate(readFileSync(file), {})).instance.exports;
 const put = (bytes) => { const p = x.alloc(bytes.length); new Uint8Array(x.memory.buffer, p, bytes.length).set(bytes); return p; };
 let fails = 0;
+let verifyOnly = 0;
 for (const c of cases) {
   const t = performance.now();
-  const n = x.prove_v(c.op, put(c.stmt), c.stmt.length, put(c.wit), c.wit.length, put(c.rnd));
-  const p = new Uint8Array(x.memory.buffer, x.proof_ptr(), n).slice();
+  const n = c.verifyOnly ? c.proof.length / 2
+    : x.prove_v(c.op, put(c.stmt), c.stmt.length, put(c.wit), c.wit.length, put(c.rnd));
+  const p = c.verifyOnly ? hex(c.proof) : new Uint8Array(x.memory.buffer, x.proof_ptr(), n).slice();
+  verifyOnly += !!c.verifyOnly;
   const got = Buffer.from(p).toString('hex');
   const inp = new Uint8Array(5 + c.stmt.length + n);
   inp[0] = c.op;
@@ -52,8 +63,8 @@ for (const c of cases) {
   const ok = x.precompile_v(put(inp), inp.length);
   const equal = n > 0 && got === c.proof;
   fails += !equal || ok !== 1;
-  out({ id: c.id, form: c.form, proof_bytes: n, wasm_equal_native: equal, wasm_precompile: ok,
-        ms: Math.round(performance.now() - t) });
+  out({ id: c.id, form: c.form, proof_bytes: n, wasm_equal_native: c.verifyOnly ? 'native proof (verify only)' : equal,
+        wasm_precompile: ok, ms: Math.round(performance.now() - t) });
 }
-out({ cases: cases.length, fails, node: process.version });
+out({ cases: cases.length, verify_only: verifyOnly, fails, node: process.version });
 process.exit(fails ? 1 : 0);

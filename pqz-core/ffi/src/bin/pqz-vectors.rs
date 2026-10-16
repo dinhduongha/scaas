@@ -790,6 +790,8 @@ fn enc_file() -> (String, String) {
 enum E {
     Op(u8),
     ProofFrom(Form),
+    /// op 7: the proof of another case of statement_transfer_multi.json (same id)
+    ProofFromCase(String),
     StmtSet(usize, Vec<u8>),
     StmtResize(usize),
     ProofResize(usize),
@@ -811,6 +813,7 @@ impl E {
         match self {
             E::Op(x) => o(vec![("op", J::from(*x))]),
             E::ProofFrom(f) => o(vec![("proof_from", J::from(fname(*f)))]),
+            E::ProofFromCase(c) => o(vec![("proof_from", J::from(c.as_str()))]),
             E::StmtSet(at, b) => pair("stmt_set", *at, hx(b)),
             E::StmtResize(n) => o(vec![("stmt_resize", J::from(*n))]),
             E::ProofResize(n) => o(vec![("proof_resize", J::from(*n))]),
@@ -829,15 +832,21 @@ impl E {
 /// The precompile input of `edits` applied to the honest input of (form, id): op, statement, proof edited in order,
 /// then the input built (`u8(op) ‖ be32(len_field or len(stmt)) ‖ stmt ‖ proof`, or `raw`) and resized.
 fn apply(edits: &[E], form: Option<Form>, id: usize, stmts: &[Vec<u8>], proofs: &[[Vec<u8>; 8]; 2]) -> Vec<u8> {
-    let (mut op, mut s, mut p) = match form {
+    let (op, s, p) = match form {
         Some(f) => (f.op(), with_id(&stmts[fidx(f)], &IDS[id].1), proofs[id][fidx(f)].clone()),
         None => (0, vec![], vec![]),
     };
+    apply_to(edits, op, s, p, id, proofs, &MProofs::new())
+}
+
+/// `edits` applied to the input `op`, statement `s`, proof `p` (of id `id`)
+fn apply_to(edits: &[E], mut op: u8, mut s: Vec<u8>, mut p: Vec<u8>, id: usize, proofs: &[[Vec<u8>; 8]; 2], mp: &MProofs) -> Vec<u8> {
     let (mut lenf, mut raw, mut size) = (None, None, None);
     for e in edits {
         match e {
             E::Op(x) => op = *x,
             E::ProofFrom(f) => p = proofs[id][fidx(*f)].clone(),
+            E::ProofFromCase(c) => p = mp[&(c.clone(), id)].clone(),
             E::StmtSet(at, b) => s[*at..*at + b.len()].copy_from_slice(b),
             E::StmtResize(n) => s.resize(*n, 0),
             E::ProofResize(n) => p.resize(*n, 0),
@@ -1363,6 +1372,343 @@ fn worstcase() -> Vec<(&'static str, J)> {
     ]
 }
 
+// ---------------------------------------------------------------- op 7 R_TXM (P6-ANON S4, plan D15, §4, §5.4)
+/// op 7 header names: word 192 = recipientsHash, word 320 = M (P6-ANON §4); the rest as op 1
+const MNAMES: [&str; 20] = [
+    "opTag", "proofSystemId", "chainId", "token", "registry", "fromUA", "recipientsHash", "beneficiaryUA", "fee", "amount",
+    "M", "sendCounter", "p", "validUntilBlock", "auditorOn", "plainUsed", "chainUid", "envelopeBinding", "salt",
+    "memoHash",
+];
+/// op 7 proofs by (case, id index)
+type MProofs = std::collections::BTreeMap<(String, usize), Vec<u8>>;
+const MULTI_FILE: &str = "statement_transfer_multi.json";
+const SEED_LEG0: u8 = 0x60; // recipient j's KeyGen seed: [0x60 + j; 32]
+const MEMO_KEY: [u8; 32] = pqz_ffi::fixture::MEMO_KEY_SEED;
+
+/// One op 7 statement of the vectors: its PQZL-id bytes (the PQZH statement differs in bytes 32..63 only), the ids
+/// it is built for, witness, the statement-file row.
+struct MRow {
+    case: String,
+    m: usize,
+    aud: bool,
+    ids: Vec<usize>,
+    stmt: Vec<u8>,
+    wit: Vec<u8>,
+    rnd: [u8; 32],
+    header: [Word; 20],
+    memo: Vec<u8>,
+    json: Vec<(&'static str, J)>,
+}
+
+/// (case, M, auditorOn, fee, leg amounts): every built (M, A) with one real leg at a position that varies by shape
+/// (D15), then a two-real-leg row, an all-decoy row and a group-boundary row (real legs 3 and 4, groups 0 and 1)
+fn multi_specs() -> Vec<(String, usize, bool, u64, Vec<u64>)> {
+    let v = 123_456u64;
+    let one = |m: usize, at: usize| (0..m).map(|j| if j == at { v } else { 0 }).collect::<Vec<u64>>();
+    let mut out = Vec::new();
+    for (aud, pos) in [(true, [0usize, 1, 2, 5]), (false, [0, 0, 3, 7])] {
+        for (m, at) in [1usize, 2, 4, 8].into_iter().zip(pos) {
+            out.push((format!("M{m}-{}", if aud { "on" } else { "off" }), m, aud, if aud { 7 } else { 0 }, one(m, at)));
+        }
+    }
+    out.push(("M2-off-two-real".into(), 2, false, 7, vec![v, 7_000]));
+    out.push(("M4-off-decoys".into(), 4, false, 0, vec![0; 4]));
+    out.push(("M8-on-boundary".into(), 8, true, 7, [vec![0; 3], vec![v, 7_000], vec![0; 3]].concat()));
+    out
+}
+
+fn leg_addr(j: usize) -> Vec<u8> {
+    vec![0xB0 + j as u8; 20]
+}
+
+fn multi_rows() -> Vec<MRow> {
+    let (kf, ka) = (keygen(SEED_F), keygen(SEED_A));
+    let kr: Vec<Key> = (0..8).map(|j| keygen([SEED_LEG0 + j as u8; 32])).collect();
+    let plain = 1_000u64;
+    let acc = enc(&[&kf], &[1_000_000], [0x61; 32]);
+    let t = ct_add(&acc.ct(0), &trivial(plain), false);
+    let bal = 1_000_000 + plain;
+    let mut tj = acc.json();
+    if let J::O(kv) = &mut tj {
+        kv.push(("plus_trivial".into(), J::from(plain)));
+    }
+    multi_specs()
+        .into_iter()
+        .enumerate()
+        .map(|(idx, (case, m, aud, fee, amounts))| {
+            let ids: Vec<usize> = (0..2).filter(|&i| st::built_legs(&IDS[i].1).contains(&m)).collect();
+            let bp = bal - amounts.iter().sum::<u64>() - fee;
+            let seed = [0x70 + idx as u8; 32];
+            let legs: Vec<(&[u8; PK], [u8; 16])> = (0..m).map(|j| (pk_ref(&kr[j].pk), digits(amounts[j]))).collect();
+            let c = pqzl::enc_multi(pk_ref(&kf.pk), digits(bp), &legs, aud.then(|| pk_ref(&ka.pk)), &seed).expect("enc_multi");
+            let uas: Vec<Word> = (0..m).map(|j| vword(&V::B(leg_addr(j)))).collect();
+            let rh = keccak(&[&uas.concat()]);
+            let mut f: Vec<(&str, V)> = vec![
+                ("chainId", V::I(22776)),
+                ("token", V::B(vec![0x11; 20])),
+                ("registry", V::B(vec![0x22; 20])),
+                ("fromUA", V::B(vec![0xA1; 32])),
+                ("recipientsHash", V::B(rh.to_vec())),
+            ];
+            if fee > 0 {
+                f.push(("beneficiaryUA", V::B(vec![0xA3; 32])));
+            }
+            f.extend([
+                ("fee", V::I(fee)),
+                ("sendCounter", V::I(3 + idx as u64)),
+                ("p", V::I(5)),
+                ("validUntilBlock", V::I(1_000_000)),
+                ("plainUsed", V::I(plain)),
+                ("chainUid", V::B(vec![0xC1; 32])),
+                ("envelopeBinding", V::B(vec![0xE1; 32])),
+                ("salt", V::B(vec![0x5A; 16])),
+            ]);
+            let mut header = st::Multi::header(&PQZL_ID, m, aud);
+            set_words(&mut header, &MNAMES, &f);
+            let legs_memo: Vec<(u64, Word)> = amounts.iter().copied().zip(uas.iter().copied()).collect();
+            let memo = pqz_ffi::memo::seal(&MEMO_KEY, &header, aud, &legs_memo).expect("memo");
+            assert_eq!(pqz_ffi::memo::open(&MEMO_KEY, &header, &memo), Some((aud, legs_memo)));
+            let mh = keccak(&[&memo]);
+            header[st::H_MEMO_HASH] = mh;
+            f.push(("memoHash", V::B(mh.to_vec())));
+            let pks: Vec<u8> = kr[..m].iter().flat_map(|k| k.pk.clone()).collect();
+            let us: Vec<u8> = c.groups.iter().flat_map(|g| g.u.to_vec()).collect();
+            let (vs, v_as) = (c.v.concat(), c.v_a.concat());
+            let s = st::Multi {
+                header,
+                m,
+                pk_f: &kf.pk,
+                pks: &pks,
+                pk_a: aud.then_some(&ka.pk[..]),
+                t: &t,
+                us: &us,
+                vs: &vs,
+                v_f: &c.v_f,
+                v_as: aud.then_some(&v_as[..]),
+            }
+            .encode()
+            .unwrap();
+            st::parse(st::OP_TRANSFER_MULTI, &s).expect("op 7 statement canonical");
+            assert_eq!(st::parse_multi(&s).unwrap().encode().unwrap(), s);
+            // witness (pqz.h PQZ_TXM_WIT_BYTES): s_f ‖ e_f ‖ (r_g ‖ e1_g)_g ‖ e2_j ‖ e2_f ‖ [e2_{a,j}] ‖ d_j ‖ d'
+            let mut w = kf.wit();
+            for g in &c.groups {
+                w.extend(g.r.iter().map(|&x| x as u8));
+                le16(&mut w, &g.e1[..]);
+            }
+            c.e2.iter().chain([&c.e2_f]).chain(&c.e2_a).for_each(|e| le16(&mut w, e));
+            amounts.iter().chain([&bp]).for_each(|&a| w.extend(digits(a)));
+            assert_eq!((s.len(), w.len()), (st::multi_len(m, aud), pqz_ffi::fixture::multi_wit_len(m, aud)));
+            let groups: Vec<J> = c
+                .groups
+                .iter()
+                .enumerate()
+                .map(|(g, e)| o(vec![("seed_enc_g", hx(&pqzl::enc_group_seed(&seed, g))), ("ctr", J::from(e.ctr))]))
+                .collect();
+            let mut objs = vec![
+                ("pk_f", keyref(&kf)),
+                ("pks", J::A(kr[..m].iter().map(keyref).collect())),
+            ];
+            if aud {
+                objs.push(("pk_a", keyref(&ka)));
+            }
+            objs.extend([
+                ("T", tj.clone()),
+                ("out", o(vec![
+                    ("seed_enc", hx(&seed)),
+                    ("values", nums(&amounts)),
+                    ("value_f", J::from(bp)),
+                    ("groups", J::A(groups)),
+                ])),
+                ("uas", J::A((0..m).map(|j| hx(&leg_addr(j))).collect())),
+            ]);
+            let idsj = |g: &dyn Fn(&[u8]) -> Word| J::O(ids.iter().map(|&i| (IDS[i].0.to_string(), hx(&g(&with_id(&s, &IDS[i].1))))).collect());
+            let json = vec![
+                ("form", J::from("TRANSFER-MULTI")),
+                ("case", J::from(case.as_str())),
+                ("op", J::from(st::OP_TRANSFER_MULTI)),
+                ("M", J::from(m)),
+                ("auditorOn", J::from(aud as u8)),
+                ("ids", J::A(ids.iter().map(|&i| J::from(IDS[i].0)).collect())),
+                ("header", fields_json(&f)),
+                ("objects", o(objs)),
+                ("memo", o(vec![("key_seed", hx(&MEMO_KEY)), ("memo_bytes", J::from(memo.len())), ("memo", hx(&memo))])),
+                ("stmt_bytes", J::from(s.len())),
+                ("stmt", hx(&s)),
+                ("stmt_keccak", idsj(&|x| keccak(&[x]))),
+                ("auth_digest", idsj(&|x| auth_digest(x))),
+                ("entry_ref", hx(&entry_ref(&f))),
+            ];
+            MRow { case, m, aud, ids, stmt: s, wit: w, rnd: [0xB0 + idx as u8; 32], header, memo, json }
+        })
+        .collect()
+}
+
+/// memo::open on edited memos of one row (§5.4): (name, key seed, edits, result)
+fn memo_opens(rows: &[MRow]) -> Vec<J> {
+    let base = rows.iter().find(|r| r.case == "M2-on").unwrap();
+    let n = base.memo.len();
+    let cases: Vec<(&str, [u8; 32], Vec<(&str, J)>)> = vec![
+        ("the sender's memo", MEMO_KEY, vec![]),
+        ("another key seed", [0x4e; 32], vec![]),
+        ("truncated by 1 byte", MEMO_KEY, vec![("resize", J::from(n - 1))]),
+        ("one more 40-byte leg (zero bytes)", MEMO_KEY, vec![("resize", J::from(n + 40))]),
+        ("shorter than one leg (17 bytes)", MEMO_KEY, vec![("resize", J::from(17usize))]),
+        ("flags byte bit 1 flipped", MEMO_KEY, vec![("flip", J::A(vec![J::from(16usize), J::from(1u8)]))]),
+        ("M byte bit 0 flipped", MEMO_KEY, vec![("flip", J::A(vec![J::from(17usize), J::from(0u8)]))]),
+        ("leg 1 amount low bit flipped", MEMO_KEY, vec![("flip", J::A(vec![J::from(18 + 40 + 7usize), J::from(0u8)]))]),
+        ("salt byte 0 bit 0 flipped", MEMO_KEY, vec![("flip", J::A(vec![J::from(0usize), J::from(0u8)]))]),
+    ];
+    cases
+        .into_iter()
+        .map(|(name, key, edits)| {
+            let mut b = base.memo.clone();
+            for (k, v) in &edits {
+                match (*k, v) {
+                    ("resize", J::N(x)) => b.resize(*x as usize, 0),
+                    ("flip", J::A(x)) => {
+                        let (J::N(at), J::N(bit)) = (&x[0], &x[1]) else { unreachable!() };
+                        b[*at as usize] ^= 1 << bit;
+                    }
+                    _ => unreachable!(),
+                }
+            }
+            let res = match pqz_ffi::memo::open(&key, &base.header, &b) {
+                None => J::from("none"),
+                Some((a, legs)) => o(vec![
+                    ("auditorOn", J::from(a)),
+                    ("legs", J::A(legs.iter().map(|(x, ua)| J::A(vec![J::from(*x), hx(ua)])).collect())),
+                ]),
+            };
+            o(vec![
+                ("name", J::from(name)),
+                ("case", J::from(base.case.as_str())),
+                ("key_seed", hx(&key)),
+                ("edits", J::A(edits.into_iter().map(|(k, v)| o(vec![(k, v)])).collect())),
+                ("result", res),
+            ])
+        })
+        .collect()
+}
+
+/// statement offsets of an op 7 shape: (pk_0, u_0, v_0, v_f, v_{a,0})
+fn moff(m: usize, aud: bool) -> (usize, usize, usize, usize, usize) {
+    let a = aud as usize;
+    let pk0 = st::HEADER_BYTES + PK;
+    let u0 = pk0 + (m + a) * PK + st::CT_BYTES;
+    let v0 = u0 + st::groups(m) * PK;
+    (pk0, u0, v0, v0 + 128 * m, v0 + 128 * (m + 1))
+}
+
+/// op 7 negative inputs (plan D15, T25): (name, case, id, edits)
+fn multi_negatives(rows: &[MRow], mp: &MProofs) -> Vec<(String, String, usize, Vec<E>)> {
+    let mut v = Vec::new();
+    let w = |x: u64| st::u64_word(x).to_vec();
+    let qb = |x: u64| x.to_be_bytes().to_vec();
+    let row = |c: &str| rows.iter().find(|r| r.case == c).unwrap();
+    for id in 0..2 {
+        let mut add = |name: String, case: &str, e: Vec<E>| v.push((format!("{case}: {name}"), case.to_string(), id, e));
+        let defaults: Vec<&MRow> = rows.iter().filter(|r| r.ids.contains(&id) && r.case == format!("M{}-{}", r.m, if r.aud { "on" } else { "off" })).collect();
+        for r in &defaults {
+            let (n, pl, c) = (r.stmt.len(), mp[&(r.case.clone(), id)].len(), r.case.as_str());
+            add("statement length - 1".into(), c, vec![E::StmtResize(n - 1)]);
+            add("statement length + 1".into(), c, vec![E::StmtResize(n + 1)]);
+            for op in 0..=6u8 {
+                add(format!("under op {op}"), c, vec![E::Op(op)]);
+            }
+            add("unknown proofSystemId (zero word)".into(), c, vec![E::StmtSet(32, vec![0; 32])]);
+            add("the other system's proofSystemId".into(), c, vec![E::StmtSet(32, IDS[1 - id].1.to_vec())]);
+            add("proof truncated by 1 byte".into(), c, vec![E::ProofResize(pl - 1)]);
+            add("proof extended by 1 zero byte".into(), c, vec![E::ProofResize(pl + 1)]);
+            add("proof byte 0 bit 0 flipped".into(), c, vec![E::ProofFlip(0, 0)]);
+            add("proof middle byte bit 3 flipped".into(), c, vec![E::ProofFlip(pl / 2, 3)]);
+            add("proof last byte bit 7 flipped".into(), c, vec![E::ProofFlip(pl - 1, 7)]);
+            if IDS[id].1 == PQZH_ID {
+                let pp = Params::proven();
+                let rel = pqzh_ligero::Rel::Multi { m: r.m, aud: r.aud };
+                let fe = 4 * (2 * (2 * pp.k - 1) + (2 * pp.k - 1 - pp.ell));
+                let col0 = 32 + 6 * fe + 8;
+                let q6 = Q.to_be_bytes()[2..].to_vec();
+                let blk = 32 + 6 * (pqzh_ligero::cs::Layout::new(rel, pp.ell).m + 12);
+                add("proof of max_proof_len(shape) + 1 bytes".into(), c, vec![E::ProofResize(pp.max_proof_len(rel) + 1)]);
+                add("w coefficient 0 element = q".into(), c, vec![E::ProofSet(32, q6.clone())]);
+                add("first opened column element 0 = q".into(), c, vec![E::ProofSet(col0 + 32, q6.clone())]);
+                add("opened columns 0 and 1 swapped (not increasing)".into(), c, vec![E::ProofSwap(col0, col0 + blk, blk)]);
+                add("opened column 0 repeated as column 1".into(), c, vec![E::ProofCopy(col0, col0 + blk, blk)]);
+            } else if *mp[&(r.case.clone(), id)].last().unwrap() < 0x80 {
+                add("coder padding bit 7 set after the final 1-bit".into(), c, vec![E::ProofFlip(pl - 1, 7)]);
+            }
+        }
+        let set = |at: usize, b: Vec<u8>| vec![E::StmtSet(at, b)];
+        let r2 = row("M2-on");
+        let (pk0, u0, v0, vf, _) = moff(2, true);
+        let n2 = r2.stmt.len();
+        let v1 = r2.stmt[v0 + 128..v0 + 256].to_vec();
+        let mut list: Vec<(&str, &str, Vec<E>)> = vec![
+            ("M word 0", "M2-on", set(320, w(0))),
+            ("M word 3", "M2-on", set(320, w(3))),
+            ("M word 16 (oversize only)", "M2-on", set(320, w(16))),
+            ("M word with bit 64 set", "M2-on", set(320 + 23, vec![1])),
+            ("M word 4 on the M = 2 length", "M2-on", set(320, w(4))),
+            ("auditorOn 0 on an auditor-on statement", "M2-on", set(448, w(0))),
+            ("auditorOn 1 on an auditor-off statement", "M4-off", set(448, w(1))),
+            ("auditorOn 2", "M2-on", set(448, w(2))),
+            ("statement of the 640-byte header only", "M2-on", vec![E::StmtResize(640)]),
+            ("statement cut inside the header (639 bytes)", "M2-on", vec![E::StmtResize(639)]),
+            ("amount 1", "M2-on", set(288, w(1))),
+            ("amount >= 2^64", "M2-on", set(288 + 23, vec![1])),
+            ("fee >= 2^64", "M2-on", set(256 + 23, vec![1])),
+            ("salt word top byte set", "M2-on", set(576, vec![1])),
+            ("salt word byte 15 set", "M4-off", set(591, vec![0x80])),
+            ("pk_f coefficient 0 = q", "M2-on", set(640, qb(Q))),
+            ("pk_1 coefficient 0 = 2^42", "M2-on", set(pk0 + PK, qb(1 << 42))),
+            ("u_0 coefficient 0 = q", "M2-on", set(u0, qb(Q))),
+            ("v_f last coefficient = q", "M2-on", set(vf + 120, qb(Q))),
+            ("v_{a,M-1} last coefficient = 2^64 - 1", "M2-on", set(n2 - 8, qb(u64::MAX))),
+            ("recipientsHash bit flipped", "M2-on", vec![E::StmtFlip(192 + 31, 0)]),
+            ("memoHash bit flipped", "M2-on", vec![E::StmtFlip(608 + 31, 0)]),
+            ("fee + 1", "M2-on", set(256 + 24, qb(8))),
+            ("chainId bit flipped", "M2-on", vec![E::StmtFlip(64 + 31, 0)]),
+            ("pk_0 coefficient 0 low bit flipped", "M2-on", vec![E::StmtFlip(pk0 + 7, 0)]),
+            ("v_0 replaced by v_1", "M2-on", set(v0, v1)),
+            ("(1, on) read as (2, off): M word 2, auditorOn 0", "M1-on", vec![E::StmtSet(320, w(2)), E::StmtSet(448, w(0))]),
+            ("op 1 TRANSFER's proof (same statement length)", "M1-on", vec![E::ProofFrom(Form::Transfer)]),
+            ("op 1 TRANSFER0's proof (same statement length)", "M1-off", vec![E::ProofFrom(Form::Transfer0)]),
+            ("M4-on's proof", "M2-on", vec![E::ProofFromCase("M4-on".into())]),
+            ("M2-on's proof", "M2-off-two-real", vec![E::ProofFromCase("M2-on".into())]),
+            ("empty proof", "M2-on", vec![E::ProofResize(0)]),
+            ("proof of MAX_PROOF(id) + 1 bytes", "M2-on", vec![E::ProofResize(st::max_proof(&IDS[id].1).unwrap() + 1)]),
+            ("proof of exactly MAX_PROOF(id) bytes", "M2-on", vec![E::ProofResize(st::max_proof(&IDS[id].1).unwrap())]),
+            ("input of exactly MAX_INPUT bytes (not a revert)", "M4-on", vec![E::InputResize(st::MAX_INPUT)]),
+            ("input of MAX_INPUT + 1 bytes (expected revert, P6f)", "M4-on", vec![E::InputResize(st::MAX_INPUT + 1)]),
+            ("length field = statement + 1", "M2-on", vec![E::LenField(n2 as u32 + 1)]),
+        ];
+        let two = row("M2-off-two-real");
+        let (_, _, tv0, _, _) = moff(2, false);
+        list.push(("v_0 and v_1 swapped", "M2-off-two-real", vec![
+            E::StmtSet(tv0, two.stmt[tv0 + 128..tv0 + 256].to_vec()),
+            E::StmtSet(tv0 + 128, two.stmt[tv0..tv0 + 128].to_vec()),
+        ]));
+        if IDS[id].1 == PQZH_ID {
+            list.push(("M word 8 (not built for PQZH)", "M4-on", set(320, w(8))));
+        } else {
+            let b = row("M8-on-boundary");
+            let (_, _, bv0, _, _) = moff(8, true);
+            let (v3, v4) = (bv0 + 3 * 128, bv0 + 4 * 128);
+            list.push(("v_3 and v_4 swapped (legs across groups 0 and 1)", "M8-on-boundary", vec![
+                E::StmtSet(v3, b.stmt[v4..v4 + 128].to_vec()),
+                E::StmtSet(v4, b.stmt[v3..v3 + 128].to_vec()),
+            ]));
+            list.push(("M8-off's proof", "M8-on-boundary", vec![E::ProofFromCase("M8-off".into())]));
+            list.push(("M word 4 on the M = 8 length", "M8-on", set(320, w(4))));
+        }
+        for (name, c, e) in list {
+            add(name.into(), c, e);
+        }
+    }
+    v
+}
+
 // ---------------------------------------------------------------- everything
 fn generate() -> (Vec<(String, String)>, bool) {
     let stale;
@@ -1399,8 +1745,41 @@ fn generate() -> (Vec<(String, String)>, bool) {
             proofs[i][fidx(r.form)] = p;
         }
     }
+    // op 7 R_TXM (P6-ANON S4): statements, both ids' proofs of each built shape
+    let mrows = multi_rows();
+    let mut mp = MProofs::new();
+    for r in &mrows {
+        for &i in &r.ids {
+            let (nm, id) = IDS[i];
+            let t = Instant::now();
+            let s = with_id(&r.stmt, &id);
+            let p = prove(&id, st::OP_TRANSFER_MULTI, &s, &r.wit, &r.rnd);
+            assert_eq!(p, prove(&id, st::OP_TRANSFER_MULTI, &s, &r.wit, &r.rnd), "prover not deterministic");
+            assert_eq!(precompile(&st::input(st::OP_TRANSFER_MULTI, &s, &p)), ("1", "verify".to_string()), "{nm} {}", r.case);
+            eprintln!("{nm} {:18} proof {:6} B  prove+verify {:.2} s", r.case, p.len(), t.elapsed().as_secs_f64());
+            mp.insert((r.case.clone(), i), p);
+        }
+    }
+    files.push(file(
+        MULTI_FILE,
+        "Op 7 R_TXM statements (P6-ANON plan §4, D15; pq-zether.md §8.1 op 7): every built (M, auditorOn) of each id with \
+         one real leg (123,456) at a position that varies by shape and decoy legs (0), plus a two-real-leg row, an \
+         all-decoy row and a group-boundary row (real legs 3 and 4 in groups 0 and 1). ids: the proofSystemIds whose \
+         built leg counts contain M (PQZL {1, 2, 4, 8}, PQZH {1, 2, 4}). header: as statement_transfer.json with word \
+         192 = recipientsHash = keccak256(UA_0 || ... || UA_{M-1}) (32-byte words of objects.uas) and word 320 = M; \
+         auditorOn = 1 iff pk_a. objects: keys by KeyGen seed (pks: leg order), T = Enc + Trivial(plus_trivial), out: \
+         the multi-group Enc (D13): group g encrypts its legs (j / 4 = g), then (g = 0) pk_f with value_f, then (auditor \
+         on) pk_a once per leg of the group, from seed_enc_g = seed_enc (g = 0) or SHAKE256(SCAAS-PQZ-ENC-GROUP-V1 || \
+         seed_enc || be4(g))[0..32), ctr = its counter. memo (§5.4, CTR-PQZ-23): salt || ((u8(auditorOn) || u8(M) || \
+         (be8(a_j) || UA_j)_j) XOR ks), key = HKDF-SHA256(IKM key_seed, no salt, info PQZ/memo/v1 || chainUid || \
+         token(20) || fromUA || be4(sendCounter) || salt)[32], ks = HKDF-Expand-SHA256(key, PQZ/memo/ks/v1, 2 + 40 M); \
+         memoHash = keccak256(memo). memo_open: memo open (the sender's recovery) on edited memos (resize, flip [byte, \
+         bit]) of the case, result = (auditorOn, [amount, UA]) or none. stmt = the PQZL-id bytes (PQZH: bytes 32..63 \
+         replaced); stmt_keccak / auth_digest per id; entry_ref as op 1.",
+        vec![("rows", J::A(mrows.iter().map(|r| o(r.json.clone())).collect())), ("memo_open", J::A(memo_opens(&mrows)))],
+    ));
     for (i, (nm, id)) in IDS.iter().enumerate() {
-        let rows = sc
+        let mut rows: Vec<J> = sc
             .rows
             .iter()
             .map(|r| {
@@ -1430,6 +1809,27 @@ fn generate() -> (Vec<(String, String)>, bool) {
                 o(kv)
             })
             .collect();
+        for r in mrows.iter().filter(|r| r.ids.contains(&i)) {
+            let p = &mp[&(r.case.clone(), i)];
+            let mut kv = vec![
+                ("form", J::from("TRANSFER-MULTI")),
+                ("case", J::from(r.case.as_str())),
+                ("op", J::from(st::OP_TRANSFER_MULTI)),
+                ("statement", o(vec![("file", J::from(MULTI_FILE)), ("case", J::from(r.case.as_str()))])),
+                ("stmt_keccak", hx(&keccak(&[&with_id(&r.stmt, id)]))),
+                ("wit", hx(&r.wit)),
+                ("wit_keccak", hx(&keccak(&[&r.wit]))),
+                ("rnd32", hx(&r.rnd)),
+                ("proof_bytes", J::from(p.len())),
+                ("proof_keccak", hx(&keccak(&[p]))),
+                ("proof_fnv", J::from(fnv(p))),
+            ];
+            if *id == PQZH_ID {
+                kv.push(("max_proof_len", J::from(Params::proven().max_proof_len(pqzh_ligero::Rel::Multi { m: r.m, aud: r.aud }))));
+            }
+            kv.extend([("expect", J::from(true)), ("proof", hx(p))]);
+            rows.push(o(kv));
+        }
         let pp = Params::proven();
         let (desc, params) = if *id == PQZL_ID {
             (
@@ -1480,7 +1880,26 @@ fn generate() -> (Vec<(String, String)>, bool) {
             ("reason", J::from(reason)),
         ]));
     }
-    eprintln!("negative: {} rows ({ndec} decoder, {nver} verifier): {:.1} s", negs.len(), t0.elapsed().as_secs_f64());
+    let mnegs = multi_negatives(&mrows, &mp);
+    for (name, case, id, edits) in &mnegs {
+        let r = mrows.iter().find(|r| &r.case == case).unwrap();
+        let input = apply_to(edits, st::OP_TRANSFER_MULTI, with_id(&r.stmt, &IDS[*id].1), mp[&(case.clone(), *id)].clone(), *id, &proofs, &mp);
+        let (out, reason) = precompile(&input);
+        assert!(out == "0" || out == "revert", "negative accepted: {name}");
+        if reason == "verify" { nver += 1 } else { ndec += 1 }
+        nrows.push(o(vec![
+            ("name", J::from(name.as_str())),
+            ("form", J::from("TRANSFER-MULTI")),
+            ("case", J::from(case.as_str())),
+            ("id", J::from(IDS[*id].0)),
+            ("edits", J::A(edits.iter().map(E::json).collect())),
+            ("input_bytes", J::from(input.len())),
+            ("input_sha3", hx(&<Sha3_256 as sha3::Digest>::digest(&input))),
+            ("expect", J::from(out)),
+            ("reason", J::from(reason)),
+        ]));
+    }
+    eprintln!("negative: {} rows ({ndec} decoder, {nver} verifier): {:.1} s", nrows.len(), t0.elapsed().as_secs_f64());
     // the disclosure opening's codec (pqz-stmt parse_opening, D15: the one canonical abi.encode(bytes, bytes)); base =
     // the TRANSFER bundle with the PQZL DISCLOSE-SENDER proof
     let ob = st::opening(&sc.bundle, &proofs[0][fidx(Form::DiscloseSender)]);

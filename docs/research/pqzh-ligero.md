@@ -1106,7 +1106,8 @@ one verify (p50 11.13 ms native), against 4 × 318,547 = 1,274,188 B and 4 × `R
   recipientsHash, so they are not valid pqz-stmt statements. H's op 7 statements are checked against `pqz-stmt`
   (`parse_multi`, used by the crate itself) and `pqz_kat.py` (an independent Python codec). The C check belongs after
   L merges: feed `dump_setup`'s `txm*_{stmt,wit}.bin` to `pqz_prove(7, …)` / `pqz_verify` / `pqz_verify_fast`, and a
-  C-made op 7 (stmt, wit) with a real opTag and recipientsHash to Ligero `prove` / `verify` (S4).
+  C-made op 7 (stmt, wit) with a real opTag and recipientsHash to Ligero `prove` / `verify` (S4). **Done in P6-ANON S4** (`pqz-core/ffi/vectors/lh2.sh`, run
+  `ffi/vectors/runs/s4a-lh2.txt`): both directions, 50 cases, 0 failures.
 
 ### 15.6 Rerun
 

@@ -4,7 +4,10 @@
    pqz_bench.c is included whole so its static buffers are visible; its main() is renamed away.
    `dump_setup DIR pqzh` (ligero.sh, stmt/xcheck.sh) writes PQZH statements as the Ligero crate's client::setup_with
    does: bytes 0..63 = the op's opTag keccak256("SCAAS-PQZ-OP-<NAME>-V1") and PQZH's proofSystemId (plan D3) instead of
-   pqz_bench.c's filler and PQZL's id (R_TX0 gets op 1's tag). Without it (run.sh) the bytes are pqz_bench.c's. */
+   pqz_bench.c's filler and PQZL's id (R_TX0 gets op 1's tag). Without it (run.sh) the bytes are pqz_bench.c's.
+   `dump_setup DIR txm` (P6-ANON S4, LH-2: ffi/vectors/lh2.sh) writes pqz_bench.c's op 7 R_TXM statements and
+   witnesses instead, every shape of TXB (txm<M>[_0]_{stmt,wit}.bin), bytes as pqz_bench.c builds them (filler opTag
+   and recipientsHash, PQZL's id); lh2.sh's Rust side sets those words. */
 #define main pqz_bench_main
 #include "../../test/pqz_bench.c"
 #undef main
@@ -38,19 +41,32 @@ dump (const char *dir, const char *name, const uint8_t *b, size_t n)
 int
 main (int argc, char **argv)
 {
-  if (argc != 2 && !(argc == 3 && strcmp (argv[2], "pqzh") == 0))
+  const int txm = argc == 3 && strcmp (argv[2], "txm") == 0;
+  if (argc != 2 && !(argc == 3 && strcmp (argv[2], "pqzh") == 0) && !txm)
     return 2;
   void *arena = malloc (ARENA_BYTES);
   if (!arena || step_init (arena, ARENA_BYTES) != 0)
     return 1;
+  if (txm)
+    {
+      int rc = 0;
+      for (unsigned t = 0; t < NTXB; t++)
+        {
+          char a[48], b[48];
+          const char *off = TXB[t].a ? "" : "_0";
+          snprintf (a, sizeof a, "txm%u%s_stmt.bin", TXB[t].m, off), snprintf (b, sizeof b, "txm%u%s_wit.bin", TXB[t].m, off);
+          rc |= dump (argv[1], a, STMT[6 + t], STLEN[6 + t]) | dump (argv[1], b, WIT[6 + t], WLEN[6 + t]);
+        }
+      return rc;
+    }
   if (argc == 3)
     {
       pqzh_prefix (reg_stmt, TAG_REG), pqzh_prefix (tx_stmt, TAG_TX), pqzh_prefix (burn_stmt, TAG_BURN);
       pqzh_prefix (ds_stmt, TAG_DS), pqzh_prefix (dr_stmt, TAG_DR), pqzh_prefix (tx0_stmt, TAG_TX);
     }
-  static const char *const N[NREL] = { "reg", "tx", "burn", "ds", "dr", "tx0" };
+  static const char *const N[6] = { "reg", "tx", "burn", "ds", "dr", "tx0" };
   int rc = 0;
-  for (int r = 0; r < NREL; r++)
+  for (int r = 0; r < 6; r++) /* the six forms (NREL also counts the op 7 shapes: mode txm) */
     {
       char a[32], b[32];
       snprintf (a, sizeof a, "%s_stmt.bin", N[r]), snprintf (b, sizeof b, "%s_wit.bin", N[r]);
