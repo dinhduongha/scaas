@@ -10,7 +10,8 @@ usage: size_gate.py <sizes.json> <size-baseline.json>     exit 1 on a violation
 import json
 import sys
 
-TOKENS = {'NoUnderlyingToken', 'UnderlyingToken', 'NoUnderlyingZetherToken', 'UnderlyingZetherToken'}
+TOKENS = {'NoUnderlyingToken', 'UnderlyingToken', 'NoUnderlyingZetherToken', 'UnderlyingZetherToken',
+          'NoUnderlyingPqzToken', 'UnderlyingPqzToken'}
 TOKEN_LIMIT, EIP170, EIP3860 = 20_480, 24_576, 49_152
 
 
