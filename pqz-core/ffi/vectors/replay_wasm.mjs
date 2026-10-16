@@ -53,7 +53,7 @@ for (const c of cases) {
   const n = c.verifyOnly ? c.proof.length / 2
     : x.prove_v(c.op, put(c.stmt), c.stmt.length, put(c.wit), c.wit.length, put(c.rnd));
   const p = c.verifyOnly ? hex(c.proof) : new Uint8Array(x.memory.buffer, x.proof_ptr(), n).slice();
-  verifyOnly += c.verifyOnly;
+  verifyOnly += !!c.verifyOnly;
   const got = Buffer.from(p).toString('hex');
   const inp = new Uint8Array(5 + c.stmt.length + n);
   inp[0] = c.op;
