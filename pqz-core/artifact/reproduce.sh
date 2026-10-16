@@ -10,7 +10,9 @@
 #                                      C <-> Rust cross-check, pqz-stmt xcheck, native + wasm32 bench of the six forms at
 #                                      the proven preset (small N); pqz-ffi tests, C ABI, native = wasm32 digests, bench;
 #                                      the vectors: pqz-vectors --check, pqz_kat.py --check, wasm32 replay (--full: +
-#                                      tamper.py); tables + comparison with expected-results.json
+#                                      tamper.py), op 7 R_TXM included (every built (id, M, auditorOn): native proof
+#                                      -> ...01, its negatives -> ...00, wasm32 replay; PQZL M = 8 verify-only);
+#                                      tables + comparison with expected-results.json
 #   artifact/reproduce.sh --full       the same with the frozen run's sample sizes (PQZL: research/pqzl-measure/relfix.sh + pqzl/sv/rel3.sh;
 #                                      PQZH: pqzh/ligero/runs/tx0.sh, the gate-B method, 1,000 verifies per form)
 #   artifact/reproduce.sh --serve      build both wasm modules and serve a browser demo (PQZL R_TX, PQZH any form: prove
@@ -19,10 +21,15 @@
 #                                      variants), golden KAT against pqzl/kat/lazer-3330e48.json, R_REG / R_TX bench
 #                                      upstream vs the fork (N proves + N verifies, default 3); the AVX-512 binaries
 #                                      run only if /proc/cpuinfo has avx512ifma
+#   artifact/reproduce.sh --multi-bench    op 7 R_TXM measurement table (P6-ANON S6, D14): PQZL research/pqzl-measure/txm-bench.sh (the
+#                                      L3 method) and PQZH ligero_bench / run_wasm.mjs txm (the H2 method of
+#                                      pqzh/ligero/runs/txm.sh), every (id, M, auditorOn), oversize shapes in bench
+#                                      builds only; results-multi.md (proof bytes, prove / verify times); ~1 h, ~2 GB
 #
 # Output: $OUT (default artifact/out/<mode>-<UTC stamp>): results.md, results.json, every raw run file, log.txt.
-# Exit 0 = every check passed (quick / full). Memory: up to ~0.8 GB (the bench arena is 768 MiB; pqz-ffi's wasm32 run
-# ~0.6 GB).
+# Exit 0 = every check passed (quick / full / multi-bench). Memory: up to ~2 GB (the PQZL bench arena is 768 MiB;
+# pqz-ffi's wasm32 run ~0.6 GB; op 7: pqz-ffi prove up to ~0.9 GB per test thread, pqz-vectors --check ~1 GB;
+# --multi-bench: PQZL M = 16 ~1.6 GB).
 set -eu
 cd "$(dirname "$0")/.."
 MODE=quick
@@ -31,14 +38,17 @@ case "${1:-}" in
   --full) MODE=full ;;
   --serve) MODE=serve ;;
   --upstream) MODE=upstream ;;
-  *) sed -n '2,27p' "$0"; exit 2 ;;
+  --multi-bench) MODE=multi ;;
+  *) sed -n '2,32p' "$0"; exit 2 ;;
 esac
 OUT=${OUT:-artifact/out/$MODE-$(date -u +%Y%m%dT%H%M%SZ)}
 mkdir -p "$OUT"
 OUT=$(cd "$OUT" && pwd)
 echo "$MODE" > "$OUT/mode.txt"
 C="--release --locked --offline" # cargo: the committed Cargo.lock, no network (the image fetched the crates)
-LW=pqzh/ligero/wasm/target/wasm32-unknown-unknown/release/pqzh_ligero_wasm.wasm
+L=pqzh/ligero # the Ligero crate (PQZH)
+LW=$L/wasm/target/wasm32-unknown-unknown/release/pqzh_ligero_wasm.wasm
+TXMB=research/pqzl-measure/txm-bench.sh # L3's PQZL op 7 harness (--multi-bench); writes $(dirname $TXMB)/runs/<label>-*
 cpu_has() { grep -m1 '^flags' /proc/cpuinfo | tr ' ' '\n' | grep -qx "$1"; }
 step() { echo "== $(date -u +%T) $*" | tee -a "$OUT/log.txt"; }
 run() { # run <file> <dir> <command...>: stdout + stderr to $OUT/<file>, then "rc=N" as its last line
@@ -49,7 +59,7 @@ run() { # run <file> <dir> <command...>: stdout + stderr to $OUT/<file>, then "r
 
 if [ $MODE = serve ]; then
   step "build wasm (PQZL pqzl/build/wasm/pqz.wasm, PQZH $LW)"
-  { pqzl/build.sh wasm && (cd pqzh/ligero/wasm && cargo build $C --target wasm32-unknown-unknown); } > "$OUT/build.txt" 2>&1
+  { pqzl/build.sh wasm && (cd $L/wasm && cargo build $C --target wasm32-unknown-unknown); } > "$OUT/build.txt" 2>&1
   mkdir -p "$OUT/web"
   cp artifact/web/index.html pqzl/build/wasm/pqz.wasm "$LW" "$OUT/web/"
   step "serving $OUT/web on http://${BIND:-127.0.0.1}:${PORT:-8000}/ (Ctrl-C to stop)"
@@ -137,6 +147,33 @@ if [ $MODE = upstream ]; then
   exit 0
 fi
 
+if [ $MODE = multi ]; then
+  # P6-ANON S6 (D14): the op 7 measurement table. Reuses the L3 / H2 harnesses, not a copy: PQZL research/pqzl-measure/txm-bench.sh
+  # (its own OVERSIZE=1 bench build under pqzl/build/ov; M = 16 there only), PQZH steps 5-8 of pqzh/ligero/runs/txm.sh
+  # (feature oversize in target/oversize only). The precompile build (default stages) never has an oversize shape.
+  step "PQZL R_TXM: $TXMB (M = 1, 2, 4, 8, 16 on / off: 10 proves, 30 verifies, SV 200, wasm 3 / 3)"
+  run pqzl-txm.txt . $TXMB artifact-txm
+  TR=$(dirname $TXMB)/runs
+  for f in "$TR"/artifact-txm-*; do [ ! -e "$f" ] || mv "$f" "$OUT/pqzl-${f#"$TR"/artifact-}"; done
+  step "PQZH R_TXM: native ligero_bench --rel txm (built M = 1, 2, 4): 10 proofs, 1,000 verifies, 12 x 80 mutations"
+  run pqzh-txm-build.txt $L cargo build $C --bin ligero_bench
+  run pqzh-txm-native.jsonl $L target/release/ligero_bench --rel txm --regime proven --r431 1 --np 10 --nv 1000 --nadv 80
+  step "PQZH R_TXM oversize (M = 8, 16; feature oversize): 3 proofs, 100 verifies, 12 x 10 mutations"
+  run pqzh-txm-oversize-build.txt $L cargo build $C --features oversize --bin ligero_bench --target-dir target/oversize
+  run pqzh-txm-oversize.jsonl $L target/oversize/release/ligero_bench --rel txm --regime proven --r431 1 --np 3 --nv 100 --nadv 10
+  step "PQZH R_TXM wasm32: 2 proofs, 1,000 verifies (oversize build: 100), 12 x 4 mutations"
+  run pqzh-txm-wasm-build.txt $L/wasm cargo build $C --target wasm32-unknown-unknown
+  run pqzh-txm-wasm.jsonl $L node wasm/run_wasm.mjs 2 1000 4 1 1 txm
+  run pqzh-txm-oversize-wasm-build.txt $L/wasm cargo build $C --target wasm32-unknown-unknown --features oversize --target-dir target/oversize
+  run pqzh-txm-oversize-wasm.jsonl $L env PQZH_WASM_FILE=wasm/target/oversize/wasm32-unknown-unknown/release/pqzh_ligero_wasm.wasm \
+    node wasm/run_wasm.mjs 2 100 4 1 1 txm
+  step "op 7 table"
+  python3 -I artifact/results.py multi "$OUT" | tee "$OUT/summary.txt"
+  step "done: $OUT"
+  grep -q '^RESULT: PASS' "$OUT/summary.txt"
+  exit
+fi
+
 # ---- quick / full
 if [ $MODE = full ]; then
   NP=10 NV=100 NPW=5 NVW=30 NF=200 DIFF3="2 2 2 2 10 6 6 6 6"
@@ -194,7 +231,6 @@ if [ $MODE = full ]; then
 else
   LNP=2 LNV=20 LNA=2 LWV=20 LWA=1 FN=20
 fi
-L=pqzh/ligero
 step "PQZH: cargo test (default features: 6 x 960 mutations, negative witnesses, cross-form, EVM fixtures)"
 run pqzh-test.txt $L cargo test $C -- --nocapture --test-threads 1
 step "PQZH: the production build (--no-default-features): tests, examples / bins, clippy -D clippy::float_arithmetic"
