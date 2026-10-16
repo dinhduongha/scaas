@@ -11,8 +11,9 @@
 //!   everything else (a modified input that verifies is a wrong accept or a malleable encoding);
 //! - the arena high-water mark stays ≤ `ARENA_BOUND` = `ARENA_SMALL` / 1.5 = 341 MiB (the maximum seen is printed).
 //!
-//! The honest inputs (every form of both ids and the fee-0 forms) come from the frozen vectors
-//! (`smartcontracts/vectors/pqz/`, written to `$PQZ_FUZZ_HONEST` by `seeds.py`); the core never proves.
+//! The honest inputs (every form of both ids, the fee-0 forms, every built op 7 `(id, M, auditorOn)` and the inputs
+//! of `regress/valid/`) come from the frozen vectors (`smartcontracts/vectors/pqz/`, written to `$PQZ_FUZZ_HONEST` by
+//! `seeds.py`); the core never proves.
 use std::sync::OnceLock;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering::Relaxed};
 
@@ -23,7 +24,11 @@ use pqz_ffi::*;
 pub const ARENA_BOUND: usize = pqzl::ARENA_SMALL / 3 * 2;
 
 struct Honest {
-    form: Form,
+    /// `None` for op 7 (`Stmt::Multi` has no `Form`)
+    form: Option<Form>,
+    op: u8,
+    /// the `pqz_test_mutate` relation code (`rel`)
+    rel: u8,
     pqzl: bool,
     stmt: Vec<u8>,
     proof: Vec<u8>,
@@ -52,13 +57,13 @@ fn honest() -> &'static [Honest] {
 
 fn record(input: Vec<u8>) -> Honest {
     let i = decode(&input).unwrap_or_else(|e| die(&format!("cached honest input does not decode: {e:?}")));
-    let (form, pqzl) = (i.stmt.form().unwrap(), *i.stmt.proof_system_id().unwrap() == PQZL_ID);
+    let (form, pqzl) = (i.stmt.form(), *i.stmt.proof_system_id().unwrap() == PQZL_ID);
     let (stmt, proof) = (i.stmt_bytes.to_vec(), i.proof.to_vec());
-    Honest { form, pqzl, stmt, proof, input }
+    Honest { form, op: i.op, rel: rel(&i.stmt), pqzl, stmt, proof, input }
 }
 
 /// The honest inputs from `seeds.py`'s file (`be32(len) ‖ input` records, built from the frozen vectors): PQZL's 8
-/// forms in `FORMS` order, PQZH's 8, then the fee-0 rows of both ids.
+/// forms in `FORMS` order, PQZH's 8, the fee-0 rows of both ids, the op 7 rows of PQZL then PQZH, `regress/valid/`.
 fn load(path: &str) -> Vec<Honest> {
     let mut b = &std::fs::read(path).unwrap_or_else(|e| die(&format!("{path}: {e} (run seeds.py)")))[..];
     let mut v = Vec::new();
@@ -67,7 +72,7 @@ fn load(path: &str) -> Vec<Honest> {
         v.push(record(b[4..4 + n].to_vec()));
         b = &b[4 + n..];
     }
-    let order = v.len() >= 16 && v.iter().take(16).enumerate().all(|(i, h)| h.pqzl == (i < 8) && h.form == stmt::FORMS[i % 8]);
+    let order = v.len() >= 16 && v.iter().take(16).enumerate().all(|(i, h)| h.pqzl == (i < 8) && h.form == Some(stmt::FORMS[i % 8]));
     if !order {
         die(&format!("{path}: expected PQZL then PQZH in FORMS order first"));
     }
@@ -169,7 +174,7 @@ pub unsafe extern "C" fn pqz_fuzz_init(target: *const std::ffi::c_char) {
     SELFTEST.set(st.1).ok();
     for h in honest() {
         if call(&h.input) != (PQZ_FFI_OK, VALID) {
-            die(&format!("honest {:?} (PQZL {}) not valid", h.form, h.pqzl));
+            die(&format!("honest {:?} op {} rel {:#x} (PQZL {}) not valid", h.form, h.op, h.rel, h.pqzl));
         }
     }
     arena_check();
@@ -220,9 +225,15 @@ fn le64(b: &[u8]) -> u64 {
     b.iter().take(8).enumerate().fold(0, |a, (i, &x)| a | (x as u64) << (8 * i))
 }
 
-/// The `pqz_test_mutate` relation code of a form (pqz_int.h: the op, `R_TX0` = 0x81).
-fn rel(f: Form) -> u8 {
-    if f == Form::Transfer0 { 0x81 } else { f.op() }
+/// The `pqz_test_mutate` relation code of a statement (pqz_int.h: the op, `R_TX0` = 0x81, `R_TXM` =
+/// `PQZ_REL_TXM(log2 M, auditorOn)` = 0x70 | auditorOn << 3 | log2 M).
+fn rel(s: &stmt::Stmt) -> u8 {
+    match (s, s.form()) {
+        (_, Some(Form::Transfer0)) => 0x81,
+        (_, Some(f)) => f.op(),
+        (stmt::Stmt::Multi(m), None) => 0x70 | (m.pk_a.is_some() as u8) << 3 | m.m.trailing_zeros() as u8,
+        _ => 0,
+    }
 }
 
 /// differential sampling: the generic verifier on every `DIFF_EVERY`-th mutated PQZL input that decodes (it needs the big arena
@@ -230,7 +241,7 @@ fn rel(f: Form) -> u8 {
 const DIFF_EVERY: u64 = 256;
 
 /// `mutate` target. Input: byte 0 = the honest input (mod their number: PQZL forms 0..7, PQZH 8..15 in
-/// `pqz_stmt::FORMS` order, then the fee-0 rows);
+/// `pqz_stmt::FORMS` order, the fee-0 rows, the op 7 rows, `regress/valid/`);
 /// byte 1 % 4 = mode: 0 edits anywhere in the precompile input (op, length field, statement, proof), 1 PQZL: one
 /// decoded proof field changed and re-encoded (`pqz_test_mutate` kind byte 2 % 14, r1 / r2 from bytes 3..19; PQZH:
 /// as mode 3) then edits in the proof, 2 edits in the statement, 3 edits in the proof; then the edit script (`edit`).
@@ -251,8 +262,8 @@ pub unsafe extern "C" fn pqz_fuzz_mutate(data: *const u8, len: usize) {
     if mode == 1 {
         if h.pqzl && d.len() >= 19 {
             let (kind, r1, r2) = (d[2] as u32 % 14, le64(&d[3..11]), le64(&d[11..19]));
-            match pqzl::test_mutate(rel(h.form), &h.proof, kind, r1, r2) {
-                Ok(Some(p)) => inp = stmt::input(h.form.op(), &h.stmt, &p),
+            match pqzl::test_mutate(h.rel, &h.proof, kind, r1, r2) {
+                Ok(Some(p)) => inp = stmt::input(h.op, &h.stmt, &p),
                 Ok(None) => die("the honest proof does not decode in pqz_test_mutate"),
                 Err(_) => die("node fault in pqz_test_mutate"),
             }
@@ -286,9 +297,15 @@ pub unsafe extern "C" fn pqz_fuzz_mutate(data: *const u8, len: usize) {
     }
 }
 
+/// The `i`-th PQZL honest input (mod their number; the first 8 are the P6e forms, so `i` < 8 keeps P6e's choice).
+fn pqzl_honest(i: usize) -> &'static Honest {
+    let n = honest().iter().filter(|h| h.pqzl).count();
+    honest().iter().filter(|h| h.pqzl).nth(i % n).unwrap()
+}
+
 /// `codec` target (D15: every decoder accepts exactly one encoding; accepted ⇒ re-encoding is the input). Input: byte
-/// 0 % 5 = codec, byte 1 = the honest input (bits 0..3) and an op override (bit 4: op = bits 5..7, 0..7), then the
-/// edit script over the codec's bytes:
+/// 0 % 5 = codec, the honest input `(byte 0 / 5) << 4 | byte 1 & 15` (mod their number; codec 4: mod the PQZL ones),
+/// an op override (byte 1 bit 4: op = bits 5..7, 0..7), then the edit script over the codec's bytes:
 /// 0 `pqz_stmt::parse(op, stmt)` ⇒ `encode` = the bytes, the form's op and length; 1 `decode_input(input)` ⇒
 /// `input(op, stmt, proof)` = the bytes and `parse` agrees; 2 `parse_bundle(bundle)` ⇒ `encode` = the bytes; 3
 /// `parse_opening(abi.encode(bundle, proof))` ⇒ `opening` = the bytes; 4 the PQZL proof decoder (`pqz_decproof`, via
@@ -303,12 +320,14 @@ pub unsafe extern "C" fn pqz_fuzz_codec(data: *const u8, len: usize) {
     }
     let d = std::slice::from_raw_parts(data, len);
     let (codec, sel, script) = (d[0] % 5, d[1], &d[2..]);
-    let h = &honest()[sel as usize % 16];
-    let op = if sel & 0x10 != 0 { sel >> 5 } else { h.form.op() };
+    let idx = (d[0] as usize / 5) << 4 | (sel & 15) as usize;
+    let h = &honest()[idx % honest().len()];
+    let hl = pqzl_honest(idx); // codec 4: a PQZL proof
+    let op = if sel & 0x10 != 0 { sel >> 5 } else { h.op };
     INPUTS.fetch_add(1, Relaxed);
     let tr = &honest()[(sel & 1) as usize]; // PQZL Transfer / Transfer0: the bundle's u, v_t, [v_a]
     let bundle = || {
-        let Ok(stmt::Stmt::Debit(t)) = stmt::parse(tr.form.op(), &tr.stmt) else { die("honest transfer") };
+        let Ok(stmt::Stmt::Debit(t)) = stmt::parse(tr.op, &tr.stmt) else { die("honest transfer") };
         let b = stmt::Bundle { salt: [0xA5; 16], u: t.u, v_t: t.v_t.unwrap(), v_a: t.v_a, to_ua: [0x22; 32] };
         b.encode().unwrap()
     };
@@ -317,7 +336,7 @@ pub unsafe extern "C" fn pqz_fuzz_codec(data: *const u8, len: usize) {
         1 => h.input.clone(),
         2 => bundle(),
         3 => stmt::opening(&bundle(), &h.proof),
-        _ => honest()[sel as usize % 8].proof.clone(),
+        _ => hl.proof.clone(),
     };
     let all = 0..b.len();
     edit(&mut b, all, script);
@@ -376,15 +395,15 @@ pub unsafe extern "C" fn pqz_fuzz_codec(data: *const u8, len: usize) {
             .is_ok()
         }
         _ => {
-            let h = &honest()[sel as usize % 8];
-            let r = pqzl::test_mutate(rel(h.form), &b, 99, 0, 0).unwrap_or_else(|_| die("node fault in pqz_test_mutate"));
-            let r2 = pqzl::test_mutate(rel(h.form), &b, 99, 0, 0).unwrap_or_else(|_| die("node fault in pqz_test_mutate"));
+            let h = hl;
+            let r = pqzl::test_mutate(h.rel, &b, 99, 0, 0).unwrap_or_else(|_| die("node fault in pqz_test_mutate"));
+            let r2 = pqzl::test_mutate(h.rel, &b, 99, 0, 0).unwrap_or_else(|_| die("node fault in pqz_test_mutate"));
             if r != r2 {
                 die("PQZL proof decoder not deterministic");
             }
             if let Some(e) = &r {
                 if *e != b {
-                    die(&format!("PQZL proof {:?}: decoded {} B, re-encoded {} B differ (non-canonical encoding accepted)", h.form, b.len(), e.len()));
+                    die(&format!("PQZL proof {:?} (rel {:#x}): decoded {} B, re-encoded {} B differ (non-canonical encoding accepted)", h.form, h.rel, b.len(), e.len()));
                 }
                 CANON.fetch_add(1, Relaxed);
             }

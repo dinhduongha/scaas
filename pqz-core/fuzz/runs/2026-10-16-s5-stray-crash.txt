@@ -1,0 +1,49 @@
+# P6-ANON S5 (2026-10-16): what is pqz-core/fuzz/crash-b9881dfc28970147ad55024620ea154c845493cb
+# (tracked since 539db61, P6e task 10; now regress/valid/crash-b9881dfc…)
+
+Origin: runs/smoke3-precompile.txt line 77-106: a FINDING 'verdict …01 for an input that should give …00 (62179 B)'
+in the merge step (-merge=1 had no -artifact_prefix, so libFuzzer wrote ./crash-<sha1> into pqz-core/fuzz/).
+The input came from a stale work corpus built by the pre-vector harness (it proved pqz_ffi::fixture::cases with
+rnd32 = 0x33..): a valid proof the vector-based oracle did not know (the smoke3 false finding, fixed in 539db61 by
+dropping stale work corpora). Not a bug of the precompile.
+
+## 1. replay through the current precompile target (build of branch p6-anon-s5, 43 honest inputs)
+scripts/capped pqz-core/build/fuzz/precompile -rss_limit_mb=3072 -malloc_limit_mb=1536 <file>
+pqz-fuzz: arena peak 268240256 B (bound 357913940 B)
+pqz-fuzz init (precompile): 43 honest inputs valid, self-test ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205, verify-only arena 512 MiB, arena used 265693696 B, peak 268240256 B
+pqz-fuzz FINDING (precompile): verdict 0000000000000000000000000000000000000000000000000000000000000001 for an input that should give 0000000000000000000000000000000000000000000000000000000000000000 (62179 B)
+==29891== ERROR: libFuzzer: deadly signal
+SUMMARY: libFuzzer: deadly signal
+
+## 2. identification (scratch crate depending on pqz-ffi --features prove; source below), under scripts/capped
+     Locking 21 packages to latest compatible versions
+      Adding generic-array v0.14.7 (available: v0.14.9)
+      Adding sha3 v0.10.8 (available: v0.10.9)
+op 5 stmt 33184 B proof 28990 B, PQZL id true
+precompile word Ok(01)
+generic verifier: Ok(true)
+statement = pqz_ffi::fixture::cases(PQZL) DiscloseReceiver
+re-proved with rnd32 = 0x33.. (the old harness's): 28990 B, byte-equal true
+
+## source (src/main.rs)
+// Identifies pqz-core/fuzz/crash-b9881dfc… (P6-ANON S5): is it the pre-vector fuzz harness's fixture input?
+use pqz_ffi::*;
+fn main() {
+    let b = std::fs::read(std::env::args().nth(1).unwrap()).unwrap();
+    let i = stmt::decode_input(&b).expect("decodes");
+    println!("op {} stmt {} B proof {} B, PQZL id {}", i.op, i.stmt_bytes.len(), i.proof.len(), *i.stmt.proof_system_id().unwrap() == PQZL_ID);
+    println!("precompile word {:02x?}", precompile(&b).map(|w| w[31]));
+    println!("generic verifier: {:?}", pqzl::verify_generic(i.op, i.stmt_bytes, i.proof));
+    for c in fixture::cases(&PQZL_ID).unwrap() {
+        if c.stmt == i.stmt_bytes {
+            println!("statement = pqz_ffi::fixture::cases(PQZL) {:?}", c.form);
+            let p = prove(c.op(), &c.stmt, &c.wit, &[0x33; 32]).unwrap();
+            println!("re-proved with rnd32 = 0x33.. (the old harness's): {} B, byte-equal {}", p.len(), p == i.proof);
+        }
+    }
+}
+
+## disposition
+git mv to regress/valid/: seeds.py appends regress/valid/* to the honest inputs (honest.bin), so the oracle expects
+…01 for it exactly, the warm-up re-verifies it at every start, it is a precompile seed and a mutate / codec base.
+run.sh's merge step now has -artifact_prefix (crashes land in pqz-core/build/fuzz/, never in the source tree).
