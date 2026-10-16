@@ -1,0 +1,3 @@
+
+RESULT: FAIL
+== 23:04:48 done: /out/quick

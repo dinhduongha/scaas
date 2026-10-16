@@ -4,6 +4,7 @@
 #   docker run --rm --memory=4g --memory-swap=4g --network none -v "$PWD/pqz-out:/out" -e OUT=/out/quick pqz-core-artifact   # quick
 #   docker run --rm --memory=4g --memory-swap=4g -v "$PWD/pqz-out:/out" -e OUT=/out/full pqz-core-artifact --full
 #   docker run --rm --memory=4g --memory-swap=4g --init -p 127.0.0.1:8000:8000 pqz-core-artifact --serve             # then http://127.0.0.1:8000/
+#   docker run --rm --memory=4g --memory-swap=4g --network none -v "$PWD/pqz-out:/out" -e OUT=/out/multi pqz-core-artifact --multi-bench   # op 7 table
 #   docker run --rm --memory=4g --memory-swap=4g -v "$PWD/pqz-out:/out" -e OUT=/out/upstream pqz-core-artifact --upstream
 # Built locally by the reader; no image is published. Pinned: the base image by digest, apt packages by version from
 # the Ubuntu snapshot archive (APT_SNAPSHOT), node by version + sha256, LaZer (for --upstream) by commit, rustup-init

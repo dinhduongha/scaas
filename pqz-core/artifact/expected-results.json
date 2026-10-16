@@ -465,6 +465,60 @@
     "valid": true
    },
    {
+    "sys": "PQZL",
+    "form": "TransferMulti1",
+    "stmt": "5c01ab0ad922ad8de379797fc8d583395735ebaef86f247073b126666a53559d",
+    "wit": "73bdec0b834565f454041210baf47cd0f2b4badab6c5a5e377202b9d4bf07649",
+    "proof": "45d0f1deca33974a6bbcd307cf4137f4550e5061fac046decd34b1064b6cb28b",
+    "proof_len": 42766,
+    "valid": true
+   },
+   {
+    "sys": "PQZL",
+    "form": "TransferMulti2",
+    "stmt": "a56ff1b6c70c81d9b784f098e3bca4998bb4a90b239b20894046bf2646414e93",
+    "wit": "e8543d707697c2c67f07d1107a0cf221101e45b92f7f3b45a2e6715a42745c58",
+    "proof": "4a81dfe830b1013eb05fcab020351d36cc73017117c5e88378d517e1ac87a4a4",
+    "proof_len": 43603,
+    "valid": true
+   },
+   {
+    "sys": "PQZL",
+    "form": "TransferMulti4",
+    "stmt": "35a0a69b1c3e8110ea46df66e0f32cd54e2ecd54ed40b07601a5d2ada1babd15",
+    "wit": "997ccf8846f2122ac1966eafe44bb6e1fff44724e0a2f25667530289b6126da3",
+    "proof": "1792b3626b6e7bcf5b42d2ee0100ec45f615d5035f8128d201b0c8ff6e0dffd4",
+    "proof_len": 45274,
+    "valid": true
+   },
+   {
+    "sys": "PQZL",
+    "form": "TransferMulti1_0",
+    "stmt": "2a1c64dead30b2e46391a10a5565b565a69c192643be8e833f94329a30caf8f9",
+    "wit": "5f6d7d584c53299b4545c00b622b500a9a20f26e656887b17c4f40bf43b2c019",
+    "proof": "9123f5fd1286751bd3efe2cf82f69cd6e2bdb2b396bd7a11c65b47df8341a5b1",
+    "proof_len": 42409,
+    "valid": true
+   },
+   {
+    "sys": "PQZL",
+    "form": "TransferMulti2_0",
+    "stmt": "b64e631d473f21554f7574e1d3f72135df953aeb9cd2fb989c7d8ff5682e94b3",
+    "wit": "009db066ad0af91af1fb3b74def2607b4fded763217291480ceb49fe30f86f24",
+    "proof": "eef6f4092af2ec2d2e4c060274bf999b385a46ae083fbe6d4a6ef227ef5e5e9d",
+    "proof_len": 42951,
+    "valid": true
+   },
+   {
+    "sys": "PQZL",
+    "form": "TransferMulti4_0",
+    "stmt": "bd891b9fcc5ff427c82bc8242c5a51d2b1bb9b3069f42a2dcd84c240a182f18f",
+    "wit": "a8b7dcd2b14997e0ab3c12be7fc271633b550399a10e1a0d220122849e36ae2a",
+    "proof": "af1f8d7baa30cee15e45cc480965abf9a944e507deae92325145da10d08e8e2e",
+    "proof_len": 43922,
+    "valid": true
+   },
+   {
     "sys": "PQZH",
     "form": "Transfer",
     "stmt": "afd9b89c3b34898e7f6e31817bea85cc79992ce5e0adddf7949016beb870fba3",
@@ -537,6 +591,60 @@
     "valid": true
    },
    {
+    "sys": "PQZH",
+    "form": "TransferMulti1",
+    "stmt": "258c8eca5a8a5027ea8ebcd0e452bace4795de1562a853b83009116e17f2c973",
+    "wit": "73bdec0b834565f454041210baf47cd0f2b4badab6c5a5e377202b9d4bf07649",
+    "proof": "ba96acb49415f0ddd9a7034be5e19dc0ba3e545b6c1eb7a2cb1743611a92078c",
+    "proof_len": 232174,
+    "valid": true
+   },
+   {
+    "sys": "PQZH",
+    "form": "TransferMulti2",
+    "stmt": "06fe98caaf6252686c68215b2cccc002ee9c01bd9c401d4fd5ac4bd145f85bc8",
+    "wit": "e8543d707697c2c67f07d1107a0cf221101e45b92f7f3b45a2e6715a42745c58",
+    "proof": "ba11b59b7f775a0a7c36a3e865777a3c812113a96120003f4240e8d927f7af4a",
+    "proof_len": 232174,
+    "valid": true
+   },
+   {
+    "sys": "PQZH",
+    "form": "TransferMulti4",
+    "stmt": "d74555ee872badff4eaad797035cb6c08079f5a6330b077e07bfac30c3b41a9b",
+    "wit": "997ccf8846f2122ac1966eafe44bb6e1fff44724e0a2f25667530289b6126da3",
+    "proof": "b6abf26c8c4afed66ed12406ec8f1cdc34a696ee7012ef21d9d67f376a45d986",
+    "proof_len": 232708,
+    "valid": true
+   },
+   {
+    "sys": "PQZH",
+    "form": "TransferMulti1_0",
+    "stmt": "beb81c303e9dd01f3cfc9acc57eafb8cfeb472552c824baa0881393732930492",
+    "wit": "5f6d7d584c53299b4545c00b622b500a9a20f26e656887b17c4f40bf43b2c019",
+    "proof": "c3e32e1de946433a2d98209603cba2ecc41a79692d510bc36c03040a60ec255d",
+    "proof_len": 230968,
+    "valid": true
+   },
+   {
+    "sys": "PQZH",
+    "form": "TransferMulti2_0",
+    "stmt": "f8f107bad3d3cb244e426dab16a553440e69799376b29bbbc6189d8e53520a8a",
+    "wit": "009db066ad0af91af1fb3b74def2607b4fded763217291480ceb49fe30f86f24",
+    "proof": "19ab2b2df20b82e715413e2ef2e480d5ca4edb96050520b80b182169d0de8b7b",
+    "proof_len": 231918,
+    "valid": true
+   },
+   {
+    "sys": "PQZH",
+    "form": "TransferMulti4_0",
+    "stmt": "43413aac624029240b501817e8e797ab9d0dbf4f188eb39aee568e53bb577a93",
+    "wit": "a8b7dcd2b14997e0ab3c12be7fc271633b550399a10e1a0d220122849e36ae2a",
+    "proof": "93966fe4fd2c3019f7bf158b4863f05a8d38b5635324935963103374aca8a431",
+    "proof_len": 230904,
+    "valid": true
+   },
+   {
     "selftest": "ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205",
     "kat_digest": "f7c772d6467c84e1c143004017d3594d57dfbde49097e9d3fd9b382e03680776",
     "a_digest": "f176b313331c898e11230c6addae3d44821413361e1416a6aedf9f26a7be3df0",
@@ -549,5 +657,53 @@
     "precompile": "ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205"
    }
   ]
- }
+ },
+ "txm": {
+  "built_legs": {
+   "pqzl": [
+    1,
+    2,
+    4,
+    8
+   ],
+   "pqzh": [
+    1,
+    2,
+    4
+   ]
+  },
+  "proof_bytes": {
+   "pqzl M1-on": 42716,
+   "pqzh M1-on": 232494,
+   "pqzl M2-on": 43604,
+   "pqzh M2-on": 231256,
+   "pqzl M4-on": 45275,
+   "pqzh M4-on": 232708,
+   "pqzl M8-on": 61794,
+   "pqzl M1-off": 42426,
+   "pqzh M1-off": 232248,
+   "pqzl M2-off": 42919,
+   "pqzh M2-off": 232078,
+   "pqzl M4-off": 43932,
+   "pqzh M4-off": 232494,
+   "pqzl M8-off": 58975,
+   "pqzl M2-off-two-real": 42923,
+   "pqzh M2-off-two-real": 231640,
+   "pqzl M4-off-decoys": 43917,
+   "pqzh M4-off-decoys": 231726,
+   "pqzl M8-on-boundary": 61795
+  },
+  "wasm_verify_only": [
+   "pqzl M8-off",
+   "pqzl M8-on",
+   "pqzl M8-on-boundary"
+  ],
+  "negatives": {
+   "pqzl": 177,
+   "pqzh": 165
+  }
+ },
+ "changes": [
+  "s6-quick: + txm (op 7 R_TXM vector replay, run /home/ha/work/ainative/scaas/scratchpad/s6-out/quick); ffi.digest_lines 17 -> 29 (added PQZL TransferMulti1, PQZL TransferMulti2, PQZL TransferMulti4, PQZL TransferMulti1_0, PQZL TransferMulti2_0, PQZL TransferMulti4_0, PQZH TransferMulti1, PQZH TransferMulti2, PQZH TransferMulti4, PQZH TransferMulti1_0, PQZH TransferMulti2_0, PQZH TransferMulti4_0); every other value unchanged"
+ ]
 }

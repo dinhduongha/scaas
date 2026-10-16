@@ -2,11 +2,28 @@
 
 Source and scripts to rebuild both PQZ proof systems and re-run their measurements: **PQZL** (the LaZer fork, C: the six
 relations `R_REG`, `R_TX`, `R_BURN`, `R_DS`, `R_DR`, `R_TX0`, the generic verifier `pqz_verify` and the specialised verifier
-`pqz_verify_fast`; `../STATUS.md`), **PQZH** (Ligero, Rust: `../pqzh/ligero/`, all six forms incl. `R_TX0`, at the
+`pqz_verify_fast`, and the multi-recipient transfer `R_TXM` (op 7, P6-ANON); `../STATUS.md`), **PQZH** (Ligero, Rust: `../pqzh/ligero/`, all six forms incl. `R_TX0`, at the
 proven preset; `docs/research/pqzh-ligero.md` §12–§14), the statement codec `pqz-stmt` (`../stmt/`) and **pqz-ffi**
 (`../ffi/`, the one precompile over both systems). Scope: both systems (owner 2026-10-14, superseding "PQZL only" of
 2026-10-13). Nothing built is published: no image, no wasm, no binaries. You build and run everything on your own
 machine, and the package compares your results with `expected-results.json`.
+
+## Status (2026-10-17, P6-ANON S6, branch `p6-anon-s6b`: op 7 `R_TXM` in the package, on the new pqz-core layout)
+
+- **op 7 in the default stages:** `results.py` replays every built `(id, M, auditorOn)` of `proof_pqzl.json` /
+  `proof_pqzh.json` (PQZL M = 1, 2, 4, 8; PQZH M = 1, 2, 4; with / without the auditor; decoy and boundary cases):
+  native through `pqz_precompile` (`…01`, `pqz-vectors --check` lines) and wasm32 (`ffi/vectors/replay_wasm.mjs`:
+  proved again byte-equal; PQZL M = 8 verify-only, wasm32 proves PQZL M ≤ 4); op 7 rows of `negative.json` (PQZL 177,
+  PQZH 165) expect `…00` / revert.
+- **`expected-results.json` regenerated once** (`results.py freeze-txm s6-quick`, owner D21: one regeneration with op 7):
+  only `txm` and `ffi.digest_lines` changed (29 lines; the 17 earlier lines kept, in order). Docker quick on the new
+  layout (`runs/s6-docker-quick/`): the run itself 177 ok, 1 FAIL = the digest lines before the regeneration
+  (`summary-run.txt`); the same output checked against the regenerated file: **PASS, 199 ok**
+  (`summary-post-freeze-txm.txt`).
+- **`--multi-bench`** (new mode): the op 7 measurement table, PQZL by `../research/pqzl-measure/txm-bench.sh` (the L3
+  method), PQZH by `ligero_bench` / `run_wasm.mjs` txm (the H2 method), oversize shapes (PQZL M = 16, PQZH M = 8, 16)
+  in bench builds only; `results.py multi` writes `results-multi.md`. Docker run: see below.
+- **Not done here:** the freeze (`--full`, gates A / B) — `expected-results.json` stays provisional until then.
 
 ## Status / resume (2026-10-14, branch `pqz-artifact2`: both systems; Docker quick PASS; freeze not run)
 
@@ -177,7 +194,7 @@ of `../README.md`. Compare it with `research/pqzl-measure/runs/final-*` (a direc
 **pqz-ffi** (`../ffi/`, the one precompile over both systems): `cargo test --features prove,test-hooks` (self-test
 hash, every decoder rejection, the PQZL differential test, node faults, the verify-only process, fill determinism, and
 the native digest lines); `cargo test --lib` without `prove`; the verify-only cdylib, its symbol scan
-(`../check_symbols.sh`), no test hooks in it, the C smoke test against `pqz_ffi.h`; clippy
+(`../pqzl/check_symbols.sh`), no test hooks in it, the C smoke test against `pqz_ffi.h`; clippy
 `-D clippy::float_arithmetic`; the wasm32 builds and digest lines (must equal native); `ffi_bench` (20 quick, 200
 `--full`). This is `ffi/run.sh` minus its `cargo +stable clippy` (the image has 1.97.1's clippy) and `/usr/bin/time`.
 
@@ -205,6 +222,7 @@ mkdir -p pqz-out
 docker run --rm --memory=4g --memory-swap=4g --network none -u "$(id -u):$(id -g)" -v "$PWD/pqz-out:/out" -e OUT=/out/quick pqz-core-artifact
 docker run --rm --memory=4g --memory-swap=4g --network none -u "$(id -u):$(id -g)" -v "$PWD/pqz-out:/out" -e OUT=/out/full pqz-core-artifact --full
 docker run --rm --memory=4g --memory-swap=4g -u "$(id -u):$(id -g)" -v "$PWD/pqz-out:/out" -e OUT=/out/upstream pqz-core-artifact --upstream
+docker run --rm --memory=4g --memory-swap=4g --network none -u "$(id -u):$(id -g)" -v "$PWD/pqz-out:/out" -e OUT=/out/multi pqz-core-artifact --multi-bench   # op 7 table, ~1 h
 docker run --rm --memory=4g --memory-swap=4g --init -p 127.0.0.1:8000:8000 pqz-core-artifact --serve # open http://127.0.0.1:8000/
 docker image rm pqz-core-artifact                                     # when done
 ```
@@ -230,6 +248,7 @@ binutils (`strings`) and about 1 GB of free memory.
 pqz-core/artifact/reproduce.sh                 # quick
 pqz-core/artifact/reproduce.sh --full
 pqz-core/artifact/reproduce.sh --serve         # PORT=8000 BIND=127.0.0.1 by default
+pqz-core/artifact/reproduce.sh --multi-bench   # the op 7 R_TXM measurement table (~1 h, ~2 GB)
 LAZER_SRC=<LaZer clone> pqz-core/artifact/reproduce.sh --upstream [N]   # without LAZER_SRC it clones from GitHub
 ```
 
@@ -314,7 +333,7 @@ its kernels from CPUID (`../xcheck/static/cpuf`), so `HEXL_DISABLE_AVX512IFMA=1`
 |---|---|
 | `Dockerfile`, `Dockerfile.dockerignore` | the pinned image (build context `pqz-core/`) |
 | `reproduce.sh` | every mode; works in Docker and on a local toolchain |
-| `results.py` | `check`: tables + comparison; `freeze`: `expected-results.json` from a frozen run (both systems + pqz-ffi) |
+| `results.py` | `check`: tables + comparison; `freeze`: `expected-results.json` from a frozen run (both systems + pqz-ffi); `freeze-txm`: only the op 7 parts from a quick / full run; `multi`: the op 7 table of a `--multi-bench` run |
 | `expected-results.json` | reference values (PROVISIONAL until the freeze run, see Status) |
 | `web/index.html` | the `--serve` page (loads the locally built `pqz.wasm` and `pqzh_ligero_wasm.wasm`) |
 | `runs/` | logs of the package's own test runs (text only) |
