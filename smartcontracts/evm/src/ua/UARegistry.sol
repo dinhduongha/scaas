@@ -117,6 +117,8 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     mapping(bytes32 keyHash => bytes32) private _keyOwner;
     mapping(bytes32 ua => bytes32) private _authRef; // Zether kinds only, ≠ 0
     mapping(bytes32 ua => address[2]) private _ekPtr; // ML-DSA expanded-key parts (SSTORE2), written once each
+    mapping(uint16 kind => uint256) private _uaCount; // per-kind list length (single-key kinds)
+    mapping(uint16 kind => mapping(uint256 i => bytes32 ua)) private _uaAt;
 
     /// @param chainUid_ the chain's genesis hash (≠ 0, `SaltedEIP712.ChainUidZero`).
     /// @param predecessor_ 0 for generation 1, else the chain's gen-1 registry.
@@ -219,6 +221,50 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         return SSTORE2.read(r.keyPtr);
     }
 
+    // ----- the per-kind list (IUARegistry.uaCount) -----
+
+    /// Appends `ua` to its kind's list (single-key kinds; structures are not listed) and returns its index.
+    function _list(uint16 kind, bytes32 ua) private returns (uint40) {
+        uint256 n = _uaCount[kind];
+        _uaAt[kind][n] = ua;
+        _uaCount[kind] = n + 1;
+        return uint40(n);
+    }
+
+    /// A kind this generation does not enable belongs to the predecessor's list.
+    function _listedHere(uint16 kind) private view returns (bool) {
+        return predecessor == address(0) || uint160(_cfg(kind)) != 0;
+    }
+
+    function uaCount(uint16 kind) public view returns (uint256) {
+        if (!_listedHere(kind)) return IUARegistry(predecessor).uaCount(kind);
+        return _uaCount[kind];
+    }
+
+    function uaAt(uint16 kind, uint256 i) external view returns (bytes32) {
+        if (!_listedHere(kind)) return IUARegistry(predecessor).uaAt(kind, i);
+        if (i >= _uaCount[kind]) revert UAIndex(kind, i);
+        return _uaAt[kind][i];
+    }
+
+    function uaPage(uint16 kind, uint256 start, uint256 n) external view returns (bytes32[] memory page) {
+        if (!_listedHere(kind)) return IUARegistry(predecessor).uaPage(kind, start, n);
+        uint256 count = _uaCount[kind];
+        if (start >= count) return page;
+        if (n > count - start) n = count - start;
+        page = new bytes32[](n);
+        for (uint256 i; i < n; ++i) {
+            page[i] = _uaAt[kind][start + i];
+        }
+    }
+
+    function uaIndex(bytes32 ua) external view returns (uint256) {
+        Record memory r = _records[ua];
+        if (r.kind == 0 && predecessor != address(0)) return IUARegistry(predecessor).uaIndex(ua);
+        if (r.kind == 0 || r.kind == UAKinds.MSIG) revert UANotIndexed(ua);
+        return r.index;
+    }
+
     function kindOf(bytes32 ua) public view returns (uint16 kind) {
         kind = _records[ua].kind;
         if (kind == 0 && predecessor != address(0)) kind = IUARegistry(predecessor).kindOf(ua);
@@ -296,7 +342,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         // 6. Structures have no PoP of their own (members proved theirs): `pop` must be empty.
         if (structure ? pop.length != 0 : !_popOk(cfg, kind, d, ua, authRef, pop)) revert UAPoP();
         _coSign(ua, authRef, authPop); // 7
-        _records[ua] = Record(kind, uint40(block.timestamp), _keyPtr(kind, keyData)); // 8
+        _records[ua] = Record(kind, uint40(block.timestamp), _keyPtr(kind, keyData), structure ? 0 : _list(kind, ua)); // 8
         if (authRef != 0) _authRef[ua] = authRef;
         if (!structure) _keyOwner[kh] = ua;
         emit UARegistered(ua, kind, keyData, authRef);

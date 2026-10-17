@@ -13,6 +13,7 @@ interface IUARegistry is IERC5267 {
         uint16 kind;
         uint40 registeredAt;
         address keyPtr; // ≠ 0 only for stored kinds (UA-2c MuSig2/FROST, UA-3 Zether, P6c PQ)
+        uint40 index; // the UA's position in its kind's list (`uaAt`); single-key kinds only (structures: 0, unlisted)
     }
 
     event UARegistered(bytes32 indexed ua, uint16 indexed kind, bytes keyData, bytes32 authRef);
@@ -29,6 +30,8 @@ interface IUARegistry is IERC5267 {
     error UAPoP();
     error UAUnauthorized(bytes32 ua); // also: ua is ZETHER or unregistered
     error UAKeyCache(uint16 kind); // not ML-DSA, disabled, part past the last, or the verifier uses a precompile
+    error UAIndex(uint16 kind, uint256 i); // uaAt past the kind's count
+    error UANotIndexed(bytes32 ua); // uaIndex of an unregistered id or of a structure (msig)
 
     function generation() external view returns (uint8); // 1 or 2
     function predecessor() external view returns (address);
@@ -55,6 +58,16 @@ interface IUARegistry is IERC5267 {
     /// The stored key of a stored kind (MuSig2 `Q`, FROST `Y`, Zether `Y`: zether.md CTR-ZTH-50; PQ `pk`), empty
     /// otherwise.
     function keyOf(bytes32 ua) external view returns (bytes memory);
+
+    /// The per-kind list of registered UAs (owner 2026-10-17: decoy selection for PQZ and classical Zether, which
+    /// wallets read as they choose; on chain because logs can be pruned). Single-key kinds only: each registration
+    /// appends at `uaCount(kind)`, assigned by the registry; structures (msig) are not listed. A kind this generation
+    /// does not enable is answered by the predecessor (a single-key kind lives in exactly one generation).
+    function uaCount(uint16 kind) external view returns (uint256);
+    function uaAt(uint16 kind, uint256 i) external view returns (bytes32); // UAIndex if i >= uaCount(kind)
+    /// Up to `n` ids from `start` (fewer at the end of the list; none if start >= uaCount(kind)).
+    function uaPage(uint16 kind, uint256 start, uint256 n) external view returns (bytes32[] memory);
+    function uaIndex(bytes32 ua) external view returns (uint256); // UANotIndexed if unregistered or a structure
 
     /// ML-DSA without a precompile (P6c): stores part `part` (ML-DSA-44: 0; ML-DSA-65: 0, 1; one transaction each) of
     /// the EIP-8051 expanded key the registry derives from `pk` under `uaOf(kind, pk)`; PoP and verify use it once

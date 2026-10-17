@@ -3138,6 +3138,13 @@ Change (2026-10-13): built as ruled (UA-5a): `_uaMint`, `wrapToUA`, `unwrapToUA`
 
 ## 25. Contracts — Post-quantum Zether
 
+### CTR-UA-29 — The registry keeps an on-chain list of the UAs of each kind
+- old: — · status: current · owner: yes · date: 2026-10-17 · normative: contracts/accounts.md#CTR-UA-29 · superseded-by: —
+
+**Why.** Wallets choose decoys for PQZ and classical Zether multi-recipient transfers among the UAs of the token's kind; event logs may be pruned on a long-running chain, the registry state is not, and a UA serves many tokens, so the list lives in the registry (`uaCount`, `uaAt`, `uaPage`, `uaIndex`; single-key kinds; structures and native ids are not listed). Controller design accepted by the owner: the index in the record's free 40 bits, ≈ +27 k gas per registration, gen 2 forwards gen-1 kinds.
+**Cost if wrong.** ≈ 27 k gas on every registration and 25,602 B of registry code (over EIP-170; test chains allow 64 KiB) for a list wallets could otherwise rebuild from logs while the logs exist.
+**Source.** owner, 2026-10-17 (TODO.md "UA Registry: on-chain index of UAs per kind"); branch `ua-index`.
+
 ### CTR-PQZ-01 — Separate PQZ class gated to private chains
 - old: R270 · status: current · owner: yes · date: 2026-10-07 · normative: contracts/pq-zero-knowledge.md#CTR-PQZ-01 · superseded-by: —
 

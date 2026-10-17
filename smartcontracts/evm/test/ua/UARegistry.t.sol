@@ -882,6 +882,76 @@ contract UARegistryTest is UARegistryBase {
         ua = reg.register(UAKinds.MSIG, d, "", 0, "");
     }
 
+    // ----- the per-kind list (owner 2026-10-17: decoy selection; uaCount / uaAt / uaPage / uaIndex) -----
+
+    function _p256(uint256 pk) internal pure returns (bytes memory) {
+        (uint256 x, uint256 y) = vm.publicKeyP256(pk);
+        return abi.encodePacked(x, y);
+    }
+
+    function test_index_appendsPerKindInRegistrationOrder() public {
+        assertEq(reg.uaCount(0x0101), 0);
+        bytes32[3] memory p;
+        for (uint256 i; i < 3; ++i) {
+            p[i] = _register(reg, 0x0101, _p256(i + 1));
+            if (i == 0) _register(reg, 0x0102, _key(0x0102)); // another kind in between: its own list
+        }
+        assertEq(reg.uaCount(0x0101), 3);
+        assertEq(reg.uaCount(0x0102), 1);
+        for (uint256 i; i < 3; ++i) {
+            assertEq(reg.uaAt(0x0101, i), p[i]);
+            assertEq(reg.uaIndex(p[i]), i);
+            (IUARegistry.Record memory r,) = reg.recordOf(p[i]);
+            assertEq(r.index, i);
+        }
+        assertEq(reg.uaAt(0x0102, 0), reg.uaOf(0x0102, _key(0x0102)));
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAIndex.selector, uint16(0x0101), uint256(3)));
+        reg.uaAt(0x0101, 3);
+        // pages: clipped at the end, empty past it, n = 0 empty
+        bytes32[] memory pg = reg.uaPage(0x0101, 1, 10);
+        assertEq(pg.length, 2);
+        assertEq(pg[0], p[1]);
+        assertEq(pg[1], p[2]);
+        assertEq(reg.uaPage(0x0101, 0, 3).length, 3);
+        assertEq(reg.uaPage(0x0101, 3, 1).length, 0);
+        assertEq(reg.uaPage(0x0101, type(uint256).max, 1).length, 0);
+        assertEq(reg.uaPage(0x0101, 0, 0).length, 0);
+        assertEq(reg.uaPage(0x0103, 0, 5).length, 0); // an enabled kind with no registration
+    }
+
+    function test_index_structuresAndUnknownIdsAreNotListed() public {
+        (, bytes32 msig) = _registerMsig();
+        assertEq(reg.uaCount(UAKinds.MSIG), 0);
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UANotIndexed.selector, msig));
+        reg.uaIndex(msig);
+        bytes32 nobody = bytes32(uint256(0xbeef) << 200);
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UANotIndexed.selector, nobody));
+        reg.uaIndex(nobody);
+        // the members the fixture registered are listed under their own kinds
+        uint256 listed;
+        for (uint256 i; i < KINDS.length; ++i) {
+            listed += reg.uaCount(KINDS[i]);
+        }
+        assertGt(listed, 0);
+    }
+
+    /// Gen 2 answers for a kind it enables from its own list and forwards every other kind to gen 1.
+    function test_index_gen2ForwardsGen1Kinds() public {
+        _gen1WithoutEd25519();
+        bytes32 a = _register(reg, 0x0101, _p256(7));
+        bytes32 b = _register(reg, 0x0101, _p256(8));
+        UARegistry gen2 = _gen2();
+        bytes32 e = _register(gen2, 0x0102, _key(0x0102));
+        assertEq(gen2.uaCount(0x0101), 2);
+        assertEq(gen2.uaAt(0x0101, 1), b);
+        assertEq(gen2.uaPage(0x0101, 0, 5)[0], a);
+        assertEq(gen2.uaIndex(b), 1);
+        assertEq(gen2.uaCount(0x0102), 1);
+        assertEq(gen2.uaAt(0x0102, 0), e);
+        assertEq(gen2.uaIndex(e), 0);
+        assertEq(reg.uaCount(0x0102), 0); // gen 1 does not enable ed25519: its own list stays empty
+    }
+
     function _registerMsig() internal returns (bytes memory d, bytes32 ua) {
         (d, ua,) = _msigRegistered();
     }
