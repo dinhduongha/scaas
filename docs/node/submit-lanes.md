@@ -129,7 +129,7 @@ lanes = [0, 1, 2, 3]                            # lanes = [account indexes] per 
 | Sui | 784 | ed25519 SLIP-10 | `m/44'/784'/i'/0'/0'` | Sui standard (all levels hardened) |
 | Stellar | 148 | ed25519 SLIP-10 | `m/44'/148'/i'` | SEP-0005 |
 | Cosmos | 118 | secp256k1 BIP-32 | `m/44'/118'/0'/0/i` | |
-| TON | 607 | ed25519 SLIP-10 | `m/44'/607'/i'` | **not** the native TON mnemonic (PBKDF2 "TON default seed"); a TON wallet imports it through its "BIP-39 /Ledger path" option |
+| GRAM | 607 | ed25519 SLIP-10 | `m/44'/607'/i'` | **not** the native GRAM mnemonic (PBKDF2 "GRAM default seed"); a GRAM wallet imports it through its "BIP-39 /Ledger path" option |
 
 Aptos and Solana lane paths are in [networks/aptos.md](../networks/aptos.md) and
 [networks/solana.md](../networks/solana.md).
@@ -158,7 +158,7 @@ Aptos and Solana lane paths are in [networks/aptos.md](../networks/aptos.md) and
 <a id="custody-keys"></a><a id="NODE-LANE-20"></a>**NODE-LANE-20** — **One custody key per family for raw-digest
 signers.** A key the node holds (lane key, mandate delegate, custody adapter key) signs in exactly one family;
 `Config::validate` refuses the same public key in two families, and imported keys carry their family tag. Family
-connector sections state the same rule for client connectors. (Hedera ED25519 accounts, Stellar and the TON mandate
+connector sections state the same rule for client connectors. (Hedera ED25519 accounts, Stellar and the GRAM mandate
 delegate all sign raw 32-byte digests with ed25519: one key across two families turns a compromised signer into a
 cross-chain oracle.)
 
@@ -190,7 +190,7 @@ transaction, not only for batches.
 
 <a id="adapter-journals"></a><a id="NODE-LANE-19"></a>**NODE-LANE-19** — **Adapter-local journals live in the
 store.** Per-lane state an adapter needs across restarts to avoid equivocation or a double send (Sui gas-coin
-`Pending`, built today as `params.lane_journal`; Solana durable-nonce value; TON seqno generation) is part of the
+`Pending`, built today as `params.lane_journal`; Solana durable-nonce value; GRAM seqno generation) is part of the
 `outer_tx` row: signed bytes, consumed object refs and versions, resolved flag; written in the `leased → signed`
 transaction, kept until the outer tx is terminal, one row per unresolved tx (never "last one only"). No
 local-directory journal: failover is "restore the store on another host", and a local journal does not move with the
@@ -293,7 +293,7 @@ where they accept fewer. As built the runner does not cap it (PLANNED).
 node's own RPC endpoints (no third-party simulation service). EVM: `eth_estimateGas` from the lane address at
 `pending` (gas limit = estimate + 20 %; a contract signer's meta-tx at least 21 000 + 400 k·64/63 + 5 000 for its
 ERC-1271 check; `mtxSettle` raised ×1.5 until an `eth_call` at that gas settles every settlement); non-EVM: `ChainAdapter::build` = build + family simulation (Soroban
-`simulateTransaction`, Sui dry-run/dev-inspect (`sui_dryRun`), Cosmos `tx/simulate`, Aptos simulate, TON emulation, Solana
+`simulateTransaction`, Sui dry-run/dev-inspect (`sui_dryRun`), Cosmos `tx/simulate`, Aptos simulate, GRAM emulation, Solana
 `simulateTransaction`; per-family details in [networks/](../networks/README.md)). Simulation narrows but cannot rule out
 a revert: state can change between simulation and inclusion (a race, an allowance spent, a pause switched on, a
 confidential `zetherNonce` used first, or the subject moving its own funds), so the node
@@ -350,7 +350,7 @@ prices. The seam is the `gas_budget` breaker plus the FinOps price file ([ops.md
 <a id="cost-metering"></a><a id="NODE-LANE-13"></a>**NODE-LANE-13** — **The gas breaker meters what the lane pays, not
 what succeeds.** Every included outer tx of ours (mined, reverted, or failed and billed) feeds `Breaker::spend` with
 `fee + value_out + deposits`: `fee` = the fee the chain charged, failures included; `value_out` = native value the tx
-moved out of the lane beyond fees, net of excess observed coming back (TON forward and attached TON, EVM `value`);
+moved out of the lane beyond fees, net of excess observed coming back (GRAM forward and attached GRAM, EVM `value`);
 `deposits` = rent or storage the lane funded (Solana account rent, Sui storage net of rebate, Aptos storage fee,
 Soroban rent). So `Breaker::spend(fee + value_out + deposits)`; adapter method `tx_cost(tx_id) → TxCost`
 (`tx_cost(tx_id) -> Option<TxCost { fee, value_out, deposits }>`) for every landed
@@ -365,7 +365,7 @@ when the family doc names the parameter the retry changes (gas or CU limit raise
 and on the second time, `reverted` with the decoded reason (consumption still checked first). `Rejected` carries
 `billed: bool`. Independently, `chain.max_attempts` (hot, default 5) caps `job.attempt_count` (incremented at
 `leased`): over it ⇒ `dead`, `ATTEMPTS_EXHAUSTED`. Each family doc keeps its own code → class table (Hedera, Aptos,
-Solana, Cosmos, Soroban, Sui, TON). A genuinely transient billed failure costs the payer a re-sign after two tries.
+Solana, Cosmos, Soroban, Sui, GRAM). A genuinely transient billed failure costs the payer a re-sign after two tries.
 
 <a id="grief"></a><a id="NODE-LANE-15"></a>**NODE-LANE-15** — **Per-subject grief score, node-wide, every family.**
 Store table `subject_grief (chain_key, subject, day, billed_failures, cost)` = `subject_grief(chain_key, subject, day,
@@ -393,9 +393,9 @@ field could hold a lane past the payload's death, query the wrong contract — a
 The mesh decoders already read the signed body.
 
 <a id="value-out"></a><a id="NODE-LANE-17"></a>**NODE-LANE-17** — **Value out per job is capped.** A job makes our lane
-send native value beyond fees only up to `chain.max_value_out` (hot; TON default 0.05 TON above the fixed attach, i.e.
+send native value beyond fees only up to `chain.max_value_out` (hot; GRAM default 0.05 GRAM above the fixed attach, i.e.
 50000000 nanoton; every other family 0). A signed floor or job field above the cap ⇒ `422 VALUE_OUT_TOO_HIGH` at intake
-and again at lease (config is hot). (One signed TON `pay` with a large forward floor would otherwise send the lane's
+and again at lease (config is hot). (One signed GRAM `pay` with a large forward floor would otherwise send the lane's
 balance to an address the signer chooses, [NET-TON-14](../networks/ton.md#NET-TON-14).) A flow that needs more forward
 value needs config.
 
@@ -426,7 +426,7 @@ intent. Cost: one `eth_call` per stuck tx per `stuck_after_secs` (60 s) and per 
 | EVM/Hedera | `eth_getLogs` on `token`, topic0 `MetaTransactionExecuted`, topic1 `from`, topic3 `batch`, from the row's `from_block` (mesh) or the block at job claim (kept with the `Sent`) to `latest`; pick the log with `nonce == m.nonce` | `digest == intent_id` and `relayer` ∈ our lanes ⇒ `landed` (an earlier hash of ours); `digest == intent_id` otherwise ⇒ `landed_elsewhere`; different digest ⇒ `superseded`; no log yet (lagging RPC) ⇒ `unknown` |
 | others | `unknown` in v1 (the adapter `events()` scan is per block range and belongs to the indexer) | resolved at finality from the event feed |
 
-After `valid_until` the subject nonce of TON/Solana/Aptos/Sui lanes may be pruned (Sui: permissionless `prune`) and read as 0; consumption checks are
+After `valid_until` the subject nonce of GRAM/Solana/Aptos/Sui lanes may be pruned (Sui: permissionless `prune`) and read as 0; consumption checks are
 only made while `now ≤ valid_until + clock_skew_secs`, and expiry decides after that.
 
 EVM view names (BUILT, P5): `mtxNonce(from, batch)`, `mtxDigest(m)` / `mtxTransferDigest(t)`; the node relays
@@ -513,8 +513,8 @@ Generic lane runner (non-EVM, and Hedera):
 - `ChainAdapter::op_consumed(&self, job: &Job) -> Result<Option<bool>>` (default `Ok(None)`), taking the `Job` so
   Hedera (`metatx` jobs) is served too. `Some(true)` iff the lane nonce has moved past the op's nonce; `Ok(None)`
   (unknown ⇒ never stop on it) for every op kind whose replay guard is not the lane nonce: v1 answers only for `pay`
-  (Cosmos `QueryMsg::Nonce`, Sui `lane_nonce`, Aptos view `lane_nonce`, TON `get_lane_nonce`, Solana `LanePda.next`,
-  absent ⇒ 0) and Hedera `metaNonce`. TON revoke would be `next > nonce + 1`; not needed in v1.
+  (Cosmos `QueryMsg::Nonce`, Sui `lane_nonce`, Aptos view `lane_nonce`, GRAM `get_lane_nonce`, Solana `LanePda.next`,
+  absent ⇒ 0) and Hedera `metaNonce`. GRAM revoke would be `next > nonce + 1`; not needed in v1.
 - `step_once`: on `SimError::Revert`, call `op_consumed`; `Some(true)` ⇒ report `consumed`, not `dead`.
 - `follow()`: on `TxStatus::Reverted`, call `op_consumed`; `Some(true)` ⇒ `consumed`, not `reverted`. Before every
   resend (`sent.is_err()` branch) call `op_consumed`; `Some(true)` ⇒ report `consumed`, stop resending, keep following the tx until its status is

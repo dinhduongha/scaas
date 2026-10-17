@@ -397,7 +397,7 @@ bounds the **rate**; rounding up adds less than one smallest unit per order and 
 stated in NatSpec. `fee ≤ MAX_FEE_PPM` (1 %) < `PPM` ⇒ `dexFee ≤ receiveFill`, so `receiveFill − dexFee` cannot
 underflow; a 1-unit receive pays a fee of 1 (its receiver gets 0) — the price of a dust order. Non-EVM programs round
 their per-fill DEX fee the same way (today a floor: Sui `dex.move:250-251`, Aptos `dex.move:247-248`, Solana
-`dex.rs:208-210`, TON `dex.tact:208`). Tests: `fee = 3_000`, receive 333 ⇒ fee 1 (was 0); receive 1 ⇒ fee 1, receiver
+`dex.rs:208-210`, GRAM `dex.tact:208`). Tests: `fee = 3_000`, receive 333 ⇒ fee 1 (was 0); receive 1 ⇒ fee 1, receiver
 0; an exact multiple ⇒ fee as before; one fill of 1 000 vs ten fills of 100 ⇒ the ten fees total ≥ the one; fuzz
 `receiveFill`, `fee ≤ MAX_FEE_PPM` ⇒ `dexFee ≤ receiveFill` and `dexFee · PPM ≥ receiveFill · fee`; `dexFee` in
 `LegSettled` equals the amount split; each non-EVM family gets the equivalent test (a dust fill pays fee 1). Status
@@ -560,17 +560,17 @@ orders signed with domain separation (network + DEX contract + every order field
 key (no account sequence; nonce/`filled` kept by the DEX program); `filled[orderHash]`, no overfill, cross-multiplied
 price, `maxFeePpm` in the order, cap 1 %; cancel closes `filled` by the owner's signature and raises `minNonce`; funds
 move person → person in the same transaction (Soroban two `require_auth`; Sui two `Account<T>` legs; Cosmos CW20
-`TransferFrom` with an allowance to the DEX contract; TON escrow — the only one that holds funds briefly, because
+`TransferFrom` with an allowance to the DEX contract; GRAM escrow — the only one that holds funds briefly, because
 jettons have no `transferFrom`); events equivalent to `OrderFilled/Matched/MatchFailed`.
 
 <a id="bound-settler"></a>
 <a id="CTR-DEX-09"></a>**CTR-DEX-09** — **Non-EVM settlement is bound to the relayer.** An order carries `relayer`
 (0 = open) and the program checks the submitter. Sui, Aptos and Solana already do; **Cosmos** (`Settle` does not check
 `info.sender`, `OrderParams` has no relayer), **Soroban** (`require_auth_for_args((order,))` binds only the order, not
-the counterparty, `maker_fill` or the submitter) and **TON** (`receive(Match)` is open) do not, so a mempool observer
+the counterparty, `maker_fill` or the submitter) and **GRAM** (`receive(Match)` is open) do not, so a mempool observer
 can copy an auth entry, insert its own pair and take the taker's price improvement. Fix: Cosmos adds `relayer` to
 `OrderParams` and requires `info.sender == relayer` when set; Soroban adds `relayer: Address` to `Order` +
-`relayer.require_auth()`; TON adds an optional `relayer` to `TradeParams`, compared with `sender()` at `Match` and on
+`relayer.require_auth()`; GRAM adds an optional `relayer` to `TradeParams`, compared with `sender()` at `Match` and on
 the hint path. **Soroban has no open form** ([NET-SOR-10](../networks/soroban.md#NET-SOR-10)): `Order.relayer: Address`
 is mandatory, because with an open form anyone who sees a pending `settle` can resubmit the two auth entries with
 `maker_fill = 1` ⇒ two nonces burnt for a dust fill and the real `settle` fails. Tests: a third party settling on
@@ -586,12 +586,12 @@ Accepted differences that the adapter, the matcher and clients must know:
 
 | Difference | Family |
 |---|---|
-| No partial fills (FOK orders only) | Cosmos, TON |
-| No `minNonce` (bulk cancel) | Cosmos, Soroban, TON |
+| No partial fills (FOK orders only) | Cosmos, GRAM |
+| No `minNonce` (bulk cancel) | Cosmos, Soroban, GRAM |
 | IOC closed at the first match (one maker) | Sui, Aptos, Solana |
 | One fee recipient for the whole DEX, not per market | Cosmos (`InstantiateMsg`), Soroban (`Key::FeeRecipient`) |
 | One `fee_ppm`, no maker/taker split | Solana |
-| Minimum received computed **after** the DEX fee (EVM: `receiveAmount` gross) | Cosmos, TON |
+| Minimum received computed **after** the DEX fee (EVM: `receiveAmount` gross) | Cosmos, GRAM |
 | No on-chain self-trade check (the node still skips them) | Cosmos, Soroban |
 | DEX-signed maker/taker orders over allowances or escrow, a separate relayer fee, no 50 % minimum fill | every non-EVM family |
 

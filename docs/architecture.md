@@ -34,7 +34,7 @@ every call. ERPs, portals, mobile apps and AI agents call them the way they call
 product; everything else is a way to reach them:
 
 - **Smart contracts** (`smartcontracts/`) — **the product.** One code base per network family: EVM (with Hedera as a
-  per-chain variant), Cosmos, Soroban, Move (Aptos, Sui), TON and Solana ([networks/README.md](networks/README.md)).
+  per-chain variant), Cosmos, Soroban, Move (Aptos, Sui), GRAM and Solana ([networks/README.md](networks/README.md)).
   On EVM: the token tree — one meta-transaction base, kinds by code, features chosen at creation
   ([CTR-TOK-21](contracts/token-wrappers.md#CTR-TOK-21), [CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22)) — the
   open factory, the DEX ([contracts/dex.md](contracts/dex.md)), accounts and mandates (Universal Account registry,
@@ -99,8 +99,8 @@ forced transfer against a recorded order. Among them:
   `disableWrap`) ([CTR-TOK-10](contracts/token-wrappers.md#CTR-TOK-10));
 - the `SCaaSDex` `admin` (four powers — listing, the split of each order's signed fee between relayer and treasury,
   exchange targets, listed-only mode — never the amount, [CTR-DEX-03](contracts/dex.md#CTR-DEX-03));
-- the admin `mint` of the standalone non-EVM tokens on Soroban, TON and CosmWasm (a supply power, not a balance power);
-- the TON DEX admin `WithdrawFees` (fees only; bounced payouts are claimed by their owners, [NET-TON-03](networks/ton.md#NET-TON-03));
+- the admin `mint` of the standalone non-EVM tokens on Soroban, GRAM and CosmWasm (a supply power, not a balance power);
+- the GRAM DEX admin `WithdrawFees` (fees only; bounced payouts are claimed by their owners, [NET-TON-03](networks/ton.md#NET-TON-03));
 - the market admins of the other DEX programs (Soroban, Sui `AdminCap`, which also sets the network once, Aptos,
   which may also sweep assets sent by mistake to its own objects, and Solana `Config.admin`: market listing and fees);
 - the `issuer`/`compliance` roles of regulated tokens (only that class, against a recorded order, [CTR-AS-17](contracts/asset-suite.md#CTR-AS-17)).
@@ -136,7 +136,7 @@ Design consequences:
 | A custodian | Relayer lanes hold gas only; the DEX holds no balances between transactions; subject funds stay in subject-controlled accounts or wallet contracts |
 | A mixer | The identities of both parties are always visible; only amounts and balances can be hidden ([contracts/zether.md](contracts/zether.md)) |
 | A database replacement | Business data stays in the client's system of record; only commitments, settlements and the minimum identity linkage go on chain ([Service model](#service-model)) |
-| An upgradeable platform | No proxy upgrade on any contract that holds value; **immutable at deploy on every family** (EVM clones; Aptos `upgrade_policy = "immutable"`; Sui `make_immutable` on the `UpgradeCap` in the deploy run; Solana upgrade authority `None` after `initialize`; Cosmos instantiated `--no-admin`; TON and Soroban as built). Each family's deploy script fails if the result is still upgradeable, and the node holds such a chain `halted` with `PROGRAM_UPGRADEABLE` ([CTR-GEN-02](contracts/README.md#CTR-GEN-02), [NODE-STO-07](node/store.md#NODE-STO-07)). New behaviour = a new version plus voluntary migration |
+| An upgradeable platform | No proxy upgrade on any contract that holds value; **immutable at deploy on every family** (EVM clones; Aptos `upgrade_policy = "immutable"`; Sui `make_immutable` on the `UpgradeCap` in the deploy run; Solana upgrade authority `None` after `initialize`; Cosmos instantiated `--no-admin`; GRAM and Soroban as built). Each family's deploy script fails if the result is still upgradeable, and the node holds such a chain `halted` with `PROGRAM_UPGRADEABLE` ([CTR-GEN-02](contracts/README.md#CTR-GEN-02), [NODE-STO-07](node/store.md#NODE-STO-07)). New behaviour = a new version plus voluntary migration |
 | A token gatekeeper | The factory is open; provenance replaces allowlists. Controlled (regulated) tokens are an explicit creation-time choice, flags 5–8 ([CTR-AS-17](contracts/asset-suite.md#CTR-AS-17); [contracts/token-wrappers.md](contracts/token-wrappers.md), [contracts/asset-suite.md](contracts/asset-suite.md)) |
 | A hosted node service | The node is infrastructure anyone can run; operators are independent, set their own policies and can only refuse or delay, never forge |
 | A single-ERP product | Any ERP integrates through the same job API ([integration.md](integration.md)) |
@@ -147,7 +147,7 @@ Design consequences:
 
 | Profile | Chains | Mesh | Typical relayers | Data exposure |
 |---|---|---|---|---|
-| **Public** (`profile = public`) | Public networks (Gnosis, Celo, Hedera, Cosmos chains, Sui, Aptos, TON, Solana, Stellar, Pi Network) | Open mesh (gossip, opt-in per chain, policy and job) plus the pull bus for partners | Issuer, distributors, partners, third-party open relayers | The ledger is public; private windows and the per-job bus scope control what is offered to peers ([INT-ERP-15](integration.md#INT-ERP-15)) |
+| **Public** (`profile = public`) | Public networks (Gnosis, Celo, Hedera, Cosmos chains, Sui, Aptos, GRAM, Solana, Stellar, Pi Network) | Open mesh (gossip, opt-in per chain, policy and job) plus the pull bus for partners | Issuer, distributors, partners, third-party open relayers | The ledger is public; private windows and the per-job bus scope control what is offered to peers ([INT-ERP-15](integration.md#INT-ERP-15)) |
 | **Private / PoA** (`profile = private`, the default) | A permissioned chain (reference: chain 7622, Nethermind, Clique, one signer, forks through Fusaka, base fee 0; [networks/evm.md](networks/evm.md)) | No gossip, ever; pull bus only to admitted private peers, served by the origin only, over PQ-protected carriers | The operator's own nodes and admitted private peers | Chain-local; intents never leave the admitted set ([NODE-MESH-06](node/mesh.md#NODE-MESH-06), [NODE-MESH-12](node/mesh.md#NODE-MESH-12)) |
 | **Consortium** | A permissioned or public chain shared by members | Pull bus between admitted members (SPKI-pinned mTLS or QUIC), optionally gossip for public chains | Each member runs a node | Per-job `bus_scope`: `restricted` (default), `open` (admitted peers) or `public` (also the open mesh) |
 
@@ -240,7 +240,7 @@ agent signs, a relayer pays gas); Zether keeps commercial amounts confidential w
 | Cosmos contracts | `smartcontracts/cosmos/` (CosmWasm workspace) | `scaas-token` (CW20 + meta-op), `scaas-mandate`, `scaas-dex`, shared `scaas-metaop` | BUILT |
 | Soroban contracts | `smartcontracts/soroban/` | SEP-41 token + `pay`, mandate, DEX; native auth as the meta-tx (Stellar and Pi Network) | BUILT |
 | Move contracts | `smartcontracts/move/{aptos,sui}/` | Package `scaas`: `meta` (per-subject account + lanes), mandate, DEX | BUILT |
-| TON contracts | `smartcontracts/ton/` (Tact) | Jetton master/wallet with public key + lanes (`SignedTransfer`), mandate, escrow DEX | BUILT |
+| GRAM contracts | `smartcontracts/ton/` (Tact) | Jetton master/wallet with public key + lanes (`SignedTransfer`), mandate, escrow DEX | BUILT |
 | Solana program | `smartcontracts/solana/` (Anchor) | Program `scaas`: subject account PDA, `LanePda`, mandate, DEX | BUILT |
 | Build and test scripts | `smartcontracts/scripts/{build,test,deploy,devnet}.sh <family>`; `scripts/capped` | One entry point per family; heavy runs capped at 4 GB, one at a time | BUILT |
 | `scaas-node` | `scaas-node/` | Rust relayer: gateway, submit lanes, indexer, drift, DEX venue, admin; mesh envelope library | BUILT with the legacy pull job source; store, job API, admin auth and gateway additions SPECIFIED; mesh transports SPECIFIED ([node/README.md](node/README.md)) |
@@ -527,7 +527,7 @@ The other families implement the same three pieces — token, mandate, DEX — i
 | Soroban (Stellar, Pi) | native Soroban authorization entries (nonce + ledger expiry) | native accounts or a custom account (`__check_auth`) | two `require_auth` in one call | none |
 | Move — Aptos | contract-level, one `Account` object per owner with lanes | the `Account` object holds any asset | legs moved inside one transaction | none |
 | Move — Sui | contract-level, shared `Account<T>` per subject with lanes | the `Account<T>` holds the coin | two `Account<T>` legs | none |
-| TON | custom jetton wallet verifies `SignedOp` (cells) | the jetton wallet carries the public key and lanes | escrow (holds funds briefly; no `transferFrom`) | none |
+| GRAM | custom jetton wallet verifies `SignedOp` (cells) | the jetton wallet carries the public key and lanes | escrow (holds funds briefly; no `transferFrom`) | none |
 | Solana | program-level, `SmartKeyAccount` PDA + `LanePda`; signature through the precompile instruction | the PDA owns SPL token accounts | DEX program | none |
 
 *Details per family: [networks/README.md](networks/README.md#families-and-chains),
@@ -603,7 +603,7 @@ flowchart TB
 | Prometheus | metrics listener | `/healthz`, `/readyz`, `/metrics` (scrape) | — |
 
 The store holds `job`, `job_event`, `feed_item`, `chain`, `token`, `lane`, `namespace`, keys, audit, `dex_*`,
-`intent` and `gossip_*`; lanes (`submit` / `lane_runner`) send to the EVM, Hedera, Cosmos, Soroban, Aptos, Sui, TON
+`intent` and `gossip_*`; lanes (`submit` / `lane_runner`) send to the EVM, Hedera, Cosmos, Soroban, Aptos, Sui, GRAM
 and Solana RPCs, and the indexer reads them back.
 
 Transitional (BUILT): today the node pulls work from one ERP and writes indexed ranges back to it; a per-chain switch

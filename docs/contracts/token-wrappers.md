@@ -625,7 +625,7 @@ empty output — with no symptom until someone has deposited funds.
   `OpenFactoryV1` (with its own) is in `legacy/p5/` (P5).
 - **Registrar** is an EOA by default (deployer); it must become a multisig before mainnet. Its only powers are
   `registerImplementation`, `deprecate`, and `setZetherEnabled`.
-- **Same rule on every family**: a fix to an Aptos package, Sui package, Solana program, Cosmos contract, TON or
+- **Same rule on every family**: a fix to an Aptos package, Sui package, Solana program, Cosmos contract, GRAM or
   Soroban contract is a new deployment at a new address plus voluntary migration by the owners of the balances;
   accounts on the old deployment keep working with the old code ([CTR-GEN-02](README.md#CTR-GEN-02)).
 
@@ -946,13 +946,13 @@ handlers that bound inputs so expected reverts do not count as failures). One in
 
 Cross-family vectors: `test/vectors/wrap_rate_vectors.json` — `(num, den, in) → (minted, used)` and
 `(num, den, w) → (out, burned)` incl. edge cases (`2^96 − 1`, `den = 1`, zero outputs), written by
-`test_writeRateVectors` and later replayed by the Cosmos, Soroban and TON wrappers. `metatx_kat.json` (v3, `MetaTxBase`) and `metatx_v1_kat.json` (built v1) are EVM/Hedera
+`test_writeRateVectors` and later replayed by the Cosmos, Soroban and GRAM wrappers. `metatx_kat.json` (v3, `MetaTxBase`) and `metatx_v1_kat.json` (built v1) are EVM/Hedera
 only.
 
 ## 13. Limitations
 
-- Non-EVM wrappers: Cosmos, Soroban and TON keep their standalone (`NONE`) tokens; wrappers there (a bank denom or CW20 on Cosmos,
-  a Stellar Asset Contract on Soroban, third-party jettons through a wrapper minter on TON) are **PLANNED** with the
+- Non-EVM wrappers: Cosmos, Soroban and GRAM keep their standalone (`NONE`) tokens; wrappers there (a bank denom or CW20 on Cosmos,
+  a Stellar Asset Contract on Soroban, third-party jettons through a wrapper minter on GRAM) are **PLANNED** with the
   same rate/reserve rules and the shared rate vectors; Move and Solana need no wrapper for gaslessness
   ([NET-ALL-19](../networks/README.md#NET-ALL-19)).
 - Gasless wrap: **SPECIFIED** (`mtxExecute(wrap)`, [CTR-TOK-20](#CTR-TOK-20)).

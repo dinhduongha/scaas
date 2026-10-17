@@ -473,7 +473,7 @@ settle tx of a candidate home (within the `checkOrder`-class RPC budget).
 - Not provable, and therefore bounded rather than detected: a home that sits on a crossing routed taker (free option).
   Short routed expiries bound it.
 
-Gossip of the book is built after the store-backed venue; non-EVM books (Sui, Aptos, Solana, Cosmos, Soroban, TON:
+Gossip of the book is built after the store-backed venue; non-EVM books (Sui, Aptos, Solana, Cosmos, Soroban, GRAM:
 relayer-bound settlement, [networks/README.md](../networks/README.md)) are **PLANNED**.
 
 ## <a id="managed-markets"></a>10. Managed markets

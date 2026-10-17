@@ -260,7 +260,7 @@ struct MetaOp has copy, drop {
   so fields travel flat) — a relayer cannot change a field and keep the signature valid.
 
 <a id="NET-APT-07"></a>**NET-APT-07** — **The Aptos domain is the on-chain `chain_id`, the derived contract address and
-the explicit `asset`.** `chain_id` is read **on chain** (cannot be faked, like TON's config 19) + `contract` (derived
+the explicit `asset`.** `chain_id` is read **on chain** (cannot be faked, like GRAM's config 19) + `contract` (derived
 from `@scaas`, so it differs between two deployments, even two networks sharing chain id 4) + `op` + `asset`. Replay:
 lane/nonce (pay), `pay_ref` once (mandate). Expiry: `now_seconds() <= valid_until`. BUILT.
 

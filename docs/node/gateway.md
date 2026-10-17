@@ -141,7 +141,7 @@ In words:
 8. Simulation (`SIMULATION_REVERT`).
 9. INSERT a `signed_op` job in `~gateway`, origin key = digest (G2 durable).
 
-Soroban: accepted, never published on the mesh ([NODE-MESH-07](mesh.md#NODE-MESH-07)). TON: `attach_nanoton` is the
+Soroban: accepted, never published on the mesh ([NODE-MESH-07](mesh.md#NODE-MESH-07)). GRAM: `attach_nanoton` is the
 node's. Limits: 64 KiB body, the per-chain breaker and the gateway concurrency limit. `/v1/ops` needs lanes that lease
 from the store: before that, the built gateway's in-memory `mpsc` feeds only the EVM submitter (Transitional (BUILT):
 door A work is not journaled and has no digest guard until it becomes a `~gateway` job).

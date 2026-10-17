@@ -83,7 +83,7 @@ Non-goals (v1):
 | Rewards other than the intent's own `fee` / `feeRecipient` | [NODE-MESH-05](#NODE-MESH-05): no `SponsorshipPool` reward, no statement payouts, no forwarder pay |
 | Soroban on the mesh | [NODE-MESH-07](#NODE-MESH-07), [NODE-MESH-24](#NODE-MESH-24): replay protection is the host's auth nonce, not a per-subject nonce in our contract |
 | Zether intents on the mesh (classical and post-quantum) | `W = 0` and single-flight per confidential subject (`from_schnorr`) need their own design; pull latency does not fit a 20 s budget |
-| EVM `call` jobs (mandate calldata), DEX `mtxSettle` jobs, non-EVM op kinds other than `pay` | no subject-signed digest whose replay guard is a lane nonce a peer can check (TON revoke uses `next == nonce + 1`, Solana mandate revoke uses a generation) |
+| EVM `call` jobs (mandate calldata), DEX `mtxSettle` jobs, non-EVM op kinds other than `pay` | no subject-signed digest whose replay guard is a lane nonce a peer can check (GRAM revoke uses `next == nonce + 1`, Solana mandate revoke uses a generation) |
 | Multi-hop private routing | [NODE-MESH-12](#NODE-MESH-12): private intents are served by their origin only; needs an origin-signed recipient set and a ruling |
 | Callback subject registry, ban-list sharing | no callbacks exist ([NODE-IDX-04](indexer-feeds.md#NODE-IDX-04)); ban lists stay local |
 | Promote-to-open of pooled intents ("private pool") | the only "private then open" path is the per-job window on own jobs ([bus scope](#bus-scope)); a pooled bus intent never changes visibility |
@@ -247,7 +247,7 @@ the same 20-byte key whether it arrives via 1.2 or padded via 1.3); `uaNonce(fro
 ### 3.1 Family qualification
 
 <a id="families"></a><a id="NODE-MESH-07"></a>**NODE-MESH-07** — **Families on the mesh v1: EVM (`evm`, and `hedera`
-which runs the same Solidity), Cosmos, Sui, Aptos, TON, Solana. Soroban is out.** Criterion: our contract computes a
+which runs the same Solidity), Cosmos, Sui, Aptos, GRAM, Solana. Soroban is out.** Criterion: our contract computes a
 meta-tx digest and keeps a per-subject sequential nonce that a peer can read; without it a peer cannot run the
 consumption check. Non-EVM op kind limited to `pay` in v1. Soroban partners relay through the job API only.
 
@@ -258,7 +258,7 @@ consumption check. Non-EVM op kind limited to `pay` in v1. Soroban partners rela
 | Cosmos | `sha256(payload)`, emitted as `digest` attribute | `NONCES: Map<(&Addr, lane), u64>`, `op.nonce == next` | `QueryMsg::Nonce { owner, lane }` | **yes** |
 | Sui | `personal_digest(bcs(MetaOp))` | `Account<T>.lanes: Table<lane, u64>`, `next == nonce` | `lane_nonce<T>(account, lane)` | **yes** |
 | Aptos | `sha3_256(bcs(MetaOp))` | `Account.lanes: Table<lane, Lane{next}>` | `#[view] lane_nonce(owner, lane)` | **yes** |
-| TON | `MetaOp` cell digest checked and emitted in `MetaTransactionExecuted` | jetton wallet `lanes: map<uint256, uint64>`, `next == m.nonce` (revoke: `next == nonce + 1`) | getter `get_lane_nonce(lane)` | **yes** (`pay`; lanes rotate every `LANE_TTL` — a check after `valid_until` is meaningless, expiry decides) |
+| GRAM | `MetaOp` cell digest checked and emitted in `MetaTransactionExecuted` | jetton wallet `lanes: map<uint256, uint64>`, `next == m.nonce` (revoke: `next == nonce + 1`) | getter `get_lane_nonce(lane)` | **yes** (`pay`; lanes rotate every `LANE_TTL` — a check after `valid_until` is meaningless, expiry decides) |
 | Solana | `sha256(MetaOp)` | `LanePda{next}` seeded `["lane", subject, lane]`, `lp.next == args.nonce` | read the `LanePda` account | **yes** (`pay`; lane PDA prunable after `valid_until`) |
 | Soroban | `op_digest` = sha256(XDR) emitted by the token | **none in our contract**: replay protection is the host's `SorobanAddressCredentials` nonce (`i64(sha256("scaas.soroban.nonce" ‖ entryRef ‖ validUntil)[0..8])`, a per-entry value, not a per-subject sequence); our contract only has a one-shot `pay_ref` | `ref_used(pay_ref)` only | **no** |
 
@@ -267,7 +267,7 @@ token lines): EVM `smartcontracts/src/metatx/ERC20MetaTx.sol` digest l.62–103,
 nonce l.26, l.80, l.102, view l.44; Hedera `smartcontracts/src/hedera/HederaMetaToken.sol` l.15 (`MetaToken is
 ERC20MetaTx`); Cosmos `chains/cosmos/metaop/src/lib.rs` l.119, `chains/cosmos/token/src/lib.rs` l.81, l.194–197, query
 l.239; Sui `chains/sui/sources/meta.move` digest l.322, lanes l.104, l.285–287, view l.484; Aptos
-`chains/aptos/sources/meta.move` l.114, l.110, l.278–279, view l.666; TON `chains/ton/contracts/jetton.tact` l.233,
+`chains/aptos/sources/meta.move` l.114, l.110, l.278–279, view l.666; GRAM `chains/ton/contracts/jetton.tact` l.233,
 lanes l.121, l.226–230 (revoke l.229), getter l.359; Solana `chains/solana/programs/scaas/src/account.rs` l.197
 (`lib.rs` l.125), lane check l.159–161, l.202; Soroban `chains/soroban/contracts/token/src/lib.rs` l.102, `pay_ref`
 l.203–206.
@@ -281,7 +281,7 @@ l.203–206.
   sign, no leading zero; exactly `metatx.rs` `uint()`).
 - Bytes and hashes: `0x` + lowercase hex. `peer_id`, `pubkey`, `sig`: lowercase hex **without** `0x`.
 - Addresses: the family's canonical form: lowercase `0x` 20 bytes on EVM/Hedera, bech32 on Cosmos, `0x` + 64 hex on
-  Sui/Aptos, raw `wc:hex` on TON, base58 on Solana.
+  Sui/Aptos, raw `wc:hex` on GRAM, base58 on Solana.
 - `chain_key` = `family:network`, exactly as the node's `ChainCfg::chain_key()` (`evm:100`, `hedera:296`, `cosmos:scaas-1`, `sui:localnet`, `aptos:4`, `ton:-239`,
   `solana:<genesis base58>`). Not CAIP-2: the node and its clients key on `chain_key`; CAIP-2 stays a display field.
 - **Canonical body JSON** (for `body_hash` only): the `evm` or `op` object serialized with object keys sorted bytewise,
@@ -365,11 +365,11 @@ to it:
 | EVM, Hedera, Cosmos | the token | `contract` | — |
 | Sui | the payer's `Account<T>` | `extra.registry` (bound by `body_hash`) | `derive_account(registry, from) == contract` |
 | Aptos | the payer's Account object | `asset` from the payload | `account_of(from) == contract` |
-| TON | the payer's jetton wallet | `extra.jetton_master` (bound by `body_hash`) | `jetton_wallet_address(from, master, code) == contract` (code hash from the token record) |
+| GRAM | the payer's jetton wallet | `extra.jetton_master` (bound by `body_hash`) | `jetton_wallet_address(from, master, code) == contract` (code hash from the token record) |
 | Solana | the payer's SmartKeyAccount PDA | `asset` (payload field; `extra.asset` must equal it) | `account_of(program, from) == contract` |
 
 Reference lines: Sui account derivation in the reference client library l.167 (formula l.159); Aptos l.233 and
-`adapters/aptos.rs` l.207; TON l.296–312 and `adapters/ton.rs` l.526; Solana l.185 (check l.176).
+`adapters/aptos.rs` l.207; GRAM l.296–312 and `adapters/ton.rs` l.526; Solana l.185 (check l.176).
 
 A failed check makes the intent `may_submit = false` (held and served, never submitted); it is not a rejection.
 
@@ -385,7 +385,7 @@ honest copy can still be ingested.
 any chain call.** Families on the mesh: EVM `eoa` as above; EVM `erc1271` by one `eth_call isValidSignature` charged to
 a per-peer simulate budget; Hedera 64-byte ED25519 as `sig_kind = "hedera_ed25519"` (length, long-zero `from`, key
 from the mirror node, cached; [NET-HED-13](../networks/hedera.md#NET-HED-13)); Cosmos ADR-036 secp256k1 (address from
-the signed pubkey) and passkey P-256 locally; Solana ed25519 locally; Aptos ed25519 against the account's auth key, TON
+the signed pubkey) and passkey P-256 locally; Solana ed25519 locally; Aptos ed25519 against the account's auth key, GRAM
 ed25519 against the wallet key, Sui against the `Account` keys (one cached state read each). Failure ⇒
 `BAD_SIGNATURE`, never simulated, and counts against the publishing peer (peer score). Otherwise every peer pays a
 simulation or view per garbage intent. Status: EVM `eoa` **BUILT**; the rest **SPECIFIED**.
@@ -443,7 +443,7 @@ given):
 6. EVM `sig_kind = erc1271` (no local recover, accepted).
 7. EVM high-s signature ⇒ `BAD_SIGNATURE`.
 8. Hedera `hedera:296` (chain id 296 in the domain); an EVM chain whose `chain_uid` the receiver lacks ⇒ `UNKNOWN_CHAIN`.
-9–13. Cosmos, Sui, Aptos, TON, Solana `pay` ops whose payload/digest are the existing cross-language vectors
+9–13. Cosmos, Sui, Aptos, GRAM, Solana `pay` ops whose payload/digest are the existing cross-language vectors
    (`chains/cosmos/tests`, `adapters/aptos.rs` `payload_and_digest_match_move_and_python`, `adapters/solana.rs`
    `payload_digest_and_addresses_match_python_and_the_program`, `adapters/sui.rs` tests,
    `chains/ton/vectors/ton-vectors.json`); expected decoded `from`/`lane`/`nonce`/`valid_until`/`token`, and
@@ -818,7 +818,7 @@ vectors + adapter unit tests with fakes.
 - Zether on the mesh: `W = 0`, single-flight per confidential subject (`from_schnorr`), push latency.
 - Soroban: a contract-level per-subject nonce (or the host nonce accepted as equivalent) would qualify it
   ([NODE-MESH-24](#NODE-MESH-24)).
-- Non-EVM op kinds other than `pay` (TON revoke `next > nonce + 1`, Solana mandate generation) on the mesh and in
+- Non-EVM op kinds other than `pay` (GRAM revoke `next > nonce + 1`, Solana mandate generation) on the mesh and in
   `op_consumed`.
 - Multi-hop private routing with an origin-signed recipient set.
 - Non-EVM multi-node e2e on one localnet (Cosmos `wasmd` is the lightest).

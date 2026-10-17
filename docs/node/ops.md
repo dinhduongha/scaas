@@ -133,7 +133,7 @@ finality + 60 s for depth/tag families, `include` + 30 s for instant families (o
 | Hedera | 3–5 s record files, instant | 15 s | 45 s | 3 record files |
 | Cosmos / Soroban (Stellar, Pi) | ~5–6 s, instant | 20 s | 50 s | 3 blocks/ledgers |
 | Sui / Aptos | ~0.5–1 s, instant | 5 s | 35 s | |
-| TON | ~5 s masterchain, message chains | 60 s | 90 s | jetton transfers span several messages |
+| GRAM | ~5 s masterchain, message chains | 60 s | 90 s | jetton transfers span several messages |
 | Solana | 0.4 s slots, `finalized` ~12.8 s | 10 s | 75 s | confirmed + 60 s margin |
 
 A chain stays out of `active` until 7 days of measurements exist ([runbooks.md#production-gates](runbooks.md#production-gates));
@@ -683,7 +683,7 @@ figures are estimates to be **measured** by a load test run alone.
 | **Rated daily volume** | ≈ 270 000 jobs/day at 30 d retention (store ≈ 20 GB at ≈ 2.5 KB per job across `job`, `job_event`, `feed_item`) | keeps the restore RTO and backup sizes; above it, lower `job_retention_secs` (≥ `valid_until` + 1 d) or accept a longer RTO |
 | PG/MySQL store | ≈ SQLite figures **at ≤ 1 ms RTT**; ≈ 5 jobs/s at 5 ms (≈ 6 statements per transaction, serialized on the fencing row) | store backends |
 | EVM lane | ≤ 16 txs in flight (typical per-account pending-slot limit) ⇒ Gnosis ≈ 3 tx/s per lane | the mempool is the limit |
-| Generic lanes (one tx in flight) | ≈ 1 ÷ `include`: Sui ~2/s, Aptos ~1/s, Solana ~1/s, Hedera ~0.3/s, Cosmos/Soroban ~0.15/s, TON ~0.1/s per lane | lanes = target rate ÷ per-lane rate (≤ 8) |
+| Generic lanes (one tx in flight) | ≈ 1 ÷ `include`: Sui ~2/s, Aptos ~1/s, Solana ~1/s, Hedera ~0.3/s, Cosmos/Soroban ~0.15/s, GRAM ~0.1/s per lane | lanes = target rate ÷ per-lane rate (≤ 8) |
 | Job API / gateway | 20 POST rps (burst 40), 10 GET rps per key; batch ≤ 50; pages ≤ 500 / 1 MiB; ≤ 4 long-polls per key / `MAX_INFLIGHT` 64, body 64 KiB | [job-api.md#errors](job-api.md#errors) |
 | Label caps | ≤ 16 chains, ≤ 8 lanes per chain, ≤ 32 namespaces, ≤ 64 tokens per chain, ≤ 256 watched wrapper legs | [NODE-OPS-13](#NODE-OPS-13) |
 | `/metrics` | series ≈ C·(9N + 6 + 102 + 14L + 4E + 2T) + C·N + W + ~1 500 (HTTP, admin, mesh, store) ⇒ ≈ 13 000 at the caps (C 16, N 32, L 8, E 4, T 64, W 256), ≈ 2 500 typical (C 4, N 4, L 4, E 2, T 8) | `scaas_relay_jobs` (9N per chain) dominates; scrape 15 s |

@@ -38,7 +38,7 @@ flowchart TD
 ```
 
 The node that relays these contracts is specified in [docs/node/](../node/README.md); the per-family programs
-(Hedera, Cosmos, Soroban, Sui, Aptos, Solana, TON) in [docs/networks/](../networks/README.md).
+(Hedera, Cosmos, Soroban, Sui, Aptos, Solana, GRAM) in [docs/networks/](../networks/README.md).
 
 **Contents**
 
@@ -132,7 +132,7 @@ The same rule on every family:
 | Sui | `0x2::package::make_immutable(UpgradeCap)` in the same deploy run, right after `sui client publish`; the `UpgradeCap` object no longer exists |
 | Solana | deploy with a temporary authority, run `initialize` (its `Initialize` accounts require the upgrade authority, `account.rs:16-26`; it takes no `network` argument, the network is a build-time constant), then `solana program set-upgrade-authority <id> --final`; `solana program show <id>` reports `Authority: none`; the `Config` PDA cannot be re-created afterwards (PDA `init` + no authority) |
 | Cosmos | instantiate with `--no-admin` ("no proxy upgrade on any contract that holds value") |
-| TON, Soroban | immutable as built |
+| GRAM, Soroban | immutable as built |
 
 - **Deploy-script gate.** `smartcontracts/scripts/deploy.sh` (aptos, sui) and `solana/scripts/deploy.sh` end with a
   check that fails the run (non-zero exit) if the deployed program is still upgradeable — Aptos registry policy ≠
@@ -148,7 +148,7 @@ The same rule on every family:
 - Tests: each deploy script run against its local network ends green only when the gate passes; a negative test
   (skip the freeze step) makes the gate fail; a Solana `initialize` after `--final` fails.
 
-Status: EVM, Hedera, TON, Soroban **BUILT**; Aptos, Sui, Solana freeze steps, Cosmos `--no-admin` and the
+Status: EVM, Hedera, GRAM, Soroban **BUILT**; Aptos, Sui, Solana freeze steps, Cosmos `--no-admin` and the
 deploy-script gate **SPECIFIED**.
 
 ## <a id="admin-powers-complete-list"></a>3. Admin powers (complete list)
@@ -168,9 +168,9 @@ power.
 | `SCaaSDex` | `admin` set once at creation ([CTR-DEX-24](dex.md#CTR-DEX-24); built: written once by `initialize`; `SCaaSDexV1`: immutable) (a multisig in production; the venue operator's multisig for a managed market) | `setMarket` (list or delist a pair), `setFeeSplit` (relayer share and treasury of the signed fee; never the amount), `setExchangeTarget` (list or delist an exchange target or executor), `setListedOnly` (DEX-wide listed-only mode for the exchange path); none touches funds | [CTR-DEX-03](dex.md#CTR-DEX-03), [CTR-DEX-23](dex.md#CTR-DEX-23) |
 | `NONE_ZETHER` / `UNDERLYING_ZETHER` | the token `owner` and role holders per kind and flags ([CTR-TOK-22](token-wrappers.md#CTR-TOK-22)); the auditor key is immutable (built, P3: set once by `initialize`; the old `ZetherToken` is in `legacy/p3/`) | as the flags — nothing touches a reserve or a shielded balance | [CTR-ZTH-09](zether.md#CTR-ZTH-09) |
 | `SealedBidTender`, `VestingGrant`, `Distribution`, `ExchangeOffer`, `UARegistry` | none | — | per file |
-| Non-EVM tier-1 tokens: Soroban `scaas-token`, TON `ScaasJettonMaster`, CosmWasm CW20 | Soroban and TON `admin`, CW20 `minter` (optional) | `mint` / `Mint`, unlimited on that token (a supply power, not a balance power) | [soroban](../networks/soroban.md#contracts), [ton](../networks/ton.md#overview), [cosmos](../networks/cosmos.md#contracts) |
+| Non-EVM tier-1 tokens: Soroban `scaas-token`, GRAM `ScaasJettonMaster`, CosmWasm CW20 | Soroban and GRAM `admin`, CW20 `minter` (optional) | `mint` / `Mint`, unlimited on that token (a supply power, not a balance power) | [soroban](../networks/soroban.md#contracts), [ton](../networks/ton.md#overview), [cosmos](../networks/cosmos.md#contracts) |
 | Soroban `scaas-dex` | `admin` | `set_market` (per-pair fees ≤ 1 %, on/off) | [soroban](../networks/soroban.md#dex) |
-| TON `ScaasDex` | admin | `SetMarket` (fees ≤ 1 %, on/off); `WithdrawFees` (fees only, never bounced or unclaimed value; no admin refund of bounced payouts) | [NET-TON-19](../networks/ton.md#NET-TON-19), [NET-TON-03](../networks/ton.md#NET-TON-03) |
+| GRAM `ScaasDex` | admin | `SetMarket` (fees ≤ 1 %, on/off); `WithdrawFees` (fees only, never bounced or unclaimed value; no admin refund of bounced payouts) | [NET-TON-19](../networks/ton.md#NET-TON-19), [NET-TON-03](../networks/ton.md#NET-TON-03) |
 | Cosmos DEX | admin | `SetMarket` only; the `Sweep` of the built version is removed (SPECIFIED) | [NET-COS-04](../networks/cosmos.md#NET-COS-04) |
 | Sui | `meta::AdminCap` | `set_network` once, create `Dex`, `set_market` (fees, listing) | [sui](../networks/sui.md#objects) |
 | Aptos | `Root.admin` (the code-object owner) | `create_dex`, `list_market`, `set_market` (fee, on/off), `admin_sweep` of an asset sent by mistake to Root, the Dex or a Market (refuses every Account and Mandate) | [aptos](../networks/aptos.md#dex) |

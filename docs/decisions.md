@@ -55,7 +55,7 @@ entries), **Why.**, **Cost if wrong.** and **Source.** Superseded entries keep o
 31. [Networks — Sui](#31-networks--sui)
 32. [Networks — Aptos](#32-networks--aptos)
 33. [Networks — Solana](#33-networks--solana)
-34. [Networks — TON](#34-networks--ton)
+34. [Networks — GRAM](#34-networks--gram)
 35. [Clients — signers and clientkeys](#35-clients--signers-and-clientkeys)
 36. [Clients — SCaaS app](#36-clients--scaas-app)
 37. [Integration — ERP](#37-integration--erp)
@@ -92,7 +92,7 @@ keeps ids out of the overview so there is nothing to trust there.
 **Rule.** SCaaS supports six families; a family is a group of chains that share one contract code base and one node
 adapter: `evm` (EVM chains, including Hedera), `cosmos` (CosmWasm), `soroban` (Stellar and Pi Network), `move` (Aptos
 and Sui), `ton` and `solana`. A chain is keyed `chain_key = family:network`. This replaces the earlier list of
-"Six ecosystems" (EVM, Hedera, TON, Sui, Soroban, Cosmos).
+"Six ecosystems" (EVM, Hedera, GRAM, Sui, Soroban, Cosmos).
 **Why.** Hedera runs EVM contracts and shares the EVM code base and signer, so it is not a family of its own; Aptos and
 Sui share the Move language but not their object models, so they are one family with two adapters; Aptos and Solana
 were added by the owner. A taxonomy by code base matches how contracts, adapters, tests and the availability matrices
@@ -3435,7 +3435,7 @@ Change (2026-10-14): controller proposal (owner may override) — `R_TX0` in PQZ
 - old: CR-PD-4(pruning), CR-R3-8(pruning) · status: current · owner: no · date: 2026-10-07 · normative: networks/README.md#NET-ALL-01 · superseded-by: —
 
 **Rule.** Families that prune executed lane state keep an executed lane for at least the horizon H after the op's `validUntil`.
-**Why.** At-most-once payment per request holds only while the executed lane is remembered: TON measures `validUntil` from execution, not from lane creation, so state pruned earlier than the issuance horizon would let a sibling signature on the same lane execute again. The prune delays equal the 30-day horizon today, so ERP-issued terms are safe.
+**Why.** At-most-once payment per request holds only while the executed lane is remembered: GRAM measures `validUntil` from execution, not from lane creation, so state pruned earlier than the issuance horizon would let a sibling signature on the same lane execute again. The prune delays equal the 30-day horizon today, so ERP-issued terms are safe.
 **Cost if wrong.** Issuers that sign terms on a lane beyond H get no pay-once guarantee.
 **Source.** [history/specs/2026-10-03-blockchain-payments-design.md](history/specs/2026-10-03-blockchain-payments-design.md) line 901; [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 700.
 
@@ -3456,7 +3456,7 @@ Change (2026-10-08): `mtxExecute` runs only allowlisted self-calls and token tra
 - old: CR-R3-1(grammar), RS4-2 · status: current · owner: no · date: 2026-10-07 · normative: networks/README.md#NET-ALL-04 · superseded-by: —
 
 **Rule.** One WebAuthn rule and one bounded `clientDataJSON` grammar for every family.
-**Why.** Verifiers had drifted apart: on Cosmos any page that could get an assertion for the rpId (a sibling subdomain, a related origin, a delegated iframe) could sign any operation, TON accepted any origin extending the stored one as a prefix, and elsewhere a cross-origin iframe yields assertions that carry the relying party's origin.
+**Why.** Verifiers had drifted apart: on Cosmos any page that could get an assertion for the rpId (a sibling subdomain, a related origin, a delegated iframe) could sign any operation, GRAM accepted any origin extending the stored one as a prefix, and elsewhere a cross-origin iframe yields assertions that carry the relying party's origin.
 **Cost if wrong.** Cosmos dev passkey addresses change.
 **Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 630; [history/plans/2026-10-03-r3-passkey-seed.md](history/plans/2026-10-03-r3-passkey-seed.md) line 15.
 
@@ -3464,7 +3464,7 @@ Change (2026-10-08): `mtxExecute` runs only allowlisted self-calls and token tra
 - old: CR-R3-6 · status: current · owner: no · date: 2026-10-08 · normative: networks/README.md#NET-ALL-05 · superseded-by: —
 
 **Rule.** Key rotation and recovery are stated per family; every gap is listed, never implied away.
-**Why.** The families do not offer the same lifecycle: a Cosmos passkey account is one key with no rotation, the Soroban guardian is only a seam, and a TON passkey cannot rotate and has no guardian, so a single blanket claim would hide real gaps.
+**Why.** The families do not offer the same lifecycle: a Cosmos passkey account is one key with no rotation, the Soroban guardian is only a seam, and a GRAM passkey cannot rotate and has no guardian, so a single blanket claim would hide real gaps.
 **Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 679.
 Change (2026-10-08): EVM rotation runs through `mtxExecute` signed by the account (CTR-ACC-10). Source add: `history/specs/2026-10-08-metatx-generic-call-design.md` §3 GC-6.
 
@@ -3472,21 +3472,21 @@ Change (2026-10-08): EVM rotation runs through `mtxExecute` signed by the accoun
 - old: net-aptos:L1, net-solana:L1 · status: current · owner: no · date: 2026-10-07 · normative: networks/README.md#NET-ALL-06 · superseded-by: —
 
 **Rule.** The indexer filters by the registered contracts in the family's own address form, and an empty list never advances the cursor.
-**Why.** The Cosmos, Sui and TON reviews found indexers reading a static or wrongly formatted contract list; an indexer that advances with an empty or mismatched list moves past ranges it never really scanned.
+**Why.** The Cosmos, Sui and GRAM reviews found indexers reading a static or wrongly formatted contract list; an indexer that advances with an empty or mismatched list moves past ranges it never really scanned.
 **Source.** [history/specs/2026-10-04-net-aptos.md](history/specs/2026-10-04-net-aptos.md) line 37; [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 41.
 
 ### NET-ALL-07 — e2e fakes return real token ids
 - old: net-aptos:L2, net-solana:L2 · status: current · owner: no · date: 2026-10-04 · normative: networks/README.md#NET-ALL-07 · superseded-by: —
 
 **Rule.** End-to-end fakes return real token ids and refuse unregistered emitters.
-**Why.** The TON and Hedera reviews found end-to-end tests that passed against fakes; a copy of the contract deployed elsewhere emits identical events, and only a fake that returns the real token ids and refuses strangers proves the indexer drops them.
+**Why.** The GRAM and Hedera reviews found end-to-end tests that passed against fakes; a copy of the contract deployed elsewhere emits identical events, and only a fake that returns the real token ids and refuses strangers proves the indexer drops them.
 **Source.** [history/specs/2026-10-04-net-aptos.md](history/specs/2026-10-04-net-aptos.md) line 38; [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 42.
 
 ### NET-ALL-08 — Payer signs every amount deciding delivery
 - old: net-aptos:L3, net-solana:L3 · status: current · owner: no · date: 2026-10-07 · normative: networks/README.md#NET-ALL-08 · superseded-by: —
 
 **Rule.** Every amount chosen by the relayer that decides whether value arrives must be inside the payer's signature.
-**Why.** The TON review found a relayer-chosen `forwardTon` amount that decided whether a signed payment arrived; any such amount outside the signature hands that decision to the relayer.
+**Why.** The GRAM review found a relayer-chosen `forwardTon` amount that decided whether a signed payment arrived; any such amount outside the signature hands that decision to the relayer.
 **Source.** [history/specs/2026-10-04-net-aptos.md](history/specs/2026-10-04-net-aptos.md) line 39; [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 43.
 
 ### NET-ALL-09 — Permanent submit refusals free the lane
@@ -3514,7 +3514,7 @@ Change (2026-10-08): EVM rotation runs through `mtxExecute` signed by the accoun
 - old: net-aptos:L7, net-solana:L7 · status: current · owner: no · date: 2026-10-04 · normative: networks/README.md#NET-ALL-12 · superseded-by: —
 
 **Rule.** Coins sent directly to an account or contract address stay spendable.
-**Why.** The Sui, Cosmos and TON reviews found coins sent straight to an account or contract address that no code path could move, so they were stuck for good.
+**Why.** The Sui, Cosmos and GRAM reviews found coins sent straight to an account or contract address that no code path could move, so they were stuck for good.
 **Source.** [history/specs/2026-10-04-net-aptos.md](history/specs/2026-10-04-net-aptos.md) line 43; [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 47.
 
 ### NET-ALL-13 — No shared object serialises all markets
@@ -3528,14 +3528,14 @@ Change (2026-10-08): EVM rotation runs through `mtxExecute` signed by the accoun
 - old: net-aptos:L9, net-solana:L9 · status: current · owner: no · date: 2026-10-04 · normative: networks/README.md#NET-ALL-14 · superseded-by: —
 
 **Rule.** A client verifies a signature only with a key it can prove belongs to the payer
-**Why.** The TON and Sui reviews found signatures accepted from keys not tied to the payer. A key added later on chain cannot be checked by the ERP without an RPC call, so it answers "unknown" and the node's simulation decides; it never answers "valid" for a key it cannot prove.
+**Why.** The GRAM and Sui reviews found signatures accepted from keys not tied to the payer. A key added later on chain cannot be checked by the ERP without an RPC call, so it answers "unknown" and the node's simulation decides; it never answers "valid" for a key it cannot prove.
 **Source.** [history/specs/2026-10-04-net-aptos.md](history/specs/2026-10-04-net-aptos.md) line 45; [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 49.
 
 ### NET-ALL-15 — Lane state prunable, storage refunded
 - old: net-aptos:L10, net-solana:L10 · status: current · owner: no · date: 2026-10-04 · normative: networks/README.md#NET-ALL-15 · superseded-by: —
 
 **Rule.** Lane and nonce state is prunable and its storage is refunded.
-**Why.** The TON review found lane and nonce tables that grow forever and keep charging storage; a permissionless prune that returns the storage deposit gives relayers a reason to clean up.
+**Why.** The GRAM review found lane and nonce tables that grow forever and keep charging storage; a permissionless prune that returns the storage deposit gives relayers a reason to clean up.
 **Source.** [history/specs/2026-10-04-net-aptos.md](history/specs/2026-10-04-net-aptos.md) line 46; [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 50.
 
 ### NET-ALL-16 — Never case-fold base58 addresses or ids
@@ -3564,13 +3564,13 @@ Change (2026-10-08): EVM rotation runs through `mtxExecute` signed by the accoun
 - old: R145 · status: current · owner: no · date: 2026-10-06 · normative: networks/README.md#NET-ALL-19 · superseded-by: —
 
 **Rule.** Token wrappers v2 are EVM and Hedera only
-**Why.** Move and Solana need no wrapper for gaslessness because the subject account already holds any coin or asset; Cosmos, Soroban and TON keep their tier-1 tokens until wrappers there are designed with the same rate and reserve rules.
+**Why.** Move and Solana need no wrapper for gaslessness because the subject account already holds any coin or asset; Cosmos, Soroban and GRAM keep their tier-1 tokens until wrappers there are designed with the same rate and reserve rules.
 **Source.** [history/specs/2026-10-06-token-wrappers-v2.md](history/specs/2026-10-06-token-wrappers-v2.md) line 152.
 
 ### NET-ALL-20 — Per-family UA registries share kind table
 - old: R314, UA:Q12 · status: current · owner: yes · date: 2026-10-07 · normative: networks/README.md#NET-ALL-20 · superseded-by: —
 
-**Why.** TON calls are asynchronous, and owner consent alone would let a wallet claim someone else's key. Owner-confirmed.
+**Why.** GRAM calls are asynchronous, and owner consent alone would let a wallet claim someone else's key. Owner-confirmed.
 **Source.** [history/specs/2026-10-06-universal-account-design.md](history/specs/2026-10-06-universal-account-design.md) line 303; [history/specs/2026-10-06-universal-account-design.md](history/specs/2026-10-06-universal-account-design.md) line 1412.
 
 ### NET-ALL-21 — Non-EVM passkey owners = UA id, URN only
@@ -3621,21 +3621,21 @@ Under "Networks — EVM":
 ### NET-ALL-27 — Verify generically, dispatch statically
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: networks/README.md#NET-ALL-27 · superseded-by: —
 
-**Why.** Move has no call by name and Solana declares every account up front, so the shared part is a per-family verifier library; each gasless function is a typed entry that calls it with its own name and argument hash; CosmWasm and TON use one `MtxExecute` message with internal dispatch. Owner: OK (2026-10-08).
+**Why.** Move has no call by name and Solana declares every account up front, so the shared part is a per-family verifier library; each gasless function is a typed entry that calls it with its own name and argument hash; CosmWasm and GRAM use one `MtxExecute` message with internal dispatch. Owner: OK (2026-10-08).
 **Cost if wrong.** One dispatching entry would need dynamic dispatch Move lacks, or a write-set Solana cannot declare.
 **Source.** `history/specs/2026-10-08-nonevm-metacall-design.md` §2, §3 NM-2, NM-4, §6 Q2.
 
 ### NET-ALL-28 — mtx names in every family, typed path at parity with EVM
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: networks/README.md#NET-ALL-28 · superseded-by: —
 
-**Why.** One naming rule everywhere (owner, 2026-10-08, reversing "non-EVM families keep their op names"): `mtx_` snake case in Move, Soroban and Solana, `Mtx` Pascal case for CosmWasm and TON; `mtx_transfer`, `mtx_pay` (lane derived from the reference), `mtx_execute_transfer` and batch as on EVM; native-signer entries and chain standards (SEP-41, CW20) keep their names. Nothing is deployed outside test chains.
+**Why.** One naming rule everywhere (owner, 2026-10-08, reversing "non-EVM families keep their op names"): `mtx_` snake case in Move, Soroban and Solana, `Mtx` Pascal case for CosmWasm and GRAM; `mtx_transfer`, `mtx_pay` (lane derived from the reference), `mtx_execute_transfer` and batch as on EVM; native-signer entries and chain standards (SEP-41, CW20) keep their names. Nothing is deployed outside test chains.
 **Cost if wrong.** Signed and direct entry points look alike, and the node, clients and readers cannot tell them apart.
 **Source.** `history/specs/2026-10-08-nonevm-metacall-design.md` §3 NM-2, NM-5, §6 Q1, Q4.
 
 ### NET-ALL-29 — Key management and mandate operations are MetaCall entries
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: networks/README.md#NET-ALL-29 · superseded-by: —
 
-**Why.** `KeyOp`, `ForwardOp`, `MandateInit`, the mandate close/revoke messages, the Cosmos mandate JSON and TON `MandatePay`/`set_key` are SCaaS structs, not chain standards (owner, 2026-10-08); as `MetaCall` entries they share the verifier, the lanes and one vector set; native chain-key rotation is untouched; DEX order structs stay, and the `trade` op becomes the token entry `MtxTrade` where a leg is token-signed.
+**Why.** `KeyOp`, `ForwardOp`, `MandateInit`, the mandate close/revoke messages, the Cosmos mandate JSON and GRAM `MandatePay`/`set_key` are SCaaS structs, not chain standards (owner, 2026-10-08); as `MetaCall` entries they share the verifier, the lanes and one vector set; native chain-key rotation is untouched; DEX order structs stay, and the `trade` op becomes the token entry `MtxTrade` where a leg is token-signed.
 **Cost if wrong.** Each extra struct keeps its own domain, nonce and vectors to maintain in every client language.
 **Source.** `history/specs/2026-10-08-nonevm-metacall-design.md` §3 NM-3, §6 Q3.
 
@@ -3654,7 +3654,7 @@ R36-R49 reserved for the third design batch, never used.
 ### NET-ALL-82 — Key management and mandates on structs of their own
 - old: — · status: superseded · owner: yes · date: 2026-10-08 · normative: — · superseded-by: NET-ALL-29
 
-**What it said.** `KeyOp` (`scaas.keyop.v1`), `ForwardOp`, `MandateInit`, mandate close/revoke messages, the Cosmos mandate JSON and TON `MandatePay` were separate signed structs with their own nonces.
+**What it said.** `KeyOp` (`scaas.keyop.v1`), `ForwardOp`, `MandateInit`, mandate close/revoke messages, the Cosmos mandate JSON and GRAM `MandatePay` were separate signed structs with their own nonces.
 **Source.** `history/specs/2026-10-08-nonevm-metacall-design.md` §3 NM-3, §6 Q3.
 
 ## 27. Networks — EVM
@@ -4624,23 +4624,23 @@ It said: Out of CU requeued without limit; replaced by NET-SOL-23.
 It said: Signed text is domain plus hex digest; replaced by NET-ALL-23.
 **Source.** [history/specs/2026-10-04-net-solana.md](history/specs/2026-10-04-net-solana.md) line 708.
 
-## 34. Networks — TON
+## 34. Networks — GRAM
 
-### NET-TON-01 — TON Tact jetton wallet; escrow DEX
+### NET-TON-01 — GRAM Tact jetton wallet; escrow DEX
 - old: R67(core) · status: current · owner: no · date: 2026-10-07 · normative: networks/ton.md#NET-TON-01 · superseded-by: —
 
-**Rule.** TON = a Tact jetton whose custom wallet verifies signed operations; the DEX is an escrow.
-**Why.** TON's asynchronous actor model has no atomicity across contracts, so the DEX holds the first signed leg in escrow until the second matches or the order expires; Tact was chosen because FunC, one level lower, was not worth it for this scope.
+**Rule.** GRAM = a Tact jetton whose custom wallet verifies signed operations; the DEX is an escrow.
+**Why.** GRAM's asynchronous actor model has no atomicity across contracts, so the DEX holds the first signed leg in escrow until the second matches or the order expires; Tact was chosen because FunC, one level lower, was not worth it for this scope.
 **Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 540.
 
-### NET-TON-02 — TON per-wallet domain set on chain
+### NET-TON-02 — GRAM per-wallet domain set on chain
 - old: CR-R3-7, reorg:Q3 · status: current · owner: yes · date: 2026-10-07 · normative: networks/ton.md#NET-TON-02 · superseded-by: —
 
-**Rule.** TON binds the `signData` domain on chain through a per-wallet domain set.
+**Rule.** GRAM binds the `signData` domain on chain through a per-wallet domain set.
 **Why.** Anyone may relay a `SignedOp`, so an off-chain domain check never runs when a phishing dApp relays its own signed data.
 **Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 693; [history/plans/2026-10-07-docs-reorg.md](history/plans/2026-10-07-docs-reorg.md) line 1217.
 
-### NET-TON-03 — TON bounced payouts claimable by owner
+### NET-TON-03 — GRAM bounced payouts claimable by owner
 - old: CR-R3-9, reorg:Q4 · status: current · owner: yes · date: 2026-10-07 · normative: networks/ton.md#NET-TON-03 · superseded-by: —
 
 **Why.** As built `bounced<JettonTransfer>` adds to `fees[master]` (`dex.tact:131-136`), which `WithdrawFees` withdraws (`:43,158`). SPECIFIED. Tests (sandbox): a bounced refund lands in `unclaimed`, `WithdrawFees` cannot take it, `Claim` pays the owner.
@@ -4663,8 +4663,8 @@ It said: Signed text is domain plus hex digest; replaced by NET-ALL-23.
 ### NET-TON-06 — Network domain = config 19 global id
 - old: R10-4 · status: current · owner: no · date: 2026-10-03 · normative: networks/ton.md#NET-TON-06 · superseded-by: —
 
-**Rule.** The TON network domain is the `global_id` read on chain from config parameter 19
-**Why.** TON addresses are identical across networks (same code and data), so a network id is required, and config parameter 19 cannot be faked.
+**Rule.** The GRAM network domain is the `global_id` read on chain from config parameter 19
+**Why.** GRAM addresses are identical across networks (same code and data), so a network id is required, and config parameter 19 cannot be faked.
 **Source.** [history/specs/2026-10-03-net-ton.md](history/specs/2026-10-03-net-ton.md) line 27.
 
 ### NET-TON-07 — Lazy key bind via SignedOp stateInit
@@ -4674,24 +4674,24 @@ It said: Signed text is domain plus hex digest; replaced by NET-ALL-23.
 **Why.** The public key must be proven by the owner's address, and checking the `stateInit` hash against the address does that without the subject sending a transaction.
 **Source.** [history/specs/2026-10-03-net-ton.md](history/specs/2026-10-03-net-ton.md) line 28.
 
-### NET-TON-08 — One TON passkey set by set_key
+### NET-TON-08 — One GRAM passkey set by set_key
 - old: R10-6 · status: current · owner: no · date: 2026-10-07 · normative: networks/ton.md#NET-TON-08 · superseded-by: —
 
-**Rule.** A TON wallet holds one passkey, attached or detached by `set_key`, which must carry a proof of possession of the attached key; origins match exactly.
+**Rule.** A GRAM wallet holds one passkey, attached or detached by `set_key`, which must carry a proof of possession of the attached key; origins match exactly.
 **Why.** One passkey is enough for the portal, and many passkeys with a guardian stay a seam because only the EVM subject account has the full lifecycle; the proof of possession comes from NET-ALL-20.
 **Source.** [history/specs/2026-10-03-net-ton.md](history/specs/2026-10-03-net-ton.md) line 29.
 
-### NET-TON-09 — TON DEX is fill-or-kill escrow
+### NET-TON-09 — GRAM DEX is fill-or-kill escrow
 - old: R10-7 · status: current · owner: no · date: 2026-10-03 · normative: networks/ton.md#NET-TON-09 · superseded-by: —
 
-**Rule.** The TON DEX is a fill-or-kill escrow.
-**Why.** TON has no atomic calls between contracts, a deliberate departure from the EVM DEX (CTR-DEX-01).
+**Rule.** The GRAM DEX is a fill-or-kill escrow.
+**Why.** GRAM has no atomic calls between contracts, a deliberate departure from the EVM DEX (CTR-DEX-01).
 **Source.** [history/specs/2026-10-03-net-ton.md](history/specs/2026-10-03-net-ton.md) line 30.
 
 ### NET-TON-10 — Relayer lane = W5R1 wallet, one message
 - old: R10-8 · status: current · owner: no · date: 2026-10-03 · normative: networks/ton.md#NET-TON-10 · superseded-by: —
 
-**Rule.** A TON relayer lane is a W5R1 wallet with its own seqno, one external message in flight, and W5 `valid_until` = the payload's expiry.
+**Rule.** A GRAM relayer lane is a W5R1 wallet with its own seqno, one external message in flight, and W5 `valid_until` = the payload's expiry.
 **Source.** [history/specs/2026-10-03-net-ton.md](history/specs/2026-10-03-net-ton.md) line 31.
 
 ### NET-TON-11 — Node uses TON Center API v3
@@ -4704,23 +4704,23 @@ It said: Signed text is domain plus hex digest; replaced by NET-ALL-23.
 ### NET-TON-12 — Events authenticated by derived wallet address
 - old: R10-10 · status: current · owner: no · date: 2026-10-07 · normative: networks/ton.md#NET-TON-12 · superseded-by: —
 
-**Rule.** TON events are authenticated by the derived wallet address.
+**Rule.** GRAM events are authenticated by the derived wallet address.
 **Why.** Jettons have no central log; authenticating the emitter by its derived address stops a fake contract from emitting fake events or clogging the indexer, with no RPC per event.
 **Source.** [history/specs/2026-10-03-net-ton.md](history/specs/2026-10-03-net-ton.md) line 33.
 
-### NET-TON-13 — No relayer fee; forward TON capped
+### NET-TON-13 — No relayer fee; forward GRAM capped
 - old: R10-11 · status: current · owner: no · date: 2026-10-07 · normative: networks/ton.md#NET-TON-13 · superseded-by: —
 
-**Rule.** No relayer fee on TON; the DEX ppm fee is signed in the order; gas TON is attached per message and the excess returns to the lane; forward TON is capped.
-**Why.** New networks carry no relayer fee by design; the forward cap answers a critical review finding that uncapped forward TON could drain a lane (NET-TON-14).
+**Rule.** No relayer fee on GRAM; the DEX ppm fee is signed in the order; gas GRAM is attached per message and the excess returns to the lane; forward GRAM is capped.
+**Why.** New networks carry no relayer fee by design; the forward cap answers a critical review finding that uncapped forward GRAM could drain a lane (NET-TON-14).
 **Source.** [history/specs/2026-10-03-net-ton.md](history/specs/2026-10-03-net-ton.md) line 34.
 
-### NET-TON-14 — Forward TON capped on every path
+### NET-TON-14 — Forward GRAM capped on every path
 - old: R10-12 · status: current · owner: no · date: 2026-10-07 · normative: networks/ton.md#NET-TON-14 · superseded-by: —
 
-**Rule.** Forward TON is capped on every path (blocking).
-**Why.** The adapter attached an uncapped amount, accepted an unsigned `extra.forward_nanoton` from job JSON, and the wallet forwards that TON to its owner, while the breaker counted only mined fees (NODE-LANE-17).
-**Cost if wrong.** Anyone who can place a job on a TON lane can drain the lane's TON; the review verdict was BLOCK until fixed.
+**Rule.** Forward GRAM is capped on every path (blocking).
+**Why.** The adapter attached an uncapped amount, accepted an unsigned `extra.forward_nanoton` from job JSON, and the wallet forwards that GRAM to its owner, while the breaker counted only mined fees (NODE-LANE-17).
+**Cost if wrong.** Anyone who can place a job on a GRAM lane can drain the lane's GRAM; the review verdict was BLOCK until fixed.
 **Source.** [history/specs/2026-10-03-net-ton.md](history/specs/2026-10-03-net-ton.md) line 225.
 
 ### NET-TON-15 — tx_id is TEP-467 normalized hash
@@ -4729,7 +4729,7 @@ It said: Signed text is domain plus hex digest; replaced by NET-ALL-23.
 **Why.** As built the code returns `ext.hash()` of the message as sent (`ton.rs:743-750`, looked up raw at `:994-997`); for seqno 0 (with `init`) the two hashes differ, and anyone relaying the BOC (TON Center, a proxy, a mesh peer) can re-wrap it (the envelope is not inside the W5 signature), so `follow` reports `dead` while the money moved. SPECIFIED. Test: a seqno-0 message with `init` ⇒ `tx_id ≠ ext.hash()`, a fake API finds it by normalized hash; a re-wrapped copy still yields `Mined`.
 **Source.** [history/specs/2026-10-03-net-ton.md](history/specs/2026-10-03-net-ton.md) line 235.
 
-### NET-TON-16 — Node checks TON domain at every door
+### NET-TON-16 — Node checks GRAM domain at every door
 - old: R10-14(node) · status: current · owner: no · date: 2026-10-07 · normative: networks/ton.md#NET-TON-16 · superseded-by: —
 
 **Rule.** The node checks the TON Connect domain at every door.
@@ -4740,7 +4740,7 @@ It said: Signed text is domain plus hex digest; replaced by NET-ALL-23.
 ### NET-TON-17 — Simulation reads balance, checks passkey locally
 - old: R10-15 · status: current · owner: no · date: 2026-10-07 · normative: networks/ton.md#NET-TON-17 · superseded-by: —
 
-**Rule.** TON simulation reads the jetton balance and checks the passkey locally.
+**Rule.** GRAM simulation reads the jetton balance and checks the passkey locally.
 **Why.** `build` read neither the jetton balance nor the passkey, so an op certain to fail on chain was still signed and sent.
 **Source.** [history/specs/2026-10-03-net-ton.md](history/specs/2026-10-03-net-ton.md) line 245.
 
@@ -4753,21 +4753,21 @@ It said: Signed text is domain plus hex digest; replaced by NET-ALL-23.
 ### NET-TON-19 — DEX keeps nothing not its own
 - old: R10-17(cancel/fees) · status: current · owner: no · date: 2026-10-07 · normative: networks/ton.md#NET-TON-19 · superseded-by: —
 
-**Rule.** The TON DEX keeps nothing that is not its own.
-**Why.** Cancelling an unknown order kept the attached TON, and bounced payouts were added to fees that the admin can withdraw; a bounce body is cut to 256 bits and carries no destination, so refunds go through an admin call with an event trail instead of a per-owner debt table.
+**Rule.** The GRAM DEX keeps nothing that is not its own.
+**Why.** Cancelling an unknown order kept the attached GRAM, and bounced payouts were added to fees that the admin can withdraw; a bounce body is cut to 256 bits and carries no destination, so refunds go through an admin call with an event trail instead of a per-owner debt table.
 **Source.** [history/specs/2026-10-03-net-ton.md](history/specs/2026-10-03-net-ton.md) line 250.
 
-### NET-TON-20 — TON target: MetaCall/MetaTransfer cells, Mtx messages
+### NET-TON-20 — GRAM target: MetaCall/MetaTransfer cells, Mtx messages
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: networks/ton.md#NET-TON-20 · superseded-by: —
 
 **Why.** The family form of NET-ALL-26 to NET-ALL-29: the encoding of both kinds, the verifier, and the map from each built entry and struct to its `mtx` name; programs are immutable, so it ships as a new deployment.
 **Cost if wrong.** Clients, node and contract drift on names and encodings per family.
 **Source.** `history/specs/2026-10-08-nonevm-metacall-design.md` §3 NM-2, NM-3, NM-5.
 
-### NET-TON-80 — TON BindKey message
+### NET-TON-80 — GRAM BindKey message
 - old: R67(bindkey) · status: superseded · owner: no · date: 2026-10-03 · normative: — · superseded-by: NET-TON-07
 
-It said: TON BindKey message; replaced by NET-TON-07.
+It said: GRAM BindKey message; replaced by NET-TON-07.
 **Source.** [history/specs/2026-10-03-blockchain-round3-design.md](history/specs/2026-10-03-blockchain-round3-design.md) line 540.
 
 ### NET-TON-81 — Domain checked only in the ERP

@@ -35,7 +35,7 @@ reconciliation is exactly that of a manual payment (the design sketch was `payUn
 **Why a wallet per payer** rather than an allowance to one shared mandate contract: a
 bug in one mandate touches only the funds deposited in that wallet, and no `approve` step for which the EOA would pay
 gas is needed; the cost is that the payer deposits into the wallet instead of keeping funds in its EOA. Equivalent
-mandates exist on Cosmos, Soroban, Sui, Aptos, TON and Solana. The wallet is deployed outside the client system (for
+mandates exist on Cosmos, Soroban, Sui, Aptos, GRAM and Solana. The wallet is deployed outside the client system (for
 example `forge create … --constructor-args <owner> <chain_uid>`); clients record only its address.
 
 **Domain.** Its EIP-712 domain

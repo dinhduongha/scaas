@@ -242,14 +242,14 @@ updated in `chain_event_ingest`; `fam_soroban.auth_nonce`, `fam_soroban.py:88-90
 `fam_aptos`, `aptos_package`, `blockchain.chain.aptos_start_block`, `aptos_root`; `blockchain_payment_request._issue`;
 tests `TestAptosPayments.test_reissue_*`), Solana (`dms_blockchain/lib/fam_solana.py`, `models/blockchain_solana.py`,
 `dms_blockchain_bridge/static/src/js/connectors/solana.js`, `fam_solana`, `_lane_address`, `solana_program_id`, `solana_config`,
-`solana_token_program`, `blockchain.chain.solana_start_slot`, `addresses.canonical('solana')`; `relay_report` path), TON (`fam_ton.py`,
+`solana_token_program`, `blockchain.chain.solana_start_slot`, `addresses.canonical('solana')`; `relay_report` path), GRAM (`fam_ton.py`,
 `blockchain_ton.py`, `connectors/ton.js`, `ton_global_id`, `ton_app_domain`, `ton_manifest_url`,
 `ton_wallet_code_hash`, `ton_wallet_code_depth`, `blockchain.token.address` = the jetton master, `batch_hex` lanes).
 
 Contracts and adapters per family: `smartcontracts/move/aptos/` (package `scaas`), `scaas-node/src/adapters/aptos.rs`,
 `scaas-node/tests/e2e_aptos.rs`; `smartcontracts/solana/` (program `scaas`), `scaas-node/src/adapters/solana.rs`,
 `scaas-node/tests/e2e_solana.rs`. Test databases: `dms_test_chain_6` (Hedera), `dms_test_chain_8` (Soroban),
-`dms_test_chain_10` (TON), `dms_test_chain_11` (Aptos, port 8931, gateway 32010–32019), `dms_test_chain_12` (Solana,
+`dms_test_chain_10` (GRAM), `dms_test_chain_11` (Aptos, port 8931, gateway 32010–32019), `dms_test_chain_12` (Solana,
 port 8932, ports 32020–32049); 118 addon tests, 4 of them Hedera (`test_fam_cosmos`, `test_fam_sui.py`); `lib/eip712.py`
 and `blockchain_relay_job.py:137` are shared. Sui verifier tests (`test_fam_sui.py`): `test_added_key_signature_is_left_to_the_node` and
 `test_recovered_key_signature_is_left_to_the_node` (⇒ `None`), `test_flipped_byte_from_added_key_is_refused` (`False`),
@@ -462,7 +462,7 @@ receiving/paying wallet** on the chain has a route; `event_node_id` set; secrets
 subset pushed (`tokens_hash` set); (3) **journal continuity**: for each lane the node reports, `journal_max ≥` Odoo's
 `max(outer_nonce)` for that signer — the transitional node bumps `lane.journal_max` on every successful legacy `signed`
 report (and imports it from each legacy `node_config`), so this holds exactly, not "as of the last read"; (4) DEX chain: every market paused, no `pending` trade;
-(5) TON chains: the forward cap is deployed on the node ([NET-TON-14](networks/ton.md#NET-TON-14)); the node's
+(5) GRAM chains: the forward cap is deployed on the node ([NET-TON-14](networks/ton.md#NET-TON-14)); the node's
 payload-sourced fields, cost metering, value-out and deposit caps are live before the first push cutover.
 
 Effects:

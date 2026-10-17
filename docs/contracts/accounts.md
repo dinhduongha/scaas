@@ -5,7 +5,7 @@ names the forms it accepts.
 
 | Form | What it is | Registration | When to use |
 |---|---|---|---|
-| **Native account** | The chain's own account: an EVM address (EOA, or a contract via ERC-1271), a Solana, Stellar, Aptos, Sui, Cosmos or TON account | none | Wallet users and anything a chain already understands |
+| **Native account** | The chain's own account: an EVM address (EOA, or a contract via ERC-1271), a Solana, Stellar, Aptos, Sui, Cosmos or GRAM account | none | Wallet users and anything a chain already understands |
 | **Universal Account** (default) | An identifier derived from key data or from a policy — passkey, P-256, ed25519, Schnorr, BLS, MuSig2/FROST groups, weighted multisig, post-quantum keys, Zether keys | once per chain, with proof of possession, for derived kinds | The default for subjects: any key type on any family, no contract per user ([Universal Account](#universal-account)) |
 | **Smart account** (optional) | `SmartKeyAccount`, an ERC-1271 contract with several keys and guardian recovery | deployed per user as a clone | A stable address across key rotation, guardian recovery, or contracts that only understand addresses ([smart account](#subjectaccount)) |
 
@@ -128,7 +128,7 @@ vectors): lower-case hex; a 32-byte value whose top 96 bits are zero is the 20-b
 keyed and compared in its 20-byte form.
 
 On families whose native ids are full 32-byte values (Solana, Aptos, Sui,
-Soroban, TON) native and derived ids share one space (collision 2^-128 birthday, infeasible) but **shape cannot tell
+Soroban, GRAM) native and derived ids share one space (collision 2^-128 birthday, infeasible) but **shape cannot tell
 them apart**: records, owners and subject accounts there store an explicit `owner_kind` and dispatch by kind, never by
 id shape. Different kinds over the same point give different ids because the tag differs (Schnorr-bn254 over `Y` ≠
 Zether-bn254 over `Y`). A 20-byte truncation of a policy hash would share the address space with EOAs: grinding an EOA
@@ -139,7 +139,7 @@ follow the same rule ([NET-ALL-21](../networks/README.md#NET-ALL-21)).
 <a id="keccak"></a>
 <a id="CTR-UA-04"></a>**CTR-UA-04** — **One hash function for ids in every family: keccak256.** The EVM opcode; native
 host functions on Solana (`sol_keccak256`), Soroban (`crypto().keccak256`), Aptos (`aptos_hash::keccak256`), Sui
-(`hash::keccak256`), TON (`HASHEXT` keccak256); pure Rust in CosmWasm (a few thousand gas units for a software keccak).
+(`hash::keccak256`), GRAM (`HASHEXT` keccak256); pure Rust in CosmWasm (a few thousand gas units for a software keccak).
 The same key data gives the same UA on every chain of every family.
 
 <a id="kind-table"></a>
@@ -155,8 +155,8 @@ generation and new token implementations that point to it.
 <a id="CTR-UA-06"></a>**CTR-UA-06** — **Native kinds are never registered; every other kind must be registered before
 it can sign or receive** (owner). Native = an EVM EOA and any EVM contract account (ERC-1271), Hedera native accounts,
 Solana ed25519, Stellar/Pi `G…`, Soroban `C…` contract accounts, Aptos native accounts (any native auth key incl.
-MultiKey), Sui native addresses (incl. native multisig, passkey flag 6, zkLogin), Cosmos native accounts. **TON is the
-exception:** a TON wallet is a contract, so the native TON account is the wallet contract address (registration-free
+MultiKey), Sui native addresses (incl. native multisig, passkey flag 6, zkLogin), Cosmos native accounts. **GRAM is the
+exception:** a GRAM wallet is a contract, so the native GRAM account is the wallet contract address (registration-free
 like ERC-1271). Every derived kind registers on each chain where it is used. Registration is where PoP and
 one-key-one-purpose are enforced; receiving to an unregistered derived id is refused, so a typo reverts instead of
 burning funds. One registration per chain (bn254 ≈ 75 k gas).
@@ -323,7 +323,7 @@ Native kinds (no registration, no tag-derived id; listed so that structures and 
 | `0x0013` | `aptos-account` | 32-byte address | Aptos | native auth key (ed25519, SingleKey, MultiKey, WebAuthn) |
 | `0x0014` | `sui-address` | 32-byte address | Sui | native flags 0/1/2/6, native multisig, zkLogin |
 | `0x0015` | `cosmos-account` | 20- or 32-byte account | Cosmos | ADR-036 secp256k1; native multisig |
-| `0x0016` | `ton-wallet` | 32-byte account id (workchain from chain config) | TON | wallet contract (W5R1/V4R2/V3R2), TON Connect |
+| `0x0016` | `ton-wallet` | 32-byte account id (workchain from chain config) | GRAM | wallet contract (W5R1/V4R2/V3R2), TON Connect |
 
 Derived kinds (registered; `d` = key data):
 
@@ -784,7 +784,7 @@ Non-EVM families ([NET-ALL-20](../networks/README.md#NET-ALL-20)):
 | Sui | native address (flags 0/1/2/6) | native unchanged (Sui passkeys are native, flag 6); `Registry<T>` gains a `key_owner` table |
 | Solana | `owner: [u8;32]`; passkey owner `sha256("scaas.owner.p256" ‖ pk33)` | passkey owner = `webauthn-p256` UA id, stored with `owner_kind`, shown only as URN; PDA `["acct", ua]`; PDA `["ukey", keyHash]` enforces keyHash uniqueness |
 | Cosmos | bech32 `from`; passkey address 20-byte truncation | passkey owner = 32-byte UA id, a ledger key in our contracts, shown only as URN; `bip340`/MuSig2/`frost-secp256k1` via an `ua-registry` contract |
-| TON | `MetaOp.from` wallet; jetton-wallet `passkey` bound by `set_key` | native `ton-wallet`; no registry |
+| GRAM | `MetaOp.from` wallet; jetton-wallet `passkey` bound by `set_key` | native `ton-wallet`; no registry |
 
 Families keep their entry points (`mtx_pay`, `MtxExecute`…, [NET-ALL-28](../networks/README.md#NET-ALL-28)); UA changes the owner ids and adds
 the registry check where an account opens for a derived owner. Every non-EVM owner field gains an explicit
@@ -1010,7 +1010,7 @@ Other families:
 | Sui | `Registry<T>`: `Table<vector<u8>, address>` for `key_owner`; account objects keyed by UA | yes | native verify functions |
 | Aptos | resource under the package root: `Table<vector<u8>, address>` | yes | pure-Move P-256 (UNAUDITED) |
 | Solana | PDAs `["ua", ua]` (record) and `["ukey", keyHash]` (claim) | yes | precompile-instruction verification |
-| TON | none; wallet-bound keys with a key signature in `set_key` | no (documented gap) | async actor model |
+| GRAM | none; wallet-bound keys with a key signature in `set_key` | no (documented gap) | async actor model |
 
 On every family, records, account owners and subject accounts store an explicit **`owner_kind`** next to the id and
 dispatch verification by that kind; id shape (`>> 160`) is an EVM/Cosmos-20-byte rule only.
@@ -1582,13 +1582,13 @@ differently fails closed. Shared vectors `smartcontracts/test/vectors/webauthn_k
 Level 2 and Chrome/Firefox Level 3; rejects: `crossOrigin:true`, `topOrigin`, a member before `crossOrigin`,
 whitespace, a suffixed origin such as `https://a.example.evil` against a stored `https://a.example`, wrong rpIdHash,
 UV unset, high-s, another digest) run in every family's suite. Built gaps closed by planned fixes: Cosmos checks
-neither rpIdHash, origin nor UV; Sui, Soroban, TON and Solana do not refuse `crossOrigin: true`; the built TON check
+neither rpIdHash, origin nor UV; Sui, Soroban, GRAM and Solana do not refuse `crossOrigin: true`; the built GRAM check
 accepts a suffixed origin.
 
 Per family: EVM/Hedera `SmartKeyAccount` (ERC-1271; P-256 via OpenZeppelin 5.2 `P256.verify`, which calls the
 RIP-7212 precompile `0x100` when present, else the Solidity verifier); Sui `secp256r1_verify`/passkey; Soroban
 `secp256r1_verify` (CAP-51) in a custom account; Cosmos `secp256r1_verify` (cosmwasm-std 2.1+); Aptos pure-Move
-P-256; Solana Secp256r1 precompile; TON passkey auth kind in the jetton wallet. Merkle batching under one assertion
+P-256; Solana Secp256r1 precompile; GRAM passkey auth kind in the jetton wallet. Merkle batching under one assertion
 exists today on EVM and Soroban only; the other families verify one digest per assertion. In the generic form the leaf is
 `H(H(0x00 ‖ digest))` with `H` the family hash (the OpenZeppelin double-hash recommendation against second
 preimages), and each operation carries `(assertion, proof)`: the verifier checks the proof (digest → root), then the
@@ -1601,9 +1601,9 @@ account, holding several passkeys `(qx, qy, rpIdHash)`; key types are `P256_WEBA
 only through `mtxExecuteAsOwner` signed by an existing key (the account's lane nonce), or `recover(newKey)` by the guardian after
 `RECOVERY_DELAY` (default 2 days, cancellable by a key); the account never has zero keys. P-256 verification per
 family: Sui `ecdsa_r1::secp256r1_verify`; Soroban `env.crypto().secp256r1_verify` (CAP-51); Cosmos `secp256r1_verify`
-(cosmwasm-std 2.1+); Hedera as EVM (probe the precompile, Solidity fallback); TON: TVM has
+(cosmwasm-std 2.1+); Hedera as EVM (probe the precompile, Solidity fallback); GRAM: TVM has
 `P256_CHKSIGNU/P256_CHKSIGNS` (TVM upgrades of 2023/2024), used through `asm` in Tact, confirmed by compiling in the
-sandbox (otherwise TON is ed25519 only and the gap is recorded). The client side
+sandbox (otherwise GRAM is ed25519 only and the gap is recorded). The client side
 (`clients/clientkeys/src/passkey-signer.js`: `creationOptions` with PRF enabled by default, `requestOptions`, `derToRS`,
 `encodeAssertion = abi.encode(authenticatorData, clientDataJSON, r, s)`, `merkleBatch`, `accountSignature =
 abi.encode(keyIndex, bytes32[] proof, sig)`) is [CLI-SGN-09](../clients/signers-clientkeys.md#CLI-SGN-09).
@@ -1616,7 +1616,7 @@ a seed key; precompile and Solidity gas; end to end: add a second key (seed when
 
 Status: **BUILT** (`smartcontracts/evm/src/account/`).
 
-<a id="CTR-ACC-11"></a>**CTR-ACC-11** — **The multi-key ERC-1271 contract account is named `SmartKeyAccount` (factory `SmartKeyAccountFactory`) in every chain family that has a contract account**: "smart" marks a contract account, "key" its many keys. Done for EVM (contract, factory, domain `SCaaS SmartKeyAccount`, vectors), the Solana PDA type and the Soroban contract (crate `scaas-smart-key-account`); Sui/Aptos keep `meta::Account<T>`, a per-token balance object and not a contract account, and TON/Cosmos have none ([networks](../networks/README.md)); the built `SubjectAccount` is in `smartcontracts/evm/legacy/p4/`.
+<a id="CTR-ACC-11"></a>**CTR-ACC-11** — **The multi-key ERC-1271 contract account is named `SmartKeyAccount` (factory `SmartKeyAccountFactory`) in every chain family that has a contract account**: "smart" marks a contract account, "key" its many keys. Done for EVM (contract, factory, domain `SCaaS SmartKeyAccount`, vectors), the Solana PDA type and the Soroban contract (crate `scaas-smart-key-account`); Sui/Aptos keep `meta::Account<T>`, a per-token balance object and not a contract account, and GRAM/Cosmos have none ([networks](../networks/README.md)); the built `SubjectAccount` is in `smartcontracts/evm/legacy/p4/`.
 
 <a id="subjectaccount"></a>
 <a id="CTR-ACC-09"></a>**CTR-ACC-09** — **`SmartKeyAccount` is option (b), kept as built**: an optional ERC-1271 smart
@@ -1724,7 +1724,7 @@ Key lifecycle per family ([NET-ALL-05](../networks/README.md#NET-ALL-05) is norm
 | Sui | per subject `Keys` object, shared by every `Account<T>` of the subject | guardian on `Keys` | planned (today per `Account<T>`) |
 | Soroban | account-authorised add/remove | **seam only** | guardian + delayed recovery planned |
 | Cosmos | **none** (passkey address = hash of key + rp + origin) | **none** | passkey account contract with rotation planned |
-| TON | wallet key follows the owner's wallet; **a passkey cannot rotate** | **none** | guardian + delayed passkey rotation planned |
+| GRAM | wallet key follows the owner's wallet; **a passkey cannot rotate** | **none** | guardian + delayed passkey rotation planned |
 | Solana | KeyOp add/remove/policy | `start_recovery` / `finish_recovery` | — |
 
 ### <a id="smart-account-limitations"></a>3.1 Smart-account limitations

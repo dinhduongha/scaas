@@ -428,7 +428,7 @@ flowchart LR
 <a id="NODE-RUN-03"></a>**NODE-RUN-03** — **CLI `scaas-node lane accept-nonce --chain <key> --lane <label> --confirm
 <n> --config node.toml`** (sequence families; node stopped; owner lock, epoch + 1). Reads `nonce_at(latest)` and
 `nonce_at(pending)` from **every** configured endpoint (all must answer) and uses the **maximum** `pending` (on Cosmos,
-Aptos, Soroban and TON `pending` = the committed sequence). **Refuses unless `pending − 1 > lane.journal_max`**
+Aptos, Soroban and GRAM `pending` = the committed sequence). **Refuses unless `pending − 1 > lane.journal_max`**
 (monotonicity). Prints every nonce in `[journal_max + 1, pending)` with its tx hash, `to`, and whether its meta-tx
 digest matches a job of the restored store; requires `--confirm` = `pending − 1`; sets `lane.journal_max` and inserts one
 `lane_adopted (chain_key, lane_label, nonce, tx_hash, adopted_at)` row per adopted nonce, audited.
@@ -537,7 +537,7 @@ Preconditions (checked by the client before it flips the chain, [integration.md]
    from each legacy configuration read), so this holds exactly, not "as of the last read".
 4. DEX chain: every market paused, no `pending` trade; wait for `pending` trades to settle or fail on the legacy path,
    flip the chain, the transitional node imports open orders once via the legacy book load, resume markets in the node.
-5. TON chain: the forward-TON cap ([NET-TON-14](../networks/ton.md#NET-TON-14)) is enforced, and payload-sourced
+5. GRAM chain: the forward-TON cap ([NET-TON-14](../networks/ton.md#NET-TON-14)) is enforced, and payload-sourced
    fields, cost metering, value-out and deposit caps ([NODE-LANE-13](submit-lanes.md#NODE-LANE-13),
    [NODE-LANE-16](submit-lanes.md#NODE-LANE-16)–[NODE-LANE-18](submit-lanes.md#NODE-LANE-18)) are live before the
    first push cutover.

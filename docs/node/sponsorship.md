@@ -77,7 +77,7 @@ measurement at the end; no oracle. A too-low cap leaves some sponsored jobs `dea
 re-pushes them unsponsored.
 
 Cost per family: Hedera reports cost in tinybar from the record (gas price conversion is the network's); Cosmos the
-`fee` coin of the outer tx; Sui `gasUsed` total; Aptos `gas_used × gas_unit_price`; TON total fees of the outer message
+`fee` coin of the outer tx; Sui `gasUsed` total; Aptos `gas_used × gas_unit_price`; GRAM total fees of the outer message
 chain charged to the lane; Solana `meta.fee` (+ priority fee); Soroban `fee_charged` (stroops). Every family books and
 limits at node level; `signed_op` matches on the decoded op; non-EVM families book and limit only (no fee floor to
 waive).

@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="960" height="600" viewBox="0 0 960 600" role="img" aria-labelledby="t d">
   <title id="t">SCaaS at a glance</title>
-  <desc id="d">Four layers. Clients (ERP or back office, wallets and signers, console and dApp, apps and AI agents) send subject-signed intents to relayers. Relayers (scaas-node, which anyone can run, plus partner and open relayers linked by mesh and gossip) submit them and pay gas. Smart contracts, the API services (tokens and wrappers, accounts and mandates, DEX, tender and asset suite, Zether and PQ Zether), run on smart chains grouped in six families: EVM, Cosmos, Soroban, Move, TON and Solana. Finalized events travel back to clients as feeds.</desc>
+  <desc id="d">Four layers. Clients (ERP or back office, wallets and signers, console and dApp, apps and AI agents) send subject-signed intents to relayers. Relayers (scaas-node, which anyone can run, plus partner and open relayers linked by mesh and gossip) submit them and pay gas. Smart contracts, the API services (tokens and wrappers, accounts and mandates, DEX, tender and asset suite, Zether and PQ Zether), run on smart chains grouped in six families: EVM, Cosmos, Soroban, Move, GRAM and Solana. Finalized events travel back to clients as feeds.</desc>
   <defs>
     <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M0 0 L10 5 L0 10 z" fill="#57606a"/>
@@ -113,7 +113,7 @@
     <text class="b" x="626" y="510" text-anchor="middle">Move</text>
     <text class="s" x="626" y="530" text-anchor="middle">Aptos, Sui</text>
     <rect x="694" y="482" width="116" height="86" rx="8" fill="#ffffff" stroke="#7c3aed"/>
-    <text class="b" x="752" y="510" text-anchor="middle">TON</text>
+    <text class="b" x="752" y="510" text-anchor="middle">GRAM</text>
     <text class="s" x="752" y="530" text-anchor="middle">Tact</text>
     <rect x="820" y="482" width="116" height="86" rx="8" fill="#ffffff" stroke="#7c3aed"/>
     <text class="b" x="878" y="510" text-anchor="middle">Solana</text>

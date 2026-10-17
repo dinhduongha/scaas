@@ -124,7 +124,7 @@ store and the claim CAS `queued → leased` returns 0 rows to the loser ([NODE-J
 client never claims: it pushes (idempotent) and applies (ordered, idempotent).
 
 **Same lane keys in two stores** is forbidden and detected on sequence families (EVM, Hedera, Cosmos, Aptos, Soroban,
-TON; Sui and Solana have no lane nonce): at lane start, `nonce_at(latest) > journal_max + 1 + tracked` ⇒ the lane
+GRAM; Sui and Solana have no lane nonce): at lane start, `nonce_at(latest) > journal_max + 1 + tracked` ⇒ the lane
 does not lease, `/readyz` reason `lane <label> used outside this store`, metric `scaas_lane_foreign_nonce_total`. A
 manual wallet send also trips it — the right default ([submit-lanes.md#lane-keys](submit-lanes.md#lane-keys),
 [runbooks.md#incidents](runbooks.md#incidents) RB-04).
@@ -135,7 +135,7 @@ manual wallet send also trips it — the right default ([submit-lanes.md#lane-ke
 one directory per backend, `meta.schema_version = '2'`; every implementing change ships one numbered migration per
 backend directory (`schema_version` + 1). Every key/hash/address column compares **byte-exact** on every backend.
 Nonces are `BIGINT` (i64); adapters refuse values > `i64::MAX` (every family fits: EVM nonce, Cosmos/Aptos sequence,
-Stellar `ledger << 32`, TON u32).
+Stellar `ledger << 32`, GRAM u32).
 
 ```sql
 -- tenants and credentials (NODE-JOB-03, NODE-JOB-05)
@@ -178,7 +178,7 @@ CREATE TABLE chain (
                            -- profile constant; required when ua_registry is set, and (SPECIFIED) on every EVM/Hedera
                            -- chain: the salt of every SCaaS EIP-712 domain (NODE-GW-07, NET-ALL-24)
   max_attempts INTEGER NOT NULL DEFAULT 5,                        -- NODE-LANE-14: attempt_count > it ⇒ dead ATTEMPTS_EXHAUSTED
-  max_value_out TEXT NOT NULL DEFAULT '0',                        -- NODE-LANE-17, smallest native unit; TON profile 50000000
+  max_value_out TEXT NOT NULL DEFAULT '0',                        -- NODE-LANE-17, smallest native unit; GRAM profile 50000000
   max_deposit_per_job TEXT NOT NULL DEFAULT '0',                  -- NODE-LANE-18 (c)
   grief_cost_cap TEXT,                                            -- NODE-LANE-15; NULL = count only
   gossip INTEGER NOT NULL DEFAULT 0,                              -- gossip.md; a private profile forces 0
@@ -570,11 +570,11 @@ call; the store snapshot replaces it chain by chain ([job-api.md#legacy-pull](jo
 <a id="config-validation"></a>`Config::validate` and the admin API refuse, besides the listener rules of
 [README.md#listeners](README.md#listeners):
 
-<a id="NODE-STO-01"></a>**NODE-STO-01** — On a family that prunes lane state after expiry (TON, Aptos, Solana, Sui), a chain
+<a id="NODE-STO-01"></a>**NODE-STO-01** — On a family that prunes lane state after expiry (GRAM, Aptos, Solana, Sui), a chain
 must have `max_valid_for_secs ≤ LANE_HORIZON` — `max_valid_for_secs ≤ H` with `H = LANE_HORIZON = 30 d`, so that
 `validUntil ≤ t_first_issue + H` holds (the pay-lane issuance horizon H,
 [CTR-MTX-04](../contracts/metatx.md#CTR-MTX-04)); the node refuses `max_valid_for_secs > LANE_HORIZON`, because pay-once then no longer
-holds ([NET-ALL-01](../networks/README.md#NET-ALL-01)). The constants are pinned equal in tests (TON `LANE_TTL`,
+holds ([NET-ALL-01](../networks/README.md#NET-ALL-01)). The constants are pinned equal in tests (GRAM `LANE_TTL`,
 Aptos/Solana `PRUNE_DELAY_S`, Sui `LANE_HORIZON_S`, node `LANE_TTL_S`, the issuer's `LANE_HORIZON_S`).
 
 <a id="NODE-STO-10"></a>**NODE-STO-10** — `max_gas_per_tx` keeps its default of 3 000 000; registering a confidential

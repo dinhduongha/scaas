@@ -970,7 +970,7 @@ New implementations get `test/as/layout/*.json` pins. The controls live in the `
 
 ## 11. Families
 
-| Component | EVM | Hedera | Cosmos | Soroban (Stellar, Pi) | Move (Aptos, Sui) | TON | Solana |
+| Component | EVM | Hedera | Cosmos | Soroban (Stellar, Pi) | Move (Aptos, Sui) | GRAM | Solana |
 |---|---|---|---|---|---|---|---|
 | Regulated controls | this file | this file (HSCS contracts + HIP-632 + HTS fail-closed underlying checks; HTS-native tokens not used, owner) | PLANNED: CW20 variant with the same rules | PLANNED: SEP-41 variant; candidate native flags (auth-required, clawback) to be assessed | PLANNED: candidate native mechanisms (Aptos FA `TransferRef` freeze/transfer; Sui regulated coin deny list) | PLANNED: jetton master + wallet with order records | PLANNED: candidate Token-2022 extensions (permanent delegate, default frozen state, transfer hook) |
 | ComplianceRegistry | this file | this file | PLANNED | PLANNED | PLANNED | PLANNED | PLANNED |

@@ -4,7 +4,7 @@ SCaaS runs the same three on-chain roles on eight families: a **token** with `pa
 operation, a **mandate** (delegated, capped payments), and a **DEX** settlement contract — plus a multi-key subject
 account where the chain needs one. This page states what every family shares; each family page
 ([EVM](evm.md), [Hedera](hedera.md), [Cosmos](cosmos.md), [Soroban](soroban.md), [Sui](sui.md), [Aptos](aptos.md),
-[Solana](solana.md), [TON](ton.md)) states only what differs.
+[Solana](solana.md), [GRAM](ton.md)) states only what differs.
 
 Status tags: **BUILT** (in code, tested), **SPECIFIED** (normative, code pending), **PLANNED** (direction, not yet
 specified in detail).
@@ -27,9 +27,10 @@ specified in detail).
 ## <a id="families-and-chains"></a>1. Families and chains
 
 The family taxonomy is an owner decision: EVM (Hedera is an EVM chain with its own page), Cosmos (CosmWasm), Soroban
-(Stellar and Pi Network), Move (Sui and Aptos), TON, Solana.
+(Stellar and Pi Network), Move (Sui and Aptos), GRAM (formerly TON), Solana. Planned (owner 2026-10-17): NEAR,
+Algorand, and TRON as an EVM profile (Base is already a draft EVM profile).
 
-<p align="center"><img src="../assets/chain-families.svg" width="860" alt="Chain families: EVM with the private chain 7622 (built, first target) and anvil 31337 (built, dev only), Hedera 295 to 298 (built, own page), and Gnosis 100, Celo 42220, BNB Smart Chain 56, Polygon PoS 137 and Base 8453 seeded as draft until the operator gate passes; Cosmos (CosmWasm), Soroban (Stellar, Pi Network; not on the mesh), Move (Sui, Aptos), TON (built, blocked for every path but the ERP pull path until the forward-TON cap lands) and Solana, all built."></p>
+<p align="center"><img src="../assets/chain-families.svg" width="860" alt="Chain families: EVM with the private chain 7622 (built, first target) and anvil 31337 (built, dev only), Hedera 295 to 298 (built, own page), and Gnosis 100, Celo 42220, BNB Smart Chain 56, Polygon PoS 137 and Base 8453 seeded as draft until the operator gate passes; Cosmos (CosmWasm), Soroban (Stellar, Pi Network; not on the mesh), Move (Sui, Aptos), GRAM (built, blocked for every path but the ERP pull path until the forward-TON cap lands) and Solana, all built. Planned, no code yet: TRON (an EVM profile on TVM), NEAR and Algorand. GRAM is the former TON."></p>
 
 | Family | Chains | Meta-tx mechanism | Subject signature | Relayer lane key | Mesh v1 | Status |
 |---|---|---|---|---|---|---|
@@ -39,8 +40,11 @@ The family taxonomy is an owner decision: EVM (Hedera is an EVM chain with its o
 | Soroban | Stellar (`pubnet`, `testnet`, `standalone`), Pi Network (`pi-mainnet`, `pi-testnet`) | native Soroban authorization (`SorobanAddressCredentials`, nonce + ledger expiry) | ed25519 (Freighter `signAuthEntry`) / custom account `__check_auth` with `secp256r1_verify` | ed25519 `m/44'/148'/i'`; Pi `m/44'/314159'/i'` | **no** | BUILT |
 | Move — Aptos | 1 / 2 / 4 | contract-level, one `Account` object per owner, lanes inside | ed25519 (Wallet Standard `signMessage`) / WebAuthn P-256 (pure-Move verifier) | ed25519 `m/44'/637'/i'/0'/0'` | yes | BUILT |
 | Move — Sui | mainnet / testnet / devnet / localnet | contract-level, shared `Account<T>` per subject, lanes inside | ed25519 / secp256k1 / secp256r1 / passkey (`signPersonalMessage`) | ed25519 `m/44'/784'/i'/0'/0'` | yes | BUILT |
-| TON | -239 / -3 | custom jetton wallet verifies `SignedOp` | TON Connect `signData` (cell) / passkey | ed25519 `m/44'/607'/i'` (W5R1 lane wallets) | yes (`pay`) | BUILT; **blocked** for every path except the transitional ERP pull path until the forward-TON cap lands ([NET-TON-14](ton.md#NET-TON-14)) |
+| GRAM | -239 / -3 | custom jetton wallet verifies `SignedOp` | TON Connect `signData` (cell) / passkey | ed25519 `m/44'/607'/i'` (W5R1 lane wallets) | yes (`pay`) | BUILT; **blocked** for every path except the transitional ERP pull path until the forward-TON cap lands ([NET-TON-14](ton.md#NET-TON-14)) |
 | Solana | `solana:<genesis hash>` | program-level, `SmartKeyAccount` PDA + `LanePda` | raw ed25519 / off-chain message / passkey, verified through the precompile instruction | ed25519 `m/44'/501'/i'/0'` | yes (`pay`) | BUILT |
+| EVM — TRON (planned) | TRON mainnet / Nile / Shasta | the EVM contracts on TRON's TVM (Solidity; TIP-712 typed data) | ECDSA secp256k1 | secp256k1 `m/44'/195'/0'/0/i` | — | PLANNED: energy / bandwidth fees, base58 addresses, TRC-20 |
+| NEAR (planned) | mainnet / testnet | to be designed (a contract that checks the signed operation; NEP-141 token) | ed25519 / secp256k1 access keys | ed25519 `m/44'/397'/0'` | — | PLANNED |
+| Algorand (planned) | mainnet / testnet | to be designed (an app call that carries the signed operation; ASA or ARC-200 token) | ed25519 / logic signatures | ed25519 `m/44'/283'/0'/0/i` | — | PLANNED |
 
 Lane keys come from one 24-word BIP-39 mnemonic or a raw private key per lane (Pi Network overrides the SLIP-44
 `coin_type`)
@@ -57,13 +61,13 @@ per-subject sequential nonce ([NODE-MESH-07](../node/mesh.md#NODE-MESH-07); owne
    ([CTR-ACC-06](../contracts/mandates.md#CTR-ACC-06)).
 2. <a id="r30-path"></a><a id="NET-ALL-02"></a>**NET-ALL-02** — **Contract-level meta-transactions are the default
    path on every network; the subject's account sequence is never an ordering lock.** An account sequence (Stellar
-   sequence, Cosmos account sequence, TON wallet seqno, the Hedera account transaction path) queues *every*
+   sequence, Cosmos account sequence, GRAM wallet seqno, the Hedera account transaction path) queues *every*
    operation of a subject on *every* contract, so one stuck transaction locks the subject everywhere — a severe
    failure mode of blockchains. On every network the subject only **signs** a domain-separated payload (network +
    contract + lane + nonce + expiry + operation hash); **each contract keeps its own lane/nonce space** (a random
    lane derived from the payment reference, nonce 0: [CTR-MTX-03](../contracts/metatx.md#CTR-MTX-03)); a relayer
    submits from **its own** account and pays native gas. Native sponsorship features (Sui sponsored transactions,
-   Soroban fee-bump, Cosmos feegrant, TON W5) are used only so that a **relayer** pays, never so that the subject's
+   Soroban fee-bump, Cosmos feegrant, GRAM W5) are used only so that a **relayer** pays, never so that the subject's
    sequence orders anything. A relayer runs many signing lanes (accounts derived from one mnemonic by account
    index), each with its own sequence; jobs spread across lanes; the fee sink is a fixed cold wallet and never a
    lane. SCaaS has no ERC-4337 dependency: the meta-transaction lives in the token contract. On EVM and Hedera
@@ -76,7 +80,7 @@ per-subject sequential nonce ([NODE-MESH-07](../node/mesh.md#NODE-MESH-07); owne
    [NET-ALL-03](#NET-ALL-03).
    Every relayer simulates on its own RPCs before signing: EVM and Hedera `eth_call`/`eth_estimateGas` (no vendor fork
    service such as Tenderly), Sui `sui_devInspectTransactionBlock`, Soroban and Solana `simulateTransaction`, Cosmos
-   `tx/simulate`, Aptos `/v1/transactions/simulate`, TON get-method reads ([NET-TON-17](ton.md#NET-TON-17)).
+   `tx/simulate`, Aptos `/v1/transactions/simulate`, GRAM get-method reads ([NET-TON-17](ton.md#NET-TON-17)).
 4. **Owner invariants hold on every network:** no ordinary account is ever a spender (allowance and delegation go to
    contracts/programs only — [CTR-TOK-01](../contracts/token-wrappers.md#CTR-TOK-01)), and on a SCaaS token only a
    contract may call `approve`, so an ordinary account never grants an allowance either (a trade order names its DEX,
@@ -88,7 +92,7 @@ per-subject sequential nonce ([NODE-MESH-07](../node/mesh.md#NODE-MESH-07); owne
    voluntary migration by the owners. Per family: Aptos `upgrade_policy = "immutable"`
    ([NET-APT-20](aptos.md#NET-APT-20)); Sui `0x2::package::make_immutable(UpgradeCap)` in the same deploy run
    ([NET-SUI-15](sui.md#NET-SUI-15)); Solana upgrade authority `None` after `initialize`
-   ([NET-SOL-20](solana.md#NET-SOL-20)); Cosmos instantiated `--no-admin` ([NET-COS-07](cosmos.md#NET-COS-07)); TON
+   ([NET-SOL-20](solana.md#NET-SOL-20)); Cosmos instantiated `--no-admin` ([NET-COS-07](cosmos.md#NET-COS-07)); GRAM
    code and Soroban contracts are immutable as built; EVM tokens are non-upgradeable clones. Every deploy script
    ends with a gate that **fails the run (non-zero exit) if the deployed program is still upgradeable** — Aptos
    registry policy ≠ immutable, Sui `UpgradeCap` still present, Solana `Authority` ≠ none, Cosmos contract admin ≠
@@ -125,8 +129,8 @@ Three pieces, as on EVM:
    binding. Where the chain has allowances, only a contract may be a spender.
 2. **Mandate.** As the EVM `MandateWallet`: funds sit in the contract, a delegate signs, limits per payment and per
    period, a payee, an expiry, revocation, each `payRef` once.
-3. **DEX.** Two signed legs, fill-or-kill per pair, no allowance to an ordinary account — except TON, which uses an
-   escrow (actor model, no cross-contract atomicity; [TON DEX](ton.md#dex)). EVM and Hedera (SPECIFIED): one taker
+3. **DEX.** Two signed legs, fill-or-kill per pair, no allowance to an ordinary account — except GRAM, which uses an
+   escrow (actor model, no cross-contract atomicity; [GRAM DEX](ton.md#dex)). EVM and Hedera (SPECIFIED): one taker
    against one or more makers per settlement; each SCaaS leg is a role-free `TradeOrder` verified by its own sell token,
    which moves the funds only into the DEX; no allowance at all ([NODE-DEX-15](../node/dex-venue.md#NODE-DEX-15)).
 
@@ -139,13 +143,13 @@ MetaCall     { domain "scaas.metacall.v1",     network, contract, function, args
 MetaTransfer { domain "scaas.metatransfer.v1", network, contract, asset, from, to, amount, entry_ref, lane, nonce, valid_until, relayer }
 ```
 
-- `function` = the entry's stable name: Move `module::function`, CosmWasm the `ExecuteMsg` variant, TON the internal
+- `function` = the entry's stable name: Move `module::function`, CosmWasm the `ExecuteMsg` variant, GRAM the internal
   opcode (`uint32`), Solana the 8-byte Anchor discriminator, Soroban the host's `function_name`. `args_hash` = the
-  family hash (Aptos `sha3_256`, Sui `blake2b256`, CosmWasm and Solana `sha256`, TON the cell hash) of the canonical
+  family hash (Aptos `sha3_256`, Sui `blake2b256`, CosmWasm and Solana `sha256`, GRAM the cell hash) of the canonical
   encoding of the entry's arguments other than the `MetaCall` and the auth.
 - `MetaTransfer` is the EVM `MetaTransfer` ([CTR-MTX-23](../contracts/metatx.md#CTR-MTX-23)): `entry_ref` 0 = a plain
   transfer, ≠ 0 = a payment (`PaymentSettled` with that reference); it keeps the typed fields wallets and the indexer
-  read. Family-specific signed bounds stay in the family's `MetaTransfer` (TON: the forward-TON floor,
+  read. Family-specific signed bounds stay in the family's `MetaTransfer` (GRAM: the forward-TON floor,
   [NET-TON-14](ton.md#NET-TON-14)).
 - `network` = the chain identity of [NET-ALL-22](#NET-ALL-22).
 - No fee field off EVM: the lane pays native gas, as for EVM contracts that are not tokens
@@ -157,10 +161,10 @@ MetaTransfer { domain "scaas.metatransfer.v1", network, contract, asset, from, t
 Soroban maps both kinds onto the host authorization preimage and has no struct of its own
 ([NET-SOR-16](soroban.md#NET-SOR-16)). On EVM and Hedera the two kinds *are* the EIP-712 `MetaTransaction` and
 `MetaTransfer` ([Hedera mapping](hedera.md#payload)). Transitional (BUILT): the token's generic `relay(op, auth)` checks **`MetaOp` v1** in every
-family — `domain = "scaas.metaop.v1"` ‖ network ‖ contract ‖ op (pay | trade | mandate_pay | revoke; TON also set_key)
+family — `domain = "scaas.metaop.v1"` ‖ network ‖ contract ‖ op (pay | trade | mandate_pay | revoke; GRAM also set_key)
 ‖ from ‖ to ‖ amount (u128) ‖ payRef (32) ‖ lane (32) ‖ nonce (u64) ‖ validUntil (u64, seconds) ‖ relayer ‖ extra
 (H(op parameters); for `trade` the parameters travel verbatim next to it) — and key management and mandates use
-structs of their own (`KeyOp`, `ForwardOp`, `MandateInit`, the Cosmos mandate JSON, TON `MandatePay`).
+structs of their own (`KeyOp`, `ForwardOp`, `MandateInit`, the Cosmos mandate JSON, GRAM `MandatePay`).
 
 <a id="NET-ALL-27"></a>**NET-ALL-27** — **Verify generically, dispatch statically** (owner 2026-10-08). Status:
 **SPECIFIED**. Move has no call by name and Solana declares every account up front, so the shared part is verification:
@@ -175,7 +179,7 @@ entries that call the verifier; a contract adds a gasless function by adding one
 | Sui | `scaas::metacall::verify` (`public`) | as Aptos | `mtx_transfer<T>`, `mtx_pay<T>`, `mtx_execute_transfer<T>` |
 | Soroban | none: the host verifies; `SmartKeyAccount.__check_auth` checks contexts ([NET-SOR-04](soroban.md#NET-SOR-04)) | the function itself, `from.require_auth_for_args(args)`, named `mtx_<name>` | SEP-41 `transfer` (standard name), `mtx_pay` |
 | CosmWasm | `scaas-metacall` crate: `verify(deps, env, info, payload, auth) -> Addr` | `MtxExecute{payload, auth}`, `payload.msg` = the inner allowlisted message, matched in the contract's own `execute` with the verified `from` (never a self-message, which would carry the contract as sender) | `MtxTransfer`, `MtxPay`, `MtxExecuteTransfer` |
-| TON | Tact trait `MetaCallVerifier` | `MtxExecute{call, auth, body}`: `hash(body) == args_hash`, then the contract dispatches `body`'s opcode over its allowlist | `MtxTransfer`, `MtxPay`, `MtxExecuteTransfer` |
+| GRAM | Tact trait `MetaCallVerifier` | `MtxExecute{call, auth, body}`: `hash(body) == args_hash`, then the contract dispatches `body`'s opcode over its allowlist | `MtxTransfer`, `MtxPay`, `MtxExecuteTransfer` |
 | Solana | `scaas-metacall` crate (instruction-sysvar signature check, lane PDA) | one instruction `mtx_<name>` per gasless function with its fixed accounts ([NET-SOL-04](solana.md#NET-SOL-04)); the library checks `function` = its own discriminator | `mtx_transfer`, `mtx_pay`, `mtx_execute_transfer` |
 
 A third-party contract (the owner's family-tree example) on Aptos: `mtx_add_person(lane, from, parent, data, lane_id,
@@ -185,7 +189,7 @@ one call into the library.
 
 <a id="NET-ALL-28"></a>**NET-ALL-28** — **Every entry point whose authority is a subject's signature is named `mtx` in
 the family's case, and the typed path matches EVM** (owner 2026-10-08). `mtx_` snake case in Move, Soroban and Solana;
-`Mtx` Pascal case for CosmWasm `ExecuteMsg` variants and TON messages ([CTR-MTX-21](../contracts/metatx.md#CTR-MTX-21)).
+`Mtx` Pascal case for CosmWasm `ExecuteMsg` variants and GRAM messages ([CTR-MTX-21](../contracts/metatx.md#CTR-MTX-21)).
 Parity with EVM ([CTR-MTX-09](../contracts/metatx.md#CTR-MTX-09), [CTR-MTX-23](../contracts/metatx.md#CTR-MTX-23),
 [CTR-MTX-24](../contracts/metatx.md#CTR-MTX-24)):
 
@@ -194,7 +198,7 @@ Parity with EVM ([CTR-MTX-09](../contracts/metatx.md#CTR-MTX-09), [CTR-MTX-23](.
 | `mtxTransfer` | `mtx_transfer` / `MtxTransfer` (Soroban: SEP-41 `transfer`) | `MetaTransfer{entry_ref: 0}` |
 | `mtxPay` | `mtx_pay` / `MtxPay` | `entry_ref = payId`, lane derived on chain as `H("scaas.pay.lane" ‖ payId)`, `nonce = 0` |
 | `mtxExecuteTransfer` | `mtx_execute_transfer` / `MtxExecuteTransfer` | `MetaTransfer` on a client-chosen lane (Move: fields as typed arguments); not on Soroban (host nonces, no lanes) |
-| `mtxBatchTransfer`, `mtxBatch` | multi-message transactions (Cosmos messages, Solana instructions, Sui PTB commands, TON messages from one lane); Aptos `mtx_batch_transfer` with parallel vectors | atomic per transaction |
+| `mtxBatchTransfer`, `mtxBatch` | multi-message transactions (Cosmos messages, Solana instructions, Sui PTB commands, GRAM messages from one lane); Aptos `mtx_batch_transfer` with parallel vectors | atomic per transaction |
 | `mtxTransferWithFee`, `mtxExecuteWithFee`, `mtxPayReceiverFee` | none while non-EVM tokens charge no relayer fee | added with a token fee |
 
 Entry points whose authority is the native transaction signer (owner-native calls, guardian recovery, admin) and chain
@@ -203,16 +207,16 @@ ship as new deployments ([CTR-GEN-02](../contracts/README.md#CTR-GEN-02)).
 
 <a id="NET-ALL-29"></a>**NET-ALL-29** — **Key management and mandate operations are `MetaCall` entries** (owner
 2026-10-08). `KeyOp` (`"scaas.keyop.v1"`: Aptos, Sui, Solana), Sui `ForwardOp`, `MandateInit` and the signed mandate
-close/revoke messages, the Cosmos mandate JSON (`"scaas.mandate.v1"`), TON `MandatePay` and op `set_key` are SCaaS
+close/revoke messages, the Cosmos mandate JSON (`"scaas.mandate.v1"`), GRAM `MandatePay` and op `set_key` are SCaaS
 structs, not chain standards; each becomes a `MetaCall` entry of its contract — `mtx_add_key`, `mtx_remove_key`,
 `mtx_set_guardian`, `mtx_cancel_recovery`, `mtx_mandate_open`, `mtx_mandate_pay`, `mtx_revoke`, … — on the contract's
 lanes, with one vector set per family. Where the account's keys have no address of their own, the account signs as
 itself, as `SmartKeyAccount` on EVM ([CTR-ACC-10](../contracts/accounts.md#CTR-ACC-10)). Native key rotation of the
 chain account (Aptos `rotate_authentication_key`) is untouched. DEX `Order`/`Cancel`/min-nonce structs stay
 ([CTR-DEX-13](../contracts/dex.md#CTR-DEX-13)); the op byte `trade` disappears — where a DEX leg is signed to the token
-(Cosmos, TON) it becomes the token's `MetaCall` entry `MtxTrade`, with the binding `relayer = to = the DEX` unchanged.
+(Cosmos, GRAM) it becomes the token's `MetaCall` entry `MtxTrade`, with the binding `relayer = to = the DEX` unchanged.
 
-**Account-sequence lanes** (Cosmos, Stellar, TON): before each job the runner reads the lane's **committed**
+**Account-sequence lanes** (Cosmos, Stellar, GRAM): before each job the runner reads the lane's **committed**
 sequence; the outer transaction carries a timebound / `valid_until` equal to the payload's expiry, so a transaction
 that never lands expires together with the payload and the sequence never hangs.
 
@@ -220,8 +224,8 @@ that never lands expires together with the payload and the sequence never hangs.
 executed lane for at least the horizon H after the op's `validUntil`.** Pay-once ("at most once per request") holds
 only if every signature on a pay lane has `validUntil ≤ t_first_issue + H` (`H = LANE_HORIZON = 30 d`,
 [CTR-MTX-04](../contracts/metatx.md#CTR-MTX-04)) **and** every pruning family keeps the executed lane for ≥ H:
-TON two `LANE_TTL` generations (`LANE_TTL` = 30 days), Aptos and Solana `PRUNE_DELAY_S`, Sui `LANE_HORIZON_S`
-(30 d). The constants are pinned equal in tests (TON `LANE_TTL`, Aptos/Solana `PRUNE_DELAY_S`, node `LANE_TTL_S`,
+GRAM two `LANE_TTL` generations (`LANE_TTL` = 30 days), Aptos and Solana `PRUNE_DELAY_S`, Sui `LANE_HORIZON_S`
+(30 d). The constants are pinned equal in tests (GRAM `LANE_TTL`, Aptos/Solana `PRUNE_DELAY_S`, node `LANE_TTL_S`,
 client `LANE_HORIZON_S`); a node chain on a pruning family must have `max_valid_for_secs ≤ H` and refuses
 `max_valid_for_secs > LANE_HORIZON` ([NODE-STO-01](../node/store.md#NODE-STO-01)); every signing client refuses an op beyond the horizon
 ([NET-APT-24](aptos.md#NET-APT-24), [NET-SOL-25](solana.md#NET-SOL-25)). Issuers that sign terms on a lane beyond H
@@ -241,7 +245,7 @@ Where the network identity in each family's signed payload comes from:
 | Sui | per-network object ids (`Config`, `Account`) | none ([NET-ALL-23](#NET-ALL-23)) |
 | Soroban | `network_id` (host preimage) | host auth preimage (contract + function + args) |
 | Cosmos | `env.block.chain_id` (runtime), `env.contract.address` | ADR-036 sign doc (`chain_id: ""`, domain inside the payload) |
-| TON | config 19 global id, master and wallet addresses | signData `domain`, checked on chain against the wallet's domain set ([NET-TON-02](ton.md#NET-TON-02)) |
+| GRAM | config 19 global id, master and wallet addresses | signData `domain`, checked on chain against the wallet's domain set ([NET-TON-02](ton.md#NET-TON-02)) |
 | Solana | the genesis hash fixed at build time ([NET-SOL-01](solana.md#NET-SOL-01)) | none ([NET-ALL-23](#NET-ALL-23)) |
 
 Every signature also expires (`validUntil`, compared with chain time) and is bound to one contract and one lane
@@ -343,7 +347,7 @@ Chrome/Firefox Level 3 shapes; reject cases: `crossOrigin:true`, `topOrigin`, a 
 whitespace, an origin extended by a suffix, wrong rpIdHash, UV unset, high-s, the challenge of another digest) run in
 every family's test suite. Why: a page that can obtain an assertion for the rpId (sibling subdomain, related origin,
 delegated iframe) would otherwise sign any op; a cross-origin iframe yields assertions that carry the RP's origin.
-Status: BUILT on EVM and Aptos; SPECIFIED for the strict grammar and exact origin on Sui, Soroban, TON and Solana and
+Status: BUILT on EVM and Aptos; SPECIFIED for the strict grammar and exact origin on Sui, Soroban, GRAM and Solana and
 for rpIdHash/origin/UV/low-s on Cosmos ([NET-COS-03](cosmos.md#NET-COS-03)).
 
 Client side: WebAuthn returns a **DER** signature and authenticators do not enforce low-s, so the client decodes DER
@@ -357,7 +361,7 @@ on the root. One biometric prompt for N lines, every line bound to the signed ro
 Verifier primitive per family: EVM and Hedera OpenZeppelin 5.2 `P256.verify` (RIP-7212 / EIP-7951 precompile at
 `0x100` when present — probed per chain as `has_p256_precompile` — else a Solidity verifier of ~200–330 k gas); Sui
 `ecdsa_r1::secp256r1_verify`; Soroban `env.crypto().secp256r1_verify` (CAP-51); Cosmos `secp256r1_verify` of
-cosmwasm-std 2.1+; TON `P256_CHKSIGNU/P256_CHKSIGNS` (TVM upgrades of 2023/2024, used through `asm` in Tact); Aptos a pure-Move verifier ([NET-APT-14](aptos.md#NET-APT-14)); Solana the
+cosmwasm-std 2.1+; GRAM `P256_CHKSIGNU/P256_CHKSIGNS` (TVM upgrades of 2023/2024, used through `asm` in Tact); Aptos a pure-Move verifier ([NET-APT-14](aptos.md#NET-APT-14)); Solana the
 secp256r1 precompile through instruction introspection ([NET-SOL-12](solana.md#NET-SOL-12)). Each family's subject
 account or contract stores the passkey; a passkey-signed op takes the same meta-transaction path as any other op of
 that family. Client rules for creating and using passkeys: [CLI-SGN-09](../clients/signers-clientkeys.md#CLI-SGN-09).
@@ -402,12 +406,12 @@ BCS). Client rendering: [CLI-SGN-27](../clients/signers-clientkeys.md#CLI-SGN-27
 
 <a id="ua-registries"></a><a id="NET-ALL-20"></a>**NET-ALL-20** — **Per-family registries share the kind table, the
 tags, the derivations and one vector file** (`smartcontracts/vectors/ua/kinds.json`,
-[CTR-UA-05](../contracts/accounts.md#CTR-UA-05)); each family realises the registry in its own idiom. TON
-has no registry in v1: a derived key on TON is bound by the native wallet owner's `set_key`, which **also carries a
+[CTR-UA-05](../contracts/accounts.md#CTR-UA-05)); each family realises the registry in its own idiom. GRAM
+has no registry in v1: a derived key on GRAM is bound by the native wallet owner's `set_key`, which **also carries a
 signature by the bound key** over `uaMessage(kind, POP_TAG, pop_digest)` (`registry_id` = the jetton-wallet address;
 TVM `CHKSIGNS` for ed25519, `P256_CHKSIGNS` for P-256), so binding is consent **and** possession; chain-wide keyHash
 uniqueness is not enforced there (the other purpose layers still hold, and the wallet refuses binding the same key
-under two wallets). Why: TON calls are asynchronous, and owner consent alone would let a wallet claim someone else's
+under two wallets). Why: GRAM calls are asynchronous, and owner consent alone would let a wallet claim someone else's
 key. Owner-confirmed.
 
 <a id="ua-passkey-ids"></a><a id="NET-ALL-21"></a>**NET-ALL-21** — **Non-EVM passkey owners become the
@@ -435,7 +439,7 @@ every gap is listed, never implied away.** The subject-account "equivalents per 
 | Sui | per `Account<T>` as built → per subject `Keys` object ([NET-SUI-02](sui.md#NET-SUI-02), SPECIFIED) | guardian per `Account<T>` as built | moves to `Keys` |
 | Soroban | account-authorised add/remove | **seam only** ([NET-SOR-03](soroban.md#NET-SOR-03)) | guardian + delayed recovery (SPECIFIED) |
 | Cosmos | **none** (passkey owner = `webauthn-p256` UA id, [NET-ALL-21](#NET-ALL-21)) | **none** | passkey account contract with rotation (design first) |
-| TON | wallet key follows the owner's wallet; **a passkey cannot rotate** | **none** | guardian + delayed passkey rotation (SPECIFIED) |
+| GRAM | wallet key follows the owner's wallet; **a passkey cannot rotate** | **none** | guardian + delayed passkey rotation (SPECIFIED) |
 | Solana | key operations add/remove/policy | `start_recovery` / `finish_recovery` | — |
 
 The **backup-key switch** ([CLI-SGN-12](../clients/signers-clientkeys.md#CLI-SGN-12)) applies per family as follows:
@@ -447,7 +451,7 @@ The **backup-key switch** ([CLI-SGN-12](../clients/signers-clientkeys.md#CLI-SGN
 | Aptos | `Account` object | 8 | yes | as EVM | no | no |
 | Solana | `SmartKeyAccount` PDA | 8 | yes | as EVM | opt-in (no de-duplication) | no |
 | Soroban | `SmartKeyAccount` `C…` | multi | no | **≥ 2 distinct keys** (owner) | no | no |
-| TON | `ScaasJettonWallet` | 2 (`pubkey` + one passkey) | no | **both keys** (owner) | no | no |
+| GRAM | `ScaasJettonWallet` | 2 (`pubkey` + one passkey) | no | **both keys** (owner) | no | no |
 | Cosmos | none (native; multi-key seam) | 1 | no | seed: native; passkey-only: **unsatisfiable** | no | no |
 
 ## 8. Head-of-line per adapter
@@ -463,7 +467,7 @@ blocking, and every family passes the anti-lock test.**
 | Aptos | lane account | sequence-number transactions; each `(lane, seq)` runs exactly once | no object locks, so no equivocation |
 | Soroban | lane account | sequence per lane, one transaction in flight | the subject's auth entry uses a non-sequential nonce |
 | Cosmos | lane account | account sequence per lane, one transaction in flight | the subject sends no transaction |
-| TON | lane wallet (W5) | seqno per lane, one transaction in flight | the subject sends no transaction; the subject's jetton wallet keeps its own lanes/nonces |
+| GRAM | lane wallet (W5) | seqno per lane, one transaction in flight | the subject sends no transaction; the subject's jetton wallet keeps its own lanes/nonces |
 | Solana | lane key with its own durable nonce account | one durable-nonce value per landed transaction | write-locks of two ops of one subject on different contracts are disjoint ([NET-SOL-04](solana.md#NET-SOL-04)) |
 
 ```mermaid
@@ -501,11 +505,11 @@ per-family inputs:
 | Soroban | closed ledger (`instant`, SCP) | `getEvents` per ledger range |
 | Sui | certified checkpoint | event query per checkpoint range |
 | Aptos | committed block (AptosBFT), cursor bounded by the Indexer API's processed version | per-transaction agreement (BUILT) |
-| TON | masterchain block (`depth 0`) | `masterchainInfo` + the jetton wallets' transactions of the range |
+| GRAM | masterchain block (`depth 0`) | `masterchainInfo` + the jetton wallets' transactions of the range |
 | Solana | commitment `finalized` | per-signature transaction agreement (`emit_cpi` inner data) |
 
 Status: BUILT for Aptos and for EVM/Hedera head hashes; SPECIFIED for event-set agreement on the other families and
-for Cosmos and TON honouring a configured quorum (today a single endpoint).
+for Cosmos and GRAM honouring a configured quorum (today a single endpoint).
 
 Every adapter normalises events to one shape ([NODE-IDX-05](../node/indexer-feeds.md#NODE-IDX-05)) with
 family-specific address forms: EVM lowercase `0x`, bech32, `0x` + 64 hex, `G…`/`C…` strkeys, raw `wc:hex`, base58.
@@ -578,7 +582,7 @@ Each family supplies a "settlement adapter" — a settlement contract that keeps
    signature locks a maker out of a market forever (`sui dex.move:295`, `aptos dex.move:299`, `solana dex.rs:340`;
    SPECIFIED fix).
 4. Value moves person to person inside one transaction: Soroban two `require_auth`; Sui `Account<T>` two legs;
-   Cosmos CW20 `TransferFrom` with the allowance to the DEX contract; TON escrow (the one exception that holds funds
+   Cosmos CW20 `TransferFrom` with the allowance to the DEX contract; GRAM escrow (the one exception that holds funds
    briefly, since jettons have no `transferFrom`).
 5. Events equivalent to `OrderFilled/Matched/MatchFailed`, so the watcher and the client mirror work unchanged.
 6. Settlement is bound to the relayer ([CTR-DEX-09](../contracts/dex.md#CTR-DEX-09)): the order names a `relayer`
@@ -587,7 +591,7 @@ Each family supplies a "settlement adapter" — a settlement contract that keeps
    Cosmos (as built `Settle` does not check `info.sender` and `OrderParams` has no relayer,
    `cosmos/dex/src/lib.rs:29-34, 145`; fix: add `relayer` to `OrderParams`, `info.sender == relayer` when set),
    Soroban (as built `require_auth_for_args((order,))` binds only the order, not the counter-order, `maker_fill` or the
-   submitter, `lib.rs:158-159`; fix: `relayer: Address` in `Order` + `relayer.require_auth()`) and TON (as built
+   submitter, `lib.rs:158-159`; fix: `relayer: Address` in `Order` + `relayer.require_auth()`) and GRAM (as built
    `receive(Match)` is open, `dex.tact:138-144`; fix: optional `relayer` in `TradeParams`, compared with `sender()` at
    `Match` and on the hint path). Without it, a mempool watcher copies the auth entries, inserts its own pair and
    takes the taker's price improvement.
@@ -596,12 +600,12 @@ Accepted differences, which the adapter, matcher and client must know:
 
 | Difference | Families |
 |---|---|
-| No partial fill (fill-or-kill orders only) | Cosmos, TON |
-| No `minNonce` (bulk cancel) | Cosmos, Soroban, TON |
+| No partial fill (fill-or-kill orders only) | Cosmos, GRAM |
+| No `minNonce` (bulk cancel) | Cosmos, Soroban, GRAM |
 | IOC closes at its first fill (one maker, [NODE-DEX-09](../node/dex-venue.md#NODE-DEX-09)) | Sui, Aptos, Solana |
 | One fee recipient for the whole DEX, not per market | Cosmos (`InstantiateMsg`), Soroban (`Key::FeeRecipient`) |
 | One `fee_ppm`, no maker/taker split (`dex.rs:74-97`) | Solana |
-| Minimum received measured **after** the DEX fee (EVM: `buyAmount`, target `receiveAmount`, gross) | Cosmos, TON |
+| Minimum received measured **after** the DEX fee (EVM: `buyAmount`, target `receiveAmount`, gross) | Cosmos, GRAM |
 | No on-chain self-trade check (the node still skips self-trades) | Cosmos, Soroban |
 
 Non-EVM books are served after the venue moves into the node store ([CLI-APP-21](../clients/app.md#CLI-APP-21)).
@@ -619,13 +623,13 @@ Non-EVM books are served after the venue moves into the node store ([CLI-APP-21]
   the deposit token. Prerequisite EIP-1153 (`TLOAD`/`TSTORE`) for the reentrancy guard; it is not new, since every
   deposit token already needs it (`MetaTxCore.nonReentrant`, `MetaTxCore.sol:38-44`, inherited by the v2 tiers and
   the Hedera children; `ERC20MetaTx.sol:35-41` for v1); the deploy script probes `TSTORE` and refuses a chain without
-  it (no storage-guard fallback). Cosmos, Soroban, Sui, Aptos, TON and Solana are PLANNED with the notes below
+  it (no storage-guard fallback). Cosmos, Soroban, Sui, Aptos, GRAM and Solana are PLANNED with the notes below
   ([contracts/tender](../contracts/tender.md)).
 - <a id="NET-ALL-19"></a>**NET-ALL-19** — **Token wrappers v2 are EVM and Hedera only**; Move and Solana need no
-  wrapper for gaslessness; Cosmos, Soroban and TON wrappers are PLANNED
+  wrapper for gaslessness; Cosmos, Soroban and GRAM wrappers are PLANNED
   ([contracts/token-wrappers](../contracts/token-wrappers.md)).
 
-| Component | EVM | Hedera | Cosmos | Soroban (Stellar, Pi) | Move (Aptos, Sui) | TON | Solana |
+| Component | EVM | Hedera | Cosmos | Soroban (Stellar, Pi) | Move (Aptos, Sui) | GRAM | Solana |
 |---|---|---|---|---|---|---|---|
 | Regulated module | SPECIFIED | SPECIFIED (HSCS contracts + HIP-632 + fail-closed HTS underlying checks; HTS-native tokens not used, owner) | PLANNED: CW20 variant with the same rules | PLANNED: SEP-41 variant; native flags (auth-required, clawback) to assess | PLANNED: native mechanisms to assess (Aptos FA `TransferRef` freeze/transfer; Sui regulated-coin deny list) | PLANNED: jetton master + wallet with order records | PLANNED: Token-2022 extensions to assess (permanent delegate, default frozen state, transfer hook) |
 | ComplianceRegistry | SPECIFIED | SPECIFIED | PLANNED | PLANNED | PLANNED | PLANNED | PLANNED |

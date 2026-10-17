@@ -203,7 +203,7 @@ rebuilds the payload with `fam/<family>.js` and returns a frozen `checked` objec
 | Solana | `text == "scaas.metaop.v1:" + hex(sha256(payload))`; payload fields as Sui (op, from, to, amount, asset, lane, window); `account == PDA(["acct", owner])`; `network` = the configured genesis |
 | Aptos | payload fields (op, from, to, amount, asset, window); `account == account_of(root, owner)`; `message` = the digest text; `application == location.origin` (portal: the configured `aptos_application`); `chainId`; `nonce == lane` |
 | Soroban | decode the invocation: contract = token, function, args (from, to, amount); `network_id` = the configured passphrase hash; `signature_expiration_ledger` ≤ current + window |
-| Cosmos, TON, Hedera ED25519 | the payload rebuilt from terms == `payload_hex`; `from`; chain/network; contract; amount |
+| Cosmos, GRAM, Hedera ED25519 | the payload rebuilt from terms == `payload_hex`; `from`; chain/network; contract; amount |
 
 When a family's signed text becomes the readable message of [NET-ALL-23](../networks/README.md#NET-ALL-23), its
 encoder renders the same text and `checkTerms` compares it byte for byte. The rows above check the built `MetaOp`; the
@@ -303,8 +303,8 @@ device first opens and checks the approval phrase, **before** `navigator.credent
 
 <a id="CLI-SGN-23"></a>**CLI-SGN-23** — **Non-EVM passkeys reuse one WebAuthn ceremony plus one encoder per family**:
 Sui flag 6, Solana `passkey_blob` (precompile), Soroban `WebAuthn{…}` (CAP-51), Aptos blob (pure-Move `scaas::p256`,
-UNAUDITED, shown as such). Order: Sui → Solana → Soroban → Aptos. Cosmos and TON passkeys are not offered yet (Cosmos and
-TON users use a seed or an extension). Why: verifier maturity.
+UNAUDITED, shown as such). Order: Sui → Solana → Soroban → Aptos. Cosmos and GRAM passkeys are not offered yet (Cosmos and
+GRAM users use a seed or an extension). Why: verifier maturity.
 
 <a id="CLI-SGN-24"></a>**CLI-SGN-24** — **The passkey challenge is base64url (no padding) of the family's op digest.** The
 open challenges (Sui `scaas.open.v1`, Solana `scaas.open.v1`, the Soroban constructor, the Aptos first-key rule) are built
@@ -318,7 +318,7 @@ by `fam/*`; passkeys stay origin-bound ([CLI-APP-14](app.md#CLI-APP-14)).
 | Soroban | host `secp256r1_verify` (CAP-51) | `SmartKeyAccount` `C…` | 65 B | per key | contract BUILT; third |
 | Aptos | pure-Move `scaas::p256` (UNAUDITED, ≈ 4 100 gas per signature) | `Account` object | 65 B | `origins` | contract BUILT (unaudited); fourth |
 | Cosmos | cosmwasm `secp256r1_verify` | none (passkey id only) | 33 B | none | not yet |
-| TON | TVM `P256_CHKSIGNS` | jetton wallet, one passkey | 33 B + `rpIdHash` + `originPrefix` | prefix | not yet |
+| GRAM | TVM `P256_CHKSIGNS` | jetton wallet, one passkey | 33 B + `rpIdHash` + `originPrefix` | prefix | not yet |
 
 Encoders (`src/fam/<family>.js`):
 
@@ -528,9 +528,9 @@ Reading the key set (clients re-read after any key change reaches finality and c
 | Aptos | `Account` resource | `keys` | `option::is_some(guardian)` |
 | Solana | `SmartKeyAccount` PDA (Borsh) | `keys` | `guardian`; also `policy & 1` |
 | Soroban | `SmartKeyAccount` key map | values (no duplicate check on chain) | none |
-| TON | jetton wallet `pubkey`, `passkey` | the bound ones | none |
+| GRAM | jetton wallet `pubkey`, `passkey` | the bound ones | none |
 
-Per-family applicability is in [networks/README](../networks/README.md#key-lifecycle) (Soroban and TON are satisfied by
+Per-family applicability is in [networks/README](../networks/README.md#key-lifecycle) (Soroban and GRAM are satisfied by
 **≥ 2 keys** and **both keys**: they have no guardian — owner). clientkeys interface (`src/backup-policy.js`, exported from
 both signer entries):
 
@@ -651,13 +651,13 @@ above; a session-key mechanism would map to Universal Account key purposes. Stat
 | Hedera ED25519 | `hedera_ed25519` | `m/44'/3030'/0'/0'/i'` | ed25519 | `0.0.N` | — | raw ed25519 over the EIP-712 digest (HIP-632) | BUILT |
 | Cosmos | `cosmos` | `m/44'/118'/0'/0/i` | secp256k1 | bech32 | — (no subject account) | ADR-036 doc | key BUILT; envelope SPECIFIED |
 | Sui | `sui` | `m/44'/784'/i'/0'/0'` | ed25519 | `blake2b(0x00 ‖ pk)` | native if owner; else role `…/20'/i'` | personal-message digest, flag 0 | key BUILT; envelope SPECIFIED |
-| TON | `ton` | `m/44'/607'/i'` | ed25519 | pubkey (wallet-bound) | — (wallet-bound) | `MetaCall`/`MetaTransfer` cell hash | key BUILT; envelope SPECIFIED |
+| GRAM | `ton` | `m/44'/607'/i'` | ed25519 | pubkey (wallet-bound) | — (wallet-bound) | `MetaCall`/`MetaTransfer` cell hash | key BUILT; envelope SPECIFIED |
 | Soroban Stellar | `stellar` | `m/44'/148'/i'` | ed25519 | `G…` | role `…/18'/i'` (`C…` key) | `G…`: sha256(auth preimage); `C…`: `Ed25519{key_id, sig}` | SPECIFIED |
 | Soroban Pi | `stellar` + 314159 | `m/44'/314159'/i'` | ed25519 | `G…` | as Stellar | as Stellar, Pi passphrase | SPECIFIED |
 | Aptos | `aptos` | `m/44'/637'/i'/0'/0'` | ed25519 | `sha3_256(pk ‖ 0x00)` | native if owner; else role `…/19'/i'` | AIP-62 `fullMessage` | SPECIFIED |
 | Solana | `solana` | `m/44'/501'/i'/0'` | ed25519 | base58 pk | native if owner; else role `…/16'/i'` | OCMS v1 (kind 1) | SPECIFIED |
 
-`a` = the user's account number. TON keys from `m/44'/607'/i'` are "BIP-39/Ledger path" imports, not native TON mnemonics.
+`a` = the user's account number. GRAM keys from `m/44'/607'/i'` are "BIP-39/Ledger path" imports, not native GRAM mnemonics.
 Interface (`src/fam/<family>.js`, used by the seed signer and wallets):
 
 ```js
@@ -720,7 +720,7 @@ true, chainId: true})` and checking `fullMessage` before returning); Solana the 
 `solana:signOffchainMessage` v1 or `solana:signMessage`, the account's `chains` containing `solana:<genesis32>`;
 preferring the off-chain message, checking `signedMessage` before sending); Cosmos `window.keplr || window.leap`
 (`enable(chainId)`, `getKey`, `signArbitrary(chainId, signer, payloadString)`); Soroban Freighter (`@stellar/freighter-api`
-pinned, vendored, lazy-loaded; `requestAccess`, `signAuthEntry(preimage_b64, {networkPassphrase, address})`); TON the
+pinned, vendored, lazy-loaded; `requestAccess`, `signAuthEntry(preimage_b64, {networkPassphrase, address})`); GRAM the
 embedded TON Connect JS bridge (`window[<jsBridgeKey>].tonconnect`: `connect(2, {manifestUrl, items:[{name:'ton_addr'}]})`,
 `send({method:'signData', …})`); Hedera ED25519 a page-provided raw signer `{accountId, publicKey, signBytes(Uint8Array)}`
 seam plus the seed path; HashPack/WalletConnect are seams. A passkey is an option in every family whose account supports

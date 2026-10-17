@@ -75,7 +75,7 @@ family details in [networks/](../networks/README.md)):
 | Soroban (Stellar, Pi) | `instant` | `getLatestLedger` | ledger | SCP closed ledger |
 | Sui | `instant` | latest certified checkpoint (quorum on digest) | checkpoint | |
 | Aptos | `instant` | committed `block_height` (bounded by indexer progress) | block | AptosBFT |
-| TON | `depth`, 0 | `masterchainInfo.last` | masterchain seqno | |
+| GRAM | `depth`, 0 | `masterchainInfo.last` | masterchain seqno | |
 | Solana | `tag` `finalized` | `getSlot(finalized)`, min slot over quorum | slot | ~12.8 s TowerBFT |
 
 Transitional (BUILT) loop, with the cursor read from the client:
@@ -119,8 +119,8 @@ Receipt proofs
 (`eth_getBlockReceipts` against `receiptsRoot`) may replace the set comparison where providers serve them; not
 required. Per family: EVM/Hedera `eth_getLogs`; Aptos per-transaction agreement (**BUILT**; the Indexer-API hint may
 omit transactions, which only delays booking); Sui event query per checkpoint range; Solana per-signature transaction
-(`emit_cpi` inner data) agreement; Soroban `getEvents` per ledger range; **Cosmos and TON honour the configured
-quorum**: Cosmos `status` + `block` at the min height and the tx events of that range, TON `masterchainInfo` + the
+(`emit_cpi` inner data) agreement; Soroban `getEvents` per ledger range; **Cosmos and GRAM honour the configured
+quorum**: Cosmos `status` + `block` at the min height and the tx events of that range, GRAM `masterchainInfo` + the
 jetton wallets' transactions of the range, each from ≥ `quorum` endpoints. Why: a primary provider sees every pending
 payment through the node's own simulate calls and could fabricate a `PaymentSettled` at a real token address or report
 `finalized = latest`. Cost: `quorum ×` reads per range. Status: Aptos **BUILT**; the other families read one endpoint
@@ -151,7 +151,7 @@ slot.
 | Cosmos | block height | `0x`+64 | `PaymentSettled`, `MetaTransactionExecuted` | bech32 addresses |
 | Sui | checkpoint | `0x`+64 | same two | `entry_ref`, `digest` from Move events |
 | Aptos | block | `0x`+64 | same two | |
-| TON | masterchain seqno | `0x`+64 | same two | raw `0:…` addresses |
+| GRAM | masterchain seqno | `0x`+64 | same two | raw `0:…` addresses |
 | Solana | slot | `0x`+128 (first signature) | same two (`emit_cpi!`) | base58 (case-sensitive) |
 | Soroban | ledger | `0x`+64 | same two | `G…`/`C…` strkeys (case-sensitive) |
 

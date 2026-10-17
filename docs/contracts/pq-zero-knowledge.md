@@ -1838,7 +1838,7 @@ would make every transfer carry two proof systems for the benefit of balances th
 Per-family availability: EVM chain 7622 (Nethermind, ours) **v1**; dev chains 31337/1337 tests only (anvil cannot host
 the precompile: forge tests mock it with `vm.mockCall` on KAT inputs; end-to-end on a chain-7622 copy); other private
 EVM chains not in v1 (later via the co-processor seam); public EVM never without an owner ruling; Cosmos SDK private
-chains feasible later (a Go module calling `libpqz` via cgo); Hedera, Soroban, Sui, Aptos, Solana, TON no
+chains feasible later (a Go module calling `libpqz` via cgo); Hedera, Soroban, Sui, Aptos, Solana, GRAM no
 ([networks/README.md](../networks/README.md#availability)).
 
 ## 14. Vectors and tests

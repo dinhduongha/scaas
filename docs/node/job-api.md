@@ -215,7 +215,7 @@ submitting lane the order's `fee` from minted units. `mtxTrade` is never a job: 
      non-canonical dynamic `data` ⇒ `422 BAD_PAYLOAD` ([NODE-JOB-20](#NODE-JOB-20)).
 4. `kind = call` requires `allow_call` ⇒ `403 CALL_NOT_ALLOWED`, **and** its selector and target must match the
    [call table](#call-table) ⇒ `403 CALL_TARGET_REFUSED` (re-checked at lease).
-   - 4a. Native value the job makes the lane send beyond fees ≤ `chain.max_value_out` (TON 0.05 TON above the fixed
+   - 4a. Native value the job makes the lane send beyond fees ≤ `chain.max_value_out` (GRAM 0.05 GRAM above the fixed
      attach, every other family 0) ⇒ `422 VALUE_OUT_TOO_HIGH` (also at lease, config is hot;
      [NODE-LANE-17](submit-lanes.md#NODE-LANE-17)). A lane-funded deposit a third party can reclaim (e.g. a Solana
      ATA of an unconfigured recipient) ⇒ `422 DEPOSIT_NOT_ALLOWED` (re-checked before signing;

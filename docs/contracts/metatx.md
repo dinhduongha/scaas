@@ -429,7 +429,7 @@ nonce    = 0
   most once because its lane has nonce 0).
 - Pay-once holds only if every signature a client issues on a pay lane has `validUntil ≤ t_first_issue + 30 d`.
   Re-issuing terms on the same lane later than that, or signing an op with `valid_until > now + 30 d` on a pruning
-  family (TON, Aptos, Solana, Sui), gives no pay-once guarantee — issue a new request (new `entryRef`, new lane)
+  family (GRAM, Aptos, Solana, Sui), gives no pay-once guarantee — issue a new request (new `entryRef`, new lane)
   instead. Wallet connectors and `clientkeys` refuse such ops.
 - The client stores `entryRef` with a UNIQUE constraint on the request, together with `chain`, `token`,
   `receiving_address`, `payer_address` (locked at start), `amount_base`, `issued_valid_until`.
@@ -477,7 +477,7 @@ an overpayment by a stranger is just money received. The full client procedure i
 <a id="CTR-MTX-04"></a>**CTR-MTX-04** — **Pay-once is conditional and is a protocol rule.** "Each payment request is
 payable at most once" holds iff (1) every signature issued on a pay lane has `validUntil ≤ t_first_issue + H`,
 `H = LANE_HORIZON = 30 d`, and (2) every family that prunes lane state keeps an executed lane for ≥ `H` after the
-executed op's `validUntil` ([NET-ALL-01](../networks/README.md#NET-ALL-01): TON two `LANE_TTL` generations; Aptos and
+executed op's `validUntil` ([NET-ALL-01](../networks/README.md#NET-ALL-01): GRAM two `LANE_TTL` generations; Aptos and
 Solana `PRUNE_DELAY_S`; Sui `prune` after `valid_until + LANE_HORIZON_S`). Issuers that sign terms on a lane beyond
 `H` get no pay-once guarantee; a node chain on a pruning family must have `max_valid_for_secs ≤ H`. Obligations:
 
@@ -486,7 +486,7 @@ Solana `PRUNE_DELAY_S`; Sui `prune` after `valid_until + LANE_HORIZON_S`). Issue
 | Issuer (ERP, app) | Sign one op per pay lane, or keep every op on that lane inside `H` of the first; terms signed beyond `H` get no pay-once guarantee | reference ERP client complies (**BUILT**) |
 | Every signing client (connectors, `clientkeys`, app) | Refuse to sign an op with `valid_until > now + LANE_HORIZON_S` on a pruning family ([NET-APT-24](../networks/aptos.md#NET-APT-24), [NET-SOL-25](../networks/solana.md#NET-SOL-25), [NET-SUI-12](../networks/sui.md#NET-SUI-12)) | **SPECIFIED** |
 | Contract | Sui `relay_pay` refuses `valid_until > now + LANE_HORIZON_S` on chain; Solana caps `valid_until` and order `expiry` at `MAX_TTL_S = 31 d` ([NET-SOL-22](../networks/solana.md#NET-SOL-22)) | **SPECIFIED** |
-| Node | Refuses `max_valid_for_secs > LANE_HORIZON` on a pruning family ([NODE-STO-01](../node/store.md#NODE-STO-01)); constants pinned equal in tests (TON `LANE_TTL`, Aptos/Solana `PRUNE_DELAY_S`, node `LANE_TTL_S`, client `LANE_HORIZON_S`) | **SPECIFIED** |
+| Node | Refuses `max_valid_for_secs > LANE_HORIZON` on a pruning family ([NODE-STO-01](../node/store.md#NODE-STO-01)); constants pinned equal in tests (GRAM `LANE_TTL`, Aptos/Solana `PRUNE_DELAY_S`, node `LANE_TTL_S`, client `LANE_HORIZON_S`) | **SPECIFIED** |
 
 ## <a id="gas"></a>8. Gas
 
@@ -745,7 +745,7 @@ payer-account sponsorship of subject transactions; Cosmos — the relayer lane s
 only as a seam for subject-sent deposits, authz never; Soroban — native authorization entries, the relayer is the
 source and may fee-bump other lanes; Sui — relayer lane PTB, sponsored transactions only for subject-sent deposits;
 Aptos — relayer lane sequence-number transaction, fee-payer/orderless only as a seam for passkey/keyless subjects;
-TON — a relayer W5 lane sends `SignedOp` to the payer's jetton wallet, subject W5 gasless extensions are not used;
+GRAM — a relayer W5 lane sends `SignedOp` to the payer's jetton wallet, subject W5 gasless extensions are not used;
 Solana — the relayer lane is the fee payer, the subject signature is checked through the Ed25519/Secp256r1 precompile
 instruction ([networks/README.md](../networks/README.md)).
 

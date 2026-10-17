@@ -40,7 +40,7 @@ meta-tx token; wrap/unwrap including gasless unwrap (target: `mtxExecute` with t
 admin users, audit, and a metrics dashboard link.
 
 **Families**, all behind one adapter interface: EVM (Gnosis 100, Celo 42220, private chain 7622 (formerly 9000), anvil 31337); Hedera
-295–298 (EVM on HSCS plus the HTS specifics); Cosmos (CosmWasm); Soroban (Stellar and Pi); Aptos; Sui; TON; Solana.
+295–298 (EVM on HSCS plus the HTS specifics); Cosmos (CosmWasm); Soroban (Stellar and Pi); Aptos; Sui; GRAM; Solana.
 
 **Deployment**: two modes from one build — a static SPA with a runtime `config.json`, or served by `scaas-node` on its
 admin listener. English (default) and Vietnamese; dark and light themes.
@@ -56,7 +56,7 @@ Non-goals:
 | Regulated (flags 5–8, [CTR-AS-17](../contracts/asset-suite.md#CTR-AS-17)) send/receive/DEX flows and managed DEX markets | view-only with the regulated-token notice ([CLI-APP-26](#CLI-APP-26)) |
 | Zether disclosure openings | not requested; the prover already exposes them |
 | Non-EVM token deployment and non-EVM wrappers | PLANNED ([NET-ALL-19](../networks/README.md#NET-ALL-19)); Move/Solana need none |
-| Cosmos and TON passkeys | not offered yet ([CLI-SGN-23](signers-clientkeys.md#CLI-SGN-23)) |
+| Cosmos and GRAM passkeys | not offered yet ([CLI-SGN-23](signers-clientkeys.md#CLI-SGN-23)) |
 | TON Connect HTTP bridge, WalletConnect | seams ([CLI-SGN-06](signers-clientkeys.md#CLI-SGN-06)) |
 | HashPack/Blade | `hedera_signMessage` prefixes the message; HIP-632 needs raw ED25519 ([NET-HED-15](../networks/hedera.md#NET-HED-15)) |
 | Celo CIP-64 fee currencies | [NET-EVM-01](../networks/evm.md#NET-EVM-01) |
@@ -120,9 +120,9 @@ Libraries (the direct allowlist, [CLI-APP-15](#CLI-APP-15)):
 | Soroban | `@stellar/stellar-base` (XDR, auth entries) + `fetch` JSON-RPC; `@stellar/freighter-api` 6.0.1 | no Horizon client |
 | Sui | `@mysten/sui` (`bcs`, `Transaction`, client with a guarded `fetch`) | — |
 | Aptos | `@aptos-labs/ts-sdk` 7.3.0 (`AptosConfig({client})` guarded) | as `smartcontracts/move/aptos/scripts` |
-| TON | `@ton/core` 0.63.1 + `fetch` against toncenter **v3** (the shim speaks v3) | `@ton/ton` dropped: its client is v2 |
+| GRAM | `@ton/core` 0.63.1 + `fetch` against toncenter **v3** (the shim speaks v3) | `@ton/ton` dropped: its client is v2 |
 | Solana | `@solana/kit` 8.4.0, HTTP transport only, no subscriptions | as `smartcontracts/solana/scripts` |
-| Polyfill | `buffer` (feross), imported **only** inside the Soroban and TON adapter chunks (`globalThis.Buffer ??= Buffer` there) | `stellar-base` and `@ton/core` need it |
+| Polyfill | `buffer` (feross), imported **only** inside the Soroban and GRAM adapter chunks (`globalThis.Buffer ??= Buffer` there) | `stellar-base` and `@ton/core` need it |
 
 Unpinned versions are fixed in `package-lock.json` by the size spike and recorded in `clients/app/README`. Package layout:
 
@@ -274,10 +274,10 @@ the terms. Every adapter receives transports wired to the guarded `fetch` ([CLI-
 | **Soroban** | `fam/soroban.js` | Freighter `signAuthEntry`, or seed `m/44'/148'/i'` (Pi coin 314159): sha256 of the auth preimage (`G…`) / `Ed25519{key_id, sig}` (`C…`) | `/v1/ops` | user = transaction source: simulate, attach auth, sign the envelope hash (only via `buildSelfPaid`) | SEP-41 `balance`; random nonce | `getEvents`, `getTransaction` |
 | **Sui** | `fam/sui.js` incl. KeyOp | `sui:signPersonalMessage`; seed `m/44'/784'/i'/0'/0'`; passkey flag 6 | `/v1/ops` | PTB `meta::relay_pay<T>` | `Account<T>` fields, owned coins | `queryEvents`, checkpoint final |
 | **Aptos** | `fam/aptos.js` | AIP-62 `aptos:signMessage`; seed `m/44'/637'/i'/0'/0'` over the client-built `fullMessage` | `/v1/ops` | entry `scaas::meta::relay_pay` | primary store, lane view | account txs; `waitForTransaction` |
-| **TON** | `fam/ton.js`, `ton-vectors.json` | TON JS bridge `signData` cell; seed `m/44'/607'/i'` with a bound pubkey | `/v1/ops` | `SignedOp` internal message + `attachNanoton` | jetton wallet get-methods (v3 `runGetMethod`) | v3 `transactions` |
+| **GRAM** | `fam/ton.js`, `ton-vectors.json` | GRAM JS bridge `signData` cell; seed `m/44'/607'/i'` with a bound pubkey | `/v1/ops` | `SignedOp` internal message + `attachNanoton` | jetton wallet get-methods (v3 `runGetMethod`) | v3 `transactions` |
 | **Solana** | `fam/solana.js`, `solana_derivation.json` | `solana:signOffchainMessage` (kind 1), else `solana:signMessage` (kind 0, **extension only**); seed: OCMS kind 1 only | `/v1/ops` | Ed25519 precompile instruction + `relay_pay`, the user as fee payer | PDA token accounts, `LanePda.next` | `getSignaturesForAddress` + `getTransaction` (`finalized`), polling |
 
-Where funds must sit: the token balance itself on EVM, Hedera, Cosmos, Soroban and TON (in the jetton wallet); Sui the
+Where funds must sit: the token balance itself on EVM, Hedera, Cosmos, Soroban and GRAM (in the jetton wallet); Sui the
 `Account<T>`, Aptos the Account object's store, Solana the PDA's token accounts — the `deposit` module moves funds there
 with a plain user-paid transfer; EVM UA balances live in the v3 UA ledger, funded by `transferToUA`. Lanes: each
 independent intent gets a random 256-bit lane; `pay` uses `payLane(payId)`; Soroban uses a random host nonce instead.
@@ -293,7 +293,7 @@ trusted.** (a) Once per RPC at adapter load the chain identity is checked; a mis
 | Soroban | `getNetwork().passphrase` | `networkPassphrase` |
 | Aptos | ledger info `chain_id` | the id in `key` |
 | Cosmos | `status.node_info.network` | the chain id in `key` |
-| TON | v3 `masterchainInfo` + config param global id | `-239` / `-3` |
+| GRAM | v3 `masterchainInfo` + config param global id | `-239` / `-3` |
 
 (b) Curated tokens pin `decimals` and `symbol` in config; a chain answer that differs refuses the token; non-curated tokens
 show the raw integer beside the decimal, need an explicit add, and are refused when `decimals > 36`. (c) `eip712Domain()`
@@ -350,7 +350,7 @@ interface Signer {
 
 Extension wallets (`signers/extension.ts` only adapts clientkeys `wallets/<family>.js` (`create(window)`) to `Signer`):
 EVM/Hedera ECDSA EIP-6963; Sui Wallet Standard; Aptos AIP-62; Solana Wallet Standard; Cosmos Keplr, Leap; Soroban Freighter
-6.0.1; TON the JS bridge. A wallet whose network differs from the selected chain is refused before signing; a user
+6.0.1; GRAM the JS bridge. A wallet whose network differs from the selected chain is refused before signing; a user
 rejection (4001 or equivalent) is not an error. The dev key (`signers/dev.ts`) is a raw key in memory only, for chains with
 `dev: true`, behind `import.meta.env.DEV` only.
 
@@ -428,7 +428,7 @@ and maps `errors.node.<code>`, and no logic keys on free text.
 <a id="signing-review"></a><a id="CLI-APP-09"></a>**CLI-APP-09** — **The signing review is rendered from the decoded bytes;
 metadata is pinned or cross-checked, the spender is allowlisted, strings are sanitised, and the signature is verified
 locally before sending.** Default validity windows: transfers, pay and unwrap ≤ 15 min; DEX orders ≤ 30 d. For digest-only
-envelopes (Aptos, Solana OCMS, TON cell, Hedera ED25519) the review also shows "your wallet will display:
+envelopes (Aptos, Solana OCMS, GRAM cell, Hedera ED25519) the review also shows "your wallet will display:
 `scaas.metaop.v1:0xABCD…1234`" and "approve SCaaS messages only on `<origin>`"; when a family moves to the readable message
 ([NET-ALL-23](../networks/README.md#NET-ALL-23)), the review shows that text. Why: extension wallets show hex for most
 families; the app's review is the only real check. Cost: non-curated tokens take an explicit-add step.
@@ -489,7 +489,7 @@ explain.
 |---|---|---|---|
 | **Account** (default once UA lands) | `webauthn-p256` UA, registered gaslessly | EVM, Hedera (v3 tokens) | single-key ⇒ unsatisfiable ⇒ not offered; existing ⇒ exit only |
 | **Recoverable account** (option (b); interim default) | `SmartKeyAccount` (passkey and/or secp256k1 role key `m/7622'/0'/<account>'/2'/<i>'`, guardian) | EVM, Hedera | ≥ 2 distinct credentials or 1 + guardian |
-| Subject accounts per family | Sui `Account<T>`, Aptos Account, Solana PDA, Soroban `C…`, TON jetton wallet | as the matrix | per family (Soroban/TON: ≥ 2 keys) |
+| Subject accounts per family | Sui `Account<T>`, Aptos Account, Solana PDA, Soroban `C…`, GRAM jetton wallet | as the matrix | per family (Soroban/TON: ≥ 2 keys) |
 | **Approvers** (minimal) | `msig` UA over member UAs/EOAs; the app shows the id and registers it | EVM | `Σw − max(w) ≥ threshold` |
 | Native wallet | a seed-vault native key or an extension wallet | all | outside the predicate |
 | Zether account | `zether-*` UA, `authRef` chosen from the user's accounts ([CTR-UA-16](../contracts/accounts.md#CTR-UA-16)) | EVM dev | n/a |
@@ -613,7 +613,7 @@ Post-quantum Zether (PQZ) tokens configured on the private chain 7622 run in the
 
 **G** = gateway (needs `gatewayNode` + `/v1/gateway`); **S** = self-paid; "—" = not available.
 
-| Feature | EVM | Hedera | Cosmos | Soroban | Sui | Aptos | TON | Solana |
+| Feature | EVM | Hedera | Cosmos | Soroban | Sui | Aptos | GRAM | Solana |
 |---|---|---|---|---|---|---|---|---|
 | Meta-op transfer / pay | G + S | G + S | G + S | G + S | G + S | G + S | G + S | G + S |
 | UA-ledger send/pay (v3 tokens) | G + S, once v3 lands | as EVM | — (later) | — | — | — | — | — |
@@ -630,7 +630,7 @@ Post-quantum Zether (PQZ) tokens configured on the private chain 7622 run in the
 | Zether | ✓ 31337/1337 only | — | — | — | — | — | — | — |
 | Passkey | ✓ SmartKeyAccount / UA | ✓ SmartKeyAccount / UA | — | planned (third) | planned (first) | planned (fourth, unaudited) | — | planned (second) |
 | Seed vault | ✓ | ✓ ECDSA + ED25519 | ✓ | ✓ (Pi 314159) | ✓ | ✓ | ✓ | ✓ (OCMS kind 1) |
-| Extension wallet | EIP-6963 | MetaMask on the relay | Keplr, Leap | Freighter | Wallet Standard | AIP-62 | TON JS bridge | Wallet Standard |
+| Extension wallet | EIP-6963 | MetaMask on the relay | Keplr, Leap | Freighter | Wallet Standard | AIP-62 | GRAM JS bridge | Wallet Standard |
 
 `features` is narrowed at runtime by config, by `/v1/gateway` (chain, token, `dex`), by token kind and by the backup policy.
 
@@ -769,10 +769,10 @@ End to end (Playwright, Chromium):
 | `ua` | anvil + the UA deployment | passkey-UA create + gasless register; v3 send; Approvers |
 | `zether` | anvil `--code-size-limit 65536` + `DEPLOY_ZETHER=1 deploy.sh evm` (dev only: registry, verifiers, the `*_ZETHER` kinds, P3; [evm](../networks/evm.md#deployments)) | register (gasless), fund, transfer, rollOver, burn, cache/BSGS |
 | `console` | `mock-node.mjs` + `mock-idp.mjs`; a real node once its admin API exists | login flows, roles, secret shown once, peer URL checks, 409/422 |
-| `cosmos`, `soroban`, `sui`, `aptos`, `ton`, `solana` | `wasmd`; `stellar/quickstart --local`; `sui start --localnet`; `devnet.sh aptos`; the TON shim; `devnet.sh solana` (`~/.local/share/solana/install/active_release/bin` on PATH) | first: self-paid with seed + the clientkeys fake wallet; then via `/v1/ops` |
+| `cosmos`, `soroban`, `sui`, `aptos`, `ton`, `solana` | `wasmd`; `stellar/quickstart --local`; `sui start --localnet`; `devnet.sh aptos`; the GRAM shim; `devnet.sh solana` (`~/.local/share/solana/install/active_release/bin` on PATH) | first: self-paid with seed + the clientkeys fake wallet; then via `/v1/ops` |
 | `node-served` | `scaas-node` with `[app]` | header bytes **and** behaviour (no CSP violations), same-origin console |
 
-Harness: localnet RPCs without CORS (the TON shim, wasmd, possibly quickstart) are forwarded with Playwright `page.route` +
+Harness: localnet RPCs without CORS (the GRAM shim, wasmd, possibly quickstart) are forwarded with Playwright `page.route` +
 `route.fetch()`, so the CSP still applies to the URL; the Freighter fake speaks freighter-api 6.0.1's postMessage protocol;
 each localnet suite runs alone under the memory cap (`scripts/capped`); CI runs unit + `evm` + `console` per PR, the rest
 nightly or when their family changes; a keyboard-only pass covers send, review and login.

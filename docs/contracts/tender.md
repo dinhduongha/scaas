@@ -487,5 +487,5 @@ probe refuses a chain without EIP-1153.
 | Cosmos (CosmWasm) | PLANNED | the contract holds the deposit; commit = the meta token's signed `Relay` op with a `pay` memo = `depositRef`, executed by the tender via submessage; commitment over `(chain_id, contract, tender, bidder, price, salt)` with SHA-256 |
 | Soroban | PLANNED | `require_auth` entries of the bidder for `commit_bid` (deposit = a SAC/token `transfer` sub-invocation in the same auth tree); reveal/withdraw permissionless |
 | Sui / Aptos | PLANNED | tender object / resource; the deposit coin moved by the relayer-submitted PTB / entry function under the bidder's signed op; time from `Clock` / `timestamp` |
-| TON | PLANNED | async: the deposit arrives as a jetton `transfer_notification` with `forward_payload = (tenderId, commitment)`; reveal/withdraw are internal messages; bounce handling on refunds |
+| GRAM | PLANNED | async: the deposit arrives as a jetton `transfer_notification` with `forward_payload = (tenderId, commitment)`; reveal/withdraw are internal messages; bounce handling on refunds |
 | Solana | PLANNED | program + PDA vault per tender; deposit via the token program CPI under the bidder's Ed25519-precompile-verified op |

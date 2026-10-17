@@ -293,8 +293,8 @@ Every family signs the two kinds `MetaCall` and `MetaTransfer` ([NET-ALL-26](../
 pays native gas and there is no token fee field. DEX settlement is a per-family program with the same invariants but
 its own leg shape: two signed legs, `filled[orderHash]`, cross-multiplied price, cap 1 %, settlement bound to the
 relayer ([dex.md section 11](dex.md#11-non-evm-dex-programs), [CTR-DEX-09](dex.md#CTR-DEX-09),
-[networks/README.md](../networks/README.md#dex-per-family)). Accepted differences: no partial fills on Cosmos and TON,
-IOC closes at the first maker on Sui, Aptos and Solana, TON holds funds briefly in escrow. Family detail: the
+[networks/README.md](../networks/README.md#dex-per-family)). Accepted differences: no partial fills on Cosmos and GRAM,
+IOC closes at the first maker on Sui, Aptos and Solana, GRAM holds funds briefly in escrow. Family detail: the
 pages under [networks/](../networks/README.md).
 **Transitional (BUILT):** the token's `relay(op, auth)` checks `MetaOp` v1, not yet the two target kinds.
 
@@ -359,7 +359,7 @@ supported only through a profile with a measured gate, an RPC quorum and a passi
 
 - **Hedera:** `instant`, depth 0: a transaction in a record file is final (aBFT), read through the mirror node
   ([hedera.md](../networks/hedera.md#5-finality-and-events)). Settlement is the same Solidity as on EVM.
-- **Other families:** Cosmos, Soroban, Sui and Aptos finalize at inclusion (`instant`), TON at the masterchain block,
+- **Other families:** Cosmos, Soroban, Sui and Aptos finalize at inclusion (`instant`), GRAM at the masterchain block,
   Solana at commitment `finalized` ([networks/README.md section 9](../networks/README.md#9-finality-per-family)).
 - **Per kind:** the transfer, wrap, mandate, Zether and tender kinds are final when their transaction is in a final
   range. An order-book settlement is final when `mtxSettle` is; the venue marks the trade `settled` from the DEX

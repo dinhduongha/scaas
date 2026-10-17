@@ -84,7 +84,7 @@ suite and the confidential layer. The node (`scaas-node`). Clients: signers, wal
 | Procurement | Sealed-bid tenders with deposits, commit/reveal and refunds | [contracts/tender.md](contracts/tender.md) |
 | Asset tokenization | Regulated tokens, vesting and streaming, distributions, corporate actions, templates | [contracts/asset-suite.md](contracts/asset-suite.md) |
 | Confidential amounts | Zether: identities visible, amounts and balances hidden; shield, multi-recipient transfer with decoys, unshield; disclosure to an auditor through four openings. A post-quantum variant (PQZ) waits for a lattice precompile on public chains | [contracts/zether.md](contracts/zether.md), [contracts/pq-zero-knowledge.md](contracts/pq-zero-knowledge.md) |
-| Many chains | Six families — EVM (including Hedera), Cosmos, Soroban (Stellar, Pi Network), Move (Aptos, Sui), TON, Solana — with one signing and relaying model | [networks/README.md](networks/README.md) |
+| Many chains | Six families — EVM (including Hedera), Cosmos, Soroban (Stellar, Pi Network), Move (Aptos, Sui), GRAM, Solana — with one signing and relaying model | [networks/README.md](networks/README.md) |
 | The node | Job API for server-side clients, a public gateway, finality-gated event feeds, gas breakers, sponsorship policies, an admin API with built-in users or OIDC | [node/README.md](node/README.md) |
 | Relayer mesh | Relayers that share intents with admitted partners or an open gossip network; private chains never leave the admitted set | [node/mesh.md](node/mesh.md), [node/gossip.md](node/gossip.md) |
 | Operations | SLOs, metrics and alerts, FinOps usage reports, incident runbooks, backup and disaster recovery | [node/ops.md](node/ops.md), [node/runbooks.md](node/runbooks.md) |
@@ -185,7 +185,7 @@ One table per area; ids in brackets are the rule prefixes each area owns.
 |---|---|
 | [README](networks/README.md) | Common model, chain identity (`chain_uid`), signing domains, passkeys, availability |
 | [evm.md](networks/evm.md) · [hedera.md](networks/hedera.md) | EVM chains and Hedera |
-| [cosmos.md](networks/cosmos.md) · [soroban.md](networks/soroban.md) · [ton.md](networks/ton.md) | CosmWasm, Stellar / Pi, TON |
+| [cosmos.md](networks/cosmos.md) · [soroban.md](networks/soroban.md) · [ton.md](networks/ton.md) | CosmWasm, Stellar / Pi, GRAM |
 | [sui.md](networks/sui.md) · [aptos.md](networks/aptos.md) · [solana.md](networks/solana.md) | Move families and Solana |
 
 ### Clients (`CLI-*`) and integration (`INT-*`)

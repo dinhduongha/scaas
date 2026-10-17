@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="960" height="580" viewBox="0 0 960 580" role="img" aria-labelledby="t d">
   <title id="t">Accounts and keys</title>
-  <desc id="d">Three account forms. Native account: the chain’s own account (EVM EOA or ERC-1271 contract, Solana, Stellar, Aptos, Sui, Cosmos, TON), no registration. Universal Account, the default (specified, nothing built): an id derived from key data or a policy, for passkeys, P-256, ed25519, Schnorr, BLS, MuSig2 and FROST groups, weighted multisig, post-quantum and Zether keys, registered once per chain in the UARegistry with proof of possession. SmartKeyAccount, optional (built, on MetaTxBase): an ERC-1271 clone from SmartKeyAccountFactory with several P-256 passkey and secp256k1 keys and guardian recovery. A passkey can serve as a UA or as a SmartKeyAccount key. Every token kind accepts all three forms and verifies the signature itself. MandateWallet (built, on MetaTxBase with a revocation epoch) is a payment authority, not an account: the payer owns it and deposits into it, a delegate pays approved payees within per-payment and per-period caps until expiry or revocation.</desc>
+  <desc id="d">Three account forms. Native account: the chain’s own account (EVM EOA or ERC-1271 contract, Solana, Stellar, Aptos, Sui, Cosmos, GRAM), no registration. Universal Account, the default (specified, nothing built): an id derived from key data or a policy, for passkeys, P-256, ed25519, Schnorr, BLS, MuSig2 and FROST groups, weighted multisig, post-quantum and Zether keys, registered once per chain in the UARegistry with proof of possession. SmartKeyAccount, optional (built, on MetaTxBase): an ERC-1271 clone from SmartKeyAccountFactory with several P-256 passkey and secp256k1 keys and guardian recovery. A passkey can serve as a UA or as a SmartKeyAccount key. Every token kind accepts all three forms and verifies the signature itself. MandateWallet (built, on MetaTxBase with a revocation epoch) is a payment authority, not an account: the payer owns it and deposits into it, a delegate pays approved payees within per-payment and per-period caps until expiry or revocation.</desc>
   <defs>
     <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M0 0 L10 5 L0 10 z" fill="#57606a"/>
@@ -28,7 +28,7 @@
   <text class="s" x="30" y="128">The chain's own account:</text>
   <text class="s" x="30" y="147">an EVM address (EOA, or a contract</text>
   <text class="s" x="30" y="166">via ERC-1271); a Solana, Stellar, Aptos,</text>
-  <text class="s" x="30" y="185">Sui, Cosmos or TON account</text>
+  <text class="s" x="30" y="185">Sui, Cosmos or GRAM account</text>
   <text class="s" x="30" y="212">Registration: none</text>
   <text class="s" x="30" y="231">For wallet users and anything a chain</text>
   <text class="s" x="30" y="250">already understands</text>
