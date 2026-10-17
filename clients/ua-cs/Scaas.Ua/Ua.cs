@@ -54,6 +54,7 @@ public static partial class UA
         new(0x0140, "zether-bn254", false, [64], "bn254-g1"),
         new(0x0141, "zether-bls12381", false, [128], "bls12381-g1"),
         new(0x0142, "pqz-mlwe", false, [16384], "pqz-mlwe"),
+        new(0x0108, "secp256k1", false, [64], "secp256k1"), // 2026-10-17, appended as in kinds.json
     ];
 
     public static readonly string[] Groups =
@@ -91,7 +92,7 @@ public static partial class UA
         return k.Native ? throw new UAException("UAKindNotDerived", k.Name) : k;
     }
 
-    static bool SingleSigning(ushort k) => k is (>= 0x0100 and <= 0x0107) or (>= 0x0110 and <= 0x0113) or (>= 0x0130 and <= 0x0133);
+    static bool SingleSigning(ushort k) => k is (>= 0x0100 and <= 0x0108) or (>= 0x0110 and <= 0x0113) or (>= 0x0130 and <= 0x0133);
     public static bool IsNative(ushort kind) => Array.Exists(Kinds, k => k.Number == kind && k.Native);
     public static bool IsZether(ushort kind) => kind is >= 0x0140 and <= 0x0142;
     public static bool IsSigning(ushort kind) => kind == 0x0120 || SingleSigning(kind);
@@ -141,7 +142,7 @@ public static partial class UA
         if (k.Group is null) return null;
         var (lo, hi) = kind switch
         {
-            0x0100 or 0x0101 => (0, 32),
+            0x0100 or 0x0101 or 0x0108 => (0, 32),
             0x0110 or 0x0111 => (1, 33),
             0x0112 or 0x0113 => (0, 64),
             _ => (0, keyData.Length),

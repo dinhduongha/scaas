@@ -70,6 +70,7 @@ KINDS = (
     (0x0140, 'zether-bn254', False, (64,), 'bn254-g1'),
     (0x0141, 'zether-bls12381', False, (128,), 'bls12381-g1'),
     (0x0142, 'pqz-mlwe', False, (16384,), 'pqz-mlwe'),
+    (0x0108, 'secp256k1', False, (64,), 'secp256k1'),  # 2026-10-17, appended as in kinds.json
 )
 _BY = {k[0]: k for k in KINDS}
 GROUPS = ('p256', 'ed25519', 'secp256k1', 'bn254-g1', 'bls12381-g1', 'bls12381-g2', 'bn254-g2', 'mldsa44', 'mldsa65',
@@ -93,7 +94,7 @@ def _derived(kind):
 
 
 def _single_signing(kind):
-    return 0x0100 <= kind <= 0x0107 or 0x0110 <= kind <= 0x0113 or 0x0130 <= kind <= 0x0133
+    return 0x0100 <= kind <= 0x0108 or 0x0110 <= kind <= 0x0113 or 0x0130 <= kind <= 0x0133
 
 
 def is_native(kind):
@@ -185,7 +186,7 @@ def key_hash_of(kind, key_data):
     if k[4] is None:
         return None
     d = _bytes(key_data)
-    lo, hi = {0x0100: (0, 32), 0x0101: (0, 32), 0x0110: (1, 33), 0x0111: (1, 33), 0x0112: (0, 64), 0x0113: (0, 64)}.get(kind, (0, len(d)))
+    lo, hi = {0x0100: (0, 32), 0x0101: (0, 32), 0x0108: (0, 32), 0x0110: (1, 33), 0x0111: (1, 33), 0x0112: (0, 64), 0x0113: (0, 64)}.get(kind, (0, len(d)))
     _need(len(d) >= hi, 'length')
     return keccak256(group_tag(k[4]), d[lo:hi])
 
@@ -260,6 +261,12 @@ BLS_R = _bls.curve_order
 
 def _int(b):
     return int.from_bytes(b, 'big')
+
+
+def _secp_xy(d):
+    x, y = _int(d[:32]), _int(d[32:])
+    _need(x < SECP_P and y < SECP_P, 'range')
+    _need(y * y % SECP_P == (pow(x, 3, SECP_P) + 7) % SECP_P, 'curve')
 
 
 def _secp_x(x):
@@ -420,6 +427,8 @@ def validate_key_data(kind, key_data, hedera_native=False):
         _bls_g2(d)
     elif kind == 0x0107:
         _bn_g2(d)
+    elif kind == 0x0108:
+        _secp_xy(d)
     elif kind == 0x0110:
         _musig2(d, _secp_compressed, 33)
     elif kind == 0x0111:

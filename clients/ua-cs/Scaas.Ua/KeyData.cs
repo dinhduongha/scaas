@@ -86,6 +86,13 @@ public static partial class UA
 
     // ----- per-curve checks -----
 
+    static void SecpXY(ReadOnlySpan<byte> d)
+    {
+        var (x, y) = (Be(d[..32]), Be(d[32..64]));
+        Need(x < SecpP && y < SecpP, "range");
+        Need(Mod(y * y, SecpP) == Mod(x * x * x + 7, SecpP), "curve");
+    }
+
     static void SecpX(ReadOnlySpan<byte> xb)
     {
         var x = Be(xb);
@@ -263,6 +270,7 @@ public static partial class UA
             case 0x0105 or 0x0141: BlsG1(d); break;
             case 0x0106: BlsG2(d); break;
             case 0x0107: BnG2(d); break;
+            case 0x0108: SecpXY(d); break;
             case 0x0110: Musig2(d, SecpCompressed, 33); break;
             case 0x0111: Frost(d, SecpCompressed, 33, SecpN); break;
             case 0x0112: Musig2(d, BnG1, 64); break;

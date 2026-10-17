@@ -61,6 +61,17 @@ func secpCompressed(b []byte) error {
 	return secpX(b[1:33])
 }
 
+func secpXY(d []byte) error {
+	X, Y := new(big.Int).SetBytes(d[:32]), new(big.Int).SetBytes(d[32:64])
+	if X.Cmp(secpP) >= 0 || Y.Cmp(secpP) >= 0 {
+		return keyDataErr("range")
+	}
+	rhs := new(big.Int).Exp(X, three, secpP)
+	rhs.Add(rhs, seven).Mod(rhs, secpP)
+	lhs := new(big.Int).Mul(Y, Y)
+	return need(lhs.Mod(lhs, secpP).Cmp(rhs) == 0, "curve")
+}
+
 func p256Point(xy []byte) error {
 	x, y := new(big.Int).SetBytes(xy[:32]), new(big.Int).SetBytes(xy[32:64])
 	if x.Cmp(p256P) >= 0 || y.Cmp(p256P) >= 0 {
@@ -306,6 +317,8 @@ func ValidateKeyData(kind uint16, d []byte, hederaNative bool) error {
 		return blsG2(d)
 	case 0x0107:
 		return bnG2(d)
+	case 0x0108:
+		return secpXY(d)
 	case 0x0110:
 		return musig2(d, secpCompressed, 33)
 	case 0x0111:

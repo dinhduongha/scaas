@@ -776,6 +776,115 @@
           "sig": "0xb4cb6b00b1bf37d827fc9fd232f24b7ed316e7b4103d7901e781493462cb436be9b81b4808aee2d7e40ddda8c74e89ffdd0297381f0572f5ad6f461a4cbfdb04"
         }
       ]
+    },
+    {
+      "name": "secp256k1",
+      "kind": 264,
+      "secret": "0xb9396b8e56cdb2e748c8538adfa31fbf8fcb8be826c23f49b79ed58bc145fda4",
+      "keyData": "0xb8d6a62c582eb94925ec4296c5dd24373c38eee76212d1bfacfd5ad434ab21b5235095446465c8ec6e2da3defd9ddb82fa26d6536acd515ae702e445e17f7a1d",
+      "ua": "0xda932c990b36675c462755b0372bedff93462738b8bcb149593b2830676e9038",
+      "pop": {
+        "context": "A",
+        "popDigest": "0xc5f53d39c06376c509a7e30a3ebc586e39221bc9a5540a505f1ee7a86e40ae8c",
+        "message": "0x4ab0717f94152ee5e3485a5812735833c0cb1ea21b7b3ca75c2fa2230eecf672",
+        "sig": "0xbf17c60d2a42d67efe0c6a4cfaeb32c3268b3a3633c7edb77e59b6aa0411cd6a35dbd6e3a5e3291ff6cf7e35cabeb15836dc38554d669c8cd3990c72a43ed34a1b"
+      },
+      "popOther": {
+        "context": "B",
+        "popDigest": "0x362a51e5cdc920f88e82eff7a60df4829d4048d485fc195cb146798ffffe3d91",
+        "message": "0x0bf6b1b45bef5bdbee2d1205f729f57a516b3bf24b474fc71d8d3ba07e77f67b",
+        "sig": "0xf6c9c7616cb7109553522f984e33dcf956a45e93b4462447da1e40fd00ddef0c2abb66dcf8a97e5e06894ddba216945ae8f95d2ba2b3ebf598ceed8d665a254b1b"
+      },
+      "sigs": [
+        {
+          "purpose": "metatx",
+          "purposeTag": "0x659f1188c729a1ac7e7f664f5bdf6be9f45677d902d8cc3cf2c018ac7449c18f",
+          "digest": "0x5375b84b2103af61e48a56e14be860f04d3be78e6516cb385ac9873014f6043c",
+          "message": "0x398bb477e071fe01129bc83e642f7f46d4fc927f1b998a3d437a5f4062116248",
+          "sig": "0xf58530aeb38b0a4ef8b7282a6047349d5dc621361e88c3c3e92bc600b3627dfd3d114a5360ace4ab245efc894af64ee9c789b996c82c1f7830e76e6c06b9abbb1c"
+        },
+        {
+          "purpose": "member",
+          "purposeTag": "0xfbd8600564b68d09f75fe5d3e6acb8fe3c5a3a4cb20da6988723433beff5212a",
+          "digest": "0x5375b84b2103af61e48a56e14be860f04d3be78e6516cb385ac9873014f6043c",
+          "message": "0xb616dd46ba3ab7bfe661ebb50914fe46e5febb0add0398d92758ec625bb56c09",
+          "sig": "0x351e1e2d8bb6bfda5dc12fd0bc86b7c0a72e7b4da1c85282abc2fadf4f9e762d56b9a91f5c8a1d7f643d14bb80e65b0ca16e0c954a7de5f98b43d709c34471e61c"
+        }
+      ],
+      "negatives": [
+        {
+          "name": "wrong-purpose",
+          "verifyPop": false,
+          "message": "0xb616dd46ba3ab7bfe661ebb50914fe46e5febb0add0398d92758ec625bb56c09",
+          "sig": "0xf58530aeb38b0a4ef8b7282a6047349d5dc621361e88c3c3e92bc600b3627dfd3d114a5360ace4ab245efc894af64ee9c789b996c82c1f7830e76e6c06b9abbb1c"
+        },
+        {
+          "name": "wrong-kind-tag",
+          "verifyPop": false,
+          "message": "0x398bb477e071fe01129bc83e642f7f46d4fc927f1b998a3d437a5f4062116248",
+          "sig": "0x594defa0b43a6fa1a1bed2b6804fd31ed73852a82b3c14805b0b8b9a06fb266e1184821339dd843c89ee4cd032903a9a85e0945cb3e44c46c2593d00c92813861b"
+        },
+        {
+          "name": "other-chain-uid",
+          "verifyPop": true,
+          "message": "0x0bf6b1b45bef5bdbee2d1205f729f57a516b3bf24b474fc71d8d3ba07e77f67b",
+          "sig": "0x1149054ab0a6cc8b9e26c9e5a0a00998a849902698ab6ea0a002c3a3d98102af5da0bc85fc5f35cf8eb26c5431f765165b412b61cad84a38067052318fbf9f611c"
+        },
+        {
+          "name": "other-registry",
+          "verifyPop": true,
+          "message": "0x4ab0717f94152ee5e3485a5812735833c0cb1ea21b7b3ca75c2fa2230eecf672",
+          "sig": "0xf6fffd06a9d69f8384f76ead0b34b8d35c0ff545cb860f761717a985a39800da10647145451fbc9f19d637d1a73fd49be75ab9e880481c0d3c86e8cad589b85d1c"
+        },
+        {
+          "name": "pop-as-sig",
+          "verifyPop": false,
+          "message": "0x398bb477e071fe01129bc83e642f7f46d4fc927f1b998a3d437a5f4062116248",
+          "sig": "0xbf17c60d2a42d67efe0c6a4cfaeb32c3268b3a3633c7edb77e59b6aa0411cd6a35dbd6e3a5e3291ff6cf7e35cabeb15836dc38554d669c8cd3990c72a43ed34a1b"
+        },
+        {
+          "name": "mutated",
+          "verifyPop": false,
+          "message": "0x398bb477e071fe01129bc83e642f7f46d4fc927f1b998a3d437a5f4062116248",
+          "sig": "0xf58530aeb38b0a4ef8b7282a6047349d5dc621361e88c3c3e92bc600b3627dfd3d114a5360ace4ab245efc894af64ee9c789b996c82c1f7830e76e6c06b9abba1c"
+        },
+        {
+          "name": "high-s",
+          "verifyPop": false,
+          "message": "0x398bb477e071fe01129bc83e642f7f46d4fc927f1b998a3d437a5f4062116248",
+          "sig": "0xf58530aeb38b0a4ef8b7282a6047349d5dc621361e88c3c3e92bc600b3627dfdc2eeb5ac9f531b54dba10376b509b114f325234fe71c80c38eeaf020c97c95861b"
+        },
+        {
+          "name": "v-flipped",
+          "verifyPop": false,
+          "message": "0x398bb477e071fe01129bc83e642f7f46d4fc927f1b998a3d437a5f4062116248",
+          "sig": "0xf58530aeb38b0a4ef8b7282a6047349d5dc621361e88c3c3e92bc600b3627dfd3d114a5360ace4ab245efc894af64ee9c789b996c82c1f7830e76e6c06b9abbb1b"
+        },
+        {
+          "name": "v-raw-0",
+          "verifyPop": false,
+          "message": "0x398bb477e071fe01129bc83e642f7f46d4fc927f1b998a3d437a5f4062116248",
+          "sig": "0xf58530aeb38b0a4ef8b7282a6047349d5dc621361e88c3c3e92bc600b3627dfd3d114a5360ace4ab245efc894af64ee9c789b996c82c1f7830e76e6c06b9abbb01"
+        },
+        {
+          "name": "v-29",
+          "verifyPop": false,
+          "message": "0x398bb477e071fe01129bc83e642f7f46d4fc927f1b998a3d437a5f4062116248",
+          "sig": "0xf58530aeb38b0a4ef8b7282a6047349d5dc621361e88c3c3e92bc600b3627dfd3d114a5360ace4ab245efc894af64ee9c789b996c82c1f7830e76e6c06b9abbb1d"
+        },
+        {
+          "name": "short",
+          "verifyPop": false,
+          "message": "0x398bb477e071fe01129bc83e642f7f46d4fc927f1b998a3d437a5f4062116248",
+          "sig": "0xf58530aeb38b0a4ef8b7282a6047349d5dc621361e88c3c3e92bc600b3627dfd3d114a5360ace4ab245efc894af64ee9c789b996c82c1f7830e76e6c06b9abbb"
+        },
+        {
+          "name": "r-zero",
+          "verifyPop": false,
+          "message": "0x398bb477e071fe01129bc83e642f7f46d4fc927f1b998a3d437a5f4062116248",
+          "sig": "0x00000000000000000000000000000000000000000000000000000000000000003d114a5360ace4ab245efc894af64ee9c789b996c82c1f7830e76e6c06b9abbb1c"
+        }
+      ]
     }
   ],
   "bip340Official": [

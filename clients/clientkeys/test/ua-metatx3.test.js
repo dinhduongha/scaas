@@ -21,7 +21,7 @@ const domain = { name: 'SCaaS MetaToken', contract: V.token, chainId: V.chainId,
 
 test('every row: typed data → digest, and the builder rebuilds the typed data from its message', () => {
   for (const [rows, build] of [[V.call, uaMetaTxTypedData], [V.transfer, uaMetaTransferTypedData]]) {
-    assert.equal(rows.length, 9);
+    assert.equal(rows.length, 10);
     for (const r of rows) {
       assert.equal(hex(hashTypedData(r.typedData)), r.digest, r.name);
       assert.deepEqual(build({ ...domain, message: r.typedData.message }), r.typedData, r.name);
@@ -68,6 +68,7 @@ const NOBLE = {
   0x0101: (kd, m, sig) => p256.verify(sig, sha256(m), concatBytes(Uint8Array.of(4), kd), { prehash: false, lowS: true }),
   0x0103: (kd, m, sig) => schnorr.verify(sig, m, kd),
   0x0102: (kd, m, sig) => ed25519.verify(sig, m, kd, { zip215: false }),
+  0x0108: (kd, m, sig) => recover(hex(sig), hex(m)) === hex(keccak_256(kd).subarray(12)),
 };
 const authOk = (from, purpose, digest, auth) => {
   if (from === S.native.ua) return recover(auth, digest) === S.native.address;
@@ -122,7 +123,7 @@ test('receiverFee rows: native payer x every derived payee and p256 x bip340; pa
       }
     }
   }
-  assert.equal(nobled, 8 + 1 + 4, 'the native payer x8 (ECDSA), the p256 payer, the p256 / bip340 x2 / ed25519 payees');
+  assert.equal(nobled, 9 + 1 + 5, 'the native payer x9 (ECDSA), the p256 payer, the p256 / bip340 x2 / ed25519 / secp256k1 payees');
 });
 
 test('receiver-pays, UA path: checkReceiverFee accepts every receiverFee row for its payee id and refuses another payee', () => {

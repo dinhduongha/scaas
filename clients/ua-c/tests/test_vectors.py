@@ -166,7 +166,7 @@ class Vectors(unittest.TestCase):
         c = K['constants']
         self.assertEqual(hx(out32(L.msg_tag)), c['MSG_TAG'])
         self.assertEqual(hx(out32(L.purpose_tag, b'pop')), c['POP_TAG'])
-        self.assertEqual(code_of(lambda: kind_row(L.kind_info, 0x0108)), 'UAKindUnknown')
+        self.assertEqual(code_of(lambda: kind_row(L.kind_info, 0x0109)), 'UAKindUnknown')
 
     def test_valid_rows(self):
         for r in K['valid']:

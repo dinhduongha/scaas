@@ -41,6 +41,13 @@ fn secp_compressed(b: &[u8]) -> Result<()> {
     need(k256::PublicKey::from_sec1_bytes(b).is_ok(), "curve")
 }
 
+fn secp_point(xy: &[u8]) -> Result<()> {
+    let mut sec1 = [0u8; 65];
+    sec1[0] = 4;
+    sec1[1..].copy_from_slice(xy);
+    need(k256::PublicKey::from_sec1_bytes(&sec1).is_ok(), "curve")
+}
+
 fn p256_point(xy: &[u8]) -> Result<()> {
     let mut sec1 = [0u8; 65];
     sec1[0] = 4;
@@ -182,6 +189,7 @@ pub fn validate_key_data(kind: u16, d: &[u8], hedera_native: bool) -> Result<()>
         0x0105 | 0x0141 => bls_g1(d),
         0x0106 => bls_g2(d),
         0x0107 => bn_g2(d),
+        0x0108 => secp_point(d),
         0x0110 => musig2(d, secp_compressed, 33),
         0x0111 => frost(d, secp_compressed, 33, &SECP_N),
         0x0112 => musig2(d, bn_g1, 64),

@@ -449,6 +449,21 @@
       "zether": true,
       "member": false,
       "memberHedera": false
+    },
+    {
+      "kind": 264,
+      "name": "secp256k1",
+      "native": false,
+      "lengths": [
+        64
+      ],
+      "tag": "scaas.ua.secp256k1.v1",
+      "TAG": "0x98521857bce4e5830d7d084b5d6bae9b6b59537ef7e8db7a57c327bf524a6de9",
+      "group": "secp256k1",
+      "signing": true,
+      "zether": false,
+      "member": true,
+      "memberHedera": true
     }
   ],
   "groups": [
@@ -791,6 +806,22 @@
       "keyData": "0xffff00020001000000000000000000000000804d4d3b798f2d5f0902318d3e50ae8b24d83e04ffff0101b99f05b3007d0b9e1f2e1b01b42aa8eb2d866429925796ec3330a3bed7e5e04cffff",
       "ua": "0xf423f08e2125185474ecdb95994154684000ebde7a39aeec0909c95177df7fd3",
       "keyHash": null
+    },
+    {
+      "kind": 264,
+      "name": "secp256k1",
+      "hederaNative": false,
+      "keyData": "0xa40771b113826d83022708f6d20803fb6bf311ec6aa71dfaba0326432d1d0433211c077fd4d1eb72d9d50352245cb55c907a468109baf6cec356dd50536bd2a0",
+      "ua": "0x3fefd5ecc2f2355f3375976768a645cb9a0bb93679e1afdc2bf0dda853b13260",
+      "keyHash": "0xdaa7434f8335f878e456993bab41808ce9f6de5bfdfc226c0d539db5ed7a6da4"
+    },
+    {
+      "kind": 264,
+      "name": "secp256k1",
+      "hederaNative": false,
+      "keyData": "0x5fb9a4604d83bd0d19bee9c97889d9df4b698a19080814bc52d9202b2fe1c71e37b869311789ef826c4c07f4009ba85770c2b133dfc6196d4c752223f7ffd32e",
+      "ua": "0x91f0d01da52ea3d784f8b5c234ae84694d90130eb3af8ec2e77595a111b53582",
+      "keyHash": "0xa941faf4e4fb46ef039ccc9b977c0fef66ec781fe3d43db31549551e01218314"
     }
   ],
   "invalid": [
@@ -1707,7 +1738,7 @@
     {
       "kind": 288,
       "hederaNative": false,
-      "keyData": "0x000100020108ab23f86778ff8fbb7f4b685b6d2ce29280defbd8d4d15411a144934ab2de4ae000010101b99f05b3007d0b9e1f2e1b01b42aa8eb2d866429925796ec3330a3bed7e5e04c0001",
+      "keyData": "0x000100020109ab23f86778ff8fbb7f4b685b6d2ce29280defbd8d4d15411a144934ab2de4ae000010101b99f05b3007d0b9e1f2e1b01b42aa8eb2d866429925796ec3330a3bed7e5e04c0001",
       "error": "UAKeyData",
       "reason": "unknown member kind"
     },
@@ -2188,7 +2219,7 @@
       "reason": "kind 0"
     },
     {
-      "kind": 264,
+      "kind": 265,
       "hederaNative": false,
       "keyData": "0x0000000000000000000000000000000000000000000000000000000000000000",
       "error": "UAKindUnknown",
@@ -2200,6 +2231,55 @@
       "keyData": "0x0000000000000000000000000000000000000000",
       "error": "UAKindNotDerived",
       "reason": "native kind"
+    },
+    {
+      "kind": 264,
+      "hederaNative": false,
+      "keyData": "0x",
+      "error": "UAKeyData",
+      "reason": "empty"
+    },
+    {
+      "kind": 264,
+      "hederaNative": false,
+      "keyData": "0xa40771b113826d83022708f6d20803fb6bf311ec6aa71dfaba0326432d1d0433211c077fd4d1eb72d9d50352245cb55c907a468109baf6cec356dd50536bd2",
+      "error": "UAKeyData",
+      "reason": "one byte short"
+    },
+    {
+      "kind": 264,
+      "hederaNative": false,
+      "keyData": "0xa40771b113826d83022708f6d20803fb6bf311ec6aa71dfaba0326432d1d0433211c077fd4d1eb72d9d50352245cb55c907a468109baf6cec356dd50536bd2a000",
+      "error": "UAKeyData",
+      "reason": "one byte long"
+    },
+    {
+      "kind": 264,
+      "hederaNative": false,
+      "keyData": "0xfffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f211c077fd4d1eb72d9d50352245cb55c907a468109baf6cec356dd50536bd2a0",
+      "error": "UAKeyData",
+      "reason": "x = p"
+    },
+    {
+      "kind": 264,
+      "hederaNative": false,
+      "keyData": "0xa40771b113826d83022708f6d20803fb6bf311ec6aa71dfaba0326432d1d0433fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f",
+      "error": "UAKeyData",
+      "reason": "y = p"
+    },
+    {
+      "kind": 264,
+      "hederaNative": false,
+      "keyData": "0xa40771b113826d83022708f6d20803fb6bf311ec6aa71dfaba0326432d1d0433211c077fd4d1eb72d9d50352245cb55c907a468109baf6cec356dd50536bd2a1",
+      "error": "UAKeyData",
+      "reason": "off the curve"
+    },
+    {
+      "kind": 264,
+      "hederaNative": false,
+      "keyData": "0x00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "error": "UAKeyData",
+      "reason": "(0, 0)"
     }
   ],
   "natives": [
@@ -2287,7 +2367,7 @@
       "error": "UAKindNotNative"
     },
     {
-      "kind": 264,
+      "kind": 265,
       "raw": "0x0000000000000000000000000000000000000000000000000000000000000000",
       "error": "UAKindUnknown"
     }

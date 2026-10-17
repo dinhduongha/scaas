@@ -24,7 +24,7 @@ EVM = os.path.abspath(os.path.join(HERE, "../.."))
 ROOT = os.path.abspath(os.path.join(EVM, "../.."))
 sys.path.insert(0, os.path.join(ROOT, "pqz-core/nethermind/chain"))
 sys.path.insert(0, os.path.join(ROOT, "smartcontracts/vectors/pqz"))
-from eth import address, keccak256, legacy_tx, sign  # noqa: E402
+from eth import _mul, address, keccak256, legacy_tx, sign  # noqa: E402
 import pqz_kat as K  # noqa: E402
 
 PQZ = "0x5caa500000000000000000000000000000000f01"
@@ -32,7 +32,7 @@ ML44 = "0x5caa500000000000000000000000000000000012"
 ML65 = "0x5caa500000000000000000000000000000000013"
 PQZL_ID = K.PQZL_ID
 SCALE, MAXS, FEE = 10_000, 1 << 40, 3
-MLDSA44, MLDSA65, PQZ_MLWE = 0x0130, 0x0131, 0x0142
+MLDSA44, MLDSA65, PQZ_MLWE, SECP256K1 = 0x0130, 0x0131, 0x0142, 0x0108
 CAP_ML, CAP_PQZ, BUDGET = 200_000, 3_000_000, 12_000_000
 FAILS, LOG = [], []
 RPC = None
@@ -44,7 +44,7 @@ def kc(*parts):
 
 P_POP, P_AUTHREF, P_METATX, P_ZAUTH = (kc(f"scaas.ua.purpose.{n}.v1") for n in ("pop", "authref", "metatx", "zether-auth"))
 MSG_TAG = kc("scaas.ua.msg.v1")
-TAG = {MLDSA44: kc("scaas.ua.mldsa44.v1"), MLDSA65: kc("scaas.ua.mldsa65.v1"), PQZ_MLWE: kc("scaas.ua.pqz-mlwe.v1")}
+TAG = {MLDSA44: kc("scaas.ua.mldsa44.v1"), MLDSA65: kc("scaas.ua.mldsa65.v1"), SECP256K1: kc("scaas.ua.secp256k1.v1"), PQZ_MLWE: kc("scaas.ua.pqz-mlwe.v1")}
 
 
 def log(s):
@@ -358,7 +358,9 @@ def run(kd, kr, ke):
     pqv = D.deploy("UAPqzVerifier", encs(["w", "w", "b", "w", "b"], [PQZ, PQZL_ID, reg_stmt[96:], reg_stmt[64:96], reg_proof]),
                    label="UAPqzVerifier PQZL")
     check(words(call(pqv, cd("isSupportedOnThisChain()", [])))[0][-1] == 1, "UAPqzVerifier.isSupportedOnThisChain()")
-    kinds = [(MLDSA44, mlv[MLDSA44], CAP_ML), (MLDSA65, mlv[MLDSA65], CAP_ML), (PQZ_MLWE, pqv, CAP_PQZ)]
+    secv = D.deploy("Secp256k1Verifier", b"", label="Secp256k1Verifier")
+    kinds = [(MLDSA44, mlv[MLDSA44], CAP_ML), (MLDSA65, mlv[MLDSA65], CAP_ML), (PQZ_MLWE, pqv, CAP_PQZ),
+             (SECP256K1, secv, 50_000)]
     reg = D.deploy("UARegistry", encs(["w", "w", "w", "w", "w", "w", ("a", ("t", ["w", "w", "w"]))],
                                       [uid, 0, 0, BUDGET, 0, 1, kinds]), label="UARegistry gen 1")
     REG[0] = reg
@@ -405,9 +407,39 @@ def run(kd, kr, ke):
     U = {n: pqz_ua(n, sk("pqz-" + n), ml[n]) for n in ("alice", "bob", "aud", "carol")}
     alice, bob, aud, carol = U["alice"], U["bob"], U["aud"], U["carol"]
 
+    # secp256k1 (ECDSA, 0x0108; CTR-UA-06, owner 2026-10-17): a secp256k1 key registers a derived id, separate from
+    # its EOA address and the same on every chain
+    def ecdsa(key, m):
+        r, s_, rec = sign(key, m)
+        return r.to_bytes(32, "big") + s_.to_bytes(32, "big") + bytes([27 + rec])
+
+    seck = int.from_bytes(sk("secp256k1"), "big") % 0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFEBAAEDCE6AF48A03BBFD25E8CD0364141
+    x, y = _mul(seck)
+    secd = x.to_bytes(32, "big") + y.to_bytes(32, "big")
+    sec_ua = words(call(reg, cd("uaOf(uint16,bytes)", ["w", "b"], SECP256K1, secd)))[0]
+    check(sec_ua == kc(TAG[SECP256K1], secd), "secp256k1 UA = keccak256(TAG ‖ x ‖ y)")
+    pd = words(call(reg, cd("popDigest(bytes32,bytes32)", ["w", "w"], sec_ua, b"\0" * 32)))[0]
+    sd.send(reg, cd("register(uint16,bytes,bytes,bytes32,bytes)", ["w", "b", "b", "w", "b"], SECP256K1, secd,
+                    ecdsa(seck, ua_msg(SECP256K1, P_POP, pd)), b"\0" * 32, b""), "register secp256k1 (ECDSA PoP)")
+    kind = int.from_bytes(words(call(reg, cd("kindOf(bytes32)", ["w"], sec_ua)))[0], "big")
+    check(kind == SECP256K1, f"secp256k1 UA {sec_ua.hex()[:16]}… kindOf 0x0108; the same key's EOA {address(seck)} is a "
+                             f"separate native id")
+    d = kc("p6g-gas")
+    data = cd("requireAuthorized(bytes32,bytes32,bytes32,bytes)", ["w", "w", "w", "b"], sec_ua, P_METATX, d,
+              encs(["b", "b"], [secd, ecdsa(seck, ua_msg(SECP256K1, P_METATX, d))]))
+    call(reg, data)
+    log(f"      gas registry.requireAuthorized(secp256k1) = {gas_of(reg, data):,} (eth_estimateGas, incl. 21,000 "
+        f"intrinsic and calldata)")
+    bad = encs(["b", "b"], [secd, ecdsa(seck, ua_msg(SECP256K1, P_METATX, kc("other")))])
+    try:
+        call(reg, cd("requireAuthorized(bytes32,bytes32,bytes32,bytes)", ["w", "w", "w", "b"], sec_ua, P_METATX, d, bad))
+        check(False, "secp256k1 signature over another digest is refused")
+    except RuntimeError:
+        check(True, "secp256k1 signature over another digest is refused (UAUnauthorized)")
+
     # the per-kind list (CTR-UA-29, owner 2026-10-17): every UA of a kind in registration order
     for kind, uas in ((PQZ_MLWE, [u.ua for u in U.values()]), (MLDSA65, [u.ua for u in list(ml.values()) + [feeua]]),
-                      (MLDSA44, [ml44.ua])):
+                      (MLDSA44, [ml44.ua]), (SECP256K1, [sec_ua])):
         n = int.from_bytes(words(call(reg, cd("uaCount(uint16)", ["w"], kind)))[0], "big")
         at = [words(call(reg, cd("uaAt(uint16,uint256)", ["w", "w"], kind, i)))[0] for i in range(n)]
         idx = [int.from_bytes(words(call(reg, cd("uaIndex(bytes32)", ["w"], ua)))[0], "big") for ua in uas]

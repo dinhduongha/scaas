@@ -810,10 +810,11 @@ the bid's own data. Either way the salt is unknown to anyone else until reveal, 
 replaced the Zether-only flow of the old `UniversalAccountRegistry` (`UA = keccak256(encodedY)`, PoP bound to
 `msg.sender`, `AuthScheme`, `linkEVM`; backed up in `smartcontracts/evm/legacy/ua3/`).
 
-**Native accounts are never registered** ([CTR-UA-06](contracts/accounts.md#CTR-UA-06)): an EVM EOA or contract
+**Native accounts need no registration** ([CTR-UA-06](contracts/accounts.md#CTR-UA-06); the same key may also register a
+derived kind, e.g. `secp256k1` or `ed25519`, for one id on every chain): an EVM EOA or contract
 account (incl. `SmartKeyAccount`, Safe), Hedera native accounts (an `msig` member only on Hedera registries), Solana,
 Stellar/Pi `G…`, Soroban `C…`, Aptos, Sui and Cosmos native accounts, GRAM wallets. They sign as today. Every **derived**
-kind (passkey `webauthn-p256`, `p256`, `ed25519`, `bip340`, Schnorr/BLS, MuSig2/FROST, `msig`, ML-DSA/FN-DSA,
+kind (passkey `webauthn-p256`, `p256`, `ed25519`, `bip340`, `secp256k1`, Schnorr/BLS, MuSig2/FROST, `msig`, ML-DSA/FN-DSA,
 `zether-*`, `pqz-mlwe`) registers once on each chain where it is used:
 
 1. The client derives the key for the kind on its own path (`m/7622'/0'/<account>'/<kindNo>'/<i>'`; Zether conf keys

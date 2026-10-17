@@ -6,6 +6,7 @@ import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {P256Verifier} from "../../src/ua/verifiers/P256Verifier.sol";
 import {WebAuthnP256Verifier} from "../../src/ua/verifiers/WebAuthnP256Verifier.sol";
 import {Bip340Verifier} from "../../src/ua/verifiers/Bip340Verifier.sol";
+import {Secp256k1Verifier} from "../../src/ua/verifiers/Secp256k1Verifier.sol";
 import {Ed25519Verifier} from "../../src/ua/verifiers/Ed25519Verifier.sol";
 import {
     SchnorrBn254Verifier,
@@ -60,7 +61,7 @@ contract UATradeVectorsTest is UARegistryBase {
         assertEq(vm.parseJsonAddress(vj, ".registry"), REG_A);
         assertEq(vm.parseJsonBytes32(vj, ".chainUid"), chainUidA);
         reg = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), true, _realCfgs());
-        for (uint256 i; i < 8; ++i) {
+        for (uint256 i; vm.keyExistsJson(sj, string.concat(".derived[", vm.toString(i), "]")); ++i) {
             string memory d = string.concat(".derived[", vm.toString(i), "].");
             reg.register(uint16(vm.parseJsonUint(sj, string.concat(d, "kind"))),
                 vm.parseJsonBytes(sj, string.concat(d, "keyData")), vm.parseJsonBytes(sj, string.concat(d, "pop.sig")), 0, "");
@@ -103,9 +104,10 @@ contract UATradeVectorsTest is UARegistryBase {
             address(new Bip340Verifier()), address(new SchnorrBn254Verifier()), address(new SchnorrBls12381Verifier()),
             address(new BlsMinSigBls12381Verifier()), address(new BlsMinSigBn254Verifier())
         ];
-        c = new UARegistry.KindConfig[](9);
+        c = new UARegistry.KindConfig[](10);
         for (uint256 i; i < 8; ++i) c[i] = UARegistry.KindConfig(KINDS[i], v[i], _cap(KINDS[i]));
         c[8] = UARegistry.KindConfig(0x0131, address(new UAMldsaVerifier(0x0131, address(0), "", "")), 5_950_000);
+        c[9] = UARegistry.KindConfig(0x0108, address(new Secp256k1Verifier()), 50_000);
     }
 
     // ----- vector reading -----
@@ -193,7 +195,7 @@ contract UATradeVectorsTest is UARegistryBase {
             vm.revertToState(snap);
             ++n;
         }
-        assertEq(n, 9);
+        assertEq(n, 10);
     }
 
     function _pqLeg(uint256 i, uint256 fill) internal view returns (ISCaaSDex.Leg memory) {

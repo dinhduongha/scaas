@@ -2964,6 +2964,8 @@ Change (2026-10-11): owner — only under `auditorMode = OPTIONAL` (CTR-ZTH-49);
 ### CTR-UA-06 — Native kinds unregistered; derived kinds register first
 - old: R294 · status: current · owner: yes · date: 2026-10-06 · normative: contracts/accounts.md#CTR-UA-06 · superseded-by: —
 
+Change (2026-10-17): owner — kinds are the same on every chain, so **every derived kind is registrable on every chain whose registry has its verifier, also where the key is a native account**; the native key's registered id is the derived `keccak256(TAG(kind) ‖ key_data)`, separate from its native id and the same on every chain (`ed25519` 0x0102 no longer "native elsewhere"). New derived kind **`secp256k1` 0x0108** (owner 2026-10-17, controller design): `x ‖ y` (64), ECDSA over the 32-byte `ua_msg`, sig `r ‖ s ‖ v`, low-s, `v ∈ {27, 28}`, keyHash group `secp256k1` over x (one key, one purpose with `bip340` / MuSig2 / FROST), `Secp256k1Verifier` (cap 50 k), enabled on every chain's gen-1 registry; registry slot 19; vectors appended (kinds.json, signatures.json, metatx3.json, uatrade_kat.json); all six clients. Native kinds stay without records and outside the per-kind list (CTR-UA-29).
+
 **Why.** Native kinds need no registration; derived kinds register once per chain, which is where PoP and one-key-one-purpose are enforced and typos revert.
 **Cost if wrong.** One registration per chain (~75 k gas on bn254).
 **Source.** `history/specs/2026-10-06-universal-account-design.md:125`

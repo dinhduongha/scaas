@@ -7,6 +7,7 @@ import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {P256Verifier} from "../../src/ua/verifiers/P256Verifier.sol";
 import {WebAuthnP256Verifier} from "../../src/ua/verifiers/WebAuthnP256Verifier.sol";
 import {Bip340Verifier} from "../../src/ua/verifiers/Bip340Verifier.sol";
+import {Secp256k1Verifier} from "../../src/ua/verifiers/Secp256k1Verifier.sol";
 import {Ed25519Verifier} from "../../src/ua/verifiers/Ed25519Verifier.sol";
 import {
     SchnorrBn254Verifier,
@@ -43,10 +44,11 @@ contract UARegistryVectorsTest is UARegistryBase {
             address(new BlsMinSigBls12381Verifier()),
             address(new BlsMinSigBn254Verifier())
         ];
-        c = new UARegistry.KindConfig[](8);
+        c = new UARegistry.KindConfig[](9);
         for (uint256 i; i < 8; ++i) {
             c[i] = UARegistry.KindConfig(KINDS[i], v[i], _cap(KINDS[i]));
         }
+        c[8] = UARegistry.KindConfig(0x0108, address(new Secp256k1Verifier()), 50_000);
     }
 
     function _d(uint256 i, string memory f) internal view returns (string memory) {
@@ -63,9 +65,9 @@ contract UARegistryVectorsTest is UARegistryBase {
             _derivedRow(i);
             ++rows;
         }
-        assertEq(rows, 8, "derived kinds");
-        assertEq(nSigs, 18, "derived sigs");
-        assertEq(nNegs, 73, "derived negatives");
+        assertEq(rows, 9, "derived kinds");
+        assertEq(nSigs, 20, "derived sigs");
+        assertEq(nNegs, 85, "derived negatives");
     }
 
     function _derivedRow(uint256 i) internal {
