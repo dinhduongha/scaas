@@ -18,9 +18,12 @@ lợi ích của, hoặc cung cấp phần mềm cho A (trừ qua dịch vụ th
 3. **Kinh doanh tơ lụa, da, lông thú**, ở bất kỳ quy mô nào: sản xuất, chế biến, mua để bán lại, bán, phân phối hoặc
    tiếp thị tơ lụa, da, lông thú, da sống và mọi sản phẩm làm từ hoặc có chứa chúng (vải, quần áo, giày dép, túi xách,
    phụ kiện, đồ bọc nội thất), hàng mới hay hàng đã qua sử dụng, kể cả bán lẻ, bán buôn.
-4. **Trên 10% doanh thu của chính công ty bạn** (không tính cả tập đoàn) đến từ việc bán, phân phối, chế biến, vận chuyển, tiếp thị hoặc tài trợ sản phẩm
-   động vật bị cấm hoặc hoạt động giết động vật (kể cả bán lẻ, bán buôn).
-5. **Buôn bán sản phẩm từ con người**, ở bất kỳ quy mô nào: mua, bán, môi giới hoặc chế biến để bán nội tạng, mô, tế bào,
+4. **Chế biến, sản xuất sản phẩm động vật bị cấm** (nhà máy, kể cả chế biến thực phẩm), hoặc **tài trợ** sản phẩm động
+   vật bị cấm hay hoạt động giết động vật, ở bất kỳ quy mô nào.
+5. **Bán, phân phối, tiếp thị, vận chuyển động vật sống để đem giết**, ở bất kỳ quy mô nào.
+6. **Trên 10% doanh thu của chính công ty bạn** (không tính cả tập đoàn) đến từ việc bán, phân phối, tiếp thị hoặc vận
+   chuyển sản phẩm động vật bị cấm (kể cả bán lẻ, bán buôn). Dưới 10% thì được phép.
+7. **Buôn bán sản phẩm từ con người**, ở bất kỳ quy mô nào: mua, bán, môi giới hoặc chế biến để bán nội tạng, mô, tế bào,
    máu và thành phần máu, bộ phận cơ thể, tóc, di hài, phôi, giao tử và mọi sản phẩm làm từ chúng (sữa mẹ không thuộc diện
    này: được phép). **Ngoại lệ duy nhất:** hiến
    tặng nội tạng, mô, tế bào, máu để chữa bệnh cho người, kể cả việc bệnh viện, ngân hàng máu/mô/tạng thu lại chi phí trên
@@ -35,7 +38,7 @@ món ăn, sản phẩm có chứa chúng. **Không bị cấm:** sữa, trứng 
 
 **Dịch vụ thứ cấp không bị cấm:** cung cấp dịch vụ đa dụng mở cho mọi người theo cùng điều kiện (ví dụ vận hành
 blockchain, node, validator, relayer, hosting, cloud, mạng, thanh toán, phần mềm) **không** bị cấm chỉ vì có khách hàng
-hoặc người dùng thuộc diện bị cấm, và doanh thu từ dịch vụ đó không tính vào ngưỡng 10%. **Người dùng vi phạm** vẫn bị cấm
+hoặc người dùng thuộc diện bị cấm, và doanh thu từ dịch vụ đó không tính vào ngưỡng 10% (mục 6). **Người dùng vi phạm** vẫn bị cấm
 và không được dùng phần mềm, kể cả qua dịch vụ đó. Ngoại lệ này không áp dụng cho dịch vụ được thiết kế, may đo hoặc
 tiếp thị riêng cho các hoạt động bị cấm, cũng không áp dụng cho việc tài trợ các hoạt động đó.
 
@@ -47,8 +50,8 @@ Nếu không thuộc diện bị cấm, và:
 
 - **toàn bộ tập đoàn là tổ chức thuần chay** (mọi sản phẩm, dịch vụ không có thành phần từ động vật và không thử nghiệm
   trên động vật), bất kể doanh thu; **hoặc**
-- **doanh thu gộp của cả tập đoàn dưới 10 triệu USD** (năm tài chính gần nhất; tổ chức không có doanh thu thì tính theo
-  tổng chi tiêu hằng năm),
+- **doanh thu của chính công ty bạn dưới 10 triệu USD** (không tính cả tập đoàn; năm tài chính gần nhất; tổ chức không
+  có doanh thu thì tính theo tổng chi tiêu hằng năm),
 
 thì bạn được dùng, sao chép, sửa, phân phối, bán phần mềm **với các quyền như MIT hoặc Apache-2.0, tuỳ bạn chọn** (chọn
 Apache thì có cả quyền bằng sáng chế của Apache), với điều kiện: **khi phân phối lại, phải giữ nguyên Vegan Community
@@ -57,7 +60,7 @@ bạn chọn cho nó.
 
 ## Vượt ngưỡng, vi phạm
 
-- Doanh thu tập đoàn đạt 10 triệu USD trở lên (và không phải thuần chay): quyền miễn phí còn **90 ngày** sau khi kết thúc
+- Doanh thu của công ty bạn đạt 10 triệu USD trở lên (và không phải thuần chay): quyền miễn phí còn **90 ngày** sau khi kết thúc
   năm tài chính đó, sau đó cần Vegan Enterprise License.
 - Rơi vào diện bị cấm, hoặc vi phạm điều khoản: **mất quyền ngay**, không có thời gian ân hạn. Chỉ Licensor mới khôi phục
   được, bằng văn bản.
