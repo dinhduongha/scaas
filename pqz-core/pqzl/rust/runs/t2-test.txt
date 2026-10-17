@@ -1,0 +1,50 @@
+$ cargo test -j2 --release --offline --features c-oracle,test-hooks -- --nocapture
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust/pqz-core/pqzl/rust)
+    Finished `release` profile [optimized + debuginfo] target(s) in 2.45s
+     Running unittests src/lib.rs (target/release/deps/pqzl-ab7c64137eb567fc)
+
+running 2 tests
+test arith::polymat::tests::views ... ok
+test arith::spoly::tests::errors_and_order ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/kat_dump.rs (target/release/deps/kat_dump-a037c3f94b1e2e74)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/oracle_arith.rs (target/release/deps/oracle_arith-e4a3232a46417393)
+
+running 4 tests
+test ntt_roundtrip_eq_c ... ok
+test basemul_eq_c ... ok
+test int_ops_eq_c ... ok
+test polyvec_ops_eq_c ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.89s
+
+     Running tests/oracle_smoke.rs (target/release/deps/oracle_smoke-c3d379b75e553eba)
+
+running 2 tests
+test rust_stub_rejects ... ok
+test c_core_selftest_proofs_verify ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.23s
+
+   Doc-tests pqzl
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+[rc=0]
+# arithmetic KAT: kat_dump vs the upstream LaZer golden file
+$ cargo build -j2 --release --offline --bin kat_dump
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust/pqz-core/pqzl/rust)
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.77s
+[rc=0]
+$ python3 -I ../kat/check.py ../kat/lazer-3330e48.json target/kat-rust.json
+19/19 cases equal; golden: lazer-3330e48 (lazer 3330e48 static v4: -march=x86-64-v4 -mavx512ifma -mavx512vbmi2 -maes -mpclmul, avx512f=1); checked: pqzl-rust
+[rc=0]

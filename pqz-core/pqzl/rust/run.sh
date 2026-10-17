@@ -1,8 +1,8 @@
 #!/bin/sh
 # pqzl (Rust port of the PQZL C core): every check in one job under scripts/capped, as ffi/run.sh:
 #   scripts/capped pqz-core/pqzl/rust/run.sh <label>      -> pqzl/rust/runs/<label>-*.txt
-# tests (native, release, the C oracle and the test hooks), clippy's float lint (no float in the crate), the wasm32
-# build (default features: no C).
+# tests (native, release, the C oracle and the test hooks), the arithmetic KAT (kat_dump vs pqzl/kat's golden file),
+# clippy's float lint (no float in the crate), the wasm32 build (default features: no C).
 set -u
 cd "$(dirname "$0")"
 L=runs/$1
@@ -10,6 +10,12 @@ mkdir -p runs
 OUT() { echo "\$ $*"; "$@"; echo "[rc=$?]"; }
 
 OUT cargo test -j2 --release --offline --features c-oracle,test-hooks -- --nocapture > "$L-test.txt" 2>&1
+{
+  echo "# arithmetic KAT: kat_dump vs the upstream LaZer golden file"
+  OUT cargo build -j2 --release --offline --bin kat_dump
+  ./target/release/kat_dump > target/kat-rust.json
+  OUT python3 -I ../kat/check.py ../kat/lazer-3330e48.json target/kat-rust.json
+} >> "$L-test.txt" 2>&1
 
 {
   echo "# clippy: no float arithmetic in the crate (default features, then with the oracle and the hooks)"
@@ -19,5 +25,5 @@ OUT cargo test -j2 --release --offline --features c-oracle,test-hooks -- --nocap
   OUT cargo build -j2 --release --offline --lib --target wasm32-unknown-unknown
 } > "$L-build.txt" 2>&1
 
-grep -hE "^test result|FAILED|panicked|^test .* (ok|FAILED)$|\[rc=" "$L-test.txt"
+grep -hE "^test result|FAILED|panicked|^test .* (ok|FAILED)$|cases equal|MISMATCH|\[rc=" "$L-test.txt"
 grep -hE "^(warning|error)|\[rc=" "$L-build.txt"

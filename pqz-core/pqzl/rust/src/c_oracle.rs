@@ -22,6 +22,11 @@ extern "C" {
     fn pqz_enc_seed(pks: *const *const u8, npk: u32, msgs: *const [u8; 16], seed_enc: *const u8, u: *mut u8,
                     vs: *mut [u8; V_BYTES], r: *mut i8, e1: *mut i16, e2: *mut [i16; 16], ctr: *mut u32) -> i32;
     fn pqz_dec(s: *const i8, ct: *const u8, m: *mut i64, noise: *mut i64) -> i32;
+    fn pqz_ntt_fwd(c: *mut u64);
+    fn pqz_ntt_inv(c: *mut u64);
+    fn pqz_ntt_basemul(r: *mut u64, a: *const u64, b: *const u64);
+    fn pqz_shim_polyvec_ops(input: *const i64, out: *mut u64, n: *mut usize) -> i32;
+    fn pqz_shim_int_ops(input: *const u64, out: *mut u64, n: *mut usize) -> i32;
     #[cfg(feature = "test-hooks")]
     fn pqz_test_mutate(op: u8, proof: *const u8, len: usize, kind: u32, r1: u64, r2: u64, out: *mut u8,
                        outlen: *mut usize) -> i32;
@@ -143,4 +148,45 @@ pub fn c_test_mutate(rel: u8, proof: &[u8], kind: u32, r1: u64, r2: u64) -> Resu
     });
     out.truncate(n);
     Ok((ok == 1).then_some(out))
+}
+
+/// `pqz_ntt_fwd` (no core state: called directly)
+pub fn c_ntt_fwd(c: &mut [u64; 64]) {
+    // SAFETY: 64 words, as the C function takes
+    unsafe { pqz_ntt_fwd(c.as_mut_ptr()) }
+}
+
+/// `pqz_ntt_inv`
+pub fn c_ntt_inv(c: &mut [u64; 64]) {
+    // SAFETY: 64 words
+    unsafe { pqz_ntt_inv(c.as_mut_ptr()) }
+}
+
+/// `pqz_ntt_basemul`
+pub fn c_ntt_basemul(a: &[u64; 64], b: &[u64; 64]) -> [u64; 64] {
+    let mut r = [0u64; 64];
+    // SAFETY: three 64-word buffers (the C function allows aliasing; these do not)
+    unsafe { pqz_ntt_basemul(r.as_mut_ptr(), a.as_ptr(), b.as_ptr()) };
+    r
+}
+
+/// `pqz_shim_polyvec_ops` (tests/oracle_shim.c), the C half of `testkit::polyvec_ops`
+pub fn c_polyvec_ops(input: &[i64]) -> Result<Vec<u64>, Error> {
+    assert_eq!(input.len(), crate::testkit::OPS_IN);
+    let mut out = vec![0u64; 1 << 16]; // ~ 140 polys of 66 words
+    let mut n = 0usize;
+    // SAFETY: input has OPS_IN words; out has room for every word the shim writes
+    rc(with_core(|| unsafe { pqz_shim_polyvec_ops(input.as_ptr(), out.as_mut_ptr(), &mut n) }))?;
+    out.truncate(n);
+    Ok(out)
+}
+
+/// `pqz_shim_int_ops` (tests/oracle_shim.c), the C half of `testkit::int_ops`
+pub fn c_int_ops(input: &[u64; crate::testkit::INT_OPS_IN]) -> Result<Vec<u64>, Error> {
+    let mut out = vec![0u64; 1024];
+    let mut n = 0usize;
+    // SAFETY: input has INT_OPS_IN words; out has room for every word the shim writes (~ 150)
+    rc(with_core(|| unsafe { pqz_shim_int_ops(input.as_ptr(), out.as_mut_ptr(), &mut n) }))?;
+    out.truncate(n);
+    Ok(out)
 }

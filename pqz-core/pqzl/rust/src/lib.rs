@@ -19,6 +19,16 @@ use alloc::vec::Vec;
 #[allow(unsafe_code)]
 pub mod c_oracle;
 
+// the arithmetic, sampling and codec layers serve the proof layers of later tasks; until those land, part is unused
+#[allow(dead_code)]
+mod arith;
+#[allow(dead_code)]
+mod coder;
+#[allow(dead_code)]
+mod rand;
+#[doc(hidden)]
+pub mod testkit;
+
 pub const OP_TRANSFER: u8 = 1;
 pub const OP_BURN: u8 = 2;
 pub const OP_REGISTER: u8 = 3;

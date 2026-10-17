@@ -50,7 +50,9 @@ mod oracle {
         for f in ["pqz_lazer", "pqz_ntt", "pqz_arena", "pqz_rel", "pqz_keys", "pqz_sv"] {
             b.file(core.join(format!("src/{f}.c")));
         }
+        b.file(core.join("rust/tests/oracle_shim.c")); // test entry points (never part of the core)
         b.compile("pqz");
+        println!("cargo:rerun-if-changed={}", core.join("rust/tests/oracle_shim.c").display());
         for d in ["src", "lazer", "params"] {
             println!("cargo:rerun-if-changed={}", core.join(d).display());
         }
