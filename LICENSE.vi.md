@@ -5,8 +5,10 @@
 
 ## Ai bị cấm
 
-Không được dùng phần mềm dưới bất kỳ hình thức nào nếu bất kỳ thành viên nào trong **tập đoàn** của bạn (công ty mẹ,
-công ty con, công ty chung quyền kiểm soát) thuộc một trong các trường hợp:
+Không được dùng phần mềm dưới bất kỳ hình thức nào nếu **chính bạn** (cá nhân hoặc pháp nhân dùng phần mềm) thuộc một
+trong các trường hợp dưới đây. Điều cấm xét **ở mức từng công ty**, không theo tập đoàn: công ty A trong tập đoàn vi
+phạm thì công ty B cùng tập đoàn (không vi phạm) **không** bị cấm vì thế; nhưng B không được dùng phần mềm thay mặt, cho
+lợi ích của, hoặc cung cấp phần mềm cho A (trừ qua dịch vụ thứ cấp nêu dưới).
 
 1. **Trực tiếp giết động vật**, ở bất kỳ quy mô nào: giết mổ, chế biến thân thịt; đánh bắt thương mại, thu hoạch nuôi
    trồng để giết, săn bắn, bẫy; thí nghiệm hoặc thử nghiệm trên động vật; mọi hoạt động thương mại có mục đích giết
@@ -16,7 +18,7 @@ công ty con, công ty chung quyền kiểm soát) thuộc một trong các trư
 3. **Kinh doanh tơ lụa, da, lông thú**, ở bất kỳ quy mô nào: sản xuất, chế biến, mua để bán lại, bán, phân phối hoặc
    tiếp thị tơ lụa, da, lông thú, da sống và mọi sản phẩm làm từ hoặc có chứa chúng (vải, quần áo, giày dép, túi xách,
    phụ kiện, đồ bọc nội thất), hàng mới hay hàng đã qua sử dụng, kể cả bán lẻ, bán buôn.
-4. **Trên 10% doanh thu** tập đoàn đến từ việc bán, phân phối, chế biến, vận chuyển, tiếp thị hoặc tài trợ sản phẩm
+4. **Trên 10% doanh thu của chính công ty bạn** (không tính cả tập đoàn) đến từ việc bán, phân phối, chế biến, vận chuyển, tiếp thị hoặc tài trợ sản phẩm
    động vật bị cấm hoặc hoạt động giết động vật (kể cả bán lẻ, bán buôn).
 5. **Buôn bán sản phẩm từ con người**, ở bất kỳ quy mô nào: mua, bán, môi giới hoặc chế biến để bán nội tạng, mô, tế bào,
    máu và thành phần máu, bộ phận cơ thể, tóc, di hài, phôi, giao tử và mọi sản phẩm làm từ chúng (sữa mẹ không thuộc diện

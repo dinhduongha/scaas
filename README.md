@@ -1046,9 +1046,11 @@ You can Free Pay to **Tu Viện Chơn Như** (Chơn Như Monastery): <https://ww
 
 SCaaS is licensed under the [Vegan Community License 1.0](LICENSE) (summary in Vietnamese:
 [LICENSE.vi.md](LICENSE.vi.md)). Free with the freedoms of MIT or Apache-2.0 for vegan organizations and for
-organizations whose group revenue is below USD 10 million; not available to anyone who kills animals (any animal: mammals, birds, fish, insects and every other species), to food businesses that
-serve products from killed animals, fertilized eggs or bee products, to anyone trading in silk, leather or fur products
-at any scale, to groups earning more than 10% of revenue from such products, or to anyone trading in human organs, tissue, blood or other human-derived products outside donation for
-medical treatment; a general-purpose service open to all (running a blockchain, a node or a relayer, hosting) is not
-excluded because one of its users is, but that user stays excluded (see the license for the exact terms); everyone else needs a Vegan Enterprise License. Contributions are accepted under the CLA in [CONTRIBUTING.md](CONTRIBUTING.md).
+organizations whose group revenue is below USD 10 million. Not available to a company that kills animals (any species),
+runs a food business serving products from killed animals, fertilized eggs or bee products, trades in silk, leather or
+fur products (new or second-hand, at any scale), earns more than 10% of its own revenue from such products, or trades in
+human-derived products outside donation for medical treatment. Exclusions apply per company, not to its whole group,
+and a general-purpose service open to all (running a blockchain, a node or a relayer, hosting) is not excluded because
+one of its users is; that user stays excluded. Everyone else needs a Vegan Enterprise License; the license has the exact
+terms. Contributions are accepted under the CLA in [CONTRIBUTING.md](CONTRIBUTING.md).
 Third-party components keep their own licenses.
