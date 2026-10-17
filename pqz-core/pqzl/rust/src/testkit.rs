@@ -653,6 +653,31 @@ pub fn rand_autostable(seed: &[u8; 32], dom: u32, bnd: i64, log2: u32) -> Result
     Ok(o)
 }
 
+/// every relation's parameters in `pqz_shim_params`'s order (tests/oracle_shim.c's `P`)
+#[cfg(feature = "c-oracle")]
+fn rels() -> &'static [(&'static str, &'static crate::params::Tbox)] {
+    use crate::params::*;
+    static RELS: &[(&str, &Tbox)] = &[
+        ("reg", &reg::pqz_reg),
+        ("tx", &tx::pqz_tx),
+        ("tx0", &tx0::pqz_tx0),
+        ("burn", &burn::pqz_burn),
+        ("ds", &ds::pqz_ds),
+        ("dr", &dr::pqz_dr),
+        ("txm2", &txm2::pqz_txm2),
+        ("txm4", &txm4::pqz_txm4),
+        ("txm8", &txm8::pqz_txm8),
+        ("txm20", &txm20::pqz_txm20),
+        ("txm40", &txm40::pqz_txm40),
+        ("txm80", &txm80::pqz_txm80),
+        #[cfg(feature = "oversize")]
+        ("txm16", &txm16::pqz_txm16),
+        #[cfg(feature = "oversize")]
+        ("txm160", &txm160::pqz_txm160),
+    ];
+    RELS
+}
+
 /// Every relation's parameters (src/params, generated from pqzl/params/pqz_*_params.h) as one word stream each, in
 /// `pqz_shim_params`'s order and layout (tests/oracle_shim.c): the whole `lnp_tbox_params_t`, pointers followed
 #[cfg(feature = "c-oracle")]
@@ -682,25 +707,8 @@ pub fn params_words() -> alloc::vec::Vec<(&'static str, alloc::vec::Vec<u64>)> {
         int(o, &a.scm2);
         int(o, &a.stdev2sqr);
     }
-    let rels: &[(&'static str, &Tbox)] = &[
-        ("reg", &reg::pqz_reg),
-        ("tx", &tx::pqz_tx),
-        ("tx0", &tx0::pqz_tx0),
-        ("burn", &burn::pqz_burn),
-        ("ds", &ds::pqz_ds),
-        ("dr", &dr::pqz_dr),
-        ("txm2", &txm2::pqz_txm2),
-        ("txm4", &txm4::pqz_txm4),
-        ("txm8", &txm8::pqz_txm8),
-        ("txm20", &txm20::pqz_txm20),
-        ("txm40", &txm40::pqz_txm40),
-        ("txm80", &txm80::pqz_txm80),
-        #[cfg(feature = "oversize")]
-        ("txm16", &txm16::pqz_txm16),
-        #[cfg(feature = "oversize")]
-        ("txm160", &txm160::pqz_txm160),
-    ];
-    rels.iter()
+    rels()
+        .iter()
         .map(|&(name, p)| {
             let mut o = alloc::vec::Vec::new();
             abdlop(&mut o, p.tbox);
@@ -721,4 +729,62 @@ pub fn params_words() -> alloc::vec::Vec<(&'static str, alloc::vec::Vec<u64>)> {
             (name, o)
         })
         .collect()
+}
+
+/// relation i's (`params_words` order) quad_many dcompress `(gamma, m)`; `None` past the last relation
+#[cfg(feature = "c-oracle")]
+pub fn dcomp_gamma_m(i: usize) -> Option<(i64, i64)> {
+    let d = rels().get(i)?.1.quad_eval.quad_many.dcompress;
+    Some((d.gamma.get_i64(), d.m.get_i64()))
+}
+
+/// `pqz_shim_ghint`'s output for relation i: `Poly::use_ghint (y, r)` and `Poly::make_ghint (z, r)` of `inp` = y, z,
+/// r; `None` past the last relation
+#[cfg(feature = "c-oracle")]
+pub fn ghint(i: usize, inp: &[i64; 192]) -> Option<alloc::vec::Vec<u64>> {
+    let d = rels().get(i)?.1.quad_eval.quad_many.dcompress;
+    let poly = |k: usize| {
+        let mut p = Poly::ZERO;
+        p.set_i64(&inp[64 * k..64 * k + 64]);
+        p
+    };
+    let (mut y, mut z, mut r) = (poly(0), poly(1), poly(2));
+    let mut o = alloc::vec::Vec::new();
+    dump(&mut o, &Poly::use_ghint(&mut y, &mut r, d));
+    dump(&mut o, &Poly::make_ghint(&mut z, &mut r, d));
+    Some(o)
+}
+
+/// A random proof of relation `code`'s shape, as long as an honest one (tB, h uniform below q, tA1 below
+/// 2^(log2q - D), c in [-8, 8], one hint in 8 in [-3, 3] and the rest 0, the Gaussian parts in [-2^(l+1), 2^(l+1))
+/// for stdev 1.55 * 2^l), encoded by the codec: decodable input for the relations without a frozen vector (the
+/// oversize shapes); `None` for an unknown code or an encoding over MAX_PROOF.
+#[cfg(feature = "c-oracle")]
+pub fn synthetic_proof(code: u8, seed: u64) -> Option<alloc::vec::Vec<u8>> {
+    use crate::coder::{encode_proof, tbox_by_code, ProofParts};
+    let p = tbox_by_code(code)?;
+    let mut f = ProofParts::new(p).ok()?;
+    let mut s = seed | 1;
+    let mut rnd = move || {
+        s ^= s >> 12;
+        s ^= s << 25;
+        s ^= s >> 27;
+        s.wrapping_mul(2_685_821_657_736_338_717)
+    };
+    let mt = p.tbox.ring.log2q - p.quad_eval.quad_many.dcompress.d;
+    let mut fill = |v: &mut [Poly], g: &mut dyn FnMut(u64) -> i64| {
+        for x in v {
+            x.set_i64(&core::array::from_fn::<i64, D, _>(|_| g(rnd())));
+        }
+    };
+    fill(&mut f.t_b, &mut |r| (r % Q) as i64);
+    fill(&mut f.h, &mut |r| (r % Q) as i64);
+    fill(&mut f.t_a1, &mut |r| (r >> (64 - mt)) as i64);
+    fill(core::slice::from_mut(&mut f.c), &mut |r| (r % 17) as i64 - 8);
+    fill(&mut f.hint, &mut |r| if r % 8 == 0 { ((r >> 3) % 7) as i64 - 3 } else { 0 });
+    let qm = p.quad_eval.quad_many;
+    for (v, l) in [(&mut f.z1, qm.log2stdev1), (&mut f.z21, qm.log2stdev2), (&mut f.z3, p.log2stdev3), (&mut f.z4, p.log2stdev4)] {
+        fill(v, &mut |r| (r % (1 << (l + 2))) as i64 - (1 << (l + 1)));
+    }
+    encode_proof(&f, crate::MAX_PROOF).ok()
 }

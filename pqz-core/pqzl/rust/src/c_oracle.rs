@@ -44,6 +44,7 @@ extern "C" {
                             nout: *mut usize) -> i32;
     fn pqz_shim_autostable(seed: *const u8, dom: u32, bnd: i64, log2: u32, out: *mut u64) -> i32;
     fn pqz_shim_params(i: u32, out: *mut u64, n: *mut usize) -> i32;
+    fn pqz_shim_ghint(i: u32, inp: *const i64, out: *mut u64) -> i32;
     #[cfg(feature = "test-hooks")]
     fn pqz_test_mutate(op: u8, proof: *const u8, len: usize, kind: u32, r1: u64, r2: u64, out: *mut u8,
                        outlen: *mut usize) -> i32;
@@ -196,17 +197,40 @@ pub fn c_enc_group_seed(seed_enc: &[u8; 32], g: u32) -> [u8; 32] {
     out
 }
 
-/// `pqz_test_mutate` (C built with PQZ_TEST_HOOKS): `Ok(None)` if the proof does not decode.
+/// `pqz_test_mutate` (C built with PQZ_TEST_HOOKS): `Some` (C returns 1) the mutated proof, `None` (0) if the proof
+/// does not decode or the result does not re-encode. The hook clears the sticky error itself and returns only 1 or 0,
+/// so there is no error to report; any other return value is a broken contract and panics.
 #[cfg(feature = "test-hooks")]
-pub fn c_test_mutate(rel: u8, proof: &[u8], kind: u32, r1: u64, r2: u64) -> Result<Option<Vec<u8>>, Error> {
+pub fn c_test_mutate(rel: u8, proof: &[u8], kind: u32, r1: u64, r2: u64) -> Option<Vec<u8>> {
     let mut out = vec![0u8; 2 * MAX_PROOF]; // the hook's own buffer size
     let mut n = out.len();
     // SAFETY: proof with its length; out has room for 2 * MAX_PROOF bytes
     let ok = with_core(|| unsafe {
         pqz_test_mutate(rel, proof.as_ptr(), proof.len(), kind, r1, r2, out.as_mut_ptr(), &mut n)
     });
-    out.truncate(n);
-    Ok((ok == 1).then_some(out))
+    match ok {
+        1 => {
+            assert!(n <= out.len(), "c_test_mutate: length {n}");
+            out.truncate(n);
+            Some(out)
+        }
+        0 => None,
+        r => panic!("c_test_mutate: pqz_test_mutate returned {r}"),
+    }
+}
+
+/// `pqz_shim_ghint`: relation i's (`c_params` order) `poly_dcompress_use_ghint (y, r)` and
+/// `poly_dcompress_make_ghint (z, r)` on `inp` = y, z, r (64 coefficients each), as `testkit::ghint` dumps them;
+/// `None` past the last relation.
+pub fn c_ghint(i: u32, inp: &[i64; 192]) -> Option<Vec<u64>> {
+    let mut out = vec![0u64; 2 * 66];
+    // SAFETY: 192 input words, 132 output words, as the shim reads / writes
+    let r = with_core(|| unsafe { pqz_shim_ghint(i, inp.as_ptr(), out.as_mut_ptr()) });
+    match r {
+        0 => Some(out),
+        -1 => None,
+        r => panic!("c_ghint: rc {r}"),
+    }
 }
 
 /// `pqz_ntt_fwd` (no core state: called directly)

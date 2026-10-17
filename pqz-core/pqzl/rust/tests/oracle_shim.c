@@ -600,17 +600,19 @@ params_abdlop (uint64_t **o, abdlop_params_srcptr a)
   params_int (o, a->stdev2sqr);
 }
 
+static const lnp_tbox_params_struct *const P[] = { pqz_reg,   pqz_tx,    pqz_tx0,   pqz_burn,  pqz_ds,   pqz_dr,
+                                                   pqz_txm2,  pqz_txm4,  pqz_txm8,  pqz_txm20, pqz_txm40, pqz_txm80,
+#ifdef PQZ_TXM_OVERSIZE
+                                                   pqz_txm16, pqz_txm160,
+#endif
+};
+#define NP (sizeof P / sizeof P[0])
+
 int
 pqz_shim_params (unsigned i, uint64_t *out, size_t *n)
 {
-  static const lnp_tbox_params_struct *const P[] = { pqz_reg,   pqz_tx,    pqz_tx0,   pqz_burn,  pqz_ds,   pqz_dr,
-                                                     pqz_txm2,  pqz_txm4,  pqz_txm8,  pqz_txm20, pqz_txm40, pqz_txm80,
-#ifdef PQZ_TXM_OVERSIZE
-                                                     pqz_txm16, pqz_txm160,
-#endif
-  };
   uint64_t *o = out;
-  if (i >= sizeof P / sizeof P[0])
+  if (i >= NP)
     return -1;
   const lnp_tbox_params_struct *p = P[i];
   params_abdlop (&o, p->tbox);
@@ -639,4 +641,31 @@ pqz_shim_params (unsigned i, uint64_t *out, size_t *n)
   *o++ = p->prooflen;
   *n = (size_t)(o - out);
   return 0;
+}
+
+/* testkit::ghint: relation i's (P above) quad_many dcompress: poly_dcompress_use_ghint (ret, y, r) and
+   poly_dcompress_make_ghint (ret, z, r) of in = y[64], z[64], r[64], each result dumped; -1 past the last relation */
+int
+pqz_shim_ghint (unsigned i, const int64_t *in, uint64_t *out)
+{
+  pqz_arena_mark_t mark;
+  poly_t y, z, r, ret;
+  if (i >= NP)
+    return -1;
+  dcompress_params_srcptr d = P[i]->quad_eval->quad_many->dcompress;
+  pqz_err = PQZ_OK;
+  pqz_arena_mark (&mark);
+  poly_alloc (y, pqz_tx_ring);
+  poly_alloc (z, pqz_tx_ring);
+  poly_alloc (r, pqz_tx_ring);
+  poly_alloc (ret, pqz_tx_ring);
+  poly_set_coeffvec_i64 (y, in);
+  poly_set_coeffvec_i64 (z, in + 64);
+  poly_set_coeffvec_i64 (r, in + 128);
+  poly_dcompress_use_ghint (ret, y, r, d);
+  dump_poly (&out, ret);
+  poly_dcompress_make_ghint (ret, z, r, d);
+  dump_poly (&out, ret);
+  pqz_arena_release (&mark);
+  return pqz_err;
 }

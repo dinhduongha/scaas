@@ -164,9 +164,9 @@ pub fn dec(s: &[i8; 2048], ct: &[u8; CT_BYTES]) -> Result<([i64; 16], [i64; 16])
 }
 
 /// `pqz_test_mutate` (test hook): decode `proof` for relation `rel` (an op, 0x81 = R_TX0, or an R_TXM shape code),
-/// change one field (`kind` with `r1` / `r2`) and re-encode. `Ok(None)`: the proof does not decode.
+/// change one field (`kind` 0..13 with `r1` / `r2`; any other kind re-encodes only) and re-encode. `Ok(None)` where
+/// C returns 0: an unknown relation, a proof that does not decode, an encoding that does not fit 2 MAX_PROOF bytes.
 #[cfg(feature = "test-hooks")]
 pub fn test_mutate(rel: u8, proof: &[u8], kind: u32, r1: u64, r2: u64) -> Result<Option<Vec<u8>>, Error> {
-    let _ = (rel, proof, kind, r1, r2);
-    Err(Error::Internal)
+    coder::test_mutate(rel, proof, kind, r1, r2)
 }

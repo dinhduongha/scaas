@@ -1,6 +1,6 @@
 //! The frozen vectors (smartcontracts/vectors/pqz, pq-zero-knowledge.md §14) against the Rust port. Keys part:
 //! keygen.json, enc.json (rows, the trivial ciphertext and the Add / Sub ops), matrix.json, the R_TXM group seeds,
-//! and Enc's input errors.
+//! and Enc's input errors. Codec part (feature `test-hooks`): every PQZL proof decodes and re-encodes to itself.
 use pqzl::{dec, enc_group_seed, enc_seed, keygen, keypair_from_secret, Error, CT_BYTES, POLYVEC_BYTES};
 use serde_json::Value;
 use sha3::digest::{ExtendableOutput, Update, XofReader};
@@ -201,4 +201,37 @@ fn enc_dec_input_errors() {
     ct[CT_BYTES - 8..].copy_from_slice(&[0; 8]);
     ct[..8].copy_from_slice(&[0xff; 8]); // a u coefficient >= q
     assert_eq!(dec(&k.s, &ct).err(), Some(Error::Input));
+}
+
+/// the relation code of a PQZL proof's form (pqz_int.h: an op, PQZ_REL_TX0, PQZ_REL_TXM (log2 M, auditorOn) from the
+/// case name M<m>-<on|off>[-...])
+#[cfg(feature = "test-hooks")]
+fn rel_code(form: &str, op: u64, case: Option<&str>) -> u8 {
+    match form {
+        "TRANSFER0" => 0x81,
+        "TRANSFER-MULTI" => {
+            let mut it = case.expect("R_TXM case")[1..].split('-');
+            let m: u8 = it.next().unwrap().parse().unwrap();
+            0x70 | ((it.next() == Some("on")) as u8) << 3 | m.trailing_zeros() as u8
+        }
+        _ => op as u8,
+    }
+}
+
+/// every PQZL proof of proof_pqzl.json (19 rows) and fee0.json (4 rows) decodes as its relation and re-encodes to the
+/// same bytes (`test_mutate` with a kind past 13: decode, the verifier's reductions, encode)
+#[cfg(feature = "test-hooks")]
+#[test]
+fn codec_roundtrip() {
+    let mut n = 0;
+    let pqzl = json("proof_pqzl.json");
+    let fee0 = json("fee0.json");
+    let rows = pqzl["rows"].as_array().unwrap().iter().map(|r| (r, &r["proof"]));
+    for (r, proof) in rows.chain(fee0["rows"].as_array().unwrap().iter().map(|r| (r, &r["pqzl"]["proof"]))) {
+        let code = rel_code(r["form"].as_str().unwrap(), r["op"].as_u64().unwrap(), r["statement"]["case"].as_str());
+        let p = hex(proof);
+        assert!(pqzl::test_mutate(code, &p, 14, 0, 0) == Ok(Some(p.clone())), "{} {}", r["form"], r["statement"]["case"]);
+        n += 1;
+    }
+    assert_eq!(n, 23);
 }
