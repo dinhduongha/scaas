@@ -1,0 +1,58 @@
+keys / cbd / matrix / enc: 0.1 s
+pqzl TRANSFER           proof  42762 B  prove+verify 3.15 s
+pqzl TRANSFER0          proof  42431 B  prove+verify 2.39 s
+pqzl BURN               proof  41904 B  prove+verify 2.65 s
+pqzl REFRESH            proof  41915 B  prove+verify 2.39 s
+pqzl REGISTER           proof  28093 B  prove+verify 0.75 s
+pqzl DISCLOSE-SENDER    proof  28977 B  prove+verify 0.96 s
+pqzl DISCLOSE-RECEIVER  proof  28996 B  prove+verify 0.83 s
+pqzl DISCLOSE-AUDITOR   proof  28986 B  prove+verify 0.93 s
+pqzh TRANSFER           proof 230946 B  prove+verify 1.40 s
+pqzh TRANSFER0          proof 231480 B  prove+verify 1.33 s
+pqzh BURN               proof 232184 B  prove+verify 1.33 s
+pqzh REFRESH            proof 230280 B  prove+verify 1.36 s
+pqzh REGISTER           proof 186778 B  prove+verify 0.79 s
+pqzh DISCLOSE-SENDER    proof 186456 B  prove+verify 0.85 s
+pqzh DISCLOSE-RECEIVER  proof 187226 B  prove+verify 0.84 s
+pqzh DISCLOSE-AUDITOR   proof 187194 B  prove+verify 0.78 s
+pqzl M1-on              proof  42716 B  prove+verify 2.39 s
+pqzh M1-on              proof 232494 B  prove+verify 1.34 s
+pqzl M2-on              proof  43604 B  prove+verify 3.28 s
+pqzh M2-on              proof 231256 B  prove+verify 1.32 s
+pqzl M4-on              proof  45275 B  prove+verify 4.08 s
+pqzh M4-on              proof 232708 B  prove+verify 1.43 s
+pqzl M8-on              proof  61794 B  prove+verify 9.52 s
+pqzl M1-off             proof  42426 B  prove+verify 2.21 s
+pqzh M1-off             proof 232248 B  prove+verify 1.36 s
+pqzl M2-off             proof  42919 B  prove+verify 2.96 s
+pqzh M2-off             proof 232078 B  prove+verify 1.44 s
+pqzl M4-off             proof  43932 B  prove+verify 2.72 s
+pqzh M4-off             proof 232494 B  prove+verify 1.42 s
+pqzl M8-off             proof  58975 B  prove+verify 5.73 s
+pqzl M2-off-two-real    proof  42923 B  prove+verify 3.10 s
+pqzh M2-off-two-real    proof 231640 B  prove+verify 1.35 s
+pqzl M4-off-decoys      proof  43917 B  prove+verify 3.02 s
+pqzh M4-off-decoys      proof 231726 B  prove+verify 1.34 s
+pqzl M8-on-boundary     proof  61795 B  prove+verify 8.27 s
+proofs: 81.4 s
+negative: 731 rows (420 decoder, 311 verifier): 122.2 s
+worst case: 134.5 s
+total: 143.5 s
+same matrix.json 1051 B
+same cbd.json 4293 B
+same keygen.json 2897 B
+same enc.json 7897 B
+same statement_transfer.json 304699 B
+same statement_burn.json 102686 B
+same statement_refresh.json 102610 B
+same statement_register.json 34421 B
+same statement_disclose.json 203876 B
+same statement_transfer_multi.json 2861546 B
+same proof_pqzl.json 2103136 B
+same proof_pqzh.json 7417141 B
+same negative.json 245576 B
+same selftest.json 2356 B
+same worstcase_noise.json 3459894 B
+same fee0.json 2796209 B
+pqz-vectors --check: 16 files, 19650288 B: ok
+rc=0

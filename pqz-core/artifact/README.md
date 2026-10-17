@@ -8,6 +8,15 @@ proven preset; `docs/research/pqzh-ligero.md` §12–§14), the statement codec 
 2026-10-13). Nothing built is published: no image, no wasm, no binaries. You build and run everything on your own
 machine, and the package compares your results with `expected-results.json`.
 
+## Status (2026-10-17): frozen
+
+**The freeze** (after gates A / B): `OUT=artifact/runs/freeze-2026-10-17 scripts/capped pqz-core/artifact/reproduce.sh
+--full` on the host toolchain under the machine lock (AMD Ryzen 5 7235HS, Ubuntu 24.04, clang 18.1.3, rustc 1.97.1,
+node v26.8.1): **RESULT PASS, 233 ok, 0 FAIL** (`runs/freeze-2026-10-17/results.md`); `expected-results.json` built from
+it by `results.py freeze "frozen 2026-10-17" artifact/runs/freeze-2026-10-17` — every proof hash, size and digest line
+equal to the provisional file, only the informational times changed; `results.py check` of the run against it: PASS.
+The PROVISIONAL notes below are history.
+
 ## Status (2026-10-17, P6-ANON S6, branch `p6-anon-s6b`: op 7 `R_TXM` in the package, on the new pqz-core layout)
 
 - **op 7 in the default stages:** `results.py` replays every built `(id, M, auditorOn)` of `proof_pqzl.json` /
@@ -105,7 +114,7 @@ Machine: AMD Ryzen 5 7235HS (8 threads; flags aes vaes avx2), in Docker: True. T
    pqz-ffi, the vectors incl. `tamper.py`):
 
    ```sh
-   OUT=pqz-core/artifact/runs/freeze-<date> scripts/capped pqz-core/artifact/reproduce.sh --full
+   OUT=artifact/runs/freeze-<date> scripts/capped pqz-core/artifact/reproduce.sh --full   # OUT is relative to pqz-core/
    cd pqz-core && python3 -I artifact/results.py freeze "frozen <date>" artifact/runs/freeze-<date> \
      > artifact/expected-results.json      # prints the three tables (Markdown) on stderr
    ```
