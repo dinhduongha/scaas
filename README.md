@@ -494,8 +494,9 @@ other ([section 7](#7-meta-transactions-and-eip-1776)).
 A chain wants many transactions and deep liquidity, because that is what makes it useful and what pays its validators.
 Yet the common design burns part of every fee (EIP-1559's base fee and its imitators) to make the native coin scarcer
 and dearer — and a dearer coin makes every transaction more expensive, which means fewer transactions. The two goals
-pull against each other. Nothing requires the burn: a chain grows by carrying more transactions, and if blocks fill up
-the gas price can rise on its own.
+pull against each other. Burning is not needed for either goal: a chain earns more by carrying more transactions, not
+by destroying its coin, and when blocks are full the gas price already rises by itself, which is enough to ration
+space.
 
 SCaaS burns nothing: the fee of an operation goes to whoever executes it, in the token used, and the cost of a payment
 does not depend on the price of a coin the user never holds.
