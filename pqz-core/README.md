@@ -45,9 +45,11 @@ flowchart LR
 | Security rests on | MSIS / MLWE (lattices) | hash functions only |
 
 Both stay far under the 60 ms verify limit, and both provers fit the 256 MiB browser (wasm32) memory limit. One precompile verifies both, chosen by the `proofSystemId` in the
-statement. **Live:** the precompile runs on chain 7622 (the testnet) since 2026-10-16 ([§3](#3-two-proof-systems-one-precompile)).
-With op 7 (multi-recipient transfer, [§5.4](#54-op-7-r_txm-multi-recipient-transfer-provisional)) the node's verify arena
-grows to 512 MiB (owner 2026-10-16).
+statement. **Live:** the precompile runs on chain 7622 (the testnet) since 2026-10-16 for ops 1–6
+([§3](#3-two-proof-systems-one-precompile)). **op 7** (one proof for a transfer to M recipients,
+[§4](#4-statement-forms-ids-limits), [§5.4](#54-op-7-r_txm-multi-recipient-transfer-provisional)) is built in both systems
+and in `pqz-ffi`, with vectors, fuzzing and the package; its activation on chain 7622 (gas rows per `(id, M, auditorOn)`)
+is in progress (P6-ANON S8).
 
 ## 2. What PQZ is
 
@@ -66,7 +68,8 @@ read balances later nor forge proofs and mint ([overview](../docs/contracts/pq-z
   - key well-formedness — `R_REG`;
   - a transfer's encryption, norms, digit carries and balance — `R_TX`, `R_TX0`;
   - burn / refresh — `R_BURN`;
-  - decryption for disclosure — `R_DS`, `R_DR`.
+  - decryption for disclosure — `R_DS`, `R_DR`;
+  - a transfer to M recipients in one proof (decoys receive an encryption of 0) — `R_TXM` (op 7).
 
 ## 3. Two proof systems, one precompile
 
@@ -76,7 +79,7 @@ read balances later nor forge proofs and mint ([overview](../docs/contracts/pq-z
 | Parameters | MSIS / MLWE, β ≥ 452 (`pqzl/params/estimator-e-s1*.txt`) | proven (unique-decoding) preset n = 32,756, k = 817, t = 121; 127.2 bits total ([pqzh-ligero.md](../docs/research/pqzh-ligero.md), "soundness") |
 | Code | C — `pqzl/src/`, `pqzl/lazer/`, `pqzl/params/`; native and freestanding wasm32 | Rust crate `pqzh-ligero` — `pqzh/ligero/`; native and wasm32 |
 | On-chain verifier | `pqz_verify_fast`, the specialised verifier (`pqzl/src/pqz_sv.c`); `pqz_verify` is the reference | `pqzh_ligero::verify` |
-| Backup | — | the Plonky3 STARK crate at the top of `pqzh/`, kept as a record, never linked |
+| Backup | — | the Plonky3 STARK crate `pqzh/stark-backup/`, kept as a record, never linked |
 
 **PQZL without heavy dependencies.** Prover and verifier use **no GMP, MPFR, HEXL, floating point, `malloc`, `abort`
 or stdio**. The six rewritten layers:
@@ -103,13 +106,16 @@ only).
 - **`pqz-ffi`** (`ffi/`) — **one `PQZ` precompile for both systems**, details in [ffi/README.md](ffi/README.md):
   - C ABI `pqz_precompile(input, len, out, out_len) -> status` (`ffi/pqz_ffi.h`, for the node's P/Invoke);
   - input `u8(op) ‖ be32(len(stmt)) ‖ stmt ‖ proof` → `pqz_stmt::decode_input` → dispatch on the statement's
-    `proofSystemId` to PQZL's `pqz_verify_fast` or to the Ligero crate; op 6 returns the cached self-test hash;
+    `proofSystemId` to PQZL's `pqz_verify_fast` or to the Ligero crate; ops 1–5 and op 7 (every built `(M, auditorOn)`
+    of both ids; an unbuilt shape ⇒ `…00`); op 6 returns the cached self-test hash;
   - libpqz is built by `build.rs` with `pqzl/build.sh`'s flags; one process-wide lock; one worker thread with a fixed
     16 MiB stack; fixed arenas: verify-only 512 MiB, prove / generic verify 1 GiB (wasm32: one 512 MiB arena; P6-ANON S3);
   - status 0 ok (`…01` / `…00`), 1 revert (input over `MAX_INPUT`), 2 bad arguments, 3 input-caused panic ⇒ `…00`,
     4 node fault ⇒ no result;
-  - feature `prove` adds keygen / enc / dec / prove of both systems (wasm32 byte-equal with native);
-  - `src/bin/pqz-vectors.rs` generates the frozen vectors `smartcontracts/vectors/pqz/`.
+  - feature `prove` adds keygen / enc / dec / prove of both systems, op 7 included with its multi-group encryption and
+    the sender memo (HKDF-SHA256), wasm32 byte-equal with native (wasm32 proves PQZL op 7 only for M ≤ 4);
+  - `src/bin/pqz-vectors.rs` generates the frozen vectors `smartcontracts/vectors/pqz/` (op 7: 11 PQZL + 8 PQZH proof
+    rows, 342 negative rows).
 
 **Live on chain 7622** (the testnet, reset 2026-10-16 with the precompiles from block 0; genesis hash unchanged
 `0x24e43dcb…c464`): the Nethermind plugin `Nethermind.Pqz` ([nethermind/README.md](nethermind/README.md), image
@@ -117,11 +123,11 @@ only).
 
 | Precompile | Address | Gas (calibrated once, 0.359 M gas / ms) |
 |---|---|---|
-| `PQZ` (ops 1–6, both systems) | `0x5caa500000000000000000000000000000000f01` | per (op, `proofSystemId`, statement length) row: 2,567,000–5,409,000 + 3 per input word; `OP_SELFTEST` 2,567,000 |
+| `PQZ` (ops 1–6, both systems; op 7 from S8) | `0x5caa500000000000000000000000000000000f01` | per (op, `proofSystemId`, statement length) row: 2,567,000–5,409,000 + 3 per input word; `OP_SELFTEST` 2,567,000. op 7 has no row yet: it is charged the smallest row and answered `…00` without calling `pqz-ffi` |
 | `MLDSA44` (EIP-8355 layout) | `0x5caa500000000000000000000000000000000012` | 49,000 + 6 per message word |
 | `MLDSA65` (EIP-8355 layout) | `0x5caa500000000000000000000000000000000013` | 68,000 + 6 per message word |
 
-The prices live in the chainspec section `engine.Pqz` (a re-price or op 7 = a new schedule); status 4 (node fault) ⇒
+The prices live in the chainspec section `engine.Pqz` (a re-price or op 7 = a new schedule at a future timestamp); status 4 (node fault) ⇒
 log `PQZ-NODE-FAULT` and process exit 120, never a verdict. Live run: probes and e2e pass
 (`nethermind/runs/2026-10-16-live.txt`); roll-out and rollback: [nethermind/chain/RUNBOOK.md](nethermind/chain/RUNBOOK.md).
 Chain 22776 (the future mainnet) gets the same addresses only after the audit and the licence clearance.
@@ -141,13 +147,34 @@ layout — statements, objects, both proof formats, the precompile input and `OP
 | 4 | DISCLOSE-SENDER | `R_DS` | 33,184 | the sender's encryption of an amount |
 | 5 | DISCLOSE-RECEIVER, DISCLOSE-AUDITOR | `R_DR` | 33,184 | decryption of a ciphertext |
 | 6 | SELFTEST | — | 0 | input exactly `06 00000000`; returns the self-test hash `ed910a2c…1333d205` |
-| 7 | multi-recipient transfer (M legs, auditor on / off) | `R_TXM` | 83,072–215,936 | sender debit, M receiver credits (decoys receive Enc(0)), per-leg auditor copies, fee |
+| 7 | TRANSFER-MULTI (M legs, auditor on / off) | `R_TXM` | 66,560–215,936 | sender debit, M leg credits (decoys receive Enc(0)), per-leg auditor copies, fee, balance digits |
 
-**op 7 `R_TXM`** ([multi-recipient plan](../docs/superpowers/plans/2026-10-14-p6-anon.md)): one proof, M recipients;
-built PQZL M ∈ {1, 2, 4, 8}, PQZH M ∈ {1, 2, 4} (M = 8 / 16 exceed PQZH's `MAX_PROOF` and `MAX_INPUT`). Every e2
-vector is bounded by 64 in ℓ2, per vector (owner 2026-10-15). Done in PQZL (C), PQZH (Rust) and `pqz-stmt`; **not yet in
-`pqz-ffi` or on chain** (P6-ANON S3–S8). Statement: 83,072 B (M = 1, on) to 215,936 B (M = 8, on); joins the frozen
-set before gates A / B.
+**op 7 `R_TXM`** ([multi-recipient plan](../docs/superpowers/plans/2026-10-14-p6-anon.md), spec CTR-PQZ-23):
+
+- **What it is:** one transfer, **one proof**, M legs. The sender is visible and debited once; the real recipient(s) are
+  hidden among the M legs, and a decoy leg carries an encryption of 0. M counts legs, real and decoys: 7 real recipients
+  ⇒ M = 8 with one decoy (owner 2026-10-16). Every e2 vector is bounded by 64 in ℓ2, per vector (owner 2026-10-15).
+- **Header:** the op 1 header with word 320 = M, word 192 = `recipientsHash`, word 448 = `auditorOn`; the legs are
+  encrypted in groups of up to 4 that share one `(r, e1)` (β 446 with the auditor, owner 2026-10-15). The sender memo is
+  sealed with HKDF-SHA256.
+- **Built shapes** (`pqz-stmt` refuses the others; statement bytes):
+
+  | M | auditor on | auditor off | PQZL | PQZH |
+  |---|---|---|---|---|
+  | 1 | 83,072 | 66,560 | built | built |
+  | 2 | 99,712 | 83,072 | built | built |
+  | 4 | 132,992 | 116,096 | built | built |
+  | 8 | 215,936 | 198,528 | built | not built: proof bound 281,208 B > `MAX_PROOF` 262,144 B, input > `MAX_INPUT` |
+  | 16 | — | — | bench builds only (statement + proof > `MAX_INPUT`) | bench builds only |
+
+  The length alone does not fix the shape: (1, on) and (2, off) are both 83,072 B, so the node prices op 7 by the
+  `(proofSystemId, M, auditorOn)` header words (plan D19).
+- **Wallet rules (owner 2026-10-16):** the user chooses the storage mode (BUNDLE / COMPACT) per transfer, the contract
+  never switches; an auditor-on BUNDLE shape over the gas cap is offered as one M = 8 COMPACT transfer (default) or split
+  into fitting BUNDLE transfers; PQZH op 7 takes at most 10 inline credits; wasm32 proves PQZL op 7 only for M ≤ 4.
+- **Where it is:** PQZL (C) and PQZH (Rust) relations, `pqz-stmt`, `pqz-ffi` (S3), the frozen vectors (S4), fuzzing (S5,
+  2 h per target, no finding), the reproducibility package (S6); **on chain 7622: in progress (S8)**; the token entry
+  points follow S7. Joins the frozen set before gates A / B.
 
 | `proofSystemId` | keccak256 of | Value | Frozen at |
 |---|---|---|---|
@@ -158,7 +185,8 @@ set before gates A / B.
 |---|---|
 | `MAX_INPUT` (larger input = revert) | 393,216 B |
 | `MAX_PROOF`, PQZL | 98,304 B |
-| `MAX_PROOF`, PQZH | 262,144 B (exact maximum at the proven preset: 235,470 B for `R_TX`; largest PQZH input 5 + 83,072 + 235,470 = 318,547 B) |
+| `MAX_PROOF`, PQZH | 262,144 B (exact maximum at the proven preset: 235,470 B for `R_TX`, 236,196 B for op 7 M = 4 with the auditor) |
+| Largest input | PQZH 369,193 B (op 7 M = 4 on: 5 + 132,992 + 236,196); PQZL 314,245 B (op 7 M = 8 on, at `MAX_PROOF`) |
 | Proof length | `1 ≤ len(proof) ≤ MAX_PROOF(id)` |
 | Verify time | **≤ 60 ms p99** on the chain host, also bounding wasm32 (owner decision 2026-10-14) |
 
@@ -261,62 +289,89 @@ are `l11` / `l12` ([pqzh-ligero.md](../docs/research/pqzh-ligero.md), "exact len
 
 </details>
 
-### 5.3 The `PQZ` precompile path (`pqz-ffi`, run `ffi1f2`)
+### 5.3 The `PQZ` precompile path (`pqz-ffi`, run `layout`, 2026-10-17)
 
-Through the C ABI `pqz_precompile`, as the node calls it (verify-only arena 144 MiB):
+Through `pqz-ffi` as the node calls it, with the verify-only arena of 512 MiB (ops 1–5: the C ABI `pqz_precompile`;
+op 7: the Rust entry point `precompile`, the same call without the C wrapper):
 
 | Form (op) | PQZL verify p50 / p99 (ms) | PQZH verify p50 / p99 (ms) |
 |---|---|---|
-| TRANSFER (1) | 8.21 / 10.42 | 9.78 / 10.76 |
-| TRANSFER0 (1) | 7.93 / 9.40 | 9.42 / 10.20 |
-| BURN (2) | 7.81 / 10.13 | 9.25 / 9.87 |
-| REFRESH (2) | 7.68 / 8.64 | 9.27 / 9.53 |
-| REGISTER (3) | 4.05 / 5.01 | 7.01 / 9.22 |
-| DISCLOSE-SENDER (4) | 4.28 / 5.23 | 7.23 / 9.67 |
-| DISCLOSE-RECEIVER (5) | 4.50 / 5.14 | 7.12 / 7.81 |
-| DISCLOSE-AUDITOR (5) | 4.58 / 5.29 | 7.11 / 7.96 |
+| TRANSFER (1) | 7.90 / 8.62 | 9.56 / 9.71 |
+| TRANSFER0 (1) | 7.65 / 8.61 | 9.33 / 9.42 |
+| BURN (2) | 7.50 / 10.04 | 9.12 / 10.02 |
+| REFRESH (2) | 7.49 / 9.57 | 9.12 / 9.39 |
+| REGISTER (3) | 3.99 / 6.58 | 6.91 / 7.04 |
+| DISCLOSE-SENDER (4) | 4.16 / 4.46 | 7.22 / 7.40 |
+| DISCLOSE-RECEIVER (5) | 4.38 / 4.80 | 7.07 / 7.26 |
+| DISCLOSE-AUDITOR (5) | 4.38 / 4.77 | 7.06 / 7.54 |
+| TRANSFER-MULTI (7), M = 1, auditor on | 7.98 / 8.76 | 9.60 / 9.77 |
+| TRANSFER-MULTI (7), M = 1, auditor off | 8.27 / 10.41 | 9.28 / 9.62 |
+| TRANSFER-MULTI (7), M = 2, auditor on | 8.45 / 10.81 | 9.91 / 10.72 |
+| TRANSFER-MULTI (7), M = 2, auditor off | 8.52 / 10.16 | 9.58 / 9.83 |
+| TRANSFER-MULTI (7), M = 4, auditor on | 9.27 / 10.52 | 10.64 / 11.02 |
+| TRANSFER-MULTI (7), M = 4, auditor off | 9.06 / 13.24 | 9.87 / 10.01 |
+| TRANSFER-MULTI (7), M = 8, auditor on | 13.58 / 14.48 | not built |
+| TRANSFER-MULTI (7), M = 8, auditor off | 12.93 / 20.05 | not built |
+
 
 <details>
-<summary>Proof sizes, the Rust entry point, adversarial inputs and source</summary>
+<summary>Proof sizes, the Rust entry point, adversarial inputs, op 7 sizes and source</summary>
 
-Source: `ffi/runs/ffi1f2-bench.jsonl` (native, n = 200 per cell, one proof per form, verify-only arena 144 MiB).
-`precompile` = the Rust entry point, C ABI = `pqz_precompile` as the node calls it; ms.
+Source: `ffi/runs/layout-bench.jsonl` (native, n = 200 per cell, one proof per form, verify-only arena 512 MiB; the
+verification run of the layout move). Adversarial = one flipped proof bit.
 
-| Form (op) | PQZL proof (bytes) | PQZL `precompile` p50 / p99 (ms) | PQZL C ABI p50 / p99 (ms) | PQZH proof (bytes) | PQZH `precompile` p50 / p99 (ms) | PQZH C ABI p50 / p99 (ms) |
+| Form (op) | PQZL proof (bytes) | PQZL `precompile` p50 / p99 (ms) | PQZL adversarial p99 (ms) | PQZH proof (bytes) | PQZH `precompile` p50 / p99 (ms) | PQZH adversarial p99 (ms) |
 |---|---|---|---|---|---|---|
-| TRANSFER (1) | 42,759 | 7.97 / 9.26 | 8.21 / 10.42 | 231,022 | 9.74 / 11.19 | 9.78 / 10.76 |
-| TRANSFER0 (1) | 42,387 | 7.94 / 9.08 | 7.93 / 9.40 | 231,064 | 9.39 / 10.22 | 9.42 / 10.20 |
-| BURN (2) | 41,914 | 7.78 / 10.16 | 7.81 / 10.13 | 231,320 | 9.29 / 11.39 | 9.25 / 9.87 |
-| REFRESH (2) | 41,902 | 7.85 / 11.83 | 7.68 / 8.64 | 231,928 | 9.26 / 10.42 | 9.27 / 9.53 |
-| REGISTER (3) | 28,068 | 4.03 / 4.74 | 4.05 / 5.01 | 187,738 | 7.04 / 9.62 | 7.01 / 9.22 |
-| DISCLOSE-SENDER (4) | 28,964 | 4.24 / 4.85 | 4.28 / 5.23 | 186,842 | 7.23 / 8.53 | 7.23 / 9.67 |
-| DISCLOSE-RECEIVER (5) | 28,990 | 4.49 / 7.31 | 4.50 / 5.14 | 187,098 | 7.11 / 8.07 | 7.12 / 7.81 |
-| DISCLOSE-AUDITOR (5) | 28,995 | 4.58 / 5.74 | 4.58 / 5.29 | 186,778 | 7.10 / 8.02 | 7.11 / 7.96 |
+| TRANSFER (1) | 42,759 | 7.88 / 8.07 | 8.04 | 231,022 | 9.58 / 10.23 | 1.26 |
+| TRANSFER0 (1) | 42,387 | 7.61 / 7.93 | 9.97 | 231,064 | 9.27 / 9.56 | 1.28 |
+| BURN (2) | 41,914 | 7.51 / 9.52 | 8.77 | 231,320 | 9.11 / 9.41 | 0.57 |
+| REFRESH (2) | 41,902 | 7.49 / 8.33 | 10.18 | 231,928 | 9.11 / 9.25 | 1.19 |
+| REGISTER (3) | 28,068 | 3.92 / 5.94 | 5.49 | 187,738 | 6.91 / 7.49 | 0.38 |
+| DISCLOSE-SENDER (4) | 28,964 | 4.15 / 4.83 | 4.39 | 186,842 | 7.22 / 7.34 | 0.42 |
+| DISCLOSE-RECEIVER (5) | 28,990 | 4.39 / 4.72 | 4.61 | 187,098 | 7.06 / 7.18 | 0.43 |
+| DISCLOSE-AUDITOR (5) | 28,995 | 4.40 / 4.89 | 4.60 | 186,778 | 7.06 / 7.24 | 0.43 |
 
-- Adversarial (C ABI, one flipped proof bit): PQZL p99 ≤ 11.1 ms (full verify), PQZH p99 ≤ 1.6 ms (rejected early).
-- Decode ≤ 0.012 ms p99; the boundary adds ≤ 0.1 ms at p50.
-- Self-test cold 82.6 ms; verify-only arena peak 94,615,600 B.
-- Every op ≤ 11.9 ms p99 against the 60 ms limit; the node plugin calibrates gas on these p99s.
+
+op 7 (statement, proof and prove time of the bench's proof; largest input = 5 + statement + the proof bound):
+
+| M, auditor | statement (bytes) | PQZL proof (bytes) | PQZL prove (ms) | PQZL largest input (bytes) | PQZH proof (bytes) | PQZH prove (ms) | PQZH largest input (bytes) |
+|---|---|---|---|---|---|---|---|
+| 1, on | 83,072 | 42,766 | 810 | 181,381 | 232,174 | 627 | 318,547 |
+| 1, off | 66,560 | 42,409 | 920 | 164,869 | 230,968 | 638 | 301,309 |
+| 2, on | 99,712 | 43,603 | 1,100 | 198,021 | 232,174 | 646 | 335,187 |
+| 2, off | 83,072 | 42,951 | 1,703 | 181,381 | 231,918 | 630 | 318,547 |
+| 4, on | 132,992 | 45,274 | 1,958 | 231,301 | 232,708 | 634 | 369,193 |
+| 4, off | 116,096 | 43,922 | 854 | 214,405 | 230,904 | 632 | 351,571 |
+| 8, on | 215,936 | 61,802 | 2,517 | 314,245 | not built | — | — |
+| 8, off | 198,528 | 58,998 | 1,948 | 296,837 | not built | — | — |
+
+
+- Decode ≤ 0.04 ms; the C wrapper adds ≤ 0.1 ms at p50.
+- Self-test cold 83.5 ms; verify-only arena peak 268,113,792 B with every form's and every op 7 shape's keys and tables
+  kept (×2.0 margin to 512 MiB); prove with every relation loaded peaks at 853,679,872 B (1 GiB arena).
+- Every op ≤ 20.1 ms p99 against the 60 ms limit. The earlier run `ffi1f2` (144 MiB arena, ops 1–5) is in
+  `ffi/runs/`.
 
 </details>
 
 ### 5.4 op 7 `R_TXM`, multi-recipient transfer (provisional)
 
-Built shapes only, auditor on (auditor off is a little smaller). PQZL: runs `research/pqzl-measure/runs/l3a-*` (P6-ANON L3,
-`pqzl/params/estimator-e-s1-txm.txt`: MSIS β 452–459, MLWE β 470, knowledge error ≤ 2^−127); PQZH: runs
-`pqzh/ligero/runs/l16-txm-*` ([pqzh-ligero.md §15](../docs/research/pqzh-ligero.md)).
+Built shapes, auditor on (auditor off is a little smaller and faster). Run: the package's `--multi-bench` in Docker
+(P6-ANON S6, 2026-10-17, `artifact/runs/s6-docker-multi/`; full table with auditor off and the oversize shapes in
+[artifact/README.md](artifact/README.md)). Parameters: `pqzl/params/estimator-e-s1-txm.txt` (MSIS β 452–459, MLWE β
+470, knowledge error ≤ 2^−127); PQZH: [pqzh-ligero.md §15](../docs/research/pqzh-ligero.md).
 
-| M | PQZL proof max (bytes) | PQZL SV verify p50 native (ms) | PQZL prove arena native / wasm (MiB) | PQZH exact max (bytes) | PQZH verify p99 native / wasm32 (ms) |
-|---|---|---|---|---|---|
-| 1 | 42,784 | 7.9 | = `R_TX` | 235,470 | 14.03 / 26.88 |
-| 2 | 43,616 | 8.1 | — | 235,470 | 15.03 / 28.62 |
-| 4 | 45,295 | 8.8 | 342.9 / 255.6 | 236,196 | 16.05 / 28.85 |
-| 8 | 61,822 | 12.9 | 664.4 / 495.3 | not built | — |
+| M | PQZL proof max (bytes) | PQZL prove native / wasm32 (ms) | PQZL SV verify p99 portable / wasm32 (ms) | PQZH proof max (bytes) | PQZH prove native / wasm32 (ms) | PQZH verify p99 native / wasm32 (ms) |
+|---|---|---|---|---|---|---|
+| 1 | 42,784 | 914 / 1,296 | 7.8 / 13.2 | 233,102 | 631 / 1,340 | 9.86 / 18.54 |
+| 2 | 43,616 | 978 / 1,371 | 8.6 / 14.2 | 232,526 | 635 / 1,346 | 10.12 / 19.01 |
+| 4 | 45,295 | 1,354 / 1,827 | 9.1 / 15.0 | 233,604 | 626 / 1,297 | 10.90 / 20.36 |
+| 8 | 61,822 | 2,398 / 2,931 (wasm32: bench build only) | 13.6 / 23.1 | not built | — | — |
 
-- PQZL SV verify wasm p50 12.7–21.5 ms; prove 1.1–2.6 s native. PQZH prove ≈ 0.7 s native, 1.5 s wasm32, heap ≤ 43.6 MB.
-- Memory: with all 14 PQZL relations' keys loaded, verify needs 193.8–253.4 MiB (node arena: 144 → 512 MiB in S3,
-  owner 2026-10-16); prove of M = 8 needs ≈ 0.66 GiB (native clients: 1 GiB arena). In the browser (256 MiB) PQZL
-  offers M ≤ 4; M = 8 is for native / desktop clients (controller proposal).
+- Memory: PQZL wasm32 prove peak 221–256 MiB for M ≤ 4 and 495 MiB for M = 8 (hence browser wallets offer M ≤ 4, M = 8
+  is for native / desktop clients); native prove arena 343 MiB at M = 4, 664 MiB at M = 8 (P6-ANON L3). PQZH prove heap
+  ≤ 44 MB native, ≤ 49 MiB wasm32.
+- The node's verify arena (512 MiB, S3) holds every op 7 shape's keys and tables with a 2× margin (§5.3).
 - One (4, on) transfer vs 4 op 1 transfers: ≈ 3.5× fewer bytes and verify time (PQZH, pqzh-ligero.md §15.3).
 
 ### 5.5 Comparisons
@@ -345,7 +400,7 @@ security, measured on the reference machine (details: [pqzh-backend-comparison.m
 | STARK (Plonky3, FRI + ZK, Goldilocks⁵) | 622 KB | 20.4 s | 2.8 GB | 19.1 ms | rejected: 2.7× larger, 30× slower to prove, 65× more memory |
 | ZK WHIR (Plonky3 WHIR with hiding) | 1.95 MB | 43 s | 2.4 GB | 46.5 ms | rejected: 8× larger, reaches only ≈ 124 bits |
 
-The rejected backends' code and runs are kept in `pqzh/` (top) as the record.
+The rejected backends' code and runs are kept in `pqzh/stark-backup/` as the record.
 
 ## 6. Build, test, run
 
@@ -538,7 +593,7 @@ paths of their day.
 - **LaZer:** MIT, (c) 2022-2026 IBM, `pqzl/lazer/LICENSE`; no patent grant — a licence / patent review is
   required before production use (not before publication).
 - **No GMP, MPFR, HEXL or libstdc++** in the library objects (`glic/runs/absence-2026-10-14.txt`).
-- **Rust dependencies:** `pqz-ffi` depends on the in-tree crates and `sha3` (`cc` at build time), the Ligero crate on
+- **Rust dependencies:** `pqz-ffi` depends on the in-tree crates and `sha3`, plus `hkdf` / `sha2` with feature `prove` (the op 7 memo; `cc` at build time), the Ligero crate on
   `sha3` and `pqz-stmt`, `pqz-stmt` on nothing; the backup STARK crate's licence table is
   `glic/runs/pqzh-cargo-licences.tsv`.
 - **Local-only builds:** `pqzl/kat/build-lazer-dump.sh` links upstream LaZer statically with GMP / MPFR (LGPL), HEXL and
@@ -554,19 +609,23 @@ paths of their day.
 tbox fixes (v2) and z21, the specialised verifier, then the relations round: hedged provers, keys from seeds, `R_TX0`, `pqz-stmt`,
 PQZH on Ligero with all six forms, `pqz-ffi`, the frozen vectors (`smartcontracts/vectors/pqz/`) and serialization v1.
 
-Then (2026-10-15 / 16): op 7 `R_TXM` in both systems and `pqz-stmt` (P6-ANON tracks L and H, §5.4), and the
-precompile **live on chain 7622** (P6f, §3).
+Then (2026-10-15 / 17): the precompile **live on chain 7622** for ops 1–6 (P6f, §3) and the PQZ contracts deployed there
+(P6g: `PqzSafety`, `UAPqzVerifier`, the PQZ token kinds; end-to-end with real PQZL proofs); op 7 `R_TXM` in both systems,
+`pqz-stmt` and `pqz-ffi` with its vectors, fuzzing and package stage (P6-ANON L, H, S1–S6, S9); the directory layout
+(`pqzl/`, `pqzh/`, `research/`, 2026-10-17).
 
 **Next, in order:**
 
-1. **op 7 into `pqz-ffi`** (S3, with the 512 MiB verify arena), the vectors (S4), fuzzing (S5), the artifact stage (S6),
-   op 7 gas on the node (S8) — the [multi-recipient plan](../docs/superpowers/plans/2026-10-14-p6-anon.md).
+1. **op 7 on chain 7622** (S8, in progress): gas rows per `(id, M, auditorOn)` calibrated on the node image, tried on a
+   copy of 7622, then a second gas schedule on the live chain; then S7 (spec and gas tables) and the op 7 entry points
+   in the PQZ tokens.
 2. **Gate A (PQZL)** and **gate B (PQZH)** ([relations plan](../docs/superpowers/plans/2026-10-14-p6e-relations.md)): KAT 19/19, fix checks, differential 0 disagreements,
-   `pqz-vectors --check` and `pqz_kat.py --check`, wasm32 replay byte-equal, `pqz-ffi` tests, fuzz first runs clean (done 2026-10-15: no finding);
+   `pqz-vectors --check` and `pqz_kat.py --check`, wasm32 replay byte-equal, `pqz-ffi` tests, fuzzing clean;
    gate B also every PQZH op ≤ 262,144 B and ≤ 60 ms p99 native and wasm32 and the review of the modified Ligero ZK
    construction. Both ids freeze there.
 3. **The freeze:** `artifact/reproduce.sh --full` → `expected-results.json` (replaces every provisional number here).
-4. **Contracts on 7622** (P6g): `PqzToken`, `UAPqzVerifier`, `UAMldsaVerifier` on the live precompiles.
+4. **PQZL in Rust** (after the freeze; [plan](../docs/superpowers/plans/2026-10-17-pqzl-rust-port.md)): crate `pqzl` in
+   `pqzl/rust/`, byte-for-byte equal to the C core; which one is the production core is decided later (owner).
 
 **Possible extension (research only, not planned): zero knowledge for arbitrary circuits on Ligero.** Today each
 operation has its own hand-written relation. Ligero can prove any arithmetic circuit, so PQZ could become
@@ -593,5 +652,5 @@ Open items (arena exhaustion, global state, secret zeroing, `pqzl/check_symbols.
 | PQZL | `docs/research/pqz-core-e-s1.md` (the spike write-up), `pqz-specialised-verifier.md`, `pqz-verifier-floor.md`, `pqz-relations-burn-disclose.md`, `pqz-tbox-soundness.md`, `pqz-l2-domain.md`, `pqz-z21-norm.md`, `pqz-parameters-e-s0.md` |
 | PQZH | `docs/research/pqzh-ligero.md`, `pqzh-backend-comparison.md`, `pqzh-design.md`, `pqzh-prototype.md`, `pqzh-zk-ext5.md`, `pqzh-zk-whir.md`, `pqzh-solidity-verifier.md`, `pqzh-starkex-verifier.md` |
 | Node | [nethermind/README.md](nethermind/README.md) (plugin, image, gas), [nethermind/chain/RUNBOOK.md](nethermind/chain/RUNBOOK.md) (copy gate, live roll-out, rollback) |
-| Plans | [relations and serialization](../docs/superpowers/plans/2026-10-14-p6e-relations.md), [multi-recipient transfer](../docs/superpowers/plans/2026-10-14-p6-anon.md), [precompiles on chain 7622](../docs/superpowers/plans/2026-10-14-p6f-precompiles.md), [pqz-core layout](../docs/superpowers/plans/2026-10-15-pqz-core-layout.md) |
+| Plans | [relations and serialization](../docs/superpowers/plans/2026-10-14-p6e-relations.md), [multi-recipient transfer](../docs/superpowers/plans/2026-10-14-p6-anon.md), [precompiles on chain 7622](../docs/superpowers/plans/2026-10-14-p6f-precompiles.md), [pqz-core layout](../docs/superpowers/plans/2026-10-15-pqz-core-layout.md), [PQZL in Rust](../docs/superpowers/plans/2026-10-17-pqzl-rust-port.md) |
 | Other | anonymity research `docs/research/pqz-anonymity.md`; general-purpose circuits `docs/research/pqz-general-purpose.md`; licences `docs/research/pqz-licence-inventory.md` |
