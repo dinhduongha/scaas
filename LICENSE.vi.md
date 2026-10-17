@@ -48,8 +48,7 @@ tiếp thị riêng cho các hoạt động bị cấm, cũng không áp dụng 
 
 Nếu không thuộc diện bị cấm, và:
 
-- **công ty bạn là tổ chức thuần chay** (mọi sản phẩm, dịch vụ không có thành phần từ động vật và không thử nghiệm
-  trên động vật), bất kể doanh thu và bất kể các công ty khác trong tập đoàn (tập đoàn thuần chay thì mọi công ty của nó
+- **công ty bạn là tổ chức thuần chay** (định nghĩa ở dưới), bất kể doanh thu và bất kể các công ty khác trong tập đoàn (tập đoàn thuần chay thì mọi công ty của nó
   đều miễn phí; tập đoàn không thuần chay thì mọi công ty thuần chay trong đó, dù một hay nhiều công ty, đều miễn phí; các công ty còn
   lại xét theo doanh thu riêng); **hoặc**
 - **doanh thu của chính công ty bạn dưới 10 triệu USD** (không tính cả tập đoàn; năm tài chính gần nhất; tổ chức không
@@ -59,6 +58,26 @@ thì bạn được dùng, sao chép, sửa, phân phối, bán phần mềm **v
 Apache thì có cả quyền bằng sáng chế của Apache), với điều kiện: **khi phân phối lại, phải giữ nguyên Vegan Community
 License**, nên mỗi người nhận cũng phải tự đủ điều kiện. Phần mềm của bạn chỉ gọi hoặc link tới SCaaS vẫn theo license
 bạn chọn cho nó.
+
+**Tổ chức thuần chay** là công ty không thuộc diện bị cấm và thoả **một trong hai**:
+
+- **(a) Theo ngành:** hoạt động chính thuộc ngành mà sản phẩm động vật thường có mặt — thực phẩm, đồ uống, ngành ăn
+  uống, mỹ phẩm và chăm sóc cá nhân, thời trang, dệt may, giày dép, phụ kiện, hoá phẩm gia dụng, dược phẩm và thực phẩm
+  chức năng, thức ăn thú cưng, nông nghiệp — và **không** sản phẩm, dịch vụ nào có nguồn gốc động vật; hoặc hoạt động
+  chính là cứu hộ, chăm sóc, bảo vệ động vật.
+- **(b) Theo hành vi**, ở bất kỳ ngành nào, thoả **đủ cả ba**:
+  1. không sản phẩm, dịch vụ nào có nguồn gốc động vật;
+  2. vận hành nội bộ không dùng sản phẩm động vật: đồ ăn uống công ty cung cấp hoặc chi trả (căng-tin, catering, sự
+     kiện, tiếp khách), quà tặng, hàng mua để dùng (đồng phục, nội thất, xe…), trừ khi luật bắt buộc;
+  3. có chính sách thuần chay bằng văn bản cho (1) và (2), công bố trên website hoặc báo cáo thường niên.
+
+"Có nguồn gốc động vật" gồm mọi sản phẩm động vật bị cấm, **và cả** sữa, trứng, len và các sợi động vật khác, cùng mọi
+thứ chứa chúng hoặc đã thử nghiệm trên động vật. Chứng nhận của bên thứ ba (Vegan Society Trademark, V-Label,
+PETA-Approved Vegan…) là bằng chứng cho (a) và (b)(1), nhưng không bắt buộc. Công ty thuộc ngành không có lựa chọn động
+vật / thực vật (xây dựng, phần mềm, tài chính, logistics…) chỉ là tổ chức thuần chay theo (b).
+
+Vậy có ba nhóm: **bị cấm** (không được dùng); **miễn phí** (doanh thu dưới 10 triệu USD, hoặc thuần chay theo (a) hay
+(b)); **còn lại** cần Vegan Enterprise License.
 
 ## Vượt ngưỡng, vi phạm
 
