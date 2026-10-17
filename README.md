@@ -456,7 +456,7 @@ Every family separates shared code from per-user data in its own way, and each h
 Five habits of the usual blockchain, token and wallet model are the source of most losses and most of the friction that
 keeps blockchains out of everyday use. SCaaS designs each of them out.
 
-### Users must hold the native coin to pay fees
+### 5.1 Users must hold the native coin to pay fees
 
 The root mistake: to do anything at all, a user must first buy and hold the chain's native coin (ETH, BNB, SOL, …) to
 pay the fee. A shop, a payroll or a loyalty program cannot ask every customer to open an exchange account first; this
@@ -467,7 +467,7 @@ ERC-2771 forwarders, ERC-4337 paymasters, fee-bump and fee-grant features — he
 SCaaS: the user never needs a native coin. Every operation is a signed intent that a relayer submits and pays gas for;
 the relayer takes its fee in the token being used, or the merchant pays it ([section 7](#7-meta-transactions-and-eip-1776)).
 
-### Transactions are synchronous and tied to the sender's account
+### 5.2 Transactions are synchronous and tied to the sender's account
 
 On every chain a normal transaction is built for the sender's own account and its **sequence number** (EVM nonce,
 Stellar sequence, Cosmos account sequence, GRAM wallet seqno), at the moment it is sent. That means:
@@ -489,7 +489,7 @@ may execute it later, from their own account ([NET-ALL-02](docs/networks/README.
 its own two-dimensional nonce space (a lane and a sequence inside it), so independent operations never wait for each
 other ([section 7](#7-meta-transactions-and-eip-1776)).
 
-### Burning the fee coin works against the chain's own goal
+### 5.3 Burning the fee coin works against the chain's own goal
 
 A chain wants many transactions and deep liquidity, because that is what makes it useful and what pays its validators.
 Yet the common design burns part of every fee (EIP-1559's base fee and its imitators) to make the native coin scarcer
@@ -500,7 +500,7 @@ the gas price can rise on its own.
 SCaaS burns nothing: the fee of an operation goes to whoever executes it, in the token used, and the cost of a payment
 does not depend on the price of a coin the user never holds.
 
-### `approve` / `revoke`: a standing permission to drain, and three paid steps
+### 5.4 `approve` / `revoke`: a standing permission to drain, and three paid steps
 
 The standard ERC-20 flow is `approve(spender, amount)`, then the dApp's call (which uses `transferFrom`), then — if the
 user remembers — `revoke`. Two things are wrong with it:
@@ -521,7 +521,7 @@ allowance (`approve(spender, 0)`, which is what a "revoke" is in ERC-20) before 
 (for example USDC) still follows its own ERC-20 rules; its holders approve only the DEX's `DexPuller`, which pulls
 nothing without the holder's signed order.
 
-### The operator's server holds the power
+### 5.5 The operator's server holds the power
 
 In a classic web or custody setup, the server signs on the user's behalf. Whoever controls that server — or steals
 its keys — can move funds, and the audit log is whatever the server wrote. In SCaaS no server holds a key that can
