@@ -36,7 +36,7 @@ new (copied from the run, sha256 `bdf886541e7fafac…`). About 30 s per spec.
 `R_TX0` meets CTR-PQZ-03's β ≥ 450 at LaZer's default `pqz_delta` 1.00366 and the MLWE rank floor 33 on the first
 try, as the other relations did.
 
-`R_TXM` (op 7, P6-ANON L1; specs `txm{2,4,8,16}[0]_params.sage`, M = 1 is `R_TX` / `R_TX0`): sized by
+`R_TXM` (the multi-recipient transfer, precompile op 7, P6-ANON L1; specs `txm{2,4,8,16}[0]_params.sage`, M = 1 is `R_TX` / `R_TX0`): sized by
 `run_e_s1.sh <LaZer> <estimator> txm2 txm4 txm8 txm20 txm40 txm80 txm16 txm160` (`estimator-e-s1-txm.txt`, which also
 lists each header's knowledge-error line), headers by `regen.sh … txm2 … txm160 tx tx0 burn` (`codegen-txm-x1.txt`:
 `tx`, `tx0`, `burn` byte-identical). Every e2 vector is its own exact-ℓ2 block with `‖e2‖² ≤ 4,096` (owner

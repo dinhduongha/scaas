@@ -1,7 +1,7 @@
 # pqz-core/fuzz
 
 Continuous fuzzing of the PQZ precompile (P6e plan Task 10, decision D12; CTR-PQZ-10 "never crash, never wrong-accept
-at the boundary"; op 7 `R_TXM` since P6-ANON S5). Three libFuzzer targets drive `pqz-ffi` — the decoder (`pqz-stmt`), the PQZL C core's specialised
+at the boundary"; multi-recipient transfer (`R_TXM`) since P6-ANON S5). Three libFuzzer targets drive `pqz-ffi` — the decoder (`pqz-stmt`), the PQZL C core's specialised
 verifier and the PQZH Ligero verifier — in the precompile's production configuration. Local runs only: no CI job
 (controller 2026-10-14; the plan's CI `pqz` job is not built).
 
@@ -21,9 +21,9 @@ flowchart LR
 
 | Target | Input | Checks (besides the common ones below) |
 |---|---|---|
-| `precompile` | raw bytes into `pqz_precompile` (`targets/precompile.c` calls the C ABI itself), `-max_len=400000` (over `MAX_INPUT`, so the revert path is reached); seeds: the vectors' honest and negative inputs (op 7's included) and `06 00000000` | — |
-| `mutate` | edit script ≤ 512 B over one of the 44 honest inputs (PQZL and PQZH × 8 forms, the fee-0 forms, every built op 7 `(id, M, auditorOn)`, `regress/valid/`): byte 0 the input, byte 1 the mode (edits anywhere incl. op and length field / one decoded PQZL proof field changed and re-encoded by `pqz_test_mutate` (op 7 too: relation code `PQZ_REL_TXM`), then edits / statement only / proof only), then `[off lo, mid, hi, xor]` edits and an optional truncate / extend | the PQZL specialised verifier (the precompile's verdict) = the generic verifier on every 256th mutated PQZL input that decodes (then the core is put back on the verify-only arena) |
-| `codec` | edit script ≤ 512 B over an honest statement / precompile input / bundle / opening / PQZL proof (any honest input: byte 0 % 5 the codec, `(byte 0 / 5) << 4 \| byte 1 & 15` the input; op 7 statements, inputs and proofs included) | D15: accepted ⇒ re-encoding equals the input — `pqz_stmt::parse` ⇒ `encode`, the form's op and length (op 7: `multi_len(M, auditorOn)`); `decode_input` ⇒ `input(op, stmt, proof)` and `parse` agree; `parse_bundle` ⇒ `encode`; `parse_opening` ⇒ `opening`; the PQZL proof decoder `pqz_decproof` ⇒ `encproof` gives the same bytes; each decoder twice, equal results |
+| `precompile` | raw bytes into `pqz_precompile` (`targets/precompile.c` calls the C ABI itself), `-max_len=400000` (over `MAX_INPUT`, so the revert path is reached); seeds: the vectors' honest and negative inputs (the multi-recipient ones included) and `06 00000000` | — |
+| `mutate` | edit script ≤ 512 B over one of the 44 honest inputs (PQZL and PQZH × 8 forms, the fee-0 forms, every built multi-recipient `(id, M, auditorOn)`, `regress/valid/`): byte 0 the input, byte 1 the mode (edits anywhere incl. op and length field / one decoded PQZL proof field changed and re-encoded by `pqz_test_mutate` (multi-recipient proofs too: relation code `PQZ_REL_TXM`), then edits / statement only / proof only), then `[off lo, mid, hi, xor]` edits and an optional truncate / extend | the PQZL specialised verifier (the precompile's verdict) = the generic verifier on every 256th mutated PQZL input that decodes (then the core is put back on the verify-only arena) |
+| `codec` | edit script ≤ 512 B over an honest statement / precompile input / bundle / opening / PQZL proof (any honest input: byte 0 % 5 the codec, `(byte 0 / 5) << 4 \| byte 1 & 15` the input; multi-recipient statements, inputs and proofs included) | D15: accepted ⇒ re-encoding equals the input — `pqz_stmt::parse` ⇒ `encode`, the form's op and length (multi-recipient: `multi_len(M, auditorOn)`); `decode_input` ⇒ `input(op, stmt, proof)` and `parse` agree; `parse_bundle` ⇒ `encode`; `parse_opening` ⇒ `opening`; the PQZL proof decoder `pqz_decproof` ⇒ `encproof` gives the same bytes; each decoder twice, equal results |
 
 Common oracle (every target, every input; `src/lib.rs`), a violation aborts (libFuzzer crash):
 
@@ -35,7 +35,7 @@ Common oracle (every target, every input; `src/lib.rs`), a violation aborts (lib
 - **Verdict**: `…01` exactly for the 44 unmodified honest inputs, the self-test hash (`ed910a2c…`) for `06 00000000`,
   `…00` for everything else: a modified input that verifies is a wrong accept or a malleable encoding.
 - **Arena bound**: the C core runs on the verify-only arena (`ARENA_SMALL` = 512 MiB since P6-ANON S3; 144 MiB for
-  the P6e campaigns below) with every form's and every op 7 shape's keys and tables built by a warm-up pass, as in a
+  the P6e campaigns below) with every form's and every multi-recipient shape's keys and tables built by a warm-up pass, as in a
   long-running node; its high-water mark must stay ≤ `ARENA_SMALL` / 1.5 (341 MiB = 357,913,940 B now, 96 MiB in the
   P6e campaigns, the margin the arena was sized with; the maximum seen is printed, see `STATUS.md` Open 2: the peak is
   input-dependent).
@@ -43,10 +43,10 @@ Common oracle (every target, every input; `src/lib.rs`), a violation aborts (lib
 Inputs come from the frozen vectors (`smartcontracts/vectors/pqz/`, P6e D9, P6-ANON S4), rebuilt by `seeds.py` (light,
 through `pqz_kat.py`'s helpers) at the start of every run: the 44 honest inputs (`pqz-core/build/fuzz/honest.bin`) —
 P6e's 24 (`proof_pqzl.json` and `proof_pqzh.json`, 8 forms each, and the 4 fee-0 forms of `fee0.json` under both
-ids), the 19 op 7 `R_TXM` rows (`proof_pqzl.json` 11: M ∈ {1, 2, 4, 8} × auditor on / off and 3 special cases;
+ids), the 19 multi-recipient (`R_TXM`) rows (`proof_pqzl.json` 11: M ∈ {1, 2, 4, 8} × auditor on / off and 3 special cases;
 `proof_pqzh.json` 8: M ∈ {1, 2, 4}; statements from `statement_transfer_multi.json`; oversize M is never built) and
 the files of `regress/valid/` — and as `precompile` seeds those plus `06 00000000` and the 731 rows of
-`negative.json` (342 of them op 7). The fuzz process never proves.
+`negative.json` (342 of them multi-recipient). The fuzz process never proves.
 
 `regress/valid/` holds valid inputs from outside the vectors, which the oracle must know as honest:
 `crash-b9881dfc…` is the pre-vector harness's own `DISCLOSE-RECEIVER` fixture input (PQZL, `pqz_ffi::fixture`,
@@ -100,11 +100,11 @@ differential disagreement or non-canonical encoding.
 | `2026-10-15-precompile` | precompile (seeds: vectors, 414) | 45 min | 1,043,633 (386) | 2,124 / 4,219, 346 inputs (31 MB) | 307,654 decoded, 434 valid = unmodified honest |
 | `2026-10-15-mutate` | mutate | 45 min | 86,923 (32) | 3,314 / 6,877, 532 inputs | 69,718 decoded; 197 SV = generic differentials |
 | `2026-10-15-codec` | codec | 45 min | 367,237 (135) | 856 / 1,553, 277 inputs | 120,328 accepted and round-tripped, 56,597 of them PQZL proofs (`decproof` ⇒ `encproof` = input) |
-| `2026-10-16-s5-precompile` | precompile with op 7 (seeds: 776, 342 op 7; 44 honest, 19 op 7) | 120 min | 3,012,684 (418) | 2,269 / 4,697, 401 inputs (43 MB) | 879,386 decoded, 205,263 of them op 7; 3,461 valid = unmodified honest |
-| `2026-10-16-s5-mutate` | mutate with op 7 | 120 min | 192,360 (26) | 3,513 / 8,241, 600 inputs | 149,586 decoded, 42,191 op 7; 473 SV = generic differentials, 108 of them op 7 |
-| `2026-10-16-s5-codec` | codec with op 7 | 120 min | 1,103,090 (153) | 917 / 1,729, 294 inputs | 382,784 decoded, 130,232 op 7; 137,333 PQZL proofs re-encoded byte-equal |
+| `2026-10-16-s5-precompile` | precompile with the multi-recipient transfer (seeds: 776, 342 multi-recipient; 44 honest, 19 multi-recipient) | 120 min | 3,012,684 (418) | 2,269 / 4,697, 401 inputs (43 MB) | 879,386 decoded, 205,263 of them multi-recipient; 3,461 valid = unmodified honest |
+| `2026-10-16-s5-mutate` | mutate with the multi-recipient transfer | 120 min | 192,360 (26) | 3,513 / 8,241, 600 inputs | 149,586 decoded, 42,191 multi-recipient; 473 SV = generic differentials, 108 of them multi-recipient |
+| `2026-10-16-s5-codec` | codec with the multi-recipient transfer | 120 min | 1,103,090 (153) | 917 / 1,729, 294 inputs | 382,784 decoded, 130,232 multi-recipient; 137,333 PQZL proofs re-encoded byte-equal |
 
-**P6-ANON S5 (op 7, 2 h per target, 2026-10-16/17):** no finding. Arena high-water mark **268,240,256 B (255.81 MiB)** in every S5 run (the honest inputs' warm-up peak; bound 341 MiB, `ARENA_SMALL` 512 MiB since S3); peak RSS 901 / 1,055 / 679 MB; slowest mutate unit 15 s (the differential's generic re-initialisation, `-timeout=120`; the `crash-mutate-slow-unit-*` files libFuzzer writes for it are not findings). Committed corpora after the merge step: `precompile` 12 inputs (424 B), `mutate` 421 inputs (6,740 B), `codec` 246 inputs (1,727 B). `2026-10-16-s5-precompile-interrupted`: a machine reboot stopped the first precompile campaign after ≈ 42 min (867,956 execs, no finding, merge step not reached); the campaign was re-run in full.
+**P6-ANON S5 (the multi-recipient transfer, 2 h per target, 2026-10-16/17):** no finding. Arena high-water mark **268,240,256 B (255.81 MiB)** in every S5 run (the honest inputs' warm-up peak; bound 341 MiB, `ARENA_SMALL` 512 MiB since S3); peak RSS 901 / 1,055 / 679 MB; slowest mutate unit 15 s (the differential's generic re-initialisation, `-timeout=120`; the `crash-mutate-slow-unit-*` files libFuzzer writes for it are not findings). Committed corpora after the merge step: `precompile` 12 inputs (424 B), `mutate` 421 inputs (6,740 B), `codec` 246 inputs (1,727 B). `2026-10-16-s5-precompile-interrupted`: a machine reboot stopped the first precompile campaign after ≈ 42 min (867,956 execs, no finding, merge step not reached); the campaign was re-run in full.
 
 **P6e campaigns.** Arena: the verify-only arena's high-water mark over every run is **95,169,680 B (90.76 MiB)**, the adversarial
 peak `pqz-ffi`'s `tests/verify_only.rs` measured (the honest inputs alone: 94,615,600 B); bound 96 MiB, `ARENA_SMALL`

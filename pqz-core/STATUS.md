@@ -526,15 +526,15 @@ D7, D12, D14 and D15 (proof half) lines.
 
 ## Op 7 `R_TXM` in `pqz-stmt` / `pqz-ffi`, P6-ANON S3 (branch `p6-anon-s3`; plan D3, D13, §5.4; CTR-PQZ-10 L-3)
 
-`pqz_stmt::parse(7, …)` / `decode_input` return op 7 as `Stmt::Multi` (S2's interim `Reject::Op` removed); `pqz-ffi`
+`pqz_stmt::parse(7, …)` / `decode_input` return the multi-recipient statement (op 7) as `Stmt::Multi` (S2's interim `Reject::Op` removed); `pqz-ffi`
 needed no new dispatch (PQZL `pqz_verify_fast(7, …)`, Ligero `verify(7, …)`; the `OVERSIZE` const assert keeps
 PQZH M = 8 / M = 16 out). Arenas: `ARENA_SMALL` 512 MiB (owner 2026-10-16), `ARENA_BIG` 1 GiB native, one 512 MiB
-arena on wasm32, where `prove` refuses PQZL op 7 with M > 4 (`Statement(Legs)`) (controller proposals). Feature
+arena on wasm32, where `prove` refuses PQZL multi-recipient transfers with M > 4 (`Statement(Legs)`) (controller proposals). Feature
 `prove`: `pqzl::enc_group_seed` / `enc_multi` (D13 per-group Enc), `fixture::multi_case` (`R_TXM` witness layout,
 `recipientsHash`, memo hash), `memo::{seal, open}` (§5.4; labels in decisions.md CTR-PQZ-23).
 
 Run `scripts/capped pqz-core/ffi/run.sh s3a` [measured] (`ffi/runs/s3a-*`): every test green — round trip of the 8
-forms + 8 op 7 shapes (PQZL) and 8 + 6 (PQZH), 1,012 rejection cases (op 7: every S2 rule through the precompile,
+forms + 8 multi-recipient shapes (PQZL) and 8 + 6 (PQZH), 1,012 rejection cases (multi-recipient: every S2 rule through the precompile,
 `recipientsHash` / `memoHash` changed, `(1, on)` relabelled `(2, off)`, op 1 ↔ op 7), PQZL differential SV vs generic
 112 cases / 16 accepted / 0 disagreements, the PQZH (4, on) boundary (input = `MAX_INPUT` ⇒ `…00`, + 1 B ⇒ revert),
 oversize M refused, memo round trip; self-test `ed910a2c…d205` unchanged; C ABI smoke, symbol scan, 0 GMP / libm,
@@ -542,12 +542,12 @@ clippy `float_arithmetic` clean. `tests/verify_only.rs`: 30 honest inputs, corpu
 = the unedited honest ones, status 3 / 4 never, 8 threads and a 1 MiB caller stack equal to serial, 5,000 mixed calls
 equal, `arena_used` 265,693,696 B after every call, **verify-only peak 268,240,256 B = 2.00 × margin in 512 MiB**
 (144 MiB would not hold it); fill determinism 0x00 / 0xA5 / 0x5A: 3,118 lines identical. **Prove arena peak with every
-relation loaded 853,679,872 B in 1 GiB (1.26 ×)**. wasm32: the prove harness proves the 8 forms and the 6 op 7 shapes
+relation loaded 853,679,872 B in 1 GiB (1.26 ×)**. wasm32: the prove harness proves the 8 forms and the 6 multi-recipient shapes
 with M ≤ 4 of each id, 29 digest lines = native (fixtures, proofs, verdicts, self-test), 36.3 s, linear memory
 594,739,200 B (was 631 MB); PQZL M = 8 prove refused. The six P6e forms' digest lines (statements, witnesses, proofs)
 equal `ffi1f2`'s.
 
-| op 7 through the FFI [measured], native, n = 200 | statement B | proof B | input B | worst-case input B | prove ms | verify p50 / p99 ms | adversarial p99 ms |
+| Multi-recipient transfer through the FFI [measured], native, n = 200 | statement B | proof B | input B | worst-case input B | prove ms | verify p50 / p99 ms | adversarial p99 ms |
 |---|---|---|---|---|---|---|---|
 | PQZL (1, on) / (1, off) | 83,072 / 66,560 | 42,766 / 42,409 | 125,843 / 108,974 | 181,381 / 164,869 | 848 / 966 | 8.19 / 11.27; 8.58 / 11.11 | 12.76 / 11.43 |
 | PQZL (2, on) / (2, off) | 99,712 / 83,072 | 43,603 / 42,951 | 143,320 / 126,028 | 198,021 / 181,381 | 1,109 / 1,846 | 8.63 / 10.80; 8.75 / 11.84 | 11.76 / 11.20 |
@@ -560,24 +560,24 @@ equal `ffi1f2`'s.
 Worst-case input = 5 + statement + the id's bound (PQZL `MAX_PROOF` 98,304; PQZH Ligero's exact bound). **D3**
 (`pqzl/params/anon/anon-sizes-s3.txt`): PQZL {1, 2, 4, 8} built (M = 16: input 474,161 / 449,947 B > `MAX_INPUT`), PQZH
 {1, 2, 4} built (M = 8: bound 281,208 B > `MAX_PROOF_PQZH`, input 497,149 B > `MAX_INPUT`; M = 16 also over the gas
-cap); largest op 7 worst-case input 369,193 B (PQZH (4, on)) ≤ 393,216. Frozen vectors (`ffi/vectors/runs/s3a-*`):
+cap); largest multi-recipient worst-case input 369,193 B (PQZH (4, on)) ≤ 393,216. Frozen vectors (`ffi/vectors/runs/s3a-*`):
 `pqz_kat.py --check` ok, tamper 179 / 179, wasm32 replay 34 / 0 fails; `pqz-vectors --check` differs only in the
 reason of the two `TRANSFER: under op 7` rows of `negative.json` (`Op` → `OpTag`, output `…00` unchanged;
 `s3a-negative-diff.txt`), the file left as frozen for S4.
 
 ## Op 7 vectors, P6-ANON S4 (branch `p6-anon-s4`; plan D15, LH-2)
 
-`smartcontracts/vectors/pqz/` (README there): **`statement_transfer_multi.json`** (11 op 7 statements: every built
+`smartcontracts/vectors/pqz/` (README there): **`statement_transfer_multi.json`** (11 multi-recipient statements: every built
 `(M, auditorOn)` of each id with one real leg at a position that varies by shape, a two-real-leg row, an all-decoy row
 with fee 0, a group-boundary row with real legs 3 and 4; multi-group Enc with each group's `seed_enc_g` and counter,
 `recipientsHash`, the §5.4 sender memo and its `memoHash`, 9 `memo_open` rows); `R_TXM` rows appended to
-`proof_pqzl.json` (11) and `proof_pqzh.json` (8, M ≤ 4); 342 op 7 rows appended to `negative.json` (pqzl 177, pqzh 165:
+`proof_pqzl.json` (11) and `proof_pqzh.json` (8, M ≤ 4); 342 multi-recipient rows appended to `negative.json` (pqzl 177, pqzh 165:
 `verify` 143, `OpTag` 70, `Length` 41, `Op` 28, `ProofSystemId` 14, `Legs` 11, `ProofLength` 11, `Coefficient` 10,
 `Salt` 4, two each of `AuditorOn`, `MustBeZero(amount)`, `Amount`, `Fee`, `Input`; two reverts at `MAX_INPUT + 1`).
-`pqz_kat.py` gained op 7 decoding (reason `Legs`), `enc_group_seed` / `enc_multi`, the memo (stdlib HMAC-SHA256) and a
-checker per new row; `replay_wasm.mjs` the op 7 rows.
+`pqz_kat.py` gained multi-recipient decoding (reason `Legs`), `enc_group_seed` / `enc_multi`, the memo (stdlib HMAC-SHA256) and a
+checker per new row; `replay_wasm.mjs` the multi-recipient rows.
 
-**Frozen files regenerated, and why:** S3 made op 7 decode, so `negative.json`'s two `TRANSFER: under op 7` rows
+**Frozen files regenerated, and why:** S3 made the multi-recipient statement (op 7) decode, so `negative.json`'s two `TRANSFER: under op 7` rows
 (pqzl, pqzh) now fail at the opTag: reason `Op` → `OpTag`, output `…00` and input bytes unchanged (S3's
 `s3a-negative-diff.txt`). Everything else S4 changed is appended: the P6e rows of `proof_pqzl.json`, `proof_pqzh.json`
 and `negative.json` are byte-identical, the 12 other P6e files byte-unchanged, the self-test hash `ed910a2c…d205`
@@ -587,30 +587,30 @@ Run `scripts/capped pqz-core/ffi/vectors/run.sh s4a write` [measured] (`ffi/vect
 998 MB RSS; `pqz-vectors --check` (second generation) byte-identical, 16 / 16 files, 19,650,288 B; every proof row and
 every negative through `pqz_precompile`, PQZL also through the generic verifier (agree); `pqz_kat.py --check` ok in
 42.7 s; `tamper.py` 191 / 191; `pqz-ffi` tests ok (incl. `selftest_vectors`); wasm32 replay 53 cases, 0 fails (50
-proved byte-equal with native, the 3 PQZL M = 8 rows verify-only: wasm32 does not prove PQZL op 7 above
+proved byte-equal with native, the 3 PQZL M = 8 rows verify-only: wasm32 does not prove PQZL multi-recipient transfers above
 `WASM_PQZL_MAX_LEGS` = 4; `s4a-wasm.txt` re-run once after a counter fix in the script's summary line).
 
-**LH-2** (`ffi/vectors/lh2.sh`, `examples/lh2.rs`, run `s4a-lh2.txt`): pqz_bench.c's op 7 statements (C, every TXB
+**LH-2** (`ffi/vectors/lh2.sh`, `examples/lh2.rs`, run `s4a-lh2.txt`): pqz_bench.c's multi-recipient statements (C, every TXB
 shape, `research/upstream/dump_setup.c` mode `txm`, opTag and recipientsHash set) and the Ligero crate's `setup_multi` ones
 (default, fee 0 all decoys, two real legs) under each id that builds M: `pqz-stmt` parse + encode byte-equal, proved
 (PQZL by the C core, PQZH by Ligero), `…01` through the precompile, the PQZL generic verifier agreeing, a
 `recipientsHash` bit flip `…00`: 50 cases (C 14, Ligero 36), 0 failures; `kat_multi.py` (pqz_kat.py) rebuilds the 6
 C statements with the PQZH id and re-encrypts every ciphertext from the C witnesses: ok.
 
-| op 7 proof bytes [measured] | (1, on) | (1, off) | (2, on) | (2, off) | (4, on) | (4, off) | (8, on) | (8, off) |
+| Multi-recipient proof bytes [measured] | (1, on) | (1, off) | (2, on) | (2, off) | (4, on) | (4, off) | (8, on) | (8, off) |
 |---|---|---|---|---|---|---|---|---|
 | PQZL | 42,716 | 42,426 | 43,604 | 42,919 | 45,275 | 43,932 | 61,794 | 58,975 |
 | PQZH (exact bound) | 232,494 (235,470) | 232,248 (234,744) | 231,256 (235,470) | 232,078 (235,470) | 232,708 (236,196) | 232,494 (235,470) | — | — |
 
-Open: no op 7 disclosure-bundle (§5.4) vectors, `pqz-stmt` has no codec for that bundle yet (S7 / P6g).
+Open: no multi-recipient disclosure-bundle (§5.4) vectors, `pqz-stmt` has no codec for that bundle yet (S7 / P6g).
 
 ## Op 7 in the reproducibility package, P6-ANON S6 (branch `p6-anon-s6b`; plan D14, D21)
 
-`artifact/reproduce.sh` replays every built `R_TXM` of both ids in its default stages and has a new `--multi-bench` mode (the op 7 measurement table: PQZL by `research/pqzl-measure/txm-bench.sh`, PQZH by `ligero_bench` / `run_wasm.mjs` txm). `expected-results.json` regenerated once (`results.py freeze-txm`: only `txm` and `ffi.digest_lines`). Docker on the new layout (2026-10-17, AMD Ryzen 5 7235HS): quick PASS 199 ok after the regeneration; `--multi-bench` PASS (29 checks, 44 min) — PQZL proof max 42,784 / 43,616 / 45,295 / 61,822 B for M = 1 / 2 / 4 / 8 with the auditor, SV p99 portable 7.8–13.6 ms, wasm32 13.2–23.1 ms; PQZH proof max 233,102 / 232,526 / 233,604 B for M = 1 / 2 / 4, verify p99 native 9.9–10.9 ms, wasm32 18.5–20.4 ms (full table `artifact/README.md`, logs `artifact/runs/s6-docker-{quick,multi}/`).
+`artifact/reproduce.sh` replays every built `R_TXM` of both ids in its default stages and has a new `--multi-bench` mode (the multi-recipient measurement table: PQZL by `research/pqzl-measure/txm-bench.sh`, PQZH by `ligero_bench` / `run_wasm.mjs` txm). `expected-results.json` regenerated once (`results.py freeze-txm`: only `txm` and `ffi.digest_lines`). Docker on the new layout (2026-10-17, AMD Ryzen 5 7235HS): quick PASS 199 ok after the regeneration; `--multi-bench` PASS (29 checks, 44 min) — PQZL proof max 42,784 / 43,616 / 45,295 / 61,822 B for M = 1 / 2 / 4 / 8 with the auditor, SV p99 portable 7.8–13.6 ms, wasm32 13.2–23.1 ms; PQZH proof max 233,102 / 232,526 / 233,604 B for M = 1 / 2 / 4, verify p99 native 9.9–10.9 ms, wasm32 18.5–20.4 ms (full table `artifact/README.md`, logs `artifact/runs/s6-docker-{quick,multi}/`).
 
 ## Op 7 live in the `PQZ` precompile on chain 7622, P6-ANON S8 (branch `p6-anon-s8`; plan D19)
 
-`Nethermind.Pqz` prices op 7 per `(proofSystemId, M, auditorOn)` (header words 320 / 448); 14 calibrated rows 3,625,000–6,177,000 gas; image `pqz2`; on chain 7622 since T = 1792205116 (2026-10-17 02:45:16Z) through a second `engine.Pqz` schedule (path A, data kept). Harness 60 min CLEAN; copy and live probes / e2e pass (`nethermind/runs/2026-10-17-*`). The rows are in plan S8's results and `nethermind/chain/engine-pqz.json`.
+`Nethermind.Pqz` prices the multi-recipient transfer per `(proofSystemId, M, auditorOn)` (header words 320 / 448); 14 calibrated rows 3,625,000–6,177,000 gas; image `pqz2`; on chain 7622 since T = 1792205116 (2026-10-17 02:45:16Z) through a second `engine.Pqz` schedule (path A, data kept). Harness 60 min CLEAN; copy and live probes / e2e pass (`nethermind/runs/2026-10-17-*`). The rows are in plan S8's results and `nethermind/chain/engine-pqz.json`.
 
 ## Gates A / B and the freeze (2026-10-17)
 

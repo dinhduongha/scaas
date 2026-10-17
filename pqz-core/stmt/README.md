@@ -34,13 +34,13 @@ accepted input. Spec: `docs/contracts/pq-zero-knowledge.md` §5, §7.2, §7.7, �
   The words pick the shape, because the length alone does not: `(M = 1, auditor on)` and `(M = 2, off)` are both
   83,072 B (equal object counts). A wrong `M` or `auditorOn` word on a valid body therefore fails as `Length`.
   `Multi::encode` refuses a header whose `M` / `auditorOn` word disagrees with the objects (`Legs` / `AuditorOn`).
-- `parse` and `decode_input` still refuse op 7 (`Reject::Op`): `Stmt` / `Form` are matched exhaustively in pqz-ffi and
+- `parse` and `decode_input` still refuse op 7 (the multi-recipient transfer; `Reject::Op`): `Stmt` / `Form` are matched exhaustively in pqz-ffi and
   Ligero, which S3 / H1 extend together with the precompile dispatch. `MAX_INPUT` and `MAX_PROOF` are unchanged (D8).
 
 ## Tests and cross-check
 
 `xcheck.sh <label>` (one job under `scripts/capped`) builds the C core, dumps its six statements, writes the
-`pqz_kat.py` inputs (`xcheck.py`: random statements of every form, every built op 7 shape of both ids with fee 0 on
-every other, and the D15 / R6 / op 7 mutations with `pqz_kat.py`'s reason), runs `cargo test` (release and debug),
+`pqz_kat.py` inputs (`xcheck.py`: random statements of every form, every built multi-recipient shape of both ids with fee 0 on
+every other, and the D15 / R6 / multi-recipient mutations with `pqz_kat.py`'s reason), runs `cargo test` (release and debug),
 the cross-check `tests/xcheck.rs` (same fields, same bytes, same rejection reason) and the wasm32 build; outputs in
 `runs/<label>-*.txt`. `cargo test --features oversize` covers the bench-only shapes.
