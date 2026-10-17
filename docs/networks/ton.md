@@ -216,7 +216,7 @@ Merkle batching are gaps. SPECIFIED for the exact origin and the proof of posses
 
 <a id="NET-TON-10"></a>**NET-TON-10** — **A GRAM relayer lane is a W5R1 wallet with its own seqno, one external message in
 flight, and W5 `valid_until` = the payload's expiry.** Key `m/44'/607'/i'` (SLIP-10 ed25519; **not** GRAM's native
-mnemonic derivation (PBKDF2 "GRAM default seed") — GRAM wallets can import it through their "BIP-39/Ledger path" option),
+mnemonic derivation (PBKDF2 salt "TON default seed", a protocol constant kept by GRAM) — GRAM wallets can import it through their "BIP-39/Ledger path" option),
 the network's standard `wallet_id`. BUILT.
 
 <a id="NET-TON-11"></a>**NET-TON-11** — **The node uses TON Center API v3** (`masterchainInfo`,
