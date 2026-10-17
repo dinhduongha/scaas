@@ -473,11 +473,22 @@ Even with the gas paid, the user had to open that particular wallet, which worke
 kinds of asset, and every sponsored transaction ran through one provider's paymaster infrastructure. The fee problem
 was moved, not removed.
 
+A loyalty example in Vietnam: in January 2025 SmartOSC and Avalanche announced on-chain vouchers for a loyalty program,
+starting with one of the country's largest food-and-beverage chains (10,000 wallets at the announcement); in June 2025
+TOUS les JOURS (CJ Foodville) took it up, with digital vouchers on an Avalanche L1 redeemed in the brand's loyalty app
+([CFOtech Asia](https://cfotech.asia/story/vietnam-launches-first-blockchain-loyalty-programme),
+[VnEconomy](https://vneconomy.vn/thuong-hieu-han-quoc-hop-tac-voi-doanh-nghiep-blockchain-gia-tang-trai-nghiem-cho-khach-hang.htm)).
+The brand's stated goal is that customers need not think about the blockchain at all — so, as far as the public
+reports show, the chain, its fees and the wallet sit inside one operator's app and one chain, and the reports do not
+say how the fees are paid. That can serve one brand's vouchers; every further merchant needs the same integration.
+
 SCaaS: the user never needs a native coin. Every operation is a signed intent that a relayer submits and pays gas for;
 the relayer takes its fee in the token being used, or the merchant pays it ([section 7](#7-meta-transactions-and-eip-1776)). A
 company in Grab's position would sign nothing on its customers' behalf and run no special wallet: each customer signs
 with a key they already have (a passkey or an existing wallet), any relayer submits, and the company pays the fees —
-in its own token, on whichever supported chain it uses.
+in its own token, on whichever supported chain it uses. The same holds for prepaid cards and vouchers of a spa, a bakery or a coffee
+chain: the voucher is a token that any wallet or app can hold, and the merchant needs no chain infrastructure of its
+own.
 
 ### 5.2 Transactions are synchronous and tied to the sender's account
 
