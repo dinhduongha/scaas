@@ -13,7 +13,7 @@ clearance ([pq-zero-knowledge.md CTR-PQZ-01](../../../docs/contracts/pq-zero-kno
 
 | Path | When | chainspec | Data |
 |---|---|---|---|
-| **A. Transition timestamp** (an upgrade of a running chain) | 22776 later, any chain upgrade, a re-price or op 7 (a second schedule) | `engine.Pqz.schedules[0].timestamp` = T in the future; history before T is unchanged | kept |
+| **A. Transition timestamp** (an upgrade of a running chain) | 22776 later, any chain upgrade, a re-price or a new op such as op 7, the multi-recipient transfer (a second schedule) | `engine.Pqz.schedules[0].timestamp` = T in the future; history before T is unchanged | kept |
 | **B. From genesis** (a new chain, the 7622 testnet reset, owner 2026-10-15) | Task 10 on 7622 may use it | `engine.Pqz` with the first timestamp = the genesis timestamp (0 on 7622): active in every block | fresh (the old data dir is backed up, not used) |
 
 The plugin refuses a first timestamp *before* genesis; a timestamp equal to genesis is path B.
@@ -154,13 +154,13 @@ Owner steps outside this runbook: the follower + rate-limited public RPC on 7622
 `docker-compose.copy.yml`, `config.follower.json` and `nginx-rpc.conf` are the rehearsed configs); a restart policy;
 when to delete the `*.bak-pqz-*` backups.
 
-## op 7 on chain 7622 (P6-ANON S8, path A — *live only*, executed 2026-10-17)
+## The multi-recipient transfer (op 7) on chain 7622 (P6-ANON S8, path A — *live only*, executed 2026-10-17)
 
-A second `engine.Pqz` schedule at a future timestamp T: the live rows unchanged plus one row per built op 7 shape
-`(proofSystemId, M, auditorOn)` (plugin rows with `legs` / `auditorOn`, plan D19), from the op 7 calibration
-(`../runs/2026-10-17-calib-ops7*`); the image moves to `scaas/nethermind-pqz:1.39.0-pqz2` (the plugin that reads op 7's
+A second `engine.Pqz` schedule at a future timestamp T: the live rows unchanged plus one row per built multi-recipient shape
+`(proofSystemId, M, auditorOn)` (plugin rows with `legs` / `auditorOn`, plan D19), from the multi-recipient calibration
+(`../runs/2026-10-17-calib-ops7*`); the image moves to `scaas/nethermind-pqz:1.39.0-pqz2` (the plugin that reads the multi-recipient transfer's
 header words) before T; the chain data is kept. Rehearsed on a fresh copy first (`../runs/2026-10-17-s8-copy-*`:
-pqz1 → pqz2 with the data kept, before T every op 7 input a miss, after T every built shape `…01`, e2e 86 ok). Log:
+pqz1 → pqz2 with the data kept, before T every multi-recipient inputs a miss, after T every built shape `…01`, e2e 86 ok). Log:
 `../runs/2026-10-17-s8-live*.txt`.
 
 ```sh
@@ -175,7 +175,7 @@ python3 -I $C/add-schedule.py $B/genesis.json <repo>/pqz-core/nethermind/runs/20
 sed -i 's#scaas/nethermind-pqz:1.39.0-pqz1#scaas/nethermind-pqz:1.39.0-pqz2#' docker-compose.yml
 docker compose up -d blockchain-node      # PQZ-START: library 4fc1a6a2…, self-test ed910a2c…, two schedules
 python3 -I -c "import json; json.dump(json.load(open('$L/genesis.json'))['engine']['Pqz'], open('$C/engine-pqz.json', 'w'), indent=2)"
-# 3. before T: every op 7 input a miss (smallest row, …00, no FFI call)
+# 3. before T: every multi-recipient inputs a miss (smallest row, …00, no FFI call)
 python3 -I $C/e2e.py probe --engine $C/engine-pqz.json --schedule 0 --rpc http://127.0.0.1:8545 --genesis-hash 0x24e43dcb…c464
 # 4. after T: every built shape …01 at its row, negatives …00; transactions with the test key 0x…04
 python3 -I $C/e2e.py probe --engine $C/engine-pqz.json --rpc http://127.0.0.1:8545 --genesis-hash 0x24e43dcb…c464

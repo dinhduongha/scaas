@@ -33,15 +33,15 @@ flowchart LR
 | feature `prove`: `prove(op, stmt, wit, rnd32)` | PQZL (`pqz_prove`) or PQZH (Ligero) by the statement's id; deterministic, hedged (CTR-PQZ-19) |
 | `pqzl::keygen`, `pqzl::enc`, `pqzl::dec`, `pqzl::keypair_from_secret` | §4.2 from seeds (`pqz_keys.c`); in every build (the self-test uses them), not on the verify path |
 | feature `prove`: `fixture::{wit_key, wit_debit, wit_ds, cases, digest_lines}` | the prover-API witness layouts (R3) and one honest instance of every form from seeds (tests, bench, wasm32 run, the Task 11 generator) |
-| feature `prove`: `fixture::{wit_multi, multi_case, multi_cases, recipients_hash}`, `pqzl::{enc_group_seed, enc_multi}`, `memo::{seal, open}` | op 7 `R_TXM` (P6-ANON S3): the per-group Enc (D13: group seeds, legs then `pk_f` then the auditor copies), the `R_TXM` witness layout, `recipientsHash`, the §5.4 sender memo; one honest case per built `(M, auditorOn)` of each id |
+| feature `prove`: `fixture::{wit_multi, multi_case, multi_cases, recipients_hash}`, `pqzl::{enc_group_seed, enc_multi}`, `memo::{seal, open}` | multi-recipient transfer (`R_TXM`) (P6-ANON S3): the per-group Enc (D13: group seeds, legs then `pk_f` then the auditor copies), the `R_TXM` witness layout, `recipientsHash`, the §5.4 sender memo; one honest case per built `(M, auditorOn)` of each id |
 
 **Lock and arenas (STATUS.md Open 6, Open 2).** Every libpqz call runs under one process-wide `Mutex` (the core keeps
 its arena, base mark, sticky error and SV tables in globals); PQZH needs none. The core lives on one arena allocated
-once: `ARENA_SMALL` (verify-only, 512 MiB since op 7, owner 2026-10-16: 2.00 × the measured adversarial peak 268 MB
-of the specialised verifier over all six forms and every op 7 shape with their keys and tables kept, plus the
+once: `ARENA_SMALL` (verify-only, 512 MiB since the multi-recipient transfer, owner 2026-10-16: 2.00 × the measured adversarial peak 268 MB
+of the specialised verifier over all six forms and every multi-recipient shape with their keys and tables kept, plus the
 self-test; run `s3a`) for the precompile path; the first prove or generic verify moves it once to `ARENA_BIG` (1 GiB
 native; the all-loaded prove peak is 854 MB, `R_TXM8_0`). wasm32 has one 512 MiB arena for both and `prove` refuses
-PQZL op 7 above M = 4 there (`ProveError::Statement(Reject::Legs)`); M = 8 is for native clients. A poisoned lock is recovered and the core
+PQZL multi-recipient transfers above M = 4 there (`ProveError::Statement(Reject::Legs)`); M = 8 is for native clients. A poisoned lock is recovered and the core
 re-initialised. The arena's pages are reserved, not touched, until the core uses them.
 
 **Faults (controller 2026-10-14).** Input-caused: a panic in the decode / verify logic (any node hits it on the
@@ -92,8 +92,8 @@ node wasm/run_wasm.mjs wasm/target/wasm32-unknown-unknown/release/pqz_ffi_wasm.w
 ```
 
 Tests (`tests/ffi.rs`): honest round trip of every form of both ids (PQZL 8 forms = six relations + REFRESH +
-AUDITOR; PQZH the same 8) and of every built op 7 shape (PQZL M ∈ {1, 2, 4, 8}, PQZH {1, 2, 4}, auditor on / off);
-`multi_limits_and_memo` (worst-case op 7 inputs vs `MAX_INPUT`, the PQZH (4, on) boundary, oversize M refused, the memo); every decoder rejection (each D15 / R6 rule with its `Reject`, op /
+AUDITOR; PQZH the same 8) and of every built multi-recipient shape (PQZL M ∈ {1, 2, 4, 8}, PQZH {1, 2, 4}, auditor on / off);
+`multi_limits_and_memo` (worst-case multi-recipient inputs vs `MAX_INPUT`, the PQZH (4, on) boundary, oversize M refused, the memo); every decoder rejection (each D15 / R6 rule with its `Reject`, op /
 opTag / id confusion, lengths ± 1, `MAX_PROOF + 1`, truncated / extended / bit-flipped proofs, the other system's
 id, framing, `MAX_INPUT + 1` = revert); the PQZL differential test (SV vs generic through the FFI on honest and
 mutated proofs); the C ABI's arguments; the self-test
