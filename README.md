@@ -15,7 +15,7 @@ function as an API function.** Users authorize every valuable call with their ow
 the call to the chain and pay its gas; the contract checks everything itself.
 
 <p align="center">
-  <img src="docs/assets/scaas-overview.svg" width="900" alt="SCaaS at a glance: clients (ERP, wallets and signers, console and dApp, apps and AI agents) send subject-signed intents to relayers (scaas-node plus partner and open relayers, linked by mesh and gossip); relayers submit and pay gas to the smart contracts (tokens and wrappers, accounts and mandates, DEX, tender and assets, Zether and PQ Zether), which run on six chain families (EVM, Cosmos, Soroban, Move, TON, Solana); finalized events come back to clients as feeds.">
+  <img src="docs/assets/scaas-overview.svg" width="900" alt="SCaaS at a glance: clients (ERP, wallets and signers, console and dApp, apps and AI agents) send subject-signed intents to relayers (scaas-node plus partner and open relayers, linked by mesh and gossip); relayers submit and pay gas to the smart contracts (tokens and wrappers, accounts and mandates, DEX, tender and assets, Zether and PQ Zether), which run on six chain families (EVM, Cosmos, Soroban, Move, GRAM (formerly TON), Solana; NEAR and Algorand planned); finalized events come back to clients as feeds.">
 </p>
 
 This page explains the idea from the ground up and points to the detailed docs. It defines no rules: the rules live
@@ -66,9 +66,9 @@ flowchart LR
 
 | Service | What the chain provides | Examples |
 |---|---|---|
-| **Execution** | A virtual machine that runs contract code deterministically; every validator gets the same result | EVM, Move VM (Aptos, Sui), Soroban WASM, CosmWasm, TVM (TON), SVM (Solana) |
+| **Execution** | A virtual machine that runs contract code deterministically; every validator gets the same result | EVM, Move VM (Aptos, Sui), Soroban WASM, CosmWasm, TVM (GRAM, formerly TON), SVM (Solana) |
 | **Storage** | Durable state owned by each contract, read and written only through its code | EVM key-value storage, Sui objects, Soroban persistent/temporary entries with a rent (TTL), Solana accounts |
-| **Payment** | Metering and billing are part of the protocol: every transaction pays a native fee, on the chain, at once — no invoice, no payment processor | ETH/xDAI gas, HBAR, SUI, XLM, TON, SOL; some chains bill in stablecoins (Gnosis xDAI, Celo fee currencies) or peg fees to USD (Hedera) |
+| **Payment** | Metering and billing are part of the protocol: every transaction pays a native fee, on the chain, at once — no invoice, no payment processor | ETH/xDAI gas, HBAR, SUI, XLM, GRAM, SOL; some chains bill in stablecoins (Gnosis xDAI, Celo fee currencies) or peg fees to USD (Hedera) |
 | **Authentication** | Every call carries a digital signature made on the **client side**; the chain verifies it. There are no server sessions and no passwords | secp256k1, ed25519, P-256 (passkeys), BLS, post-quantum schemes |
 
 Three supporting services complete the picture:
@@ -328,7 +328,7 @@ refunding the rest ([section 14](#14-how-the-design-evolved)).
 | **EIP-6963** | Discover every installed browser wallet, let the user choose one, remember the choice — no wallet library |
 | EIP-712 | The wallet shows each field of what it signs |
 | Wallet Standard | Sui, Aptos and Solana browser wallets |
-| WalletConnect, TON Connect | Mobile and TON wallets (interfaces reserved; the TON Connect HTTP bridge is not wired yet) |
+| WalletConnect, TON Connect | Mobile and GRAM (formerly TON) wallets (interfaces reserved; the TON Connect HTTP bridge is not wired yet) |
 | WebAuthn | Passkeys (P-256) that sign on the user's device |
 | BIP-39, BIP-32, BIP-43, SLIP-10, SLIP-44 | One 24-word seed; per-network and per-kind key paths (Universal Account tree `m/7622'/…`) |
 | EIP-2333, EIP-2334 | BLS and bn254 key derivation for BLS and Schnorr Universal Accounts |
@@ -349,14 +349,20 @@ refunding the rest ([section 14](#14-how-the-design-evolved)).
 **Other families** implement the same three pieces — token, mandate, DEX — on their own standards
 ([docs/networks/README.md](docs/networks/README.md#model)):
 
-| Family | Language | Token | Mandate and DEX | Accounts |
-|---|---|---|---|---|
-| Cosmos | Rust (CosmWasm) | `token` (CW20) + `metaop` | `mandate`, `dex` | ADR-036 secp256k1, passkey |
-| Soroban | Rust (WASM) | `token` (SEP-41) | `mandate`, `dex` | `account` with `__check_auth` |
-| Aptos | Move | `meta` (one account object per owner, lanes inside) | `mandate`, `dex` | `auth`, `p256` |
-| Sui | Move | `meta` (shared `Account<T>` per subject) | `mandate`, `dex` | `auth` |
-| TON | Tact | `jetton` (TEP-74, custom wallet checks the signed op) | `mandate`, `dex` (escrow) | wallet signature, passkey |
-| Solana | Rust | program `scaas` (subject account and lane accounts) | in the same program | ed25519 / P-256 precompiles |
+| Family | Chains | Language | Token | Mandate and DEX | Accounts |
+|---|---|---|---|---|---|
+| EVM | private chain 7622 (testnet), 22776 (future mainnet), Gnosis, Celo, local anvil; Hedera ([own page](docs/networks/hedera.md)); Base and TRON as EVM profiles (planned) | Solidity | `MetaTokenBase` kinds (ERC-20; TRC-20 on TRON), the Zether and PQZ kinds | `MandateWallet`, `SCaaSDex` | UA registry, ERC-1271 (`SmartKeyAccount`), passkeys |
+| Cosmos | CosmWasm chains | Rust (CosmWasm) | `token` (CW20) + `metaop` | `mandate`, `dex` | ADR-036 secp256k1, passkey |
+| Soroban | Stellar, Pi Network | Rust (WASM) | `token` (SEP-41) | `mandate`, `dex` | `account` with `__check_auth` |
+| Aptos | Aptos | Move | `meta` (one account object per owner, lanes inside) | `mandate`, `dex` | `auth`, `p256` |
+| Sui | Sui | Move | `meta` (shared `Account<T>` per subject) | `mandate`, `dex` | `auth` |
+| GRAM (formerly TON) | GRAM | Tact | `jetton` (TEP-74, custom wallet checks the signed op) | `mandate`, `dex` (escrow) | wallet signature, passkey |
+| Solana | Solana | Rust | program `scaas` (subject account and lane accounts) | in the same program | ed25519 / P-256 precompiles |
+| NEAR | NEAR | Rust (`near-sdk`, WASM) | NEP-141 fungible token (planned) | planned | access keys (ed25519 / secp256k1) |
+| Algorand | Algorand (ALGO) | Algorand Python / TEAL (AVM) | ASA or ARC-200 token (planned) | planned | ed25519 accounts, logic signatures |
+
+NEAR and Algorand are not built yet (no contract code); Base and TRON reuse the EVM contracts as chain profiles
+(TRON's TVM runs Solidity, with its own energy / bandwidth fees and base58 addresses), also not deployed yet.
 
 On every family a subject signs one of two kinds: a `MetaCall` (a call of one of the contract's allowlisted
 functions, checked by one verification library per family) or a typed `MetaTransfer`, and every signed entry point
@@ -441,7 +447,7 @@ Every family separates shared code from per-user data in its own way, and each h
 | Soroban | install the WASM once (by hash) | each instance references that hash | contracts are immutable as built |
 | Solana | one program | data in separate accounts (subject account, lanes) | upgrade authority set to `None` |
 | Move (Aptos, Sui) | one package | objects and resources per user or token | Aptos `immutable` policy; Sui `make_immutable` on the `UpgradeCap` |
-| TON | one jetton-wallet code | each wallet deployed with the same code cell in its `state_init` | code is immutable as built |
+| GRAM | one jetton-wallet code | each wallet deployed with the same code cell in its `state_init` | code is immutable as built |
 
 ---
 
@@ -464,7 +470,7 @@ to one payee, with an expiry.
 ### Transactions are synchronous and tied to the sender's account
 
 On every chain a normal transaction is built for the sender's own account and its **sequence number** (EVM nonce,
-Stellar sequence, Cosmos account sequence, TON wallet seqno), at the moment it is sent. That means:
+Stellar sequence, Cosmos account sequence, GRAM wallet seqno), at the moment it is sent. That means:
 
 - the user must be **online, at that moment, holding native coins** for gas;
 - the transactions of one account run **strictly one after another**: one stuck transaction blocks **every** later
@@ -472,7 +478,7 @@ Stellar sequence, Cosmos account sequence, TON wallet seqno), at the moment it i
 - a call cannot be signed now and executed later by someone else.
 
 **"Someone pays the fee for me" does not fix this.** The native sponsorship features — Hedera payer accounts, Sui
-sponsored transactions, Stellar fee-bump, Cosmos `feegrant`, TON wallet extensions — and the EVM add-ons ERC-2771
+sponsored transactions, Stellar fee-bump, Cosmos `feegrant`, GRAM wallet extensions — and the EVM add-ons ERC-2771
 (trusted forwarder) and ERC-4337 (bundlers and paymasters) move the *fee* to another party, but the operation is
 still a transaction of the subject's own account (so its sequence still orders everything), or it needs both parties
 to co-sign at submit time, or it runs through an external forwarder that can swallow a failed call after charging
@@ -531,7 +537,7 @@ What makes it work:
 
 | Use | Kinds | What it gives |
 |---|---|---|
-| Native accounts | EVM address, contract account (Safe, `SmartKeyAccount`), Hedera, Solana, Stellar, Aptos, Sui, Cosmos, TON wallets | Work as they are; no registration |
+| Native accounts | EVM address, contract account (Safe, `SmartKeyAccount`), Hedera, Solana, Stellar, Aptos, Sui, Cosmos, GRAM wallets | Work as they are; no registration |
 | Sign with one key | `webauthn-p256` (passkey), `p256` (HSM, secure enclave), `ed25519`, `bip340` (Schnorr), `schnorr-bn254`, `schnorr-bls12381` | Sign from any device or HSM, on any EVM chain, not only with secp256k1 |
 | BLS | `bls12381-minsig`, `bls-bn254-minsig` | Short signatures that aggregate; one pairing check on chain |
 | n-of-n group | `musig2-secp256k1`, `musig2-bn254` | Several parties produce **one** aggregate signature; the registry recomputes the group key |
@@ -610,7 +616,7 @@ market. With `MODE_RESTRICT_RELAYER`, only the named relayer may submit — the 
 `mtxBatchTransfer`, `mtxTrade`, `mtxExchange`…
 The signing domain carries `chainId`, the contract and `salt = chain_uid`, so a signature is valid on exactly one chain.
 
-**Same model on every family.** Cosmos, Soroban, Sui, Aptos, TON and Solana sign the same two kinds — a `MetaCall` of
+**Same model on every family.** Cosmos, Soroban, Sui, Aptos, GRAM and Solana sign the same two kinds — a `MetaCall` of
 an allowlisted function and a typed `MetaTransfer` — with their own signature formats and replay protection, and the
 same `mtx` names in their own case; the relayer always submits from its own account
 ([NET-ALL-26](docs/networks/README.md#NET-ALL-26)).
@@ -776,12 +782,14 @@ SCaaS groups chains into **families**: one contract code base and one node adapt
 
 | Family | Chains | Execution | How the meta-transaction is done |
 |---|---|---|---|
-| EVM | Gnosis, Celo, private chain 7622, local anvil; Hedera (own page) | EVM (Solidity) | EIP-712 intent inside the token |
+| EVM | Gnosis, Celo, private chain 7622 (testnet), 22776 (future mainnet), local anvil; Hedera (own page); Base, TRON (planned profiles) | EVM (Solidity; TRON's TVM) | EIP-712 intent inside the token |
 | Cosmos | CosmWasm chains | CosmWasm (Rust) | `Relay{payload, auth}` to the contract |
 | Soroban | Stellar, Pi Network | Soroban WASM (Rust) | native authorization entries |
 | Move | Aptos, Sui | Move VM | an account object per subject, lanes inside |
-| TON | TON | TVM (Tact) | a custom jetton wallet checks the signed operation |
+| GRAM (formerly TON) | GRAM | TVM (Tact) | a custom jetton wallet checks the signed operation |
 | Solana | Solana | SVM (Rust) | program-level, subject account + lane accounts |
+| NEAR (planned) | NEAR | NEAR WASM (Rust) | to be designed (NEAR access keys, a signed operation checked by the contract) |
+| Algorand (planned) | Algorand | AVM (Algorand Python / TEAL) | to be designed (an app call carrying the signed operation) |
 
 Other EVM chains can be added as profiles. Finality, signing domains, passkeys and the availability of each feature
 per family: [docs/networks/README.md](docs/networks/README.md).
@@ -892,7 +900,7 @@ flowchart LR
 
 | Path | What |
 |---|---|
-| `smartcontracts/` | On-chain code by family: `evm/` (Foundry; Gnosis, Celo, private chain, Hedera), `move/{aptos,sui}`, `soroban/`, `cosmos/`, `ton/`, `solana/`; `scripts/{build,test,deploy,devnet}.sh <family>`. See [`smartcontracts/README.md`](smartcontracts/README.md), [`smartcontracts/evm/README.md`](smartcontracts/evm/README.md) and [docs/contracts/](docs/contracts/README.md) |
+| `smartcontracts/` | On-chain code by family: `evm/` (Foundry; Gnosis, Celo, private chain, Hedera), `move/{aptos,sui}`, `soroban/`, `cosmos/`, `ton/` (GRAM, formerly TON), `solana/`; `scripts/{build,test,deploy,devnet}.sh <family>`. See [`smartcontracts/README.md`](smartcontracts/README.md), [`smartcontracts/evm/README.md`](smartcontracts/evm/README.md) and [docs/contracts/](docs/contracts/README.md) |
 | `scaas-node/` | Rust relayer node: gateway, submit lanes, indexer, admin, mesh. See [`scaas-node/README.md`](scaas-node/README.md) and [docs/node/](docs/node/README.md) |
 | `clients/` | Everything that runs on the user's side: `clientkeys/` (browser signers: passkey, seed vault, Zether keys; [signers-clientkeys.md](docs/clients/signers-clientkeys.md)), `zether-prover/` (Rust/WASM prover for Zether proofs, balance reading and disclosure; [zether.md](docs/contracts/zether.md)), and the Universal Account identity libraries `ua-rs/` (Rust), `ua-cxx/` (C++), `ua-qt/` (QML), `ua-dart-frb/` (Dart over Rust), `ua-py/`, `ua-go/`, `ua-cs/` (C#) and `ua-dart/` (pure Dart) ([ua-libraries.md](docs/clients/ua-libraries.md)). The console and dApp `app/` (React + Vite) is planned ([app.md](docs/clients/app.md)) |
 | `docs/` | Product docs — start at [`docs/README.md`](docs/README.md). Check: `python3 scripts/docs_check.py check` |
