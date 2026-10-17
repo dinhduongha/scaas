@@ -57,18 +57,21 @@ public class PqzPrecompileTests
     public void Gas_is_the_row_plus_the_length_term_and_never_depends_on_validity()
     {
         PqzSchedule s = Schedule();
-        Dictionary<(int, string, long), long> rowGas = Corpus.Rows12().Select(o => o!.AsObject())
-            .ToDictionary(o => ((int)o["op"]!, ((string)o["id"]!)[2..], (long)o["stmtLen"]!), o => (long)o["gas"]!);
+        Dictionary<(int, string, long, int, int), long> rowGas = Corpus.ScheduleRows().Select(o => o!.AsObject())
+            .ToDictionary(o => ((int)o["op"]!, ((string)o["id"]!)[2..], (long)o["stmtLen"]!, (int?)o["legs"] ?? 0, (int?)o["auditorOn"] ?? 0), o => (long)o["gas"]!);
         foreach (CorpusRow r in Corpus.Rows.Where(r => r.Kind is "honest" or "flip" or "fee0"))
         {
-            long want = rowGas[(r.Op, Corpus.Ids[r.Id], r.StmtLen)] + 3 * ((r.Input.Length + 31) / 32);
+            var (m, a) = Corpus.Shape(r.Input);
+            long want = rowGas[(r.Op, Corpus.Ids[r.Id], r.StmtLen, m, a)] + 3 * ((r.Input.Length + 31) / 32);
             Assert.That(PqzPrecompile.Gas(r.Input, s), Is.EqualTo(want), r.Name);
         }
-        // valid and invalid inputs of the same row and length: equal gas (the flip keeps the length)
+        // valid and invalid inputs of the same row and length: equal gas (the flip keeps the statement and the length)
         foreach (CorpusRow h in Corpus.Rows.Where(r => r.Kind == "honest"))
         {
-            CorpusRow f = Corpus.Rows.Single(r => r.Kind == "flip" && r.Id == h.Id && r.Form == h.Form);
-            Assert.That(f.Input.Length, Is.EqualTo(h.Input.Length));
+            int stmtEnd = 5 + (int)h.StmtLen;
+            CorpusRow? f = Corpus.Rows.FirstOrDefault(r => r.Kind == "flip" && r.Id == h.Id && r.Input.Length == h.Input.Length
+                && r.Input.AsSpan(0, stmtEnd).SequenceEqual(h.Input.AsSpan(0, stmtEnd)));
+            if (f is null) { Assert.That(h.Op, Is.EqualTo(PqzSchedule.OpMulti), "every op 1-5 honest input has a flip"); continue; }
             Assert.That(PqzPrecompile.Gas(f.Input, s), Is.EqualTo(PqzPrecompile.Gas(h.Input, s)), h.Name);
         }
         // misses: the smallest row + the length term; op 6: selftestGas, fixed
@@ -86,10 +89,36 @@ public class PqzPrecompileTests
     }
 
     [Test]
+    public void Op7_rows_are_keyed_by_the_M_and_auditorOn_words()
+    {
+        PqzSchedule s = Schedule();
+        // (1, on) and (2, off) have the same length (83,072 B) and get their own rows
+        CorpusRow on1 = Corpus.Rows.First(r => r.Kind == "honest" && r.Id == "pqzl" && Corpus.Shape(r.Input) == (1, 1));
+        CorpusRow off2 = Corpus.Rows.First(r => r.Kind == "honest" && r.Id == "pqzl" && Corpus.Shape(r.Input) == (2, 0));
+        Assert.That(on1.StmtLen, Is.EqualTo(off2.StmtLen));
+        Assert.That(s.RowGas(on1.Input), Is.Not.EqualTo(s.RowGas(off2.Input)));
+        Assert.That(PqzPrecompile.Run(on1.Input, s).Data, Is.EqualTo(One));
+        Assert.That(PqzPrecompile.Run(off2.Input, s).Data, Is.EqualTo(One));
+        // an M or auditorOn word outside the rows (or not a small integer): a miss — smallest row, …00, no FFI call
+        foreach ((int at, byte v) in new[] { (5 + 351, (byte)3), (5 + 479, (byte)2), (5 + 320, (byte)1), (5 + 448, (byte)1) })
+        {
+            byte[] x = (byte[])on1.Input.Clone();
+            x[at] = v;
+            long before = PqzPrecompile.FfiCalls;
+            Assert.That(s.RowGas(x), Is.Null, $"byte {at} = {v}");
+            Assert.That(PqzPrecompile.Gas(x, s), Is.EqualTo(s.MinGas + 3 * ((x.Length + 31) / 32)));
+            Assert.That(PqzPrecompile.Run(x, s).Data, Is.EqualTo(Zero));
+            Assert.That(PqzPrecompile.FfiCalls, Is.EqualTo(before));
+        }
+        // an op 7 input too short to hold the auditorOn word: a miss
+        Assert.That(s.RowGas(on1.Input.AsSpan(0, 5 + 479).ToArray()), Is.Null);
+    }
+
+    [Test]
     public void A_row_absent_from_the_schedule_is_zero_without_an_ffi_call()
     {
         // only the PQZL rows: every PQZH honest input is now a miss
-        JsonArray pqzl = new(Corpus.Rows12().Where(o => ((string)o!["id"]!).EndsWith(Corpus.Ids["pqzl"])).Select(o => o!.DeepClone()).ToArray());
+        JsonArray pqzl = new(Corpus.ScheduleRows().Where(o => ((string)o!["id"]!).EndsWith(Corpus.Ids["pqzl"])).Select(o => o!.DeepClone()).ToArray());
         PqzSchedule s = Schedule(pqzl);
         foreach (CorpusRow h in Corpus.Rows.Where(r => r.Kind == "honest" && r.Id == "pqzh"))
         {

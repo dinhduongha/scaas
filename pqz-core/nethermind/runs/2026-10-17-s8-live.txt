@@ -1,0 +1,44 @@
+# P6-ANON S8 live: op 7 on chain 7622 (path A: a second engine.Pqz schedule, image pqz1 -> pqz2, data kept), 2026-10-17T02:30:01Z, commit cc771fc
+## 0. before
+head 16950 0x3eca90626df6baabf1f556e31307ec7d24303221daaa7c30a91ab21b8d7207b3 gasLimit 80000000 gasUsed 0 ts 1792204199
+pqz2 image sha256:87c6c102da78aa782e6636494a2f9b54be788f0ac0dde6e742b881cb3dcc2a61
+## 1. stop + backup -> /home/dockers/mba-chain-nethermind-backups/op7-20261017-093001
+ Container mba_chain_node_nethermind Stopped 
+state exited
+data backup identical: 155 files
+config files identical
+62436	/l/data/nethermind_data
+62356	/b/op7-20261017-093001/nethermind_data
+## 2. edits (T = 1792205116 = 2026-10-17T02:45:16Z)
+/home/dockers/mba-chain-nethermind/genesis.json: schedule 1 added at 1792205116 = 0x6ad2e13c: 26 rows (14 new of ops [7]), selftest 2567000, mldsa44 49000, mldsa65 68000
+  op 7 id 0x0a47a768… stmtLen 132992 M 4 auditorOn 1 gas 4,935,000
+  op 7 id 0x0a47a768… stmtLen 116096 M 4 auditorOn 0 gas 4,892,000
+  op 7 id 0x0a47a768… stmtLen 99712 M 2 auditorOn 1 gas 4,001,000
+  op 7 id 0x0a47a768… stmtLen 83072 M 1 auditorOn 1 gas 3,864,000
+  op 7 id 0x0a47a768… stmtLen 83072 M 2 auditorOn 0 gas 4,415,000
+  op 7 id 0x0a47a768… stmtLen 66560 M 1 auditorOn 0 gas 4,314,000
+  op 7 id 0x2e07e6ed… stmtLen 215936 M 8 auditorOn 1 gas 6,177,000
+  op 7 id 0x2e07e6ed… stmtLen 198528 M 8 auditorOn 0 gas 5,339,000
+  op 7 id 0x2e07e6ed… stmtLen 132992 M 4 auditorOn 1 gas 4,121,000
+  op 7 id 0x2e07e6ed… stmtLen 116096 M 4 auditorOn 0 gas 3,972,000
+  op 7 id 0x2e07e6ed… stmtLen 99712 M 2 auditorOn 1 gas 3,710,000
+  op 7 id 0x2e07e6ed… stmtLen 83072 M 1 auditorOn 1 gas 3,625,000
+  op 7 id 0x2e07e6ed… stmtLen 83072 M 2 auditorOn 0 gas 3,827,000
+  op 7 id 0x2e07e6ed… stmtLen 66560 M 1 auditorOn 0 gas 3,953,000
+11c11
+<     image: scaas/nethermind-pqz:1.39.0-pqz1
+---
+>     image: scaas/nethermind-pqz:1.39.0-pqz2
+genesis: only engine.Pqz.schedules grew: True
+## 3. start
+ Container mba_chain_node_nethermind Started 
+17 Oct 02:30:22 | PQZ-START sha256=4fc1a6a27a7a3cf1c2bd2702c6fd5be0a4c2ff6a82fa9a4156d99748e4751f54 selftest=ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205 addresses=PQZ:0x5caa500000000000000000000000000000000f01,MLDSA44:0x5caa500000000000000000000000000000000012,MLDSA65:0x5caa5000
+head 16958 0x484c40c5d056bf2655c66773734b052f0f1df899c3928e2693fe9ac1d5c2adcc gasLimit 80000000 gasUsed 0 ts 1792204258
+## 4. probe before T (schedule 0), genesis hash pinned
+probe rc=0 (389 ok): probe: all checks passed
+## 5. after T (1792205116)
+head 17136 0x3725d3f9832f67783bcf7be5aed15ecac5d5c33db8c8d47b3706c3b518cba297 gasLimit 80000000 gasUsed 0 ts 1792205148
+probe rc=0 (389 ok): probe: all checks passed
+e2e rc=0 (76 ok): e2e: all checks passed
+fault / panic / refuse lines: 0
+head 17174 0xfa0940e9f81c7b6aac24072d0b44cef311ea3e862275b0e141332764fda3bd7f gasLimit 80000000 gasUsed 12697060 ts 1792205338

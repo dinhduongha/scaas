@@ -46,14 +46,22 @@ public static class Corpus
         ["pqzh"] = "0a47a7689250ba178a52ad5972cdd9153358c022cb694c08d2389e82de2fead4",
     };
 
-    /// <summary>One row per distinct (op, id, stmtLen) of the honest inputs: the 12 rows of pqz1 (D12), with gas
-    /// 1,000,000 + 1,000 · index (distinct, so a wrong lookup shows).</summary>
-    public static JsonArray Rows12()
+    /// <summary>op 7's (M, auditorOn) from header words 320 / 448 (plan D19); (0, 0) for the other ops.</summary>
+    public static (int Legs, int Aud) Shape(byte[] input) =>
+        input.Length > 485 && input[0] == PqzSchedule.OpMulti ? (input[5 + 351], input[5 + 479]) : (0, 0);
+
+    /// <summary>One row per distinct (op, id, stmtLen[, M, auditorOn]) of the honest inputs: pqz1's 12 rows (D12) plus
+    /// one per op 7 shape of both ids (S8), with gas 1,000,000 + 1,000 · index (distinct, so a wrong lookup shows).</summary>
+    public static JsonArray ScheduleRows()
     {
         JsonArray a = [];
         int i = 0;
-        foreach (var g in Rows.Where(r => r.Kind == "honest").GroupBy(r => (r.Op, r.Id, r.StmtLen)).OrderBy(g => g.Key))
-            a.Add(new JsonObject { ["op"] = g.Key.Op, ["id"] = "0x" + Ids[g.Key.Id], ["stmtLen"] = g.Key.StmtLen, ["gas"] = 1_000_000L + 1_000L * i++ });
+        foreach (var g in Rows.Where(r => r.Kind == "honest").GroupBy(r => (r.Op, r.Id, r.StmtLen, Shape(r.Input))).OrderBy(g => g.Key))
+        {
+            JsonObject o = new() { ["op"] = g.Key.Op, ["id"] = "0x" + Ids[g.Key.Id], ["stmtLen"] = g.Key.StmtLen, ["gas"] = 1_000_000L + 1_000L * i++ };
+            if (g.Key.Op == PqzSchedule.OpMulti) { o["legs"] = g.Key.Item4.Legs; o["auditorOn"] = g.Key.Item4.Aud; }
+            a.Add(o);
+        }
         return a;
     }
 }

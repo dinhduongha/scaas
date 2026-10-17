@@ -14,7 +14,10 @@ smartcontracts/evm/out. Requests are paced (the proxy allows 10 r/s, burst 20) a
   e2e.py fill    --engine E --key K [--n 8] PQZH transfers sent straight to PQZ, to fill a block
   e2e.py head                               number, hash, gasLimit, timestamp of the head
 
-Common: --rpc URL (default http://127.0.0.1:18545). Exit 0 iff every check passed."""
+Common: --rpc URL (default http://127.0.0.1:18545); --schedule N: the engine file's schedule in force (default the
+last; path A before T: 0). A row the schedule lacks (op 7 before its schedule) is expected as a miss: …00 at the
+smallest row. op 7 rows are keyed by (op, id, stmtLen, M, auditorOn) (P6-ANON S8, plan D19); the probe also replays
+the op 7 rows of negative.json. Exit 0 iff every check passed."""
 import argparse
 import json
 import os
@@ -106,10 +109,18 @@ def corpus():
         return [json.loads(l) for l in f]
 
 
+SCHEDULE = -1  # --schedule
+
+
+def small_word(b):
+    return b[31] if not any(b[:31]) else -1
+
+
 class Schedule:
     def __init__(self, path):
-        s = json.load(open(path))["schedules"][0]
-        self.rows = {(r["op"], r["id"].lower().removeprefix("0x"), r["stmtLen"]): r["gas"] for r in s["pqz"]}
+        s = json.load(open(path))["schedules"][SCHEDULE]
+        self.rows = {(r["op"], r["id"].lower().removeprefix("0x"), r["stmtLen"], r.get("legs", 0), r.get("auditorOn", 0)): r["gas"]
+                     for r in s["pqz"]}
         self.min = min(self.rows.values())
         self.selftest = s["selftestGas"]
         self.m44, self.m65 = s["mldsa44Gas"], s["mldsa65Gas"]
@@ -117,7 +128,12 @@ class Schedule:
     def row(self, b):
         if len(b) < 69:
             return None
-        return self.rows.get((b[0], b[37:69].hex(), int.from_bytes(b[1:5], "big")))
+        legs = aud = 0
+        if b[0] == 7:  # header words 320 / 448, read without validation (as the plugin)
+            if len(b) < 5 + 480:
+                return None
+            legs, aud = small_word(b[5 + 320:5 + 352]), small_word(b[5 + 448:5 + 480])
+        return self.rows.get((b[0], b[37:69].hex(), int.from_bytes(b[1:5], "big"), legs, aud))
 
     def gas(self, b):
         if b and b[0] == 6:
@@ -214,19 +230,21 @@ def cmd_probe(a, expect_fail=False):
         return
     oh = overhead()
     log(f"probe overhead (identity precompile) = {oh} gas")
-    rows = [r for r in corpus() if r["kind"] in ("honest", "flip", "fee0", "selftest")]
+    rows = [r for r in corpus() if r["kind"] in ("honest", "flip", "fee0", "selftest")
+            or (r["kind"] == "negative" and r["op"] == 7 and r["expect"] == "0")]
     by = {}
     for r in rows:
         b = bytes.fromhex(r["input"])
         word, used, rlen = call_probe(PQZ, b)
-        want = int(r["expect"], 16) if r["kind"] == "selftest" else int(r["expect"])
+        want = int(r["expect"], 16) if r["kind"] == "selftest" else 0 if sch.row(b) is None else int(r["expect"])
         gas = used - 100 - oh
         check(rlen == 32 and word == want and gas == sch.gas(b),
               f"PQZ {r['kind']:8} {r['name'][:46]:46} {r['id']}: word {word if word < 2 else hex(word)[:10]} (want {want if want < 2 else 'hash'}), gas {gas} = formula {sch.gas(b)}")
-        by.setdefault((r["id"], r["form"]), {})[r["kind"]] = gas
+        # pair a valid input with its flip by the statement (op 7: one form, several shapes)
+        by.setdefault((r["id"], r["form"], b[:5 + max(r["stmt_len"], 0)]), {})[r["kind"]] = gas
     for k, v in sorted(by.items()):
         if "honest" in v and "flip" in v:
-            check(v["honest"] == v["flip"], f"gas valid = invalid {k}: {v['honest']} / {v['flip']}")
+            check(v["honest"] == v["flip"], f"gas valid = invalid {k[:2]} ({len(k[2]) - 5:,} B statement): {v['honest']} / {v['flip']}")
     h = bytes.fromhex(next(r for r in rows if r["kind"] == "honest")["input"])
     for name, b in (("unknown id", h[:40] + bytes([h[40] ^ 1]) + h[41:]), ("short (68 B)", h[:68]), ("empty", b""),
                     ("unknown op 9", bytes([9]) + h[1:])):
@@ -318,7 +336,7 @@ def cmd_e2e(a):
         word = int(lg[0]["data"][2 + 64:2 + 128], 16) if ok else None
         used = int(lg[0]["data"][2 + 128:2 + 192], 16) if ok else None
         blocks.add(int(rc["blockNumber"], 16))
-        check(ok and word == int(row["expect"]),
+        check(ok and word == (0 if sch.row(b) is None else int(row["expect"])),
               f"tx check() {row['kind']:6} {row['name'][:40]:40} {row['id']}: event word {word} (want {row['expect']}), call gas {used}, tx gas {int(rc['gasUsed'], 16)}, block {int(rc['blockNumber'], 16)}")
     log(f"check() transactions in blocks {sorted(blocks)}")
     # direct transactions to PQZ with the largest inputs (> 128 KiB: TxPool.MaxTxSize)
@@ -416,7 +434,7 @@ def cmd_fill(a):
 
 
 def main():
-    global RPC
+    global RPC, SCHEDULE
     p = argparse.ArgumentParser()
     p.add_argument("cmd")
     p.add_argument("--rpc", default=RPC)
@@ -427,8 +445,9 @@ def main():
     p.add_argument("--calls", type=int, default=50)
     p.add_argument("--n", type=int, default=8)
     p.add_argument("--no-ua", action="store_true")
+    p.add_argument("--schedule", type=int, default=-1)
     a = p.parse_args()
-    RPC = a.rpc
+    RPC, SCHEDULE = a.rpc, a.schedule
     {"head": cmd_head, "before": cmd_before, "probe": cmd_probe, "stock": cmd_stock, "e2e": cmd_e2e,
      "burst": cmd_burst, "fill": cmd_fill}[a.cmd](a)
     log(f"{a.cmd}: {'FAILED ' + str(len(FAILS)) if FAILS else 'all checks passed'}")

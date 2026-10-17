@@ -6,7 +6,7 @@
 
 One JSON object per line: kind (honest | flip | negative | fee0 | selftest), name, id (pqzl | pqzh | -), form, op,
 stmt_len, input (hex), expect ("1", "0", "revert", or the 32-byte self-test hash in hex). The honest inputs are the
-proof_<id>.json rows; flip = the honest input with negative.json's "proof middle byte bit 3 flipped" edit (decodes,
+proof_<id>.json rows (op 7 rows keyed by their case, form TRANSFER-MULTI); flip = the honest input with negative.json's "proof middle byte bit 3 flipped" edit (decodes,
 fails in the verifier); negative = every negative.json row through pqz_kat.apply_edits; fee0 = fee0.json's statements
 under each id; selftest = selftest.json's input and hash. Nothing here is computed afresh: the edits and expectations
 are the vectors' own."""
@@ -21,7 +21,9 @@ import pqz_kat as K  # noqa: E402  (the vectors' own checker: apply_edits, state
 
 def main(out):
     stmts = {f: bytes.fromhex(r["stmt"]) for f, r in K.statement_rows(VEC).items()}
-    proofs = {(r["form"], n): bytes.fromhex(r["proof"]) for n in K.IDS for r in K.load(VEC, f"proof_{n}.json")["rows"]}
+    stmts |= {c: bytes.fromhex(r["stmt"]) for c, r in K.multi_rows(VEC).items()}  # op 7: keyed by case (P6-ANON S4)
+    rows_p = {n: K.load(VEC, f"proof_{n}.json")["rows"] for n in K.IDS}
+    proofs = {(r.get("case", r["form"]), n): bytes.fromhex(r["proof"]) for n in K.IDS for r in rows_p[n]}
     neg = K.load(VEC, "negative.json")["rows"]
     rows = []
 
@@ -30,9 +32,11 @@ def main(out):
                      "stmt_len": int.from_bytes(inp[1:5], "big") if len(inp) >= 5 else -1,
                      "input": inp.hex(), "expect": expect})
 
-    for (form, idn), p in sorted(proofs.items()):
-        op = K.OP_BYTE[form.rstrip("0")]
-        add("honest", f"{form} {idn}", idn, form, K.precompile_input(op, K.with_id(stmts[form], K.IDS[idn]), p), "1")
+    for n in K.IDS:
+        for r in rows_p[n]:
+            key = r.get("case", r["form"])
+            op = 7 if r["form"] == "TRANSFER-MULTI" else K.OP_BYTE[r["form"].rstrip("0")]
+            add("honest", f"{key} {n}", n, r["form"], K.precompile_input(op, K.with_id(stmts[key], K.IDS[n]), proofs[key, n]), "1")
     for r in neg:
         e = {"0": "0", "revert": "revert"}[r["expect"]]
         kind = "flip" if r["name"].endswith("proof middle byte bit 3 flipped") else "negative"

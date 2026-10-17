@@ -1,0 +1,391 @@
+ok    eth_chainId = 0x1dc6
+ok    genesis hash 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464 = 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464
+ok    OP_SELFTEST eth_call = ed910a2c…d205 (got 0xed910a2cf4…)
+probe overhead (identity precompile) = 22 gas
+ok    PQZ honest   TRANSFER pqzl                                  pqzl: word 1 (want 1), gas 5420799 = formula 5420799
+ok    PQZ honest   TRANSFER0 pqzl                                 pqzl: word 1 (want 1), gas 5233221 = formula 5233221
+ok    PQZ honest   BURN pqzl                                      pqzl: word 1 (want 1), gas 3731622 = formula 3731622
+ok    PQZ honest   REFRESH pqzl                                   pqzl: word 1 (want 1), gas 3731622 = formula 3731622
+ok    PQZ honest   REGISTER pqzl                                  pqzl: word 1 (want 1), gas 2699182 = formula 2699182
+ok    PQZ honest   DISCLOSE-SENDER pqzl                           pqzl: word 1 (want 1), gas 2606829 = formula 2606829
+ok    PQZ honest   DISCLOSE-RECEIVER pqzl                         pqzl: word 1 (want 1), gas 2572832 = formula 2572832
+ok    PQZ honest   DISCLOSE-AUDITOR pqzl                          pqzl: word 1 (want 1), gas 2572829 = formula 2572829
+ok    PQZ honest   M1-on pqzl                                     pqzl: word 1 (want 1), gas 3636796 = formula 3636796
+ok    PQZ honest   M2-on pqzl                                     pqzl: word 1 (want 1), gas 3723437 = formula 3723437
+ok    PQZ honest   M4-on pqzl                                     pqzl: word 1 (want 1), gas 4137713 = formula 4137713
+ok    PQZ honest   M8-on pqzl                                     pqzl: word 1 (want 1), gas 6203040 = formula 6203040
+ok    PQZ honest   M1-off pqzl                                    pqzl: word 1 (want 1), gas 3963218 = formula 3963218
+ok    PQZ honest   M2-off pqzl                                    pqzl: word 1 (want 1), gas 3838814 = formula 3838814
+ok    PQZ honest   M4-off pqzl                                    pqzl: word 1 (want 1), gas 3987006 = formula 3987006
+ok    PQZ honest   M8-off pqzl                                    pqzl: word 1 (want 1), gas 5363144 = formula 5363144
+ok    PQZ honest   M2-off-two-real pqzl                           pqzl: word 1 (want 1), gas 3838814 = formula 3838814
+ok    PQZ honest   M4-off-decoys pqzl                             pqzl: word 1 (want 1), gas 3987003 = formula 3987003
+ok    PQZ honest   M8-on-boundary pqzl                            pqzl: word 1 (want 1), gas 6203040 = formula 6203040
+ok    PQZ honest   TRANSFER pqzh                                  pqzh: word 1 (want 1), gas 4254442 = formula 4254442
+ok    PQZ honest   TRANSFER0 pqzh                                 pqzh: word 1 (want 1), gas 4048942 = formula 4048942
+ok    PQZ honest   BURN pqzh                                      pqzh: word 1 (want 1), gas 3764460 = formula 3764460
+ok    PQZ honest   REFRESH pqzh                                   pqzh: word 1 (want 1), gas 3764283 = formula 3764283
+ok    PQZ honest   REGISTER pqzh                                  pqzh: word 1 (want 1), gas 3341056 = formula 3341056
+ok    PQZ honest   DISCLOSE-SENDER pqzh                           pqzh: word 1 (want 1), gas 3303592 = formula 3303592
+ok    PQZ honest   DISCLOSE-RECEIVER pqzh                         pqzh: word 1 (want 1), gas 2901664 = formula 2901664
+ok    PQZ honest   DISCLOSE-AUDITOR pqzh                          pqzh: word 1 (want 1), gas 2901661 = formula 2901661
+ok    PQZ honest   M1-on pqzh                                     pqzh: word 1 (want 1), gas 3893586 = formula 3893586
+ok    PQZ honest   M2-on pqzh                                     pqzh: word 1 (want 1), gas 4032029 = formula 4032029
+ok    PQZ honest   M4-on pqzh                                     pqzh: word 1 (want 1), gas 4969287 = formula 4969287
+ok    PQZ honest   M1-off pqzh                                    pqzh: word 1 (want 1), gas 4342014 = formula 4342014
+ok    PQZ honest   M2-off pqzh                                    pqzh: word 1 (want 1), gas 4444547 = formula 4444547
+ok    PQZ honest   M4-off pqzh                                    pqzh: word 1 (want 1), gas 4924682 = formula 4924682
+ok    PQZ honest   M2-off-two-real pqzh                           pqzh: word 1 (want 1), gas 4444505 = formula 4444505
+ok    PQZ honest   M4-off-decoys pqzh                             pqzh: word 1 (want 1), gas 4924610 = formula 4924610
+ok    PQZ flip     TRANSFER: proof middle byte bit 3 flipped      pqzl: word 0 (want 0), gas 5420799 = formula 5420799
+ok    PQZ flip     TRANSFER0: proof middle byte bit 3 flipped     pqzl: word 0 (want 0), gas 5233221 = formula 5233221
+ok    PQZ flip     BURN: proof middle byte bit 3 flipped          pqzl: word 0 (want 0), gas 3731622 = formula 3731622
+ok    PQZ flip     REFRESH: proof middle byte bit 3 flipped       pqzl: word 0 (want 0), gas 3731622 = formula 3731622
+ok    PQZ flip     REGISTER: proof middle byte bit 3 flipped      pqzl: word 0 (want 0), gas 2699182 = formula 2699182
+ok    PQZ flip     DISCLOSE-SENDER: proof middle byte bit 3 flipp pqzl: word 0 (want 0), gas 2606829 = formula 2606829
+ok    PQZ flip     DISCLOSE-RECEIVER: proof middle byte bit 3 fli pqzl: word 0 (want 0), gas 2572832 = formula 2572832
+ok    PQZ flip     DISCLOSE-AUDITOR: proof middle byte bit 3 flip pqzl: word 0 (want 0), gas 2572829 = formula 2572829
+ok    PQZ negative TRANSFER: under op 7                           pqzl: word 0 (want 0), gas 2578799 = formula 2578799
+ok    PQZ flip     TRANSFER: proof middle byte bit 3 flipped      pqzh: word 0 (want 0), gas 4254442 = formula 4254442
+ok    PQZ flip     TRANSFER0: proof middle byte bit 3 flipped     pqzh: word 0 (want 0), gas 4048942 = formula 4048942
+ok    PQZ flip     BURN: proof middle byte bit 3 flipped          pqzh: word 0 (want 0), gas 3764460 = formula 3764460
+ok    PQZ flip     REFRESH: proof middle byte bit 3 flipped       pqzh: word 0 (want 0), gas 3764283 = formula 3764283
+ok    PQZ flip     REGISTER: proof middle byte bit 3 flipped      pqzh: word 0 (want 0), gas 3341056 = formula 3341056
+ok    PQZ flip     DISCLOSE-SENDER: proof middle byte bit 3 flipp pqzh: word 0 (want 0), gas 3303592 = formula 3303592
+ok    PQZ flip     DISCLOSE-RECEIVER: proof middle byte bit 3 fli pqzh: word 0 (want 0), gas 2901664 = formula 2901664
+ok    PQZ flip     DISCLOSE-AUDITOR: proof middle byte bit 3 flip pqzh: word 0 (want 0), gas 2901661 = formula 2901661
+ok    PQZ negative TRANSFER: under op 7                           pqzh: word 0 (want 0), gas 2596442 = formula 2596442
+ok    PQZ negative M1-on: statement length - 1                    pqzl: word 0 (want 0), gas 2578793 = formula 2578793
+ok    PQZ negative M1-on: statement length + 1                    pqzl: word 0 (want 0), gas 2578796 = formula 2578796
+ok    PQZ negative M1-on: unknown proofSystemId (zero word)       pqzl: word 0 (want 0), gas 2578796 = formula 2578796
+ok    PQZ negative M1-on: the other system's proofSystemId        pqzl: word 0 (want 0), gas 3875796 = formula 3875796
+ok    PQZ negative M1-on: proof truncated by 1 byte               pqzl: word 0 (want 0), gas 3636793 = formula 3636793
+ok    PQZ negative M1-on: proof extended by 1 zero byte           pqzl: word 0 (want 0), gas 3636796 = formula 3636796
+ok    PQZ negative M1-on: proof byte 0 bit 0 flipped              pqzl: word 0 (want 0), gas 3636796 = formula 3636796
+ok    PQZ flip     M1-on: proof middle byte bit 3 flipped         pqzl: word 0 (want 0), gas 3636796 = formula 3636796
+ok    PQZ negative M1-on: proof last byte bit 7 flipped           pqzl: word 0 (want 0), gas 3636796 = formula 3636796
+ok    PQZ negative M1-on: coder padding bit 7 set after the final pqzl: word 0 (want 0), gas 3636796 = formula 3636796
+ok    PQZ negative M2-on: statement length - 1                    pqzl: word 0 (want 0), gas 2580437 = formula 2580437
+ok    PQZ negative M2-on: statement length + 1                    pqzl: word 0 (want 0), gas 2580437 = formula 2580437
+ok    PQZ negative M2-on: unknown proofSystemId (zero word)       pqzl: word 0 (want 0), gas 2580437 = formula 2580437
+ok    PQZ negative M2-on: the other system's proofSystemId        pqzl: word 0 (want 0), gas 4014437 = formula 4014437
+ok    PQZ negative M2-on: proof truncated by 1 byte               pqzl: word 0 (want 0), gas 3723437 = formula 3723437
+ok    PQZ negative M2-on: proof extended by 1 zero byte           pqzl: word 0 (want 0), gas 3723437 = formula 3723437
+ok    PQZ negative M2-on: proof byte 0 bit 0 flipped              pqzl: word 0 (want 0), gas 3723437 = formula 3723437
+ok    PQZ flip     M2-on: proof middle byte bit 3 flipped         pqzl: word 0 (want 0), gas 3723437 = formula 3723437
+ok    PQZ negative M2-on: proof last byte bit 7 flipped           pqzl: word 0 (want 0), gas 3723437 = formula 3723437
+ok    PQZ negative M2-on: coder padding bit 7 set after the final pqzl: word 0 (want 0), gas 3723437 = formula 3723437
+ok    PQZ negative M4-on: statement length - 1                    pqzl: word 0 (want 0), gas 2583713 = formula 2583713
+ok    PQZ negative M4-on: statement length + 1                    pqzl: word 0 (want 0), gas 2583716 = formula 2583716
+ok    PQZ negative M4-on: unknown proofSystemId (zero word)       pqzl: word 0 (want 0), gas 2583713 = formula 2583713
+ok    PQZ negative M4-on: the other system's proofSystemId        pqzl: word 0 (want 0), gas 4951713 = formula 4951713
+ok    PQZ negative M4-on: proof truncated by 1 byte               pqzl: word 0 (want 0), gas 4137713 = formula 4137713
+ok    PQZ negative M4-on: proof extended by 1 zero byte           pqzl: word 0 (want 0), gas 4137716 = formula 4137716
+ok    PQZ negative M4-on: proof byte 0 bit 0 flipped              pqzl: word 0 (want 0), gas 4137713 = formula 4137713
+ok    PQZ flip     M4-on: proof middle byte bit 3 flipped         pqzl: word 0 (want 0), gas 4137713 = formula 4137713
+ok    PQZ negative M4-on: proof last byte bit 7 flipped           pqzl: word 0 (want 0), gas 4137713 = formula 4137713
+ok    PQZ negative M4-on: coder padding bit 7 set after the final pqzl: word 0 (want 0), gas 4137713 = formula 4137713
+ok    PQZ negative M8-on: statement length - 1                    pqzl: word 0 (want 0), gas 2593040 = formula 2593040
+ok    PQZ negative M8-on: statement length + 1                    pqzl: word 0 (want 0), gas 2593040 = formula 2593040
+ok    PQZ negative M8-on: unknown proofSystemId (zero word)       pqzl: word 0 (want 0), gas 2593040 = formula 2593040
+ok    PQZ negative M8-on: the other system's proofSystemId        pqzl: word 0 (want 0), gas 2593040 = formula 2593040
+ok    PQZ negative M8-on: proof truncated by 1 byte               pqzl: word 0 (want 0), gas 6203040 = formula 6203040
+ok    PQZ negative M8-on: proof extended by 1 zero byte           pqzl: word 0 (want 0), gas 6203040 = formula 6203040
+ok    PQZ negative M8-on: proof byte 0 bit 0 flipped              pqzl: word 0 (want 0), gas 6203040 = formula 6203040
+ok    PQZ flip     M8-on: proof middle byte bit 3 flipped         pqzl: word 0 (want 0), gas 6203040 = formula 6203040
+ok    PQZ negative M8-on: proof last byte bit 7 flipped           pqzl: word 0 (want 0), gas 6203040 = formula 6203040
+ok    PQZ negative M8-on: coder padding bit 7 set after the final pqzl: word 0 (want 0), gas 6203040 = formula 6203040
+ok    PQZ negative M1-off: statement length - 1                   pqzl: word 0 (want 0), gas 2577218 = formula 2577218
+ok    PQZ negative M1-off: statement length + 1                   pqzl: word 0 (want 0), gas 2577218 = formula 2577218
+ok    PQZ negative M1-off: unknown proofSystemId (zero word)      pqzl: word 0 (want 0), gas 2577218 = formula 2577218
+ok    PQZ negative M1-off: the other system's proofSystemId       pqzl: word 0 (want 0), gas 4324218 = formula 4324218
+ok    PQZ negative M1-off: proof truncated by 1 byte              pqzl: word 0 (want 0), gas 3963218 = formula 3963218
+ok    PQZ negative M1-off: proof extended by 1 zero byte          pqzl: word 0 (want 0), gas 3963218 = formula 3963218
+ok    PQZ negative M1-off: proof byte 0 bit 0 flipped             pqzl: word 0 (want 0), gas 3963218 = formula 3963218
+ok    PQZ flip     M1-off: proof middle byte bit 3 flipped        pqzl: word 0 (want 0), gas 3963218 = formula 3963218
+ok    PQZ negative M1-off: proof last byte bit 7 flipped          pqzl: word 0 (want 0), gas 3963218 = formula 3963218
+ok    PQZ negative M1-off: coder padding bit 7 set after the fina pqzl: word 0 (want 0), gas 3963218 = formula 3963218
+ok    PQZ negative M2-off: statement length - 1                   pqzl: word 0 (want 0), gas 2578814 = formula 2578814
+ok    PQZ negative M2-off: statement length + 1                   pqzl: word 0 (want 0), gas 2578814 = formula 2578814
+ok    PQZ negative M2-off: unknown proofSystemId (zero word)      pqzl: word 0 (want 0), gas 2578814 = formula 2578814
+ok    PQZ negative M2-off: the other system's proofSystemId       pqzl: word 0 (want 0), gas 4426814 = formula 4426814
+ok    PQZ negative M2-off: proof truncated by 1 byte              pqzl: word 0 (want 0), gas 3838814 = formula 3838814
+ok    PQZ negative M2-off: proof extended by 1 zero byte          pqzl: word 0 (want 0), gas 3838814 = formula 3838814
+ok    PQZ negative M2-off: proof byte 0 bit 0 flipped             pqzl: word 0 (want 0), gas 3838814 = formula 3838814
+ok    PQZ flip     M2-off: proof middle byte bit 3 flipped        pqzl: word 0 (want 0), gas 3838814 = formula 3838814
+ok    PQZ negative M2-off: proof last byte bit 7 flipped          pqzl: word 0 (want 0), gas 3838814 = formula 3838814
+ok    PQZ negative M2-off: coder padding bit 7 set after the fina pqzl: word 0 (want 0), gas 3838814 = formula 3838814
+ok    PQZ negative M4-off: statement length - 1                   pqzl: word 0 (want 0), gas 2582003 = formula 2582003
+ok    PQZ negative M4-off: statement length + 1                   pqzl: word 0 (want 0), gas 2582006 = formula 2582006
+ok    PQZ negative M4-off: unknown proofSystemId (zero word)      pqzl: word 0 (want 0), gas 2582006 = formula 2582006
+ok    PQZ negative M4-off: the other system's proofSystemId       pqzl: word 0 (want 0), gas 4907006 = formula 4907006
+ok    PQZ negative M4-off: proof truncated by 1 byte              pqzl: word 0 (want 0), gas 3987003 = formula 3987003
+ok    PQZ negative M4-off: proof extended by 1 zero byte          pqzl: word 0 (want 0), gas 3987006 = formula 3987006
+ok    PQZ negative M4-off: proof byte 0 bit 0 flipped             pqzl: word 0 (want 0), gas 3987006 = formula 3987006
+ok    PQZ flip     M4-off: proof middle byte bit 3 flipped        pqzl: word 0 (want 0), gas 3987006 = formula 3987006
+ok    PQZ negative M4-off: proof last byte bit 7 flipped          pqzl: word 0 (want 0), gas 3987006 = formula 3987006
+ok    PQZ negative M4-off: coder padding bit 7 set after the fina pqzl: word 0 (want 0), gas 3987006 = formula 3987006
+ok    PQZ negative M8-off: statement length - 1                   pqzl: word 0 (want 0), gas 2591144 = formula 2591144
+ok    PQZ negative M8-off: statement length + 1                   pqzl: word 0 (want 0), gas 2591144 = formula 2591144
+ok    PQZ negative M8-off: unknown proofSystemId (zero word)      pqzl: word 0 (want 0), gas 2591144 = formula 2591144
+ok    PQZ negative M8-off: the other system's proofSystemId       pqzl: word 0 (want 0), gas 2591144 = formula 2591144
+ok    PQZ negative M8-off: proof truncated by 1 byte              pqzl: word 0 (want 0), gas 5363144 = formula 5363144
+ok    PQZ negative M8-off: proof extended by 1 zero byte          pqzl: word 0 (want 0), gas 5363144 = formula 5363144
+ok    PQZ negative M8-off: proof byte 0 bit 0 flipped             pqzl: word 0 (want 0), gas 5363144 = formula 5363144
+ok    PQZ flip     M8-off: proof middle byte bit 3 flipped        pqzl: word 0 (want 0), gas 5363144 = formula 5363144
+ok    PQZ negative M8-off: proof last byte bit 7 flipped          pqzl: word 0 (want 0), gas 5363144 = formula 5363144
+ok    PQZ negative M8-off: coder padding bit 7 set after the fina pqzl: word 0 (want 0), gas 5363144 = formula 5363144
+ok    PQZ negative M2-on: M word 0                                pqzl: word 0 (want 0), gas 2580437 = formula 2580437
+ok    PQZ negative M2-on: M word 3                                pqzl: word 0 (want 0), gas 2580437 = formula 2580437
+ok    PQZ negative M2-on: M word 16 (oversize only)               pqzl: word 0 (want 0), gas 2580437 = formula 2580437
+ok    PQZ negative M2-on: M word with bit 64 set                  pqzl: word 0 (want 0), gas 2580437 = formula 2580437
+ok    PQZ negative M2-on: M word 4 on the M = 2 length            pqzl: word 0 (want 0), gas 2580437 = formula 2580437
+ok    PQZ negative M2-on: auditorOn 0 on an auditor-on statement  pqzl: word 0 (want 0), gas 2580437 = formula 2580437
+ok    PQZ negative M4-off: auditorOn 1 on an auditor-off statemen pqzl: word 0 (want 0), gas 2582006 = formula 2582006
+ok    PQZ negative M2-on: auditorOn 2                             pqzl: word 0 (want 0), gas 2580437 = formula 2580437
+ok    PQZ negative M2-on: statement of the 640-byte header only   pqzl: word 0 (want 0), gas 2571149 = formula 2571149
+ok    PQZ negative M2-on: statement cut inside the header (639 by pqzl: word 0 (want 0), gas 2571149 = formula 2571149
+ok    PQZ negative M2-on: amount 1                                pqzl: word 0 (want 0), gas 3723437 = formula 3723437
+ok    PQZ negative M2-on: amount >= 2^64                          pqzl: word 0 (want 0), gas 3723437 = formula 3723437
+ok    PQZ negative M2-on: fee >= 2^64                             pqzl: word 0 (want 0), gas 3723437 = formula 3723437
+ok    PQZ negative M2-on: salt word top byte set                  pqzl: word 0 (want 0), gas 3723437 = formula 3723437
+ok    PQZ negative M4-off: salt word byte 15 set                  pqzl: word 0 (want 0), gas 3987006 = formula 3987006
+ok    PQZ negative M2-on: pk_f coefficient 0 = q                  pqzl: word 0 (want 0), gas 3723437 = formula 3723437
+ok    PQZ negative M2-on: pk_1 coefficient 0 = 2^42               pqzl: word 0 (want 0), gas 3723437 = formula 3723437
+ok    PQZ negative M2-on: u_0 coefficient 0 = q                   pqzl: word 0 (want 0), gas 3723437 = formula 3723437
+ok    PQZ negative M2-on: v_f last coefficient = q                pqzl: word 0 (want 0), gas 3723437 = formula 3723437
+ok    PQZ negative M2-on: v_{a,M-1} last coefficient = 2^64 - 1   pqzl: word 0 (want 0), gas 3723437 = formula 3723437
+ok    PQZ negative M2-on: recipientsHash bit flipped              pqzl: word 0 (want 0), gas 3723437 = formula 3723437
+ok    PQZ negative M2-on: memoHash bit flipped                    pqzl: word 0 (want 0), gas 3723437 = formula 3723437
+ok    PQZ negative M2-on: fee + 1                                 pqzl: word 0 (want 0), gas 3723437 = formula 3723437
+ok    PQZ negative M2-on: chainId bit flipped                     pqzl: word 0 (want 0), gas 3723437 = formula 3723437
+ok    PQZ negative M2-on: pk_0 coefficient 0 low bit flipped      pqzl: word 0 (want 0), gas 3723437 = formula 3723437
+ok    PQZ negative M2-on: v_0 replaced by v_1                     pqzl: word 0 (want 0), gas 3723437 = formula 3723437
+ok    PQZ negative M1-on: (1, on) read as (2, off): M word 2, aud pqzl: word 0 (want 0), gas 3838796 = formula 3838796
+ok    PQZ negative M1-on: op 1 TRANSFER's proof (same statement l pqzl: word 0 (want 0), gas 3636799 = formula 3636799
+ok    PQZ negative M1-off: op 1 TRANSFER0's proof (same statement pqzl: word 0 (want 0), gas 3963221 = formula 3963221
+ok    PQZ negative M2-on: M4-on's proof                           pqzl: word 0 (want 0), gas 3723593 = formula 3723593
+ok    PQZ negative M2-off-two-real: M2-on's proof                 pqzl: word 0 (want 0), gas 3838877 = formula 3838877
+ok    PQZ negative M2-on: empty proof                             pqzl: word 0 (want 0), gas 3719351 = formula 3719351
+ok    PQZ negative M2-on: proof of MAX_PROOF(id) + 1 bytes        pqzl: word 0 (want 0), gas 3728567 = formula 3728567
+ok    PQZ negative M2-on: proof of exactly MAX_PROOF(id) bytes    pqzl: word 0 (want 0), gas 3728567 = formula 3728567
+ok    PQZ negative M4-on: input of exactly MAX_INPUT bytes (not a pqzl: word 0 (want 0), gas 4157864 = formula 4157864
+ok    PQZ negative M2-on: length field = statement + 1            pqzl: word 0 (want 0), gas 2580437 = formula 2580437
+ok    PQZ negative M2-off-two-real: v_0 and v_1 swapped           pqzl: word 0 (want 0), gas 3838814 = formula 3838814
+ok    PQZ negative M8-on-boundary: v_3 and v_4 swapped (legs acro pqzl: word 0 (want 0), gas 6203040 = formula 6203040
+ok    PQZ negative M8-on-boundary: M8-off's proof                 pqzl: word 0 (want 0), gas 6202776 = formula 6202776
+ok    PQZ negative M8-on: M word 4 on the M = 8 length            pqzl: word 0 (want 0), gas 2593040 = formula 2593040
+ok    PQZ negative M1-on: statement length - 1                    pqzh: word 0 (want 0), gas 2596586 = formula 2596586
+ok    PQZ negative M1-on: statement length + 1                    pqzh: word 0 (want 0), gas 2596586 = formula 2596586
+ok    PQZ negative M1-on: unknown proofSystemId (zero word)       pqzh: word 0 (want 0), gas 2596586 = formula 2596586
+ok    PQZ negative M1-on: the other system's proofSystemId        pqzh: word 0 (want 0), gas 3654586 = formula 3654586
+ok    PQZ negative M1-on: proof truncated by 1 byte               pqzh: word 0 (want 0), gas 3893586 = formula 3893586
+ok    PQZ negative M1-on: proof extended by 1 zero byte           pqzh: word 0 (want 0), gas 3893586 = formula 3893586
+ok    PQZ negative M1-on: proof byte 0 bit 0 flipped              pqzh: word 0 (want 0), gas 3893586 = formula 3893586
+ok    PQZ flip     M1-on: proof middle byte bit 3 flipped         pqzh: word 0 (want 0), gas 3893586 = formula 3893586
+ok    PQZ negative M1-on: proof last byte bit 7 flipped           pqzh: word 0 (want 0), gas 3893586 = formula 3893586
+ok    PQZ negative M1-on: proof of max_proof_len(shape) + 1 bytes pqzh: word 0 (want 0), gas 3893865 = formula 3893865
+ok    PQZ negative M1-on: w coefficient 0 element = q             pqzh: word 0 (want 0), gas 3893586 = formula 3893586
+ok    PQZ negative M1-on: first opened column element 0 = q       pqzh: word 0 (want 0), gas 3893586 = formula 3893586
+ok    PQZ negative M1-on: opened columns 0 and 1 swapped (not inc pqzh: word 0 (want 0), gas 3893586 = formula 3893586
+ok    PQZ negative M1-on: opened column 0 repeated as column 1    pqzh: word 0 (want 0), gas 3893586 = formula 3893586
+ok    PQZ negative M2-on: statement length - 1                    pqzh: word 0 (want 0), gas 2598029 = formula 2598029
+ok    PQZ negative M2-on: statement length + 1                    pqzh: word 0 (want 0), gas 2598029 = formula 2598029
+ok    PQZ negative M2-on: unknown proofSystemId (zero word)       pqzh: word 0 (want 0), gas 2598029 = formula 2598029
+ok    PQZ negative M2-on: the other system's proofSystemId        pqzh: word 0 (want 0), gas 3741029 = formula 3741029
+ok    PQZ negative M2-on: proof truncated by 1 byte               pqzh: word 0 (want 0), gas 4032029 = formula 4032029
+ok    PQZ negative M2-on: proof extended by 1 zero byte           pqzh: word 0 (want 0), gas 4032029 = formula 4032029
+ok    PQZ negative M2-on: proof byte 0 bit 0 flipped              pqzh: word 0 (want 0), gas 4032029 = formula 4032029
+ok    PQZ flip     M2-on: proof middle byte bit 3 flipped         pqzh: word 0 (want 0), gas 4032029 = formula 4032029
+ok    PQZ negative M2-on: proof last byte bit 7 flipped           pqzh: word 0 (want 0), gas 4032029 = formula 4032029
+ok    PQZ negative M2-on: proof of max_proof_len(shape) + 1 bytes pqzh: word 0 (want 0), gas 4032425 = formula 4032425
+ok    PQZ negative M2-on: w coefficient 0 element = q             pqzh: word 0 (want 0), gas 4032029 = formula 4032029
+ok    PQZ negative M2-on: first opened column element 0 = q       pqzh: word 0 (want 0), gas 4032029 = formula 4032029
+ok    PQZ negative M2-on: opened columns 0 and 1 swapped (not inc pqzh: word 0 (want 0), gas 4032029 = formula 4032029
+ok    PQZ negative M2-on: opened column 0 repeated as column 1    pqzh: word 0 (want 0), gas 4032029 = formula 4032029
+ok    PQZ negative M4-on: statement length - 1                    pqzh: word 0 (want 0), gas 2601287 = formula 2601287
+ok    PQZ negative M4-on: statement length + 1                    pqzh: word 0 (want 0), gas 2601287 = formula 2601287
+ok    PQZ negative M4-on: unknown proofSystemId (zero word)       pqzh: word 0 (want 0), gas 2601287 = formula 2601287
+ok    PQZ negative M4-on: the other system's proofSystemId        pqzh: word 0 (want 0), gas 4155287 = formula 4155287
+ok    PQZ negative M4-on: proof truncated by 1 byte               pqzh: word 0 (want 0), gas 4969287 = formula 4969287
+ok    PQZ negative M4-on: proof extended by 1 zero byte           pqzh: word 0 (want 0), gas 4969287 = formula 4969287
+ok    PQZ negative M4-on: proof byte 0 bit 0 flipped              pqzh: word 0 (want 0), gas 4969287 = formula 4969287
+ok    PQZ flip     M4-on: proof middle byte bit 3 flipped         pqzh: word 0 (want 0), gas 4969287 = formula 4969287
+ok    PQZ negative M4-on: proof last byte bit 7 flipped           pqzh: word 0 (want 0), gas 4969287 = formula 4969287
+ok    PQZ negative M4-on: proof of max_proof_len(shape) + 1 bytes pqzh: word 0 (want 0), gas 4969614 = formula 4969614
+ok    PQZ negative M4-on: w coefficient 0 element = q             pqzh: word 0 (want 0), gas 4969287 = formula 4969287
+ok    PQZ negative M4-on: first opened column element 0 = q       pqzh: word 0 (want 0), gas 4969287 = formula 4969287
+ok    PQZ negative M4-on: opened columns 0 and 1 swapped (not inc pqzh: word 0 (want 0), gas 4969287 = formula 4969287
+ok    PQZ negative M4-on: opened column 0 repeated as column 1    pqzh: word 0 (want 0), gas 4969287 = formula 4969287
+ok    PQZ negative M1-off: statement length - 1                   pqzh: word 0 (want 0), gas 2595014 = formula 2595014
+ok    PQZ negative M1-off: statement length + 1                   pqzh: word 0 (want 0), gas 2595014 = formula 2595014
+ok    PQZ negative M1-off: unknown proofSystemId (zero word)      pqzh: word 0 (want 0), gas 2595014 = formula 2595014
+ok    PQZ negative M1-off: the other system's proofSystemId       pqzh: word 0 (want 0), gas 3981014 = formula 3981014
+ok    PQZ negative M1-off: proof truncated by 1 byte              pqzh: word 0 (want 0), gas 4342014 = formula 4342014
+ok    PQZ negative M1-off: proof extended by 1 zero byte          pqzh: word 0 (want 0), gas 4342014 = formula 4342014
+ok    PQZ negative M1-off: proof byte 0 bit 0 flipped             pqzh: word 0 (want 0), gas 4342014 = formula 4342014
+ok    PQZ flip     M1-off: proof middle byte bit 3 flipped        pqzh: word 0 (want 0), gas 4342014 = formula 4342014
+ok    PQZ negative M1-off: proof last byte bit 7 flipped          pqzh: word 0 (want 0), gas 4342014 = formula 4342014
+ok    PQZ negative M1-off: proof of max_proof_len(shape) + 1 byte pqzh: word 0 (want 0), gas 4342248 = formula 4342248
+ok    PQZ negative M1-off: w coefficient 0 element = q            pqzh: word 0 (want 0), gas 4342014 = formula 4342014
+ok    PQZ negative M1-off: first opened column element 0 = q      pqzh: word 0 (want 0), gas 4342014 = formula 4342014
+ok    PQZ negative M1-off: opened columns 0 and 1 swapped (not in pqzh: word 0 (want 0), gas 4342014 = formula 4342014
+ok    PQZ negative M1-off: opened column 0 repeated as column 1   pqzh: word 0 (want 0), gas 4342014 = formula 4342014
+ok    PQZ negative M2-off: statement length - 1                   pqzh: word 0 (want 0), gas 2596547 = formula 2596547
+ok    PQZ negative M2-off: statement length + 1                   pqzh: word 0 (want 0), gas 2596547 = formula 2596547
+ok    PQZ negative M2-off: unknown proofSystemId (zero word)      pqzh: word 0 (want 0), gas 2596547 = formula 2596547
+ok    PQZ negative M2-off: the other system's proofSystemId       pqzh: word 0 (want 0), gas 3856547 = formula 3856547
+ok    PQZ negative M2-off: proof truncated by 1 byte              pqzh: word 0 (want 0), gas 4444547 = formula 4444547
+ok    PQZ negative M2-off: proof extended by 1 zero byte          pqzh: word 0 (want 0), gas 4444547 = formula 4444547
+ok    PQZ negative M2-off: proof byte 0 bit 0 flipped             pqzh: word 0 (want 0), gas 4444547 = formula 4444547
+ok    PQZ flip     M2-off: proof middle byte bit 3 flipped        pqzh: word 0 (want 0), gas 4444547 = formula 4444547
+ok    PQZ negative M2-off: proof last byte bit 7 flipped          pqzh: word 0 (want 0), gas 4444547 = formula 4444547
+ok    PQZ negative M2-off: proof of max_proof_len(shape) + 1 byte pqzh: word 0 (want 0), gas 4444865 = formula 4444865
+ok    PQZ negative M2-off: w coefficient 0 element = q            pqzh: word 0 (want 0), gas 4444547 = formula 4444547
+ok    PQZ negative M2-off: first opened column element 0 = q      pqzh: word 0 (want 0), gas 4444547 = formula 4444547
+ok    PQZ negative M2-off: opened columns 0 and 1 swapped (not in pqzh: word 0 (want 0), gas 4444547 = formula 4444547
+ok    PQZ negative M2-off: opened column 0 repeated as column 1   pqzh: word 0 (want 0), gas 4444547 = formula 4444547
+ok    PQZ negative M4-off: statement length - 1                   pqzh: word 0 (want 0), gas 2599682 = formula 2599682
+ok    PQZ negative M4-off: statement length + 1                   pqzh: word 0 (want 0), gas 2599682 = formula 2599682
+ok    PQZ negative M4-off: unknown proofSystemId (zero word)      pqzh: word 0 (want 0), gas 2599682 = formula 2599682
+ok    PQZ negative M4-off: the other system's proofSystemId       pqzh: word 0 (want 0), gas 4004682 = formula 4004682
+ok    PQZ negative M4-off: proof truncated by 1 byte              pqzh: word 0 (want 0), gas 4924682 = formula 4924682
+ok    PQZ negative M4-off: proof extended by 1 zero byte          pqzh: word 0 (want 0), gas 4924682 = formula 4924682
+ok    PQZ negative M4-off: proof byte 0 bit 0 flipped             pqzh: word 0 (want 0), gas 4924682 = formula 4924682
+ok    PQZ flip     M4-off: proof middle byte bit 3 flipped        pqzh: word 0 (want 0), gas 4924682 = formula 4924682
+ok    PQZ negative M4-off: proof last byte bit 7 flipped          pqzh: word 0 (want 0), gas 4924682 = formula 4924682
+ok    PQZ negative M4-off: proof of max_proof_len(shape) + 1 byte pqzh: word 0 (want 0), gas 4924961 = formula 4924961
+ok    PQZ negative M4-off: w coefficient 0 element = q            pqzh: word 0 (want 0), gas 4924682 = formula 4924682
+ok    PQZ negative M4-off: first opened column element 0 = q      pqzh: word 0 (want 0), gas 4924682 = formula 4924682
+ok    PQZ negative M4-off: opened columns 0 and 1 swapped (not in pqzh: word 0 (want 0), gas 4924682 = formula 4924682
+ok    PQZ negative M4-off: opened column 0 repeated as column 1   pqzh: word 0 (want 0), gas 4924682 = formula 4924682
+ok    PQZ negative M2-on: M word 0                                pqzh: word 0 (want 0), gas 2598029 = formula 2598029
+ok    PQZ negative M2-on: M word 3                                pqzh: word 0 (want 0), gas 2598029 = formula 2598029
+ok    PQZ negative M2-on: M word 16 (oversize only)               pqzh: word 0 (want 0), gas 2598029 = formula 2598029
+ok    PQZ negative M2-on: M word with bit 64 set                  pqzh: word 0 (want 0), gas 2598029 = formula 2598029
+ok    PQZ negative M2-on: M word 4 on the M = 2 length            pqzh: word 0 (want 0), gas 2598029 = formula 2598029
+ok    PQZ negative M2-on: auditorOn 0 on an auditor-on statement  pqzh: word 0 (want 0), gas 2598029 = formula 2598029
+ok    PQZ negative M4-off: auditorOn 1 on an auditor-off statemen pqzh: word 0 (want 0), gas 2599682 = formula 2599682
+ok    PQZ negative M2-on: auditorOn 2                             pqzh: word 0 (want 0), gas 2598029 = formula 2598029
+ok    PQZ negative M2-on: statement of the 640-byte header only   pqzh: word 0 (want 0), gas 2588741 = formula 2588741
+ok    PQZ negative M2-on: statement cut inside the header (639 by pqzh: word 0 (want 0), gas 2588741 = formula 2588741
+ok    PQZ negative M2-on: amount 1                                pqzh: word 0 (want 0), gas 4032029 = formula 4032029
+ok    PQZ negative M2-on: amount >= 2^64                          pqzh: word 0 (want 0), gas 4032029 = formula 4032029
+ok    PQZ negative M2-on: fee >= 2^64                             pqzh: word 0 (want 0), gas 4032029 = formula 4032029
+ok    PQZ negative M2-on: salt word top byte set                  pqzh: word 0 (want 0), gas 4032029 = formula 4032029
+ok    PQZ negative M4-off: salt word byte 15 set                  pqzh: word 0 (want 0), gas 4924682 = formula 4924682
+ok    PQZ negative M2-on: pk_f coefficient 0 = q                  pqzh: word 0 (want 0), gas 4032029 = formula 4032029
+ok    PQZ negative M2-on: pk_1 coefficient 0 = 2^42               pqzh: word 0 (want 0), gas 4032029 = formula 4032029
+ok    PQZ negative M2-on: u_0 coefficient 0 = q                   pqzh: word 0 (want 0), gas 4032029 = formula 4032029
+ok    PQZ negative M2-on: v_f last coefficient = q                pqzh: word 0 (want 0), gas 4032029 = formula 4032029
+ok    PQZ negative M2-on: v_{a,M-1} last coefficient = 2^64 - 1   pqzh: word 0 (want 0), gas 4032029 = formula 4032029
+ok    PQZ negative M2-on: recipientsHash bit flipped              pqzh: word 0 (want 0), gas 4032029 = formula 4032029
+ok    PQZ negative M2-on: memoHash bit flipped                    pqzh: word 0 (want 0), gas 4032029 = formula 4032029
+ok    PQZ negative M2-on: fee + 1                                 pqzh: word 0 (want 0), gas 4032029 = formula 4032029
+ok    PQZ negative M2-on: chainId bit flipped                     pqzh: word 0 (want 0), gas 4032029 = formula 4032029
+ok    PQZ negative M2-on: pk_0 coefficient 0 low bit flipped      pqzh: word 0 (want 0), gas 4032029 = formula 4032029
+ok    PQZ negative M2-on: v_0 replaced by v_1                     pqzh: word 0 (want 0), gas 4032029 = formula 4032029
+ok    PQZ negative M1-on: (1, on) read as (2, off): M word 2, aud pqzh: word 0 (want 0), gas 4444586 = formula 4444586
+ok    PQZ negative M1-on: op 1 TRANSFER's proof (same statement l pqzh: word 0 (want 0), gas 3893442 = formula 3893442
+ok    PQZ negative M1-off: op 1 TRANSFER0's proof (same statement pqzh: word 0 (want 0), gas 4341942 = formula 4341942
+ok    PQZ negative M2-on: M4-on's proof                           pqzh: word 0 (want 0), gas 4032167 = formula 4032167
+ok    PQZ negative M2-off-two-real: M2-on's proof                 pqzh: word 0 (want 0), gas 4444469 = formula 4444469
+ok    PQZ negative M2-on: empty proof                             pqzh: word 0 (want 0), gas 4010351 = formula 4010351
+ok    PQZ negative M2-on: proof of MAX_PROOF(id) + 1 bytes        pqzh: word 0 (want 0), gas 4034927 = formula 4034927
+ok    PQZ negative M2-on: proof of exactly MAX_PROOF(id) bytes    pqzh: word 0 (want 0), gas 4034927 = formula 4034927
+ok    PQZ negative M4-on: input of exactly MAX_INPUT bytes (not a pqzh: word 0 (want 0), gas 4971864 = formula 4971864
+ok    PQZ negative M2-on: length field = statement + 1            pqzh: word 0 (want 0), gas 2598029 = formula 2598029
+ok    PQZ negative M2-off-two-real: v_0 and v_1 swapped           pqzh: word 0 (want 0), gas 4444505 = formula 4444505
+ok    PQZ negative M4-on: M word 8 (not built for PQZH)           pqzh: word 0 (want 0), gas 2601287 = formula 2601287
+ok    PQZ fee0     fee0 TRANSFER pqzl                             pqzl: word 1 (want 1), gas 5420799 = formula 5420799
+ok    PQZ fee0     fee0 TRANSFER pqzh                             pqzh: word 1 (want 1), gas 4254553 = formula 4254553
+ok    PQZ fee0     fee0 TRANSFER0 pqzl                            pqzl: word 1 (want 1), gas 5233218 = formula 5233218
+ok    PQZ fee0     fee0 TRANSFER0 pqzh                            pqzh: word 1 (want 1), gas 4048933 = formula 4048933
+ok    PQZ fee0     fee0 BURN pqzl                                 pqzl: word 1 (want 1), gas 3731622 = formula 3731622
+ok    PQZ fee0     fee0 BURN pqzh                                 pqzh: word 1 (want 1), gas 3764220 = formula 3764220
+ok    PQZ fee0     fee0 REFRESH pqzl                              pqzl: word 1 (want 1), gas 3731625 = formula 3731625
+ok    PQZ fee0     fee0 REFRESH pqzh                              pqzh: word 1 (want 1), gas 3764400 = formula 3764400
+ok    PQZ selftest OP_SELFTEST                                    -: word 0xed910a2c (want hash), gas 2567000 = formula 2567000
+ok    gas valid = invalid ('pqzh', 'BURN') (50,048 B statement): 3764460 / 3764460
+ok    gas valid = invalid ('pqzh', 'DISCLOSE-AUDITOR') (33,184 B statement): 2901661 / 2901661
+ok    gas valid = invalid ('pqzh', 'DISCLOSE-RECEIVER') (33,184 B statement): 2901664 / 2901664
+ok    gas valid = invalid ('pqzh', 'DISCLOSE-SENDER') (33,184 B statement): 3303592 / 3303592
+ok    gas valid = invalid ('pqzh', 'REFRESH') (50,048 B statement): 3764283 / 3764283
+ok    gas valid = invalid ('pqzh', 'REGISTER') (16,480 B statement): 3341056 / 3341056
+ok    gas valid = invalid ('pqzh', 'TRANSFER') (83,072 B statement): 4254442 / 4254442
+ok    gas valid = invalid ('pqzh', 'TRANSFER-MULTI') (66,560 B statement): 4342014 / 4342014
+ok    gas valid = invalid ('pqzh', 'TRANSFER-MULTI') (83,072 B statement): 3893586 / 3893586
+ok    gas valid = invalid ('pqzh', 'TRANSFER-MULTI') (83,072 B statement): 4444547 / 4444547
+ok    gas valid = invalid ('pqzh', 'TRANSFER-MULTI') (99,712 B statement): 4032029 / 4032029
+ok    gas valid = invalid ('pqzh', 'TRANSFER-MULTI') (116,096 B statement): 4924682 / 4924682
+ok    gas valid = invalid ('pqzh', 'TRANSFER-MULTI') (132,992 B statement): 4969287 / 4969287
+ok    gas valid = invalid ('pqzh', 'TRANSFER0') (66,560 B statement): 4048942 / 4048942
+ok    gas valid = invalid ('pqzl', 'BURN') (50,048 B statement): 3731622 / 3731622
+ok    gas valid = invalid ('pqzl', 'DISCLOSE-AUDITOR') (33,184 B statement): 2572829 / 2572829
+ok    gas valid = invalid ('pqzl', 'DISCLOSE-RECEIVER') (33,184 B statement): 2572832 / 2572832
+ok    gas valid = invalid ('pqzl', 'DISCLOSE-SENDER') (33,184 B statement): 2606829 / 2606829
+ok    gas valid = invalid ('pqzl', 'REFRESH') (50,048 B statement): 3731622 / 3731622
+ok    gas valid = invalid ('pqzl', 'REGISTER') (16,480 B statement): 2699182 / 2699182
+ok    gas valid = invalid ('pqzl', 'TRANSFER') (83,072 B statement): 5420799 / 5420799
+ok    gas valid = invalid ('pqzl', 'TRANSFER-MULTI') (66,560 B statement): 3963218 / 3963218
+ok    gas valid = invalid ('pqzl', 'TRANSFER-MULTI') (83,072 B statement): 3636796 / 3636796
+ok    gas valid = invalid ('pqzl', 'TRANSFER-MULTI') (83,072 B statement): 3838814 / 3838814
+ok    gas valid = invalid ('pqzl', 'TRANSFER-MULTI') (99,712 B statement): 3723437 / 3723437
+ok    gas valid = invalid ('pqzl', 'TRANSFER-MULTI') (116,096 B statement): 3987006 / 3987006
+ok    gas valid = invalid ('pqzl', 'TRANSFER-MULTI') (132,992 B statement): 4137713 / 4137713
+ok    gas valid = invalid ('pqzl', 'TRANSFER-MULTI') (198,528 B statement): 5363144 / 5363144
+ok    gas valid = invalid ('pqzl', 'TRANSFER-MULTI') (215,936 B statement): 6203040 / 6203040
+ok    gas valid = invalid ('pqzl', 'TRANSFER0') (66,560 B statement): 5233221 / 5233221
+ok    PQZ miss unknown id: …00, gas 2578799 = smallest row + length term 2578799
+ok    PQZ miss short (68 B): …00, gas 2567009 = smallest row + length term 2567009
+ok    PQZ miss empty: …00, gas 2567000 = smallest row + length term 2567000
+ok    PQZ miss unknown op 9: …00, gas 2578799 = smallest row + length term 2578799
+ok    PQZ input of MAX_INPUT + 1: failed call (word 0xffff, rlen 0)
+ok    MLDSA44 eip8355 wycheproof/mldsa_44_verify_test.json: word 1 (want 1), gas 49006 = 49006
+ok    MLDSA44 eip8355 wycheproof/mldsa_44_ve sig bit flipped: 0, same gas
+ok    MLDSA44 eip8355 wycheproof/mldsa_44_verify_test.json: word 0 (want 0), gas 49006 = 49006
+ok    MLDSA44 eip8355 input shorter than PK_LEN + SIG_LEN : word 0 (want 0), gas 49000 = 49000
+ok    MLDSA65 eip8355 input shorter than PK_LEN + SIG_LEN : word 0 (want 0), gas 68000 = 68000
+ok    MLDSA44 acvp ML-DSA-44 tc 1                         : word 0 (want 0), gas 50374 = 50374
+ok    MLDSA44 acvp ML-DSA-44 tc 2                         : word 0 (want 0), gas 50494 = 50494
+ok    MLDSA44 acvp ML-DSA-44 tc 3                         : word 0 (want 0), gas 49468 = 49468
+ok    MLDSA44 acvp ML-DSA-44 tc 4                         : word 0 (want 0), gas 50404 = 50404
+ok    MLDSA44 acvp ML-DSA-44 tc 5                         : word 0 (want 0), gas 49684 = 49684
+ok    MLDSA44 acvp ML-DSA-44 tc 6                         : word 0 (want 0), gas 50536 = 50536
+ok    MLDSA44 acvp ML-DSA-44 tc 7                         : word 0 (want 0), gas 50128 = 50128
+ok    MLDSA44 acvp ML-DSA-44 tc 8                         : word 0 (want 0), gas 49210 = 49210
+ok    MLDSA44 acvp ML-DSA-44 tc 9                         : word 0 (want 0), gas 49006 = 49006
+ok    MLDSA44 acvp ML-DSA-44 tc 10                        : word 0 (want 0), gas 49894 = 49894
+ok    MLDSA44 acvp ML-DSA-44 tc 11                        : word 0 (want 0), gas 49108 = 49108
+ok    MLDSA44 acvp ML-DSA-44 tc 12                        : word 0 (want 0), gas 49726 = 49726
+ok    MLDSA44 acvp ML-DSA-44 tc 13                        : word 0 (want 0), gas 49870 = 49870
+ok    MLDSA44 acvp ML-DSA-44 tc 14                        : word 0 (want 0), gas 49588 = 49588
+ok    MLDSA44 acvp ML-DSA-44 tc 15                        : word 0 (want 0), gas 49582 = 49582
+ok    MLDSA65 acvp ML-DSA-65 tc 31                        : word 0 (want 0), gas 68654 = 68654
+ok    MLDSA65 acvp ML-DSA-65 tc 32                        : word 0 (want 0), gas 68282 = 68282
+ok    MLDSA65 acvp ML-DSA-65 tc 33                        : word 0 (want 0), gas 68282 = 68282
+ok    MLDSA65 acvp ML-DSA-65 tc 34                        : word 0 (want 0), gas 68144 = 68144
+ok    MLDSA65 acvp ML-DSA-65 tc 35                        : word 0 (want 0), gas 68396 = 68396
+ok    MLDSA65 acvp ML-DSA-65 tc 36                        : word 0 (want 0), gas 69272 = 69272
+ok    MLDSA65 acvp ML-DSA-65 tc 37                        : word 0 (want 0), gas 69512 = 69512
+ok    MLDSA65 acvp ML-DSA-65 tc 38                        : word 0 (want 0), gas 68006 = 68006
+ok    MLDSA65 acvp ML-DSA-65 tc 39                        : word 0 (want 0), gas 68684 = 68684
+ok    MLDSA65 acvp ML-DSA-65 tc 40                        : word 0 (want 0), gas 69536 = 69536
+ok    MLDSA65 acvp ML-DSA-65 tc 41                        : word 0 (want 0), gas 68090 = 68090
+ok    MLDSA65 acvp ML-DSA-65 tc 42                        : word 0 (want 0), gas 68714 = 68714
+ok    MLDSA65 acvp ML-DSA-65 tc 43                        : word 0 (want 0), gas 68036 = 68036
+ok    MLDSA65 acvp ML-DSA-65 tc 44                        : word 0 (want 0), gas 68552 = 68552
+ok    MLDSA65 acvp ML-DSA-65 tc 45                        : word 0 (want 0), gas 68522 = 68522
+ok    MLDSA44 ua mldsa44 pop                              : word 1 (want 1), gas 49006 = 49006
+ok    MLDSA44 ua mldsa44 pop sig bit flipped: 0, same gas
+ok    MLDSA44 ua mldsa44 popOther                         : word 1 (want 1), gas 49006 = 49006
+ok    MLDSA44 ua mldsa44 popOther sig bit flipped: 0, same gas
+ok    MLDSA65 ua mldsa65 pop                              : word 1 (want 1), gas 68006 = 68006
+ok    MLDSA65 ua mldsa65 pop sig bit flipped: 0, same gas
+ok    MLDSA65 ua mldsa65 popOther                         : word 1 (want 1), gas 68006 = 68006
+ok    MLDSA65 ua mldsa65 popOther sig bit flipped: 0, same gas
+ok    MLDSA65 ua mldsa65 pop                              : word 1 (want 1), gas 68006 = 68006
+ok    MLDSA65 ua mldsa65 pop sig bit flipped: 0, same gas
+ok    MLDSA65 ua mldsa65 pop                              : word 1 (want 1), gas 68006 = 68006
+ok    MLDSA65 ua mldsa65 pop sig bit flipped: 0, same gas
+probe: all checks passed

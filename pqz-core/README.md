@@ -48,8 +48,8 @@ Both stay far under the 60 ms verify limit, and both provers fit the 256 MiB bro
 statement. **Live:** the precompile runs on chain 7622 (the testnet) since 2026-10-16 for ops 1–6
 ([§3](#3-two-proof-systems-one-precompile)). **op 7** (one proof for a transfer to M recipients,
 [§4](#4-statement-forms-ids-limits), [§5.4](#54-op-7-r_txm-multi-recipient-transfer-provisional)) is built in both systems
-and in `pqz-ffi`, with vectors, fuzzing and the package; its activation on chain 7622 (gas rows per `(id, M, auditorOn)`)
-is in progress (P6-ANON S8).
+and in `pqz-ffi`, with vectors, fuzzing and the package, and **live on chain 7622 since 2026-10-17** (gas rows per
+`(id, M, auditorOn)`, P6-ANON S8).
 
 ## 2. What PQZ is
 
@@ -119,11 +119,11 @@ only).
 
 **Live on chain 7622** (the testnet, reset 2026-10-16 with the precompiles from block 0; genesis hash unchanged
 `0x24e43dcb…c464`): the Nethermind plugin `Nethermind.Pqz` ([nethermind/README.md](nethermind/README.md), image
-`scaas/nethermind-pqz:1.39.0-pqz1`, built locally, never pushed) loads `libpqz_ffi.so` and adds three precompiles:
+`scaas/nethermind-pqz:1.39.0-pqz2`, built locally, never pushed) loads `libpqz_ffi.so` and adds three precompiles:
 
 | Precompile | Address | Gas (calibrated once, 0.359 M gas / ms) |
 |---|---|---|
-| `PQZ` (ops 1–6, both systems; op 7 from S8) | `0x5caa500000000000000000000000000000000f01` | per (op, `proofSystemId`, statement length) row: 2,567,000–5,409,000 + 3 per input word; `OP_SELFTEST` 2,567,000. op 7 has no row yet: it is charged the smallest row and answered `…00` without calling `pqz-ffi` |
+| `PQZ` (ops 1–7, both systems) | `0x5caa500000000000000000000000000000000f01` | per (op, `proofSystemId`, statement length) row: 2,567,000–5,409,000 + 3 per input word; op 7 per (`proofSystemId`, M, auditorOn): 3,625,000–6,177,000 (since 2026-10-17); `OP_SELFTEST` 2,567,000; an input without a row pays the smallest row and gets `…00` without calling `pqz-ffi` |
 | `MLDSA44` (EIP-8355 layout) | `0x5caa500000000000000000000000000000000012` | 49,000 + 6 per message word |
 | `MLDSA65` (EIP-8355 layout) | `0x5caa500000000000000000000000000000000013` | 68,000 + 6 per message word |
 
@@ -173,8 +173,8 @@ layout — statements, objects, both proof formats, the precompile input and `OP
   never switches; an auditor-on BUNDLE shape over the gas cap is offered as one M = 8 COMPACT transfer (default) or split
   into fitting BUNDLE transfers; PQZH op 7 takes at most 10 inline credits; wasm32 proves PQZL op 7 only for M ≤ 4.
 - **Where it is:** PQZL (C) and PQZH (Rust) relations, `pqz-stmt`, `pqz-ffi` (S3), the frozen vectors (S4), fuzzing (S5,
-  2 h per target, no finding), the reproducibility package (S6); **on chain 7622: in progress (S8)**; the token entry
-  points follow S7. Joins the frozen set before gates A / B.
+  2 h per target, no finding), the reproducibility package (S6), **live on chain 7622 since 2026-10-17 (S8)**; the token
+  entry points follow S7. Joins the frozen set before gates A / B.
 
 | `proofSystemId` | keccak256 of | Value | Frozen at |
 |---|---|---|---|
@@ -616,9 +616,7 @@ Then (2026-10-15 / 17): the precompile **live on chain 7622** for ops 1–6 (P6f
 
 **Next, in order:**
 
-1. **op 7 on chain 7622** (S8, in progress): gas rows per `(id, M, auditorOn)` calibrated on the node image, tried on a
-   copy of 7622, then a second gas schedule on the live chain; then S7 (spec and gas tables) and the op 7 entry points
-   in the PQZ tokens.
+1. **S7** (spec and gas tables after op 7 went live on 7622 in S8) and the op 7 entry points in the PQZ tokens.
 2. **Gate A (PQZL)** and **gate B (PQZH)** ([relations plan](../docs/superpowers/plans/2026-10-14-p6e-relations.md)): KAT 19/19, fix checks, differential 0 disagreements,
    `pqz-vectors --check` and `pqz_kat.py --check`, wasm32 replay byte-equal, `pqz-ffi` tests, fuzzing clean;
    gate B also every PQZH op ≤ 262,144 B and ≤ 60 ms p99 native and wasm32 and the review of the modified Ligero ZK
