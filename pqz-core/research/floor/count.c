@@ -46,11 +46,11 @@ pqz_ntt_basemul (uint64_t r[64], const uint64_t a[64], const uint64_t b[64])
   real_ntt_basemul (r, a, b);
 }
 
+/* test/pqz_bench.c's step API: relation 0 = R_REG, 1 = R_TX */
 int step_init (void *arena, size_t len);
-int step_prove_reg (unsigned seed);
-int step_prove_tx (unsigned seed);
-int step_verify (int tx);
-int step_verify_bad (int tx, int kind, unsigned seed);
+int step_prove (int rel, unsigned seed);
+int step_verify (int rel);
+int step_verify_bad (int rel, int kind, unsigned seed);
 
 static double
 now_ms (void)
@@ -81,7 +81,7 @@ main (void)
   const size_t len = (size_t)768 << 20;
   if (step_init (malloc (len), len) != 0)
     return 1;
-  if (step_prove_reg (0) != 0 || step_prove_tx (0) != 0)
+  if (step_prove (0, 0) != 0 || step_prove (1, 0) != 0)
     return 1;
   for (int tx = 0; tx < 2; tx++)
     run (tx, 0), run (tx, 1);

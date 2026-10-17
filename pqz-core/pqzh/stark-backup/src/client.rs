@@ -173,6 +173,12 @@ pub fn setup_with(tw: &Tweak) -> Setup {
     tx[32..64].copy_from_slice(&psid);
     tx[HDR_FEE..HDR_FEE + 64].fill(0);
     tx[HDR_FEE + 24..HDR_FEE + 32].copy_from_slice(&fee.to_be_bytes());
+    // canonical header words as pqz_bench.c (§7.7, P6e D15): recipient 0 on a transfer, auditorOn = 1 (the 83,072-byte
+    // form), salt word = 16 zero bytes ‖ salt
+    tx[320..352].fill(0);
+    tx[448..480].fill(0);
+    tx[479] = 1;
+    tx[576..592].fill(0);
     wr_vec(&mut tx, &kf.pk);
     wr_vec(&mut tx, &kt.pk);
     wr_vec(&mut tx, &ka.pk);

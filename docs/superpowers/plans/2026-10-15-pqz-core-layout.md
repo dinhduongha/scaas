@@ -264,4 +264,10 @@ digest lines, arena peak 268,113,792 B); `ffi/vectors/run.sh layout` ok (`pqz-ve
 (the STARK backup's `tx_stmt` differs from the C statement — the backup's builder was not updated after the statement
 changes; `reg_stmt`, both witnesses equal) and `research/floor/build.sh` (`count.c` calls `step_prove_reg` /
 `step_prove_tx`, removed from `pqz_bench.c` in `95658a6`). Both are research / backup harnesses, not fixed here.
+**Fixed 2026-10-17:** the STARK backup's `client::setup()` now writes the canonical header words as `pqz_bench.c`
+(word 320 `recipient` 0, word 448 `auditorOn` 1, salt word's high 16 bytes 0; P6e D15) — `pqzh/xcheck/run.sh` all four
+files equal, the backup's `cargo test --release` ok; `research/floor/count.c` uses the current step API
+(`step_prove(rel, seed)`, rel 0 = `R_REG`, 1 = `R_TX`) — `research/floor/build.sh` builds and `count` runs (R_REG /
+R_TX honest verify 1, truncated 0). The size gate's `BaseHarness` error was a wrong invocation (`forge build` with test
+helpers); CI's `forge build src --sizes` gives 0 errors.
 `artifact/reproduce.sh` is validated by S6's Docker run on this layout; the node image is rebuilt in S8.
