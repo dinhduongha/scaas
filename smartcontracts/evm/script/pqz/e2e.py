@@ -530,9 +530,10 @@ def run(kd, kr, ke):
         other = int(call(t1, cd(VTA, ["w", "w", "w", "w", "b"], ref7, 0, 40, kind, opening)), 16)
         check(okw == 1 and bad == 0 and other == 0, f"op 7 leg 1 verifyTransferAmount kind {kind} (op {op}): 40 ⇒ true, "
                                                     f"41 ⇒ false, leg 0 ⇒ false")
-    sd.send(t1, cd("pqzRollOver(bytes32,bytes,bytes[])", ["w", "b", ("a", "b")], bob.ua, C1.accb(bob),
-                   C1.inline(bob, C1.state(bob)["pendingCount"])), "pqzRollOver(bob, every pending credit)")
-    for x in C1.inline(bob, C1.state(bob)["pendingCount"]):
+    cts = C1.inline(bob, C1.state(bob)["pendingCount"])
+    sd.send(t1, cd("pqzRollOver(bytes32,bytes,bytes[])", ["w", "b", ("a", "b")], bob.ua, C1.accb(bob), cts),
+            f"pqzRollOver(bob, {len(cts)} pending credits)")
+    for x in cts:
         C1.acc[bob.ua] = K.ct_add(C1.accb(bob), x)
     transfer_multi(pq, sd, C1, bob, [(alice, 15), (DEC[2], 0)], b"\0" * 32, True,
                    "pqzTransfer (op 7) bob→[alice 15, decoy2 0], the op 7 credit spent")
