@@ -324,3 +324,205 @@ pqz_shim_int_ops (const uint64_t *in, uint64_t *out, size_t *n)
   *n = (size_t)(o - out);
   return pqz_err;
 }
+
+/* ---------------------------------------------------------------- hashing, rng, samplers (testkit::rand_*) */
+
+/* an int from 5 words: limbs[0..3), sign, nlimbs (1..3) */
+static void
+load_int (int_t r, const uint64_t w[5])
+{
+  for (unsigned i = 0; i < r->nlimbs; i++)
+    r->limbs[i] = w[i];
+  r->neg = w[3] & 1;
+}
+
+/* testkit::rand_rng: rng_init (seed, dom), then rng_urandom of lens[i] bytes each, concatenated */
+int
+pqz_shim_rng (const uint8_t seed[32], uint64_t dom, const uint32_t *lens, size_t nlens, uint8_t *out)
+{
+  rng_state_t st;
+  pqz_err = PQZ_OK;
+  rng_init (st, seed, dom);
+  for (size_t i = 0; i < nlens; i++)
+    {
+      rng_urandom (st, out, lens[i]);
+      out += lens[i];
+    }
+  rng_clear (st);
+  return pqz_err;
+}
+
+/* testkit::rand_shake: SHAKE128 (which = 128) or SHAKE256 of in, absorbed in pieces alens[], squeezed in pieces
+   slens[], the squeezed bytes concatenated */
+int
+pqz_shim_shake (unsigned which, const uint8_t *in, const uint32_t *alens, size_t na, const uint32_t *slens, size_t ns,
+                uint8_t *out)
+{
+  shake128_state_t st;
+  size_t i;
+  pqz_err = PQZ_OK;
+  if (which == 128)
+    shake128_init (st);
+  else
+    shake256_init (st);
+  for (i = 0; i < na; in += alens[i++])
+    if (which == 128)
+      shake128_absorb (st, in, alens[i]);
+    else
+      shake256_absorb (st, in, alens[i]);
+  for (i = 0; i < ns; out += slens[i++])
+    if (which == 128)
+      shake128_squeeze (st, out, slens[i]);
+    else
+      shake256_squeeze (st, out, slens[i]);
+  shake128_clear (st);
+  return pqz_err;
+}
+
+/* testkit::rand_grandom: intvec_grandom (n >= 1 one-limb elements, dom) then polyvec_grandom (2 polys, dom); out =
+   the n elements then the 128 coefficients */
+int
+pqz_shim_grandom (const uint8_t seed[32], uint32_t dom, unsigned log2o, unsigned n, int64_t *out)
+{
+  pqz_arena_mark_t mark;
+  polyvec_t pv;
+  INTVEC_T (r, n, 1);
+  unsigned i, j;
+
+  pqz_err = PQZ_OK;
+  intvec_grandom (r, log2o, seed, dom);
+  for (i = 0; i < n; i++)
+    *out++ = intvec_get_elem_i64 (r, i);
+  pqz_arena_mark (&mark);
+  polyvec_alloc (pv, pqz_tx_ring, 2);
+  polyvec_grandom (pv, log2o, seed, dom);
+  for (i = 0; i < 2; i++)
+    for (j = 0; j < 64; j++)
+      *out++ = int_get_i64 (poly_get_coeff (polyvec_get_elem (pv, i), j));
+  pqz_arena_release (&mark);
+  return pqz_err;
+}
+
+/* testkit::rand_rej: rej_standard (bimodal = 0) or rej_bimodal on z, v (n >= 1 one-limb elements), scM (3 limbs),
+   sigma2 (2 limbs) with the stream rng_init (seed, dom); *rej = the verdict, next8 = the 8 stream bytes after it */
+int
+pqz_shim_rej (unsigned bimodal, const uint8_t seed[32], uint64_t dom, const int64_t *z, const int64_t *v, unsigned n,
+              const uint64_t scm[3], const uint64_t s2[2], int *rej, uint8_t next8[8])
+{
+  rng_state_t st;
+  INTVEC_T (zz, n, 1);
+  INTVEC_T (vv, n, 1);
+  INT_T (sc, 3);
+  INT_T (sg, 2);
+  unsigned i;
+
+  pqz_err = PQZ_OK;
+  for (i = 0; i < n; i++)
+    {
+      intvec_set_elem_i64 (zz, i, z[i]);
+      intvec_set_elem_i64 (vv, i, v[i]);
+    }
+  for (i = 0; i < 3; i++)
+    sc->limbs[i] = scm[i];
+  sg->limbs[0] = s2[0], sg->limbs[1] = s2[1];
+  rng_init (st, seed, dom);
+  *rej = bimodal ? rej_bimodal (st, zz, vv, sc, sg) : rej_standard (st, zz, vv, sc, sg);
+  rng_urandom (st, next8, 8);
+  rng_clear (st);
+  return pqz_err;
+}
+
+/* every element of an intvec: its nlimbs limbs, then the sign */
+static void
+dump_intvec (uint64_t **o, intvec_t r)
+{
+  for (unsigned i = 0; i < r->nelems; i++)
+    {
+      int_ptr e = intvec_get_elem (r, i);
+      for (unsigned k = 0; k < r->nlimbs; k++)
+        *(*o)++ = e->limbs[k];
+      *(*o)++ = e->neg;
+    }
+}
+
+/* a poly's 64 coefficients as int64 (the coefficient domain) */
+static void
+dump_coeffs (uint64_t **o, poly_ptr p)
+{
+  for (unsigned j = 0; j < 64; j++)
+    *(*o)++ = (uint64_t)int_get_i64 (poly_get_coeff (p, j));
+}
+
+/* testkit::rand_urandom: intvec_urandom (n >= 1 elements of nl limbs, mod, log2mod, dom) then polymat_urandom (2 x 2,
+   the same arguments) */
+int
+pqz_shim_urandom (const uint8_t seed[32], uint32_t dom, unsigned n, unsigned nl, const uint64_t m[5], unsigned log2mod,
+                  uint64_t *out, size_t *nout)
+{
+  pqz_arena_mark_t mark;
+  polymat_t pm;
+  INTVEC_T (r, n, nl);
+  INT_T (mm, (unsigned)m[4]);
+  uint64_t *o = out;
+
+  pqz_err = PQZ_OK;
+  load_int (mm, m);
+  intvec_urandom (r, mm, log2mod, seed, dom);
+  dump_intvec (&o, r);
+  pqz_arena_mark (&mark);
+  polymat_alloc (pm, pqz_tx_ring, 2, 2);
+  polymat_urandom (pm, mm, log2mod, seed, dom);
+  for (unsigned i = 0; i < 2; i++)
+    for (unsigned j = 0; j < 2; j++)
+      dump_coeffs (&o, polymat_get_elem (pm, i, j));
+  pqz_arena_release (&mark);
+  *nout = (size_t)(o - out);
+  return pqz_err;
+}
+
+/* testkit::rand_urandom_bnd: intvec_urandom_bnd (n >= 1 elements of nl limbs, lo, hi, dom) then, for one-limb lo and
+   hi, polyvec_urandom_bnd (2 polys, the same arguments) */
+int
+pqz_shim_urandom_bnd (const uint8_t seed[32], uint32_t dom, unsigned n, unsigned nl, const uint64_t lo[5],
+                      const uint64_t hi[5], uint64_t *out, size_t *nout)
+{
+  pqz_arena_mark_t mark;
+  polyvec_t pv;
+  INTVEC_T (r, n, nl);
+  INT_T (l, (unsigned)lo[4]);
+  INT_T (h, (unsigned)hi[4]);
+  uint64_t *o = out;
+
+  pqz_err = PQZ_OK;
+  load_int (l, lo);
+  load_int (h, hi);
+  intvec_urandom_bnd (r, l, h, seed, dom);
+  dump_intvec (&o, r);
+  if (lo[4] == 1 && hi[4] == 1) /* else the one-limb coefficients fail C's width assert */
+    {
+      pqz_arena_mark (&mark);
+      polyvec_alloc (pv, pqz_tx_ring, 2);
+      polyvec_urandom_bnd (pv, l, h, seed, dom);
+      for (unsigned i = 0; i < 2; i++)
+        dump_coeffs (&o, polyvec_get_elem (pv, i));
+      pqz_arena_release (&mark);
+    }
+  *nout = (size_t)(o - out);
+  return pqz_err;
+}
+
+/* testkit::rand_autostable: poly_urandom_autostable (bnd, log2, dom); out = the 64 coefficients */
+int
+pqz_shim_autostable (const uint8_t seed[32], uint32_t dom, int64_t bnd, unsigned log2, uint64_t *out)
+{
+  pqz_arena_mark_t mark;
+  poly_t p;
+
+  pqz_err = PQZ_OK;
+  pqz_arena_mark (&mark);
+  poly_alloc (p, pqz_tx_ring);
+  poly_urandom_autostable (p, bnd, log2, seed, dom);
+  dump_coeffs (&out, p);
+  pqz_arena_release (&mark);
+  return pqz_err;
+}

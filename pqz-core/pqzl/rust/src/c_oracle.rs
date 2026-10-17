@@ -27,6 +27,17 @@ extern "C" {
     fn pqz_ntt_basemul(r: *mut u64, a: *const u64, b: *const u64);
     fn pqz_shim_polyvec_ops(input: *const i64, out: *mut u64, n: *mut usize) -> i32;
     fn pqz_shim_int_ops(input: *const u64, out: *mut u64, n: *mut usize) -> i32;
+    fn pqz_shim_rng(seed: *const u8, dom: u64, lens: *const u32, nlens: usize, out: *mut u8) -> i32;
+    fn pqz_shim_shake(which: u32, input: *const u8, alens: *const u32, na: usize, slens: *const u32, ns: usize,
+                      out: *mut u8) -> i32;
+    fn pqz_shim_grandom(seed: *const u8, dom: u32, log2o: u32, n: u32, out: *mut i64) -> i32;
+    fn pqz_shim_rej(bimodal: u32, seed: *const u8, dom: u64, z: *const i64, v: *const i64, n: u32, scm: *const u64,
+                    s2: *const u64, rej: *mut i32, next8: *mut u8) -> i32;
+    fn pqz_shim_urandom(seed: *const u8, dom: u32, n: u32, nl: u32, m: *const u64, log2mod: u32, out: *mut u64,
+                        nout: *mut usize) -> i32;
+    fn pqz_shim_urandom_bnd(seed: *const u8, dom: u32, n: u32, nl: u32, lo: *const u64, hi: *const u64, out: *mut u64,
+                            nout: *mut usize) -> i32;
+    fn pqz_shim_autostable(seed: *const u8, dom: u32, bnd: i64, log2: u32, out: *mut u64) -> i32;
     #[cfg(feature = "test-hooks")]
     fn pqz_test_mutate(op: u8, proof: *const u8, len: usize, kind: u32, r1: u64, r2: u64, out: *mut u8,
                        outlen: *mut usize) -> i32;
@@ -188,5 +199,78 @@ pub fn c_int_ops(input: &[u64; crate::testkit::INT_OPS_IN]) -> Result<Vec<u64>, 
     // SAFETY: input has INT_OPS_IN words; out has room for every word the shim writes (~ 150)
     rc(with_core(|| unsafe { pqz_shim_int_ops(input.as_ptr(), out.as_mut_ptr(), &mut n) }))?;
     out.truncate(n);
+    Ok(out)
+}
+
+/// `pqz_shim_rng` (tests/oracle_shim.c), the C half of `testkit::rand_rng`; every length > 0 (else C's assert)
+pub fn c_rng(seed: &[u8; 32], dom: u64, lens: &[u32]) -> Result<Vec<u8>, Error> {
+    let mut out = vec![0u8; lens.iter().map(|&l| l as usize).sum()];
+    // SAFETY: out has room for the sum of lens
+    rc(with_core(|| unsafe { pqz_shim_rng(seed.as_ptr(), dom, lens.as_ptr(), lens.len(), out.as_mut_ptr()) }))?;
+    Ok(out)
+}
+
+/// `pqz_shim_shake`, the C half of `testkit::rand_shake`; `alens` sum to `input.len()`
+pub fn c_shake(which: u32, input: &[u8], alens: &[u32], slens: &[u32]) -> Result<Vec<u8>, Error> {
+    assert_eq!(alens.iter().map(|&l| l as usize).sum::<usize>(), input.len());
+    let mut out = vec![0u8; slens.iter().map(|&l| l as usize).sum()];
+    // SAFETY: input holds the sum of alens, out the sum of slens
+    rc(with_core(|| unsafe {
+        pqz_shim_shake(which, input.as_ptr(), alens.as_ptr(), alens.len(), slens.as_ptr(), slens.len(), out.as_mut_ptr())
+    }))?;
+    Ok(out)
+}
+
+/// `pqz_shim_grandom`, the C half of `testkit::rand_grandom` (n >= 1)
+pub fn c_grandom(seed: &[u8; 32], dom: u32, log2o: u32, n: u32) -> Result<Vec<i64>, Error> {
+    assert!(n >= 1);
+    let mut out = vec![0i64; n as usize + 128];
+    // SAFETY: out has room for n + 128 values
+    rc(with_core(|| unsafe { pqz_shim_grandom(seed.as_ptr(), dom, log2o, n, out.as_mut_ptr()) }))?;
+    Ok(out)
+}
+
+/// `pqz_shim_rej`, the C half of `testkit::rand_rej`: (reject, the next 8 stream bytes)
+pub fn c_rej(bimodal: bool, seed: &[u8; 32], dom: u64, z: &[i64], v: &[i64], scm: &[u64; 3], s2: &[u64; 2])
+             -> Result<(bool, [u8; 8]), Error> {
+    assert!(!z.is_empty() && z.len() == v.len());
+    let (mut rej, mut next8) = (0i32, [0u8; 8]);
+    // SAFETY: z and v hold n values, scm 3 and s2 2 limbs; rej and next8 are outputs of their sizes
+    rc(with_core(|| unsafe {
+        pqz_shim_rej(bimodal as u32, seed.as_ptr(), dom, z.as_ptr(), v.as_ptr(), z.len() as u32, scm.as_ptr(),
+                     s2.as_ptr(), &mut rej, next8.as_mut_ptr())
+    }))?;
+    Ok((rej != 0, next8))
+}
+
+/// `pqz_shim_urandom`, the C half of `testkit::rand_urandom` (`m`: 3 limbs, sign, nlimbs 1..=3)
+pub fn c_urandom(seed: &[u8; 32], dom: u32, n: u32, nl: u32, m: &[u64; 5], log2mod: u32) -> Result<Vec<u64>, Error> {
+    assert!(n >= 1 && (1..=3).contains(&nl) && (1..=3).contains(&m[4]));
+    let mut out = vec![0u64; n as usize * 4 + 256];
+    let mut len = 0usize;
+    // SAFETY: m has 5 words; out has room for n (nl + 1) + 256 words
+    rc(with_core(|| unsafe { pqz_shim_urandom(seed.as_ptr(), dom, n, nl, m.as_ptr(), log2mod, out.as_mut_ptr(), &mut len) }))?;
+    out.truncate(len);
+    Ok(out)
+}
+
+/// `pqz_shim_urandom_bnd`, the C half of `testkit::rand_urandom_bnd` (`lo`, `hi` as `m` of [`c_urandom`])
+pub fn c_urandom_bnd(seed: &[u8; 32], dom: u32, n: u32, nl: u32, lo: &[u64; 5], hi: &[u64; 5]) -> Result<Vec<u64>, Error> {
+    assert!(n >= 1 && (1..=3).contains(&nl) && (1..=3).contains(&lo[4]) && (1..=3).contains(&hi[4]));
+    let mut out = vec![0u64; n as usize * 4 + 128];
+    let mut len = 0usize;
+    // SAFETY: lo and hi have 5 words; out has room for n (nl + 1) + 128 words
+    rc(with_core(|| unsafe {
+        pqz_shim_urandom_bnd(seed.as_ptr(), dom, n, nl, lo.as_ptr(), hi.as_ptr(), out.as_mut_ptr(), &mut len)
+    }))?;
+    out.truncate(len);
+    Ok(out)
+}
+
+/// `pqz_shim_autostable`, the C half of `testkit::rand_autostable`
+pub fn c_autostable(seed: &[u8; 32], dom: u32, bnd: i64, log2: u32) -> Result<Vec<u64>, Error> {
+    let mut out = vec![0u64; 64];
+    // SAFETY: out has room for 64 words
+    rc(with_core(|| unsafe { pqz_shim_autostable(seed.as_ptr(), dom, bnd, log2, out.as_mut_ptr()) }))?;
     Ok(out)
 }

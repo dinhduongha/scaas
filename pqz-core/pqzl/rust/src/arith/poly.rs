@@ -10,7 +10,7 @@
 //! Results are returned by value (`*r = Poly::add(a, b, crt)`): C writes every live word of `r` (domain flag and the
 //! whole live representation), so nothing of the old `r` survives in either form, and `r` may be one of the operands
 //! (`*a = Poly::add(a, b, crt)`), as in C.
-use super::int::{int_modq, Int};
+use super::int::{int_modq, Int, IntVec};
 use super::ntt::{self, D, Q};
 use crate::coder::Dcomp;
 use crate::Error;
@@ -406,11 +406,33 @@ impl Poly {
         Poly::from_fn(|j| p.make_ghint(&z.c(j), &r.c(j)))
     }
 
-    /// `poly_urandom (r, mod, log2mod, seed, dom)` (`log2mod < 60`: the multi-limb path comes with Task 3)
+    /// `poly_urandom (r, mod, log2mod, seed, dom)`: `_urandom` on the 64 one-limb coefficients
     pub(crate) fn urandom(m: &Int, log2mod: u32, seed: &[u8; 32], dom: u64) -> Result<Poly, Error> {
-        debug_assert!(log2mod < 60);
+        let mut v = IntVec::new(D, 1)?;
+        crate::rand::urandom::urandom(&mut v, m, log2mod, seed, dom)?;
+        Ok(Poly::from_fn(|j| v.get(j)))
+    }
+
+    /// `poly_urandom_bnd (r, lo, hi, seed, dom)`: coefficients uniform in [lo, hi]
+    pub(crate) fn urandom_bnd(lo: &Int, hi: &Int, seed: &[u8; 32], dom: u64) -> Result<Poly, Error> {
+        let mut v = IntVec::new(D, 1)?;
+        crate::rand::urandom::urandom_bnd(&mut v, lo, hi, seed, dom)?;
+        Ok(Poly::from_fn(|j| v.get(j)))
+    }
+
+    /// `poly_urandom_autostable (r, bnd, log2, seed, dom)`: a challenge fixed by X -> X^-1
+    pub(crate) fn urandom_autostable(bnd: i64, log2: u32, seed: &[u8; 32], dom: u64) -> Result<Poly, Error> {
         let mut v = [0i64; D];
-        crate::rand::urandom::urandom_i64(&mut v, m.get_i64(), log2mod, seed, dom)?;
+        crate::rand::urandom::urandom_autostable(&mut v, bnd, log2, seed, dom)?;
+        let mut r = Poly::ZERO;
+        r.set_i64(&v);
+        Ok(r)
+    }
+
+    /// `poly_grandom (r, log2o, seed, dom)`: discrete Gaussian, sigma = 1.55 * 2^log2o
+    pub(crate) fn grandom(log2o: u32, seed: &[u8; 32], dom: u64) -> Result<Poly, Error> {
+        let mut v = [0i64; D];
+        crate::rand::grandom::grandom(&mut v, log2o, seed, dom)?;
         let mut r = Poly::ZERO;
         r.set_i64(&v);
         Ok(r)

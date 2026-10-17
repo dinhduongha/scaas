@@ -202,8 +202,8 @@ pub fn kat_json() -> Result<String, crate::Error> {
     let seed: [u8; 32] = core::array::from_fn(|i| (i * 7 + 1) as u8);
     let mut out = [0u8; 1024];
     let mut st = Rng::new(&seed, 5);
-    st.urandom(&mut out[..1000]); // odd length: the C core's block cache
-    st.urandom(&mut out[1000..]);
+    st.urandom(&mut out[..1000])?; // odd length: the C core's block cache
+    st.urandom(&mut out[1000..])?;
     begin_case(&mut o, &mut first, "aes256ctr_stream_hex");
     o.push('"');
     for x in out {
@@ -488,5 +488,163 @@ pub fn int_ops(inp: &[u64; INT_OPS_IN]) -> Result<alloc::vec::Vec<u64>, crate::E
         dump_intn(&mut o, &v.get(i));
         dump_intn(&mut o, &w.get(i));
     }
+    Ok(o)
+}
+
+// ---------------------------------------------------------------- hashing, rng, samplers (tests/oracle_rand.rs)
+
+/// CBD_eta samples `n` of the keys' bit stream over the SHAKE256 input `input`, from bit `bit_offset`
+#[cfg(feature = "c-oracle")]
+pub fn rand_cbd(input: &[u8], eta: u32, bit_offset: usize, n: usize) -> alloc::vec::Vec<i32> {
+    use crate::rand::shake::{cbd, Stream};
+    let mut s = Stream::new(&[input]);
+    (0..bit_offset).for_each(|_| {
+        s.bit();
+    });
+    (0..n).map(|_| cbd(eta, &mut s)).collect()
+}
+
+/// `pqz_shim_rng`: the `Rng (seed, dom)` stream read in pieces of `lens` bytes
+#[cfg(feature = "c-oracle")]
+pub fn rand_rng(seed: &[u8; 32], dom: u64, lens: &[u32]) -> Result<alloc::vec::Vec<u8>, crate::Error> {
+    let mut out = alloc::vec![0u8; lens.iter().map(|&l| l as usize).sum()];
+    let mut st = Rng::new(seed, dom);
+    let mut o = &mut out[..];
+    for &l in lens {
+        let (a, b) = o.split_at_mut(l as usize);
+        st.urandom(a)?;
+        o = b;
+    }
+    Ok(out)
+}
+
+/// `pqz_shim_shake`: SHAKE128 (`which` = 128) or SHAKE256 of `input` (absorbed in pieces `alens`), squeezed in
+/// pieces `slens`
+#[cfg(feature = "c-oracle")]
+pub fn rand_shake(which: u32, input: &[u8], alens: &[u32], slens: &[u32]) -> alloc::vec::Vec<u8> {
+    use crate::rand::shake::{shake128, shake256};
+    let mut parts = alloc::vec::Vec::new();
+    let mut rest = input;
+    for &l in alens {
+        let (a, b) = rest.split_at(l as usize);
+        parts.push(a);
+        rest = b;
+    }
+    let mut out = alloc::vec![0u8; slens.iter().map(|&l| l as usize).sum()];
+    let (mut x128, mut x256) = (shake128(&parts), shake256(&parts));
+    let mut o = &mut out[..];
+    for &l in slens {
+        let (a, b) = o.split_at_mut(l as usize);
+        if which == 128 {
+            x128.squeeze(a);
+        } else {
+            x256.squeeze(a);
+        }
+        o = b;
+    }
+    out
+}
+
+/// `pqz_shim_grandom`: `_intvec_grandom` of `n` elements, then `polyvec_grandom` of 2 polys
+#[cfg(feature = "c-oracle")]
+pub fn rand_grandom(seed: &[u8; 32], dom: u32, log2o: u32, n: u32) -> Result<alloc::vec::Vec<i64>, crate::Error> {
+    use crate::rand::grandom::{grandom, polyvec_grandom};
+    let mut out = alloc::vec![0i64; n as usize];
+    grandom(&mut out, log2o, seed, dom as u64)?;
+    let mut pv = PolyVec::new(2)?;
+    polyvec_grandom(&mut *pv, log2o, seed, dom)?;
+    for p in pv.iter() {
+        out.extend((0..D).map(|j| p.c(j).get_i64()));
+    }
+    Ok(out)
+}
+
+/// one-limb int vector from values
+#[cfg(feature = "c-oracle")]
+fn intvec_of(v: &[i64]) -> Result<crate::arith::int::IntVec, crate::Error> {
+    let mut r = crate::arith::int::IntVec::new(v.len(), 1)?;
+    r.set_i64(v);
+    Ok(r)
+}
+
+/// `pqz_shim_rej`: `rej_standard` / `rej_bimodal` on the `Rng (seed, dom)` stream: (reject, the next 8 stream bytes)
+#[cfg(feature = "c-oracle")]
+pub fn rand_rej(bimodal: bool, seed: &[u8; 32], dom: u64, z: &[i64], v: &[i64], scm: &[u64; 3], s2: &[u64; 2])
+                -> Result<(bool, [u8; 8]), crate::Error> {
+    use crate::rand::rejection::{rej_bimodal, rej_standard};
+    let (z, v) = (intvec_of(z)?, intvec_of(v)?);
+    let (scm, s2) = (Int::from_limbs(scm, 0), Int::from_limbs(s2, 0));
+    let mut st = Rng::new(seed, dom);
+    let rej = if bimodal { rej_bimodal(&mut st, &z, &v, &scm, &s2)? } else { rej_standard(&mut st, &z, &v, &scm, &s2)? };
+    Ok((rej, st.u64().to_le_bytes()))
+}
+
+/// an int from 5 words: limbs[0..3), sign, nlimbs
+#[cfg(feature = "c-oracle")]
+fn int_of(w: &[u64; 5]) -> Int {
+    Int::from_limbs(&w[..w[4] as usize], w[3] & 1)
+}
+
+#[cfg(feature = "c-oracle")]
+fn dump_intvec(o: &mut alloc::vec::Vec<u64>, r: &crate::arith::int::IntVec) {
+    for i in 0..r.len() {
+        let e = r.get(i);
+        o.extend_from_slice(e.limbs());
+        o.push(e.neg);
+    }
+}
+
+#[cfg(feature = "c-oracle")]
+fn dump_coeffs(o: &mut alloc::vec::Vec<u64>, p: &Poly) {
+    o.extend((0..D).map(|j| p.c(j).get_i64() as u64));
+}
+
+/// `pqz_shim_urandom`: `intvec_urandom` (n elements of nl limbs), then `polymat_urandom` (2 x 2)
+#[cfg(feature = "c-oracle")]
+pub fn rand_urandom(seed: &[u8; 32], dom: u32, n: u32, nl: u32, m: &[u64; 5], log2mod: u32)
+                    -> Result<alloc::vec::Vec<u64>, crate::Error> {
+    use crate::arith::polymat::PmRef;
+    use crate::rand::urandom::{polymat_urandom, urandom};
+    let m = int_of(m);
+    let mut r = crate::arith::int::IntVec::new(n as usize, nl as usize)?;
+    urandom(&mut r, &m, log2mod, seed, dom as u64)?;
+    let mut o = alloc::vec::Vec::new();
+    dump_intvec(&mut o, &r);
+    let mut pm = PolyMat::new(2, 2)?;
+    polymat_urandom(&mut pm, &m, log2mod, seed, dom)?;
+    for i in 0..2 {
+        for j in 0..2 {
+            dump_coeffs(&mut o, pm.get(i, j));
+        }
+    }
+    Ok(o)
+}
+
+/// `pqz_shim_urandom_bnd`: `intvec_urandom_bnd` (n elements of nl limbs), then for one-limb lo and hi
+/// `polyvec_urandom_bnd` (2 polys)
+#[cfg(feature = "c-oracle")]
+pub fn rand_urandom_bnd(seed: &[u8; 32], dom: u32, n: u32, nl: u32, lo: &[u64; 5], hi: &[u64; 5])
+                        -> Result<alloc::vec::Vec<u64>, crate::Error> {
+    use crate::rand::urandom::{polyvec_urandom_bnd, urandom_bnd};
+    let one_limb = lo[4] == 1 && hi[4] == 1;
+    let (lo, hi) = (int_of(lo), int_of(hi));
+    let mut r = crate::arith::int::IntVec::new(n as usize, nl as usize)?;
+    urandom_bnd(&mut r, &lo, &hi, seed, dom as u64)?;
+    let mut o = alloc::vec::Vec::new();
+    dump_intvec(&mut o, &r);
+    if one_limb {
+        let mut pv = PolyVec::new(2)?;
+        polyvec_urandom_bnd(&mut *pv, &lo, &hi, seed, dom)?;
+        pv.iter().for_each(|p| dump_coeffs(&mut o, p));
+    }
+    Ok(o)
+}
+
+/// `pqz_shim_autostable`: `poly_urandom_autostable`
+#[cfg(feature = "c-oracle")]
+pub fn rand_autostable(seed: &[u8; 32], dom: u32, bnd: i64, log2: u32) -> Result<alloc::vec::Vec<u64>, crate::Error> {
+    let p = Poly::urandom_autostable(bnd, log2, seed, dom as u64)?;
+    let mut o = alloc::vec::Vec::new();
+    dump_coeffs(&mut o, &p);
     Ok(o)
 }

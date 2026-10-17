@@ -11,7 +11,7 @@ pub(crate) fn brandom(vec: &mut [i8], k: u32, seed: &[u8; 32], dom: u64) -> Resu
     let outlen = (2 * k * n).div_ceil(8);
     out.try_reserve_exact(outlen).map_err(|_| Error::Memory)?;
     out.resize(outlen, 0);
-    Rng::new(seed, dom).urandom(&mut out);
+    Rng::new(seed, dom).urandom(&mut out)?;
     let bit = |b: usize| ((out[b >> 3] >> (b & 7)) & 1) as i8;
     for (i, v) in vec.iter_mut().enumerate() {
         *v = 0;

@@ -5,16 +5,19 @@ SCaaS PQZ (pq-zero-knowledge.md §4, §5, §8). Goal: byte-for-byte equal to the
 `(op, stmt, wit, rnd32)`, same verdicts on every input, same keys / Enc / Dec, native and wasm32 — so other chains
 and applications can use the proof system without the C build. Plan: `docs/superpowers/plans/2026-10-17-pqzl-rust-port.md`.
 
-Status: **port in progress** (Tasks 1-2 of 12: crate skeleton, API, C oracle; the arithmetic layer). Every API
+Status: **port in progress** (Tasks 1-3 of 12: crate skeleton, API, C oracle; the arithmetic layer; hashing, rng
+and samplers). Every API
 function that is not ported yet returns `Err(Error::Internal)` / `false`.
 
 ## Layout
 
 Crate-internal layers in the C core's order: `src/arith/` (`pqz_mpn.h`; LaZer's ints and int vectors with the
 `pqz_glue.h` reductions; R_q and its incomplete NTT, `pqz_ntt.c`; dense and sparse vectors and matrices of polys),
-`src/rand/` (the AES-256-CTR PRNG and the samplers), `src/coder.rs` (`dcompress.c`). `src/testkit.rs` holds the test
+`src/rand/` (SHAKE128 / SHAKE256 and the keys' CBD stream, the AES-256-CTR PRNG, the uniform, binomial and
+Gaussian samplers, the rejection tests on `pqz_fixexp.h`'s integer exp), `src/coder.rs` (`dcompress.c`). `src/testkit.rs` holds the test
 entry points (`#[doc(hidden)]`, not API): the arithmetic KAT of `pqzl/kat/lazer_dump.c`, which `src/bin/kat_dump.rs`
-prints, and the Rust halves of the oracle tests. The C half of the vector test drives `poly_auto_self` in the NTT
+prints, and the Rust halves of the oracle tests (`tests/oracle_arith.rs`, `tests/oracle_rand.rs`; the CBD vectors
+`smartcontracts/vectors/pqz/cbd.json`). The C half of the vector test drives `poly_auto_self` in the NTT
 domain, whose second loop pass writes the 64 words after the residue buffer (a C-core defect, the core is read-only
 here): the shim gives that poly a double-size residue block, so the write stays in scratch it owns.
 
@@ -33,7 +36,7 @@ floating point.
 | `sv` (default) | the specialised verifier, `Ctx::verify_fast` |
 | `oversize` | R_TXM with M = 16 (bench only) |
 | `test-hooks` | `test_mutate`; with `c-oracle` the C core is built with `-DPQZ_TEST_HOOKS` |
-| `c-oracle` | dev / test only: `build.rs` compiles the C core (`../src ../lazer ../params`, build.sh's flags) plus the test entry points `tests/oracle_shim.c`, and `c_oracle::{c_prove, c_verify, c_verify_fast, c_keygen, c_enc_seed, c_dec, c_test_mutate}` and the layer wrappers (`c_ntt_*`, `c_polyvec_ops`) call them |
+| `c-oracle` | dev / test only: `build.rs` compiles the C core (`../src ../lazer ../params`, build.sh's flags) plus the test entry points `tests/oracle_shim.c`, and `c_oracle::{c_prove, c_verify, c_verify_fast, c_keygen, c_enc_seed, c_dec, c_test_mutate}` and the layer wrappers (`c_ntt_*`, `c_polyvec_ops`, `c_int_ops`, the samplers' `c_rng` .. `c_autostable`) call them |
 
 A default build compiles no C.
 

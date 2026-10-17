@@ -6,8 +6,9 @@
 //! `add*` / `sub*` accumulations run per element where C fills a temporary vector first: the two phases touch disjoint
 //! polys, so the result and every operand's final state are the same, without the temporary.
 //! Not ported (nothing in the core calls them): `polyvec_eq`, `rshift`, `rrot`, `muldiag(2)`, `addmul2` / `submul2`,
-//! `addrshift` / `subrshift` / `addlshift`, `addscale2`, `elem_mul`, `toisoring` / `fromisoring`; the samplers come
-//! with Task 3, `polyvec_set_coeffvec2` (coefficients shared with an `intvec`) with the code that uses it.
+//! `addrshift` / `subrshift` / `addlshift`, `addscale2`, `elem_mul`, `toisoring` / `fromisoring`. The samplers are in
+//! `rand` (`polyvec_urandom`, `_urandom_bnd`, `_grandom`); `polyvec_set_coeffvec2` (coefficients shared with an
+//! `intvec`) comes with the code that uses it.
 use super::int::Int;
 use super::poly::Poly;
 use super::polymat::Pm;

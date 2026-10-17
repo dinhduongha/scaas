@@ -1,7 +1,7 @@
 //! `polymat.c` (+ the polymat inlines of lazer-in2.h): matrices of [`Poly`], owned ([`PolyMat`], row-major) or as
 //! strided views [`Sm`] (`polymat_get_submat`), through the [`Pm`] trait; rows and columns are [`Sv`] views.
 //! Not ported (nothing in the core calls them): the arithmetic (`polymat_add` .. `subscalediag2`, `rrot`, `mod`,
-//! `redc` / `redp`), `subdiags_set_zero`, the `*diag` forms, `set_one` / diagonals; the samplers come with Task 3.
+//! `redc` / `redp`), `subdiags_set_zero`, the `*diag` forms, `set_one` / diagonals; `polymat_urandom` is in `rand::urandom`.
 use super::poly::Poly;
 use super::polyvec::Sv;
 use crate::Error;
