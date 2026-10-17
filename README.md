@@ -1055,6 +1055,6 @@ business serving products from killed animals, fertilized eggs or bee products, 
 trades in human-derived products outside donation for medical treatment; nor to a company earning more than 10% of its
 own revenue from selling, distributing, marketing or transporting such products. Everything applies per company, not to
 its whole group, and a general-purpose service open to all (running a blockchain, a node or a relayer, hosting) is not
-excluded because one of its users is; that user stays excluded. Everyone else needs a Vegan Enterprise License; the
+excluded because one of its users is; that user stays excluded. Everyone else needs a Vegan Enterprise License (contact ha@dad.vn); the
 license has the exact terms. Contributions are accepted under the CLA in [CONTRIBUTING.md](CONTRIBUTING.md).
 Third-party components keep their own licenses.
