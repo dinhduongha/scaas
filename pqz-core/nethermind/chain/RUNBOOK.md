@@ -153,3 +153,33 @@ blockchain-node`) re-processes it. There is no restart policy (owner step 3).
 Owner steps outside this runbook: the follower + rate-limited public RPC on 7622 (the copy's
 `docker-compose.copy.yml`, `config.follower.json` and `nginx-rpc.conf` are the rehearsed configs); a restart policy;
 when to delete the `*.bak-pqz-*` backups.
+
+## op 7 on chain 7622 (P6-ANON S8, path A — *live only*, executed 2026-10-17)
+
+A second `engine.Pqz` schedule at a future timestamp T: the live rows unchanged plus one row per built op 7 shape
+`(proofSystemId, M, auditorOn)` (plugin rows with `legs` / `auditorOn`, plan D19), from the op 7 calibration
+(`../runs/2026-10-17-calib-ops7*`); the image moves to `scaas/nethermind-pqz:1.39.0-pqz2` (the plugin that reads op 7's
+header words) before T; the chain data is kept. Rehearsed on a fresh copy first (`../runs/2026-10-17-s8-copy-*`:
+pqz1 → pqz2 with the data kept, before T every op 7 input a miss, after T every built shape `…01`, e2e 86 ok). Log:
+`../runs/2026-10-17-s8-live*.txt`.
+
+```sh
+L=/home/dockers/mba-chain-nethermind; C=<repo>/pqz-core/nethermind/chain
+TS=$(date +%Y%m%d-%H%M%S); B=/home/dockers/mba-chain-nethermind-backups/op7-$TS
+A="docker run --rm --memory 512m -v $L:/l -v $(dirname $B):/b alpine:3"
+cd $L && docker compose stop -t 120 blockchain-node
+# 1. backup as in Task 10 step 1 (chainspec, config, compose, password, keystore, data; sha256 manifests compared)
+# 2. the second schedule (refuses a T less than 5 minutes ahead) and the image
+T=$(( $(date +%s) + 900 ))
+python3 -I $C/add-schedule.py $B/genesis.json <repo>/pqz-core/nethermind/runs/2026-10-17-calib-ops7-engine-pqz.json $T $L/genesis.json
+sed -i 's#scaas/nethermind-pqz:1.39.0-pqz1#scaas/nethermind-pqz:1.39.0-pqz2#' docker-compose.yml
+docker compose up -d blockchain-node      # PQZ-START: library 4fc1a6a2…, self-test ed910a2c…, two schedules
+python3 -I -c "import json; json.dump(json.load(open('$L/genesis.json'))['engine']['Pqz'], open('$C/engine-pqz.json', 'w'), indent=2)"
+# 3. before T: every op 7 input a miss (smallest row, …00, no FFI call)
+python3 -I $C/e2e.py probe --engine $C/engine-pqz.json --schedule 0 --rpc http://127.0.0.1:8545 --genesis-hash 0x24e43dcb…c464
+# 4. after T: every built shape …01 at its row, negatives …00; transactions with the test key 0x…04
+python3 -I $C/e2e.py probe --engine $C/engine-pqz.json --rpc http://127.0.0.1:8545 --genesis-hash 0x24e43dcb…c464
+python3 -I $C/e2e.py e2e --engine $C/engine-pqz.json --rpc http://127.0.0.1:8545 --key <test key 0x…04> --no-ua
+# Rollback before T: stop, restore genesis.json + docker-compose.yml from $B (pqz1, one schedule), start; the data
+# needs no restore (no block used the second schedule). After T: Task 10's rollback with $B's data.
+```

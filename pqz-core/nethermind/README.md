@@ -1,12 +1,12 @@
 # `Nethermind.Pqz` — the PQZ and ML-DSA precompiles for chain 7622 (P6f)
 
 A Nethermind 1.39.0 **plugin** (no Nethermind patch) that adds three precompiles, built into the local image
-`scaas/nethermind-pqz:1.39.0-pqz1` (never pushed). Plan: [P6f](../../docs/superpowers/plans/2026-10-14-p6f-precompiles.md);
+`scaas/nethermind-pqz:1.39.0-pqz2` (never pushed; `pqz1` until 2026-10-17, P6-ANON S8). Plan: [P6f](../../docs/superpowers/plans/2026-10-14-p6f-precompiles.md);
 spec: [pq-zero-knowledge.md](../../docs/contracts/pq-zero-knowledge.md) CTR-PQZ-10 / CTR-PQZ-11, §9.1–§9.3, §10.
 
 | Address | Name | What | Gas |
 |---|---|---|---|
-| `0x5caa500000000000000000000000000000000f01` | `PQZ` | both proof systems (PQZL, PQZH) through `pqz-ffi`'s C ABI `pqz_precompile` (P/Invoke into `libpqz_ffi.so`) | the active schedule's row `(op, id, stmtLen)` + 3·⌈len/32⌉; a miss = the smallest row (and `…00`, no FFI call); op 6 = `selftestGas` |
+| `0x5caa500000000000000000000000000000000f01` | `PQZ` | both proof systems (PQZL, PQZH) through `pqz-ffi`'s C ABI `pqz_precompile` (P/Invoke into `libpqz_ffi.so`) | the active schedule's row `(op, id, stmtLen)` — op 7 also `(M, auditorOn)` from header words 320 / 448 — + 3·⌈len/32⌉; a miss = the smallest row (and `…00`, no FFI call); op 6 = `selftestGas` |
 | `0x5caa500000000000000000000000000000000012` | `MLDSA44` | EIP-8355 layout `pk ‖ sig ‖ msg`, empty context, .NET 10 `MLDsa` (OpenSSL 3.5 of the base image) | `mldsa44Gas` (≥ 6,500; calibrated 49,000) + 6·⌈max(0, L − 3,732)/32⌉ |
 | `0x5caa500000000000000000000000000000000013` | `MLDSA65` | the same, ML-DSA-65 | `mldsa65Gas` (≥ 9,000; calibrated 68,000) + 6·⌈max(0, L − 5,261)/32⌉ |
 
@@ -70,3 +70,4 @@ from block 0, owner 2026-10-15).
 | 6 calibration | `t_ecMul` 17 µs; rows 2.567–5.409 M gas; `selftestGas` 2,567,000; ML-DSA 49,000 / 68,000 | `runs/2026-10-15-calib.txt` |
 | 7 copy | stock image ignores `engine.Pqz`; path A before / after T, probe 111, e2e 53; path B probe 112, e2e 53 | `runs/2026-10-1[56]-copy-*.txt` |
 | 8 rehearsal | burst 429s, 80 M ramp + full block (79.24 M gas), kill drill, rollback | `runs/2026-10-15-rehearsal.txt` |
+| S8 op 7 (P6-ANON) | plugin rows per `(id, M, auditorOn)` (plan D19), 41 / 41 tests; harness 60 min CLEAN (4,577,772 inputs); image `pqz2` (library `4fc1a6a2…`); op 7 calibration 14 rows 3,625,000–6,177,000 gas; copy path A (pqz1 → pqz2, data kept) before / after T, e2e 86 ok; **live on 7622** 2026-10-17: second schedule at T = 1792205116, probe 389 ok before and after T, e2e 76 ok | `runs/2026-10-17-*` |
