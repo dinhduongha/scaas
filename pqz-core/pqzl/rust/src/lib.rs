@@ -19,7 +19,8 @@ use alloc::vec::Vec;
 #[allow(unsafe_code)]
 pub mod c_oracle;
 
-// the arithmetic, sampling and codec layers serve the proof layers of later tasks; until those land, part is unused
+// the arithmetic, sampling and codec layers and the generated params serve the proof layers of later tasks; until
+// those land, part is unused
 #[allow(dead_code)]
 mod arith;
 #[allow(dead_code)]
@@ -27,6 +28,8 @@ mod coder;
 #[allow(dead_code)]
 mod rand;
 mod keys;
+#[allow(dead_code)]
+mod params; // generated (plan D8): pqzl/params/to_rust.py
 #[doc(hidden)]
 pub mod testkit;
 

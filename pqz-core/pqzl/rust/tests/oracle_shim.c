@@ -526,3 +526,117 @@ pqz_shim_autostable (const uint8_t seed[32], uint32_t dom, int64_t bnd, unsigned
   pqz_arena_release (&mark);
   return pqz_err;
 }
+
+/* testkit::params_words: relation i's lnp_tbox_params_t as the C compiler laid out the generated header (every field,
+   pointers followed; ints as nlimbs, neg, limbs), in testkit's relation order; -1 past the last relation */
+#include "pqz_burn_params.h"
+#include "pqz_dr_params.h"
+#include "pqz_ds_params.h"
+#include "pqz_reg_params.h"
+#include "pqz_tx0_params.h"
+#include "pqz_txm20_params.h"
+#include "pqz_txm2_params.h"
+#include "pqz_txm40_params.h"
+#include "pqz_txm4_params.h"
+#include "pqz_txm80_params.h"
+#include "pqz_txm8_params.h"
+#ifdef PQZ_TXM_OVERSIZE
+#include "pqz_txm160_params.h"
+#include "pqz_txm16_params.h"
+#endif
+
+static void
+params_int (uint64_t **o, int_srcptr a)
+{
+  *(*o)++ = a->nlimbs;
+  *(*o)++ = a->neg;
+  for (unsigned i = 0; i < a->nlimbs; i++)
+    *(*o)++ = a->limbs[i];
+}
+
+static void
+params_abdlop (uint64_t **o, abdlop_params_srcptr a)
+{
+  polyring_srcptr r = a->ring;
+  dcompress_params_srcptr d = a->dcompress;
+  params_int (o, r->q);
+  *(*o)++ = r->d;
+  *(*o)++ = r->log2q;
+  *(*o)++ = r->log2d;
+  *(*o)++ = r->moduli != 0;
+  *(*o)++ = r->nmoduli;
+  params_int (o, r->Pmodq);
+  for (unsigned i = 0; i < r->nmoduli; i++)
+    params_int (o, r->Ppmodq[i]);
+  params_int (o, r->inv2);
+  params_int (o, d->q);
+  params_int (o, d->qminus1);
+  params_int (o, d->m);
+  params_int (o, d->mby2);
+  params_int (o, d->gamma);
+  params_int (o, d->gammaby2);
+  params_int (o, d->pow2D);
+  params_int (o, d->pow2Dby2);
+  *(*o)++ = d->D;
+  *(*o)++ = (uint64_t)(int64_t)d->m_odd;
+  *(*o)++ = d->log2m;
+  *(*o)++ = a->m1;
+  *(*o)++ = a->m2;
+  *(*o)++ = a->l;
+  *(*o)++ = a->lext;
+  *(*o)++ = a->kmsis;
+  params_int (o, a->Bsqr);
+  *(*o)++ = (uint64_t)a->nu;
+  *(*o)++ = (uint64_t)a->omega;
+  *(*o)++ = a->log2omega;
+  *(*o)++ = a->eta;
+  *(*o)++ = (uint64_t)(int64_t)a->rej1;
+  *(*o)++ = a->log2stdev1;
+  params_int (o, a->scM1);
+  params_int (o, a->stdev1sqr);
+  *(*o)++ = (uint64_t)(int64_t)a->rej2;
+  *(*o)++ = a->log2stdev2;
+  params_int (o, a->scM2);
+  params_int (o, a->stdev2sqr);
+}
+
+int
+pqz_shim_params (unsigned i, uint64_t *out, size_t *n)
+{
+  static const lnp_tbox_params_struct *const P[] = { pqz_reg,   pqz_tx,    pqz_tx0,   pqz_burn,  pqz_ds,   pqz_dr,
+                                                     pqz_txm2,  pqz_txm4,  pqz_txm8,  pqz_txm20, pqz_txm40, pqz_txm80,
+#ifdef PQZ_TXM_OVERSIZE
+                                                     pqz_txm16, pqz_txm160,
+#endif
+  };
+  uint64_t *o = out;
+  if (i >= sizeof P / sizeof P[0])
+    return -1;
+  const lnp_tbox_params_struct *p = P[i];
+  params_abdlop (&o, p->tbox);
+  params_abdlop (&o, p->quad_eval->quad_eval);
+  params_abdlop (&o, p->quad_eval->quad_many);
+  *o++ = p->quad_eval->lambda;
+  *o++ = p->nbin;
+  *o++ = p->Z;
+  for (unsigned z = 0; z < p->Z; z++)
+    *o++ = p->n[z];
+  *o++ = p->nprime;
+  *o++ = p->nex;
+  *o++ = (uint64_t)(int64_t)p->rej3;
+  *o++ = p->log2stdev3;
+  params_int (&o, p->scM3);
+  params_int (&o, p->stdev3sqr);
+  *o++ = (uint64_t)(int64_t)p->rej4;
+  *o++ = p->log2stdev4;
+  params_int (&o, p->scM4);
+  params_int (&o, p->stdev4sqr);
+  params_int (&o, p->Bz3sqr);
+  params_int (&o, p->Bz4);
+  for (unsigned z = 0; z < p->Z; z++)
+    params_int (&o, p->l2Bsqr[z]);
+  params_int (&o, p->inv4);
+  *o++ = p->prooflen;
+  *n = (size_t)(o - out);
+  return 0;
+}

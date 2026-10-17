@@ -5,8 +5,9 @@ SCaaS PQZ (pq-zero-knowledge.md §4, §5, §8). Goal: byte-for-byte equal to the
 `(op, stmt, wit, rnd32)`, same verdicts on every input, same keys / Enc / Dec, native and wasm32 — so other chains
 and applications can use the proof system without the C build. Plan: `docs/superpowers/plans/2026-10-17-pqzl-rust-port.md`.
 
-Status: **port in progress** (Tasks 1-4 of 12: crate skeleton, API, C oracle; the arithmetic layer; hashing, rng
-and samplers; keys, Enc, Dec). Every API function that is not ported yet returns `Err(Error::Internal)` / `false`.
+Status: **port in progress** (Tasks 1-4 and 6 of 12: crate skeleton, API, C oracle; the arithmetic layer; hashing,
+rng and samplers; keys, Enc, Dec; the generated parameters). Every API function that is not ported yet returns
+`Err(Error::Internal)` / `false`.
 
 ## Layout
 
@@ -14,6 +15,8 @@ Crate-internal layers in the C core's order: `src/arith/` (`pqz_mpn.h`; LaZer's 
 `pqz_glue.h` reductions; R_q and its incomplete NTT, `pqz_ntt.c`; dense and sparse vectors and matrices of polys),
 `src/rand/` (SHAKE128 / SHAKE256 and the keys' CBD stream, the AES-256-CTR PRNG, the uniform, binomial and
 Gaussian samplers, the rejection tests on `pqz_fixexp.h`'s integer exp), `src/coder.rs` (`dcompress.c`),
+`src/params/` (generated, plan D8: one module per `pqzl/params/pqz_*_params.h`, written by `pqzl/params/to_rust.py`;
+do not edit; `txm16` / `txm160` only with feature `oversize`),
 `src/keys.rs` (`pqz_keys.c` and the ring work of `pqz_rel.c` it calls: A, `pqz_keypair_from_secret`, `pqz_encrypt`,
 `pqz_decrypt_raw`; A is expanded per call, as there is no `pqz_init`). `src/testkit.rs` holds the test
 entry points (`#[doc(hidden)]`, not API): the arithmetic KAT of `pqzl/kat/lazer_dump.c`, which `src/bin/kat_dump.rs`
@@ -38,7 +41,7 @@ floating point.
 | `sv` (default) | the specialised verifier, `Ctx::verify_fast` |
 | `oversize` | R_TXM with M = 16 (bench only) |
 | `test-hooks` | `test_mutate`; with `c-oracle` the C core is built with `-DPQZ_TEST_HOOKS` |
-| `c-oracle` | dev / test only: `build.rs` compiles the C core (`../src ../lazer ../params`, build.sh's flags) plus the test entry points `tests/oracle_shim.c`, and `c_oracle::{c_prove, c_verify, c_verify_fast, c_keygen, c_enc_seed, c_dec, c_keypair_from_secret, c_encrypt, c_decrypt_raw, c_enc_group_seed, c_test_mutate}` and the layer wrappers (`c_ntt_*`, `c_polyvec_ops`, `c_int_ops`, the samplers' `c_rng` .. `c_autostable`) call them |
+| `c-oracle` | dev / test only: `build.rs` compiles the C core (`../src ../lazer ../params`, build.sh's flags) plus the test entry points `tests/oracle_shim.c`, and `c_oracle::{c_prove, c_verify, c_verify_fast, c_keygen, c_enc_seed, c_dec, c_keypair_from_secret, c_encrypt, c_decrypt_raw, c_enc_group_seed, c_test_mutate}` and the layer wrappers (`c_ntt_*`, `c_polyvec_ops`, `c_int_ops`, the samplers' `c_rng` .. `c_autostable`, `c_params`) call them |
 
 A default build compiles no C.
 
@@ -51,7 +54,8 @@ scripts/capped pqz-core/pqzl/rust/run.sh <label>    # from the repo root; logs i
 Tests (release, `c-oracle,test-hooks`; `tests/vectors.rs` checks the frozen keygen / enc / matrix vectors,
 `tests/oracle_keys.rs` keys, Enc and Dec against C), the arithmetic KAT (`kat_dump` against the upstream golden file
 `pqzl/kat/lazer-3330e48.json`, `kat/check.py`), the keys KAT (`keys_kat 1000` against
-`smartcontracts/vectors/pqz/pqz_kat.py --c-keys`), clippy `-D clippy::float_arithmetic`, the wasm32 build.
+`smartcontracts/vectors/pqz/pqz_kat.py --c-keys`), the generated params (`python3 -I ../params/to_rust.py --check`;
+`tests/oracle_params.rs` compares every field with the C headers), clippy `-D clippy::float_arithmetic`, the wasm32 build.
 
 ## Licence
 

@@ -47,6 +47,10 @@ required-features = ["c-oracle"]
 name = "oracle_keys"
 required-features = ["c-oracle"]
 
+[[test]]
+name = "oracle_params"
+required-features = ["c-oracle"]
+
 [profile.release]
 debug = 1
 panic = "unwind"

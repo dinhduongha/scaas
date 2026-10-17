@@ -43,6 +43,7 @@ extern "C" {
     fn pqz_shim_urandom_bnd(seed: *const u8, dom: u32, n: u32, nl: u32, lo: *const u64, hi: *const u64, out: *mut u64,
                             nout: *mut usize) -> i32;
     fn pqz_shim_autostable(seed: *const u8, dom: u32, bnd: i64, log2: u32, out: *mut u64) -> i32;
+    fn pqz_shim_params(i: u32, out: *mut u64, n: *mut usize) -> i32;
     #[cfg(feature = "test-hooks")]
     fn pqz_test_mutate(op: u8, proof: *const u8, len: usize, kind: u32, r1: u64, r2: u64, out: *mut u8,
                        outlen: *mut usize) -> i32;
@@ -212,6 +213,19 @@ pub fn c_test_mutate(rel: u8, proof: &[u8], kind: u32, r1: u64, r2: u64) -> Resu
 pub fn c_ntt_fwd(c: &mut [u64; 64]) {
     // SAFETY: 64 words, as the C function takes
     unsafe { pqz_ntt_fwd(c.as_mut_ptr()) }
+}
+
+/// `pqz_shim_params`: relation `i`'s parameters as the C compiler reads the generated header (`testkit::params_words`'
+/// layout); `None` past the last relation. Static data: no core state, no lock.
+pub fn c_params(i: u32) -> Option<Vec<u64>> {
+    let mut out = vec![0u64; 4096];
+    let mut n = 0usize;
+    // SAFETY: out has room for 4,096 words (a relation needs about 1,000)
+    if unsafe { pqz_shim_params(i, out.as_mut_ptr(), &mut n) } != 0 {
+        return None;
+    }
+    out.truncate(n);
+    Some(out)
 }
 
 /// `pqz_ntt_inv`

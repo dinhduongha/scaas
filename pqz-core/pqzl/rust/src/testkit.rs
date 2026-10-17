@@ -7,7 +7,7 @@ use crate::arith::ntt::{self, D, Q};
 use crate::arith::poly::{Poly, RING_Q};
 use crate::arith::polymat::{Pm, PolyMat};
 use crate::arith::polyvec::{self, PolyVec};
-use crate::coder::Dcomp;
+use crate::params::tx::pqz_tx_dcomp;
 use crate::rand::rng::Rng;
 use alloc::string::String;
 use core::fmt::Write;
@@ -44,21 +44,6 @@ pub fn enc_seed_lowered(
 ) -> Result<crate::Enc, crate::Error> {
     crate::keys::enc_seed(pks, msgs, seed_enc, (bs, be, b2))
 }
-
-/// R_TX's decomposition parameters (`pqz_tx_dcomp`, params/pqz_tx_params.h; the generated params arrive with Task 6)
-const TX_DCOMP: Dcomp = Dcomp {
-    q: RING_Q,
-    qminus1: Int::from_limbs(&[Q - 1], 0),
-    m: Int::from_limbs(&[6_244_972], 0),
-    mby2: Int::from_limbs(&[3_122_486], 0),
-    gamma: Int::from_limbs(&[704_254], 0),
-    gammaby2: Int::from_limbs(&[352_127], 0),
-    pow2d: Int::from_limbs(&[2048], 0),
-    pow2dby2: Int::from_limbs(&[1024], 0),
-    d: 11,
-    m_odd: false,
-    log2m: 23,
-};
 
 /// `print_int`: up to two limbs as a decimal (a zero of either sign is `0`), else `"overflow"`
 fn put_int(o: &mut String, a: &Int) {
@@ -207,7 +192,7 @@ pub fn kat_json() -> Result<String, crate::Error> {
     begin_case(&mut o, &mut first, "decompose");
     o.push('[');
     for i in 0..NP {
-        let (mut r1, mut r0) = Poly::decompose(&mut a[i], &TX_DCOMP);
+        let (mut r1, mut r0) = Poly::decompose(&mut a[i], &pqz_tx_dcomp);
         o.push_str(if i > 0 { ",[" } else { "[" });
         put_poly(&mut o, &mut r1);
         o.push(',');
@@ -215,7 +200,7 @@ pub fn kat_json() -> Result<String, crate::Error> {
         o.push(']');
     }
     o.push(']');
-    per_pair(&mut o, &mut first, "power2round", &mut a, &mut b, &|i, a, _| Ok(Poly::power2round(&mut a[i], &TX_DCOMP)))?;
+    per_pair(&mut o, &mut first, "power2round", &mut a, &mut b, &|i, a, _| Ok(Poly::power2round(&mut a[i], &pqz_tx_dcomp)))?;
 
     // the library PRNG and the samplers driven by it
     let seed: [u8; 32] = core::array::from_fn(|i| (i * 7 + 1) as u8);
@@ -666,4 +651,74 @@ pub fn rand_autostable(seed: &[u8; 32], dom: u32, bnd: i64, log2: u32) -> Result
     let mut o = alloc::vec::Vec::new();
     dump_coeffs(&mut o, &p);
     Ok(o)
+}
+
+/// Every relation's parameters (src/params, generated from pqzl/params/pqz_*_params.h) as one word stream each, in
+/// `pqz_shim_params`'s order and layout (tests/oracle_shim.c): the whole `lnp_tbox_params_t`, pointers followed
+#[cfg(feature = "c-oracle")]
+pub fn params_words() -> alloc::vec::Vec<(&'static str, alloc::vec::Vec<u64>)> {
+    use crate::params::*;
+    fn int(o: &mut alloc::vec::Vec<u64>, a: &Int) {
+        o.extend_from_slice(&[a.n as u64, a.neg]);
+        o.extend_from_slice(&a.l[..a.n]);
+    }
+    fn abdlop(o: &mut alloc::vec::Vec<u64>, a: &Abdlop) {
+        let (r, d) = (a.ring, a.dcompress);
+        int(o, &r.q);
+        o.extend_from_slice(&[r.d as u64, r.log2q as u64, r.log2d as u64, 0, r.nmoduli as u64]); // 0: moduli NULL
+        int(o, &r.pmodq);
+        r.ppmodq.iter().for_each(|x| int(o, x));
+        int(o, &r.inv2);
+        for x in [&d.q, &d.qminus1, &d.m, &d.mby2, &d.gamma, &d.gammaby2, &d.pow2d, &d.pow2dby2] {
+            int(o, x);
+        }
+        o.extend_from_slice(&[d.d as u64, d.m_odd as u64, d.log2m as u64]);
+        o.extend_from_slice(&[a.m1, a.m2, a.l, a.lext, a.kmsis].map(u64::from));
+        int(o, &a.bsqr);
+        o.extend_from_slice(&[a.nu as u64, a.omega as u64, a.log2omega as u64, a.eta, a.rej1 as u64, a.log2stdev1 as u64]);
+        int(o, &a.scm1);
+        int(o, &a.stdev1sqr);
+        o.extend_from_slice(&[a.rej2 as u64, a.log2stdev2 as u64]);
+        int(o, &a.scm2);
+        int(o, &a.stdev2sqr);
+    }
+    let rels: &[(&'static str, &Tbox)] = &[
+        ("reg", &reg::pqz_reg),
+        ("tx", &tx::pqz_tx),
+        ("tx0", &tx0::pqz_tx0),
+        ("burn", &burn::pqz_burn),
+        ("ds", &ds::pqz_ds),
+        ("dr", &dr::pqz_dr),
+        ("txm2", &txm2::pqz_txm2),
+        ("txm4", &txm4::pqz_txm4),
+        ("txm8", &txm8::pqz_txm8),
+        ("txm20", &txm20::pqz_txm20),
+        ("txm40", &txm40::pqz_txm40),
+        ("txm80", &txm80::pqz_txm80),
+        #[cfg(feature = "oversize")]
+        ("txm16", &txm16::pqz_txm16),
+        #[cfg(feature = "oversize")]
+        ("txm160", &txm160::pqz_txm160),
+    ];
+    rels.iter()
+        .map(|&(name, p)| {
+            let mut o = alloc::vec::Vec::new();
+            abdlop(&mut o, p.tbox);
+            abdlop(&mut o, p.quad_eval.quad_eval);
+            abdlop(&mut o, p.quad_eval.quad_many);
+            o.extend_from_slice(&[p.quad_eval.lambda, p.nbin, p.z].map(u64::from));
+            o.extend(p.n.iter().map(|&x| x as u64));
+            o.extend_from_slice(&[p.nprime as u64, p.nex as u64, p.rej3 as u64, p.log2stdev3 as u64]);
+            int(&mut o, &p.scm3);
+            int(&mut o, &p.stdev3sqr);
+            o.extend_from_slice(&[p.rej4 as u64, p.log2stdev4 as u64]);
+            for x in [&p.scm4, &p.stdev4sqr, &p.bz3sqr, &p.bz4] {
+                int(&mut o, x);
+            }
+            p.l2bsqr.iter().for_each(|x| int(&mut o, x));
+            int(&mut o, &p.inv4);
+            o.push(p.prooflen);
+            (name, o)
+        })
+        .collect()
 }
