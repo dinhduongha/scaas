@@ -1,3 +1,9 @@
+## Session 2026-10-17 (UA index done) — resume here
+
+**State:** main pushed. **UA registry per-kind list merged** (`ua-index`, CTR-UA-29): `uaCount` / `uaAt` / `uaPage` / `uaIndex`, single-key kinds, ≈ +27 k gas per registration, gen 2 forwards gen-1 kinds; forge 1272 passed; redeployed on 7622 — registry `0x4d2e7dbb67bb82e3f6e8adf920588932ed7d5d42`, factory `0xf8466c6af264dda1c5b4eecdae416fd708deb3e7`, verifiers and PQZ tokens new (log `smartcontracts/evm/runs/2026-10-17-ua-index-7622.txt`, 92 ok); the P6g deployment of 2026-10-16 stays on chain unused. Owner Q&A today: natives are not auto-registered (cannot be decoys); registration is already relayable (no `msg.sender` state).
+
+**Next:** S7 (CTR-PQZ-25/-26, S9 proposals 1/2/4, the plan's gas tables incl. S8's `G_7` rows) → op 7 entry points in the PQZ tokens → gates A / B → freeze → PQZL Rust port (subagent-driven).
+
 ## Session 2026-10-17 (S8 done) — resume here
 
 **State:** main pushed. **S8 merged** (`p6-anon-s8`): op 7 live in the `PQZ` precompile on chain 7622 since T = 1792205116 (2026-10-17 09:45 +07) — a second `engine.Pqz` schedule with 14 op 7 rows per `(proofSystemId, M, auditorOn)` (3,625,000–6,177,000 gas), image `scaas/nethermind-pqz:1.39.0-pqz2` (library `4fc1a6a2…`), data kept; backup `/home/dockers/mba-chain-nethermind-backups/op7-20261017-093001`; probe 389 ok before / after T, e2e 76 ok; harness 60 min CLEAN; copy rehearsal logs `pqz-core/nethermind/runs/2026-10-17-s8-copy-*`. Rollback: RUNBOOK § op 7. Image `pqz1` kept locally for rollback; `pqz2-calib` kept for re-calibration.
