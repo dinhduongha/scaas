@@ -434,6 +434,10 @@ first runs clean; CI `pqz` job green; D2 recorded; spec §8.1 written. **Gate B 
 every op ≤ 262,144 B and ≤ 60 ms p99 native and wasm32, the Ligero Solidity measurement folded in, the subagent review
 of the ZK argument done, D3 recorded. Then merge and push per the mandate.
 
+**Gates passed 2026-10-17:** gate A and gate B with op 7 in the frozen set — `pqz-core/gate.sh 2026-10-17` (every
+step above green; the CI `pqz` job added), the PQZH limits from the S6 multi-bench (≤ 236,196 B, p99 ≤ 10.9 / 20.4 ms
+native / wasm32), the Ligero ZK review in `docs/research/pqzh-ligero.md` §12; D2 / D3 recorded as frozen.
+
 ## Owner steps
 
 1. Review the decisions D1–D15 (all controller proposals; any override before its gate costs one constant or one

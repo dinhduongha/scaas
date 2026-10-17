@@ -1,0 +1,85 @@
+   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/op7tok/pqz-core/ffi)
+    Finished `release` profile [optimized + debuginfo] target(s) in 16.29s
+     Running unittests src/lib.rs (target/release/deps/pqz_ffi-0e930d2521c0be0c)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/pqz-vectors.rs (target/release/deps/pqz_vectors-97b0ca45c63fcd0c)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/fault.rs (target/release/deps/fault-194841224566ea23)
+
+running 1 test
+test node_faults_are_status_4 ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.44s
+
+     Running tests/ffi.rs (target/release/deps/ffi-78a145c659d69e91)
+
+running 10 tests
+test header_matches ... ok
+test c_abi_arguments ... ok
+test multi_limits_and_memo ... ok
+test one_mib_stack ... ok
+test digest_lines ... ok
+test selftest_report ... ok
+test selftest_vectors ... ok
+test every_rejection has been running for over 60 seconds
+test round_trip_every_form ... ok
+test pqzl_differential ... ok
+test every_rejection ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 89.05s
+
+     Running tests/verify_only.rs (target/release/deps/verify_only-725abf0de1b0c742)
+
+running 3 tests
+test child_task ... ok
+
+running 1 test
+test child_task ... 
+running 1 test
+test child_task ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 27.39s
+
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 27.47s
+
+
+running 1 test
+test child_task ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 27.68s
+
+
+running 1 test
+test child_task ... test fill_determinism has been running for over 60 seconds
+test verify_only_arena has been running for over 60 seconds
+test verify_only_arena ... ok
+ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 26.61s
+
+
+running 1 test
+test child_task ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 26.06s
+
+test fill_determinism ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 108.06s
+
+   Doc-tests pqz_ffi
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
