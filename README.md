@@ -498,6 +498,10 @@ pull against each other. Burning is not needed for either goal: a chain earns mo
 by destroying its coin, and when blocks are full the gas price already rises by itself, which is enough to ration
 space.
 
+If the aim is to hold back inflation of the native coin, the direct levers are different: lower the new coins issued as
+validator rewards, and let fees from a larger volume of transactions pay the validators instead — which is exactly what
+meta-transactions bring, by letting people use the chain without first buying its coin.
+
 SCaaS burns nothing: the fee of an operation goes to whoever executes it, in the token used, and the cost of a payment
 does not depend on the price of a coin the user never holds.
 
