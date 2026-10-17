@@ -119,7 +119,7 @@ abstract contract ZetherFixture is Test {
         c.roles.minter = address(this);
         c.conf = IFactoryToken.ConfidentialConfig(
             address(ver), auditor ? ZetherKeys.pub(X_AUD, bls) : bytes(""), SCALE, maxShielded, FEE, dMode,
-            auditor ? aMode : 0
+            auditor ? aMode : 0, 0
         );
     }
 

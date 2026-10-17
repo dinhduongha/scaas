@@ -1,156 +1,88 @@
 # smartcontracts/evm
 
-Cây hợp đồng của `dms_blockchain`. **Nằm ngoài addon Odoo, ở `smartcontracts/evm/` (họ EVM; các họ khác ở `smartcontracts/<family>/`)** — hợp đồng
-có vòng đời riêng (audit, deploy, immutability) không trùng vòng đời của một addon.
+The SCaaS contracts of the EVM family (Foundry; the other families are under `smartcontracts/<family>/`). Normative
+rules: `docs/contracts/` (start at `docs/contracts/README.md`); reasons and old ids: `docs/decisions.md`
+(`python3 scripts/docs_check.py resolve <id>`). **Unaudited — not for production funds.**
 
-Interface đã chốt cộng các implementation đã có (2026-10-03,
-`docs/history/plans/2026-10-03-blockchain-contracts.md`):
+## What is here
 
-| Contract | File | Ghi chú |
+| Area | Files (`src/`) | Status |
 |---|---|---|
-| `NoUnderlyingToken` / `UnderlyingToken` (kinds `NONE`, `UNDERLYING`) | `src/metatx/` | clone EIP-1167 trên `MetaTokenBase` (`MetaTxBase`, `ERC20MetaTx`); `MetaTransaction` + `MetaTransfer` |
-| `OpenFactory` | `src/factory/OpenFactory.sol` | hiện thực `IOpenFactory`; salt theo người tạo |
-| `SCaaSDex` | `src/dex/SCaaSDex.sol` | clone per DEX (`createDex`): `mtxSettle` một taker nhiều maker, outside legs qua `DexPuller` |
-| Allowance chỉ giữa hợp đồng | `src/metatx/ERC20MetaTx.sol` | `approve` từ chối spender không phải hợp đồng, `transferFrom` từ chối caller không phải hợp đồng; EOA uỷ quyền EIP-7702 (`0xef0100‖addr`) = EOA; hợp đồng đang chạy constructor = EOA (R26) |
-| `MandateWallet` | `src/wallet/MandateWallet.sol` | ví một người trả cho auto-pay delegated: mandate on-chain (hạn mức lần/kỳ, payee, hạn), ERC-1271 cho chủ ví, trả bằng `payWithFee`. Deploy ngoài Odoo: `forge create src/wallet/MandateWallet.sol:MandateWallet --constructor-args <owner>` (R29) |
-| Deploy | `script/Deploy.s.sol` | ghi `deployments/<chainid>.json` |
+| Token kinds `NONE` / `UNDERLYING` | `metatx/NoUnderlyingToken.sol`, `metatx/UnderlyingToken.sol` on `MetaTokenBase` (`MetaTxBase`, `ERC20MetaTx`, `UnderlyingLib`, `AdminLib`) | built; EIP-1167 clones; meta-tx (address path and UA path), UA ledger, wrapper legs ([token-wrappers.md](../../docs/contracts/token-wrappers.md), [metatx.md](../../docs/contracts/metatx.md)) |
+| Zether kinds `NONE_ZETHER` / `UNDERLYING_ZETHER` | `zether/` (`ZetherLayer`, `ZetherLib`, `ZetherStatements`, `ZetherVerifierBn254`, `ZetherVerifierBls12381`, `ZetherDisclosure`) | built; dev chains 31337 / 1337 only (`ZetherSafety`) ([zether.md](../../docs/contracts/zether.md)) |
+| PQZ kinds `NONE_PQZ` / `UNDERLYING_PQZ` | `pqz/` (`PqzLayer`, `PqzLib`, `PqzCt`, `UAPqzVerifier`, `PqzSafety`) | built; chains 31337 / 1337 / 7622 (`PqzSafety`); op 7 multi-recipient transfers (`pqzTransfer*`) and op 1 single (`pqzTransferSingle*`) over the `PQZ` precompile ([pq-zero-knowledge.md](../../docs/contracts/pq-zero-knowledge.md)) |
+| Factory | `factory/OpenFactory.sol` (`IOpenFactory`, `IFactoryToken`) | built; open creation, versioned catalogue, the Zether / PQZ gates |
+| Universal Accounts | `ua/UARegistry.sol`, `ua/UAKinds.sol`, `ua/verifiers/`, the PQ verifiers (`MlDsa`, `FnDsa`, `SlhDsa`) | built; admin-free registry, kinds `0x0100`–`0x0108`, groups, `msig`, Zether / PQZ kinds, per-kind list ([accounts.md](../../docs/contracts/accounts.md)) |
+| DEX | `dex/SCaaSDex.sol` (`DexPuller`), `trade/` | built; clone per DEX, `mtxSettle` one taker / many makers ([dex.md](../../docs/contracts/dex.md)) |
+| Accounts and wallets | `account/SmartKeyAccount.sol` (+ factory), `wallet/MandateWallet.sol` | built |
+| Hedera | `hedera/` | built; HIP-632 / long-zero helpers for the Hedera profile ([networks/hedera.md](../../docs/networks/hedera.md)) |
+| Shared | `common/` (`MetaTxLib`, `FeePolicy`, `SigCheck`, `SaltedEIP712`, `SSTORE2`, curves and hashes) | built |
+| Chain notes | `chains/{private7622,gnosis,celo}/` | notes |
 
-Zether is built (P3: the kinds `NONE_ZETHER` and `UNDERLYING_ZETHER` in `src/zether/` as `NoUnderlyingZetherToken`, `UnderlyingZetherToken`, `ZetherLayer`, `ZetherLib`, `ZetherStatements`, `ZetherVerifierBn254`, `ZetherVerifierBls12381`;
-Zether accounts are UAs of the UA registry's Zether kinds, `src/ua/UARegistry.sol`, UA-3; the old Zether-only registry is in `legacy/ua3/` and the old `ZetherToken` line in `legacy/p3/`, not built), unaudited and gated to dev chains 31337/1337 (`ZetherSafety`,
-RS2-1); see `docs/contracts/zether.md` (CTR-ZTH-02) and `docs/contracts/README.md`. `test/vectors/metatx_kat.json` là vector v3 `MetaTransaction` (MetaTxBase);
-The v1 line (`MetaToken`, `HederaMetaToken`, `OpenFactoryV1`, `MetaTxDex`, `SCaaSDexV1`, `metatx_v1_kat.json`, `dex_kat.json`) is in `legacy/p5/`, not built (P5).
+`legacy/` keeps superseded lines for reference (`legacy/README.md`): not compiled, not tested, never deployed.
 
-## Mô hình: factory mở
+## Model: an open factory, no upgrades
 
-Ai cũng tạo token được. Ai cũng wrap thành Meta Token hoặc Zether Token được.
+Anyone can create a token, and anyone can wrap an asset; two wrappers of the same asset by two creators are both real,
+and `IERC20(asset).balanceOf(wrapper)` shows what each holds. `getWrapper` keys on `(creator, underlying)`.
 
-Ông A wrap xDAI ra `zDAI-A`. Ông B wrap cùng xDAI ra `zDAI-B`. **Hai địa chỉ khác
-nhau, cả hai đều thật.** Thị trường quyết định cái nào được dùng nhiều — và nó bỏ
-phiếu bằng tiền: `IERC20(xDAI).balanceOf(zDAI_A)` là lượng tài sản thật khoá sau
-wrapper của A, đọc được on-chain miễn phí. Factory không xếp hạng hộ.
+- **No upgrade path.** Tokens are EIP-1167 clones; no proxy, no admin over code. Versions live in the factory's
+  append-only catalogue; a token stays on the version it was created with. A bug in a version stays in every token of
+  it; the way out is a new token on a new version and a voluntary move.
+- **Provenance instead of a gate.** `factory()`, `creator()`, `underlying()`, `verifier()` are immutable and public;
+  `isToken()` checks the reverse.
+- **Every curve the chain supports.** Verifiers are passed in; points are `bytes` (bn254 G1 64 B, BLS12-381 G1 128 B).
+  On Gnosis, MSM at k = 277: bn254 1.70 M gas, BLS12-381 1.74 M (≈ 2 % more), k = 1: 6,000 vs 12,357; bn254 ≈ 100-bit
+  and on every EVM chain, BLS12-381 ≈ 126-bit and only where EIP-2537 is live.
 
-`getWrapper` khoá trên `(creator, underlying)`, không trên riêng `underlying`:
-*"wrapper xDAI của ông A"* có đúng một đáp án, *"wrapper xDAI"* thì không.
-
-Ba hệ quả xuyên suốt cây này:
-
-1. **Hỗ trợ mọi curve, không ưu tiên cái nào.** Người tạo token truyền địa chỉ verifier.
-   Vì bn254 mã hoá G1 bằng 64 byte còn BLS12-381 bằng 128 byte, interface chung nhận
-   điểm dạng `bytes` — `struct G1Point { uint256 x; uint256 y; }` là kiểu của bn254,
-   không phải kiểu của "một điểm".
-2. **Không có upgrade, chấm hết.** Chỉ EIP-1167 clone. Không Beacon, không UUPS, không
-   Diamond — người tạo cũng không nâng cấp được token của chính mình.
-
-   Version sống ở **factory**, không ở token: factory đăng ký `ZETHER v1, v2, v3…` và
-   `META v1, v2, v3…`, người tạo chọn version lúc deploy và nó ghim vĩnh viễn. Thêm v4
-   vào catalogue **không chạm** một byte nào của zDAI-A đang chạy v1.
-
-   Cái giá, nói thẳng: **một lỗi trong v1 là lỗi vĩnh viễn của mọi token trên v1.**
-   Đường duy nhất là deploy token mới trên v2 rồi người dùng unwrap/wrap sang — di cư
-   tự nguyện, từng người một. Đổi lại: không tồn tại nút bấm nào, của bất kỳ ai, thay
-   đổi được contract đang giữ tiền bạn.
-
-   Catalogue là **danh mục, không phải cổng**: append-only (`v1` không bao giờ trỏ lại
-   chỗ khác), `deprecate()` chỉ đánh dấu chứ không chặn, và `createTokenUnregistered` cho
-   phép deploy implementation ngoài catalogue — token đó mang `version() == 0`, cố ý
-   nhìn thấy được.
-3. **Bỏ gác cổng thì bù bằng xuất xứ.** `factory()`, `creator()`, `underlying()`,
-   `verifier()` bất biến và công khai, `isToken()` để đối chiếu ngược. Đủ để
-   trả lời "cái này wrap gì, ai tạo, verifier nào" — không đủ để trả lời "cái này có
-   phải bản nên dùng không", và đó là câu hỏi của thị trường.
-
-### Chọn curve nào — hướng dẫn, không phải quy định
-
-Đo thật trên Gnosis, `eth_estimateGas`, k = 277 điểm (quy mô Bulletproofs):
-
-| | bn254 | BLS12-381 |
-|---|---|---|
-| Gas MSM ở k=277 | **1,70 M** | 1,74 M (đắt hơn ~2%) |
-| Gas ở k=1 | **6.000** | 12.357 (đắt hơn 106%) |
-| An toàn | ~100 bit | **~126 bit** |
-| Chain chạy được | **mọi chain EVM** (Byzantium 2017) | chỉ chain có Prague |
-| G1 on-chain | 64 byte | 128 byte |
-
-Canon từng ghi BLS *"rẻ hơn 45–60%"*. Đo được là **sai** — không có mức tiết kiệm đó
-ở bất kỳ `k` nào. Chọn BLS khi và chỉ khi chân trời bảo mật vượt thời hạn an toàn của
-bn254; trả bằng gas nhỉnh hơn và mất khả năng chạy trên chain không có Prague.
-
-```
-src/
-├── common/     chain-agnostic: struct, phí, chữ ký
-├── metatx/     tầng NỀN — mọi token đều gasless được
-├── zether/     tầng BẢO MẬT — child của metatx, không phải nhánh song song
-└── chains/     cấu hình và script deploy theo từng chain
-```
-
-## Phân tầng
-
-```
-IERC20
- └── IERC20MetaTx          ← tầng nền
-      ├── IERC20Payment    ← token thanh toán công khai
-      └── IZetherToken     ← token bảo mật, kế thừa TOÀN BỘ meta-tx
-```
-
-Quyết định của user: *"Zether riêng, là child của MetaTransaction."* Hệ quả: mọi
-Zether token tự động gọi được qua relayer, không cần đường riêng.
-
-## Chạy
+## Build and test
 
 ```bash
-forge build                              # profile default (forge's default EVM)
-forge test
-FOUNDRY_PROFILE=private7622 forge build  # evm osaka — see the table below
+forge build
+forge test                                # the whole suite
+forge test --isolate --match-path 'test/ua/{UAGas,UARegistryGroups}.t.sol'   # gas bounds, cold
+FOUNDRY_PROFILE=private7622 forge build
 ```
 
-`lib/` không commit (`.gitignore`). Dựng lại:
+On a shared machine run heavy jobs under `scripts/capped` (repo root). `lib/` is not committed:
+`forge install foundry-rs/forge-std` and `forge install OpenZeppelin/openzeppelin-contracts` (v5.2+).
+
+**Size gate** (CTR-TOK-24), as CI runs it — `src/` only, never with the test helpers:
 
 ```bash
-forge install foundry-rs/forge-std
-forge install OpenZeppelin/openzeppelin-contracts   # cần v5.2+
+forge build src --sizes --json > /tmp/sizes.json
+python3 ../../scripts/size_gate.py /tmp/sizes.json size-baseline.json
 ```
 
-## Vì sao mỗi chain một profile EVM
+Limits: token implementations 20,480 B, other contracts 24,576 B (EIP-170), init code 49,152 B (EIP-3860).
+`size-baseline.json` lists the contracts allowed over their limit at a recorded size that may only shrink (owner
+2026-10-11: size work waits for Glamsterdam; test chains such as 7622 allow 65,536 / 131,072 B). Logic in `public` /
+`external` library functions (`PqzLib`, `ZetherLib`, `UnderlyingLib`, `AdminLib`, …) is a separately deployed contract
+reached by DELEGATECALL and does not count towards a token's size; `internal` library functions are copied into it.
 
-| Profile | EVM | Lý do |
+## EVM profiles
+
+| Profile | EVM | Why |
 |---|---|---|
-| `private7622` | **osaka** | Private Nethermind chain (Clique, one signer). Since the 2026-08-31 chainspec fix it runs through Fusaka + BPO2 (PUSH0, TSTORE, EIP-2537 live, base fee 0); it was `berlin` before, when Nethermind silently ignored the Geth-style fork keys. Chain id 7622, formerly 9000 (owner 2026-10-07: 9000 is also Evmos Testnet; genesis reset). See `src/chains/private7622/README.md`, `TRAPS.md` §"Private chain". |
-| `gnosis` | osaka | Pectra từ 2025-04-30, rồi Fusaka; có EIP-2537 (đã đo: `0x0b/0x0c/0x0f/0x10` sống) |
-| `celo` | osaka | Owner 2026-10-11: mọi chain osaka |
-| `bsc` / `polygon` / `base` | osaka | Draft (docs/networks/evm.md §1): BSC Mendel, Polygon Lisovo (bộ opcode Osaka), Base Azul |
+| `default`, `private7622` | osaka | chain 7622: private Nethermind (Clique, one signer), Fusaka + BPO2, EIP-2537 live, the `PQZ` and ML-DSA precompiles (`src/chains/private7622/`) |
+| `gnosis`, `celo` | osaka | Pectra, then Fusaka; EIP-2537 measured live |
+| `bsc`, `polygon`, `base` | osaka | drafts ([networks/evm.md](../../docs/networks/evm.md) §1) |
+| `zether` | osaka | the Zether suite (`FOUNDRY_PROFILE=zether forge test --match-path 'test/zether/*'`) |
 
-## Ba bug chặn build đã sửa so với code cũ
+## Deploying
 
-| Ở đâu | Lỗi | Sửa |
-|---|---|---|
-| `metatx/MtxTradeOrderLib.sol` | `address contract;` — `contract` là **từ khoá**. `Error 2314` | Bỏ hẳn: `verifyingContract` thuộc EIP-712 **domain**, không thuộc struct |
-| `metatx/AddressCheck.sol` | `account.nonce` không tồn tại trong Solidity | Bỏ `isEOA` — nó không quyết định được gì đúng ở EVM (xem ghi chú dưới) |
-| `metatx/IERC20MetaTx` (thiết kế) | `MetaTx(...)` 12 tham số vị trí, **không có `signature`** | Struct + `bytes signature` **tách riêng** |
+`script/Deploy.s.sol` (with `DeployBase.sol`) deploys the factory, the token catalogue, the UA registry generation 1
+with the per-chain kinds (`UAPrecompileProbe`) and writes `deployments/<chainid>.json`; `script/ZetherE2E.s.sol` for
+the dev chains. Chain 7622's PQZ stack is deployed and exercised end to end by `script/pqz/e2e.py` (logs in `runs/`,
+e.g. the live addresses of the latest run at the end of each log).
 
-Cùng lớp lỗi bắt được khi viết lại: `bytes32 indexed reference` trong một event —
-`reference` cũng là từ khoá dành riêng. Đổi thành `entryRef`.
+## Design notes
 
-> **`isEOA` bị bỏ chứ không sửa.** Không có cách nào đúng để hỏi "đây có phải EOA
-> không" trong EVM: `extcodesize == 0` đúng với ví chưa deploy, với địa chỉ đang
-> trong constructor, và (từ EIP-7702) với EOA có code. Mọi kiểm tra dựa trên nó là
-> một giả định sẽ hỏng. Cần chấp nhận cả hai loại ví thì dùng ERC-1271
-> (`SigCheck.isValid` đã làm), đừng phân loại người gọi.
-
-## Ba thay đổi thiết kế so với code cũ
-
-1. **EIP-712 thay `personal_sign`.** Ví hiển thị nội dung thay vì 32 byte mù.
-2. **`SignatureValidator.verifySignature2` bị loại** — `ecrecover` thô, không chặn
-   malleability `s`. Chưa ai gọi, nhưng là súng đã lên đạn.
-3. **The `mode` bitmask is kept** (`common/MetaTxLib.sol`, `supportedModes() = 0xF3`): flags
-   `MODE_RESTRICT_RELAYER`, `MODE_RESTRICT_FEE_RECIPIENT` plus an enumerated fee-mode nibble. `mode` is part of the
-   signed struct, and unbound `relayer`/`feeRecipient` are hashed as `address(0)` (canonical zeroing), so one
-   signature never validates under another mode. See `docs/contracts/metatx.md#digest`.
-
-Mẫu số phần trăm thống nhất **ppm (1e6)**, trần cứng **1% = 10.000 ppm**.
-`setTransferFeePerMille` (1e3) bị loại: nó không biểu diễn được 0,05%.
-
-## Tham chiếu
-
-Quy tắc hiện hành: `docs/contracts/` (bắt đầu từ `docs/contracts/README.md`); lý do và alias id cũ
-(`R…`, `RS…`, `UD:§…`): `docs/decisions.md` (`python3 scripts/docs_check.py resolve <id>`). Thứ tự ưu tiên:
-`docs/README.md#precedence`. Nguồn gốc (chỉ tham khảo): `docs/research/_USER-DECISIONS.md`, `docs/research/00-CANON.md`.
+- **EIP-712, not `personal_sign`**: wallets show the struct. Signatures are low-s, `ecrecover` is never used raw.
+- **The `mode` bitmask** (`common/MetaTxLib.sol`, `supportedModes() = 0xF3`) is signed; an unbound `relayer` /
+  `feeRecipient` is hashed as `address(0)`, so a signature never validates under another mode
+  ([metatx.md](../../docs/contracts/metatx.md#digest)).
+- **No `isEOA`.** `extcodesize == 0` is true for undeployed wallets, contracts in their constructor and (EIP-7702)
+  delegated EOAs; contracts accept both kinds of signer through ERC-1271 (`SigCheck`). Allowances are only between
+  contracts (`ERC20MetaTx`: `approve` refuses a non-contract spender, `transferFrom` a non-contract caller).
+- **Fees in ppm** (1e6), hard cap 1 % = 10,000 ppm.

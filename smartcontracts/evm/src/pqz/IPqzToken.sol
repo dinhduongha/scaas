@@ -22,6 +22,11 @@ interface IPqzToken {
     event PqzCredit(bytes32 indexed ua, uint64 indexed index, bytes32 entryRef);
     /// @notice `out = u ‖ v_t ‖ v_f ‖ [v_a]`; with the salt, `R = salt ‖ u ‖ v_t ‖ [v_a] ‖ toUA` (P6g D14).
     event PqzTransfer(bytes32 indexed entryRef, bytes32 indexed fromUA, bytes32 indexed toUA, bytes16 salt, bytes out);
+    /// @notice Op 7 (CTR-PQZ-26): `out = u_0 … u_{G−1} ‖ v_0 … v_{M−1} ‖ v_f ‖ [v_{a,0} … v_{a,M−1}]`; the legs' UAs are
+    ///         the `PqzCredit` events of `entryRef`, in leg order (`recipientsHash = keccak256(UA_0 ‖ … ‖ UA_{M−1})`).
+    event PqzTransferMulti(
+        bytes32 indexed entryRef, bytes32 indexed fromUA, bytes32 recipientsHash, uint256 legs, bytes16 salt, bytes out
+    );
     event PqzRolled(bytes32 indexed ua, uint64 rolled, bytes32 accHash);
     /// @notice Burn (`amount > 0`) or refresh (`amount = 0`); `newAcc = u' ‖ v_f` (before re-adding kept inline credits).
     event PqzBurned(bytes32 indexed ua, uint256 amount, address recipient, bytes newAcc);
@@ -36,6 +41,8 @@ interface IPqzToken {
     error NonCanonical();
     error Expired(uint256 validUntilBlock);
     error SelfTransfer();
+    error BadRecipientCount(uint256 legs);
+    error DuplicateRecipient(bytes32 ua);
     error ZeroRecipient();
     error RefreshRecipient(address recipient);
     error PlainOverdraw(uint256 plainUsed, uint256 plainPending);

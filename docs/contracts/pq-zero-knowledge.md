@@ -795,7 +795,8 @@ in another form.
 Plan: [P6-ANON](../superpowers/plans/2026-10-14-p6-anon.md) (decisions D1–D21 in [decisions.md](../decisions.md)); the
 classical design it mirrors: [zether.md CTR-ZTH-37](zether.md#CTR-ZTH-37) (Z1–Z13). Built: PQZL and PQZH relations,
 `pqz-stmt`, `pqz-ffi`, vectors, fuzzing, the package (P6-ANON S1–S6); live in the `PQZ` precompile on chain 7622 since
-2026-10-17 (S8); the token entry points below are P6g's next step.
+2026-10-17 (S8); the token entry points below are built (P6g op 7, 2026-10-17: `PqzLib.transferMulti`, forge tests
+`test/pqz/PqzMulti.t.sol`, e2e on chain 7622).
 
 <a id="CTR-PQZ-25"></a>**CTR-PQZ-25** — **Two transfer paths, no switch** (owner 2026-10-14; classical Z7 / Z8). Every
 PQZ token offers both: the **multi-recipient transfer** `pqzTransfer` / `pqzTransferCompact` / `pqzTransferNoBundle`
@@ -804,8 +805,13 @@ PQZ token offers both: the **multi-recipient transfer** `pqzTransfer` / `pqzTran
 `pqzTransferSingleCompact` / `pqzTransferSingleNoBundle`, today's op 1 `R_TX` / `R_TX0` path of §7.4 renamed, payload,
 statement, proof and storage unchanged. `M` counts legs, real and decoy: a decoy is a leg of amount 0 (an `Enc(0)`
 credit), indistinguishable on chain from a real leg; 7 real recipients ⇒ `M = 8` with one decoy (owner 2026-10-16).
-Decoys are the wallet's choice (D16): no on-chain consent or decoy rule; an optional immutable `multiLegFee` (default
-0) credits a public amount to every listed recipient's `plainPending` (D17). The storage mode is the user's per
+Decoys are the wallet's choice (D16): no on-chain consent or decoy rule. **`multiLegFee`** (D17; owner 2026-10-17: built
+with op 7): an immutable per-token amount, default 0 (then nothing changes), set at `initialize` in
+`ConfidentialConfig.multiLegFee` (Zether kinds refuse a non-zero one); on op 7 the statement's public `fee` word is
+`confidentialFee` (with a beneficiary) `+ M · multiLegFee`, the beneficiary gets its part and every listed leg, real or
+decoy, gets `multiLegFee` in `plainPending` — the same for every leg, so it reveals nothing, and listing a victim as a
+decoy costs the sender `multiLegFee` paid to the victim (T22). `confidentialFee + 8 · multiLegFee < 2^64` and
+`< maxShielded` (`BadInit`). Op 1 never charges it. The storage mode is the user's per
 transfer through the entry they call: the contract never switches it, and a BUNDLE shape that exceeds the per-tx gas
 cap simply does not fit (no early revert; the wallet estimates and offers COMPACT or a split; owner 2026-10-16). PQZH
 op 7 takes at most 10 inline credits (`INLINE_MAX_PQZH = 10`, under the node's 16 M; PQZL keeps 16; owner 2026-10-16).
@@ -834,8 +840,16 @@ with its own ABDLOP tag and the same body as op 1; only `opTag` and header words
 lengths: [serialization v1, op 7](#serialization) (`recipientsHash = keccak256(UA_0 ‖ … ‖ UA_{M−1})` at word 192, `M` at
 word 320; `(M, A)` is read from the words, the length alone is ambiguous at 83,072 B).
 
-*Contract checks, cheap first:* `M` built (`BadRecipientCount`); recipients pairwise distinct, none = `fromUA`, all
-registered `pqz-mlwe` UAs (`DuplicateRecipient`, `SelfTransfer`, `NotRegistered`); each recipient below its cap
+*Entry and payload:* `pqzTransfer(payload, acc, inline, proof, authSig)` (and `…Compact`, `…NoBundle`), the same
+arguments as the single entries, with `payload = be32(p) ‖ be32(validUntilBlock) ‖ be32(plainUsed) ‖ fromUA ‖
+beneficiaryUA ‖ be32(M) ‖ salt(16) ‖ UA_0 … UA_{M−1} ‖ out ‖ [memo]` (words as 32 bytes; the plan's separate
+`recipients` / `out` arguments folded into the payload, so both families share one ABI shape); views
+`transferStatement` (op 7) and `transferSingleStatement` (op 1). Events `PqzTransferMulti(entryRef indexed, fromUA
+indexed, recipientsHash, M, salt, out)` and `PqzCredit` per leg in leg order.
+
+*Contract checks, cheap first:* `M` built (`BadRecipientCount`); the length fixes `auditorOn` for that `M` (else
+`BadPayload`); recipients pairwise distinct, none = `fromUA`, all registered `pqz-mlwe` UAs (`DuplicateRecipient`,
+`SelfTransfer`, `AccountNotRegistered`); each recipient below its cap
 (`RefreshRequired(ua)`); then every §7.4 check on the sender (`validUntilBlock`, `acc`, `inline` with `INLINE_MAX` /
 `INLINE_MAX_PQZH`, `p`, `plainUsed`, beneficiary); `out` length `16,384·G + 128·(M + 1) + 128·M·A`; every coefficient
 `< q`. The contract builds the op 7 statement (keys by SSTORE2, `recipientsHash` from `recipients`), checks `authSig`
@@ -847,15 +861,17 @@ as §7.4 and calls `PQZ(7, statement ‖ proof)`.
 recipientsHash, M, out)` and `PqzCredit(ua indexed, index, entryRef)` per leg. Roll-over is the existing
 `pqzRollOver` (decoy credits included; keepers roll them, P6i).
 
-*Storage and memo* (CTR-PQZ-23 with `M` legs): bundle `R = salt(16) ‖ u_0 … u_{G−1} ‖ (toUA_j ‖ v_j ‖ v_{a,j})_{j<M}`
-(`16 + 16,384·G + 288·M` B with the auditor, `160·M` without the copies); memo `salt ‖ ((flags ‖ M ‖ (be8(a_j) ‖
+*Storage and memo* (CTR-PQZ-23 with `M` legs): bundle `R = salt(16) ‖ u_0 … u_{G−1} ‖ (v_j ‖ [v_{a,j}] ‖ toUA_j)_{j<M}`
+(`16 + 16,384·G + 288·M` B with the auditor, `16 + 16,384·G + 160·M` without) — for `M = 1` exactly the single
+transfer's bundle, and `(G, M, auditorOn)` follow uniquely from the length for every built `M`; memo `salt ‖ ((flags ‖ M ‖ (be8(a_j) ‖
 toUA_j)_{j<M}) XOR ks)`, `ks` from HKDF-SHA256 as CTR-PQZ-23 expanded to `2 + 40·M` bytes; the sender recovers every
 leg from storage alone.
 
 *Auditor* (CTR-PQZ-24): FULL = a copy `v_{a,j}` for every leg (the auditor reads every leg, decoys included);
 OPTIONAL = the whole transfer in or out (`auditorOn` 0 / 1; per-leg mixes are unrepresentable); NONE = no copies.
 
-*Disclosure by leg* (CTR-PQZ-14): `verifyTransferAmount(entryRef, j, amount, kind, opening)`; `SENDER_S` re-derives
+*Disclosure by leg* (CTR-PQZ-14): `verifyTransferAmount(entryRef, j, amount, kind, opening)` and
+`disclosureStatement(entryRef, j, amount, kind, bundle)` (a leg past `M`, or `AUDITOR` without the copies: false); `SENDER_S` re-derives
 `r_{g(j)}, e1_{g(j)}, e2_j` from the seeds, `RECEIVER_X` and `AUDITOR` open leg `j`, with `R_DS` / `R_DR` and the
 §7.9 statement unchanged (`(pk_j, v_j)` identifies the leg). A disclosure reveals that leg's recipient and amount,
 hence whether it was a decoy (T26). Single entries keep `j = 0`.
@@ -961,7 +977,8 @@ that reveals neither `r` nor noise, and a PQZ transfer has one recipient, so a o
 reverts `CiphertextOffState(bundleHash)`; new view `transferCiphertextHash(entryRef)`. Shared randomness and decryption
 noise must not leak ([CTR-PQZ-04](#CTR-PQZ-04)); the indexer or the parties supply the bundle bytes.
 
-`verifyTransferAmount(entryRef, amount, kind, opening)` with `opening = abi.encode(bytes bundle, bytes proof)`,
+`verifyTransferAmount(entryRef, leg, amount, kind, opening)` (leg 0 for a single entry; leg `j` of an op 7 entry,
+[CTR-PQZ-26](#CTR-PQZ-26)) with `opening = abi.encode(bytes bundle, bytes proof)`,
 `bundle = R` ([CTR-PQZ-23](#CTR-PQZ-23)), `keccak256(bundle) == entry[entryRef]` (or the stored `R`), `amount < 2^64`; statement
 (33,184 B, every scalar a 32-byte word as [encodings](#encodings), so `pk` starts word-aligned; owner 2026-10-13):
 
@@ -1691,23 +1708,26 @@ disks for that or prune ([NODE-OPS-15](../node/ops.md#NODE-OPS-15)).
 | `UAPqzVerifier` | UA `IUAPopVerifier` for `0x0142` | BUILT (P6g D3): stateless; precompile and `proofSystemId` immutable; `pk < q` checked; constructor self-test + `R_REG` probe; also a token's `verifier` (D9) |
 | `UAMldsaVerifier` | UA verifier for `mldsa44`/`mldsa65` (BUILT, P6a: EIP-8355 precompile by probe, else Solidity) | stateless; used by the UA `UARegistry` |
 | `ERC20MetaTx` (the one token base) | ERC20 + EIP712 + `IERC20MetaTx`, both structs, the address and UA paths, UA ledger | [CTR-MTX-07](metatx.md#CTR-MTX-07); `PqzToken --sizes` ≤ 24,576 B, else the `ua*` entry points move to a `fallback` decoder as MetaToken v3 |
-| `PqzToken` | shield, transfer, unshield, refresh, rollover, disclosure, meta-tx, `wrap`/`unwrap` | BUILT (P6g D1) as the kinds `NONE_PQZ` (`NoUnderlyingPqzToken`) and `UNDERLYING_PQZ` (`UnderlyingPqzToken`): `PqzLayer` on `MetaTokenBase` + the external `PqzLib` (`scaas.pqz`); clones via `OpenFactory.createToken` behind `pqzEnabled`; disclosure `verifyTransferAmount` on the token (D11); sizes 50,483 / 62,572 B (chain 7622 allows 65,536) |
+| `PqzToken` | shield, transfer, unshield, refresh, rollover, disclosure, meta-tx, `wrap`/`unwrap` | BUILT (P6g D1) as the kinds `NONE_PQZ` (`NoUnderlyingPqzToken`) and `UNDERLYING_PQZ` (`UnderlyingPqzToken`): `PqzLayer` on `MetaTokenBase` + the external `PqzLib` (`scaas.pqz`); clones via `OpenFactory.createToken` behind `pqzEnabled`; disclosure `verifyTransferAmount` on the token (D11); op 7 entries and `multiLegFee` (P6g op 7); the statement views run in `PqzLib` by DELEGATECALL, so the builders stay out of the tokens: sizes 45,734 / 58,177 B (chain 7622 allows 65,536), `PqzLib` 19,921 B |
 | `PqzCt` (library) | `plus`/`minus` on 64-bit lanes, `addTrivial` for the plain term, `reduce`, the `< q` check | BUILT (P6g): pure Solidity, no precompile; checked on the P6e vectors |
 | `Sstore2` | existing pattern (classical generator blob) | reused |
 
 Selectors (normative ABI): `pqzShield(bytes32,uint256)`, `pqzTransfer(bytes,bytes,bytes[],bytes,bytes)` (payload, acc, inline,
-proof, authSig), `pqzUnshield(bytes,bytes,bytes[],uint256,address,bytes,bytes)`, `pqzRollOver(bytes32,bytes,bytes[])`, views
+proof, authSig; op 7, [CTR-PQZ-26](#CTR-PQZ-26)), `pqzTransferCompact` / `pqzTransferNoBundle` (same arguments),
+`pqzTransferSingle` / `pqzTransferSingleCompact` / `pqzTransferSingleNoBundle` (same arguments; op 1), `pqzUnshield(bytes,bytes,bytes[],uint256,address,bytes,bytes)`, `pqzRollOver(bytes32,bytes,bytes[])`, views
 `accountState(bytes32) returns (bytes32 accHash, uint16 accUnits, uint64 pendingCount, uint64 rolled, uint64 floor,
 uint64 cleared, uint64 sendCounter, uint256 plainPending)`, `pendingHash(bytes32,uint64)`, `transferCiphertextHash(bytes32)`;
 meta-tx: `executeMetaTransaction`, `metaTxDigest`, `metaNonce`, `cancelMetaNonce`, `supportedModes`, `envelopeBinding`,
 `uaExecute`, `uaDigest`, `uaNonce`, `uaCancelNonce`, `uaEnvelopeBinding`, `transferToUA`, `balanceOfUA`, `wrap(uint256)`,
-`unwrap(uint256,address)`, and `transferStatement`/`burnStatement` views taking `binding`.
+`unwrap(uint256,address)`, the `transferStatement` (op 7) / `transferSingleStatement` (op 1) / `burnStatement` views
+taking `binding`, `disclosureStatement(bytes32,uint256,uint256,uint8,bytes)`,
+`verifyTransferAmount(bytes32,uint256,uint256,uint8,bytes)`, `multiLegFee()`.
 
 Errors (plus
 `IERC20MetaTx`'s, the UA `UA*`, `PercentFeeForbiddenOnConfidential`, `MtxNotBatchable`): `NotAllowedChain`,
 `SelfTestFailed`, `NonCanonical`, `StaleSendCounter`, `AccMismatch`, `InlineMismatch`, `InlineTooFar`, `RefreshRequired`,
 `UnitsInvariant` (the debit-time `unitsOf(T) > K_MAX` assert; unreachable unless accounting is broken), `PlainOverdraw`
-(`plainUsed > plainPending`), `Expired`, `ProofRejected`, `AuthRejected`, `AmountOutOfRange`, `CiphertextOffState`.
+(`plainUsed > plainPending`), `Expired`, `ProofRejected`, `AuthRejected`, `AmountOutOfRange`, `CiphertextOffState`, and for op 7 `BadRecipientCount`, `DuplicateRecipient`.
 
 ## 10. Chain integration (Nethermind precompile on chain 7622)
 

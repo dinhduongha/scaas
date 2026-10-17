@@ -60,10 +60,14 @@ contract ZetherDeployTest is Test {
         // a token from the deployed catalogue, on the deployed verifier
         IFactoryToken.TokenConfig memory c;
         (c.name, c.symbol, c.decimals, c.features) = ("Z", "Z", 6, 1 << AdminLib.PAYABLE);
-        c.conf = IFactoryToken.ConfidentialConfig(bn, "", 1, 1 << 40, 0, 0, 0);
+        c.conf = IFactoryToken.ConfidentialConfig(bn, "", 1, 1 << 40, 0, 0, 0, 0);
         ZetherLayer t = ZetherLayer(f.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, c, "z"));
         assertEq(address(t.verifier()), bn);
         assertEq(t.chainUid(), ZUID);
+        // multiLegFee is PQZ's (op 7, CTR-PQZ-25): a Zether token refuses a non-zero one
+        c.conf.multiLegFee = 1;
+        vm.expectRevert();
+        f.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, c, "z2");
     }
 
     /// Without `DEPLOY_ZETHER` no chain gets the stack (a plain anvil deploys as before P3); with it, a non-dev

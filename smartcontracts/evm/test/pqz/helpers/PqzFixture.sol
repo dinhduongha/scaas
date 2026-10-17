@@ -36,6 +36,7 @@ abstract contract PqzFixture is PqzRegistryBase {
     uint8 internal aMode = uint8(ZetherTypes.AuditorMode.OPTIONAL);
     bytes16 internal salt = bytes16(uint128(0x5A17));
     uint256 internal minted;
+    uint256 internal mlf; // multiLegFee (op 7)
 
     /// the client's view of each account (on the token: hashes only)
     mapping(bytes32 => bytes) internal accOf;
@@ -67,7 +68,7 @@ abstract contract PqzFixture is PqzRegistryBase {
         c.roles.minter = address(this);
         bool withAud = aMode != uint8(ZetherTypes.AuditorMode.NONE);
         c.conf = IFactoryToken.ConfidentialConfig(
-            address(pqv), withAud ? abi.encode(aud) : bytes(""), SCALE, maxShielded, FEE, dMode, aMode
+            address(pqv), withAud ? abi.encode(aud) : bytes(""), SCALE, maxShielded, FEE, dMode, aMode, mlf
         );
     }
 
@@ -141,7 +142,7 @@ abstract contract PqzFixture is PqzRegistryBase {
         bytes memory pl = _payloadFor(t, from, to, ben, out);
         bytes[] memory inl = _inline(t, from, t.accountState(from).pendingCount);
         bytes memory accF = _acc(from);
-        ref = t.pqzTransfer(pl, accF, inl, hex"c0de", _mlAuth());
+        ref = t.pqzTransferSingle(pl, accF, inl, hex"c0de", _mlAuth());
         _afterDebit(from, _cut(out, 0, PqzCt.PK), _cut(out, PqzCt.CT, PqzCt.V));
         pend[to].push(_cut(out, 0, PqzCt.CT));
     }

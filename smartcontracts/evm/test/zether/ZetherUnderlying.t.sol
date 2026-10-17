@@ -111,7 +111,7 @@ contract ZetherUnderlyingTest is ZetherFixture {
         for (uint256 i; i < legs.length; ++i) c.legs[i] = IFactoryToken.Leg(legs[i], nums[i], dens[i]);
         c.conf = IFactoryToken.ConfidentialConfig(
             address(ver), auditor ? ZetherKeys.pub(X_AUD, false) : bytes(""), SCALE, uint256(1) << 40, FEE, dMode,
-            auditor ? aMode : 0
+            auditor ? aMode : 0, 0
         );
         return UnderlyingZetherToken(payable(factory.createToken(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, c, salt)));
     }
@@ -209,7 +209,7 @@ contract ZetherUnderlyingTest is ZetherFixture {
         c.rate = IFactoryToken.RateConfig(2 days, 1000);
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);
-        c.conf = IFactoryToken.ConfidentialConfig(address(ver), "", SCALE, 100, FEE, 0, 0);
+        c.conf = IFactoryToken.ConfidentialConfig(address(ver), "", SCALE, 100, FEE, 0, 0, 0);
         z = UnderlyingZetherToken(payable(factory.createToken(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, c, "small")));
     }
 
@@ -361,7 +361,7 @@ contract ZetherUnderlyingTest is ZetherFixture {
         (c.name, c.symbol, c.decimals, c.features) = ("F", "F", 6, 1 << AdminLib.FREEZE);
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);
-        c.conf = IFactoryToken.ConfidentialConfig(address(ver), "", SCALE, 100, FEE, 0, 0);
+        c.conf = IFactoryToken.ConfidentialConfig(address(ver), "", SCALE, 100, FEE, 0, 0, 0);
         vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureInvalidForKind.selector, AdminLib.FREEZE));
         factory.createToken(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, c, "freeze");
         c.features = 1 << AdminLib.MINTABLE;

@@ -54,19 +54,19 @@ contract PqzRelayTest is PqzFixture {
         bytes memory out = _out(1, true);
         bytes memory pl = _payload(0, 10, alice, bob, bytes32(0), out, "");
         bytes[] memory none = new bytes[](0);
-        bytes memory data = abi.encodeCall(PqzLayer.pqzTransfer, (pl, _acc(alice), none, hex"c0de", _mlAuth()));
+        bytes memory data = abi.encodeCall(PqzLayer.pqzTransferSingle, (pl, _acc(alice), none, hex"c0de", _mlAuth()));
         m = _m(data, 1, 0);
         bytes32 b = tok.envelopeBinding(m);
         assertTrue(b != 0);
         assertEq(b, keccak256(abi.encode(keccak256("SCAAS-PQZ-ENVELOPE-V1"), block.chainid, tok.chainUid(), address(tok),
             signer, uint256(0), uint256(1), m.validUntil, uint32(0), address(0), uint256(0), address(0))));
-        bytes memory st = tok.transferStatement(pl, _acc(alice), none, b);
+        bytes memory st = tok.transferSingleStatement(pl, _acc(alice), none, b);
         assertEq(bytes32(_cut(st, 544, 32)), b);
         // the proof of the bound statement is valid only there: the mocked precompile accepts exactly that input
         _mockOp(1, 0);
         vm.mockCall(PQZ, abi.encodePacked(uint8(1), uint32(83_072), st, hex"c0de"), abi.encode(uint256(1)));
         vm.expectRevert(IPqzToken.ProofRejected.selector);
-        tok.pqzTransfer(pl, _acc(alice), none, hex"c0de", _mlAuth()); // stripped out of its envelope: binding 0
+        tok.pqzTransferSingle(pl, _acc(alice), none, hex"c0de", _mlAuth()); // stripped out of its envelope: binding 0
         MetaTxLib.MetaTransaction memory other = _m(data, 2, 0); // another nonce: another binding
         sg = _sig(other);
         vm.expectRevert(); // MetaTxBadNonce first; with nonce 1 used elsewhere the binding would differ
@@ -120,14 +120,14 @@ contract PqzRelayTest is PqzFixture {
         // a v3 transfer: the UA binding (its own tag) in the statement
         bytes memory pl = _payload(0, 20, alice, bob, bytes32(0), _out(2, false), "");
         bytes[] memory none = new bytes[](0);
-        m.data = abi.encodeCall(PqzLayer.pqzTransfer, (pl, _acc(alice), none, hex"c0de", _mlAuth()));
+        m.data = abi.encodeCall(PqzLayer.pqzTransferSingle, (pl, _acc(alice), none, hex"c0de", _mlAuth()));
         m.nonce = 1;
         m.mode = 0;
         m.fee = 0;
         bytes32 b = tok.uaEnvelopeBinding(m);
         assertEq(b, keccak256(abi.encode(keccak256("SCAAS-PQZ-UA-ENVELOPE-V1"), block.chainid, tok.chainUid(), address(tok),
             fee, uint256(0), uint256(1), m.validUntil, uint32(0), address(0), uint256(0), address(0))));
-        bytes memory st = tok.transferStatement(pl, _acc(alice), none, b);
+        bytes memory st = tok.transferSingleStatement(pl, _acc(alice), none, b);
         _mockOp(1, 0);
         vm.mockCall(PQZ, abi.encodePacked(uint8(1), uint32(66_560), st, hex"c0de"), abi.encode(uint256(1)));
         uint256 g = gasleft();
@@ -138,7 +138,7 @@ contract PqzRelayTest is PqzFixture {
         ms[0] = m;
         bytes[] memory auths = new bytes[](1);
         auths[0] = _mlAuth();
-        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxNotBatchable.selector, PqzLayer.pqzTransfer.selector));
+        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxNotBatchable.selector, PqzLayer.pqzTransferSingle.selector));
         tok.uaBatch(ms, auths);
         // a PQZ id cannot sign envelopes (ZETHER kind)
         m.from = alice;

@@ -30,6 +30,7 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
     function shieldScale() external view returns (uint256) { return PqzLib.$().shieldScale; }
     function maxShielded() external view returns (uint256) { return PqzLib.$().maxShielded; }
     function confidentialFee() external view returns (uint256) { return PqzLib.$().confidentialFee; }
+    function multiLegFee() external view returns (uint256) { return PqzLib.$().multiLegFee; }
     function auditorUA() external view returns (bytes32) { return PqzLib.$().auditorUA; }
     function auditorMode() external view returns (ZetherTypes.AuditorMode) { return PqzLib.$().auditorMode; }
     function disclosureMode() external view returns (ZetherTypes.DisclosureMode) { return PqzLib.$().disclosureMode; }
@@ -62,15 +63,19 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
         return r;
     }
 
-    /// @notice The transfer statement the token builds for `payload` (direct: `binding` 0), after every cheap check.
+    /// @notice The op 7 statement the token builds for a multi-recipient `payload` (direct: `binding` 0), after every
+    ///         cheap check; a payload with the memo is read as commit-reveal.
     function transferStatement(bytes calldata payload, bytes calldata acc, bytes[] calldata inl, bytes32 binding)
         external view returns (bytes memory)
     {
-        PqzLib.Env memory e = _envOf(binding);
-        bool memo = payload.length == 208 + 16_768 + 57 || payload.length == 208 + 16_640 + 57;
-        e.mode = memo ? ZetherTypes.TransferMode.HASH : _defaultMode();
-        (, bytes memory buf) = PqzLib.prepareTransfer(e, payload, acc, inl, 0);
-        return _stmt(buf);
+        return PqzLib.statementOf(7, _envOf(binding), payload, acc, inl);
+    }
+
+    /// @notice The op 1 statement of a single-recipient `payload` (`pqzTransferSingle*`).
+    function transferSingleStatement(bytes calldata payload, bytes calldata acc, bytes[] calldata inl, bytes32 binding)
+        external view returns (bytes memory)
+    {
+        return PqzLib.statementOf(1, _envOf(binding), payload, acc, inl);
     }
 
     /// @notice The burn (`amount > 0`) or refresh (`amount = 0`, `recipient = 0`) statement.
@@ -80,28 +85,27 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
     ) external view returns (bytes memory) {
         PqzLib.Env memory e = _envOf(binding);
         (e.amount, e.recipient) = (amount, recipient);
-        (, bytes memory buf) = PqzLib.prepareBurn(e, payload, acc, inl, 0);
-        return _stmt(buf);
+        return PqzLib.statementOf(2, e, payload, acc, inl);
     }
 
-    /// @notice The disclosure statement (§7.9) of `entryRef` for `kind` (0 `SENDER_S`, 1 `RECEIVER_X`, 2 `AUDITOR`).
-    function disclosureStatement(bytes32 entryRef, uint256 amount, uint8 kind, bytes calldata bundle)
+    /// @notice The disclosure statement (§7.9) of leg `leg` of `entryRef` for `kind` (0 `SENDER_S`, 1 `RECEIVER_X`,
+    ///         2 `AUDITOR`); a single-recipient entry is leg 0.
+    function disclosureStatement(bytes32 entryRef, uint256 leg, uint256 amount, uint8 kind, bytes calldata bundle)
         external view returns (bytes memory)
     {
-        return _stmt(PqzLib.disclosureBuffer(entryRef, amount, kind, bundle, _envOf(0), 0));
+        return PqzLib.disclosureStatementOf(entryRef, leg, amount, kind, bundle, _envOf(0));
     }
 
-    /// @notice CTR-PQZ-14: the precompile's verdict on `opening = abi.encode(bytes bundle, bytes proof)` (canonical
-    ///         only) for `amount` in `entryRef`. A view; no attestation. Any malformed input is false.
-    function verifyTransferAmount(bytes32 entryRef, uint256 amount, uint8 kind, bytes calldata opening)
+    /// @notice CTR-PQZ-14 / -26: the precompile's verdict on `opening = abi.encode(bytes bundle, bytes proof)`
+    ///         (canonical only) for `amount` in leg `leg` of `entryRef`. A view; no attestation. Any malformed input is
+    ///         false.
+    function verifyTransferAmount(bytes32 entryRef, uint256 leg, uint256 amount, uint8 kind, bytes calldata opening)
         external view returns (bool)
     {
         (bytes memory bundle, bytes memory proof) = abi.decode(opening, (bytes, bytes));
         if (keccak256(abi.encode(bundle, proof)) != keccak256(opening) || proof.length == 0) return false;
-        try this.disclosureStatement(entryRef, amount, kind, bundle) {} catch { return false; }
-        bytes memory buf = PqzLib.disclosureBuffer(entryRef, amount, kind, bundle, _envOf(0), proof.length);
-        assembly ("memory-safe") { mcopy(add(add(buf, 37), 33184), add(proof, 32), mload(proof)) }
-        return PqzLib.verdict(PqzLib.$().pqz, buf);
+        try this.disclosureStatement(entryRef, leg, amount, kind, bundle) {} catch { return false; }
+        return PqzLib.verifyAmountOf(entryRef, leg, amount, kind, bundle, proof, _envOf(0));
     }
 
     /// @notice CTR-PQZ-21: every envelope field except `data`, plus `chainUid` (address path).
@@ -122,23 +126,43 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
         _burn(_msgSender(), amount * PqzLib.$().shieldScale);
     }
 
-    // ------------------------------------------------------------------ transfer (§7.4, CTR-PQZ-23)
+    // ------------------------------------------------------------------ transfer (§7.4, CTR-PQZ-23, CTR-PQZ-25)
 
-    /// @notice The token's default form: the bundle stored (BUNDLE token) or commit-reveal (COMPACT token).
+    /// @notice The multi-recipient transfer, op 7 `R_TXM` (`M` legs, decoys included; CTR-PQZ-26), in the token's
+    ///         default form: the bundle stored (BUNDLE token) or commit-reveal (COMPACT token).
     function pqzTransfer(bytes calldata payload, bytes calldata acc, bytes[] calldata inl, bytes calldata proof,
         bytes calldata authSig) external nonReentrant returns (bytes32)
     {
-        return PqzLib.transfer(_envTransfer(_defaultMode()), payload, acc, inl, proof, authSig);
+        return PqzLib.transferMulti(_envTransfer(_defaultMode()), payload, acc, inl, proof, authSig);
     }
 
     function pqzTransferCompact(bytes calldata payload, bytes calldata acc, bytes[] calldata inl, bytes calldata proof,
         bytes calldata authSig) external nonReentrant returns (bytes32)
     {
-        return PqzLib.transfer(_envTransfer(ZetherTypes.TransferMode.HASH), payload, acc, inl, proof, authSig);
+        return PqzLib.transferMulti(_envTransfer(ZetherTypes.TransferMode.HASH), payload, acc, inl, proof, authSig);
     }
 
     function pqzTransferNoBundle(bytes calldata payload, bytes calldata acc, bytes[] calldata inl, bytes calldata proof,
         bytes calldata authSig) external nonReentrant returns (bytes32)
+    {
+        return PqzLib.transferMulti(_envTransfer(ZetherTypes.TransferMode.NONE), payload, acc, inl, proof, authSig);
+    }
+
+    /// @notice The single-recipient transfer, op 1 `R_TX` / `R_TX0` (§7.4), in the token's default form.
+    function pqzTransferSingle(bytes calldata payload, bytes calldata acc, bytes[] calldata inl, bytes calldata proof,
+        bytes calldata authSig) external nonReentrant returns (bytes32)
+    {
+        return PqzLib.transfer(_envTransfer(_defaultMode()), payload, acc, inl, proof, authSig);
+    }
+
+    function pqzTransferSingleCompact(bytes calldata payload, bytes calldata acc, bytes[] calldata inl,
+        bytes calldata proof, bytes calldata authSig) external nonReentrant returns (bytes32)
+    {
+        return PqzLib.transfer(_envTransfer(ZetherTypes.TransferMode.HASH), payload, acc, inl, proof, authSig);
+    }
+
+    function pqzTransferSingleNoBundle(bytes calldata payload, bytes calldata acc, bytes[] calldata inl,
+        bytes calldata proof, bytes calldata authSig) external nonReentrant returns (bytes32)
     {
         return PqzLib.transfer(_envTransfer(ZetherTypes.TransferMode.NONE), payload, acc, inl, proof, authSig);
     }
@@ -187,12 +211,6 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
         (e.amount, e.recipient) = (amount, recipient);
     }
 
-    /// @dev The statement bytes of a precompile buffer (the 5-byte prefix and the empty proof dropped).
-    function _stmt(bytes memory buf) internal pure returns (bytes memory st) {
-        st = new bytes(buf.length - 5);
-        assembly ("memory-safe") { mcopy(add(st, 32), add(buf, 37), mload(st)) }
-    }
-
     function _envelopeBinding(MetaTxLib.MetaTransaction memory m) internal view virtual override returns (bytes32) {
         (address r, address f) = MetaTxLib.canon(m);
         return keccak256(abi.encode(PqzLib.TAG_ENVELOPE, block.chainid, CHAIN_UID, address(this), m.from, m.batch,
@@ -212,6 +230,8 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
     function _isPqzOp(bytes4 sel) internal pure virtual returns (bool) {
         return sel == this.pqzShield.selector || sel == this.pqzTransfer.selector
             || sel == this.pqzTransferCompact.selector || sel == this.pqzTransferNoBundle.selector
+            || sel == this.pqzTransferSingle.selector || sel == this.pqzTransferSingleCompact.selector
+            || sel == this.pqzTransferSingleNoBundle.selector
             || sel == this.pqzUnshield.selector || sel == this.pqzRollOver.selector;
     }
 
