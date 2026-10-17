@@ -19,8 +19,8 @@ use alloc::vec::Vec;
 #[allow(unsafe_code)]
 pub mod c_oracle;
 
-// the arithmetic, sampling and codec layers and the generated params serve the proof layers of later tasks; until
-// those land, part is unused
+// the arithmetic, sampling and codec layers and the generated params serve the prover and the specialised verifier
+// of later tasks too; until those land, part is unused
 #[allow(dead_code)]
 mod arith;
 #[allow(dead_code)]
@@ -30,6 +30,8 @@ mod rand;
 mod keys;
 #[allow(dead_code)]
 mod params; // generated (plan D8): pqzl/params/to_rust.py
+mod proof;
+mod rel;
 #[doc(hidden)]
 pub mod testkit;
 
@@ -72,9 +74,15 @@ pub enum Error {
     Memory,
 }
 
-/// What the C core keeps in static storage (relation keys, specialised-verifier tables), built lazily per op.
+/// What the C core keeps in static storage (the matrix A, each relation's ABDLOP keys, specialised-verifier tables),
+/// built lazily at first use.
 #[derive(Default)]
-pub struct Ctx {}
+pub struct Ctx {
+    /// A (K x K, NTT form), expanded at the first relation call
+    a: Option<arith::polymat::PolyMat>,
+    /// A1, A2', B' (NTT form) per relation (`rel::RELS` order)
+    keys: [Option<[arith::polymat::PolyMat; 3]>; rel::NREL],
+}
 
 impl Ctx {
     pub fn new() -> Ctx {
@@ -89,8 +97,7 @@ impl Ctx {
 
     /// `pqz_verify` (the generic verifier): true = 1 (valid), false = anything else.
     pub fn verify(&mut self, op: u8, stmt: &[u8], proof: &[u8]) -> bool {
-        let _ = (op, stmt, proof);
-        false
+        self.verify_rel(op, stmt, proof) == Ok(true)
     }
 
     /// `pqz_verify_fast` (the specialised verifier): accepts exactly the proofs `verify` accepts.

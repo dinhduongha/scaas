@@ -38,7 +38,7 @@ fn cval(p: &mut Poly, j: usize) -> i64 {
 
 /// `expand_A`: A[i][j] from SHAKE128("SCAAS-PQZ-A-V2" || u8(i) || u8(j)), 8-byte BE words, low 42 bits, accept if < q
 /// (centred), then NTT form
-fn expand_a() -> Result<PolyMat, Error> {
+pub(crate) fn expand_a() -> Result<PolyMat, Error> {
     let mut a = PolyMat::new(K, K)?;
     for i in 0..K {
         for j in 0..K {
@@ -61,25 +61,30 @@ fn expand_a() -> Result<PolyMat, Error> {
 }
 
 /// `rd_be8`
-fn be8(p: &[u8]) -> u64 {
+pub(crate) fn be8(p: &[u8]) -> u64 {
     p[..8].iter().fold(0, |v, &b| (v << 8) | b as u64)
 }
 
-/// `rd_poly`: n be8 coefficients into p, centred, the rest zero. A value >= q is read as C reads it (the callers
-/// that care check `canonical` first); `(int64_t)v - q` wraps as the compiled C does.
-fn rd_poly(p: &mut Poly, inp: &[u8], n: usize) {
+/// `rd_poly`: n be8 coefficients into p, centred, the rest zero; false if a value is >= q (C's `ok`). Such a value
+/// is read as C reads it; `(int64_t)v - q` wraps as the compiled C does.
+pub(crate) fn rd_poly(p: &mut Poly, inp: &[u8], n: usize) -> bool {
     p.set_zero();
+    let mut ok = true;
     for k in 0..n {
         let v = be8(&inp[8 * k..]);
+        ok &= v < Q;
         set_c(p, k, if v > (Q - 1) / 2 { (v as i64).wrapping_sub(Q as i64) } else { v as i64 });
     }
+    ok
 }
 
-/// `rd_polyvec`: K polys of D coefficients
-fn rd_polyvec(v: &mut PolyVec, inp: &[u8]) {
+/// `rd_polyvec`: K polys of D coefficients; false if a value is >= q
+pub(crate) fn rd_polyvec(v: &mut PolyVec, inp: &[u8]) -> bool {
+    let mut ok = true;
     for (i, p) in v.iter_mut().enumerate() {
-        rd_poly(p, &inp[512 * i..], D);
+        ok &= rd_poly(p, &inp[512 * i..], D);
     }
+    ok
 }
 
 /// `wr_poly`: p to [0, q) (`poly_redp`), its first n coefficients as be8

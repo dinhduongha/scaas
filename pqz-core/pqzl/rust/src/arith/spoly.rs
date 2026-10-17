@@ -54,6 +54,16 @@ impl Sparse {
         self.sorted
     }
 
+    /// `r->sorted = s` (lnp-tbox.c sets it after appending in key order, or clears it before a re-sort)
+    pub(crate) fn set_sorted(&mut self, s: bool) {
+        self.sorted = s;
+    }
+
+    /// `r->nelems_max = n` (lnp-tbox.c resizes its accumulators in place)
+    pub(crate) fn set_nelems_max(&mut self, n: usize) {
+        self.nelems_max = n;
+    }
+
     /// entry i's poly (`spolyvec_get_elem` / `spolymat_get_elem`)
     pub(crate) fn get_elem(&mut self, i: usize) -> &mut Poly {
         &mut self.slots[i].0

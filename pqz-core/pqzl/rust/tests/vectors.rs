@@ -1,24 +1,17 @@
 //! The frozen vectors (smartcontracts/vectors/pqz, pq-zero-knowledge.md §14) against the Rust port. Keys part:
 //! keygen.json, enc.json (rows, the trivial ciphertext and the Add / Sub ops), matrix.json, the R_TXM group seeds,
 //! and Enc's input errors. Codec part (feature `test-hooks`): every PQZL proof decodes and re-encodes to itself.
+//! Verify part: every PQZL proof verifies; negative.json's PQZL rows and the cheating fixtures are rejected.
 use pqzl::{dec, enc_group_seed, enc_seed, keygen, keypair_from_secret, Error, CT_BYTES, POLYVEC_BYTES};
 use serde_json::Value;
 use sha3::digest::{ExtendableOutput, Update, XofReader};
 use sha3::{Digest, Keccak256, Shake256};
-use std::path::PathBuf;
+
+mod common;
+use common::{hex, json};
 
 const Q: u64 = 4_398_046_510_889;
 const DELTA: u64 = (1 << 26) - 1;
-
-fn json(file: &str) -> Value {
-    let p = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../smartcontracts/vectors/pqz").join(file);
-    serde_json::from_str(&std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display()))).unwrap()
-}
-
-fn hex(s: &Value) -> Vec<u8> {
-    let s = s.as_str().expect("hex string").as_bytes();
-    s.chunks(2).map(|p| u8::from_str_radix(std::str::from_utf8(p).unwrap(), 16).expect("hex")).collect()
-}
 
 fn hex32(s: &Value) -> [u8; 32] {
     hex(s).try_into().expect("32 bytes")
@@ -203,21 +196,6 @@ fn enc_dec_input_errors() {
     assert_eq!(dec(&k.s, &ct).err(), Some(Error::Input));
 }
 
-/// the relation code of a PQZL proof's form (pqz_int.h: an op, PQZ_REL_TX0, PQZ_REL_TXM (log2 M, auditorOn) from the
-/// case name M<m>-<on|off>[-...])
-#[cfg(feature = "test-hooks")]
-fn rel_code(form: &str, op: u64, case: Option<&str>) -> u8 {
-    match form {
-        "TRANSFER0" => 0x81,
-        "TRANSFER-MULTI" => {
-            let mut it = case.expect("R_TXM case")[1..].split('-');
-            let m: u8 = it.next().unwrap().parse().unwrap();
-            0x70 | ((it.next() == Some("on")) as u8) << 3 | m.trailing_zeros() as u8
-        }
-        _ => op as u8,
-    }
-}
-
 /// every PQZL proof of proof_pqzl.json (19 rows) and fee0.json (4 rows) decodes as its relation and re-encodes to the
 /// same bytes (`test_mutate` with a kind past 13: decode, the verifier's reductions, encode)
 #[cfg(feature = "test-hooks")]
@@ -228,10 +206,51 @@ fn codec_roundtrip() {
     let fee0 = json("fee0.json");
     let rows = pqzl["rows"].as_array().unwrap().iter().map(|r| (r, &r["proof"]));
     for (r, proof) in rows.chain(fee0["rows"].as_array().unwrap().iter().map(|r| (r, &r["pqzl"]["proof"]))) {
-        let code = rel_code(r["form"].as_str().unwrap(), r["op"].as_u64().unwrap(), r["statement"]["case"].as_str());
+        let code = common::rel_code(r["form"].as_str().unwrap(), r["statement"]["case"].as_str());
         let p = hex(proof);
         assert!(pqzl::test_mutate(code, &p, 14, 0, 0) == Ok(Some(p.clone())), "{} {}", r["form"], r["statement"]["case"]);
         n += 1;
     }
     assert_eq!(n, 23);
+}
+
+
+/// every PQZL proof of proof_pqzl.json (six forms, REFRESH, AUDITOR, the eleven op 7 rows) and fee0.json verifies
+#[test]
+fn all_pqzl_proofs_verify() {
+    let rows = common::pqzl_rows();
+    assert_eq!(rows.len(), 23);
+    let mut ctx = pqzl::Ctx::new();
+    for r in &rows {
+        assert!(ctx.verify(r.op, &r.stmt, &r.proof), "{}", r.name);
+    }
+}
+
+/// every PQZL row of negative.json (Review Focus 2: length / op / M / auditorOn mismatches, non-canonical words,
+/// edited proofs) is rejected by `verify` on the decoder's split (an input whose length field does not fit has no
+/// statement to verify)
+#[test]
+fn negative_rows_reject() {
+    let mut ctx = pqzl::Ctx::new();
+    let rows = common::negative_inputs();
+    assert_eq!(rows.len(), 354);
+    let mut n = 0;
+    for (name, b) in &rows {
+        if let Some((op, stmt, proof)) = common::split(b) {
+            assert!(!ctx.verify(op, stmt, proof), "{name}");
+            n += 1;
+        }
+    }
+    eprintln!("negative_rows_reject: {n} of {} rows split into (op, stmt, proof), all rejected", rows.len());
+}
+
+/// the cheating provers' proofs of check_tbox_fixes.sh (P6-L2: blocks over their own l2 bound within the pooled
+/// budget, R_REG and R_TX, and the same prover's proof of an honest witness; P6-Z21: ||z21|| far above Bsq; z1 / w
+/// norms over their bounds) are rejected, the norm prover's honest control accepted
+#[test]
+fn cheating_proofs_reject() {
+    let mut ctx = pqzl::Ctx::new();
+    for (case, op, stmt, proof, honest) in common::cheating() {
+        assert_eq!(ctx.verify(op, &stmt, &proof), honest, "{case}");
+    }
 }

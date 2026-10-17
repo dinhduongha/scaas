@@ -55,6 +55,10 @@ required-features = ["c-oracle"]
 name = "oracle_codec"
 required-features = ["c-oracle", "test-hooks"]
 
+[[test]]
+name = "oracle_verify"
+required-features = ["c-oracle", "test-hooks"]
+
 [profile.release]
 debug = 1
 panic = "unwind"

@@ -163,31 +163,6 @@ impl ProofParts {
     }
 }
 
-/// relation code (an op, 0x81 = R_TX0, or an R_TXM shape code 0x70 | auditorOn << 3 | log2 M) -> its parameters
-/// (`pqz_rel.c`'s relation table, `rel_by_code`)
-pub(crate) fn tbox_by_code(code: u8) -> Option<&'static Tbox> {
-    use crate::params::*;
-    Some(match code {
-        3 => &reg::pqz_reg,
-        1 | 0x78 => &tx::pqz_tx,
-        0x81 | 0x70 => &tx0::pqz_tx0,
-        2 => &burn::pqz_burn,
-        4 => &ds::pqz_ds,
-        5 => &dr::pqz_dr,
-        0x79 => &txm2::pqz_txm2,
-        0x7a => &txm4::pqz_txm4,
-        0x7b => &txm8::pqz_txm8,
-        0x71 => &txm20::pqz_txm20,
-        0x72 => &txm40::pqz_txm40,
-        0x73 => &txm80::pqz_txm80,
-        #[cfg(feature = "oversize")]
-        0x7c => &txm16::pqz_txm16,
-        #[cfg(feature = "oversize")]
-        0x74 => &txm160::pqz_txm160,
-        _ => return None,
-    })
-}
-
 /// LSB-first bit reader: coder.c's bounded decoder (a read at or past the end sets the sticky error, which fails the
 /// decoding, so the first such read can fail it here)
 struct Rd<'a> {
@@ -471,7 +446,7 @@ pub(crate) fn encode_proof(f: &ProofParts, cap: usize) -> Result<Vec<u8>, Error>
 #[cfg(feature = "test-hooks")]
 pub(crate) fn test_mutate(code: u8, proof: &[u8], kind: u32, r1: u64, r2: u64) -> Result<Option<Vec<u8>>, Error> {
     use crate::arith::ntt::Q;
-    let Some(p) = tbox_by_code(code) else { return Ok(None) };
+    let Some(p) = crate::rel::tbox_by_code(code) else { return Ok(None) };
     let mut f = match decode_proof(p, proof) {
         Err(Error::Input) => return Ok(None),
         r => r?,

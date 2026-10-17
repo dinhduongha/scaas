@@ -655,27 +655,9 @@ pub fn rand_autostable(seed: &[u8; 32], dom: u32, bnd: i64, log2: u32) -> Result
 
 /// every relation's parameters in `pqz_shim_params`'s order (tests/oracle_shim.c's `P`)
 #[cfg(feature = "c-oracle")]
-fn rels() -> &'static [(&'static str, &'static crate::params::Tbox)] {
-    use crate::params::*;
-    static RELS: &[(&str, &Tbox)] = &[
-        ("reg", &reg::pqz_reg),
-        ("tx", &tx::pqz_tx),
-        ("tx0", &tx0::pqz_tx0),
-        ("burn", &burn::pqz_burn),
-        ("ds", &ds::pqz_ds),
-        ("dr", &dr::pqz_dr),
-        ("txm2", &txm2::pqz_txm2),
-        ("txm4", &txm4::pqz_txm4),
-        ("txm8", &txm8::pqz_txm8),
-        ("txm20", &txm20::pqz_txm20),
-        ("txm40", &txm40::pqz_txm40),
-        ("txm80", &txm80::pqz_txm80),
-        #[cfg(feature = "oversize")]
-        ("txm16", &txm16::pqz_txm16),
-        #[cfg(feature = "oversize")]
-        ("txm160", &txm160::pqz_txm160),
-    ];
-    RELS
+fn rels() -> alloc::vec::Vec<(&'static str, &'static crate::params::Tbox)> {
+    // the relation table without the R_TXM M = 1 entries, which reuse R_TX's / R_TX0's parameters
+    crate::rel::RELS.iter().filter(|r| r.op != crate::OP_TRANSFER_MULTI || r.legs > 1).map(|r| (r.name, r.p)).collect()
 }
 
 /// Every relation's parameters (src/params, generated from pqzl/params/pqz_*_params.h) as one word stream each, in
@@ -761,7 +743,8 @@ pub fn ghint(i: usize, inp: &[i64; 192]) -> Option<alloc::vec::Vec<u64>> {
 /// oversize shapes); `None` for an unknown code or an encoding over MAX_PROOF.
 #[cfg(feature = "c-oracle")]
 pub fn synthetic_proof(code: u8, seed: u64) -> Option<alloc::vec::Vec<u8>> {
-    use crate::coder::{encode_proof, tbox_by_code, ProofParts};
+    use crate::coder::{encode_proof, ProofParts};
+    use crate::rel::tbox_by_code;
     let p = tbox_by_code(code)?;
     let mut f = ProofParts::new(p).ok()?;
     let mut s = seed | 1;
@@ -787,4 +770,14 @@ pub fn synthetic_proof(code: u8, seed: u64) -> Option<alloc::vec::Vec<u8>> {
         fill(v, &mut |r| (r % (1 << (l + 2))) as i64 - (1 << (l + 1)));
     }
     encode_proof(&f, crate::MAX_PROOF).ok()
+}
+
+/// Where relation `code`'s challenge c sits in its proof encoding: (bit offset of coefficient 0, bits per
+/// coefficient, omega; the codec refuses a value >= 2 omega + 1). `None` for an unknown code.
+pub fn proof_c_field(code: u8) -> Option<(usize, u32, i64)> {
+    let p = crate::rel::tbox_by_code(code)?;
+    let (tb, qm) = (p.tbox, p.quad_eval.quad_many);
+    let log2q = tb.ring.log2q as usize;
+    let fixed = (tb.l + tb.lext + p.quad_eval.lambda / 2) as usize * log2q + tb.kmsis as usize * (log2q - qm.dcompress.d as usize);
+    Some((64 * fixed, qm.log2omega, qm.omega))
 }

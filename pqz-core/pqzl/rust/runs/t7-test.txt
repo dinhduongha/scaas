@@ -1,0 +1,168 @@
+$ cargo test -j2 --release --offline --features c-oracle,test-hooks -- --nocapture
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust/pqz-core/pqzl/rust)
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.82s
+     Running unittests src/lib.rs (target/release/deps/pqzl-c88fecd5aeb2394a)
+
+running 2 tests
+test arith::polymat::tests::views ... ok
+test arith::spoly::tests::errors_and_order ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/kat_dump.rs (target/release/deps/kat_dump-d4f8be918544443c)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/keys_kat.rs (target/release/deps/keys_kat-7f6510be5da27e22)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/oracle_arith.rs (target/release/deps/oracle_arith-8461c8c33fa9cb7b)
+
+running 4 tests
+test ntt_roundtrip_eq_c ... ok
+test basemul_eq_c ... ok
+test int_ops_eq_c ... ok
+test polyvec_ops_eq_c ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.66s
+
+     Running tests/oracle_codec.rs (target/release/deps/oracle_codec-c7b0d1cf5dc9153b)
+
+running 3 tests
+code 0x01: refused 0 of 64 bit flips, 12 of 13 foreign proofs
+code 0x81: refused 0 of 64 bit flips, 12 of 13 foreign proofs
+code 0x02: refused 0 of 64 bit flips, 13 of 13 foreign proofs
+code 0x03: refused 0 of 64 bit flips, 13 of 13 foreign proofs
+code 0x04: refused 0 of 64 bit flips, 13 of 13 foreign proofs
+code 0x05: refused 0 of 64 bit flips, 13 of 13 foreign proofs
+code 0x78: refused 0 of 64 bit flips, 12 of 13 foreign proofs
+code 0x79: refused 2 of 64 bit flips, 13 of 13 foreign proofs
+code 0x7a: refused 0 of 64 bit flips, 13 of 13 foreign proofs
+code 0x7b: refused 0 of 64 bit flips, 13 of 13 foreign proofs
+code 0x70: refused 0 of 64 bit flips, 12 of 13 foreign proofs
+code 0x71: refused 1 of 64 bit flips, 13 of 13 foreign proofs
+code 0x72: refused 1 of 64 bit flips, 13 of 13 foreign proofs
+code 0x73: refused 0 of 64 bit flips, 13 of 13 foreign proofs
+test malformed_eq_c ... ok
+code 0x01: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+test ghint_eq_c ... ok
+code 0x81: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x02: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x03: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x04: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x05: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x78: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+test test_mutate_eq_c has been running for over 60 seconds
+code 0x79: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x7a: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x7b: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x70: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x71: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x72: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x73: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+test test_mutate_eq_c ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 121.83s
+
+     Running tests/oracle_keys.rs (target/release/deps/oracle_keys-5d3ccf3cc65e7966)
+
+running 2 tests
+keygen_enc_dec_eq_c: 182 encryptions, 18 rejected inputs, all equal
+test keygen_enc_dec_eq_c ... ok
+test keypair_encrypt_decrypt_raw_eq_c ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.21s
+
+     Running tests/oracle_params.rs (target/release/deps/oracle_params-e0d5ae8576574d16)
+
+running 1 test
+test constants_eq_c ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/oracle_rand.rs (target/release/deps/oracle_rand-9cee45b233b3628e)
+
+running 6 tests
+test cbd_eq_vectors ... ok
+test aes_ctr_eq_c ... ok
+test grandom_eq_c ... ok
+test shake_eq_c ... ok
+test urandom_eq_c ... ok
+rejection_eq_c: 982 rejects, 830 accepts, 188 errors, all equal
+test rejection_eq_c ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.91s
+
+     Running tests/oracle_smoke.rs (target/release/deps/oracle_smoke-a5fedea96c92e5d0)
+
+running 2 tests
+test rust_verify_accepts ... ok
+test c_core_selftest_proofs_verify ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.30s
+
+     Running tests/oracle_verify.rs (target/release/deps/oracle_verify-2e7e12c532882dab)
+
+running 4 tests
+test cheating_eq_c ... ok
+test c_out_of_range_rejected ... ok
+test mutated_eq_c has been running for over 60 seconds
+test negative_eq_c has been running for over 60 seconds
+negative_eq_c: 351 rows, Rust = C = reject
+test negative_eq_c ... ok
+mutated_eq_c: 280 outputs, Rust = C (25 accepted by both)
+test mutated_eq_c ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 383.95s
+
+     Running tests/vectors.rs (target/release/deps/vectors-3f96dc2a682c32b8)
+
+running 9 tests
+test enc_group_seed_eq_shake ... ok
+test enc_dec_input_errors ... ok
+test keygen_json ... ok
+test codec_roundtrip ... ok
+test enc_json ... ok
+test matrix_json ... ok
+test cheating_proofs_reject ... ok
+test all_pqzl_proofs_verify ... ok
+negative_rows_reject: 351 of 354 rows split into (op, stmt, proof), all rejected
+test negative_rows_reject ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 36.79s
+
+   Doc-tests pqzl
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+[rc=0]
+# arithmetic KAT: kat_dump vs the upstream LaZer golden file
+$ cargo build -j2 --release --offline --bin kat_dump
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.03s
+[rc=0]
+$ python3 -I ../kat/check.py ../kat/lazer-3330e48.json target/kat-rust.json
+19/19 cases equal; golden: lazer-3330e48 (lazer 3330e48 static v4: -march=x86-64-v4 -mavx512ifma -mavx512vbmi2 -maes -mpclmul, avx512f=1); checked: pqzl-rust
+[rc=0]
+# keys KAT: keys_kat (pqzl/test/pqz_keys_kat.c's JSON lines) vs the independent Python check
+$ cargo build -j2 --release --offline --bin keys_kat
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.02s
+[rc=0]
+$ sh -c ./target/release/keys_kat 1000 > target/keys-rust.jsonl
+[rc=0]
+$ python3 -I ../../../smartcontracts/vectors/pqz/pqz_kat.py --c-keys target/keys-rust.jsonl
+     C's own claim (not recomputed here): {"lowered": {"keygen_resampled": 4, "enc_resampled": 3, "ctr64_errors": 2}}
+     C's own claim (not recomputed here): {"roundtrip": 1000, "max_abs_noise": 543, "bound": 11872, "max_ctr": 0, "noncanonical_rejected": 3, "fails": 0}
+     C keys KAT target/keys-rust.jsonl: {'shake256': 10, 'keygen': 20, 'enc': 20, 'dec': 40, 'keygen_lowered': 6, 'enc_lowered': 6, 'keygen_resampled': 4, 'enc_resampled': 3, 'ctr64_errors': 2, 'enc_group_seed': 16}
+pqz_kat: ok
+[rc=0]
+# params (plan D8): src/params = pqzl/params/to_rust.py's text from the committed headers
+$ python3 -I ../params/to_rust.py --check
+to_rust.py --check: 15 files, equal
+[rc=0]

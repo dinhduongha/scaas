@@ -1,4 +1,4 @@
-//! Smoke test of the C oracle (feature `c-oracle`) and the Rust stubs, on the REGISTER rows of the frozen vectors
+//! Smoke test of the C oracle (feature `c-oracle`) and the Rust verifier, on the REGISTER rows of the frozen vectors
 //! (smartcontracts/vectors/pqz/proof_pqzl.json, statements from the file each row names).
 use pqzl::c_oracle::c_verify;
 use pqzl::{Ctx, OP_REGISTER};
@@ -50,9 +50,10 @@ fn c_core_selftest_proofs_verify() {
     }
 }
 
+/// the Rust verifier accepts them too (was the Task 1 stub's rejection)
 #[test]
-fn rust_stub_rejects() {
+fn rust_verify_accepts() {
     for (stmt, proof) in register_rows() {
-        assert!(!Ctx::new().verify(OP_REGISTER, &stmt, &proof));
+        assert!(Ctx::new().verify(OP_REGISTER, &stmt, &proof));
     }
 }
