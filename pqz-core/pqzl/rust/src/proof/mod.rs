@@ -1,9 +1,9 @@
-//! The LaZer proof layers the relations use: `abdlop.c` (keys, commitment hash), `lnp-quad.c` / `lnp-quad-many.c`
-//! (the quadratic-equation proof) and `lnp-tbox.c` (the toolbox: evaluation equations and the norm proofs, with the
-//! P6-SZ / P6-L2 Schwartz–Zippel fixes and the P6-Z21 norm check). Verifier side (Task 7).
+//! The LaZer proof layers the relations use: `abdlop.c` (keys, commitment, commitment hash), `lnp-quad.c` /
+//! `lnp-quad-many.c` (the quadratic-equation proof) and `lnp-tbox.c` (the toolbox: evaluation equations and the norm
+//! proofs, with the P6-SZ / P6-L2 Schwartz–Zippel fixes and the P6-Z21 norm check), prover and verifier.
 //!
-//! Only the forms the C core calls are ported: `pqz_rel.c` passes `lnp_tbox_verify` no quadratic parts in its own
-//! equations (every R2 is NULL), no message part (`tbox->l == 0`, so `Em`, `Pm`, `Dm` are NULL) and no constant
+//! Only the forms the C core calls are ported: `pqz_rel.c` passes `lnp_tbox_prove` / `_verify` no quadratic parts in
+//! its own equations (every R2 is NULL), no message part (`tbox->l == 0`, so `Em`, `Pm`, `Dm` are NULL) and no constant
 //! vectors (`v`, `f`, `u` NULL); the branches for those are left out.
 pub(crate) mod abdlop;
 pub(crate) mod quad;

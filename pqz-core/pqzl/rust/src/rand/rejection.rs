@@ -8,6 +8,9 @@ use super::rng::Rng;
 use crate::arith::int::{Int, IntVec};
 use crate::Error;
 
+/// `PQZ_REJ_MAX` (pqz_rt.h, CTR-PQZ-10): rounds of a rejection loop; the cap is `Error::Reject`
+pub(crate) const REJ_MAX: u32 = 1000;
+
 /// `_int2i128`: |a| < 2^126, at most 2 limbs used
 fn int2i128(a: &Int) -> Result<i128, Error> {
     let mut m = a.l[0] as u128;

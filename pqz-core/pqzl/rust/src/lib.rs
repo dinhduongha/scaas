@@ -23,6 +23,8 @@ pub mod c_oracle;
 // of later tasks too; until those land, part is unused
 #[allow(dead_code)]
 mod arith;
+#[doc(hidden)]
+pub mod bench; // pqzl/test/pqz_bench.c's setup and steps (src/bin/bench.rs, wasm/): test entry points, not API
 #[allow(dead_code)]
 mod coder;
 #[allow(dead_code)]
@@ -91,8 +93,7 @@ impl Ctx {
 
     /// `pqz_prove`: the proof for `(op, stmt, wit)` with the hedged masks from `rnd32` (CTR-PQZ-19).
     pub fn prove(&mut self, op: u8, stmt: &[u8], wit: &[u8], rnd32: &[u8; 32]) -> Result<Vec<u8>, Error> {
-        let _ = (op, stmt, wit, rnd32);
-        Err(Error::Internal)
+        self.prove_rel(op, stmt, wit, rnd32)
     }
 
     /// `pqz_verify` (the generic verifier): true = 1 (valid), false = anything else.

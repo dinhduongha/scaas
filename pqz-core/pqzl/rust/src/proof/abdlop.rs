@@ -1,10 +1,10 @@
-//! `abdlop.c`, the parts the verifier uses: `abdlop_keygen` (the public key from a seed) and `abdlop_hashcomm` (the
-//! commitment hashed into the transcript, via `abdlop_enccomm`). The opening proof `abdlop_verify` has no caller in
-//! the core (the toolbox checks the opening inside `lnp_quad_verify`).
+//! `abdlop.c`, the parts the core uses: `abdlop_keygen` (the public key from a seed), `abdlop_commit`, and
+//! `abdlop_hashcomm` (the commitment hashed into the transcript, via `abdlop_enccomm`). The opening proofs
+//! `abdlop_prove` / `abdlop_verify` have no caller in the core (the toolbox proves the opening in `lnp_quad_*`).
 use super::{hash2, Coder};
 use crate::arith::int::Int;
 use crate::arith::polymat::PolyMat;
-use crate::arith::polyvec::PolyVec;
+use crate::arith::polyvec::{self, PolyVec};
 use crate::params::Abdlop;
 use crate::rand::urandom::polymat_urandom;
 use crate::Error;
@@ -42,5 +42,29 @@ pub(crate) fn hashcomm(hash: &mut [u8; 32], t_a1: &mut PolyVec, t_b: &mut PolyVe
         c.urandom(&mut tb_, &p.ring.q, log2q)?;
     }
     *hash = hash2(hash, &c.end()?);
+    Ok(())
+}
+
+/// `abdlop_commit` (m1 > 0, l = 0: every relation's form): tA2 = A1 s1 + A2' s21 + s22, then tA1 = power2round(tA2),
+/// tA2 -= tA1 2^D, both `mod`; tB_ is empty
+pub(crate) fn commit(
+    t_a1: &mut PolyVec,
+    t_a2: &mut PolyVec,
+    s1: &mut PolyVec,
+    s2: &mut PolyVec,
+    [a1, a2p, _]: &mut [PolyMat; 3],
+    p: &Abdlop,
+) -> Result<(), Error> {
+    let (km, m1, m2r) = (p.kmsis as usize, p.m1 as usize, (p.m2 - p.kmsis) as usize);
+    if p.l > 0 || m1 == 0 {
+        return Err(Error::Internal); // not a form the core passes
+    }
+    polyvec::set(&mut **t_a2, &s2.sub(m2r, km, 1));
+    polyvec::addmul(&mut **t_a2, a1, &mut **s1, false);
+    polyvec::addmul(&mut **t_a2, a2p, &mut s2.sub(0, m2r, 1), false);
+    polyvec::power2round(&mut **t_a1, &mut **t_a2, p.dcompress);
+    polyvec::sublshift(&mut **t_a2, &mut **t_a1, p.dcompress.d);
+    polyvec::mod_self(&mut **t_a1);
+    polyvec::mod_self(&mut **t_a2);
     Ok(())
 }

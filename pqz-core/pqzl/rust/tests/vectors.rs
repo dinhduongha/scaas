@@ -214,6 +214,49 @@ fn codec_roundtrip() {
     assert_eq!(n, 23);
 }
 
+/// every PQZL proof of proof_pqzl.json and fee0.json, re-proved from the row's witness and rnd32, is the same bytes
+/// (`PQZL_REPROVE`: only the rows whose name contains it)
+#[test]
+fn reprove_byte_equal() {
+    let rows = common::pqzl_rows();
+    assert_eq!(rows.len(), 23);
+    let only = std::env::var("PQZL_REPROVE").unwrap_or_default();
+    let mut ctx = pqzl::Ctx::new();
+    for r in rows.iter().filter(|r| r.name.contains(&only)) {
+        let p = ctx.prove(r.op, &r.stmt, &r.wit, &r.rnd32).unwrap_or_else(|e| panic!("{}: {e:?}", r.name));
+        assert!(p == r.proof, "{}: {} bytes, want {}", r.name, p.len(), r.proof.len());
+    }
+}
+
+/// `prove` refuses (`Error::Input`) a statement with one non-canonical coefficient (q) or one non-canonical header
+/// word (a high byte set) for each statement parser, at places the witness parsers do not read: were the statement
+/// parser to accept, the prover would return a proof or `Error::Internal` (the unchanged rows prove:
+/// `reprove_byte_equal`)
+#[test]
+fn prove_refuses_noncanonical_statement() {
+    let rows = common::pqzl_rows();
+    let mut ctx = pqzl::Ctx::new();
+    // (row, a coefficient of the first key, a header word): prefix 64, header 640, disclosure amount 224 / key 288
+    let cases = [
+        ("REGISTER", 96, None),
+        ("TRANSFER", 640, Some(256)),
+        ("BURN", 640, Some(288)),
+        ("DISCLOSE-SENDER", 288, Some(224)),
+        ("DISCLOSE-RECEIVER", 288, Some(224)),
+        ("M2-on", 640, Some(320)),
+    ];
+    for (name, coef, word) in cases {
+        let r = rows.iter().find(|r| r.name == name).unwrap();
+        let mut st = r.stmt.clone();
+        st[coef..coef + 8].copy_from_slice(&Q.to_be_bytes());
+        assert_eq!(ctx.prove(r.op, &st, &r.wit, &r.rnd32), Err(Error::Input), "{name} coefficient");
+        if let Some(w) = word {
+            let mut st = r.stmt.clone();
+            st[w] = 1;
+            assert_eq!(ctx.prove(r.op, &st, &r.wit, &r.rnd32), Err(Error::Input), "{name} word");
+        }
+    }
+}
 
 /// every PQZL proof of proof_pqzl.json (six forms, REFRESH, AUDITOR, the eleven op 7 rows) and fee0.json verifies
 #[test]

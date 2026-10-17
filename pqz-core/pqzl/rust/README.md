@@ -5,10 +5,9 @@ SCaaS PQZ (pq-zero-knowledge.md §4, §5, §8). Goal: byte-for-byte equal to the
 `(op, stmt, wit, rnd32)`, same verdicts on every input, same keys / Enc / Dec, native and wasm32 — so other chains
 and applications can use the proof system without the C build. Plan: `docs/superpowers/plans/2026-10-17-pqzl-rust-port.md`.
 
-Status: **port in progress** (Tasks 1-7 of 12: crate skeleton, API, C oracle; the arithmetic layer; hashing,
+Status: **port in progress** (Tasks 1-8 of 12: crate skeleton, API, C oracle; the arithmetic layer; hashing,
 rng and samplers; keys, Enc, Dec; the proof codec and `test_mutate`; the generated parameters; the generic verifier
-`Ctx::verify`). Every API function that is not ported yet (`prove`, `verify_fast`) returns `Err(Error::Internal)` /
-`false`.
+`Ctx::verify`; the prover `Ctx::prove`). The API function not ported yet (`verify_fast`) returns `false`.
 
 ## Layout
 
@@ -21,10 +20,15 @@ Gaussian samplers, the rejection tests on `pqz_fixexp.h`'s integer exp), `src/co
 do not edit; `txm16` / `txm160` only with feature `oversize`),
 `src/keys.rs` (`pqz_keys.c` and the ring work of `pqz_rel.c` it calls: A, `pqz_keypair_from_secret`, `pqz_encrypt`,
 `pqz_decrypt_raw`; A is expanded per call, as there is no `pqz_init`), `src/proof/` (the LaZer proof layers the
-relations use, verifier side: `abdlop.c`'s keys and commitment hash, `lnp-quad.c` / `lnp-quad-many.c`, `lnp-tbox.c`
-with the P6-SZ / P6-L2 fixes and the P6-Z21 norm check; only the forms `pqz_rel.c` passes), `src/rel.rs`
-(`pqz_rel.c`: the one relation table, statement parsing, the relation builders, `pqz_verify`'s dispatch; A and each
-relation's ABDLOP keys are cached in `Ctx` at first use). `src/testkit.rs` holds the test
+relations use, prover and verifier: `abdlop.c`'s keys, commitment and commitment hash, `lnp-quad.c` /
+`lnp-quad-many.c`, `lnp-tbox.c` with the P6-SZ / P6-L2 fixes and the P6-Z21 norm check; only the forms `pqz_rel.c`
+passes), `src/rel.rs` (`pqz_rel.c`: the one relation table, statement parsing, the relation builders, the witness
+parsers, the hedged prover seeds of CTR-PQZ-19, `pqz_prove`'s and `pqz_verify`'s dispatch; A and each relation's
+ABDLOP keys are cached in `Ctx` at first use). `src/bench.rs` (`#[doc(hidden)]`, not API) holds
+`pqzl/test/pqz_bench.c`'s statements, witnesses and steps: `src/bin/bench.rs` times them natively (`bench [n_prove]
+[n_verify] [rel]`, the C bench's JSON lines with `proofs_fnv`), `wasm/` (a cdylib, raw exports) exports them to
+`wasm/run_wasm.mjs` (`node wasm/run_wasm.mjs [n_prove] [n_verify] [rel]` after `cargo build --release --target
+wasm32-unknown-unknown` in `wasm/`). `src/testkit.rs` holds the test
 entry points (`#[doc(hidden)]`, not API): the arithmetic KAT of `pqzl/kat/lazer_dump.c`, which `src/bin/kat_dump.rs`
 prints, KeyGen / Enc with lowered norm thresholds for `src/bin/keys_kat.rs` (`pqzl/test/pqz_keys_kat.c`'s JSON
 lines), and the Rust halves of the oracle tests (`tests/oracle_arith.rs`, `tests/oracle_rand.rs`; the CBD vectors
@@ -58,14 +62,18 @@ scripts/capped pqz-core/pqzl/rust/run.sh <label>    # from the repo root; logs i
 ```
 
 Tests (release, `c-oracle,test-hooks`; `tests/vectors.rs` checks the frozen keygen / enc / matrix vectors,
-re-encodes every PQZL proof to itself, verifies every PQZL proof, rejects every PQZL row of negative.json and the
+re-encodes every PQZL proof to itself, re-proves every PQZL proof from its witness and rnd32 to the same bytes,
+refuses non-canonical statements in `prove`, verifies every PQZL proof, rejects every PQZL row of negative.json and the
 cheating provers' proofs of `check_tbox_fixes.sh` (`tests/fixtures/cheating`, exported once by its `export.sh`),
 `tests/oracle_verify.rs` `verify` = `pqz_verify` on those, on out-of-range challenges and on `test_mutate` outputs
-(`PQZL_MUTATED_N`, default 280), `tests/oracle_keys.rs` keys, Enc and Dec against C, `tests/oracle_codec.rs`
+(`PQZL_MUTATED_N`, default 280), `tests/oracle_prove.rs` `prove` = `pqz_prove` (bytes or error code) on honest and
+altered witnesses of every relation code, `tests/oracle_keys.rs` keys, Enc and Dec against C, `tests/oracle_codec.rs`
 `test_mutate` = `pqz_test_mutate` on every relation code, malformed encodings, and the hint functions), the arithmetic KAT (`kat_dump` against the upstream golden file
 `pqzl/kat/lazer-3330e48.json`, `kat/check.py`), the keys KAT (`keys_kat 1000` against
 `smartcontracts/vectors/pqz/pqz_kat.py --c-keys`), the generated params (`python3 -I ../params/to_rust.py --check`;
-`tests/oracle_params.rs` compares every field with the C headers), clippy `-D clippy::float_arithmetic`, the wasm32 build.
+`tests/oracle_params.rs` compares every field with the C headers), the prover's `proofs_fnv` against the C core's
+runs (`bench 5 5 63` = `research/pqzl-measure/runs/tx0c-fnv-native.jsonl`, `bench 2 2 16320` = `l3a-native-fast.jsonl`,
+`node wasm/run_wasm.mjs 3 1 63` = `tx0c-fnv-wasm.jsonl`), clippy `-D clippy::float_arithmetic`, the wasm32 build.
 
 ## Licence
 

@@ -68,6 +68,9 @@ pub struct Row {
     pub code: u8,
     pub stmt: Vec<u8>,
     pub proof: Vec<u8>,
+    /// the prover's inputs of the row
+    pub wit: Vec<u8>,
+    pub rnd32: [u8; 32],
 }
 
 /// every PQZL row of proof_pqzl.json (19) and fee0.json (4)
@@ -84,6 +87,8 @@ pub fn pqzl_rows() -> Vec<Row> {
             code: rel_code(form, case),
             stmt: st[key].clone(),
             proof: hex(&r["proof"]),
+            wit: hex(&r["wit"]),
+            rnd32: hex(&r["rnd32"]).try_into().unwrap(),
         });
     }
     for r in json("fee0.json")["rows"].as_array().unwrap() {
@@ -94,6 +99,8 @@ pub fn pqzl_rows() -> Vec<Row> {
             code: rel_code(form, None),
             stmt: with_id(hex(&r["stmt"])),
             proof: hex(&r["pqzl"]["proof"]),
+            wit: hex(&r["wit"]),
+            rnd32: hex(&r["rnd32"]).try_into().unwrap(),
         });
     }
     out

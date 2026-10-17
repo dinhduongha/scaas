@@ -1,0 +1,33 @@
+# debug build (overflow checks): reprove_byte_equal, all 23 rows
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust/pqz-core/pqzl/rust)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.30s
+     Running tests/vectors.rs (target/debug/deps/vectors-a517364760ca3cd9)
+
+running 1 test
+test reprove_byte_equal has been running for over 60 seconds
+test reprove_byte_equal ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; finished in 171.59s
+
+# oversize: bench 2 0 49152 (R_TXM16, R_TXM16_0) vs l3a-native-fast 5e4d95ec 14d1bf99
+   Compiling version_check v0.9.5
+   Compiling typenum v1.20.1
+   Compiling generic-array v0.14.7
+   Compiling keccak v0.1.6
+   Compiling cpufeatures v0.2.17
+   Compiling cfg-if v1.0.5
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust/pqz-core/pqzl/rust)
+   Compiling crypto-common v0.1.7
+   Compiling inout v0.1.4
+   Compiling block-buffer v0.10.4
+   Compiling cipher v0.4.4
+   Compiling digest v0.10.7
+   Compiling aes v0.8.4
+   Compiling sha3 v0.10.8
+    Finished `release` profile [optimized + debuginfo] target(s) in 7.10s
+{"init_ms": 512.330, "verify": "generic"}
+{"timing": "R_TXM16 prove", "n": 2, "mean_ms": 3669.841, "p50_ms": 4096.121, "p99_ms": 3243.562, "max_ms": 4096.121}
+{"rel": "R_TXM16", "proof_bytes_last": 92332, "proof_bytes_max": 92332, "proofs_fnv": "5e4d95ec"}
+{"timing": "R_TXM16_0 prove", "n": 2, "mean_ms": 2070.343, "p50_ms": 2076.252, "p99_ms": 2064.434, "max_ms": 2076.252}
+{"rel": "R_TXM16_0", "proof_bytes_last": 86550, "proof_bytes_max": 86550, "proofs_fnv": "14d1bf99"}
+{"fails": 0}

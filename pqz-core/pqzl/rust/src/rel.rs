@@ -1,6 +1,7 @@
 //! `pqz_rel.c`: the relation table (the one table of the crate), statement parsing and the relation builders
 //! (R_REG, R_TX / R_TX0 / R_BURN / R_TXM, R_DS, R_DR as toolbox statements), the ABDLOP keys per relation, the
-//! statement digest and `pqz_verify`'s dispatch (op, statement length, the R_TXM header words M / auditorOn).
+//! statement digest, `pqz_verify`'s and `pqz_prove`'s dispatch (op, statement length, the R_TXM header words M /
+//! auditorOn), the witness parsers and the hedged prover seeds (CTR-PQZ-19).
 //!
 //! What C keeps in static storage (A, the keys of each relation, built at first use) lives in the caller's [`Ctx`].
 use crate::arith::int::Int;
@@ -8,13 +9,14 @@ use crate::arith::poly::Poly;
 use crate::arith::polymat::{Pm, PolyMat};
 use crate::arith::polyvec::PolyVec;
 use crate::arith::spoly::Sparse;
-use crate::coder::decode_proof;
+use crate::coder::{decode_proof, encode_proof, ProofParts};
 use crate::keys::{be8, expand_a, rd_poly, rd_polyvec};
 use crate::params::{self, Tbox};
 use crate::proof::tbox::{self, Statement};
 use crate::proof::{abdlop, Eq};
 use crate::rand::shake::shake128;
-use crate::{Ctx, Error, HEADER_BYTES, PREFIX_BYTES, POLYVEC_BYTES as PV, V_BYTES};
+use crate::rand::urandom::polyvec_urandom_bnd;
+use crate::{Ctx, Error, HEADER_BYTES, MAX_PROOF, PREFIX_BYTES, POLYVEC_BYTES as PV, V_BYTES};
 use alloc::vec::Vec;
 
 const K: usize = 32;
@@ -82,13 +84,13 @@ pub(crate) const REG_STMT: usize = PREFIX_BYTES + 32 + PV;
 pub(crate) const TX_STMT: usize = HEADER_BYTES + 3 * PV + (PV + V_BYTES) + (PV + 3 * V_BYTES);
 pub(crate) const TX0_STMT: usize = HEADER_BYTES + 2 * PV + (PV + V_BYTES) + (PV + 2 * V_BYTES);
 pub(crate) const BURN_STMT: usize = HEADER_BYTES + PV + 2 * (PV + V_BYTES);
-const DISC_AMOUNT: usize = PREFIX_BYTES + 5 * 32;
-const DISC_PK: usize = DISC_AMOUNT + 64;
+pub(crate) const DISC_AMOUNT: usize = PREFIX_BYTES + 5 * 32;
+pub(crate) const DISC_PK: usize = DISC_AMOUNT + 64;
 pub(crate) const DISC_STMT: usize = DISC_PK + 2 * PV + V_BYTES;
-const HDR_FEE: usize = 256;
-const HDR_AMOUNT: usize = 288;
-const HDR_LEGS: usize = 320;
-const HDR_AUDITOR_ON: usize = 448;
+pub(crate) const HDR_FEE: usize = 256;
+pub(crate) const HDR_AMOUNT: usize = 288;
+pub(crate) const HDR_LEGS: usize = 320;
+pub(crate) const HDR_AUDITOR_ON: usize = 448;
 
 const fn groups(m: usize) -> usize {
     m.div_ceil(4)
@@ -283,8 +285,25 @@ fn statement(s: Sys<'_>, es: Vec<PolyMat>, ps: Option<PolyMat>, ds: PolyMat) -> 
     Statement { quad: s.quad, eval: s.eval, es, ps, ds }
 }
 
+/// what the witness parsers read from the statement (`txst_t`): the ciphertext the witness decrypts (the debit
+/// relations: (u_T, v_T); R_DR: (u, v)), fee, amount
+pub(crate) struct Pub {
+    u: PolyVec,
+    v: Poly,
+    fee: u64,
+    amount: u64,
+}
+
+impl Pub {
+    fn none() -> Pub {
+        Pub { u: PolyVec(Vec::new()), v: Poly::ZERO, fee: 0, amount: 0 }
+    }
+}
+
+type Built = Option<(Statement, Pub)>;
+
 /// R_REG: prefix || message || pk; pk = A s + e
-fn build_reg(a: &mut PolyMat, stmt: &[u8]) -> Result<Option<Statement>, Error> {
+fn build_reg(a: &mut PolyMat, stmt: &[u8]) -> Result<Built, Error> {
     let p = RELS[0].p;
     let mut pk = new_vec()?;
     if !rd_polyvec(&mut pk, &stmt[PREFIX_BYTES + 32..]) {
@@ -297,7 +316,7 @@ fn build_reg(a: &mut PolyMat, stmt: &[u8]) -> Result<Option<Statement>, Error> {
     let mut es = vec_try(2)?;
     es.push(new_sel(32, 64, 0)?);
     es.push(new_sel(32, 64, 32)?);
-    Ok(Some(statement(s, es, None, new_sel(1, 64, 0)?)))
+    Ok(Some((statement(s, es, None, new_sel(1, 64, 0)?), Pub::none())))
 }
 
 /// the debit shape (`shape_t`): s1 slots, bit bases, exact-l2 blocks
@@ -449,7 +468,7 @@ fn parse_debit(stmt: &[u8], h: &Shape) -> Result<(Debit, bool), Error> {
 
 /// `build_debit` (R_TX, R_TX0, R_BURN, R_TXM): rows 1, 2 (R_q-linear), then per coefficient i rows 3-7 as evaluation
 /// equations (pq-zero-knowledge.md §7.4 with M legs)
-fn build_debit(a: &mut PolyMat, stmt: &[u8], r: &Rel) -> Result<Option<Statement>, Error> {
+fn build_debit(a: &mut PolyMat, stmt: &[u8], r: &Rel) -> Result<Built, Error> {
     let h = shape_of(r)?;
     if !shape_ok(r, &h) {
         return Ok(None);
@@ -536,7 +555,8 @@ fn build_debit(a: &mut PolyMat, stmt: &[u8], r: &Rel) -> Result<Option<Statement
     }
     let ps = new_sel(nbin, m1, h.bits)?;
     let ds = new_sel(1, m1, h.e)?;
-    Ok(Some(statement(s, es, Some(ps), ds)))
+    let p = Pub { u: t.ut, v: t.vt, fee: t.fee, amount: t.amount };
+    Ok(Some((statement(s, es, Some(ps), ds), p)))
 }
 
 /// `parse_disc`: amount (a word < 2^64), pk, u, v
@@ -550,7 +570,7 @@ fn parse_disc(stmt: &[u8]) -> Result<(u64, PolyVec, PolyVec, Poly, bool), Error>
 }
 
 /// R_DS: u = A^T r + e1; (pk^T r)_i + e2_i + Delta d_i - v_i = 0
-fn build_ds(a: &mut PolyMat, stmt: &[u8]) -> Result<Option<Statement>, Error> {
+fn build_ds(a: &mut PolyMat, stmt: &[u8]) -> Result<Built, Error> {
     let (amount, mut pk, mut u, mut v, ok) = parse_disc(stmt)?;
     if !ok {
         return Ok(None);
@@ -567,11 +587,11 @@ fn build_ds(a: &mut PolyMat, stmt: &[u8]) -> Result<Option<Statement>, Error> {
     es.push(new_sel(32, 65, 0)?);
     es.push(new_sel(32, 65, 32)?);
     es.push(new_sel(1, 65, 64)?);
-    Ok(Some(statement(s, es, None, new_sel(1, 65, 64)?)))
+    Ok(Some((statement(s, es, None, new_sel(1, 65, 64)?), Pub::none())))
 }
 
 /// R_DR: pk = A s + e; (u^T s)_i + (e'_i + 2^24) - 2^24 + Delta d_i - v_i = 0
-fn build_dr(a: &mut PolyMat, stmt: &[u8]) -> Result<Option<Statement>, Error> {
+fn build_dr(a: &mut PolyMat, stmt: &[u8]) -> Result<Built, Error> {
     let (amount, mut pk, mut u, mut v, ok) = parse_disc(stmt)?;
     if !ok {
         return Ok(None);
@@ -593,11 +613,13 @@ fn build_dr(a: &mut PolyMat, stmt: &[u8]) -> Result<Option<Statement>, Error> {
     let mut es = vec_try(2)?;
     es.push(new_sel(32, 71, 0)?);
     es.push(new_sel(32, 71, 32)?);
-    Ok(Some(statement(s, es, Some(new_sel(7, 71, 64)?), new_sel(1, 71, 0)?)))
+    let st = statement(s, es, Some(new_sel(7, 71, 64)?), new_sel(1, 71, 0)?);
+    Ok(Some((st, Pub { u, v, fee: 0, amount })))
 }
 
-/// `build`: the statement of relation r (its length checked); `None` if malformed
-fn build(a: &mut PolyMat, r: &Rel, stmt: &[u8]) -> Result<Option<Statement>, Error> {
+/// `build`: the statement of relation r (its length checked) and what the witness parsers read of it; `None` if
+/// malformed
+fn build(a: &mut PolyMat, r: &Rel, stmt: &[u8]) -> Result<Built, Error> {
     let want = match r.code {
         3 => REG_STMT,
         1 => TX_STMT,
@@ -617,23 +639,326 @@ fn build(a: &mut PolyMat, r: &Rel, stmt: &[u8]) -> Result<Option<Statement>, Err
     }
 }
 
+// ---------------------------------------------------------------- witnesses (the prover)
+
+const QI: i64 = crate::arith::ntt::Q as i64;
+
+fn le16(p: &[u8]) -> i64 {
+    i16::from_le_bytes([p[0], p[1]]) as i64
+}
+
+/// `wit_vec`: 2048 coefficients (int8, or int16 LE if wide) into s1[off .. off + 32); the rest of `w`
+fn wit_vec<'a>(s1: &mut PolyVec, off: usize, w: &'a [u8], wide: bool) -> &'a [u8] {
+    for j in 0..2048 {
+        let v = if wide { le16(&w[2 * j..]) } else { w[j] as i8 as i64 };
+        set_c(&mut s1[off + j / 64], j % 64, v);
+    }
+    &w[if wide { 4096 } else { 2048 }..]
+}
+
+/// `dec_w`: w_i = centre(v_i - (u^T s)_i), s = s1[0 .. 32)
+fn dec_w(u: &mut PolyVec, v: &mut Poly, s1: &mut PolyVec) -> [i64; 16] {
+    let mut acc = crate::arith::polyvec::dot(&mut **u, &mut s1.sub(0, K, 1));
+    acc.fromcrt();
+    core::array::from_fn(|i| {
+        let mut w = (cval(v, i) - cval(&mut acc, i)) % QI;
+        if w > (QI - 1) / 2 {
+            w -= QI;
+        }
+        if w < -(QI - 1) / 2 {
+            w += QI;
+        }
+        w
+    })
+}
+
+/// `debit_witness` (R_TX, R_TX0, R_BURN, R_TXM; pqz.h's layout) into s1, with M_i, e_T (decrypting T with s_f), the
+/// carries and the bits; false if inconsistent or out of range
+fn debit_witness(t: &mut Pub, w: &[u8], s1: &mut PolyVec, r: &Rel) -> Result<bool, Error> {
+    let h = shape_of(r)?;
+    let (l, ne2) = (h.legs, h.legs + 1 + h.aud * h.legs);
+    let mut p = wit_vec(s1, 0, w, false);
+    p = wit_vec(s1, 32, p, true);
+    for g in 0..h.groups {
+        p = wit_vec(s1, 64 + 64 * g, p, false);
+        p = wit_vec(s1, 96 + 64 * g, p, true);
+    }
+    for i in 0..ne2 {
+        for j in 0..16 {
+            set_c(&mut s1[h.e + i], j, le16(&p[32 * i + 2 * j..]));
+        }
+    }
+    p = &p[32 * ne2..];
+    // the legs' digits (R_BURN: d = digits(amount), public), d'
+    let mut d = vec_try(l)?;
+    d.resize(l, [0i64; 16]);
+    let (mut dsum, mut dp) = ([0i64; 16], [0i64; 16]);
+    for i in 0..16 {
+        dsum[i] = if h.burn { digit(t.amount, i) } else { 0 };
+        for (j, dj) in d.iter_mut().enumerate() {
+            dj[i] = p[16 * j + i] as i64;
+            dsum[i] += dj[i];
+        }
+        dp[i] = p[16 * l + i] as i64;
+    }
+    // decrypt T with s_f: M_i = round(w_i / Delta), e_T = w - Delta M
+    let wv = dec_w(&mut t.u, &mut t.v, s1);
+    let mm: [i64; 16] = core::array::from_fn(|i| (if wv[i] >= 0 { wv[i] + DELTA / 2 } else { wv[i] - DELTA / 2 }) / DELTA);
+    let et: [i64; 16] = core::array::from_fn(|i| wv[i] - DELTA * mm[i]);
+    // carries: c_i = (M_i + c_{i-1} - d'_i - sum_j d_j,i - f_i) / 16, exact, c_15 = 0
+    let mut c = [0i64; 16];
+    let mut cprev = 0;
+    for i in 0..16 {
+        let s = mm[i] + cprev - dp[i] - dsum[i] - digit(t.fee, i);
+        if s % 16 != 0 {
+            return Ok(false);
+        }
+        c[i] = s / 16;
+        cprev = c[i];
+    }
+    if c[15] != 0 {
+        return Ok(false);
+    }
+    for i in 0..16 {
+        let bad = dp[i] > 15
+            || mm[i] < 0
+            || mm[i] >= 1 << 14
+            || c[i] < -64
+            || c[i] >= 1984
+            || et[i] < -(1 << 24)
+            || et[i] >= 1 << 24
+            || d.iter().any(|dj| dj[i] > 15);
+        if bad {
+            return Ok(false);
+        }
+    }
+    for i in 0..16 {
+        let base = [h.dp, h.m, h.c, h.et];
+        let vals = [dp[i], mm[i], c[i] + 64, et[i] + (1 << 24)];
+        let (widths, n) = ([4, 14, 11, 25], [4, 14, if i < 15 { 11 } else { 0 }, 25]);
+        for b in 0..25 {
+            for k in 0..4 {
+                if b < n[k] {
+                    let sl = slot(base[k], widths[k], i, b);
+                    set_c(&mut s1[h.bits + sl / 64], sl % 64, (vals[k] >> b) & 1);
+                }
+            }
+            for (j, dj) in d.iter().enumerate().take(if b < 4 { l } else { 0 }) {
+                let sl = slot(64 * j, 4, i, b);
+                set_c(&mut s1[h.bits + sl / 64], sl % 64, (dj[i] >> b) & 1);
+            }
+        }
+    }
+    Ok(true)
+}
+
+/// `dr_witness`: s, e and the bits of e'_i + 2^24, e'_i = centre(v_i - (u^T s)_i) - Delta d_i
+fn dr_witness(t: &mut Pub, w: &[u8], s1: &mut PolyVec) -> bool {
+    let p = wit_vec(s1, 0, w, false);
+    wit_vec(s1, 32, p, true);
+    let wv = dec_w(&mut t.u, &mut t.v, s1);
+    for (i, &wi) in wv.iter().enumerate() {
+        let e = wi - DELTA * digit(t.amount, i);
+        if !(-(1 << 24)..1 << 24).contains(&e) {
+            return false; // not an encryption of amount under this key
+        }
+        for b in 0..25 {
+            set_c(&mut s1[64 + (25 * i + b) / 64], (25 * i + b) % 64, ((e + (1 << 24)) >> b) & 1);
+        }
+    }
+    true
+}
+
+/// `set_upsilon`: the slack polys upsilon_z = binexp(B_z^2 - ||x_z||^2) of the exact-l2 blocks (s1 slots [st, st +
+/// ln)); false if a block is above its bound
+fn set_upsilon(p: &Tbox, s1: &mut PolyVec, blocks: &[(usize, usize)]) -> bool {
+    let m1 = (p.tbox.m1 - p.z) as usize;
+    for (z, &(st, ln)) in blocks.iter().enumerate() {
+        let mut n2 = 0i64;
+        for x in &mut s1[st..st + ln] {
+            n2 += (0..D).map(|k| cval(x, k) * cval(x, k)).sum::<i64>();
+        }
+        let mut d = Int::new(2);
+        d.set(&p.l2bsqr[z]);
+        d.sub(&{ d }, &Int::from_i64(2, n2));
+        if d.sgn() < 0 {
+            return false; // witness above its norm bound
+        }
+        Poly::binexp(Some(&mut s1[m1 + z]), None, &d);
+    }
+    true
+}
+
+/// `witness`: the witness of relation r into s1, then the l2 slack; false if malformed, inconsistent or above a bound
+fn witness(t: &mut Pub, r: &Rel, wit: &[u8], s1: &mut PolyVec) -> Result<bool, Error> {
+    const REG_WIT: usize = 2048 + 4096;
+    let (reg, ds) = ([(0, 32), (32, 32)], [(0, 32), (32, 32), (64, 1)]);
+    let h;
+    let blocks: &[(usize, usize)] = match r.code {
+        3 => {
+            if wit.len() != REG_WIT {
+                return Ok(false);
+            }
+            let p = wit_vec(s1, 0, wit, false);
+            wit_vec(s1, 32, p, true);
+            &reg
+        }
+        4 => {
+            if wit.len() != REG_WIT + 32 {
+                return Ok(false);
+            }
+            let p = wit_vec(s1, 0, wit, false);
+            let p = wit_vec(s1, 32, p, true);
+            for j in 0..16 {
+                set_c(&mut s1[64], j, le16(&p[2 * j..]));
+            }
+            &ds
+        }
+        5 => {
+            if wit.len() != REG_WIT || !dr_witness(t, wit, s1) {
+                return Ok(false);
+            }
+            &reg
+        }
+        _ => {
+            // the debit relations (R_TX, R_TX0, R_BURN, R_TXM): one l2 slack per block
+            h = shape_of(r)?;
+            let want = (1 + h.groups) * (2048 + 4096) + 32 * (h.legs + 1 + h.aud * h.legs) + 16 * h.legs + 16;
+            if wit.len() != want || !debit_witness(t, wit, s1, r)? {
+                return Ok(false);
+            }
+            &h.blk
+        }
+    };
+    Ok(set_upsilon(r.p, s1, blocks))
+}
+
+/// `pqz_prover_seeds` (CTR-PQZ-19, P6e D6): ex[0..32) seeds s2, ex[32..64) every mask of the toolbox proof; each =
+/// SHAKE128(tag || rnd32 || wh || hash0), tags "SCAAS-PQZ-PROVER-RND-V2" / "...-SUB-V2", wh = SHAKE128(
+/// "SCAAS-PQZ-PROVER-WIT-V2" || wit)[0..32)
+fn prover_seeds(rnd32: &[u8; 32], wit: &[u8], hash0: &[u8; 32]) -> ([u8; 32], [u8; 32]) {
+    let mut wh = [0u8; 32];
+    shake128(&[b"SCAAS-PQZ-PROVER-WIT-V2", wit]).squeeze(&mut wh);
+    let (mut a, mut b) = ([0u8; 32], [0u8; 32]);
+    shake128(&[b"SCAAS-PQZ-PROVER-RND-V2", rnd32, &wh, hash0]).squeeze(&mut a);
+    shake128(&[b"SCAAS-PQZ-PROVER-SUB-V2", rnd32, &wh, hash0]).squeeze(&mut b);
+    (a, b)
+}
+
 impl Ctx {
-    /// `pqz_verify`: Ok(true) = 1; every failure (also an allocation failure, as C's arena) is 0
-    pub(crate) fn verify_rel(&mut self, op: u8, stmt: &[u8], proof: &[u8]) -> Result<bool, Error> {
-        let Some(ri) = rel_of(op, stmt) else { return Ok(false) };
-        let r = &RELS[ri];
+    /// A and relation ri's keys, built at first use
+    fn rel_state(&mut self, ri: usize) -> Result<(&mut [PolyMat; 3], &mut PolyMat), Error> {
         if self.keys[ri].is_none() {
-            self.keys[ri] = Some(rel_keys(r)?);
+            self.keys[ri] = Some(rel_keys(&RELS[ri])?);
         }
         if self.a.is_none() {
             self.a = Some(expand_a()?);
         }
-        let (Some(keys), Some(a)) = (&mut self.keys[ri], &mut self.a) else { return Err(Error::Internal) };
+        match (&mut self.keys[ri], &mut self.a) {
+            (Some(k), Some(a)) => Ok((k, a)),
+            _ => Err(Error::Internal),
+        }
+    }
+
+    /// `pqz_verify`: Ok(true) = 1; every failure (also an allocation failure, as C's arena) is 0
+    pub(crate) fn verify_rel(&mut self, op: u8, stmt: &[u8], proof: &[u8]) -> Result<bool, Error> {
+        let Some(ri) = rel_of(op, stmt) else { return Ok(false) };
+        let r = &RELS[ri];
+        let (keys, a) = self.rel_state(ri)?;
         let h = stmt_hash(op, stmt);
-        let Some(mut s) = build(a, r, stmt)? else { return Ok(false) };
+        let Some((mut s, _)) = build(a, r, stmt)? else { return Ok(false) };
         let Ok(mut f) = decode_proof(r.p, proof) else { return Ok(false) };
         let mut hash = h;
         abdlop::hashcomm(&mut hash, &mut f.t_a1, &mut f.t_b, r.p.tbox)?;
         tbox::verify(&mut hash, &mut f, keys, &mut s)
+    }
+
+    /// `pqz_prove` + `do_prove`: `Error::Input` for an unknown relation, a malformed statement or witness (also one
+    /// inconsistent with the statement, or above a norm bound) and an encoding over MAX_PROOF bytes
+    pub(crate) fn prove_rel(&mut self, op: u8, stmt: &[u8], wit: &[u8], rnd32: &[u8; 32]) -> Result<Vec<u8>, Error> {
+        let ri = rel_of(op, stmt).ok_or(Error::Input)?;
+        let r = &RELS[ri];
+        let tb = r.p.tbox;
+        let (keys, a) = self.rel_state(ri)?;
+        let hash0 = stmt_hash(op, stmt);
+        let mut f = ProofParts::new(r.p)?;
+        let mut s1 = PolyVec::new(tb.m1 as usize)?;
+        let mut m = PolyVec::new((tb.l + tb.lext) as usize)?;
+        let Some((mut s, mut t)) = build(a, r, stmt)? else { return Err(Error::Input) };
+        if !witness(&mut t, r, wit, &mut s1)? {
+            return Err(Error::Input);
+        }
+        // do_prove
+        let (ex0, ex1) = prover_seeds(rnd32, wit, &hash0);
+        let mut s2 = PolyVec::new(tb.m2 as usize)?;
+        polyvec_urandom_bnd(&mut *s2, &Int::from_i64(1, -tb.nu), &Int::from_i64(1, tb.nu), &ex0, 0)?;
+        let mut t_a2 = PolyVec::new(tb.kmsis as usize)?;
+        let mut hash = hash0;
+        abdlop::commit(&mut f.t_a1, &mut t_a2, &mut s1, &mut s2, keys, tb)?;
+        abdlop::hashcomm(&mut hash, &mut f.t_a1, &mut f.t_b, tb)?;
+        tbox::prove(&mut hash, &mut f, &mut s1, &mut m, &mut s2, &mut t_a2, keys, &mut s, &ex1)?;
+        // cap = MAX_PROOF: an over-length proof is Input before any encoder assert (C: encproof's cap, then len >
+        // PQZ_MAX_PROOF)
+        encode_proof(&f, MAX_PROOF)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::arith::ntt::Q;
+    use alloc::vec;
+
+    /// an all-zero statement of relation ri with the header words its parser requires (auditorOn, M)
+    fn zero_stmt(r: &Rel) -> Vec<u8> {
+        let len = match r.code {
+            3 => REG_STMT,
+            1 => TX_STMT,
+            0x81 => TX0_STMT,
+            2 => BURN_STMT,
+            4 | 5 => DISC_STMT,
+            _ => txm_stmt(r.legs, r.aud),
+        };
+        let mut st = vec![0u8; len];
+        if r.op == crate::OP_TRANSFER || r.op == crate::OP_TRANSFER_MULTI {
+            st[HDR_AUDITOR_ON + 31] = r.aud as u8;
+        }
+        if r.op == crate::OP_TRANSFER_MULTI {
+            st[HDR_LEGS + 31] = r.legs as u8;
+        }
+        st
+    }
+
+    /// `build` refuses one non-canonical coefficient (q, `rd_poly`) and one non-canonical header word (a high byte
+    /// set, `rd_word64`) per parser, and `prove` gives `Error::Input` for them (tests/vectors.rs
+    /// `prove_refuses_noncanonical_statement` shows it is the statement parser that refuses)
+    #[test]
+    fn build_refuses_noncanonical() {
+        let mut a = expand_a().unwrap();
+        let mut ctx = Ctx::new();
+        let cases = [
+            (0, PREFIX_BYTES + 32, None),
+            (1, HEADER_BYTES, Some(HDR_FEE)),
+            (2, HEADER_BYTES + PV, Some(HDR_AUDITOR_ON)),
+            (3, HEADER_BYTES, Some(HDR_AMOUNT)),
+            (4, DISC_PK, Some(DISC_AMOUNT)),
+            (5, DISC_PK + PV, Some(DISC_AMOUNT)),
+            (TXM0 + 1, HEADER_BYTES, Some(HDR_LEGS)),
+        ];
+        for (ri, coef, word) in cases {
+            let r = &RELS[ri];
+            let st = zero_stmt(r);
+            assert!(build(&mut a, r, &st).unwrap().is_some(), "{}", r.name);
+            let mut bad = st.clone();
+            bad[coef..coef + 8].copy_from_slice(&Q.to_be_bytes());
+            assert!(build(&mut a, r, &bad).unwrap().is_none(), "{} coefficient", r.name);
+            assert_eq!(ctx.prove(r.op, &bad, &[], &[0; 32]), Err(Error::Input), "{} coefficient", r.name);
+            if let Some(w) = word {
+                let mut bad = st;
+                bad[w] = 1;
+                assert!(build(&mut a, r, &bad).unwrap().is_none(), "{} word", r.name);
+                assert_eq!(ctx.prove(r.op, &bad, &[], &[0; 32]), Err(Error::Input), "{} word", r.name);
+            }
+        }
     }
 }
