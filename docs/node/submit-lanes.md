@@ -129,7 +129,7 @@ lanes = [0, 1, 2, 3]                            # lanes = [account indexes] per 
 | Sui | 784 | ed25519 SLIP-10 | `m/44'/784'/i'/0'/0'` | Sui standard (all levels hardened) |
 | Stellar | 148 | ed25519 SLIP-10 | `m/44'/148'/i'` | SEP-0005 |
 | Cosmos | 118 | secp256k1 BIP-32 | `m/44'/118'/0'/0/i` | |
-| GRAM | 607 | ed25519 SLIP-10 | `m/44'/607'/i'` | **not** the native GRAM mnemonic (PBKDF2 "GRAM default seed"); a GRAM wallet imports it through its "BIP-39 /Ledger path" option |
+| GRAM | 607 | ed25519 SLIP-10 | `m/44'/607'/i'` | **not** the native GRAM mnemonic (PBKDF2 salt "TON default seed", a protocol constant kept by GRAM); a GRAM wallet imports it through its "BIP-39 /Ledger path" option |
 
 Aptos and Solana lane paths are in [networks/aptos.md](../networks/aptos.md) and
 [networks/solana.md](../networks/solana.md).
