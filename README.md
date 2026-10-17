@@ -354,13 +354,13 @@ refunding the rest ([section 14](#14-how-the-design-evolved)).
 
 | Family | Chains | Language | Token | Mandate and DEX | Accounts |
 |---|---|---|---|---|---|
-| EVM | Ethereum, BSC, Polygon, Gnosis, Celo, Base, Hedera, TRON | Solidity | `MetaTokenBase` kinds (ERC-20) | `MandateWallet`, `SCaaSDex` | UA registry, ERC-1271, passkey |
-| Cosmos | CosmWasm chains | Rust (CosmWasm) | `token` (CW20) + `metaop` | `mandate`, `dex` | ADR-036 secp256k1, passkey |
-| Soroban | Stellar, Pi Network | Rust (WASM) | `token` (SEP-41) | `mandate`, `dex` | `account` with `__check_auth` |
-| Aptos | Aptos | Move | `meta` (account object per owner) | `mandate`, `dex` | `auth`, `p256` |
-| Sui | Sui | Move | `meta` (shared `Account<T>`) | `mandate`, `dex` | `auth` |
-| GRAM (ex-TON) | GRAM | Tact | `jetton` (TEP-74) | `mandate`, `dex` | wallet signature, passkey |
-| Solana | Solana | Rust | program `scaas` | same program | ed25519, P-256 |
+| [EVM](docs/networks/evm.md) | Ethereum, BSC, Polygon, Gnosis, Celo, Base, [Hedera](docs/networks/hedera.md), TRON | Solidity | `MetaTokenBase` kinds (ERC-20) | `MandateWallet`, `SCaaSDex` | UA registry, ERC-1271, passkey |
+| [Cosmos](docs/networks/cosmos.md) | CosmWasm chains | Rust (CosmWasm) | `token` (CW20) + `metaop` | `mandate`, `dex` | ADR-036 secp256k1, passkey |
+| [Soroban](docs/networks/soroban.md) | Stellar, Pi Network | Rust (WASM) | `token` (SEP-41) | `mandate`, `dex` | `account` with `__check_auth` |
+| [Aptos](docs/networks/aptos.md) | Aptos | Move | `meta` (account object per owner) | `mandate`, `dex` | `auth`, `p256` |
+| [Sui](docs/networks/sui.md) | Sui | Move | `meta` (shared `Account<T>`) | `mandate`, `dex` | `auth` |
+| [GRAM](docs/networks/ton.md) (ex-TON) | GRAM | Tact | `jetton` (TEP-74) | `mandate`, `dex` | wallet signature, passkey |
+| [Solana](docs/networks/solana.md) | Solana | Rust | program `scaas` | same program | ed25519, P-256 |
 | NEAR (planned) | NEAR | Rust (WASM) | NEP-141 | — | access keys |
 | Algorand (planned) | Algorand | Algorand Python / TEAL | ASA / ARC-200 | — | ed25519 |
 
@@ -782,12 +782,12 @@ SCaaS groups chains into **families**: one contract code base and one node adapt
 
 | Family | Chains | Execution | How the meta-transaction is done |
 |---|---|---|---|
-| EVM | Ethereum, BSC, Polygon, Gnosis, Celo, Base, Hedera, TRON | EVM (Solidity) | EIP-712 intent inside the token |
-| Cosmos | CosmWasm chains | CosmWasm (Rust) | `Relay{payload, auth}` to the contract |
-| Soroban | Stellar, Pi Network | Soroban WASM (Rust) | native authorization entries |
-| Move | Aptos, Sui | Move VM | an account object per subject, lanes inside |
-| GRAM (formerly TON) | GRAM | TVM (Tact) | a custom jetton wallet checks the signed operation |
-| Solana | Solana | SVM (Rust) | program-level, subject account + lane accounts |
+| [EVM](docs/networks/evm.md) | Ethereum, BSC, Polygon, Gnosis, Celo, Base, [Hedera](docs/networks/hedera.md), TRON | EVM (Solidity) | EIP-712 intent inside the token |
+| [Cosmos](docs/networks/cosmos.md) | CosmWasm chains | CosmWasm (Rust) | `Relay{payload, auth}` to the contract |
+| [Soroban](docs/networks/soroban.md) | Stellar, Pi Network | Soroban WASM (Rust) | native authorization entries |
+| Move | [Aptos](docs/networks/aptos.md), [Sui](docs/networks/sui.md) | Move VM | an account object per subject, lanes inside |
+| [GRAM](docs/networks/ton.md) (formerly TON) | GRAM | TVM (Tact) | a custom jetton wallet checks the signed operation |
+| [Solana](docs/networks/solana.md) | Solana | SVM (Rust) | program-level, subject account + lane accounts |
 | NEAR (planned) | NEAR | WASM (Rust) | to be designed |
 | Algorand (planned) | Algorand | AVM | to be designed |
 
