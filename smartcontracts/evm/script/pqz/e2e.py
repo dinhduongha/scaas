@@ -7,6 +7,7 @@ ML-DSA signatures. Statements are always read from the token's own views, so the
 contracts build.
 
   e2e.py --rpc http://127.0.0.1:8545 --log runs/2026-10-16-p6g-7622.txt [--keys 1,2,3]
+  (a redeploy writes a new log, e.g. runs/2026-10-17-ua-index-7622.txt; it also checks the registry's per-kind list)
 
 Deploying contracts and sending transactions only: the node is not touched. Gas price 2·baseFee + 1 gwei (baseFee +
 tip). Test keys of the 7622 genesis (0x…01–0x…03). Exit 0 iff every check passed."""
@@ -403,6 +404,16 @@ def run(kd, kr, ke):
     feeua = ml_ua("fee-ua", MLDSA65, sk("fee"))
     U = {n: pqz_ua(n, sk("pqz-" + n), ml[n]) for n in ("alice", "bob", "aud", "carol")}
     alice, bob, aud, carol = U["alice"], U["bob"], U["aud"], U["carol"]
+
+    # the per-kind list (CTR-UA-29, owner 2026-10-17): every UA of a kind in registration order
+    for kind, uas in ((PQZ_MLWE, [u.ua for u in U.values()]), (MLDSA65, [u.ua for u in list(ml.values()) + [feeua]]),
+                      (MLDSA44, [ml44.ua])):
+        n = int.from_bytes(words(call(reg, cd("uaCount(uint16)", ["w"], kind)))[0], "big")
+        at = [words(call(reg, cd("uaAt(uint16,uint256)", ["w", "w"], kind, i)))[0] for i in range(n)]
+        idx = [int.from_bytes(words(call(reg, cd("uaIndex(bytes32)", ["w"], ua)))[0], "big") for ua in uas]
+        page = call(reg, cd("uaPage(uint16,uint256,uint256)", ["w", "w", "w"], kind, 0, 100))
+        check(n == len(uas) and at == uas and idx == list(range(n)) and (len(page) - 2) // 2 == 64 + 32 * n and words(page)[2:] == uas,
+              f"registry list of kind {kind:#06x}: uaCount {n}, uaAt / uaIndex in registration order, uaPage {n} ids")
 
     # ML-DSA verify gas through the registry (both levels, precompile path)
     for u in (ml44, ml["alice"]):

@@ -267,7 +267,7 @@ pinned layout changes (it must not).
   `size-baseline.json` ratchet entries, size gate 0 errors.
 - **Chain 7622** (log `smartcontracts/evm/runs/2026-10-16-p6g-7622.txt`, 89 checks, 0 failures, 479 s; the first run,
   aborted at §6 because SCaaS tokens give EOAs no allowance (CTR-TOK-01), is kept as `…-run1-aborted.txt`; its contracts
-  stay on chain unused): `UARegistry` gen 1 `0xd3806d52cfc265ea6a8ae264dc3feda92cf1be84`, `UAMldsaVerifier` 44
+  stay on chain unused; superseded 2026-10-17 by the UA-index redeploy, `smartcontracts/evm/runs/2026-10-17-ua-index-7622.txt`): `UARegistry` gen 1 `0xd3806d52cfc265ea6a8ae264dc3feda92cf1be84`, `UAMldsaVerifier` 44
   `0xe120dcaba543fb54a37cc5dddcc11199f0d4073e` / 65 `0xf422e821237328257e9ae78d30a6081753cd67be` (`PRECOMPILE()` =
   `…0012` / `…0013`), `UAPqzVerifier` (PQZL) `0x3423b8c21222aac7bcfaa3b330e651f74e0d6188`, `OpenFactory`
   `0x61ff7446c5610cd99970e37b0f1dffea00789ca4`, `PqzLib` `0x2182c58ec11ca75831ae99ff04da3c3eb27de195`,
