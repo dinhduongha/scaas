@@ -358,6 +358,12 @@ conservative [measured].
 
 ### 8.3 Size, time, calldata and gas (M = 1, 2, 4, 8, 16)
 
+**Measured (2026-10-17):** the built shapes were measured end to end — proof sizes, prove and verify times native and
+wasm32 (the package's `--multi-bench` in Docker, `pqz-core/artifact/README.md`), the precompile path (`pqz-core/README.md`
+§5.3) and the calibrated precompile gas `G_7` on chain 7622 (3.63–6.18 M PQZL, 3.86–4.94 M PQZH,
+[pq-zero-knowledge.md §9.3](../contracts/pq-zero-knowledge.md#gas)). The estimates below predate them and are kept as
+the record of the sizing.
+
 *The tables below use groups of 4 legs, the grouping the owner kept on 2026-10-15 (β 446 accepted, §8.2); the "hints →
 β" column is the one-dimension-per-hint approximation — the DDGR20 worst case is in §8.2 (80 hints: 446.0).*
 

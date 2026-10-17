@@ -510,7 +510,8 @@ burn payload     = be32(provedAccSeq) ‖ be32(provedSendCounter) ‖ Y_f       
 
 <a id="multi-recipient"></a>
 <a id="CTR-ZTH-37"></a>**CTR-ZTH-37** — **One transfer, `M ≥ 1` recipients, one proof; `zetherTransfer` is the
-multi-recipient transfer** (owner). The sender may add randomly chosen decoy recipients that receive an encryption of 0
+multi-recipient transfer** (owner; the post-quantum form is PQZ op 7 `R_TXM`,
+[pq-zero-knowledge CTR-PQZ-25 / CTR-PQZ-26](pq-zero-knowledge.md#CTR-PQZ-25)). The sender may add randomly chosen decoy recipients that receive an encryption of 0
 and so hide the real one; sender anonymity (a ring) is not wanted and the sender stays public. **One shared `s`** serves
 every recipient: handing `s` to a checker opens every leg of that transfer, decoys included (accepted; the per-leg
 opening without `s` is [`SENDER_CP`](#CTR-ZTH-40)). The multi-recipient transfer has three entries by storage, `zetherTransfer` (the mode's default), `zetherTransferCompact`, `zetherTransferNoBundle` ([CTR-ZTH-38](#CTR-ZTH-38)); the single-recipient format above is kept unchanged (same payload, statement, proof, proof system id and full-bundle storage) under the name `zetherTransferSingle`. The statement header is the common header of [Statement](#statement-byte-layout) (with `chainUid`).

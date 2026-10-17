@@ -3431,6 +3431,24 @@ Change (2026-10-14): controller proposal (owner may override) — `R_TX0` in PQZ
 **Cost if wrong.** A PQZ token could not offer guaranteed audit coverage.
 **Source.** owner, 2026-10-11; background `research/zether-disclosure.md` §4, §6, §7, §9.
 
+### CTR-PQZ-25 — Two PQZ transfer paths: op 7 multi-recipient and op 1 single, no switch
+- old: — · status: current · owner: yes · date: 2026-10-14 · normative: contracts/pq-zero-knowledge.md#CTR-PQZ-25 · superseded-by: —
+
+Change (2026-10-17): controller (P6-ANON S7) — written into the spec with the owner's rulings of 2026-10-16: `M` counts legs (decoy padding), the storage mode is the user's per transfer (no automatic COMPACT, no early revert), PQZH op 7 ≤ 10 inline credits (`INLINE_MAX_PQZH`, S9 proposal 2 accepted). Plan decisions recorded as controller proposals (owner may override): D1 scope (mode 2A′ only), D2 both paths (op 1 unchanged), D3 sizes (PQZL {1, 2, 4, 8}, PQZH {1, 2, 4} as built and measured), D12 entry names, D16 decoys a client choice, D17 optional `multiLegFee` (default 0; zero-credit discard and per-window caps rejected), D18 decoy roll-over by keepers, D20 no limit change, D21 op 7 in the frozen set. S9 proposal 1 (node limits unchanged for op 7: `TxPool.MaxTxSize` 1 MiB, `max_gas_per_tx` 16 M, gateway body 1 MiB on the `pqz` profile, block target 80 M) and proposal 4 (plan gas re-based on the live rate; S8's calibration replaces the estimate) recorded as controller proposals; proposal 3 (automatic COMPACT for PQZL M = 8) was rejected by the owner on 2026-10-16 (CTR-PQZ-23).
+
+**Why.** Classical Z7 / Z8 (CTR-ZTH-37): one proof for many recipients with decoys, and the single-recipient transfer kept unchanged; the owner chose on 2026-10-14 that SCaaS uses the multi-recipient transfer as the normal PQZ transfer.
+**Cost if wrong.** Two code paths per token (size, audit) and decoy load on other accounts' caps (T22).
+**Source.** owner, 2026-10-14 and 2026-10-16; `superpowers/plans/2026-10-14-p6-anon.md` §5–§8, D1–D21.
+
+### CTR-PQZ-26 — R_TXM: the multi-recipient relation and its contract rules
+- old: — · status: current · owner: yes · date: 2026-10-14 · normative: contracts/pq-zero-knowledge.md#CTR-PQZ-26 · superseded-by: —
+
+Change (2026-10-17): controller (P6-ANON S7) — spec text written from the built relation (L1 / H1), layout (S2), vectors (S4) and the live precompile (S8, `G_7` per `(id, M, auditorOn)` in §9.3). Plan decisions recorded as controller proposals (owner may override) unless marked: D4 groups of ≤ 4 legs per randomness with or without the auditor (β 446.0, owner-accepted 2026-10-15), D5 one ℓ2 bound per e2 vector (owner 2026-10-15), D6 op 7 and its layout, D7 no `proofSystemId` bump, D8 limits unchanged, D9 one auditor copy per leg (OPTIONAL = whole transfer), D10 disclosure by leg with `R_DS` / `R_DR` unchanged, D11 bundle and memo with `M` legs, D13 group seeds `SCAAS-PQZ-ENC-GROUP-V1` (CTR-PQZ-19), D14 op 7 in the reproduction package (S6), D15 op 7 vectors (S4), D19 the precompile prices op 7 by the header words (S8).
+
+**Why.** `R_TX` with M legs and grouped randomness: linear rows, exact norms and digits only, so LaZer's tbox and Ligero serve it unchanged; `M = 1` is `R_TX` exactly.
+**Cost if wrong.** A second transfer relation in both proof systems and in the frozen set; the hint budget per group is below the self-imposed 450 margin by the owner's acceptance.
+**Source.** `superpowers/plans/2026-10-14-p6-anon.md` §2–§4; `pqz-core/pqzl/params/anon/hints-anon.txt`; P6-ANON S1–S8.
+
 ### CTR-PQZ-80 — PqzMetaTx: own mixin with op arguments sliced from calldata
 - old: — · status: superseded · owner: yes · date: 2026-10-08 · normative: — · superseded-by: CTR-PQZ-21
 
