@@ -14,7 +14,9 @@ Crate-internal layers in the C core's order: `src/arith/` (`pqz_mpn.h`; LaZer's 
 `pqz_glue.h` reductions; R_q and its incomplete NTT, `pqz_ntt.c`; dense and sparse vectors and matrices of polys),
 `src/rand/` (the AES-256-CTR PRNG and the samplers), `src/coder.rs` (`dcompress.c`). `src/testkit.rs` holds the test
 entry points (`#[doc(hidden)]`, not API): the arithmetic KAT of `pqzl/kat/lazer_dump.c`, which `src/bin/kat_dump.rs`
-prints, and the Rust halves of the oracle tests.
+prints, and the Rust halves of the oracle tests. The C half of the vector test drives `poly_auto_self` in the NTT
+domain, whose second loop pass writes the 64 words after the residue buffer (a C-core defect, the core is read-only
+here): the shim gives that poly a double-size residue block, so the write stays in scratch it owns.
 
 ## API
 

@@ -165,6 +165,10 @@ pqz_shim_polyvec_ops (const int64_t *in, uint64_t *out, size_t *n)
 
   poly_auto_self (d);
   dump_poly (&o, d);
+  /* poly_auto_self in the NTT domain: its loop runs over the ring's two former CRT moduli, so the second pass reverses
+     the 64 words after the 512-byte residue buffer (outside the poly). Give e a 1,024-byte residue block first
+     (poly_mul allocates only when crtrep is NULL), so that pass stays in scratch the shim owns; freed below. */
+  e->crtrep = pqz_arena_alloc (2 * _sizeof_crtrep_data (R));
   poly_mul (e, c, polyvec_get_elem (x, 0));
   poly_auto_self (e);
   dump_poly (&o, e);
@@ -209,6 +213,8 @@ pqz_shim_polyvec_ops (const int64_t *in, uint64_t *out, size_t *n)
     dump_poly (&o, spolymat_get_elem (sm, i));
 
   *n = (size_t)(o - out);
+  pqz_arena_free (e->crtrep, 2 * _sizeof_crtrep_data (R));
+  e->crtrep = NULL;
   pqz_arena_release (&mark);
   return pqz_err;
 }

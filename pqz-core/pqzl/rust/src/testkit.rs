@@ -360,6 +360,8 @@ pub fn polyvec_ops(inp: &[i64]) -> Result<alloc::vec::Vec<u64>, crate::Error> {
 
     d.auto_self();
     dump(&mut o, &d);
+    // the C half gives e a double-size residue block first: C's second pass of poly_auto_self (64 words past the
+    // residues) then stays in scratch the shim owns; the live result (the first pass) is what is compared
     let mut e = Poly::mul(&mut c, &mut x[0]);
     e.auto_self();
     dump(&mut o, &e);
