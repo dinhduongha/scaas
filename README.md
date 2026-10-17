@@ -1049,5 +1049,6 @@ SCaaS is licensed under the [Vegan Community License 1.0](LICENSE) (summary in V
 organizations whose group revenue is below USD 10 million; not available to anyone who kills animals (any animal: mammals, birds, fish, insects and every other species), to food businesses that
 serve products from killed animals, fertilized eggs or bee products, to anyone trading in silk, leather or fur products
 at any scale, to groups earning more than 10% of revenue from such products, or to anyone trading in human organs, tissue, blood or other human-derived products outside donation for
-medical treatment (see the license for the exact terms); everyone else needs a Vegan Enterprise License. Contributions are accepted under the CLA in [CONTRIBUTING.md](CONTRIBUTING.md).
+medical treatment; a general-purpose service open to all (running a blockchain, a node or a relayer, hosting) is not
+excluded because one of its users is, but that user stays excluded (see the license for the exact terms); everyone else needs a Vegan Enterprise License. Contributions are accepted under the CLA in [CONTRIBUTING.md](CONTRIBUTING.md).
 Third-party components keep their own licenses.

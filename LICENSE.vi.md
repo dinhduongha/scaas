@@ -31,6 +31,12 @@ sát, lưỡng cư, cá, giáp xác, thân mềm, côn trùng, nhện, giun và 
 (rệp son), gelatin, xương và mọi thứ có được từ việc giết động vật; **trứng có phôi** (trứng có trống); **mật ong và các sản phẩm từ ong** (sáp ong, sữa ong chúa, keo ong); và mọi
 món ăn, sản phẩm có chứa chúng. **Không bị cấm:** sữa, trứng không có phôi (trứng công nghiệp không trống), len xén.
 
+**Dịch vụ thứ cấp không bị cấm:** cung cấp dịch vụ đa dụng mở cho mọi người theo cùng điều kiện (ví dụ vận hành
+blockchain, node, validator, relayer, hosting, cloud, mạng, thanh toán, phần mềm) **không** bị cấm chỉ vì có khách hàng
+hoặc người dùng thuộc diện bị cấm, và doanh thu từ dịch vụ đó không tính vào ngưỡng 10%. **Người dùng vi phạm** vẫn bị cấm
+và không được dùng phần mềm, kể cả qua dịch vụ đó. Ngoại lệ này không áp dụng cho dịch vụ được thiết kế, may đo hoặc
+tiếp thị riêng cho các hoạt động bị cấm, cũng không áp dụng cho việc tài trợ các hoạt động đó.
+
 Điều cấm được ưu tiên hơn mọi điều khoản khác, và áp dụng cả cho Vegan Enterprise License.
 
 ## Ai được dùng miễn phí
