@@ -22,7 +22,9 @@ diffs() { (cd pqzl && CAPPED=env sv/diff.sh "gate-$L" 20 10 2 10 &&
 tbox() { (cd pqzl && ./check_tbox_fixes.sh); }
 sv() { (cd pqzl && sv/check_sv_fixes.sh); }
 cargo_tests() { (cd stmt && cargo test --release --offline) && (cd pqzh/ligero && cargo test --release --offline); }
-fuzz() { fuzz/build.sh && for t in precompile mutate codec; do fuzz/run.sh "$t" "$FZ" "gate-$L" || return 1; done; }
+# a smoke run is too short to merge into the committed corpora (the 2 h campaigns'): restore them afterwards
+fuzz() { fuzz/build.sh && for t in precompile mutate codec; do fuzz/run.sh "$t" "$FZ" "gate-$L" || return 1; done &&
+  git checkout -- fuzz/corpus && git clean -fdq fuzz/corpus; }
 
 step kat kat
 step tbox tbox

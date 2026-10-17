@@ -616,8 +616,9 @@ Then (2026-10-15 / 17): the precompile **live on chain 7622** for ops 1–6 (P6f
 
 **Next, in order:**
 
-1. **S7** (spec and gas tables after op 7 went live on 7622 in S8) and the op 7 entry points in the PQZ tokens.
-2. **Gate A (PQZL)** and **gate B (PQZH)** ([relations plan](../docs/superpowers/plans/2026-10-14-p6e-relations.md)): KAT 19/19, fix checks, differential 0 disagreements,
+1. ~~S7 and the op 7 entry points in the PQZ tokens~~ — done 2026-10-17 (op 7 live in the tokens on 7622).
+2. ~~**Gate A (PQZL)** and **gate B (PQZH)**~~ — **passed 2026-10-17** (`gate.sh`, runs `runs/gate/2026-10-17-*`; both ids
+   frozen; decisions.md CTR-PQZ-09) ([relations plan](../docs/superpowers/plans/2026-10-14-p6e-relations.md)): KAT 19/19, fix checks, differential 0 disagreements,
    `pqz-vectors --check` and `pqz_kat.py --check`, wasm32 replay byte-equal, `pqz-ffi` tests, fuzzing clean;
    gate B also every PQZH op ≤ 262,144 B and ≤ 60 ms p99 native and wasm32 and the review of the modified Ligero ZK
    construction. Both ids freeze there.
