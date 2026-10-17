@@ -354,18 +354,15 @@ refunding the rest ([section 14](#14-how-the-design-evolved)).
 
 | Family | Chains | Language | Token | Mandate and DEX | Accounts |
 |---|---|---|---|---|---|
-| EVM | private chain 7622 (testnet), 22776 (future mainnet), Gnosis, Celo, local anvil; Hedera ([own page](docs/networks/hedera.md)); Base and TRON as EVM profiles (planned) | Solidity | `MetaTokenBase` kinds (ERC-20; TRC-20 on TRON), the Zether and PQZ kinds | `MandateWallet`, `SCaaSDex` | UA registry, ERC-1271 (`SmartKeyAccount`), passkeys |
+| EVM | Ethereum, BSC, Polygon, Gnosis, Celo, Base, Hedera, TRON | Solidity | `MetaTokenBase` kinds (ERC-20) | `MandateWallet`, `SCaaSDex` | UA registry, ERC-1271, passkey |
 | Cosmos | CosmWasm chains | Rust (CosmWasm) | `token` (CW20) + `metaop` | `mandate`, `dex` | ADR-036 secp256k1, passkey |
 | Soroban | Stellar, Pi Network | Rust (WASM) | `token` (SEP-41) | `mandate`, `dex` | `account` with `__check_auth` |
-| Aptos | Aptos | Move | `meta` (one account object per owner, lanes inside) | `mandate`, `dex` | `auth`, `p256` |
-| Sui | Sui | Move | `meta` (shared `Account<T>` per subject) | `mandate`, `dex` | `auth` |
-| GRAM (formerly TON) | GRAM | Tact | `jetton` (TEP-74, custom wallet checks the signed op) | `mandate`, `dex` (escrow) | wallet signature, passkey |
-| Solana | Solana | Rust | program `scaas` (subject account and lane accounts) | in the same program | ed25519 / P-256 precompiles |
-| NEAR | NEAR | Rust (`near-sdk`, WASM) | NEP-141 fungible token (planned) | planned | access keys (ed25519 / secp256k1) |
-| Algorand | Algorand (ALGO) | Algorand Python / TEAL (AVM) | ASA or ARC-200 token (planned) | planned | ed25519 accounts, logic signatures |
-
-NEAR and Algorand are not built yet (no contract code); Base and TRON reuse the EVM contracts as chain profiles
-(TRON's TVM runs Solidity, with its own energy / bandwidth fees and base58 addresses), also not deployed yet.
+| Aptos | Aptos | Move | `meta` (account object per owner) | `mandate`, `dex` | `auth`, `p256` |
+| Sui | Sui | Move | `meta` (shared `Account<T>`) | `mandate`, `dex` | `auth` |
+| GRAM (ex-TON) | GRAM | Tact | `jetton` (TEP-74) | `mandate`, `dex` | wallet signature, passkey |
+| Solana | Solana | Rust | program `scaas` | same program | ed25519, P-256 |
+| NEAR (planned) | NEAR | Rust (WASM) | NEP-141 | — | access keys |
+| Algorand (planned) | Algorand | Algorand Python / TEAL | ASA / ARC-200 | — | ed25519 |
 
 On every family a subject signs one of two kinds: a `MetaCall` (a call of one of the contract's allowlisted
 functions, checked by one verification library per family) or a typed `MetaTransfer`, and every signed entry point
@@ -785,14 +782,14 @@ SCaaS groups chains into **families**: one contract code base and one node adapt
 
 | Family | Chains | Execution | How the meta-transaction is done |
 |---|---|---|---|
-| EVM | Gnosis, Celo, private chain 7622 (testnet), 22776 (future mainnet), local anvil; Hedera (own page); Base, TRON (planned profiles) | EVM (Solidity; TRON's TVM) | EIP-712 intent inside the token |
+| EVM | Ethereum, BSC, Polygon, Gnosis, Celo, Base, Hedera, TRON | EVM (Solidity) | EIP-712 intent inside the token |
 | Cosmos | CosmWasm chains | CosmWasm (Rust) | `Relay{payload, auth}` to the contract |
 | Soroban | Stellar, Pi Network | Soroban WASM (Rust) | native authorization entries |
 | Move | Aptos, Sui | Move VM | an account object per subject, lanes inside |
 | GRAM (formerly TON) | GRAM | TVM (Tact) | a custom jetton wallet checks the signed operation |
 | Solana | Solana | SVM (Rust) | program-level, subject account + lane accounts |
-| NEAR (planned) | NEAR | NEAR WASM (Rust) | to be designed (NEAR access keys, a signed operation checked by the contract) |
-| Algorand (planned) | Algorand | AVM (Algorand Python / TEAL) | to be designed (an app call carrying the signed operation) |
+| NEAR (planned) | NEAR | WASM (Rust) | to be designed |
+| Algorand (planned) | Algorand | AVM | to be designed |
 
 Other EVM chains can be added as profiles. Finality, signing domains, passkeys and the availability of each feature
 per family: [docs/networks/README.md](docs/networks/README.md).
