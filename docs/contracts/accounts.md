@@ -835,7 +835,7 @@ in v1.
 
 ```solidity
 interface IUARegistry is IERC5267 {
-    struct Record { uint16 kind; uint40 registeredAt; address keyPtr; }   // one slot; keyPtr ≠ 0 only for stored kinds
+    struct Record { uint16 kind; uint40 registeredAt; address keyPtr; uint40 index; }   // one slot; keyPtr ≠ 0 only for stored kinds; index = place in the kind's list (CTR-UA-29)
 
     event UARegistered(bytes32 indexed ua, uint16 indexed kind, bytes keyData, bytes32 authRef);
     event UAKeyCached(bytes32 indexed ua, uint16 indexed kind, uint256 part, address ptr);   // P6c, ML-DSA
@@ -850,6 +850,8 @@ interface IUARegistry is IERC5267 {
     error UAPoP();
     error UAUnauthorized(bytes32 ua);             // also: ua is ZETHER or unregistered
     error UAKeyCache(uint16 kind);                // not ML-DSA, disabled, part past the last, or the verifier uses a precompile
+    error UAIndex(uint16 kind, uint256 i);        // uaAt past the kind's count (CTR-UA-29)
+    error UANotIndexed(bytes32 ua);               // uaIndex of an unregistered id or a structure
 
     function generation() external view returns (uint8);                     // 1 or 2
     function predecessor() external view returns (address);
@@ -879,6 +881,11 @@ interface IUARegistry is IERC5267 {
     /// ML-DSA without a precompile (P6c): part `part` of the expanded key the registry derives from pk, one tx each
     function cacheExpandedKey(uint16 kind, bytes calldata pk, uint256 part) external returns (bytes32 ua);
     function expandedKeyOf(bytes32 ua) external view returns (address[2] memory);   // stored part pointers (0 = not yet)
+    /// The per-kind list of registered UAs (CTR-UA-29): single-key kinds, appended at registration
+    function uaCount(uint16 kind) external view returns (uint256);
+    function uaAt(uint16 kind, uint256 i) external view returns (bytes32);
+    function uaPage(uint16 kind, uint256 start, uint256 n) external view returns (bytes32[] memory);   // clipped at the end
+    function uaIndex(bytes32 ua) external view returns (uint256);
 
     /// Reverts UAUnauthorized unless `auth` authorizes `digest` for `ua` under `purposeTag`.
     /// Native ids (ua >> 160 == 0): ECDSA low-s (EOA) or ERC-1271 (50 k cap; 400 k for SmartKeyAccount clones, by the
@@ -1069,6 +1076,8 @@ this table's set and the gen-1 default caps; a kind whose probe fails gets no ve
 ### 1.10 EIP-7702 and chain identity
 
 <a id="eip7702"></a>
+<a id="CTR-UA-29"></a>**CTR-UA-29** — **The registry keeps an on-chain list of the UAs of each kind** (owner 2026-10-17). Purpose: wallets pick decoys for PQZ and classical Zether multi-recipient transfers (op 7 / Z-multi) from the UAs registered under the token's kind; on chain because event logs can be pruned on a long-running chain (EIP-4444), and in the registry because one UA serves many tokens and purposes. Every registration of a single-key kind appends the UA at `uaCount(kind)` (assigned by the registry, `Record.index`, in the record's free 40 bits); structures (`msig`) are not listed. Views `uaCount`, `uaAt`, `uaPage(kind, start, n)` (clipped at the end), `uaIndex`; how a wallet reads the list (all, ranges, random) is its own decision. Cost ≈ +27 k gas per registration (one new slot + the counter); registration stays relayable (no `msg.sender` state). A kind a generation does not enable is answered by its predecessor (a single-key kind lives in exactly one generation). Native ids are not listed and are never registered automatically (they cannot be decoys: no encryption key). Status: BUILT (branch `ua-index`).
+
 <a id="CTR-UA-24"></a>**CTR-UA-24** — **EIP-7702 delegated EOAs are native EOAs whose key stays root; native
 classification is by code at verify time.** Wherever a native EVM id is verified (`requireAuthorized`, `msig` native
 members, a native `authRef` and its co-sign, v3's native path): empty code ⇒ ECDSA low-s by the address; code that is
