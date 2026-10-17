@@ -1,0 +1,15 @@
+/home/ha/work/ainative/scaas/scratchpad/s8-copy/genesis.pqz1.json: schedule 1 added at 1792203588 = 0x6ad2db44: 26 rows (14 new of ops [7]), selftest 2567000, mldsa44 49000, mldsa65 68000
+  op 7 id 0x0a47a768… stmtLen 132992 M 4 auditorOn 1 gas 4,935,000
+  op 7 id 0x0a47a768… stmtLen 116096 M 4 auditorOn 0 gas 4,892,000
+  op 7 id 0x0a47a768… stmtLen 99712 M 2 auditorOn 1 gas 4,001,000
+  op 7 id 0x0a47a768… stmtLen 83072 M 1 auditorOn 1 gas 3,864,000
+  op 7 id 0x0a47a768… stmtLen 83072 M 2 auditorOn 0 gas 4,415,000
+  op 7 id 0x0a47a768… stmtLen 66560 M 1 auditorOn 0 gas 4,314,000
+  op 7 id 0x2e07e6ed… stmtLen 215936 M 8 auditorOn 1 gas 6,177,000
+  op 7 id 0x2e07e6ed… stmtLen 198528 M 8 auditorOn 0 gas 5,339,000
+  op 7 id 0x2e07e6ed… stmtLen 132992 M 4 auditorOn 1 gas 4,121,000
+  op 7 id 0x2e07e6ed… stmtLen 116096 M 4 auditorOn 0 gas 3,972,000
+  op 7 id 0x2e07e6ed… stmtLen 99712 M 2 auditorOn 1 gas 3,710,000
+  op 7 id 0x2e07e6ed… stmtLen 83072 M 1 auditorOn 1 gas 3,625,000
+  op 7 id 0x2e07e6ed… stmtLen 83072 M 2 auditorOn 0 gas 3,827,000
+  op 7 id 0x2e07e6ed… stmtLen 66560 M 1 auditorOn 0 gas 3,953,000

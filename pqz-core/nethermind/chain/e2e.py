@@ -240,10 +240,11 @@ def cmd_probe(a, expect_fail=False):
         gas = used - 100 - oh
         check(rlen == 32 and word == want and gas == sch.gas(b),
               f"PQZ {r['kind']:8} {r['name'][:46]:46} {r['id']}: word {word if word < 2 else hex(word)[:10]} (want {want if want < 2 else 'hash'}), gas {gas} = formula {sch.gas(b)}")
-        by.setdefault((r["id"], r["form"]), {})[r["kind"]] = gas
+        # pair a valid input with its flip by the statement (op 7: one form, several shapes)
+        by.setdefault((r["id"], r["form"], b[:5 + max(r["stmt_len"], 0)]), {})[r["kind"]] = gas
     for k, v in sorted(by.items()):
         if "honest" in v and "flip" in v:
-            check(v["honest"] == v["flip"], f"gas valid = invalid {k}: {v['honest']} / {v['flip']}")
+            check(v["honest"] == v["flip"], f"gas valid = invalid {k[:2]} ({len(k[2]) - 5:,} B statement): {v['honest']} / {v['flip']}")
     h = bytes.fromhex(next(r for r in rows if r["kind"] == "honest")["input"])
     for name, b in (("unknown id", h[:40] + bytes([h[40] ^ 1]) + h[41:]), ("short (68 B)", h[:68]), ("empty", b""),
                     ("unknown op 9", bytes([9]) + h[1:])):
