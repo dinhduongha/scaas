@@ -6,8 +6,8 @@ is a confidential token in the Zether model, whose amounts and balances stay sec
 ("PQ Zether" was the historical name; Z stands for zero-knowledge). Each operation has its own fixed relation — it is
 not a general-purpose ZK system.
 
-> **Status:** built and measured, **unaudited, not for production funds**. Numbers are provisional until the freeze after
-> gates A / B. The dated log of every change and run is [STATUS.md](STATUS.md); the spec is
+> **Status:** built and measured, **unaudited, not for production funds**. Numbers are **frozen** (2026-10-17, after
+> gates A / B: `artifact/runs/freeze-2026-10-17/`, `artifact/expected-results.json`). The dated log of every change and run is [STATUS.md](STATUS.md); the spec is
 > [pq-zero-knowledge.md, "Proof engine"](../docs/contracts/pq-zero-knowledge.md#proof-engine).
 
 ## Contents
@@ -16,7 +16,7 @@ not a general-purpose ZK system.
 2. [What PQZ is](#2-what-pqz-is) — encryption, accounts, what each proof shows
 3. [Two proof systems, one precompile](#3-two-proof-systems-one-precompile) — PQZL, PQZH and the shared parts
 4. [Statement forms, ids, limits](#4-statement-forms-ids-limits) — the operations and their sizes
-5. [Measurements](#5-measurements-provisional) — proof sizes, prove and verify times
+5. [Measurements](#5-measurements-frozen-2026-10-17) — proof sizes, prove and verify times
 6. [Build, test, run](#6-build-test-run) — commands
 7. [Directory map](#7-directory-map) — what each folder holds
 8. [Licences](#8-licences)
@@ -47,7 +47,7 @@ flowchart LR
 Both stay far under the 60 ms verify limit, and both provers fit the 256 MiB browser (wasm32) memory limit. One precompile verifies both, chosen by the `proofSystemId` in the
 statement. **Live:** the precompile runs on chain 7622 (the testnet) since 2026-10-16 for ops 1–6
 ([§3](#3-two-proof-systems-one-precompile)). **op 7** (one proof for a transfer to M recipients,
-[§4](#4-statement-forms-ids-limits), [§5.4](#54-op-7-r_txm-multi-recipient-transfer-provisional)) is built in both systems
+[§4](#4-statement-forms-ids-limits), [§5.4](#54-op-7-r_txm-multi-recipient-transfer)) is built in both systems
 and in `pqz-ffi`, with vectors, fuzzing and the package, and **live on chain 7622 since 2026-10-17** (gas rows per
 `(id, M, auditorOn)`, P6-ANON S8).
 
@@ -190,10 +190,75 @@ layout — statements, objects, both proof formats, the precompile input and `OP
 | Proof length | `1 ≤ len(proof) ≤ MAX_PROOF(id)` |
 | Verify time | **≤ 60 ms p99** on the chain host, also bounding wasm32 (owner decision 2026-10-14) |
 
-## 5. Measurements (provisional)
+## 5. Measurements (frozen 2026-10-17)
 
-> **Provisional.** These numbers are replaced by the frozen run after gates A / B (with op 7);
-> `artifact/expected-results.json` is regenerated from the same runs.
+> **Frozen run** (`artifact/reproduce.sh --full` on the host toolchain under the machine lock, after gates A / B, with
+> op 7): `artifact/runs/freeze-2026-10-17/` (`results.md`: 233 ok, 0 FAIL); `artifact/expected-results.json` is built
+> from it. Proof hashes, sizes and checks are compared; times are informational. The subsections after the frozen
+> tables keep the method and the earlier measurements.
+
+### 5.0 The frozen tables
+
+Machine: AMD Ryzen 5 7235HS (8 threads; flags aes vaes avx2), Ubuntu 24.04.4 LTS, kernel 7.0.0-34-generic, Ubuntu clang version 18.1.3 (1ubuntu1), Ubuntu LLD 18.1.3, node v26.8.1, Python 3.12.3, rustc 1.97.1 (8bab26f4f 2026-07-14), in Docker: False.
+
+#### PQZL (the LaZer fork, C)
+
+| | proof bytes (max) | prove p50 native / wasm | generic verify p50 native / wasm | SV p50 portable / x86-64-v3 / wasm | SV p99 portable / x86-64-v3 / wasm | wasm prove peak (one op, no SV) |
+|---|---|---|---|---|---|---|
+| `R_REG` | 28,113 | 290 / 509 ms | 159 / 276 ms | 3.89 / 2.42 / 6.8 ms | 5.2 / 3.4 / 9.7 ms | 70.3 MiB |
+| `R_TX` | 42,785 | 898 / 1,255 ms | 625 / 946 ms | 7.94 / 4.59 / 14.2 ms | 10.7 / 5.7 / 20.4 ms | 221.1 MiB |
+| `R_BURN` | 41,938 | 828 / 1,214 ms | 639 / 713 ms | 8.01 / 4.34 / 14.1 ms | 14.8 / 6.1 / 18.8 ms | 210.2 MiB |
+| `R_DS` | 28,995 | 408 / 644 ms | 250 / 259 ms | 4.62 / 2.73 / 7.3 ms | 6.5 / 3.9 / 9.8 ms | 73.3 MiB |
+| `R_DR` | 28,996 | 452 / 502 ms | 241 / 263 ms | 4.60 / 2.67 / 7.8 ms | 6.0 / 3.7 / 9.4 ms | 79.1 MiB |
+| `R_TX0` | 42,441 | 1,010 / 1,391 ms | 721 / 745 ms | 7.96 / 4.67 / 13.4 ms | 9.9 / 6.6 / 15.8 ms | 216.7 MiB |
+
+#### PQZH (Ligero, Rust; the proven preset)
+
+| | proof bytes (max) | max_len_exact | prove p50 native / wasm32 | verify p50 / p99 native | verify p50 / p99 wasm32 | prove memory native heap / wasm32 linear | verifies native / wasm32 |
+|---|---|---|---|---|---|---|---|
+| `R_REG` | 187,674 | 190,458 | 400 / 891 ms | 7.20 / 8.65 ms | 12.22 / 15.06 ms | 25.9 / 29 MiB | 1,000 / 1,000 |
+| `R_TX` | 232,302 | 235,470 | 695 / 1,445 ms | 10.32 / 12.05 ms | 18.64 / 23.80 ms | 43.2 / 46.8 MiB | 1,000 / 1,000 |
+| `R_BURN` | 232,632 | 234,744 | 687 / 1,431 ms | 9.50 / 11.46 ms | 17.48 / 24.43 ms | 42.9 / 47.1 MiB | 1,000 / 1,000 |
+| `R_DS` | 187,802 | 190,458 | 446 / 852 ms | 7.62 / 9.23 ms | 12.44 / 16.43 ms | 25.9 / 47.1 MiB | 1,000 / 1,000 |
+| `R_DR` | 187,226 | 190,458 | 390 / 777 ms | 7.45 / 9.25 ms | 12.49 / 16.95 ms | 25.9 / 47.1 MiB | 1,000 / 1,000 |
+| `R_TX0` | 231,800 | 234,744 | 651 / 1,555 ms | 9.92 / 12.19 ms | 17.73 / 22.47 ms | 42.9 / 48.6 MiB | 1,000 / 1,000 |
+
+#### pqz-ffi (one precompile, both systems)
+
+Self-test hash: `ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205`.
+
+| system | form | proof bytes | verify p50 / p99 through the C ABI | adversarial p50 |
+|---|---|---|---|---|
+| PQZL | Transfer | 42,759 | 8.22 / 10.16 ms | 8.54 ms |
+| PQZL | Transfer0 | 42,387 | 8.47 / 13.00 ms | 8.54 ms |
+| PQZL | Burn | 41,914 | 8.39 / 11.16 ms | 8.28 ms |
+| PQZL | Refresh | 41,902 | 8.19 / 10.88 ms | 8.74 ms |
+| PQZL | Register | 28,068 | 4.21 / 6.58 ms | 4.19 ms |
+| PQZL | DiscloseSender | 28,964 | 4.49 / 6.44 ms | 4.56 ms |
+| PQZL | DiscloseReceiver | 28,990 | 4.82 / 7.42 ms | 4.73 ms |
+| PQZL | DiscloseAuditor | 28,995 | 4.76 / 7.27 ms | 4.76 ms |
+| PQZL | TransferMulti1 | 42,766 | 8.87 / 12.42 ms | 8.75 ms |
+| PQZL | TransferMulti2 | 43,603 | 9.05 / 11.67 ms | 9.17 ms |
+| PQZL | TransferMulti4 | 45,274 | 10.05 / 13.41 ms | 9.88 ms |
+| PQZL | TransferMulti8 | 61,802 | 14.65 / 20.39 ms | 14.54 ms |
+| PQZL | TransferMulti1_0 | 42,409 | 9.14 / 11.23 ms | 8.99 ms |
+| PQZL | TransferMulti2_0 | 42,951 | 9.27 / 11.92 ms | 9.23 ms |
+| PQZL | TransferMulti4_0 | 43,922 | 9.86 / 11.94 ms | 9.93 ms |
+| PQZL | TransferMulti8_0 | 58,998 | 14.06 / 18.10 ms | 14.37 ms |
+| PQZH | Transfer | 231,022 | 10.14 / 11.49 ms | 1.28 ms |
+| PQZH | Transfer0 | 231,064 | 9.72 / 11.27 ms | 1.23 ms |
+| PQZH | Burn | 231,320 | 9.62 / 12.85 ms | 0.59 ms |
+| PQZH | Refresh | 231,928 | 9.64 / 11.71 ms | 1.21 ms |
+| PQZH | Register | 187,738 | 7.17 / 8.57 ms | 0.38 ms |
+| PQZH | DiscloseSender | 186,842 | 7.52 / 8.87 ms | 0.42 ms |
+| PQZH | DiscloseReceiver | 187,098 | 7.39 / 8.53 ms | 0.42 ms |
+| PQZH | DiscloseAuditor | 186,778 | 7.41 / 9.04 ms | 0.42 ms |
+| PQZH | TransferMulti1 | 232,174 | 10.23 / 14.35 ms | 1.29 ms |
+| PQZH | TransferMulti2 | 232,174 | 10.55 / 12.27 ms | 1.32 ms |
+| PQZH | TransferMulti4 | 232,708 | 11.22 / 12.99 ms | 1.44 ms |
+| PQZH | TransferMulti1_0 | 230,968 | 9.75 / 11.07 ms | 1.23 ms |
+| PQZH | TransferMulti2_0 | 231,918 | 10.28 / 11.98 ms | 1.29 ms |
+| PQZH | TransferMulti4_0 | 230,904 | 10.49 / 12.48 ms | 1.38 ms |
 
 **How the numbers were measured**
 
@@ -354,7 +419,7 @@ op 7 (statement, proof and prove time of the bench's proof; largest input = 5 + 
 
 </details>
 
-### 5.4 op 7 `R_TXM`, multi-recipient transfer (provisional)
+### 5.4 op 7 `R_TXM`, multi-recipient transfer
 
 Built shapes, auditor on (auditor off is a little smaller and faster). Run: the package's `--multi-bench` in Docker
 (P6-ANON S6, 2026-10-17, `artifact/runs/s6-docker-multi/`; full table with auditor off and the oversize shapes in
@@ -518,7 +583,7 @@ scripts/capped pqz-core/glic/absence.sh > pqz-core/glic/runs/absence-<date>.txt 
 
 The package (`artifact/`, [artifact/README.md](artifact/README.md)) is source only: a pinned `Dockerfile`, quick and
 `--full` modes, `--serve` (local browser demo), `--upstream` (upstream LaZer built from source); `results.py` compares a
-run with `expected-results.json` (provisional).
+run with `expected-results.json` (frozen 2026-10-17).
 
 </details>
 
@@ -622,7 +687,7 @@ Then (2026-10-15 / 17): the precompile **live on chain 7622** for ops 1–6 (P6f
    `pqz-vectors --check` and `pqz_kat.py --check`, wasm32 replay byte-equal, `pqz-ffi` tests, fuzzing clean;
    gate B also every PQZH op ≤ 262,144 B and ≤ 60 ms p99 native and wasm32 and the review of the modified Ligero ZK
    construction. Both ids freeze there.
-3. **The freeze:** `artifact/reproduce.sh --full` → `expected-results.json` (replaces every provisional number here).
+3. ~~**The freeze**~~ — done 2026-10-17: `artifact/runs/freeze-2026-10-17/`, PASS (233 ok), `expected-results.json` frozen.
 4. **PQZL in Rust** (after the freeze; [plan](../docs/superpowers/plans/2026-10-17-pqzl-rust-port.md)): crate `pqzl` in
    `pqzl/rust/`, byte-for-byte equal to the C core; which one is the production core is decided later (owner).
 

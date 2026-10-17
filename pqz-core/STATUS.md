@@ -612,6 +612,20 @@ Open: no op 7 disclosure-bundle (§5.4) vectors, `pqz-stmt` has no codec for tha
 
 `Nethermind.Pqz` prices op 7 per `(proofSystemId, M, auditorOn)` (header words 320 / 448); 14 calibrated rows 3,625,000–6,177,000 gas; image `pqz2`; on chain 7622 since T = 1792205116 (2026-10-17 02:45:16Z) through a second `engine.Pqz` schedule (path A, data kept). Harness 60 min CLEAN; copy and live probes / e2e pass (`nethermind/runs/2026-10-17-*`). The rows are in plan S8's results and `nethermind/chain/engine-pqz.json`.
 
+## Gates A / B and the freeze (2026-10-17)
+
+**Gates passed:** `gate.sh 2026-10-17` (`runs/gate/2026-10-17-*`): KAT 19/19; `check_tbox_fixes`, `check_sv_fixes` ok;
+differential 6,486 cases, 0 mismatches (portable + x86-64-v3); z21 differential 406, 0 disagreements; `pqz-vectors
+--check` 16 files byte-identical; `pqz_kat.py --check` ok; tamper 191 / 191; wasm32 replay 53 cases, 0 fails;
+`pqz-ffi`, `pqz-stmt`, Ligero tests green; STARK-backup cross-check equal; fuzz smoke 3 × 60 s, no finding. Gate B also:
+every built PQZH op ≤ 236,196 B and p99 ≤ 10.9 / 20.4 ms native / wasm32 (S6 multi-bench), the Ligero ZK review
+(`docs/research/pqzh-ligero.md` §12). CI `pqz` job added (green). Both proofSystemIds frozen (decisions CTR-PQZ-09).
+
+**Freeze:** `artifact/reproduce.sh --full` (host toolchain, machine lock): **PASS, 233 ok, 0 FAIL**
+(`artifact/runs/freeze-2026-10-17/`); `artifact/expected-results.json` = `results.py freeze "frozen 2026-10-17"` of it —
+proof hashes, sizes and digest lines equal to the provisional file, only the informational times changed. The frozen
+tables are README §5.0.
+
 ## Measured (2026-10-13, this machine, single thread)
 
 Native: clang -O2, `pqz_bench 5 5` under `scripts/capped` (5 proves, 5 + 5 honest verifies, 10 adversarial). wasm32:

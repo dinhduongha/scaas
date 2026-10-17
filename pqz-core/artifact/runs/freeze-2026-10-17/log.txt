@@ -1,0 +1,26 @@
+== 08:49:55 build (native, wasm, wasm without SV, native-x86v3)
+== 08:50:46 KAT
+== 08:50:46 check_tbox_fixes.sh
+== 08:51:55 pqzl/sv/check_sv_fixes.sh
+== 08:54:17 differential test pqz_verify vs pqz_verify_fast, portable: pqz_sv_diff 4 4 2 1 10 12 12 12 12
+== 09:09:31 differential test, x86-64-v3: pqz_sv_diff 2 2 2 2 10 6 6 6 6
+== 09:16:53 six relations, generic verifier: native pqz_bench 10 100, wasm run_wasm.mjs 5 30
+== 09:28:39 proofs_fnv: native pqz_bench 5 5, wasm run_wasm.mjs 3 1
+== 09:30:19 six relations, specialised verifier: pqz_bench 2 200 (portable, x86-64-v3), wasm 2 100, wasm both
+== 09:33:58 wasm prove memory, one relation per process (the prover build without SV)
+== 09:34:17 PQZH: cargo test (default features: 6 x 960 mutations, negative witnesses, cross-form, EVM fixtures)
+== 09:39:27 PQZH: the production build (--no-default-features): tests, examples / bins, clippy -D clippy::float_arithmetic
+== 09:39:33 PQZH: C <-> Rust cross-check (pqzh/xcheck/ligero.sh: statement + witness bytes, then kat_stmt.py)
+== 09:39:52 pqz-stmt: stmt/xcheck.sh (unit tests, C and pqz_kat.py cross-check, wasm32 build)
+== 09:40:16 PQZH: native ligero_bench, six forms: 5 proofs, 1000 verifies, 12 x 80 mutations each
+== 09:41:32 PQZH: wasm32 (node), six forms: 2 proofs, 1000 verifies, 12 x 4 mutations each
+== 09:43:32 pqz-ffi: cargo test --features prove,test-hooks (native digest lines, self-test, rejections, differential, faults)
+== 09:47:42 pqz-ffi: unit tests without prove, verify-only cdylib, symbol scan, C smoke test, clippy -D clippy::float_arithmetic
+== 09:48:04 pqz-ffi: wasm32 builds and digest lines (must equal native)
+== 09:49:05 pqz-ffi: ffi_bench 200
+== 09:52:53 vectors: pqz-vectors --check (a second generation, byte for byte, every proof and negative input through pqz_precompile)
+== 09:55:33 vectors: pqz_kat.py --check (independent Python)
+== 09:56:16 vectors: wasm32 replay (every proof proved again by pqz-ffi in wasm32: byte-equal, valid)
+== 09:57:20 vectors: tamper.py (each checker catches changed leaves)
+== 09:59:07 tables and comparison
+== 09:59:07 done: /home/ha/work/ainative/scaas/pqz-core/pqz-core/artifact/runs/freeze-2026-10-17

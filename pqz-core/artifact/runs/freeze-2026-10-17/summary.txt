@@ -1,0 +1,304 @@
+# pqz-core reproducibility run (full)
+
+Machine: AMD Ryzen 5 7235HS (8 threads; flags aes vaes avx2), Ubuntu 24.04.4 LTS, kernel 7.0.0-34-generic, Ubuntu clang version 18.1.3 (1ubuntu1), Ubuntu LLD 18.1.3, node v26.8.1, Python 3.12.3, rustc 1.97.1 (8bab26f4f 2026-07-14), in Docker: False.
+
+Times are informational (they depend on the machine); the proof hashes, the checks and the sizes are compared.
+
+## PQZL (the LaZer fork, C)
+
+| | proof bytes (max) | prove p50 native / wasm | generic verify p50 native / wasm | SV p50 portable / x86-64-v3 / wasm | SV p99 portable / x86-64-v3 / wasm | wasm prove peak (one op, no SV) |
+|---|---|---|---|---|---|---|
+| `R_REG` | 28,113 | 290 / 509 ms | 159 / 276 ms | 3.89 / 2.42 / 6.8 ms | 5.2 / 3.4 / 9.7 ms | 70.3 MiB |
+| `R_TX` | 42,785 | 898 / 1,255 ms | 625 / 946 ms | 7.94 / 4.59 / 14.2 ms | 10.7 / 5.7 / 20.4 ms | 221.1 MiB |
+| `R_BURN` | 41,938 | 828 / 1,214 ms | 639 / 713 ms | 8.01 / 4.34 / 14.1 ms | 14.8 / 6.1 / 18.8 ms | 210.2 MiB |
+| `R_DS` | 28,995 | 408 / 644 ms | 250 / 259 ms | 4.62 / 2.73 / 7.3 ms | 6.5 / 3.9 / 9.8 ms | 73.3 MiB |
+| `R_DR` | 28,996 | 452 / 502 ms | 241 / 263 ms | 4.60 / 2.67 / 7.8 ms | 6.0 / 3.7 / 9.4 ms | 79.1 MiB |
+| `R_TX0` | 42,441 | 1,010 / 1,391 ms | 721 / 745 ms | 7.96 / 4.67 / 13.4 ms | 9.9 / 6.6 / 15.8 ms | 216.7 MiB |
+
+## PQZH (Ligero, Rust; the proven preset)
+
+| | proof bytes (max) | max_len_exact | prove p50 native / wasm32 | verify p50 / p99 native | verify p50 / p99 wasm32 | prove memory native heap / wasm32 linear | verifies native / wasm32 |
+|---|---|---|---|---|---|---|---|
+| `R_REG` | 187,674 | 190,458 | 400 / 891 ms | 7.20 / 8.65 ms | 12.22 / 15.06 ms | 25.9 / 29 MiB | 1,000 / 1,000 |
+| `R_TX` | 232,302 | 235,470 | 695 / 1,445 ms | 10.32 / 12.05 ms | 18.64 / 23.80 ms | 43.2 / 46.8 MiB | 1,000 / 1,000 |
+| `R_BURN` | 232,632 | 234,744 | 687 / 1,431 ms | 9.50 / 11.46 ms | 17.48 / 24.43 ms | 42.9 / 47.1 MiB | 1,000 / 1,000 |
+| `R_DS` | 187,802 | 190,458 | 446 / 852 ms | 7.62 / 9.23 ms | 12.44 / 16.43 ms | 25.9 / 47.1 MiB | 1,000 / 1,000 |
+| `R_DR` | 187,226 | 190,458 | 390 / 777 ms | 7.45 / 9.25 ms | 12.49 / 16.95 ms | 25.9 / 47.1 MiB | 1,000 / 1,000 |
+| `R_TX0` | 231,800 | 234,744 | 651 / 1,555 ms | 9.92 / 12.19 ms | 17.73 / 22.47 ms | 42.9 / 48.6 MiB | 1,000 / 1,000 |
+
+## pqz-ffi (one precompile, both systems)
+
+Self-test hash: `ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205`.
+
+| system | form | proof bytes | verify p50 / p99 through the C ABI | adversarial p50 |
+|---|---|---|---|---|
+| PQZL | Transfer | 42,759 | 8.22 / 10.16 ms | 8.54 ms |
+| PQZL | Transfer0 | 42,387 | 8.47 / 13.00 ms | 8.54 ms |
+| PQZL | Burn | 41,914 | 8.39 / 11.16 ms | 8.28 ms |
+| PQZL | Refresh | 41,902 | 8.19 / 10.88 ms | 8.74 ms |
+| PQZL | Register | 28,068 | 4.21 / 6.58 ms | 4.19 ms |
+| PQZL | DiscloseSender | 28,964 | 4.49 / 6.44 ms | 4.56 ms |
+| PQZL | DiscloseReceiver | 28,990 | 4.82 / 7.42 ms | 4.73 ms |
+| PQZL | DiscloseAuditor | 28,995 | 4.76 / 7.27 ms | 4.76 ms |
+| PQZL | TransferMulti1 | 42,766 | 8.87 / 12.42 ms | 8.75 ms |
+| PQZL | TransferMulti2 | 43,603 | 9.05 / 11.67 ms | 9.17 ms |
+| PQZL | TransferMulti4 | 45,274 | 10.05 / 13.41 ms | 9.88 ms |
+| PQZL | TransferMulti8 | 61,802 | 14.65 / 20.39 ms | 14.54 ms |
+| PQZL | TransferMulti1_0 | 42,409 | 9.14 / 11.23 ms | 8.99 ms |
+| PQZL | TransferMulti2_0 | 42,951 | 9.27 / 11.92 ms | 9.23 ms |
+| PQZL | TransferMulti4_0 | 43,922 | 9.86 / 11.94 ms | 9.93 ms |
+| PQZL | TransferMulti8_0 | 58,998 | 14.06 / 18.10 ms | 14.37 ms |
+| PQZH | Transfer | 231,022 | 10.14 / 11.49 ms | 1.28 ms |
+| PQZH | Transfer0 | 231,064 | 9.72 / 11.27 ms | 1.23 ms |
+| PQZH | Burn | 231,320 | 9.62 / 12.85 ms | 0.59 ms |
+| PQZH | Refresh | 231,928 | 9.64 / 11.71 ms | 1.21 ms |
+| PQZH | Register | 187,738 | 7.17 / 8.57 ms | 0.38 ms |
+| PQZH | DiscloseSender | 186,842 | 7.52 / 8.87 ms | 0.42 ms |
+| PQZH | DiscloseReceiver | 187,098 | 7.39 / 8.53 ms | 0.42 ms |
+| PQZH | DiscloseAuditor | 186,778 | 7.41 / 9.04 ms | 0.42 ms |
+| PQZH | TransferMulti1 | 232,174 | 10.23 / 14.35 ms | 1.29 ms |
+| PQZH | TransferMulti2 | 232,174 | 10.55 / 12.27 ms | 1.32 ms |
+| PQZH | TransferMulti4 | 232,708 | 11.22 / 12.99 ms | 1.44 ms |
+| PQZH | TransferMulti1_0 | 230,968 | 9.75 / 11.07 ms | 1.23 ms |
+| PQZH | TransferMulti2_0 | 231,918 | 10.28 / 11.98 ms | 1.29 ms |
+| PQZH | TransferMulti4_0 | 230,904 | 10.49 / 12.48 ms | 1.38 ms |
+
+## Against expected-results.json: 233 ok, 0 FAIL, 0 warn, 0 info
+
+| status | check | detail |
+|---|---|---|
+| ok | kat | ok |
+| ok | tbox_fixes | ok |
+| ok | sv_fixes | ok |
+| ok | diff-portable | 3484 cases, 0 mismatches, 0 other fails, PRG 0 |
+| ok | diff-x86v3 | 1736 cases, 0 mismatches, 0 other fails, PRG 0 |
+| ok | native-generic.jsonl fails | fails 0, verifier disagreements 0 |
+| ok | wasm-generic.jsonl fails | fails 0, verifier disagreements 0 |
+| ok | native-fast.jsonl fails | fails 0, verifier disagreements 0 |
+| ok | x86v3-fast.jsonl fails | fails 0, verifier disagreements 0 |
+| ok | wasm-fast.jsonl fails | fails 0, verifier disagreements 0 |
+| ok | wasm-both.jsonl fails | fails 0, verifier disagreements 0 |
+| ok | fnv-native.jsonl fails | fails 0, verifier disagreements 0 |
+| ok | fnv-wasm.jsonl fails | fails 0, verifier disagreements 0 |
+| ok | alone-wasm-nosv.jsonl fails | fails 0, verifier disagreements 0 |
+| ok | R_REG proofs_fnv native-generic.jsonl n=10 | b82d49f8, expected b82d49f8 |
+| ok | R_REG proofs_fnv wasm-generic.jsonl n=5 | 8bd69f2d, expected 8bd69f2d |
+| ok | R_REG proofs_fnv native-fast.jsonl n=2 | 1af59837, expected 1af59837 |
+| ok | R_REG proofs_fnv x86v3-fast.jsonl n=2 | 1af59837, expected 1af59837 |
+| ok | R_REG proofs_fnv wasm-fast.jsonl n=2 | 1af59837, expected 1af59837 |
+| ok | R_REG proofs_fnv wasm-both.jsonl n=2 | 1af59837, expected 1af59837 |
+| ok | R_REG proofs_fnv fnv-native.jsonl n=5 | 8bd69f2d, expected 8bd69f2d |
+| ok | R_REG proofs_fnv fnv-wasm.jsonl n=3 | e70b5dc4, expected e70b5dc4 |
+| ok | R_REG proofs_fnv alone-wasm-nosv.jsonl n=1 | 25074bbb, expected 25074bbb |
+| ok | R_REG proof_bytes_max | 28113, frozen 28113 (0.00%, tol 0.5%) |
+| ok | R_REG wasm_prove_peak_bytes | 73692688, frozen 73692688 (0.00%, tol 1.0%) |
+| ok | R_REG ratio sv_speedup | 40.8, frozen 41.8 (2%, tol 50%; machine-dependent) |
+| ok | R_REG ratio wasm_over_native_prove | 1.75, frozen 1.64 (7%, tol 50%; machine-dependent) |
+| ok | R_TX proofs_fnv native-generic.jsonl n=10 | 0b786555, expected 0b786555 |
+| ok | R_TX proofs_fnv wasm-generic.jsonl n=5 | b9bbf854, expected b9bbf854 |
+| ok | R_TX proofs_fnv native-fast.jsonl n=2 | 559b3c44, expected 559b3c44 |
+| ok | R_TX proofs_fnv x86v3-fast.jsonl n=2 | 559b3c44, expected 559b3c44 |
+| ok | R_TX proofs_fnv wasm-fast.jsonl n=2 | 559b3c44, expected 559b3c44 |
+| ok | R_TX proofs_fnv wasm-both.jsonl n=2 | 559b3c44, expected 559b3c44 |
+| ok | R_TX proofs_fnv fnv-native.jsonl n=5 | b9bbf854, expected b9bbf854 |
+| ok | R_TX proofs_fnv fnv-wasm.jsonl n=3 | 9304299b, expected 9304299b |
+| ok | R_TX proofs_fnv alone-wasm-nosv.jsonl n=1 | 008d4495, expected 008d4495 |
+| ok | R_TX proof_bytes_max | 42785, frozen 42785 (0.00%, tol 0.5%) |
+| ok | R_TX wasm_prove_peak_bytes | 231858048, frozen 231858048 (0.00%, tol 1.0%) |
+| ok | R_TX ratio sv_speedup | 78.7, frozen 81.3 (3%, tol 50%; machine-dependent) |
+| ok | R_TX ratio wasm_over_native_prove | 1.4, frozen 1.35 (4%, tol 50%; machine-dependent) |
+| ok | R_BURN proofs_fnv native-generic.jsonl n=10 | c7e99b6b, expected c7e99b6b |
+| ok | R_BURN proofs_fnv wasm-generic.jsonl n=5 | 0a5976da, expected 0a5976da |
+| ok | R_BURN proofs_fnv native-fast.jsonl n=2 | 7694fd9f, expected 7694fd9f |
+| ok | R_BURN proofs_fnv x86v3-fast.jsonl n=2 | 7694fd9f, expected 7694fd9f |
+| ok | R_BURN proofs_fnv wasm-fast.jsonl n=2 | 7694fd9f, expected 7694fd9f |
+| ok | R_BURN proofs_fnv wasm-both.jsonl n=2 | 7694fd9f, expected 7694fd9f |
+| ok | R_BURN proofs_fnv fnv-native.jsonl n=5 | 0a5976da, expected 0a5976da |
+| ok | R_BURN proofs_fnv fnv-wasm.jsonl n=3 | 0ea1c7a6, expected 0ea1c7a6 |
+| ok | R_BURN proofs_fnv alone-wasm-nosv.jsonl n=1 | ad3e8a12, expected ad3e8a12 |
+| ok | R_BURN proof_bytes_max | 41938, frozen 41938 (0.00%, tol 0.5%) |
+| ok | R_BURN wasm_prove_peak_bytes | 220429488, frozen 220431120 (0.00%, tol 1.0%) |
+| ok | R_BURN ratio sv_speedup | 79.7, frozen 71.7 (11%, tol 50%; machine-dependent) |
+| ok | R_BURN ratio wasm_over_native_prove | 1.47, frozen 1.32 (11%, tol 50%; machine-dependent) |
+| ok | R_DS proofs_fnv native-generic.jsonl n=10 | 5429242c, expected 5429242c |
+| ok | R_DS proofs_fnv wasm-generic.jsonl n=5 | b4aa2e26, expected b4aa2e26 |
+| ok | R_DS proofs_fnv native-fast.jsonl n=2 | 9eb44281, expected 9eb44281 |
+| ok | R_DS proofs_fnv x86v3-fast.jsonl n=2 | 9eb44281, expected 9eb44281 |
+| ok | R_DS proofs_fnv wasm-fast.jsonl n=2 | 9eb44281, expected 9eb44281 |
+| ok | R_DS proofs_fnv wasm-both.jsonl n=2 | 9eb44281, expected 9eb44281 |
+| ok | R_DS proofs_fnv fnv-native.jsonl n=5 | b4aa2e26, expected b4aa2e26 |
+| ok | R_DS proofs_fnv fnv-wasm.jsonl n=3 | f39a8e64, expected f39a8e64 |
+| ok | R_DS proofs_fnv alone-wasm-nosv.jsonl n=1 | 478a0d94, expected 478a0d94 |
+| ok | R_DS proof_bytes_max | 28995, frozen 28995 (0.00%, tol 0.5%) |
+| ok | R_DS wasm_prove_peak_bytes | 76888880, frozen 76888880 (0.00%, tol 1.0%) |
+| ok | R_DS ratio sv_speedup | 54.0, frozen 45.2 (19%, tol 50%; machine-dependent) |
+| ok | R_DS ratio wasm_over_native_prove | 1.58, frozen 1.95 (19%, tol 50%; machine-dependent) |
+| ok | R_DR proofs_fnv native-generic.jsonl n=10 | e53ad440, expected e53ad440 |
+| ok | R_DR proofs_fnv wasm-generic.jsonl n=5 | c800f2c6, expected c800f2c6 |
+| ok | R_DR proofs_fnv native-fast.jsonl n=2 | 5bb0078c, expected 5bb0078c |
+| ok | R_DR proofs_fnv x86v3-fast.jsonl n=2 | 5bb0078c, expected 5bb0078c |
+| ok | R_DR proofs_fnv wasm-fast.jsonl n=2 | 5bb0078c, expected 5bb0078c |
+| ok | R_DR proofs_fnv wasm-both.jsonl n=2 | 5bb0078c, expected 5bb0078c |
+| ok | R_DR proofs_fnv fnv-native.jsonl n=5 | c800f2c6, expected c800f2c6 |
+| ok | R_DR proofs_fnv fnv-wasm.jsonl n=3 | 96a6e906, expected 96a6e906 |
+| ok | R_DR proofs_fnv alone-wasm-nosv.jsonl n=1 | cb2f3ced, expected cb2f3ced |
+| ok | R_DR proof_bytes_max | 28996, frozen 28996 (0.00%, tol 0.5%) |
+| ok | R_DR wasm_prove_peak_bytes | 82951488, frozen 82951488 (0.00%, tol 1.0%) |
+| ok | R_DR ratio sv_speedup | 52.5, frozen 45.8 (15%, tol 50%; machine-dependent) |
+| ok | R_DR ratio wasm_over_native_prove | 1.11, frozen 1.28 (13%, tol 50%; machine-dependent) |
+| ok | R_TX0 proofs_fnv native-generic.jsonl n=10 | a2759b37, expected a2759b37 |
+| ok | R_TX0 proofs_fnv wasm-generic.jsonl n=5 | a29a5747, expected a29a5747 |
+| ok | R_TX0 proofs_fnv native-fast.jsonl n=2 | 8b99b979, expected 8b99b979 |
+| ok | R_TX0 proofs_fnv x86v3-fast.jsonl n=2 | 8b99b979, expected 8b99b979 |
+| ok | R_TX0 proofs_fnv wasm-fast.jsonl n=2 | 8b99b979, expected 8b99b979 |
+| ok | R_TX0 proofs_fnv wasm-both.jsonl n=2 | 8b99b979, expected 8b99b979 |
+| ok | R_TX0 proofs_fnv fnv-native.jsonl n=5 | a29a5747, expected a29a5747 |
+| ok | R_TX0 proofs_fnv fnv-wasm.jsonl n=3 | a0afafc7, expected a0afafc7 |
+| ok | R_TX0 proofs_fnv alone-wasm-nosv.jsonl n=1 | bfdc29df, expected bfdc29df |
+| ok | R_TX0 proof_bytes_max | 42441, frozen 42441 (0.00%, tol 0.5%) |
+| ok | R_TX0 wasm_prove_peak_bytes | 227275456, frozen 227275456 (0.00%, tol 1.0%) |
+| ok | R_TX0 ratio sv_speedup | 90.6, frozen 71.9 (26%, tol 50%; machine-dependent) |
+| ok | R_TX0 ratio wasm_over_native_prove | 1.38, frozen 1.69 (18%, tol 50%; machine-dependent) |
+| ok | pqzh-test.txt | rc 0 and its markers |
+| ok | pqzh-nobench.txt | rc 0 and its markers |
+| ok | pqzh-xcheck.txt | rc 0 and its markers |
+| ok | stmt-xcheck.txt | rc 0 and its markers |
+| ok | ffi-test.txt | rc 0 and its markers |
+| ok | ffi-native.txt | rc 0 and its markers |
+| ok | ffi-wasm-build.txt | rc 0 and its markers |
+| ok | vectors-build.txt | rc 0 and its markers |
+| ok | vectors-check.txt | rc 0 and its markers |
+| ok | vectors-pqz-kat.txt | rc 0 and its markers |
+| ok | vectors-tamper.txt | rc 0 and its markers |
+| ok | PQZH pqzh-native.jsonl | fails 0, forms 6 / 6 |
+| ok | PQZH pqzh-wasm.jsonl | fails 0, forms 6 / 6 |
+| ok | PQZH R_REG fnv seed 0 pqzh-native.jsonl | 0ecf451a, expected 0ecf451a |
+| ok | PQZH R_REG fnv seed 1 pqzh-native.jsonl | 36b1d3e5, expected 36b1d3e5 |
+| ok | PQZH R_REG fnv seed 2 pqzh-native.jsonl | bd7e088c, expected bd7e088c |
+| ok | PQZH R_REG fnv seed 3 pqzh-native.jsonl | e1019551, expected e1019551 |
+| ok | PQZH R_REG fnv seed 4 pqzh-native.jsonl | b6215ec2, expected b6215ec2 |
+| ok | PQZH R_REG fnv seed 1 pqzh-wasm.jsonl | 36b1d3e5, expected 36b1d3e5 |
+| ok | PQZH R_REG proof bytes seed 4 pqzh-native.jsonl | 186938, expected 186938 |
+| ok | PQZH R_REG proof bytes seed 1 pqzh-wasm.jsonl | 186904, expected 186904 |
+| ok | PQZH R_REG native = wasm32 seed 1 | 36b1d3e5 |
+| ok | PQZH R_REG max_len_exact | 190458, expected 190458 |
+| ok | PQZH R_REG proofs within the bound | max 187674 <= max_len_exact 190458 = verifier bound 190458 |
+| ok | PQZH R_REG wasm32 memory <= 256 MiB | 29 MiB |
+| ok | PQZH R_REG ratio wasm_over_native_prove | 2.23, frozen 2.23 (0%, tol 50%; machine-dependent) |
+| ok | PQZH R_REG ratio wasm_over_native_verify | 1.7, frozen 1.62 (5%, tol 50%; machine-dependent) |
+| ok | PQZH R_TX fnv seed 0 pqzh-native.jsonl | 534b3a74, expected 534b3a74 |
+| ok | PQZH R_TX fnv seed 1 pqzh-native.jsonl | 720b94e0, expected 720b94e0 |
+| ok | PQZH R_TX fnv seed 2 pqzh-native.jsonl | f5bb1d99, expected f5bb1d99 |
+| ok | PQZH R_TX fnv seed 3 pqzh-native.jsonl | b28db0b7, expected b28db0b7 |
+| ok | PQZH R_TX fnv seed 4 pqzh-native.jsonl | f8c936d9, expected f8c936d9 |
+| ok | PQZH R_TX fnv seed 1 pqzh-wasm.jsonl | 720b94e0, expected 720b94e0 |
+| ok | PQZH R_TX proof bytes seed 4 pqzh-native.jsonl | 232302, expected 232302 |
+| ok | PQZH R_TX proof bytes seed 1 pqzh-wasm.jsonl | 231416, expected 231416 |
+| ok | PQZH R_TX native = wasm32 seed 1 | 720b94e0 |
+| ok | PQZH R_TX max_len_exact | 235470, expected 235470 |
+| ok | PQZH R_TX proofs within the bound | max 232302 <= max_len_exact 235470 = verifier bound 235470 |
+| ok | PQZH R_TX wasm32 memory <= 256 MiB | 46.8125 MiB |
+| ok | PQZH R_TX ratio wasm_over_native_prove | 2.08, frozen 2.02 (3%, tol 50%; machine-dependent) |
+| ok | PQZH R_TX ratio wasm_over_native_verify | 1.81, frozen 1.76 (3%, tol 50%; machine-dependent) |
+| ok | PQZH R_BURN fnv seed 0 pqzh-native.jsonl | f4fef37e, expected f4fef37e |
+| ok | PQZH R_BURN fnv seed 1 pqzh-native.jsonl | e270d5c8, expected e270d5c8 |
+| ok | PQZH R_BURN fnv seed 2 pqzh-native.jsonl | 400f16e3, expected 400f16e3 |
+| ok | PQZH R_BURN fnv seed 3 pqzh-native.jsonl | 37999f9a, expected 37999f9a |
+| ok | PQZH R_BURN fnv seed 4 pqzh-native.jsonl | e6464eb5, expected e6464eb5 |
+| ok | PQZH R_BURN fnv seed 1 pqzh-wasm.jsonl | e270d5c8, expected e270d5c8 |
+| ok | PQZH R_BURN proof bytes seed 4 pqzh-native.jsonl | 231640, expected 231640 |
+| ok | PQZH R_BURN proof bytes seed 1 pqzh-wasm.jsonl | 231256, expected 231256 |
+| ok | PQZH R_BURN native = wasm32 seed 1 | e270d5c8 |
+| ok | PQZH R_BURN max_len_exact | 234744, expected 234744 |
+| ok | PQZH R_BURN proofs within the bound | max 232632 <= max_len_exact 234744 = verifier bound 234744 |
+| ok | PQZH R_BURN wasm32 memory <= 256 MiB | 47.125 MiB |
+| ok | PQZH R_BURN ratio wasm_over_native_prove | 2.08, frozen 2.06 (1%, tol 50%; machine-dependent) |
+| ok | PQZH R_BURN ratio wasm_over_native_verify | 1.84, frozen 1.76 (5%, tol 50%; machine-dependent) |
+| ok | PQZH R_DS fnv seed 0 pqzh-native.jsonl | 0a7acf34, expected 0a7acf34 |
+| ok | PQZH R_DS fnv seed 1 pqzh-native.jsonl | 020286c2, expected 020286c2 |
+| ok | PQZH R_DS fnv seed 2 pqzh-native.jsonl | 59182207, expected 59182207 |
+| ok | PQZH R_DS fnv seed 3 pqzh-native.jsonl | 0c0d5a95, expected 0c0d5a95 |
+| ok | PQZH R_DS fnv seed 4 pqzh-native.jsonl | e62e8079, expected e62e8079 |
+| ok | PQZH R_DS fnv seed 1 pqzh-wasm.jsonl | 020286c2, expected 020286c2 |
+| ok | PQZH R_DS proof bytes seed 4 pqzh-native.jsonl | 187354, expected 187354 |
+| ok | PQZH R_DS proof bytes seed 1 pqzh-wasm.jsonl | 187482, expected 187482 |
+| ok | PQZH R_DS native = wasm32 seed 1 | 020286c2 |
+| ok | PQZH R_DS max_len_exact | 190458, expected 190458 |
+| ok | PQZH R_DS proofs within the bound | max 187802 <= max_len_exact 190458 = verifier bound 190458 |
+| ok | PQZH R_DS wasm32 memory <= 256 MiB | 47.125 MiB |
+| ok | PQZH R_DS ratio wasm_over_native_prove | 1.91, frozen 2.0 (5%, tol 50%; machine-dependent) |
+| ok | PQZH R_DS ratio wasm_over_native_verify | 1.63, frozen 1.64 (1%, tol 50%; machine-dependent) |
+| ok | PQZH R_DR fnv seed 0 pqzh-native.jsonl | e42aa3da, expected e42aa3da |
+| ok | PQZH R_DR fnv seed 1 pqzh-native.jsonl | c5f5fb23, expected c5f5fb23 |
+| ok | PQZH R_DR fnv seed 2 pqzh-native.jsonl | f8cd4b87, expected f8cd4b87 |
+| ok | PQZH R_DR fnv seed 3 pqzh-native.jsonl | caa4fc89, expected caa4fc89 |
+| ok | PQZH R_DR fnv seed 4 pqzh-native.jsonl | d83e24fc, expected d83e24fc |
+| ok | PQZH R_DR fnv seed 1 pqzh-wasm.jsonl | c5f5fb23, expected c5f5fb23 |
+| ok | PQZH R_DR proof bytes seed 4 pqzh-native.jsonl | 187066, expected 187066 |
+| ok | PQZH R_DR proof bytes seed 1 pqzh-wasm.jsonl | 185462, expected 185462 |
+| ok | PQZH R_DR native = wasm32 seed 1 | c5f5fb23 |
+| ok | PQZH R_DR max_len_exact | 190458, expected 190458 |
+| ok | PQZH R_DR proofs within the bound | max 187226 <= max_len_exact 190458 = verifier bound 190458 |
+| ok | PQZH R_DR wasm32 memory <= 256 MiB | 47.125 MiB |
+| ok | PQZH R_DR ratio wasm_over_native_prove | 1.99, frozen 2.13 (7%, tol 50%; machine-dependent) |
+| ok | PQZH R_DR ratio wasm_over_native_verify | 1.68, frozen 1.61 (4%, tol 50%; machine-dependent) |
+| ok | PQZH R_TX0 fnv seed 0 pqzh-native.jsonl | 360216a0, expected 360216a0 |
+| ok | PQZH R_TX0 fnv seed 1 pqzh-native.jsonl | a69e9010, expected a69e9010 |
+| ok | PQZH R_TX0 fnv seed 2 pqzh-native.jsonl | 4820dd60, expected 4820dd60 |
+| ok | PQZH R_TX0 fnv seed 3 pqzh-native.jsonl | 6db6d5aa, expected 6db6d5aa |
+| ok | PQZH R_TX0 fnv seed 4 pqzh-native.jsonl | d1b4f175, expected d1b4f175 |
+| ok | PQZH R_TX0 fnv seed 1 pqzh-wasm.jsonl | a69e9010, expected a69e9010 |
+| ok | PQZH R_TX0 proof bytes seed 4 pqzh-native.jsonl | 231800, expected 231800 |
+| ok | PQZH R_TX0 proof bytes seed 1 pqzh-wasm.jsonl | 231320, expected 231320 |
+| ok | PQZH R_TX0 native = wasm32 seed 1 | a69e9010 |
+| ok | PQZH R_TX0 max_len_exact | 234744, expected 234744 |
+| ok | PQZH R_TX0 proofs within the bound | max 231800 <= max_len_exact 234744 = verifier bound 234744 |
+| ok | PQZH R_TX0 wasm32 memory <= 256 MiB | 48.625 MiB |
+| ok | PQZH R_TX0 ratio wasm_over_native_prove | 2.39, frozen 2.15 (11%, tol 50%; machine-dependent) |
+| ok | PQZH R_TX0 ratio wasm_over_native_verify | 1.79, frozen 1.77 (1%, tol 50%; machine-dependent) |
+| ok | pqz-ffi selftest hash | ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205, expected ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205 |
+| ok | pqz-ffi digest lines native = wasm32 | 29 / 29 lines |
+| ok | pqz-ffi digest lines = frozen | 29 lines, 0 differ |
+| ok | vectors wasm32 replay | 53 proofs, 50 byte-equal and valid, 3 native PQZL op 7 M > 4 proofs valid (verify only), fails 0 |
+| ok | op 7 pqzh M1-off native | proof 232248 B, ...01 through pqz_precompile, expected 232248 B |
+| ok | op 7 pqzh M1-off wasm32 | 232248 B, proved again, byte-equal, precompile 1 |
+| ok | op 7 pqzh M1-on native | proof 232494 B, ...01 through pqz_precompile, expected 232494 B |
+| ok | op 7 pqzh M1-on wasm32 | 232494 B, proved again, byte-equal, precompile 1 |
+| ok | op 7 pqzh M2-off native | proof 232078 B, ...01 through pqz_precompile, expected 232078 B |
+| ok | op 7 pqzh M2-off wasm32 | 232078 B, proved again, byte-equal, precompile 1 |
+| ok | op 7 pqzh M2-off-two-real native | proof 231640 B, ...01 through pqz_precompile, expected 231640 B |
+| ok | op 7 pqzh M2-off-two-real wasm32 | 231640 B, proved again, byte-equal, precompile 1 |
+| ok | op 7 pqzh M2-on native | proof 231256 B, ...01 through pqz_precompile, expected 231256 B |
+| ok | op 7 pqzh M2-on wasm32 | 231256 B, proved again, byte-equal, precompile 1 |
+| ok | op 7 pqzh M4-off native | proof 232494 B, ...01 through pqz_precompile, expected 232494 B |
+| ok | op 7 pqzh M4-off wasm32 | 232494 B, proved again, byte-equal, precompile 1 |
+| ok | op 7 pqzh M4-off-decoys native | proof 231726 B, ...01 through pqz_precompile, expected 231726 B |
+| ok | op 7 pqzh M4-off-decoys wasm32 | 231726 B, proved again, byte-equal, precompile 1 |
+| ok | op 7 pqzh M4-on native | proof 232708 B, ...01 through pqz_precompile, expected 232708 B |
+| ok | op 7 pqzh M4-on wasm32 | 232708 B, proved again, byte-equal, precompile 1 |
+| ok | op 7 pqzl M1-off native | proof 42426 B, ...01 through pqz_precompile, expected 42426 B |
+| ok | op 7 pqzl M1-off wasm32 | 42426 B, proved again, byte-equal, precompile 1 |
+| ok | op 7 pqzl M1-on native | proof 42716 B, ...01 through pqz_precompile, expected 42716 B |
+| ok | op 7 pqzl M1-on wasm32 | 42716 B, proved again, byte-equal, precompile 1 |
+| ok | op 7 pqzl M2-off native | proof 42919 B, ...01 through pqz_precompile, expected 42919 B |
+| ok | op 7 pqzl M2-off wasm32 | 42919 B, proved again, byte-equal, precompile 1 |
+| ok | op 7 pqzl M2-off-two-real native | proof 42923 B, ...01 through pqz_precompile, expected 42923 B |
+| ok | op 7 pqzl M2-off-two-real wasm32 | 42923 B, proved again, byte-equal, precompile 1 |
+| ok | op 7 pqzl M2-on native | proof 43604 B, ...01 through pqz_precompile, expected 43604 B |
+| ok | op 7 pqzl M2-on wasm32 | 43604 B, proved again, byte-equal, precompile 1 |
+| ok | op 7 pqzl M4-off native | proof 43932 B, ...01 through pqz_precompile, expected 43932 B |
+| ok | op 7 pqzl M4-off wasm32 | 43932 B, proved again, byte-equal, precompile 1 |
+| ok | op 7 pqzl M4-off-decoys native | proof 43917 B, ...01 through pqz_precompile, expected 43917 B |
+| ok | op 7 pqzl M4-off-decoys wasm32 | 43917 B, proved again, byte-equal, precompile 1 |
+| ok | op 7 pqzl M4-on native | proof 45275 B, ...01 through pqz_precompile, expected 45275 B |
+| ok | op 7 pqzl M4-on wasm32 | 45275 B, proved again, byte-equal, precompile 1 |
+| ok | op 7 pqzl M8-off native | proof 58975 B, ...01 through pqz_precompile, expected 58975 B |
+| ok | op 7 pqzl M8-off wasm32 | 58975 B, native proof verified (wasm32 proves PQZL M <= 4), precompile 1 |
+| ok | op 7 pqzl M8-on native | proof 61794 B, ...01 through pqz_precompile, expected 61794 B |
+| ok | op 7 pqzl M8-on wasm32 | 61794 B, native proof verified (wasm32 proves PQZL M <= 4), precompile 1 |
+| ok | op 7 pqzl M8-on-boundary native | proof 61795 B, ...01 through pqz_precompile, expected 61795 B |
+| ok | op 7 pqzl M8-on-boundary wasm32 | 61795 B, native proof verified (wasm32 proves PQZL M <= 4), precompile 1 |
+| ok | op 7 pqzl negatives | 177 rows of negative.json, 177 expect 0 / revert, replayed by pqz-vectors --check (same negative.json), expected 177 rows |
+| ok | op 7 pqzh negatives | 165 rows of negative.json, 165 expect 0 / revert, replayed by pqz-vectors --check (same negative.json), expected 165 rows |
+
+RESULT: PASS
