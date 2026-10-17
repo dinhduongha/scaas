@@ -1045,8 +1045,11 @@ You can Free Pay to **Tu Viện Chơn Như** (Chơn Như Monastery): <https://ww
 ## License
 
 SCaaS is licensed under the [Vegan Community License 1.0](LICENSE) (summary in Vietnamese:
-[LICENSE.vi.md](LICENSE.vi.md)). Free with the freedoms of MIT or Apache-2.0 for vegan organizations and for companies
-whose own revenue is below USD 10 million. Not available, at any scale, to a company that kills animals, runs a food
+[LICENSE.vi.md](LICENSE.vi.md)). Free with the freedoms of MIT or Apache-2.0 for companies whose own revenue is below USD 10
+million and for vegan organizations of any size: a company in a sector where animal products are customary (food, food
+service, cosmetics, fashion, household products, pharmaceuticals, pet food, agriculture) whose products are all vegan, or
+an animal-protection organization, or a company in any sector whose products, own operations (canteens, events, gifts,
+procurement) and published policy are all vegan. Not available, at any scale, to a company that kills animals, runs a food
 business serving products from killed animals, fertilized eggs or bee products, trades in silk, leather or fur products
 (new or second-hand), processes or finances such products or killing, sells or transports live animals for slaughter, or
 trades in human-derived products outside donation for medical treatment; nor to a company earning more than 10% of its
