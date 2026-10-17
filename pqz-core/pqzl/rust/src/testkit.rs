@@ -1,6 +1,7 @@
 //! Test entry points (`#[doc(hidden)]`, not API): the arithmetic KAT of `pqzl/kat/lazer_dump.c` for the `kat_dump`
-//! binary, and the Rust halves of the C-oracle tests (`tests/oracle_arith.rs`), whose C halves are in
-//! `tests/oracle_shim.c`. Plain data in and out, so the crate's internal types stay internal.
+//! binary, KeyGen / Enc with lowered norm thresholds for the `keys_kat` binary, and the Rust halves of the C-oracle
+//! tests (`tests/oracle_arith.rs`), whose C halves are in `tests/oracle_shim.c`.
+//! Plain data in and out, so the crate's internal types stay internal.
 use crate::arith::int::Int;
 use crate::arith::ntt::{self, D, Q};
 use crate::arith::poly::{Poly, RING_Q};
@@ -24,6 +25,24 @@ pub fn ntt_inv(c: &mut [u64; 64]) {
 /// `pqz_ntt_basemul`
 pub fn ntt_basemul(a: &[u64; 64], b: &[u64; 64]) -> [u64; 64] {
     ntt::basemul(a, b)
+}
+
+/// `pqz_keygen` with lowered norm thresholds (the C core's PQZ_TEST_HOOKS knobs `pqz_test_bs` / `pqz_test_be`): the
+/// keys KAT pins the resample path and the counter-64 error with them
+pub fn keygen_lowered(seed32: &[u8; 32], bs: i64, be: i64) -> Result<crate::Key, crate::Error> {
+    crate::keys::keygen(seed32, bs, be)
+}
+
+/// `pqz_enc_seed` with lowered norm thresholds (`pqz_test_bs` / `_be` / `_b2`)
+pub fn enc_seed_lowered(
+    pks: &[&[u8; crate::POLYVEC_BYTES]],
+    msgs: &[[u8; 16]],
+    seed_enc: &[u8; 32],
+    bs: i64,
+    be: i64,
+    b2: i64,
+) -> Result<crate::Enc, crate::Error> {
+    crate::keys::enc_seed(pks, msgs, seed_enc, (bs, be, b2))
 }
 
 /// R_TX's decomposition parameters (`pqz_tx_dcomp`, params/pqz_tx_params.h; the generated params arrive with Task 6)

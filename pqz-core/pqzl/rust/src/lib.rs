@@ -26,6 +26,7 @@ mod arith;
 mod coder;
 #[allow(dead_code)]
 mod rand;
+mod keys;
 #[doc(hidden)]
 pub mod testkit;
 
@@ -119,27 +120,23 @@ pub struct Enc {
 
 /// `pqz_keypair_from_secret`: pk = A s + e (no norm check).
 pub fn keypair_from_secret(s: &[i8; 2048], e: &[i16; 2048]) -> Result<Box<[u8; POLYVEC_BYTES]>, Error> {
-    let _ = (s, e);
-    Err(Error::Internal)
+    keys::keypair_from_secret(s, e)
 }
 
 /// `pqz_keygen`: SHAKE256("SCAAS-PQZ-KEYGEN-V1" || seed32 || be4(ctr)), s <- CBD_1, e <- CBD_20, pk = A s + e.
 pub fn keygen(seed32: &[u8; 32]) -> Result<Key, Error> {
-    let _ = seed32;
-    Err(Error::Internal)
+    keys::keygen(seed32, keys::BS, keys::BE)
 }
 
 /// `pqz_enc_seed`: one encryption of `msgs[j]` (16 digits < 16) to `pks[j]` from `seed_enc`.
 pub fn enc_seed(pks: &[&[u8; POLYVEC_BYTES]], msgs: &[[u8; 16]], seed_enc: &[u8; 32]) -> Result<Enc, Error> {
-    let _ = (pks, msgs, seed_enc);
-    Err(Error::Internal)
+    keys::enc_seed(pks, msgs, seed_enc, (keys::BS, keys::BE, keys::B2))
 }
 
 /// `pqz_enc_group_seed`: R_TXM group `g`'s seed (seed_enc for g = 0, else SHAKE256("SCAAS-PQZ-ENC-GROUP-V1" ||
-/// seed_enc || be4(g))[0..32)). Infallible: returns all zeros until its task (Task 4) lands.
+/// seed_enc || be4(g))[0..32)).
 pub fn enc_group_seed(seed_enc: &[u8; 32], g: u32) -> [u8; 32] {
-    let _ = (seed_enc, g);
-    [0; 32]
+    keys::enc_group_seed(seed_enc, g)
 }
 
 /// `pqz_encrypt`: encryption with chosen short vectors (no norm check).
@@ -150,20 +147,17 @@ pub fn encrypt(
     e1: &[i16; 2048],
     e2: &[[i16; 16]],
 ) -> Result<Enc, Error> {
-    let _ = (pks, msgs, r, e1, e2);
-    Err(Error::Internal)
+    keys::encrypt(pks, msgs, r, e1, e2)
 }
 
 /// `pqz_decrypt_raw`: w_i = centre(v_i - (u^T s)_i).
 pub fn decrypt_raw(s: &[i8; 2048], u: &[u8; POLYVEC_BYTES], v: &[u8; V_BYTES]) -> Result<[i64; 16], Error> {
-    let _ = (s, u, v);
-    Err(Error::Internal)
+    keys::decrypt_raw(s, &u[..], &v[..])
 }
 
 /// `pqz_dec` of ct = u || v: the 16 digits M_i = round(w_i / Delta) and their noise w_i - Delta M_i.
 pub fn dec(s: &[i8; 2048], ct: &[u8; CT_BYTES]) -> Result<([i64; 16], [i64; 16]), Error> {
-    let _ = (s, ct);
-    Err(Error::Internal)
+    keys::dec(s, ct)
 }
 
 /// `pqz_test_mutate` (test hook): decode `proof` for relation `rel` (an op, 0x81 = R_TX0, or an R_TXM shape code),

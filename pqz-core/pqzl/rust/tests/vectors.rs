@@ -1,0 +1,204 @@
+//! The frozen vectors (smartcontracts/vectors/pqz, pq-zero-knowledge.md §14) against the Rust port. Keys part:
+//! keygen.json, enc.json (rows, the trivial ciphertext and the Add / Sub ops), matrix.json, the R_TXM group seeds,
+//! and Enc's input errors.
+use pqzl::{dec, enc_group_seed, enc_seed, keygen, keypair_from_secret, Error, CT_BYTES, POLYVEC_BYTES};
+use serde_json::Value;
+use sha3::digest::{ExtendableOutput, Update, XofReader};
+use sha3::{Digest, Keccak256, Shake256};
+use std::path::PathBuf;
+
+const Q: u64 = 4_398_046_510_889;
+const DELTA: u64 = (1 << 26) - 1;
+
+fn json(file: &str) -> Value {
+    let p = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../smartcontracts/vectors/pqz").join(file);
+    serde_json::from_str(&std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display()))).unwrap()
+}
+
+fn hex(s: &Value) -> Vec<u8> {
+    let s = s.as_str().expect("hex string").as_bytes();
+    s.chunks(2).map(|p| u8::from_str_radix(std::str::from_utf8(p).unwrap(), 16).expect("hex")).collect()
+}
+
+fn hex32(s: &Value) -> [u8; 32] {
+    hex(s).try_into().expect("32 bytes")
+}
+
+fn kec(b: &[u8]) -> String {
+    Keccak256::digest(b).iter().map(|x| format!("{x:02x}")).collect()
+}
+
+fn be8(b: &[u8]) -> Vec<u64> {
+    b.chunks(8).map(|c| u64::from_be_bytes(c.try_into().unwrap())).collect()
+}
+
+fn ints(v: &Value) -> Vec<i64> {
+    v.as_array().unwrap().iter().map(|x| x.as_i64().unwrap()).collect()
+}
+
+fn digits(x: u64) -> [u8; 16] {
+    core::array::from_fn(|i| ((x >> (4 * i)) & 15) as u8)
+}
+
+/// Σ M_i 16^i, as pqz_kat.py's dec
+fn value(m: &[i64; 16]) -> i128 {
+    m.iter().rev().fold(0i128, |a, &d| a * 16 + d as i128)
+}
+
+#[test]
+fn keygen_json() {
+    let j = json("keygen.json");
+    let rows = j["rows"].as_array().unwrap();
+    assert_eq!(rows.len(), 8);
+    for r in rows {
+        let k = keygen(&hex32(&r["seed"])).expect("keygen");
+        let sq = |v: &mut dyn Iterator<Item = i64>| v.map(|x| x * x).sum::<i64>();
+        assert_eq!(k.ctr as u64, r["ctr"].as_u64().unwrap());
+        assert_eq!(kec(&k.pk[..]), r["pk_keccak"].as_str().unwrap(), "seed {}", r["seed"]);
+        assert_eq!(be8(&k.pk[..32]), ints(&r["pk_first4"]).iter().map(|&x| x as u64).collect::<Vec<_>>());
+        assert_eq!(sq(&mut k.s.iter().map(|&x| x as i64)), r["s_sq"].as_i64().unwrap());
+        assert_eq!(sq(&mut k.e.iter().map(|&x| x as i64)), r["e_sq"].as_i64().unwrap());
+    }
+}
+
+/// A = the columns pqz_keypair_from_secret(unit vector at poly j, 0) (matrix.json's own derivation)
+#[test]
+fn matrix_json() {
+    let j = json("matrix.json");
+    let cols: Vec<Box<[u8; POLYVEC_BYTES]>> = (0..32)
+        .map(|c| {
+            let mut s = [0i8; 2048];
+            s[64 * c] = 1;
+            keypair_from_secret(&s, &[0; 2048]).expect("keypair_from_secret")
+        })
+        .collect();
+    let mut a = Vec::new(); // A[0][0], A[0][1], ...: row i of A is poly i of every column
+    for i in 0..32 {
+        for col in &cols {
+            a.extend_from_slice(&col[512 * i..512 * (i + 1)]);
+        }
+    }
+    let coeffs = |i: usize, c: usize, k: usize| be8(&cols[c][512 * i + 8 * k..512 * i + 8 * k + 64]);
+    assert_eq!(a.len() as u64, j["a_bytes"].as_u64().unwrap());
+    assert_eq!(kec(&a), j["a_keccak"].as_str().unwrap());
+    let want = |k: &str| ints(&j[k]).iter().map(|&x| x as u64).collect::<Vec<_>>();
+    assert_eq!(coeffs(0, 0, 0), want("A_0_0_first8"));
+    assert_eq!(coeffs(0, 0, 56), want("A_0_0_last8"));
+    assert_eq!(coeffs(31, 31, 0), want("A_31_31_first8"));
+    assert_eq!(coeffs(31, 31, 56), want("A_31_31_last8"));
+}
+
+fn ct_of(u: &[u8], v: &[u8]) -> Box<[u8; CT_BYTES]> {
+    let mut ct = Box::new([0u8; CT_BYTES]);
+    ct[..POLYVEC_BYTES].copy_from_slice(u);
+    ct[POLYVEC_BYTES..].copy_from_slice(v);
+    ct
+}
+
+/// coefficient-wise (a ± b) mod q (pqz_kat.py ct_add / ct_sub)
+fn ct_op(a: &[u8; CT_BYTES], b: &[u8; CT_BYTES], add: bool) -> Box<[u8; CT_BYTES]> {
+    let mut r = Box::new([0u8; CT_BYTES]);
+    for (k, (x, y)) in be8(a).into_iter().zip(be8(b)).enumerate() {
+        let z = if add { (x + y) % Q } else { (x + Q - y) % Q };
+        r[8 * k..8 * k + 8].copy_from_slice(&z.to_be_bytes());
+    }
+    r
+}
+
+#[test]
+fn enc_json() {
+    let j = json("enc.json");
+    let mut cts = Vec::new();
+    let rows = j["rows"].as_array().unwrap();
+    assert_eq!(rows.len(), 6);
+    for (i, r) in rows.iter().enumerate() {
+        let keys: Vec<_> =
+            r["recipients"].as_array().unwrap().iter().map(|s| keygen(&hex32(s)).expect("keygen")).collect();
+        let values: Vec<u64> = r["values"].as_array().unwrap().iter().map(|v| v.as_u64().unwrap()).collect();
+        let pks: Vec<&[u8; POLYVEC_BYTES]> = keys.iter().map(|k| &*k.pk).collect();
+        let msgs: Vec<[u8; 16]> = values.iter().map(|&v| digits(v)).collect();
+        let c = enc_seed(&pks, &msgs, &hex32(&r["seed_enc"])).expect("enc_seed");
+        assert_eq!(c.ctr as u64, r["ctr"].as_u64().unwrap(), "row {i}");
+        assert_eq!(kec(&c.u[..]), r["u_keccak"].as_str().unwrap(), "row {i}");
+        let legs = r["legs"].as_array().unwrap();
+        assert_eq!(legs.len(), c.vs.len());
+        for (k, leg) in legs.iter().enumerate() {
+            assert_eq!(c.vs[k].to_vec(), hex(&leg["v"]), "row {i} leg {k}");
+            let (m, _) = dec(&keys[k].s, &ct_of(&c.u[..], &c.vs[k])).expect("dec");
+            assert_eq!(m.to_vec(), ints(&leg["M"]), "row {i} leg {k}");
+            assert_eq!(value(&m), leg["value"].as_u64().unwrap() as i128);
+            assert_eq!(value(&m), values[k] as i128);
+        }
+        cts.push(ct_of(&c.u[..], &c.vs[0]));
+    }
+    // Trivial(m): u = 0, v = Delta digits(m) mod q
+    let trivial = |x: u64| {
+        let mut ct = Box::new([0u8; CT_BYTES]);
+        for (i, d) in digits(x).iter().enumerate() {
+            ct[POLYVEC_BYTES + 8 * i..POLYVEC_BYTES + 8 * i + 8].copy_from_slice(&(DELTA * *d as u64).to_be_bytes());
+        }
+        ct
+    };
+    let t = &j["trivial"];
+    assert_eq!(kec(&trivial(t["value"].as_u64().unwrap())[..]), t["ct_keccak"].as_str().unwrap());
+    let ops = j["ops"].as_array().unwrap();
+    assert_eq!(ops.len(), 4);
+    for o in ops {
+        assert_eq!(o["a"], "row 0 leg 0");
+        let b = match o["b"].as_str().unwrap() {
+            "trivial 1000" => trivial(1000),
+            "row 5 leg 0" => cts[5].clone(),
+            b => panic!("op operand {b}"),
+        };
+        let c = ct_op(&cts[0], &b, o["op"] == "add");
+        assert_eq!(kec(&c[..]), o["ct_keccak"].as_str().unwrap());
+        let (m, _) = dec(&keygen(&hex32(&o["dec_key"])).unwrap().s, &c).expect("dec");
+        assert_eq!(m.to_vec(), ints(&o["M"]), "op {} {}", o["op"], o["b"]);
+        assert_eq!(value(&m), o["value"].as_u64().unwrap() as i128);
+    }
+}
+
+/// g = 0: seed_enc; else SHAKE256("SCAAS-PQZ-ENC-GROUP-V1" || seed_enc || be4(g))[0..32) (P6-ANON D13). Fails on
+/// Task 1's all-zero stub.
+#[test]
+fn enc_group_seed_eq_shake() {
+    for i in 0..4u8 {
+        let se: [u8; 32] = core::array::from_fn(|j| 17 * i + j as u8 + 1);
+        assert_eq!(enc_group_seed(&se, 0), se);
+        for g in [1u32, 2, 3, 0x0102_0304, u32::MAX] {
+            let mut h = Shake256::default();
+            h.update(b"SCAAS-PQZ-ENC-GROUP-V1");
+            h.update(&se);
+            h.update(&g.to_be_bytes());
+            let mut want = [0u8; 32];
+            h.finalize_xof().read(&mut want);
+            let got = enc_group_seed(&se, g);
+            assert_ne!(got, [0; 32]);
+            assert_eq!(got, want, "seed_enc {i} g {g}");
+        }
+    }
+}
+
+/// pqz_enc_seed: a pk coefficient >= q or a digit > 15 -> Input; pqz_dec: a ct coefficient >= q -> Input
+#[test]
+fn enc_dec_input_errors() {
+    let k = keygen(&[7; 32]).unwrap();
+    let msg = [digits(0x0123_4567_89ab_cdef)];
+    let c = enc_seed(&[&*k.pk], &msg, &[9; 32]).expect("enc_seed");
+    let mut ct = ct_of(&c.u[..], &c.vs[0]);
+    assert_eq!(dec(&k.s, &ct).unwrap().0.map(|d| d as u8), msg[0]);
+    let mut pk = k.pk.clone();
+    pk[POLYVEC_BYTES - 8..].copy_from_slice(&Q.to_be_bytes()); // the last coefficient = q
+    assert_eq!(enc_seed(&[&*k.pk, &*pk], &[msg[0]; 2], &[9; 32]).err(), Some(Error::Input));
+    let mut m = msg;
+    m[0][15] = 16;
+    assert_eq!(enc_seed(&[&*k.pk], &m, &[9; 32]).err(), Some(Error::Input));
+    assert_eq!(enc_seed(&[&*k.pk], &[], &[9; 32]).err(), Some(Error::Input)); // one msg per pk
+    ct[CT_BYTES - 8..].copy_from_slice(&(Q - 1).to_be_bytes());
+    assert!(dec(&k.s, &ct).is_ok());
+    ct[CT_BYTES - 8..].copy_from_slice(&Q.to_be_bytes()); // a v coefficient = q
+    assert_eq!(dec(&k.s, &ct).err(), Some(Error::Input));
+    ct[CT_BYTES - 8..].copy_from_slice(&[0; 8]);
+    ct[..8].copy_from_slice(&[0xff; 8]); // a u coefficient >= q
+    assert_eq!(dec(&k.s, &ct).err(), Some(Error::Input));
+}
