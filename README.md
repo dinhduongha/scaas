@@ -458,29 +458,32 @@ keeps blockchains out of everyday use. SCaaS designs each of them out.
 
 ### 5.1 Users must hold the native coin to pay fees
 
-The root mistake: to do anything at all, a user must first buy and hold the chain's native coin (ETH, BNB, SOL, …) to
-pay the fee. A shop, a payroll or a loyalty program cannot ask every customer to open an exchange account first; this
-single requirement has kept blockchains out of most real applications. The later fixes — sponsored transactions,
-ERC-2771 forwarders, ERC-4337 paymasters, fee-bump and fee-grant features — help in places but do not remove it
-(below).
+This is the root problem. Before you can do anything on a blockchain, you have to buy its native coin — ETH, BNB,
+SOL and so on — just to pay the fee. Picture a coffee shop asking every customer to open a crypto exchange account
+before they can collect points. Nobody would. That one requirement has kept blockchains out of most everyday
+applications.
 
-An example of such a partial fix: in September 2023 Grab launched the *Grab Web3 Wallet* for its users in Singapore — a
-pilot with Circle on Polygon, holding NFT vouchers and paying in the XSGD stablecoin, part of the Monetary Authority of
-Singapore's Project Orchid — and in October 2023 piloted Circle's Gas Station, so that Grab, not the user, paid the gas
+There are workarounds: sponsored transactions, ERC-2771 forwarders, ERC-4337 paymasters, fee-bump and fee-grant
+features. They help in places, but they do not remove the problem.
+
+Grab is a good example. In September 2023 it launched the *Grab Web3 Wallet* for its users in Singapore: a pilot with
+Circle on Polygon, holding NFT vouchers and paying in the XSGD stablecoin, part of the Monetary Authority of Singapore's
+Project Orchid. A month later it tried Circle's Gas Station, so Grab paid the gas instead of the user
 ([The Defiant](https://thedefiant.io/news/defi/circle-brings-gasless-transactions-to-grab-wallet-users),
 [EDB](https://www.edb.gov.sg/en/business-insights/insights/payments-firm-circle-partners-grab-to-test-out-web3-wallet-in-singapore.html)).
-Even with the gas paid, the user had to open that particular wallet, which worked on one chain (Polygon PoS) with two
-kinds of asset, and every sponsored transaction ran through one provider's paymaster infrastructure. The fee problem
-was moved, not removed.
+Even so, users still had to open that particular wallet. It worked on one chain (Polygon PoS) with two kinds of asset,
+and every sponsored transaction went through one provider's paymaster. The fee problem had moved, not gone away.
 
-SCaaS: the user never needs a native coin. Every operation is a signed intent that a relayer submits and pays gas for;
-the relayer takes its fee in the token being used, or the merchant pays it ([section 7](#7-meta-transactions-and-eip-1776)). A
-company in Grab's position would sign nothing on its customers' behalf and run no special wallet: each customer signs
-with a key they already have (a passkey or an existing wallet), any relayer submits, and the company pays the fees —
-in its own token, on whichever supported chain it uses. The same holds for **loyalty points**, **prepaid cards**,
-**vouchers** and **prepaid service passes** (one token = one visit, session or ride) of a spa, a bakery, a gym or a
-coffee chain: each is a token that any wallet or app can hold, and the merchant needs no chain infrastructure of its
-own ([use cases](#16-use-cases), "Retail and loyalty").
+With SCaaS, users never need a native coin. They sign what they want to do, a relayer sends it to the chain and pays
+the gas, and the relayer is paid in the token being used — or the merchant pays
+([section 7](#7-meta-transactions-and-eip-1776)). A company like Grab would not need a special wallet, and it would
+never sign on its customers' behalf: each customer signs with a key they already have (a passkey or an existing
+wallet), any relayer submits, and the company pays the fees in its own token, on whichever chain it uses.
+
+The same works for **loyalty points**, **prepaid cards**, **vouchers** and **prepaid service passes** (one token = one
+visit, session or ride) at a spa, a bakery, a gym or a coffee chain. Each one is just a token that any wallet or app
+can hold, and the business does not have to run any blockchain infrastructure of its own
+([use cases](#16-use-cases), "Retail and loyalty").
 
 ### 5.2 Transactions are synchronous and tied to the sender's account
 
