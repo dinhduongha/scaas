@@ -116,6 +116,12 @@ void _secpX(Uint8List d, int lo) {
   _need((y * y) % _secpP == rhs, 'curve');
 }
 
+void _secpXY(Uint8List d) {
+  final x = _be(d, 0, 32), y = _be(d, 32, 64);
+  _need(x < _secpP && y < _secpP, 'range');
+  _need((y * y) % _secpP == (x * x * x + BigInt.from(7)) % _secpP, 'curve');
+}
+
 void _secpCompressed(Uint8List b, int o) {
   _need(b[o] == 2 || b[o] == 3, 'prefix');
   _secpX(b, o + 1);
@@ -290,6 +296,8 @@ void validateKeyData(int kind, Object? keyData, {bool hederaNative = false}) {
       _blsG2(d);
     case 0x0107:
       _bnG2(d);
+    case 0x0108:
+      _secpXY(d);
     case 0x0110:
       _musig2(d, _secpCompressed, 33);
     case 0x0111:

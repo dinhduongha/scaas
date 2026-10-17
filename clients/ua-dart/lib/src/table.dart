@@ -49,6 +49,7 @@ const kinds = <Kind>[
   Kind(0x0140, 'zether-bn254', false, [64], 'bn254-g1'),
   Kind(0x0141, 'zether-bls12381', false, [128], 'bls12381-g1'),
   Kind(0x0142, 'pqz-mlwe', false, [16384], 'pqz-mlwe'),
+  Kind(0x0108, 'secp256k1', false, [64], 'secp256k1'), // 2026-10-17, appended as in kinds.json
 ];
 
 const groups = <String>[
@@ -69,7 +70,7 @@ Kind kindInfo(int kind) {
   throw UAError('UAKindUnknown', '0x${kind.toRadixString(16).padLeft(4, '0')}');
 }
 
-bool _single(int k) => (k >= 0x0100 && k <= 0x0107) || (k >= 0x0110 && k <= 0x0113) || (k >= 0x0130 && k <= 0x0133);
+bool _single(int k) => (k >= 0x0100 && k <= 0x0108) || (k >= 0x0110 && k <= 0x0113) || (k >= 0x0130 && k <= 0x0133);
 bool isNative(int kind) => kinds.any((k) => k.number == kind && k.native);
 bool isZether(int kind) => kind >= 0x0140 && kind <= 0x0142;
 bool isSigning(int kind) => kind == 0x0120 || _single(kind);

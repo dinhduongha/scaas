@@ -81,7 +81,7 @@ Uint8List? keyHashOf(int kind, Object? keyData) {
   if (g == null) return null;
   final d = keyBytes(keyData);
   final (lo, hi) = switch (kind) {
-    0x0100 || 0x0101 => (0, 32),
+    0x0100 || 0x0101 || 0x0108 => (0, 32),
     0x0110 || 0x0111 => (1, 33),
     0x0112 || 0x0113 => (0, 64),
     _ => (0, d.length),
