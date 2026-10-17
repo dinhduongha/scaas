@@ -477,9 +477,10 @@ SCaaS: the user never needs a native coin. Every operation is a signed intent th
 the relayer takes its fee in the token being used, or the merchant pays it ([section 7](#7-meta-transactions-and-eip-1776)). A
 company in Grab's position would sign nothing on its customers' behalf and run no special wallet: each customer signs
 with a key they already have (a passkey or an existing wallet), any relayer submits, and the company pays the fees —
-in its own token, on whichever supported chain it uses. The same holds for prepaid cards and vouchers of a spa, a bakery or a coffee
-chain: the voucher is a token that any wallet or app can hold, and the merchant needs no chain infrastructure of its
-own.
+in its own token, on whichever supported chain it uses. The same holds for **loyalty points**, **prepaid cards**,
+**vouchers** and **prepaid service passes** (one token = one visit, session or ride) of a spa, a bakery, a gym or a
+coffee chain: each is a token that any wallet or app can hold, and the merchant needs no chain infrastructure of its
+own ([use cases](#16-use-cases), "Retail and loyalty").
 
 ### 5.2 Transactions are synchronous and tied to the sender's account
 
