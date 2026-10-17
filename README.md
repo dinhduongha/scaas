@@ -1042,6 +1042,8 @@ license terms. The license is the same whether you pay or not.
 
 You can Free Pay to **Tu Viện Chơn Như** (Chơn Như Monastery): <https://www.tuvienchonnhu.net>.
 
+Or to the developer's EVM wallet: `0x0389f77E846ff687d44db57bcC9DCB55dd6f4131`.
+
 ## License
 
 SCaaS is licensed under the [Vegan Community License 1.0](LICENSE) (summary in Vietnamese:
