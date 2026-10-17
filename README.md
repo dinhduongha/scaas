@@ -515,8 +515,9 @@ SCaaS: **only a contract may call `approve` — an ordinary account never grants
 form — and only a contract may spend one** ([docs/contracts/token-wrappers.md](docs/contracts/token-wrappers.md)).
 Everyday payments need no allowance at all: the payer signs one `pay` for one amount, to one payee, with an expiry.
 When a contract does need to hand tokens to another contract, it approves inside the same call and takes the allowance
-back at once: the SCaaS DEX approves an outside router only within the route it executes and resets every such
-allowance to 0 before the transaction ends (`increaseAllowance` and Permit2 approvals are refused). An outside token
+back at once: the SCaaS DEX approves an outside router only within the route it executes and revokes every such
+allowance (`approve(spender, 0)`, which is what a "revoke" is in ERC-20) before the transaction ends
+(`increaseAllowance` and Permit2 approvals are refused). An outside token
 (for example USDC) still follows its own ERC-20 rules; its holders approve only the DEX's `DexPuller`, which pulls
 nothing without the holder's signed order.
 
