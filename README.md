@@ -464,8 +464,20 @@ single requirement has kept blockchains out of most real applications. The later
 ERC-2771 forwarders, ERC-4337 paymasters, fee-bump and fee-grant features — help in places but do not remove it
 (below).
 
+An example of such a partial fix: in September 2023 Grab launched the *Grab Web3 Wallet* for its users in Singapore — a
+pilot with Circle on Polygon, holding NFT vouchers and paying in the XSGD stablecoin, part of the Monetary Authority of
+Singapore's Project Orchid — and in October 2023 piloted Circle's Gas Station, so that Grab, not the user, paid the gas
+([The Defiant](https://thedefiant.io/news/defi/circle-brings-gasless-transactions-to-grab-wallet-users),
+[EDB](https://www.edb.gov.sg/en/business-insights/insights/payments-firm-circle-partners-grab-to-test-out-web3-wallet-in-singapore.html)).
+Even with the gas paid, the user had to open that particular wallet, which worked on one chain (Polygon PoS) with two
+kinds of asset, and every sponsored transaction ran through one provider's paymaster infrastructure. The fee problem
+was moved, not removed.
+
 SCaaS: the user never needs a native coin. Every operation is a signed intent that a relayer submits and pays gas for;
-the relayer takes its fee in the token being used, or the merchant pays it ([section 7](#7-meta-transactions-and-eip-1776)).
+the relayer takes its fee in the token being used, or the merchant pays it ([section 7](#7-meta-transactions-and-eip-1776)). A
+company in Grab's position would sign nothing on its customers' behalf and run no special wallet: each customer signs
+with a key they already have (a passkey or an existing wallet), any relayer submits, and the company pays the fees —
+in its own token, on whichever supported chain it uses.
 
 ### 5.2 Transactions are synchronous and tied to the sender's account
 
