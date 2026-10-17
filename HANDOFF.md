@@ -1,6 +1,6 @@
 ## Session 2026-10-17 (UA index done) — resume here
 
-**State:** main pushed. **UA registry per-kind list merged** (`ua-index`, CTR-UA-29): `uaCount` / `uaAt` / `uaPage` / `uaIndex`, single-key kinds, ≈ +27 k gas per registration, gen 2 forwards gen-1 kinds; forge 1272 passed; redeployed on 7622 — registry `0x4d2e7dbb67bb82e3f6e8adf920588932ed7d5d42`, factory `0xf8466c6af264dda1c5b4eecdae416fd708deb3e7`, verifiers and PQZ tokens new (log `smartcontracts/evm/runs/2026-10-17-ua-index-7622.txt`, 92 ok); the P6g deployment of 2026-10-16 stays on chain unused. Owner Q&A today: natives are not auto-registered (cannot be decoys); registration is already relayable (no `msg.sender` state).
+**State:** main pushed. **UA registry per-kind list merged** (`ua-index`, CTR-UA-29): `uaCount` / `uaAt` / `uaPage` / `uaIndex`, every kind incl. msig (owner 2026-10-17), ≈ +27 k gas per registration, gen 2 forwards gen-1 kinds; forge 1272 passed; redeployed on 7622 — registry `0x1e985cbe298cebf3c931904ba12092895975ff74`, factory `0xd25304ef3c248d675419e40ed95d5e20b207db81`, verifiers and PQZ tokens new (log `smartcontracts/evm/runs/2026-10-17-ua-index-msig-7622.txt`, 92 ok); the P6g deployment of 2026-10-16 stays on chain unused. Owner Q&A today: natives are not auto-registered (cannot be decoys); registration is already relayable (no `msg.sender` state).
 
 **Next:** S7 (CTR-PQZ-25/-26, S9 proposals 1/2/4, the plan's gas tables incl. S8's `G_7` rows) → op 7 entry points in the PQZ tokens → gates A / B → freeze → PQZL Rust port (subagent-driven).
 

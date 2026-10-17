@@ -919,11 +919,11 @@ contract UARegistryTest is UARegistryBase {
         assertEq(reg.uaPage(0x0103, 0, 5).length, 0); // an enabled kind with no registration
     }
 
-    function test_index_structuresAndUnknownIdsAreNotListed() public {
+    function test_index_msigListedUnknownIdsNot() public {
         (, bytes32 msig) = _registerMsig();
-        assertEq(reg.uaCount(UAKinds.MSIG), 0);
-        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UANotIndexed.selector, msig));
-        reg.uaIndex(msig);
+        assertEq(reg.uaCount(UAKinds.MSIG), 1);
+        assertEq(reg.uaAt(UAKinds.MSIG, 0), msig);
+        assertEq(reg.uaIndex(msig), 0);
         bytes32 nobody = bytes32(uint256(0xbeef) << 200);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UANotIndexed.selector, nobody));
         reg.uaIndex(nobody);
