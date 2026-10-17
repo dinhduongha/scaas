@@ -223,7 +223,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
 
     // ----- the per-kind list (IUARegistry.uaCount) -----
 
-    /// Appends `ua` to its kind's list (single-key kinds; structures are not listed) and returns its index.
+    /// Appends `ua` to its kind's list (every kind, msig included) and returns its index.
     function _list(uint16 kind, bytes32 ua) private returns (uint40) {
         uint256 n = _uaCount[kind];
         _uaAt[kind][n] = ua;
@@ -231,7 +231,8 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         return uint40(n);
     }
 
-    /// A kind this generation does not enable belongs to the predecessor's list.
+    /// A kind this generation does not enable belongs to the predecessor's list; a kind both enable (msig) has one
+    /// list per generation.
     function _listedHere(uint16 kind) private view returns (bool) {
         return predecessor == address(0) || uint160(_cfg(kind)) != 0;
     }
@@ -261,7 +262,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     function uaIndex(bytes32 ua) external view returns (uint256) {
         Record memory r = _records[ua];
         if (r.kind == 0 && predecessor != address(0)) return IUARegistry(predecessor).uaIndex(ua);
-        if (r.kind == 0 || r.kind == UAKinds.MSIG) revert UANotIndexed(ua);
+        if (r.kind == 0) revert UANotIndexed(ua);
         return r.index;
     }
 
@@ -342,7 +343,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         // 6. Structures have no PoP of their own (members proved theirs): `pop` must be empty.
         if (structure ? pop.length != 0 : !_popOk(cfg, kind, d, ua, authRef, pop)) revert UAPoP();
         _coSign(ua, authRef, authPop); // 7
-        _records[ua] = Record(kind, uint40(block.timestamp), _keyPtr(kind, keyData), structure ? 0 : _list(kind, ua)); // 8
+        _records[ua] = Record(kind, uint40(block.timestamp), _keyPtr(kind, keyData), _list(kind, ua)); // 8
         if (authRef != 0) _authRef[ua] = authRef;
         if (!structure) _keyOwner[kh] = ua;
         emit UARegistered(ua, kind, keyData, authRef);
