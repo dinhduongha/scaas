@@ -48,8 +48,9 @@ tiếp thị riêng cho các hoạt động bị cấm, cũng không áp dụng 
 
 Nếu không thuộc diện bị cấm, và:
 
-- **toàn bộ tập đoàn là tổ chức thuần chay** (mọi sản phẩm, dịch vụ không có thành phần từ động vật và không thử nghiệm
-  trên động vật), bất kể doanh thu; **hoặc**
+- **công ty bạn là tổ chức thuần chay** (mọi sản phẩm, dịch vụ không có thành phần từ động vật và không thử nghiệm
+  trên động vật), bất kể doanh thu và bất kể các công ty khác trong tập đoàn (tập đoàn thuần chay thì mọi công ty của nó
+  đều miễn phí; tập đoàn không thuần chay thì chỉ công ty thuần chay được miễn phí); **hoặc**
 - **doanh thu của chính công ty bạn dưới 10 triệu USD** (không tính cả tập đoàn; năm tài chính gần nhất; tổ chức không
   có doanh thu thì tính theo tổng chi tiêu hằng năm),
 
