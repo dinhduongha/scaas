@@ -453,26 +453,26 @@ Every family separates shared code from per-user data in its own way, and each h
 
 ## 5. What the traditional model gets wrong
 
-Three habits of the usual token and wallet model are the source of most losses and most operational pain. SCaaS
-designs each of them out.
+Five habits of the usual blockchain, token and wallet model are the source of most losses and most of the friction that
+keeps blockchains out of everyday use. SCaaS designs each of them out.
 
-### `approve`: a standing permission to drain
+### Users must hold the native coin to pay fees
 
-The standard ERC-20 flow is `approve(spender, amount)` followed by `transferFrom`. It needs two transactions, and the
-allowance usually outlives the purpose it was given for — often "unlimited", often to a plain address. A phishing
-site that obtains one approval can empty the balance later, at any time.
+The root mistake: to do anything at all, a user must first buy and hold the chain's native coin (ETH, BNB, SOL, …) to
+pay the fee. A shop, a payroll or a loyalty program cannot ask every customer to open an exchange account first; this
+single requirement has kept blockchains out of most real applications. The later fixes — sponsored transactions,
+ERC-2771 forwarders, ERC-4337 paymasters, fee-bump and fee-grant features — help in places but do not remove it
+(below).
 
-SCaaS: **only a contract may call `approve` — an ordinary account never grants an allowance on a SCaaS token, in any
-form — and only a contract may spend one** ([docs/contracts/token-wrappers.md](docs/contracts/token-wrappers.md)). Allowances remain only for code that enforces
-its own rules (the DEX, escrow). Everyday payments need no allowance at all: the payer signs one `pay` for one amount,
-to one payee, with an expiry.
+SCaaS: the user never needs a native coin. Every operation is a signed intent that a relayer submits and pays gas for;
+the relayer takes its fee in the token being used, or the merchant pays it ([section 7](#7-meta-transactions-and-eip-1776)).
 
 ### Transactions are synchronous and tied to the sender's account
 
 On every chain a normal transaction is built for the sender's own account and its **sequence number** (EVM nonce,
 Stellar sequence, Cosmos account sequence, GRAM wallet seqno), at the moment it is sent. That means:
 
-- the user must be **online, at that moment, holding native coins** for gas;
+- the user must be **online, at that moment** (and, as above, hold native coins for gas);
 - the transactions of one account run **strictly one after another**: one stuck transaction blocks **every** later
   operation of that account, on **every** contract (head-of-line blocking);
 - a call cannot be signed now and executed later by someone else.
@@ -488,6 +488,38 @@ SCaaS: the subject signs an **intent** — "this operation, on this contract, va
 may execute it later, from their own account ([NET-ALL-02](docs/networks/README.md#NET-ALL-02)). Each contract keeps
 its own two-dimensional nonce space (a lane and a sequence inside it), so independent operations never wait for each
 other ([section 7](#7-meta-transactions-and-eip-1776)).
+
+### Burning the fee coin works against the chain's own goal
+
+A chain wants many transactions and deep liquidity, because that is what makes it useful and what pays its validators.
+Yet the common design burns part of every fee (EIP-1559's base fee and its imitators) to make the native coin scarcer
+and dearer — and a dearer coin makes every transaction more expensive, which means fewer transactions. The two goals
+pull against each other. Nothing requires the burn: a chain grows by carrying more transactions, and if blocks fill up
+the gas price can rise on its own.
+
+SCaaS burns nothing: the fee of an operation goes to whoever executes it, in the token used, and the cost of a payment
+does not depend on the price of a coin the user never holds.
+
+### `approve` / `revoke`: a standing permission to drain, and three paid steps
+
+The standard ERC-20 flow is `approve(spender, amount)`, then the dApp's call (which uses `transferFrom`), then — if the
+user remembers — `revoke`. Two things are wrong with it:
+
+- **The allowance outlives its purpose.** It is often "unlimited", often granted to a plain address, and stays until
+  the user revokes it. A phishing site or a compromised dApp can drain the balance at any later time; forgotten
+  approvals are one of the largest causes of losses for non-expert users.
+- **It makes every dApp interaction slow and expensive:** approve → call → revoke is three transactions, three
+  signatures and three fees for one action.
+
+SCaaS: **only a contract may call `approve` — an ordinary account never grants an allowance on a SCaaS token, in any
+form — and only a contract may spend one** ([docs/contracts/token-wrappers.md](docs/contracts/token-wrappers.md)).
+Everyday payments need no allowance at all: the payer signs one `pay` for one amount, to one payee, with an expiry.
+When a contract does need to hand tokens to another contract, it approves inside the same call and takes the allowance
+back at once: the SCaaS DEX approves an outside router only within the route it executes and revokes every such
+allowance (`approve(spender, 0)`, which is what a "revoke" is in ERC-20) before the transaction ends
+(`increaseAllowance` and Permit2 approvals are refused). An outside token
+(for example USDC) still follows its own ERC-20 rules; its holders approve only the DEX's `DexPuller`, which pulls
+nothing without the holder's signed order.
 
 ### The operator's server holds the power
 
@@ -1040,7 +1072,7 @@ amount you want, whenever you want, or not at all.
 Free Pay carries no warranty and no obligation, and nothing is bound to it: it buys no support, no rights and no
 license terms. The license is the same whether you pay or not.
 
-You can Free Pay to **Tu Viện Chơn Như** (Chơn Như Monastery): <https://www.tuvienchonnhu.net>.
+You can Free Pay to **Tu Viện Chơn Như** (Chơn Như Monastery): <https://www.tuvienchonnhu.net/lien-he/>.
 
 Or to the developer's EVM wallet: `0x0389f77E846ff687d44db57bcC9DCB55dd6f4131`.
 
