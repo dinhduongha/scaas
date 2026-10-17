@@ -129,7 +129,8 @@ ones: 17 + 2 vectors for `R_TX` instead of 125.
 **Transcript.** Keccak-256 chained state seeded with `keccak256("SCAAS-PQZH-LIGERO-V1" ‖ u8(op) ‖ be32(len) ‖ stmt)`;
 absorb R, draw the challenges, absorb w ‖ q ‖ h, check the nonce, absorb it, draw the indices. Squeezing: Keccak-256
 (state ‖ 0xff ‖ be64(counter)) → 8-byte big-endian words; a field element is a word masked to 42 bits, rejected if
-≥ q. The parameters (n, k, ℓ, t, grinding bits) are fixed per proofSystemId (`Params::preset`) and never read from
+≥ q. The parameters (n, k, ℓ, t, grinding bits) are fixed per proofSystemId (production: `Params::proven()`, which the
+`pqz-ffi` adapter pins; `Params::preset` is bench-only) and never read from
 the proof; the proof length is bounded before parsing and must be consumed exactly. Prover randomness:
 SHAKE256("SCAAS-PQZH-LIGERO-RNG" ‖ rnd32 ‖ op ‖ stmt) (since §12, hedged with the witness: `SHAKE256("SCAAS-PQZH-LIGERO-RNG-V2" ‖ rnd32 ‖ u8(op) ‖ be32(len) ‖ stmt ‖ wit)`; the frozen byte layout is pq-zero-knowledge.md §8.1).
 
@@ -209,7 +210,15 @@ every blind lives in exactly the space of the polynomial it masks and is inside 
 | quadratic field | `1 / |F_{q^4}|` | 168 bits |
 | Keccak-256 collision | 2^−128 | 128 bits (the binding term, as the STARK's) |
 
-Summing all six probabilities gives 127.2–127.8 bits (`total` in the run files); per term every bound is ≥ 128.
+Summing the five proven terms (the conjectured query term left out) gives 127.2–127.8 bits (`total` in the run files);
+per term every bound is ≥ 128.
+
+**Security model (review 2026-10-17, finding 1).** These are **classical bits in the random-oracle model**; soundness in
+the quantum random-oracle model is an assumption, stated, as for PQZL ([pq-zero-knowledge.md](../contracts/pq-zero-knowledge.md)
+T10). Against a quantum attacker, Grover search over the Fiat–Shamir grinding roughly halves the query term (≈ 64 bits)
+and Keccak-256 collision resistance is 2^85 (Brassard–Høyer–Tapp) — the exposure every Fiat–Shamir-compiled hash-based
+argument has. A 128-bit post-quantum soundness target would need about twice the query term, hence a new parameter set
+(t, ℓ, m) under a new proofSystemId (bump rule, §8 of the spec).
 
 ### 5.2 Parameter search [estimate, `runs/p1-params.txt`]
 
