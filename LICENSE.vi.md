@@ -90,7 +90,7 @@ Vậy có ba nhóm: **bị cấm** (không được dùng); **miễn phí** (doa
 
 ## Còn lại
 
-Mọi trường hợp khác cần **Vegan Enterprise License**: liên hệ Licensor qua https://github.com/dinhduongha/scaas. Vegan Enterprise
+Mọi trường hợp khác cần **Vegan Enterprise License**: liên hệ Licensor qua email ha@dad.vn hoặc https://github.com/dinhduongha/scaas. Vegan Enterprise
 License **cũng có cùng điều cấm**: không cấp cho ai thuộc diện bị cấm, và bên đã có Vegan Enterprise License mà sau đó rơi vào
 diện bị cấm thì mất quyền ngay.
 
