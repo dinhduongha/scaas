@@ -50,7 +50,8 @@ Nếu không thuộc diện bị cấm, và:
 
 - **công ty bạn là tổ chức thuần chay** (mọi sản phẩm, dịch vụ không có thành phần từ động vật và không thử nghiệm
   trên động vật), bất kể doanh thu và bất kể các công ty khác trong tập đoàn (tập đoàn thuần chay thì mọi công ty của nó
-  đều miễn phí; tập đoàn không thuần chay thì chỉ công ty thuần chay được miễn phí); **hoặc**
+  đều miễn phí; tập đoàn không thuần chay thì mọi công ty thuần chay trong đó, dù một hay nhiều công ty, đều miễn phí; các công ty còn
+  lại xét theo doanh thu riêng); **hoặc**
 - **doanh thu của chính công ty bạn dưới 10 triệu USD** (không tính cả tập đoàn; năm tài chính gần nhất; tổ chức không
   có doanh thu thì tính theo tổng chi tiêu hằng năm),
 
