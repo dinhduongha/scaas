@@ -91,7 +91,9 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
         if (rate && (cfg.rate.rateDelay != 0 || cfg.rate.maxRateStepBps != 0)) revert ConfigFieldForOtherKind(3);
         ConfidentialConfig calldata c = cfg.conf;
         if (conf && (c.verifier != address(0) || c.auditorKey.length != 0 || c.shieldScale != 0 || c.maxShielded != 0
-            || c.confidentialFee != 0 || c.disclosureMode != 0 || c.auditorMode != 0)) revert ConfigFieldForOtherKind(4);
+            || c.confidentialFee != 0 || c.disclosureMode != 0 || c.auditorMode != 0 || c.multiLegFee != 0)) {
+            revert ConfigFieldForOtherKind(4);
+        }
     }
 
     function _setMetadata(string memory n, string memory sym, uint8 d) internal {

@@ -80,8 +80,7 @@ contract UnderlyingPqzToken is UnderlyingToken, PqzLayer {
     {
         PqzLib.Env memory e = _envOf(binding == 0 ? unwrapBinding(x.u, x.minOut) : binding);
         (e.amount, e.recipient) = (x.amount, x.recipient);
-        (, bytes memory buf) = PqzLib.prepareBurn(e, payload, acc, inl, 0);
-        return _stmt(buf);
+        return PqzLib.statementOf(2, e, payload, acc, inl);
     }
 
     function _envUnwrap(Unwrap calldata x) private view returns (PqzLib.Env memory e) {
@@ -134,9 +133,9 @@ contract UnderlyingPqzToken is UnderlyingToken, PqzLayer {
         public pure override(UnderlyingToken, IMetaTx, MetaTxBase)
         returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
     {
-        s = new bytes4[](16);
-        c = new uint8[](16);
-        a = new uint8[](16);
+        s = new bytes4[](19);
+        c = new uint8[](19);
+        a = new uint8[](19);
         (s[0], c[0]) = (this.cancelNonce.selector, FEE_CLASS_ABSOLUTE);
         (s[1], c[1]) = (SEL_WRAP, FEE_CLASS_ABSOLUTE);
         (s[2], c[2]) = (SEL_UNWRAP_MIN, FEE_CLASS_AMOUNT);
@@ -153,6 +152,9 @@ contract UnderlyingPqzToken is UnderlyingToken, PqzLayer {
         (s[13], c[13]) = (this.pqzRollOver.selector, FEE_CLASS_ABSOLUTE);
         (s[14], c[14]) = (this.pqzWrapShield.selector, FEE_CLASS_ABSOLUTE);
         (s[15], c[15]) = (this.pqzUnshieldUnwrap.selector, FEE_CLASS_ABSOLUTE);
+        (s[16], c[16]) = (this.pqzTransferSingle.selector, FEE_CLASS_ABSOLUTE);
+        (s[17], c[17]) = (this.pqzTransferSingleCompact.selector, FEE_CLASS_ABSOLUTE);
+        (s[18], c[18]) = (this.pqzTransferSingleNoBundle.selector, FEE_CLASS_ABSOLUTE);
     }
 
     function _mtxRule(bytes4 sel) internal view override(UnderlyingToken, MetaTxBase) returns (MtxRule memory) {

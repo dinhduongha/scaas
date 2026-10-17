@@ -129,7 +129,8 @@ ones: 17 + 2 vectors for `R_TX` instead of 125.
 **Transcript.** Keccak-256 chained state seeded with `keccak256("SCAAS-PQZH-LIGERO-V1" ‖ u8(op) ‖ be32(len) ‖ stmt)`;
 absorb R, draw the challenges, absorb w ‖ q ‖ h, check the nonce, absorb it, draw the indices. Squeezing: Keccak-256
 (state ‖ 0xff ‖ be64(counter)) → 8-byte big-endian words; a field element is a word masked to 42 bits, rejected if
-≥ q. The parameters (n, k, ℓ, t, grinding bits) are fixed per proofSystemId (`Params::preset`) and never read from
+≥ q. The parameters (n, k, ℓ, t, grinding bits) are fixed per proofSystemId (production: `Params::proven()`, which the
+`pqz-ffi` adapter pins; `Params::preset` is bench-only) and never read from
 the proof; the proof length is bounded before parsing and must be consumed exactly. Prover randomness:
 SHAKE256("SCAAS-PQZH-LIGERO-RNG" ‖ rnd32 ‖ op ‖ stmt) (since §12, hedged with the witness: `SHAKE256("SCAAS-PQZH-LIGERO-RNG-V2" ‖ rnd32 ‖ u8(op) ‖ be32(len) ‖ stmt ‖ wit)`; the frozen byte layout is pq-zero-knowledge.md §8.1).
 
@@ -209,7 +210,15 @@ every blind lives in exactly the space of the polynomial it masks and is inside 
 | quadratic field | `1 / |F_{q^4}|` | 168 bits |
 | Keccak-256 collision | 2^−128 | 128 bits (the binding term, as the STARK's) |
 
-Summing all six probabilities gives 127.2–127.8 bits (`total` in the run files); per term every bound is ≥ 128.
+Summing the five proven terms (the conjectured query term left out) gives 127.2–127.8 bits (`total` in the run files);
+per term every bound is ≥ 128.
+
+**Security model (review 2026-10-17, finding 1).** These are **classical bits in the random-oracle model**; soundness in
+the quantum random-oracle model is an assumption, stated, as for PQZL ([pq-zero-knowledge.md](../contracts/pq-zero-knowledge.md)
+T10). Against a quantum attacker, Grover search over the Fiat–Shamir grinding roughly halves the query term (≈ 64 bits)
+and Keccak-256 collision resistance is 2^85 (Brassard–Høyer–Tapp) — the exposure every Fiat–Shamir-compiled hash-based
+argument has. A 128-bit post-quantum soundness target would need about twice the query term, hence a new parameter set
+(t, ℓ, m) under a new proofSystemId (bump rule, §8 of the spec).
 
 ### 5.2 Parameter search [estimate, `runs/p1-params.txt`]
 
@@ -1114,3 +1123,58 @@ one verify (p50 11.13 ms native), against 4 × 318,547 = 1,274,188 B and 4 × `R
 ```sh
 CARGO_BUILD_JOBS=2 scripts/capped pqz-core/pqzh/ligero/runs/txm.sh l16-txm   # H1 + H2: tests, oversize, FNV, native + wasm32 benches, xcheck, ffi
 ```
+
+## 12. Gate B review of the ZK argument (2026-10-17)
+
+**Date:** 2026-10-17. **Reviewer:** a Claude subagent, read-only (no build, no run), as gate B of the relations plan
+requires ([2026-10-14-p6e-relations.md](../superpowers/plans/2026-10-14-p6e-relations.md) "Gate B"). Not a
+substitute for the external review of §4.1 the plan lists as an owner step before PQZH holds real value.
+
+**Subject:** this note §4 (protocol, zero knowledge, Fiat–Shamir), §4.1 (the
+modified construction), §5 (128-bit soundness); code `pqz-core/pqzh/ligero/src/{ligero,cs,transcript,merkle,fq,fft,ring}.rs`
+and `pqz-core/ffi/src/pqzh.rs`.
+
+### Verdict
+
+**Sound and zero-knowledge as §4.1 claims, in the classical random-oracle model.** No critical or high finding.
+
+Checked in the code:
+- **Zero knowledge.** Each witness row carries k − ℓ = 122 uniform values on H_k with ℓ = k − t − 1, so the t = 121
+  opened columns are uniform. The three F_q^4 blinds are each in the space of the polynomial they mask, and all of them
+  are inside the proximity combination. Merkle leaves are salted and cannot be confused with internal nodes. The hedged
+  RNG is deterministic, and a repeated `rnd32` with another witness, statement or op gives an unrelated stream (test
+  `rng_hedged_with_witness`).
+- **Soundness and Fiat–Shamir.**
+  - The seed binds the op, the length and the statement, which starts with opTag ‖ proofSystemId.
+  - The challenges are drawn in the right order: root, then a, b, c_lin, c_quad, ρ, r_t; then w ‖ q ‖ h; then
+    proof-of-work, nonce and indices.
+  - F_q^4 = F_q[X]/(X^4 − 3) is a field. Sampling is uniform by rejection.
+  - The linear-test weights start at exponent 1.
+  - The query term at the preset (n 32,756, k 817, t 121, 16 grinding bits) is 128.50 bits, matching §5.1 and
+    `Params::proven()`.
+  - The verifier identities match §4 step 6.
+  - The exact length bound is checked before parsing.
+- **Malleability.** Every value must be canonical, the input must be consumed exactly, the Merkle multiproof is unique,
+  and no attacker-reachable panic was found.
+
+### Findings and status
+
+| # | Severity | Finding | Status |
+|---|---|---|---|
+| 1 | medium | §5 gave no security model although the system is called post-quantum. The 128 bits are classical ROM bits. A quantum Grover attack on the Fiat–Shamir grinding roughly halves the query term (≈ 64 bits), and Keccak-256 collision resistance is 2^85 (BHT). | **fixed (doc):** §5.1 states "classical, ROM; QROM assumed" as PQZL's T10, and the post-quantum query-term caveat; spec T10 row extended. A 128-bit post-quantum target would need a new parameter set and a new id: owner question, open. |
+| 2 | low | "Summing all six probabilities" is wrong: `soundness()` sums five terms, the conjectured query term is left out. 127.2–127.8 bits in total, each term ≥ 128. | **fixed (doc)** |
+| 3 | low | §4 said `Params::preset`, but production uses `Params::proven()`; `preset` is bench-only. The old RNG string still appeared. | **fixed (doc)** for the parameters. The old RNG string appears only in the history line "(was …)", which is kept. |
+| 4 | low | `Params` has public fields and `verify` takes them from the caller, so an embedder could verify with weak parameters. Only the ffi adapter pins the preset. | open (hardening; production goes through `pqz-ffi` only) |
+| 5 | note | The parameters are not absorbed into the transcript. Safe because the id fixes them; any new parameter set must take a new id, which is already the bump rule. | recorded |
+| 6 | note | The prover's retry loop would bias the distribution the ZK simulator has to match, but it never fires while the limit is `max_proof_len`. | recorded (keep the invariant) |
+| 7 | note | wasm32 aborts on panic instead of catching it; no attacker-reachable panic was found. | recorded |
+| 8 | note | §4.1 soundness item 1 does not spell out the case where w differs from the decoded combination under correlated agreement; the per-query factor already covers it. | recorded |
+
+Taken from the document only, not re-verified:
+- that BCIKS20 Thm 1.6 applies, and its constant;
+- the critique of the Ligero paper's §4.7 and Lemma B.7;
+- the ring-row recurrence;
+- that 3 generates F_q^*;
+- the per-relation field-term numbers and the measurements;
+- the Johnson preset (reference only).
+

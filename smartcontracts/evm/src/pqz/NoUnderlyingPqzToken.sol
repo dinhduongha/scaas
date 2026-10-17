@@ -59,9 +59,9 @@ contract NoUnderlyingPqzToken is NoUnderlyingToken, PqzLayer {
         public pure override(NoUnderlyingToken, IMetaTx, MetaTxBase)
         returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
     {
-        s = new bytes4[](8);
-        c = new uint8[](8);
-        a = new uint8[](8);
+        s = new bytes4[](11);
+        c = new uint8[](11);
+        a = new uint8[](11);
         (s[0], c[0]) = (this.cancelNonce.selector, FEE_CLASS_ABSOLUTE);
         (s[1], c[1]) = (this.burn.selector, FEE_CLASS_AMOUNT);
         (s[2], c[2]) = (this.pqzShield.selector, FEE_CLASS_ABSOLUTE);
@@ -70,6 +70,9 @@ contract NoUnderlyingPqzToken is NoUnderlyingToken, PqzLayer {
         (s[5], c[5]) = (this.pqzTransferNoBundle.selector, FEE_CLASS_ABSOLUTE);
         (s[6], c[6]) = (this.pqzUnshield.selector, FEE_CLASS_ABSOLUTE);
         (s[7], c[7]) = (this.pqzRollOver.selector, FEE_CLASS_ABSOLUTE);
+        (s[8], c[8]) = (this.pqzTransferSingle.selector, FEE_CLASS_ABSOLUTE);
+        (s[9], c[9]) = (this.pqzTransferSingleCompact.selector, FEE_CLASS_ABSOLUTE);
+        (s[10], c[10]) = (this.pqzTransferSingleNoBundle.selector, FEE_CLASS_ABSOLUTE);
     }
 
     function _mtxRule(bytes4 sel) internal view override(NoUnderlyingToken, MetaTxBase) returns (MtxRule memory) {

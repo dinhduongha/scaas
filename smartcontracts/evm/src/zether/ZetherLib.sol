@@ -144,7 +144,7 @@ library ZetherLib {
         uint256 p = v.g1EncodedBytes();
         bytes calldata aud = c.auditorKey;
         if (c.shieldScale == 0 || c.maxShielded == 0 || c.maxShielded > MAX_TOTAL_SHIELDED
-            || c.confidentialFee >= VALUE_BOUND || c.confidentialFee >= c.maxShielded
+            || c.confidentialFee >= VALUE_BOUND || c.confidentialFee >= c.maxShielded || c.multiLegFee != 0
             || (aud.length != 0 && (aud.length != p || !v.isValidPoint(aud) || _isO(aud)))) {
             revert IZetherToken.BadInit();
         }

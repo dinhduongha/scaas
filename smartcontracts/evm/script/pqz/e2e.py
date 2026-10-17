@@ -129,14 +129,15 @@ def dec_bytes(h):
     return b[o + 32:o + 32 + n]
 
 
+VTA = "verifyTransferAmount(bytes32,uint256,uint256,uint8,bytes)"
 MTX = ("t", ["w", "b", "w", "w", "w", "w", "w", "w", "w"])
 MTX_S = "(address,bytes,uint256,uint256,uint256,uint32,address,uint256,address)"
 UMTX_S = "(bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address)"
 UNWRAP = ("t", ["w", "w", "w", "w"])
 CFG = ("t", ["b", "b", "w", "w", "w", "w", ("t", ["w"] * 5), "w", "w", ("a", ("t", ["w", "w", "w"])), ("t", ["w", "w"]),
-             ("t", ["w", "b", "w", "w", "w", "w", "w"])])
+             ("t", ["w", "b", "w", "w", "w", "w", "w", "w"])])
 CFG_S = ("(string,string,uint8,uint256,uint256,address,(address,address,address,address,address),uint256,address,"
-         "(address,uint256,uint256)[],(uint32,uint16),(address,bytes,uint256,uint256,uint256,uint8,uint8))")
+         "(address,uint256,uint256)[],(uint32,uint16),(address,bytes,uint256,uint256,uint256,uint8,uint8,uint256))")
 
 
 # ------------------------------------------------------------------ transactions
@@ -406,6 +407,8 @@ def run(kd, kr, ke):
     feeua = ml_ua("fee-ua", MLDSA65, sk("fee"))
     U = {n: pqz_ua(n, sk("pqz-" + n), ml[n]) for n in ("alice", "bob", "aud", "carol")}
     alice, bob, aud, carol = U["alice"], U["bob"], U["aud"], U["carol"]
+    # op 7 decoys (P6g op 7): five more pqz-mlwe UAs, authority carol's ML-DSA UA
+    DEC = [pqz_ua(f"decoy{i}", sk(f"pqz-decoy{i}"), ml["carol"]) for i in range(5)]
 
     # secp256k1 (ECDSA, 0x0108; CTR-UA-06, owner 2026-10-17): a secp256k1 key registers a derived id, separate from
     # its EOA address and the same on every chain
@@ -438,7 +441,7 @@ def run(kd, kr, ke):
         check(True, "secp256k1 signature over another digest is refused (UAUnauthorized)")
 
     # the per-kind list (CTR-UA-29, owner 2026-10-17): every UA of a kind in registration order
-    for kind, uas in ((PQZ_MLWE, [u.ua for u in U.values()]), (MLDSA65, [u.ua for u in list(ml.values()) + [feeua]]),
+    for kind, uas in ((PQZ_MLWE, [u.ua for u in list(U.values()) + DEC]), (MLDSA65, [u.ua for u in list(ml.values()) + [feeua]]),
                       (MLDSA44, [ml44.ua]), (SECP256K1, [sec_ua])):
         n = int.from_bytes(words(call(reg, cd("uaCount(uint16)", ["w"], kind)))[0], "big")
         at = [words(call(reg, cd("uaAt(uint16,uint256)", ["w", "w"], kind, i)))[0] for i in range(n)]
@@ -462,7 +465,7 @@ def run(kd, kr, ke):
     def create(kind, name, sym, legs, dmode, amode, feat, supply=0, holder=0, conf=True, salt=b"p6g"):
         aud_key = aud.ua if amode else b""
         c = [name, sym, 6, feat, 0, sd.addr, [sd.addr if feat & 2 else 0, 0, 0, 0, 0], supply, holder, legs, [0, 0],
-             [pqv, aud_key, SCALE, MAXS, FEE, dmode, amode] if conf else [0, b"", 0, 0, 0, 0, 0]]
+             [pqv, aud_key, SCALE, MAXS, FEE, dmode, amode, 0] if conf else [0, b"", 0, 0, 0, 0, 0, 0]]
         data = cd(f"createToken(uint8,uint64,{CFG_S},bytes32)", ["w", "w", CFG, "w"], kind, 1, c, kc(salt))
         r = sd.send(fac, data, f"createToken {sym} (kind {kind})")
         lg = next(x for x in r["logs"] if x["address"].lower() == fac.lower())
@@ -485,12 +488,12 @@ def run(kd, kr, ke):
     check(C1.state(alice)["plainPending"] == 1000, "alice plainPending 1,000")
 
     xfer = lambda *a, **k: transfer(pq, sd, C1, *a, **k)  # noqa: E731
-    r1, ref1, bundle1, enc1 = xfer(alice, bob, carol, 300, True, "pqzTransfer alice→bob 300, fee 3 to carol")
+    r1, ref1, bundle1, enc1 = xfer(alice, bob, carol, 300, True, "pqzTransferSingle alice→bob 300, fee 3 to carol")
     sd.send(t1, cd("pqzRollOver(bytes32,bytes,bytes[])", ["w", "b", ("a", "b")], bob.ua, C1.accb(bob), C1.pend[bob.ua][0:1]),
             "pqzRollOver(bob, 1 credit)")
     C1.acc[bob.ua] = K.ct_add(C1.accb(bob), C1.pend[bob.ua][0])
-    xfer(bob, alice, b"\0" * 32, 100, True, "pqzTransfer bob→alice 100 (no fee)")
-    xfer(alice, bob, b"\0" * 32, 50, True, "pqzTransfer alice→bob 50 with 1 inline credit (p ≥ rolled)")
+    xfer(bob, alice, b"\0" * 32, 100, True, "pqzTransferSingle bob→alice 100 (no fee)")
+    xfer(alice, bob, b"\0" * 32, 50, True, "pqzTransferSingle alice→bob 50 with 1 inline credit (p ≥ rolled)")
     burn(pq, sd, C1, alice, 200, sd.addr, "pqzUnshield alice burns 200 → deployer")
     burn(pq, sd, C1, alice, 0, None, "pqzUnshield refresh (amount 0)")
     pub = int.from_bytes(words(call(t1, cd("balanceOf(address)", ["w"], sd.addr)))[0], "big")
@@ -501,16 +504,39 @@ def run(kd, kr, ke):
     log("disclosure of the first transfer (view, verifyTransferAmount):")
     for kind, op, wit in ((0, 4, K.i8(enc1[0]) + K.i16(enc1[1]) + K.i16(enc1[2][0])),
                           (1, 5, K.i8(bob.s) + K.i16(bob.e)), (2, 5, K.i8(aud.s) + K.i16(aud.e))):
-        stmt = dec_bytes(call(t1, cd("disclosureStatement(bytes32,uint256,uint8,bytes)", ["w", "w", "w", "b"], ref1, 300,
-                                     kind, bundle1)))
+        stmt = dec_bytes(call(t1, cd("disclosureStatement(bytes32,uint256,uint256,uint8,bytes)", ["w", "w", "w", "w", "b"],
+                                     ref1, 0, 300, kind, bundle1)))
         proof = pq.prove(op, stmt, wit)
         opening = encs(["b", "b"], [bundle1, proof])
-        data = cd("verifyTransferAmount(bytes32,uint256,uint8,bytes)", ["w", "w", "w", "b"], ref1, 300, kind, opening)
+        data = cd(VTA, ["w", "w", "w", "w", "b"], ref1, 0, 300, kind, opening)
         okw = int(call(t1, data), 16)
-        bad = int(call(t1, cd("verifyTransferAmount(bytes32,uint256,uint8,bytes)", ["w", "w", "w", "b"], ref1, 301, kind,
-                              opening)), 16)
+        bad = int(call(t1, cd(VTA, ["w", "w", "w", "w", "b"], ref1, 0, 301, kind, opening)), 16)
         check(okw == 1 and bad == 0, f"verifyTransferAmount kind {kind} (op {op}): 300 ⇒ true, 301 ⇒ false; "
                                      f"eth_estimateGas {gas_of(t1, data):,}")
+
+    # -------------------------------------------------------------- 4b. op 7 on pqUSD (BUNDLE, auditor FULL)
+    log("\n## 4b. op 7 multi-recipient transfer on pqUSD: M = 4 (one real leg, three decoys), fee, disclosure by leg")
+    legs4 = [(carol, 0), (bob, 40), (DEC[0], 0), (DEC[1], 0)]
+    _, ref7, bundle7, enc7 = transfer_multi(pq, sd, C1, alice, legs4, carol, True,
+                                            "pqzTransfer (op 7) alice→[carol 0, bob 40, decoy0 0, decoy1 0], fee 3 to carol")
+    for kind, op, wit in ((0, 4, K.i8(enc7["rs"][0]) + K.i16(enc7["e1s"][0]) + K.i16(enc7["e2"][1])),
+                          (1, 5, K.i8(bob.s) + K.i16(bob.e)), (2, 5, K.i8(aud.s) + K.i16(aud.e))):
+        stmt = dec_bytes(call(t1, cd("disclosureStatement(bytes32,uint256,uint256,uint8,bytes)", ["w", "w", "w", "w", "b"],
+                                     ref7, 1, 40, kind, bundle7)))
+        proof = pq.prove(op, stmt, wit)
+        opening = encs(["b", "b"], [bundle7, proof])
+        okw = int(call(t1, cd(VTA, ["w", "w", "w", "w", "b"], ref7, 1, 40, kind, opening)), 16)
+        bad = int(call(t1, cd(VTA, ["w", "w", "w", "w", "b"], ref7, 1, 41, kind, opening)), 16)
+        other = int(call(t1, cd(VTA, ["w", "w", "w", "w", "b"], ref7, 0, 40, kind, opening)), 16)
+        check(okw == 1 and bad == 0 and other == 0, f"op 7 leg 1 verifyTransferAmount kind {kind} (op {op}): 40 ⇒ true, "
+                                                    f"41 ⇒ false, leg 0 ⇒ false")
+    cts = C1.inline(bob, C1.state(bob)["pendingCount"])
+    sd.send(t1, cd("pqzRollOver(bytes32,bytes,bytes[])", ["w", "b", ("a", "b")], bob.ua, C1.accb(bob), cts),
+            f"pqzRollOver(bob, {len(cts)} pending credits)")
+    for x in cts:
+        C1.acc[bob.ua] = K.ct_add(C1.accb(bob), x)
+    transfer_multi(pq, sd, C1, bob, [(alice, 15), (DEC[2], 0)], b"\0" * 32, True,
+                   "pqzTransfer (op 7) bob→[alice 15, decoy2 0], the op 7 credit spent")
 
     # -------------------------------------------------------------- 5. relayed (v1 address path, v3 UA path)
     log("\n## 5. relayed transfers: v1 (ECDSA envelope signer pays a FIXED outer fee) and v3 (mldsa65 fee UA)")
@@ -523,7 +549,7 @@ def run(kd, kr, ke):
     dg = words(call(t1, cd(f"mtxDigest({MTX_S})", [MTX], m)))[0]
     r_, s_, rec = sign(se.key, dg)
     sig = r_.to_bytes(32, "big") + s_.to_bytes(32, "big") + bytes([27 + rec])
-    sr.send(t1, cd(f"mtxExecute({MTX_S},bytes)", [MTX, "b"], m, sig), "mtxExecute(pqzTransfer bob→alice 20), relayer pays gas")
+    sr.send(t1, cd(f"mtxExecute({MTX_S},bytes)", [MTX, "b"], m, sig), "mtxExecute(pqzTransferSingle bob→alice 20), relayer pays gas")
     C1.commit()
     fee_got = int.from_bytes(words(call(t1, cd("balanceOf(address)", ["w"], sr.addr)))[0], "big")
     check(fee_got == 5 * SCALE, f"relayer received the outer fee {fee_got:,}")
@@ -536,7 +562,7 @@ def run(kd, kr, ke):
     m[1] = data
     dg = words(call(t1, cd(f"uaDigest({UMTX_S})", [MTX], m)))[0]
     sr.send(t1, cd(f"uaExecute({UMTX_S},bytes)", [MTX, "b"], m, ml_auth(pq, feeua, P_METATX, dg)),
-            "uaExecute(pqzTransfer alice→bob 10), mldsa65 fee UA pays 2 outer")
+            "uaExecute(pqzTransferSingle alice→bob 10), mldsa65 fee UA pays 2 outer")
     C1.commit()
     left = int.from_bytes(words(call(t1, cd("balanceOfUA(bytes32)", ["w"], feeua.ua)))[0], "big")
     check(left == 8 * SCALE, f"fee UA public balance {left:,} after the outer fee")
@@ -550,10 +576,13 @@ def run(kd, kr, ke):
     sd.send(tusd, cd("approve(address,uint256)", ["w", "w"], t2, 10**12), "tUSD approve pqW")
     sd.send(t2, cd("pqzWrapShield(address,uint256,bytes32)", ["w", "w", "w"], tusd, 500 * SCALE, alice.ua),
             "pqzWrapShield(tUSD 500, alice)")
-    transfer(pq, sd, C2, alice, bob, b"\0" * 32, 120, False, "pqzTransfer alice→bob 120, auditor off (R_TX0), commit-reveal")
+    transfer(pq, sd, C2, alice, bob, b"\0" * 32, 120, False, "pqzTransferSingle alice→bob 120, auditor off (R_TX0), commit-reveal")
     sd.send(t2, cd("pqzRollOver(bytes32,bytes,bytes[])", ["w", "b", ("a", "b")], bob.ua, C2.accb(bob), C2.pend[bob.ua][0:1]),
             "pqW pqzRollOver(bob)")
     C2.acc[bob.ua] = K.ct_add(C2.accb(bob), C2.pend[bob.ua][0])
+    legs8 = [(bob, 30)] + [(u, 0) for u in [carol, aud] + DEC]
+    transfer_multi(pq, sd, C2, alice, legs8, b"\0" * 32, False,
+                   "pqzTransfer (op 7) alice→M = 8 (bob 30, seven decoys), auditor off, commit-reveal (two groups)")
     before = int.from_bytes(words(call(tusd, cd("balanceOf(address)", ["w"], sd.addr)))[0], "big")
     burn(pq, sd, C2, bob, 70, sd.addr, "pqzUnshieldUnwrap bob 70 → deployer in tUSD", unwrap=(tusd, 70 * SCALE))
     after = int.from_bytes(words(call(tusd, cd("balanceOf(address)", ["w"], sd.addr)))[0], "big")
@@ -601,7 +630,7 @@ def transfer(pq, s, C, frm, to, ben, v, aud_on, what, binding=b"\0" * 32, send=T
     ben_ua = ben.ua if isinstance(ben, UA) else ben
     blen = 16_768 if aud_on else 16_640
     hdr = lambda out: W(p) + W(10**9) + W(plain) + frm.ua + to.ua + ben_ua + salt + out + memo  # noqa: E731
-    view = lambda pl: dec_bytes(call(tok, cd("transferStatement(bytes,bytes,bytes[],bytes32)", ["b", "b", ("a", "b"), "w"],  # noqa: E731
+    view = lambda pl: dec_bytes(call(tok, cd("transferSingleStatement(bytes,bytes,bytes[],bytes32)", ["b", "b", ("a", "b"), "w"],  # noqa: E731
                                               pl, C.accb(frm), inl, binding)))
     st0 = view(hdr(bytes(blen)))
     tOff = 49_792 if aud_on else 33_408
@@ -625,7 +654,7 @@ def transfer(pq, s, C, frm, to, ben, v, aud_on, what, binding=b"\0" * 32, send=T
     proof = pq.prove(1, stmt, wit)
     ad = kc("SCAAS-PQZ-AUTH-V1", keccak256(stmt))
     auth = ml_auth(pq, frm.auth, P_ZAUTH, ad)
-    data = cd("pqzTransfer(bytes,bytes,bytes[],bytes,bytes)", ["b", "b", ("a", "b"), "b", "b"], pl, C.accb(frm), inl, proof, auth)
+    data = cd("pqzTransferSingle(bytes,bytes,bytes[],bytes,bytes)", ["b", "b", ("a", "b"), "b", "b"], pl, C.accb(frm), inl, proof, auth)
     log(f"      {what}: balance {b} → {rest} (+{v} to {to.name}, fee {fee}), p {p}, plainUsed {plain}, {len(inl)} inline, "
         f"proof {len(proof):,} B, auth {len(auth):,} B")
     # the client's next state
@@ -642,6 +671,64 @@ def transfer(pq, s, C, frm, to, ben, v, aud_on, what, binding=b"\0" * 32, send=T
     topic = "0x" + kc("PqzTransfer(bytes32,bytes32,bytes32,bytes16,bytes)").hex()
     ref = bytes.fromhex(next(x for x in rc["logs"] if x["topics"][0] == topic)["topics"][1][2:])
     return rc, ref, bundle, (r_, e1, e2)
+
+
+def transfer_multi(pq, s, C, frm, legs, ben, aud_on, what):
+    """An op 7 transfer (CTR-PQZ-26) at `p = pendingCount`, `plainUsed = plainPending`, legs [(UA, amount)] (decoys:
+    amount 0), proved over the token's own statement; returns (receipt, entryRef, bundle, enc)."""
+    tok = C.tok
+    stt = C.state(frm)
+    p, plain = stt["pendingCount"], stt["plainPending"]
+    inl = C.inline(frm, p)
+    m, g = len(legs), (len(legs) + 3) // 4
+    compact = int(call(tok, cd("disclosureMode()", [])), 16) == 1
+    salt = os.urandom(16)
+    memo = salt + os.urandom(2 + 40 * m) if compact else b""  # ponytail: memo body random, as transfer()
+    mlf = int(call(tok, cd("multiLegFee()", [])), 16)
+    fee = (FEE if ben != b"\0" * 32 else 0) + m * mlf
+    ben_ua = ben.ua if isinstance(ben, UA) else ben
+    olen = 16_384 * g + 128 * (m + 1) + (128 * m if aud_on else 0)
+    hdr = lambda out: (W(p) + W(10**9) + W(plain) + frm.ua + ben_ua + W(m) + salt  # noqa: E731
+                       + b"".join(u.ua for u, _ in legs) + out + memo)
+    view = lambda pl: dec_bytes(call(tok, cd("transferStatement(bytes,bytes,bytes[],bytes32)", ["b", "b", ("a", "b"), "w"],  # noqa: E731
+                                              pl, C.accb(frm), inl, b"\0" * 32)))
+    tOff = 640 + 16_384 * (1 + m + (1 if aud_on else 0))
+    T = view(hdr(bytes(olen)))[tOff:tOff + K.CT_BYTES]
+    b = bal(frm.s, T)
+    rest = b - sum(a for _, a in legs) - fee
+    assert rest >= 0, (b, legs, fee)
+    aud_pk = None
+    if aud_on:
+        aud_pk = dec_bytes(call(REG[0], cd("keyOf(bytes32)", ["w"], bytes.fromhex(call(tok, cd("auditorUA()", []))[2:]))))
+    e = K.enc_multi(frm.pk, K.digits(rest), [(u.pk, K.digits(a)) for u, a in legs], aud_pk, os.urandom(32))
+    out = b"".join(e["us"]) + b"".join(e["vs"]) + e["v_f"] + (b"".join(e["v_as"]) if aud_on else b"")
+    pl = hdr(out)
+    stmt = view(pl)
+    check(len(stmt) == K.multi_len(m, aud_on) and stmt[tOff:tOff + K.CT_BYTES] == T and stmt[-len(out):] == out,
+          f"{C.name} op 7 statement of {what}: {len(stmt):,} B, T and out as built")
+    wit = (K.i8(frm.s) + K.i16(frm.e) + b"".join(K.i8(r) + K.i16(x) for r, x in zip(e["rs"], e["e1s"]))
+           + b"".join(K.i16(x) for x in e["e2"] + [e["e2_f"]] + e["e2_a"])
+           + b"".join(bytes(K.digits(a)) for a in [a for _, a in legs] + [rest]))
+    t0 = time.time()
+    proof = pq.prove(7, stmt, wit)
+    tp = time.time() - t0
+    auth = ml_auth(pq, frm.auth, P_ZAUTH, kc("SCAAS-PQZ-AUTH-V1", keccak256(stmt)))
+    data = cd("pqzTransfer(bytes,bytes,bytes[],bytes,bytes)", ["b", "b", ("a", "b"), "b", "b"], pl, C.accb(frm), inl, proof, auth)
+    log(f"      {what}: M {m}, balance {b} → {rest}, fee {fee}, proof {len(proof):,} B in {tp:.2f} s, calldata {len(data):,} B")
+    newacc = e["us"][0] + e["v_f"]
+    if p < stt["rolled"]:
+        for x in inl:
+            newacc = K.ct_add(newacc, x)
+    C._next = {"acc": {frm.ua: newacc}, "pend": [(u.ua, e["us"][j // 4] + e["vs"][j]) for j, (u, _) in enumerate(legs)]}
+    bundle = salt + b"".join(e["us"]) + b"".join(e["vs"][j] + (e["v_as"][j] if aud_on else b"") + u.ua
+                                                 for j, (u, _) in enumerate(legs))
+    rc = s.send(tok, data, f"{C.name} {what}")
+    C.commit()
+    topic = "0x" + kc("PqzTransferMulti(bytes32,bytes32,bytes32,uint256,bytes16,bytes)").hex()
+    ref = bytes.fromhex(next(x for x in rc["logs"] if x["topics"][0] == topic)["topics"][1][2:])
+    check(C.state(frm)["accHash"] == int.from_bytes(keccak256(newacc), "big") or p < stt["rolled"],
+          f"{C.name} sender acc = u_0 ‖ v_f after op 7")
+    return rc, ref, bundle, e
 
 
 def burn(pq, s, C, frm, amount, recipient, what, unwrap=None):

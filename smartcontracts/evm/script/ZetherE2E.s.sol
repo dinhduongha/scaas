@@ -29,7 +29,7 @@ contract ZetherE2E is Script {
         IFactoryToken.TokenConfig memory c;
         (c.name, c.symbol, c.decimals, c.features) = ("Zether E2E", "zE2E", 6, 1 << AdminLib.PAYABLE);
         (c.initialSupply, c.initialHolder) = (1_000_000, vm.addr(pk));
-        c.conf = IFactoryToken.ConfidentialConfig(j.readAddress(".zether_verifier_bn254"), "", 1, 1 << 40, 0, 0, 0);
+        c.conf = IFactoryToken.ConfidentialConfig(j.readAddress(".zether_verifier_bn254"), "", 1, 1 << 40, 0, 0, 0, 0);
         vm.startBroadcast(pk);
         ZetherLayer t = ZetherLayer(
             OpenFactory(j.readAddress(".token_factory")).createToken(
