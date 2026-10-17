@@ -830,6 +830,97 @@
       "structHash": "0x62f6b32583403c67b801b627c1d0a5522a35cb7341c2af48171ddb82275b28e1",
       "digest": "0x6f3e3a74c60833a673bb4105f63ac2812952ff9da6e2c27977bbd62fcc7744e8",
       "auth": "0x000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000800000000000000000000000000000000000000000000000000000000000000020082c80610f73312fcf48a2eda2bd6552a4e864bb0e94dfe0109274d7381b615e0000000000000000000000000000000000000000000000000000000000000040ba0abb33d8937777ce7917114db8fb1fd388a4e6ffb84fb3c1849517703207ee46a1f5b138883d6ad3faf706bce659caffea63e2e2ccdc11133c0b90f379e80f"
+    },
+    {
+      "name": "secp256k1",
+      "kind": 264,
+      "from": "0xda932c990b36675c462755b0372bedff93462738b8bcb149593b2830676e9038",
+      "typedData": {
+        "types": {
+          "EIP712Domain": [
+            {
+              "name": "name",
+              "type": "string"
+            },
+            {
+              "name": "version",
+              "type": "string"
+            },
+            {
+              "name": "chainId",
+              "type": "uint256"
+            },
+            {
+              "name": "verifyingContract",
+              "type": "address"
+            },
+            {
+              "name": "salt",
+              "type": "bytes32"
+            }
+          ],
+          "UAMetaTransaction": [
+            {
+              "name": "from",
+              "type": "bytes32"
+            },
+            {
+              "name": "data",
+              "type": "bytes"
+            },
+            {
+              "name": "batch",
+              "type": "uint256"
+            },
+            {
+              "name": "nonce",
+              "type": "uint256"
+            },
+            {
+              "name": "validUntil",
+              "type": "uint256"
+            },
+            {
+              "name": "mode",
+              "type": "uint32"
+            },
+            {
+              "name": "relayer",
+              "type": "address"
+            },
+            {
+              "name": "fee",
+              "type": "uint256"
+            },
+            {
+              "name": "feeRecipient",
+              "type": "address"
+            }
+          ]
+        },
+        "primaryType": "UAMetaTransaction",
+        "domain": {
+          "name": "SCaaS MetaToken",
+          "version": "1",
+          "chainId": "31337",
+          "verifyingContract": "0x5ca00000000000000000000000000000000000a1",
+          "salt": "0xfd5ae6a2375e412f1c037047add923e138f84c83e565e12d4000707f3d0eabcc"
+        },
+        "message": {
+          "from": "0xda932c990b36675c462755b0372bedff93462738b8bcb149593b2830676e9038",
+          "data": "0xb5819a020000000000000000000000005ca00000000000000000000000000000000000b100000000000000000000000000000000000000000000000000000000000f4240000000000000000000000000000000000000000000000000000000000000540900000000000000000000000000000000000000000000000000000000000f1b30",
+          "batch": "7",
+          "nonce": "0",
+          "validUntil": "1800000300",
+          "mode": 19,
+          "relayer": "0x000000000000000000000000000000000000beef",
+          "fee": "5000",
+          "feeRecipient": "0x0000000000000000000000000000000000000fee"
+        }
+      },
+      "structHash": "0x161aac7896fc44212ace91334f8ecdb12abbd1f66a7ee83f1442f582ce55a614",
+      "digest": "0x5519d37120db696fa3c08476665741467e3004f5270915e9cdb3602263a87b7f",
+      "auth": "0x000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000a00000000000000000000000000000000000000000000000000000000000000040b8d6a62c582eb94925ec4296c5dd24373c38eee76212d1bfacfd5ad434ab21b5235095446465c8ec6e2da3defd9ddb82fa26d6536acd515ae702e445e17f7a1d000000000000000000000000000000000000000000000000000000000000004122d6a2f1b9013d4454a3d8c4b8c655fcfa16a49e03cdfbffce00eb916dd5ffcc6a4feebc894a5007d22aa2d1856f03563ab69aeae4fd107ff8b57a21a6e513911b00000000000000000000000000000000000000000000000000000000000000"
     }
   ],
   "transfer": [
@@ -1741,6 +1832,107 @@
       "structHash": "0x9af3ad1609b26969d4bc2033cc971904516c601318607354ac5f8187d677c3a9",
       "digest": "0x48c0a7ac4f7e5bb7fb19d5cc21c83993099224235e49c8f830568f88e9e15550",
       "auth": "0x000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000800000000000000000000000000000000000000000000000000000000000000020082c80610f73312fcf48a2eda2bd6552a4e864bb0e94dfe0109274d7381b615e000000000000000000000000000000000000000000000000000000000000004079a4f6dd43b71b2d4791c8881fe0b6b3d0216e55d3ac658f9a4afb3884fa4fe50ecd257b6b811c9a73cb2a4f8aeb741e3f967c2017cff8f6d9c81032c3376d09"
+    },
+    {
+      "name": "secp256k1",
+      "kind": 264,
+      "from": "0xda932c990b36675c462755b0372bedff93462738b8bcb149593b2830676e9038",
+      "typedData": {
+        "types": {
+          "EIP712Domain": [
+            {
+              "name": "name",
+              "type": "string"
+            },
+            {
+              "name": "version",
+              "type": "string"
+            },
+            {
+              "name": "chainId",
+              "type": "uint256"
+            },
+            {
+              "name": "verifyingContract",
+              "type": "address"
+            },
+            {
+              "name": "salt",
+              "type": "bytes32"
+            }
+          ],
+          "UAMetaTransfer": [
+            {
+              "name": "from",
+              "type": "bytes32"
+            },
+            {
+              "name": "to",
+              "type": "bytes32"
+            },
+            {
+              "name": "value",
+              "type": "uint256"
+            },
+            {
+              "name": "entryRef",
+              "type": "bytes32"
+            },
+            {
+              "name": "batch",
+              "type": "uint256"
+            },
+            {
+              "name": "nonce",
+              "type": "uint256"
+            },
+            {
+              "name": "validUntil",
+              "type": "uint256"
+            },
+            {
+              "name": "mode",
+              "type": "uint32"
+            },
+            {
+              "name": "relayer",
+              "type": "address"
+            },
+            {
+              "name": "fee",
+              "type": "uint256"
+            },
+            {
+              "name": "feeRecipient",
+              "type": "address"
+            }
+          ]
+        },
+        "primaryType": "UAMetaTransfer",
+        "domain": {
+          "name": "SCaaS MetaToken",
+          "version": "1",
+          "chainId": "31337",
+          "verifyingContract": "0x5ca00000000000000000000000000000000000a1",
+          "salt": "0xfd5ae6a2375e412f1c037047add923e138f84c83e565e12d4000707f3d0eabcc"
+        },
+        "message": {
+          "from": "0xda932c990b36675c462755b0372bedff93462738b8bcb149593b2830676e9038",
+          "to": "0x0000000000000000000000000000000000000000000000000000000000005409",
+          "value": "100000000",
+          "entryRef": "0xcdf47b4668abe0597c9bca621c6fffdd7c4160ad015fdace1c1f9caf1f54788c",
+          "batch": "83572037644246374773025187359130454626864735951110240245804944927733318416356",
+          "nonce": "0",
+          "validUntil": "1800000300",
+          "mode": 35,
+          "relayer": "0x000000000000000000000000000000000000beef",
+          "fee": "100000",
+          "feeRecipient": "0x0000000000000000000000000000000000000fee"
+        }
+      },
+      "structHash": "0x63dec206ed0d234a0c60124b79511a15d7eb9ce6009d1aa1ac17e95e8b64f805",
+      "digest": "0xb9401c4ba76fa821eb345266321560e63eb00b0a5a9c1b8d8a3e1df3873d3b23",
+      "auth": "0x000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000a00000000000000000000000000000000000000000000000000000000000000040b8d6a62c582eb94925ec4296c5dd24373c38eee76212d1bfacfd5ad434ab21b5235095446465c8ec6e2da3defd9ddb82fa26d6536acd515ae702e445e17f7a1d000000000000000000000000000000000000000000000000000000000000004178bc7868727f0aef093fb5e4f7e1519e82614338f82c90ba27a9486315fb27bb244f582c2556655edefaecd675c3d88cd7e3b8789bcc97d5fc199c8749dabf7a1b00000000000000000000000000000000000000000000000000000000000000"
     }
   ],
   "noteUA5a": "UA-5a (accounts.md CTR-UA-26/28, metatx.md CTR-MTX-05/06): burn and unwrapToUA are UAMetaTransaction rows as call (auth under metatx); receiverFee rows are uaPayReceiverFee(transfer, payerAuth, receiverFee.message.fee, feeRecipient, validUntil, payeeAuth): native payer x every derived payee, and p256 x bip340. A native payee signs receiverFeeDigest itself; a derived payee abi.encode(bytes keyData, bytes sig over ua_msg(kind, receiver-fee, receiverFeeDigest)).",
@@ -2563,6 +2755,97 @@
       "structHash": "0x40ea7bab7f6499e3cc78d4e580d023f82263a624ac2425259053297bf31fe50d",
       "digest": "0xf49be235c2fdca79ab87a53390e475d08201a5a49df4842d8934c30e4f3c9f59",
       "auth": "0x000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000800000000000000000000000000000000000000000000000000000000000000020082c80610f73312fcf48a2eda2bd6552a4e864bb0e94dfe0109274d7381b615e000000000000000000000000000000000000000000000000000000000000004024972006dd19f689b9e519cbcd60a5ba502b954349323b68cda29741bb84450167380dfb3ee6ef7c87321a07a6fa4b207c159cfd9f2f085742f1e36b39a00b05"
+    },
+    {
+      "name": "secp256k1",
+      "kind": 264,
+      "from": "0xda932c990b36675c462755b0372bedff93462738b8bcb149593b2830676e9038",
+      "typedData": {
+        "types": {
+          "EIP712Domain": [
+            {
+              "name": "name",
+              "type": "string"
+            },
+            {
+              "name": "version",
+              "type": "string"
+            },
+            {
+              "name": "chainId",
+              "type": "uint256"
+            },
+            {
+              "name": "verifyingContract",
+              "type": "address"
+            },
+            {
+              "name": "salt",
+              "type": "bytes32"
+            }
+          ],
+          "UAMetaTransaction": [
+            {
+              "name": "from",
+              "type": "bytes32"
+            },
+            {
+              "name": "data",
+              "type": "bytes"
+            },
+            {
+              "name": "batch",
+              "type": "uint256"
+            },
+            {
+              "name": "nonce",
+              "type": "uint256"
+            },
+            {
+              "name": "validUntil",
+              "type": "uint256"
+            },
+            {
+              "name": "mode",
+              "type": "uint32"
+            },
+            {
+              "name": "relayer",
+              "type": "address"
+            },
+            {
+              "name": "fee",
+              "type": "uint256"
+            },
+            {
+              "name": "feeRecipient",
+              "type": "address"
+            }
+          ]
+        },
+        "primaryType": "UAMetaTransaction",
+        "domain": {
+          "name": "SCaaS MetaToken",
+          "version": "1",
+          "chainId": "31337",
+          "verifyingContract": "0x5ca00000000000000000000000000000000000a1",
+          "salt": "0xfd5ae6a2375e412f1c037047add923e138f84c83e565e12d4000707f3d0eabcc"
+        },
+        "message": {
+          "from": "0xda932c990b36675c462755b0372bedff93462738b8bcb149593b2830676e9038",
+          "data": "0x42966c6800000000000000000000000000000000000000000000000000000000000f4240",
+          "batch": "8",
+          "nonce": "0",
+          "validUntil": "1800000300",
+          "mode": 19,
+          "relayer": "0x000000000000000000000000000000000000beef",
+          "fee": "5000",
+          "feeRecipient": "0x0000000000000000000000000000000000000fee"
+        }
+      },
+      "structHash": "0x542c9b30cc948d09422b1a6545f042c7bc526f531e2e5ae9e40a856766e10a0d",
+      "digest": "0xa6b0d9204dc3cac52b58afd02e4e0c7839cc88a4514036efeab3c89d148f3cb0",
+      "auth": "0x000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000a00000000000000000000000000000000000000000000000000000000000000040b8d6a62c582eb94925ec4296c5dd24373c38eee76212d1bfacfd5ad434ab21b5235095446465c8ec6e2da3defd9ddb82fa26d6536acd515ae702e445e17f7a1d00000000000000000000000000000000000000000000000000000000000000415f9ae79a5bfe65e68d6a16ce434dd2462e495cd1676e35b55bf09fa600fa3e6008beaf437e68c460bfcb139ddddd6fef9e0f36390a817b5e09f9a563216b37271c00000000000000000000000000000000000000000000000000000000000000"
     }
   ],
   "unwrapToUA": [
@@ -3384,6 +3667,97 @@
       "structHash": "0xba3fe1193bcae4cc5e29b79e80fb3ec9f1ad2d5da19a77b39159fc43e0cc2fdd",
       "digest": "0xe7d278745418d9bc975b55fb137f47d6a327822ec6f44328979df3ab9196e43d",
       "auth": "0x000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000800000000000000000000000000000000000000000000000000000000000000020082c80610f73312fcf48a2eda2bd6552a4e864bb0e94dfe0109274d7381b615e0000000000000000000000000000000000000000000000000000000000000040b8f2bea5e8f80fe1c34a6aad670d3b69957c4aff105d1f7f8b1516f64a7a8d5d63725412ad69928457dab9527305ebb69b7312e14621db131abc5ed2d13a5a0d"
+    },
+    {
+      "name": "secp256k1",
+      "kind": 264,
+      "from": "0xda932c990b36675c462755b0372bedff93462738b8bcb149593b2830676e9038",
+      "typedData": {
+        "types": {
+          "EIP712Domain": [
+            {
+              "name": "name",
+              "type": "string"
+            },
+            {
+              "name": "version",
+              "type": "string"
+            },
+            {
+              "name": "chainId",
+              "type": "uint256"
+            },
+            {
+              "name": "verifyingContract",
+              "type": "address"
+            },
+            {
+              "name": "salt",
+              "type": "bytes32"
+            }
+          ],
+          "UAMetaTransaction": [
+            {
+              "name": "from",
+              "type": "bytes32"
+            },
+            {
+              "name": "data",
+              "type": "bytes"
+            },
+            {
+              "name": "batch",
+              "type": "uint256"
+            },
+            {
+              "name": "nonce",
+              "type": "uint256"
+            },
+            {
+              "name": "validUntil",
+              "type": "uint256"
+            },
+            {
+              "name": "mode",
+              "type": "uint32"
+            },
+            {
+              "name": "relayer",
+              "type": "address"
+            },
+            {
+              "name": "fee",
+              "type": "uint256"
+            },
+            {
+              "name": "feeRecipient",
+              "type": "address"
+            }
+          ]
+        },
+        "primaryType": "UAMetaTransaction",
+        "domain": {
+          "name": "SCaaS MetaToken",
+          "version": "1",
+          "chainId": "31337",
+          "verifyingContract": "0x5ca00000000000000000000000000000000000a1",
+          "salt": "0xfd5ae6a2375e412f1c037047add923e138f84c83e565e12d4000707f3d0eabcc"
+        },
+        "message": {
+          "from": "0xda932c990b36675c462755b0372bedff93462738b8bcb149593b2830676e9038",
+          "data": "0xe4a9f7660000000000000000000000005ca00000000000000000000000000000000000b100000000000000000000000000000000000000000000000000000000000f424082cc815a0aeac7f5e3b170fc1922f6250c8d508bf0b260b6615952aae009a26400000000000000000000000000000000000000000000000000000000000f1b30",
+          "batch": "9",
+          "nonce": "0",
+          "validUntil": "1800000300",
+          "mode": 19,
+          "relayer": "0x000000000000000000000000000000000000beef",
+          "fee": "5000",
+          "feeRecipient": "0x0000000000000000000000000000000000000fee"
+        }
+      },
+      "structHash": "0x2a12602d312e6396fdf08eccc8d50f82780dab549d471f407916ab2059b852ae",
+      "digest": "0x395f079ef1c3e5d083ee1192c25c7da8bce6fcc59c4e17c0de91f6828e5ff1ba",
+      "auth": "0x000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000a00000000000000000000000000000000000000000000000000000000000000040b8d6a62c582eb94925ec4296c5dd24373c38eee76212d1bfacfd5ad434ab21b5235095446465c8ec6e2da3defd9ddb82fa26d6536acd515ae702e445e17f7a1d0000000000000000000000000000000000000000000000000000000000000041db83b9907ed7a294fd14973ac159b370f3ba9843f4355bd93173b0c142d2d21d3e43e37172888a2177de1437bfb20a784498648340198fcb6dcde9f38fe8d35d1c00000000000000000000000000000000000000000000000000000000000000"
     }
   ],
   "receiverFee": [
@@ -4658,6 +5032,165 @@
       "receiverFeeDigest": "0x2d171510bf1e45692a0fdbb85c2777b319d37b692d4015518c53b0bd0541f79e",
       "payerAuth": "0x11503c59e29d77264c629d0c194ab378ff33bb0aada83739ce08f76db093e01378920e8c97941d05e498281c173b0efbe82748f9975dffa5f2a6184ee26c856a1b",
       "payeeAuth": "0x000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000800000000000000000000000000000000000000000000000000000000000000020082c80610f73312fcf48a2eda2bd6552a4e864bb0e94dfe0109274d7381b615e00000000000000000000000000000000000000000000000000000000000000407b683d63233c685e7be4c16fd52d33600efa5f804368589d3c897818abb4e67e0e67aeb16bb910cde17a48b26673e29c1414ef206e38a6e7043219bbc17eac0e"
+    },
+    {
+      "payer": "native",
+      "payee": "secp256k1",
+      "transfer": {
+        "types": {
+          "EIP712Domain": [
+            {
+              "name": "name",
+              "type": "string"
+            },
+            {
+              "name": "version",
+              "type": "string"
+            },
+            {
+              "name": "chainId",
+              "type": "uint256"
+            },
+            {
+              "name": "verifyingContract",
+              "type": "address"
+            },
+            {
+              "name": "salt",
+              "type": "bytes32"
+            }
+          ],
+          "UAMetaTransfer": [
+            {
+              "name": "from",
+              "type": "bytes32"
+            },
+            {
+              "name": "to",
+              "type": "bytes32"
+            },
+            {
+              "name": "value",
+              "type": "uint256"
+            },
+            {
+              "name": "entryRef",
+              "type": "bytes32"
+            },
+            {
+              "name": "batch",
+              "type": "uint256"
+            },
+            {
+              "name": "nonce",
+              "type": "uint256"
+            },
+            {
+              "name": "validUntil",
+              "type": "uint256"
+            },
+            {
+              "name": "mode",
+              "type": "uint32"
+            },
+            {
+              "name": "relayer",
+              "type": "address"
+            },
+            {
+              "name": "fee",
+              "type": "uint256"
+            },
+            {
+              "name": "feeRecipient",
+              "type": "address"
+            }
+          ]
+        },
+        "primaryType": "UAMetaTransfer",
+        "domain": {
+          "name": "SCaaS MetaToken",
+          "version": "1",
+          "chainId": "31337",
+          "verifyingContract": "0x5ca00000000000000000000000000000000000a1",
+          "salt": "0xfd5ae6a2375e412f1c037047add923e138f84c83e565e12d4000707f3d0eabcc"
+        },
+        "message": {
+          "from": "0x000000000000000000000000fc7e9498d8035077f1705eb85be95d66f31a89f9",
+          "to": "0xda932c990b36675c462755b0372bedff93462738b8bcb149593b2830676e9038",
+          "value": "100000000",
+          "entryRef": "0xb7d3c4125adbc96b1cb80ad9981a56184e753d6f3113631588e45b7c6c1f38d7",
+          "batch": "20138788580717270933719208144767303883574625883671471993427741903746167429941",
+          "nonce": "0",
+          "validUntil": "1800000300",
+          "mode": 1,
+          "relayer": "0x000000000000000000000000000000000000beef",
+          "fee": "0",
+          "feeRecipient": "0x0000000000000000000000000000000000000000"
+        }
+      },
+      "paymentDigest": "0x142c99bcb4066c5cd376a20f1bef3f7910282347319e20606644797d09dba66c",
+      "receiverFee": {
+        "types": {
+          "EIP712Domain": [
+            {
+              "name": "name",
+              "type": "string"
+            },
+            {
+              "name": "version",
+              "type": "string"
+            },
+            {
+              "name": "chainId",
+              "type": "uint256"
+            },
+            {
+              "name": "verifyingContract",
+              "type": "address"
+            },
+            {
+              "name": "salt",
+              "type": "bytes32"
+            }
+          ],
+          "ReceiverFee": [
+            {
+              "name": "paymentDigest",
+              "type": "bytes32"
+            },
+            {
+              "name": "fee",
+              "type": "uint256"
+            },
+            {
+              "name": "feeRecipient",
+              "type": "address"
+            },
+            {
+              "name": "validUntil",
+              "type": "uint256"
+            }
+          ]
+        },
+        "primaryType": "ReceiverFee",
+        "domain": {
+          "name": "SCaaS MetaToken",
+          "version": "1",
+          "chainId": "31337",
+          "verifyingContract": "0x5ca00000000000000000000000000000000000a1",
+          "salt": "0xfd5ae6a2375e412f1c037047add923e138f84c83e565e12d4000707f3d0eabcc"
+        },
+        "message": {
+          "paymentDigest": "0x142c99bcb4066c5cd376a20f1bef3f7910282347319e20606644797d09dba66c",
+          "fee": "300000",
+          "feeRecipient": "0x0000000000000000000000000000000000000fee",
+          "validUntil": "1800000060"
+        }
+      },
+      "receiverFeeDigest": "0xfd32ae1ecad3e23ffb6ce844db3aed72026a570c93135900b5b6ff22fb97c13a",
+      "payerAuth": "0x97e5b386133e08137828ac58718c440aa6f91fa5c8269568982a729458304b61771ebfeb4ed50ed50315c7d909376212b7a80763765ed093642cf0ef30771ee11c",
+      "payeeAuth": "0x000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000a00000000000000000000000000000000000000000000000000000000000000040b8d6a62c582eb94925ec4296c5dd24373c38eee76212d1bfacfd5ad434ab21b5235095446465c8ec6e2da3defd9ddb82fa26d6536acd515ae702e445e17f7a1d000000000000000000000000000000000000000000000000000000000000004101cb8ccd1285db21fd58aa4d2b7d88ab283e59079757916c153e266b245e33ab02ee057a698d02fef9c8b4aa7a104ca1381c5223aca6d6ea493939fd6480a2bb1c00000000000000000000000000000000000000000000000000000000000000"
     },
     {
       "payer": "p256",

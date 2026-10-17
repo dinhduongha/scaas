@@ -7,6 +7,7 @@ import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {P256Verifier} from "../../src/ua/verifiers/P256Verifier.sol";
 import {WebAuthnP256Verifier} from "../../src/ua/verifiers/WebAuthnP256Verifier.sol";
 import {Bip340Verifier} from "../../src/ua/verifiers/Bip340Verifier.sol";
+import {Secp256k1Verifier} from "../../src/ua/verifiers/Secp256k1Verifier.sol";
 import {Ed25519Verifier} from "../../src/ua/verifiers/Ed25519Verifier.sol";
 import {
     SchnorrBn254Verifier,
@@ -37,7 +38,7 @@ contract UAMetaTx3VectorsTest is UARegistryBase {
         assertEq(vm.parseJsonAddress(vj, ".registry"), REG_A);
         assertEq(vm.parseJsonBytes32(vj, ".chainUid"), chainUidA);
         reg = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), true, _realCfgs());
-        for (uint256 i; i < 8; ++i) {
+        for (uint256 i; vm.keyExistsJson(sj, string.concat(".derived[", vm.toString(i), "]")); ++i) {
             string memory d = string.concat(".derived[", vm.toString(i), "].");
             reg.register(
                 uint16(vm.parseJsonUint(sj, string.concat(d, "kind"))),
@@ -66,10 +67,11 @@ contract UAMetaTx3VectorsTest is UARegistryBase {
             address(new BlsMinSigBls12381Verifier()),
             address(new BlsMinSigBn254Verifier())
         ];
-        c = new UARegistry.KindConfig[](8);
+        c = new UARegistry.KindConfig[](9);
         for (uint256 i; i < 8; ++i) {
             c[i] = UARegistry.KindConfig(KINDS[i], v[i], _cap(KINDS[i]));
         }
+        c[8] = UARegistry.KindConfig(0x0108, address(new Secp256k1Verifier()), 50_000);
     }
 
     function _f(string memory row, string memory field) internal pure returns (string memory) {
@@ -130,7 +132,7 @@ contract UAMetaTx3VectorsTest is UARegistryBase {
             _authorized(m.from, digest, vm.parseJsonBytes(vj, string.concat(r, "auth")));
             ++n;
         }
-        assertEq(n, 9);
+        assertEq(n, 10);
     }
 
     /// `UAMetaTransfer` rows: a payment with a FIXED fee from each signer to a native payee, executed.
@@ -152,9 +154,9 @@ contract UAMetaTx3VectorsTest is UARegistryBase {
             assertEq(tok.balanceOfUA(t.from), 0);
             ++n;
         }
-        assertEq(n, 9);
-        assertEq(tok.balanceOf(address(0x5409)), 9 * 100_000_000);
-        assertEq(tok.balanceOf(address(0xFEE)), 9 * 100_000);
+        assertEq(n, 10);
+        assertEq(tok.balanceOf(address(0x5409)), 10 * 100_000_000);
+        assertEq(tok.balanceOf(address(0xFEE)), 10 * 100_000);
         assertEq(tok.balanceOf(MetaTxLib.UA_POOL), 0);
     }
 
@@ -178,8 +180,8 @@ contract UAMetaTx3VectorsTest is UARegistryBase {
             assertEq(tok.totalSupply(), supply - 1_000_000);
             ++n;
         }
-        assertEq(n, 9);
-        assertEq(tok.balanceOf(address(0xFEE)), 9 * 5_000);
+        assertEq(n, 10);
+        assertEq(tok.balanceOf(address(0xFEE)), 10 * 5_000);
         assertEq(tok.balanceOf(MetaTxLib.UA_POOL), 0);
     }
 
@@ -196,7 +198,7 @@ contract UAMetaTx3VectorsTest is UARegistryBase {
             _authorized(m.from, digest, vm.parseJsonBytes(vj, string.concat(r, "auth")));
             ++n;
         }
-        assertEq(n, 9);
+        assertEq(n, 10);
     }
 
     /// `receiverFee` rows: the payment digest and the `ReceiverFee` digest recomputed by the token, then
@@ -226,8 +228,8 @@ contract UAMetaTx3VectorsTest is UARegistryBase {
             assertEq(tok.balanceOfUA(t.to), before + t.value - fee);
             ++n;
         }
-        assertEq(n, 9);
-        assertEq(tok.balanceOf(address(0xFEE)), 9 * 300_000);
+        assertEq(n, 10);
+        assertEq(tok.balanceOf(address(0xFEE)), 10 * 300_000);
     }
 
     function _authorized(bytes32 from, bytes32 digest, bytes memory auth) internal view {

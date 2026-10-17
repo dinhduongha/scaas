@@ -25,6 +25,7 @@ library UAKinds {
     uint16 internal constant SCHNORR_BLS12381 = 0x0105;
     uint16 internal constant BLS12381_MINSIG = 0x0106;
     uint16 internal constant BLS_BN254_MINSIG = 0x0107;
+    uint16 internal constant SECP256K1 = 0x0108;
     uint16 internal constant MUSIG2_SECP256K1 = 0x0110;
     uint16 internal constant FROST_SECP256K1 = 0x0111;
     uint16 internal constant MUSIG2_BN254 = 0x0112;
@@ -89,7 +90,7 @@ library UAKinds {
     }
 
     function _singleSigning(uint16 kind) private pure returns (bool) {
-        return (kind >= WEBAUTHN_P256 && kind <= BLS_BN254_MINSIG) || (kind >= MUSIG2_SECP256K1 && kind <= FROST_BN254)
+        return (kind >= WEBAUTHN_P256 && kind <= SECP256K1) || (kind >= MUSIG2_SECP256K1 && kind <= FROST_BN254)
             || (kind >= MLDSA44 && kind <= SLHDSA128S);
     }
 
@@ -126,6 +127,7 @@ library UAKinds {
         if (kind == 0x0105) return "schnorr-bls12381";
         if (kind == 0x0106) return "bls12381-minsig";
         if (kind == 0x0107) return "bls-bn254-minsig";
+        if (kind == 0x0108) return "secp256k1";
         if (kind == 0x0110) return "musig2-secp256k1";
         if (kind == 0x0111) return "frost-secp256k1";
         if (kind == 0x0112) return "musig2-bn254";
@@ -158,7 +160,7 @@ library UAKinds {
         _requireDerived(kind);
         if (kind == WEBAUTHN_P256 || kind == P256) return "p256";
         if (kind == ED25519) return "ed25519";
-        if (kind == BIP340 || kind == MUSIG2_SECP256K1 || kind == FROST_SECP256K1) return "secp256k1";
+        if (kind == BIP340 || kind == SECP256K1 || kind == MUSIG2_SECP256K1 || kind == FROST_SECP256K1) return "secp256k1";
         if (kind == SCHNORR_BN254 || kind == MUSIG2_BN254 || kind == FROST_BN254 || kind == ZETHER_BN254) return "bn254-g1";
         if (kind == SCHNORR_BLS12381 || kind == ZETHER_BLS12381) return "bls12381-g1";
         if (kind == BLS12381_MINSIG) return "bls12381-g2";
@@ -187,7 +189,7 @@ library UAKinds {
         string memory g = groupName(kind);
         if (bytes(g).length == 0) return bytes32(0);
         (uint256 lo, uint256 len) = (0, d.length);
-        if (kind == WEBAUTHN_P256 || kind == P256) len = 32;
+        if (kind == WEBAUTHN_P256 || kind == P256 || kind == SECP256K1) len = 32;
         else if (kind == MUSIG2_SECP256K1 || kind == FROST_SECP256K1) (lo, len) = (1, 32);
         else if (kind == MUSIG2_BN254 || kind == FROST_BN254) len = 64;
         if (d.length < lo + len) revert UAKeyData(kind);
@@ -244,6 +246,7 @@ library UAKinds {
         if (kind == WEBAUTHN_P256 || kind == P256) ok = _p256(d);
         else if (kind == ED25519) ok = _ed25519(d);
         else if (kind == BIP340) ok = _secpX(_word(d, 0));
+        else if (kind == SECP256K1) ok = _secpXY(_word(d, 0), _word(d, 32));
         else if (kind == SCHNORR_BN254 || kind == ZETHER_BN254) ok = _bnG1(d, 0);
         else if (kind == SCHNORR_BLS12381 || kind == ZETHER_BLS12381) ok = _bls(d, address(0x0c), 128);
         else if (kind == BLS12381_MINSIG) ok = _bls(d, address(0x0e), 256);
@@ -260,7 +263,7 @@ library UAKinds {
 
     function _fixedLength(uint16 kind) private pure returns (uint256) {
         if (kind == WEBAUTHN_P256) return 96;
-        if (kind == P256 || kind == SCHNORR_BN254 || kind == ZETHER_BN254) return 64;
+        if (kind == P256 || kind == SECP256K1 || kind == SCHNORR_BN254 || kind == ZETHER_BN254) return 64;
         if (kind == ED25519 || kind == BIP340 || kind == SLHDSA128S) return 32;
         if (kind == SCHNORR_BLS12381 || kind == ZETHER_BLS12381 || kind == BLS_BN254_MINSIG) return 128;
         if (kind == BLS12381_MINSIG) return 256;
@@ -289,6 +292,11 @@ library UAKinds {
         (bool ok, bytes memory out) = address(0x05).staticcall(abi.encode(32, 32, 32, b, e, m));
         if (!ok || out.length != 32) revert UAVerifyGas();
         r = abi.decode(out, (uint256));
+    }
+
+    function _secpXY(uint256 x, uint256 y) private pure returns (bool) {
+        if (x >= SECP_P || y >= SECP_P) return false;
+        return mulmod(y, y, SECP_P) == addmod(mulmod(mulmod(x, x, SECP_P), x, SECP_P), 7, SECP_P);
     }
 
     function _secpX(uint256 x) private view returns (bool) {

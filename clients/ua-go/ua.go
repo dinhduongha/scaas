@@ -67,6 +67,7 @@ var Kinds = []Kind{
 	{0x0140, "zether-bn254", false, []int{64}, "bn254-g1"},
 	{0x0141, "zether-bls12381", false, []int{128}, "bls12381-g1"},
 	{0x0142, "pqz-mlwe", false, []int{16384}, "pqz-mlwe"},
+	{0x0108, "secp256k1", false, []int{64}, "secp256k1"}, // 2026-10-17, appended as in kinds.json
 }
 
 var Groups = []string{"p256", "ed25519", "secp256k1", "bn254-g1", "bls12381-g1", "bls12381-g2", "bn254-g2", "mldsa44",
@@ -113,7 +114,7 @@ func derived(kind uint16) (*Kind, error) {
 }
 
 func singleSigning(k uint16) bool {
-	return (k >= 0x0100 && k <= 0x0107) || (k >= 0x0110 && k <= 0x0113) || (k >= 0x0130 && k <= 0x0133)
+	return (k >= 0x0100 && k <= 0x0108) || (k >= 0x0110 && k <= 0x0113) || (k >= 0x0130 && k <= 0x0133)
 }
 
 func IsNative(kind uint16) bool  { k, err := KindInfo(kind); return err == nil && k.Native }
@@ -227,7 +228,7 @@ func KeyHashOf(kind uint16, keyData []byte) (*[32]byte, error) {
 	}
 	lo, hi := 0, len(keyData)
 	switch kind {
-	case 0x0100, 0x0101:
+	case 0x0100, 0x0101, 0x0108:
 		hi = 32
 	case 0x0110, 0x0111:
 		lo, hi = 1, 33

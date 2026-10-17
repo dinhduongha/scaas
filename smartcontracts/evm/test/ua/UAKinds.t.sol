@@ -40,7 +40,7 @@ contract UAKindsTest is Test {
     function test_kindTable() public view {
         string memory j = _k();
         uint256 n = _count(j, "kinds");
-        assertEq(n, 30);
+        assertEq(n, 31);
         for (uint256 i; i < n; ++i) {
             uint16 kind = uint16(vm.parseJsonUint(j, _at("kinds", i, "kind")));
             bool native = vm.parseJsonBool(j, _at("kinds", i, "native"));

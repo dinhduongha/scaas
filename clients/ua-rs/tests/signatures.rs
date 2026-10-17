@@ -37,7 +37,8 @@ fn domain(v: &Value, ctx: &str, generation: u32) -> Domain {
 #[test]
 fn derived_positives_verify() {
     let v = load();
-    assert_eq!(arr(&v["derived"]).len(), 8);
+    assert_eq!(arr(&v["derived"]).len(), 9);
+    assert_eq!(num(&v["derived"][8]["kind"]), 0x0108);
     assert_eq!(num(&v["derived"][7]["kind"]), 0x0102);
     let mut n = 0;
     for r in arr(&v["derived"]) {

@@ -271,7 +271,7 @@ for (const kind of [0x0105, 0x0141]) {
   bad(0x0120, ua.encodeMsig(2, m.map((x, i) => (i === 0 ? { ...x, weight: 0 } : x))), 'weight = 0');
   bad(0x0120, ua.encodeMsig(1, sortM([mem(0x0140, id(0x0140)), mem(0x0101, id(0x0101))])), 'Zether member');
   bad(0x0120, ua.encodeMsig(1, sortM([mem(0x0120, msigUa), mem(0x0101, id(0x0101))])), 'structure member');
-  bad(0x0120, ua.encodeMsig(1, sortM([mem(0x0108, label('unknown member')), mem(0x0101, id(0x0101))])), 'unknown member kind');
+  bad(0x0120, ua.encodeMsig(1, sortM([mem(0x0109, label('unknown member')), mem(0x0101, id(0x0101))])), 'unknown member kind');
   bad(0x0120, ua.encodeMsig(1, sortM([mem(0x0010, label('solana member')), mem(0x0101, id(0x0101))])), 'foreign native member');
   bad(0x0120, msigHedera, 'hedera-native outside a Hedera profile');
   bad(0x0120, ua.encodeMsig(1, sortM([mem(0x0001, id(0x0101)), mem(0x0103, id(0x0103))])), 'native member, derived-space id');
@@ -394,8 +394,25 @@ const rng = (kind, d, reason) => bad(kind, d, reason, { why: 'range' });
 }
 
 bad(0x0000, new Uint8Array(32), 'kind 0', { error: 'UAKindUnknown' });
-bad(0x0108, new Uint8Array(32), 'unassigned kind', { error: 'UAKindUnknown' });
+bad(0x0109, new Uint8Array(32), 'unassigned kind', { error: 'UAKindUnknown' });
 bad(0x0001, new Uint8Array(20), 'native kind', { error: 'UAKindNotDerived' });
+
+// --- secp256k1 (ECDSA, 0x0108; 2026-10-17): appended after every earlier row, so earlier positions are unchanged ---
+const secpKey = secp256k1.getPublicKey(label('secp256k1'), false).subarray(1);
+valid.push(row(0x0108, secpKey));
+// the bip340 key's point (even y) as an ECDSA key: the same x, so the same keyHash (UAKeyInUse across the group)
+valid.push(row(0x0108, secp256k1.Point.fromBytes(concatBytes(Uint8Array.of(2), key.get(0x0103))).toBytes(false).subarray(1)));
+{
+  const [rb, rs] = [valid.find((r) => r.kind === 0x0103), valid.at(-1)];
+  assert(rb.keyHash === rs.keyHash && rb.ua !== rs.ua, 'shared key 0x103 / 0x108');
+}
+bad(0x0108, new Uint8Array(0), 'empty');
+bad(0x0108, secpKey.subarray(0, 63), 'one byte short');
+bad(0x0108, concatBytes(secpKey, Uint8Array.of(0)), 'one byte long');
+bad(0x0108, put(secpKey, 0, be(SECP_P, 32)), 'x = p');
+bad(0x0108, put(secpKey, 32, be(SECP_P, 32)), 'y = p');
+bad(0x0108, put(secpKey, 32, be((int(secpKey.subarray(32, 64)) + 1n) % SECP_P, 32)), 'off the curve');
+bad(0x0108, new Uint8Array(64), '(0, 0)');
 
 // --- natives, native space, canonical ids ---
 const natives = ua.KINDS.filter((k) => k.native).flatMap((k) => k.lengths.map((n) => {
@@ -404,7 +421,7 @@ const natives = ua.KINDS.filter((k) => k.native).flatMap((k) => k.lengths.map((n
   return { kind: k.kind, raw: hex(raw), id: hex(nid), canonical: ua.canonicalId(hex(nid)) };
 }));
 const nativeInvalid = [[0x0001, new Uint8Array(19), 'UAKeyData'], [0x0010, new Uint8Array(31), 'UAKeyData'],
-  [0x0101, new Uint8Array(32), 'UAKindNotNative'], [0x0108, new Uint8Array(32), 'UAKindUnknown']].map(([kind, raw, error]) => {
+  [0x0101, new Uint8Array(32), 'UAKindNotNative'], [0x0109, new Uint8Array(32), 'UAKindUnknown']].map(([kind, raw, error]) => {
   try { ua.nativeId(kind, raw); } catch (e) { assert(e.code === error, `nativeId 0x${kind.toString(16)}: ${e.message}`); return { kind, raw: hex(raw), error }; }
   throw new Error(`nativeId 0x${kind.toString(16)} accepted`);
 });

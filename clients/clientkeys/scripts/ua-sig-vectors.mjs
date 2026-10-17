@@ -57,6 +57,13 @@ const BN = bn254.fields;
 const BLS = bls12_381.fields;
 
 const p256Sign = (sk, h) => p256.sign(h, be(sk, 32), { prehash: false, lowS: true, format: 'compact' });
+const secpSign = (sk, h) => {
+  const rec = secp256k1.sign(h, be(sk, 32), { prehash: false, lowS: true, format: 'recovered' });
+  return concatBytes(rec.subarray(1), Uint8Array.of(27 + rec[0]));
+};
+/** The same ECDSA signature with s → n − s and v flipped: it recovers the same key, refused by the low-s rule. */
+const secpHighS = (sig) => concatBytes(sig.subarray(0, 32), be(SECP_N - int(sig.subarray(32, 64)), 32), Uint8Array.of(55 - sig[64]));
+const withV = (sig, v) => concatBytes(sig.subarray(0, 64), Uint8Array.of(v));
 const highS = (sig) => concatBytes(sig.subarray(0, 32), be(P256_N - int(sig.subarray(32, 64)), 32));
 
 const RP_ID = 'scaas.example';
@@ -155,9 +162,12 @@ const SCHEMES = {
     sign: (sk, m, { pop = false } = {}) => bnG1enc(mapToG1Bn254(concatBytes(pop ? BN_LABEL.pop : BN_LABEL.sig, m)).multiply(sk)) },
   // UA-2b, appended (signatures.json is append-only): the secret is the RFC 8032 seed
   ed25519: { kind: 0x0102, seed: true, keyData: (sk) => ed25519.getPublicKey(be(sk, 32)), sign: (sk, m) => ed25519.sign(m, be(sk, 32)) },
+  // 2026-10-17, appended: ECDSA secp256k1 over the 32-byte ua_msg (no prehash), sig = r ‖ s ‖ v, low-s, v ∈ {27, 28}
+  secp256k1: { kind: 0x0108, n: SECP_N, keyData: (sk) => secp256k1.getPublicKey(be(sk, 32), false).subarray(1),
+    sign: (sk, m) => secpSign(sk, m) },
 };
 // a sibling kind whose tag a "wrong-kind-tag" negative signs under (same curve where one exists)
-const OTHER_KIND = { 0x0100: 0x0101, 0x0101: 0x0100, 0x0103: 0x0110, 0x0104: 0x0140, 0x0105: 0x0141, 0x0106: 0x0105, 0x0107: 0x0104, 0x0102: 0x0103 };
+const OTHER_KIND = { 0x0100: 0x0101, 0x0101: 0x0100, 0x0103: 0x0110, 0x0104: 0x0140, 0x0105: 0x0141, 0x0106: 0x0105, 0x0107: 0x0104, 0x0102: 0x0103, 0x0108: 0x0103 };
 
 /** First point on y² = x³ + 4 (x = 1, 2, …) outside the BLS12-381 G1 subgroup. */
 function blsG1OffSubgroup() {
@@ -209,7 +219,7 @@ const derivedRows = Object.entries(SCHEMES).map(([name, s]) => {
       neg('wrong-rp-id', false, metatx, wa({ rpId: 'other.example' })), neg('type-create', false, metatx, wa({ type: 'webauthn.create' })));
   } else {
     // ed25519: flip S's low byte (its last byte would move S by 2^248, possibly past L)
-    negatives.push(neg('mutated', false, metatx, flip(metatxSig, s.kind === 0x0102 ? 32 : metatxSig.length - 1)));
+    negatives.push(neg('mutated', false, metatx, flip(metatxSig, s.kind === 0x0102 ? 32 : s.kind === 0x0108 ? 63 : metatxSig.length - 1)));
   }
   if (s.kind === 0x0102) {
     const { scalar: a } = ed25519.utils.getExtendedPublicKey(be(sk, 32));
@@ -230,6 +240,11 @@ const derivedRows = Object.entries(SCHEMES).map(([name, s]) => {
     );
   }
   if (s.kind === 0x0101) negatives.push(neg('high-s', false, metatx, highS(metatxSig)));
+  if (s.kind === 0x0108) {
+    negatives.push(neg('high-s', false, metatx, secpHighS(metatxSig)), neg('v-flipped', false, metatx, withV(metatxSig, 55 - metatxSig[64])),
+      neg('v-raw-0', false, metatx, withV(metatxSig, metatxSig[64] - 27)), neg('v-29', false, metatx, withV(metatxSig, 29)),
+      neg('short', false, metatx, metatxSig.subarray(0, 64)), neg('r-zero', false, metatx, concatBytes(new Uint8Array(32), metatxSig.subarray(32))));
+  }
   if (s.kind === 0x0104 || s.kind === 0x0105) {
     const p = metatxSig.length - 32;
     const r = s.n;

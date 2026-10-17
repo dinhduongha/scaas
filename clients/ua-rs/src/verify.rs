@@ -34,6 +34,7 @@ pub fn verify(kind: u16, key_data: &[u8], message: &[u8; 32], sig: &[u8], pop: b
         0x0105 => schnorr::<ark_bls12_381::g1::Config>(key_data, message, sig, 64),
         0x0106 => bls12381_minsig(key_data, message, sig, pop),
         0x0107 => bls_bn254_minsig(key_data, message, sig, pop),
+        0x0108 => key_data.len() == 64 && native_ecdsa(keccak(&[key_data])[12..].try_into().unwrap(), message, sig),
         0x0110..=0x0113 => crate::groups::verify(kind, key_data, message, sig, pop),
         _ => false,
     }

@@ -102,6 +102,7 @@ pub const KINDS: &[Kind] = &[
     derived(0x0140, "zether-bn254", &[64], Some("bn254-g1")),
     derived(0x0141, "zether-bls12381", &[128], Some("bls12381-g1")),
     derived(0x0142, "pqz-mlwe", &[16384], Some("pqz-mlwe")),
+    derived(0x0108, "secp256k1", &[64], Some("secp256k1")), // 2026-10-17, appended as in kinds.json
 ];
 
 pub const GROUPS: &[&str] = &[
@@ -144,7 +145,7 @@ fn derived_kind(kind: u16) -> Result<&'static Kind> {
 }
 
 fn single_signing(kind: u16) -> bool {
-    matches!(kind, 0x0100..=0x0107 | 0x0110..=0x0113 | 0x0130..=0x0133)
+    matches!(kind, 0x0100..=0x0108 | 0x0110..=0x0113 | 0x0130..=0x0133)
 }
 pub fn is_native(kind: u16) -> bool {
     KINDS.iter().any(|k| k.kind == kind && k.native)
@@ -215,7 +216,7 @@ pub fn key_hash_of(kind: u16, key_data: &[u8]) -> Result<Option<[u8; 32]>> {
     let k = derived_kind(kind)?;
     let Some(group) = k.group else { return Ok(None) };
     let (lo, hi) = match kind {
-        0x0100 | 0x0101 => (0, 32),
+        0x0100 | 0x0101 | 0x0108 => (0, 32),
         0x0110 | 0x0111 => (1, 33),
         0x0112 | 0x0113 => (0, 64),
         _ => (0, key_data.len()),

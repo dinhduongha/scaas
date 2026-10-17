@@ -11,7 +11,7 @@ import {IUAKindVerifier, IUAPopVerifier} from "./IUAVerifier.sol";
 import {UAKinds} from "./UAKinds.sol";
 import {UAMldsaVerifier} from "./MlDsa.sol";
 
-/// @title UA registry, UA-2a/2c/3 and P6c scope (accounts.md §1.8): the single-key kinds 0x0100–0x0107, the group
+/// @title UA registry, UA-2a/2c/3 and P6c scope (accounts.md §1.8): the single-key kinds 0x0100–0x0108, the group
 ///        kinds 0x0110–0x0113 (MuSig2/FROST, stored), the structure `msig`, the Zether kinds 0x0140–0x0141 (stored, with
 ///        `authRef`), the PQ signing kinds 0x0130–0x0133 (stored) and `pqz-mlwe` 0x0142 (stored, PQ `authRef`), native
 ///        EVM ids, generations.
@@ -111,6 +111,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     uint256 private immutable _CFG16; // 0x0132 fndsa512 (P6c, stored)
     uint256 private immutable _CFG17; // 0x0133 slhdsa128s (P6c, stored)
     uint256 private immutable _CFG18; // 0x0142 pqz-mlwe (P6c slot, stored, PQ authRef; verifier P6g)
+    uint256 private immutable _CFG19; // 0x0108 secp256k1 (ECDSA, 2026-10-17)
     uint256 private immutable _CFG_MSIG; // 0x0120: address(this) | verifyBudget << 160
 
     mapping(bytes32 ua => Record) private _records;
@@ -144,12 +145,12 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
                 revert UAConfig(0);
             }
         }
-        uint256[19] memory k;
+        uint256[20] memory k;
         for (uint256 i; i < kinds_.length; ++i) {
             KindConfig memory c = kinds_[i];
             uint256 slot = _slot(c.kind);
             if (
-                slot > 18 || k[slot] != 0 || c.verifier.code.length == 0 || c.cap == 0 || c.cap > verifyBudget_
+                slot > 19 || k[slot] != 0 || c.verifier.code.length == 0 || c.cap == 0 || c.cap > verifyBudget_
                     || (predecessor_ != address(0) && _groupInPredecessor(predecessor_, c.kind))
             ) revert UAConfig(c.kind);
             k[slot] = uint256(uint160(c.verifier)) | uint256(c.cap) << 160;
@@ -159,6 +160,7 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         (_CFG8, _CFG9, _CFG10, _CFG11) = (k[8], k[9], k[10], k[11]);
         (_CFG12, _CFG13) = (k[12], k[13]);
         (_CFG14, _CFG15, _CFG16, _CFG17, _CFG18) = (k[14], k[15], k[16], k[17], k[18]);
+        _CFG19 = k[19];
         _CFG_MSIG = msig_ ? uint256(uint160(address(this))) | uint256(verifyBudget_) << 160 : 0;
 
         generation = predecessor_ == address(0) ? 1 : 2;
@@ -673,7 +675,8 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     function _cfg(uint16 kind) private view returns (uint256) {
         if (kind == UAKinds.MSIG) return _CFG_MSIG;
         uint256 s = _slot(kind);
-        if (s > 18) return 0;
+        if (s > 19) return 0;
+        if (s == 19) return _CFG19;
         if (s > 13) return s < 16 ? (s == 14 ? _CFG14 : _CFG15) : (s < 18 ? (s == 16 ? _CFG16 : _CFG17) : _CFG18);
         if (s > 11) return s == 12 ? _CFG12 : _CFG13;
         if (s > 7) return s < 10 ? (s == 8 ? _CFG8 : _CFG9) : (s == 10 ? _CFG10 : _CFG11);
@@ -682,14 +685,15 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     }
 
     /// Kind-table slot: 0x0100–0x0107 → 0–7, 0x0110–0x0113 → 8–11, 0x0140–0x0141 → 12–13, 0x0130–0x0133 → 14–17,
-    /// 0x0142 → 18, anything else 19 (not in this code's table).
+    /// 0x0142 → 18, 0x0108 → 19, anything else 20 (not in this code's table).
     function _slot(uint16 kind) private pure returns (uint256) {
         if (kind >= 0x0100 && kind <= 0x0107) return kind - 0x0100;
         if (kind >= UAKinds.MUSIG2_SECP256K1 && kind <= UAKinds.FROST_BN254) return kind - 0x0110 + 8;
         if (kind == UAKinds.ZETHER_BN254 || kind == UAKinds.ZETHER_BLS12381) return kind - 0x0140 + 12;
         if (_isPq(kind)) return kind - 0x0130 + 14;
         if (kind == UAKinds.PQZ_MLWE) return 18;
-        return 19;
+        if (kind == UAKinds.SECP256K1) return 19;
+        return 20;
     }
 
     /// Length of the stored `vk` of a stored kind (CTR-UA-17), 0 otherwise: `Q` / `Y` SEC1 compressed (secp256k1) or

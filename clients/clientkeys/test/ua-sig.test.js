@@ -141,6 +141,8 @@ const VERIFY = {
   0x0105: schnorrOk(bls12_381.G1.Point, bls12_381.fields.Fr.ORDER, 128, blsG1),
   0x0106: bls12381Ok,
   0x0107: blsBn254Ok,
+  // secp256k1 (ECDSA): r‖s‖v over ua_msg recovering address(keccak256(x ‖ y)), as the native EOA rule
+  0x0108: (kd, msg, sig) => kd.length === 64 && nativeOk(hex(keccak_256(kd).subarray(12)), msg, hex(sig)),
 };
 /** `verify` / `verifyPop` (pop only matters for the BLS kinds); any throw is a refusal. */
 const verify = (kind, kd, msg, sig, pop = false) => attempt(() => VERIFY[kind](B(kd), B(msg), B(sig), pop) === true);
@@ -158,8 +160,8 @@ function nativeOk(address, h, sig) {
 const domain = (ctx, generation) => ({ generation, ...V.contexts[ctx] });
 
 test('derived kinds: key data, ids, PoP messages, every signature verifies', () => {
-  assert.equal(V.derived.length, 8);
-  assert.deepEqual(V.derived.map((r) => r.kind), [0x0100, 0x0101, 0x0103, 0x0104, 0x0105, 0x0106, 0x0107, 0x0102]); // append-only
+  assert.equal(V.derived.length, 9);
+  assert.deepEqual(V.derived.map((r) => r.kind), [0x0100, 0x0101, 0x0103, 0x0104, 0x0105, 0x0106, 0x0107, 0x0102, 0x0108]); // append-only
   for (const r of V.derived) {
     const kd = B(r.keyData);
     assert.equal(hex(ua.deriveUA(r.kind, kd)), r.ua, r.name);

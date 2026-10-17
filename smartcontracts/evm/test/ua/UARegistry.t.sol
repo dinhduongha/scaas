@@ -144,6 +144,32 @@ contract UARegistryTest is UARegistryBase {
         reg.register(UAKinds.MSIG, d, hex"01", 0, "");
     }
 
+    /// `secp256k1` (ECDSA, 0x0108) shares the keyHash group of `bip340`: the bip340 key's point as an ECDSA key
+    /// (kinds.json valid[28]) is UAKeyInUse; another ECDSA key registers, is listed and has its own id.
+    function test_secp256k1_sharesTheSecp256k1Group() public {
+        UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](2);
+        c[0] = UARegistry.KindConfig(0x0103, address(mock), 50_000);
+        c[1] = UARegistry.KindConfig(0x0108, address(mock), 50_000);
+        UARegistry r = _deploy(address(0x5ca0000000000000000000000000000000000108), chainUidA, address(0), false, BUDGET,
+            address(0), true, c);
+        string memory j = _kindsJson();
+        assertEq(vm.parseJsonUint(j, ".valid[27].kind"), 0x0108);
+        assertEq(vm.parseJsonUint(j, ".valid[28].kind"), 0x0108);
+        bytes32 bip = _register(r, 0x0103, _key(0x0103));
+        bytes memory lifted = vm.parseJsonBytes(j, ".valid[28].keyData");
+        bytes32 kh = r.keyHashOf(0x0108, lifted);
+        assertEq(kh, r.keyHashOf(0x0103, _key(0x0103)));
+        _registerReverts(r, 0x0108, lifted, abi.encodeWithSelector(IUARegistry.UAKeyInUse.selector, kh, bip));
+        bytes memory k = vm.parseJsonBytes(j, ".valid[27].keyData");
+        bytes32 ua = _register(r, 0x0108, k);
+        assertEq(ua, vm.parseJsonBytes32(j, ".valid[27].ua"));
+        assertEq(r.kindOf(ua), 0x0108);
+        assertEq(r.uaAt(0x0108, 0), ua);
+        // off the curve: y + 1
+        k[63] = bytes1(uint8(k[63]) ^ 1);
+        _registerReverts(r, 0x0108, k, abi.encodeWithSelector(UAKinds.UAKeyData.selector, uint16(0x0108)));
+    }
+
     /// Anyone may relay: two senders, one calldata ⇒ the same writes with the same values.
     function test_T_REG_3_senderIndependent() public {
         bytes memory k = _key(0x0104);
@@ -816,7 +842,7 @@ contract UARegistryTest is UARegistryBase {
 
     function test_constructorConfig() public {
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](1);
-        uint16[6] memory refused = [0x0001, 0x00ff, 0x0108, 0x0114, 0x0120, 0x0134];
+        uint16[6] memory refused = [0x0001, 0x00ff, 0x0109, 0x0114, 0x0120, 0x0134];
         for (uint256 i; i < refused.length; ++i) {
             c[0] = UARegistry.KindConfig(refused[i], address(mock), 50_000);
             vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, refused[i]));

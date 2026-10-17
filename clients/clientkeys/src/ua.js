@@ -57,6 +57,7 @@ const DERIVED = [
   [0x0140, 'zether-bn254', [64], 'bn254-g1'],
   [0x0141, 'zether-bls12381', [128], 'bls12381-g1'],
   [0x0142, 'pqz-mlwe', [16384], 'pqz-mlwe'],
+  [0x0108, 'secp256k1', [64], 'secp256k1'], // 2026-10-17, appended (rows keep their positions)
 ];
 // [number, name, native id lengths]
 const NATIVE = [
@@ -77,7 +78,7 @@ const derived = (kind) => {
   return k;
 };
 
-const singleSigning = (k) => (k >= 0x0100 && k <= 0x0107) || (k >= 0x0110 && k <= 0x0113) || (k >= 0x0130 && k <= 0x0133);
+const singleSigning = (k) => (k >= 0x0100 && k <= 0x0108) || (k >= 0x0110 && k <= 0x0113) || (k >= 0x0130 && k <= 0x0133);
 export const isNativeKind = (kind) => BY_NUMBER.get(kind)?.native === true;
 export const isZetherKind = (kind) => kind >= 0x0140 && kind <= 0x0142;
 export const isSigningKind = (kind) => kind === 0x0120 || singleSigning(kind);
@@ -130,7 +131,7 @@ export function keyHashOf(kind, keyData) {
   const k = derived(kind);
   if (!k.group) return null;
   const d = bytes(keyData);
-  const [lo, hi] = { 0x0100: [0, 32], 0x0101: [0, 32], 0x0110: [1, 33], 0x0111: [1, 33], 0x0112: [0, 64], 0x0113: [0, 64] }[kind]
+  const [lo, hi] = { 0x0100: [0, 32], 0x0101: [0, 32], 0x0108: [0, 32], 0x0110: [1, 33], 0x0111: [1, 33], 0x0112: [0, 64], 0x0113: [0, 64] }[kind]
     ?? [0, d.length];
   need(d.length >= hi, 'length');
   return keccak_256(concatBytes(GROUP(k.group), d.subarray(lo, hi)));
@@ -207,6 +208,11 @@ function secpCompressed(b) {
   need(b[0] === 2 || b[0] === 3, 'prefix');
   need(be(b.subarray(1, 33)) < SECP_P, 'range');
   point(() => secp256k1.Point.fromBytes(b));
+}
+
+function secpPoint(xy) {
+  need(be(xy.subarray(0, 32)) < SECP_P && be(xy.subarray(32, 64)) < SECP_P, 'range');
+  point(() => secp256k1.Point.fromBytes(concatBytes(Uint8Array.of(4), xy)));
 }
 
 function p256Point(xy) {
@@ -336,6 +342,7 @@ export function validateKeyData(kind, keyData, { hederaNative = false } = {}) {
     case 0x0105: case 0x0141: return blsG1(d);
     case 0x0106: return blsG2(d);
     case 0x0107: return bnG2(d);
+    case 0x0108: return secpPoint(d);
     case 0x0110: return musig2(d, secpCompressed, 33);
     case 0x0111: return frost(d, secpCompressed, 33, SECP_N);
     case 0x0112: return musig2(d, bnG1, 64);

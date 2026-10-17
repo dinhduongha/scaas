@@ -15,6 +15,7 @@ import {WebAuthnP256Verifier} from "../src/ua/verifiers/WebAuthnP256Verifier.sol
 import {P256Verifier} from "../src/ua/verifiers/P256Verifier.sol";
 import {Ed25519Verifier} from "../src/ua/verifiers/Ed25519Verifier.sol";
 import {Bip340Verifier} from "../src/ua/verifiers/Bip340Verifier.sol";
+import {Secp256k1Verifier} from "../src/ua/verifiers/Secp256k1Verifier.sol";
 import {
     SchnorrBn254Verifier,
     SchnorrBls12381Verifier,
@@ -120,7 +121,8 @@ abstract contract DeployBase is Script {
     }
 
     /// @notice UA registry generation 1 (accounts.md §1.8, CTR-UA-22) on every chain, with per-chain enablement (§1.9):
-    ///         `webauthn-p256`, `p256`, `ed25519`, `bip340`, `schnorr-bn254`, the four group kinds and `msig` everywhere;
+    ///         `webauthn-p256`, `p256`, `ed25519`, `bip340`, `secp256k1`, `schnorr-bn254`, the four group kinds and `msig`
+    ///         everywhere;
     ///         `schnorr-bls12381` and `bls12381-minsig` where `UAPrecompileProbe` passes EIP-2537; `bls-bn254-minsig` on
     ///         private chains (the dev chains and 7622) where it passes the bn254 G2 check; `zether-bn254` (and
     ///         `zether-bls12381` with EIP-2537) on the dev chains only (CTR-ZTH-02); the PQ signing kinds (P6c) on the
@@ -132,12 +134,13 @@ abstract contract DeployBase is Script {
     function _deployUARegistry(address smartKeyAccountImpl, bool isHedera) internal returns (UARegistry reg) {
         (bool bls, bool bnG2) = _precompiles();
         bool dev = ZetherSafety.isDevChain();
-        UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](20);
+        UARegistry.KindConfig[] memory k = new UARegistry.KindConfig[](21);
         uint256 n;
         k[n++] = UARegistry.KindConfig(UAKinds.WEBAUTHN_P256, address(new WebAuthnP256Verifier{salt: salt}()), 400_000);
         k[n++] = UARegistry.KindConfig(UAKinds.P256, address(new P256Verifier{salt: salt}()), 400_000);
         k[n++] = UARegistry.KindConfig(UAKinds.ED25519, address(new Ed25519Verifier{salt: salt}()), 210_000);
         k[n++] = UARegistry.KindConfig(UAKinds.BIP340, address(new Bip340Verifier{salt: salt}()), 50_000);
+        k[n++] = UARegistry.KindConfig(UAKinds.SECP256K1, address(new Secp256k1Verifier{salt: salt}()), 50_000);
         k[n++] = UARegistry.KindConfig(UAKinds.SCHNORR_BN254, address(new SchnorrBn254Verifier{salt: salt}()), 50_000);
         if (bls) {
             k[n++] = UARegistry.KindConfig(
