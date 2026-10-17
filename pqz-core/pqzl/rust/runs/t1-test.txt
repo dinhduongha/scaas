@@ -1,0 +1,23 @@
+$ cargo test -j2 --release --offline --features c-oracle,test-hooks -- --nocapture
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.01s
+     Running unittests src/lib.rs (target/release/deps/pqzl-a383995c5d2a5553)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/oracle_smoke.rs (target/release/deps/oracle_smoke-e2628f585f50a4d1)
+
+running 2 tests
+test rust_stub_rejects ... ok
+test c_core_selftest_proofs_verify ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.24s
+
+   Doc-tests pqzl
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+[rc=0]

@@ -1,0 +1,58 @@
+//! Smoke test of the C oracle (feature `c-oracle`) and the Rust stubs, on the REGISTER rows of the frozen vectors
+//! (smartcontracts/vectors/pqz/proof_pqzl.json, statements from the file each row names).
+use pqzl::c_oracle::c_verify;
+use pqzl::{Ctx, OP_REGISTER};
+use serde_json::Value;
+use std::path::PathBuf;
+
+fn vectors() -> PathBuf {
+    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../smartcontracts/vectors/pqz")
+}
+
+fn json(file: &str) -> Value {
+    let p = vectors().join(file);
+    serde_json::from_str(&std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display()))).unwrap()
+}
+
+fn hex(s: &Value) -> Vec<u8> {
+    let s = s.as_str().expect("hex string").as_bytes();
+    s.chunks(2).map(|p| u8::from_str_radix(std::str::from_utf8(p).unwrap(), 16).expect("hex")).collect()
+}
+
+/// `(stmt, proof)` of every REGISTER row of proof_pqzl.json.
+fn register_rows() -> Vec<(Vec<u8>, Vec<u8>)> {
+    let rows: Vec<_> = json("proof_pqzl.json")["rows"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|r| r["form"] == "REGISTER")
+        .map(|r| {
+            assert_eq!(r["op"], OP_REGISTER);
+            let st = &r["statement"];
+            let srow = json(st["file"].as_str().unwrap())["rows"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .find(|s| s["form"] == st["form"])
+                .expect("statement row")
+                .clone();
+            (hex(&srow["stmt"]), hex(&r["proof"]))
+        })
+        .collect();
+    assert!(!rows.is_empty(), "no REGISTER rows");
+    rows
+}
+
+#[test]
+fn c_core_selftest_proofs_verify() {
+    for (stmt, proof) in register_rows() {
+        assert!(c_verify(OP_REGISTER, &stmt, &proof), "C core rejects a REGISTER vector");
+    }
+}
+
+#[test]
+fn rust_stub_rejects() {
+    for (stmt, proof) in register_rows() {
+        assert!(!Ctx::new().verify(OP_REGISTER, &stmt, &proof));
+    }
+}

@@ -1,0 +1,38 @@
+[package]
+name = "pqzl"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.97.1"
+license-file = "../../../LICENSE"
+publish = false # crates.io only on an owner ruling (plan D7)
+description = "PQZL (the LaZer lattice proof system of SCaaS PQZ) in pure Rust, byte-for-byte equal to the C core"
+
+[dependencies]
+
+[build-dependencies]
+# feature `c-oracle` only: build.rs compiles the C core; a default build compiles no C
+cc = { version = "1", optional = true }
+
+[dev-dependencies]
+serde_json = "1"
+
+[features]
+default = ["sv"]
+# the specialised verifier (pqz_verify_fast)
+sv = []
+# R_TXM with M = 16 (bench only; does not fit MAX_INPUT)
+oversize = []
+# test entry points (test_mutate); with `c-oracle` also the C core's PQZ_TEST_HOOKS (pqz_test_mutate)
+test-hooks = []
+# dev / test only: the C core (../src, ../lazer, ../params) as the oracle, module `c_oracle`
+c-oracle = ["dep:cc"]
+
+[[test]]
+name = "oracle_smoke"
+required-features = ["c-oracle"]
+
+[profile.release]
+debug = 1
+panic = "unwind"
+
+[workspace]
