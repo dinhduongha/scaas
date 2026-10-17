@@ -508,8 +508,8 @@ user remembers — `revoke`. Two things are wrong with it:
 - **The allowance outlives its purpose.** It is often "unlimited", often granted to a plain address, and stays until
   the user revokes it. A phishing site or a compromised dApp can drain the balance at any later time; forgotten
   approvals are one of the largest causes of losses for non-expert users.
-- **It makes every dApp interaction slow and expensive:** approve → call → revoke is three transactions and three
-  fees for one action.
+- **It makes every dApp interaction slow and expensive:** approve → call → revoke is three transactions, three
+  signatures and three fees for one action.
 
 SCaaS: **only a contract may call `approve` — an ordinary account never grants an allowance on a SCaaS token, in any
 form — and only a contract may spend one** ([docs/contracts/token-wrappers.md](docs/contracts/token-wrappers.md)).
