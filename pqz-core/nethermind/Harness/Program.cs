@@ -33,13 +33,19 @@ static class Shared
         ["pqzh"] = "0a47a7689250ba178a52ad5972cdd9153358c022cb694c08d2389e82de2fead4",
     };
 
-    /// <summary>The pqz1 rows (every distinct (op, id, stmtLen) of the honest inputs), gas 1,000,000.</summary>
+    /// <summary>One row per distinct (op, id, stmtLen[, M, auditorOn]) of the honest inputs (pqz1's rows plus op 7's
+    /// shapes, P6-ANON S8), gas 1,000,000.</summary>
     public static PqzSchedule Schedule(IEnumerable<(string kind, string id, byte[] input, string expect)> corpus)
     {
         JsonArray rows = [];
         foreach (var k in corpus.Where(r => r.kind == "honest")
-                     .Select(r => (op: (int)r.input[0], r.id, len: r.input[1] << 24 | r.input[2] << 16 | r.input[3] << 8 | r.input[4])).Distinct())
-            rows.Add(new JsonObject { ["op"] = k.op, ["id"] = "0x" + Ids[k.id], ["stmtLen"] = k.len, ["gas"] = 1_000_000 });
+                     .Select(r => (op: (int)r.input[0], r.id, len: r.input[1] << 24 | r.input[2] << 16 | r.input[3] << 8 | r.input[4],
+                         legs: r.input[0] == PqzSchedule.OpMulti ? r.input[5 + 351] : 0, aud: r.input[0] == PqzSchedule.OpMulti ? r.input[5 + 479] : 0)).Distinct())
+        {
+            JsonObject o = new() { ["op"] = k.op, ["id"] = "0x" + Ids[k.id], ["stmtLen"] = k.len, ["gas"] = 1_000_000 };
+            if (k.op == PqzSchedule.OpMulti) { o["legs"] = k.legs; o["auditorOn"] = k.aud; }
+            rows.Add(o);
+        }
         JsonObject s = new() { ["timestamp"] = 1, ["pqz"] = rows, ["selftestGas"] = 1_000_000, ["mldsa44Gas"] = 6500, ["mldsa65Gas"] = 9000 };
         PqzSchedule p = new EthereumJsonSerializer().Deserialize<PqzSchedule>(s.ToJsonString());
         p.Validate();

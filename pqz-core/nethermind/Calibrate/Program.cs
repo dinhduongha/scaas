@@ -11,7 +11,8 @@ using Nethermind.Evm.Precompiles;
 using Nethermind.Pqz;
 
 // P6f Task 6 (D6, D7): gas calibration inside the built image, on the chain host.
-//   Calibrate run <corpus.jsonl> <fresh.jsonl> <ua vectors dir> <out dir> [--n 1000] [--cold 200] [--label L]
+//   Calibrate run <corpus.jsonl> <fresh.jsonl> <ua vectors dir> <out dir> [--n 1000] [--cold 200] [--label L] [--ops 7]
+// --ops: only the rows of these ops (comma list; P6-ANON S8 calibrates op 7 alone, the other rows stay as calibrated).
 //   Calibrate cold                         (child: one cold OP_SELFTEST, prints its milliseconds)
 // t_ecMul = median of Nethermind's own BN254MulPrecompile.Run (EIP-196 vector, same process and JIT); per row
 // t_row = max(p99 over n calls on the row's valid inputs (vectors + fresh proofs), p99 over n distinct adversarial
@@ -67,6 +68,7 @@ static class Cal
         N = Arg("--n", 1000);
         int cold = Arg("--cold", 200);
         string label = Array.IndexOf(a, "--label") is var li and >= 0 ? a[li + 1] : "calib";
+        HashSet<int>? ops = Array.IndexOf(a, "--ops") is var oi and >= 0 ? a[oi + 1].Split(',').Select(int.Parse).ToHashSet() : null;
         Directory.CreateDirectory(outDir);
 
         W($"# P6f calibration ({label}) {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss}Z  host {Environment.MachineName}  cpus {Environment.ProcessorCount}  .NET {Environment.Version}");
@@ -85,12 +87,21 @@ static class Cal
             (kind: (string)o["kind"]!, name: (string)o["name"]!, id: (string)o["id"]!, form: (string)o["form"]!, input: Convert.FromHexString((string)o["input"]!), expect: (string)o["expect"]!)).ToList();
         var fresh = File.ReadLines(freshPath).Select(l => JsonNode.Parse(l)!.AsObject())
             .Select(o => (id: (string)o["id"]!, input: Convert.FromHexString((string)o["input"]!))).ToList();
-        static (int op, uint len, string idHex) Key(byte[] x) =>
-            (x[0], (uint)(x[1] << 24 | x[2] << 16 | x[3] << 8 | x[4]), Convert.ToHexStringLower(x.AsSpan(37, 32)));
+        // op 7: (M, auditorOn) from header words 320 / 448 (plan D19; the low byte, as the corpus' shapes are small)
+        static (int op, uint len, string idHex, int legs, int aud) Key(byte[] x) =>
+            (x[0], (uint)(x[1] << 24 | x[2] << 16 | x[3] << 8 | x[4]), Convert.ToHexStringLower(x.AsSpan(37, 32)),
+             x[0] == PqzSchedule.OpMulti && x.Length > 485 ? x[5 + 351] : 0, x[0] == PqzSchedule.OpMulti && x.Length > 485 ? x[5 + 479] : 0);
+        static JsonObject Row((int op, uint len, string idHex, int legs, int aud) k, long gas)
+        {
+            JsonObject o = new() { ["op"] = k.op, ["id"] = "0x" + k.idHex, ["stmtLen"] = k.len, ["gas"] = gas };
+            if (k.op == PqzSchedule.OpMulti) { o["legs"] = k.legs; o["auditorOn"] = k.aud; }
+            return o;
+        }
 
         // every row of pqz-ffi's forms (D12): the distinct keys of the honest inputs; one schedule admitting all
-        var keys = corpus.Where(r => r.kind == "honest").Select(r => (k: Key(r.input), r.id)).Distinct().OrderBy(r => r.k.op).ThenBy(r => r.id).ThenByDescending(r => r.k.len).ToList();
-        JsonArray rows0 = new(keys.Select(k => (JsonNode)new JsonObject { ["op"] = k.k.op, ["id"] = "0x" + k.k.idHex, ["stmtLen"] = k.k.len, ["gas"] = 1 }).ToArray());
+        var keys = corpus.Where(r => r.kind == "honest").Select(r => (k: Key(r.input), r.id)).Distinct().OrderBy(r => r.k.op).ThenBy(r => r.id).ThenByDescending(r => r.k.len).ThenBy(r => r.k.legs).ThenBy(r => r.k.aud).ToList();
+        JsonArray rows0 = new(keys.Select(k => (JsonNode)Row(k.k, 1)).ToArray());
+        if (ops is not null) keys = keys.Where(k => ops.Contains(k.k.op)).ToList();
         PqzSchedule sched = Sched(rows0, 1, 6500, 9000);
         byte[] One = [.. new byte[31], 1], Zero = new byte[32];
         bool Is(byte[] x, byte[] want) => PqzPrecompile.Run(x, sched) is { IsSuccess: true } r && r.Data!.AsSpan().SequenceEqual(want);
@@ -98,7 +109,7 @@ static class Cal
         Random rng = new(7622);
         JsonArray rowsOut = [];
         W("");
-        W("| op | id | stmtLen | forms | valid n | p50 valid ms | p99 valid ms | p99 adversarial ms | worst adversarial set | t_row ms | gas | + calldata floor of the largest honest input (direct tx) |");
+        W("| op | id | stmtLen [M, auditorOn] | forms | valid n | p50 valid ms | p99 valid ms | p99 adversarial ms | worst adversarial set | t_row ms | gas | + calldata floor of the largest honest input (direct tx) |");
         W("|---|---|---|---|---|---|---|---|---|---|---|---|");
         long minGas = long.MaxValue;
         List<string> notes = [];
@@ -146,10 +157,10 @@ static class Cal
             long direct = DirectTx(big, gas);
             long maxProof = id == "pqzl" ? 98_304 : 262_144;
             long directMax = DirectTx(new byte[5 + k.len + maxProof].Select((_, i) => (byte)(i % 251 + 1)).ToArray(), gas);
-            W($"| {k.op} | {id} | {k.len} | {forms} | {valid.Count} ({freshN} fresh) | {F(Pct(tv, 0.5))} | {F(p99v)} | {F(pAdv)} | {worst} | {F(tRow)} | {gas:N0} | {direct:N0} ({big.Length:N0} B){(direct > 16_777_216 ? " **> EIP-7825**" : "")} |");
+            W($"| {k.op} | {id} | {k.len}{(k.op == PqzSchedule.OpMulti ? $" [{k.legs}, {k.aud}]" : "")} | {forms} | {valid.Count} ({freshN} fresh) | {F(Pct(tv, 0.5))} | {F(p99v)} | {F(pAdv)} | {worst} | {F(tRow)} | {gas:N0} | {direct:N0} ({big.Length:N0} B){(direct > 16_777_216 ? " **> EIP-7825**" : "")} |");
             if (tRow > 60) notes.Add($"op {k.op} {id} {k.len}: t_row {F(tRow)} ms > 60 ms (CTR-PQZ-09)");
             if (directMax > 16_777_216) notes.Add($"op {k.op} {id} stmtLen {k.len}: an input at MAX_PROOF ({5 + k.len + maxProof:N0} B, all non-zero) as a direct tx needs {directMax:N0} gas > 16,777,216 (P6g note; honest proofs: {direct:N0})");
-            rowsOut.Add(new JsonObject { ["op"] = k.op, ["id"] = "0x" + k.idHex, ["stmtLen"] = k.len, ["gas"] = gas });
+            rowsOut.Add(Row(k, gas));
         }
 
         // cold OP_SELFTEST: fresh processes (R3: the plugin computes it at start-up; recorded, not priced)

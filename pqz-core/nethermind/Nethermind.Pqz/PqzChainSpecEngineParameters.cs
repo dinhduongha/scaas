@@ -89,7 +89,7 @@ public class PqzSchedule
     public required long MlDsa44Gas { get; init; }
     public required long MlDsa65Gas { get; init; }
 
-    private Dictionary<(byte, uint, string), long>? _rows;
+    private Dictionary<(byte, uint, string, int, int), long>? _rows;
 
     /// <summary>The smallest row's gas: the price of a miss (D6).</summary>
     [JsonIgnore] public long MinGas { get; private set; }
@@ -97,7 +97,7 @@ public class PqzSchedule
     public void Validate()
     {
         if (Pqz is null || Pqz.Count == 0) throw new ArgumentException($"engine.Pqz schedule {Timestamp}: no pqz rows");
-        Dictionary<(byte, uint, string), long> rows = [];
+        Dictionary<(byte, uint, string, int, int), long> rows = [];
         foreach (PqzRow r in Pqz)
         {
             if (r is null) throw new ArgumentException($"engine.Pqz schedule {Timestamp}: null row");
@@ -105,8 +105,12 @@ public class PqzSchedule
             if (r.Id is null || r.Id.Length != 32) throw new ArgumentException($"engine.Pqz schedule {Timestamp}: id must be 32 bytes");
             if (r.StmtLen <= 0) throw new ArgumentException($"engine.Pqz schedule {Timestamp}: stmtLen {r.StmtLen}");
             if (r.Gas <= 0) throw new ArgumentException($"engine.Pqz schedule {Timestamp}: gas {r.Gas}");
-            if (!rows.TryAdd(Key((byte)r.Op, (uint)r.StmtLen, r.Id), r.Gas))
-                throw new ArgumentException($"engine.Pqz schedule {Timestamp}: duplicate row op {r.Op} stmtLen {r.StmtLen} id {Convert.ToHexString(r.Id)}");
+            if (r.Op == OpMulti
+                    ? r.Legs is not (>= 1 and <= 255) || r.AuditorOn is not (0 or 1)
+                    : r.Legs is not null || r.AuditorOn is not null)
+                throw new ArgumentException($"engine.Pqz schedule {Timestamp}: op {r.Op} row needs legs (1..255) and auditorOn (0 / 1) iff op is 7");
+            if (!rows.TryAdd(Key((byte)r.Op, (uint)r.StmtLen, r.Id, r.Legs ?? 0, r.AuditorOn ?? 0), r.Gas))
+                throw new ArgumentException($"engine.Pqz schedule {Timestamp}: duplicate row op {r.Op} stmtLen {r.StmtLen} id {Convert.ToHexString(r.Id)} legs {r.Legs} auditorOn {r.AuditorOn}");
         }
         if (SelftestGas <= 0) throw new ArgumentException($"engine.Pqz schedule {Timestamp}: selftestGas {SelftestGas}");
         if (MlDsa44Gas < MlDsa.Base44) throw new ArgumentException($"engine.Pqz schedule {Timestamp}: mldsa44Gas {MlDsa44Gas} < EIP-8355's {MlDsa.Base44}");
@@ -115,19 +119,40 @@ public class PqzSchedule
         _rows = rows;
     }
 
-    private static (byte, uint, string) Key(byte op, uint stmtLen, ReadOnlySpan<byte> id) => (op, stmtLen, Convert.ToHexString(id));
+    /// <summary>op 7 (P6-ANON, plan D19): its rows add (M, auditorOn), because the length alone does not fix the shape
+    /// ((1, on) and (2, off) are both 83,072 B).</summary>
+    public const int OpMulti = 7;
+    /// <summary>input offsets (5 + statement offset) of op 7's header words M (320) and auditorOn (448)</summary>
+    private const int LegsWord = 5 + 320, AuditorWord = 5 + 448;
 
-    /// <summary>The row of <paramref name="input"/> = (op = input[0], stmtLen = be32(input[1..5]), id = input[37..69]),
-    /// or null (short input, or no such row). Reads nothing else; never throws.</summary>
+    private static (byte, uint, string, int, int) Key(byte op, uint stmtLen, ReadOnlySpan<byte> id, int legs, int aud) =>
+        (op, stmtLen, Convert.ToHexString(id), legs, aud);
+
+    /// <summary>A 32-byte big-endian word &lt; 256 as its value, else -1 (no row matches -1).</summary>
+    private static int SmallWord(ReadOnlySpan<byte> w)
+    {
+        for (int i = 0; i < 31; i++) if (w[i] != 0) return -1;
+        return w[31];
+    }
+
+    /// <summary>The row of <paramref name="input"/> = (op = input[0], stmtLen = be32(input[1..5]), id = input[37..69];
+    /// op 7 also M = header word 320 and auditorOn = word 448, read without validation: pqz-ffi decides validity), or
+    /// null (short input, or no such row). Reads nothing else; never throws.</summary>
     public long? RowGas(ReadOnlySpan<byte> input)
     {
         if (input.Length < 69 || _rows is null) return null;
         uint len = (uint)(input[1] << 24 | input[2] << 16 | input[3] << 8 | input[4]);
-        return _rows.TryGetValue(Key(input[0], len, input[37..69]), out long g) ? g : null;
+        int legs = 0, aud = 0;
+        if (input[0] == OpMulti)
+        {
+            if (input.Length < AuditorWord + 32) return null;
+            (legs, aud) = (SmallWord(input.Slice(LegsWord, 32)), SmallWord(input.Slice(AuditorWord, 32)));
+        }
+        return _rows.TryGetValue(Key(input[0], len, input[37..69], legs, aud), out long g) ? g : null;
     }
 
     public override string ToString() =>
-        $"{{ts {Timestamp}, rows {Pqz.Count} [{string.Join(", ", Pqz.Select(r => $"op{r.Op}/{Convert.ToHexString(r.Id)[..8].ToLowerInvariant()}/{r.StmtLen}={r.Gas}"))}], selftest {SelftestGas}, mldsa44 {MlDsa44Gas}, mldsa65 {MlDsa65Gas}}}";
+        $"{{ts {Timestamp}, rows {Pqz.Count} [{string.Join(", ", Pqz.Select(r => $"op{r.Op}/{Convert.ToHexString(r.Id)[..8].ToLowerInvariant()}/{r.StmtLen}{(r.Legs is { } m ? $"/M{m}{(r.AuditorOn == 1 ? "a" : "")}" : "")}={r.Gas}"))}], selftest {SelftestGas}, mldsa44 {MlDsa44Gas}, mldsa65 {MlDsa65Gas}}}";
 }
 
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
@@ -137,4 +162,7 @@ public class PqzRow
     public required byte[] Id { get; init; }
     public required int StmtLen { get; init; }
     public required long Gas { get; init; }
+    /// <summary>op 7 only (required there, absent otherwise): M and auditorOn of the shape (plan D19)</summary>
+    public int? Legs { get; init; }
+    public int? AuditorOn { get; init; }
 }

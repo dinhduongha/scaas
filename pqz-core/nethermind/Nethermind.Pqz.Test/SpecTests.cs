@@ -21,7 +21,7 @@ public class SpecTests
     public static JsonObject Schedule(ulong ts, long selftestGas = 1000) => new()
     {
         ["timestamp"] = "0x" + ts.ToString("x"),
-        ["pqz"] = Corpus.Rows12(),
+        ["pqz"] = Corpus.ScheduleRows(),
         ["selftestGas"] = selftestGas,
         ["mldsa44Gas"] = 6500,
         ["mldsa65Gas"] = 9000,
@@ -117,9 +117,13 @@ public class SpecTests
             g["genesis"]!["timestamp"] = "0x10";
             g["engine"]!["Pqz"] = new JsonObject { ["schedules"] = new JsonArray(Schedule(5)) };
         })),
-        ("duplicate row", () => WithPqz(With(Schedule(T1), "pqz", new JsonArray(Corpus.Rows12()[0]!.DeepClone(), Corpus.Rows12()[0]!.DeepClone())))),
+        ("duplicate row", () => WithPqz(With(Schedule(T1), "pqz", new JsonArray(Corpus.ScheduleRows()[0]!.DeepClone(), Corpus.ScheduleRows()[0]!.DeepClone())))),
         ("op 6 row", () => WithPqz(With(Schedule(T1), "pqz", new JsonArray(new JsonObject { ["op"] = 6, ["id"] = "0x" + Corpus.Ids["pqzl"], ["stmtLen"] = 0, ["gas"] = 1 })))),
         ("id of 31 bytes", () => WithPqz(With(Schedule(T1), "pqz", new JsonArray(new JsonObject { ["op"] = 1, ["id"] = "0x" + Corpus.Ids["pqzl"][2..], ["stmtLen"] = 1, ["gas"] = 1 })))),
+        ("op 7 row without legs / auditorOn", () => WithPqz(With(Schedule(T1), "pqz", new JsonArray(new JsonObject { ["op"] = 7, ["id"] = "0x" + Corpus.Ids["pqzl"], ["stmtLen"] = 83072, ["gas"] = 1 })))),
+        ("op 7 row with auditorOn 2", () => WithPqz(With(Schedule(T1), "pqz", new JsonArray(new JsonObject { ["op"] = 7, ["id"] = "0x" + Corpus.Ids["pqzl"], ["stmtLen"] = 83072, ["gas"] = 1, ["legs"] = 1, ["auditorOn"] = 2 })))),
+        ("op 7 row with legs 0", () => WithPqz(With(Schedule(T1), "pqz", new JsonArray(new JsonObject { ["op"] = 7, ["id"] = "0x" + Corpus.Ids["pqzl"], ["stmtLen"] = 83072, ["gas"] = 1, ["legs"] = 0, ["auditorOn"] = 1 })))),
+        ("op 1 row with legs", () => WithPqz(With(Schedule(T1), "pqz", new JsonArray(new JsonObject { ["op"] = 1, ["id"] = "0x" + Corpus.Ids["pqzl"], ["stmtLen"] = 83072, ["gas"] = 1, ["legs"] = 1, ["auditorOn"] = 1 })))),
         ("mldsa44Gas below EIP-8355", () => WithPqz(With(Schedule(T1), "mldsa44Gas", 6499))),
         ("mldsa65Gas below EIP-8355", () => WithPqz(With(Schedule(T1), "mldsa65Gas", 8999))),
     ];
