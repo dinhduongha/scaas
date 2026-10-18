@@ -730,7 +730,7 @@ def vec_rel(name):
 
 
 def d6(d):
-    res = {"rels": {}, "runs": {}, "checks": [], "machine": machine()}
+    res = {"rels": {}, "checks": [], "machine": machine()}
     add = lambda s, w, x: res["checks"].append([s, w, x])
     for core in ("c", "rust"):
         for f in D6_RUNS:
@@ -752,6 +752,10 @@ def d6(d):
                     x[f"prove_{be}"] = [r["prove"]["p50_ms"], r["prove"]["p99_ms"]]
                 if "valid" in r:
                     x[f"{'verify' if ver == 'generic' else 'fast'}_{be}"] = [r["valid"]["p50_ms"], p99(r)]
+    for core in ("c", "rust"):  # ffi_bench on each pqz-ffi backend
+        p = os.path.join(d, f"{core}-ffi-bench.jsonl")
+        if os.path.exists(p):
+            res[f"ffi_{core}"] = [o for o in jsonl(p) if "sys" in o]
     p = os.path.join(d, "rust-memory.txt")
     for line in open(p, errors="replace") if os.path.exists(p) else []:
         m = re.match(r"(\S+)\s+(\d+)(?:\s+\d+){6}$", line.strip())
@@ -798,6 +802,10 @@ def d6_markdown(res):
                      f" | {ms(x.get('verify_native'))} | {ms(x.get('verify_wasm'))} | {ms(x.get('fast_native'))}"
                      f" | {ms(x.get('fast_wasm'))} | {mib(x.get('native_peak'))} | {mib(x.get('wasm_peak'))}"
                      f" | {fnv(x.get('fnv_native'))} / {fnv(x.get('fnv_wasm'))} |")
+    for core in ("c", "rust"):
+        if f"ffi_{core}" in res:
+            L += ["", f"## pqz-ffi path, {'C' if core == 'c' else 'Rust (pqzl-rust)'} backend (ffi_bench 200)", "",
+                  ffi_table({"ffi": {"bench": res[f"ffi_{core}"]}})]
     n = {s: sum(1 for c in res["checks"] if c[0] == s) for s in ("ok", "FAIL")}
     L += ["", f"## Checks: {n['ok']} ok, {n['FAIL']} FAIL", "", "| status | check | detail |", "|---|---|---|"]
     L += [f"| {s} | {w} | {x} |" for s, w, x in res["checks"]]

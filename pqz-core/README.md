@@ -234,6 +234,12 @@ Size and time limits:
 233 checks ok, `artifact/runs/freeze-2026-10-17/`). `artifact/expected-results.json` is built from it; the package
 compares proof hashes, sizes and checks against it, while times are for information only.
 
+**The Rust core** (`pqzl/rust/`, the port of the C core; owner 2026-10-18: the production PQZL core once verified)
+has a "Rust" row or column next to each C one. Its figures come from one run, `d6`, that measures C and Rust in the
+same session ([pqzl/rust/README.md](pqzl/rust/README.md#d6-rust-against-c-plan-d6-task-12)). Until that run they read
+"pending D6 (Task 12)". The C figures and the frozen C values stay as they are. The Rust proofs are the C proofs byte
+for byte (same `proofs_fnv`), so proof sizes are shared.
+
 §5.1–§5.4 are the earlier measurement rounds that §5.0 confirms. They keep the method, the extra columns (memory,
 adversarial inputs) and the source files. Their times differ from §5.0 by machine noise (about ± 20 %).
 
@@ -264,11 +270,20 @@ Toolchain of the frozen run: AMD Ryzen 5 7235HS (8 threads; flags aes vaes avx2)
 | | proof bytes (max) | prove p50 native / wasm | generic verify p50 native / wasm | SV p50 portable / x86-64-v3 / wasm | SV p99 portable / x86-64-v3 / wasm | wasm prove peak (one op, no SV) |
 |---|---|---|---|---|---|---|
 | `R_REG` | 28,113 | 290 / 509 ms | 159 / 276 ms | 3.89 / 2.42 / 6.8 ms | 5.2 / 3.4 / 9.7 ms | 70.3 MiB |
+| `R_REG` Rust | same proofs as C | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) |
 | `R_TX` | 42,785 | 898 / 1,255 ms | 625 / 946 ms | 7.94 / 4.59 / 14.2 ms | 10.7 / 5.7 / 20.4 ms | 221.1 MiB |
+| `R_TX` Rust | same proofs as C | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) |
 | `R_BURN` | 41,938 | 828 / 1,214 ms | 639 / 713 ms | 8.01 / 4.34 / 14.1 ms | 14.8 / 6.1 / 18.8 ms | 210.2 MiB |
+| `R_BURN` Rust | same proofs as C | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) |
 | `R_DS` | 28,995 | 408 / 644 ms | 250 / 259 ms | 4.62 / 2.73 / 7.3 ms | 6.5 / 3.9 / 9.8 ms | 73.3 MiB |
+| `R_DS` Rust | same proofs as C | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) |
 | `R_DR` | 28,996 | 452 / 502 ms | 241 / 263 ms | 4.60 / 2.67 / 7.8 ms | 6.0 / 3.7 / 9.4 ms | 79.1 MiB |
+| `R_DR` Rust | same proofs as C | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) |
 | `R_TX0` | 42,441 | 1,010 / 1,391 ms | 721 / 745 ms | 7.96 / 4.67 / 13.4 ms | 9.9 / 6.6 / 15.8 ms | 216.7 MiB |
+| `R_TX0` Rust | same proofs as C | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) |
+
+The C rows are the frozen run. The Rust rows will come from run `d6`, which has no x86-64-v3 build of the Rust core.
+Its wasm32 prove peak is the module's linear memory, against the C arena peak.
 
 #### PQZH (Ligero, Rust; the proven preset)
 
@@ -323,11 +338,17 @@ Self-test hash: `ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d20
 | Relation | Proof size, max (bytes) | Prove, native / wasm (ms) | SV verify p99, portable / x86-64-v3 / wasm (ms) |
 |---|---|---|---|
 | `R_REG` | 28,113 | 295 / 484 | 4.48 / 3.10 / 6.91 |
+| `R_REG` Rust | same proofs as C | pending D6 (Task 12) | pending D6 (Task 12) |
 | `R_TX` | 42,785 | 965 / 1,304 | 8.73 / 5.40 / 14.76 |
+| `R_TX` Rust | same proofs as C | pending D6 (Task 12) | pending D6 (Task 12) |
 | `R_TX0` | 42,441 | 827 / 1,398 | 8.49 / 5.53 / 14.73 |
+| `R_TX0` Rust | same proofs as C | pending D6 (Task 12) | pending D6 (Task 12) |
 | `R_BURN` | 41,938 | 874 / 1,158 | 8.35 / 4.74 / 14.21 |
+| `R_BURN` Rust | same proofs as C | pending D6 (Task 12) | pending D6 (Task 12) |
 | `R_DS` | 28,995 | 331 / 646 | 4.94 / 3.91 / 8.70 |
+| `R_DS` Rust | same proofs as C | pending D6 (Task 12) | pending D6 (Task 12) |
 | `R_DR` | 28,996 | 395 / 504 | 4.89 / 2.82 / 7.92 |
+| `R_DR` Rust | same proofs as C | pending D6 (Task 12) | pending D6 (Task 12) |
 
 <details>
 <summary>All PQZL columns (generic verify, SV p50, arena) and sources</summary>
@@ -339,15 +360,24 @@ Sources: `research/pqzl-measure/runs/tx0c-native.jsonl` (10 proves, 30 honest ve
 | Relation | Proof size, max of 10 seeds (bytes) | Prove p50, native / wasm (ms) | Generic verify p50 / p99 native; p50 wasm (ms) | SV p50 / p99, portable (ms) | SV p50 / p99, x86-64-v3 (ms) | SV p50 / p99, wasm (ms) | Arena peak, one op, native / wasm (MB) |
 |---|---|---|---|---|---|---|---|
 | `R_REG` | 28,113 | 295 / 484 | 161 / 169; 223 | 3.85 / 4.48 | 2.37 / 3.10 | 6.61 / 6.91 | 95.5 / 73.7 |
+| `R_REG` Rust | same proofs as C | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) | heap 23.5 (t10b) / pending D6 (Task 12) |
 | `R_TX` | 42,785 | 965 / 1,304 | 648 / 760; 762 | 7.98 / 8.73 | 4.76 / 5.40 | 13.36 / 14.76 | 304.2 / 231.9 |
+| `R_TX` Rust | same proofs as C | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) | heap 62.9 (t10b) / pending D6 (Task 12) |
 | `R_TX0` | 42,441 | 827 / 1,398 | 577 / 627; 760 | 8.03 / 8.49 | 4.68 / 5.53 | 13.36 / 14.73 | 298.0 / 227.3 |
+| `R_TX0` Rust | same proofs as C | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) | heap 62.0 (t10b) / pending D6 (Task 12) |
 | `R_BURN` | 41,938 | 874 / 1,158 | 556 / 584; 693 | 7.75 / 8.35 | 4.63 / 4.74 | 12.88 / 14.21 | 288.9 / 220.4 |
+| `R_BURN` Rust | same proofs as C | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) | heap 60.5 (t10b) / pending D6 (Task 12) |
 | `R_DS` | 28,995 | 331 / 646 | 200 / 214; 270 | 4.42 / 4.94 | 2.86 / 3.91 | 7.27 / 8.70 | 99.8 / 76.9 |
+| `R_DS` Rust | same proofs as C | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) | heap 24.4 (t10b) / pending D6 (Task 12) |
 | `R_DR` | 28,996 | 395 / 504 | 206 / 218; 254 | 4.50 / 4.89 | 2.69 / 2.82 | 7.52 / 7.92 | 107.7 / 83.0 |
+| `R_DR` Rust | same proofs as C | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) | heap 25.6 (t10b) / pending D6 (Task 12) |
 
 - Adversarial SV p99 (246 native / 600 wasm mutated inputs per relation): ≤ 8.9 ms portable, ≤ 5.7 ms x86-64-v3,
   ≤ 14.4 ms wasm.
 - The largest wasm prove peak (`R_TX`, 231,858,048 B = 221.1 MiB) is 13.6 % under the 256 MiB hard limit.
+- Rust rows, memory column: the Rust core has no arena. Its native heap peak (prove, cold `Ctx`, run `t10b`,
+  2026-10-18, `tests/memory.rs`) is a Rust-only fact, not a timing comparison; its wasm32 peak is pending D6
+  (Task 12).
 - Native and wasm proofs are equal byte for byte.
 - `pqz.wasm` 411,419 B (356,523 B without the specialised verifier, STATUS.md "Auditor-off transfer").
 - Every SV p99 ≥ 4× under the 60 ms limit on every build.
@@ -396,26 +426,28 @@ are `l11` / `l12` ([pqzh-ligero.md](../docs/research/pqzh-ligero.md), "exact len
 
 Verify time through `pqz-ffi`, the way the node calls it, with the 512 MiB verify-only memory area. Ops 1–5 go
 through the C function `pqz_precompile`; op 7 through the Rust entry point `precompile` (the same call without the C
-wrapper):
+wrapper). The PQZL C-backend column is run `layout`. The Rust-backend column (`pqz-ffi` feature `pqzl-rust`, the
+Rust core, which has no arena) is `ffi_bench` in run `d6`; the C backend is measured again in the same run for the
+comparison:
 
-| Form (op) | PQZL verify p50 / p99 (ms) | PQZH verify p50 / p99 (ms) |
-|---|---|---|
-| TRANSFER (1) | 7.90 / 8.62 | 9.56 / 9.71 |
-| TRANSFER0 (1) | 7.65 / 8.61 | 9.33 / 9.42 |
-| BURN (2) | 7.50 / 10.04 | 9.12 / 10.02 |
-| REFRESH (2) | 7.49 / 9.57 | 9.12 / 9.39 |
-| REGISTER (3) | 3.99 / 6.58 | 6.91 / 7.04 |
-| DISCLOSE-SENDER (4) | 4.16 / 4.46 | 7.22 / 7.40 |
-| DISCLOSE-RECEIVER (5) | 4.38 / 4.80 | 7.07 / 7.26 |
-| DISCLOSE-AUDITOR (5) | 4.38 / 4.77 | 7.06 / 7.54 |
-| TRANSFER-MULTI (7), M = 1, auditor on | 7.98 / 8.76 | 9.60 / 9.77 |
-| TRANSFER-MULTI (7), M = 1, auditor off | 8.27 / 10.41 | 9.28 / 9.62 |
-| TRANSFER-MULTI (7), M = 2, auditor on | 8.45 / 10.81 | 9.91 / 10.72 |
-| TRANSFER-MULTI (7), M = 2, auditor off | 8.52 / 10.16 | 9.58 / 9.83 |
-| TRANSFER-MULTI (7), M = 4, auditor on | 9.27 / 10.52 | 10.64 / 11.02 |
-| TRANSFER-MULTI (7), M = 4, auditor off | 9.06 / 13.24 | 9.87 / 10.01 |
-| TRANSFER-MULTI (7), M = 8, auditor on | 13.58 / 14.48 | not built |
-| TRANSFER-MULTI (7), M = 8, auditor off | 12.93 / 20.05 | not built |
+| Form (op) | PQZL verify p50 / p99 (ms), C backend | PQZL verify p50 / p99 (ms), Rust backend (`pqzl-rust`) | PQZH verify p50 / p99 (ms) |
+|---|---|---|---|
+| TRANSFER (1) | 7.90 / 8.62 | pending D6 (Task 12) | 9.56 / 9.71 |
+| TRANSFER0 (1) | 7.65 / 8.61 | pending D6 (Task 12) | 9.33 / 9.42 |
+| BURN (2) | 7.50 / 10.04 | pending D6 (Task 12) | 9.12 / 10.02 |
+| REFRESH (2) | 7.49 / 9.57 | pending D6 (Task 12) | 9.12 / 9.39 |
+| REGISTER (3) | 3.99 / 6.58 | pending D6 (Task 12) | 6.91 / 7.04 |
+| DISCLOSE-SENDER (4) | 4.16 / 4.46 | pending D6 (Task 12) | 7.22 / 7.40 |
+| DISCLOSE-RECEIVER (5) | 4.38 / 4.80 | pending D6 (Task 12) | 7.07 / 7.26 |
+| DISCLOSE-AUDITOR (5) | 4.38 / 4.77 | pending D6 (Task 12) | 7.06 / 7.54 |
+| TRANSFER-MULTI (7), M = 1, auditor on | 7.98 / 8.76 | pending D6 (Task 12) | 9.60 / 9.77 |
+| TRANSFER-MULTI (7), M = 1, auditor off | 8.27 / 10.41 | pending D6 (Task 12) | 9.28 / 9.62 |
+| TRANSFER-MULTI (7), M = 2, auditor on | 8.45 / 10.81 | pending D6 (Task 12) | 9.91 / 10.72 |
+| TRANSFER-MULTI (7), M = 2, auditor off | 8.52 / 10.16 | pending D6 (Task 12) | 9.58 / 9.83 |
+| TRANSFER-MULTI (7), M = 4, auditor on | 9.27 / 10.52 | pending D6 (Task 12) | 10.64 / 11.02 |
+| TRANSFER-MULTI (7), M = 4, auditor off | 9.06 / 13.24 | pending D6 (Task 12) | 9.87 / 10.01 |
+| TRANSFER-MULTI (7), M = 8, auditor on | 13.58 / 14.48 | pending D6 (Task 12) | not built |
+| TRANSFER-MULTI (7), M = 8, auditor off | 12.93 / 20.05 | pending D6 (Task 12) | not built |
 
 <details>
 <summary>Proof sizes, the Rust entry point, adversarial inputs, multi-recipient sizes and source</summary>
@@ -466,12 +498,19 @@ Built shapes, auditor on (auditor off is a little smaller and faster). Run: the 
 | M | PQZL proof max (bytes) | PQZL prove native / wasm32 (ms) | PQZL SV verify p99 portable / wasm32 (ms) | PQZH proof max (bytes) | PQZH prove native / wasm32 (ms) | PQZH verify p99 native / wasm32 (ms) |
 |---|---|---|---|---|---|---|
 | 1 | 42,784 | 914 / 1,296 | 7.8 / 13.2 | 233,102 | 631 / 1,340 | 9.86 / 18.54 |
+| 1 Rust | same proofs as C | pending D6 (Task 12) | pending D6 (Task 12) | — | — | — |
 | 2 | 43,616 | 978 / 1,371 | 8.6 / 14.2 | 232,526 | 635 / 1,346 | 10.12 / 19.01 |
+| 2 Rust | same proofs as C | pending D6 (Task 12) | pending D6 (Task 12) | — | — | — |
 | 4 | 45,295 | 1,354 / 1,827 | 9.1 / 15.0 | 233,604 | 626 / 1,297 | 10.90 / 20.36 |
+| 4 Rust | same proofs as C | pending D6 (Task 12) | pending D6 (Task 12) | — | — | — |
 | 8 | 61,822 | 2,398 / 2,931 (wasm32: bench build only) | 13.6 / 23.1 | not built | — | — |
+| 8 Rust | same proofs as C | pending D6 (Task 12) | pending D6 (Task 12) | — | — | — |
 
 - Memory: a PQZL proof in the browser (wasm32) peaks at 221–256 MiB for M ≤ 4 but 495 MiB for M = 8, over the
-  browser's 256 MiB limit. So browser wallets offer M ≤ 4 and M = 8 is for native or desktop wallets. Native PQZL
+  browser's 256 MiB limit. So browser wallets offer M ≤ 4 and M = 8 is for native or desktop wallets. (C core; the
+  Rust core's heap peak for proving natively is 70.0 MB at M = 4 and 115.5 MB at M = 8, auditor on, run `t10b`, a
+  Rust-only fact. Whether its wasm32 peak lets the Rust backend raise the wasm32 limit to M = 8 is Task 12's
+  question: pending D6 (Task 12), [pqzl/rust/README.md](pqzl/rust/README.md#the-wasm32-op-7-limit-owner-2026-10-18-if-it-is-enough-raise-it).) Native PQZL
   proving uses 343 MiB at M = 4 and 664 MiB at M = 8. PQZH proving needs ≤ 44 MB native and ≤ 49 MiB wasm32.
 - The node's verify arena (512 MiB, S3) holds every multi-recipient shape's keys and tables with a 2× margin (§5.3).
 - One transfer to 4 recipients (M = 4, auditor on) instead of 4 single transfers: about 3.5× fewer bytes and 3.5× less
@@ -482,12 +521,13 @@ Built shapes, auditor on (auditor off is a little smaller and faster). Run: the 
 **vs upstream LaZer.** Same statement, witness and relation source; upstream built from source by
 `artifact/reproduce.sh --upstream` (`artifact/runs/docker-upstream/upstream-bench.txt`, N = 3 medians).
 
-| | upstream LaZer `3330e48` (x86-64-v3 = AVX2 build) | this fork, portable (no AVX2 / AVX-512 needed) | fork faster by |
-|---|---|---|---|
-| `R_TX` prove / verify | 6,581 / 6,403 ms | 1,012 / 613 ms | 6.5× / 10.4× |
-| `R_REG` prove / verify | 548 / 513 ms | 247 / 178 ms | 2.2× / 2.9× |
-| `R_TX` verify, specialised verifier | — | ≈ 8 ms | ≈ 800× |
+| | upstream LaZer `3330e48` (x86-64-v3 = AVX2 build) | this fork, portable (no AVX2 / AVX-512 needed) | fork faster by | the Rust port (`pqzl/rust/`), portable |
+|---|---|---|---|---|
+| `R_TX` prove / verify | 6,581 / 6,403 ms | 1,012 / 613 ms | 6.5× / 10.4× | pending D6 (Task 12) |
+| `R_REG` prove / verify | 548 / 513 ms | 247 / 178 ms | 2.2× / 2.9× | pending D6 (Task 12) |
+| `R_TX` verify, specialised verifier | — | ≈ 8 ms | ≈ 800× | pending D6 (Task 12) |
 
+- The Rust port column will hold run `d6`'s figures (same session as a C run of the fork, not as the upstream run).
 - **The fork needs no AVX-512** (and no AVX2): every number in this README comes from the portable build on a CPU
   without AVX-512; x86-64-v3 (AVX2 + AES-NI) is an optional, faster build of the specialised verifier only.
 - Upstream LaZer's fastest path needs AVX-512 IFMA (its HEXL backend). That variant builds here but cannot run on the
@@ -648,7 +688,7 @@ run files keep the paths of their day.
 |---|---|---|---|
 | `pqzl/build.sh`, `pqzl/check_symbols.sh` | PQZL | tool | builds (native / x86-64-v3 / wasm); symbol scan of every library build |
 | `pqzl/check_tbox_fixes.sh` | PQZL | tool | fails if a LaZer fix (lazer#24, #25) or the z21 check (#26) is gone |
-| `pqzl/rust/` | PQZL | core (in progress) | crate `pqzl`, the Rust port of the C core, byte-for-byte equal to it |
+| `pqzl/rust/` | PQZL | core (port in progress; the production PQZL core once verified) | crate `pqzl`, the Rust port of the C core, byte-for-byte equal to it; `pqz-ffi` feature `pqzl-rust`; `d6.sh` measures it against C ([pqzl/rust/README.md](pqzl/rust/README.md)) |
 | `pqzl/` | PQZL | — | overview: [pqzl/README.md](pqzl/README.md) |
 | `pqzl/lazer/` | PQZL | core | the LaZer `3330e48` subset, changes marked `PQZ:` |
 | `pqzl/src/` | PQZL | core | the rewritten layers, relations, keys, specialised verifier, C ABI `pqz.h` |
@@ -735,7 +775,8 @@ run files keep the paths of their day.
 **In progress:** **PQZL in Rust** ([plan](../docs/superpowers/plans/2026-10-17-pqzl-rust-port.md)): crate `pqzl` in
 `pqzl/rust/`, byte-for-byte equal to the C core (same proofs from the same seeds). **The Rust crate will be the production PQZL core
 of the precompile** (owner 2026-10-18): once the port is verified, `pqz-ffi` builds it by default and the C core stays
-as the reference. Until then, the precompile on chain 7622 runs the C core.
+as the reference. Until then, the precompile on chain 7622 runs the C core. The package checks Rust = C (`artifact/reproduce.sh`), and run `d6` will
+compare the two cores' speed and memory in one session (§5 "Rust" rows, pending D6 (Task 12)).
 
 **Open items** (arena exhaustion, global state, clearing secrets from memory, …): [STATUS.md "Open"](STATUS.md#open).
 

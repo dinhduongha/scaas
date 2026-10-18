@@ -8,11 +8,12 @@
 # build without SV, as reproduce.sh). Then the crate's heap peak per operation (tests/memory.rs peak_per_op) and the
 # wasm32 op 7 M = 8 question of Task 12: the wasm32 module is built with feature wasm-m8 (the limit lifted; its linear
 # memory per shape is in rust-wasm-generic.jsonl), and native = wasm32 on every vector proof with M = 8 proved in
-# wasm32 too. Sample sizes = reproduce.sh --full (NP= NV= NPW= NVW= NF= override).
+# wasm32 too. Also ffi_bench on both pqz-ffi backends (README §5.3; needs Task 11's feature pqzl-rust). Sample sizes
+# = reproduce.sh --full (NP= NV= NPW= NVW= NF= override).
 set -u
 cd "$(dirname "$0")" # pqzl/rust
-D=runs/$1
-mkdir -p "$D"
+mkdir -p "runs/$1"
+D=$(pwd)/runs/$1
 NP=${NP:-10} NV=${NV:-100} NPW=${NPW:-5} NVW=${NVW:-30} NF=${NF:-200}
 C="--release --offline -j2"
 CB=../build # the C core's build (pqzl/build.sh)
@@ -41,6 +42,11 @@ for t in 0 1 2 3 4 5 6 7 8 9 10 11 12 13; do
 done
 # the crate's heap peak per relation and operation (counting allocator; the C side's is the arena peak above)
 r cargo test $C --test memory peak_per_op -- --exact --nocapture > "$D/rust-memory.txt" 2>&1
+# README §5.3: the pqz-ffi path on both backends (ffi_bench, verify through the C ABI). FFI_C / FFI_RUST: the feature
+# lists (after Task 11's default switch the C backend is the opt-in one)
+(cd ../../ffi && r cargo run $C --features "${FFI_C:-prove,test-hooks}" --example ffi_bench 200) > "$D/c-ffi-bench.jsonl" 2>&1
+(cd ../../ffi && r cargo run $C --features "${FFI_RUST:-prove,test-hooks,pqzl-rust}" --target-dir target/pqzl-rust \
+  --example ffi_bench 200) > "$D/rust-ffi-bench.jsonl" 2>&1
 # Task 12, wasm32 op 7 M = 8: both sides with WASM_MAX_LEGS = 8, so the M = 8 rows carry a proof digest on both
 r cargo test $C --features wasm-m8 --test vectors wasm_replay_inputs > "$D/rust-m8-native.txt" 2>&1
 cp target/wasm-replay/native.jsonl "$D/rust-m8-native-vectors.jsonl"

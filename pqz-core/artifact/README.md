@@ -119,6 +119,21 @@ without the auditor; decoy and boundary cases):
   wasm32 proves PQZL only up to M = 4;
 - the multi-recipient rows of `negative.json` (PQZL 177, PQZH 165) must give `…00` or a revert.
 
+**Rust = C** (port plan Task 12; the Rust core `../pqzl/rust/`, the production PQZL core once verified). These are
+new runs; the stages above stay the C core's and are not repeated (owner 2026-10-16). In quick and `--full`:
+
+- the Rust prover's `proofs_fnv` equals the C core's frozen hashes: `bench 5 5 63` natively (the six relations,
+  n = 5), `bench 2 2 16320` (the eight op 7 shapes, n = 2; `expected-results.json` `rust.txm_fnv`, from the C core's
+  L3 run) and `wasm/run_wasm.mjs 3 1 63` in wasm32 (n = 3). Every bench must report `fails 0`;
+- the keys KAT: `keys_kat 100` gives the C core's `pqz_keys_kat 100` lines (SHA-256 `rust.keys_kat`; the C-only
+  `before_init_rejected` line left out), and `pqz_kat.py --c-keys` reports `ok`;
+- `pqz-vectors --check` with `pqz-ffi` on the Rust backend (feature `pqzl-rust`, Task 11): every vector file is
+  byte-equal, `selftest.json` included, whose hash must be `rust.selftest`;
+- `--full` only: the same benches with `PQZ_VERIFY=fast` (`verify_fast`).
+
+The Rust rows of `results.md` come from these runs. They use other sample sizes than the C rows; the comparable
+figures are run `d6`'s.
+
 `--full` uses the sample sizes of the frozen runs, but not PQZL's ASan + UBSan build (`research/pqzl-measure/relfix.sh`
 and `pqzl/sv/rel3.sh` keep that).
 
@@ -254,15 +269,32 @@ in benchmark builds.
 | M | auditor | built | proof bytes (max) | prove p50 native / wasm32 | generic verify p50 / p99 native | SV p99 portable / x86-64-v3 / wasm32 | wasm32 prove peak (no SV) |
 |---|---|---|---|---|---|---|---|
 | 1 | on | yes | 42,784 | 914 / 1,296 ms | 583 / 596 ms | 7.8 / 4.8 / 13.2 ms | 221.1 MiB |
+| 1 Rust | on | yes | same proofs as C | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) |
 | 2 | on | yes | 43,616 | 978 / 1,371 ms | 674 / 936 ms | 8.6 / 5.0 / 14.2 ms | 232.3 MiB |
+| 2 Rust | on | yes | same proofs as C | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) |
 | 4 | on | yes | 45,295 | 1,354 / 1,827 ms | 865 / 880 ms | 9.1 / 5.3 / 15.0 ms | 255.6 MiB |
+| 4 Rust | on | yes | same proofs as C | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) |
 | 8 | on | yes | 61,822 | 2,398 / 2,931 ms | 2,007 / 2,138 ms | 13.6 / 8.3 / 23.1 ms | 495.3 MiB |
+| 8 Rust | on | yes | same proofs as C | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) |
 | 16 | on | no (oversize, bench build only) | 92,367 | 7,466 / 8,336 ms | 6,230 / 6,425 ms | 21.9 / 12.6 / 35.7 ms | 1,199.1 MiB |
+| 16 Rust | on | no (oversize, bench build only) | same proofs as C | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) |
 | 1 | off | yes | 42,442 | 784 / 1,112 ms | 542 / 550 ms | 7.9 / 4.7 / 12.9 ms | 216.7 MiB |
+| 1 Rust | off | yes | same proofs as C | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) |
 | 2 | off | yes | 42,936 | 1,003 / 1,650 ms | 591 / 597 ms | 8.4 / 4.8 / 13.2 ms | 223.4 MiB |
+| 2 Rust | off | yes | same proofs as C | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) |
 | 4 | off | yes | 43,956 | 1,110 / 2,605 ms | 691 / 720 ms | 8.7 / 4.9 / 13.8 ms | 237.2 MiB |
+| 4 Rust | off | yes | same proofs as C | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) |
 | 8 | off | yes | 59,048 | 1,776 / 2,370 ms | 1,444 / 1,546 ms | 12.9 / 7.2 / 21.9 ms | 447.0 MiB |
+| 8 Rust | off | yes | same proofs as C | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) |
 | 16 | off | no (oversize, bench build only) | 86,581 | 5,167 / 5,504 ms | 4,302 / 4,498 ms | 20.3 / 11.1 / 32.6 ms | 1,051.1 MiB |
+| 16 Rust | off | no (oversize, bench build only) | same proofs as C | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) |
+
+"Rust" rows: the Rust core (`pqzl/rust/`), from run `d6` (`pqzl/rust/d6.sh`, C and Rust in one session; the M = 16
+rows from a `--multi-bench` run with the Rust step). The C rows above are unchanged. `results.py multi` adds these
+rows whenever the run directory has `rust-txm-*.jsonl`. The Rust wasm32 prove peak is the module's linear memory
+after the proves, against the C arena peak; the Rust core has no x86-64-v3 build. Whether the Rust M = 8 wasm32
+peak fits within the C M = 4 peak (255.6 MiB) decides the wasm32 limit (Task 12):
+[pqzl/rust/README.md](../pqzl/rust/README.md#the-wasm32-op-7-limit-owner-2026-10-18-if-it-is-enough-raise-it).
 
 ### PQZH (Ligero, the proven preset; the H2 method of pqzh/ligero/runs/txm.sh)
 
@@ -321,7 +353,7 @@ History below.
 |---|---|
 | `Dockerfile`, `Dockerfile.dockerignore` | the pinned image (build context: the repository root, narrowed by the allowlist in `Dockerfile.dockerignore`) |
 | `reproduce.sh` | every mode; works in Docker and on a local toolchain |
-| `results.py` | `check`: the tables and the comparison; `freeze`: `expected-results.json` from a frozen run (both systems + pqz-ffi); `freeze-txm`: only the multi-recipient parts, from a quick / full run; `multi`: the multi-recipient table of a `--multi-bench` run |
+| `results.py` | `check`: the tables and the comparison; `freeze`: `expected-results.json` from a frozen run (both systems + pqz-ffi); `freeze-txm`: only the multi-recipient parts, from a quick / full run; `multi`: the multi-recipient table of a `--multi-bench` run; `d6`: the Rust-against-C table of a `pqzl/rust/d6.sh` run. Rust rows appear next to the C rows when the Rust run files exist |
 | `expected-results.json` | the reference values, frozen 2026-10-17 from `runs/freeze-2026-10-17/` |
 | `web/index.html` | the `--serve` page (loads the locally built `pqz.wasm` and `pqzh_ligero_wasm.wasm`) |
 | `runs/` | logs of the package's own test runs (text only) |

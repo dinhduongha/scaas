@@ -40,7 +40,23 @@ Terms used throughout:
 - The multi-recipient transfer (`R_TXM`, op 7) is live in the `PQZ` precompile on chain 7622 since 2026-10-17 and
   is used by the PQZ tokens.
 - **In progress: the PQZL Rust port** on branch `pqzl-rust` (plan `docs/superpowers/plans/2026-10-17-pqzl-rust-port.md`):
-  crate `pqzl` in `pqzl/rust/`, byte-for-byte equal to the C core. Tasks 1–8 of 12 are done.
+  crate `pqzl` in `pqzl/rust/`, byte-for-byte equal to the C core. Tasks 1–10 of 12 are done, with Task 10b's
+  hardening follow-ups in both cores. Task 11 is in progress: the `pqz-ffi` backend switch (feature `pqzl-rust`) and
+  the fuzz differential. Task 12 is prepared (branch `pqzl-rust-t12prep`):
+  - the package stage "Rust = C": the Rust prover's `proofs_fnv` against the C core's frozen hashes, the keys KAT,
+    and `pqz-vectors --check` on the Rust backend;
+  - the Rust rows in `results.py`'s tables;
+  - `pqzl/rust/d6.sh`, the D6 measurement of C and Rust in one session.
+- **D6, Rust against C (port plan D6; reported, not a gate): pending D6 (Task 12).** It runs after Task 11's fuzz
+  campaign, on an idle machine. The full table (six forms and eight `R_TXM` shapes, p50 / p99 native and wasm32) and
+  the wasm32 op 7 M = 8 question are in [pqzl/rust/README.md](pqzl/rust/README.md#d6-rust-against-c-plan-d6-task-12).
+  The t8–t10b Rust runs and the older C runs are not comparable.
+
+  | relation | prove p50 native, C / Rust | verify_fast p99 native, C / Rust | prove peak native: C arena / Rust heap |
+  |---|---|---|---|
+  | `R_TX` | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) / 62.9 MB (run `t10b`, Rust only) |
+  | `R_TXM8` (M = 8, auditor on) | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) / 115.5 MB (run `t10b`, Rust only) |
+  | wasm32 op 7 M = 8 (Task 12) | — | — | Rust wasm32 peak pending D6 (Task 12); budget 255.6 MiB (the C M = 4 peak) |
 - **Which core goes to production (owner, 2026-10-18; `docs/decisions.md`):** the Rust crate `pqzl` becomes the
   production PQZL core of the `PQZ` precompile once the port is finished and verified (Rust = C on the vectors, the
   fuzz differential clean, the review passed). `pqz-ffi` then switches its default backend to it (port Task 11).

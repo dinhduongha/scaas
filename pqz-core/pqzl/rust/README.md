@@ -5,7 +5,7 @@ SCaaS PQZ (pq-zero-knowledge.md §4, §5, §8). Goal: byte-for-byte equal to the
 `(op, stmt, wit, rnd32)`, same verdicts on every input, same keys / Enc / Dec, native and wasm32 — so other chains
 and applications can use the proof system without the C build. Plan: `docs/superpowers/plans/2026-10-17-pqzl-rust-port.md`.
 
-Status: **port in progress** (Tasks 1-10 of 12: crate skeleton, API, C oracle; the arithmetic layer; hashing,
+Status: **port in progress** (Tasks 1-10 of 12, with Task 10b's hardening follow-ups; crate skeleton, API, C oracle; the arithmetic layer; hashing,
 rng and samplers; keys, Enc, Dec; the proof codec and `test_mutate`; the generated parameters; the generic verifier
 `Ctx::verify`; the prover `Ctx::prove`; the specialised verifier `Ctx::verify_fast`; no globals, memory, threads,
 wasm32, the `Ctx` key methods). Every API function is ported. Owner 2026-10-18: this crate becomes the production
@@ -58,7 +58,8 @@ floating point.
   from `prove` and false from the verifiers, never a panic or an abort, and the `Ctx` stays usable
   (`tests/memory.rs`, a test-only counting / capping allocator). Peak heap (release, cold `Ctx`): R_TX prove 63 MB
   (the C arena: 312 MB), R_TXM8 prove 115 MB, R_TX verify 63 MB, R_TX verify_fast 11 MB (1.2 MB warm).
-- wasm32: `prove` of op 7 with M > `WASM_MAX_LEGS` (4) is `Error::Input` (pqz-ffi's limit).
+- wasm32: `prove` of op 7 with M > `WASM_MAX_LEGS` (4) is `Error::Input` (pqz-ffi's limit; whether the Rust
+  backend can take 8 is the D6 question below).
 - Secrets: the prover's seeds, the witness vector s1, the commitment randomness s2 and `dec`'s w are cleared after
   use (`fill` + `black_box`, where C calls `explicit_bzero`). Best effort, not guaranteed: without unsafe code and
   without a zeroize crate the compiler may elide the stores, and copies elsewhere are not cleared.
@@ -71,6 +72,7 @@ floating point.
 | `oversize` | R_TXM with M = 16 (bench only) |
 | `test-hooks` | `test_mutate`, the `testkit` module (`kat_dump`, `keys_kat`); with `c-oracle` the C core is built with `-DPQZ_TEST_HOOKS` |
 | `bench` | the `bench` module (`src/bin/bench.rs`, `wasm/`) |
+| `wasm-m8` | bench builds only (implies `bench`): `WASM_MAX_LEGS` = `TXM_MAX_LEGS`, so wasm32 proves op 7 with M = 8 (16 with `oversize`); for the measurement of the wasm32 limit (D6 below), never in a production build |
 | `c-oracle` | dev / test only: `build.rs` compiles the C core (`../src ../lazer ../params`, build.sh's flags) plus the test entry points `tests/oracle_shim.c`, and `c_oracle::{c_prove, c_verify, c_verify_fast, c_keygen, c_enc_seed, c_dec, c_keypair_from_secret, c_encrypt, c_decrypt_raw, c_enc_group_seed, c_test_mutate}` and the layer wrappers (`c_ntt_*`, `c_polyvec_ops`, `c_int_ops`, the samplers' `c_rng` .. `c_autostable`, `c_params`, `c_ghint`) call them |
 
 A default build compiles no C and has neither test entry points nor the bench.
@@ -107,6 +109,77 @@ runs (`bench 5 5 63` = `research/pqzl-measure/runs/tx0c-fnv-native.jsonl`, `benc
 in wasm32), native = wasm32 on the vectors (`node wasm/run_vectors.mjs`: proofs, verify and verify_fast verdicts of
 every PQZL vector and negative row; op 7 M = 8 prove refused; the shadow stack's use), clippy `-D
 clippy::float_arithmetic` (production build, all features, `wasm/`), the wasm32 build.
+
+## D6: Rust against C (plan D6, Task 12)
+
+**Pending D6 (Task 12).** The figures below come from one run, `d6.sh`, that measures the C core and this crate in
+the same session on the same machine. The earlier Rust runs (`runs/t8-*` to `runs/t10b-*`) and the frozen C runs
+were measured at different times, so their times are **not comparable** and are not used here. D6 is reported, not a
+gate: the owner uses it for the production choice.
+
+Layout (`results.py d6` writes it to `runs/<label>/results-d6.md`; one C row and one Rust row per relation, for the
+six forms and the eight built `R_TXM` shapes). Times are p50 / p99 in ms; verify p99 is the larger of the honest and
+the adversarial p99, as in STATUS.md.
+
+| relation | core | prove native | prove wasm32 | verify native | verify wasm32 | verify_fast native | verify_fast wasm32 | prove peak native (MiB) | prove peak wasm32 (MiB) |
+|---|---|---|---|---|---|---|---|---|---|
+| `R_REG` | C | pending D6 (Task 12) | pending D6 | pending D6 | pending D6 | pending D6 | pending D6 | pending D6 | pending D6 |
+| `R_REG` | Rust | pending D6 (Task 12) | pending D6 | pending D6 | pending D6 | pending D6 | pending D6 | pending D6 | pending D6 |
+| `R_TX`, `R_BURN`, `R_DS`, `R_DR`, `R_TX0` | C, Rust | pending D6 (Task 12) | | | | | | | |
+| `R_TXM1` … `R_TXM8_0` (8 shapes) | C, Rust | pending D6 (Task 12) | | | | | | | |
+
+- **Peak memory.** Native: the C core's arena peak against this crate's heap peak (the counting allocator of
+  `tests/memory.rs`, cold `Ctx`). wasm32: the C arena peak (the prover build without the specialised verifier) against
+  the module's linear memory after the proves, one relation per process. That memory also holds the bench's
+  statements and witnesses for every relation, so it is an upper bound.
+- Rust-only facts, which are not comparisons: the heap peaks of run `t10b` (2026-10-18, `peak_per_op`, prove from a
+  cold `Ctx`, bytes) are R_REG 23,529,344, R_TX 62,903,248, R_BURN 60,519,936, R_DS 24,442,192, R_DR 25,597,312,
+  R_TX0 62,006,944, M = 4 on 69,982,472, M = 8 on 115,489,848, M = 8 off 102,718,072.
+- The run also checks that the C and Rust `proofs_fnv` are equal for each relation (the same n), so both sides timed
+  the same proofs. It also runs `ffi_bench` on both `pqz-ffi` backends (C and `pqzl-rust`), for README §5.3.
+
+### The wasm32 op 7 limit (owner 2026-10-18: "if it is enough, raise it")
+
+wasm32 proves op 7 only up to M = 4: `pqzl::WASM_MAX_LEGS` and `pqz-ffi`'s `WASM_PQZL_MAX_LEGS`. That limit comes from
+the C core's arena, where M = 8 peaks at 495.3 MiB, over the browser's 256 MiB. `d6.sh` measures this crate's wasm32
+prove of M = 8, with the auditor on and off, in a bench build with the limit lifted (feature `wasm-m8`). It records
+the p50 time and the linear-memory peak.
+
+- **Enough** means both of these hold:
+  - the M = 8 peak is ≤ 255.6 MiB (268,012,304 B, the C core's wasm32 M = 4 peak, `R_TXM4` auditor on,
+    `artifact/runs/s6-docker-multi`; wasm32 already accepts that budget);
+  - native = wasm32 on the M = 8 vector proofs (`run_vectors.mjs` with `PQZL_WASM_MAX_LEGS=8` against a native
+    replay built with `wasm-m8`: the digest lines are equal and the M = 8 rows carry a proof digest).
+- If enough: set both constants to 8 for the Rust backend (the C backend, now opt-in, keeps 4). The wasm32 replay
+  then proves the three M = 8 rows instead of refusing them. Record the change in `docs/decisions.md` CTR-PQZ-09 with
+  the measured figures.
+- If not: keep 4, and record the figures and the reason.
+- Outcome: **pending D6 (Task 12)**. `results-d6.md` prints it as the last check ("wasm32 op 7 M = 8 (Task 12)").
+
+### How to run the D6 measurement
+
+Run it after Task 11's fuzz campaign has finished, on an idle machine (no other capped jobs, builds or containers),
+from the repository root. It is one capped job of about 1–1.5 h:
+
+```sh
+scripts/capped pqz-core/pqzl/rust/d6.sh d6      # -> pqz-core/pqzl/rust/runs/d6/ (results-d6.md, every raw file)
+```
+
+`d6.sh` builds the C core (`pqzl/build.sh all`, the wasm prover without SV), the native `bench` and the wasm32 module
+(feature `wasm-m8`). Then, for each relation and in one process per relation, core and backend, it runs C and then
+Rust in turn:
+
+- native generic: `pqz_bench` / `bench`, NP = 10 proves, NV = 100 verifies;
+- native `verify_fast`: 2 proves, NF = 200 verifies;
+- wasm32 generic: `test/run_wasm.mjs` / `wasm/run_wasm.mjs`, NPW = 5 proves, NVW = 30 verifies;
+- wasm32 `verify_fast`: 2 proves, 100 verifies;
+- the C wasm32 arena peak.
+
+These are the `reproduce.sh --full` counts; `NP= NV= NPW= NVW= NF=` override them. After that it runs
+`ffi_bench 200` on both `pqz-ffi` backends (`FFI_C` / `FFI_RUST`: the feature lists, for after Task 11's default
+switch), `tests/memory.rs peak_per_op` (heap peaks) and the M = 8 replay. Finally it runs
+`python3 -I ../../artifact/results.py d6 runs/d6`. Commit `runs/d6/` (text files), then copy the table here, into
+STATUS.md and into the Rust rows of README §5 and `artifact/README.md`. Label them "run `d6`, <date>".
 
 ## Licence
 
