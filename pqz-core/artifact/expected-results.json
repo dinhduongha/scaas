@@ -715,7 +715,7 @@
   }
  },
  "rust": {
-  "about": "port plan Task 12, the \"Rust = C\" stage: the Rust core (pqzl/rust/) against values the C core already fixed. The six relations' proofs_fnv are checked against \"relations\" (keyed by n); these are the rest",
+  "about": "port plan Task 12, the \"Rust = C\" stage: the Rust core (pqzl/rust/) against values the C core already fixed: the pqzl prover's proofs_fnv and the keys KAT (pqz-ffi's stages already run the Rust core, its default backend). The six relations' proofs_fnv are checked against \"relations\" (keyed by n); these are the rest",
   "txm_fnv": {
    "R_TXM1": {
     "2": "ee87e7a4"
@@ -747,10 +747,9 @@
    "n": 100,
    "sha256": "7d787b167f641138f3ef6e26f4cdd938c6f27433c4815ddbb587daa94dfa4a80",
    "source": "SHA-256 of research/pqzl-measure/runs/l1d-keys-kat.jsonl (the C core's pqz_keys_kat 100) without its first line, {\"before_init_rejected\": ...}, which the Rust keys_kat does not print (there is no pqz_init)"
-  },
-  "selftest": "ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205"
+  }
  },
  "changes": [
-  "2026-10-18 (port plan Task 12): + rust (txm_fnv, keys_kat, selftest) for the \"Rust = C\" stage; every C value unchanged"
+  "2026-10-18 (port plan Task 12): + rust (txm_fnv, keys_kat) for the \"Rust = C\" stage (the pqz-ffi and vectors stages run the Rust core, pqz-ffi's default backend, against the C values already here); every C value unchanged"
  ]
 }

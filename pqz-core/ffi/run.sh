@@ -28,13 +28,17 @@ cp "$X/fill.txt" "$L-fill.txt" 2>/dev/null # C backend only (fill_determinism)
   echo "# verify-only build (no prove, no test-hooks): libpqz_ffi.so, and the C core archive if build.rs compiled one"
   OUT cargo build --release --offline $BF
   echo "test hooks in the production cdylib (must be 0): $(strings -a target/release/libpqz_ffi.so | grep -cE 'TEST_ARENA|TEST_FAIL_WORKER')"
-  if cargo tree --offline $BF -e normal,build -i cc > /dev/null 2>&1; then
-    A=$(pwd)/$(ls -t target/release/build/pqz-ffi-*/out/libpqz.a | head -1)
-    OUT ../pqzl/check_symbols.sh "$A"
-  else
-    echo "C core in this build: none (cc is not in the dependency graph: build.rs compiles no C)"
-    echo "\$ cargo tree $BF -e normal,build --prefix none"; cargo tree --offline $BF -e normal,build --prefix none | sort -u
-  fi
+  # positive check (fails closed): the C core is in the build exactly when pqz-ffi's feature pqzl-c is on
+  F=$(cargo tree --offline $BF -e features -i pqz-ffi --prefix none) || echo "cargo tree -e features -i pqz-ffi: [rc=1]"
+  case $F in
+    *'pqz-ffi feature "pqzl-c"'*)
+      A=$(pwd)/$(ls -t target/release/build/pqz-ffi-*/out/libpqz.a | head -1)
+      OUT ../pqzl/check_symbols.sh "$A" ;;
+    *'pqz-ffi feature "pqzl-rust"'*)
+      echo "C core in this build: none (feature pqzl-c off, pqzl-rust on: build.rs compiles no C)"
+      echo "\$ cargo tree $BF -e normal,build --prefix none"; cargo tree --offline $BF -e normal,build --prefix none | sort -u ;;
+    *) echo "C core in this build: unknown (no PQZL backend feature in cargo tree) [rc=1]" ;;
+  esac
   SO=target/release/libpqz_ffi.so
   OUT sha256sum "$SO"
   echo "\$ readelf -d $SO | grep NEEDED"; readelf -d "$SO" | grep NEEDED

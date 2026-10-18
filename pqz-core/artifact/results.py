@@ -51,8 +51,7 @@ TEXT = {"pqzh-test.txt": ["mutated inputs rejected, 0 verifier panics caught"], 
         "ffi-native.txt": ["c_abi: ok (0 failures)", "(must be 0): 0", "symbols ok", "!No such file"],
         "ffi-wasm-build.txt": [], "vectors-build.txt": [], "vectors-check.txt": [": ok", "!DIFF", "!EXTRA"],
         "vectors-pqz-kat.txt": ["pqz_kat: ok"], "vectors-tamper.txt": ["caught: ok"],
-        "rust-build.txt": [], "rust-keys-pqz-kat.txt": ["pqz_kat: ok"], "rust-vectors-build.txt": [],
-        "rust-vectors-check.txt": [": ok", "!DIFF", "!EXTRA", "same selftest.json"]}
+        "rust-build.txt": [], "rust-keys-pqz-kat.txt": ["pqz_kat: ok"]}
 FFI = ["ffi-digests-native.jsonl", "ffi-digests-wasm.jsonl", "ffi-bench.jsonl"]
 VECTORS = "vectors-wasm.jsonl"  # replay_wasm.mjs: one line per proof, then {"cases", "verify_only", "fails"}
 # op 7 R_TXM (P6-ANON S6, D14): the built leg counts per id (= pqz-stmt built_legs, plan D3 / S3), both auditorOn;
@@ -63,7 +62,6 @@ WASM_PQZL_MAX_LEGS = 4
 VERIFY_ONLY = "native proof (verify only)"
 NEGATIVE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "smartcontracts", "vectors", "pqz",
                         "negative.json")
-SELFTEST = os.path.join(os.path.dirname(NEGATIVE), "selftest.json")
 # The Rust core (pqzl/rust/), "Rust = C" stage: run file -> (backend, verifier) as BENCH. The Rust bench / wasm runner
 # print the C bench's JSON lines without arena_peak; the wasm runner adds wasm_memory_bytes (linear memory after the
 # relation's proves). The op 7 runs are checked against expected rust.txm_fnv, the keys KAT against rust.keys_kat.
@@ -398,8 +396,8 @@ def add_rust(res, files):
 
 def compare_rust(res, exp):
     """Rust = C: the Rust prover's proofs_fnv = the C core's frozen hashes (the six relations: exp relations, keyed by n;
-    op 7: exp rust.txm_fnv), every Rust bench fails 0, the keys KAT = the C core's output, and the self-test hash of
-    selftest.json, which pqz-vectors --check on the Rust backend found byte-equal."""
+    op 7: exp rust.txm_fnv), every Rust bench fails 0, and the keys KAT = the C core's output. The self-test, digests and
+    vectors on the Rust core are the pqz-ffi / vectors stages' checks (pqz-ffi's default backend is pqzl-rust)."""
     R, E = res["rust"], exp.get("rust", {})
     add = lambda s, w, d: res["compare"].append([s, w, d])
     for name, r in R["runs"].items():
@@ -414,10 +412,6 @@ def compare_rust(res, exp):
         w = E.get("keys_kat", {}).get("sha256")
         add("info" if not w else "ok" if R["keys_kat_sha256"] == w else "FAIL", "Rust keys KAT = C",
             f'sha256 {R["keys_kat_sha256"]}, expected {w}')
-    if res.get("text_checks", {}).get("rust-vectors-check.txt") == "ok":
-        h, w = json.load(open(SELFTEST)).get("hash"), E.get("selftest")
-        add("ok" if h == w else "FAIL", "Rust backend self-test hash", f"{h} (selftest.json, byte-equal under pqz-vectors "
-            f"--check on the Rust backend), expected {w}")
 
 
 def fmt(v, nd=1):

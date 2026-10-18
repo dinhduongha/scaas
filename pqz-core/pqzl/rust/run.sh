@@ -65,6 +65,9 @@ OUT cargo test -j2 --release --offline --features c-oracle,test-hooks,bench -- -
   OUT cargo clippy -j2 --release --offline --lib -- -D clippy::float_arithmetic
   OUT cargo clippy -j2 --release --offline --features c-oracle,test-hooks,bench --lib --bins --tests -- -D clippy::float_arithmetic
   OUT cargo clippy -j2 --release --offline --manifest-path wasm/Cargo.toml --target wasm32-unknown-unknown -- -D warnings -D clippy::float_arithmetic
+  echo "# the measurement build of wasm/ (d6.sh, reproduce.sh --multi-bench): features oversize and wasm-m8"
+  OUT cargo clippy -j2 --release --offline --manifest-path wasm/Cargo.toml --target wasm32-unknown-unknown \
+    --features pqzl/oversize,pqzl/wasm-m8 -- -D warnings -D clippy::float_arithmetic
   echo "# wasm32 (default features)"
   OUT cargo build -j2 --release --offline --lib --target wasm32-unknown-unknown
 } > "$L-build.txt" 2>&1

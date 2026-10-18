@@ -13,8 +13,10 @@
 #                                      tamper.py), op 7 R_TXM included (every built (id, M, auditorOn): native proof
 #                                      -> ...01, its negatives -> ...00, wasm32 replay; PQZL M = 8 verify-only);
 #                                      Rust = C (the Rust core pqzl/rust/: proofs_fnv of its prover native + wasm32,
-#                                      the keys KAT, pqz-vectors --check with pqz-ffi feature pqzl-rust; --full: +
-#                                      verify_fast); tables + comparison with expected-results.json
+#                                      the keys KAT; --full: + verify_fast); tables + comparison with
+#                                      expected-results.json. pqz-ffi's PQZL backend is the Rust core (default feature
+#                                      pqzl-rust, CTR-PQZ-09), so the pqz-ffi and vectors stages check the Rust core
+#                                      against the values the C core fixed in expected-results.json
 #   artifact/reproduce.sh --full       the same with the frozen run's sample sizes (PQZL: research/pqzl-measure/relfix.sh + pqzl/sv/rel3.sh;
 #                                      PQZH: pqzh/ligero/runs/tx0.sh, the gate-B method, 1,000 verifies per form)
 #   artifact/reproduce.sh --serve      build both wasm modules and serve a browser demo (PQZL R_TX, PQZH any form: prove
@@ -42,7 +44,7 @@ case "${1:-}" in
   --serve) MODE=serve ;;
   --upstream) MODE=upstream ;;
   --multi-bench) MODE=multi ;;
-  *) sed -n '2,35p' "$0"; exit 2 ;;
+  *) sed -n '2,37p' "$0"; exit 2 ;;
 esac
 OUT=${OUT:-artifact/out/$MODE-$(date -u +%Y%m%dT%H%M%SZ)}
 mkdir -p "$OUT"
@@ -269,10 +271,13 @@ run ffi-test.txt ffi env PQZ_FFI_DIGESTS="$OUT/ffi-digests-native.jsonl" PQZ_FFI
   cargo test $C --features prove,test-hooks -- --nocapture --test-threads 2
 step "pqz-ffi: unit tests without prove, verify-only cdylib, symbol scan, C smoke test, clippy -D clippy::float_arithmetic"
 run ffi-native.txt ffi sh -c "cargo test $C --lib && cargo build $C \
-  && echo \"test hooks in the production cdylib (must be 0): \$(strings -a target/release/libpqz_ffi.so | grep -c TEST_ARENA)\" \
-  && if cargo tree --locked --offline -e normal,build -i cc > /dev/null 2>&1; then \
-       ../pqzl/check_symbols.sh \"\$(pwd)/\$(ls -t target/release/build/pqz-ffi-*/out/libpqz.a | head -1)\"; \
-     else echo 'symbols ok: no C core in this build (default backend pqzl-rust, CTR-PQZ-09: cc is not in the dependency graph)'; fi \
+  && echo \"test hooks in the production cdylib (must be 0): \$(strings -a target/release/libpqz_ffi.so | grep -cE 'TEST_ARENA|TEST_FAIL_WORKER')\" \
+  && F=\$(cargo tree --locked --offline -e features -i pqz-ffi --prefix none) \
+  && case \$F in \
+       *'pqz-ffi feature \"pqzl-c\"'*) ../pqzl/check_symbols.sh \"\$(pwd)/\$(ls -t target/release/build/pqz-ffi-*/out/libpqz.a | head -1)\" ;; \
+       *'pqz-ffi feature \"pqzl-rust\"'*) echo 'symbols ok: no C core in this build (default backend pqzl-rust, CTR-PQZ-09: feature pqzl-c off)' ;; \
+       *) echo 'C core in this build: unknown (no PQZL backend feature in cargo tree)'; false ;; \
+     esac \
   && \${CC:-clang} -std=c11 -Wall -Wextra -o target/c_abi tests/c_abi.c -Ltarget/release -lpqz_ffi -Wl,-rpath,\"\$(pwd)/target/release\" \
   && target/c_abi && cargo clippy $C --features prove,test-hooks --lib -- -D clippy::float_arithmetic"
 step "pqz-ffi: wasm32 builds and digest lines (must equal native)"
@@ -296,8 +301,10 @@ if [ $MODE = full ]; then
   run vectors-tamper.txt ffi python3 -I vectors/tamper.py
 fi
 
-# ---- Rust = C (port plan Task 12): the Rust core pqzl/rust/ against values the C core fixed. New runs only: the
-# stages above stay the C core's and are not repeated (owner 2026-10-16).
+# ---- Rust = C (port plan Task 12): the Rust core pqzl/rust/ against values the C core fixed. The pqz-ffi and vectors
+# stages above already run the Rust core (pqz-ffi's default backend pqzl-rust) against the C core's frozen digests,
+# self-test and vectors; this stage adds only what they do not cover: the pqzl prover's own proofs_fnv (native, wasm32)
+# and the keys KAT. Nothing above is repeated (owner 2026-10-16).
 R=pqzl/rust
 step "Rust = C: build (bench, keys_kat, the wasm32 bench module)"
 run rust-build.txt $R sh -c "cargo build $C --features bench --bin bench && cargo build $C --features test-hooks --bin keys_kat \
@@ -315,9 +322,6 @@ fi
 step "Rust = C: keys KAT (keys_kat 100 = the C core's pqz_keys_kat 100 lines; pqz_kat.py --c-keys)"
 (cd $R && target/release/keys_kat 100) > "$OUT/rust-keys-kat.jsonl" 2> "$OUT/rust-keys-kat-stderr.txt" || true
 run rust-keys-pqz-kat.txt . python3 -I $V/pqz_kat.py --c-keys "$OUT/rust-keys-kat.jsonl"
-step "Rust = C: pqz-vectors --check with pqz-ffi on the Rust backend (feature pqzl-rust)"
-run rust-vectors-build.txt ffi cargo build $C --features prove,pqzl-rust --bin pqz-vectors --target-dir target/pqzl-rust
-run rust-vectors-check.txt ffi target/pqzl-rust/release/pqz-vectors --check
 
 step "tables and comparison"
 python3 -I artifact/results.py check "$OUT" | tee "$OUT/summary.txt"
