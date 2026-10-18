@@ -1,7 +1,8 @@
 //! Memory (plan D2, D6, Review Focus 3): a test-only counting allocator (this test binary's global allocator; the
 //! crate has none) measures the peak heap per operation, and caps or denies allocations to show that exhaustion is
-//! an error, never a panic or an abort: `prove` = `Error::Memory`, `verify` / `verify_fast` = false, and the `Ctx`
-//! stays usable (the next uncapped call gives the honest result).
+//! an error, never a panic or an abort: `prove`, `try_verify` and `try_verify_fast` = `Error::Memory` (never a
+//! verdict false for the vector's proof), `verify` / `verify_fast` = false, and the `Ctx` stays usable (the next
+//! uncapped call gives the honest result).
 //!
 //! Accounting is per thread (thread-locals, const-initialised: no allocation inside the allocator), so the test
 //! harness's other threads do not disturb a measurement. `PQZL_MEM_TRACE=all` (or `=<bytes>`) prints a backtrace at
@@ -159,16 +160,19 @@ fn peak_per_op() {
     assert!(tx > 0 && tx <= 2 * C_TX_PROVE_PEAK);
 }
 
-/// the operation: Some(output = the honest one), None = out of memory (`Error::Memory`, or false from a verifier)
+/// the operation: Some(output = the honest one), None = out of memory (`Error::Memory`; the verifiers through
+/// `try_verify` / `try_verify_fast`, where out of memory must never come back as the verdict false)
 fn run(c: &mut Ctx, r: &Row, which: u8) -> Option<bool> {
-    match which {
-        0 => match c.prove(r.op, &r.stmt, &r.wit, &r.rnd32) {
-            Ok(p) => Some(p == r.proof),
-            Err(Error::Memory) => None,
-            Err(e) => panic!("{} prove: {e:?}", r.name),
-        },
-        1 => c.verify(r.op, &r.stmt, &r.proof).then_some(true),
-        _ => c.verify_fast(r.op, &r.stmt, &r.proof).then_some(true),
+    let out = match which {
+        0 => c.prove(r.op, &r.stmt, &r.wit, &r.rnd32).map(|p| p == r.proof),
+        1 => c.try_verify(r.op, &r.stmt, &r.proof),
+        _ => c.try_verify_fast(r.op, &r.stmt, &r.proof),
+    };
+    match out {
+        Ok(true) => Some(true),
+        Err(Error::Memory) => None,
+        Ok(false) => panic!("{} {}: not the honest result (an out-of-memory folded into the verdict?)", r.name, OPS[which as usize]),
+        Err(e) => panic!("{} {}: {e:?}", r.name, OPS[which as usize]),
     }
 }
 
@@ -218,10 +222,11 @@ const OPS: [&str; 3] = ["prove", "verify", "verify_fast"];
 /// Review Focus 3. The brief's 64 MiB cap is above the Rust prover's R_TX peak (60 MiB cold, `peak_per_op`; the C
 /// arena's is 298 MiB): under it R_TX prove succeeds with the vector's bytes and R_TXM8 (110 MiB) is
 /// `Error::Memory`; under 32 MiB R_TX prove is `Error::Memory`; R_TX verify and verify_fast under half their peak
-/// (at most 64 MiB) are false; after each failure the same `Ctx` gives the honest result. Then for every relation,
+/// (at most 64 MiB) are `Error::Memory` through `try_verify` / `try_verify_fast` and false through the bool API;
+/// after each failure the same `Ctx` gives the honest result. Then for every relation,
 /// operation, cold and warm `Ctx`: caps at k / (C + 1) of the measured peak (k = 1 .. C) and the denial of single
-/// allocations (each of the first F, then S spread over the rest) give the honest result or the out-of-memory
-/// result, never a panic or an abort, and the same `Ctx` gives the honest result afterwards. C, F, S: 7, 16, 16
+/// allocations (each of the first F, then S spread over the rest) give the honest result or `Error::Memory` (the
+/// verifiers: never false for the vector's proof), never a panic or an abort, and the same `Ctx` gives the honest result afterwards. C, F, S: 7, 16, 16
 /// for verify / verify_fast, 3, 4, 4 for prove (`PQZL_MEM_SWEEP=C,F,S` for both); `PQZL_MEM_THREADS` workers
 /// (default 6; accounting is per thread); `PQZL_MEM_ONLY=<text>[,<text>..]` only the items whose name contains one;
 /// `PQZL_MEM_SWEEP=0,1000000000,0` denies every allocation in turn (exhaustive).
@@ -246,7 +251,13 @@ fn exhaustion_is_error() {
         let (out, _, _, d) = measure(Some(cap), 0, || run(&mut c, tx, which));
         assert!(out.is_none() && d > 0, "R_TX {} under {cap} B (peak {peak} B)", OPS[which as usize]);
         assert_eq!(run(&mut c, tx, which), Some(true));
-        println!("R_TX {} cold under {cap} B (half its peak {peak} B): false; the same Ctx then accepts", OPS[which as usize]);
+        // the bool API under the same cap: false (and the Ctx accepts afterwards)
+        let mut c = Ctx::new();
+        let bool_api = |c: &mut Ctx| if which == 1 { c.verify(tx.op, &tx.stmt, &tx.proof) } else { c.verify_fast(tx.op, &tx.stmt, &tx.proof) };
+        let (b, _, _, d) = measure(Some(cap), 0, || bool_api(&mut c));
+        assert!(!b && d > 0);
+        assert!(bool_api(&mut c));
+        println!("R_TX {} cold under {cap} B (half its peak {peak} B): try_ = Error::Memory, bool = false; the same Ctx then accepts", OPS[which as usize]);
     }
 
     // the keys, free functions and Ctx methods (cold and warm Ctx): every allocation denied in turn

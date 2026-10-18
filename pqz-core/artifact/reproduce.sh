@@ -270,7 +270,9 @@ run ffi-test.txt ffi env PQZ_FFI_DIGESTS="$OUT/ffi-digests-native.jsonl" PQZ_FFI
 step "pqz-ffi: unit tests without prove, verify-only cdylib, symbol scan, C smoke test, clippy -D clippy::float_arithmetic"
 run ffi-native.txt ffi sh -c "cargo test $C --lib && cargo build $C \
   && echo \"test hooks in the production cdylib (must be 0): \$(strings -a target/release/libpqz_ffi.so | grep -c TEST_ARENA)\" \
-  && ../pqzl/check_symbols.sh \"\$(pwd)/\$(ls -t target/release/build/pqz-ffi-*/out/libpqz.a | head -1)\" \
+  && if cargo tree --locked --offline -e normal,build -i cc > /dev/null 2>&1; then \
+       ../pqzl/check_symbols.sh \"\$(pwd)/\$(ls -t target/release/build/pqz-ffi-*/out/libpqz.a | head -1)\"; \
+     else echo 'symbols ok: no C core in this build (default backend pqzl-rust, CTR-PQZ-09: cc is not in the dependency graph)'; fi \
   && \${CC:-clang} -std=c11 -Wall -Wextra -o target/c_abi tests/c_abi.c -Ltarget/release -lpqz_ffi -Wl,-rpath,\"\$(pwd)/target/release\" \
   && target/c_abi && cargo clippy $C --features prove,test-hooks --lib -- -D clippy::float_arithmetic"
 step "pqz-ffi: wasm32 builds and digest lines (must equal native)"

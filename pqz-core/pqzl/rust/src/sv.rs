@@ -1264,7 +1264,12 @@ fn verify_body(ar: &Ar, s: &SvRel, code: u8, hash_stmt: &[u8; 32], stmt: &[u8], 
     if proof.len() > MAX_PROOF {
         return Ok(false);
     }
-    let Ok(mut f) = decode_proof(p, proof) else { return Ok(false) };
+    // a proof that does not decode is invalid; running out of memory while decoding is not (Error::Memory)
+    let mut f = match decode_proof(p, proof) {
+        Err(Error::Memory) => return Err(Error::Memory),
+        Err(_) => return Ok(false),
+        Ok(f) => f,
+    };
 
     // working memory
     let mut wz = vz(nq, NT0)?;

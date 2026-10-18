@@ -6,13 +6,19 @@ license-file = "../../LICENSE"
 publish = false
 
 # The oracles of the libFuzzer targets (P6e plan Task 10, D12, D15): a staticlib linked by build.sh with
-# targets/<target>.c and clang 18's libFuzzer. Built only by build.sh (sancov RUSTFLAGS, feature `fuzz` of pqz-ffi:
-# the C core with ASan + UBSan). See README.md.
+# targets/<target>.c and clang 18's libFuzzer. Built only by build.sh (sancov RUSTFLAGS, feature `fuzz` of pqz-ffi;
+# mode `pqzl-diff`: the C core with ASan + UBSan too). See README.md.
 [lib]
 crate-type = ["staticlib"]
 
 [dependencies]
-pqz-ffi = { path = "../ffi", features = ["fuzz"] }
+# the production PQZL core (pqz-ffi's default backend, CTR-PQZ-09: Rust), whatever pqz-ffi's default
+pqz-ffi = { path = "../ffi", default-features = false, features = ["fuzz", "pqzl-rust"] }
+
+[features]
+# mode `pqzl-diff` (pqzl-rust plan Task 11; PQZ_FUZZ_MODE=pqzl-diff build.sh): also the C core (ASan + UBSan, pqz-ffi's
+# `pqzl::c`), compared with the Rust core on every PQZL input (verdict, pqz_test_mutate bytes)
+pqzl-diff = ["pqz-ffi/pqzl-c"]
 
 [profile.release]
 debug = 1

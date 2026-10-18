@@ -6,6 +6,7 @@
 !pqz-core/pqzl/src
 !pqz-core/pqzl/lazer
 !pqz-core/pqzl/params
+!pqz-core/pqzl/rust
 !pqz-core/stmt
 !pqz-core/pqzh/ligero
 !pqz-core/ffi
@@ -24,3 +25,4 @@
 **/bin/Debug
 **/obj
 pqz-core/ffi/runs
+pqz-core/pqzl/rust/runs

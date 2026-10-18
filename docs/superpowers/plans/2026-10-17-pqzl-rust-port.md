@@ -288,7 +288,7 @@ crate instead of the C core; the C core is not built under it), `pqz-core/fuzz/s
 - [ ] `scripts/capped pqz-core/ffi/run.sh rust1` with `--features pqzl-rust` (an env switch in `run.sh`) → every test
   passes; self-test `ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205`; native = wasm32 digest lines.
 - [ ] `ffi/vectors/run.sh rust1` with the switch → `pqz-vectors --check` byte-identical.
-- [ ] Fuzz: target `precompile` and `mutate` with `pqzl-diff` (both cores in one binary: Rust verdict = C verdict,
+- [ ] Fuzz: target `precompile` and `mutate` (and `codec`, owner 2026-10-18) with `pqzl-diff` (both cores in one binary: Rust verdict = C verdict,
   Rust proof re-encoding = C's) — 2 h per target under `scripts/capped`, no finding (Review Focus 5). Commit with the
   logs.
 

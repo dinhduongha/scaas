@@ -1,0 +1,19 @@
+# wasm32: the verify-only lib, then the prove harness (wasm/) and the digest diff against native
+$ cargo build --release --offline --lib --target wasm32-unknown-unknown
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.07s
+[rc=0]
+$ cargo build --release --offline --target wasm32-unknown-unknown
+    Finished `release` profile [optimized] target(s) in 0.01s
+[rc=0]
+$ sha256sum wasm/target/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm
+57022e332acbc91b795f5c5681172664ee8f06e32ddc2a3689d449e072e0c3cf  wasm/target/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm
+[rc=0]
+wasm bytes 904110
+$ llvm-nm-18 --undefined-only wasm/target/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm (imports)
+strings /gmp|mpfr|hexl/i: 0
+node rc=0
+wasm run 44485 ms, memory 159711232 B
+wasm PQZL op 7 M = 8 prove refused (Statement(Legs)): true
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:44.54
+	Maximum resident set size (kbytes): 222028
+native = wasm32: 29 lines equal

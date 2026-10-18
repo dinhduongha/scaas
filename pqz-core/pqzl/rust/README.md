@@ -44,6 +44,8 @@ lines), and the Rust halves of the oracle tests (`tests/oracle_arith.rs`, `tests
 ## API
 
 Mirrors the C ABI `pqzl/src/pqz.h` (sizes, layouts, return codes): `Ctx::{new, prove, verify, verify_fast}`,
+`Ctx::{try_verify, try_verify_fast}` (the verdict, or `Error::Memory` when an allocation failed, kept apart from
+false: a node must treat it as its own fault, not as an invalid proof; pqz-ffi maps it to a node fault),
 `keypair_from_secret`, `keygen`, `enc_seed`, `enc_group_seed`, `encrypt`, `decrypt_raw`, `dec`, `test_mutate`
 (feature `test-hooks`). `Ctx::{keygen, keypair_from_secret, encrypt, enc_seed}` take the same arguments and give
 the same results as the free functions, with the `Ctx`'s A (expanded once; for servers that encrypt in bulk).
@@ -55,7 +57,8 @@ floating point.
   takes `&mut self`; one `Ctx` per thread needs no lock, and a `Ctx` is `Send` (`tests/threads.rs`). With feature
   `sv` a `Ctx` is about 41 KB inline: keep it in a `Box`, a static or a thread-local.
 - Memory: every buffer that scales with the input is reserved with `try_reserve`; running out is `Error::Memory`
-  from `prove` and false from the verifiers, never a panic or an abort, and the `Ctx` stays usable
+  from `prove`, `try_verify` and `try_verify_fast` and false from `verify` / `verify_fast`, never a panic or an
+  abort, and the `Ctx` stays usable
   (`tests/memory.rs`, a test-only counting / capping allocator). Peak heap (release, cold `Ctx`): R_TX prove 63 MB
   (the C arena: 312 MB), R_TXM8 prove 115 MB, R_TX verify 63 MB, R_TX verify_fast 11 MB (1.2 MB warm).
 - wasm32: `prove` of op 7 with M > `WASM_MAX_LEGS` (4) is `Error::Input` (pqz-ffi's limit; whether the Rust

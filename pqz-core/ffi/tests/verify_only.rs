@@ -1,16 +1,17 @@
 //! The precompile in its production configuration (review of p6e-a3, controller 2026-10-14): a fresh process whose
-//! core has never proved, on the verify-only arena (`ARENA_SMALL`, 512 MiB since P6-ANON S3). The honest inputs (every
+//! core has never proved (the C backend: on the verify-only arena, `ARENA_SMALL`, 512 MiB since P6-ANON S3). The honest inputs (every
 //! form and every built op 7 shape of both ids) are proved by a child process
 //! (`child_task`), so this process only verifies.
 //!
 //! `verify_only_arena`: the full adversarial corpus (every decoder rejection and framing case, the 10,240-input
-//! abort-freedom generator) serial, from 8 threads and on a 1 MiB caller-stack thread, then 5,000 repeated mixed calls;
-//! the arena never moves: `arena_used()` after every call and `arena_peak()` at the end equal their values after the
+//! abort-freedom generator) serial, from 8 threads and on a 1 MiB caller-stack thread, then 5,000 repeated mixed calls,
+//! all equal; the C backend's arena never moves: `arena_used()` after every call and `arena_peak()` at the end equal their values after the
 //! warm-up pass (no growth, nothing left below the base mark), the arena stays `ARENA_SMALL`, and its peak leaves a margin of at least 1.5×.
 //!
 //! `fill_determinism`: child processes fill every arena with 0x00, 0xA5 or 0x5A before `pqz_init` and write the
 //! digest lines (fixtures, proofs of every form, verdicts, self-test) and the result of every corpus input; all three
-//! files must be identical (the core never reads arena bytes it did not write).
+//! files must be identical (the core never reads arena bytes it did not write). C backend only: the Rust core has no
+//! arena and no uninitialised memory.
 mod common;
 
 use std::sync::atomic::Ordering::Relaxed;
@@ -33,6 +34,7 @@ fn corpus(hs: &[Honest], n_gen: usize) -> Vec<Vec<u8>> {
     c
 }
 
+#[cfg(not(feature = "pqzl-rust"))]
 fn hex(b: &[u8]) -> String {
     b.iter().map(|x| format!("{x:02x}")).collect()
 }
@@ -45,6 +47,7 @@ fn child_task() {
     let a: Vec<&str> = arg.split(':').collect();
     match a[0] {
         "gen" => std::fs::write(a[1], to_bytes(&prove_all())).unwrap(),
+        #[cfg(not(feature = "pqzl-rust"))]
         "fill" => {
             let b = u8::from_str_radix(a[1], 16).unwrap();
             pqzl::TEST_ARENA_FILL.store(0x100 | b as u32, Relaxed);
@@ -73,14 +76,14 @@ fn verify_only_arena() {
     let honest: Vec<Vec<u8>> = hs.iter().map(|h| h.input()).collect();
     let c = corpus(&hs, N_GEN);
     let gen_from = c.len() - N_GEN;
+    #[cfg(not(feature = "pqzl-rust"))]
     assert_eq!(pqzl::arena_bytes(), 0, "no core before the first call");
 
     // warm-up pass: every relation's keys and tables get built
     let t = std::time::Instant::now();
     let r1: Vec<(i32, Word)> = c.iter().map(|i| call(i)).collect();
     let warm_s = t.elapsed().as_secs_f64();
-    assert_eq!(pqzl::arena_bytes(), pqzl::ARENA_SMALL);
-    let (used0, peak0) = (pqzl::arena_used(), pqzl::arena_peak());
+    let (used0, peak0) = arena();
     let mut valid = 0;
     for (i, (rc, w)) in r1.iter().enumerate() {
         assert_eq!(*rc, PQZ_FFI_OK, "input {i}");
@@ -119,27 +122,44 @@ fn verify_only_arena() {
     for k in 0..5_000usize {
         let i = (k * 7919) % c.len();
         assert_eq!(call(&c[i]), r1[i], "mixed call {k}");
-        assert_eq!(pqzl::arena_used(), used0, "arena in use after mixed call {k}");
+        assert_eq!(arena().0, used0, "arena in use after mixed call {k}");
     }
-    let peak1 = pqzl::arena_peak();
-    assert_eq!(peak1, peak0, "arena peak grew");
-    assert_eq!(pqzl::arena_bytes(), pqzl::ARENA_SMALL);
+    assert_eq!(arena().1, peak0, "arena peak grew");
     let lp = pqzh_ligero::ligero::VERIFY_PANICS.load(Relaxed);
-    eprintln!(
-        "verify-only {} MiB: {} honest inputs, corpus {} inputs ({} generator), warm-up {warm_s:.1} s, {valid} valid (= the unedited honest \
-         ones), status 3 / 4: 0; generator again from 8 threads and on a 1 MiB stack: equal; 5,000 mixed calls: equal; \
-         arena used {used0} B after every call, peak {peak0} B = {:.2} of the arena (margin {:.2}x), Ligero panics caught {lp}",
+    #[cfg(feature = "pqzl-rust")]
+    let mem = "Rust backend (no arena)".to_string();
+    #[cfg(not(feature = "pqzl-rust"))]
+    let mem = format!(
+        "arena {} MiB: used {used0} B after every call, peak {peak0} B = {:.2} of the arena (margin {:.2}x)",
         pqzl::ARENA_SMALL >> 20,
-        hs.len(),
-        c.len(),
-        N_GEN,
         peak0 as f64 / pqzl::ARENA_SMALL as f64,
         pqzl::ARENA_SMALL as f64 / peak0 as f64
     );
+    eprintln!(
+        "verify-only path: {} honest inputs, corpus {} inputs ({} generator), warm-up {warm_s:.1} s, {valid} valid (= the unedited honest \
+         ones), status 3 / 4: 0; generator again from 8 threads and on a 1 MiB stack: equal; 5,000 mixed calls: equal; \
+         {mem}, Ligero panics caught {lp}",
+        hs.len(),
+        c.len(),
+        N_GEN,
+    );
     assert_eq!(lp, 0);
+    #[cfg(not(feature = "pqzl-rust"))]
     assert!(2 * pqzl::ARENA_SMALL >= 3 * peak0, "arena margin under 1.5x");
 }
 
+/// The C backend's arena (used between calls, peak) on `ARENA_SMALL`; (0, 0) for the Rust backend (no arena).
+fn arena() -> (usize, usize) {
+    #[cfg(not(feature = "pqzl-rust"))]
+    {
+        assert_eq!(pqzl::arena_bytes(), pqzl::ARENA_SMALL);
+        (pqzl::arena_used(), pqzl::arena_peak())
+    }
+    #[cfg(feature = "pqzl-rust")]
+    (0, 0)
+}
+
+#[cfg(not(feature = "pqzl-rust"))]
 #[test]
 fn fill_determinism() {
     if std::env::var("PQZ_FFI_CHILD").is_ok() {

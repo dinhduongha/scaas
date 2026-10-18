@@ -21,6 +21,8 @@ COPY pqz-core/pqzl/check_symbols.sh pqz-core/pqzl/
 COPY pqz-core/pqzl/src pqz-core/pqzl/src
 COPY pqz-core/pqzl/lazer pqz-core/pqzl/lazer
 COPY pqz-core/pqzl/params pqz-core/pqzl/params
+# pqz-ffi's default PQZL backend (CTR-PQZ-09, 2026-10-18): the Rust crate pqzl; the C sources above stay for pqzl-c
+COPY pqz-core/pqzl/rust pqz-core/pqzl/rust
 COPY pqz-core/stmt pqz-core/stmt
 COPY pqz-core/pqzh/ligero pqz-core/pqzh/ligero
 COPY pqz-core/ffi pqz-core/ffi

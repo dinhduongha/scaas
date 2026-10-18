@@ -866,7 +866,12 @@ impl Ctx {
         let (keys, a) = self.rel_state(ri)?;
         let h = stmt_hash(op, stmt);
         let Some((mut s, _)) = build(a, r, stmt)? else { return Ok(false) };
-        let Ok(mut f) = decode_proof(r.p, proof) else { return Ok(false) };
+        // a proof that does not decode is invalid; running out of memory while decoding is not (Error::Memory)
+        let mut f = match decode_proof(r.p, proof) {
+            Err(Error::Memory) => return Err(Error::Memory),
+            Err(_) => return Ok(false),
+            Ok(f) => f,
+        };
         let mut hash = h;
         abdlop::hashcomm(&mut hash, &mut f.t_a1, &mut f.t_b, r.p.tbox)?;
         tbox::verify(&mut hash, &mut f, keys, &mut s)

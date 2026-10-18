@@ -3,13 +3,14 @@
 //!
 //! Input `u8(op) ‖ be32(len(stmt)) ‖ stmt ‖ proof` → `pqz_stmt::decode_input` (MAX_INPUT, op, opTag, id, the form's
 //! length — op 7: the `(id, M, auditorOn)` length of the header words, P6-ANON R4 —, every D15 / R6 rule, `1 ≤
-//! len(proof) ≤ MAX_PROOF(id)`) → dispatch on the `proofSystemId` word: PQZL to the
-//! C core's specialised verifier (`pqzl`, one process-wide lock), PQZH to Ligero (`pqzh`); op 6 to the cached
-//! self-test (`selftest`). Output: 32 bytes, `…01` valid, `…00` anything else; the one revert is an input over
-//! `MAX_INPUT`. Every entry catches panics; nothing here aborts. Faults (controller 2026-10-14): a panic in the
-//! decode / verify logic is a property of the input (every node hits it on the same input) ⇒ `…00`
-//! (`PQZ_FFI_INTERNAL`); a fault of this node (arena exhaustion, worker or core unavailable, allocation) ⇒ no result
-//! ([`Error::NodeFault`], `PQZ_FFI_NODE_FAULT`), which the host must not treat as an invalid input.
+//! len(proof) ≤ MAX_PROOF(id)`) → dispatch on the `proofSystemId` word: PQZL to the specialised verifier of the PQZL
+//! core (`pqzl`, one process-wide lock; the Rust crate `pqzl` by default, the C core with feature `pqzl-c`,
+//! CTR-PQZ-09), PQZH to Ligero (`pqzh`); op 6 to the cached self-test (`selftest`). Output: 32 bytes, `…01` valid,
+//! `…00` anything else; the one revert is an input over `MAX_INPUT`. Every entry catches panics; nothing here aborts.
+//! Faults (controller 2026-10-14): a panic in the decode / verify logic is a property of the input (every node hits
+//! it on the same input) ⇒ `…00` (`PQZ_FFI_INTERNAL`); a fault of this node (worker or core unavailable, C arena
+//! exhaustion) ⇒ no result ([`Error::NodeFault`], `PQZ_FFI_NODE_FAULT`), which the host must not treat as an invalid
+//! input.
 //!
 //! Rust API for the node: [`precompile`], [`verify_input`], [`decode`]. C ABI for P6f: [`pqz_precompile`]
 //! (`pqz_ffi.h`). Feature `prove` (P6h): [`prove`], keygen / enc / dec in [`pqzl`], witness layouts and test
@@ -119,11 +120,11 @@ pub const PQZ_FFI_BAD_ARGS: i32 = 2;
 /// a panic in the decode / verify logic was caught (input-caused, the same on every node); `out` = `…00`
 /// (CTR-PQZ-10); worth a log line
 pub const PQZ_FFI_INTERNAL: i32 = 3;
-/// a fault of this node, not of the input (arena exhaustion, worker or core unavailable, allocation): no result,
-/// nothing written; the host must abort block processing, never treat the input as invalid
+/// a fault of this node, not of the input (worker or core unavailable; C core: arena exhaustion or allocation): no
+/// result, nothing written; the host must abort block processing, never treat the input as invalid
 pub const PQZ_FFI_NODE_FAULT: i32 = 4;
 
-/// C ABI for the node (P6f, P/Invoke): see `pqz_ffi.h`. Thread-safe (libpqz calls are serialised inside); never
+/// C ABI for the node (P6f, P/Invoke): see `pqz_ffi.h`. Thread-safe (PQZL calls are serialised inside); never
 /// unwinds or aborts.
 ///
 /// # Safety
@@ -156,7 +157,7 @@ pub unsafe extern "C" fn pqz_precompile(input: *const u8, len: usize, out: *mut 
 pub enum ProveError {
     /// the statement does not decode (`pqz_stmt::parse`)
     Statement(Reject),
-    /// PQZL: the core's error code (pqz_rt.h: 1 internal, 2 arena, 3 input, 4 rejection cap; -1 node fault)
+    /// PQZL: the core's error code (pqz_rt.h: 1 internal, 2 arena / memory, 3 input, 4 rejection cap; -1 node fault)
     Pqzl(i32),
     /// PQZH: Ligero's message
     Pqzh(&'static str),
