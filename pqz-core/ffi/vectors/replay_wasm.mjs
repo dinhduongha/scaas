@@ -1,8 +1,9 @@
 // wasm32 replay of the vectors (P6e Task 11): every proof of proof_pqzl.json, proof_pqzh.json and
 // worstcase_noise.json proved again in wasm32 (pqz-ffi's prove feature, ../wasm: the C core freestanding, Ligero)
 // from the same statement, witness and rnd32 must give the same bytes and be valid through pqz_ffi::precompile.
-// Op 7 rows (P6-ANON S4, statement_transfer_multi.json): the same, except PQZL M > 4, which wasm32 does not prove
-// (pqzl::WASM_PQZL_MAX_LEGS, one 512 MiB arena; S3): the native proof is verified through the wasm32 precompile.
+// Op 7 rows (P6-ANON S4, statement_transfer_multi.json): the same. The C backend (opt-in) does not prove PQZL M > 4
+// in wasm32 (pqzl::WASM_PQZL_MAX_LEGS, one 512 MiB arena; S3): there the native proof is verified through the wasm32
+// precompile. The Rust backend (default) proves M = 8 too (port plan Task 12); the module's m8_refused() tells which.
 // Prints JSON lines; exit 1 on any difference.
 //   node replay_wasm.mjs <pqz_ffi_wasm.wasm> [vector dir]
 import { readFileSync } from 'node:fs';
@@ -18,7 +19,6 @@ for (const f of ['statement_transfer.json', 'statement_burn.json', 'statement_re
   'statement_disclose.json']) for (const r of J(f).rows) stmts[r.form] = r.stmt;
 const multi = {};
 for (const r of J('statement_transfer_multi.json').rows) multi[r.case] = r;
-const WASM_PQZL_MAX_LEGS = 4;
 
 const cases = [];
 const add = (name, op, stmt, wit, rnd, o) => { for (const id of ['pqzl', 'pqzh'])
@@ -27,7 +27,7 @@ for (const id of ['pqzl', 'pqzh'])
   for (const r of J(`proof_${id}.json`).rows) {
     const m = r.case && multi[r.case];
     cases.push({ id, form: r.case ? `${r.form} ${r.case}` : r.form, op: r.op, stmt: withId(m ? m.stmt : stmts[r.form], id),
-      wit: hex(r.wit), rnd: hex(r.rnd32), proof: r.proof, verifyOnly: !!m && id === 'pqzl' && m.M > WASM_PQZL_MAX_LEGS });
+      wit: hex(r.wit), rnd: hex(r.rnd32), proof: r.proof, pqzlM: m && id === 'pqzl' ? m.M : 0 });
   }
 const w = J('worstcase_noise.json');
 // the register statement: opTag || id || message || pk; pk comes from the receiver's R_REG witness only in C, so take
@@ -45,6 +45,8 @@ add('illustrative debit', 1, w.illustrative.debit.stmt, w.illustrative.debit.wit
 for (const r of J('fee0.json').rows) add(`fee 0 ${r.form}`, r.op, r.stmt, r.wit, r.rnd32, r);
 
 const x = (await WebAssembly.instantiate(readFileSync(file), {})).instance.exports;
+const m8Refused = x.m8_refused() === 1; // the C backend
+for (const c of cases) c.verifyOnly = c.pqzlM > 4 && m8Refused;
 const put = (bytes) => { const p = x.alloc(bytes.length); new Uint8Array(x.memory.buffer, p, bytes.length).set(bytes); return p; };
 let fails = 0;
 let verifyOnly = 0;

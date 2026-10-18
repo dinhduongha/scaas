@@ -269,14 +269,19 @@ fn hex(b: &[u8]) -> String {
     b.iter().map(|x| format!("{x:02x}")).collect()
 }
 
-/// One JSON line per form of `id`, then per op 7 shape with M ≤ `pqzl::WASM_PQZL_MAX_LEGS` (what wasm32 proves):
+/// The op 7 shapes of the digest lines: M ≤ 4, the frozen set (`expected-results.json` `ffi.digest_lines`, from when
+/// both backends proved M ≤ 4 on wasm32). The Rust backend's wasm32 M = 8 prove is checked by the vectors' wasm32
+/// replay (`vectors/replay_wasm.mjs`: proved again, byte-equal).
+const DIGEST_MAX_LEGS: usize = 4;
+
+/// One JSON line per form of `id`, then per op 7 shape with M ≤ `DIGEST_MAX_LEGS` (what wasm32 proves on both backends):
 /// keccak256 of statement, witness and proof (`rnd32` = 0x33…, the tests' value), the proof length, and the
 /// precompile's verdict. Native (test `digest_lines`) and wasm32 (`wasm/`) must print the same lines: byte-equal
 /// fixtures and proofs, the same verdicts.
 pub fn digest_lines(id: &Word) -> String {
     let sys = if *id == PQZL_ID { "PQZL" } else { "PQZH" };
     let forms = cases(id).unwrap_or_default().into_iter().map(|c| (format!("{:?}", c.form), c.op(), c.stmt, c.wit));
-    let multi = multi_cases(id, pqzl::WASM_PQZL_MAX_LEGS).unwrap_or_default().into_iter().map(|c| (c.name(), c.op(), c.stmt, c.wit));
+    let multi = multi_cases(id, DIGEST_MAX_LEGS).unwrap_or_default().into_iter().map(|c| (c.name(), c.op(), c.stmt, c.wit));
     let mut s = String::new();
     for (name, op, stmt, wit) in forms.chain(multi) {
         let k = |b: &[u8]| hex(&crate::selftest::keccak(&[b]));

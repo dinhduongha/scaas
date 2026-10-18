@@ -40,11 +40,12 @@ pub struct NodeFault;
 #[cfg(feature = "test-hooks")]
 pub static TEST_FAIL_WORKER: AtomicBool = AtomicBool::new(false);
 
-/// The largest PQZL op 7 M that `crate::prove` proves on wasm32 (controller proposal 2026-10-16, owner may override:
-/// the C core's `R_TXM4_0` with every relation loaded peaks at 432.7 MB in wasm32, M = 8 at 669 MB,
-/// `l3a-summary.txt`); M = 8 is for native clients. Verify has no such limit. The Rust backend's `pqzl::WASM_MAX_LEGS`
-/// is the same (plan Task 12 may raise both for the Rust backend).
-pub const WASM_PQZL_MAX_LEGS: usize = 4;
+/// The largest PQZL op 7 M that `crate::prove` proves on wasm32; verify has no such limit. C backend 4 (controller
+/// proposal 2026-10-16, owner may override: the C core's `R_TXM4_0` with every relation loaded peaks at 432.7 MB in
+/// wasm32, M = 8 at 669 MB, `l3a-summary.txt`; M = 8 is for native clients). Rust backend 8 = `pqzl::WASM_MAX_LEGS`
+/// (port plan Task 12, owner 2026-10-18 "if it is enough, raise it": run `d6`, the M = 8 wasm32 prove peaks at
+/// 117.4 MiB, CTR-PQZ-09).
+pub const WASM_PQZL_MAX_LEGS: usize = if cfg!(feature = "pqzl-rust") { 8 } else { 4 };
 /// The worker thread's stack (pqz_bench runs the core on an 8 MiB main thread, the wasm builds on an 8 MiB stack).
 pub const STACK: usize = 16 << 20;
 

@@ -31,8 +31,8 @@ oversize = []
 test-hooks = []
 # pqzl/test/pqz_bench.c's setup and steps (module `bench`: src/bin/bench.rs, wasm/). Not in a production build.
 bench = []
-# wasm32 proves op 7 up to TXM_MAX_LEGS (8; 16 with oversize) instead of 4: the measurement of port plan Task 12
-# (d6.sh, reproduce.sh --multi-bench). Bench builds only, never in a production build.
+# wasm32 proves op 7 up to TXM_MAX_LEGS (16 with oversize; 8 without, which is the default since Task 12): the
+# measurements (d6.sh, reproduce.sh --multi-bench). Bench builds only, never in a production build.
 wasm-m8 = ["bench"]
 # dev / test only: the C core (../src, ../lazer, ../params) as the oracle, module `c_oracle`
 c-oracle = ["dep:cc"]

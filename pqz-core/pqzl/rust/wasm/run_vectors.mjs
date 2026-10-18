@@ -1,8 +1,8 @@
 // pqzl (Rust) native = wasm32 on the vectors (as pqz-ffi's wasm digest lines): replays target/wasm-replay/in.txt
 // (written by `cargo test --test vectors wasm_replay_inputs`, with its native digest lines in native.jsonl) in the
 // wasm/ module on one Ctx and prints the same digest lines on stdout (run.sh diffs them): per vector row the proof's
-// FNV-1a (op 7 with M > 4 is refused on wasm32: checked to be Error::Input, not printed), the verify and verify_fast
-// verdicts; per negative row both verdicts. On stderr: the M > 4 refusals and the shadow-stack use per operation
+// FNV-1a (op 7 with M > WASM_MAX_LEGS = 8 would be refused on wasm32: checked to be Error::Input, not printed), the
+// verify and verify_fast verdicts; per negative row both verdicts. On stderr: the refusals (none since Task 12) and the shadow-stack use per operation
 // (the stack's free part is painted before each call and scanned after it; the stack is first in linear memory,
 // [0, top), as `sp` shows).
 //   node wasm/run_vectors.mjs [in.txt]   (PQZL_WASM_FILE: the module)
@@ -13,9 +13,9 @@ const file = process.env.PQZL_WASM_FILE
   || new URL('target/wasm32-unknown-unknown/release/pqzl_wasm.wasm', import.meta.url);
 const { instance } = await WebAssembly.instantiate(readFileSync(file), {});
 const x = instance.exports;
-// PQZL_WASM_MAX_LEGS=8 with a module built with feature pqzl/wasm-m8 (and native.jsonl from a native build with
-// feature wasm-m8): the M = 8 rows are proved in wasm32 too (port plan Task 12, d6.sh)
-const MAX_LEGS = Number(process.env.PQZL_WASM_MAX_LEGS || 4), PAINT = 0xa5;
+// = pqzl::WASM_MAX_LEGS (8 since port plan Task 12: the M = 8 rows are proved in wasm32 too); PQZL_WASM_MAX_LEGS
+// overrides it for a module built otherwise
+const MAX_LEGS = Number(process.env.PQZL_WASM_MAX_LEGS || 8), PAINT = 0xa5;
 const unhex = (h) => (h === '.' ? new Uint8Array(0) : Uint8Array.from(h.match(/../g), (b) => parseInt(b, 16)));
 const fnv = (b) => b.reduce((h, v) => Math.imul((h ^ v) >>> 0, 16777619) >>> 0, 2166136261);
 const lines = readFileSync(inFile, 'utf8').trim().split('\n').map((l) => l.split(' '));

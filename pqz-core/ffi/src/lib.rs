@@ -173,7 +173,7 @@ pub enum ProveError {
 pub fn prove(op: u8, stmt: &[u8], wit: &[u8], rnd32: &[u8; 32]) -> Result<Vec<u8>, ProveError> {
     let st = pqz_stmt::parse(op, stmt).map_err(ProveError::Statement)?;
     let id = *st.proof_system_id().ok_or(ProveError::Statement(Reject::Op))?;
-    // wasm32: PQZL op 7 up to WASM_PQZL_MAX_LEGS (the one client arena; M = 8 needs a native client)
+    // wasm32: PQZL op 7 up to WASM_PQZL_MAX_LEGS (C backend 4: the one client arena; Rust backend 8)
     if let pqz_stmt::Stmt::Multi(m) = &st {
         if cfg!(target_arch = "wasm32") && id == PQZL_ID && m.m > pqzl::WASM_PQZL_MAX_LEGS {
             return Err(ProveError::Statement(Reject::Legs));
