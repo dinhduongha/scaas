@@ -44,11 +44,12 @@ fn admit(n: isize, size: usize) -> bool {
     });
     if live > cap || k == DENY.with(Cell::get) {
         DENIED.with(|d| d.set(d.get() + 1));
+        // BUSY first: reading the variable allocates, which must pass uncounted
+        BUSY.with(|b| b.set(true));
         if std::env::var("PQZL_MEM_TRACE").is_ok_and(|v| v.parse() == Ok(size) || v == "all") {
-            BUSY.with(|b| b.set(true));
             eprintln!("denied {size} B (+{n} B, allocation {k}):\n{}", std::backtrace::Backtrace::force_capture());
-            BUSY.with(|b| b.set(false));
         }
+        BUSY.with(|b| b.set(false));
         return false;
     }
     LIVE.with(|c| c.set(live));
@@ -130,7 +131,7 @@ const C_TX_PROVE_PEAK: usize = 312_151_904;
 /// to that)
 #[test]
 fn peak_per_op() {
-    println!("size_of::<Ctx>() = {} B (the caches' tables are on the heap)", std::mem::size_of::<Ctx>());
+    println!("size_of::<Ctx>() = {} B (the specialised verifier's fixed tables inline, the rest on the heap)", std::mem::size_of::<Ctx>());
     println!("peak_per_op (bytes; cold = fresh Ctx, the call builds A / keys / SV tables; warm = second call)");
     println!("{:<28} {:>12} {:>12} {:>12} {:>12} {:>12} {:>12} {:>9}", "row", "prove cold", "prove warm",
              "verify cold", "verify warm", "fast cold", "fast warm", "allocs");

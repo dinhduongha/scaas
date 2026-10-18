@@ -54,7 +54,8 @@ the same results as the free functions, with the `Ctx`'s A (expanded once; for s
 floating point.
 
 - No globals: a `Ctx` holds the caches (A, each relation's keys, the specialised verifier's tables). Every call
-  takes `&mut self`; one `Ctx` per thread needs no lock, and a `Ctx` is `Send` (`tests/threads.rs`).
+  takes `&mut self`; one `Ctx` per thread needs no lock, and a `Ctx` is `Send` (`tests/threads.rs`). With feature
+  `sv` a `Ctx` is about 41 KB inline: keep it in a `Box`, a static or a thread-local.
 - Memory: every buffer that scales with the input is reserved with `try_reserve`; running out is `Error::Memory`
   from `prove` and false from the verifiers, never a panic or an abort, and the `Ctx` stays usable
   (`tests/memory.rs`, a test-only counting / capping allocator). Peak heap (release, cold `Ctx`): R_TX prove 63 MB

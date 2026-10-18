@@ -95,6 +95,8 @@ pub(crate) fn wipe<T: Default>(x: &mut [T]) {
 /// built lazily at first use. No globals and no interior mutability: every call takes `&mut self`, so a `Ctx` per
 /// thread needs no lock, and one `Ctx` moves between threads (`Send`) behind whatever hands out the `&mut`. A call
 /// that fails (also on allocation failure) leaves the caches usable: the next call rebuilds what is missing.
+/// With feature `sv` a `Ctx` is about 41 KB inline (the specialised verifier's fixed tables): keep it in a `Box`, a
+/// static or a thread-local rather than on a small stack or moved by value.
 #[derive(Default)]
 pub struct Ctx {
     /// A (K x K, NTT form), expanded at the first relation call

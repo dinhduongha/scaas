@@ -888,7 +888,8 @@ impl Ctx {
         let mut s1 = PolyVec::new(tb.m1 as usize)?;
         let mut m = PolyVec::new((tb.l + tb.lext) as usize)?;
         let Some((mut s, mut t)) = build(a, r, stmt)? else { return Err(Error::Input) };
-        if !witness(&mut t, r, wit, &mut s1)? {
+        if !witness(&mut t, r, wit, &mut s1).inspect_err(|_| crate::wipe(&mut s1))? {
+            crate::wipe(&mut s1);
             return Err(Error::Input);
         }
         // do_prove; the seeds, s1 and s2 are cleared on every path out (C: explicit_bzero of ex; crate::wipe)
