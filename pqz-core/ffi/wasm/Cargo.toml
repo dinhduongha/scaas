@@ -17,7 +17,7 @@ pqz-ffi = { path = "..", default-features = false, features = ["prove"] }
 
 # the PQZL backend, forwarded to pqz-ffi (the same default as pqz-ffi's; ../run.sh's PQZL=rust|c picks one alone)
 [features]
-default = ["pqzl-c"]
+default = ["pqzl-rust"]
 pqzl-rust = ["pqz-ffi/pqzl-rust"]
 pqzl-c = ["pqz-ffi/pqzl-c"]
 

@@ -28,11 +28,13 @@ sha2 = { version = "=0.10.9", optional = true }
 cc = { version = "1", optional = true }
 
 [features]
-default = ["pqzl-c"]
-# the PQZL backend of `pqzl::` (CTR-PQZ-09): the Rust crate; with both features on, `pqzl::` is the Rust one and the
-# C core is `pqzl::c` (the differential and the fuzz mode `pqzl-diff`)
+# the PQZL backend (CTR-PQZ-09, owner 2026-10-18): the Rust crate by default, no C compiled
+default = ["pqzl-rust"]
+# `pqzl::` = the Rust crate `pqzl`; with `pqzl-c` too, the C core is `pqzl::c` (the differential and the fuzz mode
+# `pqzl-diff`)
 pqzl-rust = ["dep:pqzl"]
-# the PQZL C core (build.rs compiles it); the backend of `pqzl::` when `pqzl-rust` is off
+# the PQZL C core (build.rs compiles it), opt-in: `--no-default-features --features pqzl-c` makes it the backend of
+# `pqzl::` (the reference; run.sh / vectors/run.sh: PQZL=c)
 pqzl-c = ["dep:cc"]
 # prover side for clients (P6h): keygen, enc, dec, prove (PQZL and PQZH), witness layouts, test fixtures, the op 7
 # memo
