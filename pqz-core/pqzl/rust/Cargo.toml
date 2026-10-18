@@ -26,10 +26,25 @@ default = ["sv"]
 sv = []
 # R_TXM with M = 16 (bench only; does not fit MAX_INPUT)
 oversize = []
-# test entry points (test_mutate); with `c-oracle` also the C core's PQZ_TEST_HOOKS (pqz_test_mutate)
+# test entry points (test_mutate, the `testkit` module: kat_dump, keys_kat, the oracle tests); with `c-oracle` also
+# the C core's PQZ_TEST_HOOKS (pqz_test_mutate). Not in a production build.
 test-hooks = []
+# pqzl/test/pqz_bench.c's setup and steps (module `bench`: src/bin/bench.rs, wasm/). Not in a production build.
+bench = []
 # dev / test only: the C core (../src, ../lazer, ../params) as the oracle, module `c_oracle`
 c-oracle = ["dep:cc"]
+
+[[bin]]
+name = "kat_dump"
+required-features = ["test-hooks"]
+
+[[bin]]
+name = "keys_kat"
+required-features = ["test-hooks"]
+
+[[bin]]
+name = "bench"
+required-features = ["bench"]
 
 [[test]]
 name = "oracle_smoke"

@@ -10,7 +10,7 @@ use crate::arith::polymat::{Pm, PolyMat};
 use crate::arith::polyvec::PolyVec;
 use crate::arith::spoly::Sparse;
 use crate::coder::{decode_proof, encode_proof, ProofParts};
-use crate::keys::{be8, expand_a, rd_poly, rd_polyvec};
+use crate::keys::{a_of, be8, rd_poly, rd_polyvec};
 use crate::params::{self, Tbox};
 use crate::proof::tbox::{self, Statement};
 use crate::proof::{abdlop, Eq};
@@ -842,6 +842,7 @@ fn prover_seeds(rnd32: &[u8; 32], wit: &[u8], hash0: &[u8; 32]) -> ([u8; 32], [u
     let (mut a, mut b) = ([0u8; 32], [0u8; 32]);
     shake128(&[b"SCAAS-PQZ-PROVER-RND-V2", rnd32, &wh, hash0]).squeeze(&mut a);
     shake128(&[b"SCAAS-PQZ-PROVER-SUB-V2", rnd32, &wh, hash0]).squeeze(&mut b);
+    crate::wipe(&mut wh);
     (a, b)
 }
 
@@ -851,12 +852,10 @@ impl Ctx {
         if self.keys[ri].is_none() {
             self.keys[ri] = Some(rel_keys(&RELS[ri])?);
         }
-        if self.a.is_none() {
-            self.a = Some(expand_a()?);
-        }
-        match (&mut self.keys[ri], &mut self.a) {
-            (Some(k), Some(a)) => Ok((k, a)),
-            _ => Err(Error::Internal),
+        let a = a_of(&mut self.a)?;
+        match &mut self.keys[ri] {
+            Some(k) => Ok((k, a)),
+            None => Err(Error::Internal),
         }
     }
 
@@ -874,10 +873,14 @@ impl Ctx {
     }
 
     /// `pqz_prove` + `do_prove`: `Error::Input` for an unknown relation, a malformed statement or witness (also one
-    /// inconsistent with the statement, or above a norm bound) and an encoding over MAX_PROOF bytes
+    /// inconsistent with the statement, or above a norm bound), an encoding over MAX_PROOF bytes, and on wasm32 an
+    /// op 7 statement with more than `WASM_MAX_LEGS` legs
     pub(crate) fn prove_rel(&mut self, op: u8, stmt: &[u8], wit: &[u8], rnd32: &[u8; 32]) -> Result<Vec<u8>, Error> {
         let ri = rel_of(op, stmt).ok_or(Error::Input)?;
         let r = &RELS[ri];
+        if cfg!(target_arch = "wasm32") && r.op == crate::OP_TRANSFER_MULTI && r.legs > crate::WASM_MAX_LEGS {
+            return Err(Error::Input);
+        }
         let tb = r.p.tbox;
         let (keys, a) = self.rel_state(ri)?;
         let hash0 = stmt_hash(op, stmt);
@@ -888,15 +891,22 @@ impl Ctx {
         if !witness(&mut t, r, wit, &mut s1)? {
             return Err(Error::Input);
         }
-        // do_prove
-        let (ex0, ex1) = prover_seeds(rnd32, wit, &hash0);
+        // do_prove; the seeds, s1 and s2 are cleared on every path out (C: explicit_bzero of ex; crate::wipe)
         let mut s2 = PolyVec::new(tb.m2 as usize)?;
-        polyvec_urandom_bnd(&mut *s2, &Int::from_i64(1, -tb.nu), &Int::from_i64(1, tb.nu), &ex0, 0)?;
-        let mut t_a2 = PolyVec::new(tb.kmsis as usize)?;
-        let mut hash = hash0;
-        abdlop::commit(&mut f.t_a1, &mut t_a2, &mut s1, &mut s2, keys, tb)?;
-        abdlop::hashcomm(&mut hash, &mut f.t_a1, &mut f.t_b, tb)?;
-        tbox::prove(&mut hash, &mut f, &mut s1, &mut m, &mut s2, &mut t_a2, keys, &mut s, &ex1)?;
+        let (mut ex0, mut ex1) = prover_seeds(rnd32, wit, &hash0);
+        let r = (|| {
+            polyvec_urandom_bnd(&mut *s2, &Int::from_i64(1, -tb.nu), &Int::from_i64(1, tb.nu), &ex0, 0)?;
+            let mut t_a2 = PolyVec::new(tb.kmsis as usize)?;
+            let mut hash = hash0;
+            abdlop::commit(&mut f.t_a1, &mut t_a2, &mut s1, &mut s2, keys, tb)?;
+            abdlop::hashcomm(&mut hash, &mut f.t_a1, &mut f.t_b, tb)?;
+            tbox::prove(&mut hash, &mut f, &mut s1, &mut m, &mut s2, &mut t_a2, keys, &mut s, &ex1)
+        })();
+        crate::wipe(&mut ex0);
+        crate::wipe(&mut ex1);
+        crate::wipe(&mut s1);
+        crate::wipe(&mut s2);
+        r?;
         // cap = MAX_PROOF: an over-length proof is Input before any encoder assert (C: encproof's cap, then len >
         // PQZ_MAX_PROOF)
         encode_proof(&f, MAX_PROOF)
@@ -934,7 +944,8 @@ mod tests {
     /// `prove_refuses_noncanonical_statement` shows it is the statement parser that refuses)
     #[test]
     fn build_refuses_noncanonical() {
-        let mut a = expand_a().unwrap();
+        let mut a0 = None;
+        let a = a_of(&mut a0).unwrap();
         let mut ctx = Ctx::new();
         let cases = [
             (0, PREFIX_BYTES + 32, None),
@@ -948,15 +959,15 @@ mod tests {
         for (ri, coef, word) in cases {
             let r = &RELS[ri];
             let st = zero_stmt(r);
-            assert!(build(&mut a, r, &st).unwrap().is_some(), "{}", r.name);
+            assert!(build(a, r, &st).unwrap().is_some(), "{}", r.name);
             let mut bad = st.clone();
             bad[coef..coef + 8].copy_from_slice(&Q.to_be_bytes());
-            assert!(build(&mut a, r, &bad).unwrap().is_none(), "{} coefficient", r.name);
+            assert!(build(a, r, &bad).unwrap().is_none(), "{} coefficient", r.name);
             assert_eq!(ctx.prove(r.op, &bad, &[], &[0; 32]), Err(Error::Input), "{} coefficient", r.name);
             if let Some(w) = word {
                 let mut bad = st;
                 bad[w] = 1;
-                assert!(build(&mut a, r, &bad).unwrap().is_none(), "{} word", r.name);
+                assert!(build(a, r, &bad).unwrap().is_none(), "{} word", r.name);
                 assert_eq!(ctx.prove(r.op, &bad, &[], &[0; 32]), Err(Error::Input), "{} word", r.name);
             }
         }

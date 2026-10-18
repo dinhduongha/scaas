@@ -323,12 +323,12 @@ impl Bench {
     /// statement coefficient changed, 3 the proof truncated by one byte, 4 an all-ones tail, 5 a public scalar
     /// changed; deterministic in (kind, seed): the test RNG state is restored
     pub fn verify_bad(&mut self, rel: usize, kind: u32, seed: u32) -> bool {
-        let xs0 = self.xs.0;
-        self.xs.0 ^= (seed as u64).wrapping_mul(0x9E3779B97F4A7C15);
         let (op, len) = (self.ops[rel], self.proofs[rel].len());
         if len == 0 {
-            return false; // no proof (C: undefined for kinds 0 and 3)
+            return false; // no proof (C: undefined for kinds 0 and 3); the test RNG is untouched
         }
+        let xs0 = self.xs.0; // step_verify_bad saves and restores it around verify_bad
+        self.xs.0 ^= (seed as u64).wrapping_mul(0x9E3779B97F4A7C15);
         let mut bad = self.proofs[rel].clone();
         let r = match kind {
             0 => {

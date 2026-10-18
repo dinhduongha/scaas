@@ -313,13 +313,14 @@ fn check_z34(hash: &mut [u8; 32], z3: &mut PolyVec, z4: &mut PolyVec, t_b: &mut 
 }
 
 /// the coefficients of the polys `v` (z3 or z4: 256 of them)
-fn coeffs(v: &mut PolyVec) -> Vec<Int> {
+fn coeffs(v: &mut PolyVec) -> Result<Vec<Int>, Error> {
     let mut r = Vec::new();
+    r.try_reserve_exact(v.len() * D).map_err(|_| Error::Memory)?;
     for p in v.iter_mut() {
         p.fromcrt();
         r.extend((0..D).map(|j| p.c(j)));
     }
-    r
+    Ok(r)
 }
 
 /// -(<z, V_k> mod q), centred (`intvec_dot`, `int_mod`, `int_neg_self`, `int_redc`)
@@ -373,7 +374,7 @@ fn sz_z4(a1: &mut [Acc], a2: &mut [Acc], ods: &mut PolyMat, z4: &mut PolyVec, se
     let inv2 = &tb.ring.inv2;
     let n_ = 2 * (tb.m1 + p.quad_eval.quad_eval.l) as usize;
     let v = intmat_urandom(lambda, seed, dom)?;
-    let z4_ = coeffs(z4);
+    let z4_ = coeffs(z4)?;
     let mut vrpol = vr_polys(&v, p.nprime as usize * D, seed, 256)?;
     let mut vrds = PolyMat::new(lambda, m1)?;
     for k in 0..lambda {
@@ -436,7 +437,7 @@ fn sz_z3(
     let inv2 = &tb.ring.inv2;
     let n_ = 2 * (tb.m1 + p.quad_eval.quad_eval.l) as usize;
     let v = intmat_urandom(lambda, seed, dom)?;
-    let z3_ = coeffs(z3);
+    let z3_ = coeffs(z3)?;
     let mut vrpol = vr_polys(&v, nex * D, seed, 0)?;
     let mut vrps = PolyMat::new(lambda, m1)?;
     let has_ps = ops.is_some();

@@ -2,6 +2,7 @@
 //! serves both:
 //!   cargo run --release --bin keys_kat 1000 > k.jsonl
 //!   python3 -I smartcontracts/vectors/pqz/pqz_kat.py --c-keys k.jsonl
+//! `keys_kat 1000 ctx` runs every KeyGen / Enc through one `Ctx`'s methods instead (same output, run.sh compares).
 //!
 //! In C's section numbers and order: 1. SHAKE256 on 10 inputs, absorbed and squeezed in two parts; 2. KeyGen on 20
 //! seeds, Enc of two values to recipients i and i + 1, Dec by both, the R_TXM group seeds; 4. the resample path and
@@ -12,7 +13,7 @@
 //! array in C, that is the previous iteration's `pk`, as the compiled C prints; the check ignores it). Apart from the
 //! `before_init_rejected` line, the output equals the C binary's byte for byte.
 use pqzl::testkit::{enc_seed_lowered, keygen_lowered};
-use pqzl::{dec, enc_group_seed, enc_seed, keygen, Error, CT_BYTES, POLYVEC_BYTES, V_BYTES};
+use pqzl::{dec, enc_group_seed, enc_seed, keygen, Ctx, Enc, Error, Key, CT_BYTES, POLYVEC_BYTES, V_BYTES};
 use sha3::digest::{ExtendableOutput, Update, XofReader};
 use sha3::Shake256;
 use std::fmt::Write;
@@ -70,8 +71,20 @@ fn rc<T>(r: &Result<T, Error>) -> i32 {
     }
 }
 
+/// KeyGen through `Ctx::keygen` when `ctx` is set (`keys_kat n ctx`), else the free function
+fn kg(ctx: &mut Option<Ctx>, sd: &[u8; 32]) -> Result<Key, Error> {
+    ctx.as_mut().map_or_else(|| keygen(sd), |c| c.keygen(sd))
+}
+
+/// Enc through `Ctx::enc_seed` when `ctx` is set, else the free function
+fn es(ctx: &mut Option<Ctx>, pks: &[&[u8; POLYVEC_BYTES]], m: &[[u8; 16]], se: &[u8; 32]) -> Result<Enc, Error> {
+    ctx.as_mut().map_or_else(|| enc_seed(pks, m, se), |c| c.enc_seed(pks, m, se))
+}
+
 fn main() {
     let nrt: usize = std::env::args().nth(1).map_or(1000, |a| a.parse().expect("n_roundtrip"));
+    // `ctx`: every KeyGen / Enc through one Ctx's methods (its cached A); the output must not change
+    let mut ctx = (std::env::args().nth(2).as_deref() == Some("ctx")).then(Ctx::new);
     let mut fails = 0;
     // C's static buffers: an error leaves them as they were
     let mut u = vec![0u8; POLYVEC_BYTES];
@@ -105,7 +118,7 @@ fn main() {
     let seed: Vec<[u8; 32]> = (0..NK).map(|i| core::array::from_fn(|j| (31 * i + j) as u8)).collect();
     let mut keys = Vec::new();
     for sd in &seed {
-        let k = keygen(sd);
+        let k = kg(&mut ctx, sd);
         fails += (rc(&k) != 0) as i32;
         let k = k.expect("keygen");
         let (sd, ctr, h) = (hex(sd), k.ctr, sh256(&k.pk[..]));
@@ -117,7 +130,7 @@ fn main() {
         let v = [mix(i as u64), if i == 0 { !0 } else { mix(i as u64) >> (i % 64) }];
         se = core::array::from_fn(|j| (17 * i + j + 1) as u8);
         m = [digits(v[0]), digits(v[1])];
-        let c = enc_seed(&[&*keys[i].pk, &*keys[t].pk], &m, &se);
+        let c = es(&mut ctx, &[&*keys[i].pk, &*keys[t].pk], &m, &se);
         let mut r = rc(&c);
         let ctr = c.as_ref().map_or(0, |c| c.ctr);
         if let Ok(c) = &c {
@@ -160,12 +173,12 @@ fn main() {
     let mut kp = vec![0u8; POLYVEC_BYTES];
     for (c, l) in LS.iter().enumerate() {
         let sd = &seed[l[3] as usize];
-        let k = keygen_lowered(sd, l[0], l[1]);
+        let k = keygen_lowered(ctx.as_mut(), sd, l[0], l[1]);
         let (bs, be, b2) = (if l[0] != 0 { l[0] } else { 36 }, l[1], l[2]);
         se = core::array::from_fn(|j| (101 * c + j) as u8);
         let mv = [mix(c as u64), mix(c as u64 + 50)];
         m = [digits(mv[0]), digits(mv[1])];
-        let e = enc_seed_lowered(&[&*keys[0].pk, &*keys[1].pk], &m, &se, bs, be, b2);
+        let e = enc_seed_lowered(ctx.as_mut(), &[&*keys[0].pk, &*keys[1].pk], &m, &se, bs, be, b2);
         let (rk, re) = (rc(&k), rc(&e));
         let ck = k.as_ref().map_or(-1, |k| k.ctr as i64);
         let ce = e.as_ref().map_or(-1, |e| e.ctr as i64);
@@ -206,10 +219,10 @@ fn main() {
         let (mut c1, mut c2) = (0, 0);
         let mut bad = false;
         m[0] = digits(mix(i as u64));
-        match keygen(&sd) {
+        match kg(&mut ctx, &sd) {
             Ok(k) => {
                 (c1, s0) = (k.ctr, k.s);
-                match enc_seed(&[&*k.pk], &m[..1], &se) {
+                match es(&mut ctx, &[&*k.pk], &m[..1], &se) {
                     Ok(c) => {
                         c2 = c.ctr;
                         ctv(&mut ct, &c.u[..], &c.vs[0]);
@@ -235,9 +248,9 @@ fn main() {
     let mut nc = dec(&s0, &as_ct(&ct)).is_err() as i32;
     let mut pkx = keys[0].pk.clone();
     pkx[..8].fill(0xff); // a pk coefficient >= q
-    nc += enc_seed(&[&*pkx], &m[..1], &se).is_err() as i32;
+    nc += es(&mut ctx, &[&*pkx], &m[..1], &se).is_err() as i32;
     m[0][3] = 16; // a digit >= 16
-    nc += enc_seed(&[&*keys[1].pk], &m[..1], &se).is_err() as i32;
+    nc += es(&mut ctx, &[&*keys[1].pk], &m[..1], &se).is_err() as i32;
     fails += (nc != 3) as i32;
     println!("{{\"roundtrip\": {nrt}, \"max_abs_noise\": {maxn}, \"bound\": {B_FRESH}, \"max_ctr\": {maxctr}, \
               \"noncanonical_rejected\": {nc}, \"fails\": {fails}}}");

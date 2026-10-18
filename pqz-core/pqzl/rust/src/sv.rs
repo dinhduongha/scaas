@@ -32,7 +32,6 @@ use crate::rand::rng::Rng;
 use crate::rand::urandom::urandom_i64;
 use crate::rel::{self, Rel, RELS};
 use crate::{Ctx, Error, HEADER_BYTES, MAX_PROOF, POLYVEC_BYTES, PREFIX_BYTES, V_BYTES};
-use alloc::boxed::Box;
 use alloc::vec::Vec;
 
 const NP: usize = 4;
@@ -1738,11 +1737,11 @@ impl Ctx {
         self.rel_state(ri)?;
         let (Some(keys), Some(a)) = (&self.keys[ri], &self.a) else { return Err(Error::Internal) };
         if self.sv.is_none() {
-            self.sv = Some(Box::new(Ar::new(a)?));
+            self.sv = Some(Ar::new(a)?);
         }
         let Some(ar) = &self.sv else { return Err(Error::Internal) };
         if self.svrel[ri].is_none() {
-            self.svrel[ri] = Some(Box::new(setup(ar, r, keys)?));
+            self.svrel[ri] = Some(setup(ar, r, keys)?);
         }
         let Some(s) = &self.svrel[ri] else { return Err(Error::Internal) };
         let h = rel::stmt_hash(op, stmt);

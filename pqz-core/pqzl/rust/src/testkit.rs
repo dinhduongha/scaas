@@ -28,13 +28,14 @@ pub fn ntt_basemul(a: &[u64; 64], b: &[u64; 64]) -> [u64; 64] {
 }
 
 /// `pqz_keygen` with lowered norm thresholds (the C core's PQZ_TEST_HOOKS knobs `pqz_test_bs` / `pqz_test_be`): the
-/// keys KAT pins the resample path and the counter-64 error with them
-pub fn keygen_lowered(seed32: &[u8; 32], bs: i64, be: i64) -> Result<crate::Key, crate::Error> {
-    crate::keys::keygen(seed32, bs, be)
+/// keys KAT pins the resample path and the counter-64 error with them; with `ctx` as `Ctx::keygen` (its cached A)
+pub fn keygen_lowered(ctx: Option<&mut crate::Ctx>, seed32: &[u8; 32], bs: i64, be: i64) -> Result<crate::Key, crate::Error> {
+    crate::keys::keygen(ctx.map_or(&mut None, |c| &mut c.a), seed32, bs, be)
 }
 
-/// `pqz_enc_seed` with lowered norm thresholds (`pqz_test_bs` / `_be` / `_b2`)
+/// `pqz_enc_seed` with lowered norm thresholds (`pqz_test_bs` / `_be` / `_b2`); with `ctx` as `Ctx::enc_seed`
 pub fn enc_seed_lowered(
+    ctx: Option<&mut crate::Ctx>,
     pks: &[&[u8; crate::POLYVEC_BYTES]],
     msgs: &[[u8; 16]],
     seed_enc: &[u8; 32],
@@ -42,7 +43,7 @@ pub fn enc_seed_lowered(
     be: i64,
     b2: i64,
 ) -> Result<crate::Enc, crate::Error> {
-    crate::keys::enc_seed(pks, msgs, seed_enc, (bs, be, b2))
+    crate::keys::enc_seed(ctx.map_or(&mut None, |c| &mut c.a), pks, msgs, seed_enc, (bs, be, b2))
 }
 
 /// `print_int`: up to two limbs as a decimal (a zero of either sign is `0`), else `"overflow"`

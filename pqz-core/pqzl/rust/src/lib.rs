@@ -21,6 +21,7 @@ pub mod c_oracle;
 // of later tasks too; until those land, part is unused
 #[allow(dead_code)]
 mod arith;
+#[cfg(feature = "bench")]
 #[doc(hidden)]
 pub mod bench; // pqzl/test/pqz_bench.c's setup and steps (src/bin/bench.rs, wasm/): test entry points, not API
 #[allow(dead_code)]
@@ -34,8 +35,9 @@ mod proof;
 mod rel;
 #[cfg(feature = "sv")]
 mod sv;
+#[cfg(any(feature = "test-hooks", feature = "c-oracle"))]
 #[doc(hidden)]
-pub mod testkit;
+pub mod testkit; // test entry points (kat_dump, keys_kat, the oracle tests), not API
 
 pub const OP_TRANSFER: u8 = 1;
 pub const OP_BURN: u8 = 2;
@@ -57,6 +59,9 @@ pub const PREFIX_BYTES: usize = 64;
 pub const HEADER_BYTES: usize = 640;
 /// R_TXM legs built (16 only with feature `oversize`, bench builds)
 pub const TXM_MAX_LEGS: usize = if cfg!(feature = "oversize") { 16 } else { 8 };
+/// wasm32: `prove` of op 7 only up to this many legs, M = 8 is `Error::Input` before any work (pqz-ffi's
+/// `WASM_PQZL_MAX_LEGS`, the C core's one client arena); verify takes every M
+pub const WASM_MAX_LEGS: usize = 4;
 /// keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v2") (CTR-PQZ-09)
 pub const PROOF_SYSTEM_ID: [u8; 32] = [
     0x2e, 0x07, 0xe6, 0xed, 0x1f, 0xd3, 0x03, 0xa0, 0x8c, 0x89, 0xb3, 0xea, 0xb6, 0xe8, 0x42, 0x3f, 0xdf, 0xb8, 0xf3, 0x12,
@@ -76,8 +81,20 @@ pub enum Error {
     Memory,
 }
 
+/// Clears secret material where the C core calls `explicit_bzero` (the prover's seeds `wh` / `ex`, `pqz_dec`'s `w`;
+/// here also the witness vector s1 and the commitment randomness s2). Best effort, not guaranteed: without unsafe
+/// code (no volatile write) and without a zeroize crate (D1) the compiler may still elide the stores; `black_box`
+/// on the cleared buffer makes that unlikely. Copies the compiler made earlier (moves, registers, spilled stack) and
+/// the other intermediate buffers of the prover are not cleared, as in C (STATUS Open 8).
+pub(crate) fn wipe<T: Default>(x: &mut [T]) {
+    x.iter_mut().for_each(|e| *e = T::default());
+    core::hint::black_box(&*x);
+}
+
 /// What the C core keeps in static storage (the matrix A, each relation's ABDLOP keys, specialised-verifier tables),
-/// built lazily at first use.
+/// built lazily at first use. No globals and no interior mutability: every call takes `&mut self`, so a `Ctx` per
+/// thread needs no lock, and one `Ctx` moves between threads (`Send`) behind whatever hands out the `&mut`. A call
+/// that fails (also on allocation failure) leaves the caches usable: the next call rebuilds what is missing.
 #[derive(Default)]
 pub struct Ctx {
     /// A (K x K, NTT form), expanded at the first relation call
@@ -86,10 +103,10 @@ pub struct Ctx {
     keys: [Option<[arith::polymat::PolyMat; 3]>; rel::NREL],
     /// the specialised verifier's primes and A in its form, built at the first `verify_fast`
     #[cfg(feature = "sv")]
-    sv: Option<Box<sv::Ar>>,
+    sv: Option<sv::Ar>,
     /// the specialised verifier's tables per relation (`rel::RELS` order)
     #[cfg(feature = "sv")]
-    svrel: [Option<Box<sv::SvRel>>; rel::NREL],
+    svrel: [Option<sv::SvRel>; rel::NREL],
 }
 
 impl Ctx {
@@ -97,7 +114,8 @@ impl Ctx {
         Ctx::default()
     }
 
-    /// `pqz_prove`: the proof for `(op, stmt, wit)` with the hedged masks from `rnd32` (CTR-PQZ-19).
+    /// `pqz_prove`: the proof for `(op, stmt, wit)` with the hedged masks from `rnd32` (CTR-PQZ-19). On wasm32, op 7
+    /// with more than [`WASM_MAX_LEGS`] legs is `Error::Input`.
     pub fn prove(&mut self, op: u8, stmt: &[u8], wit: &[u8], rnd32: &[u8; 32]) -> Result<Vec<u8>, Error> {
         self.prove_rel(op, stmt, wit, rnd32)
     }
@@ -111,6 +129,33 @@ impl Ctx {
     #[cfg(feature = "sv")]
     pub fn verify_fast(&mut self, op: u8, stmt: &[u8], proof: &[u8]) -> bool {
         self.verify_sv(op, stmt, proof) == Ok(true)
+    }
+
+    /// [`keygen`] with this `Ctx`'s A (expanded once, shared with its relations): same arguments, same result.
+    pub fn keygen(&mut self, seed32: &[u8; 32]) -> Result<Key, Error> {
+        keys::keygen(&mut self.a, seed32, keys::BS, keys::BE)
+    }
+
+    /// [`keypair_from_secret`] with this `Ctx`'s A: same arguments, same result.
+    pub fn keypair_from_secret(&mut self, s: &[i8; 2048], e: &[i16; 2048]) -> Result<Box<[u8; POLYVEC_BYTES]>, Error> {
+        keys::keypair_from_secret(&mut self.a, s, e)
+    }
+
+    /// [`encrypt`] with this `Ctx`'s A: same arguments, same result.
+    pub fn encrypt(
+        &mut self,
+        pks: &[&[u8; POLYVEC_BYTES]],
+        msgs: &[[u8; 16]],
+        r: &[i8; 2048],
+        e1: &[i16; 2048],
+        e2: &[[i16; 16]],
+    ) -> Result<Enc, Error> {
+        keys::encrypt(&mut self.a, pks, msgs, r, e1, e2)
+    }
+
+    /// [`enc_seed`] with this `Ctx`'s A: same arguments, same result.
+    pub fn enc_seed(&mut self, pks: &[&[u8; POLYVEC_BYTES]], msgs: &[[u8; 16]], seed_enc: &[u8; 32]) -> Result<Enc, Error> {
+        keys::enc_seed(&mut self.a, pks, msgs, seed_enc, (keys::BS, keys::BE, keys::B2))
     }
 }
 
@@ -136,17 +181,17 @@ pub struct Enc {
 
 /// `pqz_keypair_from_secret`: pk = A s + e (no norm check).
 pub fn keypair_from_secret(s: &[i8; 2048], e: &[i16; 2048]) -> Result<Box<[u8; POLYVEC_BYTES]>, Error> {
-    keys::keypair_from_secret(s, e)
+    keys::keypair_from_secret(&mut None, s, e)
 }
 
 /// `pqz_keygen`: SHAKE256("SCAAS-PQZ-KEYGEN-V1" || seed32 || be4(ctr)), s <- CBD_1, e <- CBD_20, pk = A s + e.
 pub fn keygen(seed32: &[u8; 32]) -> Result<Key, Error> {
-    keys::keygen(seed32, keys::BS, keys::BE)
+    keys::keygen(&mut None, seed32, keys::BS, keys::BE)
 }
 
 /// `pqz_enc_seed`: one encryption of `msgs[j]` (16 digits < 16) to `pks[j]` from `seed_enc`.
 pub fn enc_seed(pks: &[&[u8; POLYVEC_BYTES]], msgs: &[[u8; 16]], seed_enc: &[u8; 32]) -> Result<Enc, Error> {
-    keys::enc_seed(pks, msgs, seed_enc, (keys::BS, keys::BE, keys::B2))
+    keys::enc_seed(&mut None, pks, msgs, seed_enc, (keys::BS, keys::BE, keys::B2))
 }
 
 /// `pqz_enc_group_seed`: R_TXM group `g`'s seed (seed_enc for g = 0, else SHAKE256("SCAAS-PQZ-ENC-GROUP-V1" ||
@@ -163,7 +208,7 @@ pub fn encrypt(
     e1: &[i16; 2048],
     e2: &[[i16; 16]],
 ) -> Result<Enc, Error> {
-    keys::encrypt(pks, msgs, r, e1, e2)
+    keys::encrypt(&mut None, pks, msgs, r, e1, e2)
 }
 
 /// `pqz_decrypt_raw`: w_i = centre(v_i - (u^T s)_i).
