@@ -696,20 +696,21 @@ poly_auto_self (poly_t r)
       crtcoeff_t *crb, *cre, tmp;
       polyring_srcptr ring = poly_get_ring (r);
       const unsigned int deg = polyring_get_deg (ring);
-      unsigned int i, j;
+      unsigned int j;
 
-      _POLYRING_FOREACH_P (ring, i)
-      {
-        for (j = 0; j < deg / 2; j++)
-          {
-            crb = _get_crtcoeff (r->crtrep, i, j, deg);
-            cre = _get_crtcoeff (r->crtrep, i, deg - j - 1, deg);
+      /* PQZ: the fork's crtrep is one residue vector of deg words (_sizeof_crtrep_data), not one per CRT prime; the
+         loop over ring->nmoduli (2 in the generated rings) also reversed the deg words past the buffer. Reverse the one
+         vector only (2026-10-18, as the Rust port). Not reached by any relation; in the incomplete NTT (pqz_ntt.c) the
+         reversal is not X -> X^-1 (upstream's fully split CRT order made it so). */
+      for (j = 0; j < deg / 2; j++)
+        {
+          crb = _get_crtcoeff (r->crtrep, 0, j, deg);
+          cre = _get_crtcoeff (r->crtrep, 0, deg - j - 1, deg);
 
-            tmp = *crb;
-            *crb = *cre;
-            *cre = tmp;
-          }
-      }
+          tmp = *crb;
+          *crb = *cre;
+          *cre = tmp;
+        }
     }
   else
     {

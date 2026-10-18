@@ -1,0 +1,73 @@
+seeds.py: 44 honest inputs -> honest.bin (24 P6e, 19 op 7, 1 regress/valid); 776 precompile seeds (731 negative.json rows, 342 of them op 7)
+# fuzz codec, 60 s, 2026-10-18T09:28:40+07:00, commit bd7677d, Ubuntu clang version 18.1.3 (1ubuntu1), rustc 1.97.1 (8bab26f4f 2026-07-14)
+pqz-fuzz: arena peak 268240256 B (bound 357913940 B)
+pqz-fuzz init (codec): 44 honest inputs valid, self-test ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205, verify-only arena 512 MiB, arena used 265693696 B, peak 268240256 B
+INFO: Running with entropic power schedule (0xFF, 100).
+INFO: Seed: 164866251
+INFO: Loaded 1 modules   (26847 inline 8-bit counters): 26847 [0x593cc09432b0, 0x593cc0949b8f), 
+INFO: Loaded 1 PC tables (26847 PCs): 26847 [0x593cc0949b90,0x593cc09b2980), 
+INFO:        0 files found in /home/ha/work/ainative/scaas/.claude/worktrees/pqzl-c-hardening/pqz-core/build/fuzz/work/codec
+INFO:      246 files found in corpus/codec
+INFO:        0 files found in regress/codec
+INFO:      220 files found in /home/ha/work/ainative/scaas/.claude/worktrees/pqzl-c-hardening/pqz-core/build/fuzz/seeds/codec
+INFO: seed corpus: files: 466 min: 1b max: 130b total: 2167b rss: 481Mb
+#467	INITED cov: 905 ft: 1659 corp: 262/1527b exec/s: 116 rss: 581Mb
+#512	pulse  cov: 905 ft: 1659 corp: 262/1527b lim: 130 exec/s: 128 rss: 581Mb
+#759	NEW    cov: 905 ft: 1687 corp: 263/1601b lim: 137 exec/s: 126 rss: 627Mb L: 74/130 MS: 2 EraseBytes-InsertRepeatedBytes-
+#765	NEW    cov: 905 ft: 1693 corp: 264/1603b lim: 137 exec/s: 127 rss: 628Mb L: 2/130 MS: 1 ChangeBinInt-
+#1024	pulse  cov: 905 ft: 1693 corp: 264/1603b lim: 137 exec/s: 128 rss: 648Mb
+#1131	NEW    cov: 905 ft: 1694 corp: 265/1614b lim: 137 exec/s: 125 rss: 648Mb L: 11/130 MS: 1 InsertRepeatedBytes-
+#1225	NEW    cov: 905 ft: 1697 corp: 266/1619b lim: 137 exec/s: 122 rss: 653Mb L: 5/130 MS: 4 EraseBytes-CopyPart-InsertByte-ChangeBinInt-
+#1241	NEW    cov: 905 ft: 1699 corp: 267/1622b lim: 137 exec/s: 124 rss: 653Mb L: 3/130 MS: 1 CopyPart-
+#1245	NEW    cov: 905 ft: 1700 corp: 268/1631b lim: 137 exec/s: 124 rss: 653Mb L: 9/130 MS: 4 InsertRepeatedBytes-EraseBytes-ChangeBinInt-CopyPart-
+#1698	NEW    cov: 909 ft: 1704 corp: 269/1636b lim: 137 exec/s: 121 rss: 653Mb L: 5/130 MS: 3 ChangeByte-ChangeBinInt-CrossOver-
+#1751	NEW    cov: 909 ft: 1705 corp: 270/1752b lim: 137 exec/s: 116 rss: 653Mb L: 116/130 MS: 3 ChangeBinInt-InsertRepeatedBytes-InsertByte-
+#2048	pulse  cov: 909 ft: 1705 corp: 270/1752b lim: 137 exec/s: 102 rss: 653Mb
+#3292	NEW    cov: 909 ft: 1710 corp: 271/1766b lim: 151 exec/s: 80 rss: 653Mb L: 14/130 MS: 1 CMP- DE: "\000\000\000\000\000\000\000\030"-
+#3400	REDUCE cov: 909 ft: 1710 corp: 271/1765b lim: 151 exec/s: 79 rss: 653Mb L: 4/130 MS: 3 ChangeASCIIInt-EraseBytes-InsertByte-
+#4096	pulse  cov: 909 ft: 1710 corp: 271/1765b lim: 151 exec/s: 73 rss: 653Mb
+#4390	DONE   cov: 909 ft: 1710 corp: 271/1765b lim: 158 exec/s: 71 rss: 653Mb
+###### Recommended dictionary. ######
+"\000\000\000\000\000\000\000\030" # Uses: 75
+###### End of recommended dictionary. ######
+Done 4390 runs in 61 second(s)
+stat::number_of_executed_units: 4390
+stat::average_exec_per_sec:     71
+stat::new_units_added:          10
+stat::slowest_unit_time_sec:    0
+stat::peak_rss_mb:              653
+pqz-fuzz summary (codec): 4293 inputs checked, 1755 decoded (660 op 7), 0 valid (= unmodified honest; mutate skips those), 0 differential SV = generic (0 op 7), 642 PQZL proof re-encodings equal, arena peak max 268240256 B = 255.81 MiB (bound 341 MiB, ARENA_SMALL 512 MiB)
+[fuzz rc=0]
+pqz-fuzz: arena peak 268240256 B (bound 357913940 B)
+pqz-fuzz init (codec): 44 honest inputs valid, self-test ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205, verify-only arena 512 MiB, arena used 265693696 B, peak 268240256 B
+INFO: Running with entropic power schedule (0xFF, 100).
+INFO: Seed: 803139595
+INFO: Loaded 1 modules   (26847 inline 8-bit counters): 26847 [0x5aa58ff7b2b0, 0x5aa58ff81b8f), 
+INFO: Loaded 1 PC tables (26847 PCs): 26847 [0x5aa58ff81b90,0x5aa58ffea980), 
+MERGE-OUTER: 255 files, 0 in the initial corpus, 0 processed earlier
+MERGE-OUTER: attempt 1
+pqz-fuzz: arena peak 268240256 B (bound 357913940 B)
+pqz-fuzz init (codec): 44 honest inputs valid, self-test ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205, verify-only arena 512 MiB, arena used 265693696 B, peak 268240256 B
+INFO: Running with entropic power schedule (0xFF, 100).
+INFO: Seed: 4223498457
+INFO: Loaded 1 modules   (26847 inline 8-bit counters): 26847 [0x5bd202be22b0, 0x5bd202be8b8f), 
+INFO: Loaded 1 PC tables (26847 PCs): 26847 [0x5bd202be8b90,0x5bd202c51980), 
+MERGE-INNER: using the control file '/tmp/libFuzzerTemp.Merge1103381.txt'
+MERGE-INNER: 255 total files; 0 processed earlier; will process 255 files now
+#1	pulse  cov: 3 ft: 3 exec/s: 0 rss: 481Mb
+#2	pulse  cov: 395 ft: 395 exec/s: 0 rss: 482Mb
+#4	pulse  cov: 444 ft: 522 exec/s: 0 rss: 482Mb
+#8	pulse  cov: 486 ft: 602 exec/s: 0 rss: 483Mb
+#16	pulse  cov: 602 ft: 868 exec/s: 0 rss: 484Mb
+#32	pulse  cov: 652 ft: 1027 exec/s: 0 rss: 486Mb
+#64	pulse  cov: 722 ft: 1184 exec/s: 64 rss: 492Mb
+#128	pulse  cov: 826 ft: 1439 exec/s: 64 rss: 505Mb
+#255	DONE   cov: 890 ft: 1641 exec/s: 42 rss: 527Mb
+pqz-fuzz summary (codec): 254 inputs checked, 94 decoded (31 op 7), 0 valid (= unmodified honest; mutate skips those), 0 differential SV = generic (0 op 7), 73 PQZL proof re-encodings equal, arena peak max 268240256 B = 255.81 MiB (bound 341 MiB, ARENA_SMALL 512 MiB)
+MERGE-OUTER: successful in 1 attempt(s)
+MERGE-OUTER: the control file has 37060 bytes
+MERGE-OUTER: consumed 0Mb (482Mb rss) to parse the control file
+MERGE-OUTER: 238 new files with 1641 new features added; 890 new coverage edges
+pqz-fuzz summary (codec): 0 inputs checked, 0 decoded (0 op 7), 0 valid (= unmodified honest; mutate skips those), 0 differential SV = generic (0 op 7), 0 PQZL proof re-encodings equal, arena peak max 268240256 B = 255.81 MiB (bound 341 MiB, ARENA_SMALL 512 MiB)
+[merge rc=0]
+corpus/codec: 238 inputs, 1657 B (merged set 238 inputs, 1657 B)

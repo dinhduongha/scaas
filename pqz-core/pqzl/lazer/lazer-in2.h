@@ -2319,7 +2319,9 @@ static inline void
 int_set_i64 (int_t r, int64_t a)
 {
   r->neg = _i642neg (a);
-  r->limbs[0] = _i642sign (a) * a;
+  /* PQZ: |a| in unsigned arithmetic; upstream's _i642sign (a) * a overflowed for a = INT64_MIN (undefined behaviour,
+     reached by pqz_rel.c rd_poly on the non-canonical word 2^63 + q); |INT64_MIN| = 2^63 as before */
+  r->limbs[0] = (limb_t)_i642sign (a) * (limb_t)a;
   limbs_set (r->limbs + 1, 0, r->nlimbs - 1);
 }
 

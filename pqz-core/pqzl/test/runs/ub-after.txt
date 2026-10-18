@@ -1,0 +1,35 @@
+# ub_test after: 43e48d5, Ubuntu clang version 18.1.3 (1ubuntu1)
+# clang-18 -std=gnu11 -O1 -g -fsanitize=undefined,address -fno-omit-frame-pointer -DPQZ_DEBUG_MALLOC -fno-sanitize-recover=all -fno-sanitize=pointer-overflow -w -Ibuild/include -Isrc -Ilazer -Iparams
+== part a
+ok   fixexp x >= 64 saturates to exp(64)
+ok   fixexp x < -64 saturates to exp(-64)
+ok   fixexp unchanged on [-64, 64)
+ok   rej_standard t2 - 2 t1 wraps (num > 2^127): accept
+ok   rej_standard t - ln M wraps: accept
+ok   rej_standard num = -2^127, |num| in _quot_q56: accept
+ok   rej_bimodal a - |y| - ln M wraps: accept
+PASS (0 failed)
+== part a rc=0
+== part b
+ok   pqz_init
+ok   keypair
+ok   pqz_encrypt pk coefficient 2^63 + 0 = its reading mod q
+ok   pqz_decrypt_raw u coefficient 2^63 + 0 = its reading mod q
+ok   pqz_decrypt_raw v coefficient 2^63 + 0 = (V - q) - acc mod 2^64
+ok   pqz_encrypt pk coefficient 2^63 + 5 = its reading mod q
+ok   pqz_decrypt_raw u coefficient 2^63 + 5 = its reading mod q
+ok   pqz_decrypt_raw v coefficient 2^63 + 5 = (V - q) - acc mod 2^64
+ok   pqz_encrypt pk coefficient 2^63 + 4398046510888 = its reading mod q
+ok   pqz_decrypt_raw u coefficient 2^63 + 4398046510888 = its reading mod q
+ok   pqz_decrypt_raw v coefficient 2^63 + 4398046510888 = (V - q) - acc mod 2^64
+ok   pqz_encrypt pk coefficient 2^63 + 4398046510889 = its reading mod q
+ok   pqz_decrypt_raw u coefficient 2^63 + 4398046510889 = its reading mod q
+ok   pqz_decrypt_raw v coefficient 2^63 + 4398046510889 = (V - q) - acc mod 2^64
+PASS (0 failed)
+== part b rc=0
+== part c
+ok   poly_auto_self crt: the one residue vector reversed, nothing past it
+info poly_auto_self crt branch equals X -> X^-1: no
+PASS (0 failed)
+== part c rc=0
+ub_test after: PASS

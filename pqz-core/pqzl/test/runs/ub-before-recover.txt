@@ -1,0 +1,198 @@
+# ub_test before-recover: unfixed sources = git archive of a0dd89a (main) pqz-core/pqzl + test/pqz_ub_test.c, test/ub_test.sh; Ubuntu clang version 18.1.3 (1ubuntu1)
+# clang-18 -std=gnu11 -O1 -g -fsanitize=undefined,address -fno-omit-frame-pointer -DPQZ_DEBUG_MALLOC -w -Ibuild/include -Isrc -Ilazer -Iparams
+== part a
+src/pqz_fixexp.h:54:39: runtime error: signed integer overflow: 4611686018427387904 + 4611686018427387904 cannot be represented in type 'int64_t' (aka 'long')
+    #0 0x58b11807c867 in pqz_exp_fp <unfixed copy>/pqz-core/pqzl/src/pqz_fixexp.h:54:39
+    #1 0x58b11807a61f in exp_eq <unfixed copy>/pqz-core/pqzl/test/pqz_ub_test.c:58:3
+    #2 0x58b11807a61f in test_fixexp <unfixed copy>/pqz-core/pqzl/test/pqz_ub_test.c:70:11
+    #3 0x58b11807a61f in main <unfixed copy>/pqz-core/pqzl/test/pqz_ub_test.c:279:5
+    #4 0x7a0cbcc2a1c9 in __libc_start_call_main csu/../sysdeps/nptl/libc_start_call_main.h:58:16
+    #5 0x7a0cbcc2a28a in __libc_start_main csu/../csu/libc-start.c:360:3
+    #6 0x58b117e8d344 in _start (<unfixed copy>/pqz-core/pqzl/build/ub/pqz_ub_test+0x9a344) (BuildId: 64f56324f87c26c162492ef230779ae265c6be7c)
+
+SUMMARY: UndefinedBehaviorSanitizer: undefined-behavior src/pqz_fixexp.h:54:39 
+src/pqz_fixexp.h:52:39: runtime error: signed integer overflow: -4611686018427387905 - 4611686018427387904 cannot be represented in type 'int64_t' (aka 'long')
+    #0 0x58b11807c840 in pqz_exp_fp <unfixed copy>/pqz-core/pqzl/src/pqz_fixexp.h:52:39
+    #1 0x58b11807a747 in exp_eq <unfixed copy>/pqz-core/pqzl/test/pqz_ub_test.c:58:3
+    #2 0x58b11807a747 in test_fixexp <unfixed copy>/pqz-core/pqzl/test/pqz_ub_test.c:74:11
+    #3 0x58b11807a747 in main <unfixed copy>/pqz-core/pqzl/test/pqz_ub_test.c:279:5
+    #4 0x7a0cbcc2a1c9 in __libc_start_call_main csu/../sysdeps/nptl/libc_start_call_main.h:58:16
+    #5 0x7a0cbcc2a28a in __libc_start_main csu/../csu/libc-start.c:360:3
+    #6 0x58b117e8d344 in _start (<unfixed copy>/pqz-core/pqzl/build/ub/pqz_ub_test+0x9a344) (BuildId: 64f56324f87c26c162492ef230779ae265c6be7c)
+
+SUMMARY: UndefinedBehaviorSanitizer: undefined-behavior src/pqz_fixexp.h:52:39 
+lazer/rejection.c:99:36: runtime error: signed integer overflow: 0x3fffffffffffffff0000000000000001 - 0x8000000000000001fffffffffffffffe cannot be represented in type 'pqz_fx_i128' (aka '__int128')
+    #0 0x58b117f76f19 in rej_standard <unfixed copy>/pqz-core/pqzl/lazer/rejection.c:99:36
+    #1 0x58b11807adcb in rej_all <unfixed copy>/pqz-core/pqzl/test/pqz_ub_test.c:121:11
+    #2 0x58b11807adcb in test_rejection <unfixed copy>/pqz-core/pqzl/test/pqz_ub_test.c:142:64
+    #3 0x58b11807adcb in main <unfixed copy>/pqz-core/pqzl/test/pqz_ub_test.c:279:21
+    #4 0x7a0cbcc2a1c9 in __libc_start_call_main csu/../sysdeps/nptl/libc_start_call_main.h:58:16
+    #5 0x7a0cbcc2a28a in __libc_start_main csu/../csu/libc-start.c:360:3
+    #6 0x58b117e8d344 in _start (<unfixed copy>/pqz-core/pqzl/build/ub/pqz_ub_test+0x9a344) (BuildId: 64f56324f87c26c162492ef230779ae265c6be7c)
+
+SUMMARY: UndefinedBehaviorSanitizer: undefined-behavior lazer/rejection.c:99:36 
+lazer/rejection.c:83:21: runtime error: signed integer overflow: -9223372036854775807 - 29216840156602672 cannot be represented in type 'int64_t' (aka 'long')
+    #0 0x58b117f76f36 in _accept_exp <unfixed copy>/pqz-core/pqzl/lazer/rejection.c:83:21
+    #1 0x58b117f76f36 in rej_standard <unfixed copy>/pqz-core/pqzl/lazer/rejection.c:102:11
+    #2 0x58b11807adcb in rej_all <unfixed copy>/pqz-core/pqzl/test/pqz_ub_test.c:121:11
+    #3 0x58b11807adcb in test_rejection <unfixed copy>/pqz-core/pqzl/test/pqz_ub_test.c:142:64
+    #4 0x58b11807adcb in main <unfixed copy>/pqz-core/pqzl/test/pqz_ub_test.c:279:21
+    #5 0x7a0cbcc2a1c9 in __libc_start_call_main csu/../sysdeps/nptl/libc_start_call_main.h:58:16
+    #6 0x7a0cbcc2a28a in __libc_start_main csu/../csu/libc-start.c:360:3
+    #7 0x58b117e8d344 in _start (<unfixed copy>/pqz-core/pqzl/build/ub/pqz_ub_test+0x9a344) (BuildId: 64f56324f87c26c162492ef230779ae265c6be7c)
+
+SUMMARY: UndefinedBehaviorSanitizer: undefined-behavior lazer/rejection.c:83:21 
+src/pqz_fixexp.h:54:39: runtime error: signed integer overflow: 4611686018427387904 + 4611686018427387904 cannot be represented in type 'int64_t' (aka 'long')
+    #0 0x58b11802ebc7 in pqz_exp_fp <unfixed copy>/pqz-core/pqzl/src/pqz_fixexp.h:54:39
+    #1 0x58b117f76984 in _accept_exp <unfixed copy>/pqz-core/pqzl/lazer/rejection.c:83:3
+    #2 0x58b117f76984 in rej_standard <unfixed copy>/pqz-core/pqzl/lazer/rejection.c:102:11
+    #3 0x58b11807adcb in rej_all <unfixed copy>/pqz-core/pqzl/test/pqz_ub_test.c:121:11
+    #4 0x58b11807adcb in test_rejection <unfixed copy>/pqz-core/pqzl/test/pqz_ub_test.c:142:64
+    #5 0x58b11807adcb in main <unfixed copy>/pqz-core/pqzl/test/pqz_ub_test.c:279:21
+    #6 0x7a0cbcc2a1c9 in __libc_start_call_main csu/../sysdeps/nptl/libc_start_call_main.h:58:16
+    #7 0x7a0cbcc2a28a in __libc_start_main csu/../csu/libc-start.c:360:3
+    #8 0x58b117e8d344 in _start (<unfixed copy>/pqz-core/pqzl/build/ub/pqz_ub_test+0x9a344) (BuildId: 64f56324f87c26c162492ef230779ae265c6be7c)
+
+SUMMARY: UndefinedBehaviorSanitizer: undefined-behavior src/pqz_fixexp.h:54:39 
+lazer/aes256ctr.c:339:20: runtime error: applying zero offset to null pointer
+    #0 0x58b11802f8e0 in _aes256ctr_stream <unfixed copy>/pqz-core/pqzl/lazer/aes256ctr.c:339:20
+    #1 0x58b11802f8e0 in _rng_urandom <unfixed copy>/pqz-core/pqzl/lazer/rng.c:52:3
+    #2 0x58b117f7699d in rng_urandom <unfixed copy>/pqz-core/pqzl/lazer/rng.c:17:3
+    #3 0x58b117f7699d in _u64 <unfixed copy>/pqz-core/pqzl/lazer/rejection.c:51:3
+    #4 0x58b117f7699d in _accept_exp <unfixed copy>/pqz-core/pqzl/lazer/rejection.c:84:28
+    #5 0x58b117f7699d in rej_standard <unfixed copy>/pqz-core/pqzl/lazer/rejection.c:102:11
+    #6 0x58b11807adcb in rej_all <unfixed copy>/pqz-core/pqzl/test/pqz_ub_test.c:121:11
+    #7 0x58b11807adcb in test_rejection <unfixed copy>/pqz-core/pqzl/test/pqz_ub_test.c:142:64
+    #8 0x58b11807adcb in main <unfixed copy>/pqz-core/pqzl/test/pqz_ub_test.c:279:21
+    #9 0x7a0cbcc2a1c9 in __libc_start_call_main csu/../sysdeps/nptl/libc_start_call_main.h:58:16
+    #10 0x7a0cbcc2a28a in __libc_start_main csu/../csu/libc-start.c:360:3
+    #11 0x58b117e8d344 in _start (<unfixed copy>/pqz-core/pqzl/build/ub/pqz_ub_test+0x9a344) (BuildId: 64f56324f87c26c162492ef230779ae265c6be7c)
+
+SUMMARY: UndefinedBehaviorSanitizer: undefined-behavior lazer/aes256ctr.c:339:20 
+lazer/rejection.c:34:43: runtime error: signed integer overflow: 0x7fffffffffffffffffffffffffffffff - -1 cannot be represented in type 'pqz_fx_i128' (aka '__int128')
+    #0 0x58b11802e4f1 in _quot_q56 <unfixed copy>/pqz-core/pqzl/lazer/rejection.c:34:43
+    #1 0x58b117f7694e in rej_standard <unfixed copy>/pqz-core/pqzl/lazer/rejection.c:101:15
+    #2 0x58b11807b12b in rej_all <unfixed copy>/pqz-core/pqzl/test/pqz_ub_test.c:121:11
+    #3 0x58b11807b12b in test_rejection <unfixed copy>/pqz-core/pqzl/test/pqz_ub_test.c:153:67
+    #4 0x58b11807b12b in main <unfixed copy>/pqz-core/pqzl/test/pqz_ub_test.c:279:21
+    #5 0x7a0cbcc2a1c9 in __libc_start_call_main csu/../sysdeps/nptl/libc_start_call_main.h:58:16
+    #6 0x7a0cbcc2a28a in __libc_start_main csu/../csu/libc-start.c:360:3
+    #7 0x58b117e8d344 in _start (<unfixed copy>/pqz-core/pqzl/build/ub/pqz_ub_test+0x9a344) (BuildId: 64f56324f87c26c162492ef230779ae265c6be7c)
+
+SUMMARY: UndefinedBehaviorSanitizer: undefined-behavior lazer/rejection.c:34:43 
+lazer/rejection.c:126:21: runtime error: signed integer overflow: -9223372002495037439 - 29216840156602672 cannot be represented in type 'int64_t' (aka 'long')
+    #0 0x58b117fde375 in rej_bimodal <unfixed copy>/pqz-core/pqzl/lazer/rejection.c:126:21
+    #1 0x58b11807b2a8 in rej_all <unfixed copy>/pqz-core/pqzl/test/pqz_ub_test.c:121:11
+    #2 0x58b11807b2a8 in test_rejection <unfixed copy>/pqz-core/pqzl/test/pqz_ub_test.c:158:54
+    #3 0x58b11807b2a8 in main <unfixed copy>/pqz-core/pqzl/test/pqz_ub_test.c:279:21
+    #4 0x7a0cbcc2a1c9 in __libc_start_call_main csu/../sysdeps/nptl/libc_start_call_main.h:58:16
+    #5 0x7a0cbcc2a28a in __libc_start_main csu/../csu/libc-start.c:360:3
+    #6 0x58b117e8d344 in _start (<unfixed copy>/pqz-core/pqzl/build/ub/pqz_ub_test+0x9a344) (BuildId: 64f56324f87c26c162492ef230779ae265c6be7c)
+
+SUMMARY: UndefinedBehaviorSanitizer: undefined-behavior lazer/rejection.c:126:21 
+ok   fixexp x >= 64 saturates to exp(64)
+ok   fixexp x < -64 saturates to exp(-64)
+ok   fixexp unchanged on [-64, 64)
+FAIL rej_standard t2 - 2 t1 wraps (num > 2^127): accept
+FAIL rej_standard t - ln M wraps: accept
+FAIL rej_standard num = -2^127, |num| in _quot_q56: accept
+FAIL rej_bimodal a - |y| - ln M wraps: accept
+FAIL (4 failed)
+== part a rc=1
+== part b
+src/pqz_rel.c:230:53: runtime error: signed integer overflow: -9223372036854775808 - 4398046510889 cannot be represented in type 'int64_t' (aka 'long')
+    #0 0x5584a79560cf in rd_poly <unfixed copy>/pqz-core/pqzl/src/pqz_rel.c:230:53
+    #1 0x5584a7954e70 in rd_polyvec <unfixed copy>/pqz-core/pqzl/src/pqz_rel.c:240:11
+    #2 0x5584a7954e70 in pqz_encrypt <unfixed copy>/pqz-core/pqzl/src/pqz_rel.c:1485:7
+    #3 0x5584a79669b0 in test_enc_dec <unfixed copy>/pqz-core/pqzl/test/pqz_ub_test.c:212:17
+    #4 0x5584a79669b0 in main <unfixed copy>/pqz-core/pqzl/test/pqz_ub_test.c:283:7
+    #5 0x7f1d5ce2a1c9 in __libc_start_call_main csu/../sysdeps/nptl/libc_start_call_main.h:58:16
+    #6 0x7f1d5ce2a28a in __libc_start_main csu/../csu/libc-start.c:360:3
+    #7 0x5584a7778344 in _start (<unfixed copy>/pqz-core/pqzl/build/ub/pqz_ub_test+0x9a344) (BuildId: 64f56324f87c26c162492ef230779ae265c6be7c)
+
+SUMMARY: UndefinedBehaviorSanitizer: undefined-behavior src/pqz_rel.c:230:53 
+build/include/lazer.h:2393:31: runtime error: signed integer overflow: -1 * -9223372036854775808 cannot be represented in type 'int64_t' (aka 'long')
+    #0 0x5584a794bf96 in int_set_i64 <unfixed copy>/pqz-core/pqzl/build/include/lazer.h:2393:31
+    #1 0x5584a7955f8d in set_c <unfixed copy>/pqz-core/pqzl/src/pqz_rel.c:116:3
+    #2 0x5584a7955f8d in rd_poly <unfixed copy>/pqz-core/pqzl/src/pqz_rel.c:230:7
+    #3 0x5584a7954e70 in rd_polyvec <unfixed copy>/pqz-core/pqzl/src/pqz_rel.c:240:11
+    #4 0x5584a7954e70 in pqz_encrypt <unfixed copy>/pqz-core/pqzl/src/pqz_rel.c:1485:7
+    #5 0x5584a79669b0 in test_enc_dec <unfixed copy>/pqz-core/pqzl/test/pqz_ub_test.c:212:17
+    #6 0x5584a79669b0 in main <unfixed copy>/pqz-core/pqzl/test/pqz_ub_test.c:283:7
+    #7 0x7f1d5ce2a1c9 in __libc_start_call_main csu/../sysdeps/nptl/libc_start_call_main.h:58:16
+    #8 0x7f1d5ce2a28a in __libc_start_main csu/../csu/libc-start.c:360:3
+    #9 0x5584a7778344 in _start (<unfixed copy>/pqz-core/pqzl/build/ub/pqz_ub_test+0x9a344) (BuildId: 64f56324f87c26c162492ef230779ae265c6be7c)
+
+SUMMARY: UndefinedBehaviorSanitizer: undefined-behavior build/include/lazer.h:2393:31 
+ok   pqz_init
+ok   keypair
+ok   pqz_encrypt pk coefficient 2^63 + 0 = its reading mod q
+ok   pqz_decrypt_raw u coefficient 2^63 + 0 = its reading mod q
+ok   pqz_decrypt_raw v coefficient 2^63 + 0 = (V - q) - acc mod 2^64
+ok   pqz_encrypt pk coefficient 2^63 + 5 = its reading mod q
+ok   pqz_decrypt_raw u coefficient 2^63 + 5 = its reading mod q
+ok   pqz_decrypt_raw v coefficient 2^63 + 5 = (V - q) - acc mod 2^64
+ok   pqz_encrypt pk coefficient 2^63 + 4398046510888 = its reading mod q
+ok   pqz_decrypt_raw u coefficient 2^63 + 4398046510888 = its reading mod q
+ok   pqz_decrypt_raw v coefficient 2^63 + 4398046510888 = (V - q) - acc mod 2^64
+ok   pqz_encrypt pk coefficient 2^63 + 4398046510889 = its reading mod q
+ok   pqz_decrypt_raw u coefficient 2^63 + 4398046510889 = its reading mod q
+ok   pqz_decrypt_raw v coefficient 2^63 + 4398046510889 = (V - q) - acc mod 2^64
+PASS (0 failed)
+== part b rc=0
+== part c
+=================================================================
+==731591==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x515000000280 at pc 0x5c89c9548200 bp 0x7ffee2b44020 sp 0x7ffee2b44018
+READ of size 8 at 0x515000000280 thread T0
+    #0 0x5c89c95481ff in poly_auto_self <unfixed copy>/pqz-core/pqzl/lazer/poly.c:708:19
+    #1 0x5c89c95a612e in test_auto_ntt <unfixed copy>/pqz-core/pqzl/test/pqz_ub_test.c:257:3
+    #2 0x5c89c95a612e in main <unfixed copy>/pqz-core/pqzl/test/pqz_ub_test.c:286:5
+    #3 0x722c37c2a1c9 in __libc_start_call_main csu/../sysdeps/nptl/libc_start_call_main.h:58:16
+    #4 0x722c37c2a28a in __libc_start_main csu/../csu/libc-start.c:360:3
+    #5 0x5c89c93b7344 in _start (<unfixed copy>/pqz-core/pqzl/build/ub/pqz_ub_test+0x9a344) (BuildId: 64f56324f87c26c162492ef230779ae265c6be7c)
+
+0x515000000280 is located 0 bytes after 512-byte region [0x515000000080,0x515000000280)
+allocated by thread T0 here:
+    #0 0x5c89c9452193 in malloc (<unfixed copy>/pqz-core/pqzl/build/ub/pqz_ub_test+0x135193) (BuildId: 64f56324f87c26c162492ef230779ae265c6be7c)
+    #1 0x5c89c95452a5 in poly_tocrt <unfixed copy>/pqz-core/pqzl/lazer/poly.c:500:17
+    #2 0x5c89c95a60f1 in test_auto_ntt <unfixed copy>/pqz-core/pqzl/test/pqz_ub_test.c:255:3
+    #3 0x5c89c95a60f1 in main <unfixed copy>/pqz-core/pqzl/test/pqz_ub_test.c:286:5
+    #4 0x722c37c2a1c9 in __libc_start_call_main csu/../sysdeps/nptl/libc_start_call_main.h:58:16
+    #5 0x722c37c2a28a in __libc_start_main csu/../csu/libc-start.c:360:3
+    #6 0x5c89c93b7344 in _start (<unfixed copy>/pqz-core/pqzl/build/ub/pqz_ub_test+0x9a344) (BuildId: 64f56324f87c26c162492ef230779ae265c6be7c)
+
+SUMMARY: AddressSanitizer: heap-buffer-overflow <unfixed copy>/pqz-core/pqzl/lazer/poly.c:708:19 in poly_auto_self
+Shadow bytes around the buggy address:
+  0x515000000000: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x515000000080: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x515000000100: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x515000000180: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x515000000200: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+=>0x515000000280:[fa]fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x515000000300: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x515000000380: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x515000000400: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x515000000480: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x515000000500: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Partially addressable: 01 02 03 04 05 06 07 
+  Heap left redzone:       fa
+  Freed heap region:       fd
+  Stack left redzone:      f1
+  Stack mid redzone:       f2
+  Stack right redzone:     f3
+  Stack after return:      f5
+  Stack use after scope:   f8
+  Global redzone:          f9
+  Global init order:       f6
+  Poisoned by user:        f7
+  Container overflow:      fc
+  Array cookie:            ac
+  Intra object redzone:    bb
+  ASan internal:           fe
+  Left alloca redzone:     ca
+  Right alloca redzone:    cb
+==731591==ABORTING
+== part c rc=1
+ub_test before-recover: FAIL

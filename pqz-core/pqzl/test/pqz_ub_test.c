@@ -1,0 +1,289 @@
+/*
+ * C core hardening tests (2026-10-18): the inputs that reached undefined behaviour or an out-of-bounds write before
+ * the fixes. Built and run by test/ub_test.sh with -fsanitize=undefined,address -fno-sanitize-recover=all and
+ * -DPQZ_DEBUG_MALLOC (libc heap, so ASan sees each block); before the fixes the sanitizer aborts, after them every
+ * check prints "ok" and the expected value is the one the Rust port (crate pqzl) computes.
+ *   (a) pqz_fixexp.h pqz_exp_fp outside [-64, 64]: the intended clamp; rejection.c with exponents far beyond +-64
+ *       (two's-complement wraparound where the Rust port wraps: rej_standard t2 - 2 t1 and t - ln M, rej_bimodal
+ *       a - |y| - ln M, _quot_q56 |a| of -2^127);
+ *   (b) pqz_encrypt / pqz_decrypt_raw with a coefficient in [2^63, 2^63 + q) and 2^63 + q (rd_poly, int_set_i64);
+ *   (c) poly_auto_self in the NTT domain (crt == 1): only the one residue vector the buffer holds.
+ *   pqz_ub_test [parts]     parts: any of a, b, c (default abc)
+ */
+#include "lazer.h"
+
+#include "pqz.h"
+#include "pqz_fixexp.h"
+#include "pqz_reg_params.h"
+
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+static int fails;
+
+static void
+check (const char *name, int ok)
+{
+  printf ("%s %s\n", ok ? "ok  " : "FAIL", name);
+  fails += !ok;
+}
+
+/* ---- (a) fixexp and rejection ---- */
+
+/* the pre-fix pqz_exp_fp, valid (no overflow) only for x in [-X_MAX, X_MAX) */
+static void
+old_exp_fp (int64_t x, uint64_t *mant, int32_t *e)
+{
+  int64_t hi = (int64_t)((uint64_t)(x - PQZ_X_MAX) >> 63) - 1;
+  x = (int64_t)pqz_ct_sel64 ((uint64_t)hi, (uint64_t)PQZ_X_MAX, (uint64_t)x);
+  int64_t lo = (int64_t)((uint64_t)(x + PQZ_X_MAX) >> 63) * -1;
+  x = (int64_t)pqz_ct_sel64 ((uint64_t)lo, (uint64_t)(-PQZ_X_MAX), (uint64_t)x);
+  pqz_fx_i128 prod = (pqz_fx_i128)x * (pqz_fx_i128)PQZ_INVLN2_Q60;
+  int64_t n = (int64_t)(prod >> 116);
+  int64_t r = x - n * PQZ_LN2_Q56;
+  int64_t m1 = r >> 63;
+  n += m1, r += PQZ_LN2_Q56 & m1;
+  int64_t m2 = ((r - PQZ_LN2_Q56) >> 63) ^ (int64_t)-1;
+  n -= m2, r -= PQZ_LN2_Q56 & m2;
+  *mant = pqz_expneg_q63 ((uint64_t)(PQZ_LN2_Q56 - r));
+  *e = (int32_t)(n + 1);
+}
+
+static int
+exp_eq (int64_t x, int64_t y)
+{
+  uint64_t m1, m2;
+  int32_t e1, e2;
+  pqz_exp_fp (x, &m1, &e1);
+  pqz_exp_fp (y, &m2, &e2);
+  return m1 == m2 && e1 == e2;
+}
+
+static void
+test_fixexp (void)
+{
+  const int64_t hi[] = { PQZ_X_MAX, PQZ_X_MAX + 1, (int64_t)1 << 62 | 12345, INT64_MAX - 1, INT64_MAX };
+  const int64_t lo[] = { -PQZ_X_MAX - 1, -PQZ_X_MAX - 2, INT64_MIN / 2 - 7, INT64_MIN + 1, INT64_MIN };
+  int ok = 1;
+  for (unsigned i = 0; i < sizeof hi / sizeof hi[0]; i++)
+    ok &= exp_eq (hi[i], PQZ_X_MAX);
+  check ("fixexp x >= 64 saturates to exp(64)", ok);
+  ok = 1;
+  for (unsigned i = 0; i < sizeof lo / sizeof lo[0]; i++)
+    ok &= exp_eq (lo[i], -PQZ_X_MAX);
+  check ("fixexp x < -64 saturates to exp(-64)", ok);
+  /* inside [-X_MAX, X_MAX) the new clamp equals the old code (splitmix64 points + the edges) */
+  ok = 1;
+  uint64_t s = 1;
+  for (int i = 0; i < 100000; i++)
+    {
+      s += 0x9E3779B97F4A7C15ULL;
+      uint64_t z = (s ^ (s >> 30)) * 0xBF58476D1CE4E5B9ULL;
+      z = (z ^ (z >> 27)) * 0x94D049BB133111EBULL;
+      z ^= z >> 31;
+      int64_t x = (int64_t)(z >> 1) - PQZ_X_MAX; /* [-X_MAX, X_MAX) */
+      if (i == 0)
+        x = -PQZ_X_MAX;
+      if (i == 1)
+        x = PQZ_X_MAX - 1;
+      uint64_t m1, m2;
+      int32_t e1, e2;
+      pqz_exp_fp (x, &m1, &e1);
+      old_exp_fp (x, &m2, &e2);
+      ok &= m1 == m2 && e1 == e2;
+    }
+  check ("fixexp unchanged on [-64, 64)", ok);
+}
+
+/* int_t r = sign * (hi * 2^64 + lo) */
+static void
+set_big (int_ptr r, int neg, uint64_t hi, uint64_t lo)
+{
+  int_set_zero (r);
+  r->limbs[0] = lo;
+  if (r->nlimbs > 1)
+    r->limbs[1] = hi;
+  r->neg = neg ? 1 : 0;
+}
+
+typedef int (*rej_fn) (rng_state_t, const intvec_t, const intvec_t, const int_t, const int_t);
+
+/* rej(z, v) on 64 different u: the expected verdict whatever u is */
+static int
+rej_all (rej_fn f, intvec_t z, intvec_t v, const int_t scM, const int_t sigma2, int want)
+{
+  uint8_t seed[32] = { 7 };
+  rng_state_t st;
+  int ok = 1;
+  rng_init (st, seed, 0);
+  for (int i = 0; i < 64; i++)
+    ok &= f (st, z, v, scM, sigma2) == want;
+  rng_clear (st);
+  return ok && pqz_err == PQZ_OK;
+}
+
+static void
+test_rejection (void)
+{
+  INT_T (scM, 3);   /* round(1.5 * 2^128) */
+  INT_T (sig1, 1);  /* sigma^2 = 2^20 */
+  int_set_zero (scM);
+  scM->limbs[2] = 1, scM->limbs[1] = (uint64_t)1 << 63;
+  int_set_i64 (sig1, (int64_t)1 << 20);
+  intvec_t z, v, z2, v2;
+  intvec_alloc (z, 1, 1), intvec_alloc (v, 1, 1);
+  intvec_alloc (z2, 2, 2), intvec_alloc (v2, 2, 2);
+
+  /* S1 standard, num = t2 - 2 t1 = 3 (2^126 - 2^64 + 1) wraps past 2^127 (Rust: wrapping_sub); t = -(2^63 - 1) after
+     the clamps, t - ln M wraps to a large positive exponent -> exp(64) -> always accept (0) */
+  intvec_set_elem_i64 (v, 0, INT64_MAX);
+  intvec_set_elem_i64 (z, 0, -INT64_MAX);
+  check ("rej_standard t2 - 2 t1 wraps (num > 2^127): accept", rej_all (rej_standard, z, v, scM, sig1, 0));
+
+  /* S2 standard, num = 1 - 2^63 (no wrap), t = -(2^63 - 1); t - ln M wraps (Rust: wrapping_sub) -> accept (0) */
+  intvec_set_elem_i64 (v, 0, 1);
+  intvec_set_elem_i64 (z, 0, (int64_t)1 << 62);
+  check ("rej_standard t - ln M wraps: accept", rej_all (rej_standard, z, v, scM, sig1, 0));
+
+  /* S3 standard, two-limb entries: t2 = 2, t1 = -(2^126 - 1), num = 2^127 = -2^127 as i128; _quot_q56 |a| = 2^127
+     (Rust: wrapping_sub, as u128) clamps, t = -(2^63 - 1), t - ln M wraps -> accept (0) */
+  set_big (intvec_get_elem (v2, 0), 0, 0, 1), set_big (intvec_get_elem (v2, 1), 0, 0, 1);
+  set_big (intvec_get_elem (z2, 0), 1, ((uint64_t)1 << 62) - 1, UINT64_MAX), set_big (intvec_get_elem (z2, 1), 0, 0, 0);
+  check ("rej_standard num = -2^127, |num| in _quot_q56: accept", rej_all (rej_standard, z2, v2, scM, sig1, 0));
+
+  /* B1 bimodal, a = 2^35, |y| = 2^63 - 1 (clamped), a - |y| - ln M wraps (Rust: wrapping_sub) -> accept (0) */
+  intvec_set_elem_i64 (v, 0, 1);
+  intvec_set_elem_i64 (z, 0, (int64_t)1 << 62);
+  check ("rej_bimodal a - |y| - ln M wraps: accept", rej_all (rej_bimodal, z, v, scM, sig1, 0));
+
+  intvec_free (z), intvec_free (v), intvec_free (z2), intvec_free (v2);
+}
+
+/* ---- (b) pqz_encrypt / pqz_decrypt_raw on non-canonical coefficients ---- */
+
+#define PQZ_Q_ ((((uint64_t)1) << 42) - 215)
+
+static void
+wr_be8 (uint8_t *p, uint64_t v)
+{
+  for (int b = 7; b >= 0; b--, v >>= 8)
+    p[b] = (uint8_t)v;
+}
+
+/* rd_poly's reading of a be8 word V >= (q+1)/2: the int64 (V - q) mod 2^64 (Rust keys.rs: wrapping_sub), reduced
+   into [0, q) as the NTT does with it (pqz_int_modq of sign-magnitude, |INT64_MIN| = 2^63) */
+static uint64_t
+canon (uint64_t V)
+{
+  int64_t c = (int64_t)(V - PQZ_Q_);
+  uint64_t mag = c < 0 ? 0 - (uint64_t)c : (uint64_t)c;
+  uint64_t r = mag % PQZ_Q_;
+  return c < 0 && r ? PQZ_Q_ - r : r;
+}
+
+static void
+test_enc_dec (void)
+{
+  static int8_t s[2048], r[2048];
+  static int16_t e[2048], e1[2048], e2[1][16];
+  static uint8_t pk[PQZ_POLYVEC_BYTES], pkx[PQZ_POLYVEC_BYTES], pkc[PQZ_POLYVEC_BYTES];
+  static uint8_t u[PQZ_POLYVEC_BYTES], ux[PQZ_POLYVEC_BYTES], uc[PQZ_POLYVEC_BYTES], v[1][PQZ_V_BYTES],
+      vx[1][PQZ_V_BYTES], vc[1][PQZ_V_BYTES];
+  uint8_t msg[1][16];
+  int64_t w[16], wx[16];
+  const uint64_t Vs[] = { (uint64_t)1 << 63, ((uint64_t)1 << 63) + 5, ((uint64_t)1 << 63) + PQZ_Q_ - 1,
+                          ((uint64_t)1 << 63) + PQZ_Q_ };
+  for (int i = 0; i < 2048; i++)
+    s[i] = (int8_t)(i % 3 - 1), r[i] = (int8_t)((i * 7) % 3 - 1), e[i] = (int16_t)(i % 5 - 2),
+    e1[i] = (int16_t)((i * 3) % 5 - 2);
+  for (int i = 0; i < 16; i++)
+    msg[0][i] = (uint8_t)i, e2[0][i] = (int16_t)(i % 3 - 1);
+  check ("keypair", pqz_keypair_from_secret (s, e, pk) == PQZ_OK);
+
+  for (unsigned t = 0; t < sizeof Vs / sizeof Vs[0]; t++)
+    {
+      char name[96];
+      const uint64_t V = Vs[t];
+      const unsigned at = 8 * (3 * 64 + 17); /* poly 3, coefficient 17 */
+      const uint8_t *pkxs[1] = { pkx }, *pkcs[1] = { pkc };
+      memcpy (pkx, pk, sizeof pk), memcpy (pkc, pk, sizeof pk);
+      wr_be8 (pkx + at, V), wr_be8 (pkc + at, canon (V));
+      int rc1 = pqz_encrypt (pkxs, 1, msg, r, e1, e2, ux, vx);
+      int rc2 = pqz_encrypt (pkcs, 1, msg, r, e1, e2, uc, vc);
+      snprintf (name, sizeof name, "pqz_encrypt pk coefficient 2^63 + %llu = its reading mod q",
+                (unsigned long long)(V - ((uint64_t)1 << 63)));
+      check (name, rc1 == PQZ_OK && rc2 == PQZ_OK && !memcmp (ux, uc, sizeof ux) && !memcmp (vx, vc, sizeof vx));
+
+      /* u enters only A-products (mod q): equal to its reading mod q */
+      pqz_encrypt (pkcs, 1, msg, r, e1, e2, u, v);
+      memcpy (ux, u, sizeof u), memcpy (uc, u, sizeof u);
+      wr_be8 (ux + at, V), wr_be8 (uc + at, canon (V));
+      rc1 = pqz_decrypt_raw (s, ux, v[0], wx);
+      rc2 = pqz_decrypt_raw (s, uc, v[0], w);
+      snprintf (name, sizeof name, "pqz_decrypt_raw u coefficient 2^63 + %llu = its reading mod q",
+                (unsigned long long)(V - ((uint64_t)1 << 63)));
+      check (name, rc1 == PQZ_OK && rc2 == PQZ_OK && !memcmp (w, wx, sizeof w));
+
+      /* v is subtracted over Z: w_5 = (V - q) - acc_5 mod 2^64 (as int64), the other w_i unchanged; acc_5 = -w0_5
+         from v_5 = 0 */
+      memcpy (vx[0], v[0], PQZ_V_BYTES), memcpy (vc[0], v[0], PQZ_V_BYTES);
+      wr_be8 (vx[0] + 8 * 5, V), wr_be8 (vc[0] + 8 * 5, 0);
+      rc1 = pqz_decrypt_raw (s, u, vx[0], wx);
+      rc2 = pqz_decrypt_raw (s, u, vc[0], w);
+      int ok = rc1 == PQZ_OK && rc2 == PQZ_OK && wx[5] == (int64_t)((V - PQZ_Q_) + (uint64_t)w[5]);
+      for (int i = 0; i < 16; i++)
+        ok &= i == 5 || wx[i] == w[i];
+      snprintf (name, sizeof name, "pqz_decrypt_raw v coefficient 2^63 + %llu = (V - q) - acc mod 2^64",
+                (unsigned long long)(V - ((uint64_t)1 << 63)));
+      check (name, ok);
+    }
+}
+
+/* ---- (c) poly_auto_self in the NTT domain ---- */
+
+static void
+test_auto_ntt (void)
+{
+  poly_t p, c;
+  int64_t a[64];
+  uint64_t before[64];
+  for (int j = 0; j < 64; j++)
+    a[j] = (int64_t)(j * 1000003 % 4001) - 2000;
+  poly_alloc (p, pqz_reg_ring), poly_alloc (c, pqz_reg_ring);
+  poly_set_coeffvec_i64 (p, a);
+  poly_tocrt (p);
+  memcpy (before, p->crtrep, sizeof before);
+  poly_auto_self (p); /* before the fix: ASan heap-buffer-overflow (second pass, crtrep[64..127]) */
+  int ok = p->crt == 1;
+  for (int j = 0; j < 64; j++)
+    ok &= ((uint64_t *)p->crtrep)[j] == before[63 - j];
+  check ("poly_auto_self crt: the one residue vector reversed, nothing past it", ok && pqz_err == PQZ_OK);
+  /* information only: is the reversal X -> X^-1 in the incomplete NTT basis? (upstream's fully split CRT: yes) */
+  poly_set_coeffvec_i64 (c, a);
+  poly_auto_self (c); /* coefficient domain: the automorphism */
+  poly_fromcrt (p);
+  int same = 1;
+  for (int j = 0; j < 64; j++)
+    same &= int_get_i64 (poly_get_coeff (p, j)) == int_get_i64 (poly_get_coeff (c, j));
+  printf ("info poly_auto_self crt branch equals X -> X^-1: %s\n", same ? "yes" : "no");
+  poly_free (p), poly_free (c);
+}
+
+int
+main (int argc, char **argv)
+{
+  static uint8_t arena[(size_t)64 << 20];
+  const char *part = argc > 1 ? argv[1] : "abc"; /* the parts to run: a, b, c (one process each in ub_test.sh) */
+  if (strchr (part, 'a'))
+    test_fixexp (), test_rejection ();
+  if (strchr (part, 'b'))
+    {
+      check ("pqz_init", pqz_init (arena, sizeof arena) == PQZ_OK);
+      test_enc_dec ();
+    }
+  if (strchr (part, 'c'))
+    test_auto_ntt ();
+  printf ("%s (%d failed)\n", fails ? "FAIL" : "PASS", fails);
+  return fails != 0;
+}

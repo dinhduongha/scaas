@@ -1,0 +1,126 @@
+ok   Keccak-f permutation = hashlib sha3_256, 0 B
+ok   Keccak-f permutation = hashlib sha3_256, 1 B
+ok   Keccak-f permutation = hashlib sha3_256, 135 B
+ok   Keccak-f permutation = hashlib sha3_256, 136 B
+ok   Keccak-f permutation = hashlib sha3_256, 137 B
+ok   Keccak-f permutation = hashlib sha3_256, 300 B
+ok   keccak256('')
+ok   PQZL proofSystemId (D2)
+ok   PQZH proofSystemId (D3)
+ok   opTag TRANSFER = ef22f3d1...
+ok   opTag BURN = 7383374d...
+ok   opTag REFRESH = f118f2df...
+ok   opTag REGISTER = 69562a9c...
+ok   opTag DISCLOSE-SENDER = 868cc07c...
+ok   opTag DISCLOSE-RECEIVER = d8356cfb...
+ok   opTag DISCLOSE-AUDITOR = d6019aa4...
+ok   opTag TRANSFER-MULTI = 6f6a773a...
+     A digest keccak256(A bytes) = f176b313331c898e11230c6addae3d44821413361e1416a6aedf9f26a7be3df0
+ok   KeyGen seed 00*32: ctr 0, norms
+ok   KeyGen seed 01*32: ctr 0, norms
+ok   KeyGen seed 02*32: ctr 0, norms
+ok   Dec(Enc(m)) = m, recipient 0, max |noise| 312 <= 11872
+ok   Dec(Enc(m)) = m, recipient 1, max |noise| 335 <= 11872
+ok   Dec(Enc(m)) = m, recipient 2, max |noise| 360 <= 11872
+ok   Add with Trivial(5)
+ok   Sub
+ok   statement TRANSFER
+ok   statement TRANSFER0
+ok   statement BURN
+ok   statement REFRESH
+ok   statement REGISTER
+ok   statement DISCLOSE-SENDER
+ok   statement DISCLOSE-RECEIVER
+ok   statement DISCLOSE-AUDITOR
+ok   reject: length - 1: length
+ok   reject: length + 1: length
+ok   reject: auditorOn 0 on the 83,072-byte form: auditorOn does not match the length
+ok   reject: auditorOn 1 on the 66,560-byte form: auditorOn does not match the length
+ok   reject: auditorOn 2: auditorOn does not match the length
+ok   reject: fee >= 2^64: fee >= 2^64
+ok   reject: salt word top byte set: salt word not 16 zero bytes || salt
+ok   reject: burn salt word byte 15 set: salt word not 16 zero bytes || salt
+ok   reject: burn amount >= 2^64: amount >= 2^64
+ok   reject: transfer amount >= 2^64 (decoder stricter than R_TX): amount >= 2^64
+ok   reject: TRANSFER amount != 0: amount must be 0
+ok   reject: TRANSFER recipient != 0: recipient must be 0
+ok   reject: TRANSFER0 recipient != 0: recipient must be 0
+ok   reject: BURN toUA != 0: toUA must be 0
+ok   reject: BURN auditorOn != 0: auditorOn must be 0
+ok   reject: BURN salt != 0: salt must be 0
+ok   reject: REFRESH toUA != 0: toUA must be 0
+ok   reject: REFRESH amount != 0: amount must be 0
+ok   reject: REFRESH recipient != 0: recipient must be 0
+ok   reject: REFRESH auditorOn != 0: auditorOn must be 0
+ok   reject: REFRESH salt != 0: salt must be 0
+ok   reject: coefficient = q: coefficient >= q
+ok   reject: coefficient = 2^42: coefficient >= q
+ok   reject: TRANSFER statement under op 2: opTag does not belong to op
+ok   reject: unknown proofSystemId: unknown proofSystemId
+ok   reject: disclosure amount >= 2^64: amount >= 2^64
+ok   op 7 lengths (plan §4), distinct except (M = 1, on) = (M = 2, off) = 83,072
+ok   op 7 PQZL M = 1 auditor on: build(parse(x)) = x
+ok   op 7 PQZL M = 2 auditor on: build(parse(x)) = x
+ok   op 7 PQZL M = 4 auditor on: build(parse(x)) = x
+ok   op 7 PQZL M = 8 auditor on: build(parse(x)) = x
+ok   op 7 PQZL M = 1 auditor off: build(parse(x)) = x
+ok   op 7 PQZL M = 2 auditor off: build(parse(x)) = x
+ok   op 7 PQZL M = 4 auditor off: build(parse(x)) = x
+ok   op 7 PQZL M = 8 auditor off: build(parse(x)) = x
+ok   op 7 PQZH M = 1 auditor on: build(parse(x)) = x
+ok   op 7 PQZH M = 2 auditor on: build(parse(x)) = x
+ok   op 7 PQZH M = 4 auditor on: build(parse(x)) = x
+ok   op 7 PQZH M = 1 auditor off: build(parse(x)) = x
+ok   op 7 PQZH M = 2 auditor off: build(parse(x)) = x
+ok   op 7 PQZH M = 4 auditor off: build(parse(x)) = x
+ok   op 7 M = 1 body = op 1 body, auditor on
+ok   op 7 M = 1 body = op 1 body, auditor off
+ok   reject: op 7: length - 1: length
+ok   reject: op 7: length + 1: length
+ok   reject: op 7: M = 3 length, M word 2: length
+ok   reject: op 7: M = 0 length, M word 2: length
+ok   reject: op 7: header cut: length
+ok   reject: op 7: M word 0: M not a built leg count
+ok   reject: op 7: M word 3: M not a built leg count
+ok   reject: op 7: PQZH M word 8 (not built): M not a built leg count
+ok   reject: op 7: PQZL M word 16 (oversize only): M not a built leg count
+ok   reject: op 7: M word high bits: M not a built leg count
+ok   reject: op 7: M word 4 on the M = 2 length: length
+ok   reject: op 7: auditorOn 0 on an auditor-on statement: length
+ok   reject: op 7: auditorOn 1 on an auditor-off statement: length
+ok   reject: op 7: auditorOn 2: auditorOn does not match the length
+ok   reject: op 7: amount 1: amount must be 0
+ok   reject: op 7: amount >= 2^64: amount >= 2^64
+ok   reject: op 7: fee >= 2^64: fee >= 2^64
+ok   reject: op 7: salt word high half: salt word not 16 zero bytes || salt
+ok   reject: op 7: coefficient = q in v_{a,M-1}: coefficient >= q
+ok   reject: op 7: unknown proofSystemId: unknown proofSystemId
+ok   reject: op 7: op 7 statement under op 1: opTag does not belong to op
+ok   reject: op 7: op 1 statement under op 7: opTag does not belong to op
+ok   op 7 at 83,072 B: the M / auditorOn words pick (1, on) or (2, off)
+ok   KeyGen resamples with ||s|| <= 32, ||e|| <= 143: counters [0, 3, 4, 0]
+ok   Enc resamples with 32 / 143 / 12: counters [2, 9, 5, 42]
+ok   KeyGen: counter 64 error
+ok   Enc: counter 64 error
+ok   bundle 16,688 / 16,560 B
+ok   opening = abi.encode(bytes, bytes)
+     entryRef(7622, 1, token, 2, 0) = ea6afa7d500f6712173244bbdebf289d808d780c15138a298bcf1c0f59715ae3
+     vector files: 16
+ok   cbd.json
+ok   enc.json
+ok   fee0.json
+ok   keygen.json
+ok   matrix.json
+ok   negative.json
+ok   proof_pqzh.json
+ok   proof_pqzl.json
+ok   selftest.json
+ok   statement_burn.json
+ok   statement_disclose.json
+ok   statement_refresh.json
+ok   statement_register.json
+ok   statement_transfer.json
+ok   statement_transfer_multi.json
+ok   worstcase_noise.json
+pqz_kat: ok
+54.08 s 72020 KB

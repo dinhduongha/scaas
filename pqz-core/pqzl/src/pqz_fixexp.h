@@ -45,14 +45,17 @@ pqz_expneg_q63 (uint64_t s)
 
 /*
  * exp(x) = mant * 2^(e - 63), mant in (2^62, 2^63], for x in Q56; x is clamped to [-64, 64].
+ * The two clamp comparisons are formed in 128 bits (2026-10-18, as the Rust port's fixexp.rs): in 64 bits x - X_MAX
+ * overflowed for x < -X_MAX and x + X_MAX for x >= X_MAX (undefined behaviour). Same result on [-X_MAX, X_MAX);
+ * outside it saturates as intended. Only a rejection exponent beyond +-64 gets there (never an honest one).
  */
 static inline void
 pqz_exp_fp (int64_t x, uint64_t *mant, int32_t *e)
 {
-  int64_t hi = (int64_t)((uint64_t)(x - PQZ_X_MAX) >> 63) - 1; /* x >= X_MAX ? -1 : 0 */
-  x = (int64_t)pqz_ct_sel64 ((uint64_t)hi, (uint64_t)PQZ_X_MAX, (uint64_t)x);
-  int64_t lo = (int64_t)((uint64_t)(x + PQZ_X_MAX) >> 63) * -1; /* x < -X_MAX ? -1 : 0 */
-  x = (int64_t)pqz_ct_sel64 ((uint64_t)lo, (uint64_t)(-PQZ_X_MAX), (uint64_t)x);
+  uint64_t hi = ~(uint64_t)(((pqz_fx_i128)x - PQZ_X_MAX) >> 127); /* x >= X_MAX ? all ones : 0 */
+  x = (int64_t)pqz_ct_sel64 (hi, (uint64_t)PQZ_X_MAX, (uint64_t)x);
+  uint64_t lo = (uint64_t)(((pqz_fx_i128)x + PQZ_X_MAX) >> 127); /* x < -X_MAX ? all ones : 0 */
+  x = (int64_t)pqz_ct_sel64 (lo, (uint64_t)(-PQZ_X_MAX), (uint64_t)x);
 
   /* n = floor(x / ln 2) */
   pqz_fx_i128 prod = (pqz_fx_i128)x * (pqz_fx_i128)PQZ_INVLN2_Q60;
