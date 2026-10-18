@@ -308,10 +308,14 @@ crate instead of the C core; the C core is not built under it), `pqz-core/fuzz/s
   (Comparisons); `pqz-core/artifact/README.md` "Measurements of the multi-recipient transfer" (PQZL table, and
   `results.py` so `results-multi.md` carries the Rust rows); `pqz-core/STATUS.md` (current state). Peak memory:
   Rust heap peak (counting allocator, `tests/memory.rs`) against the C arena peak.
-- [ ] Owner 2026-10-18, open question for the owner (not decided here): the wasm32 op 7 prove limit M ≤ 4
-  (`pqz-ffi` `WASM_PQZL_MAX_LEGS`, `pqzl::WASM_MAX_LEGS`) dates from the C core's arena (221 MiB at M = 1 on wasm32).
-  The Rust prove peaks at 115 MB for M = 8 (native). Measure the wasm32 M = 8 prove time and peak with the limit lifted
-  in a bench build, put them in the D6 table, and ask the owner whether to raise the limit.
+- [ ] Owner 2026-10-18 (ruling: "if it is enough, raise it"): the wasm32 op 7 prove limit M ≤ 4 (`pqz-ffi`
+  `WASM_PQZL_MAX_LEGS`, `pqzl::WASM_MAX_LEGS`) dates from the C core's arena. Measure the Rust wasm32 prove of M = 8
+  (auditor on and off; time p50 and the wasm32 linear-memory peak) in a bench build with the limit lifted. **Enough** =
+  the M = 8 peak ≤ 255.6 MiB (the C core's wasm32 M = 4 peak, `artifact/README.md`, the budget wasm32 already
+  accepts) and native = wasm32 for the M = 8 vector proofs. If enough: set both constants to 8 for the Rust backend
+  (the C backend, opt-in, keeps 4), make the wasm32 replay prove the three M = 8 rows instead of refusing them, and
+  record the change in `docs/decisions.md` CTR-PQZ-09 with the measured figures. If not: keep 4 and record the figures
+  and the reason.
 - [ ] `docs_check` 0 errors. Commit; stop at the branch (merge per the P6 mandate after review).
 
 ## Out of scope
