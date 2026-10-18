@@ -81,6 +81,10 @@ required-features = ["c-oracle", "test-hooks"]
 name = "oracle_prove"
 required-features = ["c-oracle"]
 
+[[test]]
+name = "fs_bind"
+required-features = ["test-hooks"]
+
 [profile.release]
 debug = 1
 panic = "unwind"

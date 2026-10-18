@@ -198,7 +198,7 @@ fn enc_dec_input_errors() {
 }
 
 /// every PQZL proof of proof_pqzl.json (19 rows) and fee0.json (4 rows) decodes as its relation and re-encodes to the
-/// same bytes (`test_mutate` with a kind past 13: decode, the verifier's reductions, encode)
+/// same bytes (`test_mutate` with a kind past 14: decode, the verifier's reductions, encode)
 #[cfg(feature = "test-hooks")]
 #[test]
 fn codec_roundtrip() {
@@ -209,7 +209,7 @@ fn codec_roundtrip() {
     for (r, proof) in rows.chain(fee0["rows"].as_array().unwrap().iter().map(|r| (r, &r["pqzl"]["proof"]))) {
         let code = common::rel_code(r["form"].as_str().unwrap(), r["statement"]["case"].as_str());
         let p = hex(proof);
-        assert!(pqzl::test_mutate(code, &p, 14, 0, 0) == Ok(Some(p.clone())), "{} {}", r["form"], r["statement"]["case"]);
+        assert!(pqzl::test_mutate(code, &p, 99, 0, 0) == Ok(Some(p.clone())), "{} {}", r["form"], r["statement"]["case"]);
         n += 1;
     }
     assert_eq!(n, 23);

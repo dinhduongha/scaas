@@ -1623,6 +1623,9 @@ pqz_test_mutate (uint8_t op, const uint8_t *proof, size_t len, unsigned kind, ui
     case 13: /* swap the two h polys */
       mut_swap (polyvec_get_elem (F.h, 0), polyvec_get_elem (F.h, 1));
       break;
+    case 14: /* z3 coefficient +-1 (within Bz3: the P6-FS binding test, sz/fs_bind.c; not in the fuzzers' % 14) */
+      p = polyvec_get_elem (F.z3, r1 % 4), set_c (p, c64, cval (p, c64) + sg);
+      break;
     default: /* re-encode only */
       break;
     }

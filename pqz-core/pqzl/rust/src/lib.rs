@@ -7,7 +7,7 @@
 #![cfg_attr(feature = "c-oracle", deny(unsafe_code))] // only the dev-only C oracle module allows it
 
 extern crate alloc;
-#[cfg(feature = "c-oracle")]
+#[cfg(any(feature = "c-oracle", feature = "test-hooks"))]
 extern crate std;
 
 use alloc::boxed::Box;
@@ -252,9 +252,39 @@ pub fn dec(s: &[i8; 2048], ct: &[u8; CT_BYTES]) -> Result<([i64; 16], [i64; 16])
 }
 
 /// `pqz_test_mutate` (test hook): decode `proof` for relation `rel` (an op, 0x81 = R_TX0, or an R_TXM shape code),
-/// change one field (`kind` 0..13 with `r1` / `r2`; any other kind re-encodes only) and re-encode. `Ok(None)` where
+/// change one field (`kind` 0..14 with `r1` / `r2`; any other kind re-encodes only) and re-encode. `Ok(None)` where
 /// C returns 0: an unknown relation, a proof that does not decode, an encoding that does not fit 2 MAX_PROOF bytes.
 #[cfg(feature = "test-hooks")]
 pub fn test_mutate(rel: u8, proof: &[u8], kind: u32, r1: u64, r2: u64) -> Result<Option<Vec<u8>>, Error> {
     coder::test_mutate(rel, proof, kind, r1, r2)
+}
+
+/// The P6-FS trace (test hook, lazer#28; = the C core's `pqz_sz_trace_fn` kinds under `PQZ_SZ_TRACE`): which seed
+/// each Fiat–Shamir challenge of this thread's `prove` / `verify` / `verify_fast` calls was derived from, as
+/// `(kind, seed, dom)`: 2 / 3 = seed and dom of the z4 / z3 matrix V4 / V3, 5 = the seed of mu (and, in the generic
+/// code, of the final challenge), dom 0. Returns the records since the last call and clears them.
+#[cfg(feature = "test-hooks")]
+pub fn fs_trace_take() -> Vec<(u8, [u8; 32], u64)> {
+    fstrace::T.with(|t| core::mem::take(&mut *t.borrow_mut()))
+}
+
+#[cfg(feature = "test-hooks")]
+pub(crate) mod fstrace {
+    use alloc::vec::Vec;
+    use core::cell::RefCell;
+
+    std::thread_local! {
+        pub(crate) static T: RefCell<Vec<(u8, [u8; 32], u64)>> = const { RefCell::new(Vec::new()) };
+    }
+
+    /// one record; dropped if the allocation fails (tests/memory.rs denies allocations: no abort here, and fs_bind
+    /// counts a missing record as a failure)
+    pub(crate) fn rec(kind: u8, seed: &[u8; 32], dom: u64) {
+        T.with(|t| {
+            let mut t = t.borrow_mut();
+            if t.try_reserve(1).is_ok() {
+                t.push((kind, *seed, dom));
+            }
+        });
+    }
 }

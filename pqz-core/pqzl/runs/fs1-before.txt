@@ -1,0 +1,24 @@
+symbols ok: only memcpy memset __stack_chk_fail __stack_pointer outside the library objects
+VERDICT: evaluation-step independent Z_q tests = 4 -> ok (lambda=4 expected)
+l2dom honest: control (fix undone) accepts 1/1, production rejects 1/1
+l2dom s_over_A: control (fix undone) accepts 1/1, production rejects 1/1
+l2dom s_over_B: control (fix undone) accepts 1/1, production rejects 1/1
+l2dom tx_over: control (fix undone) accepts 1/1, production rejects 1/1
+z21 z21_big: proved 1/1; production: honest accepted 1/1, z21_big / z1_over / w_over rejected by both 3/3; control (z21 term removed) accepts z21_big 1/1
+z21_big  prove rc=0 proof 84313 B  ||z21||^2 = 1858162323594126 (R_REG Bsq = 22226101053479, 83.6x)
+P6-FS verify honest: ACCEPT
+P6-FS verify h-mutated (rejected) kind 5 mu seed: honest bb035354 mutated bb035354 -> EQUAL (FAIL)
+P6-FS verify z3-mutated (rejected) kind 2 V4 seed: honest fb144e60 mutated fb144e60 -> EQUAL (FAIL)
+P6-FS verify z3-mutated (rejected) kind 3 V3 seed: honest fb144e60 mutated fb144e60 -> EQUAL (FAIL)
+P6-FS verify z4-mutated (rejected) kind 2 V4 seed: honest fb144e60 mutated fb144e60 -> EQUAL (FAIL)
+P6-FS verify z4-mutated (rejected) kind 3 V3 seed: honest fb144e60 mutated fb144e60 -> EQUAL (FAIL)
+P6-FS verify_fast honest: ACCEPT
+P6-FS verify_fast h-mutated (rejected) kind 5 mu seed: honest bb035354 mutated bb035354 -> EQUAL (FAIL)
+P6-FS verify_fast z3-mutated (rejected) kind 2 V4 seed: honest fb144e60 mutated fb144e60 -> EQUAL (FAIL)
+P6-FS verify_fast z3-mutated (rejected) kind 3 V3 seed: honest fb144e60 mutated fb144e60 -> EQUAL (FAIL)
+P6-FS verify_fast z4-mutated (rejected) kind 2 V4 seed: honest fb144e60 mutated fb144e60 -> EQUAL (FAIL)
+P6-FS verify_fast z4-mutated (rejected) kind 3 V3 seed: honest fb144e60 mutated fb144e60 -> EQUAL (FAIL)
+VERDICT: P6-FS Fiat-Shamir binding (lazer#28) FAIL (10 failed checks of 12)
+checks: P6-SZ ok; P6-L2 ok; P6-Z21 ok; P6-FS lazer#28 FAIL; 
+check_tbox_fixes: FAIL
+rc=1

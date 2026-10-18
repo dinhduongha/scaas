@@ -1,7 +1,7 @@
 #!/bin/sh
 # pqzl (Rust port of the PQZL C core): every check in one job under scripts/capped, as ffi/run.sh:
 #   scripts/capped pqz-core/pqzl/rust/run.sh <label>      -> pqzl/rust/runs/<label>-*.txt
-# tests (native, release, the C oracle and the test hooks), the arithmetic KAT (kat_dump vs pqzl/kat's golden file),
+# tests (native, release, the C oracle and the test hooks; --no-fail-fast: every test binary runs and reports), the arithmetic KAT (kat_dump vs pqzl/kat's golden file),
 # the keys KAT (keys_kat vs smartcontracts/vectors/pqz/pqz_kat.py --c-keys), the generated params (to_rust.py --check),
 # the prover's proofs_fnv (bench natively, wasm/ in node) against the C core's runs, native = wasm32 on the vectors
 # (wasm/run_vectors.mjs, with the wasm32 stack use), clippy's float lint (no float in the crate; also wasm/), the
@@ -17,7 +17,7 @@ FNV() {
   [ "$got" = "$3 " ] && echo "fnv $1: equal ($3)" || echo "fnv $1: MISMATCH: $got, want $3"
 }
 
-OUT cargo test -j2 --release --offline --features c-oracle,test-hooks,bench -- --nocapture > "$L-test.txt" 2>&1
+OUT cargo test -j2 --release --offline --no-fail-fast --features c-oracle,test-hooks,bench -- --nocapture > "$L-test.txt" 2>&1
 {
   echo "# arithmetic KAT: kat_dump vs the upstream LaZer golden file"
   OUT cargo build -j2 --release --offline --features test-hooks --bin kat_dump

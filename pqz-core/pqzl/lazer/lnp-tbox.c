@@ -5,7 +5,9 @@
 /* PQZ: P6-SZ trace hook (pqz-core/pqzl/sz): reports how the Fiat-Shamir challenges of the evaluation step are derived.
    Compiled only with -DPQZ_SZ_TRACE; production builds are unchanged. kind: 0 = begin (dom 0 prove, 1 verify),
    1 = challenge vector of one evaluation-equation call for accumulator acc (n = number of equations),
-   2 / 3 = seed and dom of the z4 / z3 combination matrix V, 4 = seed and dom of a JL row (R or R'). */
+   2 / 3 = seed and dom of the z4 / z3 combination matrix V, 4 = seed and dom of a JL row (R or R'),
+   5 = the hash passed to lnp_quad_many_prove / _verify, the seed of mu and of the final challenge (dom 0).
+   The P6-FS binding test (sz/fs_bind.c, lazer#28) compares the kind 2 / 3 / 5 seeds of honest and mutated proofs. */
 #ifdef PQZ_SZ_TRACE
 void (*pqz_sz_trace_fn) (int kind, const uint8_t seed[32], uint64_t dom, int acc, const int64_t *v,
                          unsigned int n)
@@ -776,6 +778,7 @@ lnp_tbox_prove (uint8_t hash[32], polyvec_t tB, polyvec_t h, poly_t c,
     }
 
   DEBUG_PRINTF (DEBUG_LEVEL >= 2, "%s", "call many_prove");
+  PQZ_SZT (5, hash, 0, -1, NULL, 0);
   lnp_quad_many_prove (hash, tB, c, z1, z21, hint, s1, m, s2, tA2, A1, A2prime,
                        Bprime, R2prime_sz, r1prime_sz, lambda / 2 + 2 + N,
                        seed_cont2, quad);
@@ -1310,6 +1313,7 @@ lnp_tbox_verify (uint8_t hash[32], polyvec_t h, poly_t c, polyvec_t z1,
       r0prime_sz[i] = r0[i - off];
     }
 
+  PQZ_SZT (5, hash, 0, -1, NULL, 0);
   b = lnp_quad_many_verify (hash, c, z1, z21, hint, tA1, tB, A1, A2prime,
                             Bprime, R2prime_sz, r1prime_sz, r0prime_sz,
                             lambda / 2 + 2 + N, quad);

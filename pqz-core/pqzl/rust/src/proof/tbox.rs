@@ -685,9 +685,13 @@ fn accumulate_all(
         accumulate2(a1, a2, &mut eq(Some(r2), Some(r1), Some(mono(0, &a_))), hash, mm + 2 * (dd - 1) + 2 + i as u32, qe)?;
     }
     if nprime > 0 {
+        #[cfg(feature = "test-hooks")]
+        crate::fstrace::rec(2, hash0, (mm + 2 * (dd - 1) + 2 + z as u32) as u64);
         sz_z4(a1, a2, &mut au.ods, z4, hash0, mm + 2 * (dd - 1) + 2 + z as u32, p)?;
     }
     if nex > 0 {
+        #[cfg(feature = "test-hooks")]
+        crate::fstrace::rec(3, hash0, (mm + 2 * (dd - 1) + 2 + z as u32 + 256) as u64);
         sz_z3(a1, a2, &mut au.oes, au.ops.as_mut(), z3, hash0, mm + 2 * (dd - 1) + 2 + z as u32 + 256, p)?;
     }
     for (x, y) in a1.iter_mut().zip(a2.iter_mut()) {
@@ -767,6 +771,8 @@ pub(crate) fn verify(hash: &mut [u8; 32], f: &mut ProofParts, keys: &mut [PolyMa
     }
     let mut eqs = quad_eqs(a1, beta, &mut s.quad, p, true)?;
     let o = Opening { c: &mut f.c, z1: &mut f.z1, z21: &mut f.z21, hint: &mut f.hint, t_a1: &mut f.t_a1, t_b: &mut f.t_b };
+    #[cfg(feature = "test-hooks")]
+    crate::fstrace::rec(5, hash, 0);
     quad::many_verify(hash, o, keys, &mut eqs, p.quad_eval.quad_many)
 }
 
@@ -1086,5 +1092,7 @@ pub(crate) fn prove(
     }
 
     let mut eqs = quad_eqs(a1, beta, &mut s.quad, p, false)?;
+    #[cfg(feature = "test-hooks")]
+    crate::fstrace::rec(5, hash, 0);
     quad::many_prove(hash, f, quad::Secret { s1, m, s2, t_a2 }, keys, &mut eqs, seed_cont2, p.quad_eval.quad_many)
 }

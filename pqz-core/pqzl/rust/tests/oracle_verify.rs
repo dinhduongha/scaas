@@ -66,14 +66,14 @@ fn c_out_of_range_rejected() {
                 let i = off + k * bits as usize + b;
                 p[i / 8] = (p[i / 8] & !(1 << (i % 8))) | ((((v >> b) & 1) as u8) << (i % 8));
             }
-            assert_eq!(test_mutate(r.code, &p, 14, 0, 0), Ok(None), "{} c = {v}", r.name);
-            assert_eq!(c_test_mutate(r.code, &p, 14, 0, 0), None, "{} c = {v}", r.name);
+            assert_eq!(test_mutate(r.code, &p, 99, 0, 0), Ok(None), "{} c = {v}", r.name);
+            assert_eq!(c_test_mutate(r.code, &p, 99, 0, 0), None, "{} c = {v}", r.name);
             assert_eq!(both(&mut ctx, r.op, &r.stmt, &p), (false, false), "{} c = {v}", r.name);
         }
     }
 }
 
-/// `test_mutate` outputs (kinds 0..13 and re-encode only, chained within a seed as in oracle_codec) over every
+/// `test_mutate` outputs (kinds 0..14 and re-encode only, chained within a seed as in oracle_codec) over every
 /// relation code: Rust verdict = C verdict. PQZL_MUTATED_N outputs (default 280, 20 per code; the brief's full
 /// sample is 20,000: about 0.3 s per output, so hours; run it as a separate job).
 #[test]
@@ -86,7 +86,7 @@ fn mutated_eq_c() {
     'outer: for seed in 0.. {
         for r in &rows {
             let mut cur = r.proof.clone();
-            let kind = (g.next() % 15) as u32;
+            let kind = (g.next() % 16) as u32;
             let (r1, r2) = (g.next(), g.next());
             let rust = test_mutate(r.code, &cur, kind, r1, r2).unwrap();
             assert_eq!(rust, c_test_mutate(r.code, &cur, kind, r1, r2), "{} seed {seed} kind {kind}", r.name);
