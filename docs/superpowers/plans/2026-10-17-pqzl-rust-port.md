@@ -265,6 +265,19 @@ and, with `test-hooks`, `test_mutate` (the 14 mutation kinds of `pqz_test_mutate
   to its free function over several seeds, including after a `verify` on the same `Ctx`; the keys KAT
   (`pqz_keys_kat` / `pqz_kat.py --c-keys`, 1,000 seeds) also run through the methods. Commit.
 
+### Task 10b: C / Rust follow-ups of the hardening review
+
+- [ ] Owner 2026-10-18 (after the C-core hardening review, merged in `d10be79`; done after Task 10, before Task 11, on
+  the branch rebased onto main, so Task 11's checks run on the final code), in both the C core and the Rust crate,
+  honest proofs and `proofs_fnv` unchanged: (i) `poly_auto_self` in the NTT domain (`crt == 1`, unreachable today)
+  computes the correct X → X⁻¹ by converting to coefficients first (`_fromcrt`, then the coefficient automorphism, as
+  the fork's `poly_auto` does), so the branch can no longer return a wrong value; update `pqzl/test/pqz_ub_test.c`
+  part c; (ii) `rejection.c` / `rejection.rs`: `t − lnM`, `t2 − 2·t1` and `a − |y| − lnM` saturate instead of
+  wrapping, so a dishonest-size exponent rejects (fails closed through the `PQZ_REJ_MAX` retry cap) instead of
+  accepting; a test with exponents near ±2^63 in both. Then `scripts/capped pqz-core/gate.sh <label>` passes and the
+  C ↔ Rust oracle tests stay equal. Also update the Rust doc comments that describe the old C UB (`fixexp.rs`,
+  `poly.rs`) and drop the now unneeded double-size residue block in `testkit.rs`.
+
 ### Task 11: `pqz-ffi` backend switch and fuzz differential
 
 **Files:** Modify `pqz-core/ffi/{Cargo.toml,src/pqzl.rs}` (feature `pqzl-rust`: the same `pqzl::` functions over the
@@ -282,11 +295,23 @@ crate instead of the C core; the C core is not built under it), `pqz-core/fuzz/s
 ### Task 12: Package stage, documents
 
 **Files:** Modify `pqz-core/artifact/{reproduce.sh,results.py,expected-results.json,README.md}`, `pqz-core/README.md`
-(§7 map row `pqzl/rust/`), `pqz-core/STATUS.md`, `docs/decisions.md` (D1–D8 as recorded rulings), `pqzl/rust/README.md`.
+(§5 comparison tables, §7 map row `pqzl/rust/`), `pqz-core/STATUS.md`, `docs/decisions.md` (D1–D8 as recorded rulings), `pqzl/rust/README.md`.
 
 - [ ] `reproduce.sh` stage "Rust = C" (quick and `--full`): Task 8's `proofs_fnv`, Task 4's keys KAT, Task 11's
   `--check`; no re-run of the existing stages (owner 2026-10-16). Docker quick run passes.
-- [ ] D6 table (Rust vs C: prove / verify p50 / p99 native and wasm32, peak memory) in `pqzl/rust/README.md` and STATUS.
+- [ ] D6 table (Rust vs C: prove / verify / verify_fast p50 / p99 native and wasm32, peak memory) in `pqzl/rust/README.md`
+  and STATUS, C and Rust measured in the same session on the same machine (the t8–t10 Rust runs and the older C runs
+  are not comparable).
+- [ ] Owner 2026-10-18: add the Rust figures to the existing comparison tables, keeping every C figure (a Rust row or
+  column next to the C one, labelled with its run and date; the frozen C values stay as they are):
+  `pqz-core/README.md` §5.0 (PQZL table), §5.1, §5.3 (`pqz-ffi` path, now the Rust backend), §5.4 (`R_TXM`), §5.5
+  (Comparisons); `pqz-core/artifact/README.md` "Measurements of the multi-recipient transfer" (PQZL table, and
+  `results.py` so `results-multi.md` carries the Rust rows); `pqz-core/STATUS.md` (current state). Peak memory:
+  Rust heap peak (counting allocator, `tests/memory.rs`) against the C arena peak.
+- [ ] Owner 2026-10-18, open question for the owner (not decided here): the wasm32 op 7 prove limit M ≤ 4
+  (`pqz-ffi` `WASM_PQZL_MAX_LEGS`, `pqzl::WASM_MAX_LEGS`) dates from the C core's arena (221 MiB at M = 1 on wasm32).
+  The Rust prove peaks at 115 MB for M = 8 (native). Measure the wasm32 M = 8 prove time and peak with the limit lifted
+  in a bench build, put them in the D6 table, and ask the owner whether to raise the limit.
 - [ ] `docs_check` 0 errors. Commit; stop at the branch (merge per the P6 mandate after review).
 
 ## Out of scope
