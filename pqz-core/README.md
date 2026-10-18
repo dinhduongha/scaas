@@ -31,7 +31,7 @@ general-purpose zero-knowledge system.
 
 | Term | Meaning |
 |---|---|
-| PQZL | the lattice-based proof system (a C library derived from IBM's LaZer) |
+| PQZL | the lattice-based proof system, derived from IBM's LaZer: the C core and its byte-equal Rust port `pqzl`, which becomes the production core of the precompile |
 | PQZH | the hash-based proof system (Ligero, in Rust) |
 | statement | the public data a proof is about (keys, ciphertexts, amounts, header fields) |
 | relation | what the proof shows about the statement, for example `R_TX` for a transfer |
@@ -54,7 +54,7 @@ flowchart LR
   W["Wallet<br/>creates the proof<br/>(native or browser / wasm32)"] --> F
   N["Blockchain node<br/>contract calls the PQZ precompile"] --> F["pqz-ffi<br/>the PQZ precompile<br/>(one C ABI: pqz_precompile)"]
   F --> S["pqz-stmt<br/>reads the statement,<br/>rejects any non-canonical byte"]
-  S -- "proofSystemId = PQZL" --> L["PQZL<br/>lattice proof, C"]
+  S -- "proofSystemId = PQZL" --> L["PQZL<br/>lattice proof, Rust<br/>(crate pqzl; C core = reference)"]
   S -- "proofSystemId = PQZH" --> H["PQZH<br/>Ligero, Rust"]
 ```
 
@@ -107,7 +107,7 @@ problems. A quantum computer can then neither read balances later nor forge proo
 |---|---|---|
 | Proof | LNP22 (ABDLOP + tbox) through a fork of [LaZer](https://github.com/lazer-crypto/lazer) `3330e48` (MIT, IBM), six layers rewritten | Ligero over F_q (radix-431 domains, Keccak-256 Merkle + transcript, zero knowledge) |
 | Parameters | MSIS / MLWE, β ≥ 452 (`pqzl/params/estimator-e-s1*.txt`) | proven (unique-decoding) preset n = 32,756, k = 817, t = 121; 127.2 bits total ([pqzh-ligero.md](../docs/research/pqzh-ligero.md), "soundness") |
-| Code | C — `pqzl/src/`, `pqzl/lazer/`, `pqzl/params/`; native and freestanding wasm32 | Rust crate `pqzh-ligero` — `pqzh/ligero/`; native and wasm32 |
+| Code | Rust crate `pqzl` — `pqzl/rust/`, the production core of the precompile (owner 2026-10-18; port in progress). C — `pqzl/src/`, `pqzl/lazer/`, `pqzl/params/`: the original core and the reference the Rust crate is checked against; native and freestanding wasm32 | Rust crate `pqzh-ligero` — `pqzh/ligero/`; native and wasm32 |
 | On-chain verifier | `pqz_verify_fast`, the specialised verifier (`pqzl/src/pqz_sv.c`); `pqz_verify` is the reference | `pqzh_ligero::verify` |
 | Backup | — | the Plonky3 STARK crate `pqzh/stark-backup/`, kept as a record, never linked |
 
