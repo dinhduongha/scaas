@@ -11,7 +11,8 @@
 #                                      the proven preset (small N); pqz-ffi tests, C ABI, native = wasm32 digests, bench;
 #                                      the vectors: pqz-vectors --check, pqz_kat.py --check, wasm32 replay (--full: +
 #                                      tamper.py), op 7 R_TXM included (every built (id, M, auditorOn): native proof
-#                                      -> ...01, its negatives -> ...00, wasm32 replay; PQZL M = 8 verify-only);
+#                                      -> ...01, its negatives -> ...00, wasm32 replay; PQZL M = 8 proved in wasm32
+#                                      by the Rust backend, verify-only on the C one);
 #                                      Rust = C (the Rust core pqzl/rust/: proofs_fnv of its prover native + wasm32,
 #                                      the keys KAT; --full: + verify_fast); tables + comparison with
 #                                      expected-results.json. pqz-ffi's PQZL backend is the Rust core (default feature
@@ -44,7 +45,7 @@ case "${1:-}" in
   --serve) MODE=serve ;;
   --upstream) MODE=upstream ;;
   --multi-bench) MODE=multi ;;
-  *) sed -n '2,37p' "$0"; exit 2 ;;
+  *) sed -n '2,38p' "$0"; exit 2 ;;
 esac
 OUT=${OUT:-artifact/out/$MODE-$(date -u +%Y%m%dT%H%M%SZ)}
 mkdir -p "$OUT"
@@ -173,7 +174,7 @@ if [ $MODE = multi ]; then
   run pqzh-txm-oversize-wasm.jsonl $L env PQZH_WASM_FILE=wasm/target/oversize/wasm32-unknown-unknown/release/pqzh_ligero_wasm.wasm \
     node wasm/run_wasm.mjs 2 100 4 1 1 txm
   # port plan Task 12: the Rust core's rows (pqzl/rust bench + wasm/run_wasm.mjs, the PQZL counts above, one process per
-  # shape; features oversize and, in wasm32, wasm-m8: the M <= 4 prove limit lifted for the measurement)
+  # shape; features oversize and, in wasm32, wasm-m8: the M <= 8 prove limit lifted to 16 for the measurement)
   step "Rust R_TXM (pqzl/rust): M = 1, 2, 4, 8, 16 on / off: 10 proves, 30 verifies, SV 200, wasm 3 / 3, wasm SV 100"
   RO=target/oversize RW=wasm/target/oversize/wasm32-unknown-unknown/release/pqzl_wasm.wasm
   run rust-txm-build.txt pqzl/rust sh -c "cargo build $C --features bench,oversize --bin bench --target-dir $RO \

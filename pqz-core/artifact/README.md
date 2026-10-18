@@ -89,14 +89,15 @@ flowchart LR
 | native bench | `ligero_bench`: proof bytes, `max_len_exact`, prove, prove heap peak, verify p50 / p99, 12 mutation kinds, FNV hash of the proofs of seeds 0..n-1 | 2 proofs, 20 verifies, 12 × 2 mutations | 5, 1,000, 12 × 80 (= `pqzh/ligero/runs/tx0.sh`) |
 | wasm32 bench | `run_wasm.mjs` under node: the same, linear memory ≤ 256 MiB, FNV hash of seed 1 (must equal native) | 2 proofs, 20 verifies, 12 × 1 | 2, 1,000, 12 × 4 (the gate-B method) |
 
-**pqz-ffi** (`../ffi/`, the one precompile over both systems). This is `ffi/run.sh` without its `cargo +stable
-clippy` (the image has 1.97.1's clippy) and `/usr/bin/time`:
+**pqz-ffi** (`../ffi/`, the one precompile over both systems; its PQZL backend is the default one, the Rust core
+`pqzl`, CTR-PQZ-09). This is `ffi/run.sh` without `/usr/bin/time`:
 
 - `cargo test --features prove,test-hooks`: the self-test hash, every decoder rejection, the PQZL differential test,
   node faults, the verify-only process, fill determinism, and the native digest lines;
 - `cargo test --lib` without `prove`;
-- the verify-only cdylib, its symbol scan (`../pqzl/check_symbols.sh`), no test hooks in it, and the C smoke test
-  against `pqz_ffi.h`;
+- the verify-only cdylib, no test hooks in it (`TEST_ARENA` / `TEST_FAIL_WORKER`), the C core's symbol scan
+  (`../pqzl/check_symbols.sh`) when the build has the C core (`cargo tree -e features -i pqz-ffi` shows `pqzl-c`;
+  the default build has none and says so), and the C smoke test against `pqz_ffi.h`;
 - clippy `-D clippy::float_arithmetic`;
 - the wasm32 builds and digest lines (they must equal native);
 - `ffi_bench` (20 verifies in quick, 200 in `--full`).
@@ -115,20 +116,22 @@ built (id, M, auditorOn) of `proof_pqzl.json` / `proof_pqzh.json` (PQZL M = 1, 2
 without the auditor; decoy and boundary cases):
 
 - natively through `pqz_precompile` (`…01`, the `pqz-vectors --check` lines);
-- in wasm32 (`ffi/vectors/replay_wasm.mjs`): proved again, byte-equal. PQZL M = 8 is verify-only there, because
-  wasm32 proves PQZL only up to M = 4;
+- in wasm32 (`ffi/vectors/replay_wasm.mjs`): proved again, byte-equal, PQZL M = 8 included (`pqz-ffi`'s Rust
+  backend proves up to M = 8 in wasm32 since the Rust port's Task 12; on the C backend, opt-in, PQZL M = 8 is
+  verify-only, because the C core proves only up to M = 4 in wasm32);
 - the multi-recipient rows of `negative.json` (PQZL 177, PQZH 165) must give `…00` or a revert.
 
-**Rust = C** (port plan Task 12; the Rust core `../pqzl/rust/`, the production PQZL core once verified). These are
-new runs; the stages above stay the C core's and are not repeated (owner 2026-10-16). In quick and `--full`:
+**Rust = C** (port plan Task 12; the Rust core `../pqzl/rust/`, the production PQZL core once verified). `pqz-ffi`'s
+default PQZL backend is the Rust core (feature `pqzl-rust`, CTR-PQZ-09), so the pqz-ffi and vectors stages above
+already check it against the values the C core fixed: the self-test hash, the digest lines, `pqz-vectors --check`
+(every vector file byte-equal) and the wasm32 replay. The stage adds only what they do not cover, without repeating
+any of them (owner 2026-10-16). In quick and `--full`:
 
 - the Rust prover's `proofs_fnv` equals the C core's frozen hashes: `bench 5 5 63` natively (the six relations,
   n = 5), `bench 2 2 16320` (the eight op 7 shapes, n = 2; `expected-results.json` `rust.txm_fnv`, from the C core's
   L3 run) and `wasm/run_wasm.mjs 3 1 63` in wasm32 (n = 3). Every bench must report `fails 0`;
 - the keys KAT: `keys_kat 100` gives the C core's `pqz_keys_kat 100` lines (SHA-256 `rust.keys_kat`; the C-only
   `before_init_rejected` line left out), and `pqz_kat.py --c-keys` reports `ok`;
-- `pqz-vectors --check` with `pqz-ffi` on the Rust backend (feature `pqzl-rust`, Task 11): every vector file is
-  byte-equal, `selftest.json` included, whose hash must be `rust.selftest`;
 - `--full` only: the same benches with `PQZ_VERIFY=fast` (`verify_fast`).
 
 The Rust rows of `results.md` come from these runs. They use other sample sizes than the C rows; the comparable
@@ -269,32 +272,35 @@ in benchmark builds.
 | M | auditor | built | proof bytes (max) | prove p50 native / wasm32 | generic verify p50 / p99 native | SV p99 portable / x86-64-v3 / wasm32 | wasm32 prove peak (no SV) |
 |---|---|---|---|---|---|---|---|
 | 1 | on | yes | 42,784 | 914 / 1,296 ms | 583 / 596 ms | 7.8 / 4.8 / 13.2 ms | 221.1 MiB |
-| 1 Rust | on | yes | same proofs as C | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) |
+| 1 Rust | on | yes | same proofs as C | 572 / 1,744 ms | 339 / 468 ms | 11.7 / – / 29.8 ms | 68.9 MiB |
 | 2 | on | yes | 43,616 | 978 / 1,371 ms | 674 / 936 ms | 8.6 / 5.0 / 14.2 ms | 232.3 MiB |
-| 2 Rust | on | yes | same proofs as C | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) |
+| 2 Rust | on | yes | same proofs as C | 544 / 1,407 ms | 318 / 468 ms | 9.5 / – / 36.4 ms | 70.9 MiB |
 | 4 | on | yes | 45,295 | 1,354 / 1,827 ms | 865 / 880 ms | 9.1 / 5.3 / 15.0 ms | 255.6 MiB |
-| 4 Rust | on | yes | same proofs as C | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) |
+| 4 Rust | on | yes | same proofs as C | 799 / 2,549 ms | 411 / 530 ms | 10.0 / – / 38.8 ms | 77.2 MiB |
 | 8 | on | yes | 61,822 | 2,398 / 2,931 ms | 2,007 / 2,138 ms | 13.6 / 8.3 / 23.1 ms | 495.3 MiB |
-| 8 Rust | on | yes | same proofs as C | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) |
+| 8 Rust | on | yes | same proofs as C | 1,128 / 2,393 ms | 830 / 899 ms | 13.9 / – / 51.0 ms | 117.4 MiB |
 | 16 | on | no (oversize, bench build only) | 92,367 | 7,466 / 8,336 ms | 6,230 / 6,425 ms | 21.9 / 12.6 / 35.7 ms | 1,199.1 MiB |
-| 16 Rust | on | no (oversize, bench build only) | same proofs as C | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) |
+| 16 Rust | on | no (oversize, bench build only) | same proofs as C | not in run `d6` | – | – | – |
 | 1 | off | yes | 42,442 | 784 / 1,112 ms | 542 / 550 ms | 7.9 / 4.7 / 12.9 ms | 216.7 MiB |
-| 1 Rust | off | yes | same proofs as C | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) |
+| 1 Rust | off | yes | same proofs as C | 449 / 1,237 ms | 243 / 289 ms | 8.7 / – / 34.3 ms | 68.4 MiB |
 | 2 | off | yes | 42,936 | 1,003 / 1,650 ms | 591 / 597 ms | 8.4 / 4.8 / 13.2 ms | 223.4 MiB |
-| 2 Rust | off | yes | same proofs as C | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) |
+| 2 Rust | off | yes | same proofs as C | 639 / 2,171 ms | 287 / 316 ms | 8.9 / – / 34.8 ms | 69.1 MiB |
 | 4 | off | yes | 43,956 | 1,110 / 2,605 ms | 691 / 720 ms | 8.7 / 4.9 / 13.8 ms | 237.2 MiB |
-| 4 Rust | off | yes | same proofs as C | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) |
+| 4 Rust | off | yes | same proofs as C | 711 / 4,032 ms | 322 / 406 ms | 9.1 / – / 38.0 ms | 73.9 MiB |
 | 8 | off | yes | 59,048 | 1,776 / 2,370 ms | 1,444 / 1,546 ms | 12.9 / 7.2 / 21.9 ms | 447.0 MiB |
-| 8 Rust | off | yes | same proofs as C | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) |
+| 8 Rust | off | yes | same proofs as C | 911 / 2,827 ms | 604 / 746 ms | 12.9 / – / 50.1 ms | 105.9 MiB |
 | 16 | off | no (oversize, bench build only) | 86,581 | 5,167 / 5,504 ms | 4,302 / 4,498 ms | 20.3 / 11.1 / 32.6 ms | 1,051.1 MiB |
-| 16 Rust | off | no (oversize, bench build only) | same proofs as C | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) | pending D6 (Task 12) |
+| 16 Rust | off | no (oversize, bench build only) | same proofs as C | not in run `d6` | – | – | – |
 
-"Rust" rows: the Rust core (`pqzl/rust/`), from run `d6` (`pqzl/rust/d6.sh`, C and Rust in one session; the M = 16
-rows from a `--multi-bench` run with the Rust step). The C rows above are unchanged. `results.py multi` adds these
-rows whenever the run directory has `rust-txm-*.jsonl`. The Rust wasm32 prove peak is the module's linear memory
-after the proves, against the C arena peak; the Rust core has no x86-64-v3 build. Whether the Rust M = 8 wasm32
-peak fits within the C M = 4 peak (255.6 MiB) decides the wasm32 limit (Task 12):
-[pqzl/rust/README.md](../pqzl/rust/README.md#the-wasm32-op-7-limit-owner-2026-10-18-if-it-is-enough-raise-it).
+"Rust" rows: the Rust core (`pqzl/rust/`), from run `d6` (2026-10-18, `pqzl/rust/d6.sh`, C and Rust in one session
+outside Docker: native 10 proves / 100 verifies, wasm32 5 / 30, verify_fast 200 / 100; SV p99 = the larger of honest
+and adversarial; `pqzl/rust/runs/d6/results-d6.md` has the same run's C rows). The C rows above are unchanged. The
+M = 16 Rust rows need a `--multi-bench` run with its Rust step, which `results.py multi` turns into rows next to
+PQZL's whenever the run directory has `rust-txm-*.jsonl`; none has run yet. The Rust wasm32 prove peak is the
+module's linear memory after the proves, against the C arena peak; the Rust core has no x86-64-v3 build. The Rust
+M = 8 wasm32 peak (117.4 MiB on, 105.9 MiB off) fits within the C M = 4 peak (255.6 MiB), so `pqz-ffi`'s Rust
+backend proves M = 8 in wasm32 (Task 12:
+[pqzl/rust/README.md](../pqzl/rust/README.md#the-wasm32-op-7-limit-owner-2026-10-18-if-it-is-enough-raise-it)).
 
 ### PQZH (Ligero, the proven preset; the H2 method of pqzh/ligero/runs/txm.sh)
 

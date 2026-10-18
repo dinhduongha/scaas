@@ -100,7 +100,9 @@ once:
 - `ARENA_BIG`, 1 GiB native: the first prove or generic verify moves the core to it, once. The peak with every
   relation loaded is 854 MB (`R_TXM8_0`, M = 8 without the auditor).
 - wasm32 has one 512 MiB arena for both. There, `prove` refuses PQZL multi-recipient transfers above M = 4
-  (`ProveError::Statement(Reject::Legs)`); M = 8 is for native clients.
+  (`ProveError::Statement(Reject::Legs)`); M = 8 is for native clients. The Rust backend has no arena and proves
+  M = 8 in wasm32 too (`WASM_PQZL_MAX_LEGS` = 8 there; its M = 8 prove peaks at 117.4 MiB of linear memory, run
+  `d6`, Rust port Task 12, CTR-PQZ-09).
 
 A poisoned lock is recovered and the core re-initialised (the Rust backend: a fresh `Ctx`). The arena's pages are
 reserved, not touched, until the core uses them.
