@@ -14,7 +14,8 @@
 //!
 //! Node faults (controller 2026-10-14): a core or worker that cannot be set up and a worker job that died are not
 //! properties of the input: `Err(NodeFault)`, which the precompile entry reports as `PQZ_FFI_NODE_FAULT` with no
-//! output. The backends add their own (the C core: arena allocation, `pqz_init`, arena exhaustion).
+//! output. The backends add their own: running out of memory inside the core (the C core: arena allocation,
+//! `pqz_init`, arena exhaustion; the Rust core: `Error::Memory` from a verifier).
 #[cfg(feature = "test-hooks")]
 use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
 

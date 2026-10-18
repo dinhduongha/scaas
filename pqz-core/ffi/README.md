@@ -118,8 +118,8 @@ reserved, not touched, until the core uses them.
   block processing on status 4 and never records the input as invalid.
 - A failed Rust heap allocation outside the PQZL core aborts the process (Rust's allocator; the C arenas are
   reserved fallibly). Inside the Rust PQZL core, every buffer that scales with the input is reserved fallibly: a
-  verifier that cannot allocate returns false (`…00`, the `pqzl` crate's contract, as the C core's verifiers return
-  0), `prove` returns code 2.
+  verifier that cannot allocate gives `Error::Memory` (`pqzl::Ctx::try_verify_fast` / `try_verify`), which is a node
+  fault (status 4), as the C backend's arena exhaustion, never `…00`; `prove` returns code 2.
 
 The test hooks (feature `test-hooks`, never in a production build: `pqzl::TEST_FAIL_WORKER` for both backends; the C
 backend's `TEST_ARENA_BYTES`, `TEST_ARENA_FILL`, `reinit`, `arena_bytes`) inject the faults (`tests/fault.rs`, in its
@@ -154,8 +154,9 @@ compares byte for byte. `vectors/run.sh` runs it together with `pqz_kat.py --che
 wasm32 replay `vectors/replay_wasm.mjs` (through `wasm/`).
 
 **C core build (feature `pqzl-c`).** `build.rs` compiles
-`../pqzl/src/{pqz_lazer,pqz_ntt,pqz_arena,pqz_rel,pqz_keys,pqz_sv}.c` with the flags of `pqzl/build.sh` (clang, `-std=gnu11 -O2 -fno-builtin -fno-math-errno -ffp-contract=off -DPQZ_SV`, natively
-also `-fstack-protector-strong`, no `-march`). It assembles `lazer.h` the way `pqzl/build.sh` does, and runs
+`../pqzl/src/{pqz_lazer,pqz_ntt,pqz_arena,pqz_rel,pqz_keys,pqz_sv}.c` with the flags of `pqzl/build.sh` (clang,
+`-std=gnu11 -O2 -fno-builtin -fno-math-errno -ffp-contract=off -DPQZ_SV`, natively also `-fstack-protector-strong`,
+no `-march`). It assembles `lazer.h` the way `pqzl/build.sh` does, and runs
 `../pqzl/check_symbols.sh` on the archive: the build fails on `malloc`, stdio, libm, GMP or MPFR. For wasm32 the core
 is freestanding: `csrc/wasm_ti3.c` adds the branch-free 128-bit helpers of `pqz_wasm_rt.c` (the prover shifts by
 secret amounts; these override the weak ones of `compiler_builtins`), and Rust provides `mem*`.

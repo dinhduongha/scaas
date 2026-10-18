@@ -122,15 +122,31 @@ impl Ctx {
         self.prove_rel(op, stmt, wit, rnd32)
     }
 
-    /// `pqz_verify` (the generic verifier): true = 1 (valid), false = anything else.
+    /// `pqz_verify` (the generic verifier): true = 1 (valid), false = anything else (running out of memory too; a
+    /// caller that must tell the two apart uses [`Ctx::try_verify`]).
     pub fn verify(&mut self, op: u8, stmt: &[u8], proof: &[u8]) -> bool {
         self.verify_rel(op, stmt, proof) == Ok(true)
     }
 
-    /// `pqz_verify_fast` (the specialised verifier): accepts exactly the proofs `verify` accepts.
+    /// `pqz_verify_fast` (the specialised verifier): accepts exactly the proofs `verify` accepts. False also when
+    /// memory ran out ([`Ctx::try_verify_fast`] tells it apart).
     #[cfg(feature = "sv")]
     pub fn verify_fast(&mut self, op: u8, stmt: &[u8], proof: &[u8]) -> bool {
         self.verify_sv(op, stmt, proof) == Ok(true)
+    }
+
+    /// [`Ctx::verify`] with out-of-memory kept apart: `Ok(verdict)`, or `Err(Error::Memory)` when an allocation failed
+    /// (a fault of the caller's machine, not a property of the input: a node must not report it as invalid, as
+    /// pqz-ffi maps the C core's arena exhaustion to a node fault). `Error::Memory` is the only error; every other
+    /// failure is `Ok(false)`, the verdict `verify` gives.
+    pub fn try_verify(&mut self, op: u8, stmt: &[u8], proof: &[u8]) -> Result<bool, Error> {
+        only_memory(self.verify_rel(op, stmt, proof))
+    }
+
+    /// [`Ctx::verify_fast`] with out-of-memory kept apart, as [`Ctx::try_verify`].
+    #[cfg(feature = "sv")]
+    pub fn try_verify_fast(&mut self, op: u8, stmt: &[u8], proof: &[u8]) -> Result<bool, Error> {
+        only_memory(self.verify_sv(op, stmt, proof))
     }
 
     /// [`keygen`] with this `Ctx`'s A (expanded once, shared with its relations): same arguments, same result.
@@ -158,6 +174,14 @@ impl Ctx {
     /// [`enc_seed`] with this `Ctx`'s A: same arguments, same result.
     pub fn enc_seed(&mut self, pks: &[&[u8; POLYVEC_BYTES]], msgs: &[[u8; 16]], seed_enc: &[u8; 32]) -> Result<Enc, Error> {
         keys::enc_seed(&mut self.a, pks, msgs, seed_enc, (keys::BS, keys::BE, keys::B2))
+    }
+}
+
+/// A verifier's result with every error but `Error::Memory` folded into the verdict false.
+fn only_memory(r: Result<bool, Error>) -> Result<bool, Error> {
+    match r {
+        Err(Error::Memory) => Err(Error::Memory),
+        r => Ok(r == Ok(true)),
     }
 }
 

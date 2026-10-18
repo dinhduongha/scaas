@@ -13,8 +13,10 @@
 //! Faults: the worker unavailable is `NodeFault`, as with the C core. A panic inside the core (the C core cannot
 //! panic) is caught on the worker, the `Ctx` is dropped (rebuilt at the next call) and the panic resumes on the
 //! caller's thread, where `crate::precompile` classifies it as input-caused (`…00`, status 3). An allocation failure
-//! inside the core is `Error::Memory` from `prove` (code 2) and false from the verifiers (`pqzl`'s contract: a
-//! verifier that cannot allocate rejects, as the C core's verifiers return 0).
+//! inside the core is a fault of this node, not of the input: the verifiers (`try_verify_fast` / `try_verify`) give
+//! `Error::Memory` → `NodeFault` (status 4, as the C backend's arena exhaustion), never `…00`, so a node under memory
+//! pressure cannot reject a proof its peers accept; `prove` gives code 2. Every other core error is the verdict
+//! false, as the C backend (only `pqz_err == PQZ_ERR_ARENA` is a node fault there).
 use std::panic::{AssertUnwindSafe, catch_unwind, resume_unwind};
 use std::sync::Mutex;
 
@@ -65,7 +67,12 @@ fn with_ctx<T: Send>(f: impl FnOnce(&mut Ctx) -> T + Send) -> Result<T, NodeFaul
 /// The precompile path (plan R5): the specialised verifier. `stmt` / `proof` are passed through as given; the caller
 /// (`crate::verify`) has decoded them.
 pub fn verify_fast(op: u8, stmt: &[u8], proof: &[u8]) -> Result<bool, NodeFault> {
-    with_ctx(|c| c.verify_fast(op, stmt, proof))
+    verdict(with_ctx(|c| c.try_verify_fast(op, stmt, proof))?)
+}
+
+/// A verifier's result: out of memory (`try_verify*`'s only error) is a node fault.
+fn verdict(r: Result<bool, ::pqzl::Error>) -> Result<bool, NodeFault> {
+    r.map_err(|_| NodeFault)
 }
 
 /// `verify_fast` on the caller's thread, without the worker hop (bench: the FFI's overhead against the bare call;
@@ -86,7 +93,7 @@ pub fn test_mutate(rel: u8, proof: &[u8], kind: u32, r1: u64, r2: u64) -> Result
 
 /// The generic verifier (LaZer's), the reference for differential tests; never on the precompile path.
 pub fn verify_generic(op: u8, stmt: &[u8], proof: &[u8]) -> Result<bool, NodeFault> {
-    with_ctx(|c| c.verify(op, stmt, proof))
+    verdict(with_ctx(|c| c.try_verify(op, stmt, proof))?)
 }
 
 /// pk = A·s + e (`pqz_keypair_from_secret`; no norm check): the self-test reads the columns of A with it.
@@ -146,4 +153,16 @@ pub fn encrypt(
     }
     let c = with_ctx(|c| c.encrypt(pks, msgs, r, e1, e2)).ok()?.ok()?;
     Some((c.u, c.vs))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn out_of_memory_is_a_node_fault() {
+        assert_eq!(verdict(Ok(true)), Ok(true));
+        assert_eq!(verdict(Ok(false)), Ok(false));
+        assert_eq!(verdict(Err(::pqzl::Error::Memory)), Err(NodeFault));
+    }
 }
