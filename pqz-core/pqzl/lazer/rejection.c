@@ -7,6 +7,11 @@
  * with u uniform. The exponents are formed exactly as Q56 fixed-point quotients (masked long division),
  * exp() is pqz_fixexp.h's integer exp, and the comparison uses a 64-bit uniform u (see the precision note
  * there). Integer-only and constant-time in z and v. All functions return 1 for reject, 0 for accept.
+ *
+ * Overflow (2026-10-18): the exponent arithmetic on dishonest-size inputs (|<z,v>| near 2^126: t2 - 2 t1; an
+ * exponent t or a - |y| near -2^63: minus ln M) is done in unsigned arithmetic and wraps modulo 2^128 / 2^64, which is
+ * what the compiled code did before (signed overflow, undefined behaviour) and what the Rust port computes (wrapping_*).
+ * No honest prover gets near: the exponents stay within +-64 in Q56 (2^62) there. Prover only.
  */
 #include "lazer.h"
 
@@ -22,8 +27,8 @@ _int2i128 (const int_t a)
   for (unsigned i = 2; i < a->nlimbs; i++)
     ERR (a->limbs[i] != 0, "%s", "rejection input too large");
   ERR ((m >> 126) != 0, "%s", "rejection input too large");
-  pqz_fx_i128 s = -(pqz_fx_i128)(a->neg & 1);
-  return ((pqz_fx_i128)m ^ s) - s;
+  pqz_fx_u128 s = (pqz_fx_u128)0 - (a->neg & 1);
+  return (pqz_fx_i128)((m ^ s) - s); /* unsigned: m >= 2^127 after the ERR above must not overflow */
 }
 
 /* signed a / d in Q56, d > 0, clamped into int64 */
@@ -31,7 +36,7 @@ static int64_t
 _quot_q56 (pqz_fx_i128 a, uint64_t d)
 {
   pqz_fx_i128 s = a >> 127;
-  pqz_fx_u128 mag = (pqz_fx_u128)((a ^ s) - s);
+  pqz_fx_u128 mag = ((pqz_fx_u128)a ^ (pqz_fx_u128)s) - (pqz_fx_u128)s; /* unsigned: |-2^127| = 2^127 */
   /* |a| < 2^70 keeps |a| * 2^56 inside 128 bits; beyond that exp() saturates anyway */
   pqz_fx_u128 big = (pqz_fx_u128)0 - (pqz_fx_u128)((mag >> 70) != 0);
   mag = (mag & ~big) | ((((pqz_fx_u128)1 << 70) - 1) & big);
@@ -80,7 +85,7 @@ _accept_exp (rng_state_t state, int64_t t_q56, int64_t lnM_q56)
 {
   uint64_t mant;
   int32_t e;
-  pqz_exp_fp (t_q56 - lnM_q56, &mant, &e);
+  pqz_exp_fp ((int64_t)((uint64_t)t_q56 - (uint64_t)lnM_q56), &mant, &e); /* wraps (see the note at the top) */
   return pqz_bernoulli_fp (_u64 (state), mant, e);
 }
 
@@ -96,7 +101,8 @@ rej_standard (rng_state_t state, const intvec_t z, const intvec_t v,
 
   intvec_dot (t1, z, v); /* <z,v> */
   intvec_dot (t2, v, v); /* <v,v> */
-  pqz_fx_i128 num = _int2i128 (t2) - 2 * _int2i128 (t1);
+  /* wraps for |<z,v>| near 2^126 (see the note at the top) */
+  pqz_fx_i128 num = (pqz_fx_i128)((pqz_fx_u128)_int2i128 (t2) - 2 * (pqz_fx_u128)_int2i128 (t1));
   uint64_t den = 2 * (uint64_t)_int2i128 (sigma2);
   int64_t t = _quot_q56 (num, den);
   return !_accept_exp (state, t, _lnM_q56 (scM));
@@ -123,7 +129,7 @@ rej_bimodal (rng_state_t state, const intvec_t z, const intvec_t v,
      Draw u, compare u * (1 + exp(-2|y|)) / 2 < exp(a - |y| - ln M) in 64-bit fixed point. */
   uint64_t m1, m2;
   int32_t e1, e2;
-  pqz_exp_fp (a - y - _lnM_q56 (scM), &m1, &e1);
+  pqz_exp_fp ((int64_t)((uint64_t)a - (uint64_t)y - (uint64_t)_lnM_q56 (scM)), &m1, &e1); /* wraps (note at the top) */
   uint64_t yc = pqz_ct_sel64 (-(uint64_t)(y > PQZ_X_MAX / 2), (uint64_t)(PQZ_X_MAX / 2), (uint64_t)y);
   pqz_exp_fp (-2 * (int64_t)yc, &m2, &e2); /* exp(-2|y|) = m2 * 2^(e2 - 63), e2 <= 1 */
   /* as Q63: m2 << 1 if e2 == 1, else m2 >> -e2 (0 below 2^-63) */

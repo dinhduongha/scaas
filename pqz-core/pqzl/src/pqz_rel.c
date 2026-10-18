@@ -217,7 +217,9 @@ wr_be8 (uint8_t *p, uint64_t v)
     p[b] = (uint8_t)v;
 }
 
-/* n coefficients (be8, each < q) into poly p, centred; the rest of p zero. Returns 0 if a value is >= q. */
+/* n coefficients (be8, each < q) into poly p, centred; the rest of p zero. Returns 0 if a value is >= q. A value >= q
+   is still read, as the int64 (v - q) mod 2^64 (2026-10-18: unsigned subtraction; (int64_t)v - q overflowed for v in
+   [2^63, 2^63 + q), undefined behaviour; the same value the compiled code and the Rust port's keys.rs rd_poly give) */
 static int
 rd_poly (poly_ptr p, const uint8_t *in, unsigned n)
 {
@@ -227,7 +229,7 @@ rd_poly (poly_ptr p, const uint8_t *in, unsigned n)
     {
       uint64_t v = rd_be8 (in + 8 * k);
       ok &= v < PQZ_Q;
-      set_c (p, k, v > (PQZ_Q - 1) / 2 ? (int64_t)v - (int64_t)PQZ_Q : (int64_t)v);
+      set_c (p, k, v > (PQZ_Q - 1) / 2 ? (int64_t)(v - PQZ_Q) : (int64_t)v);
     }
   return ok;
 }
