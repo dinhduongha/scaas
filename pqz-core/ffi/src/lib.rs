@@ -8,9 +8,9 @@
 //! CTR-PQZ-09), PQZH to Ligero (`pqzh`); op 6 to the cached self-test (`selftest`). Output: 32 bytes, `…01` valid,
 //! `…00` anything else; the one revert is an input over `MAX_INPUT`. Every entry catches panics; nothing here aborts.
 //! Faults (controller 2026-10-14): a panic in the decode / verify logic is a property of the input (every node hits
-//! it on the same input) ⇒ `…00` (`PQZ_FFI_INTERNAL`); a fault of this node (worker or core unavailable, C arena
-//! exhaustion) ⇒ no result ([`Error::NodeFault`], `PQZ_FFI_NODE_FAULT`), which the host must not treat as an invalid
-//! input.
+//! it on the same input) ⇒ `…00` (`PQZ_FFI_INTERNAL`); a fault of this node (worker or core unavailable; Rust core:
+//! out of memory in a verifier, `Error::Memory`; C core: arena exhaustion) ⇒ no result ([`Error::NodeFault`],
+//! `PQZ_FFI_NODE_FAULT`), which the host must not treat as an invalid input.
 //!
 //! Rust API for the node: [`precompile`], [`verify_input`], [`decode`]. C ABI for P6f: [`pqz_precompile`]
 //! (`pqz_ffi.h`). Feature `prove` (P6h): [`prove`], keygen / enc / dec in [`pqzl`], witness layouts and test
@@ -120,8 +120,8 @@ pub const PQZ_FFI_BAD_ARGS: i32 = 2;
 /// a panic in the decode / verify logic was caught (input-caused, the same on every node); `out` = `…00`
 /// (CTR-PQZ-10); worth a log line
 pub const PQZ_FFI_INTERNAL: i32 = 3;
-/// a fault of this node, not of the input (worker or core unavailable; C core: arena exhaustion or allocation): no
-/// result, nothing written; the host must abort block processing, never treat the input as invalid
+/// a fault of this node, not of the input (worker or core unavailable; Rust core: out of memory in a verifier,
+/// `Error::Memory`; C core: arena exhaustion or allocation): no result, nothing written; the host must abort block processing, never treat the input as invalid
 pub const PQZ_FFI_NODE_FAULT: i32 = 4;
 
 /// C ABI for the node (P6f, P/Invoke): see `pqz_ffi.h`. Thread-safe (PQZL calls are serialised inside); never

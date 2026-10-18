@@ -1734,8 +1734,9 @@ fn verify_body(ar: &Ar, s: &SvRel, code: u8, hash_stmt: &[u8; 32], stmt: &[u8], 
 }
 
 impl Ctx {
-    /// `pqz_verify_fast`: Ok(true) = 1; every failure (also an allocation failure, as C's arena) is 0. The relation's
-    /// keys and A (shared with `verify`) and its tables here are built at first use.
+    /// `pqz_verify_fast`: Ok(true) = 1, Ok(false) = 0; an allocation failure is `Err(Error::Memory)` (folded into
+    /// false by `Ctx::verify_fast`, kept by `Ctx::try_verify_fast`). The relation's keys and A (shared with `verify`)
+    /// and its tables here are built at first use.
     pub(crate) fn verify_sv(&mut self, op: u8, stmt: &[u8], proof: &[u8]) -> Result<bool, Error> {
         let Some(ri) = rel::rel_of(op, stmt) else { return Ok(false) };
         let r = &RELS[ri];

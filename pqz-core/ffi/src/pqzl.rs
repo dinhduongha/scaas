@@ -106,6 +106,10 @@ fn on_worker<R: Send>(_: &mut Option<Worker>, f: impl FnOnce() -> R + Send) -> O
     Some(f())
 }
 
+/// `encrypt`'s result: `u` and one `v` per recipient.
+#[cfg(feature = "prove")]
+pub type Encrypted = (Box<[u8; PK_BYTES]>, Vec<[u8; 128]>);
+
 /// A key pair from a seed (pq-zero-knowledge.md §4.2, `pqz_keygen`).
 pub struct Key {
     pub pk: Box<[u8; PK_BYTES]>,
