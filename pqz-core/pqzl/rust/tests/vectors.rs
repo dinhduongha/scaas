@@ -2,7 +2,8 @@
 //! keygen.json, enc.json (rows, the trivial ciphertext and the Add / Sub ops), matrix.json, the R_TXM group seeds,
 //! and Enc's input errors. Codec part (feature `test-hooks`): every PQZL proof decodes and re-encodes to itself.
 //! Verify part: every PQZL proof verifies; negative.json's PQZL rows and the cheating fixtures are rejected.
-use pqzl::{dec, enc_group_seed, enc_seed, keygen, keypair_from_secret, Error, CT_BYTES, POLYVEC_BYTES};
+use pqzl::{dec, enc_group_seed, enc_seed, keygen, keypair_from_secret, Ctx, Error, CT_BYTES, POLYVEC_BYTES};
+use std::path::PathBuf;
 use serde_json::Value;
 use sha3::digest::{ExtendableOutput, Update, XofReader};
 use sha3::{Digest, Keccak256, Shake256};
@@ -297,4 +298,46 @@ fn cheating_proofs_reject() {
     for (case, op, stmt, proof, honest) in common::cheating() {
         assert_eq!(ctx.verify(op, &stmt, &proof), honest, "{case}");
     }
+}
+
+fn fnv(b: &[u8]) -> u32 {
+    b.iter().fold(2166136261u32, |h, &x| (h ^ x as u32).wrapping_mul(16777619))
+}
+
+/// hex, "." for no bytes (one field of a space-separated line)
+fn hx(b: &[u8]) -> String {
+    if b.is_empty() {
+        return ".".into();
+    }
+    b.iter().map(|x| format!("{x:02x}")).collect()
+}
+
+/// native = wasm32 (as ffi/wasm's digest lines): writes target/wasm-replay/in.txt (every PQZL vector row: op,
+/// legs, statement, witness, rnd32, proof; every negative.json PQZL row that splits, by index: op, statement, proof) for
+/// wasm/run_vectors.mjs, and target/wasm-replay/native.jsonl, one digest line per case: the proof's FNV-1a (the
+/// vector's bytes, which `reprove_byte_equal` pins as the native prover's output; omitted for op 7 with M >
+/// `WASM_MAX_LEGS`, refused on wasm32), the verify and verify_fast verdicts on this target. run.sh diffs the two.
+#[test]
+fn wasm_replay_inputs() {
+    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("target/wasm-replay");
+    std::fs::create_dir_all(&dir).unwrap();
+    let (mut inp, mut out) = (String::new(), String::new());
+    let mut c = Ctx::new();
+    for r in common::pqzl_rows() {
+        let legs: usize = if r.op == 7 { r.name[1..].split('-').next().unwrap().parse().unwrap() } else { 0 };
+        inp += &format!("row {} {} {legs} {} {} {} {}\n", r.name.replace(' ', "_"), r.op, hx(&r.stmt), hx(&r.wit),
+                        hx(&r.rnd32), hx(&r.proof));
+        let pv = if legs > pqzl::WASM_MAX_LEGS { String::new() } else { format!("\"prove\": \"{:08x}\", ", fnv(&r.proof)) };
+        let (v, f) = (c.verify(r.op, &r.stmt, &r.proof), c.verify_fast(r.op, &r.stmt, &r.proof));
+        assert!(v && f, "{}", r.name);
+        out += &format!("{{\"row\": \"{}\", {pv}\"verify\": {}, \"verify_fast\": {}}}\n", r.name.replace(' ', "_"), v as u8, f as u8);
+    }
+    for (i, (_, b)) in common::negative_inputs().iter().enumerate() {
+        let Some((op, st, pf)) = common::split(b) else { continue };
+        inp += &format!("neg {i} {op} 0 {} . . {}\n", hx(st), hx(pf));
+        let (v, f) = (c.verify(op, st, pf), c.verify_fast(op, st, pf));
+        out += &format!("{{\"neg\": \"{i}\", \"verify\": {}, \"verify_fast\": {}}}\n", v as u8, f as u8);
+    }
+    std::fs::write(dir.join("in.txt"), inp).unwrap();
+    std::fs::write(dir.join("native.jsonl"), out).unwrap();
 }

@@ -12,7 +12,7 @@ crate-type = ["cdylib"]
 path = "lib.rs"
 
 [dependencies]
-pqzl = { path = ".." }
+pqzl = { path = "..", features = ["bench"] }
 
 [profile.release]
 panic = "abort"

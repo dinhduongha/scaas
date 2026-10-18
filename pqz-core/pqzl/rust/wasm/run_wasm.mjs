@@ -1,7 +1,8 @@
 // pqzl (Rust) wasm32 runner: the steps of the native `bench` (pqzl/test/run_wasm.mjs's loop for the C core's pqz.wasm),
 // timed on the JS side; prints the same JSON lines (proofs_fnv equal to the C core's wasm32 run for the same arguments).
 //   cargo build --release --target wasm32-unknown-unknown (in this directory), then
-//   node wasm/run_wasm.mjs [n_prove] [n_verify] [rel]   (rel: bench's bit mask, default 63; PQZL_WASM_FILE: the module)
+//   node wasm/run_wasm.mjs [n_prove] [n_verify] [rel]   (rel: bench's bit mask, default 63; PQZL_WASM_FILE: the module;
+//   PQZ_VERIFY=fast: verify with verify_fast, as the native bench)
 import { readFileSync } from 'node:fs';
 
 const [np = 3, nv = 3, rels = 63] = process.argv.slice(2).map(Number);
@@ -25,7 +26,9 @@ const stats = (name, v) => {
 let t0 = performance.now();
 const rc = x.step_init();
 if (rc !== 0) { out({ error: 'init', rc }); process.exit(1); }
-out({ init_ms: Math.round((performance.now() - t0) * 10) / 10, verify: 'generic' });
+const fast = process.env.PQZ_VERIFY === 'fast';
+x.step_set_fast(fast ? 1 : 0);
+out({ init_ms: Math.round((performance.now() - t0) * 10) / 10, verify: fast ? 'fast' : 'generic' });
 
 let fails = 0;
 for (let tx = 0; tx < NAMES.length; tx++) {
