@@ -10,4 +10,7 @@ rc_only: FAIL (rc 1), expected FAIL: ok
     | FAIL | Rust rust-fnv-native.jsonl fails | fails 0, verifier disagreements 0, last rc= line not 0 |
 verify_only: FAIL (rc 1), expected FAIL: ok
     | FAIL | vectors wasm32 replay | 53 proofs, 52 byte-equal and valid, 1 native PQZL op 7 M > 4 proofs valid (verify only), fails 0 |
+no_rust_expected: FAIL (rc 1), expected FAIL: ok
+    | FAIL | expected-results.json rust.txm_fnv present | the C values the Rust core is checked against |
+    | FAIL | expected-results.json rust.keys_kat present | the C values the Rust core is checked against |
 check_rust_stage: ok

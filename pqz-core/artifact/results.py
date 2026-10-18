@@ -415,6 +415,8 @@ def compare_rust(res, exp):
     mode = res.get("mode")
     for n in RUST_REQUIRED.get(mode, []) if "rust_missing" in res else []:  # check, quick / --full: every Rust run file
         add("FAIL" if n in res.get("rust_missing", []) else "ok", f"Rust {n} present", f"reproduce.sh {mode}")
+    for k in ("txm_fnv", "keys_kat") if mode in RUST_REQUIRED and "rust_missing" in res else []:  # e.g. lost in a freeze
+        add("ok" if E.get(k) else "FAIL", f"expected-results.json rust.{k} present", "the C values the Rust core is checked against")
     for name, r in R["runs"].items():
         add("ok" if r["fails"] == 0 and r["mismatches"] == 0 and r.get("rc") == "ok" else "FAIL", f"Rust {name} fails",
             f'fails {r["fails"]}, verifier disagreements {r["mismatches"]}, last rc= line {"0" if r.get("rc") == "ok" else "not 0"}')
@@ -896,6 +898,9 @@ def main(a):
                              | {"times_ms_informational": {k: v for k, v in x.items() if k.endswith("_ms_native")
                                                            or k.endswith("_ms_wasm") or k.endswith("_ms_x86v3")}}
                              for rel, x in res["relations"].items()}} | pq
+        old = os.path.join(here, "expected-results.json")  # what a run cannot rebuild: the Rust = C values, the log
+        if os.path.exists(old):
+            exp |= {k: v for k, v in json.load(open(old)).items() if k in ("rust", "changes")}
         json.dump(exp, sys.stdout, indent=1)
         print()
         sys.stderr.write(markdown(res) + ("" if ok else "\nFROZEN RUN HAS FAILED CHECKS\n"))

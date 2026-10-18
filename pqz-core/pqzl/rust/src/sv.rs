@@ -16,8 +16,9 @@
 //! LaZer's `_urandom_i64` (`rand::urandom`, which C's local copy reproduces).
 //!
 //! What C keeps in static storage (the prime tables, A in this form, the per-relation tables) lives in the caller's
-//! [`Ctx`], built at the relation's first `verify_fast`. Working memory is `Vec` with `try_reserve`; every failure (also
-//! an allocation failure, C's arena) is a reject.
+//! [`Ctx`], built at the relation's first `verify_fast`. Working memory is `Vec` with `try_reserve`. An allocation failure
+//! is `Err(Error::Memory)`, which `Ctx::try_verify_fast` keeps (pqz-ffi: a node fault, as C's arena exhaustion) and
+//! `Ctx::verify_fast` folds into false; every other failure is a reject.
 #![allow(clippy::needless_range_loop)] // the index loops follow pqz_sv.c's loops line for line
 use crate::arith::int::{int_modq, Int};
 use crate::arith::ntt::{self, csubq, Q};
@@ -1246,7 +1247,8 @@ fn hash_enc(hash: &[u8; 32], v: &mut polyvec::Sv<'_>) -> Result<[u8; 32], Error>
     Ok(hash2(hash, &c.end()?))
 }
 
-/// `verify_body` (with `pqz_sv_verify`'s frame): false = reject; `Err` is C's sticky error (also a reject)
+/// `verify_body` (with `pqz_sv_verify`'s frame): false = reject; `Err(Error::Memory)` = an allocation failed (kept by
+/// `try_verify_fast`, a node fault in pqz-ffi); any other `Err` is C's sticky error, a reject
 fn verify_body(ar: &Ar, s: &SvRel, code: u8, hash_stmt: &[u8; 32], stmt: &[u8], proof: &[u8]) -> Result<bool, Error> {
     let pr = &ar.pr;
     let p = s.p;
@@ -1768,6 +1770,34 @@ mod tests {
         for r in RELS.iter() {
             let m = int_u64(&r.p.quad_eval.quad_many.dcompress.m).unwrap();
             assert!(2 * m - 1 > 8 * MAX_PROOF as u64, "{}: m = {m}", r.name);
+        }
+    }
+
+    /// `setup`'s derived limits = the generic verifier's, for every relation: z1bnd = floor(2 m1 64 962
+    /// 2^(2 log2stdev1) / 400) computed with `Int` as `quad.rs` does (`setup` takes the `t << (2 l1 - 4)` path, exact
+    /// also at log2stdev1 = 19, R_TXM M = 8 / 16), and bz3sqr, bz4, bsq, b2[i] = the params' Int values.
+    #[test]
+    fn setup_limits_eq_generic() {
+        use crate::arith::int::int_div;
+        let mut c = crate::Ctx::new();
+        c.rel_state(0).unwrap();
+        let ar = Ar::new(c.a.as_ref().unwrap()).unwrap();
+        for (ri, r) in RELS.iter().enumerate() {
+            c.rel_state(ri).unwrap();
+            let s = setup(&ar, r, c.keys[ri].as_ref().unwrap()).unwrap();
+            let (p, qm) = (r.p, r.p.quad_eval.quad_many);
+            let mut bnd = Int::from_i64(2, 2 * qm.m1 as i64 * 64 * 962);
+            bnd.lshift(&{ bnd }, 2 * qm.log2stdev1);
+            let mut tmp = Int::from_i64(1, 400);
+            let (x, y) = (bnd, tmp);
+            int_div(&mut bnd, &mut tmp, &x, &y);
+            assert_eq!(Some(s.z1bnd), int_u64(&bnd), "{} z1bnd (log2stdev1 {})", r.name, qm.log2stdev1);
+            assert_eq!(Some(s.bz3sqr), int_u64(&p.bz3sqr), "{} bz3sqr", r.name);
+            assert_eq!(Some(s.bz4), int_u64(&p.bz4), "{} bz4", r.name);
+            assert_eq!(Some(s.bsq), int_u64(&qm.bsqr), "{} bsq", r.name);
+            for i in 0..s.z {
+                assert_eq!(Some(s.b2[i]), int_u64(&p.l2bsqr[i]), "{} b2[{i}]", r.name);
+            }
         }
     }
 }

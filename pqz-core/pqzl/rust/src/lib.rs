@@ -85,7 +85,8 @@ pub enum Error {
 }
 
 /// Clears secret material where the C core calls `explicit_bzero` (the prover's seeds `wh` / `ex`, `pqz_dec`'s `w`;
-/// here also the witness vector s1 and the commitment randomness s2). Best effort, not guaranteed: without unsafe
+/// here also the witness vector s1 and the commitment randomness s2; the AES-CTR key schedule and the SHAKE sponges
+/// are cleared on drop, `rand::aes_ctr` / `rand::shake`, as C's `_aes256ctr_clear` / `_shake128_clear`). Best effort, not guaranteed: without unsafe
 /// code (no volatile write) and without a zeroize crate (D1) the compiler may still elide the stores; `black_box`
 /// on the cleared buffer makes that unlikely. Copies the compiler made earlier (moves, registers, spilled stack) and
 /// the other intermediate buffers of the prover are not cleared, as in C (STATUS Open 8).

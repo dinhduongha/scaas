@@ -573,7 +573,7 @@ The rejected backends' code and runs are kept in `pqzh/stark-backup/` as the rec
 
 | Want to… | Run |
 |---|---|
-| run the full gate A / B checklist (KAT, fix checks, differential, vectors, `pqz-ffi`, cargo tests, fuzz smoke) | `scripts/capped pqz-core/gate.sh <label>` |
+| run the full gate A / B checklist (KAT, fix checks, differential, vectors, `pqz-ffi`, the Rust PQZL core's tests with the C oracle, cargo tests, fuzz smoke) | `scripts/capped pqz-core/gate.sh <label>` |
 | build PQZL (native + wasm) | `pqzl/build.sh all` |
 | check the PQZL arithmetic against upstream LaZer | `pqzl/build/native/kat_dump > pqzl/build/native/kat-pqz.json`, then `python3 -I pqzl/kat/check.py pqzl/kat/lazer-3330e48.json pqzl/build/native/kat-pqz.json` (must print 19/19) |
 | test PQZH | `(cd pqzh/ligero && cargo test --release --offline)` |
@@ -726,7 +726,7 @@ run files keep the paths of their day.
 | `glic/` | both | tool | licence step 1: GMP / MPFR / HEXL absence scans |
 | `fuzz/` | both | tool | continuous fuzzing: targets `precompile`, `mutate`, `codec` (ASan + UBSan, libFuzzer) |
 | `nethermind/` | both | core + tool | `Nethermind.Pqz` plugin (PQZ + ML-DSA precompiles), tests, P/Invoke harness, calibration, image build, chain runbook and runs |
-| `gate.sh` | both | tool | the gate A / B checklist in one capped job |
+| `gate.sh` | both | tool | the gate A / B checklist in one capped job (gate A: both PQZL cores, C and Rust) |
 | `NOTICE`, `STATUS.md` | — | — | third-party notices; the detailed status log |
 
 <details>

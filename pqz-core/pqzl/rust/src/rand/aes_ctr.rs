@@ -32,3 +32,13 @@ impl AesCtr {
         }
     }
 }
+
+/// Best-effort clear of the key schedule and the keystream block (C: `_aes256ctr_clear`, `explicit_bzero`): re-keyed
+/// with zeros, as `crate::wipe` (no unsafe, no zeroize crate; `black_box` keeps the stores).
+impl Drop for AesCtr {
+    fn drop(&mut self) {
+        self.aes = Aes256::new(&[0u8; 32].into());
+        (self.ctr, self.buf, self.pos) = ([0; 16], [0; 16], 16);
+        core::hint::black_box(&*self);
+    }
+}

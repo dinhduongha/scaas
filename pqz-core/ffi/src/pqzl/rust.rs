@@ -3,7 +3,7 @@
 //! code in the core.
 //!
 //! One `pqzl::Ctx` for the process (A, each relation's keys and the specialised verifier's tables, built at first use;
-//! about 41 KB inline, so boxed, never on a caller's stack), behind a `Mutex`, used on the worker (`super::on_worker`):
+//! about 41 KB inline, so on the heap through `try_reserve_exact`, never on a caller's stack), behind a `Mutex`, used on the worker (`super::on_worker`):
 //! the C core's model without its arena. One locked `Ctx` rather than one per thread: Nethermind calls the precompile
 //! from several threads (block processing, the RPC pool); a thread-local `Ctx` would build and keep a full cache set
 //! per calling thread (memory × threads) and pay a cold build on each new pool thread, so a verify's time would depend
@@ -32,33 +32,46 @@ const _: () = assert!(
 );
 
 struct State {
-    ctx: Option<Box<Ctx>>,
+    /// empty or the one `Ctx`: a `Vec` so that its ~41 KB come from `try_reserve_exact` (an allocation failure is
+    /// `NodeFault`; a `Box::new` would abort the node, which `catch_unwind` cannot catch)
+    ctx: Vec<Ctx>,
     worker: Option<Worker>,
 }
 
-static STATE: Mutex<State> = Mutex::new(State { ctx: None, worker: None });
+static STATE: Mutex<State> = Mutex::new(State { ctx: Vec::new(), worker: None });
 
 /// Runs `f` under the lock, on the worker, with the process's `Ctx` (created at the first call). `Err(NodeFault)` if
-/// the worker is unavailable; a panic in `f` drops the `Ctx` and resumes on the caller's thread. A poisoned lock is
-/// recovered with a fresh `Ctx`.
+/// the worker is unavailable or the `Ctx` cannot be allocated; a panic in `f` drops the `Ctx` and resumes on the
+/// caller's thread. A poisoned lock is recovered with a fresh `Ctx`.
 fn with_ctx<T: Send>(f: impl FnOnce(&mut Ctx) -> T + Send) -> Result<T, NodeFault> {
     let mut g = STATE.lock().unwrap_or_else(|e| {
         STATE.clear_poison();
         let mut g = e.into_inner();
-        g.ctx = None;
+        g.ctx = Vec::new();
         g
     });
     let State { ctx, worker } = &mut *g;
-    let r = on_worker(worker, || catch_unwind(AssertUnwindSafe(|| f(ctx.get_or_insert_with(|| Box::new(Ctx::new()))))));
+    let r = on_worker(worker, || {
+        catch_unwind(AssertUnwindSafe(|| {
+            if ctx.is_empty() {
+                // ponytail: no test hook forces this failure (the counting-allocator tests are pqzl's); it is the
+                // documented try_reserve contract
+                ctx.try_reserve_exact(1).ok()?;
+                ctx.push(Ctx::new());
+            }
+            Some(f(&mut ctx[0]))
+        }))
+    });
     match r {
-        Some(Ok(out)) => Ok(out),
+        Some(Ok(Some(out))) => Ok(out),
+        Some(Ok(None)) => Err(NodeFault),
         Some(Err(panic)) => {
-            g.ctx = None;
+            g.ctx = Vec::new();
             drop(g);
             resume_unwind(panic)
         }
         None => {
-            g.ctx = None;
+            g.ctx = Vec::new();
             Err(NodeFault)
         }
     }
@@ -81,11 +94,13 @@ fn verdict(r: Result<bool, ::pqzl::Error>) -> Result<bool, NodeFault> {
 }
 
 /// `verify_fast` on the caller's thread, without the worker hop (bench: the FFI's overhead against the bare call;
-/// the caller's stack must be large enough). The `Ctx` must exist (any earlier call).
+/// the caller's stack must be large enough). The `Ctx` must exist (any earlier call). Feature `test-hooks` only: it
+/// bypasses the out-of-memory → `NodeFault` mapping (an allocation failure is the verdict false here).
+#[cfg(feature = "test-hooks")]
 #[doc(hidden)]
 pub fn verify_fast_on_caller(op: u8, stmt: &[u8], proof: &[u8]) -> bool {
     let mut g = STATE.lock().unwrap_or_else(|e| e.into_inner());
-    g.ctx.as_mut().is_some_and(|c| c.verify_fast(op, stmt, proof))
+    g.ctx.first_mut().is_some_and(|c| c.verify_fast(op, stmt, proof))
 }
 
 /// `pqzl::test_mutate` (feature `fuzz` only): decode `proof` for relation `rel` (an op, 0x81 for `R_TX0`, or an

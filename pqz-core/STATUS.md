@@ -39,10 +39,10 @@ Terms used throughout:
   is done: `artifact/runs/freeze-2026-10-17/` (section "Gates A / B and the freeze").
 - The multi-recipient transfer (`R_TXM`, op 7) is live in the `PQZ` precompile on chain 7622 since 2026-10-17 and
   is used by the PQZ tokens.
-- **In progress: the PQZL Rust port** on branch `pqzl-rust` (plan `docs/superpowers/plans/2026-10-17-pqzl-rust-port.md`):
-  crate `pqzl` in `pqzl/rust/`, byte-for-byte equal to the C core. Tasks 1–11 of 12 are done (Task 10b's hardening
-  follow-ups in both cores; Task 11: `pqz-ffi` builds the Rust core by default, the C core opt-in, the 2 h fuzz
-  differential clean). Task 12 (branch `pqzl-rust-t12prep`, under review):
+- **The PQZL Rust port is done** on branch `pqzl-rust` (plan `docs/superpowers/plans/2026-10-17-pqzl-rust-port.md`;
+  merge into `main` pending): crate `pqzl` in `pqzl/rust/`, byte-for-byte equal to the C core. Tasks 1–12 (Task 10b's
+  hardening follow-ups in both cores; Task 11: `pqz-ffi` builds the Rust core by default, the C core opt-in, the 2 h
+  fuzz differential clean; `gate.sh`'s gate A now covers both PQZL cores, step `rust`). Task 12:
   - the package stage "Rust = C" (`artifact/reproduce.sh`): the Rust prover's `proofs_fnv` against the C core's
     frozen hashes and the keys KAT; the pqz-ffi and vectors stages already run the Rust core (the default backend);
   - the Rust rows in `results.py`'s tables and in README §5 / `artifact/README.md`;

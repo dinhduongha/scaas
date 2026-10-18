@@ -71,7 +71,7 @@ Self-test hash: `ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d20
 | PQZH | TransferMulti2_0 | 231,918 | 10.07 / 10.77 ms | 1.28 ms |
 | PQZH | TransferMulti4_0 | 230,904 | 10.49 / 11.86 ms | 1.38 ms |
 
-## Against expected-results.json: 234 ok, 0 FAIL, 0 warn, 0 info
+## Against expected-results.json: 236 ok, 0 FAIL, 0 warn, 0 info
 
 | status | check | detail |
 |---|---|---|
@@ -282,6 +282,8 @@ Self-test hash: `ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d20
 | ok | Rust rust-keys-kat.jsonl present | reproduce.sh quick |
 | ok | Rust rust-build.txt present | reproduce.sh quick |
 | ok | Rust rust-keys-pqz-kat.txt present | reproduce.sh quick |
+| ok | expected-results.json rust.txm_fnv present | the C values the Rust core is checked against |
+| ok | expected-results.json rust.keys_kat present | the C values the Rust core is checked against |
 | ok | Rust rust-fnv-native.jsonl fails | fails 0, verifier disagreements 0, last rc= line 0 |
 | ok | Rust rust-fnv-wasm.jsonl fails | fails 0, verifier disagreements 0, last rc= line 0 |
 | ok | Rust rust-fnv-txm.jsonl fails | fails 0, verifier disagreements 0, last rc= line 0 |

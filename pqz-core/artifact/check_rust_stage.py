@@ -36,15 +36,25 @@ def verify_only(d):  # the Rust backend (no C core in the build) left an M = 8 r
     open(p, "w").write(t)
 
 
+def no_rust_expected(d):  # expected-results.json without its rust section (as an old freeze wrote it)
+    import json
+    e = json.load(open(os.path.join(HERE, "expected-results.json")))
+    e.pop("rust")
+    json.dump(e, open(os.path.join(d, "expected-no-rust.json"), "w"))
+
+
 def run(d):
-    r = subprocess.run([sys.executable, "-I", os.path.join(HERE, "results.py"), "check", d], capture_output=True, text=True)
+    e = os.path.join(d, "expected-no-rust.json")
+    r = subprocess.run([sys.executable, "-I", os.path.join(HERE, "results.py"), "check", d] + ([e] if os.path.exists(e) else []),
+                       capture_output=True, text=True)
     fails = [l for l in r.stdout.splitlines() if l.startswith("| FAIL")]
     return r.returncode, "RESULT: PASS" in r.stdout, fails
 
 
 bad = 0
 for name, tamper in [("untouched", None), ("crash", crash), ("early_stop", early_stop), ("missing", missing),
-                     ("rc_only", rc_only), ("verify_only", verify_only)]:
+                     ("rc_only", rc_only), ("verify_only", verify_only),
+                     ("no_rust_expected", no_rust_expected)]:
     with tempfile.TemporaryDirectory() as t:
         d = os.path.join(t, "run")
         shutil.copytree(RUN, d)

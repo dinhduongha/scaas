@@ -5,11 +5,11 @@ SCaaS PQZ (pq-zero-knowledge.md §4, §5, §8). Goal: byte-for-byte equal to the
 `(op, stmt, wit, rnd32)`, same verdicts on every input, same keys / Enc / Dec, native and wasm32 — so other chains
 and applications can use the proof system without the C build. Plan: `docs/superpowers/plans/2026-10-17-pqzl-rust-port.md`.
 
-Status: **port in progress** (Tasks 1-10 of 12, with Task 10b's hardening follow-ups; crate skeleton, API, C oracle; the arithmetic layer; hashing,
-rng and samplers; keys, Enc, Dec; the proof codec and `test_mutate`; the generated parameters; the generic verifier
-`Ctx::verify`; the prover `Ctx::prove`; the specialised verifier `Ctx::verify_fast`; no globals, memory, threads,
-wasm32, the `Ctx` key methods). Every API function is ported. Owner 2026-10-18: this crate becomes the production
-PQZL core of the `PQZ` precompile (pqz-ffi switches to it in Task 11).
+Status: **port done** (Tasks 1–12 and 10b of the plan, 2026-10-18/19): every API function is ported and checked
+against the C core (vectors re-proved byte-equal, the C oracle tests, the 2 h fuzz differential, the package's
+"Rust = C" stage). Owner 2026-10-18: this crate is the production PQZL core of the `PQZ` precompile; `pqz-ffi` builds
+it by default (feature `pqzl-rust`, Task 11), the C core is the opt-in reference. Chain 7622 keeps the C-backed node
+image until the live roll-out.
 
 ## Layout
 
@@ -64,7 +64,9 @@ floating point.
 - wasm32: `prove` of op 7 with M > `WASM_MAX_LEGS` (8) is `Error::Input` (= pqz-ffi's `WASM_PQZL_MAX_LEGS` on the
   Rust backend; raised from 4 in Task 12, see "The wasm32 op 7 limit" below; the C backend keeps 4).
 - Secrets: the prover's seeds, the witness vector s1, the commitment randomness s2 and `dec`'s w are cleared after
-  use (`fill` + `black_box`, where C calls `explicit_bzero`). Best effort, not guaranteed: without unsafe code and
+  use (`fill` + `black_box`, where C calls `explicit_bzero`), and the AES-CTR key schedules and SHAKE sponges when
+  they are dropped (re-keyed with zeros / replaced by an empty sponge, where C calls `_aes256ctr_clear` /
+  `_shake128_clear`). Best effort, not guaranteed: without unsafe code and
   without a zeroize crate the compiler may elide the stores, and copies elsewhere are not cleared.
 
 ## Features

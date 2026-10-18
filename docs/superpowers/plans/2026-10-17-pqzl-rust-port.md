@@ -2,8 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Status:** plan only (owner 2026-10-16: "plan, no code"). Execution starts **after the freeze** (owner order 2026-10-16:
-S5 → layout move → S6 ∥ this plan → S8 → S7 → gates A / B → freeze → the port). Decisions D1–D8 below are controller
+**Status:** done (2026-10-18/19, branch `pqzl-rust`): Tasks 1–12 and 10b, commits `109dda5` (Task 1) … `15c19d6`
+(Task 12 fix round), plus the whole-branch review fix round; reports in the SDD run
+`.superpowers/sdd/2026-10-17-pqzl-rust-port/`. `pqz-ffi` builds the Rust core by default (Task 11); the live chain
+7622 keeps the C-backed image until the roll-out. (Originally: plan only, owner 2026-10-16; execution after the
+freeze.) Decisions D1–D8 below are controller
 proposals; the owner may override any of them.
 
 **Owner 2026-10-17:** plan approved (D1–D8 as proposed); execution subagent-driven (superpowers:subagent-driven-development:

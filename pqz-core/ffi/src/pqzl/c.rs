@@ -180,7 +180,9 @@ pub fn verify_fast(op: u8, stmt: &[u8], proof: &[u8]) -> Result<bool, NodeFault>
 }
 
 /// `verify_fast` on the caller's thread, without the worker hop (bench: the FFI's overhead against the bare call;
-/// the caller's stack must be large enough). The core must be up (any earlier call).
+/// the caller's stack must be large enough). The core must be up (any earlier call). Feature `test-hooks` only: it
+/// bypasses the arena-exhaustion → `NodeFault` mapping.
+#[cfg(feature = "test-hooks")]
 #[doc(hidden)]
 pub fn verify_fast_on_caller(op: u8, stmt: &[u8], proof: &[u8]) -> bool {
     let g = STATE.lock().unwrap_or_else(|e| e.into_inner());

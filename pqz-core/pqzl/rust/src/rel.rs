@@ -894,12 +894,13 @@ impl Ctx {
         let mut s1 = PolyVec::new(tb.m1 as usize)?;
         let mut m = PolyVec::new((tb.l + tb.lext) as usize)?;
         let Some((mut s, mut t)) = build(a, r, stmt)? else { return Err(Error::Input) };
+        // s2 before the witness fills s1, so that no allocation failure leaves s1 unwiped
+        let mut s2 = PolyVec::new(tb.m2 as usize)?;
         if !witness(&mut t, r, wit, &mut s1).inspect_err(|_| crate::wipe(&mut s1))? {
             crate::wipe(&mut s1);
             return Err(Error::Input);
         }
         // do_prove; the seeds, s1 and s2 are cleared on every path out (C: explicit_bzero of ex; crate::wipe)
-        let mut s2 = PolyVec::new(tb.m2 as usize)?;
         let (mut ex0, mut ex1) = prover_seeds(rnd32, wit, &hash0);
         let r = (|| {
             polyvec_urandom_bnd(&mut *s2, &Int::from_i64(1, -tb.nu), &Int::from_i64(1, tb.nu), &ex0, 0)?;

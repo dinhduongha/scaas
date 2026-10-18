@@ -7,10 +7,34 @@
 use sha3::digest::{ExtendableOutput, Update, XofReader};
 use sha3::{Shake128, Shake128Reader, Shake256, Shake256Reader};
 
-/// a SHAKE output stream
-pub(crate) struct Xof<R>(R);
+/// a SHAKE reader with an empty sponge to overwrite it with (the clear on drop)
+pub(crate) trait Empty {
+    fn empty() -> Self;
+}
+impl Empty for Shake128Reader {
+    fn empty() -> Self {
+        Shake128::default().finalize_xof()
+    }
+}
+impl Empty for Shake256Reader {
+    fn empty() -> Self {
+        Shake256::default().finalize_xof()
+    }
+}
 
-impl<R: XofReader> Xof<R> {
+/// a SHAKE output stream
+pub(crate) struct Xof<R: Empty>(R);
+
+/// Best-effort clear of the sponge (C: `_shake128_clear` / `explicit_bzero`): replaced by an empty one, as
+/// `crate::wipe` (no unsafe, no zeroize crate; `black_box` keeps the stores).
+impl<R: Empty> Drop for Xof<R> {
+    fn drop(&mut self) {
+        self.0 = R::empty();
+        core::hint::black_box(&self.0);
+    }
+}
+
+impl<R: XofReader + Empty> Xof<R> {
     /// the next `out.len()` bytes (`shake128_squeeze` / `shake256_squeeze`)
     pub(crate) fn squeeze(&mut self, out: &mut [u8]) {
         self.0.read(out);
@@ -36,6 +60,13 @@ pub(crate) struct Stream {
     xof: Xof<Shake256Reader>,
     byte: u8,
     nbits: u32,
+}
+
+impl Drop for Stream {
+    fn drop(&mut self) {
+        (self.byte, self.nbits) = (0, 0); // the sponge clears itself (Xof's drop)
+        core::hint::black_box(&*self);
+    }
 }
 
 impl Stream {

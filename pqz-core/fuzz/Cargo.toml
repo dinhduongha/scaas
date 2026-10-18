@@ -12,7 +12,8 @@ publish = false
 crate-type = ["staticlib"]
 
 [dependencies]
-# the production PQZL core (pqz-ffi's default backend, CTR-PQZ-09: Rust), whatever pqz-ffi's default
+# the Rust PQZL core, pinned here (default-features off, pqzl-rust on): the production core (CTR-PQZ-09) even if
+# pqz-ffi's default feature changes; mode pqzl-diff adds the C core (feature pqzl-diff = pqz-ffi/pqzl-c)
 pqz-ffi = { path = "../ffi", default-features = false, features = ["fuzz", "pqzl-rust"] }
 
 [features]
