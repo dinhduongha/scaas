@@ -1,0 +1,27 @@
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust-t12prep/pqz-core/pqzl/rust)
+    Finished `release` profile [optimized + debuginfo] target(s) in 5.90s
+     Running tests/memory.rs (target/release/deps/memory-dfcb7353e8355278)
+
+running 1 test
+size_of::<Ctx>() = 41032 B (the specialised verifier's fixed tables inline, the rest on the heap)
+peak_per_op (bytes; cold = fresh Ctx, the call builds A / keys / SV tables; warm = second call)
+row                            prove cold   prove warm  verify cold  verify warm    fast cold    fast warm    allocs
+TRANSFER                         62903248     59672944     62578000     59347696     10709241      1206937     30393
+TRANSFER0                        62006944     58800928     61684864     58478848     10624217      1194329     27421
+BURN                             60519936     57350352     60202608     57033024     10498233      1176457     28508
+REGISTER                         23529344     21414176     23359856     21244688      6956545       737185     14027
+DISCLOSE-SENDER                  24442192     22303792     24269536     22131136      7037761       749089     18522
+DISCLOSE-RECEIVER                25597312     23338528     25398784     23140000      7419297       777793     18635
+M1-on                            62903248     59672944     62578000     59347696     10709241      1206937     26903
+M2-on                            65168352     61877328     64835184     61544160     10936633      1253801     30323
+M4-on                            69982472     66570008     69633464     66221000     11391417      1347529     32947
+M8-on                           115489848    110717256    115002504    110229912     15959193      1907113     44845
+M1-off                           62006944     58800928     61684864     58478848     10624217      1194329     26292
+M2-off                           63227968     59985520     62901136     59658688     10766585      1228585     29719
+M4-off                           65969792     62654480     65633456     62318144     11051321      1297097     27947
+M8-off                          102718072     98156680    102256072     97694680     15229337      1806249     38591
+R_TX prove (cold) 62903248 B = 0.20 x the C arena peak 312151904 B (target <= 1.1, fails > 2)
+test peak_per_op ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 25.34s
+

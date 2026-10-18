@@ -55,8 +55,9 @@ TEXT = {"pqzh-test.txt": ["mutated inputs rejected, 0 verifier panics caught"], 
 FFI = ["ffi-digests-native.jsonl", "ffi-digests-wasm.jsonl", "ffi-bench.jsonl"]
 VECTORS = "vectors-wasm.jsonl"  # replay_wasm.mjs: one line per proof, then {"cases", "verify_only", "fails"}
 # op 7 R_TXM (P6-ANON S6, D14): the built leg counts per id (= pqz-stmt built_legs, plan D3 / S3), both auditorOn;
-# wasm32 proves PQZL op 7 up to M = 4 only (pqzl::WASM_PQZL_MAX_LEGS, one 512 MiB arena, S3), so its replay verifies
-# the native PQZL M = 8 proofs (S4)
+# wasm32 proves PQZL op 7 up to M = 4 only on the C backend (pqzl::WASM_PQZL_MAX_LEGS, one 512 MiB arena, S3), so its
+# replay verifies the native PQZL M = 8 proofs there (S4); the Rust backend (default) proves M = 8 too (port plan
+# Task 12), and those rows are byte-equal, valid rows like the others
 TXM_BUILT = {"pqzl": (1, 2, 4, 8), "pqzh": (1, 2, 4)}
 WASM_PQZL_MAX_LEGS = 4
 VERIFY_ONLY = "native proof (verify only)"
@@ -723,29 +724,36 @@ def vec_rel(name):
     return VEC_REL.get(name) or (s and f"R_TXM{s[0]}{'' if s[1] else '_0'}")
 
 
-def d6(d):
+def d6(d, rerun=None):
+    """rerun: a d6.sh D6_T re-run of some loop steps (its own run dir); its relations' rows replace the first pass's."""
     res = {"rels": {}, "checks": [], "machine": machine()}
     add = lambda s, w, x: res["checks"].append([s, w, x])
-    for core in ("c", "rust"):
-        for f in D6_RUNS:
-            p = os.path.join(d, f"{core}-{f}.jsonl")
-            if not os.path.exists(p):
+    fresh = set()  # (rel, core) taken from the re-run
+    for core, src, f in [(c, s, f) for s in [d] + ([rerun] if rerun else []) for c in ("c", "rust") for f in D6_RUNS]:
+        p = os.path.join(src, f"{core}-{f}.jsonl")
+        if not os.path.exists(p):
+            continue
+        rels, fails, mism = bench(p)
+        name = os.path.relpath(p, d)
+        add("ok" if fails == 0 and mism == 0 else "FAIL", name, f"fails {fails}, verifier disagreements {mism}")
+        be, ver = f.split("-")
+        for rel, r in rels.items():
+            if src == rerun and (rel, core) not in fresh:
+                fresh.add((rel, core))
+                res["rels"].setdefault(rel, {})[core] = {}
+                rr = res.setdefault("rerun", {"dir": os.path.relpath(rerun, d), "rels": []})["rels"]
+                rr += [] if rel in rr else [rel]
+            x = res["rels"].setdefault(rel, {}).setdefault(core, {})
+            if ver == "nosv":
+                x["wasm_peak"] = r.get("arena_peak")
                 continue
-            rels, fails, mism = bench(p)
-            add("ok" if fails == 0 and mism == 0 else "FAIL", f"{core}-{f}.jsonl", f"fails {fails}, verifier disagreements {mism}")
-            be, ver = f.split("-")
-            for rel, r in rels.items():
-                x = res["rels"].setdefault(rel, {}).setdefault(core, {})
-                if ver == "nosv":
-                    x["wasm_peak"] = r.get("arena_peak")
-                    continue
-                if "fnv" in r and ver == "generic":
-                    x[f"fnv_{be}"] = [r["fnv"], r["np"]]
-                    x["native_peak" if be == "native" else "wasm_peak"] = r.get("arena_peak" if be == "native" else "wasm_memory")
-                if "prove" in r and ver == "generic":
-                    x[f"prove_{be}"] = [r["prove"]["p50_ms"], r["prove"]["p99_ms"]]
-                if "valid" in r:
-                    x[f"{'verify' if ver == 'generic' else 'fast'}_{be}"] = [r["valid"]["p50_ms"], p99(r)]
+            if "fnv" in r and ver == "generic":
+                x[f"fnv_{be}"] = [r["fnv"], r["np"]]
+                x["native_peak" if be == "native" else "wasm_peak"] = r.get("arena_peak" if be == "native" else "wasm_memory")
+            if "prove" in r and ver == "generic":
+                x[f"prove_{be}"] = [r["prove"]["p50_ms"], r["prove"]["p99_ms"]]
+            if "valid" in r:
+                x[f"{'verify' if ver == 'generic' else 'fast'}_{be}"] = [r["valid"]["p50_ms"], p99(r)]
     for core in ("c", "rust"):  # ffi_bench on each pqz-ffi backend
         p = os.path.join(d, f"{core}-ffi-bench.jsonl")
         if os.path.exists(p):
@@ -783,7 +791,9 @@ def d6_markdown(res):
          "One session, one machine; one process per relation, core and backend. Times p50 / p99 in ms (verify p99: the "
          "larger of honest and adversarial). Prove peak native: C arena peak / Rust heap peak (counting allocator, cold "
          "Ctx, tests/memory.rs); wasm32: C arena peak (prover build without SV) / Rust linear memory of the "
-         "one-relation process.", "",
+         "one-relation process.", ""] + ([f"Rows of {', '.join(f'`{r}`' for r in res['rerun']['rels'])}: the re-run in "
+         f"`{res['rerun']['dir']}/` (d6.sh D6_T), which replaces the first pass's rows of those relations (kept in the raw "
+         "files of this directory).", ""] if "rerun" in res else []) + [
          "| relation | core | prove native | prove wasm32 | verify native | verify wasm32 | verify_fast native "
          "| verify_fast wasm32 | prove peak native (MiB) | prove peak wasm32 (MiB) | proofs_fnv native / wasm32 |",
          "|---|---|---|---|---|---|---|---|---|---|---|"]
@@ -904,8 +914,8 @@ def main(a):
         ok = not any(st == "FAIL" for st, _, _ in res["checks"])
         print("RESULT:", "PASS" if ok else "FAIL")
         return 0 if ok else 1
-    if len(a) == 2 and a[0] == "d6":
-        res = d6(a[1])
+    if len(a) in (2, 3) and a[0] == "d6":
+        res = d6(a[1], a[2] if len(a) == 3 else None)
         json.dump(res, open(os.path.join(a[1], "results-d6.json"), "w"), indent=1)
         md = d6_markdown(res)
         open(os.path.join(a[1], "results-d6.md"), "w").write(md)

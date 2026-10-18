@@ -10,6 +10,9 @@
 # memory per shape is in rust-wasm-generic.jsonl), and native = wasm32 on every vector proof with M = 8 proved in
 # wasm32 too. Also ffi_bench on both pqz-ffi backends (README §5.3). Sample sizes
 # = reproduce.sh --full (NP= NV= NPW= NVW= NF= override).
+# Re-run of some loop steps only (t = relation bit, as below): D6_T="9 10 11" ... d6.sh <label>/rerun-t9-11 runs the
+# loop for those t and stops; then results.py d6 runs/<label> runs/<label>/rerun-t9-11 replaces their rows (run d6:
+# the first pass of t = 9..11 overlapped external load, so the owner had them re-run).
 set -u
 cd "$(dirname "$0")" # pqzl/rust
 mkdir -p "runs/$1"
@@ -28,7 +31,7 @@ for f in native-generic native-fast wasm-generic wasm-fast wasm-nosv; do : > "$D
 for f in native-generic native-fast wasm-generic wasm-fast; do : > "$D/rust-$f.jsonl"; done
 : > "$D/rc.txt"
 r() { "$@" || echo "rc=$? $*" >> "$D/rc.txt"; } # keep going; results.py counts the fails
-for t in 0 1 2 3 4 5 6 7 8 9 10 11 12 13; do
+for t in ${D6_T:-0 1 2 3 4 5 6 7 8 9 10 11 12 13}; do
   m=$((1 << t))
   r $CB/native/pqz_bench $NP $NV $m >> "$D/c-native-generic.jsonl"
   r target/release/bench $NP $NV $m >> "$D/rust-native-generic.jsonl"
@@ -40,6 +43,7 @@ for t in 0 1 2 3 4 5 6 7 8 9 10 11 12 13; do
   r env PQZ_VERIFY=fast node wasm/run_wasm.mjs 2 $((NF / 2)) $m >> "$D/rust-wasm-fast.jsonl"
   r env PQZ_WASM_FILE=$CB/wasm-nosv/wasm/pqz.wasm node ../test/run_wasm.mjs 1 0 $m >> "$D/c-wasm-nosv.jsonl"
 done
+if [ -n "${D6_T:-}" ]; then cat "$D/rc.txt"; exit 0; fi # a re-run of loop steps only
 # the crate's heap peak per relation and operation (counting allocator; the C side's is the arena peak above)
 r cargo test $C --test memory peak_per_op -- --exact --nocapture > "$D/rust-memory.txt" 2>&1
 # README §5.3: the pqz-ffi path on both backends (ffi_bench, verify through the C ABI): the C backend is the opt-in one
