@@ -1059,7 +1059,7 @@ port computes, so the port needs no change:
    Only exponents far beyond ±64 get there, and no honest prover produces them.
 3. **Signed overflow in `pqz_rel.c` `rd_poly`** on a non-canonical word v ∈ [2^63, 2^63 + q). It now computes
    `(int64_t)(v − q)`, the value the Rust port's `keys.rs` `rd_poly` gives. Further UB of the same kind was found and
-   fixed: `int_set_i64` (`pqzl/lazer/lazer-in2.h`, upstream code) overflowed on `INT64_MIN`, which `rd_poly` produces
+   fixed: `int_set_i64` (`pqzl/lazer/lazer-in2.h`, upstream code; reported as [lazer#27](https://github.com/lazer-crypto/lazer/issues/27), 2026-10-18) overflowed on `INT64_MIN`, which `rd_poly` produces
    from the word 2^63 + q. Its magnitude is now computed in unsigned arithmetic, giving the same limbs for every input.
 
 **Verifier path.** None of the fixes changes what a verifier computes. `pqz_exp_fp` and `rejection.c` are prover
