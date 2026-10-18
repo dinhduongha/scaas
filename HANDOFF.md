@@ -160,7 +160,7 @@ follow-up comment on #26 (paper condition LNP22 Fig. 18, impact β 452–461 →
 
 **Owner decisions this session (recorded in TODO / decisions.md):** priority "P6 first, finish the WIP, then focus on
 PQZ" (UA-5c and UA F5 paused); token-family rename `UnderlyingToken` → `WrappedToken`, `NoUnderlyingToken` →
-`IssuedToken` after P6; z21: merge `pqz-z21` (done) and **no proofSystemId bump** (every v2 verifier checks
+`NormalToken` after P6 (owner 2026-10-18; was `IssuedToken`); z21: merge `pqz-z21` (done) and **no proofSystemId bump** (every v2 verifier checks
 ‖z21‖² + ‖w − γ·w1‖² ≤ Bsq; decisions.md CTR-PQZ-03); merge `pqzh-next` with the Plonky3 0.9.0-rc.1 upgrade (pin 0.9.0
 final when released); **PQZH is not shelved**: next build and measure a ZK WHIR path and a Ligero backend, then decide
 soundness regime, proof limit / `MAX_INPUT`, prover memory target, the PQZH proofSystemId string and the backend;
