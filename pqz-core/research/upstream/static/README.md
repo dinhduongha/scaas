@@ -1,8 +1,16 @@
 # pqz-bench: static benchmark bundle, upstream LaZer vs the pqz-core fork
 
-A portable version of the upstream timing cross-check (`../RESULTS.md`). It builds fully static x86-64 binaries, so
-the owner can measure on other machines: one with AVX-512 IFMA, or the chain host. The statement, params headers,
-witness and seeds are the same as in the cross-check. Each binary runs `R_REG` and `R_TX` prove and verify.
+This folder builds a portable version of the upstream timing cross-check ([`../RESULTS.md`](../RESULTS.md)), which
+compared IBM's LaZer library with PQZL, our fork of it (parent [pqz-core README](../../../README.md)). The build makes
+fully static x86-64 binaries packed in one tarball, so the owner can copy it to another machine — one with AVX-512
+IFMA, or the chain host — and measure there without installing anything. The statement, params headers, witness and
+seeds are the same as in the cross-check. Each binary runs `R_REG` and `R_TX` prove and verify.
+
+In this folder: `build.sh` (builds the bundle), `run.sh` (runs it; shipped inside the bundle) and `cpuf/` (the CPU
+feature probe described below). The reference run at the end (bundle `pqz-bench-fd8600f`, 2026-10-13) measured the fork
+before its optimisation in [`../../opt/`](../../opt/README.md).
+
+**The four binaries**
 
 | binary | what |
 |---|---|
@@ -36,6 +44,8 @@ vendored library, and the binary uses the real CPU's flags. The v4 HEXL build al
 
 ## Build (repo side)
 
+Run from the repository root, on the dev host:
+
 ```sh
 # once, needs network: docker build -t p6d-lazer-build:ubuntu24.04 pqz-core/research/upstream
 scripts/capped pqz-core/research/upstream/static/build.sh <work dir> <LaZer clone at 3330e48>
@@ -50,6 +60,8 @@ clang, the compiler that `pqz-core/pqzl/build.sh` uses, because the image has no
 dir or the tarball (`.gitignore`).
 
 ## Run (any x86-64 Linux, no dependencies)
+
+Copy the tarball to the machine to measure, unpack it, and run `run.sh` from inside the unpacked directory:
 
 ```sh
 scp pqz-bench-<sha>.tar.gz host:   &&   ssh host

@@ -1,7 +1,34 @@
 # P6d upstream timing cross-check: LaZer 3330e48 vs the pqz-core fork on R_REG / R_TX
 
-Question: is the R_TX slowness (fork: prove ~17 s / verify ~15 s) caused by the fork's rewrite, or is it
-inherent to the statement as LaZer runs it? Measured 2026-10-13. No product code was changed; nothing was committed.
+This is the full result of the upstream cross-check ([README.md](README.md)): the same PQZL statements proved and
+verified by upstream LaZer and by the `pqz-core` fork on one machine. It is a dated research record (2026-10-13); the
+fork has been much faster since the optimisation in [`../opt/`](../opt/README.md), and today's numbers are in the
+parent [pqz-core README](../../README.md#5-measurements-frozen-2026-10-17).
+
+**Question:** is the R_TX slowness (fork: prove ~17 s / verify ~15 s) caused by the fork's rewrite, or is it
+inherent to the statement as LaZer runs it? Measured 2026-10-13. The measurement changed no product code, and nothing
+was committed at the time (the scripts and results were committed afterwards, in `cc650ef`).
+
+**Answer, in short:**
+
+- The fork was 2.1–2.6× slower to prove and 1.75–2.3× slower to verify than upstream.
+- About 75–80 % of the gap came from multiplying polynomials in NTT form (the fork's NTT is incomplete, so each
+  product costs four degree-16 multiplications), and about 25 % from an O(n²) insertion sort. The
+  [optimisation](../opt/README.md) removed both.
+- Upstream itself also misses the `R_TX` limits on this machine (prove 6.6 s against 3 s; verify about 130× over
+  50 ms). Most of that cost is LaZer's generic bookkeeping for this statement shape, not the arithmetic.
+
+**Words used here**
+
+| Term | Meaning |
+|---|---|
+| upstream | IBM's LaZer library at commit `3330e48`, the code PQZL was forked from |
+| fork | `pqz-core`'s PQZL at `b2402b5`: LaZer rewritten without GMP, MPFR, HEXL, floating point or `malloc` |
+| HEXL | Intel's library of fast modular arithmetic kernels, used by upstream LaZer |
+| NTT, CRT | ways to multiply polynomials fast: the NTT (number-theoretic transform) turns a product into many small ones; CRT splits the modulus into primes |
+| tbox | LaZer's proof toolbox that PQZL's relations are built on |
+| kill criteria | the limits PQZL had to meet to stay in the project (CTR-PQZ-09) |
+| `$S` | the session scratch directory the runs used (not in the repository) |
 
 ## Setup
 
@@ -34,6 +61,9 @@ inherent to the statement as LaZer runs it? Measured 2026-10-13. No product code
   are medians.
 
 ## Results (median of 5, ms)
+
+Both ratio columns are fork time ÷ upstream time; the last two columns use the fork built with upstream's compiler
+flags and without asserts.
 
 | | upstream LaZer (gcc -O3 native, HEXL, GMP, AES-NI) | fork as shipped (clang -O2) | ratio fork/up | fork -O3 native, no asserts | ratio |
 |---|---|---|---|---|---|
@@ -126,6 +156,9 @@ as LaZer evaluates it, for prover and verifier alike.
   -pg build is clang -O2 with asserts on, as shipped.
 
 ## Files and commands (all under `$S/xcheck/`)
+
+The runs used the session scratch directory `$S/xcheck/`; the scripts, shims, raw runs and profiles were then copied
+into this folder ([README.md](README.md)).
 
 - `build-upstream.sh` → `lazer-up/liblazer.a` + HEXL; `build-info-upstream.txt`, `hexl-cmake.log`, `lazer-build.log`
 - `build-up-bench.sh` → `bench_up` (static); `build-fork.sh` → `bench_fork_{as,noassert,native}`

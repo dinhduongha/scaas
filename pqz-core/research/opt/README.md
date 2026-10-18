@@ -1,13 +1,23 @@
 # P6d-2: pqz-core optimisation (2026-10-13)
 
-The owner asked to optimise the fork after the upstream cross-check (`../upstream/`). Branch `p6d2-opt`, merged into
-main as `b87078a`. Only the implementation changed: parameters, relations, proof format and `proofSystemId` are the
-same. Summary and analysis: `docs/research/pqz-core-e-s1.md` §11; state: `../../STATUS.md`.
+This is the record of one optimisation pass on PQZL, the lattice proof system of PQZ (a C fork of IBM's LaZer; see the
+parent [pqz-core README](../../README.md)). The upstream cross-check ([`../upstream/`](../upstream/README.md)) had shown
+that the fork was 1.75–2.6× slower than upstream LaZer, so the owner asked to optimise the fork. Nine steps (one of them later reverted) made the
+transfer proof (`R_TX`) about 15× faster to create and 20× faster to verify, with byte-identical proofs. The folder
+keeps the scripts and the raw runs so the numbers can be rerun.
+
+- Branch `p6d2-opt`, merged into main as `b87078a`.
+- Only the implementation changed: parameters, relations, proof format and `proofSystemId` are the same.
+- Summary and analysis: `docs/research/pqz-core-e-s1.md` §11; current state: [`../../STATUS.md`](../../STATUS.md).
+- **Later:** the verify time was solved by a different route, the specialised verifier `pqz_verify_fast`
+  (`pqzl/sv/`): `R_TX` verifies in 8.7 ms at p99 natively in the frozen run of 2026-10-17 (parent README,
+  [§1](../../README.md#1-at-a-glance)). The numbers below are the state of 2026-10-13.
 
 ## Result
 
-Medians, one session on an AMD Ryzen 5 7235HS. Native is `pqz_bench 5 5` (clang `-O2`, portable). Wasm is
-`run_wasm.mjs 3 1` under node. Everything ran under `scripts/capped`.
+Medians, one session on an AMD Ryzen 5 7235HS. Native is `pqz_bench 5 5` (clang `-O2`, portable). Wasm (the
+WebAssembly build a browser wallet would run) is `run_wasm.mjs 3 1` under node. Everything ran under `scripts/capped`,
+the repository's machine lock. "Arena" is the fixed memory area PQZL uses instead of `malloc`.
 
 | | Before (main `fd8600f`) | After (P6d-2) | Upstream LaZer (AVX2, `../upstream/`) |
 |---|---|---|---|
@@ -18,7 +28,7 @@ Medians, one session on an AMD Ryzen 5 7235HS. Native is `pqz_bench 5 5` (clang 
 | Arena peak `R_TX`, native / wasm | 612 / 476 MB | 316 / 241 MB | — |
 | Proof bytes `R_TX` / `R_REG` | 42,734–42,770 / 28,070–28,107 | unchanged | same |
 
-Against the kill criteria (CTR-PQZ-09, roadmap P6d row):
+Against the kill criteria (CTR-PQZ-09, roadmap P6d row: the limits PQZL had to meet to stay in the project):
 - Prove meets the 6 s limit.
 - Verify (0.72 s honest, 0.67 s worst adversarial) is still about 14× over the 50 ms limit; before this work it was about 300×.
 
@@ -27,6 +37,8 @@ Against the browser budgets (CTR-PQZ-18):
 - The wasm arena (230 MiB) is under the 256 MiB hard limit but 1.8× the 128 MiB budget.
 
 ## Step by step (`R_TX`, cumulative; files in `runs/`)
+
+Each row adds one change on top of the rows above it; times are prove / verify in seconds.
 
 | Step | Change | Commit | Native prove / verify | Wasm prove / verify |
 |---|---|---|---|---|
@@ -41,8 +53,9 @@ Against the browser budgets (CTR-PQZ-18):
 | 8 | Gram entries as dot products, zero products skipped | `6717d5f` | 1.10 / 0.75 s | 1.72 / 0.95 s |
 | 9 | z3 term accumulated in int64 | `b8767b4` | **1.10 / 0.72 s** | **1.59 / 0.82 s** |
 
-**Step 4 was the biggest win.** Each ℓ2 equation of `R_TX` selects 32 of the 146 witness polynomials. The generic
-code still built all 146² Gram entries, nearly all of them zero, and carried them through every sum, sort and copy
+**Step 4 was the biggest win.** Each ℓ2 equation of `R_TX` (a bound on the length of a block of secret values) selects
+32 of the 146 witness polynomials. The generic code still built all 146² Gram entries (the pairwise products the norm
+check needs), nearly all of them zero, and carried them through every sum, sort and copy
 after that. Upstream LaZer does the same work, which is why the fork is now faster than upstream.
 
 Tried and dropped:
@@ -65,6 +78,8 @@ Not done, and why:
 
 ## Rerun
 
+From the repository root (the first line changes into `pqz-core`):
+
 ```sh
 cd pqz-core
 pqzl/build.sh all               # native + wasm
@@ -79,8 +94,11 @@ so the profiles come from gprof.
 
 ## Open
 
-- **Verify against 50 ms.** The profile is now flat: LaZer's generic bookkeeping (`intvec_set`, sparse inserts,
+These were the open points on 2026-10-13.
+
+- **Verify against 50 ms.** Since solved by the specialised verifier (see the note at the top). On 2026-10-13: the
+  profile is now flat: LaZer's generic bookkeeping (`intvec_set`, sparse inserts,
   `int_mod`). Getting to 50 ms needs structural work, such as fewer `R_TX` equations or a typed accumulation in place
   of the generic sparse matrices. The verifier-floor analysis (`pqz-verifier-floor`) estimates how low it can go.
-- Arena exhaustion still fails non-gracefully.
+- Arena exhaustion still fails non-gracefully (still open: [STATUS.md "Open"](../../STATUS.md#open)).
 - No run yet in a real browser or on a phone.
