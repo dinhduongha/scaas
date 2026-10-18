@@ -1,8 +1,10 @@
 #!/bin/sh
 # Exports the cheating proofs check_tbox_fixes.sh builds, with their statements, into this directory (run once, under
 # scripts/capped; the files are committed): the pooled-slack prover's (l2dom/, P6-L2: s_over_A, s_over_B, tx_over and
-# its proof of an honest witness, which the fixed verifier also rejects) and the norm PoC prover's (sv/review/review.sh norm, P6-Z21: z21_big, z1_over, w_over and its
-# honest control). <case>.stmt / <case>.proof; tests/vectors.rs cheating_proofs_reject reads them. P6-SZ has no
+# its proof of an honest witness, which the fixed verifier also rejects), the norm PoC prover's (sv/review/review.sh norm, P6-Z21: z21_big, z1_over, w_over and its
+# honest control) and this directory's z34poc.sh (a patched copy of lnp-tbox.c: z3_over, z4_over, the z3 / z4 bounds
+# of _lnp_tbox_check_z34). <case>.stmt / <case>.proof; tests/vectors.rs cheating_proofs_reject and tests/sv_diff.rs
+# cheating_rejected read them (tests/common cheating()). P6-SZ has no
 # cheating prover (sz/sz_trace only traces an honest prove); the honest v2 vectors cover its transcript.
 set -eu
 F=$(cd "$(dirname "$0")" && pwd)
@@ -20,5 +22,10 @@ sv/review/review.sh norm
 for c in honest z21_big z1_over w_over; do
   cp "build/review/norm-out/$c.stmt" "$F/norm_$c.stmt"
   cp "build/review/norm-out/$c.proof" "$F/norm_$c.proof"
+done
+"$F/z34poc.sh"
+for c in z3_over z4_over; do
+  cp "build/z34poc/out/$c.stmt" "$F/norm_$c.stmt"
+  cp "build/z34poc/out/$c.proof" "$F/norm_$c.proof"
 done
 ls -l "$F"

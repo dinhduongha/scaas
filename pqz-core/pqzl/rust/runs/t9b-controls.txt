@@ -1,0 +1,85 @@
+# Fix round 1 negative controls (scratch ctl3.py: patch, cargo test --release --features test-hooks --test sv_diff --test vectors -- cheating vectors_verify_fast all_pqzl negative_rows, restore)
+## before the z3 / z4 fixtures
+  [z3] test cheating_rejected ... ok
+  [z3] test vectors_verify_fast ... ok
+  [z3] test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 1.77s
+  [z3] test cheating_proofs_reject ... ok
+  [z3] test all_pqzl_proofs_verify ... ok
+  [z3] test negative_rows_reject ... ok
+  [z3] test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 8 filtered out; finished in 37.20s
+control z3: restored, git diff clean: True
+  [z4] test cheating_rejected ... ok
+  [z4] test vectors_verify_fast ... ok
+  [z4] test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 1.87s
+  [z4] test cheating_proofs_reject ... ok
+  [z4] test all_pqzl_proofs_verify ... ok
+  [z4] test negative_rows_reject ... ok
+  [z4] test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 8 filtered out; finished in 41.53s
+control z4: restored, git diff clean: True
+  [h_sv] test cheating_rejected ... FAILED
+  [h_sv] test vectors_verify_fast ... ok
+  [h_sv] assertion `left == right` failed: l2dom_honest
+  [h_sv]   left: true
+  [h_sv] test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 1 filtered out; finished in 2.11s
+control h_sv: restored, git diff clean: True
+  [h_gen] test cheating_rejected ... ok
+  [h_gen] test vectors_verify_fast ... ok
+  [h_gen] test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 1.99s
+  [h_gen] test cheating_proofs_reject ... FAILED
+  [h_gen] test all_pqzl_proofs_verify ... ok
+  [h_gen] test negative_rows_reject ... ok
+  [h_gen] assertion `left == right` failed: l2dom_honest
+  [h_gen]   left: true
+  [h_gen] test result: FAILED. 2 passed; 1 failed; 0 ignored; 0 measured; 8 filtered out; finished in 43.56s
+control h_gen: restored, git diff clean: True
+## after (norm_z3_over, norm_z4_over added); 'git diff clean: False' for src/sv.rs = its uncommitted hint test, the file was restored from the backup
+test sv::tests::hint_bound_unreachable_by_encoding ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 0.00s
+test cheating_rejected ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 0.09s
+test cheating_proofs_reject ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 10 filtered out; finished in 0.51s
+  [z3] test cheating_rejected ... FAILED
+  [z3] test vectors_verify_fast ... ok
+  [z3] assertion `left == right` failed: norm_z3_over
+  [z3]   left: true
+  [z3] test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 1 filtered out; finished in 1.99s
+control z3: restored, git diff clean: False
+  [z4] test cheating_rejected ... FAILED
+  [z4] test vectors_verify_fast ... ok
+  [z4] assertion `left == right` failed: norm_z4_over
+  [z4]   left: true
+  [z4] test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 1 filtered out; finished in 1.80s
+control z4: restored, git diff clean: False
+  [z3_sv] test cheating_rejected ... FAILED
+  [z3_sv] test vectors_verify_fast ... ok
+  [z3_sv] assertion `left == right` failed: norm_z3_over
+  [z3_sv]   left: true
+  [z3_sv] test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 1 filtered out; finished in 1.82s
+control z3_sv: restored, git diff clean: False
+  [z3_gen] test cheating_rejected ... ok
+  [z3_gen] test vectors_verify_fast ... ok
+  [z3_gen] test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 1.84s
+  [z3_gen] test cheating_proofs_reject ... FAILED
+  [z3_gen] test all_pqzl_proofs_verify ... ok
+  [z3_gen] test negative_rows_reject ... ok
+  [z3_gen] assertion `left == right` failed: norm_z3_over
+  [z3_gen]   left: true
+  [z3_gen] test result: FAILED. 2 passed; 1 failed; 0 ignored; 0 measured; 8 filtered out; finished in 36.83s
+control z3_gen: restored, git diff clean: True
+  [z4_sv] test cheating_rejected ... FAILED
+  [z4_sv] test vectors_verify_fast ... ok
+  [z4_sv] assertion `left == right` failed: norm_z4_over
+  [z4_sv]   left: true
+  [z4_sv] test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 1 filtered out; finished in 1.85s
+control z4_sv: restored, git diff clean: False
+  [z4_gen] test cheating_rejected ... ok
+  [z4_gen] test vectors_verify_fast ... ok
+  [z4_gen] test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 1.95s
+  [z4_gen] test cheating_proofs_reject ... FAILED
+  [z4_gen] test all_pqzl_proofs_verify ... ok
+  [z4_gen] test negative_rows_reject ... ok
+  [z4_gen] assertion `left == right` failed: norm_z4_over
+  [z4_gen]   left: true
+  [z4_gen] test result: FAILED. 2 passed; 1 failed; 0 ignored; 0 measured; 8 filtered out; finished in 40.81s
+control z4_gen: restored, git diff clean: True

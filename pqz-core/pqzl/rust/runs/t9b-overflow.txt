@@ -1,0 +1,10 @@
+# debug profile (overflow checks on): cargo test --offline --features test-hooks --test sv_diff -- --nocapture cheating vectors_verify_fast
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 4.39s
+
+running 2 tests
+test cheating_rejected ... ok
+vectors_verify_fast: 23 honest rows accepted, 351 negative rows rejected
+test vectors_verify_fast ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 38.24s
+

@@ -289,7 +289,8 @@ fn negative_rows_reject() {
 
 /// the cheating provers' proofs of check_tbox_fixes.sh (P6-L2: blocks over their own l2 bound within the pooled
 /// budget, R_REG and R_TX, and the same prover's proof of an honest witness; P6-Z21: ||z21|| far above Bsq; z1 / w
-/// norms over their bounds) are rejected, the norm prover's honest control accepted
+/// norms over their bounds; z34poc.sh: z3 / z4 over their bounds) are rejected, the norm prover's honest control
+/// accepted
 #[test]
 fn cheating_proofs_reject() {
     let mut ctx = pqzl::Ctx::new();

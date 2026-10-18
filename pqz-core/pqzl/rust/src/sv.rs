@@ -1749,3 +1749,20 @@ impl Ctx {
         verify_body(ar, s, r.code, &h, stmt, proof)
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// verify_body's hint bound (|hint_j| <= m) is unreachable by encoding: the ghint coder spends 2 e - 1 bits on a
+    /// coefficient e >= 2 and -2 e on e <= -2 (`coder::ghint_bits`), so one coefficient with |e| > m costs at least
+    /// 2 m + 1 bits; with 2 m - 1 > 8 MAX_PROOF no proof that passes the length cap carries one. A parameter change
+    /// that makes the bound reachable (and so worth a cheating-prover fixture) fails here.
+    #[test]
+    fn hint_bound_unreachable_by_encoding() {
+        for r in RELS.iter() {
+            let m = int_u64(&r.p.quad_eval.quad_many.dcompress.m).unwrap();
+            assert!(2 * m - 1 > 8 * MAX_PROOF as u64, "{}: m = {m}", r.name);
+        }
+    }
+}

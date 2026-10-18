@@ -183,7 +183,8 @@ pub fn split(b: &[u8]) -> Option<(u8, &[u8], &[u8])> {
     (n <= rest.len()).then(|| (b[0], &rest[..n], &rest[n..]))
 }
 
-/// tests/fixtures/cheating (export.sh): (case, op, statement, proof, accepted?). Only the norm PoC's honest control
+/// tests/fixtures/cheating (export.sh): (case, op, statement, proof, accepted?). norm_z3_over / norm_z4_over come from
+/// z34poc.sh (z3 / z4 inflated past their bounds, consistent with the commitments). Only the norm PoC's honest control
 /// verifies: l2dom_honest is an honest witness proved by the pooled-slack prover, whose upsilon spread does not match
 /// the per-block slack, so the fixed verifier rejects it too (check_tbox_fixes.sh requires that)
 pub type Fixture = (&'static str, u8, Vec<u8>, Vec<u8>, bool);
@@ -191,7 +192,18 @@ pub type Fixture = (&'static str, u8, Vec<u8>, Vec<u8>, bool);
 pub fn cheating() -> Vec<Fixture> {
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/cheating");
     let rd = |f: String| std::fs::read(dir.join(&f)).unwrap_or_else(|e| panic!("{f}: {e}"));
-    ["l2dom_honest", "l2dom_s_over_A", "l2dom_s_over_B", "tx_over", "norm_honest", "norm_z21_big", "norm_z1_over", "norm_w_over"]
+    [
+        "l2dom_honest",
+        "l2dom_s_over_A",
+        "l2dom_s_over_B",
+        "tx_over",
+        "norm_honest",
+        "norm_z21_big",
+        "norm_z1_over",
+        "norm_w_over",
+        "norm_z3_over",
+        "norm_z4_over",
+    ]
         .into_iter()
         .map(|c| (c, if c == "tx_over" { 1 } else { 3 }, rd(format!("{c}.stmt")), rd(format!("{c}.proof")), c == "norm_honest"))
         .collect()

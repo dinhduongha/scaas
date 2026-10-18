@@ -66,7 +66,8 @@ scripts/capped pqz-core/pqzl/rust/run.sh <label>    # from the repo root; logs i
 Tests (release, `c-oracle,test-hooks`; `tests/vectors.rs` checks the frozen keygen / enc / matrix vectors,
 re-encodes every PQZL proof to itself, re-proves every PQZL proof from its witness and rnd32 to the same bytes,
 refuses non-canonical statements in `prove`, verifies every PQZL proof, rejects every PQZL row of negative.json and the
-cheating provers' proofs of `check_tbox_fixes.sh` (`tests/fixtures/cheating`, exported once by its `export.sh`),
+cheating provers' proofs of `check_tbox_fixes.sh` and of `tests/fixtures/cheating/z34poc.sh` (z3 / z4 over their bounds;
+`tests/fixtures/cheating`, exported once by its `export.sh`),
 `tests/oracle_verify.rs` `verify` = `pqz_verify` on those, on out-of-range challenges and on `test_mutate` outputs
 (`PQZL_MUTATED_N`, default 280), `tests/oracle_prove.rs` `prove` = `pqz_prove` (bytes or error code) on honest and
 altered witnesses of every relation code, `tests/oracle_keys.rs` keys, Enc and Dec against C, `tests/oracle_codec.rs`
