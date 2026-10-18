@@ -50,7 +50,7 @@ flowchart LR
   C["contract on chain 7622"] --> VM["Nethermind VM"]
   VM --> PQ["PqzPrecompile (C#)<br/>prices the input from the schedule"]
   PQ -->|"P/Invoke"| FFI["libpqz_ffi.so<br/>pqz_precompile"]
-  FFI --> L["PQZL (C core)"]
+  FFI --> L["PQZL (Rust core pqzl; the image on 7622<br/>runs the C core until the roll-out)"]
   FFI --> H["PQZH (Ligero, Rust)"]
   FFI -->|"status 0"| O["32-byte answer<br/>…01 valid / …00 invalid"]
   FFI -->|"status 1: input over MAX_INPUT"| F["failed call, all gas used"]

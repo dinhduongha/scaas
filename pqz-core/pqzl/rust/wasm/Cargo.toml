@@ -1,0 +1,21 @@
+[package]
+name = "pqzl-wasm"
+version = "0.1.0"
+edition = "2021"
+license-file = "../../../../LICENSE"
+publish = false
+
+# wasm32-unknown-unknown harness for the pqzl crate: the bench steps (pqzl::bench, as pqzl/test/pqz_bench.c's PQZ_WASM
+# exports) for run_wasm.mjs. Raw exports, no wasm-bindgen.
+[lib]
+crate-type = ["cdylib"]
+path = "lib.rs"
+
+[dependencies]
+pqzl = { path = "..", features = ["bench"] }
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+
+[workspace]

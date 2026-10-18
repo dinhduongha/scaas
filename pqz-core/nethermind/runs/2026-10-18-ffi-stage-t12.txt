@@ -1,0 +1,114 @@
+# Rust port Task 12: the node Dockerfile's ffi stage alone (inputs complete with pqz-core/pqzl/rust), commit eebc536
+$ DOCKER_BUILDKIT=1 docker build --progress plain -f pqz-core/nethermind/Dockerfile --target ffi-export -o <dir> .
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 4.90kB done
+#1 DONE 0.0s
+
+#2 resolve image config for docker-image://docker.io/docker/dockerfile:1
+#2 DONE 1.5s
+
+#3 docker-image://docker.io/docker/dockerfile:1@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
+#3 CACHED
+
+#4 [internal] load metadata for docker.io/library/rust:1.97.1-bookworm@sha256:0e2bcaef56d041a486784e54104a81aebe0da44bd03019bd70bc0401e42e4a97
+#4 DONE 0.0s
+
+#5 [rust  1/13] FROM docker.io/library/rust:1.97.1-bookworm@sha256:0e2bcaef56d041a486784e54104a81aebe0da44bd03019bd70bc0401e42e4a97
+#5 DONE 0.0s
+
+#6 [internal] load build context
+#6 transferring context: 50.62kB 0.1s done
+#6 DONE 0.1s
+
+#7 [rust  2/13] RUN apt-get update && apt-get install -y --no-install-recommends clang && rm -rf /var/lib/apt/lists/*
+#7 CACHED
+
+#8 [rust  3/13] WORKDIR /src
+#8 CACHED
+
+#9 [rust  4/13] COPY LICENSE ./
+#9 DONE 0.0s
+
+#10 [rust  5/13] COPY pqz-core/pqzl/check_symbols.sh pqz-core/pqzl/
+#10 DONE 0.0s
+
+#11 [rust  6/13] COPY pqz-core/pqzl/src pqz-core/pqzl/src
+#11 DONE 0.0s
+
+#12 [rust  7/13] COPY pqz-core/pqzl/lazer pqz-core/pqzl/lazer
+#12 DONE 0.0s
+
+#13 [rust  8/13] COPY pqz-core/pqzl/params pqz-core/pqzl/params
+#13 DONE 0.0s
+
+#14 [rust  9/13] COPY pqz-core/pqzl/rust pqz-core/pqzl/rust
+#14 DONE 0.0s
+
+#15 [rust 10/13] COPY pqz-core/stmt pqz-core/stmt
+#15 DONE 0.0s
+
+#16 [rust 11/13] COPY pqz-core/pqzh/ligero pqz-core/pqzh/ligero
+#16 DONE 0.1s
+
+#17 [rust 12/13] COPY pqz-core/ffi pqz-core/ffi
+#17 DONE 0.1s
+
+#18 [rust 13/13] COPY smartcontracts/vectors/pqz/proof_pqzl.json smartcontracts/vectors/pqz/proof_pqzh.json smartcontracts/vectors/pqz/
+#18 DONE 0.0s
+
+#19 [ffi 1/1] RUN cd pqz-core/ffi && cargo build --release --locked -j 2 && mkdir /out && cp target/release/libpqz_ffi.so /out/  && sha256sum /out/libpqz_ffi.so
+#19 0.424     Updating crates.io index
+#19 1.200  Downloading crates ...
+#19 1.457   Downloaded cpufeatures v0.2.17
+#19 1.497   Downloaded cipher v0.4.4
+#19 1.508   Downloaded inout v0.1.4
+#19 1.514   Downloaded keccak v0.1.6
+#19 1.520   Downloaded cfg-if v1.0.5
+#19 1.523   Downloaded crypto-common v0.1.7
+#19 1.547   Downloaded version_check v0.9.5
+#19 1.551   Downloaded generic-array v0.14.7
+#19 1.561   Downloaded block-buffer v0.10.4
+#19 1.577   Downloaded digest v0.10.7
+#19 1.627   Downloaded typenum v1.20.1
+#19 1.632   Downloaded aes v0.8.4
+#19 1.696   Downloaded sha3 v0.10.8
+#19 1.735    Compiling version_check v0.9.5
+#19 1.735    Compiling typenum v1.20.1
+#19 2.235    Compiling generic-array v0.14.7
+#19 2.399    Compiling keccak v0.1.6
+#19 2.857    Compiling crypto-common v0.1.7
+#19 2.918    Compiling block-buffer v0.10.4
+#19 2.998    Compiling digest v0.10.7
+#19 3.011    Compiling inout v0.1.4
+#19 3.074    Compiling cipher v0.4.4
+#19 3.131    Compiling sha3 v0.10.8
+#19 3.218    Compiling cpufeatures v0.2.17
+#19 3.240    Compiling cfg-if v1.0.5
+#19 3.261    Compiling pqzl v0.1.0 (/src/pqz-core/pqzl/rust)
+#19 3.357    Compiling aes v0.8.4
+#19 3.439    Compiling pqz-stmt v0.1.0 (/src/pqz-core/stmt)
+#19 3.918    Compiling pqz-ffi v0.1.0 (/src/pqz-core/ffi)
+#19 4.178    Compiling pqzh-ligero v0.1.0 (/src/pqz-core/pqzh/ligero)
+#19 11.72     Finished `release` profile [optimized + debuginfo] target(s) in 11.47s
+#19 11.77 5e7cb2de571592700747ba178c2f31756a8105533c95bab68b40828427c4cb4a  /out/libpqz_ffi.so
+#19 DONE 11.9s
+
+#20 [ffi-export 1/1] COPY --from=ffi /out/ /
+#20 DONE 0.0s
+
+#21 exporting to client directory
+#21 copying files 9.55MB 0.0s done
+#21 DONE 0.0s
+rc=0
+## checks on the exported libpqz_ffi.so
+sha256 5e7cb2de571592700747ba178c2f31756a8105533c95bab68b40828427c4cb4a
+test-hook strings (must be 0): 0
+$ nm -D --defined-only | grep ' T '
+0000000000064240 T pqz_precompile
+$ readelf -d | grep NEEDED
+ 0x0000000000000001 (NEEDED)             Shared library: [libgcc_s.so.1]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+ 0x0000000000000001 (NEEDED)             Shared library: [ld-linux-x86-64.so.2]
+GMP / MPFR / HEXL strings: 0

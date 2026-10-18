@@ -1,0 +1,47 @@
+# PQZL backend: the default feature (cargo flags: none)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+node faults: worker failure → status 4, out untouched; recovered
+test node_faults_are_status_4 ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.31s
+test header_matches ... ok
+test c_abi_arguments ... ok
+op 7 largest worst-case input 369193 B of MAX_INPUT 393216
+test multi_limits_and_memo ... ok
+test one_mib_stack ... ok
+test digest_lines ... ok
+selftest hash ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205
+test selftest_report ... ok
+test selftest_vectors ... ok
+test round_trip_every_form ... ok
+differential: 112 cases, 16 accepted, 0 disagreements
+test pqzl_differential ... ok
+rejection cases: 1012
+test every_rejection ... ok
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 46.33s
+test child_task ... ok
+test child_task ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 18.26s
+verify-only path: 30 honest inputs, corpus 11281 inputs (10240 generator), warm-up 9.4 s, 188 valid (= the unedited honest ones), status 3 / 4: 0; generator again from 8 threads and on a 1 MiB stack: equal; 5,000 mixed calls: equal; Rust backend (no arena), Ligero panics caught 0
+test verify_only_arena ... ok
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 46.41s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+C core in this build: none (cc is not in the dependency graph: build.rs compiles no C)
+$ readelf -d target/release/libpqz_ffi.so | grep NEEDED
+ 0x0000000000000001 (NEEDED)             Shared library: [libgcc_s.so.1]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+ 0x0000000000000001 (NEEDED)             Shared library: [ld-linux-x86-64.so.2]
+symbols /gmp|mpfr|hexl/i: 0
+strings /gmp|mpfr|hexl/i: 0
+libm-style imports: 0
+c_abi: selftest ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205
+c_abi: ok (0 failures)
+# wasm32: the verify-only lib, then the prove harness (wasm/) and the digest diff against native
+wasm bytes 904110
+wasm run 44485 ms, memory 159711232 B
+native = wasm32: 29 lines equal
+{"sys": "PQZH", "form": "TransferMulti2_0", "m": 2, "auditor": false, "stmt_bytes": 83072, "input_bytes": 314995, "proof_bound": 235470, "worst_input_bytes": 318547, "prove_ms": 675, "proof_bytes": 231918, "direct": {"n": 200, "p50_ms": 9.893, "p99_ms": 11.978, "max_ms": 12.534}, "rust": {"n": 200, "p50_ms": 9.934, "p99_ms": 12.250, "max_ms": 12.349}, "c_abi": {"n": 200, "p50_ms": 9.981, "p99_ms": 12.184, "max_ms": 12.528}, "adversarial": {"n": 200, "p50_ms": 1.273, "p99_ms": 1.594, "max_ms": 1.599}, "decode": {"n": 200, "p50_ms": 0.005, "p99_ms": 0.008, "max_ms": 0.008}}
+{"sys": "PQZH", "form": "TransferMulti4_0", "m": 4, "auditor": false, "stmt_bytes": 116096, "input_bytes": 347005, "proof_bound": 235470, "worst_input_bytes": 351571, "prove_ms": 671, "proof_bytes": 230904, "direct": {"n": 200, "p50_ms": 10.332, "p99_ms": 12.842, "max_ms": 14.444}, "rust": {"n": 200, "p50_ms": 10.339, "p99_ms": 12.736, "max_ms": 15.021}, "c_abi": {"n": 200, "p50_ms": 10.337, "p99_ms": 12.650, "max_ms": 13.016}, "adversarial": {"n": 200, "p50_ms": 1.351, "p99_ms": 2.096, "max_ms": 2.176}, "decode": {"n": 200, "p50_ms": 0.004, "p99_ms": 0.016, "max_ms": 0.025}}
+	Maximum resident set size (kbytes): 221956
+bench rc=0

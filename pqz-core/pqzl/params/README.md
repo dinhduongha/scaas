@@ -84,6 +84,11 @@ It takes about 30 s per spec.
 
 The sizes of the transfer relations (MSIS β: the attack's block size, with its classical / quantum cost):
 
+Rust (plan D8, the pure-Rust port `pqzl/rust`): `to_rust.py` (stdlib Python) converts every checked-in header into
+`pqzl/rust/src/params/<rel>.rs` (typed constants, the C names lower-cased, lazer-in2.h's structs field for field).
+After copying a header here run `python3 -I pqz-core/pqzl/params/to_rust.py`; `--check` (no Sage needed) compares the
+committed `.rs` files with the regenerated text, and `regen.sh` and `pqzl/rust/run.sh` run it.
+
 | Relation | kmsis | kmlwe | m1 + m2 | MSIS β (classical / quantum) | MLWE uSVP β (dual_hybrid β) | knowledge error | codegen proof estimate |
 |---|---|---|---|---|---|---|---|
 | `R_TX0` (`estimator-e-s1-tx0.txt`) | 23 | 33 | 145 + 68 | 457 (2^133.4 / 2^121.1) | 470 (462) | ≤ 2^−127 | ≈ 44,286 B |

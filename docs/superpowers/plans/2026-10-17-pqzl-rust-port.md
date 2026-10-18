@@ -2,8 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Status:** plan only (owner 2026-10-16: "plan, no code"). Execution starts **after the freeze** (owner order 2026-10-16:
-S5 → layout move → S6 ∥ this plan → S8 → S7 → gates A / B → freeze → the port). Decisions D1–D8 below are controller
+**Status:** done (2026-10-18/19, branch `pqzl-rust`): Tasks 1–12 and 10b, commits `109dda5` (Task 1) … `15c19d6`
+(Task 12 fix round), plus the whole-branch review fix round; reports in the SDD run
+`.superpowers/sdd/2026-10-17-pqzl-rust-port/`. `pqz-ffi` builds the Rust core by default (Task 11); the live chain
+7622 keeps the C-backed image until the roll-out. (Originally: plan only, owner 2026-10-16; execution after the
+freeze.) Decisions D1–D8 below are controller
 proposals; the owner may override any of them.
 
 **Owner 2026-10-17:** plan approved (D1–D8 as proposed); execution subagent-driven (superpowers:subagent-driven-development:
@@ -258,7 +261,25 @@ and, with `test-hooks`, `test_mutate` (the 14 mutation kinds of `pqz_test_mutate
 - [ ] `memory::exhaustion_is_error`: an allocator capped at 64 MiB → `prove` / `verify` of R_TX return
   `Error::Memory` / false, no panic (Review Focus 3).
 - [ ] wasm32: native = wasm32 for every vector proof (as `ffi/wasm` digest lines); op 7 M = 8 prove refused on wasm32
-  (`Error::Input`). Commit.
+  (`Error::Input`).
+- [ ] Owner 2026-10-18: key methods on `Ctx` that reuse its cached A (for servers that encrypt in bulk):
+  `Ctx::keygen`, `Ctx::keypair_from_secret`, `Ctx::encrypt`, `Ctx::enc_seed`, with the same arguments and results
+  as the free functions, which stay unchanged (pqz-ffi binds them). Test `keys::ctx_eq_free`: each method byte-equal
+  to its free function over several seeds, including after a `verify` on the same `Ctx`; the keys KAT
+  (`pqz_keys_kat` / `pqz_kat.py --c-keys`, 1,000 seeds) also run through the methods. Commit.
+
+### Task 10b: C / Rust follow-ups of the hardening review
+
+- [ ] Owner 2026-10-18 (after the C-core hardening review, merged in `d10be79`; done after Task 10, before Task 11, on
+  the branch rebased onto main, so Task 11's checks run on the final code), in both the C core and the Rust crate,
+  honest proofs and `proofs_fnv` unchanged: (i) `poly_auto_self` in the NTT domain (`crt == 1`, unreachable today)
+  computes the correct X → X⁻¹ by converting to coefficients first (`_fromcrt`, then the coefficient automorphism, as
+  the fork's `poly_auto` does), so the branch can no longer return a wrong value; update `pqzl/test/pqz_ub_test.c`
+  part c; (ii) `rejection.c` / `rejection.rs`: `t − lnM`, `t2 − 2·t1` and `a − |y| − lnM` saturate instead of
+  wrapping, so a dishonest-size exponent rejects (fails closed through the `PQZ_REJ_MAX` retry cap) instead of
+  accepting; a test with exponents near ±2^63 in both. Then `scripts/capped pqz-core/gate.sh <label>` passes and the
+  C ↔ Rust oracle tests stay equal. Also update the Rust doc comments that describe the old C UB (`fixexp.rs`,
+  `poly.rs`) and drop the now unneeded double-size residue block in `testkit.rs`.
 
 ### Task 11: `pqz-ffi` backend switch and fuzz differential
 
@@ -270,18 +291,34 @@ crate instead of the C core; the C core is not built under it), `pqz-core/fuzz/s
 - [ ] `scripts/capped pqz-core/ffi/run.sh rust1` with `--features pqzl-rust` (an env switch in `run.sh`) → every test
   passes; self-test `ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205`; native = wasm32 digest lines.
 - [ ] `ffi/vectors/run.sh rust1` with the switch → `pqz-vectors --check` byte-identical.
-- [ ] Fuzz: target `precompile` and `mutate` with `pqzl-diff` (both cores in one binary: Rust verdict = C verdict,
+- [ ] Fuzz: target `precompile` and `mutate` (and `codec`, owner 2026-10-18) with `pqzl-diff` (both cores in one binary: Rust verdict = C verdict,
   Rust proof re-encoding = C's) — 2 h per target under `scripts/capped`, no finding (Review Focus 5). Commit with the
   logs.
 
 ### Task 12: Package stage, documents
 
 **Files:** Modify `pqz-core/artifact/{reproduce.sh,results.py,expected-results.json,README.md}`, `pqz-core/README.md`
-(§7 map row `pqzl/rust/`), `pqz-core/STATUS.md`, `docs/decisions.md` (D1–D8 as recorded rulings), `pqzl/rust/README.md`.
+(§5 comparison tables, §7 map row `pqzl/rust/`), `pqz-core/STATUS.md`, `docs/decisions.md` (D1–D8 as recorded rulings), `pqzl/rust/README.md`.
 
 - [ ] `reproduce.sh` stage "Rust = C" (quick and `--full`): Task 8's `proofs_fnv`, Task 4's keys KAT, Task 11's
   `--check`; no re-run of the existing stages (owner 2026-10-16). Docker quick run passes.
-- [ ] D6 table (Rust vs C: prove / verify p50 / p99 native and wasm32, peak memory) in `pqzl/rust/README.md` and STATUS.
+- [ ] D6 table (Rust vs C: prove / verify / verify_fast p50 / p99 native and wasm32, peak memory) in `pqzl/rust/README.md`
+  and STATUS, C and Rust measured in the same session on the same machine (the t8–t10 Rust runs and the older C runs
+  are not comparable).
+- [ ] Owner 2026-10-18: add the Rust figures to the existing comparison tables, keeping every C figure (a Rust row or
+  column next to the C one, labelled with its run and date; the frozen C values stay as they are):
+  `pqz-core/README.md` §5.0 (PQZL table), §5.1, §5.3 (`pqz-ffi` path, now the Rust backend), §5.4 (`R_TXM`), §5.5
+  (Comparisons); `pqz-core/artifact/README.md` "Measurements of the multi-recipient transfer" (PQZL table, and
+  `results.py` so `results-multi.md` carries the Rust rows); `pqz-core/STATUS.md` (current state). Peak memory:
+  Rust heap peak (counting allocator, `tests/memory.rs`) against the C arena peak.
+- [ ] Owner 2026-10-18 (ruling: "if it is enough, raise it"): the wasm32 op 7 prove limit M ≤ 4 (`pqz-ffi`
+  `WASM_PQZL_MAX_LEGS`, `pqzl::WASM_MAX_LEGS`) dates from the C core's arena. Measure the Rust wasm32 prove of M = 8
+  (auditor on and off; time p50 and the wasm32 linear-memory peak) in a bench build with the limit lifted. **Enough** =
+  the M = 8 peak ≤ 255.6 MiB (the C core's wasm32 M = 4 peak, `artifact/README.md`, the budget wasm32 already
+  accepts) and native = wasm32 for the M = 8 vector proofs. If enough: set both constants to 8 for the Rust backend
+  (the C backend, opt-in, keeps 4), make the wasm32 replay prove the three M = 8 rows instead of refusing them, and
+  record the change in `docs/decisions.md` CTR-PQZ-09 with the measured figures. If not: keep 4 and record the figures
+  and the reason.
 - [ ] `docs_check` 0 errors. Commit; stop at the branch (merge per the P6 mandate after review).
 
 ## Out of scope

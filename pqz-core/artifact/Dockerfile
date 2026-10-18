@@ -55,7 +55,7 @@ RUN curl -fsSLo /tmp/rustup-init "https://static.rust-lang.org/rustup/archive/$R
 COPY . /src
 WORKDIR /src/pqz-core
 # the crates' dependencies by Cargo.lock, into the image (the runs use --offline)
-RUN for d in pqzh/ligero pqzh/ligero/wasm stmt ffi ffi/wasm; do \
+RUN for d in pqzh/ligero pqzh/ligero/wasm stmt ffi ffi/wasm pqzl/rust pqzl/rust/wasm; do \
       [ ! -f "$d/Cargo.lock" ] || (cd "$d" && cargo fetch --locked) || exit 1; done \
  && chmod -R a+rwX "$CARGO_HOME"
 # build once at image build time (the same build reproduce.sh repeats); world-writable so docker run -u works

@@ -70,8 +70,9 @@ pub extern "C" fn precompile_v(input: *const u8, n: u32) -> u32 {
     }
 }
 
-/// P6-ANON S3: wasm32 refuses to prove PQZL op 7 above `WASM_PQZL_MAX_LEGS` (one client arena): 1 if
-/// `prove` of a PQZL (M = 8, auditor on) statement gives `Statement(Legs)` before any core work, 0 otherwise.
+/// P6-ANON S3: wasm32 refuses to prove PQZL op 7 above `WASM_PQZL_MAX_LEGS` (C backend 4, Rust backend 8): 1 if
+/// `prove` of a PQZL (M = 8, auditor on) statement gives `Statement(Legs)` before any core work (the C backend), 0
+/// otherwise (the Rust backend proves M = 8). `vectors/replay_wasm.mjs` reads it.
 #[no_mangle]
 pub extern "C" fn m8_refused() -> u32 {
     use pqz_ffi::stmt::{multi_len, Multi, Reject};

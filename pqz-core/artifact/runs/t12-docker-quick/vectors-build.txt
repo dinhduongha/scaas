@@ -1,0 +1,4 @@
+   Compiling pqz-ffi v0.1.0 (/src/pqz-core/ffi)
+   Compiling pqzl v0.1.0 (/src/pqz-core/pqzl/rust)
+    Finished `release` profile [optimized + debuginfo] target(s) in 10.69s
+rc=0

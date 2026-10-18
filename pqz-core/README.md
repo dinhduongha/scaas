@@ -208,7 +208,8 @@ layout — statements, objects, both proof formats, the precompile input and `OP
   - an auditor-on BUNDLE transfer that would exceed the gas cap is offered as one M = 8 COMPACT transfer (the
     default) or split into smaller BUNDLE transfers;
   - a PQZH multi-recipient transfer credits at most 10 recipients inline;
-  - in the browser (wasm32), PQZL proves only M ≤ 4; M = 8 needs a native or desktop wallet (memory, §5.4).
+  - in the browser (wasm32), PQZL proves up to M = 8 with the Rust core (`pqz-ffi`'s default backend, 117 MiB at
+    M = 8, run `d6`); the C core proves only M ≤ 4 there (memory, §5.4).
 
 The two proof system ids (both frozen; a change to either proof system needs a new id):
 
@@ -233,6 +234,13 @@ Size and time limits:
 §5.0 holds **the official numbers**: the frozen run of 2026-10-17 (`artifact/reproduce.sh --full`, after gates A and B,
 233 checks ok, `artifact/runs/freeze-2026-10-17/`). `artifact/expected-results.json` is built from it; the package
 compares proof hashes, sizes and checks against it, while times are for information only.
+
+**The Rust core** (`pqzl/rust/`, the port of the C core; owner 2026-10-18: the production PQZL core once verified)
+has a "Rust" row or column next to each C one. Its figures come from one run, `d6`, that measures C and Rust in the
+same session (2026-10-18; [pqzl/rust/README.md](pqzl/rust/README.md#d6-rust-against-c-plan-d6-task-12), where the
+same run's C figures sit next to the Rust ones). The C figures and the frozen C values here stay as they are, so a
+C row and its Rust row come from different runs; compare the two cores within run `d6`. The Rust proofs are the C proofs byte
+for byte (same `proofs_fnv`), so proof sizes are shared.
 
 §5.1–§5.4 are the earlier measurement rounds that §5.0 confirms. They keep the method, the extra columns (memory,
 adversarial inputs) and the source files. Their times differ from §5.0 by machine noise (about ± 20 %).
@@ -264,11 +272,24 @@ Toolchain of the frozen run: AMD Ryzen 5 7235HS (8 threads; flags aes vaes avx2)
 | | proof bytes (max) | prove p50 native / wasm | generic verify p50 native / wasm | SV p50 portable / x86-64-v3 / wasm | SV p99 portable / x86-64-v3 / wasm | wasm prove peak (one op, no SV) |
 |---|---|---|---|---|---|---|
 | `R_REG` | 28,113 | 290 / 509 ms | 159 / 276 ms | 3.89 / 2.42 / 6.8 ms | 5.2 / 3.4 / 9.7 ms | 70.3 MiB |
+| `R_REG` Rust | same proofs as C | 203 / 507 ms | 81 / 180 ms | 3.18 / – / 13.1 ms | 4.7 / – / 16.4 ms | 27.8 MiB (linear memory) |
 | `R_TX` | 42,785 | 898 / 1,255 ms | 625 / 946 ms | 7.94 / 4.59 / 14.2 ms | 10.7 / 5.7 / 20.4 ms | 221.1 MiB |
+| `R_TX` Rust | same proofs as C | 529 / 1,344 ms | 278 / 525 ms | 6.34 / – / 26.7 ms | 8.9 / – / 32.0 ms | 68.9 MiB (linear memory) |
 | `R_BURN` | 41,938 | 828 / 1,214 ms | 639 / 713 ms | 8.01 / 4.34 / 14.1 ms | 14.8 / 6.1 / 18.8 ms | 210.2 MiB |
+| `R_BURN` Rust | same proofs as C | 516 / 1,316 ms | 238 / 474 ms | 6.10 / – / 26.3 ms | 8.4 / – / 31.9 ms | 67.1 MiB (linear memory) |
 | `R_DS` | 28,995 | 408 / 644 ms | 250 / 259 ms | 4.62 / 2.73 / 7.3 ms | 6.5 / 3.9 / 9.8 ms | 73.3 MiB |
+| `R_DS` Rust | same proofs as C | 230 / 904 ms | 103 / 213 ms | 3.35 / – / 13.6 ms | 5.1 / – / 16.5 ms | 28.6 MiB (linear memory) |
 | `R_DR` | 28,996 | 452 / 502 ms | 241 / 263 ms | 4.60 / 2.67 / 7.8 ms | 6.0 / 3.7 / 9.4 ms | 79.1 MiB |
+| `R_DR` Rust | same proofs as C | 262 / 631 ms | 102 / 214 ms | 3.50 / – / 14.4 ms | 5.5 / – / 18.6 ms | 29.7 MiB (linear memory) |
 | `R_TX0` | 42,441 | 1,010 / 1,391 ms | 721 / 745 ms | 7.96 / 4.67 / 13.4 ms | 9.9 / 6.6 / 15.8 ms | 216.7 MiB |
+| `R_TX0` Rust | same proofs as C | 472 / 1,822 ms | 237 / 521 ms | 6.24 / – / 27.1 ms | 8.6 / – / 37.1 ms | 68.4 MiB (linear memory) |
+
+The C rows are the frozen run. The Rust rows are run `d6` (2026-10-18: native 10 proves / 100 verifies, wasm32 5 / 30,
+verify_fast 200 native / 100 wasm32; SV p99 = the larger of honest and adversarial), which has no x86-64-v3 build of
+the Rust core. Its wasm32 prove peak is the module's linear memory, against the C arena peak. In the same run the C
+core gave, for `R_TX`: prove 983 / 1,460 ms, generic verify 674 / 849 ms, SV p50 8.54 / 13.6 ms, SV p99 11.4 / 17.5 ms:
+the Rust core is faster natively (prove 1.9×, verify 2.4×, SV 1.3×) and slower in wasm32 for the specialised
+verifier (SV about 2× the C time; still ≤ 39 ms p99 for the six forms, against the 60 ms limit).
 
 #### PQZH (Ligero, Rust; the proven preset)
 
@@ -323,11 +344,17 @@ Self-test hash: `ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d20
 | Relation | Proof size, max (bytes) | Prove, native / wasm (ms) | SV verify p99, portable / x86-64-v3 / wasm (ms) |
 |---|---|---|---|
 | `R_REG` | 28,113 | 295 / 484 | 4.48 / 3.10 / 6.91 |
+| `R_REG` Rust | same proofs as C | 203 / 507 | 4.70 / – / 16.39 |
 | `R_TX` | 42,785 | 965 / 1,304 | 8.73 / 5.40 / 14.76 |
+| `R_TX` Rust | same proofs as C | 529 / 1,344 | 8.91 / – / 31.96 |
 | `R_TX0` | 42,441 | 827 / 1,398 | 8.49 / 5.53 / 14.73 |
+| `R_TX0` Rust | same proofs as C | 472 / 1,822 | 8.61 / – / 37.09 |
 | `R_BURN` | 41,938 | 874 / 1,158 | 8.35 / 4.74 / 14.21 |
+| `R_BURN` Rust | same proofs as C | 516 / 1,316 | 8.45 / – / 31.93 |
 | `R_DS` | 28,995 | 331 / 646 | 4.94 / 3.91 / 8.70 |
+| `R_DS` Rust | same proofs as C | 230 / 904 | 5.12 / – / 16.52 |
 | `R_DR` | 28,996 | 395 / 504 | 4.89 / 2.82 / 7.92 |
+| `R_DR` Rust | same proofs as C | 262 / 631 | 5.54 / – / 18.57 |
 
 <details>
 <summary>All PQZL columns (generic verify, SV p50, arena) and sources</summary>
@@ -339,18 +366,31 @@ Sources: `research/pqzl-measure/runs/tx0c-native.jsonl` (10 proves, 30 honest ve
 | Relation | Proof size, max of 10 seeds (bytes) | Prove p50, native / wasm (ms) | Generic verify p50 / p99 native; p50 wasm (ms) | SV p50 / p99, portable (ms) | SV p50 / p99, x86-64-v3 (ms) | SV p50 / p99, wasm (ms) | Arena peak, one op, native / wasm (MB) |
 |---|---|---|---|---|---|---|---|
 | `R_REG` | 28,113 | 295 / 484 | 161 / 169; 223 | 3.85 / 4.48 | 2.37 / 3.10 | 6.61 / 6.91 | 95.5 / 73.7 |
+| `R_REG` Rust | same proofs as C | 203 / 507 | 81 / 95; 180 | 3.18 / 4.70 | – | 13.09 / 16.39 | heap 23.5 / linear 29.1 |
 | `R_TX` | 42,785 | 965 / 1,304 | 648 / 760; 762 | 7.98 / 8.73 | 4.76 / 5.40 | 13.36 / 14.76 | 304.2 / 231.9 |
+| `R_TX` Rust | same proofs as C | 529 / 1,344 | 278 / 310; 525 | 6.34 / 8.91 | – | 26.73 / 31.96 | heap 62.9 / linear 72.2 |
 | `R_TX0` | 42,441 | 827 / 1,398 | 577 / 627; 760 | 8.03 / 8.49 | 4.68 / 5.53 | 13.36 / 14.73 | 298.0 / 227.3 |
+| `R_TX0` Rust | same proofs as C | 472 / 1,822 | 237 / 388; 521 | 6.24 / 8.61 | – | 27.05 / 37.09 | heap 62.0 / linear 71.7 |
 | `R_BURN` | 41,938 | 874 / 1,158 | 556 / 584; 693 | 7.75 / 8.35 | 4.63 / 4.74 | 12.88 / 14.21 | 288.9 / 220.4 |
+| `R_BURN` Rust | same proofs as C | 516 / 1,316 | 238 / 270; 474 | 6.10 / 8.45 | – | 26.26 / 31.93 | heap 60.5 / linear 70.4 |
 | `R_DS` | 28,995 | 331 / 646 | 200 / 214; 270 | 4.42 / 4.94 | 2.86 / 3.91 | 7.27 / 8.70 | 99.8 / 76.9 |
+| `R_DS` Rust | same proofs as C | 230 / 904 | 103 / 127; 213 | 3.35 / 5.12 | – | 13.58 / 16.52 | heap 24.4 / linear 29.9 |
 | `R_DR` | 28,996 | 395 / 504 | 206 / 218; 254 | 4.50 / 4.89 | 2.69 / 2.82 | 7.52 / 7.92 | 107.7 / 83.0 |
+| `R_DR` Rust | same proofs as C | 262 / 631 | 102 / 126; 214 | 3.50 / 5.54 | – | 14.41 / 18.57 | heap 25.6 / linear 31.1 |
 
-- Adversarial SV p99 (246 native / 600 wasm mutated inputs per relation): ≤ 8.9 ms portable, ≤ 5.7 ms x86-64-v3,
-  ≤ 14.4 ms wasm.
+- C core: adversarial SV p99 (246 native / 600 wasm mutated inputs per relation) ≤ 8.9 ms portable, ≤ 5.7 ms
+  x86-64-v3, ≤ 14.4 ms wasm. Rust core (run `d6`, the SV p99 column, honest and adversarial): ≤ 8.9 ms native,
+  ≤ 37.1 ms wasm32.
 - The largest wasm prove peak (`R_TX`, 231,858,048 B = 221.1 MiB) is 13.6 % under the 256 MiB hard limit.
+- Rust rows (run `d6`, 2026-10-18): the Rust core has no arena. Memory column: its native heap peak (prove, cold
+  `Ctx`, `tests/memory.rs` counting allocator) and its wasm32 linear memory after the proves, one relation per
+  process (including the bench's statements and witnesses), in MB. A process that keeps every relation's keys
+  (a wallet `Ctx` proving every form and shape, M = 8 included) reaches 229,638,144 B = 219.0 MiB
+  (`pqzl/rust/runs/d6/rust-m8-wasm-vectors-stderr.txt`), under 256 MiB.
 - Native and wasm proofs are equal byte for byte.
 - `pqz.wasm` 411,419 B (356,523 B without the specialised verifier, STATUS.md "Auditor-off transfer").
-- Every SV p99 ≥ 4× under the 60 ms limit on every build.
+- C core: every SV p99 ≥ 4× under the 60 ms limit on every build. Rust core: ≥ 6.7× natively, ≥ 1.6× in wasm32
+  (its wasm32 SV is about 2× the C time, [pqzl/rust/README.md](pqzl/rust/README.md#d6-rust-against-c-plan-d6-task-12)).
 
 </details>
 
@@ -396,26 +436,28 @@ are `l11` / `l12` ([pqzh-ligero.md](../docs/research/pqzh-ligero.md), "exact len
 
 Verify time through `pqz-ffi`, the way the node calls it, with the 512 MiB verify-only memory area. Ops 1–5 go
 through the C function `pqz_precompile`; op 7 through the Rust entry point `precompile` (the same call without the C
-wrapper):
+wrapper). The PQZL C-backend column is run `layout`. The Rust-backend column (`pqz-ffi` feature `pqzl-rust`, the
+Rust core, which has no arena) is `ffi_bench` in run `d6`; the C backend is measured again in the same run for the
+comparison:
 
-| Form (op) | PQZL verify p50 / p99 (ms) | PQZH verify p50 / p99 (ms) |
-|---|---|---|
-| TRANSFER (1) | 7.90 / 8.62 | 9.56 / 9.71 |
-| TRANSFER0 (1) | 7.65 / 8.61 | 9.33 / 9.42 |
-| BURN (2) | 7.50 / 10.04 | 9.12 / 10.02 |
-| REFRESH (2) | 7.49 / 9.57 | 9.12 / 9.39 |
-| REGISTER (3) | 3.99 / 6.58 | 6.91 / 7.04 |
-| DISCLOSE-SENDER (4) | 4.16 / 4.46 | 7.22 / 7.40 |
-| DISCLOSE-RECEIVER (5) | 4.38 / 4.80 | 7.07 / 7.26 |
-| DISCLOSE-AUDITOR (5) | 4.38 / 4.77 | 7.06 / 7.54 |
-| TRANSFER-MULTI (7), M = 1, auditor on | 7.98 / 8.76 | 9.60 / 9.77 |
-| TRANSFER-MULTI (7), M = 1, auditor off | 8.27 / 10.41 | 9.28 / 9.62 |
-| TRANSFER-MULTI (7), M = 2, auditor on | 8.45 / 10.81 | 9.91 / 10.72 |
-| TRANSFER-MULTI (7), M = 2, auditor off | 8.52 / 10.16 | 9.58 / 9.83 |
-| TRANSFER-MULTI (7), M = 4, auditor on | 9.27 / 10.52 | 10.64 / 11.02 |
-| TRANSFER-MULTI (7), M = 4, auditor off | 9.06 / 13.24 | 9.87 / 10.01 |
-| TRANSFER-MULTI (7), M = 8, auditor on | 13.58 / 14.48 | not built |
-| TRANSFER-MULTI (7), M = 8, auditor off | 12.93 / 20.05 | not built |
+| Form (op) | PQZL verify p50 / p99 (ms), C backend | PQZL verify p50 / p99 (ms), Rust backend (`pqzl-rust`) | PQZH verify p50 / p99 (ms) |
+|---|---|---|---|
+| TRANSFER (1) | 7.90 / 8.62 | 6.48 / 9.27 (C backend in the same run: 8.34 / 11.72) | 9.56 / 9.71 |
+| TRANSFER0 (1) | 7.65 / 8.61 | 6.24 / 9.22 (C backend in the same run: 8.15 / 11.26) | 9.33 / 9.42 |
+| BURN (2) | 7.50 / 10.04 | 6.28 / 9.12 (C backend in the same run: 8.09 / 11.05) | 9.12 / 10.02 |
+| REFRESH (2) | 7.49 / 9.57 | 6.07 / 8.85 (C backend in the same run: 10.79 / 12.70) | 9.12 / 9.39 |
+| REGISTER (3) | 3.99 / 6.58 | 3.36 / 5.66 (C backend in the same run: 4.22 / 7.17) | 6.91 / 7.04 |
+| DISCLOSE-SENDER (4) | 4.16 / 4.46 | 3.39 / 5.92 (C backend in the same run: 4.54 / 7.34) | 7.22 / 7.40 |
+| DISCLOSE-RECEIVER (5) | 4.38 / 4.80 | 3.67 / 6.41 (C backend in the same run: 4.71 / 7.08) | 7.07 / 7.26 |
+| DISCLOSE-AUDITOR (5) | 4.38 / 4.77 | 3.73 / 6.57 (C backend in the same run: 4.86 / 6.84) | 7.06 / 7.54 |
+| TRANSFER-MULTI (7), M = 1, auditor on | 7.98 / 8.76 | 6.37 / 8.80 (C backend in the same run: 8.71 / 12.10) | 9.60 / 9.77 |
+| TRANSFER-MULTI (7), M = 1, auditor off | 8.27 / 10.41 | 6.31 / 9.81 (C backend in the same run: 9.03 / 12.96) | 9.28 / 9.62 |
+| TRANSFER-MULTI (7), M = 2, auditor on | 8.45 / 10.81 | 6.65 / 9.43 (C backend in the same run: 9.09 / 12.30) | 9.91 / 10.72 |
+| TRANSFER-MULTI (7), M = 2, auditor off | 8.52 / 10.16 | 6.43 / 10.10 (C backend in the same run: 9.31 / 12.88) | 9.58 / 9.83 |
+| TRANSFER-MULTI (7), M = 4, auditor on | 9.27 / 10.52 | 7.19 / 9.70 (C backend in the same run: 9.96 / 13.81) | 10.64 / 11.02 |
+| TRANSFER-MULTI (7), M = 4, auditor off | 9.06 / 13.24 | 6.88 / 9.77 (C backend in the same run: 9.79 / 13.14) | 9.87 / 10.01 |
+| TRANSFER-MULTI (7), M = 8, auditor on | 13.58 / 14.48 | 10.76 / 14.86 (C backend in the same run: 14.83 / 21.42) | not built |
+| TRANSFER-MULTI (7), M = 8, auditor off | 12.93 / 20.05 | 9.71 / 13.39 (C backend in the same run: 13.89 / 18.62) | not built |
 
 <details>
 <summary>Proof sizes, the Rust entry point, adversarial inputs, multi-recipient sizes and source</summary>
@@ -466,13 +508,24 @@ Built shapes, auditor on (auditor off is a little smaller and faster). Run: the 
 | M | PQZL proof max (bytes) | PQZL prove native / wasm32 (ms) | PQZL SV verify p99 portable / wasm32 (ms) | PQZH proof max (bytes) | PQZH prove native / wasm32 (ms) | PQZH verify p99 native / wasm32 (ms) |
 |---|---|---|---|---|---|---|
 | 1 | 42,784 | 914 / 1,296 | 7.8 / 13.2 | 233,102 | 631 / 1,340 | 9.86 / 18.54 |
+| 1 Rust | same proofs as C | 572 / 1,744 | 11.7 / 29.8 | — | — | — |
 | 2 | 43,616 | 978 / 1,371 | 8.6 / 14.2 | 232,526 | 635 / 1,346 | 10.12 / 19.01 |
+| 2 Rust | same proofs as C | 544 / 1,407 | 9.5 / 36.4 | — | — | — |
 | 4 | 45,295 | 1,354 / 1,827 | 9.1 / 15.0 | 233,604 | 626 / 1,297 | 10.90 / 20.36 |
+| 4 Rust | same proofs as C | 799 / 2,549 | 10.0 / 38.8 | — | — | — |
 | 8 | 61,822 | 2,398 / 2,931 (wasm32: bench build only) | 13.6 / 23.1 | not built | — | — |
+| 8 Rust | same proofs as C | 1,128 / 2,393 | 13.9 / 51.0 | — | — | — |
 
-- Memory: a PQZL proof in the browser (wasm32) peaks at 221–256 MiB for M ≤ 4 but 495 MiB for M = 8, over the
-  browser's 256 MiB limit. So browser wallets offer M ≤ 4 and M = 8 is for native or desktop wallets. Native PQZL
-  proving uses 343 MiB at M = 4 and 664 MiB at M = 8. PQZH proving needs ≤ 44 MB native and ≤ 49 MiB wasm32.
+- "Rust" rows: run `d6` (2026-10-18; C and Rust in one session,
+  [pqzl/rust/README.md](pqzl/rust/README.md#d6-rust-against-c-plan-d6-task-12)); SV p99 = the larger of honest and
+  adversarial.
+- Memory: with the C core a PQZL proof in the browser (wasm32) peaks at 221–256 MiB for M ≤ 4 but 495 MiB for M = 8,
+  over the browser's 256 MiB limit, so the C backend proves M ≤ 4 in wasm32 and M = 8 is for native or desktop
+  wallets. The Rust core needs 117.4 MiB of wasm32 linear memory at M = 8 (auditor on; 105.9 MiB off) and 115.5 MB of
+  native heap (one relation per process; a process holding every relation's keys reaches 219.0 MiB), so on
+  `pqz-ffi`'s Rust backend (the default) wasm32 proves M = 8 too (owner 2026-10-18 "if it is
+  enough, raise it", decisions.md CTR-PQZ-09; [pqzl/rust/README.md](pqzl/rust/README.md#the-wasm32-op-7-limit-owner-2026-10-18-if-it-is-enough-raise-it)).
+  C core native proving uses 343 MiB at M = 4 and 664 MiB at M = 8. PQZH proving needs ≤ 44 MB native and ≤ 49 MiB wasm32.
 - The node's verify arena (512 MiB, S3) holds every multi-recipient shape's keys and tables with a 2× margin (§5.3).
 - One transfer to 4 recipients (M = 4, auditor on) instead of 4 single transfers: about 3.5× fewer bytes and 3.5× less
   verify time (PQZH, pqzh-ligero.md §15.3).
@@ -482,12 +535,14 @@ Built shapes, auditor on (auditor off is a little smaller and faster). Run: the 
 **vs upstream LaZer.** Same statement, witness and relation source; upstream built from source by
 `artifact/reproduce.sh --upstream` (`artifact/runs/docker-upstream/upstream-bench.txt`, N = 3 medians).
 
-| | upstream LaZer `3330e48` (x86-64-v3 = AVX2 build) | this fork, portable (no AVX2 / AVX-512 needed) | fork faster by |
-|---|---|---|---|
-| `R_TX` prove / verify | 6,581 / 6,403 ms | 1,012 / 613 ms | 6.5× / 10.4× |
-| `R_REG` prove / verify | 548 / 513 ms | 247 / 178 ms | 2.2× / 2.9× |
-| `R_TX` verify, specialised verifier | — | ≈ 8 ms | ≈ 800× |
+| | upstream LaZer `3330e48` (x86-64-v3 = AVX2 build) | this fork, portable (no AVX2 / AVX-512 needed) | fork faster by | the Rust port (`pqzl/rust/`), portable |
+|---|---|---|---|---|
+| `R_TX` prove / verify | 6,581 / 6,403 ms | 1,012 / 613 ms | 6.5× / 10.4× | 529 / 278 ms (the fork in the same run: 983 / 674 ms) |
+| `R_REG` prove / verify | 548 / 513 ms | 247 / 178 ms | 2.2× / 2.9× | 203 / 81 ms (the fork in the same run: 315 / 177 ms) |
+| `R_TX` verify, specialised verifier | — | ≈ 8 ms | ≈ 800× | ≈ 6.3 ms (the fork in the same run: ≈ 8.5 ms) |
 
+- The Rust port column is run `d6` (2026-10-18), next to the fork's figures in the same run (not the upstream run's
+  session).
 - **The fork needs no AVX-512** (and no AVX2): every number in this README comes from the portable build on a CPU
   without AVX-512; x86-64-v3 (AVX2 + AES-NI) is an optional, faster build of the specialised verifier only.
 - Upstream LaZer's fastest path needs AVX-512 IFMA (its HEXL backend). That variant builds here but cannot run on the
@@ -518,7 +573,7 @@ The rejected backends' code and runs are kept in `pqzh/stark-backup/` as the rec
 
 | Want to… | Run |
 |---|---|
-| run the full gate A / B checklist (KAT, fix checks, differential, vectors, `pqz-ffi`, cargo tests, fuzz smoke) | `scripts/capped pqz-core/gate.sh <label>` |
+| run the full gate A / B checklist (KAT, fix checks, differential, vectors, `pqz-ffi`, the Rust PQZL core's tests with the C oracle, cargo tests, fuzz smoke) | `scripts/capped pqz-core/gate.sh <label>` |
 | build PQZL (native + wasm) | `pqzl/build.sh all` |
 | check the PQZL arithmetic against upstream LaZer | `pqzl/build/native/kat_dump > pqzl/build/native/kat-pqz.json`, then `python3 -I pqzl/kat/check.py pqzl/kat/lazer-3330e48.json pqzl/build/native/kat-pqz.json` (must print 19/19) |
 | test PQZH | `(cd pqzh/ligero && cargo test --release --offline)` |
@@ -648,7 +703,7 @@ run files keep the paths of their day.
 |---|---|---|---|
 | `pqzl/build.sh`, `pqzl/check_symbols.sh` | PQZL | tool | builds (native / x86-64-v3 / wasm); symbol scan of every library build |
 | `pqzl/check_tbox_fixes.sh` | PQZL | tool | fails if a LaZer fix (lazer#24, #25) or the z21 check (#26) is gone |
-| `pqzl/rust/` | PQZL | core (in progress) | crate `pqzl`, the Rust port of the C core, byte-for-byte equal to it |
+| `pqzl/rust/` | PQZL | core (port in progress; the production PQZL core once verified) | crate `pqzl`, the Rust port of the C core, byte-for-byte equal to it; `pqz-ffi` feature `pqzl-rust`; `d6.sh` measures it against C ([pqzl/rust/README.md](pqzl/rust/README.md)) |
 | `pqzl/` | PQZL | — | overview: [pqzl/README.md](pqzl/README.md) |
 | `pqzl/lazer/` | PQZL | core | the LaZer `3330e48` subset, changes marked `PQZ:` |
 | `pqzl/src/` | PQZL | core | the rewritten layers, relations, keys, specialised verifier, C ABI `pqz.h` |
@@ -671,7 +726,7 @@ run files keep the paths of their day.
 | `glic/` | both | tool | licence step 1: GMP / MPFR / HEXL absence scans |
 | `fuzz/` | both | tool | continuous fuzzing: targets `precompile`, `mutate`, `codec` (ASan + UBSan, libFuzzer) |
 | `nethermind/` | both | core + tool | `Nethermind.Pqz` plugin (PQZ + ML-DSA precompiles), tests, P/Invoke harness, calibration, image build, chain runbook and runs |
-| `gate.sh` | both | tool | the gate A / B checklist in one capped job |
+| `gate.sh` | both | tool | the gate A / B checklist in one capped job (gate A: both PQZL cores, C and Rust) |
 | `NOTICE`, `STATUS.md` | — | — | third-party notices; the detailed status log |
 
 <details>
@@ -733,9 +788,11 @@ run files keep the paths of their day.
 | 2026-10-17 | **the freeze**: `artifact/runs/freeze-2026-10-17/` (233 checks ok), `expected-results.json` frozen |
 
 **In progress:** **PQZL in Rust** ([plan](../docs/superpowers/plans/2026-10-17-pqzl-rust-port.md)): crate `pqzl` in
-`pqzl/rust/`, byte-for-byte equal to the C core (same proofs from the same seeds). **The Rust crate will be the production PQZL core
-of the precompile** (owner 2026-10-18): once the port is verified, `pqz-ffi` builds it by default and the C core stays
-as the reference. Until then, the precompile on chain 7622 runs the C core.
+`pqzl/rust/`, byte-for-byte equal to the C core (same proofs from the same seeds). **The Rust crate is the production PQZL core
+of the precompile** (owner 2026-10-18): `pqz-ffi` builds it by default (since the port's Task 11) and the C core stays
+as the reference, opt-in (feature `pqzl-c`). Not deployed yet: the precompile on chain 7622 runs the C-backed image
+until the live roll-out. The package checks Rust = C (`artifact/reproduce.sh`), and run `d6` compared the two cores'
+speed and memory in one session (§5 "Rust" rows).
 
 **Open items** (arena exhaustion, global state, clearing secrets from memory, …): [STATUS.md "Open"](STATUS.md#open).
 

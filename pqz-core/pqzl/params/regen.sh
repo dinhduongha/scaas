@@ -20,5 +20,8 @@ for r in "$@"; do
   else echo "   new (no checked-in header)"; fi
   sed 's/^/   stderr: /' "$OUT/$r.err" | head -20
 done
+# D8: the Rust params (pqzl/rust/src/params) equal the converter's text from the checked-in headers; after copying a
+# header here, regenerate them with python3 -I pqz-core/pqzl/params/to_rust.py
+python3 -I params/to_rust.py --check || rc=1
 echo "regen rc=$rc"
 exit $rc

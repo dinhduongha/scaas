@@ -1,0 +1,161 @@
+# D6: the Rust core against the C core (pqzl/rust/d6.sh)
+
+Machine: AMD Ryzen 5 7235HS (8 threads; flags aes vaes avx2), Ubuntu 24.04.4 LTS, Ubuntu clang version 18.1.3 (1ubuntu1), node v26.8.1, rustc 1.97.1 (8bab26f4f 2026-07-14).
+One session, one machine; one process per relation, core and backend. Times p50 / p99 in ms (verify p99: the larger of honest and adversarial). Prove peak native: C arena peak / Rust heap peak (counting allocator, cold Ctx, tests/memory.rs); wasm32: C arena peak (prover build without SV) / Rust linear memory of the one-relation process.
+
+Rows of `R_TXM8`, `R_TXM1_0`, `R_TXM2_0`: the re-run in `rerun-t9-11/` (d6.sh D6_T), which replaces the first pass's rows of those relations (kept in the raw files of this directory).
+
+| relation | core | prove native | prove wasm32 | verify native | verify wasm32 | verify_fast native | verify_fast wasm32 | prove peak native (MiB) | prove peak wasm32 (MiB) | proofs_fnv native / wasm32 |
+|---|---|---|---|---|---|---|---|---|---|---|
+| `R_REG` | C | 315.5 / 368.0 | 499.1 / 555.8 | 177.2 / 198.6 | 241.1 / 276.2 | 4.0 / 5.9 | 7.1 / 9.2 | 91.1 | 70.3 | b82d49f8 (n=10) / 8bd69f2d (n=5) |
+| `R_REG` | Rust | 202.8 / 213.5 | 507.4 / 765.5 | 80.9 / 95.5 | 179.8 / 201.2 | 3.2 / 4.7 | 13.1 / 16.4 | 22.4 | 27.8 | b82d49f8 (n=10) / 8bd69f2d (n=5) |
+| `R_TX` | C | 982.8 / 1,295.9 | 1,460.0 / 1,490.1 | 674.4 / 729.3 | 848.5 / 881.0 | 8.5 / 11.4 | 13.6 / 17.5 | 290.1 | 221.1 | 0b786555 (n=10) / b9bbf854 (n=5) |
+| `R_TX` | Rust | 529.4 / 835.6 | 1,344.0 / 1,635.2 | 277.9 / 309.6 | 525.1 / 561.0 | 6.3 / 8.9 | 26.7 / 32.0 | 60.0 | 68.9 | 0b786555 (n=10) / b9bbf854 (n=5) |
+| `R_BURN` | C | 900.5 / 1,196.4 | 1,368.6 / 1,404.5 | 577.2 / 646.3 | 747.5 / 864.4 | 8.0 / 11.0 | 13.0 / 16.1 | 275.5 | 210.2 | c7e99b6b (n=10) / 0a5976da (n=5) |
+| `R_BURN` | Rust | 515.6 / 800.1 | 1,316.5 / 1,629.9 | 237.6 / 270.1 | 473.9 / 501.7 | 6.1 / 8.4 | 26.3 / 31.9 | 57.7 | 67.1 | c7e99b6b (n=10) / 0a5976da (n=5) |
+| `R_DS` | C | 384.3 / 448.6 | 742.8 / 760.4 | 218.3 / 241.7 | 282.5 / 311.9 | 4.2 / 6.2 | 7.3 / 9.9 | 95.1 | 73.3 | 5429242c (n=10) / b4aa2e26 (n=5) |
+| `R_DS` | Rust | 230.1 / 276.4 | 904.0 / 954.9 | 102.5 / 127.3 | 213.2 / 233.3 | 3.4 / 5.1 | 13.6 / 16.5 | 23.3 | 28.6 | 5429242c (n=10) / b4aa2e26 (n=5) |
+| `R_DR` | C | 417.1 / 487.2 | 637.4 / 730.4 | 210.4 / 234.6 | 282.2 / 307.2 | 4.4 / 6.5 | 7.8 / 9.9 | 102.7 | 79.1 | e53ad440 (n=10) / c800f2c6 (n=5) |
+| `R_DR` | Rust | 261.9 / 322.2 | 631.3 / 989.9 | 102.1 / 125.6 | 213.8 / 226.3 | 3.5 / 5.5 | 14.4 / 18.6 | 24.4 | 29.7 | e53ad440 (n=10) / c800f2c6 (n=5) |
+| `R_TX0` | C | 934.1 / 1,164.3 | 1,484.9 / 2,010.5 | 623.9 / 725.3 | 930.0 / 998.2 | 8.2 / 11.1 | 13.4 / 17.8 | 284.2 | 216.7 | a2759b37 (n=10) / a29a5747 (n=5) |
+| `R_TX0` | Rust | 471.8 / 716.5 | 1,821.6 / 2,793.7 | 236.7 / 388.3 | 521.3 / 684.7 | 6.2 / 8.6 | 27.1 / 37.1 | 59.1 | 68.4 | a2759b37 (n=10) / a29a5747 (n=5) |
+| `R_TXM1` | C | 1,018.9 / 1,281.3 | 1,964.9 / 1,997.8 | 677.1 / 1,090.5 | 986.8 / 1,332.2 | 10.9 / 14.7 | 13.5 / 21.0 | 290.1 | 221.1 | 7e361bb1 (n=10) / eee06e22 (n=5) |
+| `R_TXM1` | Rust | 572.2 / 860.9 | 1,744.1 / 1,768.5 | 339.1 / 467.6 | 524.4 / 777.5 | 9.0 / 11.7 | 26.7 / 29.8 | 60.0 | 68.9 | 7e361bb1 (n=10) / eee06e22 (n=5) |
+| `R_TXM2` | C | 1,160.7 / 1,318.2 | 1,598.4 / 2,110.6 | 866.7 / 1,509.7 | 1,006.6 / 1,489.9 | 9.1 / 11.7 | 15.2 / 23.1 | 305.2 | 232.3 | 662f69ee (n=10) / fd812d6c (n=5) |
+| `R_TXM2` | Rust | 543.6 / 830.8 | 1,407.2 / 2,679.0 | 317.7 / 467.7 | 616.2 / 656.2 | 6.9 / 9.5 | 28.6 / 36.4 | 62.1 | 70.9 | 662f69ee (n=10) / fd812d6c (n=5) |
+| `R_TXM4` | C | 1,778.9 / 2,069.3 | 2,105.8 / 2,427.6 | 1,039.5 / 1,326.8 | 1,253.3 / 1,475.1 | 11.6 / 15.2 | 15.8 / 20.2 | 336.6 | 255.6 | 6d90ed2b (n=10) / 1a4e0938 (n=5) |
+| `R_TXM4` | Rust | 799.3 / 926.3 | 2,549.2 / 2,882.0 | 411.0 / 529.6 | 743.1 / 853.3 | 7.3 / 10.0 | 30.4 / 38.8 | 66.7 | 77.2 | 6d90ed2b (n=10) / 1a4e0938 (n=5) |
+| `R_TXM8` | C | 2,825.4 / 3,195.2 | 3,300.1 / 3,333.6 | 2,441.2 / 2,633.2 | 2,607.3 / 2,718.4 | 14.1 / 17.9 | 23.1 / 29.0 | 655.6 | 495.3 | 48609bd0 (n=10) / 70597cac (n=5) |
+| `R_TXM8` | Rust | 1,127.5 / 1,386.3 | 2,393.3 / 2,672.7 | 830.3 / 899.4 | 1,350.6 / 1,393.1 | 10.5 / 13.9 | 44.7 / 51.0 | 110.1 | 117.4 | 48609bd0 (n=10) / 70597cac (n=5) |
+| `R_TXM1_0` | C | 893.3 / 1,048.5 | 1,244.9 / 1,281.2 | 628.1 / 681.3 | 804.4 / 853.6 | 8.3 / 11.1 | 13.6 / 16.9 | 284.2 | 216.7 | 36d7ac3d (n=10) / 3f6081c3 (n=5) |
+| `R_TXM1_0` | Rust | 448.6 / 617.8 | 1,237.3 / 1,304.7 | 243.2 / 288.7 | 506.0 / 519.4 | 6.2 / 8.7 | 26.7 / 34.3 | 59.1 | 68.4 | 36d7ac3d (n=10) / 3f6081c3 (n=5) |
+| `R_TXM2_0` | C | 1,108.2 / 1,417.8 | 1,822.4 / 1,823.0 | 687.2 / 742.5 | 861.8 / 882.8 | 8.5 / 11.7 | 13.7 / 16.7 | 293.2 | 223.4 | c155b853 (n=10) / bb1bc35d (n=5) |
+| `R_TXM2_0` | Rust | 639.4 / 941.1 | 2,171.3 / 2,252.6 | 287.2 / 315.6 | 542.6 / 572.3 | 6.4 / 8.9 | 26.9 / 34.8 | 60.3 | 69.1 | c155b853 (n=10) / bb1bc35d (n=5) |
+| `R_TXM4_0` | C | 1,414.7 / 2,295.3 | 3,097.8 / 3,736.4 | 870.3 / 1,155.5 | 949.6 / 1,174.5 | 9.3 / 12.0 | 16.8 / 20.5 | 311.7 | 237.2 | c4ab18b5 (n=10) / d3d7b772 (n=5) |
+| `R_TXM4_0` | Rust | 711.2 / 1,347.4 | 4,031.9 / 5,698.1 | 322.0 / 406.0 | 664.1 / 700.7 | 6.9 / 9.1 | 28.9 / 38.0 | 62.9 | 73.9 | c4ab18b5 (n=10) / d3d7b772 (n=5) |
+| `R_TXM8_0` | C | 2,158.2 / 2,734.2 | 2,945.2 / 3,255.3 | 1,770.7 / 2,119.8 | 1,951.6 / 2,020.4 | 12.9 / 16.9 | 21.3 / 25.8 | 590.1 | 447.0 | 8a24418f (n=10) / 964a3a1d (n=5) |
+| `R_TXM8_0` | Rust | 911.1 / 1,062.6 | 2,827.1 / 2,829.6 | 604.0 / 746.2 | 1,060.1 / 1,097.1 | 9.8 / 12.9 | 41.1 / 50.1 | 98.0 | 105.9 | 8a24418f (n=10) / 964a3a1d (n=5) |
+
+## pqz-ffi path, C backend (ffi_bench 200)
+
+| system | form | proof bytes | verify p50 / p99 through the C ABI | adversarial p50 |
+|---|---|---|---|---|
+| PQZL | Transfer | 42,759 | 8.34 / 11.72 ms | 8.26 ms |
+| PQZL | Transfer0 | 42,387 | 8.15 / 11.26 ms | 8.13 ms |
+| PQZL | Burn | 41,914 | 8.09 / 11.05 ms | 7.92 ms |
+| PQZL | Refresh | 41,902 | 10.79 / 12.70 ms | 10.00 ms |
+| PQZL | Register | 28,068 | 4.22 / 7.17 ms | 4.32 ms |
+| PQZL | DiscloseSender | 28,964 | 4.54 / 7.34 ms | 4.63 ms |
+| PQZL | DiscloseReceiver | 28,990 | 4.71 / 7.08 ms | 4.76 ms |
+| PQZL | DiscloseAuditor | 28,995 | 4.86 / 6.84 ms | 4.80 ms |
+| PQZL | TransferMulti1 | 42,766 | 8.71 / 12.10 ms | 9.00 ms |
+| PQZL | TransferMulti2 | 43,603 | 9.09 / 12.30 ms | 9.05 ms |
+| PQZL | TransferMulti4 | 45,274 | 9.96 / 13.81 ms | 9.93 ms |
+| PQZL | TransferMulti8 | 61,802 | 14.83 / 21.42 ms | 14.68 ms |
+| PQZL | TransferMulti1_0 | 42,409 | 9.03 / 12.96 ms | 8.89 ms |
+| PQZL | TransferMulti2_0 | 42,951 | 9.31 / 12.88 ms | 9.34 ms |
+| PQZL | TransferMulti4_0 | 43,922 | 9.79 / 13.14 ms | 9.84 ms |
+| PQZL | TransferMulti8_0 | 58,998 | 13.89 / 18.62 ms | 13.96 ms |
+| PQZH | Transfer | 231,022 | 10.10 / 13.12 ms | 1.48 ms |
+| PQZH | Transfer0 | 231,064 | 9.80 / 11.85 ms | 1.25 ms |
+| PQZH | Burn | 231,320 | 9.56 / 11.48 ms | 0.59 ms |
+| PQZH | Refresh | 231,928 | 9.50 / 11.78 ms | 1.22 ms |
+| PQZH | Register | 187,738 | 7.17 / 8.66 ms | 0.38 ms |
+| PQZH | DiscloseSender | 186,842 | 7.47 / 8.98 ms | 0.42 ms |
+| PQZH | DiscloseReceiver | 187,098 | 7.35 / 8.80 ms | 0.43 ms |
+| PQZH | DiscloseAuditor | 186,778 | 7.37 / 8.80 ms | 0.42 ms |
+| PQZH | TransferMulti1 | 232,174 | 10.14 / 12.26 ms | 1.30 ms |
+| PQZH | TransferMulti2 | 232,174 | 10.36 / 12.16 ms | 1.36 ms |
+| PQZH | TransferMulti4 | 232,708 | 11.07 / 13.54 ms | 1.43 ms |
+| PQZH | TransferMulti1_0 | 230,968 | 9.81 / 12.30 ms | 1.25 ms |
+| PQZH | TransferMulti2_0 | 231,918 | 10.01 / 11.89 ms | 1.30 ms |
+| PQZH | TransferMulti4_0 | 230,904 | 10.21 / 12.48 ms | 1.39 ms |
+
+## pqz-ffi path, Rust (pqzl-rust) backend (ffi_bench 200)
+
+| system | form | proof bytes | verify p50 / p99 through the C ABI | adversarial p50 |
+|---|---|---|---|---|
+| PQZL | Transfer | 42,759 | 6.48 / 9.27 ms | 6.43 ms |
+| PQZL | Transfer0 | 42,387 | 6.24 / 9.22 ms | 6.30 ms |
+| PQZL | Burn | 41,914 | 6.28 / 9.12 ms | 6.22 ms |
+| PQZL | Refresh | 41,902 | 6.07 / 8.85 ms | 6.10 ms |
+| PQZL | Register | 28,068 | 3.36 / 5.66 ms | 3.33 ms |
+| PQZL | DiscloseSender | 28,964 | 3.39 / 5.92 ms | 3.52 ms |
+| PQZL | DiscloseReceiver | 28,990 | 3.67 / 6.41 ms | 3.52 ms |
+| PQZL | DiscloseAuditor | 28,995 | 3.73 / 6.57 ms | 3.65 ms |
+| PQZL | TransferMulti1 | 42,766 | 6.37 / 8.80 ms | 6.42 ms |
+| PQZL | TransferMulti2 | 43,603 | 6.65 / 9.43 ms | 6.87 ms |
+| PQZL | TransferMulti4 | 45,274 | 7.19 / 9.70 ms | 7.23 ms |
+| PQZL | TransferMulti8 | 61,802 | 10.76 / 14.86 ms | 10.59 ms |
+| PQZL | TransferMulti1_0 | 42,409 | 6.31 / 9.81 ms | 6.26 ms |
+| PQZL | TransferMulti2_0 | 42,951 | 6.43 / 10.10 ms | 6.38 ms |
+| PQZL | TransferMulti4_0 | 43,922 | 6.88 / 9.77 ms | 6.85 ms |
+| PQZL | TransferMulti8_0 | 58,998 | 9.71 / 13.39 ms | 9.82 ms |
+| PQZH | Transfer | 231,022 | 10.08 / 12.40 ms | 1.30 ms |
+| PQZH | Transfer0 | 231,064 | 9.66 / 11.99 ms | 1.25 ms |
+| PQZH | Burn | 231,320 | 9.75 / 11.73 ms | 0.60 ms |
+| PQZH | Refresh | 231,928 | 9.58 / 12.09 ms | 1.25 ms |
+| PQZH | Register | 187,738 | 7.29 / 8.82 ms | 0.38 ms |
+| PQZH | DiscloseSender | 186,842 | 7.53 / 9.14 ms | 0.42 ms |
+| PQZH | DiscloseReceiver | 187,098 | 7.37 / 8.97 ms | 0.42 ms |
+| PQZH | DiscloseAuditor | 186,778 | 7.35 / 8.98 ms | 0.43 ms |
+| PQZH | TransferMulti1 | 232,174 | 10.18 / 12.36 ms | 1.29 ms |
+| PQZH | TransferMulti2 | 232,174 | 10.41 / 12.52 ms | 1.35 ms |
+| PQZH | TransferMulti4 | 232,708 | 11.27 / 14.10 ms | 1.42 ms |
+| PQZH | TransferMulti1_0 | 230,968 | 9.66 / 11.89 ms | 1.24 ms |
+| PQZH | TransferMulti2_0 | 231,918 | 10.04 / 12.13 ms | 1.28 ms |
+| PQZH | TransferMulti4_0 | 230,904 | 10.36 / 12.52 ms | 1.39 ms |
+
+## Checks: 46 ok, 0 FAIL
+
+| status | check | detail |
+|---|---|---|
+| ok | c-native-generic.jsonl | fails 0, verifier disagreements 0 |
+| ok | c-native-fast.jsonl | fails 0, verifier disagreements 0 |
+| ok | c-wasm-generic.jsonl | fails 0, verifier disagreements 0 |
+| ok | c-wasm-fast.jsonl | fails 0, verifier disagreements 0 |
+| ok | c-wasm-nosv.jsonl | fails 0, verifier disagreements 0 |
+| ok | rust-native-generic.jsonl | fails 0, verifier disagreements 0 |
+| ok | rust-native-fast.jsonl | fails 0, verifier disagreements 0 |
+| ok | rust-wasm-generic.jsonl | fails 0, verifier disagreements 0 |
+| ok | rust-wasm-fast.jsonl | fails 0, verifier disagreements 0 |
+| ok | rerun-t9-11/c-native-generic.jsonl | fails 0, verifier disagreements 0 |
+| ok | rerun-t9-11/c-native-fast.jsonl | fails 0, verifier disagreements 0 |
+| ok | rerun-t9-11/c-wasm-generic.jsonl | fails 0, verifier disagreements 0 |
+| ok | rerun-t9-11/c-wasm-fast.jsonl | fails 0, verifier disagreements 0 |
+| ok | rerun-t9-11/c-wasm-nosv.jsonl | fails 0, verifier disagreements 0 |
+| ok | rerun-t9-11/rust-native-generic.jsonl | fails 0, verifier disagreements 0 |
+| ok | rerun-t9-11/rust-native-fast.jsonl | fails 0, verifier disagreements 0 |
+| ok | rerun-t9-11/rust-wasm-generic.jsonl | fails 0, verifier disagreements 0 |
+| ok | rerun-t9-11/rust-wasm-fast.jsonl | fails 0, verifier disagreements 0 |
+| ok | R_REG proofs_fnv native Rust = C | Rust b82d49f8 (n=10), C b82d49f8 (n=10) |
+| ok | R_REG proofs_fnv wasm Rust = C | Rust 8bd69f2d (n=5), C 8bd69f2d (n=5) |
+| ok | R_TX proofs_fnv native Rust = C | Rust 0b786555 (n=10), C 0b786555 (n=10) |
+| ok | R_TX proofs_fnv wasm Rust = C | Rust b9bbf854 (n=5), C b9bbf854 (n=5) |
+| ok | R_BURN proofs_fnv native Rust = C | Rust c7e99b6b (n=10), C c7e99b6b (n=10) |
+| ok | R_BURN proofs_fnv wasm Rust = C | Rust 0a5976da (n=5), C 0a5976da (n=5) |
+| ok | R_DS proofs_fnv native Rust = C | Rust 5429242c (n=10), C 5429242c (n=10) |
+| ok | R_DS proofs_fnv wasm Rust = C | Rust b4aa2e26 (n=5), C b4aa2e26 (n=5) |
+| ok | R_DR proofs_fnv native Rust = C | Rust e53ad440 (n=10), C e53ad440 (n=10) |
+| ok | R_DR proofs_fnv wasm Rust = C | Rust c800f2c6 (n=5), C c800f2c6 (n=5) |
+| ok | R_TX0 proofs_fnv native Rust = C | Rust a2759b37 (n=10), C a2759b37 (n=10) |
+| ok | R_TX0 proofs_fnv wasm Rust = C | Rust a29a5747 (n=5), C a29a5747 (n=5) |
+| ok | R_TXM1 proofs_fnv native Rust = C | Rust 7e361bb1 (n=10), C 7e361bb1 (n=10) |
+| ok | R_TXM1 proofs_fnv wasm Rust = C | Rust eee06e22 (n=5), C eee06e22 (n=5) |
+| ok | R_TXM2 proofs_fnv native Rust = C | Rust 662f69ee (n=10), C 662f69ee (n=10) |
+| ok | R_TXM2 proofs_fnv wasm Rust = C | Rust fd812d6c (n=5), C fd812d6c (n=5) |
+| ok | R_TXM4 proofs_fnv native Rust = C | Rust 6d90ed2b (n=10), C 6d90ed2b (n=10) |
+| ok | R_TXM4 proofs_fnv wasm Rust = C | Rust 1a4e0938 (n=5), C 1a4e0938 (n=5) |
+| ok | R_TXM8 proofs_fnv native Rust = C | Rust 48609bd0 (n=10), C 48609bd0 (n=10) |
+| ok | R_TXM8 proofs_fnv wasm Rust = C | Rust 70597cac (n=5), C 70597cac (n=5) |
+| ok | R_TXM1_0 proofs_fnv native Rust = C | Rust 36d7ac3d (n=10), C 36d7ac3d (n=10) |
+| ok | R_TXM1_0 proofs_fnv wasm Rust = C | Rust 3f6081c3 (n=5), C 3f6081c3 (n=5) |
+| ok | R_TXM2_0 proofs_fnv native Rust = C | Rust c155b853 (n=10), C c155b853 (n=10) |
+| ok | R_TXM2_0 proofs_fnv wasm Rust = C | Rust bb1bc35d (n=5), C bb1bc35d (n=5) |
+| ok | R_TXM4_0 proofs_fnv native Rust = C | Rust c4ab18b5 (n=10), C c4ab18b5 (n=10) |
+| ok | R_TXM4_0 proofs_fnv wasm Rust = C | Rust d3d7b772 (n=5), C d3d7b772 (n=5) |
+| ok | R_TXM8_0 proofs_fnv native Rust = C | Rust 8a24418f (n=10), C 8a24418f (n=10) |
+| ok | R_TXM8_0 proofs_fnv wasm Rust = C | Rust 964a3a1d (n=5), C 964a3a1d (n=5) |
+| info | wasm32 op 7 M = 8 (Task 12) | enough: native = wasm32 on the vector proofs True; Rust wasm32 M = 8 peaks {'R_TXM8': 123076608, 'R_TXM8_0': 111017984} B, budget 268,012,304 B (the C M = 4 peak) |
+
+RESULT: PASS

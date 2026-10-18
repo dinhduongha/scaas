@@ -79,8 +79,10 @@ Sender F, auditor A and `T` as the scenario (`T = Enc_F(1,000,000; 0x61…) + Tr
 + j`), UA j = the address `(0xB0 + j)` × 20; fee 7 with the auditor and 0 without (`M2-off-two-real`: 7, `M4-off-decoys`:
 0); real legs 123,456 (`M2-off-two-real` and `M8-on-boundary`: 123,456 and 7,000), decoys 0; row i has `seed_enc` `0x70 +
 i`, `sendCounter` 3 + i and `rnd32` `0xB0 + i`; memo key seed `0x4d…` (`pqz-ffi` `fixture::MEMO_KEY_SEED`). The
-statement is written once under the PQZL id; `ids` lists where M is built (M = 8: PQZL only). wasm32 does not prove PQZL
-M = 8 (`pqzl::WASM_PQZL_MAX_LEGS` = 4, one 512 MiB arena, S3): the replay verifies the native proof there. No op 7
+statement is written once under the PQZL id; `ids` lists where M is built (M = 8: PQZL only). In wasm32 the replay proves
+PQZL M = 8 again on `pqz-ffi`'s Rust backend (the default; `WASM_PQZL_MAX_LEGS` = 8 since the Rust port's Task 12); the
+C backend (opt-in) does not prove it (`WASM_PQZL_MAX_LEGS` = 4, one 512 MiB arena, S3), and the replay verifies the
+native proof there. No op 7
 disclosure bundle (§5.4) vectors: `pqz-stmt` has no codec for it yet.
 
 ### Worst-case noise

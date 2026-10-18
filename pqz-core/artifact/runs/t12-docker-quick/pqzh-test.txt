@@ -1,0 +1,160 @@
+   Compiling version_check v0.9.5
+   Compiling typenum v1.20.1
+   Compiling generic-array v0.14.7
+   Compiling keccak v0.1.6
+   Compiling block-buffer v0.10.4
+   Compiling crypto-common v0.1.7
+   Compiling digest v0.10.7
+   Compiling pqz-stmt v0.1.0 (/src/pqz-core/stmt)
+   Compiling sha3 v0.10.8
+   Compiling pqzh-ligero v0.1.0 (/src/pqz-core/pqzh/ligero)
+    Finished `release` profile [optimized + debuginfo] target(s) in 11.01s
+     Running unittests src/lib.rs (target/release/deps/pqzh_ligero-8980a7f99c8f23c9)
+
+running 13 tests
+test cs::tests::op_tags_hash ... ok
+test cs::tests::pqzh_id_d3 ... ok
+test cs::tests::ring_recurrence_matches_naive ... ok
+test fft::tests::fft_matches_naive_all_radices ... ok
+test fq::tests::field_facts_and_ext ... ok
+test fq::tests::limb_matches_u128 ... ok
+test fq::tests::mul_and_red_match_naive ... ok
+test ligero::tests::limits_exact ... ok
+test ligero::tests::max_len_exact_multiproof_tight ... ok
+test ligero::tests::proven_is_the_model ... ok
+test ligero::tests::prover_retries_over_limit ... ok
+test ligero::tests::rng_hedged_with_witness ... ok
+test merkle::tests::multiproof_roundtrip ... ok
+
+test result: ok. 13 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 11.68s
+
+     Running unittests src/bin/ligero_bench.rs (target/release/deps/ligero_bench-226a36ff1ab67d31)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/ligero_export.rs (target/release/deps/ligero_export-1dd12417b3ced21e)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/attacks.rs (target/release/deps/attacks-59783de164d75b41)
+
+running 17 tests
+test coefficient_out_of_range ... ok
+test debit_noise_range_edges ... ok
+test digit_out_of_range ... ok
+test dr_noise_range_edges ... ok
+test e2_norm_exceeded ... ok
+test evm_fixtures ... ok
+test hedged_proofs ... ok
+test honest_all_presets_cross_and_hiding ... R_REG Params { n: 32756, k: 817, ell: 695, t: 121, pow_bits: 16, proven: true, johnson: false }: 186904 B, 384.924161ms
+R_TX Params { n: 32756, k: 817, ell: 695, t: 121, pow_bits: 16, proven: true, johnson: false }: 231416 B, 688.649278ms
+R_BURN Params { n: 32756, k: 817, ell: 695, t: 121, pow_bits: 16, proven: true, johnson: false }: 231256 B, 664.515068ms
+R_DS Params { n: 32756, k: 817, ell: 695, t: 121, pow_bits: 16, proven: true, johnson: false }: 187482 B, 407.373774ms
+R_DR Params { n: 32756, k: 817, ell: 695, t: 121, pow_bits: 16, proven: true, johnson: false }: 185462 B, 398.464292ms
+R_TX0 Params { n: 32756, k: 817, ell: 695, t: 121, pow_bits: 16, proven: true, johnson: false }: 231320 B, 672.662285ms
+R_REG Params { n: 6536, k: 817, ell: 650, t: 166, pow_bits: 16, proven: true, johnson: false }: 224904 B, 171.942099ms
+R_TX Params { n: 6536, k: 817, ell: 650, t: 166, pow_bits: 16, proven: true, johnson: false }: 305790 B, 281.680587ms
+R_BURN Params { n: 6536, k: 817, ell: 650, t: 166, pow_bits: 16, proven: true, johnson: false }: 304992 B, 291.849683ms
+R_DS Params { n: 6536, k: 817, ell: 650, t: 166, pow_bits: 16, proven: true, johnson: false }: 225788 B, 161.699173ms
+R_DR Params { n: 6536, k: 817, ell: 650, t: 166, pow_bits: 16, proven: true, johnson: false }: 224898 B, 158.682858ms
+R_TX0 Params { n: 6536, k: 817, ell: 650, t: 166, pow_bits: 16, proven: true, johnson: false }: 305440 B, 339.612077ms
+R_REG Params { n: 18533, k: 172, ell: 151, t: 20, pow_bits: 16, proven: false, johnson: false }: 62912 B, 830.467038ms
+R_TX Params { n: 18533, k: 344, ell: 319, t: 24, pow_bits: 16, proven: false, johnson: false }: 92104 B, 976.110559ms
+R_BURN Params { n: 18533, k: 344, ell: 319, t: 24, pow_bits: 16, proven: false, johnson: false }: 92472 B, 935.681187ms
+R_DS Params { n: 18533, k: 172, ell: 151, t: 20, pow_bits: 16, proven: false, johnson: false }: 63160 B, 844.099373ms
+R_DR Params { n: 18533, k: 172, ell: 151, t: 20, pow_bits: 16, proven: false, johnson: false }: 63184 B, 884.141595ms
+R_TX0 Params { n: 18533, k: 344, ell: 319, t: 24, pow_bits: 16, proven: false, johnson: false }: 92184 B, 950.504707ms
+R_REG Params { n: 6536, k: 172, ell: 144, t: 27, pow_bits: 16, proven: false, johnson: false }: 79222 B, 249.570605ms
+R_TX Params { n: 6536, k: 344, ell: 308, t: 35, pow_bits: 16, proven: false, johnson: false }: 113702 B, 293.533727ms
+R_BURN Params { n: 6536, k: 344, ell: 308, t: 35, pow_bits: 16, proven: false, johnson: false }: 113140 B, 298.353471ms
+R_DS Params { n: 6536, k: 172, ell: 144, t: 27, pow_bits: 16, proven: false, johnson: false }: 79704 B, 253.108212ms
+R_DR Params { n: 6536, k: 172, ell: 144, t: 27, pow_bits: 16, proven: false, johnson: false }: 80058 B, 251.653942ms
+R_TX0 Params { n: 6536, k: 344, ell: 308, t: 35, pow_bits: 16, proven: false, johnson: false }: 113382 B, 304.5814ms
+R_REG Params { n: 6536, k: 862, ell: 709, t: 152, pow_bits: 16, proven: true, johnson: true }: 201908 B
+R_TX Params { n: 6536, k: 862, ell: 709, t: 152, pow_bits: 16, proven: true, johnson: true }: 259080 B
+R_BURN Params { n: 6536, k: 862, ell: 709, t: 152, pow_bits: 16, proven: true, johnson: true }: 256376 B
+R_DS Params { n: 6536, k: 862, ell: 709, t: 152, pow_bits: 16, proven: true, johnson: true }: 202776 B
+R_DR Params { n: 6536, k: 862, ell: 709, t: 152, pow_bits: 16, proven: true, johnson: true }: 203128 B
+R_TX0 Params { n: 6536, k: 862, ell: 709, t: 152, pow_bits: 16, proven: true, johnson: true }: 256088 B
+ok
+test mutations_960_per_relation_rejected ... 6 x 960 mutated inputs rejected, 0 verifier panics caught
+ok
+test norm_exceeded_small_coefficients ... ok
+test other_ids_and_length_bound_rejected ... ok
+test overspend ... ok
+test randomness_norm_and_range ... ok
+test scalar_word_above_2_64 ... ok
+test transfer_forms_cross_rejected ... ok
+test wrong_public_amount ... ok
+test wrong_witness_ring_row ... ok
+
+test result: ok. 17 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 93.50s
+
+     Running tests/multi.rs (target/release/deps/multi-4773411482e4f6fa)
+
+running 8 tests
+test hedged_and_deterministic ... ok
+test honest_every_shape ... R_TXM1 default: 231598 B (bound 235470)
+R_TXM1 fee 0, all legs 0: 231758 B (bound 235470)
+R_TXM1 two real legs: 231758 B (bound 235470)
+R_TXM1 real leg at j: 233038 B (bound 235470)
+R_TXM1 whole balance: 232078 B (bound 235470)
+R_TXM2 default: 232462 B (bound 235470)
+R_TXM2 fee 0, all legs 0: 232558 B (bound 235470)
+R_TXM2 two real legs: 232110 B (bound 235470)
+R_TXM2 real leg at j: 231534 B (bound 235470)
+R_TXM2 real leg at j: 232494 B (bound 235470)
+R_TXM2 whole balance: 231758 B (bound 235470)
+R_TXM4 default: 231944 B (bound 236196)
+R_TXM4 fee 0, all legs 0: 232804 B (bound 236196)
+R_TXM4 two real legs: 233732 B (bound 236196)
+R_TXM4 real leg at j: 233412 B (bound 236196)
+R_TXM4 real leg at j: 232388 B (bound 236196)
+R_TXM4 real leg at j: 232420 B (bound 236196)
+R_TXM4 whole balance: 231180 B (bound 236196)
+R_TXM1_0 default: 231304 B (bound 234744)
+R_TXM1_0 fee 0, all legs 0: 230872 B (bound 234744)
+R_TXM1_0 two real legs: 231608 B (bound 234744)
+R_TXM1_0 real leg at j: 231416 B (bound 234744)
+R_TXM1_0 whole balance: 231736 B (bound 234744)
+R_TXM2_0 default: 231438 B (bound 235470)
+R_TXM2_0 fee 0, all legs 0: 232078 B (bound 235470)
+R_TXM2_0 two real legs: 232494 B (bound 235470)
+R_TXM2_0 real leg at j: 233102 B (bound 235470)
+R_TXM2_0 real leg at j: 231854 B (bound 235470)
+R_TXM2_0 whole balance: 232526 B (bound 235470)
+R_TXM4_0 default: 230872 B (bound 235470)
+R_TXM4_0 fee 0, all legs 0: 232174 B (bound 235470)
+R_TXM4_0 two real legs: 230968 B (bound 235470)
+R_TXM4_0 real leg at j: 231854 B (bound 235470)
+R_TXM4_0 real leg at j: 231288 B (bound 235470)
+R_TXM4_0 real leg at j: 232238 B (bound 235470)
+R_TXM4_0 whole balance: 231566 B (bound 235470)
+ok
+test mutations_960_per_shape_rejected ... 6 x 960 mutated op 7 inputs rejected, 0 verifier panics caught
+ok
+test negative_witnesses ... R_TXM1: 24 negative witnesses + 3 ring rows refused and rejected
+R_TXM2: 25 negative witnesses + 3 ring rows refused and rejected
+R_TXM4: 26 negative witnesses + 3 ring rows refused and rejected
+R_TXM1_0: 22 negative witnesses + 3 ring rows refused and rejected
+R_TXM2_0: 23 negative witnesses + 3 ring rows refused and rejected
+R_TXM4_0: 24 negative witnesses + 3 ring rows refused and rejected
+ok
+test noise_range_edges ... ok
+test op1_op7_and_shapes_separated ... ok
+test rel_of_words ... ok
+test statement_changes_rejected ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 186.95s
+
+   Doc-tests pqzh_ligero
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+rc=0

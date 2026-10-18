@@ -3,11 +3,13 @@
  * the fixes. Built and run by test/ub_test.sh with -fsanitize=undefined,address -fno-sanitize-recover=all and
  * -DPQZ_DEBUG_MALLOC (libc heap, so ASan sees each block); before the fixes the sanitizer aborts, after them every
  * check prints "ok" and the expected value is the one the Rust port (crate pqzl) computes.
- *   (a) pqz_fixexp.h pqz_exp_fp outside [-64, 64]: the intended clamp; rejection.c with exponents far beyond +-64
- *       (two's-complement wraparound where the Rust port wraps: rej_standard t2 - 2 t1 and t - ln M, rej_bimodal
- *       a - |y| - ln M, _quot_q56 |a| of -2^127);
+ *   (a) pqz_fixexp.h pqz_exp_fp outside [-64, 64]: the intended clamp; pqz_sat_sub64 / pqz_sat_sub128 at the range
+ *       edges; rejection.c with exponents near +-2^63 (follow-up 2026-10-18: rej_standard t2 - 2 t1 and t - ln M,
+ *       rej_bimodal a - |y| - ln M saturate, as the Rust port's saturating_sub, where they first wrapped: below -2^63
+ *       rejects, num above 2^127 accepts);
  *   (b) pqz_encrypt / pqz_decrypt_raw with a coefficient in [2^63, 2^63 + q) and 2^63 + q (rd_poly, int_set_i64);
- *   (c) poly_auto_self in the NTT domain (crt == 1): only the one residue vector the buffer holds.
+ *   (c) poly_auto_self in the NTT domain (crt == 1): X -> X^-1 via the coefficients (follow-up 2026-10-18), equal to
+ *       the coefficient-domain automorphism, no write past the residue vector.
  *   pqz_ub_test [parts]     parts: any of a, b, c (default abc)
  */
 #include "lazer.h"
@@ -96,6 +98,35 @@ test_fixexp (void)
   check ("fixexp unchanged on [-64, 64)", ok);
 }
 
+/* pqz_sat_sub64 / pqz_sat_sub128 on every pair of edge values = the exact difference clamped into the range */
+static void
+test_satsub (void)
+{
+  const int64_t e64[] = { INT64_MIN, INT64_MIN + 1, INT64_MIN / 2, -PQZ_X_MAX, -1, 0, 1, PQZ_X_MAX, INT64_MAX / 2,
+                          INT64_MAX - 1, INT64_MAX };
+  const pqz_fx_i128 max128 = (pqz_fx_i128)(~(pqz_fx_u128)0 >> 1), min128 = -max128 - 1;
+  const pqz_fx_i128 e128[] = { min128, min128 + 1, min128 / 2, -((pqz_fx_i128)1 << 126), -1, 0, 1,
+                               (pqz_fx_i128)1 << 126, max128 / 2, max128 - 1, max128 };
+  int ok = 1;
+  for (unsigned i = 0; i < sizeof e64 / sizeof e64[0]; i++)
+    for (unsigned j = 0; j < sizeof e64 / sizeof e64[0]; j++)
+      {
+        pqz_fx_i128 d = (pqz_fx_i128)e64[i] - e64[j];
+        int64_t want = d > INT64_MAX ? INT64_MAX : d < INT64_MIN ? INT64_MIN : (int64_t)d;
+        ok &= pqz_sat_sub64 (e64[i], e64[j]) == want;
+      }
+  check ("pqz_sat_sub64 = the clamped exact difference on the edges", ok);
+  ok = 1;
+  for (unsigned i = 0; i < sizeof e128 / sizeof e128[0]; i++)
+    for (unsigned j = 0; j < sizeof e128 / sizeof e128[0]; j++)
+      {
+        pqz_fx_i128 d;
+        pqz_fx_i128 want = __builtin_sub_overflow (e128[i], e128[j], &d) ? (e128[i] < 0 ? min128 : max128) : d;
+        ok &= pqz_sat_sub128 (e128[i], e128[j]) == want;
+      }
+  check ("pqz_sat_sub128 = the clamped exact difference on the edges", ok);
+}
+
 /* int_t r = sign * (hi * 2^64 + lo) */
 static void
 set_big (int_ptr r, int neg, uint64_t hi, uint64_t lo)
@@ -135,27 +166,38 @@ test_rejection (void)
   intvec_alloc (z, 1, 1), intvec_alloc (v, 1, 1);
   intvec_alloc (z2, 2, 2), intvec_alloc (v2, 2, 2);
 
-  /* S1 standard, num = t2 - 2 t1 = 3 (2^126 - 2^64 + 1) wraps past 2^127 (Rust: wrapping_sub); t = -(2^63 - 1) after
-     the clamps, t - ln M wraps to a large positive exponent -> exp(64) -> always accept (0) */
+  /* S1 standard, num = t2 - 2 t1 = 3 (2^126 - 2^64 + 1) > 2^127 saturates to 2^127 - 1 (2026-10-18 it wrapped
+     negative); t = 2^63 - 1 after the clamps, t - ln M near +2^63 -> exp(64) -> accept (0), as the exact value */
   intvec_set_elem_i64 (v, 0, INT64_MAX);
   intvec_set_elem_i64 (z, 0, -INT64_MAX);
-  check ("rej_standard t2 - 2 t1 wraps (num > 2^127): accept", rej_all (rej_standard, z, v, scM, sig1, 0));
+  check ("rej_standard t2 - 2 t1 saturates at 2^127 - 1: accept", rej_all (rej_standard, z, v, scM, sig1, 0));
 
-  /* S2 standard, num = 1 - 2^63 (no wrap), t = -(2^63 - 1); t - ln M wraps (Rust: wrapping_sub) -> accept (0) */
+  /* S2 standard, num = 1 - 2^63, t = -(2^63 - 1); t - ln M saturates at -2^63 (it wrapped to +2^63 - ...) -> exp(-64)
+     -> reject (1) */
   intvec_set_elem_i64 (v, 0, 1);
   intvec_set_elem_i64 (z, 0, (int64_t)1 << 62);
-  check ("rej_standard t - ln M wraps: accept", rej_all (rej_standard, z, v, scM, sig1, 0));
+  check ("rej_standard t - ln M saturates at -2^63: reject", rej_all (rej_standard, z, v, scM, sig1, 1));
 
-  /* S3 standard, two-limb entries: t2 = 2, t1 = -(2^126 - 1), num = 2^127 = -2^127 as i128; _quot_q56 |a| = 2^127
-     (Rust: wrapping_sub, as u128) clamps, t = -(2^63 - 1), t - ln M wraps -> accept (0) */
+  /* S3 standard, two-limb entries: t2 = 2, t1 = -(2^126 - 1), num = 2^127 saturates to 2^127 - 1 (it wrapped to
+     -2^127), t = 2^63 - 1 -> accept (0) */
   set_big (intvec_get_elem (v2, 0), 0, 0, 1), set_big (intvec_get_elem (v2, 1), 0, 0, 1);
   set_big (intvec_get_elem (z2, 0), 1, ((uint64_t)1 << 62) - 1, UINT64_MAX), set_big (intvec_get_elem (z2, 1), 0, 0, 0);
-  check ("rej_standard num = -2^127, |num| in _quot_q56: accept", rej_all (rej_standard, z2, v2, scM, sig1, 0));
+  check ("rej_standard num = 2^127 saturates (two limbs): accept", rej_all (rej_standard, z2, v2, scM, sig1, 0));
 
-  /* B1 bimodal, a = 2^35, |y| = 2^63 - 1 (clamped), a - |y| - ln M wraps (Rust: wrapping_sub) -> accept (0) */
+  /* S4 standard, num = 1 + 2^63, t = 2^63 - 1 (clamped), t - ln M near +2^63, no saturation -> accept (0) */
+  intvec_set_elem_i64 (v, 0, 1);
+  intvec_set_elem_i64 (z, 0, -((int64_t)1 << 62));
+  check ("rej_standard t - ln M near +2^63: accept", rej_all (rej_standard, z, v, scM, sig1, 0));
+
+  /* B1 bimodal, a = 2^35, |y| = 2^63 - 1 (clamped), a - |y| - ln M saturates at -2^63 (it wrapped) -> reject (1) */
   intvec_set_elem_i64 (v, 0, 1);
   intvec_set_elem_i64 (z, 0, (int64_t)1 << 62);
-  check ("rej_bimodal a - |y| - ln M wraps: accept", rej_all (rej_bimodal, z, v, scM, sig1, 0));
+  check ("rej_bimodal a - |y| - ln M saturates at -2^63: reject", rej_all (rej_bimodal, z, v, scM, sig1, 1));
+
+  /* B2 bimodal, a = 2^63 - 1 (clamped), y = 0, a - |y| - ln M near +2^63, no saturation -> accept (0) */
+  intvec_set_elem_i64 (v, 0, INT64_MAX);
+  intvec_set_elem_i64 (z, 0, 0);
+  check ("rej_bimodal a - |y| - ln M near +2^63: accept", rej_all (rej_bimodal, z, v, scM, sig1, 0));
 
   intvec_free (z), intvec_free (v), intvec_free (z2), intvec_free (v2);
 }
@@ -247,26 +289,19 @@ test_auto_ntt (void)
 {
   poly_t p, c;
   int64_t a[64];
-  uint64_t before[64];
   for (int j = 0; j < 64; j++)
     a[j] = (int64_t)(j * 1000003 % 4001) - 2000;
   poly_alloc (p, pqz_reg_ring), poly_alloc (c, pqz_reg_ring);
   poly_set_coeffvec_i64 (p, a);
   poly_tocrt (p);
-  memcpy (before, p->crtrep, sizeof before);
-  poly_auto_self (p); /* before the fix: ASan heap-buffer-overflow (second pass, crtrep[64..127]) */
-  int ok = p->crt == 1;
-  for (int j = 0; j < 64; j++)
-    ok &= ((uint64_t *)p->crtrep)[j] == before[63 - j];
-  check ("poly_auto_self crt: the one residue vector reversed, nothing past it", ok && pqz_err == PQZ_OK);
-  /* information only: is the reversal X -> X^-1 in the incomplete NTT basis? (upstream's fully split CRT: yes) */
+  poly_auto_self (p); /* before the hardening: ASan heap-buffer-overflow (second pass, crtrep[64..127]) */
   poly_set_coeffvec_i64 (c, a);
   poly_auto_self (c); /* coefficient domain: the automorphism */
-  poly_fromcrt (p);
-  int same = 1;
+  int ok = p->crt == 0 && c->crt == 0 && pqz_err == PQZ_OK;
   for (int j = 0; j < 64; j++)
-    same &= int_get_i64 (poly_get_coeff (p, j)) == int_get_i64 (poly_get_coeff (c, j));
-  printf ("info poly_auto_self crt branch equals X -> X^-1: %s\n", same ? "yes" : "no");
+    ok &= int_get_i64 (poly_get_coeff (p, j)) == int_get_i64 (poly_get_coeff (c, j));
+  ok &= int_get_i64 (poly_get_coeff (c, 0)) == a[0] && int_get_i64 (poly_get_coeff (c, 1)) == -a[63];
+  check ("poly_auto_self crt: X -> X^-1 via the coefficients (= the coefficient-domain branch)", ok);
   poly_free (p), poly_free (c);
 }
 
@@ -276,7 +311,7 @@ main (int argc, char **argv)
   static uint8_t arena[(size_t)64 << 20];
   const char *part = argc > 1 ? argv[1] : "abc"; /* the parts to run: a, b, c (one process each in ub_test.sh) */
   if (strchr (part, 'a'))
-    test_fixexp (), test_rejection ();
+    test_fixexp (), test_satsub (), test_rejection ();
   if (strchr (part, 'b'))
     {
       check ("pqz_init", pqz_init (arena, sizeof arena) == PQZ_OK);

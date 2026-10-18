@@ -1,0 +1,88 @@
+[package]
+name = "pqzl"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.97.1"
+license-file = "../../../LICENSE"
+publish = false # crates.io only on an owner ruling (plan D7)
+description = "PQZL (the LaZer lattice proof system of SCaaS PQZ) in pure Rust, byte-for-byte equal to the C core"
+
+[dependencies]
+# D1: AES-256 block cipher (fixslice, constant time; AES-NI where detected) for the rng's AES-256-CTR
+aes = "=0.8.4"
+# D1: SHAKE128 / SHAKE256 (Keccak) for the transcript hashes and the keys' streams
+sha3 = { version = "=0.10.8", default-features = false }
+
+[build-dependencies]
+# feature `c-oracle` only: build.rs compiles the C core; a default build compiles no C
+cc = { version = "1", optional = true }
+
+[dev-dependencies]
+serde_json = "1"
+
+[features]
+default = ["sv"]
+# the specialised verifier (pqz_verify_fast)
+sv = []
+# R_TXM with M = 16 (bench only; does not fit MAX_INPUT)
+oversize = []
+# test entry points (test_mutate, the `testkit` module: kat_dump, keys_kat, the oracle tests); with `c-oracle` also
+# the C core's PQZ_TEST_HOOKS (pqz_test_mutate). Not in a production build.
+test-hooks = []
+# pqzl/test/pqz_bench.c's setup and steps (module `bench`: src/bin/bench.rs, wasm/). Not in a production build.
+bench = []
+# wasm32 proves op 7 up to TXM_MAX_LEGS (16 with oversize; 8 without, which is the default since Task 12): the
+# measurements (d6.sh, reproduce.sh --multi-bench). Bench builds only, never in a production build.
+wasm-m8 = ["bench"]
+# dev / test only: the C core (../src, ../lazer, ../params) as the oracle, module `c_oracle`
+c-oracle = ["dep:cc"]
+
+[[bin]]
+name = "kat_dump"
+required-features = ["test-hooks"]
+
+[[bin]]
+name = "keys_kat"
+required-features = ["test-hooks"]
+
+[[bin]]
+name = "bench"
+required-features = ["bench"]
+
+[[test]]
+name = "oracle_smoke"
+required-features = ["c-oracle"]
+
+[[test]]
+name = "oracle_arith"
+required-features = ["c-oracle"]
+
+[[test]]
+name = "oracle_rand"
+required-features = ["c-oracle"]
+
+[[test]]
+name = "oracle_keys"
+required-features = ["c-oracle"]
+
+[[test]]
+name = "oracle_params"
+required-features = ["c-oracle"]
+
+[[test]]
+name = "oracle_codec"
+required-features = ["c-oracle", "test-hooks"]
+
+[[test]]
+name = "oracle_verify"
+required-features = ["c-oracle", "test-hooks"]
+
+[[test]]
+name = "oracle_prove"
+required-features = ["c-oracle"]
+
+[profile.release]
+debug = 1
+panic = "unwind"
+
+[workspace]

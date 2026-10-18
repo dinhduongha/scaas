@@ -1,15 +1,37 @@
-//! Builds libpqz (the PQZL C core) as build.sh does: the same sources, `-std=gnu11 -O2 -fno-builtin -fno-math-errno
-//! -ffp-contract=off`, the specialised verifier (`-DPQZ_SV`), native with `-fstack-protector-strong`; wasm32
-//! freestanding (`-DPQZ_FREESTANDING`, src/freestanding) with pqz_wasm_rt.c's 128-bit helpers only (their shifts are
-//! branch-free, the prover shifts by secret amounts; Rust's compiler_builtins provides mem*). Then the symbol scan
-//! (../pqzl/check_symbols.sh) on the archive: no malloc, stdio, libm, GMP, MPFR. Also takes the self-test proofs
-//! from the REGISTER rows of smartcontracts/vectors/pqz/proof_{pqzl,pqzh}.json (bytes for include_bytes!).
+//! Feature `pqzl-c` (without it no C is compiled): builds libpqz (the PQZL C core) as build.sh does: the same
+//! sources, `-std=gnu11 -O2 -fno-builtin -fno-math-errno -ffp-contract=off`, the specialised verifier (`-DPQZ_SV`),
+//! native with `-fstack-protector-strong`; wasm32 freestanding (`-DPQZ_FREESTANDING`, src/freestanding) with
+//! pqz_wasm_rt.c's 128-bit helpers only (their shifts are branch-free, the prover shifts by secret amounts; Rust's
+//! compiler_builtins provides mem*). Then the symbol scan (../pqzl/check_symbols.sh) on the archive: no malloc,
+//! stdio, libm, GMP, MPFR. Always: the self-test proofs from the REGISTER rows of
+//! smartcontracts/vectors/pqz/proof_{pqzl,pqzh}.json (bytes for include_bytes!).
 use std::path::PathBuf;
 use std::{env, fs};
 
 fn main() {
     let core = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join("../pqzl"); // the PQZL C core
     let out = PathBuf::from(env::var("OUT_DIR").unwrap());
+    #[cfg(feature = "pqzl-c")]
+    c_core(&core, &out);
+
+    // the self-test's compiled-in R_REG proofs (D13): the REGISTER rows of the canonical vectors (D9: read in place,
+    // no copy here); written by this crate's pqz-vectors binary
+    let vec = core.join("../../smartcontracts/vectors/pqz");
+    for id in ["pqzl", "pqzh"] {
+        let src = vec.join(format!("proof_{id}.json"));
+        let j = fs::read_to_string(&src).unwrap_or_else(|e| panic!("{}: {e}", src.display()));
+        let row = &j[j.find("\"form\": \"REGISTER\"").expect("REGISTER row")..];
+        let hex = &row[row.find("\"proof\": \"").expect("proof field") + 10..];
+        let hex = &hex[..hex.find('"').unwrap()];
+        let nib = |c: u8| (c as char).to_digit(16).expect("proof hex") as u8;
+        let bin: Vec<u8> = hex.as_bytes().chunks(2).map(|p| nib(p[0]) << 4 | nib(p[1])).collect();
+        fs::write(out.join(format!("{id}_reg.bin")), bin).unwrap();
+        println!("cargo:rerun-if-changed={}", src.display());
+    }
+}
+
+#[cfg(feature = "pqzl-c")]
+fn c_core(core: &std::path::Path, out: &std::path::Path) {
     let wasm = env::var("CARGO_CFG_TARGET_ARCH").unwrap() == "wasm32";
 
     // lazer.h as build.sh's lazer_h() assembles it
@@ -67,20 +89,6 @@ fn main() {
         }
     }
 
-    // the self-test's compiled-in R_REG proofs (D13): the REGISTER rows of the canonical vectors (D9: read in place,
-    // no copy here); written by this crate's pqz-vectors binary
-    let vec = core.join("../../smartcontracts/vectors/pqz");
-    for id in ["pqzl", "pqzh"] {
-        let src = vec.join(format!("proof_{id}.json"));
-        let j = fs::read_to_string(&src).unwrap_or_else(|e| panic!("{}: {e}", src.display()));
-        let row = &j[j.find("\"form\": \"REGISTER\"").expect("REGISTER row")..];
-        let hex = &row[row.find("\"proof\": \"").expect("proof field") + 10..];
-        let hex = &hex[..hex.find('"').unwrap()];
-        let nib = |c: u8| (c as char).to_digit(16).expect("proof hex") as u8;
-        let bin: Vec<u8> = hex.as_bytes().chunks(2).map(|p| nib(p[0]) << 4 | nib(p[1])).collect();
-        fs::write(out.join(format!("{id}_reg.bin")), bin).unwrap();
-        println!("cargo:rerun-if-changed={}", src.display());
-    }
     for d in ["src", "lazer", "params", "check_symbols.sh"] {
         println!("cargo:rerun-if-changed={}", core.join(d).display());
     }

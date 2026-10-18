@@ -1,26 +1,44 @@
 #!/bin/sh
 # pqz-ffi (P6e Task 7): every check in one job under scripts/capped:
 #   scripts/capped pqz-core/ffi/run.sh <label>           -> ffi/runs/<label>-*.txt / .jsonl
+#   PQZL=rust|c scripts/capped pqz-core/ffi/run.sh <label>    the PQZL backend (CTR-PQZ-09) explicitly, alone
+#                                                           (--no-default-features --features pqzl-<backend>)
 # tests (native, release, feature prove; the crate's unit tests without it), the verify-only cdylib and its symbol
 # scans, the C smoke test against pqz_ffi.h, the wasm32 builds and the native = wasm32 digest diff, the bench.
 set -u
 cd "$(dirname "$0")"
 L=runs/$1 X=$(pwd)/target/run
 mkdir -p runs "$X"
+rm -f "$X/fill.txt"
 OUT() { echo "\$ $*"; "$@"; echo "[rc=$?]"; }
+case ${PQZL:-} in
+  rust | c) BF="--no-default-features --features pqzl-$PQZL" ;;
+  "") BF= ;;
+  *) echo "PQZL=$PQZL: rust or c" >&2; exit 2 ;;
+esac
 
 {
-  OUT cargo test --release --offline --lib
-  PQZ_FFI_DIGESTS=$X/native.jsonl PQZ_FFI_FILL_OUT=$X/fill.txt OUT cargo test --release --offline --features prove,test-hooks -- --nocapture --test-threads 4
+  echo "# PQZL backend: ${PQZL:-the default feature} (cargo flags: ${BF:-none})"
+  OUT cargo test --release --offline $BF --lib
+  PQZ_FFI_DIGESTS=$X/native.jsonl PQZ_FFI_FILL_OUT=$X/fill.txt OUT cargo test --release --offline $BF --features prove,test-hooks -- --nocapture --test-threads 4
 } > "$L-test.txt" 2>&1
-cp "$X/fill.txt" "$L-fill.txt" 2>/dev/null
+cp "$X/fill.txt" "$L-fill.txt" 2>/dev/null # C backend only (fill_determinism)
 
 {
-  echo "# verify-only build (default features): libpqz_ffi.so, and the C core archive build.rs compiled"
-  OUT cargo build --release --offline
-  echo "test hooks in the production cdylib (must be 0): $(strings -a target/release/libpqz_ffi.so | grep -c TEST_ARENA)"
-  A=$(pwd)/$(ls -t target/release/build/pqz-ffi-*/out/libpqz.a | head -1)
-  OUT ../pqzl/check_symbols.sh "$A"
+  echo "# verify-only build (no prove, no test-hooks): libpqz_ffi.so, and the C core archive if build.rs compiled one"
+  OUT cargo build --release --offline $BF
+  echo "test hooks in the production cdylib (must be 0): $(strings -a target/release/libpqz_ffi.so | grep -cE 'TEST_ARENA|TEST_FAIL_WORKER')"
+  # positive check (fails closed): the C core is in the build exactly when pqz-ffi's feature pqzl-c is on
+  F=$(cargo tree --offline $BF -e features -i pqz-ffi --prefix none) || echo "cargo tree -e features -i pqz-ffi: [rc=1]"
+  case $F in
+    *'pqz-ffi feature "pqzl-c"'*)
+      A=$(pwd)/$(ls -t target/release/build/pqz-ffi-*/out/libpqz.a | head -1)
+      OUT ../pqzl/check_symbols.sh "$A" ;;
+    *'pqz-ffi feature "pqzl-rust"'*)
+      echo "C core in this build: none (feature pqzl-c off, pqzl-rust on: build.rs compiles no C)"
+      echo "\$ cargo tree $BF -e normal,build --prefix none"; cargo tree --offline $BF -e normal,build --prefix none | sort -u ;;
+    *) echo "C core in this build: unknown (no PQZL backend feature in cargo tree) [rc=1]" ;;
+  esac
   SO=target/release/libpqz_ffi.so
   OUT sha256sum "$SO"
   echo "\$ readelf -d $SO | grep NEEDED"; readelf -d "$SO" | grep NEEDED
@@ -33,14 +51,14 @@ cp "$X/fill.txt" "$L-fill.txt" 2>/dev/null
   echo "# C smoke test against pqz_ffi.h"
   OUT clang -std=c11 -Wall -Wextra -o "$X/c_abi" tests/c_abi.c -Ltarget/release -lpqz_ffi -Wl,-rpath,"$(pwd)/target/release"
   OUT "$X/c_abi"
-  echo "# clippy (stable toolchain: 1.97.1 has no clippy): no float arithmetic in the crate"
-  OUT cargo +stable clippy --release --offline --features prove,test-hooks --lib -- -D clippy::float_arithmetic
+  echo "# clippy (the crate's toolchain 1.97.1; +stable 1.90 refuses pqzl's rust-version): no float arithmetic in the crate"
+  OUT cargo clippy --release --offline $BF --features prove,test-hooks --lib -- -D clippy::float_arithmetic
 } > "$L-native.txt" 2>&1
 
 {
   echo "# wasm32: the verify-only lib, then the prove harness (wasm/) and the digest diff against native"
-  OUT cargo build --release --offline --lib --target wasm32-unknown-unknown
-  (cd wasm && OUT cargo build --release --offline --target wasm32-unknown-unknown)
+  OUT cargo build --release --offline $BF --lib --target wasm32-unknown-unknown
+  (cd wasm && OUT cargo build --release --offline $BF --target wasm32-unknown-unknown)
   W=wasm/target/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm
   OUT sha256sum "$W"
   ls -l "$W" | awk '{print "wasm bytes", $5}'
@@ -52,10 +70,10 @@ cp "$X/fill.txt" "$L-fill.txt" 2>/dev/null
   if diff "$X/native.jsonl" "$X/wasm.jsonl"; then echo "native = wasm32: $(wc -l < "$X/wasm.jsonl") lines equal"; else echo "native != wasm32"; fi
 } > "$L-wasm.txt" 2>&1
 
-/usr/bin/time -v cargo run --release --offline --features prove,test-hooks --example ffi_bench "${N:-200}" > "$L-bench.jsonl" 2> "$L-bench-time.txt"
+/usr/bin/time -v cargo run --release --offline $BF --features prove,test-hooks --example ffi_bench "${N:-200}" > "$L-bench.jsonl" 2> "$L-bench-time.txt"
 echo "bench rc=$?" >> "$L-bench-time.txt"
 
-grep -hE "^test result|FAILED|panicked|^test .* (ok|FAILED)$|rejection cases|differential:|op 7 largest|abort-freedom:|selftest hash|node faults:|verify-only |fill determinism:" "$L-test.txt"
-grep -hE "^c_abi|symbols ok|forbidden|NEEDED|/gmp|libm-style|\[rc=[1-9]" "$L-native.txt"
+grep -hE "^# PQZL backend|^test result|FAILED|panicked|^test .* (ok|FAILED)$|rejection cases|differential:|op 7 largest|abort-freedom:|selftest hash|node faults:|verify-only |fill determinism:" "$L-test.txt"
+grep -hE "^c_abi|symbols ok|forbidden|C core in this build|NEEDED|/gmp|libm-style|\[rc=[1-9]" "$L-native.txt"
 grep -hE "native|wasm bytes|wasm run|\[rc=[1-9]" "$L-wasm.txt"
 tail -2 "$L-bench.jsonl"; grep -E "bench rc|Maximum resident" "$L-bench-time.txt"

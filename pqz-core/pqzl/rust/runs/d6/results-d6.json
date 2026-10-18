@@ -1,0 +1,3607 @@
+{
+ "rels": {
+  "R_REG": {
+   "c": {
+    "fnv_native": [
+     "b82d49f8",
+     10
+    ],
+    "native_peak": 95502736,
+    "prove_native": [
+     315.466,
+     367.995
+    ],
+    "verify_native": [
+     177.246,
+     198.645
+    ],
+    "fast_native": [
+     3.983,
+     5.932
+    ],
+    "fnv_wasm": [
+     "8bd69f2d",
+     5
+    ],
+    "wasm_peak": 73692688,
+    "prove_wasm": [
+     499.12,
+     555.803
+    ],
+    "verify_wasm": [
+     241.092,
+     276.18
+    ],
+    "fast_wasm": [
+     7.144,
+     9.198
+    ]
+   },
+   "rust": {
+    "fnv_native": [
+     "b82d49f8",
+     10
+    ],
+    "native_peak": 23529344,
+    "prove_native": [
+     202.807,
+     213.499
+    ],
+    "verify_native": [
+     80.917,
+     95.499
+    ],
+    "fast_native": [
+     3.176,
+     4.702
+    ],
+    "fnv_wasm": [
+     "8bd69f2d",
+     5
+    ],
+    "wasm_peak": 29097984,
+    "prove_wasm": [
+     507.43,
+     765.478
+    ],
+    "verify_wasm": [
+     179.795,
+     201.16
+    ],
+    "fast_wasm": [
+     13.092,
+     16.389
+    ]
+   }
+  },
+  "R_TX": {
+   "c": {
+    "fnv_native": [
+     "0b786555",
+     10
+    ],
+    "native_peak": 304231664,
+    "prove_native": [
+     982.836,
+     1295.862
+    ],
+    "verify_native": [
+     674.438,
+     729.274
+    ],
+    "fast_native": [
+     8.535,
+     11.403
+    ],
+    "fnv_wasm": [
+     "b9bbf854",
+     5
+    ],
+    "wasm_peak": 231858048,
+    "prove_wasm": [
+     1460.045,
+     1490.106
+    ],
+    "verify_wasm": [
+     848.482,
+     881.021
+    ],
+    "fast_wasm": [
+     13.557,
+     17.527
+    ]
+   },
+   "rust": {
+    "fnv_native": [
+     "0b786555",
+     10
+    ],
+    "native_peak": 62903248,
+    "prove_native": [
+     529.358,
+     835.578
+    ],
+    "verify_native": [
+     277.865,
+     309.614
+    ],
+    "fast_native": [
+     6.337,
+     8.911
+    ],
+    "fnv_wasm": [
+     "b9bbf854",
+     5
+    ],
+    "wasm_peak": 72220672,
+    "prove_wasm": [
+     1343.984,
+     1635.214
+    ],
+    "verify_wasm": [
+     525.127,
+     561.035
+    ],
+    "fast_wasm": [
+     26.733,
+     31.956
+    ]
+   }
+  },
+  "R_BURN": {
+   "c": {
+    "fnv_native": [
+     "c7e99b6b",
+     10
+    ],
+    "native_peak": 288852560,
+    "prove_native": [
+     900.51,
+     1196.374
+    ],
+    "verify_native": [
+     577.164,
+     646.348
+    ],
+    "fast_native": [
+     7.985,
+     10.963
+    ],
+    "fnv_wasm": [
+     "0a5976da",
+     5
+    ],
+    "wasm_peak": 220429488,
+    "prove_wasm": [
+     1368.595,
+     1404.506
+    ],
+    "verify_wasm": [
+     747.503,
+     864.382
+    ],
+    "fast_wasm": [
+     12.964,
+     16.066
+    ]
+   },
+   "rust": {
+    "fnv_native": [
+     "c7e99b6b",
+     10
+    ],
+    "native_peak": 60519936,
+    "prove_native": [
+     515.581,
+     800.087
+    ],
+    "verify_native": [
+     237.625,
+     270.052
+    ],
+    "fast_native": [
+     6.1,
+     8.446
+    ],
+    "fnv_wasm": [
+     "0a5976da",
+     5
+    ],
+    "wasm_peak": 70385664,
+    "prove_wasm": [
+     1316.492,
+     1629.908
+    ],
+    "verify_wasm": [
+     473.857,
+     501.673
+    ],
+    "fast_wasm": [
+     26.263,
+     31.933
+    ]
+   }
+  },
+  "R_DS": {
+   "c": {
+    "fnv_native": [
+     "5429242c",
+     10
+    ],
+    "native_peak": 99757344,
+    "prove_native": [
+     384.334,
+     448.601
+    ],
+    "verify_native": [
+     218.318,
+     241.71
+    ],
+    "fast_native": [
+     4.231,
+     6.189
+    ],
+    "fnv_wasm": [
+     "b4aa2e26",
+     5
+    ],
+    "wasm_peak": 76888880,
+    "prove_wasm": [
+     742.752,
+     760.402
+    ],
+    "verify_wasm": [
+     282.471,
+     311.903
+    ],
+    "fast_wasm": [
+     7.312,
+     9.877
+    ]
+   },
+   "rust": {
+    "fnv_native": [
+     "5429242c",
+     10
+    ],
+    "native_peak": 24442192,
+    "prove_native": [
+     230.142,
+     276.381
+    ],
+    "verify_native": [
+     102.533,
+     127.339
+    ],
+    "fast_native": [
+     3.352,
+     5.118
+    ],
+    "fnv_wasm": [
+     "b4aa2e26",
+     5
+    ],
+    "wasm_peak": 29949952,
+    "prove_wasm": [
+     904.033,
+     954.894
+    ],
+    "verify_wasm": [
+     213.231,
+     233.271
+    ],
+    "fast_wasm": [
+     13.584,
+     16.519
+    ]
+   }
+  },
+  "R_DR": {
+   "c": {
+    "fnv_native": [
+     "e53ad440",
+     10
+    ],
+    "native_peak": 107735936,
+    "prove_native": [
+     417.054,
+     487.221
+    ],
+    "verify_native": [
+     210.424,
+     234.606
+    ],
+    "fast_native": [
+     4.443,
+     6.525
+    ],
+    "fnv_wasm": [
+     "c800f2c6",
+     5
+    ],
+    "wasm_peak": 82951488,
+    "prove_wasm": [
+     637.364,
+     730.381
+    ],
+    "verify_wasm": [
+     282.213,
+     307.176
+    ],
+    "fast_wasm": [
+     7.777,
+     9.911
+    ]
+   },
+   "rust": {
+    "fnv_native": [
+     "e53ad440",
+     10
+    ],
+    "native_peak": 25597312,
+    "prove_native": [
+     261.906,
+     322.219
+    ],
+    "verify_native": [
+     102.126,
+     125.629
+    ],
+    "fast_native": [
+     3.504,
+     5.539
+    ],
+    "fnv_wasm": [
+     "c800f2c6",
+     5
+    ],
+    "wasm_peak": 31129600,
+    "prove_wasm": [
+     631.322,
+     989.909
+    ],
+    "verify_wasm": [
+     213.756,
+     226.28
+    ],
+    "fast_wasm": [
+     14.414,
+     18.573
+    ]
+   }
+  },
+  "R_TX0": {
+   "c": {
+    "fnv_native": [
+     "a2759b37",
+     10
+    ],
+    "native_peak": 298036528,
+    "prove_native": [
+     934.084,
+     1164.281
+    ],
+    "verify_native": [
+     623.857,
+     725.257
+    ],
+    "fast_native": [
+     8.186,
+     11.129
+    ],
+    "fnv_wasm": [
+     "a29a5747",
+     5
+    ],
+    "wasm_peak": 227275456,
+    "prove_wasm": [
+     1484.871,
+     2010.483
+    ],
+    "verify_wasm": [
+     930.028,
+     998.172
+    ],
+    "fast_wasm": [
+     13.379,
+     17.802
+    ]
+   },
+   "rust": {
+    "fnv_native": [
+     "a2759b37",
+     10
+    ],
+    "native_peak": 62006944,
+    "prove_native": [
+     471.801,
+     716.523
+    ],
+    "verify_native": [
+     236.689,
+     388.33
+    ],
+    "fast_native": [
+     6.244,
+     8.608
+    ],
+    "fnv_wasm": [
+     "a29a5747",
+     5
+    ],
+    "wasm_peak": 71696384,
+    "prove_wasm": [
+     1821.602,
+     2793.743
+    ],
+    "verify_wasm": [
+     521.27,
+     684.711
+    ],
+    "fast_wasm": [
+     27.051,
+     37.087
+    ]
+   }
+  },
+  "R_TXM1": {
+   "c": {
+    "fnv_native": [
+     "7e361bb1",
+     10
+    ],
+    "native_peak": 304231664,
+    "prove_native": [
+     1018.881,
+     1281.316
+    ],
+    "verify_native": [
+     677.125,
+     1090.483
+    ],
+    "fast_native": [
+     10.864,
+     14.698
+    ],
+    "fnv_wasm": [
+     "eee06e22",
+     5
+    ],
+    "wasm_peak": 231858048,
+    "prove_wasm": [
+     1964.901,
+     1997.768
+    ],
+    "verify_wasm": [
+     986.83,
+     1332.227
+    ],
+    "fast_wasm": [
+     13.541,
+     21.025
+    ]
+   },
+   "rust": {
+    "fnv_native": [
+     "7e361bb1",
+     10
+    ],
+    "native_peak": 62903248,
+    "prove_native": [
+     572.195,
+     860.913
+    ],
+    "verify_native": [
+     339.123,
+     467.594
+    ],
+    "fast_native": [
+     9.019,
+     11.669
+    ],
+    "fnv_wasm": [
+     "eee06e22",
+     5
+    ],
+    "wasm_peak": 72220672,
+    "prove_wasm": [
+     1744.064,
+     1768.471
+    ],
+    "verify_wasm": [
+     524.371,
+     777.495
+    ],
+    "fast_wasm": [
+     26.721,
+     29.769
+    ]
+   }
+  },
+  "R_TXM2": {
+   "c": {
+    "fnv_native": [
+     "662f69ee",
+     10
+    ],
+    "native_peak": 319999296,
+    "prove_native": [
+     1160.656,
+     1318.208
+    ],
+    "verify_native": [
+     866.716,
+     1509.711
+    ],
+    "fast_native": [
+     9.07,
+     11.717
+    ],
+    "fnv_wasm": [
+     "fd812d6c",
+     5
+    ],
+    "wasm_peak": 243572800,
+    "prove_wasm": [
+     1598.376,
+     2110.601
+    ],
+    "verify_wasm": [
+     1006.613,
+     1489.942
+    ],
+    "fast_wasm": [
+     15.243,
+     23.124
+    ]
+   },
+   "rust": {
+    "fnv_native": [
+     "662f69ee",
+     10
+    ],
+    "native_peak": 65168352,
+    "prove_native": [
+     543.581,
+     830.803
+    ],
+    "verify_native": [
+     317.688,
+     467.715
+    ],
+    "fast_native": [
+     6.852,
+     9.536
+    ],
+    "fnv_wasm": [
+     "fd812d6c",
+     5
+    ],
+    "wasm_peak": 74317824,
+    "prove_wasm": [
+     1407.241,
+     2679.036
+    ],
+    "verify_wasm": [
+     616.221,
+     656.216
+    ],
+    "fast_wasm": [
+     28.601,
+     36.368
+    ]
+   }
+  },
+  "R_TXM4": {
+   "c": {
+    "fnv_native": [
+     "6d90ed2b",
+     10
+    ],
+    "native_peak": 352904672,
+    "prove_native": [
+     1778.93,
+     2069.33
+    ],
+    "verify_native": [
+     1039.516,
+     1326.756
+    ],
+    "fast_native": [
+     11.638,
+     15.213
+    ],
+    "fnv_wasm": [
+     "1a4e0938",
+     5
+    ],
+    "wasm_peak": 268012304,
+    "prove_wasm": [
+     2105.771,
+     2427.553
+    ],
+    "verify_wasm": [
+     1253.27,
+     1475.126
+    ],
+    "fast_wasm": [
+     15.754,
+     20.198
+    ]
+   },
+   "rust": {
+    "fnv_native": [
+     "6d90ed2b",
+     10
+    ],
+    "native_peak": 69982472,
+    "prove_native": [
+     799.282,
+     926.334
+    ],
+    "verify_native": [
+     411.019,
+     529.564
+    ],
+    "fast_native": [
+     7.287,
+     9.984
+    ],
+    "fnv_wasm": [
+     "1a4e0938",
+     5
+    ],
+    "wasm_peak": 80936960,
+    "prove_wasm": [
+     2549.167,
+     2882.022
+    ],
+    "verify_wasm": [
+     743.082,
+     853.328
+    ],
+    "fast_wasm": [
+     30.419,
+     38.847
+    ]
+   }
+  },
+  "R_TXM8": {
+   "c": {
+    "fnv_native": [
+     "48609bd0",
+     10
+    ],
+    "native_peak": 687455184,
+    "prove_native": [
+     2825.408,
+     3195.172
+    ],
+    "verify_native": [
+     2441.227,
+     2633.154
+    ],
+    "fast_native": [
+     14.122,
+     17.93
+    ],
+    "fnv_wasm": [
+     "70597cac",
+     5
+    ],
+    "wasm_peak": 519384160,
+    "prove_wasm": [
+     3300.112,
+     3333.604
+    ],
+    "verify_wasm": [
+     2607.309,
+     2718.431
+    ],
+    "fast_wasm": [
+     23.133,
+     28.969
+    ]
+   },
+   "rust": {
+    "fnv_native": [
+     "48609bd0",
+     10
+    ],
+    "native_peak": 115489848,
+    "prove_native": [
+     1127.521,
+     1386.309
+    ],
+    "verify_native": [
+     830.283,
+     899.425
+    ],
+    "fast_native": [
+     10.487,
+     13.934
+    ],
+    "fnv_wasm": [
+     "70597cac",
+     5
+    ],
+    "wasm_peak": 123076608,
+    "prove_wasm": [
+     2393.328,
+     2672.686
+    ],
+    "verify_wasm": [
+     1350.566,
+     1393.058
+    ],
+    "fast_wasm": [
+     44.667,
+     50.96
+    ]
+   }
+  },
+  "R_TXM1_0": {
+   "c": {
+    "fnv_native": [
+     "36d7ac3d",
+     10
+    ],
+    "native_peak": 298036528,
+    "prove_native": [
+     893.321,
+     1048.514
+    ],
+    "verify_native": [
+     628.089,
+     681.343
+    ],
+    "fast_native": [
+     8.259,
+     11.121
+    ],
+    "fnv_wasm": [
+     "3f6081c3",
+     5
+    ],
+    "wasm_peak": 227275456,
+    "prove_wasm": [
+     1244.941,
+     1281.169
+    ],
+    "verify_wasm": [
+     804.415,
+     853.591
+    ],
+    "fast_wasm": [
+     13.564,
+     16.856
+    ]
+   },
+   "rust": {
+    "fnv_native": [
+     "36d7ac3d",
+     10
+    ],
+    "native_peak": 62006944,
+    "prove_native": [
+     448.647,
+     617.835
+    ],
+    "verify_native": [
+     243.195,
+     288.676
+    ],
+    "fast_native": [
+     6.164,
+     8.652
+    ],
+    "fnv_wasm": [
+     "3f6081c3",
+     5
+    ],
+    "wasm_peak": 71696384,
+    "prove_wasm": [
+     1237.269,
+     1304.729
+    ],
+    "verify_wasm": [
+     505.992,
+     519.38
+    ],
+    "fast_wasm": [
+     26.748,
+     34.299
+    ]
+   }
+  },
+  "R_TXM2_0": {
+   "c": {
+    "fnv_native": [
+     "c155b853",
+     10
+    ],
+    "native_peak": 307433872,
+    "prove_native": [
+     1108.214,
+     1417.822
+    ],
+    "verify_native": [
+     687.168,
+     742.471
+    ],
+    "fast_native": [
+     8.469,
+     11.688
+    ],
+    "fnv_wasm": [
+     "bb1bc35d",
+     5
+    ],
+    "wasm_peak": 234280768,
+    "prove_wasm": [
+     1822.394,
+     1822.973
+    ],
+    "verify_wasm": [
+     861.781,
+     882.754
+    ],
+    "fast_wasm": [
+     13.748,
+     16.708
+    ]
+   },
+   "rust": {
+    "fnv_native": [
+     "c155b853",
+     10
+    ],
+    "native_peak": 63227968,
+    "prove_native": [
+     639.383,
+     941.106
+    ],
+    "verify_native": [
+     287.232,
+     315.631
+    ],
+    "fast_native": [
+     6.439,
+     8.898
+    ],
+    "fnv_wasm": [
+     "bb1bc35d",
+     5
+    ],
+    "wasm_peak": 72482816,
+    "prove_wasm": [
+     2171.335,
+     2252.569
+    ],
+    "verify_wasm": [
+     542.622,
+     572.272
+    ],
+    "fast_wasm": [
+     26.888,
+     34.831
+    ]
+   }
+  },
+  "R_TXM4_0": {
+   "c": {
+    "fnv_native": [
+     "c4ab18b5",
+     10
+    ],
+    "native_peak": 326868688,
+    "prove_native": [
+     1414.653,
+     2295.257
+    ],
+    "verify_native": [
+     870.284,
+     1155.462
+    ],
+    "fast_native": [
+     9.319,
+     12.043
+    ],
+    "fnv_wasm": [
+     "d3d7b772",
+     5
+    ],
+    "wasm_peak": 248768592,
+    "prove_wasm": [
+     3097.804,
+     3736.428
+    ],
+    "verify_wasm": [
+     949.638,
+     1174.523
+    ],
+    "fast_wasm": [
+     16.832,
+     20.48
+    ]
+   },
+   "rust": {
+    "fnv_native": [
+     "c4ab18b5",
+     10
+    ],
+    "native_peak": 65969792,
+    "prove_native": [
+     711.25,
+     1347.364
+    ],
+    "verify_native": [
+     321.972,
+     406.003
+    ],
+    "fast_native": [
+     6.857,
+     9.112
+    ],
+    "fnv_wasm": [
+     "d3d7b772",
+     5
+    ],
+    "wasm_peak": 77463552,
+    "prove_wasm": [
+     4031.914,
+     5698.107
+    ],
+    "verify_wasm": [
+     664.063,
+     700.749
+    ],
+    "fast_wasm": [
+     28.864,
+     37.96
+    ]
+   }
+  },
+  "R_TXM8_0": {
+   "c": {
+    "fnv_native": [
+     "8a24418f",
+     10
+    ],
+    "native_peak": 618729232,
+    "prove_native": [
+     2158.185,
+     2734.243
+    ],
+    "verify_native": [
+     1770.698,
+     2119.81
+    ],
+    "fast_native": [
+     12.942,
+     16.869
+    ],
+    "fnv_wasm": [
+     "964a3a1d",
+     5
+    ],
+    "wasm_peak": 468698768,
+    "prove_wasm": [
+     2945.228,
+     3255.321
+    ],
+    "verify_wasm": [
+     1951.647,
+     2020.412
+    ],
+    "fast_wasm": [
+     21.281,
+     25.765
+    ]
+   },
+   "rust": {
+    "fnv_native": [
+     "8a24418f",
+     10
+    ],
+    "native_peak": 102718072,
+    "prove_native": [
+     911.051,
+     1062.616
+    ],
+    "verify_native": [
+     603.991,
+     746.229
+    ],
+    "fast_native": [
+     9.844,
+     12.929
+    ],
+    "fnv_wasm": [
+     "964a3a1d",
+     5
+    ],
+    "wasm_peak": 111017984,
+    "prove_wasm": [
+     2827.122,
+     2829.605
+    ],
+    "verify_wasm": [
+     1060.119,
+     1097.102
+    ],
+    "fast_wasm": [
+     41.082,
+     50.057
+    ]
+   }
+  }
+ },
+ "checks": [
+  [
+   "ok",
+   "c-native-generic.jsonl",
+   "fails 0, verifier disagreements 0"
+  ],
+  [
+   "ok",
+   "c-native-fast.jsonl",
+   "fails 0, verifier disagreements 0"
+  ],
+  [
+   "ok",
+   "c-wasm-generic.jsonl",
+   "fails 0, verifier disagreements 0"
+  ],
+  [
+   "ok",
+   "c-wasm-fast.jsonl",
+   "fails 0, verifier disagreements 0"
+  ],
+  [
+   "ok",
+   "c-wasm-nosv.jsonl",
+   "fails 0, verifier disagreements 0"
+  ],
+  [
+   "ok",
+   "rust-native-generic.jsonl",
+   "fails 0, verifier disagreements 0"
+  ],
+  [
+   "ok",
+   "rust-native-fast.jsonl",
+   "fails 0, verifier disagreements 0"
+  ],
+  [
+   "ok",
+   "rust-wasm-generic.jsonl",
+   "fails 0, verifier disagreements 0"
+  ],
+  [
+   "ok",
+   "rust-wasm-fast.jsonl",
+   "fails 0, verifier disagreements 0"
+  ],
+  [
+   "ok",
+   "rerun-t9-11/c-native-generic.jsonl",
+   "fails 0, verifier disagreements 0"
+  ],
+  [
+   "ok",
+   "rerun-t9-11/c-native-fast.jsonl",
+   "fails 0, verifier disagreements 0"
+  ],
+  [
+   "ok",
+   "rerun-t9-11/c-wasm-generic.jsonl",
+   "fails 0, verifier disagreements 0"
+  ],
+  [
+   "ok",
+   "rerun-t9-11/c-wasm-fast.jsonl",
+   "fails 0, verifier disagreements 0"
+  ],
+  [
+   "ok",
+   "rerun-t9-11/c-wasm-nosv.jsonl",
+   "fails 0, verifier disagreements 0"
+  ],
+  [
+   "ok",
+   "rerun-t9-11/rust-native-generic.jsonl",
+   "fails 0, verifier disagreements 0"
+  ],
+  [
+   "ok",
+   "rerun-t9-11/rust-native-fast.jsonl",
+   "fails 0, verifier disagreements 0"
+  ],
+  [
+   "ok",
+   "rerun-t9-11/rust-wasm-generic.jsonl",
+   "fails 0, verifier disagreements 0"
+  ],
+  [
+   "ok",
+   "rerun-t9-11/rust-wasm-fast.jsonl",
+   "fails 0, verifier disagreements 0"
+  ],
+  [
+   "ok",
+   "R_REG proofs_fnv native Rust = C",
+   "Rust b82d49f8 (n=10), C b82d49f8 (n=10)"
+  ],
+  [
+   "ok",
+   "R_REG proofs_fnv wasm Rust = C",
+   "Rust 8bd69f2d (n=5), C 8bd69f2d (n=5)"
+  ],
+  [
+   "ok",
+   "R_TX proofs_fnv native Rust = C",
+   "Rust 0b786555 (n=10), C 0b786555 (n=10)"
+  ],
+  [
+   "ok",
+   "R_TX proofs_fnv wasm Rust = C",
+   "Rust b9bbf854 (n=5), C b9bbf854 (n=5)"
+  ],
+  [
+   "ok",
+   "R_BURN proofs_fnv native Rust = C",
+   "Rust c7e99b6b (n=10), C c7e99b6b (n=10)"
+  ],
+  [
+   "ok",
+   "R_BURN proofs_fnv wasm Rust = C",
+   "Rust 0a5976da (n=5), C 0a5976da (n=5)"
+  ],
+  [
+   "ok",
+   "R_DS proofs_fnv native Rust = C",
+   "Rust 5429242c (n=10), C 5429242c (n=10)"
+  ],
+  [
+   "ok",
+   "R_DS proofs_fnv wasm Rust = C",
+   "Rust b4aa2e26 (n=5), C b4aa2e26 (n=5)"
+  ],
+  [
+   "ok",
+   "R_DR proofs_fnv native Rust = C",
+   "Rust e53ad440 (n=10), C e53ad440 (n=10)"
+  ],
+  [
+   "ok",
+   "R_DR proofs_fnv wasm Rust = C",
+   "Rust c800f2c6 (n=5), C c800f2c6 (n=5)"
+  ],
+  [
+   "ok",
+   "R_TX0 proofs_fnv native Rust = C",
+   "Rust a2759b37 (n=10), C a2759b37 (n=10)"
+  ],
+  [
+   "ok",
+   "R_TX0 proofs_fnv wasm Rust = C",
+   "Rust a29a5747 (n=5), C a29a5747 (n=5)"
+  ],
+  [
+   "ok",
+   "R_TXM1 proofs_fnv native Rust = C",
+   "Rust 7e361bb1 (n=10), C 7e361bb1 (n=10)"
+  ],
+  [
+   "ok",
+   "R_TXM1 proofs_fnv wasm Rust = C",
+   "Rust eee06e22 (n=5), C eee06e22 (n=5)"
+  ],
+  [
+   "ok",
+   "R_TXM2 proofs_fnv native Rust = C",
+   "Rust 662f69ee (n=10), C 662f69ee (n=10)"
+  ],
+  [
+   "ok",
+   "R_TXM2 proofs_fnv wasm Rust = C",
+   "Rust fd812d6c (n=5), C fd812d6c (n=5)"
+  ],
+  [
+   "ok",
+   "R_TXM4 proofs_fnv native Rust = C",
+   "Rust 6d90ed2b (n=10), C 6d90ed2b (n=10)"
+  ],
+  [
+   "ok",
+   "R_TXM4 proofs_fnv wasm Rust = C",
+   "Rust 1a4e0938 (n=5), C 1a4e0938 (n=5)"
+  ],
+  [
+   "ok",
+   "R_TXM8 proofs_fnv native Rust = C",
+   "Rust 48609bd0 (n=10), C 48609bd0 (n=10)"
+  ],
+  [
+   "ok",
+   "R_TXM8 proofs_fnv wasm Rust = C",
+   "Rust 70597cac (n=5), C 70597cac (n=5)"
+  ],
+  [
+   "ok",
+   "R_TXM1_0 proofs_fnv native Rust = C",
+   "Rust 36d7ac3d (n=10), C 36d7ac3d (n=10)"
+  ],
+  [
+   "ok",
+   "R_TXM1_0 proofs_fnv wasm Rust = C",
+   "Rust 3f6081c3 (n=5), C 3f6081c3 (n=5)"
+  ],
+  [
+   "ok",
+   "R_TXM2_0 proofs_fnv native Rust = C",
+   "Rust c155b853 (n=10), C c155b853 (n=10)"
+  ],
+  [
+   "ok",
+   "R_TXM2_0 proofs_fnv wasm Rust = C",
+   "Rust bb1bc35d (n=5), C bb1bc35d (n=5)"
+  ],
+  [
+   "ok",
+   "R_TXM4_0 proofs_fnv native Rust = C",
+   "Rust c4ab18b5 (n=10), C c4ab18b5 (n=10)"
+  ],
+  [
+   "ok",
+   "R_TXM4_0 proofs_fnv wasm Rust = C",
+   "Rust d3d7b772 (n=5), C d3d7b772 (n=5)"
+  ],
+  [
+   "ok",
+   "R_TXM8_0 proofs_fnv native Rust = C",
+   "Rust 8a24418f (n=10), C 8a24418f (n=10)"
+  ],
+  [
+   "ok",
+   "R_TXM8_0 proofs_fnv wasm Rust = C",
+   "Rust 964a3a1d (n=5), C 964a3a1d (n=5)"
+  ],
+  [
+   "info",
+   "wasm32 op 7 M = 8 (Task 12)",
+   "enough: native = wasm32 on the vector proofs True; Rust wasm32 M = 8 peaks {'R_TXM8': 123076608, 'R_TXM8_0': 111017984} B, budget 268,012,304 B (the C M = 4 peak)"
+  ]
+ ],
+ "machine": {
+  "cpu": "AMD Ryzen 5 7235HS",
+  "flags": "aes vaes avx2",
+  "threads": 8,
+  "os": "Ubuntu 24.04.4 LTS",
+  "kernel": "7.0.0-34-generic",
+  "cc": "Ubuntu clang version 18.1.3 (1ubuntu1)",
+  "wasm_ld": "Ubuntu LLD 18.1.3",
+  "node": "v26.8.1",
+  "python": "3.12.3",
+  "docker": false,
+  "rustc": "rustc 1.97.1 (8bab26f4f 2026-07-14)"
+ },
+ "rerun": {
+  "dir": "rerun-t9-11",
+  "rels": [
+   "R_TXM8",
+   "R_TXM1_0",
+   "R_TXM2_0"
+  ]
+ },
+ "ffi_c": [
+  {
+   "sys": "PQZL",
+   "form": "Transfer",
+   "proof_bytes": 42759,
+   "direct": {
+    "n": 200,
+    "p50_ms": 8.308,
+    "p99_ms": 11.168,
+    "max_ms": 11.207
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 8.292,
+    "p99_ms": 11.768,
+    "max_ms": 11.854
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 8.343,
+    "p99_ms": 11.722,
+    "max_ms": 15.02
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 8.256,
+    "p99_ms": 11.113,
+    "max_ms": 11.735
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.005,
+    "p99_ms": 0.012,
+    "max_ms": 0.018
+   }
+  },
+  {
+   "sys": "PQZL",
+   "form": "Transfer0",
+   "proof_bytes": 42387,
+   "direct": {
+    "n": 200,
+    "p50_ms": 8.114,
+    "p99_ms": 10.679,
+    "max_ms": 10.953
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 8.209,
+    "p99_ms": 11.236,
+    "max_ms": 11.531
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 8.149,
+    "p99_ms": 11.255,
+    "max_ms": 12.221
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 8.131,
+    "p99_ms": 10.911,
+    "max_ms": 12.145
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.002,
+    "p99_ms": 0.002,
+    "max_ms": 0.006
+   }
+  },
+  {
+   "sys": "PQZL",
+   "form": "Burn",
+   "proof_bytes": 41914,
+   "direct": {
+    "n": 200,
+    "p50_ms": 7.989,
+    "p99_ms": 10.772,
+    "max_ms": 11.449
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 8.145,
+    "p99_ms": 11.105,
+    "max_ms": 11.826
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 8.087,
+    "p99_ms": 11.053,
+    "max_ms": 12.712
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 7.915,
+    "p99_ms": 10.669,
+    "max_ms": 11.816
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.002,
+    "p99_ms": 0.004,
+    "max_ms": 0.006
+   }
+  },
+  {
+   "sys": "PQZL",
+   "form": "Refresh",
+   "proof_bytes": 41902,
+   "direct": {
+    "n": 200,
+    "p50_ms": 10.383,
+    "p99_ms": 12.732,
+    "max_ms": 14.469
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 10.625,
+    "p99_ms": 30.495,
+    "max_ms": 47.415
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 10.791,
+    "p99_ms": 12.695,
+    "max_ms": 15.537
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 9.996,
+    "p99_ms": 25.296,
+    "max_ms": 32.735
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.002,
+    "p99_ms": 0.004,
+    "max_ms": 0.009
+   }
+  },
+  {
+   "sys": "PQZL",
+   "form": "Register",
+   "proof_bytes": 28068,
+   "direct": {
+    "n": 200,
+    "p50_ms": 5.8,
+    "p99_ms": 6.913,
+    "max_ms": 7.208
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 4.524,
+    "p99_ms": 8.033,
+    "max_ms": 13.591
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 4.22,
+    "p99_ms": 7.173,
+    "max_ms": 8.172
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 4.323,
+    "p99_ms": 6.457,
+    "max_ms": 8.494
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.002,
+    "p99_ms": 0.002,
+    "max_ms": 0.003
+   }
+  },
+  {
+   "sys": "PQZL",
+   "form": "DiscloseSender",
+   "proof_bytes": 28964,
+   "direct": {
+    "n": 200,
+    "p50_ms": 4.562,
+    "p99_ms": 6.435,
+    "max_ms": 6.527
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 4.552,
+    "p99_ms": 6.547,
+    "max_ms": 6.576
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 4.538,
+    "p99_ms": 7.345,
+    "max_ms": 9.062
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 4.634,
+    "p99_ms": 6.983,
+    "max_ms": 7.354
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.001,
+    "p99_ms": 0.005,
+    "max_ms": 0.019
+   }
+  },
+  {
+   "sys": "PQZL",
+   "form": "DiscloseReceiver",
+   "proof_bytes": 28990,
+   "direct": {
+    "n": 200,
+    "p50_ms": 4.775,
+    "p99_ms": 6.824,
+    "max_ms": 7.19
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 4.909,
+    "p99_ms": 8.745,
+    "max_ms": 9.46
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 4.708,
+    "p99_ms": 7.083,
+    "max_ms": 7.932
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 4.757,
+    "p99_ms": 8.777,
+    "max_ms": 9.319
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.001,
+    "p99_ms": 0.001,
+    "max_ms": 0.003
+   }
+  },
+  {
+   "sys": "PQZL",
+   "form": "DiscloseAuditor",
+   "proof_bytes": 28995,
+   "direct": {
+    "n": 200,
+    "p50_ms": 4.681,
+    "p99_ms": 6.794,
+    "max_ms": 6.946
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 4.859,
+    "p99_ms": 7.523,
+    "max_ms": 8.997
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 4.855,
+    "p99_ms": 6.839,
+    "max_ms": 7.923
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 4.796,
+    "p99_ms": 7.282,
+    "max_ms": 8.334
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.001,
+    "p99_ms": 0.001,
+    "max_ms": 0.004
+   }
+  },
+  {
+   "sys": "PQZL",
+   "form": "TransferMulti1",
+   "m": 1,
+   "auditor": true,
+   "stmt_bytes": 83072,
+   "input_bytes": 125843,
+   "proof_bound": 98304,
+   "worst_input_bytes": 181381,
+   "prove_ms": 982,
+   "proof_bytes": 42766,
+   "direct": {
+    "n": 200,
+    "p50_ms": 8.599,
+    "p99_ms": 11.564,
+    "max_ms": 11.89
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 8.798,
+    "p99_ms": 12.335,
+    "max_ms": 14.004
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 8.715,
+    "p99_ms": 12.099,
+    "max_ms": 12.998
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 8.997,
+    "p99_ms": 13.862,
+    "max_ms": 14.643
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.005,
+    "p99_ms": 0.013,
+    "max_ms": 0.388
+   }
+  },
+  {
+   "sys": "PQZL",
+   "form": "TransferMulti2",
+   "m": 2,
+   "auditor": true,
+   "stmt_bytes": 99712,
+   "input_bytes": 143320,
+   "proof_bound": 98304,
+   "worst_input_bytes": 198021,
+   "prove_ms": 1296,
+   "proof_bytes": 43603,
+   "direct": {
+    "n": 200,
+    "p50_ms": 9.085,
+    "p99_ms": 12.293,
+    "max_ms": 12.928
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 9.177,
+    "p99_ms": 12.606,
+    "max_ms": 14.084
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 9.087,
+    "p99_ms": 12.297,
+    "max_ms": 13.065
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 9.051,
+    "p99_ms": 12.815,
+    "max_ms": 14.923
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.006,
+    "p99_ms": 0.014,
+    "max_ms": 0.018
+   }
+  },
+  {
+   "sys": "PQZL",
+   "form": "TransferMulti4",
+   "m": 4,
+   "auditor": true,
+   "stmt_bytes": 132992,
+   "input_bytes": 178271,
+   "proof_bound": 98304,
+   "worst_input_bytes": 231301,
+   "prove_ms": 2230,
+   "proof_bytes": 45274,
+   "direct": {
+    "n": 200,
+    "p50_ms": 9.927,
+    "p99_ms": 13.118,
+    "max_ms": 13.278
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 10.036,
+    "p99_ms": 14.409,
+    "max_ms": 14.976
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 9.959,
+    "p99_ms": 13.812,
+    "max_ms": 14.743
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 9.929,
+    "p99_ms": 13.413,
+    "max_ms": 13.829
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.008,
+    "p99_ms": 0.04,
+    "max_ms": 0.049
+   }
+  },
+  {
+   "sys": "PQZL",
+   "form": "TransferMulti8",
+   "m": 8,
+   "auditor": true,
+   "stmt_bytes": 215936,
+   "input_bytes": 277743,
+   "proof_bound": 98304,
+   "worst_input_bytes": 314245,
+   "prove_ms": 2998,
+   "proof_bytes": 61802,
+   "direct": {
+    "n": 200,
+    "p50_ms": 14.408,
+    "p99_ms": 19.377,
+    "max_ms": 19.685
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 14.566,
+    "p99_ms": 20.008,
+    "max_ms": 20.502
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 14.829,
+    "p99_ms": 21.424,
+    "max_ms": 21.926
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 14.677,
+    "p99_ms": 19.449,
+    "max_ms": 20.431
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.028,
+    "p99_ms": 0.034,
+    "max_ms": 0.051
+   }
+  },
+  {
+   "sys": "PQZL",
+   "form": "TransferMulti1_0",
+   "m": 1,
+   "auditor": false,
+   "stmt_bytes": 66560,
+   "input_bytes": 108974,
+   "proof_bound": 98304,
+   "worst_input_bytes": 164869,
+   "prove_ms": 1069,
+   "proof_bytes": 42409,
+   "direct": {
+    "n": 200,
+    "p50_ms": 8.903,
+    "p99_ms": 11.924,
+    "max_ms": 12.131
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 8.994,
+    "p99_ms": 12.683,
+    "max_ms": 15.541
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 9.025,
+    "p99_ms": 12.957,
+    "max_ms": 13.997
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 8.889,
+    "p99_ms": 13.224,
+    "max_ms": 14.284
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.004,
+    "p99_ms": 0.004,
+    "max_ms": 0.013
+   }
+  },
+  {
+   "sys": "PQZL",
+   "form": "TransferMulti2_0",
+   "m": 2,
+   "auditor": false,
+   "stmt_bytes": 83072,
+   "input_bytes": 126028,
+   "proof_bound": 98304,
+   "worst_input_bytes": 181381,
+   "prove_ms": 1936,
+   "proof_bytes": 42951,
+   "direct": {
+    "n": 200,
+    "p50_ms": 9.101,
+    "p99_ms": 12.406,
+    "max_ms": 12.553
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 9.235,
+    "p99_ms": 12.808,
+    "max_ms": 15.688
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 9.313,
+    "p99_ms": 12.885,
+    "max_ms": 13.437
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 9.335,
+    "p99_ms": 12.436,
+    "max_ms": 13.418
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.005,
+    "p99_ms": 0.01,
+    "max_ms": 0.026
+   }
+  },
+  {
+   "sys": "PQZL",
+   "form": "TransferMulti4_0",
+   "m": 4,
+   "auditor": false,
+   "stmt_bytes": 116096,
+   "input_bytes": 160023,
+   "proof_bound": 98304,
+   "worst_input_bytes": 214405,
+   "prove_ms": 1016,
+   "proof_bytes": 43922,
+   "direct": {
+    "n": 200,
+    "p50_ms": 9.852,
+    "p99_ms": 13.387,
+    "max_ms": 13.904
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 9.697,
+    "p99_ms": 13.708,
+    "max_ms": 16.61
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 9.795,
+    "p99_ms": 13.139,
+    "max_ms": 14.936
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 9.835,
+    "p99_ms": 13.027,
+    "max_ms": 13.712
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.007,
+    "p99_ms": 0.015,
+    "max_ms": 0.016
+   }
+  },
+  {
+   "sys": "PQZL",
+   "form": "TransferMulti8_0",
+   "m": 8,
+   "auditor": false,
+   "stmt_bytes": 198528,
+   "input_bytes": 257531,
+   "proof_bound": 98304,
+   "worst_input_bytes": 296837,
+   "prove_ms": 2487,
+   "proof_bytes": 58998,
+   "direct": {
+    "n": 200,
+    "p50_ms": 13.993,
+    "p99_ms": 19.265,
+    "max_ms": 22.548
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 13.864,
+    "p99_ms": 18.156,
+    "max_ms": 20.625
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 13.891,
+    "p99_ms": 18.621,
+    "max_ms": 19.025
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 13.965,
+    "p99_ms": 18.532,
+    "max_ms": 20.989
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.012,
+    "p99_ms": 0.032,
+    "max_ms": 0.038
+   }
+  },
+  {
+   "sys": "PQZH",
+   "form": "Transfer",
+   "proof_bytes": 231022,
+   "direct": {
+    "n": 200,
+    "p50_ms": 10.169,
+    "p99_ms": 11.852,
+    "max_ms": 12.233
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 10.095,
+    "p99_ms": 12.134,
+    "max_ms": 12.873
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 10.098,
+    "p99_ms": 13.118,
+    "max_ms": 13.443
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 1.482,
+    "p99_ms": 2.075,
+    "max_ms": 2.115
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.003,
+    "p99_ms": 0.003,
+    "max_ms": 0.007
+   }
+  },
+  {
+   "sys": "PQZH",
+   "form": "Transfer0",
+   "proof_bytes": 231064,
+   "direct": {
+    "n": 200,
+    "p50_ms": 9.66,
+    "p99_ms": 11.802,
+    "max_ms": 12.015
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 9.757,
+    "p99_ms": 11.881,
+    "max_ms": 11.987
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 9.798,
+    "p99_ms": 11.849,
+    "max_ms": 12.099
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 1.248,
+    "p99_ms": 1.941,
+    "max_ms": 1.967
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.004,
+    "p99_ms": 0.004,
+    "max_ms": 0.007
+   }
+  },
+  {
+   "sys": "PQZH",
+   "form": "Burn",
+   "proof_bytes": 231320,
+   "direct": {
+    "n": 200,
+    "p50_ms": 9.637,
+    "p99_ms": 12.15,
+    "max_ms": 12.412
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 9.626,
+    "p99_ms": 11.383,
+    "max_ms": 11.732
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 9.561,
+    "p99_ms": 11.482,
+    "max_ms": 11.927
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 0.589,
+    "p99_ms": 0.903,
+    "max_ms": 1.025
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.002,
+    "p99_ms": 0.002,
+    "max_ms": 0.005
+   }
+  },
+  {
+   "sys": "PQZH",
+   "form": "Refresh",
+   "proof_bytes": 231928,
+   "direct": {
+    "n": 200,
+    "p50_ms": 9.51,
+    "p99_ms": 11.301,
+    "max_ms": 12.073
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 9.474,
+    "p99_ms": 11.545,
+    "max_ms": 11.696
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 9.497,
+    "p99_ms": 11.784,
+    "max_ms": 13.255
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 1.218,
+    "p99_ms": 1.632,
+    "max_ms": 1.697
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.003,
+    "p99_ms": 0.005,
+    "max_ms": 0.01
+   }
+  },
+  {
+   "sys": "PQZH",
+   "form": "Register",
+   "proof_bytes": 187738,
+   "direct": {
+    "n": 200,
+    "p50_ms": 7.171,
+    "p99_ms": 8.78,
+    "max_ms": 9.0
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 7.165,
+    "p99_ms": 8.706,
+    "max_ms": 9.442
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 7.174,
+    "p99_ms": 8.66,
+    "max_ms": 9.742
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 0.38,
+    "p99_ms": 0.527,
+    "max_ms": 0.536
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.001,
+    "p99_ms": 0.001,
+    "max_ms": 0.002
+   }
+  },
+  {
+   "sys": "PQZH",
+   "form": "DiscloseSender",
+   "proof_bytes": 186842,
+   "direct": {
+    "n": 200,
+    "p50_ms": 7.552,
+    "p99_ms": 8.979,
+    "max_ms": 9.149
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 7.473,
+    "p99_ms": 9.233,
+    "max_ms": 9.436
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 7.475,
+    "p99_ms": 8.979,
+    "max_ms": 9.035
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 0.421,
+    "p99_ms": 0.624,
+    "max_ms": 0.631
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.001,
+    "p99_ms": 0.001,
+    "max_ms": 0.003
+   }
+  },
+  {
+   "sys": "PQZH",
+   "form": "DiscloseReceiver",
+   "proof_bytes": 187098,
+   "direct": {
+    "n": 200,
+    "p50_ms": 7.386,
+    "p99_ms": 8.828,
+    "max_ms": 8.899
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 7.417,
+    "p99_ms": 9.195,
+    "max_ms": 9.329
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 7.352,
+    "p99_ms": 8.8,
+    "max_ms": 8.886
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 0.431,
+    "p99_ms": 0.727,
+    "max_ms": 0.731
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.001,
+    "p99_ms": 0.001,
+    "max_ms": 0.003
+   }
+  },
+  {
+   "sys": "PQZH",
+   "form": "DiscloseAuditor",
+   "proof_bytes": 186778,
+   "direct": {
+    "n": 200,
+    "p50_ms": 7.415,
+    "p99_ms": 9.007,
+    "max_ms": 9.306
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 7.396,
+    "p99_ms": 9.009,
+    "max_ms": 9.074
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 7.372,
+    "p99_ms": 8.797,
+    "max_ms": 8.898
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 0.421,
+    "p99_ms": 0.581,
+    "max_ms": 0.6
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.001,
+    "p99_ms": 0.003,
+    "max_ms": 0.007
+   }
+  },
+  {
+   "sys": "PQZH",
+   "form": "TransferMulti1",
+   "m": 1,
+   "auditor": true,
+   "stmt_bytes": 83072,
+   "input_bytes": 315251,
+   "proof_bound": 235470,
+   "worst_input_bytes": 318547,
+   "prove_ms": 665,
+   "proof_bytes": 232174,
+   "direct": {
+    "n": 200,
+    "p50_ms": 10.083,
+    "p99_ms": 12.317,
+    "max_ms": 13.677
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 10.141,
+    "p99_ms": 12.091,
+    "max_ms": 12.182
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 10.14,
+    "p99_ms": 12.257,
+    "max_ms": 12.434
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 1.296,
+    "p99_ms": 1.692,
+    "max_ms": 2.137
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.005,
+    "p99_ms": 0.012,
+    "max_ms": 0.013
+   }
+  },
+  {
+   "sys": "PQZH",
+   "form": "TransferMulti2",
+   "m": 2,
+   "auditor": true,
+   "stmt_bytes": 99712,
+   "input_bytes": 331891,
+   "proof_bound": 235470,
+   "worst_input_bytes": 335187,
+   "prove_ms": 700,
+   "proof_bytes": 232174,
+   "direct": {
+    "n": 200,
+    "p50_ms": 10.305,
+    "p99_ms": 12.53,
+    "max_ms": 12.604
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 10.394,
+    "p99_ms": 12.508,
+    "max_ms": 12.941
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 10.36,
+    "p99_ms": 12.157,
+    "max_ms": 12.612
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 1.357,
+    "p99_ms": 2.087,
+    "max_ms": 2.107
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.006,
+    "p99_ms": 0.011,
+    "max_ms": 0.014
+   }
+  },
+  {
+   "sys": "PQZH",
+   "form": "TransferMulti4",
+   "m": 4,
+   "auditor": true,
+   "stmt_bytes": 132992,
+   "input_bytes": 365705,
+   "proof_bound": 236196,
+   "worst_input_bytes": 369193,
+   "prove_ms": 650,
+   "proof_bytes": 232708,
+   "direct": {
+    "n": 200,
+    "p50_ms": 11.095,
+    "p99_ms": 13.966,
+    "max_ms": 14.737
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 11.065,
+    "p99_ms": 13.065,
+    "max_ms": 13.626
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 11.068,
+    "p99_ms": 13.539,
+    "max_ms": 13.62
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 1.428,
+    "p99_ms": 1.93,
+    "max_ms": 2.137
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.008,
+    "p99_ms": 0.008,
+    "max_ms": 0.013
+   }
+  },
+  {
+   "sys": "PQZH",
+   "form": "TransferMulti1_0",
+   "m": 1,
+   "auditor": false,
+   "stmt_bytes": 66560,
+   "input_bytes": 297533,
+   "proof_bound": 234744,
+   "worst_input_bytes": 301309,
+   "prove_ms": 678,
+   "proof_bytes": 230968,
+   "direct": {
+    "n": 200,
+    "p50_ms": 9.692,
+    "p99_ms": 11.574,
+    "max_ms": 12.394
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 9.648,
+    "p99_ms": 11.58,
+    "max_ms": 11.789
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 9.81,
+    "p99_ms": 12.302,
+    "max_ms": 14.178
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 1.247,
+    "p99_ms": 1.815,
+    "max_ms": 1.957
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.004,
+    "p99_ms": 0.009,
+    "max_ms": 0.01
+   }
+  },
+  {
+   "sys": "PQZH",
+   "form": "TransferMulti2_0",
+   "m": 2,
+   "auditor": false,
+   "stmt_bytes": 83072,
+   "input_bytes": 314995,
+   "proof_bound": 235470,
+   "worst_input_bytes": 318547,
+   "prove_ms": 676,
+   "proof_bytes": 231918,
+   "direct": {
+    "n": 200,
+    "p50_ms": 10.091,
+    "p99_ms": 12.095,
+    "max_ms": 12.209
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 9.997,
+    "p99_ms": 12.059,
+    "max_ms": 12.381
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 10.013,
+    "p99_ms": 11.894,
+    "max_ms": 12.125
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 1.297,
+    "p99_ms": 1.732,
+    "max_ms": 1.832
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.005,
+    "p99_ms": 0.012,
+    "max_ms": 0.015
+   }
+  },
+  {
+   "sys": "PQZH",
+   "form": "TransferMulti4_0",
+   "m": 4,
+   "auditor": false,
+   "stmt_bytes": 116096,
+   "input_bytes": 347005,
+   "proof_bound": 235470,
+   "worst_input_bytes": 351571,
+   "prove_ms": 677,
+   "proof_bytes": 230904,
+   "direct": {
+    "n": 200,
+    "p50_ms": 10.361,
+    "p99_ms": 12.394,
+    "max_ms": 12.731
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 10.417,
+    "p99_ms": 12.63,
+    "max_ms": 13.289
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 10.211,
+    "p99_ms": 12.485,
+    "max_ms": 13.156
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 1.388,
+    "p99_ms": 2.115,
+    "max_ms": 2.122
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.007,
+    "p99_ms": 0.01,
+    "max_ms": 0.015
+   }
+  }
+ ],
+ "ffi_rust": [
+  {
+   "sys": "PQZL",
+   "form": "Transfer",
+   "proof_bytes": 42759,
+   "direct": {
+    "n": 200,
+    "p50_ms": 6.361,
+    "p99_ms": 8.831,
+    "max_ms": 9.41
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 6.435,
+    "p99_ms": 8.891,
+    "max_ms": 9.324
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 6.48,
+    "p99_ms": 9.27,
+    "max_ms": 10.787
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 6.435,
+    "p99_ms": 9.362,
+    "max_ms": 10.099
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.005,
+    "p99_ms": 0.008,
+    "max_ms": 0.014
+   }
+  },
+  {
+   "sys": "PQZL",
+   "form": "Transfer0",
+   "proof_bytes": 42387,
+   "direct": {
+    "n": 200,
+    "p50_ms": 6.167,
+    "p99_ms": 8.859,
+    "max_ms": 8.967
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 6.288,
+    "p99_ms": 9.114,
+    "max_ms": 10.275
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 6.244,
+    "p99_ms": 9.225,
+    "max_ms": 10.03
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 6.303,
+    "p99_ms": 10.427,
+    "max_ms": 10.44
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.004,
+    "p99_ms": 0.004,
+    "max_ms": 0.013
+   }
+  },
+  {
+   "sys": "PQZL",
+   "form": "Burn",
+   "proof_bytes": 41914,
+   "direct": {
+    "n": 200,
+    "p50_ms": 6.058,
+    "p99_ms": 8.429,
+    "max_ms": 9.009
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 6.221,
+    "p99_ms": 8.958,
+    "max_ms": 9.302
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 6.278,
+    "p99_ms": 9.12,
+    "max_ms": 9.322
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 6.222,
+    "p99_ms": 9.823,
+    "max_ms": 12.449
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.003,
+    "p99_ms": 0.007,
+    "max_ms": 0.012
+   }
+  },
+  {
+   "sys": "PQZL",
+   "form": "Refresh",
+   "proof_bytes": 41902,
+   "direct": {
+    "n": 200,
+    "p50_ms": 6.083,
+    "p99_ms": 8.465,
+    "max_ms": 8.554
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 6.048,
+    "p99_ms": 8.626,
+    "max_ms": 8.846
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 6.066,
+    "p99_ms": 8.851,
+    "max_ms": 9.069
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 6.099,
+    "p99_ms": 8.888,
+    "max_ms": 10.035
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.007,
+    "p99_ms": 0.015,
+    "max_ms": 0.015
+   }
+  },
+  {
+   "sys": "PQZL",
+   "form": "Register",
+   "proof_bytes": 28068,
+   "direct": {
+    "n": 200,
+    "p50_ms": 3.265,
+    "p99_ms": 5.027,
+    "max_ms": 5.137
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 3.275,
+    "p99_ms": 5.111,
+    "max_ms": 5.654
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 3.359,
+    "p99_ms": 5.656,
+    "max_ms": 5.949
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 3.333,
+    "p99_ms": 5.861,
+    "max_ms": 6.252
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.002,
+    "p99_ms": 0.003,
+    "max_ms": 0.017
+   }
+  },
+  {
+   "sys": "PQZL",
+   "form": "DiscloseSender",
+   "proof_bytes": 28964,
+   "direct": {
+    "n": 200,
+    "p50_ms": 3.372,
+    "p99_ms": 5.206,
+    "max_ms": 5.361
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 3.463,
+    "p99_ms": 5.887,
+    "max_ms": 6.697
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 3.389,
+    "p99_ms": 5.917,
+    "max_ms": 6.94
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 3.521,
+    "p99_ms": 5.978,
+    "max_ms": 6.652
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.004,
+    "p99_ms": 0.01,
+    "max_ms": 0.016
+   }
+  },
+  {
+   "sys": "PQZL",
+   "form": "DiscloseReceiver",
+   "proof_bytes": 28990,
+   "direct": {
+    "n": 200,
+    "p50_ms": 3.558,
+    "p99_ms": 5.429,
+    "max_ms": 5.498
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 3.603,
+    "p99_ms": 5.934,
+    "max_ms": 6.262
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 3.674,
+    "p99_ms": 6.405,
+    "max_ms": 6.82
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 3.524,
+    "p99_ms": 4.372,
+    "max_ms": 4.706
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.002,
+    "p99_ms": 0.005,
+    "max_ms": 0.013
+   }
+  },
+  {
+   "sys": "PQZL",
+   "form": "DiscloseAuditor",
+   "proof_bytes": 28995,
+   "direct": {
+    "n": 200,
+    "p50_ms": 3.538,
+    "p99_ms": 5.363,
+    "max_ms": 5.614
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 3.944,
+    "p99_ms": 7.383,
+    "max_ms": 9.326
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 3.733,
+    "p99_ms": 6.571,
+    "max_ms": 6.907
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 3.645,
+    "p99_ms": 5.776,
+    "max_ms": 6.759
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.004,
+    "p99_ms": 0.005,
+    "max_ms": 0.016
+   }
+  },
+  {
+   "sys": "PQZL",
+   "form": "TransferMulti1",
+   "m": 1,
+   "auditor": true,
+   "stmt_bytes": 83072,
+   "input_bytes": 125843,
+   "proof_bound": 98304,
+   "worst_input_bytes": 181381,
+   "prove_ms": 439,
+   "proof_bytes": 42766,
+   "direct": {
+    "n": 200,
+    "p50_ms": 6.358,
+    "p99_ms": 8.932,
+    "max_ms": 9.062
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 6.393,
+    "p99_ms": 10.263,
+    "max_ms": 10.47
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 6.369,
+    "p99_ms": 8.798,
+    "max_ms": 8.957
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 6.421,
+    "p99_ms": 9.455,
+    "max_ms": 10.1
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.005,
+    "p99_ms": 0.012,
+    "max_ms": 0.013
+   }
+  },
+  {
+   "sys": "PQZL",
+   "form": "TransferMulti2",
+   "m": 2,
+   "auditor": true,
+   "stmt_bytes": 99712,
+   "input_bytes": 143320,
+   "proof_bound": 98304,
+   "worst_input_bytes": 198021,
+   "prove_ms": 646,
+   "proof_bytes": 43603,
+   "direct": {
+    "n": 200,
+    "p50_ms": 6.619,
+    "p99_ms": 9.175,
+    "max_ms": 9.631
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 6.701,
+    "p99_ms": 9.299,
+    "max_ms": 10.038
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 6.649,
+    "p99_ms": 9.428,
+    "max_ms": 10.183
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 6.87,
+    "p99_ms": 9.914,
+    "max_ms": 12.0
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.005,
+    "p99_ms": 0.012,
+    "max_ms": 0.019
+   }
+  },
+  {
+   "sys": "PQZL",
+   "form": "TransferMulti4",
+   "m": 4,
+   "auditor": true,
+   "stmt_bytes": 132992,
+   "input_bytes": 178271,
+   "proof_bound": 98304,
+   "worst_input_bytes": 231301,
+   "prove_ms": 1395,
+   "proof_bytes": 45274,
+   "direct": {
+    "n": 200,
+    "p50_ms": 7.144,
+    "p99_ms": 9.579,
+    "max_ms": 9.686
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 7.279,
+    "p99_ms": 11.535,
+    "max_ms": 12.976
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 7.19,
+    "p99_ms": 9.703,
+    "max_ms": 10.204
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 7.227,
+    "p99_ms": 9.962,
+    "max_ms": 10.38
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.004,
+    "p99_ms": 0.009,
+    "max_ms": 0.011
+   }
+  },
+  {
+   "sys": "PQZL",
+   "form": "TransferMulti8",
+   "m": 8,
+   "auditor": true,
+   "stmt_bytes": 215936,
+   "input_bytes": 277743,
+   "proof_bound": 98304,
+   "worst_input_bytes": 314245,
+   "prove_ms": 1044,
+   "proof_bytes": 61802,
+   "direct": {
+    "n": 200,
+    "p50_ms": 10.56,
+    "p99_ms": 14.418,
+    "max_ms": 14.744
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 10.61,
+    "p99_ms": 15.722,
+    "max_ms": 17.995
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 10.761,
+    "p99_ms": 14.861,
+    "max_ms": 15.003
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 10.588,
+    "p99_ms": 14.522,
+    "max_ms": 16.057
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.007,
+    "p99_ms": 0.02,
+    "max_ms": 0.029
+   }
+  },
+  {
+   "sys": "PQZL",
+   "form": "TransferMulti1_0",
+   "m": 1,
+   "auditor": false,
+   "stmt_bytes": 66560,
+   "input_bytes": 108974,
+   "proof_bound": 98304,
+   "worst_input_bytes": 164869,
+   "prove_ms": 588,
+   "proof_bytes": 42409,
+   "direct": {
+    "n": 200,
+    "p50_ms": 6.252,
+    "p99_ms": 8.815,
+    "max_ms": 9.71
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 6.289,
+    "p99_ms": 9.098,
+    "max_ms": 10.769
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 6.31,
+    "p99_ms": 9.812,
+    "max_ms": 10.699
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 6.257,
+    "p99_ms": 9.83,
+    "max_ms": 11.14
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.005,
+    "p99_ms": 0.007,
+    "max_ms": 0.017
+   }
+  },
+  {
+   "sys": "PQZL",
+   "form": "TransferMulti2_0",
+   "m": 2,
+   "auditor": false,
+   "stmt_bytes": 83072,
+   "input_bytes": 126028,
+   "proof_bound": 98304,
+   "worst_input_bytes": 181381,
+   "prove_ms": 1338,
+   "proof_bytes": 42951,
+   "direct": {
+    "n": 200,
+    "p50_ms": 6.279,
+    "p99_ms": 8.711,
+    "max_ms": 9.024
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 6.417,
+    "p99_ms": 9.068,
+    "max_ms": 11.003
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 6.426,
+    "p99_ms": 10.096,
+    "max_ms": 11.145
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 6.38,
+    "p99_ms": 9.094,
+    "max_ms": 10.067
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.005,
+    "p99_ms": 0.007,
+    "max_ms": 0.013
+   }
+  },
+  {
+   "sys": "PQZL",
+   "form": "TransferMulti4_0",
+   "m": 4,
+   "auditor": false,
+   "stmt_bytes": 116096,
+   "input_bytes": 160023,
+   "proof_bound": 98304,
+   "worst_input_bytes": 214405,
+   "prove_ms": 472,
+   "proof_bytes": 43922,
+   "direct": {
+    "n": 200,
+    "p50_ms": 6.69,
+    "p99_ms": 9.318,
+    "max_ms": 10.11
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 6.977,
+    "p99_ms": 10.637,
+    "max_ms": 12.59
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 6.878,
+    "p99_ms": 9.774,
+    "max_ms": 10.193
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 6.851,
+    "p99_ms": 9.545,
+    "max_ms": 11.24
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.008,
+    "p99_ms": 0.011,
+    "max_ms": 0.02
+   }
+  },
+  {
+   "sys": "PQZL",
+   "form": "TransferMulti8_0",
+   "m": 8,
+   "auditor": false,
+   "stmt_bytes": 198528,
+   "input_bytes": 257531,
+   "proof_bound": 98304,
+   "worst_input_bytes": 296837,
+   "prove_ms": 1053,
+   "proof_bytes": 58998,
+   "direct": {
+    "n": 200,
+    "p50_ms": 9.584,
+    "p99_ms": 13.056,
+    "max_ms": 13.776
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 9.699,
+    "p99_ms": 13.221,
+    "max_ms": 13.451
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 9.71,
+    "p99_ms": 13.387,
+    "max_ms": 14.734
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 9.824,
+    "p99_ms": 14.058,
+    "max_ms": 16.045
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.006,
+    "p99_ms": 0.017,
+    "max_ms": 0.039
+   }
+  },
+  {
+   "sys": "PQZH",
+   "form": "Transfer",
+   "proof_bytes": 231022,
+   "direct": {
+    "n": 200,
+    "p50_ms": 10.309,
+    "p99_ms": 13.225,
+    "max_ms": 15.607
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 10.101,
+    "p99_ms": 12.112,
+    "max_ms": 12.371
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 10.08,
+    "p99_ms": 12.397,
+    "max_ms": 13.246
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 1.298,
+    "p99_ms": 2.014,
+    "max_ms": 2.026
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.011,
+    "p99_ms": 0.016,
+    "max_ms": 0.022
+   }
+  },
+  {
+   "sys": "PQZH",
+   "form": "Transfer0",
+   "proof_bytes": 231064,
+   "direct": {
+    "n": 200,
+    "p50_ms": 9.715,
+    "p99_ms": 11.739,
+    "max_ms": 12.174
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 9.755,
+    "p99_ms": 11.568,
+    "max_ms": 11.743
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 9.664,
+    "p99_ms": 11.993,
+    "max_ms": 13.18
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 1.25,
+    "p99_ms": 1.924,
+    "max_ms": 2.108
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.004,
+    "p99_ms": 0.007,
+    "max_ms": 0.013
+   }
+  },
+  {
+   "sys": "PQZH",
+   "form": "Burn",
+   "proof_bytes": 231320,
+   "direct": {
+    "n": 200,
+    "p50_ms": 9.508,
+    "p99_ms": 11.404,
+    "max_ms": 11.6
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 9.488,
+    "p99_ms": 11.547,
+    "max_ms": 11.844
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 9.749,
+    "p99_ms": 11.733,
+    "max_ms": 12.447
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 0.605,
+    "p99_ms": 1.02,
+    "max_ms": 1.311
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.003,
+    "p99_ms": 0.003,
+    "max_ms": 0.011
+   }
+  },
+  {
+   "sys": "PQZH",
+   "form": "Refresh",
+   "proof_bytes": 231928,
+   "direct": {
+    "n": 200,
+    "p50_ms": 9.523,
+    "p99_ms": 11.622,
+    "max_ms": 11.985
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 9.523,
+    "p99_ms": 11.154,
+    "max_ms": 11.53
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 9.578,
+    "p99_ms": 12.088,
+    "max_ms": 12.237
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 1.25,
+    "p99_ms": 2.042,
+    "max_ms": 2.547
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.003,
+    "p99_ms": 0.005,
+    "max_ms": 0.01
+   }
+  },
+  {
+   "sys": "PQZH",
+   "form": "Register",
+   "proof_bytes": 187738,
+   "direct": {
+    "n": 200,
+    "p50_ms": 7.211,
+    "p99_ms": 8.817,
+    "max_ms": 9.198
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 7.201,
+    "p99_ms": 8.697,
+    "max_ms": 9.254
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 7.288,
+    "p99_ms": 8.822,
+    "max_ms": 8.963
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 0.383,
+    "p99_ms": 0.58,
+    "max_ms": 0.595
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.001,
+    "p99_ms": 0.001,
+    "max_ms": 0.003
+   }
+  },
+  {
+   "sys": "PQZH",
+   "form": "DiscloseSender",
+   "proof_bytes": 186842,
+   "direct": {
+    "n": 200,
+    "p50_ms": 7.56,
+    "p99_ms": 9.182,
+    "max_ms": 10.35
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 7.539,
+    "p99_ms": 8.988,
+    "max_ms": 9.165
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 7.526,
+    "p99_ms": 9.145,
+    "max_ms": 10.496
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 0.422,
+    "p99_ms": 0.831,
+    "max_ms": 1.252
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.002,
+    "p99_ms": 0.002,
+    "max_ms": 0.004
+   }
+  },
+  {
+   "sys": "PQZH",
+   "form": "DiscloseReceiver",
+   "proof_bytes": 187098,
+   "direct": {
+    "n": 200,
+    "p50_ms": 7.386,
+    "p99_ms": 9.161,
+    "max_ms": 9.298
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 7.375,
+    "p99_ms": 8.796,
+    "max_ms": 8.917
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 7.373,
+    "p99_ms": 8.972,
+    "max_ms": 9.083
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 0.422,
+    "p99_ms": 0.587,
+    "max_ms": 0.633
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.002,
+    "p99_ms": 0.002,
+    "max_ms": 0.004
+   }
+  },
+  {
+   "sys": "PQZH",
+   "form": "DiscloseAuditor",
+   "proof_bytes": 186778,
+   "direct": {
+    "n": 200,
+    "p50_ms": 7.395,
+    "p99_ms": 8.979,
+    "max_ms": 9.048
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 7.391,
+    "p99_ms": 9.396,
+    "max_ms": 9.542
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 7.349,
+    "p99_ms": 8.981,
+    "max_ms": 9.182
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 0.431,
+    "p99_ms": 0.724,
+    "max_ms": 0.738
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.004,
+    "p99_ms": 0.005,
+    "max_ms": 0.013
+   }
+  },
+  {
+   "sys": "PQZH",
+   "form": "TransferMulti1",
+   "m": 1,
+   "auditor": true,
+   "stmt_bytes": 83072,
+   "input_bytes": 315251,
+   "proof_bound": 235470,
+   "worst_input_bytes": 318547,
+   "prove_ms": 671,
+   "proof_bytes": 232174,
+   "direct": {
+    "n": 200,
+    "p50_ms": 10.025,
+    "p99_ms": 12.461,
+    "max_ms": 12.583
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 10.186,
+    "p99_ms": 12.639,
+    "max_ms": 13.454
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 10.175,
+    "p99_ms": 12.355,
+    "max_ms": 12.416
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 1.286,
+    "p99_ms": 1.688,
+    "max_ms": 1.747
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.003,
+    "p99_ms": 0.003,
+    "max_ms": 0.007
+   }
+  },
+  {
+   "sys": "PQZH",
+   "form": "TransferMulti2",
+   "m": 2,
+   "auditor": true,
+   "stmt_bytes": 99712,
+   "input_bytes": 331891,
+   "proof_bound": 235470,
+   "worst_input_bytes": 335187,
+   "prove_ms": 706,
+   "proof_bytes": 232174,
+   "direct": {
+    "n": 200,
+    "p50_ms": 10.298,
+    "p99_ms": 12.784,
+    "max_ms": 12.987
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 10.375,
+    "p99_ms": 12.532,
+    "max_ms": 12.924
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 10.407,
+    "p99_ms": 12.52,
+    "max_ms": 13.938
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 1.348,
+    "p99_ms": 2.141,
+    "max_ms": 2.342
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.003,
+    "p99_ms": 0.007,
+    "max_ms": 0.01
+   }
+  },
+  {
+   "sys": "PQZH",
+   "form": "TransferMulti4",
+   "m": 4,
+   "auditor": true,
+   "stmt_bytes": 132992,
+   "input_bytes": 365705,
+   "proof_bound": 236196,
+   "worst_input_bytes": 369193,
+   "prove_ms": 670,
+   "proof_bytes": 232708,
+   "direct": {
+    "n": 200,
+    "p50_ms": 11.171,
+    "p99_ms": 13.851,
+    "max_ms": 14.923
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 11.128,
+    "p99_ms": 13.719,
+    "max_ms": 14.145
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 11.269,
+    "p99_ms": 14.102,
+    "max_ms": 14.445
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 1.421,
+    "p99_ms": 2.218,
+    "max_ms": 2.266
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.004,
+    "p99_ms": 0.01,
+    "max_ms": 0.011
+   }
+  },
+  {
+   "sys": "PQZH",
+   "form": "TransferMulti1_0",
+   "m": 1,
+   "auditor": false,
+   "stmt_bytes": 66560,
+   "input_bytes": 297533,
+   "proof_bound": 234744,
+   "worst_input_bytes": 301309,
+   "prove_ms": 691,
+   "proof_bytes": 230968,
+   "direct": {
+    "n": 200,
+    "p50_ms": 9.734,
+    "p99_ms": 11.479,
+    "max_ms": 11.798
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 9.682,
+    "p99_ms": 11.711,
+    "max_ms": 12.276
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 9.665,
+    "p99_ms": 11.891,
+    "max_ms": 12.129
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 1.24,
+    "p99_ms": 1.608,
+    "max_ms": 1.761
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.002,
+    "p99_ms": 0.002,
+    "max_ms": 0.007
+   }
+  },
+  {
+   "sys": "PQZH",
+   "form": "TransferMulti2_0",
+   "m": 2,
+   "auditor": false,
+   "stmt_bytes": 83072,
+   "input_bytes": 314995,
+   "proof_bound": 235470,
+   "worst_input_bytes": 318547,
+   "prove_ms": 682,
+   "proof_bytes": 231918,
+   "direct": {
+    "n": 200,
+    "p50_ms": 10.048,
+    "p99_ms": 12.199,
+    "max_ms": 12.829
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 10.002,
+    "p99_ms": 12.233,
+    "max_ms": 12.47
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 10.038,
+    "p99_ms": 12.127,
+    "max_ms": 12.549
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 1.281,
+    "p99_ms": 1.798,
+    "max_ms": 2.131
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.003,
+    "p99_ms": 0.006,
+    "max_ms": 0.008
+   }
+  },
+  {
+   "sys": "PQZH",
+   "form": "TransferMulti4_0",
+   "m": 4,
+   "auditor": false,
+   "stmt_bytes": 116096,
+   "input_bytes": 347005,
+   "proof_bound": 235470,
+   "worst_input_bytes": 351571,
+   "prove_ms": 670,
+   "proof_bytes": 230904,
+   "direct": {
+    "n": 200,
+    "p50_ms": 10.363,
+    "p99_ms": 12.407,
+    "max_ms": 12.707
+   },
+   "rust": {
+    "n": 200,
+    "p50_ms": 10.385,
+    "p99_ms": 12.903,
+    "max_ms": 13.017
+   },
+   "c_abi": {
+    "n": 200,
+    "p50_ms": 10.363,
+    "p99_ms": 12.521,
+    "max_ms": 12.69
+   },
+   "adversarial": {
+    "n": 200,
+    "p50_ms": 1.389,
+    "p99_ms": 2.234,
+    "max_ms": 2.418
+   },
+   "decode": {
+    "n": 200,
+    "p50_ms": 0.004,
+    "p99_ms": 0.004,
+    "max_ms": 0.011
+   }
+  }
+ ],
+ "wasm_m8": {
+  "native_eq_wasm": true,
+  "peaks": {
+   "R_TXM8": 123076608,
+   "R_TXM8_0": 111017984
+  },
+  "budget": 268012304,
+  "enough": true
+ }
+}

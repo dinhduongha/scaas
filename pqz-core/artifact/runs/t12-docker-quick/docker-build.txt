@@ -1,0 +1,91 @@
+#0 building with "default" instance using docker driver
+
+#1 [internal] load build definition from Dockerfile
+#1 transferring dockerfile: 5.68kB done
+#1 DONE 0.0s
+
+#2 [internal] load metadata for docker.io/library/ubuntu:24.04@sha256:534baea6a22c03a63003dbc8dbe78fe34bc0d7e595d9a9dc9834884ff530eb55
+#2 DONE 0.0s
+
+#3 [ 1/10] FROM docker.io/library/ubuntu:24.04@sha256:534baea6a22c03a63003dbc8dbe78fe34bc0d7e595d9a9dc9834884ff530eb55
+#3 DONE 0.0s
+
+#4 [internal] load build context
+#4 transferring context:
+#4 transferring context: 43.55MB 0.5s done
+#4 DONE 0.5s
+
+#5 [ 2/10] RUN apt-get update -qq && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends ca-certificates  && apt-get update -qq -o Acquire::Retries=20 --snapshot "20261013T000000Z"  && DEBIAN_FRONTEND=noninteractive apt-get install -y -qq --no-install-recommends -o Acquire::Retries=20 --snapshot "20261013T000000Z"       clang-18=1:18.1.3-1ubuntu1 lld-18=1:18.1.3-1ubuntu1 llvm-18=1:18.1.3-1ubuntu1       gcc-13=13.3.0-6ubuntu2~24.04.1 g++-13=13.3.0-6ubuntu2~24.04.1 build-essential make cmake=3.28.3-1build7       libgmp-dev libmpfr-dev python3 git unzip ca-certificates curl xz-utils  && ln -s /usr/bin/clang-18 /usr/local/bin/clang  && rm -rf /var/lib/apt/lists/*
+#5 CACHED
+
+#6 [ 3/10] RUN curl -fsSLo /tmp/node.tar.xz "https://nodejs.org/dist/v26.8.1/node-v26.8.1-linux-x64.tar.xz"  && echo "3e301118d7df53d563b7e96c1617545f26e2f76f9724be668d6cab65c15dda5d  /tmp/node.tar.xz" | sha256sum -c -  && tar -xJf /tmp/node.tar.xz -C /usr/local --strip-components=1 --exclude='*/include' --exclude='*/share'  && rm /tmp/node.tar.xz
+#6 CACHED
+
+#7 [ 4/10] RUN git clone -q https://github.com/lazer-crypto/lazer /opt/lazer && git -C /opt/lazer checkout -q "3330e487228f633eceb322807b13a596b516770f"
+#7 CACHED
+
+#8 [ 5/10] RUN curl -fsSLo /tmp/rustup-init "https://static.rust-lang.org/rustup/archive/1.29.1/x86_64-unknown-linux-gnu/rustup-init"  && echo "dda7234360b7f578ca8b0ddcb80145646fa61a67c1720a5abc7051b35c9fcb71  /tmp/rustup-init" | sha256sum -c - && chmod +x /tmp/rustup-init  && /tmp/rustup-init -y -q --no-modify-path --profile minimal --default-toolchain "1.97.1"       --target wasm32-unknown-unknown --component clippy  && rm /tmp/rustup-init && rustc --version && cargo --version && chmod -R a+rwX "/usr/local/rustup" "/usr/local/cargo"
+#8 CACHED
+
+#9 [ 6/10] COPY . /src
+#9 DONE 0.5s
+
+#10 [ 7/10] WORKDIR /src/pqz-core
+#10 DONE 0.4s
+
+#11 [ 8/10] RUN for d in pqzh/ligero pqzh/ligero/wasm stmt ffi ffi/wasm pqzl/rust pqzl/rust/wasm; do       [ ! -f "$d/Cargo.lock" ] || (cd "$d" && cargo fetch --locked) || exit 1; done  && chmod -R a+rwX "/usr/local/cargo"
+#11 1.076     Updating crates.io index
+#11 2.018  Downloading crates ...
+#11 2.233   Downloaded cpufeatures v0.2.17
+#11 2.246   Downloaded keccak v0.1.6
+#11 2.287   Downloaded generic-array v0.14.7
+#11 2.298   Downloaded version_check v0.9.5
+#11 2.302   Downloaded digest v0.10.7
+#11 2.305   Downloaded block-buffer v0.10.4
+#11 2.336   Downloaded crypto-common v0.1.7
+#11 2.401   Downloaded typenum v1.20.1
+#11 2.505   Downloaded sha3 v0.10.8
+#11 2.511   Downloaded libc v0.2.190
+#11 2.980     Updating crates.io index
+#11 3.461  Downloading crates ...
+#11 3.716   Downloaded cipher v0.4.4
+#11 3.728   Downloaded sha2 v0.10.9
+#11 3.732   Downloaded cfg-if v1.0.5
+#11 3.735   Downloaded inout v0.1.4
+#11 3.742   Downloaded subtle v2.6.1
+#11 3.817   Downloaded shlex v2.0.1
+#11 3.827   Downloaded find-msvc-tools v0.1.14
+#11 3.829   Downloaded hmac v0.12.1
+#11 3.843   Downloaded aes v0.8.4
+#11 3.856   Downloaded cc v1.8.0
+#11 3.861   Downloaded hkdf v0.12.4
+#11 4.128     Updating crates.io index
+#11 4.820  Downloading crates ...
+#11 5.190   Downloaded itoa v1.0.18
+#11 5.231   Downloaded zmij v1.0.23
+#11 5.234   Downloaded serde_core v1.0.229
+#11 5.248   Downloaded quote v1.0.47
+#11 5.274   Downloaded serde_derive v1.0.229
+#11 5.279   Downloaded proc-macro2 v1.0.107
+#11 5.283   Downloaded unicode-ident v1.0.27
+#11 5.311   Downloaded serde v1.0.229
+#11 5.316   Downloaded memchr v2.8.3
+#11 5.324   Downloaded serde_json v1.0.154
+#11 5.333   Downloaded syn v3.0.9
+#11 DONE 11.5s
+
+#12 [ 9/10] RUN pqzl/build.sh all && chmod -R a+rwX /src
+#12 11.55 symbols ok: only memcpy memset __stack_chk_fail __stack_pointer outside the library objects
+#12 24.80 symbols ok: only memcpy memset __stack_chk_fail __stack_pointer outside the library objects
+#12 DONE 55.9s
+
+#13 [10/10] RUN git config --system --add safe.directory '*'
+#13 DONE 0.5s
+
+#14 exporting to image
+#14 exporting layers
+#14 exporting layers 0.7s done
+#14 writing image sha256:94f55349a6a3581fea969bee62cc4e65c091452e59d438b7f750a2a4bdfeb9e7 done
+#14 naming to docker.io/library/pqz-core-artifact:t12 0.1s done
+#14 DONE 0.8s
+rc=0

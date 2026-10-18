@@ -39,8 +39,29 @@ Terms used throughout:
   is done: `artifact/runs/freeze-2026-10-17/` (section "Gates A / B and the freeze").
 - The multi-recipient transfer (`R_TXM`, op 7) is live in the `PQZ` precompile on chain 7622 since 2026-10-17 and
   is used by the PQZ tokens.
-- **In progress: the PQZL Rust port** on branch `pqzl-rust` (plan `docs/superpowers/plans/2026-10-17-pqzl-rust-port.md`):
-  crate `pqzl` in `pqzl/rust/`, byte-for-byte equal to the C core. Tasks 1–8 of 12 are done.
+- **The PQZL Rust port is done** on branch `pqzl-rust` (plan `docs/superpowers/plans/2026-10-17-pqzl-rust-port.md`;
+  merge into `main` pending): crate `pqzl` in `pqzl/rust/`, byte-for-byte equal to the C core. Tasks 1–12 (Task 10b's
+  hardening follow-ups in both cores; Task 11: `pqz-ffi` builds the Rust core by default, the C core opt-in, the 2 h
+  fuzz differential clean; `gate.sh`'s gate A now covers both PQZL cores, step `rust`). Task 12:
+  - the package stage "Rust = C" (`artifact/reproduce.sh`): the Rust prover's `proofs_fnv` against the C core's
+    frozen hashes and the keys KAT; the pqz-ffi and vectors stages already run the Rust core (the default backend);
+  - the Rust rows in `results.py`'s tables and in README §5 / `artifact/README.md`;
+  - D6 (below) and the wasm32 op 7 limit raised to M = 8 on the Rust backend;
+  - checks: the package's Docker quick run PASS (225 ok, `artifact/runs/t12-docker-quick/`), the node Dockerfile's
+    `ffi` stage builds (`nethermind/runs/2026-10-18-ffi-stage-t12.txt`), `gate.sh t12` PASS (`runs/gate/t12-*`).
+- **D6, Rust against C (port plan D6; reported, not a gate): run `d6`, 2026-10-18** (`pqzl/rust/d6.sh`, C and Rust in
+  one session; the C rows of `R_TXM8`, `R_TXM1_0`, `R_TXM2_0` and their Rust rows re-run on a quiet machine after
+  external load, owner ruling). The full table (six forms and eight `R_TXM` shapes, p50 / p99 native and wasm32,
+  peak memory, `ffi_bench` on both backends) is in
+  [pqzl/rust/README.md](pqzl/rust/README.md#d6-rust-against-c-plan-d6-task-12). Every `proofs_fnv` Rust = C, every
+  bench `fails 0`. The Rust core is faster natively on every relation and needs 4–6× less memory; in wasm32 its
+  verify_fast is about 2× slower than the C core's (p99 ≤ 51.0 ms, under the 60 ms limit).
+
+  | relation | prove p50 native, C / Rust (ms) | verify_fast p99 native, C / Rust (ms) | verify_fast p99 wasm32, C / Rust (ms) | prove peak native: C arena / Rust heap (MiB) |
+  |---|---|---|---|---|
+  | `R_TX` | 983 / 529 | 11.4 / 8.9 | 17.5 / 32.0 | 290.1 / 60.0 |
+  | `R_TXM8` (M = 8, auditor on) | 2,825 / 1,128 | 17.9 / 13.9 | 29.0 / 51.0 | 655.6 / 110.1 |
+  | wasm32 op 7 M = 8 (Task 12) | — | — | — | Rust wasm32 peak 117.4 MiB (on) / 105.9 MiB (off), budget 255.6 MiB (the C M = 4 peak): **enough**, the Rust backend proves M = 8 in wasm32 (the C backend keeps M ≤ 4; CTR-PQZ-09) |
 - **Which core goes to production (owner, 2026-10-18; `docs/decisions.md`):** the Rust crate `pqzl` becomes the
   production PQZL core of the `PQZ` precompile once the port is finished and verified (Rust = C on the vectors, the
   fuzz differential clean, the review passed). `pqz-ffi` then switches its default backend to it (port Task 11).
@@ -1096,6 +1117,33 @@ accepted set are all unchanged.
   - Symbol scans ok (`/gmp|mpfr|hexl/`: 0); cargo tests green; STARK-backup cross-check equal.
   - Fuzz smoke 3 × 60 s: no finding, corpora restored.
 
+**Follow-ups (2026-10-18, owner; Rust port Task 10b, branch `pqzl-rust`).** The hardening review asked for two more
+changes, made in the C core and the Rust crate alike. Outputs are unchanged: honest proofs, `proofs_fnv`,
+`proofSystemId`, the vectors and the self-test hash.
+1. **`poly_auto_self` in the NTT domain computes X → X⁻¹.** It converts to coefficients (`_fromcrt`) and applies the
+   coefficient automorphism, as `poly_auto` does; the result is in the coefficient domain. Item 1's reversal was not
+   the automorphism, so the branch returned a wrong value had anything reached it. Still no relation reaches it.
+   Rust `poly.rs` `auto_self` does the same. The oracle shim's double-size residue block, which only absorbed the
+   old out-of-bounds write, is gone (`tests/oracle_shim.c`, `src/testkit.rs`).
+2. **The rejection exponents saturate instead of wrapping.** `rejection.c` computes `t2 − 2·t1`, `t − ln M` and
+   `a − |y| − ln M` with `pqz_sat_sub128` / `pqz_sat_sub64`, constant-time helpers added to `pqz_fixexp.h`; Rust
+   `rejection.rs` uses `saturating_sub`. An exponent below −2^63 now stays the most negative one and rejects, so a
+   dishonest-size exponent fails closed through the prover's `PQZ_REJ_MAX` retry cap, where wrapping made it accept.
+   `num` above 2^127 (only for ⟨z,v⟩ near −2^126) stays the largest value and accepts, the exact value's verdict.
+   Honest exponents stay within ±64 (Q56) and never reach either edge.
+
+Evidence:
+- `pqzl/test/ub_test.sh t10b`: PASS (`pqzl/test/runs/ub-t10b.txt`). Part a checks both helpers on every pair of
+  range-edge values and six rejection inputs with exponents near ±2^63; the two negative-side inputs that accepted in
+  `ub-after.txt` now reject. Part c checks that the NTT branch equals the coefficient-domain automorphism.
+- Rust: the unit test `rand::rejection::tests::saturation_near_2_63` (the same six inputs) and the oracle test
+  `oracle_rand::rejection_saturation_eq_c` (the five one-limb inputs on 200 streams, C = Rust and the expected
+  verdict; the shim takes one-limb entries only, so the two-limb input is in the unit and C tests). The existing
+  oracle tests (`rejection_eq_c`, the arithmetic vector with `poly_auto_self` in the NTT domain) stay equal.
+- `pqzl/rust/run.sh t10b`: every test green, `proofs_fnv` equal to the C core's (native and wasm32).
+- `scripts/capped pqz-core/gate.sh t10b`: **PASS** (`runs/gate/t10b-*`), with `pqz-vectors --check` and the
+  self-test hash unchanged.
+
 ## Measured (2026-10-13, this machine, single thread)
 
 The spike's measurement record: P6d-2 against the unoptimised spike, and the verdict against the kill criteria
@@ -1200,6 +1248,14 @@ the record.
    `pqzl/test/check_symbols_neg.sh` (a missing file and a non-object exit non-zero; the library objects named from
    another directory pass) and `pqzl/build.sh native` + `glic/absence.sh` on the real files:
    `artifact/runs/art2-check-symbols.txt`, `glic/runs/absence-2026-10-15.txt`.
+10. **Rust core: wasm32 verify_fast is about 2× the C core's time** (PQZL Rust port, D6 run `d6`, 2026-10-18):
+    1.7–2.0× over the 14 relations; `R_TXM8` p99 51.0 ms against the 60 ms limit, about 15 % margin on the
+    reference CPU (C: 29.0 ms). Likely cause: `pqzl/rust/src/arith/ntt.rs` multiplies 64 × 64 → 128 bits (`mulq`,
+    `red128`, the basemul `u128` accumulator) on every target, and wasm32 has no wide multiply (each is a
+    `__multi3` call); the C core uses its 21-bit-limb path there (`pqz_ntt.c`, `PQZ_MUL128 0`). Neither wasm32 build
+    uses simd128. Follow-up, not done in the port: a `cfg(target_arch = "wasm32")` limb path in `ntt.rs` (it must give
+    the same residues; `run.sh`'s native = wasm32 replay and proofs_fnv checks pin that). Native verify is unaffected (the
+    Rust core is faster there), and the chain verifies natively.
 
 Scratch (not needed to resume, re-creatable): the LaZer and lattice-estimator clones, the upstream tbox harness and
 debug builds under the session scratchpad `p6d/`.

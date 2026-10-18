@@ -713,5 +713,43 @@
    "pqzl": 177,
    "pqzh": 165
   }
- }
+ },
+ "rust": {
+  "about": "port plan Task 12, the \"Rust = C\" stage: the Rust core (pqzl/rust/) against values the C core already fixed: the pqzl prover's proofs_fnv and the keys KAT (pqz-ffi's stages already run the Rust core, its default backend). The six relations' proofs_fnv are checked against \"relations\" (keyed by n); these are the rest",
+  "txm_fnv": {
+   "R_TXM1": {
+    "2": "ee87e7a4"
+   },
+   "R_TXM2": {
+    "2": "4294a892"
+   },
+   "R_TXM4": {
+    "2": "4ff8974f"
+   },
+   "R_TXM8": {
+    "2": "cd21b056"
+   },
+   "R_TXM1_0": {
+    "2": "bba9cd96"
+   },
+   "R_TXM2_0": {
+    "2": "2fef961b"
+   },
+   "R_TXM4_0": {
+    "2": "74c6be73"
+   },
+   "R_TXM8_0": {
+    "2": "90c8fc70"
+   }
+  },
+  "txm_fnv_source": "research/pqzl-measure/runs/l3a-native-fast.jsonl (the C core, pqz_bench 2 200 per shape; bench 2 2 16320 gives the same proofs)",
+  "keys_kat": {
+   "n": 100,
+   "sha256": "7d787b167f641138f3ef6e26f4cdd938c6f27433c4815ddbb587daa94dfa4a80",
+   "source": "SHA-256 of research/pqzl-measure/runs/l1d-keys-kat.jsonl (the C core's pqz_keys_kat 100) without its first line, {\"before_init_rejected\": ...}, which the Rust keys_kat does not print (there is no pqz_init)"
+  }
+ },
+ "changes": [
+  "2026-10-18 (port plan Task 12): + rust (txm_fnv, keys_kat) for the \"Rust = C\" stage (the pqz-ffi and vectors stages run the Rust core, pqz-ffi's default backend, against the C values already here); every C value unchanged"
+ ]
 }
