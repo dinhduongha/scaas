@@ -1,0 +1,41 @@
+   Compiling digest v0.10.7
+   Compiling pqzl v0.1.0 (/src/pqz-core/pqzl/rust)
+   Compiling pqz-ffi v0.1.0 (/src/pqz-core/ffi)
+   Compiling sha3 v0.10.8
+   Compiling pqzh-ligero v0.1.0 (/src/pqz-core/pqzh/ligero)
+    Finished `release` profile [optimized + debuginfo] target(s) in 7.87s
+     Running unittests src/lib.rs (target/release/deps/pqz_ffi-98fd775975135c4f)
+
+running 1 test
+test pqzl::rust::tests::out_of_memory_is_a_node_fault ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Compiling pqz-ffi v0.1.0 (/src/pqz-core/ffi)
+    Finished `release` profile [optimized + debuginfo] target(s) in 1.21s
+test hooks in the production cdylib (must be 0): 0
+symbols ok: no C core in this build (default backend pqzl-rust, CTR-PQZ-09: feature pqzl-c off)
+c_abi: selftest ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205
+c_abi: ok (0 failures)
+    Checking typenum v1.20.1
+    Checking subtle v2.6.1
+    Checking keccak v0.1.6
+    Checking cfg-if v1.0.5
+    Checking cpufeatures v0.2.17
+    Checking pqz-stmt v0.1.0 (/src/pqz-core/stmt)
+   Compiling pqz-ffi v0.1.0 (/src/pqz-core/ffi)
+    Checking generic-array v0.14.7
+    Checking crypto-common v0.1.7
+    Checking block-buffer v0.10.4
+    Checking inout v0.1.4
+    Checking digest v0.10.7
+    Checking cipher v0.4.4
+    Checking sha3 v0.10.8
+    Checking aes v0.8.4
+    Checking hmac v0.12.1
+    Checking hkdf v0.12.4
+    Checking pqzh-ligero v0.1.0 (/src/pqz-core/pqzh/ligero)
+    Checking pqzl v0.1.0 (/src/pqz-core/pqzl/rust)
+    Checking sha2 v0.10.9
+    Finished `release` profile [optimized + debuginfo] target(s) in 2.54s
+rc=0

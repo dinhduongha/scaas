@@ -1,0 +1,26 @@
+== 16:19:46 build (native, wasm, wasm without SV, native-x86v3)
+== 16:20:39 KAT
+== 16:20:39 check_tbox_fixes.sh
+== 16:21:58 pqzl/sv/check_sv_fixes.sh
+== 16:24:38 differential test pqz_verify vs pqz_verify_fast, portable: pqz_sv_diff 4 4 2 1 10 12 12 12 12
+== 16:41:04 six relations, generic verifier: native pqz_bench 3 3, wasm run_wasm.mjs 3 1
+== 16:42:18 six relations, specialised verifier: pqz_bench 2 50 (portable, x86-64-v3), wasm 2 25, wasm both
+== 16:43:45 wasm prove memory, one relation per process (the prover build without SV)
+== 16:44:06 PQZH: cargo test (default features: 6 x 960 mutations, negative witnesses, cross-form, EVM fixtures)
+== 16:49:09 PQZH: the production build (--no-default-features): tests, examples / bins, clippy -D clippy::float_arithmetic
+== 16:49:15 PQZH: C <-> Rust cross-check (pqzh/xcheck/ligero.sh: statement + witness bytes, then kat_stmt.py)
+== 16:49:33 pqz-stmt: stmt/xcheck.sh (unit tests, C and pqz_kat.py cross-check, wasm32 build)
+== 16:49:56 PQZH: native ligero_bench, six forms: 2 proofs, 20 verifies, 12 x 2 mutations each
+== 16:50:07 PQZH: wasm32 (node), six forms: 2 proofs, 20 verifies, 12 x 1 mutations each
+== 16:50:35 pqz-ffi: cargo test --features prove,test-hooks (native digest lines, self-test, rejections, differential, faults)
+== 16:52:30 pqz-ffi: unit tests without prove, verify-only cdylib, symbol scan, C smoke test, clippy -D clippy::float_arithmetic
+== 16:52:42 pqz-ffi: wasm32 builds and digest lines (must equal native)
+== 16:53:42 pqz-ffi: ffi_bench 20
+== 16:54:20 vectors: pqz-vectors --check (a second generation, byte for byte, every proof and negative input through pqz_precompile)
+== 16:55:48 vectors: pqz_kat.py --check (independent Python)
+== 16:56:31 vectors: wasm32 replay (every proof proved again by pqz-ffi in wasm32: byte-equal, valid)
+== 16:57:47 Rust = C: build (bench, keys_kat, the wasm32 bench module)
+== 16:58:06 Rust = C: proofs_fnv = the C core's (bench 5 5 63, bench 2 2 16320: the op 7 shapes, wasm32 3 1 63)
+== 16:59:41 Rust = C: keys KAT (keys_kat 100 = the C core's pqz_keys_kat 100 lines; pqz_kat.py --c-keys)
+== 16:59:44 tables and comparison
+== 16:59:44 done: /out
