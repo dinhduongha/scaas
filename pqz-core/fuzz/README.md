@@ -3,11 +3,14 @@
 This directory fuzzes the PQZ precompile: it feeds [`pqz-ffi`](../ffi/README.md) millions of random and mutated
 inputs and checks that it never crashes and never accepts an input it should reject (CTR-PQZ-10, "never crash, never
 wrong-accept at the boundary"). The precompile runs in its production configuration, so the fuzzing covers the decoder
-(`pqz-stmt`), the PQZL C core's specialised verifier and the PQZH Ligero verifier. The long campaigns run locally,
+(`pqz-stmt`), the PQZL core's specialised verifier (the Rust crate `pqzl`, `pqz-ffi`'s default backend since
+2026-10-18, CTR-PQZ-09; the C core until then) and the PQZH Ligero verifier. The mode `pqzl-diff` links both PQZL cores
+and compares them on every input (see "Mode `pqzl-diff`"). The long campaigns run locally,
 on the owner's machine; CI runs only a short smoke test (see "Run"). For the terms used here (op, form, SV,
 `proofSystemId`) see the glossary in the [pqz-core README](../README.md).
 
-- **Plan:** P6e plan Task 10, decision D12; the multi-recipient transfer (`R_TXM`, op 7) is covered since P6-ANON S5.
+- **Plan:** P6e plan Task 10, decision D12; the multi-recipient transfer (`R_TXM`, op 7) is covered since P6-ANON S5;
+  the Rust core and the mode `pqzl-diff` since the PQZL Rust port, Task 11.
 - **Words used here:** a *target* is one libFuzzer entry point; an *oracle* is the code that decides whether a result
   is wrong (`src/lib.rs`); an *edit script* is a short fuzzer input that describes edits to a known valid input; an
   *honest input* is a valid input with a valid proof from the frozen vectors.
@@ -18,9 +21,10 @@ flowchart LR
   T --> O["src/lib.rs oracles"]
   O --> A["pqz_precompile (C ABI) ×2"]
   A --> D["pqz-stmt decode"]
-  D --> L["PQZL: C core, ASan + UBSan<br/>verify-only arena 512 MiB"]
+  D --> L["PQZL: Rust core (pqzl)"]
   D --> H["PQZH: Ligero (Rust)"]
   O --> G["sampled: generic PQZL verifier"]
+  O --> X["mode pqzl-diff: C core, ASan + UBSan<br/>verify-only arena 512 MiB<br/>verdict and test_mutate = Rust"]
   O --> C["codecs: parse ⇒ encode = input"]
 ```
 
@@ -42,11 +46,11 @@ fee-0 forms, every built multi-recipient (id, M, auditorOn), and `regress/valid/
 
 - Byte 0 picks the honest input.
 - Byte 1 picks the mode: edits anywhere, including the op and the length field / one decoded PQZL proof field changed
-  and re-encoded by `pqz_test_mutate` (multi-recipient proofs too: relation code `PQZ_REL_TXM`), then edits /
-  statement only / proof only.
+  and re-encoded by `pqz_test_mutate` (the backend's: `pqzl::test_mutate` of the Rust core; multi-recipient proofs
+  too: relation code `PQZ_REL_TXM`), then edits / statement only / proof only.
 - Then follow `[off lo, mid, hi, xor]` edits and an optional truncate or extend.
 - Extra check: on every 256th mutated PQZL input that decodes, the PQZL specialised verifier (whose verdict is the
-  precompile's) must agree with the generic verifier. The core is then put back on the verify-only arena.
+  precompile's) must agree with the generic verifier (both the Rust core's).
 
 **`codec`** — an edit script of at most 512 B, applied to an honest statement, precompile input, bundle, opening or
 PQZL proof (multi-recipient statements, inputs and proofs included).
@@ -65,16 +69,29 @@ The common oracle is in `src/lib.rs`. A violation aborts, which libFuzzer report
 
 - **No panic anywhere.** The panic hook aborts, so a panic that `pqz-ffi`'s `catch_unwind` (status 3) or Ligero's
   own catch would hide in production becomes a finding. Overflow checks and debug assertions are on in the fuzz build.
-- **Status.** Never 3 (an input-caused panic) or 4 (a node fault: arena exhaustion, worker). Status 1 (revert) exactly
-  for the inputs over `MAX_INPUT`.
+- **Status.** Never 3 (an input-caused panic) or 4 (a node fault: worker, C arena exhaustion). Status 1 (revert)
+  exactly for the inputs over `MAX_INPUT`.
 - **Determinism.** Every precompile input runs twice and must give the same status and output.
 - **Verdict.** `…01` exactly for the 44 unmodified honest inputs, the self-test hash (`ed910a2c…`) for `06 00000000`,
   and `…00` for everything else. A modified input that verifies is a wrong accept or a malleable encoding.
-- **Arena bound.** The C core runs on the verify-only arena, as in a long-running node: `ARENA_SMALL` = 512 MiB since
-  P6-ANON S3 (144 MiB in the P6e campaigns below). A warm-up pass first builds the keys and tables of every form and
-  every multi-recipient shape. The arena's high-water mark must then stay ≤ `ARENA_SMALL` / 1.5, the margin the arena
-  was sized with: 341 MiB = 357,913,940 B now, 96 MiB in the P6e campaigns. The run prints the maximum seen, because
-  the peak depends on the input (`STATUS.md` Open 2).
+- **Arena bound (mode `pqzl-diff`; the Rust core has no arena).** The C core runs on the verify-only arena, as in a
+  long-running node: `ARENA_SMALL` = 512 MiB since P6-ANON S3 (144 MiB in the P6e campaigns below). A warm-up pass
+  first builds the keys and tables of every form and every multi-recipient shape. The arena's high-water mark must
+  then stay ≤ `ARENA_SMALL` / 1.5, the margin the arena was sized with: 341 MiB = 357,913,940 B now, 96 MiB in the
+  P6e campaigns. The run prints the maximum seen, because the peak depends on the input (`STATUS.md` Open 2).
+
+## Mode `pqzl-diff`
+
+`PQZ_FUZZ_MODE=pqzl-diff` for `build.sh` and `run.sh` (binaries `pqz-core/build/fuzz/<target>-pqzl-diff`, cargo
+feature `pqzl-diff` of this crate = `pqz-ffi`'s `pqzl-c` next to `pqzl-rust`): both PQZL cores in one binary. The
+precompile runs on the Rust core (production); the C core (`pqz_ffi::pqzl::c`, ASan + UBSan) is the oracle:
+
+- every input that decodes as PQZL: the C core's specialised verdict = the precompile's;
+- every `pqz_test_mutate` (mutate mode 1, codec 4): the C core's bytes (or "does not decode") = the Rust core's;
+- the warm-up: every honest PQZL input valid in the C core too; the C arena bound as in "Common checks".
+
+Its log lines: `pqz-fuzz init … mode pqzl-diff …` and the summary's `PQZL verdicts C = Rust`,
+`pqz_test_mutate C = Rust`.
 
 ## Inputs
 
@@ -105,13 +122,13 @@ file, `crash-b9881dfc…`:
 
 `build.sh` uses stable Rust 1.97.1 and clang 18: no nightly, no cargo-fuzz.
 
-- **Rust side.** The oracles (this crate, a `staticlib`), `pqz-ffi`, `pqz-stmt` and `pqzh-ligero` are instrumented by
-  rustc's sanitizer-coverage pass on stable flags (`-C passes=sancov-module` with `-sanitizer-coverage-level=4`,
-  inline 8-bit counters, PC table, trace-compares). `--target` keeps these flags off the build scripts.
+- **Rust side.** The oracles (this crate, a `staticlib`), `pqz-ffi`, `pqz-stmt`, `pqzl` and `pqzh-ligero` are
+  instrumented by rustc's sanitizer-coverage pass on stable flags (`-C passes=sancov-module` with
+  `-sanitizer-coverage-level=4`, inline 8-bit counters, PC table, trace-compares). `--target` keeps these flags off the build scripts.
   `panic = "unwind"` stays (pqz-ffi refuses `panic = "abort"` natively); the panic hook turns every panic into an
   abort.
-- **C core.** `pqz-ffi`'s `build.rs` compiles it with its feature `fuzz`: ASan + UBSan (`-fno-sanitize-recover=all`,
-  without the upstream nits of `STATUS.md` Open 4, as in `pqzl/sv/fuzz.sh`), `-fsanitize=fuzzer-no-link`, and
+- **C core (mode `pqzl-diff` only).** `pqz-ffi`'s `build.rs` compiles it with its features `pqzl-c` and `fuzz`:
+  ASan + UBSan (`-fno-sanitize-recover=all`, without the upstream nits of `STATUS.md` Open 4, as in `pqzl/sv/fuzz.sh`), `-fsanitize=fuzzer-no-link`, and
   `PQZ_TEST_HOOKS` (for `pqz_test_mutate`). Only in this build the symbol scan is skipped, because the sanitizer
   runtime is outside the library.
 - **Link.** `targets/<target>.c` and the staticlib are linked by `clang-18 -fsanitize=fuzzer,address,undefined`.
@@ -134,9 +151,9 @@ What `run.sh` does:
 1. **Corpus.** It fuzzes on a work corpus (`pqz-core/build/fuzz/work/<target>/`, kept between runs) plus the
    committed `corpus/<target>/`, the regression inputs `regress/<target>/` and the run-time seeds. When the honest
    inputs change, the work corpus is dropped: it would hold valid proofs the oracle does not know.
-2. **Limits.** `-rss_limit_mb=3072 -malloc_limit_mb=1536` (since P6-ANON S5). The differential's generic verifier
-   reserves `ARENA_BIG` (1 GiB since S3) in one malloc, which the old `-malloc_limit_mb=1024` reported as an
-   out-of-memory error. `scripts/capped` caps the job at 4 GB.
+2. **Limits.** `-rss_limit_mb=3072 -malloc_limit_mb=1536` (since P6-ANON S5, when the differential's generic verifier
+   ran on the C core and reserved `ARENA_BIG`, 1 GiB, in one malloc, which the old `-malloc_limit_mb=1024` reported
+   as an out-of-memory error). `scripts/capped` caps the job at 4 GB.
 3. **Merge.** It merges the work corpus into a minimal covering set and commits its inputs of ≤ 512 B to
    `corpus/<target>/`. That is all of `mutate` and `codec`; the large `precompile` inputs stay in the work corpus and
    are rebuilt from the honest inputs.

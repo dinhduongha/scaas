@@ -3,11 +3,12 @@
 //! Per honest form of both ids: `direct` = `pqz_verify_fast` on the caller's thread (the lock only, no worker hop) /
 //! `pqzh::verify`; `rust` =
 //! `precompile` (decode, dispatch, catch_unwind); `c_abi` = `pqz_precompile`; `adversarial` = `pqz_precompile` on the
-//! honest input with one proof bit flipped in the middle. Then `decode` alone, and the arena: a fresh core on the
-//! big arena that only runs the precompile path (all six PQZL forms, every op 7 shape, the self-test) and its peak.
+//! honest input with one proof bit flipped in the middle. Then `decode` alone, and (C backend) the arena: a fresh core
+//! on the big arena that only runs the precompile path (all six PQZL forms, every op 7 shape, the self-test) and its
+//! peak.
 //! Op 7 (P6-ANON S3): every built `(M, auditorOn)` of both ids after the forms, with the statement / input bytes, the
-//! worst-case input (PQZL `MAX_PROOF`, PQZH Ligero's exact bound) and one prove's time; and the prove arena's peak
-//! with every relation loaded (the core that proved everything, `ARENA_BIG`).
+//! worst-case input (PQZL `MAX_PROOF`, PQZH Ligero's exact bound) and one prove's time; and (C backend) the prove
+//! arena's peak with every relation loaded (the core that proved everything, `ARENA_BIG`).
 use std::time::Instant;
 
 use pqz_ffi::*;
@@ -78,6 +79,13 @@ fn main() {
             }
         }
     }
+    #[cfg(not(feature = "pqzl-rust"))]
+    arenas(&pqzl_inputs);
+}
+
+/// The C backend's arenas (the Rust backend has none: its heap peaks are `pqzl`'s `tests/memory.rs`).
+#[cfg(not(feature = "pqzl-rust"))]
+fn arenas(pqzl_inputs: &[Vec<u8>]) {
     // the prove arena: the core that proved every form and op 7 shape (every relation's keys loaded), since its init
     let prove_peak = pqzl::arena_peak();
     println!(
@@ -91,7 +99,7 @@ fn main() {
     let t = Instant::now();
     let st = selftest::report().unwrap();
     let st_ms = t.elapsed().as_secs_f64() * 1e3;
-    for i in &pqzl_inputs {
+    for i in pqzl_inputs {
         assert_eq!(precompile(i), Ok(VALID));
     }
     let peak = pqzl::arena_peak();

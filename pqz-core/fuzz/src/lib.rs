@@ -1,7 +1,9 @@
 //! The oracles of the libFuzzer targets (P6e plan Task 10, D12, D15), called from `targets/<target>.c`.
 //!
-//! Every target runs on the precompile's production configuration: the C core on the verify-only arena
-//! (`pqzl::ARENA_SMALL`, 512 MiB since P6-ANON S3) with every form's keys and tables built by a warm-up pass, as in a long-running node.
+//! Every target runs on the precompile's production configuration: the Rust PQZL core (`pqz-ffi`'s default backend
+//! since CTR-PQZ-09, 2026-10-18) with every form's keys and tables built by a warm-up pass, as in a long-running node.
+//! Mode `pqzl-diff` (feature, `PQZ_FUZZ_MODE=pqzl-diff build.sh`; pqzl-rust plan Task 11) also links the C core (ASan +
+//! UBSan, on the verify-only arena `pqzl::c::ARENA_SMALL`, 512 MiB) and compares the two cores on every input.
 //! On every input each target asserts (a failed assertion aborts: a libFuzzer crash):
 //! - no panic anywhere (the panic hook aborts, so even the panics `pqz-ffi` and Ligero would catch are findings);
 //! - the C ABI never returns status 3 (input-caused panic) or 4 (node fault); status 1 (revert) only above
@@ -9,19 +11,25 @@
 //! - the same input twice gives the same status and output;
 //! - the verdict: `…01` exactly for the unmodified honest inputs, the self-test hash for `06 00000000`, `…00` for
 //!   everything else (a modified input that verifies is a wrong accept or a malleable encoding);
-//! - the arena high-water mark stays ≤ `ARENA_BOUND` = `ARENA_SMALL` / 1.5 = 341 MiB (the maximum seen is printed).
+//! - mode `pqzl-diff`: every input that decodes as PQZL gets the C core's specialised verdict = the precompile's (the
+//!   Rust core's); every `pqz_test_mutate` (mutate mode 1, codec 4) gives the same bytes from both cores (decoded,
+//!   changed, re-encoded); the C arena's high-water mark stays ≤ `ARENA_BOUND` = `ARENA_SMALL` / 1.5 = 341 MiB (the
+//!   maximum seen is printed).
 //!
 //! The honest inputs (every form of both ids, the fee-0 forms, every built op 7 `(id, M, auditorOn)` and the inputs
 //! of `regress/valid/`) come from the frozen vectors (`smartcontracts/vectors/pqz/`, written to `$PQZ_FUZZ_HONEST` by
 //! `seeds.py`); the core never proves.
 use std::sync::OnceLock;
-use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering::Relaxed};
+#[cfg(feature = "pqzl-diff")]
+use std::sync::atomic::AtomicUsize;
+use std::sync::atomic::{AtomicU64, Ordering::Relaxed};
 
 use pqz_ffi::stmt::{self, Form};
 use pqz_ffi::*;
 
-/// The verify-only arena's bound: 1.5 × margin below `ARENA_SMALL`.
-pub const ARENA_BOUND: usize = pqzl::ARENA_SMALL / 3 * 2;
+/// The C core's verify-only arena's bound (mode `pqzl-diff`): 1.5 × margin below `ARENA_SMALL`.
+#[cfg(feature = "pqzl-diff")]
+pub const ARENA_BOUND: usize = pqzl::c::ARENA_SMALL / 3 * 2;
 
 struct Honest {
     /// `None` for op 7 (`Stmt::Multi` has no `Form`)
@@ -38,7 +46,13 @@ struct Honest {
 static HONEST: OnceLock<Vec<Honest>> = OnceLock::new();
 static SELFTEST: OnceLock<Word> = OnceLock::new();
 static TARGET: OnceLock<String> = OnceLock::new();
+#[cfg(feature = "pqzl-diff")]
 static PEAK: AtomicUsize = AtomicUsize::new(0);
+/// mode `pqzl-diff`: PQZL inputs whose C verdict was compared with the Rust one, and test_mutate outputs compared
+#[cfg(feature = "pqzl-diff")]
+static CORE_DIFFS: AtomicU64 = AtomicU64::new(0);
+#[cfg(feature = "pqzl-diff")]
+static CORE_MUTATES: AtomicU64 = AtomicU64::new(0);
 static INPUTS: AtomicU64 = AtomicU64::new(0);
 static DECODED: AtomicU64 = AtomicU64::new(0);
 static VALIDS: AtomicU64 = AtomicU64::new(0);
@@ -91,8 +105,15 @@ fn call(inp: &[u8]) -> (i32, Word) {
     (rc, out)
 }
 
+/// Mode `pqzl-diff`: the C core's arena peak within its bound; nothing otherwise (the Rust core has no arena).
 fn arena_check() {
-    let p = pqzl::arena_peak();
+    #[cfg(feature = "pqzl-diff")]
+    arena_check_c();
+}
+
+#[cfg(feature = "pqzl-diff")]
+fn arena_check_c() {
+    let p = pqzl::c::arena_peak();
     if p > PEAK.fetch_max(p, Relaxed) {
         eprintln!("pqz-fuzz: arena peak {p} B (bound {ARENA_BOUND} B)");
     }
@@ -130,17 +151,56 @@ fn check(inp: &[u8], a: (i32, Word), b: (i32, Word)) -> bool {
     if let Ok(i) = decode(inp) {
         DECODED.fetch_add(1, Relaxed);
         MULTI.fetch_add((i.op == 7) as u64, Relaxed);
+        #[cfg(feature = "pqzl-diff")]
+        if i.stmt.proof_system_id() == Some(&PQZL_ID) {
+            let c = pqzl::c::verify_fast(i.op, i.stmt_bytes, i.proof).unwrap_or_else(|_| die("node fault in the C core"));
+            if c != (a.1 == VALID) {
+                die(&format!("cores differ: C verdict {c}, Rust (precompile) {} (op {}, {} B)", hex(&a.1), i.op, inp.len()));
+            }
+            CORE_DIFFS.fetch_add(1, Relaxed);
+        }
     }
     VALIDS.fetch_add((a.1 == VALID) as u64, Relaxed);
     arena_check();
     a.1 == VALID
 }
 
+/// `pqzl::test_mutate` (the backend's: the Rust core), and in mode `pqzl-diff` the same from the C core: equal bytes.
+fn test_mutate(rel: u8, proof: &[u8], kind: u32, r1: u64, r2: u64) -> Option<Vec<u8>> {
+    let r = pqzl::test_mutate(rel, proof, kind, r1, r2).unwrap_or_else(|_| die("node fault in pqz_test_mutate"));
+    #[cfg(feature = "pqzl-diff")]
+    {
+        let c = pqzl::c::test_mutate(rel, proof, kind, r1, r2).unwrap_or_else(|_| die("node fault in the C core's pqz_test_mutate"));
+        if c != r {
+            die(&format!(
+                "cores differ in pqz_test_mutate (rel {rel:#x}, kind {kind}, {} B): C {:?} B, Rust {:?} B",
+                proof.len(),
+                c.as_ref().map(|v| v.len()),
+                r.as_ref().map(|v| v.len())
+            ));
+        }
+        CORE_MUTATES.fetch_add(1, Relaxed);
+    }
+    r
+}
+
 extern "C" fn summary() {
+    #[cfg(feature = "pqzl-diff")]
+    let diff = format!(
+        ", mode pqzl-diff: {} PQZL verdicts C = Rust, {} pqz_test_mutate C = Rust, C arena peak max {} B = {:.2} MiB (bound {} MiB, \
+         ARENA_SMALL {} MiB)",
+        CORE_DIFFS.load(Relaxed),
+        CORE_MUTATES.load(Relaxed),
+        PEAK.load(Relaxed),
+        PEAK.load(Relaxed) as f64 / (1 << 20) as f64,
+        ARENA_BOUND >> 20,
+        pqzl::c::ARENA_SMALL >> 20
+    );
+    #[cfg(not(feature = "pqzl-diff"))]
+    let diff = ", PQZL core: Rust";
     eprintln!(
         "pqz-fuzz summary ({}): {} inputs checked, {} decoded ({} op 7), {} valid (= unmodified honest; mutate skips those), \
-         {} differential SV = generic ({} op 7), {} PQZL proof re-encodings equal, arena peak max {} B = {:.2} MiB (bound {} MiB, \
-         ARENA_SMALL {} MiB)",
+         {} differential SV = generic ({} op 7), {} PQZL proof re-encodings equal{diff}",
         TARGET.get().map_or("?", |s| s.as_str()),
         INPUTS.load(Relaxed),
         DECODED.load(Relaxed),
@@ -149,10 +209,6 @@ extern "C" fn summary() {
         DIFFS.load(Relaxed),
         MULTI_DIFFS.load(Relaxed),
         CANON.load(Relaxed),
-        PEAK.load(Relaxed),
-        PEAK.load(Relaxed) as f64 / (1 << 20) as f64,
-        ARENA_BOUND >> 20,
-        pqzl::ARENA_SMALL >> 20
     );
 }
 
@@ -160,8 +216,8 @@ extern "C" {
     fn atexit(f: extern "C" fn()) -> i32;
 }
 
-/// `LLVMFuzzerInitialize`: the panic hook, the honest inputs, the verify-only core, a warm-up pass (every honest input
-/// valid, the self-test).
+/// `LLVMFuzzerInitialize`: the panic hook, the honest inputs, (mode `pqzl-diff`) the C core on its verify-only arena,
+/// a warm-up pass (every honest input valid, the self-test).
 ///
 /// # Safety
 /// `target` is a NUL-terminated string.
@@ -172,8 +228,9 @@ pub unsafe extern "C" fn pqz_fuzz_init(target: *const std::ffi::c_char) {
     std::panic::set_hook(Box::new(|i| die(&format!("panic: {i}"))));
     let path = std::env::var("PQZ_FUZZ_HONEST").unwrap_or_else(|_| "honest.bin".into());
     HONEST.set(load(&path)).ok();
-    if !pqzl::reinit(pqzl::ARENA_SMALL) {
-        die("reinit on the verify-only arena");
+    #[cfg(feature = "pqzl-diff")]
+    if !pqzl::c::reinit(pqzl::c::ARENA_SMALL) {
+        die("C core: reinit on the verify-only arena");
     }
     let st = call(&[6, 0, 0, 0, 0]);
     if st.0 != PQZ_FFI_OK {
@@ -184,16 +241,22 @@ pub unsafe extern "C" fn pqz_fuzz_init(target: *const std::ffi::c_char) {
         if call(&h.input) != (PQZ_FFI_OK, VALID) {
             die(&format!("honest {:?} op {} rel {:#x} (PQZL {}) not valid", h.form, h.op, h.rel, h.pqzl));
         }
+        #[cfg(feature = "pqzl-diff")]
+        if h.pqzl && pqzl::c::verify_fast(h.op, &h.stmt, &h.proof) != Ok(true) {
+            die(&format!("honest {:?} op {} rel {:#x}: not valid in the C core", h.form, h.op, h.rel));
+        }
     }
     arena_check();
-    eprintln!(
-        "pqz-fuzz init ({target}): {} honest inputs valid, self-test {}, verify-only arena {} MiB, arena used {} B, peak {} B",
-        honest().len(),
-        hex(&st.1),
-        pqzl::ARENA_SMALL >> 20,
-        pqzl::arena_used(),
-        pqzl::arena_peak()
+    #[cfg(feature = "pqzl-diff")]
+    let mode = format!(
+        "mode pqzl-diff (Rust core = the precompile, C core compared): C verify-only arena {} MiB, used {} B, peak {} B",
+        pqzl::c::ARENA_SMALL >> 20,
+        pqzl::c::arena_used(),
+        pqzl::c::arena_peak()
     );
+    #[cfg(not(feature = "pqzl-diff"))]
+    let mode = "PQZL core: Rust";
+    eprintln!("pqz-fuzz init ({target}): {} honest inputs valid, self-test {}, {mode}", honest().len(), hex(&st.1));
     atexit(summary);
 }
 
@@ -244,8 +307,8 @@ fn rel(s: &stmt::Stmt) -> u8 {
     }
 }
 
-/// differential sampling: the generic verifier on every `DIFF_EVERY`-th mutated PQZL input that decodes (it needs the big arena
-/// and a re-initialisation back to the verify-only one, ≈ 100× a fast verify)
+/// differential sampling: the generic verifier on every `DIFF_EVERY`-th mutated PQZL input that decodes (≈ 100× a
+/// fast verify)
 const DIFF_EVERY: u64 = 256;
 
 /// `mutate` target. Input: byte 0 = the honest input (mod their number: PQZL forms 0..7, PQZH 8..15 in
@@ -270,10 +333,9 @@ pub unsafe extern "C" fn pqz_fuzz_mutate(data: *const u8, len: usize) {
     if mode == 1 {
         if h.pqzl && d.len() >= 19 {
             let (kind, r1, r2) = (d[2] as u32 % 14, le64(&d[3..11]), le64(&d[11..19]));
-            match pqzl::test_mutate(h.rel, &h.proof, kind, r1, r2) {
-                Ok(Some(p)) => inp = stmt::input(h.op, &h.stmt, &p),
-                Ok(None) => die("the honest proof does not decode in pqz_test_mutate"),
-                Err(_) => die("node fault in pqz_test_mutate"),
+            match test_mutate(h.rel, &h.proof, kind, r1, r2) {
+                Some(p) => inp = stmt::input(h.op, &h.stmt, &p),
+                None => die("the honest proof does not decode in pqz_test_mutate"),
             }
             script = &d[19..];
         }
@@ -298,9 +360,6 @@ pub unsafe extern "C" fn pqz_fuzz_mutate(data: *const u8, len: usize) {
                 }
                 DIFFS.fetch_add(1, Relaxed);
                 MULTI_DIFFS.fetch_add((i.op == 7) as u64, Relaxed);
-                if !pqzl::reinit(pqzl::ARENA_SMALL) {
-                    die("reinit on the verify-only arena");
-                }
             }
         }
     }
@@ -405,8 +464,7 @@ pub unsafe extern "C" fn pqz_fuzz_codec(data: *const u8, len: usize) {
         }
         _ => {
             let h = hl;
-            let r = pqzl::test_mutate(h.rel, &b, 99, 0, 0).unwrap_or_else(|_| die("node fault in pqz_test_mutate"));
-            let r2 = pqzl::test_mutate(h.rel, &b, 99, 0, 0).unwrap_or_else(|_| die("node fault in pqz_test_mutate"));
+            let (r, r2) = (test_mutate(h.rel, &b, 99, 0, 0), test_mutate(h.rel, &b, 99, 0, 0));
             if r != r2 {
                 die("PQZL proof decoder not deterministic");
             }

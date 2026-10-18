@@ -13,7 +13,13 @@ crate-type = ["cdylib"]
 path = "lib.rs"
 
 [dependencies]
-pqz-ffi = { path = "..", features = ["prove"] }
+pqz-ffi = { path = "..", default-features = false, features = ["prove"] }
+
+# the PQZL backend, forwarded to pqz-ffi (the same default as pqz-ffi's; ../run.sh's PQZL=rust|c picks one alone)
+[features]
+default = ["pqzl-c"]
+pqzl-rust = ["pqz-ffi/pqzl-rust"]
+pqzl-c = ["pqz-ffi/pqzl-c"]
 
 [profile.release]
 panic = "abort"
