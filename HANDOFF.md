@@ -4,7 +4,7 @@
 
 **Owner rulings 2026-10-18:** token-family rename target `NormalToken` (TokenKind `NONE` → `NORMAL`), after P6; PQZH 128-bit post-quantum target deferred again (calldata ≈ 7 M gas).
 
-**Next:** Rust port follow-ups in TODO.md (roll-out on 7622 with gas re-calibration first; wasm32 limb path; M = 16 rows; minors) → rest of P6 (P6h, P6i, P6j, P6-PUB) → token-family rename.
+**Next:** Rust port follow-ups in TODO.md (roll-out on 7622 with gas re-calibration first; wasm32 limb path; M = 16 rows; minors) → token-family rename (owner 2026-10-19: before the rest of P6) → rest of P6 (P6h, P6i, P6j, P6-PUB).
 
 ## Session 2026-10-17 (op 7 in the tokens, gates A / B passed; freeze running) — resume here
 
