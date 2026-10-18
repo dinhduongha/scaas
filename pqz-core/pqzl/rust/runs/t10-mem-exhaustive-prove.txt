@@ -1,0 +1,20 @@
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust/pqz-core/pqzl/rust)
+    Finished `release` profile [optimized + debuginfo] target(s) in 12.80s
+     Running tests/memory.rs (/tmp/claude-1000/-home-ha-work-ainative-scaas/b5d78f27-d5f7-4ad9-9aff-f50c3b4e9443/scratchpad/tgt/release/deps/memory-dfcb7353e8355278)
+
+running 1 test
+TRANSFER prove cold under 64 MiB: the vector's proof; the same Ctx then proves
+M8-on prove cold under 64 MiB: Error::Memory; the same Ctx then proves
+TRANSFER prove cold under 32 MiB: Error::Memory; the same Ctx then proves
+R_TX verify cold under 31289000 B (half its peak 62578000 B): false; the same Ctx then accepts
+R_TX verify_fast cold under 5354620 B (half its peak 10709241 B): false; the same Ctx then accepts
+keys (free functions): each of the 39 allocations denied in turn: Error::Memory, then the same outputs
+keys (Ctx methods, cold): each of the 35 allocations denied in turn: Error::Memory, then the same outputs
+keys (Ctx methods, warm): each of the 34 allocations denied in turn: Error::Memory, then the same outputs
+test exhaustion_is_error has been running for over 60 seconds
+REGISTER prove warm         : peak   21414176 B,   5077 allocations, 5077 capped runs (5077 out of memory): each the honest result or out of memory, the Ctx usable after (2013 s)
+DISCLOSE-SENDER prove warm  : peak   22303792 B,   9440 allocations, 9440 capped runs (9440 out of memory): each the honest result or out of memory, the Ctx usable after (4653 s)
+test exhaustion_is_error ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 4667.66s
+

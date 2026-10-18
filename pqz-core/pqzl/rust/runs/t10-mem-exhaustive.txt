@@ -1,0 +1,26 @@
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust/pqz-core/pqzl/rust)
+    Finished `release` profile [optimized + debuginfo] target(s) in 1.27s
+     Running tests/memory.rs (target/release/deps/memory-dfcb7353e8355278)
+
+running 1 test
+TRANSFER prove cold under 64 MiB: the vector's proof; the same Ctx then proves
+M8-on prove cold under 64 MiB: Error::Memory; the same Ctx then proves
+TRANSFER prove cold under 32 MiB: Error::Memory; the same Ctx then proves
+R_TX verify cold under 31289000 B (half its peak 62578000 B): false; the same Ctx then accepts
+R_TX verify_fast cold under 5354620 B (half its peak 10709241 B): false; the same Ctx then accepts
+keys (free functions): each of the 39 allocations denied in turn: Error::Memory, then the same outputs
+keys (Ctx methods, cold): each of the 35 allocations denied in turn: Error::Memory, then the same outputs
+keys (Ctx methods, warm): each of the 34 allocations denied in turn: Error::Memory, then the same outputs
+REGISTER verify_fast warm   : peak     737185 B,    386 allocations, 386 capped runs (386 out of memory): each the honest result or out of memory, the Ctx usable after (18 s)
+TRANSFER verify_fast warm   : peak    1206937 B,    464 allocations, 464 capped runs (464 out of memory): each the honest result or out of memory, the Ctx usable after (40 s)
+test exhaustion_is_error has been running for over 60 seconds
+M2-on verify_fast warm      : peak    1253801 B,    468 allocations, 468 capped runs (468 out of memory): each the honest result or out of memory, the Ctx usable after (41 s)
+REGISTER verify_fast cold   : peak    6956545 B,   9341 allocations, 9341 capped runs (9341 out of memory): each the honest result or out of memory, the Ctx usable after (523 s)
+REGISTER verify warm        : peak   21244688 B,   3503 allocations, 3503 capped runs (3503 out of memory): each the honest result or out of memory, the Ctx usable after (1007 s)
+TRANSFER verify_fast cold   : peak   10709241 B,  15755 allocations, 15755 capped runs (15755 out of memory): each the honest result or out of memory, the Ctx usable after (1093 s)
+M2-on verify_fast cold      : peak   10936633 B,  16104 allocations, 16104 capped runs (16104 out of memory): each the honest result or out of memory, the Ctx usable after (1123 s)
+REGISTER verify cold        : peak   23359856 B,  12453 allocations, 12453 capped runs (12453 out of memory): each the honest result or out of memory, the Ctx usable after (1602 s)
+test exhaustion_is_error ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 1608.91s
+

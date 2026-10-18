@@ -1,0 +1,16 @@
+# clippy: no float arithmetic in the crate (the production build: default features; then with the oracle,
+# the hooks and the bench; then the wasm/ harness)
+$ cargo clippy -j2 --release --offline --lib -- -D clippy::float_arithmetic
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.06s
+[rc=0]
+$ cargo clippy -j2 --release --offline --features c-oracle,test-hooks,bench --lib --bins --tests -- -D clippy::float_arithmetic
+    Checking pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust/pqz-core/pqzl/rust)
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.22s
+[rc=0]
+$ cargo clippy -j2 --release --offline --manifest-path wasm/Cargo.toml --target wasm32-unknown-unknown -- -D warnings -D clippy::float_arithmetic
+    Finished `release` profile [optimized] target(s) in 0.07s
+[rc=0]
+# wasm32 (default features)
+$ cargo build -j2 --release --offline --lib --target wasm32-unknown-unknown
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.07s
+[rc=0]
