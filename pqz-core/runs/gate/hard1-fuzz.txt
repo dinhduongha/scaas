@@ -1,0 +1,64 @@
+   Compiling version_check v0.9.5
+   Compiling typenum v1.20.1
+   Compiling shlex v2.0.1
+   Compiling find-msvc-tools v0.1.14
+   Compiling keccak v0.1.6
+   Compiling pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-c-hardening/pqz-core/stmt)
+   Compiling cc v1.8.0
+   Compiling generic-array v0.14.7
+   Compiling block-buffer v0.10.4
+   Compiling crypto-common v0.1.7
+   Compiling digest v0.10.7
+   Compiling sha3 v0.10.8
+   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-c-hardening/pqz-core/ffi)
+   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-c-hardening/pqz-core/pqzh/ligero)
+   Compiling pqz-fuzz v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-c-hardening/pqz-core/fuzz)
+    Finished `release` profile [optimized + debuginfo] target(s) in 1m 13s
+-rwxrwxr-x 1 ha ha 15795160 Oct 18 09:23 /home/ha/work/ainative/scaas/.claude/worktrees/pqzl-c-hardening/pqz-core/build/fuzz/codec
+-rwxrwxr-x 1 ha ha 15795160 Oct 18 09:23 /home/ha/work/ainative/scaas/.claude/worktrees/pqzl-c-hardening/pqz-core/build/fuzz/mutate
+-rwxrwxr-x 1 ha ha 15795592 Oct 18 09:23 /home/ha/work/ainative/scaas/.claude/worktrees/pqzl-c-hardening/pqz-core/build/fuzz/precompile
+pqz-fuzz init (precompile): 44 honest inputs valid, self-test ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205, verify-only arena 512 MiB, arena used 265693696 B, peak 268240256 B
+Done 6586 runs in 61 second(s)
+stat::number_of_executed_units: 6586
+stat::average_exec_per_sec:     107
+stat::new_units_added:          163
+stat::slowest_unit_time_sec:    0
+stat::peak_rss_mb:              805
+pqz-fuzz summary (precompile): 6586 inputs checked, 1961 decoded (567 op 7), 47 valid (= unmodified honest; mutate skips those), 0 differential SV = generic (0 op 7), 0 PQZL proof re-encodings equal, arena peak max 268240256 B = 255.81 MiB (bound 341 MiB, ARENA_SMALL 512 MiB)
+[fuzz rc=0]
+pqz-fuzz init (precompile): 44 honest inputs valid, self-test ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205, verify-only arena 512 MiB, arena used 265693696 B, peak 268240256 B
+pqz-fuzz init (precompile): 44 honest inputs valid, self-test ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205, verify-only arena 512 MiB, arena used 265693696 B, peak 268240256 B
+pqz-fuzz summary (precompile): 150 inputs checked, 83 decoded (20 op 7), 0 valid (= unmodified honest; mutate skips those), 0 differential SV = generic (0 op 7), 0 PQZL proof re-encodings equal, arena peak max 268240256 B = 255.81 MiB (bound 341 MiB, ARENA_SMALL 512 MiB)
+pqz-fuzz summary (precompile): 0 inputs checked, 0 decoded (0 op 7), 0 valid (= unmodified honest; mutate skips those), 0 differential SV = generic (0 op 7), 0 PQZL proof re-encodings equal, arena peak max 268240256 B = 255.81 MiB (bound 341 MiB, ARENA_SMALL 512 MiB)
+[merge rc=0]
+corpus/precompile: 12 inputs, 309 B (merged set 128 inputs, 15680808 B)
+pqz-fuzz init (mutate): 44 honest inputs valid, self-test ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205, verify-only arena 512 MiB, arena used 265693696 B, peak 268240256 B
+Done 918 runs in 147 second(s)
+stat::number_of_executed_units: 918
+stat::average_exec_per_sec:     6
+stat::new_units_added:          7
+stat::slowest_unit_time_sec:    0
+stat::peak_rss_mb:              700
+pqz-fuzz summary (mutate): 706 inputs checked, 557 decoded (170 op 7), 0 valid (= unmodified honest; mutate skips those), 2 differential SV = generic (0 op 7), 0 PQZL proof re-encodings equal, arena peak max 268240256 B = 255.81 MiB (bound 341 MiB, ARENA_SMALL 512 MiB)
+[fuzz rc=0]
+pqz-fuzz init (mutate): 44 honest inputs valid, self-test ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205, verify-only arena 512 MiB, arena used 265693696 B, peak 268240256 B
+pqz-fuzz init (mutate): 44 honest inputs valid, self-test ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205, verify-only arena 512 MiB, arena used 265693696 B, peak 268240256 B
+pqz-fuzz summary (mutate): 417 inputs checked, 326 decoded (89 op 7), 0 valid (= unmodified honest; mutate skips those), 1 differential SV = generic (1 op 7), 0 PQZL proof re-encodings equal, arena peak max 268240256 B = 255.81 MiB (bound 341 MiB, ARENA_SMALL 512 MiB)
+pqz-fuzz summary (mutate): 0 inputs checked, 0 decoded (0 op 7), 0 valid (= unmodified honest; mutate skips those), 0 differential SV = generic (0 op 7), 0 PQZL proof re-encodings equal, arena peak max 268240256 B = 255.81 MiB (bound 341 MiB, ARENA_SMALL 512 MiB)
+[merge rc=0]
+corpus/mutate: 399 inputs, 5935 B (merged set 399 inputs, 5935 B)
+pqz-fuzz init (codec): 44 honest inputs valid, self-test ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205, verify-only arena 512 MiB, arena used 265693696 B, peak 268240256 B
+Done 4390 runs in 61 second(s)
+stat::number_of_executed_units: 4390
+stat::average_exec_per_sec:     71
+stat::new_units_added:          10
+stat::slowest_unit_time_sec:    0
+stat::peak_rss_mb:              653
+pqz-fuzz summary (codec): 4293 inputs checked, 1755 decoded (660 op 7), 0 valid (= unmodified honest; mutate skips those), 0 differential SV = generic (0 op 7), 642 PQZL proof re-encodings equal, arena peak max 268240256 B = 255.81 MiB (bound 341 MiB, ARENA_SMALL 512 MiB)
+[fuzz rc=0]
+pqz-fuzz init (codec): 44 honest inputs valid, self-test ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205, verify-only arena 512 MiB, arena used 265693696 B, peak 268240256 B
+pqz-fuzz init (codec): 44 honest inputs valid, self-test ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205, verify-only arena 512 MiB, arena used 265693696 B, peak 268240256 B
+pqz-fuzz summary (codec): 254 inputs checked, 94 decoded (31 op 7), 0 valid (= unmodified honest; mutate skips those), 0 differential SV = generic (0 op 7), 73 PQZL proof re-encodings equal, arena peak max 268240256 B = 255.81 MiB (bound 341 MiB, ARENA_SMALL 512 MiB)
+pqz-fuzz summary (codec): 0 inputs checked, 0 decoded (0 op 7), 0 valid (= unmodified honest; mutate skips those), 0 differential SV = generic (0 op 7), 0 PQZL proof re-encodings equal, arena peak max 268240256 B = 255.81 MiB (bound 341 MiB, ARENA_SMALL 512 MiB)
+[merge rc=0]
+corpus/codec: 238 inputs, 1657 B (merged set 238 inputs, 1657 B)

@@ -626,6 +626,61 @@ every built PQZH op ≤ 236,196 B and p99 ≤ 10.9 / 20.4 ms native / wasm32 (S6
 proof hashes, sizes and digest lines equal to the provisional file, only the informational times changed. The frozen
 tables are README §5.0.
 
+## C core hardening (2026-10-18, branch `pqzl-c-hardening`; owner 2026-10-18)
+
+The Rust port of PQZL (crate `pqzl`, branch `pqzl-rust`) found three latent defects in the C core, now the reference.
+All three are fixed in C with **no output change on honest or reachable inputs**, and the C now computes what the Rust
+port computes, so the port needs no change:
+
+1. **`poly_auto_self` wrote past its buffer** (`pqzl/lazer/poly.c`). In the NTT domain (`crt == 1`) it looped over
+   the ring's two former CRT moduli, but the fork keeps one residue vector of 64 words, so the second pass swapped
+   the 64 words after it. Now it reverses the one vector, as the Rust port's first pass does. No relation reaches this
+   branch. The reversal is also not the automorphism X → X⁻¹ in the fork's incomplete NTT (the test prints `no`).
+   Upstream LaZer sizes the buffer per modulus, so this is a fork defect, not an upstream one.
+2. **Signed overflow in the fixed-point exp and the rejection tests** (prover only). `pqz_fixexp.h` `pqz_exp_fp`
+   now makes its clamp comparisons in 128 bits: the same result on [−64, 64), and outside it saturates as intended
+   (as the Rust port's `fixexp.rs` does). `rejection.c` now does `t2 − 2·t1`, `t − ln M`, `a − |y| − ln M`, `|a|`
+   in `_quot_q56` and `_int2i128` in unsigned arithmetic, so the values wrap as the Rust port's `wrapping_*` calls do.
+   Only exponents far beyond ±64 get there, and no honest prover produces them.
+3. **Signed overflow in `pqz_rel.c` `rd_poly`** on a non-canonical word v ∈ [2^63, 2^63 + q). It now computes
+   `(int64_t)(v − q)`, the value the Rust port's `keys.rs` `rd_poly` gives. Further UB of the same kind was found and
+   fixed: `int_set_i64` (`pqzl/lazer/lazer-in2.h`, upstream code) overflowed on `INT64_MIN`, which `rd_poly` produces
+   from the word 2^63 + q. Its magnitude is now computed in unsigned arithmetic, giving the same limbs for every input.
+
+**Verifier path.** None of the fixes changes what a verifier computes. `pqz_exp_fp` and `rejection.c` are prover
+only. Three touched functions are reached by a verifier:
+- `int_set_i64`, from both verifiers;
+- `rd_poly`, from the generic `pqz_verify`, not from `pqz_verify_fast`, which parses with its own `rd_coeffs`;
+- `poly_auto_self`, from the generic tbox verify, but only in its coefficient branch, which did not change.
+
+`int_set_i64` and `rd_poly` give the same bits for every input. `proofSystemId`, the transcript, honest proofs and the
+accepted set are all unchanged.
+
+**Evidence.**
+- `pqzl/test/ub_test.sh` (`pqzl/test/pqz_ub_test.c`, clang 18, `-fsanitize=undefined,address
+  -fno-sanitize-recover=all`, libc heap) has three parts: (a) fixexp / rejection, (b) encrypt / decrypt,
+  (c) `poly_auto_self`.
+  - On the unfixed sources (`a0dd89a`) every part aborts: `pqzl/test/runs/ub-before.txt`.
+    `ub-before-recover.txt` lists every UB site (`pqz_fixexp.h` 52 and 54, `rejection.c` 34, 83, 99 and 126,
+    `pqz_rel.c` 230, `int_set_i64`).
+  - After the fix: PASS (`ub-after.txt`). Only `pointer-overflow` is off, because of the known upstream nit in
+    `aes256ctr.c:339` (Open 4).
+  - Before the fix, the verdict on huge exponents depended on the compiler. With plain wraparound (the recover run)
+    the old clamp sent x ≥ 64 to −64 and rejected. On the four test inputs, the fixed C and the Rust port both accept.
+- Proof hashes, in `research/pqzl-measure/runs/hard1-*`:
+  - `pqz_bench 5 5 63`: the six `proofs_fnv` rows equal `tx0c-fnv-native.jsonl`. With arena peaks, they equal the
+    unfixed `a0dd89a` byte for byte (`hard1-unfixed-a0dd89a-fnv-native.jsonl`). The one R_BURN arena-peak difference
+    against `tx0c` (2,176 B) was already there on `a0dd89a`.
+  - `pqz_bench 2 2 16320`: the eight R_TXM `proofs_fnv` rows equal `l3a-native-fast.jsonl`.
+- `scripts/capped pqz-core/gate.sh hard1`: **PASS**, every step ok (`runs/gate/hard1-*`):
+  - KAT 19/19; `check_tbox_fixes` and `check_sv_fixes` ok.
+  - Differential: 6,486 cases, 0 mismatches; z21 differential: 406 cases, 0 disagreements. The log equals
+    `2026-10-17-diff.txt` apart from `closest_z2sq_over_bsq`.
+  - `pqz-vectors --check`: 16 files ok; `pqz_kat.py --check` ok; tamper 191 / 191; wasm32 replay 53 cases, 0 fails.
+  - `pqz-ffi` tests green, with the self-test hash `ed910a2c…d205` unchanged.
+  - Symbol scans ok (`/gmp|mpfr|hexl/`: 0); cargo tests green; STARK-backup cross-check equal.
+  - Fuzz smoke 3 × 60 s: no finding, corpora restored.
+
 ## Measured (2026-10-13, this machine, single thread)
 
 Native: clang -O2, `pqz_bench 5 5` under `scripts/capped` (5 proves, 5 + 5 honest verifies, 10 adversarial). wasm32:
