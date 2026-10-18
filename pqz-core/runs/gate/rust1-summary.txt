@@ -1,0 +1,19 @@
+== kat
+   ok
+== tbox
+   ok
+== sv
+   ok
+== diff
+   ok
+== vectors
+   ok
+== ffi
+   ok
+== cargo
+   ok
+== xcheck
+   ok
+== fuzz
+   ok
+gate rust1: PASS
