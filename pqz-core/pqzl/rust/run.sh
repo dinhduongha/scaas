@@ -34,6 +34,12 @@ OUT cargo test -j2 --release --offline --features c-oracle,test-hooks -- --nocap
   FNV "bench 5 5 63" "$L-bench-63.jsonl" "8bd69f2d b9bbf854 0a5976da b4aa2e26 c800f2c6 a29a5747"
   OUT sh -c "./target/release/bench 2 2 16320 > $L-bench-16320.jsonl"
   FNV "bench 2 2 16320" "$L-bench-16320.jsonl" "ee87e7a4 4294a892 4ff8974f cd21b056 bba9cd96 2fef961b 74c6be73 90c8fc70"
+  echo "# specialised verifier: the same bench runs with PQZ_VERIFY=fast (honest and adversarial verify_fast, fails 0)"
+  OUT sh -c "PQZ_VERIFY=fast ./target/release/bench 5 50 63 > $L-bench-fast-63.jsonl"
+  FNV "bench fast 5 50 63" "$L-bench-fast-63.jsonl" "8bd69f2d b9bbf854 0a5976da b4aa2e26 c800f2c6 a29a5747"
+  OUT sh -c "PQZ_VERIFY=fast ./target/release/bench 2 50 16320 > $L-bench-fast-16320.jsonl"
+  FNV "bench fast 2 50 16320" "$L-bench-fast-16320.jsonl" "ee87e7a4 4294a892 4ff8974f cd21b056 bba9cd96 2fef961b 74c6be73 90c8fc70"
+  grep -H '"fails"' "$L-bench-63.jsonl" "$L-bench-16320.jsonl" "$L-bench-fast-63.jsonl" "$L-bench-fast-16320.jsonl"
   echo "# prover in wasm32: wasm/ in node = the C core's wasm32 run (tx0c-fnv-wasm: 3 1 63)"
   OUT sh -c "cd wasm && cargo build -j2 --release --offline --target wasm32-unknown-unknown"
   OUT sh -c "node wasm/run_wasm.mjs 3 1 63 > $L-wasm-63.jsonl"
@@ -48,5 +54,5 @@ OUT cargo test -j2 --release --offline --features c-oracle,test-hooks -- --nocap
   OUT cargo build -j2 --release --offline --lib --target wasm32-unknown-unknown
 } > "$L-build.txt" 2>&1
 
-grep -hE "^test result|FAILED|panicked|^test .* (ok|FAILED)$|cases equal|MISMATCH|pqz_kat:|to_rust.py|^fnv |\[rc=" "$L-test.txt"
+grep -hE "^test result|FAILED|panicked|^test .* (ok|FAILED)$|cases equal|cases over the six|MISMATCH|pqz_kat:|to_rust.py|^fnv |\"fails\"|\[rc=" "$L-test.txt"
 grep -hE "^(warning|error)|\[rc=" "$L-build.txt"

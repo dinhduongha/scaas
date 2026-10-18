@@ -148,9 +148,21 @@ fn key_wit(out: &mut Vec<u8>, k: &Key) {
     le16s(out, &k.e[..]);
 }
 
+/// `vfy`: the generic verifier, or with `fast` the specialised one (builds with feature `sv`)
+fn vfy(ctx: &mut Ctx, fast: bool, op: u8, st: &[u8], pf: &[u8]) -> bool {
+    #[cfg(feature = "sv")]
+    if fast {
+        return ctx.verify_fast(op, st, pf);
+    }
+    let _ = fast;
+    ctx.verify(op, st, pf)
+}
+
 /// the bench state (`step_init`'s setup) and the last proof per relation
 pub struct Bench {
     ctx: Ctx,
+    /// verify with the specialised verifier (`PQZ_VERIFY=fast`, C's `step_set_fast`)
+    pub fast: bool,
     xs: Xs,
     ops: [u8; NREL],
     stmt: Vec<Vec<u8>>,
@@ -287,7 +299,7 @@ impl Bench {
             stmt.push(st);
             wit.push(wt);
         }
-        Ok(Bench { ctx: Ctx::new(), xs, ops, stmt, wit, seedmul, keyoff, scaloff, proofs: vec![Vec::new(); NREL] })
+        Ok(Bench { ctx: Ctx::new(), fast: false, xs, ops, stmt, wit, seedmul, keyoff, scaloff, proofs: vec![Vec::new(); NREL] })
     }
 
     /// `step_prove`: rnd32[i] = seed * SEEDMUL[rel] + i; the proof is kept (none after a failure)
@@ -304,7 +316,7 @@ impl Bench {
 
     /// `step_verify`
     pub fn verify(&mut self, rel: usize) -> bool {
-        self.ctx.verify(self.ops[rel], &self.stmt[rel], &self.proofs[rel])
+        vfy(&mut self.ctx, self.fast, self.ops[rel], &self.stmt[rel], &self.proofs[rel])
     }
 
     /// `step_verify_bad`: kind 0 one random bit flipped in the proof, 1 random bytes of the valid length, 2 one
@@ -322,23 +334,23 @@ impl Bench {
             0 => {
                 let b = (self.xs.rnd() % (8 * len as u64)) as usize;
                 bad[b >> 3] ^= 1 << (b & 7);
-                self.ctx.verify(op, &self.stmt[rel], &bad)
+                vfy(&mut self.ctx, self.fast, op, &self.stmt[rel], &bad)
             }
             1 => {
                 bad.iter_mut().for_each(|x| *x = self.xs.rnd() as u8);
-                self.ctx.verify(op, &self.stmt[rel], &bad)
+                vfy(&mut self.ctx, self.fast, op, &self.stmt[rel], &bad)
             }
             2 | 5 => {
                 let off = if kind == 2 { self.keyoff[rel] + 8 * (self.xs.rnd() % 2048) as usize + 7 } else { self.scaloff[rel] };
                 self.stmt[rel][off] ^= 1;
-                let r = self.ctx.verify(op, &self.stmt[rel], &self.proofs[rel]);
+                let r = vfy(&mut self.ctx, self.fast, op, &self.stmt[rel], &self.proofs[rel]);
                 self.stmt[rel][off] ^= 1;
                 r
             }
-            3 => self.ctx.verify(op, &self.stmt[rel], &bad[..len - 1]),
+            3 => vfy(&mut self.ctx, self.fast, op, &self.stmt[rel], &bad[..len - 1]),
             _ => {
                 bad[len / 2..].fill(0xff);
-                self.ctx.verify(op, &self.stmt[rel], &bad)
+                vfy(&mut self.ctx, self.fast, op, &self.stmt[rel], &bad)
             }
         };
         self.xs.0 = xs0;

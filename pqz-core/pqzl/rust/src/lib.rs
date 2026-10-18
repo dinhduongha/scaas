@@ -2,8 +2,6 @@
 //! equal to the C core (`pqz-core/pqzl/src` + `pqzl/lazer`): same proofs for the same `(op, stmt, wit, rnd32)`, same
 //! verdicts on every input, same keys / Enc / Dec. The API mirrors the C ABI `pqzl/src/pqz.h` (plan D3); every size,
 //! layout and return code is copied from it. No globals: a [`Ctx`] holds what the C core keeps in static storage.
-//!
-//! Port in progress: a function whose task has not landed yet returns `Err(Error::Internal)` / `false`.
 #![no_std]
 #![cfg_attr(not(feature = "c-oracle"), forbid(unsafe_code))]
 #![cfg_attr(feature = "c-oracle", deny(unsafe_code))] // only the dev-only C oracle module allows it
@@ -34,6 +32,8 @@ mod keys;
 mod params; // generated (plan D8): pqzl/params/to_rust.py
 mod proof;
 mod rel;
+#[cfg(feature = "sv")]
+mod sv;
 #[doc(hidden)]
 pub mod testkit;
 
@@ -84,6 +84,12 @@ pub struct Ctx {
     a: Option<arith::polymat::PolyMat>,
     /// A1, A2', B' (NTT form) per relation (`rel::RELS` order)
     keys: [Option<[arith::polymat::PolyMat; 3]>; rel::NREL],
+    /// the specialised verifier's primes and A in its form, built at the first `verify_fast`
+    #[cfg(feature = "sv")]
+    sv: Option<Box<sv::Ar>>,
+    /// the specialised verifier's tables per relation (`rel::RELS` order)
+    #[cfg(feature = "sv")]
+    svrel: [Option<Box<sv::SvRel>>; rel::NREL],
 }
 
 impl Ctx {
@@ -104,8 +110,7 @@ impl Ctx {
     /// `pqz_verify_fast` (the specialised verifier): accepts exactly the proofs `verify` accepts.
     #[cfg(feature = "sv")]
     pub fn verify_fast(&mut self, op: u8, stmt: &[u8], proof: &[u8]) -> bool {
-        let _ = (op, stmt, proof);
-        false
+        self.verify_sv(op, stmt, proof) == Ok(true)
     }
 }
 

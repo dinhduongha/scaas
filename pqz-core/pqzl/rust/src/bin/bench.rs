@@ -2,7 +2,8 @@
 //! mask: 1 R_REG, 2 R_TX, 4 R_BURN, 8 R_DS, 16 R_DR, 32 R_TX0, 64 << t R_TXM shape t), JSON lines: per relation the
 //! prove timings, `proofs_fnv` (FNV-1a over the per-proof FNV-1a hashes, seeds 0 .. n_prove - 1: equal to the C
 //! bench's for the same arguments), honest and adversarial verify timings; `{"fails": n}` last, exit 1 if n > 0.
-//! Not ported: the arena figures (no arena), `rej_tries_mean`, the hedge / auditor / txm checks, PQZ_VERIFY=fast.
+//! `PQZ_VERIFY=fast`: verify with the specialised verifier. Not ported: the arena figures (no arena), `rej_tries_mean`,
+//! the hedge / auditor / txm checks.
 use pqzl::bench::{Bench, NAMES, NKIND, NREL};
 use std::time::Instant;
 
@@ -39,7 +40,8 @@ fn main() {
             std::process::exit(1);
         }
     };
-    println!("{{\"init_ms\": {}, \"verify\": \"generic\"}}", ms(t0.elapsed().as_micros()));
+    b.fast = std::env::var("PQZ_VERIFY").is_ok_and(|v| v == "fast");
+    println!("{{\"init_ms\": {}, \"verify\": \"{}\"}}", ms(t0.elapsed().as_micros()), if b.fast { "fast" } else { "generic" });
     let mut fails = 0;
     for tx in (0..NREL).filter(|&t| rels >> t & 1 == 1) {
         let rel = NAMES[tx];

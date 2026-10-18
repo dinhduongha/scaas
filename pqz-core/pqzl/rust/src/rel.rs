@@ -102,12 +102,12 @@ pub(crate) const fn txm_stmt(m: usize, a: usize) -> usize {
 }
 
 /// `rd_word64`: a be32 word that must be < 2^64
-fn word64(p: &[u8]) -> (u64, bool) {
+pub(crate) fn word64(p: &[u8]) -> (u64, bool) {
     (be8(&p[24..]), p[..24].iter().all(|&b| b == 0))
 }
 
 /// `rel_of`: the relation of op (op 1: R_TX0 by the 66,560-byte length, else R_TX; op 7 by its header words)
-fn rel_of(op: u8, stmt: &[u8]) -> Option<usize> {
+pub(crate) fn rel_of(op: u8, stmt: &[u8]) -> Option<usize> {
     Some(match op {
         crate::OP_REGISTER => 0,
         crate::OP_TRANSFER => {
@@ -847,7 +847,7 @@ fn prover_seeds(rnd32: &[u8; 32], wit: &[u8], hash0: &[u8; 32]) -> ([u8; 32], [u
 
 impl Ctx {
     /// A and relation ri's keys, built at first use
-    fn rel_state(&mut self, ri: usize) -> Result<(&mut [PolyMat; 3], &mut PolyMat), Error> {
+    pub(crate) fn rel_state(&mut self, ri: usize) -> Result<(&mut [PolyMat; 3], &mut PolyMat), Error> {
         if self.keys[ri].is_none() {
             self.keys[ri] = Some(rel_keys(&RELS[ri])?);
         }
