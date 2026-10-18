@@ -1,0 +1,41 @@
+# P6f calibration (2026-10-19-calib-ops123457) 2026-10-18 21:27:41Z  host 68183af48c5a  cpus 4  .NET 10.0.9
+# libpqz_ffi.so /opt/pqz-calibrate/libpqz_ffi.so sha256 16dd99ce77d05a9bea9f54142979bc21511240aeff6d4442d784470a428c9caf; n = 1000 per set; cold self-test 200 processes
+# model name	: AMD Ryzen 5 7235HS
+t_ecMul median 0.017 ms (p99 0.029, n 10000) ⇒ 0.359 M gas per ms
+
+| op | id | stmtLen [M, auditorOn] | forms | valid n | p50 valid ms | p99 valid ms | p99 adversarial ms | worst adversarial set | t_row ms | gas | + calldata floor of the largest honest input (direct tx) |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| 1 | pqzh | 83072 | TRANSFER | 22 (20 fresh) | 10.090 | 11.919 | 1.990 | proof bit flips (1000) | 11.919 | 4,283,000 | 11,670,200 (315,923 B) |
+| 1 | pqzh | 66560 | TRANSFER0 | 22 (20 fresh) | 9.747 | 11.950 | 1.914 | proof bit flips (1000) | 11.950 | 4,294,000 | 11,111,040 (298,653 B) |
+| 1 | pqzl | 83072 | TRANSFER | 22 (20 fresh) | 6.437 | 8.955 | 8.974 | proof bit flips (1000) | 8.974 | 3,225,000 | 4,979,326 (125,857 B) |
+| 1 | pqzl | 66560 | TRANSFER0 | 22 (20 fresh) | 6.308 | 9.285 | 9.325 | proof bit flips (1000) | 9.325 | 3,351,000 | 4,890,049 (109,018 B) |
+| 2 | pqzh | 50048 | BURN+REFRESH | 44 (40 fresh) | 9.623 | 13.425 | 1.850 | proof bit flips (1000) | 13.425 | 4,824,000 | 10,616,430 (282,621 B) |
+| 2 | pqzl | 50048 | BURN+REFRESH | 44 (40 fresh) | 6.188 | 8.956 | 11.240 | proof bit flips (1000) | 11.240 | 4,039,000 | 5,360,024 (92,011 B) |
+| 3 | pqzh | 16480 | REGISTER | 21 (20 fresh) | 7.182 | 8.514 | 1.318 | proof bit flips (1000) | 8.514 | 3,059,000 | 7,866,080 (204,959 B) |
+| 3 | pqzl | 16480 | REGISTER | 21 (20 fresh) | 3.325 | 5.281 | 5.552 | proof bit flips (1000) | 5.552 | 1,995,000 | 2,673,242 (44,585 B) |
+| 4 | pqzh | 33184 | DISCLOSE-SENDER | 21 (20 fresh) | 7.491 | 8.922 | 1.410 | proof bit flips (1000) | 8.922 | 3,206,000 | 8,354,830 (220,927 B) |
+| 4 | pqzl | 33184 | DISCLOSE-SENDER | 21 (20 fresh) | 3.526 | 5.771 | 7.065 | stmt last word (21) | 7.065 | 2,539,000 | 3,441,653 (62,167 B) |
+| 5 | pqzh | 33184 | DISCLOSE-RECEIVER+DISCLOSE-AUDITOR | 42 (40 fresh) | 7.399 | 8.917 | 1.483 | proof bit flips (1000) | 8.917 | 3,204,000 | 8,386,170 (221,631 B) |
+| 5 | pqzl | 33184 | DISCLOSE-RECEIVER+DISCLOSE-AUDITOR | 42 (40 fresh) | 3.622 | 5.816 | 6.347 | stmt last word (42) | 6.347 | 2,281,000 | 3,183,820 (62,196 B) |
+| 7 | pqzh | 132992 [4, 1] | TRANSFER-MULTI | 21 (20 fresh) | 11.229 | 14.139 | 2.283 | negative.json (12) | 14.139 | 5,080,000 | 13,262,870 (366,473 B) |
+| 7 | pqzh | 116096 [4, 0] | TRANSFER-MULTI+TRANSFER-MULTI | 22 (20 fresh) | 10.438 | 12.446 | 2.450 | negative.json (12) | 12.446 | 4,472,000 | 12,700,060 (348,691 B) |
+| 7 | pqzh | 99712 [2, 1] | TRANSFER-MULTI | 21 (20 fresh) | 10.452 | 13.337 | 2.174 | proof bit flips (1000) | 13.337 | 4,792,000 | 12,207,160 (332,851 B) |
+| 7 | pqzh | 83072 [1, 1] | TRANSFER-MULTI | 21 (20 fresh) | 10.034 | 11.861 | 2.018 | negative.json (12) | 11.861 | 4,262,000 | 11,684,410 (316,339 B) |
+| 7 | pqzh | 83072 [2, 0] | TRANSFER-MULTI+TRANSFER-MULTI | 22 (20 fresh) | 10.010 | 11.837 | 1.998 | negative.json (14) | 11.837 | 4,253,000 | 11,663,940 (315,891 B) |
+| 7 | pqzh | 66560 [1, 0] | TRANSFER-MULTI | 21 (20 fresh) | 9.797 | 15.153 | 1.952 | negative.json (12) | 15.153 | 5,445,000 | 11,132,350 (299,005 B) |
+| 7 | pqzl | 215936 [8, 1] | TRANSFER-MULTI+TRANSFER-MULTI | 22 (20 fresh) | 11.285 | 15.094 | 20.336 | negative.json (8) | 20.336 | 7,307,000 | 11,053,503 (277,765 B) |
+| 7 | pqzl | 198528 [8, 0] | TRANSFER-MULTI | 21 (20 fresh) | 9.760 | 13.659 | 17.320 | stmt last word (21) | 17.320 | 6,223,000 | 9,702,171 (257,549 B) |
+| 7 | pqzl | 132992 [4, 1] | TRANSFER-MULTI | 21 (20 fresh) | 7.298 | 10.101 | 10.573 | proof bit flips (1000) | 10.573 | 3,799,000 | 6,227,040 (178,283 B) |
+| 7 | pqzl | 116096 [4, 0] | TRANSFER-MULTI+TRANSFER-MULTI | 22 (20 fresh) | 6.894 | 9.692 | 9.736 | proof bit flips (1000) | 9.736 | 3,498,000 | 5,690,690 (160,058 B) |
+| 7 | pqzl | 99712 [2, 1] | TRANSFER-MULTI | 21 (20 fresh) | 6.782 | 9.532 | 13.070 | stmt last word (21) | 13.070 | 4,696,000 | 6,675,364 (143,346 B) |
+| 7 | pqzl | 83072 [1, 1] | TRANSFER-MULTI | 21 (20 fresh) | 6.437 | 8.777 | 12.279 | negative.json (8) | 12.279 | 4,412,000 | 6,166,487 (125,856 B) |
+| 7 | pqzl | 83072 [2, 0] | TRANSFER-MULTI+TRANSFER-MULTI | 22 (20 fresh) | 6.445 | 9.103 | 9.126 | proof bit flips (1000) | 9.126 | 3,279,000 | 5,035,517 (126,035 B) |
+| 7 | pqzl | 66560 [1, 0] | TRANSFER-MULTI | 21 (20 fresh) | 6.298 | 8.946 | 8.932 | stmt last word (21) | 8.946 | 3,215,000 | 4,754,165 (109,005 B) |
+
+OP_SELFTEST cold (first call in a fresh process, 200 processes): p50 89.050 ms, p99 150.174 ms ⇒ cold price would be 53,955,000 gas
+OP_SELFTEST warm (cached): p50 0.000 ms, p99 0.001 ms; selftestGas = the smallest row = 1,995,000 (D6, R3)
+ML-DSA-44: 15 ACVP inputs, p50 0.111 ms, p99 0.237 ms ⇒ calibrated 86,000, EIP-8355 BASE 6,500 ⇒ mldsa44Gas 86,000
+ML-DSA-65: 15 ACVP inputs, p50 0.165 ms, p99 0.331 ms ⇒ calibrated 119,000, EIP-8355 BASE 9,000 ⇒ mldsa65Gas 119,000
+
+sanity: every t_row ≤ 60 ms; every honest and MAX_PROOF input fits a direct transaction
+# image scaas/nethermind-pqz:1.39.0-pqz3-calib sha256:65cc5c846e2f7a4ed0a2abaf2a7205b932dc931d44d09b8aac9f338c0dbbc054; host load before: 2.96 3.57 4.35, after: 3.48 3.65 4.04

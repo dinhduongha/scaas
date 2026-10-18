@@ -1,0 +1,91 @@
+# copy, image pqz3, e2e after T = 1792360190 (schedule 2), throwaway signer key, start 1792360274
+sender 0x5a4c937850245562f5569ec7976f55374da8a7a5 nonce 0
+ok    probe deployed at 0xea57fccfddd7d854609c9a796313c2dcf70c8386 (block 156, gas 182195)
+ok    tx check() honest TRANSFER pqzl                            pqzl: event word 1 (want 1), call gas 3236921, tx gas 5177215, block 158
+ok    tx check() honest TRANSFER0 pqzl                           pqzl: event word 1 (want 1), call gas 3361343, tx gas 5048241, block 159
+ok    tx check() honest BURN pqzl                                pqzl: event word 1 (want 1), call gas 4047744, tx gas 5482481, block 160
+ok    tx check() honest REFRESH pqzl                             pqzl: event word 1 (want 1), call gas 4047744, tx gas 5482337, block 161
+ok    tx check() honest REGISTER pqzl                            pqzl: event word 1 (want 1), call gas 1999304, tx gas 2717390, block 161
+ok    tx check() honest DISCLOSE-SENDER pqzl                     pqzl: event word 1 (want 1), call gas 2544951, tx gas 3510494, block 162
+ok    tx check() honest DISCLOSE-RECEIVER pqzl                   pqzl: event word 1 (want 1), call gas 2286954, tx gas 3252361, block 164
+ok    tx check() honest DISCLOSE-AUDITOR pqzl                    pqzl: event word 1 (want 1), call gas 2286951, tx gas 3252578, block 164
+ok    tx check() honest M1-on pqzl                               pqzl: event word 1 (want 1), call gas 4423918, tx gas 6362972, block 166
+ok    tx check() honest M2-on pqzl                               pqzl: event word 1 (want 1), call gas 4709559, tx gas 6918285, block 167
+ok    tx check() honest M4-on pqzl                               pqzl: event word 1 (want 1), call gas 3815835, tx gas 6575891, block 168
+ok    tx check() honest M8-on pqzl                               pqzl: event word 1 (want 1), call gas 7333162, tx gas 11803597, block 170
+ok    tx check() honest M1-off pqzl                              pqzl: event word 1 (want 1), call gas 3225340, tx gas 4912327, block 171
+ok    tx check() honest M2-off pqzl                              pqzl: event word 1 (want 1), call gas 3290936, tx gas 5233239, block 172
+ok    tx check() honest M4-off pqzl                              pqzl: event word 1 (want 1), call gas 3513128, tx gas 5980375, block 173
+ok    tx check() honest M8-off pqzl                              pqzl: event word 1 (want 1), call gas 6247266, tx gas 10359145, block 175
+ok    tx check() honest M2-off-two-real pqzl                     pqzl: event word 1 (want 1), call gas 3290936, tx gas 5233431, block 176
+ok    tx check() honest M4-off-decoys pqzl                       pqzl: event word 1 (want 1), call gas 3513125, tx gas 5980388, block 178
+ok    tx check() honest M8-on-boundary pqzl                      pqzl: event word 1 (want 1), call gas 7333162, tx gas 11803861, block 179
+ok    tx check() honest TRANSFER pqzh                            pqzh: event word 1 (want 1), call gas 4254564, tx gas 11606670, block 181
+ok    tx check() honest TRANSFER0 pqzh                           pqzh: event word 1 (want 1), call gas 4049064, tx gas 11100440, block 183
+ok    tx check() honest BURN pqzh                                pqzh: event word 1 (want 1), call gas 3764582, tx gas 10606720, block 184
+ok    tx check() honest REFRESH pqzh                             pqzh: event word 1 (want 1), call gas 3764405, tx gas 10537860, block 185
+ok    tx check() honest REGISTER pqzh                            pqzh: event word 1 (want 1), call gas 3341178, tx gas 7801230, block 187
+ok    tx check() honest DISCLOSE-SENDER pqzh                     pqzh: event word 1 (want 1), call gas 3303714, tx gas 8313820, block 189
+ok    tx check() honest DISCLOSE-RECEIVER pqzh                   pqzh: event word 1 (want 1), call gas 2901786, tx gas 8341660, block 190
+ok    tx check() honest DISCLOSE-AUDITOR pqzh                    pqzh: event word 1 (want 1), call gas 2901783, tx gas 8336990, block 192
+ok    tx check() honest M1-on pqzh                               pqzh: event word 1 (want 1), call gas 3893708, tx gas 11660850, block 193
+ok    tx check() honest M2-on pqzh                               pqzh: event word 1 (want 1), call gas 4032151, tx gas 12131960, block 194
+ok    tx check() honest M4-on pqzh                               pqzh: event word 1 (want 1), call gas 4969409, tx gas 13241090, block 195
+ok    tx check() honest M1-off pqzh                              pqzh: event word 1 (want 1), call gas 4342136, tx gas 11136500, block 197
+ok    tx check() honest M2-off pqzh                              pqzh: event word 1 (want 1), call gas 4444669, tx gas 11642110, block 199
+ok    tx check() honest M4-off pqzh                              pqzh: event word 1 (want 1), call gas 4924804, tx gas 12698580, block 200
+ok    tx check() honest M2-off-two-real pqzh                     pqzh: event word 1 (want 1), call gas 4444627, tx gas 11625330, block 201
+ok    tx check() honest M4-off-decoys pqzh                       pqzh: event word 1 (want 1), call gas 4924732, tx gas 12666180, block 202
+ok    tx check() flip   TRANSFER: proof middle byte bit 3 flippe pqzl: event word 0 (want 0), call gas 3236921, tx gas 5177215, block 204
+ok    tx check() flip   TRANSFER0: proof middle byte bit 3 flipp pqzl: event word 0 (want 0), call gas 3361343, tx gas 5048241, block 205
+ok    tx check() flip   BURN: proof middle byte bit 3 flipped    pqzl: event word 0 (want 0), call gas 4047744, tx gas 5482481, block 206
+ok    tx check() flip   REFRESH: proof middle byte bit 3 flipped pqzl: event word 0 (want 0), call gas 4047744, tx gas 5482337, block 207
+ok    tx check() flip   REGISTER: proof middle byte bit 3 flippe pqzl: event word 0 (want 0), call gas 1999304, tx gas 2717390, block 207
+ok    tx check() flip   DISCLOSE-SENDER: proof middle byte bit 3 pqzl: event word 0 (want 0), call gas 2544951, tx gas 3510494, block 208
+ok    tx check() flip   DISCLOSE-RECEIVER: proof middle byte bit pqzl: event word 0 (want 0), call gas 2286954, tx gas 3252361, block 208
+ok    tx check() flip   DISCLOSE-AUDITOR: proof middle byte bit  pqzl: event word 0 (want 0), call gas 2286951, tx gas 3252578, block 209
+ok    tx check() flip   TRANSFER: proof middle byte bit 3 flippe pqzh: event word 0 (want 0), call gas 4254564, tx gas 11606670, block 210
+ok    tx check() flip   TRANSFER0: proof middle byte bit 3 flipp pqzh: event word 0 (want 0), call gas 4049064, tx gas 11100440, block 211
+ok    tx check() flip   BURN: proof middle byte bit 3 flipped    pqzh: event word 0 (want 0), call gas 3764582, tx gas 10606720, block 212
+ok    tx check() flip   REFRESH: proof middle byte bit 3 flipped pqzh: event word 0 (want 0), call gas 3764405, tx gas 10537860, block 214
+ok    tx check() flip   REGISTER: proof middle byte bit 3 flippe pqzh: event word 0 (want 0), call gas 3341178, tx gas 7801230, block 216
+ok    tx check() flip   DISCLOSE-SENDER: proof middle byte bit 3 pqzh: event word 0 (want 0), call gas 3303714, tx gas 8313820, block 218
+ok    tx check() flip   DISCLOSE-RECEIVER: proof middle byte bit pqzh: event word 0 (want 0), call gas 2901786, tx gas 8341660, block 220
+ok    tx check() flip   DISCLOSE-AUDITOR: proof middle byte bit  pqzh: event word 0 (want 0), call gas 2901783, tx gas 8336990, block 222
+ok    tx check() flip   M1-on: proof middle byte bit 3 flipped   pqzl: event word 0 (want 0), call gas 4423918, tx gas 6362972, block 224
+ok    tx check() flip   M2-on: proof middle byte bit 3 flipped   pqzl: event word 0 (want 0), call gas 4709559, tx gas 6918285, block 226
+ok    tx check() flip   M4-on: proof middle byte bit 3 flipped   pqzl: event word 0 (want 0), call gas 3815835, tx gas 6575891, block 227
+ok    tx check() flip   M8-on: proof middle byte bit 3 flipped   pqzl: event word 0 (want 0), call gas 7333162, tx gas 11803597, block 229
+ok    tx check() flip   M1-off: proof middle byte bit 3 flipped  pqzl: event word 0 (want 0), call gas 3225340, tx gas 4912327, block 230
+ok    tx check() flip   M2-off: proof middle byte bit 3 flipped  pqzl: event word 0 (want 0), call gas 3290936, tx gas 5233239, block 232
+ok    tx check() flip   M4-off: proof middle byte bit 3 flipped  pqzl: event word 0 (want 0), call gas 3513128, tx gas 5980363, block 233
+ok    tx check() flip   M8-off: proof middle byte bit 3 flipped  pqzl: event word 0 (want 0), call gas 6247266, tx gas 10359145, block 234
+ok    tx check() flip   M1-on: proof middle byte bit 3 flipped   pqzh: event word 0 (want 0), call gas 3893708, tx gas 11660850, block 235
+ok    tx check() flip   M2-on: proof middle byte bit 3 flipped   pqzh: event word 0 (want 0), call gas 4032151, tx gas 12131960, block 237
+ok    tx check() flip   M4-on: proof middle byte bit 3 flipped   pqzh: event word 0 (want 0), call gas 4969409, tx gas 13241090, block 238
+ok    tx check() flip   M1-off: proof middle byte bit 3 flipped  pqzh: event word 0 (want 0), call gas 4342136, tx gas 11136500, block 239
+ok    tx check() flip   M2-off: proof middle byte bit 3 flipped  pqzh: event word 0 (want 0), call gas 4444669, tx gas 11642110, block 241
+ok    tx check() flip   M4-off: proof middle byte bit 3 flipped  pqzh: event word 0 (want 0), call gas 4924804, tx gas 12698580, block 242
+ok    tx check() fee0   fee0 TRANSFER pqzl                       pqzl: event word 1 (want 1), call gas 3236921, tx gas 5176339, block 243
+ok    tx check() fee0   fee0 TRANSFER pqzh                       pqzh: event word 1 (want 1), call gas 4254675, tx gas 11648090, block 244
+ok    tx check() fee0   fee0 TRANSFER0 pqzl                      pqzl: event word 1 (want 1), call gas 3361340, tx gas 5047487, block 246
+ok    tx check() fee0   fee0 TRANSFER0 pqzh                      pqzh: event word 1 (want 1), call gas 4049055, tx gas 11095340, block 247
+ok    tx check() fee0   fee0 BURN pqzl                           pqzl: event word 1 (want 1), call gas 4047744, tx gas 5482577, block 248
+ok    tx check() fee0   fee0 BURN pqzh                           pqzh: event word 1 (want 1), call gas 3764342, tx gas 10505490, block 250
+ok    tx check() fee0   fee0 REFRESH pqzl                        pqzl: event word 1 (want 1), call gas 4047747, tx gas 5482567, block 251
+ok    tx check() fee0   fee0 REFRESH pqzh                        pqzh: event word 1 (want 1), call gas 3764522, tx gas 10579740, block 252
+check() transactions in blocks [158, 159, 160, 161, 162, 164, 166, 167, 168, 170, 171, 172, 173, 175, 176, 178, 179, 181, 183, 184, 185, 187, 189, 190, 192, 193, 194, 195, 197, 199, 200, 201, 202, 204, 205, 206, 207, 208, 209, 210, 211, 212, 214, 216, 218, 220, 222, 224, 226, 227, 229, 230, 232, 233, 234, 235, 237, 238, 239, 241, 242, 243, 244, 246, 247, 248, 250, 251, 252]
+ok    direct tx to PQZ, M4-on pqzh (365,705 B > 131,072): gasUsed 13,239,470 = max(standard 10,277,675, EIP-7623 floor 13,239,470), block 254
+ok    direct tx to PQZ, M4-off pqzh (348,595 B > 131,072): gasUsed 12,697,060 = max(standard 10,016,106, EIP-7623 floor 12,697,060), block 256
+ok    UAMldsaVerifier(0x0130) at 0x491de2a345b4cdd832c50ed3f670a3a90ec46896: PRECOMPILE() = 0x5caa500000000000000000000000000000000012 (deploy gas 2,718,147)
+ok    UAMldsaVerifier mldsa44.verify(metatx) = True (estimateGas 174,769)
+ok    UAMldsaVerifier mldsa44.verify(metatx, sig flipped) = False (estimateGas 174,769)
+ok    UAMldsaVerifier mldsa44.verify(member) = True (estimateGas 174,617)
+ok    UAMldsaVerifier mldsa44.verify(member, sig flipped) = False (estimateGas 174,617)
+ok    UAMldsaVerifier(0x0131) at 0xa5d5a36c7eb5714452778d7a6b9078cae691c8c5: PRECOMPILE() = 0x5caa500000000000000000000000000000000013 (deploy gas 2,806,681)
+ok    UAMldsaVerifier mldsa65.verify(metatx) = True (estimateGas 236,548)
+ok    UAMldsaVerifier mldsa65.verify(metatx, sig flipped) = False (estimateGas 236,548)
+ok    UAMldsaVerifier mldsa65.verify(member) = True (estimateGas 236,156)
+ok    UAMldsaVerifier mldsa65.verify(member, sig flipped) = False (estimateGas 236,156)
+e2e: all checks passed
+rc=0 end 1792360805
