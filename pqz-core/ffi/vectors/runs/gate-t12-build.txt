@@ -1,0 +1,6 @@
+PQZL backend: the default feature (cargo flags: none)
+   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust-t12prep/pqz-core/ffi)
+    Finished `release` profile [optimized + debuginfo] target(s) in 6.01s
+   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust-t12prep/pqz-core/ffi)
+   Compiling pqz-ffi-wasm v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust-t12prep/pqz-core/ffi/wasm)
+    Finished `release` profile [optimized] target(s) in 1.23s

@@ -46,7 +46,9 @@ Terms used throughout:
   - the package stage "Rust = C" (`artifact/reproduce.sh`): the Rust prover's `proofs_fnv` against the C core's
     frozen hashes and the keys KAT; the pqz-ffi and vectors stages already run the Rust core (the default backend);
   - the Rust rows in `results.py`'s tables and in README §5 / `artifact/README.md`;
-  - D6 (below) and the wasm32 op 7 limit raised to M = 8 on the Rust backend.
+  - D6 (below) and the wasm32 op 7 limit raised to M = 8 on the Rust backend;
+  - checks: the package's Docker quick run PASS (225 ok, `artifact/runs/t12-docker-quick/`), the node Dockerfile's
+    `ffi` stage builds (`nethermind/runs/2026-10-18-ffi-stage-t12.txt`), `gate.sh t12` PASS (`runs/gate/t12-*`).
 - **D6, Rust against C (port plan D6; reported, not a gate): run `d6`, 2026-10-18** (`pqzl/rust/d6.sh`, C and Rust in
   one session; the C rows of `R_TXM8`, `R_TXM1_0`, `R_TXM2_0` and their Rust rows re-run on a quiet machine after
   external load, owner ruling). The full table (six forms and eight `R_TXM` shapes, p50 / p99 native and wasm32,

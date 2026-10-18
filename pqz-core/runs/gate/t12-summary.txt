@@ -1,0 +1,21 @@
+start 2026-10-18T17:01:46Z e8b3629
+== kat
+   ok
+== tbox
+   ok
+== sv
+   ok
+== diff
+   ok
+== vectors
+   ok
+== ffi
+   ok
+== cargo
+   ok
+== xcheck
+   ok
+== fuzz
+   ok
+gate t12: PASS
+rc=0 end 2026-10-18T18:10:28Z
