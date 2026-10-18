@@ -34,6 +34,9 @@ Terms used throughout:
 
 ## Current state (2026-10-18)
 
+- **2026-10-19: PQZL is NOT sound until Open item 11 is fixed** (Fiat–Shamir omissions found by the whole-code review;
+  lazer#28). Gate A's PASS and the frozen PQZL `proofSystemId` predate the finding.
+
 - Every round below is merged into `main` (merge commits in the table).
 - **Gate A (PQZL) and gate B (PQZH) passed on 2026-10-17**, and both `proofSystemId`s are frozen. **The freeze**
   is done: `artifact/runs/freeze-2026-10-17/` (section "Gates A / B and the freeze").
@@ -1256,6 +1259,16 @@ the record.
     uses simd128. Follow-up, not done in the port: a `cfg(target_arch = "wasm32")` limb path in `ntt.rs` (it must give
     the same residues; `run.sh`'s native = wasm32 replay and proofs_fnv checks pin that). Native verify is unaffected (the
     Rust core is faster there), and the chain verifies natively.
+11. **P0: Fiat–Shamir transcript omissions in the toolbox protocol (whole-code review 2026-10-19, OPEN, being fixed).**
+    `h` is not absorbed before the challenge `mu` that combines the quadratic equations, and `z3`, `z4` are not absorbed
+    before their Schwartz–Zippel challenges; `h` is not in the final challenge either. In the C generic verifier
+    (`lazer/lnp-tbox.c`, `lnp-quad-many.c`), the C specialised verifier (`src/pqz_sv.c`), the Rust core (`rust/src/proof/`,
+    `rust/src/sv.rs`) and the provers; inherited from upstream LaZer, reported as
+    [lazer#28](https://github.com/lazer-crypto/lazer/issues/28). On code reading a cheating prover forges a proof for any
+    PQZL statement by a linear solve for `h`. Reports and controller verification:
+    `research/code-review-2026-10-19/`. Owner 2026-10-19: fix now (cheating-prover PoC first, then the transcript in all
+    four implementations, new `proofSystemId`, vectors, spec); the Rust roll-out on 7622 is stopped and the chain stays on
+    `pqz2` until the fix. PQZH (Ligero) is not affected.
 
 Scratch (not needed to resume, re-creatable): the LaZer and lattice-estimator clones, the upstream tbox harness and
 debug builds under the session scratchpad `p6d/`.
