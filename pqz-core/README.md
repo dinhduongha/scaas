@@ -731,8 +731,9 @@ run files keep the paths of their day.
 | 2026-10-17 | **the freeze**: `artifact/runs/freeze-2026-10-17/` (233 checks ok), `expected-results.json` frozen |
 
 **In progress:** **PQZL in Rust** ([plan](../docs/superpowers/plans/2026-10-17-pqzl-rust-port.md)): crate `pqzl` in
-`pqzl/rust/`, byte-for-byte equal to the C core (same proofs from the same seeds). Which of the two becomes the
-production core is the owner's later decision.
+`pqzl/rust/`, byte-for-byte equal to the C core (same proofs from the same seeds). **The Rust crate will be the production PQZL core
+of the precompile** (owner 2026-10-18): once the port is verified, `pqz-ffi` builds it by default and the C core stays
+as the reference. Until then, the precompile on chain 7622 runs the C core.
 
 **Open items** (arena exhaustion, global state, clearing secrets from memory, …): [STATUS.md "Open"](STATUS.md#open).
 

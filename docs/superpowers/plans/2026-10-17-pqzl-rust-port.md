@@ -17,8 +17,9 @@ native and wasm32 — so other chains and applications can use the LaZer proof s
 generic verifier → prover → specialised verifier), each layer checked against the C core as the oracle (a test-only
 `c-oracle` feature compiles the C core with `cc`, as `pqz-ffi/build.rs` does) and against the frozen vectors. No
 globals: one `Ctx` value holds what the C core keeps in static storage (keys per relation, SV tables), so calls are
-re-entrant and need no lock. `pqz-ffi` gains a `pqzl-rust` feature that swaps the backend; the C core stays the default
-until the owner chooses the production core (owner 2026-10-16: decided later; the other one is kept, less maintained).
+re-entrant and need no lock. `pqz-ffi` gains a `pqzl-rust` feature that swaps the backend. **Owner 2026-10-18: the Rust
+crate is the production PQZL core for the precompile**: once Task 11's checks pass, `pqzl-rust` becomes `pqz-ffi`'s
+default and the C core stays as the reference / differential oracle (kept, less maintained; decisions.md CTR-PQZ-09).
 
 **Tech Stack:** Rust 1.97.1 (`no_std` + `alloc`), RustCrypto `sha3` / `aes` (D1), `cc` (dev / test only), Python 3
 checkers already in the repository (`pqzl/kat/check.py`, `smartcontracts/vectors/pqz/pqz_kat.py`), node for wasm32.
@@ -263,6 +264,8 @@ and, with `test-hooks`, `test_mutate` (the 14 mutation kinds of `pqz_test_mutate
 
 **Files:** Modify `pqz-core/ffi/{Cargo.toml,src/pqzl.rs}` (feature `pqzl-rust`: the same `pqzl::` functions over the
 crate instead of the C core; the C core is not built under it), `pqz-core/fuzz/src/lib.rs` (mode `pqzl-diff`).
+  Owner 2026-10-18: after the checks below pass, `pqzl-rust` becomes the default feature (the C core stays reachable
+  through an opt-in feature for the differential and `pqzl-diff`).
 
 - [ ] `scripts/capped pqz-core/ffi/run.sh rust1` with `--features pqzl-rust` (an env switch in `run.sh`) → every test
   passes; self-test `ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205`; native = wasm32 digest lines.
