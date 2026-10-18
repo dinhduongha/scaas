@@ -1,0 +1,16 @@
+# copy: fourth schedule at T2 = 1792361238 with the FINAL rows (controller rule min(live, max(run 1, run 2)), runs/2026-10-19-pqzl-rows-engine-pqz.json), PQZL rows + selftestGas
+/home/ha/work/ainative/scaas/scratchpad/rust-copy/genesis.pqz4.json: schedule 3 added at 1792361238 = 0x6ad54316: 26 rows (14 new of ops [1, 2, 3, 4, 5, 7] id 0x2e07e6ed…), selftest 2406000, mldsa44 49000, mldsa65 68000
+  op 1 id 0x2e07e6ed… stmtLen 83072 gas 3,454,000 (was 3,225,000, +7.1 %)
+  op 1 id 0x2e07e6ed… stmtLen 66560 gas 3,848,000 (was 3,351,000, +14.8 %)
+  op 2 id 0x2e07e6ed… stmtLen 50048 gas 3,723,000 (was 4,039,000, -7.8 %)
+  op 3 id 0x2e07e6ed… stmtLen 16480 gas 2,695,000 (was 1,995,000, +35.1 %)
+  op 4 id 0x2e07e6ed… stmtLen 33184 gas 2,601,000 (was 2,539,000, +2.4 %)
+  op 5 id 0x2e07e6ed… stmtLen 33184 gas 2,406,000 (was 2,281,000, +5.5 %)
+  op 7 id 0x2e07e6ed… stmtLen 215936 M 8 auditorOn 1 gas 6,177,000 (was 7,307,000, -15.5 %)
+  op 7 id 0x2e07e6ed… stmtLen 198528 M 8 auditorOn 0 gas 5,339,000 (was 6,223,000, -14.2 %)
+  op 7 id 0x2e07e6ed… stmtLen 132992 M 4 auditorOn 1 gas 4,121,000 (was 3,799,000, +8.5 %)
+  op 7 id 0x2e07e6ed… stmtLen 116096 M 4 auditorOn 0 gas 3,972,000 (was 3,498,000, +13.6 %)
+  op 7 id 0x2e07e6ed… stmtLen 99712 M 2 auditorOn 1 gas 3,710,000 (was 4,696,000, -21.0 %)
+  op 7 id 0x2e07e6ed… stmtLen 83072 M 1 auditorOn 1 gas 3,625,000 (was 4,412,000, -17.8 %)
+  op 7 id 0x2e07e6ed… stmtLen 83072 M 2 auditorOn 0 gas 3,331,000 (was 3,279,000, +1.6 %)
+  op 7 id 0x2e07e6ed… stmtLen 66560 M 1 auditorOn 0 gas 3,953,000 (was 3,215,000, +23.0 %)
