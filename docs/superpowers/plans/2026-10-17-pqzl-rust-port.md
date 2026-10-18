@@ -258,7 +258,12 @@ and, with `test-hooks`, `test_mutate` (the 14 mutation kinds of `pqz_test_mutate
 - [ ] `memory::exhaustion_is_error`: an allocator capped at 64 MiB → `prove` / `verify` of R_TX return
   `Error::Memory` / false, no panic (Review Focus 3).
 - [ ] wasm32: native = wasm32 for every vector proof (as `ffi/wasm` digest lines); op 7 M = 8 prove refused on wasm32
-  (`Error::Input`). Commit.
+  (`Error::Input`).
+- [ ] Owner 2026-10-18: key methods on `Ctx` that reuse its cached A (for servers that encrypt in bulk):
+  `Ctx::keygen`, `Ctx::keypair_from_secret`, `Ctx::encrypt`, `Ctx::enc_seed`, with the same arguments and results
+  as the free functions, which stay unchanged (pqz-ffi binds them). Test `keys::ctx_eq_free`: each method byte-equal
+  to its free function over several seeds, including after a `verify` on the same `Ctx`; the keys KAT
+  (`pqz_keys_kat` / `pqz_kat.py --c-keys`, 1,000 seeds) also run through the methods. Commit.
 
 ### Task 11: `pqz-ffi` backend switch and fuzz differential
 
