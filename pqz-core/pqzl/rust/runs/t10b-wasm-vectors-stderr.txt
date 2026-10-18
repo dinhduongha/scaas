@@ -1,0 +1,8 @@
+wasm32 op 7 M = 8 prove refused (Error::Input): true (M8-on)
+wasm32 op 7 M = 8 prove refused (Error::Input): true (M8-off)
+wasm32 op 7 M = 8 prove refused (Error::Input): true (M8-on-boundary)
+wasm32 stack prove: max 24891 B of 1048571 B (row TRANSFER)
+wasm32 stack verify: max 14755 B of 1048571 B (row M8-on)
+wasm32 stack verify_fast: max 81355 B of 1048571 B (row TRANSFER)
+wasm32 stack prove (refused): max 2283 B of 1048571 B (row M8-on)
+wasm32 M > 4 refused: 3; memory 229179392 B

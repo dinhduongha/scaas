@@ -1,0 +1,33 @@
+# wasm32: the verify-only lib, then the prove harness (wasm/) and the digest diff against native
+$ cargo build --release --offline --lib --target wasm32-unknown-unknown
+   Compiling version_check v0.9.5
+   Compiling typenum v1.20.1
+   Compiling shlex v2.0.1
+   Compiling find-msvc-tools v0.1.14
+   Compiling keccak v0.1.6
+   Compiling pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust/pqz-core/stmt)
+   Compiling cc v1.8.0
+   Compiling generic-array v0.14.7
+   Compiling block-buffer v0.10.4
+   Compiling crypto-common v0.1.7
+   Compiling digest v0.10.7
+   Compiling sha3 v0.10.8
+   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust/pqz-core/ffi)
+   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust/pqz-core/pqzh/ligero)
+    Finished `release` profile [optimized + debuginfo] target(s) in 9.39s
+[rc=0]
+$ cargo build --release --offline --target wasm32-unknown-unknown
+    Finished `release` profile [optimized] target(s) in 0.02s
+[rc=0]
+$ sha256sum wasm/target/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm
+3210c97b9ed842f940886e98b4c203f8fd6d77b1e7f880933a0f3402d3d0d384  wasm/target/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm
+[rc=0]
+wasm bytes 912526
+$ llvm-nm-18 --undefined-only wasm/target/wasm32-unknown-unknown/release/pqz_ffi_wasm.wasm (imports)
+strings /gmp|mpfr|hexl/i: 0
+node rc=0
+wasm run 36958 ms, memory 594739200 B
+wasm PQZL op 7 M = 8 prove refused (Statement(Legs)): true
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 0:37.04
+	Maximum resident set size (kbytes): 519084
+native = wasm32: 29 lines equal
