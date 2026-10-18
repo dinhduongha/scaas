@@ -13,7 +13,9 @@ const file = process.env.PQZL_WASM_FILE
   || new URL('target/wasm32-unknown-unknown/release/pqzl_wasm.wasm', import.meta.url);
 const { instance } = await WebAssembly.instantiate(readFileSync(file), {});
 const x = instance.exports;
-const MAX_LEGS = 4, PAINT = 0xa5;
+// PQZL_WASM_MAX_LEGS=8 with a module built with feature pqzl/wasm-m8 (and native.jsonl from a native build with
+// feature wasm-m8): the M = 8 rows are proved in wasm32 too (port plan Task 12, d6.sh)
+const MAX_LEGS = Number(process.env.PQZL_WASM_MAX_LEGS || 4), PAINT = 0xa5;
 const unhex = (h) => (h === '.' ? new Uint8Array(0) : Uint8Array.from(h.match(/../g), (b) => parseInt(b, 16)));
 const fnv = (b) => b.reduce((h, v) => Math.imul((h ^ v) >>> 0, 16777619) >>> 0, 2166136261);
 const lines = readFileSync(inFile, 'utf8').trim().split('\n').map((l) => l.split(' '));

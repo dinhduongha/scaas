@@ -60,8 +60,9 @@ pub const HEADER_BYTES: usize = 640;
 /// R_TXM legs built (16 only with feature `oversize`, bench builds)
 pub const TXM_MAX_LEGS: usize = if cfg!(feature = "oversize") { 16 } else { 8 };
 /// wasm32: `prove` of op 7 only up to this many legs, M = 8 is `Error::Input` before any work (pqz-ffi's
-/// `WASM_PQZL_MAX_LEGS`, the C core's one client arena); verify takes every M
-pub const WASM_MAX_LEGS: usize = 4;
+/// `WASM_PQZL_MAX_LEGS`, the C core's one client arena); verify takes every M. Feature `wasm-m8` (bench builds only,
+/// the measurement of port plan Task 12) lifts it to `TXM_MAX_LEGS`
+pub const WASM_MAX_LEGS: usize = if cfg!(feature = "wasm-m8") { TXM_MAX_LEGS } else { 4 };
 /// keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v2") (CTR-PQZ-09)
 pub const PROOF_SYSTEM_ID: [u8; 32] = [
     0x2e, 0x07, 0xe6, 0xed, 0x1f, 0xd3, 0x03, 0xa0, 0x8c, 0x89, 0xb3, 0xea, 0xb6, 0xe8, 0x42, 0x3f, 0xdf, 0xb8, 0xf3, 0x12,

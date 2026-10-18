@@ -47,7 +47,9 @@ for (let tx = 0; tx < NAMES.length; tx++) {
     if (x.step_verify(tx) !== 1) { out({ rel, verify_honest: 0, run: i }); fails++; }
   }
   stats(`${rel} prove`, tp);
-  out({ rel, proof_bytes_last: x.step_len(tx), proof_bytes_max: maxlen, proofs_fnv: hall.toString(16).padStart(8, '0') });
+  // wasm_memory_bytes: the module's linear memory after the proves (it only grows: the peak so far in this process)
+  out({ rel, proof_bytes_last: x.step_len(tx), proof_bytes_max: maxlen, proofs_fnv: hall.toString(16).padStart(8, '0'),
+        wasm_memory_bytes: x.memory.buffer.byteLength });
   const tv = [];
   for (let i = 0; i < nv; i++) {
     t0 = performance.now();

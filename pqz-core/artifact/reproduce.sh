@@ -12,7 +12,9 @@
 #                                      the vectors: pqz-vectors --check, pqz_kat.py --check, wasm32 replay (--full: +
 #                                      tamper.py), op 7 R_TXM included (every built (id, M, auditorOn): native proof
 #                                      -> ...01, its negatives -> ...00, wasm32 replay; PQZL M = 8 verify-only);
-#                                      tables + comparison with expected-results.json
+#                                      Rust = C (the Rust core pqzl/rust/: proofs_fnv of its prover native + wasm32,
+#                                      the keys KAT, pqz-vectors --check with pqz-ffi feature pqzl-rust; --full: +
+#                                      verify_fast); tables + comparison with expected-results.json
 #   artifact/reproduce.sh --full       the same with the frozen run's sample sizes (PQZL: research/pqzl-measure/relfix.sh + pqzl/sv/rel3.sh;
 #                                      PQZH: pqzh/ligero/runs/tx0.sh, the gate-B method, 1,000 verifies per form)
 #   artifact/reproduce.sh --serve      build both wasm modules and serve a browser demo (PQZL R_TX, PQZH any form: prove
@@ -24,7 +26,8 @@
 #   artifact/reproduce.sh --multi-bench    op 7 R_TXM measurement table (P6-ANON S6, D14): PQZL research/pqzl-measure/txm-bench.sh (the
 #                                      L3 method) and PQZH ligero_bench / run_wasm.mjs txm (the H2 method of
 #                                      pqzh/ligero/runs/txm.sh), every (id, M, auditorOn), oversize shapes in bench
-#                                      builds only; results-multi.md (proof bytes, prove / verify times); ~1 h, ~2 GB
+#                                      builds only, and the Rust core's rows (pqzl/rust bench, wasm32 limit lifted);
+#                                      results-multi.md (proof bytes, prove / verify times); ~1 h, ~2 GB
 #
 # Output: $OUT (default artifact/out/<mode>-<UTC stamp>): results.md, results.json, every raw run file, log.txt.
 # Exit 0 = every check passed (quick / full / multi-bench). Memory: up to ~2 GB (the PQZL bench arena is 768 MiB;
@@ -39,7 +42,7 @@ case "${1:-}" in
   --serve) MODE=serve ;;
   --upstream) MODE=upstream ;;
   --multi-bench) MODE=multi ;;
-  *) sed -n '2,32p' "$0"; exit 2 ;;
+  *) sed -n '2,35p' "$0"; exit 2 ;;
 esac
 OUT=${OUT:-artifact/out/$MODE-$(date -u +%Y%m%dT%H%M%SZ)}
 mkdir -p "$OUT"
@@ -167,6 +170,18 @@ if [ $MODE = multi ]; then
   run pqzh-txm-oversize-wasm-build.txt $L/wasm cargo build $C --target wasm32-unknown-unknown --features oversize --target-dir target/oversize
   run pqzh-txm-oversize-wasm.jsonl $L env PQZH_WASM_FILE=wasm/target/oversize/wasm32-unknown-unknown/release/pqzh_ligero_wasm.wasm \
     node wasm/run_wasm.mjs 2 100 4 1 1 txm
+  # port plan Task 12: the Rust core's rows (pqzl/rust bench + wasm/run_wasm.mjs, the PQZL counts above, one process per
+  # shape; features oversize and, in wasm32, wasm-m8: the M <= 4 prove limit lifted for the measurement)
+  step "Rust R_TXM (pqzl/rust): M = 1, 2, 4, 8, 16 on / off: 10 proves, 30 verifies, SV 200, wasm 3 / 3, wasm SV 100"
+  RO=target/oversize RW=wasm/target/oversize/wasm32-unknown-unknown/release/pqzl_wasm.wasm
+  run rust-txm-build.txt pqzl/rust sh -c "cargo build $C --features bench,oversize --bin bench --target-dir $RO \
+    && cd wasm && cargo build $C --target wasm32-unknown-unknown --features pqzl/oversize,pqzl/wasm-m8 --target-dir $RO"
+  run rust-txm.txt pqzl/rust sh -c "for t in 0 1 2 3 4 5 6 7 8 9; do m=\$((64 << t))
+      $RO/release/bench 10 30 \$m >> '$OUT/rust-txm-native-generic.jsonl' || echo \"native generic \$t rc=\$?\"
+      PQZ_VERIFY=fast $RO/release/bench 2 200 \$m >> '$OUT/rust-txm-native-fast.jsonl' || echo \"native fast \$t rc=\$?\"
+      PQZL_WASM_FILE=$RW node wasm/run_wasm.mjs 3 3 \$m >> '$OUT/rust-txm-wasm-generic.jsonl' || echo \"wasm generic \$t rc=\$?\"
+      PQZL_WASM_FILE=$RW PQZ_VERIFY=fast node wasm/run_wasm.mjs 1 100 \$m >> '$OUT/rust-txm-wasm-fast.jsonl' || echo \"wasm fast \$t rc=\$?\"
+    done"
   step "op 7 table"
   python3 -I artifact/results.py multi "$OUT" | tee "$OUT/summary.txt"
   step "done: $OUT"
@@ -278,6 +293,29 @@ if [ $MODE = full ]; then
   step "vectors: tamper.py (each checker catches changed leaves)"
   run vectors-tamper.txt ffi python3 -I vectors/tamper.py
 fi
+
+# ---- Rust = C (port plan Task 12): the Rust core pqzl/rust/ against values the C core fixed. New runs only: the
+# stages above stay the C core's and are not repeated (owner 2026-10-16).
+R=pqzl/rust
+step "Rust = C: build (bench, keys_kat, the wasm32 bench module)"
+run rust-build.txt $R sh -c "cargo build $C --features bench --bin bench && cargo build $C --features test-hooks --bin keys_kat \
+  && cd wasm && cargo build $C --target wasm32-unknown-unknown"
+step "Rust = C: proofs_fnv = the C core's (bench 5 5 63, bench 2 2 16320: the op 7 shapes, wasm32 3 1 63)"
+run rust-fnv-native.jsonl $R target/release/bench 5 5 63
+run rust-fnv-txm.jsonl $R target/release/bench 2 2 16320
+run rust-fnv-wasm.jsonl $R node wasm/run_wasm.mjs 3 1 63
+if [ $MODE = full ]; then
+  step "Rust = C: the same proofs with verify_fast (bench 5 50 63, 2 50 16320, wasm32 3 10 63)"
+  run rust-fast-native.jsonl $R env PQZ_VERIFY=fast target/release/bench 5 50 63
+  run rust-fast-txm.jsonl $R env PQZ_VERIFY=fast target/release/bench 2 50 16320
+  run rust-fast-wasm.jsonl $R env PQZ_VERIFY=fast node wasm/run_wasm.mjs 3 10 63
+fi
+step "Rust = C: keys KAT (keys_kat 100 = the C core's pqz_keys_kat 100 lines; pqz_kat.py --c-keys)"
+(cd $R && target/release/keys_kat 100) > "$OUT/rust-keys-kat.jsonl" 2> "$OUT/rust-keys-kat-stderr.txt" || true
+run rust-keys-pqz-kat.txt . python3 -I $V/pqz_kat.py --c-keys "$OUT/rust-keys-kat.jsonl"
+step "Rust = C: pqz-vectors --check with pqz-ffi on the Rust backend (feature pqzl-rust)"
+run rust-vectors-build.txt ffi cargo build $C --features prove,pqzl-rust --bin pqz-vectors --target-dir target/pqzl-rust
+run rust-vectors-check.txt ffi target/pqzl-rust/release/pqz-vectors --check
 
 step "tables and comparison"
 python3 -I artifact/results.py check "$OUT" | tee "$OUT/summary.txt"

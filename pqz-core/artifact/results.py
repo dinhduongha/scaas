@@ -16,13 +16,20 @@
   results.py multi <out dir>
       the op 7 R_TXM measurement table of a reproduce.sh --multi-bench run: results-multi.md / .json; exit 1 if a
       bench failed (mutation accepted, panic, rc != 0) or a built shape is missing. Times are informational.
+  results.py d6 <run dir>
+      port plan D6 / Task 12: the Rust core against the C core, both measured in one session by pqzl/rust/d6.sh:
+      results-d6.md / .json (prove / verify / verify_fast p50 / p99 native and wasm32, prove peak memory, proofs_fnv
+      per relation and core; the wasm32 op 7 M = 8 criterion); exit 1 if a bench failed.
+
+The Rust core (pqzl/rust/, port plan Task 12) adds rows next to the C core's when its run files are present (the
+"Rust = C" stage's rust-*.jsonl in check, rust-txm-*.jsonl in multi); without them every table is as before.
 
 PQZL: proofs_fnv is a hash over the proofs of seeds 0..n-1, so it is keyed by n (the number of proves); native and
 wasm proofs are byte-identical, so one table serves both. PQZH: one FNV-1a hash and length per proof, keyed by its
 seed (ligero_bench fnv_by_seed; run_wasm.mjs's fnv_last = seed n-1), native = wasm32. pqz-ffi: the digest lines
 (statement, witness and proof hashes of every form of both systems, the self-test), native = wasm32.
 """
-import json, os, platform, re, subprocess, sys
+import hashlib, json, os, platform, re, subprocess, sys
 
 RELS = ["R_REG", "R_TX", "R_BURN", "R_DS", "R_DR", "R_TX0"]  # pqz_bench / run_wasm.mjs mask 63
 TOL = {"proof_bytes_rel": 0.005, "wasm_prove_peak_rel": 0.01, "ratio_rel": 0.5}
@@ -43,7 +50,9 @@ TEXT = {"pqzh-test.txt": ["mutated inputs rejected, 0 verifier panics caught"], 
         "ffi-test.txt": ["selftest hash", "0 disagreements"],
         "ffi-native.txt": ["c_abi: ok (0 failures)", "(must be 0): 0", "symbols ok", "!No such file"],
         "ffi-wasm-build.txt": [], "vectors-build.txt": [], "vectors-check.txt": [": ok", "!DIFF", "!EXTRA"],
-        "vectors-pqz-kat.txt": ["pqz_kat: ok"], "vectors-tamper.txt": ["caught: ok"]}
+        "vectors-pqz-kat.txt": ["pqz_kat: ok"], "vectors-tamper.txt": ["caught: ok"],
+        "rust-build.txt": [], "rust-keys-pqz-kat.txt": ["pqz_kat: ok"], "rust-vectors-build.txt": [],
+        "rust-vectors-check.txt": [": ok", "!DIFF", "!EXTRA", "same selftest.json"]}
 FFI = ["ffi-digests-native.jsonl", "ffi-digests-wasm.jsonl", "ffi-bench.jsonl"]
 VECTORS = "vectors-wasm.jsonl"  # replay_wasm.mjs: one line per proof, then {"cases", "verify_only", "fails"}
 # op 7 R_TXM (P6-ANON S6, D14): the built leg counts per id (= pqz-stmt built_legs, plan D3 / S3), both auditorOn;
@@ -54,6 +63,14 @@ WASM_PQZL_MAX_LEGS = 4
 VERIFY_ONLY = "native proof (verify only)"
 NEGATIVE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "smartcontracts", "vectors", "pqz",
                         "negative.json")
+SELFTEST = os.path.join(os.path.dirname(NEGATIVE), "selftest.json")
+# The Rust core (pqzl/rust/), "Rust = C" stage: run file -> (backend, verifier) as BENCH. The Rust bench / wasm runner
+# print the C bench's JSON lines without arena_peak; the wasm runner adds wasm_memory_bytes (linear memory after the
+# relation's proves). The op 7 runs are checked against expected rust.txm_fnv, the keys KAT against rust.keys_kat.
+RUST_BENCH = {"rust-fnv-native.jsonl": ("native", "generic"), "rust-fnv-wasm.jsonl": ("wasm", "generic"),
+              "rust-fast-native.jsonl": ("native", "fast"), "rust-fast-wasm.jsonl": ("wasm", "fast")}
+RUST_TXM = ["rust-fnv-txm.jsonl", "rust-fast-txm.jsonl"]
+RUST_KEYS = "rust-keys-kat.jsonl"
 
 
 def jsonl(path, backend=None):
@@ -81,7 +98,8 @@ def bench(path, backend=None):
                 r["np"] = o["n"]
         elif "proofs_fnv" in o:
             r = rels.setdefault(o["rel"], {})
-            r.update(fnv=o["proofs_fnv"], bytes_max=o["proof_bytes_max"], arena_peak=o["arena_peak"])
+            r.update(fnv=o["proofs_fnv"], bytes_max=o["proof_bytes_max"], arena_peak=o.get("arena_peak"),
+                     wasm_memory=o.get("wasm_memory_bytes"))
         if "fails" in o:
             fails += o["fails"]
         mism += o.get("mismatches", 0) if "fails" in o else 0
@@ -130,14 +148,15 @@ def p99(r):
     return max(v) if v else None
 
 
-def summarize(files):
-    """files: {standard name: path}. Returns the results dict (no comparison)."""
+def summarize(files, runs=BENCH):
+    """files: {standard name: path}; runs: the bench files to read (BENCH, or RUST_BENCH). Returns the results dict
+    (no comparison)."""
     res = {"relations": {rel: {"fnv": {}} for rel in RELS}, "checks": {}, "runs": {}}
     R = res["relations"]
     for name, path in files.items():
-        if name not in BENCH or not os.path.exists(path):
+        if name not in runs or not os.path.exists(path):
             continue
-        be, ver = BENCH[name]
+        be, ver = runs[name]
         rels, fails, mism = bench(path, "wasm-nosv" if ver == "alone" else None)
         res["runs"][name] = {"fails": fails, "mismatches": mism, "file": path}
         for rel, r in rels.items():
@@ -356,7 +375,49 @@ def compare(res, exp):
     res["compare"] = out
     if "pqzh" in res:
         compare_pqzh(res, exp)
+    if "rust" in res:
+        compare_rust(res, exp)
     return not any(s == "FAIL" for s, _, _ in res["compare"])
+
+
+def add_rust(res, files):
+    """res["rust"] from the "Rust = C" stage's run files; nothing when there are none."""
+    have = lambda n: files.get(n) and os.path.exists(files[n])
+    if not any(have(n) for n in list(RUST_BENCH) + RUST_TXM + [RUST_KEYS]):
+        return
+    r = summarize(files, RUST_BENCH)
+    rust = {"relations": r["relations"], "runs": r["runs"], "txm_fnv_seen": []}
+    for n in filter(have, RUST_TXM):
+        rels, fails, mism = bench(files[n])
+        rust["runs"][n] = {"fails": fails, "mismatches": mism, "file": files[n]}
+        rust["txm_fnv_seen"] += [[rel, n, x["np"], x["fnv"]] for rel, x in rels.items() if "fnv" in x]
+    if have(RUST_KEYS):
+        rust["keys_kat_sha256"] = hashlib.sha256(open(files[RUST_KEYS], "rb").read()).hexdigest()
+    res["rust"] = rust
+
+
+def compare_rust(res, exp):
+    """Rust = C: the Rust prover's proofs_fnv = the C core's frozen hashes (the six relations: exp relations, keyed by n;
+    op 7: exp rust.txm_fnv), every Rust bench fails 0, the keys KAT = the C core's output, and the self-test hash of
+    selftest.json, which pqz-vectors --check on the Rust backend found byte-equal."""
+    R, E = res["rust"], exp.get("rust", {})
+    add = lambda s, w, d: res["compare"].append([s, w, d])
+    for name, r in R["runs"].items():
+        add("ok" if r["fails"] == 0 and r["mismatches"] == 0 else "FAIL", f"Rust {name} fails",
+            f'fails {r["fails"]}, verifier disagreements {r["mismatches"]}')
+    seen = [[rel, n, np_, h] for rel in RELS for n, np_, h in R["relations"][rel].get("fnv_seen", [])] + R["txm_fnv_seen"]
+    for rel, name, np_, h in seen:
+        want = (exp["relations"][rel]["fnv"] if rel in RELS else E.get("txm_fnv", {}).get(rel, {})).get(str(np_))
+        add("info" if want is None else "ok" if want == h else "FAIL", f"Rust {rel} proofs_fnv {name} n={np_}",
+            f"{h} (no C hash for n={np_})" if want is None else f"{h}, C core {want}")
+    if "keys_kat_sha256" in R:
+        w = E.get("keys_kat", {}).get("sha256")
+        add("info" if not w else "ok" if R["keys_kat_sha256"] == w else "FAIL", "Rust keys KAT = C",
+            f'sha256 {R["keys_kat_sha256"]}, expected {w}')
+    if res.get("text_checks", {}).get("rust-vectors-check.txt") == "ok":
+        h, w = json.load(open(SELFTEST)).get("hash"), E.get("selftest")
+        add("ok" if h == w else "FAIL", "Rust backend self-test hash", f"{h} (selftest.json, byte-equal under pqz-vectors "
+            f"--check on the Rust backend), expected {w}")
 
 
 def fmt(v, nd=1):
@@ -367,14 +428,15 @@ def table(res):
     L = ["| | proof bytes (max) | prove p50 native / wasm | generic verify p50 native / wasm | SV p50 portable / x86-64-v3 / wasm"
          " | SV p99 portable / x86-64-v3 / wasm | wasm prove peak (one op, no SV) |", "|---|---|---|---|---|---|---|"]
     for rel in RELS:
-        x = res["relations"][rel]
-        g = lambda k, nd=1: fmt(x.get(k), nd)
-        pk = x.get("wasm_prove_peak_bytes")
-        L.append(f"| `{rel}` | {g('proof_bytes_max')} | {g('prove_p50_ms_native', 0)} / {g('prove_p50_ms_wasm', 0)} ms"
-                 f" | {g('generic_verify_p50_ms_native', 0)} / {g('generic_verify_p50_ms_wasm', 0)} ms"
-                 f" | {g('sv_p50_ms_native', 2)} / {g('sv_p50_ms_x86v3', 2)} / {g('sv_p50_ms_wasm', 1)} ms"
-                 f" | {g('sv_p99_ms_native', 1)} / {g('sv_p99_ms_x86v3', 1)} / {g('sv_p99_ms_wasm', 1)} ms"
-                 f" | {fmt(pk / 2**20 if pk else None)} MiB |")
+        for name, x in [(f"`{rel}`", res["relations"][rel])] + ([(f"`{rel}` Rust", res["rust"]["relations"][rel])]
+                                                               if "rust" in res else []):
+            g = lambda k, nd=1: fmt(x.get(k), nd)
+            pk = x.get("wasm_prove_peak_bytes")
+            L.append(f"| {name} | {g('proof_bytes_max')} | {g('prove_p50_ms_native', 0)} / {g('prove_p50_ms_wasm', 0)} ms"
+                     f" | {g('generic_verify_p50_ms_native', 0)} / {g('generic_verify_p50_ms_wasm', 0)} ms"
+                     f" | {g('sv_p50_ms_native', 2)} / {g('sv_p50_ms_x86v3', 2)} / {g('sv_p50_ms_wasm', 1)} ms"
+                     f" | {g('sv_p99_ms_native', 1)} / {g('sv_p99_ms_x86v3', 1)} / {g('sv_p99_ms_wasm', 1)} ms"
+                     f" | {fmt(pk / 2**20 if pk else None)} MiB |")
     return "\n".join(L)
 
 
@@ -410,6 +472,9 @@ def markdown(res):
          f"{m['cc']}, {m['wasm_ld']}, node {m['node']}, Python {m['python']}, {m.get('rustc')}, in Docker: {m['docker']}.", "",
          "Times are informational (they depend on the machine); the proof hashes, the checks and the sizes are compared.", "",
          "## PQZL (the LaZer fork, C)", "", table(res), ""]
+    if "rust" in res:
+        L += ["\"Rust\" rows: the Rust core (`pqzl/rust/`) in this run's \"Rust = C\" stage (bench 5 5 63 native, 3 1 63 "
+              "wasm32; --full also verify_fast), on the same machine as the C rows but with other sample sizes.", ""]
     if "pqzh" in res:
         L += ["## PQZH (Ligero, Rust; the proven preset)", "", pqzh_table(res), "",
               f"## pqz-ffi (one precompile, both systems)", "", f"Self-test hash: `{res['ffi'].get('selftest')}`.", "",
@@ -515,10 +580,38 @@ TXM_TEXT = ["pqzl-txm.txt", "pqzh-txm-build.txt", "pqzh-txm-oversize-build.txt",
             "pqzh-txm-oversize-wasm-build.txt"]
 
 
+TXM_RUST = ["native-generic", "native-fast", "wasm-generic", "wasm-fast"]  # rust-txm-<run>.jsonl, one process per shape
+
+
 def txm_rel(rel):
     """'R_TXM8_0' -> (8, False)."""
     m = re.fullmatch(r"R_TXM(\d+)(_0)?", rel or "")
     return m and (int(m.group(1)), not m.group(2))
+
+
+def txm_fill(out, f, rels):
+    """One op 7 bench file's relations into out {"M,on|off": {...}}; f = its run (native-generic, wasm-fast, ...).
+    wasm32 prove peak: the C arena peak of the prover build without SV (wasm-nosv), or the Rust wasm runner's linear
+    memory after the proves (wasm-generic; one shape per process)."""
+    for rel, r in rels.items():
+        s = txm_rel(rel)
+        if not s:
+            continue
+        x = out.setdefault(f"{s[0]},{'on' if s[1] else 'off'}", {"m": s[0], "aud": s[1]})
+        if f == "wasm-nosv":
+            x["wasm_prove_peak_bytes"] = r.get("arena_peak")
+        elif f.endswith("generic"):
+            be = f.split("-")[0]
+            if "bytes_max" in r:
+                x[f"proof_bytes_max_{be}"] = r["bytes_max"]
+            if r.get("wasm_memory"):
+                x["wasm_prove_peak_bytes"] = r["wasm_memory"]
+            if "prove" in r:
+                x[f"prove_p50_ms_{be}"] = r["prove"]["p50_ms"]
+            if "valid" in r:
+                x[f"verify_p50_ms_{be}"], x[f"verify_p99_ms_{be}"] = r["valid"]["p50_ms"], p99(r)
+        elif "valid" in r:
+            x[f"sv_p99_ms_{f.split('-')[0]}"] = p99(r)
 
 
 def multi(d):
@@ -536,23 +629,19 @@ def multi(d):
             continue
         rels, fails, mism = bench(p)
         add("ok" if fails == 0 and mism == 0 else "FAIL", f"pqzl-txm-{f}.jsonl", f"fails {fails}, verifier disagreements {mism}")
-        for rel, r in rels.items():
-            s = txm_rel(rel)
-            if not s:
-                continue
-            x = res["pqzl"].setdefault(f"{s[0]},{'on' if s[1] else 'off'}", {"m": s[0], "aud": s[1]})
-            if f == "wasm-nosv":
-                x["wasm_prove_peak_bytes"] = r.get("arena_peak")
-            elif f.endswith("generic"):
-                be = f.split("-")[0]
-                if "bytes_max" in r:
-                    x[f"proof_bytes_max_{be}"] = r["bytes_max"]
-                if "prove" in r:
-                    x[f"prove_p50_ms_{be}"] = r["prove"]["p50_ms"]
-                if "valid" in r:
-                    x[f"verify_p50_ms_{be}"], x[f"verify_p99_ms_{be}"] = r["valid"]["p50_ms"], p99(r)
-            elif "valid" in r:
-                x[f"sv_p99_ms_{f.split('-')[0]}"] = p99(r)
+        txm_fill(res["pqzl"], f, rels)
+    # the Rust core (reproduce.sh --multi-bench's Rust step), if run: rows next to PQZL's
+    for f in TXM_RUST:
+        p = os.path.join(d, f"rust-txm-{f}.jsonl")
+        if os.path.exists(p):
+            rels, fails, mism = bench(p)
+            add("ok" if fails == 0 and mism == 0 else "FAIL", f"rust-txm-{f}.jsonl", f"fails {fails}, verifier disagreements {mism}")
+            txm_fill(res.setdefault("rust", {}), f, rels)
+    for n in ("rust-txm-build.txt", "rust-txm.txt"):
+        p = os.path.join(d, n)
+        if os.path.exists(p):
+            st = text_check(p, [])
+            add(st, n, "rc 0" if st == "ok" else "see the file")
     for f in TXM_PQZH:
         p = os.path.join(d, f"pqzh-txm-{f}.jsonl")
         if not os.path.exists(p):
@@ -591,14 +680,21 @@ def multi_markdown(res):
          "## PQZL (research/pqzl-measure/txm-bench.sh, the L3 method)", "",
          "| M | auditor | built | proof bytes (max) | prove p50 native / wasm32 | generic verify p50 / p99 native"
          " | SV p99 portable / x86-64-v3 / wasm32 | wasm32 prove peak (no SV) |", "|---|---|---|---|---|---|---|---|"]
-    for x in sorted(res["pqzl"].values(), key=k):
-        g = lambda key, nd=1: fmt(x.get(key), nd)
-        pk = x.get("wasm_prove_peak_bytes")
-        L.append(f"| {x['m']} | {'on' if x['aud'] else 'off'} | {built('pqzl', x)} | {g('proof_bytes_max_native')}"
-                 f" | {g('prove_p50_ms_native', 0)} / {g('prove_p50_ms_wasm', 0)} ms"
-                 f" | {g('verify_p50_ms_native', 0)} / {g('verify_p99_ms_native', 0)} ms"
-                 f" | {g('sv_p99_ms_native', 1)} / {g('sv_p99_ms_x86v3', 1)} / {g('sv_p99_ms_wasm', 1)} ms"
-                 f" | {fmt(pk / 2**20 if pk else None)} MiB |")
+    rust = res.get("rust", {})
+    for c in sorted(res["pqzl"].values(), key=k):
+        rs = rust.get(f"{c['m']},{'on' if c['aud'] else 'off'}")
+        for core, x in [("", c)] + ([(" Rust", rs)] if rs else []):
+            g = lambda key, nd=1: fmt(x.get(key), nd)
+            pk = x.get("wasm_prove_peak_bytes")
+            L.append(f"| {x['m']}{core} | {'on' if x['aud'] else 'off'} | {built('pqzl', x)} | {g('proof_bytes_max_native')}"
+                     f" | {g('prove_p50_ms_native', 0)} / {g('prove_p50_ms_wasm', 0)} ms"
+                     f" | {g('verify_p50_ms_native', 0)} / {g('verify_p99_ms_native', 0)} ms"
+                     f" | {g('sv_p99_ms_native', 1)} / {g('sv_p99_ms_x86v3', 1)} / {g('sv_p99_ms_wasm', 1)} ms"
+                     f" | {fmt(pk / 2**20 if pk else None)} MiB |")
+    if rust:
+        L += ["", "\"Rust\" rows: the Rust core (`pqzl/rust/`, its bench and wasm/run_wasm.mjs, the counts of the PQZL "
+              "rows; wasm32 with the op 7 limit lifted, feature wasm-m8). Its wasm32 prove peak is the module's linear "
+              "memory after the proves (one shape per process), the C one the arena peak; no x86-64-v3 build."]
     L += ["", "## PQZH (Ligero, the proven preset; the H2 method of pqzh/ligero/runs/txm.sh)", "",
           "| M | auditor | built | proof bytes (max) | max_len_exact | prove p50 native / wasm32 | verify p50 / p99 native"
           " | verify p50 / p99 wasm32 | prove memory native heap / wasm32 linear |", "|---|---|---|---|---|---|---|---|---|"]
@@ -615,14 +711,109 @@ def multi_markdown(res):
     return "\n".join(L) + "\n"
 
 
+# D6 (port plan Task 12): pqzl/rust/d6.sh writes <core>-<run>.jsonl (one process per relation, core and backend) and
+# rust-memory.txt (tests/memory.rs peak_per_op), rust-m8-{native,wasm}-vectors.jsonl (the wasm32 op 7 M = 8 question)
+D6_RUNS = ["native-generic", "native-fast", "wasm-generic", "wasm-fast", "wasm-nosv"]  # wasm-nosv: C only
+D6_RELS = RELS + [f"R_TXM{m}{a}" for a in ("", "_0") for m in TXM_BUILT["pqzl"]]
+VEC_REL = {"REGISTER": "R_REG", "TRANSFER": "R_TX", "BURN": "R_BURN", "DISCLOSE-SENDER": "R_DS",
+           "DISCLOSE-RECEIVER": "R_DR", "TRANSFER0": "R_TX0"}
+# Task 12's criterion for raising the wasm32 op 7 prove limit to M = 8 (Rust backend): the M = 8 wasm32 peak within the
+# C core's wasm32 M = 4 peak (R_TXM4, auditor on: 268,012,304 B = 255.6 MiB, artifact/runs/s6-docker-multi), and
+# native = wasm32 on the M = 8 vector proofs
+WASM_M8_BUDGET = 268012304
+
+
+def vec_rel(name):
+    """tests/memory.rs row name -> relation: 'TRANSFER' -> 'R_TX', 'M8-off' -> 'R_TXM8_0'."""
+    s = txm_shape(name)
+    return VEC_REL.get(name) or (s and f"R_TXM{s[0]}{'' if s[1] else '_0'}")
+
+
+def d6(d):
+    res = {"rels": {}, "runs": {}, "checks": [], "machine": machine()}
+    add = lambda s, w, x: res["checks"].append([s, w, x])
+    for core in ("c", "rust"):
+        for f in D6_RUNS:
+            p = os.path.join(d, f"{core}-{f}.jsonl")
+            if not os.path.exists(p):
+                continue
+            rels, fails, mism = bench(p)
+            add("ok" if fails == 0 and mism == 0 else "FAIL", f"{core}-{f}.jsonl", f"fails {fails}, verifier disagreements {mism}")
+            be, ver = f.split("-")
+            for rel, r in rels.items():
+                x = res["rels"].setdefault(rel, {}).setdefault(core, {})
+                if ver == "nosv":
+                    x["wasm_peak"] = r.get("arena_peak")
+                    continue
+                if "fnv" in r and ver == "generic":
+                    x[f"fnv_{be}"] = [r["fnv"], r["np"]]
+                    x["native_peak" if be == "native" else "wasm_peak"] = r.get("arena_peak" if be == "native" else "wasm_memory")
+                if "prove" in r and ver == "generic":
+                    x[f"prove_{be}"] = [r["prove"]["p50_ms"], r["prove"]["p99_ms"]]
+                if "valid" in r:
+                    x[f"{'verify' if ver == 'generic' else 'fast'}_{be}"] = [r["valid"]["p50_ms"], p99(r)]
+    p = os.path.join(d, "rust-memory.txt")
+    for line in open(p, errors="replace") if os.path.exists(p) else []:
+        m = re.match(r"(\S+)\s+(\d+)(?:\s+\d+){6}$", line.strip())
+        if m and vec_rel(m.group(1)):
+            res["rels"].setdefault(vec_rel(m.group(1)), {}).setdefault("rust", {})["native_peak"] = int(m.group(2))
+    for rel, x in res["rels"].items():
+        c, r = x.get("c", {}), x.get("rust", {})
+        for be in ("native", "wasm"):
+            (hc, nc), (hr, nr) = c.get(f"fnv_{be}", [None, 0]), r.get(f"fnv_{be}", [None, 0])
+            if hc and hr:  # the same proofs only for the same n (d6.sh runs both cores with the same counts)
+                add("info" if nc != nr else "ok" if hc == hr else "FAIL", f"{rel} proofs_fnv {be} Rust = C",
+                    f"Rust {hr} (n={nr}), C {hc} (n={nc})")
+    n, w = (os.path.join(d, f"rust-m8-{s}-vectors.jsonl") for s in ("native", "wasm"))
+    if os.path.exists(n) and os.path.exists(w):
+        m8 = [l for l in open(w) if l.startswith('{"row": "M8-')]  # proved in wasm32: a "prove" digest, not a refusal
+        eq = open(n).read() == open(w).read() and bool(m8) and all('"prove"' in l for l in m8)
+        peaks = {rel: res["rels"].get(rel, {}).get("rust", {}).get("wasm_peak") for rel in ("R_TXM8", "R_TXM8_0")}
+        fit = all(v and v <= WASM_M8_BUDGET for v in peaks.values())
+        res["wasm_m8"] = {"native_eq_wasm": eq, "peaks": peaks, "budget": WASM_M8_BUDGET, "enough": eq and fit}
+        add("info", "wasm32 op 7 M = 8 (Task 12)", f"{'enough' if eq and fit else 'not enough'}: native = wasm32 on the "
+            f"vector proofs {eq}; Rust wasm32 M = 8 peaks {peaks} B, budget {WASM_M8_BUDGET:,} B (the C M = 4 peak)")
+    return res
+
+
+def d6_markdown(res):
+    ms = lambda v: "–" if not v else f"{fmt(v[0], 1)} / {fmt(v[1], 1)}"
+    mib = lambda v: "–" if not v else f"{v / 2**20:,.1f}"
+    fnv = lambda v: "–" if not v else f"{v[0]} (n={v[1]})"
+    L = ["# D6: the Rust core against the C core (pqzl/rust/d6.sh)", "",
+         "Machine: {cpu} ({threads} threads; flags {flags}), {os}, {cc}, node {node}, {rustc}.".format(**res["machine"]),
+         "One session, one machine; one process per relation, core and backend. Times p50 / p99 in ms (verify p99: the "
+         "larger of honest and adversarial). Prove peak native: C arena peak / Rust heap peak (counting allocator, cold "
+         "Ctx, tests/memory.rs); wasm32: C arena peak (prover build without SV) / Rust linear memory of the "
+         "one-relation process.", "",
+         "| relation | core | prove native | prove wasm32 | verify native | verify wasm32 | verify_fast native "
+         "| verify_fast wasm32 | prove peak native (MiB) | prove peak wasm32 (MiB) | proofs_fnv native / wasm32 |",
+         "|---|---|---|---|---|---|---|---|---|---|---|"]
+    for rel in D6_RELS + sorted(set(res["rels"]) - set(D6_RELS)):
+        for core in ("c", "rust"):
+            x = res["rels"].get(rel, {}).get(core)
+            if x is None:
+                continue
+            L.append(f"| `{rel}` | {'C' if core == 'c' else 'Rust'} | {ms(x.get('prove_native'))} | {ms(x.get('prove_wasm'))}"
+                     f" | {ms(x.get('verify_native'))} | {ms(x.get('verify_wasm'))} | {ms(x.get('fast_native'))}"
+                     f" | {ms(x.get('fast_wasm'))} | {mib(x.get('native_peak'))} | {mib(x.get('wasm_peak'))}"
+                     f" | {fnv(x.get('fnv_native'))} / {fnv(x.get('fnv_wasm'))} |")
+    n = {s: sum(1 for c in res["checks"] if c[0] == s) for s in ("ok", "FAIL")}
+    L += ["", f"## Checks: {n['ok']} ok, {n['FAIL']} FAIL", "", "| status | check | detail |", "|---|---|---|"]
+    L += [f"| {s} | {w} | {x} |" for s, w, x in res["checks"]]
+    return "\n".join(L) + "\n"
+
+
 def main(a):
     here = os.path.dirname(os.path.abspath(__file__))
     if len(a) >= 2 and a[0] == "check":
         d = a[1]
         exp = json.load(open(a[2] if len(a) > 2 else os.path.join(here, "expected-results.json")))
         files = {n: os.path.join(d, n) for n in list(BENCH) + CHECKS + list(PQZH_RUNS) + list(TEXT) + FFI + [VECTORS]}
+        files.update({n: os.path.join(d, n) for n in list(RUST_BENCH) + RUST_TXM + [RUST_KEYS]})
         res = summarize(files)
         add_pqzh(res, files)
+        add_rust(res, files)
         res["mode"] = open(os.path.join(d, "mode.txt")).read().strip() if os.path.exists(os.path.join(d, "mode.txt")) else "?"
         res["machine"] = machine()
         ok = compare(res, exp)
@@ -707,6 +898,15 @@ def main(a):
         json.dump(res, open(os.path.join(a[1], "results-multi.json"), "w"), indent=1)
         md = multi_markdown(res)
         open(os.path.join(a[1], "results-multi.md"), "w").write(md)
+        print(md)
+        ok = not any(st == "FAIL" for st, _, _ in res["checks"])
+        print("RESULT:", "PASS" if ok else "FAIL")
+        return 0 if ok else 1
+    if len(a) == 2 and a[0] == "d6":
+        res = d6(a[1])
+        json.dump(res, open(os.path.join(a[1], "results-d6.json"), "w"), indent=1)
+        md = d6_markdown(res)
+        open(os.path.join(a[1], "results-d6.md"), "w").write(md)
         print(md)
         ok = not any(st == "FAIL" for st, _, _ in res["checks"])
         print("RESULT:", "PASS" if ok else "FAIL")
