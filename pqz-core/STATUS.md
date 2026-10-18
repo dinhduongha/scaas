@@ -1096,6 +1096,33 @@ accepted set are all unchanged.
   - Symbol scans ok (`/gmp|mpfr|hexl/`: 0); cargo tests green; STARK-backup cross-check equal.
   - Fuzz smoke 3 × 60 s: no finding, corpora restored.
 
+**Follow-ups (2026-10-18, owner; Rust port Task 10b, branch `pqzl-rust`).** The hardening review asked for two more
+changes, made in the C core and the Rust crate alike. Outputs are unchanged: honest proofs, `proofs_fnv`,
+`proofSystemId`, the vectors and the self-test hash.
+1. **`poly_auto_self` in the NTT domain computes X → X⁻¹.** It converts to coefficients (`_fromcrt`) and applies the
+   coefficient automorphism, as `poly_auto` does; the result is in the coefficient domain. Item 1's reversal was not
+   the automorphism, so the branch returned a wrong value had anything reached it. Still no relation reaches it.
+   Rust `poly.rs` `auto_self` does the same. The oracle shim's double-size residue block, which only absorbed the
+   old out-of-bounds write, is gone (`tests/oracle_shim.c`, `src/testkit.rs`).
+2. **The rejection exponents saturate instead of wrapping.** `rejection.c` computes `t2 − 2·t1`, `t − ln M` and
+   `a − |y| − ln M` with `pqz_sat_sub128` / `pqz_sat_sub64`, constant-time helpers added to `pqz_fixexp.h`; Rust
+   `rejection.rs` uses `saturating_sub`. An exponent below −2^63 now stays the most negative one and rejects, so a
+   dishonest-size exponent fails closed through the prover's `PQZ_REJ_MAX` retry cap, where wrapping made it accept.
+   `num` above 2^127 (only for ⟨z,v⟩ near −2^126) stays the largest value and accepts, the exact value's verdict.
+   Honest exponents stay within ±64 (Q56) and never reach either edge.
+
+Evidence:
+- `pqzl/test/ub_test.sh t10b`: PASS (`pqzl/test/runs/ub-t10b.txt`). Part a checks both helpers on every pair of
+  range-edge values and six rejection inputs with exponents near ±2^63; the two negative-side inputs that accepted in
+  `ub-after.txt` now reject. Part c checks that the NTT branch equals the coefficient-domain automorphism.
+- Rust: the unit test `rand::rejection::tests::saturation_near_2_63` (the same six inputs) and the oracle test
+  `oracle_rand::rejection_saturation_eq_c` (the five one-limb inputs on 200 streams, C = Rust and the expected
+  verdict; the shim takes one-limb entries only, so the two-limb input is in the unit and C tests). The existing
+  oracle tests (`rejection_eq_c`, the arithmetic vector with `poly_auto_self` in the NTT domain) stay equal.
+- `pqzl/rust/run.sh t10b`: every test green, `proofs_fnv` equal to the C core's (native and wasm32).
+- `scripts/capped pqz-core/gate.sh t10b`: **PASS** (`runs/gate/t10b-*`), with `pqz-vectors --check` and the
+  self-test hash unchanged.
+
 ## Measured (2026-10-13, this machine, single thread)
 
 The spike's measurement record: P6d-2 against the unoptimised spike, and the verdict against the kill criteria

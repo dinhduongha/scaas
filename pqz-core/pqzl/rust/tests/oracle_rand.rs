@@ -156,6 +156,31 @@ fn rejection_eq_c() {
     assert!(rejects > N / 5 && accepts > N / 5 && errors > 0);
 }
 
+/// pqz_ub_test.c part a's one-limb rejection cases (exponents near +-2^63; S3 has two-limb entries, which the shim
+/// does not take: Rust's unit test `rejection::tests::saturation_near_2_63` and the C test cover it) on 200 streams:
+/// C = Rust, and the expected verdict (below -2^63 saturates and rejects, num above 2^127 saturates and accepts)
+#[test]
+fn rejection_saturation_eq_c() {
+    const MAX: i64 = i64::MAX;
+    let (scm, s2) = ([0, 1 << 63, 1], [1 << 20, 0]);
+    let cases = [
+        (false, -MAX, MAX, false),     // S1 t2 - 2 t1 saturates at 2^127 - 1
+        (false, 1 << 62, 1, true),     // S2 t - ln M saturates at -2^63
+        (false, -(1 << 62), 1, false), // S4 t - ln M near +2^63
+        (true, 1 << 62, 1, true),      // B1 a - |y| - ln M saturates at -2^63
+        (true, 0, MAX, false),         // B2 a - |y| - ln M near +2^63
+    ];
+    let mut g = Rnd(0x5EED_010B);
+    for t in 0..200 {
+        let (seed, dom) = (g.seed(), g.next());
+        for (k, &(bimodal, z, v, want)) in cases.iter().enumerate() {
+            let (r, c) = (rand_rej(bimodal, &seed, dom, &[z], &[v], &scm, &s2), c_rej(bimodal, &seed, dom, &[z], &[v], &scm, &s2));
+            assert_eq!(r, c, "stream {t}, case {k}");
+            assert_eq!(c.map(|x| x.0), Ok(want), "stream {t}, case {k}");
+        }
+    }
+}
+
 /// an int as 5 words: limbs, sign, nlimbs; limbs below 2^62 (hi - lo never wraps to 0)
 fn int5(g: &mut Rnd, nlimbs: u64, small: bool) -> [u64; 5] {
     let mut w = [0u64; 5];

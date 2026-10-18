@@ -310,17 +310,13 @@ impl Poly {
         })
     }
 
-    /// `poly_auto_self`. In the NTT domain C reverses the residue vector (its loop runs over the ring's two former CRT
-    /// moduli, so it also reverses the 64 words after the 512-byte residue buffer, outside the poly; that write cannot
-    /// be reproduced and is not)
+    /// `poly_auto_self`: X → X^-1 in place, via the coefficient domain as `auto` (the NTT branch, reached by no
+    /// relation, converts first)
     pub(crate) fn auto_self(&mut self) {
-        if self.crt {
-            self.v.reverse();
-        } else {
-            let a = self.clone();
-            for i in 1..D {
-                self.put(i, &Int::neg_of(&a.c(D - i)));
-            }
+        self.fromcrt();
+        let a = self.clone();
+        for i in 1..D {
+            self.put(i, &Int::neg_of(&a.c(D - i)));
         }
     }
 

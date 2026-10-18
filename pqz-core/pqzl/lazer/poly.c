@@ -690,34 +690,14 @@ poly_auto (poly_t r, poly_t a)
 void
 poly_auto_self (poly_t r)
 {
-  /* o-1 auto in crt form reverses crt coeffs */
-  if (r->crt == 1)
-    {
-      crtcoeff_t *crb, *cre, tmp;
-      polyring_srcptr ring = poly_get_ring (r);
-      const unsigned int deg = polyring_get_deg (ring);
-      unsigned int j;
+  intvec_ptr rcoeffvec = _get_coeffvec (r);
 
-      /* PQZ: the fork's crtrep is one residue vector of deg words (_sizeof_crtrep_data), not one per CRT prime; the
-         loop over ring->nmoduli (2 in the generated rings) also reversed the deg words past the buffer. Reverse the one
-         vector only (2026-10-18, as the Rust port). Not reached by any relation; in the incomplete NTT (pqz_ntt.c) the
-         reversal is not X -> X^-1 (upstream's fully split CRT order made it so). */
-      for (j = 0; j < deg / 2; j++)
-        {
-          crb = _get_crtcoeff (r->crtrep, 0, j, deg);
-          cre = _get_crtcoeff (r->crtrep, 0, deg - j - 1, deg);
-
-          tmp = *crb;
-          *crb = *cre;
-          *cre = tmp;
-        }
-    }
-  else
-    {
-      intvec_ptr rcoeffvec = _get_coeffvec (r);
-
-      intvec_auto_self (rcoeffvec);
-    }
+  /* PQZ: in the NTT domain (crt == 1) go through the coefficients, as poly_auto does (2026-10-18, as the Rust port).
+     Upstream reversed the residues, which is X -> X^-1 only in its fully split CRT order, not in the incomplete NTT
+     (pqz_ntt.c); and its loop over ring->nmoduli also wrote past the fork's one residue vector. Not reached by any
+     relation (every caller passes coefficients); the result is now poly_auto's, in the coefficient domain. */
+  _fromcrt (r);
+  intvec_auto_self (rcoeffvec);
 }
 
 void

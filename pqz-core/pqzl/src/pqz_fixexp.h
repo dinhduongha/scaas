@@ -33,6 +33,26 @@ pqz_ct_sel64 (uint64_t mask, uint64_t a, uint64_t b) /* mask ? a : b, mask all-o
   return (a & mask) | (b & ~mask);
 }
 
+/* a - b saturated into [INT64_MIN, INT64_MAX] / the signed 128-bit range, constant-time (2026-10-18, as the Rust
+   port's saturating_sub): overflow iff a and b differ in sign and the wrapped difference's sign differs from a's;
+   then the result is INT64_MIN if a < 0, else INT64_MAX (same in 128 bits) */
+static inline int64_t
+pqz_sat_sub64 (int64_t a, int64_t b)
+{
+  uint64_t ua = (uint64_t)a, r = ua - (uint64_t)b;
+  uint64_t ov = 0 - (((ua ^ (uint64_t)b) & (ua ^ r)) >> 63);
+  return (int64_t)pqz_ct_sel64 (ov, (ua >> 63) + (uint64_t)INT64_MAX, r);
+}
+
+static inline pqz_fx_i128
+pqz_sat_sub128 (pqz_fx_i128 a, pqz_fx_i128 b)
+{
+  pqz_fx_u128 ua = (pqz_fx_u128)a, ub = (pqz_fx_u128)b, r = ua - ub;
+  pqz_fx_u128 ov = (pqz_fx_u128)0 - (((ua ^ ub) & (ua ^ r)) >> 127);
+  pqz_fx_u128 sat = (ua >> 127) + (~(pqz_fx_u128)0 >> 1);
+  return (pqz_fx_i128)((sat & ov) | (r & ~ov));
+}
+
 /* exp(-s) in Q63 for s in [0, ln 2] given in Q56 */
 static inline uint64_t
 pqz_expneg_q63 (uint64_t s)

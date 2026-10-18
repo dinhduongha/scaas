@@ -1,12 +1,10 @@
 //! `pqz_fixexp.h`: the integer fixed-point exp of the Gaussian sampler and the rejection tests (no float), with C's
 //! masked selects and fixed loop counts. Unsigned C arithmetic wraps here too (`wrapping_*`).
 //!
-//! One deliberate difference: C clamps x into [-64, 64] (Q56) through `x - X_MAX` and `x + X_MAX`, which overflow
-//! (undefined behaviour) exactly when x is outside [-X_MAX, X_MAX); there the compiled C depends on the compiler's
-//! reading of the overflow. This port forms both comparisons in 128 bits, so it equals C on [-X_MAX, X_MAX) and
-//! saturates as intended outside. Only a rejection exponent beyond +-64 reaches that range (an acceptance
-//! probability above 2^92 or below 2^-92), which no honest input produces; the build's C (clang -O2) saturates
-//! there too on the oracle test's huge-exponent inputs (`oracle_rand::rejection_eq_c`).
+//! The clamp of x into [-64, 64] (Q56) forms both comparisons in 128 bits, as C does since the 2026-10-18 hardening
+//! (before it, C's 64-bit `x - X_MAX` / `x + X_MAX` overflowed outside [-X_MAX, X_MAX)): saturation outside that
+//! range, on every input equal to C. Only a rejection exponent beyond +-64 gets there (an acceptance probability above
+//! 2^92 or below 2^-92), which no honest input produces.
 
 pub(crate) const LN2_Q56: i64 = 49_946_518_145_322_874;
 const INVLN2_Q60: u64 = 1_663_314_137_230_540_311;

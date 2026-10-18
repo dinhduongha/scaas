@@ -39,9 +39,7 @@ operation). `src/testkit.rs` (feature `test-hooks`, also built with `c-oracle`) 
 (`#[doc(hidden)]`, not API): the arithmetic KAT of `pqzl/kat/lazer_dump.c`, which `src/bin/kat_dump.rs`
 prints, KeyGen / Enc with lowered norm thresholds for `src/bin/keys_kat.rs` (`pqzl/test/pqz_keys_kat.c`'s JSON
 lines), and the Rust halves of the oracle tests (`tests/oracle_arith.rs`, `tests/oracle_rand.rs`; the CBD vectors
-`smartcontracts/vectors/pqz/cbd.json`). The C half of the vector test drives `poly_auto_self` in the NTT
-domain, whose second loop pass writes the 64 words after the residue buffer (a C-core defect, the core is read-only
-here): the shim gives that poly a double-size residue block, so the write stays in scratch it owns.
+`smartcontracts/vectors/pqz/cbd.json`).
 
 ## API
 

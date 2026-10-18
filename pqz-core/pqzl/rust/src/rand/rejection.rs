@@ -3,6 +3,9 @@
 //!   bimodal:  accept iff u < 1 / (M exp(-<v,v> / (2 sigma^2)) cosh(<z,v> / sigma^2))
 //! with u a 64-bit uniform word from the caller's stream (one per test). `Ok(true)` = reject, as C's 1. C's `ERR`s
 //! (an input of 2^126 or more, mismatched vectors) set the sticky internal error and carry on: `Error::Internal`.
+//! `t2 - 2 t1`, `t - ln M` and `a - |y| - ln M` saturate (`saturating_sub`; C `pqz_sat_sub64` / `pqz_sat_sub128`):
+//! an exponent below -2^63 stays the most negative and rejects, `num` above 2^127 the largest and accepts, as the exact
+//! values would. Only dishonest-size inputs get there (honest exponents stay within +-64 in Q56).
 use super::fixexp::{bernoulli_fp, ct_sel64, div_q56, exp_fp, X_MAX};
 use super::rng::Rng;
 use crate::arith::int::{Int, IntVec};
@@ -67,11 +70,11 @@ fn dots(z: &IntVec, v: &IntVec) -> Result<(i128, i128), Error> {
 /// `rej_standard`
 pub(crate) fn rej_standard(st: &mut Rng, z: &IntVec, v: &IntVec, scm: &Int, sigma2: &Int) -> Result<bool, Error> {
     let (t1, t2) = dots(z, v)?;
-    let num = t2.wrapping_sub(t1.wrapping_mul(2));
+    let num = t2.saturating_sub(t1.wrapping_mul(2)); // |t1| < 2^126: 2 t1 is exact
     let den = (int2i128(sigma2)? as u64).wrapping_mul(2);
     let t = quot_q56(num, den);
     // accept iff u * M * exp(-t) <= 1, i.e. u < exp(t - ln M)
-    let (mant, e) = exp_fp(t.wrapping_sub(ln_m_q56(scm)));
+    let (mant, e) = exp_fp(t.saturating_sub(ln_m_q56(scm)));
     Ok(!bernoulli_fp(st.u64(), mant, e))
 }
 
@@ -84,7 +87,7 @@ pub(crate) fn rej_bimodal(st: &mut Rng, z: &IntVec, v: &IntVec, scm: &Int, sigma
     let ys = y >> 63;
     y = (y ^ ys).wrapping_sub(ys); // |y|
     // p = 2 exp(a - |y|) / (M (1 + exp(-2|y|))); accept iff u (1 + exp(-2|y|)) / 2 < exp(a - |y| - ln M)
-    let (m1, e1) = exp_fp(a.wrapping_sub(y).wrapping_sub(ln_m_q56(scm)));
+    let (m1, e1) = exp_fp(a.saturating_sub(y).saturating_sub(ln_m_q56(scm)));
     let yc = ct_sel64(((y > X_MAX / 2) as u64).wrapping_neg(), (X_MAX / 2) as u64, y as u64);
     let (m2, e2) = exp_fp(-2 * yc as i64); // exp(-2|y|) = m2 * 2^(e2 - 63), e2 <= 1
     // as Q63: m2 << 1 if e2 == 1, else m2 >> -e2 (0 below 2^-63)
@@ -95,4 +98,43 @@ pub(crate) fn rej_bimodal(st: &mut Rng, z: &IntVec, v: &IntVec, scm: &Int, sigma
     let w = (((1u128 << 63) + f as u128) >> 1) as u64;
     let uw = ((st.u64() as u128 * w as u128) >> 63) as u64;
     Ok(!bernoulli_fp(uw, m1, e1))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// pqz_ub_test.c part a's rejection cases: exponents near +-2^63, the verdict on 64 draws of u (scM = 1.5 2^128,
+    /// sigma^2 = 2^20); below -2^63 saturates and rejects, num above 2^127 saturates and accepts
+    #[test]
+    fn saturation_near_2_63() {
+        const MAX: i64 = i64::MAX;
+        let scm = Int::from_limbs(&[0, 1 << 63, 1], 0);
+        let s2 = Int::from_limbs(&[1 << 20], 0);
+        let one = |x: i64| {
+            let mut r = IntVec::new(1, 1).unwrap();
+            r.set_i64(&[x]);
+            r
+        };
+        // S3: two-limb entries, t2 = 2, t1 = -(2^126 - 1), num = 2^127
+        let (mut z3, mut v3) = (IntVec::new(2, 2).unwrap(), IntVec::new(2, 2).unwrap());
+        v3.set_elem(0, &Int::from_limbs(&[1, 0], 0));
+        v3.set_elem(1, &Int::from_limbs(&[1, 0], 0));
+        z3.set_elem(0, &Int::from_limbs(&[u64::MAX, (1 << 62) - 1], 1));
+        let cases: [(&str, bool, IntVec, IntVec, bool); 6] = [
+            ("S1 standard, t2 - 2 t1 saturates at 2^127 - 1", false, one(-MAX), one(MAX), false),
+            ("S2 standard, t - ln M saturates at -2^63", false, one(1 << 62), one(1), true),
+            ("S3 standard, num = 2^127 saturates (two limbs)", false, z3, v3, false),
+            ("S4 standard, t - ln M near +2^63", false, one(-(1 << 62)), one(1), false),
+            ("B1 bimodal, a - |y| - ln M saturates at -2^63", true, one(1 << 62), one(1), true),
+            ("B2 bimodal, a - |y| - ln M near +2^63", true, one(0), one(MAX), false),
+        ];
+        for (name, bimodal, z, v, want) in cases {
+            let mut st = Rng::new(&core::array::from_fn(|i| if i == 0 { 7 } else { 0 }), 0); // C's { 7 }
+            for _ in 0..64 {
+                let r = if bimodal { rej_bimodal(&mut st, &z, &v, &scm, &s2) } else { rej_standard(&mut st, &z, &v, &scm, &s2) };
+                assert_eq!(r, Ok(want), "{name}");
+            }
+        }
+    }
 }
