@@ -3,7 +3,7 @@
  * Nethermind P/Invoke). Hand-written; tests/c_abi.c compiles against it and links libpqz_ffi (run.sh), and the Rust
  * test `header_matches` checks every constant here against the crate.
  *
- * input  = u8(op) || be32(len(stmt)) || stmt || proof   (op 1..5; op 6 = SELFTEST, exactly 06 00000000)
+ * input  = u8(op) || be32(len(stmt)) || stmt || proof   (op 1..5 and 7; op 6 = SELFTEST, exactly 06 00000000)
  * output = 32 bytes: ...01 valid, ...00 anything else (malformed, unknown op / opTag / proofSystemId, wrong length,
  *          non-canonical encoding, failed check), or the self-test hash for op 6
  *
