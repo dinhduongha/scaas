@@ -1248,6 +1248,14 @@ the record.
    `pqzl/test/check_symbols_neg.sh` (a missing file and a non-object exit non-zero; the library objects named from
    another directory pass) and `pqzl/build.sh native` + `glic/absence.sh` on the real files:
    `artifact/runs/art2-check-symbols.txt`, `glic/runs/absence-2026-10-15.txt`.
+10. **Rust core: wasm32 verify_fast is about 2× the C core's time** (PQZL Rust port, D6 run `d6`, 2026-10-18):
+    1.7–2.0× over the 14 relations; `R_TXM8` p99 51.0 ms against the 60 ms limit, about 15 % margin on the
+    reference CPU (C: 29.0 ms). Likely cause: `pqzl/rust/src/arith/ntt.rs` multiplies 64 × 64 → 128 bits (`mulq`,
+    `red128`, the basemul `u128` accumulator) on every target, and wasm32 has no wide multiply (each is a
+    `__multi3` call); the C core uses its 21-bit-limb path there (`pqz_ntt.c`, `PQZ_MUL128 0`). Neither wasm32 build
+    uses simd128. Follow-up, not done in the port: a `cfg(target_arch = "wasm32")` limb path in `ntt.rs` (it must give
+    the same residues; `run.sh`'s native = wasm32 replay and proofs_fnv checks pin that). Native verify is unaffected (the
+    Rust core is faster there), and the chain verifies natively.
 
 Scratch (not needed to resume, re-creatable): the LaZer and lattice-estimator clones, the upstream tbox harness and
 debug builds under the session scratchpad `p6d/`.

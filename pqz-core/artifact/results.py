@@ -70,6 +70,13 @@ RUST_BENCH = {"rust-fnv-native.jsonl": ("native", "generic"), "rust-fnv-wasm.jso
               "rust-fast-native.jsonl": ("native", "fast"), "rust-fast-wasm.jsonl": ("wasm", "fast")}
 RUST_TXM = ["rust-fnv-txm.jsonl", "rust-fast-txm.jsonl"]
 RUST_KEYS = "rust-keys-kat.jsonl"
+# reproduce.sh's Rust runs: run file -> the n of every relation's proofs_fnv in it (bench 5 5 63, wasm32 3 1 63,
+# bench 2 2 16320); quick and --full need the first four files, --full also the verify_fast ones
+RUST_N = {"rust-fnv-native.jsonl": 5, "rust-fnv-wasm.jsonl": 3, "rust-fnv-txm.jsonl": 2,
+          "rust-fast-native.jsonl": 5, "rust-fast-wasm.jsonl": 3, "rust-fast-txm.jsonl": 2}
+RUST_REQUIRED = {"quick": ["rust-fnv-native.jsonl", "rust-fnv-wasm.jsonl", "rust-fnv-txm.jsonl", RUST_KEYS,
+                           "rust-build.txt", "rust-keys-pqz-kat.txt"]}
+RUST_REQUIRED["full"] = RUST_REQUIRED["quick"] + ["rust-fast-native.jsonl", "rust-fast-wasm.jsonl", "rust-fast-txm.jsonl"]
 
 
 def jsonl(path, backend=None):
@@ -331,7 +338,8 @@ def compare_pqzh(res, exp):
             f"{len(n)} lines" + ("" if w is None else f", {sum(a != b for a, b in zip(n, w)) + abs(len(n) - len(w))} differ"))
     if "vectors" in res:
         v = res["vectors"]
-        good = v["cases"] > 0 and v["fails"] == 0 and v["rows"] == v["cases"] and v["equal_valid"] + v["verify_only"] == v["rows"]
+        good = v["cases"] > 0 and v["fails"] == 0 and v["rows"] == v["cases"] and v["equal_valid"] + v["verify_only"] == v["rows"] \
+            and not (v.get("no_c_core") and v["verify_only"])  # the Rust backend proves every row in wasm32
         add("ok" if good else "FAIL", "vectors wasm32 replay",
             f'{v["rows"]} proofs, {v["equal_valid"]} byte-equal and valid, {v["verify_only"]} native PQZL op 7 M > '
             f'{WASM_PQZL_MAX_LEGS} proofs valid (verify only), fails {v["fails"]}')
@@ -374,7 +382,7 @@ def compare(res, exp):
     res["compare"] = out
     if "pqzh" in res:
         compare_pqzh(res, exp)
-    if "rust" in res:
+    if "rust" in res or (res.get("mode") in RUST_REQUIRED and "rust_missing" in res):  # rust_missing: add_rust ran
         compare_rust(res, exp)
     return not any(s == "FAIL" for s, _, _ in res["compare"])
 
@@ -382,6 +390,7 @@ def compare(res, exp):
 def add_rust(res, files):
     """res["rust"] from the "Rust = C" stage's run files; nothing when there are none."""
     have = lambda n: files.get(n) and os.path.exists(files[n])
+    res["rust_missing"] = [n for n in sorted(set(RUST_REQUIRED["full"])) if not have(n)]
     if not any(have(n) for n in list(RUST_BENCH) + RUST_TXM + [RUST_KEYS]):
         return
     r = summarize(files, RUST_BENCH)
@@ -390,6 +399,8 @@ def add_rust(res, files):
         rels, fails, mism = bench(files[n])
         rust["runs"][n] = {"fails": fails, "mismatches": mism, "file": files[n]}
         rust["txm_fnv_seen"] += [[rel, n, x["np"], x["fnv"]] for rel, x in rels.items() if "fnv" in x]
+    for n, x in rust["runs"].items():  # a crash or an early stop: the run's last rc= line is not 0 (as text_check)
+        x["rc"] = text_check(files[n], [])
     if have(RUST_KEYS):
         rust["keys_kat_sha256"] = hashlib.sha256(open(files[RUST_KEYS], "rb").read()).hexdigest()
     res["rust"] = rust
@@ -399,12 +410,21 @@ def compare_rust(res, exp):
     """Rust = C: the Rust prover's proofs_fnv = the C core's frozen hashes (the six relations: exp relations, keyed by n;
     op 7: exp rust.txm_fnv), every Rust bench fails 0, and the keys KAT = the C core's output. The self-test, digests and
     vectors on the Rust core are the pqz-ffi / vectors stages' checks (pqz-ffi's default backend is pqzl-rust)."""
-    R, E = res["rust"], exp.get("rust", {})
+    R, E = res.get("rust", {"runs": {}, "relations": {rel: {} for rel in RELS}, "txm_fnv_seen": []}), exp.get("rust", {})
     add = lambda s, w, d: res["compare"].append([s, w, d])
+    mode = res.get("mode")
+    for n in RUST_REQUIRED.get(mode, []) if "rust_missing" in res else []:  # check, quick / --full: every Rust run file
+        add("FAIL" if n in res.get("rust_missing", []) else "ok", f"Rust {n} present", f"reproduce.sh {mode}")
     for name, r in R["runs"].items():
-        add("ok" if r["fails"] == 0 and r["mismatches"] == 0 else "FAIL", f"Rust {name} fails",
-            f'fails {r["fails"]}, verifier disagreements {r["mismatches"]}')
+        add("ok" if r["fails"] == 0 and r["mismatches"] == 0 and r.get("rc") == "ok" else "FAIL", f"Rust {name} fails",
+            f'fails {r["fails"]}, verifier disagreements {r["mismatches"]}, last rc= line {"0" if r.get("rc") == "ok" else "not 0"}')
     seen = [[rel, n, np_, h] for rel in RELS for n, np_, h in R["relations"][rel].get("fnv_seen", [])] + R["txm_fnv_seen"]
+    for name in R["runs"]:  # every expected (relation, n) is in the run: a bench that stopped early misses some
+        want = RELS if name in RUST_BENCH else list(E.get("txm_fnv", {}))
+        got = {rel for rel, n, np_, _ in seen if n == name and np_ == RUST_N.get(name)}
+        miss = [rel for rel in want if rel not in got]
+        add("FAIL" if miss else "ok", f"Rust {name} relations", f"missing (relation, n={RUST_N.get(name)}): {miss}"
+            if miss else f"{len(want)} relations at n={RUST_N.get(name)}")
     for rel, name, np_, h in seen:
         want = (exp["relations"][rel]["fnv"] if rel in RELS else E.get("txm_fnv", {}).get(rel, {})).get(str(np_))
         add("info" if want is None else "ok" if want == h else "FAIL", f"Rust {rel} proofs_fnv {name} n={np_}",
@@ -491,7 +511,9 @@ def add_pqzh(res, files):
         rows = [o for o in jsonl(p) if "form" in o]
         end = ([o for o in jsonl(p) if "cases" in o] or [{"cases": 0, "fails": 1}])[-1]
         vo = [o for o in rows if verify_only_ok(o)]
-        res["vectors"] = {"rows": len(rows), "cases": end["cases"], "fails": end["fails"], "verify_only": len(vo),
+        fn = files.get("ffi-native.txt")
+        no_c = bool(fn) and os.path.exists(fn) and "no C core in this build" in open(fn, errors="replace").read()
+        res["vectors"] = {"rows": len(rows), "cases": end["cases"], "fails": end["fails"], "verify_only": len(vo), "no_c_core": no_c,
                           "equal_valid": sum(1 for o in rows if o.get("wasm_equal_native") is True and o.get("wasm_precompile") == 1)}
     if files.get("vectors-check.txt") and os.path.exists(files["vectors-check.txt"]):
         res["txm"] = txm_summary(files)

@@ -378,15 +378,19 @@ Sources: `research/pqzl-measure/runs/tx0c-native.jsonl` (10 proves, 30 honest ve
 | `R_DR` | 28,996 | 395 / 504 | 206 / 218; 254 | 4.50 / 4.89 | 2.69 / 2.82 | 7.52 / 7.92 | 107.7 / 83.0 |
 | `R_DR` Rust | same proofs as C | 262 / 631 | 102 / 126; 214 | 3.50 / 5.54 | – | 14.41 / 18.57 | heap 25.6 / linear 31.1 |
 
-- Adversarial SV p99 (246 native / 600 wasm mutated inputs per relation): ≤ 8.9 ms portable, ≤ 5.7 ms x86-64-v3,
-  ≤ 14.4 ms wasm.
+- C core: adversarial SV p99 (246 native / 600 wasm mutated inputs per relation) ≤ 8.9 ms portable, ≤ 5.7 ms
+  x86-64-v3, ≤ 14.4 ms wasm. Rust core (run `d6`, the SV p99 column, honest and adversarial): ≤ 8.9 ms native,
+  ≤ 37.1 ms wasm32.
 - The largest wasm prove peak (`R_TX`, 231,858,048 B = 221.1 MiB) is 13.6 % under the 256 MiB hard limit.
 - Rust rows (run `d6`, 2026-10-18): the Rust core has no arena. Memory column: its native heap peak (prove, cold
   `Ctx`, `tests/memory.rs` counting allocator) and its wasm32 linear memory after the proves, one relation per
-  process (including the bench's statements and witnesses: an upper bound), in MB.
+  process (including the bench's statements and witnesses), in MB. A process that keeps every relation's keys
+  (a wallet `Ctx` proving every form and shape, M = 8 included) reaches 229,638,144 B = 219.0 MiB
+  (`pqzl/rust/runs/d6/rust-m8-wasm-vectors-stderr.txt`), under 256 MiB.
 - Native and wasm proofs are equal byte for byte.
 - `pqz.wasm` 411,419 B (356,523 B without the specialised verifier, STATUS.md "Auditor-off transfer").
-- Every SV p99 ≥ 4× under the 60 ms limit on every build.
+- C core: every SV p99 ≥ 4× under the 60 ms limit on every build. Rust core: ≥ 6.7× natively, ≥ 1.6× in wasm32
+  (its wasm32 SV is about 2× the C time, [pqzl/rust/README.md](pqzl/rust/README.md#d6-rust-against-c-plan-d6-task-12)).
 
 </details>
 
@@ -518,7 +522,8 @@ Built shapes, auditor on (auditor off is a little smaller and faster). Run: the 
 - Memory: with the C core a PQZL proof in the browser (wasm32) peaks at 221–256 MiB for M ≤ 4 but 495 MiB for M = 8,
   over the browser's 256 MiB limit, so the C backend proves M ≤ 4 in wasm32 and M = 8 is for native or desktop
   wallets. The Rust core needs 117.4 MiB of wasm32 linear memory at M = 8 (auditor on; 105.9 MiB off) and 115.5 MB of
-  native heap, so on `pqz-ffi`'s Rust backend (the default) wasm32 proves M = 8 too (owner 2026-10-18 "if it is
+  native heap (one relation per process; a process holding every relation's keys reaches 219.0 MiB), so on
+  `pqz-ffi`'s Rust backend (the default) wasm32 proves M = 8 too (owner 2026-10-18 "if it is
   enough, raise it", decisions.md CTR-PQZ-09; [pqzl/rust/README.md](pqzl/rust/README.md#the-wasm32-op-7-limit-owner-2026-10-18-if-it-is-enough-raise-it)).
   C core native proving uses 343 MiB at M = 4 and 664 MiB at M = 8. PQZH proving needs ≤ 44 MB native and ≤ 49 MiB wasm32.
 - The node's verify arena (512 MiB, S3) holds every multi-recipient shape's keys and tables with a 2× margin (§5.3).
@@ -783,10 +788,11 @@ run files keep the paths of their day.
 | 2026-10-17 | **the freeze**: `artifact/runs/freeze-2026-10-17/` (233 checks ok), `expected-results.json` frozen |
 
 **In progress:** **PQZL in Rust** ([plan](../docs/superpowers/plans/2026-10-17-pqzl-rust-port.md)): crate `pqzl` in
-`pqzl/rust/`, byte-for-byte equal to the C core (same proofs from the same seeds). **The Rust crate will be the production PQZL core
-of the precompile** (owner 2026-10-18): once the port is verified, `pqz-ffi` builds it by default and the C core stays
-as the reference. Until then, the precompile on chain 7622 runs the C core. The package checks Rust = C (`artifact/reproduce.sh`), and run `d6` will
-compare the two cores' speed and memory in one session (§5 "Rust" rows, run `d6`).
+`pqzl/rust/`, byte-for-byte equal to the C core (same proofs from the same seeds). **The Rust crate is the production PQZL core
+of the precompile** (owner 2026-10-18): `pqz-ffi` builds it by default (since the port's Task 11) and the C core stays
+as the reference, opt-in (feature `pqzl-c`). Not deployed yet: the precompile on chain 7622 runs the C-backed image
+until the live roll-out. The package checks Rust = C (`artifact/reproduce.sh`), and run `d6` compared the two cores'
+speed and memory in one session (§5 "Rust" rows).
 
 **Open items** (arena exhaustion, global state, clearing secrets from memory, …): [STATUS.md "Open"](STATUS.md#open).
 

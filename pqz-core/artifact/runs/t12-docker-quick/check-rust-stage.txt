@@ -1,0 +1,13 @@
+untouched: PASS (rc 0), expected PASS: ok
+crash: FAIL (rc 1), expected FAIL: ok
+    | FAIL | Rust rust-fnv-wasm.jsonl fails | fails 0, verifier disagreements 0, last rc= line not 0 |
+    | FAIL | Rust rust-fnv-wasm.jsonl relations | missing (relation, n=3): ['R_REG', 'R_TX', 'R_BURN', 'R_DS', 'R_DR', 'R_TX0'] |
+early_stop: FAIL (rc 1), expected FAIL: ok
+    | FAIL | Rust rust-fnv-txm.jsonl relations | missing (relation, n=2): ['R_TXM8'] |
+missing: FAIL (rc 1), expected FAIL: ok
+    | FAIL | Rust rust-fnv-native.jsonl present | reproduce.sh quick |
+rc_only: FAIL (rc 1), expected FAIL: ok
+    | FAIL | Rust rust-fnv-native.jsonl fails | fails 0, verifier disagreements 0, last rc= line not 0 |
+verify_only: FAIL (rc 1), expected FAIL: ok
+    | FAIL | vectors wasm32 replay | 53 proofs, 52 byte-equal and valid, 1 native PQZL op 7 M > 4 proofs valid (verify only), fails 0 |
+check_rust_stage: ok

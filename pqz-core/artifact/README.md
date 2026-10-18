@@ -360,6 +360,7 @@ History below.
 | `Dockerfile`, `Dockerfile.dockerignore` | the pinned image (build context: the repository root, narrowed by the allowlist in `Dockerfile.dockerignore`) |
 | `reproduce.sh` | every mode; works in Docker and on a local toolchain |
 | `results.py` | `check`: the tables and the comparison; `freeze`: `expected-results.json` from a frozen run (both systems + pqz-ffi); `freeze-txm`: only the multi-recipient parts, from a quick / full run; `multi`: the multi-recipient table of a `--multi-bench` run; `d6`: the Rust-against-C table of a `pqzl/rust/d6.sh` run. Rust rows appear next to the C rows when the Rust run files exist |
+| `check_rust_stage.py` | pins `results.py check`'s "Rust = C" checks: on scratch copies of a passing quick run (default `runs/t12-docker-quick`), a crashed, cut-short, missing or non-zero-rc Rust bench and a verify-only wasm32 row on the Rust backend each give FAIL; the untouched copy PASS (`runs/t12-docker-quick/check-rust-stage.txt`) |
 | `expected-results.json` | the reference values, frozen 2026-10-17 from `runs/freeze-2026-10-17/` |
 | `web/index.html` | the `--serve` page (loads the locally built `pqz.wasm` and `pqzh_ligero_wasm.wasm`) |
 | `runs/` | logs of the package's own test runs (text only) |

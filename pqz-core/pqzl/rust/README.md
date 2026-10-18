@@ -168,13 +168,19 @@ their rows from the re-run. The first-pass files stay in `runs/d6/` for the reco
 - **wasm32:** prove is about level (C / Rust 0.8–1.4×; Rust slower for `R_REG`, `R_DS`, `R_TX0`, `R_TXM4`,
   `R_TXM2_0`, `R_TXM4_0`, faster for the others), generic verify is 1.3–1.9× faster, but **verify_fast is about 2× slower** than the C core (1.7–2.0×)
   (`R_TX` 26.7 / 32.0 against 13.6 / 17.5 ms; `R_TXM8` 44.7 / 51.0 against 23.1 / 29.0 ms). Every Rust wasm32
-  verify_fast p99 is under the 60 ms limit, the largest being `R_TXM8` at 51.0 ms. The chain's precompile verifies
-  natively; wasm32 verify_fast is for clients.
+  verify_fast p99 is under the 60 ms limit, the largest being `R_TXM8` at 51.0 ms: about 15 % margin on this CPU,
+  which a slower client CPU may not have. The chain's precompile verifies natively; wasm32 verify_fast is for
+  clients. Likely cause: `arith/ntt.rs` multiplies 64 × 64 → 128 bits (`mulq`, `red128`, the basemul `u128`
+  accumulator) on every target, and wasm32 has no wide multiply; the C core uses a 21-bit-limb path on wasm32
+  (`pqz_ntt.c`, `PQZ_MUL128 0`). Neither build uses simd128. Follow-up, not done in this port: a
+  `cfg(target_arch = "wasm32")` limb path in `ntt.rs` (STATUS.md "Open", item 10).
 - **Peak memory:** native, the C arena peak against this crate's heap peak (the counting allocator of
   `tests/memory.rs`, prove from a cold `Ctx`): 4–6× less (`R_TX` 60.0 against 290.1 MiB, `R_TXM8` 110.1 against
   655.6 MiB). wasm32: the C arena peak (the prover build without the specialised verifier) against the module's
-  linear memory after the proves, one relation per process. That memory also holds the bench's statements and
-  witnesses for every relation, so it is an upper bound: 2.5–4.2× less (`R_TX` 68.9 against 221.1 MiB).
+  linear memory after the proves, one relation per process (it also holds the bench's statements and witnesses for
+  every relation): 2.5–4.2× less (`R_TX` 68.9 against 221.1 MiB). A process whose `Ctx` keeps every relation's
+  keys (a wallet proving every form and shape, M = 8 included: `wasm/run_vectors.mjs` over all the vectors) reaches
+  229,638,144 B = 219.0 MiB (`runs/d6/rust-m8-wasm-vectors-stderr.txt`).
 - **pqz-ffi path** (`ffi_bench 200`, verify through the C ABI, both backends in the run): the Rust backend
   (`pqzl-rust`, the default) is faster on every PQZL form, `R_TX` 6.48 / 9.27 ms against 8.34 / 11.72 ms, op 7
   M = 8 10.76 / 14.86 ms against 14.83 / 21.42 ms; the largest Rust PQZL p99 is 14.9 ms (C 21.4 ms). Tables in
@@ -193,7 +199,9 @@ wasm32 prove of M = 8, with the auditor on and off, in a bench build with the li
     replay built with `wasm-m8`: the digest lines are equal and the M = 8 rows carry a proof digest).
 - **Outcome: enough.** The M = 8 wasm32 prove peaks at 123,076,608 B = 117.4 MiB (auditor on; p50 2,393 ms) and
   111,017,984 B = 105.9 MiB (auditor off; p50 2,827 ms); native = wasm32 on all 374 vector digest lines, the three
-  M = 8 rows proved in wasm32 with the native proof's digest (`runs/d6/rust-m8-*`).
+  M = 8 rows proved in wasm32 with the native proof's digest (`runs/d6/rust-m8-*`). Both peaks are for one
+  relation per process; a `Ctx` holding every relation's keys (all the vectors, M = 8 included) reaches
+  229,638,144 B = 219.0 MiB, still under 255.6 MiB.
 - **Done (Task 12):** `pqzl::WASM_MAX_LEGS` = 8, and `pqz-ffi`'s `WASM_PQZL_MAX_LEGS` = 8 on the Rust backend; the C
   backend (opt-in) keeps 4. The wasm32 replays (`wasm/run_vectors.mjs`, `pqz-ffi`'s `vectors/replay_wasm.mjs`) prove
   the three M = 8 rows instead of refusing them. `pqz-ffi`'s digest lines keep their frozen M ≤ 4 set. Recorded in
