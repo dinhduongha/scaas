@@ -297,7 +297,7 @@ pub fn encrypt(
     r: &[i8; 2048],
     e1: &[i16; 2048],
     e2: &[[i16; 16]],
-) -> Option<(Box<[u8; PK_BYTES]>, Vec<[u8; 128]>)> {
+) -> Option<super::Encrypted> {
     let n = pks.len();
     if n == 0 || msgs.len() != n || e2.len() != n {
         return None;

@@ -859,7 +859,8 @@ impl Ctx {
         }
     }
 
-    /// `pqz_verify`: Ok(true) = 1; every failure (also an allocation failure, as C's arena) is 0
+    /// `pqz_verify`: Ok(true) = 1, Ok(false) = 0; an allocation failure is `Err(Error::Memory)` (C: arena
+    /// exhaustion, a node fault in pqz-ffi), which `Ctx::verify` folds into false and `Ctx::try_verify` keeps
     pub(crate) fn verify_rel(&mut self, op: u8, stmt: &[u8], proof: &[u8]) -> Result<bool, Error> {
         let Some(ri) = rel_of(op, stmt) else { return Ok(false) };
         let r = &RELS[ri];

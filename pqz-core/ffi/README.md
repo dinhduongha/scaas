@@ -80,9 +80,9 @@ clients only; a native build with `panic = abort` is a compile error.
 - **Both** (`--features pqzl-c` on the default): `pqzl::` is the Rust core and `pqzl::c` the C core, in one binary
   (the fuzz mode `pqzl-diff`, `../fuzz/README.md`).
 
-The node image (`../nethermind/Dockerfile`) builds this crate's default. Its build context does not yet copy
-`pqz-core/pqzl/rust`: the live roll-out (a later step) adds it; until then chain 7622 runs the C-backed library built
-before the switch.
+The node image (`../nethermind/Dockerfile`) builds this crate's default and copies `pqz-core/pqzl/rust` (its Docker
+build is checked in the Rust port's Task 12). Chain 7622 runs the C-backed library built before the switch until the
+live roll-out.
 
 **Lock (STATUS.md Open 6).** Every PQZL call runs under one process-wide `Mutex`, on one worker thread with a 16 MiB
 stack, with either backend; PQZH needs no lock. The Rust backend keeps one `pqzl::Ctx` for the process (A, each

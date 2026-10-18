@@ -70,9 +70,14 @@ pub fn verify_fast(op: u8, stmt: &[u8], proof: &[u8]) -> Result<bool, NodeFault>
     verdict(with_ctx(|c| c.try_verify_fast(op, stmt, proof))?)
 }
 
-/// A verifier's result: out of memory (`try_verify*`'s only error) is a node fault.
+/// A verifier's result: out of memory is a node fault; any other error (`try_verify*` returns none today) is the
+/// verdict false, so a future pqzl error can never become an input-reachable node fault.
 fn verdict(r: Result<bool, ::pqzl::Error>) -> Result<bool, NodeFault> {
-    r.map_err(|_| NodeFault)
+    match r {
+        Ok(v) => Ok(v),
+        Err(::pqzl::Error::Memory) => Err(NodeFault),
+        Err(_) => Ok(false),
+    }
 }
 
 /// `verify_fast` on the caller's thread, without the worker hop (bench: the FFI's overhead against the bare call;
@@ -147,7 +152,7 @@ pub fn encrypt(
     r: &[i8; 2048],
     e1: &[i16; 2048],
     e2: &[[i16; 16]],
-) -> Option<(Box<[u8; PK_BYTES]>, Vec<[u8; 128]>)> {
+) -> Option<super::Encrypted> {
     if pks.is_empty() {
         return None;
     }
@@ -164,5 +169,8 @@ mod tests {
         assert_eq!(verdict(Ok(true)), Ok(true));
         assert_eq!(verdict(Ok(false)), Ok(false));
         assert_eq!(verdict(Err(::pqzl::Error::Memory)), Err(NodeFault));
+        for e in [::pqzl::Error::Internal, ::pqzl::Error::Input, ::pqzl::Error::Reject] {
+            assert_eq!(verdict(Err(e)), Ok(false));
+        }
     }
 }
