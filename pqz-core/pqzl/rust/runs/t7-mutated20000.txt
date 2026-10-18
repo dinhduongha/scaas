@@ -1,0 +1,12 @@
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-rust/pqz-core/pqzl/rust)
+    Finished `release` profile [optimized + debuginfo] target(s) in 5.30s
+     Running tests/oracle_verify.rs (target/release/deps/oracle_verify-2e7e12c532882dab)
+
+running 1 test
+test mutated_eq_c has been running for over 60 seconds
+mutated_eq_c: 20000 outputs, Rust = C (1388 accepted by both)
+test mutated_eq_c ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 3 filtered out; finished in 16496.95s
+
+[rc=0]
