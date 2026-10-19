@@ -2909,6 +2909,8 @@ Change (2026-10-11): owner — only under `auditorMode = OPTIONAL` (CTR-ZTH-49);
 **Cost if wrong.** A new binding and two `…ToUA` entry points per Zether kind; the prover takes a 32-byte recipient.
 **Source.** owner, 2026-10-13 (Q7); `history/specs/2026-10-13-ua-parity-design.md` §4.11, O5.
 
+Change (2026-10-20, owner): **shielded value sits in a `SHIELD_POOL` sentinel instead of being burned** — `SHIELD_POOL = address(uint160(uint256(keccak256("scaas.shield.pool.v1"))))`, for the PQZ and the Zether kinds alike. Shield moves `amount · shieldScale` from the signer to `SHIELD_POOL` (`Transfer(signer, SHIELD_POOL)`, no burn); unshield / burn-unwrap moves it out to the recipient (no mint); a fee paid from a hidden balance (beneficiary fee, the per-credit fee of every leg) moves out of `SHIELD_POOL` to each fee recipient's public balance. So `totalSupply()` never changes on shield / unshield and stays the true total, `Σ balanceOf == totalSupply` holds, `balanceOf(SHIELD_POOL) == totalShielded · shieldScale`, and the escrow invariant becomes `reserve ≥ totalSupply()`. `SHIELD_POOL` is not payable and cannot spend (as `UA_POOL`, `UAPoolNotPayable`); the token's own address is not used (CTR-MTX-18). Relations and proofs unchanged. Status: decided; built in plan Task 5h for both kinds.
+
 ### CTR-ZTH-80 — Range bits 32 and DECRYPT_BOUND 2^40
 - old: R34(params) · status: superseded · owner: yes · date: 2026-10-03 · normative: — · superseded-by: CTR-ZTH-18, CTR-ZTH-19
 
@@ -3457,6 +3459,8 @@ Change (2026-10-16): controller proposal (owner may override) — P6g plan (`sup
 **Cost if wrong.** A broken v1 envelope key can spend that signer's public float and burn its nonces; it can never move confidential value.
 **Source.** `history/specs/2026-10-06-pq-zether-design.md:337`, `history/SCaaS-2026-10-07.md:39`. Owner wording (2026-10-07): "PqzToken => Cái này cũng phải theo MetaTransaction IERC20MetaTx chứ." (PqzToken must also follow IERC20MetaTx); `history/specs/2026-10-07-metatx-generic.md` §3 MG-4.
 Change (2026-10-08): `PqzToken` sits on the one token base and relays like `ZetherToken` (CTR-PQZ-21): `PqzMetaTx` and its sliced-argument dispatch are gone; plain public transfers are `MetaTransfer`s. Source add: `history/specs/2026-10-08-metatx-generic-call-design.md` §2 G11, §3 GC-10.
+
+Change (2026-10-20, owner): **shielded value sits in a `SHIELD_POOL` sentinel instead of being burned** — `SHIELD_POOL = address(uint160(uint256(keccak256("scaas.shield.pool.v1"))))`, for the PQZ and the Zether kinds alike. Shield moves `amount · shieldScale` from the signer to `SHIELD_POOL` (`Transfer(signer, SHIELD_POOL)`, no burn); unshield / burn-unwrap moves it out to the recipient (no mint); a fee paid from a hidden balance (beneficiary fee, the per-credit fee of every leg) moves out of `SHIELD_POOL` to each fee recipient's public balance. So `totalSupply()` never changes on shield / unshield and stays the true total, `Σ balanceOf == totalSupply` holds, `balanceOf(SHIELD_POOL) == totalShielded · shieldScale`, and the escrow invariant becomes `reserve ≥ totalSupply()`. `SHIELD_POOL` is not payable and cannot spend (as `UA_POOL`, `UAPoolNotPayable`); the token's own address is not used (CTR-MTX-18). Relations and proofs unchanged. Status: decided; built in plan Task 5h for both kinds.
 
 ### CTR-PQZ-16 — Direct decryption without BSGS
 - old: R285 · status: current · owner: no · date: 2026-10-06 · normative: contracts/pq-zero-knowledge.md#CTR-PQZ-16 · superseded-by: —
