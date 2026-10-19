@@ -3242,6 +3242,8 @@ Change (2026-10-19): **owner ruling — PQZ ciphertexts are kept in contract sta
 **Cost if wrong.** A griefer with > 16 proven credits can force one re-prove.
 **Source.** `history/specs/2026-10-06-pq-zether-design.md:269`
 
+Change (2026-10-19): **owner ruling — raise `ROLL_MAX`** (today 16). The bound is gas, not arithmetic (64-bit lanes hold ≈ 2^22 additions of values < 2^42 before the one `mod q`): 16 ciphertexts in calldata cost ≈ 8.3 M gas against the 2^24 transaction cap. With the ciphertexts in state (CTR-PQZ-07) a rollover reads them instead of taking calldata: ≈ 10–25 k gas per entry with SSTORE2 or one shared `u` per operation, ≈ 1.1 M with storage slots — a second reason to prefer SSTORE2 / shared `u` in plan Task 5h. Status: decided; Task 5h sets `ROLL_MAX` from measurement as the largest batch under 2^24 gas with ≈ 25 % margin (target ≥ 256 if the layout allows), pinned by a gas test.
+
 ### CTR-PQZ-09 — LNP22 proofs through rewritten LaZer fork
 - old: R278 · status: current · owner: no · date: 2026-10-07 · normative: contracts/pq-zero-knowledge.md#CTR-PQZ-09 · superseded-by: —
 
