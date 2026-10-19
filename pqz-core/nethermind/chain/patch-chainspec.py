@@ -5,14 +5,21 @@ Writes <out> = <genesis> with engine.Pqz = <engine-pqz.json> whose first schedul
 (decimal or 0x hex; later schedules keep theirs and must be later). Refuses if engine.Pqz is already there or a
 precompile address has an allocation. Prints the diff: exactly one added key, engine.Pqz.
 
+The first timestamp must lie at least 5 minutes in the future (wall clock, as in add-schedule.py): an activation at a
+block already made would change history and split a re-synced node from the chain (review CHAIN-02, 2026-10-19). Only
+--testnet-reset activates at genesis, and there the timestamp must equal the genesis timestamp.
+
 --testnet-reset (path B: a fresh chain from this genesis, owner 2026-10-15) also sets three params that leave the
 genesis block, hence its hash, unchanged: eip4895TransitionTimestamp 1 (withdrawals from block 1: without them a
 follower rejects every block of a chain with eip4844 at 0), maximumExtraDataSize 0xffff (Clique's 97 B extraData; the
 default 32 B makes a follower reject every header) and maxCodeSizeTransition 0 (the 64 KiB code size from block 0, not
-from block 6432 of the old history). Run with python3 -I."""
+from block 6432 of the old history). patch-chainspec.py --check runs the self-check. Run with python3 -I."""
 import difflib
 import json
+import os
 import sys
+import tempfile
+import time
 
 ADDR = ["5caa500000000000000000000000000000000f01", "5caa500000000000000000000000000000000012",
         "5caa500000000000000000000000000000000013"]
@@ -29,6 +36,12 @@ def main(src, eng, ts, out, *flags):
     if alloc & set(ADDR):
         sys.exit("a precompile address has an allocation")
     t = int(ts, 0)
+    g0 = int(str(g["genesis"]["timestamp"]), 0)
+    if reset and t != g0:
+        sys.exit(f"--testnet-reset: timestamp {t} is not the genesis timestamp {g0}")
+    if not reset and t < time.time() + 300:
+        sys.exit(f"timestamp {t} is not at least 5 minutes in the future (now {int(time.time())}); "
+                 f"activation at genesis is --testnet-reset's")
     e["schedules"][0]["timestamp"] = hex(t)
     if any(int(str(s["timestamp"]), 0) <= t for s in e["schedules"][1:]):
         sys.exit("later schedules must be after the first")
@@ -50,5 +63,26 @@ def main(src, eng, ts, out, *flags):
           f"{len(removed)} removed; params changed: {', '.join(f'{k} {g['params'].get(k)} -> {g2['params'][k]}' for k in sorted(changed)) or 'none'}")
 
 
+def check():
+    """--check (review CHAIN-02): a future first timestamp passes, a past one or genesis without --testnet-reset is
+    refused; --testnet-reset takes exactly the genesis timestamp."""
+    now = int(time.time())
+    with tempfile.TemporaryDirectory() as d:
+        src, eng, out = (os.path.join(d, f) for f in ("g.json", "e.json", "o.json"))
+        json.dump({"params": {"networkID": 1}, "engine": {"clique": {}}, "genesis": {"timestamp": "0x0"},
+                   "accounts": {"0x1": {}}}, open(src, "w"))
+        json.dump({"schedules": [{"timestamp": "0x0", "pqz": []}]}, open(eng, "w"))
+        main(src, eng, str(now + 900), out)
+        main(src, eng, "0", out, "--testnet-reset")
+        for bad in ([str(now - 60)], [str(now + 60)], ["0"], [str(now + 900), "--testnet-reset"]):
+            try:
+                main(src, eng, bad[0], out, *bad[1:])
+                raise AssertionError(bad)
+            except SystemExit as e:
+                assert isinstance(e.code, str) and e.code, bad
+                print(f"  refused ({' '.join(bad)}): {e.code}")
+    print("patch-chainspec --check: ok")
+
+
 if __name__ == "__main__":
-    main(*sys.argv[1:])
+    check() if sys.argv[1:] == ["--check"] else main(*sys.argv[1:])

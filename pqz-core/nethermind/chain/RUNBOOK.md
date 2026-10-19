@@ -44,6 +44,8 @@ the licence inventory) — with `engine.Pqz` in its genesis from block 0 and the
 | **B. From genesis** (a new chain, the 7622 testnet reset, owner 2026-10-15) | Task 10 on 7622 (used on 2026-10-16) | `engine.Pqz` with the first timestamp = the genesis timestamp (0 on 7622): active in every block | fresh (the old data dir is backed up, not used) |
 
 The plugin refuses a first timestamp *before* genesis; a timestamp equal to genesis is path B.
+`patch-chainspec.py` is stricter (review CHAIN-02): without `--testnet-reset` the first timestamp must lie at least
+5 minutes in the future, as in `add-schedule.py`; with it, the timestamp must equal the genesis timestamp.
 
 ## The copy (Tasks 7–8)
 
@@ -71,7 +73,7 @@ $C/copy.sh up nethermind/nethermind:1.39.0 genesis.stock.json      # history wit
 python3 -I $C/e2e.py head
 $C/copy.sh down && $C/copy.sh backup pre                # the rollback point (data dirs, chainspecs, configs)
 # G2 demonstration: the stock image with engine.Pqz ignores it
-$C/copy.sh patch $E $(( $(date +%s) + 120 ))
+$C/copy.sh patch $E $(( $(date +%s) + 360 ))
 $C/copy.sh up nethermind/nethermind:1.39.0 genesis.pqz.json   # after T:
 python3 -I $C/e2e.py stock --engine $C/../../../scratchpad/p6f-copy/genesis.pqz.json  # the probe FAILS (recorded)
 $C/copy.sh down && $C/copy.sh restore pre
