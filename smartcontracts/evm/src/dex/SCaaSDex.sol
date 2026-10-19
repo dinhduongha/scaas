@@ -265,7 +265,8 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
     ///         catches it). A failed settlement emits `MatchFailed` with at most `MAX_REASON` bytes of its revert data;
     ///         `SigCheckGasStarved` and a UA leg's `UAVerifyGas` revert the whole call (CTR-DEX-08, CTR-DEX-26: the
     ///         submitter's gas, not the signature, failed). Only the DEX, a SCaaS token or the registry can raise them:
-    ///         every call into an outside token (`_send`, `_bal`, the puller) drops the token's revert data (W-O).
+    ///         every `transfer`, `transferFrom` and `balanceOf` the DEX makes into any token, SCaaS tokens included
+    ///         (`_send`, `_bal`, the puller), drops the token's revert data (W-O); one that ran out of gas stays empty.
     function mtxSettle(Settlement[] calldata ss) external nonReentrant returns (bool[] memory ok) {
         ok = new bool[](ss.length);
         bool any;
@@ -589,10 +590,21 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
         }
     }
 
-    /// @dev A failed transfer reverts `SafeERC20FailedOperation(token)`, never with the token's own revert data (W-O):
-    ///      an outside token, or a hook it calls, must not be able to forge the starvation errors `mtxSettle` re-raises.
+    /// @dev A failed transfer never reverts with the token's own revert data (W-O): a token, or a hook it calls, must
+    ///      not be able to forge the starvation errors `mtxSettle` re-raises. See `_tokenFailed`.
     function _send(address token, address to, uint256 amount) private {
-        if (amount != 0 && !IERC20(token).trySafeTransfer(to, amount)) revert SafeERC20.SafeERC20FailedOperation(token);
+        if (amount != 0 && !IERC20(token).trySafeTransfer(to, amount)) _tokenFailed(token);
+    }
+
+    /// @dev A failed token call: no return data (it ran out of gas, or the token has no code) reverts empty, which
+    ///      the node reads as `out_of_gas` (NODE-DEX-06); anything else reverts `SafeERC20FailedOperation(token)`.
+    ///      Empty data matches neither starvation selector, so a token still cannot forge one. Called right after the
+    ///      token call: `returndatasize` is still that call's (EXTCODESIZE in `trySafe*` leaves it alone).
+    function _tokenFailed(address token) private pure {
+        assembly ("memory-safe") {
+            if iszero(returndatasize()) { revert(0, 0) }
+        }
+        revert SafeERC20.SafeERC20FailedOperation(token);
     }
 
     /// @dev `balanceOf(this)`, without the token's revert data or more than one word of return data (W-O, as `_send`).
@@ -605,7 +617,7 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
             ok := and(s, gt(returndatasize(), 0x1f))
             b := mload(0)
         }
-        if (!ok) revert SafeERC20.SafeERC20FailedOperation(token);
+        if (!ok) _tokenFailed(token);
     }
 
     /// @dev To an id: a native one by `_send`, a derived one by the token's `transferToUA` from the DEX's own

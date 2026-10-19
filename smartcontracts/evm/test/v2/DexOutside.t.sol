@@ -57,13 +57,16 @@ contract BombERC20 {
 }
 
 /// W-O: an ERC-20 whose pull (`transferFrom`, mode 1), payout (`transfer`, mode 2) or `balanceOf` read by the DEX
-/// (mode 3) reverts with the bytes of a starvation error that `mtxSettle` re-raises for the whole batch.
+/// (mode 3) reverts with the bytes of a starvation error that `mtxSettle` re-raises for the whole batch, or, with
+/// `starve`, runs out of gas there instead.
 contract ForgeStarvedERC20 is MockERC20 {
     uint8 public mode;
     bytes public err;
     address public dex;
+    bool public starve;
     constructor() MockERC20("Forge", "FG", 18) {}
     function set(uint8 m, bytes calldata e, address d) external { (mode, err, dex) = (m, e, d); }
+    function setStarve(bool b) external { starve = b; }
     function transferFrom(address from, address to, uint256 v) public override returns (bool) {
         if (mode == 1) _forge();
         return super.transferFrom(from, to, v);
@@ -77,6 +80,7 @@ contract ForgeStarvedERC20 is MockERC20 {
         return super.balanceOf(a);
     }
     function _forge() private view {
+        if (starve) while (true) {}
         bytes memory e = err;
         assembly { revert(add(e, 0x20), mload(e)) }
     }
@@ -462,6 +466,28 @@ contract DexOutsideTest is Test {
                 assertFalse(ok[0]);
                 assertTrue(ok[1]);
             }
+        }
+    }
+
+    /// F1 (5g review of W-O): a token call that runs out of gas (pull, payout or balance read) still gives an EMPTY
+    /// `MatchFailed` reason, the node's `out_of_gas` (NODE-DEX-06), not `SafeERC20FailedOperation`; the other
+    /// settlement settles. The starved one goes second so that the 1/64 `mtxSettle` keeps can still emit its event.
+    function test_starvedOutsideTokenCall_isAnEmptyMatchFailed() public {
+        ForgeStarvedERC20 fg = new ForgeStarvedERC20();
+        _list(fg);
+        _fund(fg, dave);
+        fg.setStarve(true);
+        for (uint8 m = 1; m <= 3; ++m) {
+            fg.set(m, "", address(dex));
+            uint256 n = 10 * m;
+            DexLegs.Settlement[] memory ss = _two(
+                _settlement(_dave(address(usdc), n, 2000), n + 100), _settlement(_dave(address(fg), n, 2000), n));
+            vm.expectEmit(address(dex));
+            emit ISCaaSDex.MatchFailed(bytes32(n), "");
+            vm.prank(relayer);
+            bool[] memory ok = dex.mtxSettle{gas: 3_000_000}(DexLegs.wire(ss));
+            assertTrue(ok[0]);
+            assertFalse(ok[1]);
         }
     }
 
