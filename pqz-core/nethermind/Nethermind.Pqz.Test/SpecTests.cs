@@ -87,6 +87,50 @@ public class SpecTests
         Assert.That(ts, Does.Contain(T1).And.Contain(T2), "fork-id transitions include every schedule timestamp");
     }
 
+    /// <summary>Review W-D (2026-10-19): a release spec built for a block-number transition keeps the PQZ schedule.
+    /// Nethermind 1.39.0's <c>ChainSpecBasedSpecProvider.CreateTransitions</c> builds every block-number release with
+    /// the genesis timestamp (never null) and every timestamp release at the last block transition;
+    /// <c>SpecProviderBase.GetSpec</c> searches the timestamp releases by timestamp alone from the first timestamp
+    /// transition on. The test genesis has <c>maxCodeSizeTransition</c> 6432 (a block-number transition reached
+    /// after <see cref="T1"/> here) and no other transition above 0.</summary>
+    [Test]
+    public void A_block_number_transition_keeps_the_schedule()
+    {
+        const long B = 6432;
+        Assert.That(Load().Parameters.MaxCodeSizeTransition, Is.EqualTo(B), "the test genesis' block-number transition");
+        // (block, timestamp, schedule's selftestGas or null, EIP-170 on = the release of block B or later)
+        (long b, ulong ts, long? gas, bool eip170)[] genesisAndT1 =
+        [
+            (0, 0, 1000, false), (1, 5, 1000, false), (B - 1, T1 - 1, 1000, false), (B, T1 - 1, 1000, true), (B + 1, T1 - 1, 1000, true),
+            (1, T1, 2000, true), (B - 1, T1, 2000, true), (B, T1, 2000, true), (B + 100, T1 + 100, 2000, true),
+        ];
+        (long b, ulong ts, long? gas, bool eip170)[] onlyT1 =
+        [
+            (0, 0, null, false), (B - 1, T1 - 1, null, false), (B, T1 - 1, null, true), (B + 1, T1 - 1, null, true),
+            (1, T1, 2000, true), (B - 1, T1, 2000, true), (B, T1, 2000, true), (B + 100, T1 + 100, 2000, true),
+        ];
+        ISpecProvider stock = new ChainSpecBasedSpecProvider(Load(), LimboLogs.Instance);
+        foreach (var (name, p, cases) in new[]
+                 {
+                     ("genesis schedule + T1", Provider(WithPqz(Schedule(0, 1000), Schedule(T1, 2000))), genesisAndT1),
+                     ("T1 only", Provider(WithPqz(Schedule(T1, 2000))), onlyT1),
+                 })
+        {
+            foreach (var (b, ts, gas, eip170) in cases)
+            {
+                string at = $"{name}: block {b} timestamp {ts}";
+                IReleaseSpec spec = p.GetSpec(new ForkActivation(b, ts));
+                Assert.That(spec.IsEip170Enabled, Is.EqualTo(eip170), at + ": the release of the block-number transition");
+                Assert.That(PqzReleaseSpec.ScheduleOf(spec)?.SelftestGas, Is.EqualTo(gas), at + ": schedule");
+                FrozenSet<AddressAsKey> extra = spec.Precompiles.Except(stock.GetSpec(new ForkActivation(b, ts)).Precompiles).ToFrozenSet();
+                Assert.That(extra.SetEquals(gas is null ? [] : Three), at + ": the three addresses iff a schedule");
+            }
+            // a lookup by block number alone (no timestamp) is the block-number release: the genesis schedule or none
+            Assert.That(PqzReleaseSpec.ScheduleOf(p.GetSpec(new ForkActivation(B)))?.SelftestGas, Is.EqualTo(cases[0].gas), name + ": block B alone");
+            Assert.That(p.TransitionActivations, Does.Contain(new ForkActivation(B)).And.Contain(new ForkActivation(B, T1)), name + ": both transitions");
+        }
+    }
+
     [Test]
     public void The_schedule_is_found_through_a_decorator()
     {
