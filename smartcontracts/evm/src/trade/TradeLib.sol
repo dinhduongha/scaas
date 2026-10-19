@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
 import {ITradeToken} from "./ITradeToken.sol";
 import {SigCheck} from "../common/SigCheck.sol";
 
@@ -121,7 +122,7 @@ library TradeLib {
                     revert ITradeToken.BelowMinFill(h);
                 }
             }
-            if (move * o.receiveAmount > f.receiveFill * o.amount) revert ITradeToken.PriceLimit(h);
+            if (mulGt(move, o.receiveAmount, f.receiveFill, o.amount)) revert ITradeToken.PriceLimit(h);
             if (f.dexFee > (f.receiveFill * o.fee + PPM - 1) / PPM) revert ITradeToken.FeeAboveSigned(h);
         } else {
             move = o.amount;
@@ -132,6 +133,13 @@ library TradeLib {
         s.pulled[h] = o.flags & IOC != 0 ? o.amount : p + move;
         if (ua) emit ITradeToken.UATradeFilled(h, o.from, move, f.receiveFill, f.dexFee);
         else emit ITradeToken.TradeFilled(h, addr(o.from), move, f.receiveFill, f.dexFee);
+    }
+
+    /// @notice `a·b > c·d` over 512 bits (SOL-02, review W-S): the price limit of any amounts, never an overflow panic.
+    function mulGt(uint256 a, uint256 b, uint256 c, uint256 d) internal pure returns (bool) {
+        (uint256 h1, uint256 l1) = Math.mul512(a, b);
+        (uint256 h2, uint256 l2) = Math.mul512(c, d);
+        return h1 > h2 || (h1 == h2 && l1 > l2);
     }
 
     /// @notice After the `CancelOrder` signature: closed forever; an already closed order is a no-op.

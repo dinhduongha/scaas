@@ -278,6 +278,18 @@ contract DexTest is Test {
         _expectOne(s, abi.encodeWithSelector(ISCaaSDex.PriceLimit.selector, a.tradeOrderDigest(o)));
     }
 
+    /// SOL-02 (review W-S): an ESCROW taker's limit with a product past 2^256 is `PriceLimit`, not a panic.
+    function test_pathB_priceLimit_hugeReceiveAmount() public {
+        DexLegs.Settlement memory s;
+        s.ref = "r";
+        s.makers = new DexLegs.Leg[](1);
+        s.makers[0] = _leg(BOB_PK, b, _order(bob, a, 1000, 500, 0), 1000);
+        ITradeToken.TradeOrder memory o = _order(alice, b, 500, 1 << 250, 0); // 500 · 2^250 > 2^256
+        o.flags = 3;
+        s.taker = _leg(ALICE_PK, a, o, 500);
+        _expectOne(s, abi.encodeWithSelector(ISCaaSDex.PriceLimit.selector, a.tradeOrderDigest(o)));
+    }
+
     function test_pathB_takerPartialMatch_refundsInA() public {
         DexLegs.Settlement memory s = _book();
         ITradeToken.TradeOrder memory o = _order(alice, b, 1200, 2000, 3_000);
