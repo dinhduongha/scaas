@@ -1435,7 +1435,10 @@ the record.
    null + 0 in `aes256ctr.c:339` (P6d-2 `research/opt/asan.sh`: nothing else). **Fixed in the second code review
    (2026-10-19, Q-F; branch `rev2-pqzl`)**: the relfix ASan + UBSan stderr is empty (`research/pqzl-measure/runs/rev2-asan-stderr.txt`) and `ub_test.sh` runs with pointer-overflow on again. What stays: LSan on the malloc path reports the
    relation layer's statement objects (`pqz_rel.c` frees them by arena release), on main as well;
-   `research/opt/asan.sh` runs with `detect_leaks=0`.
+   `research/opt/asan.sh` runs with `detect_leaks=0`. **Fuzz builds (owner 2026-10-19):** `vla-bound` and
+   `pointer-overflow` on again in `ffi/build.rs` (feature `fuzz`) and `pqzl/sv/fuzz.sh` (`7aab1fe`); validated by the
+   plan Task 7 campaigns `fs7` (`pqzl-diff`, 2 h each, three at once): precompile 766,921 runs, mutate 86,955, codec
+   287,503, no finding (`fuzz/runs/fs7-*.txt`).
 5. ~~Docs: README, research note, roadmap P6d row + TODO P6 row, docs_check.~~ (done)
 6. **Global library state (SV review finding 8, for P6f).** `pqz_sv.c` keeps per-call bookkeeping in statics
    (`svb`, `nsvb`) and its tables in `SR` / `SA`; `pqz_rel.c` has one arena, one base mark and the sticky
