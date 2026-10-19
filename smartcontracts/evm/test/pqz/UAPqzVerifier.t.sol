@@ -37,6 +37,30 @@ contract UAPqzVerifierTest is PqzRegistryBase {
         new UAPqzVerifier(PQZ, PQZL_ID, pk, m, regProof);
     }
 
+    /// Review W-B: only the `PQZ` precompile, only PQZL / PQZH, only the pinned vector of that id.
+    function test_constructorPins() public {
+        UAPqzVerifier v = _newPqzVerifier(PQZL_ID);
+        bytes memory pk = _slice(regStmt, 96, 16_384);
+        bytes32 m = bytes32(_slice(regStmt, 64, 32));
+        address fake = address(0xFA4E);
+        vm.mockCall(fake, hex"0600000000", abi.encode(PqzSafety.SELFTEST));
+        vm.mockCall(fake, abi.encodePacked(uint8(3)), abi.encode(uint256(0)));
+        vm.expectRevert(abi.encodeWithSelector(PqzSafety.NotPqz.selector, fake, PQZL_ID));
+        new UAPqzVerifier(fake, PQZL_ID, pk, m, regProof);
+        bytes32 other = keccak256("another proof system");
+        vm.expectRevert(abi.encodeWithSelector(PqzSafety.NotPqz.selector, PQZ, other));
+        new UAPqzVerifier(PQZ, other, pk, m, regProof);
+        // the PQZL vector under the PQZH id: the precompile (mocked) would accept it, the pin does not
+        bytes memory st = bytes.concat(_slice(regStmt, 0, 32), PQZH_ID, _slice(regStmt, 64, 16_416));
+        vm.mockCall(PQZ, abi.encodePacked(uint8(3), uint32(16_480), st, regProof), abi.encode(uint256(1)));
+        vm.expectRevert(UAPqzVerifier.UAPqzProbe.selector);
+        new UAPqzVerifier(PQZ, PQZH_ID, pk, m, regProof);
+        // another message or key with the right proof: refused before the precompile
+        vm.expectRevert(UAPqzVerifier.UAPqzProbe.selector);
+        new UAPqzVerifier(PQZ, PQZL_ID, pk, keccak256("m"), regProof);
+        assertEq(v.PRECOMPILE(), PQZ);
+    }
+
     /// The input is exactly `u8(3) ‖ be32(16,480) ‖ opTag ‖ psid ‖ message ‖ pk ‖ proof`; the verdict only the word 1.
     function test_verifyInputAndVerdict() public {
         UAPqzVerifier v = _newPqzVerifier(PQZH_ID);

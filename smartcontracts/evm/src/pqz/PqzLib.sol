@@ -28,8 +28,11 @@ library PqzLib {
         uint64 floor;
         uint64 cleared;
         uint64 sendCounter;
+        uint64 baseRolled; // the state the last debit left (W-E): rollovers since then can be undone by a debit
+        uint16 baseUnits;
         uint256 plainPending;
         mapping(uint64 => bytes32) pendingHash;
+        bytes32 baseHash; // 0 = Trivial(0), as accHash
     }
 
     /// @custom:storage-location erc7201:scaas.pqz
@@ -77,6 +80,7 @@ library PqzLib {
         uint256 validUntil;
         uint256 auditorOn;
         uint256 plainUsed;
+        uint64 rolled; // the `rolled` the calldata `acc` belongs to: the account's, or its base's (W-E)
         bytes16 salt;
         bytes32 memoHash;
         address keyF;
@@ -98,6 +102,9 @@ library PqzLib {
     bytes32 internal constant TAG_ENVELOPE = keccak256("SCAAS-PQZ-ENVELOPE-V1");
     bytes32 internal constant TAG_UA_ENVELOPE = keccak256("SCAAS-PQZ-UA-ENVELOPE-V1");
     bytes32 internal constant TAG_UNWRAP = keccak256("SCAAS-PQZ-UNWRAP-V1");
+    /// @notice A direct transfer's `envelopeBinding` is `keccak256(abi.encode(TAG_DIRECT_MODE, uint8(mode)))` (review
+    ///         W-A): the statement, hence `authSig`, names the storage mode, so `…NoBundle` cannot replay a BUNDLE call.
+    bytes32 internal constant TAG_DIRECT_MODE = keccak256("SCAAS-PQZ-DIRECT-MODE-V1");
     bytes32 private constant TAG_ENTRY = keccak256("SCAAS-PQZ-ENTRY-V1");
     bytes32 internal constant OP_TRANSFER = 0xef22f3d1c1fc2edc565522eb73ca8cb782e8780eaf9b1f677965dd0cd5275414;
     bytes32 internal constant OP_BURN = 0x7383374d83fbb89f84ee079bff7a2742e4acb70f64b0b1e2ef40c34fb4cc1407;
@@ -109,7 +116,7 @@ library PqzLib {
     bytes32 internal constant OP_TRANSFER_MULTI = 0x6f6a773a4c94af3a446a226ef43f6f5403d6a00b95de446149f484cc02726b90;
     /// @notice The PQZH proof system id: op 7 built for M ∈ {1, 2, 4} and at most `INLINE_MAX_PQZH` inline credits
     ///         (PQZL: M ∈ {1, 2, 4, 8}, `INLINE_MAX`; CTR-PQZ-25).
-    bytes32 internal constant PQZH_ID = 0x0a47a7689250ba178a52ad5972cdd9153358c022cb694c08d2389e82de2fead4;
+    bytes32 internal constant PQZH_ID = PqzSafety.PQZH_ID;
 
     uint256 internal constant K_MAX = 1024;
     uint256 internal constant INLINE_MAX = 16;
@@ -134,8 +141,9 @@ library PqzLib {
 
     // ------------------------------------------------------------------ init
 
-    /// @notice The kind's `_init` (P6g plan D9): `verifier` a `UAPqzVerifier` (precompile and proof system),
-    ///         `auditorKey` empty or the auditor's 32-byte `pqz-mlwe` UA, cap `≤ 2^62`, fee `< 2^64` and `< cap`.
+    /// @notice The kind's `_init` (P6g plan D9): `verifier` a `UAPqzVerifier` (precompile and proof system: exactly
+    ///         `PqzSafety.PQZ`, PQZL or PQZH, the self-test passing now; review W-B), `auditorKey` empty or the
+    ///         auditor's 32-byte `pqz-mlwe` UA, cap `≤ 2^62`, fee `< 2^64` and `< cap`.
     function init(IFactoryToken.ConfidentialConfig calldata c, address registry) public {
         PqzSafety.requireAllowedChain();
         bytes calldata aud = c.auditorKey;
@@ -156,6 +164,7 @@ library PqzLib {
         UAPqzVerifier v = UAPqzVerifier(c.verifier);
         s.pqz = v.PRECOMPILE();
         s.psid = v.PROOF_SYSTEM_ID();
+        PqzSafety.requirePqz(s.pqz, s.psid); // the token's verdicts come from `s.pqz`, never from the verifier (W-B)
         s.verifier = c.verifier;
         s.disclosureMode = ZetherTypes.DisclosureMode(c.disclosureMode);
         s.auditorMode = ZetherTypes.AuditorMode(c.auditorMode);
@@ -205,10 +214,17 @@ library PqzLib {
         bytes[] calldata inl,
         uint256 proofLen
     ) internal view returns (Op memory o, bytes memory buf) {
+        _bindMode(e);
         o = _parseTransfer(payload, e.mode);
         _common(o, e);
         _receiver(o, e);
         buf = _transferBuffer(o, e, payload[T_OUT:T_OUT + o.outLen], acc, inl, proofLen);
+    }
+
+    /// @dev A direct transfer (binding 0) binds its mode (W-A); a relayed one is bound by the envelope signature over
+    ///      `data`, selector included.
+    function _bindMode(Env memory e) private pure {
+        if (e.binding == 0) e.binding = keccak256(abi.encode(TAG_DIRECT_MODE, uint8(e.mode)));
     }
 
     /// @dev Not the sender; registered; the credit cap (`RefreshRequired`); the auditor's key when `auditorOn`.
@@ -327,6 +343,7 @@ library PqzLib {
     function prepareMulti(Env memory e, bytes calldata payload, bytes calldata acc, bytes[] calldata inl, uint256 proofLen)
         internal view returns (Op memory o, bytes memory buf)
     {
+        _bindMode(e);
         o = _parseMulti(payload, e.mode);
         _common(o, e);
         o.fee += o.legs * $().multiLegFee; // the header's public fee: the beneficiary's part + M · multiLegFee
@@ -361,8 +378,8 @@ library PqzLib {
         o.op = 7;
         uint256 memo = mode == ZetherTypes.TransferMode.HASH ? 18 + 40 * m : 0;
         o.outLen = PqzCt.PK * o.groups + PqzCt.V * (m + 1);
-        uint256 rest = payload.length - T_OUT - 32 * m - memo; // the multiplications cannot overflow: m ≤ 8
-        if (payload.length < T_OUT + 32 * m + memo) revert IPqzToken.BadPayload(payload.length);
+        if (payload.length < T_OUT + 32 * m + memo) revert IPqzToken.BadPayload(payload.length); // m ≤ 8: no overflow
+        uint256 rest = payload.length - T_OUT - 32 * m - memo;
         if (rest == o.outLen + PqzCt.V * m) o.auditorOn = 1;
         else if (rest != o.outLen) revert IPqzToken.BadPayload(payload.length);
         if (o.auditorOn == 1 && s.auditorMode == ZetherTypes.AuditorMode.NONE) revert IPqzToken.AuditorForbidden();
@@ -745,12 +762,21 @@ library PqzLib {
         o.sendCounter = s.acct[o.from].sendCounter;
     }
 
-    /// @dev `T = acc ± Σ inline + Trivial(plainUsed)` after every state check of §7.4 on `acc`, `p` and `inline`.
+    /// @dev `T = acc ± Σ inline + Trivial(plainUsed)` after every state check of §7.4 on `acc`, `p` and `inline`. `acc`
+    ///      is the current one or the base (the one the last debit left; CTR-PQZ-08, W-E): a rollover since then only
+    ///      moved credits from `pending[baseRolled..rolled)` into `acc`, so the base with its own inline credits gives
+    ///      the same `T`, and an in-flight debit survives anyone's rollover.
     function _total(Op memory o, bytes calldata acc, bytes[] calldata inl) private view returns (bytes memory t) {
         Account storage a = $().acct[o.from];
         if (o.plainUsed > a.plainPending) revert IPqzToken.PlainOverdraw(o.plainUsed, a.plainPending);
-        if (acc.length != PqzCt.CT || keccak256(acc) != PqzCt.stored(a.accHash)) revert IPqzToken.AccMismatch();
+        if (acc.length != PqzCt.CT) revert IPqzToken.AccMismatch();
         uint64 r = a.rolled;
+        uint256 units = uint256(a.accUnits) + 1;
+        if (keccak256(acc) != PqzCt.stored(a.accHash)) {
+            if (keccak256(acc) != PqzCt.stored(a.baseHash)) revert IPqzToken.AccMismatch();
+            (r, units) = (a.baseRolled, uint256(a.baseUnits) + 1);
+        }
+        o.rolled = r;
         uint64 p = o.p;
         if (p < a.floor || p > a.pendingCount) revert IPqzToken.PendingRange(p, a.floor, a.pendingCount);
         bool up = p >= r;
@@ -769,7 +795,6 @@ library PqzLib {
         PqzCt.addTrivial(t, o.plainUsed);
         PqzCt.reduce(t);
         // unitsOf(T) = accUnits + (p − rolled) + 1, signed
-        uint256 units = uint256(a.accUnits) + 1;
         if (up) units += n;
         else if (units < n) revert IPqzToken.UnitsInvariant();
         else units -= n;
@@ -796,21 +821,25 @@ library PqzLib {
     }
 
     /// @dev §7.4 effects on the sender: the fresh `acc = (u, v_f)` (plus the credits a `p < rolled` debit keeps),
-    ///      `floor = p`, up to `CLEAR_MAX` dead `pendingHash` slots deleted, `plainPending −= plainUsed`.
+    ///      `floor = p`, up to `CLEAR_MAX` dead `pendingHash` slots deleted, `plainPending −= plainUsed`; the result is
+    ///      the new base. `rolled` is the one the calldata `acc` belongs to: a debit on the base undoes the rollovers
+    ///      since (their credits are pending again, every slot `≥ floor` is kept).
     function _debit(Op memory o, bytes calldata u, bytes calldata vF, bytes[] calldata inl) private {
         Account storage a = $().acct[o.from];
-        uint64 r = a.rolled;
+        uint64 r = o.rolled;
         uint64 p = o.p;
         bytes memory c = bytes.concat(u, vF);
+        uint16 units = 1;
         if (p < r) {
             for (uint256 i; i < inl.length; ++i) PqzCt.plus(c, inl[i]);
             PqzCt.reduce(c);
-            a.accUnits = uint16(1 + r - p);
+            units = uint16(1 + r - p);
         } else {
-            a.rolled = p;
-            a.accUnits = 1;
+            r = p;
         }
-        a.accHash = keccak256(c);
+        bytes32 h = keccak256(c);
+        (a.accHash, a.rolled, a.accUnits) = (h, r, units);
+        (a.baseHash, a.baseRolled, a.baseUnits) = (h, r, units);
         a.floor = p;
         uint64 c0 = a.cleared;
         uint64 end = c0 + CLEAR_MAX < p ? c0 + CLEAR_MAX : p;

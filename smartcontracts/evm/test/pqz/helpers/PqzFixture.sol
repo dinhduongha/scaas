@@ -10,6 +10,7 @@ import {AdminLib} from "../../../src/metatx/AdminLib.sol";
 import {NoUnderlyingPqzToken} from "../../../src/pqz/NoUnderlyingPqzToken.sol";
 import {PqzLayer} from "../../../src/pqz/PqzLayer.sol";
 import {PqzCt} from "../../../src/pqz/PqzCt.sol";
+import {PqzLib} from "../../../src/pqz/PqzLib.sol";
 import {ZetherTypes} from "../../../src/zether/ZetherTypes.sol";
 
 /// @notice The PQZ token stack of chain 7622 in forge (P6g plan D6): the gen-1 registry (`PqzRegistryBase`), `OpenFactory`
@@ -170,6 +171,11 @@ abstract contract PqzFixture is PqzRegistryBase {
 
     function _assertConservation(PqzLayer t) internal view {
         assertEq(t.totalSupply() + t.totalShielded() * SCALE, minted, "public + shielded = created");
+    }
+
+    /// A direct transfer's `envelopeBinding` word (review W-A).
+    function _direct(ZetherTypes.TransferMode m) internal pure returns (bytes32) {
+        return keccak256(abi.encode(PqzLib.TAG_DIRECT_MODE, uint8(m)));
     }
 
     function _cut(bytes memory b, uint256 off, uint256 len) internal pure returns (bytes memory) {

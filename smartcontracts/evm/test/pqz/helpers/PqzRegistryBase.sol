@@ -35,10 +35,15 @@ abstract contract PqzRegistryBase is PqzMock {
         vm.mockCall(ML65, invalid, abi.encode(uint256(0)));
     }
 
-    /// The self-test's `R_REG` vector as the probe; the mocked precompile accepts exactly that input.
+    /// The self-test's `R_REG` vector of `psid` as the probe (the pinned one, W-B); the mocked precompile accepts
+    /// exactly that input.
     function _newPqzVerifier(bytes32 psid) internal returns (UAPqzVerifier v) {
         regStmt = _vecHex("statement_register.json", ".rows[0].stmt");
-        regProof = _vecHex("proof_pqzl.json", ".rows[4].proof");
+        // PQZH: `proof_pqzh.json` row 4 (REGISTER) extracted to a hex file (keccak d7e6cdb5… = selftest.json's): the
+        // 7 MB JSON exceeds forge's per-test gas in memory expansion
+        regProof = psid == PQZH_ID
+            ? vm.parseBytes(string.concat("0x", vm.readFile(string.concat(vm.projectRoot(), "/test/vectors/pqzh/register_proof.hex"))))
+            : _vecHex("proof_pqzl.json", ".rows[4].proof");
         _mockSelfTest();
         vm.mockCall(PQZ, abi.encodePacked(uint8(3)), abi.encode(uint256(0)));
         bytes memory st = bytes.concat(_slice(regStmt, 0, 32), psid, _slice(regStmt, 64, 16_416));
