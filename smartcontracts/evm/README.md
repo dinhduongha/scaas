@@ -44,8 +44,10 @@ forge test --isolate --match-path 'test/ua/{UAGas,UARegistryGroups}.t.sol'   # g
 FOUNDRY_PROFILE=private7622 forge build
 ```
 
-On a shared machine run heavy jobs under `scripts/capped` (repo root). `lib/` is not committed:
-`forge install foundry-rs/forge-std` and `forge install OpenZeppelin/openzeppelin-contracts` (v5.2+).
+On a shared machine run heavy jobs under `scripts/capped` (repo root). `lib/` is not committed; the libraries are
+pinned by commit and source checksum in `scripts/evm_libs.sh` (CTR-GEN-01): OpenZeppelin `fda6b85f` (master between
+v5.2.0 and v5.3.0), forge-std `88c8a288`. `../../scripts/evm_libs.sh install` fetches them (CI does), `check` compares
+whatever `lib/` holds (a checkout, a symlink) with the pins; run it before a build that will be deployed.
 
 **Size gate** (CTR-TOK-24), as CI runs it — `src/` only, never with the test helpers:
 
