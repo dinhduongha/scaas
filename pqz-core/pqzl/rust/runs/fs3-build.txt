@@ -1,0 +1,54 @@
+# clippy: no float arithmetic in the crate (the production build: default features; then with the oracle,
+# the hooks and the bench; then the wasm/ harness)
+$ cargo clippy -j2 --release --offline --lib -- -D clippy::float_arithmetic
+    Checking pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-fs3-rust/pqz-core/pqzl/rust)
+    Finished `release` profile [optimized + debuginfo] target(s) in 1.31s
+[rc=0]
+$ cargo clippy -j2 --release --offline --features c-oracle,test-hooks,bench --lib --bins --tests -- -D clippy::float_arithmetic
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-fs3-rust/pqz-core/pqzl/rust)
+    Checking zmij v1.0.23
+    Checking serde_core v1.0.229
+    Checking itoa v1.0.18
+    Checking memchr v2.8.3
+    Checking serde_json v1.0.154
+    Finished `release` profile [optimized + debuginfo] target(s) in 17.15s
+[rc=0]
+$ cargo clippy -j2 --release --offline --manifest-path wasm/Cargo.toml --target wasm32-unknown-unknown -- -D warnings -D clippy::float_arithmetic
+    Checking typenum v1.20.1
+    Checking cfg-if v1.0.5
+    Checking keccak v0.1.6
+    Checking generic-array v0.14.7
+    Checking crypto-common v0.1.7
+    Checking inout v0.1.4
+    Checking block-buffer v0.10.4
+    Checking cipher v0.4.4
+    Checking digest v0.10.7
+    Checking aes v0.8.4
+    Checking sha3 v0.10.8
+    Checking pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-fs3-rust/pqz-core/pqzl/rust)
+    Checking pqzl-wasm v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-fs3-rust/pqz-core/pqzl/rust/wasm)
+    Finished `release` profile [optimized] target(s) in 2.03s
+[rc=0]
+# the measurement build of wasm/ (d6.sh, reproduce.sh --multi-bench): features oversize and wasm-m8
+$ cargo clippy -j2 --release --offline --manifest-path wasm/Cargo.toml --target wasm32-unknown-unknown --features pqzl/oversize,pqzl/wasm-m8 -- -D warnings -D clippy::float_arithmetic
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-fs3-rust/pqz-core/pqzl/rust)
+    Checking pqzl-wasm v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-fs3-rust/pqz-core/pqzl/rust/wasm)
+    Finished `release` profile [optimized] target(s) in 1.15s
+[rc=0]
+# wasm32 (default features)
+$ cargo build -j2 --release --offline --lib --target wasm32-unknown-unknown
+   Compiling version_check v0.9.5
+   Compiling typenum v1.20.1
+   Compiling generic-array v0.14.7
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-fs3-rust/pqz-core/pqzl/rust)
+   Compiling cfg-if v1.0.5
+   Compiling keccak v0.1.6
+   Compiling crypto-common v0.1.7
+   Compiling inout v0.1.4
+   Compiling block-buffer v0.10.4
+   Compiling cipher v0.4.4
+   Compiling digest v0.10.7
+   Compiling sha3 v0.10.8
+   Compiling aes v0.8.4
+    Finished `release` profile [optimized + debuginfo] target(s) in 6.33s
+[rc=0]
