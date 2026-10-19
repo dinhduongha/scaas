@@ -676,7 +676,8 @@ fn ct_sdiv(x: i64, d: u64) -> (i64, i64) {
 }
 
 fn dec_w(u: &mut PolyVec, v: &mut Poly, s1: &mut PolyVec) -> [i64; 16] {
-    let mut acc = crate::arith::polyvec::dot(&mut **u, &mut s1.sub(0, K, 1));
+    // Q-B (review A-3): u^T s, wiped on return (C: the arena); the caller wipes the result
+    let mut acc = Wiped(crate::arith::polyvec::dot(&mut **u, &mut s1.sub(0, K, 1)));
     acc.fromcrt();
     // review E: secret (u^T s); reduced and centred without a branch or a division
     core::array::from_fn(|i| {
@@ -704,10 +705,11 @@ fn debit_witness(t: &mut Pub, w: &[u8], s1: &mut PolyVec, r: &Rel) -> Result<boo
         }
     }
     p = &p[32 * ne2..];
-    // the legs' digits (R_BURN: d = digits(amount), public), d'
-    let mut d = vec_try(l)?;
+    // the legs' digits (R_BURN: d = digits(amount), public), d'. Q-B (review A-3): the amounts, the decryption, the
+    // carries and the noise are wiped on every exit (C `explicit_bzero` of d, dp, dsum, wv, M, eT, c)
+    let mut d = Wiped(vec_try(l)?);
     d.resize(l, [0i64; 16]);
-    let (mut dsum, mut dp) = ([0i64; 16], [0i64; 16]);
+    let (mut dsum, mut dp) = (Wiped([0i64; 16]), Wiped([0i64; 16]));
     for i in 0..16 {
         dsum[i] = if h.burn { digit(t.amount, i) } else { 0 };
         for (j, dj) in d.iter_mut().enumerate() {
@@ -717,14 +719,16 @@ fn debit_witness(t: &mut Pub, w: &[u8], s1: &mut PolyVec, r: &Rel) -> Result<boo
         dp[i] = p[16 * l + i] as i64;
     }
     // decrypt T with s_f: M_i = round(w_i / Delta), e_T = w - Delta M
-    let wv = dec_w(&mut t.u, &mut t.v, s1);
+    let wv = Wiped(dec_w(&mut t.u, &mut t.v, s1));
     // review E: round half away from zero without a branch
-    let mm: [i64; 16] = core::array::from_fn(|i| ct_sdiv(wv[i] + (((DELTA / 2) ^ (wv[i] >> 63)) - (wv[i] >> 63)), DELTA as u64).0);
-    let et: [i64; 16] = core::array::from_fn(|i| wv[i] - DELTA * mm[i]);
+    let mm: Wiped<[i64; 16]> = Wiped(core::array::from_fn(|i| {
+        ct_sdiv(wv[i] + (((DELTA / 2) ^ (wv[i] >> 63)) - (wv[i] >> 63)), DELTA as u64).0
+    }));
+    let et: Wiped<[i64; 16]> = Wiped(core::array::from_fn(|i| wv[i] - DELTA * mm[i]));
     // carries: c_i = (M_i + c_{i-1} - d'_i - sum_j d_j,i - f_i) / 16, exact, c_15 = 0
     // review E: the checks run on secret values: collected with '|' (no short-circuit branch), only the verdict
     // (witness consistent; public, the prove fails otherwise) is declassified; the same verdict as early returns
-    let mut c = [0i64; 16];
+    let mut c = Wiped([0i64; 16]);
     let mut cprev = 0;
     let mut bad = false;
     for i in 0..16 {
@@ -774,7 +778,7 @@ fn debit_witness(t: &mut Pub, w: &[u8], s1: &mut PolyVec, r: &Rel) -> Result<boo
 fn dr_witness(t: &mut Pub, w: &[u8], s1: &mut PolyVec) -> bool {
     let p = wit_vec(s1, 0, w, false);
     wit_vec(s1, 32, p, true);
-    let wv = dec_w(&mut t.u, &mut t.v, s1);
+    let wv = Wiped(dec_w(&mut t.u, &mut t.v, s1)); // Q-B (review A-3, C `explicit_bzero (wv)`)
     let mut bad = false;
     for (i, &wi) in wv.iter().enumerate() {
         let e = wi - DELTA * digit(t.amount, i);
@@ -801,10 +805,15 @@ fn set_upsilon(p: &Tbox, s1: &mut PolyVec, blocks: &[(usize, usize)]) -> bool {
         d.sub(&{ d }, &Int::from_i64(2, n2));
         let above = d.sgn() < 0;
         let above = crate::ct::verdict(above); // review E: the witness-valid verdict is public (prove fails)
+        if !above {
+            Poly::binexp(Some(&mut s1[m1 + z]), None, &d);
+        }
+        // Q-B (review A-3): the block's squared norm and its slack (the slack polys sit in s1, the caller's)
+        crate::wipe(&mut d.l);
+        crate::wipe(core::slice::from_mut(&mut n2));
         if above {
             return false; // witness above its norm bound
         }
-        Poly::binexp(Some(&mut s1[m1 + z]), None, &d);
     }
     true
 }
