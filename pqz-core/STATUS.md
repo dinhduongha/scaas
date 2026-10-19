@@ -32,12 +32,20 @@ Terms used throughout:
 | [measured] | the numbers come from the named run; raw output under the given `runs/` path |
 | p50 / p99 | median / 99th-percentile time |
 
-## Current state (2026-10-18)
+## Current state (2026-10-19)
 
-- **2026-10-19: PQZL is NOT sound until Open item 11 is fixed** (Fiat–Shamir omissions found by the whole-code review;
-  lazer#28). Gate A's PASS and the frozen PQZL `proofSystemId` predate the finding.
+- **PQZL v2 is forgeable; PQZL v3 fixes it on branch `pqzl-fs3`, not merged yet.** The whole-code review of
+  2026-10-19 found that LaZer's tbox absorbs `z3`, `z4` and `h` after the challenges that check them
+  ([lazer#28](https://github.com/lazer-crypto/lazer/issues/28), Open item 11). The fix is in all four PQZL
+  verifiers and both provers, with `proofSystemId` v3, regenerated vectors and the prover-side fixes D-2 / D-3
+  (section "PQZL v3: Fiat–Shamir fix"). Gate A's PASS and the frozen v2 id predate the finding; v2 is retired.
+  Still to do before the merge: the reproduction package and the fuzz campaign on v3, the gate, reviews A (Rust crate)
+  and B (transcript audit) (plan Tasks 6, 7, 9–12). Review fixes A–E (Codex G / agy H) are in progress, see
+  `research/code-review-2026-10-19/G`, `H`.
+- **Chain 7622 still runs PQZL v2** (image `pqz2`, the C core), which accepts forgeable v2 proofs (a test chain; owner
+  ruling), until the v3 roll-out resets it from genesis (decision F9, path B; plan Task 13).
 
-- Every round below is merged into `main` (merge commits in the table).
+- Every round below is merged into `main` (merge commits in the table), except PQZL v3.
 - **Gate A (PQZL) and gate B (PQZH) passed on 2026-10-17**, and both `proofSystemId`s are frozen. **The freeze**
   is done: `artifact/runs/freeze-2026-10-17/` (section "Gates A / B and the freeze").
 - The multi-recipient transfer (`R_TXM`, op 7) is live in the `PQZ` precompile on chain 7622 since 2026-10-17 and
@@ -90,6 +98,7 @@ Terms used throughout:
 | Multi-recipient transfer S4 (vectors) | `p6-anon-s4` | `59522d6`, 2026-10-16 |
 | Multi-recipient transfer S6 (reproducibility package) | `p6-anon-s6b` | `926a481`, 2026-10-17 |
 | Multi-recipient transfer S8 (live on chain 7622) | `p6-anon-s8` | `63e672f`, 2026-10-17 |
+| PQZL v3: Fiat–Shamir fix | `pqzl-fs3` | not yet (plan Tasks 9–12) |
 
 Original header of this log: "P6d (E-S1 `pqz-core` spike), P6d-2 (optimisation) and P6e — status (2026-10-14)".
 The spike's README, research note `docs/research/pqz-core-e-s1.md` (§11 covers P6d-2), roadmap row and TODO row
@@ -1147,6 +1156,109 @@ Evidence:
 - `scripts/capped pqz-core/gate.sh t10b`: **PASS** (`runs/gate/t10b-*`), with `pqz-vectors --check` and the
   self-test hash unchanged.
 
+## PQZL v3: Fiat–Shamir fix (branch `pqzl-fs3`)
+
+Plan `docs/superpowers/plans/2026-10-19-pqzl-fs3.md`; decisions CTR-PQZ-09 F1–F10 (owner rulings of Task 0 recorded
+`2fff733`); spec pq-zero-knowledge.md §5 "Transcripts" and §8; analysis `docs/research/pqz-tbox-soundness.md` §8.
+Closes Open item 11. Not merged yet: the reproduction package and fuzz on v3, the gate, reviews A / B (Tasks 6, 7,
+9–12); the roll-out on 7622 follows the merge (Task 13).
+
+What changed, in the C prover and generic verifier (`lazer/lnp-tbox.c`), the C specialised verifier (`src/pqz_sv.c`),
+the Rust prover and generic verifier (`rust/src/proof/tbox.rs`) and the Rust specialised verifier (`rust/src/sv.rs`):
+
+- **Two transcript rounds** (P6-FS, [lazer#28](https://github.com/lazer-crypto/lazer/issues/28)). `hz =
+  SHAKE128(cseed ‖ grandom3(z3) ‖ grandom3(z4))`, after the verifier's norm checks on z3 / z4, seeds V3 / V4 and the
+  tg round; the JL rows R / R' stay on `cseed` (the one deviation from the plan, F1: the Schwartz–Zippel
+  accumulators now take two seeds). `hash2 = SHAKE128(hash1 ‖ urandom3(h))` seeds `μ` and the final challenge; γ
+  stays on `hash1`. Encoding: the proof's own (F2), buffers sized exactly (F3).
+- **Prover-side zero-knowledge fixes** (review D). D-2: z2 now uses Rej1, the one-time-commitment rejection the
+  parameters were generated for (F7); D-3: the β3 / β4 sign bits read distinct bits (F8). They change honest proofs,
+  not verifier rules; no parameter change.
+- **`proofSystemId` v3** = `keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v3")` = `0x8079d65b…16baef` (F6) in `pqz.h`,
+  the Rust crate, `pqz-stmt`, `pqz_kat.py`, the Nethermind harness and `engine-pqz.json` (ids only), `add-schedule.py`,
+  `PqzRegistryBase.sol`, `stark-backup/src/rel.rs`. **v2 is retired** (forgeable): not accepted, no constant kept.
+- **Tests:** the P6-FS binding test, `sz/fs_bind.c` (fourth check of `check_tbox_fixes.sh`) and
+  `rust/tests/fs_bind.rs`, with mutate kind 14 (z3 ± 1, test-only; F10); unit tests of `rej_onetime` in C and Rust.
+
+| Task | Commits | Run label |
+|---|---|---|
+| 1 binding tests (FAIL expected) | `c5b2c99`, review fixes `c0bd890`, Rust run `b3cc772` | `fs1` |
+| 2 C transcript fix, id v3 | `6d83208`, review fix `2789314` | `fs2` |
+| 3 Rust transcript fix, id v3 | `420f409`, `13a8f8e`, run `41c708b` | `fs3` |
+| 4 D-2, D-3 in both cores; cheating fixtures re-exported | `c57381b`, review notes `0dc869d` | `fs4` |
+| 5 the id everywhere, vectors regenerated | `8af584b` | `fs5` |
+| 8 documents | `ec4d243` and this commit | — |
+
+**Runs** [measured]:
+
+- **fs1** (before the fix): P6-FS **FAIL**, 10 of 12 checks, in C (`pqzl/runs/fs1-before.txt`, `fs1-review-fix.txt`)
+  and Rust (`pqzl/rust/runs/fs1-test.txt`): the `μ` seed of the h-changed proof and the V3 / V4 seeds of the z3- and
+  z4-changed proofs equal the honest proof's, in `verify` and `verify_fast`. Everything else green.
+- **fs2** (C fix): `check_tbox_fixes` ok with P6-FS 0 of 12 (`pqzl/runs/fs2-tbox.txt`); `check_sv_fixes` ok;
+  `sv/diff.sh fs2` 4,328 portable + 2,158 x86-64-v3 cases, 0 mismatches, 0 PRG mismatches; z21 differential 406
+  cases, 0 disagreements (its rc 1 is the both-verdicts flag on `R_TXM8` / `R_TXM8_0`, as on main since 2026-10-17)
+  (`pqzl/runs/fs2-sv-*`); `relfix.sh fs2` KAT 19/19, `fails 0` native, wasm32 and ASan + UBSan (only the known UBSan
+  notes), native = wasm32 (`research/pqzl-measure/runs/fs2-*`).
+- **fs3** (Rust fix): `fs_bind` ok; the Rust bench `proofs_fnv` = the C fs2 values, native and wasm32; `oracle_prove`
+  Rust = C on all 14 relation codes (with its assert on the committed v2 vector disabled locally)
+  (`pqzl/rust/runs/fs3-*`).
+- **fs4** (D-2, D-3): `relfix.sh fs4` KAT 19/19, `fails 0` native, wasm32 and ASan + UBSan, `check_tbox_fixes` ok
+  (P6-SZ, P6-L2, P6-Z21, P6-FS); C `pqz_bench 2 2 16320` `fails 0` (`research/pqzl-measure/runs/fs4-*`);
+  `pqzl/test/ub_test.sh fs4` PASS with the `rej_onetime` test: acceptance 11,624 / 65,536 = 0.17737 against
+  1/(2·M2) = 0.17628 (`pqzl/test/runs/ub-fs4.txt`; Rust `onetime_rej1` the same counts); `rust/run.sh fs4` every FNV
+  line equal, `export.sh` rc 0 (every production verifier rejects the re-exported cheating fixtures;
+  `pqzl/rust/runs/fs4-*`); the harness patches still apply (`z34poc.sh` 5 edits, `l2dom` 1, `review.sh` 1 each).
+- **fs5** (id, vectors): `ffi/vectors/run.sh fs5` and `fs5-c` (`pqz-vectors --check` 16 files byte-identical on both
+  backends, `pqz_kat.py --check` ok, tamper 191 / 191, wasm32 replay 53 cases, 0 fails; `ffi/vectors/runs/fs5-*`);
+  `ffi/run.sh fs5` and `fs5-c` (native = wasm32 29 digest lines, C backend = Rust backend; `ffi/runs/fs5-*`);
+  `rust/run.sh fs5` (19 test binaries, 0 failed, every FNV line equal, native = wasm32 387 digest lines with M = 8
+  proved in wasm32; `pqzl/rust/runs/fs5-*`); C KAT 19/19 (`pqzl/runs/fs5-kat.txt`); `stmt` 11 + 1, `pqzh/ligero`
+  13 + 17 + 8, `xcheck` equal, Nethermind 41 / 41 (`nethermind/runs/2026-10-19-fs5-test.txt`), `forge test`
+  `test/pqz` 37 / 37. `negative.json` 731 → 744 rows (+16 "retired PQZL v2 proofSystemId", −3 coder-padding rows the
+  generator adds only when a proof ends below 0x80). **Self-test hash unchanged** `ed910a2c…d205` on both backends.
+  The fuzz input `regress/valid/crash-b9881…` (v2) is re-proved as `fixture-disclose-receiver-rnd33`
+  (`fuzz/runs/2026-10-19-fs5-regress-valid.txt`).
+
+`proofs_fnv`, v2 → after the transcript fix (Tasks 2 / 3) → final v3 (with D-2 / D-3; C = Rust). The C core's runs
+(`research/pqzl-measure/runs/`): v2 `tx0c-*` and `l3a-native-fast`, then `fs2-*`, `fs4-*`; the op 7 middle column is the
+Rust `fs3` bench (no C run of those shapes in Task 2). `rust/run.sh` pins the final values.
+
+| `proofs_fnv` | native 5 seeds (`5 5 63`; = wasm32 5 seeds) | wasm32 3 seeds (`3 1 63`) | native 10 seeds (relfix) |
+|---|---|---|---|
+| `R_REG` | `8bd69f2d` → `b76964d5` → `b935013d` | `e70b5dc4` → `df9c238e` → `c5d0e8c6` | `b82d49f8` → `c36b3c42` → `acfd0e0e` |
+| `R_TX` | `b9bbf854` → `78417d42` → `258418fb` | `9304299b` → `27653466` → `da580d8a` | `0b786555` → `f2c9029d` → `96bc4cff` |
+| `R_BURN` | `0a5976da` → `6c959845` → `85ab8aa8` | `0ea1c7a6` → `5850b6d7` → `581fda3e` | `c7e99b6b` → `c7904de4` → `a6690b16` |
+| `R_DS` | `b4aa2e26` → `ba3698fc` → `cd5eccf7` | `f39a8e64` → `6a168a2c` → `12c24f8f` | `5429242c` → `4a3d88dd` → `a4c5cd87` |
+| `R_DR` | `c800f2c6` → `619971bf` → `b3cb29a2` | `96a6e906` → `85759c97` → `1fc860f7` | `e53ad440` → `9d03b294` → `1449cf10` |
+| `R_TX0` | `a29a5747` → `25062de9` → `06c6a4a5` | `a0afafc7` → `78ed03a7` → `3ff37043` | `a2759b37` → `698f8483` → `b10dc839` |
+
+| op 7, `pqz_bench 2 2 16320` | v2 → Tasks 2 / 3 → v3 |
+|---|---|
+| `R_TXM1` / `R_TXM2` | `ee87e7a4` → `70cf13e6` → `e839a31e` / `4294a892` → `ec51bb4b` → `4c63cef7` |
+| `R_TXM4` / `R_TXM8` | `4ff8974f` → `06fd0b71` → `e88b6a9f` / `cd21b056` → `5761601e` → `62e81d1d` |
+| `R_TXM1_0` / `R_TXM2_0` | `bba9cd96` → `2dd19206` → `40131675` / `2fef961b` → `112a0f93` → `ad7a159c` |
+| `R_TXM4_0` / `R_TXM8_0` | `74c6be73` → `ebecbd5c` → `024ffaf8` / `90c8fc70` → `653b03b1` → `f22cc134` |
+
+Sizes, arena peaks, times (C core, native, 10 proofs, v2 `tx0c-native.jsonl` → v3 `fs4-native.jsonl`). Proof sizes
+move within the `rnd32` noise; arena peaks are equal (apart from `R_BURN`'s known 2,176 B); verify times are within the
+host's noise (about ± 20 %). Prove time follows the rejection attempts (both loops), which D-2 about doubles; `R_BURN`'s
+did not move in this sample. The full v3 tables (both cores, wasm32, the specialised verifier) are to be re-measured
+(plan Tasks 6 and 13).
+
+| | proof bytes max | rejection attempts per proof | prove p50 (ms) | generic verify p50 (ms) |
+|---|---|---|---|---|
+| `R_REG` | 28,113 → 28,105 | 7.4 → 14.0 | 295 → 287 | 161 → 164 |
+| `R_TX` | 42,785 → 42,792 | 12.1 → 18.5 | 965 → 1,125 | 648 → 677 |
+| `R_BURN` | 41,938 → 41,949 | 10.9 → 10.1 | 874 → 840 | 556 → 574 |
+| `R_DS` | 28,995 → 28,979 | 9.2 → 13.2 | 331 → 316 | 200 → 208 |
+| `R_DR` | 28,996 → 29,001 | 10.2 → 12.6 | 395 → 365 | 206 → 217 |
+| `R_TX0` | 42,441 → 42,452 | 11.0 → 23.0 | 827 → 1,140 | 577 → 585 |
+
+**Not done in this round:** the package's `expected-results.json` (Task 6) and the fuzz campaign on v3 (Task 7; three
+small `corpus/precompile` inputs still carry the v2 id and now reject on it); the gate and reviews A / B (Tasks 9–11);
+the merge (Task 12); the roll-out on 7622 with a new image and gas re-calibration (Task 13). The external
+cryptographic audit before mainnet 22776 remains open.
+
 ## Measured (2026-10-13, this machine, single thread)
 
 The spike's measurement record: P6d-2 against the unoptimised spike, and the verdict against the kill criteria
@@ -1259,7 +1371,7 @@ the record.
     uses simd128. Follow-up, not done in the port: a `cfg(target_arch = "wasm32")` limb path in `ntt.rs` (it must give
     the same residues; `run.sh`'s native = wasm32 replay and proofs_fnv checks pin that). Native verify is unaffected (the
     Rust core is faster there), and the chain verifies natively.
-11. **P0: Fiat–Shamir transcript omissions in the toolbox protocol (whole-code review 2026-10-19, OPEN, being fixed).**
+11. ~~**P0: Fiat–Shamir transcript omissions in the toolbox protocol (whole-code review 2026-10-19).**
     `h` is not absorbed before the challenge `mu` that combines the quadratic equations, and `z3`, `z4` are not absorbed
     before their Schwartz–Zippel challenges; `h` is not in the final challenge either. In the C generic verifier
     (`lazer/lnp-tbox.c`, `lnp-quad-many.c`), the C specialised verifier (`src/pqz_sv.c`), the Rust core (`rust/src/proof/`,
@@ -1268,7 +1380,15 @@ the record.
     PQZL statement by a linear solve for `h`. Reports and controller verification:
     `research/code-review-2026-10-19/`. Owner 2026-10-19: fix now (cheating-prover PoC first, then the transcript in all
     four implementations, new `proofSystemId`, vectors, spec); the Rust roll-out on 7622 is stopped and the chain stays on
-    `pqz2` until the fix. PQZH (Ligero) is not affected.
+    `pqz2` until the fix. PQZH (Ligero) is not affected.~~
+    **Closed 2026-10-19 on branch `pqzl-fs3`** (merge after the gate and reviews A / B, plan Tasks 9–12): lazer#28 is
+    fixed in all four implementations and both provers (section "PQZL v3: Fiat–Shamir fix"): C generic verifier and
+    prover (`lazer/lnp-tbox.c` `_lnp_tbox_hash_z34` / `_lnp_tbox_hash_h`) and C specialised verifier (`src/pqz_sv.c`)
+    in `6d83208` (review fix `2789314`), Rust generic verifier and prover (`rust/src/proof/tbox.rs` `hash_z34` /
+    `hash_h`) and Rust specialised verifier (`rust/src/sv.rs`) in `420f409` (`13a8f8e`, run `41c708b`); PQZL
+    `proofSystemId` v3 in every pin and the regenerated vectors in `8af584b`. The owner replaced "cheating-prover PoC
+    first" with binding tests that only observe the challenge seeds (`c5b2c99`, `c0bd890`, `b3cc772`): 10 of 12 checks
+    FAIL before the fix, 0 of 12 after, in both cores. Chain 7622 stays on `pqz2` (v2) until plan Task 13.
 
 Scratch (not needed to resume, re-creatable): the LaZer and lattice-estimator clones, the upstream tbox harness and
 debug builds under the session scratchpad `p6d/`.

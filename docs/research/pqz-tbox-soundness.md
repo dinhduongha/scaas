@@ -264,7 +264,8 @@ moved from `pqz_rel.c` to `lazer/coder.c`), the C specialised verifier sizes its
 relations are unchanged. PQZL `proofSystemId` v3 = `keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v3")` =
 `0x8079d65b…16baef` (pq-zero-knowledge.md §8, CTR-PQZ-09; decisions.md CTR-PQZ-09, F1–F10). The same bump carries two
 prover-side zero-knowledge fixes from review D (D-2, the z2 rejection; D-3, the β sign bits), implemented in the
-plan's Task 4; their figures are not in this note.
+plan's Task 4 (`c57381b`); they change honest proofs and no verifier rule, and their figures are in
+pq-zero-knowledge.md §8 ("Prover-side zero-knowledge fixes") and decisions.md F7 / F8.
 
 ### 8.4 Evidence
 
@@ -283,8 +284,17 @@ plan's Task 4; their figures are not in this note.
 - **C = Rust**: the Rust bench gives the same `proofs_fnv`, and `oracle_prove` the same proof bytes on all 14 relation
   codes (`41c708b`) [measured].
 
-These are the Task 2 / 3 values. Task 4 (D-2, D-3) changes the proofs again; the final `proofs_fnv`, vectors and
-digests come with the plan's Tasks 4–5 and `pqz-core/STATUS.md`.
+These are the Task 2 / 3 values. The final v3 code (Tasks 4–5, with D-2 / D-3) was checked again [measured]:
+
+- `relfix.sh fs4` (`pqz-core/research/pqzl-measure/runs/fs4-*`): `check_tbox_fixes` ok with P6-FS 0 failed checks of
+  12, KAT 19/19, `fails 0` native, wasm32 and ASan + UBSan, native = wasm32; final `proofs_fnv` (bench `5 5 63`)
+  `R_REG` `b935013d`, the six forms and the eight op 7 shapes in `pqz-core/STATUS.md` (section "PQZL v3");
+- Rust (`pqz-core/pqzl/rust/runs/fs5-*`): `fs_bind` 0 of 12, every bench `proofs_fnv` = the C core's, native =
+  wasm32 on 387 vector digest lines, `oracle_prove` Rust = C on all 14 relation codes against the v3 vectors;
+- the vectors regenerated under v3 (`8af584b`, `pqz-core/ffi/vectors/runs/fs5-*`): `pqz-vectors --check`
+  byte-identical on both backends, 16 negative rows for the retired v2 id, the self-test hash unchanged.
+
+The gate before the merge (plan Tasks 9, 12) and the reviews A / B (Tasks 10, 11) follow.
 
 ### 8.5 Impact on PQZ
 
@@ -298,4 +308,4 @@ digests come with the plan's Tasks 4–5 and `pqz-core/STATUS.md`.
 - **Files:** fix `pqz-core/pqzl/lazer/lnp-tbox.c` (`_lnp_tbox_hash_z34`, `_lnp_tbox_hash_h`), `lazer/coder.c`
   (`coder_grandom3_nbits`), `pqz-core/pqzl/src/pqz_sv.c`, `pqz-core/pqzl/rust/src/proof/tbox.rs` (`hash_z34`,
   `hash_h`), `rust/src/sv.rs`; tests `pqz-core/pqzl/sz/fs_bind.c`, `rust/tests/fs_bind.rs`; runs `pqz-core/pqzl/runs/fs*`,
-  `pqz-core/pqzl/rust/runs/fs*`, `pqz-core/research/pqzl-measure/runs/fs2-*`.
+  `pqz-core/pqzl/rust/runs/fs*`, `pqz-core/research/pqzl-measure/runs/fs2-*`, `fs4-*`, `pqz-core/ffi/vectors/runs/fs5-*`.

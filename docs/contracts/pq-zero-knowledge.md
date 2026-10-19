@@ -432,13 +432,19 @@ Proofs ([serialization v1](#serialization)), measured on the frozen vectors (`sm
 `proof_pqzh.json`, one proof per form at a fixed `rnd32`; lengths vary slightly with `rnd32`); the bound is what
 the verifier accepts:
 
-| Form | PQZL v2 proof (v3 figures pending: plan `pqzl-fs3` Task 5) | PQZH Ligero v1 proof | PQZH exact maximum |
+| Form | PQZL v3 proof | PQZH Ligero v1 proof | PQZH exact maximum |
 |---|---|---|---|
-| Transfer `R_TX` / auditor off `R_TX0` | 42,762 / 42,431 | 230,946 / 231,480 | 235,470 / 234,744 |
-| Burn / refresh `R_BURN` | 41,904 / 41,915 | 232,184 / 230,280 | 234,744 |
-| Registration PoP `R_REG` | 28,093 | 186,778 | 190,458 |
-| Disclosure `R_DS` / `R_DR` (receiver, auditor) | 28,977 / 28,996, 28,986 | 186,456 / 187,226, 187,194 | 190,458 |
+| Transfer `R_TX` / auditor off `R_TX0` | 42,762 / 42,421 | 230,946 / 231,480 | 235,470 / 234,744 |
+| Burn / refresh `R_BURN` | 41,895 / 41,925 | 232,184 / 230,280 | 234,744 |
+| Registration PoP `R_REG` | 28,091 | 186,778 | 190,458 |
+| Disclosure `R_DS` / `R_DR` (receiver, auditor) | 28,966 / 28,978, 28,974 | 186,456 / 187,226, 187,194 | 190,458 |
 | Limit `MAX_PROOF(id)` | 98,304 (kill criterion 96 KB, [CTR-PQZ-09](#CTR-PQZ-09)) | 262,144 | — |
+
+PQZL v3 figures: the vectors regenerated in plan `pqzl-fs3` Task 5 (`8af584b`,
+`pqz-core/ffi/vectors/runs/fs5-write-generate.txt`); op 7 at `M` = 1 / 2 / 4 / 8 with the auditor 42,775 / 43,603 /
+45,270 / 61,763 B, without it 42,392 / 42,901 / 43,932 / 59,000 B. The retired v2 vectors differed by at most 20 B per
+form (`R_TX0` 42,431, `R_BURN` 41,904 / 41,915, `R_REG` 28,093, `R_DS` / `R_DR` 28,977 / 28,996, 28,986), the
+`rnd32` noise noted above: v3 changes the transcript and the prover's rejection, not the layout or the parameters.
 
 `be8` coefficients waste 22 bits each (≈ 34 %) against tight 42-bit packing; accepted: the Solidity `Add` works on
 aligned 64-bit lanes, and bytes 0–1 of each word are zero (cheap calldata tokens: ≈ 25.2 tokens per coefficient
@@ -1264,7 +1270,7 @@ honest proofs but no verifier rule. Regression check: `pqz-core/pqzl/check_tbox_
   that `libpqz.so`, the WASM module and the mobile libraries link no GMP, MPFR, libstdc++ or libm symbols and contain no
   floating-point instructions on the verify and prove paths (`nm`/`objdump` check).
 - **Prover-side zero-knowledge fixes in v3** (whole-code review 2026-10-19, findings D-2 and D-3,
-  `pqz-core/research/code-review-2026-10-19/D-lazer-fork.md`; implemented in plan `pqzl-fs3` Task 4, figures pending).
+  `pqz-core/research/code-review-2026-10-19/D-lazer-fork.md`; implemented in plan `pqzl-fs3` Task 4, `c57381b`).
   Both are inherited from upstream LaZer, change honest proofs (the `proofs_fnv` lines, the vectors) and no verifier
   rule:
   - **z2 rejection (D-2).** `lnp-quad.c` ran the bimodal test for `z2` with `z1`'s variance σ1² and without a random
@@ -1278,9 +1284,18 @@ honest proofs but no verifier rule. Regression check: `pqz-core/pqzl/check_tbox_
     by that factor 2: kept as generated; tries per R_REG proof ≈ 7 → 14). Rej1 outputs `z2` from D_σ2 restricted to the
     half-space ⟨z2, c·s2⟩ ≥ 0, so each proof reveals one sign bit about `s2`; LNP22 / LNS21 cover this with the
     extended-MLWE assumption (to be confirmed in review B, plan Task 11). `z3` / `z4` keep the bimodal test with their own β signs.
+    Measured (`rej_onetime` unit tests, C `pqzl/test/pqz_ub_test.c` → `pqzl/test/runs/ub-fs4.txt`, Rust
+    `rand::rejection::tests::onetime_rej1`, the same counts: 2^16 samples at `R_REG`'s `scM2` / `stdev2sqr`): equal to
+    `rej_standard` OR the sign test on every sample, the same rng offset afterwards, acceptance 11,624 / 65,536 =
+    0.17737 against 1/(2·M2) = 0.17628 (M2 = 2.8364453). Rejection attempts per proof (both loops, `relfix.sh fs4`):
+    `R_REG` 14.0–16.2, `R_TX` 18.5–19.6, `R_TX0` 22.2–23.0, against 6.2–7.4, 6.1–12.6, 9.1–13.8 before (n = 5 / 10
+    proofs). `PQZ_REJ_MAX` = 1000 (CTR-PQZ-10) fails with probability ≈ e^-42.5 ≈ 2^-61 at worst (`R_TXM` M = 4,
+    2·M1·M2 ≈ 24 expected attempts), a liveness bound only (the prover retries). The headers are unchanged
+    (`params/to_rust.py --check`: 15 files equal).
   - **β signs (D-3).** The tbox sign sampler read β4 from a bit index that reached bit 8 of a `uint8_t` (β4 = +1 on
     every fourth attempt) and reused β4's bit as the next β3. v3: β3 reads bit `8 − nrbits`, β4 the next unused bit,
-    a refill when fewer than two bits remain, and the sign byte is cleared at the end.
+    a refill when fewer than two bits remain, and the sign byte is cleared at the end. Pinned by the `proofs_fnv`
+    lines and C = Rust proof bytes (no separate unit test).
 - **Relations.** `R_TX`, `R_TX0` (transfer without the auditor), `R_BURN` (also REFRESH), `R_REG`, `R_DS`, `R_DR`
   (also AUDITOR) written as LaZer specifications (`pqz-core/pqzl/params/<rel>_params.sage`) → generated
   `pqz_<rel>_params.h` checked in, regenerated only on purpose (`params/regen.sh` reproduces every header byte for
@@ -1338,7 +1353,7 @@ bytes; `be8` and `‖` as in the notation at the top.
 
 | `proofSystemId` | System | `MAX_PROOF(id)` | Verifier on the precompile path | Freeze |
 |---|---|---|---|---|
-| `keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v3")` = `0x8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef` | PQZL v3: LNP22 through LaZer's `tbox` with the P6-FS transcript ([transcript](#transcript)) (`pqz-core`: the Rust crate `pqzl`, the C core as reference) | 98,304 B | `verify_fast` (`pqz_verify_fast` in C) | pending: v3 vectors (plan `pqzl-fs3` Task 5) |
+| `keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v3")` = `0x8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef` | PQZL v3: LNP22 through LaZer's `tbox` with the P6-FS transcript ([transcript](#transcript)) (`pqz-core`: the Rust crate `pqzl`, the C core as reference) | 98,304 B | `verify_fast` (`pqz_verify_fast` in C) | v3 vectors `8af584b` (plan `pqzl-fs3` Task 5); the branch's final gate before the merge (plan Tasks 9, 12) |
 | `keccak256("scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1")` = `0x0a47a7689250ba178a52ad5972cdd9153358c022cb694c08d2389e82de2fead4` | PQZH Ligero v1: Ligero over F_q, radix-431 domains, Keccak-256 Merkle tree and transcript, zero knowledge, proven preset (`pqzh-ligero`, Rust) | 262,144 B | `pqzh_ligero::verify` | gate B (P6e D3) |
 
 Retired, **forgeable**: PQZL `…/v2` = `0x2e07e6ed1fd303a08c89b3eab6e8423fdfb8f31202958dd682a0619313798c2f`

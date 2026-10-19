@@ -128,8 +128,9 @@ the sequential results), the arithmetic KAT (`kat_dump` against the upstream gol
 `smartcontracts/vectors/pqz/pqz_kat.py --c-keys`; again with `keys_kat 1000 ctx` through the `Ctx` methods, the same
 lines), the generated params (`python3 -I ../params/to_rust.py --check`;
 `tests/oracle_params.rs` compares every field with the C headers), the prover's `proofs_fnv` against the C core's
-runs (`bench 5 5 63` = `research/pqzl-measure/runs/tx0c-fnv-native.jsonl`, `bench 2 2 16320` = `l3a-native-fast.jsonl`,
-`node wasm/run_wasm.mjs 3 1 63` = `tx0c-fnv-wasm.jsonl`; the bench runs again with `PQZ_VERIFY=fast`, natively and
+runs (PQZL v3 since 2026-10-19: `bench 5 5 63` = `research/pqzl-measure/runs/fs4-fnv-native.jsonl`, `bench 2 2 16320`
+= `fs4-fnv-native-16320.jsonl`, `node wasm/run_wasm.mjs 3 1 63` = `fs4-fnv-wasm.jsonl`; under v2 they were
+`tx0c-fnv-native`, `l3a-native-fast`, `tx0c-fnv-wasm`; the bench runs again with `PQZ_VERIFY=fast`, natively and
 in wasm32), native = wasm32 on the vectors (`node wasm/run_vectors.mjs`: proofs, verify and verify_fast verdicts of
 every PQZL vector and negative row, op 7 M = 8 proved too; the shadow stack's use), clippy `-D
 clippy::float_arithmetic` (production build, all features, `wasm/`), the wasm32 build.
@@ -141,7 +142,10 @@ measured the C core and this crate in the same session on the same machine (AMD 
 rustc 1.97.1, node v26.8.1). The earlier Rust runs (`runs/t8-*` to `runs/t10b-*`) and the frozen C runs were
 measured at different times, so their times are **not comparable** and are not used here. D6 is reported, not a
 gate: the owner uses it for the production choice. Every bench reported `fails 0`, and every relation's `proofs_fnv`
-is the same for both cores (native n = 10, wasm32 n = 5), so both sides timed the same proofs.
+is the same for both cores (native n = 10, wasm32 n = 5), so both sides timed the same proofs. D6 measured
+`proofSystemId` v2. PQZL v3 (2026-10-19) adds two hashes per proof and, with the z2 rejection fix D-2, about twice
+the z1 / z2 rejection attempts, so the prove times above are v2 figures; the v3 times are to be re-measured (plan
+`pqzl-fs3` Task 13; first C figures in `pqz-core/STATUS.md`, section "PQZL v3"). Verify does no rejection sampling.
 
 Times are p50 / p99 in ms (verify p99: the larger of the honest and the adversarial p99, as in STATUS.md). Samples:
 native 10 proves / 100 verifies, wasm32 5 / 30, verify_fast 200 native / 100 wasm32 (the `reproduce.sh --full`
