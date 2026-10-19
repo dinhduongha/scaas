@@ -26,6 +26,7 @@ its scope. Reviewed at main `4c20032`.
 | [V1-claude-plugin-pqz-zether.md](V1-claude-plugin-pqz-zether.md) | same, Claude part 1: plugin, `pqz/`, `zether/` | no P0 / P1; P2: unbound transfer mode on direct calls (W-A), creator-chosen verifier trusted (W-B); five P3 |
 | [V2-claude-ua-account-wallet.md](V2-claude-ua-account-wallet.md) | same, Claude part 2: `ua/`, `account/`, `wallet/` | no P0 / P1; P2: decoy-list flooding (W-C, spec); five P3 |
 | [V3-claude-common-metatx-dex.md](V3-claude-common-metatx-dex.md) | same, Claude part 3: `common/`, `metatx/`, `factory/`, `dex/`, `trade/`, `hedera/` | P3 only (forged gas selectors abort a DEX batch, cancel not nonce-bound, ERC-1271, hygiene) |
+| [X-review-b-transcript.md](X-review-b-transcript.md) | plan Task 11 review B at `a61d221`: the v3 fix diff, every prover message vs LNP22, F7 (Rej1), O3 (A' budget) | **P0 B-1: V3 / V4 drawn from hz before the commitment `tg` to g** (all four verifiers and both provers; the other accumulators use the post-`tg` hash) — the v3 fix does not fully close D-1; Rej1 and the A' budget confirmed; P3 docs |
 
 **Controller verification (2026-10-19).** Both P0 transcript facts were re-read by the controller in the Rust prover
 (`pqzl/rust/src/proof/tbox.rs`: `tg` hashed at 1058, `h` computed after it, `quad.rs:22` derives `mu` from the same
