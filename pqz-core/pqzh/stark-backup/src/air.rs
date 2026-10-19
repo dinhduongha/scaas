@@ -227,14 +227,16 @@ const MR_P: usize = 3; // fixed coefficient of output o at the next row: MR_P + 
 impl MvAir {
     /// `lists`: (candidate input polys, outputs) with `outs[o].coef[c]` the coefficient of candidate c. Each list is
     /// cut into groups of `n_out` outputs; a group reads only the candidates it uses. Returns the AIR and every
-    /// (poly, 1) read, so the Poly AIR can send each NTT value as often as it is read.
+    /// (poly, 1) read, so the Poly AIR can send each NTT value as often as it is read. "Uses" is structural (review
+    /// P-H): a nonzero fixed coefficient, or any statement candidate (c < stmt_lead) whatever its value, so the layout
+    /// and the preprocessed columns depend on (op, parameters) only, the key of `rel::common`'s cache.
     pub fn new(lists: &[(Vec<usize>, Vec<MvOut>)], n_out: usize) -> (Self, Vec<(usize, u32)>) {
         let groups: Vec<(&[MvOut], Vec<(usize, usize)>)> = lists
             .iter()
             .flat_map(|(cands, outs)| {
                 outs.chunks(n_out).map(move |g| {
                     let used = (0..cands.len())
-                        .filter(|&c| g.iter().any(|o| o.coef[c] != [F::ZERO; D]))
+                        .filter(|&c| g.iter().any(|o| c < o.stmt_lead || o.coef[c] != [F::ZERO; D]))
                         .map(|c| (c, cands[c]))
                         .collect();
                     (g, used)
@@ -621,3 +623,21 @@ impl<AB: InteractionBuilder<F = F>> Air<AB> for PqzhAir {
 
 #[allow(unused_imports)]
 use AirBuilder as _;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// review P-H: the MV layout (and so the preprocessed commitment, cached per (op, parameters)) does not depend on
+    /// the statement's coefficient values, not even at one output per group where an all-zero statement candidate
+    /// used to drop out of its group
+    #[test]
+    fn mv_layout_statement_independent() {
+        let layout = |sc: F| {
+            let out = MvOut { coef: vec![[sc; D], [F::ONE; D]], target: [F::ZERO; D], stmt_lead: 1 };
+            let (a, reads) = MvAir::new(&[(vec![0, 1], vec![out])], 1);
+            (a.height, a.block, a.src, a.scol, a.pre, reads)
+        };
+        assert_eq!(layout(F::ZERO), layout(F::from_u64(5)));
+    }
+}

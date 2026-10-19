@@ -64,6 +64,23 @@ pub fn stmt_digest(op: u8, stmt: &[u8]) -> [u8; 32] {
     h.finalize().into()
 }
 
+/// The prover's mask seed (review P-G, CTR-PQZ-19 as Ligero's `Rng::new`): SHAKE256("SCAAS-PQZH-STARK-RNG-V1" ||
+/// rnd32 || u8(op) || be32(len(stmt)) || stmt || wit), 32 bytes; a repeated rnd32 with another witness gives
+/// unrelated masks and salts.
+pub fn mask_seed(rnd32: &[u8; 32], op: u8, stmt: &[u8], wit: &[u8]) -> [u8; 32] {
+    use sha3::digest::{ExtendableOutput, Update, XofReader};
+    let mut h = sha3::Shake256::default();
+    h.update(b"SCAAS-PQZH-STARK-RNG-V1");
+    h.update(rnd32);
+    h.update(&[op]);
+    h.update(&(stmt.len() as u32).to_be_bytes());
+    h.update(stmt);
+    h.update(wit);
+    let mut out = [0u8; 32];
+    h.finalize_xof().read(&mut out);
+    out
+}
+
 fn rd_i8(b: &[u8], n: usize) -> Vec<Poly> {
     (0..n / D).map(|i| std::array::from_fn(|m| b[i * D + m] as i8 as i64)).collect()
 }
@@ -483,7 +500,8 @@ macro_rules! verify_with {
     }};
 }
 
-/// Prove `op` on `stmt` with witness `wit` (pqz-core byte formats). `rnd32` seeds the hiding masks (ZK mode).
+/// Prove `op` on `stmt` with witness `wit` (pqz-core byte formats). `rnd32`, hedged with the statement and the witness
+/// ([`mask_seed`]), seeds the hiding masks (ZK mode).
 pub fn prove(op: u8, stmt: &[u8], wit: &[u8], rnd32: [u8; 32], p: &Params) -> Result<Vec<u8>, &'static str> {
     prove_inner(op, stmt, wit, rnd32, p, true)
 }
@@ -496,6 +514,7 @@ pub fn prove_unchecked(op: u8, stmt: &[u8], wit: &[u8], rnd32: [u8; 32], p: &Par
 fn prove_inner(op: u8, stmt: &[u8], wit: &[u8], rnd32: [u8; 32], p: &Params, check: bool) -> Result<Vec<u8>, &'static str> {
     let b = build(op, stmt, Some(wit), check, p)?;
     let seed = stmt_digest(op, stmt);
+    let rnd32 = mask_seed(&rnd32, op, stmt, wit);
     if p.whir.is_some() && !p.zk {
         return Err("whir requires zk");
     }
@@ -630,4 +649,21 @@ where
         out.push((format!("whir{i}_base_case"), sz(&w.base_case)));
     }
     out
+}
+
+#[cfg(test)]
+mod tests {
+    /// review P-G: the mask seed depends on rnd32, the op, the framed statement and the witness
+    #[test]
+    fn mask_seed_hedged() {
+        let (st, w) = (vec![7u8; 100], vec![1u8; 64]);
+        let mut w2 = w.clone();
+        w2[63] ^= 1;
+        let a = super::mask_seed(&[3; 32], 1, &st, &w);
+        assert_eq!(a, super::mask_seed(&[3; 32], 1, &st, &w));
+        assert_ne!(a, super::mask_seed(&[3; 32], 1, &st, &w2));
+        assert_ne!(a, super::mask_seed(&[4; 32], 1, &st, &w));
+        assert_ne!(a, super::mask_seed(&[3; 32], 3, &st, &w));
+        assert_ne!(a, super::mask_seed(&[3; 32], 1, &st[..99], &[&st[99..], &w[..]].concat()));
+    }
 }

@@ -227,6 +227,11 @@ impl<'a> De<'a> {
             }
             v |= ((b & 0x7f) as u64) << (7 * i);
             if b < 0x80 {
+                // minimal encodings only (review P-F): a final 0x00 after a continuation byte (`81 00` for `01`)
+                // would give a second encoding of the same proof
+                if b == 0 && i > 0 {
+                    return err("varint not minimal");
+                }
                 return Ok(v);
             }
         }
@@ -403,5 +408,20 @@ mod tests {
         // p itself is not a canonical encoding
         assert!(super::take_from_bytes::<F>(&0xFFFF_FFFF_0000_0001u64.to_be_bytes()).is_err());
         assert!(super::take_from_bytes::<Vec<F>>(&[200, 1]).is_err()); // length beyond the input
+    }
+
+    /// review P-F: one encoding per value; the overlong `81 00` for the length `01` is rejected
+    #[test]
+    fn varints_minimal() {
+        let b = super::to_vec(&vec![7u8]).unwrap();
+        assert_eq!(b, [1, 7]);
+        assert_eq!(super::take_from_bytes::<Vec<u8>>(&b).unwrap().0, [7]);
+        assert!(super::take_from_bytes::<Vec<u8>>(&[0x81, 0x00, 7]).is_err());
+        assert!(super::take_from_bytes::<Vec<u8>>(&[0x80, 0x80, 0x00]).is_err());
+        let big = vec![0u8; 300]; // a two-byte length, AC 02
+        let e = super::to_vec(&big).unwrap();
+        assert_eq!(&e[..2], [0xac, 0x02]);
+        assert_eq!(super::take_from_bytes::<Vec<u8>>(&e).unwrap().0.len(), 300);
+        assert!(super::take_from_bytes::<Vec<u8>>(&[[0xac, 0x82, 0x00].as_slice(), &big].concat()).is_err());
     }
 }
