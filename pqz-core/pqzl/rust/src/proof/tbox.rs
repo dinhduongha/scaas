@@ -988,7 +988,15 @@ fn compute_z34(
         polyvec::addmul(&mut tbeta, &mut bp.sub(l + loff, 0, 1, m2r, 1, 1), &mut s2.sub(0, m2r, 1), false);
         polyvec::mod_self(&mut tbeta);
         polyvec::redp_self(&mut tbeta);
-        // encode ty3, ty4, tbeta: the hash of the encoding seeds the challenges
+        // encode ty3, ty4, tbeta: the hash of the encoding seeds the challenges. review E: this try's commitments are
+        // public by design (hiding if rejected); marked before the coder, so the coder itself stays checked
+        if nex > 0 {
+            crate::ct::public_pv(&f.t_b.sub(l, w, 1));
+        }
+        if nprime > 0 {
+            crate::ct::public_pv(&f.t_b.sub(l + oy4, w, 1));
+        }
+        crate::ct::public_pv(&f.t_b.sub(l + loff, 1, 1));
         let mut enc = Coder::new();
         if nex > 0 {
             enc.urandom(&mut f.t_b.sub(l, w, 1), q, log2q)?;
@@ -1105,6 +1113,7 @@ pub(crate) fn prove(
         polyvec::addmul(&mut tg, &mut keys[2].sub(qe.l as usize, 0, lambda / 2, m2r, 1, 1), &mut s2.sub(0, m2r, 1), false);
         polyvec::mod_self(&mut tg);
         polyvec::redp_self(&mut tg);
+        crate::ct::public_pv(&tg); // review E: the commitment to g, hashed and sent
         let mut enc = Coder::new();
         enc.urandom(&mut tg, q, log2q)?;
         *hash = hash2(hash, &enc.end()?);

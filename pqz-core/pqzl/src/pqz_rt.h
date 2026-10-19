@@ -31,6 +31,10 @@ extern unsigned pqz_rej_tries; /* rejection-loop iterations (z3/z4 and z1/z2 loo
 #define PQZ_CT_PUBLIC(p, n) ((void)0)
 #endif
 
+/* review E: the constant-time code (src/pqz_rel.c ct_sdiv, dec_w, debit_witness, the carries) relies on '>>' of a
+   negative int64 being arithmetic (implementation-defined in C; true for clang and gcc on every target) */
+_Static_assert ((-1LL >> 1) == -1LL, "pqz-core needs an arithmetic right shift of negative integers");
+
 /* value barrier for masks on secret data: the optimiser no longer knows a mask is 0 or all ones, so it cannot turn a
    masked select back into a branch or a cmov of pointers plus a load (clang 18 did that to limbs_cnd_select: a
    secret-dependent address; review E). Empty asm: no instruction on x86-64, aarch64 or wasm32. */

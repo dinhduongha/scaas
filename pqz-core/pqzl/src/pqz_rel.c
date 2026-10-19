@@ -1027,6 +1027,8 @@ do_prove (sys_t *S, pf_t *F, const uint8_t hash0[32], const uint8_t *wit, size_t
   polyvec_urandom_bnd (F->s2, lo, hi, ex, 0);
   memcpy (hash, hash0, 32);
   abdlop_commit (F->tA1, F->tA2, F->tB, F->s1, F->m, F->s2, S->R->A1, S->R->A2p, S->R->Bp, tb);
+  pqz_ct_public_polyvec (F->tA1); /* review E: the commitment, hashed and sent (tA2, its low part, stays secret) */
+  pqz_ct_public_polyvec (F->tB);
   abdlop_hashcomm (hash, F->tA1, F->tB, tb);
   lnp_tbox_prove (hash, F->tB, F->h, F->c, F->z1, F->z21, F->hint, F->z3, F->z4, F->s1, F->m, F->s2, F->tA2,
                   S->R->A1, S->R->A2p, S->R->Bp, S->R2, S->r1, S->N, S->R2p, S->r1p, S->r0p, S->M, S->Es, NULL,

@@ -293,6 +293,11 @@ fn prove(
         polyvec::redp_self(&mut t);
         let mut v = Poly::mod_(&mut v);
         let mut v = Poly::redp(&mut v);
+        // review E: this try's messages are public by design (hiding commitments if rejected); marked before the
+        // coder, so the coder itself stays checked
+        crate::ct::public_pv(&t);
+        crate::ct::public(&v);
+        crate::ct::public_pv(&*w1);
         let mut enc = Coder::new();
         enc.urandom(&mut t, q, log2q)?;
         enc.urandom(core::slice::from_mut(&mut v), q, log2q)?;

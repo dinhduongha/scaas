@@ -930,6 +930,8 @@ impl Ctx {
             let mut t_a2 = Wiped(PolyVec::new(tb.kmsis as usize)?);
             let mut hash = hash0;
             abdlop::commit(&mut f.t_a1, &mut t_a2, &mut s1, &mut s2, keys, tb)?;
+            crate::ct::public(&f.t_a1[..]); // review E: the commitment, hashed and sent (t_a2 stays secret)
+            crate::ct::public(&f.t_b[..]);
             abdlop::hashcomm(&mut hash, &mut f.t_a1, &mut f.t_b, tb)?;
             tbox::prove(&mut hash, &mut f, &mut s1, &mut m, &mut s2, &mut t_a2, keys, &mut s, &ex1)?;
         }

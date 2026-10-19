@@ -220,6 +220,11 @@ lnp_quad_prove (uint8_t hash[32], polyvec_t tB, poly_t c, polyvec_t z1,
       poly_mod (v, v);
       poly_redp (v, v);
 
+      /* PQZ (review E): this try's transcript messages are public by design (hashed into the challenge; t, v, w1 of a
+         rejected try are hiding commitments); marked here, before the coder, so the coder itself stays checked */
+      pqz_ct_public_polyvec (t);
+      pqz_ct_public_poly (v);
+      pqz_ct_public_polyvec (w1);
       coder_enc_begin (cstate, out);
       coder_enc_urandom3 (cstate, t, q, log2q);
       coder_enc_urandom2 (cstate, v, q, log2q);

@@ -9,22 +9,26 @@ Owner ruling 2026-10-19: fix before the merge, in both cores. Proof bytes are un
 
 The **ctgrind** technique under valgrind 3.22 memcheck (no new packages; the owner installed valgrind on 2026-10-19):
 
-- `pqzl/test/ct.sh <label> [rels] [nprove]` (under `scripts/capped`) builds the C library objects with `-DPQZ_CTGRIND`
-  at the production `-O2` and the Rust crate with the test-only feature `ctgrind` (release profile), then runs the
+- `pqzl/test/ct.sh <label> [rels] [nprove] [keys]` (under `scripts/capped`) builds the C library objects with
+  `-DPQZ_CTGRIND` and build.sh's library flags (`-O2 -fPIC -fstack-protector-strong`, function / data sections) and
+  the Rust crate with the test-only feature `ctgrind` (release profile), then runs the
   drivers `pqzl/test/pqz_ct.c` and `pqzl/rust/src/bin/ct.rs` under memcheck. The drivers prove with the **witness and
   `rnd32` marked undefined** (`VALGRIND_MAKE_MEM_UNDEFINED`), so every value derived from them (s1, s2, the slack, the
   masks y, s·c, the inner products of the rejection tests) is "uninitialised" to memcheck, and every branch or address
   computed from one is reported ("Conditional jump or move depends on uninitialised value(s)", "Use of uninitialised
-  value of size 8").
+  value of size 8"). The `keys` rounds run KeyGen (seed secret), Enc to two recipients (`seed_enc` and the digits
+  secret) and Dec (s secret). memcheck runs with `--max-stackframe=4000000` (the provers' large stack frames). Each
+  log's header records the tree: `HEAD` and the sha256 of the uncommitted diff.
 - Where a secret-derived value becomes public by design, the code marks it defined again: `PQZ_CT_PUBLIC` /
   `pqz_ct_public_poly(vec)` in C (`pqz_rt.h`, `lazer-in2.h`; no-ops unless `PQZ_CTGRIND`), `ct::public` in Rust
   (`rust/src/ct.rs`; a no-op unless the feature `ctgrind`). The Rust client request is valgrind.h's amd64 magic
-  sequence in `core::arch::asm!` (test-only feature; the production crate keeps `forbid(unsafe_code)`).
+  sequence in `core::arch::asm!` (test-only feature; the production crate keeps `forbid(unsafe_code)`). The marks for transcript messages sit at
+  the hash sites, right before the coder, not inside it, so the coder itself stays checked on every input.
 - Pass: zero reports on both sides, every proof verifies. Counted per error context (distinct stack), as memcheck
   deduplicates.
 
 Limits, stated plainly: memcheck sees only the paths the run takes (the relations and seeds run, not every branch of
-every input), only the x86-64 code of this compiler (clang 18.1.3, rustc 1.97.1), and only branches and addresses. It
+every input), only the x86-64 code of this compiler (clang 18.1.3, rustc 1.97.1 from `rust-toolchain.toml`), and only branches and addresses. It
 does not report a `cmov` / wasm `select` on a secret (it propagates the taint instead; both are constant-time on the
 targets' hardware), and not variable-latency instructions (a division). wasm32 is covered by reading the generated
 code (below), not by a tool. This is not a timing measurement; timings were not run (see "To measure").
@@ -55,9 +59,9 @@ Results.
 
 | # | Point (C / Rust) | Why it is public |
 |---|---|---|
-| b1 | the rejection verdicts: `lnp_quad_prove` (rej1 on z1, Rej1 on z2, ‖z2‖² ≤ B²) / `quad.rs`; `_lnp_tbox_compute_z34` (z3, z4 bimodal) / `tbox.rs` | standard for Fiat–Shamir with aborts (Lyubashevsky; Dilithium): by the rejection lemma the number of tries is geometric with a witness-independent parameter (≈ 1/M per test), so the verdicts reveal nothing. Only the verdict bit is declassified: a rejected try's z and the test's inner products and exponent stay secret and are checked up to the verdict |
-| b2 | every transcript message the coder encodes: `coder_enc_urandom`, `_grandom`, `_ghint` entries (`coder.c`) / `Coder::urandom`, `Coder::grandom` (`proof/mod.rs`) — tA1, tB (ty3, ty4, tβ, tg, t), v, w1, z3‖z4, h | they are hashed into the challenges or sent. A rejected try's messages are commitments (ty3 = y3 + B·s21 …, t, v, w1 = HighBits(A1 y1 + A2 y2)), computationally hiding under MLWE; the challenges derived from them are then public too (the challenge-dependent branches, e.g. `R_i[j] == 0`, are class c) |
-| b3 | the accepted proof fields: z1, z21 and the hint (`lnp-quad.c` / `quad.rs`), z3, z4 (`lnp-tbox.c` / `tbox.rs`), each h_i after it is formed, all fields in `encode_proof` (Rust) | they are the proof |
+| b1 | the rejection verdicts: `lnp_quad_prove` (rej1 on z1, Rej1 on z2, ‖z2‖² ≤ B²) / `quad.rs`; `_lnp_tbox_compute_z34` (z3, z4 bimodal) / `tbox.rs` | observable by design: the per-test verdicts and the try count show in the total prove time. They leak only what the Fiat–Shamir-with-aborts analysis allows (Lyubashevsky; Dilithium; for the one-time commitments the extended-MLWE analysis of LNP22 / LNS21): the try count is geometric with parameter ≈ 1/M per test, but this is not "nothing": e.g. for Rej1 the mass at ⟨z, v⟩ = 0 depends on v. Only the verdict bit is declassified: a rejected try's z, the test's inner products and its exponent stay secret and are checked up to the verdict |
+| b2 | each try's transcript messages, marked at the hash site right before the coder (the coder stays checked): tA1, tB after `abdlop_commit` (`do_prove` / `prove_rel`); t, v, w1 (`lnp_quad_prove` / `quad.rs`); ty3, ty4, tβ (`_lnp_tbox_compute_z34` / `tbox.rs`); tg (`lnp_tbox_prove` / `tbox.rs`). z3‖z4 and h are hashed after b3 marked them | they are hashed into the challenges or sent. A rejected try's messages are commitments (ty3 = y3 + B·s21 …, t, v, w1 = HighBits(A1 y1 + A2 y2)), computationally hiding under MLWE; the challenges derived from them are then public too (the challenge-dependent branches, e.g. `R_i[j] == 0`, are class c) |
+| b3 | the accepted proof fields: z1, z21 and the hint (`lnp-quad.c` / `quad.rs`), z3, z4 (`lnp-tbox.c` / `tbox.rs`), each h_i after it is formed (c follows from public seeds; tA1, tB by b2) | they are the proof |
 | b4 | the witness-valid verdicts: `set_upsilon` (above its bound), `debit_witness` (consistency, ranges), `dr_witness` (range) | the prover fails with `PQZ_ERR_INPUT` on a bad witness: public |
 | b5 | the prover self-checks: `__check_coeff0` (`_pqz_eqzero_public`) / `check_coeff0`; the h_i coefficient asserts (on h_i, public by b3) | the verdict is 1 for every valid witness; a failure is an internal error (public) |
 | b6 | the samplers' loops: `gaussian155`'s Bernoulli verdict (`grandom.c` / `grandom.rs`); the accept bits of `_urandom_i64` / `urandom_i64` and `_urandom_bnd` / `urandom_bnd` | uniform rejection sampling: the try count is independent of the accepted value. The Gaussian sampler: per try P(accept) = Σ_k exp(−(k−c)²/(2·1.55²))/const, independent of the centre c up to 2·exp(−2π²·1.55²) ≈ 2^−68 (Poisson summation), so the count carries no information on the sample |
@@ -69,14 +73,27 @@ The test driver itself declassifies the prove's return code, the proof bytes and
 
 Statement parsing and the relation build (`build_*`, `rd_poly`, keys), the challenge expansion (`_expand_R_i`, `c`,
 the Schwartz–Zippel challenge rows V, μ, γ), the Schwartz–Zippel accumulations over the public z3 / z4 and challenges,
-the coder internals on declassified inputs, arena sizes computed from public proof fields, the verifiers (generic and
+the coder (checked: its inputs are marked public only at the call sites above), arena sizes computed from public proof fields, the verifiers (generic and
 specialised; they share a1–a7's routines, whose results are unchanged, so every verdict is unchanged).
+
+### Keys: KeyGen, Enc, Dec (second round, after the rebase onto fixes A–D)
+
+| # | Where (C `pqz_keys.c` / Rust `keys.rs`) | Class | Change |
+|---|---|---|---|
+| k1 | `pqz_dec` / `dec`: M = floor(t / (2Δ)) − 2^17 with t from w = v − uᵀs | a | x86-64 multiplies, but wasm32 keeps `i64.div_u` by the constant 2Δ: now the fixed-step restoring division (`pqz__div` / `mpn::div`) |
+| k2 | `pqz_enc_seed` / `enc_seed`: the digit check `msgs[k][i] > 15` per digit (early return) | a | collected with `\|`, one verdict, declassified (b: the input error is public) |
+| k3 | `pqz_keygen` / `keygen`: `ns <= BS² && ne <= BE²` (short-circuit) | b | one `&` verdict, declassified: the counter is an output |
+| k4 | `pqz_enc_seed` / `enc_seed`: the resample verdict | b | declassified (the counter is an output) |
+| k5 | `canonical (pk)`, the KAT thresholds, `pqz_enc_group_seed` | c | public inputs / derivation only |
+
+The rest (`pqz_keypair_from_secret`, `pqz_encrypt`, `pqz_decrypt_raw`, `set_short`, `wr_poly`) runs on the a1–a4 arithmetic
+and showed no report. memcheck contexts, 2 rounds each: before (keys code of `cd881a6`, prover fixes in place) C 18
+(`pqz_enc_seed` digit checks 16, resample 1, `pqz_keygen` 1), Rust 21 (the digit `any` 16, `keygen` 4, `enc_seed` 1);
+after 0 / 0 (`ct-keys-before.txt`, `ct-ct2.txt`). Outputs unchanged: the C keys KAT against `pqz_kat.py --c-keys` ok,
+the Rust keys KAT (`rust/run.sh`) ok.
 
 ### Not in this fix (open)
 
-- `pqz_decrypt_raw` / `pqz_keys.c` Dec (`t / (2Δ)`) and `keys.rs`: the wallet's decryption with the secret key is not
-  the prover; it now runs on the constant-time arithmetic, but its own division and the keygen / Enc paths were not run
-  under ctgrind. Fixes A–D touch `keys.rs`; a follow-up can apply `ct_sdiv` there.
 - wasm32 is checked by reading the code only; the engines' tiers (Liftoff / TurboFan, wasmtime) decide how `select`
   and `i64.mul` are lowered.
 

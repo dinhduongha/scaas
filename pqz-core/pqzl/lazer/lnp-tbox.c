@@ -481,6 +481,7 @@ lnp_tbox_prove (uint8_t hash[32], polyvec_t tB, polyvec_t h, poly_t c,
   polyvec_mod (tg, tg);
   polyvec_redp (tg, tg);
 
+  pqz_ct_public_polyvec (tg); /* PQZ (review E): the commitment to g, hashed and sent */
   coder_enc_begin (cstate, out);
   coder_enc_urandom3 (cstate, tg, q, log2q);
   coder_enc_end (cstate);
@@ -1726,6 +1727,13 @@ _lnp_tbox_compute_z34 (uint8_t hash[32], polyvec_t tB, polyvec_t z3,
 
       /* encode ty, tbeta, hash of encoding is seed for challenges */
 
+      /* PQZ (review E): this try's commitments ty3, ty4, tbeta are public by design (hashed into R, R'; hiding
+         commitments for a rejected try); marked before the coder, so the coder itself stays checked */
+      if (nex > 0)
+        pqz_ct_public_polyvec (ty3);
+      if (nprime > 0)
+        pqz_ct_public_polyvec (ty4);
+      pqz_ct_public_polyvec (tbeta);
       coder_enc_begin (cstate, out);
       if (nex > 0)
         coder_enc_urandom3 (cstate, ty3, q, log2q);

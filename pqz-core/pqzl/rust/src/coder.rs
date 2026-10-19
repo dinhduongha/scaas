@@ -375,11 +375,6 @@ fn ghint_bits(e: i64) -> u64 {
 /// the sticky error; the bytes are still emitted there, the callers discard them). The C caller's own limits
 /// (MAX_PROOF, the output buffer) are the caller's.
 pub(crate) fn encode_proof(f: &ProofParts, cap: usize) -> Result<Vec<u8>, Error> {
-    // review E: every field is public by design (the proof)
-    for v in [&f.t_a1, &f.t_b, &f.h, &f.z1, &f.z21, &f.hint, &f.z3, &f.z4] {
-        crate::ct::public(&v[..]);
-    }
-    crate::ct::public(&f.c);
     let p = f.p;
     let qm = p.quad_eval.quad_many;
     let log2q = p.tbox.ring.log2q;

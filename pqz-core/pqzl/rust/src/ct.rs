@@ -18,11 +18,19 @@ pub(crate) fn mask(c: u64) -> u64 {
 
 /// public by design from here on (memcheck: defined)
 #[inline(always)]
-pub(crate) fn public<T: ?Sized>(x: &T) {
+pub fn public<T: ?Sized>(x: &T) {
     #[cfg(feature = "ctgrind")]
     vg::request(vg::MAKE_MEM_DEFINED, x);
     #[cfg(not(feature = "ctgrind"))]
     let _ = x;
+}
+
+/// [`public`] over every poly of a vector or view (a transcript message)
+#[inline(always)]
+pub(crate) fn public_pv<V: crate::arith::polyvec::PvRef + ?Sized>(v: &V) {
+    for i in 0..v.len() {
+        public(v.get(i));
+    }
 }
 
 /// a verdict that is public by design: `x`, marked defined. A separate function from [`public`]: through a shared
