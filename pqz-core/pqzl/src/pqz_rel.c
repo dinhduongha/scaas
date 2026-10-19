@@ -294,28 +294,6 @@ pqz_stmt_hash (uint8_t h[32], uint8_t op, const uint8_t *stmt, size_t len)
 
 /* ---------------------------------------------------------------- proof encoding (LaZer lin-proofs.c) */
 
-/* bits of coder_enc_grandom3 (v, log2o): per coefficient a unary part (nones ones + a zero) and log2o + 1 bits */
-static size_t
-grandom_bits (polyvec_t v, unsigned log2o)
-{
-  const unsigned la = log2o + 1;
-  const int64_t ao = (int64_t)1 << la;
-  size_t n = 0;
-  for (unsigned i = 0; i < v->nelems; i++)
-    for (unsigned k = 0; k < PQZ_D; k++)
-      {
-        const int64_t z = int_get_i64 (poly_get_coeff (polyvec_get_elem (v, i), k));
-        int64_t z0 = z - (z & ~(ao - 1));
-        if (z0 >= ao / 2)
-          z0 -= ao;
-        else if (z0 < -ao / 2)
-          z0 += ao;
-        const int64_t z1 = (z - z0) >> la;
-        n += (size_t)(z1 <= 0 ? -2 * z1 : 2 * z1 - 1) + 1 + la;
-      }
-  return n;
-}
-
 /* bits of coder_enc_ghint3 (v) */
 static size_t
 ghint_bits (polyvec_t v)
@@ -361,9 +339,9 @@ encproof (uint8_t *out, size_t cap, size_t *len, polyvec_t tA1, polyvec_t tB, po
   polyvec_redc (z3, z3);
   polyvec_redc (z4, z4);
   bits = (size_t)d * ((tB->nelems + h->nelems) * log2q + tA1->nelems * (log2q - D) + log2omega) + ghint_bits (hint)
-         + grandom_bits (z1, params->quad_eval->quad_many->log2stdev1)
-         + grandom_bits (z21, params->quad_eval->quad_many->log2stdev2) + grandom_bits (z3, params->log2stdev3)
-         + grandom_bits (z4, params->log2stdev4);
+         + coder_grandom3_nbits (z1, params->quad_eval->quad_many->log2stdev1)
+         + coder_grandom3_nbits (z21, params->quad_eval->quad_many->log2stdev2)
+         + coder_grandom3_nbits (z3, params->log2stdev3) + coder_grandom3_nbits (z4, params->log2stdev4);
   if (bits / 8 + 1 > cap) /* coder_enc_end: one pad bit, then the byte count */
     return 0;
   coder_enc_begin (cstate, out);

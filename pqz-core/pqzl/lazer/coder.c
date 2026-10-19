@@ -963,6 +963,36 @@ coder_enc_grandom3 (coder_state_t state, polyvec_t v, unsigned int log2o)
   }
 }
 
+/* PQZ (P6-FS, lazer#28): the number of bits coder_enc_grandom3 (v, log2o) writes, per coefficient a unary part
+   (nones ones and a zero) and log2o + 1 bits, so a caller can size its buffer exactly (the encoder has no bounds
+   checks). Was pqz_rel.c grandom_bits. */
+size_t
+coder_grandom3_nbits (polyvec_t v, unsigned int log2o)
+{
+  const unsigned int la = log2o + 1;
+  const int64_t ao = (int64_t)1 << la;
+  size_t n = 0;
+  unsigned int i, k;
+  intvec_ptr c;
+
+  _VEC_FOREACH_ELEM (v, i)
+  {
+    c = poly_get_coeffvec (polyvec_get_elem (v, i));
+    for (k = 0; k < c->nelems; k++)
+      {
+        const int64_t z = int_get_i64 (intvec_get_elem_src (c, k));
+        int64_t z0 = z - (z & ~(ao - 1));
+        if (z0 >= ao / 2)
+          z0 -= ao;
+        else if (z0 < -ao / 2)
+          z0 += ao;
+        const int64_t z1 = (z - z0) >> la;
+        n += (size_t)(z1 <= 0 ? -2 * z1 : 2 * z1 - 1) + 1 + la;
+      }
+  }
+  return n;
+}
+
 void
 coder_enc_ghint3 (coder_state_t state, polyvec_t ghint)
 {

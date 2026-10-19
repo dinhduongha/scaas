@@ -1374,6 +1374,7 @@ void coder_enc_urandom3 (coder_state_t state, polyvec_t v, const int_t m,
 int coder_dec_urandom3 (coder_state_t state, polyvec_t v, const int_t m,
                         unsigned int mbits);
 void coder_enc_grandom3 (coder_state_t state, polyvec_t v, unsigned int log2o);
+size_t coder_grandom3_nbits (polyvec_t v, unsigned int log2o); /* PQZ (P6-FS) */
 void coder_enc_ghint3 (coder_state_t state, polyvec_t ghint);
 void coder_dec_grandom3 (coder_state_t state, polyvec_t v, unsigned int log2o);
 void coder_dec_ghint3 (coder_state_t state, polyvec_t ghint);

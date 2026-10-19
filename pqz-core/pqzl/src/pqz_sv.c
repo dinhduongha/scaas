@@ -3,9 +3,9 @@
  * docs/research/pqz-specialised-verifier.md).
  *
  * pqz_verify_fast accepts exactly the proofs pqz_verify accepts: the same decoder, the same Fiat-Shamir transcript
- * (statement digest, commitments, z3 / z4 round, tg round, the final t || v || w1 round), the same challenges and
- * the same checks. What differs is how the verifier's polynomial v is computed. lnp_tbox_verify builds every
- * equation as a sparse quadratic form over the 2 (m1 + l) interleaved witness slots (s, o(s)), folds them with
+ * (statement digest, commitments, ty round, z3 / z4 round, tg round, h round, the final t || v || w1 round), the same
+ * challenges and the same checks. What differs is how the verifier's polynomial v is computed. lnp_tbox_verify
+ * builds every equation as a sparse quadratic form over the 2 (m1 + l) interleaved witness slots (s, o(s)), folds them with
  * the Schwartz-Zippel challenges into accumulators, applies the automorphism step, folds again with mu and then
  * evaluates z^T R2 z + c r1^T z + c^2 r0 - f once. All of that is linear, so v is the same element of R_q when
  * every equation is evaluated on z directly and combined with the same scalars; that is what this file does.
@@ -1424,8 +1424,8 @@ verify_body (const svrel_t *S, uint8_t op, const uint8_t hash_stmt[32], const ui
   stmt_t *T;
   work_t W;
 #define F (*Fp) /* the decoded proof, owned by pqz_sv_verify */
-  uint8_t hash[32], hash0[32], hash1[32], cseed[32];
-  prg_t g0, g1;
+  uint8_t hash[32], hashr[32], hash0[32], hash1[32], hash2[32], cseed[32];
+  prg_t gr, g0, g1, g2;
   polyring_srcptr Rq;
   unsigned i, j, k, h;
   int64_t a[DEG], b[DEG], r[DEG];
@@ -1465,10 +1465,15 @@ verify_body (const svrel_t *S, uint8_t op, const uint8_t hash_stmt[32], const ui
   int64_t *hc = sv_alloc (sizeof (int64_t) * DEG * LAMBDA / 2), *cc = sv_alloc (sizeof (int64_t) * DEG);
   int64_t *hint = sv_alloc (sizeof (int64_t) * DEG * km), *tA1 = sv_alloc (sizeof (int64_t) * DEG * km);
   int64_t *z21 = sv_alloc (sizeof (int64_t) * DEG * m2r), *tBc = sv_alloc (sizeof (int64_t) * DEG * (NQL + 1));
-  /* transcript buffer: the largest of the encodings (ty3 || ty4 || tbeta: 9 polys of 42 bits; tg: 2; final:
-     t || v || w1, 2 polys of 42 bits + km of log2m bits, as lnp_quad_verify's out[]), log2m <= 42 at setup */
+  /* transcript buffer: the largest of the encodings (ty3 || ty4 || tbeta: 9 polys of 42 bits; tg, h: 2; final:
+     t || v || w1, 2 polys of 42 bits + km of log2m bits, as lnp_quad_verify's out[]; z3 || z4: a bit range of the
+     proof, so at most proof_len + 1 bytes with the pad byte), log2m <= 42 at setup. Sized from proof_len, not from
+     the norm bounds: it is allocated before the norm checks (P6-FS). */
   const size_t nfin = CEIL (2 * 42 * DEG + S->log2m * DEG * km, 8), nty = CEIL (256 * 2 * 42 + DEG * 42, 8);
-  uint8_t *buf = sv_alloc ((nfin > nty ? nfin : nty) + 64);
+  size_t nbuf = nfin > nty ? nfin : nty;
+  if (nbuf < proof_len + 1)
+    nbuf = proof_len + 1;
+  uint8_t *buf = sv_alloc (nbuf + 64);
   if (buf == NULL)
     return 0;
 
@@ -1498,6 +1503,21 @@ verify_body (const svrel_t *S, uint8_t op, const uint8_t hash_stmt[32], const ui
     shake128_init (hs);
     shake128_absorb (hs, hash, 32);
     shake128_absorb (hs, buf, coder_get_offset (cs) >> 3);
+    shake128_squeeze (hs, hashr, 32); /* cseed: the seed of the JL rows R, R' */
+    shake128_clear (hs);
+  }
+  /* PQZ (P6-FS, lazer#28): z3, z4 before V3 / V4, as _lnp_tbox_hash_z34: hash0 = SHAKE128(cseed || grandom3 (z3) ||
+     grandom3 (z4)), the proof's own encoding (F.z3, F.z4 are centred above and not read again) */
+  {
+    coder_state_t cs;
+    shake128_state_t hs;
+    coder_enc_begin (cs, buf);
+    coder_enc_grandom3 (cs, F.z3, P->log2stdev3);
+    coder_enc_grandom3 (cs, F.z4, P->log2stdev4);
+    coder_enc_end (cs);
+    shake128_init (hs);
+    shake128_absorb (hs, hashr, 32);
+    shake128_absorb (hs, buf, coder_get_offset (cs) >> 3);
     shake128_squeeze (hs, hash0, 32);
     shake128_clear (hs);
   }
@@ -1512,6 +1532,10 @@ verify_body (const svrel_t *S, uint8_t op, const uint8_t hash_stmt[32], const ui
     polyvec_get_subvec (tg, F.tB, NQEL, LAMBDA / 2, 1), polyvec_mod (tg, tg), polyvec_redp (tg, tg);
     hash_enc (hash1, hash0, tg, Rq->q, 42, buf);
   }
+  /* PQZ (P6-FS, lazer#28): h before mu and the final challenge, as _lnp_tbox_hash_h: hash2 = SHAKE128(hash1 ||
+     urandom3 (h mod q in [0, q))); F.h is not read again (its centred coefficients are in hc) */
+  polyvec_mod (F.h, F.h), polyvec_redp (F.h, F.h);
+  hash_enc (hash2, hash1, F.h, Rq->q, 42, buf);
 
   /* checks that need only the proof (lnp_quad_verify checks them after the challenge; any order gives the same
      accept / reject): ||z1||^2, ||hint||_inf */
@@ -1559,8 +1583,10 @@ verify_body (const svrel_t *S, uint8_t op, const uint8_t hash_stmt[32], const ui
   nt_mul (&W.cBm, &W.c, &W.Bm_);
 
   /* challenges */
-  prg_seed (&g0, hash0);
-  prg_seed (&g1, hash1);
+  prg_seed (&gr, hashr); /* JL rows R, R' */
+  prg_seed (&g0, hash0); /* V3, V4 */
+  prg_seed (&g1, hash1); /* the Schwartz-Zippel challenges */
+  prg_seed (&g2, hash2); /* mu */
 
   /* ---- the evaluation-equation polynomials that do not depend on the challenges ---- */
   int64_t *Eu = sv_alloc (sizeof (int64_t) * DEG), *Eb = sv_alloc (sizeof (int64_t) * DEG);
@@ -1601,7 +1627,7 @@ verify_body (const svrel_t *S, uint8_t op, const uint8_t hash_stmt[32], const ui
       fwd (&PKe[k], r);
     }
 
-  /* ---- z3 / z4 (JL) rows: V from (hash0, dom), R / R' rows from (hash0, i) / (hash0, 256 + i) ---- */
+  /* ---- z3 / z4 (JL) rows: V from (hash0, dom), R / R' rows from (cseed, i) / (cseed, 256 + i) ---- */
   uint64_t (*V3)[JLR] = sv_alloc (sizeof (uint64_t) * LAMBDA * JLR);
   uint64_t (*V4)[JLR] = sv_alloc (sizeof (uint64_t) * LAMBDA * JLR);
   nt_t *Gz = sv_alloc (sizeof (nt_t) * LAMBDA); /* z3 + z4 term of accumulator half k (reduced) */
@@ -1635,7 +1661,7 @@ verify_body (const svrel_t *S, uint8_t op, const uint8_t hash_stmt[32], const ui
       nt_mul (&cy[i], &W.c, &W.SZ[iy3 + i]); /* c o(y3_i), c o(y4_i): |.| < 2^51 */
 
     /* z4: inv2 X^32 W4_k o(s_D) (o(beta) - beta) + c sum_i V4_k,i o(y4_i) - <z4, V4_k> c^2 */
-    jl_fold (W.vR, DEG, V4, &g0, 256, W.rows);
+    jl_fold (W.vR, DEG, V4, &gr, 256, W.rows);
     for (k = 0; k < LAMBDA; k++)
       {
         memset (&Ga[k], 0, sizeof (acc_t));
@@ -1656,7 +1682,7 @@ verify_body (const svrel_t *S, uint8_t op, const uint8_t hash_stmt[32], const ui
         acc_scal (&Ga[k], &W.c2, s, 1);
       }
     /* z3: inv2 (beta + o(beta)) sum_p o(s_p) W3_k,col(p) + c sum_i V3_k,i o(y3_i) - <z3, V3_k> c^2 */
-    jl_fold (W.vR, S->nex * DEG, V3, &g0, 0, W.rows);
+    jl_fold (W.vR, S->nex * DEG, V3, &gr, 0, W.rows);
     for (k = 0; k < LAMBDA; k++)
       {
         unsigned col = 0;
@@ -1796,12 +1822,12 @@ verify_body (const svrel_t *S, uint8_t op, const uint8_t hash_stmt[32], const ui
   if (Ra == NULL)
     return 0;
   memset (Qa, 0, sizeof *Qa), memset (La, 0, sizeof *La), memset (Ra, 0, sizeof *Ra);
-  SV_FST (15, hash1, 0); /* g1 = PRG(hash1): mu */
+  SV_FST (15, hash2, 0); /* g2 = PRG(hash2): mu */
   for (k = 0; k < ntot; k++)
     {
       uint64_t mu[DEG];
       nt_t mn;
-      if (!urandom_q (mu, DEG, &g1, k + 1)) /* polyvec_urandom (mu, q, log2q, hash, 0) */
+      if (!urandom_q (mu, DEG, &g2, k + 1)) /* polyvec_urandom (mu, q, log2q, hash, 0) */
         return 0;
       for (j = 0; j < DEG; j++)
         a[j] = (int64_t)mu[j];
@@ -1890,7 +1916,7 @@ verify_body (const svrel_t *S, uint8_t op, const uint8_t hash_stmt[32], const ui
         }
     }
 
-  /* ---- final round: c' = H(hash1 || t || v || w1) must give c ---- */
+  /* ---- final round: c' = H(hash2 || t || v || w1) must give c ---- */
   {
     coder_state_t cs;
     shake128_state_t hs;
@@ -1911,7 +1937,7 @@ verify_body (const svrel_t *S, uint8_t op, const uint8_t hash_stmt[32], const ui
     coder_enc_urandom3 (cs, w1v, mm, S->log2m);
     coder_enc_end (cs);
     shake128_init (hs);
-    shake128_absorb (hs, hash1, 32);
+    shake128_absorb (hs, hash2, 32);
     shake128_absorb (hs, buf, coder_get_offset (cs) >> 3);
     shake128_squeeze (hs, cseed, 32);
     shake128_clear (hs);

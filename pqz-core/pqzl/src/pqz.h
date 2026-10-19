@@ -20,12 +20,14 @@
 #define PQZ_POLYVEC_BYTES 16384 /* 32 polys x 64 coeffs x be8 */
 #define PQZ_V_BYTES 128         /* 16 coeffs x be8 */
 #define PQZ_PREFIX_BYTES 64     /* opTag || proofSystemId */
-/* proofSystemId (statement bytes 32..63) = keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v2") (pq-zero-knowledge.md §8,
-   CTR-PQZ-09). pqz-core only hashes it; the precompile accepts only ids it implements. v2 (was .../v1): the LaZer tbox
-   Schwartz-Zippel fixes P6-SZ / P6-L2 (lazer/lnp-tbox.c; lazer-crypto/lazer issues 24, 25) change the transcript. */
+/* proofSystemId (statement bytes 32..63) = keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v3") (pq-zero-knowledge.md §8,
+   CTR-PQZ-09). pqz-core only hashes it; the precompile accepts only ids it implements. v3 (was .../v2): the Fiat-Shamir
+   transcript absorbs z3, z4 before V3 / V4 and h before mu and the final challenge (P6-FS, lazer/lnp-tbox.c
+   _lnp_tbox_hash_z34 / _lnp_tbox_hash_h, src/pqz_sv.c; lazer-crypto/lazer issue 28); v2 is retired (forgeable).
+   v2 (was .../v1): the LaZer tbox Schwartz-Zippel fixes P6-SZ / P6-L2 (lazer-crypto/lazer issues 24, 25). */
 #define PQZ_PROOF_SYSTEM_ID                                                                                 \
-  { 0x2e, 0x07, 0xe6, 0xed, 0x1f, 0xd3, 0x03, 0xa0, 0x8c, 0x89, 0xb3, 0xea, 0xb6, 0xe8, 0x42, 0x3f,  \
-    0xdf, 0xb8, 0xf3, 0x12, 0x02, 0x95, 0x8d, 0xd6, 0x82, 0xa0, 0x61, 0x93, 0x13, 0x79, 0x8c, 0x2f }
+  { 0x80, 0x79, 0xd6, 0x5b, 0x5e, 0x5c, 0x15, 0xe3, 0x30, 0xf7, 0xe6, 0x5c, 0x87, 0x57, 0x76, 0xdf,  \
+    0xc1, 0xb0, 0xf6, 0xc9, 0x3c, 0xed, 0x90, 0xc0, 0x45, 0xe8, 0x38, 0x65, 0xd1, 0x16, 0xba, 0xef }
 
 /* R_REG: prefix || message (32) || pk */
 #define PQZ_REG_STMT_BYTES (PQZ_PREFIX_BYTES + 32 + PQZ_POLYVEC_BYTES)
