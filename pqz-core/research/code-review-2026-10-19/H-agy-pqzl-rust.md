@@ -37,6 +37,6 @@ Verified against the code at `0dc869d`. No P0 from either model; no input-reacha
 | B | Secret copies and mask seeds not wiped (`sv`, `s`, `yseed`, 96-byte seed, `m`, `t_a2`), also on `?` exits | G-2, H-2 | Confirmed (Rust); C partly the same (Open item 8) | Fix now in Rust (wiping drop guard); C: record under Open item 8 |
 | C | `canonical()` short last chunk | H-1 | Unreachable today (16,384 B is a multiple of 8) | Fix now (one line, `chunks_exact`) |
 | D | C `-INT64_MIN` in the SV z4 check | H-3 | Unreachable through the decoder (coefficient sizes bounded by `MAX_PROOF`) | Fix now (one line) |
-| E | Secret-dependent branches in the prover (`set_upsilon` / `binexp`, `Int` add / sub) | G-1 | Confirmed in source, exploitation a hypothesis; inherited from C (`lazer/int.c:257–266`) | Open item: constant-time prover arithmetic in both cores, before mainnet 22776, with the external audit |
+| E | Secret-dependent branches in the prover (`set_upsilon` / `binexp`, `Int` add / sub) | G-1 | Confirmed in source, exploitation a hypothesis; inherited from C (`lazer/int.c:257–266`) | ~~Open item before mainnet 22776~~ **Superseded (owner 2026-10-19): fix now, before the merge**, branch `pqzl-fs3-ct` (constant-time prover arithmetic in both cores, ctgrind-checked) |
 
 None of A–D changes proof bytes or verdicts on valid-length inputs (A only reorders a reject).

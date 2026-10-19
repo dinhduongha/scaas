@@ -892,8 +892,9 @@ fn compute_z34(
     let (nex, nprime, nbin) = (p.nex as usize, p.nprime as usize, p.nbin as usize);
     let m2r = (tb.m2 - tb.kmsis) as usize;
     let w = 256 / D;
-    let mut s3 = PolyVec::new(nex)?;
-    let mut s4 = PolyVec::new(nprime)?;
+    // the witness part s1[m1..] and Es·s1 / Ds·s1 (review G-2, fix B)
+    let mut s3 = Wiped(PolyVec::new(nex)?);
+    let mut s4 = Wiped(PolyVec::new(nprime)?);
     let (mut y3, mut y4) = (PolyVec::new(w)?, PolyVec::new(w)?);
     polyvec::set_zero(&mut m.sub(l + 2 * w, 1, 1)); // beta
 
@@ -998,14 +999,14 @@ fn compute_z34(
 
         let mut rs3 = Vec::new();
         if nex > 0 {
-            let s3c = coeffs_i64(&mut s3)?;
+            let s3c = Wiped(coeffs_i64(&mut s3)?);
             z3v = coeffs_i64(&mut y3)?;
             rs3 = r_times(&s3c, &cseed, 0)?;
             z3v.iter_mut().zip(&rs3).for_each(|(z, &r)| *z += beta3 * r);
         }
         let mut rs4 = Vec::new();
         if nprime > 0 {
-            let s4c = coeffs_i64(&mut s4)?;
+            let s4c = Wiped(coeffs_i64(&mut s4)?);
             z4v = coeffs_i64(&mut y4)?;
             rs4 = r_times(&s4c, &cseed, 256)?;
             z4v.iter_mut().zip(&rs4).for_each(|(z, &r)| *z += beta4 * r);

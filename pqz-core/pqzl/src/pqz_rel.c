@@ -284,7 +284,9 @@ l2sq_poly (poly_ptr p)
   return s;
 }
 
-/* statement digest: SHAKE128("SCAAS-PQZ-TRANSCRIPT-V1" || op || be32(len) || stmt) */
+/* statement digest: SHAKE128("SCAAS-PQZ-TRANSCRIPT-V1" || op || be32(len) || stmt). be32 keeps the low 32 bits of
+   len; every caller passes a relation's exact statement length (< 70,000 B, checked in rel_of first: review fix A),
+   as Rust's u32::try_from. */
 void
 pqz_stmt_hash (uint8_t h[32], uint8_t op, const uint8_t *stmt, size_t len)
 {

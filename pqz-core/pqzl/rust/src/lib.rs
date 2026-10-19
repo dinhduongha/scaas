@@ -91,8 +91,9 @@ pub enum Error {
 /// Platform boundary (review H-2, 2026-10-19): best effort, not guaranteed. It is plain stores plus `black_box`; a
 /// volatile write needs `unsafe` (forbidden outside `c-oracle`) and `zeroize` is a dependency (D1), so the compiler
 /// is not bound to keep the stores (`black_box` on the cleared buffer makes eliding them unlikely), and copies it made
-/// itself (moves of arrays and `Wiped` values, register spills, stack temporaries) are never cleared. The prover's
-/// other intermediate buffers (masks y, c·s, products with s) are not cleared either, as in C (STATUS Open 8).
+/// itself (moves of arrays and `Wiped` values, register spills, stack temporaries) are never cleared. Not cleared
+/// either, as in C (STATUS Open 8): the masks y / y3 / y4 and the z vectors built from them, `r_times`' products
+/// R·s3 / R'·s4, and the `coeffvec` copies inside the rejection step.
 pub(crate) fn wipe<T: Default>(x: &mut [T]) {
     x.iter_mut().for_each(|e| *e = T::default());
     core::hint::black_box(&*x);
@@ -107,6 +108,12 @@ pub(crate) trait Wipe {
 }
 
 impl<const N: usize> Wipe for [u8; N] {
+    fn wipe(&mut self) {
+        wipe(&mut self[..]);
+    }
+}
+
+impl Wipe for alloc::vec::Vec<i64> {
     fn wipe(&mut self) {
         wipe(&mut self[..]);
     }
