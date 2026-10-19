@@ -1,0 +1,26 @@
+# clippy: no float arithmetic in the crate (the production build: default features; then with the oracle,
+# the hooks and the bench; then the wasm/ harness)
+$ cargo clippy -j2 --release --offline --lib -- -D clippy::float_arithmetic
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-fs3-ct/pqz-core/pqzl/rust)
+    Finished `release` profile [optimized + debuginfo] target(s) in 1.26s
+[rc=0]
+$ cargo clippy -j2 --release --offline --features c-oracle,test-hooks,bench --lib --bins --tests -- -D clippy::float_arithmetic
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-fs3-ct/pqz-core/pqzl/rust)
+    Finished `release` profile [optimized + debuginfo] target(s) in 12.64s
+[rc=0]
+$ cargo clippy -j2 --release --offline --manifest-path wasm/Cargo.toml --target wasm32-unknown-unknown -- -D warnings -D clippy::float_arithmetic
+    Checking pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-fs3-ct/pqz-core/pqzl/rust)
+    Checking pqzl-wasm v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-fs3-ct/pqz-core/pqzl/rust/wasm)
+    Finished `release` profile [optimized] target(s) in 0.92s
+[rc=0]
+# the measurement build of wasm/ (d6.sh, reproduce.sh --multi-bench): features oversize and wasm-m8
+$ cargo clippy -j2 --release --offline --manifest-path wasm/Cargo.toml --target wasm32-unknown-unknown --features pqzl/oversize,pqzl/wasm-m8 -- -D warnings -D clippy::float_arithmetic
+    Checking pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-fs3-ct/pqz-core/pqzl/rust)
+    Checking pqzl-wasm v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-fs3-ct/pqz-core/pqzl/rust/wasm)
+    Finished `release` profile [optimized] target(s) in 0.92s
+[rc=0]
+# wasm32 (default features)
+$ cargo build -j2 --release --offline --lib --target wasm32-unknown-unknown
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-fs3-ct/pqz-core/pqzl/rust)
+    Finished `release` profile [optimized + debuginfo] target(s) in 3.56s
+[rc=0]

@@ -1,77 +1,103 @@
-# ct ct2: e847bec + uncommitted changes, valgrind-3.22.0, rels 127, nprove 1, keys 2
+# ct ct2: HEAD 7659e5617d2a7a880926cb81fa1f2057cdae221f, diff sha256 e3b0c44298fc1c14, valgrind-3.22.0, rels 383, nprove 3, keys 2
 Ubuntu clang version 18.1.3 (1ubuntu1)
 {"rel": "R_REG", "run": 0, "prove_rc": 0, "verify": 1, "fnv": "563d42ff"}
+{"rel": "R_REG", "run": 1, "prove_rc": 0, "verify": 1, "fnv": "912d749f"}
+{"rel": "R_REG", "run": 2, "prove_rc": 0, "verify": 1, "fnv": "d1e3dae1"}
 {"rel": "R_TX", "run": 0, "prove_rc": 0, "verify": 1, "fnv": "dc0f804c"}
+{"rel": "R_TX", "run": 1, "prove_rc": 0, "verify": 1, "fnv": "5b17f05c"}
+{"rel": "R_TX", "run": 2, "prove_rc": 0, "verify": 1, "fnv": "afe1d45b"}
 {"rel": "R_BURN", "run": 0, "prove_rc": 0, "verify": 1, "fnv": "8511a528"}
+{"rel": "R_BURN", "run": 1, "prove_rc": 0, "verify": 1, "fnv": "f9145824"}
+{"rel": "R_BURN", "run": 2, "prove_rc": 0, "verify": 1, "fnv": "61cbf4c3"}
 {"rel": "R_DS", "run": 0, "prove_rc": 0, "verify": 1, "fnv": "f2f9656d"}
+{"rel": "R_DS", "run": 1, "prove_rc": 0, "verify": 1, "fnv": "500f651a"}
+{"rel": "R_DS", "run": 2, "prove_rc": 0, "verify": 1, "fnv": "8fa08ed3"}
 {"rel": "R_DR", "run": 0, "prove_rc": 0, "verify": 1, "fnv": "8149b562"}
+{"rel": "R_DR", "run": 1, "prove_rc": 0, "verify": 1, "fnv": "9e9ff822"}
+{"rel": "R_DR", "run": 2, "prove_rc": 0, "verify": 1, "fnv": "c5d5fac8"}
 {"rel": "R_TX0", "run": 0, "prove_rc": 0, "verify": 1, "fnv": "7b49e3f7"}
+{"rel": "R_TX0", "run": 1, "prove_rc": 0, "verify": 1, "fnv": "cd6876a1"}
+{"rel": "R_TX0", "run": 2, "prove_rc": 0, "verify": 1, "fnv": "ddae5aa4"}
 {"rel": "R_TXM", "run": 0, "prove_rc": 0, "verify": 1, "fnv": "1eea8091"}
+{"rel": "R_TXM", "run": 1, "prove_rc": 0, "verify": 1, "fnv": "a2f19016"}
+{"rel": "R_TXM", "run": 2, "prove_rc": 0, "verify": 1, "fnv": "c63b8cd5"}
+{"rel": "R_TXM", "run": 0, "prove_rc": 0, "verify": 1, "fnv": "e1ed236b"}
+{"rel": "R_TXM", "run": 1, "prove_rc": 0, "verify": 1, "fnv": "f210e1af"}
+{"rel": "R_TXM", "run": 2, "prove_rc": 0, "verify": 1, "fnv": "5001ddf4"}
 {"keys": 0, "rc": 0, "dec_ok": 1, "ctr": [0, 0]}
 {"keys": 1, "rc": 0, "dec_ok": 1, "ctr": [0, 0]}
 {"fails": 0}
-==2662916== Memcheck, a memory error detector
-==2662916== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
-==2662916== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
-==2662916== Command: build/ct/pqz_ct 127 1 2
-==2662916== Parent PID: 2656883
-==2662916== 
-==2662916== Warning: set address range perms: large range [0x4a8e040, 0x34a8e040) (undefined)
-==2662916== Warning: client switching stacks?  SP change: 0x1ffed1be40 --> 0x1ffefe0a38
-==2662916==          to suppress, use: --max-stackframe=2903032 or greater
-==2662916== Warning: client switching stacks?  SP change: 0x1ffed35e80 --> 0x1ffeffaa78
-==2662916==          to suppress, use: --max-stackframe=2903032 or greater
-==2662916== Warning: client switching stacks?  SP change: 0x1ffed333f0 --> 0x1ffefe0e68
-==2662916==          to suppress, use: --max-stackframe=2808440 or greater
-==2662916==          further instances of this message will not be shown.
-==2662916== 
-==2662916== HEAP SUMMARY:
-==2662916==     in use at exit: 805,306,368 bytes in 1 blocks
-==2662916==   total heap usage: 2 allocs, 1 frees, 805,310,464 bytes allocated
-==2662916== 
-==2662916== LEAK SUMMARY:
-==2662916==    definitely lost: 0 bytes in 0 blocks
-==2662916==    indirectly lost: 0 bytes in 0 blocks
-==2662916==      possibly lost: 0 bytes in 0 blocks
-==2662916==    still reachable: 805,306,368 bytes in 1 blocks
-==2662916==         suppressed: 0 bytes in 0 blocks
-==2662916== Rerun with --leak-check=full to see details of leaked memory
-==2662916== 
-==2662916== For lists of detected and suppressed errors, rerun with: -s
-==2662916== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==2808665== Memcheck, a memory error detector
+==2808665== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==2808665== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==2808665== Command: build/ct/pqz_ct 383 3 2
+==2808665== Parent PID: 2804818
+==2808665== 
+==2808665== Warning: set address range perms: large range [0x4a8e040, 0x34a8e040) (undefined)
+==2808665== 
+==2808665== HEAP SUMMARY:
+==2808665==     in use at exit: 805,306,368 bytes in 1 blocks
+==2808665==   total heap usage: 2 allocs, 1 frees, 805,310,464 bytes allocated
+==2808665== 
+==2808665== LEAK SUMMARY:
+==2808665==    definitely lost: 0 bytes in 0 blocks
+==2808665==    indirectly lost: 0 bytes in 0 blocks
+==2808665==      possibly lost: 0 bytes in 0 blocks
+==2808665==    still reachable: 805,306,368 bytes in 1 blocks
+==2808665==         suppressed: 0 bytes in 0 blocks
+==2808665== Rerun with --leak-check=full to see details of leaked memory
+==2808665== 
+==2808665== For lists of detected and suppressed errors, rerun with: -s
+==2808665== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 ct ct2 C: rc=0 secret-dependent reports=0
-   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-fs3-ct/pqz-core/pqzl/rust)
-    Finished `release` profile [optimized + debuginfo] target(s) in 5.19s
-rustc 1.90.0 (1159e78c4 2025-09-14)
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.10s
+rustc 1.97.1 (8bab26f4f 2026-07-14)
 {"rel": "R_REG", "run": 0, "prove": "Ok(())", "verify": true, "fnv": "563d42ff"}
+{"rel": "R_REG", "run": 1, "prove": "Ok(())", "verify": true, "fnv": "912d749f"}
+{"rel": "R_REG", "run": 2, "prove": "Ok(())", "verify": true, "fnv": "d1e3dae1"}
 {"rel": "R_TX", "run": 0, "prove": "Ok(())", "verify": true, "fnv": "dc0f804c"}
+{"rel": "R_TX", "run": 1, "prove": "Ok(())", "verify": true, "fnv": "5b17f05c"}
+{"rel": "R_TX", "run": 2, "prove": "Ok(())", "verify": true, "fnv": "afe1d45b"}
 {"rel": "R_BURN", "run": 0, "prove": "Ok(())", "verify": true, "fnv": "8511a528"}
+{"rel": "R_BURN", "run": 1, "prove": "Ok(())", "verify": true, "fnv": "f9145824"}
+{"rel": "R_BURN", "run": 2, "prove": "Ok(())", "verify": true, "fnv": "61cbf4c3"}
 {"rel": "R_DS", "run": 0, "prove": "Ok(())", "verify": true, "fnv": "f2f9656d"}
+{"rel": "R_DS", "run": 1, "prove": "Ok(())", "verify": true, "fnv": "500f651a"}
+{"rel": "R_DS", "run": 2, "prove": "Ok(())", "verify": true, "fnv": "8fa08ed3"}
 {"rel": "R_DR", "run": 0, "prove": "Ok(())", "verify": true, "fnv": "8149b562"}
+{"rel": "R_DR", "run": 1, "prove": "Ok(())", "verify": true, "fnv": "9e9ff822"}
+{"rel": "R_DR", "run": 2, "prove": "Ok(())", "verify": true, "fnv": "c5d5fac8"}
 {"rel": "R_TX0", "run": 0, "prove": "Ok(())", "verify": true, "fnv": "7b49e3f7"}
+{"rel": "R_TX0", "run": 1, "prove": "Ok(())", "verify": true, "fnv": "cd6876a1"}
+{"rel": "R_TX0", "run": 2, "prove": "Ok(())", "verify": true, "fnv": "ddae5aa4"}
 {"rel": "R_TXM1", "run": 0, "prove": "Ok(())", "verify": true, "fnv": "1eea8091"}
+{"rel": "R_TXM1", "run": 1, "prove": "Ok(())", "verify": true, "fnv": "a2f19016"}
+{"rel": "R_TXM1", "run": 2, "prove": "Ok(())", "verify": true, "fnv": "c63b8cd5"}
+{"rel": "R_TXM4", "run": 0, "prove": "Ok(())", "verify": true, "fnv": "e1ed236b"}
+{"rel": "R_TXM4", "run": 1, "prove": "Ok(())", "verify": true, "fnv": "f210e1af"}
+{"rel": "R_TXM4", "run": 2, "prove": "Ok(())", "verify": true, "fnv": "5001ddf4"}
 {"keys": 0, "dec_ok": true, "ctr": [0, 0]}
 {"keys": 1, "dec_ok": true, "ctr": [0, 0]}
 {"fails": 0}
-==2672558== Memcheck, a memory error detector
-==2672558== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
-==2672558== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
-==2672558== Command: rust/target/release/ct 127 1 2
-==2672558== Parent PID: 2656883
-==2672558== 
-==2672558== 
-==2672558== HEAP SUMMARY:
-==2672558==     in use at exit: 18,266,023 bytes in 66 blocks
-==2672558==   total heap usage: 238,967 allocs, 238,901 frees, 7,705,817,079 bytes allocated
-==2672558== 
-==2672558== LEAK SUMMARY:
-==2672558==    definitely lost: 0 bytes in 0 blocks
-==2672558==    indirectly lost: 0 bytes in 0 blocks
-==2672558==      possibly lost: 0 bytes in 0 blocks
-==2672558==    still reachable: 18,266,023 bytes in 66 blocks
-==2672558==         suppressed: 0 bytes in 0 blocks
-==2672558== Rerun with --leak-check=full to see details of leaked memory
-==2672558== 
-==2672558== For lists of detected and suppressed errors, rerun with: -s
-==2672558== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
+==2858305== Memcheck, a memory error detector
+==2858305== Copyright (C) 2002-2022, and GNU GPL'd, by Julian Seward et al.
+==2858305== Using Valgrind-3.22.0 and LibVEX; rerun with -h for copyright info
+==2858305== Command: rust/target/release/ct 383 3 2
+==2858305== Parent PID: 2804818
+==2858305== 
+==2858305== 
+==2858305== HEAP SUMMARY:
+==2858305==     in use at exit: 21,183,108 bytes in 70 blocks
+==2858305==   total heap usage: 657,665 allocs, 657,595 frees, 30,513,782,611 bytes allocated
+==2858305== 
+==2858305== LEAK SUMMARY:
+==2858305==    definitely lost: 0 bytes in 0 blocks
+==2858305==    indirectly lost: 0 bytes in 0 blocks
+==2858305==      possibly lost: 0 bytes in 0 blocks
+==2858305==    still reachable: 21,183,108 bytes in 70 blocks
+==2858305==         suppressed: 0 bytes in 0 blocks
+==2858305== Rerun with --leak-check=full to see details of leaked memory
+==2858305== 
+==2858305== For lists of detected and suppressed errors, rerun with: -s
+==2858305== ERROR SUMMARY: 0 errors from 0 contexts (suppressed: 0 from 0)
 ct ct2 Rust: rc=0 secret-dependent reports=0

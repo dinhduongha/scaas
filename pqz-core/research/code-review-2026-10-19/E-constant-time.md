@@ -119,6 +119,14 @@ turned the source's mask select into a **branch**: the reason for `ct::mask`'s b
 `Dcomp::decompose` 9, `Dcomp::make_ghint` 3, `dr_witness` 1, `Dcomp::power2round` 1, `Poly::binexp` 1, `cnd_sub_ge` 1,
 other inlined 3.
 
+**Final evidence on the committed, rebased tree** (`ct-ct2.txt`: `HEAD 7659e56`, empty diff, `test/ct.sh ct2 383 3 2`):
+R_REG, R_TX, R_BURN, R_DS, R_DR, R_TX0, R_TXM (M = 1, auditor on) and R_TXM (M = 4, auditor on), three proofs each,
+plus two rounds of KeyGen / Enc / Dec: C 0 reports, Rust 0 reports, every proof verifies, every Dec returns the digits.
+The earlier rows above ran on `0dc869d` + uncommitted changes (before the rebase). The same tree: `relfix.sh ct2` (KAT 19/19, `check_tbox_fixes` ok,
+FNVs = Task 4's native and wasm32, fails 0, ASan only the known UBSan notes), `sv/diff.sh ct2` portable pass 0 mismatches
+(x86v3 / z21diff deferred to the Task 9 gate), `rust/run.sh ct2` fully green, `ffi/vectors/run.sh ct2` ok, C keys KAT
+against `pqz_kat.py --c-keys` ok.
+
 Every proof verified, and each relation's proof is byte-identical before / after and C / Rust (FNV-1a of the first
 proof: R_REG 563d42ff, R_TX dc0f804c, R_BURN 8511a528, R_DS f2f9656d, R_DR 8149b562, R_TX0 7b49e3f7, R_TXM1 1eea8091).
 
