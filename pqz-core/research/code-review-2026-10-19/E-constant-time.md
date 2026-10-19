@@ -155,7 +155,11 @@ changed routines:
   `dcompress_decompose` 125 → 76 / 170 → 88, `dcompress_make_ghint` 69 → 37 / 94 → 37, `dcompress_power2round` 25 → 24
   / 44 → 25 (`pqz_ct_barrier` itself emits no instruction: an empty `asm` with a register operand).
 
-## To measure (not run: the owner stops another session first)
+## Timing
+
+Measured 2026-10-19 16:12–16:42 by the controller on an idle host (owner stopped the other session and the knowledge / odoo19 / mssql / timescaledb / odoo-uuidv7 containers; load 0.46 at start): the Rust crate, `0dc869d` vs `06e0384` (fix E), same session, two rounds interleaved base / new, the six forms plus R_TXM8 / R_TXM8_0, `pqz-core/pqzl/rust/runs/ct-timing/` (`ct-timing.sh`, `summarize.py`, `summary.md`; `env.txt`'s rustc line is the system rustc, the binaries are built with the crate's pinned toolchain 1.97.1). p50 ratio new / base: **verify_fast (the node's path, the gas basis) 1.00–1.02 native, 1.00–1.01 wasm32**: the gas calibration margin is untouched; generic verify 1.11–1.16 native, 1.13–1.15 wasm32 (fallback / cross-check path only); prove 1.04–1.09 native, 1.02–1.06 wasm32 (e.g. wasm32 R_TX 2.18 → 2.23 s, R_TXM8 2.76 → 2.93 s). No variable-time verifier copies needed.
+
+Plan before the run (kept):
 
 Prove and verify p50 / p99, native and wasm32 (`pqz_bench` / `node test/run_wasm.mjs` with `NP` / `NV`, the Rust
 `bench` and `wasm/run_wasm.mjs`), against `0dc869d`: `int_add` / `int_sub` now form three limb vectors instead of one,
