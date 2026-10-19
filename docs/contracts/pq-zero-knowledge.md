@@ -1274,7 +1274,10 @@ honest proofs but no verifier rule. Regression check: `pqz-core/pqzl/check_tbox_
     `M2 = exp(1/(2γ2²))` were generated for: with `v = c·s2`, reject if ⟨z2, v⟩ < 0, otherwise accept with
     probability exp((‖v‖² − 2⟨z2, v⟩)/(2σ2²))/M2 (σ2² = `stdev2sqr`, the existing `scM2`). One uniform draw per
     attempt also when the sign test rejects, so C and Rust consume the rng alike. No parameter changes; about twice
-    the expected `z2` attempts. `z3` / `z4` keep the bimodal test with their own β signs.
+    the expected `z2` attempts (the params headers' `total` repetition rate, M1·M2·…, understates the expected tries
+    by that factor 2: kept as generated; tries per R_REG proof ≈ 7 → 14). Rej1 outputs `z2` from D_σ2 restricted to the
+    half-space ⟨z2, c·s2⟩ ≥ 0, so each proof reveals one sign bit about `s2`; LNP22 / LNS21 cover this with the
+    extended-MLWE assumption (to be confirmed in review B, plan Task 11). `z3` / `z4` keep the bimodal test with their own β signs.
   - **β signs (D-3).** The tbox sign sampler read β4 from a bit index that reached bit 8 of a `uint8_t` (β4 = +1 on
     every fourth attempt) and reused β4's bit as the next β3. v3: β3 reads bit `8 − nrbits`, β4 the next unused bit,
     a refill when fewer than two bits remain, and the sign byte is cleared at the end.
