@@ -1045,3 +1045,4 @@ OpenFactory.createPqzToken	renamed	OpenFactory.createToken with kind NONE_PQZ / 
 addTrivial(digits)	renamed	PqzCt.addTrivial(acc, amount) (P6g): contracts/pq-zether.md §9.4
 pqz-core/params/estimator.txt	renamed	pqz-core/pqzl/params/estimator.txt (pqz-core layout move 2026-10-17, docs/superpowers/plans/2026-10-15-pqz-core-layout.md)
 value = max(attach, forward + 0.1 TON)	renamed	networks/ton.md (the chain is GRAM, formerly TON; owner 2026-10-17): value = max(attach, forward + 0.1 GRAM)
+.github/workflows/blockchain-ci.yml	renamed	the contracts CI is .github/workflows/ci.yml (contracts/README.md#CTR-GEN-01; review W-N 2026-10-19)
