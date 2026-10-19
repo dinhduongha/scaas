@@ -3,10 +3,10 @@ resolver = "3"
 members = ["contracts/*"]
 
 [workspace.package]
-rust-version = "1.90"
+rust-version = "1.91"
 
 [workspace.dependencies]
-soroban-sdk = "25.3.0"
+soroban-sdk = "26.1.1"
 
 [profile.release]
 opt-level = "z"

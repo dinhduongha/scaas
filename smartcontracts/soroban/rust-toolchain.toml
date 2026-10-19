@@ -1,0 +1,5 @@
+# soroban-sdk 26 needs rustc >= 1.91 (Dependabot: soroban-env-host / stellar-xdr fixes); same toolchain as the PQZ crates and solana.
+[toolchain]
+channel = "1.97.1"
+profile = "minimal"
+targets = ["wasm32v1-none"]
