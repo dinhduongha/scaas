@@ -733,13 +733,14 @@ units.
 
 <a id="transfer"></a>
 
-Caller: anyone, directly (`envelopeBinding = 0`) or as an envelope op ([CTR-PQZ-15](#CTR-PQZ-15); the outer-fee balance
+Caller: anyone, directly (`envelopeBinding` = the direct mode binding, [CTR-PQZ-25](#CTR-PQZ-25)) or as an envelope op ([CTR-PQZ-15](#CTR-PQZ-15); the outer-fee balance
 check then runs before everything below). Inputs: `payload = be32(p) ‖ be32(validUntilBlock) ‖ be32(plainUsed) ‖
 fromUA ‖ toUA ‖ beneficiaryUA ‖ salt(16) ‖ out` (a commit-reveal payload appends `memo`) (`out = u ‖ v_t ‖ v_f ‖ v_a`), `acc` (current, 16,512 B), `inline` (ciphertexts
 between `p` and `rolled`), `proof`, `authSig`.
 
 Contract checks, cheap first: `block.number ≤ validUntilBlock`; both UAs registered, `from ≠ to`; beneficiary
-registered or 0; `plainUsed ≤ plainPending[from]`; `acc.length == 16,512` and `keccak256(acc) == accHash[from]`;
+registered or 0; `plainUsed ≤ plainPending[from]`; `acc.length == 16,512` and `keccak256(acc) == accHash[from]`, or
+`== baseHash[from]` and then `rolled`, `accUnits` below are `baseRolled`, `baseUnits` ([CTR-PQZ-08](#CTR-PQZ-08));
 `floor ≤ p ≤ pendingCount`; with `n = (p ≥ rolled ? p − rolled : rolled − p)` and `lo = min(p, rolled)`:
 `n ≤ INLINE_MAX` (`InlineTooFar`), **`inline.length == n` exactly**, and for every `i < n` `inline[i].length == 16,512`
 and `keccak256(inline[i]) == pendingHash[lo + i]` (`InlineMismatch`: too few entries would let `floor` advance past
@@ -762,7 +763,7 @@ builds the statement ([statement](#statement)), verifies `authSig` ([authorizati
 acc[from]    = (u, v_f);  accHash[from] = ctHash(u ‖ v_f)
                if p < rolled:  acc[from] += Σ inline  (those credits stay inside acc);  accUnits = 1 + (rolled − p)
                else:           rolled[from] = p;  accUnits = 1
-               floor[from] = p
+               floor[from] = p;  (baseHash, baseRolled, baseUnits)[from] = (accHash, rolled, accUnits)
                delete pendingHash[from][cleared .. min(p, cleared + CLEAR_MAX)); cleared = that end   (CLEAR_MAX = 32)
 plainPending[from] −= plainUsed
 pending[to]  ← (u, v_t)                                       (pendingHash, pendingCount++)
@@ -837,7 +838,13 @@ with op 7): an immutable per-token amount, default 0 (then nothing changes), set
 decoy, gets `multiLegFee` in `plainPending` — the same for every leg, so it reveals nothing, and listing a victim as a
 decoy costs the sender `multiLegFee` paid to the victim (T22). `confidentialFee + 8 · multiLegFee < 2^64` and
 `< maxShielded` (`BadInit`). Op 1 never charges it. The storage mode is the user's per
-transfer through the entry they call: the contract never switches it, and a BUNDLE shape that exceeds the per-tx gas
+transfer through the entry they call: the contract never switches it, and nobody else can. A relayed call is bound by
+the envelope signature over `data`, selector included; a **direct call binds its mode in the statement**: its
+`envelopeBinding` is `keccak256(abi.encode(keccak256("SCAAS-PQZ-DIRECT-MODE-V1"), uint8(mode)))`, mode HASH 0 (`…Compact`,
+`pqzTransfer*` on a COMPACT token), BUNDLE 1, NONE 2 (`…NoBundle`), so the proof and `authSig` of a direct BUNDLE call
+do not verify through `…NoBundle` (no entry stored, the sender's disclosure lost) or the reverse (review W-A,
+2026-10-19; classical Zether puts the mode in `opTag`). The statement views take `binding` 0 for a direct call in the
+payload's own mode (BUNDLE, or HASH with a memo) and the NONE binding for a direct `…NoBundle`. A BUNDLE shape that exceeds the per-tx gas
 cap simply does not fit (no early revert; the wallet estimates and offers COMPACT or a split; owner 2026-10-16). PQZH
 op 7 takes at most 10 inline credits (`INLINE_MAX_PQZH = 10`, under the node's 16 M; PQZL keeps 16; owner 2026-10-16).
 One envelope carries one PQZ op; PQZ selectors stay refused in `mtxBatch` / `uaBatch` (`MtxNotBatchable`).
@@ -933,12 +940,28 @@ an all-zero `u`.
 <a id="rollover"></a>
 <a id="CTR-PQZ-08"></a>**CTR-PQZ-08** — **Public rollover, race-free debits.** Anyone may roll pending credits into `acc`.
 A debit proves over `T = acc + Σ pending[rolled..p)` and the contract rebuilds that **same** `T` whether a rollover
-happened in between (`acc' − Σ pending[p..rolled')`) or not, because addition mod `q` is exact and associative. No
-`OWNER_ONLY` mode, no `accSeq`. At most `INLINE_MAX = 16` ciphertexts inline. This removes the classical rollover grief
-([CTR-ZTH-16](zether.md#CTR-ZTH-16), [CTR-ZTH-17](zether.md#CTR-ZTH-17)) instead of mitigating it. A griefer who rolls
-> 16 new credits past `p` forces a re-prove; it needs > 16 proven transfer credits of its own (≈ 2.8 M gas each; `pqzShield`
-creates no pending entries). Honest keepers roll only credits older than `KEEPER_AGE = 24` blocks (2 min), and clients
-prove at `p = pendingCount` and retry once on `InlineTooFar`, so a busy merchant's in-flight phone proof survives.
+happened in between (`acc' − Σ pending[p..rolled')`) or not, because addition mod `q` is exact and associative: a
+rollover never invalidates a **proof**. The calldata is another matter: it names an `acc` that must hash to state, and
+a rollover changes `accHash`. So the account also keeps its **base** `(baseHash, baseRolled, baseUnits)`, the state its
+last debit left (initially `Trivial(0)`, 0, 0; rollovers never touch it), and a debit may name either the current
+`acc` (with `pending` relative to `rolled`) or the base (relative to `baseRolled`). A debit on the base undoes the
+rollovers since: `rolled` returns to `baseRolled` (or moves to `p`), their credits are pending again (every slot
+`≥ floor` is kept), then the debit's own effects apply, so `T`, the new `acc` and `accUnits + unrolled` are what they
+would have been with no rollover (review W-E, 2026-10-19). Clients build on the base whenever
+`p − baseRolled ≤ INLINE_MAX` (the default for an account that does not roll its own credits); such a debit, direct or
+in an envelope, survives anyone's rollover with no rebuild and no re-signing. No `OWNER_ONLY` mode, no `accSeq`. At most
+`INLINE_MAX = 16` ciphertexts inline. **Residual (griefing, no loss):** a debit built on an intermediate `acc` — a
+rolled one that is neither the base nor the current, as needed with more than 16 credits since the last debit —
+reverts `AccMismatch` when someone rolls further; the proof stays valid, so the client rebuilds the calldata
+(`acc`, `inline`) and resubmits: no re-prove, the same `authSig` (the statement is unchanged), but a new envelope
+signature on the relayed path (it covers `data`). Only when more than 16 further credits are rolled past `p` does no
+rebuild fit `INLINE_MAX`, and the client re-proves at a new `p`. A griefer can repeat this while the account has
+unrolled credits, and can create them with proven transfers of its own (≈ 2.8 M gas each; `pqzShield` creates no
+pending entries). This
+removes the classical rollover grief ([CTR-ZTH-16](zether.md#CTR-ZTH-16), [CTR-ZTH-17](zether.md#CTR-ZTH-17)) for
+debits on the base and turns it into a rebuild otherwise. Honest keepers roll only credits older than `KEEPER_AGE = 24`
+blocks (2 min), and clients prove at `p = pendingCount` and retry once on `InlineTooFar` or `AccMismatch`, so a busy
+merchant's in-flight phone proof survives.
 
 ### 7.7 Statement layout
 
@@ -965,7 +988,7 @@ Header (640 bytes; `salt` and `memoHash` per [CTR-PQZ-23](#CTR-PQZ-23)):
 | 448 | `auditorOn` (0/1) |
 | 480 | `plainUsed` ([CTR-PQZ-06](#CTR-PQZ-06)) |
 | 512 | `chainUid` (the token's copy of `registry.chainUid()`, [CTR-PQZ-01](#CTR-PQZ-01)) |
-| 544 | `envelopeBinding` ([CTR-PQZ-15](#CTR-PQZ-15)): 0 for a direct call, else the v1 or v3 binding of the envelope that carries the op |
+| 544 | `envelopeBinding` ([CTR-PQZ-15](#CTR-PQZ-15)): for a direct call 0 (burn, refresh), the mode binding (transfer, [CTR-PQZ-25](#CTR-PQZ-25)) or `unwrapBinding(leg, minOut)` (`pqzUnshieldUnwrap`); else the v1 or v3 binding of the envelope that carries the op |
 | 576 | `salt` (16 zero bytes ‖ the build salt, [CTR-PQZ-19](#CTR-PQZ-19); burn/refresh 0, their randomness is fresh CSPRNG output) |
 | 608 | `memoHash` (`keccak256(memo)` on commit-reveal, else 0) |
 
@@ -1081,8 +1104,8 @@ public transfers and payments, which are `MetaTransfer`s as on every token ([CTR
 outer fee is the base's step 6, after the call; a failing fee reverts everything.
 
 Proof-carrying ops bind their
-envelope as classical Zether ([CTR-ZTH-06](zether.md#CTR-ZTH-06)): `envelopeBinding` is a statement header field (0 for
-a direct call), read from the ticket, so the proof and the PQ `authSig` cover exactly one envelope. The inner
+envelope as classical Zether ([CTR-ZTH-06](zether.md#CTR-ZTH-06)): `envelopeBinding` is a statement header field (a direct
+call: 0, or its own binding on a transfer or an unwrap), read from the ticket, so the proof and the PQ `authSig` cover exactly one envelope. The inner
 confidential fee (`beneficiaryUA`, `confidentialFee`) stays beside it, as classical. **Authority is split:**
 confidential balances move only on the PQ `authSig` over the statement plus the PQZ proof
 ([CTR-PQZ-12](#CTR-PQZ-12), unchanged); the envelope signer authorizes only the public-ledger part — the outer fee
@@ -1160,12 +1183,13 @@ again. An earlier ≈ 2 M estimate, which had motivated a mixin reading `m.data`
 ```
 envelopeBinding = keccak256(abi.encode(keccak256("SCAAS-PQZ-ENVELOPE-V1"), chainid, chainUid, token,
                     m.from, m.batch, m.nonce, m.validUntil, m.mode, canonRelayer, m.fee, canonFeeRecipient))
-                  (UA path: tag "SCAAS-PQZ-UA-ENVELOPE-V1", `m.from` as bytes32; direct call: 0)
+                  (UA path: tag "SCAAS-PQZ-UA-ENVELOPE-V1", `m.from` as bytes32; direct call: 0, or the
+                   transfer's mode binding (CTR-PQZ-25) or the unwrap binding)
 ```
 
 Views `envelopeBinding(m)`, `uaEnvelopeBinding(m)`, `mtxDigest(m)`, `uaDigest(m)` and `transferStatement` /
 `burnStatement(…, binding)` let clients cross-check before proving. As classical: stripping the op out of its envelope
-and calling directly (binding 0), re-wrapping it in another envelope (other `from`, nonce, validity, fee, relayer or fee
+and calling directly (the direct binding), re-wrapping it in another envelope (other `from`, nonce, validity, fee, relayer or fee
 recipient), or using it on another token or chain changes the statement ⇒ `AuthRejected` (the `authSig` is checked
 before the precompile; the proof would fail too); a replay after execution meets an advanced `sendCounter` and nonce.
 The client fixes every envelope field **before proving**; a relayer quotes its fee first. `entryRef` and `authDigest`
@@ -1185,7 +1209,7 @@ the `authRef` key signs only `zether-auth`, one key per role ([CLI-SGN-29](../cl
 The v1 path serves existing EOA/1271 payers; a 1271 wallet whose own validation is ML-DSA is PQ on the v1 path too.
 
 Choices taken with the owner rulings: one salted domain for both paths (the token shape; an earlier text had the v3
-path at `("SCaaS PqzToken", "3", chainId, token, salt = chainUid)`); one `envelopeBinding` field (0 = direct) instead of
+path at `("SCaaS PqzToken", "3", chainId, token, salt = chainUid)`); one `envelopeBinding` field (direct: 0 or the call's own binding) instead of
 classical's tag + binding pair; a dedicated `mldsa65` fee UA, not the `authRef` key; no batching of PQZ ops and no
 `unwrap` envelope op. The relaying itself follows classical Zether: the one base, `mtxExecute`, the transient ticket
 and the `mtx` names ([CTR-PQZ-21](#CTR-PQZ-21)); an earlier text gave `PqzToken` its own mixin with arguments sliced
@@ -1856,11 +1880,16 @@ split, never a silent acceptance (fail closed).
    `extraData`); a follower needs `eip4895TransitionTimestamp` and `maximumExtraDataSize` `0xffff` in the chainspec.
 
 <a id="self-test"></a>**Contract self-test.** The constructor of `UAPqzVerifier` and
-`PqzToken.initialize` call `OP_SELFTEST` and require the expected hash (a constant compiled into the contract; it folds
-in the precompile's own valid and invalid verify results). `UAPqzVerifier`'s constructor and `PqzToken.initialize`
-also take a valid `R_REG` vector (≈ 40 KB, too large to compile into code under EIP-170) as an argument, require
-`keccak256(vector) == SELFTEST_VECTOR_HASH`, require `OP_REGISTER` on it to return 1, then flip one proof bit in memory
-and require 0. `UAMldsaVerifier` probes `MLDSA65` with one valid and one invalid vector and falls back to Solidity on a mismatch; the chain-7622 deploy requires the probe to pass. Any other mismatch ⇒ `SelfTestFailed`.
+`PqzToken.initialize` (`PqzLib.init`) require the precompile to be exactly `PqzSafety.PQZ` and the proof system to be
+PQZL or PQZH (`NotPqz`), then call `OP_SELFTEST` and require the expected hash (a constant compiled into the contract;
+it folds in the precompile's own valid and invalid `R_REG` verdicts for both ids). A token takes the precompile and the
+id from its `verifier` (a `UAPqzVerifier`) but never trusts that contract: a creator-chosen verifier naming another
+"precompile" that answers 1 to everything is refused at creation (review W-B, 2026-10-19). `UAPqzVerifier`'s
+constructor also takes the self-test's `R_REG` vector of its id (≈ 45 KB PQZL / ≈ 200 KB PQZH, too large to compile
+into code under EIP-170) as an argument, requires `keccak256(psid ‖ message ‖ pk ‖ proof) == SELFTEST_VECTOR_HASH`
+(`PROBE_PQZL` / `PROBE_PQZH`), requires `OP_REGISTER` on it to return 1, then flips one proof bit in memory and requires
+0 (`UAPqzProbe`). `PqzToken.initialize` takes no vector: bound to `PQZ`, whose self-test already covers those verdicts,
+the probe would add nothing (a 45–200 KB argument on every token creation). `UAMldsaVerifier` probes `MLDSA65` with one valid and one invalid vector and falls back to Solidity on a mismatch; the chain-7622 deploy requires the probe to pass. Any other mismatch ⇒ `SelfTestFailed`.
 This, not the allowlist alone, is what keeps PQZ off chains whose client is not ours.
 
 The chain profile, the private-chain runbook and the node's `pqz` profile flag
@@ -1971,7 +2000,7 @@ service is the user's (or the organization's key oracle), never a third party's 
 | T5 | Noise growth ⇒ wrong decryption or failure oracle | worst-case bound + `K_MAX`, enforced at credit **and** at debit (`unitsOf(T)`), 4.1× margin before soundness is at risk (per-block ℓ2 bounds, `proofSystemId` v2; v1 checked only their sum, ≈ 1.12×, [noise](#noise)); no bootstrapping needed; a failure is impossible, not merely unlikely ([2024/127](https://eprint.iacr.org/2024/127)) |
 | T6 | Decryption-noise leakage (IND-CPA^D style) | noise never leaves `pqz_dec`; disclosure is ZK ([CTR-PQZ-14](#CTR-PQZ-14)); no "decrypt and publish" API |
 | T7 | Credit flood to hit `K_MAX` | `pqzShield` and fees go to `plainPending` and take no slot, so only proven transfers fill the cap: ≈ 2.8 M each, ≈ 2.9 G gas for 1022 (≈ 36 full blocks). Recovery = rolling all but the last ≤ 16 credits (64 rollovers ≈ 0.57 G) **plus** a refresh (≈ 2.6 M); a refresh alone does not free the cap while unrolled credits remain. Defender ≈ 5× cheaper; relayer fee UAs never fill. Gas is free on chain 7622, so permissioned submitters and node rate limits remain the real control; rollover is public |
-| T8 | Rollover grief against in-flight proofs | impossible by construction ([CTR-PQZ-08](#CTR-PQZ-08)); > 16 attacker transfer credits rolled past `p` force a re-prove only; honest keepers roll only credits older than `KEEPER_AGE`, clients retry once |
+| T8 | Rollover grief against in-flight proofs | proofs: impossible by construction (the same `T`, [CTR-PQZ-08](#CTR-PQZ-08)); calldata: a debit on the account's base survives any rollover (review W-E); a debit on an intermediate rolled `acc` (> 16 credits since the last debit) can be forced to rebuild its calldata and, relayed, re-sign the envelope; a re-prove only after > 16 further credits rolled past `p`; honest keepers roll only credits older than `KEEPER_AGE`, clients retry once |
 | T9 | Replay / proof transplant | `sendCounter`, `chainId`, `chainUid`, `token`, `registry`, `validUntilBlock`, UAs, fee, beneficiary and `envelopeBinding` in the statement; envelope 2D nonce and `validUntil`; strong FS |
 | T10 | Fiat–Shamir for multi-round LNP22 (round-by-round grinding; QROM) | `op` and statement absorbed first; every challenge round ≥ 128-bit sound on its own, listed in `estimator.txt`; QROM soundness an assumption, stated; tracked for the audit. PQZH (Ligero): 128-bit classical in the ROM, QROM assumed likewise; a quantum Grover attack on the Fiat–Shamir grinding halves the query term (gate B review 2026-10-17, pqzh-ligero.md §5.1 and §12) |
 | T11 | Side channels in the prover (timing of sampling, rejection, Gaussian masks; WASM JIT gives no constant-time guarantee) | constant-time CBD; masking sampler **rewritten** integer-only and constant-time (CDT full-table scan or uniform masks) — upstream uses `double` and MPFR on secret-dependent values; rejection test in constant-time fixed point, since rejected attempts would otherwise leak `⟨z, v⟩` through timing; no secret-indexed tables (software AES bitsliced) |
@@ -1985,7 +2014,7 @@ service is the user's (or the organization's key oracle), never a third party's 
 | T16 | Leaked ML-DSA key | cannot spend without the PQZ key's proof; no rotation ([CTR-UA-13](accounts.md#CTR-UA-13)): move funds to a new UA |
 | T17 | Implementation immaturity (research-grade LaZer, unaudited fork with six rewritten layers) | UNAUDITED label, allowlist, self-test, owner gates (licence clearance and independent audit) before any real funds |
 | T18 | Broken v1 envelope key (quantum ECDSA, leaked EOA) | authority split ([CTR-PQZ-15](#CTR-PQZ-15)): the envelope signer authorizes only its public balance and nonces; confidential value needs the PQ `authSig` + proof; bound ops cannot be re-pointed. Residual: loss of that signer's public float and liveness of its own relayed ops; v3 path with an `mldsa65` fee UA removes the classical key |
-| T19 | Envelope stripping or re-wrapping (relayer takes the op out, or into an envelope with its own fee/recipient) | `envelopeBinding` in the statement (0 for direct calls), checked through the `authSig` before the precompile, as classical [CTR-ZTH-06](zether.md#CTR-ZTH-06) |
+| T19 | Envelope stripping or re-wrapping (relayer takes the op out, or into an envelope with its own fee/recipient) | `envelopeBinding` in the statement (direct calls: 0, a transfer's mode binding, the unwrap binding), checked through the `authSig` before the precompile, as classical [CTR-ZTH-06](zether.md#CTR-ZTH-06) |
 | T20 | Fee griefing: envelopes that fail late to burn relayer gas | outer fee checked before any SSTORE2 read or precompile call; fee and nonce taken only after verify, so a failing op reverts whole; relayers pre-simulate on a follower; gas on chain 7622 is free, the cost is block capacity |
 | T21 | Malicious recipient keys extract hints on a multi transfer's shared `(r_g, e1_g)` (16 per leg) | ≤ 4 legs per randomness group, ≤ 80 hints, β 446.0 ≥ Kyber-512's 406 (owner-accepted exception to CTR-PQZ-03's 450); fresh randomness per operation ([CTR-PQZ-26](#CTR-PQZ-26)) |
 | T22 | Decoy flood: listing victims as decoys fills their `K_MAX` (`M − 1` victims per transfer) | each unit is a proven leg; the cap keeps the noise budget; optional `multiLegFee`; T7's permissioned submitters and rate limits; wallet load spreading (P6h) |
