@@ -285,7 +285,11 @@ domain) builds this: each settlement in a `settleOne` self-call, outside legs pe
 outside token, or a party's contract `destination` through a hook token, cannot forge it (or `UAVerifyGas`): every call
 the DEX makes into a token (the puller's `trySafeTransferFrom`, every payout by `trySafeTransfer`, every balance read)
 drops that token's revert data and reverts `SafeERC20FailedOperation(token)`, so only the DEX, a SCaaS token or the
-registry can raise the two errors (controller proposal, review W-O, 2026-10-19; owner may override; it replaces the
+registry can raise the two errors. This covers SCaaS tokens' payouts and balance reads too, so a regulated payout's
+`Frozen` / `NotEligible` / `TokenPaused` also reads `SafeERC20FailedOperation(token)` in `MatchFailed` (the venue's
+pre-check, [NODE-DEX-11](../node/dex-venue.md#NODE-DEX-11), attributes those). A token call that returns no data (it
+ran out of gas) still reverts empty, so the reason stays empty, the node's `out_of_gas` (5g review F1). (Controller
+proposal, review W-O, 2026-10-19; owner may override; it replaces the
 earlier ruling that hook tokens are never listed, and a test with a forging token, `test_forgedStarvationFromAnOutsideToken_isOnlyMatchFailed`,
 shows the forged settlement only `MatchFailed`). A gas threshold on the DEX frame was not used: a real `UAVerifyGas`
 can come back with most of the gas (a 5.95 M `mldsa65` hold refused early), so no threshold separates it from a forged
@@ -335,7 +339,7 @@ The DEX decodes each leg into one internal form with ids as `bytes32` and runs t
 | leg kind | `sellToken` recorded SCaaS at `setMarket` and its ledger on, else `UALegNotLedger(sellToken)`; never a `DexOrder`, never the `DexPuller` (a UA holds no outside token) |
 | pull | `uaTrade(o, sig, f)` on the sell token, which verifies ([CTR-DEX-25](#CTR-DEX-25)) |
 | self-trade | over ids: a native order and its padded id are one party (`SelfTrade`) |
-| payout | `to = destination == 0 ? from : destination`; a derived `to` is paid by `IUALedger(receiveToken).transferToUA(to, amount)` from the DEX's own balance (`receiveToken` a SCaaS ledger token, else `UAReceiveNotLedger(receiveToken)`), a native one by `safeTransfer` |
+| payout | `to = destination == 0 ? from : destination`; a derived `to` is paid by `IUALedger(receiveToken).transferToUA(to, amount)` from the DEX's own balance (`receiveToken` a SCaaS ledger token, else `UAReceiveNotLedger(receiveToken)`), a native one by `_send` (`trySafeTransfer`, W-O) |
 | Path B refund | to a derived `from` by `transferToUA` on the sell token |
 | fee shares, conservation | unchanged: relayer and treasury are addresses; `transferToUA` lowers the DEX's own `balanceOf` as `safeTransfer` does |
 | events | `UALegSettled` / `UAExchangeLegSettled` for a shape-1 leg; `LegSettled` / `ExchangeLegSettled` keep their shape |

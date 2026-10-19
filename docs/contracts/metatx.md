@@ -281,8 +281,8 @@ self-call.** Transient slots `keccak256("scaas.mtx.guard")`, `"scaas.mtx.sender"
 every entry point — every state-changing `external` function of a contract on `MetaTxBase` is `nonReentrant`, the
 pay (`payWithFee`, `payWithFeeToUA`), mint, role, owner, rate and guardian functions included (review W-Q,
 2026-10-19), except `initialize` (factory-only, once) and the plain ERC-20 `transfer`, `approve` and `transferFrom`,
-which make no outside call (open: the `UnderlyingZetherToken` / `UnderlyingPqzToken` overrides of `disableFeature` and
-`executeRate` still lack the modifier, outside that change's files); `nonReentrant` admits the self-call of step 5 once and consumes the ticket:
+which make no outside call (the `UnderlyingZetherToken` / `UnderlyingPqzToken` overrides of `disableFeature` and
+`executeRate` carry it too since the 5g integration); `nonReentrant` admits the self-call of step 5 once and consumes the ticket:
 
 ```solidity
 modifier nonReentrant() {

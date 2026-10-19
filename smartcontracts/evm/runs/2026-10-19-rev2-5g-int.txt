@@ -1,0 +1,49 @@
+# plan Task 5g integration (rev2-chain-int): merges of rev2-chain-pqz + rev2-chain-sol, review follow-ups — 2026-10-19
+# forge 1.3.5, solc 0.8.37, osaka; every forge run under scripts/capped; lib/ = symlinks to the main checkout's libs
+
+## merges (no conflicts)
+734b9c76 Merge branch 'rev2-chain-pqz'   (2e2e4de0)
+b37a49cf Merge branch 'rev2-chain-sol'   (a2a66a8d); size-baseline.json: only sol touched it, taken as is
+
+## new tests on the merged sources before the follow-ups (src stashed, tests kept): each code fix's test must fail
+[FAIL: log != expected log] test_starvedOutsideTokenCall_isAnEmptyMatchFailed() (gas: 3798213)
+[FAIL: Error != expected error: NotOwner(0x3D7Ebc40AF7092E3F1C81F2e996cbA5Cae2090d7) != Reentrancy()] test_reentryIntoTheRestatedAdminEntriesRefused() (gas: 1515433)   (Zether)
+[FAIL: Error != expected error: NotOwner(0x03A6a84cD762D9707A21605b548aaaB891562aAb) != Reentrancy()] test_reentryIntoTheRestatedAdminEntriesRefused() (gas: 1464788)   (PQZ)
+[PASS] test_rolloverRace_baseRolledBelowPBelowRolled() (gas: 161166484)   (review L2: coverage of code already correct, passes before and after)
+
+## targeted suites after the follow-ups (DexOutside, PqzNone, PqzUnderlying, ZetherUnderlying, NativeLeg)
+Ran 5 test suites in 1.54s (4.12s CPU time): 78 tests passed, 0 failed, 0 skipped (78 total tests)
+
+## final verification
+HEAD 427729f4
+$ forge test   (full suite)
+exit 0
+Ran 113 test suites in 63.14s (521.33s CPU time): 1306 tests passed, 0 failed, 10 skipped (1316 total tests)
+FAIL lines: 0
+$ forge test --isolate --match-path 'test/ua/{UAGas,UARegistryGroups}.t.sol'
+Ran 2 test suites in 1.23s (2.46s CPU time): 20 tests passed, 0 failed, 0 skipped (20 total tests)
+$ FOUNDRY_PROFILE=private7622 forge build
+exit 0
+    = help: https://book.getfoundry.sh/reference/forge/forge-lint#asm-keccak256
+
+$ python3 -I ../../scripts/size_gate.py --self-test
+size gate self-test ok
+$ forge build src --sizes --json > sizes.json; python3 -I ../../scripts/size_gate.py sizes.json size-baseline.json
+size gate: 0 error(s), 91 contracts
+$ scripts/evm_libs.sh check
+evm_libs: openzeppelin-contracts OK (fda6b85f2c65d146b86d513a604554d15abd6679)
+evm_libs: forge-std OK (88c8a2886f6f64c846ae57533a36361acb81683a)
+(private7622 build output ends with forge-lint notes only, all pre-existing styles)
+$ python3 -I scripts/docs_check.py check   (repo root, after the docs commit)
+check: 0 error(s), 2 warning(s), 15 note(s)   (the two budget warnings predate 5g: token-wrappers.md, node/ops.md)
+
+## changed bytecode sizes (runtime / init, bytes): branch heads (pqz: PqzLib; sol: tokens, DexPuller) -> this branch
+SCaaSDex                 ~22953 -> 22953  | init ~23840 -> 23840   (before = estimate, not measured)
+DexPuller                634 -> 643  | init 688 -> 697
+PqzLib                   20569 -> 20551  | init 20621 -> 20603
+UnderlyingPqzToken       59840 -> 60105  | init 61437 -> 61702
+UnderlyingZetherToken    57210 -> 57475  | init 58905 -> 59170
+SCaaSDex: the merged heads were not built separately; sol 22,895 + pqz's +58 = 22,953 (estimate) equals the measured
+size, so _tokenFailed costs about 0 B net; its bytecode changes. DexPuller +9.
+PqzLib -18 (N1: acc hashed once). UnderlyingPqzToken / UnderlyingZetherToken +265 each (W-Q(f)); baseline raised.
+UnderlyingPqzToken headroom: 65,536 - 60,105 = 5,431 B runtime; init 61,702 of 131,072.

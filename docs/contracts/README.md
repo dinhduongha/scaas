@@ -210,7 +210,7 @@ own job (Move test, Soroban, CosmWasm, Tact, Solana) as the family is added.
 | Pin | Value |
 |---|---|
 | Solidity | `solc_version = "0.8.37"`, `evm_version = "osaka"`, `optimizer_runs = 200`, `via_ir = false` (the 13-parameter named function is decoded by hand instead, see [metatx.md](metatx.md#named-functions)) |
-| OpenZeppelin, forge-std | `v5.2.0`, `v1.16.2` |
+| OpenZeppelin, forge-std | commits `fda6b85f`, `88c8a288`, each with the sha256 of its sources, in `scripts/evm_libs.sh` (W-N) |
 | EVM profiles | every profile is `osaka` (owner 2026-10-11): `private7622` (the private reference chain, [NET-EVM-02](../networks/evm.md#NET-EVM-02)), `zether`, `gnosis`, `celo`, `bsc`, `polygon`, `base`; test chains run anvil `--hardfork osaka --gas-limit 16777216 --code-size-limit 65536` |
 | Invariant runs | `[invariant] runs = 64, depth = 32, fail_on_revert = true` |
 | Storage layout | `extra_output = ["storageLayout"]`; the v2 layout is pinned by `test_storageLayoutIsPinned` against committed JSON |
