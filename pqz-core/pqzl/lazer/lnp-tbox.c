@@ -2044,6 +2044,11 @@ _lnp_tbox_hash_z34 (uint8_t hash[32], polyvec_t z3, polyvec_t z4,
             / 8
         + 2;
   buf = _alloc (len);
+  /* arena exhausted (here or for a3 / a4): buf may be the shared PQZ_SINK block and len computed from garbage, so
+     skip the unbounded coder; the call fails through the sticky error. z3 is encoded also when nex = 0 (no relation
+     has that; check_z34 norm-checks z3 only for nex > 0). */
+  if (pqz_err != PQZ_OK)
+    goto ret;
 
   coder_enc_begin (cstate, buf);
   coder_enc_grandom3 (cstate, a3, params->log2stdev3);
@@ -2058,6 +2063,7 @@ _lnp_tbox_hash_z34 (uint8_t hash[32], polyvec_t z3, polyvec_t z4,
   shake128_squeeze (hstate, hash, 32);
   shake128_clear (hstate);
 
+ret:
   _free (buf, len);
   polyvec_free (a4);
   polyvec_free (a3);
