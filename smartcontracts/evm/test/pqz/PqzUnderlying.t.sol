@@ -12,6 +12,8 @@ import {IPqzToken} from "../../src/pqz/IPqzToken.sol";
 import {AdminLib} from "../../src/metatx/AdminLib.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
+import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
+import {HookLeg} from "../zether/ZetherUnderlying.t.sol";
 
 /// `UNDERLYING_PQZ` (P6g plan Task 6): a leg's underlying straight into `plainPending` and a burn straight out to a
 /// leg, the direct binding of the leg and `minOut` (D12), the reserve invariant.
@@ -75,6 +77,28 @@ contract PqzUnderlyingTest is PqzFixture {
         x = UnderlyingPqzToken.Unwrap(address(0xBAD), address(0xD00D), 10, 0);
         vm.expectRevert();
         w.pqzUnshieldUnwrap(pl, _acc(alice), new bytes[](0), x, hex"c0de", _mlAuth());
+    }
+
+    /// W-Q(f) / CTR-MTX-18: the kind's restated `disableFeature` and `executeRate` carry the guard too; a hook leg that
+    /// calls either mid-pull gets `Reentrancy` (before 5g: the entry's own refusal).
+    function test_reentryIntoTheRestatedAdminEntriesRefused() public {
+        HookLeg hook = new HookLeg();
+        IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
+        c.features = (1 << AdminLib.PAYABLE);
+        c.roles.minter = address(0);
+        c.legs = new IFactoryToken.Leg[](1);
+        c.legs[0] = IFactoryToken.Leg(address(hook), 1, 1);
+        UnderlyingPqzToken z =
+            UnderlyingPqzToken(payable(factory.createToken(IOpenFactory.TokenKind.UNDERLYING_PQZ, 1, c, "hook")));
+        hook.mint(address(this), SCALE);
+        hook.approve(address(z), SCALE);
+        bytes[2] memory calls =
+            [abi.encodeCall(z.disableFeature, (AdminLib.RATE_ADJUSTABLE)), abi.encodeCall(z.executeRate, ())];
+        for (uint256 i; i < 2; ++i) {
+            hook.arm(address(z), calls[i]);
+            vm.expectRevert(IMetaTx.Reentrancy.selector);
+            z.pqzWrapShield(address(hook), SCALE, alice);
+        }
     }
 
     function test_publicWrapThenShield() public {

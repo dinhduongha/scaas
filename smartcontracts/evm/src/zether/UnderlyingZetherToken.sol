@@ -90,13 +90,13 @@ contract UnderlyingZetherToken is UnderlyingToken, ZetherLayer {
     }
 
     /// @notice As `UnderlyingToken` (also cancels a pending rate change, CTR-TOK-06); restated for the second base.
-    function disableFeature(uint8 bit) external override(UnderlyingToken, MetaTokenBase) {
+    function disableFeature(uint8 bit) external override(UnderlyingToken, MetaTokenBase) nonReentrant {
         AdminLib.disableFeature(bit, _msgSender());
         if (bit == AdminLib.RATE_ADJUSTABLE) UnderlyingLib.dropPending();
     }
 
     /// @notice The collateral check of a rate change counts the shielded value too.
-    function executeRate() external override {
+    function executeRate() external override nonReentrant {
         UnderlyingLib.executeRate(_msgSender(), totalSupply() + ZetherLib.$().totalShielded * ZetherLib.$().shieldScale);
     }
 
