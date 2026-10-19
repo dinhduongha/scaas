@@ -5,13 +5,14 @@
 # capped commands run machine-wide; the rest wait for a free slot.
 # Slot 1 is the historical lock file `heavy`, so `fuser heavy` still finds a job.
 slots=${CAPPED_SLOTS:-2}
+# CAPPED_MEM overrides the per-job cap (default 4G; owner 2026-10-19: fuzz campaigns may run 3 at once at 3G).
 dir="$HOME/.cache/r3-locks"
 while :; do
   for ((i = 1; i <= slots; i++)); do
     f="$dir/heavy"; ((i > 1)) && f="$dir/heavy.$i"
     exec {fd}>"$f"
     if flock -n "$fd"; then
-      exec systemd-run --user --scope --quiet -p MemoryMax=4G -p MemorySwapMax=2G -- "$@"
+      exec systemd-run --user --scope --quiet -p MemoryMax="${CAPPED_MEM:-4G}" -p MemorySwapMax=2G -- "$@"
     fi
     exec {fd}>&-
   done
