@@ -22,6 +22,7 @@ contract DexPuller {
 
     function pull(address token, address from, uint256 amount) external {
         if (msg.sender != dex) revert NotDex(msg.sender);
-        IERC20(token).safeTransferFrom(from, dex, amount);
+        // the token's own revert data never reaches the DEX (W-O: it could forge a starvation error)
+        if (!IERC20(token).trySafeTransferFrom(from, dex, amount)) revert SafeERC20.SafeERC20FailedOperation(token);
     }
 }

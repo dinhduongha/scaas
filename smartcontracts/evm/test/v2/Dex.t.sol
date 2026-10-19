@@ -10,7 +10,7 @@ import {SCaaSDex} from "../../src/dex/SCaaSDex.sol";
 import {ISCaaSDex} from "../../src/dex/ISCaaSDex.sol";
 import {DexLegs} from "../helpers/DexLegs.sol";
 import {ITradeToken} from "../../src/trade/ITradeToken.sol";
-import {IERC20Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {UID_, noneInit} from "./helpers/V2Fixture.sol";
 
@@ -537,8 +537,8 @@ contract DexTest is Test {
         bytes32 h = dex.dexOrderDigest(address(a), s.taker.o);
         _expectOne(s, abi.encodeWithSelector(ISCaaSDex.BadSignature.selector, h));
         s.taker = _dexLeg(ALICE_PK, address(a), s.taker.o, 1020);
-        address p = dex.puller();
-        _expectOne(s, abi.encodeWithSelector(IERC20Errors.ERC20InsufficientAllowance.selector, p, 0, 1020));
+        // the puller drops the token's revert data (W-O): a fixed error names the token
+        _expectOne(s, abi.encodeWithSelector(SafeERC20.SafeERC20FailedOperation.selector, address(a)));
     }
 
     /// Alice sells 1020 of an outside token (a `DexOrder`, pulled by the puller) against the SCaaS makers of `_book`.
