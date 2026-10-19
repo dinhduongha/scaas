@@ -1,0 +1,15 @@
+pqz-fuzz init (codec): 44 honest inputs valid, self-test ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205, mode pqzl-diff (Rust core = the precompile, C core compared): C verify-only arena 512 MiB, used 265693696 B, peak 268297168 B
+Done 287503 runs in 7201 second(s)
+stat::number_of_executed_units: 287503
+stat::average_exec_per_sec:     39
+stat::new_units_added:          502
+stat::slowest_unit_time_sec:    0
+stat::peak_rss_mb:              811
+pqz-fuzz summary (codec): 281944 inputs checked, 97837 decoded (39456 op 7), 0 valid (= unmodified honest; mutate skips those), 0 differential SV = generic (0 op 7), 42728 PQZL proof re-encodings equal, mode pqzl-diff: 0 PQZL verdicts C = Rust, 247428 pqz_test_mutate C = Rust, C arena peak max 268297168 B = 255.87 MiB (bound 341 MiB, ARENA_SMALL 512 MiB)
+[fuzz rc=0]
+pqz-fuzz init (codec): 44 honest inputs valid, self-test ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205, mode pqzl-diff (Rust core = the precompile, C core compared): C verify-only arena 512 MiB, used 265693696 B, peak 268297168 B
+pqz-fuzz init (codec): 44 honest inputs valid, self-test ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205, mode pqzl-diff (Rust core = the precompile, C core compared): C verify-only arena 512 MiB, used 265693696 B, peak 268297168 B
+pqz-fuzz summary (codec): 383 inputs checked, 173 decoded (73 op 7), 0 valid (= unmodified honest; mutate skips those), 0 differential SV = generic (0 op 7), 148 PQZL proof re-encodings equal, mode pqzl-diff: 0 PQZL verdicts C = Rust, 502 pqz_test_mutate C = Rust, C arena peak max 268297168 B = 255.87 MiB (bound 341 MiB, ARENA_SMALL 512 MiB)
+pqz-fuzz summary (codec): 0 inputs checked, 0 decoded (0 op 7), 0 valid (= unmodified honest; mutate skips those), 0 differential SV = generic (0 op 7), 0 PQZL proof re-encodings equal, mode pqzl-diff: 0 PQZL verdicts C = Rust, 0 pqz_test_mutate C = Rust, C arena peak max 268297168 B = 255.87 MiB (bound 341 MiB, ARENA_SMALL 512 MiB)
+[merge rc=0]
+corpus/codec: 290 inputs, 4848 B (merged set 290 inputs, 4848 B)
