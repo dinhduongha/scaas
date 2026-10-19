@@ -75,8 +75,9 @@ fn c_core(core: &std::path::Path, out: &std::path::Path) {
     // libFuzzer coverage, the test hooks; the sanitizer runtime is linked by the fuzz target, so no symbol scan
     let fuzz = env::var_os("CARGO_FEATURE_FUZZ").is_some();
     if fuzz {
+        // every UBSan check, vla-bound and pointer-overflow included since review Q-F (owner 2026-10-19)
         for f in ["-g", "-fno-omit-frame-pointer", "-DPQZ_TEST_HOOKS", "-fsanitize=address,undefined,fuzzer-no-link",
-                  "-fno-sanitize=vla-bound,pointer-overflow", "-fno-sanitize-recover=all"] {
+                  "-fno-sanitize-recover=all"] {
             b.flag(f);
         }
     }

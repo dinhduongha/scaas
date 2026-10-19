@@ -13,8 +13,8 @@ L=$1 T=${2:-600}
 mkdir -p build/sv-san sv/runs
 SRC="src/pqz_lazer.c src/pqz_ntt.c src/pqz_arena.c src/pqz_rel.c src/pqz_sv.c"
 INC="-std=gnu11 -g -fno-omit-frame-pointer -w -DPQZ_SV -Ibuild/include -Isrc -Ilazer -Iparams"
-# known upstream UBSan nits (STATUS.md): zero-length VLAs (M = 0 / nbin = 0), null + 0 in aes256ctr.c
-SAN="-fsanitize=address,undefined -fno-sanitize=vla-bound,pointer-overflow -fno-sanitize-recover=all"
+# all UBSan checks on, vla-bound and pointer-overflow included (their nits fixed in review Q-F; owner 2026-10-19)
+SAN="-fsanitize=address,undefined -fno-sanitize-recover=all"
 ${CC:-clang} -O1 $INC $SAN -DPQZ_DEBUG_MALLOC -o build/sv-san/pqz_bench $SRC test/pqz_bench.c
 ASAN_OPTIONS=detect_leaks=0 PQZ_VERIFY=fast $CAPPED build/sv-san/pqz_bench 1 3 > "sv/runs/$L-asan.jsonl" 2>&1 \
   || echo "asan rc=$?"
