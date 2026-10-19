@@ -538,6 +538,7 @@ abstract contract ZetherVerifierBase is IZetherVerifier {
             mstore(add(m, 128), sub(r, 2))
             mstore(add(m, 160), r)
             ok := staticcall(gas(), 0x05, m, 192, m, 32)
+            ok := and(ok, eq(returndatasize(), 32)) // W-I: no 0x05 ⇒ empty
             out := mload(m)
         }
         require(ok);
