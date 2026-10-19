@@ -29,8 +29,10 @@ pub(crate) struct Eq {
     pub(crate) r0: Option<Poly>,
 }
 
-/// LSB-first bit writer: `coder_enc_begin`, `coder_enc_urandom(2|3)`, `coder_enc_end` as the verifiers use them to
-/// hash (every section is 64 x nbits bits, so C's byte counter stays exact)
+/// LSB-first bit writer: `coder_enc_begin`, `coder_enc_urandom(2|3)`, `coder_enc_grandom3`, `coder_enc_end` as the
+/// verifiers use them to hash (urandom sections are 64 x nbits bits, grandom sections vary; `end` returns
+/// floor(bits / 8) + 1 bytes, C's `coder_get_offset >> 3` after `coder_enc_end`). `grandom` repeats
+/// `coder::encode_proof`'s z loop on this writer (same `split` / `nones`).
 pub(crate) struct Coder {
     b: Vec<u8>,
     pos: usize,
