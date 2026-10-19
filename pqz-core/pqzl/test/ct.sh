@@ -36,7 +36,7 @@ if [ "${CT_ONLY:-}" != rust ]; then
   rc=$?
   cat build/ct/c.vg >> "$O"
   n=$(count build/ct/c.vg)
-  echo "ct $L C: rc=$rc secret-dependent reports=$n" | tee -a "$O"
+  echo "ct $L C ($($CC --version | head -1)): rc=$rc secret-dependent reports=$n" | tee -a "$O"
   { [ $rc = 0 ] && [ "$n" = 0 ]; } || fail=1
 fi
 if [ "${CT_ONLY:-}" != c ]; then
@@ -46,7 +46,7 @@ if [ "${CT_ONLY:-}" != c ]; then
   rc=$?
   cat build/ct/rust.vg >> "$O"
   n=$(count build/ct/rust.vg)
-  echo "ct $L Rust: rc=$rc secret-dependent reports=$n" | tee -a "$O"
+  echo "ct $L Rust ($(cd rust && rustc --version)): rc=$rc secret-dependent reports=$n" | tee -a "$O"
   { [ $rc = 0 ] && [ "$n" = 0 ]; } || fail=1
 fi
 exit $fail

@@ -80,6 +80,12 @@ fn c_core(core: &std::path::Path, out: &std::path::Path) {
             b.flag(f);
         }
     }
+    // review round 2, Q-G: the C prover's constant time depends on the compiler (fix E was checked with clang 18;
+    // E-constant-time.md): record which one built this archive in the build script's log (target/*/build/pqz-ffi-*/output)
+    let cc = b.get_compiler();
+    let ver = std::process::Command::new(cc.path()).arg("--version").output();
+    let ver = ver.map(|o| String::from_utf8_lossy(&o.stdout).lines().next().unwrap_or("").to_string());
+    println!("pqz-ffi C core compiler: {} ({})", cc.path().display(), ver.unwrap_or_else(|e| e.to_string()));
     b.compile("pqz");
 
     if !fuzz {

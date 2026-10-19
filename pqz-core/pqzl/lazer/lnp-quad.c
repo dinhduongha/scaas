@@ -320,6 +320,7 @@ lnp_quad_prove (uint8_t hash[32], polyvec_t tB, poly_t c, polyvec_t z1,
   pqz_ct_public_polyvec (h); /* PQZ (review E): the hint, a proof field */
 
   /* cleanup */
+  explicit_bzero (yseed, sizeof (yseed)); /* PQZ (review round 2, Q-B): the seed of every mask y1, y2 */
   shake128_clear (hstate);
   rng_clear (rngstate);
   polyvec_free (R2y);

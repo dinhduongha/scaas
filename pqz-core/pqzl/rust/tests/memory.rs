@@ -232,6 +232,9 @@ const OPS: [&str; 3] = ["prove", "verify", "verify_fast"];
 /// `PQZL_MEM_SWEEP=0,1000000000,0` denies every allocation in turn (exhaustive).
 #[test]
 fn exhaustion_is_error() {
+    // the log names the settings it ran with (review round 2: the port's exhaustive logs did not)
+    let set: Vec<String> = std::env::vars().filter(|(k, _)| k.starts_with("PQZL_MEM_")).map(|(k, v)| format!("{k}={v}")).collect();
+    println!("PQZL_MEM_* settings: {}", if set.is_empty() { "none (the defaults)".to_string() } else { set.join(" ") });
     let rs = rows();
     let tx = rs.iter().find(|r| r.code == 1).unwrap();
     let m8 = rs.iter().find(|r| r.name == "M8-on").unwrap();

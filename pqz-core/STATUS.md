@@ -1300,6 +1300,58 @@ Evidence (all under `scripts/capped`, tag `rev2`, on `50e5dbc`):
   division left on secrets (`rev2-wasm-div-*.txt`).
 - `stark-backup` `cargo test --release`: 9 + 7 + 1 + 3 passed (`stark-backup/runs/rev2-tests.txt`).
 
+## Second code review: the PQZL C core (2026-10-19, branch `rev2-pqzl`)
+
+Plan `docs/superpowers/plans/2026-10-19-pqzl-fs3.md` Task 5e; reports `research/code-review-2026-10-19/L-codex-pqzl-c.md`,
+`M-agy-pqzl-c.md` (triage Q-A…Q-I), `N-claude-pqzl-c.md`; decisions CTR-PQZ-09 (the Q-A…Q-I entry, the Rust-port
+minors entry) and CTR-PQZ-26. No P0 / P1 on the verifier path, no C = Rust verdict divergence. No fix changes a proof
+byte, an arena peak or a verdict on a valid input.
+
+| # | Change | Test |
+|---|---|---|
+| Q-A | `pqz_bernoulli_fp` / Rust `bernoulli_fp`: `mant + (mant & −(sh & 1))` instead of a u128 shift by the secret `sh & 1` (a branching `__ashlti3` libcall in Rust wasm32 builds) | `ub_test` part d, Rust `bernoulli_masked_add_eq_shift` (equal on e ∈ [−70, 4]) |
+| Q-B | wipe on every exit (Open item 8): `pqz_arena_wipe_release` in `pqz_prove` and the key / encryption helpers, `wipe_vec` of the secret vectors, `explicit_bzero` of the seeds and stack arrays | `ub_test` part g: the arena above the mark is zero after keygen, enc, dec, prove |
+| Q-C | a failed LaZer allocation traps (no write after it); sink and `pqz_arena_realloc` removed; the SV's checked allocations use `pqz_arena_try_alloc` (Open item 2) | `ub_test` part h under ASan: `pqz_init` 16 B short of A and `pqz_verify` without room for the keys trap (SIGILL), no ASan report; `ffi/tests/fault.rs` 18 MiB band still status 4 |
+| Q-D | `coder_dec_ghint` / `coder_dec_grandom` stop at the first failed read; `pqz_decproof` through `err` | `ub_test` part e: the input pointer stays in the buffer; 10,552 zero proof bytes rejected by both verifiers |
+| Q-E | the bounds asserts of `spolyvec` / `spolymat_insert_elem`, `coder_dec_urandom5/6` return before the write | `ub_test` part f |
+| Q-F | `aes256ctr.c` NULL + 0, never-zero-length `INTVEC_T` / `Z` arrays, `canonical()` `n % 8`, `pqz__div` `nn ≥ dn ≥ 1` (Open item 4) | `ub_test` with pointer-overflow on; part f; relfix ASan + UBSan stderr empty |
+| Q-G | `pqz_ct_barrier` on the masks of `pqz_int_set_centred`, `dec_w`, `debit_witness`; compiler in `ct.sh`'s summary and in `pqz-ffi`'s build log (`pqz_csubq` left without: CTR-PQZ-09) | `ct.sh rev2` |
+| Q-H | `check_symbols.sh` refuses test-hook symbols; the statement-length comment | `test/check_symbols_neg.sh` |
+| Q-I | global state (Open item 6): recorded, no code | — |
+
+Rust-port minors (TODO "PQZL Rust port follow-ups" item 5): `ffi/tests/fault.rs` (Rust backend: `Ctx` allocation
+denied, cache allocations denied end to end, panic path through the hook `TEST_PANIC`), the Rust heap check in
+`ffi/tests/verify_only.rs` (review C-M5), the two-limb S3 rejection case compared C = Rust (`pqz_shim_rej_limbs`),
+`tests/memory.rs` echoing its `PQZL_MEM_*` settings, `gate.sh`'s `runs/gate/<label>-summary.txt`.
+
+Commits: `ea4b00d` (Q-A), `d08e3f9` (Q-B…Q-H), `d5bcc33` (Rust-port minors), `c5c8dfd` (C runs).
+
+**Runs** [measured] (label `rev2`):
+
+- The new tests on the pre-fix core (`cfea904`) fail: UBSan `NULL + 0` (aes256ctr) and the M = 0 VLA (`lnp-tbox.c`),
+  ASan heap-buffer-overflow (`spolyvec_insert_elem`) and global-buffer-overflow (the sink, `pqz_init`), the decoder
+  pointer past the buffer, a non-zero arena after keygen / enc / dec / prove (`pqzl/test/runs/ub-before-rev2*.txt`).
+  After the fixes `pqzl/test/ub_test.sh rev2` PASS, parts a–h (`ub-rev2.txt`).
+- `research/pqzl-measure/relfix.sh rev2`: KAT 19/19; `fails 0` native, wasm32 and ASan + UBSan, whose stderr is now
+  empty (fs4: the four Open item 4 reports); `proofs_fnv` and arena peaks equal to `fs4` in every file (native 5 and
+  10 seeds, wasm32, each relation alone) (`research/pqzl-measure/runs/rev2-*`).
+- `check_tbox_fixes` ok (P6-SZ, P6-L2, P6-Z21, P6-FS 0 of 12); `sv/check_sv_fixes.sh` ok; the portable SV differential
+  `pqz_sv_diff 20 10 2 1 10`: 4,328 cases, 0 mismatches, PRG 0, `bad_length_before_keys` 0 (the x86-64-v3 and z21
+  passes run in the Task 9 gate); `check_symbols_neg` ok (`pqzl/runs/rev2-*`, `pqzl/sv/runs/rev2-portable.jsonl`).
+- `pqzl/test/ct.sh rev2 383 3 2` (the arguments of `ct2`): 0 memcheck reports in C (clang 18.1.3) and Rust (rustc
+  1.97.1), every proof verifies (`pqzl/test/runs/ct-rev2.txt`).
+- `pqzl/rust/run.sh rev2`: fully green (19 test binaries, 0 failed, incl. `bernoulli_masked_add_eq_shift`, the two-limb
+  `rejection_saturation_eq_c`, `tests/memory.rs` with its settings line); every FNV line equal (bench 5 5 63, 2 2 16320,
+  wasm32 3 1 63 and the fast variants); native = wasm32 387 digest lines; keys KAT, `to_rust.py --check`, clippy ok
+  (`pqzl/rust/runs/rev2-*`).
+- `ffi/vectors/run.sh rev2`: `pqz-vectors --check` 16 files byte-identical, `pqz_kat.py --check` ok, tamper 191 / 191,
+  wasm32 replay 53 cases, 0 fails (`ffi/vectors/runs/rev2-*`).
+- `ffi/run.sh rev2` (Rust backend) and `PQZL=c ffi/run.sh rev2-c`: all tests green (the new fault and heap checks
+  included), native = wasm32 29 digest lines on each, the C backend's digest lines equal the Rust backend's,
+  **self-test hash unchanged** `ed910a2c…d205` on both; C backend: verify-only arena used 265,693,696 B after every
+  call and peak 268,297,200 B, as in `fs5-c`; fill determinism 3,118 lines identical; symbol scan "no test hook"; the
+  build log names clang 18.1.3 (`ffi/runs/rev2-*`, `rev2-c-*`).
+
 ## Measured (2026-10-13, this machine, single thread)
 
 The spike's measurement record: P6d-2 against the unoptimised spike, and the verdict against the kill criteria
@@ -1372,10 +1424,16 @@ the record.
    - The fuzz targets (P6e Task 10) check the peak on every input against 96 MiB (144 MiB / 1.5): over ≈ 3 M
      inputs the maximum seen is the known adversarial 95,169,680 B; no input raised it.
    - (The multi-recipient transfer later raised the verify-only arena to 512 MiB; see the S3 section.)
+   - **Second code review (2026-10-19, Q-C; branch `rev2-pqzl`):** no write follows a failed allocation any more.
+     LaZer's allocator traps when a block does not fit (the process stops; the sink is gone); the specialised
+     verifier's own allocations fail gracefully (`PQZ_ERR_ARENA`, `pqz-ffi` status 4, `tests/fault.rs`'s 18 MiB
+     band). Exhaustion inside LaZer is no longer a node fault but a stop of the process: not reachable from input,
+     the arenas are sized from measurement. Test: `pqzl/test/ub_test.sh` part h under ASan.
 3. **wasm.** Proofs are equal byte for byte with native (P6d-2, seeds 0..2). No browser run yet (node only).
    `R_TX` needs ~0.23 GB of the 4 GiB wasm32 memory (fix-ups, one op per process).
 4. **UBSan nits left as upstream:** zero-length VLAs when M = 0 / nbin = 0 (`lnp-tbox.c` 223, 875, 3451), and
-   null + 0 in `aes256ctr.c:339` (P6d-2 `research/opt/asan.sh`: nothing else). LSan on the malloc path reports the
+   null + 0 in `aes256ctr.c:339` (P6d-2 `research/opt/asan.sh`: nothing else). **Fixed in the second code review
+   (2026-10-19, Q-F; branch `rev2-pqzl`)**: the relfix ASan + UBSan stderr is empty (`research/pqzl-measure/runs/rev2-asan-stderr.txt`) and `ub_test.sh` runs with pointer-overflow on again. What stays: LSan on the malloc path reports the
    relation layer's statement objects (`pqz_rel.c` frees them by arena release), on main as well;
    `research/opt/asan.sh` runs with `detect_leaks=0`.
 5. ~~Docs: README, research note, roadmap P6d row + TODO P6 row, docs_check.~~ (done)
@@ -1387,6 +1445,7 @@ the record.
    wrapper must serialise every libpqz call (one process-wide lock) or move to per-thread contexts.
    Status: **closed at the `pqz-ffi` layer** (P6e Task 7: one process-wide lock around every libpqz call, one
    worker thread; P6f calls `pqz_precompile` and needs no lock of its own). Per-thread contexts are not done.
+   Second code review (2026-10-19, Q-I): recorded again, no code (the node uses the Rust crate, which has no globals).
 7. ~~`keygen.json` "one seed with ≥ 1 resample (searched)" cannot be searched (≈ 2^-70 per seed).~~ Settled
    (controller 2026-10-14): the row is dropped from the plan's Task 11; the resample path and the counter-64 error
    are pinned by the test-hook KATs of Task 3 (`pqzl/test/runs/keys2-*`).
@@ -1401,9 +1460,14 @@ the record.
    `s`, `yseed`, `c·s1`, `c·s2` (`proof/quad.rs`). Platform boundary: `wipe` is plain stores plus `black_box`; a
    volatile write needs `unsafe` (forbidden outside `c-oracle`) and `zeroize` would be a dependency (D1), so the
    compiler is not bound to keep the stores, and its own copies (moves, register spills, stack temporaries) are
-   never cleared; the masks y and the other intermediates are not cleared. **The C core has the same gap and keeps
-   it here:** `lnp-tbox.c` `expseed[96]`, `lnp-quad.c` `yseed[32]` are not cleared, and the copies `sv`, `s`, `m`,
-   `tA2` live in the arena (above).
+   never cleared; the masks y and the other intermediates are not cleared. ~~The C core has the same gap and keeps
+   it here: `lnp-tbox.c` `expseed[96]`, `lnp-quad.c` `yseed[32]` are not cleared, and the copies `sv`, `s`, `m`,
+   `tA2` live in the arena (above).~~
+   **C core, second code review (2026-10-19, Q-B; branch `rev2-pqzl`):** closed for C. `pqz_prove` and the key /
+   encryption helpers zero, before releasing, the arena above the mark up to the high-water mark and every freed block
+   below it (`pqz_arena_wipe_release`), plus `s1`, `s2`, `m`, `tA2`, the secret key and the encryption randomness
+   wherever they sit, the seeds `expseed` / `yseed`, the sampler buffers and the witness stack arrays (volatile
+   stores). Test: `pqzl/test/ub_test.sh` part g. Same boundary as Rust for register / spill copies.
    **PQZH (Ligero), review round 2 fix P-C (2026-10-19, branch `rev2-pqzh`):** the same pattern (`Wiped`, `Wipe` in
    `pqzh/ligero/src/lib.rs`) clears on every exit the witness values (`cs::Wit` wipes itself on drop) and every
    secret buffer of `cs::witness` (the decryptions, the recomputed A s + e / u / v, the polynomial copies, the

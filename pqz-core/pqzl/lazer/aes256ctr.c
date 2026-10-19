@@ -334,12 +334,14 @@ _aes256ctr_stream (aes256ctr_state_t state, uint8_t *out, size_t outlen)
 {
   size_t len = MIN (outlen, state->nbytes);
 
-  if (len > 0)
-    memcpy (out, state->cache_ptr, len);
-  state->cache_ptr += len;
-  state->nbytes -= len;
-  out += len;
-  outlen -= len;
+  if (len > 0) /* PQZ (review round 2, Q-F): no NULL + 0 (cache_ptr and out may be NULL) */
+    {
+      memcpy (out, state->cache_ptr, len);
+      state->cache_ptr += len;
+      state->nbytes -= len;
+      out += len;
+      outlen -= len;
+    }
 
   while (outlen >= 64)
     {

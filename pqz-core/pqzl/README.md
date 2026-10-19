@@ -52,10 +52,10 @@ flowchart TB
 | `lazer/` | the subset of LaZer `3330e48` that PQZL uses; changes made in place and marked `PQZ:`; licence `lazer/LICENSE` |
 | `params/` | one LaZer spec per relation (`*_params.sage`), the generated headers `pqz_*_params.h`, the codegen and the security sizing ([params/README.md](params/README.md)) |
 | `kat/` | known-answer test of the arithmetic layers against upstream LaZer: `lazer_dump.c`, the golden `lazer-3330e48.json`, `check.py` (must print 19/19) |
-| `test/` | `pqz_bench.c` (prove, verify, tamper checks, timings, a hash of the proofs), `run_wasm.mjs` (the same under node), `pqz_keys_kat.c` (keys KAT), `pqz_sv_diff.c` and `pqz_sv_fuzz.c` (SV differential test and fuzz target), `ct.sh` + `pqz_ct.c` (constant-time check of the prover under valgrind memcheck, C and Rust; review fix E) |
+| `test/` | `pqz_bench.c` (prove, verify, tamper checks, timings, a hash of the proofs), `run_wasm.mjs` (the same under node), `pqz_keys_kat.c` (keys KAT), `pqz_sv_diff.c` and `pqz_sv_fuzz.c` (SV differential test and fuzz target), `ct.sh` + `pqz_ct.c` (constant-time check of the prover under valgrind memcheck, C and Rust; review fix E), `ub_test.sh` + `pqz_ub_test.c` (ASan + UBSan tests of the hardening and of review round 2: parts a–f on the libc heap, g (arena wiped after secret calls) and h (an undersized arena traps) on the arena), `check_symbols_neg.sh` (the scan's failure paths) |
 | `sv/` | checks of the specialised verifier: `diff.sh`, `bench.sh`, `fuzz.sh`, `rel3.sh` (all of them in one job), `check_sv_fixes.sh`; `review/` holds the reproducers of its independent review |
 | `sz/`, `l2dom/` | reproducers of the two LaZer tbox findings (lazer#24, #25) ([sz/README.md](sz/README.md)) |
-| `build.sh`, `check_symbols.sh` | the builds (native, x86-64-v3, wasm32) and the scan that fails a build whose library references anything beyond `memcpy`, `memset` and `__stack_chk_fail` |
+| `build.sh`, `check_symbols.sh` | the builds (native, x86-64-v3, wasm32) and the scan that fails a build whose library references anything beyond `memcpy`, `memset` and `__stack_chk_fail`, or defines a test hook (`pqz_test_*`, `pqz_sv_test_*`, `pqz_sz_trace*`, `pqz_l2dom_poc`) |
 | `check_tbox_fixes.sh` | fails if one of the three LaZer fixes is gone |
 | `rust/` (branch `pqzl-rust`) | crate `pqzl`, the Rust port |
 

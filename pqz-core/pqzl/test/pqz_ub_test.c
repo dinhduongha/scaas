@@ -11,7 +11,12 @@
  *   (b) pqz_encrypt / pqz_decrypt_raw with a coefficient in [2^63, 2^63 + q) and 2^63 + q (rd_poly, int_set_i64);
  *   (c) poly_auto_self in the NTT domain (crt == 1): X -> X^-1 via the coefficients (follow-up 2026-10-18), equal to
  *       the coefficient-domain automorphism, no write past the residue vector.
- *   pqz_ub_test [parts]     parts: any of a, b, c (default abc)
+ *   review round 2 (2026-10-19, research/code-review-2026-10-19/M-agy-pqzl-c.md triage):
+ *   (d) Q-A pqz_bernoulli_fp's masked add = the former shift; (e) Q-D the entropy decoders stop at the first failed
+ *       read (and the 10,552-zero-byte R_REG proof); (f) Q-E the bounds asserts return before the write, Q-F pqz__div
+ *       nn < dn; on the arena (built without -DPQZ_DEBUG_MALLOC): (g) Q-B the arena is zero above the mark after every
+ *       secret-holding call; (h) Q-C an undersized arena traps before any write (ASan: no report).
+ *   pqz_ub_test [parts]     parts: any of a .. f (default abcdef); the arena binary: g, h
  */
 #include "lazer.h"
 
@@ -352,20 +357,216 @@ test_auto_ntt (void)
   poly_free (p), poly_free (c);
 }
 
+
+/* ---- review round 2 (2026-10-19, M-agy-pqzl-c.md triage Q-A .. Q-F) ---- */
+
+/* (d) Q-A: pqz_bernoulli_fp's masked add equals the former shift mant << (sh & 1) around every exponent edge */
+static void
+test_bernoulli (void)
+{
+  uint64_t x = 0x9E3779B97F4A7C15ULL;
+  int ok = 1;
+  for (int32_t e = -70; e <= 4; e++)
+    for (int k = 0; k < 2000; k++)
+      {
+        x ^= x << 13, x ^= x >> 7, x ^= x << 17;
+        const uint64_t mant = ((x << 29) | (x >> 35)) | (uint64_t)1 << 63;
+        for (int h = 0; h < 2; h++)
+          {
+            const uint64_t u = x >> h;
+            const int64_t sh = (int64_t)e + 1;
+            const uint64_t neg = (uint64_t)(sh >> 63), far = (uint64_t)((sh + 63) >> 63);
+            const uint64_t always = (uint64_t)((1 - sh) >> 63);
+            pqz_fx_u128 tneg = (pqz_fx_u128)(mant >> ((uint64_t)(-sh) & 63)) & ~(pqz_fx_u128)far;
+            pqz_fx_u128 tpos = (pqz_fx_u128)mant << ((uint64_t)sh & 1);
+            pqz_fx_u128 nm = (pqz_fx_u128)0 - (neg & 1);
+            int old = (int)((always & 1) | (uint64_t)((pqz_fx_u128)u < ((tneg & nm) | (tpos & ~nm))));
+            ok &= pqz_bernoulli_fp (u, mant, e) == old;
+          }
+      }
+  check ("Q-A pqz_bernoulli_fp masked add = the former shift (e in [-70, 4], 300,000 cases)", ok);
+}
+
+/* (e) Q-D: a failed read stops the entropy decoders; their input pointer never moves past the buffer. The end-to-end
+   case: a canonical R_REG statement with 10,552 zero proof bytes (L-codex C2-3) is rejected by both verifiers */
+static void
+test_truncated (void)
+{
+  static const uint8_t PSID[32] = PQZ_PROOF_SYSTEM_ID;
+  static uint8_t st[PQZ_REG_STMT_BYTES], pf[10552];
+  uint8_t buf[2] = { 0, 0 };
+  coder_state_t cs;
+  polyvec_t v;
+  polyvec_alloc (v, pqz_reg_ring, 4);
+  pqz_err = PQZ_OK;
+  coder_dec_begin_len (cs, buf, 1);
+  coder_dec_ghint3 (cs, v); /* all-zero hint: 2 bits per coefficient, 256 coefficients from one byte */
+  check ("Q-D coder_dec_ghint3 on 1 byte: err, in stays in the buffer", cs->err && cs->in <= buf + 1 && cs->byte_off <= 1);
+  coder_dec_begin_len (cs, buf, 1);
+  coder_dec_grandom3 (cs, v, 10);
+  check ("Q-D coder_dec_grandom3 on 1 byte: err, in stays in the buffer", cs->err && cs->in <= buf + 1 && cs->byte_off <= 1);
+  polyvec_free (v);
+  memcpy (st + 32, PSID, 32);
+  pqz_err = PQZ_OK;
+  check ("Q-D R_REG, 10,552 zero proof bytes: pqz_verify rejects",
+         pqz_verify (PQZ_OP_REGISTER, st, sizeof st, pf, sizeof pf) == 0);
+  check ("Q-D R_REG, 10,552 zero proof bytes: pqz_verify_fast rejects",
+         pqz_verify_fast (PQZ_OP_REGISTER, st, sizeof st, pf, sizeof pf) == 0);
+}
+
+/* (f) Q-E / Q-F: a failed bounds assert returns before the write; pqz__div refuses nn < dn */
+static void
+test_asserts (void)
+{
+  spolyvec_t sv;
+  spolyvec_alloc (sv, pqz_reg_ring, 0, 1);
+  pqz_err = PQZ_OK;
+  poly_ptr a = spolyvec_insert_elem (sv, 0);
+  poly_set_zero (a);
+  poly_ptr b = spolyvec_insert_elem (sv, 1); /* nelems_max 1: before the fix a write past elems */
+  poly_set_zero (b);
+  check ("Q-E spolyvec_insert_elem past nelems_max: a scratch poly, PQZ_ERR_INTERNAL, nelems stays 1",
+         b != a && sv->nelems == 1 && pqz_err == PQZ_ERR_INTERNAL);
+  spolyvec_free (sv);
+  spolymat_t sm;
+  spolymat_alloc (sm, pqz_reg_ring, 2, 2, 1);
+  pqz_err = PQZ_OK;
+  a = spolymat_insert_elem (sm, 0, 0);
+  b = spolymat_insert_elem (sm, 0, 1);
+  poly_set_zero (b);
+  check ("Q-E spolymat_insert_elem past nelems_max: a scratch poly, PQZ_ERR_INTERNAL, nelems stays 1",
+         b != a && sm->nelems == 1 && pqz_err == PQZ_ERR_INTERNAL);
+  spolymat_free (sm);
+  uint8_t hdr[4] = { 0xff, 0xff, 0, 0 };
+  coder_state_t cs;
+  INT_T (m, 1);
+  int_set_i64 (m, 5);
+  spolyvec_alloc (sv, pqz_reg_ring, 0, 1);
+  coder_dec_begin_len (cs, hdr, sizeof hdr);
+  coder_dec_urandom6 (cs, sv, m, 3);
+  check ("Q-E coder_dec_urandom6, header 65,535 > nelems_max: err, nothing read or inserted",
+         cs->err && cs->in == hdr && sv->nelems == 0);
+  spolyvec_free (sv);
+  mp_limb_t n[1] = { 7 }, d[2] = { 3, 1 };
+  pqz_err = PQZ_OK;
+  check ("Q-F pqz__div nn < dn: PQZ_ERR_INTERNAL, nothing read past q",
+         pqz__div (NULL, n, 1, d, 2) == 0 && pqz_err == PQZ_ERR_INTERNAL);
+  pqz_err = PQZ_OK;
+}
+
+#ifndef PQZ_DEBUG_MALLOC
+#include <signal.h>
+#include <sys/wait.h>
+#include <unistd.h>
+
+/* (g) Q-B (the arena build): after every call that held a secret (keygen, enc, dec, prove) the arena above the call's
+   mark up to the peak is zero (the arena was filled with 0xA5 first) */
+static int
+zero_above (const uint8_t *arena)
+{
+  for (size_t i = pqz_arena_used (); i < pqz_arena_peak (); i++)
+    if (arena[i] != 0)
+      return 0;
+  return pqz_arena_peak () > pqz_arena_used ();
+}
+
+static void
+test_wipe (uint8_t *arena, size_t len)
+{
+  static const uint8_t PSID[32] = PQZ_PROOF_SYSTEM_ID;
+  static uint8_t pk[PQZ_POLYVEC_BYTES], u[PQZ_POLYVEC_BYTES], vs[1][PQZ_V_BYTES], st[PQZ_REG_STMT_BYTES];
+  static uint8_t wit[PQZ_REG_WIT_BYTES], proof[PQZ_MAX_PROOF];
+  static int8_t s[2048], r[2048];
+  static int16_t e[2048], e1[2048], e2[1][16];
+  uint8_t seed[32] = { 1 }, msg[1][16] = { { 3 } }, ct[PQZ_POLYVEC_BYTES + PQZ_V_BYTES];
+  int64_t M[16], noise[16];
+  unsigned ctr;
+  memset (arena, 0xA5, len);
+  check ("Q-B pqz_init", pqz_init (arena, len) == PQZ_OK);
+  check ("Q-B pqz_keygen; the arena above the mark is zero", pqz_keygen (seed, pk, s, e, &ctr) == PQZ_OK && zero_above (arena));
+  const uint8_t *pks[1] = { pk };
+  seed[0] = 2;
+  check ("Q-B pqz_enc_seed; the arena above the mark is zero",
+         pqz_enc_seed (pks, 1, msg, seed, u, vs, r, e1, e2, &ctr) == PQZ_OK && zero_above (arena));
+  memcpy (ct, u, sizeof u), memcpy (ct + sizeof u, vs[0], PQZ_V_BYTES);
+  check ("Q-B pqz_dec; the arena above the mark is zero",
+         pqz_dec (s, ct, M, noise) == PQZ_OK && M[0] == 3 && zero_above (arena));
+  memcpy (st + 32, PSID, 32);
+  memcpy (st + PQZ_PREFIX_BYTES + 32, pk, sizeof pk);
+  for (int j = 0; j < 2048; j++)
+    wit[j] = (uint8_t)s[j], wit[2048 + 2 * j] = (uint8_t)e[j], wit[2049 + 2 * j] = (uint8_t)((uint16_t)e[j] >> 8);
+  size_t plen = sizeof proof;
+  check ("Q-B pqz_prove R_REG; the arena above the mark is zero",
+         pqz_prove (PQZ_OP_REGISTER, st, sizeof st, wit, sizeof wit, seed, proof, &plen) == PQZ_OK && zero_above (arena));
+  check ("Q-B the proof verifies", pqz_verify_fast (PQZ_OP_REGISTER, st, sizeof st, proof, plen) == 1);
+}
+
+/* (h) Q-C (the arena build, under ASan): an arena too small for an allocation stops the process (a trap: SIGILL on
+   x86-64) before anything is written; before the fix the shared 1 MiB sink took A (2 MB) and the relation keys, an
+   out-of-bounds write. pqz_arena_try_alloc (the specialised verifier's tables and working memory) fails gracefully. */
+static int
+child_dies (uint8_t *arena, size_t len, int verify)
+{
+  static uint8_t st[PQZ_REG_STMT_BYTES], pf[64];
+  fflush (stdout);
+  pid_t p = fork ();
+  if (p == 0)
+    {
+      if (pqz_init (arena, len) == PQZ_OK && verify)
+        pqz_verify (PQZ_OP_REGISTER, st, sizeof st, pf, sizeof pf);
+      _exit (0);
+    }
+  int ws;
+  waitpid (p, &ws, 0);
+  return WIFSIGNALED (ws) && WTERMSIG (ws) == SIGILL;
+}
+
+static void
+test_exhaustion (uint8_t *arena, size_t len)
+{
+  pqz_init (arena, len);
+  const size_t a = pqz_arena_used (); /* A */
+  printf ("     arena after pqz_init: %zu B\n", a);
+  check ("Q-C pqz_init on an arena 16 B short of A: trap (SIGILL), no write", child_dies (arena, a - 16, 0));
+  check ("Q-C pqz_init fits, R_REG's keys do not (arena A + 64 KiB): pqz_verify traps (SIGILL), no write",
+         child_dies (arena, a + 65536, 1));
+  pqz_err = PQZ_OK;
+  check ("Q-C pqz_arena_try_alloc over the capacity: NULL and PQZ_ERR_ARENA, the call goes on",
+         pqz_arena_try_alloc (len) == NULL && pqz_err == PQZ_ERR_ARENA);
+  pqz_err = PQZ_OK;
+}
+#endif
+
 int
 main (int argc, char **argv)
 {
   static uint8_t arena[(size_t)64 << 20];
-  const char *part = argc > 1 ? argv[1] : "abc"; /* the parts to run: a, b, c (one process each in ub_test.sh) */
+  /* the parts to run, one process each in ub_test.sh: a, b, c (2026-10-18), d, e, f (review round 2) on the libc heap
+     (-DPQZ_DEBUG_MALLOC); g, h on the arena (the second binary, built without it) */
+  const char *part = argc > 1 ? argv[1] : "abcdef";
   if (strchr (part, 'a'))
     test_fixexp (), test_satsub (), test_rejection (), test_onetime ();
+  if (strchr (part, 'b') || strchr (part, 'e'))
+    check ("pqz_init", pqz_init (arena, sizeof arena) == PQZ_OK);
   if (strchr (part, 'b'))
-    {
-      check ("pqz_init", pqz_init (arena, sizeof arena) == PQZ_OK);
-      test_enc_dec ();
-    }
+    test_enc_dec ();
   if (strchr (part, 'c'))
     test_auto_ntt ();
+  if (strchr (part, 'd'))
+    test_bernoulli ();
+  if (strchr (part, 'e'))
+    test_truncated ();
+  if (strchr (part, 'f'))
+    test_asserts ();
+#ifndef PQZ_DEBUG_MALLOC
+  if (strchr (part, 'g'))
+    {
+      const size_t big = (size_t)256 << 20; /* R_REG prove: about 100 MB of arena */
+      test_wipe (malloc (big), big);
+    }
+  if (strchr (part, 'h'))
+    test_exhaustion (arena, sizeof arena);
+#endif
   printf ("%s (%d failed)\n", fails ? "FAIL" : "PASS", fails);
   return fails != 0;
 }

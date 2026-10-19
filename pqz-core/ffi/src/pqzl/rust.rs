@@ -19,6 +19,8 @@
 //! false, as the C backend (only `pqz_err == PQZ_ERR_ARENA` is a node fault there).
 use std::panic::{AssertUnwindSafe, catch_unwind, resume_unwind};
 use std::sync::Mutex;
+#[cfg(feature = "test-hooks")]
+use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
 
 use ::pqzl::Ctx;
 
@@ -40,6 +42,18 @@ struct State {
 
 static STATE: Mutex<State> = Mutex::new(State { ctx: Vec::new(), worker: None });
 
+/// Test hook (feature `test-hooks`, never in a production build): every core call panics inside `with_ctx`'s catch,
+/// as a panic in the core would (`tests/fault.rs`: the panic path).
+#[cfg(feature = "test-hooks")]
+pub static TEST_PANIC: AtomicBool = AtomicBool::new(false);
+
+/// Test hook: drop the process's `Ctx`, so the next call allocates a new one (`tests/fault.rs` denies that allocation
+/// and the caches' with a counting allocator).
+#[cfg(feature = "test-hooks")]
+pub fn drop_ctx() {
+    STATE.lock().unwrap_or_else(|e| e.into_inner()).ctx = Vec::new();
+}
+
 /// Runs `f` under the lock, on the worker, with the process's `Ctx` (created at the first call). `Err(NodeFault)` if
 /// the worker is unavailable or the `Ctx` cannot be allocated; a panic in `f` drops the `Ctx` and resumes on the
 /// caller's thread. A poisoned lock is recovered with a fresh `Ctx`.
@@ -54,10 +68,13 @@ fn with_ctx<T: Send>(f: impl FnOnce(&mut Ctx) -> T + Send) -> Result<T, NodeFaul
     let r = on_worker(worker, || {
         catch_unwind(AssertUnwindSafe(|| {
             if ctx.is_empty() {
-                // ponytail: no test hook forces this failure (the counting-allocator tests are pqzl's); it is the
-                // documented try_reserve contract
+                // a failure is NodeFault (tests/fault.rs denies this allocation)
                 ctx.try_reserve_exact(1).ok()?;
                 ctx.push(Ctx::new());
+            }
+            #[cfg(feature = "test-hooks")]
+            if TEST_PANIC.load(Relaxed) {
+                panic!("pqz-ffi test hook TEST_PANIC");
             }
             Some(f(&mut ctx[0]))
         }))

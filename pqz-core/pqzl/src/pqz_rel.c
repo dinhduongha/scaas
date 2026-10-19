@@ -93,6 +93,21 @@ static pqz_arena_mark_t base;
 
 /* ---------------------------------------------------------------- helpers */
 
+/* Q-B (review round 2): zero a vector's coefficients and its NTT copies. The arena wipe covers the call's blocks;
+   this covers a secret vector that was allocated from a recycled block (the arena's free lists) */
+static void
+wipe_vec (polyvec_t v)
+{
+  unsigned i;
+  _VEC_FOREACH_ELEM (v, i)
+  {
+    poly_ptr p = polyvec_get_elem (v, i);
+    if (p->crtrep != NULL)
+      pqz_zeroize (p->crtrep, _sizeof_crtrep_data (p->ring));
+  }
+  pqz_zeroize (v->mem, _sizeof_polyvec_data (v->ring, v->nelems));
+}
+
 static void
 shake_tag (uint8_t out[32], const char *tag, const uint8_t *a, size_t alen, const uint8_t *b, size_t blen)
 {
@@ -285,7 +300,8 @@ l2sq_poly (poly_ptr p)
 }
 
 /* statement digest: SHAKE128("SCAAS-PQZ-TRANSCRIPT-V1" || op || be32(len) || stmt). be32 keeps the low 32 bits of
-   len; every caller passes a relation's exact statement length (< 70,000 B, checked in rel_of first: review fix A),
+   len; every caller passes a relation's exact statement length (at most 215,936 B, R_TXM8, so < 2^32; checked in
+   rel_of first: review fix A),
    as Rust's u32::try_from. */
 void
 pqz_stmt_hash (uint8_t h[32], uint8_t op, const uint8_t *stmt, size_t len)
@@ -1033,7 +1049,7 @@ do_prove (sys_t *S, pf_t *F, const uint8_t hash0[32], const uint8_t *wit, size_t
   lnp_tbox_prove (hash, F->tB, F->h, F->c, F->z1, F->z21, F->hint, F->z3, F->z4, F->s1, F->m, F->s2, F->tA2,
                   S->R->A1, S->R->A2p, S->R->Bp, S->R2, S->r1, S->N, S->R2p, S->r1p, S->r0p, S->M, S->Es, NULL,
                   NULL, S->Ps, NULL, NULL, S->Ds, NULL, NULL, ex + 32, P);
-  explicit_bzero (ex, sizeof ex); /* secret-derived; the arena's witness copies are not zeroed (STATUS Open 8) */
+  explicit_bzero (ex, sizeof ex); /* secret-derived; the arena is wiped at the end of pqz_prove (Q-B) */
   if (pqz_err && !POC_IGNORE_ERR)
     return pqz_err;
   if (!encproof (buf, sizeof buf, &len, F->tA1, F->tB, F->h, F->c, F->z1, F->z21, F->hint, F->z3, F->z4, P)
@@ -1103,8 +1119,9 @@ dec_w (polyring_srcptr Rq, polyvec_ptr u, poly_ptr v, polyvec_t s1, int64_t w[16
       /* review E: secret (u^T s); reduced and centred without a branch or a division */
       int64_t wv;
       ct_sdiv (cval (v, i) - cval (acc, i), PQZ_Q, &wv); /* wv = (v_i - acc_i) % q */
-      wv -= (int64_t)PQZ_Q & (((int64_t)(PQZ_Q - 1) / 2 - wv) >> 63);
-      wv += (int64_t)PQZ_Q & ((wv + (int64_t)(PQZ_Q - 1) / 2) >> 63);
+      /* the masks through the value barrier (review round 2, Q-G): no compiler may turn them back into a branch */
+      wv -= (int64_t)PQZ_Q & (int64_t)pqz_ct_barrier ((uint64_t)(((int64_t)(PQZ_Q - 1) / 2 - wv) >> 63));
+      wv += (int64_t)PQZ_Q & (int64_t)pqz_ct_barrier ((uint64_t)((wv + (int64_t)(PQZ_Q - 1) / 2) >> 63));
       w[i] = wv;
     }
   poly_free (acc);
@@ -1150,11 +1167,13 @@ debit_witness (txst_t *T, const uint8_t *w, polyvec_t s1, const rel_t *R)
     dec_w (Rq, T->uT, T->vT, s1, wv);
     for (i = 0; i < 16; i++)
       {
-        const int64_t sg = wv[i] >> 63; /* review E: round half away from zero without a branch */
+        /* review E: round half away from zero without a branch; the mask through the barrier (Q-G) */
+        const int64_t sg = (int64_t)pqz_ct_barrier ((uint64_t)(wv[i] >> 63));
         int64_t r, m = ct_sdiv (wv[i] + (((DELTA / 2) ^ sg) - sg), DELTA, &r);
         M[i] = m;
         eT[i] = wv[i] - DELTA * m;
       }
+    explicit_bzero (wv, sizeof wv); /* Q-B */
   }
   /* carries: c_i = (M_i + c_{i-1} - d'_i - sum_j d_j,i - f_i) / 16, exact, c_15 = 0 (so sum_j a_j + fee <= balance).
      review E: the checks run on secret values, so they are collected without a branch ('|', not '||') and only the
@@ -1178,9 +1197,8 @@ debit_witness (txst_t *T, const uint8_t *w, polyvec_t s1, const rel_t *R)
         bad |= d[j][i] > 15;
     }
   PQZ_CT_PUBLIC (&bad, sizeof bad);
-  if (bad && !CHEAT)
-    return 0;
-  for (i = 0; i < 16; i++)
+  const int ok = !bad || CHEAT;
+  for (i = 0; i < 16 && ok; i++)
     for (b = 0; b < 25; b++)
       {
         unsigned base[4] = { H.dp, H.m, H.c, H.e };
@@ -1198,7 +1216,10 @@ debit_witness (txst_t *T, const uint8_t *w, polyvec_t s1, const rel_t *R)
             set_c (polyvec_get_elem (s1, H.bits + slot / 64), slot % 64, (d[j][i] >> b) & 1);
           }
       }
-  return 1;
+  /* Q-B: amounts, carries, noise (every exit) */
+  explicit_bzero (d, sizeof d), explicit_bzero (dp, sizeof dp), explicit_bzero (dsum, sizeof dsum);
+  explicit_bzero (M, sizeof M), explicit_bzero (eT, sizeof eT), explicit_bzero (c, sizeof c);
+  return ok;
 }
 
 /* R_DR witness -> s1: s, e and the bits of e'_i + 2^24, e'_i = centre(v_i - (u^T s)_i) - Delta d_i */
@@ -1217,6 +1238,7 @@ dr_witness (txst_t *T, const uint8_t *w, polyvec_t s1)
         set_c (polyvec_get_elem (s1, 64 + (25 * i + b) / 64), (25 * i + b) % 64, ((e + (1 << 24)) >> b) & 1);
     }
   PQZ_CT_PUBLIC (&bad, sizeof bad); /* review E: the verdict is public (prove fails) */
+  explicit_bzero (wv, sizeof wv);   /* Q-B */
   return !bad; /* bad: not an encryption of amount under this key */
 }
 
@@ -1389,7 +1411,9 @@ pqz_prove (uint8_t op, const uint8_t *stmt, size_t stmt_len, const uint8_t *wit,
     rc = do_prove (&S, &F, h, wit, wit_len, rnd32, proof, proof_len);
   if (pqz_err && !POC_IGNORE_ERR)
     rc = pqz_err;
-  pqz_arena_release (&base);
+  /* Q-B: the witness copy, commitment randomness, message part and tA2, then everything the call used */
+  wipe_vec (F.s1), wipe_vec (F.s2), wipe_vec (F.m), wipe_vec (F.tA2);
+  pqz_arena_wipe_release (&base);
   return rc;
 }
 
@@ -1482,7 +1506,8 @@ pqz_keypair_from_secret (const int8_t s[2048], const int16_t e[2048], uint8_t pk
   polyvec_add (t, t, ev, 0);
   for (unsigned i = 0; i < K; i++)
     wr_poly (pk + 512 * i, polyvec_get_elem (t, i), PQZ_D);
-  pqz_arena_release (&base);
+  wipe_vec (sv), wipe_vec (ev); /* Q-B: the secret key, then the call's memory */
+  pqz_arena_wipe_release (&base);
   return pqz_err;
 }
 
@@ -1523,7 +1548,8 @@ pqz_encrypt (const uint8_t *const pks[], unsigned npk, const uint8_t msgs[][16],
       poly_redc (acc, acc);
       wr_poly (vs[k], acc, 16);
     }
-  pqz_arena_release (&base);
+  wipe_vec (rv), wipe_vec (ev); /* Q-B: the encryption randomness, then the call's memory */
+  pqz_arena_wipe_release (&base);
   return pqz_err;
 }
 
@@ -1548,7 +1574,9 @@ pqz_decrypt_raw (const int8_t s[2048], const uint8_t u[PQZ_POLYVEC_BYTES], const
   poly_sub (vv, vv, acc, 0);
   for (unsigned i = 0; i < 16; i++)
     w[i] = cval (vv, i);
-  pqz_arena_release (&base);
+  poly_free (vv), poly_free (acc); /* Q-B: u^T s and the plaintext; a freed block is wiped by the release below */
+  wipe_vec (sv); /* Q-B: the secret key, then the call's memory */
+  pqz_arena_wipe_release (&base);
   return pqz_err;
 }
 

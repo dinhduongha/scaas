@@ -142,6 +142,8 @@ coder_dec_ghint (coder_state_t state, intvec_t ghint)
   const uint8_t *_byte;
   int bit0, bit1, j;
 
+  if (state->err)
+    return; /* PQZ (review round 2, Q-D): an earlier read failed */
   _byte = state->in;
   _bit = state->bit_off;
 
@@ -181,6 +183,8 @@ coder_dec_ghint (coder_state_t state, intvec_t ghint)
         else
           int_set_i64 (elem, -(j + 3) / 2);
       }
+    if (state->err)
+      return; /* PQZ (Q-D): stop at the first failed read; in / byte_off never move past the buffer */
   }
 
   state->byte_off += nbytes;
@@ -309,6 +313,8 @@ coder_dec_grandom (coder_state_t state, intvec_t v, unsigned int log2o)
   ASSERT_ERR (state->out == NULL);
   ASSERT_ERR (state->in != NULL);
 
+  if (state->err)
+    return; /* PQZ (review round 2, Q-D): an earlier read failed */
   _byte = state->in;
   _bit = state->bit_off;
 
@@ -338,6 +344,8 @@ coder_dec_grandom (coder_state_t state, intvec_t v, unsigned int log2o)
 
     elem = intvec_get_elem (v, i);
     int_set_i64 (elem, z);
+    if (state->err)
+      return; /* PQZ (Q-D): stop at the first failed read; in / byte_off never move past the buffer */
   }
 
   state->byte_off += nbytes;
@@ -809,6 +817,11 @@ coder_dec_urandom5 (coder_state_t state, spolymat_t v, const int_t m,
   nelems = le16toh (header);
 
   ASSERT_ERR (nelems <= v->nelems_max);
+  if (nelems > v->nelems_max || state->err)
+    {
+      state->err = 1;
+      return; /* PQZ (review round 2, Q-E): no input-sized buffer, no insert past nelems_max */
+    }
 
   len = nelems * 2;
   uint16_t buf[len];
@@ -868,6 +881,11 @@ coder_dec_urandom6 (coder_state_t state, spolyvec_t v, const int_t m,
   nelems = le16toh (header);
 
   ASSERT_ERR (nelems <= v->nelems_max);
+  if (nelems > v->nelems_max || state->err)
+    {
+      state->err = 1;
+      return; /* PQZ (review round 2, Q-E): no input-sized buffer, no insert past nelems_max */
+    }
 
   len = nelems;
   uint16_t buf[len];

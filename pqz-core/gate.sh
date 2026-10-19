@@ -2,7 +2,8 @@
 # Gate A (PQZL, both cores: the C core and, since the Rust port, the Rust crate pqzl) and gate B (PQZH) of the relations plan (docs/superpowers/plans/2026-10-14-p6e-relations.md, "Gate A /
 # Gate B") with op 7 in the frozen set (P6-ANON), one job under scripts/capped (it calls capped jobs itself only through
 # the step scripts; run alone):
-#   scripts/capped pqz-core/gate.sh <label> [fuzz-seconds]      -> runs/gate/<label>-*.txt, summary on stdout
+#   scripts/capped pqz-core/gate.sh <label> [fuzz-seconds]      -> runs/gate/<label>-*.txt, summary on stdout and in
+#                                                                 runs/gate/<label>-summary.txt (with the PASS / FAIL line)
 # Steps: KAT 19/19, check_tbox_fixes, check_sv_fixes, the PQZL differential (SV vs generic, z21), the vectors job
 # (pqz-vectors --check, pqz_kat.py --check, tamper, pqz-ffi selftest vectors, wasm32 replay), the pqz-ffi job (tests,
 # symbol scans, native = wasm32 digests), cargo test of pqz-stmt and Ligero, the STARK backup cross-check, the fuzz
@@ -15,7 +16,10 @@ cd "$(dirname "$0")"
 L=$1 FZ=${2:-60} R=runs/gate/$1
 mkdir -p runs/gate
 fail=0
-step() { name=$1; shift; echo "== $name"; if "$@" > "$R-$name.txt" 2>&1; then echo "   ok"; else echo "   FAILED (rc=$?)"; fail=1; fi; }
+# the summary also goes to a file (review round 2: the PQZL Rust port's gate PASS line was on stdout only)
+say() { echo "$*" | tee -a "$R-summary.txt"; }
+echo "# gate $L: $(git rev-parse HEAD)$(git diff --quiet HEAD || echo ' + uncommitted changes'), $(date -u +%Y-%m-%dT%H:%MZ)" > "$R-summary.txt"
+step() { name=$1; shift; say "== $name"; if "$@" > "$R-$name.txt" 2>&1; then say "   ok"; else say "   FAILED (rc=$?)"; fail=1; fi; }
 
 kat() { (cd pqzl && ./build.sh native && build/native/kat_dump > build/native/kat-pqz.json &&
   python3 -I kat/check.py kat/lazer-3330e48.json build/native/kat-pqz.json); }
@@ -40,5 +44,5 @@ step rust rust
 step cargo cargo_tests
 step xcheck pqzh/xcheck/run.sh
 step fuzz fuzz
-echo "gate $L: $( [ $fail = 0 ] && echo PASS || echo FAIL )"
+say "gate $L: $( [ $fail = 0 ] && echo PASS || echo FAIL )"
 exit $fail

@@ -51,7 +51,8 @@ pqz_int_modq (const int_t a)
 static inline void
 pqz_int_set_centred (int_t c, uint64_t v)
 {
-  uint64_t big = -(uint64_t)(v > (PQZ_Q - 1) / 2); /* compiled to a flag move, no branch */
+  /* compiled to a flag move, no branch; the mask through the value barrier (review round 2, Q-G) */
+  uint64_t big = pqz_ct_barrier (-(uint64_t)(v > (PQZ_Q - 1) / 2));
   c->limbs[0] = (v & ~big) | ((PQZ_Q - v) & big);
   for (unsigned i = 1; i < c->nlimbs; i++)
     c->limbs[i] = 0;

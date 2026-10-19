@@ -427,6 +427,38 @@ pqz_shim_rej (unsigned bimodal, const uint8_t seed[32], uint64_t dom, const int6
   return pqz_err;
 }
 
+/* pqz_shim_rej on multi-limb entries (review round 2, the port's deferred minor: rejection S3 is two-limb): z and v
+   hold n elements of nl limbs then the sign, (nl + 1) words each */
+int
+pqz_shim_rej_limbs (unsigned bimodal, const uint8_t seed[32], uint64_t dom, const uint64_t *z, const uint64_t *v,
+                    unsigned n, unsigned nl, const uint64_t scm[3], const uint64_t s2[2], int *rej, uint8_t next8[8])
+{
+  rng_state_t st;
+  INTVEC_T (zz, n, nl);
+  INTVEC_T (vv, n, nl);
+  INT_T (sc, 3);
+  INT_T (sg, 2);
+
+  pqz_err = PQZ_OK;
+  for (unsigned i = 0; i < n; i++)
+    for (unsigned k = 0; k <= nl; k++)
+      {
+        int_ptr a = intvec_get_elem (zz, i), b = intvec_get_elem (vv, i);
+        if (k < nl)
+          a->limbs[k] = z[i * (nl + 1) + k], b->limbs[k] = v[i * (nl + 1) + k];
+        else
+          a->neg = z[i * (nl + 1) + k] & 1, b->neg = v[i * (nl + 1) + k] & 1;
+      }
+  for (unsigned i = 0; i < 3; i++)
+    sc->limbs[i] = scm[i];
+  sg->limbs[0] = s2[0], sg->limbs[1] = s2[1];
+  rng_init (st, seed, dom);
+  *rej = bimodal ? rej_bimodal (st, zz, vv, sc, sg) : rej_standard (st, zz, vv, sc, sg);
+  rng_urandom (st, next8, 8);
+  rng_clear (st);
+  return pqz_err;
+}
+
 /* every element of an intvec: its nlimbs limbs, then the sign */
 static void
 dump_intvec (uint64_t **o, intvec_t r)

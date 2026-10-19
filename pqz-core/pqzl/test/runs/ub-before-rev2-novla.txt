@@ -1,0 +1,175 @@
+# review round 2, the new tests on the PRE-FIX core: git archive cfea904 of pqzl/{src,lazer,params,build.sh,test} plus this branch's test/pqz_ub_test.c and test/ub_test.sh, with -Dpqz_arena_try_alloc=pqz_arena_alloc, -fno-sanitize=pointer-overflow,vla-bound (also the M = 0 VLA would stop part g first)
+# ub_test before-rev2-novla:  + uncommitted src/lazer changes, Ubuntu clang version 18.1.3 (1ubuntu1)
+# clang-18 -fno-sanitize=pointer-overflow -Dpqz_arena_try_alloc=pqz_arena_alloc -std=gnu11 -O1 -g -fsanitize=undefined,address -fno-omit-frame-pointer -DPQZ_SV -fno-sanitize-recover=all -fno-sanitize=pointer-overflow,vla-bound -w -Ibuild/include -Isrc -Ilazer -Iparams [-DPQZ_DEBUG_MALLOC]
+== part a
+ok   fixexp x >= 64 saturates to exp(64)
+ok   fixexp x < -64 saturates to exp(-64)
+ok   fixexp unchanged on [-64, 64)
+ok   pqz_sat_sub64 = the clamped exact difference on the edges
+ok   pqz_sat_sub128 = the clamped exact difference on the edges
+ok   rej_standard t2 - 2 t1 saturates at 2^127 - 1: accept
+ok   rej_standard t - ln M saturates at -2^63: reject
+ok   rej_standard num = 2^127 saturates (two limbs): accept
+ok   rej_standard t - ln M near +2^63: accept
+ok   rej_bimodal a - |y| - ln M saturates at -2^63: reject
+ok   rej_bimodal a - |y| - ln M near +2^63: accept
+ok   rej_onetime = rej_standard | (<z,v> < 0) on 2^16 samples
+ok   rej_onetime: same rng offset as rej_standard afterwards
+     rej_onetime: M2 2.8364453, accepted 11624 / 65536 = 0.17737, 1/(2 M2) = 0.17628; <z,v> < 0: 5438 (5417 of them accepted by rej_standard)
+ok   rej_onetime acceptance rate = 1/(2 M2) within 5 standard errors
+PASS (0 failed)
+== part a rc=0
+== part b
+ok   pqz_init
+ok   keypair
+ok   pqz_encrypt pk coefficient 2^63 + 0 = its reading mod q
+ok   pqz_decrypt_raw u coefficient 2^63 + 0 = its reading mod q
+ok   pqz_decrypt_raw v coefficient 2^63 + 0 = (V - q) - acc mod 2^64
+ok   pqz_encrypt pk coefficient 2^63 + 5 = its reading mod q
+ok   pqz_decrypt_raw u coefficient 2^63 + 5 = its reading mod q
+ok   pqz_decrypt_raw v coefficient 2^63 + 5 = (V - q) - acc mod 2^64
+ok   pqz_encrypt pk coefficient 2^63 + 4398046510888 = its reading mod q
+ok   pqz_decrypt_raw u coefficient 2^63 + 4398046510888 = its reading mod q
+ok   pqz_decrypt_raw v coefficient 2^63 + 4398046510888 = (V - q) - acc mod 2^64
+ok   pqz_encrypt pk coefficient 2^63 + 4398046510889 = its reading mod q
+ok   pqz_decrypt_raw u coefficient 2^63 + 4398046510889 = its reading mod q
+ok   pqz_decrypt_raw v coefficient 2^63 + 4398046510889 = (V - q) - acc mod 2^64
+PASS (0 failed)
+== part b rc=0
+== part c
+ok   poly_auto_self crt: X -> X^-1 via the coefficients (= the coefficient-domain branch)
+PASS (0 failed)
+== part c rc=0
+== part d
+ok   Q-A pqz_bernoulli_fp masked add = the former shift (e in [-70, 4], 300,000 cases)
+PASS (0 failed)
+== part d rc=0
+== part e
+ok   pqz_init
+FAIL Q-D coder_dec_ghint3 on 1 byte: err, in stays in the buffer
+FAIL Q-D coder_dec_grandom3 on 1 byte: err, in stays in the buffer
+ok   Q-D R_REG, 10,552 zero proof bytes: pqz_verify rejects
+ok   Q-D R_REG, 10,552 zero proof bytes: pqz_verify_fast rejects
+FAIL (2 failed)
+== part e rc=1
+== part f
+=================================================================
+==328210==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x502000000020 at pc 0x5a1501d0a408 bp 0x7ffcea9c6850 sp 0x7ffcea9c6848
+READ of size 8 at 0x502000000020 thread T0
+    #0 0x5a1501d0a407 in spolyvec_insert_elem pqz-core/pqzl/lazer/spolyvec.c:330:24
+    #1 0x5a1501dd71d2 in test_asserts pqz-core/pqzl/test/pqz_ub_test.c:426:16
+    #2 0x5a1501dd6d62 in main pqz-core/pqzl/test/pqz_ub_test.c:560:5
+    #3 0x7f9b3a22a1c9 in __libc_start_call_main csu/../sysdeps/nptl/libc_start_call_main.h:58:16
+    #4 0x7f9b3a22a28a in __libc_start_main csu/../csu/libc-start.c:360:3
+    #5 0x5a1501c10344 in _start (pqz-core/pqzl/build/ub/pqz_ub_test+0x6a344) (BuildId: da5e93e740439a8964d0f30f1648a60e12057fcd)
+
+0x502000000020 is located 0 bytes after 16-byte region [0x502000000010,0x502000000020)
+allocated by thread T0 here:
+    #0 0x5a1501cab193 in malloc (pqz-core/pqzl/build/ub/pqz_ub_test+0x105193) (BuildId: da5e93e740439a8964d0f30f1648a60e12057fcd)
+    #1 0x5a1501d36555 in spolyvec_alloc pqz-core/pqzl/lazer/spolyvec.c:56:14
+    #2 0x5a1501dd7189 in test_asserts pqz-core/pqzl/test/pqz_ub_test.c:422:3
+    #3 0x5a1501dd6d62 in main pqz-core/pqzl/test/pqz_ub_test.c:560:5
+    #4 0x7f9b3a22a1c9 in __libc_start_call_main csu/../sysdeps/nptl/libc_start_call_main.h:58:16
+    #5 0x7f9b3a22a28a in __libc_start_main csu/../csu/libc-start.c:360:3
+    #6 0x5a1501c10344 in _start (pqz-core/pqzl/build/ub/pqz_ub_test+0x6a344) (BuildId: da5e93e740439a8964d0f30f1648a60e12057fcd)
+
+SUMMARY: AddressSanitizer: heap-buffer-overflow pqz-core/pqzl/lazer/spolyvec.c:330:24 in spolyvec_insert_elem
+Shadow bytes around the buggy address:
+  0x501ffffffd80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x501ffffffe00: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x501ffffffe80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x501fffffff00: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x501fffffff80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+=>0x502000000000: fa fa 00 00[fa]fa fa fa fa fa fa fa fa fa fa fa
+  0x502000000080: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x502000000100: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x502000000180: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x502000000200: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x502000000280: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Partially addressable: 01 02 03 04 05 06 07 
+  Heap left redzone:       fa
+  Freed heap region:       fd
+  Stack left redzone:      f1
+  Stack mid redzone:       f2
+  Stack right redzone:     f3
+  Stack after return:      f5
+  Stack use after scope:   f8
+  Global redzone:          f9
+  Global init order:       f6
+  Poisoned by user:        f7
+  Container overflow:      fc
+  Array cookie:            ac
+  Intra object redzone:    bb
+  ASan internal:           fe
+  Left alloca redzone:     ca
+  Right alloca redzone:    cb
+==328210==ABORTING
+== part f rc=1
+== part g
+ok   Q-B pqz_init
+FAIL Q-B pqz_keygen; the arena above the mark is zero
+FAIL Q-B pqz_enc_seed; the arena above the mark is zero
+FAIL Q-B pqz_dec; the arena above the mark is zero
+FAIL Q-B pqz_prove R_REG; the arena above the mark is zero
+ok   Q-B the proof verifies
+FAIL (4 failed)
+== part g rc=1
+== part h
+     arena after pqz_init: 2719760 B
+FAIL Q-C pqz_init on an arena 16 B short of A: trap (SIGILL), no write
+=================================================================
+==328872==ERROR: AddressSanitizer: global-buffer-overflow on address 0x6258354341b0 at pc 0x6258348740c3 bp 0x7ffdff372ca0 sp 0x7ffdff372c98
+WRITE of size 8 at 0x6258354341b0 thread T0
+    #0 0x6258348740c2 in _intvec_init pqz-core/pqzl/build/include/lazer.h:1886:12
+    #1 0x6258348cfefd in _polymat_init pqz-core/pqzl/build/include/lazer.h:1991:5
+    #2 0x6258348cfefd in polymat_alloc pqz-core/pqzl/lazer/polymat.c:19:3
+    #3 0x62583492c1fe in rel_keys pqz-core/pqzl/src/pqz_rel.c:162:3
+    #4 0x62583492f368 in pqz_verify pqz-core/pqzl/src/pqz_rel.c:1411:7
+    #5 0x62583495acb3 in child_dies pqz-core/pqzl/test/pqz_ub_test.c:516:9
+    #6 0x625834958a49 in test_exhaustion pqz-core/pqzl/test/pqz_ub_test.c:532:10
+    #7 0x625834958a49 in main pqz-core/pqzl/test/pqz_ub_test.c:568:5
+    #8 0x7c3cee62a1c9 in __libc_start_call_main csu/../sysdeps/nptl/libc_start_call_main.h:58:16
+    #9 0x7c3cee62a28a in __libc_start_main csu/../csu/libc-start.c:360:3
+    #10 0x625834790354 in _start (pqz-core/pqzl/build/ub/pqz_ub_arena+0x6a354) (BuildId: 03b64023d3aba2ce856c1ba59642f38b67ffd556)
+
+0x6258354341b0 is located 1648 bytes after global variable 'sink' defined in 'pqz-core/pqzl/src/pqz_arena.c:33' (0x625835333b40) of size 1048576
+SUMMARY: AddressSanitizer: global-buffer-overflow pqz-core/pqzl/build/include/lazer.h:1886:12 in _intvec_init
+Shadow bytes around the buggy address:
+  0x625835433f00: f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9
+  0x625835433f80: f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9
+  0x625835434000: f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9
+  0x625835434080: f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9
+  0x625835434100: f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9
+=>0x625835434180: f9 f9 f9 f9 f9 f9[f9]f9 f9 f9 f9 f9 f9 f9 f9 f9
+  0x625835434200: f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9
+  0x625835434280: f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9
+  0x625835434300: f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9
+  0x625835434380: f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9
+  0x625835434400: f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Partially addressable: 01 02 03 04 05 06 07 
+  Heap left redzone:       fa
+  Freed heap region:       fd
+  Stack left redzone:      f1
+  Stack mid redzone:       f2
+  Stack right redzone:     f3
+  Stack after return:      f5
+  Stack use after scope:   f8
+  Global redzone:          f9
+  Global init order:       f6
+  Poisoned by user:        f7
+  Container overflow:      fc
+  Array cookie:            ac
+  Intra object redzone:    bb
+  ASan internal:           fe
+  Left alloca redzone:     ca
+  Right alloca redzone:    cb
+==328872==ABORTING
+FAIL Q-C pqz_init fits, R_REG's keys do not (arena A + 64 KiB): pqz_verify traps (SIGILL), no write
+FAIL Q-C pqz_arena_try_alloc over the capacity: NULL and PQZ_ERR_ARENA, the call goes on
+FAIL (3 failed)
+== part h rc=1
+ub_test before-rev2-novla: FAIL
