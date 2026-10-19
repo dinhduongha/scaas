@@ -1,13 +1,13 @@
 {
-  "_comment": "CTR-TOK-24 size gate (scripts/size_gate.py). Contracts allowed over their limit, with the measured runtime size they may not exceed; `<name>.init` likewise for init code over EIP-3860. Owner 2026-10-11: size optimised later (Glamsterdam); remove an entry once the contract fits. UA-4: + the UA ledger. UA-5a: + the receivers (wrapToUA, unwrapToUA, mintToUA, payWithFeeToUA), the UA allowlist, uaPayReceiverFee. UA-5b: + UATradeOrder (uaTrade, uaCancelOrder, uaInvalidateNonces, views) and uaWrap. P6g: + the `_batchable` / `_uaEnvelopeBinding` hooks (+137 B on each token), the PQZ kinds `NoUnderlyingPqzToken` / `UnderlyingPqzToken` (deployed on chain 7622: `maxCodeSize` 65,536 from block 0, init 131,072). UA index (owner 2026-10-17): `UARegistry` 25,602 B (the per-kind list: uaCount / uaAt / uaPage / uaIndex); the PQZ kinds +26 B (the Record's `index` field in their recordOf decoding). UA secp256k1: `UARegistry` 25,861 B. P6g op 7 (2026-10-17): the PQZ kinds shrink (statement views by DELEGATECALL into `PqzLib`, now 19,921 B) despite the op 7 entries; every token +14–33 B (`multiLegFee` in the unused-field check). Review W-Q (2026-10-19): every token +1.5–1.9 KB (`nonReentrant` on the pay, mint, role, owner and rate entries, CTR-MTX-18); `UARegistry` −5 B (W-M); 5g integration: `UnderlyingZetherToken` / `UnderlyingPqzToken` +265 B (`nonReentrant` on their restated `disableFeature` / `executeRate`; `UnderlyingPqzToken` 60,105 B against the 65,536 B test-chain limit). 5g-Z1 (owner 2026-10-19/20, CTR-ZTH-20): the confidential kinds hold their verifiers as constructor immutables and answer `verifier()` / `burnVerifier()` / `curve()`, the unshield passes the burn verifier in `ZetherLib.Env`: `NoUnderlyingZetherToken` +488 B, `UnderlyingZetherToken` +552 B (init +925 B), `NoUnderlyingPqzToken` +232 B (init 49,255 B, now over EIP-3860: `.init` entry), `UnderlyingPqzToken` +46 B (init +130 B); all within the 65,536 B test-chain limit.",
-  "NoUnderlyingToken": 37067,
-  "UnderlyingToken": 47220,
-  "NoUnderlyingZetherToken": 45786,
-  "UnderlyingZetherToken": 58027,
-  "UnderlyingZetherToken.init": 60095,
-  "NoUnderlyingPqzToken": 47581,
-  "NoUnderlyingPqzToken.init": 49255,
-  "UnderlyingPqzToken": 60151,
-  "UnderlyingPqzToken.init": 61832,
+  "_comment": "CTR-TOK-24 size gate (scripts/size_gate.py). Contracts allowed over their limit, with the measured runtime size they may not exceed; `<name>.init` likewise for init code over EIP-3860. Owner 2026-10-11: size optimised later (Glamsterdam); remove an entry once the contract fits. UA-4: + the UA ledger. UA-5a: + the receivers (wrapToUA, unwrapToUA, mintToUA, payWithFeeToUA), the UA allowlist, uaPayReceiverFee. UA-5b: + UATradeOrder (uaTrade, uaCancelOrder, uaInvalidateNonces, views) and uaWrap. P6g: + the `_batchable` / `_uaEnvelopeBinding` hooks (+137 B on each token), the PQZ kinds `NoUnderlyingPqzToken` / `UnderlyingPqzToken` (deployed on chain 7622: `maxCodeSize` 65,536 from block 0, init 131,072). UA index (owner 2026-10-17): `UARegistry` 25,602 B (the per-kind list: uaCount / uaAt / uaPage / uaIndex); the PQZ kinds +26 B (the Record's `index` field in their recordOf decoding). UA secp256k1: `UARegistry` 25,861 B. P6g op 7 (2026-10-17): the PQZ kinds shrink (statement views by DELEGATECALL into `PqzLib`, now 19,921 B) despite the op 7 entries; every token +14–33 B (`multiLegFee` in the unused-field check). Review W-Q (2026-10-19): every token +1.5–1.9 KB (`nonReentrant` on the pay, mint, role, owner and rate entries, CTR-MTX-18); `UARegistry` −5 B (W-M); 5g integration: `UnderlyingZetherToken` / `UnderlyingPqzToken` +265 B (`nonReentrant` on their restated `disableFeature` / `executeRate`; `UnderlyingPqzToken` 60,105 B against the 65,536 B test-chain limit). 5g-Z1 (owner 2026-10-19/20, CTR-ZTH-20): the confidential kinds hold their verifiers as constructor immutables and answer `verifier()` / `burnVerifier()` / `curve()`, the unshield passes the burn verifier in `ZetherLib.Env`: `NoUnderlyingZetherToken` +488 B, `UnderlyingZetherToken` +552 B (init +925 B), `NoUnderlyingPqzToken` +232 B (init 49,255 B, now over EIP-3860: `.init` entry), `UnderlyingPqzToken` +46 B (init +130 B); all within the 65,536 B test-chain limit. Review T2 CHAIN-03 (2026-10-20): `Math.mulDiv` in `FeePolicy.compute` (no overflow for amounts near 2^256): every token +201–221 B, init likewise.",
+  "NoUnderlyingToken": 37288,
+  "UnderlyingToken": 47441,
+  "NoUnderlyingZetherToken": 46007,
+  "UnderlyingZetherToken": 58228,
+  "UnderlyingZetherToken.init": 60296,
+  "NoUnderlyingPqzToken": 47802,
+  "NoUnderlyingPqzToken.init": 49476,
+  "UnderlyingPqzToken": 60352,
+  "UnderlyingPqzToken.init": 62033,
   "UARegistry": 25856
 }

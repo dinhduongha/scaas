@@ -36,6 +36,17 @@ contract FeePolicyTest is Test {
         this.callCompute(FeeMode.PERCENT, 1_000_000, 10_001);
     }
 
+    /// CHAIN-03 (review T2, 2026-10-19): amount · ppm past 2^256 is `mulDiv`, the same floor, not a panic.
+    function test_hugeAmounts_noOverflow() public {
+        uint256 amount = 1 << 250;
+        uint256 cap = amount / 100; // floor(2^250 · 1 %)
+        assertEq(FeePolicy.compute(FeeMode.FIXED, amount, 0), 0);
+        assertEq(FeePolicy.compute(FeeMode.FIXED, amount, cap), cap);
+        assertEq(FeePolicy.compute(FeeMode.PERCENT, amount, 10_000), cap);
+        vm.expectRevert(abi.encodeWithSelector(FeePolicy.FeeExceedsCap.selector, cap + 1, cap));
+        this.callCompute(FeeMode.FIXED, amount, cap + 1);
+    }
+
     function test_noneModeIsAlwaysZero() public pure {
         assertEq(FeePolicy.compute(FeeMode.NONE, 1_000_000, 999_999), 0);
     }

@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.20;
 
+import {Math} from "@openzeppelin/contracts/utils/math/Math.sol";
+
 /// @notice Ba chế độ phí. Mẫu số THỐNG NHẤT là ppm (1e6); `perMille` (1e3) đã bị
 /// loại vì không biểu diễn được 0,05%.
 enum FeeMode {
@@ -39,10 +41,10 @@ library FeePolicy {
             if (feePpmOrFixed > MAX_FEE_PPM) {
                 revert FeeExceedsCap(feePpmOrFixed, MAX_FEE_PPM);
             }
-            return (amount * feePpmOrFixed) / PPM_DENOMINATOR;
+            return Math.mulDiv(amount, feePpmOrFixed, PPM_DENOMINATOR);
         }
         // FIXED
-        uint256 cap = (amount * MAX_FEE_PPM) / PPM_DENOMINATOR;
+        uint256 cap = Math.mulDiv(amount, MAX_FEE_PPM, PPM_DENOMINATOR);
         if (feePpmOrFixed > cap) {
             revert FeeExceedsCap(feePpmOrFixed, cap);
         }
