@@ -842,9 +842,10 @@ void int_dump (int_t z);
 #endif
 void int_clear (int_t r);
 
+/* PQZ (review round 2, Q-F): + 8, so the array is never zero-length (nelems = 0: M = 0, nbin = 0) */
 #define INTVEC_T(__name__, __nelems__, __nlimbs__)                            \
   _ALIGN8 uint8_t                                                             \
-      __name__##bytes__[_sizeof_intvec_data (__nelems__, __nlimbs__)];        \
+      __name__##bytes__[_sizeof_intvec_data (__nelems__, __nlimbs__) + 8];    \
   intvec_t __name__;                                                          \
   _intvec_init (__name__, __nelems__, __nlimbs__, __name__##bytes__);
 

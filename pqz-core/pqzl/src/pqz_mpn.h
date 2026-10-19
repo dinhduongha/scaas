@@ -149,6 +149,11 @@ pqz__cnd_sub_ge (mp_limb_t *r, const mp_limb_t *m, mp_size_t n, mp_limb_t top)
 static inline mp_limb_t
 pqz__div (mp_limb_t *qp, mp_limb_t *np, mp_size_t nn, const mp_limb_t *dp, mp_size_t dn)
 {
+  if (dn < 1 || nn < dn) /* review round 2, Q-F: every caller has nn >= dn >= 1 (public sizes) */
+    {
+      pqz_err_set (PQZ_ERR_INTERNAL);
+      return 0;
+    }
   mp_limb_t rem[dn], q[nn], qtop;
   for (mp_size_t i = 0; i < dn; i++)
     rem[i] = 0;

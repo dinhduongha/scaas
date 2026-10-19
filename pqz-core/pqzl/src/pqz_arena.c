@@ -7,8 +7,12 @@
  * allocates crtreps (poly.c, polyvec.c) and sparse-matrix elements lazily: a crtrep of a long-lived poly
  * created in the middle of a call would otherwise pin every block freed below it (the upstream tbox test ran
  * a 512 MiB arena out). The temporaries come in a handful of sizes, so the pinned blocks are reused.
- * Exhaustion sets PQZ_ERR_ARENA and hands out a fixed sink block (writes stay in bounds up to PQZ_SINK
- * bytes); the caller sees the error on return.
+ * Exhaustion (review round 2, Q-C; STATUS Open item 2): LaZer never checks an allocation, so a failed
+ * pqz_arena_alloc stops the process (__builtin_trap: a trap on every target, wasm32's unreachable) before anything
+ * can write; the former shared 1 MiB sink was smaller than single allocations (R_TXM8's Schwartz-Zippel
+ * accumulators, a relation's ABDLOP keys, A) and aliased every later block. The specialised verifier's own
+ * allocations (pqz_sv.c, which check) use pqz_arena_try_alloc: NULL and PQZ_ERR_ARENA, the call returns the error.
+ * pqz_arena_wipe_release (Q-B) zeroes what a secret-holding call used before releasing it.
  */
 #include "pqz_rt.h"
 
@@ -16,9 +20,6 @@
 #define HDR 16
 #define NONE SIZE_MAX
 #define NCLS 32 /* distinct recycled block sizes (the tbox prover uses about 6); others are not recycled */
-#ifndef PQZ_SINK
-#define PQZ_SINK (1u << 20)
-#endif
 
 /* header: [offset of the previous block, NONE if none : 8][size | LISTED | FREED : 8]
    a freed, listed block keeps [next, prev] free-list offsets in its first 16 payload bytes */
@@ -28,9 +29,9 @@
 
 static uint8_t *base;
 static size_t cap, top, peak, last = NONE; /* last: offset of the top block */
+static size_t hw; /* high-water mark since the last wipe (pqz_arena_wipe_release) */
 static size_t cls_sz[NCLS], cls_head[NCLS];
 static int ncls;
-static _Alignas (16) uint8_t sink[PQZ_SINK];
 
 int pqz_err;
 const char *pqz_err_file;
@@ -44,6 +45,7 @@ pqz_arena_init (void *mem, size_t len)
   cap = len;
   top = 0;
   peak = 0;
+  hw = 0;
   last = NONE;
   ncls = 0;
 }
@@ -117,7 +119,7 @@ pop (void)
 }
 
 void *
-pqz_arena_alloc (size_t len)
+pqz_arena_try_alloc (size_t len)
 {
   size_t sz = HDR + ((len + ALIGN - 1) & ~(size_t)(ALIGN - 1));
   if (sz < HDR + 16)
@@ -140,17 +142,28 @@ pqz_arena_alloc (size_t len)
   top += sz;
   if (top > peak)
     peak = top;
+  if (top > hw)
+    hw = top;
   return base + last + HDR;
 fail:
   pqz_err_set (PQZ_ERR_ARENA);
-  return sink;
+  return NULL;
+}
+
+void *
+pqz_arena_alloc (size_t len)
+{
+  void *p = pqz_arena_try_alloc (len);
+  if (p == NULL)
+    __builtin_trap (); /* fail-stop (Q-C): LaZer would write through the result */
+  return p;
 }
 
 void
 pqz_arena_free (void *p, size_t len)
 {
   (void)len; /* not trusted: upstream changes nelems_max after allocating */
-  if (p == NULL || (uint8_t *)p == sink)
+  if (p == NULL)
     return;
   uint8_t *h = (uint8_t *)p - HDR;
   if (h < base || h >= base + top || (((uint64_t *)h)[1] & FREED))
@@ -165,16 +178,6 @@ pqz_arena_free (void *p, size_t len)
       if (c >= 0)
         push (c, o);
     }
-}
-
-void *
-pqz_arena_realloc (void *p, size_t olen, size_t nlen)
-{
-  uint8_t *n = pqz_arena_alloc (nlen);
-  if (n != sink && p != NULL)
-    memcpy (n, p, olen < nlen ? olen : nlen);
-  pqz_arena_free (p, olen);
-  return n;
 }
 
 /* mark / release: everything allocated after the mark is dropped (long-lived caches sit below it; they must
@@ -205,4 +208,24 @@ pqz_arena_release (const pqz_arena_mark_t *m)
           H (o)[1] &= ~(uint64_t)LISTED; /* stays freed below the mark, not reused */
       }
   pop ();
+}
+
+/* Q-B (review round 2; STATUS Open item 8): release to m after zeroing what the call may have left secrets in: every
+   byte above the mark up to the high-water mark since the last wipe (blocks there are dropped by the release), and
+   the payload of every freed block below it (a block recycled from a free list below the mark may have held a
+   secret; a listed block keeps its free-list links in its first 16 bytes). pqz_prove and the key / encryption
+   helpers call it; the verifiers keep pqz_arena_release (no secrets). Volatile stores (pqz_zeroize). */
+void
+pqz_arena_wipe_release (const pqz_arena_mark_t *m)
+{
+  if (hw > m->top)
+    pqz_zeroize (base + m->top, hw - m->top);
+  hw = m->top;
+  pqz_arena_release (m);
+  for (size_t o = last; o != NONE; o = H (o)[0])
+    if (H (o)[1] & FREED)
+      {
+        const size_t skip = H (o)[1] & LISTED ? 16 : 0, sz = H (o)[1] & ~(uint64_t)(ALIGN - 1);
+        pqz_zeroize (base + o + HDR + skip, sz - HDR - skip);
+      }
 }

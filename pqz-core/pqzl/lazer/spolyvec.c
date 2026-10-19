@@ -326,6 +326,9 @@ spolyvec_insert_elem (spolyvec_ptr r, unsigned int elem)
   const unsigned int nelems = r->nelems;
 
   ASSERT_ERR (r->nelems < r->nelems_max);
+  if (r->nelems >= r->nelems_max)
+    return _poly_alloc_polyvec (Rq); /* PQZ (review round 2, Q-E): a scratch poly, never written past elems; the
+                                        sticky error fails the call */
 
   if (r->elems[nelems].poly == NULL)
     r->elems[nelems].poly = _poly_alloc_polyvec (Rq);

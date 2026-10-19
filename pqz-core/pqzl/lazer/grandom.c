@@ -90,6 +90,8 @@ gaussian155 (rng_state_t state, uint64_t u, unsigned int s)
          carries no information on the sample */
       int acc = pqz_bernoulli_fp (w[2], mant, e);
       PQZ_CT_PUBLIC (&acc, sizeof (acc));
+      explicit_bzero (buf, sizeof (buf)); /* PQZ (review round 2, Q-B): this try's randomness */
+      explicit_bzero (w, sizeof (w));
       if (acc)
         return k;
     }
@@ -127,6 +129,7 @@ _grandom_sample_i32 (int32_t *ret, unsigned int nelems, unsigned int log2o,
       ret[i] = (int32_t)((k * ((int64_t)1 << log2o)) - (int64_t)urand);
     }
 
+  explicit_bzero (out, sizeof (out)); /* PQZ (review round 2, Q-B): the masks' uniform parts */
   _rng_clear (state);
 }
 
@@ -148,6 +151,7 @@ _grandom_sample (int_t z, unsigned int log2o, const uint8_t seed[32],
     u |= (uint64_t)buf[j] << (8 * j);
   u &= ((uint64_t)1 << log2o) - 1;
   int64_t k = gaussian155 (state, u, log2o);
+  explicit_bzero (buf, sizeof (buf)); /* PQZ (review round 2, Q-B) */
   _rng_clear (state);
 
   int_set_i64 (z, k * ((int64_t)1 << log2o) - (int64_t)u);

@@ -95,12 +95,13 @@ cbd16 (bits_t *b, int16_t *x, unsigned n)
   return s;
 }
 
-/* every be8 coefficient < q (pq-zero-knowledge.md §5: anything else is NonCanonical) */
+/* every be8 coefficient < q (pq-zero-knowledge.md §5: anything else is NonCanonical); n a multiple of 8 (review
+   round 2, Q-F: the twin of Rust fix C, chunks_exact) */
 static int
 canonical (const uint8_t *p, size_t n)
 {
-  int ok = 1;
-  for (size_t k = 0; k < n; k += 8)
+  int ok = n % 8 == 0;
+  for (size_t k = 0; k + 8 <= n; k += 8)
     {
       uint64_t v = 0;
       for (int i = 0; i < 8; i++)
@@ -192,7 +193,10 @@ pqz_dec (const int8_t s[2048], const uint8_t ct[PQZ_POLYVEC_BYTES + PQZ_V_BYTES]
     return PQZ_ERR_INPUT;
   int rc = pqz_decrypt_raw (s, ct, ct + PQZ_POLYVEC_BYTES, w);
   if (rc)
-    return rc;
+    {
+      explicit_bzero (w, sizeof w); /* Q-B: every exit */
+      return rc;
+    }
   for (unsigned i = 0; i < 16; i++)
     {
       /* M = round(w / Delta) = floor((2w + Delta) / (2 Delta)), no ties (Delta odd); branch-free: |w| < q/2 < 2^41, so

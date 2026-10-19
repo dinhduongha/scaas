@@ -62,8 +62,8 @@ pqz_err_set_at (int e, const char *file, int line)
 
 /* ---- arena ---- */
 void pqz_arena_init (void *mem, size_t len);
-void *pqz_arena_alloc (size_t len);
-void *pqz_arena_realloc (void *p, size_t olen, size_t nlen);
+void *pqz_arena_alloc (size_t len);     /* traps on exhaustion (Q-C): LaZer's _alloc */
+void *pqz_arena_try_alloc (size_t len); /* NULL and PQZ_ERR_ARENA on exhaustion: callers that check (pqz_sv.c) */
 void pqz_arena_free (void *p, size_t len);
 size_t pqz_arena_peak (void);
 size_t pqz_arena_used (void);
@@ -74,6 +74,7 @@ typedef struct
 } pqz_arena_mark_t;
 void pqz_arena_mark (pqz_arena_mark_t *m);
 void pqz_arena_release (const pqz_arena_mark_t *m);
+void pqz_arena_wipe_release (const pqz_arena_mark_t *m); /* Q-B: zero the call's memory, then release */
 
 /* ---- freestanding libc subset ---- */
 #ifdef PQZ_FREESTANDING

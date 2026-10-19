@@ -275,9 +275,9 @@ lnp_tbox_prove (uint8_t hash[32], polyvec_t tB, polyvec_t h, poly_t c,
   const unsigned int loff
       = (nprime > 0 ? 256 / d : 0) + (nex > 0 ? 256 / d : 0);
   const unsigned int ibeta = (m1 + Z + l + loff) * 2;
-  polymat_ptr oEs[Z];
-  polymat_ptr oEm[Z];
-  polyvec_ptr ov[Z];
+  polymat_ptr oEs[Z + 1]; /* PQZ (review round 2, Q-F): + 1, never zero-length (Z = 0) */
+  polymat_ptr oEm[Z + 1];
+  polyvec_ptr ov[Z + 1];
   polymat_t oPs;
   polymat_t oPm;
   polyvec_t of;
@@ -842,6 +842,7 @@ lnp_tbox_prove (uint8_t hash[32], polyvec_t tB, polyvec_t h, poly_t c,
       r0prime_sz2[i] = NULL;
     }
 
+  explicit_bzero (expseed, sizeof (expseed)); /* PQZ (review round 2, Q-B): the z3 / z4 rejection and mask seeds */
   polyvec_free (s);
   spolymat_free (R2t);
   spolyvec_free (r1t);
@@ -943,9 +944,9 @@ lnp_tbox_verify (uint8_t hash[32], polyvec_t h, poly_t c, polyvec_t z1,
   poly_t r0t;
   uint8_t hash0[32];
   uint8_t hashr[32]; /* PQZ (P6-FS): cseed, the seed of R, R' */
-  polymat_ptr oEs[Z];
-  polymat_ptr oEm[Z];
-  polyvec_ptr ov[Z];
+  polymat_ptr oEs[Z + 1]; /* PQZ (review round 2, Q-F): + 1, never zero-length (Z = 0) */
+  polymat_ptr oEm[Z + 1];
+  polyvec_ptr ov[Z + 1];
   polymat_t oPs;
   polymat_t oPm;
   polyvec_t of;
@@ -2069,9 +2070,9 @@ _lnp_tbox_hash_z34 (uint8_t hash[32], polyvec_t z3, polyvec_t z4,
             / 8
         + 2;
   buf = _alloc (len);
-  /* arena exhausted (here or for a3 / a4): buf may be the shared PQZ_SINK block and len computed from garbage, so
-     skip the unbounded coder; the call fails through the sticky error. z3 is encoded also when nex = 0 (no relation
-     has that; check_z34 norm-checks z3 only for nex > 0). */
+  /* an earlier error of the call: skip the unbounded coder; the call fails through the sticky error (arena
+     exhaustion traps since review round 2, Q-C). z3 is encoded also when nex = 0 (no relation has that; check_z34
+     norm-checks z3 only for nex > 0). */
   if (pqz_err != PQZ_OK)
     goto ret;
 
@@ -3628,10 +3629,10 @@ __schwartz_zippel_accumulate_z3 (
   poly_ptr poly, poly2, poly3;
   int_srcptr inv2 = Rq->inv2;
   intvec_t row1, row2;
-  polymat_ptr vREsi[Z];
-  polymat_ptr vREmi[Z];
-  intvec_ptr vRvi[Z];
-  intvec_ptr vi_[Z];
+  polymat_ptr vREsi[Z + 1]; /* PQZ (review round 2, Q-F): + 1, never zero-length (Z = 0) */
+  polymat_ptr vREmi[Z + 1];
+  intvec_ptr vRvi[Z + 1];
+  intvec_ptr vi_[Z + 1];
 
   // printf ("u:\n");
   // polyvec_dump (u);

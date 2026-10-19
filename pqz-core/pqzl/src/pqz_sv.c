@@ -861,9 +861,11 @@ sv_idx (uint8_t rel) /* rel: the op, or PQZ_REL_TX0 */
 static int sv_ready;
 
 static void *
-tab_alloc (size_t n) /* init tables, kept; NULL on arena exhaustion (_alloc then returns a shared 1 MiB sink) */
+tab_alloc (size_t n) /* init tables, kept; NULL on arena exhaustion (and on an earlier error of the call) */
 {
-  void *p = _alloc (n);
+  void *p = _try_alloc (n);
+  if (p == NULL)
+    pqz_err_set (PQZ_ERR_ARENA);
   return pqz_err ? NULL : p;
 }
 /* per-call working memory: freed in reverse order at the end of the call (the arena pops it; with
@@ -878,10 +880,11 @@ static int nsvb;
 static void *
 sv_alloc (size_t n)
 {
-  void *p = _alloc (n);
-  if (pqz_err || nsvb == SV_NBLK)
+  void *p = _try_alloc (n);
+  if (p == NULL || pqz_err || nsvb == SV_NBLK)
     {
       pqz_err_set (PQZ_ERR_ARENA);
+      _free (p, n);
       return NULL;
     }
   svb[nsvb].p = p, svb[nsvb++].n = n;
