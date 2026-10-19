@@ -155,6 +155,24 @@ public class MlDsaTests
     }
 
     [Test]
+    public void A_cryptographic_exception_is_the_failure_word()
+    {
+        // review W-R (2026-10-19): EIP-8355 never reverts. No real input is known to make .NET's import / verify throw
+        // (every pk bit pattern decodes; a malformed signature is false), so the throw comes through the seam.
+        foreach (int pkLen in new[] { MlDsa.Pk44, MlDsa.Pk65 })
+        {
+            var (alg, pk, sig, run) = Level(pkLen);
+            byte[] good = UaRows().First(r => r.valid && r.input.Length == pk + sig + 32).input;
+            Assert.That(MlDsa.Verify(alg, pk, sig, good, (_, _, _, _) => throw new CryptographicException("seam")), Is.EqualTo(Word(false)));
+            Assert.That(MlDsa.Verify(alg, pk, sig, good, (_, _, _, _) => true), Is.EqualTo(Word(true)), "the seam decides the word");
+            Assert.Throws<InvalidOperationException>(() => MlDsa.Verify(alg, pk, sig, good, (_, _, _, _) => throw new InvalidOperationException("seam")),
+                "only CryptographicException is caught");
+            byte[] ff = [.. Enumerable.Repeat((byte)0xff, pk + sig), .. new byte[32]];
+            Assert.That(run(ff), Is.EqualTo(Word(false)), "all-0xff pk and signature: false");
+        }
+    }
+
+    [Test]
     public void Gas_is_eip8355_at_minimum()
     {
         Assert.That(MlDsa.Gas(0, MlDsa.Pk44, MlDsa.Sig44, MlDsa.Base44), Is.EqualTo(6500));
