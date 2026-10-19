@@ -3147,6 +3147,10 @@ Change (2026-10-13): built as ruled (UA-5a): `_uaMint`, `wrapToUA`, `unwrapToUA`
 **Cost if wrong.** ≈ 27 k gas on every registration and 25,602 B of registry code (over EIP-170; test chains allow 64 KiB) for a list wallets could otherwise rebuild from logs while the logs exist.
 **Source.** owner, 2026-10-17 (TODO.md "UA Registry: on-chain index of UAs per kind"); branch `ua-index`.
 
+Change (2026-10-19): controller proposal (owner may override) — on-chain review W-C (`pqz-core/research/code-review-2026-10-19/U-agy-chain.md`, V2-1): **a decoy selection rule for wallets** — decoys only from UAs active in the token within the look-back window, weighted by recency, never registered after the wallet's last sync point, at most a fixed share per `authRef` group; threat S30 in accounts.md. Spec only, no bytecode. Status: written (`66654e3`); wallet code in P6h.
+
+Change (2026-10-19): owner rulings on the on-chain review (both proposals accepted): **W-J** the `secp256k1` kind (0x0108) verifies ECDSA over the raw digest, so an EOA-held key signs it only through `eth_sign` (against S23) — recorded as a residual risk in the S23 row; an EIP-191 `personal_sign` variant (new verifier, vectors, six clients) after P6. **W-K** `MandateWallet.isValidSignature` / `HederaMandateWallet` accept the owner's ECDSA over any digest (ERC-7739 class) — documented beside `SmartKeyAccount`'s limitation in accounts.md; no wrapping. Status: recorded in the spec.
+
 ### CTR-PQZ-01 — Separate PQZ class gated to private chains
 - old: R270 · status: current · owner: yes · date: 2026-10-07 · normative: contracts/pq-zero-knowledge.md#CTR-PQZ-01 · superseded-by: —
 

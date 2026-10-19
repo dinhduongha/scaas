@@ -1391,7 +1391,7 @@ live in the separate `ComplianceRegistry`. This interface was replaced by `IUARe
 | S20 | Typo in a UA id; Zether UA as receiver | unregistered `to` refused; `to` ∈ native ∪ SIGNING (`UAKindNotAccepted`) | none |
 | S21 | ERC-20 replay of `Transfer` ≠ `balanceOf` | the `UA_POOL` sub-ledger: every native balance change emits `Transfer` | naive tools show one large `UA_POOL` holder |
 | S22 | Gas repricing pushes an enabled kind over budget after funds are held | public-chain caps ≤ ~50 % of the budget; budget ≤ 70 % of the chain cap | a large repricing fork can still lock a PQ/ed25519 UA on that chain until a new generation and v3 version |
-| S23 | Raw-hash signing by EOAs (`eth_sign` drain) | native signers behind the registry sign EIP-712 `UAAuth` only; `uaCancelNonce` derived-only | none on our paths |
+| S23 | Raw-hash signing by EOAs (`eth_sign` drain) | native signers behind the registry sign EIP-712 `UAAuth` only; `uaCancelNonce` derived-only | the `secp256k1` kind (0x0108): its verifier checks ECDSA over the raw digest, so an EOA-held key signs it only through `eth_sign` (on-chain review W-J; owner 2026-10-19: recorded residual risk; an EIP-191 `personal_sign` variant after P6, with new vectors and the six clients) |
 | S24 | Native send to a derived id on non-EVM (keyless address) | derived ids shown only as URN, never in the chain's address format | a user who converts the URN by hand |
 | S25 | Membership shown as consent | app rules (members confirm off chain); the MuSig2 PoP proves participation | `msig`/FROST groups found on chain without member confirmations |
 | S26 | Chain-id collision (7622 or any id shared by two networks): PoP, `UAAuth` or v3 signature replayed to a same-address registry/token there | `chain_uid` (genesis hash) in `pop_digest`, both EIP-712 domain salts, the cancel digest and the CREATE2 init code; the node binds registry, `chainUid()` and genesis hash per profile | a replica built from a copy of our profile on a colliding chain can copy our records; nothing of ours trusts it |
@@ -1721,7 +1721,10 @@ different address on each chain and the node and app predict it per chain ([CTR-
 **Documented limitation.** `SmartKeyAccount.isValidSignature` accepts any digest signed by any of its keys —
 ERC-1271 digests are not account-wrapped (the ERC-7739 class). SCaaS digests bind `from`/`verifyingContract`, so none
 of ours replay across accounts; a third-party protocol that trusts the same key on two accounts is exposed. Wrapping
-is rejected for now: it would change every 1271 digest, every KAT and every client builder.
+is rejected for now: it would change every 1271 digest, every KAT and every client builder. The same limitation holds for
+`MandateWallet.isValidSignature` (and `HederaMandateWallet`): the owner's ECDSA over any digest is accepted, not bound
+to the wallet (on-chain review W-K; owner 2026-10-19: documented, no wrapping; the delegate cannot use ERC-1271, so the
+mandate caps hold).
 
 | Function | Rule |
 |---|---|
