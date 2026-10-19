@@ -560,17 +560,18 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
         return _verifierCall(_cfg(r.kind), IUAKindVerifier.verify.selector, SSTORE2.read(r.keyPtr), message, sig);
     }
 
-    /// A Zether UA of gen 1 is checked by gen 1; any revert there is a failed check, except `UAVerifyGas`.
+    /// A Zether UA of gen 1 is checked by gen 1; any revert there is a failed check, except starvation (`_starved`).
     function _zetherViaPredecessor(bytes32 ua, bytes32 digest, bytes calldata auth, bool zkCovered)
         private
         view
         returns (bool)
     {
         if (predecessor == address(0)) return false;
+        uint256 g = gasleft();
         try IUARegistry(predecessor).requireZetherAuthorized(ua, digest, auth, zkCovered) {
             return true;
         } catch (bytes memory err) {
-            if (err.length == 4 && bytes4(err) == UAKinds.UAVerifyGas.selector) revert UAKinds.UAVerifyGas();
+            _starved(err, g);
             return false;
         }
     }
@@ -654,19 +655,28 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
     }
 
     /// Records and kinds of gen 1 are checked by gen 1 (its verifiers, its `UAAuth` domain for native members of its
-    /// structures). Any revert there is a failed check, except `UAVerifyGas` (re-raised).
+    /// structures). Any revert there is a failed check, except starvation (`_starved`).
     function _viaPredecessor(bytes32 id, bytes32 purposeTag, bytes32 digest, bytes memory auth)
         private
         view
         returns (bool)
     {
         if (predecessor == address(0)) return false;
+        uint256 g = gasleft();
         try IUARegistry(predecessor).requireAuthorized(id, purposeTag, digest, auth) {
             return true;
         } catch (bytes memory err) {
-            // a starved caller must see UAVerifyGas, never a verdict (T-AUTH-4)
-            if (err.length == 4 && bytes4(err) == UAKinds.UAVerifyGas.selector) revert UAKinds.UAVerifyGas();
+            _starved(err, g);
             return false;
+        }
+    }
+
+    /// A starved caller must see UAVerifyGas, never a verdict (T-AUTH-4): gen 1's own `UAVerifyGas` (at a hold) is
+    /// re-raised, and so is gen 1 running out of gas before its hold (W-M): no revert data and at most the 1/64 this
+    /// frame kept (`g` = gasleft before the call); any other revert of gen 1 returns its unused gas and stays a verdict.
+    function _starved(bytes memory err, uint256 g) private view {
+        if ((err.length == 4 && bytes4(err) == UAKinds.UAVerifyGas.selector) || (err.length == 0 && gasleft() < g / 63)) {
+            revert UAKinds.UAVerifyGas();
         }
     }
 
