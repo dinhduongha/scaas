@@ -6,6 +6,10 @@
 #   sh runs/2026-10-19-rust-live.sh after    after T: probe and e2e (writes nothing on the chain host)
 # Log: runs/2026-10-19-rust-live.txt (+ -probe-before-T, -probe-after-T, -e2e). Any failed check: stop, RUNBOOK rollback.
 set -u
+# pqzl-fs3 Task 5 (2026-10-19): retired. Its rows file holds PQZL v2 rows (forgeable id, lazer#28) and it is path A;
+# the v3 roll-out is path B (CTR-PQZ-09 F9, plan 2026-10-19-pqzl-fs3 Task 13). Refuse to run before touching the chain.
+echo "2026-10-19-rust-live.sh: retired (PQZL v2 rows, path A); see plan 2026-10-19-pqzl-fs3 Task 13" >&2
+exit 2
 HERE=$(cd "$(dirname "$0")" && pwd)
 N=$(cd "$HERE/.." && pwd)
 C=$N/chain

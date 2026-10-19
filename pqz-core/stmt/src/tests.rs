@@ -92,6 +92,8 @@ fn lengths_and_constants() {
     assert_eq!(max_proof(&PQZL_ID), Some(98_304));
     assert_eq!(max_proof(&PQZH_ID), Some(262_144));
     assert_eq!(max_proof(&[0; 32]), None);
+    // the retired, forgeable PQZL v2 id (lazer#28, CTR-PQZ-09 F6 / F9) is an unknown id
+    assert_eq!(max_proof(&hex32("2e07e6ed1fd303a08c89b3eab6e8423fdfb8f31202958dd682a0619313798c2f")), None);
 }
 
 #[test]

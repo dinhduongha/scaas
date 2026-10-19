@@ -1,0 +1,48 @@
+# pqzl-fs3 Task 5 (2026-10-19): regress/valid/crash-b9881dfc… (PQZL v2) re-proved under PQZL v3
+# -> regress/valid/fixture-disclose-receiver-rnd33 (sha1 9f4597ea2e887cd4380b73aca9956b3b54251351, 62162 B)
+
+Why: the old file carries the retired, forgeable v2 proofSystemId (lazer#28, CTR-PQZ-09 F6 / F9 path B), so under v3
+it no longer decodes (Reject ProofSystemId), while seeds.py lists regress/valid/* as honest inputs (the oracle would
+expect ...01 for it and the warm-up would fail). Re-proved rather than deleted: it keeps the honest set at 44 inputs, so
+the committed mutate / codec edit scripts (byte 0 / byte 1 pick the honest input) keep their meaning, and it keeps
+the one PQZL proof outside the vectors (fixture statement, rnd32 = 0x33..). Same statement as before except the id
+word; same rnd32.
+
+## run (scratch crate depending on pqz-ffi --features prove, Rust backend; built and run under scripts/capped)
+old: decode Some(ProofSystemId)
+old: op 5 stmt 33184 B proof 28990 B, id 2e07e6ed1fd303a08c89b3eab6e8423fdfb8f31202958dd682a0619313798c2f
+old: precompile word Ok(00) (v2 id: unknown proofSystemId under v3)
+statement = fixture::cases(PQZL v3) DiscloseReceiver with the id word replaced: true
+new: proof 28973 B, input 62162 B, precompile word 01, generic verifier Ok(true)
+re-proved again: byte-equal true
+
+## source (src/main.rs; Cargo.toml: pqz-ffi = { path = "pqz-core/ffi", features = ["prove"] }, toolchain 1.97.1)
+// Task 5 (pqzl-fs3, 2026-10-19): re-prove pqz-core/fuzz/regress/valid/crash-b9881dfc… (the pre-vector harness's
+// DISCLOSE-RECEIVER fixture input, PQZL v2) under PQZL v3: same statement (fixture::cases, id now v3), same rnd32 = 0x33..
+// Usage: refix <old input> <new input out>
+use pqz_ffi::*;
+fn main() {
+    let a: Vec<String> = std::env::args().collect();
+    let old = std::fs::read(&a[1]).unwrap();
+    println!("old: decode {:?}", stmt::decode_input(&old).err());
+    let n = u32::from_be_bytes(old[1..5].try_into().unwrap()) as usize;
+    let (op, s, pr) = (old[0], &old[5..5 + n], &old[5 + n..]);
+    println!("old: op {op} stmt {n} B proof {} B, id {}", pr.len(), s[32..64].iter().map(|b| format!("{b:02x}")).collect::<String>());
+    println!("old: precompile word {:02x?} (v2 id: unknown proofSystemId under v3)", precompile(&old).map(|w| w[31]));
+    let c = fixture::cases(&PQZL_ID).unwrap().into_iter().find(|c| c.form == stmt::Form::DiscloseReceiver).unwrap();
+    let mut s_old = s.to_vec();
+    s_old[32..64].copy_from_slice(&PQZL_ID);
+    println!("statement = fixture::cases(PQZL v3) DiscloseReceiver with the id word replaced: {}", s_old == c.stmt);
+    assert_eq!(s_old, c.stmt);
+    let p = prove(c.op(), &c.stmt, &c.wit, &[0x33; 32]).unwrap();
+    let mut x = vec![c.op()];
+    x.extend_from_slice(&(c.stmt.len() as u32).to_be_bytes());
+    x.extend_from_slice(&c.stmt);
+    x.extend_from_slice(&p);
+    let w = precompile(&x).unwrap();
+    println!("new: proof {} B, input {} B, precompile word {:02x}, generic verifier {:?}", p.len(), x.len(), w[31], pqzl::verify_generic(c.op(), &c.stmt, &p));
+    assert_eq!(w[31], 1);
+    let p2 = prove(c.op(), &c.stmt, &c.wit, &[0x33; 32]).unwrap();
+    println!("re-proved again: byte-equal {}", p2 == p);
+    std::fs::write(&a[2], &x).unwrap();
+}

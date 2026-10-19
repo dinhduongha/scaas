@@ -1,0 +1,125 @@
+Compiling 146 files with Solc 0.8.37
+Solc 0.8.37 finished in 31.94s
+Compiler run successful with warnings:
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+  --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:92:29:
+   |
+92 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, signature);
+   |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:119:29:
+    |
+119 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, r, vs);
+    |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:161:29:
+    |
+161 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, v, r, s);
+    |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:169:26:
+    |
+169 |     function _throwError(RecoverError error, bytes32 errorArg) private pure {
+    |                          ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+  --> src/common/Bls12381.sol:60:28:
+   |
+60 |     error PrecompileFailed(address at);
+   |                            ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> src/zether/ZetherVerifier.sol:127:9:
+    |
+127 |         uint256 at = HEADER + 6 * p;
+    |         ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> src/zether/ZetherVerifier.sol:454:13:
+    |
+454 |             uint256 at = 4 + 2 * n + 2 * j;
+    |             ^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+  --> src/ua/verifiers/Musig2Secp256k1Verifier.sol:43:14:
+   |
+43 |             (bool ok, uint256 hx, uint256 hy) = _hint(keyData, h, l, i);
+   |              ^^^^^^^
+Note: The shadowed declaration is here:
+  --> src/ua/verifiers/Musig2Secp256k1Verifier.sol:51:10:
+   |
+51 |         (bool ok, uint256 qy) = Bip340.liftX(qx);
+   |          ^^^^^^^
+
+Warning (2018): Function state mutability can be restricted to pure
+  --> src/ua/verifiers/Musig2Secp256k1Verifier.sol:82:5:
+   |
+82 |     function _coef(bytes32 l, bytes calldata pk) private view returns (uint256) {
+   |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+  --> src/ua/verifiers/Secp256k1Verifier.sol:14:5:
+   |
+14 |     function verify(bytes calldata keyData, bytes32 message, bytes calldata sig) public view returns (bool) {
+   |     ^ (Relevant source part starts here and spans across multiple lines).
+
+
+Ran 5 tests for test/pqz/PqzCt.t.sol:PqzCtTest
+[PASS] test_canonical() (gas: 10160424)
+[PASS] test_safetyAllowlist() (gas: 5795)
+[PASS] test_selfTest() (gas: 9724)
+[PASS] test_sumsAreExact() (gas: 20413388)
+[PASS] test_trivialAgainstVectors() (gas: 14753520)
+Suite result: ok. 5 passed; 0 failed; 0 skipped; finished in 159.44ms (152.75ms CPU time)
+
+Ran 4 tests for test/pqz/UAPqzVerifier.t.sol:UAPqzVerifierTest
+[PASS] test_constructorProbes() (gas: 127936452)
+[PASS] test_registerPqzMlwe() (gas: 139065398)
+[PASS] test_registerRefused() (gas: 139224628)
+[PASS] test_verifyInputAndVerdict() (gas: 131405676)
+Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 190.66ms (465.67ms CPU time)
+
+Ran 3 tests for test/pqz/PqzRelay.t.sol:PqzRelayTest
+[PASS] test_percentAndBatchRefused() (gas: 182258)
+[PASS] test_v1BindingAndFee() (gas: 6233690)
+[PASS] test_v3FeeUA() (gas: 6117364)
+Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 200.50ms (31.78ms CPU time)
+
+Ran 2 tests for test/pqz/PqzUnderlying.t.sol:PqzUnderlyingTest
+[PASS] test_publicWrapThenShield() (gas: 1005094)
+[PASS] test_wrapShieldAndUnshieldUnwrap() (gas: 14640262)
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 232.37ms (9.24ms CPU time)
+
+Ran 10 tests for test/pqz/PqzMulti.t.sol:PqzMultiTest
+[PASS] test_multiLegFee() (gas: 11075255)
+[PASS] test_multiLegFee_bounds() (gas: 258952)
+[PASS] test_multi_M1_bundleIsTheSingleBundle() (gas: 40224973)
+[PASS] test_multi_M8_twoGroups() (gas: 197508918)
+[PASS] test_multi_allowlisted() (gas: 31783)
+[PASS] test_multi_checks() (gas: 6064913)
+[PASS] test_multi_disclosureByLeg() (gas: 207661326)
+[PASS] test_multi_modes() (gas: 4918921)
+[PASS] test_multi_pqzh() (gas: 402746061)
+[PASS] test_multi_statementAndEffects() (gas: 134520720)
+Suite result: ok. 10 passed; 0 failed; 0 skipped; finished in 1.19s (2.53s CPU time)
+
+Ran 13 tests for test/pqz/PqzNone.t.sol:PqzNoneTest
+[PASS] test_auditorModes() (gas: 22162649)
+[PASS] test_burnStatementLayout() (gas: 24271967)
+[PASS] test_compactAndNoBundle() (gas: 24274629)
+[PASS] test_disclosure() (gas: 73784020)
+[PASS] test_factoryGate() (gas: 97479)
+[PASS] test_inlineAboveRolled() (gas: 125208169)
+[PASS] test_inlineBelowRolled() (gas: 113890796)
+[PASS] test_inlineTooFarAndCreditCap() (gas: 465442592)
+[PASS] test_lifecycle() (gas: 83721142)
+[PASS] test_rollover() (gas: 466112282)
+[PASS] test_shieldChecks() (gas: 215729)
+[PASS] test_transferChecks() (gas: 49272660)
+[PASS] test_transferStatementMatchesVector() (gas: 91603084)
+Suite result: ok. 13 passed; 0 failed; 0 skipped; finished in 1.19s (3.34s CPU time)
+
+Ran 6 test suites in 1.20s (3.17s CPU time): 37 tests passed, 0 failed, 0 skipped (37 total tests)

@@ -1,0 +1,4 @@
+wasm32 stack prove: max 24891 B of 1048571 B (row TRANSFER)
+wasm32 stack verify: max 14803 B of 1048571 B (row M8-on)
+wasm32 stack verify_fast: max 82523 B of 1048571 B (row TRANSFER)
+wasm32 M > 8 refused: 0; memory 229638144 B

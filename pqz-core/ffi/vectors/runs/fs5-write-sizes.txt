@@ -1,0 +1,19 @@
+    4293 cbd.json
+    7897 enc.json
+ 2796269 fee0.json
+    2897 keygen.json
+    1051 matrix.json
+  250861 negative.json
+ 7417141 proof_pqzh.json
+ 2103032 proof_pqzl.json
+    2356 selftest.json
+  102686 statement_burn.json
+  203876 statement_disclose.json
+  102610 statement_refresh.json
+   34421 statement_register.json
+  304699 statement_transfer.json
+ 2861546 statement_transfer_multi.json
+ 3459930 worstcase_noise.json
+   16178 README.md
+   80823 pqz_kat.py
+19752566 total

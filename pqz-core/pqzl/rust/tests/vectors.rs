@@ -277,7 +277,9 @@ fn all_pqzl_proofs_verify() {
 fn negative_rows_reject() {
     let mut ctx = pqzl::Ctx::new();
     let rows = common::negative_inputs();
-    assert_eq!(rows.len(), 354);
+    // 367 since PQZL v3 (pqzl-fs3 Task 5): + 16 "retired PQZL v2 proofSystemId" rows, - 3 coder-padding rows (the
+    // generator adds those only when the proof's last byte is < 0x80)
+    assert_eq!(rows.len(), 367);
     let mut n = 0;
     for (name, b) in &rows {
         if let Some((op, stmt, proof)) = common::split(b) {

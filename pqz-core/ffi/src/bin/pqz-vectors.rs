@@ -228,6 +228,12 @@ fn auth_digest(stmt: &[u8]) -> Word {
 
 const IDS: [(&str, Word); 2] = [("pqzl", PQZL_ID), ("pqzh", PQZH_ID)];
 
+/// The retired PQZL id v2 (forgeable, lazer#28; CTR-PQZ-09 F6 / F9 path B): the negative rows "retired PQZL v2
+/// proofSystemId" put it on an honest v3 input, which every verifier must reject as an unknown id
+fn pqzl_v2_id() -> Word {
+    keccak(&[b"scaas/pqz/lnp22/mlwe-d64k32-q42l4/v2"])
+}
+
 fn fname(f: Form) -> &'static str {
     match f {
         Form::Transfer => "TRANSFER",
@@ -896,6 +902,9 @@ fn negatives(proofs: &[[Vec<u8>; 8]; 2]) -> Vec<(String, Option<Form>, Option<us
             }
             add(format!("{nm}: unknown proofSystemId (zero word)"), f, vec![E::StmtSet(32, vec![0; 32])]);
             add(format!("{nm}: the other system's proofSystemId"), f, vec![E::StmtSet(32, IDS[1 - id].1.to_vec())]);
+            if id == 0 {
+                add(format!("{nm}: retired PQZL v2 proofSystemId"), f, vec![E::StmtSet(32, pqzl_v2_id().to_vec())]);
+            }
             add(format!("{nm}: proof truncated by 1 byte"), f, vec![E::ProofResize(pl(f) - 1)]);
             add(format!("{nm}: proof extended by 1 zero byte"), f, vec![E::ProofResize(pl(f) + 1)]);
             add(format!("{nm}: proof byte 0 bit 0 flipped"), f, vec![E::ProofFlip(0, 0)]);
@@ -1618,6 +1627,9 @@ fn multi_negatives(rows: &[MRow], mp: &MProofs) -> Vec<(String, String, usize, V
             }
             add("unknown proofSystemId (zero word)".into(), c, vec![E::StmtSet(32, vec![0; 32])]);
             add("the other system's proofSystemId".into(), c, vec![E::StmtSet(32, IDS[1 - id].1.to_vec())]);
+            if id == 0 {
+                add("retired PQZL v2 proofSystemId".into(), c, vec![E::StmtSet(32, pqzl_v2_id().to_vec())]);
+            }
             add("proof truncated by 1 byte".into(), c, vec![E::ProofResize(pl - 1)]);
             add("proof extended by 1 zero byte".into(), c, vec![E::ProofResize(pl + 1)]);
             add("proof byte 0 bit 0 flipped".into(), c, vec![E::ProofFlip(0, 0)]);
