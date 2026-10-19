@@ -286,10 +286,9 @@ process-wide lock is shared by RPC calls and block import. A node that serves RP
 (a node fault inside an `eth_call`) or slowed (calls queueing on the lock) by its callers. So the signer's JSON-RPC
 must be reachable from the chain host only; public RPC goes to a follower behind the rate-limited proxy
 (`config.follower.json`, `nginx-rpc.conf`; the copy publishes it on `127.0.0.1:18545`), whose exit stops only that
-follower. **Not yet so on 7622:** the live `docker-compose.yml` (read 2026-10-19) publishes `8545:8545` and
-`8546:8546` on every host interface, so only a host firewall, if any, keeps the signer's RPC private. Owner step
-(below): publish them as `127.0.0.1:8545:8545` / `127.0.0.1:8546:8546` (or confirm the firewall) at the next restart
-of the node (plan Task 13). A start-up refusal
+follower. **On 7622** the live `docker-compose.yml` (read 2026-10-19) publishes `8545:8545` and `8546:8546` on every
+host interface; **accepted for the testnet (owner 2026-10-19)**: no firewall or binding change. The rule above binds
+mainnet 22776. A start-up refusal
 `PQZ-REFUSE … sha256 … != the reviewed …` means the image's `libpqz_ffi.so` is not the reviewed build (review W-G):
 use an image built by `build-image.sh` from the reviewed commit.
 
@@ -298,7 +297,6 @@ use an image built by `build-image.sh` from the reviewed commit.
 - The follower node and the rate-limited public RPC on 7622. The copy's `docker-compose.copy.yml`,
   `config.follower.json` and `nginx-rpc.conf` are the rehearsed configs.
 - A restart policy for the node.
-- The signer's RPC ports bound to `127.0.0.1` (or a firewall that blocks them from outside the host): review W-H above.
 - When to delete the `*.bak-pqz-*` backups (the runbook's backups are the dated directories `pqz-<TS>` and
   `op7-<TS>` in `/home/dockers/mba-chain-nethermind-backups/`).
 

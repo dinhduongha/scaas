@@ -15,3 +15,39 @@ $ python3 -I pqz-core/nethermind/chain/add-schedule.py --check
   op 2 id 0x8079d65b… stmtLen 83072 gas 8
 add-schedule --check: ok
 rc=0
+
+# review M2 (2026-10-19): replay of the two past roll-out inputs on the copy's pre-roll-out chainspec (/home/ha/work/ainative/scaas/scratchpad/rust-copy/genesis.pqz0.json), T=9999999999
+$ add-schedule.py <genesis.pqz0> runs/2026-10-17-calib-ops7-engine-pqz.json T out --ops 7
+/tmp/claude-1000/-home-ha-work-ainative-scaas/629e56fa-e47b-4948-804f-8271b3245478/scratchpad/as1.json: schedule 2 added at 9999999999 = 0x2540be3ff: 26 rows (14 new of ops [7]), selftest 2567000, mldsa44 49000, mldsa65 68000
+  op 7 id 0x0a47a768… stmtLen 132992 M 4 auditorOn 1 gas 4,935,000 (was 4,935,000, +0.0 %)
+  op 7 id 0x0a47a768… stmtLen 116096 M 4 auditorOn 0 gas 4,892,000 (was 4,892,000, +0.0 %)
+  op 7 id 0x0a47a768… stmtLen 99712 M 2 auditorOn 1 gas 4,001,000 (was 4,001,000, +0.0 %)
+  op 7 id 0x0a47a768… stmtLen 83072 M 1 auditorOn 1 gas 3,864,000 (was 3,864,000, +0.0 %)
+  op 7 id 0x0a47a768… stmtLen 83072 M 2 auditorOn 0 gas 4,415,000 (was 4,415,000, +0.0 %)
+  op 7 id 0x0a47a768… stmtLen 66560 M 1 auditorOn 0 gas 4,314,000 (was 4,314,000, +0.0 %)
+  op 7 id 0x2e07e6ed… stmtLen 215936 M 8 auditorOn 1 gas 6,177,000 (was 6,177,000, +0.0 %)
+  op 7 id 0x2e07e6ed… stmtLen 198528 M 8 auditorOn 0 gas 5,339,000 (was 5,339,000, +0.0 %)
+  op 7 id 0x2e07e6ed… stmtLen 132992 M 4 auditorOn 1 gas 4,121,000 (was 4,121,000, +0.0 %)
+  op 7 id 0x2e07e6ed… stmtLen 116096 M 4 auditorOn 0 gas 3,972,000 (was 3,972,000, +0.0 %)
+  op 7 id 0x2e07e6ed… stmtLen 99712 M 2 auditorOn 1 gas 3,710,000 (was 3,710,000, +0.0 %)
+  op 7 id 0x2e07e6ed… stmtLen 83072 M 1 auditorOn 1 gas 3,625,000 (was 3,625,000, +0.0 %)
+  op 7 id 0x2e07e6ed… stmtLen 83072 M 2 auditorOn 0 gas 3,827,000 (was 3,827,000, +0.0 %)
+  op 7 id 0x2e07e6ed… stmtLen 66560 M 1 auditorOn 0 gas 3,953,000 (was 3,953,000, +0.0 %)
+rc=0
+$ add-schedule.py <genesis.pqz0> runs/2026-10-19-calib-ops123457-run2-engine-pqz.json T out --ops 1,2,3,4,5,7 --id 0x2e07e6ed
+/tmp/claude-1000/-home-ha-work-ainative-scaas/629e56fa-e47b-4948-804f-8271b3245478/scratchpad/as2.json: schedule 2 added at 9999999999 = 0x2540be3ff: 26 rows (14 new of ops [1, 2, 3, 4, 5, 7] id 0x2e07e6ed…), selftest 2567000, mldsa44 49000, mldsa65 68000
+  op 1 id 0x2e07e6ed… stmtLen 83072 gas 3,225,000 (was 5,409,000, -40.4 %)
+  op 1 id 0x2e07e6ed… stmtLen 66560 gas 3,351,000 (was 5,223,000, -35.8 %)
+  op 2 id 0x2e07e6ed… stmtLen 50048 gas 4,039,000 (was 3,723,000, +8.5 %)
+  op 3 id 0x2e07e6ed… stmtLen 16480 gas 1,995,000 (was 2,695,000, -26.0 %)
+  op 4 id 0x2e07e6ed… stmtLen 33184 gas 2,539,000 (was 2,601,000, -2.4 %)
+  op 5 id 0x2e07e6ed… stmtLen 33184 gas 2,281,000 (was 2,567,000, -11.1 %)
+  op 7 id 0x2e07e6ed… stmtLen 215936 M 8 auditorOn 1 gas 7,307,000 (was 6,177,000, +18.3 %)
+  op 7 id 0x2e07e6ed… stmtLen 198528 M 8 auditorOn 0 gas 6,223,000 (was 5,339,000, +16.6 %)
+  op 7 id 0x2e07e6ed… stmtLen 132992 M 4 auditorOn 1 gas 3,799,000 (was 4,121,000, -7.8 %)
+  op 7 id 0x2e07e6ed… stmtLen 116096 M 4 auditorOn 0 gas 3,498,000 (was 3,972,000, -11.9 %)
+  op 7 id 0x2e07e6ed… stmtLen 99712 M 2 auditorOn 1 gas 4,696,000 (was 3,710,000, +26.6 %)
+  op 7 id 0x2e07e6ed… stmtLen 83072 M 1 auditorOn 1 gas 4,412,000 (was 3,625,000, +21.7 %)
+  op 7 id 0x2e07e6ed… stmtLen 83072 M 2 auditorOn 0 gas 3,279,000 (was 3,827,000, -14.3 %)
+  op 7 id 0x2e07e6ed… stmtLen 66560 M 1 auditorOn 0 gas 3,215,000 (was 3,953,000, -18.7 %)
+rc=0
