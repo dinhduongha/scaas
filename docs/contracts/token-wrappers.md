@@ -740,6 +740,8 @@ Factory v2 is backed up in `smartcontracts/evm/legacy/p1e/` (not built).
   emit only `TokenCreated`. The token reads the same `cfg.legs` that the factory indexed. A field of another kind reverts
   `ConfigFieldForOtherKind(field)`: 1 `initialSupply`/`initialHolder` (not `NONE*`), 2 `legs`, 3 `rate` (not
   `UNDERLYING*`), 4 `conf` (not `*_ZETHER`).
+- `latestVersion` / `latestDexVersion` may name a deprecated version: clients pick the newest non-deprecated one
+  (`isDeprecated`, `isDexDeprecated`).
 - **Views:** `registrar`, `chainUid`, `implementationOf`, `isDeprecated`, `latestVersion`, `predictAddress`, `isToken`,
   `creatorOf`, `versionOf`, `getWrapper(creator, underlying)` (the first; it may be a multi-leg token: read
   `underlyings()`), `getWrapperCount/At`, `deployCountFor/deployedFor`. Every leg is indexed, `address(0)` for the

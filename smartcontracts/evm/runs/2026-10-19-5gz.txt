@@ -82,3 +82,41 @@ evm_libs: openzeppelin-contracts OK (fda6b85f2c65d146b86d513a604554d15abd6679)
 evm_libs: forge-std OK (88c8a2886f6f64c846ae57533a36361acb81683a)
 $ python3 -I scripts/docs_check.py check
 check: 0 error(s), 2 warning(s), 15 note(s)
+
+4. Z1 review fixes (task-5gz-z1-review.md m1-m8, o1, o4), 2026-10-20
+$ forge test --match-path test/{zether/ZetherVerifier,zether/ZetherKat,zether/ZetherS3Vectors,zether/ZetherVerifierGas,zether/ZetherRevertPaths,zether/ZetherDeploy,v2/Factory,v2/FactoryZether,v2/Dex}.t.sol
+Suite result: ok. 14 passed; 0 failed; 0 skipped; finished in 36.11ms (25.05ms CPU time)
+Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 43.70ms (32.30ms CPU time)
+Suite result: ok. 13 passed; 0 failed; 0 skipped; finished in 154.13ms (68.67ms CPU time)
+Suite result: ok. 38 passed; 0 failed; 0 skipped; finished in 620.57ms (609.44ms CPU time)
+Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 627.23ms (616.07ms CPU time)
+Suite result: ok. 27 passed; 0 failed; 0 skipped; finished in 2.90s (9.51s CPU time)
+Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 2.69s (5.41s CPU time)
+Suite result: ok. 20 passed; 0 failed; 0 skipped; finished in 3.21s (3.36s CPU time)
+Suite result: ok. 20 passed; 0 failed; 0 skipped; finished in 3.21s (2.68s CPU time)
+Ran 9 test suites in 3.22s (13.49s CPU time): 147 tests passed, 0 failed, 0 skipped (147 total tests)
+$ forge test --match-path test/research/PqzStateGas.t.sol   (default gas limit)
+[SKIP: skipped] setUp() (gas: 0)
+Suite result: ok. 0 passed; 0 failed; 1 skipped; finished in 818.68µs (0.00ns CPU time)
+[SKIP: skipped] setUp() (gas: 0)
+Suite result: ok. 0 passed; 0 failed; 1 skipped; finished in 915.80µs (0.00ns CPU time)
+[SKIP] test_rollover_n2048() (gas: 0)
+[SKIP] test_rollover_n2816() (gas: 0)
+Suite result: ok. 6 passed; 0 failed; 2 skipped; finished in 417.37ms (555.92ms CPU time)
+Ran 3 test suites in 418.63ms (419.11ms CPU time): 6 tests passed, 0 failed, 4 skipped (10 total tests)
+$ forge test --match-path test/research/PqzStateGas.t.sol --gas-limit 60000000000
+Suite result: ok. 9 passed; 0 failed; 0 skipped; finished in 359.74ms (660.33ms CPU time)
+Suite result: ok. 9 passed; 0 failed; 0 skipped; finished in 359.78ms (509.34ms CPU time)
+Suite result: ok. 8 passed; 0 failed; 0 skipped; finished in 640.53ms (1.98s CPU time)
+Ran 3 test suites in 641.43ms (1.36s CPU time): 26 tests passed, 0 failed, 0 skipped (26 total tests)
+$ python3 scripts/size_gate.py
+size gate: 0 error(s), 95 contracts
+   ZetherTransferVerifierBn254          runtime  11181  init  11829
+   ZetherBurnVerifierBn254              runtime   5195  init   5842
+   ZetherInnerProductVerifierBn254      runtime   7176  init   8876
+   ZetherTransferVerifierBls12381       runtime  11521  init  12173
+   ZetherBurnVerifierBls12381           runtime   5430  init   6081
+   ZetherInnerProductVerifierBls12381   runtime   7408  init  10696
+   OpenFactory                          runtime  12247  init  13014
+$ python3 -I scripts/docs_check.py check
+check: 0 error(s), 2 warning(s), 15 note(s)

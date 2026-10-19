@@ -2677,7 +2677,9 @@ constructor fixes the canonical sets (`Canonical`: per curve transfer / burn ver
 the verifier; views `zetherVerifiers`, `pqzVerifier`; no setter); `registerImplementation` refuses a confidential release
 whose immutables are not one set (`NotCanonicalVerifiers`). (5) Limit stated in the spec: a deliberately malicious
 registrar can still register bytecode that reports canonical addresses; the registrar key is the trust root for code
-(multisig / UA msig recommended; a timelock is an option, not built). The generic per-kind environment, factory-deployed
+(multisig / UA msig recommended; a timelock is an option, not built). (6) The UA registry's Zether kinds (`zether-bn254`,
+`zether-bls12381`) verify with `ZetherSchnorr*Verifier`, fixed in the registry constructor (immutables), not with the proof
+verifiers: no change needed. The generic per-kind environment, factory-deployed
 code and library code-hash pins are plan 5g-Z2. Status: built, commit `690a295a` (plan Task 5g-Z1).
 
 ### CTR-ZTH-21 — Zether envelopes use the base's ERC-1271 cap by codehash

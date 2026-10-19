@@ -204,7 +204,6 @@ abstract contract ZetherInnerProductBase is ZetherCurve, IZetherInnerProductVeri
         uint256 r;
         uint256 n;
         uint256 k;
-        uint256 off;
         uint256 sOff;
         uint256[5] sc; // τ_x μ t̂ a b
         uint256 y;
@@ -232,7 +231,7 @@ abstract contract ZetherInnerProductBase is ZetherCurve, IZetherInnerProductVeri
             r
         );
         bytes memory pts = bytes.concat(
-            _base(), _slice(gens, 0, b.p), V, _slice(pr, b.off + 2 * b.p, 2 * b.p)
+            _base(), _slice(gens, 0, b.p), V, _slice(pr, 2 * b.p, 2 * b.p)
         );
         uint256[] memory sc = new uint256[](5);
         sc[0] = addmod(b.sc[2], r - delta, r);
@@ -252,7 +251,7 @@ abstract contract ZetherInnerProductBase is ZetherCurve, IZetherInnerProductVeri
         uint256 m = 2 * n + 2 * b.k + 4;
         bytes memory pts = new bytes(m * p);
         uint256[] memory sc = new uint256[](m);
-        _copy(pts, 0, pr, b.off, 2 * p);                 // A, S
+        _copy(pts, 0, pr, 0, 2 * p);                     // A, S
         _copy(pts, 2 * p, gens, 2 * p, n * p);         // G_0..G_{n-1}
         _copy(pts, (2 + n) * p, gens, 66 * p, n * p);  // H_0..H_{n-1}
         _copy(pts, (2 + 2 * n) * p, gens, 0, 2 * p);   // Hb, U
@@ -263,7 +262,7 @@ abstract contract ZetherInnerProductBase is ZetherCurve, IZetherInnerProductVeri
         sc[3 + 2 * n] = mulmod(b.w, addmod(b.sc[2], b.r - mulmod(b.sc[3], b.sc[4], b.r), b.r), b.r);
         for (uint256 j; j < b.k; ++j) {
             uint256 at = 4 + 2 * n + 2 * j;
-            _copy(pts, at * p, pr, b.off + (4 + 2 * j) * p, 2 * p); // L_j, R_j
+            _copy(pts, at * p, pr, (4 + 2 * j) * p, 2 * p); // L_j, R_j
             sc[at] = mulmod(b.u[j], b.u[j], b.r);
             sc[at + 1] = mulmod(b.uInv[j], b.uInv[j], b.r);
         }
@@ -330,8 +329,8 @@ abstract contract ZetherVerifierBase is ZetherCurve {
     uint256 internal constant FEE_AT = 288;
     uint256 internal constant AMOUNT_AT = 352;
 
-    /// @notice The curve's inner-product verifier (the range proofs, the generators), fixed at deployment: the factory
-    ///         appends it to the init code (`OpenFactory.deployZetherVerifier`).
+    /// @notice The curve's inner-product verifier (the range proofs, the generators), a constructor argument fixed at
+    ///         deployment (CTR-ZTH-20).
     IZetherInnerProductVerifier public immutable innerProduct;
     address public immutable generatorStore;
 
@@ -358,11 +357,8 @@ abstract contract ZetherVerifierBase is ZetherCurve {
         Ctx memory x = _ctx(statement, proof, 10 * p);
         if (x.c == 0 || !_sigmaTransfer(x)) return false;
         uint256 off1 = 10 * p + 192;
-        bool ok;
-        ok = _range(x, _pf(x, 0), off1);
-        if (!ok) return false;
-        ok = _range(x, _pf(x, 1), off1 + 16 * p + 160);
-        return ok;
+        if (!_range(x, _pf(x, 0), off1)) return false;
+        return _range(x, _pf(x, 1), off1 + 16 * p + 160);
     }
 
     /// @notice Transfer tới `M` người nhận, một proof: Σ (E1–E8, E3/E6/E7 theo từng người) + BP(v_j) cho từng
@@ -382,13 +378,10 @@ abstract contract ZetherVerifierBase is ZetherCurve {
         if (proof.length != off + (m + 1) * bpLen) return false;
         Ctx memory x = _ctx(statement, proof, (6 + 4 * m) * p);
         if (x.c == 0 || !_sigmaTransferMulti(x, m)) return false;
-        bool ok;
         for (uint256 j; j < m; ++j) {
-            ok = _range(x, _pf(x, 6 + 4 * j), off + j * bpLen);
-            if (!ok) return false;
+            if (!_range(x, _pf(x, 6 + 4 * j), off + j * bpLen)) return false;
         }
-        ok = _range(x, _pf(x, 0), off + m * bpLen);
-        return ok;
+        return _range(x, _pf(x, 0), off + m * bpLen);
     }
 
     function _verifyBurn(bytes calldata statement, bytes calldata proof) internal view returns (bool) {
@@ -397,11 +390,8 @@ abstract contract ZetherVerifierBase is ZetherCurve {
         if (bytes32(statement[0:32]) != OP_BURN || bytes32(statement[32:64]) != proofSystemId()) return false;
         Ctx memory x = _ctx(statement, proof, 4 * p);
         if (x.c == 0 || !_sigmaBurn(x)) return false;
-        bool ok;
-        ok = _range(x, _pf(x, 0), 4 * p + 96);
-        return ok;
+        return _range(x, _pf(x, 0), 4 * p + 96);
     }
-
 
     /// @dev One range proof at `off` of the proof on the running transcript, by the inner-product verifier.
     function _range(Ctx memory x, bytes memory V, uint256 off) private view returns (bool ok) {
@@ -432,7 +422,7 @@ abstract contract ZetherVerifierBase is ZetherCurve {
         (x.st, x.c) = T.challenge(x.st, "sigma.c", x.r);
     }
 
-
+    /// @dev Điểm thứ `i` của phần điểm statement (sau header 480 byte).
     function _sp(Ctx memory x, uint256 i) private pure returns (bytes memory) {
         return _slice(x.s, HEADER + i * x.p, x.p);
     }
@@ -646,7 +636,7 @@ abstract contract ZetherBurnVerifierBase is ZetherVerifierBase, IZetherBurnVerif
     }
 }
 
-
+/// @title Verifier Zether trên bn254 (precompile 0x05–0x07, có từ Byzantium).
 /// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** ~100 bit sau exTNFS (canon C6.1): mọi số tiền
 ///         confidential trên public chain phải được giả định giải mã được trong khoảng 2035–2045.
 abstract contract ZetherBn254Curve is ZetherCurve {

@@ -13,9 +13,10 @@
 #                            exceeds EIP-170 since the UA ledger (UA-4; owner: wait for Glamsterdam), so the chain needs
 #                            64 KiB code (anvil --code-size-limit 65536, chain 7622 maxCodeSize 0x10000); a chain at
 #                            24,576 refuses the deploy. Always --gas-estimate-multiplier 105: forge's default x1.30 on
-#                            the largest deploys (UnderlyingPqzToken ~13.6 M, the BLS inner-product verifier ~14 M)
-#                            exceeds the 2^24 per-transaction cap (EIP-7825). DEPLOY_ZETHER=1 (dev chains only) adds the
-#                            Zether stack. --slow always (one tx per block: anvil automine can strand a large tx).
+#                            the BLS inner-product verifier (~14 M, DEPLOY_ZETHER) exceeds the 2^24 per-transaction cap
+#                            (EIP-7825); the largest implementation, UnderlyingPqzToken (13,319,335 gas measured), is
+#                            deployed by script/pqz/e2e.py, not here. DEPLOY_ZETHER=1 (dev chains only) adds the Zether
+#                            stack. --slow always (one tx per block: anvil automine can strand a large tx).
 #   hedera  <relay-url>      same, script/hedera/DeployHedera.s.sol --slow (writes deployments/hedera-<chainid>.json)
 #   aptos   <cli-profile>    aptos move deploy-object --address-name scaas
 #   sui     <client-env>     sui client --client.env <env> publish
@@ -26,13 +27,13 @@ SC="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FAMILY="${1:?usage: $0 <family> <network> [args…]}"; NET="${2:?network}"; shift 2
 case "$FAMILY" in
   evm)     cd "$SC/evm"; Z=(--code-size-limit 65536)
-           Z+=(--gas-estimate-multiplier 105) # the largest deploys (~13.6 M, ~14 M) must stay under the 2^24 tx cap
+           Z+=(--gas-estimate-multiplier 105) # the BLS inner-product verifier (~14 M) must stay under the 2^24 tx cap
            # forge writes the JSON in the simulation, before the broadcast: keep the previous one until it succeeds
            J="deployments/$(cast chain-id --rpc-url "$NET").json"; [ -f "$J" ] && cp "$J" "$J.prev"
            if forge script script/Deploy.s.sol --rpc-url "$NET" --broadcast --slow "${Z[@]}" \
                --sender "$(cast wallet address --private-key "$PRIVATE_KEY")" "$@"; then rm -f "$J.prev"
            else [ -f "$J.prev" ] && mv "$J.prev" "$J" || rm -f "$J"; exit 1; fi ;;
-  hedera)  cd "$SC/evm" && exec forge script script/hedera/DeployHedera.s.sol --rpc-url "$NET" --broadcast --slow --code-size-limit 65536 --gas-estimate-multiplier 105 \
+  hedera)  cd "$SC/evm" && exec forge script script/hedera/DeployHedera.s.sol --rpc-url "$NET" --broadcast --slow --code-size-limit 65536 \
              --sender "$(cast wallet address --private-key "$PRIVATE_KEY")" "$@" ;;
   aptos)   exec aptos move deploy-object --package-dir "$SC/move/aptos" --address-name scaas --profile "$NET" "$@" ;;
   sui)     exec sui client --client.env "$NET" publish "$@" "$SC/move/sui" ;;

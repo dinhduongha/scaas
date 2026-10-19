@@ -1095,7 +1095,9 @@ could carry a fake verifier (`true` for every proof ⇒ `zetherUnshield` drains 
   `pqzVerifier(ps)`; no setter, no admin list — an admin list would only move the trust to the admin key). Registration of
   a `*_ZETHER` implementation reads its `verifier()`, `burnVerifier()`, `disclosure()` and refuses any other set
   (`NotCanonicalVerifiers`); `createTokenUnregistered` refuses every confidential kind; a new verifier set is a new factory
-  for now (a versioned per-kind environment is plan 5g-Z2).
+  for now (a versioned per-kind environment is plan 5g-Z2). The UA registry's Zether kinds (`zether-bn254`,
+  `zether-bls12381`) verify with `ZetherSchnorr*Verifier`, fixed in the registry constructor, not with these proof
+  verifiers: unchanged.
 - **Limit, stated plainly:** the factory compares the addresses an implementation reports; a deliberately malicious
   registrar can still register bytecode that reports canonical addresses and does something else. The registrar's key is
   the trust root for code — a multisig / UA msig before mainnet (a timelock is an option, not built).
@@ -1374,9 +1376,9 @@ calldata — its size in the last column, its transaction calldata cost (≤ 16 
 |---|---|
 | `NoUnderlyingZetherToken` / `UnderlyingZetherToken` | 31,162 / 40,706 (over EIP-170: ratchet baseline; owner: size waits for Glamsterdam) |
 | `ZetherLib` / `ZetherStatements` / `ZetherDisclosure` | 17,324 / 8,748 / 5,077 |
-| `ZetherTransferVerifierBn254` / `…Bls12381` (5g-Z1) | 11,192 / 11,532 |
-| `ZetherBurnVerifierBn254` / `…Bls12381` (5g-Z1) | 5,208 / 5,443 |
-| `ZetherInnerProductVerifierBn254` / `…Bls12381` (5g-Z1) | 7,226 / 7,458 |
+| `ZetherTransferVerifierBn254` / `…Bls12381` (5g-Z1) | 11,181 / 11,521 |
+| `ZetherBurnVerifierBn254` / `…Bls12381` (5g-Z1) | 5,195 / 5,430 |
+| `ZetherInnerProductVerifierBn254` / `…Bls12381` (5g-Z1) | 7,176 / 7,408 |
 | (the combined `ZetherVerifierBn254` / `ZetherVerifierBls12381` before 5g-Z1) | 15,955 / 16,312 |
 
 

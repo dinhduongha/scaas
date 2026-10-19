@@ -254,7 +254,7 @@ contract OpenFactory is IOpenFactory {
     function _checkCanonical(TokenKind kind, address impl) private view {
         bool ok = true;
         if (_isZether(kind)) {
-            address v = _addr(impl, IZetherToken.verifier.selector);
+            address v = _addr(impl, _VERIFIER_SEL);
             address b = _addr(impl, IZetherToken.burnVerifier.selector);
             address d = _addr(impl, IZetherToken.disclosure.selector);
             ok = v != address(0) && ((v == _ZV0 && b == _ZB0 && d == _ZD0) || (v == _ZV1 && b == _ZB1 && d == _ZD1));

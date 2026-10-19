@@ -281,6 +281,12 @@ contract PqzStateProto {
 ///     --gas-limit 60000000000
 /// Logs: smartcontracts/evm/runs/2026-10-20-5h-state-gas.txt.
 abstract contract PqzGasBase is Test {
+    /// @dev The large-`n` series run only with the documented `--gas-limit 60000000000`
+    ///      (runs/2026-10-20-5h-state-gas.txt); the default `forge test` skips them instead of failing on `create`.
+    function _needsHighGasLimit() internal {
+        vm.skip(gasleft() < 10_000_000_000);
+    }
+
     uint256 internal constant Q42 = 4_398_046_510_889; // 2^42 − 215
     uint256 internal constant Q54 = 18_014_398_509_481_657; // 2^54 − 327 (A' candidate)
     uint256 internal constant CAP = 1 << 24;
@@ -466,10 +472,12 @@ contract PqzStateGasTest is PqzGasBase {
     function test_opWrites_n2816() public { _writes(2816, Q54); }
 
     function test_rollover_n2048() public {
+        _needsHighGasLimit();
         _rollSeries(2048, Q42, _arr(hex"0020_0001_0010_0040_0080_0100_0180_01c0_0200"));
     }
 
     function test_rollover_n2816() public {
+        _needsHighGasLimit();
         _rollSeries(2816, Q54, _arr(hex"0010_0001_0010_0040_0080_0100_0140_0180"));
     }
 
@@ -545,6 +553,7 @@ abstract contract SteadyBase is PqzGasBase {
     function _q() internal pure virtual returns (uint256);
 
     function setUp() public {
+        _needsHighGasLimit();
         _setup(_n(), _q());
         _fill(UA, 16 + 512, 1000);
         pr.rollOver(UA, 16);
