@@ -16,8 +16,9 @@ namespace Nethermind.Pqz;
 
 /// <summary>
 /// P6f D1: <c>Nethermind.Pqz</c> — enabled iff the chainspec has <c>engine.Pqz</c>; registers the PQZ spec and
-/// precompile providers; at start-up (R3) checks that both registrations won, that .NET's ML-DSA is supported, and
-/// that <c>OP_SELFTEST</c> equals the compiled-in hash, then logs <c>PQZ-START</c> (library SHA-256, self-test,
+/// precompile providers; at start-up (R3) checks that both registrations won, that .NET's ML-DSA is supported, that
+/// the library's SHA-256 equals the reviewed one (review W-G) and that <c>OP_SELFTEST</c> equals the compiled-in hash,
+/// then logs <c>PQZ-START</c> (library SHA-256, self-test,
 /// schedules, addresses). Any failure: <c>PQZ-REFUSE</c> and exit 120.
 /// </summary>
 public class PqzPlugin(ChainSpec chainSpec) : INethermindPlugin
@@ -45,7 +46,7 @@ public class PqzPlugin(ChainSpec chainSpec) : INethermindPlugin
             if (!MLDsa.IsSupported) throw new InvalidOperationException("System.Security.Cryptography.MLDsa is not supported (OpenSSL >= 3.5 needed)");
             PqzChainSpecEngineParameters p = chainSpec.EngineChainSpecParametersProvider.GetChainSpecParameters<PqzChainSpecEngineParameters>();
             p.ValidateGenesis(chainSpec.Genesis?.Timestamp ?? 0);
-            string sha = SelfTest.LibrarySha256();
+            string sha = SelfTest.CheckedLibrarySha256();
             string st = SelfTest.Run();
             if (st != SelfTest.ExpectedHash) throw new InvalidOperationException($"OP_SELFTEST {st} != {SelfTest.ExpectedHash}");
             string msg = $"PQZ-START sha256={sha} selftest={st} addresses=PQZ:{PqzAddresses.Pqz},MLDSA44:{PqzAddresses.MlDsa44},MLDSA65:{PqzAddresses.MlDsa65} schedules=[{string.Join("; ", p.Schedules)}]";

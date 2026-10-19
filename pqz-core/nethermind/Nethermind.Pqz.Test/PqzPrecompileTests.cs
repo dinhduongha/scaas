@@ -54,6 +54,20 @@ public class PqzPrecompileTests
     }
 
     [Test]
+    public void Library_sha256_is_compared_with_the_reviewed_value()
+    {
+        // review W-G (2026-10-19): the plugin refuses a library whose SHA-256 is not the reviewed one; build-image.sh
+        // reads the same constant from SelfTest.cs with this pattern
+        Assert.That(SelfTest.CheckedLibrarySha256(SelfTest.LibrarySha256()), Is.EqualTo(SelfTest.LibrarySha256()));
+        Exception? e = Assert.Throws<InvalidOperationException>(() => SelfTest.CheckedLibrarySha256(new string('0', 64)));
+        Assert.That(e!.Message, Does.Contain("!= the reviewed " + new string('0', 64)));
+        string src = File.ReadAllText(Repo.Path_("pqz-core", "nethermind", "Nethermind.Pqz", "SelfTest.cs"));
+        var m = System.Text.RegularExpressions.Regex.Matches(src, @"ExpectedLibrarySha256 = ""([0-9a-f]{64})"";");
+        Assert.That(m.Select(x => x.Groups[1].Value), Is.EqualTo(new[] { SelfTest.ExpectedLibrarySha256 }));
+        Assert.That(File.ReadAllText(Repo.Path_("pqz-core", "nethermind", "build-image.sh")), Does.Contain(@"ExpectedLibrarySha256 = ""\([0-9a-f]\{64\}\)"";"));
+    }
+
+    [Test]
     public void Gas_is_the_row_plus_the_length_term_and_never_depends_on_validity()
     {
         PqzSchedule s = Schedule();

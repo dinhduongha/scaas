@@ -9,7 +9,9 @@ already made would re-price history and split a re-synced node from the chain. R
 chainspec without engine.Pqz, or any other difference. Prints the new rows (with the old price and the change when the
 last schedule had the row). --id (Rust PQZL roll-out, 2026-10-19) also limits the replaced rows to one proof system:
 pqzl, pqzh or a hex prefix of the proofSystemId; --selftest also takes selftestGas from the calibration file (every
-other price stays). add-schedule.py --check runs the self-check. Run with python3 -I."""
+other price stays). Refuses a calibration file with other than one schedule, one that lacks a row of the replaced ops
+/ id that the last schedule has (that shape would become a miss), and a duplicate row (review W-F, 2026-10-19).
+add-schedule.py --check runs the self-check. Run with python3 -I."""
 import copy
 import json
 import os
@@ -38,14 +40,25 @@ def main(src, cal, ts, out, *flags):
         sys.exit(f"timestamp {t} is not at least 5 minutes in the future (now {int(time.time())})")
     if t <= int(str(sch[-1]["timestamp"]), 0):
         sys.exit(f"timestamp {t} is not after the last schedule's {sch[-1]['timestamp']}")
-    cs = json.load(open(cal))["schedules"][0]
+    css = json.load(open(cal))["schedules"]
+    if len(css) != 1:
+        sys.exit(f"{cal} has {len(css)} schedules, not 1 (a calibration output)")
+    cs = css[0]
     new_rows = [r for r in cs["pqz"] if pick(r)]
     if not new_rows:
         sys.exit(f"no rows of ops {sorted(ops)} id {idp} in {cal}")
     s = copy.deepcopy(sch[-1])
     s["timestamp"] = hex(t)
     old = {KEY(r): r["gas"] for r in s["pqz"]}
+    # review W-F (2026-10-19): a replaced row with no new row would be a miss from T on (…00 for every honest proof of
+    # that shape), a duplicate key makes every node refuse to start; both are refused here
+    dropped = {KEY(r) for r in s["pqz"] if pick(r)} - {KEY(r) for r in new_rows}
+    if dropped:
+        sys.exit(f"{cal} lacks {len(dropped)} row(s) the last schedule has: {sorted(dropped, key=str)}")
     s["pqz"] = [r for r in s["pqz"] if not pick(r)] + new_rows
+    keys = [KEY(r) for r in s["pqz"]]
+    if len(set(keys)) != len(keys):
+        sys.exit(f"duplicate rows: {sorted({k for k in keys if keys.count(k) > 1}, key=str)}")
     if "--selftest" in flags:
         s["selftestGas"] = cs["selftestGas"]
     g2 = copy.deepcopy(g)
@@ -86,6 +99,21 @@ def check():
                 raise AssertionError(bad)
             except SystemExit as e:
                 assert e.code, bad
+        # review W-F: a calibration file that lacks a replaced row, has a duplicate row or more than one schedule
+        for name, cal_s in (("dropped", [dict(sched, pqz=[row("pqzh", 9)])]),
+                            ("duplicate", [dict(sched, pqz=[row("pqzl", 3), row("pqzl", 7), row("pqzh", 9)])]),
+                            ("two schedules", [sched, dict(sched, timestamp="0x1")])):
+            json.dump({"schedules": cal_s}, open(cal, "w"))
+            try:
+                main(src, cal, str(int(time.time()) + 900), out, "--ops", "1")
+                raise AssertionError(name)
+            except SystemExit as e:
+                assert isinstance(e.code, str) and e.code, name
+                print(f"  refused ({name}): {e.code}")
+        # a new shape (no row in the last schedule) is no drop: the op 7 roll-out of 2026-10-17 added its rows so
+        json.dump({"schedules": [dict(sched, pqz=[row("pqzl", 3), row("pqzh", 9), dict(row("pqzl", 8), op=2)])]}, open(cal, "w"))
+        g = main(src, cal, str(int(time.time()) + 900), out, "--ops", "1,2")
+        assert sorted(r["gas"] for r in g["engine"]["Pqz"]["schedules"][1]["pqz"]) == [3, 8, 9], g
     print("add-schedule --check: ok")
 
 

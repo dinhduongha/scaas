@@ -12,7 +12,9 @@ ARG SDK=mcr.microsoft.com/dotnet/sdk:10.0.301-resolute@sha256:196f61c6262aa890f4
 FROM ${BASE} AS base
 
 FROM ${RUST} AS rust
-RUN apt-get update && apt-get install -y --no-install-recommends clang && rm -rf /var/lib/apt/lists/*
+# clang pinned to exact Debian 12 versions (review W-G, 2026-10-19); a version the archive no longer serves fails the build
+RUN apt-get update && apt-get install -y --no-install-recommends clang=1:14.0-55.7~deb12u1 clang-14=1:14.0.6-12 \
+      libclang-cpp14=1:14.0.6-12 libllvm14=1:14.0.6-12 && rm -rf /var/lib/apt/lists/*
 # the toolchain file names wasm32 too; the image's 1.97.1 is the toolchain, nothing to install
 ENV RUSTUP_TOOLCHAIN=1.97.1 CARGO_BUILD_JOBS=2
 WORKDIR /src

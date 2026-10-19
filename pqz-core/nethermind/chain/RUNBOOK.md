@@ -280,6 +280,18 @@ progress is never sealed; a restart (`docker compose up -d blockchain-node`) re-
 policy: choosing one is the owner's decision (owner step 3 of the P6f plan), so after a fault someone must restart it
 by hand.
 
+**No public RPC on the signer (review W-H, 2026-10-19; a rule, not a code change).** The exit path above runs in
+whatever thread calls the precompile, `eth_call`, `eth_estimateGas` and tracing included, and the PQZL verifier's
+process-wide lock is shared by RPC calls and block import. A node that serves RPC to anyone can therefore be stopped
+(a node fault inside an `eth_call`) or slowed (calls queueing on the lock) by its callers. So the signer's JSON-RPC
+must be reachable from the chain host only; public RPC goes to a follower behind the rate-limited proxy
+(`config.follower.json`, `nginx-rpc.conf`; the copy publishes it on `127.0.0.1:18545`), whose exit stops only that
+follower. **On 7622** the live `docker-compose.yml` (read 2026-10-19) publishes `8545:8545` and `8546:8546` on every
+host interface; **accepted for the testnet (owner 2026-10-19)**: no firewall or binding change. The rule above binds
+mainnet 22776. A start-up refusal
+`PQZ-REFUSE … sha256 … != the reviewed …` means the image's `libpqz_ffi.so` is not the reviewed build (review W-G):
+use an image built by `build-image.sh` from the reviewed commit.
+
 ### Owner steps outside this runbook
 
 - The follower node and the rate-limited public RPC on 7622. The copy's `docker-compose.copy.yml`,
@@ -312,7 +324,9 @@ match the comments in the block:
 1. Back up exactly as in [Task 10 step 1](#steps-15): the chainspec, config, compose file, password, keystore and data,
    with the sha256 manifests compared. The backup lands in `$B` (`op7-$TS`), so in those commands write `op7-$TS`
    wherever they say `pqz-$TS`.
-2. Add the second schedule (the script refuses a T less than 5 minutes ahead), switch the image to `pqz2`, start the
+2. Add the second schedule (the script refuses a T less than 5 minutes ahead; since review W-F, 2026-10-19, it also
+   refuses a calibration file with more than one schedule, one that lacks a row of the replaced ops the last schedule
+   has, and a duplicate row), switch the image to `pqz2`, start the
    node, and copy the live `engine.Pqz` into `$C/engine-pqz.json` for the probes. Success: `PQZ-START` shows library
    `4fc1a6a2…`, self-test `ed910a2c…` and two schedules.
 3. Before T: probe with schedule 0. Success: every multi-recipient input is a miss (smallest row, `…00`, no FFI call).

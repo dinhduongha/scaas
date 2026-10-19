@@ -13,6 +13,9 @@ exec > "$OUT" 2>&1
 run() { echo "\$ $*"; "$@"; echo "[rc=$?]"; echo; }
 echo "# P6f image $TAG, $(date -u +%Y-%m-%dT%H:%MZ), commit $(git rev-parse --short HEAD)$(git diff --quiet HEAD -- "$ROOT/pqz-core" ':(top,exclude)pqz-core/nethermind/runs' || echo ' (dirty)')"
 COMMIT=$(git rev-parse HEAD)$(git diff --quiet HEAD -- "$ROOT/pqz-core" ':(top,exclude)pqz-core/nethermind/runs' || echo -dirty)
+# the reviewed library hash (review W-G, 2026-10-19), compiled into the plugin as well
+EXP=$(sed -n 's/.*ExpectedLibrarySha256 = "\([0-9a-f]\{64\}\)";.*/\1/p' Nethermind.Pqz/SelfTest.cs)
+[ ${#EXP} = 64 ] || { echo "FAIL no ExpectedLibrarySha256 in Nethermind.Pqz/SelfTest.cs"; exit 1; }
 run ./ref.sh
 run python3 -I corpus.py bin/corpus.jsonl
 export DOCKER_BUILDKIT=1
@@ -20,10 +23,12 @@ B="docker build -f Dockerfile --progress plain"
 rm -rf bin/ffi-out
 run $B --target ffi-export -o bin/ffi-out "$ROOT"
 FFI=$(sha256sum bin/ffi-out/libpqz_ffi.so | cut -d' ' -f1)
-echo "libpqz_ffi.so sha256 $FFI"
-run $B --target node --build-arg COMMIT="$COMMIT" --build-arg FFI_SHA256="$FFI" -t "$TAG" "$ROOT"
+echo "libpqz_ffi.so sha256 $FFI, reviewed $EXP"
+# review W-G: the image carries only the reviewed library (the Dockerfile checks FFI_SHA256 again, the plugin at start-up)
+[ "$FFI" = "$EXP" ] || { echo "FAIL the built library is not the reviewed one: review the build, set ExpectedLibrarySha256 = \"$FFI\" in Nethermind.Pqz/SelfTest.cs, commit, rebuild"; exit 1; }
+run $B --target node --build-arg COMMIT="$COMMIT" --build-arg FFI_SHA256="$EXP" -t "$TAG" "$ROOT"
 if [ "${CALIB:-0}" = 1 ]; then
-  run $B --target calib --build-arg COMMIT="$COMMIT" --build-arg FFI_SHA256="$FFI" -t "$TAG-calib" "$ROOT"
+  run $B --target calib --build-arg COMMIT="$COMMIT" --build-arg FFI_SHA256="$EXP" -t "$TAG-calib" "$ROOT"
 fi
 
 echo "## checks"
