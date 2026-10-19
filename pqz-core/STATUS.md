@@ -42,6 +42,9 @@ Terms used throughout:
   Still to do before the merge: the reproduction package and the fuzz campaign on v3, the gate, reviews A (Rust crate)
   and B (transcript audit) (plan Tasks 6, 7, 9–12). Review fixes A–E (Codex G / agy H) are in progress, see
   `research/code-review-2026-10-19/G`, `H`.
+- **Review round 2 (PQZH Rust) fixes P-A…P-H are on branch `rev2-pqzh`** (plan Task 5c), not merged: no PQZH proof
+  byte or verdict changes (section "PQZH review fixes"); P-I is a gate before the STARK backup is ever
+  promoted (Open item 12).
 - **Chain 7622 still runs PQZL v2** (image `pqz2`, the C core), which accepts forgeable v2 proofs (a test chain; owner
   ruling), until the v3 roll-out resets it from genesis (decision F9, path B; plan Task 13).
 
@@ -1259,6 +1262,44 @@ small `corpus/precompile` inputs still carry the v2 id and now reject on it); th
 the merge (Task 12); the roll-out on 7622 with a new image and gas re-calibration (Task 13). The external
 cryptographic audit before mainnet 22776 remains open.
 
+## PQZH review fixes (branch `rev2-pqzh`, plan Task 5c; review round 2)
+
+Findings and triage P-A…P-I: `research/code-review-2026-10-19/I`, `J`, `K` (Codex, agy, Claude; no P0 / P1 in the
+live path). Rule: no PQZH proof byte or verdict changes, so the PQZH `proofSystemId`, vectors and gas rows stay.
+Decisions: CTR-PQZ-19 (P-A, P-B, P-C, P-G) and CTR-PQZ-10 (P-D, P-E, P-F, P-H, P-I) in `docs/decisions.md`.
+
+- **P-A** (sparse FFT on witness values): the radix stage's sparse path is chosen from the structural zero padding,
+  never from values; the inverse transform (the witness rows) is always dense (`fft.rs`).
+- **P-B** (secret-dependent work): branch-free field arithmetic, `Fq::from_i64` / `modq` without `rem_euclid`,
+  `dot_int` without the zero skip, rounding by a fixed-step division, the honest prover's checks as one verdict per
+  error; a ctgrind check `pqzh/ligero/runs/ct.sh` (feature `ctgrind`, test only). Inventory, runs and the wasm32
+  code check: `research/code-review-2026-10-19/O-pqzh-constant-time.md`.
+- **P-C** (no wiping): `Wiped` drop guards on every secret buffer of the witness builder and the prover, the SHAKE256
+  reader replaced in place on drop (Open item 8).
+- **P-D** (verifier OOM aborts): `pqzh_ligero::try_verify` reserves the parameter-sized buffers fallibly and returns
+  `Err(Oom)`; `pqz-ffi` reports it as `NodeFault` (status 4); `tests/oom.rs`; pq-zero-knowledge.md CTR-PQZ-10 text.
+- **P-E**: `#![forbid(unsafe_code)]` in `pqzh-ligero` (deny only under `ctgrind`); the raw-pointer exports of the two
+  wasm harnesses (`pqzh/ligero/wasm`, `ffi/wasm`) are `unsafe extern "C"` with their contracts.
+- **P-F, P-G, P-H** (`stark-backup`, not live): minimal varints only (`81 00` for `01` rejected), the mask seed
+  hedged with op, statement and witness (`rel::mask_seed`; hiding backup proofs change), the MV layout from
+  structural indices (matches the `(op, Params)` cache key). Tests in `enc.rs`, `rel.rs`, `air.rs`.
+- **P-I**: no code; Open item 12.
+
+Evidence (all under `scripts/capped`, tag `rev2`, on `50e5dbc`):
+- **PQZH proof bytes unchanged.** Native `ligero_bench` FNVs of all twelve relations (six forms at seeds 0 and 1,
+  six op 7 shapes at seed 0) equal the base run on `b1c4de5` (`pqzh/ligero/runs/rev2-fnv-compare.txt`);
+  `ffi/vectors/run.sh rev2`: `pqz-vectors --check` 16 files ok (byte for byte), `pqz_kat` ok, tamper 191 / 191,
+  ffi tests ok, wasm32 replay 53 cases, 0 fails; `ffi/run.sh rev2`: native = wasm32, 29 digest lines equal (and equal
+  to `fs5`'s), self-test hash `ed910a2c…d205` unchanged, `c_abi` ok, no C core / GMP / libm in the cdylib.
+- `pqzh/ligero/runs/gateb.sh rev2`: tests 15 + 17 + 8 + 1 (`oom`) passed, `--no-default-features` lib 13 passed (full
+  `--no-default-features` test run `rev2-nobench-all.txt` ok), wasm32 1,000 verifies per form with `fails 0` and
+  wasm32 `fnv_last` = native; `xcheck/ligero.sh`: all twelve statement / witness files Rust = C, `kat_stmt` ok
+  (`rev2-xcheck.txt`).
+- `pqzh/ligero/runs/ct.sh rev2`: 0 memcheck reports over the twelve relations, every proof verifies
+  (`ct-rev2.txt`); negative control with the old arithmetic 21 contexts (`ct-rev2-control.txt`); wasm32: no 64-bit
+  division left on secrets (`rev2-wasm-div-*.txt`).
+- `stark-backup` `cargo test --release`: 9 + 7 + 1 + 3 passed (`stark-backup/runs/rev2-tests.txt`).
+
 ## Measured (2026-10-13, this machine, single thread)
 
 The spike's measurement record: P6d-2 against the unoptimised spike, and the verdict against the kill criteria
@@ -1363,6 +1404,15 @@ the record.
    never cleared; the masks y and the other intermediates are not cleared. **The C core has the same gap and keeps
    it here:** `lnp-tbox.c` `expseed[96]`, `lnp-quad.c` `yseed[32]` are not cleared, and the copies `sv`, `s`, `m`,
    `tA2` live in the arena (above).
+   **PQZH (Ligero), review round 2 fix P-C (2026-10-19, branch `rev2-pqzh`):** the same pattern (`Wiped`, `Wipe` in
+   `pqzh/ligero/src/lib.rs`) clears on every exit the witness values (`cs::Wit` wipes itself on drop) and every
+   secret buffer of `cs::witness` (the decryptions, the recomputed A s + e / u / v, the polynomial copies, the
+   products in `ring::dot_int`, `keypair`, `encrypt`) and of `ligero::prove_once` (rows, row polynomials, masks
+   u_0, u_lin, h_0, u_quad, encodings, salts, columns, the test accumulators and the quotient remainder), and the
+   FFT's scratch copies; the SHAKE256 reader whose state yields every mask is replaced in place on drop (sha3 0.10.8
+   has no `zeroize` and no `Drop`). Same platform boundary as the PQZL crate, plus: by-value `rnd32` copies
+   (`prove`, `prove_inner`, `Rng::new`, pqz-ffi's `*rnd32`) and the sha3 hasher state before `finalize_xof` are not
+   cleared (`research/code-review-2026-10-19/O-pqzh-constant-time.md` §Wiping).
 9. ~~**`pqzl/check_symbols.sh` passes when its files are missing**~~ (found in P6e Task 7, run `ffi1`; seen again
    in the reproducibility package, `artifact/runs/art2-docker-quick-1-probe-*`). The script `cd`'d to its own
    directory, so relative paths from elsewhere named nothing; `llvm-nm` errors were lost in the pipe, and the script
@@ -1398,6 +1448,19 @@ the record.
     `proofSystemId` v3 in every pin and the regenerated vectors in `8af584b`. The owner replaced "cheating-prover PoC
     first" with binding tests that only observe the challenge seeds (`c5b2c99`, `c0bd890`, `b3cc772`): 10 of 12 checks
     FAIL before the fix, 0 of 12 after, in both cores. Chain 7622 stays on `pqz2` (v2) until plan Task 13.
+
+12. **STARK backup promotion gate (review round 2, P-I; B-F1, B-F5, I-1, I-8).** `pqzh/stark-backup` is not
+    reachable (pqz-ffi never dispatches to it) and stays a record. Before it is ever promoted to a live proof system
+    it must have: (1) a reviewed **hiding** preset (`Params::DEFAULT` is `zk: false`: 28 queries against 16-row
+    amount / new-balance columns let a proof reader interpolate them; its 71.9 bits are below target); (2) a size
+    bound that admits the hiding proofs (`MAX_PROOF` 163,840 B is below them; `tests/smoke.rs` lifts the cap) or a
+    smaller hiding configuration; (3) statement decoding by `pqz-stmt` with the op tag, id, auditorOn and zero-word
+    checks (today only the fee word is read, `rel.rs` `parse_tx`); (4) a distinct `proofSystemId`; (5) every
+    relation (today R_REG and R_TX only); (6) a verifier that rejects non-hiding configurations (`zk == false`) and
+    a preset at 128-bit proven soundness; (7) the salt-form check (B-F5); (8) the prover hygiene Ligero got in this
+    review (constant-time pass, wiping); (9) the verifier fault handling (OOM as `NodeFault`, panic containment;
+    wasm32 traps on a panic); (10) vectors / KAT, tamper and xcheck runs, fuzzing, gas rows and its own review round.
+    Status: recorded, no code; **owner ruling 2026-10-19: accepted** (decisions CTR-PQZ-10).
 
 Scratch (not needed to resume, re-creatable): the LaZer and lattice-estimator clones, the upstream tbox harness and
 debug builds under the session scratchpad `p6d/`.

@@ -118,10 +118,14 @@ reserved, not touched, until the core uses them.
   (`pqz_err == PQZ_ERR_ARENA` after a call; the core is then dropped and re-initialised at the next call); the
   self-test's computation fails (its inputs are fixed); a panic outside the classified region. The host (P6f) stops
   block processing on status 4 and never records the input as invalid.
-- A failed Rust heap allocation outside the PQZL core aborts the process (Rust's allocator; the C arenas are
-  reserved fallibly). Inside the Rust PQZL core, every buffer that scales with the input is reserved fallibly: a
-  verifier that cannot allocate gives `Error::Memory` (`pqzl::Ctx::try_verify_fast` / `try_verify`), which is a node
-  fault (status 4), as the C backend's arena exhaustion, never `…00`; `prove` returns code 2.
+- A failed Rust heap allocation outside the two verifiers' reserved buffers aborts the process (Rust's allocator;
+  the C arenas are reserved fallibly). Inside the Rust PQZL core, every buffer that scales with the input is reserved
+  fallibly: a verifier that cannot allocate gives `Error::Memory` (`pqzl::Ctx::try_verify_fast` / `try_verify`), which
+  is a node fault (status 4), as the C backend's arena exhaustion, never `…00`; `prove` returns code 2. The PQZH
+  verifier (review P-D, 2026-10-19) reserves its buffers that scale with the parameters and the relation (the decoded
+  proof, the opened columns, the domains, the challenges, the combination vectors, the per-column buffers) fallibly:
+  `pqzh_ligero::try_verify` gives `Err(Oom)`, which `pqzh::verify` maps to `NodeFault` (status 4); the decoded
+  statement, the layout tables and the matrix A (512 KiB, built once per process at the first PQZH call) are still infallible.
 
 The test hooks (feature `test-hooks`, never in a production build: `pqzl::TEST_FAIL_WORKER` for both backends; the C
 backend's `TEST_ARENA_BYTES`, `TEST_ARENA_FILL`, `reinit`, `arena_bytes`) inject the faults (`tests/fault.rs`, in its

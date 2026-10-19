@@ -5,6 +5,8 @@
 use sha3::digest::{ExtendableOutput, Update, XofReader};
 use std::sync::OnceLock;
 
+use crate::Wiped;
+
 pub use crate::fq::Q;
 pub use pqz_stmt::{D, K};
 pub const DELTA: i64 = (1 << 26) - 1;
@@ -62,26 +64,29 @@ pub fn polys(v: &[i64]) -> Vec<Poly> {
     v.chunks(D).map(|c| c.try_into().unwrap()).collect()
 }
 
-/// exact integer negacyclic product sum: sum_j a[j] * b[j] in Z[X]/(X^64 + 1) (|result| < 2^63 assumed)
+/// exact integer negacyclic product sum: sum_j a[j] * b[j] in Z[X]/(X^64 + 1) (|result| < 2^63 assumed). Review P-B:
+/// the same work for every value of b (a secret: s, r), no zero skip; the wrap split by index, not by a branch.
 pub fn dot_int(a: &[&Poly], b: &[&Poly]) -> Poly {
-    let mut acc = [0i128; D];
+    let mut acc = Wiped([0i128; D]);
     for (x, y) in a.iter().zip(b) {
         for m in 0..D {
-            if y[m] == 0 {
-                continue;
+            let ym = y[m] as i128;
+            for n in 0..D - m {
+                acc[m + n] += x[n] as i128 * ym;
             }
-            for n in 0..D {
-                let v = x[n] as i128 * y[m] as i128;
-                if m + n < D { acc[m + n] += v } else { acc[m + n - D] -= v }
+            for n in D - m..D {
+                acc[m + n - D] -= x[n] as i128 * ym;
             }
         }
     }
     acc.map(|v| v as i64)
 }
 
+/// v mod q centred into (-q/2, q/2]: no division, the centring by a mask (review P-B: v is secret-derived in the
+/// honest prover's checks and decryptions)
 pub fn modq(v: i64) -> i64 {
-    let r = v.rem_euclid(Q as i64);
-    if r > (Q as i64 - 1) / 2 { r - Q as i64 } else { r }
+    let r = crate::fq::Fq::from_i64(v).0 as i64;
+    r - (Q & crate::ct::mask((((Q as i64 - 1) / 2 - r) as u64) >> 63)) as i64
 }
 
 /// pk = A s + e mod q
@@ -90,7 +95,7 @@ pub fn keypair(s: &[Poly], e: &[Poly]) -> Vec<Poly> {
     (0..K)
         .map(|i| {
             let row: Vec<&Poly> = (0..K).map(|j| &a[i * K + j]).collect();
-            let y = dot_int(&row, &s.iter().collect::<Vec<_>>());
+            let y = Wiped(dot_int(&row, &s.iter().collect::<Vec<_>>()));
             std::array::from_fn(|m| modq(y[m] + e[i][m]))
         })
         .collect()
@@ -103,7 +108,7 @@ pub fn encrypt(pks: &[&Vec<Poly>], msgs: &[[u8; 16]], r: &[Poly], e1: &[Poly], e
     let u = (0..K)
         .map(|i| {
             let col: Vec<&Poly> = (0..K).map(|j| &a[j * K + i]).collect();
-            let y = dot_int(&col, &rr);
+            let y = Wiped(dot_int(&col, &rr));
             std::array::from_fn(|m| modq(y[m] + e1[i][m]))
         })
         .collect();
@@ -112,7 +117,7 @@ pub fn encrypt(pks: &[&Vec<Poly>], msgs: &[[u8; 16]], r: &[Poly], e1: &[Poly], e
         .zip(msgs)
         .zip(e2)
         .map(|((pk, msg), e2)| {
-            let y = dot_int(&pk.iter().collect::<Vec<_>>(), &rr);
+            let y = Wiped(dot_int(&pk.iter().collect::<Vec<_>>(), &rr));
             std::array::from_fn(|i| if i < 16 { modq(y[i] + e2[i] + DELTA * msg[i] as i64) } else { 0 })
         })
         .collect();

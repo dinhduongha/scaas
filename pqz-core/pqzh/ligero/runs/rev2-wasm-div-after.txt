@@ -1,0 +1,3 @@
+# wasm32 (--no-default-features, release, rustc 1.97.1) 64-bit div/rem per function, tree rev2-pqzh working tree on b1c4de5 (after review P-B; runs/wasm_div.py)
+<pqzh_ligero::fft::Domain>::pw {'i64.rem_s': 1}
+<pqzh_ligero::fft::Domain>::try_new {'i64.div_u': 1}

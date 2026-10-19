@@ -1,0 +1,108 @@
+{"rel": "R_TXM1", "params": {"n": 32756, "k": 817, "ell": 695, "t": 121, "n2": 1634, "pow_bits": 16, "proven": true, "johnson": false, "rate": 0.02494}, "soundness_bits": {"query": 128.5, "proximity_field": 145.0, "linear_field": 154.4, "quadratic_field": 168.0, "keccak_collision": 128.0, "total": 127.2}}
+{"rel": "R_TXM1", "proof_bytes": 230242, "proof_bytes_min": 230242, "proof_bytes_max": 230242, "max_len_exact": 235470, "max_len_verifier": 235470, "fnv_last": "f67f3b40", "fnv_by_seed": ["f67f3b40"], "breakdown": {"total": 230242, "root_nonce": 40, "test_polys": 100896, "columns": 101626, "distinct_columns": 119, "rows_m": 125, "merkle": 27680}}
+{"rel": "R_TXM1", "stmt_bytes": 83072, "wit_bytes": 12416, "m_rows": 125, "input_max": 318547}
+{"rel": "R_TXM1", "timing": "prove", "stats": {"n": 1, "mean_ms": 829.479, "p50_ms": 829.479, "p99_ms": 829.479, "max_ms": 829.479}, "peak_heap_mb": 43.2}
+{"rel": "R_TXM1", "timing": "verify_honest", "stats": {"n": 1, "mean_ms": 10.549, "p50_ms": 10.549, "p99_ms": 10.549, "max_ms": 10.549}, "peak_heap_mb": 1.2}
+{"rel": "R_TXM1", "kind": "bitflip", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM1", "kind": "byte_set", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM1", "kind": "random_bytes", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM1", "kind": "truncate", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM1", "kind": "extend", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM1", "kind": "stmt_coeff", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM1", "kind": "stmt_oob", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM1", "kind": "stmt_prefix", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM1", "kind": "stmt_tail", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM1", "kind": "other_proof", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM1", "kind": "field_noncanon", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM1", "kind": "empty", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM1", "timing": "verify_adversarial", "stats": null}
+{"rel": "R_TXM2", "params": {"n": 32756, "k": 817, "ell": 695, "t": 121, "n2": 1634, "pow_bits": 16, "proven": true, "johnson": false, "rate": 0.02494}, "soundness_bits": {"query": 128.5, "proximity_field": 145.0, "linear_field": 154.4, "quadratic_field": 168.0, "keccak_collision": 128.0, "total": 127.2}}
+{"rel": "R_TXM2", "proof_bytes": 231128, "proof_bytes_min": 231128, "proof_bytes_max": 231128, "max_len_exact": 235470, "max_len_verifier": 235470, "fnv_last": "ff71ea35", "fnv_by_seed": ["ff71ea35"], "breakdown": {"total": 231128, "root_nonce": 40, "test_polys": 100896, "columns": 102480, "distinct_columns": 120, "rows_m": 125, "merkle": 27712}}
+{"rel": "R_TXM2", "stmt_bytes": 99712, "wit_bytes": 12496, "m_rows": 125, "input_max": 335187}
+{"rel": "R_TXM2", "timing": "prove", "stats": {"n": 1, "mean_ms": 738.975, "p50_ms": 738.975, "p99_ms": 738.975, "max_ms": 738.975}, "peak_heap_mb": 43.2}
+{"rel": "R_TXM2", "timing": "verify_honest", "stats": {"n": 1, "mean_ms": 10.544, "p50_ms": 10.544, "p99_ms": 10.544, "max_ms": 10.544}, "peak_heap_mb": 1.2}
+{"rel": "R_TXM2", "kind": "bitflip", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM2", "kind": "byte_set", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM2", "kind": "random_bytes", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM2", "kind": "truncate", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM2", "kind": "extend", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM2", "kind": "stmt_coeff", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM2", "kind": "stmt_oob", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM2", "kind": "stmt_prefix", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM2", "kind": "stmt_tail", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM2", "kind": "other_proof", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM2", "kind": "field_noncanon", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM2", "kind": "empty", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM2", "timing": "verify_adversarial", "stats": null}
+{"rel": "R_TXM4", "params": {"n": 32756, "k": 817, "ell": 695, "t": 121, "n2": 1634, "pow_bits": 16, "proven": true, "johnson": false, "rate": 0.02494}, "soundness_bits": {"query": 128.5, "proximity_field": 145.0, "linear_field": 154.3, "quadratic_field": 168.0, "keccak_collision": 128.0, "total": 127.2}}
+{"rel": "R_TXM4", "proof_bytes": 233604, "proof_bytes_min": 233604, "proof_bytes_max": 233604, "max_len_exact": 236196, "max_len_verifier": 236196, "fnv_last": "7a69ddcb", "fnv_by_seed": ["7a69ddcb"], "breakdown": {"total": 233604, "root_nonce": 40, "test_polys": 100896, "columns": 104060, "distinct_columns": 121, "rows_m": 126, "merkle": 28608}}
+{"rel": "R_TXM4", "stmt_bytes": 132992, "wit_bytes": 12656, "m_rows": 126, "input_max": 369193}
+{"rel": "R_TXM4", "timing": "prove", "stats": {"n": 1, "mean_ms": 753.318, "p50_ms": 753.318, "p99_ms": 753.318, "max_ms": 753.318}, "peak_heap_mb": 43.6}
+{"rel": "R_TXM4", "timing": "verify_honest", "stats": {"n": 1, "mean_ms": 11.490, "p50_ms": 11.490, "p99_ms": 11.490, "max_ms": 11.490}, "peak_heap_mb": 1.3}
+{"rel": "R_TXM4", "kind": "bitflip", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM4", "kind": "byte_set", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM4", "kind": "random_bytes", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM4", "kind": "truncate", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM4", "kind": "extend", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM4", "kind": "stmt_coeff", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM4", "kind": "stmt_oob", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM4", "kind": "stmt_prefix", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM4", "kind": "stmt_tail", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM4", "kind": "other_proof", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM4", "kind": "field_noncanon", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM4", "kind": "empty", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM4", "timing": "verify_adversarial", "stats": null}
+{"rel": "R_TXM1_0", "params": {"n": 32756, "k": 817, "ell": 695, "t": 121, "n2": 1634, "pow_bits": 16, "proven": true, "johnson": false, "rate": 0.02494}, "soundness_bits": {"query": 128.5, "proximity_field": 145.0, "linear_field": 154.4, "quadratic_field": 168.0, "keccak_collision": 128.0, "total": 127.2}}
+{"rel": "R_TXM1_0", "proof_bytes": 232024, "proof_bytes_min": 232024, "proof_bytes_max": 232024, "max_len_exact": 234744, "max_len_verifier": 234744, "fnv_last": "547bc12e", "fnv_by_seed": ["547bc12e"], "breakdown": {"total": 232024, "root_nonce": 40, "test_polys": 100896, "columns": 102608, "distinct_columns": 121, "rows_m": 124, "merkle": 28480}}
+{"rel": "R_TXM1_0", "stmt_bytes": 66560, "wit_bytes": 12384, "m_rows": 124, "input_max": 301309}
+{"rel": "R_TXM1_0", "timing": "prove", "stats": {"n": 1, "mean_ms": 653.465, "p50_ms": 653.465, "p99_ms": 653.465, "max_ms": 653.465}, "peak_heap_mb": 42.9}
+{"rel": "R_TXM1_0", "timing": "verify_honest", "stats": {"n": 1, "mean_ms": 12.006, "p50_ms": 12.006, "p99_ms": 12.006, "max_ms": 12.006}, "peak_heap_mb": 1.1}
+{"rel": "R_TXM1_0", "kind": "bitflip", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM1_0", "kind": "byte_set", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM1_0", "kind": "random_bytes", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM1_0", "kind": "truncate", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM1_0", "kind": "extend", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM1_0", "kind": "stmt_coeff", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM1_0", "kind": "stmt_oob", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM1_0", "kind": "stmt_prefix", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM1_0", "kind": "stmt_tail", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM1_0", "kind": "other_proof", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM1_0", "kind": "field_noncanon", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM1_0", "kind": "empty", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM1_0", "timing": "verify_adversarial", "stats": null}
+{"rel": "R_TXM2_0", "params": {"n": 32756, "k": 817, "ell": 695, "t": 121, "n2": 1634, "pow_bits": 16, "proven": true, "johnson": false, "rate": 0.02494}, "soundness_bits": {"query": 128.5, "proximity_field": 145.0, "linear_field": 154.4, "quadratic_field": 168.0, "keccak_collision": 128.0, "total": 127.2}}
+{"rel": "R_TXM2_0", "proof_bytes": 232366, "proof_bytes_min": 232366, "proof_bytes_max": 232366, "max_len_exact": 235470, "max_len_verifier": 235470, "fnv_last": "07d08cd9", "fnv_by_seed": ["07d08cd9"], "breakdown": {"total": 232366, "root_nonce": 40, "test_polys": 100896, "columns": 103334, "distinct_columns": 121, "rows_m": 125, "merkle": 28096}}
+{"rel": "R_TXM2_0", "stmt_bytes": 83072, "wit_bytes": 12432, "m_rows": 125, "input_max": 318547}
+{"rel": "R_TXM2_0", "timing": "prove", "stats": {"n": 1, "mean_ms": 799.390, "p50_ms": 799.390, "p99_ms": 799.390, "max_ms": 799.390}, "peak_heap_mb": 43.2}
+{"rel": "R_TXM2_0", "timing": "verify_honest", "stats": {"n": 1, "mean_ms": 11.061, "p50_ms": 11.061, "p99_ms": 11.061, "max_ms": 11.061}, "peak_heap_mb": 1.2}
+{"rel": "R_TXM2_0", "kind": "bitflip", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM2_0", "kind": "byte_set", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM2_0", "kind": "random_bytes", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM2_0", "kind": "truncate", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM2_0", "kind": "extend", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM2_0", "kind": "stmt_coeff", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM2_0", "kind": "stmt_oob", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM2_0", "kind": "stmt_prefix", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM2_0", "kind": "stmt_tail", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM2_0", "kind": "other_proof", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM2_0", "kind": "field_noncanon", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM2_0", "kind": "empty", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM2_0", "timing": "verify_adversarial", "stats": null}
+{"rel": "R_TXM4_0", "params": {"n": 32756, "k": 817, "ell": 695, "t": 121, "n2": 1634, "pow_bits": 16, "proven": true, "johnson": false, "rate": 0.02494}, "soundness_bits": {"query": 128.5, "proximity_field": 145.0, "linear_field": 154.4, "quadratic_field": 168.0, "keccak_collision": 128.0, "total": 127.2}}
+{"rel": "R_TXM4_0", "proof_bytes": 232526, "proof_bytes_min": 232526, "proof_bytes_max": 232526, "max_len_exact": 235470, "max_len_verifier": 235470, "fnv_last": "e02eb2df", "fnv_by_seed": ["e02eb2df"], "breakdown": {"total": 232526, "root_nonce": 40, "test_polys": 100896, "columns": 103334, "distinct_columns": 121, "rows_m": 125, "merkle": 28256}}
+{"rel": "R_TXM4_0", "stmt_bytes": 116096, "wit_bytes": 12528, "m_rows": 125, "input_max": 351571}
+{"rel": "R_TXM4_0", "timing": "prove", "stats": {"n": 1, "mean_ms": 725.074, "p50_ms": 725.074, "p99_ms": 725.074, "max_ms": 725.074}, "peak_heap_mb": 43.2}
+{"rel": "R_TXM4_0", "timing": "verify_honest", "stats": {"n": 1, "mean_ms": 10.705, "p50_ms": 10.705, "p99_ms": 10.705, "max_ms": 10.705}, "peak_heap_mb": 1.2}
+{"rel": "R_TXM4_0", "kind": "bitflip", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM4_0", "kind": "byte_set", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM4_0", "kind": "random_bytes", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM4_0", "kind": "truncate", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM4_0", "kind": "extend", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM4_0", "kind": "stmt_coeff", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM4_0", "kind": "stmt_oob", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM4_0", "kind": "stmt_prefix", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM4_0", "kind": "stmt_tail", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM4_0", "kind": "other_proof", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM4_0", "kind": "field_noncanon", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM4_0", "kind": "empty", "cases": 0, "accepted": 0, "panics": 0, "stats": null}
+{"rel": "R_TXM4_0", "timing": "verify_adversarial", "stats": null}

@@ -24,7 +24,8 @@
 #define PQZ_FFI_INTERNAL 3 /* a panic in the decode / verify logic was caught: input-caused, the same on every
                               node; out = ...00 (the input is invalid); log it */
 #define PQZ_FFI_NODE_FAULT 4 /* a fault of this node, not of the input (worker or core unavailable; Rust core: out of
-                                memory in a verifier, Error::Memory; C core: arena exhaustion or reservation failure):
+                                memory in a verifier, Error::Memory; PQZH: a verifier buffer not reserved; C core:
+                                arena exhaustion or reservation failure):
                                 no result, out untouched; abort block processing, never treat the input as invalid
                                 (controller 2026-10-14) */
 

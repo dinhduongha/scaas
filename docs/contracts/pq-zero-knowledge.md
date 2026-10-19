@@ -1569,8 +1569,11 @@ call serially on one worker thread, only for a fixed stack), no floating point, 
 results, bounded loops (a capped rejection loop that hits its cap ⇒ invalid); any parse error, panic or failed check ⇒
 output `0x00…00`; a fault of the node itself, not of the input (arena exhaustion, the worker or the core unavailable,
 failure to reserve the arena) gives no result at all: the node aborts processing the block and never treats the input
-as invalid (`pqz-ffi` status `PQZ_FFI_NODE_FAULT`, controller 2026-10-14); a failed Rust heap allocation or an OOM kill
-aborts the process (not reportable); gas by formula regardless of validity; activation by the chainspec's `engine.Pqz` schedules (the first schedule's
+as invalid (`pqz-ffi` status `PQZ_FFI_NODE_FAULT`, controller 2026-10-14); the verifiers' buffers that scale with the
+parameters and the relation are reserved fallibly, so out of memory there is the same node fault (the PQZL Rust core's
+`Error::Memory`; the PQZH verifier's `Oom`, `pqzh_ligero::try_verify`, review P-D 2026-10-19); any other failed Rust
+heap allocation (the decoded statement, a few KB of fixed tables, the PQZH matrix A of 512 KiB built once per process, allocations inside std) or an OOM kill aborts the
+process (not reportable); gas by formula regardless of validity; activation by the chainspec's `engine.Pqz` schedules (the first schedule's
 timestamp; [CTR-PQZ-11](#CTR-PQZ-11)); contracts self-test and
 the node probes (`has_pqz_precompile`), because a missing transition key looks exactly like an enabled one.
 
@@ -1950,7 +1953,10 @@ service is the user's (or the organization's key oracle), never a third party's 
 - The kill criterion (≤ 96 KB proof) also bounds phone upload and memory; a proof that passes native budgets but not
   the phone budget keeps native provers and the fallback, and the WASM prover waits.
 - JIT-compiled WASM gives no constant-time guarantee; the code avoids secret-dependent branches and indices, the
-  residual timing risk is stated (T11), and the native service is the choice for high-value treasury keys.
+  residual timing risk is stated (T11), and the native service is the choice for high-value treasury keys. Both
+  provers are checked for it on x86-64 with valgrind memcheck (ctgrind: PQZL `pqzl/test/ct.sh`, PQZH
+  `pqzh/ligero/runs/ct.sh`; 0 reports on the paths run) and by reading their wasm32 code for 64-bit divisions on
+  secrets (`pqz-core/research/code-review-2026-10-19/E-constant-time.md`, `O-pqzh-constant-time.md`).
 
 ## <a id="threats"></a>12. Threats
 

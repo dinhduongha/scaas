@@ -1,0 +1,168 @@
+   Compiling proc-macro2 v1.0.107
+   Compiling quote v1.0.47
+   Compiling unicode-ident v1.0.27
+   Compiling autocfg v1.5.1
+   Compiling serde_core v1.0.229
+   Compiling num-traits v0.2.19
+   Compiling syn v3.0.9
+   Compiling serde v1.0.229
+   Compiling serde_derive v1.0.229
+   Compiling syn v2.0.119
+   Compiling paste v1.0.15
+   Compiling cfg-if v1.0.5
+   Compiling cpufeatures v0.3.1
+   Compiling rand_core v0.10.1
+   Compiling chacha20 v0.10.2
+   Compiling num-integer v0.1.47
+   Compiling tracing-core v0.1.36
+   Compiling p3-maybe-rayon v0.9.0-rc.1
+   Compiling pin-project-lite v0.2.17
+   Compiling either v1.19.0
+   Compiling tracing-attributes v0.1.31
+   Compiling itertools v0.15.0
+   Compiling tracing v0.1.44
+   Compiling p3-util v0.9.0-rc.1
+   Compiling num-bigint v0.5.1
+   Compiling rand v0.10.3
+   Compiling thiserror v2.0.21
+   Compiling thiserror-impl v2.0.21
+   Compiling p3-field v0.9.0-rc.1
+   Compiling p3-matrix v0.9.0-rc.1
+   Compiling scopeguard v1.2.0
+   Compiling lock_api v0.4.14
+   Compiling spin v0.12.3
+   Compiling p3-symmetric v0.9.0-rc.1
+   Compiling p3-dft v0.9.0-rc.1
+   Compiling crunchy v0.2.4
+   Compiling tiny-keccak v2.0.2
+   Compiling libm v0.2.16
+   Compiling p3-commit v0.9.0-rc.1
+   Compiling p3-keccak v0.9.0-rc.1
+   Compiling p3-air v0.9.0-rc.1
+   Compiling p3-challenger v0.9.0-rc.1
+   Compiling p3-security v0.9.0-rc.1
+   Compiling version_check v0.9.5
+   Compiling generic-array v0.14.7
+   Compiling typenum v1.20.1
+   Compiling allocator-api2 v0.2.21
+   Compiling equivalent v1.0.2
+   Compiling foldhash v0.2.0
+   Compiling hashbrown v0.17.1
+   Compiling p3-binary-field v0.9.0-rc.1
+   Compiling p3-zk-codes v0.9.0-rc.1
+   Compiling p3-multilinear-util v0.9.0-rc.1
+   Compiling p3-lookup v0.9.0-rc.1
+   Compiling p3-mds v0.9.0-rc.1
+   Compiling block-buffer v0.10.4
+   Compiling crypto-common v0.1.7
+   Compiling cobs v0.3.0
+   Compiling postcard v1.1.3
+   Compiling digest v0.10.7
+   Compiling p3-sumcheck v0.9.0-rc.1
+   Compiling p3-poseidon1 v0.9.0-rc.1
+   Compiling p3-poseidon2 v0.9.0-rc.1
+   Compiling p3-uni-stark v0.9.0-rc.1
+   Compiling p3-merkle-tree v0.9.0-rc.1
+   Compiling keccak v0.1.6
+   Compiling sha3 v0.10.8
+   Compiling p3-batch-stark v0.9.0-rc.1
+   Compiling p3-bus v0.9.0-rc.1
+   Compiling p3-whir v0.9.0-rc.1
+   Compiling p3-multi-stark v0.9.0-rc.1
+   Compiling p3-goldilocks v0.9.0-rc.1
+   Compiling p3-fri v0.9.0-rc.1
+   Compiling pqzh v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/rev2-pqzh/pqz-core/pqzh/stark-backup)
+    Finished `release` profile [optimized + debuginfo] target(s) in 2m 12s
+     Running unittests src/lib.rs (target/release/deps/pqzh-ea0569fe0c9f63fd)
+
+running 9 tests
+test air::tests::mv_layout_statement_independent ... ok
+test enc::tests::field_elements_big_endian_and_canonical ... ok
+test enc::tests::varints_minimal ... ok
+test rel::tests::mask_seed_hedged ... ok
+test ring::tests::ntt_is_negacyclic_product ... ok
+test whirpcs::tests::coefficient_forms ... ok
+test whirpcs::tests::embedding_matches_direct_evaluation ... ok
+test ring::tests::ntt_matches_naive_and_inverts ... ok
+test whirpcs::tests::open_verify_and_rejections ... ok
+
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.07s
+
+     Running unittests src/bin/pqzh_bench.rs (target/release/deps/pqzh_bench-7b3e8751e46cbd0e)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/pqzh_security.rs (target/release/deps/pqzh_security-96be62390d0b9dab)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/pqzh_whir.rs (target/release/deps/pqzh_whir-203905db395fb554)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/attacks.rs (target/release/deps/attacks-c6c570eafb515d96)
+
+running 7 tests
+test tx_overspend ... ok
+test reg_coefficient_out_of_range ... ok
+test tx_fee_word_above_2_64 ... ok
+test tx_digit_out_of_range ... ok
+test tx_e2_norm_exceeded ... ok
+test reg_norm_exceeded_small_coefficients ... ok
+test honest_and_cross ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 11.04s
+
+     Running tests/size.rs (target/release/deps/size-670069b1290738e7)
+
+running 1 test
+test size_breakdown ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 6.21s
+
+     Running tests/smoke.rs (target/release/deps/smoke-d3e2bc51de2e0303)
+
+running 3 tests
+test honest_reg_and_tx ... ok
+test zk_honest_and_hiding ... ok
+test zk_whir_honest_and_hiding has been running for over 60 seconds
+test zk_whir_honest_and_hiding ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 133.40s
+
+   Doc-tests pqzh
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+	Command being timed: "cargo test -j2 --release --offline"
+	User time (seconds): 478.98
+	System time (seconds): 30.17
+	Percent of CPU this job got: 179%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 4:43.29
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 3656988
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 5978
+	Minor (reclaiming a frame) page faults: 13408493
+	Voluntary context switches: 20417
+	Involuntary context switches: 22671
+	Swaps: 0
+	File system inputs: 146872
+	File system outputs: 2701360
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
+tests rc=0

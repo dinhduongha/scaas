@@ -20,6 +20,9 @@ bench = []
 # bench only (P6-ANON plan, global constraints): op 7 also at M = 8, 16 (pqz-stmt's `oversize`), proofs above
 # MAX_PROOF_PQZH; never in a production build (pqz-ffi refuses pqz-stmt's `oversize`)
 oversize = ["pqz-stmt/oversize"]
+# test only (review P-B): memcheck client requests for the constant-time check (src/ct.rs, src/bin/ct.rs, runs/ct.sh;
+# x86-64); the only feature under which the lib allows `unsafe` (production: forbid(unsafe_code))
+ctgrind = ["bench"]
 
 [[bin]]
 name = "ligero_bench"
@@ -30,6 +33,11 @@ required-features = ["bench"]
 name = "ligero_export"
 path = "src/bin/ligero_export.rs"
 required-features = ["bench"]
+
+[[bin]]
+name = "ct"
+path = "src/bin/ct.rs"
+required-features = ["ctgrind"]
 
 [[example]]
 name = "dump_setup"

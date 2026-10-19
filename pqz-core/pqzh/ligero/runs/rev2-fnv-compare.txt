@@ -1,0 +1,15 @@
+# review round 2 (Task 5c): native proof bytes before (b1c4de5, runs/rev2-base-*) vs after (rev2-pqzh working tree, runs/rev2-fnv*): ligero_bench --regime proven --r431 1, seeds [0; 32] and [1; 32] (six forms), [0; 32] (op 7 shapes)
+fnv: identical (6 relations)
+"rel": "R_REG", "proof_bytes": 186904, "fnv_last": "36b1d3e5", "fnv_by_seed": ["0ecf451a", "36b1d3e5"]
+"rel": "R_TX", "proof_bytes": 231416, "fnv_last": "720b94e0", "fnv_by_seed": ["534b3a74", "720b94e0"]
+"rel": "R_BURN", "proof_bytes": 231256, "fnv_last": "e270d5c8", "fnv_by_seed": ["f4fef37e", "e270d5c8"]
+"rel": "R_DS", "proof_bytes": 187482, "fnv_last": "020286c2", "fnv_by_seed": ["0a7acf34", "020286c2"]
+"rel": "R_DR", "proof_bytes": 185462, "fnv_last": "c5f5fb23", "fnv_by_seed": ["e42aa3da", "c5f5fb23"]
+"rel": "R_TX0", "proof_bytes": 231320, "fnv_last": "a69e9010", "fnv_by_seed": ["360216a0", "a69e9010"]
+txm-fnv: identical (6 relations)
+"rel": "R_TXM1", "proof_bytes": 230242, "fnv_last": "f67f3b40", "fnv_by_seed": ["f67f3b40"]
+"rel": "R_TXM2", "proof_bytes": 231128, "fnv_last": "ff71ea35", "fnv_by_seed": ["ff71ea35"]
+"rel": "R_TXM4", "proof_bytes": 233604, "fnv_last": "7a69ddcb", "fnv_by_seed": ["7a69ddcb"]
+"rel": "R_TXM1_0", "proof_bytes": 232024, "fnv_last": "547bc12e", "fnv_by_seed": ["547bc12e"]
+"rel": "R_TXM2_0", "proof_bytes": 232366, "fnv_last": "07d08cd9", "fnv_by_seed": ["07d08cd9"]
+"rel": "R_TXM4_0", "proof_bytes": 232526, "fnv_last": "e02eb2df", "fnv_by_seed": ["e02eb2df"]

@@ -9,7 +9,8 @@
 //! `…00` anything else; the one revert is an input over `MAX_INPUT`. Every entry catches panics; nothing here aborts.
 //! Faults (controller 2026-10-14): a panic in the decode / verify logic is a property of the input (every node hits
 //! it on the same input) ⇒ `…00` (`PQZ_FFI_INTERNAL`); a fault of this node (worker or core unavailable; Rust core:
-//! out of memory in a verifier, `Error::Memory`; C core: arena exhaustion) ⇒ no result ([`Error::NodeFault`],
+//! out of memory in a verifier, `Error::Memory`; PQZH: a verifier buffer not reserved, `Oom`; C core: arena
+//! exhaustion) ⇒ no result ([`Error::NodeFault`],
 //! `PQZ_FFI_NODE_FAULT`), which the host must not treat as an invalid input.
 //!
 //! Rust API for the node: [`precompile`], [`verify_input`], [`decode`]. C ABI for P6f: [`pqz_precompile`]
@@ -70,7 +71,7 @@ pub fn verify_input(input: &[u8]) -> Result<bool, NodeFault> {
     let Ok(inp) = decode(input) else { return Ok(false) };
     match inp.stmt.proof_system_id() {
         Some(id) if *id == PQZL_ID => pqzl::verify_fast(inp.op, inp.stmt_bytes, inp.proof),
-        Some(id) if *id == PQZH_ID => Ok(pqzh::verify(inp.op, inp.stmt_bytes, inp.proof)),
+        Some(id) if *id == PQZH_ID => pqzh::verify(inp.op, inp.stmt_bytes, inp.proof),
         _ => Ok(false),
     }
 }
@@ -121,7 +122,8 @@ pub const PQZ_FFI_BAD_ARGS: i32 = 2;
 /// (CTR-PQZ-10); worth a log line
 pub const PQZ_FFI_INTERNAL: i32 = 3;
 /// a fault of this node, not of the input (worker or core unavailable; Rust core: out of memory in a verifier,
-/// `Error::Memory`; C core: arena exhaustion or allocation): no result, nothing written; the host must abort block processing, never treat the input as invalid
+/// `Error::Memory`; PQZH: a verifier buffer not reserved; C core: arena exhaustion or allocation): no result, nothing
+/// written; the host must abort block processing, never treat the input as invalid
 pub const PQZ_FFI_NODE_FAULT: i32 = 4;
 
 /// C ABI for the node (P6f, P/Invoke): see `pqz_ffi.h`. Thread-safe (PQZL calls are serialised inside); never
