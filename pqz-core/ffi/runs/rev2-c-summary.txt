@@ -1,0 +1,58 @@
+# PQZL backend: c (cargo flags: --no-default-features --features pqzl-c)
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+node faults: arena exhaustion and worker failure → status 4, out untouched; recovered
+test node_faults_are_status_4 ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.69s
+test header_matches ... ok
+test c_abi_arguments ... ok
+op 7 largest worst-case input 369193 B of MAX_INPUT 393216
+test multi_limits_and_memo ... ok
+test one_mib_stack ... ok
+test digest_lines ... ok
+selftest hash ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205
+test selftest_report ... ok
+test selftest_vectors ... ok
+test round_trip_every_form ... ok
+rejection cases: 1012
+test every_rejection ... ok
+differential: 112 cases, 16 accepted, 0 disagreements
+test pqzl_differential ... ok
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 99.57s
+test child_task ... ok
+test child_task ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 33.89s
+test child_task ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 34.15s
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 30.60s
+test child_task ... verify-only path: 30 honest inputs, corpus 11281 inputs (10240 generator), warm-up 15.0 s, 188 valid (= the unedited honest ones), status 3 / 4: 0; generator again from 8 threads and on a 1 MiB stack: equal; 5,000 mixed calls: equal; arena 512 MiB: used 265693696 B after every call, peak 268297200 B = 0.50 of the arena (margin 2.00x), Ligero panics caught 0
+test verify_only_arena ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 29.45s
+test child_task ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 2 filtered out; finished in 29.26s
+fill determinism: arenas filled 0x00 / 0xA5 / 0x5A before pqz_init: 3118 result lines identical (digest lines of 16 forms and 12 op 7 shapes incl. proofs, self-test, 3089 corpus results)
+test fill_determinism ... ok
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 123.46s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+symbols ok: only memcpy memset __stack_chk_fail __stack_pointer outside the library objects, no test hook
+$ readelf -d target/release/libpqz_ffi.so | grep NEEDED
+ 0x0000000000000001 (NEEDED)             Shared library: [libgcc_s.so.1]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+ 0x0000000000000001 (NEEDED)             Shared library: [ld-linux-x86-64.so.2]
+symbols /gmp|mpfr|hexl/i: 0
+strings /gmp|mpfr|hexl/i: 0
+libm-style imports: 0
+c_abi: selftest ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205
+c_abi: ok (0 failures)
+# wasm32: the verify-only lib, then the prove harness (wasm/) and the digest diff against native
+   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/rev2-pqzl/pqz-core/ffi)
+   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/rev2-pqzl/pqz-core/ffi)
+   Compiling pqz-ffi-wasm v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/rev2-pqzl/pqz-core/ffi/wasm)
+wasm bytes 913110
+wasm run 40830 ms, memory 593690624 B
+native = wasm32: 29 lines equal
+{"arena": "verify-only", "peak_bytes": 268167936, "x1.5_mib": 384, "ARENA_SMALL_mib": 512, "margin": 2.00, "selftest_cold_ms": 84.3, "selftest_results": [true, false, true, false]}
+{"arena": "ARENA_SMALL", "all_valid": true, "peak_bytes": 268167936}
+	Maximum resident set size (kbytes): 889616
+bench rc=0

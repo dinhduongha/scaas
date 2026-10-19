@@ -1,0 +1,143 @@
+# verify-only build (no prove, no test-hooks): libpqz_ffi.so, and the C core archive if build.rs compiled one
+$ cargo build --release --offline
+   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/rev2-pqzl/pqz-core/ffi)
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.79s
+[rc=0]
+test hooks in the production cdylib (must be 0): 0
+C core in this build: none (feature pqzl-c off, pqzl-rust on: build.rs compiles no C)
+$ cargo tree  -e normal,build --prefix none
+aes v0.8.4
+block-buffer v0.10.4
+cfg-if v1.0.5
+cipher v0.4.4
+cpufeatures v0.2.17
+crypto-common v0.1.7
+crypto-common v0.1.7 (*)
+digest v0.10.7
+generic-array v0.14.7
+generic-array v0.14.7 (*)
+inout v0.1.4
+keccak v0.1.6
+pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/rev2-pqzl/pqz-core/ffi)
+pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/rev2-pqzl/pqz-core/pqzh/ligero)
+pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/rev2-pqzl/pqz-core/pqzl/rust)
+pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/rev2-pqzl/pqz-core/stmt)
+sha3 v0.10.8
+sha3 v0.10.8 (*)
+typenum v1.20.1
+version_check v0.9.5
+$ sha256sum target/release/libpqz_ffi.so
+ec567a649216c79b4427a52ce550b1c97afb76ebe61c5eac2a5f06a3dbe0b433  target/release/libpqz_ffi.so
+[rc=0]
+$ readelf -d target/release/libpqz_ffi.so | grep NEEDED
+ 0x0000000000000001 (NEEDED)             Shared library: [libgcc_s.so.1]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+ 0x0000000000000001 (NEEDED)             Shared library: [ld-linux-x86-64.so.2]
+$ nm -D --undefined-only target/release/libpqz_ffi.so
+                 U abort@GLIBC_2.2.5
+                 U bcmp@GLIBC_2.2.5
+                 U calloc@GLIBC_2.2.5
+                 U clock_gettime@GLIBC_2.17
+                 U close@GLIBC_2.2.5
+                 w __cxa_finalize@GLIBC_2.2.5
+                 w __cxa_thread_atexit_impl@GLIBC_2.18
+                 U dl_iterate_phdr@GLIBC_2.2.5
+                 U dlsym@GLIBC_2.34
+                 U __errno_location@GLIBC_2.2.5
+                 U free@GLIBC_2.2.5
+                 U fstat64@GLIBC_2.33
+                 U getauxval@GLIBC_2.16
+                 U getcwd@GLIBC_2.2.5
+                 U getenv@GLIBC_2.2.5
+                 w gettid@GLIBC_2.30
+                 w __gmon_start__
+                 w _ITM_deregisterTMCloneTable
+                 w _ITM_registerTMCloneTable
+                 U lseek64@GLIBC_2.2.5
+                 U malloc@GLIBC_2.2.5
+                 U memcpy@GLIBC_2.14
+                 U memmove@GLIBC_2.2.5
+                 U memset@GLIBC_2.2.5
+                 U mmap64@GLIBC_2.2.5
+                 U mprotect@GLIBC_2.2.5
+                 U munmap@GLIBC_2.2.5
+                 U open64@GLIBC_2.2.5
+                 U pause@GLIBC_2.2.5
+                 U posix_memalign@GLIBC_2.2.5
+                 U pthread_attr_destroy@GLIBC_2.2.5
+                 U pthread_attr_getguardsize@GLIBC_2.34
+                 U pthread_attr_getstack@GLIBC_2.34
+                 U pthread_attr_init@GLIBC_2.2.5
+                 U pthread_attr_setstacksize@GLIBC_2.34
+                 U pthread_create@GLIBC_2.34
+                 U pthread_detach@GLIBC_2.34
+                 U pthread_getattr_np@GLIBC_2.32
+                 U pthread_key_create@GLIBC_2.34
+                 U pthread_key_delete@GLIBC_2.34
+                 U pthread_self@GLIBC_2.2.5
+                 U pthread_setname_np@GLIBC_2.34
+                 U pthread_setspecific@GLIBC_2.34
+                 U read@GLIBC_2.2.5
+                 U readlink@GLIBC_2.2.5
+                 U realloc@GLIBC_2.2.5
+                 U realpath@GLIBC_2.3
+                 U sched_yield@GLIBC_2.2.5
+                 U sigaltstack@GLIBC_2.2.5
+                 U stat64@GLIBC_2.33
+                 w statx@GLIBC_2.28
+                 U strlen@GLIBC_2.2.5
+                 U syscall@GLIBC_2.2.5
+                 U sysconf@GLIBC_2.2.5
+                 U __tls_get_addr@GLIBC_2.3
+                 U _Unwind_Backtrace@GCC_3.3
+                 U _Unwind_DeleteException@GCC_3.0
+                 U _Unwind_GetDataRelBase@GCC_3.0
+                 U _Unwind_GetIP@GCC_3.0
+                 U _Unwind_GetIPInfo@GCC_4.2.0
+                 U _Unwind_GetLanguageSpecificData@GCC_3.0
+                 U _Unwind_GetRegionStart@GCC_3.0
+                 U _Unwind_GetTextRelBase@GCC_3.0
+                 U _Unwind_RaiseException@GCC_3.0
+                 U _Unwind_Resume@GCC_3.0
+                 U _Unwind_SetGR@GCC_3.0
+                 U _Unwind_SetIP@GCC_3.0
+                 U write@GLIBC_2.2.5
+                 U writev@GLIBC_2.2.5
+                 U __xpg_strerror_r@GLIBC_2.3.4
+$ nm -D --defined-only target/release/libpqz_ffi.so | grep ' T '
+0000000000064e00 T pqz_precompile
+# GMP / MPFR / HEXL names or strings (glic/absence.sh's pattern), libm and float imports
+symbols /gmp|mpfr|hexl/i: 0
+strings /gmp|mpfr|hexl/i: 0
+libm-style imports: 0
+# C smoke test against pqz_ffi.h
+$ clang -std=c11 -Wall -Wextra -o /home/ha/work/ainative/scaas/.claude/worktrees/rev2-pqzl/pqz-core/ffi/target/run/c_abi tests/c_abi.c -Ltarget/release -lpqz_ffi -Wl,-rpath,/home/ha/work/ainative/scaas/.claude/worktrees/rev2-pqzl/pqz-core/ffi/target/release
+[rc=0]
+$ /home/ha/work/ainative/scaas/.claude/worktrees/rev2-pqzl/pqz-core/ffi/target/run/c_abi
+c_abi: selftest ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205
+c_abi: ok (0 failures)
+[rc=0]
+# clippy (the crate's toolchain 1.97.1; +stable 1.90 refuses pqzl's rust-version): no float arithmetic in the crate
+$ cargo clippy --release --offline --features prove,test-hooks --lib -- -D clippy::float_arithmetic
+    Checking typenum v1.20.1
+    Checking subtle v2.6.1
+    Checking cpufeatures v0.2.17
+    Checking cfg-if v1.0.5
+    Checking keccak v0.1.6
+   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/rev2-pqzl/pqz-core/ffi)
+    Checking pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/rev2-pqzl/pqz-core/stmt)
+    Checking generic-array v0.14.7
+    Checking crypto-common v0.1.7
+    Checking block-buffer v0.10.4
+    Checking inout v0.1.4
+    Checking digest v0.10.7
+    Checking cipher v0.4.4
+    Checking sha3 v0.10.8
+    Checking hmac v0.12.1
+    Checking sha2 v0.10.9
+    Checking aes v0.8.4
+    Checking hkdf v0.12.4
+    Checking pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/rev2-pqzl/pqz-core/pqzh/ligero)
+    Checking pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/rev2-pqzl/pqz-core/pqzl/rust)
+    Finished `release` profile [optimized + debuginfo] target(s) in 2.50s
+[rc=0]
