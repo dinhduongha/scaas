@@ -1,7 +1,8 @@
 //! Review P-D: when one of the verifier's buffers cannot be reserved, `try_verify` reports `Err(Oom)` (pqz-ffi:
 //! `NodeFault`) instead of aborting the process, and never a verdict. A global allocator that refuses every allocation
 //! of at least LIMIT bytes while armed; the limits stay above the largest allocation `try_verify` leaves infallible (a
-//! decoded public-key vector, 16 KiB).
+//! decoded public-key vector, 16 KiB; the 512 KiB matrix A is built by the `prove` that makes the test proof, before
+//! the allocator is armed).
 #![cfg(feature = "bench")]
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::sync::atomic::{AtomicUsize, Ordering};

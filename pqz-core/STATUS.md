@@ -1456,8 +1456,11 @@ the record.
     bound that admits the hiding proofs (`MAX_PROOF` 163,840 B is below them; `tests/smoke.rs` lifts the cap) or a
     smaller hiding configuration; (3) statement decoding by `pqz-stmt` with the op tag, id, auditorOn and zero-word
     checks (today only the fee word is read, `rel.rs` `parse_tx`); (4) a distinct `proofSystemId`; (5) every
-    relation (today R_REG and R_TX only). Status: recorded, no code (controller proposal, owner may override;
-    decisions CTR-PQZ-10).
+    relation (today R_REG and R_TX only); (6) a verifier that rejects non-hiding configurations (`zk == false`) and
+    a preset at 128-bit proven soundness; (7) the salt-form check (B-F5); (8) the prover hygiene Ligero got in this
+    review (constant-time pass, wiping); (9) the verifier fault handling (OOM as `NodeFault`, panic containment;
+    wasm32 traps on a panic); (10) vectors / KAT, tamper and xcheck runs, fuzzing, gas rows and its own review round.
+    Status: recorded, no code; **owner ruling 2026-10-19: accepted** (decisions CTR-PQZ-10).
 
 Scratch (not needed to resume, re-creatable): the LaZer and lattice-estimator clones, the upstream tbox harness and
 debug builds under the session scratchpad `p6d/`.

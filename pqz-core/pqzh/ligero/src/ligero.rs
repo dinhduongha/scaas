@@ -336,7 +336,7 @@ fn prove_once(op: u8, stmt: &[u8], wit: &[u8], p: &Params, check: bool, rng: &mu
     };
     let tree = Tree::new((0..n).map(|j| keccak(&[&salts[j], &col(j)])).collect());
     let root = tree.root();
-    ct::public(&root); // the commitment (b2)
+    ct::public(&root); // the commitment (b1)
 
     let mut tr = Tr::new(op, stmt);
     tr.absorb(&root);
@@ -350,7 +350,7 @@ fn prove_once(op: u8, stmt: &[u8], wit: &[u8], p: &Params, check: bool, rng: &mu
             wp[c + k - 1] += cb[i] * pc[i][c];
         }
     }
-    ct::public(&wp[..]); // a proof field (b3)
+    ct::public(&wp[..]); // a proof field (b2)
 
     // linear: q = sum_i R_i p_i + u_lin, products on H_N2 (N2 >= 2k - 1)
     let comb = cs::comb(&lay, &st, rho).map_err(|_| "memory")?;
@@ -388,7 +388,7 @@ fn prove_once(op: u8, stmt: &[u8], wit: &[u8], p: &Params, check: bool, rng: &mu
     };
     let qc = ifft4(&qe);
     let qp: Vec<F4> = (0..d2).map(|i| get4(&qc, i) + get4(&ul, i)).collect();
-    ct::public(&qp[..]); // a proof field (b3)
+    ct::public(&qp[..]); // a proof field (b2)
     if check && (qp[0] + qp[k]) * Fq(k as u64) != comb.rhs {
         return Err("linear constraints");
     }
@@ -411,8 +411,8 @@ fn prove_once(op: u8, stmt: &[u8], wit: &[u8], p: &Params, check: bool, rng: &mu
             rem[i + j] -= c * zj;
         }
     }
-    ct::public(&hp[..]); // a proof field (b3)
-    // the prover's self-check: zero for every valid witness (b4)
+    ct::public(&hp[..]); // a proof field (b2)
+    // the prover's self-check: zero for every valid witness (b5)
     if check && ct::verdict(rem.iter().fold(0, |a, v| v.0.iter().fold(a, |a, c| a | c.0)) != 0) {
         return Err("quadratic constraints");
     }
@@ -435,7 +435,7 @@ fn prove_once(op: u8, stmt: &[u8], wit: &[u8], p: &Params, check: bool, rng: &mu
     for h in tree.multiproof(&idx) {
         out.extend_from_slice(&h);
     }
-    ct::public(&out[..]); // the opened columns, their salts and the multiproof (b2, b3)
+    ct::public(&out[..]); // the opened columns, their salts and the multiproof (b3)
     Ok(out)
 }
 
@@ -475,7 +475,7 @@ pub fn verify(op: u8, stmt: &[u8], proof: &[u8], p: &Params) -> bool {
 /// the domains, the challenges, the linear test's combination vectors, the per-column evaluation buffers) could not
 /// be reserved: a fault of the machine, not of the input, which pqz-ffi reports as `NodeFault`. Not covered (still an
 /// abort on allocation failure): the decoded statement polynomials (no larger than the statement the caller already
-/// holds), the layout tables (a few KB), the shared matrix A (built once, at pqz-ffi's self-test), and allocations
+/// holds), the layout tables (a few KB), the shared matrix A (512 KiB, built once per process at first use, `cs.rs`), and allocations
 /// inside std / sha3.
 pub fn try_verify(op: u8, stmt: &[u8], proof: &[u8], p: &Params) -> Result<bool, Oom> {
     std::panic::catch_unwind(|| verify_inner(op, stmt, proof, p)).unwrap_or_else(|_| {

@@ -125,7 +125,7 @@ reserved, not touched, until the core uses them.
   verifier (review P-D, 2026-10-19) reserves its buffers that scale with the parameters and the relation (the decoded
   proof, the opened columns, the domains, the challenges, the combination vectors, the per-column buffers) fallibly:
   `pqzh_ligero::try_verify` gives `Err(Oom)`, which `pqzh::verify` maps to `NodeFault` (status 4); the decoded
-  statement, the layout tables and the matrix A (built once, by the self-test) are still infallible.
+  statement, the layout tables and the matrix A (512 KiB, built once per process at the first PQZH call) are still infallible.
 
 The test hooks (feature `test-hooks`, never in a production build: `pqzl::TEST_FAIL_WORKER` for both backends; the C
 backend's `TEST_ARENA_BYTES`, `TEST_ARENA_FILL`, `reinit`, `arena_bytes`) inject the faults (`tests/fault.rs`, in its
