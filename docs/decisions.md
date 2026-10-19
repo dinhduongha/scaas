@@ -3210,6 +3210,29 @@ Change (2026-10-19): controller proposal (owner may override) — on-chain revie
 
 Change (2026-10-19): owner rulings on the on-chain review (both proposals accepted): **W-J** the `secp256k1` kind (0x0108) verifies ECDSA over the raw digest, so an EOA-held key signs it only through `eth_sign` (against S23) — recorded as a residual risk in the S23 row; an EIP-191 `personal_sign` variant (new verifier, vectors, six clients) after P6. **W-K** `MandateWallet.isValidSignature` / `HederaMandateWallet` accept the owner's ECDSA over any digest (ERC-7739 class) — documented beside `SmartKeyAccount`'s limitation in accounts.md; no wrapping. Status: recorded in the spec.
 
+### CTR-UA-30 — A UA is one signature-verifying entity; a PQZ key is an attribute of a PQ-signing UA
+- old: — · status: current · owner: yes · date: 2026-10-20 · normative: decisions.md · superseded-by: —
+
+**Rule.** Owner rulings 2026-10-20 on the research note `docs/research/ua-identity.md`: (1) **a UA is one entity that
+can verify signatures** (a native account, a single key of any kind, BLS, a multisig m-of-n, …); ids keep the current
+derivation (CTR-UA-02 / -03: native ids as-is or zero-padded, derived ids `keccak256(keccak256(tag) ‖ key_data)`).
+(2) **Classical Zether: option (A) — the Zether key is itself the UA** (as the zether-dev `ZetherAccount.register(y, c,
+s)` with `yHash`, in SCaaS form `keccak256(keccak256(tag) ‖ Y)` with the kind tag): the key signs by Schnorr with `x`,
+the Zether proof authorizes a spend ("self" mode kept); its public balance and its confidential account share that id.
+(3) **PQZ: the PQZL public key is an attribute of a PQ-signing UA only** (`mldsa65` / `mldsa44`, later `fndsa512`, or a
+`msig` whose non-PQ members' weight is below the threshold — the CTR-PQZ-12 rule; classical signers may not carry a PQZ
+key), **supplied in `register`** (no separate attach function), with the `R_REG` proof of knowledge bound to chain,
+registry and the UA id; immutable. (4) **An encryption key belongs to one UA only**, multisig included (the existing
+`keyOwner[keccak256(GROUP ‖ key)]` map, `UAKeyInUse`). Consequences: the `pqz-mlwe` UA kind (0x0142) and its `authRef`
+go (the id 0x0142 stays as the PQZ scheme id); the PQZ account, its fees (CTR-PQZ-06 change) and its public balance live
+under the signing UA's id; for a multisig the PQZL secret is a single view / prove key, spends need the m-of-n
+signature. The research note's option to drop Zether "self" mode is withdrawn by (2).
+**Why.** One identity per holder for public and confidential balances; the PQZ key cannot sign compactly (an `R_REG`
+proof is ≈ 40 KB), so it rides on a PQ signer; Zether keys can sign, so the single-key account stays simple.
+**Cost if wrong.** Registry, verifiers, the `R_REG` message, the PQZ token state keys and every UA client change
+(test chains only; the `R_REG` change rides the 16k `proofSystemId` bump).
+**Source.** owner, 2026-10-20 (chat rulings on `docs/research/ua-identity.md` §8: PQ signers only, keys in `register`, Zether option (A)). Status: decided, not built (UA-6, before plan Task 5h).
+
 ### CTR-PQZ-01 — Separate PQZ class gated to private chains
 - old: R270 · status: current · owner: yes · date: 2026-10-07 · normative: contracts/pq-zero-knowledge.md#CTR-PQZ-01 · superseded-by: —
 

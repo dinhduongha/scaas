@@ -318,3 +318,11 @@ All chains are test-only (owner; mainnet 22776 not launched): redeploy, no compa
 2. §5: classical signers with a PQZ key — allowed, PQ-only (today), or a per-token flag.
 3. §6: drop Zether `self` mode (recommended) or keep a "proof alone" path for single holders.
 4. §6: attach as its own function (recommended) or also as a `register` argument.
+
+## 9. Owner rulings (2026-10-20)
+
+**CTR-UA-30** — the owner's answers to §8 (decisions.md CTR-UA-30): a UA is one signature-verifying
+entity; ids keep the current derivation (§8.1 as recommended); classical Zether takes **option (A)**: the Zether key is
+itself the UA and "self" mode stays (§8.3 reversed); a PQZ key is an attribute of a PQ-signing UA only (§8.2: PQ-only,
+as CTR-PQZ-12), **supplied in `register`** (§8.4: no separate attach function), immutable, one UA per key. Status:
+decided, not built (UA-6, before plan Task 5h).
