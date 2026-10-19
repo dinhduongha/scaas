@@ -29,6 +29,35 @@ pub(crate) struct Dcomp {
     pub(crate) log2m: u32,
 }
 
+/// `r += c ? a : 0` (`sub`: `-=`), c in {0, 1}, without a branch: a masked-out 0 leaves r as it was, sign included
+/// (C dcompress.c `_cnd_addsub`; review E)
+fn cnd_addsub(r: &mut Int, a: &Int, c: u64, sub: bool) {
+    let k = crate::ct::mask(c);
+    let mut t = Int::new(r.n);
+    t.set(a);
+    for x in &mut t.l[..t.n] {
+        *x &= k;
+    }
+    t.neg &= k;
+    if sub {
+        r.sub(&{ *r }, &t);
+    } else {
+        r.add(&{ *r }, &t);
+    }
+}
+
+/// upstream's centring branches as masks (C `_centre`): r negative and |r| <= g/2 (>= if `geq`): r += g; r
+/// non-negative and |r| > g/2: r -= g (both tests on the input r)
+fn centre(r: &mut Int, g: &Int, gby2: &Int, geq: bool) {
+    let neg = (r.sgn() == -1) as u64;
+    let lo = if geq { r.absge(gby2) } else { r.absle(gby2) } as u64;
+    let hi = r.absgt(gby2) as u64;
+    cnd_addsub(r, g, neg & lo, false);
+    cnd_addsub(r, g, (neg ^ 1) & hi, true);
+}
+
+/// The prover decomposes secret-derived values (w = A1 y1 + A2 y2, the hint inputs): decompose, power2round and
+/// make_ghint have no branch on the values (review E); same results as upstream's branches.
 impl Dcomp {
     /// `dcompress_decompose`, one coefficient r in (-q, q): (r1, r0) with r = r1 gamma + r0 mod q,
     /// r0 in (-gamma/2, gamma/2]
@@ -46,23 +75,21 @@ impl Dcomp {
         t.mod_(&r1, &gamma_);
         let mut r0 = Int::new(r.n);
         r0.set(&t);
-        if r0.sgn() == -1 {
-            if r0.absle(&self.gammaby2) {
-                r0.add(&{ r0 }, &self.gamma);
-            }
-        } else if r0.absgt(&self.gammaby2) {
-            r0.sub(&{ r0 }, &self.gamma);
-        }
+        centre(&mut r0, &self.gamma, &self.gammaby2, false);
 
         r1.sub(&{ r1 }, &r0);
-        if r1.eq(&self.qminus1) {
-            r1.set_i64(0);
-            r0.sub(&{ r0 }, &Int::from_i64(r.n, 1));
-        } else {
-            let (mut rq, mut rr) = (Int::new(r.n - ng + 1), Int::new(ng));
-            int_div(&mut rq, &mut rr, &r1, &gamma_);
-            r1.set(&rq);
+        // r1 == q - 1 ? (0, r0 - 1) : (r1 / gamma, r0); the division always runs (public divisor, fixed steps)
+        let eq = r1.eq(&self.qminus1) as u64;
+        let keep = crate::ct::mask(eq ^ 1);
+        let (mut rq, mut rr) = (Int::new(r.n - ng + 1), Int::new(ng));
+        int_div(&mut rq, &mut rr, &r1, &gamma_);
+        let mut q1 = Int::new(r1.n);
+        q1.set(&rq);
+        for (x, y) in r1.l[..r1.n].iter_mut().zip(&q1.l) {
+            *x = y & keep;
         }
+        r1.neg = q1.neg & keep;
+        cnd_addsub(&mut r0, &Int::from_i64(r.n, 1), eq, true);
         (r1, r0)
     }
 
@@ -74,9 +101,8 @@ impl Dcomp {
         r0.rshift(&ret, self.d);
         r0.lshift(&{ r0 }, self.d);
         r0.sub(&ret, &{ r0 });
-        if r0.absgt(&self.pow2dby2) {
-            r0.sub(&{ r0 }, &self.pow2d);
-        }
+        let hi = r0.absgt(&self.pow2dby2) as u64;
+        cnd_addsub(&mut r0, &self.pow2d, hi, true);
         ret.sub(&{ ret }, &r0);
         ret.rshift(&{ ret }, self.d);
         ret
@@ -103,12 +129,8 @@ impl Dcomp {
         ret.mod_(&{ ret }, &self.m);
         if self.m_odd {
             ret.redc(&{ ret }, &self.m);
-        } else if ret.sgn() == -1 {
-            if ret.absge(&self.mby2) {
-                ret.add(&{ ret }, &self.m);
-            }
-        } else if ret.absgt(&self.mby2) {
-            ret.sub(&{ ret }, &self.m);
+        } else {
+            centre(&mut ret, &self.m, &self.mby2, true);
         }
         ret
     }
@@ -353,6 +375,11 @@ fn ghint_bits(e: i64) -> u64 {
 /// the sticky error; the bytes are still emitted there, the callers discard them). The C caller's own limits
 /// (MAX_PROOF, the output buffer) are the caller's.
 pub(crate) fn encode_proof(f: &ProofParts, cap: usize) -> Result<Vec<u8>, Error> {
+    // review E: every field is public by design (the proof)
+    for v in [&f.t_a1, &f.t_b, &f.h, &f.z1, &f.z21, &f.hint, &f.z3, &f.z4] {
+        crate::ct::public(&v[..]);
+    }
+    crate::ct::public(&f.c);
     let p = f.p;
     let qm = p.quad_eval.quad_many;
     let log2q = p.tbox.ring.log2q;

@@ -21,6 +21,26 @@ extern unsigned pqz_rej_tries; /* rejection-loop iterations (z3/z4 and z1/z2 loo
    with prob <= (1 - 1/24.0)^1000 ~ e^-42.5 ~ 2^-61 (R_TXM M=4), e^-84 (R_REG) */
 #define PQZ_REJ_MAX 1000
 
+/* constant-time check (test/ct.sh, ctgrind): the prover's secret-derived data that is public by design (a rejection
+   verdict, the witness-valid verdict, a proof component or transcript message) is marked defined for valgrind's
+   memcheck where it becomes public; a no-op in every other build */
+#ifdef PQZ_CTGRIND
+#include <valgrind/memcheck.h>
+#define PQZ_CT_PUBLIC(p, n) ((void)VALGRIND_MAKE_MEM_DEFINED ((p), (n)))
+#else
+#define PQZ_CT_PUBLIC(p, n) ((void)0)
+#endif
+
+/* value barrier for masks on secret data: the optimiser no longer knows a mask is 0 or all ones, so it cannot turn a
+   masked select back into a branch or a cmov of pointers plus a load (clang 18 did that to limbs_cnd_select: a
+   secret-dependent address; review E). Empty asm: no instruction on x86-64, aarch64 or wasm32. */
+static inline uint64_t
+pqz_ct_barrier (uint64_t x)
+{
+  __asm__ ("" : "+r" (x));
+  return x;
+}
+
 extern int pqz_err;
 extern const char *pqz_err_file; /* where the first error of the call was raised (diagnostics) */
 extern int pqz_err_line;

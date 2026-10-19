@@ -828,11 +828,13 @@ fn evaleq<S: Pv + ?Sized>(r2: Option<&mut Sparse>, r1: Option<&mut Sparse>, r0: 
 /// 0 zero (`all = None`), coefficients 0 and d/2 zero (`Some(false)`), or every coefficient zero (`Some(true)`)
 fn check_coeff0<S: Pv + ?Sized>(r2: Option<&mut Sparse>, r1: Option<&mut Sparse>, r0: Option<&Poly>, s: &mut S, all: Option<bool>) -> Result<(), Error> {
     let v = evaleq(r2, r1, r0, s)?;
+    // review E: the value at the secret s is secret; the verdict (true for every valid witness) is public
     let ok = match all {
         None => v.c(0).eqzero(),
-        Some(false) => v.c(0).eqzero() && v.c(D / 2).eqzero(),
-        Some(true) => (0..D).all(|j| v.c(j).eqzero()),
+        Some(false) => v.c(0).eqzero() & v.c(D / 2).eqzero(),
+        Some(true) => (0..D).fold(true, |r, j| r & v.c(j).eqzero()),
     };
+    let ok = crate::ct::verdict(ok);
     if ok { Ok(()) } else { Err(Error::Internal) }
 }
 
@@ -1012,11 +1014,19 @@ fn compute_z34(
             z4v.iter_mut().zip(&rs4).for_each(|(z, &r)| *z += beta4 * r);
         }
         // rejection sampling (rej3 = rej4 = 2 in every relation: bimodal)
-        if nex > 0 && p.rej3 != 0 && rej_bimodal(&mut rstate, &intvec(&z3v)?, &intvec(&rs3)?, &p.scm3, &p.stdev3sqr)? {
-            continue;
+        if nex > 0 && p.rej3 != 0 {
+            let rej = rej_bimodal(&mut rstate, &intvec(&z3v)?, &intvec(&rs3)?, &p.scm3, &p.stdev3sqr)?;
+            let rej = crate::ct::verdict(rej); // review E: the verdict is public
+            if rej {
+                continue;
+            }
         }
-        if nprime > 0 && p.rej4 != 0 && rej_bimodal(&mut rstate, &intvec(&z4v)?, &intvec(&rs4)?, &p.scm4, &p.stdev4sqr)? {
-            continue;
+        if nprime > 0 && p.rej4 != 0 {
+            let rej = rej_bimodal(&mut rstate, &intvec(&z4v)?, &intvec(&rs4)?, &p.scm4, &p.stdev4sqr)?;
+            let rej = crate::ct::verdict(rej); // review E: the verdict is public
+            if rej {
+                continue;
+            }
         }
         break cseed;
     };
@@ -1028,6 +1038,8 @@ fn compute_z34(
     for (k, x) in f.z4.iter_mut().enumerate().take(if nprime > 0 { w } else { 0 }) {
         x.set_i64(&z4v[k * D..(k + 1) * D]);
     }
+    crate::ct::public(&f.z3[..]); // review E: accepted, proof fields
+    crate::ct::public(&f.z4[..]);
     Ok(())
 }
 
@@ -1112,6 +1124,7 @@ pub(crate) fn prove(
         check_coeff0(Some(&mut a.r2), Some(&mut a.r1), Some(&a.r0), &mut sub, Some(false))?;
         let mut t = evaleq(Some(&mut a.r2), Some(&mut a.r1), Some(&a.r0), &mut sub)?;
         f.h[i].add_assign(&mut t, false);
+        crate::ct::public(&f.h[i]); // review E: hi, a proof field
         if !(f.h[i].get_coeff(0).eqzero() && f.h[i].get_coeff(D / 2).eqzero()) {
             return Err(Error::Internal);
         }

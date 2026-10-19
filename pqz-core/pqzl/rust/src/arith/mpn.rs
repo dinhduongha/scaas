@@ -51,7 +51,7 @@ fn cnd_sub_ge(r: &mut [u64], m: &[u64], top: u64) {
         t[i] = d.wrapping_sub(br);
         br = b1 | (d < br) as u64;
     }
-    let take = ((top | (br ^ 1)) & 1).wrapping_neg();
+    let take = crate::ct::mask((top | (br ^ 1)) & 1); // review E: a barrier, no select of addresses
     for i in 0..r.len() {
         r[i] = (r[i] & !take) | (t[i] & take);
     }

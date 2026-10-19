@@ -6,7 +6,11 @@
 //! (`r.add(&{ r }, &b)`); every C function reads an operand before it writes the same limb of `r`, so the results
 //! agree. Not ported (nothing in the core calls them): `int_invmod`, `int_import` / `int_export`, the `_ct` add / sub
 //! / redc variants, `int_mul1`, `intvec_mul` / `div` / `rrot` / `lrot` / `auto` (the poly layer has its own).
+//!
+//! Constant time (review fix E, 2026-10-19; C the same): add / sub / redc / redp have no branch and no address on the
+//! operands' values (the prover runs them on secrets); the results are upstream's, bit for bit.
 use super::mpn;
+use crate::ct::mask;
 use super::ntt::{red128, Q};
 use crate::Error;
 use alloc::vec::Vec;
@@ -36,16 +40,6 @@ fn eq_ct(a: &[u64], b: &[u64]) -> u64 {
     limb_eq_ct(a.iter().zip(b).fold(0, |r, (x, y)| r | (x ^ y)), 0)
 }
 
-/// `limbs_lt`: variable-time comparison
-fn lt_vt(a: &[u64], b: &[u64]) -> bool {
-    for i in (0..a.len()).rev() {
-        if a[i] != b[i] {
-            return a[i] < b[i];
-        }
-    }
-    false
-}
-
 fn limbs_add(r: &mut [u64], a: &[u64], b: &[u64]) -> u64 {
     let mut c = false;
     for i in 0..r.len() {
@@ -66,20 +60,6 @@ fn limbs_sub(r: &mut [u64], a: &[u64], b: &[u64]) -> u64 {
         c = c1 | c2;
     }
     c as u64
-}
-
-/// `limbs_from_twoscom`: negate (two's complement) iff the top bit is set; returns that bit
-fn from_twoscom(r: &mut [u64]) -> u64 {
-    let neg = r[r.len() - 1] >> 63;
-    if neg != 0 {
-        let mut c = 1u64;
-        for x in r.iter_mut() {
-            let (s, o) = (!*x).overflowing_add(c);
-            *x = s;
-            c = o as u64;
-        }
-    }
-    neg
 }
 
 /// borrow of `a - b` (`limbs_lt_ct`), and whether `a - b` is zero
@@ -249,43 +229,48 @@ impl Int {
         self.neg = a.neg;
     }
 
-    /// `int_add` (sign-magnitude; a borrow is undone by `limbs_from_twoscom`, as in C)
+    /// `int_add` / `int_sub` (C `pqz_int_addsub`): b's sign `bneg`. Upstream's sign-magnitude branches as masks:
+    /// same sign: |a| + |b|, sign a; else |a| - |b|, on a borrow negated if its top bit is set (`limbs_from_twoscom`)
+    /// and with sign `bneg`, else sign a
+    fn addsub(&mut self, a: &Int, b: &Int, bneg: u64) {
+        let n = self.n;
+        let (mut s, mut d, mut nd) = ([0u64; MAXL], [0u64; MAXL], [0u64; MAXL]);
+        limbs_add(&mut s[..n], &a.l[..n], &b.l[..n]);
+        let c = limbs_sub(&mut d[..n], &a.l[..n], &b.l[..n]);
+        let mut cy = true;
+        for i in 0..n {
+            (nd[i], cy) = (!d[i]).overflowing_add(cy as u64);
+        }
+        let diff = mask(1 ^ limb_eq_ct(a.neg, bneg));
+        let borrow = mask(c) & diff;
+        let flip = borrow & (d[n - 1] >> 63).wrapping_neg();
+        for i in 0..n {
+            self.l[i] = (s[i] & !diff) | (nd[i] & flip) | (d[i] & diff & !flip);
+        }
+        self.neg = (bneg & borrow) | (a.neg & !borrow);
+    }
+
+    /// `int_add`
     pub(crate) fn add(&mut self, a: &Int, b: &Int) {
-        let n = self.n;
-        if a.neg == b.neg {
-            limbs_add(&mut self.l[..n], &a.l[..n], &b.l[..n]);
-            self.neg = a.neg;
-        } else if limbs_sub(&mut self.l[..n], &a.l[..n], &b.l[..n]) != 0 {
-            from_twoscom(&mut self.l[..n]);
-            self.neg = b.neg;
-        } else {
-            self.neg = a.neg;
-        }
+        self.addsub(a, b, b.neg);
     }
 
-    /// `int_sub`
+    /// `int_sub`: a + (-b)
     pub(crate) fn sub(&mut self, a: &Int, b: &Int) {
-        let n = self.n;
-        if a.neg != b.neg {
-            limbs_add(&mut self.l[..n], &a.l[..n], &b.l[..n]);
-            self.neg = a.neg;
-        } else if limbs_sub(&mut self.l[..n], &a.l[..n], &b.l[..n]) != 0 {
-            from_twoscom(&mut self.l[..n]);
-            self.neg = (b.neg == 0) as u64;
-        } else {
-            self.neg = a.neg;
-        }
+        self.addsub(a, b, limb_eq_ct(b.neg, 0));
     }
 
-    /// `int_redc`: [-(m-1), m-1] → [-(m-1)/2, (m-1)/2] (variable-time compare, as in C)
+    /// `int_redc`: [-(m-1), m-1] → [-(m-1)/2, (m-1)/2] (constant time since review E; C `limbs_lt` was variable-time)
     pub(crate) fn redc(&mut self, a: &Int, m: &Int) {
         let n = m.n;
         let mut t = [0u64; MAXL];
         limbs_sub(&mut t[..n], &m.l[..n], &a.l[..n]);
-        let b = lt_vt(&t[..n], &a.l[..n]);
-        let src = if b { t } else { a.l };
-        self.l[..n].copy_from_slice(&src[..n]);
-        self.neg = b as u64 ^ a.neg;
+        let b = sub_flags(&t[..n], &a.l[..n]).0;
+        let k = mask(b);
+        for ((r, x), y) in self.l[..n].iter_mut().zip(&a.l).zip(&t) {
+            *r = (x & !k) | (y & k);
+        }
+        self.neg = b ^ a.neg;
     }
 
     /// `int_redp`: [-(m-1), m-1] → [0, m-1]
@@ -293,7 +278,7 @@ impl Int {
         let n = a.n;
         let mut t = [0u64; MAXL];
         limbs_sub(&mut t[..n], &m.l[..n], &a.l[..n]);
-        let b = (a.neg & (1 ^ eq_zero_ct(a.limbs()))).wrapping_neg();
+        let b = mask(a.neg & (1 ^ eq_zero_ct(a.limbs())));
         for (i, x) in self.l[..self.n].iter_mut().enumerate() {
             *x = (a.l[i] & !b) | (t[i] & b);
         }

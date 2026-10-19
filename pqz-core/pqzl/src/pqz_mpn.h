@@ -136,7 +136,7 @@ pqz__cnd_sub_ge (mp_limb_t *r, const mp_limb_t *m, mp_size_t n, mp_limb_t top)
       br = b1 | b2;
     }
   /* take t when (top || !borrow) */
-  const mp_limb_t take = -(mp_limb_t)((top | (br ^ 1)) & 1);
+  const mp_limb_t take = pqz_ct_barrier (-(mp_limb_t)((top | (br ^ 1)) & 1)); /* review E: barrier */
   for (mp_size_t i = 0; i < n; i++)
     r[i] = (r[i] & ~take) | (t[i] & take);
 }

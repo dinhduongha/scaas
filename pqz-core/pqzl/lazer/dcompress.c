@@ -1,5 +1,40 @@
 #include "lazer.h"
 
+/* PQZ (review E): the prover decomposes secret-derived values (w = A1 y1 + A2 y2 in lnp-quad.c, the hint inputs), so
+   decompose, power2round and make_ghint are branch-free: each conditional add / subtract of gamma, 2^D or m adds
+   or subtracts a masked copy (a masked-out 0 leaves the operand as it was, sign included), and each conditional
+   assignment is a masked select. Same values as upstream's branches ("not ctime" below is upstream's note). */
+
+/* r = r + (c ? a : 0) (add) or r - (c ? a : 0); c in {0, 1} */
+static void
+_cnd_addsub (int_ptr r, int_srcptr a, limb_t c, int sub)
+{
+  INT_T (t, r->nlimbs);
+  const limb_t mask = pqz_ct_barrier (0 - c);
+
+  int_set (t, a);
+  for (unsigned int k = 0; k < t->nlimbs; k++)
+    t->limbs[k] &= mask;
+  t->neg &= mask;
+  if (sub)
+    int_sub (r, r, t);
+  else
+    int_add (r, r, t);
+}
+
+/* upstream's centring branches, masked: r negative and |r| <= g/2 (>= if geq): r += g; r non-negative and
+   |r| > g/2: r -= g (both tests on the input r) */
+static void
+_centre (int_ptr r, int_srcptr g, int_srcptr gby2, int geq)
+{
+  const limb_t neg = r->neg & (1 ^ limbs_eq_zero_ct (r->limbs, r->nlimbs)); /* int_sgn (r) == -1 */
+  const limb_t lo = (limb_t)(geq ? int_absge (r, gby2) : int_absle (r, gby2));
+  const limb_t hi = (limb_t)int_absgt (r, gby2);
+
+  _cnd_addsub (r, g, neg & lo, 0);
+  _cnd_addsub (r, g, (neg ^ 1) & hi, 1);
+}
+
 /*
  * not ctime, r in (-q,q)
  */
@@ -37,17 +72,7 @@ dcompress_decompose (intvec_t r1, intvec_t r0, const intvec_t r,
   _VEC_FOREACH_ELEM (r0, i)
   {
     r0i = intvec_get_elem (r0, i);
-
-    if (int_sgn (r0i) == -1)
-      {
-        if (int_absle (r0i, params->gammaby2))
-          int_add (r0i, r0i, params->gamma);
-      }
-    else
-      {
-        if (int_absgt (r0i, params->gammaby2))
-          int_sub (r0i, r0i, params->gamma);
-      }
+    _centre (r0i, params->gamma, params->gammaby2, 0);
   }
 
   intvec_sub (r1, r1, r0);
@@ -55,16 +80,17 @@ dcompress_decompose (intvec_t r1, intvec_t r0, const intvec_t r,
   {
     r1i = intvec_get_elem (r1, i);
     r0i = intvec_get_elem (r0, i);
-    if (int_eq (r1i, params->qminus1))
-      {
-        int_set_i64 (r1i, 0);
-        int_sub (r0i, r0i, one);
-      }
-    else
-      {
-        int_div (rq, rr, r1i, gamma_);
-        int_set (r1i, rq);
-      }
+    /* r1i == q - 1 ? (0, r0i - 1) : (r1i / gamma, r0i); the division always runs (public divisor, fixed steps) */
+    const limb_t eq = (limb_t)int_eq (r1i, params->qminus1);
+    const limb_t keep = pqz_ct_barrier (eq - 1); /* all ones iff not eq */
+    INT_T (t, r1i->nlimbs);
+
+    int_div (rq, rr, r1i, gamma_);
+    int_set (t, rq);
+    for (unsigned int k = 0; k < t->nlimbs; k++)
+      r1i->limbs[k] = t->limbs[k] & keep;
+    r1i->neg = t->neg & keep;
+    _cnd_addsub (r0i, one, eq, 1);
   }
 }
 
@@ -91,9 +117,7 @@ dcompress_power2round (intvec_t ret, const intvec_t r,
   _VEC_FOREACH_ELEM (r0, i)
   {
     r0i = intvec_get_elem (r0, i);
-
-    if (int_absgt (r0i, params->pow2Dby2))
-      int_sub (r0i, r0i, params->pow2D);
+    _cnd_addsub (r0i, params->pow2D, (limb_t)int_absgt (r0i, params->pow2Dby2), 1); /* PQZ (review E) */
   }
 
   intvec_sub (ret, ret, r0);
@@ -165,17 +189,7 @@ dcompress_make_ghint (intvec_t ret, const intvec_t z, const intvec_t r,
       _VEC_FOREACH_ELEM (r0, i)
       {
         reti = intvec_get_elem (ret, i);
-
-        if (int_sgn (reti) == -1)
-          {
-            if (int_absge (reti, params->mby2))
-              int_add (reti, reti, params->m);
-          }
-        else
-          {
-            if (int_absgt (reti, params->mby2))
-              int_sub (reti, reti, params->m);
-          }
+        _centre (reti, params->m, params->mby2, 1); /* PQZ (review E) */
       }
     }
 }

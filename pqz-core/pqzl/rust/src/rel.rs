@@ -666,17 +666,23 @@ fn wit_vec<'a>(s1: &mut PolyVec, off: usize, w: &'a [u8], wide: bool) -> &'a [u8
 }
 
 /// `dec_w`: w_i = centre(v_i - (u^T s)_i), s = s1[0 .. 32)
+/// x / d and x % d as Rust's `/` and `%` (truncated, d > 0) by mpn's fixed-step restoring division (C `ct_sdiv`;
+/// review E: the witness values are secret, and wasm32 keeps i64.div_s / i64.rem_s even for a constant d)
+fn ct_sdiv(x: i64, d: u64) -> (i64, i64) {
+    let s = (x >> 63) as u64;
+    let mut n = [(x as u64 ^ s).wrapping_sub(s)];
+    let q = crate::arith::mpn::div(None, &mut n, &[d]);
+    ((q ^ s).wrapping_sub(s) as i64, (n[0] ^ s).wrapping_sub(s) as i64)
+}
+
 fn dec_w(u: &mut PolyVec, v: &mut Poly, s1: &mut PolyVec) -> [i64; 16] {
     let mut acc = crate::arith::polyvec::dot(&mut **u, &mut s1.sub(0, K, 1));
     acc.fromcrt();
+    // review E: secret (u^T s); reduced and centred without a branch or a division
     core::array::from_fn(|i| {
-        let mut w = (cval(v, i) - cval(&mut acc, i)) % QI;
-        if w > (QI - 1) / 2 {
-            w -= QI;
-        }
-        if w < -(QI - 1) / 2 {
-            w += QI;
-        }
+        let mut w = ct_sdiv(cval(v, i) - cval(&mut acc, i), QI as u64).1;
+        w -= QI & (((QI - 1) / 2 - w) >> 63);
+        w += QI & ((w + (QI - 1) / 2) >> 63);
         w
     })
 }
@@ -712,34 +718,37 @@ fn debit_witness(t: &mut Pub, w: &[u8], s1: &mut PolyVec, r: &Rel) -> Result<boo
     }
     // decrypt T with s_f: M_i = round(w_i / Delta), e_T = w - Delta M
     let wv = dec_w(&mut t.u, &mut t.v, s1);
-    let mm: [i64; 16] = core::array::from_fn(|i| (if wv[i] >= 0 { wv[i] + DELTA / 2 } else { wv[i] - DELTA / 2 }) / DELTA);
+    // review E: round half away from zero without a branch
+    let mm: [i64; 16] = core::array::from_fn(|i| ct_sdiv(wv[i] + (((DELTA / 2) ^ (wv[i] >> 63)) - (wv[i] >> 63)), DELTA as u64).0);
     let et: [i64; 16] = core::array::from_fn(|i| wv[i] - DELTA * mm[i]);
     // carries: c_i = (M_i + c_{i-1} - d'_i - sum_j d_j,i - f_i) / 16, exact, c_15 = 0
+    // review E: the checks run on secret values: collected with '|' (no short-circuit branch), only the verdict
+    // (witness consistent; public, the prove fails otherwise) is declassified; the same verdict as early returns
     let mut c = [0i64; 16];
     let mut cprev = 0;
+    let mut bad = false;
     for i in 0..16 {
         let s = mm[i] + cprev - dp[i] - dsum[i] - digit(t.fee, i);
-        if s % 16 != 0 {
-            return Ok(false);
-        }
-        c[i] = s / 16;
+        bad |= (s & 15) != 0; // s % 16 != 0
+        c[i] = (s + ((s >> 63) & 15)) >> 4; // s / 16 (truncated), no division (review E)
         cprev = c[i];
     }
-    if c[15] != 0 {
-        return Ok(false);
-    }
+    bad |= c[15] != 0;
     for i in 0..16 {
-        let bad = dp[i] > 15
-            || mm[i] < 0
-            || mm[i] >= 1 << 14
-            || c[i] < -64
-            || c[i] >= 1984
-            || et[i] < -(1 << 24)
-            || et[i] >= 1 << 24
-            || d.iter().any(|dj| dj[i] > 15);
-        if bad {
-            return Ok(false);
+        bad |= (dp[i] > 15)
+            | (mm[i] < 0)
+            | (mm[i] >= 1 << 14)
+            | (c[i] < -64)
+            | (c[i] >= 1984)
+            | (et[i] < -(1 << 24))
+            | (et[i] >= 1 << 24);
+        for dj in d.iter() {
+            bad |= dj[i] > 15;
         }
+    }
+    let bad = crate::ct::verdict(bad);
+    if bad {
+        return Ok(false);
     }
     for i in 0..16 {
         let base = [h.dp, h.m, h.c, h.et];
@@ -766,16 +775,16 @@ fn dr_witness(t: &mut Pub, w: &[u8], s1: &mut PolyVec) -> bool {
     let p = wit_vec(s1, 0, w, false);
     wit_vec(s1, 32, p, true);
     let wv = dec_w(&mut t.u, &mut t.v, s1);
+    let mut bad = false;
     for (i, &wi) in wv.iter().enumerate() {
         let e = wi - DELTA * digit(t.amount, i);
-        if !(-(1 << 24)..1 << 24).contains(&e) {
-            return false; // not an encryption of amount under this key
-        }
+        bad |= (e + (1 << 24)) as u64 >= 1 << 25; // e outside [-2^24, 2^24); review E: no branch on the secret e
         for b in 0..25 {
             set_c(&mut s1[64 + (25 * i + b) / 64], (25 * i + b) % 64, ((e + (1 << 24)) >> b) & 1);
         }
     }
-    true
+    let bad = crate::ct::verdict(bad); // review E: the verdict is public (prove fails)
+    !bad // bad: not an encryption of amount under this key
 }
 
 /// `set_upsilon`: the slack polys upsilon_z = binexp(B_z^2 - ||x_z||^2) of the exact-l2 blocks (s1 slots [st, st +
@@ -790,7 +799,9 @@ fn set_upsilon(p: &Tbox, s1: &mut PolyVec, blocks: &[(usize, usize)]) -> bool {
         let mut d = Int::new(2);
         d.set(&p.l2bsqr[z]);
         d.sub(&{ d }, &Int::from_i64(2, n2));
-        if d.sgn() < 0 {
+        let above = d.sgn() < 0;
+        let above = crate::ct::verdict(above); // review E: the witness-valid verdict is public (prove fails)
+        if above {
             return false; // witness above its norm bound
         }
         Poly::binexp(Some(&mut s1[m1 + z]), None, &d);

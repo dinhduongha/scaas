@@ -259,10 +259,17 @@ int_binexp (poly_t upsilon, poly_t powB, int_srcptr B)
       if (powB != NULL && int_le (pow2, B))
         int_set (poly_get_coeff (powB, i), pow2);
 
-      if (upsilon != NULL && int_ge (B_, pow2))
+      /* PQZ (review E): B is the secret l2 slack here (set_upsilon); every bit is written and subtracted through a
+         mask, no branch (upstream: if (B_ >= 2^i) { B_ -= 2^i; coeff_i = 1; }, same values: subtracting a masked-out
+         0 leaves B_ as it was) */
+      if (upsilon != NULL)
         {
+          const int ge = int_ge (B_, pow2);
+          const limb_t mask = pqz_ct_barrier (0 - (limb_t)ge);
+          for (unsigned int k = 0; k < pow2->nlimbs; k++)
+            pow2->limbs[k] &= mask;
           int_sub (B_, B_, pow2);
-          int_set_one (poly_get_coeff (upsilon, i));
+          int_set_i64 (poly_get_coeff (upsilon, i), ge);
         }
     }
 }

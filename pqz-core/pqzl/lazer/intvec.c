@@ -412,8 +412,7 @@ intvec_mul_sgn_self (intvec_t r, int sgn)
   int_ptr ptr;
   unsigned int i;
 
-  ASSERT_ERR (sgn == 1 || sgn == -1);
-
+  /* PQZ (review E): no ASSERT_ERR on sgn, which may be secret (int_mul_sgn_self) */
   _VEC_FOREACH_ELEM (r, i)
   {
     ptr = intvec_get_elem (r, i);

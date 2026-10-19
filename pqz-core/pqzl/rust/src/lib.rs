@@ -3,8 +3,9 @@
 //! verdicts on every input, same keys / Enc / Dec. The API mirrors the C ABI `pqzl/src/pqz.h` (plan D3); every size,
 //! layout and return code is copied from it. No globals: a [`Ctx`] holds what the C core keeps in static storage.
 #![no_std]
-#![cfg_attr(not(feature = "c-oracle"), forbid(unsafe_code))]
-#![cfg_attr(feature = "c-oracle", deny(unsafe_code))] // only the dev-only C oracle module allows it
+#![cfg_attr(not(any(feature = "c-oracle", feature = "ctgrind")), forbid(unsafe_code))]
+// only the dev-only C oracle module and the test-only memcheck client requests (ct.rs, feature ctgrind) allow it
+#![cfg_attr(any(feature = "c-oracle", feature = "ctgrind"), deny(unsafe_code))]
 
 extern crate alloc;
 #[cfg(any(feature = "c-oracle", feature = "test-hooks"))]
@@ -26,6 +27,11 @@ mod arith;
 pub mod bench; // pqzl/test/pqz_bench.c's setup and steps (src/bin/bench.rs, wasm/): test entry points, not API
 #[allow(dead_code)]
 mod coder;
+#[cfg(feature = "ctgrind")]
+#[doc(hidden)]
+pub mod ct; // the ctgrind check's `secret` (src/bin/ct.rs): test entry point, not API
+#[cfg(not(feature = "ctgrind"))]
+mod ct;
 #[allow(dead_code)]
 mod rand;
 mod keys;

@@ -50,6 +50,7 @@ impl Coder {
         self.b.try_reserve(more).map_err(|_| Error::Memory)?;
         let zero = Int::new(1);
         for i in 0..v.len() {
+            crate::ct::public(v.get(i)); // review E: a transcript message (public by design)
             let p = v.at(i);
             p.fromcrt();
             for j in 0..64 {
@@ -72,6 +73,7 @@ impl Coder {
         use crate::coder::{nones, reduced, split};
         let la = log2o + 1;
         let mut bits = 0u64;
+        crate::ct::public(v); // review E: proof fields (public by design)
         for x in v {
             let x = reduced(x, true);
             for j in 0..64 {

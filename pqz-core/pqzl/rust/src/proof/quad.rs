@@ -308,7 +308,9 @@ fn prove(
         if p.rej1 != 0 {
             polyvec::fromcrt(&mut *y1);
             polyvec::fromcrt(&mut *cs1);
-            if rej_standard(&mut st, &coeffvec(&y1)?, &coeffvec(&cs1)?, &p.scm1, &p.stdev1sqr)? {
+            let rej = rej_standard(&mut st, &coeffvec(&y1)?, &coeffvec(&cs1)?, &p.scm1, &p.stdev1sqr)?;
+            let rej = crate::ct::verdict(rej); // review E: the verdict is public
+            if rej {
                 continue;
             }
         }
@@ -323,13 +325,16 @@ fn prove(
             } else {
                 rej_onetime(&mut st, &z2, &c2, &p.scm2, &p.stdev2sqr)?
             };
+            let rej = crate::ct::verdict(rej); // review E: the verdict is public
             if rej {
                 continue;
             }
         }
         polyvec::subscale2(&mut y2.sub(m2r, km, 1), &mut f.c, &mut **t_a2, false);
         polyvec::sub_assign(&mut y2.sub(m2r, km, 1), &mut *w0, false);
-        if polyvec::l2sqr(&mut *y2).gt(&p.bsqr) {
+        let rej = polyvec::l2sqr(&mut *y2).gt(&p.bsqr);
+        let rej = crate::ct::verdict(rej); // review E: the verdict is public
+        if rej {
             continue;
         }
         break cseed;
@@ -340,8 +345,11 @@ fn prove(
     polyvec::sub_assign(&mut *w1, &mut y2.sub(m2r, km, 1), false);
     polyvec::set(&mut *f.z1, &*y1);
     polyvec::set(&mut *f.z21, &y2.sub(0, m2r, 1));
+    crate::ct::public(&f.z1[..]); // review E: accepted, proof fields
+    crate::ct::public(&f.z21[..]);
     polyvec::mod_self(&mut *w1);
     polyvec::redc_self(&mut *w1);
     polyvec::make_ghint(&mut *f.hint, &mut y2.sub(m2r, km, 1), &mut *w1, dc);
+    crate::ct::public(&f.hint[..]); // review E: the hint, a proof field
     Ok(())
 }

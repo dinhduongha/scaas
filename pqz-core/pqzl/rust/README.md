@@ -87,6 +87,7 @@ floating point.
 | `bench` | the `bench` module (`src/bin/bench.rs`, `wasm/`) |
 | `wasm-m8` | bench builds only (implies `bench`): `WASM_MAX_LEGS` = `TXM_MAX_LEGS`, so wasm32 proves op 7 with M = 16 with `oversize` (without it, 8 = the default since Task 12; the D6 measurement of the limit was built with it), never in a production build |
 | `c-oracle` | dev / test only: `build.rs` compiles the C core (`../src ../lazer ../params`, build.sh's flags) plus the test entry points `tests/oracle_shim.c`, and `c_oracle::{c_prove, c_verify, c_verify_fast, c_keygen, c_enc_seed, c_dec, c_keypair_from_secret, c_encrypt, c_decrypt_raw, c_enc_group_seed, c_test_mutate}` and the layer wrappers (`c_ntt_*`, `c_polyvec_ops`, `c_int_ops`, the samplers' `c_rng` .. `c_autostable`, `c_params`, `c_ghint`) call them |
+| `ctgrind` | test only (x86-64): valgrind memcheck client requests (`ct::secret`, `ct::public`, `ct::verdict`) and the `ct` binary, the constant-time check of the prover (`pqzl/test/ct.sh`; review fix E, [E-constant-time.md](../../research/code-review-2026-10-19/E-constant-time.md)); implies `bench` |
 
 A default build compiles no C and has neither test entry points nor the bench.
 

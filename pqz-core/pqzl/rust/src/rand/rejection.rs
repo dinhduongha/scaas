@@ -21,7 +21,12 @@ fn int2i128(a: &Int) -> Result<i128, Error> {
     if a.n > 1 {
         m |= (a.l[1] as u128) << 64;
     }
-    if a.limbs().iter().skip(2).any(|&x| x != 0) || m >> 126 != 0 {
+    // review E: the inputs are secret (<z,v>, <v,v>): the bound is tested without a branch and only the verdict, an
+    // error that aborts the proof (public), is declassified (never set for an honest prover)
+    let big = a.limbs().iter().skip(2).fold((m >> 126) as u64, |r, &x| r | x);
+    let err = big != 0;
+    let err = crate::ct::verdict(err);
+    if err {
         return Err(Error::Internal);
     }
     let s = -((a.neg & 1) as i128);

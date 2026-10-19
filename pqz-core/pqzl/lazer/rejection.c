@@ -24,11 +24,17 @@ static pqz_fx_i128
 _int2i128 (const int_t a)
 {
   pqz_fx_u128 m = a->limbs[0];
+  limb_t big = 0;
   if (a->nlimbs > 1)
     m |= (pqz_fx_u128)a->limbs[1] << 64;
   for (unsigned i = 2; i < a->nlimbs; i++)
-    ERR (a->limbs[i] != 0, "%s", "rejection input too large");
-  ERR ((m >> 126) != 0, "%s", "rejection input too large");
+    big |= a->limbs[i];
+  big |= (limb_t)(m >> 126);
+  /* PQZ (review E): the inputs are secret (<z,v>, <v,v>); the bound is tested without a branch and only the verdict,
+     an error that aborts the proof (public), is declassified (never set for an honest prover) */
+  int err = (int)(1 ^ limb_eq_ct (big, 0));
+  PQZ_CT_PUBLIC (&err, sizeof err);
+  ERR (err, "%s", "rejection input too large");
   pqz_fx_u128 s = (pqz_fx_u128)0 - (a->neg & 1);
   return (pqz_fx_i128)((m ^ s) - s); /* unsigned: m >= 2^127 after the ERR above must not overflow */
 }

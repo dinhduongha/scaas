@@ -35,7 +35,11 @@ pub(crate) fn urandom_i64(vec: &mut [i64], m: i64, log2mod: u32, seed: &[u8; 32]
                 let bit = i * nb + j;
                 t |= (((out[bit >> 3] >> (bit & 7)) & 1) as i64) << j;
             }
-            if ((m - 1 - t) >> 63) & 1 == 0 {
+            // review E: uniform rejection sampling, the accept bit (and the slot k) is independent of the accepted
+            // values: public
+            let acc = ((m - 1 - t) >> 63) & 1 == 0;
+            let acc = crate::ct::verdict(acc);
+            if acc {
                 vec[k] = t;
                 k += 1;
             }
@@ -76,7 +80,9 @@ pub(crate) fn urandom_bnd(r: &mut IntVec, lo: &Int, hi: &Int, seed: &[u8; 32], d
                 *w = u64::from_le_bytes(buf[8 * k..8 * k + 8].try_into().unwrap_or_default());
             }
             e.l[top] &= mask;
-            if !gt(&e.l[..n], &tmp.l[..n]) {
+            let again = gt(&e.l[..n], &tmp.l[..n]);
+            let again = crate::ct::verdict(again); // review E: the try count of uniform rejection sampling is public
+            if !again {
                 break;
             }
         }
@@ -91,7 +97,7 @@ pub(crate) fn urandom_bnd(r: &mut IntVec, lo: &Int, hi: &Int, seed: &[u8; 32], d
 fn gt(a: &[u64], b: &[u64]) -> bool {
     let mut r = false;
     for (x, y) in a.iter().zip(b) {
-        r = (x > y) | (x == y && r);
+        r = (x > y) | ((x == y) & r); // review E: '&', no short-circuit branch on the sample
     }
     r
 }

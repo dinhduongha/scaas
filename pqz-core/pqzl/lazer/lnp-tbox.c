@@ -149,6 +149,16 @@ __evaleq (poly_ptr res, spolymat_ptr Rprime2, spolyvec_ptr rprime1,
 }
 
 #if ASSERT == ASSERT_ENABLED
+/* PQZ (review E): the self-check below evaluates the relation at the secret witness; its verdict (1 for every valid
+   witness) is public, the evaluation is not */
+static inline int
+_pqz_eqzero_public (int_srcptr a)
+{
+  int z = int_eqzero (a);
+  PQZ_CT_PUBLIC (&z, sizeof (z));
+  return z;
+}
+
 static inline void
 __check_coeff0 (spolymat_ptr Rprime2, spolyvec_ptr rprime1, poly_ptr rprime0,
                 polyvec_ptr s, int check)
@@ -166,19 +176,19 @@ __check_coeff0 (spolymat_ptr Rprime2, spolyvec_ptr rprime1, poly_ptr rprime0,
   if (check == 0)
     {
       /* check coeff 0 */
-      ASSERT_ERR (int_eqzero (poly_get_coeff (poly, 0)) == 1);
+      ASSERT_ERR (_pqz_eqzero_public (poly_get_coeff (poly, 0)) == 1);
     }
   else if (check == 1)
     {
       /* check coeff 0 and d/2 */
-      ASSERT_ERR (int_eqzero (poly_get_coeff (poly, 0)) == 1);
-      ASSERT_ERR (int_eqzero (poly_get_coeff (poly, d / 2)) == 1);
+      ASSERT_ERR (_pqz_eqzero_public (poly_get_coeff (poly, 0)) == 1);
+      ASSERT_ERR (_pqz_eqzero_public (poly_get_coeff (poly, d / 2)) == 1);
     }
   else if (check == 2)
     {
       /* check all coeffs */
       for (i = 0; i < d; i++)
-        ASSERT_ERR (int_eqzero (poly_get_coeff (poly, i)) == 1);
+        ASSERT_ERR (_pqz_eqzero_public (poly_get_coeff (poly, i)) == 1);
     }
 
   poly_free (poly);
@@ -725,6 +735,7 @@ lnp_tbox_prove (uint8_t hash[32], polyvec_t tB, polyvec_t h, poly_t c,
       __evaleq (tmp, R2prime_sz[i], r1prime_sz[i], r0prime_sz[i], subv);
       poly = polyvec_get_elem (h, i); /* gi */
       poly_add (poly, poly, tmp, 0);  /* hi = gi + schwarz zippel */
+      pqz_ct_public_poly (poly);      /* PQZ (review E): hi, a proof field */
 
       /* check that sz evaleqs plus garbage term have coeff 0 and d/2 == 0 */
       ASSERT_ERR (int_eqzero (poly_get_coeff (poly, 0)) == 1);
@@ -1820,6 +1831,7 @@ _lnp_tbox_compute_z34 (uint8_t hash[32], polyvec_t tB, polyvec_t z3,
 
           rej = rej_bimodal (rstate_rej, z3coeffs, y3coeffs, params->scM3,
                              params->stdev3sqr);
+          PQZ_CT_PUBLIC (&rej, sizeof (rej)); /* PQZ (review E): the verdict is public */
           if (rej)
             {
               DEBUG_PRINTF (DEBUG_PRINT_REJ, "%s", "reject s3");
@@ -1833,6 +1845,7 @@ _lnp_tbox_compute_z34 (uint8_t hash[32], polyvec_t tB, polyvec_t z3,
 
           rej = rej_bimodal (rstate_rej, z4coeffs, y4coeffs, params->scM4,
                              params->stdev4sqr);
+          PQZ_CT_PUBLIC (&rej, sizeof (rej)); /* PQZ (review E): the verdict is public */
           if (rej)
             {
               DEBUG_PRINTF (DEBUG_PRINT_REJ, "%s", "reject s3");
@@ -1849,6 +1862,8 @@ _lnp_tbox_compute_z34 (uint8_t hash[32], polyvec_t tB, polyvec_t z3,
   /* output proof (h,c,z1,z21,hint,z3,z4) */
   polyvec_set (z3, z3_);
   polyvec_set (z4, z4_);
+  pqz_ct_public_polyvec (z3); /* PQZ (review E): accepted, proof fields */
+  pqz_ct_public_polyvec (z4);
 
   /* cleanup */
   explicit_bzero (&rbits, sizeof (rbits)); /* PQZ (P6-D3): secret signs */

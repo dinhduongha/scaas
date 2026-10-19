@@ -362,11 +362,16 @@ impl Poly {
                     p.set_coeff(i as usize, &pow2);
                 }
             }
+            // review E: B is the secret l2 slack (rel.rs set_upsilon): every bit is written and a masked 2^i
+            // subtracted, no branch (C int_binexp; subtracting a masked-out 0 leaves B_ as it was)
             if let Some(u) = upsilon.as_deref_mut() {
-                if b_.ge(&pow2) {
-                    b_.sub(&{ b_ }, &pow2);
-                    u.set_coeff(i as usize, &Int::from_i64(1, 1));
+                let ge = b_.ge(&pow2) as u64;
+                let k = crate::ct::mask(ge);
+                for x in &mut pow2.l[..pow2.n] {
+                    *x &= k;
                 }
+                b_.sub(&{ b_ }, &pow2);
+                u.set_coeff(i as usize, &Int::from_i64(1, ge as i64));
             }
         }
     }

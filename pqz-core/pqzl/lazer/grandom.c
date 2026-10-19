@@ -85,7 +85,12 @@ gaussian155 (rng_state_t state, uint64_t u, unsigned int s)
       uint64_t mant;
       int32_t e;
       pqz_exp_fp (-x, &mant, &e);
-      if (pqz_bernoulli_fp (w[2], mant, e))
+      /* PQZ (review E): the try count is public (class b): per try P(accept) = sum_k exp(-(k - c)^2 / (2 1.55^2)) /
+         const, independent of the centre c up to 2^-68 (Poisson sum, 2 exp(-2 pi^2 1.55^2) ~ 2^-68), so the count
+         carries no information on the sample */
+      int acc = pqz_bernoulli_fp (w[2], mant, e);
+      PQZ_CT_PUBLIC (&acc, sizeof (acc));
+      if (acc)
         return k;
     }
   pqz_err_set (PQZ_ERR_REJECT);

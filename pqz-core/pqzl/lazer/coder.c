@@ -71,6 +71,8 @@ coder_enc_ghint (coder_state_t state, const intvec_t ghint)
   unsigned int nbytes = 0;
   uint8_t *_byte;
 
+  pqz_ct_public_intvec (ghint); /* PQZ (review E): every coder input is a proof field or a transcript message (public) */
+
   ASSERT_ERR (state->out != NULL);
   ASSERT_ERR (state->in == NULL);
 
@@ -194,6 +196,8 @@ coder_enc_urandom (coder_state_t state, const intvec_t v, const int_t m,
 {
   unsigned int nbits;
 
+  pqz_ct_public_intvec (v); /* PQZ (review E): every coder input is a proof field or a transcript message (public) */
+
   ASSERT_ERR (state->out != NULL);
   ASSERT_ERR (state->in == NULL);
 
@@ -236,6 +240,8 @@ coder_enc_grandom (coder_state_t state, const intvec_t v, unsigned int log2o)
   int64_t z, z0, z1; /* PQZ: int64_t, was long (32-bit on wasm32) */
   int_srcptr elem;
   uint8_t *_byte;
+
+  pqz_ct_public_intvec (v); /* PQZ (review E): every coder input is a proof field or a transcript message (public) */
 
   ASSERT_ERR (state->out != NULL);
   ASSERT_ERR (state->in == NULL);

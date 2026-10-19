@@ -973,7 +973,9 @@ set_upsilon (const lnp_tbox_params_struct *P, polyvec_t s1, const unsigned *star
       INT_T (n2t, 2 * P->tbox->ring->q->nlimbs);
       int_set_i64 (n2t, n2);
       int_sub (d, d, n2t);
-      if (int_sgn (d) < 0)
+      int above = int_sgn (d) < 0;
+      PQZ_CT_PUBLIC (&above, sizeof above); /* review E: the witness-valid verdict is public (prove fails) */
+      if (above)
         {
           if (!CHEAT)
             return 0; /* witness above its norm bound */
@@ -1071,6 +1073,19 @@ wit_vec (polyvec_t s1, unsigned off, const uint8_t *p, int wide)
   return p + (wide ? 4096 : 2048);
 }
 
+/* x / d and x % d as C's '/' and '%' (truncated, d > 0) by the fixed-step restoring division of pqz_mpn.h (review E:
+   the witness values are secret, and wasm32 keeps i64.div_s / i64.rem_s even for a constant d, whose latency is the
+   engine's and the CPU's) */
+static int64_t
+ct_sdiv (int64_t x, uint64_t d, int64_t *rem)
+{
+  const uint64_t s = (uint64_t)(x >> 63);
+  mp_limb_t n = ((uint64_t)x ^ s) - s, dd = d;
+  const uint64_t q = pqz__div (NULL, &n, 1, &dd, 1); /* n: the remainder */
+  *rem = (int64_t)((n ^ s) - s);
+  return (int64_t)((q ^ s) - s);
+}
+
 /* w_i = centre(v_i - (u^T s)_i), s = s1[0 .. 32) */
 static void
 dec_w (polyring_srcptr Rq, polyvec_ptr u, poly_ptr v, polyvec_t s1, int64_t w[16])
@@ -1083,12 +1098,11 @@ dec_w (polyring_srcptr Rq, polyvec_ptr u, poly_ptr v, polyvec_t s1, int64_t w[16
   poly_fromcrt (acc);
   for (unsigned i = 0; i < 16; i++)
     {
-      int64_t wv = cval (v, i) - cval (acc, i);
-      wv %= (int64_t)PQZ_Q;
-      if (wv > (int64_t)(PQZ_Q - 1) / 2)
-        wv -= (int64_t)PQZ_Q;
-      if (wv < -(int64_t)(PQZ_Q - 1) / 2)
-        wv += (int64_t)PQZ_Q;
+      /* review E: secret (u^T s); reduced and centred without a branch or a division */
+      int64_t wv;
+      ct_sdiv (cval (v, i) - cval (acc, i), PQZ_Q, &wv); /* wv = (v_i - acc_i) % q */
+      wv -= (int64_t)PQZ_Q & (((int64_t)(PQZ_Q - 1) / 2 - wv) >> 63);
+      wv += (int64_t)PQZ_Q & ((wv + (int64_t)(PQZ_Q - 1) / 2) >> 63);
       w[i] = wv;
     }
   poly_free (acc);
@@ -1134,33 +1148,36 @@ debit_witness (txst_t *T, const uint8_t *w, polyvec_t s1, const rel_t *R)
     dec_w (Rq, T->uT, T->vT, s1, wv);
     for (i = 0; i < 16; i++)
       {
-        int64_t m = (wv[i] >= 0 ? wv[i] + DELTA / 2 : wv[i] - DELTA / 2) / DELTA;
+        const int64_t sg = wv[i] >> 63; /* review E: round half away from zero without a branch */
+        int64_t r, m = ct_sdiv (wv[i] + (((DELTA / 2) ^ sg) - sg), DELTA, &r);
         M[i] = m;
         eT[i] = wv[i] - DELTA * m;
       }
   }
-  /* carries: c_i = (M_i + c_{i-1} - d'_i - sum_j d_j,i - f_i) / 16, exact, c_15 = 0 (so sum_j a_j + fee <= balance) */
+  /* carries: c_i = (M_i + c_{i-1} - d'_i - sum_j d_j,i - f_i) / 16, exact, c_15 = 0 (so sum_j a_j + fee <= balance).
+     review E: the checks run on secret values, so they are collected without a branch ('|', not '||') and only the
+     verdict (witness consistent, public: prove fails otherwise) is declassified; same verdict as the early returns */
   int64_t cprev = 0;
+  int bad = 0;
   for (i = 0; i < 16; i++)
     {
       int64_t s = M[i] + cprev - dp[i] - dsum[i] - (int64_t)digit (T->fee, i);
-      if (s % 16 != 0 && !CHEAT)
-        return 0;
-      c[i] = s / 16;
+      bad |= (s & 15) != 0;                /* s % 16 != 0 */
+      c[i] = (s + ((s >> 63) & 15)) >> 4; /* s / 16 (truncated), no division (review E) */
       cprev = c[i];
     }
-  if (c[15] != 0 && !CHEAT)
-    return 0;
+  bad |= c[15] != 0;
   /* ranges (the proof shows them; an honest prover checks first) */
   for (i = 0; i < 16; i++)
     {
-      int bad = dp[i] > 15 || M[i] < 0 || M[i] >= (1 << 14) || c[i] < -64 || c[i] >= 1984 || eT[i] < -(1 << 24)
-                || eT[i] >= (1 << 24);
+      bad |= (dp[i] > 15) | (M[i] < 0) | (M[i] >= (1 << 14)) | (c[i] < -64) | (c[i] >= 1984) | (eT[i] < -(1 << 24))
+             | (eT[i] >= (1 << 24));
       for (j = 0; j < L; j++)
         bad |= d[j][i] > 15;
-      if (bad && !CHEAT)
-        return 0;
     }
+  PQZ_CT_PUBLIC (&bad, sizeof bad);
+  if (bad && !CHEAT)
+    return 0;
   for (i = 0; i < 16; i++)
     for (b = 0; b < 25; b++)
       {
@@ -1189,15 +1206,16 @@ dr_witness (txst_t *T, const uint8_t *w, polyvec_t s1)
   int64_t wv[16];
   wit_vec (s1, 32, wit_vec (s1, 0, w, 0), 1);
   dec_w (DR.P->tbox->ring, T->u[0], T->v[0], s1, wv);
+  int bad = 0;
   for (unsigned i = 0; i < 16; i++)
     {
       int64_t e = wv[i] - DELTA * digit (T->amount, i);
-      if (e < -(1 << 24) || e >= (1 << 24))
-        return 0; /* not an encryption of amount under this key */
+      bad |= (e < -(1 << 24)) | (e >= (1 << 24)); /* review E: no branch on the secret e */
       for (unsigned b = 0; b < 25; b++)
         set_c (polyvec_get_elem (s1, 64 + (25 * i + b) / 64), (25 * i + b) % 64, ((e + (1 << 24)) >> b) & 1);
     }
-  return 1;
+  PQZ_CT_PUBLIC (&bad, sizeof bad); /* review E: the verdict is public (prove fails) */
+  return !bad; /* bad: not an encryption of amount under this key */
 }
 
 /* the exact statement length of relation R */
