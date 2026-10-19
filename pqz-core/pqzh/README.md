@@ -43,7 +43,8 @@ the parent [pqz-core/README.md](../README.md) first; the design and every measur
 | `src/ring.rs`, `src/client.rs` | ring helpers; the test client (feature `bench`) |
 | `src/bin/ligero_bench.rs` | the benchmark: proof bytes, soundness per term, prove time, peak memory, verify p50 / p99 |
 | `src/bin/ligero_export.rs` | fixtures for the Solidity Ligero verifier experiment (`smartcontracts/evm/test/pqzh/ligero/`) |
-| `tests/attacks.rs`, `tests/multi.rs` | mutation and negative-witness tests; op 7 tests |
+| `tests/attacks.rs`, `tests/multi.rs`, `tests/oom.rs` | mutation and negative-witness tests; op 7 tests; the verifier's out-of-memory path |
+| `src/ct.rs`, `src/bin/ct.rs` | the constant-time marks and the memcheck driver (feature `ctgrind`, test only) |
 | `wasm/` | the wasm32 module and its node runner |
 | `ligero_params.py`, `evm_model.py` | the parameter model and the EVM gas model |
 | `runs/` | one script per measurement round, with its raw results (`l<N>-*`) |
@@ -61,6 +62,7 @@ The round scripts in `runs/` (each runs alone under `scripts/capped`, from the r
 | `tx0.sh` | `R_TX0`, the transfer without the auditor (§14) |
 | `txm.sh` | the multi-recipient transfer: tests, cross-check, measurements (§15) |
 | `bench.sh` | a plain native bench run |
+| `ct.sh` | the constant-time check of the prover under valgrind memcheck (ctgrind, review P-B): 0 reports, every proof verifies |
 
 ## Build and test
 
@@ -71,7 +73,17 @@ Run from `pqz-core/`:
 (cd pqzh/ligero && cargo test --release --offline --no-default-features)  # the production build
 scripts/capped pqz-core/pqzh/ligero/runs/gateb.sh <tag>   # from the repository root: the gate-B round
 scripts/capped pqz-core/pqzh/xcheck/ligero.sh             # from the repository root: Rust bytes = C bytes, all six forms
+scripts/capped pqz-core/pqzh/ligero/runs/ct.sh <label>    # from the repository root: the constant-time check (x86-64)
 ```
+
+**Prover hygiene (review round 2, 2026-10-19).** The prover keeps no branch, table address or 64-bit division on
+secret values (witness, `rnd32`, masks): `runs/ct.sh` builds the test-only feature `ctgrind`, proves all twelve
+relations with the witness and `rnd32` marked secret under valgrind memcheck and must report nothing; the inventory,
+the declassified points and the wasm32 code check are in
+[O-pqzh-constant-time.md](../research/code-review-2026-10-19/O-pqzh-constant-time.md). Every secret buffer is wiped
+on every exit (best effort, the platform boundary is stated there). The library is `#![forbid(unsafe_code)]` (only the
+test-only `ctgrind` build has the two memcheck client requests). The verifier reserves its parameter-sized buffers
+fallibly: `try_verify` returns `Err(Oom)`, which `pqz-ffi` reports as a node fault.
 
 ## Why Ligero (and not the STARK in `stark-backup/`)
 

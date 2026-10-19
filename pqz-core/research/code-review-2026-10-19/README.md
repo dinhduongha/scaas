@@ -17,6 +17,7 @@ its scope. Reviewed at main `4c20032`.
 | [I-codex-pqzh-rust.md](I-codex-pqzh-rust.md) | round 2 (owner 2026-10-19 evening): PQZH Rust at `e9cabd1` (`pqzh/ligero`, pqz-ffi PQZH path, `stmt`, `xcheck`; `stark-backup` secondary), Codex | no P0 / P1 in the live path; round-1 A-F1, A-F2, A-Note and B-F1…F5 all still present |
 | [J-agy-pqzh-rust.md](J-agy-pqzh-rust.md) | same, agy; **triage table P-A…P-I** | same eight findings, nothing new; triage: fix P-A…P-H on `rev2-pqzh` (plan Task 5c), P-I a gate before the backup is promoted |
 | [K-claude-pqzh-rust.md](K-claude-pqzh-rust.md) | same, Claude sub-agent | no P0 / P1; new: wasm32 `i64.rem_s` / `div_s` and conditional subtractions on secrets (F3), infallible verifier allocation (F5), unsafe pointer work in bench wasm exports (F6) |
+| [O-pqzh-constant-time.md](O-pqzh-constant-time.md) | round-2 fixes P-A, P-B, P-C on `rev2-pqzh` (plan Task 5c) | inventory (a) fixed / (b) declassified / (c) public of the Ligero prover, the ctgrind check `pqzh/ligero/runs/ct.sh` (0 reports, twelve relations), the wasm32 divisions before / after, the wiping and its platform boundary |
 
 **Controller verification (2026-10-19).** Both P0 transcript facts were re-read by the controller in the Rust prover
 (`pqzl/rust/src/proof/tbox.rs`: `tg` hashed at 1058, `h` computed after it, `quad.rs:22` derives `mu` from the same
