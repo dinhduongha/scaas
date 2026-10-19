@@ -1,0 +1,197 @@
+# review round 2, the new tests on the PRE-FIX core: git archive cfea904 of pqzl/{src,lazer,params,build.sh,test} plus this branch's test/pqz_ub_test.c and test/ub_test.sh, with -Dpqz_arena_try_alloc=pqz_arena_alloc
+# ub_test before-rev2:  + uncommitted src/lazer changes, Ubuntu clang version 18.1.3 (1ubuntu1)
+# clang-18 -Dpqz_arena_try_alloc=pqz_arena_alloc -std=gnu11 -O1 -g -fsanitize=undefined,address -fno-omit-frame-pointer -DPQZ_SV -fno-sanitize-recover=all -w -Ibuild/include -Isrc -Ilazer -Iparams [-DPQZ_DEBUG_MALLOC]
+== part a
+lazer/aes256ctr.c:339:20: runtime error: applying zero offset to null pointer
+    #0 0x57c49e7f41a3 in _aes256ctr_stream pqz-core/pqzl/lazer/aes256ctr.c:339:20
+    #1 0x57c49e7f41a3 in _rng_urandom pqz-core/pqzl/lazer/rng.c:52:3
+    #2 0x57c49e76d3ea in rng_urandom pqz-core/pqzl/lazer/rng.c:17:3
+    #3 0x57c49e76d3ea in _u64 pqz-core/pqzl/lazer/rejection.c:64:3
+    #4 0x57c49e76d3ea in _accept_exp pqz-core/pqzl/lazer/rejection.c:97:28
+    #5 0x57c49e76d3ea in rej_standard pqz-core/pqzl/lazer/rejection.c:117:11
+    #6 0x57c49e83e49b in rej_all pqz-core/pqzl/test/pqz_ub_test.c:158:11
+    #7 0x57c49e83e49b in test_rejection pqz-core/pqzl/test/pqz_ub_test.c:179:67
+    #8 0x57c49e83e49b in main pqz-core/pqzl/test/pqz_ub_test.c:548:37
+    #9 0x75d89a62a1c9 in __libc_start_call_main csu/../sysdeps/nptl/libc_start_call_main.h:58:16
+    #10 0x75d89a62a28a in __libc_start_main csu/../csu/libc-start.c:360:3
+    #11 0x57c49e688344 in _start (pqz-core/pqzl/build/ub/pqz_ub_test+0x73344) (BuildId: 382f897d836556aa91ee8c81dea5b1c5e329b9b3)
+
+SUMMARY: UndefinedBehaviorSanitizer: undefined-behavior lazer/aes256ctr.c:339:20 
+== part a rc=1
+== part b
+ok   pqz_init
+ok   keypair
+ok   pqz_encrypt pk coefficient 2^63 + 0 = its reading mod q
+ok   pqz_decrypt_raw u coefficient 2^63 + 0 = its reading mod q
+ok   pqz_decrypt_raw v coefficient 2^63 + 0 = (V - q) - acc mod 2^64
+ok   pqz_encrypt pk coefficient 2^63 + 5 = its reading mod q
+ok   pqz_decrypt_raw u coefficient 2^63 + 5 = its reading mod q
+ok   pqz_decrypt_raw v coefficient 2^63 + 5 = (V - q) - acc mod 2^64
+ok   pqz_encrypt pk coefficient 2^63 + 4398046510888 = its reading mod q
+ok   pqz_decrypt_raw u coefficient 2^63 + 4398046510888 = its reading mod q
+ok   pqz_decrypt_raw v coefficient 2^63 + 4398046510888 = (V - q) - acc mod 2^64
+ok   pqz_encrypt pk coefficient 2^63 + 4398046510889 = its reading mod q
+ok   pqz_decrypt_raw u coefficient 2^63 + 4398046510889 = its reading mod q
+ok   pqz_decrypt_raw v coefficient 2^63 + 4398046510889 = (V - q) - acc mod 2^64
+PASS (0 failed)
+== part b rc=0
+== part c
+ok   poly_auto_self crt: X -> X^-1 via the coefficients (= the coefficient-domain branch)
+PASS (0 failed)
+== part c rc=0
+== part d
+ok   Q-A pqz_bernoulli_fp masked add = the former shift (e in [-70, 4], 300,000 cases)
+PASS (0 failed)
+== part d rc=0
+== part e
+lazer/aes256ctr.c:339:20: runtime error: applying zero offset to null pointer
+    #0 0x6041d23ae1a3 in _aes256ctr_stream pqz-core/pqzl/lazer/aes256ctr.c:339:20
+    #1 0x6041d23ae1a3 in _rng_urandom pqz-core/pqzl/lazer/rng.c:52:3
+    #2 0x6041d23b8fb5 in _urandom_i64 pqz-core/pqzl/lazer/urandom.c:108:7
+    #3 0x6041d234620d in _urandom pqz-core/pqzl/lazer/urandom.c:12:7
+    #4 0x6041d231c808 in _intvec_urandom pqz-core/pqzl/lazer/intvec.c:628:3
+    #5 0x6041d231c808 in _poly_urandom pqz-core/pqzl/lazer/poly.c:831:3
+    #6 0x6041d231c808 in polymat_urandom pqz-core/pqzl/lazer/polymat.c:475:5
+    #7 0x6041d231ba55 in abdlop_keygen pqz-core/pqzl/lazer/abdlop.c:55:7
+    #8 0x6041d23cd14e in rel_keys pqz-core/pqzl/src/pqz_rel.c:166:3
+    #9 0x6041d23cf9f8 in pqz_verify pqz-core/pqzl/src/pqz_rel.c:1411:7
+    #10 0x6041d23fa7e9 in test_truncated pqz-core/pqzl/test/pqz_ub_test.c:412:10
+    #11 0x6041d23fa7e9 in main pqz-core/pqzl/test/pqz_ub_test.c:558:5
+    #12 0x7c9a9702a1c9 in __libc_start_call_main csu/../sysdeps/nptl/libc_start_call_main.h:58:16
+    #13 0x7c9a9702a28a in __libc_start_main csu/../csu/libc-start.c:360:3
+    #14 0x6041d2242344 in _start (pqz-core/pqzl/build/ub/pqz_ub_test+0x73344) (BuildId: 382f897d836556aa91ee8c81dea5b1c5e329b9b3)
+
+SUMMARY: UndefinedBehaviorSanitizer: undefined-behavior lazer/aes256ctr.c:339:20 
+== part e rc=1
+== part f
+=================================================================
+==315026==ERROR: AddressSanitizer: heap-buffer-overflow on address 0x502000000020 at pc 0x6329940b616f bp 0x7fff2c4112d0 sp 0x7fff2c4112c8
+READ of size 8 at 0x502000000020 thread T0
+    #0 0x6329940b616e in spolyvec_insert_elem pqz-core/pqzl/lazer/spolyvec.c:330:24
+    #1 0x632994178da3 in test_asserts pqz-core/pqzl/test/pqz_ub_test.c:426:16
+    #2 0x632994178454 in main pqz-core/pqzl/test/pqz_ub_test.c:560:5
+    #3 0x71b8c822a1c9 in __libc_start_call_main csu/../sysdeps/nptl/libc_start_call_main.h:58:16
+    #4 0x71b8c822a28a in __libc_start_main csu/../csu/libc-start.c:360:3
+    #5 0x632993fbf344 in _start (pqz-core/pqzl/build/ub/pqz_ub_test+0x73344) (BuildId: 382f897d836556aa91ee8c81dea5b1c5e329b9b3)
+
+0x502000000020 is located 0 bytes after 16-byte region [0x502000000010,0x502000000020)
+allocated by thread T0 here:
+    #0 0x63299405a193 in malloc (pqz-core/pqzl/build/ub/pqz_ub_test+0x10e193) (BuildId: 382f897d836556aa91ee8c81dea5b1c5e329b9b3)
+    #1 0x6329940dc445 in spolyvec_alloc pqz-core/pqzl/lazer/spolyvec.c:56:14
+    #2 0x632994178d5a in test_asserts pqz-core/pqzl/test/pqz_ub_test.c:422:3
+    #3 0x632994178454 in main pqz-core/pqzl/test/pqz_ub_test.c:560:5
+    #4 0x71b8c822a1c9 in __libc_start_call_main csu/../sysdeps/nptl/libc_start_call_main.h:58:16
+    #5 0x71b8c822a28a in __libc_start_main csu/../csu/libc-start.c:360:3
+    #6 0x632993fbf344 in _start (pqz-core/pqzl/build/ub/pqz_ub_test+0x73344) (BuildId: 382f897d836556aa91ee8c81dea5b1c5e329b9b3)
+
+SUMMARY: AddressSanitizer: heap-buffer-overflow pqz-core/pqzl/lazer/spolyvec.c:330:24 in spolyvec_insert_elem
+Shadow bytes around the buggy address:
+  0x501ffffffd80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x501ffffffe00: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x501ffffffe80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x501fffffff00: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+  0x501fffffff80: 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00
+=>0x502000000000: fa fa 00 00[fa]fa fa fa fa fa fa fa fa fa fa fa
+  0x502000000080: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x502000000100: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x502000000180: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x502000000200: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+  0x502000000280: fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa fa
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Partially addressable: 01 02 03 04 05 06 07 
+  Heap left redzone:       fa
+  Freed heap region:       fd
+  Stack left redzone:      f1
+  Stack mid redzone:       f2
+  Stack right redzone:     f3
+  Stack after return:      f5
+  Stack use after scope:   f8
+  Global redzone:          f9
+  Global init order:       f6
+  Poisoned by user:        f7
+  Container overflow:      fc
+  Array cookie:            ac
+  Intra object redzone:    bb
+  ASan internal:           fe
+  Left alloca redzone:     ca
+  Right alloca redzone:    cb
+==315026==ABORTING
+== part f rc=1
+== part g
+lazer/aes256ctr.c:339:20: runtime error: applying zero offset to null pointer
+    #0 0x60595c3117f3 in _aes256ctr_stream pqz-core/pqzl/lazer/aes256ctr.c:339:20
+    #1 0x60595c3117f3 in _rng_urandom pqz-core/pqzl/lazer/rng.c:52:3
+    #2 0x60595c31c605 in _urandom_i64 pqz-core/pqzl/lazer/urandom.c:108:7
+    #3 0x60595c2a860d in _urandom pqz-core/pqzl/lazer/urandom.c:12:7
+    #4 0x60595c27e818 in _intvec_urandom pqz-core/pqzl/lazer/intvec.c:628:3
+    #5 0x60595c27e818 in _poly_urandom pqz-core/pqzl/lazer/poly.c:831:3
+    #6 0x60595c27e818 in polymat_urandom pqz-core/pqzl/lazer/polymat.c:475:5
+    #7 0x60595c27da65 in abdlop_keygen pqz-core/pqzl/lazer/abdlop.c:55:7
+    #8 0x60595c3309be in rel_keys pqz-core/pqzl/src/pqz_rel.c:166:3
+    #9 0x60595c32ed86 in pqz_prove pqz-core/pqzl/src/pqz_rel.c:1377:7
+    #10 0x60595c35e7e4 in test_wipe pqz-core/pqzl/test/pqz_ub_test.c:500:10
+    #11 0x60595c35e7e4 in main pqz-core/pqzl/test/pqz_ub_test.c:565:7
+    #12 0x7423e4a2a1c9 in __libc_start_call_main csu/../sysdeps/nptl/libc_start_call_main.h:58:16
+    #13 0x7423e4a2a28a in __libc_start_main csu/../csu/libc-start.c:360:3
+    #14 0x60595c1a4354 in _start (pqz-core/pqzl/build/ub/pqz_ub_arena+0x73354) (BuildId: 6f5553b6049df5962f5ee7838643885fff9616fd)
+
+SUMMARY: UndefinedBehaviorSanitizer: undefined-behavior lazer/aes256ctr.c:339:20 
+== part g rc=1
+== part h
+     arena after pqz_init: 2719760 B
+FAIL Q-C pqz_init on an arena 16 B short of A: trap (SIGILL), no write
+=================================================================
+==315927==ERROR: AddressSanitizer: global-buffer-overflow on address 0x5d029e6be2f0 at pc 0x5d029db046c2 bp 0x7ffc2676d5e0 sp 0x7ffc2676d5d8
+WRITE of size 8 at 0x5d029e6be2f0 thread T0
+    #0 0x5d029db046c1 in _intvec_init pqz-core/pqzl/build/include/lazer.h:1886:12
+    #1 0x5d029db582c3 in _polymat_init pqz-core/pqzl/build/include/lazer.h:1991:5
+    #2 0x5d029db582c3 in polymat_alloc pqz-core/pqzl/lazer/polymat.c:19:3
+    #3 0x5d029dbad87f in rel_keys pqz-core/pqzl/src/pqz_rel.c:162:3
+    #4 0x5d029dbb0268 in pqz_verify pqz-core/pqzl/src/pqz_rel.c:1411:7
+    #5 0x5d029dbde3e3 in child_dies pqz-core/pqzl/test/pqz_ub_test.c:516:9
+    #6 0x5d029dbdb9a6 in test_exhaustion pqz-core/pqzl/test/pqz_ub_test.c:532:10
+    #7 0x5d029dbdb9a6 in main pqz-core/pqzl/test/pqz_ub_test.c:568:5
+    #8 0x7a70e3e2a1c9 in __libc_start_call_main csu/../sysdeps/nptl/libc_start_call_main.h:58:16
+    #9 0x7a70e3e2a28a in __libc_start_main csu/../csu/libc-start.c:360:3
+    #10 0x5d029da21354 in _start (pqz-core/pqzl/build/ub/pqz_ub_arena+0x73354) (BuildId: 6f5553b6049df5962f5ee7838643885fff9616fd)
+
+0x5d029e6be2f0 is located 1648 bytes after global variable 'sink' defined in 'pqz-core/pqzl/src/pqz_arena.c:33' (0x5d029e5bdc80) of size 1048576
+SUMMARY: AddressSanitizer: global-buffer-overflow pqz-core/pqzl/build/include/lazer.h:1886:12 in _intvec_init
+Shadow bytes around the buggy address:
+  0x5d029e6be000: f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9
+  0x5d029e6be080: f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9
+  0x5d029e6be100: f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9
+  0x5d029e6be180: f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9
+  0x5d029e6be200: f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9
+=>0x5d029e6be280: f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9[f9]f9
+  0x5d029e6be300: f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9
+  0x5d029e6be380: f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9
+  0x5d029e6be400: f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9
+  0x5d029e6be480: f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9
+  0x5d029e6be500: f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9 f9
+Shadow byte legend (one shadow byte represents 8 application bytes):
+  Addressable:           00
+  Partially addressable: 01 02 03 04 05 06 07 
+  Heap left redzone:       fa
+  Freed heap region:       fd
+  Stack left redzone:      f1
+  Stack mid redzone:       f2
+  Stack right redzone:     f3
+  Stack after return:      f5
+  Stack use after scope:   f8
+  Global redzone:          f9
+  Global init order:       f6
+  Poisoned by user:        f7
+  Container overflow:      fc
+  Array cookie:            ac
+  Intra object redzone:    bb
+  ASan internal:           fe
+  Left alloca redzone:     ca
+  Right alloca redzone:    cb
+==315927==ABORTING
+FAIL Q-C pqz_init fits, R_REG's keys do not (arena A + 64 KiB): pqz_verify traps (SIGILL), no write
+FAIL Q-C pqz_arena_try_alloc over the capacity: NULL and PQZ_ERR_ARENA, the call goes on
+FAIL (3 failed)
+== part h rc=1
+ub_test before-rev2: FAIL
