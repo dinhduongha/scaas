@@ -22,6 +22,37 @@ contract CoinReenterer {
     }
 }
 
+/// W-Q: from `receive` (inside a guarded unwrap) calls every role, owner, rate and pay entry of the token and records
+/// whether each reverted `Reentrancy` (CTR-MTX-18: one guard over every entry point).
+contract CoinReentersEveryEntry {
+    UnderlyingToken public t;
+    uint256 public refused;
+    uint256 public tried;
+    function arm(UnderlyingToken t_) external { t = t_; }
+    receive() external payable {
+        bytes[13] memory calls = [
+            abi.encodeWithSelector(t.payWithFee.selector, address(1), 1, 0, 0, address(0), bytes32(0)),
+            abi.encodeWithSelector(t.payWithFeeToUA.selector, bytes32(uint256(1) << 160), 1, 0, 0, address(0), bytes32(0)),
+            abi.encodeWithSelector(t.grantRole.selector, uint8(1), address(1)),
+            abi.encodeWithSelector(t.revokeRole.selector, uint8(1), address(1)),
+            abi.encodeWithSelector(t.renounceRole.selector, uint8(1)),
+            abi.encodeWithSelector(t.disableFeature.selector, uint8(1)),
+            abi.encodeWithSelector(t.transferOwnership.selector, address(1)),
+            abi.encodeWithSelector(t.acceptOwnership.selector),
+            abi.encodeWithSelector(t.renounceOwnership.selector),
+            abi.encodeWithSelector(t.disableWrap.selector, address(0), bytes32(0)),
+            abi.encodeWithSelector(t.proposeRate.selector, address(0), uint96(1), uint96(1)),
+            abi.encodeWithSelector(t.cancelRate.selector),
+            abi.encodeWithSelector(t.executeRate.selector)
+        ];
+        for (uint256 i; i < calls.length; ++i) {
+            (bool ok, bytes memory r) = address(t).call(calls[i]);
+            ++tried;
+            if (!ok && r.length == 4 && bytes4(r) == IMetaTx.Reentrancy.selector) ++refused;
+        }
+    }
+}
+
 /// The native-coin leg (CTR-TOK-26): `address(0)`, payable wrap with `msg.value == amount`, CEI payout with all gas,
 /// balance mechanics on `address(this).balance`, forced coin is not reserve, no gasless native wrap.
 contract NativeLegTest is V2Fixture {
@@ -165,6 +196,18 @@ contract NativeLegTest is V2Fixture {
         vm.prank(address(r));
         vm.expectRevert(IMetaTx.Reentrancy.selector);
         t.unwrap(1 ether, address(r), 0);
+    }
+
+    /// W-Q: a recipient re-entering any role, owner, rate or pay entry during the payout hits the guard.
+    function test_native_reentryIntoEveryEntry_isRefused() public {
+        UnderlyingToken t = _native();
+        CoinReentersEveryEntry r = new CoinReentersEveryEntry();
+        r.arm(t);
+        _wrapNative(t, alice, 1 ether);
+        vm.prank(alice);
+        t.unwrap(1 ether, address(r), 0);
+        assertEq(r.tried(), 13);
+        assertEq(r.refused(), 13);
     }
 
     function test_native_contractRecipientGetsAllGas() public {

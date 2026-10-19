@@ -486,6 +486,24 @@ contract ZetherUnderlyingTest is ZetherFixture {
         assertEq(hook.balanceOf(address(0xD00D)), 10 * SCALE);
     }
 
+    /// W-Q(f) / CTR-MTX-18: the kind's restated `disableFeature` and `executeRate` carry the guard too; a hook leg that
+    /// calls either mid-pull gets `Reentrancy` (before 5g: the entry's own refusal).
+    function test_reentryIntoTheRestatedAdminEntriesRefused() public {
+        HookLeg hook = new HookLeg();
+        address[] memory legs = new address[](1);
+        legs[0] = address(hook);
+        UnderlyingZetherToken z = _wrapper(legs, _ones(1), _ones(1), "hook2", false);
+        hook.mint(address(this), SCALE);
+        hook.approve(address(z), SCALE);
+        bytes[2] memory calls =
+            [abi.encodeCall(z.disableFeature, (AdminLib.RATE_ADJUSTABLE)), abi.encodeCall(z.executeRate, ())];
+        for (uint256 i; i < 2; ++i) {
+            hook.arm(address(z), calls[i]);
+            vm.expectRevert(IMetaTx.Reentrancy.selector);
+            z.zetherWrapShield(address(hook), SCALE, alice.ua);
+        }
+    }
+
     function test_allowlistPinned_underlyingZether() public {
         (bytes4[] memory s, uint8[] memory c, uint8[] memory a) = w.mtxSelectors();
         assertEq(s.length, 16);

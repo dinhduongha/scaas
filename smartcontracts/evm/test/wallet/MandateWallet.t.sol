@@ -319,6 +319,26 @@ contract MandateWalletTest is MandateFixture {
     // ------------------------------------------------------------------ setMandate and the running period
 
     /// Same delegate and period length: an edit keeps the period's start and spend, so it grants no fresh budget.
+    /// W-L: periods stay on the grid of the mandate's start. After an idle stretch the first payment opens the window
+    /// that holds `now` (not a window starting at `now`), so the delegate cannot choose where a boundary falls.
+    function test_period_windows_stay_on_the_grid() public {
+        (uint64 p0,) = _period();
+        vm.warp(p0 + 2 days + 12 hours);                     // idle for two and a half periods
+        _pay(npp, 1_000, keccak256("a"));
+        (uint64 ps, uint128 spent) = _period();
+        assertEq(ps, p0 + 2 days);
+        assertEq(spent, 1_000);
+        _pay(npp, 1_000, keccak256("b"));
+        _pay(npp, 500, keccak256("c"));
+        vm.warp(p0 + 3 days - 1);
+        _payExpect(npp, 1, keccak256("d"), abi.encodeWithSelector(MandateWallet.OverPeriodCap.selector, 2_501, 2_500));
+        vm.warp(p0 + 3 days);                                // the grid boundary (a window opened on demand at
+        _pay(npp, 1, keccak256("d"));                        // p0 + 2.5 days would still be full here)
+        (ps, spent) = _period();
+        assertEq(ps, p0 + 3 days);
+        assertEq(spent, 1);
+    }
+
     function test_setMandate_keeps_the_period_budget() public {
         _pay(npp, 1_000, keccak256("a"));
         _pay(npp, 1_000, keccak256("b"));

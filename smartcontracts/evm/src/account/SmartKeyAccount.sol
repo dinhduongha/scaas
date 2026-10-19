@@ -159,7 +159,7 @@ contract SmartKeyAccount is MetaTxBase, IERC1271 {
     // ------------------------------------------------------------------ guardian (CTR-ACC-03)
 
     /// @notice Called again while pending: replaces the key and restarts the clock.
-    function initiateRecovery(SubjectKey calldata key) external {
+    function initiateRecovery(SubjectKey calldata key) external nonReentrant {
         if (msg.sender != guardian || guardian == address(0)) revert NotGuardian();
         _checkKey(key);
         bytes32 id = keyIdOf(key);
@@ -170,7 +170,7 @@ contract SmartKeyAccount is MetaTxBase, IERC1271 {
 
     /// @notice Anyone, after the delay. ADDS the key; no key is removed (the subject removes the lost key with the
     ///         new one).
-    function completeRecovery(SubjectKey calldata key) external returns (uint256 index) {
+    function completeRecovery(SubjectKey calldata key) external nonReentrant returns (uint256 index) {
         bytes32 id = pendingRecovery;
         if (id == bytes32(0) || keyIdOf(key) != id) revert NoRecovery();
         if (block.timestamp < recoveryReadyAt) revert RecoveryNotReady(recoveryReadyAt);

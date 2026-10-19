@@ -102,9 +102,10 @@ contract UnderlyingToken is MetaTokenBase, IUnderlyingToken {
         uint256 received;
         uint256 fee;
         (received, minted, fee) = UnderlyingLib.wrapBySig(u, o, sig, msg.sender);
-        _mint(o.destination == address(0) ? o.from : o.destination, minted - fee);
+        address to = o.destination == address(0) ? o.from : o.destination;
+        _mint(to, minted - fee);
         if (fee != 0) _mint(msg.sender, fee);
-        emit Wrapped(o.from, u, received, minted);
+        emit Wrapped(to, u, received, minted - fee);
     }
 
     /// @notice `mtxWrap` for a `UATradeOrder` (CTR-TOK-20, UA-5b): the underlying's `uaTrade` checks the holder (a
@@ -121,7 +122,7 @@ contract UnderlyingToken is MetaTokenBase, IUnderlyingToken {
         if (UAKinds.inNativeSpace(to)) _mint(address(uint160(uint256(to))), minted - fee);
         else _uaMint(to, minted - fee);
         if (fee != 0) _mint(msg.sender, fee);
-        emit UAWrapped(o.from, u, received, minted);
+        emit UAWrapped(to, u, received, minted - fee);
     }
 
     /// @dev `to == 0` is a sentinel, "mint to the caller", not a receiver; any other `to` is minted into that derived UA
@@ -149,24 +150,24 @@ contract UnderlyingToken is MetaTokenBase, IUnderlyingToken {
 
     // ------------------------------------------------------------------ roles: guardian, rate admin
 
-    function disableWrap(address u, bytes32 reason) external {
+    function disableWrap(address u, bytes32 reason) external nonReentrant {
         UnderlyingLib.disableWrap(u, reason, _msgSender());
     }
 
-    function proposeRate(address u, uint96 num, uint96 den) external {
+    function proposeRate(address u, uint96 num, uint96 den) external nonReentrant {
         UnderlyingLib.proposeRate(u, num, den, _msgSender());
     }
 
-    function cancelRate() external {
+    function cancelRate() external nonReentrant {
         UnderlyingLib.cancelRate(_msgSender());
     }
 
-    function executeRate() external virtual {
+    function executeRate() external virtual nonReentrant {
         UnderlyingLib.executeRate(_msgSender(), totalSupply());
     }
 
     /// @notice `disableFeature(RATE_ADJUSTABLE)` also cancels a pending rate change (CTR-TOK-06).
-    function disableFeature(uint8 bit) external virtual override {
+    function disableFeature(uint8 bit) external virtual override nonReentrant {
         AdminLib.disableFeature(bit, _msgSender());
         if (bit == AdminLib.RATE_ADJUSTABLE) UnderlyingLib.dropPending();
     }

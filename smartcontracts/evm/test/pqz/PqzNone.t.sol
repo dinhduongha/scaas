@@ -11,6 +11,21 @@ import {PqzLib} from "../../src/pqz/PqzLib.sol";
 import {ZetherTypes} from "../../src/zether/ZetherTypes.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
+import {PqzSafety} from "../../src/pqz/PqzSafety.sol";
+
+/// A verifier that claims any precompile and proof system and says "supported" (review W-B).
+contract FakePqzVerifier {
+    address public immutable PRECOMPILE;
+    bytes32 public immutable PROOF_SYSTEM_ID;
+
+    constructor(address p, bytes32 id) {
+        (PRECOMPILE, PROOF_SYSTEM_ID) = (p, id);
+    }
+
+    function isSupportedOnThisChain() external pure returns (bool) {
+        return true;
+    }
+}
 
 /// The `NONE_PQZ` token (P6g plan Task 5): life cycle, statements against the P6e vectors, every §7.4–§7.6 check,
 /// entries and disclosure. The precompile is mocked (`PqzFixture`); the arithmetic, the registry and the token are real.
@@ -106,7 +121,7 @@ contract PqzNoneTest is PqzFixture {
             abi.encode(PqzLib.OP_TRANSFER, PQZL_ID, block.chainid, address(tok), address(reg), alice, bob, carol, FEE,
                 uint256(0)),
             abi.encode(uint256(0), uint256(0), uint256(1), block.number + 100, uint256(1), uint256(1000), PQZ_UID,
-                bytes32(0), uint256(uint128(salt)), bytes32(0))
+                _direct(ZetherTypes.TransferMode.BUNDLE), uint256(uint128(salt)), bytes32(0))
         );
         assertEq(_cut(st, 0, 640), head, "header");
         bytes memory proof = hex"0102030405";
@@ -337,6 +352,7 @@ contract PqzNoneTest is PqzFixture {
         pl = _payload(0, 0, alice, bob, bytes32(0), out, memo);
         bytes memory st = cpt.transferSingleStatement(pl, _acc(alice), new bytes[](0), 0);
         assertEq(bytes32(_cut(st, 608, 32)), keccak256(memo), "memoHash");
+        assertEq(bytes32(_cut(st, 544, 32)), _direct(ZetherTypes.TransferMode.HASH), "direct commit-reveal binding");
         bytes32 ref = cpt.pqzTransferSingle(pl, _acc(alice), new bytes[](0), hex"01", _mlAuth());
         bytes memory r = bytes.concat(salt, _cut(out, 0, PqzCt.CT), _cut(out, 16_640, 128), bob);
         assertEq(cpt.transferEntry(ref), bytes.concat(keccak256(r), memo), "hash || memo");
@@ -425,6 +441,149 @@ contract PqzNoneTest is PqzFixture {
         tok.pqzShield(bob, 10);
         console2.log("pqzShield gas", g - gasleft());
         assertEq(tok.accountState(bob).plainPending, 10);
+    }
+
+    // ------------------------------------------------------------------ review 2026-10-19 (plan Task 5g)
+
+    /// W-A: a direct transfer's statement names its mode (`envelopeBinding` word), so a front-runner cannot replay a
+    /// BUNDLE call through `…NoBundle` (no entry stored) or the reverse: the proof and `authSig` are for one entry point.
+    function test_directModeBound_single() public {
+        bytes memory pl = _payload(0, 0, alice, bob, bytes32(0), _out(97, true), "");
+        bytes[] memory none = new bytes[](0);
+        bytes memory st = tok.transferSingleStatement(pl, _acc(alice), none, 0);
+        assertEq(bytes32(_cut(st, 544, 32)), _direct(ZetherTypes.TransferMode.BUNDLE));
+        bytes memory stN = tok.transferSingleStatement(pl, _acc(alice), none, _direct(ZetherTypes.TransferMode.NONE));
+        assertEq(bytes32(_cut(stN, 544, 32)), _direct(ZetherTypes.TransferMode.NONE));
+        assertEq(_cut(stN, 0, 544), _cut(st, 0, 544));
+        assertEq(_cut(stN, 576, st.length - 576), _cut(st, 576, st.length - 576), "only the binding differs");
+        bytes memory proof = hex"b0b0";
+        _mockOp(1, 0); // the precompile accepts exactly the BUNDLE statement with this proof
+        vm.mockCall(PQZ, abi.encodePacked(uint8(1), uint32(st.length), st, proof), abi.encode(uint256(1)));
+        vm.expectRevert(IPqzToken.ProofRejected.selector);
+        tok.pqzTransferSingleNoBundle(pl, _acc(alice), none, proof, _mlAuth());
+        bytes32 ref = tok.pqzTransferSingle(pl, _acc(alice), none, proof, _mlAuth());
+        assertTrue(tok.transferCiphertextHash(ref) != 0, "the bundle stored");
+        // the reverse: a NoBundle proof does not pass as a BUNDLE call
+        accOf[alice] = bytes.concat(_cut(_out(97, true), 0, PqzCt.PK), _cut(_out(97, true), PqzCt.CT, 128));
+        pl = _payload(0, 0, alice, bob, bytes32(0), _out(98, true), "");
+        stN = tok.transferSingleStatement(pl, _acc(alice), none, _direct(ZetherTypes.TransferMode.NONE));
+        vm.mockCall(PQZ, abi.encodePacked(uint8(1), uint32(stN.length), stN, proof), abi.encode(uint256(1)));
+        vm.expectRevert(IPqzToken.ProofRejected.selector);
+        tok.pqzTransferSingle(pl, _acc(alice), none, proof, _mlAuth());
+        ref = tok.pqzTransferSingleNoBundle(pl, _acc(alice), none, proof, _mlAuth());
+        assertEq(tok.transferCiphertextHash(ref), bytes32(0));
+    }
+
+    /// W-B: the token takes its verdicts from `PqzSafety.PQZ` only, for PQZL or PQZH only, after the self-test; a
+    /// creator's verifier cannot point it at an "always valid" precompile.
+    function test_initPinsThePrecompile() public {
+        IFactoryToken.TokenConfig memory c = _cfg(1 << 40);
+        address fake = address(0xFA4E);
+        c.conf.verifier = address(new FakePqzVerifier(fake, PQZL_ID));
+        vm.expectRevert(abi.encodeWithSelector(PqzSafety.NotPqz.selector, fake, PQZL_ID));
+        factory.createToken(IOpenFactory.TokenKind.NONE_PQZ, 1, c, "w1");
+        bytes32 other = keccak256("another proof system");
+        c.conf.verifier = address(new FakePqzVerifier(PQZ, other));
+        vm.expectRevert(abi.encodeWithSelector(PqzSafety.NotPqz.selector, PQZ, other));
+        factory.createToken(IOpenFactory.TokenKind.NONE_PQZ, 1, c, "w2");
+        // the real precompile and id, its self-test failing now (the verifier says "supported" regardless)
+        c.conf.verifier = address(new FakePqzVerifier(PQZ, PQZL_ID));
+        vm.mockCall(PQZ, hex"0600000000", abi.encode(bytes32(0)));
+        vm.expectRevert(abi.encodeWithSelector(PqzSafety.SelfTestFailed.selector, PQZ));
+        factory.createToken(IOpenFactory.TokenKind.NONE_PQZ, 1, c, "w3");
+        _mockSelfTest();
+        PqzLayer t = PqzLayer(factory.createToken(IOpenFactory.TokenKind.NONE_PQZ, 1, c, "w4"));
+        assertEq(t.precompile(), PQZ, "a foreign verifier object is harmless once the precompile is pinned");
+    }
+
+    /// W-E: a debit built on the base (the `acc` the last debit left) survives anyone's rollover in between: the
+    /// stale calldata gives the same `T`, hence the same statement; an intermediate rolled `acc` is the residual.
+    function test_rolloverRace_debitOnTheBase() public {
+        _credits(alice, 3); // pending 3, rolled 0; the base is Trivial(0) at rolled 0
+        bytes memory acc0 = _acc(alice);
+        bytes[] memory inl = _inline(tok, alice, 3);
+        bytes memory out = _out(110, true);
+        bytes memory pl = _payload(3, 0, alice, bob, bytes32(0), out, "");
+        bytes memory st = tok.transferSingleStatement(pl, acc0, inl, 0);
+        _roll(tok, alice, 1);
+        bytes memory acc1 = _acc(alice);
+        _roll(tok, alice, 1); // anyone, twice
+        assertEq(tok.accountState(alice).rolled, 2);
+        assertEq(tok.transferSingleStatement(pl, acc0, inl, 0), st, "the base: same T");
+        assertEq(tok.transferSingleStatement(pl, _acc(alice), _inline(tok, alice, 3), 0), st, "the current acc: same T");
+        bytes[] memory inl1 = new bytes[](2);
+        (inl1[0], inl1[1]) = (pend[alice][1], pend[alice][2]);
+        vm.expectRevert(IPqzToken.AccMismatch.selector);
+        tok.pqzTransferSingle(pl, acc1, inl1, hex"01", _mlAuth()); // neither the base nor the current acc
+        tok.pqzTransferSingle(pl, acc0, inl, hex"01", _mlAuth());
+        IPqzToken.AccountState memory a = tok.accountState(alice);
+        assertEq(a.rolled, 3);
+        assertEq(a.accUnits, 1);
+        assertEq(a.floor, 3);
+        assertEq(a.accHash, keccak256(bytes.concat(_cut(out, 0, PqzCt.PK), _cut(out, PqzCt.CT, 128))));
+    }
+
+    /// W-E, `p < baseRolled`: the base keeps credits; a rollover in between is undone (its credits pending again).
+    function test_rolloverRace_belowBaseRolled() public {
+        _credits(alice, 3);
+        _roll(tok, alice, 3);
+        bytes[] memory none = new bytes[](0);
+        bytes memory o1 = _out(111, true);
+        bytes[] memory inl = _inline(tok, alice, 1); // pending[1..3), kept in the new acc
+        tok.pqzTransferSingle(_payload(1, 0, alice, bob, bytes32(0), o1, ""), _acc(alice), inl, hex"01", _mlAuth());
+        bytes memory base = ct.sum(bytes.concat(_cut(o1, 0, PqzCt.PK), _cut(o1, PqzCt.CT, 128)), inl, none, 0);
+        accOf[alice] = base;
+        assertEq(tok.accountState(alice).accHash, keccak256(base));
+        _credits(alice, 2); // pending 5, rolled 3
+        bytes[] memory inl2 = _inline(tok, alice, 2); // pending[2..3), taken out of the base
+        assertEq(inl2.length, 1);
+        bytes memory o2 = _out(112, true);
+        bytes memory pl = _payload(2, 0, alice, bob, bytes32(0), o2, "");
+        bytes memory st = tok.transferSingleStatement(pl, base, inl2, 0);
+        _roll(tok, alice, 2); // anyone: rolled 5
+        assertEq(tok.transferSingleStatement(pl, base, inl2, 0), st);
+        tok.pqzTransferSingle(pl, base, inl2, hex"01", _mlAuth());
+        IPqzToken.AccountState memory a = tok.accountState(alice);
+        bytes memory kept = ct.sum(bytes.concat(_cut(o2, 0, PqzCt.PK), _cut(o2, PqzCt.CT, 128)), inl2, none, 0);
+        assertEq(a.accHash, keccak256(kept));
+        assertEq(a.rolled, 3, "the rollover undone");
+        assertEq(a.accUnits, 2);
+        assertEq(a.floor, 2);
+        accOf[alice] = kept;
+        _roll(tok, alice, 2); // credits 3 and 4 roll again
+        assertEq(tok.accountState(alice).rolled, 5);
+        assertEq(tok.accountState(alice).accUnits, 4);
+    }
+
+    /// W-E, `baseRolled <= p < rolled` (5g review L2): a debit on the base at p = 2 after four rollovers takes
+    /// pending[0..2) into T, sets `rolled` back to p (un-rolling pending[2..4)) and keeps every slot from 2 on.
+    function test_rolloverRace_baseRolledBelowPBelowRolled() public {
+        _credits(alice, 5); // the base is Trivial(0) at rolled 0
+        bytes memory acc0 = _acc(alice);
+        bytes[] memory inl = _inline(tok, alice, 2); // pending[0..2)
+        bytes memory out = _out(113, true);
+        bytes memory pl = _payload(2, 0, alice, bob, bytes32(0), out, "");
+        bytes memory st = tok.transferSingleStatement(pl, acc0, inl, 0);
+        _roll(tok, alice, 4); // anyone: rolled 4 > p
+        assertEq(tok.transferSingleStatement(pl, acc0, inl, 0), st, "the base: same T");
+        tok.pqzTransferSingle(pl, acc0, inl, hex"01", _mlAuth());
+        IPqzToken.AccountState memory a = tok.accountState(alice);
+        bytes memory kept = bytes.concat(_cut(out, 0, PqzCt.PK), _cut(out, PqzCt.CT, 128));
+        assertEq(a.accHash, keccak256(kept));
+        assertEq(a.rolled, 2, "rolled back to p");
+        assertEq(a.accUnits, 1);
+        assertEq(a.floor, 2);
+        accOf[alice] = kept;
+        _roll(tok, alice, 3); // credits 2, 3 and 4 roll again
+        assertEq(tok.accountState(alice).rolled, 5);
+        assertEq(tok.accountState(alice).accUnits, 4);
+    }
+
+    /// W-I: an opening that does not decode reverts (as documented); a non-canonical one is false.
+    function test_verifyTransferAmount_undecodableOpeningReverts() public {
+        (bytes32 ref,) = _transfer(tok, alice, bob, bytes32(0), 95, true);
+        vm.expectRevert();
+        tok.verifyTransferAmount(ref, 0, 1, 0, hex"0102");
     }
 
     // ------------------------------------------------------------------ helpers

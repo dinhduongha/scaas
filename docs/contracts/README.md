@@ -200,16 +200,17 @@ families carry stronger gates, enforced in code:
 
 <a id="build-pins"></a>
 
-<a id="CTR-GEN-01"></a>**CTR-GEN-01** — Contracts have their own CI workflow (`.github/workflows/blockchain-ci.yml`),
+<a id="CTR-GEN-01"></a>**CTR-GEN-01** — Contracts have their own CI workflow (`.github/workflows/ci.yml`),
 run on every PR/push that touches `smartcontracts/**` or `scaas-node/**`: (a) forge (foundry-toolchain) with
-`lib/` installed by `forge install` at pinned tags — OpenZeppelin `v5.2.0`, forge-std `v1.16.2` — because `lib/` is
-not committed; both profiles; (b) cargo test + clippy `-D warnings` + the anvil end-to-end tests; (c) each family's
+`lib/` installed (`forge install` with `--no-git`) and checked by `scripts/evm_libs.sh` at pinned commits, each with the sha256 of the sources it
+compiles — OpenZeppelin `fda6b85f` (master after v5.2.0, before v5.3.0), forge-std `88c8a288` — because `lib/` is
+not committed (`check` also verifies a local `lib/` before a deploying build; review W-N, 2026-10-19); both profiles; (b) cargo test + clippy `-D warnings` + the anvil end-to-end tests; (c) each family's
 own job (Move test, Soroban, CosmWasm, Tact, Solana) as the family is added.
 
 | Pin | Value |
 |---|---|
 | Solidity | `solc_version = "0.8.37"`, `evm_version = "osaka"`, `optimizer_runs = 200`, `via_ir = false` (the 13-parameter named function is decoded by hand instead, see [metatx.md](metatx.md#named-functions)) |
-| OpenZeppelin, forge-std | `v5.2.0`, `v1.16.2` |
+| OpenZeppelin, forge-std | commits `fda6b85f`, `88c8a288`, each with the sha256 of its sources, in `scripts/evm_libs.sh` (W-N) |
 | EVM profiles | every profile is `osaka` (owner 2026-10-11): `private7622` (the private reference chain, [NET-EVM-02](../networks/evm.md#NET-EVM-02)), `zether`, `gnosis`, `celo`, `bsc`, `polygon`, `base`; test chains run anvil `--hardfork osaka --gas-limit 16777216 --code-size-limit 65536` |
 | Invariant runs | `[invariant] runs = 64, depth = 32, fail_on_revert = true` |
 | Storage layout | `extra_output = ["storageLayout"]`; the v2 layout is pinned by `test_storageLayoutIsPinned` against committed JSON |

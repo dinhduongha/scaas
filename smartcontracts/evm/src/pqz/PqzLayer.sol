@@ -63,15 +63,17 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
         return r;
     }
 
-    /// @notice The op 7 statement the token builds for a multi-recipient `payload` (direct: `binding` 0), after every
-    ///         cheap check; a payload with the memo is read as commit-reveal.
+    /// @notice The op 7 statement the token builds for a multi-recipient `payload`, after every cheap check; a payload
+    ///         with the memo is read as commit-reveal. `binding` 0 = a direct call in that mode (`pqzTransfer`,
+    ///         `…Compact`); a direct `…NoBundle` passes `keccak256(abi.encode(keccak256("SCAAS-PQZ-DIRECT-MODE-V1"),
+    ///         uint8(2)))` (W-A); a relayed call its envelope binding.
     function transferStatement(bytes calldata payload, bytes calldata acc, bytes[] calldata inl, bytes32 binding)
         external view returns (bytes memory)
     {
         return PqzLib.statementOf(7, _envOf(binding), payload, acc, inl);
     }
 
-    /// @notice The op 1 statement of a single-recipient `payload` (`pqzTransferSingle*`).
+    /// @notice The op 1 statement of a single-recipient `payload` (`pqzTransferSingle*`; `binding` as above).
     function transferSingleStatement(bytes calldata payload, bytes calldata acc, bytes[] calldata inl, bytes32 binding)
         external view returns (bytes memory)
     {
@@ -97,8 +99,10 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
     }
 
     /// @notice CTR-PQZ-14 / -26: the precompile's verdict on `opening = abi.encode(bytes bundle, bytes proof)`
-    ///         (canonical only) for `amount` in leg `leg` of `entryRef`. A view; no attestation. Any malformed input is
-    ///         false.
+    ///         (canonical only) for `amount` in leg `leg` of `entryRef`. A view; no attestation. A non-canonical
+    ///         opening, an empty proof, an unknown entry, a bundle that is not the stored one or has no leg `leg`,
+    ///         `kind > 2` and `amount ≥ 2^64` are false; an `opening` that does not ABI-decode as `(bytes, bytes)`
+    ///         reverts, as `ZetherDisclosure`'s `OpeningMalformed` (review W-I).
     function verifyTransferAmount(bytes32 entryRef, uint256 leg, uint256 amount, uint8 kind, bytes calldata opening)
         external view returns (bool)
     {

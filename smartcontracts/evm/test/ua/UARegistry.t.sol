@@ -11,6 +11,31 @@ import {UARegistryBase, MockVerifier, MockWallet, MockPredecessor} from "./UAReg
 
 /// accounts.md §1.16 T-REG / T-AUTH / T-CHAIN / T-MEMBER for the UA-2a registry, with stand-in verifiers (the real ones
 /// are the verifier tasks' own tests; `UARegistryVectors.t.sol` runs the registry on signatures.json).
+/// W-M: a gen 1 that runs out of gas before answering (every hand-off spends all it is given), or, when `cheap`,
+/// reverts at once with no data.
+contract StarvingPredecessor is MockPredecessor {
+    bool public cheap;
+
+    constructor(bytes32 chainUid_) MockPredecessor(chainUid_, bytes32(0), bytes32(0)) {}
+
+    function setCheap(bool c) external {
+        cheap = c;
+    }
+
+    function requireAuthorized(bytes32, bytes32, bytes32, bytes calldata) external view {
+        _fail();
+    }
+
+    function requireZetherAuthorized(bytes32, bytes32, bytes calldata, bool) external view {
+        _fail();
+    }
+
+    function _fail() private view {
+        if (cheap) revert();
+        while (true) {}
+    }
+}
+
 contract UARegistryTest is UARegistryBase {
     uint256 internal constant PK_A = 0xA11CE;
     uint256 internal constant PK_B = 0xB0B;
@@ -738,6 +763,48 @@ contract UARegistryTest is UARegistryBase {
         assertEq(bytes4(ret), UAKinds.UAVerifyGas.selector);
         (ok,) = address(gen2).staticcall{gas: 2_000_000}(b); // native member through gen 2 passes too
         assertTrue(ok);
+    }
+
+    /// W-M: gen 1 out of gas behind gen 2 is `UAVerifyGas` on both hand-offs (before: `UAUnauthorized`); gen 1 reverting
+    /// at once with no data (it returns its unused gas) stays a failed check.
+    function test_W_M_gen1OutOfGas_isUAVerifyGas_aCheapRevertIsAVerdict() public {
+        StarvingPredecessor pred = new StarvingPredecessor(chainUidA);
+        UARegistry gen2 =
+            _deploy(address(0x5ca4), chainUidA, address(pred), false, BUDGET, address(0), false, _cfgs(address(mock)));
+        bytes32 ua = bytes32(uint256(0xbeef) << 200); // derived, unknown to gen 2: handed to gen 1
+        vm.expectRevert(UAKinds.UAVerifyGas.selector);
+        gen2.requireAuthorized{gas: 1_000_000}(ua, UAKinds.PURPOSE_METATX, DIGEST, "");
+        vm.expectRevert(UAKinds.UAVerifyGas.selector);
+        gen2.requireZetherAuthorized{gas: 1_000_000}(ua, DIGEST, "", true);
+        pred.setCheap(true);
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua));
+        gen2.requireAuthorized{gas: 1_000_000}(ua, UAKinds.PURPOSE_METATX, DIGEST, "");
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua));
+        gen2.requireZetherAuthorized{gas: 1_000_000}(ua, DIGEST, "", true);
+    }
+
+    /// W-M: gen 1 running out of gas before its hold (behind gen 2) is `UAVerifyGas`, never a verdict. At every gas
+    /// level a valid signature through gen 2 passes, reverts `UAVerifyGas`, or (gen 2 itself starved) reverts with no
+    /// data; it never reverts `UAUnauthorized`.
+    function test_W_M_gen1StarvedBeforeItsHold_isUAVerifyGas() public {
+        _gen1WithoutEd25519();
+        bytes memory p = _key(0x0101);
+        bytes32 ua = _register(reg, 0x0101, p);
+        UARegistry gen2 = _gen2();
+        bytes memory a = abi.encodeCall(
+            gen2.requireAuthorized,
+            (ua, UAKinds.PURPOSE_METATX, DIGEST, _auth(reg, 0x0101, p, UAKinds.PURPOSE_METATX, DIGEST))
+        );
+        bool sawGasError;
+        for (uint256 g = 5_000; g < 300_000; g += 250) {
+            (bool ok, bytes memory ret) = address(gen2).staticcall{gas: g}(a);
+            if (ok) continue;
+            assertTrue(ret.length == 0 || bytes4(ret) == UAKinds.UAVerifyGas.selector, "a starved call gave a verdict");
+            if (ret.length != 0) sawGasError = true;
+        }
+        assertTrue(sawGasError, "no UAVerifyGas in the sweep");
+        (bool passed,) = address(gen2).staticcall{gas: 2_000_000}(a);
+        assertTrue(passed, "enough gas passes");
     }
 
     /// A 1271 answer with the magic in the high 4 bytes but dirty low bytes is refused.

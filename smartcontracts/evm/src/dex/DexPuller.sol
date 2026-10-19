@@ -22,6 +22,13 @@ contract DexPuller {
 
     function pull(address token, address from, uint256 amount) external {
         if (msg.sender != dex) revert NotDex(msg.sender);
-        IERC20(token).safeTransferFrom(from, dex, amount);
+        // the token's own revert data never reaches the DEX (W-O: it could forge a starvation error); no data (out of
+        // gas) stays empty, the node's `out_of_gas` (as `SCaaSDex._tokenFailed`)
+        if (!IERC20(token).trySafeTransferFrom(from, dex, amount)) {
+            assembly ("memory-safe") {
+                if iszero(returndatasize()) { revert(0, 0) }
+            }
+            revert SafeERC20.SafeERC20FailedOperation(token);
+        }
     }
 }

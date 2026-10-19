@@ -7,6 +7,8 @@ import {ITradeToken} from "../trade/ITradeToken.sol";
 /// @notice Events and errors raised by `UnderlyingLib` (an external library) are declared here so that they are in the
 ///         token ABI. The creation config is `IFactoryToken.TokenConfig` (`legs`, `rate`).
 interface IUnderlyingToken {
+    /// @notice `account` is credited `minted`: the caller of a direct wrap; for `mtxWrap` the order's `destination` (or
+    ///         `from`) and the units net of the submitter's fee (W-Q), which its `Transfer` shows.
     event Wrapped(address indexed account, address indexed underlying, uint256 underlyingIn, uint256 minted);
     event Unwrapped(address indexed account, address indexed underlying, address recipient, uint256 burned,
         uint256 underlyingOut);
@@ -14,9 +16,9 @@ interface IUnderlyingToken {
     ///         `UATransfer(ua, 0)` names the UA).
     event UnwrappedToUA(address indexed account, address indexed underlying, bytes32 indexed to, uint256 burned,
         uint256 out);
-    /// @notice `uaWrap` (CTR-TOK-20, UA-5b): the signer's id; the units went to its `destination` (or itself) and the
-    ///         submitter's fee.
-    event UAWrapped(bytes32 indexed from, address indexed underlying, uint256 underlyingIn, uint256 minted);
+    /// @notice `uaWrap` (CTR-TOK-20, UA-5b): `to` is credited `minted`: the order's `destination` (or `from`) and the
+    ///         units net of the submitter's fee (W-Q).
+    event UAWrapped(bytes32 indexed to, address indexed underlying, uint256 underlyingIn, uint256 minted);
     event ReserveAdded(address indexed from, address indexed underlying, uint256 amount);
     event RateChangeProposed(address indexed underlying, uint96 oldNum, uint96 oldDen, uint96 newNum, uint96 newDen,
         uint64 eta);

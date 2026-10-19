@@ -60,7 +60,7 @@ contract UAWrapTest is UALedgerBase {
         ITradeToken.UATradeOrder memory o = _o(wrpL, uaP, 1000, 1000, 3_000); // fee ⌈1000 · 0.3 %⌉ = 3
         uint256 pool = wrpL.balanceOf(POOL);
         vm.expectEmit(address(wrpL));
-        emit IUnderlyingToken.UAWrapped(uaP, address(tok), 1000, 1000);
+        emit IUnderlyingToken.UAWrapped(uaP, address(tok), 1000, 997); // net of the fee (W-Q)
         assertEq(_wrap(wrpL, o), 1000);
         assertEq(wrpL.balanceOfUA(uaP), 997);
         assertEq(wrpL.balanceOf(POOL), pool + 997);
@@ -85,6 +85,8 @@ contract UAWrapTest is UALedgerBase {
         o = _o(w, _pad(alice), 1000, 1500, 0); // a native holder wraps straight into a UA
         o.destination = uaB;
         uint256 a = tok.balanceOf(alice);
+        vm.expectEmit(address(w));
+        emit IUnderlyingToken.UAWrapped(uaB, address(tok), 1000, 1500); // the credited id (W-Q)
         _wrap(w, o);
         assertEq(tok.balanceOf(alice), a - 1000);
         assertEq(w.balanceOfUA(uaB), 1500);

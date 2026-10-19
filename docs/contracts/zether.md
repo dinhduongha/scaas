@@ -165,7 +165,10 @@ all-zero `pad16`. The prover **never** outputs a non-canonical point; `UA = kecc
 
 **Point checks.**
 
-- bn254: cofactor 1 — on-curve suffices; the precompiles `0x06/0x07` revert on a bad point.
+- bn254: cofactor 1 — on-curve suffices; the precompiles `0x06/0x07` revert on a bad point. Every call to `0x05`,
+  `0x06`, `0x07` also requires the exact return size (64 bytes, `modexp` 32), as the BLS12-381 wrappers do: a chain
+  without them answers "success, empty", which on the success flag alone would read the zeros left in memory as a
+  result (review W-I, 2026-10-19; defence in depth behind `isSupportedOnThisChain` and the dev-chain gate).
 - BLS12-381: G1ADD checks **only** on-curve; G1MSM also checks the subgroup. The verifier feeds **every** externally
   received point into at least one G1MSM (every check equation is an MSM), so the subgroup check is implicit. The
   registry forces the key `Y` through a G1MSM with k=1 at registration.
@@ -1076,6 +1079,10 @@ of **canonical** verifiers and `registry()` equals the chain's canonical registr
 an implementation immutable checked only for code) — "provenance instead of gatekeeping"
 ([CTR-TOK-17](token-wrappers.md#CTR-TOK-17)) — so a v1 token from a registered implementation could still carry a fake
 verifier (returning `true` for every proof ⇒ `zetherUnshield` drains the escrow) or a fake registry (`requireZetherAuthorized` a no-op).
+The on-chain review of 2026-10-19 (W-B) raised this class again; it stays as specified here for Zether (dev chains only,
+CTR-ZTH-02; a code-hash pin cannot work, see below; a registrar allowlist in the factory would reverse
+[CTR-TOK-15](token-wrappers.md#CTR-TOK-15) and [CTR-TOK-17](token-wrappers.md#CTR-TOK-17); owner decision open), while a
+PQZ token pins its precompile itself ([pq-zero-knowledge.md self-test](pq-zero-knowledge.md#self-test)).
 
 Pin by **address**, not codehash: a verifier embeds its `generatorStore` address as an immutable, so its codehash differs
 per deployment. The built `clients/clientkeys/src/zether.js` does not read `verifier()`/`registry()` yet. Tests: the client

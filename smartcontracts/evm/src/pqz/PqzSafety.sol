@@ -10,9 +10,14 @@ library PqzSafety {
     address internal constant PQZ = 0x5caA500000000000000000000000000000000F01;
     /// @notice `OP_SELFTEST` (P6e D13, `selftest.json`): the precompile's answer to the input `06 00000000`.
     bytes32 internal constant SELFTEST = 0xed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205;
+    /// @notice The proof systems the precompile verifies (CTR-PQZ-10): PQZL v3 (lazer#28 fix; v2 retired) and PQZH.
+    bytes32 internal constant PQZL_ID = 0x8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef;
+    bytes32 internal constant PQZH_ID = 0x0a47a7689250ba178a52ad5972cdd9153358c022cb694c08d2389e82de2fead4;
 
     error NotAllowedChain(uint256 chainId);
     error SelfTestFailed(address pqz);
+    /// @notice Not the `PQZ` precompile, or a proof system it does not verify (review W-B, 2026-10-19).
+    error NotPqz(address pqz, bytes32 psid);
 
     /// @notice 31337 (anvil), 1337 (geth --dev), 7622 (the SCaaS testnet with the PQZ precompile).
     function isAllowedChain() internal view returns (bool) {
@@ -38,5 +43,12 @@ library PqzSafety {
 
     function requireSelfTest(address pqz) internal view {
         if (!selfTest(pqz)) revert SelfTestFailed(pqz);
+    }
+
+    /// @notice What a token or a `UAPqzVerifier` may be bound to (review W-B): exactly `PQZ`, one of its two proof
+    ///         systems, and its self-test now. A creator-chosen precompile could answer every proof with 1.
+    function requirePqz(address pqz, bytes32 psid) internal view {
+        if (pqz != PQZ || (psid != PQZL_ID && psid != PQZH_ID)) revert NotPqz(pqz, psid);
+        requireSelfTest(pqz);
     }
 }

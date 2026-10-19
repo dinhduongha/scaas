@@ -543,6 +543,14 @@ contract SmartKeyAccountTest is WebAuthnSoft {
             abi.encodeWithSelector(SmartKeyAccount.CallFailed.selector,
                 abi.encodeWithSelector(IMetaTx.Reentrancy.selector)));
         assertEq(acct.keyCount(), 1);
+        // W-Q: the guardian's entries are under the same guard (CTR-MTX-18)
+        bytes[2] memory rec = [abi.encodeCall(SmartKeyAccount.initiateRecovery, (_seedKey(SEED))),
+            abi.encodeCall(SmartKeyAccount.completeRecovery, (_seedKey(SEED)))];
+        for (uint256 i; i < 2; ++i) {
+            _ownerCallFails(abi.encodeCall(SmartKeyAccount.execute, (address(acct), 0, rec[i])),
+                abi.encodeWithSelector(SmartKeyAccount.CallFailed.selector,
+                    abi.encodeWithSelector(IMetaTx.Reentrancy.selector)));
+        }
     }
 
     function test_mtxBatchIsAtomic() public {
