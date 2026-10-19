@@ -3220,6 +3220,8 @@ Change (2026-10-14 → 2026-10-15): P6-ANON plan D4, randomness groups of `R_TXM
 **Cost if wrong.** Counting dust as slots let `fund(victim, 1)` × 4096 lock a victim.
 **Source.** `history/specs/2026-10-06-pq-zether-design.md:254`
 
+Change (2026-10-19): **owner ruling — `K_MAX = 1024` is too small and must be raised**: in practice one wallet is picked as a decoy many times (op 7 / Z-multi), and every decoy credit counts against its cap, so a popular or targeted account would hit `RefreshRequired` and stop receiving until its owner refreshes. Today the cap comes from the noise budget (`K · 11,872 < 2^24`, digit sums `K · 15 < 2^14`) under q ≈ 2^42; spec option A (n = 2560, q = 2^50, +25 % key / ciphertext size) gave 4096. Status: **decided; design pending** together with the ciphertexts-in-state ruling (CTR-PQZ-07, plan Task 5h): larger parameters (new `proofSystemId`), credit accounting that keeps decoy credits from blocking real ones, or both.
+
 ### CTR-PQZ-07 — Ciphertexts in calldata, hashes in storage
 - old: R276 · status: current · owner: no · date: 2026-10-06 · normative: contracts/pq-zero-knowledge.md#CTR-PQZ-07 · superseded-by: —
 
@@ -3228,6 +3230,8 @@ Change (2026-10-16): controller proposal (owner may override) — P6g plan (`sup
 **Why.** Ciphertexts live in calldata and events with hashes in storage; storage of a 16 KB ciphertext would cost 2.6–8.8 M gas per write.
 **Cost if wrong.** Indexers must rebuild state from events; clients check hashes.
 **Source.** `history/specs/2026-10-06-pq-zether-design.md:265`
+
+Change (2026-10-19): **owner ruling — PQZ ciphertexts are kept in contract state**, superseding "bytes in calldata + events". Reason (owner question on data permanence): with only hashes in state, the ciphertext bytes live in history, which EIP-4444 history expiry may prune; an account that lost its local copy could then no longer debit or roll over (funds stuck behind a valid hash). Status: **decided; design pending** (plan Task 5h: storage layout — slots vs SSTORE2 vs a hybrid, one shared `u` per operation under CTR-PQZ-04, pending cleanup at rollover, gas and state-growth budget — then build before the 7622 reset of plan Task 13).
 
 ### CTR-PQZ-08 — Public rollover with race-free debits
 - old: R277 · status: current · owner: no · date: 2026-10-07 · normative: contracts/pq-zero-knowledge.md#CTR-PQZ-08 · superseded-by: —
