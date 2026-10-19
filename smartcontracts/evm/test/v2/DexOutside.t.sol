@@ -3,7 +3,7 @@ pragma solidity ^0.8.20;
 
 import {Test, Vm} from "forge-std/Test.sol";
 import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
-import {IERC20Errors} from "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
+import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
@@ -53,6 +53,32 @@ contract BombERC20 {
     function balanceOf(address) external pure returns (uint256) { return 0; }
     function transferFrom(address, address, uint256) external pure returns (bool) {
         assembly { revert(0, 320000) }
+    }
+}
+
+/// W-O: an ERC-20 whose pull (`transferFrom`, mode 1), payout (`transfer`, mode 2) or `balanceOf` read by the DEX
+/// (mode 3) reverts with the bytes of a starvation error that `mtxSettle` re-raises for the whole batch.
+contract ForgeStarvedERC20 is MockERC20 {
+    uint8 public mode;
+    bytes public err;
+    address public dex;
+    constructor() MockERC20("Forge", "FG", 18) {}
+    function set(uint8 m, bytes calldata e, address d) external { (mode, err, dex) = (m, e, d); }
+    function transferFrom(address from, address to, uint256 v) public override returns (bool) {
+        if (mode == 1) _forge();
+        return super.transferFrom(from, to, v);
+    }
+    function transfer(address to, uint256 v) public override returns (bool) {
+        if (mode == 2) _forge();
+        return super.transfer(to, v);
+    }
+    function balanceOf(address a) public view override returns (uint256) {
+        if (mode == 3 && msg.sender == dex) _forge();
+        return super.balanceOf(a);
+    }
+    function _forge() private view {
+        bytes memory e = err;
+        assembly { revert(add(e, 0x20), mload(e)) }
     }
 }
 
@@ -306,7 +332,12 @@ contract DexOutsideTest is Test {
         usdc.approve(address(dex), type(uint256).max);
         vm.stopPrank();
         DexLegs.Settlement memory s = _settlement(_dave(address(usdc), 1, 2000), 1);
-        _expectOne(s, abi.encodeWithSelector(IERC20Errors.ERC20InsufficientAllowance.selector, p, 0, 2000));
+        _expectOne(s, abi.encodeWithSelector(SafeERC20.SafeERC20FailedOperation.selector, address(usdc))); // W-O
+        vm.prank(dave);
+        usdc.approve(p, 2000);
+        DexLegs.Settlement[] memory ss = _one(s);
+        vm.prank(relayer);
+        dex.mtxSettle(DexLegs.wire(ss));
     }
 
     function test_onlyTheDexPulls() public {
@@ -384,8 +415,9 @@ contract DexOutsideTest is Test {
         assertTrue(ok[1]);
     }
 
-    /// An outside token reverting with 320 000 bytes: `MatchFailed` keeps 256, and the copy is cheap enough that the
-    /// next settlement still runs under a gas limit an unbounded copy would exhaust.
+    /// An outside token reverting with 320 000 bytes: the puller copies none of it (W-O), `MatchFailed` carries the fixed
+    /// `SafeERC20FailedOperation(token)`, and the next settlement still runs under a gas limit an unbounded copy would
+    /// exhaust (`MAX_REASON` still bounds what a SCaaS token's revert could carry).
     function test_returnbombToken_reasonIsBounded_othersSettle() public {
         address bomb = address(new BombERC20());
         vm.prank(admin);
@@ -402,7 +434,35 @@ contract DexOutsideTest is Test {
         for (uint256 i; i < logs.length; ++i) {
             if (logs[i].topics[0] == ISCaaSDex.MatchFailed.selector) reason = abi.decode(logs[i].data, (bytes));
         }
-        assertEq(reason.length, 256);
+        assertEq(reason, abi.encodeWithSelector(SafeERC20.SafeERC20FailedOperation.selector, bomb));
+    }
+
+    /// W-O: an outside token that reverts with the bytes of `SigCheckGasStarved` or `UAVerifyGas` (at the pull, at a
+    /// payout, or reading the DEX's balance) fails only its own settlement: the DEX drops the token's revert data, the
+    /// reason is `SafeERC20FailedOperation(token)`, and the other settlement in the call settles.
+    function test_forgedStarvationFromAnOutsideToken_isOnlyMatchFailed() public {
+        ForgeStarvedERC20 fg = new ForgeStarvedERC20();
+        _list(fg);
+        _fund(fg, dave);
+        bytes[2] memory errs = [
+            abi.encodeWithSelector(ISCaaSDex.SigCheckGasStarved.selector, 400_000, 0),
+            abi.encodeWithSelector(ISCaaSDex.UAVerifyGas.selector)
+        ];
+        for (uint8 m = 1; m <= 3; ++m) {
+            for (uint256 e; e < 2; ++e) {
+                fg.set(m, errs[e], address(dex));
+                uint256 n = 10 * m + e;
+                DexLegs.Settlement[] memory ss = _two(
+                    _settlement(_dave(address(fg), n, 2000), n), _settlement(_dave(address(usdc), n, 2000), n + 100));
+                vm.expectEmit(address(dex));
+                emit ISCaaSDex.MatchFailed(
+                    bytes32(n), abi.encodeWithSelector(SafeERC20.SafeERC20FailedOperation.selector, address(fg)));
+                vm.prank(relayer);
+                bool[] memory ok = dex.mtxSettle(DexLegs.wire(ss));
+                assertFalse(ok[0]);
+                assertTrue(ok[1]);
+            }
+        }
     }
 
     // ------------------------------------------------------------------ ERC-1271 (CTR-DEX-08)

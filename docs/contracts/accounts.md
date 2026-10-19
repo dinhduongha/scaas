@@ -1011,6 +1011,12 @@ gas). Generation 2 takes `predecessor = gen1` and reads it for `UAAlreadyRegiste
 - **Chain 7622's gen 1 deploys after the PQ signing kinds**, with them and `pqz-mlwe` together, so `pqz-mlwe`'s PQ
   `authRef` is visible to it (P6c built both in gen 1; chain 7622 redeploys gen 1 with `UAPqzVerifier` in P6g). On other chains PQ signing kinds may arrive as gen 2 (their groups are new).
 
+- **A check gen 2 hands to gen 1 keeps T-AUTH-4** (controller proposal, review W-M, 2026-10-19; owner may override):
+  gen 1's `UAVerifyGas` is re-raised, and so is gen 1 running out of gas before its own hold (a revert with no data
+  while gen 2 has at most the 1/64 it kept, `gasleft() < g / 63` with `g` read before the call); any other revert of
+  gen 1 is a failed check. Before, that out-of-gas came back as `UAUnauthorized` (fail-closed, but a relayer told
+  "bad signature" instead of "more gas"). Tests `test_W_M_gen1OutOfGas_isUAVerifyGas_aCheapRevertIsAVerdict`, `test_W_M_gen1StarvedBeforeItsHold_isUAVerifyGas`.
+
 Tokens bind one registry address at `initialize` (immutable); a token that needs new kinds is a new implementation
 version pointing to gen 2. Gen 2 sees gen-1 records, so nobody re-registers.
 

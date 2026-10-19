@@ -24,12 +24,6 @@ on:
     branches: [main]
     paths: ['smartcontracts/**', 'scaas-node/**', 'clients/**', 'docs/**', 'scripts/docs_check.py', 'scripts/test_docs_check.py', 'scripts/size_gate.py', 'pqz-core/**', '.github/workflows/ci.yml']
 
-env:
-  # OpenZeppelin master fda6b85f (2025-03-13, after v5.2.0, before v5.3.0): the checkout every local build and
-  # deployment compiles against. The code uses Math.saturatingAdd / Math.mul512 (not in v5.2.0); v5.3.0 changes P256.
-  OZ_REF: fda6b85f2c65d146b86d513a604554d15abd6679
-  FORGE_STD_TAG: v1.16.2
-
 jobs:
   contracts:
     runs-on: ubuntu-latest
@@ -41,11 +35,11 @@ jobs:
       - uses: foundry-rs/foundry-toolchain@v1
         with:
           version: v1.3.5 # the forge every local build, gas figure and KAT was made with (stable drifts)
-      # lib/ is not committed: install the pinned tags (no submodule bookkeeping).
-      - name: Libraries at pinned tags
+      # lib/ is not committed: install the pinned commits and check their sources (CTR-GEN-01, scripts/evm_libs.sh).
+      - name: Libraries at pinned commits
         run: |
-          forge install --no-git foundry-rs/forge-std@${FORGE_STD_TAG}
-          forge install --no-git OpenZeppelin/openzeppelin-contracts@${OZ_REF}
+          ../../scripts/evm_libs.sh install
+          ../../scripts/evm_libs.sh check
       - name: forge test (default profile)
         run: forge test
       # the registry's gas bounds (msig at verifyBudget, stored-member bound, T-GAS) hold cold: every call its own tx
@@ -78,8 +72,8 @@ jobs:
       - name: Contract libraries for the e2e deploy script
         working-directory: smartcontracts/evm
         run: |
-          forge install --no-git foundry-rs/forge-std@${FORGE_STD_TAG}
-          forge install --no-git OpenZeppelin/openzeppelin-contracts@${OZ_REF}
+          ../../scripts/evm_libs.sh install
+          ../../scripts/evm_libs.sh check
       - name: clippy
         run: cargo clippy --all-targets -- -D warnings
       - name: unit + proptest

@@ -264,7 +264,8 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
     /// @notice Each settlement atomic; at least one must succeed, else the call reverts (the relayer's simulation
     ///         catches it). A failed settlement emits `MatchFailed` with at most `MAX_REASON` bytes of its revert data;
     ///         `SigCheckGasStarved` and a UA leg's `UAVerifyGas` revert the whole call (CTR-DEX-08, CTR-DEX-26: the
-    ///         submitter's gas, not the signature, failed).
+    ///         submitter's gas, not the signature, failed). Only the DEX, a SCaaS token or the registry can raise them:
+    ///         every call into an outside token (`_send`, `_bal`, the puller) drops the token's revert data (W-O).
     function mtxSettle(Settlement[] calldata ss) external nonReentrant returns (bool[] memory ok) {
         ok = new bool[](ss.length);
         bool any;
@@ -321,14 +322,14 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
         }
         if (s.taker.fill != takerSell) revert FillMismatch(takerSell, s.taker.fill);
         _calc(taker, tokenA, submitter, takerSell, takerRecv);
-        uint256 balA = IERC20(tokenA).balanceOf(address(this));
-        uint256 balB = IERC20(tokenB).balanceOf(address(this));
+        uint256 balA = _bal(tokenA);
+        uint256 balB = _bal(tokenB);
         _pull(tokenA, taker, s.taker.sig, submitter);
         for (uint256 i; i < n; ++i) _pull(tokenB, makers[i], s.makers[i].sig, submitter);
         _pay(s.ref, tokenA, taker, submitter);
         for (uint256 i; i < n; ++i) _pay(s.ref, tokenB, makers[i], submitter);
-        if (IERC20(tokenA).balanceOf(address(this)) != balA) revert ConservationBroken(tokenA);
-        if (IERC20(tokenB).balanceOf(address(this)) != balB) revert ConservationBroken(tokenB);
+        if (_bal(tokenA) != balA) revert ConservationBroken(tokenA);
+        if (_bal(tokenB) != balB) revert ConservationBroken(tokenB);
     }
 
     function _checkMarket(address a, address b) private view {
@@ -515,13 +516,13 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
         while (nt < t.length && t[nt].token != address(0)) ++nt;
         assembly ("memory-safe") { mstore(t, nt) }
         for (uint256 i; i < nt; ++i) {
-            t[i].snap = IERC20(t[i].token).balanceOf(address(this));
+            t[i].snap = _bal(t[i].token);
             t[i].floorsLeft = t[i].floors;
         }
         for (uint256 i; i < n; ++i) _pull(p.legs[i].sellToken, c[i], p.legs[i].sig, msg.sender);
         for (uint256 i; i < nt; ++i) {
             Tok memory x = t[i];
-            if (IERC20(x.token).balanceOf(address(this)) != x.snap + x.sold + x.refunds) {
+            if (_bal(x.token) != x.snap + x.sold + x.refunds) {
                 revert ConservationBroken(x.token);
             }
         }
@@ -548,7 +549,7 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
         for (uint256 i; i < t.length; ++i) {
             Tok memory x = t[i];
             if (x.floors == 0) continue;
-            uint256 bal = IERC20(x.token).balanceOf(address(this));
+            uint256 bal = _bal(x.token);
             uint256 keep = x.snap + x.refunds + x.floors;
             if (bal < keep) revert InsufficientOutput(x.token);
             x.excess = bal - keep;
@@ -561,7 +562,7 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
             _payExchange(p.ref, p.legs[i].sellToken, c[i], share);
         }
         for (uint256 i; i < t.length; ++i) {
-            if (IERC20(t[i].token).balanceOf(address(this)) != t[i].snap) revert ConservationBroken(t[i].token);
+            if (_bal(t[i].token) != t[i].snap) revert ConservationBroken(t[i].token);
         }
     }
 
@@ -588,16 +589,31 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
         }
     }
 
+    /// @dev A failed transfer reverts `SafeERC20FailedOperation(token)`, never with the token's own revert data (W-O):
+    ///      an outside token, or a hook it calls, must not be able to forge the starvation errors `mtxSettle` re-raises.
     function _send(address token, address to, uint256 amount) private {
-        if (amount != 0) IERC20(token).safeTransfer(to, amount);
+        if (amount != 0 && !IERC20(token).trySafeTransfer(to, amount)) revert SafeERC20.SafeERC20FailedOperation(token);
     }
 
-    /// @dev To an id: a native one by `safeTransfer`, a derived one by the token's `transferToUA` from the DEX's own
+    /// @dev `balanceOf(this)`, without the token's revert data or more than one word of return data (W-O, as `_send`).
+    function _bal(address token) private view returns (uint256 b) {
+        bool ok;
+        assembly ("memory-safe") {
+            mstore(0, 0x70a08231) // balanceOf(address)
+            mstore(0x20, address())
+            let s := staticcall(gas(), token, 0x1c, 0x24, 0, 0x20) // before returndatasize (Yul: args right to left)
+            ok := and(s, gt(returndatasize(), 0x1f))
+            b := mload(0)
+        }
+        if (!ok) revert SafeERC20.SafeERC20FailedOperation(token);
+    }
+
+    /// @dev To an id: a native one by `_send`, a derived one by the token's `transferToUA` from the DEX's own
     ///      balance (it lowers `balanceOf(this)` as `safeTransfer` does, so conservation is unchanged), only in a SCaaS
     ///      token with its UA ledger on; the token checks the receiver (registered SIGNING).
     function _sendTo(address token, bytes32 to, uint256 amount) private {
         if (amount == 0) return;
-        if (UAKinds.inNativeSpace(to)) return IERC20(token).safeTransfer(TradeLib.addr(to), amount);
+        if (UAKinds.inNativeSpace(to)) return _send(token, TradeLib.addr(to), amount);
         if (!_ledgerOn(token)) revert UAReceiveNotLedger(token);
         IUALedger(token).transferToUA(to, amount);
     }

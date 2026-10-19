@@ -281,9 +281,15 @@ reason)`); if none succeeds the whole call reverts, so the relayer's simulation 
 **Transitional (BUILT, P2b-1, P2b-2).** `SCaaSDex` (`src/dex/SCaaSDex.sol`, a clone; namespace `scaas.dex`; salted
 domain) builds this: each settlement in a `settleOne` self-call, outside legs per [CTR-DEX-18](#CTR-DEX-18). Also
 `SelfTrade`, `DuplicateOrder`, `NoMakers`, `FillMismatch`, `NothingSettled`; a maker receives `ceil(fill · receiveAmount
-/ amount)`; `MatchFailed` keeps the first 256 bytes of the revert data, `SigCheckGasStarved` reverts the whole call; a
-listed token, or a party's contract `destination` through a hook token, can forge it, so hook tokens are never listed
-(controller ruling, pending the owner). Before it: [`SCaaSDexV1`](#transitional-built).
+/ amount)`; `MatchFailed` keeps the first 256 bytes of the revert data, `SigCheckGasStarved` reverts the whole call. A listed
+outside token, or a party's contract `destination` through a hook token, cannot forge it (or `UAVerifyGas`): every call
+the DEX makes into a token (the puller's `trySafeTransferFrom`, every payout by `trySafeTransfer`, every balance read)
+drops that token's revert data and reverts `SafeERC20FailedOperation(token)`, so only the DEX, a SCaaS token or the
+registry can raise the two errors (controller proposal, review W-O, 2026-10-19; owner may override; it replaces the
+earlier ruling that hook tokens are never listed, and a test with a forging token, `test_forgedStarvationFromAnOutsideToken_isOnlyMatchFailed`,
+shows the forged settlement only `MatchFailed`). A gas threshold on the DEX frame was not used: a real `UAVerifyGas`
+can come back with most of the gas (a 5.95 M `mldsa65` hold refused early), so no threshold separates it from a forged
+one under the 16.78 M transaction cap. Before it: [`SCaaSDexV1`](#transitional-built).
 
 | Leg | Pulled into the DEX | Bounds checked by |
 |---|---|---|
@@ -442,7 +448,7 @@ by the DEX** (a contract SCaaS does not control cannot verify it):
 
 | Item | Rule |
 |---|---|
-| Classification | at `setMarket` the DEX records each token's kind: **SCaaS** iff the chain's `OpenFactory` reports it was made from a registered, non-deprecated implementation (`versionOf`, as [CTR-TND-07](tender.md#CTR-TND-07)), else **outside** — a snapshot at `setMarket`: re-list after a deprecation. Never taken from the leg: a submitter-chosen kind could send a fallback-only "token" down the `mtxTrade` path |
+| Classification | at `setMarket` the DEX records each token's kind: **SCaaS** iff the chain's `OpenFactory` reports it was made from a registered, non-deprecated implementation (`versionOf`, as [CTR-TND-07](tender.md#CTR-TND-07)), else **outside** — a snapshot at `setMarket`: re-list after a deprecation (not re-checked per leg, controller proposal, review W-Q, 2026-10-19: `deprecate` only marks a version, its tokens keep working ([CTR-TOK-18](token-wrappers.md#CTR-TOK-18)), and a per-leg check would add two factory calls to every leg; turning a listed token outside also voids every order signed in its token domain, a decision for the DEX admin, who re-lists). Never taken from the leg: a submitter-chosen kind could send a fallback-only "token" down the `mtxTrade` path |
 | Signed struct | the same `TradeOrder`, signed in the **DEX's** domain `("SCaaS Dex","1", chainId, DEX, chain_uid)` as `DexOrder(address sellToken,TradeOrder order)TradeOrder(…)`; `o.dex == address(this)` is required (the domain already binds the DEX; a different `dex` field would be a second, conflicting truth) |
 | Fill state | on the DEX: `pulled[h]` and `minNonce[from][batch]`, `h` = the `DexOrder` digest |
 | Checks | the full [CTR-DEX-15](#CTR-DEX-15) list, enforced by the DEX: relayer binding, expiry, nonce, flags, zero amounts, `minFill ≤ amount`, fee cap, signature (`SigCheck.isValid` with the ERC-1271 cap, [CTR-DEX-08](#CTR-DEX-08)), `p < amount`, `sellFill > 0`, overfill, effective minimum, price, fee bound |
@@ -483,7 +489,13 @@ on the floor ([CTR-DEX-11](#CTR-DEX-11)); (2) **snapshot** the DEX's balance of 
 [CTR-DEX-17](#CTR-DEX-17) (relayer share to `msg.sender`), refund Path B remainders; (6) **conservation** over every
 snapshotted token (`ConservationBroken`) and per leg `ExchangeLegSettled(ref, orderHash, from, destination, sold,
 receivedFloor, surplus, dexFee, refund, limitReceive)`, `limitReceive = ceil(sellFill · receiveAmount / amount)`, so a
-client checks what the signer got against what it signed without trusting the submitter. Not to be confused with
+client checks what the signer got against what it signed without trusting the submitter. **The DEX holds nothing
+between calls (sweep rule)** (controller proposal, review W-Q, 2026-10-19; owner may override): a balance that reaches
+the DEX outside a running settlement or plan (a mistaken transfer, a fee an interaction earns, such as `mtxWrap`'s
+submitter fee minted to the DEX) belongs to nobody: the plan tokens' end balances must equal their snapshots, so a
+plan cannot take it in those tokens, but an interaction may move any other token the DEX holds, so the next
+exchange-path submitter can sweep it. Clients and the node never send tokens to a DEX; no on-chain accounting is kept.
+Not to be confused with
 `ExchangeOffer.exchange` ([CTR-AS-13](asset-suite.md#CTR-AS-13)), another contract. EVM only. Status **BUILT** (P2c; Transitional after [CTR-DEX-23](#CTR-DEX-23)).
 
 <a id="CTR-DEX-21"></a>**CTR-DEX-21** — **The surplus goes to the signers, on chain** (owner). After step 4, for each

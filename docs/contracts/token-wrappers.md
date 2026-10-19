@@ -74,7 +74,9 @@ is a per-chain variant, not a creator's choice ([CTR-TOK-23](#CTR-TOK-23)).
 | `UNDERLYING` | `UnderlyingToken` | wrapper of 1–8 ERC-20s or the native coin ([CTR-TOK-26](#CTR-TOK-26)) at per-leg rates |
 | `NONE_ZETHER` | `NoUnderlyingZetherToken` | standalone + Zether layer ([zether.md](zether.md)) |
 | `UNDERLYING_ZETHER` | `UnderlyingZetherToken` | wrapper + Zether layer, wrap-shield and unshield-unwrap |
-| `NONE_PQZ`, `UNDERLYING_PQZ`, `NONE_ZETHER_PQZ`, `UNDERLYING_ZETHER_PQZ` | — | **reserved, not built**: post-quantum layer ([pq-zero-knowledge.md](pq-zero-knowledge.md)); Zether and PQZ on one token have room in the kind ids only |
+| `NONE_PQZ` | `NoUnderlyingPqzToken` | standalone + post-quantum layer ([pq-zero-knowledge.md](pq-zero-knowledge.md)) |
+| `UNDERLYING_PQZ` | `UnderlyingPqzToken` | wrapper + post-quantum layer |
+| `NONE_ZETHER_PQZ`, `UNDERLYING_ZETHER_PQZ` | — | **reserved, not built**: Zether and PQZ on one token have room in the kind ids only |
 
 | Node | Role |
 |---|---|
@@ -471,7 +473,9 @@ function mtxWrap(address underlying, TradeOrder calldata o, bytes calldata sig) 
    signature, that the wrapper is `o.dex`, the price `amount·receiveAmount ≤ minted·amount` and the fee bound, and moves
    the funds **only into the wrapper** ([CTR-DEX-15](dex.md#CTR-DEX-15));
 5. require `received == o.amount` (balance delta, as the direct wrap; else `WrapReceivedMismatch(expected, received)`), record the reserve, mint `minted − wrapFee` to `destination` (or `from`) and `wrapFee` to `msg.sender`,
-   the submitting relayer — the order's `fee` is how a gasless wrap pays its relayer.
+   the submitting relayer — the order's `fee` is how a gasless wrap pays its relayer; emit
+   `Wrapped(destination or from, u, received, minted − wrapFee)`: the credited party and what it got (review W-Q,
+   2026-10-19; before, `from` and the gross `minted`).
 
 No allowance; only the named wrapper can pull, and only at the signed minimum. The call to the underlying is a wrap
 talking to its underlying, as the direct wrap's pull is, not the meta-tx pipeline calling out. `mtxWrap` is not
@@ -482,8 +486,9 @@ Clients refuse by default to build or sign such an order when `dex` is not a reg
 **`uaWrap`** (owner 2026-10-13; BUILT, UA-5b): `uaWrap(address u, UATradeOrder o, bytes auth)` is `mtxWrap` with
 the holder's `UATradeOrder` ([CTR-DEX-25](dex.md#CTR-DEX-25)) pulled by the underlying's `uaTrade`; the underlying must
 be a SCaaS ledger token (`UALegNotLedger(u)`); `minted − wrapFee` goes to `o.destination` (0 ⇒ `o.from`), a derived id
-by `_uaMint`, a native one by `_mint`; event `UAWrapped(bytes32 indexed from, address indexed u, uint256 received,
-uint256 minted)` only (no `Wrapped`); the leg check is ERC-165 on `IUALedger`, before the pull; the fee goes to
+by `_uaMint`, a native one by `_mint`; event `UAWrapped(bytes32 indexed to, address indexed u, uint256 received,
+uint256 minted)` only (no `Wrapped`), with the credited id (`destination` or `from`) and `minted − wrapFee` (review
+W-Q, 2026-10-19); the leg check is ERC-165 on `IUALedger`, before the pull; the fee goes to
 `msg.sender`; not allowlisted (`test/ua/UAWrap.t.sol`). A native holder uses it to wrap straight into its UA. A holder of an outside underlying wraps into a
 UA with `wrapToUA`, and unwraps a SCaaS ledger leg straight into a UA with `unwrapToUA` (both BUILT, UA-5a;
 [CTR-UA-28](accounts.md#CTR-UA-28)).
@@ -624,7 +629,7 @@ empty output — with no symptom until someone has deposited funds.
   31337/1337 (`ZetherSafety`, [CTR-ZTH-02](zether.md#CTR-ZTH-02)). Built on `OpenFactory` (P3), with the verifier check;
   `OpenFactoryV1` (with its own) is in `legacy/p5/` (P5).
 - **Registrar** is an EOA by default (deployer); it must become a multisig before mainnet. Its only powers are
-  `registerImplementation`, `deprecate`, and `setZetherEnabled`.
+  `registerImplementation`, `registerDexImplementation`, `deprecate`, `setZetherEnabled` and `setPqzEnabled`.
 - **Same rule on every family**: a fix to an Aptos package, Sui package, Solana program, Cosmos contract, GRAM or
   Soroban contract is a new deployment at a new address plus voluntary migration by the owners of the balances;
   accounts on the old deployment keep working with the old code ([CTR-GEN-02](README.md#CTR-GEN-02)).
@@ -682,8 +687,8 @@ struct DexConfig { address admin; uint32 relayerSharePpm; address treasury; bool
 - **Creation (unchanged pattern).** `CREATE2` of an EIP-1167 clone, then `initialize(cfg)` **in the same call** (no
   front-run of `initialize`, no deployed-but-uninitialized state); the implementation locks its own `initialize` in
   its constructor. The address is predictable from `(factory, salt, implementation)`.
-- **Kinds** (fresh enum, nothing deployed): `NONE`, `UNDERLYING`, `NONE_ZETHER`, `UNDERLYING_ZETHER`; reserved
-  `NONE_PQZ`, `UNDERLYING_PQZ`, `NONE_ZETHER_PQZ`, `UNDERLYING_ZETHER_PQZ`. The implementation registry keeps
+- **Kinds** (fresh enum, nothing deployed): `NONE`, `UNDERLYING`, `NONE_ZETHER`, `UNDERLYING_ZETHER`, `NONE_PQZ`,
+  `UNDERLYING_PQZ`; reserved `NONE_ZETHER_PQZ`, `UNDERLYING_ZETHER_PQZ`. The implementation registry keeps
   versions per kind (register, deprecate) as before; the catalogue is append-only.
 - **One event per creation:** `TokenCreated(token, creator, kind, version, implementation, features, lockedFeatures,
   owner, underlyings)`, where `lockedFeatures` is the value the token stored (`locked | (features & ALWAYS_LOCKED)`, read
@@ -712,8 +717,10 @@ Factory v2 is backed up in `smartcontracts/evm/legacy/p1e/` (not built).
   `deprecate` are registrar-only; the catalogue is append-only (`VersionAlreadyRegistered`); version 0 is refused.
 - **Registration** requires `implementation.code.length > 0` and reads `kind(), `factory()` and `chainUid()` by staticcall: `ImplementationNotAContract`,
   `VersionKindMismatch(expected, got)` (`got = type(uint256).max` when there is no answer),
-  `ImplementationFactoryMismatch`, `ChainUidMismatch`. `NONE_PQZ`…`UNDERLYING_ZETHER_PQZ` (4–7) revert `KindReserved`;
-  kinds 2 and 3 are built (P3) and their creation passes the Zether gate.
+  `ImplementationFactoryMismatch`, `ChainUidMismatch`. `NONE_ZETHER_PQZ` and `UNDERLYING_ZETHER_PQZ` (6–7) revert
+  `KindReserved`; kinds 2 and 3 are built (P3) and their creation passes the Zether gate, kinds 4 and 5 (`NONE_PQZ`,
+  `UNDERLYING_PQZ`, P6g) pass the PQZ gate (`setPqzEnabled`, [pq-zero-knowledge.md](pq-zero-knowledge.md); review
+  W-Q, 2026-10-19: this text had kinds 4–7 reserved).
 - **Creation:** `createToken` (registered version) and `createTokenUnregistered` (same four checks, recorded with
   `version == 0`) take the leg count from `cfg.legs` (`NONE*` 0, `UNDERLYING*` 1–8, else `UnderlyingCountInvalid`),
   clone with salt `keccak256(abi.encode(msg.sender, salt))` (`SaltAlreadyUsed` when the predicted address is already in the

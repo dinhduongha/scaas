@@ -7,8 +7,9 @@ import {ISCaaSDex} from "../dex/ISCaaSDex.sol";
 /// @title The one token factory of a chain (CTR-TOK-03, CTR-TOK-25): an append-only catalogue of implementations per
 ///        kind, EIP-1167 clones by `CREATE2` initialised in the same call, no power over any token it created.
 interface IOpenFactory {
-    /// @notice CTR-TOK-21, a fresh enum (nothing deployed): the value equals the implementation's `kind()`. The `*_PQZ`
-    ///         kinds are reserved (no implementation can be registered for them yet).
+    /// @notice CTR-TOK-21, a fresh enum (nothing deployed): the value equals the implementation's `kind()`.
+    ///         `NONE_PQZ` / `UNDERLYING_PQZ` are built (P6g, behind the PQZ gate); the `*_ZETHER_PQZ` kinds are
+    ///         reserved (`KindReserved`: no implementation can be registered for them yet).
     enum TokenKind {
         NONE,
         UNDERLYING,

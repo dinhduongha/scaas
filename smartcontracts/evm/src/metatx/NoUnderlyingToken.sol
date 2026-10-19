@@ -27,13 +27,13 @@ contract NoUnderlyingToken is MetaTokenBase {
     }
 
     /// @notice `MINTABLE` and the `minter` role; never allowlisted (a minter contract's caps run on its own call).
-    function mint(address to, uint256 amount) external {
+    function mint(address to, uint256 amount) external nonReentrant {
         AdminLib.requireRole(AdminLib.MINTABLE, _msgSender());
         _mint(to, amount);
     }
 
     /// @notice `mint` into the registered SIGNING UA `to` (CTR-UA-28): the same flag and role; never allowlisted.
-    function mintToUA(bytes32 to, uint256 amount) external {
+    function mintToUA(bytes32 to, uint256 amount) external nonReentrant {
         AdminLib.requireRole(AdminLib.MINTABLE, _msgSender());
         _uaMint(to, amount);
     }

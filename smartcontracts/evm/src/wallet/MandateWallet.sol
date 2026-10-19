@@ -110,7 +110,8 @@ contract MandateWallet is MetaTxBase, IERC1271 {
     /// @notice The delegate's payment: `_msgSender()` is the mandate's delegate, `epoch_` the current epoch (so a revoke,
     ///         or any `setMandate`, voids every pay signed before it, also when the same delegate is set again), the
     ///         mandate is live, the payee approved, `0 < amount ≤ maxPerPayment`, the period total `≤ maxPerPeriod`,
-    ///         `entryRef` unused.
+    ///         `entryRef` unused. Periods are fixed windows of `periodSeconds` on the grid of `periodStart` (CTR-ACC-06):
+    ///         at most `2 · maxPerPeriod` across one boundary, at boundaries the owner can compute.
     function payUnderMandate(address token, address payee, uint256 amount, bytes32 entryRef, uint64 epoch_)
         external nonReentrant
     {
@@ -123,7 +124,8 @@ contract MandateWallet is MetaTxBase, IERC1271 {
         if (amount == 0 || amount > md.maxPerPayment) revert OverPaymentCap(amount, md.maxPerPayment);
         if (refUsed[entryRef]) revert RefAlreadyPaid(entryRef);
         if (block.timestamp >= uint256(md.periodStart) + md.periodSeconds) {
-            md.periodStart = uint64(block.timestamp);
+            // the window that holds `now` on the grid of the mandate's start (W-L): a pause never moves the boundaries
+            md.periodStart += uint64((block.timestamp - md.periodStart) / md.periodSeconds * md.periodSeconds);
             md.spentInPeriod = 0;
         }
         uint256 spent = uint256(md.spentInPeriod) + amount;

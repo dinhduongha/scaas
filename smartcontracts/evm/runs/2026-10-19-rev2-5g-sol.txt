@@ -1,0 +1,60 @@
+# plan Task 5g (rev2-chain-sol): forge runs, sizes, library pins — 2026-10-19 (forge 1.3.5, solc 0.8.37, osaka)
+# all forge runs under scripts/capped; 'before' = c25ff77 src with this branch's tests copied in
+
+## new and changed tests on c25ff77 (before the fixes): each must fail
+[FAIL: assertion failed: 0 != 13] test_native_reentryIntoEveryEntry_isRefused() (gas: 9987986)
+[FAIL: assertion failed: 1800216000 != 1800172800] test_period_windows_stay_on_the_grid() (gas: 157451)
+[FAIL: assertion failed] test_W_M_gen1StarvedBeforeItsHold_isUAVerifyGas() (gas: 19296893)
+[FAIL: Error != expected error: CallFailed(0xef6d0f02) != CallFailed(0xab143c06)] test_executeCannotReenter() (gas: 529505)
+[FAIL: Error != expected error: InsufficientOutput(0x7C6ba371836Af59c73c842Cc3E6A755F277589ec) != TokenMismatch()] test_exchange_sameSellAndReceiveToken_isRefused() (gas: 143799)
+[FAIL: log != expected log] test_derivedHolder_intoItself_feeToTheSubmitter() (gas: 285258)
+[FAIL: log != expected log] test_forgedStarvationFromAnOutsideToken_isOnlyMatchFailed() (gas: 1197494)
+[FAIL: log != expected log] test_mtxWrap_mintsAtTheRate_feeToTheSubmitter() (gas: 227179)
+[FAIL: log != expected log] test_mtxWrap_toDestination() (gas: 204588)
+[FAIL: log != expected log] test_rate_and_destinations() (gas: 9779003)
+[FAIL: Error != expected error: UAUnauthorized(0x0000000000beef00000000000000000000000000000000000000000000000000) != UAVerifyGas()] test_W_M_gen1OutOfGas_isUAVerifyGas_aCheapRevertIsAVerdict() (gas: 1874946)
+notes: the first test_W_M_gen1StarvedBeforeItsHold_isUAVerifyGas FAIL is an earlier draft of that test (sweep to 400 k
+with a pass inside the sweep); the final version passes before as well (a regression property; see decisions CTR-UA-05),
+while test_W_M_gen1OutOfGas_isUAVerifyGas_aCheapRevertIsAVerdict shows the bug. test_exchange_sameSellAndReceiveToken_isRefused
+belonged to the W-Q(b) refusal that was reverted (the full suite's test_exchange_profitableCycle_xToX: X->X cycles are
+a feature, CTR-DEX-20); it is not in the branch.
+
+## after the fixes
+$ forge test   (full suite)
+Ran 112 test suites in 106.73s (836.67s CPU time): 1287 tests passed, 0 failed, 10 skipped (1297 total tests)
+FAIL lines: 0
+$ forge test --isolate --match-path 'test/ua/{UAGas,UARegistryGroups}.t.sol'
+Ran 2 test suites in 1.26s (2.53s CPU time): 20 tests passed, 0 failed, 0 skipped (20 total tests)
+$ forge test --match-path test/ua/UARegistry.t.sol (after the second W-M test)
+Ran 38 tests for test/ua/UARegistry.t.sol:UARegistryTest
+[PASS] test_W_M_gen1OutOfGas_isUAVerifyGas_aCheapRevertIsAVerdict() (gas: 2895459)
+[PASS] test_W_M_gen1StarvedBeforeItsHold_isUAVerifyGas() (gas: 14560146)
+$ FOUNDRY_PROFILE=private7622 forge build -> exit 0
+$ python3 ../../scripts/size_gate.py --self-test -> size gate self-test ok
+$ forge build src --sizes --json; python3 ../../scripts/size_gate.py sizes.json size-baseline.json
+size gate: 0 error(s), 91 contracts
+
+## changed bytecode sizes (runtime / init, bytes): c25ff77 -> this branch
+DexPuller                    624 -> 634  | init 678 -> 688
+HederaMandateWallet          16244 -> 16378  | init 17015 -> 17149
+MandateWallet                15756 -> 15890  | init 16522 -> 16656
+NoUnderlyingPqzToken         45734 -> 47349  | init 47324 -> 48939
+NoUnderlyingToken            35423 -> 37067  | init 36929 -> 38573
+NoUnderlyingZetherToken      43794 -> 45298  | init 45454 -> 46958
+SCaaSDex                     23493 -> 22895  | init 24380 -> 23782
+SmartKeyAccount              19044 -> 19374  | init 19710 -> 20040
+SmartKeyAccountFactory       1250 -> 1250  | init 21148 -> 21478
+UARegistry                   25861 -> 25856  | init 32428 -> 32423
+UnderlyingPqzToken           58177 -> 59840  | init 59774 -> 61437
+UnderlyingToken              45293 -> 47220  | init 46806 -> 48733
+UnderlyingZetherToken        55689 -> 57210  | init 57384 -> 58905
+
+## library pins (W-N)
+$ scripts/evm_libs.sh check   (local lib/: symlink to the OZ checkout, forge-std clone)
+evm_libs: openzeppelin-contracts OK (fda6b85f2c65d146b86d513a604554d15abd6679)
+evm_libs: forge-std OK (88c8a2886f6f64c846ae57533a36361acb81683a)
+fresh tree: scripts/evm_libs.sh install && check -> both OK (same digests), 2026-10-19 22:0x
+
+## docs
+$ python3 -I scripts/docs_check.py check
+check: 0 error(s), 2 warning(s), 15 note(s)
