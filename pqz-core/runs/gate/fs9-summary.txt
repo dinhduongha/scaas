@@ -1,0 +1,22 @@
+# gate fs9: e85d8b432035fa850581086d2b49b946cdb0efd4, 2026-10-19T16:54Z
+== kat
+   ok
+== tbox
+   ok
+== sv
+   ok
+== diff
+   ok
+== vectors
+   ok
+== ffi
+   ok
+== rust
+   ok
+== cargo
+   ok
+== xcheck
+   ok
+== fuzz
+   ok
+gate fs9: PASS

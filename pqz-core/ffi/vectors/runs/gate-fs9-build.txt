@@ -1,0 +1,14 @@
+PQZL backend: the default feature (cargo flags: none)
+   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/pqz-core/ffi)
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/pqz-core/pqzl/rust)
+   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/pqz-core/pqzh/ligero)
+    Finished `release` profile [optimized + debuginfo] target(s) in 10.74s
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/pqz-core/pqzl/rust)
+   Compiling pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/pqz-core/stmt)
+   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/pqz-core/ffi)
+   Compiling inout v0.1.4
+   Compiling cipher v0.4.4
+   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/pqz-core/pqzh/ligero)
+   Compiling aes v0.8.4
+   Compiling pqz-ffi-wasm v0.1.0 (/home/ha/work/ainative/scaas/pqz-core/ffi/wasm)
+    Finished `release` profile [optimized] target(s) in 6.33s

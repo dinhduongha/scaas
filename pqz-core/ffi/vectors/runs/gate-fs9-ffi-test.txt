@@ -1,0 +1,59 @@
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/pqz-core/pqzl/rust)
+   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/pqz-core/ffi)
+    Finished `release` profile [optimized + debuginfo] target(s) in 11.96s
+     Running unittests src/lib.rs (target/release/deps/pqz_ffi-14356b7f2fc030a3)
+
+running 1 test
+test pqzl::rust::tests::out_of_memory_is_a_node_fault ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/pqz-vectors.rs (target/release/deps/pqz_vectors-ac07725e2daa13a0)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/fault.rs (target/release/deps/fault-9e5518b9a2a7ff8c)
+
+running 1 test
+test node_faults_are_status_4 ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.51s
+
+     Running tests/ffi.rs (target/release/deps/ffi-e9f2606910503470)
+
+running 10 tests
+test header_matches ... ok
+test c_abi_arguments ... ok
+test multi_limits_and_memo ... ok
+test one_mib_stack ... ok
+test digest_lines ... ok
+test selftest_report ... ok
+test round_trip_every_form ... ok
+test selftest_vectors ... ok
+test every_rejection ... ok
+test pqzl_differential ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 54.36s
+
+     Running tests/verify_only.rs (target/release/deps/verify_only-f430692651619e50)
+
+running 2 tests
+test child_task ... ok
+
+running 1 test
+test child_task ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 21.47s
+
+test verify_only_arena ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 50.17s
+
+   Doc-tests pqz_ffi
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

@@ -1,0 +1,4 @@
+reg_stmt 16480 B c=74b935e952de8495 rust=74b935e952de8495 equal
+reg_wit 6144 B c=17c7a9f62fa77af1 rust=17c7a9f62fa77af1 equal
+tx_stmt 83072 B c=42182508039fa76c rust=42182508039fa76c equal
+tx_wit 12416 B c=258e15b72416daa6 rust=258e15b72416daa6 equal
