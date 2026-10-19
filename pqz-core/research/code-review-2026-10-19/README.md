@@ -17,6 +17,9 @@ its scope. Reviewed at main `4c20032`.
 | [I-codex-pqzh-rust.md](I-codex-pqzh-rust.md) | round 2 (owner 2026-10-19 evening): PQZH Rust at `e9cabd1` (`pqzh/ligero`, pqz-ffi PQZH path, `stmt`, `xcheck`; `stark-backup` secondary), Codex | no P0 / P1 in the live path; round-1 A-F1, A-F2, A-Note and B-F1…F5 all still present |
 | [J-agy-pqzh-rust.md](J-agy-pqzh-rust.md) | same, agy; **triage table P-A…P-I** | same eight findings, nothing new; triage: fix P-A…P-H on `rev2-pqzh` (plan Task 5c), P-I a gate before the backup is promoted |
 | [K-claude-pqzh-rust.md](K-claude-pqzh-rust.md) | same, Claude sub-agent | no P0 / P1; new: wasm32 `i64.rem_s` / `div_s` and conditional subtractions on secrets (F3), infallible verifier allocation (F5), unsafe pointer work in bench wasm exports (F6) |
+| [L-codex-pqzl-c.md](L-codex-pqzl-c.md) | round 2: PQZL C core at `e9cabd1` (`pqzl/src`, `pqzl/lazer`, the C backend in pqz-ffi), Codex | P3 only: arena sink overflow (C-F2), secrets kept in C, pointer UB on truncated proofs |
+| [M-agy-pqzl-c.md](M-agy-pqzl-c.md) | same, agy; **triage table Q-A…Q-I** | wiping (rated P1, triaged P2), D-2 claim refuted, small latent UB; triage: fix Q-A…Q-H on `rev2-pqzl` (plan Task 5e), Q-I recorded |
+| [N-claude-pqzl-c.md](N-claude-pqzl-c.md) | same, Claude sub-agent | no P0 / P1, no C = Rust divergence; new: secret-amount u128 shift in fixexp (both cores, wasm32), `rel_keys` 13–14 MB through the sink, `ASSERT_ERR` fall-through, compiler dependence |
 
 **Controller verification (2026-10-19).** Both P0 transcript facts were re-read by the controller in the Rust prover
 (`pqzl/rust/src/proof/tbox.rs`: `tg` hashed at 1058, `h` computed after it, `quad.rs:22` derives `mu` from the same
