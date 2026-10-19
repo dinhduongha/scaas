@@ -196,7 +196,12 @@ itself). The wasm bench harness (`wasm/lib.rs:88–91`, a separate test-only cra
 
 Constant time (what ctgrind cannot see): `fixexp.rs` after Q-A has no variable-amount u128 shift on secret data
 (remaining u128 shifts are by constants or by the public loop index in `div_q56`); u64 shifts by secret amounts
-(`bernoulli_fp`, `rej_bimodal`) are single `i64.shr_u` on wasm32. wasm32 lowering: see "Commands".
+(`bernoulli_fp`, `rej_bimodal`) are single `i64.shr_u` on wasm32. wasm32 lowering of the release harness built by `run.sh` (`wasm/`, `llvm-objdump-18 -d`): the compiler-builtins
+i128 routines `__multi3`, `__ashlti3`, `__lshrti3` are linked but never called (no `call` targets them; every u128
+product and shift is inlined as i64 ops); the 64-bit divisions left (`i64.div_*` / `rem_*`) sit in `sv::verify_body` /
+`verify_sv`, `tbox::vr_polys` (V·R, public challenges), `coder::encode_proof` and `Coder::grandom` (`ao / 2`, a
+parameter) and `bench::verify_bad`: none on prover secrets. Data-dependent `br_if` on secrets was not re-audited
+beyond fix E's reading.
 
 Round-2 changes touching the crate: Q-A (`bernoulli_fp` masked add, test `bernoulli_masked_add_eq_shift`), fix C
 (`canonical` `chunks_exact`), fix A (length before caches, test `bad_length_refused_before_caches`), the Rust-port minors
@@ -206,10 +211,19 @@ Round-2 changes touching the crate: Q-A (`bernoulli_fp` masked add, test `bernou
 
 - The C verifiers on A-1's cheating proofs (stopped at the controller's request); the mint chain of A-1 (not built).
 - Exhaustive allocation denial (`PQZL_MEM_SWEEP=0,1000000000,0`) on the current code: only the sampled default ran.
-- The pqz-ffi fault tests (`ffi/tests/fault.rs`) were not re-run here (Task 9 gate `fs9` ran them).
 - Timing; engine-level wasm32 tiers (Liftoff / TurboFan / wasmtime lowering of `select`); dependency internals (`aes`,
   `sha3`); a proof of LNP22's soundness for these parameters.
 
 ## Commands run
 
-(see below)
+All heavy jobs under `scripts/capped` (2 slots, `cargo -j2`), in the temporary worktree `scratchpad/reviewA/wt` (detached
+at `a61d221`, removed afterwards) or the scratch copy `scratchpad/reviewA/poc` (git-ignored; logs beside it).
+
+| Command | Result |
+|---|---|
+| `scripts/capped sh pqz-core/pqzl/rust/run.sh reviewA` (worktree) | **pass**: 19 `test result: ok` lines, 0 failed (incl. `oracle_*` C = Rust, `sv_eq_c_sv` / `sv_eq_generic` 4,524 cases 0 mismatches, `cheating_rejected`, `fs_bind`, `memory.rs` `exhaustion_is_error` + `peak_per_op`); kat 19/19; keys KAT `pqz_kat: ok` (free and Ctx); `to_rust.py --check` 15 files equal; FNV bench native / fast / wasm32 all `equal`, `fails 0`; native = wasm32 387 digest lines equal; clippy and wasm32 builds `[rc=0]` |
+| `cargo test --release --test poc` (scratch copy, cheating prover of A-1) | **A-1 reproduced**: modes 1 / 2 accepted by `verify` and `verify_fast` on all 14 codes, control mode 3 rejected, mode 0 byte-identical to the vectors (`poc-run1.txt`, 80 s) |
+| the same with the C core's verdicts (`c-oracle`) | **not run**: stopped while queued, at the controller's static-only request |
+| `cargo test --test extremes` (profile with `overflow-checks` and `debug-assertions` on, crate and dependencies; unmodified `pqzl` verifiers plus `c_verify` / `c_verify_fast`) | **pass**: 2,828 cases (per code: z1, z21, z3, z4, hint, h, c set to the largest magnitude that still encodes under MAX_PROOF, half of it, ±9, ±(2^25 + 1); 150 random bit / byte / truncate / extend mutations), no panic, the four verdicts equal on every case, 7 accepted, each byte-identical to the honest proof (the value set equalled the existing coefficient, or a c value congruent mod 2ω + 1 = 17; re-run with `NMUT=0` printing them, `extremes-accepted.txt`) (`extremes-run.txt`, 2,271 s) |
+| `cargo test --release --features prove,test-hooks --test fault --test verify_only` (`pqz-core/ffi`, Rust backend, worktree) | **pass**: `node faults: Ctx and core allocation failures and worker failure → status 4, out untouched; recovered`; the `TEST_PANIC` path (two intentional panics at `src/pqzl/rust.rs:77`) caught; `verify_only_arena` ok, heap after 5,000 mixed calls equal to before |
+| `llvm-objdump-18 -d` of `wasm/target/wasm32-unknown-unknown/release/pqzl_wasm.wasm` + a call-index scan | no call to `__multi3` / `__ashlti3` / `__lshrti3`; division sites listed under "Checked and clean" |
