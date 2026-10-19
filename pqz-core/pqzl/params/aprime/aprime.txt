@@ -1,0 +1,144 @@
+# run 1 (all candidates, PARTS=23, container 3 GB: killed by the memory limit after n = 2688 in part 2)
+
+==============================================================================================================
+0. Environment
+==============================================================================================================
+lattice-estimator 53da5982597709ba0fdf94ea37a84d822310fd84, leaky-LWE-Estimator (DDGR20) 0a9caf8bf0f80097724e0c6147194c52c6b90f86, SageMath 10.7, Python 3.12.5; SMOKE=False
+
+==============================================================================================================
+1. Noise and digit budget (pq-zero-knowledge.md §4.3 generalised) and sizes
+==============================================================================================================
+B = 2 beta_e beta_s + 64; m = bitlen(15 K) digit-sum bits; Delta = floor(q / 2^(m+2)); E = 2^ceil(log2(K B));
+ok: 2E <= Delta (uniqueness), Delta (2^m - 1) + E < q/2, K B <= E; margin = (Delta - E) / ((K - 1) B) (today 4.14);
+K fit = largest K with K B <= Delta/4 at the same m; bits = the binary decomposition of R_TX (today 917)
+candidate          k  log2 q  q mod16      K  b_s  b_e      B   m log2 Delta  log2 E  log2 KB  ok  margin   K fit  bits  pk / u B    ct B
+today             32  42.000        9   1024   36  164  11872  14     26.000      24   23.535 yes    4.14    1092   917     16384   16512
+spec option A     40  50.000        9   4096   40  182  14624  16     32.000      26   25.836 yes   70.60    4369  1011     20480   20608
+A' n=2560         40  54.000        9  65536   40  182  14624  20     32.000      30   29.836 yes    3.36   69905  1199     20480   20608
+A' n=2688         42  54.000        9  65536   41  186  15316  20     32.000      30   29.903 yes    3.21   69905  1199     21504   21632
+A' n=2816         44  54.000        9  65536   42  189  15940  20     32.000      30   29.960 yes    3.08   67361  1199     22528   22656
+A' n=3072         48  54.000        9  65536   44  197  17400  20     32.000      31   30.087  NO    1.88   61709  1215     24576   24704
+A' n=3072 q55     48  55.000        9  65536   44  197  17400  20     33.000      31   30.087 yes    5.65   69905  1215     24576   24704
+  today: q = 4398046510889 (0x3ffffffff29), Delta = 67108863, LS18 bound q^(1/4)/2 = 724
+  spec option A: q = 1125899906842553 (0x3ffffffffffb9), Delta = 4294967295, LS18 bound q^(1/4)/2 = 2896
+  A' n=2560: q = 18014398509481657 (0x3ffffffffffeb9), Delta = 4294967295, LS18 bound q^(1/4)/2 = 5793
+  A' n=2688: q = 18014398509481657 (0x3ffffffffffeb9), Delta = 4294967295, LS18 bound q^(1/4)/2 = 5793
+  A' n=2816: q = 18014398509481657 (0x3ffffffffffeb9), Delta = 4294967295, LS18 bound q^(1/4)/2 = 5793
+  A' n=3072: q = 18014398509481657 (0x3ffffffffffeb9), Delta = 4294967295, LS18 bound q^(1/4)/2 = 5793
+  A' n=3072 q55: q = 36028797018963913 (0x7fffffffffffc9), Delta = 8589934591, LS18 bound q^(1/4)/2 = 6889
+
+==============================================================================================================
+2. Encryption security: lattice-estimator primal uSVP (ADPS16, GSA) and DDGR20 worst-case mixed hints on (r, e1)
+==============================================================================================================
+key: pk = A s + e (m = n); enc: (u, v_t, v_f, v_a) (m = n + 48); DDGR20: m = n + 16 as anon/hints.sage, V_max =
+var_s beta_e^2 + var_e beta_s^2 with the candidate's bounds; 32 hints = R_TX with the auditor, 80 = R_TXM group
+(4 legs + auditor). Core-SVP 0.292 beta / 0.265 beta.
+candidate         key usvp  enc usvp  DDGR h0 DDGR h32 DDGR h80   core-SVP@h80     ok@h80
+today                  476       476   475.83   463.85   445.97  130.2 / 118.2         NO
+spec option A          508       508   507.31   497.34   482.43  140.9 / 127.8        yes
+A' n=2560              457       457   456.58   447.57   434.11  126.8 / 115.0         NO
+A' n=2688              488       488   488.00   478.89   465.28  135.9 / 123.3        yes
+
+# run 2: ONLY=4 PARTS=2 (container 5 GB)
+======
+2. Encryption security: lattice-estimator primal uSVP (ADPS16, GSA) and DDGR20 worst-case mixed hints on (r, e1)
+==============================================================================================================
+key: pk = A s + e (m = n); enc: (u, v_t, v_f, v_a) (m = n + 48); DDGR20: m = n + 16 as anon/hints.sage, V_max =
+var_s beta_e^2 + var_e beta_s^2 with the candidate's bounds; 32 hints = R_TX with the auditor, 80 = R_TXM group
+(4 legs + auditor). Core-SVP 0.292 beta / 0.265 beta.
+candidate         key usvp  enc usvp  DDGR h0 DDGR h32 DDGR h80   core-SVP@h80     ok@h80
+A' n=2816              520       520   519.74   510.54   496.79  145.1 / 131.6        yes
+
+==============================================================================================================
+3. Full LWE.estimate (deny arora-gb, bkw, bdd_mitm_hybrid), ADPS16 classical and quantum
+==============================================================================================================
+reference: Kyber-512 usvp beta 406
+
+done
+
+# run 3: ONLY=0,1,3,4 PARTS=3
+3. Full LWE.estimate (deny arora-gb, bkw, bdd_mitm_hybrid), ADPS16 classical and quantum
+==============================================================================================================
+reference: Kyber-512 usvp beta 406
+usvp                 :: rop: ≈2^139.0, red: ≈2^139.0, δ: 1.003525, β: 476, d: 3945, tag: usvp
+bdd                  :: rop: ≈2^139.6, red: ≈2^139.3, svp: ≈2^137.2, β: 477, η: 469, d: 3969, tag: bdd
+dual                 :: rop: ≈2^141.0, mem: ≈2^109.1, m: 1982, β: 483, d: 4030, ↻: 1, tag: dual
+dual_hybrid          :: rop: ≈2^136.1, red: ≈2^136.1, guess: ≈2^131.5, β: 466, p: 3, ζ: 10, t: 60, β': 466, N: ≈2^94.5, m: ≈2^11.0
+  today key (m = n) classical: 2^136.1 (dual_hybrid, beta 466); usvp beta 476
+usvp                 :: rop: ≈2^126.1, red: ≈2^126.1, δ: 1.003525, β: 476, d: 3945, tag: usvp
+bdd                  :: rop: ≈2^126.8, red: ≈2^126.4, svp: ≈2^124.6, β: 477, η: 469, d: 3969, tag: bdd
+dual                 :: rop: ≈2^128.0, mem: ≈2^109.1, m: 1982, β: 483, d: 4030, ↻: 1, tag: dual
+dual_hybrid          :: rop: ≈2^124.3, red: ≈2^124.3, guess: ≈2^113.3, β: 469, p: 3, ζ: 0, t: 60, β': 469, N: ≈2^95.0, m: ≈2^11.0
+  today key (m = n) quantum: 2^124.3 (dual_hybrid, beta 469); usvp beta 476
+usvp                 :: rop: ≈2^139.0, red: ≈2^139.0, δ: 1.003525, β: 476, d: 3945, tag: usvp
+bdd                  :: rop: ≈2^139.6, red: ≈2^139.3, svp: ≈2^137.2, β: 477, η: 469, d: 3969, tag: bdd
+dual                 :: rop: ≈2^141.0, mem: ≈2^109.1, m: 1982, β: 483, d: 4030, ↻: 1, tag: dual
+dual_hybrid          :: rop: ≈2^136.1, red: ≈2^136.1, guess: ≈2^131.5, β: 466, p: 3, ζ: 10, t: 60, β': 466, N: ≈2^94.5, m: ≈2^11.0
+  today enc (m = n + 48) classical: 2^136.1 (dual_hybrid, beta 466); usvp beta 476
+usvp                 :: rop: ≈2^126.1, red: ≈2^126.1, δ: 1.003525, β: 476, d: 3945, tag: usvp
+bdd                  :: rop: ≈2^126.8, red: ≈2^126.4, svp: ≈2^124.6, β: 477, η: 469, d: 3969, tag: bdd
+dual                 :: rop: ≈2^128.0, mem: ≈2^109.1, m: 1982, β: 483, d: 4030, ↻: 1, tag: dual
+dual_hybrid          :: rop: ≈2^124.3, red: ≈2^124.3, guess: ≈2^113.3, β: 469, p: 3, ζ: 0, t: 60, β': 469, N: ≈2^95.0, m: ≈2^11.0
+  today enc (m = n + 48) quantum: 2^124.3 (dual_hybrid, beta 469); usvp beta 476
+usvp                 :: rop: ≈2^148.3, red: ≈2^148.3, δ: 1.003366, β: 508, d: 4871, tag: usvp
+bdd                  :: rop: ≈2^148.7, red: ≈2^148.6, svp: ≈2^145.1, β: 509, η: 496, d: 4976, tag: bdd
+dual                 :: rop: ≈2^149.8, mem: ≈2^115.5, m: ≈2^11.3, β: 513, d: 5044, ↻: 1, tag: dual
+dual_hybrid          :: rop: ≈2^145.7, red: ≈2^145.7, guess: ≈2^131.8, β: 499, p: 3, ζ: 10, t: 60, β': 499, N: ≈2^101.0, m: ≈2^11.3
+  spec option A key (m = n) classical: 2^145.7 (dual_hybrid, beta 499); usvp beta 508
+usvp                 :: rop: ≈2^134.6, red: ≈2^134.6, δ: 1.003366, β: 508, d: 4871, tag: usvp
+bdd                  :: rop: ≈2^135.0, red: ≈2^134.9, svp: ≈2^131.7, β: 509, η: 496, d: 4976, tag: bdd
+dual                 :: rop: ≈2^135.9, mem: ≈2^115.5, m: ≈2^11.3, β: 513, d: 5044, ↻: 1, tag: dual
+dual_hybrid          :: rop: ≈2^132.7, red: ≈2^132.5, guess: ≈2^129.3, β: 500, p: 3, ζ: 0, t: 70, β': 500, N: ≈2^99.8, m: ≈2^11.3
+  spec option A key (m = n) quantum: 2^132.7 (dual_hybrid, beta 500); usvp beta 508
+usvp                 :: rop: ≈2^148.3, red: ≈2^148.3, δ: 1.003366, β: 508, d: 4871, tag: usvp
+bdd                  :: rop: ≈2^148.7, red: ≈2^148.6, svp: ≈2^145.1, β: 509, η: 496, d: 4976, tag: bdd
+dual                 :: rop: ≈2^149.8, mem: ≈2^115.5, m: ≈2^11.3, β: 513, d: 5044, ↻: 1, tag: dual
+dual_hybrid          :: rop: ≈2^145.7, red: ≈2^145.7, guess: ≈2^131.8, β: 499, p: 3, ζ: 10, t: 60, β': 499, N: ≈2^101.0, m: ≈2^11.3
+  spec option A enc (m = n + 48) classical: 2^145.7 (dual_hybrid, beta 499); usvp beta 508
+usvp                 :: rop: ≈2^134.6, red: ≈2^134.6, δ: 1.003366, β: 508, d: 4871, tag: usvp
+bdd                  :: rop: ≈2^135.0, red: ≈2^134.9, svp: ≈2^131.7, β: 509, η: 496, d: 4976, tag: bdd
+dual                 :: rop: ≈2^135.9, mem: ≈2^115.5, m: ≈2^11.3, β: 513, d: 5044, ↻: 1, tag: dual
+dual_hybrid          :: rop: ≈2^132.7, red: ≈2^132.5, guess: ≈2^129.3, β: 500, p: 3, ζ: 0, t: 70, β': 500, N: ≈2^99.8, m: ≈2^11.3
+  spec option A enc (m = n + 48) quantum: 2^132.7 (dual_hybrid, beta 500); usvp beta 508
+usvp                 :: rop: ≈2^142.5, red: ≈2^142.5, δ: 1.003463, β: 488, d: 5281, tag: usvp
+bdd                  :: rop: ≈2^143.0, red: ≈2^142.8, svp: ≈2^140.5, β: 489, η: 480, d: 5263, tag: bdd
+dual                 :: rop: ≈2^144.2, mem: ≈2^111.5, m: ≈2^11.4, β: 494, d: 5309, ↻: 1, tag: dual
+dual_hybrid          :: rop: ≈2^140.2, red: ≈2^140.2, guess: ≈2^131.6, β: 480, p: 3, ζ: 10, t: 60, β': 480, N: ≈2^98.1, m: ≈2^11.4
+  A' n=2688 key (m = n) classical: 2^140.2 (dual_hybrid, beta 480); usvp beta 488
+usvp                 :: rop: ≈2^129.3, red: ≈2^129.3, δ: 1.003463, β: 488, d: 5281, tag: usvp
+bdd                  :: rop: ≈2^129.9, red: ≈2^129.6, svp: ≈2^127.5, β: 489, η: 480, d: 5263, tag: bdd
+dual                 :: rop: ≈2^130.9, mem: ≈2^111.5, m: ≈2^11.4, β: 494, d: 5309, ↻: 1, tag: dual
+dual_hybrid          :: rop: ≈2^128.0, red: ≈2^128.0, guess: ≈2^113.3, β: 483, p: 3, ζ: 0, t: 60, β': 483, N: ≈2^95.9, m: ≈2^11.4
+  A' n=2688 key (m = n) quantum: 2^128.0 (dual_hybrid, beta 483); usvp beta 488
+usvp                 :: rop: ≈2^142.5, red: ≈2^142.5, δ: 1.003463, β: 488, d: 5281, tag: usvp
+bdd                  :: rop: ≈2^143.0, red: ≈2^142.8, svp: ≈2^140.5, β: 489, η: 480, d: 5263, tag: bdd
+dual                 :: rop: ≈2^144.2, mem: ≈2^111.5, m: ≈2^11.4, β: 494, d: 5309, ↻: 1, tag: dual
+dual_hybrid          :: rop: ≈2^140.2, red: ≈2^140.2, guess: ≈2^131.6, β: 480, p: 3, ζ: 10, t: 60, β': 480, N: ≈2^98.1, m: ≈2^11.4
+  A' n=2688 enc (m = n + 48) classical: 2^140.2 (dual_hybrid, beta 480); usvp beta 488
+usvp                 :: rop: ≈2^129.3, red: ≈2^129.3, δ: 1.003463, β: 488, d: 5281, tag: usvp
+bdd                  :: rop: ≈2^129.9, red: ≈2^129.6, svp: ≈2^127.5, β: 489, η: 480, d: 5263, tag: bdd
+dual                 :: rop: ≈2^130.9, mem: ≈2^111.5, m: ≈2^11.4, β: 494, d: 5309, ↻: 1, tag: dual
+dual_hybrid          :: rop: ≈2^128.0, red: ≈2^128.0, guess: ≈2^113.3, β: 483, p: 3, ζ: 0, t: 60, β': 483, N: ≈2^95.9, m: ≈2^11.4
+  A' n=2688 enc (m = n + 48) quantum: 2^128.0 (dual_hybrid, beta 483); usvp beta 488
+usvp                 :: rop: ≈2^151.8, red: ≈2^151.8, δ: 1.003310, β: 520, d: 5429, tag: usvp
+bdd                  :: rop: ≈2^152.3, red: ≈2^152.1, svp: ≈2^149.2, β: 521, η: 510, d: 5512, tag: bdd
+dual                 :: rop: ≈2^153.6, mem: ≈2^118.2, m: ≈2^11.4, β: 526, d: 5557, ↻: 1, tag: dual
+dual_hybrid          :: rop: ≈2^149.3, red: ≈2^149.2, guess: ≈2^145.4, β: 511, p: 3, ζ: 0, t: 80, β': 511, N: ≈2^102.8, m: ≈2^11.5
+  A' n=2816 key (m = n) classical: 2^149.3 (dual_hybrid, beta 511); usvp beta 520
+usvp                 :: rop: ≈2^137.8, red: ≈2^137.8, δ: 1.003310, β: 520, d: 5429, tag: usvp
+bdd                  :: rop: ≈2^138.3, red: ≈2^138.1, svp: ≈2^135.4, β: 521, η: 510, d: 5512, tag: bdd
+dual                 :: rop: ≈2^139.4, mem: ≈2^118.2, m: ≈2^11.4, β: 526, d: 5557, ↻: 1, tag: dual
+dual_hybrid          :: rop: ≈2^135.9, red: ≈2^135.7, guess: ≈2^132.8, β: 512, p: 3, ζ: 10, t: 60, β': 512, N: ≈2^103.7, m: ≈2^11.5
+  A' n=2816 key (m = n) quantum: 2^135.9 (dual_hybrid, beta 512); usvp beta 520
+usvp                 :: rop: ≈2^151.8, red: ≈2^151.8, δ: 1.003310, β: 520, d: 5429, tag: usvp
+bdd                  :: rop: ≈2^152.3, red: ≈2^152.1, svp: ≈2^149.2, β: 521, η: 510, d: 5512, tag: bdd
+dual                 :: rop: ≈2^153.6, mem: ≈2^118.2, m: ≈2^11.4, β: 526, d: 5557, ↻: 1, tag: dual
+dual_hybrid          :: rop: ≈2^149.3, red: ≈2^149.2, guess: ≈2^145.4, β: 511, p: 3, ζ: 0, t: 80, β': 511, N: ≈2^102.8, m: ≈2^11.5
+  A' n=2816 enc (m = n + 48) classical: 2^149.3 (dual_hybrid, beta 511); usvp beta 520
+usvp                 :: rop: ≈2^137.8, red: ≈2^137.8, δ: 1.003310, β: 520, d: 5429, tag: usvp
+bdd                  :: rop: ≈2^138.3, red: ≈2^138.1, svp: ≈2^135.4, β: 521, η: 510, d: 5512, tag: bdd
+dual                 :: rop: ≈2^139.4, mem: ≈2^118.2, m: ≈2^11.4, β: 526, d: 5557, ↻: 1, tag: dual
+dual_hybrid          :: rop: ≈2^135.9, red: ≈2^135.7, guess: ≈2^132.8, β: 512, p: 3, ζ: 10, t: 60, β': 512, N: ≈2^103.7, m: ≈2^11.5
+  A' n=2816 enc (m = n + 48) quantum: 2^135.9 (dual_hybrid, beta 512); usvp beta 520
+
+done
