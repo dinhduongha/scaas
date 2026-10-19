@@ -4699,7 +4699,9 @@ It said: Committed OOG requeued without limit; replaced by NET-APT-21.
 
 **Why.** The family form of CTR-UA-06 on Solana: `["ua", U]` record, `["ukey", keyHash]` claim, `["acct", U]` subject Account owning one token account per mint held (NET-SOL-05), lane PDAs; rent-exempt deposits once, no TTL; a transaction of 1,232 B bounds the members of an `msig` one transaction can carry (≈ 5–7 ed25519, ≈ 2 passkey), so a larger `msig` needs an approval PDA (open); bn254 / BLS / Schnorr kinds are not enabled on Solana until their syscalls and CU are verified. Status: SPECIFIED (controller 2026-10-19, owner question; not built).
 **Cost if wrong.** A Solana UA layout that cannot carry its signatures, or balances outside SPL that wallets and DEXs cannot see.
-**Source.** owner question 2026-10-19 (how UA, msig, BLS and balances are stored and maintained on Solana).
+**Source.** owner question 2026-10-19 (how UA, msig, BLS and balances are stored and maintained on Solana); storage costs: [research/near-algorand.md](research/near-algorand.md) §5.
+
+Change (2026-10-19): owner request — a **Storage cost** table in networks/solana.md §2.1 with figures checked against the SIMDs, solana.com and mainnet RPC: the live rent-exempt rate is **5,080 lamports per byte** (SIMD-0194 active, SIMD-0437 steps 1–2 active, steps 3–5 to 696 expected in Agave 4.4), so the earlier 6,960-based figures are replaced (≈ 0.0069 SOL per KB → ≈ 0.0051 per 1,000 B; ATA ≈ 0.00204 → ≈ 0.00149 SOL; 16-member `msig` record ≈ 0.005 → ≈ 0.0037 SOL; 10 MiB ≈ 73 → ≈ 53 SOL); rent collection is disabled (SIMD-0084). The `msig` bound is restated for the v1 transactions SCaaS sends (NET-SOL-17): 4,096 B ⇒ roughly 25–30 ed25519 or 8–10 passkey members per transaction (≈ 5–7 / ≈ 2 at 1,232 B); BLS12-381 syscalls (SIMD-0388) are active on mainnet, CU not measured. Status: SPECIFIED, documentation only.
 
 ### NET-SOL-80 — Out of CU requeued without limit
 - old: RS12-16(cu) · status: superseded · owner: no · date: 2026-10-04 · normative: — · superseded-by: NET-SOL-23
