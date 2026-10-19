@@ -25,7 +25,7 @@ use crate::rand::rejection::{rej_bimodal, REJ_MAX};
 use crate::rand::rng::Rng;
 use crate::rand::shake::shake128;
 use crate::rand::urandom::urandom_i64;
-use crate::Error;
+use crate::{Error, Wiped};
 use alloc::vec::Vec;
 
 /// The relation's inputs to the toolbox (`pqz_rel.c`'s `sys_t`): N R_q-linear equations, M evaluation equations
@@ -1058,9 +1058,9 @@ pub(crate) fn prove(
         return Err(Error::Internal); // the forms pqz_rel.c passes (module doc)
     }
 
-    // the seeds: rejection on z3, z4 | g | the lower protocol
-    let mut ex = [0u8; 96];
-    shake128(&[seed]).squeeze(&mut ex);
+    // the seeds: rejection on z3, z4 | g | the lower protocol (Wiped: cleared on every exit, fix B)
+    let mut ex = Wiped([0u8; 96]);
+    shake128(&[seed]).squeeze(&mut *ex);
     let seed_rej34: &[u8; 32] = ex[..32].try_into().map_err(|_| Error::Internal)?;
     let seed_cont: &[u8; 32] = ex[32..64].try_into().map_err(|_| Error::Internal)?;
     let seed_cont2: &[u8; 32] = ex[64..].try_into().map_err(|_| Error::Internal)?;
@@ -1072,7 +1072,7 @@ pub(crate) fn prove(
     let hash0 = *hash;
 
     // s = (<s1>, <m>, <y3>, <y4>, <beta>) (and <g> before the last check)
-    let mut sv = PolyVec::new(np)?;
+    let mut sv = Wiped(PolyVec::new(np)?);
     polyvec::set(&mut sv.sub(0, m1 + z, 2), &**s1);
     polyvec::auto(&mut sv.sub(1, m1 + z, 2), &mut **s1);
     polyvec::set(&mut sv.sub((m1 + z) * 2, loff + 1, 2), &m.sub(l, loff + 1, 1));

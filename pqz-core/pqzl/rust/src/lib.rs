@@ -86,14 +86,55 @@ pub enum Error {
 }
 
 /// Clears secret material where the C core calls `explicit_bzero` (the prover's seeds `wh` / `ex`, `pqz_dec`'s `w`;
-/// here also the witness vector s1 and the commitment randomness s2; the AES-CTR key schedule and the SHAKE sponges
-/// are cleared on drop, `rand::aes_ctr` / `rand::shake`, as C's `_aes256ctr_clear` / `_shake128_clear`). Best effort, not guaranteed: without unsafe
-/// code (no volatile write) and without a zeroize crate (D1) the compiler may still elide the stores; `black_box`
-/// on the cleared buffer makes that unlikely. Copies the compiler made earlier (moves, registers, spilled stack) and
-/// the other intermediate buffers of the prover are not cleared, as in C (STATUS Open 8).
+/// here also, through [`Wiped`], the prover's secret copies and mask seeds; the AES-CTR key schedule and the SHAKE
+/// sponges are cleared on drop, `rand::aes_ctr` / `rand::shake`, as C's `_aes256ctr_clear` / `_shake128_clear`).
+/// Platform boundary (review H-2, 2026-10-19): best effort, not guaranteed. It is plain stores plus `black_box`; a
+/// volatile write needs `unsafe` (forbidden outside `c-oracle`) and `zeroize` is a dependency (D1), so the compiler
+/// is not bound to keep the stores (`black_box` on the cleared buffer makes eliding them unlikely), and copies it made
+/// itself (moves of arrays and `Wiped` values, register spills, stack temporaries) are never cleared. The prover's
+/// other intermediate buffers (masks y, c·s, products with s) are not cleared either, as in C (STATUS Open 8).
 pub(crate) fn wipe<T: Default>(x: &mut [T]) {
     x.iter_mut().for_each(|e| *e = T::default());
     core::hint::black_box(&*x);
+}
+
+/// A prover secret (a witness copy, a mask seed) that [`wipe`]s itself when dropped, so every exit, `?` included,
+/// clears it (review G-2 / H-2, fix B). Same best-effort boundary as `wipe`.
+pub(crate) struct Wiped<T: Wipe>(pub(crate) T);
+
+pub(crate) trait Wipe {
+    fn wipe(&mut self);
+}
+
+impl<const N: usize> Wipe for [u8; N] {
+    fn wipe(&mut self) {
+        wipe(&mut self[..]);
+    }
+}
+
+impl Wipe for arith::polyvec::PolyVec {
+    fn wipe(&mut self) {
+        wipe(&mut self[..]);
+    }
+}
+
+impl<T: Wipe> Drop for Wiped<T> {
+    fn drop(&mut self) {
+        self.0.wipe();
+    }
+}
+
+impl<T: Wipe> core::ops::Deref for Wiped<T> {
+    type Target = T;
+    fn deref(&self) -> &T {
+        &self.0
+    }
+}
+
+impl<T: Wipe> core::ops::DerefMut for Wiped<T> {
+    fn deref_mut(&mut self) -> &mut T {
+        &mut self.0
+    }
 }
 
 /// What the C core keeps in static storage (the matrix A, each relation's ABDLOP keys, specialised-verifier tables),

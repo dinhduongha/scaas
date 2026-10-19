@@ -16,7 +16,7 @@ use crate::proof::tbox::{self, Statement};
 use crate::proof::{abdlop, Eq};
 use crate::rand::shake::shake128;
 use crate::rand::urandom::polyvec_urandom_bnd;
-use crate::{Ctx, Error, HEADER_BYTES, MAX_PROOF, PREFIX_BYTES, POLYVEC_BYTES as PV, V_BYTES};
+use crate::{Ctx, Error, Wiped, HEADER_BYTES, MAX_PROOF, PREFIX_BYTES, POLYVEC_BYTES as PV, V_BYTES};
 use alloc::vec::Vec;
 
 const K: usize = 32;
@@ -101,14 +101,28 @@ pub(crate) const fn txm_stmt(m: usize, a: usize) -> usize {
     HEADER_BYTES + (1 + m + a) * PV + (PV + V_BYTES) + groups(m) * PV + (m + 1 + a * m) * V_BYTES
 }
 
+/// the exact statement length of relation r (`pqz_rel.c` `stmt_bytes`)
+pub(crate) const fn stmt_bytes(r: &Rel) -> usize {
+    match r.code {
+        3 => REG_STMT,
+        1 => TX_STMT,
+        0x81 => TX0_STMT,
+        2 => BURN_STMT,
+        4 | 5 => DISC_STMT,
+        _ => txm_stmt(r.legs, r.aud),
+    }
+}
+
 /// `rd_word64`: a be32 word that must be < 2^64
 pub(crate) fn word64(p: &[u8]) -> (u64, bool) {
     (be8(&p[24..]), p[..24].iter().all(|&b| b == 0))
 }
 
-/// `rel_of`: the relation of op (op 1: R_TX0 by the 66,560-byte length, else R_TX; op 7 by its header words)
+/// `rel_of`: the relation of op (op 1: R_TX0 by the 66,560-byte length, else R_TX; op 7 by its header words), `None`
+/// also when the statement is not exactly that relation's length: every entry (prove, verify, verify_fast) checks the
+/// length here, before any cache is built or the statement hashed (review G-3 / H-4, fix A)
 pub(crate) fn rel_of(op: u8, stmt: &[u8]) -> Option<usize> {
-    Some(match op {
+    let ri = match op {
         crate::OP_REGISTER => 0,
         crate::OP_TRANSFER => {
             if stmt.len() == TX0_STMT {
@@ -131,14 +145,17 @@ pub(crate) fn rel_of(op: u8, stmt: &[u8]) -> Option<usize> {
             TXM0 + RELS[TXM0..].iter().position(|r| r.legs as u64 == m && r.aud as u64 == a)?
         }
         _ => return None,
-    })
+    };
+    (stmt.len() == stmt_bytes(&RELS[ri])).then_some(ri)
 }
 
-/// `pqz_stmt_hash`: SHAKE128("SCAAS-PQZ-TRANSCRIPT-V1" || op || be32(len) || stmt)
-pub(crate) fn stmt_hash(op: u8, stmt: &[u8]) -> [u8; 32] {
+/// `pqz_stmt_hash`: SHAKE128("SCAAS-PQZ-TRANSCRIPT-V1" || op || be32(len) || stmt); `Error::Input` for a length that
+/// does not fit be32 (unreachable after `rel_of`'s exact length, but never truncated)
+pub(crate) fn stmt_hash(op: u8, stmt: &[u8]) -> Result<[u8; 32], Error> {
+    let len = u32::try_from(stmt.len()).map_err(|_| Error::Input)?;
     let mut h = [0u8; 32];
-    shake128(&[b"SCAAS-PQZ-TRANSCRIPT-V1", &[op], &(stmt.len() as u32).to_be_bytes(), stmt]).squeeze(&mut h);
-    h
+    shake128(&[b"SCAAS-PQZ-TRANSCRIPT-V1", &[op], &len.to_be_bytes(), stmt]).squeeze(&mut h);
+    Ok(h)
 }
 
 /// `rel_keys`: A1, A2', B' from SHAKE128("SCAAS-PQZ-ABDLOP-PP-V1" || code), in NTT form
@@ -620,15 +637,7 @@ fn build_dr(a: &mut PolyMat, stmt: &[u8]) -> Result<Built, Error> {
 /// `build`: the statement of relation r (its length checked) and what the witness parsers read of it; `None` if
 /// malformed
 fn build(a: &mut PolyMat, r: &Rel, stmt: &[u8]) -> Result<Built, Error> {
-    let want = match r.code {
-        3 => REG_STMT,
-        1 => TX_STMT,
-        0x81 => TX0_STMT,
-        2 => BURN_STMT,
-        4 | 5 => DISC_STMT,
-        _ => txm_stmt(r.legs, r.aud),
-    };
-    if stmt.len() != want {
+    if stmt.len() != stmt_bytes(r) {
         return Ok(None);
     }
     match r.code {
@@ -836,13 +845,12 @@ fn witness(t: &mut Pub, r: &Rel, wit: &[u8], s1: &mut PolyVec) -> Result<bool, E
 /// `pqz_prover_seeds` (CTR-PQZ-19, P6e D6): ex[0..32) seeds s2, ex[32..64) every mask of the toolbox proof; each =
 /// SHAKE128(tag || rnd32 || wh || hash0), tags "SCAAS-PQZ-PROVER-RND-V2" / "...-SUB-V2", wh = SHAKE128(
 /// "SCAAS-PQZ-PROVER-WIT-V2" || wit)[0..32)
-fn prover_seeds(rnd32: &[u8; 32], wit: &[u8], hash0: &[u8; 32]) -> ([u8; 32], [u8; 32]) {
-    let mut wh = [0u8; 32];
-    shake128(&[b"SCAAS-PQZ-PROVER-WIT-V2", wit]).squeeze(&mut wh);
-    let (mut a, mut b) = ([0u8; 32], [0u8; 32]);
-    shake128(&[b"SCAAS-PQZ-PROVER-RND-V2", rnd32, &wh, hash0]).squeeze(&mut a);
-    shake128(&[b"SCAAS-PQZ-PROVER-SUB-V2", rnd32, &wh, hash0]).squeeze(&mut b);
-    crate::wipe(&mut wh);
+fn prover_seeds(rnd32: &[u8; 32], wit: &[u8], hash0: &[u8; 32]) -> (Wiped<[u8; 32]>, Wiped<[u8; 32]>) {
+    let mut wh = Wiped([0u8; 32]);
+    shake128(&[b"SCAAS-PQZ-PROVER-WIT-V2", wit]).squeeze(&mut *wh);
+    let (mut a, mut b) = (Wiped([0u8; 32]), Wiped([0u8; 32]));
+    shake128(&[b"SCAAS-PQZ-PROVER-RND-V2", rnd32, &*wh, hash0]).squeeze(&mut *a);
+    shake128(&[b"SCAAS-PQZ-PROVER-SUB-V2", rnd32, &*wh, hash0]).squeeze(&mut *b);
     (a, b)
 }
 
@@ -862,10 +870,14 @@ impl Ctx {
     /// `pqz_verify`: Ok(true) = 1, Ok(false) = 0; an allocation failure is `Err(Error::Memory)` (C: arena
     /// exhaustion, a node fault in pqz-ffi), which `Ctx::verify` folds into false and `Ctx::try_verify` keeps
     pub(crate) fn verify_rel(&mut self, op: u8, stmt: &[u8], proof: &[u8]) -> Result<bool, Error> {
+        // the exact statement length (rel_of) and the proof cap before the caches and the hash (fix A)
         let Some(ri) = rel_of(op, stmt) else { return Ok(false) };
+        if proof.len() > MAX_PROOF {
+            return Ok(false);
+        }
         let r = &RELS[ri];
         let (keys, a) = self.rel_state(ri)?;
-        let h = stmt_hash(op, stmt);
+        let h = stmt_hash(op, stmt)?;
         let Some((mut s, _)) = build(a, r, stmt)? else { return Ok(false) };
         // a proof that does not decode is invalid; running out of memory while decoding is not (Error::Memory)
         let mut f = match decode_proof(r.p, proof) {
@@ -889,32 +901,27 @@ impl Ctx {
         }
         let tb = r.p.tbox;
         let (keys, a) = self.rel_state(ri)?;
-        let hash0 = stmt_hash(op, stmt);
+        let hash0 = stmt_hash(op, stmt)?;
         let mut f = ProofParts::new(r.p)?;
-        let mut s1 = PolyVec::new(tb.m1 as usize)?;
-        let mut m = PolyVec::new((tb.l + tb.lext) as usize)?;
+        // do_prove; the seeds, s1, m, s2 and t_a2 are cleared on every path out, `?` included (C: explicit_bzero of
+        // ex; Wiped, fix B)
+        let mut s1 = Wiped(PolyVec::new(tb.m1 as usize)?);
+        let mut m = Wiped(PolyVec::new((tb.l + tb.lext) as usize)?);
         let Some((mut s, mut t)) = build(a, r, stmt)? else { return Err(Error::Input) };
-        // s2 before the witness fills s1, so that no allocation failure leaves s1 unwiped
-        let mut s2 = PolyVec::new(tb.m2 as usize)?;
-        if !witness(&mut t, r, wit, &mut s1).inspect_err(|_| crate::wipe(&mut s1))? {
-            crate::wipe(&mut s1);
+        let mut s2 = Wiped(PolyVec::new(tb.m2 as usize)?);
+        if !witness(&mut t, r, wit, &mut s1)? {
             return Err(Error::Input);
         }
-        // do_prove; the seeds, s1 and s2 are cleared on every path out (C: explicit_bzero of ex; crate::wipe)
-        let (mut ex0, mut ex1) = prover_seeds(rnd32, wit, &hash0);
-        let r = (|| {
-            polyvec_urandom_bnd(&mut *s2, &Int::from_i64(1, -tb.nu), &Int::from_i64(1, tb.nu), &ex0, 0)?;
-            let mut t_a2 = PolyVec::new(tb.kmsis as usize)?;
+        let (ex0, ex1) = prover_seeds(rnd32, wit, &hash0);
+        polyvec_urandom_bnd(&mut **s2, &Int::from_i64(1, -tb.nu), &Int::from_i64(1, tb.nu), &ex0, 0)?;
+        {
+            // t_a2 freed before the encoding, as before (the memory peaks)
+            let mut t_a2 = Wiped(PolyVec::new(tb.kmsis as usize)?);
             let mut hash = hash0;
             abdlop::commit(&mut f.t_a1, &mut t_a2, &mut s1, &mut s2, keys, tb)?;
             abdlop::hashcomm(&mut hash, &mut f.t_a1, &mut f.t_b, tb)?;
-            tbox::prove(&mut hash, &mut f, &mut s1, &mut m, &mut s2, &mut t_a2, keys, &mut s, &ex1)
-        })();
-        crate::wipe(&mut ex0);
-        crate::wipe(&mut ex1);
-        crate::wipe(&mut s1);
-        crate::wipe(&mut s2);
-        r?;
+            tbox::prove(&mut hash, &mut f, &mut s1, &mut m, &mut s2, &mut t_a2, keys, &mut s, &ex1)?;
+        }
         // cap = MAX_PROOF: an over-length proof is Input before any encoder assert (C: encproof's cap, then len >
         // PQZ_MAX_PROOF)
         encode_proof(&f, MAX_PROOF)
@@ -929,15 +936,7 @@ mod tests {
 
     /// an all-zero statement of relation ri with the header words its parser requires (auditorOn, M)
     fn zero_stmt(r: &Rel) -> Vec<u8> {
-        let len = match r.code {
-            3 => REG_STMT,
-            1 => TX_STMT,
-            0x81 => TX0_STMT,
-            2 => BURN_STMT,
-            4 | 5 => DISC_STMT,
-            _ => txm_stmt(r.legs, r.aud),
-        };
-        let mut st = vec![0u8; len];
+        let mut st = vec![0u8; stmt_bytes(r)];
         if r.op == crate::OP_TRANSFER || r.op == crate::OP_TRANSFER_MULTI {
             st[HDR_AUDITOR_ON + 31] = r.aud as u8;
         }
@@ -945,6 +944,33 @@ mod tests {
             st[HDR_LEGS + 31] = r.legs as u8;
         }
         st
+    }
+
+    /// fix A (review G-3 / H-4): a statement one byte longer or shorter than its relation's, and a proof over the
+    /// cap, are refused before A, the relation keys or the specialised verifier's tables are built (so before the
+    /// statement is hashed): every cache of the `Ctx` stays empty
+    #[test]
+    fn bad_length_refused_before_caches() {
+        let mut ctx = Ctx::new();
+        let big = vec![0u8; MAX_PROOF + 1];
+        for r in RELS.iter() {
+            let st = zero_stmt(r);
+            let mut long = st.clone();
+            long.push(0);
+            for bad in [&long[..], &st[..st.len() - 1]] {
+                assert!(rel_of(r.op, bad).is_none(), "{} len {}", r.name, bad.len());
+                assert_eq!(ctx.try_verify(r.op, bad, &[]), Ok(false), "{}", r.name);
+                assert_eq!(ctx.prove(r.op, bad, &[], &[0; 32]), Err(Error::Input), "{}", r.name);
+                #[cfg(feature = "sv")]
+                assert_eq!(ctx.try_verify_fast(r.op, bad, &[]), Ok(false), "{}", r.name);
+            }
+            assert_eq!(ctx.try_verify(r.op, &st, &big), Ok(false), "{} proof cap", r.name);
+            #[cfg(feature = "sv")]
+            assert_eq!(ctx.try_verify_fast(r.op, &st, &big), Ok(false), "{} proof cap", r.name);
+        }
+        assert!(ctx.a.is_none() && ctx.keys.iter().all(Option::is_none));
+        #[cfg(feature = "sv")]
+        assert!(ctx.sv.is_none() && ctx.svrel.iter().all(Option::is_none));
     }
 
     /// `build` refuses one non-canonical coefficient (q, `rd_poly`) and one non-canonical header word (a high byte

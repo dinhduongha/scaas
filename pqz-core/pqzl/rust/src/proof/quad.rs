@@ -13,7 +13,7 @@ use crate::rand::grandom::polyvec_grandom;
 use crate::rand::rejection::{rej_onetime, rej_standard, REJ_MAX};
 use crate::rand::rng::Rng;
 use crate::rand::urandom::polyvec_urandom;
-use crate::Error;
+use crate::{Error, Wiped};
 
 /// `_schwartz_zippel_poly`: (R2, r1, r0) = sum_i mu_i (R2_i, r1_i, r0_i), mu = N uniform polys from (hash, 0)
 fn schwartz_zippel_poly(hash: &[u8; 32], eqs: &mut [Eq], p: &Abdlop) -> Result<(Sparse, Sparse, Poly), Error> {
@@ -219,10 +219,11 @@ fn prove(
     let m2r = m2 - km;
     let (q, log2q) = (&p.ring.q, p.ring.log2q);
     let (mut y1, mut y2) = (PolyVec::new(m1)?, PolyVec::new(m2)?);
-    let (mut cs1, mut cs2) = (PolyVec::new(m1)?, PolyVec::new(m2)?);
+    let (mut cs1, mut cs2) = (Wiped(PolyVec::new(m1)?), Wiped(PolyVec::new(m2)?));
     let n = 2 * (m1 + l);
     let (mut r2y, mut tmp, mut tmp2) = (PolyVec::new(n)?, PolyVec::new(n)?, PolyVec::new(l)?);
-    let (mut y, mut s) = (PolyVec::new(n)?, PolyVec::new(n)?);
+    // s, the mask seed and c s1, c s2 are cleared on every exit (Wiped, fix B)
+    let (mut y, mut s) = (PolyVec::new(n)?, Wiped(PolyVec::new(n)?));
     let (mut wv, mut w1, mut w0) = (PolyVec::new(km)?, PolyVec::new(km)?, PolyVec::new(km)?);
 
     // s = (<s1>, <m>)
@@ -234,8 +235,8 @@ fn prove(
     }
 
     let mut st = Rng::new(seed, 0);
-    let mut yseed = [0u8; 32];
-    st.urandom(&mut yseed)?;
+    let mut yseed = Wiped([0u8; 32]);
+    st.urandom(&mut *yseed)?;
     let mut dom = 0u32;
     let mut tries = 0;
     let cseed = loop {

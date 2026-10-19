@@ -115,7 +115,9 @@ fn set_short(f: impl Fn(usize) -> i64) -> Result<PolyVec, Error> {
 
 /// `canonical`: every be8 coefficient < q (pq-zero-knowledge.md §5)
 fn canonical(p: &[u8]) -> bool {
-    p.chunks(8).fold(true, |ok, c| ok & (be8(c) < Q))
+    // chunks_exact: a short last chunk is refused, never passed to be8 (review H-1, fix C)
+    let c = p.chunks_exact(8);
+    c.remainder().is_empty() & c.fold(true, |ok, c| ok & (be8(c) < Q))
 }
 
 /// `cbd8`: CBD_1 samples, their squared norm
@@ -316,4 +318,15 @@ pub(crate) fn dec(s: &[i8; N], ct: &[u8; CT_BYTES]) -> Result<([i64; 16], [i64; 
     }
     crate::wipe(&mut w);
     Ok((m, noise))
+}
+
+#[cfg(test)]
+mod tests {
+    /// fix C: a length that is not a multiple of 8 is not canonical (and does not panic)
+    #[test]
+    fn canonical_short_chunk() {
+        assert!(super::canonical(&[0; 16]));
+        assert!(!super::canonical(&[0; 15]));
+        assert!(!super::canonical(&[0; 7]));
+    }
 }

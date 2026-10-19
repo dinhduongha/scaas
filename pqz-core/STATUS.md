@@ -1354,6 +1354,15 @@ the record.
    `pqz_arena_release` does not clear them. `do_prove` zeroes its seeds, and `pqz_keys.c` its SHAKE state, bit
    buffer and `w`. Zeroing on release (or per call) is open, for P6f / P6h (cost: one memset of the used arena per
    prove).
+   **Rust core, review G/H fix B (2026-10-19, branch `pqzl-fs3-fixad`):** the crate `pqzl` now clears, on every
+   exit (`?` included, a drop guard `Wiped`), the prover's explicit secret copies and mask seeds: `s1`, `s2`, `m`,
+   `t_a2` and the seeds `wh` / `ex` (`rel.rs`), the 96-byte expanded mask seed and the copy `sv` (`proof/tbox.rs`),
+   `s`, `yseed`, `c·s1`, `c·s2` (`proof/quad.rs`). Platform boundary: `wipe` is plain stores plus `black_box`; a
+   volatile write needs `unsafe` (forbidden outside `c-oracle`) and `zeroize` would be a dependency (D1), so the
+   compiler is not bound to keep the stores, and its own copies (moves, register spills, stack temporaries) are
+   never cleared; the masks y and the other intermediates are not cleared. **The C core has the same gap and keeps
+   it here:** `lnp-tbox.c` `expseed[96]`, `lnp-quad.c` `yseed[32]` are not cleared, and the copies `sv`, `s`, `m`,
+   `tA2` live in the arena (above).
 9. ~~**`pqzl/check_symbols.sh` passes when its files are missing**~~ (found in P6e Task 7, run `ffi1`; seen again
    in the reproducibility package, `artifact/runs/art2-docker-quick-1-probe-*`). The script `cd`'d to its own
    directory, so relative paths from elsewhere named nothing; `llvm-nm` errors were lost in the pipe, and the script

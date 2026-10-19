@@ -112,3 +112,23 @@ fn cheating_eq_c() {
         assert_eq!(both(&mut ctx, op, &stmt, &proof), (honest, honest), "{case}");
     }
 }
+
+/// fix A (review G-3 / H-4): a statement one byte longer or shorter than its relation's, and a proof one byte over
+/// the cap, are rejected by both cores and both verifiers (generic and specialised); `rel.rs`
+/// `bad_length_refused_before_caches` and `pqz_sv_diff`'s `bad_length_before_keys` show it happens before any key is
+/// built or the statement hashed
+#[test]
+fn bad_length_eq_c() {
+    use pqzl::c_oracle::c_verify_fast;
+    let mut ctx = Ctx::new();
+    let big = vec![0u8; pqzl::MAX_PROOF + 1];
+    for r in per_code() {
+        let mut long = r.stmt.clone();
+        long.push(0);
+        let cases = [(&long[..], &r.proof[..]), (&r.stmt[..r.stmt.len() - 1], &r.proof[..]), (&r.stmt[..], &big[..])];
+        for (i, (stmt, proof)) in cases.into_iter().enumerate() {
+            assert_eq!(both(&mut ctx, r.op, stmt, proof), (false, false), "{} case {i}", r.name);
+            assert!(!ctx.verify_fast(r.op, stmt, proof) && !c_verify_fast(r.op, stmt, proof), "{} fast case {i}", r.name);
+        }
+    }
+}

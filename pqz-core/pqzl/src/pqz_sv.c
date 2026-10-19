@@ -1334,13 +1334,20 @@ typedef struct
   poly_t c;
 } lzpf_t;
 
+/* |x| as uint64_t: negated after the cast, so INT64_MIN gives 2^63, no signed overflow (review H-3, fix D) */
+static inline uint64_t
+uabs64 (int64_t x)
+{
+  return x < 0 ? -(uint64_t)x : (uint64_t)x;
+}
+
 static uint64_t
 l2_sum (const int64_t *a, unsigned n, uint64_t bnd) /* sum a_i^2 if <= bnd, else bnd + 1; bnd < 2^62, |a_i| < 2^62 */
 {
   uint64_t s = 0;
   for (unsigned i = 0; i < n; i++)
     {
-      uint64_t x = (uint64_t)(a[i] < 0 ? -a[i] : a[i]);
+      uint64_t x = uabs64 (a[i]);
       if (x >= ((uint64_t)1 << 31)) /* x^2 >= 2^62 > bnd */
         return bnd + 1;
       s += x * x;
@@ -1486,7 +1493,7 @@ verify_body (const svrel_t *S, uint8_t op, const uint8_t hash_stmt[32], const ui
   if (!l2_le (z3c, JLR, S->Bz3sqr))
     return 0;
   for (j = 0; j < JLR; j++)
-    if ((uint64_t)(z4c[j] < 0 ? -z4c[j] : z4c[j]) > S->Bz4)
+    if (uabs64 (z4c[j]) > S->Bz4)
       return 0;
   {
     polyvec_t ty3, ty4, tbeta;
@@ -1544,7 +1551,7 @@ verify_body (const svrel_t *S, uint8_t op, const uint8_t hash_stmt[32], const ui
     return 0;
   lz_get (hint, F.hint, km);
   for (j = 0; j < DEG * km; j++)
-    if ((uint64_t)(hint[j] < 0 ? -hint[j] : hint[j]) > S->m)
+    if (uabs64 (hint[j]) > S->m)
       return 0;
 
   /* proof values in the NTT domain */

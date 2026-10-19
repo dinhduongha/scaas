@@ -1,0 +1,63 @@
+{"backend": "native", "init_ms": 85.5, "init_arena": 3116288, "verify": "generic"}
+{"backend": "native", "hedge": true, "seed_bits_diff_witness": 240, "seed_bits_diff_statement": 276, "same_inputs_same_seeds": 1, "same_rnd32_same_proof": 1}
+{"backend": "native", "timing": "R_REG prove", "n": 1, "mean_ms": 478.102, "p50_ms": 478.102, "p99_ms": 478.102, "max_ms": 478.102}
+{"backend": "native", "rel": "R_REG", "proof_bytes_last": 28082, "proof_bytes_max": 28082, "arena_peak": 95502736, "rej_tries_mean": 22.00, "proofs_fnv": "e452684e"}
+{"backend": "native", "arena_resident_end": 10640000}
+{"backend": "native", "fails": 0}
+{"backend": "wasm", "init_ms":233.3,"init_arena":2471136,"verify":"generic"}
+{"backend": "wasm", "timing":"R_REG prove","n":1,"mean_ms":996.064,"p50_ms":996.064,"p99_ms":996.064,"max_ms":996.064}
+{"backend": "wasm", "rel":"R_REG","proof_bytes_last":28082,"proof_bytes_max":28082,"arena_peak":73692688,"proofs_fnv":"e452684e"}
+{"backend": "wasm", "timing":"R_REG verify adversarial","n":6,"mean_ms":119.885,"p50_ms":235.822,"p99_ms":236.613,"max_ms":238.073}
+{"backend": "wasm", "fails":0}
+{"backend": "native", "init_ms": 74.7, "init_arena": 3116288, "verify": "generic"}
+{"backend": "native", "timing": "R_TX prove", "n": 1, "mean_ms": 1199.332, "p50_ms": 1199.332, "p99_ms": 1199.332, "max_ms": 1199.332}
+{"backend": "native", "rel": "R_TX", "proof_bytes_last": 42757, "proof_bytes_max": 42757, "arena_peak": 304231664, "rej_tries_mean": 13.00, "proofs_fnv": "0e177eab"}
+{"backend": "native", "auditor_check": true, "cases": 4, "fails": 0}
+{"backend": "native", "arena_resident_end": 22514368}
+{"backend": "native", "fails": 0}
+{"backend": "wasm", "init_ms":208.6,"init_arena":2471136,"verify":"generic"}
+{"backend": "wasm", "timing":"R_TX prove","n":1,"mean_ms":1748.936,"p50_ms":1748.936,"p99_ms":1748.936,"max_ms":1748.936}
+{"backend": "wasm", "rel":"R_TX","proof_bytes_last":42757,"proof_bytes_max":42757,"arena_peak":231858048,"proofs_fnv":"0e177eab"}
+{"backend": "wasm", "timing":"R_TX verify adversarial","n":6,"mean_ms":414.654,"p50_ms":794.306,"p99_ms":818.273,"max_ms":835.344}
+{"backend": "wasm", "fails":0}
+{"backend": "native", "init_ms": 76.4, "init_arena": 3116288, "verify": "generic"}
+{"backend": "native", "timing": "R_BURN prove", "n": 1, "mean_ms": 1090.285, "p50_ms": 1090.285, "p99_ms": 1090.285, "max_ms": 1090.285}
+{"backend": "native", "rel": "R_BURN", "proof_bytes_last": 41925, "proof_bytes_max": 41925, "arena_peak": 288852560, "rej_tries_mean": 11.00, "proofs_fnv": "4dd09d17"}
+{"backend": "native", "arena_resident_end": 15944032}
+{"backend": "native", "fails": 0}
+{"backend": "wasm", "init_ms":222.1,"init_arena":2471136,"verify":"generic"}
+{"backend": "wasm", "timing":"R_BURN prove","n":1,"mean_ms":1514.706,"p50_ms":1514.706,"p99_ms":1514.706,"max_ms":1514.706}
+{"backend": "wasm", "rel":"R_BURN","proof_bytes_last":41925,"proof_bytes_max":41925,"arena_peak":220429488,"proofs_fnv":"4dd09d17"}
+{"backend": "wasm", "timing":"R_BURN verify adversarial","n":6,"mean_ms":341.504,"p50_ms":665.299,"p99_ms":671.691,"max_ms":675.571}
+{"backend": "wasm", "fails":0}
+{"backend": "native", "init_ms": 74.5, "init_arena": 3116288, "verify": "generic"}
+{"backend": "native", "timing": "R_DS prove", "n": 1, "mean_ms": 627.184, "p50_ms": 627.184, "p99_ms": 627.184, "max_ms": 627.184}
+{"backend": "native", "rel": "R_DS", "proof_bytes_last": 28956, "proof_bytes_max": 28956, "arena_peak": 99757344, "rej_tries_mean": 29.00, "proofs_fnv": "1b067078"}
+{"backend": "native", "arena_resident_end": 10756864}
+{"backend": "native", "fails": 0}
+{"backend": "wasm", "init_ms":209.7,"init_arena":2471136,"verify":"generic"}
+{"backend": "wasm", "timing":"R_DS prove","n":1,"mean_ms":1136.645,"p50_ms":1136.645,"p99_ms":1136.645,"max_ms":1136.645}
+{"backend": "wasm", "rel":"R_DS","proof_bytes_last":28956,"proof_bytes_max":28956,"arena_peak":76888880,"proofs_fnv":"1b067078"}
+{"backend": "wasm", "timing":"R_DS verify adversarial","n":6,"mean_ms":129.203,"p50_ms":251.679,"p99_ms":255.64,"max_ms":259.54}
+{"backend": "wasm", "fails":0}
+{"backend": "native", "init_ms": 75.4, "init_arena": 3116288, "verify": "generic"}
+{"backend": "native", "timing": "R_DR prove", "n": 1, "mean_ms": 338.314, "p50_ms": 338.314, "p99_ms": 338.314, "max_ms": 338.314}
+{"backend": "native", "rel": "R_DR", "proof_bytes_last": 29001, "proof_bytes_max": 29001, "arena_peak": 107735936, "rej_tries_mean": 4.00, "proofs_fnv": "2d0efee5"}
+{"backend": "native", "arena_resident_end": 11362432}
+{"backend": "native", "fails": 0}
+{"backend": "wasm", "init_ms":206.1,"init_arena":2471136,"verify":"generic"}
+{"backend": "wasm", "timing":"R_DR prove","n":1,"mean_ms":512.754,"p50_ms":512.754,"p99_ms":512.754,"max_ms":512.754}
+{"backend": "wasm", "rel":"R_DR","proof_bytes_last":29001,"proof_bytes_max":29001,"arena_peak":82951488,"proofs_fnv":"2d0efee5"}
+{"backend": "wasm", "timing":"R_DR verify adversarial","n":6,"mean_ms":130.988,"p50_ms":257.586,"p99_ms":257.814,"max_ms":260.62}
+{"backend": "wasm", "fails":0}
+{"backend": "native", "init_ms": 81.7, "init_arena": 3116288, "verify": "generic"}
+{"backend": "native", "timing": "R_TX0 prove", "n": 1, "mean_ms": 1560.725, "p50_ms": 1560.725, "p99_ms": 1560.725, "max_ms": 1560.725}
+{"backend": "native", "rel": "R_TX0", "proof_bytes_last": 42420, "proof_bytes_max": 42420, "arena_peak": 298036528, "rej_tries_mean": 35.00, "proofs_fnv": "4695a8b6"}
+{"backend": "native", "auditor_check": true, "cases": 3, "fails": 0}
+{"backend": "native", "arena_resident_end": 22345088}
+{"backend": "native", "fails": 0}
+{"backend": "wasm", "init_ms":209.2,"init_arena":2471136,"verify":"generic"}
+{"backend": "wasm", "timing":"R_TX0 prove","n":1,"mean_ms":2755.439,"p50_ms":2755.439,"p99_ms":2755.439,"max_ms":2755.439}
+{"backend": "wasm", "rel":"R_TX0","proof_bytes_last":42420,"proof_bytes_max":42420,"arena_peak":227275456,"proofs_fnv":"4695a8b6"}
+{"backend": "wasm", "timing":"R_TX0 verify adversarial","n":6,"mean_ms":378.597,"p50_ms":736.801,"p99_ms":745.205,"max_ms":751.003}
+{"backend": "wasm", "fails":0}

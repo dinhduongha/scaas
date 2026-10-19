@@ -1198,27 +1198,50 @@ dr_witness (txst_t *T, const uint8_t *w, polyvec_t s1)
   return 1;
 }
 
-/* the statement of relation R (its length checked); 0 if the statement is malformed */
-static int
-build (sys_t *S, txst_t *T, const rel_t *R, const uint8_t *stmt, size_t stmt_len, polyvec_t pk)
+/* the exact statement length of relation R */
+static size_t
+stmt_bytes (const rel_t *R)
 {
   switch (R->code)
     {
     case PQZ_OP_REGISTER:
-      return stmt_len == PQZ_REG_STMT_BYTES && build_reg (S, stmt, pk);
+      return PQZ_REG_STMT_BYTES;
     case PQZ_OP_TRANSFER:
-      return stmt_len == PQZ_TX_STMT_BYTES && build_debit (S, T, stmt, &TX);
+      return PQZ_TX_STMT_BYTES;
     case PQZ_REL_TX0:
-      return stmt_len == PQZ_TX0_STMT_BYTES && build_debit (S, T, stmt, &TX0);
+      return PQZ_TX0_STMT_BYTES;
     case PQZ_OP_BURN:
-      return stmt_len == PQZ_BURN_STMT_BYTES && build_debit (S, T, stmt, &BURN);
+      return PQZ_BURN_STMT_BYTES;
     case PQZ_OP_DISCLOSE_SENDER:
-      return stmt_len == PQZ_DISC_STMT_BYTES && build_ds (S, T, stmt);
     case PQZ_OP_DISCLOSE_RECEIVER:
-      return stmt_len == PQZ_DISC_STMT_BYTES && build_dr (S, T, stmt);
+      return PQZ_DISC_STMT_BYTES;
+    }
+  return PQZ_TXM_STMT_BYTES (R->legs, R->aud);
+}
+
+/* the statement of relation R (its length checked); 0 if the statement is malformed */
+static int
+build (sys_t *S, txst_t *T, const rel_t *R, const uint8_t *stmt, size_t stmt_len, polyvec_t pk)
+{
+  if (stmt_len != stmt_bytes (R))
+    return 0;
+  switch (R->code)
+    {
+    case PQZ_OP_REGISTER:
+      return build_reg (S, stmt, pk);
+    case PQZ_OP_TRANSFER:
+      return build_debit (S, T, stmt, &TX);
+    case PQZ_REL_TX0:
+      return build_debit (S, T, stmt, &TX0);
+    case PQZ_OP_BURN:
+      return build_debit (S, T, stmt, &BURN);
+    case PQZ_OP_DISCLOSE_SENDER:
+      return build_ds (S, T, stmt);
+    case PQZ_OP_DISCLOSE_RECEIVER:
+      return build_dr (S, T, stmt);
     }
   if (R->op == PQZ_OP_TRANSFER_MULTI)
-    return stmt_len == PQZ_TXM_STMT_BYTES (R->legs, R->aud) && build_debit (S, T, stmt, (rel_t *)R);
+    return build_debit (S, T, stmt, (rel_t *)R);
   return 0;
 }
 
@@ -1239,27 +1262,35 @@ txm_rel (const uint8_t *stmt, size_t stmt_len)
   return NULL;
 }
 
-/* the relation of op; op 1 is R_TX0 with the 66,560-byte statement, else R_TX (whose builder then checks the length);
-   op 7 by its header words */
+/* the relation of op; op 1 is R_TX0 with the 66,560-byte statement, else R_TX; op 7 by its header words. NULL also
+   when the statement is not exactly that relation's length: every entry (prove, verify, verify_fast) checks the length
+   here, before the keys or tables are built and the statement hashed (review G-3 / H-4, fix A) */
 static rel_t *
 rel_of (uint8_t op, const uint8_t *stmt, size_t stmt_len)
 {
+  rel_t *R = NULL;
   switch (op)
     {
     case PQZ_OP_REGISTER:
-      return &REG;
+      R = &REG;
+      break;
     case PQZ_OP_TRANSFER:
-      return stmt_len == PQZ_TX0_STMT_BYTES ? &TX0 : &TX;
+      R = stmt_len == PQZ_TX0_STMT_BYTES ? &TX0 : &TX;
+      break;
     case PQZ_OP_BURN:
-      return &BURN;
+      R = &BURN;
+      break;
     case PQZ_OP_DISCLOSE_SENDER:
-      return &DS;
+      R = &DS;
+      break;
     case PQZ_OP_DISCLOSE_RECEIVER:
-      return &DR;
+      R = &DR;
+      break;
     case PQZ_OP_TRANSFER_MULTI:
-      return txm_rel (stmt, stmt_len);
+      R = txm_rel (stmt, stmt_len);
+      break;
     }
-  return NULL;
+  return R != NULL && stmt_len == stmt_bytes (R) ? R : NULL;
 }
 
 /* witness -> s1 and the l2 slack (upsilon); 0 if the witness is malformed, inconsistent or above a bound */
@@ -1351,7 +1382,7 @@ pqz_verify (uint8_t op, const uint8_t *stmt, size_t stmt_len, const uint8_t *pro
   int ok = 0;
   rel_t *R = rel_of (op, stmt, stmt_len);
 
-  if (!ready || R == NULL)
+  if (!ready || R == NULL || proof_len > PQZ_MAX_PROOF) /* before the keys and the hash (fix A) */
     return 0;
   pqz_err = PQZ_OK;
   pqz_arena_release (&base);
@@ -1384,7 +1415,7 @@ pqz_verify_fast (uint8_t op, const uint8_t *stmt, size_t stmt_len, const uint8_t
   int ok;
   rel_t *R = rel_of (op, stmt, stmt_len);
 
-  if (!ready || R == NULL)
+  if (!ready || R == NULL || proof_len > PQZ_MAX_PROOF) /* before the keys, the tables and the hash (fix A) */
     return 0;
   pqz_err = PQZ_OK;
   pqz_arena_release (&base);
