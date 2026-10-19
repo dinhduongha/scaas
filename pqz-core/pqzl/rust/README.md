@@ -24,8 +24,8 @@ do not edit; `txm16` / `txm160` only with feature `oversize`),
 `pqz_decrypt_raw`; the free functions expand A per call, as there is no `pqz_init`; the `Ctx` methods use the
 `Ctx`'s A), `src/proof/` (the LaZer proof layers the
 relations use, prover and verifier: `abdlop.c`'s keys, commitment and commitment hash, `lnp-quad.c` /
-`lnp-quad-many.c`, `lnp-tbox.c` with the P6-SZ / P6-L2 fixes and the P6-Z21 norm check; only the forms `pqz_rel.c`
-passes), `src/rel.rs` (`pqz_rel.c`: the one relation table, statement parsing, the relation builders, the witness
+`lnp-quad-many.c`, `lnp-tbox.c` with the P6-SZ / P6-L2 fixes, the P6-Z21 norm check and the P6-FS transcript rounds
+of PQZL v3, `hash_z34` and `hash_h` in `proof/tbox.rs`; only the forms `pqz_rel.c` passes), `src/rel.rs` (`pqz_rel.c`: the one relation table, statement parsing, the relation builders, the witness
 parsers, the hedged prover seeds of CTR-PQZ-19, `pqz_prove`'s and `pqz_verify`'s dispatch; A and each relation's
 ABDLOP keys are cached in `Ctx` at first use), `src/sv.rs` (`pqz_sv.c`, feature `sv`: the specialised verifier,
 `pqz_verify_fast`; its prime tables, A in its form and each relation's tables are built in `Ctx` at the relation's
@@ -49,7 +49,9 @@ false: a node must treat it as its own fault, not as an invalid proof; pqz-ffi m
 `keypair_from_secret`, `keygen`, `enc_seed`, `enc_group_seed`, `encrypt`, `decrypt_raw`, `dec`, `test_mutate`
 (feature `test-hooks`). `Ctx::{keygen, keypair_from_secret, encrypt, enc_seed}` take the same arguments and give
 the same results as the free functions, with the `Ctx`'s A (expanded once; for servers that encrypt in bulk).
-`Error { Internal, Input, Reject, Memory }` = the C core's codes 1, 3, 4 and arena exhaustion.
+`Error { Internal, Input, Reject, Memory }` = the C core's codes 1, 3, 4 and arena exhaustion. `PROOF_SYSTEM_ID` =
+`keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v3")` (`0x8079d65b…16baef`, = `PQZ_PROOF_SYSTEM_ID` of `pqz.h`; v2
+retired 2026-10-19, pq-zero-knowledge.md §8).
 `#![no_std]` + `alloc`, `#![forbid(unsafe_code)]` (relaxed to `deny` only for the dev-only `c_oracle` module), no
 floating point.
 
@@ -63,6 +65,12 @@ floating point.
   (the C arena: 312 MB), R_TXM8 prove 115 MB, R_TX verify 63 MB, R_TX verify_fast 11 MB (1.2 MB warm).
 - wasm32: `prove` of op 7 with M > `WASM_MAX_LEGS` (8) is `Error::Input` (= pqz-ffi's `WASM_PQZL_MAX_LEGS` on the
   Rust backend; raised from 4 in Task 12, see "The wasm32 op 7 limit" below; the C backend keeps 4).
+- PQZL v3 (P6-FS, [lazer#28](https://github.com/lazer-crypto/lazer/issues/28)): `proof/tbox.rs` `hash_z34` absorbs
+  `grandom3(z3) ‖ grandom3(z4)` (one `Coder` session over centred copies, the proof's encoding) after `compute_z34` /
+  a successful `check_z34`; the result `hz` seeds V3 / V4 and the tg round, while the JL rows R / R' stay on `cseed`
+  (`sz_z3` / `sz_z4` take both seeds). `hash_h` absorbs `urandom3(h mod q)` before `quad::many_prove` / `many_verify`,
+  the seed of μ and the final challenge. `sv.rs` does the same (`hz` for V3 / V4, `cseed` for the JL rows, μ and the
+  final round from `hash2`). Byte-equal to the C core's `_lnp_tbox_hash_z34` / `_lnp_tbox_hash_h` (run `fs3`).
 - Secrets: the prover's seeds, the witness vector s1, the commitment randomness s2 and `dec`'s w are cleared after
   use (`fill` + `black_box`, where C calls `explicit_bzero`), and the AES-CTR key schedules and SHAKE sponges when
   they are dropped (re-keyed with zeros / replaced by an empty sponge, where C calls `_aes256ctr_clear` /
@@ -75,12 +83,20 @@ floating point.
 |---|---|
 | `sv` (default) | the specialised verifier, `Ctx::verify_fast` |
 | `oversize` | R_TXM with M = 16 (bench only) |
-| `test-hooks` | `test_mutate`, the `testkit` module (`kat_dump`, `keys_kat`); with `c-oracle` the C core is built with `-DPQZ_TEST_HOOKS` |
+| `test-hooks` | `test_mutate` (kind 14, z3 ± 1, for the P6-FS test), `fs_trace_take` (below), the `testkit` module (`kat_dump`, `keys_kat`); with `c-oracle` the C core is built with `-DPQZ_TEST_HOOKS` |
 | `bench` | the `bench` module (`src/bin/bench.rs`, `wasm/`) |
 | `wasm-m8` | bench builds only (implies `bench`): `WASM_MAX_LEGS` = `TXM_MAX_LEGS`, so wasm32 proves op 7 with M = 16 with `oversize` (without it, 8 = the default since Task 12; the D6 measurement of the limit was built with it), never in a production build |
 | `c-oracle` | dev / test only: `build.rs` compiles the C core (`../src ../lazer ../params`, build.sh's flags) plus the test entry points `tests/oracle_shim.c`, and `c_oracle::{c_prove, c_verify, c_verify_fast, c_keygen, c_enc_seed, c_dec, c_keypair_from_secret, c_encrypt, c_decrypt_raw, c_enc_group_seed, c_test_mutate}` and the layer wrappers (`c_ntt_*`, `c_polyvec_ops`, `c_int_ops`, the samplers' `c_rng` .. `c_autostable`, `c_params`, `c_ghint`) call them |
 
 A default build compiles no C and has neither test entry points nor the bench.
+
+`fs_trace_take() -> Vec<(u8, [u8; 32], u64)>` (feature `test-hooks`) is the P6-FS trace, the Rust side of the C core's
+`pqz_sz_trace_fn` under `-DPQZ_SZ_TRACE`: `(kind, seed, dom)` for each Fiat–Shamir challenge of this thread's
+`prove` / `verify` / `verify_fast`, kind 2 / 3 = the seed and domain of V4 / V3, kind 5 = the seed of μ (generic code:
+also of the final challenge), and `sv.rs` records kind + 10 (12 / 13 / 15). It returns the records since the last
+call and clears them. The recorder (`fstrace`, a `thread_local!` vector) is **off until the thread's first
+`fs_trace_take`**, which returns nothing, so other `test-hooks` builds (`pqz-ffi`'s `fuzz`, the fault hooks) never
+record; a record whose allocation fails is dropped, and the test counts a missing record as a failure.
 
 ## Checks
 
@@ -93,6 +109,9 @@ re-encodes every PQZL proof to itself, re-proves every PQZL proof from its witne
 refuses non-canonical statements in `prove`, verifies every PQZL proof, rejects every PQZL row of negative.json and the
 cheating provers' proofs of `check_tbox_fixes.sh` and of `tests/fixtures/cheating/z34poc.sh` (z3 / z4 over their bounds;
 `tests/fixtures/cheating`, exported once by its `export.sh`),
+`tests/fs_bind.rs` the P6-FS binding test (as `pqzl/sz/fs_bind.c`: one honest R_REG proof and its h- (kind 7), z3-
+(kind 14) and z4-changed (kind 5 at the bound) re-encodings; in `verify` and `verify_fast` the V3 / V4 seeds change
+with z3 and z4 and the μ seed with h, 12 checks, a missing record fails; observation only),
 `tests/oracle_verify.rs` `verify` = `pqz_verify` on those, on out-of-range challenges and on `test_mutate` outputs
 (`PQZL_MUTATED_N`, default 280), `tests/oracle_prove.rs` `prove` = `pqz_prove` (bytes or error code) on honest and
 altered witnesses of every relation code, `tests/oracle_keys.rs` keys, Enc and Dec against C, `tests/oracle_codec.rs`
