@@ -28,7 +28,7 @@ use crate::arith::polyvec::{self, PolyVec};
 use crate::coder::decode_proof;
 use crate::keys::be8;
 use crate::params::Tbox;
-use crate::proof::{abdlop, hash2, Coder};
+use crate::proof::{abdlop, hash2, tbox, Coder};
 use crate::rand::rng::Rng;
 use crate::rand::urandom::urandom_i64;
 use crate::rel::{self, Rel, RELS};
@@ -1312,6 +1312,10 @@ fn verify_body(ar: &Ar, s: &SvRel, code: u8, hash_stmt: &[u8; 32], stmt: &[u8], 
         }
         hash2(&hash, &c.end()?)
     };
+    // P6-FS (lazer#28, PQZL v3): hz = H(hash0 || grandom3(z3) || grandom3(z4)), the seed of V3 / V4 (g0) and of the
+    // tg round; the JL rows R / R' stay on hash0 (the prover's cseed, which z3 / z4 depend on)
+    let mut hz = hash0;
+    tbox::hash_z34(&mut hz, &f.z3, &f.z4, p)?;
     // h: coefficients 0 and d/2 are zero
     lz_get(&mut hc, &f.h);
     for i in 0..LAMBDA / 2 {
@@ -1324,8 +1328,12 @@ fn verify_body(ar: &Ar, s: &SvRel, code: u8, hash_stmt: &[u8; 32], stmt: &[u8], 
         let mut tg = f.t_b.sub(NQEL, LAMBDA / 2, 1);
         polyvec::mod_self(&mut tg);
         polyvec::redp_self(&mut tg);
-        hash_enc(&hash0, &mut tg)?
+        hash_enc(&hz, &mut tg)?
     };
+    // P6-FS (lazer#28, PQZL v3): hash2 = H(hash1 || urandom3(h mod q)), the seed of mu and of the final round (the
+    // gamma challenges stay on hash1)
+    let mut h2 = hash1;
+    tbox::hash_h(&mut h2, &f.h, p)?;
 
     // checks that need only the proof (lnp_quad_verify checks them after the challenge; any order gives the same
     // accept / reject): ||z1||^2, ||hint||_inf
@@ -1382,7 +1390,7 @@ fn verify_body(ar: &Ar, s: &SvRel, code: u8, hash_stmt: &[u8; 32], stmt: &[u8], 
     let cbm = nt_mul(&wc, &bm_, pr);
 
     // challenges: the PRG seeds
-    let (g0, g1) = (&hash0, &hash1);
+    let (g0, g1, g2) = (&hz, &hash1, &h2);
 
     // ---- the evaluation-equation polynomials that do not depend on the challenges ----
     // upsilon: sum_j o(u_j) (u_j - c J)   (Z <= 43 terms with X-1: |.| < 43 * 2^91)
@@ -1426,7 +1434,7 @@ fn verify_body(ar: &Ar, s: &SvRel, code: u8, hash_stmt: &[u8; 32], stmt: &[u8], 
         pke[k] = ar.fwd(&ar.red(&acc));
     }
 
-    // ---- z3 / z4 (JL) rows: V from (hash0, dom), R / R' rows from (hash0, i) / (hash0, 256 + i) ----
+    // ---- z3 / z4 (JL) rows: V from (hz, dom), R / R' rows from (hash0, i) / (hash0, 256 + i) ----
     let mut v3 = vz(1, [[0u64; JLR]; LAMBDA])?;
     let mut v4 = vz(1, [[0u64; JLR]; LAMBDA])?;
     let (v3, v4) = (&mut v3[0], &mut v4[0]);
@@ -1466,7 +1474,7 @@ fn verify_body(ar: &Ar, s: &SvRel, code: u8, hash_stmt: &[u8; 32], stmt: &[u8], 
         }
 
         // z4: inv2 X^32 W4_k o(s_D) (o(beta) - beta) + c sum_i V4_k,i o(y4_i) - <z4, V4_k> c^2
-        jl_fold(&mut vr, DEG, v4, g0, 256, &mut rows)?;
+        jl_fold(&mut vr, DEG, v4, &hash0, 256, &mut rows)?;
         for k in 0..LAMBDA {
             let mut a = [0i64; DEG];
             for j in 0..DEG {
@@ -1488,7 +1496,7 @@ fn verify_body(ar: &Ar, s: &SvRel, code: u8, hash_stmt: &[u8; 32], stmt: &[u8], 
             acc_scal(&mut ga[k], &wc2, sk, true, pr);
         }
         // z3: inv2 (beta + o(beta)) sum_p o(s_p) W3_k,col(p) + c sum_i V3_k,i o(y3_i) - <z3, V3_k> c^2
-        jl_fold(&mut vr, s.nex * DEG, v3, g0, 0, &mut rows)?;
+        jl_fold(&mut vr, s.nex * DEG, v3, &hash0, 0, &mut rows)?;
         for k in 0..LAMBDA {
             let mut col = 0;
             let mut acc = ACC0; // nex <= 426 terms (R_TXM, 16 legs, X-1 blocks): |.| < 426 2^90
@@ -1629,10 +1637,10 @@ fn verify_body(ar: &Ar, s: &SvRel, code: u8, hash_stmt: &[u8; 32], stmt: &[u8], 
     // ---- lnp_quad_many_verify / lnp_quad_verify: v = sum_k mu_k E_k(z) - f, grouped by the power of c ----
     let (mut qa, mut la, mut ra) = (ACC0, ACC0, ACC0);
     #[cfg(feature = "test-hooks")]
-    crate::fstrace::rec(15, g1, 0); // the seed of mu
+    crate::fstrace::rec(15, g2, 0); // the seed of mu
     for k in 0..ntot {
         let mut mu = [0u64; DEG];
-        urandom_q(&mut mu, g1, (k + 1) as u64)?; // polyvec_urandom (mu, q, log2q, hash, 0)
+        urandom_q(&mut mu, g2, (k + 1) as u64)?; // polyvec_urandom (mu, q, log2q, hash, 0)
         let mut a = [0i64; DEG];
         for j in 0..DEG {
             a[j] = mu[j] as i64;
@@ -1712,7 +1720,7 @@ fn verify_body(ar: &Ar, s: &SvRel, code: u8, hash_stmt: &[u8; 32], stmt: &[u8], 
         }
     }
 
-    // ---- final round: c' = H(hash1 || t || v || w1) must give c ----
+    // ---- final round: c' = H(hash2 || t || v || w1) must give c ----
     {
         let mut w1v = PolyVec::new(km)?;
         for (i, x) in w1v.iter_mut().enumerate() {
@@ -1727,7 +1735,7 @@ fn verify_body(ar: &Ar, s: &SvRel, code: u8, hash_stmt: &[u8; 32], stmt: &[u8], 
         c.urandom(&mut tt, &crate::arith::poly::RING_Q, 42)?;
         c.urandom(core::slice::from_mut(&mut vv), &crate::arith::poly::RING_Q, 42)?;
         c.urandom(&mut *w1v, &Int::from_i64(1, s.dm as i64), s.log2m)?;
-        let cseed = hash2(&hash1, &c.end()?);
+        let cseed = hash2(g2, &c.end()?);
         let mut c2 = Poly::urandom_autostable(8, 5, &cseed, 0)?;
         if !Poly::eq(&mut f.c, &mut c2) {
             return Ok(false);

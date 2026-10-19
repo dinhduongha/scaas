@@ -312,6 +312,29 @@ fn check_z34(hash: &mut [u8; 32], z3: &mut PolyVec, z4: &mut PolyVec, t_b: &mut 
     Ok(true)
 }
 
+/// P6-FS (lazer#28, PQZL v3): hash = H(hash || grandom3(z3) || grandom3(z4)), one coder session over centred copies
+/// (`encproof`'s encoding), after `compute_z34` / a successful `check_z34`: the seed of V3 / V4 and of the tg round
+pub(crate) fn hash_z34(hash: &mut [u8; 32], z3: &PolyVec, z4: &PolyVec, p: &Tbox) -> Result<(), Error> {
+    let mut enc = Coder::new();
+    enc.grandom(z3, p.log2stdev3)?;
+    enc.grandom(z4, p.log2stdev4)?;
+    *hash = hash2(hash, &enc.end()?);
+    Ok(())
+}
+
+/// P6-FS (lazer#28, PQZL v3): hash = H(hash || urandom3(h mod q in [0, q))) (`encproof`'s encoding of h, on a copy),
+/// before `quad::many_prove` / `many_verify`: the seed of mu and of the final challenge
+pub(crate) fn hash_h(hash: &mut [u8; 32], h: &PolyVec, p: &Tbox) -> Result<(), Error> {
+    let mut hr = PolyVec::new(h.len())?;
+    for (r, x) in hr.iter_mut().zip(h.iter()) {
+        *r = crate::coder::reduced(x, false);
+    }
+    let mut enc = Coder::new();
+    enc.urandom(&mut *hr, &p.tbox.ring.q, p.tbox.ring.log2q)?;
+    *hash = hash2(hash, &enc.end()?);
+    Ok(())
+}
+
 /// the coefficients of the polys `v` (z3 or z4: 256 of them)
 fn coeffs(v: &mut PolyVec) -> Result<Vec<Int>, Error> {
     let mut r = Vec::new();
@@ -364,7 +387,7 @@ fn vr_polys(v: &[Vec<i64>], ncols: usize, seed: &[u8; 32], roff: u64) -> Result<
 /// The z4 equations (approximate l_inf proof): per row k of V (lambda x 256), y4 - z4 + beta4 (V R' Ds) s1 = 0,
 /// pre-multiplied into accumulator k / 2 of the pair k % 2
 #[allow(clippy::too_many_arguments)]
-fn sz_z4(a1: &mut [Acc], a2: &mut [Acc], ods: &mut PolyMat, z4: &mut PolyVec, seed: &[u8; 32], dom: u32, p: &Tbox) -> Result<(), Error> {
+fn sz_z4(a1: &mut [Acc], a2: &mut [Acc], ods: &mut PolyMat, z4: &mut PolyVec, seed: &[u8; 32], rseed: &[u8; 32], dom: u32, p: &Tbox) -> Result<(), Error> {
     let tb = p.tbox;
     let (z, m1) = (p.z as usize, (tb.m1 - p.z) as usize);
     let (loff3, loff4) = (if p.nex > 0 { 256 / D } else { 0 }, if p.nprime > 0 { 256 / D } else { 0 });
@@ -375,7 +398,7 @@ fn sz_z4(a1: &mut [Acc], a2: &mut [Acc], ods: &mut PolyMat, z4: &mut PolyVec, se
     let n_ = 2 * (tb.m1 + p.quad_eval.quad_eval.l) as usize;
     let v = intmat_urandom(lambda, seed, dom)?;
     let z4_ = coeffs(z4)?;
-    let mut vrpol = vr_polys(&v, p.nprime as usize * D, seed, 256)?;
+    let mut vrpol = vr_polys(&v, p.nprime as usize * D, rseed, 256)?;
     let mut vrds = PolyMat::new(lambda, m1)?;
     for k in 0..lambda {
         polyvec::mul2(&mut vrds.row(k), &mut vrpol.row(k), ods);
@@ -424,6 +447,7 @@ fn sz_z3(
     ops: Option<&mut PolyMat>,
     z3: &mut PolyVec,
     seed: &[u8; 32],
+    rseed: &[u8; 32],
     dom: u32,
     p: &Tbox,
 ) -> Result<(), Error> {
@@ -438,7 +462,7 @@ fn sz_z3(
     let n_ = 2 * (tb.m1 + p.quad_eval.quad_eval.l) as usize;
     let v = intmat_urandom(lambda, seed, dom)?;
     let z3_ = coeffs(z3)?;
-    let mut vrpol = vr_polys(&v, nex * D, seed, 0)?;
+    let mut vrpol = vr_polys(&v, nex * D, rseed, 0)?;
     let mut vrps = PolyMat::new(lambda, m1)?;
     let has_ps = ops.is_some();
     if let Some(ops) = ops {
@@ -570,7 +594,8 @@ fn beta_eqs(p: &Tbox) -> Result<[Eq; 2], Error> {
 
 /// The Schwartz–Zippel accumulation, prover and verifier alike (C: from `__schwartz_zippel_accumulate2` of the
 /// relation's evaluation equations to `__schwartz_zippel_auto`): the relation's equations, then the norm proofs'
-/// internal ones (beta3, beta4, upsilon, binary, exact l2 with P6-L2's domain per block, z4, z3)
+/// internal ones (beta3, beta4, upsilon, binary, exact l2 with P6-L2's domain per block, z4, z3). `hash0` = hz seeds
+/// V3 / V4, `cseed` (the round over ty3, ty4, tbeta) the JL rows R / R' (P6-FS, lazer#28)
 #[allow(clippy::too_many_arguments)]
 fn accumulate_all(
     a1: &mut [Acc],
@@ -581,6 +606,7 @@ fn accumulate_all(
     z4: &mut PolyVec,
     hash: &[u8; 32],
     hash0: &[u8; 32],
+    cseed: &[u8; 32],
     p: &Tbox,
 ) -> Result<(), Error> {
     let tb = p.tbox;
@@ -687,12 +713,12 @@ fn accumulate_all(
     if nprime > 0 {
         #[cfg(feature = "test-hooks")]
         crate::fstrace::rec(2, hash0, (mm + 2 * (dd - 1) + 2 + z as u32) as u64);
-        sz_z4(a1, a2, &mut au.ods, z4, hash0, mm + 2 * (dd - 1) + 2 + z as u32, p)?;
+        sz_z4(a1, a2, &mut au.ods, z4, hash0, cseed, mm + 2 * (dd - 1) + 2 + z as u32, p)?;
     }
     if nex > 0 {
         #[cfg(feature = "test-hooks")]
         crate::fstrace::rec(3, hash0, (mm + 2 * (dd - 1) + 2 + z as u32 + 256) as u64);
-        sz_z3(a1, a2, &mut au.oes, au.ops.as_mut(), z3, hash0, mm + 2 * (dd - 1) + 2 + z as u32 + 256, p)?;
+        sz_z3(a1, a2, &mut au.oes, au.ops.as_mut(), z3, hash0, cseed, mm + 2 * (dd - 1) + 2 + z as u32 + 256, p)?;
     }
     for (x, y) in a1.iter_mut().zip(a2.iter_mut()) {
         sz_auto(x, y, qe)?;
@@ -752,6 +778,8 @@ pub(crate) fn verify(hash: &mut [u8; 32], f: &mut ProofParts, keys: &mut [PolyMa
     if !check_z34(hash, &mut f.z3, &mut f.z4, &mut f.t_b, p)? {
         return Ok(false);
     }
+    let cseed = *hash;
+    hash_z34(hash, &f.z3, &f.z4, p)?;
     let hash0 = *hash;
     for h in f.h.iter_mut() {
         if !(h.get_coeff(0).eqzero() && h.get_coeff(D / 2).eqzero()) {
@@ -765,11 +793,12 @@ pub(crate) fn verify(hash: &mut [u8; 32], f: &mut ProofParts, keys: &mut [PolyMa
     enc.urandom(&mut tg, q, log2q)?;
     *hash = hash2(hash, &enc.end()?);
 
-    accumulate_all(&mut a1, &mut a2, s, &mut au, &mut f.z3, &mut f.z4, hash, &hash0, p)?;
+    accumulate_all(&mut a1, &mut a2, s, &mut au, &mut f.z3, &mut f.z4, hash, &hash0, &cseed, p)?;
     for (i, a) in a1.iter_mut().enumerate() {
         finish(a, &mut f.h[i], i, p)?;
     }
     let mut eqs = quad_eqs(a1, beta, &mut s.quad, p, true)?;
+    hash_h(hash, &f.h, p)?;
     let o = Opening { c: &mut f.c, z1: &mut f.z1, z21: &mut f.z21, hint: &mut f.hint, t_a1: &mut f.t_a1, t_b: &mut f.t_b };
     #[cfg(feature = "test-hooks")]
     crate::fstrace::rec(5, hash, 0);
@@ -1036,6 +1065,8 @@ pub(crate) fn prove(
 
     let mut au = autos(s, p)?;
     compute_z34(hash, f, s1, m, s2, &mut keys[2], s, seed_rej34)?;
+    let cseed = *hash;
+    hash_z34(hash, &f.z3, &f.z4, p)?;
     let hash0 = *hash;
 
     // s = (<s1>, <m>, <y3>, <y4>, <beta>) (and <g> before the last check)
@@ -1070,7 +1101,7 @@ pub(crate) fn prove(
 
     let (mut a1, mut a2) = accs(p)?;
     let beta = beta_eqs(p)?;
-    accumulate_all(&mut a1, &mut a2, s, &mut au, &mut f.z3, &mut f.z4, hash, &hash0, p)?;
+    accumulate_all(&mut a1, &mut a2, s, &mut au, &mut f.z3, &mut f.z4, hash, &hash0, &cseed, p)?;
 
     // h_i = g_i + the accumulated evaluation i (coefficients 0 and d/2 zero), then the quadratic equations
     for (i, a) in a1.iter_mut().enumerate() {
@@ -1092,6 +1123,7 @@ pub(crate) fn prove(
     }
 
     let mut eqs = quad_eqs(a1, beta, &mut s.quad, p, false)?;
+    hash_h(hash, &f.h, p)?;
     #[cfg(feature = "test-hooks")]
     crate::fstrace::rec(5, hash, 0);
     quad::many_prove(hash, f, quad::Secret { s1, m, s2, t_a2 }, keys, &mut eqs, seed_cont2, p.quad_eval.quad_many)

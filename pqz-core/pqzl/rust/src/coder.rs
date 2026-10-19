@@ -316,14 +316,14 @@ impl Wr {
 }
 
 /// `poly_fromcrt`, `poly_mod`, then `poly_redc` / `poly_redp` (`encproof`'s reductions, on a copy)
-fn reduced(a: &Poly, centred: bool) -> Poly {
+pub(crate) fn reduced(a: &Poly, centred: bool) -> Poly {
     let mut t = a.clone();
     let mut t = Poly::mod_(&mut t);
     if centred { Poly::redc(&mut t) } else { Poly::redp(&mut t) }
 }
 
 /// `coder_enc_grandom`'s split of z: (z0 in [-ao/2, ao/2), z1) with z = ao z1 + z0, ao = 2^la
-fn split(z: i64, la: u32) -> (i64, i64) {
+pub(crate) fn split(z: i64, la: u32) -> (i64, i64) {
     let ao = 1i64 << la;
     let mut z0 = z & (ao - 1); // z - (z & (~0 << la))
     if z0 >= ao / 2 {
@@ -333,7 +333,7 @@ fn split(z: i64, la: u32) -> (i64, i64) {
 }
 
 /// the unary length of z1 (`nones`)
-fn nones(z1: i64) -> u64 {
+pub(crate) fn nones(z1: i64) -> u64 {
     if z1 <= 0 { (-2 * z1) as u64 } else { (2 * z1 - 1) as u64 }
 }
 
