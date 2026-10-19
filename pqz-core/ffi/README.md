@@ -122,10 +122,13 @@ reserved, not touched, until the core uses them.
   reserved fallibly). Inside the Rust PQZL core, every buffer that scales with the input is reserved fallibly: a
   verifier that cannot allocate gives `Error::Memory` (`pqzl::Ctx::try_verify_fast` / `try_verify`), which is a node
   fault (status 4), as the C backend's arena exhaustion, never `…00`; `prove` returns code 2.
+- The C backend's arena exhaustion is graceful (status 4) only in the specialised verifier's own allocations; an
+  allocation inside LaZer (A, a relation's keys, the prover, the generic verifier) that does not fit stops the process
+  with a trap, before anything is written (review round 2, Q-C; the arenas are sized from measurement with margin).
 
 The test hooks (feature `test-hooks`, never in a production build: `pqzl::TEST_FAIL_WORKER` for both backends; the C
-backend's `TEST_ARENA_BYTES`, `TEST_ARENA_FILL`, `reinit`, `arena_bytes`) inject the faults (`tests/fault.rs`, in its
-own process).
+backend's `TEST_ARENA_BYTES`, `TEST_ARENA_FILL`, `reinit`, `arena_bytes`; the Rust backend's `TEST_PANIC`, `drop_ctx`)
+inject the faults (`tests/fault.rs`, in its own process, with a denying allocator for the Rust backend).
 
 **Integration.** The C ABI needs no lock from the caller and at most 1 MiB of the caller's stack. A wasm32 wallet that
 embeds the `prove` feature must link with an 8 MiB stack (`-zstack-size=8388608`, as in `wasm/.cargo/config.toml`):
@@ -190,8 +193,9 @@ node wasm/run_wasm.mjs wasm/target/wasm32-unknown-unknown/release/pqz_ffi_wasm.w
 - the self-test (A digest = `pqz_kat.py`'s), and that the compiled-in self-test proofs equal a fresh prove;
 - the precompile path on a 1 MiB caller stack;
 - node faults (`tests/fault.rs`): a failing worker (both backends) and an 18 MiB fixed arena (C backend) give status
-  4 with `out` untouched; at the same fixed size a fresh C core verifies `R_REG` after the fault; everything verifies
-  again afterwards;
+  4 with `out` untouched; at the same fixed size a fresh C core verifies `R_REG` after the fault; Rust backend: a
+  denied `Ctx` allocation and denied cache allocations (≥ 1 MiB, `Error::Memory`) give status 4, a panic in the core
+  (hook `TEST_PANIC`) gives `…00` / status 3; everything verifies again afterwards;
 - the digest lines (the native half of the native = wasm32 byte-equality check).
 
 **What `tests/verify_only.rs` covers** — the production configuration: a fresh process that never proves (C backend:
@@ -201,7 +205,8 @@ on the 512 MiB arena), with its inputs made by a child process.
   inputs of the abort-freedom generator (random, random-proof and edited inputs).
 - The generator again from 8 threads and on a 1 MiB caller stack, then 5,000 repeated mixed calls.
 - Expected: identical results, no status 3 or 4, only the unedited honest inputs valid; C backend: `arena_used()`
-  constant after every call and `arena_peak()` constant.
+  constant after every call and `arena_peak()` constant; Rust backend: the process heap (a counting allocator in the
+  test) within 4 KiB of its value before the 5,000 calls after every one of them, their peak at most the warm-up's.
 - C backend: arenas filled with 0x00 / 0xA5 / 0x5A before `pqz_init` (in child processes) give identical digest lines
   and corpus results (the Rust core has no arena and no uninitialised memory).
 
