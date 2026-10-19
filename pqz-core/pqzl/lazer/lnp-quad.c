@@ -271,8 +271,8 @@ lnp_quad_prove (uint8_t hash[32], polyvec_t tB, poly_t c, polyvec_t z1,
             rej = rej_standard (rngstate, z2coeffs, cs2coeffs, params->scM2,
                                 params->stdev2sqr);
           if (params->rej2 == 2)
-            rej = rej_bimodal (rngstate, z2coeffs, cs2coeffs, params->scM2,
-                               params->stdev1sqr);
+            rej = rej_onetime (rngstate, z2coeffs, cs2coeffs, params->scM2, /* PQZ (P6-D2): Rej1, sigma2 */
+                               params->stdev2sqr); /* upstream: rej_bimodal with stdev1sqr (review D-2) */
           if (rej)
             {
               DEBUG_PRINTF (DEBUG_PRINT_REJ, "%s", "reject compr");

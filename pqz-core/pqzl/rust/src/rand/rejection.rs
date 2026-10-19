@@ -1,6 +1,7 @@
 //! `rejection.c`: the PQZ rejection tests (integer-only, `fixexp`), on scM = round(M * 2^128) and sigma2 = sigma^2:
 //!   standard: accept iff u < exp((<v,v> - 2<z,v>) / (2 sigma^2)) / M
 //!   bimodal:  accept iff u < 1 / (M exp(-<v,v> / (2 sigma^2)) cosh(<z,v> / sigma^2))
+//!   onetime:  reject if <z,v> < 0, else the standard test (Rej1 of LNP22 / LNS21, one-time commitments)
 //! with u a 64-bit uniform word from the caller's stream (one per test). `Ok(true)` = reject, as C's 1. C's `ERR`s
 //! (an input of 2^126 or more, mismatched vectors) set the sticky internal error and carry on: `Error::Internal`.
 //! `t2 - 2 t1`, `t - ln M` and `a - |y| - ln M` saturate (`saturating_sub`; C `pqz_sat_sub64` / `pqz_sat_sub128`):
@@ -100,9 +101,54 @@ pub(crate) fn rej_bimodal(st: &mut Rng, z: &IntVec, v: &IntVec, scm: &Int, sigma
     Ok(!bernoulli_fp(uw, m1, e1))
 }
 
+/// `rej_onetime` (PQZ P6-D2, review D-2: Rej1 for z2, rej2 == 2): always one u, as `rej_standard`, also when the sign
+/// test rejects, so the stream does not depend on the verdict (C = Rust parity); the sign is read without a branch
+pub(crate) fn rej_onetime(st: &mut Rng, z: &IntVec, v: &IntVec, scm: &Int, sigma2: &Int) -> Result<bool, Error> {
+    let (t1, _) = dots(z, v)?;
+    let neg = (t1 >> 127) != 0;
+    Ok(rej_standard(st, z, v, scm, sigma2)? | neg)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// pqz_ub_test.c part a's `test_onetime` (P6-D2), same inputs: R_REG's scM2 / stdev2sq, z = y + v with y from
+    /// `grandom(12, seed, s + 1)`, v = -1100, 1100, ... (||v||^2 below 2 sigma2^2 ln M2). onetime = standard | (<z,v> < 0)
+    /// with the same stream offset afterwards; acceptance rate 1/(2 M2) to 5 standard errors of 2^16 samples
+    /// (|rate - p| <= 5 sqrt(p (1 - p) / n) ~ 0.0074; fixed seeds, so it only guards the expected value). The counts
+    /// equal the C test's (11624 accepted, 5438 with <z,v> < 0, 5417 of them accepted by rej_standard).
+    #[test]
+    fn onetime_rej1() {
+        use crate::params::reg::{pqz_reg_scm2, pqz_reg_stdev2sq};
+        use crate::rand::grandom::grandom;
+        const N: usize = 64;
+        const S: u32 = 1 << 16;
+        let seed: [u8; 32] = core::array::from_fn(|i| if i == 0 { 9 } else { 0 });
+        let (mut ra, mut rb) = (Rng::new(&seed, 0), Rng::new(&seed, 0));
+        let vv: [i64; N] = core::array::from_fn(|i| if i & 1 == 1 { 1100 } else { -1100 });
+        let mut v = IntVec::new(N, 1).unwrap();
+        v.set_i64(&vv);
+        let (mut y, mut z) = ([0i64; N], IntVec::new(N, 1).unwrap());
+        let (mut acc, mut neg, mut negstd) = (0u32, 0u32, 0u32);
+        for s in 0..S {
+            grandom(&mut y, 12, &seed, s as u64 + 1).unwrap();
+            let zz: [i64; N] = core::array::from_fn(|i| y[i] + vv[i]);
+            z.set_i64(&zz);
+            let n = zz.iter().zip(&vv).map(|(a, b)| (a * b) as i128).sum::<i128>() < 0;
+            let r1 = rej_onetime(&mut ra, &z, &v, &pqz_reg_scm2, &pqz_reg_stdev2sq).unwrap();
+            let r0 = rej_standard(&mut rb, &z, &v, &pqz_reg_scm2, &pqz_reg_stdev2sq).unwrap();
+            assert_eq!(r1, r0 | n, "sample {s}");
+            neg += n as u32;
+            negstd += (n && !r0) as u32;
+            acc += !r1 as u32;
+        }
+        assert_eq!(ra.u64(), rb.u64(), "same stream offset");
+        let m2 = pqz_reg_scm2.l[2] as f64 + pqz_reg_scm2.l[1] as f64 / 18446744073709551616.0;
+        let (p, rate) = (1.0 / (2.0 * m2), acc as f64 / S as f64);
+        assert!((rate - p).abs() <= 5.0 * (p * (1.0 - p) / S as f64).sqrt(), "rate {rate} vs 1/(2 M2) {p}");
+        assert_eq!((acc, neg, negstd), (11624, 5438, 5417), "= the C test's counts");
+    }
 
     /// pqz_ub_test.c part a's rejection cases: exponents near +-2^63, the verdict on 64 draws of u (scM = 1.5 2^128,
     /// sigma^2 = 2^20); below -2^63 saturates and rejects, num above 2^127 saturates and accepts

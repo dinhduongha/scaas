@@ -1652,8 +1652,9 @@ _lnp_tbox_compute_z34 (uint8_t hash[32], polyvec_t tB, polyvec_t z3,
           break;
         }
       pqz_rej_tries++;
-      /* sample signs */
-      if (nrbits == 0)
+      /* sample signs (PQZ (P6-D3): refill when fewer than the two bits beta3 and beta4 need are left; upstream refilled
+         at 0 and beta4 read bit 8 - nrbits + 1: bit 8 (always 0, beta4 = +1) on every fourth attempt, review D-3) */
+      if (nrbits < 2)
         {
           rng_urandom (rstate_signs, &rbits, 1);
           nrbits = 8;
@@ -1693,7 +1694,7 @@ _lnp_tbox_compute_z34 (uint8_t hash[32], polyvec_t tB, polyvec_t z3,
           polyvec_mod (ty4, ty4);
           polyvec_redp (ty4, ty4);
 
-          beta4 = (rbits & (1 << (8 - nrbits + 1))) >> (8 - nrbits + 1);
+          beta4 = (rbits & (1 << (8 - nrbits))) >> (8 - nrbits); /* PQZ (P6-D3): the next unused bit */
           beta4 = 1 - 2 * beta4; /* {0,1} -> {1,-1} */
 
           // printf ("beta4 %d\n", beta4);
@@ -1850,6 +1851,7 @@ _lnp_tbox_compute_z34 (uint8_t hash[32], polyvec_t tB, polyvec_t z3,
   polyvec_set (z4, z4_);
 
   /* cleanup */
+  explicit_bzero (&rbits, sizeof (rbits)); /* PQZ (P6-D3): secret signs */
   rng_clear (rstate_signs);
   rng_clear (rstate_rej);
   polyvec_free (s3);

@@ -942,7 +942,8 @@ fn compute_z34(
             return Err(Error::Reject);
         }
         tries += 1;
-        if nrbits == 0 {
+        // P6-D3 (review D-3): refill when fewer than the two bits beta3 and beta4 need are left (upstream: at 0)
+        if nrbits < 2 {
             signs.urandom(core::slice::from_mut(&mut rbits))?;
             nrbits = 8;
         }
@@ -967,7 +968,7 @@ fn compute_z34(
             polyvec::addmul(&mut ty4, &mut bp.sub(l + oy4, 0, w, m2r, 1, 1), &mut s2.sub(0, m2r, 1), false);
             polyvec::mod_self(&mut ty4);
             polyvec::redp_self(&mut ty4);
-            beta4 = 1 - 2 * ((rbits as i64 >> (8 - nrbits + 1)) & 1); // C's bit index, as is
+            beta4 = 1 - 2 * ((rbits as i64 >> (8 - nrbits)) & 1); // P6-D3: the next unused bit (upstream bit 8 - nrbits + 1)
             nrbits -= 1;
         }
         // tbeta
@@ -1018,6 +1019,7 @@ fn compute_z34(
         }
         break cseed;
     };
+    crate::wipe(core::slice::from_mut(&mut rbits)); // P6-D3: secret signs (C explicit_bzero)
     *hash = cseed;
     for (k, x) in f.z3.iter_mut().enumerate().take(if nex > 0 { w } else { 0 }) {
         x.set_i64(&z3v[k * D..(k + 1) * D]);

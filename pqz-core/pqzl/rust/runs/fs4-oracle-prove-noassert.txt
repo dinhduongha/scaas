@@ -1,0 +1,10 @@
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-fs3/pqz-core/pqzl/rust)
+    Finished `release` profile [optimized + debuginfo] target(s) in 19.26s
+     Running tests/oracle_prove.rs (target/release/deps/oracle_prove-f4aca56540daa42e)
+
+running 1 test
+prove_eq_c: 14 relation codes, Rust = C on every case; outcomes {"byte 0: Err(Input)": 12, "byte 0: Err(Internal)": 1, "byte 0: Ok(\"proof\")": 1, "byte 2048: Ok(\"proof\")": 14, "honest: Ok(\"proof\")": 14, "last byte: Err(Input)": 14, "short: Err(Input)": 14}
+test prove_eq_c ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 39.08s
+

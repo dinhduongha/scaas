@@ -16,7 +16,10 @@
 #define PQZ_ERR_REJECT 4   /* rejection-sampling loop hit its cap */
 
 extern unsigned pqz_rej_tries; /* rejection-loop iterations (z3/z4 and z1/z2 loops), diagnostics */
-#define PQZ_REJ_MAX 1000 /* expected tries ~6 (R_REG) / ~9 (R_TX); 1000 fail with prob < 2^-140 */
+/* per rejection loop (z3/z4, z1/z2). Since Rej1 for z2 (P6-D2) the z1/z2 loop takes 2 M1 M2 tries on average, 12.3
+   (R_REG) to 24.0 (R_TXM M=4), measured pqz_rej_tries ~14 (R_REG) / ~19 (R_TX) with both loops (relfix fs4); 1000 fail
+   with prob <= (1 - 1/24.0)^1000 ~ e^-42.5 ~ 2^-61 (R_TXM M=4), e^-84 (R_REG) */
+#define PQZ_REJ_MAX 1000
 
 extern int pqz_err;
 extern const char *pqz_err_file; /* where the first error of the call was raised (diagnostics) */

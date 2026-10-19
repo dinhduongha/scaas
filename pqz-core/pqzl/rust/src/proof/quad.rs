@@ -10,7 +10,7 @@ use crate::arith::spoly::Sparse;
 use crate::coder::ProofParts;
 use crate::params::Abdlop;
 use crate::rand::grandom::polyvec_grandom;
-use crate::rand::rejection::{rej_bimodal, rej_standard, REJ_MAX};
+use crate::rand::rejection::{rej_onetime, rej_standard, REJ_MAX};
 use crate::rand::rng::Rng;
 use crate::rand::urandom::polyvec_urandom;
 use crate::Error;
@@ -315,11 +315,12 @@ fn prove(
             polyvec::fromcrt(&mut *y2);
             polyvec::fromcrt(&mut *cs2);
             let (z2, c2) = (coeffvec(&y2)?, coeffvec(&cs2)?);
-            // rej2 is 1 or 2 (C's ASSERT; 2 in every relation, with stdev1sqr as C passes it)
+            // rej2 is 1 or 2 (C's ASSERT; 2 in every relation): 2 is Rej1 with sigma2 (P6-D2; upstream rej_bimodal with
+            // stdev1sqr, review D-2)
             let rej = if p.rej2 == 1 {
                 rej_standard(&mut st, &z2, &c2, &p.scm2, &p.stdev2sqr)?
             } else {
-                rej_bimodal(&mut st, &z2, &c2, &p.scm2, &p.stdev1sqr)?
+                rej_onetime(&mut st, &z2, &c2, &p.scm2, &p.stdev2sqr)?
             };
             if rej {
                 continue;

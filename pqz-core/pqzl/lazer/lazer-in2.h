@@ -1399,6 +1399,8 @@ int rej_standard (rng_state_t state, const intvec_t z, const intvec_t v,
                   const int_t scM, const int_t sigma2);
 int rej_bimodal (rng_state_t state, const intvec_t z, const intvec_t v,
                  const int_t scM, const int_t sigma2);
+int rej_onetime (rng_state_t state, const intvec_t z, const intvec_t v,
+                 const int_t scM, const int_t sigma2);
 
 static inline unsigned int dcompress_get_d (const dcompress_params_t params);
 static inline int_srcptr dcompress_get_gamma (const dcompress_params_t params);
