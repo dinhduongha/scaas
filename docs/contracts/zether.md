@@ -2,7 +2,8 @@
 
 **Status: BUILT, UNAUDITED — NOT FOR PRODUCTION FUNDS.** The kinds `NONE_ZETHER` (`NoUnderlyingZetherToken`) and
 `UNDERLYING_ZETHER` (`UnderlyingZetherToken`) on the one meta-transaction base (`ZetherLayer` + `ZetherLib`),
-`ZetherStatements`, `ZetherDisclosure`, `ZetherVerifierBn254`, `ZetherVerifierBls12381`, `ZetherCurves`,
+`ZetherStatements`, `ZetherDisclosure`, per curve the transfer, burn and inner-product verifiers
+(`ZetherTransferVerifier*`, `ZetherBurnVerifier*`, `ZetherInnerProductVerifier*`, [CTR-ZTH-20](#CTR-ZTH-20)), `ZetherCurves`,
 `ZetherTranscript`, `ZetherSafety` and the Rust prover `zether-prover` exist with tests (P3;
 `smartcontracts/evm/src/zether/**`); the accounts are UAs of the UA registry's Zether kinds (UA-3,
 [registry](#registry)). Every Zether contract and the Zether Schnorr verifiers of the registry refuse to deploy or
@@ -260,7 +261,7 @@ flowchart LR
 ```
 
 <a id="no-epoch"></a>
-<a id="CTR-ZTH-03"></a>**CTR-ZTH-03** — **No epochs.** `IZetherVerifier.verifyTransfer/verifyBurn` take the full
+<a id="CTR-ZTH-03"></a>**CTR-ZTH-03** — **No epochs.** `IZetherVerifier.verifyTransfer` / `IZetherBurnVerifier.verifyBurn` take the full
 `statement` instead of `(payload, epoch)`; per-account state is read with `accountState(UA)` (there is no
 `simulateAccounts(encodedY, epoch)`).
 
@@ -1072,23 +1073,39 @@ BLS12-381 — BLS12-381 is more secure (~117–126 vs ~100 bit) and measured **m
 both stay supported per token meanwhile.
 
 <a id="pinned-verifier"></a>
-<a id="CTR-ZTH-20"></a>**CTR-ZTH-20** — **Clients and the gateway pin the canonical verifier and registry.** A wallet
-(the client library) and the node gateway accept a Zether token only when `verifier()` is in the chain's published list
-of **canonical** verifiers and `registry()` equals the chain's canonical registry. The factory does not refuse others
-(`OpenFactory._checkZether`, as the v1 `_checkVerifier`, only requires code + `isSupportedOnThisChain()`; the registry is
-an implementation immutable checked only for code) — "provenance instead of gatekeeping"
-([CTR-TOK-17](token-wrappers.md#CTR-TOK-17)) — so a v1 token from a registered implementation could still carry a fake
-verifier (returning `true` for every proof ⇒ `zetherUnshield` drains the escrow) or a fake registry (`requireZetherAuthorized` a no-op).
-The on-chain review of 2026-10-19 (W-B) raised this class again; it stays as specified here for Zether (dev chains only,
-CTR-ZTH-02; a code-hash pin cannot work, see below; a registrar allowlist in the factory would reverse
-[CTR-TOK-15](token-wrappers.md#CTR-TOK-15) and [CTR-TOK-17](token-wrappers.md#CTR-TOK-17); owner decision open), while a
-PQZ token pins its precompile itself ([pq-zero-knowledge.md self-test](pq-zero-knowledge.md#self-test)).
+<a id="CTR-ZTH-20"></a>**CTR-ZTH-20** — **One canonical verifier set per curve, fixed at deployment; the creator never names a
+verifier** (owner rulings 2026-10-19 / 2026-10-20, on-chain review W-B; built in plan 5g-Z1). Before, the creator passed
+`conf.verifier` and the factory only checked code and `isSupportedOnThisChain()`, so a token from a registered implementation
+could carry a fake verifier (`true` for every proof ⇒ `zetherUnshield` drains the escrow). Now:
 
-Pin by **address**, not codehash: a verifier embeds its `generatorStore` address as an immutable, so its codehash differs
-per deployment. The built `clients/clientkeys/src/zether.js` does not read `verifier()`/`registry()` yet. Tests: the client
-refuses a token with a foreign `verifier()`/`registry()`; the gateway errors when relaying a Zether op of an unpinned
-token. The gateway half is [NODE-GW-01](../node/gateway.md#NODE-GW-01)'s door; the client half
-[CLI-SGN-10](../clients/signers-clientkeys.md#CLI-SGN-10). Status **SPECIFIED**.
+- **Verifiers, per curve** (owner 2026-10-19: split for less code per call): a **transfer verifier** (`verifyTransfer`,
+  `verifyTransferMulti` and the group operations the token and `ZetherDisclosure` use), a **burn verifier** (`verifyBurn`:
+  unshield, unshield-unwrap) and one **inner-product verifier** (the NUMS generators, §3, and every 64-bit range proof,
+  `verifyRange`, by `STATICCALL`), which the other two fix in their constructors (`innerProduct()` immutable; they read the
+  generator store from it). Same statements, proofs and verdicts as the former combined verifier; sizes and gas in §19
+  and `smartcontracts/evm/runs/2026-10-19-5gz.txt` (layout (2) of three measured).
+- **The implementation holds them.** `NoUnderlyingZetherToken` / `UnderlyingZetherToken` take the disclosure contract,
+  the transfer verifier and the burn verifier as constructor arguments (immutables; the two verifiers must share one
+  `proofSystemId`), so every clone of a release uses them; `verifier()`, `burnVerifier()` and `curve()` (the transfer
+  verifier's `curveName()`) read them. The curve is an attribute of the release, version numbers carry no curve meaning
+  (the deploy registers bn254 as version 1 and BLS12-381 as version 2 of each kind). `ConfidentialConfig.verifier` must
+  be 0 (`BadInit`), for the PQZ kinds too ([pq-zero-knowledge.md](pq-zero-knowledge.md)).
+- **The factory holds the canonical sets.** `OpenFactory`'s constructor fixes, per curve, the transfer verifier, the burn
+  verifier and `ZetherDisclosure`, and per PQZ proof system the `UAPqzVerifier` (`zetherVerifiers(curve)`,
+  `pqzVerifier(ps)`; no setter, no admin list — an admin list would only move the trust to the admin key). Registration of
+  a `*_ZETHER` implementation reads its `verifier()`, `burnVerifier()`, `disclosure()` and refuses any other set
+  (`NotCanonicalVerifiers`); `createTokenUnregistered` refuses every confidential kind; a new verifier set is a new factory
+  for now (a versioned per-kind environment is plan 5g-Z2).
+- **Limit, stated plainly:** the factory compares the addresses an implementation reports; a deliberately malicious
+  registrar can still register bytecode that reports canonical addresses and does something else. The registrar's key is
+  the trust root for code — a multisig / UA msig before mainnet (a timelock is an option, not built).
+- **Clients and the gateway** accept a Zether token only when the chain's published `OpenFactory` answers
+  `isRegisteredToken(token)` and `registry()` equals the chain's canonical registry; the factory is the published source of
+  the canonical verifier addresses. The built `clients/clientkeys/src/zether.js` does not check this yet. Tests: the client
+  refuses an unregistered token or a foreign `registry()`; the gateway errors when relaying a Zether op of one. The gateway
+  half is [NODE-GW-01](../node/gateway.md#NODE-GW-01)'s door; the client half
+  [CLI-SGN-10](../clients/signers-clientkeys.md#CLI-SGN-10). Status: contracts **BUILT** (5g-Z1), clients and gateway
+  **SPECIFIED**.
 
 Production gates (owner/operator): an independent cryptographic audit (Σ-Bulletproofs, transcript, inner-product
 argument, registry PoP) **before** the dev gate is lifted; the curve decision ([CTR-ZTH-32](#CTR-ZTH-32)); gas
@@ -1357,7 +1374,10 @@ calldata — its size in the last column, its transaction calldata cost (≤ 16 
 |---|---|
 | `NoUnderlyingZetherToken` / `UnderlyingZetherToken` | 31,162 / 40,706 (over EIP-170: ratchet baseline; owner: size waits for Glamsterdam) |
 | `ZetherLib` / `ZetherStatements` / `ZetherDisclosure` | 17,324 / 8,748 / 5,077 |
-| `ZetherVerifierBn254` / `ZetherVerifierBls12381` | 15,955 / 16,312 |
+| `ZetherTransferVerifierBn254` / `…Bls12381` (5g-Z1) | 11,192 / 11,532 |
+| `ZetherBurnVerifierBn254` / `…Bls12381` (5g-Z1) | 5,208 / 5,443 |
+| `ZetherInnerProductVerifierBn254` / `…Bls12381` (5g-Z1) | 7,226 / 7,458 |
+| (the combined `ZetherVerifierBn254` / `ZetherVerifierBls12381` before 5g-Z1) | 15,955 / 16,312 |
 
 
 **Node gas cap:** the default `max_gas_per_tx = 3,000,000` (`scaas-node/src/config.rs:429-430`) is below every Zether transfer. The node compares `eth_estimateGas` (the minimum gas limit) with it, so a chain with Zether sets `max_gas_per_tx` ≥ 4.5 M for single transfers (minimum limit, auditor on, measured as above: bn254 3,593,875 direct / 3,750,726 relayed, BLS12-381 4,277,302 / 4,457,625) and, to relay larger `M`, raises it to the relayed limit of that `M` in the table above (at most 2^24). Registering a Zether token on a chain whose cap is below that warns (SPECIFIED, [NODE-STO-10](../node/store.md#NODE-STO-10)). The node pads the estimate by 20 % and clamps it: it sends `min(g + g/5, 2^24)` (EIP-7825; built in P5, `guard::gas_limit`).
@@ -1484,8 +1504,11 @@ interface ITransferDisclosure {          // implemented by the stateless ZetherD
 
 Compared with earlier drafts: the direct `zetherTransfer` (multi-recipient, [CTR-ZTH-37](#CTR-ZTH-37)) has 4 parameters and no outer fee (the outer fee lives
 only in the envelope); the built names are listed in [CTR-ZTH-45](#CTR-ZTH-45); `zetherUnshield` carries `recipient`, `beneficiary`, `authSig`; registration lives in the registry, not the
-token (no `Registered` event); `RolledOver` carries `accSeq` (no epoch). `IZetherVerifier`: `proofSystemId`,
-`curveName`, `isSupportedOnThisChain`, `verifyTransfer(statement, proof)`, `verifyBurn` (the unshield statement), `generators`, point ops.
+token (no `Registered` event); `RolledOver` carries `accSeq` (no epoch). `IZetherVerifierCommon`: `proofSystemId`,
+`proofSystemIdMulti`, `curveName`, `g1EncodedBytes`, `groupOrder`, `isSupportedOnThisChain`, `generators`;
+`IZetherVerifier` (transfer verifier) adds `verifyTransfer`, `verifyTransferMulti` and the point ops;
+`IZetherBurnVerifier` adds `verifyBurn` (the unshield statement); `IZetherInnerProductVerifier` adds `generatorStore`,
+`verifyRange` ([CTR-ZTH-20](#CTR-ZTH-20)).
 
 ## 22. Keys and families
 

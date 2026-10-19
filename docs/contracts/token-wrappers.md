@@ -605,7 +605,10 @@ contracts in their constructor and 7702-delegated EOAs; the caller check uses th
 
 <a id="CTR-TOK-15"></a>**CTR-TOK-15** — **The factory is open to everyone.** Anyone creates tokens; anyone wraps any
 ERC-20 into a meta token (or a confidential token where enabled); the market decides which one is used. SCaaS deploys
-the factory (the protocol), not tokens: ten people wrapping xDAI get ten different contracts, and that is normal.
+the factory (the protocol), not tokens: ten people wrapping xDAI get ten different contracts, and that is normal. The
+factory stays open for token creation; what a creator cannot choose is the code behind a confidential token: its
+verifiers are fixed by the implementation release (owner 2026-10-19, [CTR-ZTH-20](zether.md#CTR-ZTH-20)), and the creator
+picks them only by picking the version.
 
 <a id="CTR-TOK-18"></a>**CTR-TOK-18** — **The factory is the most critical immutable artifact.** A wrong line in the
 factory is wrong forever for every token anyone ever created through it, so the audit budget concentrates there.
@@ -619,8 +622,9 @@ empty output — with no symptom until someone has deposited funds.
   every token is a 45-byte EIP-1167 clone (`363d3d373d3d3d363d73<impl>5af43d82803e903d91602b57fd5bf3`) that
   `DELEGATECALL`s it with its own storage. A clone costs ~45 000 gas instead of ~2.5 M.
 - **Versions live in the factory**: `registerImplementation(kind, version, impl)` (registrar only, append-only,
-  version 0 forbidden), `deprecate` marks but never blocks, `createTokenUnregistered` deploys an off-catalogue
-  implementation with `version() == 0` (visibly). A bug in a version is permanent for that version's tokens; the remedy is
+  version 0 forbidden), `deprecate` is immediate and refuses new tokens of that version (owner 2026-10-20; tokens already
+  made are untouched), `createTokenUnregistered` deploys an off-catalogue implementation with `version() == 0` (visibly),
+  plain kinds only (owner 2026-10-19). A bug in a version is permanent for that version's tokens; the remedy is
   voluntary migration (unwrap the old token, wrap the new one).
 - **Atomic init**: CREATE2 salt = `keccak256(abi.encode(msg.sender, salt))` (nobody can take another creator's
   address); `initialize` runs in the same call and requires `msg.sender == FACTORY`; implementations lock themselves
@@ -647,7 +651,9 @@ uniqueness on the underlying alone, no name or symbol vetting. The ranking signa
 `isToken(token)` for the reverse check — a contract that claims a `factory()` the factory does not confirm is
 only a self-declared string. This answers "is this contract really a wrap of xDAI with verifier X created by Y"; it
 does **not** answer "is this the token I should use" — that has no on-chain answer (reputation and liquidity decide).
-Clients add their own pinning where needed ([CTR-ZTH-20](zether.md#CTR-ZTH-20)). Provenance metadata published for
+`isRegisteredToken(token)` says the token was made from a registered version (`version ≠ 0`); a version-0 token
+(`createTokenUnregistered`, plain kinds only) is unvetted code and clients and the gateway treat it so. For confidential
+tokens the factory itself is the source of the canonical verifiers ([CTR-ZTH-20](zether.md#CTR-ZTH-20)). Provenance metadata published for
 every asset: `creator`, `underlying`, `version`, `implementation`, creation block (issuance timestamp), and for
 wrappers the live reserve `underlying.balanceOf(token)` — readable by anyone for free.
 
@@ -679,7 +685,7 @@ struct TokenConfig {
     uint256 initialSupply; address initialHolder;   // NONE* only; initialHolder is ignored when initialSupply == 0
     Leg[] legs;                                // underlying (address(0) = native coin, CTR-TOK-26), num, den — UNDERLYING* only, 1..8
     RateConfig rate;                           // with RATE_ADJUSTABLE
-    ConfidentialConfig conf;                   // verifier, auditorKey (empty = none), shieldScale, maxShielded, confidentialFee, disclosureMode {BUNDLE, COMPACT}, auditorMode {NONE, FULL, OPTIONAL} — *_ZETHER only (modes: CTR-ZTH-48/49, built in P3b; the factory refuses a key that does not match auditorMode)
+    ConfidentialConfig conf;                   // verifier (must be 0: the release's, CTR-ZTH-20), auditorKey (empty = none), shieldScale, maxShielded, confidentialFee, disclosureMode {BUNDLE, COMPACT}, auditorMode {NONE, FULL, OPTIONAL} — *_ZETHER only (modes: CTR-ZTH-48/49, built in P3b; the factory refuses a key that does not match auditorMode)
 }
 struct DexConfig { address admin; uint32 relayerSharePpm; address treasury; bool listedOnly; }
 ```
@@ -713,16 +719,22 @@ built as [CTR-TOK-03](#CTR-TOK-03) and [CTR-TOK-25](#CTR-TOK-25) specify, the Ze
 node and clientkeys moved (P5), not deleted.
 Factory v2 is backed up in `smartcontracts/evm/legacy/p1e/` (not built).
 
-- `constructor(address registrar, bytes32 chainUid)`, `chainUid` non-zero (`ChainUidZero`). `registerImplementation` and
-  `deprecate` are registrar-only; the catalogue is append-only (`VersionAlreadyRegistered`); version 0 is refused.
+- `constructor(address registrar, bytes32 chainUid, Canonical canonical)`, `chainUid` non-zero (`ChainUidZero`).
+  `Canonical` fixes the confidential verifiers ([CTR-ZTH-20](zether.md#CTR-ZTH-20)): per Zether curve (0 bn254, 1
+  BLS12-381) the transfer verifier, the burn verifier and `ZetherDisclosure`, per PQZ proof system (0 PQZL, 1 PQZH) the
+  `UAPqzVerifier` (views `zetherVerifiers(curve)`, `pqzVerifier(proofSystem)`; 0 = absent; no setter).
+  `registerImplementation`, `deprecate` and `deprecateDex` are registrar-only; the catalogue is append-only
+  (`VersionAlreadyRegistered`); version 0 is refused.
 - **Registration** requires `implementation.code.length > 0` and reads `kind(), `factory()` and `chainUid()` by staticcall: `ImplementationNotAContract`,
   `VersionKindMismatch(expected, got)` (`got = type(uint256).max` when there is no answer),
   `ImplementationFactoryMismatch`, `ChainUidMismatch`. `NONE_ZETHER_PQZ` and `UNDERLYING_ZETHER_PQZ` (6–7) revert
   `KindReserved`; kinds 2 and 3 are built (P3) and their creation passes the Zether gate, kinds 4 and 5 (`NONE_PQZ`,
   `UNDERLYING_PQZ`, P6g) pass the PQZ gate (`setPqzEnabled`, [pq-zero-knowledge.md](pq-zero-knowledge.md); review
-  W-Q, 2026-10-19: this text had kinds 4–7 reserved).
-- **Creation:** `createToken` (registered version) and `createTokenUnregistered` (same four checks, recorded with
-  `version == 0`) take the leg count from `cfg.legs` (`NONE*` 0, `UNDERLYING*` 1–8, else `UnderlyingCountInvalid`),
+  W-Q, 2026-10-19: this text had kinds 4–7 reserved). A confidential implementation registers only when its verifier
+  immutables are one canonical set — `*_ZETHER`: `(verifier(), burnVerifier(), disclosure())`, `*_PQZ`: `verifier()` —
+  else `NotCanonicalVerifiers(implementation)`.
+- **Creation:** `createToken` (registered, not deprecated: `VersionDeprecated`) and `createTokenUnregistered` (plain
+  kinds only, `UnregisteredConfidentialKind` for 2–7; same four checks, recorded with `version == 0`) take the leg count from `cfg.legs` (`NONE*` 0, `UNDERLYING*` 1–8, else `UnderlyingCountInvalid`),
   clone with salt `keccak256(abi.encode(msg.sender, salt))` (`SaltAlreadyUsed` when the predicted address is already in the
   index or has code: an unregistered implementation may self-destruct its clone in `initialize`), call `initialize` in the same call, and
   emit only `TokenCreated`. The token reads the same `cfg.legs` that the factory indexed. A field of another kind reverts
@@ -732,13 +744,14 @@ Factory v2 is backed up in `smartcontracts/evm/legacy/p1e/` (not built).
   `creatorOf`, `versionOf`, `getWrapper(creator, underlying)` (the first; it may be a multi-leg token: read
   `underlyings()`), `getWrapperCount/At`, `deployCountFor/deployedFor`. Every leg is indexed, `address(0)` for the
   native coin.
-- **Zether creation (BUILT, P3).** `createToken` / `createTokenUnregistered` of kinds 2–3 check `cfg.conf.verifier` (`_checkZether`)
-  as `OpenFactoryV1.createZetherToken` / `createUnregistered(ZETHER)` did: zero reverts `VerifierRequiredForZether`; no code, or
-  `verifier.isSupportedOnThisChain()` false or unanswered, reverts `VerifierUnsupportedOnThisChain(verifier, curveName)`
+- **Zether creation (BUILT, P3; 5g-Z1).** `createToken` of kinds 2–3 checks the release's own `verifier()` (`_checkZether`):
+  no code, or `isSupportedOnThisChain()` false or unanswered, reverts `VerifierUnsupportedOnThisChain(verifier, curveName)`
   with the verifier's `curveName()` (empty when it has no code or no answer), so a BLS12-381 verifier cannot be paired
-  with a chain without EIP-2537; the token's `initialize` repeats the dev-chain check.
-- **Trust the index only for registered versions** (`versionOf(token).version != 0`): the factory indexes what the
-  config says, and an unregistered implementation (version 0) may do anything else with it.
+  with a chain without EIP-2537; PQZ likewise (`PqzVerifierUnsupported`). `cfg.conf.verifier` must be 0 (the token's
+  `BadInit`); the token's `initialize` repeats the dev-chain check.
+- **Trust the index only for registered versions** (`isRegisteredToken(token)`, `versionOf(token).version != 0`): the
+  factory indexes what the config says, and an unregistered implementation (version 0) may do anything else with it.
+  The registrar's key is the trust root for registered code (a multisig / UA msig before mainnet).
 
 <a id="factory-interface"></a>
 

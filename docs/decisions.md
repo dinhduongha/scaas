@@ -1832,6 +1832,12 @@ Change (2026-10-13): owner — a Universal Account never grants or holds an allo
 **Cost if wrong.** Two factories split provenance and tender checks; a mismatched implementation would mint clones whose signatures verify on no chain.
 **Source.** `history/specs/2026-10-06-token-wrappers-v2.md:66`; `history/specs/2026-10-07-metatx-generic.md` §3 MG-4, MG-9, §7 (CTR-TOK-03/12 row).
 
+Change (2026-10-20): owner rulings 2026-10-19 / 2026-10-20 (plan 5g-Z1) — the constructor takes `Canonical` (the
+confidential verifiers, CTR-ZTH-20) and `registerImplementation` checks a confidential release against it
+(`NotCanonicalVerifiers`); `deprecate` is immediate and `createToken` refuses a deprecated version (`VersionDeprecated`;
+tokens already made are untouched; was "marks but never blocks"); the record per (kind, version) stays a plain mapping so
+a later `usableFrom` notice period (plan 5g-Z2) is a small addition. Status: built, commit `690a295a` (plan Task 5g-Z1).
+
 ### CTR-TOK-04 — Conversion rate num/den, rounding favours contract
 - old: R133 · status: current · owner: no · date: 2026-10-06 · normative: contracts/token-wrappers.md#CTR-TOK-04 · superseded-by: —
 
@@ -1916,6 +1922,10 @@ Change (2026-10-13): owner — a Universal Account never grants or holds an allo
 **Cost if wrong.** Spam tokens exist; provenance getters (CTR-TOK-17) let clients filter them.
 **Source.** `research/_USER-DECISIONS.md:1079`
 
+Change (2026-10-20): owner 2026-10-19 (plan 5g-Z1, CTR-ZTH-20) — the factory stays open for token creation; what the
+creator no longer chooses is a confidential token's verifier: it is fixed by the implementation release (constructor
+immutables, registered only on the factory's canonical set), and the creator picks it only by picking the version. Status: built, commit `690a295a` (plan Task 5g-Z1).
+
 ### CTR-TOK-16 — getWrapper keyed by creator and underlying
 - old: UD:§20.3 · status: current · owner: yes · date: 2026-08-30 · normative: contracts/token-wrappers.md#CTR-TOK-16 · superseded-by: —
 
@@ -1929,6 +1939,10 @@ Change (2026-10-13): owner — a Universal Account never grants or holds an allo
 **Why.** Every token answers immutably who created it and from which implementation; clients decide trust instead of the factory.
 **Cost if wrong.** Clients that ignore provenance can be shown look-alike tokens.
 **Source.** `research/_USER-DECISIONS.md:1255`
+
+Change (2026-10-20): owner 2026-10-19 (plan 5g-Z1) — provenance gains `isRegisteredToken(token)` (made from a registered
+version, `version ≠ 0`); a version-0 token is unvetted code and clients and the gateway treat it so. For confidential
+tokens the factory is the published source of the canonical verifiers (CTR-ZTH-20) instead of a client-side list. Status: built, commit `690a295a` (plan Task 5g-Z1).
 
 ### CTR-TOK-18 — Factory is the critical immutable artifact
 - old: UD:§20.6 · status: current · owner: yes · date: 2026-08-30 · normative: contracts/token-wrappers.md#CTR-TOK-18 · superseded-by: —
@@ -1990,6 +2004,11 @@ Change (2026-10-09): `PAYABLE` and `BURNABLE` have no role and are always treate
 **Why.** One `TokenConfig` (name, symbol, decimals, features, lockedFeatures, owner, roles, initial supply, legs, rate, confidential parameters) replaces the per-kind `initData`; `CREATE2` clone and `initialize` in one call; one `TokenCreated` event; registry views `isToken`, `isDex` and `versionOf`; `createDex` and `DexConfig` (CTR-DEX-24); one `IOpenFactory` and one `IFactoryToken`.
 **Cost if wrong.** Per-kind encodings keep a second parsing surface in the factory, node and clients; a deployed-but-uninitialized clone can be front-run.
 **Source.** `history/specs/2026-10-08-token-tree-design.md` §7.
+
+Change (2026-10-20): owner 2026-10-19, option (a) (plan 5g-Z1) — `createTokenUnregistered` refuses every confidential kind
+(`UnregisteredConfidentialKind`, kinds 2–7) and stays for the plain kinds, recorded as version 0 and flagged unvetted
+(`isRegisteredToken` false); `ConfidentialConfig.verifier` must be 0 (the release's verifier, CTR-ZTH-20; the field stays
+until the creation API is replaced in plan 5g-Z2). Status: built, commit `690a295a` (plan Task 5g-Z1).
 
 ### CTR-TOK-26 — A leg may be the native coin
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/token-wrappers.md#CTR-TOK-26 · superseded-by: —
@@ -2282,6 +2301,10 @@ Change (2026-10-19): controller proposal (owner may override) — **DEX and meta
 **Why.** `OpenFactory.createDex` makes an `SCaaSDex` clone with `admin` written once by `initialize` and the `DexPuller` deployed by `initialize`; `isDex` serves clients and the node, and tokens never consult it, because requiring a factory-made DEX would give the factory admin too much power over trades (CTR-DEX-19 unchanged).
 **Cost if wrong.** If tokens required `isDex`, the factory admin could stop trading; without the registry, clients and the node have no on-chain list of genuine DEX versions.
 **Source.** `history/specs/2026-10-08-token-tree-design.md` T12, §7.
+
+Change (2026-10-20): owner 2026-10-20 (plan 5g-Z1) — `deprecateDex(version, reason)` (registrar, immediate,
+`DexImplementationDeprecated`) and `isDexDeprecated`; `createDex` refuses a deprecated version (`DexVersionDeprecated`);
+DEXes already made are untouched. Status: built, commit `690a295a` (plan Task 5g-Z1).
 
 ### CTR-DEX-25 — UATradeOrder: a UA's order, verified by its token
 - old: — · status: current · owner: yes · date: 2026-10-13 · normative: contracts/dex.md#CTR-DEX-25 · superseded-by: —
@@ -2639,6 +2662,23 @@ Change (2026-10-19): controller proposal (owner may override) — **on-chain rev
 
 Change (2026-10-19): **owner ruling — one canonical Zether verifier per curve, fixed at deployment, as PQZ pins its precompile** (on-chain review W-B, Zether half; supersedes the "clients pin, the factory does not refuse" stance for the verifier). An admin-managed verifier list was rejected: it only moves the trust from the token creator to the factory admin (a leaked admin key or a mistake admits a fake verifier again). Design (owner, same day: store the address at deployment instead of the CREATE2 / codehash pin first drafted): the Zether token implementations take their curve's verifier as an `immutable` constructor argument, `init` no longer accepts a `verifier`, so every clone uses it; `OpenFactory` records the verifiers at its deployment and refuses a Zether implementation whose verifier differs. No runtime admin, no CREATE2, no codehash pin; the trust is in whoever deploys the stack (already the case); a new verifier is a new implementation version. Check whether the UA registry's Zether kinds use the same verifiers and fix them the same way. Status: decided; build in plan Task 5g-Z (after the 5g integration, before 5h).
 
+Change (2026-10-20): **owner rulings 2026-10-19 / 2026-10-20, final design built in plan 5g-Z1** (replaces the
+2026-10-19 "store the address at deployment" text above in its details; same principle, no admin list). (1) Verifier
+layout (2) of three measured (`smartcontracts/evm/runs/2026-10-19-5gz.txt`): per curve a transfer verifier
+(`verifyTransfer`, `verifyTransferMulti`, the group operations), a burn verifier (`verifyBurn`) and one shared
+inner-product verifier (generators and range proofs, `verifyRange` by `STATICCALL`, fixed in the other two's
+constructors); same statements, proofs and verdicts; per-call code 11.2 + 7.2 KB (transfer) / 5.2 + 7.2 KB (burn) instead of
+16.0 KB; verify gas within +7 k (single, burn) and lower for multi (−65 k bn254, −590 k BLS at M = 8); reason: smaller
+code per call, generators computed once per curve. (2) The Zether implementations take the disclosure contract, the
+transfer verifier and the burn verifier, the PQZ implementations their `UAPqzVerifier`, as constructor immutables;
+`ConfidentialConfig.verifier` must be 0 for every confidential kind (`BadInit`). (3) The curve (PQZ: the proof system) is
+an attribute of the release (`curve()`, `proofSystemId()`); version numbers carry no curve meaning. (4) `OpenFactory`'s
+constructor fixes the canonical sets (`Canonical`: per curve transfer / burn verifier and disclosure, per PQZ proof system
+the verifier; views `zetherVerifiers`, `pqzVerifier`; no setter); `registerImplementation` refuses a confidential release
+whose immutables are not one set (`NotCanonicalVerifiers`). (5) Limit stated in the spec: a deliberately malicious
+registrar can still register bytecode that reports canonical addresses; the registrar key is the trust root for code
+(multisig / UA msig recommended; a timelock is an option, not built). The generic per-kind environment, factory-deployed
+code and library code-hash pins are plan 5g-Z2. Status: built, commit `690a295a` (plan Task 5g-Z1).
 
 ### CTR-ZTH-21 — Zether envelopes use the base's ERC-1271 cap by codehash
 - old: RS2-21 · status: current · owner: no · date: 2026-10-08 · normative: contracts/zether.md#CTR-ZTH-21 · superseded-by: —
