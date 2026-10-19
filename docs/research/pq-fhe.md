@@ -153,4 +153,19 @@ flowchart LR
   coprocessor fraud / validity proofs to be post-quantum — today's deployments use elliptic-curve signatures and
   proofs in places [inference].
 
-Status: **research only, no decision** (owner questions 2026-10-18; nothing planned).
+- **Ready-made homomorphic precompiles (owner question 2026-10-19: "build add / sub / mul / div now, as a precompile
+  for whoever needs it?"): not built.**
+  - *Add / sub* already exist where PQZ needs them: `pqzRollOver` computes `acc' = acc + Σ cts` in Solidity
+    (pq-zero-knowledge.md §7.6: 64-bit lanes, one `mod q` per lane). Its cost is calldata, ≈ 0.52 M gas per
+    16,512-byte ciphertext, not the additions, so a precompile would save almost nothing. Subtraction on `acc` is
+    left out on purpose: a debit re-encrypts the new balance fresh, which resets noise and digit growth (CTR-PQZ-05).
+  - *Mul / div of two ciphertexts* is not possible with the additive MLWE scheme; it needs FHE (BFV / TFHE) with
+    relinearisation keys, a threshold key network to decrypt results, KB–MB ciphertexts and milliseconds of GPU per
+    operation. Division has no native FHE form (bootstrapping / LUT approximations only). Under the Zether model each
+    account has its own key, so a product of two accounts' ciphertexts would not even decrypt.
+  - Each precompile is a consensus change (chainspec activation, gas pricing, audit scope, maintenance on 7622 and
+    22776), so none is added without a user and a spec. *Ciphertext × public scalar* works with today's scheme
+    and fits in Solidity if a contract needs it. Shared hidden state (auctions, a confidential order book) would be
+    its own FHE project (off-chain coprocessor + key network), specified when a use case exists.
+
+Status: **research only, no decision** (owner questions 2026-10-18 / 2026-10-19; nothing planned).
