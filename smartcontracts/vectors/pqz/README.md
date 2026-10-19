@@ -15,6 +15,14 @@ files **in place**; no copies (the copies to `smartcontracts/evm/test/vectors/pq
   from the seeds; a `*.json` here without a checker fails (by design).
 - **Frozen.** Proof bytes for a fixed `rnd32` are part of the vectors: a change that alters them is a
   `proofSystemId` bump (plan D4). `pqz-vectors --check` regenerates everything and compares byte for byte.
+- **Pending: PQZL v3.** The PQZL rows and the files below are still under the v2 id
+  (`keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v2")`), which is retired as forgeable
+  ([lazer#28](https://github.com/lazer-crypto/lazer/issues/28), [pq-zero-knowledge.md](../../../docs/contracts/pq-zero-knowledge.md)
+  §8). The Fiat–Shamir fix ([plan](../../../docs/superpowers/plans/2026-10-19-pqzl-fs3.md)) changes the transcript
+  and the prover, so its Task 5 regenerates them with `pqz-vectors` under the v3 id `0x8079d65b…16baef`: every PQZL
+  proof, the statements (bytes 32..63 hold the id), `fee0.json`, `negative.json` (with a row for the retired v2 id)
+  and `selftest.json`. The sizes, hashes and totals in this README are updated then; the self-test hash is expected to
+  stay `ed910a2c…1333d205` (it covers verdicts, not proof bytes), to be verified, not assumed.
 
 ## Run
 
