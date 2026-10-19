@@ -60,7 +60,9 @@ pub(crate) fn bernoulli_fp(u: u64, mant: u64, e: i32) -> bool {
     let always = ((1 - sh) >> 63) as u64; // sh >= 2: threshold >= 2^64 > u
     let mut tneg = (mant >> ((sh.wrapping_neg() as u64) & 63)) as u128;
     tneg &= !(far as u128);
-    let tpos = (mant as u128) << ((sh as u64) & 1);
+    // mant * 2^(sh & 1) as a masked add (review round 2, Q-A): a u128 shift by a variable amount is a libcall on
+    // wasm32 (compiler_builtins' __ashlti3 branches on the amount); sh is secret-derived
+    let tpos = (mant as u128) + ((mant as u128) & 0u128.wrapping_sub(((sh as u64) & 1) as u128));
     let nm = 0u128.wrapping_sub((neg & 1) as u128);
     let thr = (tneg & nm) | (tpos & !nm);
     (always & 1) | ((u as u128) < thr) as u64 != 0
@@ -77,4 +79,34 @@ pub(crate) fn div_q56(a: u128, d: u64) -> u128 {
         q |= (ge & 1) << b;
     }
     q
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Q-A (review round 2): the masked add equals the former `mant << (sh & 1)` threshold on every exponent around
+    /// the edges (sh < -63, -63..0, 0, 1, >= 2) and pseudo-random u, mant
+    #[test]
+    fn bernoulli_masked_add_eq_shift() {
+        let old = |u: u64, mant: u64, e: i32| {
+            let sh = e as i64 + 1;
+            let (neg, far, always) = ((sh >> 63) as u64, ((sh + 63) >> 63) as u64, ((1 - sh) >> 63) as u64);
+            let tneg = ((mant >> ((sh.wrapping_neg() as u64) & 63)) as u128) & !(far as u128);
+            let tpos = (mant as u128) << ((sh as u64) & 1);
+            let nm = 0u128.wrapping_sub((neg & 1) as u128);
+            (always & 1) | ((u as u128) < ((tneg & nm) | (tpos & !nm))) as u64 != 0
+        };
+        let mut x = 0x9E37_79B9_7F4A_7C15u64;
+        for e in -70..=4 {
+            for _ in 0..2000 {
+                x ^= x << 13;
+                x ^= x >> 7;
+                x ^= x << 17;
+                let (u, mant) = (x, x.rotate_left(29) | 1 << 63);
+                assert_eq!(bernoulli_fp(u, mant, e), old(u, mant, e), "e {e}");
+                assert_eq!(bernoulli_fp(u >> 1, mant, e), old(u >> 1, mant, e), "e {e}");
+            }
+        }
+    }
 }

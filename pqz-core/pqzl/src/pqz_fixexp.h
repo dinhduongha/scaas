@@ -101,7 +101,9 @@ pqz_bernoulli_fp (uint64_t u, uint64_t mant, int32_t e)
   uint64_t always = (uint64_t)((1 - sh) >> 63); /* sh >= 2: threshold >= 2^64 > u */
   pqz_fx_u128 tneg = mant >> ((uint64_t)(-sh) & 63);
   tneg &= ~(pqz_fx_u128)far;
-  pqz_fx_u128 tpos = (pqz_fx_u128)mant << ((uint64_t)sh & 1);
+  /* mant * 2^(sh & 1) as a masked add (review round 2, Q-A): a 128-bit shift by a variable amount is a libcall on
+     wasm32 (__ashlti3), and compiler_builtins' version branches on the amount; sh is secret-derived */
+  pqz_fx_u128 tpos = (pqz_fx_u128)mant + ((pqz_fx_u128)mant & ((pqz_fx_u128)0 - (pqz_fx_u128)((uint64_t)sh & 1)));
   pqz_fx_u128 nm = (pqz_fx_u128)0 - (neg & 1);
   pqz_fx_u128 thr = (tneg & nm) | (tpos & ~nm);
   return (int)((always & 1) | (uint64_t)((pqz_fx_u128)u < thr));
