@@ -168,6 +168,8 @@ U = keccak256(TAG(msig) ‖ keyData)
 └─ ["lane", ["acct", U], lane32]  meta-transaction nonces; pruned after valid_until (NET-SOL-08), rent refunded
 ```
 
+**Finding balances and holders.** Nothing keeps a holder list: every address is derived. `id` (a Solana pubkey or a UA id with its `owner_kind`) → `["acct", id]` → `ATA(["acct", id], mint)` is the balance; the reverse map is the `owner` / `owner_kind` stored in `["acct", id]`. The holders of a mint are the token accounts whose `mint` field is that mint (`getProgramAccounts` with a mint filter, or the SCaaS indexer); no contract keeps a list. The **owner of every token account is the Account PDA, never the user's key**, so users without a Solana wallet (passkey, MetaMask key, `msig`) hold Solana balances: they sign meta-transactions with their own key, a relayer lane submits and pays SOL (charged in the token), and the PDA signs the transfer. A UA id in base58 looks like a Solana address but has no private key: clients show it only as `urn:scaas:ua:v1:…`; the deposit address is the ATA of `["acct", id]` ([§3](#keys)).
+
 **Spending.** The relayer's transaction carries one precompile instruction per member signature over the operation
 digest (`Ed25519SigVerify`, `Secp256r1SigVerify` (SIMD-0075), the `Secp256k1` program) and then the `scaas`
 instruction, which reads the Instructions sysvar, sums the weights of the members whose signature it finds and checks the
