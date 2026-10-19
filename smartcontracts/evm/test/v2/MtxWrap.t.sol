@@ -64,7 +64,7 @@ contract MtxWrapTest is V2Fixture {
         ITradeToken.TradeOrder memory o = _order(1000, 3000, 1_000); // 0.1 % of 3000 = 3
         bytes memory sig = _sig(o); // before the prank: an external call would consume it
         vm.expectEmit(address(w));
-        emit IUnderlyingToken.Wrapped(alice, address(u), 1000, 3000);
+        emit IUnderlyingToken.Wrapped(alice, address(u), 1000, 2997); // net of the fee (W-Q)
         vm.prank(relayer);
         assertEq(w.mtxWrap(address(u), o, sig), 3000);
         assertEq(w.balanceOf(alice), 2997);
@@ -81,6 +81,8 @@ contract MtxWrapTest is V2Fixture {
         ITradeToken.TradeOrder memory o = _order(1000, 3000, 0);
         o.destination = bob;
         bytes memory sig = _sig(o);
+        vm.expectEmit(address(w));
+        emit IUnderlyingToken.Wrapped(bob, address(u), 1000, 3000); // the credited party (W-Q)
         vm.prank(relayer);
         w.mtxWrap(address(u), o, sig);
         assertEq(w.balanceOf(bob), 3000);

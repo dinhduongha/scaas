@@ -123,13 +123,20 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
     function pendingOwner() external view returns (address) { return AdminLib.$().pendingOwner; }
     function hasRole(uint8 bit, address account) external view returns (bool) { return AdminLib.hasRole(bit, account); }
 
-    function grantRole(uint8 bit, address account) external { AdminLib.grantRole(bit, account, _msgSender()); }
-    function revokeRole(uint8 bit, address account) external { AdminLib.revokeRole(bit, account, _msgSender()); }
-    function renounceRole(uint8 bit) external { AdminLib.renounceRole(bit, _msgSender()); }
-    function disableFeature(uint8 bit) external virtual { AdminLib.disableFeature(bit, _msgSender()); }
-    function transferOwnership(address newOwner) external { AdminLib.transferOwnership(newOwner, _msgSender()); }
-    function acceptOwnership() external { AdminLib.acceptOwnership(_msgSender()); }
-    function renounceOwnership() external { AdminLib.renounceOwnership(_msgSender()); }
+    // One guard over every entry point (CTR-MTX-18), the role and owner functions too (W-Q).
+    function grantRole(uint8 bit, address account) external nonReentrant {
+        AdminLib.grantRole(bit, account, _msgSender());
+    }
+    function revokeRole(uint8 bit, address account) external nonReentrant {
+        AdminLib.revokeRole(bit, account, _msgSender());
+    }
+    function renounceRole(uint8 bit) external nonReentrant { AdminLib.renounceRole(bit, _msgSender()); }
+    function disableFeature(uint8 bit) external virtual nonReentrant { AdminLib.disableFeature(bit, _msgSender()); }
+    function transferOwnership(address newOwner) external nonReentrant {
+        AdminLib.transferOwnership(newOwner, _msgSender());
+    }
+    function acceptOwnership() external nonReentrant { AdminLib.acceptOwnership(_msgSender()); }
+    function renounceOwnership() external nonReentrant { AdminLib.renounceOwnership(_msgSender()); }
 
     /// @notice ERC-165; `IERC20Payment` only while `PAYABLE` is set.
     function supportsInterface(bytes4 id) external view returns (bool) {
@@ -363,7 +370,7 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
     /// @notice The caller pays gas itself; the fee is on top, `amount` arrives whole; never to the payee (CTR-MTX-08).
     function payWithFee(
         address to, uint256 amount, FeeMode feeMode, uint256 fee, address feeRecipient, bytes32 entryRef
-    ) external returns (bool) {
+    ) external nonReentrant returns (bool) {
         AdminLib.requireFeature(AdminLib.PAYABLE);
         address payer = _msgSender();
         uint256 feeAmount = FeePolicy.compute(feeMode, amount, fee);
@@ -381,7 +388,7 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
     ///         on top to `feeRecipient` (an address: never the payee; `UA_POOL` and the token are refused by `_update`).
     function payWithFeeToUA(
         bytes32 to, uint256 amount, FeeMode feeMode, uint256 fee, address feeRecipient, bytes32 entryRef
-    ) external returns (bool) {
+    ) external nonReentrant returns (bool) {
         AdminLib.requireFeature(AdminLib.PAYABLE);
         _requireDerivedReceiver(to);
         bytes32 payer = MetaTxLib.pad(_msgSender());

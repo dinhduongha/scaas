@@ -54,9 +54,9 @@ contract HederaV2Test is Test {
 
     function test_implementationSizes() public view {
         // owner: size later (Glamsterdam); budget 20,480 (P2a ruling); +8.7 KB for the UA ledger (UA-4); +1.2 / +2.5 KB
-        // for the UA-5a receivers; +2.3 / +3.4 KB for UA-5b (UATradeOrder, uaWrap) (size-baseline.json holds the exact
-        // ratchet)
-        assertLe(f.implementationOf(IOpenFactory.TokenKind.NONE, 1).code.length, 36_864);
+        // for the UA-5a receivers; +2.3 / +3.4 KB for UA-5b (UATradeOrder, uaWrap); +1.6 KB for the guard on every entry
+        // (review W-Q, CTR-MTX-18) (size-baseline.json holds the exact ratchet)
+        assertLe(f.implementationOf(IOpenFactory.TokenKind.NONE, 1).code.length, 38_912);
         // Transitional (P1d D2): over EIP-170 until the size work
         assertLe(f.implementationOf(IOpenFactory.TokenKind.UNDERLYING, 1).code.length, 49_152);
     }
