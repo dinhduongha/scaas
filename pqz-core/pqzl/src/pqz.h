@@ -2,7 +2,10 @@
  * pqz-core C ABI (pq-zero-knowledge.md §8, CTR-PQZ-09): R_REG (OP_REGISTER), R_TX and R_TX0 (OP_TRANSFER, auditor on / off,
  * told apart by the statement length), R_BURN (OP_BURN, also REFRESH), R_DS (OP_DISCLOSE_SENDER), R_DR
  * (OP_DISCLOSE_RECEIVER, also AUDITOR), R_TXM (OP_TRANSFER_MULTI, op 7: M legs, P6-ANON).
- * Single-threaded; all memory comes from the arena given to pqz_init (no malloc), errors are return codes.
+ * Single-threaded; all memory comes from the arena given to pqz_init (no malloc), errors are return codes. An arena
+ * too small for an allocation inside LaZer (A, a relation's keys, the prover, the generic verifier) stops the process
+ * (a trap: no write may follow a failed allocation, review round 2 Q-C); the specialised verifier's own allocations
+ * return PQZ_ERR_ARENA (2). Secret-holding calls (pqz_prove, keygen / enc / dec) zero the arena they used (Q-B).
  */
 #ifndef PQZ_H
 #define PQZ_H

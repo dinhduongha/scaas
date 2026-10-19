@@ -13,7 +13,10 @@
 //! Node faults (controller 2026-10-14): a core or worker that cannot be set up (arena allocation, `pqz_init`, thread
 //! creation), a worker job that panicked, and the core running out of arena (`pqz_err == PQZ_ERR_ARENA` after a call)
 //! are not properties of the input: `with_core` returns `Err(NodeFault)` (and drops the core, re-initialised at the
-//! next call), which the precompile entry reports as `PQZ_FFI_NODE_FAULT` with no output.
+//! next call), which the precompile entry reports as `PQZ_FFI_NODE_FAULT` with no output. Arena exhaustion is graceful
+//! only in the specialised verifier's own allocations; inside LaZer (keys, A, the prover, the generic verifier) the
+//! core traps and the process stops (review round 2, Q-C: no write may follow a failed allocation), so the arenas
+//! below are sized from measurement with margin.
 use std::sync::Mutex;
 #[cfg(feature = "test-hooks")]
 use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering::Relaxed};

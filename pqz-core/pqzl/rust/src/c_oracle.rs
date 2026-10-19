@@ -38,6 +38,8 @@ extern "C" {
     fn pqz_shim_grandom(seed: *const u8, dom: u32, log2o: u32, n: u32, out: *mut i64) -> i32;
     fn pqz_shim_rej(bimodal: u32, seed: *const u8, dom: u64, z: *const i64, v: *const i64, n: u32, scm: *const u64,
                     s2: *const u64, rej: *mut i32, next8: *mut u8) -> i32;
+    fn pqz_shim_rej_limbs(bimodal: u32, seed: *const u8, dom: u64, z: *const u64, v: *const u64, n: u32, nl: u32,
+                          scm: *const u64, s2: *const u64, rej: *mut i32, next8: *mut u8) -> i32;
     fn pqz_shim_urandom(seed: *const u8, dom: u32, n: u32, nl: u32, m: *const u64, log2mod: u32, out: *mut u64,
                         nout: *mut usize) -> i32;
     fn pqz_shim_urandom_bnd(seed: *const u8, dom: u32, n: u32, nl: u32, lo: *const u64, hi: *const u64, out: *mut u64,
@@ -324,6 +326,21 @@ pub fn c_rej(bimodal: bool, seed: &[u8; 32], dom: u64, z: &[i64], v: &[i64], scm
     rc(with_core(|| unsafe {
         pqz_shim_rej(bimodal as u32, seed.as_ptr(), dom, z.as_ptr(), v.as_ptr(), z.len() as u32, scm.as_ptr(),
                      s2.as_ptr(), &mut rej, next8.as_mut_ptr())
+    }))?;
+    Ok((rej != 0, next8))
+}
+
+/// `pqz_shim_rej_limbs`, the C half of `testkit::rand_rej_limbs`: `z`, `v` hold n elements of `nl` limbs then the sign
+#[allow(clippy::too_many_arguments)]
+pub fn c_rej_limbs(bimodal: bool, seed: &[u8; 32], dom: u64, z: &[u64], v: &[u64], nl: u32, scm: &[u64; 3],
+                   s2: &[u64; 2]) -> Result<(bool, [u8; 8]), Error> {
+    let w = nl as usize + 1;
+    assert!(nl >= 1 && !z.is_empty() && z.len() == v.len() && z.len().is_multiple_of(w));
+    let (mut rej, mut next8) = (0i32, [0u8; 8]);
+    // SAFETY: z and v hold n (nl + 1) words, scm 3 and s2 2 limbs; rej and next8 are outputs of their sizes
+    rc(with_core(|| unsafe {
+        pqz_shim_rej_limbs(bimodal as u32, seed.as_ptr(), dom, z.as_ptr(), v.as_ptr(), (z.len() / w) as u32, nl,
+                           scm.as_ptr(), s2.as_ptr(), &mut rej, next8.as_mut_ptr())
     }))?;
     Ok((rej != 0, next8))
 }

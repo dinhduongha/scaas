@@ -7,6 +7,10 @@
 //! abort-freedom generator) serial, from 8 threads and on a 1 MiB caller-stack thread, then 5,000 repeated mixed calls,
 //! all equal; the C backend's arena never moves: `arena_used()` after every call and `arena_peak()` at the end equal their values after the
 //! warm-up pass (no growth, nothing left below the base mark), the arena stays `ARENA_SMALL`, and its peak leaves a margin of at least 1.5×.
+//! The Rust backend (review round 2; the port's deferred minor C-M5): this test binary counts the process's heap (a
+//! global allocator), and over the 5,000 mixed calls the heap in use stays within 4 KiB of its value before them
+//! (the worker channel's blocks come and go; a leak of 1 B per call would be 5 KB) and their peak stays at or below
+//! the warm-up's.
 //!
 //! `fill_determinism`: child processes fill every arena with 0x00, 0xA5 or 0x5A before `pqz_init` and write the
 //! digest lines (fixtures, proofs of every form, verdicts, self-test) and the result of every corpus input; all three
@@ -20,6 +24,52 @@ use common::*;
 use pqz_ffi::*;
 
 const N_GEN: usize = 10_240;
+
+/// The process's heap in use and its peak (the Rust backend: no arena to read)
+#[cfg(feature = "pqzl-rust")]
+mod heap {
+    use std::alloc::{GlobalAlloc, Layout, System};
+    use std::sync::atomic::{AtomicIsize, Ordering::Relaxed};
+
+    pub static LIVE: AtomicIsize = AtomicIsize::new(0);
+    pub static PEAK: AtomicIsize = AtomicIsize::new(0);
+
+    fn add(n: isize) {
+        PEAK.fetch_max(LIVE.fetch_add(n, Relaxed) + n, Relaxed);
+    }
+
+    struct Counting;
+    unsafe impl GlobalAlloc for Counting {
+        unsafe fn alloc(&self, l: Layout) -> *mut u8 {
+            let p = unsafe { System.alloc(l) };
+            if !p.is_null() {
+                add(l.size() as isize);
+            }
+            p
+        }
+        unsafe fn alloc_zeroed(&self, l: Layout) -> *mut u8 {
+            let p = unsafe { System.alloc_zeroed(l) };
+            if !p.is_null() {
+                add(l.size() as isize);
+            }
+            p
+        }
+        unsafe fn dealloc(&self, p: *mut u8, l: Layout) {
+            unsafe { System.dealloc(p, l) };
+            LIVE.fetch_sub(l.size() as isize, Relaxed);
+        }
+        unsafe fn realloc(&self, p: *mut u8, l: Layout, n: usize) -> *mut u8 {
+            let q = unsafe { System.realloc(p, l, n) };
+            if !q.is_null() {
+                add(n as isize - l.size() as isize);
+            }
+            q
+        }
+    }
+
+    #[global_allocator]
+    static A: Counting = Counting;
+}
 
 fn tmp(name: &str) -> String {
     format!("{}/{name}", env!("CARGO_TARGET_TMPDIR"))
@@ -118,16 +168,33 @@ fn verify_only_arena() {
     });
     assert_eq!(small, r1[gen_from..], "1 MiB caller stack = serial");
 
-    // repeated mixed calls; the arena in use between calls never moves
+    // repeated mixed calls; the arena in use between calls never moves (the Rust backend: the heap, within 4 KiB)
+    #[cfg(feature = "pqzl-rust")]
+    let (heap0, warm_peak) = (heap::LIVE.load(Relaxed), heap::PEAK.swap(heap::LIVE.load(Relaxed), Relaxed));
+    #[cfg(feature = "pqzl-rust")]
+    let (mut lo, mut hi) = (heap0, heap0);
     for k in 0..5_000usize {
         let i = (k * 7919) % c.len();
         assert_eq!(call(&c[i]), r1[i], "mixed call {k}");
         assert_eq!(arena().0, used0, "arena in use after mixed call {k}");
+        #[cfg(feature = "pqzl-rust")]
+        {
+            let h = heap::LIVE.load(Relaxed);
+            (lo, hi) = (lo.min(h), hi.max(h));
+            assert!(h.abs_diff(heap0) <= 4096, "Rust heap in use after mixed call {k}: {h} B, before them {heap0} B");
+        }
     }
     assert_eq!(arena().1, peak0, "arena peak grew");
+    #[cfg(feature = "pqzl-rust")]
+    let loop_peak = heap::PEAK.load(Relaxed);
+    #[cfg(feature = "pqzl-rust")]
+    assert!(loop_peak <= warm_peak, "Rust heap peak of the mixed calls {loop_peak} B over the warm-up's {warm_peak} B");
     let lp = pqzh_ligero::ligero::VERIFY_PANICS.load(Relaxed);
     #[cfg(feature = "pqzl-rust")]
-    let mem = "Rust backend (no arena)".to_string();
+    let mem = format!(
+        "Rust backend (no arena): heap in use after the 5,000 mixed calls {lo}..={hi} B (before them {heap0} B), their \
+         peak {loop_peak} B <= the warm-up's {warm_peak} B"
+    );
     #[cfg(not(feature = "pqzl-rust"))]
     let mem = format!(
         "arena {} MiB: used {used0} B after every call, peak {peak0} B = {:.2} of the arena (margin {:.2}x)",

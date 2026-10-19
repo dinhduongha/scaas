@@ -583,6 +583,27 @@ pub fn rand_rej(bimodal: bool, seed: &[u8; 32], dom: u64, z: &[i64], v: &[i64], 
     Ok((rej, st.u64().to_le_bytes()))
 }
 
+/// `pqz_shim_rej_limbs`: [`rand_rej`] on elements of `nl` limbs then the sign ((nl + 1) words each)
+#[cfg(feature = "c-oracle")]
+#[allow(clippy::too_many_arguments)]
+pub fn rand_rej_limbs(bimodal: bool, seed: &[u8; 32], dom: u64, z: &[u64], v: &[u64], nl: u32, scm: &[u64; 3],
+                      s2: &[u64; 2]) -> Result<(bool, [u8; 8]), crate::Error> {
+    use crate::rand::rejection::{rej_bimodal, rej_standard};
+    let w = nl as usize + 1;
+    let vec = |x: &[u64]| -> Result<crate::arith::int::IntVec, crate::Error> {
+        let mut r = crate::arith::int::IntVec::new(x.len() / w, nl as usize)?;
+        for (i, e) in x.chunks_exact(w).enumerate() {
+            r.set_elem(i, &Int::from_limbs(&e[..nl as usize], e[nl as usize] & 1));
+        }
+        Ok(r)
+    };
+    let (z, v) = (vec(z)?, vec(v)?);
+    let (scm, s2) = (Int::from_limbs(scm, 0), Int::from_limbs(s2, 0));
+    let mut st = Rng::new(seed, dom);
+    let rej = if bimodal { rej_bimodal(&mut st, &z, &v, &scm, &s2)? } else { rej_standard(&mut st, &z, &v, &scm, &s2)? };
+    Ok((rej, st.u64().to_le_bytes()))
+}
+
 /// an int from 5 words: limbs[0..3), sign, nlimbs
 #[cfg(feature = "c-oracle")]
 fn int_of(w: &[u64; 5]) -> Int {

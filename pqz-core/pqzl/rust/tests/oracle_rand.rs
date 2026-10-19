@@ -1,9 +1,9 @@
 //! Hashing, the rng and the samplers against the C core (feature `c-oracle`) and the frozen CBD vectors: 1,000
 //! seeded inputs per oracle test, Rust = C (outputs and error codes). The C halves are `pqz_shim_*` in
 //! tests/oracle_shim.c, the Rust halves `testkit::rand_*`.
-use pqzl::c_oracle::{c_autostable, c_grandom, c_rej, c_rng, c_shake, c_urandom, c_urandom_bnd};
-use pqzl::testkit::{rand_autostable, rand_cbd, rand_grandom, rand_rej, rand_rng, rand_shake, rand_urandom,
-                    rand_urandom_bnd};
+use pqzl::c_oracle::{c_autostable, c_grandom, c_rej, c_rej_limbs, c_rng, c_shake, c_urandom, c_urandom_bnd};
+use pqzl::testkit::{rand_autostable, rand_cbd, rand_grandom, rand_rej, rand_rej_limbs, rand_rng, rand_shake,
+                    rand_urandom, rand_urandom_bnd};
 
 const N: usize = 1_000;
 
@@ -156,9 +156,10 @@ fn rejection_eq_c() {
     assert!(rejects > N / 5 && accepts > N / 5 && errors > 0);
 }
 
-/// pqz_ub_test.c part a's one-limb rejection cases (exponents near +-2^63; S3 has two-limb entries, which the shim
-/// does not take: Rust's unit test `rejection::tests::saturation_near_2_63` and the C test cover it) on 200 streams:
-/// C = Rust, and the expected verdict (below -2^63 saturates and rejects, num above 2^127 saturates and accepts)
+/// pqz_ub_test.c part a's rejection cases (exponents near +-2^63) on 200 streams: C = Rust, and the expected verdict
+/// (below -2^63 saturates and rejects, num above 2^127 saturates and accepts); the one-limb cases through
+/// `pqz_shim_rej`, S3 (two-limb entries, num = 2^127; review round 2, the port's deferred minor) through
+/// `pqz_shim_rej_limbs`
 #[test]
 fn rejection_saturation_eq_c() {
     const MAX: i64 = i64::MAX;
@@ -178,6 +179,12 @@ fn rejection_saturation_eq_c() {
             assert_eq!(r, c, "stream {t}, case {k}");
             assert_eq!(c.map(|x| x.0), Ok(want), "stream {t}, case {k}");
         }
+        // S3: z = (-(2^126 - 1), 0), v = (1, 1) in two limbs: t2 = 2, t1 = -(2^126 - 1), num = 2^127 saturates, accepts
+        let (z3, v3) = ([u64::MAX, (1 << 62) - 1, 1, 0, 0, 0], [1, 0, 0, 1, 0, 0]);
+        let (r, c) = (rand_rej_limbs(false, &seed, dom, &z3, &v3, 2, &scm, &s2),
+                      c_rej_limbs(false, &seed, dom, &z3, &v3, 2, &scm, &s2));
+        assert_eq!(r, c, "stream {t}, case S3");
+        assert_eq!(c.map(|x| x.0), Ok(false), "stream {t}, case S3");
     }
 }
 
