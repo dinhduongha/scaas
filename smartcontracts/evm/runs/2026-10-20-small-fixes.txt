@@ -39,3 +39,14 @@ UnderlyingPqzToken           60151 -> 60352  | init 61832 -> 62033
 UnderlyingToken              47220 -> 47441  | init 48733 -> 48954
 UnderlyingZetherToken        58027 -> 58228  | init 60095 -> 60296
 (no chainspec, proof-vector or gas-row change; deployed 7622 bytecode differs from these until the Task 13 redeploy)
+
+## branch status at the machine shutdown (2026-10-20; branch rev2-small-fixes, not merged, not pushed)
+CHAIN-02 (88c8083): done. patch-chainspec.py refuses a first timestamp < now + 5 min; at genesis only with
+  --testnet-reset (timestamp = the genesis timestamp). Tested: `python3 -I patch-chainspec.py --check` ok (2 accepted,
+  4 refused: past, now + 1 min, 0 without reset, future with reset); `add-schedule.py --check` ok. Plugin unchanged.
+CHAIN-03 (4fae6ab): done and tested (above).
+A-3 (aee749d, WIP): code done; clippy with all features ok; run.sh a3 stopped after its first 8 test binaries (all
+  ok). Left: the full `scripts/capped sh pqz-core/pqzl/rust/run.sh a3` (KATs, vectors, proofs_fnv = proof bytes
+  unchanged), then mark A-3 fixed in W-review-a-pqzl-rust.md / README and drop the WIP prefix (reword or a follow-up).
+docs: `python3 -I scripts/docs_check.py check` -> check: 0 error(s), 2 warning(s), 15 note(s) (the 2 warnings are
+  pre-existing budgets).
