@@ -2627,6 +2627,9 @@ Change (2026-10-08): `MetaTransaction` has no `to`/`value`, so the binding drops
 **Cost if wrong.** A spoofed verifier address would accept forged proofs in the client's view.
 **Source.** `history/specs/2026-10-03-zether-design.md:661`
 
+Change (2026-10-19): **owner ruling — one canonical Zether verifier per curve, as PQZ pins its precompile** (on-chain review W-B, Zether half; supersedes the "clients pin, the factory does not refuse" stance for the verifier). An admin-managed verifier list was rejected: it only moves the trust from the token creator to the factory admin (a leaked admin key or a mistake admits a fake verifier again). Design: `ZetherVerifierBn254` / `ZetherVerifierBls12381` and their `GeneratorStore` are deployed deterministically with CREATE2 (fixed constructor arguments, so the verifier init code is the same everywhere); `ZetherSafety` pins each verifier's init-code hash and the deployer; `ZetherLib.init` refuses a `verifier` that is not the computed address or whose `extcodehash` differs; the factory stays open for token creation; a new verifier is a new token implementation version. Check whether the UA registry's Zether kinds use the same verifiers and pin them the same way. Status: decided; build in plan Task 5g-Z (after the 5g integration, before 5h).
+
+
 ### CTR-ZTH-21 — Zether envelopes use the base's ERC-1271 cap by codehash
 - old: RS2-21 · status: current · owner: no · date: 2026-10-08 · normative: contracts/zether.md#CTR-ZTH-21 · superseded-by: —
 
