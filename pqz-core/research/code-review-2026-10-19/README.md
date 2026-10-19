@@ -21,6 +21,11 @@ its scope. Reviewed at main `4c20032`.
 | [M-agy-pqzl-c.md](M-agy-pqzl-c.md) | same, agy; **triage table Q-A…Q-I** | wiping (rated P1, triaged P2), D-2 claim refuted, small latent UB; triage: fix Q-A…Q-H on `rev2-pqzl` (plan Task 5e), Q-I recorded |
 | [N-claude-pqzl-c.md](N-claude-pqzl-c.md) | same, Claude sub-agent | no P0 / P1, no C = Rust divergence; new: secret-amount u128 shift in fixexp (both cores, wasm32), `rel_keys` 13–14 MB through the sink, `ASSERT_ERR` fall-through, compiler dependence |
 | [O-pqzh-constant-time.md](O-pqzh-constant-time.md) | round-2 fixes P-A, P-B, P-C on `rev2-pqzh` (plan Task 5c) | inventory (a) fixed / (b) declassified / (c) public of the Ligero prover, the ctgrind check `pqzh/ligero/runs/ct.sh` (0 reports, twelve relations), the wasm32 divisions before / after, the wiping and its platform boundary |
+| [T-codex-chain-aborted.md](T-codex-chain-aborted.md) | on-chain review (plan Task 5f) at `7aab1fe`: Nethermind PQZ plugin + all EVM Solidity, Codex | aborted, workspace out of credits; one lead (W-A), confirmed by V1 |
+| [U-agy-chain.md](U-agy-chain.md) | same, agy; **triage table W-A…W-S** | 3 P2 in the plugin (one refuted, one plausible, one P3), 3 P3 in Solidity; triage: fix on `rev2-chain` (plan Task 5g) |
+| [V1-claude-plugin-pqz-zether.md](V1-claude-plugin-pqz-zether.md) | same, Claude part 1: plugin, `pqz/`, `zether/` | no P0 / P1; P2: unbound transfer mode on direct calls (W-A), creator-chosen verifier trusted (W-B); five P3 |
+| [V2-claude-ua-account-wallet.md](V2-claude-ua-account-wallet.md) | same, Claude part 2: `ua/`, `account/`, `wallet/` | no P0 / P1; P2: decoy-list flooding (W-C, spec); five P3 |
+| [V3-claude-common-metatx-dex.md](V3-claude-common-metatx-dex.md) | same, Claude part 3: `common/`, `metatx/`, `factory/`, `dex/`, `trade/`, `hedera/` | P3 only (forged gas selectors abort a DEX batch, cancel not nonce-bound, ERC-1271, hygiene) |
 
 **Controller verification (2026-10-19).** Both P0 transcript facts were re-read by the controller in the Rust prover
 (`pqzl/rust/src/proof/tbox.rs`: `tg` hashed at 1058, `h` computed after it, `quad.rs:22` derives `mu` from the same
