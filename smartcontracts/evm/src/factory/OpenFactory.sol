@@ -6,7 +6,8 @@ import {IOpenFactory} from "./IOpenFactory.sol";
 import {IFactoryToken} from "./IFactoryToken.sol";
 import {ISCaaSDex} from "../dex/ISCaaSDex.sol";
 import {ITokenAdmin} from "../metatx/ITokenAdmin.sol";
-import {IZetherVerifier} from "../zether/IZetherVerifier.sol";
+import {IZetherVerifierCommon} from "../zether/IZetherVerifier.sol";
+import {IZetherToken} from "../zether/IZetherToken.sol";
 import {ZetherSafety} from "../zether/ZetherSafety.sol";
 import {PqzSafety} from "../pqz/PqzSafety.sol";
 
@@ -17,7 +18,12 @@ import {PqzSafety} from "../pqz/PqzSafety.sol";
 ///         the catalogue is append-only, so a wrong entry would be dead forever. Creation clones by `CREATE2` with
 ///         the salt scoped by the creator and calls `initialize` in the same call; flag validation is the token's.
 ///         Kinds `NONE`, `UNDERLYING`, `NONE_ZETHER`, `UNDERLYING_ZETHER`; a `*_ZETHER` creation passes the Zether gate
-///         (`zetherEnabled`, a dev chain, a verifier this chain runs). **Zether is UNAUDITED — NOT FOR PRODUCTION FUNDS.**
+///         (`zetherEnabled`, a dev chain, a verifier this chain runs), a `*_PQZ` one the PQZ gate. The confidential
+///         verifiers are canonical (owner 2026-10-19, CTR-ZTH-20): fixed in the constructor (`Canonical`), and a
+///         confidential implementation is registered only when its verifier immutables are one of those sets; the
+///         creator never names a verifier and cannot use an unregistered confidential implementation. A deprecated
+///         version is no longer creatable (owner 2026-10-20). The registrar's key remains the trust root for code.
+///         **Zether is UNAUDITED — NOT FOR PRODUCTION FUNDS.**
 contract OpenFactory is IOpenFactory {
     struct Info {
         address creator;
@@ -27,6 +33,7 @@ contract OpenFactory is IOpenFactory {
     }
 
     uint256 internal constant MAX_LEGS = 8;
+    bytes4 private constant _VERIFIER_SEL = bytes4(keccak256("verifier()"));
 
     address public immutable registrar;
     bytes32 public immutable chainUid;
@@ -40,13 +47,34 @@ contract OpenFactory is IOpenFactory {
     mapping(uint64 => address) private _dexImpl;
     uint64 private _latestDex;
     mapping(address => uint64) private _dexVersion; // 0 = not a DEX made here
+    mapping(uint64 => bool) private _dexDeprecated;
     bool public zetherEnabled;
     bool public pqzEnabled;
 
-    constructor(address registrar_, bytes32 chainUid_) {
+    address private immutable _ZV0;
+    address private immutable _ZV1;
+    address private immutable _ZB0;
+    address private immutable _ZB1;
+    address private immutable _ZD0;
+    address private immutable _ZD1;
+    address private immutable _PQ0;
+    address private immutable _PQ1;
+
+    constructor(address registrar_, bytes32 chainUid_, Canonical memory c) {
         if (chainUid_ == bytes32(0)) revert ChainUidZero();
         registrar = registrar_;
         chainUid = chainUid_;
+        (_ZV0, _ZV1, _ZB0, _ZB1) = (c.zetherVerifier[0], c.zetherVerifier[1], c.zetherBurnVerifier[0], c.zetherBurnVerifier[1]);
+        (_ZD0, _ZD1, _PQ0, _PQ1) = (c.zetherDisclosure[0], c.zetherDisclosure[1], c.pqzVerifier[0], c.pqzVerifier[1]);
+    }
+
+    function zetherVerifiers(uint8 curve) public view returns (address verifier, address burnVerifier, address disclosure) {
+        if (curve == 0) return (_ZV0, _ZB0, _ZD0);
+        if (curve == 1) return (_ZV1, _ZB1, _ZD1);
+    }
+
+    function pqzVerifier(uint8 proofSystem) public view returns (address) {
+        return proofSystem == 0 ? _PQ0 : proofSystem == 1 ? _PQ1 : address(0);
     }
 
     // ------------------------------------------------------------------ catalogue
@@ -57,6 +85,7 @@ contract OpenFactory is IOpenFactory {
         address existing = _impl[kind][version];
         if (existing != address(0)) revert VersionAlreadyRegistered(kind, version, existing);
         _checkImplementation(kind, implementation);
+        _checkCanonical(kind, implementation);
         _impl[kind][version] = implementation;
         if (version > _latest[kind]) _latest[kind] = version;
         emit ImplementationRegistered(kind, version, implementation, msg.sender);
@@ -105,12 +134,14 @@ contract OpenFactory is IOpenFactory {
     {
         address impl = _impl[kind][version];
         if (impl == address(0)) revert VersionUnknown(kind, version);
+        if (_deprecated[kind][version]) revert VersionDeprecated(kind, version);
         return _create(kind, version, impl, cfg, salt);
     }
 
     function createTokenUnregistered(
         TokenKind kind, address implementation, IFactoryToken.TokenConfig calldata cfg, bytes32 salt
     ) external returns (address) {
+        if (uint8(kind) >= uint8(TokenKind.NONE_ZETHER)) revert UnregisteredConfidentialKind(kind);
         _checkImplementation(kind, implementation);
         return _create(kind, 0, implementation, cfg, salt);
     }
@@ -122,6 +153,10 @@ contract OpenFactory is IOpenFactory {
     // ------------------------------------------------------------------ provenance
 
     function isToken(address token) external view returns (bool) { return _info[token].exists; }
+
+    function isRegisteredToken(address token) external view returns (bool) {
+        return _info[token].exists && _info[token].version != 0;
+    }
 
     function creatorOf(address token) external view returns (address) { return _info[token].creator; }
 
@@ -170,11 +205,21 @@ contract OpenFactory is IOpenFactory {
 
     function dexImplementationOf(uint64 version) external view returns (address) { return _dexImpl[version]; }
 
+    function deprecateDex(uint64 version, string calldata reason) external {
+        if (msg.sender != registrar) revert NotRegistrar();
+        if (_dexImpl[version] == address(0)) revert DexVersionUnknown(version);
+        _dexDeprecated[version] = true;
+        emit DexImplementationDeprecated(version, reason);
+    }
+
+    function isDexDeprecated(uint64 version) external view returns (bool) { return _dexDeprecated[version]; }
+
     function latestDexVersion() external view returns (uint64) { return _latestDex; }
 
     function createDex(uint64 version, ISCaaSDex.DexConfig calldata cfg, bytes32 salt) external returns (address dex) {
         address impl = _dexImpl[version];
         if (impl == address(0)) revert DexVersionUnknown(version);
+        if (_dexDeprecated[version]) revert DexVersionDeprecated(version);
         bytes32 s = _salt(msg.sender, salt);
         address predicted = Clones.predictDeterministicAddress(impl, s);
         if (predicted.code.length != 0 || _dexVersion[predicted] != 0) revert SaltAlreadyUsed(predicted);
@@ -203,17 +248,47 @@ contract OpenFactory is IOpenFactory {
         if (!ok || bytes32(got) != chainUid) revert ChainUidMismatch(chainUid, ok ? bytes32(got) : bytes32(0));
     }
 
+    /// @dev A confidential implementation's verifier immutables must be one canonical set (CTR-ZTH-20): Zether
+    ///      `(verifier(), burnVerifier(), disclosure())` equal to curve 0's or curve 1's, PQZ `verifier()` equal to PQZL's
+    ///      or PQZH's. No answer reads as 0, and 0 never matches.
+    function _checkCanonical(TokenKind kind, address impl) private view {
+        bool ok = true;
+        if (_isZether(kind)) {
+            address v = _addr(impl, _VERIFIER_SEL);
+            address b = _addr(impl, IZetherToken.burnVerifier.selector);
+            address d = _addr(impl, IZetherToken.disclosure.selector);
+            ok = v != address(0) && ((v == _ZV0 && b == _ZB0 && d == _ZD0) || (v == _ZV1 && b == _ZB1 && d == _ZD1));
+        } else if (_isPqz(kind)) {
+            address v = _addr(impl, _VERIFIER_SEL);
+            ok = v != address(0) && (v == _PQ0 || v == _PQ1);
+        }
+        if (!ok) revert NotCanonicalVerifiers(impl);
+    }
+
+    function _isZether(TokenKind kind) private pure returns (bool) {
+        return kind == TokenKind.NONE_ZETHER || kind == TokenKind.UNDERLYING_ZETHER;
+    }
+
+    function _isPqz(TokenKind kind) private pure returns (bool) {
+        return kind == TokenKind.NONE_PQZ || kind == TokenKind.UNDERLYING_PQZ;
+    }
+
+    /// @dev An address-sized answer of `impl`, else 0.
+    function _addr(address impl, bytes4 sel) private view returns (address) {
+        (bool ok, uint256 w) = _word(impl, sel);
+        return ok && w == uint160(w) ? address(uint160(w)) : address(0);
+    }
+
     /// @dev The gate, then the verifier: an absent precompile does not revert, it returns success with empty output,
     ///      so a verifier this chain cannot run is refused before anyone deposits (CTR-TOK-03).
     function _checkZether(address verifier) private view {
         if (!zetherEnabled) revert ZetherDisabled();
         ZetherSafety.requireDevChain(); // a flag set on a dev chain does not survive a chain id change (fork)
-        if (verifier == address(0)) revert VerifierRequiredForZether();
         // low level: no code, or a fallback answering with empty data, fails typed rather than with a decode revert
-        (bool answered, uint256 w) = _word(verifier, IZetherVerifier.isSupportedOnThisChain.selector);
+        (bool answered, uint256 w) = _word(verifier, IZetherVerifierCommon.isSupportedOnThisChain.selector);
         if (answered && w == 1) return;
         string memory curve;
-        if (answered) try IZetherVerifier(verifier).curveName() returns (string memory c) { curve = c; } catch {}
+        if (answered) try IZetherVerifierCommon(verifier).curveName() returns (string memory c) { curve = c; } catch {}
         revert VerifierUnsupportedOnThisChain(verifier, curve);
     }
 
@@ -221,8 +296,7 @@ contract OpenFactory is IOpenFactory {
     function _checkPqz(address verifier) private view {
         if (!pqzEnabled) revert PqzDisabled();
         PqzSafety.requireAllowedChain();
-        if (verifier == address(0)) revert VerifierRequiredForPqz();
-        (bool answered, uint256 w) = _word(verifier, IZetherVerifier.isSupportedOnThisChain.selector);
+        (bool answered, uint256 w) = _word(verifier, IZetherVerifierCommon.isSupportedOnThisChain.selector);
         if (!answered || w != 1) revert PqzVerifierUnsupported(verifier);
     }
 
@@ -240,8 +314,9 @@ contract OpenFactory is IOpenFactory {
     function _create(TokenKind kind, uint64 version, address impl, IFactoryToken.TokenConfig calldata cfg,
         bytes32 salt) private returns (address token)
     {
-        if (kind == TokenKind.NONE_ZETHER || kind == TokenKind.UNDERLYING_ZETHER) _checkZether(cfg.conf.verifier);
-        if (kind == TokenKind.NONE_PQZ || kind == TokenKind.UNDERLYING_PQZ) _checkPqz(cfg.conf.verifier);
+        // the release's own verifier (an immutable checked at registration, CTR-ZTH-20)
+        if (_isZether(kind)) _checkZether(_addr(impl, _VERIFIER_SEL));
+        if (_isPqz(kind)) _checkPqz(_addr(impl, _VERIFIER_SEL));
         uint256 n = cfg.legs.length;
         bool wrapper = kind == TokenKind.UNDERLYING || kind == TokenKind.UNDERLYING_ZETHER
             || kind == TokenKind.UNDERLYING_PQZ;

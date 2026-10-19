@@ -27,8 +27,11 @@ contract UnderlyingPqzToken is UnderlyingToken, PqzLayer {
         uint256 minOut;
     }
 
-    constructor(address factory_, address smartKeyAccountImpl_, bytes32 chainUid_, address registry_)
+    /// @param verifier_ the `UAPqzVerifier` of this release (CTR-ZTH-20 / CTR-PQZ-10: `OpenFactory` registers it only
+    ///        on one of its canonical PQZ verifiers).
+    constructor(address factory_, address smartKeyAccountImpl_, bytes32 chainUid_, address registry_, address verifier_)
         UnderlyingToken(factory_, smartKeyAccountImpl_, chainUid_, registry_, false)
+        PqzLayer(verifier_)
     {
         if (registry_.code.length == 0) revert BadInit();
     }
@@ -40,7 +43,7 @@ contract UnderlyingPqzToken is UnderlyingToken, PqzLayer {
     function _init(TokenConfig calldata cfg) internal override(UnderlyingToken, MetaTokenBase) {
         _requireUnused(cfg, true, false, false, false);
         UnderlyingLib.initToken(cfg, false, AdminLib.KIND_UNDERLYING_PQZ);
-        PqzLib.init(cfg.conf, _REGISTRY);
+        PqzLib.init(cfg.conf, _REGISTRY, PQZ_VERIFIER);
     }
 
     // ------------------------------------------------------------------ wrap-shield / unshield-unwrap (CTR-PQZ-22)

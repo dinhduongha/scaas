@@ -3,8 +3,8 @@ pragma solidity ^0.8.20;
 
 import {Test} from "forge-std/Test.sol";
 import {stdJson} from "forge-std/StdJson.sol";
-import {ZetherVerifierBn254, ZetherVerifierBls12381, ZetherVerifierBase} from "../../src/zether/ZetherVerifier.sol";
-import {IZetherVerifier} from "../../src/zether/IZetherVerifier.sol";
+import {IZetherVerifier, IZetherBurnVerifier} from "../../src/zether/IZetherVerifier.sol";
+import {ZetherVerifiers} from "./helpers/ZetherVerifiers.sol";
 import {ZetherTranscript as T} from "../../src/zether/ZetherTranscript.sol";
 import {G1Bn254, G1Bls12381} from "../../src/zether/ZetherCurves.sol";
 
@@ -15,12 +15,14 @@ contract ZetherKatTest is Test {
     using stdJson for string;
 
     string constant DIR = "test/vectors/zether/";
-    ZetherVerifierBn254 bn;
-    ZetherVerifierBls12381 bls;
+    IZetherVerifier bn;
+    IZetherVerifier bls;
+    IZetherBurnVerifier bnB;
+    IZetherBurnVerifier blsB;
 
     function setUp() public {
-        bn = new ZetherVerifierBn254();
-        bls = new ZetherVerifierBls12381();
+        (bn, bnB) = ZetherVerifiers.deploy(false);
+        (bls, blsB) = ZetherVerifiers.deploy(true);
     }
 
     function _checkGenerators(IZetherVerifier v, string memory file) internal view {
@@ -47,10 +49,14 @@ contract ZetherKatTest is Test {
 
     function test_generatorsBn254MatchIndependentReference() public view {
         _checkGenerators(bn, "generators_bn254.json");
+        assertEq(keccak256(bnB.generators()), keccak256(bn.generators()), "the burn verifier's generators");
+        assertEq(bnB.proofSystemId(), bn.proofSystemId(), "one proof system");
     }
 
     function test_generatorsBls12381MatchIndependentReference() public view {
         _checkGenerators(bls, "generators_bls12381.json");
+        assertEq(keccak256(blsB.generators()), keccak256(bls.generators()), "the burn verifier's generators");
+        assertEq(blsB.proofSystemId(), bls.proofSystemId(), "one proof system");
     }
 
     function test_transcriptMatchesReference() public view {

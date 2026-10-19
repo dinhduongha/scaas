@@ -29,7 +29,7 @@ contract ZetherHandler is ZetherFixture {
         _stack(false);
         leg[0] = new MockERC20("USD", "USD", 6);
         leg[1] = new MockERC20("ODD", "ODD", 6);
-        UnderlyingZetherToken impl = new UnderlyingZetherToken(address(factory), address(0), ZUID, address(reg), dis);
+        UnderlyingZetherToken impl = new UnderlyingZetherToken(address(factory), address(0), ZUID, address(reg), dis, ver, burnVer);
         vm.prank(registrar);
         factory.registerImplementation(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, address(impl));
         IFactoryToken.TokenConfig memory c;
@@ -40,7 +40,7 @@ contract ZetherHandler is ZetherFixture {
         c.legs = new IFactoryToken.Leg[](2);
         c.legs[0] = IFactoryToken.Leg(address(leg[0]), 1, 1);
         c.legs[1] = IFactoryToken.Leg(address(leg[1]), 3, 7);
-        c.conf = IFactoryToken.ConfidentialConfig(address(ver), "", SCALE, MAX, FEE, 0, 0, 0);
+        c.conf = IFactoryToken.ConfidentialConfig(address(0), "", SCALE, MAX, FEE, 0, 0, 0);
         w = UnderlyingZetherToken(payable(factory.createToken(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, c, "inv")));
         tok = ZetherLayer(address(w));
         _users();

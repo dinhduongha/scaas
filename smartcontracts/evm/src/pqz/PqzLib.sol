@@ -141,13 +141,14 @@ library PqzLib {
 
     // ------------------------------------------------------------------ init
 
-    /// @notice The kind's `_init` (P6g plan D9): `verifier` a `UAPqzVerifier` (precompile and proof system: exactly
-    ///         `PqzSafety.PQZ`, PQZL or PQZH, the self-test passing now; review W-B), `auditorKey` empty or the
-    ///         auditor's 32-byte `pqz-mlwe` UA, cap `≤ 2^62`, fee `< 2^64` and `< cap`.
-    function init(IFactoryToken.ConfidentialConfig calldata c, address registry) public {
+    /// @notice The kind's `_init` (P6g plan D9): `verifier` the release's `UAPqzVerifier` (CTR-ZTH-20: `c.verifier` must
+    ///         be 0, the creator never chooses one; precompile and proof system: exactly `PqzSafety.PQZ`, PQZL or PQZH,
+    ///         the self-test passing now; review W-B), `auditorKey` empty or the auditor's 32-byte `pqz-mlwe` UA, cap
+    ///         `≤ 2^62`, fee `< 2^64` and `< cap`.
+    function init(IFactoryToken.ConfidentialConfig calldata c, address registry, address verifier) public {
         PqzSafety.requireAllowedChain();
         bytes calldata aud = c.auditorKey;
-        if (c.shieldScale == 0 || c.maxShielded == 0 || c.maxShielded > MAX_TOTAL_SHIELDED
+        if (c.verifier != address(0) || c.shieldScale == 0 || c.maxShielded == 0 || c.maxShielded > MAX_TOTAL_SHIELDED
             || c.confidentialFee >= VALUE_BOUND || c.confidentialFee >= c.maxShielded
             || c.confidentialFee + 8 * c.multiLegFee >= VALUE_BOUND || c.confidentialFee + 8 * c.multiLegFee >= c.maxShielded
             || (aud.length != 0 && aud.length != 32) || c.maxShielded > type(uint256).max / c.shieldScale) {
@@ -161,11 +162,11 @@ library PqzLib {
         bytes32 a = aud.length == 32 ? bytes32(aud) : bytes32(0);
         if (a != 0 && !_registered(registry, a)) revert IPqzToken.AccountNotRegistered(a);
         PqzStorage storage s = $();
-        UAPqzVerifier v = UAPqzVerifier(c.verifier);
+        UAPqzVerifier v = UAPqzVerifier(verifier);
         s.pqz = v.PRECOMPILE();
         s.psid = v.PROOF_SYSTEM_ID();
         PqzSafety.requirePqz(s.pqz, s.psid); // the token's verdicts come from `s.pqz`, never from the verifier (W-B)
-        s.verifier = c.verifier;
+        s.verifier = verifier;
         s.disclosureMode = ZetherTypes.DisclosureMode(c.disclosureMode);
         s.auditorMode = ZetherTypes.AuditorMode(c.auditorMode);
         s.shieldScale = c.shieldScale;

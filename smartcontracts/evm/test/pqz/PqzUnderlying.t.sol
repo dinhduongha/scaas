@@ -23,7 +23,7 @@ contract PqzUnderlyingTest is PqzFixture {
 
     function setUp() public {
         _stack();
-        UnderlyingPqzToken impl = new UnderlyingPqzToken(address(factory), address(0), PQZ_UID_(), address(reg));
+        UnderlyingPqzToken impl = new UnderlyingPqzToken(address(factory), address(0), PQZ_UID_(), address(reg), address(pqv));
         vm.prank(registrar);
         factory.registerImplementation(IOpenFactory.TokenKind.UNDERLYING_PQZ, 1, address(impl));
         usd = new MockERC20("USD", "USD", 6);
@@ -114,5 +114,29 @@ contract PqzUnderlyingTest is PqzFixture {
         w.pqzUnshield(pl, _acc(bob), new bytes[](0), 5, address(this), hex"c0de", _mlAuth());
         assertEq(w.totalSupply(), 35 * SCALE);
         assertEq(usd.balanceOf(address(w)), w.totalSupply() + w.totalShielded() * SCALE);
+    }
+
+    /// The largest implementation (`UnderlyingPqzToken`, plan 5g-Z) fits one Osaka transaction as `deploy.sh` sends a
+    /// deploy (gas limit = forge's estimate × `--gas-estimate-multiplier 105`; forge's estimate ran ~1.05× the measured
+    /// CREATE2 + intrinsic + calldata, ZetherDeploy.t): not with forge's default ×1.30. Init code over EIP-3860's 49,152
+    /// fits 7622 / anvil (131,072 with `--code-size-limit 65536`).
+    function test_largestImplementationFitsOneOsakaTx() public {
+        bytes memory code = abi.encodePacked(type(UnderlyingPqzToken).creationCode,
+            abi.encode(address(factory), address(0), PQZ_UID_(), address(reg), address(pqv)));
+        uint256 g = gasleft();
+        address a;
+        assembly ("memory-safe") { a := create2(0, add(code, 32), mload(code), 7) }
+        g -= gasleft();
+        assertTrue(a != address(0), "deploys");
+        uint256 data = 32 * 16; // the CREATE2 deployer's salt word
+        for (uint256 j; j < code.length; ++j) data += code[j] == 0 ? 4 : 16;
+        uint256 txGas = 21_000 + data + g * 64 / 63;
+        emit log_named_uint("UnderlyingPqzToken init code bytes", code.length);
+        emit log_named_uint("UnderlyingPqzToken runtime bytes", a.code.length);
+        emit log_named_uint("UnderlyingPqzToken deploy tx gas", txGas);
+        assertGt(code.length, 49_152, "over EIP-3860: 64 KiB chains only");
+        assertLe(code.length, 131_072);
+        assertLt(txGas * 105 * 105 / 10_000, 1 << 24, "fits EIP-7825 with --gas-estimate-multiplier 105");
+        assertGt(txGas * 105 * 130 / 10_000, 1 << 24, "forge's default x1.30 would not");
     }
 }

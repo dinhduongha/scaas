@@ -16,8 +16,11 @@ import {PqzLib} from "./PqzLib.sol";
 ///         only; shielded value exists only through `pqzShield`, which burns public units. Flags: `PAYABLE`,
 ///         `MINTABLE`, `BURNABLE`. Built by `OpenFactory.createToken` with `conf` set and `legs`, `rate` empty.
 contract NoUnderlyingPqzToken is NoUnderlyingToken, PqzLayer {
-    constructor(address factory_, address smartKeyAccountImpl_, bytes32 chainUid_, address registry_)
+    /// @param verifier_ the `UAPqzVerifier` of this release (CTR-ZTH-20 / CTR-PQZ-10: `OpenFactory` registers it only
+    ///        on one of its canonical PQZ verifiers).
+    constructor(address factory_, address smartKeyAccountImpl_, bytes32 chainUid_, address registry_, address verifier_)
         NoUnderlyingToken(factory_, smartKeyAccountImpl_, chainUid_, registry_, false)
+        PqzLayer(verifier_)
     {
         if (registry_.code.length == 0) revert BadInit();
     }
@@ -30,7 +33,7 @@ contract NoUnderlyingPqzToken is NoUnderlyingToken, PqzLayer {
         _requireUnused(cfg, false, true, true, false);
         _setMetadata(cfg.name, cfg.symbol, cfg.decimals);
         AdminLib.init(AdminLib.KIND_NONE_PQZ, cfg.features, cfg.lockedFeatures, cfg.owner, cfg.roles);
-        PqzLib.init(cfg.conf, _REGISTRY);
+        PqzLib.init(cfg.conf, _REGISTRY, PQZ_VERIFIER);
         if (cfg.initialSupply != 0) _mint(cfg.initialHolder, cfg.initialSupply);
     }
 

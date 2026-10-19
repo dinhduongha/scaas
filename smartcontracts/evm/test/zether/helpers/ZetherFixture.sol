@@ -20,11 +20,12 @@ import {ZetherStatements} from "../../../src/zether/ZetherStatements.sol";
 import {ITransferDisclosure} from "../../../src/zether/ITransferDisclosure.sol";
 import {ZetherTranscript} from "../../../src/zether/ZetherTranscript.sol";
 import {IZetherToken} from "../../../src/zether/IZetherToken.sol";
-import {IZetherVerifier} from "../../../src/zether/IZetherVerifier.sol";
-import {ZetherVerifierBn254, ZetherVerifierBls12381} from "../../../src/zether/ZetherVerifier.sol";
+import {IZetherVerifier, IZetherBurnVerifier} from "../../../src/zether/IZetherVerifier.sol";
+import {ZetherVerifiers} from "./ZetherVerifiers.sol";
 import {ZetherTypes} from "../../../src/zether/ZetherTypes.sol";
 import {ZetherProver} from "./ZetherProver.sol";
 import {ZetherKeys} from "./ZetherKeys.sol";
+import {zetherCanon} from "../../helpers/Canon.sol";
 
 bytes32 constant ZUID = 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464;
 
@@ -45,6 +46,7 @@ abstract contract ZetherFixture is Test {
     NoUnderlyingZetherToken internal noneImpl;
     UARegistry internal reg;
     IZetherVerifier internal ver;
+    IZetherBurnVerifier internal burnVer;
     ZetherLayer internal tok;
     ZetherDisclosure internal dis;
     ZetherStatements internal stm;
@@ -82,13 +84,15 @@ abstract contract ZetherFixture is Test {
 
     function _stack(bool useBls) internal {
         bls = useBls;
-        factory = new OpenFactory(registrar, ZUID);
+        // the canonical verifiers and disclosure first: the factory fixes them in its constructor (CTR-ZTH-20)
+        (ver, burnVer) = ZetherVerifiers.deploy(useBls);
         dis = new ZetherDisclosure();
+        factory = new OpenFactory(registrar, ZUID,
+            zetherCanon(useBls ? 1 : 0, address(ver), address(burnVer), address(dis)));
         stm = new ZetherStatements();
         reg = _uaRegistry();
         prover = new ZetherProver();
-        ver = useBls ? IZetherVerifier(address(new ZetherVerifierBls12381())) : IZetherVerifier(address(new ZetherVerifierBn254()));
-        noneImpl = new NoUnderlyingZetherToken(address(factory), address(0), ZUID, address(reg), dis);
+        noneImpl = new NoUnderlyingZetherToken(address(factory), address(0), ZUID, address(reg), dis, ver, burnVer);
         vm.startPrank(registrar);
         factory.registerImplementation(IOpenFactory.TokenKind.NONE_ZETHER, 1, address(noneImpl));
         factory.setZetherEnabled(true);
@@ -118,7 +122,7 @@ abstract contract ZetherFixture is Test {
         c.features = (1 << AdminLib.PAYABLE) | (1 << AdminLib.MINTABLE) | (1 << AdminLib.BURNABLE);
         c.roles.minter = address(this);
         c.conf = IFactoryToken.ConfidentialConfig(
-            address(ver), auditor ? ZetherKeys.pub(X_AUD, bls) : bytes(""), SCALE, maxShielded, FEE, dMode,
+            address(0), auditor ? ZetherKeys.pub(X_AUD, bls) : bytes(""), SCALE, maxShielded, FEE, dMode,
             auditor ? aMode : 0, 0
         );
     }

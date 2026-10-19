@@ -11,6 +11,8 @@ import {PqzLib} from "../../src/pqz/PqzLib.sol";
 import {ZetherTypes} from "../../src/zether/ZetherTypes.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {NoUnderlyingPqzToken} from "../../src/pqz/NoUnderlyingPqzToken.sol";
+import {OpenFactory} from "../../src/factory/OpenFactory.sol";
+import {pqzCanon} from "../helpers/Canon.sol";
 
 /// Op 7, the multi-recipient transfer (CTR-PQZ-25 / -26; P6g op 7): `pqzTransfer*` with `M` legs (decoys included),
 /// the statement against pq-zero-knowledge.md §8.1 op 7, the effects per leg, the bundle (for `M = 1` the single
@@ -340,7 +342,15 @@ contract PqzMultiTest is PqzFixture {
 
     /// A PQZH token: M = 8 is not built; at most 10 inline credits on op 7 (16 on op 1).
     function test_multi_pqzh() public {
+        // a PQZH release: its verifier is an immutable, one of the factory's canonical ones (CTR-ZTH-20)
         pqv = _newPqzVerifier(PQZH_ID);
+        factory = new OpenFactory(registrar, PQZ_UID, pqzCanon(1, address(pqv)));
+        NoUnderlyingPqzToken hImpl =
+            new NoUnderlyingPqzToken(address(factory), address(0), PQZ_UID, address(reg), address(pqv));
+        vm.startPrank(registrar);
+        factory.registerImplementation(IOpenFactory.TokenKind.NONE_PQZ, 1, address(hImpl));
+        factory.setPqzEnabled(true);
+        vm.stopPrank();
         PqzLayer h = _newToken("pqzh");
         assertEq(h.proofSystemId(), PQZH_ID);
         bytes32[] memory rec = _legsOf(8);

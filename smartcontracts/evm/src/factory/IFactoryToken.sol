@@ -28,6 +28,9 @@ interface IFactoryToken {
     ///         `auditorMode` 0 `NONE` (no key, every `C_aud = O`), 1 `FULL` (key, every transfer includes the auditor)
     ///         or 2 `OPTIONAL` (key, the sender may leave the auditor out per transfer). `ZetherTypes` names the values.
     struct ConfidentialConfig {
+        /// Must be 0 (`BadInit`) for every confidential kind (owner 2026-10-19, CTR-ZTH-20): the verifiers are
+        /// immutables of the implementation release, registered only on the factory's canonical set; the creator picks
+        /// them by picking the version. Kept so the creation ABI does not change (plan 5g-Z2 replaces this config).
         address verifier;
         bytes auditorKey;
         uint256 shieldScale;

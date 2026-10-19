@@ -10,6 +10,7 @@ import {AdminLib} from "../metatx/AdminLib.sol";
 import {UnderlyingLib} from "../metatx/UnderlyingLib.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {ITransferDisclosure} from "./ITransferDisclosure.sol";
+import {IZetherVerifier, IZetherBurnVerifier} from "./IZetherVerifier.sol";
 import {ZetherTypes} from "./ZetherTypes.sol";
 import {ZetherLayer} from "./ZetherLayer.sol";
 import {ZetherLib} from "./ZetherLib.sol";
@@ -25,9 +26,9 @@ import {ZetherLib} from "./ZetherLib.sol";
 ///         part. Flags: `PAYABLE`, `RATE_ADJUSTABLE`, `WRAP_DISABLEABLE` (CTR-ZTH-47). Never on Hedera.
 contract UnderlyingZetherToken is UnderlyingToken, ZetherLayer {
     constructor(address factory_, address smartKeyAccountImpl_, bytes32 chainUid_, address registry_,
-        ITransferDisclosure disclosure_)
+        ITransferDisclosure disclosure_, IZetherVerifier transferVerifier_, IZetherBurnVerifier burnVerifier_)
         UnderlyingToken(factory_, smartKeyAccountImpl_, chainUid_, registry_, false)
-        ZetherLayer(disclosure_)
+        ZetherLayer(disclosure_, transferVerifier_, burnVerifier_)
     {}
 
     function kind() public pure override(UnderlyingToken, MetaTokenBase) returns (uint8) {
@@ -37,7 +38,7 @@ contract UnderlyingZetherToken is UnderlyingToken, ZetherLayer {
     function _init(TokenConfig calldata cfg) internal override(UnderlyingToken, MetaTokenBase) {
         _requireUnused(cfg, true, false, false, false);
         UnderlyingLib.initToken(cfg, false, AdminLib.KIND_UNDERLYING_ZETHER);
-        ZetherLib.init(cfg.conf);
+        ZetherLib.init(cfg.conf, TRANSFER_VERIFIER);
     }
 
     // ------------------------------------------------------------------ wrap-shield / unshield-unwrap (CTR-ZTH-45)
@@ -116,8 +117,10 @@ contract UnderlyingZetherToken is UnderlyingToken, ZetherLayer {
     ///      and `minOut` (`ZetherLib.unwrapBinding`) under `ZTX_V1_DIRECT`.
     function _envUnwrap(address u, uint256 minOut) private view returns (ZetherLib.Env memory) {
         bytes32 b = _ticketBinding();
-        if (b != bytes32(0)) return ZetherLib.Env(_REGISTRY, CHAIN_UID, ZetherLib.TAG_RELAYED, b);
-        return ZetherLib.Env(_REGISTRY, CHAIN_UID, ZetherLib.TAG_DIRECT, ZetherLib.unwrapBinding(u, minOut));
+        if (b != bytes32(0)) return ZetherLib.Env(_REGISTRY, CHAIN_UID, ZetherLib.TAG_RELAYED, b, BURN_VERIFIER);
+        return ZetherLib.Env(
+            _REGISTRY, CHAIN_UID, ZetherLib.TAG_DIRECT, ZetherLib.unwrapBinding(u, minOut), BURN_VERIFIER
+        );
     }
 
     // ------------------------------------------------------------------ allowlist (CTR-MTX-19, CTR-ZTH-34)

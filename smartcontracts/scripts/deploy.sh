@@ -12,8 +12,11 @@
 #                            Always --code-size-limit 65536: every token implementation
 #                            exceeds EIP-170 since the UA ledger (UA-4; owner: wait for Glamsterdam), so the chain needs
 #                            64 KiB code (anvil --code-size-limit 65536, chain 7622 maxCodeSize 0x10000); a chain at
-#                            24,576 refuses the deploy. DEPLOY_ZETHER=1 (dev chains only) adds the Zether stack and
-#                            --gas-estimate-multiplier 105. --slow always (one tx per block: anvil automine can strand a large tx).
+#                            24,576 refuses the deploy. Always --gas-estimate-multiplier 105: forge's default x1.30 on
+#                            the BLS inner-product verifier (~14 M, DEPLOY_ZETHER) exceeds the 2^24 per-transaction cap
+#                            (EIP-7825); the largest implementation, UnderlyingPqzToken (13,319,335 gas measured), is
+#                            deployed by script/pqz/e2e.py, not here. DEPLOY_ZETHER=1 (dev chains only) adds the Zether
+#                            stack. --slow always (one tx per block: anvil automine can strand a large tx).
 #   hedera  <relay-url>      same, script/hedera/DeployHedera.s.sol --slow (writes deployments/hedera-<chainid>.json)
 #   aptos   <cli-profile>    aptos move deploy-object --address-name scaas
 #   sui     <client-env>     sui client --client.env <env> publish
@@ -24,7 +27,7 @@ SC="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FAMILY="${1:?usage: $0 <family> <network> [args…]}"; NET="${2:?network}"; shift 2
 case "$FAMILY" in
   evm)     cd "$SC/evm"; Z=(--code-size-limit 65536)
-           case "${DEPLOY_ZETHER:-}" in 1|true|TRUE|True) Z+=(--gas-estimate-multiplier 105) ;; esac
+           Z+=(--gas-estimate-multiplier 105) # the BLS inner-product verifier (~14 M) must stay under the 2^24 tx cap
            # forge writes the JSON in the simulation, before the broadcast: keep the previous one until it succeeds
            J="deployments/$(cast chain-id --rpc-url "$NET").json"; [ -f "$J" ] && cp "$J" "$J.prev"
            if forge script script/Deploy.s.sol --rpc-url "$NET" --broadcast --slow "${Z[@]}" \

@@ -1798,7 +1798,7 @@ disks for that or prune ([NODE-OPS-15](../node/ops.md#NODE-OPS-15)).
 | Contract | Role | Notes |
 |---|---|---|
 | `PqzSafety` (library) | [CTR-PQZ-01](#CTR-PQZ-01) allowlist + self-test helper | BUILT (P6g D2): {31337, 1337, 7622}; `selfTest` = op 6 answers exactly `0xed910a2c…d205` |
-| `UAPqzVerifier` | UA `IUAPopVerifier` for `0x0142` | BUILT (P6g D3): stateless; precompile and `proofSystemId` immutable; `pk < q` checked; constructor self-test + `R_REG` probe; also a token's `verifier` (D9) |
+| `UAPqzVerifier` | UA `IUAPopVerifier` for `0x0142` | BUILT (P6g D3): stateless; precompile and `proofSystemId` immutable; `pk < q` checked; constructor self-test + `R_REG` probe; also a PQZ release's `verifier` (D9): an implementation constructor argument, one of `OpenFactory`'s canonical PQZ verifiers (5g-Z1, [CTR-ZTH-20](zether.md#CTR-ZTH-20)) |
 | `UAMldsaVerifier` | UA verifier for `mldsa44`/`mldsa65` (BUILT, P6a: EIP-8355 precompile by probe, else Solidity) | stateless; used by the UA `UARegistry` |
 | `ERC20MetaTx` (the one token base) | ERC20 + EIP712 + `IERC20MetaTx`, both structs, the address and UA paths, UA ledger | [CTR-MTX-07](metatx.md#CTR-MTX-07); `PqzToken --sizes` ≤ 24,576 B, else the `ua*` entry points move to a `fallback` decoder as MetaToken v3 |
 | `PqzToken` | shield, transfer, unshield, refresh, rollover, disclosure, meta-tx, `wrap`/`unwrap` | BUILT (P6g D1) as the kinds `NONE_PQZ` (`NoUnderlyingPqzToken`) and `UNDERLYING_PQZ` (`UnderlyingPqzToken`): `PqzLayer` on `MetaTokenBase` + the external `PqzLib` (`scaas.pqz`); clones via `OpenFactory.createToken` behind `pqzEnabled`; disclosure `verifyTransferAmount` on the token (D11); op 7 entries and `multiLegFee` (P6g op 7); the statement views run in `PqzLib` by DELEGATECALL, so the builders stay out of the tokens: sizes 45,734 / 58,177 B (chain 7622 allows 65,536), `PqzLib` 19,921 B |
@@ -1883,8 +1883,11 @@ split, never a silent acceptance (fail closed).
 `PqzToken.initialize` (`PqzLib.init`) require the precompile to be exactly `PqzSafety.PQZ` and the proof system to be
 PQZL or PQZH (`NotPqz`), then call `OP_SELFTEST` and require the expected hash (a constant compiled into the contract;
 it folds in the precompile's own valid and invalid `R_REG` verdicts for both ids). A token takes the precompile and the
-id from its `verifier` (a `UAPqzVerifier`) but never trusts that contract: a creator-chosen verifier naming another
-"precompile" that answers 1 to everything is refused at creation (review W-B, 2026-10-19). `UAPqzVerifier`'s
+id from its `verifier` (a `UAPqzVerifier`) but never trusts that contract: a verifier naming another "precompile" that
+answers 1 to everything is refused at creation (review W-B, 2026-10-19). Since plan 5g-Z1 the creator names no verifier
+at all (`ConfidentialConfig.verifier` must be 0): it is an immutable of the implementation release, registered only when
+it is one of the factory's canonical PQZ verifiers (PQZL, PQZH; owner 2026-10-19, [CTR-ZTH-20](zether.md#CTR-ZTH-20)), so
+the proof system is an attribute of the release (`proofSystemId()`); the init check stays as a second line. `UAPqzVerifier`'s
 constructor also takes the self-test's `R_REG` vector of its id (≈ 45 KB PQZL / ≈ 200 KB PQZH, too large to compile
 into code under EIP-170) as an argument, requires `keccak256(psid ‖ message ‖ pk ‖ proof) == SELFTEST_VECTOR_HASH`
 (`PROBE_PQZL` / `PROBE_PQZH`), requires `OP_REGISTER` on it to return 1, then flips one proof bit in memory and requires

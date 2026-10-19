@@ -15,6 +15,7 @@ import {DexPuller} from "../../src/dex/DexPuller.sol";
 import {ITradeToken} from "../../src/trade/ITradeToken.sol";
 import {MockERC20, FeeOnTransferERC20} from "../helpers/Mocks.sol";
 import {UID_, noneInit} from "./helpers/V2Fixture.sol";
+import {noVerifiers} from "../helpers/Canon.sol";
 
 /// Router (v3 style): pulls `amountIn` (+ `extraIn`) from the caller under its allowance, pays `amountOut`
 /// (- `shortOut`) to `to` and always claims `amountOut` (the DEX never reads it).
@@ -149,7 +150,7 @@ contract DexExchangeTest is Test {
     MockRouter router;
 
     function setUp() public {
-        f = new OpenFactory(address(this), UID_);
+        f = new OpenFactory(address(this), UID_, noVerifiers());
         f.registerImplementation(IOpenFactory.TokenKind.NONE, 1,
             address(new NoUnderlyingToken(address(f), address(0), UID_, address(0), false)));
         f.registerDexImplementation(1, address(new SCaaSDex(address(f), UID_, address(0))));

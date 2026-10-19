@@ -17,6 +17,7 @@ import {IUALedger} from "../../src/metatx/IUALedger.sol";
 import {MockERC20, StubUARegistry} from "../helpers/Mocks.sol";
 import {noneInit, underlyingInit, Rate} from "../v2/helpers/V2Fixture.sol";
 import {MockHederaAccountService, MockHts} from "./HederaMocks.sol";
+import {noVerifiers} from "../helpers/Canon.sol";
 
 /// T5: con Hedera của ba tầng (TW2 §11, R144) — HIP-632 trên mỗi tầng, associate lúc init, kiểm phí HTS fail-closed.
 contract HederaV2Test is Test {
@@ -40,7 +41,7 @@ contract HederaV2Test is Test {
         vm.etch(HTS, type(MockHts).runtimeCode);
         alice = address(uint160(1_234_567));
         MockHederaAccountService(HAS).setEdKey(alice, vm.addr(ALICE_KEY));
-        f = new OpenFactory(registrar, UID);
+        f = new OpenFactory(registrar, UID, noVerifiers());
         vm.startPrank(registrar);
         f.registerImplementation(IOpenFactory.TokenKind.NONE, 1,
             address(new NoUnderlyingToken(address(f), address(0), UID, address(0), true)));

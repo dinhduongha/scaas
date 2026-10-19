@@ -12,6 +12,9 @@ import {ZetherTypes} from "../../src/zether/ZetherTypes.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {PqzSafety} from "../../src/pqz/PqzSafety.sol";
+import {OpenFactory} from "../../src/factory/OpenFactory.sol";
+import {NoUnderlyingPqzToken} from "../../src/pqz/NoUnderlyingPqzToken.sol";
+import {pqzCanon} from "../helpers/Canon.sol";
 
 /// A verifier that claims any precompile and proof system and says "supported" (review W-B).
 contract FakePqzVerifier {
@@ -404,13 +407,18 @@ contract PqzNoneTest is PqzFixture {
         vm.prank(registrar);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.KindReserved.selector, IOpenFactory.TokenKind.NONE_ZETHER_PQZ));
         factory.registerImplementation(IOpenFactory.TokenKind.NONE_ZETHER_PQZ, 1, address(noneImpl));
+        // the creator names no verifier (CTR-ZTH-20): any non-zero `conf.verifier` is refused, the canonical one too
         IFactoryToken.TokenConfig memory c = _cfg(1 << 40);
-        c.conf.verifier = address(0);
-        vm.expectRevert(IOpenFactory.VerifierRequiredForPqz.selector);
-        factory.createToken(IOpenFactory.TokenKind.NONE_PQZ, 1, c, "g1");
-        c.conf.verifier = address(reg);
-        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.PqzVerifierUnsupported.selector, address(reg)));
-        factory.createToken(IOpenFactory.TokenKind.NONE_PQZ, 1, c, "g2");
+        address[2] memory named = [address(reg), address(pqv)];
+        for (uint256 i; i < 2; ++i) {
+            c.conf.verifier = named[i];
+            vm.expectRevert(IPqzToken.BadInit.selector);
+            factory.createToken(IOpenFactory.TokenKind.NONE_PQZ, 1, c, bytes32(i + 1));
+        }
+        // an unregistered PQZ implementation cannot be cloned at all (owner 2026-10-19)
+        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.UnregisteredConfidentialKind.selector,
+            IOpenFactory.TokenKind.NONE_PQZ));
+        factory.createTokenUnregistered(IOpenFactory.TokenKind.NONE_PQZ, address(noneImpl), _cfg(1 << 40), "g2");
         // the self-test failing now: refused at creation and at setPqzEnabled(true)
         vm.mockCall(PQZ, hex"0600000000", abi.encode(bytes32(0)));
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.PqzVerifierUnsupported.selector, address(pqv)));
@@ -474,26 +482,38 @@ contract PqzNoneTest is PqzFixture {
         assertEq(tok.transferCiphertextHash(ref), bytes32(0));
     }
 
-    /// W-B: the token takes its verdicts from `PqzSafety.PQZ` only, for PQZL or PQZH only, after the self-test; a
-    /// creator's verifier cannot point it at an "always valid" precompile.
+    /// W-B / CTR-ZTH-20: a release on a verifier the factory does not list is refused at registration; and even a
+    /// factory whose deployer listed a fake verifier gets tokens whose verdicts come from `PqzSafety.PQZ` only, for PQZL or
+    /// PQZH only, after the self-test (the init check stays as a second line).
     function test_initPinsThePrecompile() public {
-        IFactoryToken.TokenConfig memory c = _cfg(1 << 40);
+        NoUnderlyingPqzToken rogue = new NoUnderlyingPqzToken(address(factory), address(0), PQZ_UID, address(reg),
+            address(new FakePqzVerifier(PQZ, PQZL_ID)));
+        vm.prank(registrar);
+        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.NotCanonicalVerifiers.selector, address(rogue)));
+        factory.registerImplementation(IOpenFactory.TokenKind.NONE_PQZ, 2, address(rogue));
+        assertEq(factory.pqzVerifier(0), address(pqv));
+        assertEq(factory.pqzVerifier(1), address(0));
         address fake = address(0xFA4E);
-        c.conf.verifier = address(new FakePqzVerifier(fake, PQZL_ID));
-        vm.expectRevert(abi.encodeWithSelector(PqzSafety.NotPqz.selector, fake, PQZL_ID));
-        factory.createToken(IOpenFactory.TokenKind.NONE_PQZ, 1, c, "w1");
         bytes32 other = keccak256("another proof system");
-        c.conf.verifier = address(new FakePqzVerifier(PQZ, other));
-        vm.expectRevert(abi.encodeWithSelector(PqzSafety.NotPqz.selector, PQZ, other));
-        factory.createToken(IOpenFactory.TokenKind.NONE_PQZ, 1, c, "w2");
-        // the real precompile and id, its self-test failing now (the verifier says "supported" regardless)
-        c.conf.verifier = address(new FakePqzVerifier(PQZ, PQZL_ID));
-        vm.mockCall(PQZ, hex"0600000000", abi.encode(bytes32(0)));
-        vm.expectRevert(abi.encodeWithSelector(PqzSafety.SelfTestFailed.selector, PQZ));
-        factory.createToken(IOpenFactory.TokenKind.NONE_PQZ, 1, c, "w3");
+        address[3] memory pre = [fake, PQZ, PQZ];
+        bytes32[3] memory ids = [PQZL_ID, other, PQZL_ID];
+        for (uint256 i; i < 3; ++i) {
+            address fv = address(new FakePqzVerifier(pre[i], ids[i]));
+            OpenFactory g = new OpenFactory(registrar, PQZ_UID, pqzCanon(1, fv));
+            NoUnderlyingPqzToken impl = new NoUnderlyingPqzToken(address(g), address(0), PQZ_UID, address(reg), fv);
+            vm.startPrank(registrar);
+            g.registerImplementation(IOpenFactory.TokenKind.NONE_PQZ, 1, address(impl));
+            g.setPqzEnabled(true);
+            vm.stopPrank();
+            if (i == 2) vm.mockCall(PQZ, hex"0600000000", abi.encode(bytes32(0))); // the real pair, self-test failing
+            vm.expectRevert(i == 2 ? abi.encodeWithSelector(PqzSafety.SelfTestFailed.selector, PQZ)
+                : abi.encodeWithSelector(PqzSafety.NotPqz.selector, pre[i], ids[i]));
+            g.createToken(IOpenFactory.TokenKind.NONE_PQZ, 1, _cfg(1 << 40), "w");
+        }
         _mockSelfTest();
-        PqzLayer t = PqzLayer(factory.createToken(IOpenFactory.TokenKind.NONE_PQZ, 1, c, "w4"));
-        assertEq(t.precompile(), PQZ, "a foreign verifier object is harmless once the precompile is pinned");
+        assertEq(tok.precompile(), PQZ);
+        assertEq(tok.verifier(), address(pqv), "the release's verifier");
+        assertTrue(factory.isRegisteredToken(address(tok)));
     }
 
     /// W-E: a debit built on the base (the `acc` the last debit left) survives anyone's rollover in between: the

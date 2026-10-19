@@ -444,6 +444,8 @@ function createDex(uint64 version, DexConfig calldata cfg, bytes32 salt) externa
 **Transitional (BUILT, P2b-1).** Built: `registerDexImplementation` (append-only; the implementation answers `factory()`
 and `chainUid()`), `dexImplementationOf`, `latestDexVersion`, `createDex`, `isDex`, `dexVersionOf`, `DexImplementationRegistered`,
 `DexCreated` (controller ruling, pending the owner); the scripts register the implementation (`dex_implementation`), no clone.
+`deprecateDex(version, reason)` (registrar, immediate, `DexImplementationDeprecated`) makes `createDex` refuse that version
+(`DexVersionDeprecated`); DEXes already made keep working (owner 2026-10-20, plan 5g-Z1; `isDexDeprecated`).
 
 ## 6. Outside-token legs
 

@@ -12,6 +12,7 @@ import {PqzLayer} from "../../../src/pqz/PqzLayer.sol";
 import {PqzCt} from "../../../src/pqz/PqzCt.sol";
 import {PqzLib} from "../../../src/pqz/PqzLib.sol";
 import {ZetherTypes} from "../../../src/zether/ZetherTypes.sol";
+import {pqzCanon} from "../../helpers/Canon.sol";
 
 /// @notice The PQZ token stack of chain 7622 in forge (P6g plan D6): the gen-1 registry (`PqzRegistryBase`), `OpenFactory`
 ///         with the PQZ gate on, `NoUnderlyingPqzToken` clones. The `PQZ` precompile answers 1 for ops 1, 2, 4, 5 unless
@@ -46,8 +47,8 @@ abstract contract PqzFixture is PqzRegistryBase {
     function _stack() internal virtual {
         _registryStack();
         ct = new PqzCtHarness();
-        factory = new OpenFactory(registrar, PQZ_UID);
-        noneImpl = new NoUnderlyingPqzToken(address(factory), address(0), PQZ_UID, address(reg));
+        factory = new OpenFactory(registrar, PQZ_UID, pqzCanon(0, address(pqv))); // PQZL canonical (CTR-ZTH-20)
+        noneImpl = new NoUnderlyingPqzToken(address(factory), address(0), PQZ_UID, address(reg), address(pqv));
         vm.startPrank(registrar);
         factory.registerImplementation(IOpenFactory.TokenKind.NONE_PQZ, 1, address(noneImpl));
         factory.setPqzEnabled(true);
@@ -69,7 +70,7 @@ abstract contract PqzFixture is PqzRegistryBase {
         c.roles.minter = address(this);
         bool withAud = aMode != uint8(ZetherTypes.AuditorMode.NONE);
         c.conf = IFactoryToken.ConfidentialConfig(
-            address(pqv), withAud ? abi.encode(aud) : bytes(""), SCALE, maxShielded, FEE, dMode, aMode, mlf
+            address(0), withAud ? abi.encode(aud) : bytes(""), SCALE, maxShielded, FEE, dMode, aMode, mlf
         );
     }
 

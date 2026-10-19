@@ -3,7 +3,7 @@ pragma solidity ^0.8.24;
 
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {ZetherTypes} from "./ZetherTypes.sol";
-import {IZetherVerifier} from "./IZetherVerifier.sol";
+import {IZetherVerifier, IZetherBurnVerifier} from "./IZetherVerifier.sol";
 import {ITransferDisclosure} from "./ITransferDisclosure.sol";
 import {IUALedger} from "../metatx/IUALedger.sol";
 
@@ -105,7 +105,14 @@ interface IZetherToken is IUALedger {
     function disclosureMode() external view returns (ZetherTypes.DisclosureMode);
     /// @notice The canonical `ZetherDisclosure` (stateless, shared), an implementation immutable (CTR-ZTH-43).
     function disclosure() external view returns (ITransferDisclosure);
+    /// @notice The curve's transfer verifier (transfers, the group operations), an implementation immutable that
+    ///         `OpenFactory` checks against its canonical set at registration (CTR-ZTH-20).
     function verifier() external view returns (IZetherVerifier);
+    /// @notice The curve's burn verifier (unshield, unshield-unwrap), likewise (CTR-ZTH-20).
+    function burnVerifier() external view returns (IZetherBurnVerifier);
+    /// @notice The release's curve, `"bn254"` or `"bls12-381"` (the transfer verifier's `curveName()`): an attribute of
+    ///         the implementation version; version numbers carry no curve meaning.
+    function curve() external view returns (string memory);
     // `registry()` (the account registry, an implementation immutable, CTR-ZTH-44) is the UA ledger's (`IUALedger`).
 
     // ------------------------------------------------------------------ state
