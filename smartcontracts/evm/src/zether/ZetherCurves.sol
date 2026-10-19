@@ -6,7 +6,9 @@ import {HashToCurve} from "../common/HashToCurve.sol";
 /// @title Phép nhóm G1 của bn254 qua precompile EIP-196 (0x06 add, 0x07 mul).
 /// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Điểm là `bytes` 64 byte `x ‖ y`, vô cực = 64 byte 0
 ///         (đặc tả `2026-10-03-zether-design.md` §2). Cofactor 1: on-curve là đủ, và precompile tự từ
-///         chối điểm sai/không chính tắc, nên mọi hàm ở đây revert `BadPoint` thay vì trả rác.
+///         chối điểm sai/không chính tắc, nên mọi hàm ở đây revert `BadPoint` thay vì trả rác. Mọi lời gọi precompile
+///         đòi đúng số byte trả về (review W-I): một chain thiếu 0x05/0x06/0x07 trả "thành công, rỗng", nên chỉ cờ
+///         thành công sẽ đọc các số 0 còn trong bộ nhớ như một kết quả.
 library G1Bn254 {
     uint256 internal constant P = 21888242871839275222246405745257275088696311157297823662689037894645226208583;
     uint256 internal constant R = 21888242871839275222246405745257275088548364400416034343698204186575808495617;
@@ -35,6 +37,7 @@ library G1Bn254 {
             mstore(add(m, 64), mload(add(b, 32)))
             mstore(add(m, 96), mload(add(b, 64)))
             ok := staticcall(gas(), 0x06, m, 128, add(c, 32), 64)
+            ok := and(ok, eq(returndatasize(), 64)) // after the call: Yul evaluates right to left
         }
         if (!ok) revert BadPoint();
     }
@@ -64,6 +67,7 @@ library G1Bn254 {
             mstore(add(m, 32), mload(add(a, 64)))
             mstore(add(m, 64), k)
             ok := staticcall(gas(), 0x07, m, 96, add(c, 32), 64)
+            ok := and(ok, eq(returndatasize(), 64))
         }
         if (!ok) revert BadPoint();
     }
@@ -86,7 +90,9 @@ library G1Bn254 {
                 mstore(add(m, 160), mload(add(pp, 32)))
                 mstore(add(m, 192), s)
                 ok := and(ok, staticcall(gas(), 0x07, add(m, 128), 96, add(m, 64), 64))
+                ok := and(ok, eq(returndatasize(), 64))
                 ok := and(ok, staticcall(gas(), 0x06, m, 128, m, 64))
+                ok := and(ok, eq(returndatasize(), 64))
             }
             mstore(add(out, 32), mload(m))
             mstore(add(out, 64), mload(add(m, 32)))
@@ -104,6 +110,7 @@ library G1Bn254 {
             mstore(add(m, 64), 0)
             mstore(add(m, 96), 0)
             ok := staticcall(gas(), 0x06, m, 128, m, 64)
+            ok := and(ok, eq(returndatasize(), 64))
         }
     }
 
@@ -136,6 +143,7 @@ library G1Bn254 {
             mstore(add(m, 128), e)
             mstore(add(m, 160), P)
             ok := staticcall(gas(), 0x05, m, 192, m, 32)
+            ok := and(ok, eq(returndatasize(), 32))
             r := mload(m)
         }
         if (!ok) revert ModexpFailed();

@@ -84,6 +84,26 @@ contract TradeTest is V2Fixture {
         _expect(ITradeToken.FeeAboveSigned.selector, o2, _fill(600, 1200, 5));
     }
 
+    /// SOL-02 (review W-S, 2026-10-19): the price limit of amounts whose products pass 2^256 is a verdict, not a panic.
+    function test_pathA_priceLimit_hugeAmounts() public {
+        ITradeToken.TradeOrder memory o = _order(1 << 200, 1 << 100);
+        _expect(ITradeToken.PriceLimit.selector, o, _fill(1 << 200, (1 << 100) - 1, 0));
+    }
+
+    /// `mulGt` is exactly `a·b > c·d` wherever the products fit, and ordered past 2^256.
+    function testFuzz_mulGt(uint128 a, uint128 b, uint128 c, uint128 d) public pure {
+        assertEq(TradeLib.mulGt(a, b, c, d), uint256(a) * b > uint256(c) * d);
+    }
+
+    function test_mulGt_past2pow256() public pure {
+        uint256 m = type(uint256).max;
+        assertTrue(TradeLib.mulGt(m, 2, m, 1));
+        assertFalse(TradeLib.mulGt(m, 1, m, 2));
+        assertFalse(TradeLib.mulGt(m, m, m, m));
+        assertTrue(TradeLib.mulGt(1 << 200, 1 << 100, (1 << 100) - 1, 1 << 200));
+        assertFalse(TradeLib.mulGt(1 << 200, 1 << 100, 1 << 100, 1 << 200));
+    }
+
     function test_minFill_signerAboveTheFloor_andFillOrKill() public {
         ITradeToken.TradeOrder memory o = _order(1000, 2000);
         o.minFill = 800;

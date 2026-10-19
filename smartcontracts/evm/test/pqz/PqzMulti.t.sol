@@ -83,7 +83,7 @@ contract PqzMultiTest is PqzFixture {
             abi.encode(PqzLib.OP_TRANSFER_MULTI, PQZL_ID, block.chainid, address(tok), address(reg), alice,
                 keccak256(abi.encodePacked(rec)), carol, FEE, uint256(0)),
             abi.encode(uint256(4), uint256(0), uint256(0), block.number + 100, uint256(1), uint256(1000), PQZ_UID,
-                bytes32(0), uint256(uint128(salt)), bytes32(0))
+                _direct(ZetherTypes.TransferMode.BUNDLE), uint256(uint128(salt)), bytes32(0))
         );
         assertEq(_cut(st, 0, 640), head, "header: word 192 recipientsHash, 320 M");
         assertEq(_cut(st, 640, PqzCt.PK), _keyOf(alice), "pk_f");
@@ -311,6 +311,31 @@ contract PqzMultiTest is PqzFixture {
         mlf = (uint256(1) << 61); // confidentialFee + 8 · mlf ≥ 2^64
         vm.expectRevert();
         _newToken("big");
+    }
+
+    /// Review W-A: op 7's direct entry points bind their mode too (`pqzTransfer` BUNDLE ≠ `pqzTransferNoBundle`).
+    function test_directModeBound_multi() public {
+        bytes32[] memory rec = _legsOf(2);
+        bytes memory pl = _mpayload(0, 0, alice, 0, rec, _blob(120, _outLen(2, true)), "");
+        bytes[] memory none = new bytes[](0);
+        bytes memory st = tok.transferStatement(pl, _acc(alice), none, 0);
+        assertEq(bytes32(_cut(st, 544, 32)), _direct(ZetherTypes.TransferMode.BUNDLE));
+        bytes memory stN = tok.transferStatement(pl, _acc(alice), none, _direct(ZetherTypes.TransferMode.NONE));
+        assertEq(_cut(stN, 576, st.length - 576), _cut(st, 576, st.length - 576), "only the binding differs");
+        bytes memory proof = hex"b0b1";
+        _mockOp(7, 0);
+        vm.mockCall(PQZ, abi.encodePacked(uint8(7), uint32(st.length), st, proof), abi.encode(uint256(1)));
+        vm.expectRevert(IPqzToken.ProofRejected.selector);
+        tok.pqzTransferNoBundle(pl, _acc(alice), none, proof, _mlAuth());
+        bytes32 ref = tok.pqzTransfer(pl, _acc(alice), none, proof, _mlAuth());
+        assertTrue(tok.transferCiphertextHash(ref) != 0, "the bundle stored");
+    }
+
+    /// Review W-I: a payload shorter than its legs and memo is `BadPayload`, not an arithmetic panic.
+    function test_multi_shortPayloadIsBadPayload() public {
+        bytes memory pl = bytes.concat(new bytes(160), bytes32(uint256(1)), bytes16(0)); // 208 B, M = 1, no leg
+        vm.expectRevert(abi.encodeWithSelector(IPqzToken.BadPayload.selector, uint256(208)));
+        tok.pqzTransfer(pl, _acc(alice), new bytes[](0), hex"01", _mlAuth());
     }
 
     /// A PQZH token: M = 8 is not built; at most 10 inline credits on op 7 (16 on op 1).

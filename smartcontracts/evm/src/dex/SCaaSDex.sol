@@ -383,7 +383,7 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
                 uint256 m = o.minFill > o.amount - o.amount / 2 ? o.minFill : o.amount - o.amount / 2;
                 if (sold < m || recv < o.receiveAmount - o.receiveAmount / 2) revert BelowMinFill(c.h);
             }
-            if (sold * o.receiveAmount > recv * o.amount) revert PriceLimit(c.h);
+            if (TradeLib.mulGt(sold, o.receiveAmount, recv, o.amount)) revert PriceLimit(c.h);
             c.refund = o.amount - sold;
         }
     }

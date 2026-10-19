@@ -1,0 +1,21 @@
+# plan Task 5g (rev2-chain-pqz) sizes: c25ff77 -> branch, `forge build src --sizes --json`; size_gate.py: 0 error(s), 91 contracts
+contract | runtime before | runtime after | init before | init after
+BlsMinSigBn254Verifier | 2851 | 2856 | 2903 | 2908
+FrostBn254Verifier | 4563 | 4580 | 4591 | 4608
+Musig2Bn254Verifier | 5260 | 5271 | 5311 | 5322
+PqzLib | 19921 | 20569 | 19973 | 20621
+SCaaSDex | 23493 | 23551 | 24380 | 24438
+SchnorrBls12381Verifier | 3502 | 3513 | 3553 | 3564
+SchnorrBn254Verifier | 3502 | 3513 | 3553 | 3564
+TradeLib | 3369 | 3454 | 3421 | 3506
+UAPqzVerifier | 1314 | 1314 | 2437 | 2820
+ZetherSchnorrBls12381Verifier | 3512 | 3523 | 3637 | 3648
+ZetherSchnorrBn254Verifier | 3512 | 3523 | 3637 | 3648
+ZetherVerifierBls12381 | 16312 | 16317 | 19601 | 19606
+ZetherVerifierBn254 | 15955 | 15982 | 17651 | 17683
+unchanged: NoUnderlyingPqzToken 45734 / init 47324
+unchanged: UnderlyingPqzToken 58177 / init 59774
+unchanged: NoUnderlyingZetherToken 43794 / init 45454
+unchanged: UnderlyingZetherToken 55689 / init 57384
+unchanged: OpenFactory 10330 / init 10579
+unchanged: UARegistry 25861 / init 32428

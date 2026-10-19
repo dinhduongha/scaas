@@ -66,7 +66,7 @@ contract PqzRelayTest is PqzFixture {
         _mockOp(1, 0);
         vm.mockCall(PQZ, abi.encodePacked(uint8(1), uint32(83_072), st, hex"c0de"), abi.encode(uint256(1)));
         vm.expectRevert(IPqzToken.ProofRejected.selector);
-        tok.pqzTransferSingle(pl, _acc(alice), none, hex"c0de", _mlAuth()); // stripped out of its envelope: binding 0
+        tok.pqzTransferSingle(pl, _acc(alice), none, hex"c0de", _mlAuth()); // stripped out of its envelope: the direct binding
         MetaTxLib.MetaTransaction memory other = _m(data, 2, 0); // another nonce: another binding
         sg = _sig(other);
         vm.expectRevert(); // MetaTxBadNonce first; with nonce 1 used elsewhere the binding would differ
