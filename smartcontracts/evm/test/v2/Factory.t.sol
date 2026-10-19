@@ -11,6 +11,7 @@ import {UnderlyingToken} from "../../src/metatx/UnderlyingToken.sol";
 import {ITokenAdmin} from "../../src/metatx/ITokenAdmin.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {UID_, noneInit, underlyingInit, Rate} from "./helpers/V2Fixture.sol";
+import {noVerifiers} from "../helpers/Canon.sol";
 
 /// Answers `kind()` only.
 contract KindOnly {
@@ -51,7 +52,7 @@ contract FactoryTest is Test {
     IOpenFactory.TokenKind constant UNDERLYING = IOpenFactory.TokenKind.UNDERLYING;
 
     function setUp() public {
-        f = new OpenFactory(registrar, UID_);
+        f = new OpenFactory(registrar, UID_, noVerifiers());
         noneImpl = new NoUnderlyingToken(address(f), address(0), UID_, address(0), false);
         underlyingImpl = new UnderlyingToken(address(f), address(0), UID_, address(0), false);
         vm.startPrank(registrar);
@@ -81,7 +82,7 @@ contract FactoryTest is Test {
 
     function test_constructor_refusesZeroChainUid() public {
         vm.expectRevert(IOpenFactory.ChainUidZero.selector);
-        new OpenFactory(registrar, bytes32(0));
+        new OpenFactory(registrar, bytes32(0), noVerifiers());
         assertEq(f.chainUid(), UID_);
         assertEq(f.registrar(), registrar);
     }
@@ -120,18 +121,27 @@ contract FactoryTest is Test {
         assertEq(f.implementationOf(UNDERLYING, 1), address(underlyingImpl));
     }
 
-    function test_deprecateOnlyMarks() public {
+    /// `deprecate` is immediate and refuses new tokens of that version (owner 2026-10-20); tokens already made keep
+    /// working and the other versions stay creatable.
+    function test_deprecate_refusesNewTokensOfThatVersion() public {
         vm.prank(alice);
         vm.expectRevert(IOpenFactory.NotRegistrar.selector);
         f.deprecate(NONE, 1, "x");
         vm.prank(registrar);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VersionUnknown.selector, NONE, 9));
         f.deprecate(NONE, 9, "x");
+        vm.prank(alice);
+        address before = f.createToken(NONE, 1, _none(alice), "before");
         vm.prank(registrar);
         f.deprecate(NONE, 1, "bug");
         assertTrue(f.isDeprecated(NONE, 1));
         vm.prank(alice);
-        f.createToken(NONE, 1, _none(alice), "still"); // deprecation is advisory
+        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VersionDeprecated.selector, NONE, 1));
+        f.createToken(NONE, 1, _none(alice), "after");
+        assertTrue(f.isRegisteredToken(before), "an existing token is untouched");
+        assertEq(NoUnderlyingToken(before).balanceOf(alice), 1000);
+        vm.prank(alice);
+        f.createToken(UNDERLYING, 1, _wrapper(_two()), "other version");
     }
 
     // ------------------------------------------------------------------ create
@@ -238,6 +248,8 @@ contract FactoryTest is Test {
         f.createTokenUnregistered(NONE, address(bad), _none(alice), "x");
     }
 
+    /// Plain kinds only (owner 2026-10-19): recorded as version 0 and not a registered token, so clients and the gateway
+    /// treat it as unvetted; every confidential kind (2–7) is refused before any check.
     function test_createTokenUnregistered_isCheckedAndRecordedAsVersion0() public {
         NoUnderlyingToken mine = new NoUnderlyingToken(address(f), address(0), UID_, address(0), false);
         vm.prank(alice);
@@ -245,6 +257,14 @@ contract FactoryTest is Test {
         (, uint64 v) = f.versionOf(t);
         assertEq(v, 0);
         assertEq(NoUnderlyingToken(t).version(), 0);
+        assertTrue(f.isToken(t));
+        assertFalse(f.isRegisteredToken(t), "version 0: unvetted");
+        assertTrue(f.isRegisteredToken(f.createToken(NONE, 1, _none(alice), "r")));
+        assertFalse(f.isRegisteredToken(address(mine)));
+        for (uint8 k = 2; k <= 7; ++k) {
+            vm.expectRevert(abi.encodeWithSelector(IOpenFactory.UnregisteredConfidentialKind.selector, k));
+            f.createTokenUnregistered(IOpenFactory.TokenKind(k), address(mine), _none(alice), "c");
+        }
         NoUnderlyingToken other = new NoUnderlyingToken(address(f), address(0), keccak256("x"), address(0), false);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ChainUidMismatch.selector, UID_, keccak256("x")));
         f.createTokenUnregistered(NONE, address(other), _none(alice), "u2");

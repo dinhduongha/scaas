@@ -365,10 +365,13 @@ def run(kd, kr, ke):
     reg = D.deploy("UARegistry", encs(["w", "w", "w", "w", "w", "w", ("a", ("t", ["w", "w", "w"]))],
                                       [uid, 0, 0, BUDGET, 0, 1, kinds]), label="UARegistry gen 1")
     REG[0] = reg
-    fac = D.deploy("OpenFactory", encs(["w", "w"], [sd.addr, uid]))
+    # the canonical verifiers fixed in the factory (CTR-ZTH-20, Canonical = Zether transfer[2], burn[2], disclosure[2],
+    # PQZ[2]: 8 static words); PQZL's is this run's UAPqzVerifier, the rest absent
+    fac = D.deploy("OpenFactory", encs(["w"] * 10, [sd.addr, uid, 0, 0, 0, 0, 0, 0, pqv, 0]))
     none_i = D.deploy("NoUnderlyingToken", encs(["w"] * 5, [fac, 0, uid, reg, 0]))
-    npqz_i = D.deploy("NoUnderlyingPqzToken", encs(["w"] * 4, [fac, 0, uid, reg]))
-    upqz_i = D.deploy("UnderlyingPqzToken", encs(["w"] * 4, [fac, 0, uid, reg]))
+    # the release's verifier is a constructor argument (an implementation immutable, CTR-ZTH-20)
+    npqz_i = D.deploy("NoUnderlyingPqzToken", encs(["w"] * 5, [fac, 0, uid, reg, pqv]))
+    upqz_i = D.deploy("UnderlyingPqzToken", encs(["w"] * 5, [fac, 0, uid, reg, pqv]))
     for kind, impl in ((0, none_i), (4, npqz_i), (5, upqz_i)):
         sd.send(fac, cd("registerImplementation(uint8,uint64,address)", ["w", "w", "w"], kind, 1, impl),
                 f"registerImplementation(kind {kind})")
@@ -465,7 +468,7 @@ def run(kd, kr, ke):
     def create(kind, name, sym, legs, dmode, amode, feat, supply=0, holder=0, conf=True, salt=b"p6g"):
         aud_key = aud.ua if amode else b""
         c = [name, sym, 6, feat, 0, sd.addr, [sd.addr if feat & 2 else 0, 0, 0, 0, 0], supply, holder, legs, [0, 0],
-             [pqv, aud_key, SCALE, MAXS, FEE, dmode, amode, 0] if conf else [0, b"", 0, 0, 0, 0, 0, 0]]
+             [0, aud_key, SCALE, MAXS, FEE, dmode, amode, 0] if conf else [0, b"", 0, 0, 0, 0, 0, 0]]  # verifier 0: the release's
         data = cd(f"createToken(uint8,uint64,{CFG_S},bytes32)", ["w", "w", CFG, "w"], kind, 1, c, kc(salt))
         r = sd.send(fac, data, f"createToken {sym} (kind {kind})")
         lg = next(x for x in r["logs"] if x["address"].lower() == fac.lower())

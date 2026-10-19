@@ -2,8 +2,8 @@
 pragma solidity ^0.8.20;
 
 import {Test, console2} from "forge-std/Test.sol";
-import {ZetherVerifierBn254, ZetherVerifierBls12381} from "../../src/zether/ZetherVerifier.sol";
-import {IZetherVerifier} from "../../src/zether/IZetherVerifier.sol";
+import {IZetherVerifier, IZetherBurnVerifier} from "../../src/zether/IZetherVerifier.sol";
+import {ZetherVerifiers} from "./helpers/ZetherVerifiers.sol";
 import {G1Bls12381} from "../../src/zether/ZetherCurves.sol";
 import {ZetherProver} from "./helpers/ZetherProver.sol";
 
@@ -15,8 +15,10 @@ contract ZetherVerifierTest is Test {
     bytes32 constant OP_B = keccak256("SCAAS-ZETHER-OP-BURN-V1");
     bytes32 constant DIRECT = keccak256("ZTX_V1_DIRECT");
 
-    ZetherVerifierBn254 bn;
-    ZetherVerifierBls12381 bls;
+    IZetherVerifier bn;
+    IZetherVerifier bls;
+    IZetherBurnVerifier bnB;
+    IZetherBurnVerifier blsB;
     ZetherProver prover;
 
     uint256 constant XF = 0xA11CE;
@@ -26,8 +28,8 @@ contract ZetherVerifierTest is Test {
     uint256 constant S = 0x5;
 
     function setUp() public {
-        bn = new ZetherVerifierBn254();
-        bls = new ZetherVerifierBls12381();
+        (bn, bnB) = ZetherVerifiers.deploy(false);
+        (bls, blsB) = ZetherVerifiers.deploy(true);
         prover = new ZetherProver();
     }
 
@@ -83,7 +85,12 @@ contract ZetherVerifierTest is Test {
     }
 
     function callVerify(IZetherVerifier v, bytes memory st, bytes memory pr, bool transfer) external view returns (bool) {
-        return transfer ? v.verifyTransfer(st, pr) : v.verifyBurn(st, pr);
+        return transfer ? v.verifyTransfer(st, pr) : _burnOf(v).verifyBurn(st, pr);
+    }
+
+    /// The burn verifier of `v`'s curve (CTR-ZTH-20: a transfer and a burn verifier per curve).
+    function _burnOf(IZetherVerifier v) internal view returns (IZetherBurnVerifier) {
+        return address(v) == address(bn) ? bnB : blsB;
     }
 
     // ------------------------------------------------------------------ transfer
@@ -192,7 +199,7 @@ contract ZetherVerifierTest is Test {
     function test_burnWrongBalanceWitnessRejected() public view {
         bytes memory st = _burnStatement(bn, 1000, 400, 5);
         bytes memory pr = prover.proveBurn(bn, st, ZetherProver.BurnWitness(XF, 596, 0x99, keccak256("b")));
-        assertFalse(bn.verifyBurn(st, pr));
+        assertFalse(bnB.verifyBurn(st, pr));
     }
 
     function test_auditorOffRequiresIdentityCaud() public {
@@ -302,16 +309,16 @@ contract ZetherVerifierTest is Test {
     function test_burnProofNotATransferProof() public view {
         bytes memory st = _burnStatement(bn, 1000, 400, 5);
         bytes memory pr = prover.proveBurn(bn, st, ZetherProver.BurnWitness(XF, 595, 0x99, keccak256("b")));
-        assertTrue(bn.verifyBurn(st, pr));
+        assertTrue(bnB.verifyBurn(st, pr));
         assertFalse(bn.verifyTransfer(st, pr));
         bytes memory t = bytes.concat(st);
         t[351] = bytes1(uint8(t[351]) ^ 1); // recipient bị relayer đổi
-        assertFalse(bn.verifyBurn(t, pr));
+        assertFalse(bnB.verifyBurn(t, pr));
     }
 
     function test_burnWrongKeyRejected() public view {
         bytes memory st = _burnStatement(bn, 1000, 400, 5);
         bytes memory pr = prover.proveBurn(bn, st, ZetherProver.BurnWitness(XT, 595, 0x99, keccak256("b")));
-        assertFalse(bn.verifyBurn(st, pr));
+        assertFalse(bnB.verifyBurn(st, pr));
     }
 }

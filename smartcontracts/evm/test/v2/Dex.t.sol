@@ -13,6 +13,7 @@ import {ITradeToken} from "../../src/trade/ITradeToken.sol";
 import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {UID_, noneInit} from "./helpers/V2Fixture.sol";
+import {noVerifiers} from "../helpers/Canon.sol";
 
 /// ERC-1271 makers that must not take other settlements down with them.
 contract Burner1271 {
@@ -45,7 +46,7 @@ contract DexTest is Test {
     NoUnderlyingToken b; // the makers sell B
 
     function setUp() public {
-        f = new OpenFactory(registrar, UID_);
+        f = new OpenFactory(registrar, UID_, noVerifiers());
         address noneImpl = address(new NoUnderlyingToken(address(f), address(0), UID_, address(0), false));
         dexImpl = new SCaaSDex(address(f), UID_, address(0));
         vm.startPrank(registrar);
@@ -640,6 +641,24 @@ contract DexTest is Test {
         address d = f.createDex(2, ISCaaSDex.DexConfig(admin, 0, treasury, false), "v2");
         assertEq(f.dexVersionOf(d), 2); // the requested version, not the latest
         assertEq(f.dexVersionOf(address(dex)), 1);
+    }
+
+    /// `deprecateDex` is registrar-only and immediate: `createDex` refuses that version (owner 2026-10-20), an existing
+    /// DEX of it keeps its record.
+    function test_deprecateDex_refusesNewDexOfThatVersion() public {
+        vm.expectRevert(IOpenFactory.NotRegistrar.selector);
+        f.deprecateDex(1, "x");
+        vm.prank(registrar);
+        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.DexVersionUnknown.selector, 9));
+        f.deprecateDex(9, "x");
+        vm.prank(registrar);
+        vm.expectEmit(true, false, false, true, address(f));
+        emit IOpenFactory.DexImplementationDeprecated(1, "bug");
+        f.deprecateDex(1, "bug");
+        assertTrue(f.isDexDeprecated(1));
+        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.DexVersionDeprecated.selector, 1));
+        f.createDex(1, ISCaaSDex.DexConfig(admin, 0, treasury, false), "after");
+        assertEq(f.dexVersionOf(address(dex)), 1, "the existing DEX keeps its record");
     }
 
     function test_createDex_saltScopedByCreator_andNotReusable() public {

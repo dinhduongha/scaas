@@ -372,7 +372,7 @@ contract ZetherModesUnderlyingTest is ZetherModesSuite {
 
     function setUp() public {
         _stack(false);
-        UnderlyingZetherToken impl = new UnderlyingZetherToken(address(factory), address(0), ZUID, address(reg), dis);
+        UnderlyingZetherToken impl = new UnderlyingZetherToken(address(factory), address(0), ZUID, address(reg), dis, ver, burnVer);
         vm.prank(registrar);
         factory.registerImplementation(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, address(impl));
         _users();

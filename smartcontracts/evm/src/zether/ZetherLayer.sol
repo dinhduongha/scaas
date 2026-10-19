@@ -5,7 +5,7 @@ import {ERC20MetaTx} from "../metatx/ERC20MetaTx.sol";
 import {MetaTokenBase} from "../metatx/MetaTokenBase.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {IZetherToken} from "./IZetherToken.sol";
-import {IZetherVerifier} from "./IZetherVerifier.sol";
+import {IZetherVerifier, IZetherBurnVerifier} from "./IZetherVerifier.sol";
 import {ITransferDisclosure} from "./ITransferDisclosure.sol";
 import {ZetherTypes} from "./ZetherTypes.sol";
 import {ZetherLib} from "./ZetherLib.sol";
@@ -14,16 +14,27 @@ import {ZetherLib} from "./ZetherLib.sol";
 ///        CTR-ZTH-45 and the views; the state and the logic are `ZetherLib` (`scaas.zether`).
 /// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Dev chains only (`ZetherSafety`, CTR-ZTH-02). A layer over the
 ///         public ERC-20 balance: `zetherShield` burns public units, `zetherUnshield` mints them; the confidential layer
-///         keeps no underlying of its own. The registry (the base's, `ERC20MetaTx`) and the disclosure contract are implementation immutables; the
-///         verifier (the curve), the auditor key and the two modes (`disclosureMode`, `auditorMode`) are chosen at
-///         creation and never change. Every entry point is `nonReentrant`.
+///         keeps no underlying of its own. The registry (the base's, `ERC20MetaTx`), the disclosure contract and the
+///         curve's transfer and burn verifiers are implementation immutables (CTR-ZTH-20: `OpenFactory` registers an
+///         implementation only on its canonical verifiers), so the curve is an attribute of the release (`curve()`); the
+///         auditor key and the two modes (`disclosureMode`, `auditorMode`) are chosen at creation and never change.
+///         Every entry point is `nonReentrant`.
 abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
     ITransferDisclosure private immutable _DISCLOSURE;
+    /// @dev The transfer verifier (transfer proofs, the group operations; `init` copies it into `ZetherLib`'s storage,
+    ///      the library cannot read immutables) and the burn verifier (unshield proofs, through `ZetherLib.Env`).
+    IZetherVerifier internal immutable TRANSFER_VERIFIER;
+    IZetherBurnVerifier internal immutable BURN_VERIFIER;
 
-    /// @dev Runs after `MetaTokenBase`'s constructor, which set `_REGISTRY`: a Zether kind needs a registry.
-    constructor(ITransferDisclosure disclosure_) {
-        if (_REGISTRY.code.length == 0 || address(disclosure_).code.length == 0) revert BadInit();
+    /// @dev Runs after `MetaTokenBase`'s constructor, which set `_REGISTRY`: a Zether kind needs a registry. The two
+    ///      verifiers must be of one proof system (one curve).
+    constructor(ITransferDisclosure disclosure_, IZetherVerifier transferVerifier_, IZetherBurnVerifier burnVerifier_) {
+        if (_REGISTRY.code.length == 0 || address(disclosure_).code.length == 0
+            || address(transferVerifier_).code.length == 0 || address(burnVerifier_).code.length == 0
+            || transferVerifier_.proofSystemId() != burnVerifier_.proofSystemId()) revert BadInit();
         _DISCLOSURE = disclosure_;
+        TRANSFER_VERIFIER = transferVerifier_;
+        BURN_VERIFIER = burnVerifier_;
     }
 
     /// @notice CTR-MTX-02: confidential tokens sign under `"SCaaS ZetherToken"`.
@@ -33,7 +44,9 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
 
     // ------------------------------------------------------------------ views
 
-    function verifier() external view returns (IZetherVerifier) { return ZetherLib.$().verifier; }
+    function verifier() external view returns (IZetherVerifier) { return TRANSFER_VERIFIER; }
+    function burnVerifier() external view returns (IZetherBurnVerifier) { return BURN_VERIFIER; }
+    function curve() external view returns (string memory) { return TRANSFER_VERIFIER.curveName(); }
     function disclosure() external view returns (ITransferDisclosure) { return _DISCLOSURE; }
     function shieldScale() external view returns (uint256) { return ZetherLib.$().shieldScale; }
     function maxDecryptableShielded() external view returns (uint256) { return ZetherLib.$().maxShielded; }
@@ -152,7 +165,7 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
     ///      else 0 (`ZTX_V1_DIRECT`), so a proof lifted out of a pending envelope fails as a direct call.
     function _env() internal view returns (ZetherLib.Env memory) {
         bytes32 b = _ticketBinding();
-        return ZetherLib.Env(_REGISTRY, CHAIN_UID, ZetherLib.tagOf(b), b);
+        return ZetherLib.Env(_REGISTRY, CHAIN_UID, ZetherLib.tagOf(b), b, BURN_VERIFIER);
     }
 
     /// @dev The base stores it in the ticket for the self-call of every `mtxExecute` on this token.

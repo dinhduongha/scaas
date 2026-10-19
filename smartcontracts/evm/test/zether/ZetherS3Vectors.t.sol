@@ -3,8 +3,8 @@ pragma solidity ^0.8.20;
 
 import {Test} from "forge-std/Test.sol";
 import {stdJson} from "forge-std/StdJson.sol";
-import {ZetherVerifierBn254, ZetherVerifierBls12381} from "../../src/zether/ZetherVerifier.sol";
-import {IZetherVerifier} from "../../src/zether/IZetherVerifier.sol";
+import {IZetherVerifier, IZetherBurnVerifier} from "../../src/zether/IZetherVerifier.sol";
+import {ZetherVerifiers} from "./helpers/ZetherVerifiers.sol";
 import {ZetherTranscript as T} from "../../src/zether/ZetherTranscript.sol";
 import {ITransferDisclosure} from "../../src/zether/ITransferDisclosure.sol";
 import {ZetherDisclosure} from "../../src/zether/ZetherDisclosure.sol";
@@ -32,18 +32,20 @@ contract ZetherS3VectorsTest is Test {
     using stdJson for string;
 
     string constant DIR = "test/vectors/zether/s3/";
-    ZetherVerifierBn254 bn;
-    ZetherVerifierBls12381 bls;
+    IZetherVerifier bn;
+    IZetherVerifier bls;
+    IZetherBurnVerifier bnB;
+    IZetherBurnVerifier blsB;
     ZetherDisclosure disc;
 
     function setUp() public {
-        bn = new ZetherVerifierBn254();
-        bls = new ZetherVerifierBls12381();
+        (bn, bnB) = ZetherVerifiers.deploy(false);
+        (bls, blsB) = ZetherVerifiers.deploy(true);
         disc = new ZetherDisclosure();
     }
 
     function _v(string memory curve) internal view returns (IZetherVerifier) {
-        return keccak256(bytes(curve)) == keccak256("bn254") ? IZetherVerifier(address(bn)) : IZetherVerifier(address(bls));
+        return keccak256(bytes(curve)) == keccak256("bn254") ? bn : bls;
     }
 
     enum Op { TRANSFER, BURN, MULTI }
@@ -55,7 +57,7 @@ contract ZetherS3VectorsTest is Test {
     function verify(IZetherVerifier v, bytes memory st, bytes memory pr, Op op) external view returns (bool) {
         if (op == Op.TRANSFER) return v.verifyTransfer(st, pr);
         if (op == Op.MULTI) return v.verifyTransferMulti(st, pr);
-        return v.verifyBurn(st, pr);
+        return (address(v) == address(bn) ? bnB : blsB).verifyBurn(st, pr);
     }
 
     function _flip(bytes memory a, uint256 i) internal pure returns (bytes memory b) {
@@ -239,7 +241,7 @@ contract ZetherS3VectorsTest is Test {
 
     function test_s3SchnorrMatches() public view {
         string[2] memory files = ["schnorr_bn254.json", "schnorr_bls12381.json"];
-        IZetherVerifier[2] memory vs = [IZetherVerifier(address(bn)), IZetherVerifier(address(bls))];
+        IZetherVerifier[2] memory vs = [bn, bls];
         for (uint256 i; i < 2; ++i) {
             string memory j = vm.readFile(string.concat(DIR, files[i]));
             bytes memory y = j.readBytes(".Y");

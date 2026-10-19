@@ -13,11 +13,23 @@ import {ITokenAdmin} from "../../src/metatx/ITokenAdmin.sol";
 import {ZetherSafety} from "../../src/zether/ZetherSafety.sol";
 import {MockERC20, SupportedVerifier, UnsupportedVerifier} from "../helpers/Mocks.sol";
 import {UID_, noneInit} from "./helpers/V2Fixture.sol";
+import {noVerifiers, zetherCanon} from "../helpers/Canon.sol";
 
 /// Kind 2 stand-in: the public `NONE` kind under the confidential id and domain name, accepting `conf` (the factory's
-/// side only; the Zether layer is tested in `test/zether`).
+/// side only; the Zether layer is tested in `test/zether`). `verifier()`, `burnVerifier()`, `disclosure()` answer the
+/// raw words given (CTR-ZTH-20: the factory reads them at registration; a word wider than an address is refused).
 contract MockNoneZether is NoUnderlyingToken {
-    constructor(address f) NoUnderlyingToken(f, address(0), UID_, address(0), false) {}
+    uint256 internal immutable _V;
+    uint256 internal immutable _B;
+    uint256 internal immutable _D;
+
+    constructor(address f, uint256 v, uint256 b, uint256 d) NoUnderlyingToken(f, address(0), UID_, address(0), false) {
+        (_V, _B, _D) = (v, b, d);
+    }
+
+    function verifier() external view returns (uint256) { return _V; }
+    function burnVerifier() external view returns (uint256) { return _B; }
+    function disclosure() external view returns (uint256) { return _D; }
 
     function kind() public pure override returns (uint8) { return AdminLib.KIND_NONE_ZETHER; }
 
@@ -32,7 +44,13 @@ contract MockNoneZether is NoUnderlyingToken {
 
 /// Kind 3 stand-in: the public `UNDERLYING` kind under the confidential id, its flags validated for kind 3.
 contract MockUnderlyingZether is UnderlyingToken {
-    constructor(address f) UnderlyingToken(f, address(0), UID_, address(0), false) {}
+    address public immutable verifier;
+    address public immutable burnVerifier;
+    address public immutable disclosure;
+
+    constructor(address f, address v, address b, address d) UnderlyingToken(f, address(0), UID_, address(0), false) {
+        (verifier, burnVerifier, disclosure) = (v, b, d);
+    }
 
     function kind() public pure override returns (uint8) { return AdminLib.KIND_UNDERLYING_ZETHER; }
 
@@ -56,34 +74,34 @@ contract FactoryZetherTest is Test {
     MockUnderlyingZether undZ;
     MockERC20 usd = new MockERC20("USD", "USD", 6);
     SupportedVerifier okVer = new SupportedVerifier();
+    SupportedVerifier okBurn = new SupportedVerifier();
+    address okDis = address(new SupportedVerifier()); // any contract: the factory compares addresses
     UnsupportedVerifier badVer = new UnsupportedVerifier();
 
     IOpenFactory.TokenKind constant NZ = IOpenFactory.TokenKind.NONE_ZETHER;
     IOpenFactory.TokenKind constant UZ = IOpenFactory.TokenKind.UNDERLYING_ZETHER;
 
     function setUp() public {
-        f = new OpenFactory(registrar, UID_);
-        noneZ = new MockNoneZether(address(f));
-        undZ = new MockUnderlyingZether(address(f));
+        f = new OpenFactory(registrar, UID_, zetherCanon(0, address(okVer), address(okBurn), okDis));
+        noneZ = new MockNoneZether(address(f), uint160(address(okVer)), uint160(address(okBurn)), uint160(okDis));
+        undZ = new MockUnderlyingZether(address(f), address(okVer), address(okBurn), okDis);
         vm.startPrank(registrar);
         f.registerImplementation(NZ, 1, address(noneZ));
         f.registerImplementation(UZ, 1, address(undZ));
         vm.stopPrank();
     }
 
-    function _conf(address verifier) internal pure returns (IFactoryToken.TokenConfig memory c) {
+    function _conf() internal pure returns (IFactoryToken.TokenConfig memory c) {
         c = noneInit("Zether", "Z", 6, 0, address(0), address(0));
-        c.conf.verifier = verifier;
         c.conf.shieldScale = 1;
     }
 
-    function _underlying(address verifier) internal view returns (IFactoryToken.TokenConfig memory c) {
+    function _underlying() internal view returns (IFactoryToken.TokenConfig memory c) {
         c.name = "Zether wrapped";
         c.symbol = "ZW";
         c.decimals = 6;
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);
-        c.conf.verifier = verifier;
     }
 
     function _enable() internal {
@@ -94,9 +112,9 @@ contract FactoryZetherTest is Test {
     function test_zetherGate_offByDefault_registrarOnly_devChainsOnly() public {
         assertFalse(f.zetherEnabled());
         vm.expectRevert(IOpenFactory.ZetherDisabled.selector);
-        f.createToken(NZ, 1, _conf(address(okVer)), "a");
+        f.createToken(NZ, 1, _conf(), "a");
         vm.expectRevert(IOpenFactory.ZetherDisabled.selector);
-        f.createTokenUnregistered(UZ, address(undZ), _underlying(address(okVer)), "a");
+        f.createToken(UZ, 1, _underlying(), "a");
         vm.expectRevert(IOpenFactory.NotRegistrar.selector);
         f.setZetherEnabled(true);
         uint256[4] memory prod = [uint256(1), 100, 42220, 7622];
@@ -116,11 +134,11 @@ contract FactoryZetherTest is Test {
         assertEq(logs[0].topics[0], IOpenFactory.ZetherEnabled.selector);
         assertEq(abi.decode(logs[0].data, (bool)), true);
         assertTrue(f.zetherEnabled());
-        f.createToken(NZ, 1, _conf(address(okVer)), "on 1337");
+        f.createToken(NZ, 1, _conf(), "on 1337");
         // the flag set on a dev chain does not survive a chain id change (a fork)
         vm.chainId(100);
         vm.expectRevert(abi.encodeWithSelector(ZetherSafety.ZetherNotDevChain.selector, 100));
-        f.createToken(NZ, 1, _conf(address(okVer)), "fork");
+        f.createToken(NZ, 1, _conf(), "fork");
         vm.chainId(31337);
         vm.recordLogs();
         vm.prank(registrar);
@@ -130,46 +148,73 @@ contract FactoryZetherTest is Test {
         assertEq(logs[0].topics[0], IOpenFactory.ZetherEnabled.selector);
         assertEq(abi.decode(logs[0].data, (bool)), false, "the disable event says false");
         vm.expectRevert(IOpenFactory.ZetherDisabled.selector);
-        f.createToken(NZ, 1, _conf(address(okVer)), "off again");
+        f.createToken(NZ, 1, _conf(), "off again");
     }
 
-    function test_zetherGate_verifierCheckedAtCreation_bothKinds() public {
+    /// CTR-ZTH-20: a release registers only when its `(verifier(), burnVerifier(), disclosure())` is one of the canonical
+    /// sets fixed in the factory's constructor; no admin can add one; the creator names none.
+    function test_zetherRelease_canonicalVerifiersOnly() public {
+        uint256 v = uint160(address(okVer));
+        uint256 b = uint160(address(okBurn));
+        uint256 d = uint160(okDis);
+        // one part off, zero, swapped, or wider than an address
+        uint256[3][7] memory bad = [[uint256(0), b, d], [v, 0, d], [v, b, 0], [uint256(0x99), b, d], [b, v, d],
+            [v | 1 << 200, b, d], [v, b, d | 1 << 160]];
+        for (uint256 i; i < bad.length; ++i) {
+            MockNoneZether m = new MockNoneZether(address(f), bad[i][0], bad[i][1], bad[i][2]);
+            vm.prank(registrar);
+            vm.expectRevert(abi.encodeWithSelector(IOpenFactory.NotCanonicalVerifiers.selector, address(m)));
+            f.registerImplementation(NZ, 2, address(m));
+        }
+        MockUnderlyingZether u = new MockUnderlyingZether(address(f), address(okVer), address(0x99), okDis);
+        vm.prank(registrar);
+        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.NotCanonicalVerifiers.selector, address(u)));
+        f.registerImplementation(UZ, 2, address(u));
+        // curve 1 is empty on this factory: nothing matches it
+        (address tv, address bv, address dv) = f.zetherVerifiers(1);
+        assertEq(tv, address(0));
+        assertEq(bv, address(0));
+        assertEq(dv, address(0));
+        (tv, bv, dv) = f.zetherVerifiers(0);
+        assertEq(tv, address(okVer));
+        assertEq(bv, address(okBurn));
+        assertEq(dv, okDis);
+        // the canonical release creates, registered
         _enable();
-        vm.expectRevert(IOpenFactory.VerifierRequiredForZether.selector);
-        f.createToken(NZ, 1, _conf(address(0)), "a");
-        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VerifierUnsupportedOnThisChain.selector, address(0x99), ""));
-        f.createToken(NZ, 1, _conf(address(0x99)), "a");
-        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VerifierUnsupportedOnThisChain.selector, address(badVer),
-            "bls12-381"));
-        f.createToken(NZ, 1, _conf(address(badVer)), "a");
-        // a permissive fallback answers every call with empty data: typed refusal, not a decode revert (review T1 M2)
-        address perm = address(new PermissiveFallback());
-        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VerifierUnsupportedOnThisChain.selector, perm, ""));
-        f.createToken(NZ, 1, _conf(perm), "a");
-        address mute = address(usd); // has code, answers neither function
-        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VerifierUnsupportedOnThisChain.selector, mute, ""));
-        f.createTokenUnregistered(UZ, address(undZ), _underlying(mute), "a");
-        vm.expectRevert(IOpenFactory.VerifierRequiredForZether.selector);
-        f.createToken(UZ, 1, _underlying(address(0)), "a");
-        address t = f.createToken(NZ, 1, _conf(address(okVer)), "ok");
-        (IOpenFactory.TokenKind k, uint64 v) = f.versionOf(t);
-        assertEq(uint8(k), uint8(NZ));
-        assertEq(v, 1);
-        address w = f.createToken(UZ, 1, _underlying(address(okVer)), "ok");
+        address t = f.createToken(NZ, 1, _conf(), "ok");
+        assertTrue(f.isRegisteredToken(t));
+        assertEq(f.getWrapper(address(this), address(usd)), address(0));
+        address w = f.createToken(UZ, 1, _underlying(), "ok");
         assertEq(f.getWrapper(address(this), address(usd)), w);
+    }
+
+    /// A canonical verifier this chain cannot run is still refused at creation (CTR-TOK-18): typed, with the curve name.
+    function test_zetherGate_canonicalVerifierUnsupported() public {
+        address perm = address(new PermissiveFallback()); // answers every call with empty data (review T1 M2)
+        address mute = address(usd); // has code, answers neither function
+        address[3] memory vs = [address(badVer), perm, mute];
+        string[3] memory curves = ["bls12-381", "", ""];
+        for (uint256 i; i < vs.length; ++i) {
+            OpenFactory g = new OpenFactory(registrar, UID_, zetherCanon(1, vs[i], address(okBurn), okDis));
+            MockNoneZether m = new MockNoneZether(address(g), uint160(vs[i]), uint160(address(okBurn)), uint160(okDis));
+            vm.startPrank(registrar);
+            g.registerImplementation(NZ, 1, address(m));
+            g.setZetherEnabled(true);
+            vm.stopPrank();
+            vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VerifierUnsupportedOnThisChain.selector, vs[i], curves[i]));
+            g.createToken(NZ, 1, _conf(), "a");
+        }
         // the public kinds never pass through the gate (no flag, no verifier)
         NoUnderlyingToken none = new NoUnderlyingToken(address(f), address(0), UID_, address(0), false);
         vm.prank(registrar);
         f.registerImplementation(IOpenFactory.TokenKind.NONE, 1, address(none));
-        vm.prank(registrar);
-        f.setZetherEnabled(false);
         f.createToken(IOpenFactory.TokenKind.NONE, 1, noneInit("P", "P", 0, 0, address(0), address(0)), "public");
     }
 
     /// The flags of kind 3 are validated for kind 3: the regulated flags are invalid there (CTR-ZTH-47), not "not built".
     function test_underlyingZether_flagsValidatedForItsKind() public {
         _enable();
-        IFactoryToken.TokenConfig memory c = _underlying(address(okVer));
+        IFactoryToken.TokenConfig memory c = _underlying();
         c.features = 1 << AdminLib.FREEZE;
         vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureInvalidForKind.selector, AdminLib.FREEZE));
         f.createToken(UZ, 1, c, "a");
@@ -180,7 +225,7 @@ contract FactoryZetherTest is Test {
 
     /// A public kind refuses every `conf` field, the two modes included.
     function test_publicKinds_refuseEveryConfField() public {
-        OpenFactory g = new OpenFactory(registrar, UID_);
+        OpenFactory g = new OpenFactory(registrar, UID_, noVerifiers());
         NoUnderlyingToken none = new NoUnderlyingToken(address(g), address(0), UID_, address(0), false);
         vm.prank(registrar);
         g.registerImplementation(IOpenFactory.TokenKind.NONE, 1, address(none));

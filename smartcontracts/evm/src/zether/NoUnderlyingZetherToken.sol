@@ -8,6 +8,7 @@ import {MetaTxBase} from "../metatx/MetaTxBase.sol";
 import {IMetaTx} from "../metatx/IMetaTx.sol";
 import {AdminLib} from "../metatx/AdminLib.sol";
 import {ITransferDisclosure} from "./ITransferDisclosure.sol";
+import {IZetherVerifier, IZetherBurnVerifier} from "./IZetherVerifier.sol";
 import {ZetherLayer} from "./ZetherLayer.sol";
 import {ZetherLib} from "./ZetherLib.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
@@ -19,9 +20,9 @@ import {MetaTxLib} from "../common/MetaTxLib.sol";
 ///         `rate` empty. Never on Hedera (no dev chain there).
 contract NoUnderlyingZetherToken is NoUnderlyingToken, ZetherLayer {
     constructor(address factory_, address smartKeyAccountImpl_, bytes32 chainUid_, address registry_,
-        ITransferDisclosure disclosure_)
+        ITransferDisclosure disclosure_, IZetherVerifier transferVerifier_, IZetherBurnVerifier burnVerifier_)
         NoUnderlyingToken(factory_, smartKeyAccountImpl_, chainUid_, registry_, false)
-        ZetherLayer(disclosure_)
+        ZetherLayer(disclosure_, transferVerifier_, burnVerifier_)
     {}
 
     function kind() public pure override(NoUnderlyingToken, MetaTokenBase) returns (uint8) {
@@ -32,7 +33,7 @@ contract NoUnderlyingZetherToken is NoUnderlyingToken, ZetherLayer {
         _requireUnused(cfg, false, true, true, false);
         _setMetadata(cfg.name, cfg.symbol, cfg.decimals);
         AdminLib.init(AdminLib.KIND_NONE_ZETHER, cfg.features, cfg.lockedFeatures, cfg.owner, cfg.roles);
-        ZetherLib.init(cfg.conf);
+        ZetherLib.init(cfg.conf, TRANSFER_VERIFIER);
         if (cfg.initialSupply != 0) _mint(cfg.initialHolder, cfg.initialSupply);
     }
 

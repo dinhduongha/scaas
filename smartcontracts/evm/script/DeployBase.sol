@@ -35,7 +35,16 @@ import {UAPrecompileProbe} from "./UAPrecompileProbe.sol";
 import {ZetherSafety} from "../src/zether/ZetherSafety.sol";
 import {ZetherDisclosure} from "../src/zether/ZetherDisclosure.sol";
 import {ZetherStatements} from "../src/zether/ZetherStatements.sol";
-import {ZetherVerifierBn254, ZetherVerifierBls12381} from "../src/zether/ZetherVerifier.sol";
+import {
+    ZetherInnerProductVerifierBn254,
+    ZetherTransferVerifierBn254,
+    ZetherBurnVerifierBn254,
+    ZetherInnerProductVerifierBls12381,
+    ZetherTransferVerifierBls12381,
+    ZetherBurnVerifierBls12381
+} from "../src/zether/ZetherVerifier.sol";
+import {IZetherVerifier, IZetherBurnVerifier, IZetherInnerProductVerifier} from "../src/zether/IZetherVerifier.sol";
+import {ITransferDisclosure} from "../src/zether/ITransferDisclosure.sol";
 import {NoUnderlyingZetherToken} from "../src/zether/NoUnderlyingZetherToken.sol";
 import {UnderlyingZetherToken} from "../src/zether/UnderlyingZetherToken.sol";
 
@@ -101,7 +110,9 @@ abstract contract DeployBase is Script {
     function _deployTokenFactory(address registrar, bool register, address smartKeyAccountImpl, bool isHedera)
         internal returns (OpenFactory f)
     {
-        f = new OpenFactory{salt: salt}(registrar, uid);
+        IOpenFactory.Canonical memory canon;
+        if (deployZether) canon = _deployZetherVerifiers();
+        f = new OpenFactory{salt: salt}(registrar, uid, canon);
         UARegistry reg = _deployUARegistry(smartKeyAccountImpl, isHedera);
         NoUnderlyingToken none = new NoUnderlyingToken{salt: salt}(address(f), smartKeyAccountImpl, uid, address(reg), isHedera);
         if (register) f.registerImplementation(IOpenFactory.TokenKind.NONE, 1, address(none));
@@ -115,7 +126,6 @@ abstract contract DeployBase is Script {
         if (register) f.registerDexImplementation(1, address(dexImpl));
         _gate(address(dexImpl));
         vm.serializeAddress("deploy", "dex_implementation", address(dexImpl));
-        if (deployZether) require(ZetherSafety.isDevChain(), "DEPLOY_ZETHER: dev chains only (CTR-ZTH-02)");
         if (deployZether) _deployZether(f, register, smartKeyAccountImpl, address(reg));
         vm.serializeBytes32("deploy", "chain_uid", uid);
     }
@@ -201,35 +211,60 @@ abstract contract DeployBase is Script {
         } catch {}
     }
 
-    /// @notice Dev chains only (CTR-ZTH-02; elsewhere the Zether verifiers refuse to deploy): `ZetherDisclosure`,
-    ///         `ZetherStatements`, both proof verifiers, the two confidential implementations on the UA registry `reg`
-    ///         (its Zether kinds; JSON `zether_registry` = `ua_registry`), registered as version 1 of `NONE_ZETHER` and `UNDERLYING_ZETHER`, and the factory's Zether gate switched on
-    ///         when the deployer is the registrar. **UNAUDITED — NOT FOR PRODUCTION FUNDS.** The implementations exceed
-    ///         EIP-170 and the BLS verifier takes ~14.1 M gas: anvil `--code-size-limit 65536`, forge script
-    ///         `--code-size-limit 65536 --gas-estimate-multiplier 105` (deploy.sh adds both; docs/networks/evm.md).
-    function _deployZether(OpenFactory f, bool register, address smartKeyAccountImpl, address reg) internal {
-        ZetherDisclosure dis = new ZetherDisclosure{salt: salt}();
-        ZetherStatements stm = new ZetherStatements{salt: salt}();
-        ZetherVerifierBn254 bn = new ZetherVerifierBn254{salt: salt}();
-        ZetherVerifierBls12381 bls = new ZetherVerifierBls12381{salt: salt}();
-        NoUnderlyingZetherToken none =
-            new NoUnderlyingZetherToken{salt: salt}(address(f), smartKeyAccountImpl, uid, reg, dis);
-        UnderlyingZetherToken und =
-            new UnderlyingZetherToken{salt: salt}(address(f), smartKeyAccountImpl, uid, reg, dis);
-        if (register) {
-            f.registerImplementation(IOpenFactory.TokenKind.NONE_ZETHER, 1, address(none));
-            f.registerImplementation(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, address(und));
-            f.setZetherEnabled(true);
+    /// @notice The canonical Zether verifiers (CTR-ZTH-20), before the factory, which fixes them in its constructor:
+    ///         per curve the inner-product verifier (the generators, ~14 M gas on BLS12-381), then the transfer and burn
+    ///         verifiers on it; one `ZetherDisclosure` for both curves. Dev chains only (CTR-ZTH-02; elsewhere the
+    ///         verifiers refuse to deploy). JSON `zether_disclosure`, `zether_{inner_product,transfer,burn}_verifier_<curve>`
+    ///         (`zether_verifier_<curve>` = the transfer verifier).
+    function _deployZetherVerifiers() internal returns (IOpenFactory.Canonical memory c) {
+        require(ZetherSafety.isDevChain(), "DEPLOY_ZETHER: dev chains only (CTR-ZTH-02)");
+        address dis = address(new ZetherDisclosure{salt: salt}());
+        IZetherInnerProductVerifier[2] memory ip =
+            [IZetherInnerProductVerifier(new ZetherInnerProductVerifierBn254{salt: salt}()),
+                IZetherInnerProductVerifier(new ZetherInnerProductVerifierBls12381{salt: salt}())];
+        c.zetherVerifier = [address(new ZetherTransferVerifierBn254{salt: salt}(ip[0])),
+            address(new ZetherTransferVerifierBls12381{salt: salt}(ip[1]))];
+        c.zetherBurnVerifier = [address(new ZetherBurnVerifierBn254{salt: salt}(ip[0])),
+            address(new ZetherBurnVerifierBls12381{salt: salt}(ip[1]))];
+        c.zetherDisclosure = [dis, dis];
+        string[2] memory n = ["bn254", "bls12381"];
+        for (uint256 i; i < 2; ++i) {
+            vm.serializeAddress("deploy", string.concat("zether_inner_product_verifier_", n[i]), address(ip[i]));
+            vm.serializeAddress("deploy", string.concat("zether_verifier_", n[i]), c.zetherVerifier[i]);
+            vm.serializeAddress("deploy", string.concat("zether_burn_verifier_", n[i]), c.zetherBurnVerifier[i]);
         }
-        _gate(address(none));
-        _gate(address(und));
+        vm.serializeAddress("deploy", "zether_disclosure", dis);
+    }
+
+    /// @notice Dev chains only: `ZetherStatements` and, per curve, the two confidential implementations on the factory's
+    ///         canonical verifiers of that curve and the UA registry `reg` (its Zether kinds; JSON `zether_registry` =
+    ///         `ua_registry`), registered as versions 1 (bn254) and 2 (BLS12-381) of `NONE_ZETHER` and
+    ///         `UNDERLYING_ZETHER` — the curve is the release's attribute (`curve()`), not the number's — and the
+    ///         factory's Zether gate switched on when the deployer is the registrar. **UNAUDITED — NOT FOR PRODUCTION
+    ///         FUNDS.** The implementations exceed EIP-170 and the BLS inner-product verifier takes ~14 M gas: anvil
+    ///         `--code-size-limit 65536`, forge script `--code-size-limit 65536 --gas-estimate-multiplier 105`
+    ///         (deploy.sh passes both; docs/networks/evm.md).
+    function _deployZether(OpenFactory f, bool register, address smartKeyAccountImpl, address reg) internal {
+        ZetherStatements stm = new ZetherStatements{salt: salt}();
+        string[2] memory n = ["bn254", "bls12381"];
+        for (uint8 c; c < 2; ++c) {
+            (address tv, address bv, address dis) = f.zetherVerifiers(c);
+            NoUnderlyingZetherToken none = new NoUnderlyingZetherToken{salt: salt}(address(f), smartKeyAccountImpl, uid,
+                reg, ITransferDisclosure(dis), IZetherVerifier(tv), IZetherBurnVerifier(bv));
+            UnderlyingZetherToken und = new UnderlyingZetherToken{salt: salt}(address(f), smartKeyAccountImpl, uid,
+                reg, ITransferDisclosure(dis), IZetherVerifier(tv), IZetherBurnVerifier(bv));
+            if (register) {
+                f.registerImplementation(IOpenFactory.TokenKind.NONE_ZETHER, c + 1, address(none));
+                f.registerImplementation(IOpenFactory.TokenKind.UNDERLYING_ZETHER, c + 1, address(und));
+            }
+            _gate(address(none));
+            _gate(address(und));
+            vm.serializeAddress("deploy", string.concat("implementation_none_zether_", n[c]), address(none));
+            vm.serializeAddress("deploy", string.concat("implementation_underlying_zether_", n[c]), address(und));
+        }
+        if (register) f.setZetherEnabled(true);
         vm.serializeAddress("deploy", "zether_registry", reg); // = ua_registry
-        vm.serializeAddress("deploy", "zether_disclosure", address(dis));
         vm.serializeAddress("deploy", "zether_statements", address(stm));
-        vm.serializeAddress("deploy", "zether_verifier_bn254", address(bn));
-        vm.serializeAddress("deploy", "zether_verifier_bls12381", address(bls));
-        vm.serializeAddress("deploy", "implementation_none_zether", address(none));
-        vm.serializeAddress("deploy", "implementation_underlying_zether", address(und));
     }
 
     /// @notice Two kind-`NONE` demo tokens from `f` (dev chains; only when the deployer is the registrar): 6 decimals,

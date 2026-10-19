@@ -14,6 +14,7 @@ import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {noneInit} from "../v2/helpers/V2Fixture.sol";
 import {UALedgerBase} from "./UALedgerBase.sol";
+import {noVerifiers} from "../helpers/Canon.sol";
 
 /// Pulls `amountIn` of `tIn` from the caller under its allowance and pays `amountOut` of `tOut` to `to`.
 contract UARouter {
@@ -40,7 +41,7 @@ abstract contract UADexBase is UALedgerBase {
     function setUp() public virtual override {
         super.setUp();
         dave = vm.addr(DAVE_PK);
-        f = new OpenFactory(address(this), chainUidA);
+        f = new OpenFactory(address(this), chainUidA, noVerifiers());
         f.registerImplementation(IOpenFactory.TokenKind.NONE, 1,
             address(new NoUnderlyingToken(address(f), address(0), chainUidA, REG_L, false)));
         f.registerImplementation(IOpenFactory.TokenKind.NONE, 2,

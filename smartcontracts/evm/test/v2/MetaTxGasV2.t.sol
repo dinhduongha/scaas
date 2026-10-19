@@ -12,6 +12,7 @@ import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {noneInit, underlyingInit, Rate} from "./helpers/V2Fixture.sol";
+import {noVerifiers} from "../helpers/Canon.sol";
 
 contract Always1271 {
     function isValidSignature(bytes32, bytes memory) external pure returns (bytes4) { return 0x1626ba7e; }
@@ -57,7 +58,7 @@ contract MetaTxGasV2Test is Test {
     function setUp() public {
         vm.warp(1_800_000_000);
         signer = vm.addr(PK);
-        OpenFactory f2 = new OpenFactory(address(this), UID);
+        OpenFactory f2 = new OpenFactory(address(this), UID, noVerifiers());
         f2.registerImplementation(IOpenFactory.TokenKind.NONE, 1,
             address(new NoUnderlyingToken(address(f2), address(0), UID, address(0), false)));
         f2.registerImplementation(IOpenFactory.TokenKind.UNDERLYING, 1,

@@ -12,6 +12,7 @@ import {ITradeToken} from "../../src/trade/ITradeToken.sol";
 import {TradeLib} from "../../src/trade/TradeLib.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {UID_, noneInit} from "./helpers/V2Fixture.sol";
+import {noVerifiers} from "../helpers/Canon.sol";
 
 /// KAT of the DEX side (CTR-DEX-16, -18, -02) on a real `SCaaSDex` clone on chain 7622 with its real `chain_uid`:
 /// `dex_order_kat.json` holds an outside-token maker order as a `DexOrder` in the DEX domain "SCaaS Dex", a SCaaS taker
@@ -34,7 +35,7 @@ contract DexKatTest is Test {
     function setUp() public {
         vm.chainId(7622);
         vm.warp(1_800_000_000);
-        OpenFactory f = new OpenFactory(address(this), UID_);
+        OpenFactory f = new OpenFactory(address(this), UID_, noVerifiers());
         f.registerImplementation(IOpenFactory.TokenKind.NONE, 1,
             address(new NoUnderlyingToken(address(f), address(0), UID_, address(0), false)));
         f.registerDexImplementation(1, address(new SCaaSDex(address(f), UID_, address(0))));

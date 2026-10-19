@@ -16,6 +16,7 @@ import {MockERC20, FeeOnTransferERC20} from "../helpers/Mocks.sol";
 import {Mock1271Wallet} from "../helpers/WalletMocks.sol";
 import {Burner1271, Bomb1271} from "./Dex.t.sol";
 import {UID_, noneInit} from "./helpers/V2Fixture.sol";
+import {noVerifiers} from "../helpers/Canon.sol";
 
 /// ERC-1271 wallet that needs ~100 k gas to say "valid": passes under 400 k (a `SmartKeyAccount` clone), not under 50 k.
 contract Work1271 {
@@ -146,7 +147,7 @@ contract DexOutsideTest is Test {
 
     function setUp() public {
         work = address(new Work1271());
-        f = new OpenFactory(address(this), UID_);
+        f = new OpenFactory(address(this), UID_, noVerifiers());
         f.registerImplementation(IOpenFactory.TokenKind.NONE, 1,
             address(new NoUnderlyingToken(address(f), work, UID_, address(0), false)));
         f.registerDexImplementation(1, address(new SCaaSDex(address(f), UID_, work)));

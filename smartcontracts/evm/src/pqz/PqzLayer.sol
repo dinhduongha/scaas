@@ -13,10 +13,19 @@ import {PqzCt} from "./PqzCt.sol";
 ///        points and views of pq-zero-knowledge.md §9.4; the state and the logic are `PqzLib` (`scaas.pqz`).
 /// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Chains 31337 / 1337 / 7622 only (`PqzSafety`). A layer over the
 ///         public ERC-20 balance: `pqzShield` burns public units into `plainPending`, `pqzUnshield` mints them; the
-///         confidential layer keeps no underlying of its own. The verifier (precompile and proof system), the auditor
-///         UA and the two modes are fixed at creation. Every entry point is `nonReentrant`; the PQZ selectors are
+///         confidential layer keeps no underlying of its own. The verifier (precompile and proof system) is an
+///         implementation immutable (CTR-ZTH-20 / CTR-PQZ-10), so the proof system is an attribute of the release; the
+///         auditor UA and the two modes are fixed at creation. Every entry point is `nonReentrant`; the PQZ selectors are
 ///         allowlisted on both relaying paths (fee class `ABSOLUTE`) and never batched (CTR-PQZ-21).
 abstract contract PqzLayer is MetaTokenBase, IPqzToken {
+    /// @dev The `UAPqzVerifier` of this release; `init` takes the precompile and the proof system from it.
+    address internal immutable PQZ_VERIFIER;
+
+    constructor(address verifier_) {
+        if (verifier_.code.length == 0) revert BadInit();
+        PQZ_VERIFIER = verifier_;
+    }
+
     /// @notice CTR-PQZ-15: the token signs under `"SCaaS PqzToken"`.
     function _domainName() internal pure virtual override(ERC20MetaTx) returns (string memory) {
         return "SCaaS PqzToken";
@@ -24,7 +33,7 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
 
     // ------------------------------------------------------------------ views
 
-    function verifier() external view returns (address) { return PqzLib.$().verifier; }
+    function verifier() external view returns (address) { return PQZ_VERIFIER; }
     function precompile() external view returns (address) { return PqzLib.$().pqz; }
     function proofSystemId() external view returns (bytes32) { return PqzLib.$().psid; }
     function shieldScale() external view returns (uint256) { return PqzLib.$().shieldScale; }

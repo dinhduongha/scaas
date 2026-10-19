@@ -4,7 +4,7 @@ pragma solidity ^0.8.24;
 import {IFactoryToken} from "../factory/IFactoryToken.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
 import {IZetherToken} from "./IZetherToken.sol";
-import {IZetherVerifier} from "./IZetherVerifier.sol";
+import {IZetherVerifier, IZetherBurnVerifier} from "./IZetherVerifier.sol";
 import {ZetherTypes} from "./ZetherTypes.sol";
 import {ZetherSafety} from "./ZetherSafety.sol";
 
@@ -61,6 +61,9 @@ library ZetherLib {
         bytes32 chainUid;
         bytes32 tag;
         bytes32 binding;
+        /// @dev The implementation's burn verifier (CTR-ZTH-20): the unshield proofs. The transfer verifier is copied to
+        ///      storage at `init` (shield and roll-over use its group operations without an `Env`).
+        IZetherBurnVerifier burnVer;
     }
 
     /// @notice Everything a statement needs besides the payload and the sender's account: from the token's storage
@@ -79,6 +82,8 @@ library ZetherLib {
         ZetherTypes.DisclosureMode disclosureMode;
         bytes32 tag;
         bytes32 binding;
+        /// @dev `Env.burnVer` (unshield only; `ZetherStatements` leaves it 0).
+        IZetherBurnVerifier burnVer;
     }
 
     /// @notice The sender's part of a statement (points as stored, `O` when unset).
@@ -134,16 +139,16 @@ library ZetherLib {
 
     // ------------------------------------------------------------------ init
 
-    /// @notice The kind's `_init` (dev chains only, CTR-ZTH-02): verifier, scale, cap `≤ 2^54`, inner fee `< 2^64` and
-    ///         `< cap`, auditor key empty or a valid point `≠ O` of the verifier's curve; `cap · scale` must not overflow;
+    /// @notice The kind's `_init` (dev chains only, CTR-ZTH-02): `v` the implementation's transfer verifier (CTR-ZTH-20;
+    ///         `c.verifier` must be 0: the creator never chooses one), scale, cap `≤ 2^54`, inner fee `< 2^64` and `< cap`,
+    ///         auditor key empty or a valid point `≠ O` of the verifier's curve; `cap · scale` must not overflow;
     ///         `disclosureMode` BUNDLE or COMPACT (CTR-ZTH-48), `auditorMode` NONE without a key, FULL or OPTIONAL with
     ///         one (CTR-ZTH-49).
-    function init(IFactoryToken.ConfidentialConfig calldata c) public {
+    function init(IFactoryToken.ConfidentialConfig calldata c, IZetherVerifier v) public {
         ZetherSafety.requireDevChain();
-        IZetherVerifier v = IZetherVerifier(c.verifier);
         uint256 p = v.g1EncodedBytes();
         bytes calldata aud = c.auditorKey;
-        if (c.shieldScale == 0 || c.maxShielded == 0 || c.maxShielded > MAX_TOTAL_SHIELDED
+        if (c.verifier != address(0) || c.shieldScale == 0 || c.maxShielded == 0 || c.maxShielded > MAX_TOTAL_SHIELDED
             || c.confidentialFee >= VALUE_BOUND || c.confidentialFee >= c.maxShielded || c.multiLegFee != 0
             || (aud.length != 0 && (aud.length != p || !v.isValidPoint(aud) || _isO(aud)))) {
             revert IZetherToken.BadInit();
@@ -364,6 +369,7 @@ library ZetherLib {
     /// @notice The statement context of the token itself (`address(this)` under `DELEGATECALL`).
     function ctx(ZetherStorage storage s, Env memory e) internal view returns (Ctx memory c) {
         c.ver = s.verifier;
+        c.burnVer = e.burnVer;
         c.registry = e.registry;
         c.token = address(this);
         c.chainUid = e.chainUid;
@@ -584,14 +590,16 @@ library ZetherLib {
         return IUARegistry(registry).kindOf(ZetherTypes.UA.unwrap(ua)) == ZetherTypes.kindOf(p);
     }
 
-    /// @dev The account's spending authority over the statement (registry), then the proof (knowledge of `x`).
+    /// @dev The account's spending authority over the statement (registry), then the proof (knowledge of `x`): a
+    ///      transfer on the transfer verifier `c.ver`, a burn on the burn verifier `c.burnVer`, both immutables of the
+    ///      implementation (CTR-ZTH-20); their range proofs on the inner-product verifier each of them fixes.
     function _check(Ctx memory c, Prepared memory pp, bytes calldata authSig, bytes calldata proof, bytes32 op) private view {
         IUARegistry(c.registry).requireZetherAuthorized(
             ZetherTypes.UA.unwrap(pp.from), keccak256(abi.encodePacked(AUTH_TAG, keccak256(pp.statement))), authSig, true
         );
         bool ok = op == OP_TRANSFER
             ? c.ver.verifyTransfer(pp.statement, proof)
-            : op == OP_BURN ? c.ver.verifyBurn(pp.statement, proof) : c.ver.verifyTransferMulti(pp.statement, proof);
+            : op == OP_BURN ? c.burnVer.verifyBurn(pp.statement, proof) : c.ver.verifyTransferMulti(pp.statement, proof);
         if (!ok) revert IZetherToken.ProofRejected();
     }
 

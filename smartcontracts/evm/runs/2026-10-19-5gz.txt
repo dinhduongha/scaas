@@ -1,0 +1,84 @@
+Plan Task 5g-Z (CTR-ZTH-20), branch rev2-zether-canon — run log (2026-10-20)
+forge 1.3.5-stable, solc 0.8.37, optimizer 200, evm osaka. Capped jobs, -j as forge default.
+
+1. Zether verifier layout candidates (owner 2026-10-19: split transfer / burn), runtime / init bytes
+   (`forge build src/zether/ZetherVerifier.sol --sizes`; candidate (3) from a temporary
+   src/zether/ZetherVerifierCand3.sol, removed after the build; sources kept in the git-ignored scratchpad/zcanon/).
+
+   today (main 5g):            combined ZetherVerifierBn254 15,955 / init 17,651; Bls12381 16,312 / 19,601
+   (1) duplicated Bulletproof:  Transfer Bn254 15,145 / 16,846   Bls 15,480 / 18,769
+                                Burn     Bn254  9,148 / 10,848   Bls  9,379 / 12,667
+   (2) shared inner-product:    Transfer Bn254 11,192 / 11,840   Bls 11,532 / 12,184
+       (STATICCALL, pinned as   Burn     Bn254  5,208 /  5,855   Bls  5,443 /  6,094
+        an immutable)           InnerProduct Bn254 7,226 / 8,926 Bls  7,458 / 10,746
+   (3) as (2), multi apart:     Single   Bn254  8,026 /  8,674   Bls  8,366 /  9,018
+                                Multi    Bn254  7,546 /  8,193   Bls  7,770 /  8,421
+                                (burn, inner-product as (2))
+   Code a call loads, bn254: today 15,955; (1) transfer 15,145, burn 9,148; (2) transfer 11,192 + 7,226, burn
+   5,208 + 7,226; (3) single 8,026 + 7,226, multi 7,546 + 7,226.
+   Generator computation (the ~14 M gas BLS deploy) runs once per curve in (2)/(3) (inner-product verifier), twice in (1).
+
+2. Verify gas, cold external call, honest proofs from ZetherProver on hand-built statements
+   (test/zether/ZetherVerifierGas.t.sol in an isolated copy of the verifier sources, because the branch's full tree
+   does not build yet — see the report; FOUNDRY_SPARSE_MODE did not isolate the test with forge 1.3.5):
+                          (1) duplicated     (2) shared IP
+   bn254 transfer          2,774,390          2,781,285   (+6,895)
+   bn254 multi M=8        12,353,693         12,288,381   (-65,312)
+   bn254 burn              1,350,215          1,354,271   (+4,056)
+   bls12-381 transfer      3,008,503          3,001,746   (-6,757)
+   bls12-381 multi M=8    13,786,276         13,196,040   (-590,236)
+   bls12-381 burn          1,443,355          1,447,344   (+3,989)
+   Suite result (each): ok. 6 passed; 0 failed; 0 skipped
+   (3) runs the same code path as (2) per call (one STATICCALL per range proof): same gas.
+
+3. Plan 5g-Z1 gates (2026-10-20, on main a61d2215; owner-approved scope; layout (2) built)
+$ forge test   (full suite)
+[FAIL: create] setUp() (gas: 0)
+[FAIL: create] test_rollover_n2048() (gas: 1072425142)
+[FAIL: create] test_rollover_n2816() (gas: 1073373123)
+Ran 117 test suites in 68.29s (540.08s CPU time): 1323 tests passed, 4 failed, 10 skipped (1337 total tests)
+   the 4 failures are test/research/PqzStateGas.t.sol (5h research, merged in a61d2215) without its documented
+   --gas-limit 60000000000 (runs/2026-10-20-5h-state-gas.txt); with it:
+$ forge test --match-path test/research/PqzStateGas.t.sol --gas-limit 60000000000
+$ forge test --isolate --match-path test/ua/{UAGas,UARegistryGroups}.t.sol
+$ forge test --match-path test/{zether/ZetherRevertPaths,pqz/PqzMulti,pqz/PqzUnderlying,pqz/PqzNone,v2/FactoryZether,v2/Factory,v2/Dex,zether/ZetherDeploy}.t.sol -vv
+  UnderlyingPqzToken init code bytes: 61992
+  UnderlyingPqzToken runtime bytes: 60151
+  UnderlyingPqzToken deploy tx gas: 13319335
+  deploy tx gas: 1169128
+  deploy tx gas: 2031330
+  deploy tx gas: 4857577
+  deploy tx gas: 12353055
+  deploy tx gas: 2523288
+  deploy tx gas: 1208761
+  deploy tx gas: 2597983
+  deploy tx gas: 1260415
+  deploy tx gas: 10164764
+  deploy tx gas: 12853539
+Ran 8 test suites in 3.67s (13.95s CPU time): 116 tests passed, 0 failed, 0 skipped (116 total tests)
+Ran 3 test suites in 1.15s (2.71s CPU time): 26 tests passed, 0 failed, 0 skipped (26 total tests)
+Ran 2 test suites in 3.79s (6.53s CPU time): 20 tests passed, 0 failed, 0 skipped (20 total tests)
+   (ZetherDeploy fits test, in order: disclosure, statements, IP bn254, IP BLS, transfer / burn bn254, transfer / burn BLS, NONE_ZETHER, UNDERLYING_ZETHER; all < 2^24 / 1.05^2)
+$ FOUNDRY_PROFILE=private7622 forge build
+Compiling 3 files with Solc 0.8.37
+Compiler run successful with warnings:
+$ forge build src --sizes --json; python3 scripts/size_gate.py (after the baseline update)
+   NoUnderlyingZetherToken              runtime  45786  init  47805
+   UnderlyingZetherToken                runtime  58027  init  60095
+   NoUnderlyingPqzToken                 runtime  47581  init  49255
+   UnderlyingPqzToken                   runtime  60151  init  61832
+   OpenFactory                          runtime  12266  init  13033
+   ZetherLib                            runtime  17620  init  17672
+   PqzLib                               runtime  20559  init  20611
+   ZetherTransferVerifierBn254          runtime  11192  init  11840
+   ZetherBurnVerifierBn254              runtime   5208  init   5855
+   ZetherInnerProductVerifierBn254      runtime   7226  init   8926
+   ZetherTransferVerifierBls12381       runtime  11532  init  12184
+   ZetherBurnVerifierBls12381           runtime   5443  init   6094
+   ZetherInnerProductVerifierBls12381   runtime   7458  init  10746
+size gate: 0 error(s), 95 contracts
+$ scripts/evm_libs.sh check
+evm_libs: openzeppelin-contracts OK (fda6b85f2c65d146b86d513a604554d15abd6679)
+evm_libs: forge-std OK (88c8a2886f6f64c846ae57533a36361acb81683a)
+$ python3 -I scripts/docs_check.py check
+check: 0 error(s), 2 warning(s), 15 note(s)
