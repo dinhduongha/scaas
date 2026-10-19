@@ -32,7 +32,8 @@
 
 #ifdef PQZ_SZ_TRACE
 /* P6-FS binding test only (sz/fs_bind.c, lazer#28; never in a production build): the trace hook of lazer/lnp-tbox.c,
-   same kinds: 2 / 3 = seed and dom of V4 / V3, 5 = the seed of mu (dom 0) */
+   same kinds + 10 (the SV tag, so fs_bind sees that verify_fast took this path): 12 / 13 = seed and dom of V4 / V3,
+   15 = the seed of mu (dom 0) */
 extern void (*pqz_sz_trace_fn) (int kind, const uint8_t seed[32], uint64_t dom, int acc, const int64_t *v,
                                 unsigned int n);
 #define SV_FST(kind, seed, dom)                                                                                    \
@@ -1607,8 +1608,8 @@ verify_body (const svrel_t *S, uint8_t op, const uint8_t hash_stmt[32], const ui
   if (Gz == NULL)
     return 0;
   const uint32_t dom_z4 = M + 2 * (DEG - 1) + 2 + Z, dom_z3 = dom_z4 + 256;
-  SV_FST (2, hash0, dom_z4);
-  SV_FST (3, hash0, dom_z3);
+  SV_FST (12, hash0, dom_z4);
+  SV_FST (13, hash0, dom_z3);
   if (!urandom_mat (V4, &g0, dom_z4) || !urandom_mat (V3, &g0, dom_z3))
     return 0;
   {
@@ -1795,7 +1796,7 @@ verify_body (const svrel_t *S, uint8_t op, const uint8_t hash_stmt[32], const ui
   if (Ra == NULL)
     return 0;
   memset (Qa, 0, sizeof *Qa), memset (La, 0, sizeof *La), memset (Ra, 0, sizeof *Ra);
-  SV_FST (5, hash1, 0); /* g1 = PRG(hash1): mu */
+  SV_FST (15, hash1, 0); /* g1 = PRG(hash1): mu */
   for (k = 0; k < ntot; k++)
     {
       uint64_t mu[DEG];

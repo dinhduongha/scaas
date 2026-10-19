@@ -1435,8 +1435,8 @@ fn verify_body(ar: &Ar, s: &SvRel, code: u8, hash_stmt: &[u8; 32], stmt: &[u8], 
     let dom_z3 = dom_z4 + 256;
     #[cfg(feature = "test-hooks")]
     {
-        crate::fstrace::rec(2, g0, dom_z4 as u64);
-        crate::fstrace::rec(3, g0, dom_z3 as u64);
+        crate::fstrace::rec(12, g0, dom_z4 as u64); // kinds + 10: the SV tag
+        crate::fstrace::rec(13, g0, dom_z3 as u64);
     }
     urandom_mat(v4, g0, dom_z4)?;
     urandom_mat(v3, g0, dom_z3)?;
@@ -1629,7 +1629,7 @@ fn verify_body(ar: &Ar, s: &SvRel, code: u8, hash_stmt: &[u8; 32], stmt: &[u8], 
     // ---- lnp_quad_many_verify / lnp_quad_verify: v = sum_k mu_k E_k(z) - f, grouped by the power of c ----
     let (mut qa, mut la, mut ra) = (ACC0, ACC0, ACC0);
     #[cfg(feature = "test-hooks")]
-    crate::fstrace::rec(5, g1, 0); // the seed of mu
+    crate::fstrace::rec(15, g1, 0); // the seed of mu
     for k in 0..ntot {
         let mut mu = [0u64; DEG];
         urandom_q(&mut mu, g1, (k + 1) as u64)?; // polyvec_urandom (mu, q, log2q, hash, 0)

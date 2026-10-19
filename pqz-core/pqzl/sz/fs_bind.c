@@ -10,7 +10,8 @@
  * Every prover message must be absorbed before the challenges that follow it: the V4 / V3 seeds (kinds 2 / 3) must
  * differ between the honest and the z3- and z4-changed proofs, the mu seed (kind 5) between the honest and the
  * h-changed proof. A record that is not emitted (the verifier rejected before the challenge) counts as a failure,
- * never as "differ". The honest proof must verify. Exit 0 = binding holds in both verifiers.
+ * never as "differ". The honest proof must verify. verify_fast must report pqz_sv.c's tagged kinds 12 / 13 / 15
+ * (another path records the untagged ones: MISSING). Exit 0 = binding holds in both verifiers.
  *
  * Observation only: it builds no proof meant to verify and searches for none.
  */
@@ -25,18 +26,18 @@ extern void (*pqz_sz_trace_fn) (int kind, const uint8_t seed[32], uint64_t dom, 
 int pqz_test_mutate (uint8_t op, const uint8_t *proof, size_t len, unsigned kind, uint64_t r1, uint64_t r2,
                      uint8_t *out, size_t *outlen);
 
-/* the first seed of kinds 2, 3, 5 in one verifier call */
+/* the first seed of kinds 2, 3, 5 (generic) and 12, 13, 15 (pqz_sv.c's tagged kinds) in one verifier call */
 static struct
 {
-  int seen[6];
-  uint8_t seed[6][32];
+  int seen[16];
+  uint8_t seed[16][32];
 } cur;
 
 static void
 trace (int kind, const uint8_t seed[32], uint64_t dom, int acc, const int64_t *v, unsigned int n)
 {
   (void)dom, (void)acc, (void)v, (void)n;
-  if ((kind == 2 || kind == 3 || kind == 5) && !cur.seen[kind])
+  if ((kind % 10 == 2 || kind % 10 == 3 || kind % 10 == 5) && kind < 16 && !cur.seen[kind])
     cur.seen[kind] = 1, memcpy (cur.seed[kind], seed, 32);
 }
 
@@ -140,8 +141,8 @@ main (void)
   for (int fast = 0; fast < 2; fast++)
     {
       const char *vn = fast ? "verify_fast" : "verify";
-      uint8_t hon[6][32];
-      int hseen[6];
+      uint8_t hon[16][32];
+      int hseen[16];
       int ok = run (fast, proof, len);
       memcpy (hon, cur.seed, sizeof hon), memcpy (hseen, cur.seen, sizeof hseen);
       printf ("P6-FS %s honest: %s\n", vn, ok == 1 ? "ACCEPT" : "REJECT (FAIL)");
@@ -153,12 +154,13 @@ main (void)
             {
               if ((m == 0) != (k == 5) || k == 4)
                 continue; /* h -> kind 5; z3, z4 -> kinds 2, 3 */
-              const char *res = !hseen[k] || !cur.seen[k]           ? "MISSING (FAIL)"
-                                : memcmp (hon[k], cur.seed[k], 32) ? "differ"
+              const int t = k + 10 * fast; /* verify_fast must report pqz_sv.c's tagged kinds */
+              const char *res = !hseen[t] || !cur.seen[t]           ? "MISSING (FAIL)"
+                                : memcmp (hon[t], cur.seed[t], 32) ? "differ"
                                                                    : "EQUAL (FAIL)";
               printf ("P6-FS %s %s-mutated (%s) kind %d %s: honest %02x%02x%02x%02x mutated %02x%02x%02x%02x -> %s\n",
-                      vn, mname[m], okm == 1 ? "accepted" : "rejected", k, kname[k], hon[k][0], hon[k][1],
-                      hon[k][2], hon[k][3], cur.seed[k][0], cur.seed[k][1], cur.seed[k][2], cur.seed[k][3], res);
+                      vn, mname[m], okm == 1 ? "accepted" : "rejected", t, kname[k], hon[t][0], hon[t][1],
+                      hon[t][2], hon[t][3], cur.seed[t][0], cur.seed[t][1], cur.seed[t][2], cur.seed[t][3], res);
               fails += res[0] != 'd';
             }
         }

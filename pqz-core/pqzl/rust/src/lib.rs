@@ -262,28 +262,35 @@ pub fn test_mutate(rel: u8, proof: &[u8], kind: u32, r1: u64, r2: u64) -> Result
 /// The P6-FS trace (test hook, lazer#28; = the C core's `pqz_sz_trace_fn` kinds under `PQZ_SZ_TRACE`): which seed
 /// each Fiat–Shamir challenge of this thread's `prove` / `verify` / `verify_fast` calls was derived from, as
 /// `(kind, seed, dom)`: 2 / 3 = seed and dom of the z4 / z3 matrix V4 / V3, 5 = the seed of mu (and, in the generic
-/// code, of the final challenge), dom 0. Returns the records since the last call and clears them.
+/// code, of the final challenge), dom 0; the specialised verifier (`sv.rs`) records kind + 10. Returns the records since the last call and clears them. Off until this
+/// thread's first call (which returns nothing): other test-hooks builds (pqz-ffi `fuzz`, the fault hooks) never call
+/// it, so they never record.
 #[cfg(feature = "test-hooks")]
-pub fn fs_trace_take() -> Vec<(u8, [u8; 32], u64)> {
-    fstrace::T.with(|t| core::mem::take(&mut *t.borrow_mut()))
+pub fn fs_trace_take() -> Vec<fstrace::Rec> {
+    fstrace::T.with(|t| t.borrow_mut().replace(Vec::new()).unwrap_or_default())
 }
 
 #[cfg(feature = "test-hooks")]
-pub(crate) mod fstrace {
+pub mod fstrace {
     use alloc::vec::Vec;
     use core::cell::RefCell;
 
+    /// (kind, seed, dom)
+    pub type Rec = (u8, [u8; 32], u64);
+
     std::thread_local! {
-        pub(crate) static T: RefCell<Vec<(u8, [u8; 32], u64)>> = const { RefCell::new(Vec::new()) };
+        /// None = off (see `fs_trace_take`)
+        pub(crate) static T: RefCell<Option<Vec<Rec>>> = const { RefCell::new(None) };
     }
 
-    /// one record; dropped if the allocation fails (tests/memory.rs denies allocations: no abort here, and fs_bind
-    /// counts a missing record as a failure)
+    /// one record while on; dropped if the allocation fails (tests/memory.rs denies allocations: no abort here, and
+    /// fs_bind counts a missing record as a failure)
     pub(crate) fn rec(kind: u8, seed: &[u8; 32], dom: u64) {
         T.with(|t| {
-            let mut t = t.borrow_mut();
-            if t.try_reserve(1).is_ok() {
-                t.push((kind, *seed, dom));
+            if let Some(t) = t.borrow_mut().as_mut() {
+                if t.try_reserve(1).is_ok() {
+                    t.push((kind, *seed, dom));
+                }
             }
         });
     }

@@ -5,6 +5,7 @@
 //! z4 (kind 5 at the bound, (r1 >> 8) even). The V4 / V3 seeds (kinds 2 / 3) must differ between the honest and the
 //! z3- and z4-changed proofs, the mu seed (kind 5) between the honest and the h-changed proof; a missing record (the
 //! verifier rejected before the challenge) is a failure, never "differ"; the honest proof verifies.
+//! `verify_fast` must report the SV-tagged kinds 12 / 13 / 15 (another path records the untagged ones: MISSING).
 //! Observation only: no proof meant to verify is built or searched for.
 use pqzl::{fs_trace_take, test_mutate, Ctx, OP_REGISTER};
 
@@ -32,13 +33,14 @@ fn fs_bind() {
         })
         .collect();
     fs_trace_take();
-    let mut fails = Vec::new();
+    let (mut fails, mut checks) = (Vec::new(), 0);
     for (vn, fast) in [("verify", false), ("verify_fast", true)] {
         let mut run = |p: &[u8]| {
             let ok = if fast { ctx.verify_fast(OP_REGISTER, &r.stmt, p) } else { ctx.verify(OP_REGISTER, &r.stmt, p) };
             (ok, fs_trace_take())
         };
         let (ok, hon) = run(&honest);
+        checks += 1;
         println!("P6-FS {vn} honest: {}", if ok { "ACCEPT" } else { "REJECT (FAIL)" });
         if !ok {
             fails.push(format!("{vn} honest rejected"));
@@ -47,24 +49,26 @@ fn fs_bind() {
             let (okm, mt) = run(p);
             let kinds: &[(u8, &str)] = if *mn == "h" { &[(5, "mu seed")] } else { &[(2, "V4 seed"), (3, "V3 seed")] };
             for &(k, kn) in kinds {
-                let (a, b) = (seed(&hon, k), seed(&mt, k));
+                let t = k + if fast { 10 } else { 0 }; // verify_fast must report sv.rs's tagged kinds
+                let (a, b) = (seed(&hon, t), seed(&mt, t));
+                checks += 1;
                 let res = match (a, b) {
                     (Some(a), Some(b)) if a != b => "differ",
                     (Some(_), Some(_)) => "EQUAL (FAIL)",
                     _ => "MISSING (FAIL)",
                 };
                 println!(
-                    "P6-FS {vn} {mn}-mutated ({}) kind {k} {kn}: honest {} mutated {} -> {res}",
+                    "P6-FS {vn} {mn}-mutated ({}) kind {t} {kn}: honest {} mutated {} -> {res}",
                     if okm { "accepted" } else { "rejected" },
                     hex4(a),
                     hex4(b)
                 );
                 if res != "differ" {
-                    fails.push(format!("{vn} {mn} kind {k} {res}"));
+                    fails.push(format!("{vn} {mn} kind {t} {res}"));
                 }
             }
         }
     }
-    println!("VERDICT: P6-FS Fiat-Shamir binding (lazer#28) {} ({} failed checks of 12)", if fails.is_empty() { "ok" } else { "FAIL" }, fails.len());
+    println!("VERDICT: P6-FS Fiat-Shamir binding (lazer#28) {} ({} failed checks of {checks})", if fails.is_empty() { "ok" } else { "FAIL" }, fails.len());
     assert!(fails.is_empty(), "P6-FS binding failed: {fails:?}");
 }
