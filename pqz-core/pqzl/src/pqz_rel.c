@@ -1574,6 +1574,7 @@ pqz_decrypt_raw (const int8_t s[2048], const uint8_t u[PQZ_POLYVEC_BYTES], const
   poly_sub (vv, vv, acc, 0);
   for (unsigned i = 0; i < 16; i++)
     w[i] = cval (vv, i);
+  poly_free (vv), poly_free (acc); /* Q-B: u^T s and the plaintext; a freed block is wiped by the release below */
   wipe_vec (sv); /* Q-B: the secret key, then the call's memory */
   pqz_arena_wipe_release (&base);
   return pqz_err;

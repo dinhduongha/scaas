@@ -10,8 +10,8 @@
 //! rebuilt lazily); the core then stays there. wasm32 (clients) has one arena for both, so linear memory never holds
 //! two, and proves PQZL op 7 only up to `WASM_PQZL_MAX_LEGS` legs.
 //!
-//! Node faults (controller 2026-10-14): a core or worker that cannot be set up (arena allocation, `pqz_init`, thread
-//! creation), a worker job that panicked, and the core running out of arena (`pqz_err == PQZ_ERR_ARENA` after a call)
+//! Node faults (controller 2026-10-14): a core or worker that cannot be set up (arena allocation, thread creation; `pqz_init`
+//! on an undersized arena traps since review Q-C), a worker job that panicked, and the core running out of arena (`pqz_err == PQZ_ERR_ARENA` after a call)
 //! are not properties of the input: `with_core` returns `Err(NodeFault)` (and drops the core, re-initialised at the
 //! next call), which the precompile entry reports as `PQZ_FFI_NODE_FAULT` with no output. Arena exhaustion is graceful
 //! only in the specialised verifier's own allocations; inside LaZer (keys, A, the prover, the generic verifier) the
