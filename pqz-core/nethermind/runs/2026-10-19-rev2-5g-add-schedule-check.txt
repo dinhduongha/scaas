@@ -1,0 +1,17 @@
+$ python3 -I pqz-core/nethermind/chain/add-schedule.py --check
+/tmp/tmpl41529ia/o.json: schedule 1 added at 1792427682 = 0x6ad646a2: 2 rows (1 new of ops [1] id 0x8079d65b…), selftest 4, mldsa44 1, mldsa65 2
+  op 1 id 0x8079d65b… stmtLen 83072 gas 3 (was 5, -40.0 %)
+/tmp/tmpl41529ia/o.json: schedule 1 added at 1792427682 = 0x6ad646a2: 2 rows (2 new of ops [1]), selftest 4, mldsa44 1, mldsa65 2
+  op 1 id 0x8079d65b… stmtLen 83072 gas 3 (was 5, -40.0 %)
+  op 1 id 0x0a47a768… stmtLen 83072 gas 9 (was 4, +125.0 %)
+/tmp/tmpl41529ia/o.json: schedule 1 added at 1792427682 = 0x6ad646a2: 2 rows (1 new of ops [1] id 0x8079d65b…), selftest 3, mldsa44 1, mldsa65 2
+  op 1 id 0x8079d65b… stmtLen 83072 gas 3 (was 5, -40.0 %)
+  refused (dropped): /tmp/tmpl41529ia/c.json lacks 1 row(s) the last schedule has: [(1, '0x8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef', 83072, None, None)]
+  refused (duplicate): duplicate rows: [(1, '0x8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef', 83072, None, None)]
+  refused (two schedules): /tmp/tmpl41529ia/c.json has 2 schedules, not 1 (a calibration output)
+/tmp/tmpl41529ia/o.json: schedule 1 added at 1792427682 = 0x6ad646a2: 3 rows (3 new of ops [1, 2]), selftest 4, mldsa44 1, mldsa65 2
+  op 1 id 0x8079d65b… stmtLen 83072 gas 3 (was 5, -40.0 %)
+  op 1 id 0x0a47a768… stmtLen 83072 gas 9 (was 4, +125.0 %)
+  op 2 id 0x8079d65b… stmtLen 83072 gas 8
+add-schedule --check: ok
+rc=0

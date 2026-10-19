@@ -32,7 +32,7 @@ how the library works: the parent [pqz-core README](../README.md), §3
 | Address | Name | What it checks | Gas |
 |---|---|---|---|
 | `0x5caa500000000000000000000000000000000f01` | `PQZ` | a proof of either proof system (PQZL or PQZH), through `pqz-ffi`'s C function `pqz_precompile` (P/Invoke into `libpqz_ffi.so`) | the active schedule's row `(op, id, stmtLen)` — the multi-recipient transfer (op 7) also `(M, auditorOn)` from header words 320 / 448 — + 3·⌈len/32⌉; a miss = the smallest row (and `…00`, no FFI call); op 6 = `selftestGas` |
-| `0x5caa500000000000000000000000000000000012` | `MLDSA44` | an ML-DSA-44 signature; EIP-8355 input layout `pk ‖ sig ‖ msg`, empty context; .NET 10 `MLDsa` (OpenSSL 3.5 of the base image) | `mldsa44Gas` (≥ 6,500; calibrated 49,000) + 6·⌈max(0, L − 3,732)/32⌉ |
+| `0x5caa500000000000000000000000000000000012` | `MLDSA44` | an ML-DSA-44 signature; EIP-8355 input layout `pk ‖ sig ‖ msg`, empty context; .NET 10 `MLDsa` (OpenSSL 3.5 of the base image); never reverts: a short input or a `CryptographicException` from .NET is `…00` (review W-R) | `mldsa44Gas` (≥ 6,500; calibrated 49,000) + 6·⌈max(0, L − 3,732)/32⌉ |
 | `0x5caa500000000000000000000000000000000013` | `MLDSA65` | the same for ML-DSA-65 | `mldsa65Gas` (≥ 9,000; calibrated 68,000) + 6·⌈max(0, L − 5,261)/32⌉ |
 
 How to read the gas column: `id` is the statement's `proofSystemId`, `stmtLen` its length in bytes and `len` the
@@ -64,9 +64,14 @@ A node fault never becomes a verdict: the node stops before it seals the block, 
 ### How the plugin turns on
 
 The plugin reads `engine.Pqz` from the chainspec. Each schedule's timestamp becomes a fork transition, and from that
-timestamp on the three addresses are added to the node's precompile table. At start-up the plugin checks that its
-registrations took effect, that .NET supports ML-DSA and that the library's self-test (op 6) returns the expected hash;
-it then logs `PQZ-START` (library SHA-256, self-test, schedules, addresses). Any failure logs `PQZ-REFUSE` and the node
+timestamp on the three addresses are added to the node's precompile table. A release that Nethermind builds for a
+block-number transition (for example `maxCodeSizeTransition`) carries the schedule in force at the genesis timestamp,
+and from the first timestamp transition on Nethermind looks releases up by timestamp alone, so a block-number
+transition never drops the precompiles (review W-D, 2026-10-19: refuted, the test
+`A_block_number_transition_keeps_the_schedule` is the proof). At start-up the plugin checks that its registrations
+took effect, that .NET supports ML-DSA, that the library's SHA-256 equals the reviewed value compiled into the plugin
+(`SelfTest.ExpectedLibrarySha256`, review W-G) and that the library's self-test (op 6) returns the expected hash; it
+then logs `PQZ-START` (library SHA-256, self-test, schedules, addresses). Any failure logs `PQZ-REFUSE` and the node
 exits with code 120 instead of running without the precompiles.
 
 ```mermaid
@@ -123,6 +128,14 @@ CALIB=1 scripts/capped pqz-core/nethermind/build-image.sh pqz1                  
 # 7. Calibrate the gas prices, once, on the chain host
 scripts/capped pqz-core/nethermind/calibrate.sh pqz1                                       # ONE run: runs/<date>-calib.txt, chain/engine-pqz.json
 ```
+
+**The reviewed library (review W-G, 2026-10-19).** `build-image.sh` reads `ExpectedLibrarySha256` from
+`Nethermind.Pqz/SelfTest.cs`, builds `libpqz_ffi.so` (the `ffi-export` target) and stops with `FAIL the built library is
+not the reviewed one` unless the two hashes are equal; the Dockerfile checks the library in the image against the same
+value and the plugin refuses to start with any other library. A change to the library is therefore: build, review the
+new hash (the failure line prints it), set it in `SelfTest.cs`, commit, build again (the `ffi` stage comes from the
+cache). The value today is the library of `pqz3`; plan Task 13 sets the one of `pqz4`. `clang` in the Dockerfile is
+pinned to exact Debian 12 package versions.
 
 The commands show the first image label, `pqz1`. The current image was built with the label `pqz2`
 (`runs/2026-10-17-image-pqz2.txt`). The multi-recipient calibration was `calibrate.sh pqz2 --ops 7`: it writes only
