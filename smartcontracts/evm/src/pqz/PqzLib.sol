@@ -772,8 +772,9 @@ library PqzLib {
         if (acc.length != PqzCt.CT) revert IPqzToken.AccMismatch();
         uint64 r = a.rolled;
         uint256 units = uint256(a.accUnits) + 1;
-        if (keccak256(acc) != PqzCt.stored(a.accHash)) {
-            if (keccak256(acc) != PqzCt.stored(a.baseHash)) revert IPqzToken.AccMismatch();
+        bytes32 h = keccak256(acc); // 16,512 B: hashed once
+        if (h != PqzCt.stored(a.accHash)) {
+            if (h != PqzCt.stored(a.baseHash)) revert IPqzToken.AccMismatch();
             (r, units) = (a.baseRolled, uint256(a.baseUnits) + 1);
         }
         o.rolled = r;

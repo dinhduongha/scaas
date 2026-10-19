@@ -555,6 +555,30 @@ contract PqzNoneTest is PqzFixture {
         assertEq(tok.accountState(alice).accUnits, 4);
     }
 
+    /// W-E, `baseRolled <= p < rolled` (5g review L2): a debit on the base at p = 2 after four rollovers takes
+    /// pending[0..2) into T, sets `rolled` back to p (un-rolling pending[2..4)) and keeps every slot from 2 on.
+    function test_rolloverRace_baseRolledBelowPBelowRolled() public {
+        _credits(alice, 5); // the base is Trivial(0) at rolled 0
+        bytes memory acc0 = _acc(alice);
+        bytes[] memory inl = _inline(tok, alice, 2); // pending[0..2)
+        bytes memory out = _out(113, true);
+        bytes memory pl = _payload(2, 0, alice, bob, bytes32(0), out, "");
+        bytes memory st = tok.transferSingleStatement(pl, acc0, inl, 0);
+        _roll(tok, alice, 4); // anyone: rolled 4 > p
+        assertEq(tok.transferSingleStatement(pl, acc0, inl, 0), st, "the base: same T");
+        tok.pqzTransferSingle(pl, acc0, inl, hex"01", _mlAuth());
+        IPqzToken.AccountState memory a = tok.accountState(alice);
+        bytes memory kept = bytes.concat(_cut(out, 0, PqzCt.PK), _cut(out, PqzCt.CT, 128));
+        assertEq(a.accHash, keccak256(kept));
+        assertEq(a.rolled, 2, "rolled back to p");
+        assertEq(a.accUnits, 1);
+        assertEq(a.floor, 2);
+        accOf[alice] = kept;
+        _roll(tok, alice, 3); // credits 2, 3 and 4 roll again
+        assertEq(tok.accountState(alice).rolled, 5);
+        assertEq(tok.accountState(alice).accUnits, 4);
+    }
+
     /// W-I: an opening that does not decode reverts (as documented); a non-canonical one is false.
     function test_verifyTransferAmount_undecodableOpeningReverts() public {
         (bytes32 ref,) = _transfer(tok, alice, bob, bytes32(0), 95, true);
