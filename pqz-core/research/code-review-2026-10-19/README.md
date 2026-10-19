@@ -14,6 +14,9 @@ its scope. Reviewed at main `4c20032`.
 | [D-lazer-fork.md](D-lazer-fork.md) | `pqzl/lazer` | **P0: `z3`, `z4` are never absorbed before their Schwartz–Zippel challenges `V`** (all four implementations; inherited). P2: z2 rejection test gets z1's variance and has no random sign (Codex lead a confirmed; prover-side ZK). P3: β4 sign reads bit 8 on the fourth attempt (Codex lead b confirmed; negligible). |
 | [G-codex-pqzl-rust.md](G-codex-pqzl-rust.md) | `pqzl/rust` at `0dc869d` (branch `pqzl-fs3`), Codex | P1: secret-dependent branches in the prover (fix E, branch `pqzl-fs3-ct`). P2: secret copies / mask seeds not wiped (fix B); statement hashed before the length check (fix A) |
 | [H-agy-pqzl-rust.md](H-agy-pqzl-rust.md) | same, agy; triage table A–E | P3: `canonical()` short chunk (fix C), wiping (fix B), C `-INT64_MIN` in the SV (fix D), `as u32` length (fix A). A–D fixed on `pqzl-fs3-fixad` (plan Task 4b, decisions CTR-PQZ-09) |
+| [I-codex-pqzh-rust.md](I-codex-pqzh-rust.md) | round 2 (owner 2026-10-19 evening): PQZH Rust at `e9cabd1` (`pqzh/ligero`, pqz-ffi PQZH path, `stmt`, `xcheck`; `stark-backup` secondary), Codex | no P0 / P1 in the live path; round-1 A-F1, A-F2, A-Note and B-F1…F5 all still present |
+| [J-agy-pqzh-rust.md](J-agy-pqzh-rust.md) | same, agy; **triage table P-A…P-I** | same eight findings, nothing new; triage: fix P-A…P-H on `rev2-pqzh` (plan Task 5c), P-I a gate before the backup is promoted |
+| [K-claude-pqzh-rust.md](K-claude-pqzh-rust.md) | same, Claude sub-agent | no P0 / P1; new: wasm32 `i64.rem_s` / `div_s` and conditional subtractions on secrets (F3), infallible verifier allocation (F5), unsafe pointer work in bench wasm exports (F6) |
 
 **Controller verification (2026-10-19).** Both P0 transcript facts were re-read by the controller in the Rust prover
 (`pqzl/rust/src/proof/tbox.rs`: `tg` hashed at 1058, `h` computed after it, `quad.rs:22` derives `mu` from the same
