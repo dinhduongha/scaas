@@ -11,9 +11,17 @@ const M42: u64 = (1 << 42) - 1;
 /// bytes per F_q element in proofs (big-endian, 42 bits in 6 bytes, canonical)
 pub const EB: usize = 6;
 
+/// x - q if x >= q, else x (x < 2^63), by a mask instead of a branch (review P-B: the prover's arithmetic runs on
+/// secret values)
+#[inline(always)]
+fn csub(x: u64) -> u64 {
+    let y = x.wrapping_sub(Q);
+    y.wrapping_add(Q & (y >> 63).wrapping_neg())
+}
+
 /// 21-bit-piece arithmetic for wasm32 (compiled everywhere so the native tests check it against the u128 path)
 pub(crate) mod limb {
-    use super::{M42, Q};
+    use super::{M42, csub};
     const M21: u64 = (1 << 21) - 1;
 
     /// a b = h 2^42 + m 2^21 + l for a, b < 2^42: l, h < 2^42, m < 2^43
@@ -33,8 +41,7 @@ pub(crate) mod limb {
     pub fn red3([l, m, h]: [u64; 3]) -> u64 {
         let (l, m, h) = (fold(l), fold(m), fold(h));
         // m 2^21 = (m >> 21) 2^42 + (m & M21) 2^21; 2^42 = 215: s < 2^42 + 2^43 + 2^51
-        let s = fold(l + ((m & M21) << 21) + ((m >> 21) + h) * 215); // < 2^42 + 2^18
-        if s >= Q { s - Q } else { s }
+        csub(fold(l + ((m & M21) << 21) + ((m >> 21) + h) * 215)) // < 2^42 + 2^18 before csub
     }
 
     /// w += k a b (a, b < q; the sum of k over all terms of one accumulator at most 2^20)
@@ -65,8 +72,7 @@ pub fn red(x: u128) -> u64 {
     let x = (x & M42 as u128) + (x >> 42) * 215; // < 2^95
     let x = (x & M42 as u128) + (x >> 42) * 215; // < 2^61
     let x = x as u64;
-    let x = (x & M42) + (x >> 42) * 215; // < 2^42 + 2^28
-    if x >= Q { x - Q } else { x }
+    csub((x & M42) + (x >> 42) * 215) // < 2^42 + 2^28 before csub
 }
 
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
@@ -75,8 +81,15 @@ pub struct Fq(pub u64);
 impl Fq {
     pub const ZERO: Fq = Fq(0);
     pub const ONE: Fq = Fq(1);
+    /// v mod q (= `v.rem_euclid(q)`) without a division or a branch (review P-B: on wasm32 `rem_euclid` is
+    /// `i64.rem_s`, whose latency depends on the operands): |v| folded at 2^42 = 215 (mod q), then negated by a mask
     pub fn from_i64(v: i64) -> Fq {
-        Fq(v.rem_euclid(Q as i64) as u64)
+        let s = (v >> 63) as u64; // all ones if v < 0
+        let a = (v as u64 ^ s).wrapping_sub(s); // |v| (2^63 for i64::MIN)
+        let a = (a & M42) + (a >> 42) * 215; // < 2^42 + 2^30
+        let r = csub((a & M42) + (a >> 42) * 215); // < 2^42 + 215 before csub
+        let n = (Fq::ZERO - Fq(r)).0;
+        Fq(r ^ ((r ^ n) & s))
     }
     pub fn pow(self, mut e: u64) -> Fq {
         let (mut b, mut r) = (self, Fq::ONE);
@@ -108,15 +121,15 @@ impl Add for Fq {
     type Output = Fq;
     #[inline(always)]
     fn add(self, o: Fq) -> Fq {
-        let s = self.0 + o.0;
-        Fq(if s >= Q { s - Q } else { s })
+        Fq(csub(self.0 + o.0))
     }
 }
 impl Sub for Fq {
     type Output = Fq;
     #[inline(always)]
     fn sub(self, o: Fq) -> Fq {
-        Fq(if self.0 >= o.0 { self.0 - o.0 } else { self.0 + Q - o.0 })
+        let d = self.0.wrapping_sub(o.0); // review P-B: a mask, not a branch
+        Fq(d.wrapping_add(Q & (d >> 63).wrapping_neg()))
     }
 }
 impl Neg for Fq {
@@ -266,9 +279,10 @@ impl Acc4 {
     }
 }
 
-/// x_i^{-1} for all i (Montgomery's trick); also returns the product of all x_i. Every x_i must be nonzero.
-pub fn batch_inv(x: &[Fq]) -> (Vec<Fq>, Fq) {
-    let mut pre = Vec::with_capacity(x.len());
+/// x_i^{-1} for all i (Montgomery's trick); also returns the product of all x_i. Every x_i must be nonzero. The
+/// verifier's buffers, so reserved fallibly (review P-D).
+pub fn batch_inv(x: &[Fq]) -> Result<(Vec<Fq>, Fq), crate::Oom> {
+    let mut pre = crate::try_vec(x.len())?;
     let mut acc = Fq::ONE;
     for &v in x {
         pre.push(acc);
@@ -276,12 +290,13 @@ pub fn batch_inv(x: &[Fq]) -> (Vec<Fq>, Fq) {
     }
     let total = acc;
     let mut inv = acc.inv();
-    let mut out = vec![Fq::ZERO; x.len()];
+    let mut out = crate::try_vec(x.len())?;
+    out.resize(x.len(), Fq::ZERO);
     for i in (0..x.len()).rev() {
         out[i] = inv * pre[i];
         inv = inv * x[i];
     }
-    (out, total)
+    Ok((out, total))
 }
 
 #[cfg(test)]
@@ -301,6 +316,32 @@ mod tests {
         }
         assert_eq!(red(u128::MAX) as u128, u128::MAX % Q as u128);
         assert_eq!(Fq(12345).inv() * Fq(12345), Fq::ONE);
+    }
+
+    /// review P-B: the branch-free from_i64 / add / sub / csub give the reference values (rem_euclid, the branches)
+    #[test]
+    fn branch_free_matches_reference() {
+        let mut s = 0x2545_f491_4f6c_dd1du64;
+        let q = Q as i64;
+        let mut edge = vec![0i64, 1, -1, q, -q, q - 1, 1 - q, i64::MIN, i64::MAX, i64::MIN + 1];
+        edge.extend((0..100_000).map(|i| {
+            s ^= s << 13;
+            s ^= s >> 7;
+            s ^= s << 17;
+            (s as i64) >> (i % 64)
+        }));
+        for &v in &edge {
+            assert_eq!(Fq::from_i64(v).0, v.rem_euclid(Q as i64) as u64, "{v}");
+        }
+        for w in edge.windows(2) {
+            let (a, b) = (Fq::from_i64(w[0]), Fq::from_i64(w[1]));
+            let sum = a.0 + b.0;
+            assert_eq!((a + b).0, if sum >= Q { sum - Q } else { sum });
+            assert_eq!((a - b).0, if a.0 >= b.0 { a.0 - b.0 } else { a.0 + Q - b.0 });
+        }
+        for x in [0, 1, Q - 1, Q, Q + 1, 2 * Q - 1, (1 << 42) + (1 << 30)] {
+            assert_eq!(csub(x), if x >= Q { x - Q } else { x });
+        }
     }
 
     /// the wasm32 piece arithmetic gives the u128 path's values (products, F_q^4 products, long lazy sums, edges)
@@ -359,7 +400,7 @@ mod tests {
             f = f.pow(Q);
         }
         assert_eq!(f, a);
-        let (inv, prod) = batch_inv(&[Fq(2), Fq(3), Fq(5)]);
+        let (inv, prod) = batch_inv(&[Fq(2), Fq(3), Fq(5)]).unwrap();
         assert_eq!(prod, Fq(30));
         assert_eq!(inv[2] * Fq(5), Fq::ONE);
     }

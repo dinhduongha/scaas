@@ -50,7 +50,7 @@ fn main() {
             adv[m] ^= 4;
             assert_eq!(precompile(&input), Ok(VALID));
             let direct = |s: &[u8], p: &[u8]| {
-                if id == PQZL_ID { pqzl::verify_fast_on_caller(op, s, p) } else { pqzh::verify(op, s, p) }
+                if id == PQZL_ID { pqzl::verify_fast_on_caller(op, s, p) } else { pqzh::verify(op, s, p) == Ok(true) }
             };
             assert!(verify_input(&input).unwrap()); // warm on the worker (relation keys, SV tables)
             let mut out = [0u8; 32];

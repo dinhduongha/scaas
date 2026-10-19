@@ -1,6 +1,9 @@
 //! PQZH-Ligero bench steps exported to JS (wasm32-unknown-unknown, single-threaded, panic = abort), as pqzh/wasm.
 //! Timing on the JS side (run_wasm.mjs). `rel` indexes RELS then multi_rels(): 0 R_REG, 1 R_TX, 2 R_BURN, 3 R_DS,
 //! 4 R_DR, 5 R_TX0, 6.. the op 7 R_TXM shapes (auditor on, then off; `step_shape`).
+//! A bench harness for a trusted caller (run_wasm.mjs), never linked into a node or a wallet (review P-E): `rel` must
+//! be < `step_nrel()` and `step_init` must run first, or the export traps (panic = abort); the one export that takes
+//! a pointer, `step_load`, is `unsafe` with its contract stated.
 
 use std::cell::RefCell;
 
@@ -120,8 +123,12 @@ pub extern "C" fn step_alloc(len: u32) -> *mut u8 {
 }
 
 /// take the proof (which = 0) or the other statement's proof (which = 1) of relation `rel` from a step_alloc buffer
+///
+/// # Safety
+/// `ptr` and `len` must be exactly a `step_alloc(len)` result not yet passed to `step_load` (ownership moves here).
 #[no_mangle]
-pub extern "C" fn step_load(rel: u32, which: u32, ptr: *mut u8, len: u32) {
+pub unsafe extern "C" fn step_load(rel: u32, which: u32, ptr: *mut u8, len: u32) {
+    // SAFETY: the caller's contract above: a leaked boxed slice of exactly `len` bytes, owned from here on
     let v = unsafe { Vec::from_raw_parts(ptr, len as usize, len as usize) };
     with(|st| if which == 0 { st.proof[rel as usize] = v } else { st.other[rel as usize] = v });
 }

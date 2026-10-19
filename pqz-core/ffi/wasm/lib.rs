@@ -1,5 +1,7 @@
 //! pqz-ffi prove feature in wasm32: `run(sel)` writes the digest lines of `pqz_ffi::fixture::digest_lines` (sel bit 0
 //! PQZL, bit 1 PQZH) and the self-test hash; `out_ptr` / return value = the UTF-8 text in linear memory.
+//! A test harness for a trusted caller (run_wasm.mjs, vectors/replay_wasm.mjs), never linked into a node or a wallet
+//! (review P-E): the exports that read caller memory are `unsafe` with their contract stated.
 use std::cell::RefCell;
 
 use pqz_ffi::{fixture, PQZH_ID, PQZL_ID};
@@ -34,7 +36,11 @@ thread_local! {
     static PROOF: RefCell<Vec<u8>> = const { RefCell::new(Vec::new()) };
 }
 
-fn sl<'a>(p: *const u8, n: u32) -> &'a [u8] {
+/// # Safety
+/// `p` points to `n` readable bytes of linear memory (an `alloc` buffer) that stay unchanged while the slice lives;
+/// `n = 0` with any non-null `p`.
+unsafe fn sl<'a>(p: *const u8, n: u32) -> &'a [u8] {
+    // SAFETY: the caller's contract above
     unsafe { std::slice::from_raw_parts(p, n as usize) }
 }
 
@@ -45,10 +51,15 @@ pub extern "C" fn alloc(n: u32) -> *mut u8 {
 }
 
 /// `pqz_ffi::prove` (the statement's id picks PQZL or PQZH); the proof length, 0 if the prover refused
+///
+/// # Safety
+/// `st` / `sn`, `wit` / `wn` and `rnd` / 32 are readable buffers as [`sl`] requires (from `alloc`).
 #[no_mangle]
-pub extern "C" fn prove_v(op: u32, st: *const u8, sn: u32, wit: *const u8, wn: u32, rnd: *const u8) -> u32 {
-    let r: [u8; 32] = sl(rnd, 32).try_into().unwrap();
-    let p = pqz_ffi::prove(op as u8, sl(st, sn), sl(wit, wn), &r).unwrap_or_default();
+pub unsafe extern "C" fn prove_v(op: u32, st: *const u8, sn: u32, wit: *const u8, wn: u32, rnd: *const u8) -> u32 {
+    // SAFETY: the caller's contract above
+    let (r, st, wit) = unsafe { (sl(rnd, 32), sl(st, sn), sl(wit, wn)) };
+    let r: [u8; 32] = r.try_into().unwrap();
+    let p = pqz_ffi::prove(op as u8, st, wit, &r).unwrap_or_default();
     PROOF.with(|o| {
         *o.borrow_mut() = p;
         o.borrow().len() as u32
@@ -61,9 +72,13 @@ pub extern "C" fn proof_ptr() -> *const u8 {
 }
 
 /// `pqz_ffi::precompile` on the input: 1 = `…01`, 0 = `…00`, 2 = anything else (revert, node fault, self-test hash)
+///
+/// # Safety
+/// `input` / `n` is a readable buffer as [`sl`] requires (from `alloc`).
 #[no_mangle]
-pub extern "C" fn precompile_v(input: *const u8, n: u32) -> u32 {
-    match pqz_ffi::precompile(sl(input, n)) {
+pub unsafe extern "C" fn precompile_v(input: *const u8, n: u32) -> u32 {
+    // SAFETY: the caller's contract above
+    match pqz_ffi::precompile(unsafe { sl(input, n) }) {
         Ok(w) if w == pqz_ffi::VALID => 1,
         Ok(w) if w == pqz_ffi::INVALID => 0,
         _ => 2,

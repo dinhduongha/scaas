@@ -5,9 +5,10 @@ use pqzh_ligero::Params;
 /// THE preset of the D3 id (proven, radix 431, n = 32,756, k = 817, t = 121, l = 695): a `const fn`, no floats.
 pub const PARAMS: Params = Params::proven();
 
-/// The Ligero verifier (it catches its own panics; `crate::precompile` catches any other).
-pub fn verify(op: u8, stmt: &[u8], proof: &[u8]) -> bool {
-    pqzh_ligero::verify(op, stmt, proof, &PARAMS)
+/// The Ligero verifier (it catches its own panics; `crate::precompile` catches any other). `Err(NodeFault)` when one
+/// of its buffers could not be reserved (review P-D, as PQZL's `Error::Memory`).
+pub fn verify(op: u8, stmt: &[u8], proof: &[u8]) -> Result<bool, crate::NodeFault> {
+    pqzh_ligero::try_verify(op, stmt, proof, &PARAMS).map_err(|_| crate::NodeFault)
 }
 
 /// Ligero's prover (hedged with the statement and witness, D6).

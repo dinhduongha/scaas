@@ -41,6 +41,7 @@ use pqz_stmt::{
 use crate::ring::{D, DELTA, Poly, a_matrix, digits, dot_int, encrypt, keypair, modq, polys, polys_of};
 
 use crate::fq::{Acc4, F4, Fq};
+use crate::{Oom, Wipe, Wiped, ct, try_vec};
 
 const BS: i64 = 36 * 36;
 const BE: i64 = 164 * 164;
@@ -398,69 +399,119 @@ fn v_minus(v: &Poly, amount: u64) -> Poly {
 
 // ---- witness ----
 
+/// The witness values. Wiped when dropped (review P-C).
 pub struct Wit {
     pub big: Vec<Vec<i64>>,
     pub small: Vec<i64>,
 }
 
-fn rd_i8(b: &[u8], n: usize) -> Vec<i64> {
-    b[..n].iter().map(|&x| x as i8 as i64).collect()
+impl Drop for Wit {
+    fn drop(&mut self) {
+        self.big.wipe();
+        self.small.wipe();
+    }
 }
-fn rd_i16(b: &[u8], n: usize) -> Vec<i64> {
-    (0..n).map(|i| i16::from_le_bytes([b[2 * i], b[2 * i + 1]]) as i64).collect()
+
+fn rd_i8(b: &[u8], n: usize) -> Wiped<Vec<i64>> {
+    Wiped(b[..n].iter().map(|&x| x as i8 as i64).collect())
+}
+fn rd_i16(b: &[u8], n: usize) -> Wiped<Vec<i64>> {
+    Wiped((0..n).map(|i| i16::from_le_bytes([b[2 * i], b[2 * i + 1]]) as i64).collect())
 }
 fn l2(v: &[i64]) -> i64 {
     v.iter().map(|x| x * x).sum()
 }
 
+// Review P-B: the honest prover's checks run on secret values, so each is a 0 / 1 (or nonzero) word without a branch,
+// OR-ed into one verdict per error, declassified there (`ct::verdict`: the error is the API's public output).
+
+/// 1 if x > b (|x|, |b| < 2^62)
+fn gt(x: i64, b: i64) -> u64 {
+    ((b - x) >> 63) as u64 & 1
+}
+/// nonzero if the polynomials differ
+fn diff1(x: &Poly, y: &Poly) -> i64 {
+    x.iter().zip(y).fold(0, |d, (u, v)| d | (u ^ v))
+}
+/// nonzero if the polynomial vectors differ (equal lengths: K polynomials, public)
+fn diff(a: &[Poly], b: &[Poly]) -> i64 {
+    a.iter().zip(b).fold(0, |d, (x, y)| d | diff1(x, y))
+}
+/// Wiped polynomials of a secret vector
+fn wpolys(v: &[i64]) -> Wiped<Vec<Poly>> {
+    Wiped(polys(v))
+}
+
+/// x / d (d < 2^62) by a fixed 64-step restoring division: no branch, no division instruction (review P-B; PQZL's
+/// `ct_sdiv` idea: wasm32 compiles `/` by a constant to `i64.div_s`, whose latency depends on the operands)
+fn ct_udiv(x: u64, d: u64) -> u64 {
+    let (mut q, mut r) = (0u64, 0u64);
+    for i in (0..64).rev() {
+        r = (r << 1) | (x >> i & 1); // < 2d
+        let t = r.wrapping_sub(d);
+        let ge = (t >> 63) ^ 1; // r >= d
+        r = r.wrapping_sub(d & ge.wrapping_neg());
+        q |= ge << i;
+    }
+    q
+}
+
+/// round(w / Delta), halves away from zero (pqz_rel.c debit_witness), by sign and magnitude (|w| < 2^62)
+fn round_delta(w: i64) -> i64 {
+    let s = w >> 63;
+    let a = ((w ^ s) - s) as u64;
+    (ct_udiv(a + (DELTA / 2) as u64, DELTA as u64) as i64 ^ s) - s
+}
+
 /// Witness values from pqz-core's witness bytes (`form`'s length, pqz.h). `check` = the honest prover's checks (as
 /// pqz_rel.c's witness builders plus the key / ciphertext equations); without them an invalid witness is laid out
-/// anyway (bits wrap), for the negative tests.
+/// anyway (bits wrap), for the negative tests. Every secret buffer is wiped on every exit (review P-C).
 pub fn witness(rel: impl Into<Rel>, st: &Stmt, wit: &[u8], check: bool) -> Result<Wit, &'static str> {
     if wit.len() != rel.into().wit_len() {
         return Err("length");
     }
+    let take = std::mem::take::<Vec<i64>>;
     match st {
         Stmt::Reg(pk) => {
-            let s = rd_i8(wit, N);
-            let e = rd_i16(&wit[N..], N);
-            if check && (l2(&s) > BS || l2(&e) > BE) {
+            let (mut s, mut e) = (rd_i8(wit, N), rd_i16(&wit[N..], N));
+            if check && ct::verdict(gt(l2(&s), BS) | gt(l2(&e), BE) != 0) {
                 return Err("witness norm");
             }
-            if check && keypair(&polys(&s), &polys(&e)) != *pk {
+            if check && ct::verdict(diff(&Wiped(keypair(&wpolys(&s), &wpolys(&e))), pk) != 0) {
                 return Err("pk != A s + e");
             }
             let small = vec![BS - l2(&s), BE - l2(&e)];
-            Ok(Wit { big: vec![s, e], small })
+            Ok(Wit { big: vec![take(&mut s), take(&mut e)], small })
         }
         Stmt::Debit(t) => {
             let (nl, ng, nd) = (t.legs.len(), t.us.len(), t.nd);
-            let sf = rd_i8(wit, N);
-            let ef = rd_i16(&wit[2048..], N);
+            let mut sf = rd_i8(wit, N);
+            let mut ef = rd_i16(&wit[2048..], N);
             // (r_g, e1_g) per group
-            let rs: Vec<Vec<i64>> = (0..ng).map(|g| rd_i8(&wit[6144 * (1 + g)..], N)).collect();
-            let e1s: Vec<Vec<i64>> = (0..ng).map(|g| rd_i16(&wit[6144 * (1 + g) + 2048..], N)).collect();
+            let mut rs: Wiped<Vec<Vec<i64>>> =
+                Wiped((0..ng).map(|g| take(&mut rd_i8(&wit[6144 * (1 + g)..], N))).collect());
+            let mut e1s: Wiped<Vec<Vec<i64>>> =
+                Wiped((0..ng).map(|g| take(&mut rd_i16(&wit[6144 * (1 + g) + 2048..], N))).collect());
             let p0 = 6144 * (1 + ng);
-            let e2: Vec<Vec<i64>> = (0..nl).map(|x| rd_i16(&wit[p0 + 32 * x..], 16)).collect();
+            let e2: Wiped<Vec<Vec<i64>>> = Wiped((0..nl).map(|x| take(&mut rd_i16(&wit[p0 + 32 * x..], 16))).collect());
             let p = p0 + 32 * nl;
             // d_j (R_BURN: digits(amount), public) and d'
-            let ds: Vec<[u8; 16]> = if t.burn {
+            let ds: Wiped<Vec<[u8; 16]>> = Wiped(if t.burn {
                 vec![digits(t.amount)]
             } else {
                 (0..nd).map(|j| wit[p + 16 * j..p + 16 * j + 16].try_into().unwrap()).collect()
-            };
+            });
             let q = p + 16 * nd;
-            let dp: [u8; 16] = wit[q..q + 16].try_into().unwrap();
-            if check
-                && (l2(&sf) > BS
-                    || l2(&ef) > BE
-                    || rs.iter().any(|r| l2(r) > BS)
-                    || e1s.iter().any(|e| l2(e) > BE)
-                    || e2.iter().any(|x| l2(x) > B2))
-            {
+            let dp: Wiped<[u8; 16]> = Wiped(wit[q..q + 16].try_into().unwrap());
+            let norm = gt(l2(&sf), BS)
+                | gt(l2(&ef), BE)
+                | rs.iter().fold(0, |a, r| a | gt(l2(r), BS))
+                | e1s.iter().fold(0, |a, e| a | gt(l2(e), BE))
+                | e2.iter().fold(0, |a, x| a | gt(l2(x), B2));
+            if check && ct::verdict(norm != 0) {
                 return Err("witness norm");
             }
-            if check && keypair(&polys(&sf), &polys(&ef)) != t.pkf {
+            if check && ct::verdict(diff(&Wiped(keypair(&wpolys(&sf), &wpolys(&ef))), &t.pkf) != 0) {
                 return Err("pk_f != A s_f + e_f");
             }
             if check {
@@ -468,97 +519,106 @@ pub fn witness(rel: impl Into<Rel>, st: &Stmt, wit: &[u8], check: bool) -> Resul
                 for g in 0..ng {
                     let x: Vec<usize> = (0..nl).filter(|&x| t.legs[x].g == g).collect();
                     let pks: Vec<&Vec<Poly>> = x.iter().map(|&x| &t.legs[x].pk).collect();
-                    let msgs: Vec<[u8; 16]> = x.iter().map(|&x| t.legs[x].dig.map_or(dp, |j| ds[j])).collect();
-                    let e2g: Vec<Vec<i64>> = x.iter().map(|&x| e2[x].clone()).collect();
-                    let (u, vs) = encrypt(&pks, &msgs, &polys(&rs[g]), &polys(&e1s[g]), &e2g);
-                    if u != t.us[g] || vs.iter().zip(&x).any(|(v, &x)| *v != t.legs[x].v) {
+                    let msgs: Wiped<Vec<[u8; 16]>> =
+                        Wiped(x.iter().map(|&x| t.legs[x].dig.map_or(*dp, |j| ds[j])).collect());
+                    let e2g: Wiped<Vec<Vec<i64>>> = Wiped(x.iter().map(|&x| e2[x].clone()).collect());
+                    let (u, vs) = encrypt(&pks, &msgs, &wpolys(&rs[g]), &wpolys(&e1s[g]), &e2g);
+                    let (u, vs) = (Wiped(u), Wiped(vs));
+                    let d = vs.iter().zip(&x).fold(diff(&u, &t.us[g]), |d, (v, &x)| d | diff1(v, &t.legs[x].v));
+                    if ct::verdict(d != 0) {
                         return Err("ciphertext");
                     }
                 }
             }
             // M, e_T by rounding, carries (pqz_rel.c debit_witness), with the leg sum sum_j d_j
-            let y = dot_int(&t.ut.iter().collect::<Vec<_>>(), &polys(&sf).iter().collect::<Vec<_>>());
-            let (mut mv, mut et, mut cv) = (vec![0i64; 16], vec![0i64; 16], vec![0i64; 16]);
-            let mut cprev = 0i64;
+            let y = Wiped(dot_int(&t.ut.iter().collect::<Vec<_>>(), &wpolys(&sf).iter().collect::<Vec<_>>()));
+            let (mut mv, mut et, mut cv) = (Wiped(vec![0i64; 16]), Wiped(vec![0i64; 16]), Wiped(vec![0i64; 16]));
+            let (mut cprev, mut bad_d, mut bad_c) = (0i64, 0u64, 0u64);
             for i in 0..16 {
                 let wv = modq(t.vt[i] - y[i]);
-                let m = (if wv >= 0 { wv + DELTA / 2 } else { wv - DELTA / 2 }) / DELTA;
+                let m = round_delta(wv);
                 let e = wv - DELTA * m;
                 let dsum: i64 = ds.iter().map(|d| d[i] as i64).sum();
                 let s = m + cprev - dp[i] as i64 - dsum - ((t.fee >> (4 * i)) & 15) as i64;
-                if check
-                    && (s % 16 != 0
-                        || ds.iter().any(|d| d[i] > 15)
-                        || dp[i] > 15
-                        || !(0..1 << 14).contains(&m)
-                        || !(-(1 << 24)..1 << 24).contains(&e))
-                {
-                    return Err("digits");
-                }
-                let c = s.div_euclid(16);
-                if check && !(-64..1984).contains(&c) {
-                    return Err("carry");
-                }
+                // s % 16 != 0, a digit > 15, M outside [0, 2^14), e_T outside [-2^24, 2^24)
+                bad_d |= (s & 15) as u64
+                    | ds.iter().fold(0, |a, d| a | d[i] >> 4) as u64
+                    | (dp[i] >> 4) as u64
+                    | (m as u64) >> 14
+                    | ((e + (1 << 24)) as u64) >> 25;
+                let c = s >> 4; // = s.div_euclid(16)
+                bad_c |= ((c + 64) as u64) >> 11; // c outside [-64, 1984)
                 (mv[i], et[i], cv[i]) = (m, e, c);
                 cprev = c;
             }
-            if check && cprev != 0 {
+            if check && ct::verdict(bad_d != 0) {
+                return Err("digits");
+            }
+            if check && ct::verdict(bad_c != 0) {
+                return Err("carry");
+            }
+            if check && ct::verdict(cprev != 0) {
                 return Err("carry out");
             }
-            let mut small: Vec<i64> = e2.iter().flatten().copied().collect();
+            let mut small = Vec::with_capacity(16 * nl + 16 * nd + 64 + 2 * (1 + ng) + nl); // no reallocation
+            small.extend(e2.iter().flatten());
             if !t.burn {
                 small.extend(ds.iter().flatten().map(|&x| x as i64));
             }
             small.extend(dp.iter().map(|&x| x as i64));
-            small.extend(mv);
-            small.extend(cv);
-            small.extend(et);
+            small.extend_from_slice(&mv);
+            small.extend_from_slice(&cv);
+            small.extend_from_slice(&et);
             small.extend([BS - l2(&sf), BE - l2(&ef)]);
             for g in 0..ng {
                 small.extend([BS - l2(&rs[g]), BE - l2(&e1s[g])]);
             }
             small.extend(e2.iter().map(|x| B2 - l2(x)));
-            let mut big = vec![sf, ef];
-            for (r, e1) in rs.into_iter().zip(e1s) {
-                big.extend([r, e1]);
+            let mut w = Wit { big: Vec::with_capacity(2 * (1 + ng)), small };
+            w.big.extend([take(&mut sf), take(&mut ef)]);
+            for (r, e1) in rs.iter_mut().zip(e1s.iter_mut()) {
+                w.big.extend([take(r), take(e1)]);
             }
-            Ok(Wit { big, small })
+            Ok(w)
         }
         Stmt::Ds(t) => {
-            let r = rd_i8(wit, N);
-            let e1 = rd_i16(&wit[2048..], N);
-            let e2 = rd_i16(&wit[6144..], 16);
-            if check && (l2(&r) > BS || l2(&e1) > BE || l2(&e2) > B2) {
+            let (mut r, mut e1, e2) = (rd_i8(wit, N), rd_i16(&wit[2048..], N), rd_i16(&wit[6144..], 16));
+            if check && ct::verdict(gt(l2(&r), BS) | gt(l2(&e1), BE) | gt(l2(&e2), B2) != 0) {
                 return Err("witness norm");
             }
             if check {
-                let (u, vs) = encrypt(&[&t.pk], &[digits(t.amount)], &polys(&r), &polys(&e1), &[e2.clone()]);
-                if u != t.u || vs[0] != t.v {
+                let e2v = Wiped(vec![e2.to_vec()]);
+                let (u, vs) = encrypt(&[&t.pk], &[digits(t.amount)], &wpolys(&r), &wpolys(&e1), &e2v);
+                let (u, vs) = (Wiped(u), Wiped(vs));
+                if ct::verdict(diff(&u, &t.u) | diff1(&vs[0], &t.v) != 0) {
                     return Err("ciphertext");
                 }
             }
-            let mut small = e2.clone();
+            let mut small = Vec::with_capacity(16 + 3);
+            small.extend_from_slice(&e2);
             small.extend([BS - l2(&r), BE - l2(&e1), B2 - l2(&e2)]);
-            Ok(Wit { big: vec![r, e1], small })
+            Ok(Wit { big: vec![take(&mut r), take(&mut e1)], small })
         }
         Stmt::Dr(t) => {
-            let s = rd_i8(wit, N);
-            let e = rd_i16(&wit[N..], N);
-            if check && (l2(&s) > BS || l2(&e) > BE) {
+            let (mut s, mut e) = (rd_i8(wit, N), rd_i16(&wit[N..], N));
+            if check && ct::verdict(gt(l2(&s), BS) | gt(l2(&e), BE) != 0) {
                 return Err("witness norm");
             }
-            if check && keypair(&polys(&s), &polys(&e)) != t.pk {
+            if check && ct::verdict(diff(&Wiped(keypair(&wpolys(&s), &wpolys(&e))), &t.pk) != 0) {
                 return Err("pk != A s + e");
             }
             // e'_i = centre(v_i - (u^T s)_i) - Delta d_i (pqz_rel.c dr_witness)
-            let y = dot_int(&t.u.iter().collect::<Vec<_>>(), &polys(&s).iter().collect::<Vec<_>>());
+            let y = Wiped(dot_int(&t.u.iter().collect::<Vec<_>>(), &wpolys(&s).iter().collect::<Vec<_>>()));
             let d = digits(t.amount);
-            let mut small: Vec<i64> = (0..16).map(|i| modq(t.v[i] - y[i]) - DELTA * d[i] as i64).collect();
-            if check && small.iter().any(|e| !(-(1 << 24)..1 << 24).contains(e)) {
+            let mut small = Wiped(Vec::with_capacity(16 + 2));
+            small.extend((0..16).map(|i| modq(t.v[i] - y[i]) - DELTA * d[i] as i64));
+            // e' outside [-2^24, 2^24)
+            let bad = small.iter().fold(0u64, |a, &e| a | ((e + (1 << 24)) as u64) >> 25);
+            if check && ct::verdict(bad != 0) {
                 return Err("not an encryption of amount");
             }
             small.extend([BS - l2(&s), BE - l2(&e)]);
-            Ok(Wit { big: vec![s, e], small })
+            Ok(Wit { big: vec![take(&mut s), take(&mut e)], small: take(&mut small) })
         }
     }
 }
@@ -618,6 +678,8 @@ struct Bld<'a> {
     rho: F4,
     rp: Vec<F4>,
     next: u64,
+    /// an own vector could not be reserved (review P-D)
+    oom: bool,
 }
 
 impl Bld<'_> {
@@ -628,7 +690,21 @@ impl Bld<'_> {
     }
     fn add(&mut self, (r, s): (usize, usize), w: F4) {
         let ell = self.lay.ell;
-        self.c.own[r].get_or_insert_with(|| vec![F4::ZERO; ell])[s] += w;
+        if self.c.own[r].is_none() {
+            match try_vec(ell) {
+                Ok(mut v) => {
+                    v.resize(ell, F4::ZERO);
+                    self.c.own[r] = Some(v);
+                }
+                Err(Oom) => {
+                    self.oom = true;
+                    return;
+                }
+            }
+        }
+        if let Some(v) = &mut self.c.own[r] {
+            v[s] += w;
+        }
     }
     /// constraints sum_j (M_ij x_j)_k (+ terms the caller adds) = b_ik for i < nout, k < kk, x_j = 64 values of big
     /// group g starting at 64 j; returns gamma_i = w0 G^i (weight of (i, k) = gamma_i rho^k)
@@ -691,15 +767,16 @@ impl Bld<'_> {
     }
 }
 
-/// The verifier's combination of all linear constraints for challenge rho, and the right-hand side.
-pub fn comb(lay: &Layout, st: &Stmt, rho: F4) -> Comb {
+/// The verifier's combination of all linear constraints for challenge rho, and the right-hand side; `Oom` if an own
+/// vector (l F_q^4 values per row) could not be reserved (review P-D).
+pub fn comb(lay: &Layout, st: &Stmt, rho: F4) -> Result<Comb, Oom> {
     let mut rp = vec![F4::ONE; D + 1];
     for k in 1..=D {
         rp[k] = rp[k - 1] * rho;
     }
     let m = lay.m;
     let c = Comb { own: vec![None; m], beta: vec![F4::ZERO; m], ones: vec![F4::ZERO; m], rhs: F4::ZERO, nweights: 0 };
-    let mut b = Bld { lay, c, rho, rp, next: 1 };
+    let mut b = Bld { lay, c, rho, rp, next: 1, oom: false };
     let delta = Fq(DELTA as u64);
     match st {
         Stmt::Reg(pk) => b.ring_rows(false, 0, 1, pk), // pk = A s + e
@@ -825,7 +902,10 @@ pub fn comb(lay: &Layout, st: &Stmt, rho: F4) -> Comb {
         }
     }
     b.c.nweights = b.next;
-    b.c
+    if b.oom {
+        return Err(Oom);
+    }
+    Ok(b.c)
 }
 
 #[cfg(test)]
@@ -856,6 +936,37 @@ mod tests {
         }
     }
 
+    /// review P-B: the branch-free rounding, division and centring give the reference values (`/`, the sign branch,
+    /// `rem_euclid` and the centring branch)
+    #[test]
+    fn branch_free_rounding_matches_reference() {
+        let reference = |w: i64| (if w >= 0 { w + DELTA / 2 } else { w - DELTA / 2 }) / DELTA;
+        let modq_ref = |v: i64| {
+            let r = v.rem_euclid(crate::fq::Q as i64);
+            if r > (crate::fq::Q as i64 - 1) / 2 { r - crate::fq::Q as i64 } else { r }
+        };
+        let half = (crate::fq::Q as i64 - 1) / 2;
+        let mut xs = vec![0, 1, -1, DELTA / 2, -(DELTA / 2), DELTA / 2 + 1, -(DELTA / 2) - 1, DELTA, -DELTA];
+        xs.extend([half, -half]);
+        let mut s = 0x9E37_79B9_7F4A_7C15u64;
+        xs.extend((0..100_000).map(|i| {
+            s ^= s << 13;
+            s ^= s >> 7;
+            s ^= s << 17;
+            if i % 2 == 0 { (s % crate::fq::Q) as i64 - half } else { (s as i64) >> (i % 64) }
+        }));
+        for &w in &xs {
+            assert_eq!(modq(w), modq_ref(w), "{w}");
+            if w.abs() <= half {
+                assert_eq!(round_delta(w), reference(w), "{w}");
+            }
+        }
+        let divs = [(0u64, 1u64), (12_345_678_901, DELTA as u64), (u64::MAX >> 2, 3), (u64::MAX >> 2, (1 << 61) + 5)];
+        for (x, d) in divs {
+            assert_eq!(ct_udiv(x, d), x / d, "{x} / {d}");
+        }
+    }
+
     /// f_m(a) recurrence against sum_k rho^k (X^m a mod X^64 + 1)_k, for K = 64 and K = 16
     #[test]
     fn ring_recurrence_matches_naive() {
@@ -868,7 +979,7 @@ mod tests {
         let p: Poly = std::array::from_fn(|i| (i as i64 * 7919) % 1000 - 500);
         for kk in [16, 64] {
             let c = Comb { own: vec![None; lay.m], beta: vec![F4::ZERO; lay.m], ones: vec![F4::ZERO; lay.m], rhs: F4::ZERO, nweights: 0 };
-            let mut b = Bld { lay: &lay, c, rho, rp: rp.clone(), next: 1 };
+            let mut b = Bld { lay: &lay, c, rho, rp: rp.clone(), next: 1, oom: false };
             let gam = b.ring(&|_, _| &p, 1, 1, kk, 0);
             let own = b.c.own[0].as_ref().unwrap();
             for m in 0..D {
