@@ -190,7 +190,7 @@ pub fn verify_fast_on_caller(op: u8, stmt: &[u8], proof: &[u8]) -> bool {
 }
 
 /// `pqz_test_mutate` (pqz_rel.c test hook, feature `fuzz` only): decode `proof` for relation `rel` (an op, or 0x81
-/// for `R_TX0`) with the precompile's decoder, change one field (`kind` 0..13 with `r1` / `r2`; any other kind changes
+/// for `R_TX0`) with the precompile's decoder, change one field (`kind` 0..14 with `r1` / `r2`; any other kind changes
 /// nothing) and re-encode. `Ok(None)`: the proof does not decode.
 #[cfg(feature = "fuzz")]
 pub fn test_mutate(rel: u8, proof: &[u8], kind: u32, r1: u64, r2: u64) -> Result<Option<Vec<u8>>, NodeFault> {

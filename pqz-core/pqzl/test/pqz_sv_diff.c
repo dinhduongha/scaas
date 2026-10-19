@@ -638,6 +638,43 @@ mutate_round (int rel, const uint8_t *st, size_t stlen, size_t len, int fuzz)
     }
 }
 
+/* fix A (review G-3 / H-4): a statement one byte off its relation's length, or a proof over the cap, is refused before
+   the relation keys and SV tables are built and the statement is hashed: on a fresh core (pqz_init built only A) the
+   arena's used mark stays put. Before the fix the keys were built first (the mark moved). */
+static int
+bad_length_before_keys (void)
+{
+  static const struct
+  {
+    uint8_t op;
+    size_t len;
+    uint8_t m, a;
+  } C[] = { { PQZ_OP_REGISTER, PQZ_REG_STMT_BYTES, 0, 0 },          { PQZ_OP_TRANSFER, PQZ_TX_STMT_BYTES, 0, 1 },
+            { PQZ_OP_TRANSFER, PQZ_TX0_STMT_BYTES, 0, 0 },          { PQZ_OP_BURN, PQZ_BURN_STMT_BYTES, 0, 0 },
+            { PQZ_OP_DISCLOSE_SENDER, PQZ_DISC_STMT_BYTES, 0, 0 },  { PQZ_OP_DISCLOSE_RECEIVER, PQZ_DISC_STMT_BYTES, 0, 0 },
+            { PQZ_OP_TRANSFER_MULTI, PQZ_TXM_STMT_BYTES (2, 1), 2, 1 } };
+  const size_t used = pqz_arena_used ();
+  int bad = 0;
+  memset (st2, 0, sizeof st2);
+  for (unsigned i = 0; i < sizeof C / sizeof C[0]; i++)
+    {
+      st2[PQZ_HDR_LEGS + 31] = C[i].m, st2[PQZ_HDR_AUDITOR_ON + 31] = C[i].a;
+      for (int d = -1; d <= 1; d++)
+        {
+          /* d = +-1: the length one byte off; d = 0: the exact length, a proof one byte over the cap */
+          const size_t sl = C[i].len + d, pl = d ? 0 : PQZ_MAX_PROOF + 1;
+          size_t len = PQZ_MAX_PROOF;
+          bad += pqz_verify (C[i].op, st2, sl, pf, pl) != 0;
+          bad += pqz_verify_fast (C[i].op, st2, sl, pf, pl) != 0;
+          if (d)
+            bad += pqz_prove (C[i].op, st2, sl, st2, 0, st2, pf, &len) != 3; /* PQZ_ERR_INPUT */
+        }
+    }
+  bad += pqz_arena_used () != used;
+  printf ("{\"bad_length_before_keys\": %d}\n", bad);
+  return bad;
+}
+
 int
 main (int argc, char **argv)
 {
@@ -662,6 +699,7 @@ main (int argc, char **argv)
   int prg = pqz_sv_test_prg (200);
   printf ("{\"prg_mismatches\": %d}\n", prg);
   fails += prg != 0;
+  fails += bad_length_before_keys ();
   for (int rel = 0; rel < NREL; rel++)
     {
       const size_t per = (size_t)(rel < 6 ? nps[rel] : ntxm) * (1 + muts * (14 + 16 + fuzz));

@@ -120,7 +120,10 @@ pqz_keygen (const uint8_t seed32[32], uint8_t pk[PQZ_POLYVEC_BYTES], int8_t s[20
       stream (&b, "SCAAS-PQZ-KEYGEN-V1", 19, seed32, ctr);
       int64_t ns = cbd8 (&b, s, N), ne = cbd16 (&b, e, N);
       stream_clear (&b);
-      if (ns <= BS * BS && ne <= BE * BE)
+      /* review E: the resample verdict is public (the counter is an output); the norms are not */
+      int ok = (ns <= BS * BS) & (ne <= BE * BE);
+      PQZ_CT_PUBLIC (&ok, sizeof ok);
+      if (ok)
         {
           if (ctr_used)
             *ctr_used = ctr;
@@ -136,14 +139,17 @@ pqz_enc_seed (const uint8_t *const pks[], unsigned npk, const uint8_t msgs[][16]
               int16_t e2[][16], unsigned *ctr_used)
 {
   bits_t b;
+  int bad = 0;
   for (unsigned k = 0; k < npk; k++)
     {
       if (!canonical (pks[k], PQZ_POLYVEC_BYTES))
         return PQZ_ERR_INPUT;
       for (unsigned i = 0; i < 16; i++)
-        if (msgs[k][i] > 15)
-          return PQZ_ERR_INPUT;
+        bad |= msgs[k][i] > 15; /* review E: the digits are secret, only the verdict is public */
     }
+  PQZ_CT_PUBLIC (&bad, sizeof bad);
+  if (bad)
+    return PQZ_ERR_INPUT;
   for (uint32_t ctr = 0; ctr < MAXCTR; ctr++)
     {
       stream (&b, "SCAAS-PQZ-ENC-V1", 16, seed_enc, ctr);
@@ -152,6 +158,7 @@ pqz_enc_seed (const uint8_t *const pks[], unsigned npk, const uint8_t msgs[][16]
       for (unsigned k = 0; k < npk; k++)
         ok &= cbd16 (&b, e2[k], 16) <= B2 * B2;
       stream_clear (&b);
+      PQZ_CT_PUBLIC (&ok, sizeof ok); /* review E: the resample verdict is public */
       if (ok)
         {
           if (ctr_used)
@@ -189,9 +196,10 @@ pqz_dec (const int8_t s[2048], const uint8_t ct[PQZ_POLYVEC_BYTES + PQZ_V_BYTES]
   for (unsigned i = 0; i < 16; i++)
     {
       /* M = round(w / Delta) = floor((2w + Delta) / (2 Delta)), no ties (Delta odd); branch-free: |w| < q/2 < 2^41, so
-         t = 2w + Delta + 2 Delta 2^17 > 0, and floor(t / (2 Delta)) = M + 2^17 (one unsigned division by a constant) */
-      uint64_t t = (uint64_t)(2 * w[i] + DELTA + 2 * DELTA * ((int64_t)1 << 17));
-      int64_t m = (int64_t)(t / (uint64_t)(2 * DELTA)) - ((int64_t)1 << 17);
+         t = 2w + Delta + 2 Delta 2^17 > 0, and floor(t / (2 Delta)) = M + 2^17. review E: the division is the fixed-step
+         restoring division of pqz_mpn.h (w is secret; wasm32 keeps a 64-bit '/' as i64.div_u even by a constant) */
+      mp_limb_t t = (uint64_t)(2 * w[i] + DELTA + 2 * DELTA * ((int64_t)1 << 17)), d = 2 * DELTA;
+      int64_t m = (int64_t)pqz__div (NULL, &t, 1, &d, 1) - ((int64_t)1 << 17);
       M[i] = m, noise[i] = w[i] - DELTA * m;
     }
   explicit_bzero (w, sizeof w);

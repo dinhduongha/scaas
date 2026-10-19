@@ -5,7 +5,9 @@
 /* PQZ: P6-SZ trace hook (pqz-core/pqzl/sz): reports how the Fiat-Shamir challenges of the evaluation step are derived.
    Compiled only with -DPQZ_SZ_TRACE; production builds are unchanged. kind: 0 = begin (dom 0 prove, 1 verify),
    1 = challenge vector of one evaluation-equation call for accumulator acc (n = number of equations),
-   2 / 3 = seed and dom of the z4 / z3 combination matrix V, 4 = seed and dom of a JL row (R or R'). */
+   2 / 3 = seed and dom of the z4 / z3 combination matrix V, 4 = seed and dom of a JL row (R or R'),
+   5 = the hash passed to lnp_quad_many_prove / _verify, the seed of mu and of the final challenge (dom 0).
+   The P6-FS binding test (sz/fs_bind.c, lazer#28) compares the kind 2 / 3 / 5 seeds of honest and mutated proofs. */
 #ifdef PQZ_SZ_TRACE
 void (*pqz_sz_trace_fn) (int kind, const uint8_t seed[32], uint64_t dom, int acc, const int64_t *v,
                          unsigned int n)
@@ -101,15 +103,20 @@ static void __schwartz_zippel_accumulate_z4 (
     spolymat_ptr R2i2[], spolyvec_ptr r1i2[], poly_ptr r0i2[],
     spolymat_ptr R2t, spolyvec_ptr r1t, poly_ptr r0t, polymat_t Ds,
     polymat_t Dm, polyvec_t u, polymat_t oDs, polymat_t oDm, polyvec_t z4,
-    const uint8_t seed[32], uint32_t dom, const lnp_tbox_params_t params);
+    const uint8_t seed[32], const uint8_t rseed[32], uint32_t dom,
+    const lnp_tbox_params_t params);
 static void __schwartz_zippel_accumulate_z3 (
     spolymat_ptr R2i[], spolyvec_ptr r1i[], poly_ptr r0i[],
     spolymat_ptr R2i2[], spolyvec_ptr r1i2[], poly_ptr r0i2[],
     spolymat_ptr R2t, spolyvec_ptr r1t, poly_ptr r0t, polymat_ptr Es[],
     polymat_ptr Em[], polyvec_ptr v[], polymat_ptr oEs[], polymat_ptr oEm[],
     polymat_t Ps, polymat_t Pm, polyvec_t f, polymat_t oPs, polymat_t oPm,
-    polyvec_t z3, const uint8_t seed[32], uint32_t dom,
+    polyvec_t z3, const uint8_t seed[32], const uint8_t rseed[32], uint32_t dom,
     const lnp_tbox_params_t params);
+static void _lnp_tbox_hash_z34 (uint8_t hash[32], polyvec_t z3, polyvec_t z4,
+                                const lnp_tbox_params_t params);
+static void _lnp_tbox_hash_h (uint8_t hash[32], polyvec_t h,
+                              const lnp_tbox_params_t params);
 
 static inline void
 __evaleq (poly_ptr res, spolymat_ptr Rprime2, spolyvec_ptr rprime1,
@@ -142,6 +149,16 @@ __evaleq (poly_ptr res, spolymat_ptr Rprime2, spolyvec_ptr rprime1,
 }
 
 #if ASSERT == ASSERT_ENABLED
+/* PQZ (review E): the self-check below evaluates the relation at the secret witness; its verdict (1 for every valid
+   witness) is public, the evaluation is not */
+static inline int
+_pqz_eqzero_public (int_srcptr a)
+{
+  int z = int_eqzero (a);
+  PQZ_CT_PUBLIC (&z, sizeof (z));
+  return z;
+}
+
 static inline void
 __check_coeff0 (spolymat_ptr Rprime2, spolyvec_ptr rprime1, poly_ptr rprime0,
                 polyvec_ptr s, int check)
@@ -159,19 +176,19 @@ __check_coeff0 (spolymat_ptr Rprime2, spolyvec_ptr rprime1, poly_ptr rprime0,
   if (check == 0)
     {
       /* check coeff 0 */
-      ASSERT_ERR (int_eqzero (poly_get_coeff (poly, 0)) == 1);
+      ASSERT_ERR (_pqz_eqzero_public (poly_get_coeff (poly, 0)) == 1);
     }
   else if (check == 1)
     {
       /* check coeff 0 and d/2 */
-      ASSERT_ERR (int_eqzero (poly_get_coeff (poly, 0)) == 1);
-      ASSERT_ERR (int_eqzero (poly_get_coeff (poly, d / 2)) == 1);
+      ASSERT_ERR (_pqz_eqzero_public (poly_get_coeff (poly, 0)) == 1);
+      ASSERT_ERR (_pqz_eqzero_public (poly_get_coeff (poly, d / 2)) == 1);
     }
   else if (check == 2)
     {
       /* check all coeffs */
       for (i = 0; i < d; i++)
-        ASSERT_ERR (int_eqzero (poly_get_coeff (poly, i)) == 1);
+        ASSERT_ERR (_pqz_eqzero_public (poly_get_coeff (poly, i)) == 1);
     }
 
   poly_free (poly);
@@ -235,6 +252,7 @@ lnp_tbox_prove (uint8_t hash[32], polyvec_t tB, polyvec_t h, poly_t c,
   shake128_state_t hstate;
   coder_state_t cstate;
   uint8_t hash0[32];
+  uint8_t hashr[32]; /* PQZ (P6-FS): cseed, the seed of R, R' */
   uint8_t expseed[3 * 32];
   const uint8_t *seed_rej34 = expseed;
   const uint8_t *seed_cont = expseed + 32;
@@ -394,6 +412,9 @@ lnp_tbox_prove (uint8_t hash[32], polyvec_t tB, polyvec_t h, poly_t c,
   _lnp_tbox_compute_z34 (hash, tB, z3, z4, s1, m, s2, Bprime, Es, Em, v, Ps,
                          Pm, f, Ds, Dm, u, seed_rej34, params);
   STOPWATCH_STOP (stopwatch_lnp_tbox_prove_z34);
+  /* PQZ (P6-FS, lazer#28): absorb z3, z4 before V3 / V4; R, R' stay on cseed */
+  memcpy (hashr, hash, 32);
+  _lnp_tbox_hash_z34 (hash, z3, z4, params);
   memcpy (hash0, hash, 32); // save this level of FS hash for later
 
   /* tB = (tB_,tg,t) */
@@ -460,6 +481,7 @@ lnp_tbox_prove (uint8_t hash[32], polyvec_t tB, polyvec_t h, poly_t c,
   polyvec_mod (tg, tg);
   polyvec_redp (tg, tg);
 
+  pqz_ct_public_polyvec (tg); /* PQZ (review E): the commitment to g, hashed and sent */
   coder_enc_begin (cstate, out);
   coder_enc_urandom3 (cstate, tg, q, log2q);
   coder_enc_end (cstate);
@@ -675,7 +697,8 @@ lnp_tbox_prove (uint8_t hash[32], polyvec_t tB, polyvec_t h, poly_t c,
       __schwartz_zippel_accumulate_z4 (R2prime_sz, r1prime_sz, r0prime_sz,
                                        R2prime_sz2, r1prime_sz2, r0prime_sz2,
                                        R2t, r1t, r0t, Ds, Dm, u, oDs, oDm, z4,
-                                       hash0, M + 2 * (d - 1) + 2 + Z, params);
+                                       hash0, hashr, M + 2 * (d - 1) + 2 + Z,
+                                       params);
     }
   STOPWATCH_STOP (stopwatch_lnp_tbox_prove_sz_z4);
   STOPWATCH_START (stopwatch_lnp_tbox_prove_sz_z3, "lnp_tbox_prove_sz_z3");
@@ -685,7 +708,7 @@ lnp_tbox_prove (uint8_t hash[32], polyvec_t tB, polyvec_t h, poly_t c,
       __schwartz_zippel_accumulate_z3 (
           R2prime_sz, r1prime_sz, r0prime_sz, R2prime_sz2, r1prime_sz2,
           r0prime_sz2, R2t, r1t, r0t, Es, Em, v, oEs, oEm, Ps, Pm, f, oPs, oPm,
-          z3, hash0, M + 2 * (d - 1) + 2 + Z + 256, params);
+          z3, hash0, hashr, M + 2 * (d - 1) + 2 + Z + 256, params);
     }
   STOPWATCH_STOP (stopwatch_lnp_tbox_prove_sz_z3);
 
@@ -713,6 +736,7 @@ lnp_tbox_prove (uint8_t hash[32], polyvec_t tB, polyvec_t h, poly_t c,
       __evaleq (tmp, R2prime_sz[i], r1prime_sz[i], r0prime_sz[i], subv);
       poly = polyvec_get_elem (h, i); /* gi */
       poly_add (poly, poly, tmp, 0);  /* hi = gi + schwarz zippel */
+      pqz_ct_public_poly (poly);      /* PQZ (review E): hi, a proof field */
 
       /* check that sz evaleqs plus garbage term have coeff 0 and d/2 == 0 */
       ASSERT_ERR (int_eqzero (poly_get_coeff (poly, 0)) == 1);
@@ -776,6 +800,8 @@ lnp_tbox_prove (uint8_t hash[32], polyvec_t tB, polyvec_t h, poly_t c,
     }
 
   DEBUG_PRINTF (DEBUG_LEVEL >= 2, "%s", "call many_prove");
+  _lnp_tbox_hash_h (hash, h, params); /* PQZ (P6-FS, lazer#28): h before mu */
+  PQZ_SZT (5, hash, 0, -1, NULL, 0);
   lnp_quad_many_prove (hash, tB, c, z1, z21, hint, s1, m, s2, tA2, A1, A2prime,
                        Bprime, R2prime_sz, r1prime_sz, lambda / 2 + 2 + N,
                        seed_cont2, quad);
@@ -916,6 +942,7 @@ lnp_tbox_verify (uint8_t hash[32], polyvec_t h, poly_t c, polyvec_t z1,
   spolyvec_t r1t;
   poly_t r0t;
   uint8_t hash0[32];
+  uint8_t hashr[32]; /* PQZ (P6-FS): cseed, the seed of R, R' */
   polymat_ptr oEs[Z];
   polymat_ptr oEm[Z];
   polyvec_ptr ov[Z];
@@ -1152,6 +1179,9 @@ lnp_tbox_verify (uint8_t hash[32], polyvec_t h, poly_t c, polyvec_t z1,
                            params);
   if (b != 1)
     goto ret;
+  /* PQZ (P6-FS, lazer#28): absorb z3, z4 before V3 / V4; R, R' stay on cseed */
+  memcpy (hashr, hash, 32);
+  _lnp_tbox_hash_z34 (hash, z3, z4, params);
   memcpy (hash0, hash, 32); // save this level of FS hash for later
 
   /* check if h's coeffs 0 and d/2 are zero. */
@@ -1252,7 +1282,8 @@ lnp_tbox_verify (uint8_t hash[32], polyvec_t h, poly_t c, polyvec_t z1,
       __schwartz_zippel_accumulate_z4 (R2prime_sz, r1prime_sz, r0prime_sz,
                                        R2prime_sz2, r1prime_sz2, r0prime_sz2,
                                        R2t, r1t, r0t, Ds, Dm, u, oDs, oDm, z4,
-                                       hash0, M + 2 * (d - 1) + 2 + Z, params);
+                                       hash0, hashr, M + 2 * (d - 1) + 2 + Z,
+                                       params);
     }
   STOPWATCH_STOP (stopwatch_lnp_tbox_verify_sz_z4);
   STOPWATCH_START (stopwatch_lnp_tbox_verify_sz_z3, "lnp_tbox_verify_sz_z3");
@@ -1261,7 +1292,7 @@ lnp_tbox_verify (uint8_t hash[32], polyvec_t h, poly_t c, polyvec_t z1,
       __schwartz_zippel_accumulate_z3 (
           R2prime_sz, r1prime_sz, r0prime_sz, R2prime_sz2, r1prime_sz2,
           r0prime_sz2, R2t, r1t, r0t, Es, Em, v, oEs, oEm, Ps, Pm, f, oPs, oPm,
-          z3, hash0, M + 2 * (d - 1) + 2 + Z + 256, params);
+          z3, hash0, hashr, M + 2 * (d - 1) + 2 + Z + 256, params);
     }
   STOPWATCH_STOP (stopwatch_lnp_tbox_verify_sz_z3);
 
@@ -1310,6 +1341,8 @@ lnp_tbox_verify (uint8_t hash[32], polyvec_t h, poly_t c, polyvec_t z1,
       r0prime_sz[i] = r0[i - off];
     }
 
+  _lnp_tbox_hash_h (hash, h, params); /* PQZ (P6-FS, lazer#28): h before mu */
+  PQZ_SZT (5, hash, 0, -1, NULL, 0);
   b = lnp_quad_many_verify (hash, c, z1, z21, hint, tA1, tB, A1, A2prime,
                             Bprime, R2prime_sz, r1prime_sz, r0prime_sz,
                             lambda / 2 + 2 + N, quad);
@@ -1631,8 +1664,9 @@ _lnp_tbox_compute_z34 (uint8_t hash[32], polyvec_t tB, polyvec_t z3,
           break;
         }
       pqz_rej_tries++;
-      /* sample signs */
-      if (nrbits == 0)
+      /* sample signs (PQZ (P6-D3): refill when fewer than the two bits beta3 and beta4 need are left; upstream refilled
+         at 0 and beta4 read bit 8 - nrbits + 1: bit 8 (always 0, beta4 = +1) on every fourth attempt, review D-3) */
+      if (nrbits < 2)
         {
           rng_urandom (rstate_signs, &rbits, 1);
           nrbits = 8;
@@ -1672,7 +1706,7 @@ _lnp_tbox_compute_z34 (uint8_t hash[32], polyvec_t tB, polyvec_t z3,
           polyvec_mod (ty4, ty4);
           polyvec_redp (ty4, ty4);
 
-          beta4 = (rbits & (1 << (8 - nrbits + 1))) >> (8 - nrbits + 1);
+          beta4 = (rbits & (1 << (8 - nrbits))) >> (8 - nrbits); /* PQZ (P6-D3): the next unused bit */
           beta4 = 1 - 2 * beta4; /* {0,1} -> {1,-1} */
 
           // printf ("beta4 %d\n", beta4);
@@ -1693,6 +1727,13 @@ _lnp_tbox_compute_z34 (uint8_t hash[32], polyvec_t tB, polyvec_t z3,
 
       /* encode ty, tbeta, hash of encoding is seed for challenges */
 
+      /* PQZ (review E): this try's commitments ty3, ty4, tbeta are public by design (hashed into R, R'; hiding
+         commitments for a rejected try); marked before the coder, so the coder itself stays checked */
+      if (nex > 0)
+        pqz_ct_public_polyvec (ty3);
+      if (nprime > 0)
+        pqz_ct_public_polyvec (ty4);
+      pqz_ct_public_polyvec (tbeta);
       coder_enc_begin (cstate, out);
       if (nex > 0)
         coder_enc_urandom3 (cstate, ty3, q, log2q);
@@ -1798,6 +1839,7 @@ _lnp_tbox_compute_z34 (uint8_t hash[32], polyvec_t tB, polyvec_t z3,
 
           rej = rej_bimodal (rstate_rej, z3coeffs, y3coeffs, params->scM3,
                              params->stdev3sqr);
+          PQZ_CT_PUBLIC (&rej, sizeof (rej)); /* PQZ (review E): the verdict is public */
           if (rej)
             {
               DEBUG_PRINTF (DEBUG_PRINT_REJ, "%s", "reject s3");
@@ -1811,6 +1853,7 @@ _lnp_tbox_compute_z34 (uint8_t hash[32], polyvec_t tB, polyvec_t z3,
 
           rej = rej_bimodal (rstate_rej, z4coeffs, y4coeffs, params->scM4,
                              params->stdev4sqr);
+          PQZ_CT_PUBLIC (&rej, sizeof (rej)); /* PQZ (review E): the verdict is public */
           if (rej)
             {
               DEBUG_PRINTF (DEBUG_PRINT_REJ, "%s", "reject s3");
@@ -1827,8 +1870,11 @@ _lnp_tbox_compute_z34 (uint8_t hash[32], polyvec_t tB, polyvec_t z3,
   /* output proof (h,c,z1,z21,hint,z3,z4) */
   polyvec_set (z3, z3_);
   polyvec_set (z4, z4_);
+  pqz_ct_public_polyvec (z3); /* PQZ (review E): accepted, proof fields */
+  pqz_ct_public_polyvec (z4);
 
   /* cleanup */
+  explicit_bzero (&rbits, sizeof (rbits)); /* PQZ (P6-D3): secret signs */
   rng_clear (rstate_signs);
   rng_clear (rstate_rej);
   polyvec_free (s3);
@@ -1989,6 +2035,101 @@ ret:
   /* cleanup */
   polyvec_free (tmp_polyvec);
   return b;
+}
+
+/* PQZ (P6-FS, lazer#28): absorb the prover messages z3, z4 before the challenges V3 / V4 that combine their 256
+   equations each (upstream derived V from cseed, fixed before z3, z4 exist, so a prover could pick z3, z4 after V):
+   hash <- SHAKE128(hash || enc), enc = one coder session of grandom3 (z3, log2stdev3) then grandom3 (z4, log2stdev4),
+   the proof's own encoding (pqz_rel.c encproof), on centred copies (the callers keep using z3, z4). The buffer is
+   sized exactly (coder_grandom3_nbits): LaZer's coder writes without bounds checks. Transcript change:
+   proofSystemId v3 (CTR-PQZ-09). Upstream: https://github.com/lazer-crypto/lazer/issues/28 */
+static void
+_lnp_tbox_hash_z34 (uint8_t hash[32], polyvec_t z3, polyvec_t z4,
+                    const lnp_tbox_params_t params)
+{
+  polyring_srcptr Rq = params->tbox->ring;
+  shake128_state_t hstate;
+  coder_state_t cstate;
+  polyvec_t a3, a4;
+  uint8_t *buf;
+  size_t len;
+
+  polyvec_alloc (a3, Rq, polyvec_get_nelems (z3));
+  polyvec_alloc (a4, Rq, polyvec_get_nelems (z4));
+  polyvec_set (a3, z3);
+  polyvec_set (a4, z4);
+  polyvec_fromcrt (a3);
+  polyvec_fromcrt (a4);
+  polyvec_mod (a3, a3);
+  polyvec_mod (a4, a4);
+  polyvec_redc (a3, a3);
+  polyvec_redc (a4, a4);
+  len = (coder_grandom3_nbits (a3, params->log2stdev3)
+         + coder_grandom3_nbits (a4, params->log2stdev4))
+            / 8
+        + 2;
+  buf = _alloc (len);
+  /* arena exhausted (here or for a3 / a4): buf may be the shared PQZ_SINK block and len computed from garbage, so
+     skip the unbounded coder; the call fails through the sticky error. z3 is encoded also when nex = 0 (no relation
+     has that; check_z34 norm-checks z3 only for nex > 0). */
+  if (pqz_err != PQZ_OK)
+    goto ret;
+
+  coder_enc_begin (cstate, buf);
+  coder_enc_grandom3 (cstate, a3, params->log2stdev3);
+  coder_enc_grandom3 (cstate, a4, params->log2stdev4);
+  coder_enc_end (cstate);
+  ASSERT_ERR (coder_get_offset (cstate) % 8 == 0);
+  ASSERT_ERR ((coder_get_offset (cstate) >> 3) < len);
+
+  shake128_init (hstate);
+  shake128_absorb (hstate, hash, 32);
+  shake128_absorb (hstate, buf, coder_get_offset (cstate) >> 3);
+  shake128_squeeze (hstate, hash, 32);
+  shake128_clear (hstate);
+
+ret:
+  _free (buf, len);
+  polyvec_free (a4);
+  polyvec_free (a3);
+}
+
+/* PQZ (P6-FS, lazer#28): absorb the prover message h before mu and the final challenge (lnp_quad_many_prove /
+   _verify derive both from this hash; upstream passed the tg-round hash, which h does not enter, so a prover could
+   pick h after mu): hash <- SHAKE128(hash || urandom3 (h mod q in [0, q), q, log2q)), the proof's own encoding, on
+   a copy. Transcript change: proofSystemId v3 (CTR-PQZ-09). */
+static void
+_lnp_tbox_hash_h (uint8_t hash[32], polyvec_t h, const lnp_tbox_params_t params)
+{
+  polyring_srcptr Rq = params->tbox->ring;
+  int_srcptr q = polyring_get_mod (Rq);
+  const unsigned int log2q = polyring_get_log2q (Rq);
+  const unsigned int d = polyring_get_deg (Rq);
+  const unsigned int n = polyvec_get_nelems (h);
+  shake128_state_t hstate;
+  coder_state_t cstate;
+  uint8_t out[CEIL (log2q * d * n, 8) + 2];
+  polyvec_t a;
+
+  polyvec_alloc (a, Rq, n);
+  polyvec_set (a, h);
+  polyvec_fromcrt (a);
+  polyvec_mod (a, a);
+  polyvec_redp (a, a);
+
+  coder_enc_begin (cstate, out);
+  coder_enc_urandom3 (cstate, a, q, log2q);
+  coder_enc_end (cstate);
+  ASSERT_ERR (coder_get_offset (cstate) % 8 == 0);
+  ASSERT_ERR ((coder_get_offset (cstate) >> 3) < sizeof (out));
+
+  shake128_init (hstate);
+  shake128_absorb (hstate, hash, 32);
+  shake128_absorb (hstate, out, coder_get_offset (cstate) >> 3);
+  shake128_squeeze (hstate, hash, 32);
+  shake128_clear (hstate);
+
+  polyvec_free (a);
 }
 
 /* expand i-th row of R from cseed and i */
@@ -3152,7 +3293,8 @@ __schwartz_zippel_accumulate_z4 (spolymat_ptr R2i[], spolyvec_ptr r1i[],
                                  poly_ptr r0t, polymat_t Ds, polymat_t Dm,
                                  polyvec_t u, polymat_t oDs, polymat_t oDm,
                                  polyvec_t z4, const uint8_t seed[32],
-                                 uint32_t dom, const lnp_tbox_params_t params)
+                                 const uint8_t rseed[32], uint32_t dom,
+                                 const lnp_tbox_params_t params)
 {
   abdlop_params_srcptr tbox = params->tbox;
   polyring_srcptr Rq = tbox->ring;
@@ -3233,7 +3375,7 @@ __schwartz_zippel_accumulate_z4 (spolymat_ptr R2i[], spolyvec_ptr r1i[],
 
   for (i = 0; i < 256; i++)
     {
-      _expand_Rprime_i (Rprimei, nprime * d, i, seed);
+      _expand_Rprime_i (Rprimei, nprime * d, i, rseed);
 
       for (k = 0; k < lambda; k++)
         {
@@ -3285,7 +3427,7 @@ __schwartz_zippel_accumulate_z4 (spolymat_ptr R2i[], spolyvec_ptr r1i[],
   INTMAT_T (Rprime, 256, nprime * d, 1);
   for (i = 0; i < 256; i++)
     {
-      _expand_Rprime_i (Rprimei, nprime * d, i, seed);
+      _expand_Rprime_i (Rprimei, nprime * d, i, rseed);
       for (j = 0; j < nprime * d; j++)
         RPRIME[i * (nprime * d) + j] = Rprimei[j];
     }
@@ -3450,7 +3592,7 @@ __schwartz_zippel_accumulate_z3 (
     spolymat_ptr R2t, spolyvec_ptr r1t, poly_ptr r0t, polymat_ptr Es[],
     polymat_ptr Em[], polyvec_ptr v[], polymat_ptr oEs[], polymat_ptr oEm[],
     polymat_t Ps, polymat_t Pm, polyvec_t f, polymat_t oPs, polymat_t oPm,
-    polyvec_t z3, const uint8_t seed[32], uint32_t dom,
+    polyvec_t z3, const uint8_t seed[32], const uint8_t rseed[32], uint32_t dom,
     const lnp_tbox_params_t params)
 {
   abdlop_params_srcptr tbox = params->tbox;
@@ -3562,7 +3704,7 @@ __schwartz_zippel_accumulate_z3 (
     memset (vR64, 0, lambda * ncols * sizeof (int64_t));
     for (i = 0; i < 256; i++)
       {
-        _expand_R_i (Ri, nex * d, i, seed);
+        _expand_R_i (Ri, nex * d, i, rseed);
 
         for (k = 0; k < lambda; k++)
           {

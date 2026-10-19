@@ -90,8 +90,9 @@ const fn nib(c: u8) -> u8 {
     }
 }
 
-/// PQZL: `keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v2")` (D2)
-pub const PQZL_ID: Word = hex32("2e07e6ed1fd303a08c89b3eab6e8423fdfb8f31202958dd682a0619313798c2f");
+/// PQZL: `keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v3")` (D2; v3 = the Fiat–Shamir fix, lazer#28, CTR-PQZ-09 F6).
+/// v2 (`0x2e07e6ed…798c2f`) is retired, not accepted: its transcript is forgeable (F9 path B).
+pub const PQZL_ID: Word = hex32("8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef");
 /// PQZH: `keccak256("scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1")` (D3)
 pub const PQZH_ID: Word = hex32("0a47a7689250ba178a52ad5972cdd9153358c022cb694c08d2389e82de2fead4");
 pub const MAX_PROOF_PQZL: usize = 98_304;

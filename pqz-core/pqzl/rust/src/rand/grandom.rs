@@ -54,7 +54,11 @@ fn gaussian155(st: &mut Rng, u: u64, s: u32) -> Result<i64, Error> {
         let x56 = (f1 as i128 * f2 as i128) >> 56;
         let x = ((x56 as u128).wrapping_mul(DSS_Q62 as u128) >> 62) as i64;
         let (mant, e) = exp_fp(x.wrapping_neg());
-        if bernoulli_fp(w[2], mant, e) {
+        // review E: the try count is public (class b): P(accept) per try is independent of the centre c up to 2^-68
+        // (C grandom.c)
+        let acc = bernoulli_fp(w[2], mant, e);
+        let acc = crate::ct::verdict(acc);
+        if acc {
             return Ok(k);
         }
     }

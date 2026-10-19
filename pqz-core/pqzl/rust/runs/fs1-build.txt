@@ -1,0 +1,19 @@
+# clippy: no float arithmetic in the crate (the production build: default features; then with the oracle,
+# the hooks and the bench; then the wasm/ harness)
+$ cargo clippy -j2 --release --offline --lib -- -D clippy::float_arithmetic
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.06s
+[rc=0]
+$ cargo clippy -j2 --release --offline --features c-oracle,test-hooks,bench --lib --bins --tests -- -D clippy::float_arithmetic
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.03s
+[rc=0]
+$ cargo clippy -j2 --release --offline --manifest-path wasm/Cargo.toml --target wasm32-unknown-unknown -- -D warnings -D clippy::float_arithmetic
+    Finished `release` profile [optimized] target(s) in 0.07s
+[rc=0]
+# the measurement build of wasm/ (d6.sh, reproduce.sh --multi-bench): features oversize and wasm-m8
+$ cargo clippy -j2 --release --offline --manifest-path wasm/Cargo.toml --target wasm32-unknown-unknown --features pqzl/oversize,pqzl/wasm-m8 -- -D warnings -D clippy::float_arithmetic
+    Finished `release` profile [optimized] target(s) in 0.01s
+[rc=0]
+# wasm32 (default features)
+$ cargo build -j2 --release --offline --lib --target wasm32-unknown-unknown
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.06s
+[rc=0]

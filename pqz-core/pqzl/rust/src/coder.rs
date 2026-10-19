@@ -29,6 +29,35 @@ pub(crate) struct Dcomp {
     pub(crate) log2m: u32,
 }
 
+/// `r += c ? a : 0` (`sub`: `-=`), c in {0, 1}, without a branch: a masked-out 0 leaves r as it was, sign included
+/// (C dcompress.c `_cnd_addsub`; review E)
+fn cnd_addsub(r: &mut Int, a: &Int, c: u64, sub: bool) {
+    let k = crate::ct::mask(c);
+    let mut t = Int::new(r.n);
+    t.set(a);
+    for x in &mut t.l[..t.n] {
+        *x &= k;
+    }
+    t.neg &= k;
+    if sub {
+        r.sub(&{ *r }, &t);
+    } else {
+        r.add(&{ *r }, &t);
+    }
+}
+
+/// upstream's centring branches as masks (C `_centre`): r negative and |r| <= g/2 (>= if `geq`): r += g; r
+/// non-negative and |r| > g/2: r -= g (both tests on the input r)
+fn centre(r: &mut Int, g: &Int, gby2: &Int, geq: bool) {
+    let neg = (r.sgn() == -1) as u64;
+    let lo = if geq { r.absge(gby2) } else { r.absle(gby2) } as u64;
+    let hi = r.absgt(gby2) as u64;
+    cnd_addsub(r, g, neg & lo, false);
+    cnd_addsub(r, g, (neg ^ 1) & hi, true);
+}
+
+/// The prover decomposes secret-derived values (w = A1 y1 + A2 y2, the hint inputs): decompose, power2round and
+/// make_ghint have no branch on the values (review E); same results as upstream's branches.
 impl Dcomp {
     /// `dcompress_decompose`, one coefficient r in (-q, q): (r1, r0) with r = r1 gamma + r0 mod q,
     /// r0 in (-gamma/2, gamma/2]
@@ -46,23 +75,21 @@ impl Dcomp {
         t.mod_(&r1, &gamma_);
         let mut r0 = Int::new(r.n);
         r0.set(&t);
-        if r0.sgn() == -1 {
-            if r0.absle(&self.gammaby2) {
-                r0.add(&{ r0 }, &self.gamma);
-            }
-        } else if r0.absgt(&self.gammaby2) {
-            r0.sub(&{ r0 }, &self.gamma);
-        }
+        centre(&mut r0, &self.gamma, &self.gammaby2, false);
 
         r1.sub(&{ r1 }, &r0);
-        if r1.eq(&self.qminus1) {
-            r1.set_i64(0);
-            r0.sub(&{ r0 }, &Int::from_i64(r.n, 1));
-        } else {
-            let (mut rq, mut rr) = (Int::new(r.n - ng + 1), Int::new(ng));
-            int_div(&mut rq, &mut rr, &r1, &gamma_);
-            r1.set(&rq);
+        // r1 == q - 1 ? (0, r0 - 1) : (r1 / gamma, r0); the division always runs (public divisor, fixed steps)
+        let eq = r1.eq(&self.qminus1) as u64;
+        let keep = crate::ct::mask(eq ^ 1);
+        let (mut rq, mut rr) = (Int::new(r.n - ng + 1), Int::new(ng));
+        int_div(&mut rq, &mut rr, &r1, &gamma_);
+        let mut q1 = Int::new(r1.n);
+        q1.set(&rq);
+        for (x, y) in r1.l[..r1.n].iter_mut().zip(&q1.l) {
+            *x = y & keep;
         }
+        r1.neg = q1.neg & keep;
+        cnd_addsub(&mut r0, &Int::from_i64(r.n, 1), eq, true);
         (r1, r0)
     }
 
@@ -74,9 +101,8 @@ impl Dcomp {
         r0.rshift(&ret, self.d);
         r0.lshift(&{ r0 }, self.d);
         r0.sub(&ret, &{ r0 });
-        if r0.absgt(&self.pow2dby2) {
-            r0.sub(&{ r0 }, &self.pow2d);
-        }
+        let hi = r0.absgt(&self.pow2dby2) as u64;
+        cnd_addsub(&mut r0, &self.pow2d, hi, true);
         ret.sub(&{ ret }, &r0);
         ret.rshift(&{ ret }, self.d);
         ret
@@ -103,12 +129,8 @@ impl Dcomp {
         ret.mod_(&{ ret }, &self.m);
         if self.m_odd {
             ret.redc(&{ ret }, &self.m);
-        } else if ret.sgn() == -1 {
-            if ret.absge(&self.mby2) {
-                ret.add(&{ ret }, &self.m);
-            }
-        } else if ret.absgt(&self.mby2) {
-            ret.sub(&{ ret }, &self.m);
+        } else {
+            centre(&mut ret, &self.m, &self.mby2, true);
         }
         ret
     }
@@ -316,14 +338,14 @@ impl Wr {
 }
 
 /// `poly_fromcrt`, `poly_mod`, then `poly_redc` / `poly_redp` (`encproof`'s reductions, on a copy)
-fn reduced(a: &Poly, centred: bool) -> Poly {
+pub(crate) fn reduced(a: &Poly, centred: bool) -> Poly {
     let mut t = a.clone();
     let mut t = Poly::mod_(&mut t);
     if centred { Poly::redc(&mut t) } else { Poly::redp(&mut t) }
 }
 
 /// `coder_enc_grandom`'s split of z: (z0 in [-ao/2, ao/2), z1) with z = ao z1 + z0, ao = 2^la
-fn split(z: i64, la: u32) -> (i64, i64) {
+pub(crate) fn split(z: i64, la: u32) -> (i64, i64) {
     let ao = 1i64 << la;
     let mut z0 = z & (ao - 1); // z - (z & (~0 << la))
     if z0 >= ao / 2 {
@@ -333,7 +355,7 @@ fn split(z: i64, la: u32) -> (i64, i64) {
 }
 
 /// the unary length of z1 (`nones`)
-fn nones(z1: i64) -> u64 {
+pub(crate) fn nones(z1: i64) -> u64 {
     if z1 <= 0 { (-2 * z1) as u64 } else { (2 * z1 - 1) as u64 }
 }
 
@@ -440,7 +462,7 @@ pub(crate) fn encode_proof(f: &ProofParts, cap: usize) -> Result<Vec<u8>, Error>
     Ok(w.b)
 }
 
-/// `pqz_test_mutate` (test hook): decode `proof` as relation `code`, change one field (`kind` 0..13 with `r1`, `r2`;
+/// `pqz_test_mutate` (test hook): decode `proof` as relation `code`, change one field (`kind` 0..14 with `r1`, `r2`;
 /// any other kind re-encodes only) and re-encode. `Ok(None)` where C returns 0: an unknown code, a proof that does
 /// not decode, an encoding over 2 MAX_PROOF bytes (the hook's buffer) or a fixed-width value out of range.
 #[cfg(feature = "test-hooks")]
@@ -478,6 +500,7 @@ pub(crate) fn test_mutate(code: u8, proof: &[u8], kind: u32, r1: u64, r2: u64) -
         11 => set(&mut f.t_a1[ix(km)], c64, ((r1 >> 8) % (1 << (42 - p.quad_eval.quad_many.dcompress.d))) as i64),
         12 => add(&mut f.z21[ix(m2r)], c64, sg),
         13 => f.h.swap(0, 1),
+        14 => add(&mut f.z3[ix(4)], c64, sg),
         _ => {}
     }
     match encode_proof(&f, 2 * MAX_PROOF) {

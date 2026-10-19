@@ -6,7 +6,8 @@
  *   (a) pqz_fixexp.h pqz_exp_fp outside [-64, 64]: the intended clamp; pqz_sat_sub64 / pqz_sat_sub128 at the range
  *       edges; rejection.c with exponents near +-2^63 (follow-up 2026-10-18: rej_standard t2 - 2 t1 and t - ln M,
  *       rej_bimodal a - |y| - ln M saturate, as the Rust port's saturating_sub, where they first wrapped: below -2^63
- *       rejects, num above 2^127 accepts);
+ *       rejects, num above 2^127 accepts); rej_onetime (P6-D2, Rej1 for z2): rejects every <z,v> < 0, = rej_standard
+ *       otherwise with the same rng offset, acceptance rate 1/(2 M2);
  *   (b) pqz_encrypt / pqz_decrypt_raw with a coefficient in [2^63, 2^63 + q) and 2^63 + q (rd_poly, int_set_i64);
  *   (c) poly_auto_self in the NTT domain (crt == 1): X -> X^-1 via the coefficients (follow-up 2026-10-18), equal to
  *       the coefficient-domain automorphism, no write past the residue vector.
@@ -202,6 +203,52 @@ test_rejection (void)
   intvec_free (z), intvec_free (v), intvec_free (z2), intvec_free (v2);
 }
 
+/* rej_onetime (P6-D2, review D-2: Rej1 for z2) on R_REG's z2 parameters (scM2, sigma2^2 = stdev2sq): z = y + v with
+   y ~ D_sigma2 (intvec_grandom, log2o 12 = log2stdev2) and v fixed, ||v||^2 = 64 * 1100^2 < 2 sigma2^2 ln M2 (the
+   bound under which Rej1 outputs exactly D_sigma2). Per sample rej_onetime on one rng and rej_standard on a second rng
+   with the same seed: onetime = standard | (<z,v> < 0) (every <z,v> < 0 rejects; the count of those rej_standard
+   accepted shows the sign test is not vacuous), and afterwards both streams are at the same offset (one u per call).
+   Acceptance rate: (1/M2) Pr[<y,v> >= 0] = 1/(2 M2) (the mass at <y,v> = 0 is ~1e-5), to 5 standard errors of 2^16
+   Bernoulli samples, |rate - p| <= 5 sqrt(p (1 - p) / n) ~ 0.0074 (squared, no libm). The seeds are fixed, so the bound
+   only guards the expected value; the old z2 call (rej_bimodal with stdev1sqr) and rej_standard accept ~1/M2 = 0.35. */
+static void
+test_onetime (void)
+{
+  enum { N = 64, S = 1 << 16 };
+  uint8_t seed[32] = { 9 }, ua[8], ub[8];
+  rng_state_t ra, rb;
+  intvec_t y, z, v;
+  INT_T (dot, 2);
+  intvec_alloc (y, N, 1), intvec_alloc (z, N, 1), intvec_alloc (v, N, 1);
+  for (int i = 0; i < N; i++)
+    intvec_set_elem_i64 (v, i, (i & 1) ? 1100 : -1100);
+  rng_init (ra, seed, 0), rng_init (rb, seed, 0);
+  long acc = 0, neg = 0, negstd = 0;
+  int ok = 1;
+  for (uint32_t s = 0; s < S; s++)
+    {
+      intvec_grandom (y, 12, seed, s + 1);
+      intvec_add (z, y, v);
+      intvec_dot (dot, z, v);
+      int n = int_sgn (dot) < 0;
+      int r1 = rej_onetime (ra, z, v, pqz_reg_scM2, pqz_reg_stdev2sq);
+      int r0 = rej_standard (rb, z, v, pqz_reg_scM2, pqz_reg_stdev2sq);
+      ok &= r1 == (r0 | n);
+      neg += n, negstd += n & !r0, acc += !r1;
+    }
+  rng_urandom (ra, ua, 8), rng_urandom (rb, ub, 8);
+  check ("rej_onetime = rej_standard | (<z,v> < 0) on 2^16 samples", ok && negstd > 0 && pqz_err == PQZ_OK);
+  check ("rej_onetime: same rng offset as rej_standard afterwards", memcmp (ua, ub, 8) == 0);
+  double m2 = (double)pqz_reg_scM2->limbs[2] + (double)pqz_reg_scM2->limbs[1] / 18446744073709551616.0;
+  double p = 1 / (2 * m2), rate = (double)acc / S;
+  printf ("     rej_onetime: M2 %.7f, accepted %ld / %d = %.5f, 1/(2 M2) = %.5f; <z,v> < 0: %ld (%ld of them "
+          "accepted by rej_standard)\n", m2, acc, S, rate, p, neg, negstd);
+  check ("rej_onetime acceptance rate = 1/(2 M2) within 5 standard errors",
+         (rate - p) * (rate - p) <= 25 * p * (1 - p) / S);
+  rng_clear (ra), rng_clear (rb);
+  intvec_free (y), intvec_free (z), intvec_free (v);
+}
+
 /* ---- (b) pqz_encrypt / pqz_decrypt_raw on non-canonical coefficients ---- */
 
 #define PQZ_Q_ ((((uint64_t)1) << 42) - 215)
@@ -311,7 +358,7 @@ main (int argc, char **argv)
   static uint8_t arena[(size_t)64 << 20];
   const char *part = argc > 1 ? argv[1] : "abc"; /* the parts to run: a, b, c (one process each in ub_test.sh) */
   if (strchr (part, 'a'))
-    test_fixexp (), test_satsub (), test_rejection ();
+    test_fixexp (), test_satsub (), test_rejection (), test_onetime ();
   if (strchr (part, 'b'))
     {
       check ("pqz_init", pqz_init (arena, sizeof arena) == PQZ_OK);

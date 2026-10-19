@@ -198,7 +198,7 @@ fn enc_dec_input_errors() {
 }
 
 /// every PQZL proof of proof_pqzl.json (19 rows) and fee0.json (4 rows) decodes as its relation and re-encodes to the
-/// same bytes (`test_mutate` with a kind past 13: decode, the verifier's reductions, encode)
+/// same bytes (`test_mutate` with a kind past 14: decode, the verifier's reductions, encode)
 #[cfg(feature = "test-hooks")]
 #[test]
 fn codec_roundtrip() {
@@ -209,7 +209,7 @@ fn codec_roundtrip() {
     for (r, proof) in rows.chain(fee0["rows"].as_array().unwrap().iter().map(|r| (r, &r["pqzl"]["proof"]))) {
         let code = common::rel_code(r["form"].as_str().unwrap(), r["statement"]["case"].as_str());
         let p = hex(proof);
-        assert!(pqzl::test_mutate(code, &p, 14, 0, 0) == Ok(Some(p.clone())), "{} {}", r["form"], r["statement"]["case"]);
+        assert!(pqzl::test_mutate(code, &p, 99, 0, 0) == Ok(Some(p.clone())), "{} {}", r["form"], r["statement"]["case"]);
         n += 1;
     }
     assert_eq!(n, 23);
@@ -277,7 +277,9 @@ fn all_pqzl_proofs_verify() {
 fn negative_rows_reject() {
     let mut ctx = pqzl::Ctx::new();
     let rows = common::negative_inputs();
-    assert_eq!(rows.len(), 354);
+    // 367 since PQZL v3 (pqzl-fs3 Task 5): + 16 "retired PQZL v2 proofSystemId" rows, - 3 coder-padding rows (the
+    // generator adds those only when the proof's last byte is < 0x80)
+    assert_eq!(rows.len(), 367);
     let mut n = 0;
     for (name, b) in &rows {
         if let Some((op, stmt, proof)) = common::split(b) {

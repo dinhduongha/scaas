@@ -1,0 +1,32 @@
+build rc=0
+P6-FS verify honest: ACCEPT
+P6-FS verify h-mutated (rejected) kind 5 mu seed: honest bb035354 mutated bb035354 -> EQUAL (FAIL)
+P6-FS verify z3-mutated (rejected) kind 2 V4 seed: honest fb144e60 mutated fb144e60 -> EQUAL (FAIL)
+P6-FS verify z3-mutated (rejected) kind 3 V3 seed: honest fb144e60 mutated fb144e60 -> EQUAL (FAIL)
+P6-FS verify z4-mutated (rejected) kind 2 V4 seed: honest fb144e60 mutated fb144e60 -> EQUAL (FAIL)
+P6-FS verify z4-mutated (rejected) kind 3 V3 seed: honest fb144e60 mutated fb144e60 -> EQUAL (FAIL)
+P6-FS verify_fast honest: ACCEPT
+P6-FS verify_fast h-mutated (rejected) kind 15 mu seed: honest bb035354 mutated bb035354 -> EQUAL (FAIL)
+P6-FS verify_fast z3-mutated (rejected) kind 12 V4 seed: honest fb144e60 mutated fb144e60 -> EQUAL (FAIL)
+P6-FS verify_fast z3-mutated (rejected) kind 13 V3 seed: honest fb144e60 mutated fb144e60 -> EQUAL (FAIL)
+P6-FS verify_fast z4-mutated (rejected) kind 12 V4 seed: honest fb144e60 mutated fb144e60 -> EQUAL (FAIL)
+P6-FS verify_fast z4-mutated (rejected) kind 13 V3 seed: honest fb144e60 mutated fb144e60 -> EQUAL (FAIL)
+VERDICT: P6-FS Fiat-Shamir binding (lazer#28) FAIL (10 failed checks of 12)
+checks: P6-SZ ok; P6-L2 ok; P6-Z21 ok; P6-FS lazer#28 FAIL; 
+check_tbox_fixes: FAIL
+P6-FS verify honest: ACCEPT
+P6-FS verify h-mutated (rejected) kind 5 mu seed: honest a92c7e51 mutated a92c7e51 -> EQUAL (FAIL)
+P6-FS verify z3-mutated (rejected) kind 2 V4 seed: honest cfd80bb9 mutated cfd80bb9 -> EQUAL (FAIL)
+P6-FS verify z3-mutated (rejected) kind 3 V3 seed: honest cfd80bb9 mutated cfd80bb9 -> EQUAL (FAIL)
+P6-FS verify z4-mutated (rejected) kind 2 V4 seed: honest cfd80bb9 mutated cfd80bb9 -> EQUAL (FAIL)
+P6-FS verify z4-mutated (rejected) kind 3 V3 seed: honest cfd80bb9 mutated cfd80bb9 -> EQUAL (FAIL)
+P6-FS verify_fast honest: ACCEPT
+P6-FS verify_fast h-mutated (rejected) kind 15 mu seed: honest a92c7e51 mutated a92c7e51 -> EQUAL (FAIL)
+P6-FS verify_fast z3-mutated (rejected) kind 12 V4 seed: honest cfd80bb9 mutated cfd80bb9 -> EQUAL (FAIL)
+P6-FS verify_fast z3-mutated (rejected) kind 13 V3 seed: honest cfd80bb9 mutated cfd80bb9 -> EQUAL (FAIL)
+P6-FS verify_fast z4-mutated (rejected) kind 12 V4 seed: honest cfd80bb9 mutated cfd80bb9 -> EQUAL (FAIL)
+P6-FS verify_fast z4-mutated (rejected) kind 13 V3 seed: honest cfd80bb9 mutated cfd80bb9 -> EQUAL (FAIL)
+VERDICT: P6-FS Fiat-Shamir binding (lazer#28) FAIL (10 failed checks of 12)
+P6-FS binding failed: ["verify h kind 5 EQUAL (FAIL)", "verify z3 kind 2 EQUAL (FAIL)", "verify z3 kind 3 EQUAL (FAIL)", "verify z4 kind 2 EQUAL (FAIL)", "verify z4 kind 3 EQUAL (FAIL)", "verify_fast h kind 15 EQUAL (FAIL)", "verify_fast z3 kind 12 EQUAL (FAIL)", "verify_fast z3 kind 13 EQUAL (FAIL)", "verify_fast z4 kind 12 EQUAL (FAIL)", "verify_fast z4 kind 13 EQUAL (FAIL)"]
+    Finished `release` profile [optimized + debuginfo] target(s) in 13.54s
+    Finished `release` profile [optimized + debuginfo] target(s) in 1.13s

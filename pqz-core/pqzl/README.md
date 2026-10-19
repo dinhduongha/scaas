@@ -52,7 +52,7 @@ flowchart TB
 | `lazer/` | the subset of LaZer `3330e48` that PQZL uses; changes made in place and marked `PQZ:`; licence `lazer/LICENSE` |
 | `params/` | one LaZer spec per relation (`*_params.sage`), the generated headers `pqz_*_params.h`, the codegen and the security sizing ([params/README.md](params/README.md)) |
 | `kat/` | known-answer test of the arithmetic layers against upstream LaZer: `lazer_dump.c`, the golden `lazer-3330e48.json`, `check.py` (must print 19/19) |
-| `test/` | `pqz_bench.c` (prove, verify, tamper checks, timings, a hash of the proofs), `run_wasm.mjs` (the same under node), `pqz_keys_kat.c` (keys KAT), `pqz_sv_diff.c` and `pqz_sv_fuzz.c` (SV differential test and fuzz target) |
+| `test/` | `pqz_bench.c` (prove, verify, tamper checks, timings, a hash of the proofs), `run_wasm.mjs` (the same under node), `pqz_keys_kat.c` (keys KAT), `pqz_sv_diff.c` and `pqz_sv_fuzz.c` (SV differential test and fuzz target), `ct.sh` + `pqz_ct.c` (constant-time check of the prover under valgrind memcheck, C and Rust; review fix E) |
 | `sv/` | checks of the specialised verifier: `diff.sh`, `bench.sh`, `fuzz.sh`, `rel3.sh` (all of them in one job), `check_sv_fixes.sh`; `review/` holds the reproducers of its independent review |
 | `sz/`, `l2dom/` | reproducers of the two LaZer tbox findings (lazer#24, #25) ([sz/README.md](sz/README.md)) |
 | `build.sh`, `check_symbols.sh` | the builds (native, x86-64-v3, wasm32) and the scan that fails a build whose library references anything beyond `memcpy`, `memset` and `__stack_chk_fail` |

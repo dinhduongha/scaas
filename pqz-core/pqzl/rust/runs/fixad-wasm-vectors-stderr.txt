@@ -1,0 +1,14 @@
+node:fs:621
+    return binding.readFileUtf8(path, stringToFlags(options.flag));
+                   ^
+
+Error: ENOENT: no such file or directory, open '/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-fs3-fixad/pqz-core/pqzl/rust/target/wasm-replay/in.txt'
+    at readFileSync (node:fs:621:20)
+    at file:///home/ha/work/ainative/scaas/.claude/worktrees/pqzl-fs3-fixad/pqz-core/pqzl/rust/wasm/run_vectors.mjs:21:15 {
+  errno: -2,
+  code: 'ENOENT',
+  syscall: 'open',
+  path: '/home/ha/work/ainative/scaas/.claude/worktrees/pqzl-fs3-fixad/pqz-core/pqzl/rust/target/wasm-replay/in.txt'
+}
+
+Node.js v26.8.1

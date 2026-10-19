@@ -11,6 +11,8 @@ general-purpose zero-knowledge system.
 
 > **Status:** built and measured, **unaudited — not for production funds**. The numbers below are **frozen**: they come
 > from the run of 2026-10-17 (`artifact/runs/freeze-2026-10-17/`, checked against `artifact/expected-results.json`).
+> They are PQZL `proofSystemId` **v2**, retired on 2026-10-19 as forgeable ([lazer#28](https://github.com/lazer-crypto/lazer/issues/28));
+> PQZL v3 (branch `pqzl-fs3`) changes the proofs and the prover's times, not the format: see §5 and STATUS.md "PQZL v3".
 > The dated log of every change and run is [STATUS.md](STATUS.md); the specification is
 > [pq-zero-knowledge.md, "Proof engine"](../docs/contracts/pq-zero-knowledge.md#proof-engine).
 
@@ -123,10 +125,12 @@ or stdio**. The six rewritten layers:
 
 The relations are in `pqzl/src/pqz_rel.c` (the prover mixes the secret witness into its random masks, so a weak random number generator cannot leak keys).
 
-**Three soundness findings in upstream LaZer** were fixed here and reported:
+**Four soundness findings in upstream LaZer** were fixed here and reported:
 [lazer#24](https://github.com/lazer-crypto/lazer/issues/24) and [#25](https://github.com/lazer-crypto/lazer/issues/25)
-(the reason for `proofSystemId` v2) and [#26](https://github.com/lazer-crypto/lazer/issues/26) (z21 norm, verifier
-only).
+(the reason for `proofSystemId` v2), [#26](https://github.com/lazer-crypto/lazer/issues/26) (z21 norm, verifier
+only) and [#28](https://github.com/lazer-crypto/lazer/issues/28) (Fiat–Shamir: `z3`, `z4` and `h` were absorbed after
+the challenges that check them, so v2 proofs are forgeable; the reason for `proofSystemId` v3, which also carries two
+prover-side zero-knowledge fixes, D-2 and D-3).
 
 **Shared by both systems:**
 
@@ -211,12 +215,16 @@ layout — statements, objects, both proof formats, the precompile input and `OP
   - in the browser (wasm32), PQZL proves up to M = 8 with the Rust core (`pqz-ffi`'s default backend, 117 MiB at
     M = 8, run `d6`); the C core proves only M ≤ 4 there (memory, §5.4).
 
-The two proof system ids (both frozen; a change to either proof system needs a new id):
+The two proof system ids (a change to either proof system needs a new id):
 
 | `proofSystemId` | keccak256 of | Value | Frozen at |
 |---|---|---|---|
-| PQZL v2 | `scaas/pqz/lnp22/mlwe-d64k32-q42l4/v2` | `0x2e07e6ed1fd303a08c89b3eab6e8423fdfb8f31202958dd682a0619313798c2f` | gate A |
+| PQZL v3 | `scaas/pqz/lnp22/mlwe-d64k32-q42l4/v3` | `0x8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef` | vectors `8af584b` (branch `pqzl-fs3`); its final gate before the merge |
 | PQZH | `scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1` | `0x0a47a7689250ba178a52ad5972cdd9153358c022cb694c08d2389e82de2fead4` | gate B |
+
+Retired: PQZL v2 (`…/v2`, `0x2e07e6ed…798c2f`, frozen at gate A), **forgeable** (lazer#28), removed from the accepted
+set and from `pqz-stmt` on 2026-10-19. Chain 7622 still runs it (image `pqz2`) until the v3 roll-out resets the chain
+from genesis (plan `pqzl-fs3` Task 13).
 
 Size and time limits:
 
@@ -230,6 +238,14 @@ Size and time limits:
 | Verify time | **≤ 60 ms at p99** on the chain host, and also in wasm32 (owner decision 2026-10-14) |
 
 ## 5. Measurements (frozen 2026-10-17)
+
+**PQZL v2 figures.** §5.0–§5.4 and run `d6` measured `proofSystemId` v2. PQZL v3 changes every proof byte (new
+`proofs_fnv`: STATUS.md, section "PQZL v3"), the PQZL proof sizes by at most 20 B per form
+([pq-zero-knowledge.md §4.4](../docs/contracts/pq-zero-knowledge.md#44-sizes)), and the prover's times: the z2 rejection fix
+(D-2) about doubles the z1 / z2 rejection attempts (`R_TX` 18.5–19.6 per proof). First v3 figures (C core,
+`research/pqzl-measure/runs/fs4-native.jsonl`, 10 proofs, a loaded host): prove p50 native `R_REG` 287 ms, `R_TX`
+1,125 ms, `R_TX0` 1,140 ms, generic verify p50 `R_TX` 677 ms. The full v3 tables (both cores, wasm32, the specialised
+verifier, the package's `expected-results.json`) are to be re-measured (plan `pqzl-fs3` Tasks 6 and 13).
 
 §5.0 holds **the official numbers**: the frozen run of 2026-10-17 (`artifact/reproduce.sh --full`, after gates A and B,
 233 checks ok, `artifact/runs/freeze-2026-10-17/`). `artifact/expected-results.json` is built from it; the package
@@ -742,9 +758,9 @@ run files keep the paths of their day.
 | `pqzl/kat/` | arithmetic-layer KAT: `lazer_dump.c` (one source, upstream or pqz-core backend), golden `lazer-3330e48.json`, `check.py`, `build-lazer-dump.sh` |
 | `pqzl/test/` | `pqz_bench.c` (prove, verify, tamper checks, the hedging check, timings, a hash of the proofs), `run_wasm.mjs` (the same under node), `pqz_keys_kat.c` (SHAKE256 / KeyGen / Enc / Dec KAT and round trip, checked by `pqz_kat.py --c-keys`), `pqz_sv_diff.c`, `pqz_sv_fuzz.c`, runs `runs/` |
 | `pqzl/sv/` | specialised verifier checks (`docs/research/pqz-specialised-verifier.md`): `diff.sh` (differential test against `pqz_verify`), `bench.sh` (portable, x86-64-v3, wasm), `fuzz.sh` (ASan + UBSan, libFuzzer), `research/pqzl-measure.sh` (all relations in one capped job: diff, bench, wasm both, ASan, KAT, both fix checks, memory per op), `check_sv_fixes.sh` (fails unless the differential test catches either tbox fix reverted in `pqz_sv.c`), runs `runs/`; `review/` the independent review's reproducers (`review.sh dom | norm | zdiff | fuzz`: cheating provers past the final hash, the z21 differential `z21diff.c`; never compiled by `pqzl/build.sh`) |
-| `research/pqzl-measure/` | the PQZL measurement round: `bench.sh` (build, KAT, `R_REG` / `R_TX` proof hashes, timings), `relfix.sh` (after the owner's fix-ups of 2026-10-13: build, KAT, tbox fixes, proof hashes, arena peak per relation, ASan + UBSan, timings of all six), raw runs `runs/` (latest `tx0c-*`) |
+| `research/pqzl-measure/` | the PQZL measurement round: `bench.sh` (build, KAT, `R_REG` / `R_TX` proof hashes, timings), `relfix.sh` (after the owner's fix-ups of 2026-10-13: build, KAT, tbox fixes, proof hashes, arena peak per relation, ASan + UBSan, timings of all six), raw runs `runs/` (latest `fs4-*`, PQZL v3) |
 | `research/opt/` | optimisation round: `bench.sh` (native + wasm bench), `prof.sh` (gprof), `asan.sh` (ASan + UBSan, malloc path), microbenches `micro_basemul.c` / `micro_aes.c`, raw results `runs/` (STATUS.md, optimisation section) |
-| `pqzl/sz/`, `pqzl/l2dom/` | the two LaZer tbox soundness findings behind `proofSystemId` v2 ([lazer#24](https://github.com/lazer-crypto/lazer/issues/24), [#25](https://github.com/lazer-crypto/lazer/issues/25)): challenge-row trace and the pooled-slack cheating prover; run by `pqzl/check_tbox_fixes.sh` ([pqzl/sz/README.md](pqzl/sz/README.md)) |
+| `pqzl/sz/`, `pqzl/l2dom/` | the two LaZer tbox soundness findings behind `proofSystemId` v2 ([lazer#24](https://github.com/lazer-crypto/lazer/issues/24), [#25](https://github.com/lazer-crypto/lazer/issues/25)): challenge-row trace and the pooled-slack cheating prover; the Fiat–Shamir binding test behind v3 (`sz/fs_bind.c`, [lazer#28](https://github.com/lazer-crypto/lazer/issues/28)); run by `pqzl/check_tbox_fixes.sh` ([pqzl/sz/README.md](pqzl/sz/README.md)) |
 | `research/floor/` | verifier-floor microbenchmarks and cost model (`docs/research/pqz-verifier-floor.md`): unit costs, prototypes, operation counts of the generic verifier; `research/floor/build.sh run` under `scripts/capped` |
 | `research/upstream/` | upstream LaZer vs the fork on the same statements ([research/upstream/README.md](research/upstream/README.md), [RESULTS.md](research/upstream/RESULTS.md)); `shim/` is also used by `artifact/reproduce.sh --upstream`; `static/` a local benchmark bundle (never published) |
 | `pqzh/ligero/` | crate `pqzh-ligero` (`docs/research/pqzh-ligero.md`): field, FFT, constraint systems of the six forms, protocol, Merkle, transcript; `wasm/` module; `ligero_params.py` and `evm_model.py` models; run scripts and raw runs `runs/` |
@@ -786,6 +802,7 @@ run files keep the paths of their day.
 | 2026-10-17 | the multi-recipient transfer (op 7) in both systems, `pqz-stmt`, `pqz-ffi`, vectors, fuzzing, the package, live on chain 7622 and in the PQZ tokens; the directory layout |
 | 2026-10-17 | **gate A (PQZL) and gate B (PQZH) passed** (`gate.sh`, runs `runs/gate/2026-10-17-*`, decisions.md CTR-PQZ-09): KAT 19/19, fix checks, differential with 0 disagreements, vector checks, wasm32 replay byte-equal, `pqz-ffi` tests, clean fuzzing; for PQZH also every proof ≤ 262,144 B, every verify ≤ 60 ms p99, and the review of the modified Ligero zero-knowledge construction. Both ids are frozen. |
 | 2026-10-17 | **the freeze**: `artifact/runs/freeze-2026-10-17/` (233 checks ok), `expected-results.json` frozen |
+| 2026-10-19 | **PQZL v3** (branch `pqzl-fs3`, not merged yet): the Fiat–Shamir fix for lazer#28 in all four PQZL verifiers and both provers, the z2 rejection and β sign fixes, `proofSystemId` v3, regenerated vectors; v2 retired (STATUS.md, section "PQZL v3") |
 
 **In progress:** **PQZL in Rust** ([plan](../docs/superpowers/plans/2026-10-17-pqzl-rust-port.md)): crate `pqzl` in
 `pqzl/rust/`, byte-for-byte equal to the C core (same proofs from the same seeds). **The Rust crate is the production PQZL core

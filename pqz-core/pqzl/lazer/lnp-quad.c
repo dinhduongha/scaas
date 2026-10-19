@@ -220,6 +220,11 @@ lnp_quad_prove (uint8_t hash[32], polyvec_t tB, poly_t c, polyvec_t z1,
       poly_mod (v, v);
       poly_redp (v, v);
 
+      /* PQZ (review E): this try's transcript messages are public by design (hashed into the challenge; t, v, w1 of a
+         rejected try are hiding commitments); marked here, before the coder, so the coder itself stays checked */
+      pqz_ct_public_polyvec (t);
+      pqz_ct_public_poly (v);
+      pqz_ct_public_polyvec (w1);
       coder_enc_begin (cstate, out);
       coder_enc_urandom3 (cstate, t, q, log2q);
       coder_enc_urandom2 (cstate, v, q, log2q);
@@ -254,6 +259,7 @@ lnp_quad_prove (uint8_t hash[32], polyvec_t tB, poly_t c, polyvec_t z1,
 
           rej = rej_standard (rngstate, z1coeffs, cs1coeffs, params->scM1,
                               params->stdev1sqr);
+          PQZ_CT_PUBLIC (&rej, sizeof (rej)); /* PQZ (review E): the verdict is public */
           if (rej)
             {
               DEBUG_PRINTF (DEBUG_PRINT_REJ, "%s", "reject on s1");
@@ -271,8 +277,9 @@ lnp_quad_prove (uint8_t hash[32], polyvec_t tB, poly_t c, polyvec_t z1,
             rej = rej_standard (rngstate, z2coeffs, cs2coeffs, params->scM2,
                                 params->stdev2sqr);
           if (params->rej2 == 2)
-            rej = rej_bimodal (rngstate, z2coeffs, cs2coeffs, params->scM2,
-                               params->stdev1sqr);
+            rej = rej_onetime (rngstate, z2coeffs, cs2coeffs, params->scM2, /* PQZ (P6-D2): Rej1, sigma2 */
+                               params->stdev2sqr); /* upstream: rej_bimodal with stdev1sqr (review D-2) */
+          PQZ_CT_PUBLIC (&rej, sizeof (rej)); /* PQZ (review E): the verdict is public */
           if (rej)
             {
               DEBUG_PRINTF (DEBUG_PRINT_REJ, "%s", "reject compr");
@@ -286,6 +293,7 @@ lnp_quad_prove (uint8_t hash[32], polyvec_t tB, poly_t c, polyvec_t z1,
       polyvec_l2sqr (norm, y2);
 
       rej = int_gt (norm, params->Bsqr);
+      PQZ_CT_PUBLIC (&rej, sizeof (rej)); /* PQZ (review E): the verdict is public */
       if (rej)
         {
           DEBUG_PRINTF (DEBUG_PRINT_REJ, "%s", "reject on s1");
@@ -303,10 +311,13 @@ lnp_quad_prove (uint8_t hash[32], polyvec_t tB, poly_t c, polyvec_t z1,
   /* output proof (z1,z21,h,c) */
   polyvec_set (z1, y1);
   polyvec_set (z21, y21);
+  pqz_ct_public_polyvec (z1); /* PQZ (review E): accepted, proof fields */
+  pqz_ct_public_polyvec (z21);
 
   polyvec_mod (w1, w1);
   polyvec_redc (w1, w1); // XXX
   polyvec_dcompress_make_ghint (h, y22, w1, dcomp_param);
+  pqz_ct_public_polyvec (h); /* PQZ (review E): the hint, a proof field */
 
   /* cleanup */
   shake128_clear (hstate);

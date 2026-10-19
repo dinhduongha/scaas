@@ -29,8 +29,10 @@ pub(crate) struct Eq {
     pub(crate) r0: Option<Poly>,
 }
 
-/// LSB-first bit writer: `coder_enc_begin`, `coder_enc_urandom(2|3)`, `coder_enc_end` as the verifiers use them to
-/// hash (every section is 64 x nbits bits, so C's byte counter stays exact)
+/// LSB-first bit writer: `coder_enc_begin`, `coder_enc_urandom(2|3)`, `coder_enc_grandom3`, `coder_enc_end` as the
+/// verifiers use them to hash (urandom sections are 64 x nbits bits, grandom sections vary; `end` returns
+/// floor(bits / 8) + 1 bytes, C's `coder_get_offset >> 3` after `coder_enc_end`). `grandom` repeats
+/// `coder::encode_proof`'s z loop on this writer (same `split` / `nones`).
 pub(crate) struct Coder {
     b: Vec<u8>,
     pos: usize,
@@ -57,6 +59,37 @@ impl Coder {
                 }
                 for k in 0..nbits {
                     self.bit((x.l[0] >> k) & 1);
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// `coder_enc_grandom3 (v, log2o)` of centred copies of v's polys (`fromcrt`, `mod`, `redc`: `encproof`'s
+    /// encoding of z3 / z4; P6-FS, lazer#28). The callers pass norm-bounded vectors (|z| < q / 2 after the copy's
+    /// reduction in any case), so the unary parts are short; the length is summed first and reserved fallibly.
+    pub(crate) fn grandom(&mut self, v: &[Poly], log2o: u32) -> Result<(), Error> {
+        use crate::coder::{nones, reduced, split};
+        let la = log2o + 1;
+        let mut bits = 0u64;
+        for x in v {
+            let x = reduced(x, true);
+            for j in 0..64 {
+                bits = bits.saturating_add(nones(split(x.c(j).get_i64(), la).1) + 1 + la as u64);
+            }
+        }
+        let more = usize::try_from(bits / 8 + 1).map_err(|_| Error::Memory)?;
+        self.b.try_reserve(more).map_err(|_| Error::Memory)?;
+        for x in v {
+            let x = reduced(x, true);
+            for j in 0..64 {
+                let (z0, z1) = split(x.c(j).get_i64(), la);
+                for _ in 0..nones(z1) {
+                    self.bit(1);
+                }
+                self.bit(0);
+                for k in 0..la {
+                    self.bit((z0 as u64 >> k) & 1);
                 }
             }
         }

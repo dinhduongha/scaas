@@ -377,7 +377,7 @@ B_FRESH = β_e·β_s + β_s·β_e + β_2 = 164·36 + 36·164 + 64 = 11,872      
 ```
 
 B_FRESH needs each bound **per block**: every exact-ℓ2 bound is its own equation of the proof with its own
-Schwartz–Zippel challenges (`proofSystemId` v2, [CTR-PQZ-09](#CTR-PQZ-09)). A proof of only the sums
+Schwartz–Zippel challenges (since `proofSystemId` v2, [CTR-PQZ-09](#CTR-PQZ-09)). A proof of only the sums
 (`‖s_t‖² + ‖e_t‖² ≤ 36² + 164²`, and so on) would let a sender and a recipient under one control reach
 `√(28,192 + 1) · √68,672 ≈ 44,001` per credit.
 
@@ -432,13 +432,19 @@ Proofs ([serialization v1](#serialization)), measured on the frozen vectors (`sm
 `proof_pqzh.json`, one proof per form at a fixed `rnd32`; lengths vary slightly with `rnd32`); the bound is what
 the verifier accepts:
 
-| Form | PQZL v2 proof | PQZH Ligero v1 proof | PQZH exact maximum |
+| Form | PQZL v3 proof | PQZH Ligero v1 proof | PQZH exact maximum |
 |---|---|---|---|
-| Transfer `R_TX` / auditor off `R_TX0` | 42,762 / 42,431 | 230,946 / 231,480 | 235,470 / 234,744 |
-| Burn / refresh `R_BURN` | 41,904 / 41,915 | 232,184 / 230,280 | 234,744 |
-| Registration PoP `R_REG` | 28,093 | 186,778 | 190,458 |
-| Disclosure `R_DS` / `R_DR` (receiver, auditor) | 28,977 / 28,996, 28,986 | 186,456 / 187,226, 187,194 | 190,458 |
+| Transfer `R_TX` / auditor off `R_TX0` | 42,762 / 42,421 | 230,946 / 231,480 | 235,470 / 234,744 |
+| Burn / refresh `R_BURN` | 41,895 / 41,925 | 232,184 / 230,280 | 234,744 |
+| Registration PoP `R_REG` | 28,091 | 186,778 | 190,458 |
+| Disclosure `R_DS` / `R_DR` (receiver, auditor) | 28,966 / 28,978, 28,974 | 186,456 / 187,226, 187,194 | 190,458 |
 | Limit `MAX_PROOF(id)` | 98,304 (kill criterion 96 KB, [CTR-PQZ-09](#CTR-PQZ-09)) | 262,144 | — |
+
+PQZL v3 figures: the vectors regenerated in plan `pqzl-fs3` Task 5 (`8af584b`,
+`pqz-core/ffi/vectors/runs/fs5-write-generate.txt`); op 7 at `M` = 1 / 2 / 4 / 8 with the auditor 42,775 / 43,603 /
+45,270 / 61,763 B, without it 42,392 / 42,901 / 43,932 / 59,000 B. The retired v2 vectors differed by at most 20 B per
+form (`R_TX0` 42,431, `R_BURN` 41,904 / 41,915, `R_REG` 28,093, `R_DS` / `R_DR` 28,977 / 28,996, 28,986), the
+`rnd32` noise noted above: v3 changes the transcript and the prover's rejection, not the layout or the parameters.
 
 `be8` coefficients waste 22 bits each (≈ 34 %) against tight 42-bit packing; accepted: the Solidity `Add` works on
 aligned 64-bit lanes, and bytes 0–1 of each word are zero (cheap calldata tokens: ≈ 25.2 tokens per coefficient
@@ -499,15 +505,34 @@ change is a new `proofSystemId`. Hints then open only ciphertexts of amounts the
   `opTag = keccak256("SCAAS-PQZ-OP-<NAME>-V1")` for `TRANSFER`, `BURN`, `REFRESH`, `REGISTER`, `DISCLOSE-SENDER`,
   `DISCLOSE-RECEIVER`, `DISCLOSE-AUDITOR`. The precompile requires the `opTag` to belong to the input's `op` byte and
   the `proofSystemId` to be one it implements, for every op.
-- <a id="transcript"></a>**Transcripts (as implemented; P6e D7, 2026-10-14).** Both proof systems absorb `op` and the
-  whole statement (with its `opTag ‖ proofSystemId` prefix) **before** any prover message (strong Fiat–Shamir, as
-  classical); challenges are derived, never sent. `op` is the input's op byte (1 for both `R_TX` and `R_TX0`).
-  - **PQZL v2** (`pqz_rel.c` `pqz_stmt_hash`, then LaZer's `tbox`): `hash0 = SHAKE128("SCAAS-PQZ-TRANSCRIPT-V1" ‖
-    u8(op) ‖ be32(len(stmt)) ‖ stmt)`, 32 bytes (the tag's ASCII bytes, no length prefix). `hash0` seeds LaZer's tbox
-    transcript unchanged: each prover message (including the ones the verifier recomputes instead of reading from the
-    proof), encoded with LaZer's coder as the proof fields are ([serialization v1](#serialization)), is absorbed as
-    `hash ← SHAKE128(hash ‖ encoded message)[0..32)`, first the commitment `tA1 ‖ tB` (`abdlop_hashcomm`), and every
-    challenge is expanded from the current `hash`; there are no labels or length fields.
+- <a id="transcript"></a>**Transcripts (as implemented; P6e D7, 2026-10-14; PQZL v3 P6-FS, 2026-10-19).** Both proof
+  systems absorb `op` and the whole statement (with its `opTag ‖ proofSystemId` prefix) **before** any prover message
+  (strong Fiat–Shamir, as classical); challenges are derived, never sent. `op` is the input's op byte (1 for both
+  `R_TX` and `R_TX0`).
+  - **PQZL v3** (`pqz_rel.c` `pqz_stmt_hash`, then LaZer's `tbox` with two added rounds, `PQZ (P6-FS, lazer#28)` in
+    `lnp-tbox.c`, `pqz_sv.c` and the Rust crate's `proof/tbox.rs`, `sv.rs`): `hash0 =
+    SHAKE128("SCAAS-PQZ-TRANSCRIPT-V1" ‖ u8(op) ‖ be32(len(stmt)) ‖ stmt)`, 32 bytes (the tag's ASCII bytes, no length
+    prefix). `hash0` seeds LaZer's tbox transcript: each prover message (including the ones the verifier recomputes
+    instead of reading from the proof), encoded with LaZer's coder as the proof fields are
+    ([serialization v1](#serialization)), is absorbed as `hash ← SHAKE128(hash ‖ encoded message)[0..32)` before the
+    first challenge that depends on it, and every challenge is expanded from the current `hash`; there are no labels
+    or length fields (lengths are fixed per relation; the `z` encoding is self-delimiting). The rounds, in order:
+    1. the commitment `tA1 ‖ tB` (`abdlop_hashcomm`);
+    2. `ty3 ‖ ty4 ‖ tbeta` → `cseed`: the seed of the JL rows `R` (`cseed`, row `i`) and `R'` (`cseed`, `256 + i`);
+    3. **`z3 ‖ z4` (new in v3)**, absorbed after the verifier's norm checks on them: one coder session of
+       `grandom3(z3, log2stdev3)` then `grandom3(z4, log2stdev4)` over centred copies (the proof's encoding of these
+       fields), `hz = SHAKE128(cseed ‖ enc)`. The matrices V4 (domain `M + 2(d−1) + 2 + Z`) and V3 (that `+ 256`),
+       which fold the 256 equations `z = y + β·R·s` of each, and the next round chain from `hz`; `R` / `R'` stay on
+       `cseed`, because the prover computes `z3` / `z4` from them;
+    4. `tg` → `hash1`: the Schwartz–Zippel challenges γ of the evaluation step;
+    5. **`h` (new in v3)**, as `urandom3(h mod q ∈ [0, q), q, 42)` (its proof encoding) → `hash2`: the seed of `μ`
+       (`lnp-quad-many.c`);
+    6. `t ‖ v ‖ w1` → `SHAKE128(hash2 ‖ t ‖ v ‖ w1)`, the seed of the final challenge `c` (`lnp-quad.c`); `z1`, `z21`,
+       `hint` and `c` are the response.
+
+    v2 lacked rounds 3 and 5: V3 / V4 came from `cseed`, fixed before `z3` / `z4` exist, and `μ` and `c` from
+    `hash1`, which `h` does not enter, so a prover could choose those messages after seeing the challenge that checks
+    them (lazer#28, [CTR-PQZ-09](#CTR-PQZ-09)).
   - **PQZH Ligero v1** (`pqz-core/pqzh/ligero/src/transcript.rs`): a Keccak-256 chain, `state =
     keccak256("SCAAS-PQZH-LIGERO-V1" ‖ u8(op) ‖ be32(len(stmt)) ‖ stmt)`; `absorb(x)`: `state = keccak256(state ‖ x)`;
     squeeze: `keccak256(state ‖ 0xff ‖ be64(ctr))` (`ctr` from 0 after each absorb) gives four 8-byte big-endian
@@ -518,8 +543,8 @@ change is a new `proofSystemId`. Hints then open only ciphertexts of amounts the
     the 8 nonce bytes; draw `t` column indices.
 
   Earlier text here described a labelled SHAKE256 transcript (a 1-byte label length, label and `be32` length per
-  message) that was never implemented; the v2 code and the frozen vectors are normative (P6e gap G3: changing the
-  code instead would be a `proofSystemId` bump).
+  message) that was never implemented; the code and the vectors are normative (P6e gap G3: changing the code instead
+  would be a `proofSystemId` bump).
 - **Round-by-round soundness.** LNP22 has several challenge rounds (commitment, JL projection, the amortization or
   "garbage" challenges, the final challenge). Under Fiat–Shamir a prover can grind each round separately, so the
   soundness of the non-interactive proof is about `Q ×` the **worst single round** error, not the product.
@@ -1189,9 +1214,9 @@ the transfer proof exceeds 96 KB, if p99 adversarial verify exceeds 60 ms on the
 cannot reach arithmetic-layer KAT equality with upstream. Single implementation; LaZer is MIT and protocol logic stays
 upstream-shaped. We own a C fork with six rewritten layers, a rewrite rather than a kernel swap; upstream protocol
 fixes are merged by hand. **Versioning:** two proof systems, one `proofSystemId` word with two values
-([serialization v1](#serialization)): PQZL `keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v2")` (`0x2e07e6ed…798c2f`,
-`PQZ_PROOF_SYSTEM_ID` in `pqz-core/pqzl/src/pqz.h`; P6e D2: stays v2 across the auditor-off form and the hedged prover,
-frozen at gate A) and PQZH (Ligero over F_q) `keccak256("scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1")`
+([serialization v1](#serialization)): PQZL `keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v3")` (`0x8079d65b…16baef`,
+`PQZ_PROOF_SYSTEM_ID` in `pqz-core/pqzl/src/pqz.h`, `PROOF_SYSTEM_ID` in `pqz-core/pqzl/rust/src/lib.rs`; since
+2026-10-19, replacing v2, which P6e D2 had frozen at gate A) and PQZH (Ligero over F_q) `keccak256("scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1")`
 (`0x0a47a768…2fead4`; P6e D3, frozen at gate B), `MAX_PROOF` 98,304 B and 262,144 B. The token stores its id at
 `initialize` and the precompile accepts only ids it implements. **Bump rule** (P6e D4): any change, after a
 deployment, to the parameters, presets, relation rows or statement layout of an existing form, the transcript, the
@@ -1206,7 +1231,18 @@ evaluation accumulators (2 independent tests, soundness ≈ 2^-84 against the st
 challenge domain for all exact-ℓ2 equations, so only the sum of the block norms was checked ([noise](#noise)). A v2
 verifier bounds the whole `z2 = (z21, z22)` ([lazer#26](https://github.com/lazer-crypto/lazer/issues/26), 2026-10-13):
 it changes which proofs are accepted, not the transcript or any honest proof, and no verifier without it was deployed.
-The id stays v2 (owner 2026-10-14: no bump for the z21 fix).
+The id stayed v2 (owner 2026-10-14: no bump for the z21 fix).
+v2 → v3 (2026-10-19, P6-FS, [lazer#28](https://github.com/lazer-crypto/lazer/issues/28)): LaZer's `tbox` did not
+absorb two prover messages before the challenges that check them: `z3`, `z4` (the approximate-range responses) before
+V3 / V4, and `h` (the evaluation step's garbage polynomials) before `μ` and the final challenge. A prover that sees the
+challenge before it fixes the message is not bound by the check, so **v2 proofs are forgeable**. The gap is upstream
+LaZer's and was in all four verifiers (C generic and specialised, Rust generic and specialised) and in both provers
+(C, Rust). v3 adds the two rounds ([transcript](#transcript), rounds 3 and 5); the proof layout, the parameters and the
+relations are unchanged. **v2 is retired**: it leaves the accepted set and `pqz-stmt`, and chain 7622 is reset from
+genesis at the v3 roll-out (owner 2026-10-19, path B), since the PQZ tokens and `UAPqzVerifier` hold their id
+immutably and are redeployed. v3 also carries the two prover-side fixes below (z2 rejection, β signs), which change
+honest proofs but no verifier rule. Regression check: `pqz-core/pqzl/check_tbox_fixes.sh` (P6-FS,
+`pqz-core/pqzl/sz/README.md`); analysis `docs/research/pqz-tbox-soundness.md` §8.
 
 - **Origin.** Fork of LaZer at a pinned commit (`main` was `3330e48`, 2026-09-28; the pin is recorded), MIT, repo path
   `scaas/pqz-core/`. Kept: LNP22 protocol logic, codegen (`scripts/lin-codegen.sage` with lattice-estimator), parameter
@@ -1217,7 +1253,7 @@ The id stays v2 (owner 2026-10-14: no bump for the z21 fix).
   - masking sampler: integer discrete Gaussian (CDT with a constant-time full-table scan), or uniform masks with
     integer rejection if the proof-size cost is acceptable; no `double`;
   - rejection: the acceptance test in fixed-point integer arithmetic with a constant-time exp approximation whose error
-    is inside the proof's statistical-distance budget; no MPFR;
+    is inside the proof's statistical-distance budget; no MPFR (v3's z2 rejection and β signs: "Prover-side zero-knowledge fixes" below);
   - memory and errors: a caller-provided arena (`pqz_init(arena, len)`; `pqz-ffi` reserves it once at run time,
     512 MiB verify-only, 1 GiB for proving since P6-ANON S3; wasm32 one 512 MiB arena), every `ERR`/`ASSERT` an error return; no `malloc`,
     no `abort`, no stdio;
@@ -1233,6 +1269,33 @@ The id stays v2 (owner 2026-10-14: no bump for the z21 fix).
   on real AVX-512 hardware). CI asserts
   that `libpqz.so`, the WASM module and the mobile libraries link no GMP, MPFR, libstdc++ or libm symbols and contain no
   floating-point instructions on the verify and prove paths (`nm`/`objdump` check).
+- **Prover-side zero-knowledge fixes in v3** (whole-code review 2026-10-19, findings D-2 and D-3,
+  `pqz-core/research/code-review-2026-10-19/D-lazer-fork.md`; implemented in plan `pqzl-fs3` Task 4, `c57381b`).
+  Both are inherited from upstream LaZer, change honest proofs (the `proofs_fnv` lines, the vectors) and no verifier
+  rule:
+  - **z2 rejection (D-2).** `lnp-quad.c` ran the bimodal test for `z2` with `z1`'s variance σ1² and without a random
+    sign: acceptance was ≈ 1/M2 almost independently of `z2`, and the published `z21` was not distributed as the
+    zero-knowledge simulator assumes (estimated leakage about the fresh commitment randomness `s2` under 0.1 bit per
+    proof). v3 uses **Rej1**, the one-time-commitment rejection of LNP22 / LNS21 that the codegen's `rejs2 = 2` and
+    `M2 = exp(1/(2γ2²))` were generated for: with `v = c·s2`, reject if ⟨z2, v⟩ < 0, otherwise accept with
+    probability exp((‖v‖² − 2⟨z2, v⟩)/(2σ2²))/M2 (σ2² = `stdev2sqr`, the existing `scM2`). One uniform draw per
+    attempt also when the sign test rejects, so C and Rust consume the rng alike. No parameter changes; about twice
+    the expected `z2` attempts (the params headers' `total` repetition rate, M1·M2·…, understates the expected tries
+    by that factor 2: kept as generated; tries per R_REG proof ≈ 7 → 14). Rej1 outputs `z2` from D_σ2 restricted to the
+    half-space ⟨z2, c·s2⟩ ≥ 0, so each proof reveals one sign bit about `s2`; LNP22 / LNS21 cover this with the
+    extended-MLWE assumption (to be confirmed in review B, plan Task 11). `z3` / `z4` keep the bimodal test with their own β signs.
+    Measured (`rej_onetime` unit tests, C `pqzl/test/pqz_ub_test.c` → `pqzl/test/runs/ub-fs4.txt`, Rust
+    `rand::rejection::tests::onetime_rej1`, the same counts: 2^16 samples at `R_REG`'s `scM2` / `stdev2sqr`): equal to
+    `rej_standard` OR the sign test on every sample, the same rng offset afterwards, acceptance 11,624 / 65,536 =
+    0.17737 against 1/(2·M2) = 0.17628 (M2 = 2.8364453). Rejection attempts per proof (both loops, `relfix.sh fs4`):
+    `R_REG` 14.0–16.2, `R_TX` 18.5–19.6, `R_TX0` 22.2–23.0, against 6.2–7.4, 6.1–12.6, 9.1–13.8 before (n = 5 / 10
+    proofs). `PQZ_REJ_MAX` = 1000 (CTR-PQZ-10) fails with probability ≈ e^-42.5 ≈ 2^-61 at worst (`R_TXM` M = 4,
+    2·M1·M2 ≈ 24 expected attempts), a liveness bound only (the prover retries). The headers are unchanged
+    (`params/to_rust.py --check`: 15 files equal).
+  - **β signs (D-3).** The tbox sign sampler read β4 from a bit index that reached bit 8 of a `uint8_t` (β4 = +1 on
+    every fourth attempt) and reused β4's bit as the next β3. v3: β3 reads bit `8 − nrbits`, β4 the next unused bit,
+    a refill when fewer than two bits remain, and the sign byte is cleared at the end. Pinned by the `proofs_fnv`
+    lines and C = Rust proof bytes (no separate unit test).
 - **Relations.** `R_TX`, `R_TX0` (transfer without the auditor), `R_BURN` (also REFRESH), `R_REG`, `R_DS`, `R_DR`
   (also AUDITOR) written as LaZer specifications (`pqz-core/pqzl/params/<rel>_params.sage`) → generated
   `pqz_<rel>_params.h` checked in, regenerated only on purpose (`params/regen.sh` reproduces every header byte for
@@ -1290,10 +1353,13 @@ bytes; `be8` and `‖` as in the notation at the top.
 
 | `proofSystemId` | System | `MAX_PROOF(id)` | Verifier on the precompile path | Freeze |
 |---|---|---|---|---|
-| `keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v2")` = `0x2e07e6ed1fd303a08c89b3eab6e8423fdfb8f31202958dd682a0619313798c2f` | PQZL v2: LNP22 through LaZer's `tbox` (`pqz-core`, C) | 98,304 B | `pqz_verify_fast` | gate A (P6e D2) |
+| `keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v3")` = `0x8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef` | PQZL v3: LNP22 through LaZer's `tbox` with the P6-FS transcript ([transcript](#transcript)) (`pqz-core`: the Rust crate `pqzl`, the C core as reference) | 98,304 B | `verify_fast` (`pqz_verify_fast` in C) | v3 vectors `8af584b` (plan `pqzl-fs3` Task 5); the branch's final gate before the merge (plan Tasks 9, 12) |
 | `keccak256("scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1")` = `0x0a47a7689250ba178a52ad5972cdd9153358c022cb694c08d2389e82de2fead4` | PQZH Ligero v1: Ligero over F_q, radix-431 domains, Keccak-256 Merkle tree and transcript, zero knowledge, proven preset (`pqzh-ligero`, Rust) | 262,144 B | `pqzh_ligero::verify` | gate B (P6e D3) |
 
-Retired, never deployed: PQZL `…/v1` (2026-10-13) and the STARK's provisional
+Retired, **forgeable**: PQZL `…/v2` = `0x2e07e6ed1fd303a08c89b3eab6e8423fdfb8f31202958dd682a0619313798c2f`
+(2026-10-19; [lazer#28](https://github.com/lazer-crypto/lazer/issues/28), [CTR-PQZ-09](#CTR-PQZ-09)): removed from
+the accepted set and from `pqz-stmt`; chain 7622, which runs it on image `pqz2` (a test chain), is reset from genesis
+at the v3 roll-out. Retired, never deployed: PQZL `…/v1` (2026-10-13) and the STARK's provisional
 `keccak256("scaas/pqz/pqzh/stark-d1-goldilocks5-fri-keccak256-zk/v1")` (`0xaa1f92dd…`). Any other id ⇒ `0`.
 
 **Precompile input** (`pqz-stmt` `decode_input`, run by `pqz-ffi` before any proof code):
@@ -1342,7 +1408,7 @@ address as 12 zero bytes ‖ address).
 | Word | Offset | Field | Decoder rule |
 |---|---|---|---|
 | 0 | 0 | `opTag` | the op's (table above) |
-| 1 | 32 | `proofSystemId` | PQZL v2 or PQZH Ligero v1 |
+| 1 | 32 | `proofSystemId` | PQZL v3 or PQZH Ligero v1 |
 | 2–5 | 64, 96, 128, 160 | `chainId`, `token`, `registry`, `fromUA` | hashed |
 | 6 | 192 | `toUA` | BURN, REFRESH: 0; transfers: hashed |
 | 7 | 224 | `beneficiaryUA` | hashed |
@@ -1414,7 +1480,7 @@ each) = 12,416 B; `R_TX0` the same without `e2_a` = 12,384 B; `R_BURN` `s_f ‖ 
 `R_DS` `r ‖ e1 ‖ e2_t` = 6,176 B; `R_DR` `s ‖ e` = 6,144 B. `rnd32`: 32 bytes of CSPRNG output, hedged per
 [CTR-PQZ-19](#CTR-PQZ-19).
 
-**PQZL proof (v2)** (`pqz_rel.c` `encproof` / `pqz_decproof`, `lazer/coder.c`). One bit string, bits filled from the
+**PQZL proof (v2 and v3: one layout)** (`pqz_rel.c` `encproof` / `pqz_decproof`, `lazer/coder.c`). One bit string, bits filled from the
 least significant bit of each byte; polynomials in order, coefficient 0 first; counts per relation from
 `params/pqz_<rel>_params.h`:
 
@@ -1466,7 +1532,7 @@ flipped. Frozen value `0xed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce
 `selftest.json`). Computed once per process, cached.
 
 **Changes against earlier text of this file** (code and vectors win): §5's labelled SHAKE256 transcript → the v2
-transcripts; §7.7's "amount (burn; else 0)", "recipient (burn; else 0)", `toUA` and salt notes are decoder rules now
+transcripts (PQZL: v3 since 2026-10-19, with the P6-FS rounds); §7.7's "amount (burn; else 0)", "recipient (burn; else 0)", `toUA` and salt notes are decoder rules now
 (`pqz-stmt`'s zero words; the core only hashes those words); §8's C API (`pqz_keygen(seed32, pk)`, `pqz_enc(...)`, `pqz_dec(seed32, …)`) → the `pqz.h` signatures, and its
 "compile-time arena" → an arena reserved once at run time; §8's "the engine's own" proof format and the one
 `MAX_PROOF` → the two formats above and `MAX_PROOF(id)`; §9.1's `MAX_INPUT` 262,144 → 393,216; §14's vector

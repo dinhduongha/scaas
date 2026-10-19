@@ -105,18 +105,22 @@ of every run. It is light: it uses `pqz_kat.py`'s helpers, and the fuzz process 
     cases), `proof_pqzh.json` 8 (M ∈ {1, 2, 4}); the statements come from `statement_transfer_multi.json`; oversize M
     is never built;
   - the files of `regress/valid/`.
-- **The `precompile` seeds:** those inputs, plus `06 00000000` and the 731 rows of `negative.json` (342 of them
+- **The `precompile` seeds:** those inputs, plus `06 00000000` and the 744 rows of `negative.json` (347 of them
   multi-recipient).
 
 `regress/valid/` holds valid inputs from outside the vectors, which the oracle must know as honest. Today it holds one
-file, `crash-b9881dfc…`:
+file, `fixture-disclose-receiver-rnd33`:
 
 - what it is: the `DISCLOSE-RECEIVER` fixture input of the harness before the vectors existed (PQZL,
   `pqz_ffi::fixture`, `rnd32` = 0x33…);
-- how it got here: it was the false finding of `smoke3-precompile`. The merge step wrote it into the fuzz directory
-  (that step had no `-artifact_prefix`; it has one now), and it sat at the fuzz root from P6e Task 10 to P6-ANON S5;
+- how it got here: it was the false finding of `smoke3-precompile` (then `crash-b9881dfc…`). The merge step wrote it
+  into the fuzz directory (that step had no `-artifact_prefix`; it has one now), and it sat at the fuzz root from P6e
+  Task 10 to P6-ANON S5;
 - how it was identified: `runs/2026-10-16-s5-stray-crash.txt` (the generic verifier says valid; it was re-proved
-  byte-equal).
+  byte-equal);
+- PQZL v3 (lazer#28 fix, 2026-10-19): `crash-b9881dfc…` carried the retired v2 id, so it was re-proved under v3 with the
+  same statement (id word aside) and `rnd32`, and renamed: `runs/2026-10-19-fs5-regress-valid.txt`. Re-proved rather
+  than deleted, so the honest set stays at 44 and the committed `mutate` / `codec` edit scripts keep their meaning.
 
 ## Build (D12)
 

@@ -87,7 +87,7 @@ def shake256(data, n):
 
 
 # ---------------------------------------------------------------- ids, tags (§5, CTR-PQZ-09, P6e D2 / D3)
-PQZL_ID = keccak256(b"scaas/pqz/lnp22/mlwe-d64k32-q42l4/v2")
+PQZL_ID = keccak256(b"scaas/pqz/lnp22/mlwe-d64k32-q42l4/v3")  # v2 retired (lazer#28, CTR-PQZ-09 F6)
 PQZH_ID = keccak256(b"scaas/pqz/pqzh/ligero-fq-r431-keccak256-zk-proven/v1")
 OP_NAMES = ["TRANSFER", "BURN", "REFRESH", "REGISTER", "DISCLOSE-SENDER", "DISCLOSE-RECEIVER", "DISCLOSE-AUDITOR",
             "TRANSFER-MULTI"]
@@ -628,7 +628,7 @@ def selftest(log):
         m = bytes((7 * i + 1) & 255 for i in range(n))
         ok(_sponge(m, 0x06) == hashlib.sha3_256(m).digest(), f"Keccak-f permutation = hashlib sha3_256, {n} B")
     ok(keccak256(b"").hex() == "c5d2460186f7233c927e7db2dcc703c0e500b653ca82273b7bfad8045d85a470", "keccak256('')")
-    ok(PQZL_ID.hex() == "2e07e6ed1fd303a08c89b3eab6e8423fdfb8f31202958dd682a0619313798c2f", "PQZL proofSystemId (D2)")
+    ok(PQZL_ID.hex() == "8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef", "PQZL proofSystemId (D2)")
     ok(PQZH_ID.hex() == "0a47a7689250ba178a52ad5972cdd9153358c022cb694c08d2389e82de2fead4", "PQZH proofSystemId (D3)")
     plan = {"TRANSFER": "ef22f3d1", "BURN": "7383374d", "REFRESH": "f118f2df", "REGISTER": "69562a9c",
             "DISCLOSE-SENDER": "868cc07c", "DISCLOSE-RECEIVER": "d8356cfb", "DISCLOSE-AUDITOR": "d6019aa4",

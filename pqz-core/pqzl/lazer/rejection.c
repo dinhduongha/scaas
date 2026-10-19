@@ -4,6 +4,7 @@
  * Same tests and the same inputs (scM = round(M * 2^128), sigma2 = sigma^2):
  *   standard: accept iff u < exp((<v,v> - 2<z,v>) / (2 sigma^2)) / M
  *   bimodal:  accept iff u < 1 / (M exp(-<v,v> / (2 sigma^2)) cosh(<z,v> / sigma^2))
+ *   onetime:  reject if <z,v> < 0, else the standard test (Rej1 of LNP22 / LNS21, one-time commitments)
  * with u uniform. The exponents are formed exactly as Q56 fixed-point quotients (masked long division),
  * exp() is pqz_fixexp.h's integer exp, and the comparison uses a 64-bit uniform u (see the precision note
  * there). Integer-only and constant-time in z and v. All functions return 1 for reject, 0 for accept.
@@ -23,11 +24,17 @@ static pqz_fx_i128
 _int2i128 (const int_t a)
 {
   pqz_fx_u128 m = a->limbs[0];
+  limb_t big = 0;
   if (a->nlimbs > 1)
     m |= (pqz_fx_u128)a->limbs[1] << 64;
   for (unsigned i = 2; i < a->nlimbs; i++)
-    ERR (a->limbs[i] != 0, "%s", "rejection input too large");
-  ERR ((m >> 126) != 0, "%s", "rejection input too large");
+    big |= a->limbs[i];
+  big |= (limb_t)(m >> 126);
+  /* PQZ (review E): the inputs are secret (<z,v>, <v,v>); the bound is tested without a branch and only the verdict,
+     an error that aborts the proof (public), is declassified (never set for an honest prover) */
+  int err = (int)(1 ^ limb_eq_ct (big, 0));
+  PQZ_CT_PUBLIC (&err, sizeof err);
+  ERR (err, "%s", "rejection input too large");
   pqz_fx_u128 s = (pqz_fx_u128)0 - (a->neg & 1);
   return (pqz_fx_i128)((m ^ s) - s); /* unsigned: m >= 2^127 after the ERR above must not overflow */
 }
@@ -145,4 +152,20 @@ rej_bimodal (rng_state_t state, const intvec_t z, const intvec_t v,
   uint64_t u = _u64 (state);
   uint64_t uw = (uint64_t)(((pqz_fx_u128)u * w) >> 63);
   return !pqz_bernoulli_fp (uw, m1, e1);
+}
+
+/* PQZ (P6-D2, review D-2): Rej1 for z2 (rej2 == 2). Always one u, as rej_standard, also when the sign test rejects:
+   the rng stream does not depend on the verdict (C = Rust parity). The sign is read without a branch. */
+int
+rej_onetime (rng_state_t state, const intvec_t z, const intvec_t v,
+             const int_t scM, const int_t sigma2)
+{
+  INT_T (t1, z->nlimbs << 1);
+
+  ASSERT_ERR (z->nelems == v->nelems);
+  ASSERT_ERR (z->nlimbs == v->nlimbs);
+
+  intvec_dot (t1, z, v); /* <z,v> */
+  int neg = (int)((pqz_fx_u128)_int2i128 (t1) >> 127);
+  return rej_standard (state, z, v, scM, sigma2) | neg;
 }

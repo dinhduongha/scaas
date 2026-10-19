@@ -1,0 +1,135 @@
+test arith::polymat::tests::views ... ok
+test arith::spoly::tests::errors_and_order ... ok
+test keys::tests::canonical_short_chunk ... ok
+test sv::tests::hint_bound_unreachable_by_encoding ... ok
+test rel::tests::bad_length_refused_before_caches ... ok
+test rand::rejection::tests::saturation_near_2_63 ... ok
+test rel::tests::build_refuses_noncanonical ... ok
+test sv::tests::setup_limits_eq_generic ... ok
+test rand::rejection::tests::onetime_rej1 ... ok
+test result: ok. 9 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.81s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test fs_bind ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.64s
+test ctx_eq_free ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.01s
+TRANSFER prove cold under 64 MiB: the vector's proof; the same Ctx then proves
+M8-on prove cold under 64 MiB: Error::Memory; the same Ctx then proves
+TRANSFER prove cold under 32 MiB: Error::Memory; the same Ctx then proves
+R_TX verify cold under 31289000 B (half its peak 62578000 B): try_ = Error::Memory, bool = false; the same Ctx then accepts
+R_TX verify_fast cold under 5354620 B (half its peak 10709241 B): try_ = Error::Memory, bool = false; the same Ctx then accepts
+keys (free functions): each of the 39 allocations denied in turn: Error::Memory, then the same outputs
+keys (Ctx methods, cold): each of the 35 allocations denied in turn: Error::Memory, then the same outputs
+keys (Ctx methods, warm): each of the 34 allocations denied in turn: Error::Memory, then the same outputs
+R_TX prove (cold) 62903248 B = 0.20 x the C arena peak 312151904 B (target <= 1.1, fails > 2)
+test peak_per_op ... ok
+test exhaustion_is_error ... ok
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 461.67s
+test ntt_roundtrip_eq_c ... ok
+test basemul_eq_c ... ok
+test int_ops_eq_c ... ok
+test polyvec_ops_eq_c ... ok
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.19s
+test malformed_eq_c ... ok
+test ghint_eq_c ... ok
+test test_mutate_eq_c ... ok
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 131.48s
+test keypair_encrypt_decrypt_raw_eq_c ... ok
+test keygen_enc_dec_eq_c ... ok
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.35s
+test constants_eq_c ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test prove_eq_c ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 46.63s
+test cbd_eq_vectors ... ok
+test rejection_saturation_eq_c ... ok
+test aes_ctr_eq_c ... ok
+test grandom_eq_c ... ok
+test shake_eq_c ... ok
+test urandom_eq_c ... ok
+test rejection_eq_c ... ok
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.87s
+test rust_verify_accepts ... ok
+test c_core_selftest_proofs_verify ... ok
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.30s
+test cheating_eq_c ... ok
+test bad_length_eq_c ... ok
+test c_out_of_range_rejected ... ok
+test negative_eq_c ... ok
+test mutated_eq_c ... ok
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 343.02s
+test cheating_rejected ... ok
+test vectors_verify_fast ... ok
+sv_eq_c_sv: 3484 cases over the six forms, 4524 in all, 0 mismatches, 0 auditor / legs accepts
+test sv_eq_c_sv ... ok
+sv_eq_generic: 3484 cases over the six forms, 4524 in all, 0 mismatches, 0 auditor / legs accepts
+test sv_eq_generic ... ok
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 349.77s
+test concurrent_eq_sequential ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 149.80s
+test enc_group_seed_eq_shake ... ok
+test enc_dec_input_errors ... ok
+test keygen_json ... ok
+test codec_roundtrip ... ok
+test enc_json ... ok
+test matrix_json ... ok
+test prove_refuses_noncanonical_statement ... ok
+test cheating_proofs_reject ... ok
+test all_pqzl_proofs_verify ... ok
+test reprove_byte_equal ... ok
+test negative_rows_reject ... ok
+test wasm_replay_inputs ... ok
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 53.97s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+[rc=0]
+[rc=0]
+19/19 cases equal; golden: lazer-3330e48 (lazer 3330e48 static v4: -march=x86-64-v4 -mavx512ifma -mavx512vbmi2 -maes -mpclmul, avx512f=1); checked: pqzl-rust
+[rc=0]
+[rc=0]
+[rc=0]
+     C's own claim (not recomputed here): {"roundtrip": 1000, "max_abs_noise": 543, "bound": 11872, "max_ctr": 0, "noncanonical_rejected": 3, "fails": 0}
+pqz_kat: ok
+[rc=0]
+[rc=0]
+[rc=0]
+     C's own claim (not recomputed here): {"roundtrip": 1000, "max_abs_noise": 543, "bound": 11872, "max_ctr": 0, "noncanonical_rejected": 3, "fails": 0}
+pqz_kat: ok
+[rc=0]
+# params (plan D8): src/params = pqzl/params/to_rust.py's text from the committed headers
+$ python3 -I ../params/to_rust.py --check
+to_rust.py --check: 15 files, equal
+[rc=0]
+[rc=0]
+[rc=0]
+fnv bench 5 5 63: equal (b935013d 258418fb 85ab8aa8 cd5eccf7 b3cb29a2 06c6a4a5)
+[rc=0]
+fnv bench 2 2 16320: equal (e839a31e 4c63cef7 e88b6a9f 62e81d1d 40131675 ad7a159c 024ffaf8 f22cc134)
+[rc=0]
+fnv bench fast 5 50 63: equal (b935013d 258418fb 85ab8aa8 cd5eccf7 b3cb29a2 06c6a4a5)
+[rc=0]
+fnv bench fast 2 50 16320: equal (e839a31e 4c63cef7 e88b6a9f 62e81d1d 40131675 ad7a159c 024ffaf8 f22cc134)
+runs/ct2-bench-63.jsonl:{"fails": 0}
+runs/ct2-bench-16320.jsonl:{"fails": 0}
+runs/ct2-bench-fast-63.jsonl:{"fails": 0}
+runs/ct2-bench-fast-16320.jsonl:{"fails": 0}
+[rc=0]
+[rc=0]
+fnv wasm 3 1 63: equal (c5d0e8c6 da580d8a 581fda3e 12c24f8f 1fc860f7 3ff37043)
+[rc=0]
+fnv wasm fast 3 10 63: equal (c5d0e8c6 da580d8a 581fda3e 12c24f8f 1fc860f7 3ff37043)
+runs/ct2-wasm-63.jsonl:{"fails":0}
+runs/ct2-wasm-fast-63.jsonl:{"fails":0}
+[rc=0]
+native = wasm32: 387 digest lines equal
+wasm32 stack prove: max 24891 B of 1048571 B (row TRANSFER)
+wasm32 stack verify: max 15427 B of 1048571 B (row M8-on)
+wasm32 stack verify_fast: max 82523 B of 1048571 B (row TRANSFER)
+wasm32 M > 8 refused: 0; memory 229638144 B
+[rc=0]
+[rc=0]
+[rc=0]
+[rc=0]
+[rc=0]
+rc=0

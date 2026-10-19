@@ -284,7 +284,9 @@ l2sq_poly (poly_ptr p)
   return s;
 }
 
-/* statement digest: SHAKE128("SCAAS-PQZ-TRANSCRIPT-V1" || op || be32(len) || stmt) */
+/* statement digest: SHAKE128("SCAAS-PQZ-TRANSCRIPT-V1" || op || be32(len) || stmt). be32 keeps the low 32 bits of
+   len; every caller passes a relation's exact statement length (< 70,000 B, checked in rel_of first: review fix A),
+   as Rust's u32::try_from. */
 void
 pqz_stmt_hash (uint8_t h[32], uint8_t op, const uint8_t *stmt, size_t len)
 {
@@ -293,28 +295,6 @@ pqz_stmt_hash (uint8_t h[32], uint8_t op, const uint8_t *stmt, size_t len)
 }
 
 /* ---------------------------------------------------------------- proof encoding (LaZer lin-proofs.c) */
-
-/* bits of coder_enc_grandom3 (v, log2o): per coefficient a unary part (nones ones + a zero) and log2o + 1 bits */
-static size_t
-grandom_bits (polyvec_t v, unsigned log2o)
-{
-  const unsigned la = log2o + 1;
-  const int64_t ao = (int64_t)1 << la;
-  size_t n = 0;
-  for (unsigned i = 0; i < v->nelems; i++)
-    for (unsigned k = 0; k < PQZ_D; k++)
-      {
-        const int64_t z = int_get_i64 (poly_get_coeff (polyvec_get_elem (v, i), k));
-        int64_t z0 = z - (z & ~(ao - 1));
-        if (z0 >= ao / 2)
-          z0 -= ao;
-        else if (z0 < -ao / 2)
-          z0 += ao;
-        const int64_t z1 = (z - z0) >> la;
-        n += (size_t)(z1 <= 0 ? -2 * z1 : 2 * z1 - 1) + 1 + la;
-      }
-  return n;
-}
 
 /* bits of coder_enc_ghint3 (v) */
 static size_t
@@ -361,9 +341,9 @@ encproof (uint8_t *out, size_t cap, size_t *len, polyvec_t tA1, polyvec_t tB, po
   polyvec_redc (z3, z3);
   polyvec_redc (z4, z4);
   bits = (size_t)d * ((tB->nelems + h->nelems) * log2q + tA1->nelems * (log2q - D) + log2omega) + ghint_bits (hint)
-         + grandom_bits (z1, params->quad_eval->quad_many->log2stdev1)
-         + grandom_bits (z21, params->quad_eval->quad_many->log2stdev2) + grandom_bits (z3, params->log2stdev3)
-         + grandom_bits (z4, params->log2stdev4);
+         + coder_grandom3_nbits (z1, params->quad_eval->quad_many->log2stdev1)
+         + coder_grandom3_nbits (z21, params->quad_eval->quad_many->log2stdev2)
+         + coder_grandom3_nbits (z3, params->log2stdev3) + coder_grandom3_nbits (z4, params->log2stdev4);
   if (bits / 8 + 1 > cap) /* coder_enc_end: one pad bit, then the byte count */
     return 0;
   coder_enc_begin (cstate, out);
@@ -993,7 +973,9 @@ set_upsilon (const lnp_tbox_params_struct *P, polyvec_t s1, const unsigned *star
       INT_T (n2t, 2 * P->tbox->ring->q->nlimbs);
       int_set_i64 (n2t, n2);
       int_sub (d, d, n2t);
-      if (int_sgn (d) < 0)
+      int above = int_sgn (d) < 0;
+      PQZ_CT_PUBLIC (&above, sizeof above); /* review E: the witness-valid verdict is public (prove fails) */
+      if (above)
         {
           if (!CHEAT)
             return 0; /* witness above its norm bound */
@@ -1045,6 +1027,8 @@ do_prove (sys_t *S, pf_t *F, const uint8_t hash0[32], const uint8_t *wit, size_t
   polyvec_urandom_bnd (F->s2, lo, hi, ex, 0);
   memcpy (hash, hash0, 32);
   abdlop_commit (F->tA1, F->tA2, F->tB, F->s1, F->m, F->s2, S->R->A1, S->R->A2p, S->R->Bp, tb);
+  pqz_ct_public_polyvec (F->tA1); /* review E: the commitment, hashed and sent (tA2, its low part, stays secret) */
+  pqz_ct_public_polyvec (F->tB);
   abdlop_hashcomm (hash, F->tA1, F->tB, tb);
   lnp_tbox_prove (hash, F->tB, F->h, F->c, F->z1, F->z21, F->hint, F->z3, F->z4, F->s1, F->m, F->s2, F->tA2,
                   S->R->A1, S->R->A2p, S->R->Bp, S->R2, S->r1, S->N, S->R2p, S->r1p, S->r0p, S->M, S->Es, NULL,
@@ -1091,6 +1075,19 @@ wit_vec (polyvec_t s1, unsigned off, const uint8_t *p, int wide)
   return p + (wide ? 4096 : 2048);
 }
 
+/* x / d and x % d as C's '/' and '%' (truncated, d > 0) by the fixed-step restoring division of pqz_mpn.h (review E:
+   the witness values are secret, and wasm32 keeps i64.div_s / i64.rem_s even for a constant d, whose latency is the
+   engine's and the CPU's) */
+static int64_t
+ct_sdiv (int64_t x, uint64_t d, int64_t *rem)
+{
+  const uint64_t s = (uint64_t)(x >> 63);
+  mp_limb_t n = ((uint64_t)x ^ s) - s, dd = d;
+  const uint64_t q = pqz__div (NULL, &n, 1, &dd, 1); /* n: the remainder */
+  *rem = (int64_t)((n ^ s) - s);
+  return (int64_t)((q ^ s) - s);
+}
+
 /* w_i = centre(v_i - (u^T s)_i), s = s1[0 .. 32) */
 static void
 dec_w (polyring_srcptr Rq, polyvec_ptr u, poly_ptr v, polyvec_t s1, int64_t w[16])
@@ -1103,12 +1100,11 @@ dec_w (polyring_srcptr Rq, polyvec_ptr u, poly_ptr v, polyvec_t s1, int64_t w[16
   poly_fromcrt (acc);
   for (unsigned i = 0; i < 16; i++)
     {
-      int64_t wv = cval (v, i) - cval (acc, i);
-      wv %= (int64_t)PQZ_Q;
-      if (wv > (int64_t)(PQZ_Q - 1) / 2)
-        wv -= (int64_t)PQZ_Q;
-      if (wv < -(int64_t)(PQZ_Q - 1) / 2)
-        wv += (int64_t)PQZ_Q;
+      /* review E: secret (u^T s); reduced and centred without a branch or a division */
+      int64_t wv;
+      ct_sdiv (cval (v, i) - cval (acc, i), PQZ_Q, &wv); /* wv = (v_i - acc_i) % q */
+      wv -= (int64_t)PQZ_Q & (((int64_t)(PQZ_Q - 1) / 2 - wv) >> 63);
+      wv += (int64_t)PQZ_Q & ((wv + (int64_t)(PQZ_Q - 1) / 2) >> 63);
       w[i] = wv;
     }
   poly_free (acc);
@@ -1154,33 +1150,36 @@ debit_witness (txst_t *T, const uint8_t *w, polyvec_t s1, const rel_t *R)
     dec_w (Rq, T->uT, T->vT, s1, wv);
     for (i = 0; i < 16; i++)
       {
-        int64_t m = (wv[i] >= 0 ? wv[i] + DELTA / 2 : wv[i] - DELTA / 2) / DELTA;
+        const int64_t sg = wv[i] >> 63; /* review E: round half away from zero without a branch */
+        int64_t r, m = ct_sdiv (wv[i] + (((DELTA / 2) ^ sg) - sg), DELTA, &r);
         M[i] = m;
         eT[i] = wv[i] - DELTA * m;
       }
   }
-  /* carries: c_i = (M_i + c_{i-1} - d'_i - sum_j d_j,i - f_i) / 16, exact, c_15 = 0 (so sum_j a_j + fee <= balance) */
+  /* carries: c_i = (M_i + c_{i-1} - d'_i - sum_j d_j,i - f_i) / 16, exact, c_15 = 0 (so sum_j a_j + fee <= balance).
+     review E: the checks run on secret values, so they are collected without a branch ('|', not '||') and only the
+     verdict (witness consistent, public: prove fails otherwise) is declassified; same verdict as the early returns */
   int64_t cprev = 0;
+  int bad = 0;
   for (i = 0; i < 16; i++)
     {
       int64_t s = M[i] + cprev - dp[i] - dsum[i] - (int64_t)digit (T->fee, i);
-      if (s % 16 != 0 && !CHEAT)
-        return 0;
-      c[i] = s / 16;
+      bad |= (s & 15) != 0;                /* s % 16 != 0 */
+      c[i] = (s + ((s >> 63) & 15)) >> 4; /* s / 16 (truncated), no division (review E) */
       cprev = c[i];
     }
-  if (c[15] != 0 && !CHEAT)
-    return 0;
+  bad |= c[15] != 0;
   /* ranges (the proof shows them; an honest prover checks first) */
   for (i = 0; i < 16; i++)
     {
-      int bad = dp[i] > 15 || M[i] < 0 || M[i] >= (1 << 14) || c[i] < -64 || c[i] >= 1984 || eT[i] < -(1 << 24)
-                || eT[i] >= (1 << 24);
+      bad |= (dp[i] > 15) | (M[i] < 0) | (M[i] >= (1 << 14)) | (c[i] < -64) | (c[i] >= 1984) | (eT[i] < -(1 << 24))
+             | (eT[i] >= (1 << 24));
       for (j = 0; j < L; j++)
         bad |= d[j][i] > 15;
-      if (bad && !CHEAT)
-        return 0;
     }
+  PQZ_CT_PUBLIC (&bad, sizeof bad);
+  if (bad && !CHEAT)
+    return 0;
   for (i = 0; i < 16; i++)
     for (b = 0; b < 25; b++)
       {
@@ -1209,38 +1208,62 @@ dr_witness (txst_t *T, const uint8_t *w, polyvec_t s1)
   int64_t wv[16];
   wit_vec (s1, 32, wit_vec (s1, 0, w, 0), 1);
   dec_w (DR.P->tbox->ring, T->u[0], T->v[0], s1, wv);
+  int bad = 0;
   for (unsigned i = 0; i < 16; i++)
     {
       int64_t e = wv[i] - DELTA * digit (T->amount, i);
-      if (e < -(1 << 24) || e >= (1 << 24))
-        return 0; /* not an encryption of amount under this key */
+      bad |= (e < -(1 << 24)) | (e >= (1 << 24)); /* review E: no branch on the secret e */
       for (unsigned b = 0; b < 25; b++)
         set_c (polyvec_get_elem (s1, 64 + (25 * i + b) / 64), (25 * i + b) % 64, ((e + (1 << 24)) >> b) & 1);
     }
-  return 1;
+  PQZ_CT_PUBLIC (&bad, sizeof bad); /* review E: the verdict is public (prove fails) */
+  return !bad; /* bad: not an encryption of amount under this key */
+}
+
+/* the exact statement length of relation R */
+static size_t
+stmt_bytes (const rel_t *R)
+{
+  switch (R->code)
+    {
+    case PQZ_OP_REGISTER:
+      return PQZ_REG_STMT_BYTES;
+    case PQZ_OP_TRANSFER:
+      return PQZ_TX_STMT_BYTES;
+    case PQZ_REL_TX0:
+      return PQZ_TX0_STMT_BYTES;
+    case PQZ_OP_BURN:
+      return PQZ_BURN_STMT_BYTES;
+    case PQZ_OP_DISCLOSE_SENDER:
+    case PQZ_OP_DISCLOSE_RECEIVER:
+      return PQZ_DISC_STMT_BYTES;
+    }
+  return PQZ_TXM_STMT_BYTES (R->legs, R->aud);
 }
 
 /* the statement of relation R (its length checked); 0 if the statement is malformed */
 static int
 build (sys_t *S, txst_t *T, const rel_t *R, const uint8_t *stmt, size_t stmt_len, polyvec_t pk)
 {
+  if (stmt_len != stmt_bytes (R))
+    return 0;
   switch (R->code)
     {
     case PQZ_OP_REGISTER:
-      return stmt_len == PQZ_REG_STMT_BYTES && build_reg (S, stmt, pk);
+      return build_reg (S, stmt, pk);
     case PQZ_OP_TRANSFER:
-      return stmt_len == PQZ_TX_STMT_BYTES && build_debit (S, T, stmt, &TX);
+      return build_debit (S, T, stmt, &TX);
     case PQZ_REL_TX0:
-      return stmt_len == PQZ_TX0_STMT_BYTES && build_debit (S, T, stmt, &TX0);
+      return build_debit (S, T, stmt, &TX0);
     case PQZ_OP_BURN:
-      return stmt_len == PQZ_BURN_STMT_BYTES && build_debit (S, T, stmt, &BURN);
+      return build_debit (S, T, stmt, &BURN);
     case PQZ_OP_DISCLOSE_SENDER:
-      return stmt_len == PQZ_DISC_STMT_BYTES && build_ds (S, T, stmt);
+      return build_ds (S, T, stmt);
     case PQZ_OP_DISCLOSE_RECEIVER:
-      return stmt_len == PQZ_DISC_STMT_BYTES && build_dr (S, T, stmt);
+      return build_dr (S, T, stmt);
     }
   if (R->op == PQZ_OP_TRANSFER_MULTI)
-    return stmt_len == PQZ_TXM_STMT_BYTES (R->legs, R->aud) && build_debit (S, T, stmt, (rel_t *)R);
+    return build_debit (S, T, stmt, (rel_t *)R);
   return 0;
 }
 
@@ -1261,27 +1284,35 @@ txm_rel (const uint8_t *stmt, size_t stmt_len)
   return NULL;
 }
 
-/* the relation of op; op 1 is R_TX0 with the 66,560-byte statement, else R_TX (whose builder then checks the length);
-   op 7 by its header words */
+/* the relation of op; op 1 is R_TX0 with the 66,560-byte statement, else R_TX; op 7 by its header words. NULL also
+   when the statement is not exactly that relation's length: every entry (prove, verify, verify_fast) checks the length
+   here, before the keys or tables are built and the statement hashed (review G-3 / H-4, fix A) */
 static rel_t *
 rel_of (uint8_t op, const uint8_t *stmt, size_t stmt_len)
 {
+  rel_t *R = NULL;
   switch (op)
     {
     case PQZ_OP_REGISTER:
-      return &REG;
+      R = &REG;
+      break;
     case PQZ_OP_TRANSFER:
-      return stmt_len == PQZ_TX0_STMT_BYTES ? &TX0 : &TX;
+      R = stmt_len == PQZ_TX0_STMT_BYTES ? &TX0 : &TX;
+      break;
     case PQZ_OP_BURN:
-      return &BURN;
+      R = &BURN;
+      break;
     case PQZ_OP_DISCLOSE_SENDER:
-      return &DS;
+      R = &DS;
+      break;
     case PQZ_OP_DISCLOSE_RECEIVER:
-      return &DR;
+      R = &DR;
+      break;
     case PQZ_OP_TRANSFER_MULTI:
-      return txm_rel (stmt, stmt_len);
+      R = txm_rel (stmt, stmt_len);
+      break;
     }
-  return NULL;
+  return R != NULL && stmt_len == stmt_bytes (R) ? R : NULL;
 }
 
 /* witness -> s1 and the l2 slack (upsilon); 0 if the witness is malformed, inconsistent or above a bound */
@@ -1373,7 +1404,7 @@ pqz_verify (uint8_t op, const uint8_t *stmt, size_t stmt_len, const uint8_t *pro
   int ok = 0;
   rel_t *R = rel_of (op, stmt, stmt_len);
 
-  if (!ready || R == NULL)
+  if (!ready || R == NULL || proof_len > PQZ_MAX_PROOF) /* before the keys and the hash (fix A) */
     return 0;
   pqz_err = PQZ_OK;
   pqz_arena_release (&base);
@@ -1406,7 +1437,7 @@ pqz_verify_fast (uint8_t op, const uint8_t *stmt, size_t stmt_len, const uint8_t
   int ok;
   rel_t *R = rel_of (op, stmt, stmt_len);
 
-  if (!ready || R == NULL)
+  if (!ready || R == NULL || proof_len > PQZ_MAX_PROOF) /* before the keys, the tables and the hash (fix A) */
     return 0;
   pqz_err = PQZ_OK;
   pqz_arena_release (&base);
@@ -1622,6 +1653,9 @@ pqz_test_mutate (uint8_t op, const uint8_t *proof, size_t len, unsigned kind, ui
       break;
     case 13: /* swap the two h polys */
       mut_swap (polyvec_get_elem (F.h, 0), polyvec_get_elem (F.h, 1));
+      break;
+    case 14: /* z3 coefficient +-1 (not clamped: a coefficient at Bz3 leaves it; the P6-FS binding test, sz/fs_bind.c; not in the fuzzers' % 14) */
+      p = polyvec_get_elem (F.z3, r1 % 4), set_c (p, c64, cval (p, c64) + sg);
       break;
     default: /* re-encode only */
       break;

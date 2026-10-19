@@ -3,11 +3,12 @@
 //! verdicts on every input, same keys / Enc / Dec. The API mirrors the C ABI `pqzl/src/pqz.h` (plan D3); every size,
 //! layout and return code is copied from it. No globals: a [`Ctx`] holds what the C core keeps in static storage.
 #![no_std]
-#![cfg_attr(not(feature = "c-oracle"), forbid(unsafe_code))]
-#![cfg_attr(feature = "c-oracle", deny(unsafe_code))] // only the dev-only C oracle module allows it
+#![cfg_attr(not(any(feature = "c-oracle", feature = "ctgrind")), forbid(unsafe_code))]
+// only the dev-only C oracle module and the test-only memcheck client requests (ct.rs, feature ctgrind) allow it
+#![cfg_attr(any(feature = "c-oracle", feature = "ctgrind"), deny(unsafe_code))]
 
 extern crate alloc;
-#[cfg(feature = "c-oracle")]
+#[cfg(any(feature = "c-oracle", feature = "test-hooks"))]
 extern crate std;
 
 use alloc::boxed::Box;
@@ -26,6 +27,11 @@ mod arith;
 pub mod bench; // pqzl/test/pqz_bench.c's setup and steps (src/bin/bench.rs, wasm/): test entry points, not API
 #[allow(dead_code)]
 mod coder;
+#[cfg(feature = "ctgrind")]
+#[doc(hidden)]
+pub mod ct; // the ctgrind check's `secret` (src/bin/ct.rs): test entry point, not API
+#[cfg(not(feature = "ctgrind"))]
+mod ct;
 #[allow(dead_code)]
 mod rand;
 mod keys;
@@ -65,10 +71,11 @@ pub const TXM_MAX_LEGS: usize = if cfg!(feature = "oversize") { 16 } else { 8 };
 /// takes; the C core keeps 4, CTR-PQZ-09). Feature `wasm-m8` (bench builds only) lifts it to `TXM_MAX_LEGS` (16 with
 /// `oversize`)
 pub const WASM_MAX_LEGS: usize = if cfg!(feature = "wasm-m8") { TXM_MAX_LEGS } else { 8 };
-/// keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v2") (CTR-PQZ-09)
+/// keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v3") (CTR-PQZ-09; v3: the Fiat-Shamir transcript absorbs z3, z4 and h,
+/// P6-FS, lazer#28; v2 is retired, forgeable)
 pub const PROOF_SYSTEM_ID: [u8; 32] = [
-    0x2e, 0x07, 0xe6, 0xed, 0x1f, 0xd3, 0x03, 0xa0, 0x8c, 0x89, 0xb3, 0xea, 0xb6, 0xe8, 0x42, 0x3f, 0xdf, 0xb8, 0xf3, 0x12,
-    0x02, 0x95, 0x8d, 0xd6, 0x82, 0xa0, 0x61, 0x93, 0x13, 0x79, 0x8c, 0x2f,
+    0x80, 0x79, 0xd6, 0x5b, 0x5e, 0x5c, 0x15, 0xe3, 0x30, 0xf7, 0xe6, 0x5c, 0x87, 0x57, 0x76, 0xdf, 0xc1, 0xb0, 0xf6, 0xc9,
+    0x3c, 0xed, 0x90, 0xc0, 0x45, 0xe8, 0x38, 0x65, 0xd1, 0x16, 0xba, 0xef,
 ];
 
 /// The C core's return codes (`pqz_rt.h`, D3).
@@ -85,14 +92,62 @@ pub enum Error {
 }
 
 /// Clears secret material where the C core calls `explicit_bzero` (the prover's seeds `wh` / `ex`, `pqz_dec`'s `w`;
-/// here also the witness vector s1 and the commitment randomness s2; the AES-CTR key schedule and the SHAKE sponges
-/// are cleared on drop, `rand::aes_ctr` / `rand::shake`, as C's `_aes256ctr_clear` / `_shake128_clear`). Best effort, not guaranteed: without unsafe
-/// code (no volatile write) and without a zeroize crate (D1) the compiler may still elide the stores; `black_box`
-/// on the cleared buffer makes that unlikely. Copies the compiler made earlier (moves, registers, spilled stack) and
-/// the other intermediate buffers of the prover are not cleared, as in C (STATUS Open 8).
+/// here also, through [`Wiped`], the prover's secret copies and mask seeds; the AES-CTR key schedule and the SHAKE
+/// sponges are cleared on drop, `rand::aes_ctr` / `rand::shake`, as C's `_aes256ctr_clear` / `_shake128_clear`).
+/// Platform boundary (review H-2, 2026-10-19): best effort, not guaranteed. It is plain stores plus `black_box`; a
+/// volatile write needs `unsafe` (forbidden outside `c-oracle`) and `zeroize` is a dependency (D1), so the compiler
+/// is not bound to keep the stores (`black_box` on the cleared buffer makes eliding them unlikely), and copies it made
+/// itself (moves of arrays and `Wiped` values, register spills, stack temporaries) are never cleared. Not cleared
+/// either, as in C (STATUS Open 8): the masks y / y3 / y4 and the z vectors built from them, `r_times`' products
+/// R·s3 / R'·s4, and the `coeffvec` copies inside the rejection step.
 pub(crate) fn wipe<T: Default>(x: &mut [T]) {
     x.iter_mut().for_each(|e| *e = T::default());
     core::hint::black_box(&*x);
+}
+
+/// A prover secret (a witness copy, a mask seed) that [`wipe`]s itself when dropped, so every exit, `?` included,
+/// clears it (review G-2 / H-2, fix B). Same best-effort boundary as `wipe`.
+pub(crate) struct Wiped<T: Wipe>(pub(crate) T);
+
+pub(crate) trait Wipe {
+    fn wipe(&mut self);
+}
+
+impl<const N: usize> Wipe for [u8; N] {
+    fn wipe(&mut self) {
+        wipe(&mut self[..]);
+    }
+}
+
+impl Wipe for alloc::vec::Vec<i64> {
+    fn wipe(&mut self) {
+        wipe(&mut self[..]);
+    }
+}
+
+impl Wipe for arith::polyvec::PolyVec {
+    fn wipe(&mut self) {
+        wipe(&mut self[..]);
+    }
+}
+
+impl<T: Wipe> Drop for Wiped<T> {
+    fn drop(&mut self) {
+        self.0.wipe();
+    }
+}
+
+impl<T: Wipe> core::ops::Deref for Wiped<T> {
+    type Target = T;
+    fn deref(&self) -> &T {
+        &self.0
+    }
+}
+
+impl<T: Wipe> core::ops::DerefMut for Wiped<T> {
+    fn deref_mut(&mut self) -> &mut T {
+        &mut self.0
+    }
 }
 
 /// What the C core keeps in static storage (the matrix A, each relation's ABDLOP keys, specialised-verifier tables),
@@ -252,9 +307,46 @@ pub fn dec(s: &[i8; 2048], ct: &[u8; CT_BYTES]) -> Result<([i64; 16], [i64; 16])
 }
 
 /// `pqz_test_mutate` (test hook): decode `proof` for relation `rel` (an op, 0x81 = R_TX0, or an R_TXM shape code),
-/// change one field (`kind` 0..13 with `r1` / `r2`; any other kind re-encodes only) and re-encode. `Ok(None)` where
+/// change one field (`kind` 0..14 with `r1` / `r2`; any other kind re-encodes only) and re-encode. `Ok(None)` where
 /// C returns 0: an unknown relation, a proof that does not decode, an encoding that does not fit 2 MAX_PROOF bytes.
 #[cfg(feature = "test-hooks")]
 pub fn test_mutate(rel: u8, proof: &[u8], kind: u32, r1: u64, r2: u64) -> Result<Option<Vec<u8>>, Error> {
     coder::test_mutate(rel, proof, kind, r1, r2)
+}
+
+/// The P6-FS trace (test hook, lazer#28; = the C core's `pqz_sz_trace_fn` kinds under `PQZ_SZ_TRACE`): which seed
+/// each Fiat–Shamir challenge of this thread's `prove` / `verify` / `verify_fast` calls was derived from, as
+/// `(kind, seed, dom)`: 2 / 3 = seed and dom of the z4 / z3 matrix V4 / V3, 5 = the seed of mu (and, in the generic
+/// code, of the final challenge), dom 0; the specialised verifier (`sv.rs`) records kind + 10. Returns the records since the last call and clears them. Off until this
+/// thread's first call (which returns nothing): other test-hooks builds (pqz-ffi `fuzz`, the fault hooks) never call
+/// it, so they never record.
+#[cfg(feature = "test-hooks")]
+pub fn fs_trace_take() -> Vec<fstrace::Rec> {
+    fstrace::T.with(|t| t.borrow_mut().replace(Vec::new()).unwrap_or_default())
+}
+
+#[cfg(feature = "test-hooks")]
+pub mod fstrace {
+    use alloc::vec::Vec;
+    use core::cell::RefCell;
+
+    /// (kind, seed, dom)
+    pub type Rec = (u8, [u8; 32], u64);
+
+    std::thread_local! {
+        /// None = off (see `fs_trace_take`)
+        pub(crate) static T: RefCell<Option<Vec<Rec>>> = const { RefCell::new(None) };
+    }
+
+    /// one record while on; dropped if the allocation fails (tests/memory.rs denies allocations: no abort here, and
+    /// fs_bind counts a missing record as a failure)
+    pub(crate) fn rec(kind: u8, seed: &[u8; 32], dom: u64) {
+        T.with(|t| {
+            if let Some(t) = t.borrow_mut().as_mut() {
+                if t.try_reserve(1).is_ok() {
+                    t.push((kind, *seed, dom));
+                }
+            }
+        });
+    }
 }

@@ -73,16 +73,16 @@ fn len(x: &Option<Vec<u8>>) -> Option<usize> {
     x.as_ref().map(Vec::len)
 }
 
-/// kinds 0..13 x 200 (r1, r2) seeds x every relation code: Rust = C. Within a seed the kinds chain (kind k mutates
+/// kinds 0..14 x 200 (r1, r2) seeds x every relation code: Rust = C. Within a seed the kinds chain (kind k mutates
 /// kind k - 1's output when there is one), so the decoders also meet what the mutations produce (long hints, large z).
 #[test]
 fn test_mutate_eq_c() {
     let mut g = Rnd(0x5EED_C0DE);
     for (code, proof) in proofs() {
-        let mut some = [0u32; 14];
+        let mut some = [0u32; 15];
         for s in 0..200 {
             let mut cur = proof.clone();
-            for kind in 0..14u32 {
+            for kind in 0..15u32 {
                 let (r1, r2) = (g.next(), g.next());
                 let r = test_mutate(code, &cur, kind, r1, r2).expect("Rust test_mutate error");
                 let c = c_test_mutate(code, &cur, kind, r1, r2);
@@ -145,8 +145,8 @@ fn malformed_eq_c() {
         }
         let (mut flips, mut foreign) = (0, 0); // refused
         for (name, x, must) in &v {
-            let r = test_mutate(*code, x, 14, 0, 0).expect("Rust test_mutate error");
-            let c = c_test_mutate(*code, x, 14, 0, 0);
+            let r = test_mutate(*code, x, 99, 0, 0).expect("Rust test_mutate error");
+            let c = c_test_mutate(*code, x, 99, 0, 0);
             assert!(r == c, "code {code:#x} {name}: Rust {:?} C {:?}", len(&r), len(&c));
             assert!(!must || c.is_none(), "code {code:#x} {name}: C accepts");
             flips += (c.is_none() && name.starts_with("bit flip")) as u32;
@@ -157,8 +157,8 @@ fn malformed_eq_c() {
         }
         println!("code {code:#04x}: refused {flips} of 64 bit flips, {foreign} of {} foreign proofs", all.len() - 1);
     }
-    assert_eq!(test_mutate(0x42, &all[0].1, 14, 0, 0), Ok(None), "unknown relation code");
-    assert_eq!(c_test_mutate(0x42, &all[0].1, 14, 0, 0), None);
+    assert_eq!(test_mutate(0x42, &all[0].1, 99, 0, 0), Ok(None), "unknown relation code");
+    assert_eq!(c_test_mutate(0x42, &all[0].1, 99, 0, 0), None);
 }
 
 /// `use_ghint (y, r)` and `make_ghint (z, r)` of every relation's dcompress: 2,000 inputs each in their domains

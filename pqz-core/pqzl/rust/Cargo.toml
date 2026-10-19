@@ -36,6 +36,8 @@ bench = []
 wasm-m8 = ["bench"]
 # dev / test only: the C core (../src, ../lazer, ../params) as the oracle, module `c_oracle`
 c-oracle = ["dep:cc"]
+# test only (x86-64): valgrind memcheck client requests for the constant-time check (src/bin/ct.rs, review fix E)
+ctgrind = ["bench"]
 
 [[bin]]
 name = "kat_dump"
@@ -48,6 +50,10 @@ required-features = ["test-hooks"]
 [[bin]]
 name = "bench"
 required-features = ["bench"]
+
+[[bin]]
+name = "ct"
+required-features = ["ctgrind"]
 
 [[test]]
 name = "oracle_smoke"
@@ -80,6 +86,10 @@ required-features = ["c-oracle", "test-hooks"]
 [[test]]
 name = "oracle_prove"
 required-features = ["c-oracle"]
+
+[[test]]
+name = "fs_bind"
+required-features = ["test-hooks"]
 
 [profile.release]
 debug = 1

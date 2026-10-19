@@ -1374,6 +1374,7 @@ void coder_enc_urandom3 (coder_state_t state, polyvec_t v, const int_t m,
 int coder_dec_urandom3 (coder_state_t state, polyvec_t v, const int_t m,
                         unsigned int mbits);
 void coder_enc_grandom3 (coder_state_t state, polyvec_t v, unsigned int log2o);
+size_t coder_grandom3_nbits (polyvec_t v, unsigned int log2o); /* PQZ (P6-FS) */
 void coder_enc_ghint3 (coder_state_t state, polyvec_t ghint);
 void coder_dec_grandom3 (coder_state_t state, polyvec_t v, unsigned int log2o);
 void coder_dec_ghint3 (coder_state_t state, polyvec_t ghint);
@@ -1397,6 +1398,8 @@ void coder_dec_urandom6 (coder_state_t state, spolyvec_t v, const int_t m,
 int rej_standard (rng_state_t state, const intvec_t z, const intvec_t v,
                   const int_t scM, const int_t sigma2);
 int rej_bimodal (rng_state_t state, const intvec_t z, const intvec_t v,
+                 const int_t scM, const int_t sigma2);
+int rej_onetime (rng_state_t state, const intvec_t z, const intvec_t v,
                  const int_t scM, const int_t sigma2);
 
 static inline unsigned int dcompress_get_d (const dcompress_params_t params);
@@ -2181,7 +2184,7 @@ static inline void
 limbs_cnd_select (limb_t *r, limb_t *a, limb_t *b, unsigned int nlimbs,
                   limb_t c)
 {
-  const limb_t mask1 = (limb_t)(-((long long)c)); /* c == 1 : mask1 == ~0 */
+  const limb_t mask1 = pqz_ct_barrier ((limb_t)(-((long long)c))); /* c == 1 : mask1 == ~0 (PQZ: barrier, review E) */
   const limb_t mask2 = ~mask1;                    /* c == 1 : mask2 == 0 */
   unsigned int i;
 
@@ -2361,8 +2364,8 @@ int_sgn (const int_t a)
 static inline void
 int_mul_sgn_self (int_t r, int sgn)
 {
-  ASSERT_ERR (sgn == 1 || sgn == -1);
-
+  /* PQZ (review E): no ASSERT_ERR (sgn == 1 || sgn == -1): sgn may be secret (beta3 / beta4 of lnp-tbox.c, 1 - 2 bit
+     by construction), and the assert was a branch on it */
   r->neg = _sign2neg (int_sgn (r) * sgn);
 }
 
@@ -2587,32 +2590,37 @@ int_add (int_t r, const int_t a, const int_t b)
   r->neg = limbs_from_twoscom (r->limbs, r->nlimbs);
 }
 #else
+/* PQZ (review E, constant time): the upstream sign-magnitude result with no branch on the operands: |a| + |b| and
+   |a| - |b| are both formed and one is selected with masks. Same sign: |a| + |b|, sign a. Else |a| - |b|; on a
+   borrow it is negated if its top bit is set (upstream's limbs_from_twoscom) and gets b's sign, else a's sign. */
 static inline void
-int_add (int_t r, const int_t a, const int_t b)
+pqz_int_addsub (int_t r, const int_t a, const int_t b, limb_t bneg)
 {
-  limb_t c;
+  const unsigned int n = r->nlimbs;
+  limb_t s[n], d[n], nd[n];
+  const limb_t aneg = a->neg;
+  const limb_t diff = pqz_ct_barrier (0 - (1 ^ limb_eq_ct (aneg, bneg)));
+  unsigned char cy = 1;
+  unsigned int i;
 
   ASSERT_ERR (a->nlimbs == b->nlimbs);
   ASSERT_ERR (r->nlimbs == a->nlimbs);
 
-  if (a->neg == b->neg)
-    {
-      limbs_add (r->limbs, a->limbs, b->limbs, 0, r->nlimbs);
-      r->neg = a->neg;
-    }
-  else
-    {
-      c = limbs_sub (r->limbs, a->limbs, b->limbs, 0, r->nlimbs);
-      if (c)
-        {
-          limbs_from_twoscom (r->limbs, r->nlimbs);
-          r->neg = b->neg;
-        }
-      else
-        {
-          r->neg = a->neg;
-        }
-    }
+  limbs_add (s, a->limbs, b->limbs, 0, n);
+  const limb_t c = limbs_sub (d, a->limbs, b->limbs, 0, n);
+  for (i = 0; i < n; i++)
+    cy = _addcarry_u64_ (cy, ~d[i], 0, (unsigned long long *)&nd[i]);
+  const limb_t borrow = pqz_ct_barrier (0 - c) & diff;
+  const limb_t flip = borrow & (0 - (d[n - 1] >> (NBITS_LIMB - 1)));
+  for (i = 0; i < n; i++)
+    r->limbs[i] = (s[i] & ~diff) | (nd[i] & flip) | (d[i] & diff & ~flip);
+  r->neg = (bneg & borrow) | (aneg & ~borrow);
+}
+
+static inline void
+int_add (int_t r, const int_t a, const int_t b)
+{
+  pqz_int_addsub (r, a, b, b->neg);
 }
 #endif
 
@@ -2653,32 +2661,11 @@ int_sub (int_t r, const int_t a, const int_t b)
   r->neg = limbs_from_twoscom (r->limbs, r->nlimbs);
 }
 #else
+/* PQZ (review E): a - b = a + (-b), as upstream's branches (sign !b->neg on a borrow), constant time */
 static inline void
 int_sub (int_t r, const int_t a, const int_t b)
 {
-  limb_t c;
-
-  ASSERT_ERR (a->nlimbs == b->nlimbs);
-  ASSERT_ERR (r->nlimbs == a->nlimbs);
-
-  if (a->neg != b->neg)
-    {
-      limbs_add (r->limbs, a->limbs, b->limbs, 0, r->nlimbs);
-      r->neg = a->neg;
-    }
-  else
-    {
-      c = limbs_sub (r->limbs, a->limbs, b->limbs, 0, r->nlimbs);
-      if (c)
-        {
-          limbs_from_twoscom (r->limbs, r->nlimbs);
-          r->neg = !b->neg;
-        }
-      else
-        {
-          r->neg = a->neg;
-        }
-    }
+  pqz_int_addsub (r, a, b, (limb_t)(!b->neg));
 }
 #endif
 
@@ -2712,16 +2699,10 @@ int_redc (int_t r, const int_t a, const int_t m)
 
   limbs_sub (tmp, m->limbs, a->limbs, 0, m->nlimbs);
 
-  b = limbs_lt (tmp, a->limbs, m->nlimbs);
-  if (b)
-    {
-      limbs_cpy (r->limbs, tmp, m->nlimbs);
-    }
-  else
-    {
-      limbs_cpy (r->limbs, a->limbs, m->nlimbs);
-    }
+  /* PQZ (review E): constant time (upstream: limbs_lt and a branch), as int_redc_ct; r may alias a */
+  b = limbs_lt_ct (tmp, a->limbs, m->nlimbs);
   r->neg = b ^ a->neg;
+  limbs_cnd_select (r->limbs, (limb_t *)a->limbs, tmp, m->nlimbs, b);
 }
 
 /* [-(m-1),...,(m-1)] -> [-(m-1)/2,...,(m-1)/2] */
@@ -3525,6 +3506,47 @@ static inline poly_srcptr
 polyvec_get_elem_src (const polyvec_t a, unsigned int elem)
 {
   return polyvec_get_elem (a, elem);
+}
+
+/* PQZ (review E): PQZ_CT_PUBLIC (pqz_rt.h) over an intvec / poly / polyvec: the prover's secret-derived values that
+   are public by design (proof fields, transcript messages), marked where they become public; no-ops unless
+   PQZ_CTGRIND (test/ct.sh) */
+static inline void
+pqz_ct_public_intvec (const intvec_t a)
+{
+#ifdef PQZ_CTGRIND
+  for (unsigned int i = 0; i < a->nelems; i++)
+    {
+      int_srcptr e = intvec_get_elem_src (a, i);
+      PQZ_CT_PUBLIC (e->limbs, e->nlimbs * sizeof (limb_t));
+      PQZ_CT_PUBLIC (&e->neg, sizeof (e->neg));
+    }
+#else
+  (void)a;
+#endif
+}
+
+static inline void
+pqz_ct_public_poly (const poly_t a)
+{
+#ifdef PQZ_CTGRIND
+  pqz_ct_public_intvec (a->coeffs);
+  if (a->crtrep != NULL)
+    PQZ_CT_PUBLIC (a->crtrep, _sizeof_crtrep_data (a->ring));
+#else
+  (void)a;
+#endif
+}
+
+static inline void
+pqz_ct_public_polyvec (const polyvec_t a)
+{
+#ifdef PQZ_CTGRIND
+  for (unsigned int i = 0; i < a->nelems; i++)
+    pqz_ct_public_poly (polyvec_get_elem (a, i));
+#else
+  (void)a;
+#endif
 }
 
 static inline void

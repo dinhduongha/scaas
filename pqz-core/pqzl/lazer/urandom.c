@@ -67,13 +67,17 @@ _urandom_bnd (intvec_t r, const int_t lo, const int_t hi,
 
     int_set_i64 (_r, 0);
 
+    limb_t again;
     do
       {
         _rng_urandom (state, ptr,
                       (NBITS_LIMB / 8) * top + CEIL (nbits_top, 8));
         _r->limbs[top] &= mask;
+        /* PQZ (review E): uniform rejection sampling, the try count is independent of the accepted value: public */
+        again = limbs_gt_ct (_r->limbs, tmp->limbs, nlimbs);
+        PQZ_CT_PUBLIC (&again, sizeof (again));
       }
-    while (limbs_gt_ct (_r->limbs, tmp->limbs, nlimbs));
+    while (again);
 
     int_add (_r, _r, l);
   }
@@ -115,10 +119,13 @@ _urandom_i64 (int64_t *vec, unsigned int nelems, int64_t mod,
 
               tmp |= (((int64_t)((out[q] & (1 << r)) >> r)) << j);
             }
-          if (((((mod - 1) - tmp) >> 63) & 1) == 0)
-            {
-              ASSERT_ERR (tmp < mod);
-              ASSERT_ERR (tmp >= 0);
+          /* PQZ (review E): uniform rejection sampling, the accept bit (and so the slot k) is independent of the
+             accepted values: public */
+          int acc = ((((mod - 1) - tmp) >> 63) & 1) == 0;
+          PQZ_CT_PUBLIC (&acc, sizeof (acc));
+          if (acc)
+            { /* PQZ (review E): upstream's ASSERT_ERR (tmp < mod), (tmp >= 0) dropped: branches on the secret value,
+                 and true by the test above and by construction (log2mod < 60 bits) */
               vec[k] = tmp;
               k++;
             }

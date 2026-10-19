@@ -310,6 +310,24 @@ impl Bench {
         r.map(|_| ())
     }
 
+    /// the ctgrind check (src/bin/ct.rs): `prove` with the witness and rnd32 marked secret for memcheck, both and
+    /// the proof public again after it
+    #[cfg(feature = "ctgrind")]
+    pub fn prove_ct(&mut self, rel: usize, seed: u32) -> Result<(), Error> {
+        let rnd32: [u8; 32] = core::array::from_fn(|i| seed.wrapping_mul(self.seedmul[rel]).wrapping_add(i as u32) as u8);
+        crate::ct::secret(&self.wit[rel][..]);
+        crate::ct::secret(&rnd32);
+        let r = self.ctx.prove(self.ops[rel], &self.stmt[rel], &self.wit[rel], &rnd32);
+        crate::ct::public(&self.wit[rel][..]);
+        crate::ct::public(&rnd32);
+        crate::ct::public(&r);
+        if let Ok(p) = &r {
+            crate::ct::public(&p[..]);
+        }
+        self.proofs[rel] = r.as_ref().map_or(Vec::new(), Clone::clone);
+        r.map(|_| ())
+    }
+
     pub fn len(&self, rel: usize) -> usize {
         self.proofs[rel].len()
     }

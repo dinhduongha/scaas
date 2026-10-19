@@ -8,7 +8,7 @@ import {UAMldsaVerifier} from "../../../src/ua/MlDsa.sol";
 import {UAPqzVerifier} from "../../../src/pqz/UAPqzVerifier.sol";
 
 bytes32 constant PQZ_UID = 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464; // chain 7622's genesis
-bytes32 constant PQZL_ID = 0x2e07e6ed1fd303a08c89b3eab6e8423fdfb8f31202958dd682a0619313798c2f;
+bytes32 constant PQZL_ID = 0x8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef; // v3 (lazer#28 fix); v2 retired
 bytes32 constant PQZH_ID = 0x0a47a7689250ba178a52ad5972cdd9153358c022cb694c08d2389e82de2fead4;
 
 /// @notice A gen-1 `UARegistry` as on chain 7622 (P6g plan D15): `mldsa65` on its precompile candidate (mocked: every

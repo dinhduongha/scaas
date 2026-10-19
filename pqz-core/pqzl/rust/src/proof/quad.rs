@@ -10,10 +10,10 @@ use crate::arith::spoly::Sparse;
 use crate::coder::ProofParts;
 use crate::params::Abdlop;
 use crate::rand::grandom::polyvec_grandom;
-use crate::rand::rejection::{rej_bimodal, rej_standard, REJ_MAX};
+use crate::rand::rejection::{rej_onetime, rej_standard, REJ_MAX};
 use crate::rand::rng::Rng;
 use crate::rand::urandom::polyvec_urandom;
-use crate::Error;
+use crate::{Error, Wiped};
 
 /// `_schwartz_zippel_poly`: (R2, r1, r0) = sum_i mu_i (R2_i, r1_i, r0_i), mu = N uniform polys from (hash, 0)
 fn schwartz_zippel_poly(hash: &[u8; 32], eqs: &mut [Eq], p: &Abdlop) -> Result<(Sparse, Sparse, Poly), Error> {
@@ -219,10 +219,11 @@ fn prove(
     let m2r = m2 - km;
     let (q, log2q) = (&p.ring.q, p.ring.log2q);
     let (mut y1, mut y2) = (PolyVec::new(m1)?, PolyVec::new(m2)?);
-    let (mut cs1, mut cs2) = (PolyVec::new(m1)?, PolyVec::new(m2)?);
+    let (mut cs1, mut cs2) = (Wiped(PolyVec::new(m1)?), Wiped(PolyVec::new(m2)?));
     let n = 2 * (m1 + l);
     let (mut r2y, mut tmp, mut tmp2) = (PolyVec::new(n)?, PolyVec::new(n)?, PolyVec::new(l)?);
-    let (mut y, mut s) = (PolyVec::new(n)?, PolyVec::new(n)?);
+    // s, the mask seed and c s1, c s2 are cleared on every exit (Wiped, fix B)
+    let (mut y, mut s) = (PolyVec::new(n)?, Wiped(PolyVec::new(n)?));
     let (mut wv, mut w1, mut w0) = (PolyVec::new(km)?, PolyVec::new(km)?, PolyVec::new(km)?);
 
     // s = (<s1>, <m>)
@@ -234,8 +235,8 @@ fn prove(
     }
 
     let mut st = Rng::new(seed, 0);
-    let mut yseed = [0u8; 32];
-    st.urandom(&mut yseed)?;
+    let mut yseed = Wiped([0u8; 32]);
+    st.urandom(&mut *yseed)?;
     let mut dom = 0u32;
     let mut tries = 0;
     let cseed = loop {
@@ -292,6 +293,11 @@ fn prove(
         polyvec::redp_self(&mut t);
         let mut v = Poly::mod_(&mut v);
         let mut v = Poly::redp(&mut v);
+        // review E: this try's messages are public by design (hiding commitments if rejected); marked before the
+        // coder, so the coder itself stays checked
+        crate::ct::public_pv(&t);
+        crate::ct::public(&v);
+        crate::ct::public_pv(&*w1);
         let mut enc = Coder::new();
         enc.urandom(&mut t, q, log2q)?;
         enc.urandom(core::slice::from_mut(&mut v), q, log2q)?;
@@ -307,7 +313,9 @@ fn prove(
         if p.rej1 != 0 {
             polyvec::fromcrt(&mut *y1);
             polyvec::fromcrt(&mut *cs1);
-            if rej_standard(&mut st, &coeffvec(&y1)?, &coeffvec(&cs1)?, &p.scm1, &p.stdev1sqr)? {
+            let rej = rej_standard(&mut st, &coeffvec(&y1)?, &coeffvec(&cs1)?, &p.scm1, &p.stdev1sqr)?;
+            let rej = crate::ct::verdict(rej); // review E: the verdict is public
+            if rej {
                 continue;
             }
         }
@@ -315,19 +323,23 @@ fn prove(
             polyvec::fromcrt(&mut *y2);
             polyvec::fromcrt(&mut *cs2);
             let (z2, c2) = (coeffvec(&y2)?, coeffvec(&cs2)?);
-            // rej2 is 1 or 2 (C's ASSERT; 2 in every relation, with stdev1sqr as C passes it)
+            // rej2 is 1 or 2 (C's ASSERT; 2 in every relation): 2 is Rej1 with sigma2 (P6-D2; upstream rej_bimodal with
+            // stdev1sqr, review D-2)
             let rej = if p.rej2 == 1 {
                 rej_standard(&mut st, &z2, &c2, &p.scm2, &p.stdev2sqr)?
             } else {
-                rej_bimodal(&mut st, &z2, &c2, &p.scm2, &p.stdev1sqr)?
+                rej_onetime(&mut st, &z2, &c2, &p.scm2, &p.stdev2sqr)?
             };
+            let rej = crate::ct::verdict(rej); // review E: the verdict is public
             if rej {
                 continue;
             }
         }
         polyvec::subscale2(&mut y2.sub(m2r, km, 1), &mut f.c, &mut **t_a2, false);
         polyvec::sub_assign(&mut y2.sub(m2r, km, 1), &mut *w0, false);
-        if polyvec::l2sqr(&mut *y2).gt(&p.bsqr) {
+        let rej = polyvec::l2sqr(&mut *y2).gt(&p.bsqr);
+        let rej = crate::ct::verdict(rej); // review E: the verdict is public
+        if rej {
             continue;
         }
         break cseed;
@@ -338,8 +350,11 @@ fn prove(
     polyvec::sub_assign(&mut *w1, &mut y2.sub(m2r, km, 1), false);
     polyvec::set(&mut *f.z1, &*y1);
     polyvec::set(&mut *f.z21, &y2.sub(0, m2r, 1));
+    crate::ct::public(&f.z1[..]); // review E: accepted, proof fields
+    crate::ct::public(&f.z21[..]);
     polyvec::mod_self(&mut *w1);
     polyvec::redc_self(&mut *w1);
     polyvec::make_ghint(&mut *f.hint, &mut y2.sub(m2r, km, 1), &mut *w1, dc);
+    crate::ct::public(&f.hint[..]); // review E: the hint, a proof field
     Ok(())
 }

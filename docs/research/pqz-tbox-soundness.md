@@ -6,7 +6,10 @@ Written 2026-10-13 (TODO P6-SZ). Finding, fix and evidence for the first of two 
 `tbox` that came out of the PQZL verifier work. The second (exact-ℓ2 equations sharing one domain) is
 `pqz-l2-domain.md`. Upstream issue: [lazer-crypto/lazer#24](https://github.com/lazer-crypto/lazer/issues/24),
 confirmed by the LaZer maintainers. Fixed in `pqz-core` under `proofSystemId` v2 (fix `f1bae83`, merged with the
-second fix in `5361946`; version bump and regression check merged in `98695de`). **No decision is recorded here.**
+second fix in `5361946`; version bump and regression check merged in `98695de`). §8 (added 2026-10-19) covers a
+third `tbox` finding of a different kind, prover messages missing from the Fiat–Shamir transcript
+([lazer#28](https://github.com/lazer-crypto/lazer/issues/28), P6-FS, `proofSystemId` v3). **No decision is recorded
+here.**
 
 **[measured]** marks a number from a run (pointed to). **[code]** marks a statement read in the source at the given
 lines. **[estimate]** marks a number computed from counts. **[inference]** marks a conclusion drawn here.
@@ -168,3 +171,141 @@ times moved within the host's noise (`pqz-core/STATUS.md`, v2 section) [measured
   `pqz-core/pqzl/sv/check_sv_fixes.sh`.
 - Runs: `pqz-core/research/pqzl-measure/runs/v2-*`, `v2full-*` (incl. `v2full-sz-trace.txt`).
 - Rerun: `cd pqz-core && ../scripts/capped sh -c './build.sh native && ./check_tbox_fixes.sh'`.
+
+## 8. lazer#28: prover messages absorbed after the challenges that check them (P6-FS, v3)
+
+Added 2026-10-19 (plan `docs/superpowers/plans/2026-10-19-pqzl-fs3.md`, Task 8). Found by the whole-code review of
+2026-10-19 (`pqz-core/research/code-review-2026-10-19/`, findings C-F1 and D-1), filed upstream as
+[lazer-crypto/lazer#28](https://github.com/lazer-crypto/lazer/issues/28). Fixed under `proofSystemId` v3: C `6d83208`
+(review fix `2789314`), Rust `420f409`; binding tests `c5b2c99` / `c0bd890`. Unlike §1–§7 this is not a challenge
+that is too weak but one that comes too early.
+
+### 8.1 What was not absorbed
+
+In a Fiat–Shamir proof each challenge is a hash of everything the prover has sent before it. LaZer's `tbox` derives
+two challenges from a hash that does not yet contain the message the challenge checks [code]:
+
+| Prover message | Challenge that checks it | v2 (LaZer `3330e48`, upstream `b958e24`) | v3 |
+|---|---|---|---|
+| `z3`, `z4` (approximate-range responses, `z = y + β·R·s`, 256 Z_q coefficients each) | V3, V4: λ × 256 matrices that fold the 256 equations of each into λ = 4 | from `hash0 = cseed`, the hash of `ty3 ‖ ty4 ‖ tbeta`, fixed before `z3` / `z4` exist; `z3` / `z4` are never absorbed, not in the tg round and not in the final round | from `hz = SHAKE128(cseed ‖ grandom3(z3) ‖ grandom3(z4))` |
+| `h` (the evaluation step's garbage polynomials, `h_i = g_i + ` the accumulated evaluation `i`) | `μ`, which folds all quadratic relations into one, and the final challenge `c` | `μ` (`lnp-quad-many.c`) and `c = H(hash ‖ t ‖ v ‖ w1)` (`lnp-quad.c`) from `hash1 = H(… ‖ tg)`, which `h` does not enter | from `hash2 = SHAKE128(hash1 ‖ urandom3(h))` |
+
+Upstream sites [code]: `lnp-tbox.c`
+[L441–L444](https://github.com/lazer-crypto/lazer/blob/b958e247a2fdb9593b3c25c9603c6c5305c19420/src/lnp-tbox.c#L441-L444),
+[L673–L708](https://github.com/lazer-crypto/lazer/blob/b958e247a2fdb9593b3c25c9603c6c5305c19420/src/lnp-tbox.c#L673-L708),
+[L748](https://github.com/lazer-crypto/lazer/blob/b958e247a2fdb9593b3c25c9603c6c5305c19420/src/lnp-tbox.c#L748);
+`lnp-quad-many.c`
+[L34](https://github.com/lazer-crypto/lazer/blob/b958e247a2fdb9593b3c25c9603c6c5305c19420/src/lnp-quad-many.c#L34);
+`lnp-quad.c`
+[L458–L472](https://github.com/lazer-crypto/lazer/blob/b958e247a2fdb9593b3c25c9603c6c5305c19420/src/lnp-quad.c#L458-L472).
+The fork had the same order in all four implementations (C generic `lazer/lnp-tbox.c`, C specialised `src/pqz_sv.c`,
+Rust `rust/src/proof/tbox.rs`, Rust `rust/src/sv.rs`) and in both provers; the P6-SZ, P6-L2 and P6-Z21 fixes do not
+touch these rounds. It also contradicts the spec's own rule that each prover message is absorbed
+(pq-zero-knowledge.md §5, "Transcripts") [code].
+
+### 8.2 Why it breaks soundness
+
+A Schwartz–Zippel check (a random linear combination of equations) is sound because the prover fixes the values
+before the random coefficients exist: a nonzero error survives a uniform row of Z_q coefficients except with
+probability 1/q. The Fiat–Shamir transform keeps that order only if the challenge is hashed from a transcript that
+already contains the values. When the message enters after the challenge, or never, the prover computes the challenge
+first and then chooses the message as a function of it; the probability argument does not apply, and what remains
+for the prover is a linear system it can solve, not a guess [inference].
+
+- **`z3`, `z4` before V3, V4.** In LNP22's approximate range proof (the Johnson–Lindenstrauss projection) the prover
+  commits to `y` and `β`, receives `R`, sends `z = y + β·R·s`, and the verifier checks that `z` is short and that it
+  is consistent with the commitments. The `tbox` checks consistency only through the λ = 4 rows of V. With V known
+  first, a prover has to match the honest `z` on those 4 combinations, not on all 256 coordinates, and 4 linear
+  conditions mod q leave room for a short `z` even when the committed `s3` / `s4` is far out of range. The
+  approximate bound on `s3` is what lets the exact-ℓ2 proofs conclude `‖e‖² + ‖υ‖² = B²` over Z rather than only
+  mod q, so without it the per-block noise bounds of the encryption relations (pq-zero-knowledge.md §4.3) are no
+  longer enforced (review D-1) [inference].
+- **`h` before `μ`.** LNP22 (§4.4, Fig. 8; aggregation of relations with vanishing constant coefficient) has the
+  prover send `h` and then receive `μ`. The verifier's only direct check on `h` is that two coefficients are zero.
+  With `μ` known first, the one combined quadratic relation that ties the witness to the statement can be satisfied
+  through `h`, so it constrains nothing that sits inside it: the linear rows of every relation, the encryption and
+  balance rows, the binary, range, υ and exact-ℓ2 equations. Every PQZL statement form is affected (review C-F1)
+  [inference].
+
+Review C estimates the second gap alone as a forgery of any PQZL statement for about one proof's work. No forging
+tool was written: the owner replaced the earlier "cheating-prover proof of concept first" with binding tests that only
+observe which bytes seed which challenge (§8.4). Severity: P0, against the ≈ 2^-84 of §3 [inference].
+
+### 8.3 The fix
+
+Two rounds, the same pattern as LaZer's other rounds (`hash ← SHAKE128(hash ‖ coder encoding)`), in the prover, the
+generic verifier and the specialised verifier, C and Rust (`PQZ (P6-FS, lazer#28)` comments) [code]:
+
+1. **hz.** After `_lnp_tbox_compute_z34` (prover) and after a successful `_lnp_tbox_check_z34` (verifier, so the norm
+   checks run first): `hz = SHAKE128(cseed ‖ enc)`, `enc` one coder session of `coder_enc_grandom3 (z3, log2stdev3)`
+   and `coder_enc_grandom3 (z4, log2stdev4)` over centred copies (`fromcrt`, `mod`, `redc`), the proof's own encoding
+   (`pqz_rel.c` `encproof`). V3 / V4 and the tg round chain from `hz`.
+2. **hash2.** Right before `lnp_quad_many_prove` / `_verify`: `hash2 = SHAKE128(hash1 ‖ urandom3(h mod q ∈ [0, q),
+   q, 42))`, h's proof encoding, on a copy reduced with `redp`. `μ` and `c` take `hash2` with no edit to the quad
+   files; the specialised verifiers draw `μ` from `PRG(hash2)` and run the final round over `hash2`. The γ challenges
+   stay on `hash1`: `h` is computed from them, so they must come before it.
+
+**Why R and R' must stay on `cseed`.** `R` / `R'` are the JL challenge of the range proof and V is the check of its
+response; LNP22 orders them commitment (`ty`, `tbeta`) → `R` → `z` → V. The prover builds `z3 = y3 + β3·R·s3` from
+`R`, so `R` cannot depend on `hz` (it would depend on `z3`, which depends on `R`), and it must still follow the
+commitment, which `cseed` does. Upstream drew V and the rows of `R` / `R'` from one seed in
+`__schwartz_zippel_accumulate_z3` / `_z4`; v3 gives those functions two seeds, V's (`hz`) and `rseed` (`cseed`), and
+the specialised verifiers fold the JL rows on `cseed` and V3 / V4 on `hz`. That split was the one deviation from the
+plan's "no further edits" (decision F1) [code].
+
+**Encoding and buffers.** Absorbing the proof encoding makes the round injective (the grandom decoding is bijective,
+with one pad bit) and needs no labels: `h`'s length is fixed per relation and the z encoding is self-delimiting.
+LaZer's coder writes without bounds checks, so the generic code sizes its buffer exactly (`coder_grandom3_nbits`,
+moved from `pqz_rel.c` to `lazer/coder.c`), the C specialised verifier sizes its transcript buffer from `proof_len`
+(z3 ‖ z4 is a bit range of the proof, and the buffer exists before the norm checks), and Rust grows a `Vec` with
+`try_reserve` [code].
+
+**Transcript change.** v2 and v3 proofs do not verify against each other; the proof layout, the parameters and the
+relations are unchanged. PQZL `proofSystemId` v3 = `keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v3")` =
+`0x8079d65b…16baef` (pq-zero-knowledge.md §8, CTR-PQZ-09; decisions.md CTR-PQZ-09, F1–F10). The same bump carries two
+prover-side zero-knowledge fixes from review D (D-2, the z2 rejection; D-3, the β sign bits), implemented in the
+plan's Task 4 (`c57381b`); they change honest proofs and no verifier rule, and their figures are in
+pq-zero-knowledge.md §8 ("Prover-side zero-knowledge fixes") and decisions.md F7 / F8.
+
+### 8.4 Evidence
+
+- **Binding test** `pqz-core/pqzl/sz/fs_bind.c`, the fourth check of `check_tbox_fixes.sh` (`sz/README.md`), and
+  `pqz-core/pqzl/rust/tests/fs_bind.rs`: one honest `R_REG` proof and three re-encodings with `h`, `z3` or `z4`
+  changed by one coefficient; in `verify` and `verify_fast` the V3 / V4 seeds must differ for the z3 and z4 changes and
+  the `μ` seed for the h change (12 checks; a missing seed record fails). Before the fix 10 of 12 fail in both cores,
+  every checked seed equal to the honest one (`pqz-core/pqzl/runs/fs1-before.txt`, `fs1-review-fix.txt`,
+  `pqz-core/pqzl/rust/runs/fs1-test.txt`); after it 0 of 12 (`pqz-core/pqzl/runs/fs2-tbox.txt`,
+  `pqz-core/pqzl/rust/runs/fs3-test.txt`) [measured].
+- **Specialised = generic**: `sv/check_sv_fixes.sh` ok; `sv/diff.sh fs2` 4,328 + 2,158 cases, 0 mismatches
+  (`pqz-core/pqzl/runs/fs2-sv-*`) [measured].
+- **Honest proofs** (`relfix.sh fs2`, `pqz-core/research/pqzl-measure/runs/fs2-*`): `fails 0` native, wasm32 and
+  ASan + UBSan, KAT 19/19, native = wasm32; every `proofs_fnv` changed (`R_REG` `8bd69f2d` → `b76964d5`, bench
+  `5 5 63`) [measured].
+- **C = Rust**: the Rust bench gives the same `proofs_fnv`, and `oracle_prove` the same proof bytes on all 14 relation
+  codes (`41c708b`) [measured].
+
+These are the Task 2 / 3 values. The final v3 code (Tasks 4–5, with D-2 / D-3) was checked again [measured]:
+
+- `relfix.sh fs4` (`pqz-core/research/pqzl-measure/runs/fs4-*`): `check_tbox_fixes` ok with P6-FS 0 failed checks of
+  12, KAT 19/19, `fails 0` native, wasm32 and ASan + UBSan, native = wasm32; final `proofs_fnv` (bench `5 5 63`)
+  `R_REG` `b935013d`, the six forms and the eight op 7 shapes in `pqz-core/STATUS.md` (section "PQZL v3");
+- Rust (`pqz-core/pqzl/rust/runs/fs5-*`): `fs_bind` 0 of 12, every bench `proofs_fnv` = the C core's, native =
+  wasm32 on 387 vector digest lines, `oracle_prove` Rust = C on all 14 relation codes against the v3 vectors;
+- the vectors regenerated under v3 (`8af584b`, `pqz-core/ffi/vectors/runs/fs5-*`): `pqz-vectors --check`
+  byte-identical on both backends, 16 negative rows for the retired v2 id, the self-test hash unchanged.
+
+The gate before the merge (plan Tasks 9, 12) and the reviews A / B (Tasks 10, 11) follow.
+
+### 8.5 Impact on PQZ
+
+- **Deployed:** v2 runs on chain 7622 (image `pqz2`), a test chain; every SCaaS chain is test-only. v2 proofs are
+  forgeable, so v2 is retired: removed from the accepted set and from `pqz-stmt`, and 7622 is reset from genesis at
+  the v3 roll-out (owner 2026-10-19, path B), with the PQZ tokens and `UAPqzVerifier`, which hold the id immutably,
+  redeployed. v1 had the same gap and is already retired [code].
+- **Parameters, sizes, noise budget:** unchanged. With both rounds in place the extractor argument of LNP22 applies
+  again to `z3` / `z4` and to the quadratic relations, and the numbers of §3 and of pq-zero-knowledge.md §4.3 hold
+  for v3 [inference]; review B (the plan's Task 11) audits every prover message against LNP22's order.
+- **Files:** fix `pqz-core/pqzl/lazer/lnp-tbox.c` (`_lnp_tbox_hash_z34`, `_lnp_tbox_hash_h`), `lazer/coder.c`
+  (`coder_grandom3_nbits`), `pqz-core/pqzl/src/pqz_sv.c`, `pqz-core/pqzl/rust/src/proof/tbox.rs` (`hash_z34`,
+  `hash_h`), `rust/src/sv.rs`; tests `pqz-core/pqzl/sz/fs_bind.c`, `rust/tests/fs_bind.rs`; runs `pqz-core/pqzl/runs/fs*`,
+  `pqz-core/pqzl/rust/runs/fs*`, `pqz-core/research/pqzl-measure/runs/fs2-*`, `fs4-*`, `pqz-core/ffi/vectors/runs/fs5-*`.

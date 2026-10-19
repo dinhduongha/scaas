@@ -115,7 +115,9 @@ fn set_short(f: impl Fn(usize) -> i64) -> Result<PolyVec, Error> {
 
 /// `canonical`: every be8 coefficient < q (pq-zero-knowledge.md §5)
 fn canonical(p: &[u8]) -> bool {
-    p.chunks(8).fold(true, |ok, c| ok & (be8(c) < Q))
+    // chunks_exact: a short last chunk is refused, never passed to be8 (review H-1, fix C)
+    let c = p.chunks_exact(8);
+    c.remainder().is_empty() & c.fold(true, |ok, c| ok & (be8(c) < Q))
 }
 
 /// `cbd8`: CBD_1 samples, their squared norm
@@ -173,7 +175,8 @@ pub(crate) fn keygen(a: &mut Option<PolyMat>, seed32: &[u8; 32], bs: i64, be: i6
     for ctr in 0..MAXCTR {
         let mut b = Stream::keys(b"SCAAS-PQZ-KEYGEN-V1", seed32, ctr);
         let (ns, ne) = (cbd8(&mut b, &mut s[..]), cbd16(&mut b, &mut e[..]));
-        if ns <= bs * bs && ne <= be * be {
+        // review E: the resample verdict is public (the counter is an output); the norms are not
+        if crate::ct::verdict((ns <= bs * bs) & (ne <= be * be)) {
             let pk = keypair_from_secret(a, &s, &e)?;
             return Ok(Key { pk, s, e, ctr });
         }
@@ -254,10 +257,15 @@ pub(crate) fn enc_seed(
     if msgs.len() != pks.len() {
         return Err(Error::Input);
     }
+    let mut bad = false;
     for (pk, m) in pks.iter().zip(msgs) {
-        if !canonical(&pk[..]) || m.iter().any(|&d| d > 15) {
+        if !canonical(&pk[..]) {
             return Err(Error::Input);
         }
+        bad |= m.iter().fold(false, |r, &d| r | (d > 15)); // review E: the digits are secret, the verdict public
+    }
+    if crate::ct::verdict(bad) {
+        return Err(Error::Input);
     }
     let (mut r, mut e1, mut e2) = (boxed(0i8)?, boxed(0i16)?, filled(pks.len(), [0i16; 16])?);
     for ctr in 0..MAXCTR {
@@ -267,7 +275,8 @@ pub(crate) fn enc_seed(
         for x in e2.iter_mut() {
             ok &= cbd16(&mut b, x) <= b2 * b2;
         }
-        if ok {
+        if crate::ct::verdict(ok) {
+            // review E: the resample verdict is public
             let (u, vs) = encrypt_raw(a, pks, msgs, &r, &e1, &e2)?;
             return Ok(Enc { u, vs, r, e1, e2, ctr });
         }
@@ -310,10 +319,22 @@ pub(crate) fn dec(s: &[i8; N], ct: &[u8; CT_BYTES]) -> Result<([i64; 16], [i64; 
     let mut w = decrypt_raw(s, u, v)?;
     let (mut m, mut noise) = ([0i64; 16], [0i64; 16]);
     for i in 0..16 {
-        let t = (2 * w[i] + DELTA + 2 * DELTA * (1 << 17)) as u64;
-        m[i] = (t / (2 * DELTA) as u64) as i64 - (1 << 17);
+        // review E: the fixed-step restoring division (w is secret; wasm32 keeps a 64-bit '/' as i64.div_u)
+        let mut t = [(2 * w[i] + DELTA + 2 * DELTA * (1 << 17)) as u64];
+        m[i] = crate::arith::mpn::div(None, &mut t, &[(2 * DELTA) as u64]) as i64 - (1 << 17);
         noise[i] = w[i] - DELTA * m[i];
     }
     crate::wipe(&mut w);
     Ok((m, noise))
+}
+
+#[cfg(test)]
+mod tests {
+    /// fix C: a length that is not a multiple of 8 is not canonical (and does not panic)
+    #[test]
+    fn canonical_short_chunk() {
+        assert!(super::canonical(&[0; 16]));
+        assert!(!super::canonical(&[0; 15]));
+        assert!(!super::canonical(&[0; 7]));
+    }
 }

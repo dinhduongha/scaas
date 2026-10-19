@@ -30,9 +30,9 @@ pub const MAX_PROOF: usize = 160 * 1024;
 /// keccak256("scaas/pqz/pqzh/stark-d1-goldilocks5-fri-keccak256-zk/v1"). Like pqz-core, the relation only hashes it
 /// (the precompile dispatches on it). Provisional until the FRI parameters (soundness regime) are fixed.
 pub const PQZH_PROOF_SYSTEM_ID: [u8; 32] = hex32("aa1f92ddc5763201c2582c8387bd6513842e52779310d6bcf39a7fec99284304");
-/// PQZL's id as pqz-core v2 writes it (pqz.h PQZ_PROOF_SYSTEM_ID = keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v2")),
-/// used only for the byte cross-check against pqz_bench.c.
-pub const PQZL_PROOF_SYSTEM_ID: [u8; 32] = hex32("2e07e6ed1fd303a08c89b3eab6e8423fdfb8f31202958dd682a0619313798c2f");
+/// PQZL's id as pqz-core writes it (pqz.h PQZ_PROOF_SYSTEM_ID = keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v3"), v2
+/// retired by the Fiat–Shamir fix lazer#28), used only for the byte cross-check against pqz_bench.c (pqzh/xcheck/run.sh).
+pub const PQZL_PROOF_SYSTEM_ID: [u8; 32] = hex32("8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef");
 
 const fn nib(c: u8) -> u8 {
     if c <= b'9' { c - b'0' } else { c - b'a' + 10 }

@@ -12,6 +12,8 @@ its scope. Reviewed at main `4c20032`.
 | [B-pqzh-stark-backup.md](B-pqzh-stark-backup.md) | `pqzh/stark-backup`, `pqzh/xcheck` (backup, not live) | P1: the only preset is not zero-knowledge and proves 71.9 bits; hiding proofs exceed `MAX_PROOF`. P2: overlong length varints accepted (Codex lead a confirmed); masks seeded from `rnd32` alone (Codex lead b confirmed). P3: latent preprocessed-root cache divergence; verifier spec drift. |
 | [C-pqzl-c.md](C-pqzl-c.md) | `pqzl/src` (C glue, generic and specialised verifiers) vs the Rust port | **P0: `h` is not absorbed into the Fiat–Shamir transcript before `mu`** → forgery of any PQZL statement by a linear solve (all four implementations; inherited from LaZer). P3: arena exhaustion sink smaller than single allocations. Codex leads (reused domain, signed representatives, encoding canonicality) settled: sound. |
 | [D-lazer-fork.md](D-lazer-fork.md) | `pqzl/lazer` | **P0: `z3`, `z4` are never absorbed before their Schwartz–Zippel challenges `V`** (all four implementations; inherited). P2: z2 rejection test gets z1's variance and has no random sign (Codex lead a confirmed; prover-side ZK). P3: β4 sign reads bit 8 on the fourth attempt (Codex lead b confirmed; negligible). |
+| [G-codex-pqzl-rust.md](G-codex-pqzl-rust.md) | `pqzl/rust` at `0dc869d` (branch `pqzl-fs3`), Codex | P1: secret-dependent branches in the prover (fix E, branch `pqzl-fs3-ct`). P2: secret copies / mask seeds not wiped (fix B); statement hashed before the length check (fix A) |
+| [H-agy-pqzl-rust.md](H-agy-pqzl-rust.md) | same, agy; triage table A–E | P3: `canonical()` short chunk (fix C), wiping (fix B), C `-INT64_MIN` in the SV (fix D), `as u32` length (fix A). A–D fixed on `pqzl-fs3-fixad` (plan Task 4b, decisions CTR-PQZ-09) |
 
 **Controller verification (2026-10-19).** Both P0 transcript facts were re-read by the controller in the Rust prover
 (`pqzl/rust/src/proof/tbox.rs`: `tg` hashed at 1058, `h` computed after it, `quad.rs:22` derives `mu` from the same
@@ -22,3 +24,7 @@ L748; `lnp-quad-many.c` L34; `lnp-quad.c` L458–L472). No cheating-prover proof
 **Owner rulings 2026-10-19:** fix the P0s now, ahead of the other Rust-port follow-ups and the token rename; report
 upstream as a public issue at once (filed as [lazer-crypto/lazer#28](https://github.com/lazer-crypto/lazer/issues/28));
 stop and roll back the Rust-backed roll-out on 7622 (live stays on `pqz2` until the fix).
+
+**Fix E (2026-10-19, owner ruling: before the merge, both cores):** Codex finding G-1, prover control flow on secret
+witness values (slack, `binexp`, `Int` add / sub). Inventory, fixes, the ctgrind check (`pqzl/test/ct.sh`) and its
+limits: [E-constant-time.md](E-constant-time.md).

@@ -66,14 +66,14 @@ fn c_out_of_range_rejected() {
                 let i = off + k * bits as usize + b;
                 p[i / 8] = (p[i / 8] & !(1 << (i % 8))) | ((((v >> b) & 1) as u8) << (i % 8));
             }
-            assert_eq!(test_mutate(r.code, &p, 14, 0, 0), Ok(None), "{} c = {v}", r.name);
-            assert_eq!(c_test_mutate(r.code, &p, 14, 0, 0), None, "{} c = {v}", r.name);
+            assert_eq!(test_mutate(r.code, &p, 99, 0, 0), Ok(None), "{} c = {v}", r.name);
+            assert_eq!(c_test_mutate(r.code, &p, 99, 0, 0), None, "{} c = {v}", r.name);
             assert_eq!(both(&mut ctx, r.op, &r.stmt, &p), (false, false), "{} c = {v}", r.name);
         }
     }
 }
 
-/// `test_mutate` outputs (kinds 0..13 and re-encode only, chained within a seed as in oracle_codec) over every
+/// `test_mutate` outputs (kinds 0..14 and re-encode only, chained within a seed as in oracle_codec) over every
 /// relation code: Rust verdict = C verdict. PQZL_MUTATED_N outputs (default 280, 20 per code; the brief's full
 /// sample is 20,000: about 0.3 s per output, so hours; run it as a separate job).
 #[test]
@@ -86,7 +86,7 @@ fn mutated_eq_c() {
     'outer: for seed in 0.. {
         for r in &rows {
             let mut cur = r.proof.clone();
-            let kind = (g.next() % 15) as u32;
+            let kind = (g.next() % 16) as u32;
             let (r1, r2) = (g.next(), g.next());
             let rust = test_mutate(r.code, &cur, kind, r1, r2).unwrap();
             assert_eq!(rust, c_test_mutate(r.code, &cur, kind, r1, r2), "{} seed {seed} kind {kind}", r.name);
@@ -110,5 +110,25 @@ fn cheating_eq_c() {
     let mut ctx = Ctx::new();
     for (case, op, stmt, proof, honest) in common::cheating() {
         assert_eq!(both(&mut ctx, op, &stmt, &proof), (honest, honest), "{case}");
+    }
+}
+
+/// fix A (review G-3 / H-4): a statement one byte longer or shorter than its relation's, and a proof one byte over
+/// the cap, are rejected by both cores and both verifiers (generic and specialised); `rel.rs`
+/// `bad_length_refused_before_caches` and `pqz_sv_diff`'s `bad_length_before_keys` show it happens before any key is
+/// built or the statement hashed
+#[test]
+fn bad_length_eq_c() {
+    use pqzl::c_oracle::c_verify_fast;
+    let mut ctx = Ctx::new();
+    let big = vec![0u8; pqzl::MAX_PROOF + 1];
+    for r in per_code() {
+        let mut long = r.stmt.clone();
+        long.push(0);
+        let cases = [(&long[..], &r.proof[..]), (&r.stmt[..r.stmt.len() - 1], &r.proof[..]), (&r.stmt[..], &big[..])];
+        for (i, (stmt, proof)) in cases.into_iter().enumerate() {
+            assert_eq!(both(&mut ctx, r.op, stmt, proof), (false, false), "{} case {i}", r.name);
+            assert!(!ctx.verify_fast(r.op, stmt, proof) && !c_verify_fast(r.op, stmt, proof), "{} fast case {i}", r.name);
+        }
     }
 }
