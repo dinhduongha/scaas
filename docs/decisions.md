@@ -4690,6 +4690,13 @@ It said: Committed OOG requeued without limit; replaced by NET-APT-21.
 **Cost if wrong.** Clients, node and contract drift on names and encodings per family.
 **Source.** `history/specs/2026-10-08-nonevm-metacall-design.md` §3 NM-2, NM-3, NM-5.
 
+### NET-SOL-34 — Universal Accounts on Solana: rent-exempt PDAs, nothing expires
+- old: — · status: current · owner: no · date: 2026-10-19 · normative: networks/solana.md#NET-SOL-34 · superseded-by: —
+
+**Why.** The family form of CTR-UA-06 on Solana: `["ua", U]` record, `["ukey", keyHash]` claim, `["acct", U]` subject Account owning one token account per mint held (NET-SOL-05), lane PDAs; rent-exempt deposits once, no TTL; a transaction of 1,232 B bounds the members of an `msig` one transaction can carry (≈ 5–7 ed25519, ≈ 2 passkey), so a larger `msig` needs an approval PDA (open); bn254 / BLS / Schnorr kinds are not enabled on Solana until their syscalls and CU are verified. Status: SPECIFIED (controller 2026-10-19, owner question; not built).
+**Cost if wrong.** A Solana UA layout that cannot carry its signatures, or balances outside SPL that wallets and DEXs cannot see.
+**Source.** owner question 2026-10-19 (how UA, msig, BLS and balances are stored and maintained on Solana).
+
 ### NET-SOL-80 — Out of CU requeued without limit
 - old: RS12-16(cu) · status: superseded · owner: no · date: 2026-10-04 · normative: — · superseded-by: NET-SOL-23
 

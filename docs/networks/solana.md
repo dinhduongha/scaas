@@ -140,6 +140,69 @@ Lamports sent by mistake to the PDA (above rent exemption) are withdrawn by KeyO
 alternative: funds in the wallet's ATA with an `Approve` to the PDA — a token account has only **one** delegate
 (conflicts with other dApps), re-approval needs a native transaction, and there is no multi-key/recovery. BUILT.
 
+### 2.1 Universal Accounts and their storage (UA F on Solana; SPECIFIED)
+
+<a id="ua-storage"></a>
+
+<a id="NET-SOL-34"></a>**NET-SOL-34** — **A Universal Account on Solana is a set of rent-exempt PDAs: one registry
+record per UA, one key claim per signing key, one Account PDA per subject that owns one token account per mint held;
+nothing expires.** (Controller 2026-10-19, owner question; family form of [CTR-UA-06](../contracts/accounts.md#CTR-UA-06)
+and the Solana row of [accounts.md §1.7](../contracts/accounts.md#registry). Not built: today's program has the 1-of-N
+`SmartKeyAccount` with a guardian, and passkey owners as `sha256("scaas.owner.p256" ‖ pk33)`.)
+
+Every Solana state item is an **account**: an address, a size fixed at creation (grown by `realloc`), and a one-time
+**rent-exempt deposit** of 6,960 lamports per byte incl. 128 B of header (≈ 0.0069 SOL per KB). A funded account never
+expires (no TTL, no periodic rent; contrast Soroban [NET-SOR-11](soroban.md#NET-SOR-11) and GRAM's storage fees).
+Example, a 2-of-3 `msig` UA `U` that holds USDC:
+
+```text
+U = keccak256(TAG(msig) ‖ keyData)
+├─ ["ua", U]          registry record: kind 0x0120, keyData = u16 threshold ‖ u16 count ‖ count × (u16 kind ‖ id32 ‖ u16 weight)
+│                     ≤ 16 members ⇒ ≤ 580 B ⇒ ≈ 0.005 SOL; a structure has no ["ukey", …] claim
+├─ member A  native Solana wallet (ed25519)        → a native id, no record
+├─ member B  passkey, webauthn-p256 UA              → ["ua", B] + ["ukey", keyHash_B]
+├─ member C  MetaMask key, secp256k1 UA             → ["ua", C] + ["ukey", keyHash_C]
+├─ ["acct", U]        the subject Account (owner_kind = msig): policy, guardian, keys
+│   ├─ ATA(["acct", U], USDC)    165 B ≈ 0.00204 SOL: the USDC balance (NET-SOL-05)
+│   └─ ATA(["acct", U], mint X)  one more per further mint held
+└─ ["lane", ["acct", U], lane32]  meta-transaction nonces; pruned after valid_until (NET-SOL-08), rent refunded
+```
+
+**Spending.** The relayer's transaction carries one precompile instruction per member signature over the operation
+digest (`Ed25519SigVerify`, `Secp256r1SigVerify` (SIMD-0075), the `Secp256k1` program) and then the `scaas`
+instruction, which reads the Instructions sysvar, sums the weights of the members whose signature it finds and checks the
+threshold; the Account PDA then signs the token transfer with its seeds. **Limit: a transaction is at most 1,232 B.** An
+ed25519 check costs ≈ 120 B, a passkey assertion (authenticatorData, clientDataJSON, signature, key) ≈ 300–400 B, so
+one transaction holds ≈ 5–7 ed25519 members or ≈ 2 passkey members; address lookup tables shorten account lists, not
+signature data. **Open (design gap):** a larger `msig` needs an approval PDA (`["appr", U, digest]`) that collects
+member approvals over several transactions and executes at the threshold.
+
+**Kinds on Solana.** Built verifiers exist for ed25519, secp256k1 (ECDSA) and P-256 / WebAuthn. The bn254 / BLS kinds
+(`schnorr-*`, `bls*-minsig`, `musig2-bn254`, `frost-bn254`) are EVM-only in the kind table; `bip340`, `musig2-secp256k1`
+and `frost-secp256k1` are EVM / Cosmos. Candidates, **to verify and measure before enabling**: bn254 kinds through the
+`alt_bn128` syscalls (pairing CU against the 1.4 M CU limit), Schnorr over secp256k1 through `secp256k1_recover` (the
+`ecrecover` trick used on EVM); BLS12-381 only if a mainnet syscall exists.
+
+**Upkeep.** Who pays each deposit: the registrant for `["ua", …]` / `["ukey", …]` (a relayer lane may front it and
+charge the subject); the lane for a lazily opened `["acct", U]` (recorded `rent_payer`); the first sender (or the
+portal) for an ATA; the lane for lane PDAs. Refunds: lane PDAs at `prune`; an empty ATA can be closed; UA records are
+never closed (identity). `["acct", U]` grows by `realloc` per key or origin (a small top-up each time). The program has
+no upgrade authority after `initialize` ([NET-SOL-20](#NET-SOL-20)): a new version is a new program id, as a UA
+registry generation on EVM.
+
+**Why balances are token accounts, not one ledger account** ([NET-SOL-05](#NET-SOL-05)), and how a ledger would scale if
+one were ever needed (e.g. an internal balance kind with no SPL mint):
+
+| Layout | Capacity | Parallelism | Cost | Visible to Solana wallets / DEXs | Data availability |
+|---|---|---|---|---|---|
+| **one token account (or PDA) per holder** (chosen) | unbounded (one account per holder × mint) | holders' transactions run in parallel (disjoint write sets) | ≈ 0.002 SOL per holder × mint, refundable on close | yes (SPL) | in state |
+| one ledger account | ≤ 10 MiB per account (≈ 260 k entries of 40 B); a program grows an account by ≤ 10 KiB per instruction | every transaction writes it ⇒ serialised | ≈ 73 SOL deposit for 10 MiB | no | in state |
+| sharded ledger: N bucket accounts by hash(holder) | N × ≈ 260 k | only holders in different buckets run in parallel; a hot bucket serialises | ≈ 73 SOL per full bucket | no | in state |
+| state compression (on-chain Merkle root, leaves in the ledger / an indexer, e.g. ZK compression) | very large | proofs per access | cheapest | no | **in history / indexers, not state** — the availability risk ruled out for PQZ ([CTR-PQZ-07](../contracts/pq-zero-knowledge.md#CTR-PQZ-07)) |
+
+Per-holder accounts are the only layout without a capacity ceiling, with parallel writes and with balances in state;
+the 10 MiB limit is per account, so it never binds them.
+
 ## 3. Keys
 
 <a id="keys"></a>
@@ -754,6 +817,8 @@ dynamic [32024, 32050)). The local validator enables every feature from epoch 0 
 - Durable nonces may be deprecated (SIMD discussion #415) ⇒ the fallback in [NET-SOL-16](#NET-SOL-16).
 - Rent locked in lane/mref/fill PDAs until `prune` (~0.0012 SOL per op); no automatic node crank yet.
 - A hot receiver: every payment to one wallet writes that ATA (12M CU/block).
+- UA on Solana is SPECIFIED, not built ([NET-SOL-34](#NET-SOL-34)): an `msig` larger than one 1,232-B transaction
+  needs an approval PDA (open); bn254 / BLS / Schnorr kinds are not enabled on Solana.
 - Solana's Clock drifts from wall time ([NET-SOL-18](#NET-SOL-18)); at-most-once is held by the lane PDA.
 - Mints with a transfer hook or transfer fee are unusable; permanent delegate / freeze / pause are issuer risk.
 - A hosted RPC that truncates history or caps `getSignaturesForAddress` makes the indexer report an error, never commit a
