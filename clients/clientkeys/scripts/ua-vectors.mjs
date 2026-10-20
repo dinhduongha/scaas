@@ -489,7 +489,8 @@ const pqzMsig = [
   ['one classical + one PQ member, threshold 2', ua.encodeMsig(2, sortM([mem(0x0101, id(0x0101)), mem(0x0130, id(0x0130))])), true],
   ['classical weight = threshold', ua.encodeMsig(1, sortM([mem(0x0101, id(0x0101)), mem(0x0130, id(0x0130))])), false],
   ['PQ members only', ua.encodeMsig(2, sortM([mem(0x0130, id(0x0130)), mem(0x0133, id(0x0133))])), true],
-  ['slhdsa128s counts as PQ', ua.encodeMsig(1, sortM([mem(0x0133, id(0x0133)), mem(0x0101, id(0x0101), 1)])), false],
+  ['slhdsa128s counts as PQ weight (classical 1 < threshold 2 only if 0x0133 is PQ)', ua.encodeMsig(2, sortM([mem(0x0101, id(0x0101), 1), mem(0x0133, id(0x0133), 2)])), true],
+  ['slhdsa128s + classical at equal weight', ua.encodeMsig(1, sortM([mem(0x0133, id(0x0133)), mem(0x0101, id(0x0101), 1)])), false],
   ['heavy PQ member, light classical', ua.encodeMsig(3, sortM([mem(0x0101, id(0x0101), 2), mem(0x0131, id(0x0131), 2)])), true],
 ].map(([reason, d, eligible]) => {
   assert(ua.msigPqzEligible(d) === eligible, reason);

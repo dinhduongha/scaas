@@ -96,6 +96,8 @@ test('UA-6: PQZ holders, msig eligibility, pop digest and R_REG message', () => 
   assert.equal(ua.msigPqzEligible(m(1, [0x0101, 1], [0x0130, 1])), false); // classical weight = threshold
   assert.equal(ua.msigPqzEligible(m(2, [0x0130, 1], [0x0133, 1])), true); // slhdsa128s counts as PQ
   assert.equal(ua.msigPqzEligible(m(3, [0x0101, 2], [0x0131, 2])), true);
+  assert.equal(ua.msigPqzEligible(m(2, [0x0101, 1], [0x0133, 2])), true); // decides: only if 0x0133 counts as PQ weight
+  assert.equal(ua.msigPqzEligible(m(2, [0x0101, 1], [0x0141, 2])), false); // a non-PQ member of the same weight does not
   assert.throws(() => ua.msigPqzEligible(new Uint8Array(5)), (e) => e.code === 'UAKeyData');
   const c = { chainId: 31337, chainUid: '0x' + '24'.repeat(32), registry: '0x' + 'aa'.repeat(20), ua: '0x' + '11'.repeat(32) };
   const h = ua.keyHashOf(0x0142, new Uint8Array(16384));
@@ -104,6 +106,8 @@ test('UA-6: PQZ holders, msig eligibility, pop digest and R_REG message', () => 
   const hp = ua.holderPopMessage(0x0130, { ...c, pqzKey: new Uint8Array(16384) });
   assert.equal(hex(hp.pqzKeyHash), hex(h));
   assert.equal(hex(hp.message), hex(ua.uaMessage(0x0130, ua.POP_TAG, ua.popDigest({ ...c, pqzKeyHash: h }))));
+  assert.throws(() => ua.holderPopMessage(0x0101, { ...c, pqzKey: new Uint8Array(16384) }), (e) => e.code === 'UAPqzHolder');
+  assert.throws(() => ua.holderPopMessage(0x0133, { ...c, pqzKey: new Uint8Array(16384) }), (e) => e.code === 'UAPqzHolder');
   assert.equal(hex(ua.holderPopMessage(0x0130, c).popDigest), hex(ua.popDigest(c)), 'no key: the plain pop');
   assert.equal(hex(ua.pqzRegMessage({ ...c, pqzKey: new Uint8Array(16384) })),
     hex(ua.uaMessage(0x0142, ua.POP_TAG, ua.popDigest({ ...c, pqzKeyHash: h }))));

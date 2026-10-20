@@ -637,7 +637,7 @@ fn by_curve<C: ZCurve>(cmd: &str, v: &Value, rng: &mut OsRng) -> R<Value> {
             let (chain, uid, reg) = (num(v, "chainId")?, fixed::<32>(v, "chainUid")?, fixed::<20>(v, "registry")?);
             let d = schnorr::pop_digest(chain, &uid, &reg, &k.ua(), &[0u8; 32]);
             Ok(json!({
-                "kind": zether_kind::<C>(), "Y": hx(&k.encoded_y()), "UA": hx(&k.ua()), 
+                "kind": zether_kind::<C>(), "Y": hx(&k.encoded_y()), "UA": hx(&k.ua()),
                 "popDigest": hx(&d), "uaMsg": hx(&schnorr::ua_message::<C>(&schnorr::purpose_tag("pop"), &d)),
                 "pop": hx(&schnorr::zether_pop(&k, chain, &uid, &reg, rng)),
             }))
@@ -655,6 +655,11 @@ fn by_curve<C: ZCurve>(cmd: &str, v: &Value, rng: &mut OsRng) -> R<Value> {
         "uaSig" => {
             let k = key::<C>(v)?;
             let (purpose, d) = (get(v, "purpose")?.as_str().ok_or("`purpose` must be a string")?, fixed::<32>(v, "digest")?);
+            // the SIGNING purposes of a Zether UA; `pop` has its own command, anything else is unknown
+            const PURPOSES: [&str; 10] = ["metatx", "zether-auth", "metatx-cancel", "member", "zether-owner", "keyop", "receiver-fee", "vp", "vc-anchor", "trade"];
+            if !PURPOSES.contains(&purpose) {
+                return Err(format!("`purpose` must be one of {PURPOSES:?} (the PoP has its own command `pop`)"));
+            }
             let m = schnorr::ua_message::<C>(&schnorr::purpose_tag(purpose), &d);
             Ok(json!({"uaMsg": hx(&m), "sig": hx(&schnorr::sign(&k, &m, rng))}))
         }

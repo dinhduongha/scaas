@@ -186,6 +186,7 @@ export function zetherPop(curve, x, { chainId, chainUid, registry }) {
  * Spends carry no signature: the proof alone authorizes them (UA-6).
  */
 export function zetherSign(curve, x, purpose, digest) {
+  if (purpose === 'pop') throw new Error('the PoP has its own signer: zetherPop');
   return schnorrSign(curve, x, uaMessage(zetherKind(curve), purposeTag(purpose), digest));
 }
 

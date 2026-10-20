@@ -1,3 +1,4 @@
+// TODO(UA-6 Task 8): delete the PENDING branch once the regenerated vectors are committed.
 // The directory the UA tests read their vectors from: smartcontracts/vectors/ua/ once Task 8 regenerated it for UA-6
 // (kinds.json has `schemes`); until then (UA-6 PENDING) a temporary copy of it with the generators' fresh output laid
 // over it, so the tests exercise the new format (no authRef, new register shape, no bn254 Zether rows, holder rows with

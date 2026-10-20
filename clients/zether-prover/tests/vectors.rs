@@ -84,7 +84,17 @@ fn api_roundtrip_mnemonic_keygen_prove_decrypt() {
         let own = call("ownerAuth", json!({"curve": curve, "key": k0, "digest": "0x".to_string() + &"77".repeat(32)}));
         assert!(own["auth"].as_str().unwrap().len() > 2 + 2 * 128);
         let sig = call("uaSig", json!({"curve": curve, "key": k0, "purpose": "metatx", "digest": "0x".to_string() + &"78".repeat(32)}));
-        assert_eq!(sig["sig"].as_str().unwrap().len(), 2 + 2 * (128 + 32), "R || z");
+        let digest: [u8; 32] = [0x78; 32];
+        let m = zether_prover::schnorr::ua_message::<zether_prover::curve::Bls12381>(&zether_prover::schnorr::purpose_tag("metatx"), &digest);
+        assert_eq!(sig["uaMsg"], json!(zether_prover::api::hx(&m)));
+        let raw = hex::decode(&sig["sig"].as_str().unwrap()[2..]).unwrap();
+        assert_eq!(raw.len(), 128 + 32, "R || z");
+        let y = zether_prover::curve::decode_point::<zether_prover::curve::Bls12381>(&hex::decode(&a["Y"].as_str().unwrap()[2..]).unwrap()).unwrap();
+        zether_prover::schnorr::verify::<zether_prover::curve::Bls12381>(&y, &m, &raw).unwrap();
+        for bad in ["pop", "nope"] {
+            let r = json!({"curve": curve, "key": k0, "purpose": bad, "digest": "0x".to_string() + &"78".repeat(32)});
+            assert!(zether_prover::api::call("uaSig", &r.to_string()).is_err(), "{bad}");
+        }
     }
     assert!(zether_prover::api::call("keygen", r#"{"curve":"secp256k1","key":{"x":"0x01"}}"#).is_err());
     // 2^32 + 60 must not silently alias coin 60.

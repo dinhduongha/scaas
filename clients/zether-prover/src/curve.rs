@@ -237,7 +237,6 @@ mod tests {
     }
 
     #[cfg(feature = "bn254")]
-
     #[test]
     fn point_roundtrip_bn254() {
         roundtrip::<Bn254>();
@@ -272,7 +271,6 @@ mod tests {
     }
 
     #[cfg(feature = "bn254")]
-
     #[test]
     fn bn254_gen_even_y_and_distinct() {
         let a = <Bn254 as ZCurve>::gen(b"G", 0);

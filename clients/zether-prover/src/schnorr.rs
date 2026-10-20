@@ -351,7 +351,6 @@ mod tests {
     }
 
     #[cfg(feature = "bn254")]
-    #[cfg(feature = "bn254")]
     #[test]
     fn schnorr_pop_bn254() {
         suite::<Bn254>();

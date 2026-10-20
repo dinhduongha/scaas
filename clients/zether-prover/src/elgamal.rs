@@ -358,7 +358,6 @@ mod tests {
     }
 
     #[cfg(feature = "bn254")]
-
     #[test]
     fn elgamal_bn254() {
         homomorphic::<Bn254>();

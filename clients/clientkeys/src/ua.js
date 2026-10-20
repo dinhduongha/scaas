@@ -171,9 +171,11 @@ export function popDigest({ chainId, chainUid, registry, ua, pqzKeyHash = new Ui
 /**
  * What a PQ holder signs to register with a PQZ key (UA-6 U14): `{ pqzKeyHash, popDigest, message }` with
  * `message = uaMessage(kind, pop, popDigest(ua, h))`, `h = keyHash(0x0142, pqzKey)`; the same `h` goes to `pqzRegMessage`
- * for the native prover's `pqzPop`. Without a key (`pqzKey` omitted) `h = 0`, the plain pop.
+ * for the native prover's `pqzPop`. Single-key holders only (`isPqzHolder`); a PQ-eligible `msig` (`msigPqzEligible`) uses
+ * `popDigest` / `pqzKeyHash` and signs `memberDigest(ua, message)` with each member, not `message` itself. Without a key (`pqzKey` omitted) `h = 0`, the plain pop.
  */
 export function holderPopMessage(kind, { chainId, chainUid, registry, ua, pqzKey }) {
+  if (pqzKey && !isPqzHolder(kind)) fail('UAPqzHolder', `0x${Number(kind).toString(16)} may not hold a PQZ key`);
   const pqzKeyHash = pqzKey ? keyHashOf(0x0142, pqzKey) : new Uint8Array(32);
   const d = popDigest({ chainId, chainUid, registry, ua, pqzKeyHash });
   return { pqzKeyHash, popDigest: d, message: uaMessage(kind, POP_TAG, d) };
