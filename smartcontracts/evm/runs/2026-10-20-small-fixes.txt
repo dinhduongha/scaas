@@ -50,3 +50,29 @@ A-3 (aee749d, WIP): code done; clippy with all features ok; run.sh a3 stopped af
   unchanged), then mark A-3 fixed in W-review-a-pqzl-rust.md / README and drop the WIP prefix (reword or a follow-up).
 docs: `python3 -I scripts/docs_check.py check` -> check: 0 error(s), 2 warning(s), 15 note(s) (the 2 warnings are
   pre-existing budgets).
+
+## update 2026-10-20 (after the shutdown): A-3 verified, review fixes (.superpowers/sdd/2026-10-20-small-fixes-review.md)
+A-3 (aee749d WIP + 03d0e51 verified): done. `scripts/capped sh pqz-core/pqzl/rust/run.sh a3` ok (pqzl/rust/runs/a3-*):
+  every test binary ok, KATs as before, proofs_fnv equal to the pinned digests, native = wasm32 on 387 lines, 0 fails.
+  The WIP prefix stays on aee749d (history not rewritten); docs cite "aee749df + 03d0e512".
+review fixes 5747b6e (Rust): P2-1 encrypt_raw wipes each recipient's pk^T r (acc) and its redc copy, and wr_poly its
+  redp copy (C pqz_rel.c:1551-1552 clears acc with the arena); Minor-1 set_upsilon's Int::from_i64(2, n2) wiped;
+  Minor-2 debit_witness's vals Wiped; Minor-3 keys::encrypt allocates the e2 copy last; Minor-4 (partly) keygen /
+  enc_seed allocate the take blanks before the loop (no Error::Memory after the key is computed; the 2 blank
+  allocations stay: moving the Box out of the Wiped guard without them needs a dead Option branch, the crate has no
+  panics and no unsafe). Minor-5 (non-volatile wipe, by-value moves): no change, lib.rs's documented H-2 boundary.
+  clippy (c-oracle, test-hooks, bench; --lib --bins --tests -D warnings) ok. `scripts/capped sh
+  pqz-core/pqzl/rust/run.sh a3b` (pqzl/rust/runs/a3b-*): 56 tests ok, 0 FAILED / panicked; arithmetic KAT 19/19,
+  pqz_kat ok (free functions and Ctx), to_rust.py --check equal; bench / bench fast / wasm / wasm fast proofs_fnv equal
+  to the pinned digests (proof bytes unchanged), fails 0; native = wasm32 on 387 digest lines (a3b-native-vectors.jsonl
+  = a3-native-vectors.jsonl); sv_eq 3484 cases 0 mismatches; build log 0 warnings; R_TX prove p50 633 ms (a3: 667).
+  Alloc-failure counts 45 / 41 / 40 (keys free / Ctx cold / Ctx warm), as in a3.
+review fixes f3dfbd0 (CHAIN-02): Minor-6 patch-chainspec.py --check asserts each refusal's reason; Minor-7 without
+  --testnet-reset the first timestamp must also be after the genesis timestamp (a still-future genesis). `python3 -I
+  pqz-core/nethermind/chain/patch-chainspec.py --check` ok: 4 accepted (now + 15 min; 0 with reset; future genesis g
+  with reset at g; g + 1 s), 6 refused (past, now + 1 min, 0 without reset: "5 minutes"; future with reset: "not the
+  genesis"; future genesis at now + 15 min and at g without reset: "not after the genesis").
+for plan Task 13 (docs/superpowers/plans/2026-10-19-pqzl-fs3.md, path B reset of 7622): the live 7622 genesis has had
+  engine.Pqz since 2026-10-16, so patch-chainspec.py refuses it ("engine.Pqz already present"). The reset must start
+  from a genesis without Pqz (the faithful / stock copy or the pre-2026-10-16 backup), then patch-chainspec.py on the
+  new rows.
