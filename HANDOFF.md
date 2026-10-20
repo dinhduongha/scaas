@@ -27,8 +27,10 @@ or Codex run is left running.
 - `rev2-zether-z2` head `fd672de9`, worktree `.claude/worktrees/rev2-zether-z2`: Z2 (generic `Env`, `deployImplementation`,
   `initialize(creator, version, initArgs)`, release hashes, `usableFrom`); `forge build src` OK, **test tree does not
   compile yet**; resume notes `smartcontracts/evm/runs/2026-10-20-5gz2-wip.txt`. Owner questions, answered 2026-10-20 (chat):
-  notice period defaults (10 min on 7622, 3 days on 22776) — **OK**; `initialize` without Env (Env fixed in the
-  constructor) — **not answered yet**; `deployImplementation` binds the kind's latest Env — **No**, to be discussed
+  notice period defaults (10 min on 7622, 3 days on 22776) — **OK**; `initialize` without Env — **answered**: keep the split explicit — the implementation carries what never changes for it
+  (Env: verifier addresses, registry, chain, libraries; fixed in its constructor), the contract instance carries its own
+  configuration from `initArgs` (e.g. a wrapped USDC → VND token at 1 : 25,000 and a USDC → RUB token at another rate;
+  mint / burn / blacklist / … allowed or not), and both feed the governance matrix below; `deployImplementation` binds the kind's latest Env — **No**, to be discussed
   together with smart-contract governance and token governance; library pins = registrar list checked by code hash, not
   compared with the init code's link references — **OK**.
 - `rev2-small-fixes` head `8c7c00f2`, worktree `.claude/worktrees/rev2-small-fixes`: CHAIN-02 (first-activation future
@@ -38,7 +40,7 @@ or Codex run is left running.
   WIP prefix. Expect a `size-baseline.json` conflict with Z2.
 
 **Next (order):** (1) finish `rev2-small-fixes` (A-3 run) → review → merge; (2) finish Z2 (tests compile, gates, sizes,
-deploy gas, specs; apply the answers above, `initialize` without Env still open) → review → merge; (3) **UA-6** spec + plan from CTR-UA-30 (registry: PQZ key
+deploy gas, specs; apply the answers above) → review → merge; (3) **UA-6** spec + plan from CTR-UA-30 (registry: PQZ key
 in `register` for PQ signers, `keyOwner` uniqueness, `pqz-mlwe` kind / `authRef` removed, `R_REG` message bound to the
 UA id; Zether stays a key-UA) — before 5h; (4) **5h** (PQZ state in contract, ordered rollovers, ROLL_AGE 24, per-credit
 fee to public balances, `plainPending` removed, `SHIELD_POOL` for PQZ and Zether, CHAIN-01 all-zero `u` refused) then the
@@ -52,8 +54,8 @@ removable).
 to a contract, tokens included; recorded under CTR-UA-30). Owner later: Otterscan **dropped** (not needed); Zether `authRef` **removed entirely** (decisions CTR-UA-30). Were open: (a) **Otterscan on 7622** — not
 possible on Nethermind 1.39 (no `ots_` / `erigon_` RPC, NethermindEth/nethermind#11990; node container stopped, nothing
 changed): Blockscout from the commented stack in `/home/dockers/mba-chain-nethermind/docker-compose.yml` (recommended,
-≈ 1.5–3 GB, pin tags, `mem_limit`, ports 22776+) or an own `ots_` shim; (b) Z2 `initialize` without Env; (c) Zether
-`authRef` (decided: removed); still open (d) the four transfer flows and shielding into another account, proof-free
+≈ 1.5–3 GB, pin tags, `mem_limit`, ports 22776+) or an own `ots_` shim; (b) Z2 `initialize` without Env (answered: implementation / instance split); (c) Zether
+`authRef` (decided: removed); still open (d) the four transfer flows and shielding into another account (decided: all four on both layers, shield proof-free; names `mtxShield` / `mtxUnshield`, built in 5h; decisions CTR-PQZ-06, CTR-ZTH-45), proof-free
 `pqzShield` (trivial pending entry folded by the permissionless rollover) into 5h — analysis
 `docs/research/shield-and-key-reuse.md`.
 

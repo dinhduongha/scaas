@@ -47,7 +47,7 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
 - [ ] **UA-6: encryption keys as UA attributes (owner 2026-10-20, decisions CTR-UA-30; research `docs/research/ua-identity.md`)** — spec + plan, then code: registry `register` takes the PQZ key (PQ signers only), `keyOwner` uniqueness incl. msig, `pqz-mlwe` kind and `authRef` removed, `R_REG` message bound to the UA id (rides the 16k id bump), PQZ account keyed by the signing UA; classical Zether unchanged (key = UA, "self" mode). Before plan Task 5h. All UA clients follow.
 - [ ] **Z2 owner questions (answers 2026-10-20):** notice period defaults (10 min on 7622, 3 days on 22776) — **OK**;
   library pins = registrar list checked by code hash, not compared with the init code's link references — **OK**;
-  `initialize` without Env (Env fixed in the constructor) — **open**; `deployImplementation` binds the kind's latest Env
+  `initialize` without Env — **answered**: keep the split explicit — the implementation carries what never changes for it (Env: verifier addresses, registry, chain, libraries; fixed in its constructor), the contract instance carries its own configuration from `initArgs` (e.g. a wrapped USDC → VND token at 1 : 25,000 and a USDC → RUB token at another rate; mint / burn / blacklist / … allowed or not), and both feed the governance matrix item; `deployImplementation` binds the kind's latest Env
   — **No**: to be discussed together with smart-contract governance and token governance.
 - [ ] **bamboo-dms: follow the generic factory API (owner 2026-10-20, plan Task 5g-Z)** — `createToken(kind, version, bytes initArgs, salt)` / `createDex(version, bytes initArgs, salt)` replace the typed `TokenConfig` path; the confidential verifier set comes from the factory (no creator-supplied verifier); `createTokenUnregistered` is refused for confidential kinds; version 0 tokens are unvetted (`isRegisteredToken`). Update the Odoo connector encoders when 5g-Z merges.
 - [ ] **PQZL Rust port follow-ups** (port merged `5952951`; placed in the fs3 plan 2026-10-19; full text in
@@ -157,8 +157,15 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
   `mtx_` and the old op types go. Node adapters and clients (`fam/*.js`, CLI-SGN-27) follow each family; vectors per
   family.
 
-## 0. Finish the spec phase (5 items left)
+## 0. Finish the spec phase (6 items left)
 
+- [ ] **Governance matrix for factory-made contracts (owner 2026-10-20)** — tokens, DEX, later lending and the other
+  contract families: for every property and power (verifiers and Env, rates and legs, mint, burn, blacklist, pause, fees,
+  roles, upgrades of the release) state where it comes from and who may change it: **fixed by the implementation**
+  (Env, constructor) × **set at creation** (`initArgs`, per instance) × **changeable after deployment** (by whom, with
+  which delay, lockable or not). Covers smart-contract governance (releases, Env versions, `deployImplementation` — owner:
+  it must not simply bind the kind's latest Env) and token governance (today's `features` / `lockedFeatures`, `AdminLib`
+  roles, `owner = 0`, `RATE_ADJUSTABLE` with `rateDelay` / `maxRateStepBps`). Spec first (owner rule), then Z2 follows it.
 - [ ] **SCaaS Chain 22776** (owner 2026-10-12): a new chain "SCaaS Chain", chain id 22776, beside the existing ones; chain 7622 and the UA key tree `m/7622'/…` stay unchanged. Ports in the 22776+ range (proposed RPC HTTP 22776, WS 22777, P2P 22778). Onboard like any chain: docs/networks/evm.md row, profile, finality gate, genesis/identity pin, deploy, node config. The chain itself (docker/chainspec) is run by the owner outside this repo.
 - [ ] **Template library** (owner 2026-10-12): every README use case (escrow with an arbiter, milestone service
   contracts, sale with delivery, leases, installment loans, subscriptions, revenue sharing, deposit with periodic
