@@ -1,3 +1,40 @@
+## Session 2026-10-21 (5h part B: Task 7 done, Task 8a paused) — resume here
+
+**State:** main has this note only (local commit, not pushed). Part B work on branch **`pqz-16k`** (worktree
+`.claude/worktrees/pqz-16k`, from main `56943a36`, not pushed): Task 7 `a87795da`, fix `161121d2` (review + re-review
+clean). SDD ledger with every ruling (git-ignored, on disk):
+`.claude/worktrees/pqz-16k/.superpowers/sdd/2026-10-20-pqz-state-redesign/progress.md`. No agent, capped job, docker or
+background shell left running.
+- **Task 7 (16k parameters, owner summary `pqz-core/pqzl/params/p16k/results-16k.md`):** q = 2^50 − 42,310,535, Δ =
+  2^30 − 41, n = 2560, `K_MAX` 16,384; min β 455 with proof MLWE rank 39 (rank 38 → dual_hybrid 446 / 447); encryption
+  uSVP 508 / dual 499; max PQZL proof 60,882 B (txm8 G = 1) < `MAX_PROOF` 98,304; max input 309,591 B < 512 KiB;
+  n = 2304 out (β 415 at 80 hints).
+- **Owner checkpoint 2026-10-21 (approved):** (1) the 16k set above incl. rank 39; (2) **`ROLL_MAX` = 192** (full
+  relayed tx 11,934,843 gas, 208 is over 0.75·2^24); (3) **op 7 M = 8 uses one randomness group G = 1** (dual_hybrid at
+  144 hints 453.68 / 455.68 ≥ 450, thin; relayed gas ≈ 15.69 M fits 2^24, G = 2 ≈ 20.96 M does not); (4) **PQZH
+  `MAX_PROOF_PQZH` raised to 320 KiB = 327,680** (every debit proof ≈ 302.7 KB).
+- **Risk carried to Task 9:** G = 1 fits 2^24 relayed only while the 16k op 7 M = 8 precompile price ≤ 8.81 M (1.43×
+  today); today's M = 8 relayed is already ≈ 17.0 M > 2^24 (pre-existing, fixed by 16k + G = 1).
+- **Task 8 split (ruling):** 8a transcript on today's parameters (B-1 V3 / V4 from the post-`tg` hash in C generic,
+  C SV, Rust generic, Rust `verify_fast` + both provers, `tg`-mutation test, review A's cheating prover
+  `scratchpad/reviewA/poc/` as a committed fixture; A-2 distinct Schwartz–Zippel challenges; `R_REG`) → 8b PQZL C +
+  Rust at 16k (+ txm8 G = 1 relation) → 8c PQZH Ligero over the new q → 8d `pqz-stmt`, Nethermind, Solidity (`PqzCt`,
+  `ROLL_MAX` 192 re-pin, `PqzSafety`, new `UAPqzVerifier` / Env / releases), vectors, one `proofSystemId` bump,
+  `gate.sh fin`. Briefs `task-8a-brief.md`, `task-8-brief.md` in the ledger dir.
+- **Task 8a paused before code:** the implementer mapped every B-1 / A-2 line and designed the fixture
+  (`pqzl/rust/tests/cheat_b1.rs` + test-only hooks); resume steps in `task-8a-report.md` § "Paused". Ruling: `R_REG` —
+  UA-6 §9 keeps relation / statement / verifier, only the message pre-image changed (UA-6 built it) → 8a documents the
+  message in `pqz-stmt`, re-pins `UAPqzVerifier.PROBE_PQZL`; PQZ vectors keep an opaque 32-byte message.
+- **Metatx split:** spike on branch `metatx-lib` (`bbca6985`, worktree `.claude/worktrees/metatx-lib`, report
+  `scratchpad/metatx-lib-report.md`): NoUnderlyingToken 38,351 B; A (library) token 34,588 + lib 11,577, +7–8.7k gas
+  cold; B (module behind `fallback`) token 7,083, +2.7k cold; B′ 3,347. Owner 2026-10-21: size vs 24,576 is not an
+  argument (wait for Glamsterdam); the real ceiling is 64 KiB — `UnderlyingPqzToken` ≈ 61 KB + governance. **Timing
+  (controller ruling on the owner's ask):** after part B merges, before fs3 Tasks 12 / 6 / 13 and before governance code.
+
+**Next:** (1) resume Task 8a (resume the ledger; dispatch a fresh implementer with `task-8a-brief.md` + the report's
+"Paused" section); in parallel (2) **spike A for `UnderlyingPqzToken`** (owner ask 2026-10-21: how far below 64 KiB the
+library pattern brings the largest token) on `metatx-lib`; then 8b → 8c → 8d → Task 9 (timing only on the owner's go).
+
 ## Session 2026-10-20 (night; 5h part A merged) — resume here
 
 **State:** main pushed (this note). **5h part A merged** (branch `pqz-state-b`, `0b499439..`; merge commit "Merge branch

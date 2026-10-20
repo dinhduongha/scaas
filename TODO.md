@@ -39,9 +39,17 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
 
 ### Now (order)
 
-- **Now (2026-10-20 night):** **5h part A merged** (branch `pqz-state-b`, merge commit on main; Tasks 1–6 + relayed
-  rollover, final review + fix wave + re-review clean). Next: **5h part B** (16k regeneration with B-1, A-2, `R_REG`,
-  one `proofSystemId` bump; plan Tasks 7–9), then the Codex order below (HANDOFF.md top note).
+- **Now (2026-10-21):** **5h part B** on branch `pqz-16k` (not pushed): Task 7 done (16k set approved by the owner:
+  q = 2^50 − 42,310,535, rank 39, `ROLL_MAX` 192, op 7 M = 8 G = 1, `MAX_PROOF_PQZH` 327,680); **Task 8a paused before
+  code** (B-1, A-2, `R_REG`), then 8b PQZL 16k → 8c PQZH → 8d stmt / contracts / vectors / id bump → Task 9 (review,
+  timing on the owner's go). HANDOFF.md top note.
+- [ ] **Spike A for `UnderlyingPqzToken`** (owner 2026-10-21): the meta-tx library pattern on the largest token
+  (≈ 61 KB vs the 64 KiB limit, governance still to come) — size and gas, on branch `metatx-lib` next to the
+  NoUnderlying spike (`scratchpad/metatx-lib-report.md`). Size vs 24,576 is not a criterion (wait for Glamsterdam).
+- [ ] **Metatx split** (owner 2026-10-20 "kiểu gì cũng phải tách"; governance goes to a lib or module): spec → plan →
+  build **after 5h part B merges, before fs3 Tasks 12 / 6 / 13 and before governance code** (timing ruled 2026-10-21).
+  Open for the spec: A (library) vs B / B′ (module behind `fallback`; conflicts with the 2026-10-20 "no view fallback"
+  ruling).
 - [x] **`MtxRule`: allow-list vs fee class — owner 2026-10-20: keep as is.** `feeClass = 0` = not relayable,
   `ABSOLUTE` / `AMOUNT` = the fee basis (CTR-MTX-20); on contracts with `supportedModes() = 0x03` (`SmartKeyAccount`,
   `MandateWallet`, their `cancelNonce`) an `ABSOLUTE` selector can only run with fee mode `NONE` (CTR-MTX-22; node
