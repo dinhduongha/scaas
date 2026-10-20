@@ -427,6 +427,34 @@ contract PqzNoneTest is PqzFixture {
         assertEq(tok.precompile(), PQZ);
     }
 
+    /// Review 5g-Z2 P2-3: the release env (`deps = [UAPqzVerifier]` with code, never Hedera) is checked by the
+    /// constructor, bubbled through `deployImplementation`.
+    function test_constructorChecksTheEnv() public {
+        bytes memory code = type(NoUnderlyingPqzToken).creationCode;
+        IFactoryToken.Env[4] memory bad;
+        for (uint256 i; i < bad.length; ++i) bad[i] = pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv));
+        bad[0].deps = new address[](0);                                  // no verifier
+        bad[1].deps = new address[](2);                                  // two
+        (bad[1].deps[0], bad[1].deps[1]) = (address(pqv), address(pqv));
+        bad[2].hedera = true;                                            // never on Hedera
+        bad[3].deps[0] = address(0x1234);                                // a verifier without code
+        for (uint256 i; i < bad.length; ++i) {
+            uint16 ev = Catalogue.env(factory, IOpenFactory.TokenKind.NONE_PQZ, bad[i]);
+            vm.prank(registrar);
+            vm.expectRevert(IPqzToken.BadInit.selector);
+            factory.deployImplementation(IOpenFactory.TokenKind.NONE_PQZ, 2, ev, code, "");
+        }
+    }
+
+    /// Review 5g-Z2 P2-3 (controller proposal 2): the kind enabled, but on a chain outside PQZ's allowlist (22776, the
+    /// mainnet) every `createToken` reverts with the implementation's gate.
+    function test_createToken_enabledKindOnAForbiddenChain_reverts() public {
+        assertTrue(factory.kindEnabled(IOpenFactory.TokenKind.NONE_PQZ));
+        vm.chainId(22776);
+        vm.expectRevert(abi.encodeWithSelector(PqzSafety.NotAllowedChain.selector, 22776));
+        factory.createToken(IOpenFactory.TokenKind.NONE_PQZ, 1, abi.encode(_cfg(1 << 40)), "mainnet");
+    }
+
     function test_shieldChecks() public {
         _public(tok, address(this), 10 * SCALE);
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.AccountNotRegistered.selector, bytes32(uint256(1))));
