@@ -51,18 +51,19 @@ public static partial class UA
         new(0x0131, "mldsa65", false, [1952], "mldsa65"),
         new(0x0132, "fndsa512", false, [897], "fndsa512"),
         new(0x0133, "slhdsa128s", false, [32], "slhdsa128s"),
-        new(0x0140, "zether-bn254", false, [64], "bn254-g1"),
         new(0x0141, "zether-bls12381", false, [128], "bls12381-g1"),
-        new(0x0142, "pqz-mlwe", false, [16384], "pqz-mlwe"),
         new(0x0108, "secp256k1", false, [64], "secp256k1"), // 2026-10-17, appended as in kinds.json
     ];
+
+    /// <summary>Schemes are not kinds (UA-6 U14): 0x0142 is the PQZ key attribute of a PQ holder; it keeps its tag and keyHash group.</summary>
+    public static readonly Kind[] Schemes = [new(0x0142, "pqz-mlwe", false, [16384], "pqz-mlwe")];
 
     public static readonly string[] Groups =
         ["p256", "ed25519", "secp256k1", "bn254-g1", "bls12381-g1", "bls12381-g2", "bn254-g2", "mldsa44", "mldsa65",
          "fndsa512", "slhdsa128s", "pqz-mlwe"];
 
     public static readonly string[] Purposes =
-        ["pop", "authref", "metatx", "metatx-cancel", "member", "zether-auth", "zether-owner", "keyop", "receiver-fee", "vp",
+        ["pop", "metatx", "metatx-cancel", "member", "zether-auth", "zether-owner", "keyop", "receiver-fee", "vp",
          "vc-anchor", "trade"];
 
     public const string DomainType =
@@ -86,20 +87,27 @@ public static partial class UA
     public static Kind KindInfo(ushort kind) =>
         Array.Find(Kinds, k => k.Number == kind) ?? throw new UAException("UAKindUnknown", $"0x{kind:x4}");
 
+    // tag / keyHash / message accept a kind or a scheme; id derivation and key-data validation accept kinds only
+    static Kind Tagged(ushort kind) => Array.Find(Schemes, s => s.Number == kind) ?? Derived(kind);
+
     static Kind Derived(ushort kind)
     {
+        if (Array.Find(Schemes, s => s.Number == kind) is { } s) throw new UAException("UAKindNotDerived", s.Name);
         var k = KindInfo(kind);
         return k.Native ? throw new UAException("UAKindNotDerived", k.Name) : k;
     }
 
     static bool SingleSigning(ushort k) => k is (>= 0x0100 and <= 0x0108) or (>= 0x0110 and <= 0x0113) or (>= 0x0130 and <= 0x0133);
     public static bool IsNative(ushort kind) => Array.Exists(Kinds, k => k.Number == kind && k.Native);
-    public static bool IsZether(ushort kind) => kind is >= 0x0140 and <= 0x0142;
-    public static bool IsSigning(ushort kind) => kind == 0x0120 || SingleSigning(kind);
+    public static bool IsZether(ushort kind) => kind == 0x0141;
+    public static bool IsSigning(ushort kind) => kind == 0x0120 || kind == 0x0141 || SingleSigning(kind);
+
+    /// <summary>Kinds that may hold a PQZ key attribute: mldsa44, mldsa65, fndsa512 (an msig per <see cref="MsigPqzEligible"/>).</summary>
+    public static bool IsPqzHolder(ushort kind) => kind is >= 0x0130 and <= 0x0132;
     public static bool IsMember(ushort kind, bool hederaNative = false) =>
         SingleSigning(kind) || kind is 0x0001 or 0x0002 || (hederaNative && kind == 0x0003);
 
-    public static string KindTagString(ushort kind) => $"scaas.ua.{Derived(kind).Name}.v1";
+    public static string KindTagString(ushort kind) => $"scaas.ua.{Tagged(kind).Name}.v1";
     public static byte[] Tag(ushort kind) => Keccak256(Utf8(KindTagString(kind)));
 
     public static string GroupTagString(string group) =>
@@ -112,7 +120,7 @@ public static partial class UA
     static byte[] Sized(byte[] b, int n, string what) => b.Length == n ? b : throw new ArgumentException($"{what} must be {n} bytes");
 
     /// <summary><c>keccak256(TAG(kind) ‖ keyData)</c>; no validation (see <see cref="DeriveUA"/>).</summary>
-    public static byte[] UAOf(ushort kind, byte[] keyData) => Keccak256(Tag(kind), keyData);
+    public static byte[] UAOf(ushort kind, byte[] keyData) => Keccak256(Tag(Derived(kind).Number), keyData);
 
     public static bool InNativeSpace(byte[] id) => Sized(id, 32, "id").AsSpan(0, 12).IndexOfAnyExcept((byte)0) < 0;
 
@@ -138,7 +146,7 @@ public static partial class UA
     /// <summary><c>keccak256(GROUP(g) ‖ canonical pubkey)</c>, null for structures. Call on validated key data.</summary>
     public static byte[]? KeyHashOf(ushort kind, byte[] keyData)
     {
-        var k = Derived(kind);
+        var k = Tagged(kind);
         if (k.Group is null) return null;
         var (lo, hi) = kind switch
         {
@@ -170,10 +178,39 @@ public static partial class UA
         return w;
     }
 
-    /// <summary><c>pop_digest</c> (CTR-UA-07).</summary>
-    public static byte[] PopDigest(ulong chainId, byte[] chainUid, byte[] registry, byte[] ua, byte[] authRef) =>
+    /// <summary><c>pop_digest</c> (CTR-UA-07); <c>pqzKeyHash</c> is the keyHash of the UA's PQZ key, 32 zero bytes without one.</summary>
+    public static byte[] PopDigest(ulong chainId, byte[] chainUid, byte[] registry, byte[] ua, byte[] pqzKeyHash) =>
         Keccak256(PurposeTag("pop"), ChainKeyHash(chainId), Sized(chainUid, 32, "chainUid"), AddressWord(registry),
-            Sized(ua, 32, "ua"), Sized(authRef, 32, "authRef"));
+            Sized(ua, 32, "ua"), Sized(pqzKeyHash, 32, "pqzKeyHash"));
+
+    /// <summary>What a PQ holder signs to register (UA-6 U14): the PQZ keyHash (zeros without a key), the pop digest and
+    /// <c>UAMessage(kind, pop, popDigest)</c>. A non-null <paramref name="pqzKey"/> needs a holder kind, else UAPqzHolder.</summary>
+    public static (byte[] PqzKeyHash, byte[] PopDigest, byte[] Message) HolderPopMessage(
+        ushort kind, ulong chainId, byte[] chainUid, byte[] registry, byte[] ua, byte[]? pqzKey = null)
+    {
+        if (pqzKey is not null && !IsPqzHolder(kind)) throw new UAException("UAPqzHolder", $"0x{kind:x4} may not hold a PQZ key");
+        var h = pqzKey is null ? new byte[32] : KeyHashOf(0x0142, pqzKey)!;
+        var d = PopDigest(chainId, chainUid, registry, ua, h);
+        return (h, d, UAMessage(kind, PurposeTag("pop"), d));
+    }
+
+    /// <summary>The message R_REG proves over: <c>UAMessage(0x0142, pop, PopDigest(ua, keyHash(0x0142, pqzKey)))</c>.</summary>
+    public static byte[] PqzRegMessage(ulong chainId, byte[] chainUid, byte[] registry, byte[] ua, byte[] pqzKey) =>
+        UAMessage(0x0142, PurposeTag("pop"), PopDigest(chainId, chainUid, registry, ua, KeyHashOf(0x0142, pqzKey)!));
+
+    /// <summary>True when the msig members outside kinds 0x0130-0x0133 weigh less than its threshold (CTR-PQZ-12).</summary>
+    public static bool MsigPqzEligible(byte[] keyData)
+    {
+        var d = keyData;
+        if (d.Length < 4 || d.Length != 4 + 36 * ((d[2] << 8) | d[3])) throw new UAException("UAKeyData", "length");
+        var classical = 0;
+        for (var o = 4; o < d.Length; o += 36)
+        {
+            var k = (d[o] << 8) | d[o + 1];
+            if (k is < 0x0130 or > 0x0133) classical += (d[o + 34] << 8) | d[o + 35];
+        }
+        return classical < ((d[0] << 8) | d[1]);
+    }
 
     /// <summary>The registry's EIP-712 domain ("SCaaS UARegistry", "&lt;generation&gt;", chainId, registry, salt = chainUid).</summary>
     public sealed record Domain(uint Generation, ulong ChainId, byte[] Registry, byte[] ChainUid);

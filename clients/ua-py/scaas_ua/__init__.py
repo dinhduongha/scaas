@@ -67,15 +67,16 @@ KINDS = (
     (0x0131, 'mldsa65', False, (1952,), 'mldsa65'),
     (0x0132, 'fndsa512', False, (897,), 'fndsa512'),
     (0x0133, 'slhdsa128s', False, (32,), 'slhdsa128s'),
-    (0x0140, 'zether-bn254', False, (64,), 'bn254-g1'),
     (0x0141, 'zether-bls12381', False, (128,), 'bls12381-g1'),
-    (0x0142, 'pqz-mlwe', False, (16384,), 'pqz-mlwe'),
     (0x0108, 'secp256k1', False, (64,), 'secp256k1'),  # 2026-10-17, appended as in kinds.json
 )
+# Schemes are not kinds (UA-6 U14): 0x0142 is the PQZ key attribute of a PQ holder; it keeps its tag and keyHash group.
+SCHEMES = ((0x0142, 'pqz-mlwe', (16384,), 'pqz-mlwe'),)
 _BY = {k[0]: k for k in KINDS}
+_SCHEME = {s[0]: s for s in SCHEMES}
 GROUPS = ('p256', 'ed25519', 'secp256k1', 'bn254-g1', 'bls12381-g1', 'bls12381-g2', 'bn254-g2', 'mldsa44', 'mldsa65',
           'fndsa512', 'slhdsa128s', 'pqz-mlwe')
-PURPOSES = ('pop', 'authref', 'metatx', 'metatx-cancel', 'member', 'zether-auth', 'zether-owner', 'keyop', 'receiver-fee',
+PURPOSES = ('pop', 'metatx', 'metatx-cancel', 'member', 'zether-auth', 'zether-owner', 'keyop', 'receiver-fee',
             'vp', 'vc-anchor', 'trade')
 
 
@@ -87,10 +88,20 @@ def kind_info(kind):
 
 
 def _derived(kind):
+    if kind in _SCHEME:
+        raise UAError('UAKindNotDerived', _SCHEME[kind][1])
     k = kind_info(kind)
     if k[2]:
         raise UAError('UAKindNotDerived', k[1])
     return k
+
+
+def _tagged(kind):
+    """(name, group) of a scheme or a derived kind: tag / keyHash / message accept both; ids and key data kinds only."""
+    if kind in _SCHEME:
+        return _SCHEME[kind][1], _SCHEME[kind][3]
+    k = _derived(kind)
+    return k[1], k[4]
 
 
 def _single_signing(kind):
@@ -102,11 +113,16 @@ def is_native(kind):
 
 
 def is_zether(kind):
-    return 0x0140 <= kind <= 0x0142
+    return kind == 0x0141
 
 
 def is_signing(kind):
-    return kind == 0x0120 or _single_signing(kind)
+    return kind == 0x0120 or kind == 0x0141 or _single_signing(kind)
+
+
+def is_pqz_holder(kind):
+    """Kinds that may hold a PQZ key attribute: mldsa44, mldsa65, fndsa512 (an msig per msig_pqz_eligible)."""
+    return 0x0130 <= kind <= 0x0132
 
 
 def is_member(kind, hedera_native=False):
@@ -114,7 +130,7 @@ def is_member(kind, hedera_native=False):
 
 
 def kind_tag_string(kind):
-    return f'scaas.ua.{_derived(kind)[1]}.v1'
+    return f'scaas.ua.{_tagged(kind)[0]}.v1'
 
 
 def tag(kind):
@@ -155,6 +171,7 @@ def _sized(b, n, what):
 
 def ua_of(kind, key_data):
     """``keccak256(TAG(kind) ‖ keyData)``; no validation (see derive_ua)."""
+    _derived(kind)  # a scheme (0x0142) or a native kind has no derived id
     return keccak256(tag(kind), _bytes(key_data))
 
 
@@ -182,13 +199,13 @@ def native_id(kind, raw):
 
 def key_hash_of(kind, key_data):
     """``keccak256(GROUP(g) ‖ canonical pubkey)``, None for structures. Call on validated key data."""
-    k = _derived(kind)
-    if k[4] is None:
+    group = _tagged(kind)[1]
+    if group is None:
         return None
     d = _bytes(key_data)
     lo, hi = {0x0100: (0, 32), 0x0101: (0, 32), 0x0108: (0, 32), 0x0110: (1, 33), 0x0111: (1, 33), 0x0112: (0, 64), 0x0113: (0, 64)}.get(kind, (0, len(d)))
     _need(len(d) >= hi, 'length')
-    return keccak256(group_tag(k[4]), d[lo:hi])
+    return keccak256(group_tag(group), d[lo:hi])
 
 
 def ua_message(kind, purpose, digest):
@@ -203,10 +220,25 @@ def _address_word(a):
     return bytes(12) + _sized(a, 20, 'registry')
 
 
-def pop_digest(chain_id, chain_uid, registry, ua, auth_ref=bytes(32)):
-    """``pop_digest`` (CTR-UA-07)."""
+def pop_digest(chain_id, chain_uid, registry, ua, pqz_key_hash=bytes(32)):
+    """``pop_digest`` (CTR-UA-07): pqz_key_hash is the keyHash of the UA's PQZ key, 0 without one."""
     return keccak256(POP_TAG, chain_key_hash(chain_id), _sized(chain_uid, 32, 'chainUid'), _address_word(registry),
-                     _sized(ua, 32, 'ua'), _sized(auth_ref, 32, 'authRef'))
+                     _sized(ua, 32, 'ua'), _sized(pqz_key_hash, 32, 'pqzKeyHash'))
+
+
+def holder_pop_message(kind, chain_id, chain_uid, registry, ua, pqz_key=None):
+    """What a PQ holder signs to register (UA-6 U14): (pqz_key_hash, pop_digest, message); no key -> hash 0, the plain pop."""
+    if pqz_key is not None and not is_pqz_holder(kind):
+        raise UAError('UAPqzHolder', f'0x{kind:04x} may not hold a PQZ key')
+    h = key_hash_of(0x0142, pqz_key) if pqz_key is not None else bytes(32)
+    d = pop_digest(chain_id, chain_uid, registry, ua, h)
+    return h, d, ua_message(kind, POP_TAG, d)
+
+
+def pqz_reg_message(chain_id, chain_uid, registry, ua, pqz_key):
+    """The message R_REG proves over: ua_message(0x0142, pop, pop_digest(ua, keyHash(0x0142, pqz_key)))."""
+    h = key_hash_of(0x0142, pqz_key)
+    return ua_message(0x0142, POP_TAG, pop_digest(chain_id, chain_uid, registry, ua, h))
 
 
 def ua_auth_domain_separator(generation, chain_id, registry, chain_uid):
@@ -234,6 +266,15 @@ def canonical_id(text):
         raise UAError('UAIdFormat', repr(text))
     h = m.group(1).lower()
     return '0x' + (h[24:] if len(h) == 64 and h.startswith('0' * 24) else h)
+
+
+def msig_pqz_eligible(key_data):
+    """True when the msig members outside kinds 0x0130-0x0133 weigh less than its threshold (CTR-PQZ-12)."""
+    d = _bytes(key_data)
+    _need(len(d) >= 4 and len(d) == 4 + 36 * int.from_bytes(d[2:4], 'big'), 'length')
+    classical = sum(int.from_bytes(d[o + 34:o + 36], 'big') for o in range(4, len(d), 36)
+                    if not 0x0130 <= int.from_bytes(d[o:o + 2], 'big') <= 0x0133)
+    return classical < int.from_bytes(d[:2], 'big')
 
 
 def encode_msig(threshold, members):
@@ -419,7 +460,7 @@ def validate_key_data(kind, key_data, hedera_native=False):
         _ed25519(d)
     elif kind == 0x0103:
         _secp_x(_int(d))
-    elif kind in (0x0104, 0x0140):
+    elif kind == 0x0104:
         _bn_g1(d)
     elif kind in (0x0105, 0x0141):
         _bls_g1(d)
@@ -441,4 +482,4 @@ def validate_key_data(kind, key_data, hedera_native=False):
         _msig(d, hedera_native)
     elif kind == 0x0132:
         _fndsa(d)
-    # mldsa44/65, slhdsa128s, pqz-mlwe: the length is the whole check
+    # mldsa44/65, slhdsa128s: the length is the whole check

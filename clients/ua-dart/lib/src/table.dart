@@ -46,11 +46,12 @@ const kinds = <Kind>[
   Kind(0x0131, 'mldsa65', false, [1952], 'mldsa65'),
   Kind(0x0132, 'fndsa512', false, [897], 'fndsa512'),
   Kind(0x0133, 'slhdsa128s', false, [32], 'slhdsa128s'),
-  Kind(0x0140, 'zether-bn254', false, [64], 'bn254-g1'),
   Kind(0x0141, 'zether-bls12381', false, [128], 'bls12381-g1'),
-  Kind(0x0142, 'pqz-mlwe', false, [16384], 'pqz-mlwe'),
   Kind(0x0108, 'secp256k1', false, [64], 'secp256k1'), // 2026-10-17, appended as in kinds.json
 ];
+
+/// Schemes are not kinds (UA-6 U14): 0x0142 is the PQZ key attribute of a PQ holder; it keeps its tag and keyHash group.
+const schemes = <Kind>[Kind(0x0142, 'pqz-mlwe', false, [16384], 'pqz-mlwe')];
 
 const groups = <String>[
   'p256', 'ed25519', 'secp256k1', 'bn254-g1', 'bls12381-g1', 'bls12381-g2', 'bn254-g2', 'mldsa44', 'mldsa65',
@@ -58,7 +59,7 @@ const groups = <String>[
 ];
 
 const purposes = <String>[
-  'pop', 'authref', 'metatx', 'metatx-cancel', 'member', 'zether-auth', 'zether-owner', 'keyop', 'receiver-fee', 'vp',
+  'pop', 'metatx', 'metatx-cancel', 'member', 'zether-auth', 'zether-owner', 'keyop', 'receiver-fee', 'vp',
   'vc-anchor', 'trade',
 ];
 
@@ -72,7 +73,10 @@ Kind kindInfo(int kind) {
 
 bool _single(int k) => (k >= 0x0100 && k <= 0x0108) || (k >= 0x0110 && k <= 0x0113) || (k >= 0x0130 && k <= 0x0133);
 bool isNative(int kind) => kinds.any((k) => k.number == kind && k.native);
-bool isZether(int kind) => kind >= 0x0140 && kind <= 0x0142;
-bool isSigning(int kind) => kind == 0x0120 || _single(kind);
+bool isZether(int kind) => kind == 0x0141;
+bool isSigning(int kind) => kind == 0x0120 || kind == 0x0141 || _single(kind);
+
+/// Kinds that may hold a PQZ key attribute: mldsa44, mldsa65, fndsa512 (an msig per [msigPqzEligible]).
+bool isPqzHolder(int kind) => kind >= 0x0130 && kind <= 0x0132;
 bool isMember(int kind, [bool hederaNative = false]) =>
     _single(kind) || kind == 0x0001 || kind == 0x0002 || (hederaNative && kind == 0x0003);

@@ -58,6 +58,7 @@ void main() {
       expect(isZether(n), r['zether']);
       expect(isMember(n), r['member']);
       expect(isMember(n, true), r['memberHedera']);
+      expect(isPqzHolder(n), r['pqzHolder']);
       if (info.native) {
         expect(_err(() => tag(n)).code, 'UAKindNotDerived');
         continue;
@@ -65,6 +66,17 @@ void main() {
       expect(kindTagString(n), r['tag']);
       expect(_hx(tag(n)), r['TAG']);
     }
+    final sch = (k['schemes'] as List).cast<Map>();
+    expect(schemes.length, sch.length);
+    for (var i = 0; i < sch.length; i++) {
+      final s = sch[i], n = _kind(s);
+      expect([schemes[i].number, schemes[i].name, schemes[i].group, schemes[i].lengths], [n, s['name'], s['group'], s['lengths']]);
+      expect(kindTagString(n), s['tag']);
+      expect(_hx(tag(n)), s['TAG']);
+      expect(_err(() => uaOf(n, Uint8List(16384))).code, 'UAKindNotDerived');
+      expect(_err(() => validateKeyData(n, Uint8List(16384))).code, 'UAKindNotDerived');
+    }
+    expect(_hx(keyHashOf(0x0142, _b(k['pqzKey']))!), k['pqzKeyHash']);
     for (final r in (k['groups'] as List).cast<Map>()) {
       expect(groupTagString(r['group']), r['tag']);
       expect(_hx(groupTag(r['group'])), r['GROUP']);
@@ -132,7 +144,22 @@ void main() {
       final c = ctx[p['context']] as Map;
       final id = c['chainId'] as int;
       expect(_hx(chainKeyHash(id)), p['chainKeyHash']);
-      expect(_hx(popDigest(id, _b(c['chainUid']), _b(c['registry']), _b(p['ua']), _b(p['authRef']))), p['popDigest']);
+      expect(_hx(popDigest(id, _b(c['chainUid']), _b(c['registry']), _b(p['ua']), _b(p['pqzKeyHash']))), p['popDigest']);
+    }
+    final pqzKey = _b(k['pqzKey']);
+    for (final r in (s['pqzReg'] as List).cast<Map>()) {
+      final c = ctx[r['context']] as Map;
+      final id = c['chainId'] as int;
+      final cu = _b(c['chainUid']), reg = _b(c['registry']), ua = _b(r['ua']);
+      expect(_hx(pqzRegMessage(id, cu, reg, ua, pqzKey)), r['pqzRegMessage']);
+      expect(_hx(popDigest(id, cu, reg, ua, _b(r['pqzKeyHash']))), r['popDigest']);
+      final h = holderPopMessage(_kind(r), id, cu, reg, ua, pqzKey);
+      expect([_hx(h.pqzKeyHash), _hx(h.popDigest)], [r['pqzKeyHash'], r['popDigest']]);
+      expect(_hx(h.message), _hx(uaMessage(_kind(r), purposeTag('pop'), h.popDigest)));
+    }
+    expect(_err(() => holderPopMessage(0x0101, 1, Uint8List(32), Uint8List(20), Uint8List(32), Uint8List(16384))).code, 'UAPqzHolder');
+    for (final r in (s['pqzMsig'] as List).cast<Map>()) {
+      expect(msigPqzEligible(_b(r['keyData'])), r['eligible'], reason: r['reason'] as String);
     }
     for (final a in (s['uaAuth'] as List).cast<Map>()) {
       final c = ctx[a['context']] as Map;

@@ -309,7 +309,7 @@ func ValidateKeyData(kind uint16, d []byte, hederaNative bool) error {
 		return ed25519Key(d)
 	case 0x0103:
 		return secpX(d)
-	case 0x0104, 0x0140:
+	case 0x0104:
 		return bnG1(d)
 	case 0x0105, 0x0141:
 		return blsG1(d)

@@ -16,12 +16,23 @@ Uint8List _k(List<Uint8List> p) => keccak256(p);
 final Uint8List msgTag = _k([_utf8('scaas.ua.msg.v1')]);
 
 Kind _derived(int kind) {
+  for (final s in schemes) {
+    if (s.number == kind) throw UAError('UAKindNotDerived', s.name);
+  }
   final k = kindInfo(kind);
   if (k.native) throw UAError('UAKindNotDerived', k.name);
   return k;
 }
 
-String kindTagString(int kind) => 'scaas.ua.${_derived(kind).name}.v1';
+// tag / keyHash / message accept a kind or a scheme; id derivation and key-data validation accept kinds only
+Kind _tagged(int kind) {
+  for (final s in schemes) {
+    if (s.number == kind) return s;
+  }
+  return _derived(kind);
+}
+
+String kindTagString(int kind) => 'scaas.ua.${_tagged(kind).name}.v1';
 Uint8List tag(int kind) => _k([_utf8(kindTagString(kind))]);
 
 /// Throws ArgumentError for a group outside the table (a programming error; the table is closed).
@@ -45,7 +56,7 @@ Uint8List _sized(Uint8List b, int n, String what) {
 String _hex(Uint8List b) => b.map((x) => x.toRadixString(16).padLeft(2, '0')).join();
 
 /// keccak256(TAG(kind) ‖ keyData); no validation (see [deriveUA]). [keyData]: Uint8List or hex String.
-Uint8List uaOf(int kind, Object? keyData) => _k([tag(kind), keyBytes(keyData)]);
+Uint8List uaOf(int kind, Object? keyData) => _k([tag(_derived(kind).number), keyBytes(keyData)]);
 
 bool inNativeSpace(Uint8List id) {
   _sized(id, 32, 'id');
@@ -76,7 +87,7 @@ Uint8List nativeId(int kind, Object? raw) {
 
 /// keccak256(GROUP(g) ‖ canonical pubkey), null for structures. Call on validated key data.
 Uint8List? keyHashOf(int kind, Object? keyData) {
-  final k = _derived(kind);
+  final k = _tagged(kind);
   final g = k.group;
   if (g == null) return null;
   final d = keyBytes(keyData);
@@ -117,15 +128,44 @@ Uint8List _addressWord(Uint8List a) {
   return w;
 }
 
-/// pop_digest (CTR-UA-07).
-Uint8List popDigest(int chainId, Uint8List chainUid, Uint8List registry, Uint8List ua, Uint8List authRef) => _k([
+/// pop_digest (CTR-UA-07); [pqzKeyHash] is the keyHash of the UA's PQZ key, 32 zero bytes without one.
+Uint8List popDigest(int chainId, Uint8List chainUid, Uint8List registry, Uint8List ua, Uint8List pqzKeyHash) => _k([
       purposeTag('pop'),
       chainKeyHash(chainId),
       _sized(chainUid, 32, 'chainUid'),
       _addressWord(registry),
       _sized(ua, 32, 'ua'),
-      _sized(authRef, 32, 'authRef'),
+      _sized(pqzKeyHash, 32, 'pqzKeyHash'),
     ]);
+
+/// What a PQ holder signs to register (UA-6 U14): the PQZ keyHash (zeros without a key), the pop digest and
+/// uaMessage(kind, pop, popDigest). A [pqzKey] needs a holder kind ([isPqzHolder]), else UAPqzHolder.
+({Uint8List pqzKeyHash, Uint8List popDigest, Uint8List message}) holderPopMessage(
+    int kind, int chainId, Uint8List chainUid, Uint8List registry, Uint8List ua,
+    [Object? pqzKey]) {
+  if (pqzKey != null && !isPqzHolder(kind)) {
+    throw UAError('UAPqzHolder', '0x${kind.toRadixString(16).padLeft(4, '0')} may not hold a PQZ key');
+  }
+  final h = pqzKey == null ? Uint8List(32) : keyHashOf(0x0142, pqzKey)!;
+  final d = popDigest(chainId, chainUid, registry, ua, h);
+  return (pqzKeyHash: h, popDigest: d, message: uaMessage(kind, purposeTag('pop'), d));
+}
+
+/// The message R_REG proves over: uaMessage(0x0142, pop, popDigest(ua, keyHash(0x0142, pqzKey))).
+Uint8List pqzRegMessage(int chainId, Uint8List chainUid, Uint8List registry, Uint8List ua, Object? pqzKey) =>
+    uaMessage(0x0142, purposeTag('pop'), popDigest(chainId, chainUid, registry, ua, keyHashOf(0x0142, pqzKey)!));
+
+/// True when the msig members outside kinds 0x0130-0x0133 weigh less than its threshold (CTR-PQZ-12).
+bool msigPqzEligible(Object? keyData) {
+  final d = keyBytes(keyData);
+  if (d.length < 4 || d.length != 4 + 36 * ((d[2] << 8) | d[3])) throw UAError('UAKeyData', 'length');
+  var classical = 0;
+  for (var o = 4; o < d.length; o += 36) {
+    final k = (d[o] << 8) | d[o + 1];
+    if (k < 0x0130 || k > 0x0133) classical += (d[o + 34] << 8) | d[o + 35];
+  }
+  return classical < ((d[0] << 8) | d[1]);
+}
 
 /// The registry's EIP-712 domain ("SCaaS UARegistry", "<generation>", chainId, registry, salt = chainUid).
 class Domain {
