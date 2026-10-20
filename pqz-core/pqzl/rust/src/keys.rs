@@ -96,9 +96,10 @@ pub(crate) fn rd_polyvec(v: &mut PolyVec, inp: &[u8]) -> bool {
     ok
 }
 
-/// `wr_poly`: p to [0, q) (`poly_redp`), its first n coefficients as be8
+/// `wr_poly`: p to [0, q) (`poly_redp`), its first n coefficients as be8 (the reduced copy wiped: `encrypt_raw`'s
+/// pk^T r passes through it, review A-3 P2-1)
 fn wr_poly(out: &mut [u8], p: &mut Poly, n: usize) {
-    let mut r = Poly::redp(p);
+    let mut r = Wiped(Poly::redp(p));
     for k in 0..n {
         out[8 * k..8 * k + 8].copy_from_slice(&(cval(&mut r, k) as u64).to_be_bytes());
     }
@@ -173,14 +174,15 @@ pub(crate) fn keypair_from_secret(
 /// `pqz_keygen` with the norm thresholds `bs`, `be` (`BS`, `BE`; lowered only by the keys KAT's test hooks)
 pub(crate) fn keygen(a: &mut Option<PolyMat>, seed32: &[u8; 32], bs: i64, be: i64) -> Result<Key, Error> {
     // Q-B (review A-3): s, e are wiped on the error exits (`?`, `Reject`); only the accepted pair leaves
+    // (the blanks `take` leaves in their place are allocated first: no allocation failure after the key is computed)
     let (mut s, mut e) = (Wiped(boxed(0i8)?), Wiped(boxed(0i16)?));
+    let blank = (boxed(0i8)?, boxed(0i16)?);
     for ctr in 0..MAXCTR {
         let mut b = Stream::keys(b"SCAAS-PQZ-KEYGEN-V1", seed32, ctr);
         let (ns, ne) = (cbd8(&mut b, &mut s[..]), cbd16(&mut b, &mut e[..]));
         // review E: the resample verdict is public (the counter is an output); the norms are not
         if crate::ct::verdict((ns <= bs * bs) & (ne <= be * be)) {
             let pk = keypair_from_secret(a, &s, &e)?;
-            let blank = (boxed(0i8)?, boxed(0i16)?);
             return Ok(Key { pk, s: s.take(blank.0), e: e.take(blank.1), ctr });
         }
     }
@@ -221,13 +223,15 @@ fn encrypt_raw(
     let mut pk = PolyVec::new(K)?;
     for k in 0..pks.len() {
         rd_polyvec(&mut pk, &pks[k][..]);
-        let mut acc = polyvec::dot(&mut *pk, &mut *rv);
+        // Q-B (review A-3 P2-1): pk^T r and its reduced copy, wiped (C clears acc with its arena)
+        let mut acc = Wiped(polyvec::dot(&mut *pk, &mut *rv));
         acc.fromcrt();
         for i in 0..16 {
             let c = cval(&mut acc, i) + e2[k][i] as i64 + DELTA * msgs[k][i] as i64;
             set_c(&mut acc, i, c);
         }
-        wr_poly(&mut vs[k], &mut Poly::redc(&mut acc), 16);
+        let mut vr = Wiped(Poly::redc(&mut acc));
+        wr_poly(&mut vs[k], &mut vr, 16);
     }
     Ok((u, vs))
 }
@@ -242,9 +246,9 @@ pub(crate) fn encrypt(
     e2: &[[i16; 16]],
 ) -> Result<Enc, Error> {
     let (u, vs) = encrypt_raw(a, pks, msgs, r, e1, e2)?;
-    let mut e2v = filled(e2.len(), [0i16; 16])?;
-    e2v.copy_from_slice(e2);
     let (mut rb, mut e1b) = (boxed(0i8)?, boxed(0i16)?);
+    let mut e2v = filled(e2.len(), [0i16; 16])?; // last: no allocation fails after the e2 copy (review A-3 Minor-3)
+    e2v.copy_from_slice(e2);
     rb.copy_from_slice(r);
     e1b.copy_from_slice(e1);
     Ok(Enc { u, vs, r: rb, e1: e1b, e2: e2v, ctr: 0 })
@@ -273,6 +277,7 @@ pub(crate) fn enc_seed(
     }
     // Q-B (review A-3): r, e1, e2 are wiped on the error exits (`?`, `Reject`); only the accepted ones leave
     let (mut r, mut e1, mut e2) = (Wiped(boxed(0i8)?), Wiped(boxed(0i16)?), Wiped(filled(pks.len(), [0i16; 16])?));
+    let blank = (boxed(0i8)?, boxed(0i16)?); // allocated first, as in keygen
     for ctr in 0..MAXCTR {
         let mut b = Stream::keys(b"SCAAS-PQZ-ENC-V1", seed_enc, ctr);
         let mut ok = cbd8(&mut b, &mut r[..]) <= bs * bs;
@@ -283,7 +288,6 @@ pub(crate) fn enc_seed(
         if crate::ct::verdict(ok) {
             // review E: the resample verdict is public
             let (u, vs) = encrypt_raw(a, pks, msgs, &r, &e1, &e2)?;
-            let blank = (boxed(0i8)?, boxed(0i16)?);
             return Ok(Enc { u, vs, r: r.take(blank.0), e1: e1.take(blank.1), e2: e2.take(Vec::new()), ctr });
         }
     }

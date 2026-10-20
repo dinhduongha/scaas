@@ -756,7 +756,7 @@ fn debit_witness(t: &mut Pub, w: &[u8], s1: &mut PolyVec, r: &Rel) -> Result<boo
     }
     for i in 0..16 {
         let base = [h.dp, h.m, h.c, h.et];
-        let vals = [dp[i], mm[i], c[i] + 64, et[i] + (1 << 24)];
+        let vals = Wiped([dp[i], mm[i], c[i] + 64, et[i] + (1 << 24)]); // review A-3 Minor-2
         let (widths, n) = ([4, 14, 11, 25], [4, 14, if i < 15 { 11 } else { 0 }, 25]);
         for b in 0..25 {
             for k in 0..4 {
@@ -802,7 +802,8 @@ fn set_upsilon(p: &Tbox, s1: &mut PolyVec, blocks: &[(usize, usize)]) -> bool {
         }
         let mut d = Int::new(2);
         d.set(&p.l2bsqr[z]);
-        d.sub(&{ d }, &Int::from_i64(2, n2));
+        let mut n2i = Int::from_i64(2, n2);
+        d.sub(&{ d }, &n2i);
         let above = d.sgn() < 0;
         let above = crate::ct::verdict(above); // review E: the witness-valid verdict is public (prove fails)
         if !above {
@@ -810,6 +811,7 @@ fn set_upsilon(p: &Tbox, s1: &mut PolyVec, blocks: &[(usize, usize)]) -> bool {
         }
         // Q-B (review A-3): the block's squared norm and its slack (the slack polys sit in s1, the caller's)
         crate::wipe(&mut d.l);
+        crate::wipe(&mut n2i.l);
         crate::wipe(core::slice::from_mut(&mut n2));
         if above {
             return false; // witness above its norm bound

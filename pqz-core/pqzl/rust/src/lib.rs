@@ -99,11 +99,11 @@ pub enum Error {
 /// is not bound to keep the stores (`black_box` on the cleared buffer makes eliding them unlikely), and copies it made
 /// itself (moves of arrays and `Wiped` values, register spills, stack temporaries) are never cleared. Also cleared,
 /// as the C core does since Q-B (`d08e3f9`; review A-3, 2026-10-20): the key helpers' secret key, noise and encryption
-/// randomness (`keys::keypair_from_secret`, `encrypt_raw`, `decrypt_raw`'s key and plaintext, the rejected samples of
-/// `keygen` / `enc_seed` on their error exits) and the witness parsing's values (`rel::dec_w`, `debit_witness`,
-/// `dr_witness`, `set_upsilon`). Not cleared (C clears them since Q-B with its arena, `pqz_arena_wipe_release`; a
-/// gap of this crate): the masks y / y3 / y4 and the z vectors built from them, `r_times`' products R·s3 / R'·s4, and
-/// the `coeffvec` copies inside the rejection step.
+/// randomness (`keys::keypair_from_secret`, `encrypt_raw` with each pk^T r, `decrypt_raw`'s key and plaintext, the
+/// rejected samples of `keygen` / `enc_seed` on their error exits) and the witness parsing's values (`rel::dec_w`,
+/// `debit_witness`, `dr_witness`, `set_upsilon`). Not cleared (C clears them since Q-B with its arena,
+/// `pqz_arena_wipe_release`; a gap of this crate): the masks y / y3 / y4 and the z vectors built from them, `r_times`'
+/// products R·s3 / R'·s4, and the `coeffvec` copies inside the rejection step.
 pub(crate) fn wipe<T: Default>(x: &mut [T]) {
     x.iter_mut().for_each(|e| *e = T::default());
     core::hint::black_box(&*x);
