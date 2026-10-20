@@ -10,7 +10,10 @@ import {AdminLib} from "../metatx/AdminLib.sol";
 import {UnderlyingLib} from "../metatx/UnderlyingLib.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {PqzLayer} from "./PqzLayer.sol";
-import {PqzLib} from "./PqzLib.sol";
+import {PqzCore} from "./PqzCore.sol";
+import {PqzBurnLib} from "./PqzBurnLib.sol";
+import {PqzStateLib} from "./PqzStateLib.sol";
+import {PqzViewLib} from "./PqzViewLib.sol";
 
 /// @title Kind `UNDERLYING_PQZ` (CTR-TOK-21, CTR-PQZ-22): the wrapper of 1–8 legs with the PQZ layer (P6g plan D1).
 /// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Chains 31337 / 1337 / 7622 only. Legs, rates, reserves,
@@ -48,7 +51,7 @@ contract UnderlyingPqzToken is UnderlyingToken, PqzLayer {
     function _init(TokenConfig memory cfg) internal override(UnderlyingToken, MetaTokenBase) {
         _requireUnused(cfg, true, false, false, false);
         UnderlyingLib.initToken(cfg, false, AdminLib.KIND_UNDERLYING_PQZ);
-        PqzLib.init(cfg.conf, _REGISTRY, PQZ_VERIFIER);
+        PqzStateLib.init(cfg.conf, _REGISTRY, PQZ_VERIFIER);
     }
 
     // ------------------------------------------------------------------ wrap-shield / unshield-unwrap (CTR-PQZ-22)
@@ -57,9 +60,9 @@ contract UnderlyingPqzToken is UnderlyingToken, PqzLayer {
     ///         `shieldScale` (`AmountNotScaled`), goes to `plainPending[ua]` as `minted / shieldScale`.
     function pqzWrapShield(address u, uint256 amountIn, bytes32 ua) external payable nonReentrant {
         (,, uint256 minted) = UnderlyingLib.wrap(UnderlyingLib.indexOf(u), amountIn, _msgSender(), msg.value);
-        uint256 scale = PqzLib.$().shieldScale;
+        uint256 scale = PqzCore.$().shieldScale;
         if (minted % scale != 0) revert AmountNotScaled(minted, scale);
-        PqzLib.shield(ua, minted / scale, _REGISTRY);
+        PqzStateLib.shield(ua, minted / scale, _REGISTRY);
     }
 
     /// @notice The burn of `x.amount` (statement: `amount`, `recipient`; direct, `envelopeBinding` binds `x.u` and
@@ -67,31 +70,31 @@ contract UnderlyingPqzToken is UnderlyingToken, PqzLayer {
     function pqzUnshieldUnwrap(bytes calldata payload, bytes calldata acc, bytes[] calldata inl, Unwrap calldata x,
         bytes calldata proof, bytes calldata authSig) external nonReentrant
     {
-        PqzLib.unshield(_envUnwrap(x), payload, acc, inl, proof, authSig);
+        PqzBurnLib.unshield(_envUnwrap(x), payload, acc, inl, proof, authSig);
         _payUnwrap(x);
     }
 
     function _payUnwrap(Unwrap calldata x) private {
         uint256 i = UnderlyingLib.indexOf(x.u);
-        (uint256 out,) = UnderlyingLib.quoteUnwrap(i, x.amount * PqzLib.$().shieldScale, x.recipient, x.minOut);
+        (uint256 out,) = UnderlyingLib.quoteUnwrap(i, x.amount * PqzCore.$().shieldScale, x.recipient, x.minOut);
         UnderlyingLib.payOut(i, x.recipient, out);
     }
 
     /// @notice The `envelopeBinding` word of a direct `pqzUnshieldUnwrap` (P6g plan D12).
     function unwrapBinding(address u, uint256 minOut) public pure returns (bytes32) {
-        return keccak256(abi.encode(PqzLib.TAG_UNWRAP, u, minOut));
+        return keccak256(abi.encode(PqzCore.TAG_UNWRAP, u, minOut));
     }
 
     /// @notice The burn statement of `pqzUnshieldUnwrap` (the binding as the call would use it, direct or `binding`).
     function unshieldUnwrapStatement(bytes calldata payload, bytes calldata acc, bytes[] calldata inl,
         Unwrap calldata x, bytes32 binding) external view returns (bytes memory)
     {
-        PqzLib.Env memory e = _envOf(binding == 0 ? unwrapBinding(x.u, x.minOut) : binding);
+        PqzCore.Env memory e = _envOf(binding == 0 ? unwrapBinding(x.u, x.minOut) : binding);
         (e.amount, e.recipient) = (x.amount, x.recipient);
-        return PqzLib.statementOf(2, e, payload, acc, inl);
+        return PqzViewLib.statementOf(2, e, payload, acc, inl);
     }
 
-    function _envUnwrap(Unwrap calldata x) private view returns (PqzLib.Env memory e) {
+    function _envUnwrap(Unwrap calldata x) private view returns (PqzCore.Env memory e) {
         bytes32 b = _ticketBinding();
         e = _envOf(b != 0 ? b : unwrapBinding(x.u, x.minOut));
         (e.amount, e.recipient) = (x.amount, x.recipient);
@@ -105,7 +108,7 @@ contract UnderlyingPqzToken is UnderlyingToken, PqzLayer {
 
     /// @notice The collateral check of a rate change counts the shielded value too.
     function executeRate() external override nonReentrant {
-        UnderlyingLib.executeRate(_msgSender(), totalSupply() + PqzLib.$().totalShielded * PqzLib.$().shieldScale);
+        UnderlyingLib.executeRate(_msgSender(), totalSupply() + PqzCore.$().totalShielded * PqzCore.$().shieldScale);
     }
 
     // ------------------------------------------------------------------ the layer's hooks

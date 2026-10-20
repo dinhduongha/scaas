@@ -5,6 +5,10 @@ import {Vm} from "forge-std/Vm.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
+import {PqzStateLib} from "../../src/pqz/PqzStateLib.sol";
+import {PqzTransferLib} from "../../src/pqz/PqzTransferLib.sol";
+import {PqzBurnLib} from "../../src/pqz/PqzBurnLib.sol";
+import {PqzViewLib} from "../../src/pqz/PqzViewLib.sol";
 
 /// @notice A plain release environment (plan 5g-Z2): no dependencies, no pinned libraries.
 function plainEnv(address factory, address ska, bytes32 uid, address registry, bool hedera)
@@ -22,13 +26,19 @@ function zetherEnv(address factory, bytes32 uid, address registry, address trans
     (e.deps[0], e.deps[1], e.deps[2], e.deps[3]) = (transfer, burn, innerProduct, disclosure);
 }
 
-/// @notice A `*_PQZ` environment: `deps` = the `UAPqzVerifier`.
+/// @notice A `*_PQZ` environment: `deps` = the `UAPqzVerifier`; `libs` = the four PQZ libraries (plan 5h D14) with
+///         their code hashes, which `deployImplementation` checks.
 function pqzEnv(address factory, bytes32 uid, address registry, address verifier)
-    pure returns (IFactoryToken.Env memory e)
+    view returns (IFactoryToken.Env memory e)
 {
     e = plainEnv(factory, address(0), uid, registry, false);
     e.deps = new address[](1);
     e.deps[0] = verifier;
+    e.libs = new address[](4);
+    (e.libs[0], e.libs[1], e.libs[2], e.libs[3]) =
+        (address(PqzStateLib), address(PqzTransferLib), address(PqzBurnLib), address(PqzViewLib));
+    e.libCodeHashes = new bytes32[](4);
+    for (uint256 i; i < 4; ++i) e.libCodeHashes[i] = e.libs[i].codehash;
 }
 
 /// @notice The registrar's catalogue calls for tests (plan 5g-Z2): publish an env, deploy a release from init code.

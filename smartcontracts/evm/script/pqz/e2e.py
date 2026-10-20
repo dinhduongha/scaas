@@ -376,7 +376,8 @@ def run(kd, kr, ke):
     REG[0] = reg
     # plan 5g-Z2: the factory (notice period 0 here) deploys every release itself: env version 1 of each kind
     # (factory, chain_uid, registry, SmartKeyAccount implementation 0, Hedera false, deps, the linked libraries with
-    # their code hashes; the PQZ kinds' one dependency is this run's UAPqzVerifier, CTR-ZTH-20), then the release
+    # their code hashes (the PQZ kinds link the four PqzStateLib / PqzTransferLib / PqzBurnLib / PqzViewLib, plan 5h D14,
+    # each deployed once by D.lib; the PQZ kinds' one dependency is this run's UAPqzVerifier, CTR-ZTH-20), then the release
     # from the init code without arguments on env 1, named explicitly (owner 2026-10-20; the factory appends
     # envVersion, env, implArgs)
     fac = D.deploy("OpenFactory", encs(["w"] * 3, [sd.addr, uid, 0]))

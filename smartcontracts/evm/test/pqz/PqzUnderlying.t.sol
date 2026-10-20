@@ -6,7 +6,7 @@ import {PqzFixture} from "./helpers/PqzFixture.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {UnderlyingPqzToken} from "../../src/pqz/UnderlyingPqzToken.sol";
 import {PqzLayer} from "../../src/pqz/PqzLayer.sol";
-import {PqzLib} from "../../src/pqz/PqzLib.sol";
+import {PqzCore} from "../../src/pqz/PqzCore.sol";
 import {PqzCt} from "../../src/pqz/PqzCt.sol";
 import {IPqzToken} from "../../src/pqz/IPqzToken.sol";
 import {AdminLib} from "../../src/metatx/AdminLib.sol";

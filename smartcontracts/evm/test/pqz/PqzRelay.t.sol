@@ -4,7 +4,7 @@ pragma solidity ^0.8.24;
 import {console2} from "forge-std/Test.sol";
 import {PqzFixture} from "./helpers/PqzFixture.sol";
 import {PqzLayer} from "../../src/pqz/PqzLayer.sol";
-import {PqzLib} from "../../src/pqz/PqzLib.sol";
+import {PqzCore} from "../../src/pqz/PqzCore.sol";
 import {PqzCt} from "../../src/pqz/PqzCt.sol";
 import {IPqzToken} from "../../src/pqz/IPqzToken.sol";
 import {NoUnderlyingPqzToken} from "../../src/pqz/NoUnderlyingPqzToken.sol";

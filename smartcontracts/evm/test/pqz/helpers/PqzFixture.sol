@@ -10,7 +10,7 @@ import {AdminLib} from "../../../src/metatx/AdminLib.sol";
 import {NoUnderlyingPqzToken} from "../../../src/pqz/NoUnderlyingPqzToken.sol";
 import {PqzLayer} from "../../../src/pqz/PqzLayer.sol";
 import {PqzCt} from "../../../src/pqz/PqzCt.sol";
-import {PqzLib} from "../../../src/pqz/PqzLib.sol";
+import {PqzCore} from "../../../src/pqz/PqzCore.sol";
 import {ZetherTypes} from "../../../src/zether/ZetherTypes.sol";
 import {Catalogue, pqzEnv} from "../../helpers/Catalogue.sol";
 
@@ -178,7 +178,7 @@ abstract contract PqzFixture is PqzRegistryBase {
 
     /// A direct transfer's `envelopeBinding` word (review W-A).
     function _direct(ZetherTypes.TransferMode m) internal pure returns (bytes32) {
-        return keccak256(abi.encode(PqzLib.TAG_DIRECT_MODE, uint8(m)));
+        return keccak256(abi.encode(PqzCore.TAG_DIRECT_MODE, uint8(m)));
     }
 
     function _cut(bytes memory b, uint256 off, uint256 len) internal pure returns (bytes memory) {

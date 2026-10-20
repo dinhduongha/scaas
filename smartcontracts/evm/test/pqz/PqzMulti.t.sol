@@ -7,7 +7,7 @@ import {PQZ_UID, PQZL_ID, PQZH_ID} from "./helpers/PqzRegistryBase.sol";
 import {PqzLayer} from "../../src/pqz/PqzLayer.sol";
 import {IPqzToken} from "../../src/pqz/IPqzToken.sol";
 import {PqzCt} from "../../src/pqz/PqzCt.sol";
-import {PqzLib} from "../../src/pqz/PqzLib.sol";
+import {PqzCore} from "../../src/pqz/PqzCore.sol";
 import {ZetherTypes} from "../../src/zether/ZetherTypes.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {NoUnderlyingPqzToken} from "../../src/pqz/NoUnderlyingPqzToken.sol";
@@ -82,7 +82,7 @@ contract PqzMultiTest is PqzFixture {
     /// The §8.1 op 7 layout of alice's M = 4 statement with the auditor and carol as beneficiary.
     function _checkLayout(bytes memory st, bytes32[] memory rec, bytes memory out) internal view {
         bytes memory head = bytes.concat(
-            abi.encode(PqzLib.OP_TRANSFER_MULTI, PQZL_ID, block.chainid, address(tok), address(reg), alice,
+            abi.encode(PqzCore.OP_TRANSFER_MULTI, PQZL_ID, block.chainid, address(tok), address(reg), alice,
                 keccak256(abi.encodePacked(rec)), carol, FEE, uint256(0)),
             abi.encode(uint256(4), uint256(0), uint256(0), block.number + 100, uint256(1), uint256(1000), PQZ_UID,
                 _direct(ZetherTypes.TransferMode.BUNDLE), uint256(uint128(salt)), bytes32(0))

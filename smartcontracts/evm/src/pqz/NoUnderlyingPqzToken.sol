@@ -9,7 +9,8 @@ import {IMetaTx} from "../metatx/IMetaTx.sol";
 import {AdminLib} from "../metatx/AdminLib.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {PqzLayer} from "./PqzLayer.sol";
-import {PqzLib} from "./PqzLib.sol";
+import {PqzCore} from "./PqzCore.sol";
+import {PqzStateLib} from "./PqzStateLib.sol";
 
 /// @title Kind `NONE_PQZ` (CTR-TOK-21, CTR-PQZ-22): the standalone token with the PQZ layer (P6g plan D1).
 /// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Chains 31337 / 1337 / 7622 only. `MINTABLE` mints public units
@@ -33,7 +34,7 @@ contract NoUnderlyingPqzToken is NoUnderlyingToken, PqzLayer {
         _requireUnused(cfg, false, true, true, false);
         _setMetadata(cfg.name, cfg.symbol, cfg.decimals);
         AdminLib.init(AdminLib.KIND_NONE_PQZ, cfg.features, cfg.lockedFeatures, cfg.owner, cfg.roles);
-        PqzLib.init(cfg.conf, _REGISTRY, PQZ_VERIFIER);
+        PqzStateLib.init(cfg.conf, _REGISTRY, PQZ_VERIFIER);
         if (cfg.initialSupply != 0) _mint(cfg.initialHolder, cfg.initialSupply);
     }
 

@@ -21,7 +21,7 @@ import {UAPqzVerifier} from "./UAPqzVerifier.sol";
 ///         (`requireAuthorized`, the signing UA's own signature, purpose `zether-auth`) before the precompile. The account is
 ///         the signing UA; its PQZ key is an attribute of its registry record (UA-6 U7), so a UA without one is no
 ///         PQZ account (`AccountNotRegistered`); there is no `authRef`.
-library PqzLib {
+library PqzCore {
     struct Account {
         bytes32 accHash; // 0 = Trivial(0) (P6g D10)
         uint16 accUnits;
@@ -99,7 +99,7 @@ library PqzLib {
     }
 
     // keccak256(abi.encode(uint256(keccak256("scaas.pqz")) - 1)) & ~bytes32(uint256(0xff))
-    bytes32 private constant _STORAGE = 0xda865ec17214f25b93cdb133d719c79392c290a4b9089fd0bba156256c521500;
+    bytes32 internal constant _STORAGE = 0xda865ec17214f25b93cdb133d719c79392c290a4b9089fd0bba156256c521500;
 
     bytes32 internal constant TAG_ENVELOPE = keccak256("SCAAS-PQZ-ENVELOPE-V1");
     bytes32 internal constant TAG_UA_ENVELOPE = keccak256("SCAAS-PQZ-UA-ENVELOPE-V1");
@@ -107,7 +107,7 @@ library PqzLib {
     /// @notice A direct transfer's `envelopeBinding` is `keccak256(abi.encode(TAG_DIRECT_MODE, uint8(mode)))` (review
     ///         W-A): the statement, hence `authSig`, names the storage mode, so `…NoBundle` cannot replay a BUNDLE call.
     bytes32 internal constant TAG_DIRECT_MODE = keccak256("SCAAS-PQZ-DIRECT-MODE-V1");
-    bytes32 private constant TAG_ENTRY = keccak256("SCAAS-PQZ-ENTRY-V1");
+    bytes32 internal constant TAG_ENTRY = keccak256("SCAAS-PQZ-ENTRY-V1");
     bytes32 internal constant OP_TRANSFER = 0xef22f3d1c1fc2edc565522eb73ca8cb782e8780eaf9b1f677965dd0cd5275414;
     bytes32 internal constant OP_BURN = 0x7383374d83fbb89f84ee079bff7a2742e4acb70f64b0b1e2ef40c34fb4cc1407;
     bytes32 internal constant OP_REFRESH = 0xf118f2df0f018062e2d4c296a01707dcd7ad7c85f6981d68517ac8b2cd75eede;
@@ -125,17 +125,17 @@ library PqzLib {
     uint256 internal constant INLINE_MAX_PQZH = 10;
     uint256 internal constant ROLL_MAX = 16;
     uint64 internal constant CLEAR_MAX = 32;
-    uint256 private constant MAX_TOTAL_SHIELDED = 1 << 62;
-    uint256 private constant VALUE_BOUND = 1 << 64;
-    uint256 private constant HEADER = 640;
+    uint256 internal constant MAX_TOTAL_SHIELDED = 1 << 62;
+    uint256 internal constant VALUE_BOUND = 1 << 64;
+    uint256 internal constant HEADER = 640;
     /// @dev Transfer payload: `p ‖ validUntilBlock ‖ plainUsed ‖ fromUA ‖ toUA ‖ beneficiaryUA ‖ salt(16)`, then `out`.
-    uint256 private constant T_OUT = 208;
+    uint256 internal constant T_OUT = 208;
     /// @dev Burn payload: `p ‖ validUntilBlock ‖ plainUsed ‖ fromUA ‖ beneficiaryUA`, then `u' ‖ v_f`.
-    uint256 private constant B_OUT = 160;
-    uint256 private constant OUT_ON = 16_768;
-    uint256 private constant OUT_OFF = 16_640;
-    uint256 private constant MEMO = 57;
-    uint256 private constant DISCLOSE = 33_184;
+    uint256 internal constant B_OUT = 160;
+    uint256 internal constant OUT_ON = 16_768;
+    uint256 internal constant OUT_OFF = 16_640;
+    uint256 internal constant MEMO = 57;
+    uint256 internal constant DISCLOSE = 33_184;
 
     function $() internal pure returns (PqzStorage storage s) {
         assembly ("memory-safe") { s.slot := _STORAGE }
@@ -143,71 +143,12 @@ library PqzLib {
 
     // ------------------------------------------------------------------ init
 
-    /// @notice The kind's `_init` (P6g plan D9): `verifier` the release's `UAPqzVerifier` (CTR-ZTH-20: the creator never
-    ///         chooses one; precompile and proof system: exactly `PqzSafety.PQZ`, PQZL or PQZH,
-    ///         the self-test passing now; review W-B), `auditorKey` empty or the auditor's 32-byte `pqz-mlwe` UA, cap
-    ///         `≤ 2^62`, fee `< 2^64` and `< cap`.
-    function init(IFactoryToken.ConfidentialConfig memory c, address registry, address verifier) public {
-        PqzSafety.requireAllowedChain();
-        bytes memory aud = c.auditorKey;
-        if (c.shieldScale == 0 || c.maxShielded == 0 || c.maxShielded > MAX_TOTAL_SHIELDED
-            || c.confidentialFee >= VALUE_BOUND || c.confidentialFee >= c.maxShielded
-            || c.confidentialFee + 8 * c.multiLegFee >= VALUE_BOUND || c.confidentialFee + 8 * c.multiLegFee >= c.maxShielded
-            || (aud.length != 0 && aud.length != 32) || c.maxShielded > type(uint256).max / c.shieldScale) {
-            revert IPqzToken.BadInit();
-        }
-        if (c.disclosureMode > uint8(ZetherTypes.DisclosureMode.COMPACT)) revert IPqzToken.BadDisclosureMode(c.disclosureMode);
-        if (c.auditorMode > uint8(ZetherTypes.AuditorMode.OPTIONAL)
-            || (aud.length == 0) != (c.auditorMode == uint8(ZetherTypes.AuditorMode.NONE))) {
-            revert IPqzToken.BadAuditorMode(c.auditorMode);
-        }
-        bytes32 a = aud.length == 32 ? bytes32(aud) : bytes32(0);
-        if (a != 0 && !_registered(registry, a)) revert IPqzToken.AccountNotRegistered(a);
-        PqzStorage storage s = $();
-        UAPqzVerifier v = UAPqzVerifier(verifier);
-        s.pqz = v.PRECOMPILE();
-        s.psid = v.PROOF_SYSTEM_ID();
-        PqzSafety.requirePqz(s.pqz, s.psid); // the token's verdicts come from `s.pqz`, never from the verifier (W-B)
-        s.verifier = verifier;
-        s.disclosureMode = ZetherTypes.DisclosureMode(c.disclosureMode);
-        s.auditorMode = ZetherTypes.AuditorMode(c.auditorMode);
-        s.shieldScale = c.shieldScale;
-        s.maxShielded = c.maxShielded;
-        s.confidentialFee = c.confidentialFee;
-        s.multiLegFee = c.multiLegFee;
-        s.auditorUA = a;
-    }
 
     // ------------------------------------------------------------------ shield (§7.3)
 
-    /// @notice `plainPending[ua] += amount`, `totalShielded += amount` within the cap. The token takes the public units
-    ///         (`pqzShield`) or a leg's underlying (`pqzWrapShield`).
-    function shield(bytes32 ua, uint256 amount, address registry) public {
-        PqzStorage storage s = $();
-        if (!_registered(registry, ua)) revert IPqzToken.AccountNotRegistered(ua);
-        uint256 room = s.maxShielded - s.totalShielded;
-        if (amount == 0 || amount > room) revert IPqzToken.AmountOutOfRange(amount, room);
-        s.totalShielded += amount;
-        _plain(ua, amount);
-    }
 
     // ------------------------------------------------------------------ transfer (§7.4)
 
-    /// @notice One-recipient transfer: checks, statement, `authSig`, proof, then the debit, the credit, the fee, the
-    ///         entry by `mode` (HASH commit-reveal, BUNDLE stored, NONE nothing).
-    ///      Arguments ordered for the stack: the ones used last on top.
-    function transfer(
-        Env memory e,
-        bytes calldata payload,
-        bytes calldata acc,
-        bytes[] calldata inl,
-        bytes calldata proof,
-        bytes calldata authSig
-    ) public returns (bytes32 ref) {
-        (Op memory o, bytes memory buf) = prepareTransfer(e, payload, acc, inl, proof.length);
-        _check(o, buf, proof, authSig);
-        ref = _settleTransfer(o, payload, inl);
-    }
 
     /// @notice The statement and every cheap check of a transfer, in the buffer that becomes the precompile input.
     function prepareTransfer(
@@ -226,12 +167,12 @@ library PqzLib {
 
     /// @dev A direct transfer (binding 0) binds its mode (W-A); a relayed one is bound by the envelope signature over
     ///      `data`, selector included.
-    function _bindMode(Env memory e) private pure {
+    function _bindMode(Env memory e) internal pure {
         if (e.binding == 0) e.binding = keccak256(abi.encode(TAG_DIRECT_MODE, uint8(e.mode)));
     }
 
     /// @dev Not the sender; registered; the credit cap (`RefreshRequired`); the auditor's key when `auditorOn`.
-    function _receiver(Op memory o, Env memory e) private view {
+    function _receiver(Op memory o, Env memory e) internal view {
         PqzStorage storage s = $();
         if (o.from == o.to) revert IPqzToken.SelfTransfer();
         o.keyT = _keyPtr(e.registry, o.to);
@@ -248,7 +189,7 @@ library PqzLib {
         bytes calldata acc,
         bytes[] calldata inl,
         uint256 proofLen
-    ) private view returns (bytes memory buf) {
+    ) internal view returns (bytes memory buf) {
         if (!PqzCt.isCanonical(out)) revert IPqzToken.NonCanonical();
         bytes memory t = _total(o, acc, inl);
         uint256 nk = 2 + o.auditorOn;
@@ -263,7 +204,7 @@ library PqzLib {
     }
 
     /// @dev The payload's shape by the disclosure mode: `out` with or without `v_a`, the memo exactly on HASH.
-    function _parseTransfer(bytes calldata payload, ZetherTypes.TransferMode mode) private view returns (Op memory o) {
+    function _parseTransfer(bytes calldata payload, ZetherTypes.TransferMode mode) internal view returns (Op memory o) {
         PqzStorage storage s = $();
         if (s.disclosureMode == ZetherTypes.DisclosureMode.COMPACT && mode != ZetherTypes.TransferMode.HASH) {
             revert IPqzToken.TransferEntryDisabled(uint8(s.disclosureMode));
@@ -291,7 +232,7 @@ library PqzLib {
         }
     }
 
-    function _settleTransfer(Op memory o, bytes calldata payload, bytes[] calldata inl) private returns (bytes32 ref) {
+    function _settleTransfer(Op memory o, bytes calldata payload, bytes[] calldata inl) internal returns (bytes32 ref) {
         bytes calldata out = payload[T_OUT:T_OUT + o.outLen];
         _debit(o, out[0:PqzCt.PK], out[PqzCt.CT:PqzCt.CT + PqzCt.V], inl);
         ref = _sent(o);
@@ -302,7 +243,7 @@ library PqzLib {
     }
 
     /// @dev `pending[to] ← (u, v_t)`.
-    function _credit(Op memory o, bytes32 ref, bytes calldata out) private {
+    function _credit(Op memory o, bytes32 ref, bytes calldata out) internal {
         Account storage b = $().acct[o.to];
         uint64 i = b.pendingCount;
         b.pendingHash[i] = keccak256(out[0:PqzCt.CT]); // u ‖ v_t
@@ -311,7 +252,7 @@ library PqzLib {
     }
 
     /// @dev `R = salt ‖ u ‖ v_t ‖ [v_a] ‖ word(toUA)`: SSTORE2 (BUNDLE) or its hash and the memo (HASH; P6g D14).
-    function _entry(Op memory o, bytes32 ref, bytes calldata payload) private {
+    function _entry(Op memory o, bytes32 ref, bytes calldata payload) internal {
         PqzStorage storage s = $();
         bytes calldata out = payload[T_OUT:T_OUT + o.outLen];
         bytes memory r = bytes.concat(o.salt, out[0:PqzCt.CT], out[OUT_OFF:o.outLen], o.to);
@@ -325,22 +266,6 @@ library PqzLib {
 
     // ------------------------------------------------------------------ multi-recipient transfer (op 7, CTR-PQZ-26)
 
-    /// @notice Op 7 `R_TXM`: `M` legs (decoys are legs of amount 0), one proof; the sender exactly as a single transfer,
-    ///         a credit per leg, the fee once, the entry by `mode`. Payload: `p ‖ validUntilBlock ‖ plainUsed ‖ fromUA ‖
-    ///         beneficiaryUA ‖ M ‖ salt(16) ‖ UA_0 … UA_{M−1} ‖ out ‖ [memo]`, `out = u_0 … u_{G−1} ‖ v_0 … v_{M−1} ‖ v_f ‖
-    ///         [v_{a,0} … v_{a,M−1}]`, memo `18 + 40·M` bytes on HASH.
-    function transferMulti(
-        Env memory e,
-        bytes calldata payload,
-        bytes calldata acc,
-        bytes[] calldata inl,
-        bytes calldata proof,
-        bytes calldata authSig
-    ) public returns (bytes32 ref) {
-        (Op memory o, bytes memory buf) = prepareMulti(e, payload, acc, inl, proof.length);
-        _check(o, buf, proof, authSig);
-        ref = _settleMulti(o, payload, inl);
-    }
 
     /// @notice The op 7 statement and every cheap check, in the precompile buffer.
     function prepareMulti(Env memory e, bytes calldata payload, bytes calldata acc, bytes[] calldata inl, uint256 proofLen)
@@ -366,7 +291,7 @@ library PqzLib {
     }
 
     /// @dev `M` in the id's built set, the length fixing `auditorOn`, the auditor mode, the memo on HASH.
-    function _parseMulti(bytes calldata payload, ZetherTypes.TransferMode mode) private view returns (Op memory o) {
+    function _parseMulti(bytes calldata payload, ZetherTypes.TransferMode mode) internal view returns (Op memory o) {
         PqzStorage storage s = $();
         if (s.disclosureMode == ZetherTypes.DisclosureMode.COMPACT && mode != ZetherTypes.TransferMode.HASH) {
             revert IPqzToken.TransferEntryDisabled(uint8(s.disclosureMode));
@@ -401,7 +326,7 @@ library PqzLib {
 
     /// @dev Every leg: not the sender, pairwise distinct, a registered `pqz-mlwe` UA (its key), under its credit cap;
     ///      the auditor's key when `auditorOn`.
-    function _legs(Op memory o, Env memory e, bytes calldata payload) private view {
+    function _legs(Op memory o, Env memory e, bytes calldata payload) internal view {
         PqzStorage storage s = $();
         uint256 m = o.legs;
         o.keys = new address[](m);
@@ -426,7 +351,7 @@ library PqzLib {
         bytes calldata acc,
         bytes[] calldata inl,
         uint256 proofLen
-    ) private view returns (bytes memory buf) {
+    ) internal view returns (bytes memory buf) {
         if (!PqzCt.isCanonical(out)) revert IPqzToken.NonCanonical();
         bytes memory t = _total(o, acc, inl);
         uint256 nk = 1 + o.legs + o.auditorOn;
@@ -441,7 +366,7 @@ library PqzLib {
         _cd(buf, HEADER + nk * PqzCt.PK + PqzCt.CT, out);
     }
 
-    function _settleMulti(Op memory o, bytes calldata payload, bytes[] calldata inl) private returns (bytes32 ref) {
+    function _settleMulti(Op memory o, bytes calldata payload, bytes[] calldata inl) internal returns (bytes32 ref) {
         uint256 off = T_OUT + 32 * o.legs;
         bytes calldata out = payload[off:off + o.outLen];
         uint256 vf = PqzCt.PK * o.groups + PqzCt.V * o.legs;
@@ -455,7 +380,7 @@ library PqzLib {
     }
 
     /// @dev `pending[UA_j] ← (u_{⌊j/4⌋}, v_j)` in leg order.
-    function _creditLegs(Op memory o, bytes32 ref, bytes calldata payload, bytes calldata out) private {
+    function _creditLegs(Op memory o, bytes32 ref, bytes calldata payload, bytes calldata out) internal {
         PqzStorage storage s = $();
         uint256 v0 = PqzCt.PK * o.groups;
         uint256 mlf = s.multiLegFee;
@@ -472,7 +397,7 @@ library PqzLib {
     }
 
     /// @dev The entry by `mode`: SSTORE2 of `R` (BUNDLE) or its hash and the memo (HASH).
-    function _entryMulti(Op memory o, bytes32 ref, bytes calldata payload, bytes calldata out) private {
+    function _entryMulti(Op memory o, bytes32 ref, bytes calldata payload, bytes calldata out) internal {
         PqzStorage storage s = $();
         bytes memory r = _bundleMulti(o, payload, out);
         if (o.mode == ZetherTypes.TransferMode.BUNDLE) {
@@ -485,7 +410,7 @@ library PqzLib {
 
     /// @dev `R = salt ‖ u_0 … u_{G−1} ‖ (v_j ‖ [v_{a,j}] ‖ word(UA_j))_{j<M}` — for `M = 1` the single transfer's bundle
     ///      exactly (CTR-PQZ-26).
-    function _bundleMulti(Op memory o, bytes calldata payload, bytes calldata out) private pure returns (bytes memory r) {
+    function _bundleMulti(Op memory o, bytes calldata payload, bytes calldata out) internal pure returns (bytes memory r) {
         uint256 m = o.legs;
         uint256 us = PqzCt.PK * o.groups;
         uint256 ls = 160 + PqzCt.V * o.auditorOn;
@@ -500,31 +425,18 @@ library PqzLib {
         }
     }
 
-    function _put(bytes memory r, uint256 off, bytes memory x) private pure {
+    function _put(bytes memory r, uint256 off, bytes memory x) internal pure {
         assembly ("memory-safe") { mcopy(add(add(r, 32), off), add(x, 32), mload(x)) }
     }
 
-    function _putCd(bytes memory r, uint256 off, bytes calldata x) private pure {
+    function _putCd(bytes memory r, uint256 off, bytes calldata x) internal pure {
         assembly ("memory-safe") { calldatacopy(add(add(r, 32), off), x.offset, x.length) }
     }
 
     // ------------------------------------------------------------------ burn and refresh (§7.5)
 
-    /// @notice `R_BURN`: the debit with `amount` public (0 = refresh); the token then pays `amount · shieldScale`.
-    function unshield(
-        Env memory e,
-        bytes calldata payload,
-        bytes calldata acc,
-        bytes[] calldata inl,
-        bytes calldata proof,
-        bytes calldata authSig
-    ) public {
-        (Op memory o, bytes memory buf) = prepareBurn(e, payload, acc, inl, proof.length);
-        _check(o, buf, proof, authSig);
-        _settleBurn(o, payload[B_OUT:B_OUT + PqzCt.CT], inl);
-    }
 
-    function _settleBurn(Op memory o, bytes calldata out, bytes[] calldata inl) private {
+    function _settleBurn(Op memory o, bytes calldata out, bytes[] calldata inl) internal {
         _debit(o, out[0:PqzCt.PK], out[PqzCt.PK:PqzCt.CT], inl);
         _sent(o);
         if (o.fee != 0) _plain(o.ben, o.fee);
@@ -566,7 +478,7 @@ library PqzLib {
         bytes calldata acc,
         bytes[] calldata inl,
         uint256 proofLen
-    ) private view returns (bytes memory buf) {
+    ) internal view returns (bytes memory buf) {
         if (!PqzCt.isCanonical(out)) revert IPqzToken.NonCanonical();
         bytes memory t = _total(o, acc, inl);
         o.stLen = HEADER + PqzCt.PK + 2 * PqzCt.CT;
@@ -579,27 +491,6 @@ library PqzLib {
 
     // ------------------------------------------------------------------ rollover (§7.6)
 
-    /// @notice Anyone: `acc += Σ cts` for the next `1 ≤ n ≤ 16` pending credits.
-    function rollOver(bytes32 ua, bytes calldata acc, bytes[] calldata cts) public {
-        Account storage a = $().acct[ua];
-        uint256 n = cts.length;
-        uint64 r = a.rolled;
-        if (n == 0 || n > ROLL_MAX || r + n > a.pendingCount) revert IPqzToken.RollOverRange(n);
-        if (acc.length != PqzCt.CT || keccak256(acc) != PqzCt.stored(a.accHash)) revert IPqzToken.AccMismatch();
-        bytes memory c = PqzCt.load(acc);
-        for (uint256 j; j < n; ++j) {
-            if (cts[j].length != PqzCt.CT || keccak256(cts[j]) != a.pendingHash[uint64(r + j)]) {
-                revert IPqzToken.InlineMismatch(j);
-            }
-            PqzCt.plus(c, cts[j]);
-        }
-        PqzCt.reduce(c);
-        bytes32 h = keccak256(c);
-        a.accHash = h;
-        a.rolled = uint64(r + n);
-        a.accUnits += uint16(n);
-        emit IPqzToken.PqzRolled(ua, uint64(r + n), h);
-    }
 
     // ------------------------------------------------------------------ disclosure (§7.9, P6g D11)
 
@@ -632,7 +523,7 @@ library PqzLib {
 
     /// @dev Leg `j` of a bundle: the offsets of `u_{⌊j/4⌋}` and of `v_j` (`v_{a,j}` for `AUDITOR`), and its owner.
     function _legOf(bytes memory bundle, uint256 j, uint8 kind)
-        private view returns (uint256 uOff, uint256 vOff, bytes32 owner)
+        internal view returns (uint256 uOff, uint256 vOff, bytes32 owner)
     {
         uint256 bl = bundle.length;
         (uint256 g, uint256 m, uint256 a) = _bundleShape(bl);
@@ -647,7 +538,7 @@ library PqzLib {
 
     /// @dev `(G, M, auditorOn)` of a bundle `salt ‖ u_0 … u_{G−1} ‖ (v_j ‖ [v_{a,j}] ‖ UA_j)_{j<M}` from its length:
     ///      unique for every built `M` (≤ 8: the legs take < 16,384 bytes), else `BadPayload`.
-    function _bundleShape(uint256 bl) private pure returns (uint256 g, uint256 m, uint256 a) {
+    function _bundleShape(uint256 bl) internal pure returns (uint256 g, uint256 m, uint256 a) {
         if (bl < 16 + PqzCt.PK) revert IPqzToken.BadPayload(bl);
         g = (bl - 16) / PqzCt.PK;
         uint256 rem = bl - 16 - PqzCt.PK * g;
@@ -660,7 +551,7 @@ library PqzLib {
         revert IPqzToken.BadPayload(bl);
     }
 
-    function _discHead(bytes memory buf, bytes32 ref, uint256 amount, uint8 kind, Env memory e) private view {
+    function _discHead(bytes memory buf, bytes32 ref, uint256 amount, uint8 kind, Env memory e) internal view {
         bytes32 tag = kind == 0 ? OP_DS : kind == 1 ? OP_DR : OP_DA;
         _mem(buf, 0, abi.encode(tag, $().psid, block.chainid, e.chainUid, address(this), e.registry, ref, amount,
             uint256(kind)));
@@ -684,57 +575,18 @@ library PqzLib {
 
     // ------------------------------------------------------------------ statement views (by DELEGATECALL)
 
-    /// @notice The statement an entry point would build for `payload` (`op` 7 multi, 1 single, 2 burn / refresh with
-    ///         `e.amount`, `e.recipient`), after every cheap check; a transfer payload with the memo is commit-reveal.
-    ///         Public, so the builders stay in the library and out of the tokens' code.
-    function statementOf(uint8 op, Env memory e, bytes calldata payload, bytes calldata acc, bytes[] calldata inl)
-        public view returns (bytes memory)
-    {
-        bytes memory buf;
-        if (op == 7) {
-            e.mode = multiHasMemo(payload) ? ZetherTypes.TransferMode.HASH : _defaultMode();
-            (, buf) = prepareMulti(e, payload, acc, inl, 0);
-        } else if (op == 1) {
-            uint256 l = payload.length - T_OUT;
-            e.mode = l == OUT_ON + MEMO || l == OUT_OFF + MEMO ? ZetherTypes.TransferMode.HASH : _defaultMode();
-            (, buf) = prepareTransfer(e, payload, acc, inl, 0);
-        } else {
-            (, buf) = prepareBurn(e, payload, acc, inl, 0);
-        }
-        return _stmtOf(buf);
-    }
 
-    /// @notice The disclosure statement of leg `leg` of `ref` (reverts as `disclosureBuffer`).
-    function disclosureStatementOf(bytes32 ref, uint256 leg, uint256 amount, uint8 kind, bytes memory bundle, Env memory e)
-        public view returns (bytes memory)
-    {
-        return _stmtOf(disclosureBuffer(ref, leg, amount, kind, bundle, e, 0));
-    }
 
-    /// @notice The precompile's verdict on the disclosure of leg `leg` with `proof` (the caller checked the shape).
-    function verifyAmountOf(
-        bytes32 ref,
-        uint256 leg,
-        uint256 amount,
-        uint8 kind,
-        bytes memory bundle,
-        bytes memory proof,
-        Env memory e
-    ) public view returns (bool) {
-        bytes memory buf = disclosureBuffer(ref, leg, amount, kind, bundle, e, proof.length);
-        assembly ("memory-safe") { mcopy(add(add(buf, 37), 33184), add(proof, 32), mload(proof)) }
-        return verdict($().pqz, buf);
-    }
 
     /// @dev `pqzTransfer`'s form: BUNDLE on a BUNDLE token, commit-reveal (HASH) on a COMPACT one.
-    function _defaultMode() private view returns (ZetherTypes.TransferMode) {
+    function _defaultMode() internal view returns (ZetherTypes.TransferMode) {
         return $().disclosureMode == ZetherTypes.DisclosureMode.COMPACT
             ? ZetherTypes.TransferMode.HASH
             : ZetherTypes.TransferMode.BUNDLE;
     }
 
     /// @dev The statement bytes of a precompile buffer (the 5-byte prefix and the empty proof dropped).
-    function _stmtOf(bytes memory buf) private pure returns (bytes memory st) {
+    function _stmtOf(bytes memory buf) internal pure returns (bytes memory st) {
         st = new bytes(buf.length - 5);
         assembly ("memory-safe") { mcopy(add(st, 32), add(buf, 37), mload(st)) }
     }
@@ -742,7 +594,7 @@ library PqzLib {
     // ------------------------------------------------------------------ shared steps
 
     /// @dev Words 0–2 of both payloads and the sender (`fromUA` at 96).
-    function _head(Op memory o, bytes calldata payload) private pure {
+    function _head(Op memory o, bytes calldata payload) internal pure {
         uint256 p = uint256(bytes32(payload[0:32]));
         if (p > type(uint64).max) revert IPqzToken.BadPayload(payload.length);
         o.p = uint64(p);
@@ -752,7 +604,7 @@ library PqzLib {
     }
 
     /// @dev Expiry, the sender registered (its key), the beneficiary registered or 0 and the fee, the counter.
-    function _common(Op memory o, Env memory e) private view {
+    function _common(Op memory o, Env memory e) internal view {
         PqzStorage storage s = $();
         if (block.number > o.validUntil) revert IPqzToken.Expired(o.validUntil);
         o.registry = e.registry;
@@ -769,7 +621,7 @@ library PqzLib {
     ///      is the current one or the base (the one the last debit left; CTR-PQZ-08, W-E): a rollover since then only
     ///      moved credits from `pending[baseRolled..rolled)` into `acc`, so the base with its own inline credits gives
     ///      the same `T`, and an in-flight debit survives anyone's rollover.
-    function _total(Op memory o, bytes calldata acc, bytes[] calldata inl) private view returns (bytes memory t) {
+    function _total(Op memory o, bytes calldata acc, bytes[] calldata inl) internal view returns (bytes memory t) {
         Account storage a = $().acct[o.from];
         if (o.plainUsed > a.plainPending) revert IPqzToken.PlainOverdraw(o.plainUsed, a.plainPending);
         if (acc.length != PqzCt.CT) revert IPqzToken.AccMismatch();
@@ -808,7 +660,7 @@ library PqzLib {
     /// @dev The authority (registry: the signing UA `from` itself over `authDigest`, purpose `zether-auth`; UA-6 U7),
     ///      then the proof.
     function _check(Op memory o, bytes memory buf, bytes calldata proof, bytes calldata authSig)
-        private view
+        internal view
     {
         uint256 len = o.stLen;
         bytes32 h;
@@ -829,7 +681,7 @@ library PqzLib {
     ///      `floor = p`, up to `CLEAR_MAX` dead `pendingHash` slots deleted, `plainPending −= plainUsed`; the result is
     ///      the new base. `rolled` is the one the calldata `acc` belongs to: a debit on the base undoes the rollovers
     ///      since (their credits are pending again, every slot `≥ floor` is kept).
-    function _debit(Op memory o, bytes calldata u, bytes calldata vF, bytes[] calldata inl) private {
+    function _debit(Op memory o, bytes calldata u, bytes calldata vF, bytes[] calldata inl) internal {
         Account storage a = $().acct[o.from];
         uint64 r = o.rolled;
         uint64 p = o.p;
@@ -854,12 +706,12 @@ library PqzLib {
     }
 
     /// @dev `sendCounter++`; the debit's `entryRef` (counter before the increment).
-    function _sent(Op memory o) private returns (bytes32) {
+    function _sent(Op memory o) internal returns (bytes32) {
         $().acct[o.from].sendCounter = o.sendCounter + 1;
         return entryRefOf(o.chainUid, o.from, o.sendCounter);
     }
 
-    function _plain(bytes32 ua, uint256 amount) private {
+    function _plain(bytes32 ua, uint256 amount) internal {
         PqzStorage storage s = $();
         uint256 v = s.acct[ua].plainPending + amount;
         s.acct[ua].plainPending = v;
@@ -872,26 +724,26 @@ library PqzLib {
     }
 
     /// @dev A UA holding a PQZ key (UA-6 U7: `recordOf(ua).pqzKey ≠ 0`).
-    function _registered(address registry, bytes32 ua) private view returns (bool) {
+    function _registered(address registry, bytes32 ua) internal view returns (bool) {
         (, address ptr) = IUARegistry(registry).recordOf(ua);
         return ptr != address(0);
     }
 
     /// @dev The PQZ key pointer of a holder (`AccountNotRegistered` otherwise, or for a key of another length).
-    function _keyPtr(address registry, bytes32 ua) private view returns (address ptr) {
+    function _keyPtr(address registry, bytes32 ua) internal view returns (address ptr) {
         (, ptr) = IUARegistry(registry).recordOf(ua);
         if (ptr.code.length != PqzCt.PK + 1) revert IPqzToken.AccountNotRegistered(ua);
     }
 
     // ------------------------------------------------------------------ the buffer `u8(op) ‖ be32(len) ‖ stmt ‖ proof`
 
-    function _buffer(uint8 op, uint256 stLen, uint256 proofLen) private pure returns (bytes memory buf) {
+    function _buffer(uint8 op, uint256 stLen, uint256 proofLen) internal pure returns (bytes memory buf) {
         buf = new bytes(5 + stLen + proofLen);
         assembly ("memory-safe") { mstore(add(buf, 32), or(shl(248, op), shl(216, stLen))) }
     }
 
     /// @dev The 20 header words (§7.7) at statement offset 0.
-    function _header(bytes memory buf, Op memory o, Env memory e) private view {
+    function _header(bytes memory buf, Op memory o, Env memory e) internal view {
         _mem(buf, 0, abi.encode(o.opTag, $().psid, block.chainid, address(this), e.registry, o.from, o.to, o.ben, o.fee,
             o.amount));
         _mem(buf, 320, abi.encode(o.recipient, uint256(o.sendCounter), uint256(o.p), o.validUntil, o.auditorOn,
@@ -899,15 +751,15 @@ library PqzLib {
     }
 
     /// @dev Statement offset `off` (the buffer's 5-byte prefix skipped).
-    function _mem(bytes memory buf, uint256 off, bytes memory x) private pure {
+    function _mem(bytes memory buf, uint256 off, bytes memory x) internal pure {
         assembly ("memory-safe") { mcopy(add(add(buf, 37), off), add(x, 32), mload(x)) }
     }
 
-    function _cd(bytes memory buf, uint256 off, bytes calldata x) private pure {
+    function _cd(bytes memory buf, uint256 off, bytes calldata x) internal pure {
         assembly ("memory-safe") { calldatacopy(add(add(buf, 37), off), x.offset, x.length) }
     }
 
-    function _key(bytes memory buf, uint256 off, address ptr) private view {
+    function _key(bytes memory buf, uint256 off, address ptr) internal view {
         assembly ("memory-safe") { extcodecopy(ptr, add(add(buf, 37), off), 1, 16384) }
     }
 }

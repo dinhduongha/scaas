@@ -7,7 +7,7 @@ import {PQZ_UID, PQZL_ID} from "./helpers/PqzRegistryBase.sol";
 import {PqzLayer} from "../../src/pqz/PqzLayer.sol";
 import {IPqzToken} from "../../src/pqz/IPqzToken.sol";
 import {PqzCt} from "../../src/pqz/PqzCt.sol";
-import {PqzLib} from "../../src/pqz/PqzLib.sol";
+import {PqzCore} from "../../src/pqz/PqzCore.sol";
 import {ZetherTypes} from "../../src/zether/ZetherTypes.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
@@ -121,7 +121,7 @@ contract PqzNoneTest is PqzFixture {
         assertEq(st.length, 83_072);
         assertEq(_cut(st, 640, 83_072 - 640), _cut(txStmt, 640, 83_072 - 640), "body = vector body");
         bytes memory head = bytes.concat(
-            abi.encode(PqzLib.OP_TRANSFER, PQZL_ID, block.chainid, address(tok), address(reg), alice, bob, carol, FEE,
+            abi.encode(PqzCore.OP_TRANSFER, PQZL_ID, block.chainid, address(tok), address(reg), alice, bob, carol, FEE,
                 uint256(0)),
             abi.encode(uint256(0), uint256(0), uint256(1), block.number + 100, uint256(1), uint256(1000), PQZ_UID,
                 _direct(ZetherTypes.TransferMode.BUNDLE), uint256(uint128(salt)), bytes32(0))
@@ -142,7 +142,7 @@ contract PqzNoneTest is PqzFixture {
         bytes memory pl = bytes.concat(abi.encode(uint256(0), block.number + 5, uint256(50), alice, bytes32(0)), nb);
         bytes memory st = tok.burnStatement(pl, _acc(alice), new bytes[](0), 7, address(0xD00D), keccak256("b"));
         assertEq(st.length, 50_048);
-        assertEq(bytes32(_cut(st, 0, 32)), PqzLib.OP_BURN);
+        assertEq(bytes32(_cut(st, 0, 32)), PqzCore.OP_BURN);
         assertEq(uint256(bytes32(_cut(st, 288, 32))), 7, "amount");
         assertEq(address(uint160(uint256(bytes32(_cut(st, 320, 32))))), address(0xD00D), "recipient");
         assertEq(bytes32(_cut(st, 544, 32)), keccak256("b"), "envelopeBinding");
@@ -151,7 +151,7 @@ contract PqzNoneTest is PqzFixture {
         assertEq(_cut(st, 17_024, PqzCt.CT), ct.sum(t, new bytes[](0), new bytes[](0), 50), "T = 0 + Trivial(50)");
         assertEq(_cut(st, 33_536, PqzCt.CT), nb, "u' || v_f");
         st = tok.burnStatement(pl, _acc(alice), new bytes[](0), 0, address(0), 0);
-        assertEq(bytes32(_cut(st, 0, 32)), PqzLib.OP_REFRESH);
+        assertEq(bytes32(_cut(st, 0, 32)), PqzCore.OP_REFRESH);
     }
 
     // ------------------------------------------------------------------ inline credits on both sides of `rolled`
@@ -377,14 +377,14 @@ contract PqzNoneTest is PqzFixture {
         bytes memory r = bytes.concat(salt, _cut(out, 0, PqzCt.CT), _cut(out, 16_640, 128), bob);
         bytes memory st = tok.disclosureStatement(ref, 0, 123, 1, r);
         assertEq(st.length, 33_184);
-        assertEq(_cut(st, 0, 288), abi.encode(PqzLib.OP_DR, PQZL_ID, block.chainid, PQZ_UID, address(tok), address(reg),
+        assertEq(_cut(st, 0, 288), abi.encode(PqzCore.OP_DR, PQZL_ID, block.chainid, PQZ_UID, address(tok), address(reg),
             ref, uint256(123), uint256(1)));
         assertEq(_cut(st, 288, PqzCt.PK), _cut(txStmt, 17_024, PqzCt.PK), "pk_t (bob)");
         assertEq(_cut(st, 16_672, PqzCt.PK + 128), _cut(out, 0, PqzCt.CT), "u || v_t");
         st = tok.disclosureStatement(ref, 0, 123, 2, r);
         assertEq(_cut(st, 288, PqzCt.PK), _cut(txStmt, 33_408, PqzCt.PK), "pk_a");
         assertEq(_cut(st, 33_056, 128), _cut(out, 16_640, 128), "v_a");
-        assertEq(bytes32(_cut(st, 0, 32)), PqzLib.OP_DA);
+        assertEq(bytes32(_cut(st, 0, 32)), PqzCore.OP_DA);
         bytes memory opening = abi.encode(r, hex"0a0b");
         vm.expectCall(PQZ, abi.encodePacked(uint8(5), uint32(33_184), st, hex"0a0b"));
         assertTrue(tok.verifyTransferAmount(ref, 0, 123, 2, opening));
