@@ -39,6 +39,8 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
 
 ### Now (order)
 
+- **Now (2026-10-20 evening):** 5h part A on branch `pqz-state-b` — Tasks 1, 2, 3z done and reviewed; Task 3 done, review
+  pending; next 3b → 4 → 5 → 6 (HANDOFF.md top note, ledger in the worktree's `.superpowers/sdd/2026-10-20-pqz-state-redesign/`).
 - [ ] **Review order with Codex (owner 2026-10-20; Codex credits limited — two runs only, one type at a time, each on
   the owner's go):** (1) UA-6 (contracts, clients; Claude reviews) → (2) 5h part A (PQZ state, proof-free shield,
   `SHIELD_POOL`, `mtx*` names, fees; plus UA-5c (a) the confidential ops through the UA envelope binding and (b)
