@@ -28,6 +28,7 @@ class Vectors(unittest.TestCase):
             self.assertEqual(ua.is_zether(n), r['zether'], name)
             self.assertEqual(ua.is_member(n, False), r['member'], name)
             self.assertEqual(ua.is_member(n, True), r['memberHedera'], name)
+            self.assertEqual(ua.is_pqz_holder(n), r['pqzHolder'], name)
             if native:
                 with self.assertRaises(ua.UAError) as e:
                     ua.tag(n)
@@ -35,6 +36,16 @@ class Vectors(unittest.TestCase):
             else:
                 self.assertEqual(ua.kind_tag_string(n), r['tag'])
                 self.assertEqual(hx(ua.tag(n)), r['TAG'])
+        self.assertEqual([(s[0], s[1], list(s[2]), s[3]) for s in ua.SCHEMES],
+                         [(s['kind'], s['name'], s['lengths'], s['group']) for s in K['schemes']])
+        for s in K['schemes']:
+            self.assertEqual(ua.kind_tag_string(s['kind']), s['tag'])
+            self.assertEqual(hx(ua.tag(s['kind'])), s['TAG'])
+            for f in (lambda: ua.ua_of(s['kind'], bytes(16384)), lambda: ua.validate_key_data(s['kind'], bytes(16384))):
+                with self.assertRaises(ua.UAError) as e:
+                    f()
+                self.assertEqual(e.exception.code, 'UAKindNotDerived')
+        self.assertEqual(hx(ua.key_hash_of(0x0142, b(K['pqzKey']))), K['pqzKeyHash'])
         for r in K['groups']:
             self.assertEqual(ua.group_tag_string(r['group']), r['tag'])
             self.assertEqual(hx(ua.group_tag(r['group'])), r['GROUP'])
@@ -86,8 +97,21 @@ class Vectors(unittest.TestCase):
         for p in S['pop']:
             c = S['contexts'][p['context']]
             self.assertEqual(hx(ua.chain_key_hash(c['chainId'])), p['chainKeyHash'])
-            got = ua.pop_digest(c['chainId'], b(c['chainUid']), b(c['registry']), b(p['ua']), b(p['authRef']))
+            got = ua.pop_digest(c['chainId'], b(c['chainUid']), b(c['registry']), b(p['ua']), b(p['pqzKeyHash']))
             self.assertEqual(hx(got), p['popDigest'])
+        for r in S['pqzReg']:
+            c = S['contexts'][r['context']]
+            args = (c['chainId'], b(c['chainUid']), b(c['registry']), b(r['ua']))
+            self.assertEqual(hx(ua.pqz_reg_message(*args, b(K['pqzKey']))), r['pqzRegMessage'])
+            self.assertEqual(hx(ua.pop_digest(*args, b(r['pqzKeyHash']))), r['popDigest'])
+            h, d, m = ua.holder_pop_message(r['kind'], *args, b(K['pqzKey']))
+            self.assertEqual((hx(h), hx(d)), (r['pqzKeyHash'], r['popDigest']))
+            self.assertEqual(m, ua.ua_message(r['kind'], ua.POP_TAG, d))
+        with self.assertRaises(ua.UAError) as e:
+            ua.holder_pop_message(0x0101, 1, bytes(32), bytes(20), bytes(32), bytes(16384))
+        self.assertEqual(e.exception.code, 'UAPqzHolder')
+        for r in S['pqzMsig']:
+            self.assertEqual(ua.msig_pqz_eligible(b(r['keyData'])), r['eligible'], r['reason'])
         for a in S['uaAuth']:
             c = S['contexts'][a['context']]
             args = (a['generation'], c['chainId'], b(c['registry']), b(c['chainUid']))
