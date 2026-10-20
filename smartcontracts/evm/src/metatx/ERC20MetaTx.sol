@@ -472,6 +472,15 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
     // exclude 0); when the REGULATED features (FREEZE / PAUSE / ALLOWLIST, AdminLib) are built they must also hook
     // here, including the UA->UA branch.
     function _uaMove(bytes32 from, bytes32 to, uint256 value) internal {
+        // D19: no UA-ledger caller reaches `SHIELD_POOL` (its moves bypass `_update`); only `_poolMove` does.
+        if (from == MetaTxLib.pad(MetaTxLib.SHIELD_POOL) || to == MetaTxLib.pad(MetaTxLib.SHIELD_POOL)) {
+            revert ShieldPoolNotPayable();
+        }
+        _poolMove(from, to, value);
+    }
+
+    /// @dev `_uaMove` without the pool refusal: for a shielding layer's own moves into / out of `SHIELD_POOL` (D19).
+    function _poolMove(bytes32 from, bytes32 to, uint256 value) internal {
         bool fromUA = !UAKinds.inNativeSpace(from);
         bool toUA = !UAKinds.inNativeSpace(to);
         if (!toUA && address(uint160(uint256(to))) == address(this)) revert TransferToSelf(); // CTR-MTX-18

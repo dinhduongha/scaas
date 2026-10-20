@@ -199,6 +199,27 @@ contract UALedgerTest is UALedgerBase {
         tok.uaExecuteTransfer(t, a);
     }
 
+    /// D19: no UA-ledger fee reaches `SHIELD_POOL`: the transfer fee, and the self-call fee of `uaExecute` (`_uaMove`
+    /// itself refuses the pool; it bypasses the `_update` guard).
+    function test_D19_feeToShieldPoolRefused() public {
+        address sp = MetaTxLib.SHIELD_POOL;
+        _fund(uaP, 1_000);
+        MetaTxLib.UAMetaTransfer memory t = _t(uaP, _pad(bob), 100);
+        (t.mode, t.fee, t.feeRecipient) = (RR | RF | FIX, 1, sp);
+        _xferReverts(t, abi.encodeWithSelector(IUALedger.ShieldPoolNotPayable.selector));
+        _wrapFor(alice, 10_000);
+        vm.prank(alice);
+        wrp.transferToUA(uaP, 5_000);
+        MetaTxLib.UAMetaTransaction memory m = _m(address(wrp), uaP,
+            abi.encodeWithSignature("unwrap(address,uint256,address,uint256)", address(und), 100, bob, 100));
+        (m.mode, m.fee, m.feeRecipient) = (RR | RF | FIX, 1, sp);
+        bytes memory a = _authM(address(wrp), m);
+        vm.expectRevert(IUALedger.ShieldPoolNotPayable.selector);
+        vm.prank(RELAYER);
+        wrp.uaExecute(m, a);
+        assertEq(wrp.balanceOf(sp), 0, "nothing reached the pool");
+    }
+
     /// CTR-MTX-18: a `uaExecute` fee to the token's own address is refused (derived and native `from`).
     function test_T_V3_3_feeToTokenRefused() public {
         _wrapFor(alice, 10_000);

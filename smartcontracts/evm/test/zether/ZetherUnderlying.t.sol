@@ -135,6 +135,7 @@ contract ZetherUnderlyingTest is ZetherFixture {
         }
         assertEq(sum, t.totalShielded(), "sum of plaintext balances == totalShielded");
         UnderlyingToken u = UnderlyingToken(payable(address(t)));
+        assertEq(t.balanceOf(SHIELD_POOL_), t.totalShielded() * SCALE, "balanceOf(SHIELD_POOL) == totalShielded x scale");
         assertGe(u.collateralValue(), t.totalSupply(), "reserve invariant (the shielded value sits in SHIELD_POOL, D19)");
     }
 
@@ -225,9 +226,30 @@ contract ZetherUnderlyingTest is ZetherFixture {
     function _unwrapProof(uint256 amount, uint256 b, address recipient, address u, uint256 minOut, bytes32 envB)
         internal view returns (bytes memory pl, bytes memory pr)
     {
+        return _unwrapProofB(amount, b, recipient, u, minOut, envB, _none());
+    }
+
+    function _unwrapProofB(uint256 amount, uint256 b, address recipient, address u, uint256 minOut, bytes32 envB, ZetherTypes.UA ben)
+        internal view returns (bytes memory pl, bytes memory pr)
+    {
         pl = _unshieldPayload(tok, alice);
-        bytes memory st = stm.unshieldUnwrapStatement(address(w), pl, amount, recipient, _none(), u, minOut, envB);
-        pr = _proveU(alice, st, amount, b, _none(), tok);
+        bytes memory st = stm.unshieldUnwrapStatement(address(w), pl, amount, recipient, ben, u, minOut, envB);
+        pr = _proveU(alice, st, amount, b, ben, tok);
+    }
+
+    /// D19: the beneficiary fee of an unshield-unwrap leaves the pool for the beneficiary's public balance; the amount
+    /// is burnt from the pool and paid by the leg.
+    function test_unshieldUnwrap_beneficiaryFee_toPublicBalance() public {
+        _shielded(60, 40 * SCALE); // 60 + 80 shielded
+        uint256 s0 = w.totalSupply();
+        (bytes memory pl, bytes memory pr) = _unwrapProofB(10, 140, address(0xD00D), address(usd), 0, 0, carol.ua);
+        w.zetherUnshieldUnwrap(pl, pr, carol.ua, address(usd), address(0xD00D), 10, 0);
+        assertEq(usd.balanceOf(address(0xD00D)), 10 * SCALE);
+        assertEq(w.totalSupply(), s0 - 10 * SCALE, "only the unwrapped amount is burnt, the fee stays supply");
+        assertEq(w.totalShielded(), s0 / SCALE - 10 - FEE);
+        assertEq(w.balanceOf(SHIELD_POOL_), w.totalShielded() * SCALE, "pool == totalShielded x scale");
+        assertEq(w.balanceOfUA(ZetherTypes.UA.unwrap(carol.ua)), FEE * SCALE, "fee: public units to the beneficiary");
+        assertGe(UnderlyingToken(payable(address(w))).collateralValue(), w.totalSupply());
     }
 
     function test_unshieldUnwrap_paysTheLeg_burnsFromThePool() public {

@@ -199,11 +199,11 @@ library ZetherLib {
     ///         `acc_f −= (C_deb + [fee]G, D_out)`, `pend_t += (C_out, D_out)`, `totalShielded -= fee` (the fee is paid in public units by the layer), `sendCounter_f++`;
     ///         the record `salt ‖ B` stored in full.
     function transferSingle(bytes calldata payload, bytes calldata proof, ZetherTypes.UA beneficiary, Env memory e)
-        public returns (bytes32)
+        public returns (bytes32, uint256)
     {
         (Ctx memory c, Prepared memory pp) = _prepareSingle(payload, beneficiary, e);
         _check(c, pp, proof, OP_TRANSFER);
-        return _settleSingle(c, pp, payload);
+        return (_settleSingle(c, pp, payload), pp.fee);
     }
 
     function _prepareSingle(bytes calldata payload, ZetherTypes.UA beneficiary, Env memory e)
@@ -236,10 +236,10 @@ library ZetherLib {
         ZetherTypes.UA beneficiary,
         ZetherTypes.TransferMode mode,
         Env memory e
-    ) public returns (bytes32) {
+    ) public returns (bytes32, uint256) {
         (Ctx memory c, Prepared memory pp) = _prepareMulti(payload, beneficiary, mode, e);
         _check(c, pp, proof, OP_MULTI_HASH);
-        return _settleMulti(c, pp, payload, mode);
+        return (_settleMulti(c, pp, payload, mode), pp.fee);
     }
 
     function _prepareMulti(bytes calldata payload, ZetherTypes.UA beneficiary, ZetherTypes.TransferMode mode, Env memory e)
@@ -284,7 +284,7 @@ library ZetherLib {
         uint256 amount,
         address recipient,
         Env memory e
-    ) public {
+    ) public returns (uint256) {
         (Ctx memory c, Prepared memory pp) = _prepareUnshield(payload, amount, recipient, beneficiary, e);
         _check(c, pp, proof, OP_BURN);
         ZetherStorage storage s = $();
@@ -294,6 +294,7 @@ library ZetherLib {
         s.totalShielded -= amount;
         _payFee(s, pp);
         emit IZetherToken.ZetherUnshielded(pp.from, amount, recipient);
+        return pp.fee;
     }
 
     function _prepareUnshield(

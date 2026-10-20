@@ -56,7 +56,7 @@ contract UnderlyingZetherToken is UnderlyingToken, ZetherLayer {
         uint256 scale = ZetherLib.$().shieldScale;
         if (minted % scale != 0) revert AmountNotScaled(minted, scale);
         ZetherLib.shield(ua, minted / scale, _REGISTRY);
-        _uaMove(bytes32(0), MetaTxLib.pad(MetaTxLib.SHIELD_POOL), minted); // D19: minted to the pool
+        _poolMove(bytes32(0), MetaTxLib.pad(MetaTxLib.SHIELD_POOL), minted); // D19: minted to the pool
     }
 
     /// @notice The unshield proof (amount and `recipient` in the statement; a direct call also binds `u` and `minOut`),
@@ -90,9 +90,9 @@ contract UnderlyingZetherToken is UnderlyingToken, ZetherLayer {
     ) private {
         uint256 i = UnderlyingLib.indexOf(x.u);
         _requirePayee(x.recipient);
-        ZetherLib.unshield(payload, proof, beneficiary, x.amount, x.recipient, _envUnwrap(x.u, x.minOut));
-        _uaMove(MetaTxLib.pad(MetaTxLib.SHIELD_POOL), bytes32(0), x.amount * ZetherLib.$().shieldScale); // D19: burn from the pool
-        _payBeneficiary(beneficiary);
+        uint256 fee = ZetherLib.unshield(payload, proof, beneficiary, x.amount, x.recipient, _envUnwrap(x.u, x.minOut));
+        _poolMove(MetaTxLib.pad(MetaTxLib.SHIELD_POOL), bytes32(0), x.amount * ZetherLib.$().shieldScale); // D19: burn from the pool
+        _payBeneficiary(beneficiary, fee);
         (uint256 out,) = UnderlyingLib.quoteUnwrap(i, x.amount * ZetherLib.$().shieldScale, x.recipient, x.minOut);
         UnderlyingLib.payOut(i, x.recipient, out);
     }

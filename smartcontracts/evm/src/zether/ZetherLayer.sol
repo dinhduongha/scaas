@@ -117,7 +117,7 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
     function zetherShield(bytes calldata encodedY, uint256 amount) external nonReentrant {
         ZetherLib.shield(ZetherTypes.toUA(encodedY), amount, _REGISTRY);
         address m = _msgSender();
-        _uaMove(m == MetaTxLib.UA_POOL ? _ticketSubject() : MetaTxLib.pad(m), MetaTxLib.pad(MetaTxLib.SHIELD_POOL),
+        _poolMove(m == MetaTxLib.UA_POOL ? _ticketSubject() : MetaTxLib.pad(m), MetaTxLib.pad(MetaTxLib.SHIELD_POOL),
             amount * ZetherLib.$().shieldScale);
     }
 
@@ -127,25 +127,33 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
     function zetherTransfer(bytes calldata payload, bytes calldata proof, ZetherTypes.UA beneficiary)
         external nonReentrant returns (bytes32)
     {
-        return _paid(ZetherLib.transferMulti(payload, proof, beneficiary, ZetherLib.defaultMode(), _env()), beneficiary);
+        (bytes32 ref, uint256 fee) = ZetherLib.transferMulti(payload, proof, beneficiary, ZetherLib.defaultMode(), _env());
+        _payBeneficiary(beneficiary, fee);
+        return ref;
     }
 
     function zetherTransferCompact(bytes calldata payload, bytes calldata proof, ZetherTypes.UA beneficiary)
         external nonReentrant returns (bytes32)
     {
-        return _paid(ZetherLib.transferMulti(payload, proof, beneficiary, ZetherTypes.TransferMode.HASH, _env()), beneficiary);
+        (bytes32 ref, uint256 fee) = ZetherLib.transferMulti(payload, proof, beneficiary, ZetherTypes.TransferMode.HASH, _env());
+        _payBeneficiary(beneficiary, fee);
+        return ref;
     }
 
     function zetherTransferNoBundle(bytes calldata payload, bytes calldata proof, ZetherTypes.UA beneficiary)
         external nonReentrant returns (bytes32)
     {
-        return _paid(ZetherLib.transferMulti(payload, proof, beneficiary, ZetherTypes.TransferMode.NONE, _env()), beneficiary);
+        (bytes32 ref, uint256 fee) = ZetherLib.transferMulti(payload, proof, beneficiary, ZetherTypes.TransferMode.NONE, _env());
+        _payBeneficiary(beneficiary, fee);
+        return ref;
     }
 
     function zetherTransferSingle(bytes calldata payload, bytes calldata proof, ZetherTypes.UA beneficiary)
         external nonReentrant returns (bytes32)
     {
-        return _paid(ZetherLib.transferSingle(payload, proof, beneficiary, _env()), beneficiary);
+        (bytes32 ref, uint256 fee) = ZetherLib.transferSingle(payload, proof, beneficiary, _env());
+        _payBeneficiary(beneficiary, fee);
+        return ref;
     }
 
     // ------------------------------------------------------------------ unshield
@@ -160,9 +168,9 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
         uint256 amount
     ) external nonReentrant {
         _requirePayee(to);
-        ZetherLib.unshield(payload, proof, beneficiary, amount, to, _env());
-        _uaMove(MetaTxLib.pad(MetaTxLib.SHIELD_POOL), MetaTxLib.pad(to), amount * ZetherLib.$().shieldScale);
-        _payBeneficiary(beneficiary);
+        uint256 fee = ZetherLib.unshield(payload, proof, beneficiary, amount, to, _env());
+        _poolMove(MetaTxLib.pad(MetaTxLib.SHIELD_POOL), MetaTxLib.pad(to), amount * ZetherLib.$().shieldScale);
+        _payBeneficiary(beneficiary, fee);
     }
 
     // ------------------------------------------------------------------ roll-over (not allowlisted, CTR-ZTH-34)
@@ -194,23 +202,19 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
 
     // ------------------------------------------------------------------ internals
 
-    /// @dev A public payee of an unshield: not `SHIELD_POOL`, not `UA_POOL`, not zero or the token (`_uaMove` checks those).
+    /// @dev A public payee of an unshield: not `SHIELD_POOL`, not `UA_POOL`; the token is refused by the move and zero by
+    ///      `prepareUnshield` (`ZeroRecipient`).
     function _requirePayee(address to) internal pure {
-        if (to == MetaTxLib.SHIELD_POOL || to == MetaTxLib.UA_POOL) revert ShieldPoolNotPayable();
+        if (to == MetaTxLib.SHIELD_POOL) revert ShieldPoolNotPayable();
+        if (to == MetaTxLib.UA_POOL) revert UAPoolNotPayable();
     }
 
-    /// @dev The beneficiary fee (D19): `confidentialFee · shieldScale` public units from the pool to the beneficiary's
-    ///      public (UA-ledger) balance, when a beneficiary is named (the library has set `totalShielded` and registered it).
-    function _payBeneficiary(ZetherTypes.UA beneficiary) internal {
-        ZetherLib.ZetherStorage storage s = ZetherLib.$();
-        if (ZetherTypes.UA.unwrap(beneficiary) != bytes32(0) && s.confidentialFee != 0) {
-            _uaMove(MetaTxLib.pad(MetaTxLib.SHIELD_POOL), ZetherTypes.UA.unwrap(beneficiary), s.confidentialFee * s.shieldScale);
+    /// @dev The beneficiary fee (D19): `fee · shieldScale` public units (`fee` from the library: 0 without a beneficiary)
+    ///      from the pool to the beneficiary's public (UA-ledger) balance.
+    function _payBeneficiary(ZetherTypes.UA beneficiary, uint256 fee) internal {
+        if (fee != 0) {
+            _poolMove(MetaTxLib.pad(MetaTxLib.SHIELD_POOL), ZetherTypes.UA.unwrap(beneficiary), fee * ZetherLib.$().shieldScale);
         }
-    }
-
-    function _paid(bytes32 entryRef, ZetherTypes.UA beneficiary) private returns (bytes32) {
-        _payBeneficiary(beneficiary);
-        return entryRef;
     }
 
     /// @dev The statement binding of this call (CTR-ZTH-34): the envelope's inside `mtxExecute` (`ZTX_V1_RELAYED`),

@@ -148,34 +148,54 @@ contract ZetherHandler is ZetherFixture {
         feeUA[k] += FEE * SCALE;
     }
 
-    function unshieldUnwrap(uint8 i, uint8 l, uint256 amt) external noLoss {
+    /// @dev `k % 4 == 3`: no beneficiary; else user `k % 3` gets the inner fee in public units (D19) when `acc` covers it.
+    function _ben(uint8 k, uint256 i, uint256 amt) internal view returns (ZetherTypes.UA ben, uint256 fee) {
+        if (k % 4 == 3 || acc[i] < amt + FEE) return (_none(), 0);
+        return (us[k % 3].ua, FEE);
+    }
+
+    function unshieldUnwrap(uint8 i, uint8 l, uint256 amt, uint8 k) external noLoss {
         (i, l) = (i % 3, l % 2);
         if (_pendingRate()) return; // the fixture's _ensureAcc would wrap-shield
         _ensureAcc(i);
         amt = bound(amt, 1, acc[i]);
-        (uint256 out,) = w.previewUnwrap(address(leg[l]), amt * SCALE);
-        (,, uint256 r,,) = w.legOf(address(leg[l]));
-        if (out == 0 || out > r) return;
-        bytes memory pl = _unshieldPayload(tok, us[i]);
-        bytes memory st = stm.unshieldUnwrapStatement(address(w), pl, amt, address(0xD00D), _none(), address(leg[l]), out, 0);
-        s0 = w.totalSupply();
-        w.zetherUnshieldUnwrap(pl, _proveU(us[i], st, amt, acc[i], _none(), tok), _none(), address(leg[l]),
-            address(0xD00D), amt, out);
-        require(w.totalSupply() == s0 - amt * SCALE, "unshield-unwrap burns exactly from the pool");
-        acc[i] -= amt;
+        (ZetherTypes.UA ben, uint256 fee) = _ben(k, i, amt);
+        uint256 out = _uuOut(l, amt);
+        if (out == 0) return;
+        _uu(i, l, amt, out, ben);
+        acc[i] -= amt + fee;
+        if (fee != 0) feeUA[uint8(k % 3)] += fee * SCALE;
         paid[l] += out;
     }
 
-    function unshieldPublic(uint8 i, uint256 amt) external noLoss {
+    /// @dev The leg's payout for `amt` units, 0 when it is nothing or exceeds the reserve.
+    function _uuOut(uint8 l, uint256 amt) internal view returns (uint256 out) {
+        (out,) = w.previewUnwrap(address(leg[l]), amt * SCALE);
+        (,, uint256 r,,) = w.legOf(address(leg[l]));
+        if (out > r) out = 0;
+    }
+
+    function _uu(uint8 i, uint8 l, uint256 amt, uint256 out, ZetherTypes.UA ben) internal {
+        bytes memory pl = _unshieldPayload(tok, us[i]);
+        bytes memory st = stm.unshieldUnwrapStatement(address(w), pl, amt, address(0xD00D), ben, address(leg[l]), out, 0);
+        s0 = w.totalSupply();
+        w.zetherUnshieldUnwrap(pl, _proveU(us[i], st, amt, acc[i], ben, tok), ben, address(leg[l]),
+            address(0xD00D), amt, out);
+        require(w.totalSupply() == s0 - amt * SCALE, "unshield-unwrap burns exactly from the pool");
+    }
+
+    function unshieldPublic(uint8 i, uint256 amt, uint8 k) external noLoss {
         i %= 3;
         if (_pendingRate()) return;
         _ensureAcc(i);
         amt = bound(amt, 1, acc[i]);
-        (bytes memory pl, bytes memory pr) = _proveUnshield(tok, us[i], amt, acc[i], address(this), _none(), 0);
+        (ZetherTypes.UA ben, uint256 fee) = _ben(k, i, amt);
+        (bytes memory pl, bytes memory pr) = _proveUnshield(tok, us[i], amt, acc[i], address(this), ben, 0);
         s0 = w.totalSupply();
-        tok.zetherUnshield(pl, pr, _none(), address(this), amt);
+        tok.zetherUnshield(pl, pr, ben, address(this), amt);
         require(w.totalSupply() == s0, "unshield moves, not mints");
-        acc[i] -= amt;
+        acc[i] -= amt + fee;
+        if (fee != 0) feeUA[uint8(k % 3)] += fee * SCALE;
     }
 
     function unwrap(uint8 l, uint256 amt) external noLoss {
