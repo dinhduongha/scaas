@@ -15,7 +15,6 @@ import {PqzBurnLib} from "./PqzBurnLib.sol";
 import {PqzStateLib} from "./PqzStateLib.sol";
 import {PqzViewLib} from "./PqzViewLib.sol";
 import {IConfidentialUnderlyingToken} from "../confidential/IConfidentialToken.sol";
-import {UAKinds} from "../ua/UAKinds.sol";
 
 /// @title Kind `UNDERLYING_PQZ` (CTR-TOK-21, CTR-PQZ-22): the wrapper of 1–8 legs with the PQZ layer (P6g plan D1).
 /// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Chains 31337 / 1337 / 7622 only. Legs, rates, reserves,
@@ -73,21 +72,9 @@ contract UnderlyingPqzToken is UnderlyingToken, PqzLayer, IConfidentialUnderlyin
     {
         _ben(payload, 128, beneficiary);
         _burn(_envUnwrap(x, _ticketBinding()), payload, proof, auth, accHint);
-        _poolMove(MetaTxLib.pad(MetaTxLib.SHIELD_POOL), bytes32(0), x.amount * PqzCore.$().shieldScale);
-        _payUnwrap(x);
-    }
-
-    function _payUnwrap(Unwrap calldata x) private {
-        uint256 i = UnderlyingLib.indexOf(x.underlying);
         uint256 wrapped = x.amount * PqzCore.$().shieldScale;
-        if (UAKinds.inNativeSpace(x.recipient)) {
-            address r = address(uint160(uint256(x.recipient)));
-            (uint256 out,) = UnderlyingLib.quoteUnwrap(i, wrapped, r, x.minOut);
-            UnderlyingLib.payOut(i, r, out);
-        } else {
-            (uint256 out,) = UnderlyingLib.quoteUnwrapToUA(i, wrapped, x.minOut);
-            UnderlyingLib.payOutToUA(i, x.recipient, out);
-        }
+        _poolMove(MetaTxLib.pad(MetaTxLib.SHIELD_POOL), bytes32(0), wrapped);
+        UnderlyingLib.payOutTo(UnderlyingLib.indexOf(x.underlying), x.recipient, wrapped, x.minOut);
     }
 
     /// @notice The `envelopeBinding` word of a direct `mtxUnshieldUnwrap` (P6g plan D12).

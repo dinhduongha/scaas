@@ -15,6 +15,7 @@ import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {AdminLib} from "./AdminLib.sol";
 import {MetaTokenBase} from "./MetaTokenBase.sol";
 import {HederaLib} from "../hedera/HederaLib.sol";
+import {UAKinds} from "../ua/UAKinds.sol";
 
 /// @title Legs, reserve and rates of kind `UNDERLYING` (CTR-TOK-24), in the ERC-7201 namespace `scaas.underlying`.
 /// @notice External library: the core of wrap and unwrap **without a destination** (pull, rate, reserve; pay out),
@@ -288,6 +289,20 @@ library UnderlyingLib {
         uint256 after_ = IERC20(u).balanceOf(address(this));
         uint256 sent = before > after_ ? before - after_ : 0;
         if (sent != out) revert IUnderlyingToken.UnderlyingTransferMismatch(u, out, sent);
+    }
+
+    /// @notice The leg payout of an unshield-unwrap (CTR-ZTH-51, UA-5c) to a recipient id, after the caller burnt
+    ///         `wrapped`: a native id (its address) by `quoteUnwrap` + `payOut`, a derived UA in leg `i`'s own UA ledger
+    ///         by `quoteUnwrapToUA` + `payOutToUA` (`UALegNotLedger` for an outside leg).
+    function payOutTo(uint256 i, bytes32 recipient, uint256 wrapped, uint256 minOut) public returns (uint256 out) {
+        if (UAKinds.inNativeSpace(recipient)) {
+            address r = address(uint160(uint256(recipient)));
+            (out,) = quoteUnwrap(i, wrapped, r, minOut);
+            payOut(i, r, out);
+        } else {
+            (out,) = quoteUnwrapToUA(i, wrapped, minOut);
+            payOutToUA(i, recipient, out);
+        }
     }
 
     // ------------------------------------------------------------------ guardian (WRAP_DISABLEABLE)

@@ -88,20 +88,13 @@ contract UnderlyingZetherToken is UnderlyingToken, ZetherLayer, IConfidentialUnd
         Unwrap calldata x
     ) private {
         uint256 i = UnderlyingLib.indexOf(x.underlying);
-        bool native = UAKinds.inNativeSpace(x.recipient);
-        address r = address(uint160(uint256(x.recipient)));
-        if (native) _requirePayee(r); // a derived recipient: the leg's `transferToUA` checks it
+        // a derived recipient: the leg's `transferToUA` checks it
+        if (UAKinds.inNativeSpace(x.recipient)) _requirePayee(address(uint160(uint256(x.recipient))));
         uint256 fee = ZetherLib.unshield(payload, proof, beneficiary, x.amount, x.recipient, _envUnwrap(x.underlying, x.minOut));
         uint256 wrapped = x.amount * ZetherLib.$().shieldScale;
         _poolMove(MetaTxLib.pad(MetaTxLib.SHIELD_POOL), bytes32(0), wrapped); // D19: burn from the pool
         _payBeneficiary(beneficiary, fee);
-        if (native) {
-            (uint256 out,) = UnderlyingLib.quoteUnwrap(i, wrapped, r, x.minOut);
-            UnderlyingLib.payOut(i, r, out);
-        } else {
-            (uint256 out,) = UnderlyingLib.quoteUnwrapToUA(i, wrapped, x.minOut);
-            UnderlyingLib.payOutToUA(i, x.recipient, out);
-        }
+        UnderlyingLib.payOutTo(i, x.recipient, wrapped, x.minOut);
     }
 
     /// @notice As `UnderlyingToken` (also cancels a pending rate change, CTR-TOK-06); restated for the second base.
