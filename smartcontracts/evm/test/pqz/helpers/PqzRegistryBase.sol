@@ -12,9 +12,9 @@ bytes32 constant PQZL_ID = 0x8079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e
 bytes32 constant PQZH_ID = 0x0a47a7689250ba178a52ad5972cdd9153358c022cb694c08d2389e82de2fead4;
 
 /// @notice A gen-1 `UARegistry` as on chain 7622 (P6g plan D15): `mldsa65` on its precompile candidate (mocked: every
-///         input ⇒ 1 except the probe's invalid one) and `pqz-mlwe` on `UAPqzVerifier` (the `PQZ` precompile mocked,
-///         `PqzMock`). ML-DSA signatures are filler bytes of the right length; what is real is every registry and
-///         verifier path between them.
+///         input ⇒ 1 except the probe's invalid one) and the PQZ key verifier `UAPqzVerifier` (slot 0x0142; the `PQZ`
+///         precompile mocked, `PqzMock`). ML-DSA signatures are filler bytes of the right length; what is real is every
+///         registry and verifier path between them.
 abstract contract PqzRegistryBase is PqzMock {
     address internal constant ML65 = 0x5CAA500000000000000000000000000000000013;
     uint256 internal constant ML65_PK = 1952;
@@ -61,11 +61,15 @@ abstract contract PqzRegistryBase is PqzMock {
         reg = new UARegistry(PQZ_UID, address(0), false, 12_000_000, address(0), true, k);
     }
 
-    /// An `mldsa65` UA with the filler key `seed ‖ 0…` (PoP accepted by the mocked precompile).
-    function _mldsaUA(uint8 seed) internal returns (bytes32 ua) {
-        bytes memory pk = new bytes(ML65_PK);
+    /// The filler `mldsa65` key `seed ‖ 0…`.
+    function _mlPk(uint8 seed) internal pure returns (bytes memory pk) {
+        pk = new bytes(ML65_PK);
         pk[0] = bytes1(seed);
-        ua = reg.register(UAKinds.MLDSA65, pk, new bytes(ML65_SIG), 0, "");
+    }
+
+    /// An `mldsa65` UA with the filler key `seed ‖ 0…` (PoP accepted by the mocked precompile), no PQZ key.
+    function _mldsaUA(uint8 seed) internal returns (bytes32 ua) {
+        ua = reg.register(UAKinds.MLDSA65, _mlPk(seed), new bytes(ML65_SIG), "", "");
     }
 
     /// The `UA` auth format with a filler ML-DSA signature (`abi.encode(bytes(""), sig)`).
@@ -73,8 +77,9 @@ abstract contract PqzRegistryBase is PqzMock {
         return abi.encode(bytes(""), new bytes(ML65_SIG));
     }
 
-    /// A `pqz-mlwe` UA for `pk` with the `authRef` `auth` (PoP: any proof bytes, op 3 mocked to 1 by the caller).
-    function _pqzUA(bytes memory pk, bytes32 auth) internal returns (bytes32) {
-        return reg.register(UAKinds.PQZ_MLWE, pk, hex"aa", auth, _mlAuth());
+    /// A PQZ account (UA-6): the `mldsa65` UA of the filler key `seed ‖ 0…` registered with the PQZ key `pk` in one
+    /// call (`R_REG`: any proof bytes, op 3 mocked to 1 by the caller).
+    function _pqzUA(bytes memory pk, uint8 seed) internal returns (bytes32) {
+        return reg.register(UAKinds.MLDSA65, _mlPk(seed), new bytes(ML65_SIG), pk, hex"aa");
     }
 }

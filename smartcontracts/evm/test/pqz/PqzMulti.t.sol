@@ -23,7 +23,7 @@ contract PqzMultiTest is PqzFixture {
     function setUp() public {
         _stack();
         _mockOp(7, 1);
-        for (uint8 i; i < 8; ++i) xs[i] = _pqzUA(_pk(20 + i), _mldsaUA(10 + i));
+        for (uint8 i; i < 8; ++i) xs[i] = _pqzUA(_pk(20 + i), 10 + i);
         tok = _newToken("pqz");
     }
 
@@ -104,8 +104,10 @@ contract PqzMultiTest is PqzFixture {
         }
     }
 
+    /// The PQZ key of a holder (UA-6: `recordOf`'s pointer, SSTORE2 code after its leading STOP byte).
     function _keyOf(bytes32 ua) internal view returns (bytes memory) {
-        return reg.keyOf(ua);
+        (, address ptr) = reg.recordOf(ua);
+        return _slice(ptr.code, 1, ptr.code.length - 1);
     }
 
     // ------------------------------------------------------------------ statement and effects

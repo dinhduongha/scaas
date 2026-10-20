@@ -80,7 +80,7 @@ contract UARegistryGroupsTest is UARegistryBase, GroupFixtures {
             pop = _gsign(g.kind, g.secret, g.vk, _popMsg(r, g.kind, g.keyData));
             if (g.kind == MS) pop = bytes.concat(pop, g.hints);
         }
-        return r.register(g.kind, g.keyData, pop, 0, "");
+        return r.register(g.kind, g.keyData, pop, "", "");
     }
 
     /// `auth = abi.encode(bytes(""), sig)` (CTR-UA-17: stored kinds carry only the signature).
@@ -121,16 +121,16 @@ contract UARegistryGroupsTest is UARegistryBase, GroupFixtures {
             assertEq(reg.keyHashOf(g.kind, g.keyData), g.keyHash);
             vm.warp(5_000 + i);
             vm.expectEmit(true, true, false, true, address(reg));
-            emit IUARegistry.UARegistered(g.ua, g.kind, g.keyData, 0);
-            assertEq(reg.register(g.kind, g.keyData, g.pop, 0, ""), g.ua);
-            (IUARegistry.Record memory r, bytes32 authRef) = reg.recordOf(g.ua);
+            emit IUARegistry.UARegistered(g.ua, g.kind, g.keyData, address(0));
+            assertEq(reg.register(g.kind, g.keyData, g.pop, "", ""), g.ua);
+            (IUARegistry.Record memory r, address pqzKey) = reg.recordOf(g.ua);
             assertEq(r.kind, g.kind);
             assertEq(r.registeredAt, 5_000 + i);
-            assertEq(authRef, 0);
+            assertEq(pqzKey, address(0));
             assertEq(r.keyPtr.code, bytes.concat(hex"00", g.vk), "keyPtr = SSTORE2(vk)");
             assertEq(reg.keyOwner(g.keyHash), g.ua);
             vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAAlreadyRegistered.selector, g.ua));
-            reg.register(g.kind, g.keyData, g.pop, 0, "");
+            reg.register(g.kind, g.keyData, g.pop, "", "");
             ++count;
         }
         assertEq(count, 20);
@@ -157,7 +157,7 @@ contract UARegistryGroupsTest is UARegistryBase, GroupFixtures {
                     assertEq(err, keccak256("UAPoP"), vm.parseJsonString(j, string.concat(r, ".name")));
                     vm.expectRevert(IUARegistry.UAPoP.selector);
                 }
-                reg.register(gs[k].kind, d, pop, 0, "");
+                reg.register(gs[k].kind, d, pop, "", "");
                 ++seen;
             }
         }
@@ -173,7 +173,7 @@ contract UARegistryGroupsTest is UARegistryBase, GroupFixtures {
             : bytes.concat(g.vk, hex"0002", other, KEY_X_N);
         bytes memory pop = bytes.concat(_bip340Sign(g.secret, _popMsg(reg, MS, d)), g.hints);
         vm.expectRevert(IUARegistry.UAPoP.selector);
-        reg.register(MS, d, pop, 0, "");
+        reg.register(MS, d, pop, "", "");
     }
 
     /// The group key occupies its keyHash group: the same key as a single key (`bip340` x(Q), `schnorr-bn254` Y) is
@@ -189,7 +189,7 @@ contract UARegistryGroupsTest is UARegistryBase, GroupFixtures {
         bytes32 qua = _register(reg, UAKinds.SCHNORR_BN254, b.vk);
         assertEq(b.keyHash, reg.keyHashOf(UAKinds.SCHNORR_BN254, b.vk));
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKeyInUse.selector, b.keyHash, qua));
-        reg.register(FB, b.keyData, b.pop, 0, "");
+        reg.register(FB, b.keyData, b.pop, "", "");
     }
 
     // ----- requireAuthorized (CTR-UA-17) -----
@@ -247,7 +247,7 @@ contract UARegistryGroupsTest is UARegistryBase, GroupFixtures {
         Group[4] memory gs = _mains();
         for (uint256 k; k < 4; ++k) {
             Group memory g = gs[k];
-            bytes memory call = abi.encodeCall(reg.register, (g.kind, g.keyData, g.pop, 0, ""));
+            bytes memory call = abi.encodeCall(reg.register, (g.kind, g.keyData, g.pop, "", ""));
             (uint256 lo, uint256 hi) = (20_000, 8_000_000); // lo fails, hi succeeds
             while (hi - lo > 250) {
                 uint256 mid = (lo + hi) / 2;
@@ -299,7 +299,7 @@ contract UARegistryGroupsTest is UARegistryBase, GroupFixtures {
             _expectUnauthorized(gen2, g.ua, UAKinds.PURPOSE_METATX, DIGEST, abi.encode(g.keyData, sig));
             _expectUnauthorized(gen2, g.ua, UAKinds.PURPOSE_KEYOP, DIGEST, auth);
             vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKindDisabled.selector, g.kind));
-            gen2.register(g.kind, g.keyData, g.pop, 0, "");
+            gen2.register(g.kind, g.keyData, g.pop, "", "");
         }
     }
 
@@ -372,7 +372,7 @@ contract UARegistryGroupsTest is UARegistryBase, GroupFixtures {
         m[1] = Member(r.kindOf(b), b, 1);
         m[2] = Member(UAKinds.EVM_EOA, _pad(vm.addr(PK_E)), 1);
         d = _msigKey(3, m);
-        ms = r.register(UAKinds.MSIG, d, "", 0, "");
+        ms = r.register(UAKinds.MSIG, d, "", "", "");
     }
 
     function _memberSigs(UARegistry r, bytes memory d, bytes32 ms, Group memory a, Group memory b)
@@ -409,7 +409,7 @@ contract UARegistryGroupsTest is UARegistryBase, GroupFixtures {
                 vm.toString(g.n)
             );
             (bool ok,, uint256 used) =
-                meter.measure(address(reg), abi.encodeCall(reg.register, (g.kind, g.keyData, g.pop, 0, "")));
+                meter.measure(address(reg), abi.encodeCall(reg.register, (g.kind, g.keyData, g.pop, "", "")));
             assertTrue(ok, label);
             assertLt(used, BUDGET / 4, "register well within the budget");
             emit log_named_uint(string.concat(label, " register"), used);
@@ -440,7 +440,7 @@ contract UARegistryGroupsTest is UARegistryBase, GroupFixtures {
             new UARegistry.KindConfig[](0)
         );
         Group memory g = _group(kind, 16, 16);
-        bytes32 mu = r1.register(kind, g.keyData, "", 0, "");
+        bytes32 mu = r1.register(kind, g.keyData, "", "", "");
         Member[] memory m = new Member[](1);
         UARegistry.MemberSig[] memory s = new UARegistry.MemberSig[](1);
         s[0] = UARegistry.MemberSig(0, "", new bytes(sigLen));
@@ -448,7 +448,7 @@ contract UARegistryGroupsTest is UARegistryBase, GroupFixtures {
         for (uint256 i; i < 2; ++i) {
             m[0] = Member(kind, mu, uint16(i + 1)); // another id per generation
             bytes memory d = _msigKey(uint16(i + 1), m);
-            bytes32 ms = regs[i].register(UAKinds.MSIG, d, "", 0, "");
+            bytes32 ms = regs[i].register(UAKinds.MSIG, d, "", "", "");
             uint256 bound = GROUP_CAP + 35_000; // UARegistry.MSIG_MEMBER_GAS
             if (i == 1) bound += GROUP_CAP / 63 + 5_000; // gen 1's own hold (register step 4)
             (bool ok,) = address(regs[i]).call{gas: bound}(

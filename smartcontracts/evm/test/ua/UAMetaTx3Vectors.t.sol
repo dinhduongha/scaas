@@ -45,7 +45,7 @@ contract UAMetaTx3VectorsTest is UARegistryBase {
                 uint16(vm.parseJsonUint(sj, string.concat(d, "kind"))),
                 vm.parseJsonBytes(sj, string.concat(d, "keyData")),
                 vm.parseJsonBytes(sj, string.concat(d, "pop.sig")),
-                0,
+                "",
                 ""
             );
         }

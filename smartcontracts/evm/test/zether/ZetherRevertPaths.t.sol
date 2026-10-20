@@ -108,7 +108,7 @@ contract ZetherRevertPathsTest is ZetherFixture {
         bytes32 m = reg.uaMessage(
             UAKinds.ZETHER_BLS12381, UAKinds.PURPOSE_POP, reg.popDigest(ZetherTypes.UA.unwrap(blsUa), 0)
         );
-        reg.register(UAKinds.ZETHER_BLS12381, blsKey, ZetherKeys.schnorr(0x7777, m, true), 0, "");
+        reg.register(UAKinds.ZETHER_BLS12381, blsKey, ZetherKeys.schnorr(0x7777, m, true), "", "");
         assertEq(reg.kindOf(ZetherTypes.UA.unwrap(blsUa)), UAKinds.ZETHER_BLS12381);
         assertFalse(tok.registered(blsUa));
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.AccountNotRegistered.selector, blsUa));

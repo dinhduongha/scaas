@@ -575,7 +575,7 @@ contract ZetherUnderlyingTest is ZetherFixture {
         bytes memory y = ZetherKeys.pub(0xA07, false);
         ua = UAKinds.uaOf(UAKinds.SCHNORR_BN254, y);
         bytes32 m = reg.uaMessage(UAKinds.SCHNORR_BN254, UAKinds.PURPOSE_POP, reg.popDigest(ua, 0));
-        reg.register(UAKinds.SCHNORR_BN254, y, ZetherKeys.sign("scaas.ua.schnorr.v1", 0xA07, m, false), 0, "");
+        reg.register(UAKinds.SCHNORR_BN254, y, ZetherKeys.sign("scaas.ua.schnorr.v1", 0xA07, m, false), "", "");
     }
 
     /// UA-5a (CTR-UA-26): `NONE_ZETHER` inherits `burn` on the UA allowlist from `NoUnderlyingToken`; a derived signer
