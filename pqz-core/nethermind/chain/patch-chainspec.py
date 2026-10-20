@@ -7,7 +7,9 @@ precompile address has an allocation. Prints the diff: exactly one added key, en
 
 The first timestamp must lie at least 5 minutes in the future (wall clock, as in add-schedule.py): an activation at a
 block already made would change history and split a re-synced node from the chain (review CHAIN-02, 2026-10-19). Only
---testnet-reset activates at genesis, and there the timestamp must equal the genesis timestamp.
+--testnet-reset activates at genesis, and there the timestamp must equal the genesis timestamp. Without it the first
+timestamp must also lie after the genesis timestamp (a fresh chain whose genesis is still in the future: activating
+at its genesis needs the reset params; review Minor-7, 2026-10-20).
 
 --testnet-reset (path B: a fresh chain from this genesis, owner 2026-10-15) also sets three params that leave the
 genesis block, hence its hash, unchanged: eip4895TransitionTimestamp 1 (withdrawals from block 1: without them a
@@ -42,6 +44,8 @@ def main(src, eng, ts, out, *flags):
     if not reset and t < time.time() + 300:
         sys.exit(f"timestamp {t} is not at least 5 minutes in the future (now {int(time.time())}); "
                  f"activation at genesis is --testnet-reset's")
+    if not reset and t <= g0:
+        sys.exit(f"timestamp {t} is not after the genesis timestamp {g0}; activation at genesis is --testnet-reset's")
     e["schedules"][0]["timestamp"] = hex(t)
     if any(int(str(s["timestamp"]), 0) <= t for s in e["schedules"][1:]):
         sys.exit("later schedules must be after the first")
@@ -65,21 +69,29 @@ def main(src, eng, ts, out, *flags):
 
 def check():
     """--check (review CHAIN-02): a future first timestamp passes, a past one or genesis without --testnet-reset is
-    refused; --testnet-reset takes exactly the genesis timestamp."""
+    refused, and so is one at or before a still-future genesis; --testnet-reset takes exactly the genesis timestamp.
+    Each refusal must give its expected reason (review Minor-6)."""
     now = int(time.time())
     with tempfile.TemporaryDirectory() as d:
         src, eng, out = (os.path.join(d, f) for f in ("g.json", "e.json", "o.json"))
-        json.dump({"params": {"networkID": 1}, "engine": {"clique": {}}, "genesis": {"timestamp": "0x0"},
-                   "accounts": {"0x1": {}}}, open(src, "w"))
+        src2 = os.path.join(d, "g2.json")  # a fresh chain whose genesis is still an hour ahead
+        for f, g0 in ((src, "0x0"), (src2, hex(now + 3600))):
+            json.dump({"params": {"networkID": 1}, "engine": {"clique": {}}, "genesis": {"timestamp": g0},
+                       "accounts": {"0x1": {}}}, open(f, "w"))
         json.dump({"schedules": [{"timestamp": "0x0", "pqz": []}]}, open(eng, "w"))
         main(src, eng, str(now + 900), out)
         main(src, eng, "0", out, "--testnet-reset")
-        for bad in ([str(now - 60)], [str(now + 60)], ["0"], [str(now + 900), "--testnet-reset"]):
+        main(src2, eng, str(now + 3600), out, "--testnet-reset")
+        main(src2, eng, str(now + 3601), out)
+        for g, bad, why in ((src, [str(now - 60)], "5 minutes"), (src, [str(now + 60)], "5 minutes"),
+                            (src, ["0"], "5 minutes"), (src, [str(now + 900), "--testnet-reset"], "not the genesis"),
+                            (src2, [str(now + 900)], "not after the genesis"),
+                            (src2, [str(now + 3600)], "not after the genesis")):
             try:
-                main(src, eng, bad[0], out, *bad[1:])
+                main(g, eng, bad[0], out, *bad[1:])
                 raise AssertionError(bad)
             except SystemExit as e:
-                assert isinstance(e.code, str) and e.code, bad
+                assert isinstance(e.code, str) and why in e.code, (bad, e.code)
                 print(f"  refused ({' '.join(bad)}): {e.code}")
     print("patch-chainspec --check: ok")
 
