@@ -39,6 +39,16 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
 
 ### Now (order)
 
+- [ ] **Review order with Codex (owner 2026-10-20; Codex credits limited — two runs only, one type at a time, each on
+  the owner's go):** (1) UA-6 (contracts, clients; Claude reviews) → (2) 5h part A (PQZ state, proof-free shield,
+  `SHIELD_POOL`, `mtx*` names, fees; contracts, today's parameters; Claude reviews) → (3) 5h part B: the 16k
+  regeneration in pqz-core (C, Rust, PQZH Ligero, codegen, vectors; q = 2^50 − 42,310,535, B-1, A-2, `R_REG`) →
+  (4) **Codex run 1: pqz-core Rust + C** — one job over the v3 → v4 pqz-core diff, focus: Fiat–Shamir transcript (B-1,
+  A-2), parameters / q / Ligero subgroup, `R_REG` message, constant-time paths, secret wiping (A-3), C = Rust parity;
+  hand it the gate logs, fuzz results and review A's cheating prover; free sandbox check `codex sandbox` first →
+  (5) fixes → fuzz → gate fin → **freeze pqz-core** → (6) **Codex run 2: contracts** (OpenFactory 5g-Z2, UA-6 registry,
+  PQZ / Zether after 5h) before the 7622 redeploy → (7) plan fs3 Task 13 (7622 reset; ask the owner before timing).
+  If credits allow only one run: pqz-core first (proof soundness); contracts keep Claude reviews.
 - **Next (2026-10-20 shutdown):** (`rev2-small-fixes` and Z2 merged 2026-10-20) → UA-6 (CTR-UA-30: PQZ key as an attribute of a PQ-signing UA, supplied in `register`; Zether key stays a UA) → 5h (+ `plainPending` removed, `SHIELD_POOL` for PQZ and Zether) → 16k parameter regen with B-1 / A-2 / R_REG under one `proofSystemId` → Task 12 → 6 → 13 → 14 (resume notes in HANDOFF.md).
 - [ ] **P0 PQZL Fiat–Shamir fix — rest of plan `docs/superpowers/plans/2026-10-19-pqzl-fs3.md`** (owner 2026-10-19:
   first; code merged `361a86b`, PQZL `proofSystemId` v3; full item in COMPLETED.md): Task 5h, the 16k regeneration,
