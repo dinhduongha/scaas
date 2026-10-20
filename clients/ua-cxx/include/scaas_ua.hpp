@@ -13,7 +13,7 @@ namespace scaas::ua {
 
 using Bytes = std::vector<uint8_t>;
 
-// code(): UAKeyData, UAIdInNativeSpace, UAKindUnknown, UAKindNotDerived, UAKindNotNative, UAIdFormat, UAPurposeUnknown.
+// code(): UAKeyData, UAIdInNativeSpace, UAKindUnknown, UAKindNotDerived, UAKindNotNative, UAIdFormat, UAPurposeUnknown, UAPqzHolder.
 // reason(): the label after "UAKeyData: " (empty for every other code).
 class Error : public std::runtime_error {
 public:
@@ -38,6 +38,11 @@ struct Member {
     Bytes id;  // 32 bytes
     uint16_t weight;
 };
+struct HolderPop {
+    Bytes pqzKeyHash;  // 32 bytes, 0 without a PQZ key
+    Bytes popDigest;
+    Bytes message;  // uaMessage(kind, pop, popDigest)
+};
 struct Domain {
     uint32_t generation;
     uint64_t chainId;
@@ -61,11 +66,17 @@ void validateKeyData(uint16_t kind, const Bytes& keyData, bool hederaNative);
 bool inNativeSpace(const Bytes& id);
 bool isNative(uint16_t kind);
 bool isZether(uint16_t kind);
+bool isPqzHolder(uint16_t kind);  // 0x0130-0x0132 may hold a PQZ key
+bool msigPqzEligible(const Bytes& keyData);  // msig members outside 0x0130-0x0133 weigh less than the threshold
 bool isSigning(uint16_t kind);
 bool isMember(uint16_t kind, bool hederaNative);
 Bytes uaMessage(uint16_t kind, const Bytes& purposeTag, const Bytes& digest);
 Bytes chainKeyHash(uint64_t chainId);
-Bytes popDigest(uint64_t chainId, const Bytes& chainUid, const Bytes& registry, const Bytes& ua, const Bytes& authRef);
+Bytes popDigest(uint64_t chainId, const Bytes& chainUid, const Bytes& registry, const Bytes& ua, const Bytes& pqzKeyHash);  // pqzKeyHash: keyHash of the UA's PQZ key, 0 without one
+// What a PQ holder signs to register; pqzKey nullopt = no key. A key for a non-holder kind throws UAPqzHolder.
+HolderPop holderPopMessage(uint16_t kind, uint64_t chainId, const Bytes& chainUid, const Bytes& registry, const Bytes& ua,
+                           const std::optional<Bytes>& pqzKey);
+Bytes pqzRegMessage(uint64_t chainId, const Bytes& chainUid, const Bytes& registry, const Bytes& ua, const Bytes& pqzKey);
 Bytes uaAuthDomainSeparator(const Domain& d);
 Bytes uaAuthDigest(const Domain& d, const Bytes& ua, const Bytes& purposeTag, const Bytes& digest);
 Bytes memberDigest(const Bytes& structureUa, const Bytes& uaMsg);

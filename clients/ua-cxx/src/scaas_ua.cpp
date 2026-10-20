@@ -80,12 +80,24 @@ void validateKeyData(uint16_t k, const Bytes& d, bool h) { call([&] { ffi::valid
 bool inNativeSpace(const Bytes& id) { return call([&] { return ffi::in_native_space(sl(id)); }); }
 bool isNative(uint16_t k) { return ffi::is_native(k); }
 bool isZether(uint16_t k) { return ffi::is_zether(k); }
+bool isPqzHolder(uint16_t k) { return ffi::is_pqz_holder(k); }
+bool msigPqzEligible(const Bytes& d) { return call([&] { return ffi::msig_pqz_eligible(sl(d)); }); }
 bool isSigning(uint16_t k) { return ffi::is_signing(k); }
 bool isMember(uint16_t k, bool h) { return ffi::is_member(k, h); }
 Bytes uaMessage(uint16_t k, const Bytes& p, const Bytes& d) { return call([&] { return bytes(ffi::ua_message(k, sl(p), sl(d))); }); }
 Bytes chainKeyHash(uint64_t c) { return bytes(ffi::chain_key_hash(c)); }
-Bytes popDigest(uint64_t c, const Bytes& uid, const Bytes& reg, const Bytes& ua, const Bytes& ref) {
-    return call([&] { return bytes(ffi::pop_digest(c, sl(uid), sl(reg), sl(ua), sl(ref))); });
+Bytes popDigest(uint64_t c, const Bytes& uid, const Bytes& reg, const Bytes& ua, const Bytes& pqzKeyHash) {
+    return call([&] { return bytes(ffi::pop_digest(c, sl(uid), sl(reg), sl(ua), sl(pqzKeyHash))); });
+}
+HolderPop holderPopMessage(uint16_t k, uint64_t c, const Bytes& uid, const Bytes& reg, const Bytes& ua, const std::optional<Bytes>& key) {
+    static const Bytes none;
+    return call([&] {
+        auto r = ffi::holder_pop_message(k, c, sl(uid), sl(reg), sl(ua), key.has_value(), sl(key ? *key : none));
+        return HolderPop{bytes(r.pqz_key_hash), bytes(r.pop_digest), bytes(r.message)};
+    });
+}
+Bytes pqzRegMessage(uint64_t c, const Bytes& uid, const Bytes& reg, const Bytes& ua, const Bytes& key) {
+    return call([&] { return bytes(ffi::pqz_reg_message(c, sl(uid), sl(reg), sl(ua), sl(key))); });
 }
 Bytes uaAuthDomainSeparator(const Domain& d) {
     return call([&] { return bytes(ffi::ua_auth_domain_separator(d.generation, d.chainId, sl(d.registry), sl(d.chainUid))); });
