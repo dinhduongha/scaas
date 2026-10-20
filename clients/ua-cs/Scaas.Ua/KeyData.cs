@@ -266,7 +266,7 @@ public static partial class UA
             case 0x0101: P256Point(d); break;
             case 0x0102: Ed25519(d); break;
             case 0x0103: SecpX(d); break;
-            case 0x0104 or 0x0140: BnG1(d); break;
+            case 0x0104: BnG1(d); break;
             case 0x0105 or 0x0141: BlsG1(d); break;
             case 0x0106: BlsG2(d); break;
             case 0x0107: BnG2(d); break;

@@ -13,7 +13,8 @@ import {
     SchnorrBn254Verifier,
     SchnorrBls12381Verifier,
     BlsMinSigBls12381Verifier,
-    BlsMinSigBn254Verifier
+    BlsMinSigBn254Verifier,
+    ZetherSchnorrBls12381Verifier
 } from "../../src/ua/verifiers/PairingVerifiers.sol";
 import {UARegistryBase} from "./UARegistryBase.sol";
 
@@ -44,11 +45,12 @@ contract UARegistryVectorsTest is UARegistryBase {
             address(new BlsMinSigBls12381Verifier()),
             address(new BlsMinSigBn254Verifier())
         ];
-        c = new UARegistry.KindConfig[](9);
+        c = new UARegistry.KindConfig[](10);
         for (uint256 i; i < 8; ++i) {
             c[i] = UARegistry.KindConfig(KINDS[i], v[i], _cap(KINDS[i]));
         }
         c[8] = UARegistry.KindConfig(0x0108, address(new Secp256k1Verifier()), 50_000);
+        c[9] = UARegistry.KindConfig(0x0141, address(new ZetherSchnorrBls12381Verifier()), 70_000);
     }
 
     function _d(uint256 i, string memory f) internal view returns (string memory) {
@@ -65,9 +67,9 @@ contract UARegistryVectorsTest is UARegistryBase {
             _derivedRow(i);
             ++rows;
         }
-        assertEq(rows, 9, "derived kinds");
-        assertEq(nSigs, 20, "derived sigs");
-        assertEq(nNegs, 85, "derived negatives");
+        assertEq(rows, 10, "derived kinds");
+        assertEq(nSigs, 22, "derived sigs");
+        assertEq(nNegs, 91, "derived negatives");
     }
 
     function _derivedRow(uint256 i) internal {
@@ -84,7 +86,7 @@ contract UARegistryVectorsTest is UARegistryBase {
         }
         bytes memory pop = vm.parseJsonBytes(sj, _d(i, "pop.sig"));
         uint256 g = gasleft();
-        reg.register(kind, k, pop, 0, "");
+        reg.register(kind, k, pop, "", "");
         g -= gasleft();
         emit log_named_uint(string.concat("register ", vm.parseJsonString(sj, _d(i, "name"))), g);
         assertEq(reg.kindOf(ua), kind);
@@ -106,10 +108,15 @@ contract UARegistryVectorsTest is UARegistryBase {
         return _d(i, string.concat("negatives[", vm.toString(n), "].", f));
     }
 
+    /// A stored kind (zether-bls12381) carries an empty keyData in its auth.
+    function _authKey(uint256 i, bytes memory k) internal view returns (bytes memory) {
+        return vm.keyExistsJson(sj, _d(i, "stored")) ? bytes("") : k;
+    }
+
     function _derivedSig(uint256 i, uint256 s, bytes memory k, bytes32 ua) internal {
         string memory row = string.concat("sigs[", vm.toString(s), "].");
         bytes32 p = _purposeTag(vm.parseJsonString(sj, _d(i, string.concat(row, "purpose"))));
-        bytes memory auth = abi.encode(k, vm.parseJsonBytes(sj, _d(i, string.concat(row, "sig"))));
+        bytes memory auth = abi.encode(_authKey(i, k), vm.parseJsonBytes(sj, _d(i, string.concat(row, "sig"))));
         bytes32 dg = vm.parseJsonBytes32(sj, _d(i, string.concat(row, "digest")));
         uint256 g = gasleft();
         reg.requireAuthorized(ua, p, dg, auth);
@@ -120,7 +127,7 @@ contract UARegistryVectorsTest is UARegistryBase {
     /// Verify-side negatives: the registry is asked exactly the row's message under metatx or member.
     function _derivedNegative(uint256 i, uint256 n, uint16 kind, bytes memory k, bytes32 ua) internal {
         bytes32 m = vm.parseJsonBytes32(sj, _neg(i, n, "message"));
-        bytes memory auth = abi.encode(k, vm.parseJsonBytes(sj, _neg(i, n, "sig")));
+        bytes memory auth = abi.encode(_authKey(i, k), vm.parseJsonBytes(sj, _neg(i, n, "sig")));
         bytes32 p;
         if (m == UAKinds.uaMessage(kind, UAKinds.PURPOSE_METATX, digest)) p = UAKinds.PURPOSE_METATX;
         else if (m == UAKinds.uaMessage(kind, UAKinds.PURPOSE_MEMBER, digest)) p = UAKinds.PURPOSE_MEMBER;
@@ -131,7 +138,7 @@ contract UARegistryVectorsTest is UARegistryBase {
 
     function _popRefused(uint16 kind, bytes memory k, bytes memory sig) internal {
         vm.expectRevert(IUARegistry.UAPoP.selector);
-        reg.register(kind, k, sig, 0, "");
+        reg.register(kind, k, sig, "", "");
     }
 
     function test_vectors_native() public {
@@ -198,13 +205,13 @@ contract UARegistryVectorsTest is UARegistryBase {
                 uint16(vm.parseJsonUint(sj, _d(i, "kind"))),
                 vm.parseJsonBytes(sj, _d(i, "keyData")),
                 vm.parseJsonBytes(sj, _d(i, "pop.sig")),
-                0,
+                "",
                 ""
             );
         }
         bytes memory d = vm.parseJsonBytes(sj, ".msig.keyData");
         uint256 g = gasleft();
-        bytes32 ua = reg.register(UAKinds.MSIG, d, "", 0, "");
+        bytes32 ua = reg.register(UAKinds.MSIG, d, "", "", "");
         emit log_named_uint("register msig (4 members)", g - gasleft());
         assertEq(ua, vm.parseJsonBytes32(sj, ".msig.ua"));
         uint256 valid;

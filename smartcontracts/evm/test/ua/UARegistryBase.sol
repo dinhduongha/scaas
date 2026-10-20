@@ -219,14 +219,14 @@ abstract contract UARegistryBase is Test {
     }
 
     function _register(UARegistry r, uint16 kind, bytes memory keyData) internal returns (bytes32) {
-        return r.register(kind, keyData, _pop(r, kind, keyData), 0, "");
+        return r.register(kind, keyData, _pop(r, kind, keyData), "", "");
     }
 
     /// The PoP is computed first: `vm.expectRevert` applies to the next external call.
     function _registerReverts(UARegistry r, uint16 kind, bytes memory keyData, bytes memory err) internal {
         bytes memory pop = _pop(r, kind, keyData);
         vm.expectRevert(err);
-        r.register(kind, keyData, pop, 0, "");
+        r.register(kind, keyData, pop, "", "");
     }
 
     function _auth(UARegistry r, uint16 kind, bytes memory keyData, bytes32 purpose, bytes32 digest)

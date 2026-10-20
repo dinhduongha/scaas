@@ -63,14 +63,13 @@ contract UnderlyingZetherToken is UnderlyingToken, ZetherLayer {
     function zetherUnshieldUnwrap(
         bytes calldata payload,
         bytes calldata proof,
-        bytes calldata authSig,
         ZetherTypes.UA beneficiary,
         address u,
         address recipient,
         uint256 amount,
         uint256 minOut
     ) external nonReentrant {
-        _unshieldUnwrap(payload, proof, authSig, beneficiary, Unwrap(u, recipient, amount, minOut));
+        _unshieldUnwrap(payload, proof, beneficiary, Unwrap(u, recipient, amount, minOut));
     }
 
     struct Unwrap {
@@ -85,12 +84,11 @@ contract UnderlyingZetherToken is UnderlyingToken, ZetherLayer {
     function _unshieldUnwrap(
         bytes calldata payload,
         bytes calldata proof,
-        bytes calldata authSig,
         ZetherTypes.UA beneficiary,
         Unwrap memory x
     ) private {
         uint256 i = UnderlyingLib.indexOf(x.u);
-        ZetherLib.unshield(payload, proof, authSig, beneficiary, x.amount, x.recipient, _envUnwrap(x.u, x.minOut));
+        ZetherLib.unshield(payload, proof, beneficiary, x.amount, x.recipient, _envUnwrap(x.u, x.minOut));
         (uint256 out,) = UnderlyingLib.quoteUnwrap(i, x.amount * ZetherLib.$().shieldScale, x.recipient, x.minOut);
         UnderlyingLib.payOut(i, x.recipient, out);
     }
@@ -163,7 +161,8 @@ contract UnderlyingZetherToken is UnderlyingToken, ZetherLayer {
         return UnderlyingToken._mtxRule(sel);
     }
 
+    /// @notice `UnderlyingToken`'s UA allowlist and `zetherShield` (CTR-ZTH-51, as `NoUnderlyingZetherToken`).
     function _uaAllowed(bytes4 sel) internal view override(UnderlyingToken, ERC20MetaTx) returns (bool) {
-        return UnderlyingToken._uaAllowed(sel);
+        return sel == this.zetherShield.selector || UnderlyingToken._uaAllowed(sel);
     }
 }

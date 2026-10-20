@@ -110,22 +110,10 @@ contract BlsMinSigBn254Verifier is UASafeVerifier {
 
 bytes constant ZETHER_SCHNORR_TAG = "SCAAS-ZETHER-SCHNORR-V1";
 
-/// @title `zether-bn254` (0x0140): `Y` (64), `sig = R ‖ z` (96) under the Zether Schnorr tag (accounts.md §1.9), never
-///        the UA one, so a Zether key never yields a `schnorr-bn254` signature (S13); `verifyPop` = `verify`. Dev chains
-///        only, like every Zether contract (zether.md CTR-ZTH-02).
-contract ZetherSchnorrBn254Verifier is UASafeVerifier {
-    constructor() UASafeVerifier(40_000) {
-        ZetherSafety.requireDevChain();
-    }
-
-    function check(bytes calldata keyData, bytes32 message, bytes calldata sig, bool)
-        external view override returns (bool)
-    {
-        return keyData.length == 64 && CurveSigs.schnorr(ZETHER_SCHNORR_TAG, keyData, message, sig);
-    }
-}
-
-/// @title `zether-bls12381` (0x0141): `Y` (128, EIP-2537), `sig = R ‖ z` (160) under the Zether Schnorr tag; dev chains.
+/// @title `zether-bls12381` (0x0141): `Y` (128, EIP-2537), `sig = R ‖ z` (160) under the Zether Schnorr tag (accounts.md
+///        §1.9), never the UA one, so a Zether key never yields a `schnorr-bls12381` signature (S13); `verifyPop` =
+///        `verify`. Dev chains only, like every Zether contract (zether.md CTR-ZTH-02). The `zether-bn254` verifier is in
+///        `legacy/ua6/` (U10).
 contract ZetherSchnorrBls12381Verifier is UASafeVerifier {
     constructor() UASafeVerifier(60_000) {
         ZetherSafety.requireDevChain();

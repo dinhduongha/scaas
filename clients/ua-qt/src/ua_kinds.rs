@@ -34,6 +34,9 @@ pub mod qobject {
         #[qinvokable] #[cxx_name = "inNativeSpace"] fn in_native_space(self: Pin<&mut Self>, id: &QString) -> bool;
         #[qinvokable] #[cxx_name = "isNative"] fn is_native(self: Pin<&mut Self>, kind: i32) -> bool;
         #[qinvokable] #[cxx_name = "isZether"] fn is_zether(self: Pin<&mut Self>, kind: i32) -> bool;
+        #[qinvokable] #[cxx_name = "isPqzHolder"] fn is_pqz_holder(self: Pin<&mut Self>, kind: i32) -> bool;
+        /// false on failure (see `lastError`) as well as for a non-eligible `msig`.
+        #[qinvokable] #[cxx_name = "msigPqzEligible"] fn msig_pqz_eligible(self: Pin<&mut Self>, key_data: &QString) -> bool;
         #[qinvokable] #[cxx_name = "isSigning"] fn is_signing(self: Pin<&mut Self>, kind: i32) -> bool;
         #[qinvokable] #[cxx_name = "isMember"] fn is_member(self: Pin<&mut Self>, kind: i32, hedera_native: bool) -> bool;
         #[qinvokable] #[cxx_name = "uaMessage"]
@@ -41,7 +44,12 @@ pub mod qobject {
         /// `chain_id` is a JS number: exact up to 2^53.
         #[qinvokable] #[cxx_name = "chainKeyHash"] fn chain_key_hash(self: Pin<&mut Self>, chain_id: f64) -> QString;
         #[qinvokable] #[cxx_name = "popDigest"]
-        fn pop_digest(self: Pin<&mut Self>, chain_id: f64, chain_uid: &QString, registry: &QString, ua: &QString, auth_ref: &QString) -> QString;
+        fn pop_digest(self: Pin<&mut Self>, chain_id: f64, chain_uid: &QString, registry: &QString, ua: &QString, pqz_key_hash: &QString) -> QString;
+        /// JSON `{pqzKeyHash, popDigest, message}`; `pqz_key` "" = no key (hash 0). A key for a non-holder kind is `UAPqzHolder`.
+        #[qinvokable] #[cxx_name = "holderPopMessage"]
+        fn holder_pop_message(self: Pin<&mut Self>, kind: i32, chain_id: f64, chain_uid: &QString, registry: &QString, ua: &QString, pqz_key: &QString) -> QString;
+        #[qinvokable] #[cxx_name = "pqzRegMessage"]
+        fn pqz_reg_message(self: Pin<&mut Self>, chain_id: f64, chain_uid: &QString, registry: &QString, ua: &QString, pqz_key: &QString) -> QString;
         #[qinvokable] #[cxx_name = "uaAuthDomainSeparator"]
         fn ua_auth_domain_separator(self: Pin<&mut Self>, generation: i32, chain_id: f64, registry: &QString, chain_uid: &QString) -> QString;
         #[qinvokable] #[cxx_name = "uaAuthDigest"]
@@ -179,6 +187,12 @@ impl qobject::UaKinds {
     pub fn is_zether(self: Pin<&mut Self>, kind: i32) -> bool {
         self.run(|| Ok(ua::is_zether(k(kind)?)))
     }
+    pub fn is_pqz_holder(self: Pin<&mut Self>, kind: i32) -> bool {
+        self.run(|| Ok(ua::is_pqz_holder(k(kind)?)))
+    }
+    pub fn msig_pqz_eligible(self: Pin<&mut Self>, key_data: &QString) -> bool {
+        self.run(|| from_ua(ua::msig_pqz_eligible(&key(key_data)?)))
+    }
     pub fn is_signing(self: Pin<&mut Self>, kind: i32) -> bool {
         self.run(|| Ok(ua::is_signing(k(kind)?)))
     }
@@ -191,8 +205,18 @@ impl qobject::UaKinds {
     pub fn chain_key_hash(self: Pin<&mut Self>, chain_id: f64) -> QString {
         self.hex(|| Ok(ua::chain_key_hash(id(chain_id)?).to_vec()))
     }
-    pub fn pop_digest(self: Pin<&mut Self>, chain_id: f64, chain_uid: &QString, registry: &QString, ua: &QString, auth_ref: &QString) -> QString {
-        self.hex(|| Ok(ua::pop_digest(id(chain_id)?, &fixed(chain_uid)?, &fixed(registry)?, &fixed(ua)?, &fixed(auth_ref)?).to_vec()))
+    pub fn pop_digest(self: Pin<&mut Self>, chain_id: f64, chain_uid: &QString, registry: &QString, ua: &QString, pqz_key_hash: &QString) -> QString {
+        self.hex(|| Ok(ua::pop_digest(id(chain_id)?, &fixed(chain_uid)?, &fixed(registry)?, &fixed(ua)?, &fixed(pqz_key_hash)?).to_vec()))
+    }
+    pub fn holder_pop_message(self: Pin<&mut Self>, kind: i32, chain_id: f64, chain_uid: &QString, registry: &QString, ua: &QString, pqz_key: &QString) -> QString {
+        QString::from(&self.run(|| {
+            let pk = if s(pqz_key).is_empty() { None } else { Some(key(pqz_key)?) };
+            let (h, d, m) = from_ua(ua::holder_pop_message(k(kind)?, id(chain_id)?, &fixed(chain_uid)?, &fixed(registry)?, &fixed(ua)?, pk.as_deref()))?;
+            Ok(serde_json::json!({"pqzKeyHash": hx(&h), "popDigest": hx(&d), "message": hx(&m)}).to_string())
+        }))
+    }
+    pub fn pqz_reg_message(self: Pin<&mut Self>, chain_id: f64, chain_uid: &QString, registry: &QString, ua: &QString, pqz_key: &QString) -> QString {
+        self.hex(|| Ok(from_ua(ua::pqz_reg_message(id(chain_id)?, &fixed(chain_uid)?, &fixed(registry)?, &fixed(ua)?, &key(pqz_key)?))?.to_vec()))
     }
     pub fn ua_auth_domain_separator(self: Pin<&mut Self>, generation: i32, chain_id: f64, registry: &QString, chain_uid: &QString) -> QString {
         self.hex(|| Ok(ua::ua_auth_domain_separator(&domain(generation, chain_id, registry, chain_uid)?).to_vec()))

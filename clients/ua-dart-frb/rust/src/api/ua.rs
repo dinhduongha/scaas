@@ -3,7 +3,7 @@
 //! (a Dart exception). Byte data is `Uint8List` (`Vec<u8>`), ids and digests are fixed-size arrays.
 use flutter_rust_bridge::frb;
 
-/// `code` is one of the seven shared codes (`UAKeyData`, `UAKindUnknown`, ...); `reason` is the label after `UAKeyData: ` (empty for every other code),
+/// `code` is one of the shared codes (the seven of the vector files plus `UAPqzHolder`) (`UAKeyData`, `UAKindUnknown`, ...); `reason` is the label after `UAKeyData: ` (empty for every other code),
 /// as in the cxx and pure-Dart libraries.
 ///
 /// Integers are `i64` so a Dart value cannot wrap at the Rust width: a kind outside 0..=0xFFFF is `UAKindUnknown`; a chain
@@ -129,6 +129,15 @@ pub fn is_zether(kind: i64) -> bool {
     k(kind).is_ok_and(scaas_ua::is_zether)
 }
 #[frb(sync)]
+pub fn is_pqz_holder(kind: i64) -> bool {
+    k(kind).is_ok_and(scaas_ua::is_pqz_holder)
+}
+/// An `msig` whose members of kinds outside 0x0130-0x0133 weigh less than its threshold (`UAKeyData` on malformed data).
+#[frb(sync)]
+pub fn msig_pqz_eligible(key_data: Vec<u8>) -> R<bool> {
+    Ok(scaas_ua::msig_pqz_eligible(&key_data)?)
+}
+#[frb(sync)]
 pub fn is_signing(kind: i64) -> bool {
     k(kind).is_ok_and(scaas_ua::is_signing)
 }
@@ -145,8 +154,26 @@ pub fn chain_key_hash(chain_id: i64) -> R<[u8; 32]> {
     Ok(scaas_ua::chain_key_hash(n(chain_id)?))
 }
 #[frb(sync)]
-pub fn pop_digest(chain_id: i64, chain_uid: [u8; 32], registry: [u8; 20], ua: [u8; 32], auth_ref: [u8; 32]) -> R<[u8; 32]> {
-    Ok(scaas_ua::pop_digest(n(chain_id)?, &chain_uid, &registry, &ua, &auth_ref))
+pub fn pop_digest(chain_id: i64, chain_uid: [u8; 32], registry: [u8; 20], ua: [u8; 32], pqz_key_hash: [u8; 32]) -> R<[u8; 32]> {
+    Ok(scaas_ua::pop_digest(n(chain_id)?, &chain_uid, &registry, &ua, &pqz_key_hash))
+}
+/// What a PQ holder signs to register (UA-6 U14): `message = ua_message(kind, pop, pop_digest)`.
+pub struct HolderPop {
+    pub pqz_key_hash: [u8; 32],
+    pub pop_digest: [u8; 32],
+    pub message: [u8; 32],
+}
+/// `pqz_key` null = no key (hash 0, the plain pop); a key for a kind that may not hold one is `UAPqzHolder`.
+#[frb(sync)]
+pub fn holder_pop_message(kind: i64, chain_id: i64, chain_uid: [u8; 32], registry: [u8; 20], ua: [u8; 32], pqz_key: Option<Vec<u8>>) -> R<HolderPop> {
+    let (pqz_key_hash, pop_digest, message) =
+        scaas_ua::holder_pop_message(k(kind)?, n(chain_id)?, &chain_uid, &registry, &ua, pqz_key.as_deref())?;
+    Ok(HolderPop { pqz_key_hash, pop_digest, message })
+}
+/// The message `R_REG` proves over for `pqz_key` (the PQZ scheme 0x0142).
+#[frb(sync)]
+pub fn pqz_reg_message(chain_id: i64, chain_uid: [u8; 32], registry: [u8; 20], ua: [u8; 32], pqz_key: Vec<u8>) -> R<[u8; 32]> {
+    Ok(scaas_ua::pqz_reg_message(n(chain_id)?, &chain_uid, &registry, &ua, &pqz_key)?)
 }
 #[frb(sync)]
 pub fn ua_auth_domain_separator(domain: UaDomain) -> R<[u8; 32]> {

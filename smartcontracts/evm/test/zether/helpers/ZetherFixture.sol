@@ -8,11 +8,7 @@ import {IFactoryToken} from "../../../src/factory/IFactoryToken.sol";
 import {AdminLib} from "../../../src/metatx/AdminLib.sol";
 import {UARegistry} from "../../../src/ua/UARegistry.sol";
 import {UAKinds} from "../../../src/ua/UAKinds.sol";
-import {
-    SchnorrBn254Verifier,
-    ZetherSchnorrBn254Verifier,
-    ZetherSchnorrBls12381Verifier
-} from "../../../src/ua/verifiers/PairingVerifiers.sol";
+import {SchnorrBn254Verifier, ZetherSchnorrBls12381Verifier} from "../../../src/ua/verifiers/PairingVerifiers.sol";
 import {NoUnderlyingZetherToken} from "../../../src/zether/NoUnderlyingZetherToken.sol";
 import {ZetherLayer} from "../../../src/zether/ZetherLayer.sol";
 import {ZetherDisclosure} from "../../../src/zether/ZetherDisclosure.sol";
@@ -30,8 +26,9 @@ import {ZetherVerifierBase} from "../../../src/zether/ZetherVerifier.sol";
 
 bytes32 constant ZUID = 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464;
 
-/// @notice The real stack: `OpenFactory` with the Zether gate on, the UA registry (`zether-bn254`, `zether-bls12381` and
-///         `schnorr-bn254` for a derived `authRef`, on their real verifiers), a verifier, `ZetherDisclosure`,
+/// @notice The real stack (BLS12-381, the only classical Zether curve since UA-6, CTR-ZTH-32): `OpenFactory` with the
+///         Zether gate on, the UA registry (`zether-bls12381` and `schnorr-bn254` for a SIGNING UA, on their real
+///         verifiers), the verifiers, `ZetherDisclosure`,
 ///         `ZetherStatements` and `NoUnderlyingZetherToken` clones. The test wallet keeps `x` and the plaintext balances
 ///         to build witnesses and decrypt; the prover is the test-only `ZetherProver`. Public units come from `mint`
 ///         (the fixture is the minter); `_public` is overridden where they come from a wrap.
@@ -52,7 +49,7 @@ abstract contract ZetherFixture is Test {
     ZetherDisclosure internal dis;
     ZetherStatements internal stm;
     ZetherProver internal prover;
-    bool internal bls;
+    bool internal constant bls = true;
     /// @dev CTR-ZTH-42: the sender leaves the auditor out (every `C_aud = O`) on a token with an auditor.
     bool internal audOut;
     /// @dev The sender puts the auditor key in (every `C_aud ≠ O`) even on a token without one.
@@ -77,16 +74,15 @@ abstract contract ZetherFixture is Test {
     User internal bob;
     User internal carol; // receives the inner fee (a relayer)
 
-    function _deploy(bool useBls, bool auditor) internal virtual {
-        _stack(useBls);
+    function _deploy(bool auditor) internal virtual {
+        _stack();
         tok = _newToken(auditor, "zusd");
         _users();
     }
 
-    function _stack(bool useBls) internal {
-        bls = useBls;
+    function _stack() internal {
         // the curve's verifiers and disclosure, then the factory's env of the Zether kinds (plan 5g-Z2, CTR-ZTH-20)
-        (ver, burnVer) = ZetherVerifiers.deploy(useBls);
+        (ver, burnVer) = ZetherVerifiers.deploy();
         dis = new ZetherDisclosure();
         factory = new OpenFactory(registrar, ZUID, 0);
         stm = new ZetherStatements();
@@ -106,12 +102,11 @@ abstract contract ZetherFixture is Test {
             address(ZetherVerifierBase(address(ver)).innerProduct()), address(dis));
     }
 
-    /// Gen 1 with the two Zether kinds and `schnorr-bn254` (caps as accounts.md §1.15), budget 12 M, no msig.
+    /// Gen 1 with `zether-bls12381` and `schnorr-bn254` (caps as accounts.md §1.15), budget 12 M, no msig.
     function _uaRegistry() internal returns (UARegistry) {
-        UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](3);
-        c[0] = UARegistry.KindConfig(UAKinds.ZETHER_BN254, address(new ZetherSchnorrBn254Verifier()), 50_000);
-        c[1] = UARegistry.KindConfig(UAKinds.ZETHER_BLS12381, address(new ZetherSchnorrBls12381Verifier()), 70_000);
-        c[2] = UARegistry.KindConfig(UAKinds.SCHNORR_BN254, address(new SchnorrBn254Verifier()), 50_000);
+        UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](2);
+        c[0] = UARegistry.KindConfig(UAKinds.ZETHER_BLS12381, address(new ZetherSchnorrBls12381Verifier()), 70_000);
+        c[1] = UARegistry.KindConfig(UAKinds.SCHNORR_BN254, address(new SchnorrBn254Verifier()), 50_000);
         return new UARegistry(ZUID, address(0), false, 12_000_000, address(0), false, c);
     }
 
@@ -142,32 +137,29 @@ abstract contract ZetherFixture is Test {
         return ZetherLayer(factory.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, abi.encode(_cfg(auditor, maxShielded)), salt));
     }
 
+    /// Registers `Y = [x]G` as `zether-bls12381` (the Zether key is the UA: no `authRef` since UA-6), relayed by
+    /// `evm` (the record does not depend on the caller, CTR-UA-07).
     function _user(uint256 x, address evm) internal returns (User memory u) {
-        return _user(x, evm, 0, "");
-    }
-
-    /// Registers `Y = [x]G` as this stack's Zether kind with `authRef` (0 = self) and the authority's co-sign `authPop`,
-    /// relayed by `evm` (the record does not depend on the caller, CTR-UA-07).
-    function _user(uint256 x, address evm, bytes32 authRef, bytes memory authPop) internal returns (User memory u) {
         u.x = x;
         u.y = ZetherKeys.pub(x, bls);
         u.evm = evm;
-        bytes memory pop = ZetherKeys.schnorr(x, _popMsg(u.y, authRef), bls);
+        bytes memory pop = ZetherKeys.schnorr(x, _popMsg(u.y), bls);
         vm.prank(evm);
-        u.ua = ZetherTypes.UA.wrap(reg.register(_zkind(), u.y, pop, authRef, authPop));
+        u.ua = ZetherTypes.UA.wrap(reg.register(_zkind(), u.y, pop, "", ""));
     }
 
-    function _zkind() internal view returns (uint16) {
-        return bls ? UAKinds.ZETHER_BLS12381 : UAKinds.ZETHER_BN254;
+    function _zkind() internal pure returns (uint16) {
+        return UAKinds.ZETHER_BLS12381;
     }
 
-    /// `uaMessage(kind, POP, popDigest(UA(Y), authRef))`, what the Zether key signs to register (CTR-UA-07).
-    function _popMsg(bytes memory y, bytes32 authRef) internal view returns (bytes32) {
+    /// `uaMessage(kind, POP, popDigest(UA(Y), 0))`, what the Zether key signs to register (CTR-UA-07).
+    function _popMsg(bytes memory y) internal view returns (bytes32) {
         bytes32 ua = ZetherTypes.UA.unwrap(ZetherTypes.toUA(y));
-        return reg.uaMessage(_zkind(), UAKinds.PURPOSE_POP, reg.popDigest(ua, authRef));
+        return reg.uaMessage(_zkind(), UAKinds.PURPOSE_POP, reg.popDigest(ua, 0));
     }
 
-    /// A self account's owner op (roll-over, mode): `abi.encode(bytes(""), Schnorr by x over the zether-owner ua_msg)`.
+    /// An owner op (roll-over, mode; `requireAuthorized` under `zether-owner`, UA-6 U9):
+    /// `abi.encode(bytes(""), Schnorr by x over the zether-owner ua_msg)`.
     function _ownerAuth(User memory u, bytes32 digest) internal view returns (bytes memory) {
         return abi.encode(bytes(""), ZetherKeys.schnorr(u.x, reg.uaMessage(_zkind(), UAKinds.PURPOSE_ZETHER_OWNER, digest), bls));
     }
@@ -333,11 +325,11 @@ abstract contract ZetherFixture is Test {
         if (sel == ZetherLayer.zetherShield.selector) return abi.encodeCall(ZetherLayer.zetherShield, (bob.y, 3));
         if (sel == ZetherLayer.zetherUnshield.selector) {
             (bytes memory pl, bytes memory pr) = _proveUnshield(tok, alice, 10, bal, address(0xB0C), _none(), b);
-            return abi.encodeCall(ZetherLayer.zetherUnshield, (pl, pr, bytes(""), _none(), address(0xB0C), 10));
+            return abi.encodeCall(ZetherLayer.zetherUnshield, (pl, pr, _none(), address(0xB0C), 10));
         }
         if (sel == ZetherLayer.zetherTransferSingle.selector) {
             Tx memory t = _proveTransfer(tok, alice, bob, 10, bal, _none(), b);
-            return abi.encodeCall(ZetherLayer.zetherTransferSingle, (t.payload, t.proof, bytes(""), _none()));
+            return abi.encodeCall(ZetherLayer.zetherTransferSingle, (t.payload, t.proof, _none()));
         }
         ZetherTypes.TransferMode mode = sel == ZetherLayer.zetherTransferCompact.selector ? ZetherTypes.TransferMode.HASH
             : sel == ZetherLayer.zetherTransfer.selector ? _defaultForm(tok) : ZetherTypes.TransferMode.NONE;
@@ -357,11 +349,11 @@ abstract contract ZetherFixture is Test {
         uint256[] memory vs = new uint256[](1);
         vs[0] = 10;
         Tx memory u = _proveMulti(tok, alice, to, vs, bal, _none(), mode, b);
-        return abi.encodeWithSelector(sel, u.payload, u.proof, bytes(""), _none());
+        return abi.encodeWithSelector(sel, u.payload, u.proof, _none());
     }
 
     function _direct(ZetherLayer t, Tx memory r, ZetherTypes.UA ben) internal returns (bytes32) {
-        return t.zetherTransferSingle(r.payload, r.proof, "", ben);
+        return t.zetherTransferSingle(r.payload, r.proof, ben);
     }
 
     // ------------------------------------------------------------------ disclosure (ZetherDisclosure)

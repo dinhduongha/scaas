@@ -39,3 +39,22 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   (`UA = keccak256(encodedY)`, eight `AuthScheme`s, PoP bound to `msg.sender`, `links`/`link_eth`, `keyOf`),
   `src/common/AuthScheme.sol`, and their tests `test/zether/UniversalAccountRegistry.t.sol`, `test/AuthScheme.t.sol`;
   not built. `src/common/MultiSig.sol` stays in `src/` (accounts.md §1.13).
+- `ua6/`: the UA registry and its consumers as they stood on `main` before UA-6 Task 2 removed `authRef`
+  (CTR-UA-30 Change 2026-10-20; spec `docs/superpowers/specs/2026-10-20-ua6-encryption-key-attributes.md`; owner:
+  backup, not delete): `src/ua/UARegistry.sol`, `IUARegistry.sol`, `UAKinds.sol` (`register(kind, keyData, pop,
+  authRef, authPop)`, `_authRef`, `_checkAuthRef`, `_checkPqzAuthRef`, `_coSign`, `PURPOSE_AUTHREF`, error `UAAuthRef`,
+  `pqz-mlwe` 0x0142 as a stored kind), `src/pqz/PqzLib.sol` (the PQZ account as a `pqz-mlwe` UA, authorized by its
+  `authRef` through `requireZetherAuthorized`), and the tests with the `authRef` cases: `test/ua/UARegistry.t.sol`
+  (T-REG-3b), `UARegistryZether.t.sol` (native / derived / `msig` / same-curve-BLS `authRef`), `UARegistryPq.t.sol`
+  (the `pqz-mlwe` `authRef` rule), `test/pqz/UAPqzVerifier.t.sol` and `helpers/PqzRegistryBase.sol` (the `pqz-mlwe`
+  registration), `test/zether/ZetherAuthRef.t.sol` (moved, not copied); not built. UA-6 Task 4 (U8–U10, CTR-ZTH-32)
+  added the whole bn254 Zether line and the `authSig` path as they stood before it: `src/zether/` (`ZetherVerifier.sol`
+  with `ZetherBn254Curve` and the three bn254 verifier contracts, `ZetherLib.sol` with `AUTH_TAG` and the
+  `requireZetherAuthorized` calls, `ZetherLayer.sol` / `IZetherToken.sol` / `UnderlyingZetherToken.sol` /
+  `NoUnderlyingZetherToken.sol` with the `authSig` argument, `ZetherTypes.sol` with `KIND_ZETHER_BN254` /
+  `TAG_ZETHER_BN254`, `IZetherVerifier.sol`), `src/ua/verifiers/PairingVerifiers.sol` (`ZetherSchnorrBn254Verifier`),
+  `script/DeployBase.sol` and `script/ZetherE2E.s.sol` (the bn254 deploy steps, versions 1 bn254 / 2 BLS12-381),
+  `scripts/e2e-zether.sh` (the bn254 / `authRef` e2e), and every `test/zether/` file it cut bn254 suites from (the
+  fixture with `useBls`, the bn254 KATs, S3 vector and prover-cross suites, the bn254 gas rows). The registry side
+  (kind 0x0140, slot 12, `requireZetherAuthorized`) is in the pre-UA-6 `src/ua/` copies above. The vector JSON
+  (`test/vectors/zether/*bn254*`, the 0x0140 rows of `../vectors/ua/kinds.json`) stays in place until UA-6 Task 8.

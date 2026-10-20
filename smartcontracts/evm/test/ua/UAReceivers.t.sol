@@ -83,15 +83,16 @@ contract UAReceiversTest is UALedgerBase {
         assertEq(hm.balanceOfUA(uaP), 700);
     }
 
-    function test_uaMint_refusesNativeUnregisteredZether() public {
+    /// UA-6 U8: the Zether UA receives (a SIGNING UA).
+    function test_uaMint_refusesNativeUnregistered_zetherReceives() public {
         vm.expectRevert(abi.encodeWithSelector(IUALedger.UANotRegistered.selector, _pad(bob)));
         hm.mintUA(_pad(bob), 1);
         bytes32 unknown = keccak256("unregistered");
         vm.expectRevert(abi.encodeWithSelector(IUALedger.UANotRegistered.selector, unknown));
         hm.mintUA(unknown, 1);
-        vm.expectRevert(abi.encodeWithSelector(IUALedger.UAKindNotAccepted.selector, uaZ, UAKinds.ZETHER_BN254));
         hm.mintUA(uaZ, 1);
-        assertEq(hm.totalSupply(), 0);
+        assertEq(hm.balanceOfUA(uaZ), 1);
+        assertEq(hm.totalSupply(), 1);
     }
 
     function test_uaMint_ledgerOff() public {
@@ -150,6 +151,16 @@ contract UAReceiversTest is UALedgerBase {
         assertEq(wrp.totalSupply(), 1_000);
         assertEq(_reserve(wrp, address(und)), 1_000);
         assertEq(und.balanceOf(address(wrp)), 1_000);
+    }
+
+    /// UA-6 U8: the Zether UA is a SIGNING UA, so `wrapToUA` credits it.
+    function test_UA6_wrapToUA_zetherReceives() public {
+        und.mint(alice, 100);
+        vm.startPrank(alice);
+        und.approve(address(wrp), 100);
+        assertEq(wrp.wrapToUA(address(und), 100, uaZ), 100);
+        vm.stopPrank();
+        assertEq(wrp.balanceOfUA(uaZ), 100);
     }
 
     function test_wrapToUA_nativeLeg_direct() public {
@@ -212,8 +223,6 @@ contract UAReceiversTest is UALedgerBase {
         w.wrapToUA(address(und), 100, _pad(bob));
         vm.expectRevert(abi.encodeWithSelector(IUALedger.UANotRegistered.selector, unknown));
         w.wrapToUA(address(und), 100, unknown);
-        vm.expectRevert(abi.encodeWithSelector(IUALedger.UAKindNotAccepted.selector, uaZ, UAKinds.ZETHER_BN254));
-        w.wrapToUA(address(und), 100, uaZ);
         vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.UnknownUnderlying.selector, address(tok)));
         w.wrapToUA(address(tok), 100, uaP);
         // `bytes32(0)` is `_wrap`'s mint-to-caller sentinel: `wrapToUA` refuses it as a native id first
@@ -307,8 +316,8 @@ contract UAReceiversTest is UALedgerBase {
         vm.startPrank(alice);
         vm.expectRevert(abi.encodeWithSelector(IUALedger.UANotRegistered.selector, _pad(bob)));
         wrpL.unwrapToUA(address(tok), 10, _pad(bob), 0);
-        vm.expectRevert(abi.encodeWithSelector(IUALedger.UAKindNotAccepted.selector, uaZ, UAKinds.ZETHER_BN254));
-        wrpL.unwrapToUA(address(tok), 10, uaZ, 0);
+        wrpL.unwrapToUA(address(tok), 10, uaZ, 0); // UA-6 U8: the Zether UA receives
+        assertEq(tok.balanceOfUA(uaZ), 10);
         bytes32 unknown = keccak256("unregistered");
         vm.expectRevert(abi.encodeWithSelector(IUALedger.UANotRegistered.selector, unknown));
         wrpL.unwrapToUA(address(tok), 10, unknown, 0);
@@ -504,8 +513,8 @@ contract UAReceiversTest is UALedgerBase {
         vm.startPrank(alice);
         vm.expectRevert(abi.encodeWithSelector(IUALedger.UANotRegistered.selector, _pad(bob)));
         tok.payWithFeeToUA(_pad(bob), 1, FeeMode.NONE, 0, address(0), REF);
-        vm.expectRevert(abi.encodeWithSelector(IUALedger.UAKindNotAccepted.selector, uaZ, UAKinds.ZETHER_BN254));
-        tok.payWithFeeToUA(uaZ, 1, FeeMode.NONE, 0, address(0), REF);
+        tok.payWithFeeToUA(uaZ, 1, FeeMode.NONE, 0, address(0), REF); // UA-6 U8: the Zether UA receives
+        assertEq(tok.balanceOfUA(uaZ), 1);
         vm.expectRevert(abi.encodeWithSelector(FeePolicy.FeeExceedsCap.selector, 10_001, 10_000));
         tok.payWithFeeToUA(uaP, 1_000, FeeMode.PERCENT, 10_001, FEE_TO, REF);
         vm.stopPrank();

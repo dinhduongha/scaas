@@ -34,13 +34,14 @@ L = types.SimpleNamespace()  # L.tag is scaas_ua_tag
 for name, res, args in [
     ('abi_version', u32, []), ('status_name', C.c_char_p, [st]), ('last_error', C.c_char_p, []),
     ('kind_count', sz, []), ('kind_at', st, [sz, P]), ('kind_info', st, [u16, P]),
-    ('is_native', bl, [u16]), ('is_zether', bl, [u16]), ('is_signing', bl, [u16]), ('is_member', bl, [u16, bl]),
+    ('is_native', bl, [u16]), ('is_zether', bl, [u16]), ('is_pqz_holder', bl, [u16]), ('is_signing', bl, [u16]), ('is_member', bl, [u16, bl]),
     ('tag', st, [u16, P]), ('kind_tag_string', st, [u16, P, P]), ('group_tag', st, [u8, P, P]),
     ('group_tag_string', st, [u8, P, P, P]), ('msg_tag', st, [P]), ('purpose_tag', st, [u8, P]),
     ('ua_of', st, [u16, u8, sz, P]), ('derive_ua', st, [u16, u8, sz, bl, P]), ('native_id', st, [u16, u8, sz, P]),
     ('key_hash_of', st, [u16, u8, sz, P, P]), ('validate_key_data', st, [u16, u8, sz, bl]),
     ('in_native_space', st, [u8, P]), ('ua_message', st, [u16, u8, u8, P]), ('chain_key_hash', st, [u64, P]),
-    ('pop_digest', st, [u64, u8, u8, u8, u8, P]), ('ua_auth_domain_separator', st, [u32, u64, u8, u8, P]),
+    ('pop_digest', st, [u64, u8, u8, u8, u8, P]), ('msig_pqz_eligible', st, [u8, sz, P]),
+    ('holder_pop_message', st, [u16, u64, u8, u8, u8, u8, sz, P, P, P]), ('pqz_reg_message', st, [u64, u8, u8, u8, u8, sz, P]), ('ua_auth_domain_separator', st, [u32, u64, u8, u8, P]),
     ('ua_auth_digest', st, [u32, u64, u8, u8, u8, u8, u8, P]), ('member_digest', st, [u8, u8, P]),
     ('canonical_id', st, [u8, P, P]), ('encode_msig', st, [u16, P, sz, P, P]),
 ]:
@@ -144,6 +145,7 @@ class Vectors(unittest.TestCase):
                 self.assertEqual(info.group and info.group.decode(), r['group'])
                 self.assertEqual(L.is_signing(n), r['signing'])
                 self.assertEqual(L.is_zether(n), r['zether'])
+                self.assertEqual(L.is_pqz_holder(n), r['pqzHolder'])
                 self.assertEqual(L.is_member(n, False), r['member'])
                 self.assertEqual(L.is_member(n, True), r['memberHedera'])
                 self.assertEqual(L.is_native(n), info.native)
@@ -152,6 +154,13 @@ class Vectors(unittest.TestCase):
                 else:
                     self.assertEqual(text(L.kind_tag_string, n), r['tag'])
                     self.assertEqual(hx(out32(L.tag, n)), r['TAG'])
+        for r in K['schemes']:  # schemes are not kinds: tag and keyHash only
+            self.assertEqual(text(L.kind_tag_string, r['kind']), r['tag'])
+            self.assertEqual(hx(out32(L.tag, r['kind'])), r['TAG'])
+            self.assertEqual(code_of(lambda: kind_row(L.kind_info, r['kind'])), 'UAKindUnknown')
+            self.assertEqual(code_of(lambda: out32(lambda k, o: L.ua_of(k, b'', 0, o), r['kind'])), 'UAKindNotDerived')
+            self.assertEqual(code_of(lambda: ok(L.validate_key_data(r['kind'], b'', 0, False))), 'UAKindNotDerived')
+        self.assertEqual(hx(opt32(lambda *a: kd(L.key_hash_of, 0x0142, b(K['pqzKey']), *a))), K['pqzKeyHash'])
         for r in K['groups']:
             with self.subTest(r['group']):
                 g = r['group'].encode()
@@ -159,7 +168,7 @@ class Vectors(unittest.TestCase):
                 self.assertEqual(hx(opt32(L.group_tag, g)), r['GROUP'])
         self.assertIsNone(opt32(L.group_tag, b'nope'))
         self.assertIsNone(opt_text(L.group_tag_string, b'nope'))
-        self.assertEqual(len(K['purposes']), 12)
+        self.assertEqual(len(K['purposes']), 11)
         for r in K['purposes']:
             self.assertEqual(hx(out32(L.purpose_tag, r['purpose'].encode())), r['purposeTag'], r['purpose'])
         self.assertEqual(code_of(lambda: out32(L.purpose_tag, b'nope')), 'UAPurposeUnknown')
@@ -220,8 +229,24 @@ class Vectors(unittest.TestCase):
             with self.subTest('pop', ua=p['ua']):
                 c = S['contexts'][p['context']]
                 self.assertEqual(hx(out32(L.chain_key_hash, c['chainId'])), p['chainKeyHash'])  # context E is 2^40+7
-                d = out32(L.pop_digest, c['chainId'], b(c['chainUid']), b(c['registry']), b(p['ua']), b(p['authRef']))
+                d = out32(L.pop_digest, c['chainId'], b(c['chainUid']), b(c['registry']), b(p['ua']), b(p['pqzKeyHash']))
                 self.assertEqual(hx(d), p['popDigest'])
+        pk = b(K['pqzKey'])
+        for p in S['pqzReg']:
+            c = S['contexts'][p['context']]
+            args = (c['chainId'], b(c['chainUid']), b(c['registry']), b(p['ua']))
+            h, d, m = C.create_string_buffer(32), C.create_string_buffer(32), C.create_string_buffer(32)
+            ok(L.holder_pop_message(p['kind'], *args, pk, len(pk), h, d, m))
+            self.assertEqual((hx(h.raw), hx(d.raw)), (p['pqzKeyHash'], p['popDigest']))
+            self.assertEqual(hx(out32(L.pqz_reg_message, *args, pk, len(pk))), p['pqzRegMessage'])
+            for bad in (0x0101, 0x0133):
+                self.assertEqual(code_of(lambda: ok(L.holder_pop_message(bad, *args, pk, len(pk), h, d, m))), 'UAPqzHolder')
+            ok(L.holder_pop_message(p['kind'], *args, None, 0, h, d, m))  # no key: hash 0
+            self.assertEqual(h.raw, bytes(32))
+        for p in S['pqzMsig']:
+            e = bl()
+            ok(L.msig_pqz_eligible(b(p['keyData']), len(b(p['keyData'])), C.byref(e)))
+            self.assertEqual(e.value, p['eligible'], p['reason'])
         for a in S['uaAuth']:
             with self.subTest('uaAuth', ua=a['ua']):
                 c = S['contexts'][a['context']]

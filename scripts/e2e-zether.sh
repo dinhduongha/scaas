@@ -1,10 +1,9 @@
 #!/usr/bin/env bash
-# UA-3 e2e on a dev chain (accounts.md CTR-UA-22; T-ZET): a fresh anvil (chain 31337, osaka, 64 KiB code), `deploy.sh
-# evm` with DEPLOY_ZETHER=1 (the UA registry with its verifiers, the precompile probe through eth_call, the Zether
-# stack), then on that chain:
-#   1. a self `zether-bn254` UA: clientkeys makes the PoP against the deployed registry, a relayer submits it;
-#   2. a `zether-bn254` UA whose `authRef` is the deployer EOA, co-signed with the EOA's EIP-712 UAAuth (cast);
-#   3. a NONE_ZETHER token from the deployed factory shields to UA 1 (script/ZetherE2E.s.sol).
+# UA-3 e2e on a dev chain (accounts.md CTR-UA-22; T-ZET; UA-6: BLS12-381 only, no `authRef`): a fresh anvil (chain
+# 31337, osaka, 64 KiB code), `deploy.sh evm` with DEPLOY_ZETHER=1 (the UA registry with its verifiers, the precompile
+# probe through eth_call, the Zether stack), then on that chain:
+#   1. a `zether-bls12381` UA: clientkeys makes the PoP against the deployed registry, a relayer submits it;
+#   2. a NONE_ZETHER token from the deployed factory shields to it (script/ZetherE2E.s.sol).
 # Needs anvil, forge, cast, jq, node (clients/clientkeys with its node_modules). PORT (default 18545) for the anvil.
 set -euo pipefail
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -22,35 +21,26 @@ DEPLOY_ZETHER=1 "$ROOT/smartcontracts/scripts/deploy.sh" evm "$RPC" --silent >/d
 J="$ROOT/smartcontracts/evm/deployments/31337.json"
 REG="$(jq -r .ua_registry "$J")"
 CUID="$(jq -r .chain_uid "$J")"
-ZERO="0x$(printf '%064d' 0)"
 call() { cast call "$REG" "$@" --rpc-url "$RPC"; }
-register() { cast send "$REG" 'register(uint16,bytes,bytes,bytes32,bytes)' 0x0140 "$@" --private-key "$RELAYER" --rpc-url "$RPC" >/dev/null; }
-# clientkeys: Y, UA and the registry PoP of the bn254 key x (hex) for authRef
+# clientkeys: Y, UA and the registry PoP of the BLS12-381 key x (hex), over popDigest(ua, 0)
 pop() {
   node --input-type=module -e "
     import { zetherPop } from '$ROOT/clients/clientkeys/src/zether.js';
     import { fromHex } from '$ROOT/clients/clientkeys/src/bytes.js';
-    const p = zetherPop('bn254', fromHex('$1'), { chainId: 31337, chainUid: '$CUID', registry: '$REG', authRef: '$2' });
+    const p = zetherPop('bls12381', fromHex('$1'), { chainId: 31337, chainUid: '$CUID', registry: '$REG' });
     console.log(p.Y, p.UA, p.pop);"
 }
-# 1. self
-read -r Y1 UA1 POP1 < <(pop "0x$(printf '%064x' 0x5eed1)" "$ZERO")
-[ "$(call 'uaOf(uint16,bytes)(bytes32)' 0x0140 "$Y1")" = "$UA1" ]
-register "$Y1" "$POP1" "$ZERO" 0x
-[ "$(call 'kindOf(bytes32)(uint16)' "$UA1")" = 320 ]
+# 1. the Zether UA (register(kind, keyData, pop, pqzKey, pqzProof): no PQZ key)
+read -r Y1 UA1 POP1 < <(pop "0x$(printf '%064x' 0x5eed1)")
+[ "$(call 'uaOf(uint16,bytes)(bytes32)' 0x0141 "$Y1")" = "$UA1" ]
+cast send "$REG" 'register(uint16,bytes,bytes,bytes,bytes)' 0x0141 "$Y1" "$POP1" 0x 0x --private-key "$RELAYER" \
+  --rpc-url "$RPC" >/dev/null
+[ "$(call 'kindOf(bytes32)(uint16)' "$UA1")" = 321 ]
 [ "$(call 'keyOf(bytes32)(bytes)' "$UA1")" = "$Y1" ]
-echo "1/3 self Zether UA registered (clientkeys PoP, relayed)"
-# 2. authRef = the deployer EOA: UAAuth(authRef, PURPOSE_AUTHREF, popDigest(ua, authRef)) signed by the EOA
-AUTH="$(cast abi-encode 'f(address)' "$DEPLOYER")"
-read -r Y2 UA2 POP2 < <(pop "0x$(printf '%064x' 0x5eed2)" "$AUTH")
-PD="$(call 'popDigest(bytes32,bytes32)(bytes32)' "$UA2" "$AUTH")"
-H="$(call 'uaAuthDigest(bytes32,bytes32,bytes32)(bytes32)' "$AUTH" "$(cast keccak scaas.ua.purpose.authref.v1)" "$PD")"
-register "$Y2" "$POP2" "$AUTH" "$(cast wallet sign --no-hash --private-key "$PRIVATE_KEY" "$H")"
-[ "$(call 'recordOf(bytes32)((uint16,uint40,address),bytes32)' "$UA2" | tail -1)" = "$AUTH" ]
-echo "2/3 Zether UA with a native authRef registered (EOA co-sign)"
-# 3. the token side
+echo "1/2 Zether UA registered (clientkeys PoP, relayed)"
+# 2. the token side
 cd "$ROOT/smartcontracts/evm"
 ZETHER_Y="$Y1" forge script script/ZetherE2E.s.sol --rpc-url "$RPC" --broadcast --code-size-limit 65536 \
   --sender "$DEPLOYER" --silent >/dev/null
-echo "3/3 NONE_ZETHER token shielded to UA 1 (registered by kindOf)"
-echo "e2e-zether: 3/3 passed"
+echo "2/2 NONE_ZETHER token shielded to the Zether UA (registered by kindOf)"
+echo "e2e-zether: 2/2 passed"

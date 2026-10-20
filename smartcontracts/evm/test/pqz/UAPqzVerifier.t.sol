@@ -83,53 +83,51 @@ contract UAPqzVerifierTest is PqzRegistryBase {
         assertFalse(v.verifyPop(_slice(pk, 0, 16_352), m, hex"0102"));
     }
 
-    function test_registerPqzMlwe() public {
+    /// UA-6: an `mldsa65` holder registers with its PQZ key in one call; `R_REG` reaches the precompile over
+    /// `uaMessage(0x0142, POP, popDigest(signerUA, h))`; the signer signs for its PQZ account (purpose `zether-auth`).
+    function test_registerPqzKey() public {
         _registryStack();
         assertTrue(reg.kindEnabled(UAKinds.PQZ_MLWE));
         assertEq(reg.verifyCap(UAKinds.PQZ_MLWE), CAP_PQZ);
-        bytes32 auth = _mldsaUA(1);
         bytes memory pk = _slice(regStmt, 96, 16_384);
-        bytes32 ua = reg.uaOf(UAKinds.PQZ_MLWE, pk);
-        bytes32 msg_ = reg.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_POP, reg.popDigest(ua, auth));
+        bytes32 ua = reg.uaOf(UAKinds.MLDSA65, _mlPk(1));
+        bytes32 h = reg.keyHashOf(UAKinds.PQZ_MLWE, pk);
+        bytes32 msg_ = reg.uaMessage(UAKinds.PQZ_MLWE, UAKinds.PURPOSE_POP, reg.popDigest(ua, h));
         bytes memory input = abi.encodePacked(uint8(3), uint32(16_480), _slice(regStmt, 0, 32), PQZL_ID, msg_, pk, hex"aa");
         vm.mockCall(PQZ, input, abi.encode(uint256(1)));
         vm.expectCall(PQZ, input);
         uint256 g = gasleft();
-        assertEq(_pqzUA(pk, auth), ua);
-        emit log_named_uint("register pqz-mlwe (mocked PoP, filler ML-DSA co-sign) gas", g - gasleft());
-        assertEq(reg.kindOf(ua), UAKinds.PQZ_MLWE);
-        assertEq(reg.keyOf(ua), pk);
-        (, bytes32 a) = reg.recordOf(ua);
-        assertEq(a, auth);
-        // the authority signs for it (purpose zether-auth); the PQZ id itself never signs
-        reg.requireZetherAuthorized(ua, keccak256("d"), _mlAuth(), true);
-        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua));
-        reg.requireAuthorized(ua, UAKinds.PURPOSE_METATX, keccak256("d"), _mlAuth());
+        assertEq(_pqzUA(pk, 1), ua);
+        emit log_named_uint("register mldsa65 + PQZ key (mocked R_REG, filler ML-DSA PoP) gas", g - gasleft());
+        assertEq(reg.kindOf(ua), UAKinds.MLDSA65);
+        (, address ptr) = reg.recordOf(ua);
+        assertEq(ptr.code, bytes.concat(hex"00", pk));
+        assertEq(reg.keyOwner(h), ua);
+        reg.requireAuthorized(ua, UAKinds.PURPOSE_ZETHER_AUTH, keccak256("d"), _mlAuth());
     }
 
     function test_registerRefused() public {
         _registryStack();
-        bytes32 auth = _mldsaUA(1);
         bytes memory pk = _slice(regStmt, 96, 16_384);
-        // PoP refused by the precompile (the default op-3 answer is 0)
+        // R_REG refused by the precompile (the default op-3 answer is 0)
         vm.expectRevert(IUARegistry.UAPoP.selector);
-        _pqzUA(pk, auth);
+        _pqzUA(pk, 1);
         vm.mockCall(PQZ, abi.encodePacked(uint8(3)), abi.encode(uint256(1)));
-        // authRef 0 or a native id: CTR-PQZ-12
-        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAAuthRef.selector, bytes32(0)));
-        reg.register(UAKinds.PQZ_MLWE, pk, hex"aa", 0, "");
-        bytes32 native = bytes32(uint256(uint160(address(this))));
-        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAAuthRef.selector, native));
-        reg.register(UAKinds.PQZ_MLWE, pk, hex"aa", native, _mlAuth());
-        // non-canonical key: the verifier refuses before the precompile ⇒ UAPoP
+        // 0x0142 is not a kind (UA-6)
+        vm.expectRevert(abi.encodeWithSelector(UAKinds.UAKindNotDerived.selector, UAKinds.PQZ_MLWE));
+        reg.register(UAKinds.PQZ_MLWE, pk, hex"aa", "", "");
+        // non-canonical key or wrong length: the verifier refuses before the precompile ⇒ UAPoP
         bytes memory bad = bytes.concat(pk);
         bad[0] = 0xff;
         vm.expectRevert(IUARegistry.UAPoP.selector);
-        _pqzUA(bad, auth);
-        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKeyData.selector, UAKinds.PQZ_MLWE));
-        _pqzUA(_slice(pk, 0, 100), auth);
-        bytes32 ua = _pqzUA(pk, auth);
+        _pqzUA(bad, 1);
+        vm.expectRevert(IUARegistry.UAPoP.selector);
+        _pqzUA(_slice(pk, 0, 100), 1);
+        bytes32 ua = _pqzUA(pk, 1);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAAlreadyRegistered.selector, ua));
-        _pqzUA(pk, auth);
+        _pqzUA(pk, 1);
+        bytes32 h = reg.keyHashOf(UAKinds.PQZ_MLWE, pk);
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKeyInUse.selector, h, ua));
+        _pqzUA(pk, 2);
     }
 }

@@ -787,7 +787,7 @@ any signing scalar. BIP-32/SLIP-10 have no bn254 or BLS12-381, so derivation is 
 - The audit view/disclosure key (`ITransferDisclosure`): `<use> = 8`, on both trees.
 - Short forms: `m/12381/<coin>/<acct>/7` and `m/254/<coin>/<acct>/7` (`m/254/…`).
 - `y = g^x` (G1 of the curve); `UA = keccak256(TAG(kind) ‖ encodedY)` (`ZetherTypes.toUA`, tagged; `encodedY`: bn254 64 bytes
-  `x‖y`, BLS12-381 128 bytes per EIP-2537); the proof of possession now binds chain, registry, UA and `authRef`
+  `x‖y`, BLS12-381 128 bytes per EIP-2537); the proof of possession binds chain, registry and UA
   ([CTR-UA-07](../contracts/accounts.md#CTR-UA-07); an earlier Schnorr PoP over `keccak256(registry ‖ encodedY ‖
   account)` bound to the caller account is replaced; the legacy registry's (`legacy/ua3/`) challenge had no chain id). Zether protocol: [contracts/zether](../contracts/zether.md).
 - Stored like the seed: client only, encrypted at rest, never sent to a server or a relayer.
@@ -808,11 +808,15 @@ else. `sealPqKey({account, index})` (key worker) derives `seed32` once and seals
 the 32-byte leaf from stdin, exported on the user's own machine, never the BIP-39 seed; organizations keep the leaf in the
 key oracle and the ML-DSA key in an HSM with FIPS 204 firmware where available. `sealPqKey`/`openPqKey` join the vault v2 API
 next to `sealConfKey`/`openConfKey`. clientkeys uses `deriveUAKey(seed, {kind: 'mldsa65', account, index})` /
-`signUA('zether-auth', authDigest)` with a vetted JS/WASM ML-DSA package; an explicit export of the 32-byte leaf (never the
+`signUA('zether-auth', authDigest)` with a vetted JS/WASM ML-DSA package; **the register flow** builds the PQZ key from the
+sealed leaf (`openPqKey`), computes `h = keccak256(GROUP(pqz-mlwe) ‖ pqzKey)`, signs the signer's `pop` over
+`popDigest(ua, h)` and hands the leaf to the native prover for `pqzPop` (the `R_REG` proof over `uaMessage(0x0142, pop,
+popDigest(ua, h))`), then submits `register(kind, pk, pop, pqzKey, pqzPop)` once; a PQ signer is registered together
+with its PQZ key (a holder-kind registration without one is refused unless asked: the key can never be added later); an explicit export of the 32-byte leaf (never the
 seed) feeds the native prover or the organization's key oracle — PQ Zether proving is **not** in JS; envelopes reuse the
 existing `MetaTransaction` EIP-712 builder (address path, domain `("SCaaS PqzToken", "1", …)`) and the
-`UAMetaTransaction` builder (UA path, `salt = chainUid`) with `signUA('metatx', digest)` by the dedicated `mldsa65` fee UA — no new signing code; the UA kind
-vectors (`smartcontracts/vectors/ua/kinds.json`) gain the `pqz-mlwe` row (seed → pk, UA, keyHash). Protocol detail:
+`UAMetaTransaction` builder (UA path, `salt = chainUid`) with `signUA('metatx', digest)` by the dedicated `mldsa65` fee UA — no new signing code; the UA
+vectors (`smartcontracts/vectors/ua/kinds.json`) carry the `pqz-mlwe` scheme row (seed → pk, keyHash, `pqz_reg_message`). Protocol detail:
 [contracts/pq-zether](../contracts/pq-zero-knowledge.md). SPECIFIED.
 
 ## 12. Zether balance reading

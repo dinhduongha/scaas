@@ -40,6 +40,7 @@ contract UAWrapTest is UALedgerBase {
     function _a(ITradeToken.UATradeOrder memory o) internal view returns (bytes memory) {
         bytes32 h = tok.uaTradeOrderDigest(o);
         if (o.from == _pad(alice)) return _ecdsa(ALICE_PK, h);
+        if (o.from == uaZ) return _zAuth(UAKinds.PURPOSE_TRADE, h);
         uint16 kind = lreg.kindOf(o.from);
         return _auth(lreg, kind, _key(kind), UAKinds.PURPOSE_TRADE, h);
     }
@@ -98,11 +99,21 @@ contract UAWrapTest is UALedgerBase {
         ITradeToken.UATradeOrder memory o = _o(wrpL, uaP, 1000, 1000, 0);
         o.destination = bytes32(uint256(keccak256("unregistered")));
         _wrapReverts(wrpL, address(tok), o, abi.encodeWithSelector(IUALedger.UANotRegistered.selector, o.destination));
-        o.destination = uaZ;
-        _wrapReverts(wrpL, address(tok), o,
-            abi.encodeWithSelector(IUALedger.UAKindNotAccepted.selector, uaZ, UAKinds.ZETHER_BN254));
         o.destination = _pad(POOL);
         _wrapReverts(wrpL, address(tok), o, abi.encodeWithSelector(IUALedger.UAPoolNotPayable.selector));
+    }
+
+    /// UA-6 U8: the Zether UA is a wrap destination and signs its own `UATradeOrder` (purpose `trade`).
+    function test_UA6_zetherDestinationAndSigner() public {
+        ITradeToken.UATradeOrder memory o = _o(wrpL, uaP, 1000, 1000, 0);
+        o.destination = uaZ;
+        _wrap(wrpL, o);
+        assertEq(wrpL.balanceOfUA(uaZ), 1000);
+        _fund(uaZ, 500);
+        o = _o(wrpL, uaZ, 500, 500, 0);
+        _wrap(wrpL, o);
+        assertEq(wrpL.balanceOfUA(uaZ), 1500);
+        assertEq(tok.balanceOfUA(uaZ), 0);
     }
 
     function test_legAndOrderChecks() public {

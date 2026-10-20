@@ -17,7 +17,9 @@ import {ENV_PQZ_VERIFIER} from "../factory/IFactoryToken.sol";
 ///         confidential layer keeps no underlying of its own. The verifier (precompile and proof system) is an
 ///         implementation immutable (CTR-ZTH-20 / CTR-PQZ-10), so the proof system is an attribute of the release; the
 ///         auditor UA and the two modes are fixed at creation. Every entry point is `nonReentrant`; the PQZ selectors are
-///         allowlisted on both relaying paths (fee class `ABSOLUTE`) and never batched (CTR-PQZ-21).
+///         allowlisted on both relaying paths (fee class `ABSOLUTE`) and never batched (CTR-PQZ-21). A holder is a signing
+///         UA: `authSig` is that UA's own signature over the statement digest, and its PQZ key is a record attribute
+///         (UA-6 U7); a UA without the key is refused as sender, leg, beneficiary, shield target and auditor.
 abstract contract PqzLayer is MetaTokenBase, IPqzToken {
     /// @dev The `UAPqzVerifier` of this release; `init` takes the precompile and the proof system from it.
     address internal immutable PQZ_VERIFIER;

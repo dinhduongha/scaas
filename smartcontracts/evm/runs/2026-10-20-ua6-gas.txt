@@ -1,0 +1,1181 @@
+UA-6 Task 9 gas, 2026-10-20. forge (Osaka), solc 0.8.37. 'before' = main cc5b8c51 measured with the same commands in a temporary checkout; 'after' = ua6-t9.
+Commands: (1) forge test --isolate -vv --match-path 'test/ua/{UAGas,UARegistryZether}.t.sol'   (2) forge test -vv --match-test 'gas|Gas|lifecycleShield|ownerOnlyRollOver|transferBls|burnBls|shieldAndRollOver' --match-path 'test/zether/*'   (3) ZETHER_GAS_PROBE=1 forge test --gas-limit 9000000000000000000 --match-test test_measure -vv   (4) forge test --isolate -vv --match-path 'test/ua/UARegistryUA6.t.sol'
+Full suite (forge test): 1242 passed, 0 failed, 9 skipped (1251), 112 suites. PairingVerifiers test_gas fails under --isolate only (arithmetic underflow in its own gasleft math); passes in the normal run.
+
+== before (main) vs after, selected rows ==
+msig worst case (16 x largest cap, handed) | 7141584 | 7141584 | +0
+ed25519 verify worst: least frame gas | 170286 | 170286 | +0
+ed25519 cap | 210000 | 210000 | +0
+register ed25519: least call gas | 287645 | 290722 | +3077
+register ed25519: gas used | 308858 | 312207 | +3349
+requireAuthorized ed25519 | 179772 | 179812 | +40
+sig bytes (largest real) | 512 | 512 | +0
+msig per derived member (cold) | 14092 | 14277 | +185
+msig per gen-1 member via gen 2 (cold) | 21716 | 21835 | +119
+msig per native EOA member (cold) | 10986 | 11008 | +22
+msig per native 7702-designator member (cold) | 11668 | 11686 | +18
+msig per native ERC-1271 wallet member (cold, incl. wallet exec) | 13247 | 13262 | +15
+account cold surcharge added (0 under --isolate) | 0 | 0 | +0
+msig member overhead + largest local hold | 33065 | 33184 | +119
+gen 1 case 0 bound | 5485000 | 5485000 | +0
+least requireAuthorized frame gas | 426728 | 426734 | +6
+gen 1 case 1 bound | 435000 | 435000 | +0
+gen 1 case 2 bound | 435000 | 435000 | +0
+gen 2 case 0 bound | 5552558 | 5552558 | +0
+gen 2 case 1 bound | 446529 | 446529 | +0
+gen 2 case 2 bound | 435000 | 435000 | +0
+requireAuthorized native ECDSA (registry warm) | 10891 | 10913 | +22
+requireAuthorized native ERC-1271 (ECDSA wallet) | 12636 | 12658 | +22
+register bls-bn254-minsig: least call gas | 455077 | 456395 | +1318
+register bls-bn254-minsig: gas used | 342902 | 346183 | +3281
+register msig 16 natives | 240184 | 253210 | +13026
+bls12-381 zetherTransferSingle (direct, auditor, fee) gas | 3987202 | 3980809 | -6393
+bls12-381 zetherUnshield gas | 1572150 | 1568179 | -3971
+bls12-381 zetherRollOverSigned (Schnorr) gas | 208118 | 207962 | -156
+bls12-381 zetherShield (first credit) gas | 216515 | 214130 | -2385
+bls12-381 zetherShield (warm) gas | 34406 | 34021 | -385
+bls12-381 zetherRollOver gas | 167040 | 166822 | -218
+bls12-381 zetherRollOver no-op gas | 3140 | 2922 | -218
+bls12-381 burn verify gas | 1459997 | 1457771 | -2226
+bls12-381 transfer verify gas | 2962817 | 2962817 | +0
+bls12-381 transfer+auditor verify gas | 3004284 | 3004284 | +0
+bls12-381 burn verify gas (cold call) | 1446687 | 1446687 | +0
+bls12-381 multi M=8 verify gas (cold call) | 13190095 | 13190095 | +0
+bls12-381 transfer verify gas (cold call) | 3000428 | 3000428 | +0
+bls12-381 zetherTransfer M=1 BUNDLE | 3982638 | 3976535 | -6103
+bls12-381 zetherTransfer M=1 HASH | 3679162 | 3673079 | -6083
+bls12-381 zetherTransfer M=1 NONE | 3580017 | 3573934 | -6083
+bls12-381 zetherTransfer M=2 BUNDLE | 6053188 | 6046855 | -6333
+bls12-381 zetherTransfer M=2 HASH | 5443450 | 5437135 | -6315
+bls12-381 zetherTransfer M=2 NONE | 5294212 | 5287899 | -6313
+bls12-381 zetherTransfer M=4 BUNDLE | 10198439 | 10191643 | -6796
+bls12-381 zetherTransfer M=4 HASH | 8931878 | 8925099 | -6779
+bls12-381 zetherTransfer M=4 NONE | 8726609 | 8719833 | -6776
+bls12-381 zetherTransfer M=8 BUNDLE | 18506783 | 18499048 | -7735
+bls12-381 zetherTransfer M=8 HASH | 15950084 | 15942363 | -7721
+bls12-381 zetherTransfer M=8 NONE | 15607813 | 15600108 | -7705
+bls12-381 zetherTransfer M=1 BUNDLE auditor-out | 3862799 | 3856696 | -6103
+bls12-381 zetherTransfer M=1 HASH auditor-out | 3638924 | 3632840 | -6084
+bls12-381 zetherTransfer M=1 NONE auditor-out | 3539778 | 3533695 | -6083
+bls12-381 zetherTransfer M=2 BUNDLE auditor-out | 5812500 | 5806166 | -6334
+bls12-381 zetherTransfer M=2 HASH auditor-out | 5361961 | 5355647 | -6314
+bls12-381 zetherTransfer M=2 NONE auditor-out | 5212724 | 5206410 | -6314
+bls12-381 zetherTransfer M=4 BUNDLE auditor-out | 9715529 | 9708732 | -6797
+bls12-381 zetherTransfer M=4 HASH auditor-out | 8767368 | 8760589 | -6779
+bls12-381 zetherTransfer M=4 NONE auditor-out | 8562099 | 8555322 | -6777
+bls12-381 zetherTransfer M=8 BUNDLE auditor-out | 17537349 | 17529613 | -7736
+bls12-381 zetherTransfer M=8 HASH auditor-out | 15617452 | 15609732 | -7720
+bls12-381 zetherTransfer M=8 NONE auditor-out | 15275176 | 15267471 | -7705
+bls12-381 zetherTransferSingle auditor-out | 3847591 | 3841474 | -6117
+bls12-381 zetherTransferSingle | 3968424 | 3962306 | -6118
+register zether-bls12381 (UARegistryZether test_registerSelf --isolate) | 250236 | 251761 | +1525
+
+== new in UA-6 (no main row) ==
+  register mldsa65 + PQZ key (stand-in verifiers) 4438075
+  register PQ-eligible msig {mldsa65, p256} t=2 + PQZ key (stand-in verifiers) 3894160
+  requireAuthorized zether-bls12381 (metatx) 59831
+
+== raw: UAGas + UARegistryUA6 (--isolate) ==
+Compiling 4 files with Solc 0.8.37
+Solc 0.8.37 finished in 2.40s
+Compiler run successful with warnings:
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+  --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:92:29:
+   |
+92 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, signature);
+   |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:119:29:
+    |
+119 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, r, vs);
+    |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:161:29:
+    |
+161 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, v, r, s);
+    |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:169:26:
+    |
+169 |     function _throwError(RecoverError error, bytes32 errorArg) private pure {
+    |                          ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+  --> src/common/Bls12381.sol:60:28:
+   |
+60 |     error PrecompileFailed(address at);
+   |                            ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UAGas.t.sol:182:26:
+    |
+182 |     function _registerAt(address at, address pred, UARegistry.KindConfig[] memory cfg, bytes memory d, uint256 bound)
+    |                          ^^^^^^^^^^
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/ua/UARegistryBase.sol:232:5:
+    |
+232 |     function _auth(UARegistry r, uint16 kind, bytes memory keyData, bytes32 purpose, bytes32 digest)
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+
+Ran 12 tests for test/ua/UARegistryUA6.t.sol:UARegistryUA6Test
+[PASS] test_UA6_frontRun() (gas: 22312593)
+[PASS] test_UA6_generations() (gas: 26119775)
+[PASS] test_UA6_holderWithKey() (gas: 36065859)
+Logs:
+  register mldsa65 + PQZ key (stand-in verifiers) 4438075
+
+[PASS] test_UA6_holderWithoutKey() (gas: 1055648)
+[PASS] test_UA6_keyUniqueAcrossKinds() (gas: 17573615)
+[PASS] test_UA6_msigSquatting() (gas: 20888218)
+Logs:
+  register PQ-eligible msig {mldsa65, p256} t=2 + PQZ key (stand-in verifiers) 3894160
+
+[PASS] test_UA6_nonHolders() (gas: 11671333)
+[PASS] test_UA6_pqzDisabled() (gas: 7499768)
+[PASS] test_UA6_pqzListOrder() (gas: 35928025)
+[PASS] test_UA6_pqzNotAKind() (gas: 7490456)
+[PASS] test_UA6_zetherRequireAuthorized() (gas: 811742)
+Logs:
+  requireAuthorized zether-bls12381 (metatx) 59831
+
+[PASS] test_UA6_zetherSets() (gas: 347459)
+Suite result: ok. 12 passed; 0 failed; 0 skipped; finished in 178.36ms (649.60ms CPU time)
+
+Ran 6 tests for test/ua/UAGas.t.sol:UAGasTest
+[PASS] test_T_GAS_capsWithinBudget() (gas: 3576257)
+Logs:
+  msig worst case (16 x largest cap, handed): 7141584
+
+[PASS] test_T_GAS_ed25519() (gas: 10798970)
+Logs:
+  ed25519 verify worst: least frame gas: 170286
+  ed25519 cap: 210000
+  register ed25519: least call gas: 290722
+  register ed25519: gas used: 312207
+  requireAuthorized ed25519: 179812
+
+[PASS] test_T_GAS_msigAtBudget() (gas: 307516801)
+Logs:
+  sig bytes (largest real): 512
+  msig per derived member (cold): 14277
+  msig per gen-1 member via gen 2 (cold): 21835
+  msig per native EOA member (cold): 11008
+  msig per native 7702-designator member (cold): 11686
+  msig per native ERC-1271 wallet member (cold, incl. wallet exec): 13262
+  account cold surcharge added (0 under --isolate): 0
+  msig member overhead + largest local hold: 33184
+  gen 1 case 0 bound: 5485000
+    least requireAuthorized frame gas: 5025445
+  gen 1 case 1 bound: 435000
+    least requireAuthorized frame gas: 427411
+  gen 1 case 2 bound: 435000
+    least requireAuthorized frame gas: 426734
+  gen 2 case 0 bound: 5552558
+    least requireAuthorized frame gas: 5098806
+  gen 2 case 1 bound: 446529
+    least requireAuthorized frame gas: 444436
+  gen 2 case 2 bound: 435000
+    least requireAuthorized frame gas: 426734
+
+[PASS] test_T_GAS_native() (gas: 736924)
+Logs:
+  requireAuthorized native ECDSA (registry warm): 10913
+  requireAuthorized native ERC-1271 (ECDSA wallet): 12658
+
+[PASS] test_T_GAS_registerHeadroomBlsBn254() (gas: 4433789)
+Logs:
+  register bls-bn254-minsig: least call gas: 456395
+  register bls-bn254-minsig: gas used: 346183
+
+[PASS] test_T_GAS_structureOverBudgetRefused() (gas: 4111274)
+Logs:
+  register msig 16 natives: 253210
+
+Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 834.64ms (927.63ms CPU time)
+
+Ran 2 test suites in 836.04ms (1.01s CPU time): 18 tests passed, 0 failed, 0 skipped (18 total tests)
+== raw: zether non-isolate ==
+No files changed, compilation skipped
+
+Ran 1 test for test/zether/ZetherUnderlying.t.sol:ZetherUnderlyingTest
+[PASS] test_nativeLeg_wrapShieldPayable_notGasless() (gas: 881121)
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 58.92ms (939.84µs CPU time)
+
+Ran 3 tests for test/zether/ZetherNone.t.sol:ZetherNoneBls12381Test
+[PASS] test_lifecycleShieldTransferRollOverUnshield() (gas: 116641505)
+Logs:
+  bls12-381 zetherTransferSingle (direct, auditor, fee) gas 3980809
+  bls12-381 zetherUnshield gas 1568179
+
+[PASS] test_ownerOnlyRollOver() (gas: 947622)
+Logs:
+  bls12-381 zetherRollOverSigned (Schnorr) gas 207962
+
+[PASS] test_shieldAndRollOverGas() (gas: 400791)
+Logs:
+  bls12-381 zetherShield (first credit) gas 214130
+  bls12-381 zetherShield (warm) gas 34021
+  bls12-381 zetherRollOver gas 166822
+  bls12-381 zetherRollOver no-op gas 2922
+
+Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 1.42s (1.37s CPU time)
+
+Ran 3 tests for test/zether/ZetherVerifier.t.sol:ZetherVerifierTest
+[PASS] test_burnBls() (gas: 11982796)
+Logs:
+  bls12-381 burn verify gas 1457771
+
+[PASS] test_transferBls() (gas: 24779683)
+Logs:
+  bls12-381 transfer verify gas 2962817
+
+[PASS] test_transferBlsAuditor() (gas: 24906891)
+Logs:
+  bls12-381 transfer+auditor verify gas 3004284
+
+Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 4.09s (995.51ms CPU time)
+
+Ran 3 tests for test/zether/ZetherVerifierGas.t.sol:ZetherVerifierGasTest
+[PASS] test_gasBurnBls12381() (gas: 27437796)
+Logs:
+  bls12-381 burn verify gas (cold call) 1446687
+
+[PASS] test_gasMulti8Bls12381() (gas: 152831638)
+Logs:
+  bls12-381 multi M=8 verify gas (cold call) 13190095
+
+[PASS] test_gasTransferBls12381() (gas: 40367507)
+Logs:
+  bls12-381 transfer verify gas (cold call) 3000428
+
+Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 4.39s (2.52s CPU time)
+
+Ran 31 tests for test/zether/ZetherMulti.t.sol:ZetherMultiBls12381Test
+[PASS] test_gasDiscloseM1Bundle() (gas: 27319606)
+Logs:
+  bls12-381 disclose M=1 BUNDLE SENDER_S gas 120531 bundles 0
+  bls12-381 disclose M=1 BUNDLE RECEIVER_X gas 151955 bundles 0
+  bls12-381 disclose M=1 BUNDLE AUDITOR gas 165203 bundles 0
+  bls12-381 disclose M=1 BUNDLE SENDER_CP gas 152004 bundles 0
+
+[PASS] test_gasDiscloseM1Hash() (gas: 27042865)
+Logs:
+  bls12-381 disclose M=1 HASH SENDER_S gas 88553 bundles 528
+  bls12-381 disclose M=1 HASH RECEIVER_X gas 119974 bundles 528
+  bls12-381 disclose M=1 HASH AUDITOR gas 133222 bundles 528
+  bls12-381 disclose M=1 HASH SENDER_CP gas 120023 bundles 528
+
+[PASS] test_gasDiscloseM8Bundle() (gas: 144799765)
+Logs:
+  bls12-381 disclose M=8 BUNDLE SENDER_S gas 364737 bundles 0
+  bls12-381 disclose M=8 BUNDLE RECEIVER_X gas 396223 bundles 0
+  bls12-381 disclose M=8 BUNDLE AUDITOR gas 409486 bundles 0
+  bls12-381 disclose M=8 BUNDLE SENDER_CP gas 396272 bundles 0
+
+[PASS] test_gasDiscloseM8Hash() (gas: 142129535)
+Logs:
+  bls12-381 disclose M=8 HASH SENDER_S gas 110959 bundles 4112
+  bls12-381 disclose M=8 HASH RECEIVER_X gas 142422 bundles 4112
+  bls12-381 disclose M=8 HASH AUDITOR gas 155677 bundles 4112
+  bls12-381 disclose M=8 HASH SENDER_CP gas 142471 bundles 4112
+
+[PASS] test_gasDiscloseSingle() (gas: 27064680)
+Logs:
+  bls12-381 disclose Single SENDER_S gas 120531 bundles 0
+  bls12-381 disclose Single RECEIVER_X gas 151955 bundles 0
+  bls12-381 disclose Single AUDITOR gas 165203 bundles 0
+  bls12-381 disclose Single SENDER_CP gas 152004 bundles 0
+
+[PASS] test_gasM1Bundle() (gas: 26362905)
+Logs:
+  bls12-381 zetherTransfer M=1 BUNDLE gas 3976535 calldata 6948
+
+[PASS] test_gasM1Hash() (gas: 26067306)
+Logs:
+  bls12-381 zetherTransfer M=1 HASH gas 3673079 calldata 7012
+
+[PASS] test_gasM1None() (gas: 25960326)
+Logs:
+  bls12-381 zetherTransfer M=1 NONE gas 3573934 calldata 6948
+
+[PASS] test_gasM2Bundle() (gas: 40517590)
+Logs:
+  bls12-381 zetherTransfer M=2 BUNDLE gas 6046855 calldata 10116
+
+[PASS] test_gasM2Hash() (gas: 39921563)
+Logs:
+  bls12-381 zetherTransfer M=2 HASH gas 5437135 calldata 10212
+
+[PASS] test_gasM2None() (gas: 39758700)
+Logs:
+  bls12-381 zetherTransfer M=2 NONE gas 5287899 calldata 10116
+
+[PASS] test_gasM4Bundle() (gas: 71235753)
+Logs:
+  bls12-381 zetherTransfer M=4 BUNDLE gas 10191643 calldata 16452
+
+[PASS] test_gasM4Hash() (gas: 69994679)
+Logs:
+  bls12-381 zetherTransfer M=4 HASH gas 8925099 calldata 16644
+
+[PASS] test_gasM4None() (gas: 69763942)
+Logs:
+  bls12-381 zetherTransfer M=4 NONE gas 8719833 calldata 16452
+
+[PASS] test_gasM8Bundle() (gas: 142886704)
+Logs:
+  bls12-381 zetherTransfer M=8 BUNDLE gas 18499048 calldata 29124
+
+[PASS] test_gasM8Hash() (gas: 140379975)
+Logs:
+  bls12-381 zetherTransfer M=8 HASH gas 15942363 calldata 29476
+
+[PASS] test_gasM8None() (gas: 139987830)
+Logs:
+  bls12-381 zetherTransfer M=8 NONE gas 15600108 calldata 29124
+
+[PASS] test_gasOutM1Bundle() (gas: 26163176)
+Logs:
+  bls12-381 zetherTransfer M=1 BUNDLE auditor-out gas 3856696 calldata 6948
+
+[PASS] test_gasOutM1Hash() (gas: 25947067)
+Logs:
+  bls12-381 zetherTransfer M=1 HASH auditor-out gas 3632840 calldata 7012
+
+[PASS] test_gasOutM1None() (gas: 25840129)
+Logs:
+  bls12-381 zetherTransfer M=1 NONE auditor-out gas 3533695 calldata 6948
+
+[PASS] test_gasOutM2Bundle() (gas: 40137744)
+Logs:
+  bls12-381 zetherTransfer M=2 BUNDLE auditor-out gas 5806166 calldata 10116
+
+[PASS] test_gasOutM2Hash() (gas: 39700919)
+Logs:
+  bls12-381 zetherTransfer M=2 HASH auditor-out gas 5355647 calldata 10212
+
+[PASS] test_gasOutM2None() (gas: 39538032)
+Logs:
+  bls12-381 zetherTransfer M=2 NONE auditor-out gas 5206410 calldata 10116
+
+[PASS] test_gasOutM4Bundle() (gas: 70489258)
+Logs:
+  bls12-381 zetherTransfer M=4 BUNDLE auditor-out gas 9708732 calldata 16452
+
+[PASS] test_gasOutM4Hash() (gas: 69566590)
+Logs:
+  bls12-381 zetherTransfer M=4 HASH auditor-out gas 8760589 calldata 16644
+
+[PASS] test_gasOutM4None() (gas: 69335847)
+Logs:
+  bls12-381 zetherTransfer M=4 NONE auditor-out gas 8555322 calldata 16452
+
+[PASS] test_gasOutM8Bundle() (gas: 141380064)
+Logs:
+  bls12-381 zetherTransfer M=8 BUNDLE auditor-out gas 17529613 calldata 29124
+
+[PASS] test_gasOutM8Hash() (gas: 139510092)
+Logs:
+  bls12-381 zetherTransfer M=8 HASH auditor-out gas 15609732 calldata 29476
+
+[PASS] test_gasOutM8None() (gas: 139117942)
+Logs:
+  bls12-381 zetherTransfer M=8 NONE auditor-out gas 15267471 calldata 29124
+
+[PASS] test_gasOutSingle() (gas: 25999670)
+Logs:
+  bls12-381 zetherTransferSingle auditor-out gas 3841474 calldata 6916
+
+[PASS] test_gasSingle() (gas: 26174026)
+Logs:
+  bls12-381 zetherTransferSingle gas 3962306 calldata 6916
+
+Suite result: ok. 31 passed; 0 failed; 0 skipped; finished in 4.39s (26.15s CPU time)
+
+Ran 5 test suites in 4.39s (14.36s CPU time): 41 tests passed, 0 failed, 0 skipped (41 total tests)
+== raw: gas-limit probe ==
+  GASLIMIT bls12381 direct bundle on M=1 limit=4284877
+  GASLIMIT bls12381 direct bundle on M=2 limit=6463561
+  GASLIMIT bls12381 direct bundle on M=3 limit=8643468
+  GASLIMIT bls12381 direct bundle on M=4 limit=10824280
+  GASLIMIT bls12381 direct bundle on M=5 limit=13005980
+  GASLIMIT bls12381 direct bundle on M=6 limit=15188797
+  GASLIMIT bls12381 direct bundle on M=7 limit=17372899
+  GASLIMIT bls12381 direct bundle out M=1 limit=4158866
+  GASLIMIT bls12381 direct bundle out M=2 limit=6210524
+  GASLIMIT bls12381 direct bundle out M=3 limit=8263263
+  GASLIMIT bls12381 direct bundle out M=4 limit=10316704
+  GASLIMIT bls12381 direct bundle out M=5 limit=12370838
+  GASLIMIT bls12381 direct bundle out M=6 limit=14426048
+  GASLIMIT bls12381 direct bundle out M=7 limit=16482217
+  GASLIMIT bls12381 direct bundle out M=8 limit=18539733
+  GASLIMIT bls12381 relayed bundle on M=1 limit=4465468
+  GASLIMIT bls12381 relayed bundle on M=2 limit=6715522
+  GASLIMIT bls12381 relayed bundle on M=3 limit=8966956
+  GASLIMIT bls12381 relayed bundle on M=4 limit=11219857
+  GASLIMIT bls12381 relayed bundle on M=5 limit=13473501
+  GASLIMIT bls12381 relayed bundle on M=6 limit=15728743
+  GASLIMIT bls12381 relayed bundle on M=7 limit=17985178
+  GASLIMIT bls12381 relayed bundle out M=1 limit=4335571
+  GASLIMIT bls12381 relayed bundle out M=2 limit=6454705
+  GASLIMIT bls12381 relayed bundle out M=3 limit=8574830
+  GASLIMIT bls12381 relayed bundle out M=4 limit=10696141
+  GASLIMIT bls12381 relayed bundle out M=5 limit=12818465
+  GASLIMIT bls12381 relayed bundle out M=6 limit=14941807
+  GASLIMIT bls12381 relayed bundle out M=7 limit=17066376
+  GASLIMIT bls12381 direct compact on M=1 limit=3972477
+  GASLIMIT bls12381 direct compact on M=2 limit=5835602
+  GASLIMIT bls12381 direct compact on M=3 limit=7677109
+  GASLIMIT bls12381 direct compact on M=4 limit=9519630
+  GASLIMIT bls12381 direct compact on M=5 limit=11362946
+  GASLIMIT bls12381 direct compact on M=6 limit=13210159
+  GASLIMIT bls12381 direct compact on M=7 limit=15076920
+  GASLIMIT bls12381 direct compact on M=8 limit=16924647
+  GASLIMIT bls12381 direct compact out M=1 limit=3928577
+  GASLIMIT bls12381 direct compact out M=2 limit=5746969
+  GASLIMIT bls12381 direct compact out M=3 limit=7543429
+  GASLIMIT bls12381 direct compact out M=4 limit=9340702
+  GASLIMIT bls12381 direct compact out M=5 limit=11138674
+  GASLIMIT bls12381 direct compact out M=6 limit=12940423
+  GASLIMIT bls12381 direct compact out M=7 limit=14761256
+  GASLIMIT bls12381 direct compact out M=8 limit=16563056
+  GASLIMIT bls12381 direct compact out M=9 limit=18365576
+  GASLIMIT bls12381 relayed compact on M=1 limit=4143205
+  GASLIMIT bls12381 relayed compact on M=2 limit=6067704
+  GASLIMIT bls12381 relayed compact on M=3 limit=7969869
+  GASLIMIT bls12381 relayed compact on M=4 limit=9873697
+  GASLIMIT bls12381 relayed compact on M=5 limit=11778279
+  GASLIMIT bls12381 relayed compact on M=6 limit=13686874
+  GASLIMIT bls12381 relayed compact on M=7 limit=15615982
+  GASLIMIT bls12381 relayed compact on M=8 limit=17525754
+  GASLIMIT bls12381 relayed compact out M=1 limit=4098048
+  GASLIMIT bls12381 relayed compact out M=2 limit=5976320
+  GASLIMIT bls12381 relayed compact out M=3 limit=7831997
+  GASLIMIT bls12381 relayed compact out M=4 limit=9689024
+  GASLIMIT bls12381 relayed compact out M=5 limit=11547014
+  GASLIMIT bls12381 relayed compact out M=6 limit=13408784
+  GASLIMIT bls12381 relayed compact out M=7 limit=15290789
+  GASLIMIT bls12381 relayed compact out M=8 limit=17153058
+  GASLIMIT bls12381 direct none on M=1 limit=3869343
+  GASLIMIT bls12381 direct none on M=2 limit=5680401
+  GASLIMIT bls12381 direct none on M=3 limit=7492382
+  GASLIMIT bls12381 direct none on M=4 limit=9305373
+  GASLIMIT bls12381 direct none on M=5 limit=11119214
+  GASLIMIT bls12381 direct none on M=6 limit=12934328
+  GASLIMIT bls12381 direct none on M=7 limit=14749898
+  GASLIMIT bls12381 direct none on M=8 limit=16566909
+  GASLIMIT bls12381 direct none on M=9 limit=18384918
+  GASLIMIT bls12381 direct none out M=1 limit=3825587
+  GASLIMIT bls12381 direct none out M=2 limit=5591647
+  GASLIMIT bls12381 direct none out M=3 limit=7358701
+  GASLIMIT bls12381 direct none out M=4 limit=9126444
+  GASLIMIT bls12381 direct none out M=5 limit=10894856
+  GASLIMIT bls12381 direct none out M=6 limit=12664148
+  GASLIMIT bls12381 direct none out M=7 limit=14434412
+  GASLIMIT bls12381 direct none out M=8 limit=16205229
+  GASLIMIT bls12381 direct none out M=9 limit=17977092
+  GASLIMIT bls12381 relayed none on M=1 limit=4036885
+  GASLIMIT bls12381 relayed none on M=2 limit=5907367
+  GASLIMIT bls12381 relayed none on M=3 limit=7779320
+  GASLIMIT bls12381 relayed none on M=4 limit=9652139
+  GASLIMIT bls12381 relayed none on M=5 limit=11526236
+  GASLIMIT bls12381 relayed none on M=6 limit=13401748
+  GASLIMIT bls12381 relayed none on M=7 limit=15278242
+  GASLIMIT bls12381 relayed none on M=8 limit=17156247
+  GASLIMIT bls12381 relayed none out M=1 limit=3991705
+  GASLIMIT bls12381 relayed none out M=2 limit=5816041
+  GASLIMIT bls12381 relayed none out M=3 limit=7641413
+  GASLIMIT bls12381 relayed none out M=4 limit=9467908
+  GASLIMIT bls12381 relayed none out M=5 limit=11295234
+  GASLIMIT bls12381 relayed none out M=6 limit=13123778
+  GASLIMIT bls12381 relayed none out M=7 limit=14953144
+  GASLIMIT bls12381 relayed none out M=8 limit=16783617
+  GASLIMIT bls12381 direct single on M=1 limit=4270355
+  GASLIMIT bls12381 direct single out M=1 limit=4143331
+  GASLIMIT bls12381 relayed single on M=1 limit=4450581
+  GASLIMIT bls12381 relayed single out M=1 limit=4319567
+== raw: main (before) ==
+Compiling 139 files with Solc 0.8.37
+Solc 0.8.37 finished in 14.76s
+Compiler run successful with warnings:
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+  --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:92:29:
+   |
+92 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, signature);
+   |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:119:29:
+    |
+119 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, r, vs);
+    |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:161:29:
+    |
+161 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, v, r, s);
+    |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:169:26:
+    |
+169 |     function _throwError(RecoverError error, bytes32 errorArg) private pure {
+    |                          ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+  --> src/common/Bls12381.sol:60:28:
+   |
+60 |     error PrecompileFailed(address at);
+   |                            ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> src/factory/OpenFactory.sol:285:26:
+    |
+285 |         private returns (address at, Release memory r)
+    |                          ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> src/zether/ZetherVerifier.sol:264:13:
+    |
+264 |             uint256 at = 4 + 2 * n + 2 * j;
+    |             ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> src/zether/ZetherVerifier.sol:368:9:
+    |
+368 |         uint256 at = HEADER + 6 * p;
+    |         ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> test/ua/UAGas.t.sol:182:26:
+    |
+182 |     function _registerAt(address at, address pred, UARegistry.KindConfig[] memory cfg, bytes memory d, uint256 bound)
+    |                          ^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+  --> src/ua/verifiers/Musig2Secp256k1Verifier.sol:43:14:
+   |
+43 |             (bool ok, uint256 hx, uint256 hy) = _hint(keyData, h, l, i);
+   |              ^^^^^^^
+Note: The shadowed declaration is here:
+  --> src/ua/verifiers/Musig2Secp256k1Verifier.sol:51:10:
+   |
+51 |         (bool ok, uint256 qy) = Bip340.liftX(qx);
+   |          ^^^^^^^
+
+Warning (2018): Function state mutability can be restricted to pure
+  --> src/ua/verifiers/Musig2Secp256k1Verifier.sol:82:5:
+   |
+82 |     function _coef(bytes32 l, bytes calldata pk) private view returns (uint256) {
+   |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+  --> src/ua/verifiers/Secp256k1Verifier.sol:14:5:
+   |
+14 |     function verify(bytes calldata keyData, bytes32 message, bytes calldata sig) public view returns (bool) {
+   |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/ua/UARegistryBase.sol:232:5:
+    |
+232 |     function _auth(UARegistry r, uint16 kind, bytes memory keyData, bytes32 purpose, bytes32 digest)
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+
+Ran 13 tests for test/ua/UARegistryZether.t.sol:UARegistryZetherTest
+[PASS] test_T_AUTH_1b_registeredZether() (gas: 303816)
+[PASS] test_T_REG_3b_zether() (gas: 648130)
+Logs:
+  register zether-bn254 native authRef 239550
+
+[PASS] test_authRefDerived() (gas: 481861)
+[PASS] test_authRefMsig() (gas: 679040)
+[PASS] test_authRefRefused() (gas: 521435)
+[PASS] test_authRefSameCurveBls() (gas: 1374727)
+[PASS] test_constructorZetherSlots() (gas: 3903614)
+[PASS] test_gen2HandsZetherToGen1() (gas: 7864007)
+[PASS] test_keyHashGroupShared() (gas: 310919)
+[PASS] test_registerSelf() (gas: 770717)
+Logs:
+  register zether-bn254 self 210389
+  register zether-bls12381 self 250236
+
+[PASS] test_zetherAuthorizedByAuthRef() (gas: 1080914)
+Logs:
+  zether-auth, native authRef 23449
+
+[PASS] test_zetherAuthorizedSelf() (gas: 1533729)
+Logs:
+  owner op zether-bn254 self 46965
+  owner op zether-bls12381 self 58841
+
+[PASS] test_zetherVerifiers() (gas: 1529132)
+Suite result: ok. 13 passed; 0 failed; 0 skipped; finished in 25.26ms (60.04ms CPU time)
+
+Ran 6 tests for test/ua/UAGas.t.sol:UAGasTest
+[PASS] test_T_GAS_capsWithinBudget() (gas: 3576257)
+Logs:
+  msig worst case (16 x largest cap, handed): 7141584
+
+[PASS] test_T_GAS_ed25519() (gas: 10744668)
+Logs:
+  ed25519 verify worst: least frame gas: 170286
+  ed25519 cap: 210000
+  register ed25519: least call gas: 287645
+  register ed25519: gas used: 308858
+  requireAuthorized ed25519: 179772
+
+[PASS] test_T_GAS_msigAtBudget() (gas: 310269297)
+Logs:
+  sig bytes (largest real): 512
+  msig per derived member (cold): 14092
+  msig per gen-1 member via gen 2 (cold): 21716
+  msig per native EOA member (cold): 10986
+  msig per native 7702-designator member (cold): 11668
+  msig per native ERC-1271 wallet member (cold, incl. wallet exec): 13247
+  account cold surcharge added (0 under --isolate): 0
+  msig member overhead + largest local hold: 33065
+  gen 1 case 0 bound: 5485000
+    least requireAuthorized frame gas: 5024511
+  gen 1 case 1 bound: 435000
+    least requireAuthorized frame gas: 427289
+  gen 1 case 2 bound: 435000
+    least requireAuthorized frame gas: 426728
+  gen 2 case 0 bound: 5552558
+    least requireAuthorized frame gas: 5098280
+  gen 2 case 1 bound: 446529
+    least requireAuthorized frame gas: 444365
+  gen 2 case 2 bound: 435000
+    least requireAuthorized frame gas: 426728
+
+[PASS] test_T_GAS_native() (gas: 736892)
+Logs:
+  requireAuthorized native ECDSA (registry warm): 10891
+  requireAuthorized native ERC-1271 (ECDSA wallet): 12636
+
+[PASS] test_T_GAS_registerHeadroomBlsBn254() (gas: 4148719)
+Logs:
+  register bls-bn254-minsig: least call gas: 455077
+  register bls-bn254-minsig: gas used: 342902
+
+[PASS] test_T_GAS_structureOverBudgetRefused() (gas: 4092303)
+Logs:
+  register msig 16 natives: 240184
+
+Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 734.85ms (801.32ms CPU time)
+
+Ran 2 test suites in 736.05ms (760.11ms CPU time): 19 tests passed, 0 failed, 0 skipped (19 total tests)
+Compiling 10 files with Solc 0.8.37
+Solc 0.8.37 finished in 10.50s
+Compiler run successful with warnings:
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+  --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:92:29:
+   |
+92 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, signature);
+   |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:119:29:
+    |
+119 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, r, vs);
+    |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:161:29:
+    |
+161 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, v, r, s);
+    |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:169:26:
+    |
+169 |     function _throwError(RecoverError error, bytes32 errorArg) private pure {
+    |                          ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+  --> src/common/Bls12381.sol:60:28:
+   |
+60 |     error PrecompileFailed(address at);
+   |                            ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> src/factory/OpenFactory.sol:285:26:
+    |
+285 |         private returns (address at, Release memory r)
+    |                          ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> src/zether/ZetherVerifier.sol:264:13:
+    |
+264 |             uint256 at = 4 + 2 * n + 2 * j;
+    |             ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> src/zether/ZetherVerifier.sol:368:9:
+    |
+368 |         uint256 at = HEADER + 6 * p;
+    |         ^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+   --> test/zether/helpers/ZetherFixture.sol:137:38:
+    |
+137 |     function _newToken(bool auditor, bytes32 salt) internal virtual returns (ZetherLayer) {
+    |                                      ^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+  --> test/zether/helpers/ZetherFixture.sol:65:5:
+   |
+65 |     bytes16 internal salt = bytes16(uint128(0x5A17));
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+   --> test/zether/helpers/ZetherFixture.sol:141:38:
+    |
+141 |     function _newToken(bool auditor, bytes32 salt, uint256 maxShielded) internal virtual returns (ZetherLayer) {
+    |                                      ^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+  --> test/zether/helpers/ZetherFixture.sol:65:5:
+   |
+65 |     bytes16 internal salt = bytes16(uint128(0x5A17));
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (2018): Function state mutability can be restricted to view
+  --> test/zether/ZetherVerifier.t.sol:98:5:
+   |
+98 |     function _honestTransfer(Case memory k) internal {
+   |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to view
+   --> test/zether/ZetherVerifier.t.sol:118:5:
+    |
+118 |     function test_transferOverspendRejected() public {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to view
+   --> test/zether/ZetherVerifier.t.sol:124:5:
+    |
+124 |     function test_transferFeeOverspendRejected() public {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to view
+   --> test/zether/ZetherVerifier.t.sol:130:5:
+    |
+130 |     function test_transferValueOutOfRangeRejected() public {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to view
+   --> test/zether/ZetherVerifier.t.sol:137:5:
+    |
+137 |     function test_sigmaBulletsLinkageRejected() public {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to view
+   --> test/zether/ZetherVerifier.t.sol:143:5:
+    |
+143 |     function test_transferTamperedProofBitsRejected() public {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to view
+   --> test/zether/ZetherVerifier.t.sol:160:5:
+    |
+160 |     function test_transferTamperedStatementFieldsRejected() public {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to view
+   --> test/zether/ZetherVerifier.t.sol:189:5:
+    |
+189 |     function test_auditorCiphertextMustMatchValue() public {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to view
+   --> test/zether/ZetherVerifier.t.sol:205:5:
+    |
+205 |     function test_auditorOffRequiresIdentityCaud() public {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to view
+   --> test/zether/ZetherVerifier.t.sol:292:5:
+    |
+292 |     function test_burnBn254() public {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to view
+   --> test/zether/ZetherVerifier.t.sol:298:5:
+    |
+298 |     function test_burnBls() public {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+
+Ran 1 test for test/zether/ZetherUnderlying.t.sol:ZetherUnderlyingTest
+[PASS] test_nativeLeg_wrapShieldPayable_notGasless() (gas: 822776)
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 40.42ms (547.50µs CPU time)
+
+Ran 3 tests for test/zether/ZetherNone.t.sol:ZetherNoneBn254Test
+[PASS] test_lifecycleShieldTransferRollOverUnshield() (gas: 86196606)
+Logs:
+  bn254 zetherTransferSingle (direct, auditor, fee) gas 3375538
+  bn254 zetherUnshield gas 1451983
+
+[PASS] test_ownerOnlyRollOver() (gas: 724555)
+Logs:
+  bn254 zetherRollOverSigned (Schnorr) gas 145037
+
+[PASS] test_shieldAndRollOverGas() (gas: 311137)
+Logs:
+  bn254 zetherShield (first credit) gas 160619
+  bn254 zetherShield (warm) gas 26215
+  bn254 zetherRollOver gas 115876
+  bn254 zetherRollOver no-op gas 3150
+
+Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 1.08s (1.06s CPU time)
+
+Ran 3 tests for test/zether/ZetherVerifier.t.sol:ZetherVerifierTest
+[PASS] test_burnBls() (gas: 11984964)
+Logs:
+  bls12-381 burn verify gas 1459997
+
+[PASS] test_transferBls() (gas: 24779709)
+Logs:
+  bls12-381 transfer verify gas 2962817
+
+[PASS] test_transferBlsAuditor() (gas: 24906917)
+Logs:
+  bls12-381 transfer+auditor verify gas 3004284
+
+Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 1.48s (1.41s CPU time)
+
+Ran 3 tests for test/zether/ZetherNone.t.sol:ZetherNoneBls12381Test
+[PASS] test_lifecycleShieldTransferRollOverUnshield() (gas: 116663211)
+Logs:
+  bls12-381 zetherTransferSingle (direct, auditor, fee) gas 3987202
+  bls12-381 zetherUnshield gas 1572150
+
+[PASS] test_ownerOnlyRollOver() (gas: 954134)
+Logs:
+  bls12-381 zetherRollOverSigned (Schnorr) gas 208118
+
+[PASS] test_shieldAndRollOverGas() (gas: 403320)
+Logs:
+  bls12-381 zetherShield (first credit) gas 216515
+  bls12-381 zetherShield (warm) gas 34406
+  bls12-381 zetherRollOver gas 167040
+  bls12-381 zetherRollOver no-op gas 3140
+
+Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 1.89s (1.83s CPU time)
+
+Ran 6 tests for test/zether/ZetherVerifierGas.t.sol:ZetherVerifierGasTest
+[PASS] test_gasBurnBls12381() (gas: 27437880)
+Logs:
+  bls12-381 burn verify gas (cold call) 1446687
+
+[PASS] test_gasBurnBn254() (gas: 17259126)
+Logs:
+  bn254 burn verify gas (cold call) 1353622
+
+[PASS] test_gasMulti8Bls12381() (gas: 152831722)
+Logs:
+  bls12-381 multi M=8 verify gas (cold call) 13190095
+
+[PASS] test_gasMulti8Bn254() (gas: 104199508)
+Logs:
+  bn254 multi M=8 verify gas (cold call) 12282508
+
+[PASS] test_gasTransferBls12381() (gas: 40367591)
+Logs:
+  bls12-381 transfer verify gas (cold call) 3000428
+
+[PASS] test_gasTransferBn254() (gas: 26972958)
+Logs:
+  bn254 transfer verify gas (cold call) 2779983
+
+Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 7.98s (5.04s CPU time)
+
+Ran 31 tests for test/zether/ZetherMulti.t.sol:ZetherMultiBls12381Test
+[PASS] test_gasDiscloseM1Bundle() (gas: 27327471)
+Logs:
+  bls12-381 disclose M=1 BUNDLE SENDER_S gas 120575 bundles 0
+  bls12-381 disclose M=1 BUNDLE RECEIVER_X gas 152043 bundles 0
+  bls12-381 disclose M=1 BUNDLE AUDITOR gas 165313 bundles 0
+  bls12-381 disclose M=1 BUNDLE SENDER_CP gas 152092 bundles 0
+
+[PASS] test_gasDiscloseM1Hash() (gas: 27050711)
+Logs:
+  bls12-381 disclose M=1 HASH SENDER_S gas 88597 bundles 528
+  bls12-381 disclose M=1 HASH RECEIVER_X gas 120062 bundles 528
+  bls12-381 disclose M=1 HASH AUDITOR gas 133332 bundles 528
+  bls12-381 disclose M=1 HASH SENDER_CP gas 120111 bundles 528
+
+[PASS] test_gasDiscloseM8Bundle() (gas: 144810414)
+Logs:
+  bls12-381 disclose M=8 BUNDLE SENDER_S gas 364781 bundles 0
+  bls12-381 disclose M=8 BUNDLE RECEIVER_X gas 396311 bundles 0
+  bls12-381 disclose M=8 BUNDLE AUDITOR gas 409596 bundles 0
+  bls12-381 disclose M=8 BUNDLE SENDER_CP gas 396360 bundles 0
+
+[PASS] test_gasDiscloseM8Hash() (gas: 142140149)
+Logs:
+  bls12-381 disclose M=8 HASH SENDER_S gas 111003 bundles 4112
+  bls12-381 disclose M=8 HASH RECEIVER_X gas 142510 bundles 4112
+  bls12-381 disclose M=8 HASH AUDITOR gas 155787 bundles 4112
+  bls12-381 disclose M=8 HASH SENDER_CP gas 142559 bundles 4112
+
+[PASS] test_gasDiscloseSingle() (gas: 27072548)
+Logs:
+  bls12-381 disclose Single SENDER_S gas 120575 bundles 0
+  bls12-381 disclose Single RECEIVER_X gas 152043 bundles 0
+  bls12-381 disclose Single AUDITOR gas 165313 bundles 0
+  bls12-381 disclose Single SENDER_CP gas 152092 bundles 0
+
+[PASS] test_gasM1Bundle() (gas: 26370320)
+Logs:
+  bls12-381 zetherTransfer M=1 BUNDLE gas 3982638 calldata 7012
+
+[PASS] test_gasM1Hash() (gas: 26074702)
+Logs:
+  bls12-381 zetherTransfer M=1 HASH gas 3679162 calldata 7076
+
+[PASS] test_gasM1None() (gas: 25967721)
+Logs:
+  bls12-381 zetherTransfer M=1 NONE gas 3580017 calldata 7012
+
+[PASS] test_gasM2Bundle() (gas: 40525405)
+Logs:
+  bls12-381 zetherTransfer M=2 BUNDLE gas 6053188 calldata 10180
+
+[PASS] test_gasM2Hash() (gas: 39929360)
+Logs:
+  bls12-381 zetherTransfer M=2 HASH gas 5443450 calldata 10276
+
+[PASS] test_gasM2None() (gas: 39766495)
+Logs:
+  bls12-381 zetherTransfer M=2 NONE gas 5294212 calldata 10180
+
+[PASS] test_gasM4Bundle() (gas: 71244371)
+Logs:
+  bls12-381 zetherTransfer M=4 BUNDLE gas 10198439 calldata 16516
+
+[PASS] test_gasM4Hash() (gas: 70003281)
+Logs:
+  bls12-381 zetherTransfer M=4 HASH gas 8931878 calldata 16708
+
+[PASS] test_gasM4None() (gas: 69772540)
+Logs:
+  bls12-381 zetherTransfer M=4 NONE gas 8726609 calldata 16516
+
+[PASS] test_gasM8Bundle() (gas: 142896942)
+Logs:
+  bls12-381 zetherTransfer M=8 BUNDLE gas 18506783 calldata 29188
+
+[PASS] test_gasM8Hash() (gas: 140390200)
+Logs:
+  bls12-381 zetherTransfer M=8 HASH gas 15950084 calldata 29540
+
+[PASS] test_gasM8None() (gas: 139998038)
+Logs:
+  bls12-381 zetherTransfer M=8 NONE gas 15607813 calldata 29188
+
+[PASS] test_gasOutM1Bundle() (gas: 26170592)
+Logs:
+  bls12-381 zetherTransfer M=1 BUNDLE auditor-out gas 3862799 calldata 7012
+
+[PASS] test_gasOutM1Hash() (gas: 25954464)
+Logs:
+  bls12-381 zetherTransfer M=1 HASH auditor-out gas 3638924 calldata 7076
+
+[PASS] test_gasOutM1None() (gas: 25847525)
+Logs:
+  bls12-381 zetherTransfer M=1 NONE auditor-out gas 3539778 calldata 7012
+
+[PASS] test_gasOutM2Bundle() (gas: 40145560)
+Logs:
+  bls12-381 zetherTransfer M=2 BUNDLE auditor-out gas 5812500 calldata 10180
+
+[PASS] test_gasOutM2Hash() (gas: 39708716)
+Logs:
+  bls12-381 zetherTransfer M=2 HASH auditor-out gas 5361961 calldata 10276
+
+[PASS] test_gasOutM2None() (gas: 39545828)
+Logs:
+  bls12-381 zetherTransfer M=2 NONE auditor-out gas 5212724 calldata 10180
+
+[PASS] test_gasOutM4Bundle() (gas: 70497877)
+Logs:
+  bls12-381 zetherTransfer M=4 BUNDLE auditor-out gas 9715529 calldata 16516
+
+[PASS] test_gasOutM4Hash() (gas: 69575192)
+Logs:
+  bls12-381 zetherTransfer M=4 HASH auditor-out gas 8767368 calldata 16708
+
+[PASS] test_gasOutM4None() (gas: 69344446)
+Logs:
+  bls12-381 zetherTransfer M=4 NONE auditor-out gas 8562099 calldata 16516
+
+[PASS] test_gasOutM8Bundle() (gas: 141390303)
+Logs:
+  bls12-381 zetherTransfer M=8 BUNDLE auditor-out gas 17537349 calldata 29188
+
+[PASS] test_gasOutM8Hash() (gas: 139520317)
+Logs:
+  bls12-381 zetherTransfer M=8 HASH auditor-out gas 15617452 calldata 29540
+
+[PASS] test_gasOutM8None() (gas: 139128150)
+Logs:
+  bls12-381 zetherTransfer M=8 NONE auditor-out gas 15275176 calldata 29188
+
+[PASS] test_gasOutSingle() (gas: 26007088)
+Logs:
+  bls12-381 zetherTransferSingle auditor-out gas 3847591 calldata 6980
+
+[PASS] test_gasSingle() (gas: 26181444)
+Logs:
+  bls12-381 zetherTransferSingle gas 3968424 calldata 6980
+
+Suite result: ok. 31 passed; 0 failed; 0 skipped; finished in 8.35s (32.44s CPU time)
+
+Ran 31 tests for test/zether/ZetherMulti.t.sol:ZetherMultiBn254Test
+[PASS] test_gasDiscloseM1Bundle() (gas: 20722713)
+Logs:
+  bn254 disclose M=1 BUNDLE SENDER_S gas 77600 bundles 0
+  bn254 disclose M=1 BUNDLE RECEIVER_X gas 101573 bundles 0
+  bn254 disclose M=1 BUNDLE AUDITOR gas 110445 bundles 0
+  bn254 disclose M=1 BUNDLE SENDER_CP gas 101622 bundles 0
+
+[PASS] test_gasDiscloseM1Hash() (gas: 20624516)
+Logs:
+  bn254 disclose M=1 HASH SENDER_S gas 62875 bundles 272
+  bn254 disclose M=1 HASH RECEIVER_X gas 86848 bundles 272
+  bn254 disclose M=1 HASH AUDITOR gas 95720 bundles 272
+  bn254 disclose M=1 HASH SENDER_CP gas 86897 bundles 272
+
+[PASS] test_gasDiscloseM8Bundle() (gas: 100750872)
+Logs:
+  bn254 disclose M=8 BUNDLE SENDER_S gas 199619 bundles 0
+  bn254 disclose M=8 BUNDLE RECEIVER_X gas 223615 bundles 0
+  bn254 disclose M=8 BUNDLE AUDITOR gas 232492 bundles 0
+  bn254 disclose M=8 BUNDLE SENDER_CP gas 223664 bundles 0
+
+[PASS] test_gasDiscloseM8Hash() (gas: 99621044)
+Logs:
+  bn254 disclose M=8 HASH SENDER_S gas 84017 bundles 2064
+  bn254 disclose M=8 HASH RECEIVER_X gas 108006 bundles 2064
+  bn254 disclose M=8 HASH AUDITOR gas 116882 bundles 2064
+  bn254 disclose M=8 HASH SENDER_CP gas 108055 bundles 2064
+
+[PASS] test_gasDiscloseSingle() (gas: 20563674)
+Logs:
+  bn254 disclose Single SENDER_S gas 77600 bundles 0
+  bn254 disclose Single RECEIVER_X gas 101573 bundles 0
+  bn254 disclose Single AUDITOR gas 110445 bundles 0
+  bn254 disclose Single SENDER_CP gas 101622 bundles 0
+
+[PASS] test_gasM1Bundle() (gas: 19976917)
+Logs:
+  bn254 zetherTransfer M=1 BUNDLE gas 3389507 calldata 3940
+
+[PASS] test_gasM1Hash() (gas: 19856476)
+Logs:
+  bn254 zetherTransfer M=1 HASH gas 3261366 calldata 4004
+
+[PASS] test_gasM1None() (gas: 19751822)
+Logs:
+  bn254 zetherTransfer M=1 NONE gas 3164390 calldata 3940
+
+[PASS] test_gasM2Bundle() (gas: 30273109)
+Logs:
+  bn254 zetherTransfer M=2 BUNDLE gas 5094801 calldata 5636
+
+[PASS] test_gasM2Hash() (gas: 30027441)
+Logs:
+  bn254 zetherTransfer M=2 HASH gas 4835727 calldata 5732
+
+[PASS] test_gasM2None() (gas: 29869231)
+Logs:
+  bn254 zetherTransfer M=2 NONE gas 4690857 calldata 5636
+
+[PASS] test_gasM4Bundle() (gas: 51903685)
+Logs:
+  bn254 zetherTransfer M=4 BUNDLE gas 8506809 calldata 9028
+
+[PASS] test_gasM4Hash() (gas: 51363220)
+Logs:
+  bn254 zetherTransfer M=4 HASH gas 7941535 calldata 9220
+
+[PASS] test_gasM4None() (gas: 51142014)
+Logs:
+  bn254 zetherTransfer M=4 NONE gas 7745139 calldata 9028
+
+[PASS] test_gasM8Bundle() (gas: 99524982)
+Logs:
+  bn254 zetherTransfer M=8 BUNDLE gas 15337108 calldata 15812
+
+[PASS] test_gasM8Hash() (gas: 98418004)
+Logs:
+  bn254 zetherTransfer M=8 HASH gas 14182066 calldata 16164
+
+[PASS] test_gasM8None() (gas: 98047149)
+Logs:
+  bn254 zetherTransfer M=8 NONE gas 13859209 calldata 15812
+
+[PASS] test_gasOutM1Bundle() (gas: 19863470)
+Logs:
+  bn254 zetherTransfer M=1 BUNDLE auditor-out gas 3322570 calldata 3940
+
+[PASS] test_gasOutM1Hash() (gas: 19782718)
+Logs:
+  bn254 zetherTransfer M=1 HASH auditor-out gas 3234230 calldata 4004
+
+[PASS] test_gasOutM1None() (gas: 19678107)
+Logs:
+  bn254 zetherTransfer M=1 NONE auditor-out gas 3137253 calldata 3940
+
+[PASS] test_gasOutM2Bundle() (gas: 30076592)
+Logs:
+  bn254 zetherTransfer M=2 BUNDLE auditor-out gas 4980278 calldata 5636
+
+[PASS] test_gasOutM2Hash() (gas: 29890625)
+Logs:
+  bn254 zetherTransfer M=2 HASH auditor-out gas 4780906 calldata 5732
+
+[PASS] test_gasOutM2None() (gas: 29732392)
+Logs:
+  bn254 zetherTransfer M=2 NONE auditor-out gas 4636034 calldata 5636
+
+[PASS] test_gasOutM4Bundle() (gas: 51538393)
+Logs:
+  bn254 zetherTransfer M=4 BUNDLE auditor-out gas 8296999 calldata 9028
+
+[PASS] test_gasOutM4Hash() (gas: 51097430)
+Logs:
+  bn254 zetherTransfer M=4 HASH auditor-out gas 7831224 calldata 9220
+
+[PASS] test_gasOutM4None() (gas: 50876222)
+Logs:
+  bn254 zetherTransfer M=4 NONE auditor-out gas 7634829 calldata 9028
+
+[PASS] test_gasOutM8Bundle() (gas: 98810857)
+Logs:
+  bn254 zetherTransfer M=8 BUNDLE auditor-out gas 14936243 calldata 15812
+
+[PASS] test_gasOutM8Hash() (gas: 97882931)
+Logs:
+  bn254 zetherTransfer M=8 HASH auditor-out gas 13960303 calldata 16164
+
+[PASS] test_gasOutM8None() (gas: 97512077)
+Logs:
+  bn254 zetherTransfer M=8 NONE auditor-out gas 13637443 calldata 15812
+
+[PASS] test_gasOutSingle() (gas: 19753354)
+Logs:
+  bn254 zetherTransferSingle auditor-out gas 3307349 calldata 3908
+
+[PASS] test_gasSingle() (gas: 19851575)
+Logs:
+  bn254 zetherTransferSingle gas 3375115 calldata 3908
+
+Suite result: ok. 31 passed; 0 failed; 0 skipped; finished in 8.35s (20.48s CPU time)
+
+Ran 7 test suites in 8.35s (29.17s CPU time): 78 tests passed, 0 failed, 0 skipped (78 total tests)

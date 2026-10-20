@@ -492,7 +492,7 @@ explain.
 | Subject accounts per family | Sui `Account<T>`, Aptos Account, Solana PDA, Soroban `C…`, GRAM jetton wallet | as the matrix | per family (Soroban/TON: ≥ 2 keys) |
 | **Approvers** (minimal) | `msig` UA over member UAs/EOAs; the app shows the id and registers it | EVM | `Σw − max(w) ≥ threshold` |
 | Native wallet | a seed-vault native key or an extension wallet | all | outside the predicate |
-| Zether account | `zether-*` UA, `authRef` chosen from the user's accounts ([CTR-UA-16](../contracts/accounts.md#CTR-UA-16)) | EVM dev | n/a |
+| Zether account | `zether-bls12381` UA, the Zether key is the UA ([CTR-UA-16](../contracts/accounts.md#CTR-UA-16)) | EVM dev | n/a |
 
 The accounts screen (`src/features/accounts/`) shows, per account, the kind and the key role; the bound origin(s) for passkeys; BE/BS labels ("this
 device only", "may share one password manager"); the backup state from `backupStatus`.
@@ -542,7 +542,7 @@ wizards build Safe transactions the same way.
 | 11 | Fund meta account | owned coins / FA / SPL | deposit transfer; `transferToUA` | Sui, Aptos, Solana, EVM v3 |
 | 12 | DEX markets | `/v1/dex/markets` + `/v1/gateway` `dex`, on-chain `markets(key)` | — | EVM; others "unavailable" |
 | 13 | DEX market | `depth` (poll 2 s while visible), `trades`, `ticker`, `orders?maker=`, own-node `depth?scope=network` (read-only) | place, cancel, cancel-all; on-chain `cancel`/`invalidateNonces` (target: `mtxCancelOrder`/`mtxInvalidateNonces` on the sell token, `mtxCancelOrders` on the DEX for outside-token orders) | EVM |
-| 14 | Zether | `registered(UA)`, account state, cache, BSGS (worker) | register a `zether-*` UA with `authRef` (gasless); `zetherShield` / `zetherWrapShield` ([CTR-ZTH-45](../contracts/zether.md#CTR-ZTH-45); built: `approve` + `fund`, P3); transfer; burn; rollOver | EVM dev |
+| 14 | Zether | `registered(UA)`, account state, cache, BSGS (worker) | register a `zether-bls12381` UA (gasless); `zetherShield` / `zetherWrapShield` ([CTR-ZTH-45](../contracts/zether.md#CTR-ZTH-45); built: `approve` + `fund`, P3); transfer; burn; rollOver | EVM dev |
 | 15 | Settings | — | locale, theme, dev key (dev builds) | — |
 | 16 | Console login | `GET /v1/admin/auth-modes` ∩ config OIDC | built-in login; OIDC redirect | — |
 | 17 | Overview | `/v1/admin/info`, `/me` | — | — |
@@ -592,12 +592,10 @@ expiry, and the review says so. Prices are the node's decimal strings, never a f
 books.** Owner decision (non-EVM DEX books after EVM). The DEX module is generic over `/v1/dex/*` and turns on per chain when
 `/v1/gateway` reports `dex`. Why: only the EVM venue has a book.
 
-**Zether.** Register: the worker builds the `zether-*` key data and the tagged PoP (purpose `pop`); `authRef` is 0 (self) or
-one of the user's accounts; registration is submitted gaslessly or self-paid (no `msg.sender` binding). Prove, in the worker:
+**Zether.** Register: the worker builds the `zether-*` key data and the tagged PoP (purpose `pop`); the Zether key is the UA (no authority); registration is submitted gaslessly or self-paid (no `msg.sender` binding). Prove, in the worker:
 `zetherCall("proveTransfer", {curve, key: {x}, chainId, token, sendCounter, accSeq, acc, balance, yTo, amount, fee,
 beneficiary})` with `x` from `openConfKey` **inside** the worker; the result is `opData` for the `OP_ZTRANSFER` envelope
-(gateway) or `directCalldata`; with `authRef ≠ 0` the authorisation signature comes from the key worker (`zether-auth`
-purpose). Balance: open the cache, then `checkBalance` against the current `acc`; on a miss run BSGS on the delta; after own
+(gateway) or `directCalldata`; the proof alone authorizes the spend. Balance: open the cache, then `checkBalance` against the current `acc`; on a miss run BSGS on the delta; after own
 operations update with `setCachedBalance` / `cacheAfterDebit` / `cacheAfterRollOver`; above the device bound (2^44) show a
 banner ([zether balance](signers-clientkeys.md#zether-balance)). Every Zether screen carries "UNAUDITED — dev chains only".
 

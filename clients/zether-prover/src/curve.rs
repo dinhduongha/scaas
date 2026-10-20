@@ -40,6 +40,7 @@ fn gen_msg(label: &[u8], index: u32) -> Vec<u8> {
     m
 }
 
+#[cfg(feature = "bn254")]
 impl ZCurve for ark_bn254::g1::Config {
     type Fq = ark_bn254::Fq;
     const NAME: &'static str = "bn254";
@@ -109,6 +110,7 @@ pub fn proof_system_id_multi<C: ZCurve>() -> [u8; 32] {
     keccak256(&[C::PROOF_SYSTEM_LABEL, b"/multi"].concat())
 }
 
+#[cfg(feature = "bn254")]
 pub type Bn254 = ark_bn254::g1::Config;
 pub type Bls12381 = ark_bls12_381::g1::Config;
 
@@ -234,6 +236,7 @@ mod tests {
         assert!(decode_scalar::<C>(&order_be::<C>()).is_err());
     }
 
+    #[cfg(feature = "bn254")]
     #[test]
     fn point_roundtrip_bn254() {
         roundtrip::<Bn254>();
@@ -267,6 +270,7 @@ mod tests {
         }
     }
 
+    #[cfg(feature = "bn254")]
     #[test]
     fn bn254_gen_even_y_and_distinct() {
         let a = <Bn254 as ZCurve>::gen(b"G", 0);

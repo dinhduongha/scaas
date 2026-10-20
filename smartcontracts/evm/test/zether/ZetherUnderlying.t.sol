@@ -77,7 +77,7 @@ contract ZetherUnderlyingTest is ZetherFixture {
     bytes32 internal signer; // a SIGNING UA, receiver of `wrapToUA`
 
     function setUp() public {
-        _stack(false);
+        _stack();
         undImpl = UnderlyingZetherToken(payable(Catalogue.release(factory, IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, _zenv(),
             type(UnderlyingZetherToken).creationCode)));
         address[] memory legs = new address[](2);
@@ -110,7 +110,7 @@ contract ZetherUnderlyingTest is ZetherFixture {
         c.legs = new IFactoryToken.Leg[](legs.length);
         for (uint256 i; i < legs.length; ++i) c.legs[i] = IFactoryToken.Leg(legs[i], nums[i], dens[i]);
         c.conf = IFactoryToken.ConfidentialConfig(
-            auditor ? ZetherKeys.pub(X_AUD, false) : bytes(""), SCALE, uint256(1) << 40, FEE, dMode,
+            auditor ? ZetherKeys.pub(X_AUD, bls) : bytes(""), SCALE, uint256(1) << 40, FEE, dMode,
             auditor ? aMode : 0, 0
         );
         return UnderlyingZetherToken(payable(factory.createToken(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, abi.encode(c), salt)));
@@ -175,7 +175,7 @@ contract ZetherUnderlyingTest is ZetherFixture {
         w.zetherWrapShield(address(usd), 30 * SCALE + 1, alice.ua);
         vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.UnknownUnderlying.selector, address(0xDEAD)));
         w.zetherWrapShield(address(0xDEAD), SCALE, alice.ua);
-        ZetherTypes.UA ghost = ZetherTypes.toUA(ZetherKeys.pub(0x6057, false));
+        ZetherTypes.UA ghost = ZetherTypes.toUA(ZetherKeys.pub(0x6057, bls));
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.AccountNotRegistered.selector, ghost));
         w.zetherWrapShield(address(usd), SCALE, ghost);
         vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.NativeValueMismatch.selector, 1, 0));
@@ -234,7 +234,7 @@ contract ZetherUnderlyingTest is ZetherFixture {
         (bytes memory pl, bytes memory pr) = _unwrapProof(40, 140, address(0xD00D), address(eur), 20 * SCALE, 0);
         vm.expectEmit(true, false, false, true, address(w));
         emit IZetherToken.ZetherUnshielded(alice.ua, 40, address(0xD00D));
-        w.zetherUnshieldUnwrap(pl, pr, "", _none(), address(eur), address(0xD00D), 40, 20 * SCALE);
+        w.zetherUnshieldUnwrap(pl, pr, _none(), address(eur), address(0xD00D), 40, 20 * SCALE);
         assertEq(eur.balanceOf(address(0xD00D)), 20 * SCALE, "40 units at 2 per raw EUR");
         assertEq(_reserve(address(eur)), 20 * SCALE);
         assertEq(w.totalSupply(), 0, "nothing minted");
@@ -242,7 +242,7 @@ contract ZetherUnderlyingTest is ZetherFixture {
         assertTrue(_holds(tok, alice, 100, true));
         // the USD leg, 1:1
         (pl, pr) = _unwrapProof(60, 100, address(0xD00D), address(usd), 0, 0);
-        w.zetherUnshieldUnwrap(pl, pr, "", _none(), address(usd), address(0xD00D), 60, 0);
+        w.zetherUnshieldUnwrap(pl, pr, _none(), address(usd), address(0xD00D), 60, 0);
         assertEq(usd.balanceOf(address(0xD00D)), 60 * SCALE);
         _assertConservation(tok, 200);
     }
@@ -252,17 +252,17 @@ contract ZetherUnderlyingTest is ZetherFixture {
         // more than the leg's reserve: EUR holds nothing
         (bytes memory pl, bytes memory pr) = _unwrapProof(10, 10, address(0xD00D), address(eur), 0, 0);
         vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.InsufficientReserve.selector, address(eur), 5 * SCALE, 0));
-        w.zetherUnshieldUnwrap(pl, pr, "", _none(), address(eur), address(0xD00D), 10, 0);
+        w.zetherUnshieldUnwrap(pl, pr, _none(), address(eur), address(0xD00D), 10, 0);
         // minOut above what the leg pays
         (pl, pr) = _unwrapProof(10, 10, address(0xD00D), address(usd), 10 * SCALE + 1, 0);
         vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.UnwrapBelowMin.selector, 10 * SCALE, 10 * SCALE + 1));
-        w.zetherUnshieldUnwrap(pl, pr, "", _none(), address(usd), address(0xD00D), 10, 10 * SCALE + 1);
+        w.zetherUnshieldUnwrap(pl, pr, _none(), address(usd), address(0xD00D), 10, 10 * SCALE + 1);
         // the token itself as recipient
         (pl, pr) = _unwrapProof(10, 10, address(w), address(usd), 0, 0);
         vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.UnwrapRecipientInvalid.selector, address(w)));
-        w.zetherUnshieldUnwrap(pl, pr, "", _none(), address(usd), address(w), 10, 0);
+        w.zetherUnshieldUnwrap(pl, pr, _none(), address(usd), address(w), 10, 0);
         vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.UnknownUnderlying.selector, address(0xDEAD)));
-        w.zetherUnshieldUnwrap(pl, pr, "", _none(), address(0xDEAD), address(w), 10, 0);
+        w.zetherUnshieldUnwrap(pl, pr, _none(), address(0xDEAD), address(w), 10, 0);
     }
 
     /// A direct proof binds the leg and `minOut` (controller ruling, pending the owner): copied from a pending call it
@@ -271,15 +271,15 @@ contract ZetherUnderlyingTest is ZetherFixture {
         _shielded(30, 30 * SCALE);
         (bytes memory pl, bytes memory pr) = _unwrapProof(10, 90, address(0xD00D), address(usd), 10 * SCALE, 0);
         vm.expectRevert(IZetherToken.ProofRejected.selector);
-        w.zetherUnshieldUnwrap(pl, pr, "", _none(), address(eur), address(0xD00D), 10, 5 * SCALE); // other leg
+        w.zetherUnshieldUnwrap(pl, pr, _none(), address(eur), address(0xD00D), 10, 5 * SCALE); // other leg
         vm.expectRevert(IZetherToken.ProofRejected.selector);
-        w.zetherUnshieldUnwrap(pl, pr, "", _none(), address(usd), address(0xD00D), 10, 0); // minOut dropped
+        w.zetherUnshieldUnwrap(pl, pr, _none(), address(usd), address(0xD00D), 10, 0); // minOut dropped
         vm.expectRevert(IZetherToken.ProofRejected.selector);
-        w.zetherUnshield(pl, pr, "", _none(), address(0xD00D), 10); // into public units instead
+        w.zetherUnshield(pl, pr, _none(), address(0xD00D), 10); // into public units instead
         (bytes memory pl2, bytes memory pr2) = _proveUnshield(tok, alice, 10, 90, address(0xD00D), _none(), 0);
         vm.expectRevert(IZetherToken.ProofRejected.selector);
-        w.zetherUnshieldUnwrap(pl2, pr2, "", _none(), address(usd), address(0xD00D), 10, 0);
-        w.zetherUnshieldUnwrap(pl, pr, "", _none(), address(usd), address(0xD00D), 10, 10 * SCALE);
+        w.zetherUnshieldUnwrap(pl2, pr2, _none(), address(usd), address(0xD00D), 10, 0);
+        w.zetherUnshieldUnwrap(pl, pr, _none(), address(usd), address(0xD00D), 10, 10 * SCALE);
         assertEq(stm.unwrapBinding(address(usd), 10 * SCALE),
             keccak256(abi.encode(keccak256("SCAAS-ZETHER-UNWRAP-V1"), address(usd), 10 * SCALE)));
     }
@@ -295,11 +295,11 @@ contract ZetherUnderlyingTest is ZetherFixture {
         });
         (bytes memory pl, bytes memory pr) = _unwrapProof(10, 30, address(0xB0C), address(usd), 0, w.envelopeBinding(m));
         m.data = abi.encodeCall(UnderlyingZetherToken.zetherUnshieldUnwrap,
-            (pl, pr, bytes(""), _none(), address(usd), address(0xB0C), 10, 0));
+            (pl, pr, _none(), address(usd), address(0xB0C), 10, 0));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(PAYER_PK, w.mtxDigest(m));
         bytes memory sig = abi.encodePacked(r, s, v);
         vm.expectRevert(IZetherToken.ProofRejected.selector); // lifted out: the direct binding differs
-        w.zetherUnshieldUnwrap(pl, pr, "", _none(), address(usd), address(0xB0C), 10, 0);
+        w.zetherUnshieldUnwrap(pl, pr, _none(), address(usd), address(0xB0C), 10, 0);
         vm.prank(relayer);
         w.mtxExecute(m, sig);
         assertEq(usd.balanceOf(address(0xB0C)), 10 * SCALE);
@@ -316,11 +316,11 @@ contract ZetherUnderlyingTest is ZetherFixture {
         Tx memory t = _proveTransfer(tok, alice, bob, 21, 50, _none(), 0);
         bytes32 ref = _direct(tok, t, _none());
         assertEq(address(w.disclosure()), address(dis));
-        assertEq(w.auditorKey(), ZetherKeys.pub(X_AUD, false));
-        assertEq(w.transferEntry(ref).length, 16 + 4 * 64, "the single format stores R = salt, then B");
+        assertEq(w.auditorKey(), ZetherKeys.pub(X_AUD, bls));
+        assertEq(w.transferEntry(ref).length, 16 + 4 * 128, "the single format stores R = salt, then B");
         (bytes memory ct,) = dis.transferCiphertext(address(w), ref, 0, "");
-        bytes memory dOut = new bytes(64);
-        for (uint256 i; i < 64; ++i) dOut[i] = ct[64 + i];
+        bytes memory dOut = new bytes(128);
+        for (uint256 i; i < 128; ++i) dOut[i] = ct[128 + i];
         assertTrue(_vta(tok, ref, 0, 21, ITransferDisclosure.OpeningKind.SENDER_S, abi.encode(t.s), ""));
         assertTrue(_vta(tok, ref, 0, 21, ITransferDisclosure.OpeningKind.RECEIVER_X,
             _cpOpening(tok, bob.x, ref, 0, 21, ITransferDisclosure.OpeningKind.RECEIVER_X, dOut), ""));
@@ -446,13 +446,13 @@ contract ZetherUnderlyingTest is ZetherFixture {
         bytes memory pr = _proveU(alice, st, 2, 3, _none(), zt);
         rc.arm(address(z), abi.encodeCall(ZetherLayer.zetherRollOver, (bob.ua)), false);
         vm.expectRevert(IMetaTx.Reentrancy.selector);
-        z.zetherUnshieldUnwrap(pl, pr, "", _none(), address(0), address(rc), 2, 0);
+        z.zetherUnshieldUnwrap(pl, pr, _none(), address(0), address(rc), 2, 0);
         rc.arm(address(0), "", true);
         vm.expectRevert();
-        z.zetherUnshieldUnwrap(pl, pr, "", _none(), address(0), address(rc), 2, 0);
+        z.zetherUnshieldUnwrap(pl, pr, _none(), address(0), address(rc), 2, 0);
         assertEq(z.totalShielded(), 3, "nothing debited");
         rc.arm(address(0), "", false);
-        z.zetherUnshieldUnwrap(pl, pr, "", _none(), address(0), address(rc), 2, 0);
+        z.zetherUnshieldUnwrap(pl, pr, _none(), address(0), address(rc), 2, 0);
         assertEq(address(rc).balance, 2e16);
         assertEq(address(z).balance, 1e16);
         (,, uint256 res,,) = z.legOf(address(0));
@@ -479,9 +479,9 @@ contract ZetherUnderlyingTest is ZetherFixture {
         bytes memory st = stm.unshieldUnwrapStatement(address(z), pl, 10, address(0xD00D), _none(), address(hook), 0, 0);
         bytes memory pr = _proveU(alice, st, 10, 30, _none(), ZetherLayer(address(z)));
         vm.expectRevert(IMetaTx.Reentrancy.selector);
-        z.zetherUnshieldUnwrap(pl, pr, "", _none(), address(hook), address(0xD00D), 10, 0);
+        z.zetherUnshieldUnwrap(pl, pr, _none(), address(hook), address(0xD00D), 10, 0);
         hook.arm(address(0), "");
-        z.zetherUnshieldUnwrap(pl, pr, "", _none(), address(hook), address(0xD00D), 10, 0);
+        z.zetherUnshieldUnwrap(pl, pr, _none(), address(hook), address(0xD00D), 10, 0);
         assertEq(hook.balanceOf(address(0xD00D)), 10 * SCALE);
     }
 
@@ -575,7 +575,7 @@ contract ZetherUnderlyingTest is ZetherFixture {
         bytes memory y = ZetherKeys.pub(0xA07, false);
         ua = UAKinds.uaOf(UAKinds.SCHNORR_BN254, y);
         bytes32 m = reg.uaMessage(UAKinds.SCHNORR_BN254, UAKinds.PURPOSE_POP, reg.popDigest(ua, 0));
-        reg.register(UAKinds.SCHNORR_BN254, y, ZetherKeys.sign("scaas.ua.schnorr.v1", 0xA07, m, false), 0, "");
+        reg.register(UAKinds.SCHNORR_BN254, y, ZetherKeys.sign("scaas.ua.schnorr.v1", 0xA07, m, false), "", "");
     }
 
     /// UA-5a (CTR-UA-26): `NONE_ZETHER` inherits `burn` on the UA allowlist from `NoUnderlyingToken`; a derived signer
@@ -666,7 +666,7 @@ contract ZetherUnderlyingTest is ZetherFixture {
         if (sel == UnderlyingZetherToken.zetherUnshieldUnwrap.selector) {
             (bytes memory pl, bytes memory pr) = _unwrapProof(10, bal, address(0xB0C), address(usd), 0, b);
             return abi.encodeCall(UnderlyingZetherToken.zetherUnshieldUnwrap,
-                (pl, pr, bytes(""), _none(), address(usd), address(0xB0C), 10, 0));
+                (pl, pr, _none(), address(usd), address(0xB0C), 10, 0));
         }
         return _zetherOpCall(sel, bal, b);
     }

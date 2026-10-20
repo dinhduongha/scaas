@@ -37,6 +37,7 @@ import { hashStruct, hashTypedData, padId, payLane, uaMetaTxTypedData, uaMetaTra
 import { shake256 } from '@noble/hashes/sha3.js';
 import { seedFromWords } from '../src/seed.js';
 import { PQ_KINDS, pqKeygen, pqMessage } from '../src/pq.js';
+import { schnorrSign as zetherSchnorr } from '../src/zether.js';
 
 const VECTORS = fileURLToPath(new URL('../../../smartcontracts/vectors/ua/', import.meta.url));
 const OUT = process.argv[2] ?? VECTORS;
@@ -165,9 +166,17 @@ const SCHEMES = {
   // 2026-10-17, appended: ECDSA secp256k1 over the 32-byte ua_msg (no prehash), sig = r ‖ s ‖ v, low-s, v ∈ {27, 28}
   secp256k1: { kind: 0x0108, n: SECP_N, keyData: (sk) => secp256k1.getPublicKey(be(sk, 32), false).subarray(1),
     sign: (sk, m) => secpSign(sk, m) },
+  // UA-6, appended: the Zether key UA signs every UA-ledger write (SIGNING set) by the Zether Schnorr (tag SCAAS-ZETHER-SCHNORR-V1,
+  // clients/zether-prover/src/schnorr.rs); a stored kind, so its auth carries an empty keyData (the registry reads Y)
+  'zether-bls12381': { kind: 0x0141, n: BLS.Fr.ORDER, stored: true,
+    keyData: (sk) => blsG1enc(bls12_381.G1.Point.BASE.multiply(sk)),
+    sign(sk, m) {
+      const k = (int(keccak_256(concatBytes(be(sk, 32), m, utf8ToBytes('scaas.ua.vectors.nonce')))) % (BLS.Fr.ORDER - 1n)) + 1n;
+      return zetherSchnorr('bls12381', be(sk, 32), m, k);
+    } },
 };
 // a sibling kind whose tag a "wrong-kind-tag" negative signs under (same curve where one exists)
-const OTHER_KIND = { 0x0100: 0x0101, 0x0101: 0x0100, 0x0103: 0x0110, 0x0104: 0x0140, 0x0105: 0x0141, 0x0106: 0x0105, 0x0107: 0x0104, 0x0102: 0x0103, 0x0108: 0x0103 };
+const OTHER_KIND = { 0x0100: 0x0101, 0x0101: 0x0100, 0x0103: 0x0110, 0x0104: 0x0112, 0x0105: 0x0141, 0x0141: 0x0105, 0x0106: 0x0105, 0x0107: 0x0104, 0x0102: 0x0103, 0x0108: 0x0103 };
 
 /** First point on y² = x³ + 4 (x = 1, 2, …) outside the BLS12-381 G1 subgroup. */
 function blsG1OffSubgroup() {
@@ -181,8 +190,8 @@ function blsG1OffSubgroup() {
 }
 
 // --- derived rows ---
-const popOf = (kind, uaId, ctx) => {
-  const popDigest = ua.popDigest({ ...contexts[ctx], ua: uaId });
+const popOf = (kind, uaId, ctx, pqzKeyHash) => {
+  const popDigest = ua.popDigest({ ...contexts[ctx], ua: uaId, pqzKeyHash });
   return { popDigest, message: ua.uaMessage(kind, ua.POP_TAG, popDigest) };
 };
 const derivedRows = Object.entries(SCHEMES).map(([name, s]) => {
@@ -256,7 +265,7 @@ const derivedRows = Object.entries(SCHEMES).map(([name, s]) => {
   }
   if (s.kind === 0x0106) negatives.push(neg('off-subgroup', false, metatx, blsG1OffSubgroup()));
   return { name, kind: s.kind, secret: hex(be(sk, 32)), keyData: hex(keyData), ua: hex(id), pop: pop('A'), popOther: pop('B'),
-    sigs, negatives };
+    sigs, negatives, ...(s.stored ? { stored: true } : {}) };
 });
 
 // --- native EOA: UAAuth under the registry domain ---
@@ -526,7 +535,8 @@ const m3Transfer = (from) => uaMetaTransferTypedData({ ...M3, message: { from, t
   fee: 100000, feeRecipient: M3_FEE_TO } });
 const m3Signers = [{ name: 'native', kind: 0x0001, id: nativeUa, keyData: null, sign: (d) => ecdsa(nativeSk, d) },
   ...derivedRows.map((r) => ({ name: r.name, kind: r.kind, id: fromHex(r.ua), keyData: fromHex(r.keyData),
-    sign: (d) => SCHEMES[r.name].sign(int(fromHex(r.secret)), ua.uaMessage(r.kind, tag('metatx'), d)) }))];
+    sign: (d) => SCHEMES[r.name].sign(int(fromHex(r.secret)), ua.uaMessage(r.kind, tag('metatx'), d)) }))]
+  .map((x) => (x.name === 'zether-bls12381' ? { ...x, keyData: new Uint8Array(0) } : x)); // stored kind: empty keyData in the auth
 /** Native: 65-byte ECDSA over the v3 digest itself; derived: abi.encode(keyData, sig over ua_msg(kind, metatx, digest)). */
 const m3Rows = (build) => m3Signers.map((s) => {
   const typedData = build(s.id);
@@ -603,12 +613,17 @@ const pqSignMsg = (name, sk, uaMsg, opts = pqOpts(name)) =>
   PQ_KINDS[name].alg.sign(PQ_KINDS[name].pq ? pqMessage(name, uaMsg) : uaMsg, sk, opts);
 const PQ_OTHER = { mldsa44: 'mldsa65', mldsa65: 'mldsa44', fndsa512: 'slhdsa128s', slhdsa128s: 'fndsa512' };
 const pqKey = (name, index) => pqKeygen(pqSeedBytes, name, 0, index);
+// UA-6: a PQ signer registers its PQZ key in the same call; its pop is over popDigest(ua, h) with h = keyHash(0x0142, pqzKey) != 0
+// (the same key as ua-vectors.mjs). `popPqz` rows: the digest and message move with h, so a pop for no key does not carry over.
+const PQZ_KEY = shake256(utf8ToBytes('scaas ua-1 vector pqz-mlwe key'), { dkLen: 16384 });
+const PQZ_H = ua.keyHashOf(0x0142, PQZ_KEY);
+const PQZ_HOLDERS = new Set(['mldsa44', 'mldsa65', 'fndsa512']);
 const pqAuth = (sig) => hex(abiEncode(['bytes', 'bytes'], [new Uint8Array(0), sig]));
 const pqRows = Object.keys(PQ_KINDS).map((name) => {
   const { kind } = PQ_KINDS[name];
   const kp = pqKey(name, 0);
   const sign = (m) => pqSignMsg(name, kp.secretKey, m);
-  const pop = (ctx) => { const p = popOf(kind, kp.ua, ctx); return { context: ctx, popDigest: hex(p.popDigest), message: hex(p.message), sig: hex(sign(p.message)) }; };
+  const pop = (ctx, h) => { const p = popOf(kind, kp.ua, ctx, h); return { context: ctx, ...(h ? { pqzKeyHash: hex(h) } : {}), popDigest: hex(p.popDigest), message: hex(p.message), sig: hex(sign(p.message)) }; };
   const metatx = ua.uaMessage(kind, tag('metatx'), DIGEST);
   const member = ua.uaMessage(kind, tag('member'), DIGEST);
   const metatxSig = sign(metatx);
@@ -626,7 +641,13 @@ const pqRows = Object.keys(PQ_KINDS).map((name) => {
     negatives.push(neg('context-kind-tag', false, metatx,
       PQ_KINDS[name].alg.sign(pqMessage(name, metatx), kp.secretKey, { context: utf8ToBytes(PQ_KINDS[name].tag), extraEntropy: false })));
   }
+  if (PQZ_HOLDERS.has(name)) {
+    // the pop without the key does not verify as the holder's pop with it, and the reverse
+    negatives.push(neg('pop-without-pqz-key', true, popOf(kind, kp.ua, 'A', PQZ_H).message, sign(popA)),
+      neg('pop-with-pqz-key-as-plain', true, popA, sign(popOf(kind, kp.ua, 'A', PQZ_H).message)));
+  }
   return { name, kind, keyData: hex(kp.publicKey), ua: hex(kp.ua), pop: pop('A'), popOther: pop('B'),
+    ...(PQZ_HOLDERS.has(name) ? { pqzKey: hex(PQZ_KEY), popPqz: pop('A', PQZ_H) } : {}),
     sigs: [
       { purpose: 'metatx', purposeTag: hex(tag('metatx')), digest: hex(DIGEST), message: hex(metatx), sig: hex(metatxSig) },
       { purpose: 'member', purposeTag: hex(tag('member')), digest: hex(DIGEST), message: hex(member), sig: hex(sign(member)) },
@@ -646,9 +667,14 @@ function pqMsig(name, list, threshold) {
   const keyData = ua.encodeMsig(threshold, ms);
   const id = ua.deriveUA(0x0120, keyData);
   const md = ua.memberDigest(id, ua.uaMessage(0x0120, tag('metatx'), DIGEST));
-  const sigOf = (m) => (m.kind === 0x0101
-    ? { index: m.index, keyData: SCHEMES.p256.keyData(p256Sk), sig: SCHEMES.p256.sign(p256Sk, ua.uaMessage(0x0101, tag('member'), md)) }
-    : { index: m.index, keyData: new Uint8Array(0), sig: pqSignMsg('mldsa65', m.sk, ua.uaMessage(0x0131, tag('member'), md)) });
+  const sigOf = (m, mdv = md) => (m.kind === 0x0101
+    ? { index: m.index, keyData: SCHEMES.p256.keyData(p256Sk), sig: SCHEMES.p256.sign(p256Sk, ua.uaMessage(0x0101, tag('member'), mdv)) }
+    : { index: m.index, keyData: new Uint8Array(0), sig: pqSignMsg('mldsa65', m.sk, ua.uaMessage(0x0131, tag('member'), mdv)) });
+  // UA-6 U5: a PQ-eligible msig registers with an m-of-n pop over popDigest(ua, h) (purpose pop, members under member)
+  const popD = ua.popDigest({ ...contexts.A, ua: id, pqzKeyHash: PQZ_H });
+  const popMd = ua.memberDigest(id, ua.uaMessage(0x0120, ua.POP_TAG, popD));
+  const popList = ms.slice(0, threshold).map((m) => sigOf(m, popMd));
+  const popBlob = encodeMemberSigs(popList);
   const set = (n, valid, picks) => {
     const list = picks.map((k) => sigOf(ms[k]));
     const sig = encodeMemberSigs(list);
@@ -660,6 +686,9 @@ function pqMsig(name, list, threshold) {
     ? [set('members-0-1', true, [0, 1]), set('members-1-2', true, [1, 2]), set('below-threshold', false, [0])]
     : [set('both', true, [0, 1]), set('below-threshold', false, [0])];
   return { name, keyData: hex(keyData), ua: hex(id), threshold, purpose: 'metatx', digest: hex(DIGEST), memberDigest: hex(md),
+    pqzEligible: ua.msigPqzEligible(keyData),
+    popPqz: { context: 'A', pqzKey: hex(PQZ_KEY), pqzKeyHash: hex(PQZ_H), popDigest: hex(popD), memberDigest: hex(popMd),
+      pop: hex(popBlob), indices: ms.slice(0, threshold).map((m) => m.index) },
     members: ms.map((m) => ({ index: m.index, kind: m.kind, id: hex(m.id), weight: m.weight })), sets };
 }
 const pqTreasury = pqMsig('treasury', pqMembers.map(({ kp }) => ({ kind: 0x0131, id: kp.ua, weight: 1, sk: kp.secretKey })), 2);

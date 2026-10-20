@@ -41,6 +41,7 @@ public class VectorTests
             Assert.Equal(r.GetProperty("zether").GetBoolean(), UA.IsZether(n));
             Assert.Equal(r.GetProperty("member").GetBoolean(), UA.IsMember(n, false));
             Assert.Equal(r.GetProperty("memberHedera").GetBoolean(), UA.IsMember(n, true));
+            Assert.Equal(r.GetProperty("pqzHolder").GetBoolean(), UA.IsPqzHolder(n));
             if (info.Native)
             {
                 Assert.Equal("UAKindNotDerived", Assert.Throws<UAException>(() => UA.Tag(n)).Code);
@@ -49,6 +50,17 @@ public class VectorTests
             Assert.Equal(r.GetProperty("tag").GetString(), UA.KindTagString(n));
             Assert.Equal(r.GetProperty("TAG").GetString(), Hx(UA.Tag(n)));
         }
+        Assert.Equal(UA.Schemes.Length, k.GetProperty("schemes").GetArrayLength());
+        foreach (var (r, s) in k.GetProperty("schemes").EnumerateArray().Zip(UA.Schemes))
+        {
+            Assert.Equal((r.GetProperty("kind").GetUInt16(), r.GetProperty("name").GetString(), r.GetProperty("group").GetString()), (s.Number, s.Name, s.Group));
+            Assert.Equal(r.GetProperty("lengths").EnumerateArray().Select(x => x.GetInt32()).ToArray(), s.Lengths);
+            Assert.Equal(r.GetProperty("tag").GetString(), UA.KindTagString(s.Number));
+            Assert.Equal(r.GetProperty("TAG").GetString(), Hx(UA.Tag(s.Number)));
+            Assert.Equal("UAKindNotDerived", Assert.Throws<UAException>(() => UA.UAOf(s.Number, new byte[16384])).Code);
+            Assert.Equal("UAKindNotDerived", Assert.Throws<UAException>(() => UA.ValidateKeyData(s.Number, new byte[16384])).Code);
+        }
+        Assert.Equal(k.GetProperty("pqzKeyHash").GetString(), Hx(UA.KeyHashOf(0x0142, B(k.GetProperty("pqzKey")))!));
         foreach (var r in k.GetProperty("groups").EnumerateArray())
         {
             var g = r.GetProperty("group").GetString()!;
@@ -131,9 +143,25 @@ public class VectorTests
             var c = ctx.GetProperty(p.GetProperty("context").GetString()!);
             var id = c.GetProperty("chainId").GetUInt64();
             Assert.Equal(p.GetProperty("chainKeyHash").GetString(), Hx(UA.ChainKeyHash(id)));
-            var got = UA.PopDigest(id, B(c.GetProperty("chainUid")), B(c.GetProperty("registry")), B(p.GetProperty("ua")), B(p.GetProperty("authRef")));
+            var got = UA.PopDigest(id, B(c.GetProperty("chainUid")), B(c.GetProperty("registry")), B(p.GetProperty("ua")), B(p.GetProperty("pqzKeyHash")));
             Assert.Equal(p.GetProperty("popDigest").GetString(), Hx(got));
         }
+        var pqzKey = B(Load("kinds.json").GetProperty("pqzKey"));
+        foreach (var r in s.GetProperty("pqzReg").EnumerateArray())
+        {
+            var c = ctx.GetProperty(r.GetProperty("context").GetString()!);
+            var id = c.GetProperty("chainId").GetUInt64();
+            byte[] cu = B(c.GetProperty("chainUid")), reg = B(c.GetProperty("registry")), ua = B(r.GetProperty("ua"));
+            Assert.Equal(r.GetProperty("pqzRegMessage").GetString(), Hx(UA.PqzRegMessage(id, cu, reg, ua, pqzKey)));
+            Assert.Equal(r.GetProperty("popDigest").GetString(), Hx(UA.PopDigest(id, cu, reg, ua, B(r.GetProperty("pqzKeyHash")))));
+            var (h, d, m) = UA.HolderPopMessage(Kind(r), id, cu, reg, ua, pqzKey);
+            Assert.Equal(r.GetProperty("pqzKeyHash").GetString(), Hx(h));
+            Assert.Equal(r.GetProperty("popDigest").GetString(), Hx(d));
+            Assert.Equal(Hx(UA.UAMessage(Kind(r), UA.PurposeTag("pop"), d)), Hx(m));
+        }
+        Assert.Equal("UAPqzHolder", Assert.Throws<UAException>(() => UA.HolderPopMessage(0x0101, 1, new byte[32], new byte[20], new byte[32], new byte[16384])).Code);
+        foreach (var r in s.GetProperty("pqzMsig").EnumerateArray())
+            Assert.Equal(r.GetProperty("eligible").GetBoolean(), UA.MsigPqzEligible(B(r.GetProperty("keyData"))));
         foreach (var a in s.GetProperty("uaAuth").EnumerateArray())
         {
             var c = ctx.GetProperty(a.GetProperty("context").GetString()!);

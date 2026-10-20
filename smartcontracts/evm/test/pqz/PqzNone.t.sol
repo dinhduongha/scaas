@@ -455,6 +455,35 @@ contract PqzNoneTest is PqzFixture {
         factory.createToken(IOpenFactory.TokenKind.NONE_PQZ, 1, abi.encode(_cfg(1 << 40)), "mainnet");
     }
 
+    /// UA-6 (RF6): a registered `mldsa65` UA without a PQZ key is no PQZ account: as sender, leg, beneficiary,
+    /// shield target and auditor alike (`AccountNotRegistered`).
+    function test_keylessUAIsNoPqzAccount() public {
+        bytes32 k = _mldsaUA(20);
+        bytes memory out = _out(60, true);
+        bytes[] memory none = new bytes[](0);
+        bytes memory err = abi.encodeWithSelector(IPqzToken.AccountNotRegistered.selector, k);
+        _credits(alice, 1);
+        bytes memory accA = _acc(alice);
+        bytes[] memory one = _inline(tok, alice, 1);
+        bytes memory pl = _payload(1, 0, alice, k, bytes32(0), out, "");
+        vm.expectRevert(err); // recipient leg
+        tok.pqzTransferSingle(pl, accA, one, hex"01", _mlAuth());
+        pl = _payload(1, 0, alice, bob, k, out, "");
+        vm.expectRevert(err); // beneficiary
+        tok.pqzTransferSingle(pl, accA, one, hex"01", _mlAuth());
+        pl = _payload(1, 0, k, bob, bytes32(0), out, "");
+        vm.expectRevert(err); // sender
+        tok.pqzTransferSingle(pl, accA, none, hex"01", _mlAuth());
+        _public(tok, address(this), SCALE);
+        vm.expectRevert(err); // shield target
+        tok.pqzShield(k, 1);
+        IFactoryToken.TokenConfig memory c = _cfg(1 << 40);
+        c.conf.auditorMode = uint8(ZetherTypes.AuditorMode.FULL);
+        c.conf.auditorKey = abi.encode(k);
+        vm.expectRevert(err); // auditor
+        factory.createToken(IOpenFactory.TokenKind.NONE_PQZ, 1, abi.encode(c), "keyless");
+    }
+
     function test_shieldChecks() public {
         _public(tok, address(this), 10 * SCALE);
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.AccountNotRegistered.selector, bytes32(uint256(1))));

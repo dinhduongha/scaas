@@ -1,7 +1,7 @@
 //! zether-read-balance — read a Zether balance too large for the wallet's device BSGS (lost cache
 //! on a big account, zether-limits §4–§5). Native only. UNAUDITED.
 //!
-//!   zether-read-balance --curve bn254|bls12381 [--table-bits 24] [--bound-bits 54]
+//!   zether-read-balance --curve bls12381 (bn254 with the legacy feature) [--table-bits 24] [--bound-bits 54]
 //!                       [--table-file PATH] [--pending]
 //!                       (--ct <C hex>:<D hex> | --rpc <url> --token <address>)
 //!
@@ -26,7 +26,9 @@ use std::process::{Command, ExitCode, Stdio};
 use serde_json::{json, Value};
 use zeroize::Zeroizing;
 use zether_prover::abi::decode_account_state;
-use zether_prover::curve::{decode_point, Bls12381, Bn254, ZCurve};
+use zether_prover::curve::{decode_point, Bls12381, ZCurve};
+#[cfg(feature = "bn254")]
+use zether_prover::curve::Bn254;
 use zether_prover::elgamal::{check_ram, mem_available, BsgsParams, BsgsTable, Ciphertext};
 use zether_prover::envelope::selector;
 
@@ -174,9 +176,10 @@ fn main() -> ExitCode {
         let key: Value = serde_json::from_str(&input).map_err(|_| "stdin: key JSON expected".to_string())?;
         let mut req = Value::Object(serde_json::Map::from_iter([("key".to_string(), key)]));
         let out = match a.curve.as_str() {
+            #[cfg(feature = "bn254")]
             "bn254" => run::<Bn254>(&a, &req),
             "bls12381" => run::<Bls12381>(&a, &req),
-            _ => Err("--curve must be bn254 or bls12381".into()),
+            _ => Err("--curve must be bls12381 (bn254: legacy `bn254` feature)".into()),
         };
         wipe(&mut req);
         out

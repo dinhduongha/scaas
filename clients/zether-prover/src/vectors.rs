@@ -1,7 +1,9 @@
 //! Deterministic vector files for S2 (zether-design §14) and S4 (R33 keys). Regenerate with
 //! `zether-cli vectors vectors/`; `tests/vectors.rs` fails when the committed files drift.
 
+#[cfg(feature = "bn254")]
 use ark_ff::BigInteger;
+#[cfg(feature = "bn254")]
 use ark_ff::PrimeField;
 use rand_chacha::rand_core::SeedableRng;
 use rand_chacha::ChaCha20Rng;
@@ -9,9 +11,13 @@ use serde_json::{json, Value};
 
 use crate::api::{hx, prove_burn_json, prove_transfer_json, prove_transfer_multi_json};
 use crate::bulletproofs::Gens;
-use crate::curve::{decode_scalar, encode_point, encode_scalar, zether_kind, Bls12381, Bn254, Fr, ZCurve};
+use crate::curve::{decode_scalar, encode_point, encode_scalar, zether_kind, Bls12381, Fr, ZCurve};
+#[cfg(feature = "bn254")]
+use crate::curve::Bn254;
 use crate::elgamal::encrypt;
-use crate::keys::{derive_child_sk, derive_master_sk, seed_from_mnemonic, ZetherKey, USE_CONF, USE_DISCLOSURE};
+#[cfg(feature = "bn254")]
+use crate::keys::{derive_child_sk, derive_master_sk};
+use crate::keys::{seed_from_mnemonic, ZetherKey, USE_CONF, USE_DISCLOSURE};
 use crate::schnorr::{self, entry_ref, open_chaum_pedersen, open_sender, open_sender_cp, Entry, OpeningKind};
 use crate::transcript::{hash_to_scalar, Op, Transcript};
 use crate::zether::{self, BurnProof, BurnStatement, MultiTransferStatement, TransferProof, TransferStatement};
@@ -144,7 +150,7 @@ fn per_curve<C: ZCurve>(files: &mut Vec<(String, Value)>, transcripts: &mut Vec<
     transcripts.push(json!({"name": format!("burn_{}", C::NAME), "case": transcript_json::<C>(&t)}));
     files.push((format!("burn_{}.json", C::NAME), bv));
 
-    // Schnorr over the UA registry's PoP message (CTR-UA-07, authRef 0), fixed k.
+    // Schnorr over the UA registry's PoP message (CTR-UA-07, pqzKeyHash 0), fixed k.
     let (registry, uid) = ([0xaa_u8; 20], hex::decode(&CHAIN_UID[2..]).unwrap().try_into().unwrap());
     let d = schnorr::pop_digest(CHAIN, &uid, &registry, &from.ua(), &[0u8; 32]);
     let msg = schnorr::ua_message::<C>(&schnorr::purpose_tag("pop"), &d);
@@ -235,15 +241,15 @@ fn r33_curve<C: ZCurve>() -> Value {
                 "x": hx(&encode_scalar::<C>(&k.x)), "Y": hx(&k.encoded_y()), "UA": hx(&k.ua()),
             });
             if key_use == USE_CONF {
-                // the UA registry's PoP (CTR-UA-07), self (authRef 0), on the vectors' chain
-                let (registry, auth_ref) = ([0xaa_u8; 20], [0u8; 32]);
+                // the UA registry's PoP (CTR-UA-07; no PQZ key: pqzKeyHash 0), on the vectors' chain
+                let (registry, pqz_key_hash) = ([0xaa_u8; 20], [0u8; 32]);
                 let uid: [u8; 32] = hex::decode(&CHAIN_UID[2..]).unwrap().try_into().unwrap();
-                let pop = schnorr::zether_pop(&k, CHAIN, &uid, &registry, &auth_ref, &mut rng);
-                schnorr::verify_pop(&k.y, CHAIN, &uid, &registry, &auth_ref, &pop).unwrap();
-                let d = schnorr::pop_digest(CHAIN, &uid, &registry, &k.ua(), &auth_ref);
+                let pop = schnorr::zether_pop(&k, CHAIN, &uid, &registry, &mut rng);
+                schnorr::verify_pop(&k.y, CHAIN, &uid, &registry, &pop).unwrap();
+                let d = schnorr::pop_digest(CHAIN, &uid, &registry, &k.ua(), &pqz_key_hash);
                 v["pop"] = json!({
                     "kind": zether_kind::<C>(), "chainId": CHAIN, "chainUid": CHAIN_UID, "registry": hx(&registry),
-                    "authRef": hx(&auth_ref), "popDigest": hx(&d),
+                    "pqzKeyHash": hx(&pqz_key_hash), "popDigest": hx(&d),
                     "uaMsg": hx(&schnorr::ua_message::<C>(&schnorr::purpose_tag("pop"), &d)), "pop": hx(&pop),
                 });
             }
@@ -253,6 +259,7 @@ fn r33_curve<C: ZCurve>() -> Value {
     json!({"curve": C::NAME, "salt": String::from_utf8_lossy(C::KEYGEN_SALT), "keys": keys})
 }
 
+#[cfg(feature = "bn254")]
 fn dec(b: &[u8]) -> String {
     let mut v = b.to_vec();
     let mut out = Vec::new();
@@ -273,6 +280,7 @@ fn dec(b: &[u8]) -> String {
     }
 }
 
+#[cfg(feature = "bn254")]
 fn eip2333_bn254() -> Value {
     let cases = [
         ("c55257c360c07c72029aebc1b53c05ed0362ada38ead3e3e9efa3708e53495531f09a6987599d18264c1e1c92f2cf141630c7a3c4ab7c81b2f001698e7463b04", 0u32),
@@ -303,7 +311,7 @@ fn r33_inputs() -> Value {
     let index_cases: Vec<Value> = coins
         .into_iter()
         .map(|coin| {
-            let req = json!({"curve": "bn254", "key": {"seed": hx(&seed()), "coin": coin, "account": 0}});
+            let req = json!({"curve": "bls12381", "key": {"seed": hx(&seed()), "coin": coin, "account": 0}});
             match crate::api::call("keygen", &req.to_string()) {
                 Ok(out) => json!({"coin": coin, "ok": true, "Y": serde_json::from_str::<Value>(&out).unwrap()["Y"]}),
                 Err(_) => json!({"coin": coin, "ok": false}),
@@ -313,7 +321,7 @@ fn r33_inputs() -> Value {
     let pass = "m\u{1ead}t kh\u{1ea9}u";
     json!({
         "index_rule": "integer (JSON number or decimal string) in [0, 2^32 - 1]; anything else is an error",
-        "seed": hx(&seed()), "curve": "bn254", "account": 0, "index_cases": index_cases,
+        "seed": hx(&seed()), "curve": "bls12381", "account": 0, "index_cases": index_cases,
         "passphrase": {"mnemonic": MNEMONIC, "passphrase_nfc": pass,
                        "seed": hx(&seed_from_mnemonic(MNEMONIC, pass).unwrap()[..])},
     })
@@ -323,18 +331,22 @@ fn r33_inputs() -> Value {
 pub fn generate() -> Vec<(String, Value)> {
     let mut files = vec![];
     let mut transcripts = vec![];
+    #[cfg(feature = "bn254")]
     per_curve::<Bn254>(&mut files, &mut transcripts);
     per_curve::<Bls12381>(&mut files, &mut transcripts);
     files.push(("transcript_s3.json".into(), json!({"cases": transcripts})));
-    files.push((
-        "r33_keys.json".into(),
-        json!({
-            "mnemonic": MNEMONIC, "passphrase": "", "seed": hx(&seed()), "coin": 60,
-            "uses": {"conf": USE_CONF, "disclosure": USE_DISCLOSURE},
-            "bn254": r33_curve::<Bn254>(), "bls12381": r33_curve::<Bls12381>(),
-            "eip2333_bn254_variant": eip2333_bn254(),
-        }),
-    ));
+    #[allow(unused_mut)]
+    let mut r33 = json!({
+        "mnemonic": MNEMONIC, "passphrase": "", "seed": hx(&seed()), "coin": 60,
+        "uses": {"conf": USE_CONF, "disclosure": USE_DISCLOSURE},
+        "bls12381": r33_curve::<Bls12381>(),
+    });
+    #[cfg(feature = "bn254")]
+    {
+        r33["bn254"] = r33_curve::<Bn254>();
+        r33["eip2333_bn254_variant"] = eip2333_bn254();
+    }
+    files.push(("r33_keys.json".into(), r33));
     files.push(("r33_inputs.json".into(), r33_inputs()));
     files.push(("envelope.json".into(), envelope_vector()));
     files

@@ -53,7 +53,7 @@ never added. **All or nothing, and the user never pays for an operation that did
 check everything before the fee and cannot fail afterwards; a self-call runs **first** and pays its fee **after**
 (so a wrap can pay from the units it mints), and any failure — of the call or of the fee transfer — reverts the whole
 transaction with the inner revert data, fee and nonce included. No `try/catch`, no mode switch. Smart-contract wallets
-(ERC-1271; a native `authRef` of a Zether UA in the UA registry) are first-class signers.
+(ERC-1271) are first-class signers.
 
 <a id="CTR-MTX-14"></a>**CTR-MTX-14** — Signatures are EIP-712 typed data, never `personal_sign`: wallets display the
 fields instead of 32 opaque bytes. The pinned typehash below is the only payment-intent type; there is no raw
@@ -333,7 +333,7 @@ it. Nothing else is reachable through `mtxExecute`.
 | | `unwrapToUA(address,uint256,bytes32,uint256)` (BUILT, UA-5a; also on the UA allowlist) | `AMOUNT(1)` |
 | `NONE_ZETHER` / `UNDERLYING_ZETHER` (built, P3) | the kind's public entries (`burn`; or `UnderlyingToken`'s six, without `unwrap(uint256,address)`) | as above |
 | | `zetherShield(bytes,uint256)`, `zetherWrapShield(address,uint256,bytes32)` (`UNDERLYING_ZETHER`) | `ABSOLUTE` |
-| | `zetherTransfer`, `…Bundle`, `…NoBundle`, `…Single` `(bytes,bytes,bytes,bytes32)`, `zetherUnshield(bytes,bytes,bytes,bytes32,address,uint256)`, `zetherUnshieldUnwrap` | `ABSOLUTE`; envelope binding through the ticket ([CTR-ZTH-34](zether.md#CTR-ZTH-34)) |
+| | `zetherTransfer`, `…Compact`, `…NoBundle`, `…Single` `(bytes,bytes,bytes32)`, `zetherUnshield(bytes,bytes,bytes32,address,uint256)`, `zetherUnshieldUnwrap` | `ABSOLUTE`; envelope binding through the ticket ([CTR-ZTH-34](zether.md#CTR-ZTH-34)) |
 | | `zetherUnshieldToUA`, `zetherUnshieldUnwrapToUA` (`UNDERLYING_ZETHER`) (SPECIFIED, UA-5c; [CTR-ZTH-51](zether.md#CTR-ZTH-51)) | `ABSOLUTE`; envelope binding as above |
 | `PqzToken` | `pqzTransfer(bytes,bytes,bytes[],bytes,bytes)`, `pqzUnshield(bytes,bytes,bytes[],uint256,address,bytes,bytes)`, `pqzShield(bytes32,uint256)`, `pqzRollOver(bytes32,bytes,bytes[])` | `ABSOLUTE`; not batchable ([CTR-PQZ-21](pq-zero-knowledge.md#CTR-PQZ-21)) |
 | `MandateWallet` | delegate: `payUnderMandate(address,address,uint256,bytes32,uint64)`, `revoke(address,uint64)`; owner: `setMandate`, `setPayee`, `revoke(address)`, `execute` ([CTR-ACC-06](mandates.md#CTR-ACC-06)) | fee `NONE` only |

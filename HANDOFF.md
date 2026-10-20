@@ -71,3 +71,11 @@ run 1 on pqz-core Rust + C** → fixes, fuzz, gate, freeze → **Codex run 2 on 
 order with Codex"). UA-6 in progress on branch `ua6` (worktree `.claude/worktrees/ua6`; SDD ledger
 `.superpowers/sdd/2026-10-20-ua6-encryption-key-attributes/progress.md` there): Tasks 1, 2, 5 done and merged into
 `ua6`; Task 4 (Zether, bn254 to legacy) running in `.claude/worktrees/ua6-t4`.
+
+**UA-6 merged (2026-10-20, late):** branch `ua6` (Tasks 1–9 + final review fix wave + the owner's Zether owner-op
+kind check `4ce03f50`), subagent-driven with a reviewer per task and a whole-branch review (no on-chain authorization
+hole found). Gates on the merged tree: forge 1243 / 0 / 9, size gate 0, docs_check 0; clientkeys 107 / 0 / 2,
+zether-prover, ua-rs, ua-c, ua-cxx, ua-qt (Qt 6.12 at `~/usr/Qt/6.12.0/gcc_64`), ua-dart-frb, ua-py, ua-go, ua-cs,
+ua-dart green. Not yet exercised: `script/pqz/e2e.py` on a PQZ chain and a real `R_REG` proof in evm tests (fs3 Task 13
+/ 16k regen). Every controller ruling is in decisions.md under CTR-UA-30 with commits. **Next: 5h part A** (plan
+`docs/superpowers/plans/2026-10-20-pqz-state-redesign.md`, owner rulings at its top).

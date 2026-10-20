@@ -29,10 +29,6 @@ contract ZetherVerifierGasTest is Test {
         prover = new ZetherProver();
     }
 
-    function _use(bool bls) internal {
-        (v, vb) = ZetherVerifiers.deploy(bls);
-    }
-
     function _header(bytes32 op, bytes32 psid, uint256 amount, address recipient) internal view returns (bytes memory) {
         return bytes.concat(
             abi.encode(op, psid, block.chainid, keccak256("gas chain"), address(0x70CE), keccak256("ZTX_V1_DIRECT")),
@@ -112,13 +108,14 @@ contract ZetherVerifierGasTest is Test {
         pr = prover.proveBurn(v, st, ZetherProver.BurnWitness(XF, B - amt - FEE, 0x99, keccak256("b")));
     }
 
-    function _run(bool bls, uint8 op) internal {
-        _use(bls);
+    /// BLS12-381 only since UA-6 (CTR-ZTH-32); the bn254 rows are in `legacy/ua6/`.
+    function _run(uint8 op) internal {
+        (v, vb) = ZetherVerifiers.deploy();
         (bytes memory st, bytes memory pr) = op == 0 ? _single() : op == 1 ? _multi(8) : _burn();
         (bool ok, uint256 g) = _verify(op, st, pr);
         assertTrue(ok, "honest proof");
         string[3] memory names = ["transfer", "multi M=8", "burn"];
-        console2.log(bls ? "bls12-381" : "bn254", names[op], "verify gas (cold call)", g);
+        console2.log("bls12-381", names[op], "verify gas (cold call)", g);
     }
 
     function _verify(uint8 op, bytes memory st, bytes memory pr) internal returns (bool ok, uint256 g) {
@@ -131,10 +128,7 @@ contract ZetherVerifierGasTest is Test {
         g -= gasleft();
     }
 
-    function test_gasTransferBn254() public { _run(false, 0); }
-    function test_gasMulti8Bn254() public { _run(false, 1); }
-    function test_gasBurnBn254() public { _run(false, 2); }
-    function test_gasTransferBls12381() public { _run(true, 0); }
-    function test_gasMulti8Bls12381() public { _run(true, 1); }
-    function test_gasBurnBls12381() public { _run(true, 2); }
+    function test_gasTransferBls12381() public { _run(0); }
+    function test_gasMulti8Bls12381() public { _run(1); }
+    function test_gasBurnBls12381() public { _run(2); }
 }

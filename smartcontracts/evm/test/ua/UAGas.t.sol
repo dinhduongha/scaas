@@ -128,7 +128,7 @@ contract UAGasTest is UARegistryBase {
         UARegistry home = _deploy(address(0x5ce0), chainUidA, address(0), false, BUDGET, address(impl), true, c);
         Member[] memory all = new Member[](16);
         for (uint256 i; i < 8; ++i) {
-            all[i] = Member(KINDS[i], home.register(KINDS[i], _key(KINDS[i]), "", 0, ""), 1);
+            all[i] = Member(KINDS[i], home.register(KINDS[i], _key(KINDS[i]), "", "", ""), 1);
         }
         bytes memory clone = abi.encodePacked(hex"363d3d373d3d3d363d73", impl, hex"5af43d82803e903d91602b57fd5bf3");
         for (uint256 i; i < 8; ++i) {
@@ -190,8 +190,8 @@ contract UAGasTest is UARegistryBase {
             _registerMembers(r, d);
         }
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKeyData.selector, UAKinds.MSIG));
-        tight.register(UAKinds.MSIG, d, "", 0, "");
-        ua = r.register(UAKinds.MSIG, d, "", 0, "");
+        tight.register(UAKinds.MSIG, d, "", "", "");
+        ua = r.register(UAKinds.MSIG, d, "", "", "");
     }
 
     /// Asserts `call` succeeds with `bound` gas for the callee frame; returns the least frame gas that succeeds. Each
@@ -213,7 +213,7 @@ contract UAGasTest is UARegistryBase {
         uint256 count = uint16(bytes2(abi.encodePacked(d[2], d[3])));
         for (uint256 j; j < count; ++j) {
             uint16 kind = uint16(bytes2(abi.encodePacked(d[4 + 36 * j], d[5 + 36 * j])));
-            if (kind >= 0x0100) r.register(kind, _key(kind), "", 0, "");
+            if (kind >= 0x0100) r.register(kind, _key(kind), "", "", "");
         }
     }
 
@@ -251,7 +251,7 @@ contract UAGasTest is UARegistryBase {
                 }
             }
         }
-        assertEq(rows, 20 + 85, "signature rows scanned");
+        assertEq(rows, 22 + 91, "signature rows scanned");
         assertGe(max, 256, "largest real signature");
         return new bytes(max);
     }
@@ -271,14 +271,14 @@ contract UAGasTest is UARegistryBase {
         for (uint256 i; i < 8; ++i) {
             bytes memory k = _key(KINDS[i]);
             bytes32 id = UAKinds.uaOf(KINDS[i], k);
-            if (!home.isRegistered(id)) home.register(KINDS[i], k, big, 0, "");
+            if (!home.isRegistered(id)) home.register(KINDS[i], k, big, "", "");
             m[i] = Member(KINDS[i], id, w);
         }
         uint256[2] memory used;
         uint16[2] memory t = [uint16(1), uint16(8)];
         for (uint256 x; x < 2; ++x) {
             bytes memory d = _msigKey(t[x] * w, m);
-            bytes32 ua = r.register(UAKinds.MSIG, d, "", 0, "");
+            bytes32 ua = r.register(UAKinds.MSIG, d, "", "", "");
             UARegistry.MemberSig[] memory s = new UARegistry.MemberSig[](t[x]);
             for (uint16 j; j < t[x]; ++j) {
                 (, bytes memory k) = _memberAt(d, j);
@@ -332,7 +332,7 @@ contract UAGasTest is UARegistryBase {
         uint16[2] memory t = [uint16(1), uint16(16)];
         for (uint256 x; x < 2; ++x) {
             bytes memory d = _msigKey(t[x], m);
-            bytes32 ua = r.register(UAKinds.MSIG, d, "", 0, "");
+            bytes32 ua = r.register(UAKinds.MSIG, d, "", "", "");
             bytes memory auth = _nativeAuth(r, d, ua, t[x], ids);
             vm.cool(address(r));
             _cool(accounts);
@@ -382,11 +382,11 @@ contract UAGasTest is UARegistryBase {
         }
         bytes memory d = _msigKey(3, m);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKeyData.selector, UAKinds.MSIG));
-        tight.register(UAKinds.MSIG, d, "", 0, "");
-        roomy.register(UAKinds.MSIG, d, "", 0, ""); // exactly at the budget
+        tight.register(UAKinds.MSIG, d, "", "", "");
+        roomy.register(UAKinds.MSIG, d, "", "", ""); // exactly at the budget
         // threshold 2 of the same three: c = 2, the two largest caps
         d = _msigKey(2, m);
-        tight.register(UAKinds.MSIG, d, "", 0, "");
+        tight.register(UAKinds.MSIG, d, "", "", "");
         // 16 native members on a chain with SmartKeyAccount clones: 16 × 435 k = 6.96 M ≤ 12 M
         UARegistry ska = _deploy(
             address(0x5cc3),
@@ -403,7 +403,7 @@ contract UAGasTest is UARegistryBase {
             n[i] = Member(UAKinds.EVM_EOA, _pad(vm.addr(1000 + i)), 1);
         }
         uint256 g = gasleft();
-        ska.register(UAKinds.MSIG, _msigKey(16, n), "", 0, "");
+        ska.register(UAKinds.MSIG, _msigKey(16, n), "", "", "");
         emit log_named_uint("register msig 16 natives", g - gasleft());
         UARegistry small = _deploy(
             address(0x5cc4),
@@ -416,7 +416,7 @@ contract UAGasTest is UARegistryBase {
             _cfgs(address(mock))
         );
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKeyData.selector, UAKinds.MSIG));
-        small.register(UAKinds.MSIG, _msigKey(16, n), "", 0, "");
+        small.register(UAKinds.MSIG, _msigKey(16, n), "", "", "");
     }
 
     /// Caps of the gen-1 default config: ≤ 50 % of `verifyBudget` (public-chain rule, CTR-UA-23); each pairing kind's
@@ -475,7 +475,7 @@ contract UAGasTest is UARegistryBase {
         UARegistry r = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), false, c);
         bytes memory call = abi.encodeCall(
             r.register,
-            (0x0107, vm.parseJsonBytes(sj, ".derived[6].keyData"), vm.parseJsonBytes(sj, ".derived[6].pop.sig"), 0, "")
+            (0x0107, vm.parseJsonBytes(sj, ".derived[6].keyData"), vm.parseJsonBytes(sj, ".derived[6].pop.sig"), "", "")
         );
         uint256 lo = 100_000;
         uint256 hi = 1_000_000;
@@ -520,7 +520,7 @@ contract UAGasTest is UARegistryBase {
         c[0] = UARegistry.KindConfig(0x0102, address(ev), uint64(cap));
         UARegistry r = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), false, c);
         bytes memory k = vm.parseJsonBytes(sj, ".derived[7].keyData");
-        bytes memory call = abi.encodeCall(r.register, (0x0102, k, vm.parseJsonBytes(sj, ".derived[7].pop.sig"), 0, ""));
+        bytes memory call = abi.encodeCall(r.register, (0x0102, k, vm.parseJsonBytes(sj, ".derived[7].pop.sig"), "", ""));
         uint256 lo = 100_000;
         uint256 hi = 1_000_000;
         while (hi - lo > 500) {

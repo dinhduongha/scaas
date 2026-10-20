@@ -422,7 +422,8 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
         _uaMove(bytes32(0), to, v);
     }
 
-    /// @dev A receiver: a native id other than 0, the token and `UA_POOL`; or a registered SIGNING UA (never Zether).
+    /// @dev A receiver: a native id other than 0, the token and `UA_POOL`; or a registered SIGNING UA (the Zether UA
+    ///      included since UA-6, U8).
     function _checkTo(bytes32 to) private view {
         if (UAKinds.inNativeSpace(to)) {
             address a = address(uint160(uint256(to)));

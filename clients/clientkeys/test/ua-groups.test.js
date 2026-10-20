@@ -7,13 +7,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
+import { dir } from './ua-vectors-dir.js';
 import { secp256k1, schnorr } from '@noble/curves/secp256k1.js';
 import { hash_to_field } from '@noble/curves/abstract/hash-to-curve.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import * as ua from '../src/ua.js';
 import { hex, fromHex, concatBytes, utf8ToBytes, word } from '../src/bytes.js';
 
-const V = JSON.parse(readFileSync(new URL('../../../smartcontracts/vectors/ua/groups.json', import.meta.url)));
+const V = JSON.parse(readFileSync(new URL('groups.json', dir)));
 const Pt = secp256k1.Point;
 const N = Pt.Fn.ORDER;
 const G = Pt.BASE;

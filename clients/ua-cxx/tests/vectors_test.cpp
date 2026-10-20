@@ -61,6 +61,7 @@ static void table_groups_purposes_constants() {
         if (info.group) CHECK(*info.group == r["group"].get<std::string>(), name);
         CHECK(isSigning(n) == r["signing"].get<bool>(), name);
         CHECK(isZether(n) == r["zether"].get<bool>(), name);
+        CHECK(isPqzHolder(n) == r["pqzHolder"].get<bool>(), name);
         CHECK(isMember(n, false) == r["member"].get<bool>(), name);
         CHECK(isMember(n, true) == r["memberHedera"].get<bool>(), name);
         CHECK(isNative(n) == info.native, name);
@@ -71,13 +72,22 @@ static void table_groups_purposes_constants() {
             CHECK(hx(tag(n)) == r["TAG"].get<std::string>(), name);
         }
     }
+    for (auto& r : k["schemes"]) {  // schemes are not kinds: tag and keyHash only
+        uint16_t n = kind(r["kind"]);
+        CHECK(kindTagString(n) == r["tag"].get<std::string>(), "scheme tag");
+        CHECK(hx(tag(n)) == r["TAG"].get<std::string>(), "scheme TAG");
+        CHECK(code_of([&] { kindInfo(n); }) == "UAKindUnknown", "scheme is no kind");
+        CHECK(code_of([&] { uaOf(n, {}); }) == "UAKindNotDerived", "scheme uaOf");
+        CHECK(code_of([&] { validateKeyData(n, {}, false); }) == "UAKindNotDerived", "scheme validate");
+    }
+    CHECK(hx(*keyHashOf(0x0142, bytes(k["pqzKey"]))) == k["pqzKeyHash"].get<std::string>(), "pqzKeyHash");
     for (auto& r : k["groups"]) {
         auto g = r["group"].get<std::string>();
         CHECK(groupTagString(g) == r["tag"].get<std::string>(), g);
         CHECK(hx(*groupTag(g)) == r["GROUP"].get<std::string>(), g);
     }
     CHECK(!groupTag("nope") && !groupTagString("nope"), "unknown group");
-    CHECK(k["purposes"].size() == 12, "purposes size");
+    CHECK(k["purposes"].size() == 11, "purposes size");
     for (auto& r : k["purposes"]) CHECK(hx(purposeTag(r["purpose"])) == r["purposeTag"].get<std::string>(), r["purpose"].get<std::string>());
     CHECK(code_of([] { purposeTag("nope"); }) == "UAPurposeUnknown", "purpose");
     auto& c = k["constants"];
@@ -146,9 +156,24 @@ static void structures() {
         auto& c = s["contexts"][p["context"].get<std::string>()];
         uint64_t chain = c["chainId"].get<uint64_t>();  // context E is 2^40+7
         CHECK(hx(chainKeyHash(chain)) == p["chainKeyHash"].get<std::string>(), "chainKeyHash");
-        CHECK(hx(popDigest(chain, bytes(c["chainUid"]), bytes(c["registry"]), bytes(p["ua"]), bytes(p["authRef"]))) ==
+        CHECK(hx(popDigest(chain, bytes(c["chainUid"]), bytes(c["registry"]), bytes(p["ua"]), bytes(p["pqzKeyHash"]))) ==
                   p["popDigest"].get<std::string>(), "popDigest");
     }
+    Bytes pk = bytes(load("kinds.json")["pqzKey"]);
+    for (auto& p : s["pqzReg"]) {
+        auto& c = s["contexts"][p["context"].get<std::string>()];
+        uint64_t chain = c["chainId"].get<uint64_t>();
+        Bytes uid = bytes(c["chainUid"]), reg = bytes(c["registry"]), ua = bytes(p["ua"]);
+        auto h = holderPopMessage(kind(p["kind"]), chain, uid, reg, ua, pk);
+        CHECK(hx(h.pqzKeyHash) == p["pqzKeyHash"].get<std::string>(), "holder pqzKeyHash");
+        CHECK(hx(h.popDigest) == p["popDigest"].get<std::string>(), "holder popDigest");
+        CHECK(hx(pqzRegMessage(chain, uid, reg, ua, pk)) == p["pqzRegMessage"].get<std::string>(), "pqzRegMessage");
+        CHECK(code_of([&] { holderPopMessage(0x0101, chain, uid, reg, ua, pk); }) == "UAPqzHolder", "classical holder");
+        CHECK(code_of([&] { holderPopMessage(0x0133, chain, uid, reg, ua, pk); }) == "UAPqzHolder", "slhdsa holder");
+        CHECK(hx(holderPopMessage(kind(p["kind"]), chain, uid, reg, ua, std::nullopt).pqzKeyHash) == hx(Bytes(32)), "no key");
+    }
+    for (auto& p : s["pqzMsig"])
+        CHECK(msigPqzEligible(bytes(p["keyData"])) == p["eligible"].get<bool>(), p["reason"].get<std::string>());
     for (auto& a : s["uaAuth"]) {
         auto& c = s["contexts"][a["context"].get<std::string>()];
         Domain d{a["generation"].get<uint32_t>(), c["chainId"].get<uint64_t>(), bytes(c["registry"]), bytes(c["chainUid"])};

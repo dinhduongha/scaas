@@ -41,7 +41,7 @@ contract UADeployTest is Test {
         assertTrue(bn);
         string memory code = vm.toString(type(UAPrecompileProbe).creationCode);
         string memory j = vm.readFile("../vectors/ua/kinds.json");
-        uint256[3] memory rows = [uint256(88), 94, 99];
+        uint256[3] memory rows = [uint256(79), 85, 90];
         for (uint256 i; i < 3; ++i) {
             string memory row = string.concat(".invalid[", vm.toString(rows[i]), "]");
             assertEq(vm.parseJsonString(j, string.concat(row, ".reason")), "outside the subgroup");
@@ -50,11 +50,12 @@ contract UADeployTest is Test {
         }
     }
 
-    /// Dev chain 31337: every kind this registry code has, the Zether ones included; budget 12 M; msig on.
+    /// Dev chain 31337: every kind this registry code has, `zether-bls12381` included (`zether-bn254` is in
+    /// `legacy/ua6/`, UA-6 U10); budget 12 M; msig on.
     function test_devChain() public {
         IUARegistry reg = _registry(31337, false);
         bool[5] memory on = _kinds(reg, [uint16(0x0105), 0x0106, 0x0107, 0x0140, 0x0141]);
-        for (uint256 i; i < 5; ++i) assertTrue(on[i]);
+        assertTrue(on[0] && on[1] && on[2] && !on[3] && on[4]);
         assertEq(reg.verifyBudget(), 12_000_000);
         assertEq(reg.chainUid(), UID);
         assertEq(reg.generation(), 1);
@@ -101,6 +102,6 @@ contract UADeployTest is Test {
         (, string memory json) = h.deploy(UID, true, ska, false);
         IUARegistry reg = IUARegistry(vm.parseJsonAddress(json, ".ua_registry"));
         bool[5] memory on = _kinds(reg, [uint16(0x0105), 0x0106, 0x0107, 0x0140, 0x0141]);
-        assertTrue(!on[0] && !on[1] && !on[2] && on[3] && !on[4], "only zether-bn254 of these");
+        assertTrue(!on[0] && !on[1] && !on[2] && !on[3] && !on[4], "none of these");
     }
 }

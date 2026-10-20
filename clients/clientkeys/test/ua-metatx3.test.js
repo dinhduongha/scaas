@@ -10,18 +10,19 @@ import { p256 } from '@noble/curves/nist.js';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import * as ua from '../src/ua.js';
+import { schnorrVerify as zetherVerify } from '../src/zether.js';
 import { hex, fromHex, keccak_256, utf8ToBytes, abiEncode, concatBytes } from '../src/bytes.js';
 import { hashTypedData, hashStruct, padId, uaMetaTxTypedData, uaMetaTransferTypedData, receiverFeeTypedData,
   unwrapToUACalldata, checkReceiverFee } from '../src/evm.js';
 
-const dir = new URL('../../../smartcontracts/vectors/ua/', import.meta.url);
+import { dir } from './ua-vectors-dir.js';
 const V = JSON.parse(readFileSync(new URL('metatx3.json', dir)));
 const S = JSON.parse(readFileSync(new URL('signatures.json', dir)));
 const domain = { name: 'SCaaS MetaToken', contract: V.token, chainId: V.chainId, chainUid: V.chainUid };
 
 test('every row: typed data → digest, and the builder rebuilds the typed data from its message', () => {
   for (const [rows, build] of [[V.call, uaMetaTxTypedData], [V.transfer, uaMetaTransferTypedData]]) {
-    assert.equal(rows.length, 10);
+    assert.equal(rows.length, 11);
     for (const r of rows) {
       assert.equal(hex(hashTypedData(r.typedData)), r.digest, r.name);
       assert.deepEqual(build({ ...domain, message: r.typedData.message }), r.typedData, r.name);
@@ -68,14 +69,15 @@ const NOBLE = {
   0x0101: (kd, m, sig) => p256.verify(sig, sha256(m), concatBytes(Uint8Array.of(4), kd), { prehash: false, lowS: true }),
   0x0103: (kd, m, sig) => schnorr.verify(sig, m, kd),
   0x0102: (kd, m, sig) => ed25519.verify(sig, m, kd, { zip215: false }),
+  0x0141: (kd, m, sig) => zetherVerify('bls12381', kd, m, sig), // UA-6: the Zether UA signs every write
   0x0108: (kd, m, sig) => recover(hex(sig), hex(m)) === hex(keccak_256(kd).subarray(12)),
 };
 const authOk = (from, purpose, digest, auth) => {
   if (from === S.native.ua) return recover(auth, digest) === S.native.address;
   const d = S.derived.find((x) => x.ua === from);
   const [kd, sig] = split(auth);
-  assert.equal(hex(kd), d.keyData);
-  return NOBLE[d.kind] ? NOBLE[d.kind](kd, ua.uaMessage(d.kind, ua.purposeTag(purpose), fromHex(digest)), sig) : null;
+  assert.equal(hex(kd), d.stored ? '0x' : d.keyData, 'a stored kind (Zether) sends no key data');
+  return NOBLE[d.kind] ? NOBLE[d.kind](d.stored ? fromHex(d.keyData) : kd, ua.uaMessage(d.kind, ua.purposeTag(purpose), fromHex(digest)), sig) : null;
 };
 
 test('burn and unwrapToUA rows: one per signer of call, the same envelope, data the new call', () => {
@@ -123,7 +125,7 @@ test('receiverFee rows: native payer x every derived payee and p256 x bip340; pa
       }
     }
   }
-  assert.equal(nobled, 9 + 1 + 5, 'the native payer x9 (ECDSA), the p256 payer, the p256 / bip340 x2 / ed25519 / secp256k1 payees');
+  assert.equal(nobled, 10 + 1 + 6, 'the native payer x10 (ECDSA), the p256 payer, the p256 / bip340 x2 / ed25519 / secp256k1 / zether payees');
 });
 
 test('receiver-pays, UA path: checkReceiverFee accepts every receiverFee row for its payee id and refuses another payee', () => {

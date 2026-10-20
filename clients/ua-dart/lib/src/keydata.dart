@@ -277,6 +277,9 @@ void _fndsa(Uint8List d) {
 /// Throws UAError('UAKeyData') unless [keyData] (Uint8List or hex String) is the unique canonical encoding of a valid
 /// key or structure of [kind].
 void validateKeyData(int kind, Object? keyData, {bool hederaNative = false}) {
+  for (final s in schemes) {
+    if (s.number == kind) throw UAError('UAKindNotDerived', s.name);
+  }
   final k = kindInfo(kind);
   if (k.native) throw UAError('UAKindNotDerived', k.name);
   final d = keyBytes(keyData);
@@ -288,7 +291,7 @@ void validateKeyData(int kind, Object? keyData, {bool hederaNative = false}) {
       _ed25519(d);
     case 0x0103:
       _secpX(d, 0);
-    case 0x0104 || 0x0140:
+    case 0x0104:
       _bnG1(d, 0);
     case 0x0105 || 0x0141:
       _blsG1(d);

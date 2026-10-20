@@ -113,7 +113,7 @@ interface IZetherToken is IUALedger {
     function verifier() external view returns (IZetherVerifier);
     /// @notice The curve's burn verifier (unshield, unshield-unwrap), likewise (CTR-ZTH-20).
     function burnVerifier() external view returns (IZetherBurnVerifier);
-    /// @notice The release's curve, `"bn254"` or `"bls12-381"` (the transfer verifier's `curveName()`): an attribute of
+    /// @notice The release's curve, `"bls12-381"` (the transfer verifier's `curveName()`): an attribute of
     ///         the implementation version; version numbers carry no curve meaning.
     function curve() external view returns (string memory);
     // `registry()` (the account registry, an implementation immutable, CTR-ZTH-44) is the UA ledger's (`IUALedger`).
@@ -137,8 +137,10 @@ interface IZetherToken is IUALedger {
     function zetherRollOver(ZetherTypes.UA account) external;
     /// @notice Skips `OWNER_ONLY` items.
     function zetherRollOverBatch(ZetherTypes.UA[] calldata accounts) external;
+    /// @notice Owner roll-over: a registered Zether UA only (`AccountNotRegistered` otherwise).
     function zetherRollOverSigned(ZetherTypes.UA account, uint64 expectedPendingSeq, uint64 validUntilBlock, bytes calldata sig)
         external;
+    /// @notice Owner mode change: a registered Zether UA only (`AccountNotRegistered` otherwise).
     function zetherSetRollOverMode(
         ZetherTypes.UA account,
         ZetherTypes.RollOverMode mode,
@@ -153,22 +155,21 @@ interface IZetherToken is IUALedger {
     /// @notice `M` recipients, one proof, the token's default (CTR-ZTH-38): the record stored (BUNDLE) on a `BUNDLE`
     ///         token, commit-reveal (HASH: the commitment and the sender memo stored, the record in `TransferBundles`) on
     ///         a `COMPACT` token.
-    function zetherTransfer(bytes calldata payload, bytes calldata proof, bytes calldata authSig, ZetherTypes.UA beneficiary)
+    function zetherTransfer(bytes calldata payload, bytes calldata proof, ZetherTypes.UA beneficiary)
         external returns (bytes32 entryRef);
     /// @notice Commit-reveal (HASH) on every token: the commitment and the sender memo stored, the record in the event.
-    function zetherTransferCompact(bytes calldata payload, bytes calldata proof, bytes calldata authSig, ZetherTypes.UA beneficiary)
+    function zetherTransferCompact(bytes calldata payload, bytes calldata proof, ZetherTypes.UA beneficiary)
         external returns (bytes32 entryRef);
     /// @notice Stores nothing (NONE, disclosure off chain from calldata); `TransferEntryDisabled` on a `COMPACT` token.
-    function zetherTransferNoBundle(bytes calldata payload, bytes calldata proof, bytes calldata authSig, ZetherTypes.UA beneficiary)
+    function zetherTransferNoBundle(bytes calldata payload, bytes calldata proof, ZetherTypes.UA beneficiary)
         external returns (bytes32 entryRef);
     /// @notice The single-recipient format, its record stored in full; `TransferEntryDisabled` on a `COMPACT` token.
-    function zetherTransferSingle(bytes calldata payload, bytes calldata proof, bytes calldata authSig, ZetherTypes.UA beneficiary)
+    function zetherTransferSingle(bytes calldata payload, bytes calldata proof, ZetherTypes.UA beneficiary)
         external returns (bytes32 entryRef);
     /// @notice Proves the unshield statement, then mints `amount · shieldScale` public units to `to`.
     function zetherUnshield(
         bytes calldata payload,
         bytes calldata proof,
-        bytes calldata authSig,
         ZetherTypes.UA beneficiary,
         address to,
         uint256 amount

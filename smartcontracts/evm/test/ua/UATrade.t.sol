@@ -56,6 +56,7 @@ contract UATradeTest is UALedgerBase {
     function _authP(bytes32 from, bytes32 purpose, bytes32 digest) internal view returns (bytes memory) {
         if (from == _pad(alice)) return _ecdsa(ALICE_PK, digest);
         if (from == _pad(bob)) return _ecdsa(BOB_PK, digest);
+        if (from == uaZ) return _zAuth(purpose, digest);
         uint16 kind = lreg.kindOf(from);
         return _auth(lreg, kind, _key(kind), purpose, digest);
     }
@@ -253,10 +254,11 @@ contract UATradeTest is UALedgerBase {
         bytes memory other = _authP(uaB, UAKinds.PURPOSE_TRADE, h);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, uaP));
         tok.uaTrade(o, other, _f(600, 1200, 0));
-        // a Zether UA never signs through the registry
+        // the Zether UA signs under `trade` like any SIGNING UA (UA-6 U8): its `metatx` signature is refused
         o.from = uaZ;
+        bytes memory zWrong = _authP(uaZ, UAKinds.PURPOSE_METATX, tok.uaTradeOrderDigest(o));
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, uaZ));
-        tok.uaTrade(o, "", _f(600, 1200, 0));
+        tok.uaTrade(o, zWrong, _f(600, 1200, 0));
         // UA_POOL as a native id
         o.from = _pad(POOL);
         vm.expectRevert(IUALedger.UAPoolNotPayable.selector);

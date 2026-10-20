@@ -29,7 +29,7 @@ gateway body, job payloads, every family adapter's decoder — BCS/XDR/protobuf/
 (dev-dependency): no panic, every error is an `Err`. The job API extends the `hmac` mode with per-namespace key ids
 ([NODE-JOB-05](job-api.md#NODE-JOB-05)).
 
-Limits: body 64 KiB (1 MiB on the PQZ chain profile only); a global concurrency limit (`tower`
+Limits: body 64 KiB (1 MiB on the PQZ chain profile only; `POST /v1/ua/register` 160 KiB: a PQZL holder registration is ≈ 49 KB binary, ≈ 100–108 KB as hex, and PQZH proofs of ≈ 187 KB register directly, not through the gateway); a global concurrency limit (`tower`
 `ConcurrencyLimitLayer`, default 32) because every request costs a simulation; a per-IP rate limit at the reverse
 proxy in front of an open gateway ([runbooks.md#production-gates](runbooks.md#production-gates)).
 
@@ -86,7 +86,7 @@ A duplicate returns `200` with the stored state (idempotent).
 | `POST /v1/metatx {chain, token, struct?, m, signature}` (`struct` = `call` \| `transfer`, default `transfer`; [CTR-MTX-15](../contracts/metatx.md#CTR-MTX-15)) | `202 {"status":"queued"}` today; the target adds `"intent_id"` (+ `exclusive` when published on the mesh) | token registered and active (`TOKEN_NOT_SERVED`); strict parse; normalization ([NODE-LANE-10](submit-lanes.md#NODE-LANE-10)) before simulation; the lanes' guard: chain binding, `data` shape and selector ([NODE-JOB-20](job-api.md#NODE-JOB-20)), refused ⇒ `400`; simulation, then `mtxDigest` / `mtxTransferDigest`; [door A rules](#door-a-intake). On Hedera chains (295–298) `sig_bytes` may be **64** bytes (HIP-632 ED25519); 65–2048 bytes elsewhere |
 | `POST /v1/ops {chain, op}` | `op` = the job API `signed_op` payload; `202 {"status": "queued", "intent_id": "<digest hex>"}` | below |
 | `POST /v1/ua-metatx {chain, token, struct?, m: WireUAMetaTransaction \| WireUAMetaTransfer, auth}` | `ua_metatx` job | token `features ∋ ua` (v3: `registry() ≠ 0`); `from >> 160 ≠ 0` ⇒ registry record ([UA record cache](#ua-cache), `UA_NOT_REGISTERED`); cheap kinds verified locally ([NODE-GSP-15](gossip.md#NODE-GSP-15)); node computes `uaDigest` |
-| `POST /v1/ua/register {chain, kind, keyData, pop, authRef}` (`{chain, kind, keyData: 0x…, pop: 0x…, authRef: 0x…32}`) | `call` job to `chain.ua_registry` ([NODE-GW-03](#NODE-GW-03)) | id recomputed, `>> 160 ≠ 0`; not registered (`UA_ALREADY_REGISTERED`, `UA_KEY_IN_USE`); PoP verified for cheap kinds over `pop_digest` with `chain.chain_uid`; per-chain registration quota |
+| `POST /v1/ua/register {chain, kind, keyData, pop, pqzKey?, pqzPop?}` (`{chain, kind, keyData: 0x…, pop: 0x…, pqzKey?: 0x…, pqzPop?: 0x…}`; the pair only for a PQ signer that carries a PQZ key, [CTR-UA-16](../contracts/accounts.md#CTR-UA-16)) | `call` job to `chain.ua_registry` ([NODE-GW-03](#NODE-GW-03)) | id recomputed, `>> 160 ≠ 0`; not registered (`UA_ALREADY_REGISTERED`, `UA_KEY_IN_USE`); the node recomputes `h = keccak256(GROUP(pqz-mlwe) ‖ pqzKey)` and verifies the PoP of cheap kinds over `pop_digest(ua, h)` with `chain.chain_uid`; it never verifies `R_REG` locally (simulation does); body limit 160 KiB; per-chain registration quota |
 | `GET /v1/intents/{intent_id}` | the `~gateway` job: `{"intent_id", "state", "consumed_kind"?, "tx_hash"?, "updated_at"}` | **only for gateway-origin rows**: rows from peers or from the job API (incl. private-chain intents) answer 404, the same as unknown or expired ids |
 | `POST /v1/dex/orders`, `…/cancel`, `…/cancel-all`; `GET /v1/dex/{markets,depth,trades,ticker,orders}` (`GET /v1/dex/orders?maker=`), `GET /v1/dex/exchanges/{ref}` (SPECIFIED) | [dex-venue.md#routes](dex-venue.md#routes) | managed markets add `NOT_ELIGIBLE {reason}`, `UNBOUND_FORBIDDEN`, `FEE_FORBIDDEN`, `PAUSED`, `ATTESTATION_SHORTER`; mesh `route_order` ⇒ `MANAGED_LOCAL` ([dex-venue.md#managed-markets](dex-venue.md#managed-markets)) |
 | `GET /v1/dex/depth?scope=network`, `GET /v1/dex/homes` | network depth and DEX homes ([dex-venue.md#gossip](dex-venue.md#gossip)) | — |
@@ -159,7 +159,7 @@ chain.ua_registry`, `selector` = `register`, `max_tx_per_payer_hour = 0`
 
 ### 3.1 UA record cache
 
-<a id="ua-cache"></a>Per chain, `recordOf(from)` is read once from `chain.ua_registry`; records are immutable, so hits
+<a id="ua-cache"></a>Per chain, `recordOf(from)` (the record and the PQZ key pointer, 0 = none) is read once from `chain.ua_registry`; records are immutable, so hits
 stay in memory with no expiry and misses for 60 s; cheap kinds (webauthn-p256, p256, ed25519, bip340, schnorr-bn254)
 are verified with the shared Rust kind library, the rest by simulation. No store table. Config per chain:
 `ua_registry` address and generation; enabled kinds are read from the chain at onboarding. The node never holds UA

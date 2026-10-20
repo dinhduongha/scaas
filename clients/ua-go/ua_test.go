@@ -76,7 +76,7 @@ func TestTableGroupsPurposesConstants(t *testing.T) {
 		}
 		group, _ := r["group"].(string)
 		if info.Group != group || IsSigning(n) != r["signing"] || IsZether(n) != r["zether"] ||
-			IsMember(n, false) != r["member"] || IsMember(n, true) != r["memberHedera"] {
+			IsMember(n, false) != r["member"] || IsMember(n, true) != r["memberHedera"] || IsPqzHolder(n) != r["pqzHolder"] {
 			t.Fatalf("%s sets or group", info.Name)
 		}
 		if info.Native {
@@ -90,6 +90,27 @@ func TestTableGroupsPurposesConstants(t *testing.T) {
 		if s != r["tag"] || hx(tg[:]) != r["TAG"] {
 			t.Fatalf("%s tag", info.Name)
 		}
+	}
+	if len(rows(k, "schemes")) != len(Schemes) {
+		t.Fatal("scheme count")
+	}
+	for i, r := range rows(k, "schemes") {
+		s, _ := KindTagString(kind(r["kind"]))
+		tg, _ := Tag(kind(r["kind"]))
+		if Schemes[i].Number != kind(r["kind"]) || Schemes[i].Name != r["name"] || Schemes[i].Group != r["group"] ||
+			s != r["tag"] || hx(tg[:]) != r["TAG"] {
+			t.Fatalf("scheme %v", r["name"])
+		}
+		if _, err := UAOf(Schemes[i].Number, make([]byte, 16384)); code(err) != "UAKindNotDerived" {
+			t.Fatal("scheme UAOf")
+		}
+		if code(ValidateKeyData(Schemes[i].Number, make([]byte, 16384), false)) != "UAKindNotDerived" {
+			t.Fatal("scheme validate")
+		}
+	}
+	pqzKey := bs(k["pqzKey"])
+	if kh, err := KeyHashOf(0x0142, pqzKey); err != nil || hx(kh[:]) != k["pqzKeyHash"] {
+		t.Fatal("pqzKeyHash")
 	}
 	for _, r := range rows(k, "groups") {
 		s, _ := GroupTagString(r["group"].(string))
@@ -187,9 +208,33 @@ func TestStructures(t *testing.T) {
 		c := ctx[p["context"].(string)].(obj)
 		id := uint64(c["chainId"].(float64))
 		ckh := ChainKeyHash(id)
-		got := PopDigest(id, b32(c["chainUid"]), b20(c["registry"]), b32(p["ua"]), b32(p["authRef"]))
+		got := PopDigest(id, b32(c["chainUid"]), b20(c["registry"]), b32(p["ua"]), b32(p["pqzKeyHash"]))
 		if hx(ckh[:]) != p["chainKeyHash"] || hx(got[:]) != p["popDigest"] {
 			t.Fatalf("pop %s", p["context"])
+		}
+	}
+	pqzKey := bs(load(t, "kinds.json")["pqzKey"])
+	for _, r := range rows(s, "pqzReg") {
+		c := ctx[r["context"].(string)].(obj)
+		id := uint64(c["chainId"].(float64))
+		m, err := PqzRegMessage(id, b32(c["chainUid"]), b20(c["registry"]), b32(r["ua"]), pqzKey)
+		d := PopDigest(id, b32(c["chainUid"]), b20(c["registry"]), b32(r["ua"]), b32(r["pqzKeyHash"]))
+		h, hd, hm, err2 := HolderPopMessage(kind(r["kind"]), id, b32(c["chainUid"]), b20(c["registry"]), b32(r["ua"]), pqzKey)
+		if err != nil || err2 != nil || hx(m[:]) != r["pqzRegMessage"] || hx(d[:]) != r["popDigest"] ||
+			hx(h[:]) != r["pqzKeyHash"] || hd != d {
+			t.Fatalf("pqzReg %s", r["context"])
+		}
+		pop, _ := PurposeTag("pop")
+		if want, _ := UAMessage(kind(r["kind"]), pop, d); hm != want {
+			t.Fatal("holder message")
+		}
+	}
+	if _, _, _, err := HolderPopMessage(0x0101, 1, [32]byte{}, [20]byte{}, [32]byte{}, make([]byte, 16384)); code(err) != "UAPqzHolder" {
+		t.Fatal("holder kind")
+	}
+	for _, r := range rows(s, "pqzMsig") {
+		if got, err := MsigPqzEligible(bs(r["keyData"])); err != nil || got != r["eligible"] {
+			t.Fatalf("pqzMsig %v", r["reason"])
 		}
 	}
 	for _, a := range rows(s, "uaAuth") {

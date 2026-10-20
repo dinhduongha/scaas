@@ -71,8 +71,9 @@ contract NoUnderlyingZetherToken is NoUnderlyingToken, ZetherLayer {
         return NoUnderlyingToken._mtxRule(sel);
     }
 
-    /// @notice `NoUnderlyingToken`'s UA allowlist (`burn`); the Zether ops join it in UA-5c (CTR-ZTH-51).
+    /// @notice `NoUnderlyingToken`'s UA allowlist (`burn`) and `zetherShield` (CTR-ZTH-51: no proof, no binding; the Zether
+    ///         UA shields its own public units, UA-6 U8); the proof-carrying Zether ops join it in UA-5c.
     function _uaAllowed(bytes4 sel) internal view override(NoUnderlyingToken, ERC20MetaTx) returns (bool) {
-        return NoUnderlyingToken._uaAllowed(sel);
+        return sel == this.zetherShield.selector || NoUnderlyingToken._uaAllowed(sel);
     }
 }

@@ -47,8 +47,6 @@ contract UALedgerTest is UALedgerBase {
         bytes32 unknown = keccak256("unregistered");
         vm.expectRevert(abi.encodeWithSelector(IUALedger.UANotRegistered.selector, unknown));
         tok.transferToUA(unknown, 1);
-        vm.expectRevert(abi.encodeWithSelector(IUALedger.UAKindNotAccepted.selector, uaZ, UAKinds.ZETHER_BN254));
-        tok.transferToUA(uaZ, 1);
         vm.stopPrank();
     }
 
@@ -222,10 +220,17 @@ contract UALedgerTest is UALedgerBase {
 
     // ----- T-V3-3b: Zether receivers, UA_POOL, native cancel -----
 
-    function test_T_V3_3b_zetherReceiverRefused() public {
+    /// UA-6 U8 (CTR-UA-30 (2)): the Zether UA (`zether-bls12381`) is a SIGNING UA: it receives by `transferToUA` and
+    /// by a UA transfer, and signs its own `UAMetaTransfer` (Schnorr by `x` on `Y`, `auth.keyData` empty).
+    function test_UA6_zetherReceivesAndSigns() public {
+        _fund(uaZ, 50);
+        assertEq(tok.balanceOfUA(uaZ), 50);
         _fund(uaP, 10);
-        _xferReverts(_t(uaP, uaZ, 1),
-            abi.encodeWithSelector(IUALedger.UAKindNotAccepted.selector, uaZ, UAKinds.ZETHER_BN254));
+        _xfer(_t(uaP, uaZ, 7));
+        assertEq(tok.balanceOfUA(uaZ), 57);
+        _xfer(_t(uaZ, uaB, 20));
+        assertEq(tok.balanceOfUA(uaZ), 37);
+        assertEq(tok.balanceOfUA(uaB), 20);
     }
 
     function test_T_V3_3b_poolNotPayable() public {

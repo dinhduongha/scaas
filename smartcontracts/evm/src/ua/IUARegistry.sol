@@ -6,8 +6,10 @@ import {IERC5267} from "@openzeppelin/contracts/interfaces/IERC5267.sol";
 /// @title The UA registry (accounts.md §1.8): monotonic, admin-free records of derived UAs and the one entry point
 ///        `requireAuthorized` that tokens call for every UA signature.
 /// @notice `eip712Domain()` (ERC-5267) comes from `IERC5267`: fields `0x1f`, name "SCaaS UARegistry", version = the
-///         generation in decimal, salt = `chainUid`. The Zether kinds (UA-3) add `requireZetherAuthorized` and
-///         `keyOf`; the PQ kinds (P6c) the ML-DSA expanded-key cache.
+///         generation in decimal, salt = `chainUid`. The stored kinds add `keyOf`; the PQ kinds (P6c) the ML-DSA
+///         expanded-key cache; UA-6 the PQZ key attribute of a PQ signing UA (`register`'s `pqzKey`, `recordOf`).
+///         The Zether UA signs through `requireAuthorized` like any stored kind (UA-6 U8); `requireZetherAuthorized`
+///         is in `legacy/ua6/` (U9).
 interface IUARegistry is IERC5267 {
     struct Record {
         uint16 kind;
@@ -16,7 +18,8 @@ interface IUARegistry is IERC5267 {
         uint40 index; // the UA's position in its kind's list (`uaAt`)
     }
 
-    event UARegistered(bytes32 indexed ua, uint16 indexed kind, bytes keyData, bytes32 authRef);
+    /// `pqzKey`: the SSTORE2 pointer of the UA's PQZ key (UA-6), 0 = none.
+    event UARegistered(bytes32 indexed ua, uint16 indexed kind, bytes keyData, address pqzKey);
     /// One part of an ML-DSA id's expanded key stored (P6c), at `ptr` (SSTORE2).
     event UAKeyCached(bytes32 indexed ua, uint16 indexed kind, uint256 part, address ptr);
 
@@ -26,9 +29,9 @@ interface IUARegistry is IERC5267 {
     error UAAlreadyRegistered(bytes32 ua);
     error UAKeyInUse(bytes32 keyHash, bytes32 owner); // layer 2
     error UAMemberUnknown(bytes32 member); // structure member not native/registered, or kind ∉ MEMBER
-    error UAAuthRef(bytes32 authRef); // Zether: not native/SIGNING, same-curve BLS, PQ rule; others: ≠ 0
+    error UAPqzHolder(bytes32 ua); // UA-6 U3: this UA's kind / structure may not hold a PQZ key
     error UAPoP();
-    error UAUnauthorized(bytes32 ua); // also: ua is ZETHER or unregistered
+    error UAUnauthorized(bytes32 ua); // also: ua is unregistered
     error UAKeyCache(uint16 kind); // not ML-DSA, disabled, part past the last, or the verifier uses a precompile
     error UAIndex(uint16 kind, uint256 i); // uaAt past the kind's count
     error UANotIndexed(bytes32 ua); // uaIndex of an unregistered id
@@ -43,16 +46,19 @@ interface IUARegistry is IERC5267 {
     function hederaNative() external view returns (bool); // Hedera profile: 0x0003 ∈ MEMBER
     function uaOf(uint16 kind, bytes calldata keyData) external pure returns (bytes32);
     function keyHashOf(uint16 kind, bytes calldata keyData) external pure returns (bytes32); // 0 for structures
-    function popDigest(bytes32 ua, bytes32 authRef) external view returns (bytes32);
+    /// `pqzKeyHash` = `keyHashOf(0x0142, pqzKey)`, 0 for a UA without a PQZ key (UA-6 U4).
+    function popDigest(bytes32 ua, bytes32 pqzKeyHash) external view returns (bytes32);
     function uaMessage(uint16 kind, bytes32 purposeTag, bytes32 digest) external pure returns (bytes32);
     /// EIP-712 digest of UAAuth(ua, purposeTag, digest) under this registry's domain: what native signers sign.
     function uaAuthDigest(bytes32 ua, bytes32 purposeTag, bytes32 digest) external view returns (bytes32);
 
-    function register(uint16 kind, bytes calldata keyData, bytes calldata pop, bytes32 authRef, bytes calldata authPop)
-        external
-        returns (bytes32 ua); // authPop empty iff authRef == 0
+    /// `pqzKey`: the PQZ public key of a holder (`mldsa44`, `mldsa65`, `fndsa512`, a PQ-eligible `msig`; UA-6 U3), or
+    /// empty; `pqzPop`: its `R_REG` proof over `uaMessage(0x0142, POP, popDigest(ua, h))`, empty iff `pqzKey` is.
+    function register(uint16 kind, bytes calldata keyData, bytes calldata pop, bytes calldata pqzKey,
+        bytes calldata pqzPop) external returns (bytes32 ua);
 
-    function recordOf(bytes32 ua) external view returns (Record memory r, bytes32 authRef);
+    /// `pqzKey`: the SSTORE2 pointer of the UA's PQZ key, 0 = none (gen 2 forwards gen-1 records).
+    function recordOf(bytes32 ua) external view returns (Record memory r, address pqzKey);
     function kindOf(bytes32 ua) external view returns (uint16); // 0 = not registered (native ids too)
     function isRegistered(bytes32 ua) external view returns (bool);
     function keyOwner(bytes32 keyHash) external view returns (bytes32);
@@ -82,15 +88,9 @@ interface IUARegistry is IERC5267 {
     /// Native ids (ua >> 160 == 0): ECDSA low-s (EOA) or ERC-1271 (50 k cap; 400 k for SmartKeyAccount clones, by the
     ///   immutable clone codehash) over uaAuthDigest(ua, purposeTag, digest) — never over the raw digest.
     ///   Classified by code at call time: empty ⇒ ECDSA; 7702 designator ⇒ ECDSA, else 1271; other ⇒ 1271.
-    /// Derived SIGNING: auth = abi.encode(bytes keyData, bytes sig); keyData empty for stored kinds.
+    /// Derived SIGNING: auth = abi.encode(bytes keyData, bytes sig); keyData empty for stored kinds (Zether
+    ///   `zether-bls12381` included, UA-6 U8: a Schnorr by `x` on `Y`).
     ///   msig: sig = abi.encode(MemberSig[]), MemberSig{uint16 index; bytes keyData; bytes sig}.
-    /// ZETHER or unregistered: UAUnauthorized.
+    /// Unregistered: UAUnauthorized.
     function requireAuthorized(bytes32 ua, bytes32 purposeTag, bytes32 digest, bytes calldata auth) external view;
-
-    /// Reverts UAUnauthorized unless `auth` authorizes `digest` for the Zether UA `ua` (accounts.md §1.7 Z-auth).
-    /// `authRef == 0`: zkCovered ⇒ `auth` empty (the proof is the authorization); !zkCovered ⇒ a Zether Schnorr by `x`,
-    ///   `auth = abi.encode(bytes(""), sig)`, over uaMessage(kind, PURPOSE_ZETHER_OWNER, digest), `Y` from `keyPtr`.
-    /// `authRef ≠ 0`: requireAuthorized(authRef, zkCovered ? PURPOSE_ZETHER_AUTH : PURPOSE_ZETHER_OWNER, digest, auth).
-    /// Not a Zether UA, or unregistered: UAUnauthorized.
-    function requireZetherAuthorized(bytes32 ua, bytes32 digest, bytes calldata auth, bool zkCovered) external view;
 }

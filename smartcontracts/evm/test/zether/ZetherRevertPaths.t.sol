@@ -15,12 +15,9 @@ import {IZetherToken} from "../../src/zether/IZetherToken.sol";
 import {ZetherTypes} from "../../src/zether/ZetherTypes.sol";
 import {ITransferDisclosure} from "../../src/zether/ITransferDisclosure.sol";
 import {ZetherSafety} from "../../src/zether/ZetherSafety.sol";
-import {G1Bn254} from "../../src/zether/ZetherCurves.sol";
+import {G1Bls12381} from "../../src/zether/ZetherCurves.sol";
 import {
     ZetherVerifierBase,
-    ZetherInnerProductVerifierBn254,
-    ZetherTransferVerifierBn254,
-    ZetherBurnVerifierBn254,
     ZetherInnerProductVerifierBls12381,
     ZetherTransferVerifierBls12381,
     ZetherBurnVerifierBls12381
@@ -33,6 +30,7 @@ import {ZetherVerifiers} from "./helpers/ZetherVerifiers.sol";
 import {Puller} from "../helpers/WalletMocks.sol";
 import {ZetherKeys} from "./helpers/ZetherKeys.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
+import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 
 /// `NONE_ZETHER` with one guarded call-out to the caller (`reenter`): a frame that holds the guard.
@@ -78,6 +76,15 @@ contract UnsupportedHereVerifier {
     }
 }
 
+/// A burn verifier of another proof system on the same inner-product verifier (the bn254 one before UA-6, CTR-ZTH-32).
+contract OtherSystemBurnVerifier {
+    address public immutable innerProduct;
+
+    constructor(address ip) { innerProduct = ip; }
+
+    function proofSystemId() external pure returns (bytes32) { return keccak256("another proof system"); }
+}
+
 /// The same, with a `curveName()` that reverts: the typed error survives with an empty name (review 5g-Z2 M-1).
 contract UnsupportedNamelessVerifier is UnsupportedHereVerifier {
     constructor(address real) UnsupportedHereVerifier(real) {}
@@ -90,11 +97,11 @@ contract UnsupportedNamelessVerifier is UnsupportedHereVerifier {
 ///         creation, the approve rule on the public side (CTR-TOK-01), the spending authority beside the proof.
 contract ZetherRevertPathsTest is ZetherFixture {
     function setUp() public {
-        _deploy(false, false);
+        _deploy(false);
     }
 
     function test_shieldRevertPaths() public {
-        bytes memory stranger = ZetherKeys.pub(0x5757, false);
+        bytes memory stranger = ZetherKeys.pub(0x5757, true);
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.AccountNotRegistered.selector, ZetherTypes.toUA(stranger)));
         tok.zetherShield(stranger, 1);
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.AmountOutOfRange.selector, 0, uint256(1) << 40));
@@ -102,17 +109,14 @@ contract ZetherRevertPathsTest is ZetherFixture {
         uint256 over = (uint256(1) << 40) + 1;
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.AmountOutOfRange.selector, over, uint256(1) << 40));
         tok.zetherShield(alice.y, over);
-        // a curve the token does not run: a BLS key on a bn254 token is not registered here
-        bytes memory blsKey = ZetherKeys.pub(0x7777, true);
-        ZetherTypes.UA blsUa = ZetherTypes.toUA(blsKey);
-        bytes32 m = reg.uaMessage(
-            UAKinds.ZETHER_BLS12381, UAKinds.PURPOSE_POP, reg.popDigest(ZetherTypes.UA.unwrap(blsUa), 0)
-        );
-        reg.register(UAKinds.ZETHER_BLS12381, blsKey, ZetherKeys.schnorr(0x7777, m, true), 0, "");
-        assertEq(reg.kindOf(ZetherTypes.UA.unwrap(blsUa)), UAKinds.ZETHER_BLS12381);
-        assertFalse(tok.registered(blsUa));
-        vm.expectRevert(abi.encodeWithSelector(IZetherToken.AccountNotRegistered.selector, blsUa));
-        tok.zetherShield(blsKey, 1);
+        // a bn254 key (the legacy curve, UA-6 U10): no registry holds it, so it is never registered here
+        bytes memory bnKey = ZetherKeys.pub(0x7777, false);
+        ZetherTypes.UA bnUa = ZetherTypes.toUA(bnKey);
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKindDisabled.selector, uint16(0x0140)));
+        reg.register(0x0140, bnKey, "", "", "");
+        assertFalse(tok.registered(bnUa));
+        vm.expectRevert(abi.encodeWithSelector(IZetherToken.AccountNotRegistered.selector, bnUa));
+        tok.zetherShield(bnKey, 1);
     }
 
     function _aliceTx() internal returns (Tx memory) {
@@ -123,7 +127,7 @@ contract ZetherRevertPathsTest is ZetherFixture {
 
     function _call(bytes memory payload, bytes memory proof, ZetherTypes.UA ben, bytes memory err) internal {
         vm.expectRevert(err);
-        tok.zetherTransferSingle(payload, proof, "", ben);
+        tok.zetherTransferSingle(payload, proof, ben);
     }
 
     function test_transferBadPayloadLength() public {
@@ -134,14 +138,14 @@ contract ZetherRevertPathsTest is ZetherFixture {
 
     function test_transferToSelfRejected() public {
         Tx memory t = _aliceTx();
-        for (uint256 i; i < 64; ++i) t.payload[144 + i] = t.payload[80 + i]; // Y_to := Y_from
+        for (uint256 i; i < 128; ++i) t.payload[208 + i] = t.payload[80 + i]; // Y_to := Y_from
         _call(t.payload, t.proof, _none(), abi.encodeWithSelector(IZetherToken.SelfTransfer.selector));
     }
 
     function test_transferToUnregisteredRejected() public {
         Tx memory t = _aliceTx();
-        bytes memory gy = ZetherKeys.pub(0x6057, false);
-        for (uint256 i; i < 64; ++i) t.payload[144 + i] = gy[i];
+        bytes memory gy = ZetherKeys.pub(0x6057, true);
+        for (uint256 i; i < 128; ++i) t.payload[208 + i] = gy[i];
         _call(t.payload, t.proof, _none(),
             abi.encodeWithSelector(IZetherToken.AccountNotRegistered.selector, ZetherTypes.toUA(gy)));
     }
@@ -149,7 +153,7 @@ contract ZetherRevertPathsTest is ZetherFixture {
     /// The fee is no back door to register an account: the beneficiary must be registered.
     function test_unregisteredBeneficiaryRejected() public {
         Tx memory t = _aliceTx();
-        ZetherTypes.UA ghost = ZetherTypes.toUA(ZetherKeys.pub(0x6057, false));
+        ZetherTypes.UA ghost = ZetherTypes.toUA(ZetherKeys.pub(0x6057, true));
         _call(t.payload, t.proof, ghost, abi.encodeWithSelector(IZetherToken.AccountNotRegistered.selector, ghost));
     }
 
@@ -172,11 +176,11 @@ contract ZetherRevertPathsTest is ZetherFixture {
         ZetherTypes.UA n = _none();
         bytes[10] memory calls = [
             abi.encodeCall(ZetherLayer.zetherShield, (alice.y, 1)),
-            abi.encodeCall(ZetherLayer.zetherTransfer, ("", "", "", n)),
-            abi.encodeCall(ZetherLayer.zetherTransferCompact, ("", "", "", n)),
-            abi.encodeCall(ZetherLayer.zetherTransferNoBundle, ("", "", "", n)),
-            abi.encodeCall(ZetherLayer.zetherTransferSingle, ("", "", "", n)),
-            abi.encodeCall(ZetherLayer.zetherUnshield, ("", "", "", n, address(0xD), 1)),
+            abi.encodeCall(ZetherLayer.zetherTransfer, ("", "", n)),
+            abi.encodeCall(ZetherLayer.zetherTransferCompact, ("", "", n)),
+            abi.encodeCall(ZetherLayer.zetherTransferNoBundle, ("", "", n)),
+            abi.encodeCall(ZetherLayer.zetherTransferSingle, ("", "", n)),
+            abi.encodeCall(ZetherLayer.zetherUnshield, ("", "", n, address(0xD), 1)),
             abi.encodeCall(ZetherLayer.zetherRollOver, (alice.ua)),
             abi.encodeCall(ZetherLayer.zetherRollOverBatch, (new ZetherTypes.UA[](0))),
             abi.encodeCall(ZetherLayer.zetherRollOverSigned, (alice.ua, 1, 1, "")),
@@ -200,23 +204,23 @@ contract ZetherRevertPathsTest is ZetherFixture {
         tok.zetherRollOver(alice.ua);
         (bytes memory pl, bytes memory pr) = _proveUnshield(tok, alice, 10, 100, address(0xD), _none(), 0);
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.AmountOutOfRange.selector, 0, uint256(1) << 40));
-        tok.zetherUnshield(pl, pr, "", _none(), address(0xD), 0);
+        tok.zetherUnshield(pl, pr, _none(), address(0xD), 0);
         uint256 over = (uint256(1) << 40) + 1;
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.AmountOutOfRange.selector, over, uint256(1) << 40));
-        tok.zetherUnshield(pl, pr, "", _none(), address(0xD), over);
+        tok.zetherUnshield(pl, pr, _none(), address(0xD), over);
         vm.expectRevert(IZetherToken.ZeroRecipient.selector);
-        tok.zetherUnshield(pl, pr, "", _none(), address(0), 10);
+        tok.zetherUnshield(pl, pr, _none(), address(0), 10);
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.BadPayload.selector, pl.length - 1));
-        tok.zetherUnshield(_trim(pl), pr, "", _none(), address(0xD), 10);
+        tok.zetherUnshield(_trim(pl), pr, _none(), address(0xD), 10);
         vm.expectRevert(IZetherToken.ProofRejected.selector); // another recipient than the proven one
-        tok.zetherUnshield(pl, pr, "", _none(), address(0xE), 10);
+        tok.zetherUnshield(pl, pr, _none(), address(0xE), 10);
         vm.expectRevert(IZetherToken.ProofRejected.selector); // another amount
-        tok.zetherUnshield(pl, pr, "", _none(), address(0xD), 11);
+        tok.zetherUnshield(pl, pr, _none(), address(0xD), 11);
         // to the token itself: the proof passes, the mint is refused (CTR-MTX-18)
         (bytes memory pl2, bytes memory pr2) = _proveUnshield(tok, alice, 10, 100, address(tok), _none(), 0);
         vm.expectRevert(IERC20MetaTx.TransferToSelf.selector);
-        tok.zetherUnshield(pl2, pr2, "", _none(), address(tok), 10);
-        tok.zetherUnshield(pl, pr, "", _none(), address(0xD), 10);
+        tok.zetherUnshield(pl2, pr2, _none(), address(tok), 10);
+        tok.zetherUnshield(pl, pr, _none(), address(0xD), 10);
         assertEq(tok.balanceOf(address(0xD)), 10 * SCALE);
         assertEq(tok.totalShielded(), 90);
     }
@@ -260,9 +264,11 @@ contract ZetherRevertPathsTest is ZetherFixture {
         bad[0].conf.shieldScale = 0;
         bad[1].conf.maxShielded = (uint256(1) << 54) + 1;               // > 2^54
         bad[2].conf.maxShielded = 0;
-        bad[3].conf.auditorKey = new bytes(64);                         // auditor = O
-        bad[4].conf.auditorKey = abi.encodePacked(uint256(1), uint256(3)); // not on the curve
-        bad[5].conf.auditorKey = ZetherKeys.pub(X_AUD, true);           // a BLS key on a bn254 token
+        bad[3].conf.auditorKey = new bytes(128);                        // auditor = O
+        bytes memory off = ZetherKeys.pub(X_AUD, true);
+        off[127] = off[127] ^ 0x01;
+        bad[4].conf.auditorKey = off;                                   // not on the curve
+        bad[5].conf.auditorKey = ZetherKeys.pub(X_AUD, false);          // a bn254 key (legacy) on the BLS12-381 token
         for (uint256 i; i < bad.length; ++i) {
             vm.expectRevert(IZetherToken.BadInit.selector);
             factory.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, abi.encode(bad[i]), bytes32(i + 100));
@@ -297,15 +303,16 @@ contract ZetherRevertPathsTest is ZetherFixture {
     /// proof system, both fixed to the env's inner-product verifier, each in its role; never on Hedera.
     function test_constructorNeedsTheEnvDependencies() public {
         bytes memory code = type(NoUnderlyingZetherToken).creationCode;
-        (, IZetherBurnVerifier blsBurn) = ZetherVerifiers.deploy(true);
-        IZetherVerifier copy = IZetherVerifier(address(new ZetherTransferVerifierBn254(
+        address ip = address(ZetherVerifierBase(address(ver)).innerProduct());
+        address other = address(new OtherSystemBurnVerifier(ip));
+        IZetherVerifier copy = IZetherVerifier(address(new ZetherTransferVerifierBls12381(
             ZetherVerifierBase(address(ver)).innerProduct())));
         IFactoryToken.Env[10] memory bad;
         for (uint256 i; i < bad.length; ++i) bad[i] = _zenv();
         bad[0].registry = address(0x1234);                               // a registry without code
         bad[1].deps[3] = address(0x1234);                                // a disclosure without code
         bad[2].deps[0] = address(0x1234);                                // a transfer verifier without code
-        bad[3].deps[1] = address(blsBurn);                               // a BLS12-381 burn verifier with a bn254 one
+        bad[3].deps[1] = other;                                          // a burn verifier of another proof system
         bad[4].deps[2] = address(0x99);                                  // not the verifiers' inner-product verifier
         bad[5].deps = new address[](3);                                  // too few
         bad[6].hedera = true;                                            // never on Hedera
@@ -332,7 +339,7 @@ contract ZetherRevertPathsTest is ZetherFixture {
         IFactoryToken.Env memory e = _zenv();
         e.deps[0] = address(w);
         Catalogue.release(factory, IOpenFactory.TokenKind.NONE_ZETHER, 2, e, type(NoUnderlyingZetherToken).creationCode);
-        vm.expectRevert(abi.encodeWithSelector(IZetherToken.VerifierUnsupportedOnThisChain.selector, address(w), "bn254"));
+        vm.expectRevert(abi.encodeWithSelector(IZetherToken.VerifierUnsupportedOnThisChain.selector, address(w), "bls12-381"));
         factory.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 2, abi.encode(_cfg(false, 1 << 40)), "unsupported");
         UnsupportedNamelessVerifier n = new UnsupportedNamelessVerifier(address(ver));
         e.deps[0] = address(n);
@@ -380,7 +387,7 @@ contract ZetherRevertPathsTest is ZetherFixture {
         assertEq(address(tok.verifier()), address(ver));
         assertEq(address(tok.burnVerifier()), address(burnVer));
         assertEq(address(tok.disclosure()), address(dis));
-        assertEq(tok.curve(), "bn254");
+        assertEq(tok.curve(), "bls12-381");
         bytes32 ns = 0xd1eef6cbeb7b383e0a92b3cb723053d5c39c76707d89da6b14ff91b83198ce00;
         assertEq(address(uint160(uint256(vm.load(address(tok), ns)))), address(ver), "the library's copy");
         assertTrue(factory.isRegisteredToken(address(tok)));
@@ -456,13 +463,13 @@ contract ZetherRevertPathsTest is ZetherFixture {
     }
 
     function test_curveLibBadLength() public {
-        vm.expectRevert(abi.encodeWithSelector(G1Bn254.BadLength.selector, 63));
-        ver.g1Add(new bytes(63), new bytes(64));
+        vm.expectRevert(abi.encodeWithSelector(G1Bls12381.BadLength.selector, 127));
+        ver.g1Add(new bytes(127), new bytes(128));
         bytes memory g = ver.g1MulBase(1);
-        vm.expectRevert(abi.encodeWithSelector(G1Bn254.BadLength.selector, 63));
-        ver.g1Sub(g, new bytes(63)); // neg
-        vm.expectRevert(abi.encodeWithSelector(G1Bn254.BadLength.selector, 128));
-        ver.g1Msm(bytes.concat(g, g), new uint256[](1)); // msm: pts ≠ k·64
+        vm.expectRevert(abi.encodeWithSelector(G1Bls12381.BadLength.selector, 127));
+        ver.g1Sub(g, new bytes(127)); // neg
+        vm.expectRevert(abi.encodeWithSelector(G1Bls12381.BadLength.selector, 256));
+        ver.g1Msm(bytes.concat(g, g), new uint256[](1)); // msm: pts ≠ k·128
     }
 
     /// ERC-7201 `scaas.zether` (CTR-TOK-24): where an indexer reads the verifier, the scale, `totalShielded`.
@@ -481,7 +488,7 @@ contract ZetherRevertPathsTest is ZetherFixture {
         assertEq(uint256(vm.load(address(tok), bytes32(uint256(ns) + 3))), FEE);
         assertEq(uint256(vm.load(address(tok), bytes32(uint256(ns) + 5))), 0);
         assertEq(vm.load(address(tok), bytes32(uint256(ns) + 6)), ver.proofSystemId());
-        assertEq(uint256(vm.load(address(tok), bytes32(uint256(ns) + 7))), 64);
+        assertEq(uint256(vm.load(address(tok), bytes32(uint256(ns) + 7))), 128);
         bytes32 a = keccak256(abi.encode(alice.ua, uint256(ns) + 8)); // accC, accD, pendC, pendD, then the seqs
         assertEq(uint64(uint256(vm.load(address(tok), bytes32(uint256(a) + 4))) >> 64), 1, "pendingSeq");
     }
@@ -489,12 +496,6 @@ contract ZetherRevertPathsTest is ZetherFixture {
     /// CTR-ZTH-02: the verifiers refuse to deploy outside the dev chains (as the registry and `initialize`).
     function test_verifiersOnlyDeployOnDevChain() public {
         vm.chainId(1);
-        vm.expectRevert(abi.encodeWithSelector(ZetherSafety.ZetherNotDevChain.selector, 1));
-        new ZetherInnerProductVerifierBn254();
-        vm.expectRevert(abi.encodeWithSelector(ZetherSafety.ZetherNotDevChain.selector, 1));
-        new ZetherTransferVerifierBn254(IZetherInnerProductVerifier(address(0)));
-        vm.expectRevert(abi.encodeWithSelector(ZetherSafety.ZetherNotDevChain.selector, 1));
-        new ZetherBurnVerifierBn254(IZetherInnerProductVerifier(address(0)));
         vm.expectRevert(abi.encodeWithSelector(ZetherSafety.ZetherNotDevChain.selector, 1));
         new ZetherInnerProductVerifierBls12381();
         vm.expectRevert(abi.encodeWithSelector(ZetherSafety.ZetherNotDevChain.selector, 1));

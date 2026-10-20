@@ -1,0 +1,85 @@
+{
+  "account": 0,
+  "curve": "bn254",
+  "index_cases": [
+    {
+      "Y": "0x1e037798de69338aab6028a1b51973cbd621573e83a050e0f39aeceb1b8857ee1190c780bb381afa2f7f8d71a0119fd0fcd703121aa1576f70ba3050c61f844f",
+      "coin": 0,
+      "ok": true
+    },
+    {
+      "Y": "0x244e36c1af2252bfa3189e5cc658233c546edbc975adfbaea3304b2a1d0162bd11bce3e1d9ce1988398f474d2867c9a33285e2b885b9810cc429c9ae2191d74a",
+      "coin": 60,
+      "ok": true
+    },
+    {
+      "Y": "0x2e72aa3d9570f9b1450de1f43566ba9c8c22d8b6c0d49702d2a506c61f95a9402ac3190be2d92b6d13e3724609504371ea3376d7fe14ba24abe8291870363cc5",
+      "coin": 4294967295,
+      "ok": true
+    },
+    {
+      "coin": 4294967296,
+      "ok": false
+    },
+    {
+      "coin": -1,
+      "ok": false
+    },
+    {
+      "coin": 1.5,
+      "ok": false
+    },
+    {
+      "Y": "0x244e36c1af2252bfa3189e5cc658233c546edbc975adfbaea3304b2a1d0162bd11bce3e1d9ce1988398f474d2867c9a33285e2b885b9810cc429c9ae2191d74a",
+      "coin": "60",
+      "ok": true
+    },
+    {
+      "Y": "0x244e36c1af2252bfa3189e5cc658233c546edbc975adfbaea3304b2a1d0162bd11bce3e1d9ce1988398f474d2867c9a33285e2b885b9810cc429c9ae2191d74a",
+      "coin": "+60",
+      "ok": true
+    },
+    {
+      "Y": "0x244e36c1af2252bfa3189e5cc658233c546edbc975adfbaea3304b2a1d0162bd11bce3e1d9ce1988398f474d2867c9a33285e2b885b9810cc429c9ae2191d74a",
+      "coin": "060",
+      "ok": true
+    },
+    {
+      "coin": "4294967296",
+      "ok": false
+    },
+    {
+      "coin": "-1",
+      "ok": false
+    },
+    {
+      "coin": "6 0",
+      "ok": false
+    },
+    {
+      "coin": "",
+      "ok": false
+    },
+    {
+      "coin": null,
+      "ok": false
+    },
+    {
+      "coin": true,
+      "ok": false
+    },
+    {
+      "coin": [
+        60
+      ],
+      "ok": false
+    }
+  ],
+  "index_rule": "integer (JSON number or decimal string) in [0, 2^32 - 1]; anything else is an error",
+  "passphrase": {
+    "mnemonic": "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art",
+    "passphrase_nfc": "mật khẩu",
+    "seed": "0xe031dc67ae9c173bf9b1989a53fe05b4da4282e0f4f671aad0e7a7a6cd9e401f2683914fbbefe9aee48280d2e415f23d5020ffa80284e037f91b4120757ff519"
+  },
+  "seed": "0x408b285c123836004f4b8842c89324c1f01382450c0d439af345ba7fc49acf705489c6fc77dbd4e3dc1dd8cc6bc9f043db8ada1e243c4a0eafb290d399480840"
+}

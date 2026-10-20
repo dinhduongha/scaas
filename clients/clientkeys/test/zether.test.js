@@ -1,11 +1,11 @@
 // R33 Zether conf keys: EIP-2333 published vectors (BLS12-381) and S3's pinned vectors
-// (zether-prover/vectors/{r33_keys,schnorr_bn254,schnorr_bls12381}.json, copied verbatim) — the
+// (zether-prover/vectors/{r33_keys,schnorr_bls12381}.json, copied verbatim) — the
 // browser derivation must be byte-for-byte the prover's.
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import {
-  deriveMasterSk, deriveChildSk, deriveConfKey, confPublic, schnorrSign, schnorrVerify, zetherKind, zetherPop, zetherOwnerAuth,
+  deriveMasterSk, deriveChildSk, deriveConfKey, confPublic, schnorrSign, schnorrVerify, zetherKind, zetherPop, zetherSign, zetherOwnerAuth,
   sealConfKey, openConfKey, confLabel, CURVES, encodePoint, decodePoint, checkBalance, sealBalanceCache, openBalanceCache,
   setCachedBalance, cacheAfterDebit, cacheAfterRollOver, readBalance,
 } from '../src/zether.js';
@@ -36,21 +36,20 @@ test('EIP-2333 published test cases (BLS12-381)', () => {
     assert.equal(m, master);
     assert.equal(deriveChildSk('bls12381', m, idx), child);
   }
-  assert.throws(() => deriveMasterSk('bn254', new Uint8Array(31)), /32 bytes/);
+  assert.throws(() => deriveMasterSk('bls12381', new Uint8Array(31)), /32 bytes/);
 });
 
-test('bn254 EIP-2333 variant == S3 pinned vectors', () => {
-  for (const v of R33.eip2333_bn254_variant) {
-    const m = deriveMasterSk('bn254', fromHex(v.seed));
-    assert.equal(m, BigInt(v.master_SK));
-    assert.equal(deriveChildSk('bn254', m, v.child_index), BigInt(v.child_SK));
-  }
+test('bn254 is gone since UA-6 (kept in legacy/ua6/zether.js)', () => {
+  assert.throws(() => deriveMasterSk('bn254', new Uint8Array(32)), /bls12381/);
+  assert.throws(() => zetherKind('bn254'), /bls12381/);
+  assert.equal(zetherKind('bls12381'), 0x0141);
+  assert.deepEqual(Object.keys(CURVES), ['bls12381']);
 });
 
 test('conf/disclosure keys from the mnemonic == S3 (x, Y, UA, path) on both curves', () => {
   const seed = seedFromWords(R33.mnemonic, R33.passphrase);
   assert.equal(hex(seed), R33.seed);
-  for (const curve of ['bn254', 'bls12381']) {
+  for (const curve of ['bls12381']) {
     for (const k of R33[curve].keys) {
       const [, , coin, account, use] = k.path.split('/').map(Number);
       const got = deriveConfKey(seed, { curve, coin, account, use });
@@ -63,21 +62,22 @@ test('conf/disclosure keys from the mnemonic == S3 (x, Y, UA, path) on both curv
 });
 
 test('S3 PoP vectors (the UA registry PoP, CTR-UA-07) verify here; ours has the same digest and verifies', () => {
-  for (const curve of ['bn254', 'bls12381']) {
+  for (const curve of ['bls12381']) {
     for (const k of R33[curve].keys.filter((x) => x.pop)) {
-      const { chainId, chainUid, registry, authRef } = k.pop;
+      const { chainId, chainUid, registry } = k.pop;
+      assert.equal(k.pop.pqzKeyHash, '0x' + '00'.repeat(32), 'a Zether UA holds no PQZ key');
       assert.equal(zetherKind(curve), k.pop.kind);
-      const mine = zetherPop(curve, fromHex(k.x), { chainId, chainUid, registry, authRef });
+      const mine = zetherPop(curve, fromHex(k.x), { chainId, chainUid, registry });
       assert.deepEqual([mine.UA, mine.popDigest, mine.uaMsg], [k.UA, k.pop.popDigest, k.pop.uaMsg]);
       assert.ok(schnorrVerify(curve, fromHex(k.Y), fromHex(k.pop.uaMsg), fromHex(k.pop.pop)), `${curve} ${k.path}`);
       assert.ok(schnorrVerify(curve, fromHex(k.Y), fromHex(mine.uaMsg), fromHex(mine.pop)));
       assert.notEqual(mine.pop, k.pop.pop, 'hedged nonce');
-      // bound to chain, chainUid, registry and authRef: each changed field moves the message
+      // bound to chain, chainUid, registry and the PQZ keyHash word: each changed field moves the message
       const moved = [
-        { chainId: chainId + 1, chainUid, registry, authRef },
-        { chainId, chainUid: '0x' + '25'.repeat(32), registry, authRef },
-        { chainId, chainUid, registry: '0x' + 'ab'.repeat(20), authRef },
-        { chainId, chainUid, registry, authRef: '0x' + '01'.repeat(32) },
+        { chainId: chainId + 1, chainUid, registry },
+        { chainId, chainUid: '0x' + '25'.repeat(32), registry },
+        { chainId, chainUid, registry: '0x' + 'ab'.repeat(20) },
+        { chainId, chainUid, registry, pqzKeyHash: '0x' + '01'.repeat(32) },
       ];
       for (const ctx of moved) {
         const m = uaMessage(k.pop.kind, purposeTag('pop'), popDigest({ ...ctx, ua: k.UA }));
@@ -88,21 +88,35 @@ test('S3 PoP vectors (the UA registry PoP, CTR-UA-07) verify here; ours has the 
 });
 
 test('owner op: abi.encode(bytes(""), Schnorr over uaMessage(kind, zether-owner, digest))', () => {
-  for (const curve of ['bn254', 'bls12381']) {
+  for (const curve of ['bls12381']) {
     const k = R33[curve].keys[0];
     const digest = '0x' + '77'.repeat(32);
     const auth = fromHex(zetherOwnerAuth(curve, fromHex(k.x), digest));
-    const sig = auth.subarray(auth.length - (curve === 'bn254' ? 96 : 160));
+    const sig = auth.subarray(auth.length - 160);
     assert.equal(hex(auth), hex(abiEncode(['bytes', 'bytes'], [new Uint8Array(0), sig])));
     const m = uaMessage(zetherKind(curve), purposeTag('zether-owner'), digest);
     assert.ok(schnorrVerify(curve, fromHex(k.Y), m, sig));
     assert.equal(schnorrVerify(curve, fromHex(k.Y), fromHex(digest), sig), false, 'never the raw digest');
     assert.equal(schnorrVerify(curve, fromHex(k.Y), uaMessage(zetherKind(curve), purposeTag('zether-auth'), digest), sig), false);
+    assert.equal(schnorrVerify(curve, fromHex(k.Y), uaMessage(zetherKind(curve), purposeTag('metatx'), digest), sig), false);
   }
 });
 
+test('every UA-ledger write: Schnorr by x over uaMessage(0x0141, purpose, digest); no raw digest, no other purpose', () => {
+  const k = R33.bls12381.keys[0];
+  const digest = '0x' + '5a'.repeat(32);
+  for (const purpose of ['metatx', 'metatx-cancel', 'keyop', 'receiver-fee', 'vp', 'vc-anchor', 'trade', 'zether-owner']) {
+    const sig = zetherSign('bls12381', fromHex(k.x), purpose, digest);
+    assert.equal(sig.length, 160);
+    assert.ok(schnorrVerify('bls12381', fromHex(k.Y), uaMessage(0x0141, purposeTag(purpose), digest), sig), purpose);
+    assert.equal(schnorrVerify('bls12381', fromHex(k.Y), uaMessage(0x0141, purposeTag('pop'), digest), sig), false, purpose);
+  }
+  assert.throws(() => zetherSign('bls12381', fromHex(k.x), 'authref', digest), /does not sign/);
+  for (const p of ['member', 'zether-auth']) assert.throws(() => zetherSign('bls12381', fromHex(k.x), p, digest), /does not sign/, p);
+});
+
 test('Schnorr with S3 fixed nonce is byte-identical; tampering fails', () => {
-  for (const curve of ['bn254', 'bls12381']) {
+  for (const curve of ['bls12381']) {
     const v = vec(`schnorr_${curve}.json`);
     const sig = schnorrSign(curve, fromHex(v.x), fromHex(v.msg), BigInt(v.k));
     assert.equal(hex(sig), v.sig);
@@ -119,11 +133,11 @@ test('Schnorr with S3 fixed nonce is byte-identical; tampering fails', () => {
 test('conf key is apart from signing keys: other path/curve/account ⇒ other x; never a signing scalar', () => {
   const seed = seedFromWords(R33.mnemonic);
   const xs = new Set();
-  for (const curve of ['bn254', 'bls12381']) {
+  for (const curve of ['bls12381']) {
     for (const account of [0, 1]) for (const use of [7, 8]) xs.add(hex(deriveConfKey(seed, { curve, coin: 60, account, use }).x));
     xs.add(hex(deriveConfKey(seed, { curve, coin: 784, account: 0 }).x));
   }
-  assert.equal(xs.size, 10);
+  assert.equal(xs.size, 5);
   for (const net of Object.keys(NETWORKS)) {
     for (const i of [0, 1]) {
       const sk = deriveKey(seed, net, i).privateKey;
@@ -134,12 +148,12 @@ test('conf key is apart from signing keys: other path/curve/account ⇒ other x;
 
 test('x is sealed at rest like the seed; only Y/UA come back', async () => {
   const seed = seedFromWords(R33.mnemonic);
-  const { vault, Y, UA } = await sealConfKey({ seed, curve: 'bn254', coin: 60, account: 0, pin: 'river-otter-7' });
-  assert.equal(Y, R33.bn254.keys[0].Y);
-  assert.equal(UA, R33.bn254.keys[0].UA);
-  assert.equal(vault.label, confLabel('bn254', 60, 0));
-  assert.ok(!JSON.stringify(vault).includes(R33.bn254.keys[0].x.slice(2)));
-  assert.equal(hex(await openConfKey(vault, { pin: 'river-otter-7' })), R33.bn254.keys[0].x);
+  const { vault, Y, UA } = await sealConfKey({ seed, curve: 'bls12381', coin: 60, account: 0, pin: 'river-otter-7' });
+  assert.equal(Y, R33.bls12381.keys[0].Y);
+  assert.equal(UA, R33.bls12381.keys[0].UA);
+  assert.equal(vault.label, confLabel('bls12381', 60, 0));
+  assert.ok(!JSON.stringify(vault).includes(R33.bls12381.keys[0].x.slice(2)));
+  assert.equal(hex(await openConfKey(vault, { pin: 'river-otter-7' })), R33.bls12381.keys[0].x);
   await assert.rejects(openConfKey(vault, { pin: 'river-otter-8' }), /Wrong PIN/);
 });
 
@@ -154,7 +168,7 @@ test('path-index rule == S3 prover (r33_inputs.json)', () => {
     else assert.throws(run, /path index/, `coin ${JSON.stringify(c.coin)}`);
   }
   for (const account of [-1, 2 ** 32, 0.5, NaN]) {
-    assert.throws(() => deriveConfKey(seed, { curve: 'bn254', coin: 60, account }), /path index/);
+    assert.throws(() => deriveConfKey(seed, { curve: 'bls12381', coin: 60, account }), /path index/);
   }
   assert.equal(hex(seedFromWords(v.passphrase.mnemonic, v.passphrase.passphrase_nfc)), v.passphrase.seed);
 });
@@ -179,7 +193,7 @@ function deviceFor(curve, x) {
   };
 }
 
-for (const curve of ['bn254', 'bls12381']) {
+for (const curve of ['bls12381']) {
   const { Point } = CURVES[curve];
   const x = 0x5eed1234n;
   const Y = Point.BASE.multiply(x);

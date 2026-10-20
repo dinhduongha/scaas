@@ -23,10 +23,10 @@ interface IZetherVerifierCommon {
     /// @notice Id của transfer nhiều người nhận: nhãn của `proofSystemId` thêm "/multi".
     function proofSystemIdMulti() external pure returns (bytes32);
 
-    /// @notice `"bn254"` | `"bls12-381"`.
+    /// @notice `"bls12-381"` (the bn254 verifiers, `"bn254"`, are in `legacy/ua6/` since UA-6).
     function curveName() external pure returns (string memory);
 
-    /// @notice 64 cho bn254, **128** cho BLS12-381 (EIP-2537 pad mỗi Fp thành 64 byte).
+    /// @notice **128** cho BLS12-381 (EIP-2537 pad mỗi Fp thành 64 byte; 64 cho bn254 trong `legacy/ua6/`).
     function g1EncodedBytes() external pure returns (uint256);
 
     /// @notice Bậc nhóm `r` (scalar field).

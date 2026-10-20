@@ -25,6 +25,7 @@ pub enum UAError {
     KindNotNative(u16),
     IdFormat,
     PurposeUnknown,
+    PqzHolder(u16),
 }
 
 impl UAError {
@@ -37,6 +38,7 @@ impl UAError {
             UAError::KindNotNative(_) => "UAKindNotNative",
             UAError::IdFormat => "UAIdFormat",
             UAError::PurposeUnknown => "UAPurposeUnknown",
+            UAError::PqzHolder(_) => "UAPqzHolder",
         }
     }
 }
@@ -99,11 +101,14 @@ pub const KINDS: &[Kind] = &[
     derived(0x0131, "mldsa65", &[1952], Some("mldsa65")),
     derived(0x0132, "fndsa512", &[897], Some("fndsa512")),
     derived(0x0133, "slhdsa128s", &[32], Some("slhdsa128s")),
-    derived(0x0140, "zether-bn254", &[64], Some("bn254-g1")),
     derived(0x0141, "zether-bls12381", &[128], Some("bls12381-g1")),
-    derived(0x0142, "pqz-mlwe", &[16384], Some("pqz-mlwe")),
     derived(0x0108, "secp256k1", &[64], Some("secp256k1")), // 2026-10-17, appended as in kinds.json
 ];
+
+/// Schemes are not kinds (UA-6 U14): 0x0142 is the PQZ key attribute of a PQ holder; it keeps its tag and keyHash group.
+pub const SCHEMES: &[Kind] = &[derived(0x0142, "pqz-mlwe", &[16384], Some("pqz-mlwe"))];
+/// The scheme number of the PQZ key attribute.
+pub const PQZ_SCHEME: u16 = 0x0142;
 
 pub const GROUPS: &[&str] = &[
     "p256", "ed25519", "secp256k1", "bn254-g1", "bls12381-g1", "bls12381-g2", "bn254-g2", "mldsa44", "mldsa65", "fndsa512",
@@ -111,7 +116,7 @@ pub const GROUPS: &[&str] = &[
 ];
 
 pub const PURPOSES: &[&str] = &[
-    "pop", "authref", "metatx", "metatx-cancel", "member", "zether-auth", "zether-owner", "keyop", "receiver-fee", "vp",
+    "pop", "metatx", "metatx-cancel", "member", "zether-auth", "zether-owner", "keyop", "receiver-fee", "vp",
     "vc-anchor", "trade",
 ];
 
@@ -137,6 +142,9 @@ pub fn kind_info(kind: u16) -> Result<&'static Kind> {
 }
 
 fn derived_kind(kind: u16) -> Result<&'static Kind> {
+    if SCHEMES.iter().any(|k| k.kind == kind) {
+        return Err(UAError::KindNotDerived(kind));
+    }
     let k = kind_info(kind)?;
     if k.native {
         return Err(UAError::KindNotDerived(kind));
@@ -151,17 +159,42 @@ pub fn is_native(kind: u16) -> bool {
     KINDS.iter().any(|k| k.kind == kind && k.native)
 }
 pub fn is_zether(kind: u16) -> bool {
-    matches!(kind, 0x0140..=0x0142)
+    kind == 0x0141
 }
 pub fn is_signing(kind: u16) -> bool {
-    kind == 0x0120 || single_signing(kind)
+    kind == 0x0120 || kind == 0x0141 || single_signing(kind)
+}
+/// Kinds that may hold a PQZ key attribute: mldsa44, mldsa65, fndsa512 (an `msig` per [`msig_pqz_eligible`]).
+pub fn is_pqz_holder(kind: u16) -> bool {
+    matches!(kind, 0x0130..=0x0132)
+}
+/// An `msig` whose members of kinds outside 0x0130-0x0133 weigh less than its threshold (CTR-PQZ-12).
+pub fn msig_pqz_eligible(key_data: &[u8]) -> Result<bool> {
+    let u16_at = |o: usize| key_data.get(o..o + 2).map(|s| u16::from_be_bytes([s[0], s[1]]) as usize);
+    let bad = || UAError::KeyData("length");
+    let count = u16_at(2).ok_or_else(bad)?;
+    if key_data.len() != 4 + 36 * count {
+        return Err(bad());
+    }
+    let mut classical = 0usize;
+    for i in 0..count {
+        let o = 4 + 36 * i;
+        if !(0x0130..=0x0133).contains(&u16_at(o).ok_or_else(bad)?) {
+            classical += u16_at(o + 34).ok_or_else(bad)?;
+        }
+    }
+    Ok(classical < u16_at(0).ok_or_else(bad)?)
 }
 pub fn is_member(kind: u16, hedera_native: bool) -> bool {
     single_signing(kind) || kind == 0x0001 || kind == 0x0002 || (hedera_native && kind == 0x0003)
 }
 
+// tag / keyHash / message accept a kind or a scheme; id derivation and key-data validation accept kinds only
+fn tagged_kind(kind: u16) -> Result<&'static Kind> {
+    SCHEMES.iter().find(|k| k.kind == kind).map_or_else(|| derived_kind(kind), Ok)
+}
 pub fn kind_tag_string(kind: u16) -> Result<String> {
-    Ok(format!("scaas.ua.{}.v1", derived_kind(kind)?.name))
+    Ok(format!("scaas.ua.{}.v1", tagged_kind(kind)?.name))
 }
 pub fn tag(kind: u16) -> Result<[u8; 32]> {
     Ok(keccak256(kind_tag_string(kind)?.as_bytes()))
@@ -184,6 +217,7 @@ pub fn purpose_tag(purpose: &str) -> Result<[u8; 32]> {
 
 /// `keccak256(TAG(kind) ‖ keyData)`; no validation (see [`derive_ua`]).
 pub fn ua_of(kind: u16, key_data: &[u8]) -> Result<[u8; 32]> {
+    derived_kind(kind)?; // a scheme (0x0142) or a native kind has no derived id
     Ok(keccak(&[&tag(kind)?, key_data]))
 }
 pub fn in_native_space(id: &[u8; 32]) -> bool {
@@ -213,7 +247,7 @@ pub fn native_id(kind: u16, raw: &[u8]) -> Result<[u8; 32]> {
 }
 /// `keccak256(GROUP(g) ‖ canonical pubkey)`, `None` for structures. Call on validated key data.
 pub fn key_hash_of(kind: u16, key_data: &[u8]) -> Result<Option<[u8; 32]>> {
-    let k = derived_kind(kind)?;
+    let k = tagged_kind(kind)?;
     let Some(group) = k.group else { return Ok(None) };
     let (lo, hi) = match kind {
         0x0100 | 0x0101 | 0x0108 => (0, 32),
@@ -241,9 +275,34 @@ fn address_word(a: &[u8; 20]) -> [u8; 32] {
     w[12..].copy_from_slice(a);
     w
 }
-/// `pop_digest` (CTR-UA-07).
-pub fn pop_digest(chain_id: u64, chain_uid: &[u8; 32], registry: &[u8; 20], ua: &[u8; 32], auth_ref: &[u8; 32]) -> [u8; 32] {
-    keccak(&[&purpose_tag("pop").expect("pop"), &chain_key_hash(chain_id), chain_uid, &address_word(registry), ua, auth_ref])
+/// `pop_digest` (CTR-UA-07): `pqz_key_hash` is the keyHash of the UA's PQZ key, 0 without one (the bytes of the former `authRef = 0`).
+pub fn pop_digest(chain_id: u64, chain_uid: &[u8; 32], registry: &[u8; 20], ua: &[u8; 32], pqz_key_hash: &[u8; 32]) -> [u8; 32] {
+    keccak(&[&purpose_tag("pop").expect("pop"), &chain_key_hash(chain_id), chain_uid, &address_word(registry), ua, pqz_key_hash])
+}
+
+/// What a PQ holder signs to register (UA-6 U14): `(pqzKeyHash, popDigest, message)`, `message = ua_message(kind, pop,
+/// pop_digest(ua, h))`, `h = key_hash_of(0x0142, pqz_key)`, 0 without a key. A key needs a single-key holder ([`is_pqz_holder`]);
+/// a PQ-eligible `msig` uses `pop_digest` / `key_hash_of` and signs `member_digest(ua, message)` per member.
+pub fn holder_pop_message(
+    kind: u16, chain_id: u64, chain_uid: &[u8; 32], registry: &[u8; 20], ua: &[u8; 32], pqz_key: Option<&[u8]>,
+) -> Result<([u8; 32], [u8; 32], [u8; 32])> {
+    let h = match pqz_key {
+        Some(k) => {
+            if !is_pqz_holder(kind) {
+                return Err(UAError::PqzHolder(kind));
+            }
+            key_hash_of(PQZ_SCHEME, k)?.expect("scheme group")
+        }
+        None => [0u8; 32],
+    };
+    let d = pop_digest(chain_id, chain_uid, registry, ua, &h);
+    Ok((h, d, ua_message(kind, &purpose_tag("pop")?, &d)?))
+}
+
+/// The message `R_REG` proves over: `ua_message(0x0142, pop, pop_digest(ua, key_hash_of(0x0142, pqz_key)))`.
+pub fn pqz_reg_message(chain_id: u64, chain_uid: &[u8; 32], registry: &[u8; 20], ua: &[u8; 32], pqz_key: &[u8]) -> Result<[u8; 32]> {
+    let h = key_hash_of(PQZ_SCHEME, pqz_key)?.expect("scheme group");
+    ua_message(PQZ_SCHEME, &purpose_tag("pop")?, &pop_digest(chain_id, chain_uid, registry, ua, &h))
 }
 
 /// The registry's EIP-712 domain: `("SCaaS UARegistry", "<generation>", chainId, registry, salt = chainUid)`.
