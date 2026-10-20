@@ -237,3 +237,93 @@ $ python3 -I scripts/docs_check.py check     0 error(s), 2 warning(s) (line budg
   chain before EIP-7954; it is not deployed by the scripts today (owner: size work after Glamsterdam).
 - main has moved since the branch point (`e4fc3a09` at the time of writing): expect text conflicts in docs/decisions.md
   and TODO.md when merging.
+
+## Review fixes (2026-10-20, review `.superpowers/sdd/2026-10-20-5gz2-review.md`, verdict APPROVE-WITH-FIXES)
+
+forge 1.3.5-stable, solc 0.8.37; every build / test through `scripts/capped`, `-j2`.
+
+### Fixed
+
+- **P1-1** `scaas-node/tests/e2e.rs`: `createDex(uint64 version, bytes initArgs, bytes32 salt)` with
+  `initArgs = DexConfig {…}.abi_encode()`. Grep of scaas-node, clients, scripts (and smartcontracts/evm/script) for the
+  old typed factory API (createToken / createTokenUnregistered / createDex / registerImplementation /
+  registerDexImplementation / zetherEnabled / pqzEnabled / setZetherEnabled / setPqzEnabled): no other caller
+  (`scaas-node/src/abi.rs` mentions `createDex` in a comment only; DeployBase, ZetherE2E.s.sol and pqz/e2e.py already
+  use `bytes initArgs`).
+- **P2-1** `OpenFactory._publish` refuses a library code hash `0` or `keccak256("")` (`EnvInvalid`); test in
+  `Factory.t test_publishEnv`.
+- **P2-2** Zether constructor: transfer ≠ burn verifier, the transfer verifier answers `ringSize()` with one word and the
+  burn verifier does not (staticcall probes; `BadInit`). Choice: `ringSize()` over a new role constant — the deployed
+  verifier contracts already have it (only `ZetherTransferVerifierBase` defines it), no verifier redeploy. Tests in
+  `ZetherRevertPaths.t test_constructorNeedsTheEnvDependencies`: swapped pair, the transfer verifier twice, two distinct
+  transfer verifiers. Init +259 B on both Zether kinds (baseline raised, reason in `_comment`).
+- **P2-3** tests: `PqzNone.t test_constructorChecksTheEnv` (no dep, two deps, Hedera, a verifier without code →
+  `IPqzToken.BadInit` bubbled through `deployImplementation`); `Dex.t test_deployDexImplementation`
+  `ImplementationFactoryMismatch` (a DEX release with no `factory()`), `ImplementationNotAContract` (empty init code),
+  `publishDexEnv` by a non-registrar → `NotRegistrar`; end to end through the factory with the kind enabled:
+  `ZetherRevertPaths.t test_createToken_enabledKindOnANonDevChain_reverts` (chain 1 → `ZetherNotDevChain(1)`),
+  `PqzNone.t test_createToken_enabledKindOnAForbiddenChain_reverts` (22776 → `NotAllowedChain(22776)`).
+- **P2-4** + **owner ruling 2026-10-20 (every mainnet ≥ 3 days)**:
+  - `DeployBase`: `_isTestChain` is a fixed list (31337, 1337, the node e2e's anvils 31900–31999, 7622, Hedera
+    296–298, the public testnets of chain-uids.json: 11155111, 560048, 17000, 63, 97, 10200, 80002, 84532, 11142220,
+    44787, 11155420, 421614, 43113, 59141). Listed chains: any period, default 10 min on 7622 and 0 on the others.
+    Every other chain (22776, Hedera 295, Ethereum, BSC, an unknown chain) is a mainnet: default and floor 3 days,
+    below reverts. `NOTICE_PERIOD > uint64` reverts (no truncation). Choice: 31337 / 1337 keep default 0 (the e2e and
+    `DEMO_SUPPLY` need 0), the e2e range 31900–31999 is listed because the node e2e deploys there with `DEMO_SUPPLY`.
+    Test `ZetherDeploy.t test_noticePeriod_mainnetFloorAndDefaults` (through `DeployHarness.noticeFor` /
+    `defaultNotice`). The Hedera 295 question of the review is answered by the ruling (295 = mainnet, 3 days).
+  - `OpenFactory` constructor: `noticePeriod ≤ MAX_NOTICE_PERIOD = 30 days` (`NoticePeriodTooLong`); choice: 30 days
+    (the review suggested ≤ 365 days; 30 days covers every planned value, 3 days on mainnet, with a wide margin).
+    Test in `Factory.t test_noticePeriod`.
+- **M-1** `ZetherLib.init`: `curveName()` in try/catch, so `VerifierUnsupportedOnThisChain(v, "")` survives a reverting
+  `curveName`; test `UnsupportedNamelessVerifier` in `test_createToken_refusesAVerifierUnsupportedOnThisChain`.
+- **M-2** documented under `DeployFailed` (IOpenFactory) and token-wrappers.md CTR-TOK-03: runtime over the code-size
+  limit → `DeployFailed`; init code over EIP-3860 → the factory's frame halts and the registrar's call consumes all its gas.
+- **M-3** token-wrappers.md CTR-TOK-03 "Limit" and zether.md CTR-ZTH-20 reworded: the factory proves which env was
+  appended and that the env's listed libraries had their pinned code hashes, not which libraries the code links.
+- `DexKat.t`: the factory's code changed, so the DEX clone address moved → `WRITE_KAT=true forge test --match-contract
+  DexKatTest`; consumers re-checked: clientkeys `node --test test/evm.test.js` 20 / 20 (main checkout's node_modules
+  symlinked for the run, removed), scaas-node `cargo test --lib kat_hashes_and_calldata_match_forge` 1 passed.
+- Docs: decisions.md Change lines (CTR-TOK-03: the owner ruling + P2-1 / P2-4; CTR-ZTH-20: P2-2, M-1, M-3),
+  token-wrappers.md, zether.md, networks/evm.md (the notice-period defaults and floor).
+
+### Commits (on `a8ab6f72`)
+
+- `4725558f` OpenFactory: empty library pins refused, notice period capped at 30 days, DEX / env tests, KAT regenerated.
+- `399bce49` Zether: verifier roles, typed unsupported-chain error, tests, size baseline.
+- `9c456fad` tests: PQZ constructor env checks and the chain gate through `createToken`.
+- `655c362e` DeployBase: `NOTICE_PERIOD` safe by default (owner ruling 2026-10-20).
+- `bb1f49f4` scaas-node e2e: `createDex(uint64, bytes, bytes32)`.
+- `e03fc0b0` docs: decisions.md Change lines, token-wrappers.md, zether.md, networks/evm.md.
+- (this file, committed last).
+
+### Left as notes (not changed)
+
+- **M-4** an unregistered plain implementation (`createTokenUnregistered`) reports its own `underlyings()`, so it can
+  fill `deployedFor(u)` / `deployCountFor(u)`; clients must filter with `isRegisteredToken` (or skip `_byUnderlying` for
+  version 0 later).
+- **M-5** reentrancy through `initialize` (unchanged): an inner `TokenCreated` can precede the outer one; indexers must
+  not assume nesting order.
+- **M-6** `abi.decode(initArgs, (TokenConfig))` accepts trailing bytes (harmless, `TokenCreated` does not carry them).
+- **M-7** `script/pqz/e2e.py` and `scripts/e2e-zether.sh` still not run against a chain (run `e2e.py` once on anvil
+  before merging).
+- Size: `UnderlyingToken`, `NoUnderlyingZetherToken` init over EIP-3860 (see the review's "Size and deploy");
+  22776's chainspec must carry `maxCodeSize` 0x10000 like 7622's.
+
+### Gates (after the fixes)
+
+$ forge test   (full suite)
+Ran 117 test suites in 113.91s (226.80s CPU time): 1330 tests passed, 0 failed, 14 skipped (1344 total tests)
+$ forge test --isolate --match-path 'test/ua/{UAGas,UARegistryGroups}.t.sol'
+Ran 2 test suites in 1.74s (2.54s CPU time): 20 tests passed, 0 failed, 0 skipped (20 total tests)
+$ forge test --match-path test/research/PqzStateGas.t.sol --gas-limit 60000000000
+Ran 3 test suites in 1.16s (1.77s CPU time): 26 tests passed, 0 failed, 0 skipped (26 total tests)
+$ FOUNDRY_PROFILE=private7622 forge build      compiles (warnings only)
+$ forge build src --sizes --json; python3 scripts/size_gate.py   size gate: 0 error(s), 95 contracts (after raising
+   `NoUnderlyingZetherToken.init` 49,498 → 49,757 and `UnderlyingZetherToken.init` 61,677 → 61,936; OpenFactory
+   runtime 15,675 B, init 16,069 B)
+$ scripts/evm_libs.sh check     openzeppelin-contracts OK, forge-std OK
+$ python3 -I scripts/docs_check.py check     0 error(s), 2 warning(s) (the same line budgets as before), 15 note(s)
+$ scaas-node: cargo test --test e2e --no-run (capped, -j2, target in the session scratchpad): compiles
+$ cargo test --test e2e dex_order_book_settles_partial_fills_persists_and_cancels -- --ignored (anvil 31950, no docker):
+   1 passed, 0 failed
