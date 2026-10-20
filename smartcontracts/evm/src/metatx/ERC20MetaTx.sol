@@ -368,9 +368,10 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
         emit UAMetaTransactionExecuted(m.from, msg.sender, m.batch, m.nonce, digest, feeTo, fee);      // 7
     }
 
-    /// @notice The envelope binding a proof inside the UA path's self-call carries (CTR-PQZ-15, P6g plan D4): 0 by
-    ///         default; the PQZ layer returns its own (tag `SCAAS-PQZ-UA-ENVELOPE-V1`), never 0, so step 5 writes it on
-    ///         every PQZ envelope (the address path's `_envelopeBinding` rule).
+    /// @notice The envelope binding a proof inside the UA path's self-call carries (CTR-PQZ-15, P6g plan D4,
+    ///         CTR-ZTH-51): 0 by default; the confidential layers return their own (tags `SCAAS-PQZ-UA-ENVELOPE-V1`,
+    ///         `SCAAS-ZETHER-UA-ENVELOPE-V1`), never 0, so step 5 writes it on every envelope of theirs (the address
+    ///         path's `_envelopeBinding` rule).
     function _uaEnvelopeBinding(MetaTxLib.UAMetaTransaction memory) internal view virtual returns (bytes32) {
         return bytes32(0);
     }

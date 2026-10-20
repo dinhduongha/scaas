@@ -58,7 +58,8 @@ contract NoUnderlyingPqzToken is NoUnderlyingToken, PqzLayer {
         return PqzLayer._batchable(sel);
     }
 
-    /// @notice The allowlist (CTR-MTX-19, CTR-PQZ-21): `cancelNonce`, `burn(uint256)` `AMOUNT(0)`, the PQZ ops `ABSOLUTE` (not the rollover, CTR-ZTH-34).
+    /// @notice The allowlist (CTR-MTX-19, CTR-PQZ-21): `cancelNonce`, `burn(uint256)` `AMOUNT(0)`, the PQZ ops
+    ///         `ABSOLUTE` (not the rollover, CTR-ZTH-34).
     function mtxSelectors()
         public pure override(NoUnderlyingToken, IMetaTx, MetaTxBase)
         returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)

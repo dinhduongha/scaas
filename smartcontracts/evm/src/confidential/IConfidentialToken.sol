@@ -11,8 +11,9 @@ pragma solidity ^0.8.24;
 ///         functions are in `IZetherToken` / `IPqzToken`. Events carry the fields of both layers; a field one layer
 ///         lacks is 0 there (Zether: `blob`, `accUnits`, `accHash`).
 interface IConfidentialToken {
-    /// @notice A shield: `amount` shielded units from `from`'s public units (or a leg's underlying) to `toUA`; `index` the
-    ///         PQZ pending entry, Zether's `pendingSeq` after the credit. `from` is `_msgSender()`: `UA_POOL` for a UA signer.
+    /// @notice A shield: `amount` shielded units from `from`'s public units (or a leg's underlying) to `toUA`; `index`
+    ///         the PQZ pending entry, Zether's `pendingSeq` after the credit. `from` is `_msgSender()`: `UA_POOL` for a
+    ///         UA signer.
     event Shielded(bytes32 indexed toUA, address indexed from, uint256 amount, uint64 index);
     /// @notice A single-recipient transfer; `fee` the proven fee word, `sendCounter` the sender's before the debit,
     ///         `blob` the PQZ op blob (`R ‖ v_f`), 0 on Zether.

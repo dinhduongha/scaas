@@ -20,8 +20,8 @@ import {UAKinds} from "../ua/UAKinds.sol";
 /// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Chains 31337 / 1337 / 7622 only (`PqzSafety`). A layer over the
 ///         public ERC-20 balance: `mtxShield` moves public units to `SHIELD_POOL` into a TRIVIAL pending entry (no
 ///         proof, any holder, free; plan 5h D18, D19), every debit may top up `shieldIn` from the signer's public
-///         balance in the same call, `mtxUnshield` moves units out of the pool (to an address or a signing UA); fees (txFee to the beneficiary, op 7's
-///         `decoyFee` to every leg) go from the pool to public UA-ledger balances. Nothing is minted or burnt by the
+///         balance in the same call, `mtxUnshield` moves units out of the pool (to an address or a signing UA); fees
+///         (txFee to the beneficiary, op 7's `decoyFee` to every leg) go from the pool to public UA-ledger balances. Nothing is minted or burnt by the
 ///         layer: `balanceOf(SHIELD_POOL) == totalShielded · shieldScale`. Ciphertexts, `acc` and the queue
 ///         live in state (plan 5h D1–D9): debits take an optional `accHint`, rollovers are `(ua, n)` by anyone. The verifier (precompile and proof system) is an
 ///         implementation immutable (CTR-ZTH-20 / CTR-PQZ-10), so the proof system is an attribute of the release; the

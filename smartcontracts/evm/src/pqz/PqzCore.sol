@@ -437,7 +437,9 @@ library PqzCore {
         _entry(o, ref, ptr, payload, 18 + 40 * o.legs);
         bytes32[] memory rec = new bytes32[](o.legs);
         for (uint256 j; j < o.legs; ++j) rec[j] = bytes32(payload[M_OUT + 32 * j:M_OUT + 32 * j + 32]);
-        emit IConfidentialToken.ConfidentialTransferMulti(ref, o.from, o.ben, o.fee, o.sendCounter, rec, uint8(o.mode), ptr);
+        emit IConfidentialToken.ConfidentialTransferMulti(
+            ref, o.from, o.ben, o.fee, o.sendCounter, rec, uint8(o.mode), ptr
+        );
     }
 
     /// @dev `pending[UA_j] ← (u_{⌊j/4⌋}, v_j)` of the blob, in leg order.
