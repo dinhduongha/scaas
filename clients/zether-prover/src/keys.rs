@@ -138,7 +138,7 @@ impl<C: ZCurve> ZetherKey<C> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::curve::{Bls12381, Bn254};
+    use crate::curve::Bls12381;
     use ark_ff::BigInteger;
 
     fn dec<C: ZCurve>(s: &Fr<C>) -> String {
@@ -184,6 +184,6 @@ mod tests {
 
     #[test]
     fn short_seed_rejected() {
-        assert!(derive_master_sk::<Bn254>(&[0u8; 31]).is_err());
+        assert!(derive_master_sk::<Bls12381>(&[0u8; 31]).is_err());
     }
 }

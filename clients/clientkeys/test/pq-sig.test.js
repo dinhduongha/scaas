@@ -11,7 +11,7 @@ import * as ua from '../src/ua.js';
 import { hex, fromHex, abiEncode } from '../src/bytes.js';
 import { hashTypedData } from '../src/evm.js';
 
-const dir = new URL('../../../smartcontracts/vectors/ua/', import.meta.url);
+import { dir } from './ua-vectors-dir.js';
 const V = JSON.parse(readFileSync(new URL('pq_signatures.json', dir)));
 const K = JSON.parse(readFileSync(new URL('pq_kat.json', dir)));
 const seed = seedFromWords(V.mnemonic);
@@ -56,8 +56,27 @@ test('every PoP and signature verifies with noble; every negative is refused', (
       negs++;
     }
   }
-  assert.equal(negs, 27);
+  assert.equal(negs, 33);
   for (const x of V.extraKeys) assert.ok(ok(x.kind, x.keyData, x.pop.message, x.pop.sig), `extra ${x.index}`);
+});
+
+test('UA-6: a holder registers its PQZ key in the same call: pop over popDigest(ua, h), h = keyHash(0x0142, pqzKey) != 0', () => {
+  const h = hex(ua.keyHashOf(0x0142, fromHex(V.kinds[0].pqzKey)));
+  assert.notEqual(h, '0x' + '00'.repeat(32));
+  const holders = V.kinds.filter((r) => r.popPqz);
+  assert.deepEqual(holders.map((r) => r.name), ['mldsa44', 'mldsa65', 'fndsa512']); // slhdsa128s holds none
+  for (const r of holders) {
+    const p = r.popPqz;
+    assert.equal(p.pqzKeyHash, h);
+    const d = ua.popDigest({ ...V.contexts[p.context], ua: fromHex(r.ua), pqzKeyHash: h });
+    assert.equal(hex(d), p.popDigest);
+    assert.notEqual(p.popDigest, r.pop.popDigest, 'h moves the digest');
+    assert.equal(hex(ua.uaMessage(r.kind, ua.POP_TAG, d)), p.message);
+    assert.ok(ok(r.kind, r.keyData, p.message, p.sig), `${r.name} pop with the key`);
+    assert.ok(!ok(r.kind, r.keyData, p.message, r.pop.sig), `${r.name}: the plain pop is not the holder's pop`);
+    assert.equal(hex(ua.pqzRegMessage({ ...V.contexts[p.context], ua: fromHex(r.ua), pqzKey: fromHex(r.pqzKey) })),
+      hex(ua.uaMessage(0x0142, ua.POP_TAG, d)), 'R_REG message');
+  }
 });
 
 test('msig structures: key data, id, member digest; every member signature verifies; auth = abi.encode(keyData, sig)', () => {
@@ -82,6 +101,14 @@ test('msig structures: key data, id, member digest; every member signature verif
     }
   }
   assert.equal(pqSigs, 6);
+  // UA-6 U5: a PQ-eligible msig registers with an m-of-n pop over popDigest(ua, h) (purpose pop, members under member)
+  for (const m of [V.msig.treasury, V.msig.hybrid]) {
+    assert.equal(m.pqzEligible, true, m.name);
+    assert.equal(ua.msigPqzEligible(fromHex(m.keyData)), true, m.name);
+    const pd = ua.popDigest({ ...V.contexts[m.popPqz.context], ua: fromHex(m.ua), pqzKeyHash: fromHex(m.popPqz.pqzKeyHash) });
+    assert.equal(hex(pd), m.popPqz.popDigest);
+    assert.equal(hex(ua.memberDigest(fromHex(m.ua), ua.uaMessage(0x0120, ua.POP_TAG, pd))), m.popPqz.memberDigest);
+  }
 });
 
 test('metatx3 rows: typed data → digest, one call and one transfer per PQ kind, auth with empty key data', () => {

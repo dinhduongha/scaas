@@ -5,7 +5,9 @@ use ark_ff::{One, Zero};
 use rand_chacha::rand_core::SeedableRng;
 use rand_chacha::ChaCha20Rng;
 use zether_prover::bulletproofs::Gens;
-use zether_prover::curve::{generator, point_len, Bls12381, Bn254, Fr, ZCurve, G};
+use zether_prover::curve::{generator, point_len, Bls12381, Fr, ZCurve, G};
+#[cfg(feature = "bn254")]
+use zether_prover::curve::Bn254;
 use zether_prover::elgamal::{encrypt, Ciphertext};
 use zether_prover::keys::ZetherKey;
 use zether_prover::zether::*;
@@ -97,6 +99,7 @@ fn valid_and_effects<C: ZCurve>() {
     verify_transfer(&f.gens, &st, &p).unwrap();
 }
 
+#[cfg(feature = "bn254")]
 #[test]
 fn transfer_valid_bn254() {
     valid_and_effects::<Bn254>();
@@ -131,6 +134,7 @@ fn prover_refuses<C: ZCurve>() {
 
 #[test]
 fn transfer_prover_refuses_bad_requests() {
+    #[cfg(feature = "bn254")]
     prover_refuses::<Bn254>();
     prover_refuses::<Bls12381>();
 }
@@ -193,6 +197,7 @@ fn sigma_negatives<C: ZCurve>() {
     assert!(verify_transfer(&f.gens, &s, &p).is_err(), "other acc");
 }
 
+#[cfg(feature = "bn254")]
 #[test]
 fn transfer_sigma_negatives_bn254() {
     sigma_negatives::<Bn254>();
@@ -240,6 +245,7 @@ fn header_binding<C: ZCurve>() {
     assert!(BurnStatement::<C>::decode(&st.encode()).is_err());
 }
 
+#[cfg(feature = "bn254")]
 #[test]
 fn transfer_header_binding_bn254() {
     header_binding::<Bn254>();
@@ -307,6 +313,7 @@ fn burn_suite<C: ZCurve>() {
     assert!(s.validate().is_err());
 }
 
+#[cfg(feature = "bn254")]
 #[test]
 fn burn_bn254() {
     burn_suite::<Bn254>();
@@ -347,6 +354,7 @@ fn large_values<C: ZCurve>() {
     verify_transfer(&gens, &st, &p).unwrap();
 }
 
+#[cfg(feature = "bn254")]
 #[test]
 fn transfer_large_values_bn254() {
     large_values::<Bn254>();
@@ -409,6 +417,7 @@ fn multi_valid_and_effects<C: ZCurve>() {
     assert_eq!(MultiTransferProof::<C>::wire_len(1), TransferProof::<C>::wire_len());
 }
 
+#[cfg(feature = "bn254")]
 #[test]
 fn multi_valid_bn254() {
     multi_valid_and_effects::<Bn254>();
@@ -504,7 +513,7 @@ fn multi_negatives<C: ZCurve>() {
 /// Review T1 m2: the single format has no memo: a caller's memo hash is dropped, and a statement with one is refused.
 #[test]
 fn single_has_no_memo_hash() {
-    let f = fx::<Bn254>();
+    let f = fx::<Bls12381>();
     let mut h = header(0);
     h.memo_hash = [7; 32];
     let (mut st, _, _) = transfer(&f, h, true, 5);
@@ -545,6 +554,7 @@ fn gas_table_edges<C: ZCurve>(relayed: bool, want: [[usize; 2]; 3]) {
     }
 }
 
+#[cfg(feature = "bn254")]
 #[test]
 fn gas_table_edges_bn254() {
     gas_table_edges::<Bn254>(false, [[8, 9], [8, 8], [9, 9]]);
@@ -559,6 +569,7 @@ fn gas_table_edges_bls12_381() {
 
 /// The relayed column is the dearer one: at `M` = 9 a bn254 compact transfer without the auditor fits direct, not
 /// relayed; past a measured row the estimate grows by the row's last step.
+#[cfg(feature = "bn254")]
 #[test]
 fn gas_relayed_column_and_extrapolation() {
     assert_eq!(transfer_gas::<Bn254>(TransferMode::Hash, false, false, 9), 16_364_440);
@@ -574,6 +585,7 @@ fn gas_relayed_column_and_extrapolation() {
     assert!(msg.contains("compact without the auditor, relayed, M = 9") && msg.contains("none without the auditor (~16559080)"), "{msg}");
 }
 
+#[cfg(feature = "bn254")]
 #[test]
 fn multi_negatives_bn254() {
     multi_negatives::<Bn254>();
@@ -589,48 +601,48 @@ fn multi_negatives_bls12_381() {
 /// the amounts, the recipients, the fee or the binding (so the sender rebuilds it from its key and chain data alone).
 #[test]
 fn s_inputs() {
-    let (x, ua, salt) = (Fr::<Bn254>::from(7u64), [0x77u8; 32], [0x5a; 16]);
-    let base = derive_s::<Bn254>(&x, &header(0), &ua, &salt);
+    let (x, ua, salt) = (Fr::<Bls12381>::from(7u64), [0x77u8; 32], [0x5a; 16]);
+    let base = derive_s::<Bls12381>(&x, &header(0), &ua, &salt);
     let mut h = header(0);
     h.chain_uid[31] ^= 1;
-    assert_ne!(derive_s::<Bn254>(&x, &h, &ua, &salt), base, "chainUid");
-    assert_ne!(derive_s::<Bn254>(&x, &header(0), &ua, &[0x5b; 16]), base, "salt");
+    assert_ne!(derive_s::<Bls12381>(&x, &h, &ua, &salt), base, "chainUid");
+    assert_ne!(derive_s::<Bls12381>(&x, &header(0), &ua, &[0x5b; 16]), base, "salt");
     let mut h = header(0);
     h.token[0] ^= 1;
-    assert_ne!(derive_s::<Bn254>(&x, &h, &ua, &salt), base, "token");
+    assert_ne!(derive_s::<Bls12381>(&x, &h, &ua, &salt), base, "token");
     let mut h = header(0);
     h.send_counter += 1;
-    assert_ne!(derive_s::<Bn254>(&x, &h, &ua, &salt), base, "sendCounter");
-    assert_ne!(derive_s::<Bn254>(&x, &header(0), &[0x78; 32], &salt), base, "fromUA");
-    assert_ne!(derive_s::<Bn254>(&Fr::<Bn254>::from(8u64), &header(0), &ua, &salt), base, "the key");
+    assert_ne!(derive_s::<Bls12381>(&x, &h, &ua, &salt), base, "sendCounter");
+    assert_ne!(derive_s::<Bls12381>(&x, &header(0), &[0x78; 32], &salt), base, "fromUA");
+    assert_ne!(derive_s::<Bls12381>(&Fr::<Bls12381>::from(8u64), &header(0), &ua, &salt), base, "the key");
     let mut h = header(300);
     (h.chain_id, h.acc_seq, h.binding, h.memo_hash, h.salt) = (1, 9, Binding::Relayed([1; 32]), [2; 32], [3; 16]);
-    assert_eq!(derive_s::<Bn254>(&x, &h, &ua, &salt), base, "chainId, accSeq, fee, beneficiary, binding, the header fields are not inputs (the salt argument is)");
+    assert_eq!(derive_s::<Bls12381>(&x, &h, &ua, &salt), base, "chainId, accSeq, fee, beneficiary, binding, the header fields are not inputs (the salt argument is)");
 }
 
 /// CTR-ZTH-50: the memo opens under the sender's key and header to the flag and the legs, and under nothing else.
 #[test]
 fn memo_roundtrip() {
-    let (x, ua, salt) = (Fr::<Bn254>::from(7u64), [0x77u8; 32], [0x5a; 16]);
-    let (y1, y2) = (generator::<Bn254>() * Fr::<Bn254>::from(3u64), generator::<Bn254>());
-    let memo = seal_memo::<Bn254>(&x, &header(0), &ua, &salt, true, &[(y1, 1200u64), (y2, 0)]);
+    let (x, ua, salt) = (Fr::<Bls12381>::from(7u64), [0x77u8; 32], [0x5a; 16]);
+    let (y1, y2) = (generator::<Bls12381>() * Fr::<Bls12381>::from(3u64), generator::<Bls12381>());
+    let memo = seal_memo::<Bls12381>(&x, &header(0), &ua, &salt, true, &[(y1, 1200u64), (y2, 0)]);
     assert_eq!(memo.len(), memo_len(2));
     assert_eq!(memo.len(), 17 + 2 * 40);
     assert_eq!(&memo[..16], &salt, "the salt in clear");
-    let (s2, aud, legs) = open_memo::<Bn254>(&x, &header(0), &ua, &memo).unwrap();
+    let (s2, aud, legs) = open_memo::<Bls12381>(&x, &header(0), &ua, &memo).unwrap();
     assert!(s2 == salt && aud);
-    assert_eq!(legs[0], MemoLeg { amount: 1200, to_ua: zether_prover::curve::ua_of::<Bn254>(&y1) });
+    assert_eq!(legs[0], MemoLeg { amount: 1200, to_ua: zether_prover::curve::ua_of::<Bls12381>(&y1) });
     assert_eq!(legs[1].amount, 0);
     let mut h = header(0);
     h.chain_uid[0] ^= 1;
-    assert_ne!(open_memo::<Bn254>(&x, &h, &ua, &memo).unwrap().2, legs, "another chain: garbage");
-    assert_ne!(open_memo::<Bn254>(&Fr::<Bn254>::from(8u64), &header(0), &ua, &memo).unwrap().2, legs, "another key");
-    assert!(open_memo::<Bn254>(&x, &header(0), &ua, &memo[..memo.len() - 1]).is_err(), "length");
+    assert_ne!(open_memo::<Bls12381>(&x, &h, &ua, &memo).unwrap().2, legs, "another chain: garbage");
+    assert_ne!(open_memo::<Bls12381>(&Fr::<Bls12381>::from(8u64), &header(0), &ua, &memo).unwrap().2, legs, "another key");
+    assert!(open_memo::<Bls12381>(&x, &header(0), &ua, &memo[..memo.len() - 1]).is_err(), "length");
     // review T1 m4: the longest memo (M = MAX_RECIPIENTS, 657 B), which no build reaches under the gas cap
-    let legs16: Vec<_> = (1..=16u64).map(|i| (generator::<Bn254>() * Fr::<Bn254>::from(i), i)).collect();
-    let long = seal_memo::<Bn254>(&x, &header(0), &ua, &salt, true, &legs16);
+    let legs16: Vec<_> = (1..=16u64).map(|i| (generator::<Bls12381>() * Fr::<Bls12381>::from(i), i)).collect();
+    let long = seal_memo::<Bls12381>(&x, &header(0), &ua, &salt, true, &legs16);
     assert_eq!(long.len(), 657);
-    assert_eq!(open_memo::<Bn254>(&x, &header(0), &ua, &long).unwrap().2[15].amount, 16);
-    let off = seal_memo::<Bn254>(&x, &header(0), &ua, &salt, false, &[(y1, 1200u64)]);
-    assert!(!open_memo::<Bn254>(&x, &header(0), &ua, &off).unwrap().1, "the auditor flag");
+    assert_eq!(open_memo::<Bls12381>(&x, &header(0), &ua, &long).unwrap().2[15].amount, 16);
+    let off = seal_memo::<Bls12381>(&x, &header(0), &ua, &salt, false, &[(y1, 1200u64)]);
+    assert!(!open_memo::<Bls12381>(&x, &header(0), &ua, &off).unwrap().1, "the auditor flag");
 }

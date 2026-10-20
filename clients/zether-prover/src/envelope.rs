@@ -120,32 +120,29 @@ pub fn selector(sig: &str) -> [u8; 4] {
 }
 
 /// Calldata of a confidential transfer (`zetherTransfer`, `…Compact`, `…NoBundle`, `…Single`, all
-/// `(bytes payload, bytes proof, bytes authSig, bytes32 beneficiary)`): the direct call and, unchanged, the envelope's `data`.
-pub fn transfer_call(sig: &str, payload: &[u8], proof: &[u8], auth_sig: &[u8], beneficiary: &[u8; 32]) -> Vec<u8> {
+/// `(bytes payload, bytes proof, bytes32 beneficiary)`; UA-6: no `authSig`, the proof alone authorizes the spend): the direct call and, unchanged, the envelope's `data`.
+pub fn transfer_call(sig: &str, payload: &[u8], proof: &[u8], beneficiary: &[u8; 32]) -> Vec<u8> {
     let mut d = selector(sig).to_vec();
     d.extend(abi::encode(&[
         Tok::Bytes(payload.to_vec()),
         Tok::Bytes(proof.to_vec()),
-        Tok::Bytes(auth_sig.to_vec()),
         Tok::Word(*beneficiary),
     ]));
     d
 }
 
-/// `zetherUnshield(bytes payload, bytes proof, bytes authSig, bytes32 beneficiary, address to, uint256 amount)`.
+/// `zetherUnshield(bytes payload, bytes proof, bytes32 beneficiary, address to, uint256 amount)`.
 pub fn unshield_call(
     payload: &[u8],
     proof: &[u8],
-    auth_sig: &[u8],
     beneficiary: &[u8; 32],
     to: &[u8; 20],
     amount: u64,
 ) -> Vec<u8> {
-    let mut d = selector("zetherUnshield(bytes,bytes,bytes,bytes32,address,uint256)").to_vec();
+    let mut d = selector("zetherUnshield(bytes,bytes,bytes32,address,uint256)").to_vec();
     d.extend(abi::encode(&[
         Tok::Bytes(payload.to_vec()),
         Tok::Bytes(proof.to_vec()),
-        Tok::Bytes(auth_sig.to_vec()),
         Tok::Word(*beneficiary),
         Tok::Word(abi::addr(to)),
         Tok::Word(abi::u256(amount)),

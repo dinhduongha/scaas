@@ -1,14 +1,12 @@
 // R33: the Zether confidentiality key `x` from the SAME seed on its own tree (design §C.4), apart
 // from every BIP-32/SLIP-10 signing key:
-//   - BLS12-381: EIP-2333 exactly, path `m/12381/<coin>/<account>/<use>`;
-//   - bn254: the same EIP-2333 construction with bn254's `r` and salt "SCAAS-ZETHER-BN254-v1",
-//     path `m/254/<coin>/<account>/<use>`.
+//   - BLS12-381 only (UA-6: the contracts dropped bn254 / kind 0x0140): EIP-2333 exactly, path
+//     `m/12381/<coin>/<account>/<use>`. The bn254 variant is kept in legacy/ua6/zether.js (not built).
 // `<use>` 7 = conf key, 8 = disclosure (reserved). Byte-for-byte the same as S3's
 // `zether-prover/src/keys.rs` + `schnorr.rs` (pinned by test/vectors/r33_keys.json and schnorr_*.json),
 // so the browser does not need the 1 MB prover wasm just to register. `x` is sealed like the seed
 // (vault.js) and never sent anywhere; only `Y`, `UA` and the PoP leave the device. The UA, the PoP and the
 // owner-op signature are the UA registry's (accounts.md CTR-UA-07, CTR-UA-16; ids and digests from ua.js).
-import { bn254 } from '@noble/curves/bn254.js';
 import { bls12_381 } from '@noble/curves/bls12-381.js';
 import { hkdf } from '@noble/hashes/hkdf.js';
 import { sha256, sha512 } from '@noble/hashes/sha2.js';
@@ -21,13 +19,12 @@ export const USE_DISCLOSURE = 8;
 const L = 48; // ceil(3 * ceil(log2 r) / 16) for both curves
 
 export const CURVES = {
-  bn254: { Point: bn254.G1.Point, root: 254, salt: 'SCAAS-ZETHER-BN254-v1', coordLen: 32 },
   bls12381: { Point: bls12_381.G1.Point, root: 12381, salt: 'BLS-SIG-KEYGEN-SALT-', coordLen: 64 },
 };
 
 function curveOf(name) {
   const c = CURVES[name];
-  if (!c) throw new Error('curve must be "bn254" or "bls12381"');
+  if (!c) throw new Error('curve must be "bls12381" (bn254 is gone since UA-6)');
   return c;
 }
 
@@ -92,8 +89,8 @@ export function decodePoint(curve, bytes) {
   return P;
 }
 
-/** The UA kind of a curve's Zether key: `zether-bn254` 0x0140, `zether-bls12381` 0x0141 (accounts.md §1.6). */
-export const zetherKind = (curve) => (curveOf(curve) === CURVES.bn254 ? 0x0140 : 0x0141);
+/** The UA kind of the Zether key: `zether-bls12381` 0x0141 (accounts.md §1.6). */
+export const zetherKind = (curve) => (curveOf(curve), 0x0141);
 
 /** `Y = g^x`, `UA = keccak256(TAG(zether-<curve>) ‖ Y)` (ZetherTypes.toUA, CTR-UA-16). */
 export function confPublic(curve, x) {
@@ -170,27 +167,35 @@ export function schnorrVerify(curve, Ybytes, msg, sig) {
 }
 
 /**
- * The `pop` of `UARegistry.register(kind, Y, pop, authRef, authPop)` (CTR-UA-07): Schnorr by `x` under the Zether tag
- * over `uaMessage(kind, POP, popDigest)`, `popDigest` over the chain, its `chainUid`, the registry, the UA and `authRef`
- * (0 = self; a non-zero `authRef` also needs the authority's own `authPop`, purpose `authref`). Never bound to a caller:
- * anyone may relay the registration.
+ * The `pop` of `UARegistry.register(0x0141, Y, pop, "", "")` (CTR-UA-07): Schnorr by `x` under the Zether tag
+ * over `uaMessage(kind, POP, popDigest)`, `popDigest` over the chain, its `chainUid`, the registry and the UA (the last
+ * word, `pqzKeyHash`, is 0: a Zether UA holds no PQZ key). Never bound to a caller: anyone may relay the registration.
  */
-export function zetherPop(curve, x, { chainId, chainUid, registry, authRef = new Uint8Array(32) }) {
-  // chainUid, registry, authRef: hex strings or bytes (ua.js)
+export function zetherPop(curve, x, { chainId, chainUid, registry }) {
+  // chainUid, registry: hex strings or bytes (ua.js)
   const kind = zetherKind(curve);
   const { Y, UA } = confPublic(curve, x);
-  const d = popDigest({ chainId, chainUid, registry, ua: UA, authRef });
+  const d = popDigest({ chainId, chainUid, registry, ua: UA });
   const m = uaMessage(kind, purposeTag('pop'), d);
   return { kind, Y, UA, popDigest: hex(d), uaMsg: hex(m), pop: hex(schnorrSign(curve, x, m)) };
 }
 
 /**
- * The `sig` of a self account's owner op (`zetherRollOverSigned`, `zetherSetRollOverMode`; `authRef = 0`):
- * `abi.encode(bytes(""), Schnorr by x over uaMessage(kind, zether-owner, digest))`; the registry reads `Y` from its record.
+ * The `sig` a Zether UA gives every UA-ledger write (metatx, metatx-cancel, keyop, receiver-fee, vp, vc-anchor, trade,
+ * zether-owner, member): Schnorr by `x` over `uaMessage(0x0141, purpose, digest)`; the registry reads `Y` from its record.
+ * Spends carry no signature: the proof alone authorizes them (UA-6).
+ */
+export function zetherSign(curve, x, purpose, digest) {
+  if (purpose === 'pop') throw new Error('the PoP has its own signer: zetherPop');
+  return schnorrSign(curve, x, uaMessage(zetherKind(curve), purposeTag(purpose), digest));
+}
+
+/**
+ * The `sig` of an owner op (`zetherRollOverSigned`, `zetherSetRollOverMode`):
+ * `abi.encode(bytes(""), Schnorr by x over uaMessage(kind, zether-owner, digest))`.
  */
 export function zetherOwnerAuth(curve, x, digest) {
-  const m = uaMessage(zetherKind(curve), purposeTag('zether-owner'), digest);
-  return hex(abiEncode(['bytes', 'bytes'], [new Uint8Array(0), schnorrSign(curve, x, m)]));
+  return hex(abiEncode(['bytes', 'bytes'], [new Uint8Array(0), zetherSign(curve, x, 'zether-owner', digest)]));
 }
 
 // ------------------------------------------------------------------ at rest

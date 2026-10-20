@@ -338,7 +338,9 @@ pub fn verify<C: ZCurve>(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::curve::{Bls12381, Bn254};
+    use crate::curve::Bls12381;
+    #[cfg(feature = "bn254")]
+    use crate::curve::Bn254;
     use ark_ff::UniformRand;
     use rand_chacha::rand_core::SeedableRng;
     use rand_chacha::ChaCha20Rng;
@@ -409,6 +411,8 @@ mod tests {
         assert!(verify(&mut stmt::<C>(&vc, b"other"), &g, 32, &vc, &p).is_err());
         assert!(check(&g, 64, &vc, &p).is_err());
     }
+
+    #[cfg(feature = "bn254")]
 
     #[test]
     fn bulletproofs_bn254() {

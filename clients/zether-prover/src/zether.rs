@@ -240,13 +240,6 @@ fn is_zero_msm<C: ZCurve>(bases: &[G<C>], scalars: &[Fr<C>], what: &'static str)
     }
 }
 
-/// `keccak256("SCAAS-ZETHER-AUTH-V1" ‖ keccak256(statement))` — what `authSig` signs (§11).
-pub fn auth_digest(statement: &[u8]) -> [u8; 32] {
-    let mut b = b"SCAAS-ZETHER-AUTH-V1".to_vec();
-    b.extend_from_slice(&keccak256(statement));
-    keccak256(&b)
-}
-
 // ---------------------------------------------------------------------------------------------
 // Transfer
 // ---------------------------------------------------------------------------------------------

@@ -15,8 +15,10 @@ use crate::abi::{self, Tok};
 use crate::bulletproofs::Gens;
 use crate::curve::{
     decode_point, decode_scalar, encode_point, encode_scalar, generator, keccak256, point_len, ua_of, zether_kind,
-    Bls12381, Bn254, Fr, ZCurve, G,
+    Bls12381, Fr, ZCurve, G,
 };
+#[cfg(feature = "bn254")]
+use crate::curve::Bn254;
 use crate::elgamal::{
     cached_table, cached_table_bits, check_balance, check_ram, encrypt, mem_available, BsgsParams, Ciphertext,
 };
@@ -171,7 +173,7 @@ fn sc<C: ZCurve>(s: &Fr<C>) -> String {
 }
 
 /// `zetherTransferSingle` — a direct call has no outer fee; relayed, the same bytes are the envelope's `data`.
-const TRANSFER_SINGLE: &str = "zetherTransferSingle(bytes,bytes,bytes,bytes32)";
+const TRANSFER_SINGLE: &str = "zetherTransferSingle(bytes,bytes,bytes32)";
 
 fn opt_str<'a>(v: &'a Value, k: &str) -> R<Option<&'a str>> {
     match v.get(k).filter(|x| !x.is_null()) {
@@ -206,10 +208,10 @@ fn y_aud<C: ZCurve>(v: &Value) -> R<G<C>> {
 /// COMPACT token), `zetherTransferCompact` commit-reveal on every token, `zetherTransferNoBundle` NONE.
 fn transfer_multi_sig(mode: TransferMode, compact: bool) -> &'static str {
     match mode {
-        TransferMode::Bundle => "zetherTransfer(bytes,bytes,bytes,bytes32)",
-        TransferMode::Hash if compact => "zetherTransfer(bytes,bytes,bytes,bytes32)",
-        TransferMode::Hash => "zetherTransferCompact(bytes,bytes,bytes,bytes32)",
-        TransferMode::NoBundle => "zetherTransferNoBundle(bytes,bytes,bytes,bytes32)",
+        TransferMode::Bundle => "zetherTransfer(bytes,bytes,bytes32)",
+        TransferMode::Hash if compact => "zetherTransfer(bytes,bytes,bytes32)",
+        TransferMode::Hash => "zetherTransferCompact(bytes,bytes,bytes32)",
+        TransferMode::NoBundle => "zetherTransferNoBundle(bytes,bytes,bytes32)",
     }
 }
 
@@ -238,11 +240,10 @@ pub fn prove_transfer_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v
         "statement": hx(&stmt),
         "proof": hx(&proof),
         "payload": hx(&payload),
-        "authDigest": hx(&zether::auth_digest(&stmt)),
         "entryRef": hx(&schnorr::entry_ref(h.chain_id, &h.chain_uid, &h.token, &k.ua(), h.send_counter)),
         "salt": hx(&st.header.salt),
         "record": hx(&st.record()),
-        "directCalldata": hx(&envelope::transfer_call(TRANSFER_SINGLE, &payload, &proof, &[], &h.beneficiary)),
+        "directCalldata": hx(&envelope::transfer_call(TRANSFER_SINGLE, &payload, &proof, &h.beneficiary)),
     });
     if include_witness(v) {
         out["witness"] = json!({"x": sc::<C>(&w.x), "v": sc::<C>(&w.v), "s": sc::<C>(&w.s), "b": sc::<C>(&w.b),
@@ -287,11 +288,10 @@ pub fn prove_transfer_multi_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens
         "proof": hx(&proof),
         "payload": hx(&payload),
         "bundles": hx(&st.bundles()),
-        "authDigest": hx(&zether::auth_digest(&stmt)),
         "entryRef": hx(&schnorr::entry_ref(h.chain_id, &h.chain_uid, &h.token, &k.ua(), h.send_counter)),
         "salt": hx(&st.header.salt),
         "memo": hx(&w.memo),
-        "directCalldata": hx(&envelope::transfer_call(transfer_multi_sig(mode, compact), &payload, &proof, &[], &h.beneficiary)),
+        "directCalldata": hx(&envelope::transfer_call(transfer_multi_sig(mode, compact), &payload, &proof, &h.beneficiary)),
     });
     if include_witness(v) {
         out["witness"] = json!({"x": sc::<C>(&w.x), "s": sc::<C>(&w.s), "b": sc::<C>(&w.b), "bPrime": sc::<C>(&w.b_prime),
@@ -314,11 +314,10 @@ pub fn prove_burn_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v: &V
         "statement": hx(&stmt),
         "proof": hx(&proof),
         "payload": hx(&payload),
-        "authDigest": hx(&zether::auth_digest(&stmt)),
     });
     // An unwrap-bound proof fits only `zetherUnshieldUnwrap` (no builder yet, K15): `zetherUnshield` would refuse it.
     if !matches!(h.binding, Binding::Unwrap(_)) {
-        out["directCalldata"] = hx(&envelope::unshield_call(&payload, &proof, &[], &h.beneficiary, &recipient, amount)).into();
+        out["directCalldata"] = hx(&envelope::unshield_call(&payload, &proof, &h.beneficiary, &recipient, amount)).into();
     }
     if include_witness(v) {
         out["witness"] = json!({"x": sc::<C>(&w.x), "b": sc::<C>(&w.b), "amount": amount.to_string(),
@@ -632,16 +631,15 @@ fn by_curve<C: ZCurve>(cmd: &str, v: &Value, rng: &mut OsRng) -> R<Value> {
         "verifyTransfer" => verify_json::<C>(&gens(), v, false),
         "verifyTransferMulti" => verify_multi_json::<C>(&gens(), v),
         "verifyBurn" => verify_json::<C>(&gens(), v, true),
-        // The `register` PoP (CTR-UA-07): `chainId`, `chainUid`, `registry`, `authRef` (optional, 0 = self).
+        // The `register` PoP (CTR-UA-07): `chainId`, `chainUid`, `registry` (a Zether UA holds no PQZ key: the digest's last word is 0).
         "pop" => {
             let k = key::<C>(v)?;
             let (chain, uid, reg) = (num(v, "chainId")?, fixed::<32>(v, "chainUid")?, fixed::<20>(v, "registry")?);
-            let auth_ref = if v.get("authRef").is_some() { fixed::<32>(v, "authRef")? } else { [0u8; 32] };
-            let d = schnorr::pop_digest(chain, &uid, &reg, &k.ua(), &auth_ref);
+            let d = schnorr::pop_digest(chain, &uid, &reg, &k.ua(), &[0u8; 32]);
             Ok(json!({
-                "kind": zether_kind::<C>(), "Y": hx(&k.encoded_y()), "UA": hx(&k.ua()), "authRef": hx(&auth_ref),
+                "kind": zether_kind::<C>(), "Y": hx(&k.encoded_y()), "UA": hx(&k.ua()),
                 "popDigest": hx(&d), "uaMsg": hx(&schnorr::ua_message::<C>(&schnorr::purpose_tag("pop"), &d)),
-                "pop": hx(&schnorr::zether_pop(&k, chain, &uid, &reg, &auth_ref, rng)),
+                "pop": hx(&schnorr::zether_pop(&k, chain, &uid, &reg, rng)),
             }))
         }
         // A self account's owner op (roll-over, mode): `sig` for `zetherRollOverSigned` / `zetherSetRollOverMode`.
@@ -652,6 +650,18 @@ fn by_curve<C: ZCurve>(cmd: &str, v: &Value, rng: &mut OsRng) -> R<Value> {
                 "uaMsg": hx(&schnorr::ua_message::<C>(&schnorr::purpose_tag("zether-owner"), &d)),
                 "auth": hx(&schnorr::owner_auth(&k, &d, rng)),
             }))
+        }
+        // The Zether UA signs every UA-ledger write (UA-6): `sig` = Schnorr by x over `ua_message(purpose, digest)`.
+        "uaSig" => {
+            let k = key::<C>(v)?;
+            let (purpose, d) = (get(v, "purpose")?.as_str().ok_or("`purpose` must be a string")?, fixed::<32>(v, "digest")?);
+            // the SIGNING purposes of a Zether UA; `pop` has its own command, anything else is unknown
+            const PURPOSES: [&str; 10] = ["metatx", "zether-auth", "metatx-cancel", "member", "zether-owner", "keyop", "receiver-fee", "vp", "vc-anchor", "trade"];
+            if !PURPOSES.contains(&purpose) {
+                return Err(format!("`purpose` must be one of {PURPOSES:?} (the PoP has its own command `pop`)"));
+            }
+            let m = schnorr::ua_message::<C>(&schnorr::purpose_tag(purpose), &d);
+            Ok(json!({"uaMsg": hx(&m), "sig": hx(&schnorr::sign(&k, &m, rng))}))
         }
         "shieldCalldata" => {
             let mut d = envelope::selector("zetherShield(bytes,uint256)").to_vec();
@@ -673,9 +683,10 @@ pub fn call(cmd: &str, input: &str) -> R<String> {
                    "digest": hx(&envelope::digest(chain, &uid, &token, &m))})
         }
         _ => match get(&v, "curve")?.as_str() {
+            #[cfg(feature = "bn254")]
             Some("bn254") => by_curve::<Bn254>(cmd, &v, &mut OsRng)?,
             Some("bls12381") => by_curve::<Bls12381>(cmd, &v, &mut OsRng)?,
-            _ => return Err("curve must be \"bn254\" or \"bls12381\"".into()),
+            _ => return Err("curve must be \"bls12381\" (bn254 is a legacy build feature)".into()),
         },
     };
     Ok(out.to_string())

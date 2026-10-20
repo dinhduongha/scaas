@@ -111,10 +111,11 @@ const key = new Map([
   [0x0131, pq('mldsa65')],
   [0x0132, pq('fndsa512')],
   [0x0133, pq('slhdsa128s')],
-  [0x0140, bnG1('zether-bn254')],
   [0x0141, blsG1('zether-bls12381')],
-  [0x0142, shake256(utf8ToBytes('scaas ua-1 vector pqz-mlwe key'), { dkLen: 16384 })],
 ]);
+// the PQZ key attribute (scheme 0x0142, UA-6): not a kind, so not in `key`
+const pqzKey = shake256(utf8ToBytes('scaas ua-1 vector pqz-mlwe key'), { dkLen: 16384 });
+const pqzKeyHash = ua.keyHashOf(0x0142, pqzKey);
 const id = (kind) => ua.deriveUA(kind, key.get(kind));
 const eoa = ua.nativeId(0x0001, label('evm-eoa').subarray(12));
 const hedera = ua.nativeId(0x0003, concatBytes(new Uint8Array(12), be(1234n, 8)));
@@ -135,9 +136,9 @@ const row = (kind, keyData, hederaNative = false) => {
 };
 const valid = [...[...key].map(([k, d]) => row(k, d)), row(0x0120, msigKey), row(0x0120, msigHedera, true)];
 // the same key under two kinds of one group: two ids, one keyHash (the registry's UAKeyInUse, CTR-UA-11)
-valid.push(row(0x0140, key.get(0x0104)), row(0x0100, concatBytes(key.get(0x0101), sha256(utf8ToBytes('scaas.example')))));
-for (const [a, b] of [[0x0104, 0x0140], [0x0101, 0x0100]]) {
-  const [ra, rb] = [valid.find((r) => r.kind === a), valid.at(b === 0x0140 ? -2 : -1)];
+valid.push(row(0x0141, key.get(0x0105)), row(0x0100, concatBytes(key.get(0x0101), sha256(utf8ToBytes('scaas.example')))));
+for (const [a, b] of [[0x0105, 0x0141], [0x0101, 0x0100]]) {
+  const [ra, rb] = [valid.find((r) => r.kind === a), valid.at(b === 0x0141 ? -2 : -1)];
   assert(ra.keyHash === rb.keyHash && ra.ua !== rb.ua, `shared key 0x${a.toString(16)} / 0x${b.toString(16)}`);
 }
 
@@ -189,7 +190,7 @@ bad(0x0102, put(put(new Uint8Array(32), 0, Uint8Array.of(1)), 31, Uint8Array.of(
 bad(0x0102, firstRefused((y) => be(y, 32).reverse(), (b) => ed25519.Point.fromBytes(b, false)), 'not a point');
 bad(0x0103, be(SECP_P, 32), 'x = p');
 bad(0x0103, firstRefused((x) => be(x, 32), (b) => secp256k1.Point.fromBytes(concatBytes(Uint8Array.of(2), b))), 'x does not lift');
-for (const kind of [0x0104, 0x0140]) {
+for (const kind of [0x0104]) {
   const d = key.get(kind);
   bad(kind, new Uint8Array(64), 'identity');
   bad(kind, put(d, 0, be(BN.Fp.ORDER, 32)), 'x = p');
@@ -269,7 +270,7 @@ for (const kind of [0x0105, 0x0141]) {
   bad(0x0120, ua.encodeMsig(0, m), 'threshold = 0');
   bad(0x0120, ua.encodeMsig(5, m), 'threshold > total weight');
   bad(0x0120, ua.encodeMsig(2, m.map((x, i) => (i === 0 ? { ...x, weight: 0 } : x))), 'weight = 0');
-  bad(0x0120, ua.encodeMsig(1, sortM([mem(0x0140, id(0x0140)), mem(0x0101, id(0x0101))])), 'Zether member');
+  bad(0x0120, ua.encodeMsig(1, sortM([mem(0x0141, id(0x0141)), mem(0x0101, id(0x0101))])), 'Zether member');
   bad(0x0120, ua.encodeMsig(1, sortM([mem(0x0120, msigUa), mem(0x0101, id(0x0101))])), 'structure member');
   bad(0x0120, ua.encodeMsig(1, sortM([mem(0x0109, label('unknown member')), mem(0x0101, id(0x0101))])), 'unknown member kind');
   bad(0x0120, ua.encodeMsig(1, sortM([mem(0x0010, label('solana member')), mem(0x0101, id(0x0101))])), 'foreign native member');
@@ -323,7 +324,7 @@ const rng = (kind, d, reason) => bad(kind, d, reason, { why: 'range' });
   rng(0x0111, put(fr, 0, sx1p), 'Y: x = 1 + p (non-canonical)');
   // bn254 G1 (1, 2)
   const g1 = concatBytes(be(1n, 32), be(2n, 32));
-  for (const kind of [0x0104, 0x0140]) {
+  for (const kind of [0x0104]) {
     accepts(kind, g1);
     rng(kind, addP(g1, 0, 32, BN.Fp.ORDER), '(1 + p, 2) (non-canonical x)');
     rng(kind, addP(g1, 32, 32, BN.Fp.ORDER), '(1, 2 + p) (non-canonical y)');
@@ -396,6 +397,9 @@ const rng = (kind, d, reason) => bad(kind, d, reason, { why: 'range' });
 bad(0x0000, new Uint8Array(32), 'kind 0', { error: 'UAKindUnknown' });
 bad(0x0109, new Uint8Array(32), 'unassigned kind', { error: 'UAKindUnknown' });
 bad(0x0001, new Uint8Array(20), 'native kind', { error: 'UAKindNotDerived' });
+// UA-6: 0x0142 is a scheme, not a kind (clients refuse `ua_of` / `validate_key_data` for it); 0x0140 is gone
+bad(0x0142, pqzKey, 'scheme pqz-mlwe, not a kind', { error: 'UAKindNotDerived' });
+bad(0x0140, new Uint8Array(64), 'zether-bn254 left the table in UA-6', { error: 'UAKindUnknown' });
 
 // --- secp256k1 (ECDSA, 0x0108; 2026-10-17): appended after every earlier row, so earlier positions are unchanged ---
 const secpKey = secp256k1.getPublicKey(label('secp256k1'), false).subarray(1);
@@ -445,7 +449,7 @@ const canonicalIds = [
 
 // --- messages ---
 const digest = label('digest');
-const messages = [...[...key.keys(), 0x0120].map((kind) => [kind, 'pop']), ...ua.PURPOSES.map((p) => [0x0100, p])]
+const messages = [...[...key.keys(), 0x0120, 0x0142].map((kind) => [kind, 'pop']), ...ua.PURPOSES.map((p) => [0x0100, p])]
   .map(([kind, purpose]) => ({ kind, purpose, purposeTag: hex(ua.purposeTag(purpose)), digest: hex(digest),
     uaMsg: hex(ua.uaMessage(kind, ua.purposeTag(purpose), digest)) }));
 
@@ -459,13 +463,42 @@ const contexts = {
   E: { chainId: 2 ** 40 + 7, chainUid: hex(label('chain uid E')), registry },
 };
 const zero = hex(z32);
-const pop = [...Object.keys(contexts).map((c) => ({ context: c, ua: derivedId, authRef: zero })),
-  { context: 'A', ua: hex(id(0x0140)), authRef: derivedId }]
+const hex0 = zero;
+const pqzH = hex(pqzKeyHash);
+const holder = hex(id(0x0130));
+// pqzKeyHash 0 for every UA without a PQZ key; a holder's digest binds h (a key added later cannot reuse a PoP)
+const pop = [...Object.keys(contexts).map((c) => ({ context: c, ua: derivedId, pqzKeyHash: hex0 })),
+  { context: 'A', ua: hex(id(0x0141)), pqzKeyHash: hex0 }, { context: 'A', ua: holder, pqzKeyHash: hex0 },
+  { context: 'A', ua: holder, pqzKeyHash: pqzH }, { context: 'B', ua: holder, pqzKeyHash: pqzH }]
   .map((p) => {
     const c = contexts[p.context];
-    return { ...p, chainKeyHash: hex(ua.chainKeyHash(c.chainId)), popDigest: hex(ua.popDigest({ ...c, ua: p.ua, authRef: p.authRef })) };
+    return { ...p, chainKeyHash: hex(ua.chainKeyHash(c.chainId)), popDigest: hex(ua.popDigest({ ...c, ua: p.ua, pqzKeyHash: p.pqzKeyHash })) };
   });
-assert(new Set(pop.map((p) => p.popDigest)).size === pop.length, 'popDigest must separate chain id, chain uid, registry, ua and authRef');
+assert(new Set(pop.map((p) => p.popDigest)).size === pop.length, 'popDigest must separate chain id, chain uid, registry, ua and pqzKeyHash');
+// R_REG's message: uaMessage(0x0142, pop, popDigest(ua, keyHash(0x0142, pqzKey))), per holder kind and context
+const pqzReg = [['A', 0x0130], ['B', 0x0131], ['A', 0x0132]].map(([context, kind]) => {
+  const c = contexts[context];
+  const u = id(kind);
+  return { context, kind, ua: hex(u), pqzKeyHash: pqzH, popDigest: hex(ua.popDigest({ ...c, ua: u, pqzKeyHash })),
+    pqzRegMessage: hex(ua.pqzRegMessage({ ...c, ua: u, pqzKey })) };
+});
+assert(new Set(pqzReg.map((p) => p.pqzRegMessage)).size === pqzReg.length, 'pqz_reg_message must separate context and holder');
+// msig_pqz_eligible: the weight of members outside 0x0130-0x0133 must be below the threshold (CTR-PQZ-12)
+const pqzMsig = [
+  ['classical members outweigh the threshold', msigKey, false],
+  ['one classical + one PQ member, threshold 2', ua.encodeMsig(2, sortM([mem(0x0101, id(0x0101)), mem(0x0130, id(0x0130))])), true],
+  ['classical weight = threshold', ua.encodeMsig(1, sortM([mem(0x0101, id(0x0101)), mem(0x0130, id(0x0130))])), false],
+  ['PQ members only', ua.encodeMsig(2, sortM([mem(0x0130, id(0x0130)), mem(0x0133, id(0x0133))])), true],
+  ['slhdsa128s counts as PQ weight (classical 1 < threshold 2 only if 0x0133 is PQ)', ua.encodeMsig(2, sortM([mem(0x0101, id(0x0101), 1), mem(0x0133, id(0x0133), 2)])), true],
+  ['slhdsa128s + classical at equal weight', ua.encodeMsig(1, sortM([mem(0x0133, id(0x0133)), mem(0x0101, id(0x0101), 1)])), false],
+  ['heavy PQ member, light classical', ua.encodeMsig(3, sortM([mem(0x0101, id(0x0101), 2), mem(0x0131, id(0x0131), 2)])), true],
+].map(([reason, d, eligible]) => {
+  assert(ua.msigPqzEligible(d) === eligible, reason);
+  valid.push(row(0x0120, d));
+  const u = ua.deriveUA(0x0120, d);
+  return { reason, keyData: hex(d), ua: hex(u), eligible,
+    popDigest: hex(ua.popDigest({ ...contexts.A, ua: u, pqzKeyHash: eligible ? pqzKeyHash : z32 })) };
+});
 const memberTag = ua.purposeTag('member');
 const uaAuth = [['A', 1], ['A', 2], ['B', 1], ['C', 1], ['E', 1]].map(([context, generation]) => {
   const domain = { generation, ...contexts[context] };
@@ -480,11 +513,13 @@ const member = [{ structureUa: hex(msigUa), uaMsg: hex(msigMsg), memberDigest: h
 const kinds = ua.KINDS.map((k) => ({
   kind: k.kind, name: k.name, native: k.native, lengths: k.lengths,
   tag: k.native ? null : ua.kindTagString(k.kind), TAG: k.native ? null : hex(ua.TAG(k.kind)), group: k.group,
-  signing: ua.isSigningKind(k.kind), zether: ua.isZetherKind(k.kind),
+  signing: ua.isSigningKind(k.kind), zether: ua.isZetherKind(k.kind), pqzHolder: ua.isPqzHolder(k.kind),
   member: ua.isMemberKind(k.kind, false), memberHedera: ua.isMemberKind(k.kind, true),
 }));
 const constants = { MSG_TAG: hex(ua.MSG_TAG), POP_TAG: hex(ua.POP_TAG), DOMAIN_TYPEHASH: hex(ua.DOMAIN_TYPEHASH),
   UAAUTH_TYPEHASH: hex(ua.UAAUTH_TYPEHASH), NAME_HASH: hex(ua.NAME_HASH) };
+const schemes = ua.SCHEMES.map((k) => ({ kind: k.kind, name: k.name, lengths: k.lengths, group: k.group,
+  tag: ua.kindTagString(k.kind), TAG: hex(ua.TAG(k.kind)) }));
 const groups = ua.GROUPS.map((g) => ({ group: g, tag: ua.groupTagString(g), GROUP: hex(ua.GROUP(g)) }));
 const purposes = ua.PURPOSES.map((p) => ({ purpose: p, tag: `scaas.ua.purpose.${p}.v1`, purposeTag: hex(ua.purposeTag(p)) }));
 const note = 'Generated by clients/clientkeys/scripts/ua-vectors.mjs (src/ua.js on @noble/curves 2.4.0); never edit by hand. '
@@ -493,7 +528,7 @@ const note = 'Generated by clients/clientkeys/scripts/ua-vectors.mjs (src/ua.js 
   + 'points, not real groups.';
 mkdirSync(OUT, { recursive: true });
 const write = (name, obj) => writeFileSync(join(OUT, name), `${JSON.stringify(obj, null, 2)}\n`);
-write('kinds.json', { note, version: 1, constants, kinds, groups, purposes, valid, invalid, natives, nativeInvalid, nativeSpace,
+write('kinds.json', { note, version: 1, constants, kinds, schemes, pqzKey: hex(pqzKey), pqzKeyHash: pqzH, groups, purposes, valid, invalid, natives, nativeInvalid, nativeSpace,
   messages, canonicalIds });
-write('structures.json', { note, version: 1, contexts, pop, uaAuth, member });
+write('structures.json', { note, version: 1, contexts, pop, pqzReg, pqzMsig, uaAuth, member });
 console.log(`kinds.json: ${valid.length} valid, ${invalid.length} invalid; structures.json written to ${OUT}`);

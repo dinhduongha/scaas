@@ -17,9 +17,10 @@ import { bls12_381 } from '@noble/curves/bls12-381.js';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { sha256, sha512 } from '@noble/hashes/sha2.js';
 import * as ua from '../src/ua.js';
+import { schnorrVerify as zetherVerify } from '../src/zether.js';
 import { hex, fromHex, keccak_256, utf8ToBytes, concatBytes, b64url } from '../src/bytes.js';
 
-const dir = new URL('../../../smartcontracts/vectors/ua/', import.meta.url);
+import { dir } from './ua-vectors-dir.js';
 const V = JSON.parse(readFileSync(new URL('signatures.json', dir)));
 const FUZZ = JSON.parse(readFileSync(new URL('ed25519_fuzz.json', dir)));
 const int = (b) => BigInt(hex(b));
@@ -141,6 +142,8 @@ const VERIFY = {
   0x0105: schnorrOk(bls12_381.G1.Point, bls12_381.fields.Fr.ORDER, 128, blsG1),
   0x0106: bls12381Ok,
   0x0107: blsBn254Ok,
+  // UA-6: the Zether UA's Schnorr (tag SCAAS-ZETHER-SCHNORR-V1), verified by clientkeys' own zether.js (the prover's twin)
+  0x0141: (kd, msg, sig) => zetherVerify('bls12381', kd, msg, sig),
   // secp256k1 (ECDSA): r‖s‖v over ua_msg recovering address(keccak256(x ‖ y)), as the native EOA rule
   0x0108: (kd, msg, sig) => kd.length === 64 && nativeOk(hex(keccak_256(kd).subarray(12)), msg, hex(sig)),
 };
@@ -160,8 +163,8 @@ function nativeOk(address, h, sig) {
 const domain = (ctx, generation) => ({ generation, ...V.contexts[ctx] });
 
 test('derived kinds: key data, ids, PoP messages, every signature verifies', () => {
-  assert.equal(V.derived.length, 9);
-  assert.deepEqual(V.derived.map((r) => r.kind), [0x0100, 0x0101, 0x0103, 0x0104, 0x0105, 0x0106, 0x0107, 0x0102, 0x0108]); // append-only
+  assert.equal(V.derived.length, 10);
+  assert.deepEqual(V.derived.map((r) => r.kind), [0x0100, 0x0101, 0x0103, 0x0104, 0x0105, 0x0106, 0x0107, 0x0102, 0x0108, 0x0141]); // append-only
   for (const r of V.derived) {
     const kd = B(r.keyData);
     assert.equal(hex(ua.deriveUA(r.kind, kd)), r.ua, r.name);
