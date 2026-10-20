@@ -10,6 +10,7 @@ import {IPqzToken} from "../../src/pqz/IPqzToken.sol";
 import {NoUnderlyingPqzToken} from "../../src/pqz/NoUnderlyingPqzToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
+import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 
 /// Relaying (CTR-PQZ-15 / -21, P6g plan D4): the address path binds the envelope into the statement (header word 17), the
@@ -149,7 +150,7 @@ contract PqzRelayTest is PqzFixture {
         h.data = abi.encodeCall(PqzLayer.pqzShield, (bob, 3));
         h.validUntil = block.timestamp + 1 hours;
         vm.mockCall(ML65, bytes(""), abi.encode(uint256(0))); // every ML-DSA verification now fails
-        vm.expectRevert();
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, alice));
         tok.uaExecute(h, _mlAuth());
         vm.mockCall(ML65, bytes(""), abi.encode(uint256(1)));
         tok.uaExecute(h, _mlAuth());
