@@ -18,7 +18,9 @@ import {UAPqzVerifier} from "./UAPqzVerifier.sol";
 ///         pq-zero-knowledge.md §7.4–§7.9 and §8.1. Ciphertexts are calldata and events, hashes in storage (CTR-PQZ-07). Every
 ///         statement is built once, in a buffer `u8(op) ‖ be32(len) ‖ stmt ‖ proof` that is the precompile input
 ///         (P6g D13); `authDigest = keccak256("SCAAS-PQZ-AUTH-V1" ‖ keccak256(stmt))` is checked by the registry
-///         (`requireAuthorized`, the signing UA's PQ signature, purpose `zether-auth`) before the precompile.
+///         (`requireAuthorized`, the signing UA's own signature, purpose `zether-auth`) before the precompile. The account is
+///         the signing UA; its PQZ key is an attribute of its registry record (UA-6 U7), so a UA without one is no
+///         PQZ account (`AccountNotRegistered`); there is no `authRef`.
 library PqzLib {
     struct Account {
         bytes32 accHash; // 0 = Trivial(0) (P6g D10)

@@ -140,11 +140,22 @@ contract PqzRelayTest is PqzFixture {
         auths[0] = _mlAuth();
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxNotBatchable.selector, PqzLayer.pqzTransferSingle.selector));
         tok.uaBatch(ms, auths);
-        // a PQZ id cannot sign envelopes (ZETHER kind)
-        m.from = alice;
-        m.nonce = 0;
+        // UA-6: a holder is a signing UA, so alice (registered with her PQZ key in one call) signs an envelope herself;
+        // the same envelope under a signature the `mldsa65` precompile rejects is refused (no `authRef`, no foreign signer)
+        NoUnderlyingPqzToken(address(tok)).mintToUA(alice, 3 * SCALE);
+        minted += 3 * SCALE;
+        MetaTxLib.UAMetaTransaction memory h;
+        h.from = alice;
+        h.data = abi.encodeCall(PqzLayer.pqzShield, (bob, 3));
+        h.validUntil = block.timestamp + 1 hours;
+        vm.mockCall(ML65, bytes(""), abi.encode(uint256(0))); // every ML-DSA verification now fails
         vm.expectRevert();
-        tok.uaExecute(m, _mlAuth());
+        tok.uaExecute(h, _mlAuth());
+        vm.mockCall(ML65, bytes(""), abi.encode(uint256(1)));
+        tok.uaExecute(h, _mlAuth());
+        assertEq(tok.balanceOfUA(alice), 0, "alice's own signature shielded her units");
+        assertEq(tok.accountState(bob).plainPending, 3);
+        _assertConservation(tok);
         assertEq(UAKinds.PQZ_MLWE, 0x0142);
     }
 }
