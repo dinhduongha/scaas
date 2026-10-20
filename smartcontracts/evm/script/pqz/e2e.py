@@ -42,7 +42,7 @@ def kc(*parts):
     return keccak256(b"".join(p if isinstance(p, bytes) else p.encode() for p in parts))
 
 
-P_POP, P_AUTHREF, P_METATX, P_ZAUTH = (kc(f"scaas.ua.purpose.{n}.v1") for n in ("pop", "authref", "metatx", "zether-auth"))
+P_POP, P_METATX, P_ZAUTH = (kc(f"scaas.ua.purpose.{n}.v1") for n in ("pop", "metatx", "zether-auth"))
 MSG_TAG = kc("scaas.ua.msg.v1")
 TAG = {MLDSA44: kc("scaas.ua.mldsa44.v1"), MLDSA65: kc("scaas.ua.mldsa65.v1"), SECP256K1: kc("scaas.ua.secp256k1.v1"), PQZ_MLWE: kc("scaas.ua.pqz-mlwe.v1")}
 
@@ -394,7 +394,7 @@ def run(kd, kr, ke):
         sd.send(fac, cd("setKindEnabled(uint8,bool)", ["w", "w"], kind, 1), f"setKindEnabled({kind}, true)")
 
     # -------------------------------------------------------------- 2. UAs
-    log("\n## 2. UAs: ML-DSA authorities (real signatures) and pqz-mlwe keys (real R_REG proofs)")
+    log("\n## 2. UAs: ML-DSA UAs and PQZ holders (ML-DSA UA + pqz-mlwe key attribute, real R_REG proofs)")
 
     def ml_ua(name, kind, seed):
         lvl = 44 if kind == MLDSA44 else 65
@@ -425,7 +425,7 @@ def run(kd, kr, ke):
 
     sk = lambda tag: kc("p6g-e2e-7622/", tag)  # noqa: E731  (test seeds, in this log on purpose)
     log(f"test seeds: keccak256('p6g-e2e-7622/<name>')")
-    ml44 = ml_ua("auth-44", MLDSA44, sk("ml44"))
+    ml44 = ml_ua("mldsa44-ua", MLDSA44, sk("ml44"))
     feeua = ml_ua("fee-ua", MLDSA65, sk("fee"))
     U = {n: pqz_ua(n, sk("pqz-" + n), sk("ml-" + n)) for n in ("alice", "bob", "aud", "carol")}
     alice, bob, aud, carol = U["alice"], U["bob"], U["aud"], U["carol"]
@@ -473,7 +473,7 @@ def run(kd, kr, ke):
               f"registry list of kind {kind:#06x}: uaCount {n}, uaAt / uaIndex in registration order, uaPage {n} ids")
 
     # ML-DSA verify gas through the registry (both levels, precompile path)
-    for u in (ml44, ml["alice"]):
+    for u in (ml44, U["alice"]):
         d = kc("p6g-gas")
         data = cd("requireAuthorized(bytes32,bytes32,bytes32,bytes)", ["w", "w", "w", "b"], u.ua, P_METATX, d,
                   ml_auth(pq, u, P_METATX, d))
