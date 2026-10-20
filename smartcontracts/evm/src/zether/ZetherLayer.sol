@@ -91,7 +91,7 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
 
     /// @notice Registered as this token's Zether kind (`registry.kindOf`, accounts.md §1.13).
     function registered(ZetherTypes.UA ua) external view returns (bool) {
-        return ZetherLib.registeredOn(_REGISTRY, ua, ZetherLib.$().p);
+        return ZetherLib.registeredOn(_REGISTRY, ua);
     }
 
     function accountState(ZetherTypes.UA ua) external view returns (AccountState memory) {
@@ -121,28 +121,28 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
     // ------------------------------------------------------------------ transfer (CTR-ZTH-37, CTR-ZTH-38)
 
     /// @notice The token's default: the record stored (`BUNDLE` token) or commit-reveal (`COMPACT` token).
-    function zetherTransfer(bytes calldata payload, bytes calldata proof, bytes calldata authSig, ZetherTypes.UA beneficiary)
+    function zetherTransfer(bytes calldata payload, bytes calldata proof, ZetherTypes.UA beneficiary)
         external nonReentrant returns (bytes32)
     {
-        return ZetherLib.transferMulti(payload, proof, authSig, beneficiary, ZetherLib.defaultMode(), _env());
+        return ZetherLib.transferMulti(payload, proof, beneficiary, ZetherLib.defaultMode(), _env());
     }
 
-    function zetherTransferCompact(bytes calldata payload, bytes calldata proof, bytes calldata authSig, ZetherTypes.UA beneficiary)
+    function zetherTransferCompact(bytes calldata payload, bytes calldata proof, ZetherTypes.UA beneficiary)
         external nonReentrant returns (bytes32)
     {
-        return ZetherLib.transferMulti(payload, proof, authSig, beneficiary, ZetherTypes.TransferMode.HASH, _env());
+        return ZetherLib.transferMulti(payload, proof, beneficiary, ZetherTypes.TransferMode.HASH, _env());
     }
 
-    function zetherTransferNoBundle(bytes calldata payload, bytes calldata proof, bytes calldata authSig, ZetherTypes.UA beneficiary)
+    function zetherTransferNoBundle(bytes calldata payload, bytes calldata proof, ZetherTypes.UA beneficiary)
         external nonReentrant returns (bytes32)
     {
-        return ZetherLib.transferMulti(payload, proof, authSig, beneficiary, ZetherTypes.TransferMode.NONE, _env());
+        return ZetherLib.transferMulti(payload, proof, beneficiary, ZetherTypes.TransferMode.NONE, _env());
     }
 
-    function zetherTransferSingle(bytes calldata payload, bytes calldata proof, bytes calldata authSig, ZetherTypes.UA beneficiary)
+    function zetherTransferSingle(bytes calldata payload, bytes calldata proof, ZetherTypes.UA beneficiary)
         external nonReentrant returns (bytes32)
     {
-        return ZetherLib.transferSingle(payload, proof, authSig, beneficiary, _env());
+        return ZetherLib.transferSingle(payload, proof, beneficiary, _env());
     }
 
     // ------------------------------------------------------------------ unshield
@@ -151,12 +151,11 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
     function zetherUnshield(
         bytes calldata payload,
         bytes calldata proof,
-        bytes calldata authSig,
         ZetherTypes.UA beneficiary,
         address to,
         uint256 amount
     ) external nonReentrant {
-        ZetherLib.unshield(payload, proof, authSig, beneficiary, amount, to, _env());
+        ZetherLib.unshield(payload, proof, beneficiary, amount, to, _env());
         _mint(to, amount * ZetherLib.$().shieldScale);
     }
 

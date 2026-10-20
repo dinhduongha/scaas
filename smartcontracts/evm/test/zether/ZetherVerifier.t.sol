@@ -15,9 +15,7 @@ contract ZetherVerifierTest is Test {
     bytes32 constant OP_B = keccak256("SCAAS-ZETHER-OP-BURN-V1");
     bytes32 constant DIRECT = keccak256("ZTX_V1_DIRECT");
 
-    IZetherVerifier bn;
     IZetherVerifier bls;
-    IZetherBurnVerifier bnB;
     IZetherBurnVerifier blsB;
     ZetherProver prover;
 
@@ -28,8 +26,7 @@ contract ZetherVerifierTest is Test {
     uint256 constant S = 0x5;
 
     function setUp() public {
-        (bn, bnB) = ZetherVerifiers.deploy(false);
-        (bls, blsB) = ZetherVerifiers.deploy(true);
+        (bls, blsB) = ZetherVerifiers.deploy(); // BLS12-381 only since UA-6 (CTR-ZTH-32)
         prover = new ZetherProver();
     }
 
@@ -89,8 +86,8 @@ contract ZetherVerifierTest is Test {
     }
 
     /// The burn verifier of `v`'s curve (CTR-ZTH-20: a transfer and a burn verifier per curve).
-    function _burnOf(IZetherVerifier v) internal view returns (IZetherBurnVerifier) {
-        return address(v) == address(bn) ? bnB : blsB;
+    function _burnOf(IZetherVerifier) internal view returns (IZetherBurnVerifier) {
+        return blsB;
     }
 
     // ------------------------------------------------------------------ transfer
@@ -104,21 +101,18 @@ contract ZetherVerifierTest is Test {
         console2.log(k.v.curveName(), k.auditor ? "transfer+auditor verify gas" : "transfer verify gas", g0 - gasleft());
     }
 
-    function test_transferBn254() public { _honestTransfer(Case(bn, 1000, 300, 5, false)); }
-    function test_transferBn254Auditor() public { _honestTransfer(Case(bn, 1000, 300, 5, true)); }
     function test_transferBls() public { _honestTransfer(Case(bls, 1000, 300, 5, false)); }
     function test_transferBlsAuditor() public { _honestTransfer(Case(bls, 1000, 300, 5, true)); }
-    function test_transferWholeBalanceNoFee() public { _honestTransfer(Case(bn, 1000, 1000, 0, true)); }
+    function test_transferWholeBalanceNoFee() public { _honestTransfer(Case(bls, 1000, 1000, 0, true)); }
     /// n_v = 64 (limits D1): v = 2^64 − 1 và b' = 0 cùng qua — verifier chỉ biết dải đã chứng minh.
-    function test_transferMaxValue() public { _honestTransfer(Case(bn, 2 ** 64 + 6, 2 ** 64 - 1, 7, false)); }
-    function test_transferAbove2pow32Bn254() public { _honestTransfer(Case(bn, 2 ** 54, 2 ** 32 + 5, 7, true)); }
+    function test_transferMaxValue() public { _honestTransfer(Case(bls, 2 ** 64 + 6, 2 ** 64 - 1, 7, false)); }
     function test_transferAbove2pow32Bls() public { _honestTransfer(Case(bls, 2 ** 54, 2 ** 44 + 3, 7, false)); }
-    function test_transferMaxFee() public { _honestTransfer(Case(bn, 2 ** 64, 1, 2 ** 64 - 1, false)); }
+    function test_transferMaxFee() public { _honestTransfer(Case(bls, 2 ** 64, 1, 2 ** 64 - 1, false)); }
 
     function test_transferOverspendRejected() public {
-        Case memory k = Case(bn, 1000, 1001, 0, false); // b' = −1 mod r: BP n=64 không chứng minh được
+        Case memory k = Case(bls, 1000, 1001, 0, false); // b' = −1 mod r: BP n=64 không chứng minh được
         bytes memory st = _transferStatement(k, k.amount);
-        assertFalse(_ok(bn, st, _proveTransfer(k, st, k.amount), true));
+        assertFalse(_ok(bls, st, _proveTransfer(k, st, k.amount), true));
     }
 
     function test_transferFeeOverspendRejected() public {
@@ -128,20 +122,20 @@ contract ZetherVerifierTest is Test {
     }
 
     function test_transferValueOutOfRangeRejected() public {
-        Case memory k = Case(bn, 2 ** 64 + 10, 2 ** 64, 0, false); // v = 2^64 ∉ [0, 2^64), b' = 10 hợp lệ
+        Case memory k = Case(bls, 2 ** 64 + 10, 2 ** 64, 0, false); // v = 2^64 ∉ [0, 2^64), b' = 10 hợp lệ
         bytes memory st = _transferStatement(k, k.amount);
-        assertFalse(_ok(bn, st, _proveTransfer(k, st, k.amount), true));
+        assertFalse(_ok(bls, st, _proveTransfer(k, st, k.amount), true));
     }
 
     /// Σ-Bullets: ciphertext mang 900 nhưng witness (V_v, z_v) nói 100 — phải fail ở E3/E4.
     function test_sigmaBulletsLinkageRejected() public {
-        Case memory k = Case(bn, 1000, 100, 0, false);
+        Case memory k = Case(bls, 1000, 100, 0, false);
         bytes memory st = _transferStatement(k, 900);
-        assertFalse(_ok(bn, st, _proveTransfer(k, st, 100), true));
+        assertFalse(_ok(bls, st, _proveTransfer(k, st, 100), true));
     }
 
     function test_transferTamperedProofBitsRejected() public {
-        Case memory k = Case(bn, 1000, 300, 5, true);
+        Case memory k = Case(bls, 1000, 300, 5, true);
         bytes memory st = _transferStatement(k, k.amount);
         bytes memory pr = _proveTransfer(k, st, k.amount);
         uint256 p = 64;
@@ -153,7 +147,7 @@ contract ZetherVerifierTest is Test {
         for (uint256 i; i < offs.length; ++i) {
             bytes memory t = bytes.concat(pr);
             t[offs[i]] = bytes1(uint8(t[offs[i]]) ^ 0x01);
-            assertFalse(_ok(bn, st, t, true), "tampered proof accepted");
+            assertFalse(_ok(bls, st, t, true), "tampered proof accepted");
         }
     }
 
@@ -172,17 +166,16 @@ contract ZetherVerifierTest is Test {
     }
 
     function test_transferWrongOpTagOrSystemRejected() public view {
-        Case memory k = Case(bn, 1000, 300, 5, false);
+        Case memory k = Case(bls, 1000, 300, 5, false);
         bytes memory st = _transferStatement(k, k.amount);
         bytes memory pr = _proveTransfer(k, st, k.amount);
         bytes memory t = bytes.concat(st);
         t[0] = 0x00;
-        assertFalse(bn.verifyTransfer(t, pr));
+        assertFalse(bls.verifyTransfer(t, pr));
         t = bytes.concat(st);
         t[40] = 0x00;
-        assertFalse(bn.verifyTransfer(t, pr));
-        assertFalse(bn.verifyTransfer(st, bytes.concat(pr, hex"00")), "length");
-        assertFalse(bls.verifyTransfer(st, pr), "cross-curve");
+        assertFalse(bls.verifyTransfer(t, pr));
+        assertFalse(bls.verifyTransfer(st, bytes.concat(pr, hex"00")), "length");
     }
 
     /// Auditor bật nhưng C_aud mã hoá số khác C_out: E6 (cùng z_v, z_s) phải bắt — auditor không bị lừa.
@@ -197,30 +190,30 @@ contract ZetherVerifierTest is Test {
 
     /// Witness b' sai (E1 đúng khoá, E5 sai số dư) — burn chỉ qua khi `b' = b − amount − fee`.
     function test_burnWrongBalanceWitnessRejected() public view {
-        bytes memory st = _burnStatement(bn, 1000, 400, 5);
-        bytes memory pr = prover.proveBurn(bn, st, ZetherProver.BurnWitness(XF, 596, 0x99, keccak256("b")));
-        assertFalse(bnB.verifyBurn(st, pr));
+        bytes memory st = _burnStatement(bls, 1000, 400, 5);
+        bytes memory pr = prover.proveBurn(bls, st, ZetherProver.BurnWitness(XF, 596, 0x99, keccak256("b")));
+        assertFalse(blsB.verifyBurn(st, pr));
     }
 
     function test_auditorOffRequiresIdentityCaud() public {
-        Case memory k = Case(bn, 1000, 300, 5, false);
+        Case memory k = Case(bls, 1000, 300, 5, false);
         bytes memory st = _transferStatement(k, k.amount);
         bytes memory pr = _proveTransfer(k, st, k.amount);
         // nhét một C_aud khác O khi auditor tắt
         bytes memory t = bytes.concat(st);
-        bytes memory junk = bn.g1MulBase(42);
+        bytes memory junk = bls.g1MulBase(42);
         for (uint256 i; i < 64; ++i) t[480 + 8 * 64 + i] = junk[i];
-        assertFalse(_ok(bn, t, pr, true));
+        assertFalse(_ok(bls, t, pr, true));
     }
 
     /// CTR-ZTH-22 (c): `s = 0` gives `D_out = O` and `C_out = [v]G` (the amount in the clear); refused even with an
     /// otherwise honest proof.
     function test_dOutIdentityRejected() public view {
-        bytes memory st = _zeroSStatement(bn, 1000, 300, 5);
-        bytes memory pr = prover.proveTransfer(bn, st, ZetherProver.TransferWitness({
+        bytes memory st = _zeroSStatement(bls, 1000, 300, 5);
+        bytes memory pr = prover.proveTransfer(bls, st, ZetherProver.TransferWitness({
             x: XF, v: 300, s: 0, bPrime: 1000 - 300 - 5, gammaV: 0x77, gammaB: 0x88, seed: keccak256("t")
         }));
-        assertFalse(_ok(bn, st, pr, true));
+        assertFalse(_ok(bls, st, pr, true));
     }
 
     function _zeroSStatement(IZetherVerifier v, uint256 b, uint256 amount, uint256 fee) internal view returns (bytes memory) {
@@ -260,16 +253,16 @@ contract ZetherVerifierTest is Test {
     }
 
     function test_nonCanonicalScalarRejected() public view {
-        Case memory k = Case(bn, 1000, 300, 5, false);
+        Case memory k = Case(bls, 1000, 300, 5, false);
         bytes memory st = _transferStatement(k, k.amount);
         bytes memory pr = _proveTransfer(k, st, k.amount);
         // z_x + r: cùng điểm, khác byte — phải bị từ chối (chống malleability)
         uint256 zx;
         assembly { zx := mload(add(add(pr, 32), 640)) }
-        uint256 alias_ = zx + bn.groupOrder();
+        uint256 alias_ = zx + bls.groupOrder();
         if (alias_ > zx) {
             assembly { mstore(add(add(pr, 32), 640), alias_) }
-            assertFalse(bn.verifyTransfer(st, pr));
+            assertFalse(bls.verifyTransfer(st, pr));
         }
     }
 
@@ -289,12 +282,6 @@ contract ZetherVerifierTest is Test {
         return (ok, g0 - gasleft());
     }
 
-    function test_burnBn254() public {
-        (bool ok, uint256 gas) = _burn(bn, 1000, 400, 5);
-        assertTrue(ok);
-        console2.log("bn254 burn verify gas", gas);
-    }
-
     function test_burnBls() public {
         (bool ok, uint256 gas) = _burn(bls, 1000, 400, 5);
         assertTrue(ok);
@@ -302,23 +289,23 @@ contract ZetherVerifierTest is Test {
     }
 
     function test_burnOverspendRejected() public view {
-        (bool ok,) = _burn(bn, 1000, 996, 5);
+        (bool ok,) = _burn(bls, 1000, 996, 5);
         assertFalse(ok);
     }
 
     function test_burnProofNotATransferProof() public view {
-        bytes memory st = _burnStatement(bn, 1000, 400, 5);
-        bytes memory pr = prover.proveBurn(bn, st, ZetherProver.BurnWitness(XF, 595, 0x99, keccak256("b")));
-        assertTrue(bnB.verifyBurn(st, pr));
-        assertFalse(bn.verifyTransfer(st, pr));
+        bytes memory st = _burnStatement(bls, 1000, 400, 5);
+        bytes memory pr = prover.proveBurn(bls, st, ZetherProver.BurnWitness(XF, 595, 0x99, keccak256("b")));
+        assertTrue(blsB.verifyBurn(st, pr));
+        assertFalse(bls.verifyTransfer(st, pr));
         bytes memory t = bytes.concat(st);
         t[351] = bytes1(uint8(t[351]) ^ 1); // recipient bị relayer đổi
-        assertFalse(bnB.verifyBurn(t, pr));
+        assertFalse(blsB.verifyBurn(t, pr));
     }
 
     function test_burnWrongKeyRejected() public view {
-        bytes memory st = _burnStatement(bn, 1000, 400, 5);
-        bytes memory pr = prover.proveBurn(bn, st, ZetherProver.BurnWitness(XT, 595, 0x99, keccak256("b")));
-        assertFalse(bnB.verifyBurn(st, pr));
+        bytes memory st = _burnStatement(bls, 1000, 400, 5);
+        bytes memory pr = prover.proveBurn(bls, st, ZetherProver.BurnWitness(XT, 595, 0x99, keccak256("b")));
+        assertFalse(blsB.verifyBurn(st, pr));
     }
 }

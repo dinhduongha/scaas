@@ -47,5 +47,14 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   `authRef` through `requireZetherAuthorized`), and the tests with the `authRef` cases: `test/ua/UARegistry.t.sol`
   (T-REG-3b), `UARegistryZether.t.sol` (native / derived / `msig` / same-curve-BLS `authRef`), `UARegistryPq.t.sol`
   (the `pqz-mlwe` `authRef` rule), `test/pqz/UAPqzVerifier.t.sol` and `helpers/PqzRegistryBase.sol` (the `pqz-mlwe`
-  registration), `test/zether/ZetherAuthRef.t.sol` (moved, not copied); not built. UA-6 Task 4 adds the `zether-bn254`
-  line and `requireZetherAuthorized` here.
+  registration), `test/zether/ZetherAuthRef.t.sol` (moved, not copied); not built. UA-6 Task 4 (U8–U10, CTR-ZTH-32)
+  added the whole bn254 Zether line and the `authSig` path as they stood before it: `src/zether/` (`ZetherVerifier.sol`
+  with `ZetherBn254Curve` and the three bn254 verifier contracts, `ZetherLib.sol` with `AUTH_TAG` and the
+  `requireZetherAuthorized` calls, `ZetherLayer.sol` / `IZetherToken.sol` / `UnderlyingZetherToken.sol` /
+  `NoUnderlyingZetherToken.sol` with the `authSig` argument, `ZetherTypes.sol` with `KIND_ZETHER_BN254` /
+  `TAG_ZETHER_BN254`, `IZetherVerifier.sol`), `src/ua/verifiers/PairingVerifiers.sol` (`ZetherSchnorrBn254Verifier`),
+  `script/DeployBase.sol` and `script/ZetherE2E.s.sol` (the bn254 deploy steps, versions 1 bn254 / 2 BLS12-381),
+  `scripts/e2e-zether.sh` (the bn254 / `authRef` e2e), and every `test/zether/` file it cut bn254 suites from (the
+  fixture with `useBls`, the bn254 KATs, S3 vector and prover-cross suites, the bn254 gas rows). The registry side
+  (kind 0x0140, slot 12, `requireZetherAuthorized`) is in the pre-UA-6 `src/ua/` copies above. The vector JSON
+  (`test/vectors/zether/*bn254*`, the 0x0140 rows of `../vectors/ua/kinds.json`) stays in place until UA-6 Task 8.

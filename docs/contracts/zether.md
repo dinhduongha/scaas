@@ -64,7 +64,7 @@ The
 NatSpec and client screens carry the warning. Non-EVM families: feasibility only. The statement and transcript are
 frozen byte-exact in this file. Classical Zether runs on BLS12-381 only ([CTR-ZTH-32](#CTR-ZTH-32)); the bn254 line
 (a second curve cost twice the verifier audit and ~1.3× prover work, with no interop between curves) is in
-`smartcontracts/evm/legacy/ua6/`, and the bn254 columns below describe it.
+`smartcontracts/evm/legacy/ua6/`; its figures are kept in the "Legacy bn254" notes of §3 and §19.
 
 <a id="philosophy"></a>**Identity visible, amounts hidden.** SCaaS Zether is not a mixer:
 
@@ -143,22 +143,38 @@ relation) plus **exactly two Bulletproof range statements** — `v ∈ [0, 2^{n_
 strong Fiat-Shamir). NUMS generators are computed in the verifier constructor and stored with SSTORE2 (130 points: `h`,
 `U`, `G_0..63`, `H_0..63`).
 
-| | bn254 (alt_bn128) | BLS12-381 G1 |
-|---|---|---|
-| `p` | `21888242871839275222246405745257275088696311157297823662689037894645226208583` | `0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab` |
-| `r` | `21888242871839275222246405745257275088548364400416034343698204186575808495617` | `0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001` |
-| `G` | `(1, 2)` | x=`0x17f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb` y=`0x08b3f481e3aaa0f1a09e30ed741d8ae4fcf5e095d5d00af600db18cb2c04b3edd03cc744a2888ae40caa232946c5e7e1` |
-| Point `P` bytes | **64** = `be32(x) ‖ be32(y)` (EIP-196) | **128** = `pad16 ‖ x48 ‖ pad16 ‖ y48` (EIP-2537; `pad16` = 16 zero bytes) |
-| `O` | 64 zero bytes | 128 zero bytes |
-| Scalar | 32 bytes BE, **must be `< r`** | 32 bytes BE, **must be `< r`** |
-| Precompiles | `0x06` add, `0x07` mul (MSM = a mul+add loop) | `0x0b` G1ADD, `0x0c` G1MSM (subgroup check), `0x10` MAP_FP_TO_G1 |
-| Security | ~100 bit | ~117–126 bit |
-| Chains | any EVM since Byzantium | Prague (EIP-2537) |
-| `proofSystemId` | `keccak256("scaas/zether/sigma-bullets/bn254/n64-n64/v2")` | `keccak256("scaas/zether/sigma-bullets/bls12-381/n64-n64/v2")` (`v2`: the 480-byte header, P3b; label: controller ruling, pending the owner) |
+| | BLS12-381 G1 |
+|---|---|
+| `p` | `0x1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab` |
+| `r` | `0x73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001` |
+| `G` | x=`0x17f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb` y=`0x08b3f481e3aaa0f1a09e30ed741d8ae4fcf5e095d5d00af600db18cb2c04b3edd03cc744a2888ae40caa232946c5e7e1` |
+| Point `P` bytes | **128** = `pad16 ‖ x48 ‖ pad16 ‖ y48` (EIP-2537; `pad16` = 16 zero bytes) |
+| `O` | 128 zero bytes |
+| Scalar | 32 bytes BE, **must be `< r`** |
+| Precompiles | `0x0b` G1ADD, `0x0c` G1MSM (subgroup check), `0x10` MAP_FP_TO_G1 |
+| Security | ~117–126 bit |
+| Chains | Prague (EIP-2537) |
+| `proofSystemId` | `keccak256("scaas/zether/sigma-bullets/bls12-381/n64-n64/v2")` (`v2`: the 480-byte header, P3b; label: controller ruling, pending the owner) |
 
-Both curves are supported; the token creator chooses the verifier. BLS12-381 buys security, **not** gas (measured: it
-is more expensive; an earlier "45–60 % cheaper" claim is wrong). Which curve production tokens should use is open
-([CTR-ZTH-32](#CTR-ZTH-32)).
+<details><summary>Legacy bn254 (alt_bn128; <code>smartcontracts/evm/legacy/ua6/</code>, UA-6 U10)</summary>
+
+| | bn254 (alt_bn128) |
+|---|---|
+| `p` | `21888242871839275222246405745257275088696311157297823662689037894645226208583` |
+| `r` | `21888242871839275222246405745257275088548364400416034343698204186575808495617` |
+| `G` | `(1, 2)` |
+| Point `P` bytes | **64** = `be32(x) ‖ be32(y)` (EIP-196) |
+| `O` | 64 zero bytes |
+| Scalar | 32 bytes BE, **must be `< r`** |
+| Precompiles | `0x06` add, `0x07` mul (MSM = a mul+add loop) |
+| Security | ~100 bit |
+| Chains | any EVM since Byzantium |
+| `proofSystemId` | `keccak256("scaas/zether/sigma-bullets/bn254/n64-n64/v2")` |
+
+</details>
+
+Classical Zether runs on BLS12-381 only ([CTR-ZTH-32](#CTR-ZTH-32)). BLS12-381 buys security, **not** gas (measured:
+it is more expensive than the legacy bn254 line; an earlier "45–60 % cheaper" claim is wrong).
 
 **The canonical encoding is unique.** Coordinates must be `< p` (the precompiles refuse otherwise); BLS points must have
 all-zero `pad16`. The prover **never** outputs a non-canonical point; `UA = keccak256(encodedY)` relies on that.
@@ -688,7 +704,7 @@ wrap and unwrap entries (without `unwrap(uint256,address)`). A direct `zetherUns
 with `keccak256(abi.encode(keccak256("SCAAS-ZETHER-UNWRAP-V1"), u, minOut))` as its binding word, so a copied proof can
 neither change the leg, drop `minOut` nor become a `zetherUnshield` (controller rulings, pending the owner). Relayed, the
 envelope binding covers every envelope field except `data`, so `u` and `minOut` are protected only by the envelope
-signer's signature: the signer (the account authority) can re-route a proof to another leg with `minOut` 0, or into public
+signer's signature: the envelope signer (the account itself) can re-route a proof to another leg with `minOut` 0, or into public
 units through `zetherUnshield`; the relayer cannot (amount and recipient stay bound). Binding `u` and `minOut` when relayed
 is an open question (controller ruling, pending the owner).
 
@@ -1020,7 +1036,9 @@ Zether token (its own confidential account is classical by nature).
 - **Unchanged:** a one-call `zetherWrapShield` from a UA source (a UA wrap-shields in two signed steps, `uaWrap` then
   `uaExecute(zetherShield)`; owner 2026-10-13); the roll-over functions; the Zether UA as the confidential account.
 
-Status **SPECIFIED** (UA-5c). `pqzUnshield` takes a `bytes32` recipient from the start (P6g).
+Status **SPECIFIED** (UA-5c), except the shield bullet: `zetherShield` is on the UA allowlist of both Zether kinds
+since UA-6 Task 4 (the Zether UA shields its own public units by `uaExecute(zetherShield)`, U8). `pqzUnshield` takes a
+`bytes32` recipient from the start (P6g).
 
 <a id="CTR-ZTH-46"></a>**CTR-ZTH-46** — **The prover views live in a stateless `ZetherStatements`** (owner, T14; pairs
 with `ZetherDisclosure`). It serves `transferStatement`, `transferStatementSingle` and `unshieldStatement` (built:
@@ -1061,8 +1079,8 @@ of `ZetherSafety` + a new deployment, after the cryptographic audit.
   generic gate of every kind (plan 5g-Z2, owner 2026-10-20: it replaces `setZetherEnabled`, which only worked on a dev
   chain); creating a `*_ZETHER` token reverts when the kind is off (`KindDisabled`) **or**, in the token's `initialize`,
   when the chain is not a dev chain (built, P3; 5g-Z2).
-- The kinds' `initialize`, the constructors of both proof verifiers and of `ZetherSchnorrBn254Verifier` /
-  `ZetherSchnorrBls12381Verifier` also revert outside a dev chain (a manual deploy cannot bypass it).
+- The kinds' `initialize`, the constructors of the proof verifiers and of `ZetherSchnorrBls12381Verifier` also
+  revert outside a dev chain (a manual deploy cannot bypass it).
 - The NatSpec of every Zether contract carries **UNAUDITED — NOT FOR PRODUCTION FUNDS**.
 
 <a id="CTR-ZTH-33"></a>**CTR-ZTH-33** — *Open (owner).* **Chain 7622 is not a classical-Zether dev chain**:
@@ -1070,8 +1088,8 @@ of `ZetherSafety` + a new deployment, after the cryptographic audit.
 
 <a id="parameters"></a>
 <a id="CTR-ZTH-32"></a>**CTR-ZTH-32** — **Classical Zether is BLS12-381 only** (owner). BLS12-381 is more secure
-(~117–126 vs ~100 bit) and measured more expensive than bn254 (the gas table below, bn254 columns kept as the
-reference of the legacy line). The bn254 line — the kind `zether-bn254`, its Schnorr verifier, the bn254 token verifier
+(~117–126 vs ~100 bit) and measured more expensive than bn254 (the bn254 figures are kept in the "Legacy bn254" notes
+of §3 and §19). The bn254 line — the kind `zether-bn254`, its Schnorr verifier, the bn254 token verifier
 instances and `proofSystemId`, deploy steps, vectors and prover paths — is in `smartcontracts/evm/legacy/ua6/`
 (backup, not deleted); the NUMS generators and parameters of §2–§5 name bn254 only for that legacy line.
 
@@ -1091,7 +1109,7 @@ could carry a fake verifier (`true` for every proof ⇒ `zetherUnshield` drains 
   the transfer verifier and the burn verifier as constructor arguments (immutables; the two verifiers must share one
   `proofSystemId`), so every clone of a release uses them; `verifier()`, `burnVerifier()` and `curve()` (the transfer
   verifier's `curveName()`) read them. The curve is an attribute of the release, version numbers carry no curve meaning
-  (the deploy releases bn254 as version 1 and BLS12-381 as version 2 of each kind). `ConfidentialConfig` has no
+  (since UA-6 the deploy releases BLS12-381 as version 1 of each kind; the bn254 releases are in `legacy/ua6/`). `ConfidentialConfig` has no
   verifier field (plan 5g-Z2; for the PQZ kinds too, [pq-zero-knowledge.md](pq-zero-knowledge.md)).
 - **The factory deploys them with the release's env** (plan 5g-Z2, owner 2026-10-20; it replaces 5g-Z1's
   constructor-fixed `Canonical` sets, `zetherVerifiers` / `pqzVerifier` and `NotCanonicalVerifiers`). The registrar
@@ -1263,20 +1281,38 @@ the P3 kinds** for `n_v = 64`, the figures of the old `ZetherToken` are gone): *
 intrinsic and calldata** (a bn254 transfer ≈ 3.9 KB calldata ≈ +52 k; BLS ≈ 7 KB ≈ +99 k). Verification gas does not
 depend on the value (identical for `v = 300`, `v = 2^32 + 5`, `v = 2^64 − 1`). The test that produced each figure is in
 the first column; `zetherUnshield` is on `NONE_ZETHER` (public mint, no underlying transfer); `zetherWrapShield` and
-`zetherUnshieldUnwrap` are not measured.
+`zetherUnshieldUnwrap` are not measured. UA-6 (U9) removed the registry authorization call and the `authSig` calldata
+from every spend and moved the owner ops to `requireAuthorized`; the BLS12-381 figures below predate it (U18
+re-measures them).
 
-| Operation (test) | bn254 | BLS12-381 | Earlier estimate (bn254 unless noted) | Deviation (n_v = 64) |
-|---|---|---|---|---|
-| `verifyTransfer` (verifier, auditor off; `ZetherVerifier.t` `test_transferBn254` / `Bls`) | **2,738,357** | **2,967,069** | BP 1,507 k + Σ 171 k = 1,678 k | +63 % |
-| `verifyTransfer` (auditor on; `test_transferBn254Auditor` / `BlsAuditor`) | **2,766,616** | **3,009,705** | +27.5 k | matches (+28 k / +43 k) |
-| `verifyBurn` (`test_burnBn254` / `Bls`) | **1,349,144** | **1,448,212** | ~1.27 M | +6 % |
-| `zetherTransferSingle` / `zetherTransfer` (multi) | see tables (a) and (b) below | | earlier single-recipient figures: 3.29 M / 3.92 M (direct, auditor, inner fee) | superseded by (a) |
-| `zetherUnshield` (`ZetherNone.t` `test_lifecycleShieldTransferRollOverUnshield`) | **1,439,816** | **1,565,410** | ~1.27 M | +13 % |
-| `zetherShield` (first credit / warm; `test_shieldAndRollOverGas`) | 160,332 / 25,928 | 216,283 / 34,174 | — | UA-3 (`kindOf`); before 159,788 / 25,384 and 215,748 / 33,639 |
-| `zetherRollOver` (work / no-op; `test_shieldAndRollOverGas`) | 115,783 / 3,093 | 166,975 / 3,083 | ~66 k execution | unchanged |
-| `zetherRollOverSigned` (Schnorr; `test_ownerOnlyRollOver`) | **144,588** | **207,785** | ~31 k | UA-3: the registry's verifier call and `Y` from SSTORE2 (before 135,768 / 199,750) |
-| UA registry `register`, self (`UARegistryZether.t` `test_registerSelf`, cold, `--isolate`) | **165,126** | **205,059** | — | UA-3: the UA PoP + SSTORE2(`Y`) for `keyOf` (CTR-ZTH-50) |
-| `register` SELF_SCHNORR, the backed-up registry (`legacy/ua3`, `UniversalAccountRegistry.t` `test_registerGas`) | 169,802 | 194,966 | ~105,750; BLS ~160 k | P3: 102,659 / 83,440; +67 k / +112 k in P3b, the key kept for `keyOf` (CTR-ZTH-50) |
+| Operation (test) | BLS12-381 | Earlier estimate (bn254 unless noted) | Deviation (n_v = 64) |
+|---|---|---|---|
+| `verifyTransfer` (verifier, auditor off; `ZetherVerifier.t` `test_transferBls`) | **2,967,069** | BP 1,507 k + Σ 171 k = 1,678 k | +63 % |
+| `verifyTransfer` (auditor on; `test_transferBlsAuditor`) | **3,009,705** | +27.5 k | matches (+28 k / +43 k) |
+| `verifyBurn` (`test_burnBls`) | **1,448,212** | ~1.27 M | +6 % |
+| `zetherTransferSingle` / `zetherTransfer` (multi) | see tables (a) and (b) below | earlier single-recipient figures: 3.29 M / 3.92 M (direct, auditor, inner fee) | superseded by (a) |
+| `zetherUnshield` (`ZetherNone.t` `test_lifecycleShieldTransferRollOverUnshield`) | **1,565,410** | ~1.27 M | +13 % |
+| `zetherShield` (first credit / warm; `test_shieldAndRollOverGas`) | 216,283 / 34,174 | — | UA-3 (`kindOf`); before 159,788 / 25,384 and 215,748 / 33,639 |
+| `zetherRollOver` (work / no-op; `test_shieldAndRollOverGas`) | 166,975 / 3,083 | ~66 k execution | unchanged |
+| `zetherRollOverSigned` (Schnorr; `test_ownerOnlyRollOver`) | **207,785** | ~31 k | UA-3: the registry's verifier call and `Y` from SSTORE2 (before 135,768 / 199,750) |
+| UA registry `register`, self (`UARegistryZether.t` `test_registerSelf`, cold, `--isolate`) | **205,059** | — | UA-3: the UA PoP + SSTORE2(`Y`) for `keyOf` (CTR-ZTH-50) |
+| `register` SELF_SCHNORR, the backed-up registry (`legacy/ua3`, `UniversalAccountRegistry.t` `test_registerGas`) | 194,966 | ~105,750; BLS ~160 k | P3: 102,659 / 83,440; +67 k / +112 k in P3b, the key kept for `keyOf` (CTR-ZTH-50) |
+
+<details><summary>Legacy bn254 column (as measured before UA-6; <code>legacy/ua6/</code>)</summary>
+
+| Operation | bn254 |
+|---|---|
+| `verifyTransfer` (verifier, auditor off; `ZetherVerifier.t` `test_transferBn254` / `Bls`) | **2,738,357** |
+| `verifyTransfer` (auditor on; `test_transferBn254Auditor` / `BlsAuditor`) | **2,766,616** |
+| `verifyBurn` (`test_burnBn254` / `Bls`) | **1,349,144** |
+| `zetherUnshield` (`ZetherNone.t` `test_lifecycleShieldTransferRollOverUnshield`) | **1,439,816** |
+| `zetherShield` (first credit / warm; `test_shieldAndRollOverGas`) | 160,332 / 25,928 |
+| `zetherRollOver` (work / no-op; `test_shieldAndRollOverGas`) | 115,783 / 3,093 |
+| `zetherRollOverSigned` (Schnorr; `test_ownerOnlyRollOver`) | **144,588** |
+| UA registry `register`, self (`UARegistryZether.t` `test_registerSelf`, cold, `--isolate`) | **165,126** |
+| `register` SELF_SCHNORR, the backed-up registry (`legacy/ua3`, `UniversalAccountRegistry.t` `test_registerGas`) | 169,802 |
+
+</details>
 
 `n_v` 32 → 64 (measured 2026-10-05) adds exactly one inner-product round and 64 pairs `G_i`/`H_i` to the BP-2 MSM of Bulletproof #1:
 ≈ +538 k (bn254) / +519 k (BLS) execution gas, ≈ +20 %/+15 % on a single-recipient transfer. The relayed form adds ≈ +85 k (bn254, `ZetherRelay.t` `test_relayedTransferSingle_outerFeeFromPublicBalance_innerFeeToBeneficiary`) to a direct transfer. Burn is unchanged (BP#2 only).
@@ -1309,14 +1345,6 @@ BUNDLE token, NONE = `zetherTransferNoBundle`.
 
 | Curve | Entry | Aud. | M = 1 | M = 2 | M = 4 | M = 8 | Calldata (M = 1 / 2 / 4 / 8) |
 |---|---|---|---|---|---|---|---|
-| bn254 | `zetherTransferSingle` | on | 3,352,792 | — | — | — | 3,908 |
-| bn254 | `zetherTransferSingle` | out | 3,284,946 | — | — | — | 3,908 |
-| bn254 | Compact | on | 3,239,635 | 4,809,467 | 7,916,175 | 14,198,340 | 4,004 / 5,732 / 9,220 / 16,164 |
-| bn254 | Compact | out | 3,212,449 | 4,754,406 | 7,804,810 | 13,972,187 | same |
-| bn254 | BUNDLE | on | 3,368,038 | 5,068,803 | 8,481,710 | 15,353,653 | 3,940 / 5,636 / 9,028 / 15,812 |
-| bn254 | BUNDLE | out | 3,301,051 | 4,954,040 | 8,270,846 | 14,948,398 | same |
-| bn254 | NONE | on | 3,142,904 | 4,664,842 | 7,720,023 | 13,875,749 | as BUNDLE |
-| bn254 | NONE | out | 3,115,717 | 4,609,779 | 7,608,659 | 13,649,593 | as BUNDLE |
 | BLS12-381 | `zetherTransferSingle` | on | 3,968,916 | — | — | — | 6,980 |
 | BLS12-381 | `zetherTransferSingle` | out | 3,846,915 | — | — | — | 6,980 |
 | BLS12-381 | Compact | on | 3,680,488 | 5,470,832 | 9,068,513 | **16,533,815** | 7,076 / 10,276 / 16,708 / 29,540 |
@@ -1325,6 +1353,21 @@ BUNDLE token, NONE = `zetherTransferNoBundle`.
 | BLS12-381 | BUNDLE | out | 3,863,321 | 5,837,216 | 9,843,379 | **18,090,504** | same |
 | BLS12-381 | NONE | on | 3,581,588 | 5,321,839 | 8,863,490 | 16,191,841 | as BUNDLE |
 | BLS12-381 | NONE | out | 3,540,283 | 5,237,423 | 8,689,932 | 15,828,339 | as BUNDLE |
+
+<details><summary>Legacy bn254 rows (as measured before UA-6; <code>legacy/ua6/</code>)</summary>
+
+| Curve | Entry | Aud. | M = 1 | M = 2 | M = 4 | M = 8 | Calldata (M = 1 / 2 / 4 / 8) |
+|---|---|---|---|---|---|---|---|
+| bn254 | `zetherTransferSingle` | on | 3,352,792 | — | — | — | 3,908 |
+| bn254 | `zetherTransferSingle` | out | 3,284,946 | — | — | — | 3,908 |
+| bn254 | Compact | on | 3,239,635 | 4,809,467 | 7,916,175 | 14,198,340 | 4,004 / 5,732 / 9,220 / 16,164 |
+| bn254 | Compact | out | 3,212,449 | 4,754,406 | 7,804,810 | 13,972,187 | same |
+| bn254 | BUNDLE | on | 3,368,038 | 5,068,803 | 8,481,710 | 15,353,653 | 3,940 / 5,636 / 9,028 / 15,812 |
+| bn254 | BUNDLE | out | 3,301,051 | 4,954,040 | 8,270,846 | 14,948,398 | same |
+| bn254 | NONE | on | 3,142,904 | 4,664,842 | 7,720,023 | 13,875,749 | as BUNDLE |
+| bn254 | NONE | out | 3,115,717 | 4,609,779 | 7,608,659 | 13,649,593 | as BUNDLE |
+
+</details>
 
 - **Per extra recipient** (slope M = 1 → 8, auditor on): bn254 Compact ≈ 1.57 M, BUNDLE ≈ 1.71 M, NONE ≈ 1.53 M;
   BLS12-381 Compact ≈ 1.84 M, BUNDLE ≈ 2.16 M, NONE ≈ 1.80 M — against ≈ 3.35 M / 3.97 M for another separate transfer.
@@ -1337,18 +1380,25 @@ BUNDLE token, NONE = `zetherTransferNoBundle`.
 
 | Curve | Form | Aud. | max `M` | limit at max | limit at max + 1 |
 |---|---|---|---|---|---|
-| bn254 | Compact | on | 8 / 8 | 14,988,311 / 15,515,275 | 16,641,769 / 17,222,681 |
-| bn254 | Compact | out | 9 / 8 | 16,364,440 / 15,262,054 | 18,012,699 / 16,936,814 |
-| bn254 | BUNDLE | on | 8 / 7 | 16,175,389 / 14,874,606 | 17,986,008 / 16,739,892 |
-| bn254 | BUNDLE | out | 8 / 8 | 15,744,842 / 16,295,902 | 17,503,407 / 18,111,911 |
-| bn254 | NONE | on | 9 / 8 | 16,275,709 / 15,166,166 | 17,905,215 / 16,844,747 |
-| bn254 | NONE | out | 9 / 9 | 15,998,568 / 16,559,080 | 17,595,998 / 18,208,894 |
 | BLS12-381 | Compact | on | 7 / 7 | 15,542,949 / 16,096,752 | 17,535,556 / 18,155,759 |
 | BLS12-381 | Compact | out | 7 / 7 | 15,202,174 / 15,745,625 | 17,142,001 / 17,750,224 |
 | BLS12-381 | BUNDLE | on | 6 / 6 | 15,529,396 / 16,079,862 | 17,838,917 / 18,465,985 |
 | BLS12-381 | BUNDLE | out | 6 / 6 | 14,747,469 / 15,273,371 | 16,923,160 / 17,521,427 |
 | BLS12-381 | NONE | on | 7 / 7 | 15,215,864 / 15,759,174 | 17,177,775 / 17,786,510 |
 | BLS12-381 | NONE | out | 7 / 7 | 14,875,267 / 15,407,985 | 16,784,409 / 17,381,188 |
+
+<details><summary>Legacy bn254 rows (as measured before UA-6; <code>legacy/ua6/</code>)</summary>
+
+| Curve | Form | Aud. | max `M` | limit at max | limit at max + 1 |
+|---|---|---|---|---|---|
+| bn254 | Compact | on | 8 / 8 | 14,988,311 / 15,515,275 | 16,641,769 / 17,222,681 |
+| bn254 | Compact | out | 9 / 8 | 16,364,440 / 15,262,054 | 18,012,699 / 16,936,814 |
+| bn254 | BUNDLE | on | 8 / 7 | 16,175,389 / 14,874,606 | 17,986,008 / 16,739,892 |
+| bn254 | BUNDLE | out | 8 / 8 | 15,744,842 / 16,295,902 | 17,503,407 / 18,111,911 |
+| bn254 | NONE | on | 9 / 8 | 16,275,709 / 15,166,166 | 17,905,215 / 16,844,747 |
+| bn254 | NONE | out | 9 / 9 | 15,998,568 / 16,559,080 | 17,595,998 / 18,208,894 |
+
+</details>
 
   A limit under 2^24 at `M + 1` is refused by the margin. More recipients go in separate transfers; the statement itself allows `M ≤ 16`.
 - **Prover** (release `zether-cli proveTransferMulti`, one process per call; median of 3 on the chain-7622 host, AMD
@@ -1364,16 +1414,23 @@ calldata — its size in the last column, its transaction calldata cost (≤ 16 
 
 | Curve | Entry | `SENDER_S` | `RECEIVER_X` | `AUDITOR` | `SENDER_CP` | Bundles in calldata |
 |---|---|---|---|---|---|---|
-| bn254 | Single (stored) | 79,651 | 103,580 | 112,496 | 103,629 | — |
-| bn254 | BUNDLE M = 1 | 79,651 | 103,580 | 112,496 | 103,629 | — |
-| bn254 | BUNDLE M = 8 | 201,670 | 225,622 | 234,543 | 225,671 | — |
-| bn254 | Compact M = 1 | 64,926 | 88,855 | 97,771 | 88,904 | 272 B |
-| bn254 | Compact M = 8 | 86,068 | 110,013 | 118,933 | 110,062 | 2,064 B |
 | BLS12-381 | Single (stored) | 122,807 | 154,318 | 167,632 | 154,367 | — |
 | BLS12-381 | BUNDLE M = 1 | 122,807 | 154,318 | 167,632 | 154,367 | — |
 | BLS12-381 | BUNDLE M = 8 | 367,013 | 398,586 | 411,915 | 398,635 | — |
 | BLS12-381 | Compact M = 1 | 90,829 | 122,337 | 135,651 | 122,386 | 528 B |
 | BLS12-381 | Compact M = 8 | 113,235 | 144,785 | 158,106 | 144,834 | 4,112 B |
+
+<details><summary>Legacy bn254 rows (as measured before UA-6; <code>legacy/ua6/</code>)</summary>
+
+| Curve | Entry | `SENDER_S` | `RECEIVER_X` | `AUDITOR` | `SENDER_CP` | Bundles in calldata |
+|---|---|---|---|---|---|---|
+| bn254 | Single (stored) | 79,651 | 103,580 | 112,496 | 103,629 | — |
+| bn254 | BUNDLE M = 1 | 79,651 | 103,580 | 112,496 | 103,629 | — |
+| bn254 | BUNDLE M = 8 | 201,670 | 225,622 | 234,543 | 225,671 | — |
+| bn254 | Compact M = 1 | 64,926 | 88,855 | 97,771 | 88,904 | 272 B |
+| bn254 | Compact M = 8 | 86,068 | 110,013 | 118,933 | 110,062 | 2,064 B |
+
+</details>
 
 - `SENDER_CP` costs as `RECEIVER_X` (+49 gas: the bases swap); `AUDITOR` adds the cold `auditorKey()` read (≈ 9 k /
   13 k). A stored entry is read whole: BUNDLE M = 8 pays ≈ 65 / 129 cold slots for 2 / 4 KiB, which is why commit-reveal

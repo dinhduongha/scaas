@@ -15,14 +15,13 @@ contract ZetherKatTest is Test {
     using stdJson for string;
 
     string constant DIR = "test/vectors/zether/";
-    IZetherVerifier bn;
     IZetherVerifier bls;
-    IZetherBurnVerifier bnB;
     IZetherBurnVerifier blsB;
 
+    /// BLS12-381 only since UA-6 (CTR-ZTH-32); the bn254 verifier KATs are in `legacy/ua6/`. The transcript and
+    /// hash-to-scalar cases keep both group orders (the `G1Bn254` library serves the `*-bn254` UA kinds).
     function setUp() public {
-        (bn, bnB) = ZetherVerifiers.deploy(false);
-        (bls, blsB) = ZetherVerifiers.deploy(true);
+        (bls, blsB) = ZetherVerifiers.deploy();
     }
 
     function _checkGenerators(IZetherVerifier v, string memory file) internal view {
@@ -45,12 +44,6 @@ contract ZetherKatTest is Test {
     function _at(bytes memory blob, uint256 i, uint256 p) internal pure returns (bytes memory out) {
         out = new bytes(p);
         for (uint256 k; k < p; ++k) out[k] = blob[i * p + k];
-    }
-
-    function test_generatorsBn254MatchIndependentReference() public view {
-        _checkGenerators(bn, "generators_bn254.json");
-        assertEq(keccak256(bnB.generators()), keccak256(bn.generators()), "the burn verifier's generators");
-        assertEq(bnB.proofSystemId(), bn.proofSystemId(), "one proof system");
     }
 
     function test_generatorsBls12381MatchIndependentReference() public view {
@@ -106,7 +99,6 @@ contract ZetherKatTest is Test {
         assertEq(v.g1MulBase(uint256(j.readBytes32(".z"))), v.g1Add(R, v.g1Mul(Y, e)), "schnorr eq");
     }
 
-    function test_schnorrBn254MatchesReference() public view { _checkSchnorr(bn, "schnorr_bn254.json"); }
     function test_schnorrBls12381MatchesReference() public view { _checkSchnorr(bls, "schnorr_bls12381.json"); }
 
     // --------------------------------------------------------------- phép nhóm
@@ -129,18 +121,7 @@ contract ZetherKatTest is Test {
         assertEq(v.ringSize(), 2);
     }
 
-    function test_groupLawsBn254() public view { _groupLaws(bn); }
     function test_groupLawsBls12381() public view { _groupLaws(bls); }
-
-    function test_bn254RejectsOffCurve() public {
-        bytes memory bad = abi.encodePacked(uint256(1), uint256(3));
-        assertFalse(bn.isValidPoint(bad));
-        bytes memory g = bn.g1MulBase(1);
-        vm.expectRevert(G1Bn254.BadPoint.selector);
-        bn.g1Add(bad, g);
-        assertFalse(bn.isValidPoint(abi.encodePacked(uint256(1), G1Bn254.P + 2))); // không chính tắc
-        assertFalse(bn.isValidPoint(new bytes(63)));
-    }
 
     function test_blsRejectsNonSubgroupAndOffCurve() public {
         string memory j = vm.readFile(string.concat(DIR, "curve_misc.json"));

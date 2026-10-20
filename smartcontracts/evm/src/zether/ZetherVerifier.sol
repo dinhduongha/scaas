@@ -6,7 +6,7 @@ import {
 } from "./IZetherVerifier.sol";
 import {ZetherTranscript as T} from "./ZetherTranscript.sol";
 import {ZetherSafety} from "./ZetherSafety.sol";
-import {G1Bn254, G1Bls12381} from "./ZetherCurves.sol";
+import {G1Bls12381} from "./ZetherCurves.sol";
 
 /// @title The curve layer every Zether verifier contract shares: the curve hooks, the proof system ids, the NUMS
 ///        generator blob (§3, read from an SSTORE2 data contract) and the arithmetic helpers.
@@ -636,47 +636,6 @@ abstract contract ZetherBurnVerifierBase is ZetherVerifierBase, IZetherBurnVerif
     }
 }
 
-/// @title Verifier Zether trên bn254 (precompile 0x05–0x07, có từ Byzantium).
-/// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** ~100 bit sau exTNFS (canon C6.1): mọi số tiền
-///         confidential trên public chain phải được giả định giải mã được trong khoảng 2035–2045.
-abstract contract ZetherBn254Curve is ZetherCurve {
-    function _psidLabel() internal pure override returns (string memory) {
-        return "scaas/zether/sigma-bullets/bn254/n64-n64/v2";
-    }
-
-    function curveName() external pure returns (string memory) { return "bn254"; }
-
-    /// @dev Probe: G + G phải đúng bằng [2]G (vector cố định). Rỗng/sai ⇒ false.
-    function isSupportedOnThisChain() external view returns (bool) {
-        (bool ok, bytes memory out) = address(0x06).staticcall(abi.encodePacked(uint256(1), uint256(2), uint256(1), uint256(2)));
-        if (!ok || out.length != 64) return false;
-        (bool ok2, bytes memory out2) = address(0x07).staticcall(abi.encodePacked(uint256(1), uint256(2), uint256(2)));
-        return ok2 && out2.length == 64 && keccak256(out) == keccak256(out2)
-            && keccak256(out) == keccak256(abi.encodePacked(
-                uint256(0x030644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd3),
-                uint256(0x15ed738c0e0a7c92e7845f96b2ae9c0a68a6a449e3538fc7ff3ebf7a5a18a2c4)));
-    }
-
-    function _pointBytes() internal pure override returns (uint256) { return 64; }
-    function _order() internal pure override returns (uint256) { return G1Bn254.R; }
-    function _base() internal pure override returns (bytes memory) { return G1Bn254.generator(); }
-
-    function _gen(string memory label, uint32 index) internal view override returns (bytes memory) {
-        return G1Bn254.mapToG1(abi.encodePacked("SCAAS-ZETHER-GEN-BN254-V1", _genMsg(label, index)));
-    }
-
-    function _msm(bytes memory pts, uint256[] memory sc) internal view override returns (bytes memory) {
-        return G1Bn254.msm(pts, sc);
-    }
-
-    function _add(bytes memory a, bytes memory b) internal view override returns (bytes memory) {
-        return G1Bn254.add(a, b);
-    }
-
-    function _neg(bytes memory a) internal pure override returns (bytes memory) { return G1Bn254.neg(a); }
-    function _valid(bytes memory a) internal view override returns (bool) { return G1Bn254.isValid(a); }
-}
-
 /// @title Verifier Zether trên BLS12-381 (EIP-2537, cần Prague).
 /// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** 117–126 bit; điểm 128 byte; subgroup check nằm
 ///         trong mọi G1MSM.
@@ -716,19 +675,6 @@ abstract contract ZetherBls12381Curve is ZetherCurve {
 
     function _neg(bytes memory a) internal pure override returns (bytes memory) { return G1Bls12381.neg(a); }
     function _valid(bytes memory a) internal view override returns (bool) { return G1Bls12381.isValid(a); }
-}
-
-/// @title The bn254 inner-product (Bulletproof) verifier: the generators and the range proofs (CTR-ZTH-20).
-contract ZetherInnerProductVerifierBn254 is ZetherInnerProductBase, ZetherBn254Curve {}
-
-/// @title The bn254 transfer verifier (CTR-ZTH-20: one canonical per chain, recorded by `OpenFactory`).
-contract ZetherTransferVerifierBn254 is ZetherTransferVerifierBase, ZetherBn254Curve {
-    constructor(IZetherInnerProductVerifier ip) ZetherVerifierBase(ip) {}
-}
-
-/// @title The bn254 burn verifier (CTR-ZTH-20).
-contract ZetherBurnVerifierBn254 is ZetherBurnVerifierBase, ZetherBn254Curve {
-    constructor(IZetherInnerProductVerifier ip) ZetherVerifierBase(ip) {}
 }
 
 /// @title The BLS12-381 inner-product (Bulletproof) verifier (CTR-ZTH-20).

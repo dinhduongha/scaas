@@ -27,7 +27,7 @@ contract ZetherHandler is ZetherFixture {
     uint256 internal constant MAX = 1 << 30;
 
     function init() external {
-        _stack(false);
+        _stack();
         leg[0] = new MockERC20("USD", "USD", 6);
         leg[1] = new MockERC20("ODD", "ODD", 6);
         UnderlyingZetherToken impl = UnderlyingZetherToken(payable(Catalogue.release(factory, IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, _zenv(),
@@ -129,7 +129,7 @@ contract ZetherHandler is ZetherFixture {
         if (out == 0 || out > r) return;
         bytes memory pl = _unshieldPayload(tok, us[i]);
         bytes memory st = stm.unshieldUnwrapStatement(address(w), pl, amt, address(0xD00D), _none(), address(leg[l]), out, 0);
-        w.zetherUnshieldUnwrap(pl, _proveU(us[i], st, amt, acc[i], _none(), tok), "", _none(), address(leg[l]),
+        w.zetherUnshieldUnwrap(pl, _proveU(us[i], st, amt, acc[i], _none(), tok), _none(), address(leg[l]),
             address(0xD00D), amt, out);
         acc[i] -= amt;
         paid[l] += out;
@@ -141,7 +141,7 @@ contract ZetherHandler is ZetherFixture {
         _ensureAcc(i);
         amt = bound(amt, 1, acc[i]);
         (bytes memory pl, bytes memory pr) = _proveUnshield(tok, us[i], amt, acc[i], address(this), _none(), 0);
-        tok.zetherUnshield(pl, pr, "", _none(), address(this), amt);
+        tok.zetherUnshield(pl, pr, _none(), address(this), amt);
         acc[i] -= amt;
     }
 

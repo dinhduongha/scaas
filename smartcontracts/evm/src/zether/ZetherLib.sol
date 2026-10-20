@@ -3,6 +3,7 @@ pragma solidity ^0.8.24;
 
 import {IFactoryToken} from "../factory/IFactoryToken.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
+import {UAKinds} from "../ua/UAKinds.sol";
 import {IZetherToken} from "./IZetherToken.sol";
 import {IZetherVerifier, IZetherBurnVerifier} from "./IZetherVerifier.sol";
 import {ZetherTypes} from "./ZetherTypes.sol";
@@ -123,7 +124,6 @@ library ZetherLib {
     bytes32 private constant TAG_ENTRY = keccak256("SCAAS-ZETHER-ENTRY-V1");
     bytes32 private constant TAG_ROLLOVER = keccak256("ZETHER_ROLLOVER_V1");
     bytes32 private constant TAG_SET_MODE = keccak256("ZETHER_SET_ROLLOVER_MODE_V1");
-    bytes private constant AUTH_TAG = "SCAAS-ZETHER-AUTH-V1";
     uint256 private constant MAX_RECIPIENTS = 16;
     /// @dev Where the points start: the single payload after `accSeq ‖ sendCounter ‖ salt(16)`, the multi-recipient one
     ///      after `… ‖ salt(16) ‖ be32(M)` (zether.md §9, §11).
@@ -185,7 +185,7 @@ library ZetherLib {
     ///         (`zetherShield`) or the underlying (`zetherWrapShield`); the minter never mints shielded value.
     function shield(ZetherTypes.UA ua, uint256 amount, address registry) public {
         ZetherStorage storage s = $();
-        if (!registeredOn(registry, ua, s.p)) revert IZetherToken.AccountNotRegistered(ua);
+        if (!registeredOn(registry, ua)) revert IZetherToken.AccountNotRegistered(ua);
         uint256 room = s.maxShielded - s.totalShielded;
         if (amount == 0 || amount > room) revert IZetherToken.AmountOutOfRange(amount, room);
         s.totalShielded += amount;
@@ -195,18 +195,14 @@ library ZetherLib {
 
     // ------------------------------------------------------------------ transfer
 
-    /// @notice The single-recipient format (BUNDLE tokens only): checks, authority, proof, then
+    /// @notice The single-recipient format (BUNDLE tokens only): checks, the proof (the only authority), then
     ///         `acc_f −= (C_deb + [fee]G, D_out)`, `pend_t += (C_out, D_out)`, `pend_ben += [fee]G`, `sendCounter_f++`;
     ///         the record `salt ‖ B` stored in full.
-    function transferSingle(
-        bytes calldata payload,
-        bytes calldata proof,
-        bytes calldata authSig,
-        ZetherTypes.UA beneficiary,
-        Env memory e
-    ) public returns (bytes32) {
+    function transferSingle(bytes calldata payload, bytes calldata proof, ZetherTypes.UA beneficiary, Env memory e)
+        public returns (bytes32)
+    {
         (Ctx memory c, Prepared memory pp) = _prepareSingle(payload, beneficiary, e);
-        _check(c, pp, authSig, proof, OP_TRANSFER);
+        _check(c, pp, proof, OP_TRANSFER);
         return _settleSingle(c, pp, payload);
     }
 
@@ -237,13 +233,12 @@ library ZetherLib {
     function transferMulti(
         bytes calldata payload,
         bytes calldata proof,
-        bytes calldata authSig,
         ZetherTypes.UA beneficiary,
         ZetherTypes.TransferMode mode,
         Env memory e
     ) public returns (bytes32) {
         (Ctx memory c, Prepared memory pp) = _prepareMulti(payload, beneficiary, mode, e);
-        _check(c, pp, authSig, proof, OP_MULTI_HASH);
+        _check(c, pp, proof, OP_MULTI_HASH);
         return _settleMulti(c, pp, payload, mode);
     }
 
@@ -279,20 +274,19 @@ library ZetherLib {
 
     // ------------------------------------------------------------------ unshield
 
-    /// @notice The unshield statement (zether.md §8.2, built name `burn`): checks, authority, proof, then
+    /// @notice The unshield statement (zether.md §8.2, built name `burn`): checks, the proof (the only authority), then
     ///         `acc_f.C −= [amount + fee]G`, `pend_ben += [fee]G`, `sendCounter_f++`, `totalShielded −= amount`. The token
     ///         then pays `amount · shieldScale` public-equivalent units to `recipient` (mint or a leg's underlying).
     function unshield(
         bytes calldata payload,
         bytes calldata proof,
-        bytes calldata authSig,
         ZetherTypes.UA beneficiary,
         uint256 amount,
         address recipient,
         Env memory e
     ) public {
         (Ctx memory c, Prepared memory pp) = _prepareUnshield(payload, amount, recipient, beneficiary, e);
-        _check(c, pp, authSig, proof, OP_BURN);
+        _check(c, pp, proof, OP_BURN);
         ZetherStorage storage s = $();
         Account storage a = s.acct[pp.from];
         a.accC = c.ver.g1Sub(_pt(a.accC, c.p), c.ver.g1MulBase(amount + pp.fee));
@@ -331,8 +325,9 @@ library ZetherLib {
         }
     }
 
-    /// @notice CTR-ZTH-16/17: `lastRolledPendingSeq < expectedPendingSeq ≤ pendingSeq`, signed by the account's
-    ///         authority over `ZETHER_ROLLOVER_V1` with `chainid`, `chainUid`, the token and `accSeq`.
+    /// @notice CTR-ZTH-16/17: `lastRolledPendingSeq < expectedPendingSeq ≤ pendingSeq`, signed by the account (a Schnorr
+    ///         by `x` through `registry.requireAuthorized` under `zether-owner`, UA-6 U9) over `ZETHER_ROLLOVER_V1` with
+    ///         `chainid`, `chainUid`, the token and `accSeq`.
     function rollOverSigned(
         ZetherTypes.UA ua,
         uint64 expectedPendingSeq,
@@ -349,7 +344,7 @@ library ZetherLib {
         bytes32 digest = keccak256(abi.encode(
             TAG_ROLLOVER, block.chainid, e.chainUid, address(this), ua, a.accSeq, expectedPendingSeq, validUntilBlock
         ));
-        IUARegistry(e.registry).requireZetherAuthorized(ZetherTypes.UA.unwrap(ua), digest, sig, false);
+        _requireOwner(e, ua, digest, sig);
         _rollOver(s, ua);
     }
 
@@ -366,7 +361,7 @@ library ZetherLib {
         bytes32 digest = keccak256(abi.encode(
             TAG_SET_MODE, block.chainid, e.chainUid, address(this), ua, uint8(mode), a.modeNonce, validUntilBlock
         ));
-        IUARegistry(e.registry).requireZetherAuthorized(ZetherTypes.UA.unwrap(ua), digest, sig, false);
+        _requireOwner(e, ua, digest, sig);
         a.mode = mode;
         a.modeNonce += 1;
         emit IZetherToken.RollOverModeChanged(ua, mode);
@@ -590,21 +585,25 @@ library ZetherLib {
 
     /// @dev Registered on the verifier's curve.
     function _requireRegistered(Ctx memory c, ZetherTypes.UA ua) private view {
-        if (!registeredOn(c.registry, ua, c.p)) revert IZetherToken.AccountNotRegistered(ua);
+        if (!registeredOn(c.registry, ua)) revert IZetherToken.AccountNotRegistered(ua);
     }
 
-    /// @notice `ua` is registered as the Zether kind of the point length `p` (accounts.md §1.13: `kindOf`).
-    function registeredOn(address registry, ZetherTypes.UA ua, uint256 p) internal view returns (bool) {
-        return IUARegistry(registry).kindOf(ZetherTypes.UA.unwrap(ua)) == ZetherTypes.kindOf(p);
+    /// @notice `ua` is registered as `zether-bls12381` (accounts.md §1.13: `kindOf`).
+    function registeredOn(address registry, ZetherTypes.UA ua) internal view returns (bool) {
+        return IUARegistry(registry).kindOf(ZetherTypes.UA.unwrap(ua)) == ZetherTypes.KIND_ZETHER_BLS12381;
     }
 
-    /// @dev The account's spending authority over the statement (registry), then the proof (knowledge of `x`): a
-    ///      transfer on the transfer verifier `c.ver`, a burn on the burn verifier `c.burnVer`, both immutables of the
-    ///      implementation (CTR-ZTH-20); their range proofs on the inner-product verifier each of them fixes.
-    function _check(Ctx memory c, Prepared memory pp, bytes calldata authSig, bytes calldata proof, bytes32 op) private view {
-        IUARegistry(c.registry).requireZetherAuthorized(
-            ZetherTypes.UA.unwrap(pp.from), keccak256(abi.encodePacked(AUTH_TAG, keccak256(pp.statement))), authSig, true
-        );
+    /// @dev An owner op (roll-over, mode): the Zether UA's Schnorr by `x` through `requireAuthorized` under
+    ///      `zether-owner`, `sig = abi.encode(bytes(""), schnorrSig)` (UA-6 U9; `Y` from the record).
+    function _requireOwner(Env memory e, ZetherTypes.UA ua, bytes32 digest, bytes calldata sig) private view {
+        IUARegistry(e.registry).requireAuthorized(ZetherTypes.UA.unwrap(ua), UAKinds.PURPOSE_ZETHER_OWNER, digest, sig);
+    }
+
+    /// @dev The proof is the spending authority (knowledge of `x`; UA-6 U9: no registry call, `from` registered by
+    ///      `kindOf` in the prepare step): a transfer on the transfer verifier `c.ver`, a burn on the burn verifier
+    ///      `c.burnVer`, both immutables of the implementation (CTR-ZTH-20); their range proofs on the inner-product
+    ///      verifier each of them fixes.
+    function _check(Ctx memory c, Prepared memory pp, bytes calldata proof, bytes32 op) private view {
         bool ok = op == OP_TRANSFER
             ? c.ver.verifyTransfer(pp.statement, proof)
             : op == OP_BURN ? c.burnVer.verifyBurn(pp.statement, proof) : c.ver.verifyTransferMulti(pp.statement, proof);
