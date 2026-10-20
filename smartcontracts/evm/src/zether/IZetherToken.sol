@@ -137,8 +137,10 @@ interface IZetherToken is IUALedger {
     function zetherRollOver(ZetherTypes.UA account) external;
     /// @notice Skips `OWNER_ONLY` items.
     function zetherRollOverBatch(ZetherTypes.UA[] calldata accounts) external;
+    /// @notice Owner roll-over: a registered Zether UA only (`AccountNotRegistered` otherwise).
     function zetherRollOverSigned(ZetherTypes.UA account, uint64 expectedPendingSeq, uint64 validUntilBlock, bytes calldata sig)
         external;
+    /// @notice Owner mode change: a registered Zether UA only (`AccountNotRegistered` otherwise).
     function zetherSetRollOverMode(
         ZetherTypes.UA account,
         ZetherTypes.RollOverMode mode,

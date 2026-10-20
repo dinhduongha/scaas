@@ -317,6 +317,7 @@ sendCounter_f++
   expectedPendingSeq ≤ pendingSeq`, signed by the account's own key (Schnorr by `x` through `requireAuthorized`, purpose `zether-owner`, [registry](#registry)) over
   `keccak256(abi.encode(keccak256("ZETHER_ROLLOVER_V1"), chainid, chainUid, token, UA, accSeq, expectedPendingSeq, validUntilBlock))`.
 - `zetherRollOverSigned` also works for `PUBLIC` accounts.
+- The owner ops (`zetherRollOverSigned`, `zetherSetRollOverMode`) accept a registered Zether UA (`kindOf == 0x0141`) only: any other kind or an unregistered id reverts `AccountNotRegistered(ua)` before `requireAuthorized`, even with a valid signature (owner ruling 2026-10-20; `test_ownerOpsZetherUaOnly`).
 - `zetherSetRollOverMode(UA, mode, validUntilBlock, sig)`: digest
   `keccak256(abi.encode(keccak256("ZETHER_SET_ROLLOVER_MODE_V1"), chainid, chainUid, token, UA, uint8(mode), modeNonce, validUntilBlock))`,
   `modeNonce++` after every change (no replay of an old signature). `chainUid` is in both digests
@@ -801,7 +802,7 @@ other write of the account is a Zether Schnorr by `x` through `registry.requireA
 
 | Write | Purpose | `auth` |
 |---|---|---|
-| `zetherRollOverSigned`, `zetherSetRollOverMode` | `zether-owner` | `abi.encode(bytes(""), sig)`: Schnorr by `x` over `uaMessage(0x0141, PURPOSE_ZETHER_OWNER, digest)`, `Y` from the record |
+| `zetherRollOverSigned`, `zetherSetRollOverMode` | `zether-owner` | `abi.encode(bytes(""), sig)`: Schnorr by `x` over `uaMessage(0x0141, PURPOSE_ZETHER_OWNER, digest)`, `Y` from the record; a registered Zether UA only, else `AccountNotRegistered` |
 | `register` PoP | `pop` | Schnorr by `x` over `uaMessage(0x0141, PURPOSE_POP, popDigest(UA, 0))` |
 | UA-ledger writes of the account's public balance (`ua*`, `uaExecute(zetherShield)`, trade, mandates, receiver fee) | the write's purpose | the same Schnorr (`abi.encode(bytes(""), sig)`); `zether-bls12381` is a SIGNING UA, not an `msig` member (CTR-UA-14) |
 

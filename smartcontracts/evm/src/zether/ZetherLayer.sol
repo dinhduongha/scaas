@@ -169,12 +169,14 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
         ZetherLib.rollOverBatch(uas);
     }
 
+    /// @dev Owner roll-over: a registered Zether UA only (`AccountNotRegistered` otherwise).
     function zetherRollOverSigned(ZetherTypes.UA ua, uint64 expectedPendingSeq, uint64 validUntilBlock, bytes calldata sig)
         external nonReentrant
     {
         ZetherLib.rollOverSigned(ua, expectedPendingSeq, validUntilBlock, sig, _env());
     }
 
+    /// @dev Owner mode change: a registered Zether UA only (`AccountNotRegistered` otherwise).
     function zetherSetRollOverMode(
         ZetherTypes.UA ua,
         ZetherTypes.RollOverMode mode,

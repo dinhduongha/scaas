@@ -336,6 +336,7 @@ library ZetherLib {
         Env memory e
     ) public {
         if (block.number > validUntilBlock) revert IZetherToken.RollOverExpired(validUntilBlock);
+        if (!registeredOn(e.registry, ua)) revert IZetherToken.AccountNotRegistered(ua); // Zether UA only (2026-10-20)
         ZetherStorage storage s = $();
         Account storage a = s.acct[ua];
         if (a.pendingSeq < expectedPendingSeq || expectedPendingSeq <= a.lastRolledPendingSeq) {
@@ -357,6 +358,7 @@ library ZetherLib {
         Env memory e
     ) public {
         if (block.number > validUntilBlock) revert IZetherToken.RollOverExpired(validUntilBlock);
+        if (!registeredOn(e.registry, ua)) revert IZetherToken.AccountNotRegistered(ua); // Zether UA only (2026-10-20)
         Account storage a = $().acct[ua];
         bytes32 digest = keccak256(abi.encode(
             TAG_SET_MODE, block.chainid, e.chainUid, address(this), ua, uint8(mode), a.modeNonce, validUntilBlock
@@ -593,7 +595,8 @@ library ZetherLib {
         return IUARegistry(registry).kindOf(ZetherTypes.UA.unwrap(ua)) == ZetherTypes.KIND_ZETHER_BLS12381;
     }
 
-    /// @dev An owner op (roll-over, mode): the Zether UA's Schnorr by `x` through `requireAuthorized` under
+    /// @dev An owner op (roll-over, mode): a registered Zether UA only (owner ruling 2026-10-20; checked first by both entry
+    ///      points: any other kind or an unregistered id reverts `AccountNotRegistered`), its Schnorr by `x` through `requireAuthorized` under
     ///      `zether-owner`, `sig = abi.encode(bytes(""), schnorrSig)` (UA-6 U9; `Y` from the record).
     function _requireOwner(Env memory e, ZetherTypes.UA ua, bytes32 digest, bytes calldata sig) private view {
         IUARegistry(e.registry).requireAuthorized(ZetherTypes.UA.unwrap(ua), UAKinds.PURPOSE_ZETHER_OWNER, digest, sig);

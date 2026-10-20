@@ -583,6 +583,44 @@ abstract contract ZetherNoneSuite is ZetherFixture {
         assertEq(tok.accountState(alice.ua).accSeq, 1);
     }
 
+    /// Owner ruling 2026-10-20: the owner ops accept a registered Zether UA only. A `schnorr-bn254` UA (same
+    /// key, valid Schnorr under `zether-owner`) and an unregistered id are refused with `AccountNotRegistered`.
+    function test_ownerOpsZetherUaOnly() public {
+        uint256 x = 0xBEEF1;
+        bytes memory y = ZetherKeys.pub(x, false);
+        bytes32 other = reg.uaOf(UAKinds.SCHNORR_BN254, y);
+        bytes32 pd = reg.popDigest(other, 0);
+        vm.prank(address(0xB0B));
+        reg.register(
+            UAKinds.SCHNORR_BN254, y,
+            ZetherKeys.sign("scaas.ua.schnorr.v1", x, reg.uaMessage(UAKinds.SCHNORR_BN254, UAKinds.PURPOSE_POP, pd), false), "", ""
+        );
+        _refusedOwnerOps(other, x);
+        _refusedOwnerOps(keccak256("unregistered"), x);
+    }
+
+    function _refusedOwnerOps(bytes32 raw, uint256 x) internal {
+        uint64 until = uint64(block.number + 50);
+        ZetherTypes.UA id = ZetherTypes.UA.wrap(raw);
+        bytes32 d = keccak256(abi.encode(
+            keccak256("ZETHER_SET_ROLLOVER_MODE_V1"), block.chainid, ZUID, address(tok), id,
+            uint8(ZetherTypes.RollOverMode.OWNER_ONLY), uint64(0), until
+        ));
+        bytes memory sig = _otherSig(x, d);
+        vm.expectRevert(abi.encodeWithSelector(IZetherToken.AccountNotRegistered.selector, id));
+        tok.zetherSetRollOverMode(id, ZetherTypes.RollOverMode.OWNER_ONLY, until, sig);
+        d = keccak256(abi.encode(
+            keccak256("ZETHER_ROLLOVER_V1"), block.chainid, ZUID, address(tok), id, uint64(0), uint64(1), until
+        ));
+        sig = _otherSig(x, d);
+        vm.expectRevert(abi.encodeWithSelector(IZetherToken.AccountNotRegistered.selector, id));
+        tok.zetherRollOverSigned(id, 1, until, sig);
+    }
+
+    function _otherSig(uint256 x, bytes32 d) internal view returns (bytes memory) {
+        return abi.encode(bytes(""), ZetherKeys.sign("scaas.ua.schnorr.v1", x, reg.uaMessage(UAKinds.SCHNORR_BN254, UAKinds.PURPOSE_ZETHER_OWNER, d), false));
+    }
+
     /// U8 (CTR-UA-30 (2), CTR-ZTH-51): the Zether UA's public balance lives on the UA ledger under the same id: it
     /// receives by `transferToUA` and by a UA transfer, signs a `UAMetaTransfer`, and shields its own public units with
     /// `uaExecute(zetherShield)` (Schnorr by `x` under `metatx`).
