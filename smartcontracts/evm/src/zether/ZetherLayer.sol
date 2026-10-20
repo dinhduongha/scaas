@@ -36,7 +36,9 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
 
     /// @dev Runs after `MetaTokenBase`'s constructor, which set `_REGISTRY`: a Zether kind needs a registry. The release's
     ///      `Env.deps` (plan 5g-Z2): `ENV_ZETHER_TRANSFER`, `ENV_ZETHER_BURN`, `ENV_ZETHER_INNER_PRODUCT` (fixed inside the
-    ///      two, checked here), `ENV_ZETHER_DISCLOSURE`; the two verifiers must be of one proof system (one curve).
+    ///      two, checked here), `ENV_ZETHER_DISCLOSURE`; the two verifiers must be of one proof system (one curve), and
+    ///      each in its role (review 5g-Z2 P2-2): two addresses, the transfer verifier answers `ringSize()` and the burn
+    ///      verifier does not (a swapped or duplicated pair would accept shields and lock them).
     constructor(Env memory env) {
         address[] memory d = env.deps;
         if (d.length != 4 || env.hedera || _REGISTRY.code.length == 0) revert BadInit(); // never on Hedera
@@ -45,12 +47,20 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
         address ip = d[ENV_ZETHER_INNER_PRODUCT];
         if (address(t).code.length == 0 || address(b).code.length == 0 || d[ENV_ZETHER_DISCLOSURE].code.length == 0
             || t.proofSystemId() != b.proofSystemId() || ip == address(0)
-            || IInnerProductBound(address(t)).innerProduct() != ip || IInnerProductBound(address(b)).innerProduct() != ip) {
+            || IInnerProductBound(address(t)).innerProduct() != ip || IInnerProductBound(address(b)).innerProduct() != ip
+            || address(t) == address(b) || !_answers(address(t), IZetherVerifier.ringSize.selector)
+            || _answers(address(b), IZetherVerifier.ringSize.selector)) {
             revert BadInit();
         }
         _DISCLOSURE = ITransferDisclosure(d[ENV_ZETHER_DISCLOSURE]);
         TRANSFER_VERIFIER = t;
         BURN_VERIFIER = b;
+    }
+
+    /// @dev `target` answers `sel()` with one word (constructor only).
+    function _answers(address target, bytes4 sel) private view returns (bool) {
+        (bool ok, bytes memory r) = target.staticcall(abi.encodeWithSelector(sel));
+        return ok && r.length == 32;
     }
 
     /// @notice CTR-MTX-02: confidential tokens sign under `"SCaaS ZetherToken"`.

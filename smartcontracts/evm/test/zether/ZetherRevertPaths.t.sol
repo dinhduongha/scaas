@@ -78,6 +78,13 @@ contract UnsupportedHereVerifier {
     }
 }
 
+/// The same, with a `curveName()` that reverts: the typed error survives with an empty name (review 5g-Z2 M-1).
+contract UnsupportedNamelessVerifier is UnsupportedHereVerifier {
+    constructor(address real) UnsupportedHereVerifier(real) {}
+
+    function curveName() external pure returns (string memory) { revert(); }
+}
+
 /// @notice The revert paths of the confidential layer on `NONE_ZETHER` (the relaying ones are in `ZetherRelay.t`, the
 ///         underlying ones in `ZetherUnderlying.t`): shield, transfer and unshield shapes, the confidential config at
 ///         creation, the approve rule on the public side (CTR-TOK-01), the spending authority beside the proof.
@@ -287,13 +294,13 @@ contract ZetherRevertPathsTest is ZetherFixture {
     }
 
     /// The release's `Env.deps` (plan 5g-Z2, CTR-ZTH-20): four entries with code, a registry, the two verifiers of one
-    /// proof system, both fixed to the env's inner-product verifier; never on Hedera.
+    /// proof system, both fixed to the env's inner-product verifier, each in its role; never on Hedera.
     function test_constructorNeedsTheEnvDependencies() public {
         bytes memory code = type(NoUnderlyingZetherToken).creationCode;
         (, IZetherBurnVerifier blsBurn) = ZetherVerifiers.deploy(true);
         IZetherVerifier copy = IZetherVerifier(address(new ZetherTransferVerifierBn254(
             ZetherVerifierBase(address(ver)).innerProduct())));
-        IFactoryToken.Env[7] memory bad;
+        IFactoryToken.Env[10] memory bad;
         for (uint256 i; i < bad.length; ++i) bad[i] = _zenv();
         bad[0].registry = address(0x1234);                               // a registry without code
         bad[1].deps[3] = address(0x1234);                                // a disclosure without code
@@ -302,6 +309,10 @@ contract ZetherRevertPathsTest is ZetherFixture {
         bad[4].deps[2] = address(0x99);                                  // not the verifiers' inner-product verifier
         bad[5].deps = new address[](3);                                  // too few
         bad[6].hedera = true;                                            // never on Hedera
+        // each verifier in its role (review 5g-Z2 P2-2): a swapped or duplicated pair would lock every shield
+        (bad[7].deps[0], bad[7].deps[1]) = (address(burnVer), address(ver)); // swapped
+        bad[8].deps[1] = address(ver);                                   // the transfer verifier twice
+        bad[9].deps[1] = address(copy);                                  // two transfer verifiers
         for (uint256 i; i < bad.length; ++i) {
             vm.expectRevert(IZetherToken.BadInit.selector);
             new NoUnderlyingZetherToken(1, bad[i], "");
@@ -323,9 +334,23 @@ contract ZetherRevertPathsTest is ZetherFixture {
         Catalogue.release(factory, IOpenFactory.TokenKind.NONE_ZETHER, 2, e, type(NoUnderlyingZetherToken).creationCode);
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.VerifierUnsupportedOnThisChain.selector, address(w), "bn254"));
         factory.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 2, abi.encode(_cfg(false, 1 << 40)), "unsupported");
+        UnsupportedNamelessVerifier n = new UnsupportedNamelessVerifier(address(ver));
+        e.deps[0] = address(n);
+        Catalogue.release(factory, IOpenFactory.TokenKind.NONE_ZETHER, 3, e, type(NoUnderlyingZetherToken).creationCode);
+        vm.expectRevert(abi.encodeWithSelector(IZetherToken.VerifierUnsupportedOnThisChain.selector, address(n), ""));
+        factory.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 3, abi.encode(_cfg(false, 1 << 40)), "nameless");
         // the same config on the honest release of the same env shape is accepted
         assertTrue(factory.isRegisteredToken(
             factory.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, abi.encode(_cfg(false, 1 << 40)), "supported")));
+    }
+
+    /// Review 5g-Z2 P2-3 (controller proposal 2): the registrar may enable a Zether kind anywhere, but on a non-dev
+    /// chain every `createToken` reverts with the implementation's gate.
+    function test_createToken_enabledKindOnANonDevChain_reverts() public {
+        assertTrue(factory.kindEnabled(IOpenFactory.TokenKind.NONE_ZETHER));
+        vm.chainId(1);
+        vm.expectRevert(abi.encodeWithSelector(ZetherSafety.ZetherNotDevChain.selector, 1));
+        factory.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, abi.encode(_cfg(false, 1 << 40)), "mainnet");
     }
 
     /// CTR-ZTH-20 / plan 5g-Z2: the creator never names a verifier — the config has no field for it; the factory deploys

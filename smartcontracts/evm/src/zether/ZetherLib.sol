@@ -150,7 +150,9 @@ library ZetherLib {
         // factory's creation gate, plan 5g-Z2)
         (bool ok, bytes memory r) = address(v).staticcall(abi.encodeCall(v.isSupportedOnThisChain, ()));
         if (!ok || r.length != 32 || abi.decode(r, (uint256)) != 1) {
-            revert IZetherToken.VerifierUnsupportedOnThisChain(address(v), v.curveName());
+            string memory curve;
+            try v.curveName() returns (string memory n) { curve = n; } catch {} // keep the typed error (review M-1)
+            revert IZetherToken.VerifierUnsupportedOnThisChain(address(v), curve);
         }
         uint256 p = v.g1EncodedBytes();
         bytes memory aud = c.auditorKey;
