@@ -23,15 +23,23 @@ String? _find(String name) {
   }
 }
 
-dynamic _load(String name) =>
-    jsonDecode(_find(name) ?? (throw StateError('smartcontracts/vectors/ua/$name not found above ${cwd()}; set UA_VECTORS')));
+dynamic _load(String name) => jsonDecode(
+  _find(name) ??
+      (throw StateError(
+        'smartcontracts/vectors/ua/$name not found above ${cwd()}; set UA_VECTORS',
+      )),
+);
 
 Uint8List _b(Object? s) {
   final h = (s as String).substring(2);
-  return Uint8List.fromList([for (var i = 0; i < h.length; i += 2) int.parse(h.substring(i, i + 2), radix: 16)]);
+  return Uint8List.fromList([
+    for (var i = 0; i < h.length; i += 2)
+      int.parse(h.substring(i, i + 2), radix: 16),
+  ]);
 }
 
-String _hx(Uint8List b) => '0x${b.map((x) => x.toRadixString(16).padLeft(2, '0')).join()}';
+String _hx(Uint8List b) =>
+    '0x${b.map((x) => x.toRadixString(16).padLeft(2, '0')).join()}';
 int _kind(Map r) => r['kind'] as int;
 UAError _err(void Function() f) {
   try {
@@ -58,6 +66,7 @@ void main() {
       expect(isZether(n), r['zether']);
       expect(isMember(n), r['member']);
       expect(isMember(n, true), r['memberHedera']);
+      expect(isPqzHolder(n), r['pqzHolder']);
       if (info.native) {
         expect(_err(() => tag(n)).code, 'UAKindNotDerived');
         continue;
@@ -65,6 +74,28 @@ void main() {
       expect(kindTagString(n), r['tag']);
       expect(_hx(tag(n)), r['TAG']);
     }
+    final sch = (k['schemes'] as List).cast<Map>();
+    expect(schemes.length, sch.length);
+    for (var i = 0; i < sch.length; i++) {
+      final s = sch[i], n = _kind(s);
+      expect(
+        [
+          schemes[i].number,
+          schemes[i].name,
+          schemes[i].group,
+          schemes[i].lengths,
+        ],
+        [n, s['name'], s['group'], s['lengths']],
+      );
+      expect(kindTagString(n), s['tag']);
+      expect(_hx(tag(n)), s['TAG']);
+      expect(_err(() => uaOf(n, Uint8List(16384))).code, 'UAKindNotDerived');
+      expect(
+        _err(() => validateKeyData(n, Uint8List(16384))).code,
+        'UAKindNotDerived',
+      );
+    }
+    expect(_hx(keyHashOf(0x0142, _b(k['pqzKey']))!), k['pqzKeyHash']);
     for (final r in (k['groups'] as List).cast<Map>()) {
       expect(groupTagString(r['group']), r['tag']);
       expect(_hx(groupTag(r['group'])), r['GROUP']);
@@ -76,16 +107,31 @@ void main() {
     final c = k['constants'] as Map;
     expect(_hx(msgTag), c['MSG_TAG']);
     expect(_hx(purposeTag('pop')), c['POP_TAG']);
-    expect(_hx(keccak256([Uint8List.fromList(utf8.encode(domainType))])), c['DOMAIN_TYPEHASH']);
-    expect(_hx(keccak256([Uint8List.fromList(utf8.encode(uaAuthType))])), c['UAAUTH_TYPEHASH']);
-    expect(_hx(keccak256([Uint8List.fromList(utf8.encode(registryName))])), c['NAME_HASH']);
+    expect(
+      _hx(keccak256([Uint8List.fromList(utf8.encode(domainType))])),
+      c['DOMAIN_TYPEHASH'],
+    );
+    expect(
+      _hx(keccak256([Uint8List.fromList(utf8.encode(uaAuthType))])),
+      c['UAAUTH_TYPEHASH'],
+    );
+    expect(
+      _hx(keccak256([Uint8List.fromList(utf8.encode(registryName))])),
+      c['NAME_HASH'],
+    );
   });
 
   test('valid rows', () {
     for (final r in (k['valid'] as List).cast<Map>()) {
       final d = _b(r['keyData']);
-      expect(_hx(deriveUA(_kind(r), d, hederaNative: r['hederaNative'])), r['ua']);
-      expect(deriveUA(_kind(r), r['keyData'], hederaNative: r['hederaNative']), deriveUA(_kind(r), d, hederaNative: r['hederaNative']));
+      expect(
+        _hx(deriveUA(_kind(r), d, hederaNative: r['hederaNative'])),
+        r['ua'],
+      );
+      expect(
+        deriveUA(_kind(r), r['keyData'], hederaNative: r['hederaNative']),
+        deriveUA(_kind(r), d, hederaNative: r['hederaNative']),
+      );
       final h = keyHashOf(_kind(r), d);
       expect(h == null ? null : _hx(h), r['keyHash']);
     }
@@ -93,7 +139,13 @@ void main() {
 
   test('invalid rows', () {
     for (final r in (k['invalid'] as List).cast<Map>()) {
-      final e = _err(() => validateKeyData(_kind(r), _b(r['keyData']), hederaNative: r['hederaNative']));
+      final e = _err(
+        () => validateKeyData(
+          _kind(r),
+          _b(r['keyData']),
+          hederaNative: r['hederaNative'],
+        ),
+      );
       expect(e.code, r['error'], reason: '${_kind(r)} ${r['reason']}: $e');
     }
   });
@@ -121,7 +173,10 @@ void main() {
 
   test('messages', () {
     for (final r in (k['messages'] as List).cast<Map>()) {
-      expect(_hx(uaMessage(_kind(r), purposeTag(r['purpose']), _b(r['digest']))), r['uaMsg']);
+      expect(
+        _hx(uaMessage(_kind(r), purposeTag(r['purpose']), _b(r['digest']))),
+        r['uaMsg'],
+      );
     }
   });
 
@@ -132,21 +187,91 @@ void main() {
       final c = ctx[p['context']] as Map;
       final id = c['chainId'] as int;
       expect(_hx(chainKeyHash(id)), p['chainKeyHash']);
-      expect(_hx(popDigest(id, _b(c['chainUid']), _b(c['registry']), _b(p['ua']), _b(p['authRef']))), p['popDigest']);
+      expect(
+        _hx(
+          popDigest(
+            id,
+            _b(c['chainUid']),
+            _b(c['registry']),
+            _b(p['ua']),
+            _b(p['pqzKeyHash']),
+          ),
+        ),
+        p['popDigest'],
+      );
+    }
+    final pqzKey = _b(k['pqzKey']);
+    for (final r in (s['pqzReg'] as List).cast<Map>()) {
+      final c = ctx[r['context']] as Map;
+      final id = c['chainId'] as int;
+      final cu = _b(c['chainUid']), reg = _b(c['registry']), ua = _b(r['ua']);
+      expect(_hx(pqzRegMessage(id, cu, reg, ua, pqzKey)), r['pqzRegMessage']);
+      expect(
+        _hx(popDigest(id, cu, reg, ua, _b(r['pqzKeyHash']))),
+        r['popDigest'],
+      );
+      final h = holderPopMessage(_kind(r), id, cu, reg, ua, pqzKey);
+      expect(
+        [_hx(h.pqzKeyHash), _hx(h.popDigest)],
+        [r['pqzKeyHash'], r['popDigest']],
+      );
+      expect(
+        _hx(h.message),
+        _hx(uaMessage(_kind(r), purposeTag('pop'), h.popDigest)),
+      );
+    }
+    expect(
+      _err(
+        () => holderPopMessage(
+          0x0101,
+          1,
+          Uint8List(32),
+          Uint8List(20),
+          Uint8List(32),
+          Uint8List(16384),
+        ),
+      ).code,
+      'UAPqzHolder',
+    );
+    for (final r in (s['pqzMsig'] as List).cast<Map>()) {
+      expect(
+        msigPqzEligible(_b(r['keyData'])),
+        r['eligible'],
+        reason: r['reason'] as String,
+      );
     }
     for (final a in (s['uaAuth'] as List).cast<Map>()) {
       final c = ctx[a['context']] as Map;
-      final d = Domain(a['generation'] as int, c['chainId'] as int, _b(c['registry']), _b(c['chainUid']));
+      final d = Domain(
+        a['generation'] as int,
+        c['chainId'] as int,
+        _b(c['registry']),
+        _b(c['chainUid']),
+      );
       expect(_hx(uaAuthDomainSeparator(d)), a['domainSeparator']);
-      expect(_hx(uaAuthDigest(d, _b(a['ua']), _b(a['purposeTag']), _b(a['digest']))), a['uaAuthDigest']);
+      expect(
+        _hx(uaAuthDigest(d, _b(a['ua']), _b(a['purposeTag']), _b(a['digest']))),
+        a['uaAuthDigest'],
+      );
     }
     for (final m in (s['member'] as List).cast<Map>()) {
-      expect(_hx(memberDigest(_b(m['structureUa']), _b(m['uaMsg']))), m['memberDigest']);
+      expect(
+        _hx(memberDigest(_b(m['structureUa']), _b(m['uaMsg']))),
+        m['memberDigest'],
+      );
     }
   });
 
   test('malformed input is a UAError, never a RangeError', () {
-    for (final bad in <Object?>[null, 5, [1, 2], 'zz', 'abc', Uint8List(0), Uint8List(3)]) {
+    for (final bad in <Object?>[
+      null,
+      5,
+      [1, 2],
+      'zz',
+      'abc',
+      Uint8List(0),
+      Uint8List(3),
+    ]) {
       for (final n in kinds.where((x) => !x.native).map((x) => x.number)) {
         final e = _err(() => validateKeyData(n, bad));
         expect(e.code, 'UAKeyData');
@@ -159,7 +284,10 @@ void main() {
         _err(() => validateKeyData(n, Uint8List(len)));
       }
     }
-    expect(_err(() => validateKeyData(0xffff, Uint8List(1))).code, 'UAKindUnknown');
+    expect(
+      _err(() => validateKeyData(0xffff, Uint8List(1))).code,
+      'UAKindUnknown',
+    );
     expect(_err(() => canonicalId('0x${'a' * 40}\n')).code, 'UAIdFormat');
   });
 }

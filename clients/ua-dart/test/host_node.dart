@@ -21,6 +21,8 @@ external _Process get _process;
 
 final _fs = _Fs(_require('fs'));
 
-String? readIfExists(String path) => _fs.existsSync(path) ? _fs.readFileSync(path, 'utf8') : null;
+String? readIfExists(String path) =>
+    _fs.existsSync(path) ? _fs.readFileSync(path, 'utf8') : null;
 String cwd() => _process.cwd();
-String? env(String name) => (_process.env.getProperty(name.toJS) as JSString?)?.toDart;
+String? env(String name) =>
+    (_process.env.getProperty(name.toJS) as JSString?)?.toDart;

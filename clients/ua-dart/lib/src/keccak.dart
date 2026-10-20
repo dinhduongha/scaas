@@ -57,7 +57,8 @@ void _f(Uint32List s) {
       final p = (x + 4) % 5, n = (x + 1) % 5;
       final nl = c[2 * n], nh = c[2 * n + 1];
       // rotl64(C[n], 1)
-      final rl = ((nl << 1) | (nh >>> 31)) & _m, rh = ((nh << 1) | (nl >>> 31)) & _m;
+      final rl = ((nl << 1) | (nh >>> 31)) & _m,
+          rh = ((nh << 1) | (nl >>> 31)) & _m;
       final dl = (c[2 * p] ^ rl) & _m, dh = (c[2 * p + 1] ^ rh) & _m;
       for (var y = 0; y < 25; y += 5) {
         s[2 * (x + y)] ^= dl;
@@ -76,7 +77,8 @@ void _f(Uint32List s) {
           n -= 32;
         }
         if (n > 0) {
-          final nl = ((lo << n) | (hi >>> (32 - n))) & _m, nh = ((hi << n) | (lo >>> (32 - n))) & _m;
+          final nl = ((lo << n) | (hi >>> (32 - n))) & _m,
+              nh = ((hi << n) | (lo >>> (32 - n))) & _m;
           lo = nl;
           hi = nh;
         }
@@ -88,7 +90,9 @@ void _f(Uint32List s) {
     // chi
     for (var y = 0; y < 25; y += 5) {
       for (var x = 0; x < 5; x++) {
-        final a = 2 * (y + x), n1 = 2 * (y + (x + 1) % 5), n2 = 2 * (y + (x + 2) % 5);
+        final a = 2 * (y + x),
+            n1 = 2 * (y + (x + 1) % 5),
+            n2 = 2 * (y + (x + 2) % 5);
         s[a] = (b[a] ^ ((~b[n1] & _m) & b[n2])) & _m;
         s[a + 1] = (b[a + 1] ^ ((~b[n1 + 1] & _m) & b[n2 + 1])) & _m;
       }
@@ -118,7 +122,11 @@ Uint8List keccak256(List<Uint8List> parts) {
   for (var off = 0; off < padded.length; off += rate) {
     for (var i = 0; i < rate ~/ 4; i++) {
       final k = off + 4 * i;
-      s[i] ^= padded[k] | padded[k + 1] << 8 | padded[k + 2] << 16 | padded[k + 3] << 24;
+      s[i] ^=
+          padded[k] |
+          padded[k + 1] << 8 |
+          padded[k + 2] << 16 |
+          padded[k + 3] << 24;
     }
     _f(s);
   }
