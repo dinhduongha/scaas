@@ -23,7 +23,7 @@ big-endian; everything else as in [zether.md](zether.md) (`‖`, `be32`, `u8`, A
    - 4.4 [Sizes](#44-sizes)
    - 4.5 [Shared randomness against malicious recipients](#45-shared-randomness-against-malicious-recipients)
 5. [Encodings shared by contract, precompile and clients](#5-encodings-shared-by-contract-precompile-and-clients)
-6. [Keys, UA kind and authorization](#6-keys-ua-kind-and-authorization)
+6. [Keys, the UA attribute and authorization](#6-keys-the-ua-attribute-and-authorization)
 7. [Protocol](#7-protocol)
    - 7.1 [State (per `(UA, token)`)](#71-state-per-ua-token)
    - 7.2 [Register (the UA registry)](#72-register-the-ua-registry)
@@ -63,7 +63,7 @@ module-lattice assumptions:
 | Balance encryption | lifted ElGamal on bn254 / BLS12-381 G1 | additive module-LWE, BFV-style scaling `Δ`, digit-packed plaintext ([encryption](#encryption)) |
 | Validity proofs | Σ-protocol + 2 Bulletproofs (`n_v = n_b = 64`) | one LNP22 lattice proof per op ([proof engine](#proof-engine)): key, encryption, decryption and integer-carry relations with exact norms |
 | Verification | Solidity + bn254/BLS precompiles | native precompile on chain 7622 (`PQZ`, `0x5caa5…0f01`), same PQZL core as the prover: the C core today, the byte-equal Rust crate `pqzl` once its port is verified (owner 2026-10-18) ([CTR-PQZ-09](#CTR-PQZ-09), [CTR-PQZ-10](#CTR-PQZ-10)) |
-| Authorization | 8 `AuthScheme`s in the legacy registry (`legacy/ua3/`); the UA registry replaces them by `authRef` | UA `authRef` = `mldsa65` UA (default) or a PQ-dominant UA `msig` (hybrid, t-of-n), verified via precompile `0x…0F10` ([CTR-PQZ-12](#CTR-PQZ-12)) |
+| Authorization | the key is the UA; its spends need the proof alone (the legacy registry's 8 `AuthScheme`s are in `legacy/ua3/`) | the PQ signing UA that carries the PQZ key: `mldsa65` (default), `mldsa44`, `fndsa512` or a PQ-dominant `msig` (hybrid, t-of-n), signing `authDigest` through `requireAuthorized` ([CTR-PQZ-12](#CTR-PQZ-12)) |
 | Relaying | ERC-20 on the one base `ERC20MetaTx`: allowlisted self-calls through `mtxExecute`, outer fee `NONE`/`FIXED` from the public balance, `envelopeBinding` in the statement ([CTR-ZTH-34](zether.md#CTR-ZTH-34); built: `ZetherMetaTx` with `OP_ZTRANSFER`/`OP_ZBURN`) | the same base, self-call and rules ([CTR-PQZ-15](#CTR-PQZ-15), [CTR-PQZ-21](#CTR-PQZ-21)), plus the UA path's `UAMetaTransaction` so a PQ UA pays the outer fee |
 | Decryption | BSGS discrete log, device cache, `zether-read-balance` | direct rounding, microseconds, exact; no BSGS, no cache needed ([CTR-PQZ-16](#CTR-PQZ-16)) |
 | State | points in storage | ciphertext **hashes** in storage, bytes in calldata + events; public amounts (`pqzShield`, fees) as a public `plainPending` integer; public keys in SSTORE2 ([CTR-PQZ-07](#CTR-PQZ-07), [CTR-PQZ-06](#CTR-PQZ-06)) |
@@ -551,46 +551,52 @@ change is a new `proofSystemId`. Hints then open only ciphertexts of amounts the
   `estimator.txt` lists the soundness error of each round (with its repetitions), each ≤ `2^-128`; no parameter of the
   fork may rely on multiplying errors across rounds.
 
-## 6. Keys, UA kind and authorization
+## 6. Keys, the UA attribute and authorization
 
 <a id="keys"></a>
 <a id="ua-kind"></a>
-<a id="CTR-PQZ-13"></a>**CTR-PQZ-13** — **PQZ UA kind = `0x0142` `pqz-mlwe`** (tag `scaas.ua.pqz-mlwe.v1`, `d = pk`
-16,384 B, new keyHash group `pqz-mlwe`), a Zether-family kind ([CTR-UA-16](accounts.md#CTR-UA-16): binds only
-the encryption key, immutable `authRef`); `UA = keccak256(keccak256(tag) ‖ pk)` ([CTR-UA-02](accounts.md#CTR-UA-02),
-[CTR-UA-04](accounts.md#CTR-UA-04)); PoP over `popDigest(ua, authRef)` binds chain (`chain_key` and
-`chain_uid`), registry, UA and `authRef`, not the caller, and the `authRef` co-signs it
-([CTR-UA-07](accounts.md#CTR-UA-07)); key seed by the UA PQ rule
-`HKDF-SHA256(BIP-39 seed, "scaas.ua.pq.v1", tag ‖ u32 account ‖ u32 i)`, derived **only in the key worker**
-([CLI-APP-24](../clients/app.md#CLI-APP-24)) and sealed there as a 32-byte PQZ leaf that the Zether worker and
-`pqz-cli` open (`sealPqKey` / `openPqKey`). Signing kinds are the UA's `mldsa65`/`mldsa44`/`fndsa512`; PQZ adds no
-signing kind. The UA owns identity; PQZ adds one row and its verifier, as a generation-1 kind on chain 7622.
+<a id="CTR-PQZ-13"></a>**CTR-PQZ-13** — **The PQZ key is an attribute of a PQ signing UA; `0x0142` `pqz-mlwe` is its scheme id, not a UA
+kind** (owner, CTR-UA-30 in [decisions.md](../decisions.md)). Tag `scaas.ua.pqz-mlwe.v1`, `pk` of `PqzCt.PK` bytes (16,384
+now), keyHash group `pqz-mlwe`. A UA is the actor that signs a write; the PQZ key cannot sign compactly (an `R_REG` proof
+is ≈ 40 KB), so it rides on a PQ signer: the signer's id is the PQZ account (`fromUA`, `toUA`, `auditorUA`), its public
+balance on the UA ledger and its confidential balance share it, and the PQZ key is **not** in the id. The key is supplied
+in the signer's `register(kind, keyData, pop, pqzKey, pqzPop)` ([CTR-UA-16](accounts.md#CTR-UA-16)), is immutable and
+belongs to one UA only (`UAKeyInUse` on the group `pqz-mlwe`, `msig` included). The signer's PoP and the `R_REG` proof
+are over the same `popDigest(ua, pqzKeyHash)` ([CTR-UA-07](accounts.md#CTR-UA-07)) under different kind tags: the proof is
+bound to chain (`chain_key` and `chain_uid`), registry and the signer's id, not the caller, and nobody can strip or swap
+the key. Key seed by the UA PQ rule `HKDF-SHA256(BIP-39 seed, "scaas.ua.pq.v1", tag ‖ u32 account ‖ u32 i)`, derived
+**only in the key worker** ([CLI-APP-24](../clients/app.md#CLI-APP-24)) and sealed there as a 32-byte PQZ leaf that the
+Zether worker and `pqz-cli` open (`sealPqKey` / `openPqKey`). PQZ adds no signing kind and no UA kind.
 
-| No. | Name (tag `scaas.ua.<name>.v1`) | `d` | keyHash group | PoP | Verifier (EVM) | Families |
+| No. | Name (tag `scaas.ua.<name>.v1`) | Key | keyHash group | Proof | Verifier (EVM) | Chains |
 |---|---|---|---|---|---|---|
-| `0x0142` | `pqz-mlwe` | `pk` (16,384) | `pqz-mlwe` (new group) | `R_REG` proof over `uaMessage(0x0142, POP_TAG, popDigest(ua, authRef))` **plus** the `authRef` co-sign | `UAPqzVerifier` → precompile `0x…0F01` op 3 | chain 7622 ([CTR-PQZ-01](#CTR-PQZ-01)) |
+| `0x0142` | `pqz-mlwe` (scheme) | `pk` (`PqzCt.PK`) | `pqz-mlwe` | `R_REG` proof over `uaMessage(0x0142, POP_TAG, popDigest(signerUA, pqzKeyHash))` | `UAPqzVerifier` → precompile `0x…0F01` op 3 | chain 7622 ([CTR-PQZ-01](#CTR-PQZ-01)) |
 
-`UA = keccak256(keccak256("scaas.ua.pqz-mlwe.v1") ‖ pk)`; `UA >> 160 ≠ 0` ([CTR-UA-03](accounts.md#CTR-UA-03)). The record is the UA `Record{kind, registeredAt, keyPtr}`
-with `keyPtr = SSTORE2(pk)` (stored kinds) plus the immutable `authRef`.
+**Record storage.** The signer's UA `Record` is unchanged; the PQZ key is a second SSTORE2 pointer beside it
+(`recordOf(ua)` returns it, 0 = none; `UAPqzVerifier` refuses any key that is not exactly `PqzCt.PK` bytes with every
+coefficient `< q`, so the registry hard-codes no length). `UARegistered` carries the pointer, not the key (≈ 0.13 M gas of
+log data saved). Registration total: [gas](#gas). Wallets read the key with `eth_getCode(pointer)` minus the leading
+`STOP` byte. The holder is also in the registry's list `0x0142` ([CTR-UA-29](accounts.md#CTR-UA-29)), the set PQZ decoys
+are drawn from.
 
 <a id="authorization"></a>
-<a id="CTR-PQZ-12"></a>**CTR-PQZ-12** — **PQZ authorization is always a separate PQ signing UA** (the UA `authRef`,
-tightened; owner). A `pqz-mlwe` record's `authRef` must be a registered `mldsa65` / `mldsa44` UA (`fndsa512` once the
-UA registry enables it, FIPS 206), or a UA `msig` whose non-PQ members' total weight is **below** its threshold — so no
-classical-only subset can authorize. That `msig` rule is the hybrid (e.g. `mldsa65` w 1 + `p256` w 1, threshold 2) and
-the t-of-n ML-DSA form. Refused: `authRef = 0` (self), native ids (EOA/ERC-1271), any classical-only kind
-(`UAAuthRef`). BUILT in UA registry generation 1 (P6c, `UARegistry._checkPqzAuthRef`): "PQ" is every PQ signing kind
-0x0130–0x0133 — `fndsa512` and `slhdsa128s` included, since the registry enables them with ML-DSA — and the `msig`'s
-members are read from the key data in `authPop`, which the co-sign verifies against the id. One key = one purpose: the PQZ key decrypts and proves, the ML-DSA key authorizes; the UA's PQ signing
-kinds ([CTR-UA-23](accounts.md#CTR-UA-23)) invite exactly this hybrid. A leaked PQZ key is a read-only breach
-(`survivesEncKeyLeak`).
+<a id="CTR-PQZ-12"></a>**CTR-PQZ-12** — **Only a PQ signing UA carries a PQZ key; it authorizes every spend** (owner). The holders are
+a registered single-key `mldsa65` / `mldsa44` UA (`fndsa512` where the registry enables it, FIPS 206), or a UA `msig`
+whose non-PQ members' total weight is **below** its threshold — so no classical-only subset can authorize. That `msig`
+rule is the hybrid (e.g. `mldsa65` w 1 + `p256` w 1, threshold 2) and the t-of-n ML-DSA form; the weight is summed over
+members whose kind is not 0x0130–0x0133 (`slhdsa128s` counts as PQ weight in an `msig` but is not a direct holder: a
+7,856-byte signature and a ≈ 1.4 M gas cap on every spend). Every other kind — classical signers, `slhdsa128s`, Zether,
+a classical-dominant `msig` — reverts `UAPqzHolder`. A PQ-eligible `msig` registers with its m-of-n `pop`, so nobody
+can fix it without a key. One key = one purpose: the PQZ key decrypts and proves, the signer's key authorizes; the UA's
+PQ signing kinds ([CTR-UA-23](accounts.md#CTR-UA-23)) invite exactly this hybrid. A leaked PQZ key is a read-only breach
+(spends need the signer's signature); for an `msig` holder it is one view / prove key held by an operator, every spend
+needs the m-of-n.
 
-Authorization UAs are UA kinds: `mldsa65` `0x0131` (default), `mldsa44` `0x0130`, `fndsa512` `0x0132` once enabled, or a
+Signing UAs that may carry a key: `mldsa65` `0x0131` (default), `mldsa44` `0x0130`, `fndsa512` `0x0132` once enabled, or a
 PQ-dominant `msig` `0x0120`, e.g. hybrid `{mldsa65 w1, p256 w1}` threshold 2, or treasury `{mldsa65 ×3, w1 each}`
-threshold 2. The UA `msig` rules apply (members registered, sorted, one level, `count ≤ 16`); PQZ adds: Σ weight of
-members whose kind is not `mldsa*`/`fndsa512` `<` threshold. The UA keeps MuSig2 and FROST as **separate kinds**
-(`musig2-*` `0x0110`/`0x0112`, `frost-*` `0x0111`/`0x0113`); they are classical aggregate Schnorr, so they are refused as
-a direct `authRef` and count as non-PQ weight inside an `msig`.
+threshold 2. The UA `msig` rules apply (members registered, sorted, one level, `count ≤ 16`). The UA keeps MuSig2 and FROST
+as **separate kinds** (`musig2-*` `0x0110`/`0x0112`, `frost-*` `0x0111`/`0x0113`); they are classical aggregate Schnorr,
+so they are no holders and count as non-PQ weight inside an `msig`.
 
 **Derivation** (the PQ branch of the UA tree, [CLI-SGN-30](../clients/signers-clientkeys.md#CLI-SGN-30)):
 
@@ -619,9 +625,6 @@ with the kind tag in `info` instead of a `kindNo'` level, because PQ seeds are n
   where available (`auth_custody`).
 - `sealPqKey`/`openPqKey` join the vault v2 API next to `sealConfKey`/`openConfKey`
   ([clients/signers-clientkeys.md](../clients/signers-clientkeys.md#zether-keys)).
-
-**Record storage.** The record is the UA `Record` plus `authRef`; `keyPtr = SSTORE2(pk)` (16,384 B, ≈ 3.3 M gas once)
-and `UARegistered` carries `pk` (16 KB of log data, ≈ 0.13 M gas). Registration total: [gas](#gas).
 
 ## 7. Protocol
 
@@ -692,35 +695,38 @@ states and values in signed 64-bit for clients. The classical 2^54 rationale (th
 
 ### 7.2 Register (the UA registry)
 
-`register(0x0142, pk, pop, authRef, authPop)` follows the UA register steps ([registry](accounts.md#registry));
-PQZ-specific content of each step:
+`register(kind, keyData, pop, pqzKey, pqzPop)` of a PQ signer follows the UA register steps
+([registry](accounts.md#registry)); PQZ-specific content of each step (only when `pqzKey` is given):
 
-1. Kind enabled only where the registry generation was deployed with `UAPqzVerifier`
-   ([CTR-UA-05](accounts.md#CTR-UA-05), [CTR-UA-23](accounts.md#CTR-UA-23)). P6c built the registry slot, the stored
-   `pk` (step 8) and step 5; the verifier, and with it the kind on chain 7622, is P6g's.
-2. Key data: exactly 16,384 bytes, every coefficient `< q` (`UAKeyData`; P6c checks the length, the coefficient check
-   comes with the encoding E-S2 freezes, P6e/P6g).
-3. Id: `uaOf(0x0142, pk)`, not in the native space, not registered.
-4. `keyHash = keccak256("pqz-mlwe" ‖ pk)` free (`UAKeyInUse`).
-5. `authRef` per [CTR-PQZ-12](#CTR-PQZ-12) (`UAAuthRef`); the auth UA registered first with its own PoP.
-6. PoP: `UAPqzVerifier.verify(pk, message, pop)` = `PQZ(OP_REGISTER, stmt ‖ pop) == 1` with `stmt = opTag(REGISTER)
-   ‖ proofSystemId ‖ message ‖ pk` (prefix as [encodings](#encodings); `proofSystemId` is an immutable of
-   `UAPqzVerifier`) and `message = uaMessage(0x0142, POP_TAG, popDigest(ua, authRef))` — relation `R_REG`:
-   `pk = A s + e`, `‖s‖ ≤ 36`, `‖e‖ ≤ 164`, the message absorbed into the statement. `popDigest` is
-   `keccak256(POP_TAG ‖ chainKeyHash ‖ chainUid ‖ registry_id ‖ ua ‖ authRef)` ([CTR-UA-07](accounts.md#CTR-UA-07)):
-   it binds chain (`chain_key` and `chain_uid`), registry, UA and `authRef`, not the caller, so anyone may submit and
-   nobody can strip or swap the `authRef`.
-7. Co-sign: `requireAuthorized(authRef, PURPOSE_AUTHREF, popDigest(ua, authRef), authPop)` — the ML-DSA (or PQ `msig`)
-   authority consents to this exact `(ua, authRef)` on this chain and registry, so nobody can name a victim's ML-DSA UA
-   as the authority of their PQZ key — `UAUnauthorized(authRef)`. `authPop` is the UA format
-   ([authorization check](#authorization-check)).
-8. Store, `keyPtr = SSTORE2(pk)`, emit `UARegistered(ua, 0x0142, pk, authRef)` (16 KB of log data, ≈ 0.13 M gas).
+1. `kindEnabled(0x0142)`: the registry generation was deployed with `UAPqzVerifier` in slot `0x0142`
+   ([CTR-UA-05](accounts.md#CTR-UA-05), [CTR-UA-23](accounts.md#CTR-UA-23)); else `UAKindDisabled(0x0142)`. A generation
+   enables `0x0142` for at most one generation per chain.
+2. Key data of the signer as for its kind (`UAKeyData`). The PQZ key is checked inside step 7 (exactly `PqzCt.PK` bytes,
+   every coefficient `< q`).
+3. Id: `uaOf(kind, keyData)` of the signer, not in the native space, not registered. Its `pop` is verified in step 6.
+4. `keyHash = keccak256(GROUP("pqz-mlwe") ‖ pqzKey)` free here and in the predecessor (`UAKeyInUse`).
+5. Holder rule of [CTR-PQZ-12](#CTR-PQZ-12) (`UAPqzHolder`); `pqzPop` is non-empty (`UAPoP`).
+6. The signer's PoP over `popDigest(ua, pqzKeyHash)` with its kind's verifier; a PQ-eligible `msig` signs with its m-of-n.
+7. PoP of the PQZ key: `UAPqzVerifier.verifyPop(pk, message, pqzPop)` = `PQZ(OP_REGISTER, stmt ‖ pop) == 1` with
+   `stmt = opTag(REGISTER) ‖ proofSystemId ‖ message ‖ pk` (prefix as [encodings](#encodings); `proofSystemId` is an
+   immutable of `UAPqzVerifier`) and `message = uaMessage(0x0142, POP_TAG, popDigest(ua, pqzKeyHash))` — relation
+   `R_REG`: `pk = A s + e`, `‖s‖ ≤ 36`, `‖e‖ ≤ 164`, the message absorbed into the statement. `popDigest` is
+   `keccak256(POP_TAG ‖ chainKeyHash ‖ chainUid ‖ registry_id ‖ ua ‖ pqzKeyHash)` ([CTR-UA-07](accounts.md#CTR-UA-07)):
+   it binds chain (`chain_key` and `chain_uid`), registry and the signer's id, not the caller, so anyone may submit,
+   nobody can strip or swap the key, and a proof made for another UA fails. The relation, the statement layout and the
+   verifier do not depend on what the message commits to.
+8. Store the signer's record, `_pqzKey[ua] = SSTORE2(pk)`, `keyOwner` for the signer's key and for `pqzKeyHash`, the
+   lists (the signer's kind, and `0x0142`); emit `UARegistered(ua, kind, keyData, pqzKeyPtr)` (a 20-byte pointer, not
+   16 KB of log data).
+
+The signer's `register` without a PQZ key is the plain UA registration; it can never get one later (the PQZ key is not
+in the id; a new signing key is a new UA).
 
 No rotation ([CTR-UA-13](accounts.md#CTR-UA-13)): a new key is a new UA plus a confidential transfer to it.
 
 ### 7.3 Fund
 
-`pqzShield(bytes32 ua, uint256 amount)`: `ua` registered, `0 < amount`, `totalShielded + amount ≤ maxShielded`;
+`pqzShield(bytes32 ua, uint256 amount)`: `ua` registered with a PQZ key, `0 < amount`, `totalShielded + amount ≤ maxShielded`;
 `plainPending[ua] += amount`; `amount·shieldScale` **public units of the caller are burned** (the signer's ERC-20
 balance, or its `_uaBalance` on the v3 path), exactly as `zetherShield`; `totalShielded += amount`; emit
 `PqzPlainCredit(ua, amount, plainPending[ua])`. No ciphertext, no pending slot, no cap check, no proof, no later
@@ -738,7 +744,7 @@ check then runs before everything below). Inputs: `payload = be32(p) ‖ be32(va
 fromUA ‖ toUA ‖ beneficiaryUA ‖ salt(16) ‖ out` (a commit-reveal payload appends `memo`) (`out = u ‖ v_t ‖ v_f ‖ v_a`), `acc` (current, 16,512 B), `inline` (ciphertexts
 between `p` and `rolled`), `proof`, `authSig`.
 
-Contract checks, cheap first: `block.number ≤ validUntilBlock`; both UAs registered, `from ≠ to`; beneficiary
+Contract checks, cheap first: `block.number ≤ validUntilBlock`; both UAs registered with a PQZ key (`AccountNotRegistered`), `from ≠ to`; beneficiary
 registered or 0; `plainUsed ≤ plainPending[from]`; `acc.length == 16,512` and `keccak256(acc) == accHash[from]`, or
 `== baseHash[from]` and then `rolled`, `accUnits` below are `baseRolled`, `baseUnits` ([CTR-PQZ-08](#CTR-PQZ-08));
 `floor ≤ p ≤ pendingCount`; with `n = (p ≥ rolled ? p − rolled : rolled − p)` and `lo = min(p, rolled)`:
@@ -880,7 +886,7 @@ beneficiaryUA ‖ be32(M) ‖ salt(16) ‖ UA_0 … UA_{M−1} ‖ out ‖ [memo
 indexed, recipientsHash, M, salt, out)` and `PqzCredit` per leg in leg order.
 
 *Contract checks, cheap first:* `M` built (`BadRecipientCount`); the length fixes `auditorOn` for that `M` (else
-`BadPayload`); recipients pairwise distinct, none = `fromUA`, all registered `pqz-mlwe` UAs (`DuplicateRecipient`,
+`BadPayload`); recipients pairwise distinct, none = `fromUA`, all registered UAs holding a PQZ key (`DuplicateRecipient`,
 `SelfTransfer`, `AccountNotRegistered`); each recipient below its cap
 (`RefreshRequired(ua)`); then every §7.4 check on the sender (`validUntilBlock`, `acc`, `inline` with `INLINE_MAX` /
 `INLINE_MAX_PQZH`, `p`, `plainUsed`, beneficiary); `out` length `16,384·G + 128·(M + 1) + 128·M·A`; every coefficient
@@ -1045,7 +1051,7 @@ noise must not leak ([CTR-PQZ-04](#CTR-PQZ-04)); the indexer or the parties supp
 | 16,672 | `u` (16,384) |
 | 33,056 | `v` (128; 16 coefficients `be8`) |
 
-The contract loads `pk` from the **registry** (`keyPtr` of `toUA` for `SENDER_S`/`RECEIVER_X`, of the
+The contract loads `pk` from the **registry** (the PQZ key pointer of `recordOf(toUA)` for `SENDER_S`/`RECEIVER_X`, of the
 token's `auditorUA` for `AUDITOR`), never from the opening; `v = v_t`, or `v_a` for `AUDITOR`:
 
 | Kind | Prover | Relation |
@@ -1066,24 +1072,26 @@ the `verifyTransferAmount` view ([integration.md](../integration.md#confidential
 
 <a id="authorization-check"></a>
 
-`registry.requireZetherAuthorized(fromUA, authDigest, authSig, zkCovered = true)`. Because [CTR-PQZ-12](#CTR-PQZ-12)
-forbids `authRef = 0`, this always runs `requireAuthorized(authRef, PURPOSE_ZETHER_AUTH, authDigest, authSig)` with
-`PURPOSE_ZETHER_AUTH = keccak256("scaas.ua.purpose.zether-auth.v1")`: `authSig = abi.encode(bytes keyData, bytes sig)`
-with empty `keyData` for stored PQ kinds ([CTR-UA-17](accounts.md#CTR-UA-17)), `msig` member signatures in
-the UA format. The signed message is **exactly** the UA tagged message ([CTR-UA-12](accounts.md#CTR-UA-12)),
-computed by the registry from the `authRef` record's **actual** kind, never a kind fixed here:
+`registry.requireAuthorized(fromUA, PURPOSE_ZETHER_AUTH, authDigest, authSig)` on the signing UA itself, which must hold a
+PQZ key ([CTR-PQZ-12](#CTR-PQZ-12); `AccountNotRegistered` otherwise). `PURPOSE_ZETHER_AUTH =
+keccak256("scaas.ua.purpose.zether-auth.v1")`: `authSig = abi.encode(bytes keyData, bytes sig)` with empty `keyData` for
+stored PQ kinds ([CTR-UA-17](accounts.md#CTR-UA-17)), `msig` member signatures in the UA format. The signed message is
+**exactly** the UA tagged message ([CTR-UA-12](accounts.md#CTR-UA-12)), computed by the registry from the signer's
+**actual** kind, never a kind fixed here:
 
 ```
 ua_msg = keccak256(MSG_TAG ‖ TAG(authKind) ‖ PURPOSE_ZETHER_AUTH ‖ authDigest)
-MSG_TAG = keccak256("scaas.ua.msg.v1");   authKind = kindOf(authRef) ∈ {mldsa65, mldsa44, fndsa512, slhdsa128s, msig}
+MSG_TAG = keccak256("scaas.ua.msg.v1");   authKind = kindOf(fromUA) ∈ {mldsa65, mldsa44, fndsa512, msig}
 ```
 
-`mldsa65`/`mldsa44`/`slhdsa128s` sign `pq_msg = keccak256(TAG(authKind) ‖ ua_msg)` with the empty context ([CTR-UA-23](accounts.md#CTR-UA-23), SPECIFIED (P6); transitional: ML-DSA over `ua_msg` with `ctx = kind_tag`; `slhdsa128s` only where enabled), `fndsa512` as the UA PQ kinds; for an `msig` `authRef` each
+`mldsa65`/`mldsa44` sign `pq_msg = keccak256(TAG(authKind) ‖ ua_msg)` with the empty context ([CTR-UA-23](accounts.md#CTR-UA-23), SPECIFIED (P6); transitional: ML-DSA over `ua_msg` with `ctx = kind_tag`), `fndsa512` as the UA PQ kinds; for an `msig` each
 member signs the UA `member` purpose over `keccak256(structureUA ‖ ua_msg)` with its own kind (native members inside
 `UAAuth`), and the UA threshold rule plus the PQ-weight rule apply. PQZ adds no signing domain of its own: a signature
-valid here is valid through `UARegistry.requireAuthorized(authRef, PURPOSE_ZETHER_AUTH, authDigest, authSig)` and vice
+valid here is valid through `UARegistry.requireAuthorized(fromUA, PURPOSE_ZETHER_AUTH, authDigest, authSig)` and vice
 versa (vectors). The UA `zether-auth` purpose covers the PQZ digest, which carries its own domain string. Both the
-proof (knowledge of the PQZ key) **and** the signature (the auth UA) are required (classical invariant #1).
+proof (knowledge of the PQZ key) **and** the signature (the signing UA) are required (classical invariant #1 does not
+apply here: classical Zether spends by its proof alone). The auditor and every credited leg are holders too
+(`AccountNotRegistered`); fees go to the beneficiary's public UA-ledger balance (CTR-PQZ-06), which needs no PQZ key.
 
 ### 7.11 Meta-transactions
 
@@ -1157,7 +1165,7 @@ Any other selector ⇒ `MtxSelectorNotAllowed`. `supportedModes()` returns `0xF3
 `MtxFeeClass`/`PercentFeeForbiddenOnConfidential` on the four PQZ selectors. The PQZ functions run their cheap checks
 (shape, the signer's public balance `≥ amount·shieldScale` for `pqzShield`) before any SSTORE2 read, statement build or
 precompile call; then the op's own checks in transfer/burn order, the statement with `envelopeBinding`,
-`requireZetherAuthorized` (the PQ `authSig`) and the `PQZ` verify; burn's underlying transfer last, then the escrow
+`requireAuthorized` (the PQ `authSig`) and the `PQZ` verify; burn's underlying transfer last, then the escrow
 check. Anything failing ⇒ the whole transaction reverts: no fee, nonce unspent; the relayer loses its gas (free on
 chain 7622) and protects itself by simulating on a follower.
 
@@ -1205,12 +1213,12 @@ keep their formulas (the binding enters through the statement).
 
 So the v1 path's exposure is bounded by the signer's public fee float. **Default (clients):** PQZ accounts relay
 through the v3 path with a dedicated `mldsa65` **fee UA** (same derivation, its own index `i`, holding only the float);
-the `authRef` key signs only `zether-auth`, one key per role ([CLI-SGN-29](../clients/signers-clientkeys.md#CLI-SGN-29)).
+the holder's signing key signs only `zether-auth`, one key per role ([CLI-SGN-29](../clients/signers-clientkeys.md#CLI-SGN-29)).
 The v1 path serves existing EOA/1271 payers; a 1271 wallet whose own validation is ML-DSA is PQ on the v1 path too.
 
 Choices taken with the owner rulings: one salted domain for both paths (the token shape; an earlier text had the v3
 path at `("SCaaS PqzToken", "3", chainId, token, salt = chainUid)`); one `envelopeBinding` field (direct: 0 or the call's own binding) instead of
-classical's tag + binding pair; a dedicated `mldsa65` fee UA, not the `authRef` key; no batching of PQZ ops and no
+classical's tag + binding pair; a dedicated `mldsa65` fee UA, not the holder's signing key; no batching of PQZ ops and no
 `unwrap` envelope op. The relaying itself follows classical Zether: the one base, `mtxExecute`, the transient ticket
 and the `mtx` names ([CTR-PQZ-21](#CTR-PQZ-21)); an earlier text gave `PqzToken` its own mixin with arguments sliced
 from calldata.
@@ -1780,7 +1788,7 @@ byte, ≈ 1.5 k tokens of ABI and header (scratch Python, 2026-10-06):
 | `pqzRollOver` of 16 credits | ≈ 8.9 M | calldata-bound (17 ciphertexts); amortizes to ≈ 0.55 M per credit |
 | `pqzShield` | ≈ 0.07 M | ERC-20 pull, `plainPending` and `totalShielded` updates, small event; nothing to roll later; as an envelope op ≈ 0.1 M (v1) / ≈ 0.2 M (v3, ML-DSA) |
 | `pqzUnshield` / `refresh` | ≈ 2.6 M | one recipient, no auditor, ≈ 258 k tokens |
-| `register` | ≈ 4.7–5.2 M once | SSTORE2 of a 16 KB pk ≈ 3.3 M + PoP verify + `UARegistered` log ≈ 0.13 M + standard calldata ≈ 0.59 M incl. the ≈ 3.4 KB ML-DSA `authPop` + its verify ≈ 0.01 M (above its ≈ 1.46 M floor) |
+| `register` | ≈ 4.7–5.2 M once | SSTORE2 of a 16 KB pk ≈ 3.3 M + `R_REG` verify + standard calldata ≈ 0.59 M + the signer's PoP verify ≈ 0.01 M (above its ≈ 1.46 M floor); one transaction with the signer's registration, no second record slot, and the `UARegistered` log carries a 20-byte pointer, not 16 KB; +≈ 27 k for the `0x0142` list append; UA-6 re-measures it (`runs/<date>-ua6-gas.txt`) |
 | Classical reference (measured) | 3.33 M / 3.41 M transfer, 0.115 M rollover | [zether.md](zether.md#gas-measured) |
 
 **Note (2026-10-14).** Every "50 ms" figure in this section (and the "+16 inline at 50 ms" requirement) is at the
@@ -2013,7 +2021,7 @@ service is the user's (or the organization's key oracle), never a third party's 
 | T13a | Precompile **crash** (abort, OOB, stack overflow) on crafted input ⇒ the single signer dies ⇒ chain halt | never-crash requirement: Rust bounds-checked decoder, error returns instead of `abort`, fixed arena and stack, bounded loops, no timeouts ([CTR-PQZ-10](#CTR-PQZ-10)); follower-only public RPC and pre-simulation |
 | T13b | Malicious recipient keys extract hints on the shared `(r, e1)` (forms `e^T r − s^T e1 + e2`) | assumption "MLWE with ≤ 32 adversarial perfect hints on `(r, e1)`" (DDGR20 worst case β 463.9), and for `R_TXM` ≤ 80 hints per `(r_g, e1_g)` with groups of 4 legs, auditor included (β 446.0 ≥ Kyber-512's 406, owner-accepted exception to [CTR-PQZ-03](#CTR-PQZ-03)'s 450 margin; `pqz-core/pqzl/params/anon/hints-anon.txt`); fresh `(r, e1)` per operation; split-randomness fallback ([CTR-PQZ-04](#CTR-PQZ-04)) |
 | T13c | Chain-id collision (former id 9000 = Evmos Testnet; 7622 not assumed unique) | owner move to 7622; precompile self-test; `chainUid` (genesis hash) in every statement, `entryRef` and PoP; node binds genesis hash, registry `chainUid()` and token |
-| T14 | Rogue / stolen public key registration; naming a victim's ML-DSA UA as `authRef` | `R_REG` PoP over the UA `popDigest(ua, authRef)` (chain key, `chain_uid`, registry, UA, `authRef`) plus the `authRef` co-sign ([CTR-UA-07](accounts.md#CTR-UA-07)); keyHash group `pqz-mlwe`; front-running yields the identical record |
+| T14 | Rogue / stolen public key registration; claiming a victim's PQ signer for one's own PQZ key | `R_REG` PoP over the UA `popDigest(ua, pqzKeyHash)` (chain key, `chain_uid`, registry, the signer's UA, the key hash) beside the signer's own PoP over the same digest ([CTR-UA-07](accounts.md#CTR-UA-07)); keyHash group `pqz-mlwe`; front-running yields the identical record |
 | T15 | Leaked PQZ key | read-only breach (auth key separate, [CTR-PQZ-12](#CTR-PQZ-12)); move funds to a new UA |
 | T16 | Leaked ML-DSA key | cannot spend without the PQZ key's proof; no rotation ([CTR-UA-13](accounts.md#CTR-UA-13)): move funds to a new UA |
 | T17 | Implementation immaturity (research-grade LaZer, unaudited fork with six rewritten layers) | UNAUDITED label, allowlist, self-test, owner gates (licence clearance and independent audit) before any real funds |
@@ -2090,8 +2098,8 @@ Later phases add, in the same directory: `derive.json` (P6h), `register_pqz.json
 |---|---|
 | `derive.json` | BIP-39 seed → derivation seeds, PQZ pk, ML-DSA pk, UAs, keyHashes (rows also in the UA `kinds.json`) |
 | `mldsa65.json` | NIST ACVP-style vectors via the chosen implementation |
-| `auth_{mldsa65,mldsa44,msig}.json` | `authDigest` → the UA `ua_msg` (with `MSG_TAG`, `TAG(authKind)`, `PURPOSE_ZETHER_AUTH`) → signature, for an `mldsa65`, an `mldsa44` and a hybrid `msig {mldsa65 w1, p256 w1} t=2` `authRef`; each verifies through `requireZetherAuthorized` **and** directly through `UARegistry.requireAuthorized(authRef, PURPOSE_ZETHER_AUTH, …)`; rows shared with the UA vectors |
-| `register_pqz.json` | `popDigest(ua, authRef)` (with `chainKeyHash`, `chainUid`), the `R_REG` PoP and the `authRef` co-sign `authPop` |
+| `auth_{mldsa65,mldsa44,msig}.json` | `authDigest` → the UA `ua_msg` (with `MSG_TAG`, `TAG(authKind)`, `PURPOSE_ZETHER_AUTH`) → signature, for an `mldsa65`, an `mldsa44` and a hybrid `msig {mldsa65 w1, p256 w1} t=2` holder; each verifies through `UARegistry.requireAuthorized(fromUA, PURPOSE_ZETHER_AUTH, …)`; rows shared with the UA vectors |
+| `register_pqz.json` | `popDigest(ua, pqzKeyHash)` (with `chainKeyHash`, `chainUid`) for a signer with a PQZ key, the signer's PoP and the `R_REG` PoP over it |
 | `metatx_pqz.json` | per op and path: envelope fields → `metaTxDigest` (v1 domain, no salt) / `uaDigest` (v3, `salt = chainUid`), `envelopeBinding` / `uaEnvelopeBinding`, the bound statement and `authDigest`, the signature (ECDSA, `mldsa65` fee UA); the direct form with binding 0; typehashes pinned to the classical meta-tx vectors and the UA `metatx3.json` |
 
 The UA `smartcontracts/vectors/ua/kinds.json` gains the `pqz-mlwe` row (seed → pk, UA, keyHash).
@@ -2129,12 +2137,12 @@ clientkeys (derivation, ML-DSA, `authDigest`); a pure-Python `pqz_kat.py` (no nu
   without the 64-byte prefix ⇒ 0; a disclosure proof replayed against another registry ⇒ 0;
 - rollover race: a debit proven at `p`, then `pqzRollOver` of 3 / 16 / 17 credits, then the debit ⇒ ok / ok /
   `InlineTooFar`; then decrypt both accounts and check conservation;
-- registry: PoP for another chain/registry/UA; same `pk` twice (`UAKeyInUse`); `authRef` = 0, an EOA, a classical
-  `msig` (non-PQ weight ≥ threshold), a Zether UA — all `UAAuthRef`; ML-DSA signature with empty instead of kind-tag
-  context; **`authRef` binding**: a PQZ key registered naming a victim's ML-DSA UA as `authRef` without the victim's
-  `authPop` ⇒ `UAUnauthorized`; `authPop` replayed with another `authRef`, or the PoP replayed with `authRef` stripped
-  or changed ⇒ `UAPoP`/`UAUnauthorized`; an `authSig` over a message without `MSG_TAG`, or with `TAG(mldsa65)` for an
-  `mldsa44` or `msig` `authRef` ⇒ `AuthRejected`;
+- registry: PoP for another chain/registry/UA; same `pk` twice, on an `msig` and an ML-DSA UA (`UAKeyInUse`); a PQZ key on
+  an EOA, a classical single key, `slhdsa128s`, a classical-dominant `msig` or a Zether UA (`UAPqzHolder`); ML-DSA
+  signature with empty instead of kind-tag context; **key binding**: the PQZ key stripped or swapped by a front-runner,
+  or `R_REG` made for another UA's digest ⇒ `UAPoP`; a PQ-eligible `msig` without its `pop` ⇒ `UAPoP`; an `authSig` over a
+  message without `MSG_TAG`, or with `TAG(mldsa65)` for an `mldsa44` or `msig` signer ⇒ `AuthRejected`; a leg or auditor
+  without a PQZ key ⇒ `AccountNotRegistered`;
 - disclosure: right amount ⇒ true, amount ± 1 ⇒ false, wrong `entryRef`, bundle bytes not matching the hash;
 - **burn / refresh randomness** (prover test): two burns, and two refreshes, built at one `sendCounter` for different
   balances (another `plainUsed`) carry different `u'`, and `v_f − v_f'` is not `Δ·(b' − b'')` ([CTR-PQZ-19](#CTR-PQZ-19));
@@ -2144,8 +2152,8 @@ clientkeys (derivation, ML-DSA, `authDigest`); a pure-Python `pqz_kat.py` (no nu
   proof or `authSig` ⇒ revert, no fee moved, nonce unspent; an op stripped from its envelope and called directly, or
   re-wrapped with another nonce / fee / `validUntil` / bound relayer / bound fee recipient / `from` ⇒ `AuthRejected`; v1
   binding presented on the v3 path (and vice versa) ⇒ `AuthRejected`; `cancelNonce` / `uaCancelNonce` kills a bound
-  in-flight op; v1 and v3 share one nonce per native id; v3 `from` = a `pqz-mlwe` UA ⇒ `UAKindNotAccepted`; a broken-key
-  simulation (the test owns the v1 envelope key, not the `authRef` key) can drain the public float and burn nonces but
+  in-flight op; v1 and v3 share one nonce per native id; v3 `from` = a UA without a PQZ key on a PQZ op ⇒ `AccountNotRegistered`; a broken-key
+  simulation (the test owns the v1 envelope key, not the holder's key) can drain the public float and burn nonces but
   every confidential op it builds reverts; envelope `pqzShield` debits the public balance and keeps the escrow invariant;
   relayed `+16` inline transfer at the mocked price of the verify limit (50 ms when written, 60 ms since 2026-10-14;
   recalibrated in P6f) stays ≤ 16.78 M gas;

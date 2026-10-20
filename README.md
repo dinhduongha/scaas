@@ -608,7 +608,7 @@ What makes it work:
 | t-of-n threshold | `frost-secp256k1`, `frost-bn254` | Any `t` of `n` parties sign; the chain checks **one** signature; key-generation proofs checked at registration |
 | Multisig policy | `msig` | A weighted threshold over up to 16 members of any signing kind — e.g. two passkeys plus an HSM, or a director's passkey plus a company EOA |
 | Post-quantum signing | `mldsa44`, `mldsa65`, `fndsa512` (Falcon) | Authorization that survives a quantum computer; such a UA (or a multisig whose non-PQ members' weight stays below the threshold) may carry a PQZ key for PQ confidential balances, given once in `register` and immutable |
-| Classical confidential balances | `zether-bn254`, `zether-bls12381` | The Zether key is itself the UA: it signs by Schnorr with its secret `x`, and its Zether proof authorizes a spend ("self" mode) |
+| Classical confidential balances | `zether-bls12381` | The Zether key is itself the UA: it signs every write by Schnorr with its secret `x`, and its Zether proof alone authorizes a spend; its public and confidential balances share one id |
 
 </details>
 
@@ -628,7 +628,8 @@ optional smart account `SmartKeyAccount` — itself a native contract UA
 **Status.** The UA registry is BUILT and deployed on chain 7622 (signing, BLS, group, threshold, multisig,
 post-quantum and Zether kinds; P6g), with the UA ledger in the token base (UA-4), UA receivers and wrap (UA-5a) and UA
 trade orders (UA-5b); UA-5c is SPECIFIED. The identity rule above (owner, 2026-10-20, CTR-UA-30) is decided, not built:
-UA-6 replaces today's separate `pqz-mlwe` kind and its `authRef` with a PQZ key carried by the PQ signer
+UA-6 (SPECIFIED, next to build) replaces today's separate `pqz-mlwe` kind and its `authRef` with a PQZ key carried by the PQ signer,
+removes the Zether `authRef`, and moves the bn254 Zether line to `legacy/`
 ([function → kinds](docs/contracts/accounts.md#function-kinds)).
 
 ---

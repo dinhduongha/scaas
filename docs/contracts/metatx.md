@@ -53,7 +53,7 @@ never added. **All or nothing, and the user never pays for an operation that did
 check everything before the fee and cannot fail afterwards; a self-call runs **first** and pays its fee **after**
 (so a wrap can pay from the units it mints), and any failure — of the call or of the fee transfer — reverts the whole
 transaction with the inner revert data, fee and nonce included. No `try/catch`, no mode switch. Smart-contract wallets
-(ERC-1271; a native `authRef` of a Zether UA in the UA registry) are first-class signers.
+(ERC-1271) are first-class signers.
 
 <a id="CTR-MTX-14"></a>**CTR-MTX-14** — Signatures are EIP-712 typed data, never `personal_sign`: wallets display the
 fields instead of 32 opaque bytes. The pinned typehash below is the only payment-intent type; there is no raw
