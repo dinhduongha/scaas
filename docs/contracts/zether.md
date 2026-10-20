@@ -7,7 +7,7 @@
 `ZetherTranscript`, `ZetherSafety` and the Rust prover `zether-prover` exist with tests (P3;
 `smartcontracts/evm/src/zether/**`); the accounts are UAs of the UA registry's Zether kinds (UA-3,
 [registry](#registry)). Every Zether contract and the Zether Schnorr verifiers of the registry refuse to deploy or
-initialize outside chain ids 31337/1337, and `OpenFactory.zetherEnabled` defaults to `false` ([safety
+initialize outside chain ids 31337/1337, and the factory's kind gate starts off for kinds 2–3 (`setKindEnabled`, [safety
 gate](#safety-gate)). Post-quantum confidential balances are a separate class ([pq-zero-knowledge.md](pq-zero-knowledge.md)). Relaying is
 the generic self-call ([relaying](#envelope)), `chainUid` is in every chain-bound digest; the built `ZetherToken` with its
 `ZetherMetaTx` envelope is backed up, not built, in `smartcontracts/evm/legacy/p3/`. **Built (P3b):** the storage and auditor modes, the salted `s` and the sender memo ([CTR-ZTH-38](#CTR-ZTH-38), [CTR-ZTH-48](#CTR-ZTH-48)–[CTR-ZTH-50](#CTR-ZTH-50), [CTR-ZTH-30](#CTR-ZTH-30)).
@@ -1052,14 +1052,16 @@ chain is open ([CTR-ZTH-33](#CTR-ZTH-33)). Post-quantum Zether serves the privat
 <a id="safety-gate"></a>
 <a id="dev-gate"></a>
 <a id="CTR-ZTH-02"></a>**CTR-ZTH-02** — **Classical Zether is gated to dev chains**: a hard-coded allowlist
-`ZetherSafety.isDevChain()`: `chainid ∈ {31337 (anvil/hardhat), 1337 (geth --dev)}`; the factory flag is off by
-default; the check is repeated in `initialize` and in the constructors of the proof verifiers and of the registry's
+`ZetherSafety.isDevChain()`: `chainid ∈ {31337 (anvil/hardhat), 1337 (geth --dev)}`; the factory's kind gate is off by
+default; the check is in `initialize` and in the constructors of the proof verifiers and of the registry's
 Zether Schnorr verifiers (the UA registry itself deploys on every chain; without those verifiers its Zether kinds are
 disabled). Adding a chain = a change
 of `ZetherSafety` + a new deployment, after the cryptographic audit.
 
-- `OpenFactory.zetherEnabled` defaults to `false`; `setZetherEnabled(true)` (registrar) reverts outside a dev chain;
-  creating a `*_ZETHER` token reverts when the flag is off **or** the chain is not a dev chain (built, P3).
+- `OpenFactory.kindEnabled(NONE_ZETHER / UNDERLYING_ZETHER)` starts `false`; `setKindEnabled` (registrar) is the
+  generic gate of every kind (plan 5g-Z2, owner 2026-10-20: it replaces `setZetherEnabled`, which only worked on a dev
+  chain); creating a `*_ZETHER` token reverts when the kind is off (`KindDisabled`) **or**, in the token's `initialize`,
+  when the chain is not a dev chain (built, P3; 5g-Z2).
 - The kinds' `initialize`, the constructors of both proof verifiers and of `ZetherSchnorrBn254Verifier` /
   `ZetherSchnorrBls12381Verifier` also revert outside a dev chain (a manual deploy cannot bypass it).
 - The NatSpec of every Zether contract carries **UNAUDITED — NOT FOR PRODUCTION FUNDS**.
@@ -1088,25 +1090,30 @@ could carry a fake verifier (`true` for every proof ⇒ `zetherUnshield` drains 
   the transfer verifier and the burn verifier as constructor arguments (immutables; the two verifiers must share one
   `proofSystemId`), so every clone of a release uses them; `verifier()`, `burnVerifier()` and `curve()` (the transfer
   verifier's `curveName()`) read them. The curve is an attribute of the release, version numbers carry no curve meaning
-  (the deploy registers bn254 as version 1 and BLS12-381 as version 2 of each kind). `ConfidentialConfig.verifier` must
-  be 0 (`BadInit`), for the PQZ kinds too ([pq-zero-knowledge.md](pq-zero-knowledge.md)).
-- **The factory holds the canonical sets.** `OpenFactory`'s constructor fixes, per curve, the transfer verifier, the burn
-  verifier and `ZetherDisclosure`, and per PQZ proof system the `UAPqzVerifier` (`zetherVerifiers(curve)`,
-  `pqzVerifier(ps)`; no setter, no admin list — an admin list would only move the trust to the admin key). Registration of
-  a `*_ZETHER` implementation reads its `verifier()`, `burnVerifier()`, `disclosure()` and refuses any other set
-  (`NotCanonicalVerifiers`); `createTokenUnregistered` refuses every confidential kind; a new verifier set is a new factory
-  for now (a versioned per-kind environment is plan 5g-Z2). The UA registry's Zether kinds (`zether-bn254`,
+  (the deploy releases bn254 as version 1 and BLS12-381 as version 2 of each kind). `ConfidentialConfig` has no
+  verifier field (plan 5g-Z2; for the PQZ kinds too, [pq-zero-knowledge.md](pq-zero-knowledge.md)).
+- **The factory deploys them with the release's env** (plan 5g-Z2, owner 2026-10-20; it replaces 5g-Z1's
+  constructor-fixed `Canonical` sets, `zetherVerifiers` / `pqzVerifier` and `NotCanonicalVerifiers`). The registrar
+  publishes per kind a versioned, never-changed `Env` whose `deps` are, for `*_ZETHER`, the transfer, burn and
+  inner-product verifier and `ZetherDisclosure` of one curve (positions `ENV_ZETHER_*` 0–3), for `*_PQZ` the
+  `UAPqzVerifier` (`ENV_PQZ_VERIFIER` 0); `deployImplementation(kind, version, envVersion, initcode, implArgs)`
+  `CREATE2`s the init code with that env appended, so the verifiers are immutables of the release by construction
+  ([CTR-TOK-03](token-wrappers.md#release-env)). The Zether constructor refuses missing code, two verifiers of different
+  proof systems, verifiers not fixed to `deps[2]` and a Hedera env (`BadInit`); its `initialize` refuses a transfer
+  verifier that does not run on this chain (`VerifierUnsupportedOnThisChain`, moved from the factory). No setter, no admin
+  list (an admin list would only move the trust to the admin key); a new verifier set is a new env version and a new
+  release; tokens of older versions keep theirs. `createTokenUnregistered` refuses every confidential kind. The UA registry's Zether kinds (`zether-bn254`,
   `zether-bls12381`) verify with `ZetherSchnorr*Verifier`, fixed in the registry constructor, not with these proof
   verifiers: unchanged.
-- **Limit, stated plainly:** the factory compares the addresses an implementation reports; a deliberately malicious
-  registrar can still register bytecode that reports canonical addresses and does something else. The registrar's key is
+- **Limit, stated plainly:** the factory proves which env and libraries a release was deployed with, not what its code
+  does; a deliberately malicious registrar can still deploy init code that ignores the env. The registrar's key is
   the trust root for code — a multisig / UA msig before mainnet (a timelock is an option, not built).
 - **Clients and the gateway** accept a Zether token only when the chain's published `OpenFactory` answers
   `isRegisteredToken(token)` and `registry()` equals the chain's canonical registry; the factory is the published source of
-  the canonical verifier addresses. The built `clients/clientkeys/src/zether.js` does not check this yet. Tests: the client
+  the verifier addresses (`releaseOf(kind, version)` → `envOf(kind, envVersion).deps`). The built `clients/clientkeys/src/zether.js` does not check this yet. Tests: the client
   refuses an unregistered token or a foreign `registry()`; the gateway errors when relaying a Zether op of one. The gateway
   half is [NODE-GW-01](../node/gateway.md#NODE-GW-01)'s door; the client half
-  [CLI-SGN-10](../clients/signers-clientkeys.md#CLI-SGN-10). Status: contracts **BUILT** (5g-Z1), clients and gateway
+  [CLI-SGN-10](../clients/signers-clientkeys.md#CLI-SGN-10). Status: contracts **BUILT** (5g-Z1, 5g-Z2), clients and gateway
   **SPECIFIED**.
 
 Production gates (owner/operator): an independent cryptographic audit (Σ-Bulletproofs, transcript, inner-product

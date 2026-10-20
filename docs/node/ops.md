@@ -278,7 +278,7 @@ Node, chains, jobs, lanes, RPC, store (SPECIFIED):
 Watched events (`event`): asset suite `OrderRecorded`, `OrderRevoked`, `ForcedTransfer`, `AccountFrozen`,
 `AccountUnfrozen`, `Paused`, `Unpaused`, `FeatureDisabled`, `RoleGranted`, `RoleRevoked`, `AttesterSet`; token wrappers
 `WrapDisabled`, `GuardianRenounced`, `MinterRenounced`, `RateChangeProposed`, `RateChanged`, `RateChangeCancelled`,
-`RateAdminRenounced`; factory `ImplementationRegistered`, `ImplementationDeprecated` (`IOpenFactory.sol`). Only
+`RateAdminRenounced`; factory `EnvPublished`, `ImplementationDeployed`, `ImplementationDeprecated`, `KindEnabled` (`IOpenFactory.sol`, plan 5g-Z2). Only
 registered tokens and configured factories. (`MetaNonceCancelled` is a subject's own action, handled by the
 consumption check; not an ops event.)
 

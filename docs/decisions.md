@@ -1838,6 +1838,26 @@ confidential verifiers, CTR-ZTH-20) and `registerImplementation` checks a confid
 tokens already made are untouched; was "marks but never blocks"); the record per (kind, version) stays a plain mapping so
 a later `usableFrom` notice period (plan 5g-Z2) is a small addition. Status: built, commit `690a295a` (plan Task 5g-Z1).
 
+Change (2026-10-20): owner rulings 2026-10-20 (plan 5g-Z2) — **the factory deploys every release on a versioned
+environment.** The constructor is `(registrar, chainUid, noticePeriod)` (5g-Z1's `Canonical` removed). The registrar
+publishes per kind (and one DEX domain) a versioned, append-only, never-changed `Env {factory, chainUid, registry,
+smartKeyAccountImpl, hedera, deps, libs, libCodeHashes}` (`publishEnv`, `publishDexEnv`; the factory's own factory and
+`chainUid`, else `EnvInvalid`) and releases code with `deployImplementation(kind, version, envVersion, initcode,
+implArgs)` / `deployDexImplementation(version, envVersion, initcode, implArgs)`: the factory checks each library's code
+hash, `CREATE2`s `initcode ‖ abi.encode(envVersion, env, implArgs)`, checks `kind()` / `factory()` / `chainUid()` and
+records `Release {implementation, envVersion, envHash, usableFrom, deprecated}`; the events carry the env hash, the
+init-code hash (without the appended arguments) and the code hash. `registerImplementation` /
+`registerDexImplementation` are removed. (1) **Notice period** (owner ruling 2026-10-20, confirmed): a release is
+usable `noticePeriod` seconds after its deployment (`VersionNotYetUsable`); the deploy's `NOTICE_PERIOD` defaults to
+10 minutes on 7622, 3 days on 22776, 0 elsewhere. (2) **Library pins** (owner ruling 2026-10-20, confirmed):
+`Env.libs` is the registrar's list of the libraries the release links, each pinned by code hash
+(`LibraryCodeHashMismatch`); the factory does not parse the init code to compare the list with its link references.
+(3) **Env binding** (owner ruling 2026-10-20: **no** to "`deployImplementation` binds the kind's latest env"; the final
+rule belongs to a later governance-matrix spec): interim, **controller proposal 2026-10-20, owner may override** —
+`deployImplementation` / `deployDexImplementation` take an explicit `envVersion` that must be published for that kind
+or the DEX (`EnvUnknown(domain, envVersion)`), recorded in the `Release`; an older env stays usable for a new release.
+Status: built on branch `rev2-zether-z2`, commit `0f88e66f` (plan Task 5g-Z2).
+
 ### CTR-TOK-04 — Conversion rate num/den, rounding favours contract
 - old: R133 · status: current · owner: no · date: 2026-10-06 · normative: contracts/token-wrappers.md#CTR-TOK-04 · superseded-by: —
 
@@ -1926,6 +1946,10 @@ Change (2026-10-20): owner 2026-10-19 (plan 5g-Z1, CTR-ZTH-20) — the factory s
 creator no longer chooses is a confidential token's verifier: it is fixed by the implementation release (constructor
 immutables, registered only on the factory's canonical set), and the creator picks it only by picking the version. Status: built, commit `690a295a` (plan Task 5g-Z1).
 
+Change (2026-10-20): owner 2026-10-20 (plan 5g-Z2) — the confidential release's verifiers are the `deps` of the env
+version the registrar names at `deployImplementation` (CTR-TOK-03 Change of 2026-10-20), immutables of its code by
+construction; the creator still picks them only by picking the version. Status: built on branch `rev2-zether-z2`, commit `0f88e66f` (plan Task 5g-Z2).
+
 ### CTR-TOK-16 — getWrapper keyed by creator and underlying
 - old: UD:§20.3 · status: current · owner: yes · date: 2026-08-30 · normative: contracts/token-wrappers.md#CTR-TOK-16 · superseded-by: —
 
@@ -1944,12 +1968,24 @@ Change (2026-10-20): owner 2026-10-19 (plan 5g-Z1) — provenance gains `isRegis
 version, `version ≠ 0`); a version-0 token is unvetted code and clients and the gateway treat it so. For confidential
 tokens the factory is the published source of the canonical verifiers (CTR-ZTH-20) instead of a client-side list. Status: built, commit `690a295a` (plan Task 5g-Z1).
 
+Change (2026-10-20): owner 2026-10-20 (plan 5g-Z2) — the factory publishes a confidential token's verifiers through its
+release: `releaseOf(kind, version)` gives `envVersion` and `envHash`, `envOf(kind, envVersion).deps` the addresses (5g-Z1's
+`zetherVerifiers` / `pqzVerifier` views are removed with `Canonical`). Status: built on branch `rev2-zether-z2`, commit `0f88e66f` (plan Task 5g-Z2).
+
 ### CTR-TOK-18 — Factory is the critical immutable artifact
 - old: UD:§20.6 · status: current · owner: yes · date: 2026-08-30 · normative: contracts/token-wrappers.md#CTR-TOK-18 · superseded-by: —
 
 **Why.** The factory is the most critical immutable artifact: every clone inherits its code choices.
 **Cost if wrong.** A factory bug is inherited by every token created through it until a new factory ships.
 **Source.** `research/_USER-DECISIONS.md:1288`
+
+Change (2026-10-20): owner 2026-10-20 (plan 5g-Z2) — the chain and verifier checks leave the factory for the
+implementations' `initialize`: a Zether token reverts `VerifierUnsupportedOnThisChain` when the release's transfer
+verifier's `isSupportedOnThisChain()` is false or unanswered (`ZetherLib.init`, was the factory's `_checkZether`), and
+outside a dev chain (`ZetherSafety`); a PQZ token runs `PqzSafety` (was also `_checkPqz`). The factory keeps one generic
+gate, `setKindEnabled(kind, on)` (registrar; it replaces `setZetherEnabled` / `setPqzEnabled`); **controller proposal,
+owner may override:** the plain kinds start enabled, the confidential kinds disabled, and `setKindEnabled` itself runs
+no chain check (the token's `initialize` does). Status: built on branch `rev2-zether-z2`, commit `0f88e66f` (plan Task 5g-Z2).
 
 ### CTR-TOK-19 — Multi wrap checks only its own leg's reserve
 - old: — · status: current · owner: yes · date: 2026-10-06 · normative: contracts/token-wrappers.md#CTR-TOK-19 · superseded-by: —
@@ -2009,6 +2045,18 @@ Change (2026-10-20): owner 2026-10-19, option (a) (plan 5g-Z1) — `createTokenU
 (`UnregisteredConfidentialKind`, kinds 2–7) and stays for the plain kinds, recorded as version 0 and flagged unvetted
 (`isRegisteredToken` false); `ConfidentialConfig.verifier` must be 0 (the release's verifier, CTR-ZTH-20; the field stays
 until the creation API is replaced in plan 5g-Z2). Status: built, commit `690a295a` (plan Task 5g-Z1).
+
+Change (2026-10-20): owner rulings 2026-10-20 (plan 5g-Z2) — **generic creation API.** `createToken(kind, version, bytes
+initArgs, salt)`, `createTokenUnregistered(kind, implementation, bytes initArgs, salt)` (plain kinds only) and
+`createDex(version, bytes initArgs, salt)`; every implementation answers `initialize(address creator, uint64 version,
+bytes initArgs)`; the kinds of this repository decode `initArgs = abi.encode(TokenConfig)`, `SCaaSDex`
+`abi.encode(DexConfig)`; the factory never reads `initArgs`. **Owner ruling 2026-10-20 (confirmed): `initialize` takes no
+`Env`**, and the split stays explicit — the implementation carries what never changes for it (the `Env` in its
+constructor: verifiers, registry, chain, libraries), each instance carries its own configuration from `initArgs`
+(rates, features, roles, the confidential settings). `ConfidentialConfig.verifier` is removed (7 fields). The factory's
+index and the one `TokenCreated` read the token's `underlyings()`, `features()`, `lockedFeatures()` and `owner()` after
+`initialize`; `createToken` refuses an unknown, deprecated or not-yet-usable release and a disabled kind (`KindDisabled`).
+Status: built on branch `rev2-zether-z2`, commit `0f88e66f` (plan Task 5g-Z2).
 
 ### CTR-TOK-26 — A leg may be the native coin
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/token-wrappers.md#CTR-TOK-26 · superseded-by: —
@@ -2306,6 +2354,13 @@ Change (2026-10-20): owner 2026-10-20 (plan 5g-Z1) — `deprecateDex(version, re
 `DexImplementationDeprecated`) and `isDexDeprecated`; `createDex` refuses a deprecated version (`DexVersionDeprecated`);
 DEXes already made are untouched. Status: built, commit `690a295a` (plan Task 5g-Z1).
 
+Change (2026-10-20): owner rulings 2026-10-20 (plan 5g-Z2) — `createDex(version, bytes initArgs, salt)` with
+`initArgs = abi.encode(DexConfig)` and `SCaaSDex.initialize(creator, version, initArgs)`; the DEX release is deployed by the
+factory on a published DEX env (`publishDexEnv`, `deployDexImplementation(version, envVersion, initcode, implArgs)`, the
+`SmartKeyAccount` implementation and the linked `TradeLib` from the env; the explicit `envVersion` is the interim
+controller proposal of CTR-TOK-03, owner may override) and is usable after the notice period
+(`DexVersionNotYetUsable`). Status: built on branch `rev2-zether-z2`, commit `0f88e66f` (plan Task 5g-Z2).
+
 ### CTR-DEX-25 — UATradeOrder: a UA's order, verified by its token
 - old: — · status: current · owner: yes · date: 2026-10-13 · normative: contracts/dex.md#CTR-DEX-25 · superseded-by: —
 
@@ -2532,6 +2587,11 @@ Change (2026-10-19): controller proposal (owner may override) — **on-chain rev
 **Cost if wrong.** A configurable gate is one transaction away from production use.
 **Source.** `history/specs/2026-10-03-zether-design.md:583`
 
+Change (2026-10-20): owner 2026-10-20 (plan 5g-Z2) — the factory's Zether flag `zetherEnabled` (settable only on a dev
+chain) is replaced by the generic kind gate `setKindEnabled` (kinds 2–3 start disabled); the dev-chain allowlist itself is
+unchanged and now enforced, for the factory path, in the token's `initialize` and the verifier constructors (a factory
+on a non-dev chain can enable the kind, but every creation reverts). Status: built on branch `rev2-zether-z2`, commit `0f88e66f` (plan Task 5g-Z2).
+
 ### CTR-ZTH-03 — No epochs; verifier takes the full statement; fund from the public balance
 - old: RS2-2 · status: current · owner: no · date: 2026-10-08 · normative: contracts/zether.md#CTR-ZTH-03 · superseded-by: —
 
@@ -2681,6 +2741,18 @@ registrar can still register bytecode that reports canonical addresses; the regi
 `zether-bls12381`) verify with `ZetherSchnorr*Verifier`, fixed in the registry constructor (immutables), not with the proof
 verifiers: no change needed. The generic per-kind environment, factory-deployed
 code and library code-hash pins are plan 5g-Z2. Status: built, commit `690a295a` (plan Task 5g-Z1).
+
+Change (2026-10-20): **owner rulings 2026-10-20, plan 5g-Z2** (replaces item (4) of the 5g-Z1 change above; same
+principle, no admin list). The verifiers come from the release's environment instead of a factory-constructor
+`Canonical` set: `Env.deps` of a `*_ZETHER` kind = transfer, burn and inner-product verifier and `ZetherDisclosure` of one
+curve (positions 0–3), of a `*_PQZ` kind = the `UAPqzVerifier` (position 0); the factory deploys the implementation with
+that env appended to its init code, so the verifiers are constructor immutables of the release by construction, and
+`NotCanonicalVerifiers`, `zetherVerifiers`, `pqzVerifier` are removed. The Zether constructor refuses missing code, two
+verifiers of different proof systems, verifiers not fixed to `deps[2]` and a Hedera env (`BadInit`; **controller
+proposal, owner may override:** the Hedera refusal, for PQZ too — no confidential kind targets Hedera). A new verifier
+set is a new env version plus a new release; tokens of older versions keep theirs. Limit restated: the factory proves
+which env and libraries a release was deployed with, not what its code does; the registrar's key stays the trust root.
+Status: built on branch `rev2-zether-z2`, commit `0f88e66f` (plan Task 5g-Z2).
 
 ### CTR-ZTH-21 — Zether envelopes use the base's ERC-1271 cap by codehash
 - old: RS2-21 · status: current · owner: no · date: 2026-10-08 · normative: contracts/zether.md#CTR-ZTH-21 · superseded-by: —
