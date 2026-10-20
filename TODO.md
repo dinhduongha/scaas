@@ -42,10 +42,10 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
 - **Now (2026-10-20 night):** **5h part A merged** (branch `pqz-state-b`, merge commit on main; Tasks 1–6 + relayed
   rollover, final review + fix wave + re-review clean). Next: **5h part B** (16k regeneration with B-1, A-2, `R_REG`,
   one `proofSystemId` bump; plan Tasks 7–9), then the Codex order below (HANDOFF.md top note).
-- [ ] **`MtxRule`: allow-list vs fee class (owner 2026-10-20: owner reviews it, do not change):** today `feeClass = 0`
-  means "not relayable" (`MetaTxBase.MtxRule`, CTR-MTX-20), mixing the allow-list with the fee basis; a split
-  (`allowed` + `feeClass`) would touch `MetaTxBase`, every `_mtxRule`, `mtxSelectors()`, node `guard.rs`, clients.
-  Not scheduled. Standing rule meanwhile: every `mtx*` write is relayable, outer fee may be 0 (CTR-MTX-19).
+- [x] **`MtxRule`: allow-list vs fee class — owner 2026-10-20: keep as is.** `feeClass = 0` = not relayable,
+  `ABSOLUTE` / `AMOUNT` = the fee basis (CTR-MTX-20); on contracts with `supportedModes() = 0x03` (`SmartKeyAccount`,
+  `MandateWallet`, their `cancelNonce`) an `ABSOLUTE` selector can only run with fee mode `NONE` (CTR-MTX-22; node
+  `guard.rs` checks both). Rollovers on the tokens are `ABSOLUTE` (fee `NONE`, `FIXED 0` or `FIXED x`). No change.
 - [ ] **Review order with Codex (owner 2026-10-20; Codex credits limited — two runs only, one type at a time, each on
   the owner's go):** (1) UA-6 (contracts, clients; Claude reviews) → (2) 5h part A (PQZ state, proof-free shield,
   `SHIELD_POOL`, `mtx*` names, fees; plus UA-5c (a) the confidential ops through the UA envelope binding and (b)
