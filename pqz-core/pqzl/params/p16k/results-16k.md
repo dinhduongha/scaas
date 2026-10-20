@@ -1,6 +1,6 @@
 # 16k parameter candidate: results for the owner checkpoint (plan 5h Task 7)
 
-**Status:** measured candidate, 2026-10-21. Nothing in production changed: no header, Rust / C / Solidity constant, id or
+**Status:** measured candidate, 2026-10-21; fix round 1 (review I1, I2, m3, m4) the same day. Nothing in production changed: no header, Rust / C / Solidity constant, id or
 vector. Plan Task 8 switches the code after this checkpoint. Plan: `docs/superpowers/plans/2026-10-20-pqz-state-redesign.md`
 (D16, D23, D25); spec §6.
 
@@ -20,24 +20,32 @@ vector. Plan Task 8 switches the code after this checkpoint. Plan: `docs/superpo
 | Item | Result | Limit |
 |---|---|---|
 | Encryption security (key and enc, n = 2560) | uSVP β 508; dual_hybrid β 499 / 500; 2^145.7 / 2^132.7 | β ≥ 450 |
-| DDGR20 worst case at 144 hints (one group: 8 legs + auditor) | **β 462.68** | ≥ 450 → **M = 8 uses G = 1** |
+| DDGR20 worst case at 144 hints (one group: 8 legs + auditor) | **β 462.68** (primal, DDGR20) | ≥ 450 |
+| dual_hybrid at 144 hints (n − h model; and minus the DDGR20 worst-case offset 7.32) | **461 / 463** (classical / quantum); **453.68 / 455.68** | ≥ 450 → both models: **M = 8 uses G = 1** |
 | Smallest proof-instance β (all 14 specs, both models) | **455** (MSIS of R_TX / R_TX0 / R_BURN / R_TXM M = 2, M = 4 off); hiding MLWE uSVP ≥ 471, dual_hybrid **462 / 463** | ≥ 450 |
 | Largest PQZL codegen proof | **76,002 B** (R_TXM M = 8, G = 2, auditor); G = 1: **60,882 B** | `MAX_PROOF` 98,304 |
 | Largest PQZL precompile input | 345,191 B (M = 8, G = 2, auditor); G = 1: 309,591 B | `MAX_INPUT` 512 KiB (also under today's 393,216) |
-| `ROLL_MAX` | **208** (relayed 12,564,860 gas; 224 relayed: 13,256,108) | 0.75 · 2^24 = 12,582,912 |
-| `mtxPrepareAcc` halves | 7,176,058 direct, 7,213,421 relayed (each) | 12,582,912 |
-| op 7 M = 8 transaction, G = 2 | ≈ 20.6 M [estimate] — **does not fit** | 2^24 = 16,777,216 |
-| op 7 M = 8 transaction, G = 1 | ≈ 15.4 M [estimate] — fits, ≈ 1.3 M margin | 2^24 |
+| `ROLL_MAX`, full relayed transaction with a fee (binding convention, fix round 1) | **192** (11,934,843 gas); 208: 12,626,103 — over | 0.75 · 2^24 = 12,582,912 |
+| `ROLL_MAX`, execution gas of the call only, fee 0 (first round's convention) | 208 (12,564,860); 224: 13,256,108 | 12,582,912 |
+| `mtxPrepareAcc` half, full relayed transaction with a fee | 7,274,714 (execution only: 7,176,058 direct, 7,213,421 relayed) | 12,582,912 |
+| op 7 M = 8 relayed transaction, G = 2 | 13,210,485 measured + precompile ≈ 7.72 M [estimate] ≈ 20.96 M — **does not fit** | 2^24 = 16,777,216 |
+| op 7 M = 8 relayed transaction, G = 1 | 7,938,513 measured + ≈ 7.72 M [estimate] ≈ 15.69 M — fits while the precompile row ≤ **8,809,678** (1.43× today's 6,177,000; direct call: ≤ 9,059,115, 1.47×) | 2^24 |
 | n = 2304 at 80 hints | β 415.29 (0 hints: 439.58; key uSVP 440) — **does not clear 450**: no owner checkpoint | ≥ 450 |
 | PQZH Ligero proof bound, debit forms | **≈ 302.7 KB [estimate] — over `MAX_PROOF_PQZH` 262,144** (owner) | 262,144 |
 | e_s0 checks at 16k (budget, exactness, Fiat–Shamir rounds) | all met | — |
 
 **Decisions the numbers force (O9 rule):**
-1. **op 7 M = 8 uses one randomness group (G = 1)**: 144 worst-case hints give β 462.68 ≥ 450 (auditor off, 128 hints:
-   467.60). Groups of up to 8 legs share one `(r, e1)`. This is a new relation shape (`txm8g1` / `txm80g1` here),
+1. **op 7 M = 8 uses one randomness group (G = 1)**: 144 worst-case hints give β 462.68 ≥ 450 under DDGR20 (auditor
+   off, 128 hints: 467.60), and dual_hybrid 461 / 463 on the n − h model (453.68 / 455.68 after subtracting the
+   worst-case offset), so both models clear 450. Groups of up to 8 legs share one `(r, e1)`. This is a new relation shape (`txm8g1` / `txm80g1` here),
    and on chain it is also the only M = 8 shape that fits 2^24 (§6). Task 8: `G = ⌈M / 8⌉` (or G = 1 for M ≤ 8) in the
    relation, `pqz-stmt`, both cores and the Solidity layout.
-2. **`ROLL_MAX = 208`** (the largest multiple of 16 whose relayed call stays under 0.75 · 2^24).
+2. **`ROLL_MAX = 192`** (recommendation, fix round 1): the largest multiple of 16 whose **full relayed transaction**
+   — 21,000 intrinsic, the envelope's calldata, a cold implementation, a non-zero absolute outer fee to a fresh relayer
+   — stays ≤ 0.75 · 2^24: 192 → 11,934,843 (648 k margin), 208 → 12,626,103 (over by 43 k). The first round's 208
+   held only for the execution gas of a fee-0 call (18 k margin). With 192 the direct-call pin `test_gas_rollMax`'s
+   "`ROLL_MAX` + 16 over it" assertion (execution-only convention) no longer holds (208 direct = 12,527,572): Task 8
+   re-pins it on the full-transaction convention.
 3. **n = 2304 is out**: below 450 already without hints.
 4. **Owner item: PQZH's `MAX_PROOF_PQZH`.** At the 16k sizes every PQZH debit proof bound is ≈ 302 KB (> 262,144 B);
    R_REG / R_DS / R_DR stay at ≈ 233 KB. No other preset in the model's search is meaningfully smaller (§5). Either
@@ -72,6 +80,19 @@ m = n + 16; 16 hints per key; "mixed" = worst-case maximal-norm forms, V_max = �
 | **144** | 469.03 | 467.31 | **462.68** | 470 |
 | 256 | 439.58 | 436.56 | 428.41 | 440 |
 | 272 | 435.40 | 432.19 | 423.55 | 436 |
+
+**dual_hybrid on the hinted instance** (fix round 1, `dual_hints16k.sage`, appended to `hints-16k-n2560.txt` as
+section 6): h hints on r as h removed secret dimensions (LWE n = 2560 − h, m = 2576), as the "estimator n − h" column;
+"− offset" subtracts (n − h primal − DDGR20 mixed), the worst-case penalty of DDGR20 over that model [estimate]:
+
+| hints | primal n − h | dual_hybrid classical / quantum | DDGR20 mixed | offset | dual_hybrid − offset |
+|---|---|---|---|---|---|
+| 0 | 508 | 499 / 500 | 507.31 | 0.69 | 498.31 / 499.31 |
+| 16 | 504 | 495 / 495 | 502.32 | 1.68 | 493.32 / 493.32 |
+| 32 | 499 | 490 / 493 | 497.34 | 1.66 | 488.34 / 491.34 |
+| 80 | 486 | 478 / 480 | 482.43 | 3.57 | 474.43 / 476.43 |
+| 128 | 474 | 465 / 467 | 467.60 | 6.40 | 458.60 / 460.60 |
+| **144** | 470 | **461 / 463** | 462.68 | 7.32 | **453.68 / 455.68** |
 
 The 0-hint row reproduces spec §6.2's 507.3; 80 hints give 482.43 (spec: 482.4). Largest group with β ≥ 450: 8 legs
 (auditor on and off); M = 16 in one group (272 / 256 hints) fails. **n = 2304** (`hints-16k-n2304.txt`): 0 / 80 / 144
@@ -150,16 +171,19 @@ largest reconstructed integer 2^29 < q; R_DR Δ·15 + 2^29 < q. Fiat–Shamir ro
 constant, `ZERO_HASH`, 644 `acc` words in halves of 322, `K_MAX`, `ROLL_MAX`, payload / disclosure lengths) and runs
 the pins of `test/pqz/PqzStateGas.t.sol` (distinct cold blobs, every coefficient q − 1, `ACC_MARK` words, each test
 its own transaction). Execution gas of the token call; precompile and ML-DSA mocked. Logs: `gas-16k-r208.txt`
-(`ROLL_MAX` = 208, op 7 proof 76,002 B), `gas-16k-r224.txt` (the 224 build), `gas-16k-r208-g1.txt` (`G1=1`: one group
+(`ROLL_MAX` = 208, op 7 proof 76,002 B), `gas-16k-r192.txt` (the recommended 192 build), `gas-16k-r208-n192.txt`
+(192 entries full transaction in the 208 build), `gas-16k-r224.txt` (the 224 build), `gas-16k-r208-g1.txt` (`G1=1`: one group
 for M ≤ 8, proof 60,882 B), `gas-today-n2048.txt` (the same tests at today's sizes).
 
 | Call | today (n = 2048) | 16k (n = 2560) |
 |---|---|---|
 | `mtxRollOver` 1 / 16 / 128 | 2,854,442 / 3,430,787 / 7,498,963 | 3,553,051 / 4,232,596 / 9,071,332 |
-| `mtxRollOver` `ROLL_MAX` direct / relayed | 256: 12,148,307 / 12,185,595 | **208: 12,527,572 / 12,564,860** |
-| `ROLL_MAX` + 16 relayed (own build) | — | 224: 13,256,108 (> 12,582,912) |
+| `mtxRollOver` `ROLL_MAX` direct / relayed (execution, fee 0) | 256: 12,148,307 / 12,185,595 | 208: 12,527,572 / 12,564,860; 192: 11,836,324 / 11,873,612 |
+| `ROLL_MAX` + 16 relayed (own build, execution, fee 0) | — | 224: 13,256,108 (> 12,582,912) |
+| `mtxRollOver` full relayed transaction, fee 7 (fix round 1) | 256: 12,246,838 | **192: 11,934,843**; 208: 12,626,103 (over) |
+| `mtxPrepareAcc` half 0, full relayed transaction, fee 7 | 5,856,602 | 7,274,714 |
 | fit: per entry / fixed | 36,323 / 2,849,619 | 43,203 / 3,541,348 |
-| `ROLL_MAX` after a TRIVIAL-only rollover | 12,088,219 | 12,467,484 |
+| `ROLL_MAX` after a TRIVIAL-only rollover | 12,088,219 | 12,467,484 (208); 11,776,236 (192) |
 | `mtxPrepareAcc` half 0 / 1, direct / relayed | 5,757,946 / 5,795,309 | **7,176,058 / 7,213,421** |
 | op 1 BUNDLE, auditor, fresh ref | 4,002,873 | 4,928,464 |
 | op 1, materialised `acc`, hint / no hint | 4,133,936 / 5,229,390 | 5,072,798 / 6,433,509 |
@@ -168,7 +192,14 @@ for M ≤ 8, proof 60,882 B), `gas-today-n2048.txt` (the same tests at today's s
 | burn / refresh | 3,857,681 / 3,832,302 | 4,769,650 / 4,744,270 |
 | shield append / merge | 73,940 / 51,774 | 73,940 / 51,774 |
 
-**op 7 M = 8 against the 2^24 transaction gas cap** (direct call; relayed adds ≈ 37 k plus the envelope):
+**Full-transaction convention (fix round 1).** `_fullTx` in `PqzStateGas.t.sol` relays the call through `mtxExecute`
+with a FIXED (absolute) outer fee of 7 paid from the signer's public balance to a fresh relayer (a zero → non-zero
+balance write), computes the digest under a snapshot that is reverted (so the clone's implementation and libraries
+are cold in the measured call; `tok` itself is cold too, +2,600 against chain, conservative), and reports
+`21,000 + max(EIP-2028 calldata + execution, EIP-7623 floor)` of the real `mtxExecute` calldata. The UA envelope
+(`uaExecute`, ML-DSA auth) was not measured: its ML-DSA precompile is mocked here.
+
+**op 7 M = 8 against the 2^24 transaction gas cap** (first round: direct call; fix round 1: the relayed full transaction):
 
 | | today (G = 2) | 16k G = 2 | **16k G = 1** |
 |---|---|---|---|
@@ -178,11 +209,20 @@ for M ≤ 8, proof 60,882 B), `gas-today-n2048.txt` (the same tests at today's s
 | calldata EIP-2028 (measured; all-non-zero bound) | 1,453,236 | 1,729,664 (1,974,848) | 1,253,252 (1,404,992) |
 | 21,000 + calldata + execution (measured) | 10,491,522 | 12,832,436 | 7,689,076 |
 | precompile schedule gas | 6,177,000 (today's row) | ≈ 7.72 M [estimate] | ≈ 7.72 M [estimate] |
-| **total** | 16,668,522 (fits by 0.11 M) | **≈ 20.6 M: over 2^24** | **≈ 15.4 M: fits (≈ 1.3 M margin)** [estimate] |
+| **total, direct** | 16,668,522 (fits by 0.11 M) | **≈ 20.6 M: over 2^24** | **≈ 15.4 M: fits (≈ 1.3 M margin)** [estimate] |
+| relayed full tx, fee 7: `mtxExecute` calldata bytes | 104,356 | 123,972 | 88,356 |
+| relayed: execution / calldata gas (measured) | 9,316,891 / 1,456,648 | 11,456,409 / 1,733,076 | 6,660,849 / 1,256,664 |
+| relayed: 21,000 + calldata + execution (measured) | 10,794,539 | 13,210,485 | **7,938,513** |
+| **total, relayed** (+ precompile, + 3 gas per input word ≈ 29–33 k) | ≈ 17.0 M: over | ≈ 20.96 M: over | **≈ 15.69 M: fits (≈ 1.09 M margin)** [estimate] |
+| **precompile tolerance**: the largest op 7 M = 8 row that still fits 2^24 | — | none (≤ 3.53 M) | **relayed 8,809,678 (1.43× today's row); direct 9,059,115 (1.47×)** |
 
 The precompile estimate is today's PQZL op 7 M = 8 row scaled by the statement ratio 1.25 (n 2048 → 2560), applied
-to G = 1 too (its statement is 8 % smaller, so this is conservative); input words add ≈ 30 k. G = 2 is over the cap
-even with today's unscaled 6.18 M (19.0 M). Task 9's calibration replaces the estimate.
+to G = 1 too (its statement is 8 % smaller, so this is conservative); input words add 3 · ⌈309,591 / 32⌉ = 29,025 for
+G = 1. G = 2 is over the cap even with today's unscaled 6.18 M (19.0 M direct). **Tolerance:** G = 1 fits relayed while
+Task 9's calibrated row is ≤ 8,809,678 = 2^24 − 7,938,513 − 29,025; the 7.72 M estimate leaves 14 % headroom (direct: 17 %), so a
+calibration at the top of the reviewer's +18 % spread (≈ 9.11 M) would fit **neither** path (relayed ≤ 8,809,678,
+direct ≤ 9,059,115): M = 8 on chain then needs either a calibrated row inside the tolerance or a smaller op 7 cost. Today's M = 8 relayed is already over (≈ 17.0 M), so relayed op 7
+M = 8 does not run on today's parameters either.
 
 ## 7. Files and reruns
 
@@ -199,7 +239,8 @@ lattice-estimator 53da598, leaky-LWE-Estimator 0a9caf8, image `sagemath/sagemath
 | `enc16k.sage`, `run_enc16k.sh` → `enc-16k.txt` | encryption uSVP and full estimates, n = 2560 and 2304 |
 | `e_s0_16k.py`, `run_e_s0_16k.sh` → `e-s0-16k.txt` | budget, exactness, Fiat–Shamir rounds |
 | `ligero16k.py` → `ligero-16k.txt` | PQZH domains, proof bounds per form, preset search [estimate] |
-| `gas16k.sh` → `gas-16k-*.txt`, `gas-today-n2048.txt` | the as-built gas pins at the 16k sizes |
+| `gas16k.sh` → `gas-16k-*.txt`, `gas-today-n2048.txt` | the as-built gas pins at the 16k sizes (`r192`, `r208`, `r208-n192`, `r208-g1`, `r224`) |
+| `dual_hints16k.sage` (`SCRIPT=… run_enc16k.sh`) → section 6 of `hints-16k-n2560.txt` | dual_hybrid on the hinted instance |
 
 ```sh
 T=<dir with lk (0a9caf8), le (53da598), lz (3330e48) checkouts>; P=pqz-core/pqzl/params/p16k
@@ -212,5 +253,8 @@ scripts/capped $P/run_e_s0_16k.sh > $P/e-s0-16k.txt
 python3 -I $P/ligero16k.py > $P/ligero-16k.txt
 PQZ_PROOF_LEN=76002 scripts/capped $P/gas16k.sh <work dir> <smartcontracts/evm/lib> 208 > $P/gas-16k-r208.txt
 scripts/capped $P/gas16k.sh <work dir> <lib> 224 --match-test test_gas_rollMax -vv > $P/gas-16k-r224.txt
+PQZ_ROLL_N=192 scripts/capped $P/gas16k.sh <work dir> <lib> 208 --match-test test_gas_rollMax_relayedFullTx -vv > $P/gas-16k-r208-n192.txt
+PQZ_PROOF_LEN=76002 scripts/capped $P/gas16k.sh <work dir> <lib> 192 > $P/gas-16k-r192.txt
+SCRIPT=dual_hints16k.sage scripts/capped $P/run_enc16k.sh $T/le >> $P/hints-16k-n2560.txt
 PQZ_PROOF_LEN=60882 G1=1 scripts/capped $P/gas16k.sh <work dir> <lib> 208 --match-test test_gas_op7 -vv > $P/gas-16k-r208-g1.txt
 ```

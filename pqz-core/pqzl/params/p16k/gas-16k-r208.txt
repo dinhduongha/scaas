@@ -1,4 +1,4 @@
-== p16k/gas16k.sh: repository 56943a36, ROLL_MAX = 208, G1 = 0; the 16k edits:
+== p16k/gas16k.sh: repository a87795da, ROLL_MAX = 208, G1 = 0; the 16k edits:
    src/pqz/PqzCt.sol: 12,14c12,14
    src/pqz/PqzCt.sol: <     uint256 internal constant Q = 4_398_046_510_889; // 2^42 − 215
    src/pqz/PqzCt.sol: <     uint256 internal constant DELTA = 67_108_863; // 2^26 − 1 = ⌊q / 2^16⌋
@@ -88,8 +88,8 @@
    test/pqz/helpers/PqzFixture.sol: ---
    test/pqz/helpers/PqzFixture.sol: >         return _blob(seed, withAud ? 20_864 : 20_736);
 forge Version: 1.3.5-stable
-Compiling 12 files with Solc 0.8.37
-Solc 0.8.37 finished in 7.14s
+Compiling 1 files with Solc 0.8.37
+Solc 0.8.37 finished in 3.78s
 Compiler run successful with warnings:
 Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:92:29:
@@ -128,9 +128,9 @@ Logs:
   mtxRollOver ROLL_MAX after a TRIVIAL-only rollover gas 12467484
 
 [PASS] test_trivialRoll_noZeroSlot() (gas: 1280929)
-Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 127.11ms (28.56ms CPU time)
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 126.03ms (26.73ms CPU time)
 
-Ran 23 tests for test/pqz/PqzStateGas.t.sol:PqzStatePinGasTest
+Ran 26 tests for test/pqz/PqzStateGas.t.sol:PqzStatePinGasTest
 [PASS] test_gas_burn() (gas: 5025600)
 Logs:
   burn 1 to an address, fee, fresh ref gas 4769650
@@ -167,7 +167,13 @@ Logs:
 Logs:
   op 7 M = 8 BUNDLE, auditor, fee, fresh ref (8 first credits) gas 10484989
 
-[PASS] test_gas_op7_M8_txTotal() (gas: 31106429)
+[PASS] test_gas_op7_M8_relayedFullTx() (gas: 32171901)
+Logs:
+  relayed op 7 M = 8, full transaction, fee 7, proof bytes (precompile mocked) 76002
+    mtxExecute calldata bytes / execution / calldata gas / EIP-7623 floor 123972 11456409 1733076
+    floor / transaction total 4332690 13210485
+
+[PASS] test_gas_op7_M8_txTotal() (gas: 31106451)
 Logs:
   op 7 M = 8 calldata bytes / zero bytes / proof bytes 123428 20432 76002
   op 7 M = 8 BUNDLE, auditor, fee, fresh ref: execution (precompile mocked) gas 11081772
@@ -178,19 +184,25 @@ Logs:
 Logs:
   mtxPrepareAcc half 0 gas 7176058
 
-[PASS] test_gas_prepareAcc_half0_relayed() (gas: 7236142)
+[PASS] test_gas_prepareAcc_half0_relayed() (gas: 7236105)
 Logs:
   relayed mtxPrepareAcc half 0 (mtxExecute, fee 0) gas 7213421
 
-[PASS] test_gas_prepareAcc_half1() (gas: 7184445)
+[PASS] test_gas_prepareAcc_half0_relayedFullTx() (gas: 7389129)
+Logs:
+  relayed mtxPrepareAcc half 0, full transaction, fee 7
+    mtxExecute calldata bytes / execution / calldata gas / EIP-7623 floor 612 7249646 4068
+    floor / transaction total 10170 7274714
+
+[PASS] test_gas_prepareAcc_half1() (gas: 7184467)
 Logs:
   mtxPrepareAcc half 1 gas 7176058
 
-[PASS] test_gas_prepareAcc_half1_relayed() (gas: 7236051)
+[PASS] test_gas_prepareAcc_half1_relayed() (gas: 7236124)
 Logs:
   relayed mtxPrepareAcc half 1 (mtxExecute, fee 0) gas 7213421
 
-[PASS] test_gas_refresh() (gas: 5000165)
+[PASS] test_gas_refresh() (gas: 5000187)
 Logs:
   refresh, fee, fresh ref gas 4744270
 
@@ -205,9 +217,15 @@ Logs:
   mtxRollOver ROLL_MAX + 16 (linear fit) gas 13218820
   per entry / fixed (fit) 43203 3541348
 
-[PASS] test_gas_rollMax_relayed() (gas: 11589148)
+[PASS] test_gas_rollMax_relayed() (gas: 11589199)
 Logs:
   relayed mtxRollOver ROLL_MAX (mtxExecute, fee 0) gas 12564860
+
+[FAIL: the full relayed transaction under 0.75 * 2^24: 12626103 > 12582912] test_gas_rollMax_relayedFullTx() (gas: 12741588)
+Logs:
+  relayed mtxRollOver, full transaction, fee 7, entries 208
+    mtxExecute calldata bytes / execution / calldata gas / EIP-7623 floor 612 12601011 4092
+    floor / transaction total 10230 12626103
 
 [PASS] test_gas_roll_1() (gas: 3556364)
 Logs:
@@ -229,6 +247,12 @@ Logs:
 Logs:
   mtxShield, merge (TRIVIAL tail of this block) gas 51774
 
-Suite result: ok. 23 passed; 0 failed; 0 skipped; finished in 233.52ms (228.16ms CPU time)
+Suite result: FAILED. 25 passed; 1 failed; 0 skipped; finished in 250.49ms (379.50ms CPU time)
 
-Ran 2 test suites in 235.21ms (360.63ms CPU time): 25 tests passed, 0 failed, 0 skipped (25 total tests)
+Ran 2 test suites in 252.44ms (376.52ms CPU time): 27 tests passed, 1 failed, 0 skipped (28 total tests)
+
+Failing tests:
+Encountered 1 failing test in test/pqz/PqzStateGas.t.sol:PqzStatePinGasTest
+[FAIL: the full relayed transaction under 0.75 * 2^24: 12626103 > 12582912] test_gas_rollMax_relayedFullTx() (gas: 12741588)
+
+Encountered a total of 1 failing tests, 27 tests succeeded

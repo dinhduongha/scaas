@@ -24,6 +24,8 @@ contract PqzStatePinGasTest is PqzSlots {
     bytes32 internal frank; // a TRIVIAL tail of the current block
     bytes32[8] internal xs;
     uint256 internal nextBlob = 0x5EED0000;
+    uint256 internal constant RKEY = 0xA11CE; // the envelope signer
+    address internal constant RELAYER = address(0x7E1A7E); // a fresh relayer: the fee credit is a zero → non-zero write
 
     function setUp() public {
         _stack();
@@ -49,6 +51,7 @@ contract PqzStatePinGasTest is PqzSlots {
         _fund(tok, frank, 1); // frank: a TRIVIAL tail of the test's block
         _public(tok, address(this), 1000 * SCALE);
         _fund(tok, _pqzUA(_pk(12), 12), 100); // D19: the pool holds the fees the measured debits pay out
+        _public(tok, vm.addr(RKEY), 1000); // the relayed envelopes' signer pays the outer fee (full-tx pins)
     }
 
     /// `STOP ‖ salt(16) ‖ u ‖ v_t ‖ toUA ‖ v_f`, every coefficient `q − 1` (the lane-overflow worst case).
@@ -112,15 +115,59 @@ contract PqzStatePinGasTest is PqzSlots {
         }
     }
 
-    /// `data` (a token call) relayed through `mtxExecute` (fee 0, an unfunded signer, own transaction).
+    /// `data` (a token call) relayed through `mtxExecute` (fee 0, own transaction; execution gas only).
     function _relayed(bytes memory data) internal returns (uint256) {
-        uint256 key = 0xA11CE;
+        uint256 key = RKEY;
         MetaTxLib.MetaTransaction memory m;
         m.from = vm.addr(key);
         m.data = data;
         m.validUntil = block.timestamp + 1 hours;
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(key, tok.mtxDigest(m));
         return _gas(abi.encodeWithSignature("mtxExecute((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)", m, abi.encodePacked(r, s, v)));
+    }
+
+    /// Fix round 1 (review I1, m3): `data` relayed as a full transaction. The envelope pays a FIXED (absolute) outer fee
+    /// `fee` from the signer's public balance to a fresh relayer; the digest is computed under a snapshot that is then
+    /// reverted, so the clone's implementation and libraries are cold in the measured call (`tok` itself is cold too,
+    /// though on chain `tx.to` is warm: +2,600, conservative). Returns the execution gas, the EIP-2028 calldata gas of the
+    /// `mtxExecute` calldata, the EIP-7623 floor and the transaction total `21,000 + max(calldata + execution, floor)`.
+    function _fullTx(bytes memory data, uint256 fee) internal returns (uint256 exec, uint256 cd, uint256 floor, uint256 tot) {
+        MetaTxLib.MetaTransaction memory m;
+        m.from = vm.addr(RKEY);
+        m.data = data;
+        m.validUntil = block.timestamp + 1 hours;
+        m.mode = fee == 0 ? 0 : MetaTxLib.MODE_FEE_FIXED;
+        m.fee = fee;
+        uint256 snap = vm.snapshotState();
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(RKEY, tok.mtxDigest(m));
+        vm.revertToState(snap);
+        bytes memory call = abi.encodeWithSignature("mtxExecute((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)", m, abi.encodePacked(r, s, v));
+        uint256 zeros;
+        for (uint256 i; i < call.length; ++i) if (call[i] == 0) ++zeros;
+        cd = 4 * zeros + 16 * (call.length - zeros);
+        floor = 10 * (zeros + 4 * (call.length - zeros));
+        vm.prank(RELAYER);
+        exec = _gas(call);
+        tot = 21_000 + (cd + exec > floor ? cd + exec : floor);
+        assertEq(tok.balanceOf(RELAYER), fee, "the outer fee was paid");
+        console2.log("  mtxExecute calldata bytes / execution / calldata gas / EIP-7623 floor", call.length, exec, cd);
+        console2.log("  floor / transaction total", floor, tot);
+    }
+
+    /// Fix round 1 (I1): the `ROLL_MAX` rollover (or `PQZ_ROLL_N` entries) as a full relayed transaction with an outer
+    /// fee: the binding convention for `ROLL_MAX` (the whole transaction <= 0.75 · 2^24).
+    function test_gas_rollMax_relayedFullTx() public {
+        uint256 n = vm.envOr("PQZ_ROLL_N", PqzCore.ROLL_MAX);
+        console2.log("relayed mtxRollOver, full transaction, fee 7, entries", n);
+        (,,, uint256 tot) = _fullTx(abi.encodeCall(tok.mtxRollOver, (alice, n)), 7);
+        assertLe(tot, CAP, "the full relayed transaction under 0.75 * 2^24");
+    }
+
+    /// Fix round 1 (I1): each `mtxPrepareAcc` half as a full relayed transaction with an outer fee.
+    function test_gas_prepareAcc_half0_relayedFullTx() public {
+        console2.log("relayed mtxPrepareAcc half 0, full transaction, fee 7");
+        (,,, uint256 tot) = _fullTx(abi.encodeCall(tok.mtxPrepareAcc, (eve, 0)), 7);
+        assertLe(tot, CAP);
     }
 
     /// The same `ROLL_MAX` rollover relayed (owner rule 2026-10-20: every mtx* write is relayable). Plan 5h Task 7:
@@ -264,6 +311,19 @@ contract PqzStatePinGasTest is PqzSlots {
         console2.log("calldata gas EIP-2028 / all non-zero bound / EIP-7623 floor", std, 16 * data.length,
             10 * (zeros + 4 * (data.length - zeros)));
         console2.log("tx total 21,000 + calldata + execution, without the precompile's schedule gas", 21_000 + std + exec);
+    }
+
+    /// Fix round 1 (m3): op 7 M = 8 relayed as a full transaction with the real data (payload and a `PQZ_PROOF_LEN`-byte
+    /// proof) and an outer fee; the precompile's schedule gas is not included (mocked).
+    function test_gas_op7_M8_relayedFullTx() public {
+        uint256 plen = vm.envOr("PQZ_PROOF_LEN", uint256(64_578));
+        bytes memory proof = new bytes(plen);
+        for (uint256 i; i < plen; i += 32) {
+            bytes32 w = keccak256(abi.encode("proof", i));
+            assembly ("memory-safe") { mstore(add(add(proof, 32), i), w) }
+        }
+        console2.log("relayed op 7 M = 8, full transaction, fee 7, proof bytes (precompile mocked)", plen);
+        _fullTx(_op7p(8, proof), 7);
     }
 
     function _burn(uint256 amount, address to) internal view returns (bytes memory) {

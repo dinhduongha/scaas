@@ -1,4 +1,4 @@
-== p16k/gas16k.sh: repository 56943a36, ROLL_MAX = 208, G1 = 1; the 16k edits:
+== p16k/gas16k.sh: repository a87795da, ROLL_MAX = 208, G1 = 1; the 16k edits:
    src/pqz/PqzCt.sol: 12,14c12,14
    src/pqz/PqzCt.sol: <     uint256 internal constant Q = 4_398_046_510_889; // 2^42 − 215
    src/pqz/PqzCt.sol: <     uint256 internal constant DELTA = 67_108_863; // 2^26 − 1 = ⌊q / 2^16⌋
@@ -111,13 +111,13 @@
    test/pqz/helpers/PqzFixture.sol: <         return PqzCt.PK * ((m + 3) / 4) + PqzCt.V * (m + 1) + (withAud ? PqzCt.V * m : 0);
    test/pqz/helpers/PqzFixture.sol: ---
    test/pqz/helpers/PqzFixture.sol: >         return PqzCt.PK * ((m + 7) / 8) + PqzCt.V * (m + 1) + (withAud ? PqzCt.V * m : 0);
-   test/pqz/PqzStateGas.t.sol: 219c219
+   test/pqz/PqzStateGas.t.sol: 279c279
    test/pqz/PqzStateGas.t.sol: <         uint256 g = (m + 3) / 4;
    test/pqz/PqzStateGas.t.sol: ---
    test/pqz/PqzStateGas.t.sol: >         uint256 g = (m + 7) / 8;
 forge Version: 1.3.5-stable
 Compiling 12 files with Solc 0.8.37
-Solc 0.8.37 finished in 7.02s
+Solc 0.8.37 finished in 7.23s
 Compiler run successful with warnings:
 Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:92:29:
@@ -150,22 +150,28 @@ Warning (6335): "at" will be promoted to keyword in the future and will not be a
     |                          ^^^^^^^^^^
 
 
-Ran 3 tests for test/pqz/PqzStateGas.t.sol:PqzStatePinGasTest
-[PASS] test_gas_op7_M4() (gas: 5702447)
+Ran 4 tests for test/pqz/PqzStateGas.t.sol:PqzStatePinGasTest
+[PASS] test_gas_op7_M4() (gas: 5702469)
 Logs:
   op 7 M = 4 BUNDLE, auditor, fee, fresh ref (4 first credits) gas 5419746
 
-[PASS] test_gas_op7_M8() (gas: 6365635)
+[PASS] test_gas_op7_M8() (gas: 6365657)
 Logs:
   op 7 M = 8 BUNDLE, auditor, fee, fresh ref (8 first credits) gas 6058863
 
-[PASS] test_gas_op7_M8_txTotal() (gas: 20296871)
+[PASS] test_gas_op7_M8_relayedFullTx() (gas: 20972883)
+Logs:
+  relayed op 7 M = 8, full transaction, fee 7, proof bytes (precompile mocked) 60882
+    mtxExecute calldata bytes / execution / calldata gas / EIP-7623 floor 88356 6660849 1256664
+    floor / transaction total 3141660 7938513
+
+[PASS] test_gas_op7_M8_txTotal() (gas: 20296915)
 Logs:
   op 7 M = 8 calldata bytes / zero bytes / proof bytes 87812 12645 60882
   op 7 M = 8 BUNDLE, auditor, fee, fresh ref: execution (precompile mocked) gas 6414824
   calldata gas EIP-2028 / all non-zero bound / EIP-7623 floor 1253252 1404992 3133130
   tx total 21,000 + calldata + execution, without the precompile's schedule gas 7689076
 
-Suite result: ok. 3 passed; 0 failed; 0 skipped; finished in 205.25ms (52.64ms CPU time)
+Suite result: ok. 4 passed; 0 failed; 0 skipped; finished in 195.03ms (91.00ms CPU time)
 
-Ran 1 test suite in 206.47ms (205.25ms CPU time): 3 tests passed, 0 failed, 0 skipped (3 total tests)
+Ran 1 test suite in 196.33ms (195.03ms CPU time): 4 tests passed, 0 failed, 0 skipped (4 total tests)
