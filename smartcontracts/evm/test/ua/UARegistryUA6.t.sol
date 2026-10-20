@@ -316,6 +316,9 @@ contract UARegistryUA6Test is UARegistryBase {
         assertFalse(UAKinds.isDerived(UAKinds.PQZ_MLWE));
         assertEq(UAKinds.tag(UAKinds.PQZ_MLWE), keccak256("scaas.ua.pqz-mlwe.v1"));
         assertEq(UAKinds.groupName(UAKinds.PQZ_MLWE), "pqz-mlwe");
+        // uaOf refuses it too (CTR-PQZ-13): the PQZ key is an attribute, never an id
+        vm.expectRevert(abi.encodeWithSelector(UAKinds.UAKindNotDerived.selector, UAKinds.PQZ_MLWE));
+        r.uaOf(UAKinds.PQZ_MLWE, key);
     }
 
     // ----- Review Focus 4/5: the Zether kind in SIGNING, not MEMBER (U8) -----

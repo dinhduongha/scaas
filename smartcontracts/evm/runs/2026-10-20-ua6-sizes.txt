@@ -1,4 +1,4 @@
-UA-6 Task 9 sizes, 2026-10-21. $ forge build src --sizes --json; python3 -I scripts/size_gate.py sizes.json size-baseline.json -> size gate: 0 error(s), 91 contracts
+UA-6 Task 9 sizes, 2026-10-20. $ forge build src --sizes --json; python3 -I scripts/size_gate.py sizes.json size-baseline.json -> size gate: 0 error(s), 91 contracts
 (the brief's `forge build --sizes` without `src` also counts test harnesses, which are not gated)
 
 contract | baseline before | measured now | delta

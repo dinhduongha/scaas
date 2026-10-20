@@ -183,6 +183,7 @@ library UAKinds {
 
     /// `keccak256(TAG(kind) ‖ keyData)`; no validation.
     function uaOf(uint16 kind, bytes memory keyData) internal pure returns (bytes32) {
+        _requireDerived(kind); // pqz-mlwe is a key attribute, not an id kind (CTR-PQZ-13)
         return keccak256(abi.encodePacked(tag(kind), keyData));
     }
 

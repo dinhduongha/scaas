@@ -1282,7 +1282,7 @@ intrinsic and calldata** (a bn254 transfer ≈ 3.9 KB calldata ≈ +52 k; BLS �
 depend on the value (identical for `v = 300`, `v = 2^32 + 5`, `v = 2^64 − 1`). The test that produced each figure is in
 the first column; `zetherUnshield` is on `NONE_ZETHER` (public mint, no underlying transfer); `zetherWrapShield` and
 `zetherUnshieldUnwrap` are not measured. UA-6 (U9) removed the registry authorization call and the `authSig` calldata
-from every spend and moved the owner ops to `requireAuthorized`; the BLS12-381 figures below are re-measured after it (UA-6 U18, 2026-10-21, `runs/2026-10-21-ua6-gas.txt`; the
+from every spend and moved the owner ops to `requireAuthorized`; the BLS12-381 figures below are re-measured after it (UA-6 U18, 2026-10-20, `runs/2026-10-20-ua6-gas.txt`; the
 max-`M` rows of the EIP-7825 table moved: the prover's `gas_limits` follow).
 
 | Operation (test) | BLS12-381 | Earlier estimate (bn254 unless noted) | Deviation (n_v = 64) |

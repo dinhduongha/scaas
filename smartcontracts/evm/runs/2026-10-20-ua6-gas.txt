@@ -1,4 +1,4 @@
-UA-6 Task 9 gas, 2026-10-21. forge (Osaka), solc 0.8.37. 'before' = main cc5b8c51 measured with the same commands in a temporary checkout; 'after' = ua6-t9.
+UA-6 Task 9 gas, 2026-10-20. forge (Osaka), solc 0.8.37. 'before' = main cc5b8c51 measured with the same commands in a temporary checkout; 'after' = ua6-t9.
 Commands: (1) forge test --isolate -vv --match-path 'test/ua/{UAGas,UARegistryZether}.t.sol'   (2) forge test -vv --match-test 'gas|Gas|lifecycleShield|ownerOnlyRollOver|transferBls|burnBls|shieldAndRollOver' --match-path 'test/zether/*'   (3) ZETHER_GAS_PROBE=1 forge test --gas-limit 9000000000000000000 --match-test test_measure -vv   (4) forge test --isolate -vv --match-path 'test/ua/UARegistryUA6.t.sol'
 Full suite (forge test): 1242 passed, 0 failed, 9 skipped (1251), 112 suites. PairingVerifiers test_gas fails under --isolate only (arithmetic underflow in its own gasleft math); passes in the normal run.
 

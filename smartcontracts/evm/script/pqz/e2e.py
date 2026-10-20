@@ -467,10 +467,11 @@ def run(kd, kr, ke):
                       (MLDSA44, [ml44.ua]), (SECP256K1, [sec_ua])):
         n = int.from_bytes(words(call(reg, cd("uaCount(uint16)", ["w"], kind)))[0], "big")
         at = [words(call(reg, cd("uaAt(uint16,uint256)", ["w", "w"], kind, i)))[0] for i in range(n)]
-        idx = [int.from_bytes(words(call(reg, cd("uaIndex(bytes32)", ["w"], ua)))[0], "big") for ua in uas]
+        # uaIndex is the UA's position in its own kind list; the 0x0142 list has no reverse index (spec U11)
+        idx = list(range(n)) if kind == PQZ_MLWE else [int.from_bytes(words(call(reg, cd("uaIndex(bytes32)", ["w"], ua)))[0], "big") for ua in uas]
         page = call(reg, cd("uaPage(uint16,uint256,uint256)", ["w", "w", "w"], kind, 0, 100))
         check(n == len(uas) and at == uas and idx == list(range(n)) and (len(page) - 2) // 2 == 64 + 32 * n and words(page)[2:] == uas,
-              f"registry list of kind {kind:#06x}: uaCount {n}, uaAt / uaIndex in registration order, uaPage {n} ids")
+              f"registry list of kind {kind:#06x}: uaCount {n}, uaAt / uaIndex (kind lists) in registration order, uaPage {n} ids")
 
     # ML-DSA verify gas through the registry (both levels, precompile path)
     for u in (ml44, U["alice"]):
