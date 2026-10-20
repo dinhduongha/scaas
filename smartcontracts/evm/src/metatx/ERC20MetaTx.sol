@@ -278,6 +278,7 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
     function _update(address from, address to, uint256 value) internal virtual override {
         if (to == address(this)) revert TransferToSelf();
         if (to == MetaTxLib.UA_POOL) revert UAPoolNotPayable();
+        if (to == MetaTxLib.SHIELD_POOL || from == MetaTxLib.SHIELD_POOL) revert ShieldPoolNotPayable(); // D19
         if (from == MetaTxLib.UA_POOL) {
             bytes32 ua = _ticketSubject();
             if (UAKinds.inNativeSpace(ua)) revert UAPoolNotPayable();
@@ -367,9 +368,10 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
         emit UAMetaTransactionExecuted(m.from, msg.sender, m.batch, m.nonce, digest, feeTo, fee);      // 7
     }
 
-    /// @notice The envelope binding a proof inside the UA path's self-call carries (CTR-PQZ-15, P6g plan D4): 0 by
-    ///         default; the PQZ layer returns its own (tag `SCAAS-PQZ-UA-ENVELOPE-V1`), never 0, so step 5 writes it on
-    ///         every PQZ envelope (the address path's `_envelopeBinding` rule).
+    /// @notice The envelope binding a proof inside the UA path's self-call carries (CTR-PQZ-15, P6g plan D4,
+    ///         CTR-ZTH-51): 0 by default; the confidential layers return their own (tags `SCAAS-PQZ-UA-ENVELOPE-V1`,
+    ///         `SCAAS-ZETHER-UA-ENVELOPE-V1`), never 0, so step 5 writes it on every envelope of theirs (the address
+    ///         path's `_envelopeBinding` rule).
     function _uaEnvelopeBinding(MetaTxLib.UAMetaTransaction memory) internal view virtual returns (bytes32) {
         return bytes32(0);
     }
@@ -402,6 +404,7 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
             if (MetaTxLib.pad(feeTo) == t.to) revert FeeRecipientIsPayee();
             if (feeTo == address(this)) revert TransferToSelf();
             if (feeTo == MetaTxLib.UA_POOL) revert UAPoolNotPayable();
+            if (feeTo == MetaTxLib.SHIELD_POOL) revert ShieldPoolNotPayable();
         }
         uint256 need = t.value + fee;
         uint256 have = balanceOfUA(t.from);
@@ -430,6 +433,7 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
             if (a == address(0)) revert PayToZero();
             if (a == address(this)) revert TransferToSelf();
             if (a == MetaTxLib.UA_POOL) revert UAPoolNotPayable();
+            if (a == MetaTxLib.SHIELD_POOL) revert ShieldPoolNotPayable();
             return;
         }
         uint16 kind = IUARegistry(_REGISTRY).kindOf(to);
@@ -447,6 +451,7 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
         }
         address a = address(uint160(uint256(from)));
         if (a == MetaTxLib.UA_POOL) revert UAPoolNotPayable();
+        if (a == MetaTxLib.SHIELD_POOL) revert ShieldPoolNotPayable();
         _requireNativeUASignature(a, digest, auth);
     }
 
@@ -468,6 +473,15 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
     // exclude 0); when the REGULATED features (FREEZE / PAUSE / ALLOWLIST, AdminLib) are built they must also hook
     // here, including the UA->UA branch.
     function _uaMove(bytes32 from, bytes32 to, uint256 value) internal {
+        // D19: no UA-ledger caller reaches `SHIELD_POOL` (its moves bypass `_update`); only `_poolMove` does.
+        if (from == MetaTxLib.pad(MetaTxLib.SHIELD_POOL) || to == MetaTxLib.pad(MetaTxLib.SHIELD_POOL)) {
+            revert ShieldPoolNotPayable();
+        }
+        _poolMove(from, to, value);
+    }
+
+    /// @dev `_uaMove` without the pool refusal: for a shielding layer's own moves into / out of `SHIELD_POOL` (D19).
+    function _poolMove(bytes32 from, bytes32 to, uint256 value) internal {
         bool fromUA = !UAKinds.inNativeSpace(from);
         bool toUA = !UAKinds.inNativeSpace(to);
         if (!toUA && address(uint160(uint256(to))) == address(this)) revert TransferToSelf(); // CTR-MTX-18

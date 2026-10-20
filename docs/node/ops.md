@@ -703,9 +703,9 @@ Above the rated load: a second node on **different chains**, not a bigger store.
 - Job kinds ([job-api.md#post-v1jobs](job-api.md#post-v1jobs)): envelope ops use the **existing** `metatx` (v1) and
   `ua_metatx` (v3) jobs, with the node-computed digest over the token's domain, idempotency and lanes unchanged; the
   token row has `kind = pqz`. Job kind `pqz_call` is for **direct open calls** only: `{chain, contract, selector ∈
-  {pqzTransfer, pqzUnshield, pqzRollOver}, calldata}` (direct `pqzShield` pulls the caller's underlying, so it is never a node
-  job; with the multi-recipient transfer, P6-ANON, `pqzTransfer*` is op 7 with M ≥ 1 recipients and the single-recipient
-  `pqzTransferSingle*` (op 1) joins the set, each with its `Compact` / `NoBundle` variants). For all: the contract must be a configured PQZ token; pre-simulation by `eth_estimateGas` on a
+  {mtxConfidentialTransfer, mtxUnshield, mtxRollOver}, calldata}` (direct `mtxShield` moves the caller's public units into the pool and `mtxWrapShield` pulls the caller's underlying, so neither is a node
+  job; `mtxRollOver` is also an allowlisted envelope op (a relayed `metatx` job, outer fee may be 0, owner 2026-10-20); with the multi-recipient transfer, P6-ANON, `mtxConfidentialTransfer*` is op 7 with M ≥ 1 recipients and the single-recipient
+  `mtxConfidentialTransferSingle*` (op 1) joins the set, each with its `Compact` variant; `NoBundle` is retired on PQZ). For all: the contract must be a configured PQZ token; pre-simulation by `eth_estimateGas` on a
   **follower**, never the signer (fails ⇒ job rejected, no gas spent; op 7 is pre-simulated the same way); `max_gas_per_tx = 16_000_000` on chain 7622 (the
   default 3,000,000 already rejects classical Zether transfers at 3.36 M); never batched (`PqzToken` has no
   `mtxBatch`). Gateway body limit 1 MiB on job submissions to the `pqz` chain profile only (a v3 transfer job is ≈ 170
@@ -716,15 +716,18 @@ Above the rated load: a second node on **different chains**, not a bigger store.
   hex the largest job is ≈ 0.88 MB (≈ 0.92 MB at 11 inline), under 1 MiB (1.19×). No inline credit: PQZL M = 8 ≈ 10.4
   M, PQZH M = 4 ≈ 10.7 M; ≥ 5 such calls per 80 M block.
 - Optional rollover keeper: per configured PQZ token, when an account has ≥ 16 unrolled credits **older than
-  `KEEPER_AGE = 24` blocks** (2 min) and the chain is idle, submit `pqzRollOver` of those old credits only, with
+  `KEEPER_AGE = 24` blocks** (2 min) and the chain is idle, submit `mtxRollOver` of those old credits only, with
   ciphertexts from logs (anyone may; it is harmless). A proof in flight chose `p ≥` every credit older than its own
   state read, so the keeper never pushes `rolled` more than 16 past it. Clients prove at `p = pendingCount` and, on
-  `InlineTooFar`, refresh state and re-prove once.
+  `InlineTooFar`, refresh state and re-prove once. *Since plan 5h (docs sync 2026-10-20) the contract enforces `ROLL_AGE = 5`
+  blocks per rolled entry and `mtxRollOver(ua, n)` (`n ≤ ROLL_MAX = 256`) reads the entries from state, with no ciphertexts from logs
+  and no 16-credit batch; the keeper policy and its numbers above are to be updated in the node task that follows part A
+  ([CTR-PQZ-08](../contracts/pq-zero-knowledge.md#CTR-PQZ-08)).*
 - **P6i, multi-recipient transfer (op 7, P6-ANON; SPECIFIED):**
-  - Indexer: normalizes `PqzTransferMulti(entryRef, fromUA, recipientsHash, M, out)` and its M per-leg
-    `PqzCredit(ua, index, entryRef)` (`PqzTransfer` + one `PqzCredit` for op 1, as today). Leg j's credit ciphertext is
+  - Indexer: normalizes `ConfidentialTransferMulti(entryRef, fromUA, beneficiary, fee, sendCounter, recipients, mode, blob)` (M = `recipients.length`) and its M per-leg
+    `Credited(ua, index, entryRef)` (`ConfidentialTransfer` + one `Credited` for op 1, as today). Leg j's credit ciphertext is
     `u_{⌊j/4⌋} ‖ v_j` sliced from `out` (`out = u_0 … u_{G−1} ‖ v_0 … v_{M−1} ‖ v_f ‖ [v_{a,0} … v_{a,M−1}]`,
-    `G = ⌈M/4⌉`); legs are matched by log order (P6g emits the `PqzCredit`s in leg order), and the indexer checks
+    `G = ⌈M/4⌉`); legs are matched by log order (P6g emits the `Credited`s in leg order), and the indexer checks
     `keccak256` of the matched UAs (32-byte words in leg order) `== recipientsHash` and each
     `keccak256(u_{g(j)} ‖ v_j)` against the pending slot it rebuilds; a mismatch is an integrity alert
     ([NODE-OPS-12](#NODE-OPS-12)), never a silent skip. Decoy legs (`Enc(0)`) are indistinguishable and indexed like

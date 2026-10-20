@@ -101,7 +101,7 @@ pub fn verify_pop<C: ZCurve>(
     verify(y, &ua_message::<C>(&purpose_tag("pop"), &d), pop)
 }
 
-/// The `sig` of an owner op (`zetherRollOverSigned`, `zetherSetRollOverMode`):
+/// The `sig` of an owner op (`mtxRollOverSigned`, `mtxSetRollOverMode`):
 /// `abi.encode(bytes(""), Schnorr by x over ua_message(zether-owner, digest))` — the registry reads `Y` from its record.
 pub fn owner_auth<C: ZCurve, R: RngCore + CryptoRng>(key: &ZetherKey<C>, digest: &[u8; 32], rng: &mut R) -> Vec<u8> {
     let sig = sign(key, &ua_message::<C>(&purpose_tag("zether-owner"), digest), rng);

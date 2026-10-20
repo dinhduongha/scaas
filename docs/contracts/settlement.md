@@ -56,7 +56,7 @@ intent is a booked fact. Every kind below shares these properties:
 | Signature wrap | `mtxWrap` | holder signs a `TradeOrder` in the underlying's domain; any relayer | underlying and wrapper | order `fee` to the relayer, out of the minted units | tx | **BUILT** (P2a, `UnderlyingToken`) | [CTR-TOK-20](token-wrappers.md#CTR-TOK-20) |
 | DEX order book | `SCaaSDex.mtxSettle`, `mtxCancelOrders`, `mtxInvalidateNonces`; token side `mtxTrade` | each party signs a `TradeOrder`; the venue lane | token (Path A) or DEX (Path B, outside legs); DEX conservation | one signed rate, split relayer / treasury by the DEX | tx, then the DEX watcher | token side **BUILT** (P2a); `SCaaSDex` **BUILT** (P2b-1 SCaaS legs, P2b-2 outside legs); `SCaaSDexV1` pair `settle` **BUILT** | [CTR-DEX-13](dex.md#CTR-DEX-13) to [-19](dex.md#CTR-DEX-19), [-22](dex.md#CTR-DEX-22), [-24](dex.md#CTR-DEX-24) |
 | Exchange against AMMs | `mtxExchange`, `mtxExchangeVia` | the same signed orders; the venue lane | token or DEX, DEX conservation | signed rate on the floor; surplus to the signers | tx, then the DEX watcher | **BUILT** (P2c, `SCaaSDex`) | [CTR-DEX-20](dex.md#CTR-DEX-20) to [-23](dex.md#CTR-DEX-23) |
-| Confidential (Zether) | `zetherTransfer*`, `zetherShield`, `zetherUnshield`, roll-over; `zetherWrapShield`, `zetherUnshieldUnwrap` (`UNDERLYING_ZETHER`) | owner signs the call, the proof binds the envelope; any relayer | token verifier | outer NONE / FIXED (never PERCENT), inner `confidentialFee` | tx (dev chains) | **BUILT, UNAUDITED** (the `*_ZETHER` kinds, P3; dev chains only); PQZ **SPECIFIED** | [zether.md](zether.md), [pq-zero-knowledge.md](pq-zero-knowledge.md) |
+| Confidential (Zether) | `mtxConfidentialTransfer*`, `mtxShield`, `mtxUnshield`, roll-over; `mtxWrapShield`, `mtxUnshieldUnwrap` (`UNDERLYING_ZETHER`) | owner signs the call, the proof binds the envelope; any relayer | token verifier | outer NONE / FIXED (never PERCENT), inner `confidentialFee` | tx (dev chains) | **BUILT, UNAUDITED** (the `*_ZETHER` kinds, P3; dev chains only); PQZ **SPECIFIED** | [zether.md](zether.md), [pq-zero-knowledge.md](pq-zero-knowledge.md) |
 | Mandate | `payUnderMandate` (named `mtxPayUnderMandate`), `revoke` | delegate signs; any relayer | `MandateWallet` | NONE; relayer pays gas | tx | **BUILT** (P4: epoch, `mtx` names) | [CTR-ACC-06](mandates.md#CTR-ACC-06), [-07](mandates.md#CTR-ACC-07) |
 | Asset-suite action | forced transfer, freeze, `VestingGrant.release`, `Distribution` claim, `ExchangeOffer` | issuer / compliance role, or a permissionless claim | token or action contract | by action | tx | **SPECIFIED**, nothing built | [asset-suite.md](asset-suite.md) |
 | Tender | `commitBid` (deposit is a `MetaTransfer`), `revealBid`, `withdrawDeposit` | bidder signs only the deposit | tender and token | NONE | tx | **SPECIFIED**, nothing built | [CTR-TND-01](tender.md#CTR-TND-01), [-03](tender.md#CTR-TND-03) |
@@ -239,10 +239,10 @@ Status **BUILT** (P2c, `SCaaSDex`): the DEX also refuses a sell token that arriv
 
 Confidential tokens are meta-tx tokens: the target is a `ZetherLayer` on `MetaTokenBase`, every confidential entry
 point an allowlisted self-call of `mtxExecute` with `ABSOLUTE` fee class ([CTR-ZTH-08](zether.md#CTR-ZTH-08),
-[CTR-ZTH-34](zether.md#CTR-ZTH-34)). Kinds of settlement: **shield** from the public balance (`zetherShield`,
+[CTR-ZTH-34](zether.md#CTR-ZTH-34)). Kinds of settlement: **shield** from the public balance (`mtxShield`,
 [CTR-ZTH-35](zether.md#CTR-ZTH-35)), **transfer** to one or several recipients with decoys and one proof
-(`zetherTransfer`, `...Single`, `...Compact`, `...NoBundle`, [CTR-ZTH-37](zether.md#CTR-ZTH-37),
-[CTR-ZTH-38](zether.md#CTR-ZTH-38)), **unshield** (`zetherUnshield`) and **roll-over** of pending credits
+(`mtxConfidentialTransfer`, `...Single`, `...Compact`, `...NoBundle`, [CTR-ZTH-37](zether.md#CTR-ZTH-37),
+[CTR-ZTH-38](zether.md#CTR-ZTH-38)), **unshield** (`mtxUnshield`) and **roll-over** of pending credits
 ([CTR-ZTH-45](zether.md#CTR-ZTH-45)). The proof carries an envelope binding, so a proof lifted out of its envelope
 fails ([CTR-ZTH-06](zether.md#CTR-ZTH-06)). PQZ mirrors the names with `pqz` and relays the same way
 ([CTR-PQZ-21](pq-zero-knowledge.md#CTR-PQZ-21), [CTR-PQZ-22](pq-zero-knowledge.md#CTR-PQZ-22)); nothing of PQZ is built.

@@ -542,7 +542,7 @@ wizards build Safe transactions the same way.
 | 11 | Fund meta account | owned coins / FA / SPL | deposit transfer; `transferToUA` | Sui, Aptos, Solana, EVM v3 |
 | 12 | DEX markets | `/v1/dex/markets` + `/v1/gateway` `dex`, on-chain `markets(key)` | — | EVM; others "unavailable" |
 | 13 | DEX market | `depth` (poll 2 s while visible), `trades`, `ticker`, `orders?maker=`, own-node `depth?scope=network` (read-only) | place, cancel, cancel-all; on-chain `cancel`/`invalidateNonces` (target: `mtxCancelOrder`/`mtxInvalidateNonces` on the sell token, `mtxCancelOrders` on the DEX for outside-token orders) | EVM |
-| 14 | Zether | `registered(UA)`, account state, cache, BSGS (worker) | register a `zether-bls12381` UA (gasless); `zetherShield` / `zetherWrapShield` ([CTR-ZTH-45](../contracts/zether.md#CTR-ZTH-45); built: `approve` + `fund`, P3); transfer; burn; rollOver | EVM dev |
+| 14 | Zether | `registered(UA)`, account state, cache, BSGS (worker) | register a `zether-bls12381` UA (gasless); `mtxShield` / `mtxWrapShield` ([CTR-ZTH-45](../contracts/zether.md#CTR-ZTH-45); built: `approve` + `fund`, P3); transfer; burn; rollOver | EVM dev |
 | 15 | Settings | — | locale, theme, dev key (dev builds) | — |
 | 16 | Console login | `GET /v1/admin/auth-modes` ∩ config OIDC | built-in login; OIDC redirect | — |
 | 17 | Overview | `/v1/admin/info`, `/me` | — | — |

@@ -535,8 +535,8 @@ the UA ledger ([CTR-UA-28](#CTR-UA-28)). Rules for every UA form:
   mandate in the payer's own `MandateWallet`); `approve` stays refused on every `ua*` function.
 - **Unchanged, no UA counterpart:** the token owner and role holders (`mint` role, rate admin, guardian, the
   `ITokenAdmin` functions), the DEX `admin`, the factory creator and `TokenConfig.owner` / `roles` / `initialHolder`,
-  `SmartKeyAccount` keys and guardian, `addReserve`, and a one-call `zetherWrapShield` from a UA source (a UA source
-  wrap-shields in two signed steps: `uaWrap`, then `uaExecute(zetherShield)`). Their holders **still act gaslessly**
+  `SmartKeyAccount` keys and guardian, `addReserve`, and a one-call `mtxWrapShield` from a UA source (a UA source
+  wrap-shields in two signed steps: `uaWrap`, then `uaExecute(mtxShield)`). Their holders **still act gaslessly**
   through their own contract account — `SmartKeyAccount.mtxExecuteAsOwner`, a `MandateWallet` owner's `execute` through
   `mtxExecute`, or a Safe's `execTransaction` — with fee `NONE`, relayed as a `call` job
   ([NODE-JOB-01](../node/job-api.md#NODE-JOB-01), [NODE-JOB-19](../node/job-api.md#NODE-JOB-19)); what stays is that no
@@ -576,15 +576,15 @@ EVM Zether (the `*_ZETHER` tokens, BLS12-381 only):
 
 | Function | Subject | Accepts | Verified by |
 |---|---|---|---|
-| `zetherShield(encodedY, amount)` | receiver `UA(zether, Y)`; sender pays | Z (registered); sender N, or U through `uaExecute` (UA-5c) | registry `kindOf` |
-| `zetherTransfer(payload, proof, beneficiary)` | `from = UA(Y_f)`, `to = UA(Y_t)`, `beneficiary` | Z, Z, Z | the proof alone (knowledge of `x`); the token checks `kindOf(from)` |
-| `zetherUnshield(payload, proof, beneficiary, to, amount)` | `from`, `beneficiary`; `to` address | Z, Z; recipient N | as transfer |
-| `zetherUnshieldToUA(…, bytes32 to, amount)`, `zetherUnshieldUnwrapToUA` (SPECIFIED, UA-5c) | `from`, `beneficiary`; `to` id | Z, Z; recipient U-derived | as transfer ([CTR-ZTH-51](zether.md#CTR-ZTH-51)) |
-| `zetherRollOverSigned(ua, …, sig)`, `zetherSetRollOverMode(ua, …, sig)` | `ua` | Z | `requireAuthorized(ua, PURPOSE_ZETHER_OWNER, digest, sig)`: Zether Schnorr by `x` |
-| `zetherRollOver(ua)`, `zetherRollOverBatch(uas)` | `ua` | Z | none (public) |
+| `mtxShield(bytes32 toUA, uint256 amount)` | receiver `UA(zether, Y)`; sender pays | Z (registered); sender N, or U through `uaExecute` (UA-5c) | registry `kindOf` |
+| `mtxConfidentialTransfer(payload, proof, auth, beneficiary, accHint)` (`auth`, `accHint` empty on Zether) | `from = UA(Y_f)`, `to = UA(Y_t)`, `beneficiary` | Z, Z, Z | the proof alone (knowledge of `x`); the token checks `kindOf(from)` |
+| `mtxUnshield(payload, proof, auth, beneficiary, accHint, amount, recipient)` | `from`, `beneficiary`; `recipient` a native address (zero-padded `bytes32`) | Z, Z; recipient N | as transfer |
+| `mtxUnshield(…, uint256 amount, bytes32 recipient)` with a derived-UA `recipient`, `mtxUnshieldUnwrap` with a UA recipient (no separate `…ToUA` entry point; BUILT, plan 5h Task 3b; [CTR-ZTH-51](zether.md#CTR-ZTH-51)) | `from`, `beneficiary`; `recipient` id | Z, Z; recipient U-derived | as transfer |
+| `mtxRollOverSigned(ua, …, sig)`, `mtxSetRollOverMode(ua, …, sig)` | `ua` | Z | `requireAuthorized(ua, PURPOSE_ZETHER_OWNER, digest, sig)`: Zether Schnorr by `x` |
+| `mtxRollOver(bytes32 ua, uint256 n)`, `mtxRollOverBatch(uas)` | `ua` | Z | none (public) |
 | `wrap`, `unwrap` | sender | N | — |
-| `mtxExecute(m, sig)` (self-call of `zetherTransfer`/`zetherUnshield`/`zetherShield`/`wrap`/`unwrap`, outer fee) | `m.from` (outer-fee payer) | N | the base's `_requireValidSignature` |
-| `uaExecute(m, auth)` (the same self-calls under the UA envelope binding, outer fee from the UA ledger; `zetherShield` BUILT (UA-6 Task 4), the other Zether self-calls SPECIFIED, UA-5c) | `m.from` (outer-fee payer) | U | `requireAuthorized` (derived) / the native check ([CTR-ZTH-51](zether.md#CTR-ZTH-51)) |
+| `mtxExecute(m, sig)` (self-call of `mtxConfidentialTransfer`/`mtxUnshield`/`mtxShield`/`wrap`/`unwrap`, outer fee) | `m.from` (outer-fee payer) | N | the base's `_requireValidSignature` |
+| `uaExecute(m, auth)` (the same self-calls under the UA envelope binding, outer fee from the UA ledger; `mtxShield` BUILT (UA-6 Task 4), the other Zether self-calls SPECIFIED, UA-5c) | `m.from` (outer-fee payer) | U | `requireAuthorized` (derived) / the native check ([CTR-ZTH-51](zether.md#CTR-ZTH-51)) |
 | views `registered`, `accountState`, `sendCounter` | `ua` | Z | — |
 
 The proof-covered entry points carry no `authSig`: the proof of knowledge of `x` is the authorization. The roll-over and
@@ -630,8 +630,7 @@ whose burn through `UA_POOL` debits that UA (`unwrap`, and since UA-5a `unwrapTo
 Every movement emits `UATransfer(bytes32 from, bytes32 to, uint256 value)` (BUILT with `from` and `to` indexed) when a side
 is derived, and every move that changes a native balance also emits ERC-20 `Transfer`: native → UA is
 `Transfer(sender, UA_POOL)`, UA → native (including a fee from a UA to `feeRecipient`) is `Transfer(UA_POOL, to)`; UA →
-UA emits `UATransfer` only; a mint into a derived UA (`_uaMint`: `wrapToUA`, `mintToUA`, BUILT (UA-5a); `uaWrap`, BUILT (UA-5b);
-`zetherUnshieldToUA`, SPECIFIED; [CTR-UA-28](#CTR-UA-28)) emits `Transfer(0, UA_POOL)` and `UATransfer(0, ua)`. Native
+UA emits `UATransfer` only; a mint into a derived UA (`_uaMint`: `wrapToUA`, `mintToUA`, BUILT (UA-5a); `uaWrap`, BUILT (UA-5b); [CTR-UA-28](#CTR-UA-28)) emits `Transfer(0, UA_POOL)` and `UATransfer(0, ua)`; an unshield to a derived UA mints nothing: the pool moves `SHIELD_POOL → ua`'s ledger balance (`Transfer(SHIELD_POOL, UA_POOL)` and `UATransfer`, [CTR-ZTH-51](zether.md#CTR-ZTH-51) Change 2026-10-20). Native
 `transfer`/`transferFrom` and v3 `to` refuse `UA_POOL` (`UAPoolNotPayable`).
 Projecting `bytes32 → address` re-creates the 2^80 collision ([CTR-UA-03](#CTR-UA-03)); without the pool, replaying
 `Transfer` logs would stop equalling `balanceOf` for native holders. Naive ERC-20 indexers see one large `UA_POOL`
@@ -658,7 +657,7 @@ both paths; native ids are zero-padded).
 
 <a id="CTR-UA-26"></a>**CTR-UA-26** — **The UA path splits like the address path** (owner): a generic
 `UAMetaTransaction` (an allowlisted call of this token under a UA — BUILT: the two `unwrap`s with `minOut` (UA-4),
-`unwrapToUA` on the wrapper kinds and `burn` on `NONE` / `NONE_ZETHER` (UA-5a); SPECIFIED: `zetherShield` and the
+`unwrapToUA` on the wrapper kinds and `burn` on `NONE` / `NONE_ZETHER` (UA-5a); SPECIFIED: `mtxShield` and the
 confidential ops under the UA envelope binding on
 the Zether kinds (UA-5c, [CTR-ZTH-51](zether.md#CTR-ZTH-51)); `PqzToken`'s four PQZ selectors,
 [CTR-PQZ-21](pq-zero-knowledge.md#CTR-PQZ-21)) and a typed `UAMetaTransfer` (transfer with `entryRef = 0`, or
@@ -756,7 +755,7 @@ error UALegNotLedger(address token);
 
 Every `to` is checked as a `UAMetaTransfer` receiver (`UANotRegistered`, `UAKindNotAccepted`). The reserve invariant of
 the wrapper kinds is unchanged: `totalSupply` counts `UA_POOL`. `uaPayReceiverFee` (the UA twin of receiver-pays) is
-[CTR-MTX-05](metatx.md#CTR-MTX-05); `zetherUnshieldToUA` is [CTR-ZTH-51](zether.md#CTR-ZTH-51). Status **BUILT (UA-5a)**
+[CTR-MTX-05](metatx.md#CTR-MTX-05); the unshield to a UA (`mtxUnshield` with a derived-UA `recipient`) is [CTR-ZTH-51](zether.md#CTR-ZTH-51). Status **BUILT (UA-5a)**
 (plan `docs/superpowers/plans/2026-10-13-ua5a-receivers-wrap.md`; `test/ua/UAReceivers.t.sol`, `UAAllowlist5a.t.sol`,
 `UAReceiverFee.t.sol`, `wrapToUA` / `unwrapToUA` also at a 3/2 rate (minted, burned and out distinct), the
 `UALedgerInvariant` replay over the new moves with the ledger-leg wrapper at 3/2, and `invariant_ledgerLegSolvent`).
@@ -1325,7 +1324,7 @@ person has distinct UAs on two curves, never merged). `register(encodedY, authSc
 - `linkEVM` ⇒ `links[msg.sender] = UA`, `link_eth[UA] = msg.sender` (`EVMAlreadyLinked` if already linked);
 - no key rotation, no relinking: a new key is a new UA.
 
-| # | Scheme | `authData` | Authorization on transfer/unshield/zetherRollOverSigned | Use |
+| # | Scheme | `authData` | Authorization on transfer/unshield/mtxRollOverSigned | Use |
 |---|---|---|---|---|
 | 0 | `SELF_SCHNORR` | `0x` | the ZK proof itself (or Schnorr by `x`) | single holder |
 | 1 | `ECDSA_MULTISIG` | `abi.encode(address[] ownersSorted, uint256 threshold)`, `0 < t ≤ n` | `abi.encode(bytes[] sigs)` sorted by signer, raw digest, low-s | boards, finance approvers |

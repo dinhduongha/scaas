@@ -197,12 +197,12 @@ fn recover_an_opt_out() {
     assert_eq!(r["bundles"], t["bundles"]);
 }
 
-/// A full record (`zetherTransfer` on a BUNDLE token, the single format) from storage, and any entry from calldata: the
+/// A full record (`mtxConfidentialTransfer` on a BUNDLE token, the single format) from storage, and any entry from calldata: the
 /// salt in `R` or the payload gives `s`, BSGS the amounts.
 #[test]
 fn recover_a_record_and_calldata() {
     let mut req = multi(BN);
-    req["disclosureMode"] = Value::Null; // a BUNDLE token: `zetherTransfer` stores R
+    req["disclosureMode"] = Value::Null; // a BUNDLE token: `mtxConfidentialTransfer` stores R
     let t = ok("proveTransferMulti", &req);
     assert_eq!(t["memo"], json!("0x"), "no memo off commit-reveal");
     let base = json!({"curve": BN, "key": key(0), "chainId": 31337, "chainUid": UID, "token": TOKEN,
@@ -241,7 +241,7 @@ fn two_builds_at_one_counter_differ() {
     assert_ne!(hexb(&a["memo"])[16..], hexb(&b["memo"])[16..], "memo keystream");
 }
 
-/// The default entry follows the token: `zetherTransfer` stores R on a BUNDLE token (the default) and commits on a
+/// The default entry follows the token: `mtxConfidentialTransfer` stores R on a BUNDLE token (the default) and commits on a
 /// COMPACT token, which refuses the other forms and the single format; `auditorMode` FULL needs `yAud`, NONE refuses it.
 #[test]
 fn modes_in_the_request() {
@@ -250,16 +250,16 @@ fn modes_in_the_request() {
     let sel = |t: &Value| t["directCalldata"].as_str().unwrap()[2..10].to_string();
     let t = ok("proveTransferMulti", &req);
     assert_eq!(t["mode"], json!("bundle"));
-    assert_eq!(sel(&t), "b0dcc0ca", "zetherTransfer, the default");
+    assert_eq!(sel(&t), "5dc7af97", "mtxConfidentialTransfer, the default");
     let mut h = req.clone();
     h["mode"] = json!("compact");
-    let compact = hex::encode(zether_prover::envelope::selector("zetherTransferCompact(bytes,bytes,bytes32)"));
+    let compact = hex::encode(zether_prover::envelope::selector("mtxConfidentialTransferCompact(bytes,bytes,bytes,bytes32,bytes)"));
     assert_eq!(sel(&ok("proveTransferMulti", &h)), compact, "commit-reveal on a BUNDLE token");
     let mut c = req.clone();
     c["disclosureMode"] = json!("compact");
     let t = ok("proveTransferMulti", &c);
     assert_eq!(t["mode"], json!("compact"));
-    assert_eq!(sel(&t), "b0dcc0ca", "zetherTransfer: commit-reveal on a COMPACT token");
+    assert_eq!(sel(&t), "5dc7af97", "mtxConfidentialTransfer: commit-reveal on a COMPACT token");
     for m in ["bundle", "none"] {
         c["mode"] = json!(m);
         assert!(err("proveTransferMulti", &c).contains("TransferEntryDisabled"));

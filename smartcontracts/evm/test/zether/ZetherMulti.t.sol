@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {console2} from "forge-std/Test.sol";
+import {IConfidentialToken} from "../../src/confidential/IConfidentialToken.sol";
 import {ZetherFixture} from "./helpers/ZetherFixture.sol";
 import {ZetherLayer} from "../../src/zether/ZetherLayer.sol";
 import {IZetherToken} from "../../src/zether/IZetherToken.sol";
@@ -26,15 +27,15 @@ abstract contract ZetherMultiSuite is ZetherFixture {
     }
 
     function _send(ZetherLayer t, ZetherTypes.TransferMode mode, Tx memory x, ZetherTypes.UA ben) internal returns (bytes32) {
-        if (mode == ZetherTypes.TransferMode.HASH) return t.zetherTransferCompact(x.payload, x.proof, ben);
-        if (mode == ZetherTypes.TransferMode.BUNDLE) return t.zetherTransfer(x.payload, x.proof, ben);
-        return t.zetherTransferNoBundle(x.payload, x.proof, ben);
+        if (mode == ZetherTypes.TransferMode.HASH) return t.mtxConfidentialTransferCompact(x.payload, x.proof, "", ZetherTypes.UA.unwrap(ben), "");
+        if (mode == ZetherTypes.TransferMode.BUNDLE) return t.mtxConfidentialTransfer(x.payload, x.proof, "", ZetherTypes.UA.unwrap(ben), "");
+        return t.mtxConfidentialTransferNoBundle(x.payload, x.proof, "", ZetherTypes.UA.unwrap(ben), "");
     }
 
     function _selector(ZetherTypes.TransferMode mode) internal pure returns (bytes4) {
-        if (mode == ZetherTypes.TransferMode.HASH) return ZetherLayer.zetherTransferCompact.selector;
-        if (mode == ZetherTypes.TransferMode.BUNDLE) return ZetherLayer.zetherTransfer.selector;
-        return ZetherLayer.zetherTransferNoBundle.selector;
+        if (mode == ZetherTypes.TransferMode.HASH) return ZetherLayer.mtxConfidentialTransferCompact.selector;
+        if (mode == ZetherTypes.TransferMode.BUNDLE) return ZetherLayer.mtxConfidentialTransfer.selector;
+        return ZetherLayer.mtxConfidentialTransferNoBundle.selector;
     }
 
     function _modeName(ZetherTypes.TransferMode mode) internal pure returns (string memory) {
@@ -50,10 +51,10 @@ abstract contract ZetherMultiSuite is ZetherFixture {
     function _bundlesOf(bytes memory payload) internal view returns (bytes memory b) {
         uint256 p = ver.g1EncodedBytes();
         uint256 m = uint256(bytes32(_cut(payload, 80, 32)));
-        bytes memory dOut = _cut(payload, 112 + p, p);
+        bytes memory dOut = _cut(payload, 144 + p, p);
         b = _cut(payload, 64, 16);
         for (uint256 j; j < m; ++j) {
-            uint256 o = 112 + 3 * p + 3 * p * j;
+            uint256 o = 144 + 3 * p + 3 * p * j;
             b = bytes.concat(b, _cut(payload, o, 2 * p), dOut, _cut(payload, o + 2 * p, p));
         }
     }
@@ -67,7 +68,7 @@ abstract contract ZetherMultiSuite is ZetherFixture {
 
     function _funded(uint256 amount) internal {
         _fund(tok, alice, amount);
-        tok.zetherRollOver(alice.ua);
+        tok.mtxRollOver(ZetherTypes.UA.unwrap(alice.ua), 1);
     }
 
     // ------------------------------------------------------------------ gas (spec §7)
@@ -79,12 +80,12 @@ abstract contract ZetherMultiSuite is ZetherFixture {
         uint256[] memory vs = new uint256[](m);
         vs[m / 2] = 1000; // một người nhận thật, còn lại là mồi nhận 0
         Tx memory t = _proveMulti(tok, alice, _to(m), vs, b, carol.ua, mode);
-        uint256 cd = abi.encodeWithSelector(_selector(mode), t.payload, t.proof, carol.ua).length;
+        uint256 cd = abi.encodeWithSelector(_selector(mode), t.payload, t.proof, bytes(""), ZetherTypes.UA.unwrap(carol.ua), bytes("")).length;
         uint256 g0 = gasleft();
         _send(tok, mode, t, carol.ua);
         uint256 used = g0 - gasleft();
         console2.log(string.concat(
-            bls ? "bls12-381" : "bn254", " zetherTransfer M=", vm.toString(m), " ", _modeName(mode),
+            bls ? "bls12-381" : "bn254", " mtxConfidentialTransfer M=", vm.toString(m), " ", _modeName(mode),
             audOut ? " auditor-out" : "", " gas ", vm.toString(used), " calldata ", vm.toString(cd)
         ));
         assertTrue(_holds(tok, alice, b - 1000 - FEE, true), "sender acc = b - sum(v) - fee");
@@ -95,12 +96,12 @@ abstract contract ZetherMultiSuite is ZetherFixture {
         uint256 b = 1_000_000;
         _funded(b);
         Tx memory t = _proveTransfer(tok, alice, rs[0], 1000, b, carol.ua, 0);
-        uint256 cd = abi.encodeCall(ZetherLayer.zetherTransferSingle, (t.payload, t.proof, carol.ua)).length;
+        uint256 cd = abi.encodeCall(ZetherLayer.mtxConfidentialTransferSingle, (t.payload, t.proof, bytes(""), ZetherTypes.UA.unwrap(carol.ua), bytes(""))).length;
         uint256 g0 = gasleft();
         _direct(tok, t, carol.ua);
         uint256 used = g0 - gasleft();
         console2.log(string.concat(
-            bls ? "bls12-381" : "bn254", " zetherTransferSingle", audOut ? " auditor-out" : "",
+            bls ? "bls12-381" : "bn254", " mtxConfidentialTransferSingle", audOut ? " auditor-out" : "",
             " gas ", vm.toString(used), " calldata ", vm.toString(cd)
         ));
         assertTrue(_holds(tok, alice, b - 1000 - FEE, true), "sender acc = b - v - fee");
@@ -143,11 +144,12 @@ abstract contract ZetherMultiSuite is ZetherFixture {
         (vs[0], vs[1], vs[2], vs[3]) = (0, 300, 0, 50);
         uint256 seq = tok.accountState(rs[1].ua).pendingSeq;
         Tx memory t = _proveMulti(tok, alice, _to(4), vs, 1000, carol.ua, ZetherTypes.TransferMode.HASH);
-        ZetherTypes.UA[] memory uas = new ZetherTypes.UA[](4);
-        for (uint256 j; j < 4; ++j) uas[j] = rs[j].ua;
+        bytes32[] memory uas = new bytes32[](4);
+        for (uint256 j; j < 4; ++j) uas[j] = ZetherTypes.UA.unwrap(rs[j].ua);
         bytes32 expected = _ref(tok, alice, 0);
-        vm.expectEmit(true, true, false, true, address(tok));
-        emit IZetherToken.ZetherTransferMulti(alice.ua, carol.ua, FEE, 0, expected, uas, ZetherTypes.TransferMode.HASH);
+        vm.expectEmit(true, true, true, true, address(tok));
+        emit IConfidentialToken.ConfidentialTransferMulti(expected, ZetherTypes.UA.unwrap(alice.ua),
+            ZetherTypes.UA.unwrap(carol.ua), FEE, 0, uas, uint8(ZetherTypes.TransferMode.HASH), address(0));
         bytes32 ref = _send(tok, ZetherTypes.TransferMode.HASH, t, carol.ua);
         assertEq(ref, _ref(tok, alice, 0), "entryRef carries chainUid (CTR-ZTH-36)");
         assertTrue(_holds(tok, alice, 1000 - 350 - FEE, true), "sender debited sum + fee");
@@ -156,9 +158,10 @@ abstract contract ZetherMultiSuite is ZetherFixture {
         }
         assertEq(tok.accountState(rs[1].ua).pendingSeq, seq + 1, "every recipient gets a credit");
         assertEq(tok.accountState(rs[0].ua).pendingSeq, 1, "decoys too");
-        assertTrue(_holds(tok, carol, FEE, false), "beneficiary");
+        assertEq(tok.balanceOfUA(ZetherTypes.UA.unwrap(carol.ua)), FEE * SCALE, "beneficiary public balance");
+        assertEq(tok.accountState(carol.ua).pendingSeq, 0, "no pend_ben credit (D19)");
         assertEq(tok.sendCounter(alice.ua), 1);
-        assertEq(tok.totalShielded(), 1000, "nothing created or destroyed");
+        assertEq(tok.totalShielded(), 1000 - FEE, "only the fee left the shielded set (D19)");
     }
 
     function test_auditorOffToken() public {
@@ -184,49 +187,49 @@ abstract contract ZetherMultiSuite is ZetherFixture {
         bytes memory pl = bytes.concat(t.payload);
         pl[111] = bytes1(0);
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.BadRecipientCount.selector, 0));
-        tok.zetherTransferCompact(pl, t.proof, _none());
+        tok.mtxConfidentialTransferCompact(pl, t.proof, "", bytes32(0), "");
         pl[111] = bytes1(uint8(17));
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.BadRecipientCount.selector, 17));
-        tok.zetherTransferCompact(pl, t.proof, _none());
+        tok.mtxConfidentialTransferCompact(pl, t.proof, "", bytes32(0), "");
         // M = 3 with two legs: length
         pl[111] = bytes1(uint8(3));
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.BadPayload.selector, t.payload.length));
-        tok.zetherTransferCompact(pl, t.proof, _none());
+        tok.mtxConfidentialTransferCompact(pl, t.proof, "", bytes32(0), "");
         // duplicate recipient, self, unregistered
         User[] memory dup = _to(2);
         dup[1] = dup[0];
         Tx memory d = _proveMultiUnchecked(dup, vs);
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.DuplicateRecipient.selector, rs[0].ua));
-        tok.zetherTransferCompact(d.payload, t.proof, _none());
+        tok.mtxConfidentialTransferCompact(d.payload, t.proof, "", bytes32(0), "");
         User[] memory self = _to(2);
         self[1] = alice;
         d = _proveMultiUnchecked(self, vs);
         vm.expectRevert(IZetherToken.SelfTransfer.selector);
-        tok.zetherTransferCompact(d.payload, t.proof, _none());
+        tok.mtxConfidentialTransferCompact(d.payload, t.proof, "", bytes32(0), "");
         User[] memory stranger = _to(2);
         stranger[1].y = _pubOf(0x5757);
         stranger[1].ua = ZetherTypes.toUA(stranger[1].y);
         d = _proveMultiUnchecked(stranger, vs);
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.AccountNotRegistered.selector, stranger[1].ua));
-        tok.zetherTransferCompact(d.payload, t.proof, _none());
+        tok.mtxConfidentialTransferCompact(d.payload, t.proof, "", bytes32(0), "");
         // tampered C_deb, C_out_2, C_aud_1
-        uint256[3] memory offs = [112 + 2 * p, 112 + 3 * p + 3 * p + p, 112 + 3 * p + 2 * p];
+        uint256[3] memory offs = [144 + 2 * p, 144 + 3 * p + 3 * p + p, 144 + 3 * p + 2 * p];
         for (uint256 i; i < 3; ++i) {
             bytes memory tampered = _replacePoint(t.payload, offs[i]);
             vm.expectRevert(IZetherToken.ProofRejected.selector);
-            tok.zetherTransferCompact(tampered, t.proof, _none());
+            tok.mtxConfidentialTransferCompact(tampered, t.proof, "", bytes32(0), "");
         }
-        // a HASH proof under another form (`zetherTransfer` stores R on this BUNDLE token): with its memo the payload
+        // a HASH proof under another form (`mtxConfidentialTransfer` stores R on this BUNDLE token): with its memo the payload
         // has the wrong shape for that form, without it the statement (opTag, memoHash) is another one
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.BadPayload.selector, t.payload.length));
-        tok.zetherTransfer(t.payload, t.proof, _none());
+        tok.mtxConfidentialTransfer(t.payload, t.proof, "", bytes32(0), "");
         bytes memory bare = _cut(t.payload, 0, t.payload.length - 17 - 40 * 2);
         vm.expectRevert(IZetherToken.ProofRejected.selector);
-        tok.zetherTransfer(bare, t.proof, _none());
+        tok.mtxConfidentialTransfer(bare, t.proof, "", bytes32(0), "");
         // valid, then replay
-        tok.zetherTransferCompact(t.payload, t.proof, _none());
+        tok.mtxConfidentialTransferCompact(t.payload, t.proof, "", bytes32(0), "");
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.StaleSendCounter.selector, 1, 0));
-        tok.zetherTransferCompact(t.payload, t.proof, _none());
+        tok.mtxConfidentialTransferCompact(t.payload, t.proof, "", bytes32(0), "");
     }
 
     /// @dev Payload thôi (chưa proof) — các phép kiểm hình dạng chạy trước verify.
@@ -246,8 +249,8 @@ abstract contract ZetherMultiSuite is ZetherFixture {
     {
         uint256 p = ver.g1EncodedBytes();
         bytes memory base = kind == ITransferDisclosure.OpeningKind.SENDER_CP
-            ? _cut(payload, 112 + 3 * p + 3 * p * j, p)
-            : _cut(payload, 112 + p, p);
+            ? _cut(payload, 144 + 3 * p + 3 * p * j, p)
+            : _cut(payload, 144 + p, p);
         return _cpOpening(tok, x, ref, j, amount, kind, base);
     }
 
@@ -350,9 +353,9 @@ abstract contract ZetherMultiSuite is ZetherFixture {
         Tx memory on = _proveMulti(tok, alice, _to(3), vs, 500, _none(), ZetherTypes.TransferMode.BUNDLE);
         // Y_a nằm trong statement: proof của lựa chọn này không qua dưới lựa chọn kia
         vm.expectRevert(IZetherToken.ProofRejected.selector);
-        tok.zetherTransfer(t.payload, on.proof, _none());
+        tok.mtxConfidentialTransfer(t.payload, on.proof, "", bytes32(0), "");
         vm.expectRevert(IZetherToken.ProofRejected.selector);
-        tok.zetherTransfer(on.payload, t.proof, _none());
+        tok.mtxConfidentialTransfer(on.payload, t.proof, "", bytes32(0), "");
         bytes32 ref = _send(tok, ZetherTypes.TransferMode.BUNDLE, t, _none());
         assertTrue(_holds(tok, rs[1], 77, false));
         assertTrue(_holds(tok, alice, 423, true));
@@ -367,9 +370,9 @@ abstract contract ZetherMultiSuite is ZetherFixture {
         Tx memory t = _proveMulti(tok, alice, _to(2), vs, 500, _none(), ZetherTypes.TransferMode.HASH);
         uint256 p = ver.g1EncodedBytes();
         bytes memory pl = bytes.concat(t.payload);
-        for (uint256 i; i < p; ++i) pl[112 + 5 * p + i] = 0; // C_aud_1 = O, C_aud_2 ≠ O
+        for (uint256 i; i < p; ++i) pl[144 + 5 * p + i] = 0; // C_aud_1 = O, C_aud_2 ≠ O
         vm.expectRevert(IZetherToken.AuditorLegsMixed.selector);
-        tok.zetherTransferCompact(pl, t.proof, _none());
+        tok.mtxConfidentialTransferCompact(pl, t.proof, "", bytes32(0), "");
         vm.expectRevert(IZetherToken.AuditorLegsMixed.selector);
         stm.transferStatement(address(tok), pl, _none(), ZetherTypes.TransferMode.HASH, 0);
     }
@@ -381,9 +384,9 @@ abstract contract ZetherMultiSuite is ZetherFixture {
         uint256[] memory vs = new uint256[](1);
         vs[0] = 5;
         Tx memory t = _proveMulti(tok, alice, _to(1), vs, 500, _none(), ZetherTypes.TransferMode.HASH);
-        bytes memory pl = _replacePoint(t.payload, 112 + 5 * ver.g1EncodedBytes());
+        bytes memory pl = _replacePoint(t.payload, 144 + 5 * ver.g1EncodedBytes());
         vm.expectRevert(IZetherToken.AuditorForbidden.selector);
-        tok.zetherTransferCompact(pl, t.proof, _none());
+        tok.mtxConfidentialTransferCompact(pl, t.proof, "", bytes32(0), "");
         vm.expectRevert(IZetherToken.AuditorForbidden.selector);
         stm.transferStatement(address(tok), pl, _none(), ZetherTypes.TransferMode.HASH, 0);
     }

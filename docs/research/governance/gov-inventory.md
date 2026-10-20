@@ -110,7 +110,7 @@ Source column:
 | `shieldScale` | INIT | — | — | > 0 | never changes | Z2:…ZetherLib.sol:157,172 |
 | `maxShielded` (total cap) | INIT | — | — | `≤ 2^54` | never changes | Z2:…ZetherLib.sol:132,157-162 |
 | `confidentialFee` (inner fee, to the named beneficiary) | INIT | — | — | `< 2^64`, `< maxShielded` | never changes | Z2:…ZetherLib.sol:158,174,384,582 |
-| `multiLegFee` | INIT | — | — | must be 0 on Zether | — | Z2:…ZetherLib.sol:158 |
+| `minDecoyFee` (was `multiLegFee`; the least per-leg `decoyFee`, 5h) | INIT | — | — | `< 2^64`; `confidentialFee + 16 · minDecoyFee` `< 2^64` and `< maxShielded` | never changes | 5h:…ZetherLib.sol `init` |
 | `auditorKey` | INIT | — | — | empty or a valid G1 point, not O | **no rotation** | Z2:…ZetherLib.sol:156-161,175 |
 | `auditorMode` NONE / FULL / OPTIONAL | INIT | — | — | key present ⇔ mode ≠ NONE | never changes | Z2:…ZetherLib.sol:164-171; spec:zether.md#CTR-ZTH-42 |
 | `disclosureMode` (storage mode) BUNDLE / COMPACT | INIT | — | — | ≤ 1 | never changes | Z2:…ZetherLib.sol:163,170; spec:zether.md#CTR-ZTH-38 |

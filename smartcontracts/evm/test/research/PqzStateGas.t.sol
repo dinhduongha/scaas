@@ -149,7 +149,7 @@ contract PqzStateProto {
         todayPendingHash[keccak256(abi.encode(ua, i))] = keccak256(ct);
     }
 
-    /// PqzLib.rollOver's work: the acc and every ct from calldata, hash-checked, summed, the new hash stored.
+    /// PqzCore.rollOver's work: the acc and every ct from calldata, hash-checked, summed, the new hash stored.
     function todaySetAcc(bytes32 h) external {
         todayAccHash = h;
     }

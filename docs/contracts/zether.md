@@ -53,7 +53,7 @@ terminator.
 <a id="CTR-ZTH-01"></a>**CTR-ZTH-01** — **Full classical Zether** (owner): the `*_ZETHER` kinds clone through the factory,
 verifiers for bn254 **and** BLS12-381 (the curve is a deploy-time parameter of each token: the creator chooses the
 verifier at `initialize`, there is no setter and no system-wide curve; the prover is generic over the curve), ElGamal
-`acc/pending` balances, two `zetherRollOver` modes (`PUBLIC` default, `OWNER_ONLY` opt-in per account, with an on-chain
+`acc/pending` balances, two `mtxRollOver` modes (`PUBLIC` default, `OWNER_ONLY` opt-in per account, with an on-chain
 `accSeq`), shield/transfer/unshield, Bulletproofs with exactly two range statements, envelope binding to the meta-tx, public
 fee scalars, the `ITransferDisclosure` selective-disclosure interface (open the transfer ciphertext; three openings —
 `SENDER_S`, `RECEIVER_X`, `AUDITOR` — all kept; verification is a free view, attestation an optional event; the bundle is
@@ -98,8 +98,8 @@ so a valid balance is always provable and decryptable by BSGS up to 2^54.
 <a id="CTR-ZTH-04"></a>**CTR-ZTH-04** — **`shieldScale` = raw underlying units per shielded unit** (as in the code's
 NatSpec; not "the number of decimals kept": with `decimals` and `keep` the relation is `shieldScale =
 10^(decimals − keep)`). Example: a 6-decimal stablecoin kept to 2 decimals has `shieldScale = 10^4`; a 0-decimal
-underlying has `shieldScale = 1`. `zetherShield(ua, amount)` takes `amount` in **shielded units** and draws `amount · shieldScale` (`amount × shieldScale`)
-raw units of the caller's public balance ([CTR-ZTH-35](#CTR-ZTH-35)); `zetherUnshield(…, amount)` pays `amount · shieldScale`. Decimals, shield scale and decryption bound are per token (the
+underlying has `shieldScale = 1`. `mtxShield(ua, amount)` takes `amount` in **shielded units** and draws `amount · shieldScale` (`amount × shieldScale`)
+raw units of the caller's public balance ([CTR-ZTH-35](#CTR-ZTH-35)); `mtxUnshield(…, amount)` pays `amount · shieldScale`. Decimals, shield scale and decryption bound are per token (the
 creator's choice, [CTR-GEN-04](README.md#CTR-GEN-04)).
 
 <a id="range-bits"></a>
@@ -118,7 +118,7 @@ fee`, `amount ≤ 2^54`, `< 2^66` — the same conclusion; `amount + fee` is als
 computes with `addmod`, which never wraps.
 
 Integer invariant: the sum of all `acc`/`pending` exponents of a token
-`= totalShielded ≤ maxDecryptableShielded ≤ 2^54` — `zetherShield` adds exactly `amount` with the cap checked; a transfer moves
+`= totalShielded ≤ maxDecryptableShielded ≤ 2^54` — `mtxShield` adds exactly `amount` with the cap checked; a transfer moves
 exactly `v` to the receiver's `pending` and `fee` to the beneficiary's `pending`, and leaves the sender exactly `b'`;
 rollOver adds two numbers `≤ totalShielded`; burn removes exactly `amount`. No homomorphic addition (`pending += v`,
 `+= fee`, `acc += pending`) reaches `r`, because every term and every sum is `≤ 2^54`. Because `b' = b − fee − v ≥ 0` is proven `< 2^64` at the same time, `v ≤ b ≤ 2^54`. Consequences: (a) every real
@@ -255,12 +255,12 @@ State per `(UA, token)`:
 | Slot | Changed by | Role |
 |---|---|---|
 | `acc = (C, D)` | rollOver (adds pending), debits (transfer/burn) | the **only** source of every proof |
-| `pending = (C, D)` | every credit: `zetherShield`, incoming transfers, inner fees | where incoming money waits |
+| `pending = (C, D)` | every credit: `mtxShield`, incoming transfers, inner fees | where incoming money waits |
 | `accSeq` (uint64) | `+1` per rollOver that does work | **in the statement**; the contract `require(accSeq == provedAccSeq)` before verification |
 | `pendingSeq` (uint64) | `+1` per credit | tells the client there is new money |
 | `lastRolledPendingSeq` | rollOver | the no-op rule |
 | `sendCounter` (uint64) | `+1` per successful debit | **in the statement**; anti-replay of proofs; client PRF for `s` |
-| `mode` | `zetherSetRollOverMode` (owner signature) | `PUBLIC` (default) / `OWNER_ONLY` |
+| `mode` | `mtxSetRollOverMode` (owner signature) | `PUBLIC` (default) / `OWNER_ONLY` |
 
 A new account has `acc = pending = (O, O)`, every counter `0`, `mode = PUBLIC`.
 
@@ -268,11 +268,11 @@ How value moves between the two slots:
 
 ```mermaid
 flowchart LR
-    SH["zetherShield:<br/>public units in"] -->|"pending.C += amount G<br/>pendingSeq++"| P["pending"]
+    SH["mtxShield:<br/>public units in"] -->|"pending.C += amount G<br/>pendingSeq++"| P["pending"]
     IN["incoming transfer,<br/>inner fee"] -->|"credit, pendingSeq++"| P
     P -->|"rollOver:<br/>acc += pending, accSeq++"| A["acc<br/>(source of every proof)"]
     A -->|"transfer: proof over acc,<br/>sendCounter++"| R["recipient pending"]
-    A -->|"zetherUnshield:<br/>acc -= amount + fee"| U["underlying paid<br/>to recipient"]
+    A -->|"mtxUnshield:<br/>acc -= amount + fee"| U["underlying paid<br/>to recipient"]
 ```
 
 <a id="no-epoch"></a>
@@ -280,45 +280,47 @@ flowchart LR
 `statement` instead of `(payload, epoch)`; per-account state is read with `accountState(UA)` (there is no
 `simulateAccounts(encodedY, epoch)`).
 
-- **zetherShield(Y, amount):** `pending.C += [amount]G` (D unchanged; the amount is public), `pendingSeq++`. It debits
-  `amount·shieldScale` public units of this token from the caller ([CTR-ZTH-35](#CTR-ZTH-35)).
+- **mtxShield(toUA, amount):** `pending.C += [amount]G` (D unchanged; the amount is public), `pendingSeq++`. `Y` is resolved from
+  the registry by the UA id (the Zether key is the UA, [CTR-UA-30](accounts.md#CTR-UA-16)). It moves
+  `amount·shieldScale` public units of this token from the caller **to `SHIELD_POOL`** ([CTR-ZTH-35](#CTR-ZTH-35),
+  [CTR-ZTH-51](#CTR-ZTH-51)); nothing is burned.
 
-<a id="CTR-ZTH-35"></a>**CTR-ZTH-35** — **`zetherShield` draws from the caller's public balance** (owner):
-`zetherShield(encodedY, amount)` always debits `amount · shieldScale` public Zether units from `_msgSender()` and adds `amount`
-to `totalShielded`, instead of pulling the underlying a second time — one path for every Zether token. The escrow
-invariant (`underlying held ≥ totalSupply + totalShielded · shieldScale`, [CTR-ZTH-44](#CTR-ZTH-44)) is unchanged by
-construction: the underlying is already held for those public units. A holder of an outside underlying wraps, then
-funds — two direct calls, or one gasless `mtxBatch` of `mtxExecute(wrap)` and `mtxExecute(zetherShield)`; an EOA holding a
+<a id="CTR-ZTH-35"></a>**CTR-ZTH-35** — **`mtxShield` draws from the caller's public balance** (owner):
+`mtxShield(toUA, amount)` always moves `amount · shieldScale` public Zether units from `_msgSender()` to `SHIELD_POOL` (since
+plan 5h; earlier it burned them) and adds `amount` to `totalShielded`, instead of pulling the underlying a second time — one path
+for every Zether token. The escrow invariant (`underlying held ≥ totalSupply()`, with the pool counted in `totalSupply()`,
+[CTR-ZTH-44](#CTR-ZTH-44)) is unchanged by construction: the underlying is already held for those public units. A holder of an outside underlying wraps, then
+funds — two direct calls, or one gasless `mtxBatch` of `mtxExecute(wrap)` and `mtxExecute(mtxShield)`; an EOA holding a
 SCaaS underlying wraps by signature (`mtxWrap`, [CTR-TOK-20](token-wrappers.md#CTR-TOK-20)), then funds. Without it, an
 EOA holding a SCaaS underlying could not shield at all (it cannot approve, [CTR-TOK-01](token-wrappers.md#CTR-TOK-01)).
-A UA shields from its UA balance through `uaExecute(zetherShield)` ([CTR-ZTH-51](#CTR-ZTH-51); the `zetherShield` part BUILT in UA-6 Task 4, the other self-calls SPECIFIED, UA-5c).
+A UA shields from its UA balance through `uaExecute(mtxShield)` ([CTR-ZTH-51](#CTR-ZTH-51); the `mtxShield` part BUILT in UA-6 Task 4, the other self-calls SPECIFIED, UA-5c).
 - **transfer:** the sender proves over `acc`. Effect:
 
 ```
 acc_f.C   = acc_f.C − C_deb − [fee]G         acc_f.D   = acc_f.D − D_out
 pend_t.C += C_out                             pend_t.D += D_out           pendingSeq_t++
-pend_ben.C += [fee]G   (if fee > 0)                                       pendingSeq_ben++
+totalShielded −= fee;  SHIELD_POOL → beneficiary's public UA-ledger balance: fee·shieldScale   (if fee > 0; plan 5h D19)
 sendCounter_f++
 ```
 
-- **zetherUnshield(amount, recipient):** `acc_f.C −= [amount + fee]G`, fee as above, `sendCounter_f++`, pays the underlying to
+- **mtxUnshield(amount, recipient):** `acc_f.C −= [amount + fee]G`, fee as above, `sendCounter_f++`, pays the underlying to
   `recipient`.
 - **rollOver:** `acc += pending; pending = (O,O); accSeq++; lastRolledPendingSeq = pendingSeq` (in short:
   `acc += pending; pending = 0; accSeq += 1`). It runs only when
   `pendingSeq > lastRolledPendingSeq`; otherwise it is a **silent no-op** (anti-DoS).
 
-<a id="rollover"></a>Two modes (`enum RollOverMode { PUBLIC, OWNER_ONLY }`, `zetherSetRollOverMode` signed; names per
+<a id="rollover"></a>Two modes (`enum RollOverMode { PUBLIC, OWNER_ONLY }`, `mtxSetRollOverMode` signed; names per
 [CTR-ZTH-45](#CTR-ZTH-45), signed through the base, [CTR-MTX-21](metatx.md#CTR-MTX-21)):
 
-- `PUBLIC` (default; retail, loyalty, low-risk): anyone may call `zetherRollOver(UA)` / `zetherRollOverBatch(UA[])` without a
-  signature. `zetherRollOverBatch` skips `OWNER_ONLY` and unregistered items.
-- `OWNER_ONLY` (treasury, B2B high value): `zetherRollOver` reverts `RollOverOwnerOnly`; only `zetherRollOverSigned(UA,
+- `PUBLIC` (default; retail, loyalty, low-risk): anyone may call `mtxRollOver(UA)` / `mtxRollOverBatch(UA[])` without a
+  signature. `mtxRollOverBatch` skips `OWNER_ONLY` and unregistered items.
+- `OWNER_ONLY` (treasury, B2B high value): `mtxRollOver` reverts `RollOverOwnerOnly`; only `mtxRollOverSigned(UA,
   expectedPendingSeq, validUntilBlock, sig)` — `block.number ≤ validUntilBlock`, `lastRolledPendingSeq <
   expectedPendingSeq ≤ pendingSeq`, signed by the account's own key (Schnorr by `x` through `requireAuthorized`, purpose `zether-owner`, [registry](#registry)) over
   `keccak256(abi.encode(keccak256("ZETHER_ROLLOVER_V1"), chainid, chainUid, token, UA, accSeq, expectedPendingSeq, validUntilBlock))`.
-- `zetherRollOverSigned` also works for `PUBLIC` accounts.
-- The owner ops (`zetherRollOverSigned`, `zetherSetRollOverMode`) accept a registered Zether UA (`kindOf == 0x0141`) only: any other kind or an unregistered id reverts `AccountNotRegistered(ua)` before `requireAuthorized`, even with a valid signature (owner ruling 2026-10-20; `test_ownerOpsZetherUaOnly`).
-- `zetherSetRollOverMode(UA, mode, validUntilBlock, sig)`: digest
+- `mtxRollOverSigned` also works for `PUBLIC` accounts.
+- The owner ops (`mtxRollOverSigned`, `mtxSetRollOverMode`) accept a registered Zether UA (`kindOf == 0x0141`) only: any other kind or an unregistered id reverts `AccountNotRegistered(ua)` before `requireAuthorized`, even with a valid signature (owner ruling 2026-10-20; `test_ownerOpsZetherUaOnly`).
+- `mtxSetRollOverMode(UA, mode, validUntilBlock, sig)`: digest
   `keccak256(abi.encode(keccak256("ZETHER_SET_ROLLOVER_MODE_V1"), chainid, chainUid, token, UA, uint8(mode), modeNonce, validUntilBlock))`,
   `modeNonce++` after every change (no replay of an old signature). `chainUid` is in both digests
   ([CTR-ZTH-36](#CTR-ZTH-36)): a re-created chain restarts `modeNonce`, `accSeq` and block numbers, so a captured mode
@@ -328,12 +330,12 @@ The owner-signed-only rollOver of an earlier design was rejected: the `PUBLIC` d
 usable without the owner's key, and `OWNER_ONLY` is chosen per account by risk class (by the client system).
 
 <a id="rollover-signed"></a>
-<a id="CTR-ZTH-16"></a>**CTR-ZTH-16** — `zetherRollOverSigned` accepts `pendingSeq ≥ expectedPendingSeq` (not `==`): a free
+<a id="CTR-ZTH-16"></a>**CTR-ZTH-16** — `mtxRollOverSigned` accepts `pendingSeq ≥ expectedPendingSeq` (not `==`): a free
 `v = 0` transfer by a griefer cannot kill an `OWNER_ONLY` owner's rollOver. Replay stays blocked because the digest
 pins `accSeq`. Test: `test_rollOverSignedSurvivesFrontRunCredit`.
 
 <a id="rollover-signed-new-credit"></a>
-<a id="CTR-ZTH-17"></a>**CTR-ZTH-17** — `zetherRollOverSigned` also requires `expectedPendingSeq > lastRolledPendingSeq`: a
+<a id="CTR-ZTH-17"></a>**CTR-ZTH-17** — `mtxRollOverSigned` also requires `expectedPendingSeq > lastRolledPendingSeq`: a
 signature that names no new credit would be a no-op that does not raise `accSeq`, would live until the next credit,
 and anyone could use it to force a rollOver and kill the owner's in-flight proof. Now every accepted signature performs
 a real rollOver ⇒ single use (`test_rollOverSignedWithoutNewCreditIsRejected`).
@@ -341,9 +343,9 @@ a real rollOver ⇒ single use (`test_rollOverSignedWithoutNewCreditIsRejected`)
 **Race.** Transfer/burn **never** merge pending by themselves. A credit that arrives while a proof is being built
 changes only `pending` ⇒ the proof stays valid. Only rollOver changes `accSeq`; a proof built on an old `accSeq` is
 refused **before** verification (`StaleAccSeq`, cheap). With `OWNER_ONLY` nobody but the owner bumps `accSeq`, and an
-inserted credit cannot kill the owner's `zetherRollOverSigned`. With `PUBLIC` the grief **costs only gas**: a registered
+inserted credit cannot kill the owner's `mtxRollOverSigned`. With `PUBLIC` the grief **costs only gas**: a registered
 account with balance 0 can still prove a `v = 0` transfer (a valid proof, the amount hidden ⇒ not blockable on chain)
-and then call `zetherRollOver` ⇒ a wallet that needs stable proofs while targeted switches to `OWNER_ONLY`. Wallet
+and then call `mtxRollOver` ⇒ a wallet that needs stable proofs while targeted switches to `OWNER_ONLY`. Wallet
 rule: never hold a signed rollOver while a transfer is in flight; short `validUntilBlock` (≈ 50 blocks).
 
 <a id="CTR-ZTH-31"></a>**CTR-ZTH-31** — *Open (owner contingency, never ruled).* If rollOver griefing spreads, a
@@ -393,10 +395,16 @@ Points:
   `O` when off; when off `C_aud` **must** be `O`.
 - **burn:** `Y_f ‖ C_acc ‖ D_acc` (3P).
 
-The transfer layout above is the single-recipient format (`zetherTransferSingle`); the multi-recipient statement is
+The transfer layout above is the single-recipient format (`mtxConfidentialTransferSingle`); the multi-recipient statement is
 in [Multi-recipient transfer](#multi-recipient).
 
-`fee = confidentialFee()` if `beneficiary ≠ 0`, else `0` (a fixed fee per token, never a function of `v`).
+`fee = confidentialFee()` if `beneficiary ≠ 0`, else `0` (a fixed fee per token, never a function of `v`). Since plan 5h the beneficiary
+fee is **not** a confidential credit (before, the effect was `pend_ben.C += [fee]G`, `pendingSeq_ben++`): the library returns the `fee` it debited from `totalShielded` and the token pays exactly that
+from `SHIELD_POOL` to the beneficiary's public UA-ledger balance (spendable at once, visible on `UATransfer`); a fee needs a
+registered, UA-ledger-enabled beneficiary. The relation is unchanged (`fee` was already public in the statement). This is the
+`txFee` of [CTR-PQZ-06](pq-zero-knowledge.md#CTR-PQZ-06). The multi-recipient format adds the sender's per-leg
+**`decoyFee`** `d` (owner 2026-10-20, as PQZ op 7; built in the 5h final fix wave): there `fee = txFee + M · d` (§ CTR-ZTH-37);
+the single format never pays one.
 
 ## 8. Σ-protocol
 
@@ -529,12 +537,12 @@ burn payload     = be32(provedAccSeq) ‖ be32(provedSendCounter) ‖ Y_f       
 ## 11. Multi-recipient transfer
 
 <a id="multi-recipient"></a>
-<a id="CTR-ZTH-37"></a>**CTR-ZTH-37** — **One transfer, `M ≥ 1` recipients, one proof; `zetherTransfer` is the
+<a id="CTR-ZTH-37"></a>**CTR-ZTH-37** — **One transfer, `M ≥ 1` recipients, one proof; `mtxConfidentialTransfer` is the
 multi-recipient transfer** (owner; the post-quantum form is PQZ op 7 `R_TXM`,
 [pq-zero-knowledge CTR-PQZ-25 / CTR-PQZ-26](pq-zero-knowledge.md#CTR-PQZ-25)). The sender may add randomly chosen decoy recipients that receive an encryption of 0
 and so hide the real one; sender anonymity (a ring) is not wanted and the sender stays public. **One shared `s`** serves
 every recipient: handing `s` to a checker opens every leg of that transfer, decoys included (accepted; the per-leg
-opening without `s` is [`SENDER_CP`](#CTR-ZTH-40)). The multi-recipient transfer has three entries by storage, `zetherTransfer` (the mode's default), `zetherTransferCompact`, `zetherTransferNoBundle` ([CTR-ZTH-38](#CTR-ZTH-38)); the single-recipient format above is kept unchanged (same payload, statement, proof, proof system id and full-bundle storage) under the name `zetherTransferSingle`. The statement header is the common header of [Statement](#statement-byte-layout) (with `chainUid`).
+opening without `s` is [`SENDER_CP`](#CTR-ZTH-40)). The multi-recipient transfer has three entries by storage, `mtxConfidentialTransfer` (the mode's default), `mtxConfidentialTransferCompact`, `mtxConfidentialTransferNoBundle` ([CTR-ZTH-38](#CTR-ZTH-38)); the single-recipient format above is kept unchanged (same payload, statement, proof, proof system id and full-bundle storage) under the name `mtxConfidentialTransferSingle`. The statement header is the common header of [Statement](#statement-byte-layout) (with `chainUid`).
 
 **Relation and proof.** Witness: `x, s, v_1..v_M, b' = b − Σv_j − fee, γ_vj, γ_b`. Ciphertexts (shared `s`, shared
 `D_out = [s]G`):
@@ -569,7 +577,7 @@ aggregation). Soundness as [CTR-ZTH-18](#CTR-ZTH-18): the only sum of proven val
 **Encoding.**
 
 ```text
-payload   = be32(provedAccSeq) ‖ be32(provedSendCounter) ‖ salt(16) ‖ be32(M) ‖ Y_f ‖ D_out ‖ C_deb ‖ (Y_tj ‖ C_out_j ‖ C_aud_j)_{j=1..M} [‖ memo]
+payload   = be32(provedAccSeq) ‖ be32(provedSendCounter) ‖ salt(16) ‖ be32(M) ‖ be32(decoyFee) ‖ Y_f ‖ D_out ‖ C_deb ‖ (Y_tj ‖ C_out_j ‖ C_aud_j)_{j=1..M} [‖ memo]
 statement = header(opTag) ‖ Y_f ‖ Y_a ‖ C_acc ‖ D_acc ‖ D_out ‖ C_deb ‖ be32(M) ‖ (Y_tj ‖ C_out_j ‖ C_aud_j)_{j=1..M}
 opTag     = keccak256("SCAAS-ZETHER-OP-TRANSFER-MULTI-V1/" ‖ mode)     mode ∈ {"HASH", "BUNDLE", "NONE"}
 proof     = sigma commitments ‖ sigma responses ‖ BP(v_1) … BP(v_M) ‖ BP(b')
@@ -580,24 +588,34 @@ The mode is in `opTag`, so a relayer cannot switch the mode of a signed proof. `
 `SelfTransfer`, `AccountNotRegistered`). The multi-recipient format has its own proof system id, so a single-recipient proof never
 matches it. Relaying through the meta-transaction envelope is the generic self-call ([CTR-ZTH-34](#CTR-ZTH-34)).
 
-**Token.** Checks and order as `zetherTransferSingle` (cheap first, `accSeq`/`sendCounter`, `kindOf(from)` is the Zether kind, verify; the proof alone authorizes). Effects: `acc_f −= (C_deb + [fee]G, D_out)`; per `j`
-`pending_tj += (C_out_j, D_out)`, `pendingSeq_tj++`; fee to the beneficiary as in the single format; `sendCounter_f++`
-once. `entryRef` as in the single format (one per transfer); recipient `j` is addressed as `(entryRef, j)`.
+**Decoy fee** (owner 2026-10-20; built in the 5h final fix wave). The payload's `decoyFee` word `d` is the sender's
+per-leg fee: `minDecoyFee() ≤ d < 2^64`, else `DecoyFeeOutOfRange(d, minDecoyFee)`; the statement's public `fee` word is
+`txFee + M · d` (`txFee = confidentialFee` when a beneficiary is named, else 0; `≥ 2^64` ⇒ `AmountOutOfRange`), so the
+proof binds `d` — the statement layout and the relation are unchanged (the fee was already public). `minDecoyFee` is the
+token's immutable `ConfidentialConfig.minDecoyFee` (may be 0, the default; `initialize` requires `minDecoyFee < 2^64` and
+`confidentialFee + 16 · minDecoyFee` `< 2^64` and `< maxDecryptableShielded`; no chain floor). `ZetherLib.transferMulti`
+returns what the debit moved (`Paid {txFee, decoyFee, legs}`) and the token pays exactly that from `SHIELD_POOL`: `txFee`
+to the beneficiary's public UA-ledger balance, `d` to **every** leg's (the real recipient included, so it reveals no decoy).
+A non-zero `d` adds ≈ 28.7 k gas per leg (the prover's `DECOY_LEG_GAS` = 32 k in its gas check).
+
+**Token.** Checks and order as `mtxConfidentialTransferSingle` (cheap first, `accSeq`/`sendCounter`, `kindOf(from)` is the Zether kind, verify; the proof alone authorizes). Effects: `acc_f −= (C_deb + [fee]G, D_out)`; per `j`
+`pending_tj += (C_out_j, D_out)`, `pendingSeq_tj++`; `txFee` to the beneficiary as in the single format and `d` to every leg
+(above); `sendCounter_f++` once. `entryRef` as in the single format (one per transfer); recipient `j` is addressed as `(entryRef, j)`.
 
 <a id="storage-modes"></a>
-<a id="CTR-ZTH-38"></a>**CTR-ZTH-38** — **Three transfer entries; the plain name is the mode's default** (owner 2026-10-08, 2026-10-11; built in P3b). `zetherTransfer`, `zetherTransferCompact`, `zetherTransferNoBundle`, all `(bytes payload, bytes proof, UA beneficiary) returns (bytes32 entryRef)`; the salt ([CTR-ZTH-30](#CTR-ZTH-30)) and the sender memo ([CTR-ZTH-50](#CTR-ZTH-50)) travel inside `payload`, so they are signed and the ABI shape is the same for every entry. The bundle of leg `j` is `B_j = Y_tj ‖ C_out_j ‖ D_out ‖ C_aud_j` (bn254 256 B, BLS12-381 512 B per leg); the record is `R = salt ‖ B_1 ‖ … ‖ B_M`. Commit-reveal stores `keccak256(R)` (one slot) ‖ `memo` and emits `TransferBundles(entryRef, R)`; on-chain disclosure then takes `R` from the caller and `ZetherDisclosure` checks the hash (the commitment is over `R`, salt included: controller ruling, pending the owner). A large `M` exceeds the EIP-7825 cap on a transaction's gas limit: the prover takes at most 6 to 8 recipients by form, auditor and direct or relayed (BLS12-381, measured after UA-6: [§19](#gas)) and refuses a larger build against its table of measured gas limits; the contract has no cap. Every entry emits `ZetherTransferMulti(from, beneficiary, fee, sendCounter, entryRef, recipients, mode)`; `mode` in the event and the `opTag` names what is stored:
+<a id="CTR-ZTH-38"></a>**CTR-ZTH-38** — **Three transfer entries; the plain name is the mode's default** (owner 2026-10-08, 2026-10-11; built in P3b). `mtxConfidentialTransfer`, `mtxConfidentialTransferCompact`, `mtxConfidentialTransferNoBundle`, all `(bytes payload, bytes proof, UA beneficiary) returns (bytes32 entryRef)`; the salt ([CTR-ZTH-30](#CTR-ZTH-30)) and the sender memo ([CTR-ZTH-50](#CTR-ZTH-50)) travel inside `payload`, so they are signed and the ABI shape is the same for every entry. The bundle of leg `j` is `B_j = Y_tj ‖ C_out_j ‖ D_out ‖ C_aud_j` (bn254 256 B, BLS12-381 512 B per leg); the record is `R = salt ‖ B_1 ‖ … ‖ B_M`. Commit-reveal stores `keccak256(R)` (one slot) ‖ `memo` and emits `TransferBundles(entryRef, R)`; on-chain disclosure then takes `R` from the caller and `ZetherDisclosure` checks the hash (the commitment is over `R`, salt included: controller ruling, pending the owner). A large `M` exceeds the EIP-7825 cap on a transaction's gas limit: the prover takes at most 6 to 8 recipients by form, auditor and direct or relayed (BLS12-381, measured after UA-6: [§19](#gas)) and refuses a larger build against its table of measured gas limits; the contract has no cap. Every entry emits `ConfidentialTransferMulti(from, beneficiary, fee, sendCounter, entryRef, recipients, mode)`; `mode` in the event and the `opTag` names what is stored:
 
 | Entry | BUNDLE token ([CTR-ZTH-48](#CTR-ZTH-48)): stored per transfer | COMPACT token: stored per transfer |
 |---|---|---|
-| `zetherTransfer` | `R` = every bundle `B_1 ‖ … ‖ B_M` (bn254 256 B per leg) — **default**; on-chain disclosure with nothing supplied | the commitment `keccak256(R)`, `R = salt ‖ B_1 ‖ … ‖ B_M` (32 B) + the sender memo (17 + 40·M B, [CTR-ZTH-50](#CTR-ZTH-50)) — **default** |
-| `zetherTransferCompact` | commitment + sender memo, as on COMPACT (cheaper) | same as `zetherTransfer` |
-| `zetherTransferNoBundle` | nothing (cheapest; disclosure off chain from calldata) | reverts `TransferEntryDisabled` (owner, 2026-10-11: every transfer stays openable) |
-| `zetherTransferSingle` | stores `R` with its one leg (`j = 0`), event `ZetherTransfer` | reverts `TransferEntryDisabled` (controller ruling, pending the owner) |
+| `mtxConfidentialTransfer` | `R` = every bundle `B_1 ‖ … ‖ B_M` (bn254 256 B per leg) — **default**; on-chain disclosure with nothing supplied | the commitment `keccak256(R)`, `R = salt ‖ B_1 ‖ … ‖ B_M` (32 B) + the sender memo (17 + 40·M B, [CTR-ZTH-50](#CTR-ZTH-50)) — **default** |
+| `mtxConfidentialTransferCompact` | commitment + sender memo, as on COMPACT (cheaper) | same as `mtxConfidentialTransfer` |
+| `mtxConfidentialTransferNoBundle` | nothing (cheapest; disclosure off chain from calldata) | reverts `TransferEntryDisabled` (owner, 2026-10-11: every transfer stays openable) |
+| `mtxConfidentialTransferSingle` | stores `R` with its one leg (`j = 0`), event `ConfidentialTransfer` | reverts `TransferEntryDisabled` (controller ruling, pending the owner) |
 
-Every entry also updates `acc_f`, `pending_tj` and `sendCounter`; the commitment entries put the full bundles in `TransferBundles(entryRef, bundles)` and calldata. The prover and client default to `zetherTransfer`; a caller on a BUNDLE token may pick commit-reveal or no-bundle to save gas. `s` of one transfer opens only that transfer ([CTR-ZTH-30](#CTR-ZTH-30)). Off-chain checking needs no storage. Who can open what under each storage: [who can open what](#who-opens); costs: [gas](#gas). The P3 entry `zetherTransferBundle` is gone (`zetherTransfer` was HASH there).
+Every entry also updates `acc_f`, `pending_tj` and `sendCounter`; the commitment entries put the full bundles in `TransferBundles(entryRef, bundles)` and calldata. The prover and client default to `mtxConfidentialTransfer`; a caller on a BUNDLE token may pick commit-reveal or no-bundle to save gas. `s` of one transfer opens only that transfer ([CTR-ZTH-30](#CTR-ZTH-30)). Off-chain checking needs no storage. Who can open what under each storage: [who can open what](#who-opens); costs: [gas](#gas). The P3 entry `zetherTransferBundle` is gone (`mtxConfidentialTransfer` was HASH there).
 
 <a id="disclosure-mode"></a>
-<a id="CTR-ZTH-48"></a>**CTR-ZTH-48** — **`disclosureMode ∈ {BUNDLE, COMPACT}` is chosen at `initialize` and immutable** (owner, 2026-10-11; built in P3b). It is `ConfidentialConfig.disclosureMode` through `OpenFactory` ([CTR-TOK-25](token-wrappers.md#CTR-TOK-25)), readable as `disclosureMode()`; an unknown value reverts `BadDisclosureMode`. BUNDLE: every entry of [CTR-ZTH-38](#CTR-ZTH-38) is open and `zetherTransfer` stores the full record. COMPACT: commit-reveal only (`zetherTransfer` = `zetherTransferCompact`); `zetherTransferNoBundle` and `zetherTransferSingle` revert `TransferEntryDisabled(disclosureMode)`. One implementation per kind serves both modes: COMPACT is a subset of BUNDLE, the modes are config flags and the kinds stay `NONE_ZETHER` / `UNDERLYING_ZETHER` ([CTR-TOK-21](token-wrappers.md#CTR-TOK-21)); separate implementations were rejected and are revisited only if EIP-170 forces smaller bytecode.
+<a id="CTR-ZTH-48"></a>**CTR-ZTH-48** — **`disclosureMode ∈ {BUNDLE, COMPACT}` is chosen at `initialize` and immutable** (owner, 2026-10-11; built in P3b). It is `ConfidentialConfig.disclosureMode` through `OpenFactory` ([CTR-TOK-25](token-wrappers.md#CTR-TOK-25)), readable as `disclosureMode()`; an unknown value reverts `BadDisclosureMode`. BUNDLE: every entry of [CTR-ZTH-38](#CTR-ZTH-38) is open and `mtxConfidentialTransfer` stores the full record. COMPACT: commit-reveal only (`mtxConfidentialTransfer` = `mtxConfidentialTransferCompact`); `mtxConfidentialTransferNoBundle` and `mtxConfidentialTransferSingle` revert `TransferEntryDisabled(disclosureMode)`. One implementation per kind serves both modes: COMPACT is a subset of BUNDLE, the modes are config flags and the kinds stay `NONE_ZETHER` / `UNDERLYING_ZETHER` ([CTR-TOK-21](token-wrappers.md#CTR-TOK-21)); separate implementations were rejected and are revisited only if EIP-170 forces smaller bytecode.
 
 <a id="auditor-mode"></a>
 <a id="CTR-ZTH-49"></a>**CTR-ZTH-49** — **`auditorMode ∈ {NONE, FULL, OPTIONAL}` is chosen at `initialize` and immutable** (owner, 2026-10-11; built in P3b), `ConfidentialConfig.auditorMode` beside `auditorKey` ([CTR-ZTH-09](#CTR-ZTH-09)), readable as `auditorMode()`. The rule binds every transfer, single and multi-recipient:
@@ -685,28 +703,30 @@ binding differs ⇒ revert; another token / another chain ⇒ the header differs
 <a id="direct-calls"></a>
 <a id="CTR-ZTH-34"></a>**CTR-ZTH-34** — **Zether runs through the generic self-call** (owner). `mtxExecute` with `m.data` =
 the real calldata of an allowlisted Zether function
-([CTR-MTX-19](metatx.md#CTR-MTX-19)): `zetherTransfer(bytes,bytes,bytes32)`,
-`zetherUnshield(bytes,bytes,bytes32,address,uint256)`, `zetherShield(bytes,uint256)`, public `wrap(uint256)` and `unwrap(uint256,address)`;
+([CTR-MTX-19](metatx.md#CTR-MTX-19)): `mtxConfidentialTransfer*` `(bytes,bytes,bytes,bytes32,bytes)`,
+`mtxUnshield(bytes,bytes,bytes,bytes32,bytes,uint256,bytes32)`, `mtxUnshieldUnwrap`, `mtxShield(bytes32,uint256)`, `mtxWrapShield`, public `wrap(uint256)` and `unwrap(uint256,address)` (the shared signature of [CTR-ZTH-45](#CTR-ZTH-45));
 a public ERC-20 transfer is a `MetaTransfer` like on every token ([CTR-MTX-23](metatx.md#CTR-MTX-23)). `PqzToken`
-relays the same way ([CTR-PQZ-21](pq-zero-knowledge.md#CTR-PQZ-21)). `zetherTransfer` and `zetherUnshield` compute
+relays the same way ([CTR-PQZ-21](pq-zero-knowledge.md#CTR-PQZ-21)). `mtxConfidentialTransfer` and `mtxUnshield` compute
 `binding = (msg.sender == address(this) && ticket live) ? ticketBinding : 0`, so the statement tag is
 `ZTX_V1_RELAYED` with the envelope's binding inside `mtxExecute` and `ZTX_V1_DIRECT` with binding 0 otherwise: a proof
 lifted from a pending meta-tx fails as a direct call, and the envelope-stripping attack stays closed. Under a UA
-signer (`uaExecute`) the binding is the UA envelope's, with its own tag ([CTR-ZTH-51](#CTR-ZTH-51); SPECIFIED, UA-5c).
+signer (`uaExecute`) the binding is the UA envelope's, with its own tag ([CTR-ZTH-51](#CTR-ZTH-51); UA-5c (a), plan 5h Task 3b).
 
 The outer fee is
 the base's step 6, `FIXED` absolute or `NONE` (fee class `ABSOLUTE`, [CTR-MTX-20](metatx.md#CTR-MTX-20)); the inner fee
-(`confidentialFee` to the beneficiary) is unchanged. The dynamic arguments are re-encoded canonically by the node
-before it computes the mesh `intent_id`. The `rollOver*` functions stay outside the allowlist: `zetherRollOver` needs no
-signature, and `zetherRollOverSigned`/`zetherSetRollOverMode` carry their own signature, so anyone can relay them.
-**Built (P3)**, with every signer-authorised confidential op allowlisted `ABSOLUTE`: the four transfers, `zetherShield`,
-`zetherUnshield`, and on `UNDERLYING_ZETHER` `zetherWrapShield` and `zetherUnshieldUnwrap` beside `UnderlyingToken`'s
-wrap and unwrap entries (without `unwrap(uint256,address)`). A direct `zetherUnshieldUnwrap` proves under `ZTX_V1_DIRECT`
+(`confidentialFee` to the beneficiary's public balance out of `SHIELD_POOL`) keeps its amount and statement word. The dynamic arguments are re-encoded canonically by the node
+before it computes the mesh `intent_id`. The four roll-over functions are on both allowlists too, `ABSOLUTE` with the outer fee `FIXED` (possibly 0) or
+`NONE` (owner 2026-10-20: every `mtx*` write is relayable): `mtxRollOver(bytes32,uint256)`, `mtxRollOverBatch(bytes32[])`,
+`mtxRollOverSigned` and `mtxSetRollOverMode`. They do exactly what the direct call does (the first two need no
+signature; the signed pair keep checking their owner signature inside, so a relayer only pays the gas). BUILT, commit `b5e61c96`.
+**Built (P3)**, with every signer-authorised confidential op allowlisted `ABSOLUTE`: the four transfers, `mtxShield`,
+`mtxUnshield`, and on `UNDERLYING_ZETHER` `mtxWrapShield` and `mtxUnshieldUnwrap` beside `UnderlyingToken`'s
+wrap and unwrap entries (without `unwrap(uint256,address)`). A direct `mtxUnshieldUnwrap` proves under `ZTX_V1_DIRECT`
 with `keccak256(abi.encode(keccak256("SCAAS-ZETHER-UNWRAP-V1"), u, minOut))` as its binding word, so a copied proof can
-neither change the leg, drop `minOut` nor become a `zetherUnshield` (controller rulings, pending the owner). Relayed, the
+neither change the leg, drop `minOut` nor become a `mtxUnshield` (controller rulings, pending the owner). Relayed, the
 envelope binding covers every envelope field except `data`, so `u` and `minOut` are protected only by the envelope
 signer's signature: the envelope signer (on `mtxExecute`, the address `m.from` the holder chose; these proof-carrying ops are not on the UA allowlist until UA-5c) can re-route a proof to another leg with `minOut` 0, or into public
-units through `zetherUnshield`; the relayer cannot (amount and recipient stay bound). Binding `u` and `minOut` when relayed
+units through `mtxUnshield`; the relayer cannot (amount and recipient stay bound). Binding `u` and `minOut` when relayed
 is an open question (controller ruling, pending the owner).
 
 <a id="direct-transfer"></a>
@@ -714,17 +734,17 @@ is an open question (controller ruling, pending the owner).
 gas, statement `ZTX_V1_DIRECT`, `envelopeBinding = 0`; the outer fee lives only in the envelope:
 
 ```
-zetherTransfer(bytes payload, bytes proof, bytes32 beneficiary) returns (bytes32 entryRef)
-zetherUnshield(bytes payload, bytes proof, bytes32 beneficiary, address to, uint256 amount)
+mtxConfidentialTransfer(bytes payload, bytes proof, bytes auth, bytes32 beneficiary, bytes accHint) returns (bytes32 entryRef)
+mtxUnshield(bytes payload, bytes proof, bytes auth, bytes32 beneficiary, bytes accHint, uint256 amount, bytes32 recipient)
 ```
 
-In short: `zetherTransfer(payload, proof, beneficiary)` and
-`zetherUnshield(payload, proof, beneficiary, to, amount)`.
+In short: the shared signature of [CTR-ZTH-45](#CTR-ZTH-45); on Zether `auth` and `accHint` must be **empty** (the proof alone authorizes,
+[CTR-UA-30](accounts.md#CTR-UA-16); they exist so that one selector serves both layers).
 
 (A first version had 7 parameters `…, FeeMode, uint256, address` — dropped: nobody needs to pay a fee to themselves,
 and 7 parameters push every Solidity caller into *stack too deep* with legacy codegen.) There is no
 signature argument on either path: the proof of knowledge of `x` is the spending authority ([authorization](#registry)),
-and `from` must be a registered `zether-bls12381` UA. `zetherUnshield`:
+and `from` must be a registered `zether-bls12381` UA. `mtxUnshield`:
 `0 < amount ≤ maxDecryptableShielded` (≤ 2^54) is checked **before** the statement is built — with `fee < 2^64` this
 guarantees `amount + fee < 2^65 < r`, no alias mod `r`.
 
@@ -735,8 +755,8 @@ guarantees `amount + fee < 2^65 < r`, no alias mod `r`.
 
 <a id="fees"></a>
 <a id="CTR-ZTH-05"></a>**CTR-ZTH-05** — **Two fee layers.** The **inner** fee is a public scalar `fee` in the statement,
-subtracted homomorphically `C_acc − [fee]G` and credited as `[fee]G` to the `pending` of the `beneficiary` UA (a
-registered account), not paid out as ERC-20; it is fixed per token (`confidentialFee`), independent of `v`. The
+subtracted homomorphically `C_acc − [fee]G` and paid, since plan 5h, from `SHIELD_POOL` to the public UA-ledger balance of the
+`beneficiary` UA (a registered account; before 5h it was credited as `[fee]G` to its `pending`); it is fixed per token (`confidentialFee`), independent of `v`. The
 **outer** fee is paid from the token's **public** ERC-20 balance (`wrap`/`unwrap` the underlying 1:1). Three
 combinations serve different cases: inner only (a relayer that holds a confidential account), outer only (a relayer
 paid in the public balance), or a direct call with neither.
@@ -802,9 +822,9 @@ other write of the account is a Zether Schnorr by `x` through `registry.requireA
 
 | Write | Purpose | `auth` |
 |---|---|---|
-| `zetherRollOverSigned`, `zetherSetRollOverMode` | `zether-owner` | `abi.encode(bytes(""), sig)`: Schnorr by `x` over `uaMessage(0x0141, PURPOSE_ZETHER_OWNER, digest)`, `Y` from the record; a registered Zether UA only, else `AccountNotRegistered` |
+| `mtxRollOverSigned`, `mtxSetRollOverMode` | `zether-owner` | `abi.encode(bytes(""), sig)`: Schnorr by `x` over `uaMessage(0x0141, PURPOSE_ZETHER_OWNER, digest)`, `Y` from the record; a registered Zether UA only, else `AccountNotRegistered` |
 | `register` PoP | `pop` | Schnorr by `x` over `uaMessage(0x0141, PURPOSE_POP, popDigest(UA, 0))` |
-| UA-ledger writes of the account's public balance (`ua*`, `uaExecute(zetherShield)`, trade, mandates, receiver fee) | the write's purpose | the same Schnorr (`abi.encode(bytes(""), sig)`); `zether-bls12381` is a SIGNING UA, not an `msig` member (CTR-UA-14) |
+| UA-ledger writes of the account's public balance (`ua*`, `uaExecute(mtxShield)`, trade, mandates, receiver fee) | the write's purpose | the same Schnorr (`abi.encode(bytes(""), sig)`); `zether-bls12381` is a SIGNING UA, not an `msig` member (CTR-UA-14) |
 
 Schnorr (every curve):
 
@@ -854,7 +874,7 @@ account's level); a replay needs that same `msg.sender` and yields the same reco
 `popSignature = abi.encode(bytes schnorrPop, bytes authPop)`: `schnorrPop` = a Schnorr signature by `x` over `c`
 (anti-rogue-key for the ElGamal key); `authPop` = a proof of the authorization key, also over `c`:
 
-| # | Scheme | `authData` | `authSig` (transfer/burn/zetherRollOverSigned) | `authPop` |
+| # | Scheme | `authData` | `authSig` (transfer/burn/mtxRollOverSigned) | `authPop` |
 |---|---|---|---|---|
 | 0 | SELF_SCHNORR | `0x` | empty when a proof is present; otherwise `abi.encode(encodedY, schnorrSig)` | empty |
 | 1 | ECDSA_MULTISIG | `abi.encode(address[] owners_sorted, uint256 threshold)` | `abi.encode(bytes[] sigs)` sorted by signer, ascending | as authSig, over `c` |
@@ -937,7 +957,7 @@ Additional checks: `amount < 2^n_v = 2^64` (otherwise `amount + r` would also "p
 
 | Storage | Sender (`s`, every leg; or `SENDER_CP`, one leg) | Receiver `j` (`RECEIVER_X`, its leg) | Auditor (`AUDITOR`, every leg) |
 |---|---|---|---|
-| Full record (`zetherTransfer` on BUNDLE, single format) | always, from seed + storage (salt in `R`); on chain with nothing supplied | always, from storage with `x_tj` | always, from storage with `x_a` |
+| Full record (`mtxConfidentialTransfer` on BUNDLE, single format) | always, from seed + storage (salt in `R`); on chain with nothing supplied | always, from storage with `x_tj` | always, from storage with `x_a` |
 | Commit-reveal | always, from seed + storage (memo, [CTR-ZTH-50](#CTR-ZTH-50)); on chain with the rebuilt `R` | needs `R` from `TransferBundles` or calldata (log availability) | needs `R` from `TransferBundles` or calldata |
 | No-bundle | needs the calldata (salt and legs); off chain only | needs the calldata; off chain only | needs the calldata; off chain only |
 
@@ -972,81 +992,117 @@ All rules of the multi-recipient design (Z1–Z13,
 [CTR-ZTH-37](#CTR-ZTH-37)…[CTR-ZTH-43](#CTR-ZTH-43)) carry over unchanged except the names.
 The confidential layer keeps **no underlying of its own**: it reuses `UnderlyingLib` on kind `UNDERLYING_ZETHER`, so a
 leg may be the native coin like on every `UNDERLYING*` kind ([CTR-TOK-26](token-wrappers.md#CTR-TOK-26)) and
-`zetherWrapShield` of a native leg is payable like a native wrap. `shieldScale` = public units per shielded unit
+`mtxWrapShield` of a native leg is payable like a native wrap. `shieldScale` = public units per shielded unit
 ([CTR-ZTH-04](#CTR-ZTH-04); shielded amounts are bounded by `2^54`).
 
-- **Reserve invariant.** `UNDERLYING_ZETHER`: `Σ_i ⌊reserve_i·num_i/den_i⌋ ≥ totalSupply() + totalShielded·shieldScale`,
-  held by construction (a wrap-shield credits whole units, an unshield-unwrap pays at most what it removes) and checked
-  by `executeRate` with the shielded part (controller ruling, pending the owner). `totalSupply()` counts public
-  balances only (the ERC-20 meaning); `totalShielded()` is a separate view.
+- **Reserve invariant.** `UNDERLYING_ZETHER`: `Σ_i ⌊reserve_i·num_i/den_i⌋ ≥ totalSupply()`, where `totalSupply()` includes
+  `balanceOf(SHIELD_POOL) == totalShielded·shieldScale` (plan 5h: shielded value is held in the pool, not burned, so `totalSupply()`
+  is the true total). Held by construction (a wrap-shield mints whole units to the pool, an unshield-unwrap burns from the pool
+  and pays at most what it removes) and checked by `executeRate` on `totalSupply()` alone. `totalShielded()` is a view.
 - **The minter never mints shielded.** `MINTABLE` on `NONE_ZETHER` mints public balance only; shielded value exists only
-  through `zetherShield` / `zetherWrapShield`, which take public units or an underlying deposit.
-- **Fees.** The inner confidential fee (fixed per token, credited to the beneficiary UA) stays in `ZetherLib`. Relaying
+  through `mtxShield` / `mtxWrapShield`, which take public units or an underlying deposit.
+- **Fees.** The inner confidential fee (fixed per token, paid from `SHIELD_POOL` to the beneficiary UA's public balance) stays in `ZetherLib`, which returns the fee it debited. Relaying
   goes through the base ([CTR-ZTH-34](#CTR-ZTH-34)).
 - **Removed with the built `ZetherToken`** (now in `legacy/p3/`): its own underlying, `wrap`/`unwrap`/`fund`,
   `_checkEscrow`, `UnsupportedUnderlying`, `ZetherMetaTx` and the envelope, the v1 init, `burn`, the prover views.
 
-<a id="CTR-ZTH-45"></a>**CTR-ZTH-45** — **Entry points and names** (owner, T5). Zether entry points carry the prefix
-`zether` (classical) or `pqz` ([CTR-PQZ-22](pq-zero-knowledge.md#CTR-PQZ-22)); `shieldScale` as above.
+<a id="CTR-ZTH-45"></a>**CTR-ZTH-45** — **One `mtx*` interface for both confidential layers** (owner 2026-10-20, plan 5h D20, Q3 approved; before that
+entry points carried the prefix `zether` or `pqz`, [CTR-PQZ-22](pq-zero-knowledge.md#CTR-PQZ-22)). The Zether and PQZ tokens
+implement one interface, `IConfidentialToken` (`src/confidential/IConfidentialToken.sol`), with **one selector per shared function across
+both layers**, no layer argument (the combined kinds 6 and 7 are dropped, [CTR-TOK-21](token-wrappers.md#CTR-TOK-21)); layer-only functions sit in
+`IZetherToken` / `IPqzToken` on the same scheme. `mtxTransfer` is taken (the public meta-transfer of `MetaTokenBase`), so the
+confidential transfers are `mtxConfidentialTransfer…` (wallets may label them "Secure Transfer"). `shieldScale` as above.
 
-| Function | Effect |
-|---|---|
-| `zetherShield(ua, amount)` | `_burn(sender, amount·shieldScale)` from the public balance; `pending[ua] += [amount]G` |
-| `zetherWrapShield(u, amountIn, ua)` | `UnderlyingLib` pulls `amountIn` of leg `u` and computes the public-equivalent `minted` at the leg's rate **without minting**; `minted % shieldScale ≠ 0` ⇒ `AmountNotScaled` (the client sends an exact amount); `pending[ua] += [minted / shieldScale]G` |
-| `zetherTransfer`, `zetherTransferCompact`, `zetherTransferNoBundle`, `zetherTransferSingle` | the multi-recipient transfers of [CTR-ZTH-37](#CTR-ZTH-37)/[CTR-ZTH-38](#CTR-ZTH-38) |
-| `zetherUnshield(payload, proof, beneficiary, to, amount)` | the proof of the unshield statement ([Burn](#burn)); `_mint(to, amount·shieldScale)` |
-| `zetherUnshieldUnwrap(payload, proof, beneficiary, u, recipient, amount, minOut)` | the same proof; burns `amount·shieldScale` public-equivalent units from `totalShielded` and `UnderlyingLib` pays leg `u` that value **rounded down**, bounded by `minOut`, nothing minted; the holder loses less than one raw underlying unit to the rounding (a public `unwrap` burns only `⌈out·q⌉`), so a client picks `amount` with `previewUnwrap(u, amount·shieldScale).burned == amount·shieldScale` |
-| `zetherRollOver`, `zetherRollOverBatch`, `zetherSetRollOverMode`, `zetherRollOverSigned` | the roll-over functions of [ElGamal state and lifecycle](#rollover) |
+| Function | Layers | Effect |
+|---|---|---|
+| `mtxShield(bytes32 toUA, uint256 amount)` | both | `amount·shieldScale` public units signer → `SHIELD_POOL`; Zether: `pending[toUA] += [amount]G`, `Y` resolved from the registry by UA id; PQZ: a TRIVIAL queue entry ([CTR-PQZ-06](pq-zero-knowledge.md#CTR-PQZ-06)) |
+| `mtxWrapShield(address underlying, uint256 amountIn, bytes32 toUA)` | `UNDERLYING_*` | `UnderlyingLib` pulls `amountIn` of the leg and mints the public-equivalent `minted` **to `SHIELD_POOL`**; `minted % shieldScale ≠ 0` ⇒ `AmountNotScaled`; then as `mtxShield` |
+| `mtxConfidentialTransfer`, `…Compact`, `…Single` | both | the multi-recipient / single transfers of [CTR-ZTH-37](#CTR-ZTH-37)/[CTR-ZTH-38](#CTR-ZTH-38) and [CTR-PQZ-25](pq-zero-knowledge.md#CTR-PQZ-25) |
+| `mtxConfidentialTransferNoBundle` | Zether only | storage mode NONE (retired on PQZ) |
+| `mtxConfidentialTransferSingleCompact` | PQZ only | op 1 in commit-reveal form |
+| `mtxUnshield(…, uint256 amount, bytes32 recipient)` | both | the unshield proof; `amount·shieldScale` from `SHIELD_POOL` to `recipient`; PQZ `amount = 0, recipient = 0` is a refresh; one function for native and UA recipients ([CTR-ZTH-51](#CTR-ZTH-51)) |
+| `mtxUnshieldUnwrap(…)` | `UNDERLYING_*` | the same proof; `amount·shieldScale` burnt **from the pool**, then the leg pays `u` that value rounded down, bounded by `minOut`, nothing minted; the holder loses less than one raw underlying unit to the rounding (a public `unwrap` burns only `⌈out·q⌉`), so a client picks `amount` with `previewUnwrap(u, amount·shieldScale).burned == amount·shieldScale` |
+| `mtxRollOver(bytes32 ua, uint256 n)` | both | PQZ: roll `n` queue entries ([§7.6](pq-zero-knowledge.md#76-rollover)); Zether: one aggregated `pending`, any `n ≥ 1` rolls it |
+| `mtxRollOverBatch`, `mtxRollOverSigned`, `mtxSetRollOverMode` | Zether only | the roll-over functions of [ElGamal state and lifecycle](#rollover) |
+| `mtxPrepareAcc(bytes32 ua, uint256 half)` | PQZ only | [pq-zero-knowledge.md §7.6](pq-zero-knowledge.md#76-rollover) |
 
-`NONE_ZETHER` has `zetherShield` / `zetherUnshield` only. Events follow the names (`ZetherShielded`, `ZetherUnshielded`,
-`ZetherTransfer`, `ZetherTransferMulti`, …). There is no `zetherRegister` / `pqzRegister` (T6): the registry's
-`register` is relayable (PoP over `popDigest(ua, pqzKeyHash)`, anyone submits, [accounts.md](accounts.md)), and the
-confidential kinds depend on that registry for gasless onboarding. **Built (P3)** under these names (before P3:
-`transferConfidential*`, `burn`, `fund`, `rollOverPublic`, `setRollOverMode`, …; node and client ABI in P5);
-`zetherShield` takes the encoded key, `zetherWrapShield` the UA; the two underlying paths emit only `ZetherShielded` /
-`ZetherUnshielded`, since nothing is minted or burnt (controller ruling, pending the owner).
+**Shared proof-taking signature** (controller ruling, plan 5h): `(bytes payload, bytes proof, bytes auth, bytes32 beneficiary,
+bytes accHint[, layer-neutral trailing arguments])`. PQZ: `auth` = the signing UA's signature over `authDigest` (formerly
+`authSig`), `beneficiary` must equal the payload's beneficiary (the call reverts otherwise), `accHint` = the optional materialised `acc`.
+Zether: `auth` and `accHint` **must be empty** (the proof alone authorizes, UA-6): `AuthNotEmpty()` / `AccHintNotEmpty()`, checked first
+on every proof-taking entry point; `mtxRollOver(ua, 0)` ⇒ `RollOverRange(0)`. Trailing arguments:
+`mtxUnshield(payload, proof, auth, beneficiary, accHint, uint256 amount, bytes32 recipient)`; `mtxUnshieldUnwrap` takes the five and then
+the leg as one calldata struct `Unwrap(address underlying, bytes32 recipient, uint256 amount, uint256 minOut)` (declared in
+`IConfidentialToken`; a flat 9-argument form is stack-too-deep on the legacy code generator, `via_ir = false`). The relay allow-lists (`mtxSelectors`, address and UA path)
+list these selectors; the Zether roll-overs (all four) and PQZ's `mtxRollOver` and `mtxPrepareAcc` are on them too (Task R, owner 2026-10-20, [CTR-ZTH-34](#CTR-ZTH-34)).
+
+**Events** (shared names): `Shielded(bytes32 indexed toUA, address indexed from, uint256 amount, uint64 index)` (Zether `index` =
+`pendingSeq`), `ConfidentialTransfer`, `ConfidentialTransferMulti` (fields unified where both layers have them),
+`Unshielded` (refresh: `amount = 0`), `RolledOver(bytes32 indexed ua, uint64 rolled, uint32 accUnits, bytes32 accHash)` (Zether:
+`rolled` = `accSeq`), `Credited`, `Debited`; `TransferBundles` and `RollOverModeChanged` unchanged. **Views keep their names**
+(`accountState`, `pqzAccount`, …): this rule is about entry points. `NONE_ZETHER` has `mtxShield` / `mtxUnshield` only. There is no
+`zetherRegister` / `pqzRegister` (T6): the registry's `register` is relayable (PoP over `popDigest(ua, pqzKeyHash)`, anyone submits,
+[accounts.md](accounts.md)), and the confidential kinds depend on that registry for gasless onboarding. **Built (P3)** as
+`zether*` names, **renamed in plan 5h Task 3b** (before P3: `transferConfidential*`, `burn`, `fund`, `rollOverPublic`,
+`setRollOverMode`, …; no compatibility shims, all chains are test chains); the two underlying paths emit `Shielded` / `Unshielded` only, since
+nothing is minted or burnt on the user's balance (controller ruling, pending the owner).
 
 <a id="ua-public-side"></a>
-<a id="CTR-ZTH-51"></a>**CTR-ZTH-51** — **The public side from and to the UA ledger** (owner 2026-10-13,
-[CTR-UA-27](accounts.md#CTR-UA-27)). The confidential account is the Zether UA itself (CTR-UA-14, CTR-UA-16), which is also a SIGNING UA on the UA
-ledger, so its public balance and its confidential account share one id. The **public** side — the units a shield burns,
-the units an unshield mints, the outer fee — may be any UA, so a PQ UA holder needs no classical key to *pay into* a
+<a id="CTR-ZTH-51"></a>**CTR-ZTH-51** — **The public side from and to the UA ledger, and `SHIELD_POOL`** (owner 2026-10-13,
+[CTR-UA-27](accounts.md#CTR-UA-27); pool: owner 2026-10-20, plan 5h D19). The confidential account is the Zether UA itself (CTR-UA-14, CTR-UA-16), which is also a SIGNING UA on the UA
+ledger, so its public balance and its confidential account share one id. The **public** side — the units a shield moves into
+the pool, the units an unshield moves out of it, the outer fee — may be any UA, so a PQ UA holder needs no classical key to *pay into* a
 Zether token (its own confidential account is classical by nature).
 
-- **Shield from a UA.** `zetherShield` joins the UA allowlist on both Zether kinds: its body `_burn(_msgSender(), …)`
-  already debits the subject under a derived ticket ([CTR-UA-26](accounts.md#CTR-UA-26)); it carries no proof, so it
-  needs no binding.
-- **Confidential ops paid by a UA.** `zetherTransfer*`, `zetherUnshield`, `zetherUnshieldUnwrap` and the two `…ToUA`
-  below join the UA allowlist (`ABSOLUTE`, the outer fee from the signer's UA balance), and `uaExecute` stores a UA
+- **`SHIELD_POOL`** (both layers): `SHIELD_POOL = address(uint160(uint256(keccak256("scaas.shield.pool.v1"))))`, not payable, cannot spend
+  (as `UA_POOL`, `ShieldPoolNotPayable`); shielded value is **held there instead of being burned**. Shield: signer → pool
+  (`Transfer(signer, SHIELD_POOL)`); wrap-shield: mint to the pool; unshield: pool → recipient; unshield-unwrap: burn from the pool, then the
+  leg pays; the beneficiary fee: pool → the beneficiary's public UA-ledger balance (no longer a confidential credit). Invariants, tested
+  on both layers (the Zether invariant handler of plan 5h Task 3z, `PqzPoolInvariantTest`): `totalSupply()` unchanged by shield / unshield / fees,
+  `Σ balanceOf == totalSupply`, `balanceOf(SHIELD_POOL) == totalShielded·shieldScale`, `reserve ≥ totalSupply()`. The pool guard lives in
+  `ERC20MetaTx._uaMove` (a native `SHIELD_POOL` side reverts `ShieldPoolNotPayable`, which covers outer fees, `uaExecute` fee calls and
+  receiver fees); a unshield's payee check also refuses `UA_POOL` (`UAPoolNotPayable`). **Trust boundary:** the layers move the pool only
+  through the internal `_poolMove`, which is unguarded by design (the guarded `_uaMove` would refuse the pool); only layer code may call it, and
+  any contract that inherits `ERC20MetaTx` and calls `_poolMove` can move the pool. The libraries return what the debit moved (Zether
+  `fee`, PQZ `PqzCore.Paid`) and the token pays exactly that.
+- **Shield from a UA.** `mtxShield` joins the UA allowlist on both Zether kinds: it moves from `_msgSender()` (the subject under a derived
+  ticket, [CTR-UA-26](accounts.md#CTR-UA-26)) to the pool; it carries no proof, so it needs no binding.
+- **Confidential ops paid by a UA (UA-5c (a)).** `mtxConfidentialTransfer*`, `mtxUnshield`, `mtxUnshieldUnwrap` join the UA allowlist
+  (`ABSOLUTE`, the outer fee from the signer's UA balance), and `uaExecute` stores a UA
   envelope binding in the ticket as the address path does ([CTR-ZTH-34](#CTR-ZTH-34)):
   `uaEnvelopeBinding(m) = keccak256(abi.encode(TAG_UA_ENVELOPE, chainid, chainUid, token, m.from, m.batch, m.nonce,
   m.validUntil, m.mode, canonRelayer, m.fee, canonFeeRecipient))` with `TAG_UA_ENVELOPE =
   keccak256("SCAAS-ZETHER-UA-ENVELOPE-V1")`, a tag distinct from the address envelope's (as PQZ's
   `SCAAS-PQZ-UA-ENVELOPE-V1`, [CTR-PQZ-21](pq-zero-knowledge.md#CTR-PQZ-21)): a proof lifted from a UA envelope into an address
-  envelope, or back, fails.
-- **Unshield to a UA.** `zetherUnshieldToUA(payload, proof, beneficiary, bytes32 to, uint256 amount)`: `to`
-  registered SIGNING; the same `OP_BURN` statement, whose recipient word (header word 12 counting from 0, today
-  `abi.encode(address)`) carries `to` as a `bytes32`. A native recipient's word is unchanged (a padded address) and a
-  derived id has non-zero top bits, so one proof binds exactly one recipient id with no new op tag. Then
-  `_uaMint(to, amount · shieldScale)` ([CTR-UA-28](accounts.md#CTR-UA-28)); event `ZetherUnshieldedUA(UA indexed from,
-  uint256 amount, bytes32 indexed to)`. `zetherUnshieldUnwrapToUA` likewise pays a SCaaS ledger leg through
-  `transferToUA` (`UALegNotLedger` otherwise). The prover takes the recipient as 32 bytes; the statement layout does
-  not change.
-- **Invariant.** `totalSupply` counts `UA_POOL`, so the reserve invariant of `UNDERLYING_ZETHER` ([CTR-ZTH-44](#CTR-ZTH-44))
-  is unchanged.
-- **Unchanged:** a one-call `zetherWrapShield` from a UA source (a UA wrap-shields in two signed steps, `uaWrap` then
-  `uaExecute(zetherShield)`; owner 2026-10-13); the roll-over functions; the Zether UA as the confidential account.
+  envelope, or back, fails (tested in both directions).
+- **Unshield to a UA (UA-5c (b)) — the same function.** There is no `…ToUA` entry point (controller ruling, plan 5h; it supersedes the
+  separate `zetherUnshieldToUA` / `zetherUnshieldUnwrapToUA` of the earlier text): `mtxUnshield(payload, proof, auth, beneficiary,
+  accHint, uint256 amount, bytes32 recipient)` takes the recipient as a `bytes32`. The same `OP_BURN` statement, whose recipient word
+  (header word 12 counting from 0) carries `recipient`: a native recipient's word is unchanged (a zero-padded address, so existing vectors
+  and statements are unchanged) and a derived id has non-zero top bits, so one proof binds exactly one recipient id with no new op tag. A
+  derived id must be a registered SIGNING UA and is credited on the UA ledger by a pool move `SHIELD_POOL → recipient` (`_poolMove`; no mint, so
+  no `Transfer(0, UA_POOL)`, [CTR-UA-28](accounts.md#CTR-UA-28)); the pools are refused as recipient. `mtxUnshieldUnwrap` to a UA pays a
+  SCaaS ledger leg through `transferToUA` (`UALegNotLedger` otherwise). The prover takes the recipient as 32 bytes; the statement layout does
+  not change. PQZ takes a `bytes32` recipient the same way.
+- **Invariant.** `totalSupply` counts `UA_POOL` and `SHIELD_POOL`, so the reserve invariant of `UNDERLYING_ZETHER` ([CTR-ZTH-44](#CTR-ZTH-44))
+  is `reserve ≥ totalSupply()`.
+- **Unchanged:** a one-call `mtxWrapShield` from a UA source (a UA wrap-shields in two signed steps, `uaWrap` then
+  `uaExecute(mtxShield)`; owner 2026-10-13); the roll-over functions; the Zether UA as the confidential account.
 
-Status **SPECIFIED** (UA-5c), except the shield bullet: `zetherShield` is on the UA allowlist of both Zether kinds
-since UA-6 Task 4 (the Zether UA shields its own public units by `uaExecute(zetherShield)`, U8). `pqzUnshield` takes a
-`bytes32` recipient from the start (P6g).
+Status: the pool, the pool fee path and the `mtxShield` UA allowlist entry are **BUILT** (plan 5h Task 3z, UA-6 Task 4); the `mtx*` rename,
+the one-function unshield to a UA and the UA-5c (a) envelope are **BUILT** (plan 5h Task 3b). PQZ takes a
+`bytes32` recipient the same way. The unshield-unwrap payout is one branch, `UnderlyingLib.payOutTo(i, recipient, wrapped, minOut)` (3b fix 1,
+on both underlying kinds): a native id ⇒ `quoteUnwrap` + `payOut`, a derived UA ⇒ `quoteUnwrapToUA` + `payOutToUA` (`UALegNotLedger` for an
+outside leg); the order is debit, pool burn of `amount · shieldScale`, beneficiary fee, then `payOutTo`.
+`Shielded.from` is `_msgSender()`: for a UA signer (`uaExecute`) it is `UA_POOL` on both layers, not the UA (the shielding UA is in the same
+transaction's `UAMetaTransactionExecuted(from, …)` and in the `UATransfer(ua, SHIELD_POOL, …)` of the pool move).
 
 <a id="CTR-ZTH-46"></a>**CTR-ZTH-46** — **The prover views live in a stateless `ZetherStatements`** (owner, T14; pairs
 with `ZetherDisclosure`). It serves `transferStatement`, `transferStatementSingle` and `unshieldStatement` (built:
 `burnStatement`) from the token's `accountState`, so the token carries no prover-only view; no admin, no upgrade, one
 stateless instance, as `ZetherDisclosure` ([CTR-ZTH-43](#CTR-ZTH-43)); it reads the curve from the token. Its output is the byte layout of [Statement](#statement-byte-layout) and
 nothing else. **Built (P3)**; every view takes `envelopeBinding` (`transferStatement` too: a multi-recipient transfer
-relays), and `unshieldUnwrapStatement` / `unwrapBinding` serve `zetherUnshieldUnwrap` (controller ruling, pending the owner).
+relays), and `unshieldUnwrapStatement` / `unwrapBinding` serve `mtxUnshieldUnwrap` (controller ruling, pending the owner).
 
 <a id="CTR-ZTH-47"></a>**CTR-ZTH-47** — **Regulated flags are refused on confidential kinds** (owner, T11). The flags
 valid on `NONE_ZETHER` / `UNDERLYING_ZETHER` are `PAYABLE`; `MINTABLE` / `BURNABLE` (`NONE_ZETHER`);
@@ -1098,7 +1154,7 @@ instances and `proofSystemId`, deploy steps, vectors and prover paths — is in 
 <a id="CTR-ZTH-20"></a>**CTR-ZTH-20** — **One canonical verifier set per curve, fixed at deployment; the creator never names a
 verifier** (owner rulings 2026-10-19 / 2026-10-20, on-chain review W-B; built in plan 5g-Z1). Before, the creator passed
 `conf.verifier` and the factory only checked code and `isSupportedOnThisChain()`, so a token from a registered implementation
-could carry a fake verifier (`true` for every proof ⇒ `zetherUnshield` drains the escrow). Now:
+could carry a fake verifier (`true` for every proof ⇒ `mtxUnshield` drains the escrow). Now:
 
 - **Verifiers, per curve** (owner 2026-10-19: split for less code per call): a **transfer verifier** (`verifyTransfer`,
   `verifyTransferMulti` and the group operations the token and `ZetherDisclosure` use), a **burn verifier** (`verifyBurn`:
@@ -1198,7 +1254,7 @@ Limits (shielded units; for a 6-decimal stablecoin kept to 2 decimals, `shieldSc
 | Actual supply cap of a token | `maxDecryptableShielded`, set by the creator at `initialize`, ≤ 2^54 | per token |
 | Maximum balance of one account | ≤ the token's supply | ≤ 2^54 |
 | **Maximum amount of ONE transfer** (`v < 2^n_v`) | `n_v` | 2^64 − 1 ⇒ in practice bounded only by the sender's balance: the whole balance in one transaction (the former 2^32 − 1 = 4,294,967,295-unit cap — $42.9 million at one unit = $0.01 — forced large payments into several transactions, whose count revealed "amount > cap") |
-| Withdrawal (`zetherUnshield`) | `0 < amount ≤ maxDecryptableShielded` | ≤ the supply |
+| Withdrawal (`mtxUnshield`) | `0 < amount ≤ maxDecryptableShielded` | ≤ the supply |
 | Confidential fee | `confidentialFee < 2^n_v` **and** `< maxDecryptableShielded` (else `BadInit`, `ZetherLib.init`) | < 2^64 and < `maxDecryptableShielded` |
 | Amount provable by disclosure | `amount < 2^n_v` | < 2^64 |
 | Node gas cap per transaction | `max_gas_per_tx`, default 3,000,000 | **below** every transfer (single, minimum gas limit: bn254 3,593,875 direct / 3,750,726 relayed, BLS12-381 4,284,877 / 4,465,468) ⇒ a chain with Zether sets ≥ 4.5 M, up to 2^24 to relay large `M` ([§19](#gas)) |
@@ -1224,7 +1280,7 @@ linearly `b = 0 … B_MAX` with `B_MAX = 4294967295` (`B_MAX = 2^32 − 1`); its
 1. A balance is ElGamal `(C, D) = (g^b·y^r, g^r)`; the owner computes only `g^b = C·D^{-x}` and must solve a discrete
    logarithm, solvable only when `b` is known to lie in a small range — `MAX` is that range (linear search, or BSGS /
    kangaroo in O(√MAX), still bounded by MAX).
-2. The contract enforces the bound by capping the **total** (`zetherShield` checks `bTransfer + bTotal <= MAX`; the original ZSC's `fund`): every balance
+2. The contract enforces the bound by capping the **total** (`mtxShield` checks `bTransfer + bTotal <= MAX`; the original ZSC's `fund`): every balance
    ≤ the total ≤ MAX, so every wallet can read its balance.
 3. It is not "the maximum per transfer"; it only coincides with the original 32-bit range proofs, and the "amount out
    of range" messages caused that misreading. Per transfer the limit is the range proof and the balance; MAX is the
@@ -1280,8 +1336,8 @@ Osaka, solc 0.8.37, chain 31337, real proofs from the prover vectors and `Zether
 the P3 kinds** for `n_v = 64`, the figures of the old `ZetherToken` are gone): **execution gas, excluding the 21,000
 intrinsic and calldata** (a bn254 transfer ≈ 3.9 KB calldata ≈ +52 k; BLS ≈ 7 KB ≈ +99 k). Verification gas does not
 depend on the value (identical for `v = 300`, `v = 2^32 + 5`, `v = 2^64 − 1`). The test that produced each figure is in
-the first column; `zetherUnshield` is on `NONE_ZETHER` (public mint, no underlying transfer); `zetherWrapShield` and
-`zetherUnshieldUnwrap` are not measured. UA-6 (U9) removed the registry authorization call and the `authSig` calldata
+the first column; `mtxUnshield` is on `NONE_ZETHER` (public mint, no underlying transfer); `mtxWrapShield` and
+`mtxUnshieldUnwrap` are not measured. UA-6 (U9) removed the registry authorization call and the `authSig` calldata
 from every spend and moved the owner ops to `requireAuthorized`; the BLS12-381 figures below are re-measured after it (UA-6 U18, 2026-10-20, `runs/2026-10-20-ua6-gas.txt`; the
 max-`M` rows of the EIP-7825 table moved: the prover's `gas_limits` follow).
 
@@ -1290,11 +1346,11 @@ max-`M` rows of the EIP-7825 table moved: the prover's `gas_limits` follow).
 | `verifyTransfer` (verifier, auditor off; `ZetherVerifier.t` `test_transferBls`) | **2,962,817** | BP 1,507 k + Σ 171 k = 1,678 k | +63 % |
 | `verifyTransfer` (auditor on; `test_transferBlsAuditor`) | **3,004,284** | +27.5 k | matches (+28 k / +43 k) |
 | `verifyBurn` (`test_burnBls`) | **1,457,771** | ~1.27 M | +6 % |
-| `zetherTransferSingle` / `zetherTransfer` (multi) | see tables (a) and (b) below | earlier single-recipient figures: 3.29 M / 3.92 M (direct, auditor, inner fee) | superseded by (a) |
-| `zetherUnshield` (`ZetherNone.t` `test_lifecycleShieldTransferRollOverUnshield`) | **1,568,179** | ~1.27 M | +13 % |
-| `zetherShield` (first credit / warm; `test_shieldAndRollOverGas`) | 214,130 / 34,021 | — | UA-3 (`kindOf`); before 159,788 / 25,384 and 215,748 / 33,639; UA-6 −2.4 k / −0.4 k |
-| `zetherRollOver` (work / no-op; `test_shieldAndRollOverGas`) | 166,822 / 2,922 | ~66 k execution | unchanged |
-| `zetherRollOverSigned` (Schnorr; `test_ownerOnlyRollOver`) | **207,962** | ~31 k | UA-3: the registry's verifier call and `Y` from SSTORE2 (before 135,768 / 199,750) |
+| `mtxConfidentialTransferSingle` / `mtxConfidentialTransfer` (multi) | see tables (a) and (b) below | earlier single-recipient figures: 3.29 M / 3.92 M (direct, auditor, inner fee) | superseded by (a) |
+| `mtxUnshield` (`ZetherNone.t` `test_lifecycleShieldTransferRollOverUnshield`) | **1,568,179** | ~1.27 M | +13 % |
+| `mtxShield` (first credit / warm; `test_shieldAndRollOverGas`) | 214,130 / 34,021 | — | UA-3 (`kindOf`); before 159,788 / 25,384 and 215,748 / 33,639; UA-6 −2.4 k / −0.4 k |
+| `mtxRollOver` (work / no-op; `test_shieldAndRollOverGas`) | 166,822 / 2,922 | ~66 k execution | unchanged |
+| `mtxRollOverSigned` (Schnorr; `test_ownerOnlyRollOver`) | **207,962** | ~31 k | UA-3: the registry's verifier call and `Y` from SSTORE2 (before 135,768 / 199,750) |
 | UA registry `register`, self (`UARegistryZether.t` `test_registerSelf`, cold, `--isolate`) | **251,761** | — | UA-3: the UA PoP + SSTORE2(`Y`) for `keyOf` (CTR-ZTH-50); 205,059 before the UA index and UA-6 (main 250,236) |
 | `register` SELF_SCHNORR, the backed-up registry (`legacy/ua3`, `UniversalAccountRegistry.t` `test_registerGas`) | 194,966 | ~105,750; BLS ~160 k | P3: 102,659 / 83,440; +67 k / +112 k in P3b, the key kept for `keyOf` (CTR-ZTH-50) |
 
@@ -1305,10 +1361,10 @@ max-`M` rows of the EIP-7825 table moved: the prover's `gas_limits` follow).
 | `verifyTransfer` (verifier, auditor off; `ZetherVerifier.t` `test_transferBn254` / `Bls`) | **2,738,357** |
 | `verifyTransfer` (auditor on; `test_transferBn254Auditor` / `BlsAuditor`) | **2,766,616** |
 | `verifyBurn` (`test_burnBn254` / `Bls`) | **1,349,144** |
-| `zetherUnshield` (`ZetherNone.t` `test_lifecycleShieldTransferRollOverUnshield`) | **1,439,816** |
-| `zetherShield` (first credit / warm; `test_shieldAndRollOverGas`) | 160,332 / 25,928 |
-| `zetherRollOver` (work / no-op; `test_shieldAndRollOverGas`) | 115,783 / 3,093 |
-| `zetherRollOverSigned` (Schnorr; `test_ownerOnlyRollOver`) | **144,588** |
+| `mtxUnshield` (`ZetherNone.t` `test_lifecycleShieldTransferRollOverUnshield`) | **1,439,816** |
+| `mtxShield` (first credit / warm; `test_shieldAndRollOverGas`) | 160,332 / 25,928 |
+| `mtxRollOver` (work / no-op; `test_shieldAndRollOverGas`) | 115,783 / 3,093 |
+| `mtxRollOverSigned` (Schnorr; `test_ownerOnlyRollOver`) | **144,588** |
 | UA registry `register`, self (`UARegistryZether.t` `test_registerSelf`, cold, `--isolate`) | **165,126** |
 | `register` SELF_SCHNORR, the backed-up registry (`legacy/ua3`, `UniversalAccountRegistry.t` `test_registerGas`) | 169,802 |
 
@@ -1316,7 +1372,7 @@ max-`M` rows of the EIP-7825 table moved: the prover's `gas_limits` follow).
 
 `n_v` 32 → 64 (measured 2026-10-05) adds exactly one inner-product round and 64 pairs `G_i`/`H_i` to the BP-2 MSM of Bulletproof #1:
 ≈ +538 k (bn254) / +519 k (BLS) execution gas, ≈ +20 %/+15 % on a single-recipient transfer. The relayed form adds ≈ +85 k (bn254, `ZetherRelay.t` `test_relayedTransferSingle_outerFeeFromPublicBalance_innerFeeToBeneficiary`) to a direct transfer. Burn is unchanged (BP#2 only).
-A few hundred gas of drift on `register`/`zetherRollOverSigned` is bytecode/memory layout, not logic. Why the numbers differ
+A few hundred gas of drift on `register`/`mtxRollOverSigned` is bytecode/memory layout, not logic. Why the numbers differ
 from earlier estimates, so nobody "fixes" the wrong thing:
 
 - **bn254 verify +63 % over the estimate:** the estimate assumed one `n_v = 32` BP and 6,550 gas per MSM point; now
@@ -1340,13 +1396,13 @@ without the 21,000 intrinsic and calldata, each cell from a fresh state (every r
 first credit), inner fee to a beneficiary, one real recipient and `M − 1` decoys at 0, real proofs (test prover
 `ZetherProver.sol`). **on** = auditor on; **out** = the same auditor-on token, the sender leaves the auditor out
 ([CTR-ZTH-42](#CTR-ZTH-42): every `C_aud = O`, statement `Y_a = O`). Calldata = the ABI-encoded call in bytes (same for
-on and out). Compact = `zetherTransferCompact` (and `zetherTransfer` on a COMPACT token), BUNDLE = `zetherTransfer` on a
-BUNDLE token, NONE = `zetherTransferNoBundle`.
+on and out). Compact = `mtxConfidentialTransferCompact` (and `mtxConfidentialTransfer` on a COMPACT token), BUNDLE = `mtxConfidentialTransfer` on a
+BUNDLE token, NONE = `mtxConfidentialTransferNoBundle`.
 
 | Curve | Entry | Aud. | M = 1 | M = 2 | M = 4 | M = 8 | Calldata (M = 1 / 2 / 4 / 8) |
 |---|---|---|---|---|---|---|---|
-| BLS12-381 | `zetherTransferSingle` | on | 3,962,306 | — | — | — | 6,916 |
-| BLS12-381 | `zetherTransferSingle` | out | 3,841,474 | — | — | — | 6,916 |
+| BLS12-381 | `mtxConfidentialTransferSingle` | on | 3,962,306 | — | — | — | 6,916 |
+| BLS12-381 | `mtxConfidentialTransferSingle` | out | 3,841,474 | — | — | — | 6,916 |
 | BLS12-381 | Compact | on | 3,673,079 | 5,437,135 | 8,925,099 | **15,942,363** | 7,012 / 10,212 / 16,644 / 29,476 |
 | BLS12-381 | Compact | out | 3,632,840 | 5,355,647 | 8,760,589 | 15,609,732 | same |
 | BLS12-381 | BUNDLE | on | 3,976,535 | 6,046,855 | 10,191,643 | **18,499,048** | 6,948 / 10,116 / 16,452 / 29,124 |
@@ -1358,8 +1414,8 @@ BUNDLE token, NONE = `zetherTransferNoBundle`.
 
 | Curve | Entry | Aud. | M = 1 | M = 2 | M = 4 | M = 8 | Calldata (M = 1 / 2 / 4 / 8) |
 |---|---|---|---|---|---|---|---|
-| bn254 | `zetherTransferSingle` | on | 3,352,792 | — | — | — | 3,908 |
-| bn254 | `zetherTransferSingle` | out | 3,284,946 | — | — | — | 3,908 |
+| bn254 | `mtxConfidentialTransferSingle` | on | 3,352,792 | — | — | — | 3,908 |
+| bn254 | `mtxConfidentialTransferSingle` | out | 3,284,946 | — | — | — | 3,908 |
 | bn254 | Compact | on | 3,239,635 | 4,809,467 | 7,916,175 | 14,198,340 | 4,004 / 5,732 / 9,220 / 16,164 |
 | bn254 | Compact | out | 3,212,449 | 4,754,406 | 7,804,810 | 13,972,187 | same |
 | bn254 | BUNDLE | on | 3,368,038 | 5,068,803 | 8,481,710 | 15,353,653 | 3,940 / 5,636 / 9,028 / 15,812 |
@@ -1484,8 +1540,8 @@ Regenerate with `zether-cli vectors vectors` (prover) and `kat.py` (py_ecc ≥ 8
 <a id="required-tests"></a>
 <a id="CTR-ZTH-22"></a>**CTR-ZTH-22** — **Mandatory tests for the load-bearing invariants:** (a) an invariant/fuzz
 handler (using `test/zether/helpers/ZetherProver.sol`) over random shield/transfer/rollOver/unshield/wrap/unwrap sequences:
-Σ of the `acc` + `pending` exponents = `totalShielded ≤ maxDecryptableShielded`, escrow `held ≥ totalSupply +
-totalShielded·shieldScale` ([CTR-ZTH-18](#CTR-ZTH-18)); (b) BLS points outside the subgroup placed in the
+Σ of the `acc` + `pending` exponents = `totalShielded ≤ maxDecryptableShielded`, `balanceOf(SHIELD_POOL) == totalShielded·shieldScale`, escrow `held ≥ totalSupply()`
+(the pool is part of `totalSupply()`, plan 5h; [CTR-ZTH-18](#CTR-ZTH-18)); (b) BLS points outside the subgroup placed in the
 statement/proof (`C_out`, `D_out`, `A_*`, `L_j`) ⇒ `verifyTransfer` false/revert (the implicit subgroup check through
 MSM); (c) `D_out = O` is refused (`ZetherVerifier.sol`). **Built (P3):** (a) `ZetherInvariant.t`, (b) and (c) `ZetherVerifier.t`.
 
@@ -1493,17 +1549,18 @@ MSM); (c) `D_out = O` is refused (`ZetherVerifier.sol`). **Built (P3):** (a) `Ze
 
 ```solidity
 interface IZetherToken is IERC20MetaTx {  // target; built (P3): standalone, the ops both kinds share (wrap-shield / unshield-unwrap on UnderlyingZetherToken)
+    // plan 5h Task 3b: every proof-taking function below takes the shared arguments (payload, proof, bytes auth /* empty */, bytes32 beneficiary,
+    // bytes accHint /* empty */[, trailing]) of CTR-ZTH-45 (mtxUnshield: ..., uint256 amount, bytes32 recipient); the sketch keeps the pre-5h argument lists
     struct AccountState { bytes accC; bytes accD; bytes pendingC; bytes pendingD; uint64 accSeq; uint64 pendingSeq;
                           uint64 sendCounter; uint64 modeNonce; ZetherTypes.RollOverMode mode; }
-    event ZetherShielded(ZetherTypes.UA indexed account, uint256 amount);
-    event ZetherTransfer(ZetherTypes.UA indexed from, ZetherTypes.UA indexed to, ZetherTypes.UA indexed beneficiary,
-                               uint256 fee, uint256 sendCounter, bytes32 entryRef);          // single format
-    event ZetherTransferMulti(ZetherTypes.UA indexed from, ZetherTypes.UA indexed beneficiary, uint256 fee,
-                                    uint256 sendCounter, bytes32 entryRef, ZetherTypes.UA[] recipients,
-                                    ZetherTypes.TransferMode mode);
+    event Shielded(bytes32 indexed toUA, address indexed from, uint256 amount, uint64 index);   // shared name, index = pendingSeq
+    event ConfidentialTransfer(bytes32 indexed entryRef, bytes32 indexed fromUA, bytes32 indexed toUA, bytes32 beneficiary,
+                               uint256 fee, uint64 sendCounter, address blob);               // single format; blob = 0 on Zether
+    event ConfidentialTransferMulti(bytes32 indexed entryRef, bytes32 indexed fromUA, bytes32 indexed beneficiary, uint256 fee,
+                                    uint64 sendCounter, bytes32[] recipients, uint8 mode, address blob);  // mode = TransferMode
     event TransferBundles(bytes32 indexed entryRef, bytes bundles);                          // commit-reveal (HASH)
-    event ZetherUnshielded(ZetherTypes.UA indexed account, uint256 amount, address indexed recipient);
-    event RolledOver(ZetherTypes.UA indexed account, uint256 accSeq);
+    event Unshielded(bytes32 indexed ua, uint256 amount, bytes32 indexed recipient, address blob);   // shared name; recipient a native id or a UA; blob = 0 on Zether
+    event RolledOver(bytes32 indexed ua, uint64 rolled, uint32 accUnits, bytes32 accHash);   // shared name; Zether: rolled = accSeq
     event RollOverModeChanged(ZetherTypes.UA indexed account, ZetherTypes.RollOverMode mode);
 
     function maxDecryptableShielded() external view returns (uint256);   // ≤ 2^54
@@ -1518,25 +1575,25 @@ interface IZetherToken is IERC20MetaTx {  // target; built (P3): standalone, the
     function accountState(ZetherTypes.UA account) external view returns (AccountState memory);
     function sendCounter(ZetherTypes.UA account) external view returns (uint256);
 
-    function zetherRollOver(ZetherTypes.UA account) external;
-    function zetherRollOverBatch(ZetherTypes.UA[] calldata accounts) external;
-    function zetherRollOverSigned(ZetherTypes.UA account, uint64 expectedPendingSeq, uint64 validUntilBlock, bytes calldata sig) external;
-    function zetherSetRollOverMode(ZetherTypes.UA account, ZetherTypes.RollOverMode mode, uint64 validUntilBlock, bytes calldata sig) external;
+    function mtxRollOver(bytes32 ua, uint256 n) external;   // shared; any n >= 1 rolls the one aggregated pending
+    function mtxRollOverBatch(ZetherTypes.UA[] calldata accounts) external;
+    function mtxRollOverSigned(ZetherTypes.UA account, uint64 expectedPendingSeq, uint64 validUntilBlock, bytes calldata sig) external;
+    function mtxSetRollOverMode(ZetherTypes.UA account, ZetherTypes.RollOverMode mode, uint64 validUntilBlock, bytes calldata sig) external;
 
-    function zetherShield(bytes calldata ua, uint256 amount) external;   // burns amount·shieldScale public units (CTR-ZTH-35)
+    function mtxShield(bytes32 toUA, uint256 amount) external;   // moves amount·shieldScale public units to SHIELD_POOL (CTR-ZTH-35)
     // multi-recipient (CTR-ZTH-37/38); enum TransferMode { HASH, BUNDLE, NONE }
-    function zetherTransfer(bytes calldata payload, bytes calldata proof,
+    function mtxConfidentialTransfer(bytes calldata payload, bytes calldata proof,
                                   ZetherTypes.UA beneficiary) external returns (bytes32 entryRef);          // BUNDLE token: R; COMPACT: commit-reveal
-    function zetherTransferCompact(bytes calldata payload, bytes calldata proof,
+    function mtxConfidentialTransferCompact(bytes calldata payload, bytes calldata proof,
                                         ZetherTypes.UA beneficiary) external returns (bytes32 entryRef);    // commit-reveal
-    function zetherTransferNoBundle(bytes calldata payload, bytes calldata proof,
+    function mtxConfidentialTransferNoBundle(bytes calldata payload, bytes calldata proof,
                                           ZetherTypes.UA beneficiary) external returns (bytes32 entryRef);  // NONE; BUNDLE tokens only
-    function zetherTransferSingle(bytes calldata payload, bytes calldata proof,
+    function mtxConfidentialTransferSingle(bytes calldata payload, bytes calldata proof,
                                         ZetherTypes.UA beneficiary) external returns (bytes32 entryRef);    // one recipient
-    function zetherUnshield(bytes calldata payload, bytes calldata proof,
+    function mtxUnshield(bytes calldata payload, bytes calldata proof,
                   ZetherTypes.UA beneficiary, address to, uint256 amount) external;
-    function zetherWrapShield(address u, uint256 amountIn, ZetherTypes.UA ua) external payable;   // UNDERLYING_ZETHER; payable for a native leg
-    function zetherUnshieldUnwrap(bytes calldata payload, bytes calldata proof,
+    function mtxWrapShield(address u, uint256 amountIn, ZetherTypes.UA ua) external payable;   // UNDERLYING_ZETHER; payable for a native leg
+    function mtxUnshieldUnwrap(bytes calldata payload, bytes calldata proof,
                   ZetherTypes.UA beneficiary, address u, address recipient, uint256 amount, uint256 minOut) external;
     // wrap / unwrap / mtxWrap and the legs are the UnderlyingLib surface of UNDERLYING_ZETHER (CTR-TOK-24), not repeated here
     function chainUid() external view returns (bytes32);
@@ -1570,8 +1627,8 @@ interface ITransferDisclosure {          // implemented by the stateless ZetherD
 }
 ```
 
-Compared with earlier drafts: the direct `zetherTransfer` (multi-recipient, [CTR-ZTH-37](#CTR-ZTH-37)) has 4 parameters and no outer fee (the outer fee lives
-only in the envelope); the built names are listed in [CTR-ZTH-45](#CTR-ZTH-45); `zetherUnshield` carries `recipient`, `beneficiary`; registration lives in the registry, not the
+Compared with earlier drafts: the direct `mtxConfidentialTransfer` (multi-recipient, [CTR-ZTH-37](#CTR-ZTH-37)) has 4 parameters and no outer fee (the outer fee lives
+only in the envelope); the built names are listed in [CTR-ZTH-45](#CTR-ZTH-45); `mtxUnshield` carries `recipient`, `beneficiary`; registration lives in the registry, not the
 token (no `Registered` event); `RolledOver` carries `accSeq` (no epoch). `IZetherVerifierCommon`: `proofSystemId`,
 `proofSystemIdMulti`, `curveName`, `g1EncodedBytes`, `groupOrder`, `isSupportedOnThisChain`, `generators`;
 `IZetherVerifier` (transfer verifier) adds `verifyTransfer`, `verifyTransferMulti` and the point ops;

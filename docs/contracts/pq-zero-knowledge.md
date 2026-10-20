@@ -2,9 +2,11 @@
 
 **Name (owner 2026-10-15):** PQZ stands for **Post-Quantum Zero-knowledge**: a post-quantum zero-knowledge proof engine (two proof systems, PQZL on lattices and PQZH on hashes, behind one precompile). Its first application is the confidential token specified here, which follows the Zether model (encrypted balances and amounts, visible identities); "PQ Zether" was the historical name. The proof system is not a general-purpose ZK system: each operation has its own fixed relation. This file will be renamed `pq-zero-knowledge.md` together with the pqz-core layout move.
 
-Status: **SPECIFIED, UNAUDITED — NOT FOR PRODUCTION FUNDS**; nothing of PQZ is deployed; the proof engine (`pqz-core`,
+Status: **SPECIFIED, UNAUDITED — NOT FOR PRODUCTION FUNDS**; nothing of PQZ is deployed on a public chain; the proof engine (`pqz-core`,
 both proof systems), the precompile boundary `pqz-ffi` and the frozen vectors are built (P6d, P6e; byte layouts in
-[serialization v1](#serialization)), the contracts, node integration and clients are not (classical Zether is BUILT on
+[serialization v1](#serialization)), and the token contracts are built on the test chains, including the state redesign of plan 5h
+part A (ciphertexts in state, unbounded ordered queue, proof-free shield, `SHIELD_POOL`, `mtx*` names; today's parameters, §7);
+the 16k parameters and their one `proofSystemId` bump (part B), node integration and clients are not (classical Zether is BUILT on
 dev chains, [zether.md](zether.md)). Every size, proof length and gas figure below marked *estimate* is replaced by
 measurement before the parameters freeze. Notation: `R = Z[X]/(X^64 + 1)`, `R_q = R/qR`; `s`, `r`, `e` are vectors in
 `R^32` (2048 integer coefficients); `a^T b` for vectors in `R_q^32` is `Σ_j a_j·b_j ∈ R_q`; `x[i]` is coefficient `i`
@@ -27,7 +29,7 @@ big-endian; everything else as in [zether.md](zether.md) (`‖`, `be32`, `u8`, A
 7. [Protocol](#7-protocol)
    - 7.1 [State (per `(UA, token)`)](#71-state-per-ua-token)
    - 7.2 [Register (the UA registry)](#72-register-the-ua-registry)
-   - 7.3 [Fund](#73-fund)
+   - 7.3 [Shield](#73-shield)
    - 7.4 [Transfer](#transfer)
    - 7.5 [Burn and refresh](#75-burn-and-refresh)
    - 7.6 [Rollover](#76-rollover)
@@ -66,7 +68,7 @@ module-lattice assumptions:
 | Authorization | the key is the UA; its spends need the proof alone (the legacy registry's 8 `AuthScheme`s are in `legacy/ua3/`) | the PQ signing UA that carries the PQZ key: `mldsa65` (default), `mldsa44`, `fndsa512` or a PQ-dominant `msig` (hybrid, t-of-n), signing `authDigest` through `requireAuthorized` ([CTR-PQZ-12](#CTR-PQZ-12)) |
 | Relaying | ERC-20 on the one base `ERC20MetaTx`: allowlisted self-calls through `mtxExecute`, outer fee `NONE`/`FIXED` from the public balance, `envelopeBinding` in the statement ([CTR-ZTH-34](zether.md#CTR-ZTH-34); built: `ZetherMetaTx` with `OP_ZTRANSFER`/`OP_ZBURN`) | the same base, self-call and rules ([CTR-PQZ-15](#CTR-PQZ-15), [CTR-PQZ-21](#CTR-PQZ-21)), plus the UA path's `UAMetaTransaction` so a PQ UA pays the outer fee |
 | Decryption | BSGS discrete log, device cache, `zether-read-balance` | direct rounding, microseconds, exact; no BSGS, no cache needed ([CTR-PQZ-16](#CTR-PQZ-16)) |
-| State | points in storage | ciphertext **hashes** in storage, bytes in calldata + events; public amounts (`pqzShield`, fees) as a public `plainPending` integer; public keys in SSTORE2 ([CTR-PQZ-07](#CTR-PQZ-07), [CTR-PQZ-06](#CTR-PQZ-06)) |
+| State | points in storage | every ciphertext in contract state (one SSTORE2 op blob per debit, one slot per pending entry, a materialised `acc`), an unbounded ordered pending queue; public amounts (`mtxShield`) as TRIVIAL queue entries, value held in `SHIELD_POOL`; public keys in SSTORE2 ([CTR-PQZ-07](#CTR-PQZ-07), [CTR-PQZ-06](#CTR-PQZ-06)) |
 | Chains | dev allowlist 31337/1337 | allowlist 31337/1337/**7622** **and** a constructor self-test through the precompile **and** the registry's `chain_uid` in every statement ([CTR-PQZ-01](#CTR-PQZ-01), [NET-ALL-22](../networks/README.md#NET-ALL-22)) |
 
 **Cost.** Ciphertext 16,512 B, public key 16,384 B, transfer proof 42,762 B in PQZL and ≈ 231 KB in PQZH (the
@@ -74,8 +76,9 @@ frozen vectors, [sizes](#44-sizes)). A PQZL transfer is ≈ 77 KB of
 calldata and ≈ **2.8 M gas** while the p99 verify time stays under ≈ 11 ms (the EIP-7623 calldata floor binds,
 [gas](#gas)), rising to ≈ 7.5 M at the former 50 ms kill threshold (the limit is 60 ms since 2026-10-14; gas is
 recalibrated in P6f) — the same order as classical Zether's measured 3.29–3.36 M.
-Consuming each received credit later costs ≈ 0.52 M gas more (its ciphertext enters calldata once more,
-[rollover](#rollover-op)). Security of the encryption: primal-uSVP block size β ≈ 476 (core-SVP 139 classical / 126
+Since plan 5h the ciphertexts are in contract state, so a debit carries no `acc` or `inline` calldata and a received credit is
+rolled in by a permissionless `mtxRollOver(ua, n)` at ≈ 36 k gas per entry ([rollover](#rollover-op); contract-side gas of
+every operation in [gas](#gas-state), numbers measured on the built token). Security of the encryption: primal-uSVP block size β ≈ 476 (core-SVP 139 classical / 126
 quantum; Kyber-512 is 406 → 118 / 107 under the same script, [parameters](#parameters)).
 
 **What it protects.** Amounts and balances stay confidential against a future quantum adversary (no
@@ -265,6 +268,13 @@ module form matches the LNP22 proof ring.
 
 ### <a id="parameters"></a>4.1 Parameters
 
+> **Decided, not built (plan 5h part B).** The owner ruled (2026-10-20, CTR-PQZ-06 Change) `K_MAX = 16,384` with n = 2560 (k = 40),
+> Δ = ⌊q / 2^20⌋ and, after owner question Q1, **q = 2^50 − 42,310,535** (prime, q ≡ 9 mod 16, q − 1 = 2^3·19·43·431·5659·70627, so
+> PQZH's Ligero domains exist; the first ruled q = 2^50 − 71 has none), Δ = 2^30 − 41, under **one** new `proofSystemId` that
+> also carries the B-1 transcript fix, A-2 and the `R_REG` message bound to the UA id ([CTR-PQZ-09](#CTR-PQZ-09)). Part A (the
+> state redesign, §7) is built on the parameters below; part B regenerates every relation and constant. Derivation, security
+> and size tables: spec [`2026-10-20-pqz-state-redesign.md`](../superpowers/specs/2026-10-20-pqz-state-redesign.md) §6.
+
 <a id="parameters"></a>
 <a id="CTR-PQZ-03"></a>**CTR-PQZ-03** — **Parameters**: `d = 64`, `k = 32`, `q = 2^42 − 215` (prime, `q ≡ 9 mod 16`, so
 `X^64 + 1` splits into `l = 4` irreducible factors), `Δ = 2^26 − 1 = ⌊q/2^16⌋`, secrets and encryption randomness
@@ -349,7 +359,7 @@ Enc({(pk_j, m_j)}, seed_enc):
                          output u and (v_j)_j
 Add(ct, ct'):            coefficient-wise mod q on u (2048) and v (16)
 Sub(ct, ct'):            coefficient-wise mod q
-Trivial(m):              u = 0, v[i] = Δ·m[i]                      (built only inside a debit's T, from plainUsed)
+Trivial(m):              u = 0, v[i] = Δ·m[i]                      (built only inside a debit's T, from shieldIn; a shield's TRIVIAL entry is the same form)
 Dec(s, (u, v)):          w_i = centre(v[i] − (u^T·s)[i] mod q)  ∈ (−q/2, q/2]
                          M_i = round(w_i / Δ),  noise_i = w_i − Δ·M_i
                          value = Σ_{i<16} M_i · 16^i    (as an integer; M_i may exceed 15 before a refresh)
@@ -632,63 +642,116 @@ with the kind tag in `info` instead of a `kindNo'` level, because PQ seeds are n
 
 ### 7.1 State (per `(UA, token)`)
 
+State layout of plan 5h (spec [`2026-10-20-pqz-state-redesign.md`](../superpowers/specs/2026-10-20-pqz-state-redesign.md) §5.1,
+built in `src/pqz/PqzCore.sol`, ERC-7201 namespace `scaas.pqz`, decisions D1–D9, D18, D24 in [decisions.md](../decisions.md)).
+All ciphertext bytes an account needs are in contract state; logs and calldata are a convenience
+([CTR-PQZ-07](#CTR-PQZ-07)).
+
 | Slot | Type | Changed by | Role |
 |---|---|---|---|
-| `accHash` | bytes32 | debit, rollover | `keccak256(acc)`; `acc` of a new account = `Trivial(0)` |
-| `accUnits` | uint16 | debit (→ 1 + over-rolled), rollover (+n) | ciphertexts summed into `acc` |
-| `pendingCount` | uint64 | every proven credit (+1) | |
-| `rolled` | uint64 | rollover, debit | pending indexes `< rolled` are inside `acc` |
-| `floor` | uint64 | debit (→ `p`) | pending indexes `< floor` were consumed by the last debit; a debit needs `floor ≤ p` |
-| `cleared` | uint64 | debit | `pendingHash[i]` for `i < cleared` is deleted (`cleared ≤ floor`) |
-| `pendingHash[i]` | bytes32 | proven credit `i`; deleted below `floor` | `ctHash` of credit `i` |
-| `plainPending` | uint256 | `pqzShield` (+amount), fee credit (+fee), debit (−`plainUsed`) | public amounts not yet in `acc` |
+| `pendingCount` | uint64 | every credit and every appended shield entry (+1) | length of the ordered queue; **unbounded** |
+| `rolled` | uint64 | rollover (+n′), debit (→ `p`) | entries `< rolled` are inside `acc` |
+| `floor` | uint64 | debit (→ `p`), rollover (raised together with `cleared`) | entries `< floor` were consumed by the last debit; a debit needs `floor ≤ p` |
+| `cleared` | uint64 | debit, rollover | pending slots `< cleared` are deleted (`cleared ≤ floor ≤ rolled ≤ pendingCount`) |
+| `pending[i]` | one slot: `blob(160) ‖ uOff(16) ‖ vOff(16) ‖ block(64)` | credit, shield; deleted below `rolled − INLINE_MAX` | where the credit's `u` and `v_j` sit inside the op blob (byte offsets) and the block it was made in; **TRIVIAL entry** (a shield): `blob = 0`, `vOff = 0`, the amount in the low 64 bits of the blob field |
+| `acc` | `accBlob(160)`, the offsets of `u_0` and `v_f` in it, `accUnits` (uint32), `flags` | debit (→ a reference to the debit's blob, `accUnits = 1`), rollover (→ materialised) | the account's encrypted balance; flags `1` MATERIALISED, `2` / `4` the two prepared halves of `accWords` |
+| `accWords[516]` | 516 words | `mtxPrepareAcc` (placeholder), rollover (the sum) | the materialised `acc`; overwritten in place, never zeroed |
+| `accHash` | bytes32 | rollover | `keccak256` of the materialised `acc`; the check of the optional calldata hint, meaningful only while `flags & 1` |
 | `sendCounter` | uint64 | debit (+1) | in the statement; replay protection; [CTR-PQZ-19](#CTR-PQZ-19) |
-| `entry[entryRef]` | bytes32 + memo, or an SSTORE2 pointer | transfer | `bundleHash` and memo, or the bundle ([CTR-PQZ-23](#CTR-PQZ-23)) |
+| `entryPtr[entryRef]`, `memos[entryRef]` | address, bytes | transfer | the **op blob** of the transfer (both storage modes) and, on commit-reveal, the sender memo ([CTR-PQZ-23](#CTR-PQZ-23)) |
+
+An account that never debited has `acc = Trivial(0)` (no blob, `accUnits = 0`). The op blob is one SSTORE2 per debit,
+written once and never deleted: a transfer's `R ‖ v_f` with `R = salt ‖ u_0 … u_{G−1} ‖ (v_j ‖ [v_{a,j}] ‖ UA_j)_{j<M}`
+exactly as [CTR-PQZ-23](#CTR-PQZ-23) / [CTR-PQZ-26](#CTR-PQZ-26), a burn's or refresh's `u′ ‖ v_f`. Credits and `acc` point
+into it, so a ciphertext is stored once however many legs share it ([CTR-PQZ-04](#CTR-PQZ-04)).
+
+Removed against the earlier layout: `pendingHash[i]`, `plainPending` ([CTR-PQZ-06](#CTR-PQZ-06)), the W-E base
+(`baseHash`, `baseRolled`, `baseUnits`; [CTR-PQZ-08](#CTR-PQZ-08)), the `entry` hash map (the blob is the entry).
 
 The slots above, as a flow:
 
 ```mermaid
 flowchart LR
-    SH["pqzShield:<br/>plainPending += amount"] --> PL["plainPending<br/>(public integer)"]
-    CR["proven transfer credit:<br/>pendingCount++"] --> PD["pending[i]<br/>(pendingHash)"]
-    PD -->|"pqzRollOver, anyone:<br/>acc += cts, rolled += n"| ACC["acc<br/>(accHash)"]
-    ACC -->|"debit proves over T =<br/>acc + Σ inline + plain term"| DEB["fresh encryption of b'"]
-    PL -->|"plainUsed ≤ plainPending"| DEB
-    DEB -->|"new acc, floor = p,<br/>sendCounter++"| ACC
+    TX["debit (transfer, multi, burn, refresh)"] -->|"one SSTORE2"| BLOB["op blob<br/>u_g, v_j, v_f"]
+    TX -->|"one slot per leg"| PEND["pending[ua][i]<br/>(blob, uOff, vOff, block)"]
+    SH["mtxShield (no proof, any account)"] -->|"TRIVIAL entry (amount, block),<br/>merged within one block"| PEND
+    TX -->|"acc = reference, rolled = floor = p"| ACC0["acc (fresh)<br/>→ (blob, u_0, v_f)"]
+    PEND -->|"mtxRollOver(ua, n): strict order,<br/>age ≥ ROLL_AGE, stops at K_MAX − 1"| ACCM["acc (materialised)<br/>516 words + accHash"]
+    ACC0 --> ACCM
+    ACCM -->|"T = acc ± Σ pending[window)<br/>+ Trivial(shieldIn), read from state"| TX
 ```
 
-Credit cap: a proven credit reverts `RefreshRequired(ua)` when `accUnits + (pendingCount − rolled) + 1 + 1 > K_MAX` (the
-new credit and the reserved plain term). `pqzShield` and fee credits never hit the cap. Token globals: `underlying`,
-`shieldScale`, `maxShielded ≤ 2^62`, `totalShielded`, `confidentialFee`, `auditorUA` (or 0), `registry`,
-`proofSystemId`, `chainUid`. Public ledgers ([CTR-PQZ-15](#CTR-PQZ-15)): the ERC-20 balances (`wrap`/`unwrap` 1:1 in raw
-underlying units, as `ZetherToken`), the UA ledger `_uaBalance[bytes32]` with `_uaTotal` shown as `balanceOf(UA_POOL)`
-([CTR-UA-18](accounts.md#CTR-UA-18)), and one nonce map `_uaNonce[bytes32][batch]`. Escrow invariant, checked
-after every outflow as classical: `underlying.balanceOf(this) ≥ totalSupply() + totalShielded·shieldScale`
-(`totalSupply` includes `_uaTotal`).
+Cap: `K_MAX = 1024` units (today's parameters; 16,384 under the 16k parameters of part B) bounds only `acc`: a rollover never
+takes `acc` above `K_MAX − 1` units, and every debit checks `unitsOf(T) = accUnits + (p − rolled) + 1 ≤ K_MAX`
+(a TRIVIAL entry counts one unit, like a credit; the `+ 1` is the `shieldIn` term). Credits and shields are never refused
+([CTR-PQZ-06](#CTR-PQZ-06)). Token globals: `underlying`, `shieldScale`, `maxShielded ≤ 2^62`, `totalShielded`,
+`confidentialFee` (the `txFee`), `minDecoyFee`, `auditorUA` (or 0), `registry`, `proofSystemId`, `chainUid`.
+Public ledgers ([CTR-PQZ-15](#CTR-PQZ-15)): the ERC-20 balances (`wrap`/`unwrap` 1:1 in raw underlying units, as
+`ZetherToken`), the UA ledger `_uaBalance[bytes32]` with `_uaTotal` shown as `balanceOf(UA_POOL)`
+([CTR-UA-18](accounts.md#CTR-UA-18)), and one nonce map `_uaNonce[bytes32][batch]`. **Pool invariant**, tested on the
+built token: `balanceOf(SHIELD_POOL) == totalShielded · shieldScale`, `totalSupply()` moves only with wraps and
+unwraps, `Σ balanceOf == totalSupply`, escrow `underlying.balanceOf(this) ≥ totalSupply()` (the pool is part of
+`totalSupply`).
 
 <a id="credit-cap"></a>
-<a id="CTR-PQZ-06"></a>**CTR-PQZ-06** — **Credit cap and public amounts.** Public amounts never become ciphertexts: `pqzShield`
-and fee credits add to a public `plainPending[ua]` (uint), and a debit consumes a declared `plainUsed ≤ plainPending` as
-**one** trivial term of `T`. Only proven transfer credits take pending slots. Each account's live unit count
-`accUnits + (pendingCount − rolled) + 1` (the `+ 1` reserves the plain term) is ≤ `K_MAX = 1024`; a credit beyond it
-reverts `RefreshRequired(ua)`. Every debit also asserts `unitsOf(T) ≤ K_MAX`. `REFRESH` = a burn of amount 0 (no
-underlying moves) and resets `accUnits` to 1; it frees the cap only once the unrolled credits are rolled to within
-`INLINE_MAX` of `pendingCount`. This keeps the worst-case bounds. Counting `pqzShield` and fee dust as 16 KB pending entries
-would let `pqzShield(victim, 1)` × 4096 (≈ 0.33 G gas) lock a victim whose recovery cost ≈ 0.83 G, and a relayer's fee UA
-would fill by design. Filling a victim now takes proven transfers at ≈ 2.8 M each (≈ 2.9 G for 1022), and recovery
-costs ≈ 0.57 G, ≈ 5× less (threat T7). Gas on chain 7622 is free, so rate limiting still rests on permissioned
-submitters and node policy.
+<a id="CTR-PQZ-06"></a>**CTR-PQZ-06** — **No credit is refused: an unbounded ordered queue, a capped `acc`, public amounts as
+TRIVIAL entries, two fees.** (Owner rulings 2026-10-19 and 2026-10-20, plan 5h; built in part A on today's parameters.)
+
+- **Credits.** An op 1 or op 7 credit appends one pending slot (≈ 26 k gas, ≈ 46 k for an account's first) and never reverts
+  for the receiver's state: `RefreshRequired` and every cap check on a credit are gone, `pendingCount` is unbounded.
+- **Strict order.** Every way an entry leaves the queue is a prefix: a rollover takes `[rolled, rolled + n′)`, a debit takes
+  `[rolled, p)` inline. No operation can name, drop or skip one entry, so the set a debit absorbs is "all indexes below the
+  cut", independent of values; a zero-amount decoy is absorbed exactly like a real credit, and nobody watching a recipient
+  learns which ring members of past transfers were decoys. Clients prove at `p = pendingCount` or the largest `p` the
+  inline window allows, never at a value-dependent cut.
+- **Cap on `acc`.** A rollover takes `n′ = min(n, K_MAX − 1 − accUnits)` entries and reverts `CapReached(ua)` when
+  `n′ = 0`; a debit re-encrypts the balance fresh and resets `accUnits` to 1, so a refresh (a burn of 0, [§7.5](#75-burn-and-refresh))
+  frees a full account, which can always refresh with `p = rolled`. Head-of-line: a real credit behind `x` decoys becomes
+  spendable after `⌈x / ROLL_MAX⌉` rollovers (`ROLL_MAX = 256`: 10,000 queued decoys take 40 rollovers, run by keepers,
+  the owner or a relayer).
+- **Public amounts never become ciphertexts.** `mtxShield` appends (or merges into) a **TRIVIAL entry** of the receiver's
+  queue ([§7.3](#73-shield)); a TRIVIAL entry is the ciphertext `u = 0, v = Δ·digits(amount)`: one `K_MAX` unit, zero noise,
+  added as its own `Trivial(digits(amount))` wherever it is summed (rollover, inline window, un-roll). Folding a run of
+  entries as one normalised term is rejected: `Trivial(digits(a)) + Trivial(digits(b)) ≠ Trivial(digits(a + b))` as ring
+  elements, so an un-roll could no longer subtract part of a run exactly. A per-account integer accumulator outside the
+  queue (`plainPending`, removed) is rejected for the same reason: a rollover between prove and submit would make the
+  contract's `T` differ from the proof's. `shieldIn` (formerly `plainUsed`) is the same-call top-up: public units moved from
+  the signer into `SHIELD_POOL` and added as one `Trivial(digits(shieldIn))` term of `T`; the relation is unchanged.
+- **Fees (owner 2026-10-20), both paid out of `SHIELD_POOL` to public UA-ledger balances.** `txFee` = `confidentialFee`,
+  per transaction on any op that names a beneficiary, to that beneficiary. `decoyFee`, op 7 only: an explicit
+  sender-chosen payload word `d ≥ minDecoyFee`, the same `d` to **every** leg (the real recipient included, so it reveals
+  no decoy); the statement's `fee` word is `txFee + M·d`, so the proof binds `d`. `minDecoyFee` is immutable at
+  `initialize`, may be 0, has no chain floor (`ConfidentialConfig.multiLegFee` is renamed `minDecoyFee`; the Zether
+  kinds take the same rule on their multi-recipient format, [zether.md §7](zether.md#CTR-ZTH-37)). `d < minDecoyFee` or `d ≥ 2^64` reverts `DecoyFeeOutOfRange(d, min)`. Op 1 never pays a decoy fee
+  and **shields are free** (gas only; a tx fee only when relayed). A fee needs a registered beneficiary with a UA-ledger
+  balance. This replaces the earlier per-credit fee and its chain floor.
+- **Flood economics.** A decoy or shield costs its sender the op blob share and one slot and costs the receiver side one
+  rollover share (≈ 36 k gas; a TRIVIAL entry less) paid by keepers or the owner; filling a queue no longer locks the
+  account (it costs delay and rollover work), and the recipient is paid `d` per decoy leg. Gas on chain 7622 is free, so
+  permissioned submitters and node rate limits ([T7](#threats)) stay the control for a flood.
 
 <a id="calldata-storage"></a>
-<a id="CTR-PQZ-07"></a>**CTR-PQZ-07** — **Ciphertexts live in calldata and events, hashes in storage.** `acc` and each
-pending credit are stored as `keccak256(ct)`; operations that need them take the bytes in calldata and the contract
-checks the hash. Public keys (PQZ and ML-DSA) are written once with SSTORE2 and read with `EXTCODECOPY`. Storage of a
-16 KB ciphertext costs 2.6–8.8 M gas per write; calldata 0.52 M; SSTORE2 reads ≈ 10 k. Indexers rebuild state from
-events.
+<a id="CTR-PQZ-07"></a>**CTR-PQZ-07** — **Ciphertexts live in contract state; logs carry pointers.** (Owner 2026-10-19, built in
+plan 5h part A.) The account can debit, roll over, decrypt and disclose from state alone, so history expiry (EIP-4444) cannot
+strand funds. Layout: one SSTORE2 op blob per debit (200 gas per code byte, ≈ 3.4 M for an op 1 blob; 16,816 B with the
+auditor, 35,216 B for op 7 M = 8 with the auditor; the test chains allow 64 KiB of code, so mainnet 22776 must keep
+`maxCodeSize ≥ 64 KiB` or split op 7 blobs per group); one slot per pending entry; `acc` a reference to the last debit's
+blob until a rollover materialises it in 516 words. A debit **reads** `acc` and its inline window from state
+(`EXTCODECOPY` ≈ 4 k gas per 16 KB; a cold materialised `acc` is 516 SLOADs ≈ 1.1 M gas), so the debit entry points have no
+`acc` / `inline` argument; an optional calldata `accHint` (the materialised `acc`) replaces the SLOADs when
+`keccak256(hint) == accHash` and the MATERIALISED flag is set, and is ignored otherwise (a stale hint never reverts).
+Public keys (PQZ and ML-DSA) are written once with SSTORE2. Wallets restore from state alone (views of [§7.8](#78-events-and-indexing));
+indexers follow events for "what changed" and read bytes from state. Contract code is split into four DELEGATECALL libraries in
+the same namespace (D14): `PqzStateLib` (init, shield, rollover, prepare), `PqzTransferLib` (op 1, op 7), `PqzBurnLib`
+(burn, refresh, unwrap debit), `PqzViewLib` (statement views, disclosure), over the internal `PqzCore` (types, constants,
+the shared steps); the libraries return what the debit moved (`PqzCore.Paid`) and the token pays exactly that. Each library
+is below 24,576 B and both tokens fit the hard 65,536 B limit (UnderlyingPqzToken 60,907 B, NoUnderlyingPqzToken 48,412 B at
+the 5h Task 3 fix; the earlier 4 KiB margin target was dropped by the owner, the size ratchet still applies).
 
 <a id="limits"></a>
 <a id="CTR-PQZ-17"></a>**CTR-PQZ-17** — **Limits.** `MAX_TOTAL_SHIELDED = 2^62`; transfer and burn amounts `< 2^64` (16
-base-16 digits); `confidentialFee < 2^64`; `plainPending ≤ maxShielded` (it is part of `totalShielded`); `shieldScale`
+base-16 digits); `confidentialFee < 2^64`, `d < 2^64` and `confidentialFee + 8·minDecoyFee < 2^64` and `< maxShielded` at
+`initialize` (`BadInit`); `totalShielded ≤ maxShielded` (it equals `balanceOf(SHIELD_POOL) / shieldScale`); `shieldScale`
 as classical ([CTR-ZTH-04](zether.md#CTR-ZTH-04)). No BSGS bound any more; 2^62 keeps `b' + v + fee < 2^64` for honest
 states and values in signed 64-bit for clients. The classical 2^54 rationale (the BSGS decryption bound,
 [CTR-ZTH-26](zether.md#CTR-ZTH-26)) does not carry over.
@@ -724,66 +787,86 @@ in the id; a new signing key is a new UA).
 
 No rotation ([CTR-UA-13](accounts.md#CTR-UA-13)): a new key is a new UA plus a confidential transfer to it.
 
-### 7.3 Fund
+### 7.3 Shield
 
-`pqzShield(bytes32 ua, uint256 amount)`: `ua` registered with a PQZ key, `0 < amount`, `totalShielded + amount ≤ maxShielded`;
-`plainPending[ua] += amount`; `amount·shieldScale` **public units of the caller are burned** (the signer's ERC-20
-balance, or its `_uaBalance` on the v3 path), exactly as `zetherShield`; `totalShielded += amount`; emit
-`PqzPlainCredit(ua, amount, plainPending[ua])`. No ciphertext, no pending slot, no cap check, no proof, no later
-rollover. On `UNDERLYING_PQZ`, `pqzWrapShield(u, amountIn, ua)` takes a leg's underlying straight into `plainPending`
-(nothing minted). BUILT (P6g plan D1): an earlier text pulled the underlying with `transferFrom`; in the token tree the
-public ERC-20 balance is the layer below the confidential one, so a direct call and an envelope op both burn public
-units.
+`mtxShield(bytes32 toUA, uint256 amount)` (anyone, into **any** registered account with a PQZ key, no proof, free):
+`0 < amount`, `totalShielded + amount ≤ maxShielded`; `amount·shieldScale` public units of the caller move to
+`SHIELD_POOL` (the signer's ERC-20 balance, or its `_uaBalance` under a derived-UA signer; no burn); `totalShielded +=
+amount`; then the **TRIVIAL entry** `(amount, block.number)` is appended to `pending[toUA]`, or merged into the tail entry
+when the tail is TRIVIAL, was made in the same block and is still pending (index `≥ max(floor, rolled)`: never into an
+entry a debit of the same block already spent); emit `Shielded(toUA, from, amount, index)`. A merge costs ≈ 52 k gas,
+an append ≈ 74 k, an account's first entry ≈ 88 k (Task 3 measurement). No ciphertext, no proof, no cap check, never
+refused ([CTR-PQZ-06](#CTR-PQZ-06)).
+
+- **No loss.** The entry is rolled like any other (`ROLL_AGE`, strict order, the clamp) and an un-roll (`p < rolled`) makes
+  it pending again with its amount intact.
+- **No grief.** A debit proven on the state of an earlier block has a window `[.., p)` of entries that already existed; a
+  merge only touches an entry created in the current block, whose index is `≥ p`, and an append lands after `p`. So no
+  shield can change an entry inside a debit's window, and `ROLL_AGE` keeps new entries from being rolled past `p`.
+  Residual (documented and tested, `test_trivial_sameBlockResidual`): a debit whose window includes an entry of its own
+  block (its submitter predicted that entry, e.g. a shield and a debit bundled in one block) can be made to revert
+  `ProofRejected` by a merge before it; wallets use the same-call `shieldIn` top-up for "shield and spend now".
+- **Spendable** after `ROLL_AGE` and a rollover (anyone's), at once in the owner's own debit with `p` past it (the inline
+  window), or in the same call as a debit's `shieldIn` top-up from the signer's public balance.
+- **Wrap-shield.** On `UNDERLYING_PQZ`, `mtxWrapShield(address underlying, uint256 amountIn, bytes32 toUA)` takes a leg's
+  underlying, mints `minted` public units **to `SHIELD_POOL`** (`minted % shieldScale ≠ 0` ⇒ `AmountNotScaled`) and
+  writes the same TRIVIAL entry. BUILT (P6g plan D1): an earlier text pulled the underlying with `transferFrom`; in the
+  token tree the public ERC-20 balance is the layer below the confidential one, so a direct call and an envelope op both
+  move public units.
+- **The four flows** (research `shield-and-key-reuse.md` §3 (cited in [decisions.md](../decisions.md))): public → public (UA ledger /
+  ERC-20), public → anyone's confidential (`mtxShield`), confidential → anyone's public (`mtxUnshield` with a recipient), confidential →
+  confidential (`R_TX`, `R_TXM`).
 
 ### <a id="transfer"></a>7.4 Transfer
 
 <a id="transfer"></a>
 
 Caller: anyone, directly (`envelopeBinding` = the direct mode binding, [CTR-PQZ-25](#CTR-PQZ-25)) or as an envelope op ([CTR-PQZ-15](#CTR-PQZ-15); the outer-fee balance
-check then runs before everything below). Inputs: `payload = be32(p) ‖ be32(validUntilBlock) ‖ be32(plainUsed) ‖
-fromUA ‖ toUA ‖ beneficiaryUA ‖ salt(16) ‖ out` (a commit-reveal payload appends `memo`) (`out = u ‖ v_t ‖ v_f ‖ v_a`), `acc` (current, 16,512 B), `inline` (ciphertexts
-between `p` and `rolled`), `proof`, `authSig`.
+check then runs before everything below). Entry points (the shared signature of the `mtx*` interface,
+[CTR-ZTH-45](zether.md#CTR-ZTH-45)): `mtxConfidentialTransferSingle(bytes payload, bytes proof, bytes auth, bytes32 beneficiary,
+bytes accHint)` and `…SingleCompact` (op 1), `mtxConfidentialTransfer` / `…Compact` (op 7, [§7.4.1](#multi-transfer)). `auth` is
+the signing UA's signature over `authDigest` (formerly `authSig`); `beneficiary` must equal the payload's beneficiary or the call reverts;
+`accHint` is the optional materialised `acc` ([CTR-PQZ-07](#CTR-PQZ-07)). There is no `acc` and no `inline` argument:
+both are read from state. `payload = be32(p) ‖ be32(validUntilBlock) ‖ be32(shieldIn) ‖ fromUA ‖ toUA ‖ beneficiaryUA ‖
+salt(16) ‖ out` (a commit-reveal payload appends `memo`; `out = u ‖ v_t ‖ v_f ‖ v_a`).
 
-Contract checks, cheap first: `block.number ≤ validUntilBlock`; both UAs registered with a PQZ key (`AccountNotRegistered`), `from ≠ to`; beneficiary
-registered or 0; `plainUsed ≤ plainPending[from]`; `acc.length == 16,512` and `keccak256(acc) == accHash[from]`, or
-`== baseHash[from]` and then `rolled`, `accUnits` below are `baseRolled`, `baseUnits` ([CTR-PQZ-08](#CTR-PQZ-08));
-`floor ≤ p ≤ pendingCount`; with `n = (p ≥ rolled ? p − rolled : rolled − p)` and `lo = min(p, rolled)`:
-`n ≤ INLINE_MAX` (`InlineTooFar`), **`inline.length == n` exactly**, and for every `i < n` `inline[i].length == 16,512`
-and `keccak256(inline[i]) == pendingHash[lo + i]` (`InlineMismatch`: too few entries would let `floor` advance past
-credits missing from `T`, burning them; extras would make `T` and `unitsOf(T)` diverge from state); receiver cap check
-(the fee goes to `plainPending`, so `beneficiary == toUA` needs no extra slot); every coefficient `< q`. Then
+Contract checks, cheap first: `block.number ≤ validUntilBlock`; both UAs registered with a PQZ key (`AccountNotRegistered`),
+`from ≠ to`; beneficiary registered or 0; `u` not all zero (`ZeroU`, Codex T2 CHAIN-01: such a credit would leave `acc`
+unchanged while `rolled` advances); `floor ≤ p ≤ pendingCount` (`PendingRange`); with `n = |p − rolled|`: `n ≤ INLINE_MAX`
+(`InlineTooFar`); the signer's public balance covers `shieldIn·shieldScale`; every coefficient `< q`. There is **no receiver
+cap check** (the receiver's queue is unbounded). Then `T` is built from state:
 
 ```
-T = acc + Σ inline + Trivial(digits(plainUsed))     if p ≥ rolled   (inline = pending[rolled..p))
-T = acc − Σ inline + Trivial(digits(plainUsed))     if p < rolled   (inline = pending[p..rolled))
-unitsOf(T) = accUnits + (p − rolled) + 1            (signed; p < rolled subtracts)
-require unitsOf(T) ≤ K_MAX                          (defence in depth; unreachable if the credit cap holds)
+acc  = the materialised words (or the hint, if flags & MAT and keccak256(hint) == accHash),
+       else the debit-blob reference (u_0, v_f), else Trivial(0) for a new account
+T = acc + Σ window + Trivial(digits(shieldIn))    if p ≥ rolled   (window = pending[rolled..p))
+T = acc − Σ window + Trivial(digits(shieldIn))    if p < rolled   (window = pending[p..rolled))
+window entries: a credit's u ‖ v from its blob; a TRIVIAL entry as Trivial(digits(amount))
+unitsOf(T) = accUnits + (p − rolled) + 1          (signed; p < rolled subtracts); require ≤ K_MAX (UnitsInvariant)
 ```
 
-The plain term is added even when `plainUsed = 0`; `+ 1` counts it either way. `plainPending` is safe against races
-because third parties can only increase it. Clients set `plainUsed = plainPending` at prove time. The contract then
-builds the statement ([statement](#statement)), verifies `authSig` ([authorization check](#authorization-check)), calls
-`PQZ(OP_TRANSFER, statement ‖ proof)`, then:
+The `shieldIn` term is added even when `shieldIn = 0`; `+ 1` counts it either way. A debit takes **young** entries inline
+(`ROLL_AGE` binds rollovers only). The contract then builds the statement ([statement](#statement)), verifies `auth`
+([authorization check](#authorization-check)), calls `PQZ(OP_TRANSFER, statement ‖ proof)`, then:
 
 ```text
-acc[from]    = (u, v_f);  accHash[from] = ctHash(u ‖ v_f)
-               if p < rolled:  acc[from] += Σ inline  (those credits stay inside acc);  accUnits = 1 + (rolled − p)
-               else:           rolled[from] = p;  accUnits = 1
-               floor[from] = p;  (baseHash, baseRolled, baseUnits)[from] = (accHash, rolled, accUnits)
-               delete pendingHash[from][cleared .. min(p, cleared + CLEAR_MAX)); cleared = that end   (CLEAR_MAX = 32)
-plainPending[from] −= plainUsed
-pending[to]  ← (u, v_t)                                       (pendingHash, pendingCount++)
-plainPending[ben] += fee                 if fee > 0   (event PqzPlainCredit)
-entry[entryRef] = keccak256(R) ‖ memo, R or nothing   (by entry, CTR-PQZ-23)
+op blob      = SSTORE2(R ‖ v_f)                        (one write; R = salt ‖ u ‖ v_t ‖ [v_a] ‖ toUA)
+acc[from]    = reference (blob, u_0, v_f);  accUnits = 1;  flags &= ~MAT
+               rolled = floor = p                      (p < rolled un-rolls [p, rolled): those entries are pending again)
+               delete pending[cleared .. p); cleared = p    (≤ 2·INLINE_MAX slots)
 sendCounter[from]++
-emit PqzTransfer(entryRef, fromUA, toUA, out);  emit PqzCredit(toUA, index, entryRef)
+pending[to]  ← (blob, uOff of u, vOff of v_t, block.number)      (pendingCount++)
+entryPtr[entryRef] = blob                (both storage modes); memos[entryRef] = memo   (commit-reveal)
+totalShielded  = totalShielded + shieldIn − fee − amount     (checked; amount = 0 for a transfer)
 ```
 
-Deleting dead `pendingHash` slots is nearly free on floor-bound transactions (the refund comes off execution gas, which
-sits under the floor) and keeps state from growing by 32 B per credit forever. Slots `< floor` are never read again: a
-later debit needs `p' ≥ floor`, and rollover reads indexes `≥ rolled ≥ floor`.
+and the token pays, from `SHIELD_POOL`, exactly what the library debited (`PqzCore.Paid`): `shieldIn` units from the signer
+into the pool, the `txFee` to the beneficiary's public balance (and op 7's `decoyFee` to each leg, [CTR-PQZ-25](#CTR-PQZ-25)); and
+emits `Debited(from, rolled, floor, blob)`, `ConfidentialTransfer(entryRef, fromUA, toUA, beneficiary, fee, sendCounter, blob)` and `Credited(toUA, index, entryRef)`. After a debit the stored `accHash` is stale and the MAT flag is clear; the hint path checks the flag first.
+Deleting dead pending slots is nearly free on floor-bound transactions (the refund comes off execution gas) and keeps state
+from growing by 32 B per credit forever; slots `< floor` are never read again.
 
-`fee = confidentialFee` if `beneficiary ≠ 0`, else 0 (never a function of `v`). `entryRef =
+`txFee = confidentialFee` if `beneficiary ≠ 0`, else 0 (never a function of `v`). `entryRef =
 keccak256(abi.encode(keccak256("SCAAS-PQZ-ENTRY-V1"), chainid, chainUid, token, fromUA, sendCounter))` (counter before
 increment; `chainUid` per [CTR-PQZ-01](#CTR-PQZ-01)).
 
@@ -814,10 +897,10 @@ classical `C_deb` disappears. The proof carries a decryption relation, which the
 in another form.
 
 <a id="derived-randomness"></a>
-<a id="CTR-PQZ-19"></a>**CTR-PQZ-19** — **Encryption randomness is derived from the seed and a published salt**, so the sender can re-create it for disclosure (owner 2026-10-11: the classical salt rule, [CTR-ZTH-30](zether.md#CTR-ZTH-30), applies to PQZ): `seed_enc = HKDF-SHA256(ikm = pqzKeySeed, salt = "SCAAS-PQZ-ENC-V2" (controller ruling, pending the owner), info = chainUid ‖ token(20) ‖ fromUA ‖ be32(sendCounter) ‖ salt)`, with `salt` = 16 fresh random bytes per build, carried in the payload and the statement header, hence in `PqzTransfer`, the stored bundle, the commitment and the no-bundle calldata; the contract does not check it. A fresh salt per build means a re-proof at the same counter never reuses `r` (reusing `r` across two messages leaks `Δ·(m − m')` up to small noise), and the sender remembers no amount. Masking randomness *inside* the proof is hedged (`H(secret ‖ statement ‖ 32 B CSPRNG)`), as implemented (P6e D6): PQZL seeds the commitment randomness from `SHAKE128("SCAAS-PQZ-PROVER-RND-V2" ‖ rnd32 ‖ wh ‖ hash0)[0..32)` and every mask from the same with `"SCAAS-PQZ-PROVER-SUB-V2"`, `wh = SHAKE128("SCAAS-PQZ-PROVER-WIT-V2" ‖ wit)[0..32)`, `hash0` the statement digest ([transcript](#transcript)); PQZH draws all prover randomness from `SHAKE256("SCAAS-PQZH-LIGERO-RNG-V2" ‖ rnd32 ‖ u8(op) ‖ be32(len(stmt)) ‖ stmt ‖ wit)` (`wit` the prover-API witness bytes, [serialization v1](#serialization)); a repeated `rnd32` with another witness or statement gives unrelated masks, equal inputs give equal proofs. **Burn and refresh are outside this derivation** (owner 2026-10-13): their encryption randomness `r, e1, e2_f` is fresh CSPRNG output (hedging it with `pqzKeySeed` is allowed), never `seed_enc` or any other value fixed by the counter. Their header salt is 0 ([statement](#statement)), so a counter-derived seed would give two burns or refreshes built at one `sendCounter` for different balances `b' ≠ b''` (a re-proof after `InlineTooFar`, another `plainUsed`) the same `r` and `e2_f`, and `v_f − v_f'` would be `Δ·(b' − b'')` exactly. No disclosure re-derives them: the burned amount is public and `v_f` is the sender's own balance. Replaces the message-bound form (`info = be32(chainId) ‖ token ‖ fromUA ‖ be8(sendCounter) ‖ toUA ‖ be8(v) ‖ be8(b') ‖ u8(auditorOn)`, never built). **Op 7 groups** (P6-ANON D13): group 0 uses `seed_enc`; group `g ≥ 1` uses `seed_enc_g = SHAKE256("SCAAS-PQZ-ENC-GROUP-V1" ‖ seed_enc ‖ be4(g))[0..32)`; inside a group `Enc` draws `r_g, e1_g`, then `e2` for the group's legs, then (group 0) `e2_f`, then the group's auditor copies.
+<a id="CTR-PQZ-19"></a>**CTR-PQZ-19** — **Encryption randomness is derived from the seed and a published salt**, so the sender can re-create it for disclosure (owner 2026-10-11: the classical salt rule, [CTR-ZTH-30](zether.md#CTR-ZTH-30), applies to PQZ): `seed_enc = HKDF-SHA256(ikm = pqzKeySeed, salt = "SCAAS-PQZ-ENC-V2" (controller ruling, pending the owner), info = chainUid ‖ token(20) ‖ fromUA ‖ be32(sendCounter) ‖ salt)`, with `salt` = 16 fresh random bytes per build, carried in the payload and the statement header, hence in `ConfidentialTransfer`, the stored bundle, the commitment and the no-bundle calldata; the contract does not check it. A fresh salt per build means a re-proof at the same counter never reuses `r` (reusing `r` across two messages leaks `Δ·(m − m')` up to small noise), and the sender remembers no amount. Masking randomness *inside* the proof is hedged (`H(secret ‖ statement ‖ 32 B CSPRNG)`), as implemented (P6e D6): PQZL seeds the commitment randomness from `SHAKE128("SCAAS-PQZ-PROVER-RND-V2" ‖ rnd32 ‖ wh ‖ hash0)[0..32)` and every mask from the same with `"SCAAS-PQZ-PROVER-SUB-V2"`, `wh = SHAKE128("SCAAS-PQZ-PROVER-WIT-V2" ‖ wit)[0..32)`, `hash0` the statement digest ([transcript](#transcript)); PQZH draws all prover randomness from `SHAKE256("SCAAS-PQZH-LIGERO-RNG-V2" ‖ rnd32 ‖ u8(op) ‖ be32(len(stmt)) ‖ stmt ‖ wit)` (`wit` the prover-API witness bytes, [serialization v1](#serialization)); a repeated `rnd32` with another witness or statement gives unrelated masks, equal inputs give equal proofs. **Burn and refresh are outside this derivation** (owner 2026-10-13): their encryption randomness `r, e1, e2_f` is fresh CSPRNG output (hedging it with `pqzKeySeed` is allowed), never `seed_enc` or any other value fixed by the counter. Their header salt is 0 ([statement](#statement)), so a counter-derived seed would give two burns or refreshes built at one `sendCounter` for different balances `b' ≠ b''` (a re-proof after `InlineTooFar`, another `shieldIn`) the same `r` and `e2_f`, and `v_f − v_f'` would be `Δ·(b' − b'')` exactly. No disclosure re-derives them: the burned amount is public and `v_f` is the sender's own balance. Replaces the message-bound form (`info = be32(chainId) ‖ token ‖ fromUA ‖ be8(sendCounter) ‖ toUA ‖ be8(v) ‖ be8(b') ‖ u8(auditorOn)`, never built). **Op 7 groups** (P6-ANON D13): group 0 uses `seed_enc`; group `g ≥ 1` uses `seed_enc_g = SHAKE256("SCAAS-PQZ-ENC-GROUP-V1" ‖ seed_enc ‖ be4(g))[0..32)`; inside a group `Enc` draws `r_g, e1_g`, then `e2` for the group's legs, then (group 0) `e2_f`, then the group's auditor copies.
 
 <a id="pqz-storage-modes"></a>
-<a id="CTR-PQZ-23"></a>**CTR-PQZ-23** — **Storage modes and the sender memo as classical** (owner, 2026-10-11; spec only): `disclosureMode ∈ {BUNDLE, COMPACT}` at `initialize`, immutable ([CTR-ZTH-48](zether.md#CTR-ZTH-48)). The bundle is `R = salt ‖ u ‖ v_t ‖ v_a ‖ toUA` (16,688 B with the auditor, 16,560 B without). Entries as [CTR-ZTH-38](zether.md#CTR-ZTH-38), the plain name being the mode's default: `pqzTransfer` stores `R` with SSTORE2 on a BUNDLE token (≈ 3.4 M gas at 200 gas per code byte, **estimate**, against ≈ 0.52 M of calldata) and is commit-reveal on a COMPACT token; `pqzTransferCompact` is commit-reveal on both (`entry[entryRef] = keccak256(R)` plus the sender memo); `pqzTransferNoBundle` stores nothing and reverts `TransferEntryDisabled` on a COMPACT token. Salt and memo travel inside `payload`. The memo is [CTR-ZTH-50](zether.md#CTR-ZTH-50) with `pqzKeySeed` and `info = "PQZ/memo/v1" ‖ chainUid ‖ token(20) ‖ fromUA ‖ be32(sendCounter) ‖ salt`: `memo = salt ‖ ((flags ‖ be8(v) ‖ toUA) XOR ks)` (`flags` bit0 = `auditorOn`; `ks` of 41 B), 57 B for the one recipient (owner 2026-10-13: `be32` counter, as classical Zether — it only enters the off-chain HKDF, so it costs nothing; `be8` amount, because amounts are `< 2^64` by the plaintext encoding and a wider field would only add calldata) (labels `"PQZ/memo/v1"`, `"SCAAS-PQZ-ENC-V2"`: controller ruling, pending the owner), `memoHash` in the statement header. The sender recovers from storage alone: `sendCounter` → `entryRef` → memo → `seed_enc` → `r, e1, e2_t, e2_a` → `u ‖ v_t ‖ v_a` with `pk_t` from the registry → the hash check → a `SENDER_S` proof. Receiver and auditor read `R` from storage (full record) or from `PqzTransfer` logs / calldata.
+<a id="CTR-PQZ-23"></a>**CTR-PQZ-23** — **Storage modes and the sender memo** (owner, 2026-10-11; built in plan 5h part A): `disclosureMode ∈ {BUNDLE, COMPACT}` at `initialize`, immutable ([CTR-ZTH-48](zether.md#CTR-ZTH-48)). The bundle is `R = salt ‖ u ‖ v_t ‖ v_a ‖ toUA` (16,688 B with the auditor, 16,560 B without). **Every transfer stores its op blob `R ‖ v_f`** (one SSTORE2, [CTR-PQZ-07](#CTR-PQZ-07)); the mode decides only what else the entry holds. `entryPtr[entryRef]` = the op blob in both modes. `mtxConfidentialTransfer*` is the token's default mode: on a BUNDLE token `entryRef` resolves to `R` (the blob minus its trailing 128 B of `v_f`, `transferEntry(entryRef) = R`); on a COMPACT token it is commit-reveal and the entry is `keccak256(R) ‖ memo` (HASH). `…Compact` is commit-reveal on both. `transferCiphertextHash(entryRef) = keccak256(R)` is read from the blob. **The NONE mode is retired on PQZ** (owner 2026-10-20, O5): `…NoBundle` (op 1 and op 7) and `TransferEntryDisabled`-on-NONE are gone, since the blob is written for the credits anyway and NONE saved nothing; Zether keeps `mtxConfidentialTransferNoBundle`. Salt and memo travel inside `payload`. The memo is [CTR-ZTH-50](zether.md#CTR-ZTH-50) with `pqzKeySeed` and `info = "PQZ/memo/v1" ‖ chainUid ‖ token(20) ‖ fromUA ‖ be32(sendCounter) ‖ salt`: `memo = salt ‖ ((flags ‖ be8(v) ‖ toUA) XOR ks)` (`flags` bit0 = `auditorOn`; `ks` of 41 B), 57 B for the one recipient (owner 2026-10-13: `be32` counter, as classical Zether — it only enters the off-chain HKDF, so it costs nothing; `be8` amount, because amounts are `< 2^64` by the plaintext encoding and a wider field would only add calldata) (labels `"PQZ/memo/v1"`, `"SCAAS-PQZ-ENC-V2"`: controller ruling, pending the owner), `memoHash` in the statement header. The sender recovers from storage alone: `sendCounter` → `entryRef` → memo → `seed_enc` → `r, e1, e2_t, e2_a` → `u ‖ v_t ‖ v_a` with `pk_t` from the registry → the hash check → a `SENDER_S` proof. Receiver and auditor read `R` from the blob (`pqzEntryBlob`). Disclosure reads `R` from the blob, so `disclosureStatement(entryRef, leg, amount, kind)` has no bundle argument and `verifyTransferAmount(entryRef, leg, amount, kind, proof)` takes the proof alone as the opening (the W-I canonical-opening check is moot: nothing is decoded).
 
 <a id="pqz-auditor-mode"></a>
 <a id="CTR-PQZ-24"></a>**CTR-PQZ-24** — **Auditor modes as classical** (owner, 2026-10-11; spec only): `auditorMode ∈ {NONE, FULL, OPTIONAL}` at `initialize`, immutable ([CTR-ZTH-49](zether.md#CTR-ZTH-49)), with `auditorUA`. NONE: `auditorUA = 0`, `auditorOn = 0` and no `v_a`. FULL: `auditorOn = 1` on every transfer, else `AuditorRequired`; the auditor reads every transfer from creation and can rebuild balances by bookkeeping. OPTIONAL: the sender's per-transfer choice, publicly visible as `auditorOn = 0` (no `v_a`), statement row 5 skipped. The auditor-off transfer is its own relation `R_TX0` (P6e D8): `R_TX` without `pk_a`, `v_a`, `e2_a`, every other row and norm kept; op 1 with a 66,560-byte statement, and the `auditorOn` word must be what the length says (1 for 83,072 B, 0 for 66,560 B; [serialization v1](#serialization)). The factory refuses FULL or OPTIONAL without `auditorUA`, NONE with one and unknown values (`BadAuditorMode`).
@@ -827,30 +910,34 @@ in another form.
 Plan: [P6-ANON](../superpowers/plans/2026-10-14-p6-anon.md) (decisions D1–D21 in [decisions.md](../decisions.md)); the
 classical design it mirrors: [zether.md CTR-ZTH-37](zether.md#CTR-ZTH-37) (Z1–Z13). Built: PQZL and PQZH relations,
 `pqz-stmt`, `pqz-ffi`, vectors, fuzzing, the package (P6-ANON S1–S6); live in the `PQZ` precompile on chain 7622 since
-2026-10-17 (S8); the token entry points below are built (P6g op 7, 2026-10-17: `PqzLib.transferMulti`, forge tests
+2026-10-17 (S8); the token entry points below are built (P6g op 7, 2026-10-17: `PqzTransferLib.transferMulti`, forge tests
 `test/pqz/PqzMulti.t.sol`, e2e on chain 7622).
 
 <a id="CTR-PQZ-25"></a>**CTR-PQZ-25** — **Two transfer paths, no switch** (owner 2026-10-14; classical Z7 / Z8). Every
-PQZ token offers both: the **multi-recipient transfer** `pqzTransfer` / `pqzTransferCompact` / `pqzTransferNoBundle`
+PQZ token offers both: the **multi-recipient transfer** `mtxConfidentialTransfer` / `mtxConfidentialTransferCompact`
 — always op 7 `R_TXM`, `M ≥ 1` legs, `M` in the built set of the token's `proofSystemId` (PQZL {1, 2, 4, 8}, PQZH
-{1, 2, 4}; else `BadRecipientCount`) — and the **single-recipient transfer** `pqzTransferSingle` /
-`pqzTransferSingleCompact` / `pqzTransferSingleNoBundle`, today's op 1 `R_TX` / `R_TX0` path of §7.4 renamed, payload,
+{1, 2, 4}; else `BadRecipientCount`) — and the **single-recipient transfer** `mtxConfidentialTransferSingle` /
+`mtxConfidentialTransferSingleCompact`, today's op 1 `R_TX` / `R_TX0` path of §7.4, payload,
 statement, proof and storage unchanged. `M` counts legs, real and decoy: a decoy is a leg of amount 0 (an `Enc(0)`
 credit), indistinguishable on chain from a real leg; 7 real recipients ⇒ `M = 8` with one decoy (owner 2026-10-16).
-Decoys are the wallet's choice (D16): no on-chain consent or decoy rule. **`multiLegFee`** (D17; owner 2026-10-17: built
-with op 7): an immutable per-token amount, default 0 (then nothing changes), set at `initialize` in
-`ConfidentialConfig.multiLegFee` (Zether kinds refuse a non-zero one); on op 7 the statement's public `fee` word is
-`confidentialFee` (with a beneficiary) `+ M · multiLegFee`, the beneficiary gets its part and every listed leg, real or
-decoy, gets `multiLegFee` in `plainPending` — the same for every leg, so it reveals nothing, and listing a victim as a
-decoy costs the sender `multiLegFee` paid to the victim (T22). `confidentialFee + 8 · multiLegFee < 2^64` and
-`< maxShielded` (`BadInit`). Op 1 never charges it. The storage mode is the user's per
+Decoys are the wallet's choice (D16): no on-chain consent or decoy rule. **`decoyFee`** (owner 2026-10-20, replacing the
+earlier `multiLegFee`): op 7 carries an explicit payload word `d` (after `M`, before the salt: `… ‖ be32(M) ‖ d ‖ salt(16) ‖ UA_0 …`);
+`d ≥ minDecoyFee` (the token's immutable `ConfidentialConfig.minDecoyFee`, default 0; the Zether kinds take it too) and `d < 2^64`, else
+`DecoyFeeOutOfRange(d, minDecoyFee)`. The statement's public `fee` word is `txFee + M·d` (`txFee = confidentialFee` with a
+beneficiary; `≥ 2^64` ⇒ `AmountOutOfRange`), so the proof binds `d`. The beneficiary gets the `txFee` part and **every**
+listed leg, real recipient included, gets `d` — the same for every leg, so it reveals nothing, and listing a victim as a
+decoy costs the sender `d` paid to the victim (T22); all of it is paid out of `SHIELD_POOL` to the public UA-ledger
+balances, from the amount the library debited. `confidentialFee + 8 · minDecoyFee < 2^64` and `< maxShielded`
+(`BadInit`). Op 1 never charges `d`. The storage mode is the user's per
 transfer through the entry they call: the contract never switches it, and nobody else can. A relayed call is bound by
-the envelope signature over `data`, selector included; a **direct call binds its mode in the statement**: its
-`envelopeBinding` is `keccak256(abi.encode(keccak256("SCAAS-PQZ-DIRECT-MODE-V1"), uint8(mode)))`, mode HASH 0 (`…Compact`,
-`pqzTransfer*` on a COMPACT token), BUNDLE 1, NONE 2 (`…NoBundle`), so the proof and `authSig` of a direct BUNDLE call
-do not verify through `…NoBundle` (no entry stored, the sender's disclosure lost) or the reverse (review W-A,
-2026-10-19; classical Zether puts the mode in `opTag`). The statement views take `binding` 0 for a direct call in the
-payload's own mode (BUNDLE, or HASH with a memo) and the NONE binding for a direct `…NoBundle`. A BUNDLE shape that exceeds the per-tx gas
+the envelope signature over `data`, selector included, **and the mode is folded into the statement binding** (plan 5h D15,
+review L1): `binding = keccak256(abi.encode(envelopeBinding, uint8(mode)))`; a **direct call** uses
+`keccak256(abi.encode(keccak256("SCAAS-PQZ-DIRECT-MODE-V1"), uint8(mode)))` with mode HASH 0 (`…Compact`,
+`mtxConfidentialTransfer*` on a COMPACT token) and BUNDLE 1 (NONE, 2, is retired). A proof built for one mode therefore does
+not verify through the other entry, relayed or direct (review W-A, 2026-10-19; classical Zether puts the mode in `opTag`). An
+unwrap's binding folds the leg and `minOut` the same way (`keccak256(abi.encode(envelopeBinding, unwrapBinding(u, minOut)))`
+relayed; direct unchanged); burns and refreshes have no mode and keep the envelope binding. The statement views take `binding` 0
+for a direct call in the payload's own mode (BUNDLE, or HASH with a memo). A BUNDLE shape that exceeds the per-tx gas
 cap simply does not fit (no early revert; the wallet estimates and offers COMPACT or a split; owner 2026-10-16). PQZH
 op 7 takes at most 10 inline credits (`INLINE_MAX_PQZH = 10`, under the node's 16 M; PQZL keeps 16; owner 2026-10-16).
 One envelope carries one PQZ op; PQZ selectors stay refused in `mtxBatch` / `uaBatch` (`MtxNotBatchable`).
@@ -878,26 +965,27 @@ with its own ABDLOP tag and the same body as op 1; only `opTag` and header words
 lengths: [serialization v1, op 7](#serialization) (`recipientsHash = keccak256(UA_0 ‖ … ‖ UA_{M−1})` at word 192, `M` at
 word 320; `(M, A)` is read from the words, the length alone is ambiguous at 83,072 B).
 
-*Entry and payload:* `pqzTransfer(payload, acc, inline, proof, authSig)` (and `…Compact`, `…NoBundle`), the same
-arguments as the single entries, with `payload = be32(p) ‖ be32(validUntilBlock) ‖ be32(plainUsed) ‖ fromUA ‖
-beneficiaryUA ‖ be32(M) ‖ salt(16) ‖ UA_0 … UA_{M−1} ‖ out ‖ [memo]` (words as 32 bytes; the plan's separate
+*Entry and payload:* `mtxConfidentialTransfer(payload, proof, auth, beneficiary, accHint)` (and `…Compact`), the same
+arguments as the single entries, with `payload = be32(p) ‖ be32(validUntilBlock) ‖ be32(shieldIn) ‖ fromUA ‖
+beneficiaryUA ‖ be32(M) ‖ be32(decoyFee) ‖ salt(16) ‖ UA_0 … UA_{M−1} ‖ out ‖ [memo]` (words as 32 bytes; the plan's separate
 `recipients` / `out` arguments folded into the payload, so both families share one ABI shape); views
-`transferStatement` (op 7) and `transferSingleStatement` (op 1). Events `PqzTransferMulti(entryRef indexed, fromUA
-indexed, recipientsHash, M, salt, out)` and `PqzCredit` per leg in leg order.
+`transferStatement` (op 7) and `transferSingleStatement` (op 1), each `(payload, binding)`. Events `ConfidentialTransferMulti(entryRef indexed, fromUA
+indexed, beneficiary indexed, fee, sendCounter, recipients, mode, blob)` and `Credited` per leg in leg order.
 
 *Contract checks, cheap first:* `M` built (`BadRecipientCount`); the length fixes `auditorOn` for that `M` (else
 `BadPayload`); recipients pairwise distinct, none = `fromUA`, all registered UAs holding a PQZ key (`DuplicateRecipient`,
-`SelfTransfer`, `AccountNotRegistered`); each recipient below its cap
-(`RefreshRequired(ua)`); then every §7.4 check on the sender (`validUntilBlock`, `acc`, `inline` with `INLINE_MAX` /
-`INLINE_MAX_PQZH`, `p`, `plainUsed`, beneficiary); `out` length `16,384·G + 128·(M + 1) + 128·M·A`; every coefficient
-`< q`. The contract builds the op 7 statement (keys by SSTORE2, `recipientsHash` from `recipients`), checks `authSig`
+`SelfTransfer`, `AccountNotRegistered`; **no recipient cap check**); `decoyFee` in range (`DecoyFeeOutOfRange`); no group's `u` all zero (`ZeroU`);
+then every §7.4 check on the sender (`validUntilBlock`, `p`, the inline window with `INLINE_MAX` /
+`INLINE_MAX_PQZH`, `shieldIn`, beneficiary); `out` length `16,384·G + 128·(M + 1) + 128·M·A`; every coefficient
+`< q`. The contract builds the op 7 statement (keys by SSTORE2, `recipientsHash` from the payload's UAs), checks `auth`
 as §7.4 and calls `PQZ(7, statement ‖ proof)`.
 
-*Effects:* the sender exactly as §7.4 (`acc ← (u_0, v_f)`, `floor`, `cleared`, `plainPending`, `sendCounter++`); per leg
-`pending[recipient_j] ← keccak256(u_{g(j)} ‖ v_j)`, `pendingCount++`; the fee once to the beneficiary; `multiLegFee` (if
-`> 0`) to every recipient's `plainPending`; the entry per storage mode; events `PqzTransferMulti(entryRef, fromUA,
-recipientsHash, M, out)` and `PqzCredit(ua indexed, index, entryRef)` per leg. Roll-over is the existing
-`pqzRollOver` (decoy credits included; keepers roll them, P6i).
+*Effects:* the sender exactly as §7.4 (`acc ←` a reference to the op blob, `rolled = floor = p`, `cleared`, `sendCounter++`);
+per leg `pending[recipient_j] ← (blob, uOff of u_{g(j)}, vOff of v_j, block)`, `pendingCount++` (one slot, no hash); the
+`txFee` once to the beneficiary and `decoyFee` to **every** leg, both from `SHIELD_POOL` to public UA-ledger balances;
+the op blob as the entry in either mode; events `Debited`, `ConfidentialTransferMulti(entryRef, fromUA,
+beneficiary, fee, sendCounter, recipients, mode, blob)` and `Credited(ua indexed, index, entryRef)` per leg. Roll-over is the existing
+`mtxRollOver` (decoy credits included; keepers roll them, P6i).
 
 *Storage and memo* (CTR-PQZ-23 with `M` legs): bundle `R = salt(16) ‖ u_0 … u_{G−1} ‖ (v_j ‖ [v_{a,j}] ‖ toUA_j)_{j<M}`
 (`16 + 16,384·G + 288·M` B with the auditor, `16 + 16,384·G + 160·M` without) — for `M = 1` exactly the single
@@ -908,66 +996,86 @@ leg from storage alone.
 *Auditor* (CTR-PQZ-24): FULL = a copy `v_{a,j}` for every leg (the auditor reads every leg, decoys included);
 OPTIONAL = the whole transfer in or out (`auditorOn` 0 / 1; per-leg mixes are unrepresentable); NONE = no copies.
 
-*Disclosure by leg* (CTR-PQZ-14): `verifyTransferAmount(entryRef, j, amount, kind, opening)` and
-`disclosureStatement(entryRef, j, amount, kind, bundle)` (a leg past `M`, or `AUDITOR` without the copies: false); `SENDER_S` re-derives
+*Disclosure by leg* (CTR-PQZ-14): `verifyTransferAmount(entryRef, j, amount, kind, proof)` and
+`disclosureStatement(entryRef, j, amount, kind)` (both read `R` from the op blob; a leg past `M`, or `AUDITOR` without the copies: false); `SENDER_S` re-derives
 `r_{g(j)}, e1_{g(j)}, e2_j` from the seeds, `RECEIVER_X` and `AUDITOR` open leg `j`, with `R_DS` / `R_DR` and the
 §7.9 statement unchanged (`(pk_j, v_j)` identifies the leg). A disclosure reveals that leg's recipient and amount,
 hence whether it was a decoy (T26). Single entries keep `j = 0`.
 
 *Decoy credits* cannot exhaust the noise budget: each leg is a proven encryption and one unit under the cap
-([CTR-PQZ-06](#CTR-PQZ-06)), so `K_MAX · 11,872 < 2^24` holds whatever the decoys. They can fill a victim's cap or bury
-real credits behind junk (T22, T23); the owner can always spend `acc` with `p = rolled`, keepers roll, and the
-amplification over zero-amount single transfers is at most `M − 1` victims per transfer (P6-ANON plan §5.2).
+([CTR-PQZ-06](#CTR-PQZ-06)), so `K_MAX · 11,872 < 2^24` holds whatever the decoys. They can no longer lock a victim (credits
+are never refused); they can bury real credits behind junk (head-of-line delay, T22, T23: `⌈x / ROLL_MAX⌉` rollovers for `x`
+decoys ahead); the owner can always spend `acc` with `p = rolled`, keepers roll, the victim is paid `decoyFee` per decoy leg,
+and the amplification over zero-amount single transfers is at most `M − 1` victims per transfer (P6-ANON plan §5.2).
 
 ### 7.5 Burn and refresh
 
-`pqzUnshield(payload, acc, inline, amount, recipient, proof, authSig)` with `payload = be32(p) ‖ be32(validUntilBlock) ‖
-be32(plainUsed) ‖ fromUA ‖ beneficiaryUA ‖ u' ‖ v_f`. `0 < amount ≤ maxShielded` (burn) or `amount = 0` and
-`recipient = 0` (`refresh`, op tag `REFRESH`). `T`, `unitsOf(T)`, `plainUsed` and every transfer check on `acc` and
-`inline` (`inline.length == n`, element lengths, index mapping `lo + i`) as for a transfer. Relation `R_BURN` = `R_TX`
-rows 1, 2, 4, 6, 7 with `d = digits(amount)` **public** (no `d` witness, no rows 3/5). Effects: `acc[from]`, `floor`,
-`cleared`, `plainPending[from]` as for a transfer; fee to `plainPending[ben]`; `totalShielded −= amount`; underlying
-`amount·shieldScale` to `recipient`; `sendCounter++`. The randomness of `u' ‖ v_f` is fresh on every build, never derived
-from the counter ([CTR-PQZ-19](#CTR-PQZ-19)).
+`mtxUnshield(bytes payload, bytes proof, bytes auth, bytes32 beneficiary, bytes accHint, uint256 amount, bytes32 recipient)` — the
+same signature as Zether's ([CTR-ZTH-45](zether.md#CTR-ZTH-45)); `beneficiary` must equal the payload's — with `payload = be32(p) ‖
+be32(validUntilBlock) ‖ be32(shieldIn) ‖ fromUA ‖ beneficiaryUA ‖ u' ‖ v_f`. `0 < amount ≤ maxShielded` (burn) or `amount = 0` and
+`recipient = 0` (`refresh`, op tag `REFRESH`; `RefreshRecipient` otherwise). `recipient` is **one `bytes32` for native and UA
+recipients** (owner ruling 2026-10-20: no separate `…ToUA` entry point): a native address is its zero-padded id (the statement
+word is unchanged), a derived UA id (non-zero top bits) must be a registered SIGNING UA and is credited on the UA ledger;
+`SHIELD_POOL` and `UA_POOL` are refused as recipient (`ShieldPoolNotPayable`, `UAPoolNotPayable`) in `prepareBurn`, so the
+statement views refuse them too. `T`, `unitsOf(T)`, `shieldIn` and every transfer check on `p`, the inline window and the
+hint ([§7.4](#transfer)) apply as for a transfer. Relation `R_BURN` = `R_TX`
+rows 1, 2, 4, 6, 7 with `d = digits(amount)` **public** (no `d` witness, no rows 3/5). Effects: op blob `u' ‖ v_f`, `acc`
+= its reference, `rolled = floor = p`, `cleared`, `sendCounter++` as for a transfer; `totalShielded = totalShielded + shieldIn −
+fee − amount` (checked); the token then moves `amount·shieldScale` public units **from `SHIELD_POOL` to `recipient`** (no mint;
+a UA recipient: pool → its ledger balance), the `txFee` from the pool to the beneficiary's public balance, and `shieldIn` into the pool. Events:
+`Debited(ua, rolled, floor, blob)` and `Unshielded(ua, amount, recipient, blob)` (`amount = 0` for a refresh). The randomness of
+`u' ‖ v_f` is fresh on every build, never derived from the counter ([CTR-PQZ-19](#CTR-PQZ-19)). On `UNDERLYING_PQZ`,
+`mtxUnshieldUnwrap` takes the same arguments plus the leg (`u`, `minOut`): it burns `amount·shieldScale` from `SHIELD_POOL` and the
+leg pays the underlying (a UA recipient: a SCaaS ledger leg through `transferToUA`, else `UALegNotLedger`); the leg and
+`minOut` are folded into the binding ([CTR-PQZ-25](#CTR-PQZ-25)).
 
 ### 7.6 Rollover
 
 <a id="rollover-op"></a>
 
-`pqzRollOver(bytes32 ua, bytes acc, bytes[] cts)`: anyone; `1 ≤ cts.length ≤ ROLL_MAX = 16`; `rolled + cts.length ≤
-pendingCount`; `acc.length == 16,512`, `keccak256(acc) == accHash`; every `cts[j].length == 16,512` and `cts[j]` matches
-`pendingHash[rolled + j]`; `acc' = acc + Σ cts` in Solidity (64-bit lanes, one `mod q` per lane at the end — 16
-additions of values `< 2^42` cannot overflow a lane); `accHash = ctHash(acc')`; `rolled += n`; `accUnits += n`; emit
-`PqzRolled(ua, rolled, accHash)` (clients recompute `acc'`). No proof, no signature: rollover cannot hurt anyone. As an
-envelope op it is the same call with an outer fee, so an owner can pay a relayer to roll. Calldata is the cost: ≈ 0.52 M
-gas per ciphertext; a relayer batches it off-peak. Only proven credits exist as pending entries, so no rollover carries
-an all-zero `u`.
+`mtxRollOver(bytes32 ua, uint256 n)` (shared with Zether, [CTR-ZTH-45](zether.md#CTR-ZTH-45); PQZ and Zether differ only in what `n`
+means): anyone; `1 ≤ n ≤ ROLL_MAX = 256` (`RollOverRange`); `AccNotPrepared(ua)` until `mtxPrepareAcc` wrote both halves of the
+account's `acc` words; `CapReached(ua)` when `accUnits ≥ K_MAX − 1`; `n′ = min(n, K_MAX − 1 − accUnits)`; `rolled + n′ ≤
+pendingCount` (`RollOverRange`, no clamp to what is pending); every rolled entry must be at least `ROLL_AGE = 5` blocks old
+(`RollTooYoung(index)`, TRIVIAL entries too). The entries `[rolled, rolled + n′)` are read **from state** (a credit's `u ‖ v`
+from its blob, a TRIVIAL entry as `Trivial(digits(amount))` with no blob read), added lane-wise to `acc` (64-bit lanes, one
+`mod q` per lane at the end: `ROLL_MAX + 16 + 1` terms of `q − 1` stay far below 2^64), and the 516 words are rewritten
+in place, each stored as `ACC_MARK | word` (bit 255; lanes are `< 2^42`), so no slot is ever zeroed — not even by a
+TRIVIAL-only first rollover, whose `u` is 0 (final review I1) — and the mark is masked off on read (`accHash` and hints are
+over the unmarked bytes); `accHash` is updated, `flags |= MAT`, `rolled += n′`, `accUnits += n′`; the pending slots below `rolled − INLINE_MAX`
+are deleted (`cleared` and, when passed, `floor` follow); emit `RolledOver(ua, rolled, accUnits, accHash)`. No calldata besides
+`(ua, n)`, no proof, no signature: rollover cannot hurt anyone. It is also an allowlisted envelope op on both paths (Task R, owner 2026-10-20, [CTR-PQZ-21](#CTR-PQZ-21)): anyone calls it
+directly or through a relayer; the relayed `ROLL_MAX` rollover measures 12,185,595 gas (under `0.75 · 2^24`). Cost (contract side, measured on the built token, `ROLL_AGE = 5`, each rollover its own
+cold transaction): ≈ 2.85 M fixed (516 word rewrites) + ≈ 36.3 k per entry: 1 → 2.85 M, 16 → 3.43 M, 128 → 7.50 M,
+**256 → 12.15 M (72.4 % of 2^24)**; 272 would be 12.73 M, over the 0.75 · 2^24 = 12,582,912 rule, so `ROLL_MAX = 256`,
+pinned by `PqzStatePinGasTest`; 256 credits after a TRIVIAL-only rollover 12.09 M (`PqzStateTrivialRollGasTest`; 20.89 M
+before `ACC_MARK`).
+
+**`mtxPrepareAcc(bytes32 ua, uint256 half)`** (PQZ only; permissionless, idempotent, `half ∈ {0, 1}`, else `BadPayload(half)`;
+the account must be a registered PQZ holder, else `AccountNotRegistered`): writes a non-zero placeholder into one half of the
+516 `acc` words, so the first rollover rewrites (5 k per word) instead of creating 516 slots (≈ 11.4 M, which no useful batch
+could share). ≈ 5.76 M per half. Keepers (or the owner) run it once per `(UA, token)`; it is not an allowlisted envelope op.
 
 <a id="rollover"></a>
-<a id="CTR-PQZ-08"></a>**CTR-PQZ-08** — **Public rollover, race-free debits.** Anyone may roll pending credits into `acc`.
-A debit proves over `T = acc + Σ pending[rolled..p)` and the contract rebuilds that **same** `T` whether a rollover
-happened in between (`acc' − Σ pending[p..rolled')`) or not, because addition mod `q` is exact and associative: a
-rollover never invalidates a **proof**. The calldata is another matter: it names an `acc` that must hash to state, and
-a rollover changes `accHash`. So the account also keeps its **base** `(baseHash, baseRolled, baseUnits)`, the state its
-last debit left (initially `Trivial(0)`, 0, 0; rollovers never touch it), and a debit may name either the current
-`acc` (with `pending` relative to `rolled`) or the base (relative to `baseRolled`). A debit on the base undoes the
-rollovers since: `rolled` returns to `baseRolled` (or moves to `p`), their credits are pending again (every slot
-`≥ floor` is kept), then the debit's own effects apply, so `T`, the new `acc` and `accUnits + unrolled` are what they
-would have been with no rollover (review W-E, 2026-10-19). Clients build on the base whenever
-`|p − baseRolled| ≤ INLINE_MAX` (`p` may also lie below `baseRolled`) (the default for an account that does not roll its own credits); such a debit, direct or
-in an envelope, survives anyone's rollover with no rebuild and no re-signing. No `OWNER_ONLY` mode, no `accSeq`. At most
-`INLINE_MAX = 16` ciphertexts inline. **Residual (griefing, no loss):** a debit built on an intermediate `acc` — a
-rolled one that is neither the base nor the current, as needed with more than 16 credits since the last debit —
-reverts `AccMismatch` when someone rolls further; the proof stays valid, so the client rebuilds the calldata
-(`acc`, `inline`) and resubmits: no re-prove, the same `authSig` (the statement is unchanged), but a new envelope
-signature on the relayed path (it covers `data`). Only when more than 16 further credits are rolled past `p` does no
-rebuild fit `INLINE_MAX`, and the client re-proves at a new `p`. A griefer can repeat this while the account has
-unrolled credits, and can create them with proven transfers of its own (≈ 2.8 M gas each; `pqzShield` creates no
-pending entries). This
-removes the classical rollover grief ([CTR-ZTH-16](zether.md#CTR-ZTH-16), [CTR-ZTH-17](zether.md#CTR-ZTH-17)) for
-debits on the base and turns it into a rebuild otherwise. Honest keepers roll only credits older than `KEEPER_AGE = 24`
-blocks (2 min), and clients prove at `p = pendingCount` and retry once on `InlineTooFar` or `AccMismatch`, so a busy
-merchant's in-flight phone proof survives.
+<a id="CTR-PQZ-08"></a>**CTR-PQZ-08** — **Public rollover, strict order, race-free debits without a base.** (Built in plan 5h part A.)
+Anyone may roll pending entries into `acc`. A debit proves over `T = acc ± Σ pending[window)` and the contract rebuilds that
+**same** `T` from state whatever happened in between (addition mod `q` is exact and associative): a rollover never
+invalidates a proof. With `acc` and every pending ciphertext in state ([CTR-PQZ-07](#CTR-PQZ-07)) no calldata can go stale,
+so W-E's base (`baseHash`, `baseRolled`, `baseUnits`, the base branch of `_total`) is **removed**; its "rolled moves
+backwards" behaviour survives only as the **un-roll**: a debit with `p < rolled` sets `rolled = floor = p`, the entries
+`[p, rolled)` (credits and TRIVIAL entries) are pending again — their slots still exist, since rollovers delete only below
+`rolled − INLINE_MAX` — and are rolled again later; nothing is lost or skipped, the price is re-rolling at most `INLINE_MAX`
+entries. The one race left needs entries newer than the proof: **`ROLL_AGE = 5` blocks** (owner 2026-10-20, was 24 in the
+first design; ≈ 25 s at 5 s blocks), enforced per rolled entry, means entries `≥ p` made after the proof cannot be rolled for
+`ROLL_AGE` blocks, so within that time `rolled ≤ p` at submission; after it the debit still settles while `rolled − p ≤
+INLINE_MAX = 16`. **Residuals (bounded harm, no loss):** (a) more than `INLINE_MAX` rolled entries past `p` (`InlineTooFar`, or
+`PendingRange` since every rollover keeps `floor ≥ rolled − INLINE_MAX`): the client re-proves at a new `p`; this needs more
+than `INLINE_MAX` *old* entries above `p`, which happens when the client's `p` was capped by the inline window (more than 16
+entries above `rolled` when it proved), so a client with a short queue never meets it; (b) a debit whose window holds an
+entry of its own block can be made to revert by a merge before it ([§7.3](#73-shield)). A griefer can no longer force a
+re-prove of a debit submitted within `ROLL_AGE` blocks. Clients prove at `p = pendingCount` (or the largest `p` the window allows)
+and retry once on `InlineTooFar` or `ProofRejected`; the W-E race tests are regressions ("a rollover between prove and
+submit still settles", `PqzStateTest`). No `OWNER_ONLY` mode, no `accSeq`.
 
 ### 7.7 Statement layout
 
@@ -992,9 +1100,9 @@ Header (640 bytes; `salt` and `memoHash` per [CTR-PQZ-23](#CTR-PQZ-23)):
 | 384 | `p` |
 | 416 | `validUntilBlock` |
 | 448 | `auditorOn` (0/1) |
-| 480 | `plainUsed` ([CTR-PQZ-06](#CTR-PQZ-06)) |
+| 480 | `shieldIn` ([CTR-PQZ-06](#CTR-PQZ-06); named `plainUsed` before plan 5h, same word, same relation) |
 | 512 | `chainUid` (the token's copy of `registry.chainUid()`, [CTR-PQZ-01](#CTR-PQZ-01)) |
-| 544 | `envelopeBinding` ([CTR-PQZ-15](#CTR-PQZ-15)): for a direct call 0 (burn, refresh), the mode binding (transfer, [CTR-PQZ-25](#CTR-PQZ-25)) or `unwrapBinding(leg, minOut)` (`pqzUnshieldUnwrap`); else the v1 or v3 binding of the envelope that carries the op |
+| 544 | `envelopeBinding` ([CTR-PQZ-15](#CTR-PQZ-15)): for a direct call 0 (burn, refresh), the mode binding (transfer, [CTR-PQZ-25](#CTR-PQZ-25)) or `unwrapBinding(leg, minOut)` (`mtxUnshieldUnwrap`); else the v1 or v3 binding of the envelope that carries the op |
 | 576 | `salt` (16 zero bytes ‖ the build salt, [CTR-PQZ-19](#CTR-PQZ-19); burn/refresh 0, their randomness is fresh CSPRNG output) |
 | 608 | `memoHash` (`keccak256(memo)` on commit-reveal, else 0) |
 
@@ -1009,15 +1117,36 @@ bytes, wrapped as the UA `ua_msg` and signed by ML-DSA as `pq_msg` with the empt
 
 ### 7.8 Events and indexing
 
-`PqzCredit(bytes32 indexed ua, uint64 indexed index, bytes32 entryRef)` (the bytes `u ‖ v_t` are in that `PqzTransfer`),
-`PqzPlainCredit(bytes32 indexed ua, uint256 amount, uint256 plainPending)`, `PqzTransfer(bytes32 indexed entryRef,
-bytes32 indexed fromUA, bytes32 indexed toUA, bytes16 salt, bytes out)` (with the salt, the bundle `R` is rebuildable
-from logs; P6g plan D14), `PqzRolled(bytes32 indexed ua, uint64 rolled, bytes32
-accHash)`, `PqzBurned(bytes32 indexed ua, uint256 amount, address recipient, bytes newAcc)`, `PqzRegistered(…)`. A
-client rebuilds `acc`, the pending list and `plainPending` of its UA from these logs alone and checks each against the
-stored hashes and values before proving. Logs cost 8 gas/byte (≈ 134 k per transfer) — the price of not trusting an
-indexer for state. The node's indexer normalizes `MetaTransactionExecuted`, `UAMetaTransactionExecuted`, `Transfer` and
-`UATransfer` of a PQZ token like any meta token's, beside the `Pqz*` events.
+Events carry pointers, not bytes (≈ 134 k gas less per transfer; the bytes are in state, [CTR-PQZ-07](#CTR-PQZ-07)), under the
+names shared with Zether ([CTR-ZTH-45](zether.md#CTR-ZTH-45)):
+`Shielded(bytes32 indexed toUA, address indexed from, uint256 amount, uint64 index)` (a shield, `index` = its queue index, merged
+or appended), `Credited(bytes32 indexed ua, uint64 indexed index, bytes32 entryRef)` (a proven credit; its `u ‖ v` are in the op
+blob of `entryRef`), `Debited(bytes32 indexed ua, uint64 rolled, uint64 floor, address blob)` (every debit: an indexer sees
+`rolled` move; `acc` now references `blob`), `ConfidentialTransfer(bytes32 indexed entryRef, bytes32 indexed fromUA, bytes32
+indexed toUA, bytes32 beneficiary, uint256 fee, uint64 sendCounter, address blob)` and `ConfidentialTransferMulti(bytes32 indexed
+entryRef, bytes32 indexed fromUA, bytes32 indexed beneficiary, uint256 fee, uint64 sendCounter, bytes32[] recipients, uint8 mode, address blob)`
+(as built in `IConfidentialToken`; `fee` = the proven fee word, op 7: txFee + M·decoyFee; the blob is the op blob, the salt its first 16 bytes; `recipients` replaces the
+earlier `recipientsHash, legs`, both derivable from it),
+`RolledOver(bytes32 indexed ua, uint64 rolled, uint32 accUnits, bytes32 accHash)`, `Unshielded(bytes32 indexed ua, uint256 amount,
+bytes32 indexed recipient, address blob)` (burn or refresh, `amount = 0`; the as-built PQZ event of plan 5h Task 3 had an `address`
+recipient, widened with the UA recipient in Task 3b), `PqzRegistered(…)`. `PqzPlainCredit` is gone with `plainPending`.
+`Shielded.from` is `_msgSender()`; for a UA signer (`uaExecute`) it is `UA_POOL`, not the UA (the UA is in the same transaction's
+`UAMetaTransactionExecuted` and in the `UATransfer(ua, SHIELD_POOL, …)` of the pool move). `mtxUnshieldUnwrap` takes the leg as the calldata struct
+`Unwrap(address underlying, bytes32 recipient, uint256 amount, uint256 minOut)`, pays through `UnderlyingLib.payOutTo` (native id: `quoteUnwrap` + `payOut`;
+derived UA: `quoteUnwrapToUA` + `payOutToUA`, `UALegNotLedger` for an outside leg) after the debit and the pool burn. A `beneficiary` that differs from the payload's word
+reverts `BeneficiaryMismatch(payload, given)`.
+
+**Views** (names unchanged by the `mtx*` rename; [CTR-ZTH-45](zether.md#CTR-ZTH-45) is about entry points):
+`pqzAccount(ua)` → `AccountState{pendingCount, rolled, floor, cleared, accBlob, accUnits, flags, sendCounter, accHash}`
+(`accHash` is meaningful only while `flags & 1`); `pqzAcc(ua)` → the `acc` bytes (the materialised words, or the
+reference's `u_0 ‖ v_f`); `pqzPending(ua, i)` → the raw slot word `blob ‖ uOff ‖ vOff ‖ block`; `pqzPendingCt(ua, i)` → `u ‖ v`
+(a TRIVIAL entry: `Trivial(digits(amount))`); `pqzEntryBlob(entryRef)` → `R ‖ v_f` (empty if unknown); `transferEntry`,
+`transferCiphertextHash`, `minDecoyFee()`, `confidentialFee()`. **Restore from state alone** (all `eth_call`, no logs): seed →
+UA → `pqzAccount` → `pqzAcc` and `pqzPendingCt` for `[rolled, pendingCount)` → decrypt → balance = Dec(acc) + Σ Dec(pending)
+(TRIVIAL entries: their public amount); fee income sits in the public balance (`balanceOf` / the UA ledger); sender
+disclosure: `sendCounter` → `entryRef` → `pqzEntryBlob` (+ memo) → the leg. Indexers follow events for "what changed" and read
+the bytes from state. The node's indexer normalizes `MetaTransactionExecuted`, `UAMetaTransactionExecuted`, `Transfer` and
+`UATransfer` of a PQZ token like any meta token's, beside these events.
 
 ### <a id="disclosure"></a>7.9 Disclosure
 
@@ -1064,7 +1193,7 @@ Uniqueness by [noise](#noise). `verifyTransferAmount` is a view (the precompile 
 there is **no on-chain attestation** — no `attestTransferAmount`, no `AmountAttested` (owner 2026-10-13, as classical
 [CTR-ZTH-39](zether.md#CTR-ZTH-39): any contract can call the view, and one that needs a trace records the result
 itself). `transferCiphertextHash(entryRef)` returns the bundle hash;
-the bundle bytes come from `PqzTransfer` logs. Nothing reveals `r` (which would open `v_f`, the sender's balance) or
+the bundle bytes come from `ConfidentialTransfer` logs. Nothing reveals `r` (which would open `v_f`, the sender's balance) or
 decryption noise. Client systems see PQZ like classical Zether: amounts known from their own documents, checked with
 the `verifyTransferAmount` view ([integration.md](../integration.md#confidential-payments)).
 
@@ -1072,7 +1201,7 @@ the `verifyTransferAmount` view ([integration.md](../integration.md#confidential
 
 <a id="authorization-check"></a>
 
-`registry.requireAuthorized(fromUA, PURPOSE_ZETHER_AUTH, authDigest, authSig)` on the signing UA itself, which must hold a
+`registry.requireAuthorized(fromUA, PURPOSE_ZETHER_AUTH, authDigest, authSig)` (`authSig` is the `auth` argument of the entry points) on the signing UA itself, which must hold a
 PQZ key ([CTR-PQZ-12](#CTR-PQZ-12); `AccountNotRegistered` otherwise). `PURPOSE_ZETHER_AUTH =
 keccak256("scaas.ua.purpose.zether-auth.v1")`: `authSig = abi.encode(bytes keyData, bytes sig)` with empty `keyData` for
 stored PQ kinds ([CTR-UA-17](accounts.md#CTR-UA-17)), `msig` member signatures in the UA format. The signed message is
@@ -1103,8 +1232,21 @@ allowances per [CTR-TOK-01](token-wrappers.md#CTR-TOK-01), escrow invariant) on 
 `supportedModes() = MODE_KNOWN_MASK` (`0xF3`), `MetaTransactionExecuted` and the base's errors, EIP-712 domain
 `("SCaaS PqzToken", "1", chainId, token, salt = chainUid)` ([CTR-GEN-05](README.md#CTR-GEN-05)).
 
+**Shielded value sits in `SHIELD_POOL`, not burned** (owner 2026-10-20, plan 5h D19; both confidential layers):
+`SHIELD_POOL = address(uint160(uint256(keccak256("scaas.shield.pool.v1"))))`, not payable and unable to spend (as `UA_POOL`;
+`ShieldPoolNotPayable`). `mtxShield` moves `amount·shieldScale` from the signer to the pool; `mtxWrapShield` mints `minted`
+to the pool; `mtxUnshield` moves it from the pool to the recipient; `mtxUnshieldUnwrap` burns it from the pool, then the leg
+pays; every fee from a hidden balance (`txFee`, `decoyFee`) moves from the pool to the recipient's public balance. So
+`totalSupply()` never moves on shield, unshield or fee, stays the true total, `Σ balanceOf == totalSupply` holds,
+`balanceOf(SHIELD_POOL) == totalShielded·shieldScale` and the escrow invariant is `reserve ≥ totalSupply()`. The pool guard lives in
+the shared base, `ERC20MetaTx._uaMove` (a native `SHIELD_POOL` side of a ledger move reverts, which covers outer fees,
+`uaExecute` fee calls and receiver fees); the confidential layers move the pool only through the **internal `_poolMove`**.
+`_poolMove` is deliberately unguarded and is the inheritance trust boundary of the token tree: only layer code (`PqzLayer`,
+`ZetherLayer`, the underlying variants) may call it, and any contract that inherits `ERC20MetaTx` and calls it can move the
+pool. Relations and proofs are unchanged by the pool.
+
 Every PQZ op —
-`pqzShield`, `pqzTransfer`, `pqzUnshield`, refresh, `pqzRollOver` — is reachable as a direct open call **and** as an allowlisted self-call
+`mtxShield`, `mtxConfidentialTransfer`, `mtxUnshield`, refresh — is reachable as a direct open call **and** as an allowlisted self-call
 whose `m.data` is byte-identical to the direct call's calldata ([CTR-PQZ-21](#CTR-PQZ-21)), so a client builds one
 calldata and either submits it or wraps it. Envelope ops take outer fee `NONE` or `FIXED` only, absolute; `PERCENT`
 reverts (`FeePolicy.requireConfidentialSafe`, [CTR-ZTH-07](zether.md#CTR-ZTH-07)) and stays available only for plain
@@ -1117,12 +1259,11 @@ call: 0, or its own binding on a transfer or an unwrap), read from the ticket, s
 confidential fee (`beneficiaryUA`, `confidentialFee`) stays beside it, as classical. **Authority is split:**
 confidential balances move only on the PQ `authSig` over the statement plus the PQZ proof
 ([CTR-PQZ-12](#CTR-PQZ-12), unchanged); the envelope signer authorizes only the public-ledger part — the outer fee
-from its own public balance, its nonce, and for `pqzShield` the public amount it shields from that balance.
+from its own public balance, its nonce, and for `mtxShield` the public amount it shields from that balance.
 
 **PQ-complete
 path:** the same selectors through `uaExecute` with a `UAMetaTransaction` ([CTR-UA-26](accounts.md#CTR-UA-26)) on
-`PqzToken`'s own `bytes32` UA ledger ([CTR-UA-18](accounts.md#CTR-UA-18)), whose UA allowlist holds the four PQZ
-selectors, so an `mldsa65`/`mldsa44` UA or a PQ-dominant `msig` pays the outer fee and signs the nonce, and no
+`PqzToken`'s own `bytes32` UA ledger ([CTR-UA-18](accounts.md#CTR-UA-18)), whose UA allowlist holds the same selectors (the transfers, `mtxUnshield`, `mtxShield`; plus `mtxWrapShield` / `mtxUnshieldUnwrap` on `UNDERLYING_PQZ`), so an `mldsa65`/`mldsa44` UA or a PQ-dominant `msig` pays the outer fee and signs the nonce, and no
 classical key signs anything on the op path. Envelopes are not carried on the mesh, exactly as classical Zether
 ([NODE-MESH-01](../node/mesh.md#NODE-MESH-01)). Relayers, the node, the indexer and client systems handle PQZ with the
 existing meta-tx path. An address-path envelope signer is ECDSA/1271, hence the UA path. A broken envelope key can
@@ -1146,32 +1287,34 @@ new proof (the binding is in the statement).
 Plus the UA ledger's `transferToUA(bytes32, uint256)`, `balanceOfUA(bytes32)`, `UA_POOL` and `UATransfer`, so a PQ UA can
 hold the public fee float. Same surface as `ZetherToken` (owner check 2026-10-07): **`wrap`/`unwrap` exist as direct
 calls** exactly as classical, and the envelope ops are the confidential ones. **Wrap/unwrap parity:** `wrap` and
-`unwrap` are direct calls on both tokens and neither is an envelope op. The **gasless exit is the envelope `pqzUnshield`**,
+`unwrap` are direct calls on both tokens and neither is an envelope op. The **gasless exit is the envelope `mtxUnshield`**,
 which pays the underlying straight to `recipient`, so no envelope `unwrap` op is needed.
 
 **Allowlisted selectors** (fee class `ABSOLUTE`, [CTR-MTX-20](metatx.md#CTR-MTX-20)):
 
 | Selector | Effect | Statement binding |
 |---|---|---|
-| `pqzTransfer(bytes,bytes,bytes[],bytes,bytes)` | [transfer](#transfer) | `envelopeBinding` = this envelope's |
-| `pqzUnshield(bytes,bytes,bytes[],uint256,address,bytes,bytes)` (burn and refresh) | burn and refresh | as above |
-| `pqzShield(bytes32,uint256)` | shield, source = the signer's public balance | none: no statement; the envelope signature covers `(ua, amount)` |
-| `pqzRollOver(bytes32,bytes,bytes[])` | [rollover](#rollover-op) | none (no authority needed) |
+| `mtxConfidentialTransfer`, `…Compact`, `…Single`, `…SingleCompact` `(bytes payload,bytes proof,bytes auth,bytes32 beneficiary,bytes accHint)` | [transfer](#transfer) | `envelopeBinding` = this envelope's, folded with the mode ([CTR-PQZ-25](#CTR-PQZ-25)) |
+| `mtxUnshield(bytes,bytes,bytes,bytes32,bytes,uint256,bytes32)` (burn and refresh) | burn and refresh | as above |
+| `mtxShield(bytes32,uint256)` | shield, source = the signer's public balance | none: no statement; the envelope signature covers `(ua, amount)` |
+| `UNDERLYING_PQZ`: `mtxWrapShield(address,uint256,bytes32)`, `mtxUnshieldUnwrap` | wrap-shield, unshield-unwrap | the unwrap folds `(leg, minOut)` into the binding |
+
+`mtxRollOver(bytes32,uint256)` and `mtxPrepareAcc(bytes32,uint256)` are allowlisted on both paths (Task R, owner 2026-10-20: every `mtx*` write is relayable; `ABSOLUTE`, the outer fee may be 0; static 68-byte shape; unbatched like the other PQZ ops). Neither needs an authority: the relayed call does what the direct call does, and the signer's only role is to pay the outer fee. BUILT, commit `b5e61c96`.
 
 Any other selector ⇒ `MtxSelectorNotAllowed`. `supportedModes()` returns `0xF3` on both paths: flag bits
 `MODE_RESTRICT_RELAYER` (`0x01`) and `MODE_RESTRICT_FEE_RECIPIENT` (`0x02`) apply to every op; fee nibble `NONE`
 (`0x00`) and `FIXED` (`0x20`) apply to every op, `FIXED` absolute (no 1 % cap, the amount is hidden —
 [CTR-ZTH-07](zether.md#CTR-ZTH-07)); `PERCENT` (`0x10`) applies to `MetaTransfer`s only and reverts
-`MtxFeeClass`/`PercentFeeForbiddenOnConfidential` on the four PQZ selectors. The PQZ functions run their cheap checks
-(shape, the signer's public balance `≥ amount·shieldScale` for `pqzShield`) before any SSTORE2 read, statement build or
+`MtxFeeClass`/`PercentFeeForbiddenOnConfidential` on the PQZ selectors. The PQZ functions run their cheap checks
+(shape, the signer's public balance `≥ amount·shieldScale` for `mtxShield`) before any SSTORE2 read, statement build or
 precompile call; then the op's own checks in transfer/burn order, the statement with `envelopeBinding`,
-`requireAuthorized` (the PQ `authSig`) and the `PQZ` verify; burn's underlying transfer last, then the escrow
-check. Anything failing ⇒ the whole transaction reverts: no fee, nonce unspent; the relayer loses its gas (free on
+`requireAuthorized` (the PQ `auth`) and the `PQZ` verify; the pool movements last (the amount the library debited, paid by
+the token), then the escrow check. Anything failing ⇒ the whole transaction reverts: no fee, nonce unspent; the relayer loses its gas (free on
 chain 7622) and protects itself by simulating on a follower.
 
 <a id="CTR-PQZ-21"></a>**CTR-PQZ-21** — **`PqzToken` relays through the generic self-call, as classical Zether**
-(owner 2026-10-08: "why not the same as Zether?"). `pqzTransfer`, `pqzUnshield`, `pqzShield(bytes32,uint256)` and
-`pqzRollOver(bytes32,bytes,bytes[])` are allowlisted self-calls through `mtxExecute`/`uaExecute`, and the proof-carrying
+(owner 2026-10-08: "why not the same as Zether?"). `mtxConfidentialTransfer*`, `mtxUnshield`, `mtxShield(bytes32,uint256)` are allowlisted self-calls
+through `mtxExecute`/`uaExecute` (`mtxRollOver` and `mtxPrepareAcc` too, Task R), and the proof-carrying
 ones read the envelope binding from the ticket ([CTR-ZTH-34](zether.md#CTR-ZTH-34)); there is no separate PQZ mixin.
 PQZ selectors are refused in `mtxBatch`/`uaBatch` (`MtxNotBatchable(selector)`: one op is ≈ 3 M gas and up to
 ≈ 340 KB). **Cost of the self-call:** one memory copy of `m.data` for the `CALL`, `3·w + w²/512` gas with `w` = words:
@@ -1179,11 +1322,16 @@ PQZ selectors are refused in `mtxBatch`/`uaBatch` (`MtxNotBatchable(selector)`: 
 again. An earlier ≈ 2 M estimate, which had motivated a mixin reading `m.data` as calldata slices, assumed three copies
 (decode, re-encode, call). A PQZ op is ≈ 3.25 M gas, below the EIP-7825 cap of 16,777,216.
 
-<a id="CTR-PQZ-22"></a>**CTR-PQZ-22** — **PQZ entry-point names mirror classical Zether** (owner,
-[CTR-ZTH-45](zether.md#CTR-ZTH-45)). PQZ entry points are `pqzShield`, `pqzWrapShield`, `pqzTransfer`, `pqzUnshield`,
-`pqzUnshieldUnwrap`, `pqzRollOver`; kinds `NONE_PQZ`, `UNDERLYING_PQZ` (and `*_ZETHER_PQZ`) are reserved
-([CTR-TOK-21](token-wrappers.md#CTR-TOK-21)). There is no `pqzRegister`. Renamed from the earlier specified names
-`fund`, `pqzBurn`, `rollOver`. Multi-recipient transfers: [CTR-PQZ-25](#CTR-PQZ-25) / [CTR-PQZ-26](#CTR-PQZ-26) (`pqzTransfer*` = op 7, the single path renamed `pqzTransferSingle*`); Z9 is already PQZ ([CTR-PQZ-14](#CTR-PQZ-14)), Z10 is not needed (`SENDER_S` is per leg), Z12 is [CTR-PQZ-24](#CTR-PQZ-24).
+<a id="CTR-PQZ-22"></a>**CTR-PQZ-22** — **PQZ entry points share the `mtx*` names and one interface with classical Zether** (owner,
+[CTR-ZTH-45](zether.md#CTR-ZTH-45), 2026-10-20; before that the `pqz*` prefix mirrored the `zether*` one). PQZ entry points are
+`mtxShield`, `mtxWrapShield`, `mtxConfidentialTransfer` / `…Compact` / `…Single` / `…SingleCompact`, `mtxUnshield`,
+`mtxUnshieldUnwrap`, `mtxRollOver` and the PQZ-only `mtxPrepareAcc`; they implement `IConfidentialToken` (one selector per shared function
+across both layers) and `IPqzToken` (the PQZ-only functions, views and errors). Events: `Shielded`, `Credited`, `Debited`,
+`ConfidentialTransfer`, `ConfidentialTransferMulti`, `RolledOver`, `Unshielded`. Views keep their `pqz*` names (`pqzAccount`, `pqzAcc`,
+`pqzPending`, `pqzPendingCt`, `pqzEntryBlob`). Kinds `NONE_PQZ`, `UNDERLYING_PQZ` are built; the combined kinds 6 and 7 are dropped
+([CTR-TOK-21](token-wrappers.md#CTR-TOK-21)). There is no `pqzRegister`. Earlier names: `fund`, `pqzBurn`, `rollOver`, then
+`pqzShield`, `pqzTransfer*`, `pqzUnshield`, `pqzRollOver`, `pqzPrepareAcc`. Multi-recipient transfers:
+[CTR-PQZ-25](#CTR-PQZ-25) / [CTR-PQZ-26](#CTR-PQZ-26) (`mtxConfidentialTransfer*` = op 7, the single path `mtxConfidentialTransferSingle*`); Z9 is already PQZ ([CTR-PQZ-14](#CTR-PQZ-14)), Z10 is not needed (`SENDER_S` is per leg), Z12 is [CTR-PQZ-24](#CTR-PQZ-24).
 
 **Binding** ([CTR-ZTH-06](zether.md#CTR-ZTH-06), plus `chainUid`; `m.data` excluded because it contains the proof;
 `MetaTransaction` has no `to`/`value`):
@@ -1207,7 +1355,7 @@ keep their formulas (the binding enters through the statement).
 
 | Broken key | Can | Cannot |
 |---|---|---|
-| v1 envelope signer (ECDSA EOA, or a 1271 wallet with classical validation) | sign envelopes as `from`: spend its public balance (public transfers, outer fees to a recipient it picks, `pqzShield` that shields that balance into any UA); spend or cancel its nonces, which kills its own bound in-flight PQZ ops (liveness only) | move confidential value (needs the PQ `authSig` and the PQZ proof); change a bound op's fee, relayer, recipient, nonce or validity; re-wrap or strip a signed op; touch another account's balance |
+| v1 envelope signer (ECDSA EOA, or a 1271 wallet with classical validation) | sign envelopes as `from`: spend its public balance (public transfers, outer fees to a recipient it picks, `mtxShield` that shields that balance into any UA); spend or cancel its nonces, which kills its own bound in-flight PQZ ops (liveness only) | move confidential value (needs the PQ `authSig` and the PQZ proof); change a bound op's fee, relayer, recipient, nonce or validity; re-wrap or strip a signed op; touch another account's balance |
 | relayer lane key (gas only) | delay or drop its own submissions; submit an envelope it saw (same effect as the owner's submission; with `feeRecipient` unbound it collects the fee, [NODE-LANE-10](../node/submit-lanes.md#NODE-LANE-10)) | anything else |
 | v3 `from` = `mldsa*` UA or PQ-dominant `msig` (PQ-weight rule) | — (no classical key on the path) | — |
 
@@ -1449,7 +1597,7 @@ address as 12 zero bytes ‖ address).
 | 10 | 320 | `recipient` | transfers and REFRESH: 0; BURN: hashed |
 | 11–13 | 352, 384, 416 | `sendCounter`, `p`, `validUntilBlock` | hashed |
 | 14 | 448 | `auditorOn` | op 1: 1 with 83,072 B, 0 with 66,560 B, any other word ⇒ `0` (read by both relations); BURN, REFRESH: 0 |
-| 15–17 | 480, 512, 544 | `plainUsed`, `chainUid`, `envelopeBinding` | hashed |
+| 15–17 | 480, 512, 544 | `shieldIn`, `chainUid`, `envelopeBinding` | hashed |
 | 18 | 576 | `salt` | bytes 576..591 zero (16 zero bytes ‖ the 16-byte salt); BURN, REFRESH: the whole word 0 |
 | 19 | 608 | `memoHash` | hashed |
 
@@ -1740,7 +1888,7 @@ processes. ML-DSA p99 0.135 ms (44) / 0.189 ms (65) ⇒ `mldsa44Gas` **49,000**,
 6,500 / 9,000 is lower). Re-calibrate before chain 22776 or when a later measurement differs by more than 15 %. The
 estimates below predate this table.
 
-**Measured on chain 7622 (P6g e2e, 2026-10-16, real PQZL proofs, `gasUsed` of the transaction; log
+**Measured on chain 7622 (P6g e2e, 2026-10-16, before plan 5h: hashes in state, `acc` and `inline` in calldata; real PQZL proofs, `gasUsed` of the transaction; log
 `smartcontracts/evm/runs/2026-10-16-p6g-7622.txt`).** Proofs from `pqz-ffi` (`examples/pqz_prove.rs`): transfer
 42.4–42.8 KB, burn / refresh 41.9 KB, `R_REG` 28.1 KB, disclosure 29.0 KB, each 0.3–1.9 s native.
 
@@ -1750,22 +1898,48 @@ estimates below predate this table.
 | UA-6 `register(mldsa65, …, pqzKey, pqzPop)` (holder: PQZ key attribute) / PQ-eligible `msig` {mldsa65, p256} t=2 with a PQZ key | 4,438,075 / 3,894,160 | `UARegistryUA6.t` `test_UA6_holderWithKey` / `test_UA6_msigSquatting`, `--isolate`, **stand-in verifiers** (a lower bound: the real `R_REG` precompile prices more); 2026-10-20, `runs/2026-10-20-ua6-gas.txt` |
 | `register` `mldsa65` / `mldsa44` (PoP on the precompile) | 687,743 / 509,018 | |
 | `registry.requireAuthorized` `mldsa65` / `mldsa44` (`eth_estimateGas`) | 301,776 / 287,268 | incl. 21,000 and the 3.3 / 2.4 KB signature calldata |
-| `pqzShield` | 97,801 | public units burned |
-| `pqzWrapShield` (`UNDERLYING_PQZ`) | 159,757 | |
-| `pqzTransfer` BUNDLE, auditor on, fee | 10,720,732 | precompile row 5,409,000 + SSTORE2 of the 16.7 KB bundle + 80 KB calldata |
-| `pqzTransfer` BUNDLE, auditor on, 1 inline credit | 11,039,035 | +16.5 KB calldata |
-| `pqzTransfer` commit-reveal, auditor off (`R_TX0`) | 7,142,520 | no SSTORE2; the 57-byte memo |
-| `pqzTransfer` in a v1 envelope (FIXED outer fee) / v3 envelope (`mldsa65` fee UA) | 11,278,161 / 11,406,642 | both with 1 inline credit |
-| `pqzUnshield` burn / refresh | 5,548,745 / 5,529,570 | |
-| `pqzUnshieldUnwrap` (leg payout) | 5,594,862 | |
-| `pqzRollOver` (1 credit) | 710,370 | |
+| `mtxShield` | 97,801 | public units burned |
+| `mtxWrapShield` (`UNDERLYING_PQZ`) | 159,757 | |
+| `mtxConfidentialTransfer` BUNDLE, auditor on, fee | 10,720,732 | precompile row 5,409,000 + SSTORE2 of the 16.7 KB bundle + 80 KB calldata |
+| `mtxConfidentialTransfer` BUNDLE, auditor on, 1 inline credit | 11,039,035 | +16.5 KB calldata |
+| `mtxConfidentialTransfer` commit-reveal, auditor off (`R_TX0`) | 7,142,520 | no SSTORE2; the 57-byte memo |
+| `mtxConfidentialTransfer` in a v1 envelope (FIXED outer fee) / v3 envelope (`mldsa65` fee UA) | 11,278,161 / 11,406,642 | both with 1 inline credit |
+| `mtxUnshield` burn / refresh | 5,548,745 / 5,529,570 | |
+| `mtxUnshieldUnwrap` (leg payout) | 5,594,862 | |
+| `mtxRollOver` (1 credit) | 710,370 | |
 | `verifyTransferAmount` `SENDER_S` / `RECEIVER_X` / `AUDITOR` (`eth_estimateGas`) | 3,650,832 / 3,616,461 / 3,618,801 | views; op 4 / op 5 rows 2,601,000 / 2,567,000 |
 | `setPqzEnabled(true)` (self-test) / `createToken` `NONE_PQZ` / `UNDERLYING_PQZ` | 2,612,253 / 3,022,079 / 3,192,615 | each creation runs the self-test; measured before plan 5g-Z2, whose `setKindEnabled` runs no self-test (the token's `initialize` does) |
 
-A BUNDLE transfer with many inline credits approaches the 16,777,216 cap (≈ +0.32 M per credit); clients roll first or
-use the commit-reveal form.
+A BUNDLE transfer with many inline credits approached the 16,777,216 cap (≈ +0.32 M per credit) before plan 5h; see below
+for the state redesign, where an inline credit costs ≈ 36 k.
 
-Estimates for a typical transfer (auditor on, no inline credits, 40 KB proof), **to be replaced by measurements**.
+<a id="gas-state"></a>
+**Contract-side gas of the state redesign (plan 5h part A, today's parameters; forge on the real token, precompile and ML-DSA
+verification mocked, calldata and the 21,000 intrinsic excluded, every account and slot cold as in a new transaction,
+refunds not subtracted).** Add the precompile row (5.2–5.4 M for op 1) and the calldata (no `acc` / `inline` bytes any more:
+≈ 80 KB less than an op 1 with one inline credit before). Logs: `smartcontracts/evm/runs/2026-10-20-5h-b-gas.txt` (Task 2),
+Task 3 numbers from `test/pqz/PqzStateGas.t.sol`.
+
+| Operation | Gas | Note |
+|---|---|---|
+| op 1 BUNDLE, auditor, fee, `p = rolled`, `acc` = blob reference | 4,000,294 | Task 3 (4,131,760 in Task 2 before the fee became a balance write) |
+| … materialised `acc` + valid hint / no hint | 4,131,335 / 5,357,164 | the hint saves 516 cold SLOADs (≈ 1.1 M); Task 3 / Task 2 |
+| … 16 inline credits from cold blobs, hint | 4,843,937 | ≈ 36 k per inline credit (Task 2) |
+| op 1 COMPACT / with `shieldIn` 100 | 4,072,031 / 4,141,055 | Task 3 / Task 2; NONE retired |
+| op 7 M = 4 / M = 8, auditor, fee, first credits | 4,464,033 / 8,580,422 | Task 3 (`decoyFee` included) |
+| burn / refresh | 3,856,419 / 3,831,003 | Task 3 |
+| `mtxShield`: first entry / append / merge | 88,219 / 73,940 / 51,774 | final fix wave (88,221 / 73,942 / 51,776 in Task 3) |
+| `mtxRollOver` 1 / 16 / 128 / **256** | 2,854,442 / 3,430,787 / 7,498,963 / **12,148,307** | final fix wave, each its own cold transaction (`ACC_MARK`); 72.4 % of 2^24; linear fit 2,849,619 + 36,323 per entry; 272 → 12,729,475 > 12,582,912 |
+| `mtxRollOver` 256 after a TRIVIAL-only rollover | 12,088,219 | final review I1: 20,888,499 before `ACC_MARK` (the TRIVIAL rollover had zeroed 515 of 516 slots) |
+| `mtxPrepareAcc` half 0 / half 1 | 5,757,946 / 5,757,946 | once per `(UA, token)`; writes `ACC_MARK` |
+
+`ROLL_MAX = 256` (largest multiple of 16 with 0.75 · 2^24 ≥ cost) is pinned by `PqzStatePinGasTest`. The lanes after 16 + 256
+terms of `q − 1` give `q − 272` in every coefficient (no wrap). A burn or refresh is ≈ 3.4 M dearer than before (the op blob,
+`u′ ‖ v_f`: direct cost of ciphertexts in state, owner ruling O7); a COMPACT transfer ≈ 3.4 M dearer (it stores the blob too).
+Op 7 with M = 8 and the auditor stays under the 16,777,216 cap with the mocked precompile only up to the proof sizes of today's
+parameters; under the 16k parameters of part B it is re-measured (spec §5.4).
+
+Estimates for a typical transfer (pre-5h) (auditor on, no inline credits, 40 KB proof), **to be replaced by measurements**.
 Calldata: `out` 16,768 + `acc` 16,512 B at ≈ 25.2 tokens per `be8` coefficient, proof and signature at ≈ 3.99 tokens per
 byte, ≈ 1.5 k tokens of ABI and header (scratch Python, 2026-10-06):
 
@@ -1786,9 +1960,9 @@ byte, ≈ 1.5 k tokens of ABI and header (scratch Python, 2026-10-06):
 | `transfer` in a v1 envelope | ≈ 2.82 M while `t_p99 ≲ 9.7 ms`; ≈ 3.5 M at 15 ms; ≈ 7.7 M at 50 ms | +≈ 0.6 KB calldata (struct head, offsets, 65 B ECDSA; ≈ 1 k tokens, +0.01 M floor); +≈ 0.2 M execution (ecrecover, one copy of `m.data` for `keccak256`, nonce, fee transfer, event), which shrinks the floor-bound range |
 | `transfer` in a v3 envelope, `mldsa65` fee UA | ≈ 2.95 M while `t_p99 ≲ 10 ms`; ≈ 3.5 M at 15 ms; ≈ 7.7 M at 50 ms | + the ≈ 3.4 KB ML-DSA `auth` (≈ 13.5 k tokens, +0.135 M floor) + verify via `0x…0F10` and the fee UA's SSTORE2 key read ≈ 0.02 M |
 | envelope at +16 inline credits | ≤ 16.78 M at 50 ms (requirement) | args sliced in place; a decode-and-self-call copy of ≈ 340 KB would add ≈ 2 M; a forge gas test checks it |
-| `pqzRollOver` of 16 credits | ≈ 8.9 M | calldata-bound (17 ciphertexts); amortizes to ≈ 0.55 M per credit |
-| `pqzShield` | ≈ 0.07 M | ERC-20 pull, `plainPending` and `totalShielded` updates, small event; nothing to roll later; as an envelope op ≈ 0.1 M (v1) / ≈ 0.2 M (v3, ML-DSA) |
-| `pqzUnshield` / `refresh` | ≈ 2.6 M | one recipient, no auditor, ≈ 258 k tokens |
+| `mtxRollOver` of 16 credits | 3.43 M (measured, 5h) | from state, no calldata (the pre-5h estimate was ≈ 8.9 M calldata-bound); see the 5h table above |
+| `mtxShield` | 0.05–0.09 M (measured, 5h) | proof-free: public units to `SHIELD_POOL`, a TRIVIAL pending entry, `totalShielded`; see the 5h table above |
+| `mtxUnshield` / `refresh` | ≈ 2.6 M | one recipient, no auditor, ≈ 258 k tokens |
 | `register` | ≈ 4.7–5.2 M once | SSTORE2 of a 16 KB pk ≈ 3.3 M + `R_REG` verify + standard calldata ≈ 0.59 M + the signer's PoP verify ≈ 0.01 M (above its ≈ 1.46 M floor); one transaction with the signer's registration, no second record slot, and the `UARegistered` log carries a 20-byte pointer, not 16 KB; +≈ 27 k for the `0x0142` list append; UA-6 re-measures it (`runs/<date>-ua6-gas.txt`) |
 | Classical reference (measured) | 3.33 M / 3.41 M transfer, 0.115 M rollover | [zether.md](zether.md#gas-measured) |
 
@@ -1810,26 +1984,32 @@ disks for that or prune ([NODE-OPS-15](../node/ops.md#NODE-OPS-15)).
 | `UAPqzVerifier` | UA `IUAPopVerifier` for `0x0142` | BUILT (P6g D3): stateless; precompile and `proofSystemId` immutable; `pk < q` checked; constructor self-test + `R_REG` probe; also a PQZ release's `verifier` (D9): an implementation constructor argument, one of `OpenFactory`'s canonical PQZ verifiers (5g-Z1, [CTR-ZTH-20](zether.md#CTR-ZTH-20)) |
 | `UAMldsaVerifier` | UA verifier for `mldsa44`/`mldsa65` (BUILT, P6a: EIP-8355 precompile by probe, else Solidity) | stateless; used by the UA `UARegistry` |
 | `ERC20MetaTx` (the one token base) | ERC20 + EIP712 + `IERC20MetaTx`, both structs, the address and UA paths, UA ledger | [CTR-MTX-07](metatx.md#CTR-MTX-07); `PqzToken --sizes` ≤ 24,576 B, else the `ua*` entry points move to a `fallback` decoder as MetaToken v3 |
-| `PqzToken` | shield, transfer, unshield, refresh, rollover, disclosure, meta-tx, `wrap`/`unwrap` | BUILT (P6g D1) as the kinds `NONE_PQZ` (`NoUnderlyingPqzToken`) and `UNDERLYING_PQZ` (`UnderlyingPqzToken`): `PqzLayer` on `MetaTokenBase` + the external `PqzLib` (`scaas.pqz`); clones via `OpenFactory.createToken` behind the kind gate (`setKindEnabled`, plan 5g-Z2; was `pqzEnabled`); disclosure `verifyTransferAmount` on the token (D11); op 7 entries and `multiLegFee` (P6g op 7); the statement views run in `PqzLib` by DELEGATECALL, so the builders stay out of the tokens: sizes 45,734 / 58,177 B (chain 7622 allows 65,536), `PqzLib` 19,921 B |
-| `PqzCt` (library) | `plus`/`minus` on 64-bit lanes, `addTrivial` for the plain term, `reduce`, the `< q` check | BUILT (P6g): pure Solidity, no precompile; checked on the P6e vectors |
+| `PqzToken` | shield, transfer, unshield, refresh, rollover, disclosure, meta-tx, `wrap`/`unwrap` | BUILT (P6g D1, state redesign plan 5h part A) as the kinds `NONE_PQZ` (`NoUnderlyingPqzToken`) and `UNDERLYING_PQZ` (`UnderlyingPqzToken`): `PqzLayer` on `MetaTokenBase` + four external libraries in the one namespace `scaas.pqz` over the internal `PqzCore` (`PqzStateLib` init / shield / rollover / prepare, `PqzTransferLib` op 1 and op 7, `PqzBurnLib` burn / refresh / unwrap debit, `PqzViewLib` statement views and disclosure; they are the release's `Env.libs`, code hashes checked by `deployImplementation`, plan 5g-Z2); clones via `OpenFactory.createToken` behind the kind gate (`setKindEnabled`); disclosure `verifyTransferAmount` on the token (D11); op 7 entries and `minDecoyFee`. Sizes at the 5h Task 3 fix: `UnderlyingPqzToken` 60,907 B, `NoUnderlyingPqzToken` 48,412 B (hard limit 65,536; the 4 KiB margin target was dropped), libraries 6,378 / 13,194 / 7,633 / 12,111 B (each < 24,576) |
+| `PqzCt` (library) | `plus`/`minus` on 64-bit lanes, `addTrivial` for the `shieldIn` term and `subTrivial` / `addMem` / `subMem` / `loadBlob` / `isZero` for the queue, `reduce`, the `< q` check | BUILT (P6g): pure Solidity, no precompile; checked on the P6e vectors |
 | `Sstore2` | existing pattern (classical generator blob) | reused |
 
-Selectors (normative ABI): `pqzShield(bytes32,uint256)`, `pqzTransfer(bytes,bytes,bytes[],bytes,bytes)` (payload, acc, inline,
-proof, authSig; op 7, [CTR-PQZ-26](#CTR-PQZ-26)), `pqzTransferCompact` / `pqzTransferNoBundle` (same arguments),
-`pqzTransferSingle` / `pqzTransferSingleCompact` / `pqzTransferSingleNoBundle` (same arguments; op 1), `pqzUnshield(bytes,bytes,bytes[],uint256,address,bytes,bytes)`, `pqzRollOver(bytes32,bytes,bytes[])`, views
-`accountState(bytes32) returns (bytes32 accHash, uint16 accUnits, uint64 pendingCount, uint64 rolled, uint64 floor,
-uint64 cleared, uint64 sendCounter, uint256 plainPending)`, `pendingHash(bytes32,uint64)`, `transferCiphertextHash(bytes32)`;
+Selectors (normative ABI; the proof-taking ones share the signature `(bytes payload, bytes proof, bytes auth, bytes32 beneficiary, bytes accHint[, …])`
+with Zether, [CTR-ZTH-45](zether.md#CTR-ZTH-45); as built in `src/confidential/IConfidentialToken.sol`, selectors pinned in
+`ConfidentialSelectors.t.sol`): `mtxShield(bytes32,uint256)`, `mtxWrapShield(address,uint256,bytes32)`,
+`mtxConfidentialTransfer(bytes,bytes,bytes,bytes32,bytes)` (op 7, [CTR-PQZ-26](#CTR-PQZ-26)) and `…Compact`, `…Single`, `…SingleCompact`
+(op 1) with the same arguments, `mtxUnshield(bytes,bytes,bytes,bytes32,bytes,uint256,bytes32)`, `mtxUnshieldUnwrap` (the same five, then
+the leg arguments), `mtxRollOver(bytes32,uint256)`, `mtxPrepareAcc(bytes32,uint256)`; views `pqzAccount(bytes32)` →
+`AccountState{pendingCount, rolled, floor, cleared, accBlob, accUnits, flags, sendCounter, accHash}`, `pqzAcc(bytes32)`,
+`pqzPending(bytes32,uint64)` (the raw slot word), `pqzPendingCt(bytes32,uint64)`, `pqzEntryBlob(bytes32)`,
+`transferCiphertextHash(bytes32)`, `transferEntry(bytes32)`, `minDecoyFee()`, `confidentialFee()`;
 meta-tx: `executeMetaTransaction`, `metaTxDigest`, `metaNonce`, `cancelMetaNonce`, `supportedModes`, `envelopeBinding`,
 `uaExecute`, `uaDigest`, `uaNonce`, `uaCancelNonce`, `uaEnvelopeBinding`, `transferToUA`, `balanceOfUA`, `wrap(uint256)`,
 `unwrap(uint256,address)`, the `transferStatement` (op 7) / `transferSingleStatement` (op 1) / `burnStatement` views
-taking `binding`, `disclosureStatement(bytes32,uint256,uint256,uint8,bytes)`,
-`verifyTransferAmount(bytes32,uint256,uint256,uint8,bytes)`, `multiLegFee()`.
+taking `binding`, `disclosureStatement(bytes32,uint256,uint256,uint8)`,
+`verifyTransferAmount(bytes32,uint256,uint256,uint8,bytes)`. There is no view `fallback`: views stay direct token functions (owner ruling).
 
 Errors (plus
-`IERC20MetaTx`'s, the UA `UA*`, `PercentFeeForbiddenOnConfidential`, `MtxNotBatchable`): `NotAllowedChain`,
-`SelfTestFailed`, `NonCanonical`, `StaleSendCounter`, `AccMismatch`, `InlineMismatch`, `InlineTooFar`, `RefreshRequired`,
-`UnitsInvariant` (the debit-time `unitsOf(T) > K_MAX` assert; unreachable unless accounting is broken), `PlainOverdraw`
-(`plainUsed > plainPending`), `Expired`, `ProofRejected`, `AuthRejected`, `AmountOutOfRange`, `CiphertextOffState`, and for op 7 `BadRecipientCount`, `DuplicateRecipient`.
+`IERC20MetaTx`'s, the UA `UA*`, `PercentFeeForbiddenOnConfidential`, `MtxNotBatchable`, `ShieldPoolNotPayable`): `NotAllowedChain`,
+`SelfTestFailed`, `NonCanonical`, `PendingRange`, `InlineTooFar`, `UnitsInvariant` (the debit-time `unitsOf(T) > K_MAX` assert;
+unreachable unless accounting is broken), `RollOverRange`, `CapReached`, `RollTooYoung`, `AccNotPrepared`, `ZeroU`,
+`DecoyFeeOutOfRange`, `UnknownEntry`, `Expired`, `ProofRejected`, `AuthRejected`, `AmountOutOfRange`, `AmountNotScaled`,
+`BadPayload`, and for op 7 `BadRecipientCount`, `DuplicateRecipient`. Gone with the old layout: `StaleSendCounter`, `AccMismatch`,
+`InlineMismatch`, `RefreshRequired`, `PlainOverdraw`, `CiphertextOffState`.
 
 ## 10. Chain integration (Nethermind precompile on chain 7622)
 
@@ -1889,7 +2069,7 @@ split, never a silent acceptance (fail closed).
    `extraData`); a follower needs `eip4895TransitionTimestamp` and `maximumExtraDataSize` `0xffff` in the chainspec.
 
 <a id="self-test"></a>**Contract self-test.** The constructor of `UAPqzVerifier` and
-`PqzToken.initialize` (`PqzLib.init`) require the precompile to be exactly `PqzSafety.PQZ` and the proof system to be
+`PqzToken.initialize` (`PqzStateLib.init`) require the precompile to be exactly `PqzSafety.PQZ` and the proof system to be
 PQZL or PQZH (`NotPqz`), then call `OP_SELFTEST` and require the expected hash (a constant compiled into the contract;
 it folds in the precompile's own valid and invalid `R_REG` verdicts for both ids). A token takes the precompile and the
 id from its `verifier` (a `UAPqzVerifier`) but never trusts that contract: a verifier naming another "precompile" that
@@ -2012,8 +2192,8 @@ service is the user's (or the organization's key oracle), never a third party's 
 | T4 | Malformed ciphertexts (out-of-range coefficients, wrong lengths, huge noise) | `< q` checks in Solidity and precompile; every ciphertext comes with a proof of exact norms; the only trivial term (the plain term of `T`) is built by the contract |
 | T5 | Noise growth ⇒ wrong decryption or failure oracle | worst-case bound + `K_MAX`, enforced at credit **and** at debit (`unitsOf(T)`), 4.1× margin before soundness is at risk (per-block ℓ2 bounds, `proofSystemId` v2; v1 checked only their sum, ≈ 1.12×, [noise](#noise)); no bootstrapping needed; a failure is impossible, not merely unlikely ([2024/127](https://eprint.iacr.org/2024/127)) |
 | T6 | Decryption-noise leakage (IND-CPA^D style) | noise never leaves `pqz_dec`; disclosure is ZK ([CTR-PQZ-14](#CTR-PQZ-14)); no "decrypt and publish" API |
-| T7 | Credit flood to hit `K_MAX` | `pqzShield` and fees go to `plainPending` and take no slot, so only proven transfers fill the cap: ≈ 2.8 M each, ≈ 2.9 G gas for 1022 (≈ 36 full blocks). Recovery = rolling all but the last ≤ 16 credits (64 rollovers ≈ 0.57 G) **plus** a refresh (≈ 2.6 M); a refresh alone does not free the cap while unrolled credits remain. Defender ≈ 5× cheaper; relayer fee UAs never fill. Gas is free on chain 7622, so permissioned submitters and node rate limits remain the real control; rollover is public |
-| T8 | Rollover grief against in-flight proofs | proofs: impossible by construction (the same `T`, [CTR-PQZ-08](#CTR-PQZ-08)); calldata: a debit on the account's base survives any rollover (review W-E); a debit on an intermediate rolled `acc` (> 16 credits since the last debit) can be forced to rebuild its calldata and, relayed, re-sign the envelope; a re-prove only after > 16 further credits rolled past `p`; honest keepers roll only credits older than `KEEPER_AGE`, clients retry once |
+| T7 | Credit and shield flood: filling a victim's queue | credits and shields are **never refused** (plan 5h, [CTR-PQZ-06](#CTR-PQZ-06)), so a flood no longer locks an account; it costs the victim delay and rollover work. Measured cost of the work: a rollover is ≈ 2.85 M + 36.3 k per entry (`ROLL_MAX = 256` = 12.13 M gas, 72.3 % of 2^24; a TRIVIAL entry costs less), 10,000 queued decoys = 40 rollovers, run by keepers, the owner or a relayer; recovery of a full `acc` is one refresh (≈ 3.9 M contract side). The flooder pays per entry: a proven transfer ≈ 4.0–4.5 M plus the proof, a decoy leg `decoyFee` to the victim (`d ≥ minDecoyFee`, paid to every leg), a shield one TRIVIAL slot per account and block (a merge within the block ≈ 52 k, an append ≈ 74 k; at one per 5 s block ≈ 17,280 entries a day ≈ 0.16 G gas of rollover work). Shields are free for the sender (owner 2026-10-20, gas only), so on chain 7622, where gas is free, permissioned submitters and node rate limits remain the real control; rollover is public |
+| T8 | Rollover grief against in-flight proofs | proofs: impossible by construction (the same `T`, [CTR-PQZ-08](#CTR-PQZ-08)); calldata: none left, since `acc` and the inline window are read from state and a stale optional hint is ignored; **`ROLL_AGE = 5` blocks** keeps entries made after the proof from being rolled past `p`, so a debit submitted within five blocks of its proof never sees `rolled > p`, and after that it settles while `rolled − p ≤ INLINE_MAX` (the un-roll keeps order and loses nothing). Residuals, bounded harm and no loss: more than `INLINE_MAX` *old* entries above a capped `p` (re-prove at a new `p`), and a debit whose window holds an entry of its own block, revertible by a same-block merge ([§7.3](#73-shield)); clients prove at `p = pendingCount` and retry once on `InlineTooFar` or `ProofRejected` |
 | T9 | Replay / proof transplant | `sendCounter`, `chainId`, `chainUid`, `token`, `registry`, `validUntilBlock`, UAs, fee, beneficiary and `envelopeBinding` in the statement; envelope 2D nonce and `validUntil`; strong FS |
 | T10 | Fiat–Shamir for multi-round LNP22 (round-by-round grinding; QROM) | `op` and statement absorbed first; every challenge round ≥ 128-bit sound on its own, listed in `estimator.txt`; QROM soundness an assumption, stated; tracked for the audit. PQZH (Ligero): 128-bit classical in the ROM, QROM assumed likewise; a quantum Grover attack on the Fiat–Shamir grinding halves the query term (gate B review 2026-10-17, pqzh-ligero.md §5.1 and §12) |
 | T11 | Side channels in the prover (timing of sampling, rejection, Gaussian masks; WASM JIT gives no constant-time guarantee) | constant-time CBD; masking sampler **rewritten** integer-only and constant-time (CDT full-table scan or uniform masks) — upstream uses `double` and MPFR on secret-dependent values; rejection test in constant-time fixed point, since rejected attempts would otherwise leak `⟨z, v⟩` through timing; no secret-indexed tables (software AES bitsliced) |
@@ -2026,12 +2206,12 @@ service is the user's (or the organization's key oracle), never a third party's 
 | T15 | Leaked PQZ key | read-only breach (auth key separate, [CTR-PQZ-12](#CTR-PQZ-12)); move funds to a new UA |
 | T16 | Leaked ML-DSA key | cannot spend without the PQZ key's proof; no rotation ([CTR-UA-13](accounts.md#CTR-UA-13)): move funds to a new UA |
 | T17 | Implementation immaturity (research-grade LaZer, unaudited fork with six rewritten layers) | UNAUDITED label, allowlist, self-test, owner gates (licence clearance and independent audit) before any real funds |
-| T18 | Broken v1 envelope key (quantum ECDSA, leaked EOA) | authority split ([CTR-PQZ-15](#CTR-PQZ-15)): the envelope signer authorizes only its public balance and nonces; confidential value needs the PQ `authSig` + proof; bound ops cannot be re-pointed (their amounts, recipients and outputs). Residual: loss of that signer's public float and liveness of its own relayed ops; on a relayed op the storage mode (BUNDLE / HASH / NONE) and an unwrap's leg / `minOut` are bound by the envelope signature only (the PQ `authSig` covers `envelopeBinding`, which excludes `data`), so the key holder can re-sign the same op with another mode (`…NoBundle`), as `pqzUnshield` instead of `pqzUnshieldUnwrap`, or with another leg / `minOut`, and front-run: at worst no entry is stored or the payout takes another form, with no value lost beyond the public float above (review 5g L1, 2026-10-19; folding the mode into every binding is plan Task 5h); v3 path with an `mldsa65` fee UA removes the classical key |
+| T18 | Broken v1 envelope key (quantum ECDSA, leaked EOA) | authority split ([CTR-PQZ-15](#CTR-PQZ-15)): the envelope signer authorizes only its public balance and nonces; confidential value needs the PQ `authSig` + proof; bound ops cannot be re-pointed (their amounts, recipients and outputs). Residual: loss of that signer's public float and liveness of its own relayed ops; on a relayed op the storage mode (BUNDLE / HASH / NONE) and an unwrap's leg / `minOut` are bound by the envelope signature only (the PQ `authSig` covers `envelopeBinding`, which excludes `data`), so the key holder can re-sign the same op with another mode (`…NoBundle`), as `mtxUnshield` instead of `mtxUnshieldUnwrap`, or with another leg / `minOut`, and front-run: at worst no entry is stored or the payout takes another form, with no value lost beyond the public float above (review 5g L1, 2026-10-19). **Closed by plan 5h D15:** the mode is folded into every relayed binding (`keccak256(abi.encode(envelopeBinding, uint8(mode)))`) and an unwrap's leg / `minOut` likewise, so a re-signed envelope with another mode or leg no longer verifies against the proof; NONE is retired, so `…NoBundle` no longer exists; v3 path with an `mldsa65` fee UA removes the classical key |
 | T19 | Envelope stripping or re-wrapping (relayer takes the op out, or into an envelope with its own fee/recipient) | `envelopeBinding` in the statement (direct calls: 0, a transfer's mode binding, the unwrap binding), checked through the `authSig` before the precompile, as classical [CTR-ZTH-06](zether.md#CTR-ZTH-06) |
 | T20 | Fee griefing: envelopes that fail late to burn relayer gas | outer fee checked before any SSTORE2 read or precompile call; fee and nonce taken only after verify, so a failing op reverts whole; relayers pre-simulate on a follower; gas on chain 7622 is free, the cost is block capacity |
 | T21 | Malicious recipient keys extract hints on a multi transfer's shared `(r_g, e1_g)` (16 per leg) | ≤ 4 legs per randomness group, ≤ 80 hints, β 446.0 ≥ Kyber-512's 406 (owner-accepted exception to CTR-PQZ-03's 450); fresh randomness per operation ([CTR-PQZ-26](#CTR-PQZ-26)) |
-| T22 | Decoy flood: listing victims as decoys fills their `K_MAX` (`M − 1` victims per transfer) | each unit is a proven leg; the cap keeps the noise budget; optional `multiLegFee`; T7's permissioned submitters and rate limits; wallet load spreading (P6h) |
-| T23 | Burying real credits behind junk (ordered roll-over) | the owner can always spend `acc` with `p = rolled`; keepers roll decoy credits (P6i) |
+| T22 | Decoy flood: listing victims as decoys (`M − 1` victims per transfer) | each unit is a proven leg; the cap on `acc` keeps the noise budget and is never a refusal (head-of-line delay only); **`decoyFee`**: the sender pays `d ≥ minDecoyFee` to every leg, the victim included, so a flood pays its victims for the rollover work; T7's permissioned submitters and rate limits; wallet load spreading (P6h) |
+| T23 | Burying real credits behind junk (ordered roll-over) | strict order is deliberate (it hides which ring members were decoys); a real credit behind `x` decoys is spendable after `⌈x / ROLL_MAX⌉` rollovers (`ROLL_MAX = 256`: 10,000 decoys = 40 rollovers, ≈ 12.1 M gas each), or at once in the owner's own debit with `p` within `INLINE_MAX` of `rolled`; the owner can always spend `acc` with `p = rolled`; keepers roll decoy credits (P6i); the decoy fee compensates the work |
 | T24 | Decoy selection and intersection (inactive or fixed decoys, repeated payments with varying decoys, the real recipient's next activity, colluding decoys) | wallet policy (P6h): recently active candidates from the registry's per-kind list ([accounts CTR-UA-29](accounts.md#CTR-UA-29)), stable sets per payee and week, load spreading; anonymity set ≤ `M` minus colluders |
 | T25 | Op confusion (op 1 vs op 7, sizes, groupings, auditor on / off) | distinct `opTag`, the length bound to `(id, M, A)`, `M` and `recipientsHash` in the statement; negative vectors |
 | T26 | A disclosure reveals that its leg was a decoy (amount 0), narrowing the other recipients' set | by consent of the discloser, as classical |
@@ -2040,7 +2220,7 @@ service is the user's (or the organization's key oracle), never a third party's 
 
 - Clique block signing (secp256k1): a quantum adversary with the signer key could produce blocks; it cannot decrypt PQZ
   amounts or forge PQZ proofs, but it could censor or reorder. Consensus PQ is out of scope.
-- Relayer lane keys (gas only) and the public ERC-20 underlying, `pqzShield`/`pqzUnshield` amounts (public by design).
+- Relayer lane keys (gas only) and the public ERC-20 underlying, `mtxShield`/`mtxUnshield` amounts (public by design).
 - A v1 envelope signer (ECDSA/1271): it controls only its public `PqzToken` balance and its nonces (T18); the v3 path
   with a PQ fee UA has no classical key on the op path.
 - Classical Zether tokens on the same chain keep their HNDL exposure; migration moves pilots off them.
@@ -2049,15 +2229,15 @@ service is the user's (or the organization's key oracle), never a third party's 
 ## 13. Hybrid path and migration
 
 <a id="migration"></a>
-<a id="CTR-PQZ-20"></a>**CTR-PQZ-20** — **Migration classical → PQZ** is `ZetherToken.zetherUnshield` to the owner's address then
-`PqzToken.pqzShield`; the amount is public on chain 7622 once. No cross-system equality proof in v1. Classical Zether holds
+<a id="CTR-PQZ-20"></a>**CTR-PQZ-20** — **Migration classical → PQZ** is `ZetherToken.mtxUnshield` to the owner's address then
+`PqzToken.mtxShield`; the amount is public on chain 7622 once. No cross-system equality proof in v1. Classical Zether holds
 no production funds (dev-only gate), so only pilots migrate.
 
 | Phase | What runs | HNDL status |
 |---|---|---|
 | H0 (today) | classical Zether on dev chains only ([CTR-ZTH-02](zether.md#CTR-ZTH-02)); the owner decides chain 7622 for classical Zether ([CTR-ZTH-33](zether.md#CTR-ZTH-33)) | exposed, but no production funds |
 | H1 | PQZ on chain 7622 behind [CTR-PQZ-01](#CTR-PQZ-01), dev and pilot only | amounts PQ-safe from first use |
-| H2 | pilots migrate classical → PQZ: `ZetherToken.zetherUnshield(…, ownerAddress)` then `PqzToken.pqzShield(ua, amount)` with `approve(PqzToken)` (spender is a contract, [CTR-TOK-01](token-wrappers.md#CTR-TOK-01)) | each migrated amount is public once on chain 7622 |
+| H2 | pilots migrate classical → PQZ: `ZetherToken.mtxUnshield(…, ownerAddress)` then `PqzToken.mtxShield(ua, amount)` with `approve(PqzToken)` (spender is a contract, [CTR-TOK-01](token-wrappers.md#CTR-TOK-01)) | each migrated amount is public once on chain 7622 |
 | H3 | release gates **G-LIC** (licence/patent clearance) and independent audit ([CTR-PQZ-01](#CTR-PQZ-01)) — both before any production or commercial use | — |
 
 No dual-stack ciphertexts (ElGamal ⊕ lattice secret-sharing of every balance) and no cross-system equality proof: both
@@ -2120,24 +2300,33 @@ clientkeys (derivation, ML-DSA, `authDigest`); a pure-Python `pqz_kat.py` (no nu
 - a coefficient `= q` or `≥ 2^42` in `pk`, `acc`, inline, `out`; wrong lengths;
 - **malicious-prover harness** (a debug build of `pqz-core` with checks disabled, never shipped): `v > balance`; digit
   16; `M_i = 2^14`; carry out of range; `e_T` at `2^24`; `‖r‖ = 37`, `‖e1‖ = 165`, `‖e2‖ = 65`; `v_t` and `v_a` with
-  different `d`; `T` from a different `acc`; `T` without the plain term or with another `plainUsed`; key of another UA;
-- stale `sendCounter`; `validUntilBlock` passed; `acc` hash mismatch; inline ciphertext out of order; `|p − rolled| =
-  17`; `p > pendingCount`; `p < floor` (would subtract credits the last debit consumed); proven credit when units would
-  exceed `K_MAX` (with the reserved plain unit); `plainUsed > plainPending` (`PlainOverdraw`); a third-party `pqzShield`
-  between prove and submit (must still succeed); self-transfer; unregistered receiver; auditor flag mismatch;
-  `beneficiary == toUA`; 4096 `pqzShield` calls to one UA leave its transfer path open;
-- **inline length**: in transfer, burn and refresh, for both `p ≥ rolled` and `p < rolled`, `inline.length = n − 1` and
-  `n + 1` ⇒ `InlineMismatch`; an element of 16,511 or 16,513 bytes ⇒ `InlineMismatch`; entries in the right order but
-  shifted by one index ⇒ `InlineMismatch`; `pqzRollOver` past `pendingCount` reverts; invariant (1) holds after every
-  accepted debit (no credit below `floor` is missing from `T`);
+  different `d`; `T` from a different `acc`; `T` without the `shieldIn` term or with another `shieldIn`; key of another UA;
+- stale `sendCounter`; `validUntilBlock` passed; `|p − rolled| = 17`; `p > pendingCount`; `p < floor` (would subtract
+  credits the last debit consumed); an all-zero shared `u` (`ZeroU`, op 1, each op 7 group, burn, refresh); a third-party
+  `mtxShield` between prove and submit (must still succeed); self-transfer; unregistered receiver; auditor flag mismatch;
+  `beneficiary == toUA`; credits and shields beyond the old 1,024 cap (never refused, op 1, op 7, shield);
+- **state layout (plan 5h, `PqzStateTest`, 19 tests + the invariant):** cap clamp / `CapReached` / refresh reset /
+  `UnitsInvariant`; a rollover past the queue reverts; `AccNotPrepared`; **RF1** the un-roll at `p = rolled − INLINE_MAX` right
+  after a `ROLL_MAX` rollover with TRIVIAL entries and credits in the window (and `PendingRange` one below); **RF2** a stale
+  hint, the old materialised `acc` as hint after a debit (the MAT flag is checked first), a malformed hint, a valid hint (each
+  with `expectCall` on the exact precompile input); **RF3** `RollTooYoung` at `block_i + ROLL_AGE − 1`, a young inline entry in
+  the owner's debit, the three W-E races as "a rollover between prove and submit still settles"; **RF9** shield merge / append,
+  no merge into a same-block spent tail, TRIVIAL on both sides of `p`, `shieldIn`, and the documented same-block residual
+  (`test_trivial_sameBlockResidual`); restore from state alone (credits, merged shields, an op 7 leg, a rollover, a burn
+  reference, an un-roll); the op blob is the bundle. Pool tests (`PqzPoolTest`): free third-party shield to the pool, txFee
+  on op 1 and burn, the pools refused as payee or spender, `decoyFee` uniform per leg and its bounds, the D15 folded binding
+  (a pre-D15 proof and a `…NoBundle`-style proof both `ProofRejected`), every event's exact data;
+- **invariants** (`PqzStateInvariantTest`, `PqzPoolInvariantTest`): each debit's `T` equals `ref + Σ entries [lastP, p)`, every
+  pending ciphertext is in exactly one place, `cleared ≤ floor ≤ rolled ≤ pendingCount`; `balanceOf(SHIELD_POOL) ==
+  totalShielded·shieldScale`, `totalSupply` moves only with wraps and unwraps, every fee is in a public UA balance;
 - **chain uid**: a proof, authorization or disclosure valid on one chain-7622 copy is replayed on a second copy with the
   same chain id, token and registry addresses but another genesis/`chainUid` ⇒ 0 / `AuthRejected`; `initialize` with
   `registry.chainUid() == 0` reverts;
 - **op / proofSystemId confusion:** each valid proof submitted under every other `op` byte, under its own op with another
   op's `opTag`, and with a `proofSystemId` the precompile does not implement ⇒ 0; register and disclosure statements
   without the 64-byte prefix ⇒ 0; a disclosure proof replayed against another registry ⇒ 0;
-- rollover race: a debit proven at `p`, then `pqzRollOver` of 3 / 16 / 17 credits, then the debit ⇒ ok / ok /
-  `InlineTooFar`; then decrypt both accounts and check conservation;
+- rollover race: a debit proven at `p`, then `mtxRollOver` of 3 / 16 / 17 credits (aged by `ROLL_AGE`), then the debit ⇒ ok / ok /
+  `InlineTooFar` only when the 17 entries were older than the proof; then decrypt both accounts and check conservation;
 - registry: PoP for another chain/registry/UA; same `pk` twice, on an `msig` and an ML-DSA UA (`UAKeyInUse`); a PQZ key on
   an EOA, a classical single key, `slhdsa128s`, a classical-dominant `msig` or a Zether UA (`UAPqzHolder`); ML-DSA
   signature with empty instead of kind-tag context; **key binding**: the PQZ key stripped or swapped by a front-runner,
@@ -2146,7 +2335,7 @@ clientkeys (derivation, ML-DSA, `authDigest`); a pure-Python `pqz_kat.py` (no nu
   without a PQZ key ⇒ `AccountNotRegistered`;
 - disclosure: right amount ⇒ true, amount ± 1 ⇒ false, wrong `entryRef`, bundle bytes not matching the hash;
 - **burn / refresh randomness** (prover test): two burns, and two refreshes, built at one `sendCounter` for different
-  balances (another `plainUsed`) carry different `u'`, and `v_f − v_f'` is not `Δ·(b' − b'')` ([CTR-PQZ-19](#CTR-PQZ-19));
+  balances (another `shieldIn`) carry different `u'`, and `v_f − v_f'` is not `Δ·(b' − b'')` ([CTR-PQZ-19](#CTR-PQZ-19));
 - **meta-tx**, each on the v1 and the v3 path: `PERCENT` on a PQZ op ⇒ `PercentFeeForbiddenOnConfidential` (and accepted
   on a plain public transfer); an unknown selector ⇒ `MtxSelectorNotAllowed`; a PQZ selector in `mtxBatch`/`uaBatch` ⇒ `MtxNotBatchable`; outer fee above
   the payer's public balance ⇒ `MetaTxInsufficientForFee` **with the precompile mock asserting zero calls**; invalid
@@ -2155,7 +2344,7 @@ clientkeys (derivation, ML-DSA, `authDigest`); a pure-Python `pqz_kat.py` (no nu
   binding presented on the v3 path (and vice versa) ⇒ `AuthRejected`; `cancelNonce` / `uaCancelNonce` kills a bound
   in-flight op; v1 and v3 share one nonce per native id; v3 `from` = a UA without a PQZ key on a PQZ op ⇒ `AccountNotRegistered`; a broken-key
   simulation (the test owns the v1 envelope key, not the holder's key) can drain the public float and burn nonces but
-  every confidential op it builds reverts; envelope `pqzShield` debits the public balance and keeps the escrow invariant;
+  every confidential op it builds reverts; envelope `mtxShield` debits the public balance and keeps the escrow invariant;
   relayed `+16` inline transfer at the mocked price of the verify limit (50 ms when written, 60 ms since 2026-10-14;
   recalibrated in P6f) stays ≤ 16.78 M gas;
 - precompile absent (call an empty address) ⇒ `ProofRejected` / `SelfTestFailed`;
@@ -2175,12 +2364,12 @@ clientkeys (derivation, ML-DSA, `authDigest`); a pure-Python `pqz_kat.py` (no nu
 - `estimator.txt` reproducible: CI reruns the pinned lattice-estimator commit on the recorded commands and diffs the
   output.
 
-**Invariants** (forge, with mocked precompile and real `PqzCt`): (1) `Σ_ua decrypted(acc + pending) + Σ_ua plainPending
-= totalShielded` (decryption computed off-chain by the test harness from the logged ciphertexts and known test keys)
-after every random sequence of fund/transfer/rollover/burn/refresh; (2) every reachable `T` has `unitsOf(T) ≤ K_MAX`, and
-every account has `accUnits + (pendingCount − rolled) + 1 ≤ K_MAX`; (3) `cleared ≤ floor ≤ rolled ≤ pendingCount`, and no
-deleted `pendingHash` slot is ever read; (4) escrow `underlying.balanceOf(token) ≥ totalSupply() +
-totalShielded·shieldScale` and `balanceOf(UA_POOL) = Σ _uaBalance`, over random mixes of direct and envelope ops on both
+**Invariants** (forge, with mocked precompile and real `PqzCt`): (1) `Σ_ua decrypted(acc + pending) + Σ_ua (TRIVIAL amounts)
+= totalShielded − fees paid` (decryption computed off-chain by the test harness from the op blobs and known test keys)
+after every random sequence of shield/transfer/rollover/burn/refresh; (2) every reachable `T` has `unitsOf(T) ≤ K_MAX`
+(a rollover never takes `accUnits` above `K_MAX − 1`); (3) `cleared ≤ floor ≤ rolled ≤ pendingCount`, and no
+deleted pending slot is ever read; (4) `balanceOf(SHIELD_POOL) = totalShielded·shieldScale`, escrow `underlying.balanceOf(token) ≥
+totalSupply()` and `balanceOf(UA_POOL) = Σ _uaBalance`, over random mixes of direct and envelope ops on both
 paths.
 
 Build order (serial heavy builds, one at a time): parameter and literature spike (estimator, leaky-LWE, per-round

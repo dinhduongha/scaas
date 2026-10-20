@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.20;
 
+import {ZetherLayer} from "../../src/zether/ZetherLayer.sol";
 import {Test} from "forge-std/Test.sol";
 import {stdJson} from "forge-std/StdJson.sol";
 import {IZetherVerifier, IZetherBurnVerifier} from "../../src/zether/IZetherVerifier.sol";
@@ -99,6 +100,12 @@ contract ZetherS3VectorsTest is Test {
         assertEq(op, keccak256("SCAAS-ZETHER-OP-TRANSFER-MULTI-V1/HASH"));
         assertEq(psid, bls.proofSystemIdMulti());
         assertEq(bls.proofSystemIdMulti(), keccak256("scaas/zether/sigma-bullets/bls12-381/n64-n64/v2/multi"));
+        // the payload's decoyFee word (owner 2026-10-20) and the statement fee txFee + M · decoyFee (word 9)
+        bytes memory pl = j.readBytes(".payload");
+        uint256 d = j.readUint(".request.decoyFee");
+        assertEq(uint256(bytes32(_head(pl, 112))), d);
+        assertEq(uint256(bytes32(_head(pl, 80))), 3);
+        assertEq(uint256(bytes32(_head(j.readBytes(".statement"), 288))), j.readUint(".request.fee") + 3 * d);
         string memory k = vm.readFile(string.concat(DIR, "transfer_multi_noaud_bls12381.json"));
         (op,) = abi.decode(_head(k.readBytes(".statement"), 0), (bytes32, bytes32));
         assertEq(op, keccak256("SCAAS-ZETHER-OP-TRANSFER-MULTI-V1/NONE"));
@@ -164,18 +171,20 @@ contract ZetherS3VectorsTest is Test {
         for (uint256 i; i < 192; ++i) out[i] = st[off + i];
     }
 
-    /// `directCalldata` = `zetherTransferSingle(payload, proof, beneficiary)`: the direct call, and unchanged the
+    /// `directCalldata` = `mtxConfidentialTransferSingle(payload, proof, beneficiary)`: the direct call, and unchanged the
     /// envelope's `data` (CTR-ZTH-34; no `authSig` since UA-6 U9).
     function test_s3DirectCalldataIsTheEntryPointCall() public view {
         string memory j = vm.readFile(string.concat(DIR, "transfer_bls12381.json"));
         bytes memory op = j.readBytes(".directCalldata");
-        assertEq(bytes4(op), bytes4(keccak256("zetherTransferSingle(bytes,bytes,bytes32)")));
+        assertEq(bytes4(op), ZetherLayer.mtxConfidentialTransferSingle.selector);
         bytes memory args = new bytes(op.length - 4);
         for (uint256 i; i < args.length; ++i) args[i] = op[4 + i];
-        (bytes memory pl, bytes memory pr, bytes32 ben) = abi.decode(args, (bytes, bytes, bytes32));
+        (bytes memory pl, bytes memory pr, bytes memory auth, bytes32 ben, bytes memory hint) =
+            abi.decode(args, (bytes, bytes, bytes, bytes32, bytes));
         assertEq(pl, j.readBytes(".payload"));
         assertEq(pr, j.readBytes(".proof"));
         assertEq(ben, j.readBytes32(".request.beneficiary"));
+        assertEq(auth.length + hint.length, 0, "Zether: auth and accHint empty");
     }
 
     /// Mở tiết lộ của S3 qua contract `ZetherDisclosure` thật (token giả etch tại địa chỉ token của vector): bốn kind

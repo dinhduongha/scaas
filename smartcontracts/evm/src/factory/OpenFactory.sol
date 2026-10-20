@@ -69,7 +69,6 @@ contract OpenFactory is IOpenFactory {
     // ------------------------------------------------------------------ environments
 
     function publishEnv(TokenKind kind, uint16 envVersion, IFactoryToken.Env calldata env) external onlyRegistrar {
-        if (uint8(kind) > uint8(TokenKind.UNDERLYING_PQZ)) revert KindReserved(kind);
         _publish(uint8(kind), envVersion, env);
     }
 
@@ -98,7 +97,6 @@ contract OpenFactory is IOpenFactory {
         bytes calldata initcode,
         bytes calldata implArgs
     ) external onlyRegistrar returns (address implementation) {
-        if (uint8(kind) > uint8(TokenKind.UNDERLYING_PQZ)) revert KindReserved(kind);
         if (version == 0) revert VersionUnknown(kind, 0);
         address existing = _releases[kind][version].implementation;
         if (existing != address(0)) revert VersionAlreadyRegistered(kind, version, existing);
@@ -119,7 +117,6 @@ contract OpenFactory is IOpenFactory {
     }
 
     function setKindEnabled(TokenKind kind, bool on) external onlyRegistrar {
-        if (uint8(kind) > uint8(TokenKind.UNDERLYING_PQZ)) revert KindReserved(kind);
         uint256 bit = 1 << uint8(kind);
         _enabled = on ? _enabled | bit : _enabled & ~bit;
         emit KindEnabled(kind, on);
@@ -307,7 +304,6 @@ contract OpenFactory is IOpenFactory {
 
     /// @dev Code, `kind()`, `factory()`, `chainUid()`: each read by staticcall, a missing or short answer refused.
     function _checkImplementation(TokenKind kind, address implementation) private view {
-        if (uint8(kind) > uint8(TokenKind.UNDERLYING_PQZ)) revert KindReserved(kind);
         if (implementation.code.length == 0) revert ImplementationNotAContract(implementation);
         (bool ok, uint256 got) = _word(implementation, IFactoryToken.kind.selector);
         if (!ok) got = type(uint256).max;

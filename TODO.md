@@ -53,7 +53,9 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
   (5) fixes → fuzz → gate fin → **freeze pqz-core** → (5a) **token-family rename** (`NormalToken` / `WrappedToken`;
   before P6h and before Codex run 2, so the review sees the final names) → (5b) **`clients/pqz-prover` (P6h)**: the
   wallet PQZ prover — a Rust crate over `pqzl` + `stmt` with wasm bindings, API shaped like `clients/zether-prover`
-  (read state, decrypt the balance, build statements, prove, envelope) → (5c′) **UA-5c (c) + (d)**: the generic UA
+  (read state, decrypt the balance, build statements, prove, envelope; the wallet view list `pqzAccount`, `pqzAcc`,
+  `pqzPending`, `pqzPendingCt`, `pqzEntryBlob`, `minDecoyFee`; rollover by count, with `mtxPrepareAcc` called directly
+  — neither `mtxRollOver` nor `mtxPrepareAcc` is relayable) → (5c′) **UA-5c (c) + (d)**: the generic UA
   envelope pipeline in `MetaTxBase` and `MandateWallet` (+ Hedera) with `bytes32` owner / delegate / payees (needed by
   the node's `ua_metatx`) → (5c) **node relay (P6i + the needed part of
   UA F5)**: `ua_metatx` jobs (UA envelopes, `from: bytes32` — after UA-6 every Zether UA and PQ signer writes only
@@ -143,7 +145,7 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
 - [ ] **MT-5 / DEX:** `checkOrder` for the new DEX (not specified; with the node's P7 intake), the DEX invariant suite
   (dex.md §14), the fork test with real Uniswap bytecode, `IS_HEDERA` in `SCaaSDex` (a Hedera ED25519 account cannot
   sign a `DexOrder`); the node's P7 gas rules for `mtxSettle` are in COMPLETED.md (P2b-2).
-- [ ] **P3 Zether:** a real-passkey envelope test (CTR-ZTH-21), gas of `zetherWrapShield` / `zetherUnshieldUnwrap`
+- [ ] **P3 Zether:** a real-passkey envelope test (CTR-ZTH-21), gas of `mtxWrapShield` / `mtxUnshieldUnwrap`
   (zether.md gas tables re-measured on the new kinds), client Zether encoders, the disclosure questions (P3 plan header).
 - [ ] **MT-8 node:** breaker per `(from, selector)` and batching (NODE-LANE-11/25), TradeEngine (NODE-DEX-17/18, P7),
   NODE-IDX-06 `repeat_of`, `ua_metatx` (UA F1), per-poll venue check (NODE-DEX-08); review leftovers (gateway guard
@@ -276,6 +278,6 @@ Owner/operator gates from `docs/history/HANDOFF-blockchain.md` §1 (O1–O8 are 
   - [ ] **UA-5c split (owner 2026-10-20):** (a) confidential ops via the UA envelope + (b) unshield to a UA → 5h part A;
     (c) generic UA pipeline in `MetaTxBase` + (d) `MandateWallet` `bytes32` → step 5c′ before the node relay (5c);
     `zetherShield` via `uaExecute` already built in UA-6.
-  - [ ] **UA-5c** Zether public side and mandates: `zetherShield` and the confidential ops on the UA allowlist with the UA envelope binding (`SCAAS-ZETHER-UA-ENVELOPE-V1`), `zetherUnshieldToUA` / `zetherUnshieldUnwrapToUA` (`bytes32` recipient word, zether-prover 32-byte recipient); the generic UA pipeline into `MetaTxBase`; `MandateWallet` (+ Hedera) with `bytes32` owner / delegate / payees and UA builders, no ERC-1271 for a derived owner. Independent of UA-5b (needs UA-5a's `_uaMint` and `payWithFeeToUA`); the node part after UA F5.
-  - Later, with their own streams: regulated tokens key compliance by `bytes32` and hook the UA ledger (asset suite, CTR-AS-07); `SealedBidTender`, `VestingGrant`, `Distribution`, `ExchangeOffer` with UA bidders and beneficiaries when built; `pqzUnshield` with a `bytes32` recipient (P6g).
+  - [ ] **UA-5c** mandates (c)(d), step 5c′: the generic UA pipeline into `MetaTxBase`; `MandateWallet` (+ Hedera) with `bytes32` owner / delegate / payees and UA builders, no ERC-1271 for a derived owner. The contracts of (a)(b) are built in 5h part A (Task 3b: the confidential ops on the UA allowlist with the UA envelope binding `SCAAS-ZETHER-UA-ENVELOPE-V1`, `mtxUnshield` / `mtxUnshieldUnwrap` with a `bytes32` recipient, no `…ToUA` entry point) and the zether-prover builds a 32-byte recipient (final fix wave m3). Independent of UA-5b (needs UA-5a's `_uaMint` and `payWithFeeToUA`); the node part after UA F5.
+  - Later, with their own streams: regulated tokens key compliance by `bytes32` and hook the UA ledger (asset suite, CTR-AS-07); `SealedBidTender`, `VestingGrant`, `Distribution`, `ExchangeOffer` with UA bidders and beneficiaries when built.
 - [x] ~~Zether prover gas cap: an authorization allowance by `authRef` kind in `check_gas`~~ — obsolete: UA-6 removed the Zether `authRef` and `authSig`, the allowance is gone (branch `ua6`, merge pending); full note in COMPLETED.md.

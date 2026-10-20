@@ -55,7 +55,7 @@ interface IFactoryToken {
     /// @notice `*_ZETHER` kinds only; every other kind requires it empty. `maxShielded` (the total cap, `≤ 2^54`) and
     ///         `confidentialFee` (the inner fee, `< 2^64` and `< maxShielded`) are per token (CTR-ZTH-04, CTR-ZTH-05).
     ///         The two modes are fixed for the token's life (CTR-ZTH-38, CTR-ZTH-42): `disclosureMode` 0 `BUNDLE` (the
-    ///         default: every transfer entry, `zetherTransfer` stores the record) or 1 `COMPACT` (commit-reveal only);
+    ///         default: every transfer entry, `mtxConfidentialTransfer` stores the record) or 1 `COMPACT` (commit-reveal only);
     ///         `auditorMode` 0 `NONE` (no key, every `C_aud = O`), 1 `FULL` (key, every transfer includes the auditor)
     ///         or 2 `OPTIONAL` (key, the sender may leave the auditor out per transfer). `ZetherTypes` names the values.
     ///         The verifiers are not in it: they are the release's (`Env.deps`, CTR-ZTH-20); the creator picks them by
@@ -67,9 +67,10 @@ interface IFactoryToken {
         uint256 confidentialFee;
         uint8 disclosureMode;
         uint8 auditorMode;
-        /// PQZ only (op 7, CTR-PQZ-25): a public amount credited to every listed leg of a multi-recipient transfer,
-        /// paid by the sender with the fee; 0 = none. Zether kinds: must be 0.
-        uint256 multiLegFee;
+        /// Both layers (owner 2026-10-20): the least per-leg `decoyFee` a sender may put in a multi-recipient payload
+        /// (PQZ op 7, CTR-PQZ-25; Zether `mtxConfidentialTransfer*` multi); the sender's `decoyFee` goes to every leg's
+        /// public balance. Immutable; 0 allowed (the default).
+        uint256 minDecoyFee;
     }
 
     /// @notice CTR-TOK-25. Fields of another kind must be empty (`ConfigFieldForOtherKind`), so a token never carries a

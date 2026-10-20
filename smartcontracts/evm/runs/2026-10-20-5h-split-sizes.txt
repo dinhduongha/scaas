@@ -1,0 +1,8 @@
+5h Task 1 (D14): PqzLib split; forge build src --sizes, runtime/init bytes
+before: NoUnderlyingPqzToken 48397/50912, UnderlyingPqzToken 60838/63360 (size-baseline.json, unchanged by the split)
+NoUnderlyingPqzToken	48397	50912	(token limit margin to 61,440: 13043)
+PqzBurnLib	7308	7360	(limit 24,576)
+PqzStateLib	4407	4459	(limit 24,576)
+PqzTransferLib	13680	13732	(limit 24,576)
+PqzViewLib	12161	12213	(limit 24,576)
+UnderlyingPqzToken	60838	63360	(token limit margin to 61,440: 602)

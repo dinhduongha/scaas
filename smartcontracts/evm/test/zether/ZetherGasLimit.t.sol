@@ -26,13 +26,13 @@ abstract contract ZetherGasLimitSuite is ZetherFixture {
         for (uint256 i; i < rs.length; ++i) rs[i] = _user(0xD00 + i, address(uint160(0xE00 + i)));
         _public(tok, vm.addr(PAYER_PK), 1000);
         _fund(tok, alice, 1_000_000);
-        tok.zetherRollOver(alice.ua);
+        tok.mtxRollOver(ZetherTypes.UA.unwrap(alice.ua), 1);
     }
 
     function _sel(ZetherTypes.TransferMode mode) internal pure returns (bytes4) {
-        if (mode == ZetherTypes.TransferMode.HASH) return ZetherLayer.zetherTransferCompact.selector;
-        if (mode == ZetherTypes.TransferMode.BUNDLE) return ZetherLayer.zetherTransfer.selector;
-        return ZetherLayer.zetherTransferNoBundle.selector;
+        if (mode == ZetherTypes.TransferMode.HASH) return ZetherLayer.mtxConfidentialTransferCompact.selector;
+        if (mode == ZetherTypes.TransferMode.BUNDLE) return ZetherLayer.mtxConfidentialTransfer.selector;
+        return ZetherLayer.mtxConfidentialTransferNoBundle.selector;
     }
 
     /// @dev `alice → rs[0..m)`, one leg of 1000 (decoys 0), inner fee to carol (every account's first credit: the dear
@@ -44,7 +44,7 @@ abstract contract ZetherGasLimitSuite is ZetherFixture {
         vs[m / 2] = 1000;
         if (!relayed) {
             Tx memory t = _proveMulti(tok, alice, to, vs, 1_000_000, carol.ua, mode);
-            return abi.encodeWithSelector(_sel(mode), t.payload, t.proof, carol.ua);
+            return abi.encodeWithSelector(_sel(mode), t.payload, t.proof, bytes(""), ZetherTypes.UA.unwrap(carol.ua), bytes(""));
         }
         MetaTxLib.MetaTransaction memory mt = MetaTxLib.MetaTransaction({
             from: vm.addr(PAYER_PK), data: "", batch: 1, nonce: tok.mtxNonce(vm.addr(PAYER_PK), 1),
@@ -52,7 +52,7 @@ abstract contract ZetherGasLimitSuite is ZetherFixture {
             relayer: relayer, fee: 3, feeRecipient: address(0)
         });
         Tx memory u = _proveMulti(tok, alice, to, vs, 1_000_000, carol.ua, mode, tok.envelopeBinding(mt));
-        mt.data = abi.encodeWithSelector(_sel(mode), u.payload, u.proof, carol.ua);
+        mt.data = abi.encodeWithSelector(_sel(mode), u.payload, u.proof, bytes(""), ZetherTypes.UA.unwrap(carol.ua), bytes(""));
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(PAYER_PK, tok.mtxDigest(mt));
         return abi.encodeCall(IMetaTx.mtxExecute, (mt, abi.encodePacked(r, s, v)));
     }
@@ -122,7 +122,7 @@ abstract contract ZetherGasLimitSuite is ZetherFixture {
         assertTrue(_ok(cd, 1_100_000, false), "fits");
     }
 
-    /// @dev `zetherTransferSingle` alice → rs[0], auditor on and out, direct and relayed (§19 node cap).
+    /// @dev `mtxConfidentialTransferSingle` alice → rs[0], auditor on and out, direct and relayed (§19 node cap).
     function test_measure_single() public {
         vm.skip(!vm.envOr("ZETHER_GAS_PROBE", false));
         for (uint256 k; k < 4; ++k) {
@@ -131,7 +131,7 @@ abstract contract ZetherGasLimitSuite is ZetherFixture {
             bytes memory cd;
             if (!relayed) {
                 Tx memory t = _proveTransfer(tok, alice, rs[0], 1000, 1_000_000, carol.ua, 0);
-                cd = abi.encodeCall(ZetherLayer.zetherTransferSingle, (t.payload, t.proof, carol.ua));
+                cd = abi.encodeCall(ZetherLayer.mtxConfidentialTransferSingle, (t.payload, t.proof, bytes(""), ZetherTypes.UA.unwrap(carol.ua), bytes("")));
             } else {
                 MetaTxLib.MetaTransaction memory mt = MetaTxLib.MetaTransaction({
                     from: vm.addr(PAYER_PK), data: "", batch: 1, nonce: tok.mtxNonce(vm.addr(PAYER_PK), 1),
@@ -139,7 +139,7 @@ abstract contract ZetherGasLimitSuite is ZetherFixture {
                     relayer: relayer, fee: 3, feeRecipient: address(0)
                 });
                 Tx memory u = _proveTransfer(tok, alice, rs[0], 1000, 1_000_000, carol.ua, tok.envelopeBinding(mt));
-                mt.data = abi.encodeCall(ZetherLayer.zetherTransferSingle, (u.payload, u.proof, carol.ua));
+                mt.data = abi.encodeCall(ZetherLayer.mtxConfidentialTransferSingle, (u.payload, u.proof, bytes(""), ZetherTypes.UA.unwrap(carol.ua), bytes("")));
                 (uint8 v, bytes32 r, bytes32 s) = vm.sign(PAYER_PK, tok.mtxDigest(mt));
                 cd = abi.encodeCall(IMetaTx.mtxExecute, (mt, abi.encodePacked(r, s, v)));
             }

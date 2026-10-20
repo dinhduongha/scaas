@@ -9,11 +9,12 @@ import {IMetaTx} from "../metatx/IMetaTx.sol";
 import {AdminLib} from "../metatx/AdminLib.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {PqzLayer} from "./PqzLayer.sol";
-import {PqzLib} from "./PqzLib.sol";
+import {PqzCore} from "./PqzCore.sol";
+import {PqzStateLib} from "./PqzStateLib.sol";
 
 /// @title Kind `NONE_PQZ` (CTR-TOK-21, CTR-PQZ-22): the standalone token with the PQZ layer (P6g plan D1).
 /// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Chains 31337 / 1337 / 7622 only. `MINTABLE` mints public units
-///         only; shielded value exists only through `pqzShield`, which burns public units. Flags: `PAYABLE`,
+///         only; shielded value exists only through `mtxShield`, which moves public units to `SHIELD_POOL` (D19). Flags: `PAYABLE`,
 ///         `MINTABLE`, `BURNABLE`. Built by `OpenFactory.createToken` with `conf` set and `legs`, `rate` empty.
 contract NoUnderlyingPqzToken is NoUnderlyingToken, PqzLayer {
     /// @dev The factory's append (`OpenFactory.deployImplementation`, plan 5g-Z2): the release's `Env`, whose
@@ -33,7 +34,7 @@ contract NoUnderlyingPqzToken is NoUnderlyingToken, PqzLayer {
         _requireUnused(cfg, false, true, true, false);
         _setMetadata(cfg.name, cfg.symbol, cfg.decimals);
         AdminLib.init(AdminLib.KIND_NONE_PQZ, cfg.features, cfg.lockedFeatures, cfg.owner, cfg.roles);
-        PqzLib.init(cfg.conf, _REGISTRY, PQZ_VERIFIER);
+        PqzStateLib.init(cfg.conf, _REGISTRY, PQZ_VERIFIER);
         if (cfg.initialSupply != 0) _mint(cfg.initialHolder, cfg.initialSupply);
     }
 
@@ -57,25 +58,25 @@ contract NoUnderlyingPqzToken is NoUnderlyingToken, PqzLayer {
         return PqzLayer._batchable(sel);
     }
 
-    /// @notice The allowlist (CTR-MTX-19, CTR-PQZ-21): `cancelNonce`, `burn(uint256)` `AMOUNT(0)`, the PQZ ops `ABSOLUTE`.
+    /// @notice The allowlist (CTR-MTX-19, CTR-PQZ-21): `cancelNonce`, `burn(uint256)` `AMOUNT(0)`, the PQZ ops
+    ///         `ABSOLUTE` (incl. the rollover and `mtxPrepareAcc`).
     function mtxSelectors()
         public pure override(NoUnderlyingToken, IMetaTx, MetaTxBase)
         returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
     {
-        s = new bytes4[](11);
-        c = new uint8[](11);
-        a = new uint8[](11);
+        s = new bytes4[](10);
+        c = new uint8[](10);
+        a = new uint8[](10);
         (s[0], c[0]) = (this.cancelNonce.selector, FEE_CLASS_ABSOLUTE);
         (s[1], c[1]) = (this.burn.selector, FEE_CLASS_AMOUNT);
-        (s[2], c[2]) = (this.pqzShield.selector, FEE_CLASS_ABSOLUTE);
-        (s[3], c[3]) = (this.pqzTransfer.selector, FEE_CLASS_ABSOLUTE);
-        (s[4], c[4]) = (this.pqzTransferCompact.selector, FEE_CLASS_ABSOLUTE);
-        (s[5], c[5]) = (this.pqzTransferNoBundle.selector, FEE_CLASS_ABSOLUTE);
-        (s[6], c[6]) = (this.pqzUnshield.selector, FEE_CLASS_ABSOLUTE);
-        (s[7], c[7]) = (this.pqzRollOver.selector, FEE_CLASS_ABSOLUTE);
-        (s[8], c[8]) = (this.pqzTransferSingle.selector, FEE_CLASS_ABSOLUTE);
-        (s[9], c[9]) = (this.pqzTransferSingleCompact.selector, FEE_CLASS_ABSOLUTE);
-        (s[10], c[10]) = (this.pqzTransferSingleNoBundle.selector, FEE_CLASS_ABSOLUTE);
+        (s[2], c[2]) = (this.mtxShield.selector, FEE_CLASS_ABSOLUTE);
+        (s[3], c[3]) = (this.mtxConfidentialTransfer.selector, FEE_CLASS_ABSOLUTE);
+        (s[4], c[4]) = (this.mtxConfidentialTransferCompact.selector, FEE_CLASS_ABSOLUTE);
+        (s[5], c[5]) = (this.mtxUnshield.selector, FEE_CLASS_ABSOLUTE);
+        (s[6], c[6]) = (this.mtxConfidentialTransferSingle.selector, FEE_CLASS_ABSOLUTE);
+        (s[7], c[7]) = (this.mtxConfidentialTransferSingleCompact.selector, FEE_CLASS_ABSOLUTE);
+        (s[8], c[8]) = (this.mtxRollOver.selector, FEE_CLASS_ABSOLUTE);
+        (s[9], c[9]) = (this.mtxPrepareAcc.selector, FEE_CLASS_ABSOLUTE);
     }
 
     function _mtxRule(bytes4 sel) internal view override(NoUnderlyingToken, MetaTxBase) returns (MtxRule memory) {

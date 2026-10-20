@@ -14,7 +14,7 @@ import {MetaTxLib} from "../common/MetaTxLib.sol";
 
 /// @title Kind `NONE_ZETHER` (CTR-TOK-21): the standalone token with the Zether layer (CTR-ZTH-44).
 /// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Dev chains only. `MINTABLE` mints public units only; shielded
-///         value exists only through `zetherShield`, which burns public units. Flags: `PAYABLE`, `MINTABLE`, `BURNABLE`
+///         value exists only through `mtxShield`, which moves public units to `SHIELD_POOL`. Flags: `PAYABLE`, `MINTABLE`, `BURNABLE`
 ///         (the regulated flags are refused, CTR-ZTH-47). Built by `OpenFactory.createToken` with `conf` set and `legs`,
 ///         `rate` empty. Never on Hedera (no dev chain there).
 contract NoUnderlyingZetherToken is NoUnderlyingToken, ZetherLayer {
@@ -47,23 +47,33 @@ contract NoUnderlyingZetherToken is NoUnderlyingToken, ZetherLayer {
         return ZetherLayer._envelopeBinding(m);
     }
 
+    function _uaEnvelopeBinding(MetaTxLib.UAMetaTransaction memory m)
+        internal view override(ERC20MetaTx, ZetherLayer) returns (bytes32)
+    {
+        return ZetherLayer._uaEnvelopeBinding(m);
+    }
+
     /// @notice The allowlist (CTR-MTX-19, CTR-ZTH-34): `cancelNonce` (base), `burn(uint256)` `AMOUNT(0)`, then the
     ///         Zether ops, each `ABSOLUTE`.
     function mtxSelectors()
         public pure override(NoUnderlyingToken, IMetaTx, MetaTxBase)
         returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
     {
-        s = new bytes4[](8);
-        c = new uint8[](8);
-        a = new uint8[](8);
+        s = new bytes4[](12);
+        c = new uint8[](12);
+        a = new uint8[](12);
         (s[0], c[0]) = (this.cancelNonce.selector, FEE_CLASS_ABSOLUTE);
         (s[1], c[1]) = (this.burn.selector, FEE_CLASS_AMOUNT);
-        (s[2], c[2]) = (this.zetherShield.selector, FEE_CLASS_ABSOLUTE);
-        (s[3], c[3]) = (this.zetherTransfer.selector, FEE_CLASS_ABSOLUTE);
-        (s[4], c[4]) = (this.zetherTransferCompact.selector, FEE_CLASS_ABSOLUTE);
-        (s[5], c[5]) = (this.zetherTransferNoBundle.selector, FEE_CLASS_ABSOLUTE);
-        (s[6], c[6]) = (this.zetherTransferSingle.selector, FEE_CLASS_ABSOLUTE);
-        (s[7], c[7]) = (this.zetherUnshield.selector, FEE_CLASS_ABSOLUTE);
+        (s[2], c[2]) = (this.mtxShield.selector, FEE_CLASS_ABSOLUTE);
+        (s[3], c[3]) = (this.mtxConfidentialTransfer.selector, FEE_CLASS_ABSOLUTE);
+        (s[4], c[4]) = (this.mtxConfidentialTransferCompact.selector, FEE_CLASS_ABSOLUTE);
+        (s[5], c[5]) = (this.mtxConfidentialTransferNoBundle.selector, FEE_CLASS_ABSOLUTE);
+        (s[6], c[6]) = (this.mtxConfidentialTransferSingle.selector, FEE_CLASS_ABSOLUTE);
+        (s[7], c[7]) = (this.mtxUnshield.selector, FEE_CLASS_ABSOLUTE);
+        (s[8], c[8]) = (this.mtxRollOver.selector, FEE_CLASS_ABSOLUTE);
+        (s[9], c[9]) = (this.mtxRollOverBatch.selector, FEE_CLASS_ABSOLUTE);
+        (s[10], c[10]) = (this.mtxRollOverSigned.selector, FEE_CLASS_ABSOLUTE);
+        (s[11], c[11]) = (this.mtxSetRollOverMode.selector, FEE_CLASS_ABSOLUTE);
     }
 
     function _mtxRule(bytes4 sel) internal view override(NoUnderlyingToken, MetaTxBase) returns (MtxRule memory) {
@@ -71,9 +81,10 @@ contract NoUnderlyingZetherToken is NoUnderlyingToken, ZetherLayer {
         return NoUnderlyingToken._mtxRule(sel);
     }
 
-    /// @notice `NoUnderlyingToken`'s UA allowlist (`burn`) and `zetherShield` (CTR-ZTH-51: no proof, no binding; the Zether
-    ///         UA shields its own public units, UA-6 U8); the proof-carrying Zether ops join it in UA-5c.
+    /// @notice `NoUnderlyingToken`'s UA allowlist (`burn`) and the Zether ops (CTR-ZTH-51, UA-5c): `mtxShield` (no proof,
+    ///         no binding; the Zether UA shields its own public units, UA-6 U8) and the proof-carrying ones, whose
+    ///         statement carries the UA envelope binding; the outer fee from the signer's UA balance.
     function _uaAllowed(bytes4 sel) internal view override(NoUnderlyingToken, ERC20MetaTx) returns (bool) {
-        return sel == this.zetherShield.selector || NoUnderlyingToken._uaAllowed(sel);
+        return _isZetherOp(sel) || NoUnderlyingToken._uaAllowed(sel);
     }
 }

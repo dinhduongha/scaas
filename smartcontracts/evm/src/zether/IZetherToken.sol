@@ -6,15 +6,18 @@ import {ZetherTypes} from "./ZetherTypes.sol";
 import {IZetherVerifier, IZetherBurnVerifier} from "./IZetherVerifier.sol";
 import {ITransferDisclosure} from "./ITransferDisclosure.sol";
 import {IUALedger} from "../metatx/IUALedger.sol";
+import {IConfidentialToken} from "../confidential/IConfidentialToken.sol";
 
 /// @title The confidential layer of the kinds `NONE_ZETHER` and `UNDERLYING_ZETHER` (CTR-ZTH-44, CTR-ZTH-45): ElGamal
 ///        `acc`/`pending` balances over the token's public ERC-20 balance.
 /// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Byte-exact contract with the prover: `docs/contracts/zether.md`.
 ///         The token is also an `IERC20MetaTx` on the one meta-transaction base: every proof-carrying entry point is a
-///         direct call (statement `ZTX_V1_DIRECT`, binding 0) or an allowlisted self-call of `mtxExecute` whose envelope
-///         binding the statement carries (`ZTX_V1_RELAYED`, CTR-ZTH-34). `zetherWrapShield` and `zetherUnshieldUnwrap`
-///         are on `UNDERLYING_ZETHER` only; the prover views are in `ZetherStatements` (CTR-ZTH-46).
-interface IZetherToken is IUALedger {
+///         direct call (statement `ZTX_V1_DIRECT`, binding 0) or an allowlisted self-call of `mtxExecute` / `uaExecute`
+///         whose envelope binding the statement carries (`ZTX_V1_RELAYED`, CTR-ZTH-34, CTR-ZTH-51). The shared entry points
+///         and events are `IConfidentialToken`'s (`auth` and `accHint` must be empty here); `mtxWrapShield` and
+///         `mtxUnshieldUnwrap` are on `UNDERLYING_ZETHER` only (`IConfidentialUnderlyingToken`); the prover views are in
+///         `ZetherStatements` (CTR-ZTH-46).
+interface IZetherToken is IUALedger, IConfidentialToken {
     /// @notice One account at one block. An unset point is `O`.
     struct AccountState {
         bytes accC;
@@ -28,35 +31,13 @@ interface IZetherToken is IUALedger {
         ZetherTypes.RollOverMode mode;
     }
 
-    event ZetherShielded(ZetherTypes.UA indexed account, uint256 amount);
-    /// @notice The single-recipient format (`zetherTransferSingle`).
-    event ZetherTransfer(
-        ZetherTypes.UA indexed from,
-        ZetherTypes.UA indexed to,
-        ZetherTypes.UA indexed beneficiary,
-        uint256 fee,
-        uint256 sendCounter,
-        bytes32 entryRef
-    );
-    /// @notice `M` recipients (decoys included), one proof; the recipients are public, the amounts encrypted.
-    event ZetherTransferMulti(
-        ZetherTypes.UA indexed from,
-        ZetherTypes.UA indexed beneficiary,
-        uint256 fee,
-        uint256 sendCounter,
-        bytes32 entryRef,
-        ZetherTypes.UA[] recipients,
-        ZetherTypes.TransferMode mode
-    );
     /// @notice Commit-reveal (HASH): the record `R = salt ‖ B_1 ‖ … ‖ B_M`, whose hash `entryRef` stores.
     event TransferBundles(bytes32 indexed entryRef, bytes bundles);
-    /// @notice `recipient` received `amount · shieldScale` public units (`zetherUnshield`) or the underlying they are
-    ///         worth (`zetherUnshieldUnwrap`).
-    event ZetherUnshielded(ZetherTypes.UA indexed account, uint256 amount, address indexed recipient);
-    event RolledOver(ZetherTypes.UA indexed account, uint256 accSeq);
     event RollOverModeChanged(ZetherTypes.UA indexed account, ZetherTypes.RollOverMode mode);
 
     error AccountNotRegistered(ZetherTypes.UA account);
+    /// @notice A multi-recipient `decoyFee` below the token's `minDecoyFee`, or `≥ 2^64` (owner 2026-10-20; as PQZ's).
+    error DecoyFeeOutOfRange(uint256 decoyFee, uint256 minDecoyFee);
     error AmountOutOfRange(uint256 amount, uint256 max);
     error ProofRejected();
     error StaleAccSeq(uint256 expected, uint256 got);
@@ -77,7 +58,7 @@ interface IZetherToken is IUALedger {
     error AuditorForbidden();
     /// @notice Commit-reveal: the memo's clear salt is not the payload's (storage-only recovery needs it, CTR-ZTH-50).
     error MemoSaltMismatch();
-    /// @notice A `COMPACT` token refuses `zetherTransferNoBundle` and `zetherTransferSingle` (CTR-ZTH-48).
+    /// @notice A `COMPACT` token refuses `mtxConfidentialTransferNoBundle` and `mtxConfidentialTransferSingle` (CTR-ZTH-48).
     error TransferEntryDisabled(uint8 disclosureMode);
     /// @notice `ConfidentialConfig.disclosureMode` is neither BUNDLE nor COMPACT (CTR-ZTH-48).
     error BadDisclosureMode(uint8 mode);
@@ -88,8 +69,14 @@ interface IZetherToken is IUALedger {
     error VerifierUnsupportedOnThisChain(address verifier, string curve);
     /// @notice A `ConfidentialConfig` the token refuses (CTR-ZTH-04, CTR-ZTH-26).
     error BadInit();
-    /// @notice `zetherWrapShield`: the public-equivalent of the deposit is not a whole number of shielded units.
+    /// @notice `mtxWrapShield`: the public-equivalent of the deposit is not a whole number of shielded units.
     error AmountNotScaled(uint256 minted, uint256 shieldScale);
+    /// @notice A shared proof-taking entry point got a non-empty `auth`: the Zether proof alone authorises (UA-6).
+    error AuthNotEmpty();
+    /// @notice A shared proof-taking entry point got a non-empty `accHint` (Zether has no materialised `acc`).
+    error AccHintNotEmpty();
+    /// @notice `mtxRollOver` with `n = 0`.
+    error RollOverRange(uint256 n);
 
     // ------------------------------------------------------------------ per-token parameters (immutable)
 
@@ -99,12 +86,15 @@ interface IZetherToken is IUALedger {
     function shieldScale() external view returns (uint256);
     /// @notice The inner fee, `< 2^64` and `< maxDecryptableShielded`; never a function of `v` (CTR-ZTH-07).
     function confidentialFee() external view returns (uint256);
+    /// @notice The least per-leg `decoyFee` of a multi-recipient transfer (owner 2026-10-20); `confidentialFee + 16 ·
+    ///         minDecoyFee` is `< 2^64` and `< maxDecryptableShielded`. 0 allowed.
+    function minDecoyFee() external view returns (uint256);
     /// @notice The auditor key (`ITransferDisclosure.AUDITOR`), empty exactly when `auditorMode()` is `NONE` (CTR-ZTH-09).
     function auditorKey() external view returns (bytes memory);
     /// @notice `NONE`, `FULL` (every transfer includes the auditor) or `OPTIONAL` (the sender's choice per transfer).
     function auditorMode() external view returns (ZetherTypes.AuditorMode);
-    /// @notice `BUNDLE` (`zetherTransfer` stores the record; `zetherTransferCompact`, `zetherTransferNoBundle` save gas)
-    ///         or `COMPACT` (`zetherTransfer` and `zetherTransferCompact` are commit-reveal; no-bundle and single refused).
+    /// @notice `BUNDLE` (`mtxConfidentialTransfer` stores the record; `…Compact`, `…NoBundle` save gas) or `COMPACT`
+    ///         (`mtxConfidentialTransfer` and `…Compact` are commit-reveal; no-bundle and single refused).
     function disclosureMode() external view returns (ZetherTypes.DisclosureMode);
     /// @notice The canonical `ZetherDisclosure` (stateless, shared), an implementation immutable (CTR-ZTH-43).
     function disclosure() external view returns (ITransferDisclosure);
@@ -130,48 +120,30 @@ interface IZetherToken is IUALedger {
     function sendCounter(ZetherTypes.UA account) external view returns (uint256);
     /// @notice The binding a relayed proof carries (CTR-ZTH-06): every envelope field except `data`, plus `chainUid`.
     function envelopeBinding(MetaTxLib.MetaTransaction calldata m) external view returns (bytes32);
+    /// @notice The UA path's binding (CTR-ZTH-51): tag `SCAAS-ZETHER-UA-ENVELOPE-V1`, `from` as `bytes32`.
+    function uaEnvelopeBinding(MetaTxLib.UAMetaTransaction calldata m) external view returns (bytes32);
 
-    // ------------------------------------------------------------------ roll-over (CTR-ZTH-16, CTR-ZTH-17)
+    // ------------------------------------------------------------------ Zether-only entry points (CTR-ZTH-45)
 
-    /// @notice `PUBLIC` accounts: anyone, a silent no-op without a new credit; `OWNER_ONLY` reverts.
-    function zetherRollOver(ZetherTypes.UA account) external;
     /// @notice Skips `OWNER_ONLY` items.
-    function zetherRollOverBatch(ZetherTypes.UA[] calldata accounts) external;
+    function mtxRollOverBatch(ZetherTypes.UA[] calldata accounts) external;
     /// @notice Owner roll-over: a registered Zether UA only (`AccountNotRegistered` otherwise).
-    function zetherRollOverSigned(ZetherTypes.UA account, uint64 expectedPendingSeq, uint64 validUntilBlock, bytes calldata sig)
+    function mtxRollOverSigned(ZetherTypes.UA account, uint64 expectedPendingSeq, uint64 validUntilBlock, bytes calldata sig)
         external;
     /// @notice Owner mode change: a registered Zether UA only (`AccountNotRegistered` otherwise).
-    function zetherSetRollOverMode(
+    function mtxSetRollOverMode(
         ZetherTypes.UA account,
         ZetherTypes.RollOverMode mode,
         uint64 validUntilBlock,
         bytes calldata sig
     ) external;
-
-    // ------------------------------------------------------------------ shield / transfer / unshield (CTR-ZTH-45)
-
-    /// @notice Burns `amount · shieldScale` public units of the caller; `pending[ua] += [amount]G` (CTR-ZTH-35).
-    function zetherShield(bytes calldata encodedY, uint256 amount) external;
-    /// @notice `M` recipients, one proof, the token's default (CTR-ZTH-38): the record stored (BUNDLE) on a `BUNDLE`
-    ///         token, commit-reveal (HASH: the commitment and the sender memo stored, the record in `TransferBundles`) on
-    ///         a `COMPACT` token.
-    function zetherTransfer(bytes calldata payload, bytes calldata proof, ZetherTypes.UA beneficiary)
-        external returns (bytes32 entryRef);
-    /// @notice Commit-reveal (HASH) on every token: the commitment and the sender memo stored, the record in the event.
-    function zetherTransferCompact(bytes calldata payload, bytes calldata proof, ZetherTypes.UA beneficiary)
-        external returns (bytes32 entryRef);
-    /// @notice Stores nothing (NONE, disclosure off chain from calldata); `TransferEntryDisabled` on a `COMPACT` token.
-    function zetherTransferNoBundle(bytes calldata payload, bytes calldata proof, ZetherTypes.UA beneficiary)
-        external returns (bytes32 entryRef);
-    /// @notice The single-recipient format, its record stored in full; `TransferEntryDisabled` on a `COMPACT` token.
-    function zetherTransferSingle(bytes calldata payload, bytes calldata proof, ZetherTypes.UA beneficiary)
-        external returns (bytes32 entryRef);
-    /// @notice Proves the unshield statement, then mints `amount · shieldScale` public units to `to`.
-    function zetherUnshield(
+    /// @notice Multi-recipient, stores nothing (NONE, disclosure off chain from calldata); `TransferEntryDisabled` on a
+    ///         `COMPACT` token.
+    function mtxConfidentialTransferNoBundle(
         bytes calldata payload,
         bytes calldata proof,
-        ZetherTypes.UA beneficiary,
-        address to,
-        uint256 amount
-    ) external;
+        bytes calldata auth,
+        bytes32 beneficiary,
+        bytes calldata accHint
+    ) external returns (bytes32 entryRef);
 }

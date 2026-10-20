@@ -15,6 +15,16 @@ contract PqzCtHarness {
         PqzCt.reduce(c);
     }
 
+    /// `acc + Σ plus + Σ_k Trivial(digits(triv_k))`, one `addTrivial` per amount (TRIVIAL entries, plan 5h D18).
+    function sumMixed(bytes calldata acc, bytes[] calldata plus_, uint256[] calldata triv)
+        external pure returns (bytes memory c)
+    {
+        c = PqzCt.load(acc);
+        for (uint256 i; i < plus_.length; ++i) PqzCt.plus(c, plus_[i]);
+        for (uint256 i; i < triv.length; ++i) PqzCt.addTrivial(c, triv[i]);
+        PqzCt.reduce(c);
+    }
+
     function canonical(bytes calldata b) external pure returns (bool) {
         return PqzCt.isCanonical(b);
     }

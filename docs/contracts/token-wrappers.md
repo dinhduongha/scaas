@@ -76,7 +76,13 @@ is a per-chain variant, not a creator's choice ([CTR-TOK-23](#CTR-TOK-23)).
 | `UNDERLYING_ZETHER` | `UnderlyingZetherToken` | wrapper + Zether layer, wrap-shield and unshield-unwrap |
 | `NONE_PQZ` | `NoUnderlyingPqzToken` | standalone + post-quantum layer ([pq-zero-knowledge.md](pq-zero-knowledge.md)) |
 | `UNDERLYING_PQZ` | `UnderlyingPqzToken` | wrapper + post-quantum layer |
-| `NONE_ZETHER_PQZ`, `UNDERLYING_ZETHER_PQZ` | — | **reserved, not built**: Zether and PQZ on one token have room in the kind ids only |
+
+There are four confidential-layer kinds and no combined kind: `NONE_ZETHER_PQZ` and `UNDERLYING_ZETHER_PQZ` (ids 6 and 7)
+were dropped (owner 2026-10-20, plan 5h D21; the ids are not reused, and the factory's ABI decoder rejects them). Both
+layers expose one `mtx*` interface (`IConfidentialToken`, [CTR-ZTH-45](zether.md#CTR-ZTH-45)), so a combined token needs
+no layer argument. Both layers keep shielded value in the `SHIELD_POOL` sentinel instead of burning it
+([CTR-PQZ-15](pq-zero-knowledge.md#CTR-PQZ-15), [CTR-ZTH-51](zether.md#CTR-ZTH-51)); `SHIELD_POOL` is a token-level
+address like `UA_POOL`, not payable and unable to spend.
 
 | Node | Role |
 |---|---|
@@ -307,7 +313,7 @@ to a third party.
 underlying; lowering `q` means each wrapped unit redeems for **more**.
 
 <a id="CTR-TOK-05"></a>**CTR-TOK-05** — Reserve accounting is internal: `reserve_i` changes only through `wrap`,
-`unwrap`, `addReserve` (on `UNDERLYING_ZETHER` also `zetherWrapShield` / `zetherUnshieldUnwrap`, no `Wrapped` /
+`unwrap`, `addReserve` (on `UNDERLYING_ZETHER` also `mtxWrapShield` / `mtxUnshieldUnwrap`, no `Wrapped` /
 `Unwrapped`). The solvency invariant is **`collateralValue() := Σ_i ⌊reserve_i·num_i/den_i⌋ ≥ totalSupply()`** (`+
 totalShielded·shieldScale`, [CTR-ZTH-44](zether.md#CTR-ZTH-44)), plus `underlying_i.balanceOf(this) ≥ reserve_i` while
 the underlying behaves. Wrap mints the **measured** balance delta; unwrap requires the balance to drop by exactly `out`
@@ -741,7 +747,7 @@ struct DexConfig { address admin; uint32 relayerSharePpm; address treasury; bool
   front-run of `initialize`, no deployed-but-uninitialized state); the implementation locks its own `initialize` in
   its constructor. The address is predictable from `(factory, salt, implementation)`.
 - **Kinds** (fresh enum, nothing deployed): `NONE`, `UNDERLYING`, `NONE_ZETHER`, `UNDERLYING_ZETHER`, `NONE_PQZ`,
-  `UNDERLYING_PQZ`; reserved `NONE_ZETHER_PQZ`, `UNDERLYING_ZETHER_PQZ`. The catalogue keeps versions per kind
+  `UNDERLYING_PQZ` (6 and 7 were `NONE_ZETHER_PQZ` / `UNDERLYING_ZETHER_PQZ`, dropped 2026-10-20, ids not reused). The catalogue keeps versions per kind
   (deploy, deprecate; [CTR-TOK-03](#CTR-TOK-03)); it is append-only.
 - **One event per creation:** `TokenCreated(token, creator, kind, version, implementation, features, lockedFeatures,
   owner, underlyings)`, where `lockedFeatures` is the value the token stored (`locked | (features & ALWAYS_LOCKED)`, read
@@ -776,8 +782,7 @@ Factory v2 is backed up in `smartcontracts/evm/legacy/p1e/` (not built).
   `DeployFailed`, then `kind()`, `factory()` and `chainUid()` read by staticcall: `ImplementationNotAContract`,
   `VersionKindMismatch(expected, got)` (`got = type(uint256).max` when there is no answer),
   `ImplementationFactoryMismatch`, `ChainUidMismatch`. The constructor refuses a notice period over 30 days
-  (`NoticePeriodTooLong`). `NONE_ZETHER_PQZ` and `UNDERLYING_ZETHER_PQZ` (6–7) revert
-  `KindReserved`; kinds 2–5 are built (Zether P3, PQZ P6g; review W-Q, 2026-10-19: this text had kinds 4–7 reserved).
+  (`NoticePeriodTooLong`). Kinds 6–7 do not exist (`NONE_ZETHER_PQZ` / `UNDERLYING_ZETHER_PQZ` dropped, plan 5h D21: `KindReserved` removed, the ABI decoder rejects them); kinds 2–5 are built (Zether P3, PQZ P6g; review W-Q, 2026-10-19: this text had kinds 4–7 reserved).
   The constructors check their env: a confidential kind needs its `deps` (`*_ZETHER`: four with code, a registry, the
   two verifiers of one `proofSystemId`, both fixed to `deps[2]`, two addresses, the transfer verifier answering
   `ringSize()` and the burn verifier not; `*_PQZ`: the verifier) and refuses a Hedera env
@@ -802,7 +807,7 @@ Factory v2 is backed up in `smartcontracts/evm/legacy/p1e/` (not built).
   (moved from the factory, owner 2026-10-20): a Zether token (`ZetherLib.init`) reverts outside a dev chain, and with
   `IZetherToken.VerifierUnsupportedOnThisChain(verifier, curveName)` when the release's transfer verifier's
   `isSupportedOnThisChain()` is false or unanswered, so a BLS12-381 verifier cannot serve a chain without EIP-2537; a
-  PQZ token (`PqzLib.init`) requires the allowlisted chain, the precompile and its self-test (`PqzSafety`).
+  PQZ token (`PqzStateLib.init`) requires the allowlisted chain, the precompile and its self-test (`PqzSafety`).
   `ConfidentialConfig` has no verifier field.
 - **Trust the index only for registered versions** (`isRegisteredToken(token)`, `versionOf(token).version != 0`): the
   factory indexes what the config says, and an unregistered implementation (version 0) may do anything else with it.
@@ -812,8 +817,7 @@ Factory v2 is backed up in `smartcontracts/evm/legacy/p1e/` (not built).
 
 The built interface is `IOpenFactory.sol` and the `TokenConfig` block of [CTR-TOK-25](#CTR-TOK-25); the event is
 `TokenCreated(token, creator, kind, version, implementation, features, lockedFeatures, owner, underlyings)`, the
-enum `TokenKind { NONE, UNDERLYING, NONE_ZETHER, UNDERLYING_ZETHER, NONE_PQZ, UNDERLYING_PQZ, NONE_ZETHER_PQZ,
-UNDERLYING_ZETHER_PQZ }`. The deploy scripts publish env 1 of `NONE` and of the DEX and deploy `NoUnderlyingToken` as
+enum `TokenKind { NONE, UNDERLYING, NONE_ZETHER, UNDERLYING_ZETHER, NONE_PQZ, UNDERLYING_PQZ }`. The deploy scripts publish env 1 of `NONE` and of the DEX and deploy `NoUnderlyingToken` as
 version 1 of `NONE` and `SCaaSDex` as DEX version 1 through the factory (on a dev chain also both `*_ZETHER` kinds on
 env 1 = bn254 and env 2 = BLS12-381, the kinds enabled); `UnderlyingToken` is not deployed ([CTR-GEN-06](README.md#CTR-GEN-06), [CTR-TOK-24](#CTR-TOK-24)). Separate `AssetFactory` for action
 contracts: [asset-suite.md](asset-suite.md#templates).

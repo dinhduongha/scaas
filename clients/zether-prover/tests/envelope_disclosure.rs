@@ -63,12 +63,12 @@ fn envelope_matches_cast() {
     m2.mode |= MODE_RESTRICT_FEE_RECIPIENT;
     assert_ne!(envelope_binding(31337, &UID, &TOK, &m), envelope_binding(31337, &UID, &TOK, &m2));
     assert_eq!(
-        hex::encode(transfer_call("zetherTransferSingle(bytes,bytes,bytes32)", &[0xaa, 0xbb], &[0xcc, 0xdd, 0xee], &[0x22; 32])),
-        "339627f3000000000000000000000000000000000000000000000000000000000000006000000000000000000000000000000000000000000000000000000000000000a022222222222222222222222222222222222222222222222222222222222222220000000000000000000000000000000000000000000000000000000000000002aabb0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000003ccddee0000000000000000000000000000000000000000000000000000000000"
+        hex::encode(transfer_call("mtxConfidentialTransferSingle(bytes,bytes,bytes,bytes32,bytes)", &[0xaa, 0xbb], &[0xcc, 0xdd, 0xee], &[0x22; 32])),
+        "ebc62fbb00000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000000e00000000000000000000000000000000000000000000000000000000000000120222222222222222222222222222222222222222222222222222222222222222200000000000000000000000000000000000000000000000000000000000001400000000000000000000000000000000000000000000000000000000000000002aabb0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000003ccddee000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
     );
     assert_eq!(
-        hex::encode(unshield_call(&[0xaa, 0xbb], &[0xcc, 0xdd], &[0; 32], &[0x44; 20], 400_000)),
-        "f2d8013000000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000000000000000000000000000000000e0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000044444444444444444444444444444444444444440000000000000000000000000000000000000000000000000000000000061a800000000000000000000000000000000000000000000000000000000000000002aabb0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002ccdd000000000000000000000000000000000000000000000000000000000000"
+        hex::encode(unshield_call(&[0xaa, 0xbb], &[0xcc, 0xdd], &[0; 32], &{ let mut t = [0x44; 32]; t[..12].fill(0); t }, 400_000)),
+        "a85a2deb00000000000000000000000000000000000000000000000000000000000000e000000000000000000000000000000000000000000000000000000000000001200000000000000000000000000000000000000000000000000000000000000160000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001800000000000000000000000000000000000000000000000000000000000061a8000000000000000000000000044444444444444444444444444444444444444440000000000000000000000000000000000000000000000000000000000000002aabb0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000002ccdd00000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
     );
     assert_eq!(
         hex::encode(entry_ref(31337, &UID, &TOK, &[0x55; 32], 3)),
@@ -102,13 +102,13 @@ fn relayed_and_disclosure<C: ZCurve>() {
         fee: 0,
         beneficiary: [0; 32],
         amount: 0,
-        recipient: [0; 20],
+        recipient: [0; 32],
         salt: [0; 16],
         memo_hash: [0; 32],
     };
     let (st, p, w) = prove_transfer(&gens, &from, h, to.y, aud.y, acc, 5000, 1234, &mut rng).unwrap();
     verify_transfer(&gens, &st, &p).unwrap();
-    m.data = transfer_call("zetherTransferSingle(bytes,bytes,bytes32)", &st.payload(), &p.encode(), &[0; 32]);
+    m.data = transfer_call("mtxConfidentialTransferSingle(bytes,bytes,bytes,bytes32,bytes)", &st.payload(), &p.encode(), &[0; 32]);
     // Same proof inside a different envelope (other nonce) → different binding → rejected.
     let mut m2 = m.clone();
     m2.nonce += 1;
@@ -221,10 +221,46 @@ fn relayed_and_disclosure_bls12_381() {
 
 #[test]
 fn entry_point_selectors_match_the_spec() {
-    // CTR-ZTH-45: the zether-prefixed names; the multi-recipient default is `zetherTransfer`, commit-reveal
-    // `zetherTransferCompact`, the single format `zetherTransferSingle` (same four arguments, no outer fee on a direct call).
-    assert_eq!(hex::encode(selector("zetherTransfer(bytes,bytes,bytes32)")), "b0dcc0ca");
-    assert_eq!(hex::encode(selector("zetherTransferSingle(bytes,bytes,bytes32)")), "339627f3");
-    assert_eq!(hex::encode(selector("zetherUnshield(bytes,bytes,bytes32,address,uint256)")), "f2d80130");
-    assert_eq!(hex::encode(selector("zetherShield(bytes,uint256)")), "1ca6ee72");
+    // CTR-ZTH-45 / plan 5h D20: the shared `IConfidentialToken` names; the multi-recipient default is
+    // `mtxConfidentialTransfer`, the single format `mtxConfidentialTransferSingle` (payload, proof, auth, beneficiary,
+    // accHint; Zether: `auth` and `accHint` empty).
+    assert_eq!(hex::encode(selector("mtxConfidentialTransfer(bytes,bytes,bytes,bytes32,bytes)")), "5dc7af97");
+    assert_eq!(hex::encode(selector("mtxConfidentialTransferSingle(bytes,bytes,bytes,bytes32,bytes)")), "ebc62fbb");
+    assert_eq!(hex::encode(selector("mtxUnshield(bytes,bytes,bytes,bytes32,bytes,uint256,bytes32)")), "a85a2deb");
+    assert_eq!(hex::encode(selector("mtxShield(bytes32,uint256)")), "e9385800");
+}
+
+/// Final review m3 (CTR-ZTH-51): an unshield to a derived UA. `proveBurn` takes a 32-byte recipient id as well as a
+/// 20-byte address (its padded id); the statement's word 12 and the calldata's `recipient` word are that id, and the
+/// statement decodes back to it (no "dirty high bytes" refusal).
+#[test]
+fn burn_recipient_address_or_ua() {
+    use serde_json::{json, Value};
+    use zether_prover::curve::{encode_point, encode_scalar};
+    use zether_prover::zether::BurnStatement;
+    type C = Bls12381;
+    let from = ZetherKey::<C>::conf(&[3u8; 64], 60, 0).unwrap();
+    let acc = encrypt(&from.y, 5000, &Fr::<C>::from(77u64));
+    let hx = |b: &[u8]| format!("0x{}", hex::encode(b));
+    let ua = [0x5au8; 32];
+    let mut padded = [0u8; 32];
+    padded[12..].fill(0x44);
+    let req = |given: String| json!({
+        "curve": "bls12381", "key": {"x": hx(&encode_scalar::<C>(&from.x))}, "chainId": 31337, "chainUid": hx(&UID),
+        "token": hx(&TOK), "sendCounter": 0, "accSeq": 1, "balance": 5000, "amount": 1000, "recipient": given,
+        "acc": {"C": hx(&encode_point::<C>(&acc.c)), "D": hx(&encode_point::<C>(&acc.d))},
+    });
+    for (given, id) in [(hx(&[0x44; 20]), padded), (hx(&ua), ua)] {
+        let out: Value = serde_json::from_str(&zether_prover::api::call("proveBurn", &req(given).to_string()).unwrap()).unwrap();
+        let st = hex::decode(&out["statement"].as_str().unwrap()[2..]).unwrap();
+        assert_eq!(&st[384..416], &id, "statement word 12");
+        assert_eq!(BurnStatement::<C>::decode(&st).unwrap().header.recipient, id);
+        let cd = hex::decode(&out["directCalldata"].as_str().unwrap()[2..]).unwrap();
+        assert_eq!(&cd[4 + 6 * 32..4 + 7 * 32], &id, "mtxUnshield's recipient argument");
+        let v = json!({"curve": "bls12381", "statement": out["statement"], "proof": out["proof"]});
+        let ok: Value = serde_json::from_str(&zether_prover::api::call("verifyBurn", &v.to_string()).unwrap()).unwrap();
+        assert_eq!(ok["ok"], json!(true));
+    }
+    let err = zether_prover::api::call("proveBurn", &req(hx(&[1; 21])).to_string()).unwrap_err();
+    assert!(err.contains("20-byte address or a 32-byte UA id"), "{err}");
 }

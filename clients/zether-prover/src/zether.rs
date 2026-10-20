@@ -1,5 +1,5 @@
 //! Statements, Σ-protocol and proofs for `transfer` and `burn`, byte-exact per zether-design
-//! §6 (statement), §7 (Σ), §8 (Bulletproofs), §9 (wire + payload). `zetherShield` carries no proof
+//! §6 (statement), §7 (Σ), §8 (Bulletproofs), §9 (wire + payload). `mtxShield` carries no proof
 //! (public amount, §5). The verifier here mirrors the Solidity verifier for tests/vectors.
 
 use ark_ff::{PrimeField, Zero};
@@ -47,7 +47,7 @@ pub enum Binding {
     Direct,
     /// `ZTX_V1_RELAYED` with `envelopeBinding` from [`crate::envelope::envelope_binding`].
     Relayed([u8; 32]),
-    /// `ZTX_V1_DIRECT` with [`crate::envelope::unwrap_binding`]: a direct `zetherUnshieldUnwrap` binds its leg and
+    /// `ZTX_V1_DIRECT` with [`crate::envelope::unwrap_binding`]: a direct `mtxUnshieldUnwrap` binds its leg and
     /// `minOut` (controller ruling, pending the owner).
     Unwrap([u8; 32]),
 }
@@ -68,8 +68,8 @@ pub struct Header {
     pub beneficiary: [u8; 32],
     /// Burn only (transfer: 0).
     pub amount: u64,
-    /// Burn only (transfer: zero address).
-    pub recipient: [u8; 20],
+    /// Burn only (transfer: 0): the recipient id, a padded address or a derived SIGNING UA (CTR-ZTH-51; word 12).
+    pub recipient: [u8; 32],
     /// Transfer only (burn: 0): 16 fresh random bytes per build, an input of [`derive_s`]; the prove functions draw it.
     pub salt: [u8; 16],
     /// Commit-reveal only (else 0): `keccak256` of the sender memo the payload ends with ([`seal_memo`]).
@@ -132,7 +132,7 @@ impl Header {
             be32_u64(self.fee),
             self.beneficiary,
             be32_u64(self.amount),
-            be32_addr(&self.recipient),
+            self.recipient,
             salt_word(&self.salt),
             self.memo_hash,
         ];
@@ -175,7 +175,7 @@ impl Header {
             fee: u64_of(w(9))?,
             beneficiary: w(10).try_into().unwrap(),
             amount: u64_of(w(11))?,
-            recipient: addr_of(w(12))?,
+            recipient: w(12).try_into().unwrap(),
             salt: w(13)[16..].try_into().unwrap(),
             memo_hash: w(14).try_into().unwrap(),
         })
@@ -312,7 +312,7 @@ impl<C: ZCurve> TransferStatement<C> {
     pub fn validate(&self) -> Result<(), ZError> {
         let h = &self.header;
         h.check_fee()?;
-        if h.amount != 0 || h.recipient != [0u8; 20] {
+        if h.amount != 0 || h.recipient != [0u8; 32] {
             return Err(ZError::BadStatement("transfer with amount/recipient"));
         }
         if self.y_f.is_zero() || self.y_t.is_zero() {
@@ -750,7 +750,7 @@ pub fn transfer_gas<C: ZCurve>(mode: TransferMode, auditor: bool, relayed: bool,
     }
 }
 
-/// The largest `M` whose [`transfer_gas`] fits [`TX_GAS_CAP`] less [`GAS_MARGIN`] (`zetherTransfer*` builds above it
+/// The largest `M` whose [`transfer_gas`] fits [`TX_GAS_CAP`] less [`GAS_MARGIN`] (`mtxConfidentialTransfer*` builds above it
 /// are refused, [`ZError::GasCap`]).
 pub fn max_recipients<C: ZCurve>(mode: TransferMode, auditor: bool, relayed: bool) -> usize {
     (1..=MAX_RECIPIENTS)
@@ -759,11 +759,22 @@ pub fn max_recipients<C: ZCurve>(mode: TransferMode, auditor: bool, relayed: boo
         .unwrap_or(0)
 }
 
+/// What a non-zero `decoyFee` adds per leg on top of [`transfer_gas`] (the pool → leg payout, the leg's first UA-ledger
+/// credit: 28,663 measured, `ZetherDecoyFeeGasTest`, which pins this bound).
+pub const DECOY_LEG_GAS: u64 = 32_000;
+
+/// [`transfer_gas`] plus [`DECOY_LEG_GAS`] per leg when the build pays a `decoyFee`.
+pub fn build_gas<C: ZCurve>(mode: TransferMode, auditor: bool, relayed: bool, m: usize, decoy: bool) -> u64 {
+    transfer_gas::<C>(mode, auditor, relayed, m) + if decoy { m as u64 * DECOY_LEG_GAS } else { 0 }
+}
+
 /// Refuse a build over the cap, naming the estimate, the most recipients this form takes and the cheaper forms that
 /// fit at this `M` (leaving the auditor out is the sender's choice on an `OPTIONAL` token only; `bundle` and `none`
-/// need a `BUNDLE` token). `relayed`: the build carries an envelope binding, so the relayed column applies.
-fn check_gas<C: ZCurve>(mode: TransferMode, auditor: bool, relayed: bool, m: usize) -> Result<(), ZError> {
-    let gas = transfer_gas::<C>(mode, auditor, relayed, m);
+/// need a `BUNDLE` token). `relayed`: the build carries an envelope binding, so the relayed column applies; `decoy`:
+/// it pays a `decoyFee` ([`build_gas`]).
+fn check_gas<C: ZCurve>(mode: TransferMode, auditor: bool, relayed: bool, m: usize, decoy: bool) -> Result<(), ZError> {
+    let fits = |f, a, n| build_gas::<C>(f, a, relayed, n, decoy) <= TX_GAS_CAP - GAS_MARGIN;
+    let gas = build_gas::<C>(mode, auditor, relayed, m, decoy);
     if gas <= TX_GAS_CAP - GAS_MARGIN {
         return Ok(());
     }
@@ -773,8 +784,8 @@ fn check_gas<C: ZCurve>(mode: TransferMode, auditor: bool, relayed: bool, m: usi
         .flat_map(|f| [(f, true), (f, false)])
         .filter(|&(f, a)| (a <= auditor) && (f, a) != (mode, auditor))
         .filter_map(|(f, a)| {
-            let g = transfer_gas::<C>(f, a, relayed, m);
-            (g <= TX_GAS_CAP - GAS_MARGIN).then(|| format!("{} {} (~{g})", f.name(), aud(a)))
+            let g = build_gas::<C>(f, a, relayed, m, decoy);
+            fits(f, a, m).then(|| format!("{} {} (~{g})", f.name(), aud(a)))
         })
         .collect::<Vec<_>>()
         .join(", ");
@@ -784,7 +795,7 @@ fn check_gas<C: ZCurve>(mode: TransferMode, auditor: bool, relayed: bool, m: usi
         gas,
         cap: TX_GAS_CAP,
         margin: GAS_MARGIN,
-        max_m: max_recipients::<C>(mode, auditor, relayed),
+        max_m: (1..=MAX_RECIPIENTS).rev().find(|&n| fits(mode, auditor, n)).unwrap_or(0),
         alternatives: if alternatives.is_empty() { "none".into() } else { alternatives },
     })
 }
@@ -793,9 +804,9 @@ fn check_gas<C: ZCurve>(mode: TransferMode, auditor: bool, relayed: bool, m: usi
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TransferMode {
     /// Commit-reveal: `keccak256(R)` and the sender memo stored, `R` in an event
-    /// (`zetherTransferCompact`; `zetherTransfer` on a `COMPACT` token, its only form). JSON `compact`.
+    /// (`mtxConfidentialTransferCompact`; `mtxConfidentialTransfer` on a `COMPACT` token, its only form). JSON `compact`.
     Hash,
-    /// `B_1 ‖ … ‖ B_M` stored (`zetherTransfer` on a `BUNDLE` token, the default).
+    /// `B_1 ‖ … ‖ B_M` stored (`mtxConfidentialTransfer` on a `BUNDLE` token, the default).
     Bundle,
     /// Nothing stored; disclosure off chain from calldata.
     NoBundle,
@@ -812,7 +823,7 @@ impl TransferMode {
         })
     }
 
-    /// The JSON name (the entries: `zetherTransfer` the token's default, `…Compact`, `…NoBundle`).
+    /// The JSON name (the entries: `mtxConfidentialTransfer` the token's default, `…Compact`, `…NoBundle`).
     pub fn name(self) -> &'static str {
         match self {
             Self::Hash => "compact",
@@ -889,13 +900,15 @@ impl<C: ZCurve> MultiTransferStatement<C> {
         Ok(Self { header, mode, y_f, y_a, acc, d_out, c_deb, legs })
     }
 
-    /// `be32(accSeq) ‖ be32(sendCounter) ‖ salt(16) ‖ be32(M) ‖ Y_f ‖ D_out ‖ C_deb ‖ (Y_tj ‖ C_out_j ‖ C_aud_j)_j`, then
-    /// `memo` (the witness's: commit-reveal only, empty otherwise).
-    pub fn payload(&self, memo: &[u8]) -> Vec<u8> {
+    /// `be32(accSeq) ‖ be32(sendCounter) ‖ salt(16) ‖ be32(M) ‖ be32(decoyFee) ‖ Y_f ‖ D_out ‖ C_deb ‖
+    /// (Y_tj ‖ C_out_j ‖ C_aud_j)_j`, then `memo` (the witness's: commit-reveal only, empty otherwise). `decoy_fee` is the
+    /// witness's too: the payload carries it, the statement binds it through `fee = txFee + M · decoyFee`.
+    pub fn payload(&self, decoy_fee: u64, memo: &[u8]) -> Vec<u8> {
         let mut b = be32_u64(self.header.acc_seq).to_vec();
         b.extend(be32_u64(self.header.send_counter));
         b.extend_from_slice(&self.header.salt);
         b.extend(be32_u64(self.legs.len() as u64));
+        b.extend(be32_u64(decoy_fee));
         b.extend(cat::<C>(&[&self.y_f, &self.d_out, &self.c_deb]));
         b.extend(self.leg_bytes());
         b.extend_from_slice(memo);
@@ -913,15 +926,21 @@ impl<C: ZCurve> MultiTransferStatement<C> {
         !self.y_a.is_zero()
     }
 
-    /// Structural rules the token enforces before verify (spec §4).
+    /// Structural rules the token enforces before verify (spec §4). The fee word is `txFee + M · decoyFee` (owner
+    /// 2026-10-20): `< 2^n_v`, and without a beneficiary (no txFee) a multiple of `M`.
     pub fn validate(&self) -> Result<(), ZError> {
         let h = &self.header;
-        h.check_fee()?;
-        if h.amount != 0 || h.recipient != [0u8; 20] {
+        if !value_in_range(h.fee) {
+            return Err(ZError::BadStatement("fee >= 2^n_v"));
+        }
+        if h.amount != 0 || h.recipient != [0u8; 32] {
             return Err(ZError::BadStatement("transfer with amount/recipient"));
         }
         if self.legs.is_empty() || self.legs.len() > MAX_RECIPIENTS {
             return Err(ZError::BadStatement("recipient count"));
+        }
+        if h.beneficiary == [0u8; 32] && h.fee % self.legs.len() as u64 != 0 {
+            return Err(ZError::BadStatement("fee without beneficiary is not M · decoyFee"));
         }
         if (h.memo_hash != [0u8; 32]) != (self.mode == TransferMode::Hash) {
             return Err(ZError::BadStatement("a memo hash exactly on commit-reveal"));
@@ -955,6 +974,8 @@ pub struct MultiTransferWitness<C: ZCurve> {
     pub gamma_b: Fr<C>,
     /// The sender memo a commit-reveal payload ends with ([`seal_memo`]); empty for the other forms.
     pub memo: Vec<u8>,
+    /// The per-leg `decoyFee` the payload carries (public; in the statement only through `fee`).
+    pub decoy_fee: u64,
 }
 
 impl<C: ZCurve> Drop for MultiTransferWitness<C> {
@@ -1162,12 +1183,15 @@ pub fn verify_transfer_multi<C: ZCurve>(
 }
 
 /// Build the statement for `recipients` (`(Y_to, v)`, decoys with `v = 0`) and prove it; the
-/// same checks as [`prove_transfer`], with `balance ≥ Σv + fee`.
+/// same checks as [`prove_transfer`], with `balance ≥ Σv + fee`. `header.fee` is the txFee (the token's
+/// `confidentialFee` when a beneficiary is named, else 0); the statement's fee is `txFee + M · decoy_fee` (owner
+/// 2026-10-20: the sender's per-leg `decoyFee`, `≥` the token's `minDecoyFee`, paid to every leg).
 #[allow(clippy::too_many_arguments)]
 pub fn prove_transfer_multi<C: ZCurve, R: RngCore + CryptoRng>(
     gens: &Gens<C>,
     key: &ZetherKey<C>,
     header: Header,
+    decoy_fee: u64,
     mode: TransferMode,
     recipients: &[(G<C>, u64)],
     y_aud: G<C>,
@@ -1180,14 +1204,23 @@ pub fn prove_transfer_multi<C: ZCurve, R: RngCore + CryptoRng>(
     if acc.c - acc.d * key.x != g * Fr::<C>::from(balance) {
         return Err(ZError::BadStatement("balance does not decrypt from acc"));
     }
+    if recipients.is_empty() || recipients.len() > MAX_RECIPIENTS {
+        return Err(ZError::BadStatement("recipient count"));
+    }
+    if header.beneficiary == [0u8; 32] && header.fee != 0 {
+        return Err(ZError::BadStatement("fee without beneficiary"));
+    }
+    let fee = header.fee as u128 + recipients.len() as u128 * decoy_fee as u128;
+    if fee >= 1u128 << N_V {
+        return Err(ZError::BadStatement("txFee + M · decoyFee >= 2^n_v"));
+    }
+    header.fee = fee as u64;
     let total: u128 = recipients.iter().map(|(_, v)| *v as u128).sum();
     let b_prime = (balance as u128)
         .checked_sub(total + header.fee as u128)
         .ok_or(ZError::BadStatement("insufficient balance"))? as u64;
-    if recipients.is_empty() || recipients.len() > MAX_RECIPIENTS {
-        return Err(ZError::BadStatement("recipient count"));
-    }
-    check_gas::<C>(mode, !y_aud.is_zero(), matches!(header.binding, Binding::Relayed(_)), recipients.len())?;
+    let relayed = matches!(header.binding, Binding::Relayed(_));
+    check_gas::<C>(mode, !y_aud.is_zero(), relayed, recipients.len(), decoy_fee != 0)?;
     let (salt, s) = draw_salt::<C, R>(&key.x, &header, &key.ua(), rng);
     header.salt = salt;
     let memo = if mode == TransferMode::Hash {
@@ -1227,6 +1260,7 @@ pub fn prove_transfer_multi<C: ZCurve, R: RngCore + CryptoRng>(
         b_prime: Fr::<C>::from(b_prime),
         gamma_b: n.next::<C>(),
         memo,
+        decoy_fee,
     };
     let p = prove_transfer_multi_core(gens, &st, &w, rng)?;
     Ok((st, p, w))

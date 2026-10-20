@@ -37,7 +37,7 @@ contract ZetherE2E is Script {
                 IOpenFactory.TokenKind.NONE_ZETHER, 1, abi.encode(c), keccak256("scaas.e2e.zether")
             )
         );
-        t.zetherShield(y, 1234);
+        t.mtxShield(ZetherTypes.UA.unwrap(ZetherTypes.toUA(y)), 1234);
         vm.stopBroadcast();
         require(t.registry() == address(reg) && t.registered(ua), "registered by kindOf");
         require(t.accountState(ua).pendingSeq == 1 && t.totalShielded() == 1234, "shielded");

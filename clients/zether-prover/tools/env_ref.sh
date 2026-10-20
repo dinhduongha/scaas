@@ -14,8 +14,8 @@ SH=$(cast keccak $(cast abi-encode 'f(bytes32,address,bytes32,bytes32,uint256,ui
 DT=$(cast keccak "EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)")
 DS=$(cast keccak $(cast abi-encode 'f(bytes32,bytes32,bytes32,uint256,address,bytes32)' $DT $(cast keccak "SCaaS ZetherToken") $(cast keccak "1") 31337 $TOK $CUID))
 echo "digest $(cast keccak 0x1901${DS:2}${SH:2})"
-echo "transfer_call $(cast calldata 'zetherTransferSingle(bytes,bytes,bytes32)' 0xaabb 0xccddee 0x2222222222222222222222222222222222222222222222222222222222222222)"
-echo "unshield_call $(cast calldata 'zetherUnshield(bytes,bytes,bytes32,address,uint256)' 0xaabb 0xccdd 0x0000000000000000000000000000000000000000000000000000000000000000 0x4444444444444444444444444444444444444444 400000)"
+echo "transfer_call $(cast calldata 'mtxConfidentialTransferSingle(bytes,bytes,bytes,bytes32,bytes)' 0xaabb 0xccddee 0x 0x2222222222222222222222222222222222222222222222222222222222222222 0x)"
+echo "unshield_call $(cast calldata 'mtxUnshield(bytes,bytes,bytes,bytes32,bytes,uint256,bytes32)' 0xaabb 0xccdd 0x 0x0000000000000000000000000000000000000000000000000000000000000000 0x 400000 0x0000000000000000000000004444444444444444444444444444444444444444)"
 echo "entry_ref $(cast keccak $(cast abi-encode 'f(bytes32,uint256,bytes32,address,bytes32,uint256)' $(cast keccak SCAAS-ZETHER-ENTRY-V1) 31337 $CUID $TOK 0x5555555555555555555555555555555555555555555555555555555555555555 3))"
 echo "unwrap_binding $(cast keccak $(cast abi-encode 'f(bytes32,address,uint256)' $(cast keccak SCAAS-ZETHER-UNWRAP-V1) 0x4444444444444444444444444444444444444444 1000))"
-for s in 'zetherTransfer(bytes,bytes,bytes32)' 'zetherTransferSingle(bytes,bytes,bytes32)' 'zetherUnshield(bytes,bytes,bytes32,address,uint256)' 'zetherShield(bytes,uint256)'; do echo "sel $s $(cast sig "$s")"; done
+for s in 'mtxConfidentialTransfer(bytes,bytes,bytes,bytes32,bytes)' 'mtxConfidentialTransferSingle(bytes,bytes,bytes,bytes32,bytes)' 'mtxUnshield(bytes,bytes,bytes,bytes32,bytes,uint256,bytes32)' 'mtxShield(bytes32,uint256)'; do echo "sel $s $(cast sig "$s")"; done

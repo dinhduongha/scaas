@@ -104,10 +104,9 @@ contract ZetherDeployTest is Test {
         ZetherLayer t = ZetherLayer(f.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, abi.encode(c), "z"));
         assertEq(address(t.verifier()), tv);
         assertEq(t.chainUid(), ZUID);
-        // multiLegFee is PQZ's (op 7, CTR-PQZ-25): a Zether token refuses a non-zero one
-        c.conf.multiLegFee = 1;
-        vm.expectRevert();
-        f.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, abi.encode(c), "z2");
+        // minDecoyFee on both layers (owner 2026-10-20): a Zether token takes a non-zero one (bounds: ZetherMulti)
+        c.conf.minDecoyFee = 1;
+        assertEq(ZetherLayer(f.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, abi.encode(c), "z2")).minDecoyFee(), 1);
     }
 
     /// Without `DEPLOY_ZETHER` no chain gets the stack (a plain anvil deploys as before P3); with it, a non-dev

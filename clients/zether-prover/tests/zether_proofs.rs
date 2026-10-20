@@ -32,7 +32,7 @@ fn header(fee: u64) -> Header {
         fee,
         beneficiary: if fee > 0 { [0x22; 32] } else { [0; 32] },
         amount: 0,
-        recipient: [0; 20],
+        recipient: [0; 32],
         salt: [0; 16],
         memo_hash: [0; 32],
     }
@@ -260,7 +260,7 @@ fn burn_suite<C: ZCurve>() {
     let f = fx::<C>();
     let mut h = header(300);
     h.amount = 400_000;
-    h.recipient = [0x44; 20];
+    h.recipient[12..].fill(0x44); // a padded address
     let mut memo = h.clone();
     memo.memo_hash = [1; 32];
     assert!(prove_burn(&f.gens, &f.from, memo, f.acc, BAL, &mut rng()).is_err(), "a burn has no memo");
@@ -378,7 +378,7 @@ fn multi<C: ZCurve>(
 ) -> (MultiTransferStatement<C>, MultiTransferProof<C>, MultiTransferWitness<C>) {
     let ya = if aud { f.aud.y } else { G::<C>::zero() };
     let rs: Vec<(G<C>, u64)> = vs.iter().enumerate().map(|(j, v)| (key::<C>(10 + j as u32).y, *v)).collect();
-    prove_transfer_multi(&f.gens, &f.from, h, mode, &rs, ya, f.acc, BAL, &mut rng()).unwrap()
+    prove_transfer_multi(&f.gens, &f.from, h, 0, mode, &rs, ya, f.acc, BAL, &mut rng()).unwrap()
 }
 
 fn multi_valid_and_effects<C: ZCurve>() {
@@ -398,7 +398,7 @@ fn multi_valid_and_effects<C: ZCurve>() {
         let memo = if mode == TransferMode::Hash { memo_len(m) } else { 0 };
         assert_eq!(w.memo.len(), memo, "a memo on commit-reveal only");
         assert_eq!(st.header.memo_hash == [0; 32], memo == 0, "memoHash in the header exactly then");
-        assert_eq!(st.payload(&w.memo).len(), 112 + (3 + 3 * m) * point_len::<C>() + memo, "… ‖ legs [‖ memo]");
+        assert_eq!(st.payload(w.decoy_fee, &w.memo).len(), 144 + (3 + 3 * m) * point_len::<C>() + memo, "… ‖ legs [‖ memo]");
         assert_eq!(st.bundles().len(), 16 + 4 * m * point_len::<C>(), "R = salt ‖ B_1 ‖ … ‖ B_M");
         // Effects: the sender loses Σv + fee, each recipient decrypts its own v (decoys: 0).
         let g = generator::<C>();
@@ -428,6 +428,45 @@ fn multi_valid_bls12_381() {
     multi_valid_and_effects::<Bls12381>();
 }
 
+/// Owner fee ruling 4 (2026-10-20): the payload's `decoyFee` word (bytes 112..144), the statement fee `txFee + M · d`
+/// (with and without a beneficiary), the sender debited by it, the bound `< 2^64`, and the gas a decoy payout adds.
+#[test]
+fn multi_decoy_fee_bls12_381() {
+    type C = Bls12381;
+    let f = fx::<C>();
+    let rs: Vec<(G<C>, u64)> = [0u64, 70, 0].iter().enumerate().map(|(j, v)| (key::<C>(10 + j as u32).y, *v)).collect();
+    let prove = |h: Header, d: u64, rs: &[(G<C>, u64)]| {
+        prove_transfer_multi(&f.gens, &f.from, h, d, TransferMode::Bundle, rs, f.aud.y, f.acc, BAL, &mut rng())
+    };
+    let (st, p, w) = prove(header(300), 5, &rs).unwrap();
+    assert_eq!(st.header.fee, 300 + 3 * 5, "statement fee = txFee + M · decoyFee");
+    verify_transfer_multi(&f.gens, &st, &p).unwrap();
+    let pl = st.payload(w.decoy_fee, &w.memo);
+    assert_eq!(&pl[80..112], &{ let mut x = [0u8; 32]; x[31] = 3; x }, "be32(M)");
+    assert_eq!(&pl[112..144], &{ let mut x = [0u8; 32]; x[31] = 5; x }, "be32(decoyFee)");
+    let g = generator::<C>();
+    let acc2 = Ciphertext { c: st.acc.c - st.c_deb - g * Fr::<C>::from(315u64), d: st.acc.d - st.d_out };
+    assert_eq!(decrypt(&acc2, &f.from.x), BAL - 70 - 315);
+    // no beneficiary: fee = M · d, a multiple of M; a txFee without one is still refused
+    let (st0, p0, _) = prove(header(0), 4, &rs[..2]).unwrap();
+    assert_eq!(st0.header.fee, 8);
+    verify_transfer_multi(&f.gens, &st0, &p0).unwrap();
+    let mut bad = st0.clone();
+    bad.header.fee = 7;
+    assert!(bad.validate().is_err(), "fee without beneficiary not M · decoyFee");
+    assert!(prove(Header { beneficiary: [0; 32], ..header(300) }, 4, &rs).is_err());
+    assert!(prove(header(300), u64::MAX / 2, &rs).is_err(), "txFee + M · d >= 2^64");
+    // the decoy payout's gas: bls12-381 none with the auditor, direct, fits M = 8 without a decoy fee, 7 with one
+    assert_eq!(build_gas::<C>(TransferMode::NoBundle, true, false, 8, true), transfer_gas::<C>(TransferMode::NoBundle, true, false, 8) + 8 * DECOY_LEG_GAS);
+    let rs8: Vec<(G<C>, u64)> = (0..8).map(|i| (key::<C>(10 + i).y, 1)).collect();
+    let none = |d| prove_transfer_multi(&f.gens, &f.from, header(0), d, TransferMode::NoBundle, &rs8, f.aud.y, f.acc, BAL, &mut rng()).map(|_| ());
+    assert!(none(0).is_ok());
+    match none(1) {
+        Err(ZError::GasCap { m: 8, max_m: 7, .. }) => {}
+        other => panic!("M = 8 with a decoy fee not refused: {other:?}"),
+    }
+}
+
 fn multi_negatives<C: ZCurve>() {
     let f = fx::<C>();
     let mut r = rng();
@@ -435,7 +474,7 @@ fn multi_negatives<C: ZCurve>() {
     let y = |i: u32| key::<C>(i).y;
     let bad = |e: Result<_, ZError>| assert!(e.is_err());
     let pm = |rs: &[(G<C>, u64)], h: Header, r: &mut ChaCha20Rng| {
-        prove_transfer_multi(&f.gens, &f.from, h, TransferMode::Hash, rs, ya, f.acc, BAL, r).map(|_| ())
+        prove_transfer_multi(&f.gens, &f.from, h, 0, TransferMode::Hash, rs, ya, f.acc, BAL, r).map(|_| ())
     };
     bad(pm(&[], header(0), &mut r)); // no recipient
     let many = |n: u32| (10..10 + n).map(|i| (y(i), 1)).collect::<Vec<_>>();
@@ -541,7 +580,7 @@ fn gas_table_edges<C: ZCurve>(relayed: bool, want: [[usize; 2]; 3]) {
             assert!(transfer_gas::<C>(mode, aud, relayed, max + 1) > TX_GAS_CAP - GAS_MARGIN);
             let rs = |n: usize| (0..n as u32).map(|i| (key::<C>(10 + i).y, 1)).collect::<Vec<_>>();
             let y_a = if aud { ya } else { G::<C>::zero() };
-            let build = |n| prove_transfer_multi(&f.gens, &f.from, h.clone(), mode, &rs(n), y_a, f.acc, BAL, &mut rng());
+            let build = |n| prove_transfer_multi(&f.gens, &f.from, h.clone(), 0, mode, &rs(n), y_a, f.acc, BAL, &mut rng());
             assert!(build(max).is_ok(), "{what}: M = {max} builds");
             match build(max + 1).map(|_| ()) {
                 Err(ZError::GasCap { m, gas, cap, max_m, .. }) => {
@@ -578,7 +617,7 @@ fn gas_relayed_column_and_extrapolation() {
     let f = fx::<Bn254>();
     let rs = (0..9).map(|i| (key::<Bn254>(10 + i).y, 1)).collect::<Vec<_>>();
     let h = Header { binding: Binding::Relayed([0x33; 32]), ..header(0) };
-    let msg = prove_transfer_multi(&f.gens, &f.from, h, TransferMode::Hash, &rs, G::<Bn254>::zero(), f.acc, BAL, &mut rng())
+    let msg = prove_transfer_multi(&f.gens, &f.from, h, 0, TransferMode::Hash, &rs, G::<Bn254>::zero(), f.acc, BAL, &mut rng())
     .map(|_| ())
     .unwrap_err()
     .to_string();

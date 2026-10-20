@@ -22,6 +22,7 @@ abstract contract ZetherProverCrossSuite is ZetherFixture {
     uint256 internal constant PAYER_PK = 0x9A7E5;
     User[3] internal rs;
     uint256[3] internal amts = [uint256(1200), 0, 77];
+    uint256 internal dFee; // the per-leg decoyFee of the request (owner 2026-10-20)
 
     function setUp() public {
         vm.skip(bytes(vm.envOr("ZETHER_CLI", string(""))).length == 0);
@@ -54,7 +55,7 @@ abstract contract ZetherProverCrossSuite is ZetherFixture {
         (dMode, aMode) = (d, a);
         t = _newToken(auditor, name);
         _fund(t, alice, B);
-        t.zetherRollOver(alice.ua);
+        t.mtxRollOver(ZetherTypes.UA.unwrap(alice.ua), 1);
     }
 
     /// @dev The prove request: alice's state, the fee to carol, the modes, `yAud` (null = left out), `extra` fields.
@@ -100,7 +101,8 @@ abstract contract ZetherProverCrossSuite is ZetherFixture {
     function _settled(ZetherLayer t, string memory out, bytes32 ref, ZetherTypes.TransferMode tm) internal {
         assertEq(ref, out.readBytes32(".entryRef"), "entryRef");
         for (uint256 j; j < 3; ++j) assertTrue(_holds(t, rs[j], amts[j], false), "recipient pending");
-        assertTrue(_holds(t, alice, B - 1277 - FEE, true), "sender acc");
+        assertTrue(_holds(t, alice, B - 1277 - FEE - 3 * dFee, true), "sender acc");
+        for (uint256 j; j < 3; ++j) assertEq(t.balanceOfUA(ZetherTypes.UA.unwrap(rs[j].ua)), dFee * SCALE, "decoyFee per leg");
         bytes memory e = t.transferEntry(ref);
         bytes memory r = out.readBytes(".bundles");
         if (tm == ZetherTypes.TransferMode.NONE) return assertEq(e.length, 0, "nothing stored");
@@ -129,6 +131,13 @@ abstract contract ZetherProverCrossSuite is ZetherFixture {
 
     function test_bundleOptional_default() public {
         _multi(_token(0, 2, true, "b-opt"), "bundle", "optional", true, "");
+    }
+
+    /// A decoy fee of 3 per leg on a `minDecoyFee = 2` token: the prover's payload word and fee word are the token's.
+    function test_bundleOptional_decoyFee() public {
+        minDecoy = 2;
+        dFee = 3;
+        _multi(_token(0, 2, true, "b-dec"), "bundle", "optional", true, ',"decoyFee":3,"minDecoyFee":2');
     }
 
     function test_bundleNone_noBundle() public {

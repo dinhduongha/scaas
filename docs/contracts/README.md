@@ -14,12 +14,12 @@ the rules every one of them shares. Status tags (**BUILT**, **SPECIFIED**, **PLA
 | [dex.md](dex.md) | `SCaaSDex` with token-verified `TradeOrder`s, outside-token legs through the `DexPuller`, the exchange path against AMMs (`mtxExchange`), managed-market venue contract | **SPECIFIED** (built: `SCaaSDex`, P2b-1, P2b-2, P2c; `SCaaSDexV1` with DEX-signed orders over allowances) |
 | [tender.md](tender.md) | `SealedBidTender` | **SPECIFIED** |
 | [asset-suite.md](asset-suite.md) | regulated module, vesting, distributions, corporate actions, templates | **SPECIFIED** |
-| [zether.md](zether.md) | classical Zether, byte-exact; limits; decryption bound | **BUILT, UNAUDITED** (dev chains) |
-| [pq-zero-knowledge.md](pq-zero-knowledge.md) | post-quantum Zether on private/PoA chains | **SPECIFIED, UNAUDITED** |
+| [zether.md](zether.md) | classical Zether (BLS12-381), byte-exact; limits; decryption bound; the `mtx*` interface shared with PQZ ([CTR-ZTH-45](zether.md#CTR-ZTH-45)); `SHIELD_POOL` ([CTR-ZTH-51](zether.md#CTR-ZTH-51)) | **BUILT, UNAUDITED** (dev chains) |
+| [pq-zero-knowledge.md](pq-zero-knowledge.md) | post-quantum Zether on private/PoA chains: ciphertexts in contract state, unbounded ordered queue, proof-free shield, `SHIELD_POOL` | **SPECIFIED, UNAUDITED** (token contracts built on the test chains; 5h part A: state redesign, today's parameters) |
 | [mandates.md](mandates.md) | `MandateWallet`: delegated, capped payment from the payer's own wallet; auto-pay client integration | **BUILT**; revocation epoch **SPECIFIED** |
 | [settlement.md](settlement.md) | map of every settlement kind: entry points, who checks what, fees, finality (adds no rules) | overview |
 
-<p align="center"><img src="../assets/token-axes.svg" width="860" alt="Token model on two axes. Kind = confidential layer: NONE and UNDERLYING (plain, built in P1), NONE_ZETHER and UNDERLYING_ZETHER (built in P3, unaudited, dev chains only), NONE_PQZ and UNDERLYING_PQZ (reserved, not built; PQ Zether specified and unaudited) and NONE_ZETHER_PQZ and UNDERLYING_ZETHER_PQZ (reserved, not built). Who signs = the account: an EOA (ECDSA, built), a SmartKeyAccount (ERC-1271, built) or a Universal Account with a PQ key mldsa44, mldsa65 or fndsa512 through the UA ledger in the token base (specified, not built); every kind accepts the same intents from each."></p>
+<p align="center"><img src="../assets/token-axes.svg" width="860" alt="Token model on two axes. Kind = confidential layer: NONE and UNDERLYING (plain, built in P1), NONE_ZETHER and UNDERLYING_ZETHER (built in P3, unaudited, dev chains only), NONE_PQZ and UNDERLYING_PQZ (built on the private chains, unaudited); the combined kinds NONE_ZETHER_PQZ and UNDERLYING_ZETHER_PQZ were dropped on 2026-10-20. Who signs = the account: an EOA (ECDSA, built), a SmartKeyAccount (ERC-1271, built) or a Universal Account with a PQ key mldsa44, mldsa65 or fndsa512 through the UA ledger in the token base (specified, not built); every kind accepts the same intents from each."></p>
 
 How the families relate:
 

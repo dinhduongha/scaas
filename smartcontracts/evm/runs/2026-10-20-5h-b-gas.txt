@@ -1,0 +1,108 @@
+# plan 5h Task 2 (pqz-state-b), 2026-10-20: gas of the state layout on the real token (test/pqz/PqzStateGas.t.sol)
+# cmd: cd smartcontracts/evm && ../../scripts/capped forge test --match-contract PqzStatePinGasTest -vv
+# execution gas of the token call (refunds not subtracted; calldata, 21,000 intrinsic, precompile and ML-DSA verification excluded: mocked);
+# each test one transaction after setUp; rollover entries each from a distinct cold blob (every coefficient q - 1); ROLL_AGE = 5 (owner 2026-10-20)
+# pin: ROLL_MAX = 256 <= 0.75 * 2^24 = 12,582,912 < ROLL_MAX + 16 (linear fit); each pqzPrepareAcc half <= 0.75 * 2^24
+
+Ran 19 tests for test/pqz/PqzStateGas.t.sol:PqzStatePinGasTest
+[PASS] test_gas_burn() (gas: 4183474)
+Logs:
+  burn 1 to an address, fee, fresh ref gas 3980361
+
+[PASS] test_gas_op1_bundle_16inline() (gas: 6096997)
+Logs:
+  op 1 BUNDLE, auditor, fee, 16 inline credits (cold blobs), hint gas 4843937
+
+[PASS] test_gas_op1_bundle_freshRef() (gas: 4340755)
+Logs:
+  op 1 BUNDLE, auditor, fee, p = rolled, acc = blob reference gas 4131760
+
+[PASS] test_gas_op1_bundle_materialised_hint() (gas: 5594584)
+Logs:
+  op 1 BUNDLE, auditor, fee, p = rolled, materialised acc, hint gas 4264801
+
+[PASS] test_gas_op1_bundle_materialised_noHint() (gas: 5491366)
+Logs:
+  op 1 BUNDLE, auditor, fee, p = rolled, materialised acc, no hint gas 5357164
+
+[PASS] test_gas_op1_compact() (gas: 4417331)
+Logs:
+  op 1 COMPACT (HASH), auditor, fee, fresh ref gas 4194398
+
+[PASS] test_gas_op1_none() (gas: 4311836)
+Logs:
+  op 1 NONE, auditor, fee, fresh ref gas 4101098
+
+[PASS] test_gas_op1_shieldIn() (gas: 4351854)
+Logs:
+  op 1 BUNDLE, auditor, fee, shieldIn 100, fresh ref gas 4141055
+
+[PASS] test_gas_op7_M4() (gas: 4819402)
+Logs:
+  op 7 M = 4 BUNDLE, auditor, fee, fresh ref (4 first credits) gas 4590445
+
+[PASS] test_gas_op7_M8() (gas: 9360124)
+Logs:
+  op 7 M = 8 BUNDLE, auditor, fee, fresh ref (8 first credits) gas 8878091
+
+[PASS] test_gas_prepareAcc_half0() (gas: 5766256)
+Logs:
+  pqzPrepareAcc half 0 gas 5757911
+
+[PASS] test_gas_prepareAcc_half1() (gas: 5766254)
+Logs:
+  pqzPrepareAcc half 1 gas 5757911
+
+[PASS] test_gas_refresh() (gas: 4148727)
+Logs:
+  refresh, fee, fresh ref gas 3945688
+
+[PASS] test_gas_rollMax() (gas: 18025570)
+Logs:
+  pqzRollOver 128 (steady, distinct cold blobs) gas 7492392
+  pqzRollOver ROLL_MAX = 256 (steady, distinct cold blobs) gas 12134236
+  pqzRollOver 272 (linear fit) gas 12714466
+  per entry / fixed (fit) 36264 2850548
+
+[PASS] test_gas_roll_1() (gas: 2851227)
+Logs:
+  pqzRollOver 1 (steady) gas 2847871
+
+[PASS] test_gas_roll_16() (gas: 3355544)
+Logs:
+  pqzRollOver 16 (steady) gas 3424216
+
+[PASS] test_gas_shield_append() (gas: 81331)
+Logs:
+  pqzShield, append (tail of an earlier block) gas 73191
+
+[PASS] test_gas_shield_firstEntry() (gas: 95642)
+Logs:
+  pqzShield, the account's first entry (append) gas 87470
+
+[PASS] test_gas_shield_merge() (gas: 69066)
+Logs:
+  pqzShield, merge (TRIVIAL tail of this block) gas 51028
+
+Suite result: ok. 19 passed; 0 failed; 0 skipped; finished in 191.90ms (99.90ms CPU time)
+
+Ran 1 test suite in 193.49ms (191.90ms CPU time): 19 tests passed, 0 failed, 0 skipped (19 total tests)
+
+## Summary against spec §5.4 (contract side only: add the precompile, ≈ 5.2–5.4 M for op 1, and the calldata)
+
+| Operation | Measured here | Spec §5.4 proposal (contract parts) |
+|---|---|---|
+| op 1 BUNDLE, auditor, fee, p = rolled, acc = blob ref | 4,131,760 | blob 16,816 B + credit + acc ref ≈ 3.49 M + T 115 k |
+| … materialised acc, valid hint | 4,264,801 | + 136 k execution (hint) |
+| … materialised acc, no hint (516 cold SLOADs) | 5,357,164 | + ≈ 1.23 M |
+| … 16 inline credits from cold blobs, hint | 4,843,937 | ≈ 30.5 k per inline credit (measured ≈ 36 k) |
+| op 1 COMPACT (HASH) / NONE | 4,194,398 / 4,101,098 | both store the blob now (O5) |
+| op 1 with shieldIn | 4,141,055 | + the public burn (≈ 9 k) |
+| op 7 M = 4 / M = 8, auditor, fee (first credits of each leg) | 4,590,445 / 8,878,091 | 3.75 M / 7.45 M blob + credits |
+| burn 1 / refresh, fee | 3,980,361 / 3,945,688 | blob u' ‖ v_f 3.39 M |
+| pqzShield: first entry / append / merge | 87,470 / 73,191 / 51,028 | ≈ 0.08 M / ≈ 0.06 M [estimate] |
+| pqzRollOver 1 / 16 / 128 / 256 (steady) | 2,847,871 / 3,424,216 / 7,492,392 / 12,134,236 | 2.82 M / 3.36 M / 7.46 M / 12.11 M |
+| linear fit | 2,850,548 + 36,264 per entry; 272 ≈ 12,714,466 > 12,582,912 | ≈ 2.78 M + 36.3 k |
+| pqzPrepareAcc half 0 / 1 | 5,757,911 / 5,757,911 | 2 × ≈ 5.7 M |
+
+ROLL_MAX = 256 pinned (72.3 % of 2^24); lanes after 16 + 256 terms of q − 1 checked (every coefficient q − 272).
