@@ -28,6 +28,9 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
   UaDomain dco_decode_box_autoadd_ua_domain(dynamic raw);
 
   @protected
+  HolderPop dco_decode_holder_pop(dynamic raw);
+
+  @protected
   PlatformInt64 dco_decode_i_64(dynamic raw);
 
   @protected
@@ -48,6 +51,9 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
 
   @protected
   String? dco_decode_opt_String(dynamic raw);
+
+  @protected
+  Uint8List? dco_decode_opt_list_prim_u_8_strict(dynamic raw);
 
   @protected
   U8Array32? dco_decode_opt_u_8_array_32(dynamic raw);
@@ -90,6 +96,9 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
   UaDomain sse_decode_box_autoadd_ua_domain(SseDeserializer deserializer);
 
   @protected
+  HolderPop sse_decode_holder_pop(SseDeserializer deserializer);
+
+  @protected
   PlatformInt64 sse_decode_i_64(SseDeserializer deserializer);
 
   @protected
@@ -110,6 +119,9 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
 
   @protected
   String? sse_decode_opt_String(SseDeserializer deserializer);
+
+  @protected
+  Uint8List? sse_decode_opt_list_prim_u_8_strict(SseDeserializer deserializer);
 
   @protected
   U8Array32? sse_decode_opt_u_8_array_32(SseDeserializer deserializer);
@@ -158,6 +170,9 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
   );
 
   @protected
+  void sse_encode_holder_pop(HolderPop self, SseSerializer serializer);
+
+  @protected
   void sse_encode_i_64(PlatformInt64 self, SseSerializer serializer);
 
   @protected
@@ -186,6 +201,12 @@ abstract class ScaasUaApiImplPlatform extends BaseApiImpl<ScaasUaWire> {
 
   @protected
   void sse_encode_opt_String(String? self, SseSerializer serializer);
+
+  @protected
+  void sse_encode_opt_list_prim_u_8_strict(
+    Uint8List? self,
+    SseSerializer serializer,
+  );
 
   @protected
   void sse_encode_opt_u_8_array_32(U8Array32? self, SseSerializer serializer);

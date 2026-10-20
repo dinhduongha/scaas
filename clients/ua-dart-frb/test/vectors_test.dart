@@ -53,6 +53,7 @@ void main() {
       expect(isSigning(kind: n), r['signing']);
       expect(isZether(kind: n), r['zether']);
       expect(isNative(kind: n), r['native']);
+      expect(isPqzHolder(kind: n), r['pqzHolder']);
       expect(isMember(kind: n, hederaNative: false), r['member']);
       expect(isMember(kind: n, hederaNative: true), r['memberHedera']);
       if (info.native) {
@@ -62,6 +63,16 @@ void main() {
         expect(hx(tag(kind: n)), r['TAG']);
       }
     }
+    for (final r in rows(k, 'schemes')) {
+      // schemes are not kinds: tag and keyHash only
+      final n = r['kind'] as int;
+      expect(kindTagString(kind: n), r['tag']);
+      expect(hx(tag(kind: n)), r['TAG']);
+      expect(errCode(() => kindInfo(kind: n)), 'UAKindUnknown');
+      expect(errCode(() => uaOf(kind: n, keyData: Uint8List(0))), 'UAKindNotDerived');
+      expect(errCode(() => validateKeyData(kind: n, keyData: Uint8List(0), hederaNative: false)), 'UAKindNotDerived');
+    }
+    expect(hx(keyHashOf(kind: 0x0142, keyData: bytes(k['pqzKey']))!), k['pqzKeyHash']);
     for (final r in rows(k, 'groups')) {
       expect(groupTagString(group: r['group']), r['tag']);
       expect(hx(groupTag(group: r['group'])!), r['GROUP']);
@@ -136,8 +147,33 @@ void main() {
               chainUid: b32(c['chainUid']),
               registry: b20(c['registry']),
               ua: b32(p['ua']),
-              authRef: b32(p['authRef']))),
+              pqzKeyHash: b32(p['pqzKeyHash']))),
           p['popDigest']);
+    }
+    final pk = bytes(load('kinds.json')['pqzKey']);
+    for (final p in rows(s, 'pqzReg')) {
+      final c = s['contexts'][p['context']];
+      final id = c['chainId'] as int;
+      final h = holderPopMessage(
+          kind: p['kind'], chainId: id, chainUid: b32(c['chainUid']), registry: b20(c['registry']), ua: b32(p['ua']), pqzKey: pk);
+      expect(hx(h.pqzKeyHash), p['pqzKeyHash']);
+      expect(hx(h.popDigest), p['popDigest']);
+      expect(
+          hx(pqzRegMessage(
+              chainId: id, chainUid: b32(c['chainUid']), registry: b20(c['registry']), ua: b32(p['ua']), pqzKey: pk)),
+          p['pqzRegMessage']);
+      for (final bad in [0x0101, 0x0133]) {
+        expect(
+            errCode(() => holderPopMessage(
+                kind: bad, chainId: id, chainUid: b32(c['chainUid']), registry: b20(c['registry']), ua: b32(p['ua']), pqzKey: pk)),
+            'UAPqzHolder');
+      }
+      final none = holderPopMessage(
+          kind: p['kind'], chainId: id, chainUid: b32(c['chainUid']), registry: b20(c['registry']), ua: b32(p['ua']));
+      expect(none.pqzKeyHash.toList(), List.filled(32, 0));
+    }
+    for (final p in rows(s, 'pqzMsig')) {
+      expect(msigPqzEligible(keyData: bytes(p['keyData'])), p['eligible'], reason: p['reason']);
     }
     for (final a in rows(s, 'uaAuth')) {
       final c = s['contexts'][a['context']];
@@ -161,7 +197,7 @@ void main() {
     expect(out.length, 4 + 36);
     expect(out.sublist(0, 4), [0, 1, 0, 1]);
     try {
-      validateKeyData(kind: 0x0140, keyData: Uint8List(3), hederaNative: false);
+      validateKeyData(kind: 0x0104, keyData: Uint8List(3), hederaNative: false);
       fail('accepted');
     } on UAError catch (e) {
       expect(e.code, 'UAKeyData');

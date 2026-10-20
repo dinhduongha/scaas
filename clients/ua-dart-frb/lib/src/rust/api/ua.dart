@@ -70,6 +70,13 @@ bool isNative({required PlatformInt64 kind}) =>
 bool isZether({required PlatformInt64 kind}) =>
     ScaasUa.instance.api.crateApiUaIsZether(kind: kind);
 
+bool isPqzHolder({required PlatformInt64 kind}) =>
+    ScaasUa.instance.api.crateApiUaIsPqzHolder(kind: kind);
+
+/// An `msig` whose members of kinds outside 0x0130-0x0133 weigh less than its threshold (`UAKeyData` on malformed data).
+bool msigPqzEligible({required List<int> keyData}) =>
+    ScaasUa.instance.api.crateApiUaMsigPqzEligible(keyData: keyData);
+
 bool isSigning({required PlatformInt64 kind}) =>
     ScaasUa.instance.api.crateApiUaIsSigning(kind: kind);
 
@@ -97,13 +104,45 @@ U8Array32 popDigest({
   required U8Array32 chainUid,
   required U8Array20 registry,
   required U8Array32 ua,
-  required U8Array32 authRef,
+  required U8Array32 pqzKeyHash,
 }) => ScaasUa.instance.api.crateApiUaPopDigest(
   chainId: chainId,
   chainUid: chainUid,
   registry: registry,
   ua: ua,
-  authRef: authRef,
+  pqzKeyHash: pqzKeyHash,
+);
+
+/// `pqz_key` null = no key (hash 0, the plain pop); a key for a kind that may not hold one is `UAPqzHolder`.
+HolderPop holderPopMessage({
+  required PlatformInt64 kind,
+  required PlatformInt64 chainId,
+  required U8Array32 chainUid,
+  required U8Array20 registry,
+  required U8Array32 ua,
+  Uint8List? pqzKey,
+}) => ScaasUa.instance.api.crateApiUaHolderPopMessage(
+  kind: kind,
+  chainId: chainId,
+  chainUid: chainUid,
+  registry: registry,
+  ua: ua,
+  pqzKey: pqzKey,
+);
+
+/// The message `R_REG` proves over for `pqz_key` (the PQZ scheme 0x0142).
+U8Array32 pqzRegMessage({
+  required PlatformInt64 chainId,
+  required U8Array32 chainUid,
+  required U8Array20 registry,
+  required U8Array32 ua,
+  required List<int> pqzKey,
+}) => ScaasUa.instance.api.crateApiUaPqzRegMessage(
+  chainId: chainId,
+  chainUid: chainUid,
+  registry: registry,
+  ua: ua,
+  pqzKey: pqzKey,
 );
 
 U8Array32 uaAuthDomainSeparator({required UaDomain domain}) =>
@@ -141,6 +180,32 @@ Uint8List encodeMsig({
   threshold: threshold,
   members: members,
 );
+
+/// What a PQ holder signs to register (UA-6 U14): `message = ua_message(kind, pop, pop_digest)`.
+class HolderPop {
+  final U8Array32 pqzKeyHash;
+  final U8Array32 popDigest;
+  final U8Array32 message;
+
+  const HolderPop({
+    required this.pqzKeyHash,
+    required this.popDigest,
+    required this.message,
+  });
+
+  @override
+  int get hashCode =>
+      pqzKeyHash.hashCode ^ popDigest.hashCode ^ message.hashCode;
+
+  @override
+  bool operator ==(Object other) =>
+      identical(this, other) ||
+      other is HolderPop &&
+          runtimeType == other.runtimeType &&
+          pqzKeyHash == other.pqzKeyHash &&
+          popDigest == other.popDigest &&
+          message == other.message;
+}
 
 class KindInfo {
   final int kind;
@@ -235,7 +300,7 @@ class UaDomain {
           chainUid == other.chainUid;
 }
 
-/// `code` is one of the seven shared codes (`UAKeyData`, `UAKindUnknown`, ...); `reason` is the label after `UAKeyData: ` (empty for every other code),
+/// `code` is one of the shared codes (the seven of the vector files plus `UAPqzHolder`) (`UAKeyData`, `UAKindUnknown`, ...); `reason` is the label after `UAKeyData: ` (empty for every other code),
 /// as in the cxx and pure-Dart libraries.
 ///
 /// Integers are `i64` so a Dart value cannot wrap at the Rust width: a kind outside 0..=0xFFFF is `UAKindUnknown`; a chain
