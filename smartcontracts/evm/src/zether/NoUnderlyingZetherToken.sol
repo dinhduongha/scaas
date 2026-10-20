@@ -8,7 +8,6 @@ import {MetaTxBase} from "../metatx/MetaTxBase.sol";
 import {IMetaTx} from "../metatx/IMetaTx.sol";
 import {AdminLib} from "../metatx/AdminLib.sol";
 import {ITransferDisclosure} from "./ITransferDisclosure.sol";
-import {IZetherVerifier, IZetherBurnVerifier} from "./IZetherVerifier.sol";
 import {ZetherLayer} from "./ZetherLayer.sol";
 import {ZetherLib} from "./ZetherLib.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
@@ -19,17 +18,18 @@ import {MetaTxLib} from "../common/MetaTxLib.sol";
 ///         (the regulated flags are refused, CTR-ZTH-47). Built by `OpenFactory.createToken` with `conf` set and `legs`,
 ///         `rate` empty. Never on Hedera (no dev chain there).
 contract NoUnderlyingZetherToken is NoUnderlyingToken, ZetherLayer {
-    constructor(address factory_, address smartKeyAccountImpl_, bytes32 chainUid_, address registry_,
-        ITransferDisclosure disclosure_, IZetherVerifier transferVerifier_, IZetherBurnVerifier burnVerifier_)
-        NoUnderlyingToken(factory_, smartKeyAccountImpl_, chainUid_, registry_, false)
-        ZetherLayer(disclosure_, transferVerifier_, burnVerifier_)
+    /// @dev The factory's append (`OpenFactory.deployImplementation`, plan 5g-Z2): the release's `Env` (Hedera off: no
+    ///      dev chain there); no `implArgs`.
+    constructor(uint16 envVersion, Env memory env, bytes memory implArgs)
+        NoUnderlyingToken(envVersion, env, implArgs)
+        ZetherLayer(env)
     {}
 
     function kind() public pure override(NoUnderlyingToken, MetaTokenBase) returns (uint8) {
         return AdminLib.KIND_NONE_ZETHER;
     }
 
-    function _init(TokenConfig calldata cfg) internal override(NoUnderlyingToken, MetaTokenBase) {
+    function _init(TokenConfig memory cfg) internal override(NoUnderlyingToken, MetaTokenBase) {
         _requireUnused(cfg, false, true, true, false);
         _setMetadata(cfg.name, cfg.symbol, cfg.decimals);
         AdminLib.init(AdminLib.KIND_NONE_ZETHER, cfg.features, cfg.lockedFeatures, cfg.owner, cfg.roles);

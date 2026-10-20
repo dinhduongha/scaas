@@ -17,6 +17,7 @@ import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {noneInit} from "../v2/helpers/V2Fixture.sol";
 import {MockWallet} from "./UARegistryBase.sol";
 import {UALedgerBase} from "./UALedgerBase.sol";
+import {plainEnv} from "../helpers/Catalogue.sol";
 
 /// Receiver-pays on the UA path (metatx.md CTR-MTX-05/06, the `uaPayReceiverFee` paragraph): the payer's
 /// `UAMetaTransfer` runs untouched through the typed UA pipeline, then the payee — a native id signing the token's
@@ -186,10 +187,10 @@ contract UAReceiverFeeTest is UALedgerBase {
         _runRevert(t, 11, FEE_TO, until, abi.encodeWithSelector(IMetaTokenV2.ReceiverFeeAmount.selector, 11, 10));
         // `PAYABLE` off
         NoUnderlyingToken np =
-            NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(address(this), address(0), chainUidA, REG_L, false))));
+            NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(1, plainEnv(address(this), address(0), chainUidA, REG_L, false), ""))));
         IFactoryToken.TokenConfig memory c = noneInit("NP", "NP", 6, 0, address(0), address(this));
         c.features = (1 << AdminLib.MINTABLE) | (1 << AdminLib.BURNABLE);
-        np.initialize(address(this), 1, c);
+        np.initialize(address(this), 1, abi.encode(c));
         np.mintToUA(uaP, 10);
         t = _pay(uaP, uaE, 10);
         t.batch = np.payLane(t.entryRef);
@@ -280,8 +281,8 @@ contract UAReceiverFeeTest is UALedgerBase {
         MockWallet impl = new MockWallet(bob, 0, 100_000, address(0)); // ECDSA by bob after burning 100 k gas
         address payee = Clones.clone(address(impl));
         NoUnderlyingToken t400 =
-            NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(address(this), address(impl), chainUidA, REG_L, false))));
-        t400.initialize(address(this), 1, noneInit("S", "S", 6, 0, address(0), address(this)));
+            NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(1, plainEnv(address(this), address(impl), chainUidA, REG_L, false), ""))));
+        t400.initialize(address(this), 1, abi.encode(noneInit("S", "S", 6, 0, address(0), address(this))));
         t400.mintToUA(uaP, 2 * N);
         NoUnderlyingToken[2] memory ts = [tok, t400];
         _fund(uaP, N);

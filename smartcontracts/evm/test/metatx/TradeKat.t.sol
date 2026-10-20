@@ -7,6 +7,7 @@ import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
 import {ITradeToken} from "../../src/trade/ITradeToken.sol";
 import {TradeLib} from "../../src/trade/TradeLib.sol";
 import {noneInit} from "../v2/helpers/V2Fixture.sol";
+import {plainEnv} from "../helpers/Catalogue.sol";
 
 /// KATs of the token-side DEX structs (CTR-DEX-13, CTR-DEX-02) on a real token: `trade_kat.json` holds a
 /// `TradeOrder`, its `CancelOrder` and an `InvalidateNonces`, in the token domain "SCaaS MetaToken" of a
@@ -22,8 +23,8 @@ contract TradeKatTest is Test {
     function setUp() public {
         vm.chainId(7622);
         vm.warp(1_800_000_000);
-        tok = NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(address(this), address(0), UID, address(0), false))));
-        tok.initialize(address(this), 1, noneInit("Points", "PTS", 6, 0, address(this), address(this)));
+        tok = NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(1, plainEnv(address(this), address(0), UID, address(0), false), ""))));
+        tok.initialize(address(this), 1, abi.encode(noneInit("Points", "PTS", 6, 0, address(this), address(this))));
     }
 
     function _domainSep() internal view returns (bytes32) {

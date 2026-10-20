@@ -19,6 +19,7 @@ import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {noneInit} from "../v2/helpers/V2Fixture.sol";
 import {UARegistryBase} from "./UARegistryBase.sol";
+import {plainEnv} from "../helpers/Catalogue.sol";
 
 /// smartcontracts/vectors/ua/metatx3.json (accounts.md §1.16, the v3 KAT): a `NONE` clone at the vector's token
 /// address on context A with the real UA-2a/UA-2b verifiers. Every row's struct (built from the file's typed data)
@@ -49,10 +50,10 @@ contract UAMetaTx3VectorsTest is UARegistryBase {
             );
         }
         address token = vm.parseJsonAddress(vj, ".token");
-        address impl = address(new NoUnderlyingToken(address(this), address(0), chainUidA, REG_A, false));
+        address impl = address(new NoUnderlyingToken(1, plainEnv(address(this), address(0), chainUidA, REG_A, false), ""));
         vm.etch(token, abi.encodePacked(hex"363d3d373d3d3d363d73", impl, hex"5af43d82803e903d91602b57fd5bf3"));
         tok = NoUnderlyingToken(token);
-        tok.initialize(address(this), 1, noneInit("Points", "PTS", 6, 0, address(0), address(this)));
+        tok.initialize(address(this), 1, abi.encode(noneInit("Points", "PTS", 6, 0, address(0), address(this))));
         vm.warp(1_800_000_000);
     }
 

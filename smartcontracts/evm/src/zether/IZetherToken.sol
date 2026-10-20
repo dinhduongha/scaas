@@ -83,6 +83,9 @@ interface IZetherToken is IUALedger {
     error BadDisclosureMode(uint8 mode);
     /// @notice `ConfidentialConfig.auditorMode` unknown, FULL or OPTIONAL without a key, or NONE with one (CTR-ZTH-49).
     error BadAuditorMode(uint8 mode);
+    /// @notice The release's verifier does not run on this chain (`isSupportedOnThisChain()` false or unanswered: a
+    ///         BLS12-381 verifier without EIP-2537); `curve` its `curveName()` (plan 5g-Z2, from the factory's gate).
+    error VerifierUnsupportedOnThisChain(address verifier, string curve);
     /// @notice A `ConfidentialConfig` the token refuses (CTR-ZTH-04, CTR-ZTH-26).
     error BadInit();
     /// @notice `zetherWrapShield`: the public-equivalent of the deposit is not a whole number of shielded units.

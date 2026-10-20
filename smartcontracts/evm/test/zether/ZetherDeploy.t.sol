@@ -24,6 +24,7 @@ import {ZetherLayer} from "../../src/zether/ZetherLayer.sol";
 import {NoUnderlyingZetherToken} from "../../src/zether/NoUnderlyingZetherToken.sol";
 import {UnderlyingZetherToken} from "../../src/zether/UnderlyingZetherToken.sol";
 import {ZUID} from "./helpers/ZetherFixture.sol";
+import {zetherEnv} from "../helpers/Catalogue.sol";
 
 /// @notice `DeployBase` with `DEPLOY_ZETHER` on a dev chain deploys and registers the Zether stack (kinds 2 and 3, the
 ///         gate on); without it (the default) or on any other chain (the e2e's 319xx, Hedera's 298) none of it.
@@ -45,10 +46,19 @@ contract ZetherDeployTest is Test {
             : type(ZetherTransferVerifierBls12381).creationCode, abi.encode(ip)));
         address bv = _at(h, abi.encodePacked(c == 0 ? type(ZetherBurnVerifierBn254).creationCode
             : type(ZetherBurnVerifierBls12381).creationCode, abi.encode(ip)));
-        (address t_, address b_, address d_) = f.zetherVerifiers(c);
-        assertEq(t_, tv);
-        assertEq(b_, bv);
-        assertEq(d_, _at(h, type(ZetherDisclosure).creationCode));
+        // the env each release was deployed with (plan 5g-Z2): deps = transfer, burn, inner-product verifier, disclosure
+        for (uint8 k = 2; k <= 3; ++k) {
+            IOpenFactory.Release memory rel = f.releaseOf(IOpenFactory.TokenKind(k), c + 1);
+            assertEq(rel.envVersion, c + 1);
+            IFactoryToken.Env memory e = f.envOf(IOpenFactory.TokenKind(k), c + 1);
+            assertEq(rel.envHash, keccak256(abi.encode(e)));
+            assertEq(e.deps[0], tv);
+            assertEq(e.deps[1], bv);
+            assertEq(e.deps[2], ip);
+            assertEq(e.deps[3], _at(h, type(ZetherDisclosure).creationCode));
+            assertEq(e.libs.length, 5);
+            for (uint256 i; i < e.libs.length; ++i) assertEq(e.libCodeHashes[i], e.libs[i].codehash);
+        }
         assertEq(vm.parseJsonAddress(json, string.concat(".zether_verifier_", key)), tv);
         assertEq(vm.parseJsonAddress(json, string.concat(".zether_burn_verifier_", key)), bv);
         assertEq(vm.parseJsonAddress(json, string.concat(".zether_inner_product_verifier_", key)), ip);
@@ -67,7 +77,8 @@ contract ZetherDeployTest is Test {
     function test_devChain_registersBothConfidentialKinds() public {
         DeployHarness h = new DeployHarness();
         (OpenFactory f, string memory json) = h.deploy(ZUID, true, ska);
-        assertTrue(f.zetherEnabled());
+        assertTrue(f.kindEnabled(IOpenFactory.TokenKind.NONE_ZETHER));
+        assertTrue(f.kindEnabled(IOpenFactory.TokenKind.UNDERLYING_ZETHER));
         NoUnderlyingZetherToken none = NoUnderlyingZetherToken(f.implementationOf(IOpenFactory.TokenKind.NONE_ZETHER, 1));
         UnderlyingZetherToken und =
             UnderlyingZetherToken(payable(f.implementationOf(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1)));
@@ -94,14 +105,14 @@ contract ZetherDeployTest is Test {
         // a token from the deployed catalogue, on the deployed verifier
         IFactoryToken.TokenConfig memory c;
         (c.name, c.symbol, c.decimals, c.features) = ("Z", "Z", 6, 1 << AdminLib.PAYABLE);
-        c.conf = IFactoryToken.ConfidentialConfig(address(0), "", 1, 1 << 40, 0, 0, 0, 0);
-        ZetherLayer t = ZetherLayer(f.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, c, "z"));
+        c.conf = IFactoryToken.ConfidentialConfig("", 1, 1 << 40, 0, 0, 0, 0);
+        ZetherLayer t = ZetherLayer(f.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, abi.encode(c), "z"));
         assertEq(address(t.verifier()), tv[0]);
         assertEq(t.chainUid(), ZUID);
         // multiLegFee is PQZ's (op 7, CTR-PQZ-25): a Zether token refuses a non-zero one
         c.conf.multiLegFee = 1;
         vm.expectRevert();
-        f.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, c, "z2");
+        f.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, abi.encode(c), "z2");
     }
 
     /// Without `DEPLOY_ZETHER` no chain gets the stack (a plain anvil deploys as before P3); with it, a non-dev
@@ -112,7 +123,7 @@ contract ZetherDeployTest is Test {
             vm.chainId(ids[i]);
             DeployHarness h = new DeployHarness();
             (OpenFactory f,) = h.deploy(ZUID, false, ska);
-            assertFalse(f.zetherEnabled());
+            assertFalse(f.kindEnabled(IOpenFactory.TokenKind.NONE_ZETHER));
             assertEq(f.implementationOf(IOpenFactory.TokenKind.NONE_ZETHER, 1), address(0));
             assertEq(f.implementationOf(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1), address(0));
             assertEq(f.implementationOf(IOpenFactory.TokenKind.NONE, 1) == address(0), false, "the public kinds still");
@@ -123,17 +134,20 @@ contract ZetherDeployTest is Test {
         }
     }
 
-    /// Each Zether-stack deploy fits one Osaka transaction as `deploy.sh` sends it (through the CREATE2 deployer, gas
-    /// limit = forge's estimate × `--gas-estimate-multiplier 105`) and the anvil's 64 KiB code limit. Tx gas ≈ 21,000 +
+    /// Each Zether-stack deploy fits one Osaka transaction as `deploy.sh` sends it (the verifiers through the CREATE2
+    /// deployer, the releases through `OpenFactory.deployImplementation`, a few k more; gas limit = forge's estimate ×
+    /// `--gas-estimate-multiplier 105`) and the anvil's 64 KiB code limit. Tx gas ≈ 21,000 +
     /// calldata + the CREATE2 measured here + the 1/64 the deployer's call holds back; forge's estimate was 1.047× this
     /// figure on anvil (BLS verifier: 14,963,261 vs 14,296,783; 14,083,070 used), hence the first ×1.05.
     function test_zetherStack_fitsOneOsakaTx() public {
         address ip = address(new ZetherInnerProductVerifierBls12381());
         address ipBn = address(new ZetherInnerProductVerifierBn254());
         bytes memory ipArg = abi.encode(ip);
-        bytes memory zArgs = abi.encode(address(this), ska, ZUID, address(this), address(new ZetherDisclosure()),
+        // the factory's append (plan 5g-Z2): abi.encode(envVersion, env, implArgs)
+        bytes memory zArgs = abi.encode(uint16(1), zetherEnv(address(this), ZUID, address(this),
             address(new ZetherTransferVerifierBn254(ZetherInnerProductVerifierBn254(ipBn))),
-            address(new ZetherBurnVerifierBn254(ZetherInnerProductVerifierBn254(ipBn))));
+            address(new ZetherBurnVerifierBn254(ZetherInnerProductVerifierBn254(ipBn))), ipBn,
+            address(new ZetherDisclosure())), bytes(""));
         bytes[10] memory codes = [
             type(ZetherDisclosure).creationCode,
             type(ZetherStatements).creationCode,

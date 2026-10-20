@@ -30,11 +30,11 @@ contract ZetherE2E is Script {
         (c.name, c.symbol, c.decimals, c.features) = ("Zether E2E", "zE2E", 6, 1 << AdminLib.PAYABLE);
         (c.initialSupply, c.initialHolder) = (1_000_000, vm.addr(pk));
         // version 1 of NONE_ZETHER is the bn254 release (CTR-ZTH-20); the creator names no verifier
-        c.conf = IFactoryToken.ConfidentialConfig(address(0), "", 1, 1 << 40, 0, 0, 0, 0);
+        c.conf = IFactoryToken.ConfidentialConfig("", 1, 1 << 40, 0, 0, 0, 0);
         vm.startBroadcast(pk);
         ZetherLayer t = ZetherLayer(
             OpenFactory(j.readAddress(".token_factory")).createToken(
-                IOpenFactory.TokenKind.NONE_ZETHER, 1, c, keccak256("scaas.e2e.zether")
+                IOpenFactory.TokenKind.NONE_ZETHER, 1, abi.encode(c), keccak256("scaas.e2e.zether")
             )
         );
         t.zetherShield(y, 1234);

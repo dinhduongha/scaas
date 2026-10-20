@@ -310,7 +310,7 @@ contract Tier2Test is V2Fixture {
         IFactoryToken.TokenConfig memory cfg =
             abi.decode(_singleInit(c, 6, 1, 1, _fixedRate()), (IFactoryToken.TokenConfig));
         vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.UnderlyingInvalid.selector, c));
-        MetaTokenBase(c).initialize(address(this), 1, cfg);
+        MetaTokenBase(c).initialize(address(this), 1, abi.encode(cfg));
     }
 
     function test_boundsAreInclusive() public {

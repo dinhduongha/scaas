@@ -50,23 +50,24 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
     /// @notice Wrong underlying count for the tier (0 / 1 / 2–8).
     error UnderlyingCountInvalid(uint256 n);
 
-    /// @dev Runs ONCE on the implementation and locks it, so nobody can `initialize` it. `registry_` is the chain's UA
-    ///      registry (0 = no UA ledger).
-    constructor(address factory_, address smartKeyAccountImpl_, bytes32 chainUid_, address registry_, bool isHedera_)
-        ERC20MetaTx(chainUid_, registry_)
+    /// @dev Runs ONCE on the implementation and locks it, so nobody can `initialize` it. `env` is the release's
+    ///      deployment environment (plan 5g-Z2, `OpenFactory.deployImplementation` appends it): the factory, `chain_uid`,
+    ///      the chain's UA registry (0 = no UA ledger), the `SmartKeyAccount` implementation, Hedera.
+    constructor(Env memory env)
+        ERC20MetaTx(env.chainUid, env.registry)
     {
-        FACTORY = factory_;
+        FACTORY = env.factory;
         _SELF = address(this);
-        SMART_KEY_ACCOUNT_IMPL = smartKeyAccountImpl_;
-        _SMART_KEY_CLONE_CODEHASH = smartKeyAccountImpl_ == address(0) ? bytes32(0) : keccak256(abi.encodePacked(
-            hex"363d3d373d3d3d363d73", smartKeyAccountImpl_, hex"5af43d82803e903d91602b57fd5bf3"));
-        IS_HEDERA = isHedera_;
+        SMART_KEY_ACCOUNT_IMPL = env.smartKeyAccountImpl;
+        _SMART_KEY_CLONE_CODEHASH = env.smartKeyAccountImpl == address(0) ? bytes32(0) : keccak256(abi.encodePacked(
+            hex"363d3d373d3d3d363d73", env.smartKeyAccountImpl, hex"5af43d82803e903d91602b57fd5bf3"));
+        IS_HEDERA = env.hedera;
         AdminLib.$().initialized = true;
     }
 
-    /// @notice The factory calls it in the SAME call as CREATE2 (CTR-TOK-25). A UA registry must name this chain's
-    ///         `chain_uid` (CTR-UA-19).
-    function initialize(address creator_, uint64 version_, TokenConfig calldata cfg) external {
+    /// @notice The factory calls it in the SAME call as CREATE2 (CTR-TOK-25). `initArgs = abi.encode(TokenConfig)`
+    ///         (the kinds of this repository). A UA registry must name this chain's `chain_uid` (CTR-UA-19).
+    function initialize(address creator_, uint64 version_, bytes calldata initArgs) external {
         if (msg.sender != FACTORY) revert NotFactory();
         if (_REGISTRY != address(0)) {
             bytes32 u = IUARegistry(_REGISTRY).chainUid();
@@ -77,20 +78,23 @@ abstract contract MetaTokenBase is ERC20MetaTx, IMetaTokenV2, IFactoryToken, IER
         t.initialized = true;
         t.creator = creator_;
         t.version = version_;
-        _init(cfg);
+        _init(abi.decode(initArgs, (TokenConfig)));
     }
+
+    /// @notice No underlying (the `NONE*` kinds); `UnderlyingToken` lists its legs. Read by the factory's index.
+    function underlyings() public view virtual returns (address[] memory us) {}
 
     /// @dev The kind checks its fields of `cfg` (`ConfigFieldForOtherKind` for another kind's), calls `_setMetadata`
     ///      and `AdminLib.init`.
-    function _init(TokenConfig calldata cfg) internal virtual;
+    function _init(TokenConfig memory cfg) internal virtual;
 
     /// @dev `ConfigFieldForOtherKind` for a set field the kind does not use; `conf` is used only by `*_ZETHER`.
-    function _requireUnused(TokenConfig calldata cfg, bool supply, bool legs, bool rate, bool conf) internal pure {
+    function _requireUnused(TokenConfig memory cfg, bool supply, bool legs, bool rate, bool conf) internal pure {
         if (supply && (cfg.initialSupply != 0 || cfg.initialHolder != address(0))) revert ConfigFieldForOtherKind(1);
         if (legs && cfg.legs.length != 0) revert ConfigFieldForOtherKind(2);
         if (rate && (cfg.rate.rateDelay != 0 || cfg.rate.maxRateStepBps != 0)) revert ConfigFieldForOtherKind(3);
-        ConfidentialConfig calldata c = cfg.conf;
-        if (conf && (c.verifier != address(0) || c.auditorKey.length != 0 || c.shieldScale != 0 || c.maxShielded != 0
+        ConfidentialConfig memory c = cfg.conf;
+        if (conf && (c.auditorKey.length != 0 || c.shieldScale != 0 || c.maxShielded != 0
             || c.confidentialFee != 0 || c.disclosureMode != 0 || c.auditorMode != 0 || c.multiLegFee != 0)) {
             revert ConfigFieldForOtherKind(4);
         }

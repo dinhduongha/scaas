@@ -14,7 +14,7 @@ import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {noneInit} from "../v2/helpers/V2Fixture.sol";
 import {UALedgerBase} from "./UALedgerBase.sol";
-import {noVerifiers} from "../helpers/Canon.sol";
+import {plainEnv, Catalogue} from "../helpers/Catalogue.sol";
 
 /// Pulls `amountIn` of `tIn` from the caller under its allowance and pays `amountOut` of `tOut` to `to`.
 contract UARouter {
@@ -41,16 +41,14 @@ abstract contract UADexBase is UALedgerBase {
     function setUp() public virtual override {
         super.setUp();
         dave = vm.addr(DAVE_PK);
-        f = new OpenFactory(address(this), chainUidA, noVerifiers());
-        f.registerImplementation(IOpenFactory.TokenKind.NONE, 1,
-            address(new NoUnderlyingToken(address(f), address(0), chainUidA, REG_L, false)));
-        f.registerImplementation(IOpenFactory.TokenKind.NONE, 2,
-            address(new NoUnderlyingToken(address(f), address(0), chainUidA, address(0), false)));
-        f.registerDexImplementation(1, address(new SCaaSDex(address(f), chainUidA, address(0))));
-        A = NoUnderlyingToken(f.createToken(IOpenFactory.TokenKind.NONE, 1, noneInit("A", "A", 0, 1e6, alice, address(0)), "A"));
-        B = NoUnderlyingToken(f.createToken(IOpenFactory.TokenKind.NONE, 1, noneInit("B", "B", 0, 1e6, bob, address(0)), "B"));
-        C = NoUnderlyingToken(f.createToken(IOpenFactory.TokenKind.NONE, 2, noneInit("C", "C", 0, 1e6, bob, address(0)), "C"));
-        dex = SCaaSDex(f.createDex(1, ISCaaSDex.DexConfig(address(this), 200_000, TREASURY, false), "dex"));
+        f = new OpenFactory(address(this), chainUidA, 0);
+        Catalogue.plain(f, IOpenFactory.TokenKind.NONE, 1, type(NoUnderlyingToken).creationCode, REG_L, address(0), false);
+        Catalogue.plain(f, IOpenFactory.TokenKind.NONE, 2, type(NoUnderlyingToken).creationCode, address(0), address(0), false);
+        Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
+        A = NoUnderlyingToken(f.createToken(IOpenFactory.TokenKind.NONE, 1, abi.encode(noneInit("A", "A", 0, 1e6, alice, address(0))), "A"));
+        B = NoUnderlyingToken(f.createToken(IOpenFactory.TokenKind.NONE, 1, abi.encode(noneInit("B", "B", 0, 1e6, bob, address(0))), "B"));
+        C = NoUnderlyingToken(f.createToken(IOpenFactory.TokenKind.NONE, 2, abi.encode(noneInit("C", "C", 0, 1e6, bob, address(0))), "C"));
+        dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(address(this), 200_000, TREASURY, false)), "dex"));
         usdc = new MockERC20("USD Coin", "USDC", 6);
         usdc.mint(dave, 1e6);
         address puller = dex.puller();

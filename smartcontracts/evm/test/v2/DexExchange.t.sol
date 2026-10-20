@@ -15,7 +15,7 @@ import {DexPuller} from "../../src/dex/DexPuller.sol";
 import {ITradeToken} from "../../src/trade/ITradeToken.sol";
 import {MockERC20, FeeOnTransferERC20} from "../helpers/Mocks.sol";
 import {UID_, noneInit} from "./helpers/V2Fixture.sol";
-import {noVerifiers} from "../helpers/Canon.sol";
+import {plainEnv, Catalogue} from "../helpers/Catalogue.sol";
 
 /// Router (v3 style): pulls `amountIn` (+ `extraIn`) from the caller under its allowance, pays `amountOut`
 /// (- `shortOut`) to `to` and always claims `amountOut` (the DEX never reads it).
@@ -150,15 +150,12 @@ contract DexExchangeTest is Test {
     MockRouter router;
 
     function setUp() public {
-        f = new OpenFactory(address(this), UID_, noVerifiers());
-        f.registerImplementation(IOpenFactory.TokenKind.NONE, 1,
-            address(new NoUnderlyingToken(address(f), address(0), UID_, address(0), false)));
-        f.registerDexImplementation(1, address(new SCaaSDex(address(f), UID_, address(0))));
-        a = NoUnderlyingToken(f.createToken(IOpenFactory.TokenKind.NONE, 1,
-            noneInit("A", "A", 0, 1e6, alice, address(0)), "a"));
-        b = NoUnderlyingToken(f.createToken(IOpenFactory.TokenKind.NONE, 1,
-            noneInit("B", "B", 0, 1e6, bob, address(0)), "b"));
-        dex = SCaaSDex(f.createDex(1, ISCaaSDex.DexConfig(admin, 200_000, treasury, false), "dex"));
+        f = new OpenFactory(address(this), UID_, 0);
+        Catalogue.plain(f, IOpenFactory.TokenKind.NONE, 1, type(NoUnderlyingToken).creationCode, address(0), address(0), false);
+        Catalogue.dex(f, 1, type(SCaaSDex).creationCode, address(0));
+        a = NoUnderlyingToken(f.createToken(IOpenFactory.TokenKind.NONE, 1, abi.encode(noneInit("A", "A", 0, 1e6, alice, address(0))), "a"));
+        b = NoUnderlyingToken(f.createToken(IOpenFactory.TokenKind.NONE, 1, abi.encode(noneInit("B", "B", 0, 1e6, bob, address(0))), "b"));
+        dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(admin, 200_000, treasury, false)), "dex"));
         puller = dex.puller();
         usdc = new MockERC20("USD Coin", "USDC", 6);
         c = new MockERC20("Hop", "C", 18);

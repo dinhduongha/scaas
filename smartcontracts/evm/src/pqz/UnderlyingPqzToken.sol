@@ -27,20 +27,25 @@ contract UnderlyingPqzToken is UnderlyingToken, PqzLayer {
         uint256 minOut;
     }
 
-    /// @param verifier_ the `UAPqzVerifier` of this release (CTR-ZTH-20 / CTR-PQZ-10: `OpenFactory` registers it only
-    ///        on one of its canonical PQZ verifiers).
-    constructor(address factory_, address smartKeyAccountImpl_, bytes32 chainUid_, address registry_, address verifier_)
-        UnderlyingToken(factory_, smartKeyAccountImpl_, chainUid_, registry_, false)
-        PqzLayer(verifier_)
+    /// @dev The factory's append (`OpenFactory.deployImplementation`, plan 5g-Z2): the release's `Env`, whose
+    ///      `deps[ENV_PQZ_VERIFIER]` is the release's `UAPqzVerifier` (CTR-ZTH-20 / CTR-PQZ-10); no `implArgs`.
+    constructor(uint16 envVersion, Env memory env, bytes memory implArgs)
+        UnderlyingToken(envVersion, env, implArgs)
+        PqzLayer(env)
     {
-        if (registry_.code.length == 0) revert BadInit();
+        if (env.registry.code.length == 0) revert BadInit();
+    }
+
+    /// @dev The legs (`UnderlyingToken`), restated for the second base.
+    function underlyings() public view override(UnderlyingToken, MetaTokenBase) returns (address[] memory) {
+        return super.underlyings();
     }
 
     function kind() public pure override(UnderlyingToken, MetaTokenBase) returns (uint8) {
         return AdminLib.KIND_UNDERLYING_PQZ;
     }
 
-    function _init(TokenConfig calldata cfg) internal override(UnderlyingToken, MetaTokenBase) {
+    function _init(TokenConfig memory cfg) internal override(UnderlyingToken, MetaTokenBase) {
         _requireUnused(cfg, true, false, false, false);
         UnderlyingLib.initToken(cfg, false, AdminLib.KIND_UNDERLYING_PQZ);
         PqzLib.init(cfg.conf, _REGISTRY, PQZ_VERIFIER);

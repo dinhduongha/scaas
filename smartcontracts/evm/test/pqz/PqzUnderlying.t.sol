@@ -14,6 +14,7 @@ import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {HookLeg} from "../zether/ZetherUnderlying.t.sol";
+import {Catalogue, pqzEnv} from "../helpers/Catalogue.sol";
 
 /// `UNDERLYING_PQZ` (P6g plan Task 6): a leg's underlying straight into `plainPending` and a burn straight out to a
 /// leg, the direct binding of the leg and `minOut` (D12), the reserve invariant.
@@ -23,16 +24,15 @@ contract PqzUnderlyingTest is PqzFixture {
 
     function setUp() public {
         _stack();
-        UnderlyingPqzToken impl = new UnderlyingPqzToken(address(factory), address(0), PQZ_UID_(), address(reg), address(pqv));
-        vm.prank(registrar);
-        factory.registerImplementation(IOpenFactory.TokenKind.UNDERLYING_PQZ, 1, address(impl));
+        Catalogue.release(factory, IOpenFactory.TokenKind.UNDERLYING_PQZ, 1,
+            pqzEnv(address(factory), PQZ_UID_(), address(reg), address(pqv)), type(UnderlyingPqzToken).creationCode);
         usd = new MockERC20("USD", "USD", 6);
         IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
         c.features = (1 << AdminLib.PAYABLE);
         c.roles.minter = address(0);
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);
-        w = UnderlyingPqzToken(payable(factory.createToken(IOpenFactory.TokenKind.UNDERLYING_PQZ, 1, c, "w")));
+        w = UnderlyingPqzToken(payable(factory.createToken(IOpenFactory.TokenKind.UNDERLYING_PQZ, 1, abi.encode(c), "w")));
         tok = PqzLayer(address(w));
     }
 
@@ -89,7 +89,7 @@ contract PqzUnderlyingTest is PqzFixture {
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(hook), 1, 1);
         UnderlyingPqzToken z =
-            UnderlyingPqzToken(payable(factory.createToken(IOpenFactory.TokenKind.UNDERLYING_PQZ, 1, c, "hook")));
+            UnderlyingPqzToken(payable(factory.createToken(IOpenFactory.TokenKind.UNDERLYING_PQZ, 1, abi.encode(c), "hook")));
         hook.mint(address(this), SCALE);
         hook.approve(address(z), SCALE);
         bytes[2] memory calls =
@@ -120,22 +120,25 @@ contract PqzUnderlyingTest is PqzFixture {
     /// deploy (gas limit = forge's estimate × `--gas-estimate-multiplier 105`; forge's estimate ran ~1.05× the measured
     /// CREATE2 + intrinsic + calldata, ZetherDeploy.t): not with forge's default ×1.30. Init code over EIP-3860's 49,152
     /// fits 7622 / anvil (131,072 with `--code-size-limit 65536`).
+    /// Plan 5g-Z2: measured through `OpenFactory.deployImplementation` itself (the env appended, the release's checks),
+    /// as the registrar's transaction: intrinsic + calldata + the call.
     function test_largestImplementationFitsOneOsakaTx() public {
-        bytes memory code = abi.encodePacked(type(UnderlyingPqzToken).creationCode,
-            abi.encode(address(factory), address(0), PQZ_UID_(), address(reg), address(pqv)));
+        bytes memory code = type(UnderlyingPqzToken).creationCode;
+        bytes memory data_ = abi.encodeCall(factory.deployImplementation, (IOpenFactory.TokenKind.UNDERLYING_PQZ, 2, 1, code, ""));
+        vm.prank(registrar);
         uint256 g = gasleft();
-        address a;
-        assembly ("memory-safe") { a := create2(0, add(code, 32), mload(code), 7) }
+        address a = factory.deployImplementation(IOpenFactory.TokenKind.UNDERLYING_PQZ, 2, 1, code, "");
         g -= gasleft();
-        assertTrue(a != address(0), "deploys");
-        uint256 data = 32 * 16; // the CREATE2 deployer's salt word
-        for (uint256 j; j < code.length; ++j) data += code[j] == 0 ? 4 : 16;
-        uint256 txGas = 21_000 + data + g * 64 / 63;
-        emit log_named_uint("UnderlyingPqzToken init code bytes", code.length);
+        uint256 data;
+        for (uint256 j; j < data_.length; ++j) data += data_[j] == 0 ? 4 : 16;
+        uint256 txGas = 21_000 + data + g;
+        uint256 init = code.length + abi.encode(uint16(1), factory.envOf(IOpenFactory.TokenKind.UNDERLYING_PQZ, 1),
+            bytes("")).length;
+        emit log_named_uint("UnderlyingPqzToken init code bytes (with the env)", init);
         emit log_named_uint("UnderlyingPqzToken runtime bytes", a.code.length);
-        emit log_named_uint("UnderlyingPqzToken deploy tx gas", txGas);
-        assertGt(code.length, 49_152, "over EIP-3860: 64 KiB chains only");
-        assertLe(code.length, 131_072);
+        emit log_named_uint("UnderlyingPqzToken deployImplementation tx gas", txGas);
+        assertGt(init, 49_152, "over EIP-3860: 64 KiB chains only");
+        assertLe(init, 131_072);
         assertLt(txGas * 105 * 105 / 10_000, 1 << 24, "fits EIP-7825 with --gas-estimate-multiplier 105");
         assertGt(txGas * 105 * 130 / 10_000, 1 << 24, "forge's default x1.30 would not");
     }

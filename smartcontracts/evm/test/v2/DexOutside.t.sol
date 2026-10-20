@@ -16,7 +16,7 @@ import {MockERC20, FeeOnTransferERC20} from "../helpers/Mocks.sol";
 import {Mock1271Wallet} from "../helpers/WalletMocks.sol";
 import {Burner1271, Bomb1271} from "./Dex.t.sol";
 import {UID_, noneInit} from "./helpers/V2Fixture.sol";
-import {noVerifiers} from "../helpers/Canon.sol";
+import {plainEnv, Catalogue} from "../helpers/Catalogue.sol";
 
 /// ERC-1271 wallet that needs ~100 k gas to say "valid": passes under 400 k (a `SmartKeyAccount` clone), not under 50 k.
 contract Work1271 {
@@ -147,13 +147,11 @@ contract DexOutsideTest is Test {
 
     function setUp() public {
         work = address(new Work1271());
-        f = new OpenFactory(address(this), UID_, noVerifiers());
-        f.registerImplementation(IOpenFactory.TokenKind.NONE, 1,
-            address(new NoUnderlyingToken(address(f), work, UID_, address(0), false)));
-        f.registerDexImplementation(1, address(new SCaaSDex(address(f), UID_, work)));
-        a = NoUnderlyingToken(f.createToken(IOpenFactory.TokenKind.NONE, 1,
-            noneInit("A", "A", 0, 1e6, alice, address(0)), "a"));
-        dex = SCaaSDex(f.createDex(1, ISCaaSDex.DexConfig(admin, 0, treasury, false), "dex"));
+        f = new OpenFactory(address(this), UID_, 0);
+        Catalogue.plain(f, IOpenFactory.TokenKind.NONE, 1, type(NoUnderlyingToken).creationCode, address(0), work, false);
+        Catalogue.dex(f, 1, type(SCaaSDex).creationCode, work);
+        a = NoUnderlyingToken(f.createToken(IOpenFactory.TokenKind.NONE, 1, abi.encode(noneInit("A", "A", 0, 1e6, alice, address(0))), "a"));
+        dex = SCaaSDex(f.createDex(1, abi.encode(ISCaaSDex.DexConfig(admin, 0, treasury, false)), "dex"));
         usdc = _list(new MockERC20("USD Coin", "USDC", 6));
         _fund(usdc, dave);
     }

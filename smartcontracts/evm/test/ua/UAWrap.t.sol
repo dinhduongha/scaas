@@ -10,6 +10,7 @@ import {UnderlyingToken} from "../../src/metatx/UnderlyingToken.sol";
 import {ITradeToken} from "../../src/trade/ITradeToken.sol";
 import {underlyingInit, Rate} from "../v2/helpers/V2Fixture.sol";
 import {UALedgerBase} from "./UALedgerBase.sol";
+import {plainEnv} from "../helpers/Catalogue.sol";
 
 /// token-wrappers.md CTR-TOK-20 `uaWrap` (UA-5b): a holder (derived, or a native id) of a SCaaS ledger underlying wraps
 /// by a `UATradeOrder` pulled by the underlying's `uaTrade`; `minted − fee` goes to `o.destination` (0 ⇒ `o.from`), a
@@ -132,12 +133,12 @@ contract UAWrapTest is UALedgerBase {
     /// A wrapper whose own ledger is off mints to a native destination, and refuses a derived one (`UALedgerOff`).
     function test_ledgerOffWrapper() public {
         UnderlyingToken w = UnderlyingToken(Clones.clone(address(
-            new UnderlyingToken(address(this), address(0), chainUidA, address(0), false))));
+            new UnderlyingToken(1, plainEnv(address(this), address(0), chainUidA, address(0), false), ""))));
         address[] memory us = new address[](1);
         uint256[] memory one = new uint256[](1);
         (us[0], one[0]) = (address(tok), 1);
         Rate memory fixedRate;
-        w.initialize(address(this), 1, underlyingInit(us, one, one, 6, fixedRate, address(0), address(0)));
+        w.initialize(address(this), 1, abi.encode(underlyingInit(us, one, one, 6, fixedRate, address(0), address(0))));
         ITradeToken.UATradeOrder memory o = _o(w, uaP, 1000, 1000, 0);
         _wrapReverts(w, address(tok), o, abi.encodeWithSelector(IUALedger.UALedgerOff.selector));
         o.destination = _pad(bob);

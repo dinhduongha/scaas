@@ -25,7 +25,8 @@ import {ZetherVerifiers} from "./ZetherVerifiers.sol";
 import {ZetherTypes} from "../../../src/zether/ZetherTypes.sol";
 import {ZetherProver} from "./ZetherProver.sol";
 import {ZetherKeys} from "./ZetherKeys.sol";
-import {zetherCanon} from "../../helpers/Canon.sol";
+import {Catalogue, zetherEnv} from "../../helpers/Catalogue.sol";
+import {ZetherVerifierBase} from "../../../src/zether/ZetherVerifier.sol";
 
 bytes32 constant ZUID = 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464;
 
@@ -84,19 +85,25 @@ abstract contract ZetherFixture is Test {
 
     function _stack(bool useBls) internal {
         bls = useBls;
-        // the canonical verifiers and disclosure first: the factory fixes them in its constructor (CTR-ZTH-20)
+        // the curve's verifiers and disclosure, then the factory's env of the Zether kinds (plan 5g-Z2, CTR-ZTH-20)
         (ver, burnVer) = ZetherVerifiers.deploy(useBls);
         dis = new ZetherDisclosure();
-        factory = new OpenFactory(registrar, ZUID,
-            zetherCanon(useBls ? 1 : 0, address(ver), address(burnVer), address(dis)));
+        factory = new OpenFactory(registrar, ZUID, 0);
         stm = new ZetherStatements();
         reg = _uaRegistry();
         prover = new ZetherProver();
-        noneImpl = new NoUnderlyingZetherToken(address(factory), address(0), ZUID, address(reg), dis, ver, burnVer);
+        noneImpl = NoUnderlyingZetherToken(Catalogue.release(factory, IOpenFactory.TokenKind.NONE_ZETHER, 1, _zenv(),
+            type(NoUnderlyingZetherToken).creationCode));
         vm.startPrank(registrar);
-        factory.registerImplementation(IOpenFactory.TokenKind.NONE_ZETHER, 1, address(noneImpl));
-        factory.setZetherEnabled(true);
+        factory.setKindEnabled(IOpenFactory.TokenKind.NONE_ZETHER, true);
+        factory.setKindEnabled(IOpenFactory.TokenKind.UNDERLYING_ZETHER, true);
         vm.stopPrank();
+    }
+
+    /// The release env of this stack's curve (`deps`: transfer, burn, inner-product verifier, disclosure).
+    function _zenv() internal view returns (IFactoryToken.Env memory) {
+        return zetherEnv(address(factory), ZUID, address(reg), address(ver), address(burnVer),
+            address(ZetherVerifierBase(address(ver)).innerProduct()), address(dis));
     }
 
     /// Gen 1 with the two Zether kinds and `schnorr-bn254` (caps as accounts.md §1.15), budget 12 M, no msig.
@@ -122,7 +129,7 @@ abstract contract ZetherFixture is Test {
         c.features = (1 << AdminLib.PAYABLE) | (1 << AdminLib.MINTABLE) | (1 << AdminLib.BURNABLE);
         c.roles.minter = address(this);
         c.conf = IFactoryToken.ConfidentialConfig(
-            address(0), auditor ? ZetherKeys.pub(X_AUD, bls) : bytes(""), SCALE, maxShielded, FEE, dMode,
+            auditor ? ZetherKeys.pub(X_AUD, bls) : bytes(""), SCALE, maxShielded, FEE, dMode,
             auditor ? aMode : 0, 0
         );
     }
@@ -132,7 +139,7 @@ abstract contract ZetherFixture is Test {
     }
 
     function _newToken(bool auditor, bytes32 salt, uint256 maxShielded) internal virtual returns (ZetherLayer) {
-        return ZetherLayer(factory.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, _cfg(auditor, maxShielded), salt));
+        return ZetherLayer(factory.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, abi.encode(_cfg(auditor, maxShielded)), salt));
     }
 
     function _user(uint256 x, address evm) internal returns (User memory u) {

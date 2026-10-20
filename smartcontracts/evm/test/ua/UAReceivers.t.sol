@@ -20,10 +20,11 @@ import {FeeMode, FeePolicy} from "../../src/common/FeePolicy.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {noneInit, underlyingInit, Rate} from "../v2/helpers/V2Fixture.sol";
 import {UALedgerBase} from "./UALedgerBase.sol";
+import {plainEnv} from "../helpers/Catalogue.sol";
 
 /// Exposes `_uaMint` (accounts.md CTR-UA-28).
 contract UAMintHarness is NoUnderlyingToken {
-    constructor(bytes32 uid, address reg) NoUnderlyingToken(msg.sender, address(0), uid, reg, false) {}
+    constructor(bytes32 uid, address reg) NoUnderlyingToken(1, plainEnv(msg.sender, address(0), uid, reg, false), "") {}
 
     function mintUA(bytes32 to, uint256 v) external {
         _uaMint(to, v);
@@ -66,7 +67,7 @@ contract UAReceiversTest is UALedgerBase {
 
     function _harness(address registry_) internal returns (UAMintHarness h) {
         h = UAMintHarness(Clones.clone(address(new UAMintHarness(chainUidA, registry_))));
-        h.initialize(address(this), 1, noneInit("H", "H", 6, 0, address(0), address(this)));
+        h.initialize(address(this), 1, abi.encode(noneInit("H", "H", 6, 0, address(0), address(this))));
     }
 
     // ----- _uaMint -----
@@ -123,10 +124,10 @@ contract UAReceiversTest is UALedgerBase {
 
     /// A NONE clone on `REG_L` with `features` and no minter.
     function _none(uint256 features) internal returns (NoUnderlyingToken t) {
-        t = NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(address(this), address(0), chainUidA, REG_L, false))));
+        t = NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(1, plainEnv(address(this), address(0), chainUidA, REG_L, false), ""))));
         IFactoryToken.TokenConfig memory c = noneInit("N", "N", 6, 1_000, alice, address(0));
         c.features = features;
-        t.initialize(address(this), 1, c);
+        t.initialize(address(this), 1, abi.encode(c));
     }
 
     // ----- wrapToUA -----
@@ -199,8 +200,8 @@ contract UAReceiversTest is UALedgerBase {
         (one[0], one[1]) = (1, 1);
         Rate memory adj = Rate(true, address(this), 2 days, 1_000);
         UnderlyingToken w =
-            UnderlyingToken(Clones.clone(address(new UnderlyingToken(address(this), address(0), chainUidA, REG_L, false))));
-        w.initialize(address(this), 1, underlyingInit(us, one, one, 6, adj, address(this), address(0)));
+            UnderlyingToken(Clones.clone(address(new UnderlyingToken(1, plainEnv(address(this), address(0), chainUidA, REG_L, false), ""))));
+        w.initialize(address(this), 1, abi.encode(underlyingInit(us, one, one, 6, adj, address(this), address(0))));
         und.mint(alice, 1_000);
         und2.mint(alice, 1_000);
         vm.startPrank(alice);
@@ -242,12 +243,12 @@ contract UAReceiversTest is UALedgerBase {
 
     /// A one-leg 1:1 wrapper of `leg` with the ledger off (registry 0).
     function _offWrapper(address leg) internal returns (UnderlyingToken w) {
-        w = UnderlyingToken(Clones.clone(address(new UnderlyingToken(address(this), address(0), chainUidA, address(0), false))));
+        w = UnderlyingToken(Clones.clone(address(new UnderlyingToken(1, plainEnv(address(this), address(0), chainUidA, address(0), false), ""))));
         address[] memory us = new address[](1);
         uint256[] memory one = new uint256[](1);
         (us[0], one[0]) = (leg, 1);
         Rate memory fixedRate;
-        w.initialize(address(this), 1, underlyingInit(us, one, one, 6, fixedRate, address(0), address(0)));
+        w.initialize(address(this), 1, abi.encode(underlyingInit(us, one, one, 6, fixedRate, address(0), address(0))));
     }
 
     // ----- unwrapToUA -----
@@ -287,8 +288,8 @@ contract UAReceiversTest is UALedgerBase {
         wrpN.unwrapToUA(address(0), 100, uaP, 0);
         vm.stopPrank();
         NoUnderlyingToken off =
-            NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(address(this), address(0), chainUidA, address(0), false))));
-        off.initialize(address(this), 1, noneInit("Off", "OFF", 6, 0, address(0), address(this)));
+            NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(1, plainEnv(address(this), address(0), chainUidA, address(0), false), ""))));
+        off.initialize(address(this), 1, abi.encode(noneInit("Off", "OFF", 6, 0, address(0), address(this))));
         UnderlyingToken w = _wrapper(address(off));
         off.mint(address(this), 100);
         off.approve(address(w), 100);
@@ -331,8 +332,8 @@ contract UAReceiversTest is UALedgerBase {
         (one[0], one[1]) = (1, 1);
         Rate memory fixedRate;
         UnderlyingToken w =
-            UnderlyingToken(Clones.clone(address(new UnderlyingToken(address(this), address(0), chainUidA, REG_L, false))));
-        w.initialize(address(this), 1, underlyingInit(us, one, one, 6, fixedRate, address(0), address(0)));
+            UnderlyingToken(Clones.clone(address(new UnderlyingToken(1, plainEnv(address(this), address(0), chainUidA, REG_L, false), ""))));
+        w.initialize(address(this), 1, abi.encode(underlyingInit(us, one, one, 6, fixedRate, address(0), address(0))));
         und.mint(alice, 50);
         vm.startPrank(alice);
         und.approve(address(w), 50);

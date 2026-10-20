@@ -28,16 +28,16 @@ contract UnderlyingToken is MetaTokenBase, IUnderlyingToken {
     bytes4 internal constant SEL_WRAP_TO_UA = bytes4(keccak256("wrapToUA(address,uint256,bytes32)"));
     bytes4 internal constant SEL_UNWRAP_TO_UA = bytes4(keccak256("unwrapToUA(address,uint256,bytes32,uint256)"));
 
-    constructor(address factory_, address smartKeyAccountImpl_, bytes32 chainUid_, address registry_, bool isHedera_)
-        MetaTokenBase(factory_, smartKeyAccountImpl_, chainUid_, registry_, isHedera_)
-    {}
+    /// @dev The factory's append (`OpenFactory.deployImplementation`, plan 5g-Z2): the release's `Env`; this kind takes
+    ///      no `implArgs`.
+    constructor(uint16, Env memory env, bytes memory) MetaTokenBase(env) {}
 
     function kind() public pure virtual override returns (uint8) {
         return AdminLib.KIND_UNDERLYING;
     }
 
     /// @dev `initialSupply`, `initialHolder`, `conf` must be empty; legs and rate are checked in `UnderlyingLib`.
-    function _init(TokenConfig calldata cfg) internal virtual override {
+    function _init(TokenConfig memory cfg) internal virtual override {
         _requireUnused(cfg, true, false, false, true);
         UnderlyingLib.initToken(cfg, IS_HEDERA, AdminLib.KIND_UNDERLYING);
     }
@@ -220,7 +220,7 @@ contract UnderlyingToken is MetaTokenBase, IUnderlyingToken {
         return s.legCount == 1 ? s.legs[0].token : address(0);
     }
 
-    function underlyings() external view returns (address[] memory us) {
+    function underlyings() public view virtual override(IUnderlyingToken, MetaTokenBase) returns (address[] memory us) {
         UnderlyingLib.UnderlyingStorage storage s = UnderlyingLib.$();
         uint256 n = s.legCount;
         us = new address[](n);

@@ -13,6 +13,7 @@ import {ITokenAdmin} from "../../src/metatx/ITokenAdmin.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {noneInit} from "../v2/helpers/V2Fixture.sol";
 import {UALedgerBase} from "./UALedgerBase.sol";
+import {plainEnv} from "../helpers/Catalogue.sol";
 
 /// T-V3-1: the named `ua*` functions build their struct and run its pipeline (CTR-UA-26 mirroring CTR-MTX-09) —
 /// same digest, same events, one lane consumed once — and enforce only their mode shape.
@@ -77,8 +78,8 @@ contract UALedgerNamedTest is UALedgerBase {
     function test_uaPay_needsPayable() public {
         IFactoryToken.TokenConfig memory c = noneInit("NoPay", "NP", 6, 0, address(0), address(this));
         c.features = 1 << AdminLib.MINTABLE;
-        NoUnderlyingToken np = NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(address(this), address(0), chainUidA, REG_L, false))));
-        np.initialize(address(this), 1, c);
+        NoUnderlyingToken np = NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(1, plainEnv(address(this), address(0), chainUidA, REG_L, false), ""))));
+        np.initialize(address(this), 1, abi.encode(c));
         vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureNotSet.selector, AdminLib.PAYABLE));
         np.uaPay(uaP, uaB, 1, keccak256("p"), block.timestamp + 1, RR, RELAYER, 0, address(0), "");
         // a UAMetaTransfer with `entryRef` set is not gated

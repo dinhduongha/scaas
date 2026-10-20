@@ -23,6 +23,7 @@ import {ITradeToken} from "../../src/trade/ITradeToken.sol";
 import {TradeLib} from "../../src/trade/TradeLib.sol";
 import {noneInit} from "../v2/helpers/V2Fixture.sol";
 import {UARegistryBase} from "./UARegistryBase.sol";
+import {plainEnv} from "../helpers/Catalogue.sol";
 
 /// Classifies every token as a registered SCaaS token, so a DEX clone at a vector address can list the vector tokens.
 contract KindFactory {
@@ -75,12 +76,12 @@ contract UATradeVectorsTest is UARegistryBase {
         A = _token(vm.parseJsonAddress(vj, ".tokenA"));
         B = _token(vm.parseJsonAddress(vj, ".tokenB"));
         KindFactory kf = new KindFactory();
-        address impl = address(new SCaaSDex(address(kf), chainUidA, address(0)));
+        address impl = address(new SCaaSDex(1, plainEnv(address(kf), address(0), chainUidA, address(0), false), ""));
         address at = vm.parseJsonAddress(vj, ".dex");
         vm.etch(at, abi.encodePacked(hex"363d3d373d3d3d363d73", impl, hex"5af43d82803e903d91602b57fd5bf3"));
         dex = SCaaSDex(at);
         vm.prank(address(kf));
-        dex.initialize(address(this), 1, ISCaaSDex.DexConfig(address(this), 200_000, TREASURY, false));
+        dex.initialize(address(this), 1, abi.encode(ISCaaSDex.DexConfig(address(this), 200_000, TREASURY, false)));
         dex.setMarket(address(A), address(B), true);
         vm.warp(1_800_000_000);
     }
@@ -92,10 +93,10 @@ contract UATradeVectorsTest is UARegistryBase {
     }
 
     function _token(address at) internal returns (NoUnderlyingToken t) {
-        address impl = address(new NoUnderlyingToken(address(this), address(0), chainUidA, REG_A, false));
+        address impl = address(new NoUnderlyingToken(1, plainEnv(address(this), address(0), chainUidA, REG_A, false), ""));
         vm.etch(at, abi.encodePacked(hex"363d3d373d3d3d363d73", impl, hex"5af43d82803e903d91602b57fd5bf3"));
         t = NoUnderlyingToken(at);
-        t.initialize(address(this), 1, noneInit("T", "T", 6, 1e15, address(this), address(this)));
+        t.initialize(address(this), 1, abi.encode(noneInit("T", "T", 6, 1e15, address(this), address(this))));
     }
 
     function _realCfgs() internal returns (UARegistry.KindConfig[] memory c) {

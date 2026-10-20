@@ -12,7 +12,7 @@ import {PqzLayer} from "../../../src/pqz/PqzLayer.sol";
 import {PqzCt} from "../../../src/pqz/PqzCt.sol";
 import {PqzLib} from "../../../src/pqz/PqzLib.sol";
 import {ZetherTypes} from "../../../src/zether/ZetherTypes.sol";
-import {pqzCanon} from "../../helpers/Canon.sol";
+import {Catalogue, pqzEnv} from "../../helpers/Catalogue.sol";
 
 /// @notice The PQZ token stack of chain 7622 in forge (P6g plan D6): the gen-1 registry (`PqzRegistryBase`), `OpenFactory`
 ///         with the PQZ gate on, `NoUnderlyingPqzToken` clones. The `PQZ` precompile answers 1 for ops 1, 2, 4, 5 unless
@@ -47,11 +47,13 @@ abstract contract PqzFixture is PqzRegistryBase {
     function _stack() internal virtual {
         _registryStack();
         ct = new PqzCtHarness();
-        factory = new OpenFactory(registrar, PQZ_UID, pqzCanon(0, address(pqv))); // PQZL canonical (CTR-ZTH-20)
-        noneImpl = new NoUnderlyingPqzToken(address(factory), address(0), PQZ_UID, address(reg), address(pqv));
+        factory = new OpenFactory(registrar, PQZ_UID, 0);
+        // plan 5g-Z2: the PQZL release, its verifier the env's (CTR-ZTH-20)
+        noneImpl = NoUnderlyingPqzToken(Catalogue.release(factory, IOpenFactory.TokenKind.NONE_PQZ, 1,
+            pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv)), type(NoUnderlyingPqzToken).creationCode));
         vm.startPrank(registrar);
-        factory.registerImplementation(IOpenFactory.TokenKind.NONE_PQZ, 1, address(noneImpl));
-        factory.setPqzEnabled(true);
+        factory.setKindEnabled(IOpenFactory.TokenKind.NONE_PQZ, true);
+        factory.setKindEnabled(IOpenFactory.TokenKind.UNDERLYING_PQZ, true);
         vm.stopPrank();
         for (uint8 op = 1; op <= 5; ++op) if (op != 3) _mockOp(op, 1);
         txStmt = _vecHex("statement_transfer.json", ".rows[0].stmt");
@@ -70,12 +72,12 @@ abstract contract PqzFixture is PqzRegistryBase {
         c.roles.minter = address(this);
         bool withAud = aMode != uint8(ZetherTypes.AuditorMode.NONE);
         c.conf = IFactoryToken.ConfidentialConfig(
-            address(0), withAud ? abi.encode(aud) : bytes(""), SCALE, maxShielded, FEE, dMode, aMode, mlf
+            withAud ? abi.encode(aud) : bytes(""), SCALE, maxShielded, FEE, dMode, aMode, mlf
         );
     }
 
     function _newToken(bytes32 s) internal returns (PqzLayer) {
-        return PqzLayer(factory.createToken(IOpenFactory.TokenKind.NONE_PQZ, 1, _cfg(uint256(1) << 40), s));
+        return PqzLayer(factory.createToken(IOpenFactory.TokenKind.NONE_PQZ, 1, abi.encode(_cfg(uint256(1) << 40)), s));
     }
 
     // ------------------------------------------------------------------ ciphertexts

@@ -8,6 +8,7 @@ import {ZetherTypes} from "../zether/ZetherTypes.sol";
 import {IPqzToken} from "./IPqzToken.sol";
 import {PqzLib} from "./PqzLib.sol";
 import {PqzCt} from "./PqzCt.sol";
+import {ENV_PQZ_VERIFIER} from "../factory/IFactoryToken.sol";
 
 /// @title The PQZ layer of the kinds `NONE_PQZ` and `UNDERLYING_PQZ` (CTR-PQZ-15, CTR-PQZ-22; P6g plan D1): the entry
 ///        points and views of pq-zero-knowledge.md §9.4; the state and the logic are `PqzLib` (`scaas.pqz`).
@@ -21,9 +22,10 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
     /// @dev The `UAPqzVerifier` of this release; `init` takes the precompile and the proof system from it.
     address internal immutable PQZ_VERIFIER;
 
-    constructor(address verifier_) {
-        if (verifier_.code.length == 0) revert BadInit();
-        PQZ_VERIFIER = verifier_;
+    /// @dev `env.deps = [UAPqzVerifier]` (`ENV_PQZ_VERIFIER`); never on Hedera.
+    constructor(Env memory env) {
+        if (env.deps.length != 1 || env.hedera || env.deps[ENV_PQZ_VERIFIER].code.length == 0) revert BadInit();
+        PQZ_VERIFIER = env.deps[ENV_PQZ_VERIFIER];
     }
 
     /// @notice CTR-PQZ-15: the token signs under `"SCaaS PqzToken"`.

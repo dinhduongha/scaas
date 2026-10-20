@@ -12,6 +12,7 @@ import {TradeLib} from "../../src/trade/TradeLib.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {noneInit} from "../v2/helpers/V2Fixture.sol";
 import {UALedgerBase} from "./UALedgerBase.sol";
+import {plainEnv} from "../helpers/Catalogue.sol";
 
 /// dex.md CTR-DEX-25 (UA-5b): the sell token's side of a `UATradeOrder` — CTR-DEX-15 steps 1–8 on ids, step 4 under the
 /// UA purpose `trade`, the move through the UA ledger, one `minNonce` floor per id across both structs, and the
@@ -264,8 +265,8 @@ contract UATradeTest is UALedgerBase {
 
     function test_ledgerOff_everyUATradeFunction() public {
         NoUnderlyingToken off = NoUnderlyingToken(Clones.clone(address(
-            new NoUnderlyingToken(address(this), address(0), chainUidA, address(0), false))));
-        off.initialize(address(this), 1, noneInit("Off", "OFF", 6, 1_000_000, alice, address(this)));
+            new NoUnderlyingToken(1, plainEnv(address(this), address(0), chainUidA, address(0), false), ""))));
+        off.initialize(address(this), 1, abi.encode(noneInit("Off", "OFF", 6, 1_000_000, alice, address(this))));
         ITradeToken.UATradeOrder memory o = _o(_pad(alice), 1000, 2000);
         vm.expectRevert(IUALedger.UALedgerOff.selector);
         off.uaTrade(o, "", _f(600, 1200, 0));

@@ -141,14 +141,14 @@ library PqzLib {
 
     // ------------------------------------------------------------------ init
 
-    /// @notice The kind's `_init` (P6g plan D9): `verifier` the release's `UAPqzVerifier` (CTR-ZTH-20: `c.verifier` must
-    ///         be 0, the creator never chooses one; precompile and proof system: exactly `PqzSafety.PQZ`, PQZL or PQZH,
+    /// @notice The kind's `_init` (P6g plan D9): `verifier` the release's `UAPqzVerifier` (CTR-ZTH-20: the creator never
+    ///         chooses one; precompile and proof system: exactly `PqzSafety.PQZ`, PQZL or PQZH,
     ///         the self-test passing now; review W-B), `auditorKey` empty or the auditor's 32-byte `pqz-mlwe` UA, cap
     ///         `≤ 2^62`, fee `< 2^64` and `< cap`.
-    function init(IFactoryToken.ConfidentialConfig calldata c, address registry, address verifier) public {
+    function init(IFactoryToken.ConfidentialConfig memory c, address registry, address verifier) public {
         PqzSafety.requireAllowedChain();
-        bytes calldata aud = c.auditorKey;
-        if (c.verifier != address(0) || c.shieldScale == 0 || c.maxShielded == 0 || c.maxShielded > MAX_TOTAL_SHIELDED
+        bytes memory aud = c.auditorKey;
+        if (c.shieldScale == 0 || c.maxShielded == 0 || c.maxShielded > MAX_TOTAL_SHIELDED
             || c.confidentialFee >= VALUE_BOUND || c.confidentialFee >= c.maxShielded
             || c.confidentialFee + 8 * c.multiLegFee >= VALUE_BOUND || c.confidentialFee + 8 * c.multiLegFee >= c.maxShielded
             || (aud.length != 0 && aud.length != 32) || c.maxShielded > type(uint256).max / c.shieldScale) {

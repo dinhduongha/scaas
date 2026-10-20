@@ -16,6 +16,7 @@ import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {FeeMode} from "../../src/common/FeePolicy.sol";
 import {noneInit} from "../v2/helpers/V2Fixture.sol";
 import {UALedgerBase} from "./UALedgerBase.sol";
+import {plainEnv} from "../helpers/Catalogue.sol";
 
 /// accounts.md CTR-UA-26 as grown by UA-5a (CTR-UA-27 "allowlist or dedicated function"): `burn` (`NONE*`) and
 /// `unwrapToUA` (the wrappers) run under `uaExecute` / `uaBatch`; under a derived ticket each debits exactly the subject
@@ -60,10 +61,10 @@ contract UAAllowlist5aTest is UALedgerBase {
             abi.encodeWithSelector(IUALedger.UAInsufficientBalance.selector, uaP, 596, 597));
         // `BURNABLE` off: the feature error of `burn`
         NoUnderlyingToken nb =
-            NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(address(this), address(0), chainUidA, REG_L, false))));
+            NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(1, plainEnv(address(this), address(0), chainUidA, REG_L, false), ""))));
         IFactoryToken.TokenConfig memory c = noneInit("NB", "NB", 6, 0, address(0), address(this));
         c.features = (1 << AdminLib.PAYABLE) | (1 << AdminLib.MINTABLE);
-        nb.initialize(address(this), 1, c);
+        nb.initialize(address(this), 1, abi.encode(c));
         nb.mintToUA(uaP, 10);
         _exec(address(nb), _m(address(nb), uaP, abi.encodeCall(NoUnderlyingToken.burn, (1))),
             abi.encodeWithSelector(ITokenAdmin.FeatureNotSet.selector, AdminLib.BURNABLE));

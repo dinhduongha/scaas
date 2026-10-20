@@ -14,6 +14,7 @@ import {IERC20Payment} from "../../src/metatx/IERC20Payment.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {FeeMode} from "../../src/common/FeePolicy.sol";
 import {MockHederaAccountService} from "../hedera/HederaMocks.sol";
+import {plainEnv} from "../helpers/Catalogue.sol";
 
 /// Kind NONE on the flags and the owner model (CTR-TOK-21, CTR-TOK-22) and the Hedera branch (CTR-TOK-23).
 contract FeaturesTest is Test {
@@ -35,7 +36,7 @@ contract FeaturesTest is Test {
     function setUp() public {
         vm.chainId(7622);
         vm.warp(1_800_000_000);
-        impl = address(new NoUnderlyingToken(address(this), address(0), UID, address(0), false));
+        impl = address(new NoUnderlyingToken(1, plainEnv(address(this), address(0), UID, address(0), false), ""));
     }
 
     function _cfg(uint256 features, uint256 locked, address owner_, address minter_, uint256 supply)
@@ -51,7 +52,7 @@ contract FeaturesTest is Test {
         internal returns (NoUnderlyingToken t)
     {
         t = NoUnderlyingToken(Clones.clone(implementation));
-        t.initialize(address(this), 1, cfg);
+        t.initialize(address(this), 1, abi.encode(cfg));
     }
 
     function _sig(bytes32 d) internal pure returns (bytes memory) {
@@ -80,9 +81,9 @@ contract FeaturesTest is Test {
     function test_initRefusesFlagsOfAnotherKind() public {
         NoUnderlyingToken t = NoUnderlyingToken(Clones.clone(impl));
         vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureInvalidForKind.selector, uint8(3)));
-        t.initialize(address(this), 1, _cfg(1 << 3, 0, address(0), address(0), 0));
+        t.initialize(address(this), 1, abi.encode(_cfg(1 << 3, 0, address(0), address(0), 0)));
         vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureNotBuilt.selector, uint8(7)));
-        t.initialize(address(this), 1, _cfg(1 << 7, 0, address(0), address(0), 0));
+        t.initialize(address(this), 1, abi.encode(_cfg(1 << 7, 0, address(0), address(0), 0)));
     }
 
     // ------------------------------------------------------------------ MINTABLE, BURNABLE
@@ -254,7 +255,7 @@ contract FeaturesTest is Test {
         uint256 edKey = 0xA11CE5;
         address native = address(uint160(1_234_567));
         MockHederaAccountService(has).setEdKey(native, vm.addr(edKey));
-        address hImpl = address(new NoUnderlyingToken(address(this), address(0), UID, address(0), true));
+        address hImpl = address(new NoUnderlyingToken(1, plainEnv(address(this), address(0), UID, address(0), true), ""));
         IFactoryToken.TokenConfig memory cfg;
         (cfg.name, cfg.symbol, cfg.initialSupply, cfg.initialHolder) = ("P", "P", 100, native);
         NoUnderlyingToken h = _token(hImpl, cfg);

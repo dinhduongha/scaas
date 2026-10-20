@@ -12,7 +12,7 @@ import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {noneInit, underlyingInit, Rate} from "./helpers/V2Fixture.sol";
-import {noVerifiers} from "../helpers/Canon.sol";
+import {plainEnv, Catalogue} from "../helpers/Catalogue.sol";
 
 contract Always1271 {
     function isValidSignature(bytes32, bytes memory) external pure returns (bytes4) { return 0x1626ba7e; }
@@ -58,11 +58,9 @@ contract MetaTxGasV2Test is Test {
     function setUp() public {
         vm.warp(1_800_000_000);
         signer = vm.addr(PK);
-        OpenFactory f2 = new OpenFactory(address(this), UID, noVerifiers());
-        f2.registerImplementation(IOpenFactory.TokenKind.NONE, 1,
-            address(new NoUnderlyingToken(address(f2), address(0), UID, address(0), false)));
-        f2.registerImplementation(IOpenFactory.TokenKind.UNDERLYING, 1,
-            address(new UnderlyingToken(address(f2), address(0), UID, address(0), false)));
+        OpenFactory f2 = new OpenFactory(address(this), UID, 0);
+        Catalogue.plain(f2, IOpenFactory.TokenKind.NONE, 1, type(NoUnderlyingToken).creationCode, address(0), address(0), false);
+        Catalogue.plain(f2, IOpenFactory.TokenKind.UNDERLYING, 1, type(UnderlyingToken).creationCode, address(0), address(0), false);
         acct = new Always1271();
         v2 = _v2(f2, "a");
         v2b = _v2(f2, "b");
@@ -74,8 +72,7 @@ contract MetaTxGasV2Test is Test {
         uint256[] memory one = new uint256[](1);
         one[0] = 1;
         Rate memory c;
-        w = UnderlyingToken(f2.createToken(IOpenFactory.TokenKind.UNDERLYING, 1,
-            underlyingInit(us, one, one, 6, c, address(0), address(0)), "w"));
+        w = UnderlyingToken(f2.createToken(IOpenFactory.TokenKind.UNDERLYING, 1, abi.encode(underlyingInit(us, one, one, 6, c, address(0), address(0))), "w"));
         usdc.mint(signer, 1_000e6);
         vm.startPrank(signer);
         usdc.approve(address(w), type(uint256).max);
@@ -85,8 +82,7 @@ contract MetaTxGasV2Test is Test {
     }
 
     function _v2(OpenFactory f2, bytes32 salt) internal returns (NoUnderlyingToken t) {
-        t = NoUnderlyingToken(f2.createToken(IOpenFactory.TokenKind.NONE, 1,
-            noneInit("V2", "V2", 18, 0, address(this), address(this)), salt));
+        t = NoUnderlyingToken(f2.createToken(IOpenFactory.TokenKind.NONE, 1, abi.encode(noneInit("V2", "V2", 18, 0, address(this), address(this))), salt));
         _fund(address(t));
     }
 

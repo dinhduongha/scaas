@@ -16,6 +16,7 @@ import {ZetherKeys} from "./helpers/ZetherKeys.sol";
 import {ZUID} from "./helpers/ZetherFixture.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
+import {Catalogue} from "../helpers/Catalogue.sol";
 
 /// @notice The two modes fixed at `initialize` (CTR-ZTH-48, CTR-ZTH-49), every pair on a kind: `disclosureMode`
 ///         `BUNDLE` (`zetherTransfer` stores `R = salt ‖ B_1 ‖ … ‖ B_M`, `zetherTransferCompact` commits, `…NoBundle`
@@ -47,7 +48,7 @@ abstract contract ZetherModesSuite is ZetherFixture {
     }
 
     function _newToken(bool auditor, bytes32 salt_, uint256) internal virtual override returns (ZetherLayer) {
-        return ZetherLayer(factory.createToken(_kind(), 1, _kindCfg(auditor), salt_));
+        return ZetherLayer(factory.createToken(_kind(), 1, abi.encode(_kindCfg(auditor)), salt_));
     }
 
     // ------------------------------------------------------------------ the matrix
@@ -269,12 +270,12 @@ abstract contract ZetherModesSuite is ZetherFixture {
         ];
         for (uint256 i; i < bad.length; ++i) {
             vm.expectRevert(errs[i]);
-            factory.createToken(_kind(), 1, bad[i], bytes32(i + 200));
+            factory.createToken(_kind(), 1, abi.encode(bad[i]), bytes32(i + 200));
         }
         IFactoryToken.TokenConfig memory ok = _kindCfg(true);
         ok.conf.auditorMode = FULL;
         ok.conf.disclosureMode = COMPACT;
-        ZetherLayer t = ZetherLayer(factory.createToken(_kind(), 1, ok, "ok"));
+        ZetherLayer t = ZetherLayer(factory.createToken(_kind(), 1, abi.encode(ok), "ok"));
         assertEq(uint8(t.auditorMode()), FULL);
         assertEq(uint8(t.disclosureMode()), COMPACT);
     }
@@ -372,9 +373,8 @@ contract ZetherModesUnderlyingTest is ZetherModesSuite {
 
     function setUp() public {
         _stack(false);
-        UnderlyingZetherToken impl = new UnderlyingZetherToken(address(factory), address(0), ZUID, address(reg), dis, ver, burnVer);
-        vm.prank(registrar);
-        factory.registerImplementation(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, address(impl));
+        UnderlyingZetherToken impl = UnderlyingZetherToken(payable(Catalogue.release(factory, IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, _zenv(),
+            type(UnderlyingZetherToken).creationCode)));
         _users();
     }
 

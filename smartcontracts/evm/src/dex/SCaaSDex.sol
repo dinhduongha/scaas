@@ -8,6 +8,7 @@ import {ReentrancyGuardTransient} from "@openzeppelin/contracts/utils/Reentrancy
 import {ISCaaSDex, IExchangeExecutor} from "./ISCaaSDex.sol";
 import {ITradeToken} from "../trade/ITradeToken.sol";
 import {IOpenFactory} from "../factory/IOpenFactory.sol";
+import {IFactoryToken} from "../factory/IFactoryToken.sol";
 import {SaltedEIP712} from "../common/SaltedEIP712.sol";
 import {SigCheck} from "../common/SigCheck.sol";
 import {TradeLib} from "../trade/TradeLib.sol";
@@ -112,13 +113,15 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
     }
 
     /// @dev Runs once on the implementation and locks it.
-    constructor(address factory_, bytes32 chainUid_, address smartKeyAccountImpl_)
-        SaltedEIP712("SCaaS Dex", "1", chainUid_)
+    /// @dev The factory's append (`OpenFactory.deployDexImplementation`, plan 5g-Z2): the release's `Env` (factory,
+    ///      `chain_uid`, the `SmartKeyAccount` implementation); no `implArgs`.
+    constructor(uint16, IFactoryToken.Env memory env, bytes memory)
+        SaltedEIP712("SCaaS Dex", "1", env.chainUid)
     {
-        FACTORY = factory_;
-        SMART_KEY_ACCOUNT_IMPL = smartKeyAccountImpl_;
-        _SMART_KEY_CLONE_CODEHASH = smartKeyAccountImpl_ == address(0) ? bytes32(0) : keccak256(abi.encodePacked(
-            hex"363d3d373d3d3d363d73", smartKeyAccountImpl_, hex"5af43d82803e903d91602b57fd5bf3"));
+        FACTORY = env.factory;
+        SMART_KEY_ACCOUNT_IMPL = env.smartKeyAccountImpl;
+        _SMART_KEY_CLONE_CODEHASH = env.smartKeyAccountImpl == address(0) ? bytes32(0) : keccak256(abi.encodePacked(
+            hex"363d3d373d3d3d363d73", env.smartKeyAccountImpl, hex"5af43d82803e903d91602b57fd5bf3"));
         _s().initialized = true;
     }
 
@@ -128,8 +131,10 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
 
     // ------------------------------------------------------------------ init and admin (CTR-DEX-24, CTR-DEX-03)
 
-    function initialize(address, uint64, DexConfig calldata cfg) external {
+    /// @notice `initArgs = abi.encode(DexConfig)` (plan 5g-Z2: the factory forwards the creator's bytes).
+    function initialize(address, uint64, bytes calldata initArgs) external {
         if (msg.sender != FACTORY) revert NotFactory();
+        DexConfig memory cfg = abi.decode(initArgs, (DexConfig));
         DexStorage storage s = _s();
         if (s.initialized) revert AlreadyInitialized();
         s.initialized = true;

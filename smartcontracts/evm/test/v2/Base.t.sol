@@ -66,13 +66,13 @@ contract BaseTest is V2Fixture {
         address impl = t.implementation();
         IFactoryToken.TokenConfig memory cfg;
         vm.expectRevert(MetaTokenBase.AlreadyInitialized.selector);
-        MetaTokenBase(impl).initialize(address(this), 1, cfg);
+        MetaTokenBase(impl).initialize(address(this), 1, abi.encode(cfg));
         vm.expectRevert(MetaTokenBase.AlreadyInitialized.selector);
-        t.initialize(address(this), 1, cfg);
+        t.initialize(address(this), 1, abi.encode(cfg));
         address c = Clones.clone(impl);
         vm.prank(address(0xBAD));
         vm.expectRevert(MetaTokenBase.NotFactory.selector);
-        MetaTokenBase(c).initialize(address(0xBAD), 1, cfg);
+        MetaTokenBase(c).initialize(address(0xBAD), 1, abi.encode(cfg));
     }
 
     // ------------------------------------------------------------------ pipeline

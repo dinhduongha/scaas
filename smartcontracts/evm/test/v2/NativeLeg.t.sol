@@ -9,6 +9,7 @@ import {UnderlyingToken} from "../../src/metatx/UnderlyingToken.sol";
 import {IUnderlyingToken} from "../../src/metatx/IUnderlyingToken.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
+import {plainEnv} from "../helpers/Catalogue.sol";
 
 /// Has no `receive`: refuses the native coin.
 contract CoinRefuser {}
@@ -249,7 +250,7 @@ contract NativeLegTest is V2Fixture {
     }
 
     function test_native_decimalsOnHederaAre8() public {
-        UnderlyingToken h = UnderlyingToken(_clone(address(new UnderlyingToken(address(this), address(0), UID_, address(0), true)),
+        UnderlyingToken h = UnderlyingToken(_clone(address(new UnderlyingToken(1, plainEnv(address(this), address(0), UID_, address(0), true), "")),
             address(this), _one(address(0)), _singleInit(address(0), 8, 1, 1, _fixedRate())));
         (,,, uint8 dec,) = h.legOf(address(0));
         assertEq(dec, 8);

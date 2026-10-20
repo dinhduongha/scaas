@@ -15,6 +15,7 @@ import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {noneInit} from "../v2/helpers/V2Fixture.sol";
 import {MockWallet} from "./UARegistryBase.sol";
 import {UALedgerBase} from "./UALedgerBase.sol";
+import {plainEnv} from "../helpers/Catalogue.sol";
 
 /// accounts.md CTR-UA-18 (the ledger, `UA_POOL`, events), CTR-UA-19 (structs, domain, `initialize` check), CTR-UA-24
 /// (the native path), CTR-UA-26 (pipelines, receivers, allowlist, one nonce map, `uaCancelNonce`); T-V3-1 (the shared
@@ -371,8 +372,8 @@ contract UALedgerTest is UALedgerBase {
     // ----- registry binding (CTR-UA-19) -----
 
     function test_registryOff() public {
-        NoUnderlyingToken off = NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(address(this), address(0), chainUidA, address(0), false))));
-        off.initialize(address(this), 1, noneInit("Off", "OFF", 6, 100, alice, address(this)));
+        NoUnderlyingToken off = NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(1, plainEnv(address(this), address(0), chainUidA, address(0), false), ""))));
+        off.initialize(address(this), 1, abi.encode(noneInit("Off", "OFF", 6, 100, alice, address(this))));
         assertEq(off.registry(), address(0));
         assertFalse(off.supportsInterface(type(IUALedger).interfaceId));
         assertTrue(tok.supportsInterface(type(IUALedger).interfaceId));
@@ -386,10 +387,10 @@ contract UALedgerTest is UALedgerBase {
 
     function test_initialize_registryChainUid() public {
         bytes32 other = keccak256("other genesis");
-        address impl = address(new NoUnderlyingToken(address(this), address(0), other, REG_L, false));
+        address impl = address(new NoUnderlyingToken(1, plainEnv(address(this), address(0), other, REG_L, false), ""));
         NoUnderlyingToken c = NoUnderlyingToken(Clones.clone(impl));
         vm.expectRevert(abi.encodeWithSelector(IUALedger.UARegistryChainUid.selector, chainUidA, other));
-        c.initialize(address(this), 1, noneInit("X", "X", 6, 0, address(0), address(this)));
+        c.initialize(address(this), 1, abi.encode(noneInit("X", "X", 6, 0, address(0), address(this))));
     }
 
     function test_uaDigest_domainAndTypehash() public view {

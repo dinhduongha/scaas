@@ -139,16 +139,22 @@ library ZetherLib {
 
     // ------------------------------------------------------------------ init
 
-    /// @notice The kind's `_init` (dev chains only, CTR-ZTH-02): `v` the implementation's transfer verifier (CTR-ZTH-20;
-    ///         `c.verifier` must be 0: the creator never chooses one), scale, cap `≤ 2^54`, inner fee `< 2^64` and `< cap`,
+    /// @notice The kind's `_init` (dev chains only, CTR-ZTH-02): `v` the release's transfer verifier (CTR-ZTH-20, running
+    ///         on this chain: `VerifierUnsupportedOnThisChain`), scale, cap `≤ 2^54`, inner fee `< 2^64` and `< cap`,
     ///         auditor key empty or a valid point `≠ O` of the verifier's curve; `cap · scale` must not overflow;
     ///         `disclosureMode` BUNDLE or COMPACT (CTR-ZTH-48), `auditorMode` NONE without a key, FULL or OPTIONAL with
     ///         one (CTR-ZTH-49).
-    function init(IFactoryToken.ConfidentialConfig calldata c, IZetherVerifier v) public {
+    function init(IFactoryToken.ConfidentialConfig memory c, IZetherVerifier v) public {
         ZetherSafety.requireDevChain();
+        // the release's verifier must run here (an absent precompile answers success with empty output; moved from the
+        // factory's creation gate, plan 5g-Z2)
+        (bool ok, bytes memory r) = address(v).staticcall(abi.encodeCall(v.isSupportedOnThisChain, ()));
+        if (!ok || r.length != 32 || abi.decode(r, (uint256)) != 1) {
+            revert IZetherToken.VerifierUnsupportedOnThisChain(address(v), v.curveName());
+        }
         uint256 p = v.g1EncodedBytes();
-        bytes calldata aud = c.auditorKey;
-        if (c.verifier != address(0) || c.shieldScale == 0 || c.maxShielded == 0 || c.maxShielded > MAX_TOTAL_SHIELDED
+        bytes memory aud = c.auditorKey;
+        if (c.shieldScale == 0 || c.maxShielded == 0 || c.maxShielded > MAX_TOTAL_SHIELDED
             || c.confidentialFee >= VALUE_BOUND || c.confidentialFee >= c.maxShielded || c.multiLegFee != 0
             || (aud.length != 0 && (aud.length != p || !v.isValidPoint(aud) || _isO(aud)))) {
             revert IZetherToken.BadInit();
