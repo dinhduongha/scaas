@@ -1,14 +1,34 @@
 # PQZ state and credit-cap redesign (plan Task 5h): design
 
-**Status:** design for the owner's review (designer for plan Task 5h, 2026-10-20). Nothing is built; the decisions below
-are controller proposals until the owner rules. Implementation plan:
-[`2026-10-20-pqz-state-redesign.md`](../plans/2026-10-20-pqz-state-redesign.md) (decisions D1–D17).
+**Status:** design (designer for plan Task 5h, 2026-10-20). Owner rulings O1–O9 on the first version recorded
+(CTR-PQZ-07 Change 2026-10-20); **updated 2026-10-20 (later the same day)** to the owner's further rulings listed under
+"Update 2026-10-20" below. Nothing is built. Implementation plan:
+[`2026-10-20-pqz-state-redesign.md`](../plans/2026-10-20-pqz-state-redesign.md) (decisions D1–D25).
 
 **Inputs.** Owner rulings of 2026-10-19 in [decisions.md](../../decisions.md): CTR-PQZ-06 (A' plus B), CTR-PQZ-07
 (ciphertexts in contract state), CTR-PQZ-08 (raise `ROLL_MAX`); plan
 [`2026-10-19-pqzl-fs3.md`](../plans/2026-10-19-pqzl-fs3.md) Task 5h with the carry-overs of the 5g review of W-E; the
 controller's request of 2026-10-20 (library split, §8). Normative text today:
 [pq-zero-knowledge.md](../../contracts/pq-zero-knowledge.md) §4, §7.
+
+**Update 2026-10-20 (owner rulings after the first version; each changed passage names its source):**
+- **[16k]** CTR-PQZ-06 Change "`K_MAX = 16,384` instead of 65,536": n = 2560 (k = 40), q = 2^50 − 71, Δ = 2^30 − 1;
+  supersedes A' (n = 2816, q = 2^54 − 327) and O2 / the A' numbers of O9 (§6).
+- **[noPP]** CTR-PQZ-06 Change "`plainPending` is removed": fees go to public UA-ledger balances, `plainUsed` is renamed
+  `shieldIn` (§5.1, §5.2, §5.7).
+- **[4flows]** CTR-PQZ-06 Change "all four transfer flows … shielding needs no proof on either layer": PQZ public amounts
+  enter the ordered queue and are folded by the permissionless rollover (§5.9); research
+  [`shield-and-key-reuse.md`](../../research/shield-and-key-reuse.md) §2–§3.
+- **[pool]** CTR-PQZ-15 / CTR-ZTH-51 Change "`SHIELD_POOL` sentinel instead of burn", both layers (§5.10).
+- **[mtx]** CTR-ZTH-45 Change "one name for both confidential layers: `mtxShield` / `mtxUnshield`" (§5.11).
+- **[kinds]** CTR-TOK-21 Change "`NONE_ZETHER_PQZ` / `UNDERLYING_ZETHER_PQZ` dropped" (§7).
+- **[bls]** CTR-ZTH-32 Change "classical Zether uses BLS12-381 only", bn254 line to `legacy/` (§7).
+- **[ua]** CTR-UA-30 and its Changes (a UA signs; PQZ key = attribute of a PQ signer, supplied in `register`, `R_REG`
+  bound to the UA id; `authRef` removed incl. Zether): built in **UA-6**, which comes before 5h (§7).
+- **[id]** CTR-PQZ-09 Change (review B-1, owner): one `proofSystemId` bump carries the 16k parameters, the B-1 fix (V3 /
+  V4 from the post-`tg` hash), A-2's renumbering and UA-6's `R_REG` message (§6.4).
+- **[Z2]** 5g-Z2 merged (`c173de37`): the PQZ tokens are released through `OpenFactory`'s `Env` /
+  `deployImplementation` (§7, §8).
 
 **Evidence (all committed).**
 - Gas: the measurement prototype `smartcontracts/evm/test/research/PqzStateGas.t.sol` (forge, Osaka; not production
@@ -25,23 +45,33 @@ controller's request of 2026-10-20 (library split, §8). Normative text today:
 
 | Object | Where | Write | Read |
 |---|---|---|---|
-| The `out` of every debit (transfer, multi, burn, refresh): `u_0 … u_{G−1}`, every `v`, the bundle fields | one SSTORE2 **op blob** per operation (≤ 35.2 KB today, ≤ 47.5 KB under A'; the test chains allow 64 KiB of code) | 200 gas per byte, once | EXTCODECOPY |
+| The `out` of every debit (transfer, multi, burn, refresh): `u_0 … u_{G−1}`, every `v`, the bundle fields | one SSTORE2 **op blob** per operation (≤ 35.2 KB today, ≤ 43.4 KB under 16k; the test chains allow 64 KiB of code) | 200 gas per byte, once | EXTCODECOPY |
 | A pending credit | **one slot**: blob address, which `u`, which `v`, the credit's block | 22.1 k | 2.1 k |
+| A shield (public amount, any account) [4flows] | **one trivial queue slot** per account and block (no blob): amount, block | 22.1 k, or ≈ 5 k merged into the same block's entry | 2.1 k |
 | `acc` after a debit | a reference to that debit's blob (`u_0`, `v_f`) | none extra | EXTCODECOPY |
-| `acc` after a rollover | materialised in `CT/32` slots (516; 708 under A'), overwritten in place | ≈ 2.6 M (516 × 5,000) | 516 cold SLOADs, or a hash-checked calldata hint |
+| `acc` after a rollover | materialised in `CT/32` slots (516; 644 under 16k), overwritten in place | ≈ 2.6 M (516 × 5,000) | 516 cold SLOADs, or a hash-checked calldata hint |
 
 With it: credits are never refused; rollovers take entries strictly in order from state (no calldata), stop at the
 cap, and cost ≈ 36 k per entry (plus ≈ 2.8 M fixed) instead of ≈ 0.52 M of calldata per ciphertext, so **`ROLL_MAX = 256`** (today's
-parameters) / **176** (A'), against 16 today; W-E's base mechanism goes away and an enforced `ROLL_AGE` keeps
+parameters) / **≈ 208** (16k, interpolated, to be measured), against 16 today; W-E's base mechanism goes away and an enforced `ROLL_AGE` keeps
 debits race-free; a transfer costs about what a BUNDLE transfer costs today (its bundle *is* the op blob) and a
-COMPACT / NONE transfer ≈ 3.4 M more; state grows by the op blob (≈ 16.8–35.2 KB per operation, as a BUNDLE transfer
+COMPACT transfer ≈ 3.4 M more (NONE retired, O5); state grows by the op blob (≈ 16.8–35.2 KB per operation, as a BUNDLE transfer
 already does) plus 16.5 KB once per account (the materialised `acc`).
 
-**A'**: n = 2816 (k = 44), q = 2^54 − 327, `K_MAX = 65,536`; encryption β 520 (496.8 with the 80 worst-case hints of a
-4-leg group with the auditor, so the β 446 exception of CTR-PQZ-03 disappears), mint margin 3.08× (today 4.14×), keys
-and ciphertexts +37.5 %, R_TX proof ≈ 57.1 KB by LaZer's codegen (today's codegen estimate 44.6 KB). Since B alone
-already removes the liveness problem that motivated `K_MAX`, **open question O1** asks whether A' is still worth its
-cost.
+**Shield without a proof, four flows [4flows], `SHIELD_POOL` [pool], one interface [mtx]** (§5.9–§5.11): a shield
+(into one's own or anyone's account) moves public units into `SHIELD_POOL` and appends a *trivial* entry to the
+recipient's ordered queue — at most one per account and block, later shields in the same block merge into it; rollovers
+and debits add it as `Trivial(digits(amount))` like any entry, so the un-roll of D4 stays exact. Fees and unshields
+leave the pool to public UA balances; `totalSupply()` stays the true total. Both layers use `mtxShield` /
+`mtxUnshield` and siblings from one `IConfidentialToken` interface.
+
+**Parameters [16k]** (§6, owner 2026-10-20): n = 2560 (k = 40), q = 2^50 − 71, Δ = 2^30 − 1, `K_MAX = 16,384`
+(the spec's option-A set): encryption β 508 (482.4 with the 80 worst-case hints of a 4-leg group with the auditor, so
+the β 446 exception of CTR-PQZ-03 disappears), mint margin 3.36× (today 4.14×), keys and ciphertexts +25 %. Proof
+sizes, `ROLL_MAX` and op 7 M = 8 are re-measured. **New finding (§6.5):** q − 1 = 2^3 · 17 · 8,278,675,785,607 has no
+multiplicative subgroup large enough for PQZH's Ligero domains (today 2^3·19·43·431 divides q − 1), so PQZH cannot run
+over q = 2^50 − 71; owner question Q1 proposes a prime of the same size whose q − 1 keeps today's radices. The A'
+measurements below stay as the record of the superseded candidate.
 
 ## 2. Today
 
@@ -70,11 +100,20 @@ Of a transfer, the precompile takes 5.2–5.4 M (op 1, `engine-pqz.json` v3 rows
    or skip an entry; a rollover stops before `acc` exceeds the cap; the owner's refresh resets it.
 3. **R-roll** (CTR-PQZ-08): `ROLL_MAX` = the largest batch under 2^24 gas with ≈ 25 % margin, target ≥ 256, pinned by a
    gas test.
-4. **R-A'** (CTR-PQZ-06): q ≈ 2^54, `K_MAX` ≈ 65,536, new `proofSystemId` (PQZL and PQZH), sizes and margin measured.
+4. **R-16k** (CTR-PQZ-06 Change "`K_MAX = 16,384`", supersedes R-A' q ≈ 2^54 / 65,536): n = 2560, q ≈ 2^50,
+   `K_MAX = 16,384`, one new `proofSystemId` for PQZL and PQZH (with B-1, A-2 and UA-6's `R_REG` message, CTR-PQZ-09),
+   sizes and margin measured.
 5. **Carry-overs** (5g review): drop W-E's base instead of keeping two mechanisms; widen `accUnits` beyond uint16; keep
    W-A's direct mode binding and the two race tests as regressions; a wallet view of `rolled`; fold the transfer mode
-   into every binding (review L1, T18).
+   into every binding (review L1, T18). Codex T2 CHAIN-01: refuse an operation whose shared `u` is all zero.
 6. **Size** (controller 2026-10-20): every PQZ token implementation under the 64 KiB test-chain limit with margin.
+7. **R-flows** [4flows]: all four flows on both layers (public → public, public → anyone's confidential, confidential →
+   anyone's public, confidential → confidential); a shield needs no proof; PQZ public amounts reach `acc` by the
+   permissionless rollover (one `K_MAX` unit per fold) or inline in a debit; an in-flight debit neither loses a shielded
+   amount nor can be griefed by a third-party shield. `plainPending` removed [noPP].
+8. **R-pool** [pool]: shielded value sits in `SHIELD_POOL` (no burn / mint on shield, unshield, fees), both layers.
+9. **R-names** [mtx], **R-kinds** [kinds], **R-curve** [bls]: one `mtx*` interface for both layers; kinds 6 and 7 gone;
+   Zether BLS12-381 only.
 
 ## 4. Layout options
 
@@ -92,10 +131,11 @@ byte; EXTCODECOPY 2,600 cold + 3 per word.
 | **S3** `u` per group in SSTORE2, each `v` in 4 slots | ≈ 3.3 M + 2 × 88 k | 5 slots ≈ 110 k | 8.4 k + EXTCODECOPY | correct, but `v` in slots costs 4× its code bytes |
 | **S4 (recommended)** one SSTORE2 **op blob** with every `u_g` and `v`; one slot per credit | 3.49 M (blob 16,816 B + the credit + the sender's `acc` reference) | 26.3 k (46.2 k for an account's first credit) | ≈ 36 k incl. the adds | cheapest everywhere; the blob is also the BUNDLE entry |
 
-The blob of an op 7 transfer with M = 8 and the auditor is 35,216 B (47,504 B under A'): above EIP-170's 24,576 B, inside
+The blob of an op 7 transfer with M = 8 and the auditor is 35,216 B (43,408 B under 16k [16k]; 47,504 B under the
+superseded A'): above EIP-170's 24,576 B, inside
 the 65,536 B `maxCodeSize` of chain 7622 (since 2026-10-11, [evm.md](../../networks/evm.md); PQZ is gated to the
 private chains, CTR-PQZ-01), so one blob per operation always fits there. **New requirement:** the mainnet 22776
-genesis must keep `maxCodeSize ≥ 64 KiB` (≥ 48 KiB under A' with n = 2816), or op 7 blobs split per group.
+genesis must keep `maxCodeSize ≥ 64 KiB` (≥ 43.4 KB is what 16k needs), or op 7 blobs split per group.
 
 ### 4.2 Where `acc` goes
 
@@ -104,7 +144,7 @@ genesis must keep `maxCodeSize ≥ 64 KiB` (≥ 48 KiB under A' with n = 2816), 
 | **A1** always materialised in slots | 516 slot rewrites ≈ 2.6 M (516 × 5,000) | read + rewrite ≈ 2.6 M (516 × 5,000) | 16.5 KB per account | the debit pays the rewrite for nothing |
 | **A2** SSTORE2 per write | 3.3 M | 3.3 M + 16.5 KB garbage per rollover | grows per rollover | **rejected** (≥ 1 MB of garbage per account per 64 rollovers) |
 | **A3** lazy: `acc` = last debit + Σ rolled entries, never summed | — | free | — | the debit would sum up to `K_MAX` entries: **rejected** |
-| **A4 (recommended)** reference after a debit, materialised by rollovers | 1 slot (the reference) | ≈ 2.6 M (516 × 5,000) steady, ≈ 11.4 M (A': ≈ 15.8 M) the first time | 16.5 KB once per account | cheapest; the first materialisation is split out (`pqzPrepareAcc`, §5.3) |
+| **A4 (recommended)** reference after a debit, materialised by rollovers | 1 slot (the reference) | ≈ 2.6 M (516 × 5,000) steady, ≈ 11.4 M (16k: ≈ 14.2 M) the first time | 16.5 KB once per account | cheapest; the first materialisation is split out (`pqzPrepareAcc`, §5.3) |
 
 ## 5. Recommended design (today's parameters)
 
@@ -114,9 +154,10 @@ genesis must keep `maxCodeSize ≥ 64 KiB` (≥ 48 KiB under A' with n = 2816), 
 Account (per (UA, token), ERC-7201 scaas.pqz):
   slot 0  pendingCount u64 | rolled u64 | floor u64 | cleared u64
   slot 1  accBlob address | accG u8 | accGs u8 | accV u8 | accUnits u32 | flags u8 (MATERIALISED, WRITTEN)
-  slot 2  plainPending u128 | sendCounter u64
+  slot 2  sendCounter u64                                    (plainPending removed [noPP])
   slot 3  accHash bytes32            (keccak of the materialised acc; the calldata hint's check)
   pending[i]  blob(160) | g u8 | G u8 | j u8 | block u64     (one slot per credit, deleted below rolled − INLINE_MAX)
+              blob = 0: a TRIVIAL entry [4flows], the low 64 bits of the blob field = amount (§5.9)
   accWords[0 .. CT/32)                                         (the materialised acc; never zeroed)
 op blob (SSTORE2, per debit; `R` exactly as CTR-PQZ-23 / -26, then v_f):
   transfer  salt(16) ‖ u_0 … u_{G−1} ‖ (v_j ‖ [v_{a,j}] ‖ UA_j)_{j<M} ‖ v_f
@@ -132,8 +173,9 @@ index `≥ rolled` is pending, every index in `[floor, rolled)` is inside `acc`;
 flowchart LR
     TX["debit op (transfer, multi, burn, refresh)"] -->|"one SSTORE2"| BLOB["op blob<br/>u_g, v_j, v_f, bundle"]
     TX -->|"one slot per leg"| PEND["pending[ua][i]<br/>(blob, g, j, block)"]
+    SH["mtxShield (no proof, any account)"] -->|"TRIVIAL entry (amount, block),<br/>merged within one block"| PEND
     TX -->|"acc = reference, rolled = floor = p"| ACC0["acc (fresh)<br/>→ (blob, u_0, v_f)"]
-    PEND -->|"pqzRollOver(ua, n): strict order,<br/>age ≥ ROLL_AGE, stops at K_MAX"| ACCM["acc (materialised)<br/>CT/32 slots"]
+    PEND -->|"mtxRollOver(ua, n): strict order,<br/>age ≥ ROLL_AGE, stops at K_MAX"| ACCM["acc (materialised)<br/>CT/32 slots"]
     ACC0 --> ACCM
     ACCM -->|"T = acc ± Σ pending[rolled..p)<br/>read from state (hint optional)"| TX
 ```
@@ -141,18 +183,25 @@ flowchart LR
 ### 5.2 Operations
 
 - **Credit** (op 1, op 7 legs): `pending[ua][pendingCount++] = (blob, g, G, j, block.number)`; never refused (R-B).
-  The per-credit fee (§5.7) goes to the credited UA's `plainPending`.
-- **Rollover** `pqzRollOver(ua, n)`: anyone. `n' = min(n, K_MAX − 1 − accUnits)`; `CapReached(ua)` when `n' = 0`;
-  `1 ≤ n ≤ ROLL_MAX`; `AccNotPrepared` until `pqzPrepareAcc` wrote both halves of the account's `acc` words (§5.3); entries
+  The per-credit fee (§5.7) goes to the credited UA's public UA-ledger balance (out of `SHIELD_POOL`) [noPP] [pool].
+- **Shield** `mtxShield(toUA, amount)` (anyone, into any registered account, no proof) [4flows]: public units of the
+  signer → `SHIELD_POOL`; a TRIVIAL entry `(amount, block.number)` appended to `pending[toUA]`, or merged into the
+  tail entry when that is TRIVIAL and of the same block (§5.9). Never refused (R-B).
+- **Rollover** `mtxRollOver(ua, n)` (`pqzRollOver` before [mtx]): anyone. `n' = min(n, K_MAX − 1 − accUnits)`; `CapReached(ua)` when `n' = 0`;
+  `1 ≤ n ≤ ROLL_MAX`; `AccNotPrepared` until `mtxPrepareAcc` wrote both halves of the account's `acc` words (§5.3); entries
   `[rolled, rolled + n')` in order, each at least `ROLL_AGE` blocks old (`RollTooYoung`); `acc ← acc + Σ` (from the
-  reference or the slots), one `mod q` per lane, written to the slots, `accHash` updated, `rolled += n'`,
+  reference or the slots; a TRIVIAL entry adds `Trivial(digits(amount))` to `v` only, no blob read), one `mod q` per lane, written to the slots, `accHash` updated, `rolled += n'`,
   `accUnits += n'`; the slots below `rolled − INLINE_MAX` deleted. No calldata besides `(ua, n)`.
-- **Debit** (transfer, multi, burn, refresh): `T = acc ± Σ pending[min(p, rolled) .. max(p, rolled)) + Trivial(plainUsed)`
+- **Debit** (transfer, multi, burn, refresh): `T = acc ± Σ pending[min(p, rolled) .. max(p, rolled)) + Trivial(digits(shieldIn))`
+  (`plainUsed` renamed `shieldIn` [noPP]: the public amount moved from the signer to `SHIELD_POOL` in the same call, 0
+  for none; a TRIVIAL entry in the window counts as `Trivial(digits(amount))`, §5.9)
   with `|p − rolled| ≤ INLINE_MAX`, `p ≥ floor`, `unitsOf(T) ≤ K_MAX`, everything read from state; the optional hint
   replaces the 516 SLOADs of a materialised `acc` when `keccak(hint) == accHash`. Effects: op blob, `acc` = reference
   to `(u_0, v_f)`, `accUnits = 1`, `rolled = floor = p`, the dead slots `[cleared, p)` deleted (≤ 2·`INLINE_MAX`).
   A debit with `p < rolled` thereby **un-rolls** `[p, rolled)`: those credits are pending again (their slots still
   exist, §5.1) and are rolled again later — no loss, no skip; the price is re-rolling ≤ `INLINE_MAX` entries.
+  An operation whose shared `u` (any `u_g`, or a burn's `u'`) is all zero is refused (Codex T2 CHAIN-01: such a credit
+  would leave `acc` unchanged while `rolled` advances); TRIVIAL entries are contract-made and exempt.
 
 ### 5.3 Rollover gas and `ROLL_MAX`
 
@@ -177,16 +226,24 @@ the slot `INLINE_MAX` behind ≈ 5 k gross); under A' ≈ 3.81 M + 46.6 k. With 
 
 - **today's parameters: `ROLL_MAX = 256`** (12.11 M, margin 27.8 %; 272 would be 12.69 M) — the target is met;
 - **A' (n = 2816): `ROLL_MAX = 176`** (≈ 12.01 M; 192 would be ≈ 12.76 M) — **below the 256 target**: the add loop is
-  37 % longer and the `acc` rewrite 37 % larger. 256 under A' costs 15.8 M (94 % of the cap). Open question O9.
+  37 % longer and the `acc` rewrite 37 % larger. 256 under A' costs 15.8 M (94 % of the cap). Open question O9
+  (ruled: 176 accepted under A'; superseded by [16k]).
+- **16k (n = 2560, 644 words) [16k], not measured:** linear in the word count between the two measured sets,
+  ≈ 3.47 M fixed + ≈ 43.2 k per entry, so **`ROLL_MAX` ≈ 208** [estimate; decisions CTR-PQZ-06 gave ≈ 210–220]; 256 would
+  cost ≈ 14.5 M (86 % of the cap). Re-measured with `PqzStateSteadyGasTest2560` (prototype parameterised on n) in plan
+  Task 7 and pinned in Task 8. A TRIVIAL entry costs a rollover ≈ 9 k [estimate] (slot read, 16 lane adds on `v`,
+  deletion), so the worst case for `ROLL_MAX` stays "every entry a credit from a distinct cold blob".
 
-Today's `ROLL_MAX = 16` costs ≈ 8.9 M: 1.76 M of execution plus 17 ciphertexts of calldata, 3.55 M at the standard price and 8.86 M under the EIP-7623 floor (`test_today_n2048`); the live 7622 run measured 0.71 M for one ciphertext and 1.59 M for two. 64-bit lanes hold `2^64 / q` terms: 2^22 today, **1,024 under A'**, so
-`ROLL_MAX + 1 + INLINE_MAX ≤ 1,023` holds either way (one `mod q` per lane at the end, as today).
+Today's `ROLL_MAX = 16` costs ≈ 8.9 M: 1.76 M of execution plus 17 ciphertexts of calldata, 3.55 M at the standard price and 8.86 M under the EIP-7623 floor (`test_today_n2048`); the live 7622 run measured 0.71 M for one ciphertext and 1.59 M for two. 64-bit lanes hold `2^64 / q` terms: 2^22 today, 1,024 under A', **16,384 under 16k**, so
+`ROLL_MAX + 1 + INLINE_MAX` stays far below the bound (one `mod q` per lane at the end, as today).
 
 **The first materialisation** of an account writes its `CT/32` words zero → non-zero: 516 × 22.1 k ≈ 11.4 M (measured:
-the first rollover of 32 entries 12,585,689), under A' 708 × 22.1 k ≈ 15.8 M (16 entries 16,551,938, 98.7 % of the cap).
-Under A' it cannot share a transaction with any useful batch, so the design splits it out: **`pqzPrepareAcc(ua, half)`**,
+the first rollover of 32 entries 12,585,689), under A' 708 × 22.1 k ≈ 15.8 M (16 entries 16,551,938, 98.7 % of the cap),
+under 16k 644 × 22.1 k ≈ 14.2 M (85 % of the cap) [estimate].
+Under A' and 16k it cannot share a transaction with any useful batch, so the design splits it out: **`mtxPrepareAcc(ua, half)`**
+(`pqzPrepareAcc` before [mtx]),
 permissionless and idempotent, writes a non-zero placeholder into one half of the account's `acc` words (≈ 5.7 M today,
-≈ 7.8 M under A'); a rollover reverts `AccNotPrepared` until both halves are done. Keepers (or the owner) run it once per
+≈ 7.1 M under 16k); a rollover reverts `AccNotPrepared` until both halves are done. Keepers (or the owner) run it once per
 `(UA, token)` before the first rollover; one rule for both parameter sets, so no `ROLL_MAX_FIRST`.
 
 ### 5.4 Gas per operation against today
@@ -199,19 +256,22 @@ are unchanged (today's parameters). "Δ" is against today.
 | Transfer op 1, BUNDLE, auditor, `p = rolled` | 10.72 M (live) | ≈ 10.5 M | blob 16,816 B instead of `R` 16,688 B (+26 k); no `acc` calldata (−208 k); no `out` bytes in the event (−134 k); `T` from the blob reference 115 k instead of calldata `acc` + keccak (+≈ 80 k) |
 | … with a materialised `acc` | same | ≈ 10.6 M with the hint, ≈ 11.7 M without | hint: 136 k execution + the same 208 k of calldata as today; from slots: 1.23 M |
 | … with 16 inline credits | ≈ 15.8 M (live: +0.32 M per inline credit) | ≈ 11.0 M | 30.5 k per inline credit from its blob instead of 16.5 KB of calldata |
-| Transfer op 1, COMPACT / NONE | ≈ 7.3 M | ≈ 10.5 M | +3.36 M: these modes now store the blob too (O5) |
+| Transfer op 1, COMPACT / NONE | ≈ 7.3 M | ≈ 10.5 M | +3.36 M: these modes now store the blob too (O5 ruled: NONE retired, COMPACT stays) |
+| Shield (no proof) [4flows] | ≈ 0.1 M (`plainPending`) | ≈ 0.08 M new entry / ≈ 0.06 M merged [estimate] | public move to `SHIELD_POOL` + one trivial slot; replaces the "proven-debit shield" of the first 2026-10-20 ruling (≈ 3.5 M + verify) |
 | Transfer op 7, M = 4, BUNDLE | 10.11 M (live) | ≈ 9.9 M | as op 1; blob 17,680 B (3.75 M with the 4 credits) |
 | Transfer op 7, M = 8, auditor | ≈ 15.6–16 M (estimate, BUNDLE) | ≈ 15.4 M | blob 35,216 B = 7.45 M with the 8 credits; fits the cap with ≈ 8 % to spare; COMPACT no longer avoids it |
 | Burn / refresh | 5.55 / 5.53 M (live) | ≈ 8.7 M | +3.39 M blob `u' ‖ v_f` (O7), −208 k `acc` calldata, −132 k event bytes |
 | Credit (per leg) | 31.8 k (keccak 16.5 KB + slot) | 26.3 k (46.2 k first) | one slot, no keccak |
 | Rollover of 16 | ≈ 8.9 M (prototype, EIP-7623 floor); the live run added 0.88 M per ciphertext (≈ 14 M for 16) | ≈ 3.36 M | no calldata |
 | Rollover of 256 | impossible (> 16 per tx) | 12.11 M | |
-| `pqzPrepareAcc` (once per account, two halves) | — | 2 × ≈ 5.7 M | §5.3 |
+| `mtxPrepareAcc` (once per account, two halves) | — | 2 × ≈ 5.7 M | §5.3 |
 | Debit effects | ≈ 0.1 M | 82 k | `acc` reference, counters, ≤ 32 slot deletions |
 
-Under A' every blob grows 37 % (op 1 4.73 M, op 7 M = 4 5.00 M, M = 8 9.97 M, burn 4.66 M) and the precompile's
-gas is unknown until calibration (timing, owner's go-ahead). **Op 7 with M = 8 then exceeds the 2^24 cap** (≈ 10 M of
-blob alone plus a larger proof and precompile): see §6.2 for a remedy (one randomness group, G = 1) and O9.
+Under 16k [16k] every blob grows ≈ 25 % (op 1 20,912 B ≈ 4.18 M, op 7 M = 4 21,776 B ≈ 4.36 M, M = 8 43,408 B
+≈ 8.68 M, burn 20,608 B ≈ 4.12 M; under the superseded A' +37 %) and the precompile's gas is unknown until calibration
+(timing, owner's go-ahead). **Op 7 with M = 8 likely exceeds the 2^24 cap** (≈ 15.4 M today + ≈ 1.6 M more blob, a
+larger proof and precompile) [estimate]: the O9 remedy carries over — one randomness group (G = 1, blob 22,928 B,
+≈ 4.1 M less), else M ≤ 4 on chain (§6.2).
 
 ### 5.5 State growth, garbage and refunds
 
@@ -223,7 +283,8 @@ blob alone plus a larger proof and precompile): see §6.2 for a remedy (one rand
   debit). The refund (4,800 per slot) is capped at a fifth of the transaction's gas and does not raise the 2^24 cap,
   so the gross cost (≈ 5 k per slot) is what `ROLL_MAX` pays for. Leaving the slots instead (today's `CLEAR_MAX`
   deletes ≤ 32 per debit) would grow state by 32 B per credit forever under an unbounded queue.
-- **Per account, once:** the materialised `acc`, 16.5 KB (22.6 KB under A'), rewritten in place, never zeroed (a zeroed
+- **Per shield, temporary** [4flows]: at most one TRIVIAL slot per account and block, deleted like a credit's.
+- **Per account, once:** the materialised `acc`, 16.5 KB (20.6 KB under 16k), rewritten in place, never zeroed (a zeroed
   word would cost the zero → non-zero price again).
 - **Garbage:** none besides the blobs: `acc` words are reused; the W-E base slots disappear.
 
@@ -243,10 +304,11 @@ credits past `p`). The two W-E race tests stay as regressions ("a rollover betwe
 
 ### 5.7 B: credits never refused, ordered rollovers, privacy, and the credit fee
 
-**Cap.** `K_MAX` now bounds only `acc`: a rollover never takes `acc` above `K_MAX − 1` units (one reserved for the plain
+**Cap.** `K_MAX` now bounds only `acc`: a rollover never takes `acc` above `K_MAX − 1` units (one reserved for the `shieldIn`
 term), a debit checks `unitsOf(T) ≤ K_MAX` as today, and any debit (a refresh is a burn of 0) resets `accUnits` to 1.
 An account whose `acc` is full can always refresh with `p = rolled` (units `K_MAX`); after that rollovers continue.
-Credits keep arriving while `acc` is full: they wait in the queue. `accUnits` becomes uint32.
+Credits and shields keep arriving while `acc` is full: they wait in the queue. `accUnits` becomes uint32 (16,384 would
+fit uint16 under [16k]; uint32 costs nothing in the packed slot and keeps room).
 
 **Head-of-line.** A real credit behind `x` decoys becomes spendable once `rolled ≥ its index − INLINE_MAX`, i.e. after
 `⌈x / ROLL_MAX⌉` rollovers: with `ROLL_MAX = 256`, 10,000 queued decoys take 40 rollovers (keepers', the owner's,
@@ -264,25 +326,156 @@ into the P6h wallet notes.
 **Who pays (decoy flooding).** A credit costs its sender the op blob share and one slot (26.3 k (46.2 k for an account's first credit)), and costs the
 recipient side one rollover share (≈ 36 k) later, paid by keepers or the owner. On the SCaaS chains gas is free,
 so gas does not price a flood; the levers are (a) the **per-credit fee**: today's `multiLegFee` (op 7 only, default 0)
-becomes a per-credit fee on both transfer paths, paid to every credited UA's `plainPending` (the victim is paid for the
-work), the same for every leg so it reveals nothing; on chains 7622 / 22776 `init` refuses 0 (the floor amount is the
-owner's, O4); (b) permissioned submitters and node rate limits (T7), unchanged. Filling a victim's queue no longer
-locks it (R-B), so a flood now costs the victim rollover work and delay, not liveness.
+becomes a per-credit fee on both transfer paths, paid out of `SHIELD_POOL` to every credited UA's **public UA-ledger
+balance** [noPP] [pool] (the victim is paid for the work, spendable at once), the same for every leg so it reveals
+nothing; on chains 7622 / 22776 `initialize` refuses an amount below the floor (O4 ruled: at least the state cost of one
+pending slot, ≈ 26.3 k gas at the chain's gas price, the figure set per chain profile); (b) permissioned submitters and
+node rate limits (T7), unchanged. Filling a victim's queue no longer locks it (R-B), so a flood now costs the victim
+rollover work and delay, not liveness.
+
+**Third-party shields** [4flows] (controller proposal, owner question Q2): a shield into another account adds at most
+one TRIVIAL entry per block to the victim's queue (later shields in the block merge), each one `K_MAX` unit and ≈ 9 k of
+rollover gas. A dedicated flooder at one shield per block (5 s) adds 17,280 entries a day: about one forced refresh a
+day and ≈ 0.16 G gas of keeper work. Proposal: a shield whose `toUA` is not the signer's own UA pays the per-credit fee
+of (a) from the signer's public balance straight to `toUA`'s public balance (never through the pool); a shield to
+oneself pays nothing. The Zether shield needs no such fee (its pending is one aggregated ciphertext; third-party
+shields cost the receiver nothing).
 
 ### 5.8 Wallets and indexers
 
-Views (D13): `pqzAccount(ua)` → `pendingCount, rolled, floor, cleared, accUnits, flags, plainPending, sendCounter,
-accBlob`; `pqzAcc(ua)` → the `acc` bytes (reference or slots); `pqzPending(ua, i)` → `(blob, g, G, j, block)`;
-`pqzPendingCt(ua, i)` → `u_g ‖ v_j`; `pqzEntryBlob(entryRef)`. **Restore from state alone:** seed → UA →
+Views (D13): `pqzAccount(ua)` → `pendingCount, rolled, floor, cleared, accUnits, flags, sendCounter,
+accBlob` (`plainPending` removed [noPP]); `pqzAcc(ua)` → the `acc` bytes (reference or slots); `pqzPending(ua, i)` →
+`(blob, g, G, j, block)` or `(TRIVIAL, amount, block)`; `pqzPendingCt(ua, i)` → `u_g ‖ v_j` (a TRIVIAL entry:
+`Trivial(digits(amount))`); `pqzEntryBlob(entryRef)`. **Restore from state alone:** seed → UA →
 `pqzAccount` → `pqzAcc` and `pqzPendingCt` for `[rolled, pendingCount)` → decrypt → balance = Dec(acc) + Σ Dec(pending)
-+ `plainPending`; sender disclosure: `sendCounter` → `entryRef` → `pqzEntryBlob` (+ memo) → the leg. All `eth_call`, no
-logs. Events carry pointers (D12; ≈ 134 k less per transfer): `PqzTransfer(…, blob)`, `PqzBurned(…, blob)`,
-`PqzRolled(ua, rolled, accUnits, accHash)` and a new `PqzDebited(ua, rolled, floor, blob)` (review N4: an indexer sees
-`rolled` move on every debit). Indexers follow events for "what changed" and read bytes from state. The debit API
+(TRIVIAL entries: their public amount); fee income sits in the public balance (`balanceOf` / the UA ledger); sender
+disclosure: `sendCounter` → `entryRef` → `pqzEntryBlob` (+ memo) → the leg. All `eth_call`, no
+logs. Events carry pointers (D12; ≈ 134 k less per transfer), under the shared names of §5.11 [mtx]:
+`ConfidentialTransfer(…, blob)`, `Unshielded(…, blob)`, `RolledOver(ua, rolled, accUnits, accHash)`, `Shielded(toUA,
+from, amount, index)` and a new `Debited(ua, rolled, floor, blob)` (review N4: an indexer sees `rolled` move on every
+debit). Indexers follow events for "what changed" and read bytes from state. The debit API
 loses its `acc` / `inline` arguments (an optional `accHint` instead), the rollover takes `(ua, n)`: a client break,
-done together with the relayed mode binding (review L1, D15) so clients break once.
+done together with the relayed mode binding (review L1, D15) and the `mtx*` rename [mtx] so clients break once.
 
-## 6. A': larger parameters
+### 5.9 Shield without a proof: the trivial entry and its ordered position [4flows]
+
+Owner ruling (CTR-PQZ-06 Change "all four transfer flows"): a PQZ shield needs no proof; public amounts are folded into
+`acc` by the permissionless rollover as `Trivial(sum)` (zero noise, one `K_MAX` unit), and a debit may still take them
+inline; the fold must sit at an ordered position so that an in-flight debit neither loses the amount nor can be griefed.
+
+**Why not a per-account integer accumulator outside the queue.** A debit's proof fixes `T` (§5.6). If a rollover
+folded a separate accumulator `S` into `acc` between prove and submit, the contract's rebuild `acc + …` would contain
+`Trivial(S)` the proof did not, and the un-roll of D4 (which subtracts queue entries `[p, rolled)`) could not take it
+out again: either the debit reverts (griefable by any third-party shield followed by a rollover) or `S` is lost when the
+debit replaces `acc`. The integer only works if nothing but a debit consumes it — exactly `plainPending`'s flaw.
+
+**Design (controller proposal, D18).** A shield is a queue entry, so the order of D4 / D6 covers it unchanged:
+
+```text
+mtxShield(toUA, amount):                    (anyone; toUA registered; 0 < amount, totalShielded + amount ≤ maxShielded)
+  move amount · shieldScale public units: signer → SHIELD_POOL            ([pool]; no burn)
+  t = pending[toUA][pendingCount − 1]
+  if pendingCount > 0 and t is TRIVIAL and t.block == block.number
+     and pendingCount − 1 ≥ max(floor, rolled):                       t.amount += amount       (merge, ≈ 5 k)
+  else: pending[toUA][pendingCount++] = (TRIVIAL, amount, block.number)                         (append, ≈ 22.1 k)
+  (the max(floor, rolled) guard: never merge into an entry a debit of the same block already spent)
+  emit Shielded(toUA, signer, amount, index)
+rollover / debit: a TRIVIAL entry is the ciphertext (u = 0, v = Δ·digits(amount)) — one unit, zero noise
+```
+
+- **No loss.** The entry is rolled like any other (`ROLL_AGE`, strict order, the clamp), and an un-roll (`p < rolled`)
+  makes it pending again with its amount intact.
+- **No grief.** A debit proven on the state of block `X − 1` or earlier has `p ≤ pendingCount` of that state; a merge
+  only touches an entry created in the *current* block, whose index is `≥ p`; an append lands after `p`. So no shield
+  can change an entry inside a debit's window `[.., p)`, and `ROLL_AGE` keeps new entries from being rolled past `p`.
+  Residual: a debit whose window includes an entry of its own block (possible only if its submitter predicted that
+  entry, e.g. a shield and a debit bundled into one block) can be made to revert by a merge before it; wallets use
+  the same-call `shieldIn` top-up for "shield and spend now" instead.
+- **Exactness.** Each entry contributes its own `Trivial(digits(amount))` wherever it is added (rollover, inline
+  window, un-roll subtraction). Folding a run of entries as one normalised `Trivial(digits(Σ))` would cost one unit per
+  run instead of one per entry, but `Trivial(digits(a)) + Trivial(digits(b)) ≠ Trivial(digits(a + b))` as ring
+  elements (digits are not normalised under addition), so an un-roll could no longer subtract part of a run exactly:
+  rejected. The ruling's "one `K_MAX` unit per fold" holds per entry, and an entry already sums every shield into the
+  account within one block.
+- **Spendable.** After `ROLL_AGE` and a rollover (anyone's), or at once in the owner's own debit with `p` past it (the
+  inline window), or in the same call as a debit's `shieldIn` top-up from the signer's public balance (CTR-PQZ-06
+  Change "`plainPending` is removed": "any transfer may top up the same way"). `shieldIn` replaces `plainUsed` in the
+  payload and the statement header word (offset 480); the relation and `proofSystemId` are unchanged (a name only).
+- **Wrap-shield** (`mtxWrapShield`): the underlying is pulled, `minted` public units are minted to `SHIELD_POOL`, and
+  the same TRIVIAL entry is written (today it mints nothing).
+- **Units.** `unitsOf(T) = accUnits + (p − rolled) + 1` is unchanged (a TRIVIAL entry counts as one, like a credit).
+- **The four flows** (research §3): public → public (UA ledger / ERC-20); public → anyone's confidential
+  (`mtxShield(toUA, …)`, third party allowed; fee: §5.7, Q2); confidential → anyone's public (`mtxUnshield` with a
+  recipient, a proven burn); confidential → confidential (`R_TX`, `R_TXM`).
+
+**Classical Zether** keeps its shield as today (`pending += [amount]G`, no proof, any registered account); only the
+public side changes (§5.10). Its race answer for a rollover under an in-flight debit stays `OWNER_ONLY` mode.
+
+### 5.10 `SHIELD_POOL` on both layers [pool]
+
+CTR-PQZ-15 / CTR-ZTH-51 Change: `SHIELD_POOL = address(uint160(uint256(keccak256("scaas.shield.pool.v1"))))`, not
+payable, cannot spend (as `UA_POOL`).
+
+| Step | Today (both layers) | After 5h (both layers) |
+|---|---|---|
+| shield | `_burn(signer, a·s)` | `Transfer(signer → SHIELD_POOL, a·s)` |
+| wrap-shield | mints nothing | mint `a·s` to `SHIELD_POOL` |
+| unshield | `_mint(recipient, a·s)` | `Transfer(SHIELD_POOL → recipient, a·s)` |
+| unshield-unwrap | the leg pays from its reserve | burn `a·s` from `SHIELD_POOL`, then the leg pays |
+| beneficiary fee | PQZ `plainPending[ben]`; Zether `pend_ben += [fee]G` | `Transfer(SHIELD_POOL → ben's public balance, fee·s)` |
+| per-credit fee (PQZ) | `plainPending[leg]` | `Transfer(SHIELD_POOL → leg's public balance)` per leg |
+
+(`s` = `shieldScale`.) Invariants, tested on both layers: `totalSupply()` unchanged by shield / unshield / fees,
+`Σ balanceOf == totalSupply`, `balanceOf(SHIELD_POOL) == totalShielded · shieldScale`, escrow `reserve ≥ totalSupply()`.
+The Zether beneficiary fee moving from a confidential credit to the public balance is the ruling's text ("a fee paid
+from a hidden balance (beneficiary fee …) moves out of `SHIELD_POOL` to each fee recipient's public balance", for both
+kinds); the Zether relation is unchanged (`fee` is already public in the statement), only the effect changes.
+
+### 5.11 One interface for both layers: `mtx*` names [mtx]
+
+CTR-ZTH-45 Change: `mtxShield` / `mtxUnshield` and the siblings on one scheme, one interface shared by the Zether and
+PQZ tokens, no layer argument (kinds 6 and 7 dropped, [kinds]). `mtxTransfer` already exists (the public meta-transfer
+of `MetaTokenBase`), so the confidential transfers take `mtxConfidentialTransfer…`. Proposed table (controller
+proposal, owner question Q3):
+
+| Old (Zether) | Old (PQZ) | New | Notes |
+|---|---|---|---|
+| `zetherShield(bytes encodedY, uint256)` | `pqzShield(bytes32 ua, uint256)` | `mtxShield(bytes32 toUA, uint256 amount)` | Zether resolves `Y` from the registry by UA id (CTR-UA-30 (2): the key is the UA) |
+| `zetherWrapShield(address, uint256, UA)` | `pqzWrapShield(address, uint256, bytes32)` | `mtxWrapShield(address underlying, uint256 amountIn, bytes32 toUA)` | `UNDERLYING_*` kinds |
+| `zetherTransfer` | `pqzTransfer` (op 7) | `mtxConfidentialTransfer` | the token's default storage mode |
+| `zetherTransferCompact` | `pqzTransferCompact` | `mtxConfidentialTransferCompact` | |
+| `zetherTransferNoBundle` | `pqzTransferNoBundle` | `mtxConfidentialTransferNoBundle` (Zether only) | PQZ NONE retired (O5) |
+| `zetherTransferSingle` | `pqzTransferSingle` (op 1) | `mtxConfidentialTransferSingle` | |
+| — | `pqzTransferSingleCompact` | `mtxConfidentialTransferSingleCompact` (PQZ only) | |
+| — | `pqzTransferSingleNoBundle` | removed | O5 |
+| `zetherUnshield` | `pqzUnshield` (burn; `amount = 0` = refresh) | `mtxUnshield` | |
+| `zetherUnshieldUnwrap` | `pqzUnshieldUnwrap` | `mtxUnshieldUnwrap` | |
+| `zetherRollOver(UA)` | `pqzRollOver(ua, acc, cts)` | `mtxRollOver(bytes32 ua, uint256 n)` | Zether: one aggregated pending, any `n ≥ 1` rolls it |
+| `zetherRollOverBatch` | — | `mtxRollOverBatch` (Zether only) | |
+| `zetherRollOverSigned` | — | `mtxRollOverSigned` (Zether only) | |
+| `zetherSetRollOverMode` | — | `mtxSetRollOverMode` (Zether only) | |
+| — | (new) `pqzPrepareAcc` | `mtxPrepareAcc` (PQZ only) | §5.3 |
+| event `ZetherShielded` | `PqzPlainCredit` | `Shielded(bytes32 indexed toUA, address indexed from, uint256 amount, uint64 index)` | Zether `index` = `pendingSeq` |
+| `ZetherTransfer` / `ZetherTransferMulti` | `PqzTransfer` / `PqzTransferMulti` | `ConfidentialTransfer` / `ConfidentialTransferMulti` | fields unified where both layers have them (Task 3b) |
+| `ZetherUnshielded` | `PqzBurned` | `Unshielded` | refresh: `amount = 0` |
+| `RolledOver` | `PqzRolled` | `RolledOver(bytes32 indexed ua, uint64 rolled, uint32 accUnits, bytes32 accHash)` | Zether: `rolled` = `accSeq` |
+| — | `PqzCredit` | `Credited` | |
+| — | (new) `PqzDebited` | `Debited` | D12 |
+| `TransferBundles`, `RollOverModeChanged` | — | unchanged | already layer-neutral |
+
+Signatures: the shared functions take the same arguments on both layers so one interface (`IConfidentialToken`) holds
+one selector each — the proof-taking ones `(bytes payload, bytes proof, bytes authSig, bytes32 beneficiary, bytes
+accHint[, …])`: PQZ requires `beneficiary` to equal the payload's, Zether requires an empty `accHint`. Layer-only
+functions (`mtxPrepareAcc`, the Zether rollover modes) sit in the layer's own interface on the same scheme. Views keep
+their names (`pqzAccount`, `accountState`, …): CTR-ZTH-45 is about entry points. The relay allow-lists
+(`mtxSelectors`) follow the new selectors; rollovers stay off them (CTR-ZTH-34).
+
+## 6. Larger parameters: A' measured, 16k chosen
+
+**[16k] (owner 2026-10-20, CTR-PQZ-06 Change):** `K_MAX = 16,384` with the spec's option-A set n = 2560 (k = 40),
+q = 2^50 − 71, Δ = 2^30 − 1 — supersedes the A' recommendation (n = 2816, q = 2^54 − 327) and rulings O2 and O9's A'
+figures. §6.1–§6.3 keep the A' measurements as the record and add the 16k row; §6.4 is the 16k regeneration; §6.5 is
+a new constraint from PQZH on q.
 
 ### 6.1 Candidates and the budget
 
@@ -296,6 +489,7 @@ margin `(Δ − E) / ((K − 1)·B)` (today 4.14×).
 |---|---|---|---|---|---|---|---|---|---|---|---|
 | today | 32 | 2^42 − 215 | 1,024 | 36 / 164 | 11,872 | 14 | 2^26 − 1 | 2^24 | yes | 4.14× | 16,512 |
 | spec option A | 40 | 2^50 − 71 | 4,096 | 40 / 182 | 14,624 | 16 | 2^32 − 1 | 2^26 | yes | 70.6× | 20,608 |
+| **16k (owner 2026-10-20)** | **40** | **2^50 − 71** | **16,384** | **40 / 182** | **14,624** | **18** | **2^30 − 1** | **2^28** | **yes** | **3.36×** | **20,608** |
 | A' n = 2560 | 40 | 2^54 − 327 | 65,536 | 40 / 182 | 14,624 | 20 | 2^32 − 1 | 2^30 | yes | 3.36× | 20,608 |
 | A' n = 2688 | 42 | 2^54 − 327 | 65,536 | 41 / 186 | 15,316 | 20 | 2^32 − 1 | 2^30 | yes | 3.21× | 21,632 |
 | **A' n = 2816** | **44** | **2^54 − 327** | **65,536** | **42 / 189** | **15,940** | **20** | **2^32 − 1** | **2^30** | **yes** | **3.08×** | **22,656** |
@@ -316,6 +510,12 @@ The range proofs grow: `M_i` 14 → 20 bits, carries 11 → 17 bits (`c_i + 64 �
 `1,199 − 64 + 64·M`, R_DR `e'` 25 → 31 bits. The plain term stays noise-free, so the reachable maximum is
 `(K − 1)·B` as today. **n = 3072 does not fit q = 2^54** (`K·B = 2^30.09`); it needs q ≈ 2^55.
 
+**Derivation for 16k [16k].** `15·K = 245,760 < 2^18` (m = 18); `K·B_FRESH = 16,384 · 14,624 = 239,599,616 < 2^28`
+(E = 2^28); `Δ = ⌊q / 2^20⌋ = 2^30 − 1`, `2E = 2^29 ≤ Δ`; `Δ·(2^18 − 1) + 2^28 ≈ 2^48 < q/2`. Mint margin
+`(Δ − E) / ((K − 1)·B) = 805,306,367 / 239,584,992 = 3.36×`. Bit widths: `M_i` 14 → 18 bits, carries 11 → 15,
+`e_T` 25 → 29; by the A' scaling (+47 bits of R_TX per bit of m) R_TX ≈ 1,105 bits (18 binary polys), R_BURN ≈ 1,041
+(17) [estimate; the `*_params.sage` specs of plan Task 7 give the exact rows], R_DR `e'` 25 → 29 bits.
+
 ### 6.2 Security
 
 Encryption (`aprime.txt`; Kyber-512 for reference: uSVP β 406, core-SVP 118.6 classical / 107.6 quantum):
@@ -323,7 +523,7 @@ Encryption (`aprime.txt`; Kyber-512 for reference: uSVP β 406, core-SVP 118.6 c
 | Candidate | key / enc uSVP β | best attack, classical / quantum (full `LWE.estimate`) | DDGR20 β, 0 / 32 / 80 worst-case hints | ≥ 450 at 80 hints |
 |---|---|---|---|---|
 | today | 476 / 476 | 2^136.1 / 2^124.3 (dual_hybrid β 466 / 469) | 475.8 / 463.9 / 446.0 | no (owner exception) |
-| spec option A | 508 / 508 | 2^145.7 / 2^132.7 (dual_hybrid 499 / 500) | 507.3 / 497.3 / 482.4 | yes |
+| spec option A = **16k** (same n, q) | 508 / 508 | 2^145.7 / 2^132.7 (dual_hybrid 499 / 500) | 507.3 / 497.3 / 482.4 | yes |
 | A' n = 2560 | 457 / 457 | — | 456.6 / 447.6 / 434.1 | **no** |
 | A' n = 2688 | 488 / 488 | 2^140.2 / 2^128.0 (dual_hybrid 480 / 483) | 488.0 / 478.9 / 465.3 | yes |
 | **A' n = 2816** | **520 / 520** | **2^149.3 / 2^135.9 (dual_hybrid 511 / 512)** | **519.7 / 510.5 / 496.8** | **yes** |
@@ -360,60 +560,130 @@ measured v3 proofs today.
 instead of two (blob 24,976 B instead of 47,504 B, ≈ 4.5 M less) and a smaller statement. To be measured with the
 leaky-LWE-Estimator in Task 7 before it is relied on (O9).
 
+**Under 16k [16k]:** at n = 2560 β falls ≈ 0.31 per hint (507.3 → 482.4 over 80), so 144 hints extrapolate to ≈ 462,
+above 450 with less room; G = 1 for M = 8 gives a 22,928 B blob instead of 43,408 B (≈ 4.1 M less). O9's rule carries
+over: measure 144 hints in Task 7, else M ≤ 4 on chain. Also to measure (CTR-PQZ-06 Change): whether **n = 2304**
+(k = 36) clears β ≥ 450 at 80 hints (−10 % sizes); if it does, it comes back to the owner as a checkpoint before Task 8
+(not assumed here). The proof MLWE rank: at q = 2^42 rank 33 gives dual_hybrid 462, at 2^54 rank 41 only 447; at 2^50
+`kmlwe_min` is re-tuned until uSVP and dual_hybrid are both ≥ 450.
+
 ### 6.3 Sizes
 
-| Object | Today (n = 2048) | A' n = 2688 | A' n = 2816 |
-|---|---|---|---|
-| `pk`, `u` | 16,384 | 21,504 | 22,528 |
-| `ct` | 16,512 | 21,632 | 22,656 |
-| Statement R_TX / R_TX0 | 83,072 / 66,560 | 108,672 / 87,040 | 113,792 / 91,136 |
-| R_BURN / disclosure | 50,048 / 33,184 | 65,408 / 43,424 | 68,480 / 45,472 |
-| op 7 M = 8 with / without auditor | 215,936 / 198,528 | 282,496 / 259,968 | 295,808 / 272,256 |
-| op blob op 1 / op 7 M = 8 with auditor | 16,816 / 35,216 | 21,936 / 45,456 | 22,960 / 47,504 |
-| Proofs (PQZL, codegen estimate) | R_TX 42,762, M = 8 61,763 (measured) | R_TX ≈ 55.7 KB, M = 8 ≈ 80.4 KB | R_TX ≈ 57.1 KB, M = 8 ≈ 82.6 KB |
+| Object | Today (n = 2048) | **16k n = 2560** [16k] | A' n = 2688 | A' n = 2816 |
+|---|---|---|---|---|
+| `pk`, `u` | 16,384 | **20,480** | 21,504 | 22,528 |
+| `ct` | 16,512 | **20,608** | 21,632 | 22,656 |
+| Statement R_TX / R_TX0 | 83,072 / 66,560 | **≈ 103,552 / 82,944** | 108,672 / 87,040 | 113,792 / 91,136 |
+| R_BURN / disclosure | 50,048 / 33,184 | **≈ 62,336 / 41,376** | 65,408 / 43,424 | 68,480 / 45,472 |
+| op 7 M = 8 with / without auditor | 215,936 / 198,528 | **≈ 269,184 / 247,680** | 282,496 / 259,968 | 295,808 / 272,256 |
+| op blob op 1 / op 7 M = 8 with auditor | 16,816 / 35,216 | **20,912 / 43,408** | 21,936 / 45,456 | 22,960 / 47,504 |
+| Proofs (PQZL, codegen estimate) | R_TX 42,762, M = 8 61,763 (measured) | **to measure** (Task 7; between today and A') | R_TX ≈ 55.7 KB, M = 8 ≈ 80.4 KB | R_TX ≈ 57.1 KB, M = 8 ≈ 82.6 KB |
+
+(16k statements interpolated linearly in n between today and A' n = 2688, which is exact for the per-coefficient
+parts; the `*_params.sage` / `pqz-stmt` lengths of Task 7 / 8 replace them.)
 
 `MAX_INPUT = 393,216`: today the largest honest inputs are PQZL op 7 M = 8 (≤ 314,245 at `MAX_PROOF`) and PQZH op 7
-M = 4 (≤ 369,193). Under A' (n = 2816) PQZL M = 8 with the auditor is 295,808 + ≈ 80 KB ≈ 376 KB (4 % under the limit) and PQZH M = 4 182,144 + a
-larger Ligero proof: **`MAX_INPUT` must rise** (512 KiB proposed; O8). `MAX_PROOF` (PQZL 98,304) holds if the M = 8
-proof stays below it (≈ 82.6 KB codegen estimate, ≈ 79 KB expected).
+M = 4 (≤ 369,193). Under 16k PQZL M = 8 with the auditor is ≈ 269,184 + a proof of ≈ 70–80 KB ≈ 345 KB, and PQZH M = 4
+grows by its statement (+25 %) and a Ligero proof over the new field: O8's ruling stands — **`MAX_INPUT` 512 KiB**
+(the A' figure 376 KB under the old limit is superseded). `MAX_PROOF` (PQZL 98,304) holds if the M = 8 proof stays
+below it (measured in Task 7).
 
-### 6.4 Regeneration scope and order
+### 6.4 Regeneration scope and order: one `proofSystemId` bump [16k] [id]
 
-Everything that names n, q, Δ, the bounds, the bit layouts or the sizes:
+Everything that names n, q, Δ, the bounds, the bit layouts or the sizes, plus the transcript and `R_REG` changes that
+the owner folded into the same bump (CTR-PQZ-09 Change, review B-1; CTR-UA-30 Cost line):
 - **params** (`pqz-core/pqzl/params/`): every `*_params.sage` (reg, tx, tx0, burn, ds, dr, txm2 / 4 / 8 with and
-  without the auditor), headers by `regen.sh`, `to_rust.py` → `pqzl/rust/src/params/`, `estimator-*.txt`,
-  `anon/hints-anon.txt` re-run, `e_s0.py`'s exactness and Fiat–Shamir checks at the new q;
-- **C and Rust PQZL**: `pqz.h` / `lib.rs` constants (N, k, q, Δ, bounds, `K_MAX`, bit offsets), the NTT for the new q
-  (q ≡ 9 mod 16 keeps l = 4 and the incomplete NTT shape), the matrix `A` expansion ("keep the low 54 bits"), keys /
-  Enc / Dec KATs, arena sizes (statements +37 %);
-- **PQZH (Ligero)**: the field is the new q — 54 × 54-bit products still fit u128; the wasm32 21-bit limb path becomes
-  three 18-bit limbs; constraint widths; its id bumps too;
-- **`pqz-stmt`**: lengths per form, `MAX_PROOF`, `MAX_INPUT`, the ids; Nethermind plugin limits and arena;
+  without the auditor) at n = 2560, q (§6.5), m = 18, E = 2^28, headers by `regen.sh`, `to_rust.py` →
+  `pqzl/rust/src/params/`, `estimator-*.txt`, `anon/hints-anon.txt` re-run (16–144 hints, and n = 2304 at 80),
+  `e_s0.py`'s exactness and Fiat–Shamir checks at the new q;
+- **C and Rust PQZL**: `pqz.h` / `lib.rs` constants (N, k, q, Δ, bounds, `K_MAX = 16,384`, bit offsets), the NTT for
+  the new q (q ≡ 9 mod 16 keeps l = 4 and the incomplete NTT shape), the matrix `A` expansion (50-bit samples), keys /
+  Enc / Dec KATs, heap peaks (statements +25 %);
+- **B-1** (review B, P0; confirmed by review A's cheating prover): V3 / V4 drawn from the post-`tg` hash in all four
+  implementations (C generic, C SV, Rust generic, Rust `verify_fast`) and both provers, plus the `tg`-mutation binding
+  test; the cheating-prover harness (`scratchpad/reviewA/poc/`) becomes the regression fixture;
+- **A-2** (review A, P3): the last β4 row and the υ row get distinct Schwartz–Zippel challenges (renumbered);
+- **`R_REG` message bound to the UA id** (from **UA-6**, CTR-UA-30 (3)): the statement / transcript change UA-6
+  specifies (chain, registry, UA id) — 5h implements it in the relation, `pqz-stmt`, the vectors and the registry's
+  probe, UA-6 owns the registry side;
+- **PQZH (Ligero)**: the field is the new q (50-bit products fit u128; the wasm32 21-bit limb path becomes three
+  17-bit limbs), constraint widths, the FFT domains of §6.5; its id bumps too;
+- **`pqz-stmt`**: lengths per form, `MAX_PROOF`, `MAX_INPUT` (512 KiB, O8), the ids; Nethermind plugin limits;
 - **Solidity**: `PqzCt` (`Q`, `DELTA`, `PK`, `CT`, `ZERO_HASH`), `PqzSafety` ids, probe proofs, self-test hash;
-  `ROLL_MAX` re-pinned (lanes now hold 2^10 terms: `ROLL_MAX + 1 + INLINE_MAX ≤ 1023`);
+  `ROLL_MAX` re-pinned (lanes hold 2^14 terms); a new `UAPqzVerifier` instance → a new `Env` version
+  (`OpenFactory.publishEnv`) and new PQZ releases (`deployImplementation`) [Z2];
 - **vectors and KATs** (`smartcontracts/vectors/pqz/`, `pqz_kat.py`, fuzz seeds, the package), every digest;
-- **ids**: PQZL `keccak256("scaas/pqz/lnp22/mlwe-d64k44-q54l4/v1")` (the d/k/q/l in the label change), PQZH Ligero v2;
+- **ids** (controller proposal): PQZL `keccak256("scaas/pqz/lnp22/mlwe-d64k40-q50l4/v4")` — the label's d/k/q/l
+  change and the version continues from v3 so "v3 → v4" stays unambiguous in the B-1 records; PQZH
+  `keccak256("scaas/pqz/pqzh/ligero-fq-<radices>-keccak256-zk-proven/v2")` with the radices of §6.5; v3 and PQZH v1
+  retired at the 7622 reset (plan fs3 Task 13);
 - **gas**: precompile calibration (timing, owner's go-ahead), the 60 ms p99 verify limit re-checked (R_TXM M = 8 was
-  51.0 ms p99 in wasm32 at today's size; +37 % input is a real risk, O8), node memory.
+  51.0 ms p99 in wasm32 at today's size; +25 % input), node memory.
 
-Order (D17): B and the state layout on today's parameters first — no relation, vector or id changes (statements are
-unchanged) — reviewed and merged; then A' as one parameter change; then plan fs3 Task 6 (package) and Task 13 (7622
-reset and gas), which wait for 5h.
+Order (D17): B, the state layout, the shield / pool / names work on today's parameters first — no relation, vector
+or id changes (statements are unchanged; `shieldIn` is a rename of a header word) — reviewed and merged; then the
+16k regeneration with B-1, A-2 and `R_REG` as one id bump; then plan fs3 Task 6 (package) and Task 13 (7622 reset
+and gas), which wait for 5h.
 
-## 7. Interaction with Task 5g-Z and the classical Zether contracts
+### 6.5 New constraint: PQZH needs FFT domains in F_q
 
-- **5g-Z** (CTR-ZTH-20: the Zether verifier immutable in the token implementation, recorded by `OpenFactory`) touches
-  the Zether token implementations, `OpenFactory` and deploy scripts. 5h touches the PQZ libraries and the PQZ token
-  implementations; the shared files are `OpenFactory` (only if a PQZ registration rule changed — it does not: the PQZ
-  verifier pin stays `PqzSafety`'s code pin, W-B) and the deploy scripts (`script/pqz/e2e.py` links four libraries after
-  D14). 5g-Z merges first; 5h rebases on it; no semantic overlap.
-- **Classical Zether contracts: unchanged.** `ZetherLib` / `ZetherLayer` keep their layout (curve points, small);
-  `ConfidentialConfig.multiLegFee` keeps its name and the Zether kinds keep refusing a non-zero value, so D10 does
-  not touch them.
+PQZH's Ligero works over F_q itself with multiplicative subgroups `H_n`, `n | q − 1` ([pqzh-ligero.md](../../research/pqzh-ligero.md):
+today `q − 1 = 2^3 · 19 · 43 · 431 · 1,561,243`, radices 2, 19, 43, 431; the proven `R_TX` / `R_REG` preset n =
+32,756 = 4 · 19 · 431). For the ruled **q = 2^50 − 71, q − 1 = 2^3 · 17 · 8,278,675,785,607**: the largest smooth
+subgroup has order 136, so no Reed–Solomon domain of the needed size (≈ 2^15) exists and **PQZH cannot be built over
+that q**. (The superseded A' prime had the same gap: 2^54 − 327 − 1 = 2^3 · 3 · 1789 · 419,563,967,521.) PQZL does
+not care (its NTT needs only q ≡ 9 mod 16), and PQZL and PQZH must share q (same statements, same codec).
+
+Primes of the same size that keep the budget (Δ = ⌊q / 2^20⌋ ≈ 2^30, every check of §6.1 unchanged) and q ≡ 9 mod 16
+(searched with stdlib Python, Miller–Rabin with the 12 smallest prime bases, deterministic below 3.3·10^24):
+
+| q | q − 1 divisible by | Δ | Note |
+|---|---|---|---|
+| **2^50 − 42,310,535** | 2^3 · 19 · 43 · 431 (every radix of today's domains) | 2^30 − 41 | below 2^50: 50-bit sampling and 2^14 terms per lane kept; **recommended** |
+| 2^50 + 8,395,753 | 2^3 · 19 · 43 · 431 | 2^30 + 8 | above 2^50 (51-bit samples) |
+| 2^50 − 2,086,167 | 2^3 · 19 · 431 (today's proven preset n) | 2^30 − 2 | radix 43 lost (conjectured presets) |
+| 2^50 − 423 | 2^3 · 3 · 5^2 · 7 · 19 · 139 | 2^30 − 1 | new radices; the Ligero presets re-searched |
+
+Security moves by nothing measurable (q changes by < 0.004 %); Task 7 re-runs the estimator on the chosen q anyway.
+This changes the owner's stated q, so it is **owner question Q1**.
+
+## 7. Dependencies: 5g-Z, UA-6, the Zether side, the kinds and the curve
+
+- **5g-Z1 and 5g-Z2 are merged** (`77f7478`, `c173de37`) [Z2]: the PQZ tokens take their `UAPqzVerifier` from
+  `Env.deps[ENV_PQZ_VERIFIER]` and are released by `OpenFactory.deployImplementation` with the linked libraries listed
+  in `Env.libs` and checked by `libCodeHashes`. 5h builds on that: D14's four libraries are four `Env.libs` entries
+  (deploy scripts publish a new `Env` version for `NONE_PQZ` / `UNDERLYING_PQZ`); the 16k step adds a new
+  `UAPqzVerifier` (new id, new probe) and so another `Env` version and release. No factory logic changes for PQZ
+  besides [kinds].
+- **UA-6 comes before 5h** [ua] (CTR-UA-30; spec and plan written separately): the PQZ key becomes an attribute of a
+  PQ-signing UA supplied in `register`, the `pqz-mlwe` kind and `authRef` go (Zether's `authRef` too), and the `R_REG`
+  message is bound to the UA id. 5h depends on it for: the account key `(UA, token)` = the signing UA's id; the public
+  UA-ledger balance that receives fees and unshields [noPP]; the PQZ auditor (`ConfidentialConfig.auditorKey` = a UA
+  whose record carries a PQZ key instead of a `pqz-mlwe` UA); the `R_REG` change, which rides 5h's id bump (§6.4).
+- **Classical Zether contracts now change in 5h** (they were "unchanged" in the first version): `SHIELD_POOL` instead of
+  burn / mint and the beneficiary fee to the public balance [pool] (§5.10); the `mtx*` names and the shared interface
+  [mtx] (§5.11); the Zether shield stays proof-free and third-party (§5.9). `ConfidentialConfig.multiLegFee` keeps its
+  name and the Zether kinds keep refusing a non-zero value (D10 does not reach Zether). Relations, proofs and the Zether
+  layout are unchanged.
+- **Kinds 6 and 7 dropped** [kinds] (CTR-TOK-21 Change): `NONE_ZETHER_PQZ` / `UNDERLYING_ZETHER_PQZ` leave
+  `IOpenFactory.TokenKind`; ids 6 and 7 are not reused. With the enum ending at `UNDERLYING_PQZ` the ABI decoder already
+  rejects 6 and 7, so the four `KindReserved` checks of `OpenFactory` and the error go (tests in `v2/Factory.t.sol`,
+  `PqzNone.t.sol` move to "decoding reverts"); token-wrappers.md kind table, pq-zero-knowledge.md, contracts/README.md.
+- **Zether BLS12-381 only** [bls] (CTR-ZTH-32 Change): the bn254 Zether line — the bn254 verifier instances, the
+  `proofSystemId` `…/bn254/…`, its deploy steps and `Env` publication, the bn254 vectors and test suites — moves to
+  `legacy/` (backup, not delete); the prover keeps its curve-generic code but builds and tests BLS12-381 only; the
+  signing kinds `schnorr-bn254`, `bls-bn254-minsig`, `frost-bn254`, `musig2-bn254` are not affected. **Decision D22
+  (controller proposal): a separate task "Z-BLS" on its own branch, not part of 5h**, run after UA-6 (which removes the
+  `zether-bn254` UA kind 0x0140 and its Schnorr verifier from the registry) and merged before 5h's Zether task
+  (plan Task 3b), so the rename and `SHIELD_POOL` touch only the BLS line. Reasons: it is a removal across verifiers,
+  deploy scripts, vectors and the prover, independent of the PQZ state work; reviewed on its own it stays small; it can
+  run alongside 5h Tasks 1–3 (PQZ only).
 
 ## 8. Code size and the library split
 
 `UnderlyingPqzToken` is 60,105 B (limit 65,536, 5,431 B left), `NoUnderlyingPqzToken` 47,349 B; `PqzLib` 20,551 B
+(at the first version; **after 5g-Z2 `size-baseline.json` has 60,621 B and 48,160 B** [Z2]: 819 B left under the
+4 KiB margin target)
 (EIP-170's 24,576 B applies to libraries in the size gate). The tokens hold the entry points and the ERC-20 / UA side;
 all PQZ logic already runs by DELEGATECALL in `PqzLib` (its public functions), so the 5h logic lands in the library,
 not in the tokens.
@@ -423,7 +693,7 @@ not in the tokens.
 
 | Library | Public functions | Today's code, measured | Projected after 5h |
 |---|---|---|---|
-| `PqzStateLib` | `init`, `shield`, `rollOver`, `prepareAcc`, the views of §5.8 | 4,041 B | ≈ 7–8 KB (rollover from state, prepare, five views) |
+| `PqzStateLib` | `init`, `shield`, `rollOver`, `prepareAcc`, the views of §5.8 | 4,041 B | ≈ 7–8 KB (rollover from state, prepare, five views, TRIVIAL entries) |
 | `PqzTransferLib` | `transfer` (op 1), `transferMulti` (op 7) | 13,723 B | ≈ 14–15 KB (`_total` from state, blob writer, credit fee; the base branch and calldata `acc` go) |
 | `PqzBurnLib` | `unshield` (burn, refresh, unwrap path) | 7,340 B | ≈ 8 KB |
 | `PqzViewLib` | `statementOf`, `disclosureStatementOf`, `verifyAmountOf` | 12,220 B | ≈ 12–13 KB (disclosure reads `R` from the blob) |
@@ -433,41 +703,65 @@ what is unused), `forge build src --sizes` (log in `runs/2026-10-20-5h-state-gas
 steps make the four sum to 37.3 KB against 20.6 KB, which is the point: a transfer loads 13.7 KB instead of 20.6 KB, a
 rollover 4 KB (owner: lighter per-call code for the node, as the Zether transfer / burn verifier split).
 
-**Tokens.** The tokens link four library addresses instead of one (a few bytes per call site). 5h removes the `acc` and
-`inline` arguments of eight entry points (calldata decoding of `bytes` + `bytes[]` per entry point, ≈ 0.1–0.15 KB
-each) and adds five views and `pqzPrepareAcc` (≈ 0.1–0.15 KB each, each a DELEGATECALL stub): projected
-`UnderlyingPqzToken` ≈ 59.5–60.5 KB, `NoUnderlyingPqzToken` ≈ 46.8–47.8 KB — inside the 4 KiB margin target (≤ 61,440
-B) but only by ≈ 1–2 KB. **Reserve if Task 1 measures more:** route the read-only statement / disclosure views of the
-token (`transferStatement`, `transferSingleStatement`, `burnStatement`, `disclosureStatement`, `verifyTransferAmount`)
-and the new state views through one `fallback` that DELEGATECALLs `PqzViewLib` / `PqzStateLib` by selector (≈ 2–3 KB
-saved, no state-changing path through the fallback). Task 1 does the split first, with no behaviour change, so the
-later tasks see the real headroom.
+**Tokens.** The tokens link four library addresses instead of one (a few bytes per call site; four `Env.libs`
+entries [Z2]). 5h removes the `acc` and `inline` arguments of the debit entry points (calldata decoding of `bytes` +
+`bytes[]` per entry point, ≈ 0.1–0.15 KB each), retires the two PQZ NONE entry points (O5) and `plainPending` [noPP],
+and adds five views and `mtxPrepareAcc` (≈ 0.1–0.15 KB each, each a DELEGATECALL stub), the `SHIELD_POOL` moves
+[pool] and the shared-interface argument checks [mtx] (≈ 0.2–0.4 KB): projected `UnderlyingPqzToken` ≈ 60.0–61.0 KB,
+`NoUnderlyingPqzToken` ≈ 47.5–48.5 KB [estimate] — **at or above the 4 KiB margin target (≤ 61,440 B) for the
+underlying kind.** So the former reserve becomes part of plan Task 1 unless the split alone restores the margin: route
+the read-only statement / disclosure views of the token (`transferStatement`, `transferSingleStatement`,
+`burnStatement`, `disclosureStatement`, `verifyTransferAmount`) and the new state views through one `fallback` that
+DELEGATECALLs `PqzViewLib` / `PqzStateLib` by selector (≈ 2–3 KB saved, no state-changing path through the fallback).
+Task 1 does the split first, with no behaviour change, so the later tasks see the real headroom. The Zether kinds
+(`UnderlyingZetherToken` 58,432 B) change by the rename and the pool moves only (≈ ±0.3 KB).
 
 ## 9. Risks
 
-- **First materialisation** (≈ 11.4 M; A' ≈ 15.8 M, 94 % of the cap) cannot share a transaction with a useful batch
-  under A': hence the separate, permissionless `pqzPrepareAcc` (two halves), once per `(UA, token)`.
-- **`ROLL_MAX` under A' is 176, not 256**, and **op 7 with M = 8 exceeds the 2^24 cap under A'** with two randomness
-  groups (blob ≈ 10 M + precompile + calldata) unless one group (G = 1) is measured safe (O9).
-- **Permanent op blobs.** No SELFDESTRUCT since Cancun: every operation leaves 16.8–35.2 KB (A' 22.8–47.5 KB) forever.
+- **First materialisation** (≈ 11.4 M; 16k ≈ 14.2 M, 85 % of the cap; A' ≈ 15.8 M) cannot share a transaction with a
+  useful batch under 16k: hence the separate, permissionless `mtxPrepareAcc` (two halves), once per `(UA, token)`.
+- **`ROLL_MAX` under 16k ≈ 208, not 256** [estimate], and **op 7 with M = 8 likely exceeds the 2^24 cap under 16k**
+  with two randomness groups (blob ≈ 8.7 M + precompile + calldata) unless one group (G = 1) is measured safe (O9).
+- **PQZH and q** (§6.5): the ruled q = 2^50 − 71 has no Ligero domain; without a change of q (Q1) PQZH has no 16k id.
+- **Permanent op blobs.** No SELFDESTRUCT since Cancun: every operation leaves 16.8–35.2 KB (16k 20.6–43.4 KB) forever.
   That is the price of R-state; BUNDLE tokens pay it today already. A future pruning (EIP-7736-style state expiry) would
   need the blobs to be resurrectable — out of scope.
-- **COMPACT / NONE get dearer** (≈ +3.4 M per transfer); with ciphertexts in state they can no longer avoid storage (O5).
-- **Refresh gets dearer** (burn / refresh write a 16.5 KB blob: ≈ +3.3 M; O7 lists the alternative).
-- **A'**: verify time (+37 % input, M = 8 near the limit), `MAX_INPUT`, the PQZH field change, proof MLWE dual_hybrid
-  below 450 until `kmlwe` rises, mint margin 3.08× instead of 4.14×.
+- **COMPACT gets dearer** (≈ +3.4 M per transfer); with ciphertexts in state it can no longer avoid storage (NONE retired, O5).
+- **Refresh gets dearer** (burn / refresh write a 16.5 KB blob: ≈ +3.3 M; O7 ruled: accepted).
+- **16k**: verify time (+25 % input, M = 8 near the limit), `MAX_INPUT` (512 KiB, O8), the PQZH field change, the proof
+  MLWE rank re-tuned for dual_hybrid ≥ 450, mint margin 3.36× instead of 4.14×; the one id bump also carries B-1, A-2
+  and `R_REG`, so its review covers parameters and transcript together.
+- **Third-party shield flooding** (§5.7): one TRIVIAL entry per victim per block, one unit each; priced only by Q2's fee.
+- **Same-block residual** (§5.9): a debit that inlines an entry of its own block can be reverted by a merge.
+- **Token size** (§8): `UnderlyingPqzToken` near the 4 KiB margin target before 5h; the view `fallback` is likely needed.
+- **Rename breadth** [mtx]: every client, relayer allow-list (`mtxSelectors`), e2e script, test and doc that names a
+  `zether*` / `pqz*` entry point or event changes in one step (test chains only, no migration).
 - **Un-roll waste**: a debit with `p < rolled` makes keepers re-roll ≤ `INLINE_MAX` entries.
 
 ## 10. Open questions for the owner
 
-| # | Question | Recommendation |
-|---|---|---|
-| O1 | B alone removes the liveness problem (credits are never refused; only rollovers stop at the cap until a refresh). Is A' still wanted? With `K_MAX = 1024` an account refreshes every ≈ 1,000 credits; with 65,536 every ≈ 65,000. | Keep B first; decide A' after B is live, weighing +37 % sizes, the verify-time risk and the re-calibration against fewer refreshes. If A' is kept: n = 2816. |
-| O2 | n = 2816 (β 520 / 496.8 with 80 hints, margin 3.08×) or n = 2688 (488 / 465.3, 3.21×, 4.5 % smaller)? | 2816: drops the β 446 exception with room. |
-| O3 | Mint margin 3.08× (today 4.14×) acceptable? q ≈ 2^55 doubles it (6.2×) at a few β units. | Accept 3.08× (the cap is enforced twice; a forge invariant checks it). |
-| O4 | The per-credit fee floor on 7622 / 22776: any non-zero amount, or a minimum in token units set per token by the deployer? | `init` refuses 0 on the SCaaS chains; the amount is the deployer's. |
-| O5 | Storage modes: with every op stored, BUNDLE costs nothing extra and NONE saves nothing. Keep the three entry points (ABI) with the new meaning, or retire NONE? | Keep them (ABI and W-A bindings stable). |
-| O6 | `ROLL_AGE = 24` blocks enforced (rollovers wait 2 min after a credit)? | Yes. |
-| O7 | Burn / refresh write a 16.5 KB blob (+3.3 M). Alternative: write the fresh `acc` into the account's slots when they exist (≈ 2.6 M), the blob otherwise. | Blob always (one rule); revisit if refresh gas matters. |
-| O8 | Under A': `MAX_INPUT` 384 KiB → 512 KiB, and the verify-time limit for the larger forms. | Raise to 512 KiB; measure p99 with your go-ahead before A' is frozen. |
-| O9 | Under A' (n = 2816): `ROLL_MAX` = 176 (target 256 missed: 256 costs 15.8 M, 94 % of the cap), and op 7 M = 8 does not fit one transaction with two randomness groups. Options: accept 176; one group for M = 8 (≈ 478 β extrapolated at 144 hints, to be measured) and drop M = 8 if it still does not fit; or n = 2688 (`ROLL_MAX` ≈ 192, blobs −4.5 %). | Accept 176; measure G = 1 for M = 8 in Task 7; M ≤ 4 on chain under A' if G = 1 fails. |
+All nine were ruled on 2026-10-20 (CTR-PQZ-07 Change "owner rulings on the 5h design": the recommendations accepted);
+two were then superseded the same day by [16k].
+
+| # | Question | Recommendation | Ruling (2026-10-20) |
+|---|---|---|---|
+| O1 | B alone removes the liveness problem (credits are never refused; only rollovers stop at the cap until a refresh). Is A' still wanted? With `K_MAX = 1024` an account refreshes every ≈ 1,000 credits; with 65,536 every ≈ 65,000. | Keep B first; decide A' after B is live, weighing +37 % sizes, the verify-time risk and the re-calibration against fewer refreshes. If A' is kept: n = 2816. | B first with today's parameters, then larger parameters — now the 16k set [16k] |
+| O2 | n = 2816 (β 520 / 496.8 with 80 hints, margin 3.08×) or n = 2688 (488 / 465.3, 3.21×, 4.5 % smaller)? | 2816: drops the β 446 exception with room. | n = 2816 — **superseded** by [16k]: n = 2560, q ≈ 2^50 (β 508 / 482.4, margin 3.36×) |
+| O3 | Mint margin 3.08× (today 4.14×) acceptable? q ≈ 2^55 doubles it (6.2×) at a few β units. | Accept 3.08× (the cap is enforced twice; a forge invariant checks it). | accepted, re-checked by review B; under 16k the margin is 3.36× |
+| O4 | The per-credit fee floor on 7622 / 22776: any non-zero amount, or a minimum in token units set per token by the deployer? | `init` refuses 0 on the SCaaS chains; the amount is the deployer's. | a floor of at least the state cost of one pending slot (≈ 26.3 k gas at the chain's gas price), set per chain profile; paid to public balances [noPP] |
+| O5 | Storage modes: with every op stored, BUNDLE costs nothing extra and NONE saves nothing. Keep the three entry points (ABI) with the new meaning, or retire NONE? | Keep them (ABI and W-A bindings stable). | **NONE retired** for PQZ (fewer entry points, simpler W-A binding) |
+| O6 | `ROLL_AGE = 24` blocks enforced (rollovers wait 2 min after a credit)? | Yes. | yes (replaces W-E's base); TRIVIAL entries too |
+| O7 | Burn / refresh write a 16.5 KB blob (+3.3 M). Alternative: write the fresh `acc` into the account's slots when they exist (≈ 2.6 M), the blob otherwise. | Blob always (one rule); revisit if refresh gas matters. | accepted (≈ 3.3 M dearer) |
+| O8 | Under A': `MAX_INPUT` 384 KiB → 512 KiB, and the verify-time limit for the larger forms. | Raise to 512 KiB; measure p99 with your go-ahead before A' is frozen. | 512 KiB; verify time measured on a quiet host when the owner frees it (applies to 16k) |
+| O9 | Under A' (n = 2816): `ROLL_MAX` = 176 (target 256 missed: 256 costs 15.8 M, 94 % of the cap), and op 7 M = 8 does not fit one transaction with two randomness groups. Options: accept 176; one group for M = 8 (≈ 478 β extrapolated at 144 hints, to be measured) and drop M = 8 if it still does not fit; or n = 2688 (`ROLL_MAX` ≈ 192, blobs −4.5 %). | Accept 176; measure G = 1 for M = 8 in Task 7; M ≤ 4 on chain under A' if G = 1 fails. | 176 accepted under A' — **figure superseded** by [16k] (≈ 208 to measure); the M = 8 rule (G = 1 at 144 hints, else M ≤ 4) carries over |
+
+## 11. Owner questions (2026-10-20 update)
+
+Only what blocks a 5h task; research-only items stay in the tasks (n = 2304 at 80 hints, the proof MLWE rank, the
+Ligero preset search are measured and reported, not asked).
+
+| # | Question | Recommendation | Blocks |
+|---|---|---|---|
+| Q1 | The ruled q = 2^50 − 71 has no FFT domain for PQZH's Ligero (q − 1 = 2^3 · 17 · 8.3·10^12, §6.5). Change q to a prime of the same size whose q − 1 keeps today's Ligero radices, or keep 2^50 − 71 for PQZL and leave PQZH without a 16k id? | **q = 2^50 − 42,310,535** (q − 1 divisible by 2^3 · 19 · 43 · 431, Δ = 2^30 − 41, every budget check, `K_MAX` 16,384 and the security estimate unchanged); PQZL and PQZH keep one shared q. | Task 7 |
+| Q2 | A PQZ shield into **another** account adds a queue entry and a `K_MAX` unit to the victim (§5.7): charge it the per-credit fee (O4 floor), paid from the shielder straight to the recipient's public balance, with shields to oneself free? | Yes (controller proposal); Zether shields stay free. | Task 2 |
+| Q3 | The `mtx*` name table of §5.11 — in particular `mtxConfidentialTransfer…` (since `mtxTransfer` is the public meta-transfer) and one selector per function across both layers (unused arguments refused per layer). | Approve the table as proposed. | Task 3b |
