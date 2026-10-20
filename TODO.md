@@ -43,9 +43,9 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
   q = 2^50 − 42,310,535, rank 39, `ROLL_MAX` 192, op 7 M = 8 G = 1, `MAX_PROOF_PQZH` 327,680); **Task 8a paused before
   code** (B-1, A-2, `R_REG`), then 8b PQZL 16k → 8c PQZH → 8d stmt / contracts / vectors / id bump → Task 9 (review,
   timing on the owner's go). HANDOFF.md top note.
-- [ ] **Spike A for `UnderlyingPqzToken`** (owner 2026-10-21): the meta-tx library pattern on the largest token
-  (≈ 61 KB vs the 64 KiB limit, governance still to come) — size and gas, on branch `metatx-lib` next to the
-  NoUnderlying spike (`scratchpad/metatx-lib-report.md`). Size vs 24,576 is not a criterion (wait for Glamsterdam).
+- [x] **Spike A for `UnderlyingPqzToken`** (owner 2026-10-21) — done `a12cd06b` on `metatx-lib`: 61,045 → A 56,898
+  (headroom 8,638 under 65,536) / A2 54,321 (11,215); relayed +7–9k gas (A), large op 7 envelope ≈ +1 M unless only
+  the data hash goes to the library. HANDOFF.md top note.
 - [ ] **Metatx split** (owner 2026-10-20 "kiểu gì cũng phải tách"; governance goes to a lib or module): spec → plan →
   build **after 5h part B merges, before fs3 Tasks 12 / 6 / 13 and before governance code** (timing ruled 2026-10-21).
   Open for the spec: A (library) vs B / B′ (module behind `fallback`; conflicts with the 2026-10-20 "no view fallback"
@@ -209,6 +209,13 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
   which delay, lockable or not). Covers smart-contract governance (releases, Env versions, `deployImplementation` — owner:
   it must not simply bind the kind's latest Env) and token governance (today's `features` / `lockedFeatures`, `AdminLib`
   roles, `owner = 0`, `RATE_ADJUSTABLE` with `rateDelay` / `maxRateStepBps`). Spec first (owner rule), then Z2 follows it.
+  - Inputs (owner 2026-10-21, chat): (1) **mint allowance per minter** — `{total, perWindow, window, expiry}`, two-tier
+    (USDC masterMinter pattern), a reduce-only role; (2) **moderator transfer** of a user's balance without the user's
+    signature (loyalty points), bounded by a per-moderator total and per window (same primitive as (1)), own event,
+    relayable, public balances only — never on confidential kinds (FORCE rule); proposal: enabled at INIT only;
+    (3) **hybrid underlying** — wrap (citizen brings a stablecoin) plus issuer mint under one `maxSupply`; reserve
+    accounting needed (proposal: unbacked units not redeemable for the underlying; alternatives pro-rata or queue P15);
+    PQZ / Zether minters never mint shielded value.
 - [ ] **SCaaS Chain 22776** (owner 2026-10-12): a new chain "SCaaS Chain", chain id 22776, beside the existing ones; chain 7622 and the UA key tree `m/7622'/…` stay unchanged. Ports in the 22776+ range (proposed RPC HTTP 22776, WS 22777, P2P 22778). Onboard like any chain: docs/networks/evm.md row, profile, finality gate, genesis/identity pin, deploy, node config. The chain itself (docker/chainspec) is run by the owner outside this repo.
 - [ ] **Template library** (owner 2026-10-12): every README use case (escrow with an arbiter, milestone service
   contracts, sale with delivery, leases, installment loans, subscriptions, revenue sharing, deposit with periodic

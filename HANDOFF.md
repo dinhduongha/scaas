@@ -31,9 +31,20 @@ background shell left running.
   argument (wait for Glamsterdam); the real ceiling is 64 KiB — `UnderlyingPqzToken` ≈ 61 KB + governance. **Timing
   (controller ruling on the owner's ask):** after part B merges, before fs3 Tasks 12 / 6 / 13 and before governance code.
 
+- **Spike A on `UnderlyingPqzToken` (owner ask, done `a12cd06b` on `metatx-lib`; report section in
+  `scratchpad/metatx-lib-report.md`, log `smartcontracts/evm/runs/2026-10-21-metatx-lib-spike-pqz.txt`; 49 / 49 tests,
+  parity prod / A / A2):** runtime 61,045 (headroom 4,491 under 65,536) → **A 56,898 (8,638)** with `SpikeMtxLib`
+  11,577 → A2 (+ `SpikePqzMtxLib` 4,212) 54,321 (11,215). PQZ layer stays ≈ 12.7 KB (its auth / digest / nonce / fee are
+  already in the PQZ libraries; ceiling ≈ 13.5 KB headroom). Gas cold: relayed +7.1–9.4k (A) / +13–15k (A2); relayed
+  op 1 ≈ +20k / +25k (+0.5–0.66 %); warm +5.9k / +8.2k; direct calls unchanged. **Concern:** A passes the envelope data
+  to the library a second time → a ≈ 340 KB op 7 would pay ≈ +1.0 M gas (computed); fix if A is chosen: keep the
+  self-call in the token, pass the library only the data hash. Governance code in the shared base lands in every kind.
+- **Owner question 2026-10-21 (answered in chat, recorded in TODO §0 governance item):** mint allowance per minter
+  (total, per window, expiry); moderator transfer without the user's signature (bounded, public balances only, never
+  confidential kinds); hybrid underlying + mint under one cap (reserve accounting: unbacked units not redeemable).
+
 **Next:** (1) resume Task 8a (resume the ledger; dispatch a fresh implementer with `task-8a-brief.md` + the report's
-"Paused" section); in parallel (2) **spike A for `UnderlyingPqzToken`** (owner ask 2026-10-21: how far below 64 KiB the
-library pattern brings the largest token) on `metatx-lib`; then 8b → 8c → 8d → Task 9 (timing only on the owner's go).
+"Paused" section); then 8b → 8c → 8d → Task 9 (timing only on the owner's go).
 
 ## Session 2026-10-20 (night; 5h part A merged) — resume here
 
