@@ -36,6 +36,8 @@ interface IZetherToken is IUALedger, IConfidentialToken {
     event RollOverModeChanged(ZetherTypes.UA indexed account, ZetherTypes.RollOverMode mode);
 
     error AccountNotRegistered(ZetherTypes.UA account);
+    /// @notice A multi-recipient `decoyFee` below the token's `minDecoyFee`, or `≥ 2^64` (owner 2026-10-20; as PQZ's).
+    error DecoyFeeOutOfRange(uint256 decoyFee, uint256 minDecoyFee);
     error AmountOutOfRange(uint256 amount, uint256 max);
     error ProofRejected();
     error StaleAccSeq(uint256 expected, uint256 got);
@@ -84,6 +86,9 @@ interface IZetherToken is IUALedger, IConfidentialToken {
     function shieldScale() external view returns (uint256);
     /// @notice The inner fee, `< 2^64` and `< maxDecryptableShielded`; never a function of `v` (CTR-ZTH-07).
     function confidentialFee() external view returns (uint256);
+    /// @notice The least per-leg `decoyFee` of a multi-recipient transfer (owner 2026-10-20); `confidentialFee + 16 ·
+    ///         minDecoyFee` is `< 2^64` and `< maxDecryptableShielded`. 0 allowed.
+    function minDecoyFee() external view returns (uint256);
     /// @notice The auditor key (`ITransferDisclosure.AUDITOR`), empty exactly when `auditorMode()` is `NONE` (CTR-ZTH-09).
     function auditorKey() external view returns (bytes memory);
     /// @notice `NONE`, `FULL` (every transfer includes the auditor) or `OPTIONAL` (the sender's choice per transfer).

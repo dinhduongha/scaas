@@ -9,7 +9,7 @@ import {ZetherLib} from "./ZetherLib.sol";
 /// @title The prover views of every Zether token (CTR-ZTH-46): the statement a token will build at this block.
 /// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Stateless, no admin, no upgrade, one instance for every token on
 ///         every curve (as `ZetherDisclosure`). It reads the token's views (`verifier`, `registry`, `chainUid`,
-///         `confidentialFee`, `maxDecryptableShielded`, `auditorKey`, `auditorMode`, `disclosureMode`, `accountState`)
+///         `confidentialFee`, `minDecoyFee`, `maxDecryptableShielded`, `auditorKey`, `auditorMode`, `disclosureMode`, `accountState`)
 ///         and runs the token's own builders (`ZetherLib`, internal), so the bytes are the token's, with the same cheap
 ///         checks. The caller picks the token it trusts. `envelopeBinding` 0 = a direct call (`ZTX_V1_DIRECT`), else the envelope's binding
 ///         (`ZTX_V1_RELAYED`, `IZetherToken.envelopeBinding`).
@@ -100,6 +100,7 @@ contract ZetherStatements {
         c.psid = c.ver.proofSystemId();
         c.p = c.ver.g1EncodedBytes();
         c.fee = t.confidentialFee();
+        c.minDecoyFee = t.minDecoyFee();
         c.maxShielded = t.maxDecryptableShielded();
         c.auditorKey = t.auditorKey();
         c.auditorMode = t.auditorMode();

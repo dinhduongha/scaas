@@ -20,7 +20,7 @@ import {Catalogue} from "../helpers/Catalogue.sol";
 /// are the ghost. Every value op does work (`_ensureAcc` rolls over, wrap-shields or shields first), the surplus
 /// `collateral − supply` never drops except by a rate change (rounding against the holder), and the underlying paid
 /// out equals a ghost per leg (CTR-ZTH-22 a, review T5 I1). D19 (CTR-ZTH-51): the shielded value is public units in
-/// `SHIELD_POOL`: `totalSupply()` is unchanged by shield, transfer fees and unshield (wrap-shield mints and
+/// `SHIELD_POOL`: `totalSupply()` is unchanged by shield, transfer fees (multi-recipient `decoyFee` included) and unshield (wrap-shield mints and
 /// unshield-unwrap burns exactly the pool's share), `balanceOf(SHIELD_POOL) == totalShielded · S`, and
 /// `Σ balanceOf == totalSupply()`.
 contract ZetherHandler is ZetherFixture {
@@ -33,6 +33,7 @@ contract ZetherHandler is ZetherFixture {
     uint256 internal s0; // totalSupply before the op under test (storage: the stack is full)
     uint256[3] public feeUA; // public units the inner fee paid to each user's UA-ledger balance
     uint256 internal constant MAX = 1 << 30;
+    uint256 internal constant MIN_DECOY = 1;
 
     function init() external {
         _stack();
@@ -48,7 +49,7 @@ contract ZetherHandler is ZetherFixture {
         c.legs = new IFactoryToken.Leg[](2);
         c.legs[0] = IFactoryToken.Leg(address(leg[0]), 1, 1);
         c.legs[1] = IFactoryToken.Leg(address(leg[1]), 3, 7);
-        c.conf = IFactoryToken.ConfidentialConfig("", SCALE, MAX, FEE, 0, 0, 0);
+        c.conf = IFactoryToken.ConfidentialConfig("", SCALE, MAX, FEE, 0, 0, MIN_DECOY);
         w = UnderlyingZetherToken(payable(factory.createToken(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, abi.encode(c), "inv")));
         tok = ZetherLayer(address(w));
         _users();
@@ -147,6 +148,40 @@ contract ZetherHandler is ZetherFixture {
         acc[i] -= v + FEE;
         pend[j] += v;
         feeUA[k] += FEE * SCALE;
+    }
+
+    /// A multi-recipient transfer from `i` to both other users (`j` real, the other a decoy of 0), `decoyFee` `d` in
+    /// `[MIN_DECOY, 3]` paid to both legs and txFee to `k` (or none, `k % 4 == 3`), all from the pool to public
+    /// UA-ledger balances (owner ruling 4): the supply is unchanged.
+    function transferMultiDecoy(uint8 i, uint8 j, uint8 k, uint256 v, uint256 d) external noLoss {
+        (i, j) = (i % 3, j % 3);
+        if (i == j) j = (i + 1) % 3;
+        if (_pendingRate()) return;
+        _ensureAcc(i);
+        d = bound(d, MIN_DECOY, 3);
+        (ZetherTypes.UA ben, uint256 fee) = (k % 4 == 3 || k % 3 == i) ? (_none(), 0) : (us[k % 3].ua, FEE);
+        if (acc[i] <= fee + 2 * d) return;
+        v = bound(v, 1, acc[i] - fee - 2 * d);
+        _multiDecoy(i, j, v, d, ben);
+        acc[i] -= v + fee + 2 * d;
+        pend[j] += v;
+        if (fee != 0) feeUA[k % 3] += FEE * SCALE;
+    }
+
+    function _multiDecoy(uint256 i, uint256 j, uint256 v, uint256 d, ZetherTypes.UA ben) internal {
+        uint256 o = 3 - i - j; // the decoy leg
+        User[] memory to = new User[](2);
+        (to[0], to[1]) = (us[j], us[o]);
+        uint256[] memory vs = new uint256[](2);
+        vs[0] = v;
+        decoyFee = d;
+        Tx memory t = _proveMulti(tok, us[i], to, vs, acc[i], ben, ZetherTypes.TransferMode.BUNDLE);
+        decoyFee = 0;
+        s0 = w.totalSupply();
+        tok.mtxConfidentialTransfer(t.payload, t.proof, "", ZetherTypes.UA.unwrap(ben), "");
+        require(w.totalSupply() == s0, "fees do not change the supply");
+        feeUA[j] += d * SCALE;
+        feeUA[o] += d * SCALE;
     }
 
     /// @dev `k % 4 == 3`: no beneficiary; else user `k % 3` gets the inner fee in public units (D19) when `acc` covers it.
@@ -265,10 +300,10 @@ contract ZetherInvariantTest is Test {
         h = new ZetherHandler();
         h.init();
         targetContract(address(h));
-        bytes4[] memory sel = new bytes4[](9);
+        bytes4[] memory sel = new bytes4[](10);
         (sel[0], sel[1], sel[2], sel[3]) = (h.shield.selector, h.wrapShield.selector, h.rollOver.selector, h.transfer.selector);
         (sel[4], sel[5], sel[6], sel[7]) = (h.unshieldUnwrap.selector, h.unshieldPublic.selector, h.unwrap.selector, h.rate.selector);
-        sel[8] = h.transferFee.selector;
+        (sel[8], sel[9]) = (h.transferFee.selector, h.transferMultiDecoy.selector);
         targetSelector(FuzzSelector(address(h), sel));
     }
 

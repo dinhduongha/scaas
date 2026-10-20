@@ -51,10 +51,10 @@ abstract contract ZetherMultiSuite is ZetherFixture {
     function _bundlesOf(bytes memory payload) internal view returns (bytes memory b) {
         uint256 p = ver.g1EncodedBytes();
         uint256 m = uint256(bytes32(_cut(payload, 80, 32)));
-        bytes memory dOut = _cut(payload, 112 + p, p);
+        bytes memory dOut = _cut(payload, 144 + p, p);
         b = _cut(payload, 64, 16);
         for (uint256 j; j < m; ++j) {
-            uint256 o = 112 + 3 * p + 3 * p * j;
+            uint256 o = 144 + 3 * p + 3 * p * j;
             b = bytes.concat(b, _cut(payload, o, 2 * p), dOut, _cut(payload, o + 2 * p, p));
         }
     }
@@ -213,7 +213,7 @@ abstract contract ZetherMultiSuite is ZetherFixture {
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.AccountNotRegistered.selector, stranger[1].ua));
         tok.mtxConfidentialTransferCompact(d.payload, t.proof, "", bytes32(0), "");
         // tampered C_deb, C_out_2, C_aud_1
-        uint256[3] memory offs = [112 + 2 * p, 112 + 3 * p + 3 * p + p, 112 + 3 * p + 2 * p];
+        uint256[3] memory offs = [144 + 2 * p, 144 + 3 * p + 3 * p + p, 144 + 3 * p + 2 * p];
         for (uint256 i; i < 3; ++i) {
             bytes memory tampered = _replacePoint(t.payload, offs[i]);
             vm.expectRevert(IZetherToken.ProofRejected.selector);
@@ -249,8 +249,8 @@ abstract contract ZetherMultiSuite is ZetherFixture {
     {
         uint256 p = ver.g1EncodedBytes();
         bytes memory base = kind == ITransferDisclosure.OpeningKind.SENDER_CP
-            ? _cut(payload, 112 + 3 * p + 3 * p * j, p)
-            : _cut(payload, 112 + p, p);
+            ? _cut(payload, 144 + 3 * p + 3 * p * j, p)
+            : _cut(payload, 144 + p, p);
         return _cpOpening(tok, x, ref, j, amount, kind, base);
     }
 
@@ -370,7 +370,7 @@ abstract contract ZetherMultiSuite is ZetherFixture {
         Tx memory t = _proveMulti(tok, alice, _to(2), vs, 500, _none(), ZetherTypes.TransferMode.HASH);
         uint256 p = ver.g1EncodedBytes();
         bytes memory pl = bytes.concat(t.payload);
-        for (uint256 i; i < p; ++i) pl[112 + 5 * p + i] = 0; // C_aud_1 = O, C_aud_2 ≠ O
+        for (uint256 i; i < p; ++i) pl[144 + 5 * p + i] = 0; // C_aud_1 = O, C_aud_2 ≠ O
         vm.expectRevert(IZetherToken.AuditorLegsMixed.selector);
         tok.mtxConfidentialTransferCompact(pl, t.proof, "", bytes32(0), "");
         vm.expectRevert(IZetherToken.AuditorLegsMixed.selector);
@@ -384,7 +384,7 @@ abstract contract ZetherMultiSuite is ZetherFixture {
         uint256[] memory vs = new uint256[](1);
         vs[0] = 5;
         Tx memory t = _proveMulti(tok, alice, _to(1), vs, 500, _none(), ZetherTypes.TransferMode.HASH);
-        bytes memory pl = _replacePoint(t.payload, 112 + 5 * ver.g1EncodedBytes());
+        bytes memory pl = _replacePoint(t.payload, 144 + 5 * ver.g1EncodedBytes());
         vm.expectRevert(IZetherToken.AuditorForbidden.selector);
         tok.mtxConfidentialTransferCompact(pl, t.proof, "", bytes32(0), "");
         vm.expectRevert(IZetherToken.AuditorForbidden.selector);

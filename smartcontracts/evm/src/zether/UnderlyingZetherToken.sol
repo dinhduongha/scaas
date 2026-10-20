@@ -93,7 +93,7 @@ contract UnderlyingZetherToken is UnderlyingToken, ZetherLayer, IConfidentialUnd
         uint256 fee = ZetherLib.unshield(payload, proof, beneficiary, x.amount, x.recipient, _envUnwrap(x.underlying, x.minOut));
         uint256 wrapped = x.amount * ZetherLib.$().shieldScale;
         _poolMove(MetaTxLib.pad(MetaTxLib.SHIELD_POOL), bytes32(0), wrapped); // D19: burn from the pool
-        _payBeneficiary(beneficiary, fee);
+        _fromPool(beneficiary, fee);
         UnderlyingLib.payOutTo(i, x.recipient, wrapped, x.minOut);
     }
 

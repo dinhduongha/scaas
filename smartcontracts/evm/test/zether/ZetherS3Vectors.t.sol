@@ -100,6 +100,12 @@ contract ZetherS3VectorsTest is Test {
         assertEq(op, keccak256("SCAAS-ZETHER-OP-TRANSFER-MULTI-V1/HASH"));
         assertEq(psid, bls.proofSystemIdMulti());
         assertEq(bls.proofSystemIdMulti(), keccak256("scaas/zether/sigma-bullets/bls12-381/n64-n64/v2/multi"));
+        // the payload's decoyFee word (owner 2026-10-20) and the statement fee txFee + M · decoyFee (word 9)
+        bytes memory pl = j.readBytes(".payload");
+        uint256 d = j.readUint(".request.decoyFee");
+        assertEq(uint256(bytes32(_head(pl, 112))), d);
+        assertEq(uint256(bytes32(_head(pl, 80))), 3);
+        assertEq(uint256(bytes32(_head(j.readBytes(".statement"), 288))), j.readUint(".request.fee") + 3 * d);
         string memory k = vm.readFile(string.concat(DIR, "transfer_multi_noaud_bls12381.json"));
         (op,) = abi.decode(_head(k.readBytes(".statement"), 0), (bytes32, bytes32));
         assertEq(op, keccak256("SCAAS-ZETHER-OP-TRANSFER-MULTI-V1/NONE"));

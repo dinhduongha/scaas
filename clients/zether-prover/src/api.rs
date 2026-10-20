@@ -252,7 +252,9 @@ pub fn prove_transfer_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v
     Ok(out)
 }
 
-/// `recipients`: `[{"yTo", "amount"}, …]` (decoys with amount 0); `mode`, the stored form: `bundle` | `compact` |
+/// `recipients`: `[{"yTo", "amount"}, …]` (decoys with amount 0); `fee` the txFee (`confidentialFee` with a
+/// `beneficiary`), `decoyFee` the per-leg fee the token pays to every leg (default 0; `minDecoyFee`, the token's, checked
+/// when given): the statement's fee is `fee + M · decoyFee` (owner 2026-10-20); `mode`, the stored form: `bundle` | `compact` |
 /// `none`, by default the token's (`disclosureMode` `"bundle"`, the default: `bundle`; `"compact"`: `compact`, the only
 /// form it takes), so the calldata calls `mtxConfidentialTransfer` unless a gas-saving form is asked for. `yAud` absent or null leaves the auditor out (statement `Y_a = O`, every `C_aud = O`): required on a token
 /// without auditor, refused on a `FULL` one, the sender's choice on an `OPTIONAL` one (`auditorMode`, checked when
@@ -276,11 +278,15 @@ pub fn prove_transfer_multi_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens
         .map(|r| Ok((point::<C>(r, "yTo")?, num(r, "amount")?)))
         .collect::<R<Vec<_>>>()?;
     let y_aud = y_aud::<C>(v)?;
+    let d = opt_num(v, "decoyFee")?;
+    if d < opt_num(v, "minDecoyFee")? {
+        return Err("`decoyFee` below the token's `minDecoyFee` (DecoyFeeOutOfRange)".into());
+    }
     let (st, p, w) = zether::prove_transfer_multi(
-        gens, &k, h.clone(), mode, &recipients, y_aud, ct::<C>(v, "acc")?, num(v, "balance")?, rng,
+        gens, &k, h.clone(), d, mode, &recipients, y_aud, ct::<C>(v, "acc")?, num(v, "balance")?, rng,
     )
     .map_err(e)?;
-    let (stmt, proof, payload) = (st.encode(), p.encode(), st.payload(&w.memo));
+    let (stmt, proof, payload) = (st.encode(), p.encode(), st.payload(w.decoy_fee, &w.memo));
     let mut out = json!({
         "curve": C::NAME,
         "mode": mode.name(),
@@ -528,13 +534,13 @@ fn payload_record<C: ZCurve>(b: &[u8]) -> R<(Vec<u8>, Option<Vec<u8>>)> {
         return Ok((r, None));
     }
     let m = abi::word_u64(b, 80).ok_or("payload: M")? as usize;
-    let end = 112 + 3 * p * (1 + m);
+    let end = 144 + 3 * p * (1 + m); // … ‖ be32(M) ‖ be32(decoyFee) ‖ Y_f ‖ D_out ‖ C_deb ‖ legs
     if m == 0 || m > zether::MAX_RECIPIENTS || (b.len() != end && b.len() != end + zether::memo_len(m)) {
         return Err("payload: neither format".into());
     }
     for j in 0..m {
-        let o = 112 + 3 * p * (j + 1);
-        for at in [o, o + p, 112 + p, o + 2 * p] {
+        let o = 144 + 3 * p * (j + 1);
+        for at in [o, o + p, 144 + p, o + 2 * p] {
             r.extend_from_slice(cut(at));
         }
     }

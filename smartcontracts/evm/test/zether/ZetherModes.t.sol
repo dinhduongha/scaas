@@ -203,7 +203,7 @@ abstract contract ZetherModesSuite is ZetherFixture {
         _fund(tok, alice, 500);
         tok.mtxRollOver(ZetherTypes.UA.unwrap(alice.ua), 1);
         bytes memory pl = bytes.concat(_multiPayload(tok, alice, _two(), _vs(9), 7, tok.accountState(alice.ua)), _memo(2));
-        for (uint256 i; i < p; ++i) pl[112 + 5 * p + i] = 0; // leg 1: C_aud = O, leg 2 ≠ O
+        for (uint256 i; i < p; ++i) pl[144 + 5 * p + i] = 0; // leg 1: C_aud = O, leg 2 ≠ O
         vm.expectRevert(IZetherToken.AuditorRequired.selector);
         tok.mtxConfidentialTransferCompact(pl, "", "", bytes32(0), "");
         vm.expectRevert(IZetherToken.AuditorRequired.selector);
@@ -215,7 +215,7 @@ abstract contract ZetherModesSuite is ZetherFixture {
         audForce = true;
         pl = _multiPayload(tok, alice, _two(), _vs(9), 7, tok.accountState(alice.ua));
         audForce = false;
-        for (uint256 i; i < p; ++i) pl[112 + 5 * p + i] = 0;
+        for (uint256 i; i < p; ++i) pl[144 + 5 * p + i] = 0;
         vm.expectRevert(IZetherToken.AuditorForbidden.selector);
         tok.mtxConfidentialTransfer(pl, "", "", bytes32(0), "");
         vm.expectRevert(IZetherToken.AuditorForbidden.selector);

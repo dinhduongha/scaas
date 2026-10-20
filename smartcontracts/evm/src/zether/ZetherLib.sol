@@ -53,6 +53,8 @@ library ZetherLib {
         mapping(bytes32 => bytes32) entryHashes;
         /// @dev Next to every commitment: the sender memo (CTR-ZTH-50), as given.
         mapping(bytes32 => bytes) memos;
+        /// @dev The least per-leg `decoyFee` of a multi-recipient transfer (owner 2026-10-20), immutable.
+        uint256 minDecoyFee;
     }
 
     /// @notice The token's immutables a call needs, and the statement's binding: `(ZTX_V1_DIRECT, 0)` for a direct
@@ -78,6 +80,7 @@ library ZetherLib {
         bytes32 psid;
         uint256 p;
         uint256 fee;
+        uint256 minDecoyFee;
         uint256 maxShielded;
         bytes auditorKey;
         ZetherTypes.AuditorMode auditorMode;
@@ -101,13 +104,25 @@ library ZetherLib {
         ZetherTypes.UA from;
         ZetherTypes.UA beneficiary;
         bytes statement;
+        /// @dev The statement's public fee word: the inner fee (when a beneficiary is named), plus `M · decoyFee` on the
+        ///      multi-recipient format.
         uint256 fee;
+        /// @dev Multi-recipient only: the sender's per-leg `decoyFee` (payload word at 112).
+        uint256 decoyFee;
         uint64 sendCounter;
         /// @dev The payload's salt (CTR-ZTH-30, header word 13) and, on commit-reveal, `keccak256(memo)` (CTR-ZTH-50,
         ///      header word 14); both 0 for an unshield.
         bytes16 salt;
         bytes32 memoHash;
         ZetherTypes.UA[] to; // multi-recipient only
+    }
+
+    /// @notice What a multi-recipient debit moved out of `totalShielded` besides the transfers: `txFee` (the beneficiary's)
+    ///         and `decoyFee` for each of `legs`; the layer pays exactly that from `SHIELD_POOL` (as `PqzCore.Paid`).
+    struct Paid {
+        uint256 txFee;
+        uint256 decoyFee;
+        ZetherTypes.UA[] legs;
     }
 
     // keccak256(abi.encode(uint256(keccak256("scaas.zether")) - 1)) & ~bytes32(uint256(0xff))
@@ -128,9 +143,9 @@ library ZetherLib {
     bytes32 private constant TAG_SET_MODE = keccak256("ZETHER_SET_ROLLOVER_MODE_V1");
     uint256 private constant MAX_RECIPIENTS = 16;
     /// @dev Where the points start: the single payload after `accSeq ‖ sendCounter ‖ salt(16)`, the multi-recipient one
-    ///      after `… ‖ salt(16) ‖ be32(M)` (zether.md §9, §11).
+    ///      after `… ‖ salt(16) ‖ be32(M) ‖ be32(decoyFee)` (zether.md §9, §11).
     uint256 private constant S_PTS = 80;
-    uint256 private constant M_PTS = 112;
+    uint256 private constant M_PTS = 144;
     uint256 private constant MAX_TOTAL_SHIELDED = 1 << 54;
     /// @dev `2^n_v` (n_v = 64, CTR-ZTH-18): the bound of `confidentialFee`.
     uint256 private constant VALUE_BOUND = 1 << 64;
@@ -143,6 +158,8 @@ library ZetherLib {
 
     /// @notice The kind's `_init` (dev chains only, CTR-ZTH-02): `v` the release's transfer verifier (CTR-ZTH-20, running
     ///         on this chain: `VerifierUnsupportedOnThisChain`), scale, cap `≤ 2^54`, inner fee `< 2^64` and `< cap`,
+    ///         `minDecoyFee < 2^64` with `confidentialFee + 16 · minDecoyFee` `< 2^64` and `< cap` (16 legs at most; no
+    ///         chain-level floor, owner 2026-10-20),
     ///         auditor key empty or a valid point `≠ O` of the verifier's curve; `cap · scale` must not overflow;
     ///         `disclosureMode` BUNDLE or COMPACT (CTR-ZTH-48), `auditorMode` NONE without a key, FULL or OPTIONAL with
     ///         one (CTR-ZTH-49).
@@ -159,7 +176,9 @@ library ZetherLib {
         uint256 p = v.g1EncodedBytes();
         bytes memory aud = c.auditorKey;
         if (c.shieldScale == 0 || c.maxShielded == 0 || c.maxShielded > MAX_TOTAL_SHIELDED
-            || c.confidentialFee >= VALUE_BOUND || c.confidentialFee >= c.maxShielded || c.minDecoyFee != 0
+            || c.confidentialFee >= VALUE_BOUND || c.confidentialFee >= c.maxShielded || c.minDecoyFee >= VALUE_BOUND
+            || c.confidentialFee + MAX_RECIPIENTS * c.minDecoyFee >= VALUE_BOUND
+            || c.confidentialFee + MAX_RECIPIENTS * c.minDecoyFee >= c.maxShielded
             || (aud.length != 0 && (aud.length != p || !v.isValidPoint(aud) || _isO(aud)))) {
             revert IZetherToken.BadInit();
         }
@@ -176,6 +195,7 @@ library ZetherLib {
         s.shieldScale = c.shieldScale;
         s.maxShielded = c.maxShielded;
         s.confidentialFee = c.confidentialFee;
+        s.minDecoyFee = c.minDecoyFee;
         s.auditorKey = aud;
         s.psid = v.proofSystemId();
         s.p = p;
@@ -231,19 +251,20 @@ library ZetherLib {
             ZetherTypes.UA.unwrap(pp.beneficiary), pp.fee, pp.sendCounter, address(0));
     }
 
-    /// @notice `M` recipients, one proof (CTR-ZTH-37/38): `acc_f −= (C_deb + [fee]G, D_out)`, every
-    ///         `pend_tj += (C_out_j, D_out)`, `totalShielded -= fee` (the fee is paid in public units by the layer), `sendCounter_f++` once; the record by `mode` (the stored
-    ///         form, CTR-ZTH-38), which a `COMPACT` token allows only as HASH.
+    /// @notice `M` recipients, one proof (CTR-ZTH-37/38): `acc_f −= (C_deb + [fee]G, D_out)` with `fee = txFee + M ·
+    ///         decoyFee`, every `pend_tj += (C_out_j, D_out)`, `totalShielded -= fee`, `sendCounter_f++` once; the record by
+    ///         `mode` (the stored form, CTR-ZTH-38), which a `COMPACT` token allows only as HASH. Returns `Paid`: `txFee`
+    ///         to the beneficiary and `decoyFee` to each leg, decoys included (owner 2026-10-20).
     function transferMulti(
         bytes calldata payload,
         bytes calldata proof,
         ZetherTypes.UA beneficiary,
         ZetherTypes.TransferMode mode,
         Env memory e
-    ) public returns (bytes32, uint256) {
+    ) public returns (bytes32, Paid memory) {
         (Ctx memory c, Prepared memory pp) = _prepareMulti(payload, beneficiary, mode, e);
         _check(c, pp, proof, OP_MULTI_HASH);
-        return (_settleMulti(c, pp, payload, mode), pp.fee);
+        return (_settleMulti(c, pp, payload, mode), Paid(pp.fee - pp.to.length * pp.decoyFee, pp.decoyFee, pp.to));
     }
 
     function _prepareMulti(bytes calldata payload, ZetherTypes.UA beneficiary, ZetherTypes.TransferMode mode, Env memory e)
@@ -391,6 +412,7 @@ library ZetherLib {
         c.psid = s.psid;
         c.p = s.p;
         c.fee = s.confidentialFee;
+        c.minDecoyFee = s.minDecoyFee;
         c.maxShielded = s.maxShielded;
         c.auditorKey = s.auditorKey;
         c.auditorMode = s.auditorMode;
@@ -433,12 +455,13 @@ library ZetherLib {
         return ZetherTypes.toUA(payload[S_PTS:S_PTS + p]);
     }
 
-    /// @notice `be32(accSeq) ‖ be32(sendCounter) ‖ salt(16) ‖ be32(M) ‖ Y_f ‖ D_out ‖ C_deb ‖ (Y_tj ‖ C_out_j ‖ C_aud_j)_j`,
+    /// @notice `be32(accSeq) ‖ be32(sendCounter) ‖ salt(16) ‖ be32(M) ‖ be32(decoyFee) ‖ Y_f ‖ D_out ‖ C_deb ‖
+    ///         (Y_tj ‖ C_out_j ‖ C_aud_j)_j`,
     ///         then the sender memo (`17 + 40·M` bytes, CTR-ZTH-50) on commit-reveal only (checked by the form,
     ///         `prepareMulti`).
     function multiFrom(bytes calldata payload, uint256 p) internal pure returns (ZetherTypes.UA) {
         if (payload.length < M_PTS + 3 * p) revert IZetherToken.BadPayload(payload.length);
-        uint256 m = uint256(bytes32(payload[80:M_PTS]));
+        uint256 m = uint256(bytes32(payload[80:112]));
         if (m == 0 || m > MAX_RECIPIENTS) revert IZetherToken.BadRecipientCount(m);
         uint256 legsEnd = M_PTS + 3 * p * (1 + m);
         if (payload.length != legsEnd && payload.length != legsEnd + 17 + 40 * m) {
@@ -478,7 +501,9 @@ library ZetherLib {
     }
 
     /// @notice As `prepareSingle`, for `M` recipients: pairwise distinct, none the sender, all registered; a `COMPACT`
-    ///         token takes HASH only; the memo exactly on HASH, its clear salt the payload's, its hash in the header.
+    ///         token takes HASH only; the memo exactly on HASH, its clear salt the payload's, its hash in the header;
+    ///         `minDecoyFee ≤ decoyFee < 2^64` (`DecoyFeeOutOfRange`) and the header's fee word `txFee + M · decoyFee`
+    ///         `< 2^64`, so the proof binds the sender's `decoyFee` (no relation change: the fee is already public).
     function prepareMulti(
         Ctx memory c,
         Acct memory a,
@@ -492,9 +517,13 @@ library ZetherLib {
         uint256 p = c.p;
         pp.from = ZetherTypes.toUA(payload[M_PTS:M_PTS + p]);
         _requireRegistered(c, pp.from);
-        pp.to = _recipients(c, payload, pp.from, uint256(bytes32(payload[80:M_PTS])));
+        pp.to = _recipients(c, payload, pp.from, uint256(bytes32(payload[80:112])));
         pp.beneficiary = beneficiary;
-        pp.fee = _innerFee(c, beneficiary);
+        uint256 d = uint256(bytes32(payload[112:M_PTS]));
+        if (d < c.minDecoyFee || d >= VALUE_BOUND) revert IZetherToken.DecoyFeeOutOfRange(d, c.minDecoyFee);
+        pp.decoyFee = d;
+        pp.fee = _innerFee(c, beneficiary) + pp.to.length * d;
+        if (pp.fee >= VALUE_BOUND) revert IZetherToken.AmountOutOfRange(pp.fee, VALUE_BOUND);
         pp.sendCounter = _checkSeqs(a, payload);
         pp.salt = bytes16(payload[64:80]);
         bytes calldata memo = payload[M_PTS + 3 * p * (1 + pp.to.length):];
@@ -560,7 +589,7 @@ library ZetherLib {
             _header(c, op, c.ver.proofSystemIdMulti(), a, pp, 0, 0),
             payload[M_PTS:M_PTS + p], _auditorPoint(c, _audOff(payload, p, pp.to.length), pp.to.length), a.accC, a.accD
         );
-        head = bytes.concat(head, payload[M_PTS + p:M_PTS + 3 * p], payload[80:M_PTS]);
+        head = bytes.concat(head, payload[M_PTS + p:M_PTS + 3 * p], payload[80:112]);
         return bytes.concat(head, payload[M_PTS + 3 * p:M_PTS + 3 * p * (1 + pp.to.length)]);
     }
 

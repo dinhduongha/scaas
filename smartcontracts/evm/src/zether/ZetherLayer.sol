@@ -80,6 +80,7 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
     function shieldScale() external view returns (uint256) { return ZetherLib.$().shieldScale; }
     function maxDecryptableShielded() external view returns (uint256) { return ZetherLib.$().maxShielded; }
     function confidentialFee() external view returns (uint256) { return ZetherLib.$().confidentialFee; }
+    function minDecoyFee() external view returns (uint256) { return ZetherLib.$().minDecoyFee; }
     function auditorKey() external view returns (bytes memory) { return ZetherLib.$().auditorKey; }
     function auditorMode() external view returns (ZetherTypes.AuditorMode) { return ZetherLib.$().auditorMode; }
     function disclosureMode() external view returns (ZetherTypes.DisclosureMode) { return ZetherLib.$().disclosureMode; }
@@ -157,7 +158,7 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
         _noAuth(auth, accHint);
         ZetherTypes.UA ben = ZetherTypes.UA.wrap(beneficiary);
         (bytes32 ref, uint256 fee) = ZetherLib.transferSingle(payload, proof, ben, _env());
-        _payBeneficiary(ben, fee);
+        _fromPool(ben, fee);
         return ref;
     }
 
@@ -174,7 +175,7 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
         ZetherTypes.UA ben = ZetherTypes.UA.wrap(beneficiary);
         uint256 fee = ZetherLib.unshield(payload, proof, ben, amount, recipient, _env());
         _poolMove(MetaTxLib.pad(MetaTxLib.SHIELD_POOL), recipient, amount * ZetherLib.$().shieldScale);
-        _payBeneficiary(ben, fee);
+        _fromPool(ben, fee);
     }
 
     // ------------------------------------------------------------------ roll-over (not allowlisted, CTR-ZTH-34)
@@ -228,22 +229,24 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
         if (accHint.length != 0) revert AccHintNotEmpty();
     }
 
-    /// @dev The multi-recipient entry points by stored form `mode`.
+    /// @dev The multi-recipient entry points by stored form `mode`: the library's `txFee` to the beneficiary, then its
+    ///      `decoyFee` to EVERY leg, the real recipient included (owner 2026-10-20: uniform, so it reveals no decoy).
     function _multi(bytes calldata payload, bytes calldata proof, bytes calldata auth, bytes32 beneficiary,
         bytes calldata accHint, ZetherTypes.TransferMode mode) private returns (bytes32 ref)
     {
         _noAuth(auth, accHint);
         ZetherTypes.UA ben = ZetherTypes.UA.wrap(beneficiary);
-        uint256 fee;
-        (ref, fee) = ZetherLib.transferMulti(payload, proof, ben, mode, _env());
-        _payBeneficiary(ben, fee);
+        ZetherLib.Paid memory f;
+        (ref, f) = ZetherLib.transferMulti(payload, proof, ben, mode, _env());
+        _fromPool(ben, f.txFee);
+        if (f.decoyFee != 0) for (uint256 j; j < f.legs.length; ++j) _fromPool(f.legs[j], f.decoyFee);
     }
 
-    /// @dev The beneficiary fee (D19): `fee · shieldScale` public units (`fee` from the library: 0 without a beneficiary)
-    ///      from the pool to the beneficiary's public (UA-ledger) balance.
-    function _payBeneficiary(ZetherTypes.UA beneficiary, uint256 fee) internal {
+    /// @dev A fee the library took out of `totalShielded` (D19): `fee · shieldScale` public units (0: nothing) from the
+    ///      pool to the Zether UA's public (UA-ledger) balance: the beneficiary's inner fee, a leg's `decoyFee`.
+    function _fromPool(ZetherTypes.UA to, uint256 fee) internal {
         if (fee != 0) {
-            _poolMove(MetaTxLib.pad(MetaTxLib.SHIELD_POOL), ZetherTypes.UA.unwrap(beneficiary), fee * ZetherLib.$().shieldScale);
+            _poolMove(MetaTxLib.pad(MetaTxLib.SHIELD_POOL), ZetherTypes.UA.unwrap(to), fee * ZetherLib.$().shieldScale);
         }
     }
 

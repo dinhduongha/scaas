@@ -60,6 +60,10 @@ abstract contract ZetherFixture is Test {
     /// @dev The sender's salt (CTR-ZTH-30) of every transfer the fixture builds; the memo of a commit-reveal transfer
     ///      starts with it, the rest is filler here (the token never reads it, CTR-ZTH-50).
     bytes16 internal salt = bytes16(uint128(0x5A17));
+    /// @dev The per-leg `decoyFee` every multi-recipient payload the fixture builds carries (owner 2026-10-20), and the
+    ///      `minDecoyFee` of the tokens it creates.
+    uint256 internal decoyFee;
+    uint256 internal minDecoy;
     uint8 internal aMode = uint8(ZetherTypes.AuditorMode.OPTIONAL);
     /// @dev Public units the fixture created per token (`mint` or wrap): `totalSupply + totalShielded·SCALE` stays equal.
     mapping(address => uint256) internal minted;
@@ -127,7 +131,7 @@ abstract contract ZetherFixture is Test {
         c.roles.minter = address(this);
         c.conf = IFactoryToken.ConfidentialConfig(
             auditor ? ZetherKeys.pub(X_AUD, bls) : bytes(""), SCALE, maxShielded, FEE, dMode,
-            auditor ? aMode : 0, 0
+            auditor ? aMode : 0, minDecoy
         );
     }
 
@@ -259,6 +263,7 @@ abstract contract ZetherFixture is Test {
         r.payload = _multiPayload(t, from, to, vs, r.s, st);
         if (mode == ZetherTypes.TransferMode.HASH) r.payload = bytes.concat(r.payload, _memo(to.length));
         if (ZetherTypes.UA.unwrap(ben) != 0) b -= t.confidentialFee();
+        b -= to.length * decoyFee;
         r.proof = prover.proveTransferMulti(
             ver, stm.transferStatement(address(t), r.payload, ben, mode, binding), _multiWitness(from.x, r.s, vs, b)
         );
@@ -277,7 +282,8 @@ abstract contract ZetherFixture is Test {
         w = ZetherProver.MultiWitness(x, s, vs, bPrime, gv, 0x5678 + bPrime, keccak256(abi.encode(s)));
     }
 
-    /// @dev `be32(accSeq) ‖ be32(sendCounter) ‖ be32(M) ‖ Y_f ‖ D_out ‖ C_deb ‖ (Y_tj ‖ C_out_j ‖ C_aud_j)_j` (`salt(16)` after `sendCounter`); `_proveMulti` appends the memo on commit-reveal.
+    /// @dev `be32(accSeq) ‖ be32(sendCounter) ‖ salt(16) ‖ be32(M) ‖ be32(decoyFee) ‖ Y_f ‖ D_out ‖ C_deb ‖
+    ///      (Y_tj ‖ C_out_j ‖ C_aud_j)_j`; `_proveMulti` appends the memo on commit-reveal.
     function _multiPayload(
         ZetherLayer t,
         User memory from,
@@ -296,7 +302,8 @@ abstract contract ZetherFixture is Test {
         }
         (,bytes memory dOut, bytes memory cDeb,) = prover.ciphertexts(ver, from.y, from.y, aud, total, s);
         payload = bytes.concat(
-            abi.encode(uint256(st.accSeq), uint256(st.sendCounter)), salt, abi.encode(to.length), from.y, dOut, cDeb, legs
+            abi.encode(uint256(st.accSeq), uint256(st.sendCounter)), salt, abi.encode(to.length, decoyFee), from.y, dOut, cDeb,
+            legs
         );
     }
 

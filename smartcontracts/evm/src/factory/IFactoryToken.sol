@@ -67,8 +67,9 @@ interface IFactoryToken {
         uint256 confidentialFee;
         uint8 disclosureMode;
         uint8 auditorMode;
-        /// PQZ only (op 7, CTR-PQZ-25; owner 2026-10-20): the least `decoyFee` a sender may put in an op 7 payload; the
-        /// sender's `decoyFee` goes to every leg's public balance. Immutable; 0 allowed. Zether kinds: must be 0 (5h Task 3b).
+        /// Both layers (owner 2026-10-20): the least per-leg `decoyFee` a sender may put in a multi-recipient payload
+        /// (PQZ op 7, CTR-PQZ-25; Zether `mtxConfidentialTransfer*` multi); the sender's `decoyFee` goes to every leg's
+        /// public balance. Immutable; 0 allowed (the default).
         uint256 minDecoyFee;
     }
 
