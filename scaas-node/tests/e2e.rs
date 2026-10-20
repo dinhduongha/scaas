@@ -483,7 +483,7 @@ async fn drain(s: &mut Submitter, rx: &mut mpsc::Receiver<Work>) {
 
 alloy::sol! {
     struct DexConfig { address admin; uint32 relayerSharePpm; address treasury; bool listedOnly; }
-    function createDex(uint64 version, DexConfig cfg, bytes32 salt) external returns (address dex);
+    function createDex(uint64 version, bytes initArgs, bytes32 salt) external returns (address dex);
     function setMarket(address base, address quote, bool listed) external;
     function approve(address spender, uint256 value) external returns (bool);
     function mint(address to, uint256 value) external;
@@ -535,8 +535,8 @@ async fn dex_order_book_settles_partial_fills_persists_and_cancels() {
     let alice_b0 = balance(&rpc, token_b, alice.address()).await;
     send(&rpc, &deployer, token_b, IToken::transferCall { to: bob.address(), value: U256::from(500_000_000u64) }.abi_encode()).await;
     let treasury = Address::repeat_byte(0x7a);
-    let dex = create(&rpc, &deployer, factory, createDexCall { version: 1, cfg: DexConfig { admin: deployer.address(),
-        relayerSharePpm: 500_000, treasury, listedOnly: false }, salt: B256::repeat_byte(0xde) }.abi_encode()).await;
+    let dex = create(&rpc, &deployer, factory, createDexCall { version: 1, initArgs: DexConfig { admin: deployer.address(),
+        relayerSharePpm: 500_000, treasury, listedOnly: false }.abi_encode().into(), salt: B256::repeat_byte(0xde) }.abi_encode()).await;
     send(&rpc, &deployer, dex, setMarketCall { base: token_a, quote: token_b, listed: true }.abi_encode()).await;
     let usdc = deploy_outside_token(&rpc, &deployer).await;
     send(&rpc, &deployer, usdc, mintCall { to: dave.address(), value: U256::from(1_000_000_000u64) }.abi_encode()).await;
