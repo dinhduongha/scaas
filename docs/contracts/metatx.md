@@ -332,10 +332,10 @@ it. Nothing else is reachable through `mtxExecute`.
 | | `wrapToUA(address,uint256,bytes32)` (BUILT, UA-5a; [CTR-UA-28](accounts.md#CTR-UA-28)) | `ABSOLUTE` |
 | | `unwrapToUA(address,uint256,bytes32,uint256)` (BUILT, UA-5a; also on the UA allowlist) | `AMOUNT(1)` |
 | `NONE_ZETHER` / `UNDERLYING_ZETHER` (built, P3) | the kind's public entries (`burn`; or `UnderlyingToken`'s six, without `unwrap(uint256,address)`) | as above |
-| | `zetherShield(bytes,uint256)`, `zetherWrapShield(address,uint256,bytes32)` (`UNDERLYING_ZETHER`) | `ABSOLUTE` |
-| | `zetherTransfer`, `…Compact`, `…NoBundle`, `…Single` `(bytes,bytes,bytes32)`, `zetherUnshield(bytes,bytes,bytes32,address,uint256)`, `zetherUnshieldUnwrap` | `ABSOLUTE`; envelope binding through the ticket ([CTR-ZTH-34](zether.md#CTR-ZTH-34)) |
-| | `zetherUnshieldToUA`, `zetherUnshieldUnwrapToUA` (`UNDERLYING_ZETHER`) (SPECIFIED, UA-5c; [CTR-ZTH-51](zether.md#CTR-ZTH-51)) | `ABSOLUTE`; envelope binding as above |
-| `PqzToken` | `pqzTransfer(bytes,bytes,bytes[],bytes,bytes)`, `pqzUnshield(bytes,bytes,bytes[],uint256,address,bytes,bytes)`, `pqzShield(bytes32,uint256)`, `pqzRollOver(bytes32,bytes,bytes[])` | `ABSOLUTE`; not batchable ([CTR-PQZ-21](pq-zero-knowledge.md#CTR-PQZ-21)) |
+| | `mtxShield(bytes32,uint256)`, `mtxWrapShield(address,uint256,bytes32)` (`UNDERLYING_ZETHER`) | `ABSOLUTE` |
+| | `mtxConfidentialTransfer`, `…Compact`, `…NoBundle`, `…Single` `(bytes payload,bytes proof,bytes auth,bytes32 beneficiary,bytes accHint)`, `mtxUnshield(…, uint256 amount, bytes32 recipient)`, `mtxUnshieldUnwrap` (the shared signature of the 5h interface, [CTR-ZTH-45](zether.md#CTR-ZTH-45); Zether takes empty `auth` and `accHint`) | `ABSOLUTE`; envelope binding through the ticket ([CTR-ZTH-34](zether.md#CTR-ZTH-34)) |
+| | `mtxUnshield` / `mtxUnshieldUnwrap` with a derived-UA recipient (one selector each; the former `…ToUA` names are gone; SPECIFIED, plan 5h Task 3b, [CTR-ZTH-51](zether.md#CTR-ZTH-51)) | `ABSOLUTE`; envelope binding as above |
+| `PqzToken` | `mtxConfidentialTransfer`, `…Compact`, `…Single`, `…SingleCompact` `(bytes payload,bytes proof,bytes auth,bytes32 beneficiary,bytes accHint)`, `mtxUnshield(…, uint256 amount, bytes32 recipient)`, `mtxShield(bytes32,uint256)`, `mtxRollOver(bytes32,uint256)` (`UNDERLYING_PQZ`: also `mtxWrapShield`, `mtxUnshieldUnwrap`); `mtxPrepareAcc` is not allowlisted | `ABSOLUTE`; not batchable ([CTR-PQZ-21](pq-zero-knowledge.md#CTR-PQZ-21)) |
 | `MandateWallet` | delegate: `payUnderMandate(address,address,uint256,bytes32,uint64)`, `revoke(address,uint64)`; owner: `setMandate`, `setPayee`, `revoke(address)`, `execute` ([CTR-ACC-06](mandates.md#CTR-ACC-06)) | fee `NONE` only |
 | `SmartKeyAccount` | `addKey`, `removeKey`, `rotateKey`, `setGuardian`, `cancelRecovery`, `execute`, signed by the account itself ([CTR-ACC-10](accounts.md#CTR-ACC-10)) | fee `NONE` only |
 
@@ -347,7 +347,7 @@ second digest and no `minOut`). **Never allowlisted:**
 `cancelRate`, `executeRate`, `disableWrap` (role holders act through their own
 contract, [NODE-JOB-01](../node/job-api.md#NODE-JOB-01); a signature check would skip a minter contract's caps or a
 Safe's guards; the holder still acts gaslessly through its own contract account, [CTR-UA-27](accounts.md#CTR-UA-27)); `transfer` and `pay` (they are `MetaTransfer`s); `payWithFee` and `payWithFeeToUA` (they charge their own fee); `mtxExecute`, its alias and every other `mtx…` entry
-(no nesting); `initialize`; views; Zether `zetherRollOverSigned`/`zetherSetRollOverMode` (they carry their
+(no nesting); `initialize`; views; Zether `mtxRollOverSigned`/`mtxSetRollOverMode` (they carry their
 own signature). For selectors with dynamic arguments (Zether) the contract cannot cheaply pin one encoding: the node
 re-encodes the decoded arguments and refuses non-canonical `data` before it computes the mesh `intent_id`; a
 non-canonical duplicate on chain is harmless, because only the signer can produce one (`data` is signed) and the
@@ -579,7 +579,7 @@ signed, not the entry point, and stay. Non-EVM families follow the same rule in 
 | tokens | + `mtxExecuteWithFee`, `mtxExecuteTransfer`, `mtxBatchTransfer`, `mtxTransfer`, `mtxTransferWithFee`, `mtxPay`, `mtxPayReceiverFee`; views `mtxTransferDigest`, `payLane` |
 | tokens (trade) | `mtxTrade`, `mtxCancelOrder`, `mtxInvalidateNonces` ([dex.md](dex.md#CTR-DEX-15)) |
 | wrappers, `UNDERLYING_ZETHER` (built on `UnderlyingToken`, inherited in P3) | `mtxWrap` ([CTR-TOK-20](token-wrappers.md#CTR-TOK-20)) |
-| `NONE_ZETHER` / `UNDERLYING_ZETHER` (built, P3) | `zetherRollOverSigned`, `zetherSetRollOverMode` ([CTR-ZTH-16](zether.md#CTR-ZTH-16)) |
+| `NONE_ZETHER` / `UNDERLYING_ZETHER` (built, P3) | `mtxRollOverSigned`, `mtxSetRollOverMode` ([CTR-ZTH-16](zether.md#CTR-ZTH-16)) |
 | `MandateWallet` | + `mtxPayUnderMandate`, `mtxRevoke`, `mtxExecuteAsOwner`, named builders of a `MetaTransaction` ([mandates.md](mandates.md#mandatewallet)) |
 | `SmartKeyAccount` | + `mtxExecuteAsOwner`, named builder of a `MetaTransaction` ([CTR-ACC-10](accounts.md#CTR-ACC-10)) |
 | `SCaaSDex` | `mtxSettle`, `mtxCancelOrders`, `mtxInvalidateNonces` ([dex.md](dex.md#CTR-DEX-16)) |
