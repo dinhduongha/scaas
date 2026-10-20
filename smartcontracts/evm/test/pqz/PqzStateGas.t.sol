@@ -5,6 +5,7 @@ import {console2} from "forge-std/Test.sol";
 import {PqzSlots} from "./PqzState.t.sol";
 import {PqzCt} from "../../src/pqz/PqzCt.sol";
 import {PqzCore} from "../../src/pqz/PqzCore.sol";
+import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 
 /// Plan 5h Task 2 gas (Review Focus 5, 6; spec §5.3 / §5.4) on the real token: `ROLL_MAX` and the `mtxPrepareAcc` halves
 /// pinned under `0.75 · 2^24`, the shield (append, merge) and the per-op table. Each test is one transaction after
@@ -108,6 +109,19 @@ contract PqzStatePinGasTest is PqzSlots {
             assembly ("memory-safe") { w := mload(add(add(acc, 32), o)) }
             assertEq(w, want);
         }
+    }
+
+    /// The same `ROLL_MAX` rollover relayed through `mtxExecute` (fee 0, an unfunded signer, own transaction).
+    function test_gas_rollMax_relayed() public {
+        uint256 key = 0xA11CE;
+        MetaTxLib.MetaTransaction memory m;
+        m.from = vm.addr(key);
+        m.data = abi.encodeCall(tok.mtxRollOver, (alice, PqzCore.ROLL_MAX));
+        m.validUntil = block.timestamp + 1 hours;
+        (uint8 v, bytes32 r, bytes32 s) = vm.sign(key, tok.mtxDigest(m));
+        uint256 g = _gas(abi.encodeWithSignature("mtxExecute((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)", m, abi.encodePacked(r, s, v)));
+        _log("relayed mtxRollOver ROLL_MAX = 256 (mtxExecute, fee 0)", g);
+        assertLe(g, CAP, "relayed ROLL_MAX under 0.75 * 2^24");
     }
 
     function test_gas_roll128() public {

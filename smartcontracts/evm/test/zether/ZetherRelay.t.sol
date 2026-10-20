@@ -190,15 +190,18 @@ contract ZetherRelayTest is ZetherFixture {
     function test_everyListedSelectorRuns() public {
         _public(tok, payer, 3 * SCALE);
         (bytes4[] memory s,,) = tok.mtxSelectors();
-        assertEq(s.length, 8);
+        assertEq(s.length, 12);
         uint256 bal = 500;
         for (uint256 i; i < s.length; ++i) {
+            // the owner-signed pair has its own relayed tests (ZetherUA5c)
+            if (s[i] == ZetherLayer.mtxRollOverSigned.selector || s[i] == ZetherLayer.mtxSetRollOverMode.selector) continue;
             MetaTxLib.MetaTransaction memory m = _mt("", 200 + i, RR, 0);
             if (s[i] == IMetaTx.cancelNonce.selector) m.data = abi.encodeCall(IMetaTx.cancelNonce, (55));
             else if (s[i] == NoUnderlyingToken.burn.selector) m.data = abi.encodeCall(NoUnderlyingToken.burn, (7));
             else {
                 m.data = _zetherOpCall(s[i], bal, tok.envelopeBinding(m));
-                if (s[i] != ZetherLayer.mtxShield.selector) bal -= 10;
+                if (s[i] != ZetherLayer.mtxShield.selector && s[i] != ZetherLayer.mtxRollOver.selector
+                    && s[i] != ZetherLayer.mtxRollOverBatch.selector) bal -= 10;
             }
             _exec(m, _sign(PAYER_PK, m));
         }
@@ -261,14 +264,15 @@ contract ZetherRelayTest is ZetherFixture {
     /// CTR-MTX-19: the published allowlist; the roll-over functions, `mint` and the trade entries are refused.
     function test_allowlistPinned() public {
         (bytes4[] memory s, uint8[] memory c, uint8[] memory a) = tok.mtxSelectors();
-        bytes4[8] memory want = [
+        bytes4[12] memory want = [
             IMetaTx.cancelNonce.selector, NoUnderlyingToken.burn.selector, ZetherLayer.mtxShield.selector,
             ZetherLayer.mtxConfidentialTransfer.selector, ZetherLayer.mtxConfidentialTransferCompact.selector,
             ZetherLayer.mtxConfidentialTransferNoBundle.selector, ZetherLayer.mtxConfidentialTransferSingle.selector,
-            ZetherLayer.mtxUnshield.selector
+            ZetherLayer.mtxUnshield.selector, ZetherLayer.mtxRollOver.selector, ZetherLayer.mtxRollOverBatch.selector,
+            ZetherLayer.mtxRollOverSigned.selector, ZetherLayer.mtxSetRollOverMode.selector
         ];
-        assertEq(s.length, 8);
-        for (uint256 i; i < 8; ++i) {
+        assertEq(s.length, 12);
+        for (uint256 i; i < 12; ++i) {
             assertEq(s[i], want[i]);
             assertEq(c[i], i == 1 ? 2 : 1, "burn AMOUNT, the rest ABSOLUTE");
             assertEq(a[i], 0);
@@ -278,10 +282,7 @@ contract ZetherRelayTest is ZetherFixture {
         assertEq(bytes4(keccak256("mtxConfidentialTransferCompact(bytes,bytes,bytes,bytes32,bytes)")), ZetherLayer.mtxConfidentialTransferCompact.selector);
         assertEq(bytes4(keccak256("mtxUnshield(bytes,bytes,bytes,bytes32,bytes,uint256,bytes32)")),
             ZetherLayer.mtxUnshield.selector);
-        bytes[4] memory refused = [
-            abi.encodeCall(ZetherLayer.mtxRollOver, (ZetherTypes.UA.unwrap(alice.ua), 1)),
-            abi.encodeCall(ZetherLayer.mtxRollOverSigned, (alice.ua, 1, 1, bytes(""))),
-            abi.encodeCall(ZetherLayer.mtxSetRollOverMode, (alice.ua, ZetherTypes.RollOverMode.PUBLIC, 1, bytes(""))),
+        bytes[1] memory refused = [
             abi.encodeCall(NoUnderlyingToken.mint, (payer, 1))
         ];
         for (uint256 i; i < refused.length; ++i) {

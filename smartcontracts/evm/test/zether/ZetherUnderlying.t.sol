@@ -531,7 +531,7 @@ contract ZetherUnderlyingTest is ZetherFixture {
 
     function test_allowlistPinned_underlyingZether() public {
         (bytes4[] memory s, uint8[] memory c, uint8[] memory a) = w.mtxSelectors();
-        assertEq(s.length, 16);
+        assertEq(s.length, 20);
         assertEq(s[12], UnderlyingZetherToken.mtxWrapShield.selector);
         assertEq(s[13], UnderlyingZetherToken.mtxUnshieldUnwrap.selector);
         assertEq(s[14], UnderlyingToken.wrapToUA.selector);
@@ -546,6 +546,14 @@ contract ZetherUnderlyingTest is ZetherFixture {
         assertEq(s[9], ZetherLayer.mtxConfidentialTransferNoBundle.selector);
         assertEq(s[10], ZetherLayer.mtxConfidentialTransferSingle.selector);
         assertEq(s[11], ZetherLayer.mtxUnshield.selector);
+        assertEq(s[16], ZetherLayer.mtxRollOver.selector);
+        assertEq(s[17], ZetherLayer.mtxRollOverBatch.selector);
+        assertEq(s[18], ZetherLayer.mtxRollOverSigned.selector);
+        assertEq(s[19], ZetherLayer.mtxSetRollOverMode.selector);
+        for (uint256 i = 16; i < 20; ++i) {
+            assertEq(c[i], 1, "roll-overs ABSOLUTE");
+            assertEq(a[i], 0);
+        }
         for (uint256 i = 6; i < 14; ++i) {
             assertEq(c[i], 1, "ABSOLUTE");
             assertEq(a[i], 0);
@@ -580,15 +588,12 @@ contract ZetherUnderlyingTest is ZetherFixture {
 
     /// K6 and CTR-MTX-19 on kind 3 (review T5 m2): `_mtxRule` refuses these inside `mtxExecute`, not only the view.
     function test_allowlistRefusals_underlyingZether() public {
-        bytes[9] memory refused = [
+        bytes[6] memory refused = [
             abi.encodeWithSignature("unwrap(uint256,address)", 1, payer),
             abi.encodeWithSignature("proposeRate(address,uint96,uint96)", address(usd), 1, 1),
             abi.encodeWithSignature("cancelRate()"),
             abi.encodeWithSignature("executeRate()"),
             abi.encodeWithSignature("disableWrap(address,bytes32)", address(usd), bytes32(0)),
-            abi.encodeCall(ZetherLayer.mtxRollOver, (ZetherTypes.UA.unwrap(alice.ua), 1)),
-            abi.encodeCall(ZetherLayer.mtxRollOverSigned, (alice.ua, 1, 1, bytes(""))),
-            abi.encodeCall(ZetherLayer.mtxSetRollOverMode, (alice.ua, ZetherTypes.RollOverMode.PUBLIC, 1, bytes(""))),
             abi.encodeWithSelector(IUnderlyingToken.mtxWrap.selector)
         ];
         for (uint256 i; i < refused.length; ++i) {
@@ -634,10 +639,12 @@ contract ZetherUnderlyingTest is ZetherFixture {
         vm.prank(payer);
         usd.approve(address(w), type(uint256).max);
         (bytes4[] memory s,,) = w.mtxSelectors();
-        assertEq(s.length, 16);
+        assertEq(s.length, 20);
         signer = _signingUA();
         uint256 bal = 70;
         for (uint256 i; i < s.length; ++i) {
+            // the owner-signed pair has its own relayed tests (ZetherUA5c)
+            if (s[i] == ZetherLayer.mtxRollOverSigned.selector || s[i] == ZetherLayer.mtxSetRollOverMode.selector) continue;
             bytes memory data = _k3Call(s[i], bal, w.envelopeBinding(_envOf(300 + i)));
             uint256 sc = w.accountState(alice.ua).sendCounter;
             bool single = s[i] == bytes4(keccak256("wrap(uint256)")) || s[i] == bytes4(keccak256("unwrap(uint256,address,uint256)"));
@@ -733,7 +740,7 @@ contract ZetherUnderlyingTest is ZetherFixture {
     }
 
     /// UA-5c (a): `mtxUnshieldUnwrap` is on the UA allowlist (its statement carries the UA envelope binding);
-    /// `mtxWrapShield` and the rollovers are not (a UA wrap-shields by `uaWrap` then `mtxShield`).
+    /// `mtxWrapShield` is not, the rollovers are (a UA wrap-shields by `uaWrap` then `mtxShield`).
     function test_uaAllowlist_underlyingZether() public {
         _shielded(30, 0);
         bytes32 b = ZetherTypes.UA.unwrap(bob.ua);
@@ -748,18 +755,19 @@ contract ZetherUnderlyingTest is ZetherFixture {
         vm.prank(relayer);
         w.uaExecute(m, au);
         assertEq(usd.balanceOf(address(0xD00D)), 10 * SCALE);
-        bytes[2] memory off = [
-            abi.encodeCall(UnderlyingZetherToken.mtxWrapShield, (address(usd), SCALE, b)),
-            abi.encodeCall(ZetherLayer.mtxRollOver, (b, 1))
-        ];
-        for (uint256 i; i < off.length; ++i) {
-            m.data = off[i];
-            m.nonce = w.uaNonce(b, 1);
-            bytes memory auth = _bobAuth(m);
-            vm.prank(relayer);
-            vm.expectRevert(abi.encodeWithSelector(IUALedger.MetaTxUnknownOp.selector, bytes4(off[i])));
-            w.uaExecute(m, auth);
-        }
+        bytes memory off = abi.encodeCall(UnderlyingZetherToken.mtxWrapShield, (address(usd), SCALE, b));
+        m.data = off;
+        m.nonce = w.uaNonce(b, 1);
+        bytes memory auth = _bobAuth(m);
+        vm.prank(relayer);
+        vm.expectRevert(abi.encodeWithSelector(IUALedger.MetaTxUnknownOp.selector, bytes4(off)));
+        w.uaExecute(m, auth);
+        // the roll-over is on the UA allowlist of the kind (owner 2026-10-20), fee 0
+        m.data = abi.encodeCall(ZetherLayer.mtxRollOver, (b, 1));
+        m.nonce = w.uaNonce(b, 1);
+        auth = _bobAuth(m);
+        vm.prank(relayer);
+        w.uaExecute(m, auth);
     }
 
     function _bobAuth(MetaTxLib.UAMetaTransaction memory m) internal view returns (bytes memory) {

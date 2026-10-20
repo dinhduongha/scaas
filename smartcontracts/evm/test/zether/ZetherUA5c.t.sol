@@ -239,19 +239,97 @@ contract ZetherUA5cTest is ZetherFixture {
         assertTrue(_holds(tok, alice, 505, true));
     }
 
-    /// The UA allowlist of `NONE_ZETHER`: the six Zether ops and `burn`; the rollovers are not on it (CTR-ZTH-34).
-    function test_uaAllowlist_rolloversOff() public {
-        bytes[3] memory off = [
-            abi.encodeCall(ZetherLayer.mtxRollOver, (_id(bob), 1)),
-            abi.encodeCall(ZetherLayer.mtxRollOverSigned, (bob.ua, 1, 1, bytes(""))),
-            abi.encodeCall(ZetherLayer.mtxSetRollOverMode, (bob.ua, ZetherTypes.RollOverMode.PUBLIC, 1, bytes("")))
-        ];
-        for (uint256 i; i < off.length; ++i) {
-            MetaTxLib.UAMetaTransaction memory m = _uam(bob, off[i]);
-            bytes memory auth = _uaAuth(bob, m);
-            vm.prank(relayer);
-            vm.expectRevert(abi.encodeWithSelector(IUALedger.MetaTxUnknownOp.selector, bytes4(off[i])));
-            tok.uaExecute(m, auth);
-        }
+    // ------------------------------------------------------------------ relayed roll-overs (owner 2026-10-20)
+
+    function _relayAddr(bytes memory data, uint256 fee) internal {
+        MetaTxLib.MetaTransaction memory m = _mt(data);
+        m.fee = fee;
+        m.mode = fee == 0 ? RR : RR | FIX;
+        bytes memory sig = _sign(m);
+        vm.prank(relayer);
+        tok.mtxExecute(m, sig);
+    }
+
+    function _relayUA(User memory u, bytes memory data, uint256 fee) internal {
+        MetaTxLib.UAMetaTransaction memory m = _uam(u, data);
+        m.fee = fee;
+        m.mode = fee == 0 ? RR : RR | FIX;
+        bytes memory au = _uaAuth(u, m);
+        vm.prank(relayer);
+        tok.uaExecute(m, au);
+    }
+
+    function _modeSig(User memory u, ZetherTypes.RollOverMode mode, uint64 nonce, uint64 until) internal view returns (bytes memory) {
+        return _ownerAuth(u, keccak256(bytes.concat(
+            abi.encode(keccak256("ZETHER_SET_ROLLOVER_MODE_V1"), block.chainid, ZUID, address(tok)),
+            abi.encode(u.ua, uint8(mode), nonce, until))));
+    }
+
+    function _rollSig(User memory u, uint64 accSeq, uint64 pendSeq, uint64 until) internal view returns (bytes memory) {
+        return _ownerAuth(u, keccak256(bytes.concat(
+            abi.encode(keccak256("ZETHER_ROLLOVER_V1"), block.chainid, ZUID, address(tok)),
+            abi.encode(u.ua, accSeq, pendSeq, until))));
+    }
+
+    /// `mtxRollOver` / `mtxRollOverBatch` through the address envelope: fee 0 and fee 3 (signer to relayer).
+    function test_relayedRollOver_addressEnvelope() public {
+        _fund(tok, alice, 5);
+        uint64 s = tok.accountState(alice.ua).accSeq;
+        _relayAddr(abi.encodeCall(ZetherLayer.mtxRollOver, (_id(alice), 1)), 0);
+        assertEq(tok.accountState(alice.ua).accSeq, s + 1, "rolled");
+        assertEq(tok.balanceOf(relayer), 0, "fee 0");
+        assertEq(tok.balanceOf(payer), 1000);
+        _fund(tok, alice, 5);
+        ZetherTypes.UA[] memory b = new ZetherTypes.UA[](1);
+        b[0] = alice.ua;
+        _relayAddr(abi.encodeCall(ZetherLayer.mtxRollOverBatch, (b)), 3);
+        assertEq(tok.accountState(alice.ua).accSeq, s + 2, "batch rolled");
+        assertEq(tok.balanceOf(relayer), 3, "fee to the relayer");
+        assertEq(tok.balanceOf(payer), 997, "from the signer");
+    }
+
+    /// The same through the UA envelope (bob's UA balance pays the fee).
+    function test_relayedRollOver_uaEnvelope() public {
+        _fund(tok, alice, 5);
+        uint64 s = tok.accountState(alice.ua).accSeq;
+        _relayUA(bob, abi.encodeCall(ZetherLayer.mtxRollOver, (_id(alice), 1)), 0);
+        assertEq(tok.accountState(alice.ua).accSeq, s + 1);
+        assertEq(tok.balanceOfUA(_id(bob)), 10, "fee 0");
+        _fund(tok, alice, 5);
+        ZetherTypes.UA[] memory b = new ZetherTypes.UA[](1);
+        b[0] = alice.ua;
+        _relayUA(bob, abi.encodeCall(ZetherLayer.mtxRollOverBatch, (b)), 3);
+        assertEq(tok.accountState(alice.ua).accSeq, s + 2);
+        assertEq(tok.balanceOf(relayer), 3);
+        assertEq(tok.balanceOfUA(_id(bob)), 7);
+    }
+
+    /// The owner-signed pair relayed: the owner's own signature is still checked inside (a bad one reverts).
+    function test_relayedSignedRollOver_bothEnvelopes() public {
+        uint64 until = uint64(block.number + 50);
+        _relayAddr(abi.encodeCall(ZetherLayer.mtxSetRollOverMode,
+            (alice.ua, ZetherTypes.RollOverMode.OWNER_ONLY, until, _modeSig(alice, ZetherTypes.RollOverMode.OWNER_ONLY, 0, until))), 0);
+        assertTrue(tok.accountState(alice.ua).mode == ZetherTypes.RollOverMode.OWNER_ONLY, "mode set via the relayer");
+        _fund(tok, alice, 5);
+        uint64 acc = tok.accountState(alice.ua).accSeq;
+        uint64 pend = tok.accountState(alice.ua).pendingSeq;
+        MetaTxLib.MetaTransaction memory m = _mt(abi.encodeCall(ZetherLayer.mtxRollOverSigned, (alice.ua, pend, until, bytes("bad"))));
+        bytes memory sig = _sign(m);
+        vm.prank(relayer);
+        vm.expectRevert();
+        tok.mtxExecute(m, sig);
+        _relayAddr(abi.encodeCall(ZetherLayer.mtxRollOverSigned, (alice.ua, pend, until, _rollSig(alice, acc, pend, until))), 3);
+        assertEq(tok.accountState(alice.ua).accSeq, acc + 1, "owner roll-over via the address envelope");
+        assertEq(tok.balanceOf(relayer), 3);
+        // the UA envelope
+        _fund(tok, alice, 5);
+        acc = tok.accountState(alice.ua).accSeq;
+        pend = tok.accountState(alice.ua).pendingSeq;
+        _relayUA(bob, abi.encodeCall(ZetherLayer.mtxRollOverSigned, (alice.ua, pend, until, _rollSig(alice, acc, pend, until))), 0);
+        assertEq(tok.accountState(alice.ua).accSeq, acc + 1, "owner roll-over via the UA envelope");
+        _relayUA(bob, abi.encodeCall(ZetherLayer.mtxSetRollOverMode,
+            (alice.ua, ZetherTypes.RollOverMode.PUBLIC, until, _modeSig(alice, ZetherTypes.RollOverMode.PUBLIC, 1, until))), 3);
+        assertTrue(tok.accountState(alice.ua).mode == ZetherTypes.RollOverMode.PUBLIC, "mode set via the UA envelope");
+        assertEq(tok.balanceOfUA(_id(bob)), 7);
     }
 }

@@ -339,6 +339,12 @@ abstract contract ZetherFixture is Test {
     ///      10 from alice's acc balance `bal` (to bob, or unshielded to 0xB0C). Used to relay every listed selector once.
     function _zetherOpCall(bytes4 sel, uint256 bal, bytes32 b) internal view returns (bytes memory) {
         if (sel == ZetherLayer.mtxShield.selector) return abi.encodeCall(ZetherLayer.mtxShield, (ZetherTypes.UA.unwrap(bob.ua), 3));
+        if (sel == ZetherLayer.mtxRollOver.selector) return abi.encodeCall(ZetherLayer.mtxRollOver, (ZetherTypes.UA.unwrap(alice.ua), 1));
+        if (sel == ZetherLayer.mtxRollOverBatch.selector) {
+            ZetherTypes.UA[] memory one = new ZetherTypes.UA[](1);
+            one[0] = alice.ua;
+            return abi.encodeCall(ZetherLayer.mtxRollOverBatch, (one));
+        }
         if (sel == ZetherLayer.mtxUnshield.selector) {
             (bytes memory pl, bytes memory pr) = _proveUnshield(tok, alice, 10, bal, address(0xB0C), _none(), b);
             return abi.encodeCall(ZetherLayer.mtxUnshield, (pl, pr, bytes(""), bytes32(0), bytes(""), 10, bytes32(uint256(uint160(address(0xB0C))))));

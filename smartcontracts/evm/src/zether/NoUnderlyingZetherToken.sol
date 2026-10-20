@@ -59,9 +59,9 @@ contract NoUnderlyingZetherToken is NoUnderlyingToken, ZetherLayer {
         public pure override(NoUnderlyingToken, IMetaTx, MetaTxBase)
         returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
     {
-        s = new bytes4[](8);
-        c = new uint8[](8);
-        a = new uint8[](8);
+        s = new bytes4[](12);
+        c = new uint8[](12);
+        a = new uint8[](12);
         (s[0], c[0]) = (this.cancelNonce.selector, FEE_CLASS_ABSOLUTE);
         (s[1], c[1]) = (this.burn.selector, FEE_CLASS_AMOUNT);
         (s[2], c[2]) = (this.mtxShield.selector, FEE_CLASS_ABSOLUTE);
@@ -70,6 +70,10 @@ contract NoUnderlyingZetherToken is NoUnderlyingToken, ZetherLayer {
         (s[5], c[5]) = (this.mtxConfidentialTransferNoBundle.selector, FEE_CLASS_ABSOLUTE);
         (s[6], c[6]) = (this.mtxConfidentialTransferSingle.selector, FEE_CLASS_ABSOLUTE);
         (s[7], c[7]) = (this.mtxUnshield.selector, FEE_CLASS_ABSOLUTE);
+        (s[8], c[8]) = (this.mtxRollOver.selector, FEE_CLASS_ABSOLUTE);
+        (s[9], c[9]) = (this.mtxRollOverBatch.selector, FEE_CLASS_ABSOLUTE);
+        (s[10], c[10]) = (this.mtxRollOverSigned.selector, FEE_CLASS_ABSOLUTE);
+        (s[11], c[11]) = (this.mtxSetRollOverMode.selector, FEE_CLASS_ABSOLUTE);
     }
 
     function _mtxRule(bytes4 sel) internal view override(NoUnderlyingToken, MetaTxBase) returns (MtxRule memory) {

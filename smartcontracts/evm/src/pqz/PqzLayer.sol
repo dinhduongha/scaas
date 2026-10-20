@@ -320,21 +320,22 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
             m.nonce, m.validUntil, m.mode, r, m.fee, f));
     }
 
-    /// @dev The PQZ ops of both kinds (CTR-PQZ-21): allowlisted `ABSOLUTE` on both paths, never batched; not the
-    ///      rollover or `mtxPrepareAcc` (anyone calls them directly, CTR-ZTH-34).
+    /// @dev The PQZ ops of both kinds (CTR-PQZ-21): allowlisted `ABSOLUTE` on both paths, never batched; includes the
+    ///      permissionless `mtxRollOver` / `mtxPrepareAcc` (relayed, owner 2026-10-20; the fee may be 0).
     function _isPqzOp(bytes4 sel) internal pure virtual returns (bool) {
         return sel == this.mtxShield.selector || sel == this.mtxConfidentialTransfer.selector
             || sel == this.mtxConfidentialTransferCompact.selector
             || sel == this.mtxConfidentialTransferSingle.selector
-            || sel == this.mtxConfidentialTransferSingleCompact.selector || sel == this.mtxUnshield.selector;
+            || sel == this.mtxConfidentialTransferSingleCompact.selector || sel == this.mtxUnshield.selector
+            || sel == this.mtxRollOver.selector || sel == this.mtxPrepareAcc.selector;
     }
 
     function _batchable(bytes4 sel) internal view virtual override returns (bool) {
         return !_isPqzOp(sel);
     }
 
-    /// @dev `mtxShield` has a static shape (68 bytes); the others carry `bytes`.
+    /// @dev `mtxShield`, `mtxRollOver`, `mtxPrepareAcc` have a static shape (68 bytes); the others carry `bytes`.
     function _pqzRule(bytes4 sel) internal pure returns (MtxRule memory) {
-        return MtxRule(FEE_CLASS_ABSOLUTE, 0, sel == this.mtxShield.selector ? 68 : 0);
+        return MtxRule(FEE_CLASS_ABSOLUTE, 0, (sel == this.mtxShield.selector || sel == this.mtxRollOver.selector || sel == this.mtxPrepareAcc.selector) ? 68 : 0);
     }
 }

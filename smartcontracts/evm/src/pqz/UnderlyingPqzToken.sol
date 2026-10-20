@@ -136,15 +136,15 @@ contract UnderlyingPqzToken is UnderlyingToken, PqzLayer, IConfidentialUnderlyin
 
     // ------------------------------------------------------------------ allowlist (CTR-MTX-19, CTR-PQZ-21)
 
-    /// @notice `UnderlyingToken`'s eight, then the PQZ ops and the two leg paths, each `ABSOLUTE` (not the rollover,
-    ///         CTR-ZTH-34).
+    /// @notice `UnderlyingToken`'s eight, then the PQZ ops and the two leg paths, each `ABSOLUTE` (incl. the rollover
+    ///         and `mtxPrepareAcc`).
     function mtxSelectors()
         public pure override(UnderlyingToken, IMetaTx, MetaTxBase)
         returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
     {
-        s = new bytes4[](16);
-        c = new uint8[](16);
-        a = new uint8[](16);
+        s = new bytes4[](18);
+        c = new uint8[](18);
+        a = new uint8[](18);
         (s[0], c[0]) = (this.cancelNonce.selector, FEE_CLASS_ABSOLUTE);
         (s[1], c[1]) = (SEL_WRAP, FEE_CLASS_ABSOLUTE);
         (s[2], c[2]) = (SEL_UNWRAP_MIN, FEE_CLASS_AMOUNT);
@@ -161,6 +161,8 @@ contract UnderlyingPqzToken is UnderlyingToken, PqzLayer, IConfidentialUnderlyin
         (s[13], c[13]) = (this.mtxUnshieldUnwrap.selector, FEE_CLASS_ABSOLUTE);
         (s[14], c[14]) = (this.mtxConfidentialTransferSingle.selector, FEE_CLASS_ABSOLUTE);
         (s[15], c[15]) = (this.mtxConfidentialTransferSingleCompact.selector, FEE_CLASS_ABSOLUTE);
+        (s[16], c[16]) = (this.mtxRollOver.selector, FEE_CLASS_ABSOLUTE);
+        (s[17], c[17]) = (this.mtxPrepareAcc.selector, FEE_CLASS_ABSOLUTE);
     }
 
     function _mtxRule(bytes4 sel) internal view override(UnderlyingToken, MetaTxBase) returns (MtxRule memory) {

@@ -20,7 +20,7 @@ import {MockERC20} from "../helpers/Mocks.sol";
 
 /// Plan 5h Task 3b on the PQZ kinds (the precompile mocked): the shared `IConfidentialToken` signature (`beneficiary`
 /// = the payload's, D20), the unshield to a `bytes32` UA recipient (UA-5c (b)), the unshield-unwrap to a UA through a
-/// SCaaS ledger leg, and the allow-lists (the rollover and `mtxPrepareAcc` off both paths, CTR-ZTH-34).
+/// SCaaS ledger leg, and the allow-lists (the rollover and `mtxPrepareAcc` on both paths, owner 2026-10-20).
 contract PqzSharedTest is PqzFixture {
     uint256 internal constant KEY = 0xA11CE;
     address internal relayer = address(0xBEEF);
@@ -101,16 +101,17 @@ contract PqzSharedTest is PqzFixture {
         // the UA allowlist of the kind: not `mtxWrapShield` (a UA wrap-shields in two steps)
         _uaRefused(PqzLayer(address(w)), abi.encodeCall(UnderlyingPqzToken.mtxWrapShield, (address(usd), SCALE, alice)));
         (bytes4[] memory s, uint8[] memory cl,) = w.mtxSelectors();
-        bytes4[16] memory want = [
+        bytes4[18] memory want = [
             IMetaTx.cancelNonce.selector, bytes4(keccak256("wrap(uint256)")), bytes4(keccak256("unwrap(uint256,address,uint256)")),
             bytes4(keccak256("wrap(address,uint256)")), bytes4(keccak256("unwrap(address,uint256,address,uint256)")),
             UnderlyingToken.addReserve.selector, UnderlyingToken.wrapToUA.selector, UnderlyingToken.unwrapToUA.selector,
             PqzLayer.mtxShield.selector, PqzLayer.mtxConfidentialTransfer.selector, PqzLayer.mtxConfidentialTransferCompact.selector,
             PqzLayer.mtxUnshield.selector, UnderlyingPqzToken.mtxWrapShield.selector, UnderlyingPqzToken.mtxUnshieldUnwrap.selector,
-            PqzLayer.mtxConfidentialTransferSingle.selector, PqzLayer.mtxConfidentialTransferSingleCompact.selector
+            PqzLayer.mtxConfidentialTransferSingle.selector, PqzLayer.mtxConfidentialTransferSingleCompact.selector,
+            PqzLayer.mtxRollOver.selector, PqzLayer.mtxPrepareAcc.selector
         ];
-        assertEq(s.length, 16);
-        for (uint256 i; i < 16; ++i) {
+        assertEq(s.length, 18);
+        for (uint256 i; i < 18; ++i) {
             assertEq(s[i], want[i]);
             if (i >= 8) assertEq(cl[i], 1, "the PQZ ops ABSOLUTE");
         }
@@ -154,31 +155,76 @@ contract PqzSharedTest is PqzFixture {
         t.uaExecute(m, _mlAuth());
     }
 
-    /// `NONE_PQZ`: exactly `cancelNonce`, `burn` and the six shared PQZ ops; the rollover and `mtxPrepareAcc` are on
-    /// neither relaying path (CTR-ZTH-34: anyone calls them directly).
+    /// `NONE_PQZ`: exactly `cancelNonce`, `burn`, the six shared PQZ ops and the rollover / `mtxPrepareAcc` (owner
+    /// 2026-10-20: every mtx* write is relayable), `ABSOLUTE`.
     function test_allowlists_noneKind() public {
         (bytes4[] memory s, uint8[] memory c,) = NoUnderlyingPqzToken(address(tok)).mtxSelectors();
-        bytes4[8] memory want = [
+        bytes4[10] memory want = [
             IMetaTx.cancelNonce.selector, NoUnderlyingToken.burn.selector, PqzLayer.mtxShield.selector,
             PqzLayer.mtxConfidentialTransfer.selector, PqzLayer.mtxConfidentialTransferCompact.selector,
             PqzLayer.mtxUnshield.selector, PqzLayer.mtxConfidentialTransferSingle.selector,
-            PqzLayer.mtxConfidentialTransferSingleCompact.selector
+            PqzLayer.mtxConfidentialTransferSingleCompact.selector, PqzLayer.mtxRollOver.selector,
+            PqzLayer.mtxPrepareAcc.selector
         ];
-        assertEq(s.length, 8);
-        for (uint256 i; i < 8; ++i) {
+        assertEq(s.length, 10);
+        for (uint256 i; i < 10; ++i) {
             assertEq(s[i], want[i]);
             assertEq(c[i], i == 1 ? 2 : 1);
         }
-        bytes[2] memory off = [abi.encodeCall(PqzLayer.mtxRollOver, (alice, 1)), abi.encodeCall(PqzLayer.mtxPrepareAcc, (alice, 0))];
-        for (uint256 i; i < 2; ++i) {
-            _uaRefused(tok, off[i]);
-            MetaTxLib.MetaTransaction memory m;
-            m.from = vm.addr(KEY);
-            m.data = off[i];
-            m.validUntil = block.timestamp + 1 hours;
-            (uint8 v, bytes32 r, bytes32 sg) = vm.sign(KEY, tok.mtxDigest(m));
-            vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxSelectorNotAllowed.selector, bytes4(off[i])));
-            tok.mtxExecute(m, abi.encodePacked(r, sg, v));
-        }
+    }
+
+    // ------------------------------------------------------------------ relayed rollover (owner 2026-10-20)
+
+    function _relayAddr(bytes memory data, uint256 nonce, uint256 fee) internal {
+        MetaTxLib.MetaTransaction memory m;
+        m.from = vm.addr(KEY);
+        m.data = data;
+        m.nonce = nonce;
+        m.validUntil = block.timestamp + 1 hours;
+        m.mode = fee == 0 ? 0 : MetaTxLib.MODE_FEE_FIXED;
+        m.fee = fee;
+        (uint8 v, bytes32 r, bytes32 sg) = vm.sign(KEY, tok.mtxDigest(m));
+        vm.prank(relayer);
+        tok.mtxExecute(m, abi.encodePacked(r, sg, v));
+    }
+
+    function _relayUA(bytes memory data, uint256 fee) internal {
+        MetaTxLib.UAMetaTransaction memory m;
+        m.from = fan;
+        m.data = data;
+        m.nonce = tok.uaNonce(fan, 0);
+        m.validUntil = block.timestamp + 1 hours;
+        m.mode = fee == 0 ? 0 : MetaTxLib.MODE_FEE_FIXED;
+        m.fee = fee;
+        vm.prank(relayer);
+        tok.uaExecute(m, _mlAuth());
+    }
+
+    /// Relayed `mtxPrepareAcc` (both halves) then `mtxRollOver`: fee 0 (address envelope), then fee 5 from the signer's
+    /// public balance to the relayer; same on the UA envelope.
+    function test_relayedPrepareAndRollOver() public {
+        _fund(tok, alice, 5);
+        vm.roll(block.number + ROLL_AGE);
+        _public(tok, vm.addr(KEY), 5);
+        _relayAddr(abi.encodeCall(PqzLayer.mtxPrepareAcc, (alice, 0)), 0, 0);
+        _relayAddr(abi.encodeCall(PqzLayer.mtxPrepareAcc, (alice, 1)), 1, 0);
+        assertEq(tok.pqzAccount(alice).flags & 6, 6, "both halves prepared");
+        assertEq(tok.balanceOf(relayer), 0, "fee 0");
+        _relayAddr(abi.encodeCall(PqzLayer.mtxRollOver, (alice, 1)), 2, 5);
+        assertEq(tok.pqzAccount(alice).rolled, 1, "rolled");
+        assertEq(tok.balanceOf(relayer), 5, "fee to the relayer");
+        assertEq(tok.balanceOf(vm.addr(KEY)), 0, "from the signer");
+        // the UA envelope
+        _fund(tok, alice, 3);
+        vm.roll(block.number + ROLL_AGE);
+        NoUnderlyingPqzToken(address(tok)).mintToUA(fan, 5);
+        minted += 5;
+        _relayUA(abi.encodeCall(PqzLayer.mtxRollOver, (alice, 1)), 0);
+        assertEq(tok.pqzAccount(alice).rolled, 2, "rolled via the UA envelope, fee 0");
+        _relayUA(abi.encodeCall(PqzLayer.mtxPrepareAcc, (bob, 0)), 5);
+        assertEq(tok.balanceOf(relayer), 10);
+        assertEq(tok.balanceOfUA(fan), 0, "UA fee paid");
+        assertEq(tok.pqzAccount(bob).flags & 2, 2, "bob half 0 prepared via the UA envelope");
+        _assertConservation(tok);
     }
 }

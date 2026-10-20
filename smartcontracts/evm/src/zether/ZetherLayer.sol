@@ -178,7 +178,7 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
         _fromPool(ben, fee);
     }
 
-    // ------------------------------------------------------------------ roll-over (not allowlisted, CTR-ZTH-34)
+    // ------------------------------------------------------------------ roll-over (`mtxRollOver` / `mtxRollOverBatch` allowlisted, CTR-ZTH-34)
 
     /// @notice The one aggregated pending of `ua` into `acc` for any `n ≥ 1` (`RollOverRange` for 0).
     function mtxRollOver(bytes32 ua, uint256 n) external nonReentrant {
@@ -274,13 +274,16 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
     }
 
     /// @dev The allowlist entries of the layer (CTR-ZTH-34, CTR-MTX-19): every signer-authorised confidential op,
-    ///      `ABSOLUTE` (no percentage of a hidden amount, CTR-ZTH-07), dynamic arguments; the roll-over functions are not
-    ///      listed (they carry their own signature or none). The same set is on the UA allowlist (CTR-ZTH-51).
+    ///      `ABSOLUTE` (no percentage of a hidden amount, CTR-ZTH-07), dynamic arguments; every roll-over function is
+    ///      listed too (owner 2026-10-20: every mtx* write is relayable; the fee may be 0); the signed ones keep
+    ///      checking their own owner signature. The same set is on the UA allowlist (CTR-ZTH-51).
     function _isZetherOp(bytes4 sel) internal pure returns (bool) {
         return sel == this.mtxShield.selector || sel == this.mtxConfidentialTransfer.selector
             || sel == this.mtxConfidentialTransferCompact.selector
             || sel == this.mtxConfidentialTransferNoBundle.selector
-            || sel == this.mtxConfidentialTransferSingle.selector || sel == this.mtxUnshield.selector;
+            || sel == this.mtxConfidentialTransferSingle.selector || sel == this.mtxUnshield.selector
+            || sel == this.mtxRollOver.selector || sel == this.mtxRollOverBatch.selector
+            || sel == this.mtxRollOverSigned.selector || sel == this.mtxSetRollOverMode.selector;
     }
 
     function _zetherBinding(MetaTxLib.MetaTransaction memory m) internal view returns (bytes32) {
