@@ -64,16 +64,17 @@ var Kinds = []Kind{
 	{0x0131, "mldsa65", false, []int{1952}, "mldsa65"},
 	{0x0132, "fndsa512", false, []int{897}, "fndsa512"},
 	{0x0133, "slhdsa128s", false, []int{32}, "slhdsa128s"},
-	{0x0140, "zether-bn254", false, []int{64}, "bn254-g1"},
 	{0x0141, "zether-bls12381", false, []int{128}, "bls12381-g1"},
-	{0x0142, "pqz-mlwe", false, []int{16384}, "pqz-mlwe"},
 	{0x0108, "secp256k1", false, []int{64}, "secp256k1"}, // 2026-10-17, appended as in kinds.json
 }
+
+// Schemes are not kinds (UA-6 U14): 0x0142 is the PQZ key attribute of a PQ holder; it keeps its tag and keyHash group.
+var Schemes = []Kind{{0x0142, "pqz-mlwe", false, []int{16384}, "pqz-mlwe"}}
 
 var Groups = []string{"p256", "ed25519", "secp256k1", "bn254-g1", "bls12381-g1", "bls12381-g2", "bn254-g2", "mldsa44",
 	"mldsa65", "fndsa512", "slhdsa128s", "pqz-mlwe"}
 
-var Purposes = []string{"pop", "authref", "metatx", "metatx-cancel", "member", "zether-auth", "zether-owner", "keyop",
+var Purposes = []string{"pop", "metatx", "metatx-cancel", "member", "zether-auth", "zether-owner", "keyop",
 	"receiver-fee", "vp", "vc-anchor", "trade"}
 
 const (
@@ -103,6 +104,11 @@ func KindInfo(kind uint16) (*Kind, error) {
 }
 
 func derived(kind uint16) (*Kind, error) {
+	for i := range Schemes {
+		if Schemes[i].Number == kind {
+			return nil, fail("UAKindNotDerived", Schemes[i].Name)
+		}
+	}
 	k, err := KindInfo(kind)
 	if err != nil {
 		return nil, err
@@ -113,19 +119,32 @@ func derived(kind uint16) (*Kind, error) {
 	return k, nil
 }
 
+// tagged accepts a kind or a scheme (tag, keyHash, message); ids and key data take kinds only.
+func tagged(kind uint16) (*Kind, error) {
+	for i := range Schemes {
+		if Schemes[i].Number == kind {
+			return &Schemes[i], nil
+		}
+	}
+	return derived(kind)
+}
+
 func singleSigning(k uint16) bool {
 	return (k >= 0x0100 && k <= 0x0108) || (k >= 0x0110 && k <= 0x0113) || (k >= 0x0130 && k <= 0x0133)
 }
 
 func IsNative(kind uint16) bool  { k, err := KindInfo(kind); return err == nil && k.Native }
-func IsZether(kind uint16) bool  { return kind >= 0x0140 && kind <= 0x0142 }
-func IsSigning(kind uint16) bool { return kind == 0x0120 || singleSigning(kind) }
+func IsZether(kind uint16) bool  { return kind == 0x0141 }
+func IsSigning(kind uint16) bool { return kind == 0x0120 || kind == 0x0141 || singleSigning(kind) }
+
+// IsPqzHolder: kinds that may hold a PQZ key attribute, mldsa44, mldsa65, fndsa512 (an msig per MsigPqzEligible).
+func IsPqzHolder(kind uint16) bool { return kind >= 0x0130 && kind <= 0x0132 }
 func IsMember(kind uint16, hederaNative bool) bool {
 	return singleSigning(kind) || kind == 0x0001 || kind == 0x0002 || (hederaNative && kind == 0x0003)
 }
 
 func KindTagString(kind uint16) (string, error) {
-	k, err := derived(kind)
+	k, err := tagged(kind)
 	if err != nil {
 		return "", err
 	}
@@ -168,6 +187,9 @@ func PurposeTag(purpose string) ([32]byte, error) {
 
 // UAOf is keccak256(TAG(kind) ‖ keyData), without validation (see DeriveUA).
 func UAOf(kind uint16, keyData []byte) ([32]byte, error) {
+	if _, err := derived(kind); err != nil {
+		return [32]byte{}, err
+	}
 	t, err := Tag(kind)
 	if err != nil {
 		return t, err
@@ -219,7 +241,7 @@ func NativeID(kind uint16, raw []byte) (id [32]byte, err error) {
 
 // KeyHashOf is keccak256(GROUP(g) ‖ canonical pubkey), nil for structures. Call on validated key data.
 func KeyHashOf(kind uint16, keyData []byte) (*[32]byte, error) {
-	k, err := derived(kind)
+	k, err := tagged(kind)
 	if err != nil {
 		return nil, err
 	}
@@ -265,11 +287,40 @@ func word(v uint64) []byte {
 
 func addressWord(a [20]byte) []byte { return append(make([]byte, 12), a[:]...) }
 
-// PopDigest is pop_digest (CTR-UA-07).
-func PopDigest(chainID uint64, chainUID [32]byte, registry [20]byte, ua, authRef [32]byte) [32]byte {
+// PopDigest is pop_digest (CTR-UA-07); pqzKeyHash is the keyHash of the UA's PQZ key, zero without one.
+func PopDigest(chainID uint64, chainUID [32]byte, registry [20]byte, ua, pqzKeyHash [32]byte) [32]byte {
 	pop, _ := PurposeTag("pop")
 	ckh := ChainKeyHash(chainID)
-	return Keccak256(pop[:], ckh[:], chainUID[:], addressWord(registry), ua[:], authRef[:])
+	return Keccak256(pop[:], ckh[:], chainUID[:], addressWord(registry), ua[:], pqzKeyHash[:])
+}
+
+// HolderPopMessage is what a PQ holder signs to register (UA-6 U14): the PQZ keyHash (zero without a key), the pop digest and
+// uaMessage(kind, pop, popDigest). A non-nil pqzKey needs a holder kind (IsPqzHolder), else UAPqzHolder.
+func HolderPopMessage(kind uint16, chainID uint64, chainUID [32]byte, registry [20]byte, ua [32]byte, pqzKey []byte) (h, digest, msg [32]byte, err error) {
+	if pqzKey != nil {
+		if !IsPqzHolder(kind) {
+			return h, digest, msg, fail("UAPqzHolder", fmt.Sprintf("0x%04x may not hold a PQZ key", kind))
+		}
+		p, err := KeyHashOf(0x0142, pqzKey)
+		if err != nil {
+			return h, digest, msg, err
+		}
+		h = *p
+	}
+	digest = PopDigest(chainID, chainUID, registry, ua, h)
+	pop, _ := PurposeTag("pop")
+	msg, err = UAMessage(kind, pop, digest)
+	return
+}
+
+// PqzRegMessage is the message R_REG proves over: uaMessage(0x0142, pop, popDigest(ua, keyHash(0x0142, pqzKey))).
+func PqzRegMessage(chainID uint64, chainUID [32]byte, registry [20]byte, ua [32]byte, pqzKey []byte) ([32]byte, error) {
+	h, err := KeyHashOf(0x0142, pqzKey)
+	if err != nil {
+		return [32]byte{}, err
+	}
+	pop, _ := PurposeTag("pop")
+	return UAMessage(0x0142, pop, PopDigest(chainID, chainUID, registry, ua, *h))
 }
 
 // Domain is the registry's EIP-712 domain ("SCaaS UARegistry", "<generation>", chainId, registry, salt = chainUid).
@@ -309,6 +360,21 @@ func CanonicalID(text string) (string, error) {
 		h = h[24:]
 	}
 	return "0x" + h, nil
+}
+
+// MsigPqzEligible: the weight of msig members outside kinds 0x0130-0x0133 is below the threshold (CTR-PQZ-12).
+func MsigPqzEligible(keyData []byte) (bool, error) {
+	d := keyData
+	if len(d) < 4 || len(d) != 4+36*(int(d[2])<<8|int(d[3])) {
+		return false, keyDataErr("length")
+	}
+	classical := 0
+	for o := 4; o < len(d); o += 36 {
+		if k := int(d[o])<<8 | int(d[o+1]); k < 0x0130 || k > 0x0133 {
+			classical += int(d[o+34])<<8 | int(d[o+35])
+		}
+	}
+	return classical < int(d[0])<<8|int(d[1]), nil
 }
 
 // Member is one msig member.
