@@ -64,8 +64,10 @@ abstract contract DeployBase is Script {
     bytes32 internal uid;
     /// @notice `DEPLOY_ZETHER` env (default false): also deploy the Zether stack (`_deployZether`, dev chains only).
     bool internal deployZether;
-    /// @notice `OpenFactory.noticePeriod` (plan 5g-Z2): `NOTICE_PERIOD` env, default 10 minutes on 7622, 3 days on 22776,
-    ///         0 elsewhere (the dev chains, the e2e).
+    /// @notice `OpenFactory.noticePeriod` (plan 5g-Z2; owner ruling 2026-10-20): `NOTICE_PERIOD` env. Safe by default:
+    ///         every chain not in `_isTestChain` is a mainnet (22776, Hedera 295, Ethereum, BSC, an unknown chain), with
+    ///         default and floor 3 days; 7622 defaults to 10 minutes, the other test / dev chains to 0. At most 30 days
+    ///         (`MAX_NOTICE_PERIOD`, the factory's).
     uint64 internal noticePeriod;
 
     /// @notice `UA_VERIFY_BUDGET = min(12 M, ⌊0.7 × the chain's per-transaction gas cap⌋)` (CTR-UA-23): EIP-7825
@@ -87,11 +89,34 @@ abstract contract DeployBase is Script {
     function _setup() internal {
         salt = vm.envOr("DEPLOY_SALT", keccak256("scaas.deploy.v1"));
         deployZether = vm.envOr("DEPLOY_ZETHER", false);
-        noticePeriod = uint64(vm.envOr("NOTICE_PERIOD",
-            block.chainid == 7622 ? uint256(10 minutes) : block.chainid == 22776 ? uint256(3 days) : 0));
+        noticePeriod = _checkedNotice(block.chainid, vm.envOr("NOTICE_PERIOD", _defaultNotice(block.chainid)));
         uid = _chainUid();
         require(CREATE2_FACTORY.code.length != 0,
             "no deterministic CREATE2 deployer at 0x4e59b44847b379578588920ca78fbf26c0b4956c (runbook NET-EVM-05)");
+    }
+
+    function _defaultNotice(uint256 c) internal pure returns (uint256) {
+        return !_isTestChain(c) ? 3 days : c == 7622 ? 10 minutes : 0;
+    }
+
+    /// @dev The period is immutable: a mainnet never gets a factory with a short notice (review 5g-Z2 P2-4, owner
+    ///      2026-10-20); no silent `uint64` truncation.
+    function _checkedNotice(uint256 c, uint256 notice) internal pure returns (uint64) {
+        require(notice <= type(uint64).max, "NOTICE_PERIOD exceeds uint64");
+        require(_isTestChain(c) || notice >= 3 days, "NOTICE_PERIOD below 3 days on a mainnet (not a listed test chain)");
+        return uint64(notice);
+    }
+
+    /// @notice The test / dev chains (owner ruling 2026-10-20), a fixed list: local dev (31337, 1337), the node e2e's
+    ///         anvils (31900–31999), 7622, Hedera 296–298 and the public testnets of chain-uids.json (Ethereum Sepolia,
+    ///         Hoodi, Holesky; ETC Mordor; BSC, Gnosis Chiado, Polygon Amoy, Base, Celo Sepolia and Alfajores, OP,
+    ///         Arbitrum, Avalanche Fuji, Linea). Every other chain is a mainnet.
+    function _isTestChain(uint256 c) internal pure returns (bool) {
+        if (c == 31337 || c == 1337 || (c >= 31900 && c <= 31999) || c == 7622 || (c >= 296 && c <= 298)) return true;
+        uint32[14] memory t = [uint32(11155111), 560048, 17000, 63, 97, 10200, 80002, 84532, 11142220, 44787, 11155420,
+            421614, 43113, 59141];
+        for (uint256 i; i < t.length; ++i) if (c == t[i]) return true;
+        return false;
     }
 
     /// @notice `CHAIN_UID` env (chain-uids.json), default block 0's hash as the RPC reports it; either way it must

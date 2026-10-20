@@ -134,6 +134,27 @@ contract ZetherDeployTest is Test {
         }
     }
 
+    /// `NOTICE_PERIOD` (owner ruling 2026-10-20, review 5g-Z2 P2-4): safe by default — every chain outside the fixed
+    /// test / dev list is a mainnet, default and floor 3 days; 7622 defaults to 10 minutes, the other test chains to 0;
+    /// a value over `uint64` is refused, never truncated.
+    function test_noticePeriod_mainnetFloorAndDefaults() public {
+        DeployHarness h = new DeployHarness();
+        uint256[8] memory test = [uint256(31337), 1337, 31950, 7622, 296, 298, 11155111, 97];
+        for (uint256 i; i < test.length; ++i) {
+            assertEq(h.defaultNotice(test[i]), test[i] == 7622 ? 10 minutes : 0);
+            assertEq(h.noticeFor(test[i], 0), 0);
+        }
+        uint256[6] memory main = [uint256(22776), 295, 1, 56, 100, 987654321]; // the last: an unknown chain
+        for (uint256 i; i < main.length; ++i) {
+            assertEq(h.defaultNotice(main[i]), 3 days);
+            assertEq(h.noticeFor(main[i], 3 days), 3 days);
+            vm.expectRevert("NOTICE_PERIOD below 3 days on a mainnet (not a listed test chain)");
+            h.noticeFor(main[i], 3 days - 1);
+        }
+        vm.expectRevert("NOTICE_PERIOD exceeds uint64");
+        h.noticeFor(7622, uint256(type(uint64).max) + 1);
+    }
+
     /// Each Zether-stack deploy fits one Osaka transaction as `deploy.sh` sends it (the verifiers through the CREATE2
     /// deployer, the releases through `OpenFactory.deployImplementation`, a few k more; gas limit = forge's estimate ×
     /// `--gas-estimate-multiplier 105`) and the anvil's 64 KiB code limit. Tx gas ≈ 21,000 +
