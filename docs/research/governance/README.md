@@ -12,7 +12,7 @@ same day: **deferred** — the synthesis and the SCaaS matrix draft come later (
   tokenfactory), ERC-3643, Uniswap, Aave, Compound, Morpho, Euler, Maker, OpenZeppelin, L2BEAT-style taxonomies.
   Tags: [F] fetched this session, [M] from memory (re-check), [I] inference.
 - `gov-survey-2.md` — Curve, Balancer, Lido, Chainlink, Safe, Seaport, ENS, Yearn v3, LayerZero / Wormhole, Ethena,
-  EigenLayer, GMX, Pendle, rollup security councils (added when its run finishes).
+  EigenLayer, GMX, Pendle, rollup security councils; §15 lists 21 patterns and a factory proposal (inference).
 
 Findings to carry into the synthesis (from the inventory): most post-deployment powers act with no delay (role grants,
 DEX setters, registrar); `lockedFeatures` locks a power on, not off; CTR-TOK-22 names a delayed admin transfer that
