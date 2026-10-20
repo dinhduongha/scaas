@@ -67,7 +67,7 @@ library PqzStateLib {
     /// @notice Anyone (plan 5h D8): `acc += Σ pending[rolled .. rolled + n')` strictly in order, `n' = min(n, K_MAX − 1 −
     ///         accUnits)` (`CapReached` at 0), `1 ≤ n ≤ ROLL_MAX`, each entry at least `ROLL_AGE` blocks old
     ///         (`RollTooYoung`), the account prepared (`AccNotPrepared`); the sum is written to the `acc` words with its
-    ///         `accHash`; the slots below `rolled − INLINE_MAX` are deleted (`floor` follows `cleared`).
+    ///         `accHash` (over the unmarked words; each slot stores `ACC_MARK | word`, so none is zeroed); the slots below `rolled − INLINE_MAX` are deleted (`floor` follows `cleared`).
     function rollOver(bytes32 ua, uint256 n) public {
         if (n == 0 || n > PqzCore.ROLL_MAX) revert IPqzToken.RollOverRange(n);
         PqzCore.Account storage a = PqzCore.$().acct[ua];
@@ -81,10 +81,11 @@ library PqzStateLib {
         PqzCore._window(a, c, r, n, true, true);
         PqzCt.reduce(c);
         uint256[516] storage w = a.accWords;
+        uint256 mk = PqzCore.ACC_MARK;
         assembly ("memory-safe") {
             let b := w.slot
             let d := add(c, 32)
-            for { let i := 0 } lt(i, 516) { i := add(i, 1) } { sstore(add(b, i), mload(add(d, shl(5, i)))) }
+            for { let i := 0 } lt(i, 516) { i := add(i, 1) } { sstore(add(b, i), or(mload(add(d, shl(5, i))), mk)) }
         }
         bytes32 h = keccak256(c);
         uint64 nr = uint64(r + n);
@@ -102,7 +103,7 @@ library PqzStateLib {
         emit IConfidentialToken.RolledOver(ua, nr, uint32(units + n), h);
     }
 
-    /// @notice Permissionless, idempotent (plan 5h D8): writes a non-zero placeholder into half `half` (0 or 1) of the
+    /// @notice Permissionless, idempotent (plan 5h D8): writes the non-zero `ACC_MARK` into half `half` (0 or 1) of the
     ///         account's `acc` words, so the first rollover rewrites instead of creating 516 slots (≈ 11.4 M); a no-op
     ///         once done (a materialised `acc` has both).
     function prepareAcc(bytes32 ua, uint256 half, address registry) public {
@@ -113,9 +114,10 @@ library PqzStateLib {
         if (!PqzCore._registered(registry, ua)) revert IPqzToken.AccountNotRegistered(ua);
         uint256[516] storage w = a.accWords;
         uint256 hw = PqzCore.HALF_WORDS;
+        uint256 mk = PqzCore.ACC_MARK;
         assembly ("memory-safe") {
             let b := add(w.slot, mul(half, hw))
-            for { let i := 0 } lt(i, hw) { i := add(i, 1) } { sstore(add(b, i), 1) }
+            for { let i := 0 } lt(i, hw) { i := add(i, 1) } { sstore(add(b, i), mk) }
         }
         a.flags |= bit;
     }

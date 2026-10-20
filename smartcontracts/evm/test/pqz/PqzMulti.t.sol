@@ -326,7 +326,7 @@ contract PqzMultiTest is PqzFixture {
 
     function test_minDecoyFee_initBounds() public {
         minDecoy = (uint256(1) << 61); // confidentialFee + 8 · minDecoyFee ≥ 2^64
-        vm.expectRevert();
+        vm.expectRevert(IPqzToken.BadInit.selector);
         _newToken("big");
     }
 

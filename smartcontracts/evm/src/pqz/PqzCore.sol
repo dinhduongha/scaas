@@ -46,7 +46,7 @@ library PqzCore {
         uint64 sendCounter;
         bytes32 accHash;
         mapping(uint64 => uint256) pending;
-        uint256[516] accWords; // CT / 32: written once non-zero by `prepareAcc`, never zeroed (D3)
+        uint256[516] accWords; // CT / 32, each `ACC_MARK | word`: written non-zero by `prepareAcc`, never zeroed (D3)
     }
 
     /// @custom:storage-location erc7201:scaas.pqz
@@ -157,6 +157,9 @@ library PqzCore {
     uint8 internal constant MAT = 1; // `acc` is `accWords`
     uint8 internal constant PREP = 6; // both halves of `accWords` written (bits 2, 4: halves 0, 1)
     uint256 internal constant HALF_WORDS = 258;
+    /// @dev Bit 255 of every stored `accWords` slot (lanes are `< 2^42`, so the bit is free): a word of four zero
+    ///      coefficients (a TRIVIAL-only `acc` has `u = 0`) never zeroes its slot (D3; final review I1). Masked off on read.
+    uint256 internal constant ACC_MARK = 1 << 255;
     uint256 internal constant MAX_TOTAL_SHIELDED = 1 << 62;
     uint256 internal constant VALUE_BOUND = 1 << 64;
     uint256 internal constant HEADER = 640;
@@ -704,7 +707,8 @@ library PqzCore {
             assembly ("memory-safe") {
                 let b := w.slot
                 let d := add(c, 32)
-                for { let i := 0 } lt(i, 516) { i := add(i, 1) } { mstore(add(d, shl(5, i)), sload(add(b, i))) }
+                let k := not(ACC_MARK)
+                for { let i := 0 } lt(i, 516) { i := add(i, 1) } { mstore(add(d, shl(5, i)), and(sload(add(b, i)), k)) }
             }
             return c;
         }

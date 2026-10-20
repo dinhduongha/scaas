@@ -84,10 +84,14 @@ contract PqzStatePinGasTest is PqzSlots {
     // ------------------------------------------------------------------ ROLL_MAX and prepare (Review Focus 5, 6)
 
     /// `ROLL_MAX` = the largest multiple of 16 under `0.75 · 2^24`: `ROLL_MAX` fits, `ROLL_MAX + 16` (the linear fit
-    /// of a 128-entry rollover of another account in the same transaction) would not. Then the lanes: `acc` holds
-    /// `16 (q − 1)`, the rollover adds `ROLL_MAX` entries of `q − 1`: every coefficient is `q − 272`.
+    /// through a 128-entry rollover of another account) would not. The 128-entry call runs first under a snapshot that
+    /// is reverted (`vm.revertToState` restores cold access too: `gMax` equals its value as the test's only call), so
+    /// both are measured cold, as `test_gas_roll128` alone. Then the lanes: `acc` holds `16 (q − 1)`, the rollover adds
+    /// `ROLL_MAX` entries of `q − 1`: every coefficient is `q − 272`.
     function test_gas_rollMax() public {
+        uint256 snap = vm.snapshotState();
         uint256 g128 = _gas(abi.encodeCall(tok.mtxRollOver, (dave, 128)));
+        vm.revertToState(snap);
         uint256 gMax = _gas(abi.encodeCall(tok.mtxRollOver, (alice, PqzCore.ROLL_MAX)));
         uint256 next = gMax + (gMax - g128) * 16 / (PqzCore.ROLL_MAX - 128);
         _log("mtxRollOver 128 (steady, distinct cold blobs)", g128);
@@ -104,6 +108,10 @@ contract PqzStatePinGasTest is PqzSlots {
             assembly ("memory-safe") { w := mload(add(add(acc, 32), o)) }
             assertEq(w, want);
         }
+    }
+
+    function test_gas_roll128() public {
+        _log("mtxRollOver 128 (steady, distinct cold blobs)", _gas(abi.encodeCall(tok.mtxRollOver, (dave, 128))));
     }
 
     function test_gas_roll_1() public {
@@ -208,5 +216,90 @@ contract PqzStatePinGasTest is PqzSlots {
 
     function test_gas_burn() public {
         _log("burn 1 to an address, fee, fresh ref", _gas(_burn(1, address(0xD00D))));
+    }
+}
+
+/// Final review I1 (D3 "the `acc` slots are never zeroed"): a shield-only account's first rollover sums TRIVIAL entries
+/// only, so every `u` coefficient of its `acc` is 0. Each stored word carries a marker bit, so no slot goes back to zero
+/// and the next rollover of `ROLL_MAX` cold credits still rewrites (2,900 gas a word), not re-creates (22,100), and
+/// fits `0.75 · 2^24`. Each test is one transaction after `setUp`.
+contract PqzStateTrivialRollGasTest is PqzSlots {
+    uint256 internal constant CAP = (uint256(1) << 24) * 3 / 4;
+    uint256 internal constant QM1 = PqzCt.Q - 1;
+    uint256 internal constant TRIV = 4; // TRIVIAL entries rolled in setUp
+    uint256 internal nextBlob = 0x5EED0000;
+    bytes32 internal gina;
+
+    function _blobCode() internal pure returns (bytes memory c) {
+        c = new bytes(1 + 16 + PqzCt.PK + 128 + 32 + 128);
+        uint256 w = QM1 << 192 | QM1 << 128 | QM1 << 64 | QM1;
+        for (uint256 o = 17; o < 17 + PqzCt.CT; o += 32) {
+            assembly ("memory-safe") { mstore(add(add(c, 32), o), w) }
+        }
+    }
+
+    function _gas(bytes memory data) internal returns (uint256 used) {
+        uint256 g0 = gasleft();
+        (bool ok, bytes memory ret) = address(tok).call(data);
+        used = g0 - gasleft();
+        if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+    }
+
+    function setUp() public {
+        _stack();
+        _mockOp(7, 1);
+        tok = _newToken("gas");
+        gina = _pqzUA(_pk(13), 13);
+        tok.mtxPrepareAcc(gina, 0);
+        tok.mtxPrepareAcc(gina, 1);
+        _public(tok, address(this), TRIV * SCALE);
+        for (uint256 i; i < TRIV; ++i) {
+            tok.mtxShield(gina, 1);
+            vm.roll(block.number + 1);
+        }
+        vm.roll(block.number + 30);
+        tok.mtxRollOver(gina, TRIV); // acc = Trivial(4): every u coefficient 0
+        // ROLL_MAX credits after the TRIVIAL entries, each from its own cold blob, every coefficient q − 1
+        bytes memory code = _blobCode();
+        for (uint256 i; i < PqzCore.ROLL_MAX; ++i) {
+            address b = address(uint160(++nextBlob));
+            vm.etch(b, code);
+            uint256 e = uint256(uint160(b)) << 96 | uint256(16) << 80 | uint256(16 + PqzCt.PK) << 64 | 1;
+            vm.store(address(tok), _pendingSlot(gina, TRIV + i), bytes32(e));
+        }
+        bytes32 k = bytes32(_acctSlot(gina));
+        uint256 w = uint256(vm.load(address(tok), k));
+        vm.store(address(tok), k, bytes32((w & ~uint256(type(uint64).max)) | (TRIV + PqzCore.ROLL_MAX)));
+    }
+
+    /// No `acc` slot is zero after the TRIVIAL-only rollover (D3), and the `u` half still reads as zero.
+    function test_trivialRoll_noZeroSlot() public view {
+        for (uint256 i; i < PqzCt.CT / 32; ++i) {
+            assertTrue(vm.load(address(tok), bytes32(_acctSlot(gina) + 5 + i)) != 0, "acc slot zeroed");
+        }
+        bytes memory acc = tok.pqzAcc(gina);
+        for (uint256 o; o < PqzCt.PK; o += 32) {
+            uint256 x;
+            assembly ("memory-safe") { x := mload(add(add(acc, 32), o)) }
+            assertEq(x, 0, "u of Trivial(4)");
+        }
+        assertEq(keccak256(acc), tok.pqzAccount(gina).accHash, "accHash over the unmarked bytes");
+    }
+
+    /// The regression pin: `ROLL_MAX` cold credits after the TRIVIAL-only rollover fit `0.75 · 2^24` (10.6 M for
+    /// n = 1 and 20.9 M for `ROLL_MAX` when the slots were zeroed), and every `u` coefficient is `256 (q − 1) mod q`.
+    function test_gas_rollMax_afterTrivialRoll() public {
+        uint256 g = _gas(abi.encodeCall(tok.mtxRollOver, (gina, PqzCore.ROLL_MAX)));
+        console2.log("mtxRollOver ROLL_MAX after a TRIVIAL-only rollover gas", g);
+        assertLe(g, CAP, "ROLL_MAX under 0.75 * 2^24");
+        bytes memory acc = tok.pqzAcc(gina);
+        uint256 want = PqzCt.Q - PqzCore.ROLL_MAX;
+        want = want << 192 | want << 128 | want << 64 | want;
+        for (uint256 o; o < PqzCt.PK; o += 32) {
+            uint256 x;
+            assembly ("memory-safe") { x := mload(add(add(acc, 32), o)) }
+            assertEq(x, want);
+        }
+        assertEq(keccak256(acc), tok.pqzAccount(gina).accHash);
     }
 }
