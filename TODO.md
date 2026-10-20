@@ -39,7 +39,7 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
 
 ### Now (order)
 
-- **Next (2026-10-20 shutdown):** finish `rev2-small-fixes` (A-3 review fixes) → (Z2 merged 2026-10-20) → UA-6 (CTR-UA-30: PQZ key as an attribute of a PQ-signing UA, supplied in `register`; Zether key stays a UA) → 5h (+ `plainPending` removed, `SHIELD_POOL` for PQZ and Zether) → 16k parameter regen with B-1 / A-2 / R_REG under one `proofSystemId` → Task 12 → 6 → 13 → 14 (resume notes in HANDOFF.md).
+- **Next (2026-10-20 shutdown):** (`rev2-small-fixes` and Z2 merged 2026-10-20) → UA-6 (CTR-UA-30: PQZ key as an attribute of a PQ-signing UA, supplied in `register`; Zether key stays a UA) → 5h (+ `plainPending` removed, `SHIELD_POOL` for PQZ and Zether) → 16k parameter regen with B-1 / A-2 / R_REG under one `proofSystemId` → Task 12 → 6 → 13 → 14 (resume notes in HANDOFF.md).
 - [ ] **P0 PQZL Fiat–Shamir fix — rest of plan `docs/superpowers/plans/2026-10-19-pqzl-fs3.md`** (owner 2026-10-19:
   first; code merged `361a86b`, PQZL `proofSystemId` v3; full item in COMPLETED.md): Task 5h, the 16k regeneration,
   Tasks 12 → 6 → 13 → 14 in the order of the Next line. Owner approval pending: the lazer#28 comment and the D-2/D-3
