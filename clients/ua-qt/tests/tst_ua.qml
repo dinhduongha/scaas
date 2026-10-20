@@ -23,6 +23,7 @@ TestCase {
             compare(UaKinds.isNative(r.kind), r.native)
             compare(UaKinds.isSigning(r.kind), r.signing, r.name)
             compare(UaKinds.isZether(r.kind), r.zether, r.name)
+            compare(UaKinds.isPqzHolder(r.kind), r.pqzHolder, r.name)
             compare(UaKinds.isMember(r.kind, false), r.member, r.name)
             compare(UaKinds.isMember(r.kind, true), r.memberHedera, r.name)
             if (r.native) {
@@ -34,6 +35,17 @@ TestCase {
                 compare(UaKinds.lastError, "")
             }
         }
+        for (const r of k.schemes) {  // schemes are not kinds: tag and keyHash only
+            compare(UaKinds.kindTagString(r.kind), r.tag)
+            compare(UaKinds.tag(r.kind), r.TAG)
+            UaKinds.kindInfo(r.kind)
+            compare(UaKinds.lastError, "UAKindUnknown")
+            UaKinds.uaOf(r.kind, "0x")
+            compare(UaKinds.lastError, "UAKindNotDerived")
+            compare(UaKinds.validateKeyData(r.kind, "0x", false), false)
+            compare(UaKinds.lastError, "UAKindNotDerived")
+        }
+        compare(UaKinds.keyHashOf(0x0142, k.pqzKey), k.pqzKeyHash)
         for (const r of k.groups) {
             compare(UaKinds.groupTagString(r.group), r.tag)
             compare(UaKinds.groupTag(r.group), r.GROUP)
@@ -97,8 +109,23 @@ TestCase {
         for (const p of s.pop) {
             const c = s.contexts[p.context]
             compare(UaKinds.chainKeyHash(c.chainId), p.chainKeyHash)
-            compare(UaKinds.popDigest(c.chainId, c.chainUid, c.registry, p.ua, p.authRef), p.popDigest)
+            compare(UaKinds.popDigest(c.chainId, c.chainUid, c.registry, p.ua, p.pqzKeyHash), p.popDigest)
         }
+        for (const p of s.pqzReg) {
+            const c = s.contexts[p.context]
+            const h = JSON.parse(UaKinds.holderPopMessage(p.kind, c.chainId, c.chainUid, c.registry, p.ua, k.pqzKey))
+            compare(h.pqzKeyHash, p.pqzKeyHash)
+            compare(h.popDigest, p.popDigest)
+            compare(UaKinds.pqzRegMessage(c.chainId, c.chainUid, c.registry, p.ua, k.pqzKey), p.pqzRegMessage)
+            for (const bad of [0x0101, 0x0133]) {
+                UaKinds.holderPopMessage(bad, c.chainId, c.chainUid, c.registry, p.ua, k.pqzKey)
+                compare(UaKinds.lastError, "UAPqzHolder")
+            }
+            compare(JSON.parse(UaKinds.holderPopMessage(p.kind, c.chainId, c.chainUid, c.registry, p.ua, "")).pqzKeyHash,
+                    "0x" + "00".repeat(32))
+        }
+        for (const p of s.pqzMsig)
+            compare(UaKinds.msigPqzEligible(p.keyData), p.eligible, p.reason)
         for (const a of s.uaAuth) {
             const c = s.contexts[a.context]
             compare(UaKinds.uaAuthDomainSeparator(a.generation, c.chainId, c.registry, c.chainUid), a.domainSeparator)
