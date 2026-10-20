@@ -82,7 +82,7 @@ impl Transcript {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::curve::{Bls12381, Bn254};
+    use crate::curve::Bls12381;
     use ark_ff::Zero;
 
     #[test]
@@ -95,15 +95,13 @@ mod tests {
         pre.extend_from_slice(&[0, 0, 0, 2, 0xab, 0xcd]);
         let st1 = keccak256(&pre);
         assert_eq!(t.state(), st1);
-        let c = t.challenge::<Bn254>("sigma.c");
+        let c = t.challenge::<Bls12381>("sigma.c");
         let mut pre = st1.to_vec();
         pre.extend_from_slice(&[0x01, 7]);
         pre.extend_from_slice(b"sigma.c");
         let st2 = keccak256(&pre);
         assert_eq!(t.state(), st2);
-        assert_eq!(c, hash_to_scalar::<Bn254>(&st2));
+        assert_eq!(c, hash_to_scalar::<Bls12381>(&st2));
         assert!(!c.is_zero());
-        // Same state, different curve: different reduction.
-        let _ = hash_to_scalar::<Bls12381>(&st2);
     }
 }

@@ -1,14 +1,19 @@
-//! R33: conf key tree — pinned bn254 vectors, independence across paths/curves, and
+//! R33: conf key tree — pinned vectors, independence across paths/curves, and
 //! "x never equals a signing scalar of the same seed".
 
 use hmac::{Hmac, Mac};
 use sha2::Sha512;
-use zether_prover::curve::{decode_point, encode_scalar, keccak256, ua_of, Bls12381, Bn254, ZCurve};
-use zether_prover::keys::{derive_child_sk, derive_master_sk, derive_path, seed_from_mnemonic, ZetherKey};
+use zether_prover::curve::{decode_point, encode_scalar, keccak256, ua_of, Bls12381, ZCurve};
+#[cfg(feature = "bn254")]
+use zether_prover::curve::Bn254;
+#[cfg(feature = "bn254")]
+use zether_prover::keys::{derive_child_sk, derive_master_sk};
+use zether_prover::keys::{derive_path, seed_from_mnemonic, ZetherKey};
 
 const ABANDON_ART: &str = "abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon \
 abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon abandon art";
 
+#[cfg(feature = "bn254")]
 fn dec_to_be(d: &str) -> [u8; 32] {
     let mut out = [0u8; 32];
     for ch in d.bytes() {
@@ -42,6 +47,7 @@ fn bip39_seed_and_24_word_rule() {
 
 /// bn254 variant: same EIP-2333 seeds, values pinned from an independent stdlib-Python
 /// implementation (tools/eip2333_ref.py).
+#[cfg(feature = "bn254")]
 #[test]
 fn bn254_pinned_vectors() {
     let cases = [
@@ -67,8 +73,11 @@ fn bn254_pinned_vectors() {
 
 #[test]
 fn conf_key_pinned_for_abandon_art() {
-    let bn = ZetherKey::<Bn254>::conf(&seed(), 60, 0).unwrap();
-    assert_eq!(hex::encode(encode_scalar::<Bn254>(&bn.x)), "2c6941c0d6c2913b0de687819730f0ee74ee01da6c9906d8cc6feac4a163e87e");
+    #[cfg(feature = "bn254")]
+    {
+        let bn = ZetherKey::<Bn254>::conf(&seed(), 60, 0).unwrap();
+        assert_eq!(hex::encode(encode_scalar::<Bn254>(&bn.x)), "2c6941c0d6c2913b0de687819730f0ee74ee01da6c9906d8cc6feac4a163e87e");
+    }
     let bls = ZetherKey::<Bls12381>::conf(&seed(), 60, 0).unwrap();
     assert_eq!(hex::encode(encode_scalar::<Bls12381>(&bls.x)), "67c93b3838eb86a76ead85bd6be7ca97ad82758b4ccd30ec58bff013a3392074");
 }
@@ -92,8 +101,11 @@ fn scalars<C: ZCurve>() -> Vec<[u8; 32]> {
 
 #[test]
 fn keys_independent_across_paths_curves_seeds() {
-    let mut all = scalars::<Bn254>();
-    all.extend(scalars::<Bls12381>());
+    #[allow(unused_mut)]
+    let mut all = scalars::<Bls12381>();
+    #[cfg(feature = "bn254")]
+    all.extend(scalars::<Bn254>());
+    // distinct (coin, account, use, seed) tuples, and (with the legacy feature) distinct across curves
     let n = all.len();
     all.sort();
     all.dedup();
@@ -138,7 +150,11 @@ fn conf_key_never_equals_a_signing_key() {
     // EIP-2334 BLS withdrawal (m/12381/60/0/0) and signing (m/12381/60/0/0/0) keys of the same tree.
     signing.push(encode_scalar::<Bls12381>(&derive_path::<Bls12381>(&s, &[12381, 60, 0, 0]).unwrap()));
     signing.push(encode_scalar::<Bls12381>(&derive_path::<Bls12381>(&s, &[12381, 60, 0, 0, 0]).unwrap()));
-    for conf in scalars::<Bn254>().into_iter().chain(scalars::<Bls12381>()) {
+    #[allow(unused_mut)]
+    let mut confs = scalars::<Bls12381>();
+    #[cfg(feature = "bn254")]
+    confs.extend(scalars::<Bn254>());
+    for conf in confs {
         for sk in &signing {
             assert_ne!(&conf, sk);
         }
@@ -158,6 +174,7 @@ fn ua_roundtrip<C: ZCurve>() {
 
 #[test]
 fn ua_pubkey_roundtrip() {
+    #[cfg(feature = "bn254")]
     ua_roundtrip::<Bn254>();
     ua_roundtrip::<Bls12381>();
 }
@@ -179,6 +196,7 @@ fn ua_identity_matches_ua_vectors() {
     for row in kinds["valid"].as_array().unwrap() {
         let kd = hex::decode(&row["keyData"].as_str().unwrap()[2..]).unwrap();
         let ua = match row["kind"].as_u64().unwrap() {
+            #[cfg(feature = "bn254")]
             0x0140 => ua_of::<Bn254>(&decode_point::<Bn254>(&kd).unwrap()),
             0x0141 => ua_of::<Bls12381>(&decode_point::<Bls12381>(&kd).unwrap()),
             _ => continue,
@@ -189,6 +207,7 @@ fn ua_identity_matches_ua_vectors() {
     for row in kinds["messages"].as_array().unwrap() {
         let (p, d) = (hex32(&row["purposeTag"]), hex32(&row["digest"]));
         let m = match row["kind"].as_u64().unwrap() {
+            #[cfg(feature = "bn254")]
             0x0140 => ua_message::<Bn254>(&p, &d),
             0x0141 => ua_message::<Bls12381>(&p, &d),
             _ => continue,
@@ -200,7 +219,8 @@ fn ua_identity_matches_ua_vectors() {
     for row in st["pop"].as_array().unwrap() {
         let c = &st["contexts"][row["context"].as_str().unwrap()];
         let reg: [u8; 20] = hex::decode(&c["registry"].as_str().unwrap()[2..]).unwrap().try_into().unwrap();
-        let d = pop_digest(c["chainId"].as_u64().unwrap(), &hex32(&c["chainUid"]), &reg, &hex32(&row["ua"]), &hex32(&row["authRef"]));
+        let d = pop_digest(c["chainId"].as_u64().unwrap(), &hex32(&c["chainUid"]), &reg, &hex32(&row["ua"]), &hex32(&row.get("pqzKeyHash").unwrap_or(&row["authRef"])));
+        // ponytail: `authRef` is the pre-UA-6 name of the same (zero) word; Task 8 regenerates the file with `pqzKeyHash`.
         assert_eq!(d, hex32(&row["popDigest"]));
         n += 1;
     }
@@ -218,7 +238,7 @@ fn bip39_passphrase_is_nfkd_normalized() {
         assert_eq!(hex::encode(&seed_from_mnemonic(ABANDON_ART, pass).unwrap()[..]), want, "{pass:?}");
     }
     // Same through the JSON API, and a non-string passphrase is an error, not "".
-    let call = |key: serde_json::Value| zether_prover::api::call("keygen", &serde_json::json!({"curve": "bn254", "key": key}).to_string());
+    let call = |key: serde_json::Value| zether_prover::api::call("keygen", &serde_json::json!({"curve": "bls12381", "key": key}).to_string());
     let by_words = call(serde_json::json!({"mnemonic": ABANDON_ART, "passphrase": "m\u{1ead}t kh\u{1ea9}u", "coin": 60, "account": 0}));
     let by_seed = call(serde_json::json!({"seed": format!("0x{want}"), "coin": 60, "account": 0}));
     assert_eq!(by_words.unwrap(), by_seed.unwrap());

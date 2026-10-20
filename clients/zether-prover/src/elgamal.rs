@@ -312,7 +312,9 @@ impl<C: ZCurve> BsgsTable<C> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::curve::{Bls12381, Bn254};
+    use crate::curve::Bls12381;
+    #[cfg(feature = "bn254")]
+    use crate::curve::Bn254;
     use ark_ff::UniformRand;
 
     fn keypair<C: ZCurve>(rng: &mut impl rand_core::RngCore) -> (Fr<C>, G<C>) {
@@ -355,6 +357,8 @@ mod tests {
         assert!(check_balance(&Ciphertext::<C>::zero(), &x, 0));
     }
 
+    #[cfg(feature = "bn254")]
+
     #[test]
     fn elgamal_bn254() {
         homomorphic::<Bn254>();
@@ -383,7 +387,7 @@ mod tests {
         assert_eq!(BsgsParams::desktop(2 << 30).table_bits, 25);
         assert_eq!(BsgsParams::desktop(64 << 30).table_bits, 26);
         assert_eq!(BsgsParams::for_target().bound_bits, 54); // native test target
-        assert!(BsgsTable::<Bn254>::new(17).is_err());
+        assert!(BsgsTable::<Bls12381>::new(17).is_err());
         assert!(check_ram(24, Some(512 << 20)).is_ok());
         assert!(check_ram(24, Some((512 << 20) - 1)).is_err());
         assert!(check_ram(27, None).is_ok());
@@ -391,28 +395,29 @@ mod tests {
 
     #[test]
     fn table_save_load_verify() {
-        let t = BsgsTable::<Bn254>::new(18).unwrap();
+        let t = BsgsTable::<Bls12381>::new(18).unwrap();
         let bytes = t.to_bytes();
-        assert_eq!(bytes.len(), 15 + (12 << 18));
-        let u = BsgsTable::<Bn254>::from_bytes(&bytes).unwrap();
+        let head = 8 + 1 + <Bls12381 as ZCurve>::NAME.len() + 1; // magic, name length, name, bits
+        assert_eq!(bytes.len(), head + (12 << 18));
+        let u = BsgsTable::<Bls12381>::from_bytes(&bytes).unwrap();
         assert_eq!(u.table_bits(), 18);
         assert!(u.baby == t.baby && u.giant == t.giant);
-        // Other curve, truncated, duplicated j, unsorted, wrong key: refused.
-        assert!(BsgsTable::<Bls12381>::from_bytes(&bytes).is_err());
-        assert!(BsgsTable::<Bn254>::from_bytes(&bytes[..bytes.len() - 12]).is_err());
-        let head = 15;
+        // Other curve (legacy bn254 feature), truncated, duplicated j, unsorted, wrong key: refused.
+        #[cfg(feature = "bn254")]
+        assert!(BsgsTable::<Bn254>::from_bytes(&bytes).is_err());
+        assert!(BsgsTable::<Bls12381>::from_bytes(&bytes[..bytes.len() - 12]).is_err());
         let mut dup = bytes.clone();
         dup.copy_within(head + 8..head + 12, head + 12 + 8);
-        assert!(BsgsTable::<Bn254>::from_bytes(&dup).is_err());
+        assert!(BsgsTable::<Bls12381>::from_bytes(&dup).is_err());
         let mut swap = bytes.clone();
         swap.copy_within(head..head + 12, head + 12 * 5);
-        assert!(BsgsTable::<Bn254>::from_bytes(&swap).is_err());
+        assert!(BsgsTable::<Bls12381>::from_bytes(&swap).is_err());
         // Every key replaced by a sorted fake: the sampled recomputation catches it.
         let mut fake = bytes.clone();
         for (i, e) in fake[head..].chunks_exact_mut(12).enumerate() {
             e[..8].copy_from_slice(&(i as u64).to_le_bytes());
             e[8..].copy_from_slice(&(i as u32).to_le_bytes());
         }
-        assert!(BsgsTable::<Bn254>::from_bytes(&fake).is_err());
+        assert!(BsgsTable::<Bls12381>::from_bytes(&fake).is_err());
     }
 }

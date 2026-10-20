@@ -13,7 +13,7 @@ const token = "0x5fbdb2315678afecb367f032d93f642f64180aa3";
 const r33 = JSON.parse(fs.readFileSync(path.join(__dirname, "../vectors/r33_keys.json"), "utf8"));
 let n = 0;
 
-for (const curve of ["bn254", "bls12381"]) {
+for (const curve of ["bls12381"]) {
   const k0 = { mnemonic, coin: 60, account: 0 };
   const k1 = { mnemonic, coin: 60, account: 1 };
   const from = call("keygen", { curve, key: k0, revealSecret: true });
@@ -72,7 +72,7 @@ for (const curve of ["bn254", "bls12381"]) {
   assert.throws(() => zetherCall("recoverTransfer", JSON.stringify({ ...chain, entry })), /keyOf/);
   n++;
 
-  // the UA registry's PoP (CTR-UA-07) equals the native vector's: same key, chain, chainUid, registry, authRef 0
+  // the UA registry's PoP (CTR-UA-07) equals the native vector's: same key, chain, chainUid, registry, no PQZ key
   const v = r33[curve].keys[0].pop;
   const pop = call("pop", { curve, key: k0, chainId: v.chainId, chainUid: v.chainUid, registry: v.registry });
   assert.deepEqual([pop.UA, pop.kind, pop.popDigest, pop.uaMsg], [from.UA, v.kind, v.popDigest, v.uaMsg]);

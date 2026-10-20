@@ -1,3 +1,4 @@
+#![cfg(feature = "bn254")] // ponytail: the D5 recovery flow on bn254 (table 2^22); the BLS12-381 twin is a follow-up, bn254 left the contracts in UA-6
 //! zether-limits D5 end to end: a balance > 2^44 is out of reach of a device BSGS, is held and
 //! spent through the wallet cache (`checkBalance`, no BSGS), and after the cache is lost the
 //! native `zether-read-balance` recovers it from the pasted ciphertext. The CLI runs with the

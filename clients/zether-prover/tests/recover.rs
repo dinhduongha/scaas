@@ -4,7 +4,9 @@
 
 use serde_json::{json, Value};
 use zether_prover::api::{self, call};
-use zether_prover::curve::{keccak256, Bls12381, Bn254};
+use zether_prover::curve::{keccak256, Bls12381};
+#[cfg(feature = "bn254")]
+use zether_prover::curve::Bn254;
 
 fn ok(cmd: &str, v: &Value) -> Value {
     serde_json::from_str(&call(cmd, &v.to_string()).unwrap()).unwrap()
@@ -13,6 +15,16 @@ fn ok(cmd: &str, v: &Value) -> Value {
 fn err(cmd: &str, v: &Value) -> String {
     call(cmd, &v.to_string()).unwrap_err()
 }
+
+/// Curves under test: BLS12-381 only, plus bn254 with the legacy `bn254` feature (`BN` = the cheaper one of them).
+#[cfg(feature = "bn254")]
+const CURVES: [&str; 2] = ["bn254", "bls12381"];
+#[cfg(not(feature = "bn254"))]
+const CURVES: [&str; 1] = ["bls12381"];
+#[cfg(feature = "bn254")]
+const BN: &str = "bn254";
+#[cfg(not(feature = "bn254"))]
+const BN: &str = "bls12381";
 
 const UID: &str = "0x2424242424242424242424242424242424242424242424242424242424242424";
 const TOKEN: &str = "0x5fbdb2315678afecb367f032d93f642f64180aa3";
@@ -57,7 +69,7 @@ fn from_storage(curve: &str, entry: &Value, uid: &str) -> Value {
 
 #[test]
 fn recover_from_storage_alone() {
-    for curve in ["bn254", "bls12381"] {
+    for curve in CURVES {
         let t = ok("proveTransferMulti", &multi(curve));
         assert_eq!(t["mode"], json!("compact"));
         let r = ok("recoverTransfer", &from_storage(curve, &entry(&t), UID));
@@ -95,6 +107,7 @@ fn ua(curve: &str, a: u32) -> Value {
 fn recover_with(curve: &str, q: &Value, key_of: &mut dyn FnMut(&[u8; 32]) -> Option<Vec<u8>>) -> Result<Value, String> {
     let mut rng = rand_core::OsRng;
     match curve {
+        #[cfg(feature = "bn254")]
         "bn254" => api::recover_transfer_with::<Bn254, _>(q, key_of, &mut rng),
         _ => api::recover_transfer_with::<Bls12381, _>(q, key_of, &mut rng),
     }
@@ -106,7 +119,7 @@ fn recover_with(curve: &str, q: &Value, key_of: &mut dyn FnMut(&[u8; 32]) -> Opt
 /// garbage is refused (fail closed).
 #[test]
 fn recover_with_keys_from_the_registry() {
-    for curve in ["bn254", "bls12381"] {
+    for curve in CURVES {
         let t = ok("proveTransferMulti", &multi(curve));
         let mut q = from_storage(curve, &entry(&t), UID);
         q["keys"] = Value::Null;
@@ -152,13 +165,13 @@ fn recover_with_keys_from_the_registry() {
 /// here is far below the amount).
 #[test]
 fn recover_commit_reveal_calldata_without_keys() {
-    let mut req = multi("bn254");
+    let mut req = multi(BN);
     req["balance"] = json!(1u64 << 40);
-    req["acc"] = ok("encrypt", &json!({"curve": "bn254", "Y": y("bn254", 0), "amount": 1u64 << 40}));
+    req["acc"] = ok("encrypt", &json!({"curve": BN, "Y": y(BN, 0), "amount": 1u64 << 40}));
     req["recipients"][0]["amount"] = json!(1u64 << 33);
     let t = ok("proveTransferMulti", &req);
-    let q = json!({"curve": "bn254", "key": key(0), "chainId": 31337, "chainUid": UID, "token": TOKEN,
-        "yAud": y("bn254", 9), "tableBits": 10, "boundBits": 20, "payload": t["payload"]});
+    let q = json!({"curve": BN, "key": key(0), "chainId": 31337, "chainUid": UID, "token": TOKEN,
+        "yAud": y(BN, 9), "tableBits": 10, "boundBits": 20, "payload": t["payload"]});
     let r = ok("recoverTransfer", &q);
     assert_eq!(r["bundles"], t["bundles"]);
     assert_eq!(r["legs"][0]["amount"], json!((1u64 << 33).to_string()));
@@ -174,10 +187,10 @@ fn recover_commit_reveal_calldata_without_keys() {
 /// An `OPTIONAL` opt-out: the memo's flag says the auditor was left out; no `yAud` needed.
 #[test]
 fn recover_an_opt_out() {
-    let mut req = multi("bn254");
+    let mut req = multi(BN);
     req["yAud"] = Value::Null;
     let t = ok("proveTransferMulti", &req);
-    let mut q = from_storage("bn254", &entry(&t), UID);
+    let mut q = from_storage(BN, &entry(&t), UID);
     q["yAud"] = Value::Null;
     let r = ok("recoverTransfer", &q);
     assert_eq!(r["auditorIncluded"], json!(false));
@@ -188,19 +201,19 @@ fn recover_an_opt_out() {
 /// salt in `R` or the payload gives `s`, BSGS the amounts.
 #[test]
 fn recover_a_record_and_calldata() {
-    let mut req = multi("bn254");
+    let mut req = multi(BN);
     req["disclosureMode"] = Value::Null; // a BUNDLE token: `zetherTransfer` stores R
     let t = ok("proveTransferMulti", &req);
     assert_eq!(t["memo"], json!("0x"), "no memo off commit-reveal");
-    let base = json!({"curve": "bn254", "key": key(0), "chainId": 31337, "chainUid": UID, "token": TOKEN,
-        "yAud": y("bn254", 9), "tableBits": 18, "boundBits": 24});
+    let base = json!({"curve": BN, "key": key(0), "chainId": 31337, "chainUid": UID, "token": TOKEN,
+        "yAud": y(BN, 9), "tableBits": 18, "boundBits": 24});
     let mut q = base.clone();
     (q["entry"], q["sendCounter"]) = (t["bundles"].clone(), json!(4));
     let r = ok("recoverTransfer", &q);
     assert_eq!(r["s"], t["witness"]["s"]);
     assert_eq!(r["legs"][0]["amount"], json!("1200"), "BSGS");
     let mut w = q.clone();
-    w["yAud"] = y("bn254", 8); // review T1 m1: only the record compare refuses a wrong auditor key
+    w["yAud"] = y(BN, 8); // review T1 m1: only the record compare refuses a wrong auditor key
     assert!(err("recoverTransfer", &w).contains("rebuilt"), "wrong yAud on a record");
     let mut q = base.clone();
     q["payload"] = t["payload"].clone();
@@ -221,7 +234,7 @@ fn recover_a_record_and_calldata() {
 /// and another `s`.
 #[test]
 fn two_builds_at_one_counter_differ() {
-    let req = multi("bn254");
+    let req = multi(BN);
     let (a, b) = (ok("proveTransferMulti", &req), ok("proveTransferMulti", &req));
     assert_ne!(a["salt"], b["salt"]);
     assert_ne!(a["witness"]["s"], b["witness"]["s"]);
@@ -232,21 +245,21 @@ fn two_builds_at_one_counter_differ() {
 /// COMPACT token, which refuses the other forms and the single format; `auditorMode` FULL needs `yAud`, NONE refuses it.
 #[test]
 fn modes_in_the_request() {
-    let mut req = multi("bn254");
+    let mut req = multi(BN);
     req["disclosureMode"] = Value::Null;
     let sel = |t: &Value| t["directCalldata"].as_str().unwrap()[2..10].to_string();
     let t = ok("proveTransferMulti", &req);
     assert_eq!(t["mode"], json!("bundle"));
-    assert_eq!(sel(&t), "d228e5c0", "zetherTransfer, the default");
+    assert_eq!(sel(&t), "b0dcc0ca", "zetherTransfer, the default");
     let mut h = req.clone();
     h["mode"] = json!("compact");
-    let compact = hex::encode(zether_prover::envelope::selector("zetherTransferCompact(bytes,bytes,bytes,bytes32)"));
+    let compact = hex::encode(zether_prover::envelope::selector("zetherTransferCompact(bytes,bytes,bytes32)"));
     assert_eq!(sel(&ok("proveTransferMulti", &h)), compact, "commit-reveal on a BUNDLE token");
     let mut c = req.clone();
     c["disclosureMode"] = json!("compact");
     let t = ok("proveTransferMulti", &c);
     assert_eq!(t["mode"], json!("compact"));
-    assert_eq!(sel(&t), "d228e5c0", "zetherTransfer: commit-reveal on a COMPACT token");
+    assert_eq!(sel(&t), "b0dcc0ca", "zetherTransfer: commit-reveal on a COMPACT token");
     for m in ["bundle", "none"] {
         c["mode"] = json!(m);
         assert!(err("proveTransferMulti", &c).contains("TransferEntryDisabled"));
@@ -276,10 +289,13 @@ fn gas_cap_message() {
         "a cheaper form: none ("] {
         assert!(e.contains(part), "{part}: {e}");
     }
-    let mut bn = multi("bn254");
+    #[cfg(feature = "bn254")]
+    {
+    let mut bn = multi(BN);
     bn["disclosureMode"] = Value::Null;
-    bn["recipients"] = json!((1..=9).map(|a| json!({"yTo": y("bn254", a), "amount": 1})).collect::<Vec<_>>());
+    bn["recipients"] = json!((1..=9).map(|a| json!({"yTo": y(BN, a), "amount": 1})).collect::<Vec<_>>());
     let e = err("proveTransferMulti", &bn);
     assert!(e.contains("bn254 bundle with the auditor, direct, M = 9") && e.contains("at most 8"), "{e}");
     assert!(e.contains("compact without the auditor (~16364440), none with the auditor (~16275709)"), "{e}");
+    }
 }
