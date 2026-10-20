@@ -559,8 +559,14 @@ its own key types — an EVM chain knows secp256k1 addresses and nothing else. R
 more: passkeys on phones, HSMs, ed25519 keys, Schnorr and BLS keys, multisig and threshold groups, post-quantum keys,
 and confidential (Zether) keys.
 
-**A Universal Account (UA) is an identifier derived from key data or from a policy — an EOA address generalized to
-every signature scheme** ([docs/contracts/accounts.md](docs/contracts/accounts.md)).
+**A Universal Account (UA) is the actor — a person, an organization, a device or a group — that signs, and answers
+for, every write to a smart contract, tokens included.** Its signature may come from a native account, a single key
+of any kind, a BLS key, a group or threshold key, or an m-of-n multisig; it is named by a 32-byte id derived from that
+key data or policy: an EOA address generalized to every signature scheme
+([docs/contracts/accounts.md](docs/contracts/accounts.md), CTR-UA-30 in [decisions](docs/decisions.md)).
+A UA holds its public and its confidential balances under the same id. Reading needs no UA; whatever cannot sign a
+write is not a UA but an attribute of one: a classical Zether key is itself a UA (it signs by Schnorr, and its proof
+authorizes a spend), while a post-quantum PQZ key, which cannot sign, is an attribute of a post-quantum signing UA.
 
 ```mermaid
 flowchart LR
@@ -584,8 +590,11 @@ What makes it work:
 - **One key, one purpose.** The same key is never used for two kinds — wallets derive a separate key per kind, and the
   registry refuses a key already registered under another kind
   ([CTR-UA-10](docs/contracts/accounts.md#CTR-UA-10)).
-- **Each function accepts the kinds it needs.** A payment accepts any signing kind; a confidential transfer accepts
-  only Zether kinds ([CTR-UA-14](docs/contracts/accounts.md#CTR-UA-14)).
+- **Each function accepts the kinds it needs.** A payment accepts any signing kind; a classical confidential transfer
+  accepts only Zether kinds, a PQ confidential transfer only a post-quantum signer that carries a PQZ key
+  ([CTR-UA-14](docs/contracts/accounts.md#CTR-UA-14)).
+- **An encryption key belongs to one UA.** A Zether key or a PQZ key is registered under one UA only, multisig
+  included; a second registration of the same key is refused.
 
 <details>
 <summary><b>What a UA can hold</b> — native accounts, single keys, BLS, n-of-n groups, t-of-n thresholds, multisig, post-quantum and confidential kinds</summary>
@@ -598,8 +607,8 @@ What makes it work:
 | n-of-n group | `musig2-secp256k1`, `musig2-bn254` | Several parties produce **one** aggregate signature; the registry recomputes the group key |
 | t-of-n threshold | `frost-secp256k1`, `frost-bn254` | Any `t` of `n` parties sign; the chain checks **one** signature; key-generation proofs checked at registration |
 | Multisig policy | `msig` | A weighted threshold over up to 16 members of any signing kind — e.g. two passkeys plus an HSM, or a director's passkey plus a company EOA |
-| Post-quantum signing | `mldsa44`, `mldsa65`, `fndsa512` (Falcon) | Authorization that survives a quantum computer |
-| Confidential balances | `zether-bn254`, `zether-bls12381`, `pqz-mlwe` | Encryption keys for Zether and PQ Zether; they never sign — spending is authorized by another UA (`authRef`) |
+| Post-quantum signing | `mldsa44`, `mldsa65`, `fndsa512` (Falcon) | Authorization that survives a quantum computer; such a UA (or a multisig whose non-PQ members' weight stays below the threshold) may carry a PQZ key for PQ confidential balances, given once in `register` and immutable |
+| Classical confidential balances | `zether-bn254`, `zether-bls12381` | The Zether key is itself the UA: it signs by Schnorr with its secret `x`, and its Zether proof authorizes a spend ("self" mode) |
 
 </details>
 
@@ -607,7 +616,7 @@ Threshold ECDSA from MPC custody providers needs no kind of its own: its output 
 is a plain EVM address.
 
 **Ways to use it:** sign alone (one key); sign together (`msig`, weighted); aggregate (MuSig2, BLS); share a key by
-threshold (FROST); authorize a confidential account (a Zether UA points to the UA that may spend it); and, optionally,
+threshold (FROST); hold a confidential balance (a Zether key UA, or a PQ signer with a PQZ key); and, optionally,
 attach verifiable credentials (eKYC) to any account, native or derived — never mandatory, and never parsed on chain
 ([credentials](docs/contracts/accounts.md#credentials)).
 
@@ -616,10 +625,10 @@ address across key changes, guardian recovery, or compatibility with contracts t
 optional smart account `SmartKeyAccount` — itself a native contract UA
 ([CTR-ACC-09](docs/contracts/accounts.md#CTR-ACC-09)).
 
-**Status.** The UA model is SPECIFIED, nothing of the new registry is built yet. Already BUILT: BLS verification,
-bn254 FROST and MuSig2 verification, ECDSA N-of-M quorums, `SmartKeyAccount`, and the Zether-only registry that the UA
-registry replaces. In the first version, existing tokens, the DEX and mandates keep accepting native accounts; UA
-holders use the new UA-ledger tokens (MetaToken v3) and Zether
+**Status.** The UA registry is BUILT and deployed on chain 7622 (signing, BLS, group, threshold, multisig,
+post-quantum and Zether kinds; P6g), with the UA ledger in the token base (UA-4), UA receivers and wrap (UA-5a) and UA
+trade orders (UA-5b); UA-5c is SPECIFIED. The identity rule above (owner, 2026-10-20, CTR-UA-30) is decided, not built:
+UA-6 replaces today's separate `pqz-mlwe` kind and its `authRef` with a PQZ key carried by the PQ signer
 ([function → kinds](docs/contracts/accounts.md#function-kinds)).
 
 ---
@@ -820,7 +829,7 @@ named auditor opens any single transfer.
 | Protects | Amounts and balances, against today's attackers | The same, **also against a future quantum computer** — both reading balances later ("harvest now, decrypt later") and forging proofs to mint |
 | Encryption | ElGamal on elliptic curves (bn254 or BLS12-381, chosen per token at deploy) | Module-lattice (LWE) encryption |
 | Proofs | Σ-protocol + two Bulletproofs range proofs | One lattice proof (LNP22) per operation, verified by a native precompile |
-| Authorization | Registry of signature schemes | Universal Account `authRef`: ML-DSA-65 by default, or a hybrid post-quantum multisig |
+| Authorization | The Zether key UA itself (Schnorr by `x`, the proof authorizes a spend) | The post-quantum signing UA that carries the PQZ key: ML-DSA-65 by default, or a multisig whose non-PQ weight is below the threshold (CTR-UA-30, UA-6) |
 | Gas per transfer | ≈ 3.3 M (measured) | ≈ 2.8 M (estimate; calldata-bound, ≈ 77 KB per transfer) |
 | Gasless | Yes — `IERC20MetaTx` envelope, public fee | Yes — the same envelope, plus a post-quantum payer |
 | Where | Development chains only, until an independent audit | Private/PoA chains only (chain 7622), behind a precompile self-test |
