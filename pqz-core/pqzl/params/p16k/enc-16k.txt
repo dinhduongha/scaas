@@ -1,0 +1,52 @@
+lattice-estimator 53da598, SageMath 10.7, Python 3.12.5; q = 1125899864532089
+reference: Kyber-512 usvp beta 406
+
+== n = 2560 key (m = n): primal uSVP beta 508
+usvp                 :: rop: ≈2^148.3, red: ≈2^148.3, δ: 1.003366, β: 508, d: 4871, tag: usvp
+bdd                  :: rop: ≈2^148.7, red: ≈2^148.6, svp: ≈2^145.1, β: 509, η: 496, d: 4976, tag: bdd
+dual                 :: rop: ≈2^149.8, mem: ≈2^115.5, m: ≈2^11.3, β: 513, d: 5044, ↻: 1, tag: dual
+dual_hybrid          :: rop: ≈2^145.7, red: ≈2^145.7, guess: ≈2^131.8, β: 499, p: 3, ζ: 10, t: 60, β': 499, N: ≈2^101.0, m: ≈2^11.3
+  classical: best 2^145.7 (dual_hybrid, beta 499); usvp beta 508, dual_hybrid beta 499
+usvp                 :: rop: ≈2^134.6, red: ≈2^134.6, δ: 1.003366, β: 508, d: 4871, tag: usvp
+bdd                  :: rop: ≈2^135.0, red: ≈2^134.9, svp: ≈2^131.7, β: 509, η: 496, d: 4976, tag: bdd
+dual                 :: rop: ≈2^135.9, mem: ≈2^115.5, m: ≈2^11.3, β: 513, d: 5044, ↻: 1, tag: dual
+dual_hybrid          :: rop: ≈2^132.7, red: ≈2^132.5, guess: ≈2^129.3, β: 500, p: 3, ζ: 0, t: 70, β': 500, N: ≈2^99.8, m: ≈2^11.3
+  quantum: best 2^132.7 (dual_hybrid, beta 500); usvp beta 508, dual_hybrid beta 500
+
+== n = 2560 enc (m = n + 48): primal uSVP beta 508
+usvp                 :: rop: ≈2^148.3, red: ≈2^148.3, δ: 1.003366, β: 508, d: 4871, tag: usvp
+bdd                  :: rop: ≈2^148.7, red: ≈2^148.6, svp: ≈2^145.1, β: 509, η: 496, d: 4976, tag: bdd
+dual                 :: rop: ≈2^149.8, mem: ≈2^115.5, m: ≈2^11.3, β: 513, d: 5044, ↻: 1, tag: dual
+dual_hybrid          :: rop: ≈2^145.7, red: ≈2^145.7, guess: ≈2^131.8, β: 499, p: 3, ζ: 10, t: 60, β': 499, N: ≈2^101.0, m: ≈2^11.3
+  classical: best 2^145.7 (dual_hybrid, beta 499); usvp beta 508, dual_hybrid beta 499
+usvp                 :: rop: ≈2^134.6, red: ≈2^134.6, δ: 1.003366, β: 508, d: 4871, tag: usvp
+bdd                  :: rop: ≈2^135.0, red: ≈2^134.9, svp: ≈2^131.7, β: 509, η: 496, d: 4976, tag: bdd
+dual                 :: rop: ≈2^135.9, mem: ≈2^115.5, m: ≈2^11.3, β: 513, d: 5044, ↻: 1, tag: dual
+dual_hybrid          :: rop: ≈2^132.7, red: ≈2^132.5, guess: ≈2^129.3, β: 500, p: 3, ζ: 0, t: 70, β': 500, N: ≈2^99.8, m: ≈2^11.3
+  quantum: best 2^132.7 (dual_hybrid, beta 500); usvp beta 508, dual_hybrid beta 500
+
+== n = 2304 key (m = n): primal uSVP beta 440
+usvp                 :: rop: ≈2^128.5, red: ≈2^128.5, δ: 1.003726, β: 440, d: 4416, tag: usvp
+bdd                  :: rop: ≈2^129.0, red: ≈2^128.8, svp: ≈2^125.9, β: 441, η: 430, d: 4475, tag: bdd
+dual                 :: rop: ≈2^129.9, mem: ≈2^101.1, m: ≈2^11.1, β: 445, d: 4551, ↻: 1, tag: dual
+dual_hybrid          :: rop: ≈2^126.4, red: ≈2^126.4, guess: ≈2^116.8, β: 433, p: 3, ζ: 10, t: 50, β': 433, N: ≈2^87.8, m: ≈2^11.2
+  classical: best 2^126.4 (dual_hybrid, beta 433); usvp beta 440, dual_hybrid beta 433
+usvp                 :: rop: ≈2^116.6, red: ≈2^116.6, δ: 1.003726, β: 440, d: 4416, tag: usvp
+bdd                  :: rop: ≈2^117.1, red: ≈2^116.9, svp: ≈2^114.2, β: 441, η: 430, d: 4475, tag: bdd
+dual                 :: rop: ≈2^117.9, mem: ≈2^101.1, m: ≈2^11.1, β: 445, d: 4551, ↻: 1, tag: dual
+dual_hybrid          :: rop: ≈2^115.3, red: ≈2^115.3, guess: ≈2^100.3, β: 435, p: 3, ζ: 0, t: 50, β': 435, N: ≈2^90.1, m: ≈2^11.2
+  quantum: best 2^115.3 (dual_hybrid, beta 435); usvp beta 440, dual_hybrid beta 435
+
+== n = 2304 enc (m = n + 48): primal uSVP beta 440
+usvp                 :: rop: ≈2^128.5, red: ≈2^128.5, δ: 1.003726, β: 440, d: 4416, tag: usvp
+bdd                  :: rop: ≈2^129.0, red: ≈2^128.8, svp: ≈2^125.9, β: 441, η: 430, d: 4475, tag: bdd
+dual                 :: rop: ≈2^129.9, mem: ≈2^101.1, m: ≈2^11.1, β: 445, d: 4551, ↻: 1, tag: dual
+dual_hybrid          :: rop: ≈2^126.4, red: ≈2^126.4, guess: ≈2^116.8, β: 433, p: 3, ζ: 10, t: 50, β': 433, N: ≈2^87.8, m: ≈2^11.2
+  classical: best 2^126.4 (dual_hybrid, beta 433); usvp beta 440, dual_hybrid beta 433
+usvp                 :: rop: ≈2^116.6, red: ≈2^116.6, δ: 1.003726, β: 440, d: 4416, tag: usvp
+bdd                  :: rop: ≈2^117.1, red: ≈2^116.9, svp: ≈2^114.2, β: 441, η: 430, d: 4475, tag: bdd
+dual                 :: rop: ≈2^117.9, mem: ≈2^101.1, m: ≈2^11.1, β: 445, d: 4551, ↻: 1, tag: dual
+dual_hybrid          :: rop: ≈2^115.3, red: ≈2^115.3, guess: ≈2^100.3, β: 435, p: 3, ζ: 0, t: 50, β': 435, N: ≈2^90.1, m: ≈2^11.2
+  quantum: best 2^115.3 (dual_hybrid, beta 435); usvp beta 440, dual_hybrid beta 435
+
+done

@@ -1,0 +1,144 @@
+Compiling 1 files with Solc 0.8.37
+Solc 0.8.37 finished in 3.77s
+Compiler run successful with warnings:
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+  --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:92:29:
+   |
+92 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, signature);
+   |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:119:29:
+    |
+119 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, r, vs);
+    |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:161:29:
+    |
+161 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, v, r, s);
+    |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:169:26:
+    |
+169 |     function _throwError(RecoverError error, bytes32 errorArg) private pure {
+    |                          ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> src/factory/OpenFactory.sol:282:26:
+    |
+282 |         private returns (address at, Release memory r)
+    |                          ^^^^^^^^^^
+
+
+Ran 2 tests for test/pqz/PqzStateGas.t.sol:PqzStateTrivialRollGasTest
+[PASS] test_gas_rollMax_afterTrivialRoll() (gas: 11161844)
+Logs:
+  mtxRollOver ROLL_MAX after a TRIVIAL-only rollover gas 12088219
+
+[PASS] test_trivialRoll_noZeroSlot() (gas: 1016838)
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 122.95ms (27.43ms CPU time)
+
+Ran 23 tests for test/pqz/PqzStateGas.t.sol:PqzStatePinGasTest
+[PASS] test_gas_burn() (gas: 4061017)
+Logs:
+  burn 1 to an address, fee, fresh ref gas 3857681
+
+[PASS] test_gas_op1_bundle_16inline() (gas: 5969345)
+Logs:
+  op 1 BUNDLE, auditor, fee, 16 inline credits (cold blobs), hint gas 4713072
+
+[PASS] test_gas_op1_bundle_freshRef() (gas: 4212030)
+Logs:
+  op 1 BUNDLE, auditor, fee, p = rolled, acc = blob reference gas 4002873
+
+[PASS] test_gas_op1_bundle_materialised_hint() (gas: 5466955)
+Logs:
+  op 1 BUNDLE, auditor, fee, p = rolled, materialised acc, hint gas 4133936
+
+[PASS] test_gas_op1_bundle_materialised_noHint() (gas: 5363732)
+Logs:
+  op 1 BUNDLE, auditor, fee, p = rolled, materialised acc, no hint gas 5229390
+
+[PASS] test_gas_op1_compact() (gas: 4297641)
+Logs:
+  op 1 COMPACT (HASH), auditor, fee, fresh ref gas 4074591
+
+[PASS] test_gas_op1_shieldIn() (gas: 4225997)
+Logs:
+  op 1 BUNDLE, auditor, fee, shieldIn 100, fresh ref gas 4015037
+
+[PASS] test_gas_op7_M4() (gas: 4698018)
+Logs:
+  op 7 M = 4 BUNDLE, auditor, fee, fresh ref (4 first credits) gas 4468572
+
+[PASS] test_gas_op7_M8() (gas: 9069514)
+Logs:
+  op 7 M = 8 BUNDLE, auditor, fee, fresh ref (8 first credits) gas 8586995
+
+[PASS] test_gas_op7_M8_txTotal() (gas: 25700960)
+Logs:
+  op 7 M = 8 calldata bytes / zero bytes / proof bytes 103812 17313 64578
+  op 7 M = 8 BUNDLE, auditor, fee, fresh ref: execution (precompile mocked) gas 9017286
+  calldata gas EIP-2028 / all non-zero bound / EIP-7623 floor 1453236 1660992 3633090
+  tx total 21,000 + calldata + execution, without the precompile's schedule gas 10491522
+
+[PASS] test_gas_prepareAcc_half0() (gas: 5766313)
+Logs:
+  mtxPrepareAcc half 0 gas 5757946
+
+[PASS] test_gas_prepareAcc_half0_relayed() (gas: 5818030)
+Logs:
+  relayed mtxPrepareAcc half 0 (mtxExecute, fee 0) gas 5795309
+
+[PASS] test_gas_prepareAcc_half1() (gas: 5766333)
+Logs:
+  mtxPrepareAcc half 1 gas 5757946
+
+[PASS] test_gas_prepareAcc_half1_relayed() (gas: 5817939)
+Logs:
+  relayed mtxPrepareAcc half 1 (mtxExecute, fee 0) gas 5795309
+
+[PASS] test_gas_refresh() (gas: 4035586)
+Logs:
+  refresh, fee, fresh ref gas 3832302
+
+[PASS] test_gas_roll128() (gas: 6892691)
+Logs:
+  mtxRollOver 128 (steady, distinct cold blobs) gas 7498963
+
+[PASS] test_gas_rollMax() (gas: 18054904)
+Logs:
+  mtxRollOver 128 (steady, distinct cold blobs) gas 7498963
+  mtxRollOver ROLL_MAX (steady, distinct cold blobs) gas 12148307
+  mtxRollOver ROLL_MAX + 16 (linear fit) gas 12729475
+  per entry / fixed (fit) 36323 2849619
+
+[PASS] test_gas_rollMax_relayed() (gas: 10979483)
+Logs:
+  relayed mtxRollOver ROLL_MAX (mtxExecute, fee 0) gas 12185595
+
+[PASS] test_gas_roll_1() (gas: 2857755)
+Logs:
+  mtxRollOver 1 (steady) gas 2854442
+
+[PASS] test_gas_roll_16() (gas: 3362181)
+Logs:
+  mtxRollOver 16 (steady) gas 3430787
+
+[PASS] test_gas_shield_append() (gas: 82080)
+Logs:
+  mtxShield, append (tail of an earlier block) gas 73940
+
+[PASS] test_gas_shield_firstEntry() (gas: 96413)
+Logs:
+  mtxShield, the account's first entry (append) gas 88219
+
+[PASS] test_gas_shield_merge() (gas: 69880)
+Logs:
+  mtxShield, merge (TRIVIAL tail of this block) gas 51774
+
+Suite result: ok. 23 passed; 0 failed; 0 skipped; finished in 203.38ms (210.43ms CPU time)
+
+Ran 2 test suites in 205.64ms (326.32ms CPU time): 25 tests passed, 0 failed, 0 skipped (25 total tests)

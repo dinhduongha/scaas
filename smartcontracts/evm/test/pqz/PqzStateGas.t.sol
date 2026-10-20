@@ -96,9 +96,10 @@ contract PqzStatePinGasTest is PqzSlots {
         uint256 gMax = _gas(abi.encodeCall(tok.mtxRollOver, (alice, PqzCore.ROLL_MAX)));
         uint256 next = gMax + (gMax - g128) * 16 / (PqzCore.ROLL_MAX - 128);
         _log("mtxRollOver 128 (steady, distinct cold blobs)", g128);
-        _log("mtxRollOver ROLL_MAX = 256 (steady, distinct cold blobs)", gMax);
-        _log("mtxRollOver 272 (linear fit)", next);
-        console2.log("per entry / fixed (fit)", (gMax - g128) / 128, gMax - (gMax - g128) * 2);
+        _log("mtxRollOver ROLL_MAX (steady, distinct cold blobs)", gMax);
+        _log("mtxRollOver ROLL_MAX + 16 (linear fit)", next);
+        console2.log("per entry / fixed (fit)", (gMax - g128) / (PqzCore.ROLL_MAX - 128),
+            g128 - (gMax - g128) * 128 / (PqzCore.ROLL_MAX - 128));
         assertLe(gMax, CAP, "ROLL_MAX under 0.75 * 2^24");
         assertGt(next, CAP, "ROLL_MAX + 16 over it");
         bytes memory acc = tok.pqzAcc(alice);
@@ -111,16 +112,22 @@ contract PqzStatePinGasTest is PqzSlots {
         }
     }
 
-    /// The same `ROLL_MAX` rollover relayed through `mtxExecute` (fee 0, an unfunded signer, own transaction).
-    function test_gas_rollMax_relayed() public {
+    /// `data` (a token call) relayed through `mtxExecute` (fee 0, an unfunded signer, own transaction).
+    function _relayed(bytes memory data) internal returns (uint256) {
         uint256 key = 0xA11CE;
         MetaTxLib.MetaTransaction memory m;
         m.from = vm.addr(key);
-        m.data = abi.encodeCall(tok.mtxRollOver, (alice, PqzCore.ROLL_MAX));
+        m.data = data;
         m.validUntil = block.timestamp + 1 hours;
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(key, tok.mtxDigest(m));
-        uint256 g = _gas(abi.encodeWithSignature("mtxExecute((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)", m, abi.encodePacked(r, s, v)));
-        _log("relayed mtxRollOver ROLL_MAX = 256 (mtxExecute, fee 0)", g);
+        return _gas(abi.encodeWithSignature("mtxExecute((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)", m, abi.encodePacked(r, s, v)));
+    }
+
+    /// The same `ROLL_MAX` rollover relayed (owner rule 2026-10-20: every mtx* write is relayable). Plan 5h Task 7:
+    /// `ROLL_MAX` is the largest multiple of 16 when this fails at `ROLL_MAX + 16` (built with that constant).
+    function test_gas_rollMax_relayed() public {
+        uint256 g = _relayed(abi.encodeCall(tok.mtxRollOver, (alice, PqzCore.ROLL_MAX)));
+        _log("relayed mtxRollOver ROLL_MAX (mtxExecute, fee 0)", g);
         assertLe(g, CAP, "relayed ROLL_MAX under 0.75 * 2^24");
     }
 
@@ -146,6 +153,19 @@ contract PqzStatePinGasTest is PqzSlots {
     function test_gas_prepareAcc_half1() public {
         uint256 g = _gas(abi.encodeCall(tok.mtxPrepareAcc, (eve, 1)));
         _log("mtxPrepareAcc half 1", g);
+        assertLe(g, CAP);
+    }
+
+    /// Plan 5h Task 7: each half relayed (fee 0) stays under `0.75 · 2^24` too (every mtx* write is relayable).
+    function test_gas_prepareAcc_half0_relayed() public {
+        uint256 g = _relayed(abi.encodeCall(tok.mtxPrepareAcc, (eve, 0)));
+        _log("relayed mtxPrepareAcc half 0 (mtxExecute, fee 0)", g);
+        assertLe(g, CAP);
+    }
+
+    function test_gas_prepareAcc_half1_relayed() public {
+        uint256 g = _relayed(abi.encodeCall(tok.mtxPrepareAcc, (eve, 1)));
+        _log("relayed mtxPrepareAcc half 1 (mtxExecute, fee 0)", g);
         assertLe(g, CAP);
     }
 
@@ -203,12 +223,16 @@ contract PqzStatePinGasTest is PqzSlots {
     }
 
     function _op7(uint256 m) internal view returns (bytes memory) {
+        return _op7p(m, hex"c0de");
+    }
+
+    function _op7p(uint256 m, bytes memory proof) internal view returns (bytes memory) {
         bytes memory r;
         for (uint256 j; j < m; ++j) r = bytes.concat(r, xs[j]);
         uint256 g = (m + 3) / 4;
         bytes memory out = _blob(81 + m, PqzCt.PK * g + PqzCt.V * (m + 1) + PqzCt.V * m);
         return abi.encodeCall(tok.mtxConfidentialTransfer, (bytes.concat(abi.encode(uint256(0), block.number + 100, uint256(0),
-            carol, alice, m, uint256(0)), salt, r, out), hex"c0de", _mlAuth(), alice, ""));
+            carol, alice, m, uint256(0)), salt, r, out), proof, _mlAuth(), alice, ""));
     }
 
     function test_gas_op7_M4() public {
@@ -217,6 +241,29 @@ contract PqzStatePinGasTest is PqzSlots {
 
     function test_gas_op7_M8() public {
         _log("op 7 M = 8 BUNDLE, auditor, fee, fresh ref (8 first credits)", _gas(_op7(8)));
+    }
+
+    /// Plan 5h Task 7: op 7 M = 8 (auditor, fee, fresh ref) as one transaction against 2^24, with a proof of
+    /// `PQZ_PROOF_LEN` bytes (default 64,578: today's codegen estimate of `R_TXM` M = 8; set it to the measured or the
+    /// candidate's size). Logs the execution gas (precompile mocked: its schedule gas is not included), the calldata gas
+    /// (EIP-2028 4 / 16, and the "all bytes non-zero" bound) and the EIP-7623 floor of the call's data.
+    function test_gas_op7_M8_txTotal() public {
+        uint256 plen = vm.envOr("PQZ_PROOF_LEN", uint256(64_578));
+        bytes memory proof = new bytes(plen);
+        for (uint256 i; i < plen; i += 32) {
+            bytes32 w = keccak256(abi.encode("proof", i));
+            assembly ("memory-safe") { mstore(add(add(proof, 32), i), w) }
+        }
+        bytes memory data = _op7p(8, proof);
+        uint256 zeros;
+        for (uint256 i; i < data.length; ++i) if (data[i] == 0) ++zeros;
+        uint256 exec = _gas(data);
+        uint256 std = 4 * zeros + 16 * (data.length - zeros);
+        console2.log("op 7 M = 8 calldata bytes / zero bytes / proof bytes", data.length, zeros, plen);
+        _log("op 7 M = 8 BUNDLE, auditor, fee, fresh ref: execution (precompile mocked)", exec);
+        console2.log("calldata gas EIP-2028 / all non-zero bound / EIP-7623 floor", std, 16 * data.length,
+            10 * (zeros + 4 * (data.length - zeros)));
+        console2.log("tx total 21,000 + calldata + execution, without the precompile's schedule gas", 21_000 + std + exec);
     }
 
     function _burn(uint256 amount, address to) internal view returns (bytes memory) {
