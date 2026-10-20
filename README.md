@@ -197,7 +197,7 @@ mobile apps and AI agents call them like any other API.
 | Web API | SCaaS |
 |---|---|
 | Service endpoint | A contract address on a chain |
-| API function (`POST /payments`) | A contract function (`mtxPay(...)`, `mtxExchange(...)`, `zetherTransfer(...)`, or any allowlisted function of any SCaaS contract) |
+| API function (`POST /payments`) | A contract function (`mtxPay(...)`, `mtxExchange(...)`, `mtxConfidentialTransfer(...)`, or any allowlisted function of any SCaaS contract) |
 | Bearer token issued by the server | The **subject's own signature** over exactly this call (EIP-712 on EVM) |
 | Quotas and limits | Caps inside the contract: per-payment and per-period mandate limits, expiry on every signature |
 | API versioning | A version catalogue in the factory; each deployed contract stays fixed ([section 4](#4-shared-code-delegate-call-separate-data-and-upgradeable)) |

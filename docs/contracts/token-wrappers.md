@@ -807,7 +807,7 @@ Factory v2 is backed up in `smartcontracts/evm/legacy/p1e/` (not built).
   (moved from the factory, owner 2026-10-20): a Zether token (`ZetherLib.init`) reverts outside a dev chain, and with
   `IZetherToken.VerifierUnsupportedOnThisChain(verifier, curveName)` when the release's transfer verifier's
   `isSupportedOnThisChain()` is false or unanswered, so a BLS12-381 verifier cannot serve a chain without EIP-2537; a
-  PQZ token (`PqzLib.init`) requires the allowlisted chain, the precompile and its self-test (`PqzSafety`).
+  PQZ token (`PqzStateLib.init`) requires the allowlisted chain, the precompile and its self-test (`PqzSafety`).
   `ConfidentialConfig` has no verifier field.
 - **Trust the index only for registered versions** (`isRegisteredToken(token)`, `versionOf(token).version != 0`): the
   factory indexes what the config says, and an unregistered implementation (version 0) may do anything else with it.

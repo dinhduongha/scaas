@@ -721,8 +721,8 @@ TRIVIAL entries, two fees.** (Owner rulings 2026-10-19 and 2026-10-20, plan 5h; 
   per transaction on any op that names a beneficiary, to that beneficiary. `decoyFee`, op 7 only: an explicit
   sender-chosen payload word `d ≥ minDecoyFee`, the same `d` to **every** leg (the real recipient included, so it reveals
   no decoy); the statement's `fee` word is `txFee + M·d`, so the proof binds `d`. `minDecoyFee` is immutable at
-  `initialize`, may be 0, has no chain floor (`ConfidentialConfig.multiLegFee` is renamed `minDecoyFee`; Zether kinds
-  still require 0). `d < minDecoyFee` or `d ≥ 2^64` reverts `DecoyFeeOutOfRange(d, min)`. Op 1 never pays a decoy fee
+  `initialize`, may be 0, has no chain floor (`ConfidentialConfig.multiLegFee` is renamed `minDecoyFee`; the Zether
+  kinds take the same rule on their multi-recipient format, [zether.md §7](zether.md#CTR-ZTH-37)). `d < minDecoyFee` or `d ≥ 2^64` reverts `DecoyFeeOutOfRange(d, min)`. Op 1 never pays a decoy fee
   and **shields are free** (gas only; a tx fee only when relayed). A fee needs a registered beneficiary with a UA-ledger
   balance. This replaces the earlier per-credit fee and its chain floor.
 - **Flood economics.** A decoy or shield costs its sender the op blob share and one slot and costs the receiver side one
@@ -922,7 +922,7 @@ statement, proof and storage unchanged. `M` counts legs, real and decoy: a decoy
 credit), indistinguishable on chain from a real leg; 7 real recipients ⇒ `M = 8` with one decoy (owner 2026-10-16).
 Decoys are the wallet's choice (D16): no on-chain consent or decoy rule. **`decoyFee`** (owner 2026-10-20, replacing the
 earlier `multiLegFee`): op 7 carries an explicit payload word `d` (after `M`, before the salt: `… ‖ be32(M) ‖ d ‖ salt(16) ‖ UA_0 …`);
-`d ≥ minDecoyFee` (the token's immutable `ConfidentialConfig.minDecoyFee`, default 0; Zether kinds require 0) and `d < 2^64`, else
+`d ≥ minDecoyFee` (the token's immutable `ConfidentialConfig.minDecoyFee`, default 0; the Zether kinds take it too) and `d < 2^64`, else
 `DecoyFeeOutOfRange(d, minDecoyFee)`. The statement's public `fee` word is `txFee + M·d` (`txFee = confidentialFee` with a
 beneficiary; `≥ 2^64` ⇒ `AmountOutOfRange`), so the proof binds `d`. The beneficiary gets the `txFee` part and **every**
 listed leg, real recipient included, gets `d` — the same for every leg, so it reveals nothing, and listing a victim as a
@@ -1040,12 +1040,16 @@ pendingCount` (`RollOverRange`, no clamp to what is pending); every rolled entry
 (`RollTooYoung(index)`, TRIVIAL entries too). The entries `[rolled, rolled + n′)` are read **from state** (a credit's `u ‖ v`
 from its blob, a TRIVIAL entry as `Trivial(digits(amount))` with no blob read), added lane-wise to `acc` (64-bit lanes, one
 `mod q` per lane at the end: `ROLL_MAX + 16 + 1` terms of `q − 1` stay far below 2^64), and the 516 words are rewritten
-in place; `accHash` is updated, `flags |= MAT`, `rolled += n′`, `accUnits += n′`; the pending slots below `rolled − INLINE_MAX`
+in place, each stored as `ACC_MARK | word` (bit 255; lanes are `< 2^42`), so no slot is ever zeroed — not even by a
+TRIVIAL-only first rollover, whose `u` is 0 (final review I1) — and the mark is masked off on read (`accHash` and hints are
+over the unmarked bytes); `accHash` is updated, `flags |= MAT`, `rolled += n′`, `accUnits += n′`; the pending slots below `rolled − INLINE_MAX`
 are deleted (`cleared` and, when passed, `floor` follow); emit `RolledOver(ua, rolled, accUnits, accHash)`. No calldata besides
-`(ua, n)`, no proof, no signature: rollover cannot hurt anyone. As an envelope op it is the same call with an outer fee, so
-an owner can pay a relayer to roll. Cost (contract side, measured on the built token, `ROLL_AGE = 5`): ≈ 2.85 M fixed (516
-word rewrites) + ≈ 36.3 k per entry: 1 → 2.85 M, 16 → 3.42 M, 128 → 7.49 M, **256 → 12.13 M (72.3 % of 2^24)**; 272 would be 12.71 M,
-over the 0.75 · 2^24 = 12,582,912 rule, so `ROLL_MAX = 256`, pinned by `PqzStatePinGasTest`.
+`(ua, n)`, no proof, no signature: rollover cannot hurt anyone. It is not an envelope op (off both PQZ allow-lists, plan 5h
+Task 3b): anyone calls it directly. Cost (contract side, measured on the built token, `ROLL_AGE = 5`, each rollover its own
+cold transaction): ≈ 2.85 M fixed (516 word rewrites) + ≈ 36.3 k per entry: 1 → 2.85 M, 16 → 3.43 M, 128 → 7.50 M,
+**256 → 12.15 M (72.4 % of 2^24)**; 272 would be 12.73 M, over the 0.75 · 2^24 = 12,582,912 rule, so `ROLL_MAX = 256`,
+pinned by `PqzStatePinGasTest`; 256 credits after a TRIVIAL-only rollover 12.09 M (`PqzStateTrivialRollGasTest`; 20.89 M
+before `ACC_MARK`).
 
 **`mtxPrepareAcc(bytes32 ua, uint256 half)`** (PQZ only; permissionless, idempotent, `half ∈ {0, 1}`, else `BadPayload(half)`;
 the account must be a registered PQZ holder, else `AccountNotRegistered`): writes a non-zero placeholder into one half of the
@@ -1924,9 +1928,10 @@ Task 3 numbers from `test/pqz/PqzStateGas.t.sol`.
 | op 1 COMPACT / with `shieldIn` 100 | 4,072,031 / 4,141,055 | Task 3 / Task 2; NONE retired |
 | op 7 M = 4 / M = 8, auditor, fee, first credits | 4,464,033 / 8,580,422 | Task 3 (`decoyFee` included) |
 | burn / refresh | 3,856,419 / 3,831,003 | Task 3 |
-| `mtxShield`: first entry / append / merge | 88,221 / 73,942 / 51,776 | Task 3 |
-| `mtxRollOver` 1 / 16 / 128 / **256** | 2,847,871 / 3,424,216 / 7,492,392 / **12,134,236** | 72.3 % of 2^24; linear fit 2,850,548 + 36,264 per entry; 272 → 12,714,466 > 12,582,912 |
-| `mtxPrepareAcc` half 0 / half 1 | 5,757,911 / 5,757,911 | once per `(UA, token)` |
+| `mtxShield`: first entry / append / merge | 88,219 / 73,940 / 51,774 | final fix wave (88,221 / 73,942 / 51,776 in Task 3) |
+| `mtxRollOver` 1 / 16 / 128 / **256** | 2,854,442 / 3,430,787 / 7,498,963 / **12,148,307** | final fix wave, each its own cold transaction (`ACC_MARK`); 72.4 % of 2^24; linear fit 2,849,619 + 36,323 per entry; 272 → 12,729,475 > 12,582,912 |
+| `mtxRollOver` 256 after a TRIVIAL-only rollover | 12,088,219 | final review I1: 20,888,499 before `ACC_MARK` (the TRIVIAL rollover had zeroed 515 of 516 slots) |
+| `mtxPrepareAcc` half 0 / half 1 | 5,757,946 / 5,757,946 | once per `(UA, token)`; writes `ACC_MARK` |
 
 `ROLL_MAX = 256` (largest multiple of 16 with 0.75 · 2^24 ≥ cost) is pinned by `PqzStatePinGasTest`. The lanes after 16 + 256
 terms of `q − 1` give `q − 272` in every coefficient (no wrap). A burn or refresh is ≈ 3.4 M dearer than before (the op blob,
@@ -1955,8 +1960,8 @@ byte, ≈ 1.5 k tokens of ABI and header (scratch Python, 2026-10-06):
 | `transfer` in a v1 envelope | ≈ 2.82 M while `t_p99 ≲ 9.7 ms`; ≈ 3.5 M at 15 ms; ≈ 7.7 M at 50 ms | +≈ 0.6 KB calldata (struct head, offsets, 65 B ECDSA; ≈ 1 k tokens, +0.01 M floor); +≈ 0.2 M execution (ecrecover, one copy of `m.data` for `keccak256`, nonce, fee transfer, event), which shrinks the floor-bound range |
 | `transfer` in a v3 envelope, `mldsa65` fee UA | ≈ 2.95 M while `t_p99 ≲ 10 ms`; ≈ 3.5 M at 15 ms; ≈ 7.7 M at 50 ms | + the ≈ 3.4 KB ML-DSA `auth` (≈ 13.5 k tokens, +0.135 M floor) + verify via `0x…0F10` and the fee UA's SSTORE2 key read ≈ 0.02 M |
 | envelope at +16 inline credits | ≤ 16.78 M at 50 ms (requirement) | args sliced in place; a decode-and-self-call copy of ≈ 340 KB would add ≈ 2 M; a forge gas test checks it |
-| `mtxRollOver` of 16 credits | ≈ 8.9 M | calldata-bound (17 ciphertexts); amortizes to ≈ 0.55 M per credit |
-| `mtxShield` | ≈ 0.07 M | ERC-20 pull, `plainPending` and `totalShielded` updates, small event; nothing to roll later; as an envelope op ≈ 0.1 M (v1) / ≈ 0.2 M (v3, ML-DSA) |
+| `mtxRollOver` of 16 credits | 3.43 M (measured, 5h) | from state, no calldata (the pre-5h estimate was ≈ 8.9 M calldata-bound); see the 5h table above |
+| `mtxShield` | 0.05–0.09 M (measured, 5h) | proof-free: public units to `SHIELD_POOL`, a TRIVIAL pending entry, `totalShielded`; see the 5h table above |
 | `mtxUnshield` / `refresh` | ≈ 2.6 M | one recipient, no auditor, ≈ 258 k tokens |
 | `register` | ≈ 4.7–5.2 M once | SSTORE2 of a 16 KB pk ≈ 3.3 M + `R_REG` verify + standard calldata ≈ 0.59 M + the signer's PoP verify ≈ 0.01 M (above its ≈ 1.46 M floor); one transaction with the signer's registration, no second record slot, and the `UARegistered` log carries a 20-byte pointer, not 16 KB; +≈ 27 k for the `0x0142` list append; UA-6 re-measures it (`runs/<date>-ua6-gas.txt`) |
 | Classical reference (measured) | 3.33 M / 3.41 M transfer, 0.115 M rollover | [zether.md](zether.md#gas-measured) |

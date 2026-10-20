@@ -677,8 +677,9 @@ This changes the owner's stated q, so it is **owner question Q1**.
   whose record carries a PQZ key instead of a `pqz-mlwe` UA); the `R_REG` change, which rides 5h's id bump (§6.4).
 - **Classical Zether contracts now change in 5h** (they were "unchanged" in the first version): `SHIELD_POOL` instead of
   burn / mint and the beneficiary fee to the public balance [pool] (§5.10); the `mtx*` names and the shared interface
-  [mtx] (§5.11); the Zether shield stays proof-free and third-party (§5.9). `ConfidentialConfig.multiLegFee` keeps its
-  name and the Zether kinds keep refusing a non-zero value (D10 does not reach Zether). Relations, proofs and the Zether
+  [mtx] (§5.11); the Zether shield stays proof-free and third-party (§5.9). `ConfidentialConfig.multiLegFee` is renamed
+  `minDecoyFee` and, by the owner's fee ruling of 2026-10-20, applies to both layers: the Zether multi-recipient payload
+  carries the sender's `decoyFee` (`fee = txFee + M·d`, paid to every leg; built in the final fix wave). Relations, proofs and the Zether
   layout are unchanged.
 - **Kinds 6 and 7 dropped** [kinds] (CTR-TOK-21 Change): `NONE_ZETHER_PQZ` / `UNDERLYING_ZETHER_PQZ` leave
   `IOpenFactory.TokenKind`; ids 6 and 7 are not reused. With the enum ending at `UNDERLYING_PQZ` the ABI decoder already

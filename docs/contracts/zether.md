@@ -402,7 +402,9 @@ in [Multi-recipient transfer](#multi-recipient).
 fee is **not** a confidential credit (before, the effect was `pend_ben.C += [fee]G`, `pendingSeq_ben++`): the library returns the `fee` it debited from `totalShielded` and the token pays exactly that
 from `SHIELD_POOL` to the beneficiary's public UA-ledger balance (spendable at once, visible on `UATransfer`); a fee needs a
 registered, UA-ledger-enabled beneficiary. The relation is unchanged (`fee` was already public in the statement). This is the
-`txFee` of [CTR-PQZ-06](pq-zero-knowledge.md#CTR-PQZ-06); the Zether kinds have no `decoyFee` today (`minDecoyFee` must be 0).
+`txFee` of [CTR-PQZ-06](pq-zero-knowledge.md#CTR-PQZ-06). The multi-recipient format adds the sender's per-leg
+**`decoyFee`** `d` (owner 2026-10-20, as PQZ op 7; built in the 5h final fix wave): there `fee = txFee + M · d` (§ CTR-ZTH-37);
+the single format never pays one.
 
 ## 8. Σ-protocol
 
@@ -575,7 +577,7 @@ aggregation). Soundness as [CTR-ZTH-18](#CTR-ZTH-18): the only sum of proven val
 **Encoding.**
 
 ```text
-payload   = be32(provedAccSeq) ‖ be32(provedSendCounter) ‖ salt(16) ‖ be32(M) ‖ Y_f ‖ D_out ‖ C_deb ‖ (Y_tj ‖ C_out_j ‖ C_aud_j)_{j=1..M} [‖ memo]
+payload   = be32(provedAccSeq) ‖ be32(provedSendCounter) ‖ salt(16) ‖ be32(M) ‖ be32(decoyFee) ‖ Y_f ‖ D_out ‖ C_deb ‖ (Y_tj ‖ C_out_j ‖ C_aud_j)_{j=1..M} [‖ memo]
 statement = header(opTag) ‖ Y_f ‖ Y_a ‖ C_acc ‖ D_acc ‖ D_out ‖ C_deb ‖ be32(M) ‖ (Y_tj ‖ C_out_j ‖ C_aud_j)_{j=1..M}
 opTag     = keccak256("SCAAS-ZETHER-OP-TRANSFER-MULTI-V1/" ‖ mode)     mode ∈ {"HASH", "BUNDLE", "NONE"}
 proof     = sigma commitments ‖ sigma responses ‖ BP(v_1) … BP(v_M) ‖ BP(b')
@@ -586,9 +588,19 @@ The mode is in `opTag`, so a relayer cannot switch the mode of a signed proof. `
 `SelfTransfer`, `AccountNotRegistered`). The multi-recipient format has its own proof system id, so a single-recipient proof never
 matches it. Relaying through the meta-transaction envelope is the generic self-call ([CTR-ZTH-34](#CTR-ZTH-34)).
 
+**Decoy fee** (owner 2026-10-20; built in the 5h final fix wave). The payload's `decoyFee` word `d` is the sender's
+per-leg fee: `minDecoyFee() ≤ d < 2^64`, else `DecoyFeeOutOfRange(d, minDecoyFee)`; the statement's public `fee` word is
+`txFee + M · d` (`txFee = confidentialFee` when a beneficiary is named, else 0; `≥ 2^64` ⇒ `AmountOutOfRange`), so the
+proof binds `d` — the statement layout and the relation are unchanged (the fee was already public). `minDecoyFee` is the
+token's immutable `ConfidentialConfig.minDecoyFee` (may be 0, the default; `initialize` requires `minDecoyFee < 2^64` and
+`confidentialFee + 16 · minDecoyFee` `< 2^64` and `< maxDecryptableShielded`; no chain floor). `ZetherLib.transferMulti`
+returns what the debit moved (`Paid {txFee, decoyFee, legs}`) and the token pays exactly that from `SHIELD_POOL`: `txFee`
+to the beneficiary's public UA-ledger balance, `d` to **every** leg's (the real recipient included, so it reveals no decoy).
+A non-zero `d` adds ≈ 28.7 k gas per leg (the prover's `DECOY_LEG_GAS` = 32 k in its gas check).
+
 **Token.** Checks and order as `mtxConfidentialTransferSingle` (cheap first, `accSeq`/`sendCounter`, `kindOf(from)` is the Zether kind, verify; the proof alone authorizes). Effects: `acc_f −= (C_deb + [fee]G, D_out)`; per `j`
-`pending_tj += (C_out_j, D_out)`, `pendingSeq_tj++`; fee to the beneficiary as in the single format; `sendCounter_f++`
-once. `entryRef` as in the single format (one per transfer); recipient `j` is addressed as `(entryRef, j)`.
+`pending_tj += (C_out_j, D_out)`, `pendingSeq_tj++`; `txFee` to the beneficiary as in the single format and `d` to every leg
+(above); `sendCounter_f++` once. `entryRef` as in the single format (one per transfer); recipient `j` is addressed as `(entryRef, j)`.
 
 <a id="storage-modes"></a>
 <a id="CTR-ZTH-38"></a>**CTR-ZTH-38** — **Three transfer entries; the plain name is the mode's default** (owner 2026-10-08, 2026-10-11; built in P3b). `mtxConfidentialTransfer`, `mtxConfidentialTransferCompact`, `mtxConfidentialTransferNoBundle`, all `(bytes payload, bytes proof, UA beneficiary) returns (bytes32 entryRef)`; the salt ([CTR-ZTH-30](#CTR-ZTH-30)) and the sender memo ([CTR-ZTH-50](#CTR-ZTH-50)) travel inside `payload`, so they are signed and the ABI shape is the same for every entry. The bundle of leg `j` is `B_j = Y_tj ‖ C_out_j ‖ D_out ‖ C_aud_j` (bn254 256 B, BLS12-381 512 B per leg); the record is `R = salt ‖ B_1 ‖ … ‖ B_M`. Commit-reveal stores `keccak256(R)` (one slot) ‖ `memo` and emits `TransferBundles(entryRef, R)`; on-chain disclosure then takes `R` from the caller and `ZetherDisclosure` checks the hash (the commitment is over `R`, salt included: controller ruling, pending the owner). A large `M` exceeds the EIP-7825 cap on a transaction's gas limit: the prover takes at most 6 to 8 recipients by form, auditor and direct or relayed (BLS12-381, measured after UA-6: [§19](#gas)) and refuses a larger build against its table of measured gas limits; the contract has no cap. Every entry emits `ConfidentialTransferMulti(from, beneficiary, fee, sendCounter, entryRef, recipients, mode)`; `mode` in the event and the `opTag` names what is stored:

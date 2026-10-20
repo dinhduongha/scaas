@@ -458,11 +458,11 @@ flowchart LR
     D["ZetherDisclosure"]
     U -->|"wrap"| P
     P -->|"unwrap"| U
-    P -->|"zetherShield"| S
-    S -->|"zetherUnshield"| P
-    U -->|"zetherWrapShield"| S
-    S -->|"zetherUnshieldUnwrap"| U
-    S -->|"zetherTransfer, M legs"| S
+    P -->|"mtxShield"| S
+    S -->|"mtxUnshield"| P
+    U -->|"mtxWrapShield"| S
+    S -->|"mtxUnshieldUnwrap"| U
+    S -->|"mtxConfidentialTransfer, M legs"| S
     S -.->|"verify proof"| V
     S -.->|"requireAuthorized"| R
     ST -.->|"reads account state"| S
@@ -741,7 +741,7 @@ sequenceDiagram
 
 Value enters the shielded balance straight from an underlying leg and leaves straight to one
 ([CTR-ZTH-45](contracts/zether.md#CTR-ZTH-45), [CTR-ZTH-37](contracts/zether.md#CTR-ZTH-37)); built (P3) on development
-chains only: `UnderlyingZetherToken` (`zetherWrapShield`, `zetherUnshieldUnwrap`), Zether ops relayed through `mtxExecute`,
+chains only: `UnderlyingZetherToken` (`mtxWrapShield`, `mtxUnshieldUnwrap`; plan 5h names), Zether ops relayed through `mtxExecute`,
 and `ITransferDisclosure`.
 
 ```mermaid
@@ -752,17 +752,17 @@ sequenceDiagram
     participant STM as ZetherStatements
     participant VER as Zether verifier
     participant RCV as Recipient
-    SND->>RLY: MetaTransaction zetherWrapShield(u, amountIn, ua)
+    SND->>RLY: MetaTransaction mtxWrapShield(u, amountIn, ua)
     RLY->>TOK: mtxExecute(m, sig)
     TOK->>TOK: pull leg u at its rate, credit pending of ua
     SND->>STM: transferStatement(token, ...)
     SND->>SND: prove M legs (real and decoys) under one proof
-    SND->>RLY: MetaTransaction zetherTransfer(payload, proof, beneficiary)
+    SND->>RLY: MetaTransaction mtxConfidentialTransfer(payload, proof, "", beneficiary, "")
     RLY->>TOK: mtxExecute(m, sig)
     TOK->>VER: verify the proof (no authSig: the proof of x is the authorization)
     TOK->>TOK: debit the sender, credit each leg, store the bundle hash
-    RCV->>TOK: zetherRollOver (relayed), then decrypt off chain
-    RCV->>RLY: MetaTransaction zetherUnshieldUnwrap(..., u, recipient, amount, minOut)
+    RCV->>TOK: mtxRollOver (direct, anyone), then decrypt off chain
+    RCV->>RLY: MetaTransaction mtxUnshieldUnwrap(..., (u, recipient, amount, minOut))
     RLY->>TOK: mtxExecute(m, sig)
     TOK->>VER: verify the unshield proof
     TOK-->>RCV: pay leg u, nothing minted
@@ -945,7 +945,7 @@ Crypto-shredding, disclosure for reconciliation and the land gate are in
 | **Feature flag** | A bit of a token's `features`, chosen at creation (`PAYABLE`, `MINTABLE`, `BURNABLE`, `RATE_ADJUSTABLE`, `WRAP_DISABLEABLE`, the regulated `FREEZE`, `FORCE`, `PAUSE`, `ALLOWLIST`); per flag locked or disableable, never set later ([CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22)). |
 | **Owner** | A token's optional administrator: grants and revokes the roles of its flags, may clear an unlocked flag, may renounce for good; it acts on a flag only through a role ([CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22)). |
 | **Role holder** | An account granted the role of a flag (`minter`, `rateAdmin`, `guardian`, `issuer`, `compliance`); it can use only that flag's power and keeps the role after the owner renounces ([CTR-TOK-22](contracts/token-wrappers.md#CTR-TOK-22)). |
-| **Shield / unshield** | Moving value into or out of a confidential token's shielded (encrypted) balance, from or to the public balance (`zetherShield`, `zetherUnshield`) or straight from or to an underlying leg (`zetherWrapShield`, `zetherUnshieldUnwrap`) ([CTR-ZTH-45](contracts/zether.md#CTR-ZTH-45)). |
+| **Shield / unshield** | Moving value into or out of a confidential token's shielded (encrypted) balance, from or to the public balance (`mtxShield`, `mtxUnshield`) or straight from or to an underlying leg (`mtxWrapShield`, `mtxUnshieldUnwrap`) ([CTR-ZTH-45](contracts/zether.md#CTR-ZTH-45)). |
 | **Decoy** | A recipient leg of a confidential transfer that receives an encryption of 0, added by the sender to hide the real recipient ([CTR-ZTH-37](contracts/zether.md#CTR-ZTH-37)). |
 | **Opening** | Data that proves the amount of one confidential transfer leg to a checker without revealing a key: `SENDER_S`, `RECEIVER_X`, `AUDITOR`, `SENDER_CP` ([CTR-ZTH-40](contracts/zether.md#CTR-ZTH-40)). |
 | **`chain_uid`** | The chain's genesis block hash: with `chain_key` it identifies a chain (a chain id alone is not unique), and it is the `salt` of every SCaaS signing domain ([NET-ALL-22](networks/README.md#NET-ALL-22)). |
