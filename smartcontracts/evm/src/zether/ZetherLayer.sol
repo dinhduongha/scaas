@@ -178,7 +178,7 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
         _fromPool(ben, fee);
     }
 
-    // ------------------------------------------------------------------ roll-over (`mtxRollOver` / `mtxRollOverBatch` allowlisted, CTR-ZTH-34)
+    // ------------------------------------------------------------------ roll-over (all four allowlisted, CTR-ZTH-34)
 
     /// @notice The one aggregated pending of `ua` into `acc` for any `n ≥ 1` (`RollOverRange` for 0).
     function mtxRollOver(bytes32 ua, uint256 n) external nonReentrant {
