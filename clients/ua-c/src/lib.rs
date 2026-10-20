@@ -36,6 +36,8 @@ pub const SCAAS_UA_ERR_ARGUMENT: ScaasUaStatus = 8;
 pub const SCAAS_UA_ERR_BUFFER: ScaasUaStatus = 9;
 /// "UAInternal": a caught panic (a bug).
 pub const SCAAS_UA_ERR_INTERNAL: ScaasUaStatus = 10;
+/// "UAPqzHolder": a PQZ key given for a kind that may not hold one (only 0x0130-0x0132 may).
+pub const SCAAS_UA_ERR_PQZ_HOLDER: ScaasUaStatus = 11;
 
 /// One row of the kind table. `name` and `group` are static NUL-terminated strings (never freed); `group` is NULL when
 /// the kind has no group. `lengths[0..lengths_len]` are the accepted key-data lengths; `lengths_len == 0` means variable
@@ -72,6 +74,7 @@ impl From<ua::UAError> for Fail {
             KindNotNative(_) => SCAAS_UA_ERR_KIND_NOT_NATIVE,
             IdFormat => SCAAS_UA_ERR_ID_FORMAT,
             PurposeUnknown => SCAAS_UA_ERR_PURPOSE_UNKNOWN,
+            PqzHolder(_) => SCAAS_UA_ERR_PQZ_HOLDER,
         };
         Fail(status, e.to_string())
     }
@@ -178,7 +181,7 @@ pub extern "C" fn scaas_ua_abi_version() -> u32 {
 }
 
 /// The static code string of a status: "UAOk", "UAKeyData" ... "UAPurposeUnknown" (the vector files' `error` values),
-/// "UAArgument", "UABuffer", "UAInternal"; "UAStatusUnknown" for any other value.
+/// "UAArgument", "UABuffer", "UAInternal", "UAPqzHolder"; "UAStatusUnknown" for any other value.
 #[no_mangle]
 pub extern "C" fn scaas_ua_status_name(status: ScaasUaStatus) -> *const c_char {
     let name: &'static CStr = match status {
@@ -193,6 +196,7 @@ pub extern "C" fn scaas_ua_status_name(status: ScaasUaStatus) -> *const c_char {
         SCAAS_UA_ERR_ARGUMENT => c"UAArgument",
         SCAAS_UA_ERR_BUFFER => c"UABuffer",
         SCAAS_UA_ERR_INTERNAL => c"UAInternal",
+        SCAAS_UA_ERR_PQZ_HOLDER => c"UAPqzHolder",
         _ => c"UAStatusUnknown",
     };
     name.as_ptr()
@@ -251,13 +255,25 @@ pub extern "C" fn scaas_ua_is_member(kind: u16, hedera_native: bool) -> bool {
     safe(false, || ua::is_member(kind, hedera_native))
 }
 
-/// The 32-byte TAG of a derived kind.
+/// Whether `kind` may hold a PQZ key attribute (mldsa44, mldsa65, fndsa512).
+#[no_mangle]
+pub extern "C" fn scaas_ua_is_pqz_holder(kind: u16) -> bool {
+    safe(false, || ua::is_pqz_holder(kind))
+}
+
+/// `*out = true` iff the `msig` key data is PQ-eligible: its members outside 0x0130-0x0133 weigh less than the threshold.
+#[no_mangle]
+pub extern "C" fn scaas_ua_msig_pqz_eligible(key_data: *const u8, key_data_len: usize, out: *mut bool) -> ScaasUaStatus {
+    run(|| put(out, ua::msig_pqz_eligible(bytes(key_data, key_data_len)?)?))
+}
+
+/// The 32-byte TAG of a derived kind, or of the PQZ scheme 0x0142.
 #[no_mangle]
 pub extern "C" fn scaas_ua_tag(kind: u16, out32: *mut u8) -> ScaasUaStatus {
     run(|| put(out32.cast(), ua::tag(kind)?))
 }
 
-/// The tag string of a derived kind (NUL-terminated; `*out_len` counts the NUL).
+/// The tag string of a derived kind or of the PQZ scheme 0x0142 (NUL-terminated; `*out_len` counts the NUL).
 #[no_mangle]
 pub extern "C" fn scaas_ua_kind_tag_string(kind: u16, out: *mut c_char, out_len: *mut usize) -> ScaasUaStatus {
     run(|| write_str(out, out_len, &ua::kind_tag_string(kind)?))
@@ -383,19 +399,62 @@ pub extern "C" fn scaas_ua_chain_key_hash(chain_id: u64, out32: *mut u8) -> Scaa
     run(|| put(out32.cast(), ua::chain_key_hash(chain_id)))
 }
 
-/// The 32-byte popDigest; `chain_uid32`, `ua32`, `auth_ref32` are 32 bytes, `registry20` is 20 bytes.
+/// The 32-byte popDigest; `chain_uid32`, `ua32`, `pqz_key_hash32` are 32 bytes (the keyHash of the UA's PQZ key, all
+/// zero without one), `registry20` is 20 bytes.
 #[no_mangle]
 pub extern "C" fn scaas_ua_pop_digest(
     chain_id: u64,
     chain_uid32: *const u8,
     registry20: *const u8,
     ua32: *const u8,
-    auth_ref32: *const u8,
+    pqz_key_hash32: *const u8,
     out32: *mut u8,
 ) -> ScaasUaStatus {
     run(|| {
-        let d = ua::pop_digest(chain_id, arr(chain_uid32)?, arr(registry20)?, arr(ua32)?, arr(auth_ref32)?);
+        let d = ua::pop_digest(chain_id, arr(chain_uid32)?, arr(registry20)?, arr(ua32)?, arr(pqz_key_hash32)?);
         put(out32.cast(), d)
+    })
+}
+
+/// What a PQ holder signs to register: `out_pqz_key_hash32`, `out_pop_digest32` and `out_message32` (the ua_msg over the pop
+/// digest). `pqz_key` NULL = no key (hash 0, the plain pop); a key for a kind that may not hold one is `SCAAS_UA_ERR_PQZ_HOLDER`.
+#[no_mangle]
+#[allow(clippy::too_many_arguments)]
+pub extern "C" fn scaas_ua_holder_pop_message(
+    kind: u16,
+    chain_id: u64,
+    chain_uid32: *const u8,
+    registry20: *const u8,
+    ua32: *const u8,
+    pqz_key: *const u8,
+    pqz_key_len: usize,
+    out_pqz_key_hash32: *mut u8,
+    out_pop_digest32: *mut u8,
+    out_message32: *mut u8,
+) -> ScaasUaStatus {
+    run(|| {
+        let key = if pqz_key.is_null() { None } else { Some(bytes(pqz_key, pqz_key_len)?) };
+        let (h, d, m) = ua::holder_pop_message(kind, chain_id, arr(chain_uid32)?, arr(registry20)?, arr(ua32)?, key)?;
+        put(out_pqz_key_hash32.cast(), h)?;
+        put(out_pop_digest32.cast(), d)?;
+        put(out_message32.cast(), m)
+    })
+}
+
+/// The 32-byte message `R_REG` proves over for `pqz_key` (the PQZ scheme 0x0142).
+#[no_mangle]
+pub extern "C" fn scaas_ua_pqz_reg_message(
+    chain_id: u64,
+    chain_uid32: *const u8,
+    registry20: *const u8,
+    ua32: *const u8,
+    pqz_key: *const u8,
+    pqz_key_len: usize,
+    out32: *mut u8,
+) -> ScaasUaStatus {
+    run(|| {
+        let m = ua::pqz_reg_message(chain_id, arr(chain_uid32)?, arr(registry20)?, arr(ua32)?, bytes(pqz_key, pqz_key_len)?)?;
+        put(out32.cast(), m)
     })
 }
 

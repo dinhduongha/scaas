@@ -41,6 +41,11 @@ mod ffi {
         id: Vec<u8>,
         weight: u16,
     }
+    struct HolderPop {
+        pqz_key_hash: Vec<u8>,
+        pop_digest: Vec<u8>,
+        message: Vec<u8>,
+    }
     extern "Rust" {
         fn kind_info(kind: u16) -> Result<KindInfo>;
         fn kind_count() -> usize;
@@ -59,11 +64,16 @@ mod ffi {
         fn in_native_space(id: &[u8]) -> Result<bool>;
         fn is_native(kind: u16) -> bool;
         fn is_zether(kind: u16) -> bool;
+        fn is_pqz_holder(kind: u16) -> bool;
+        fn msig_pqz_eligible(key_data: &[u8]) -> Result<bool>;
         fn is_signing(kind: u16) -> bool;
         fn is_member(kind: u16, hedera_native: bool) -> bool;
         fn ua_message(kind: u16, purpose: &[u8], digest: &[u8]) -> Result<Vec<u8>>;
         fn chain_key_hash(chain_id: u64) -> Vec<u8>;
-        fn pop_digest(chain_id: u64, chain_uid: &[u8], registry: &[u8], ua: &[u8], auth_ref: &[u8]) -> Result<Vec<u8>>;
+        fn pop_digest(chain_id: u64, chain_uid: &[u8], registry: &[u8], ua: &[u8], pqz_key_hash: &[u8]) -> Result<Vec<u8>>;
+        #[allow(clippy::too_many_arguments)]
+        fn holder_pop_message(kind: u16, chain_id: u64, chain_uid: &[u8], registry: &[u8], ua: &[u8], has_pqz_key: bool, pqz_key: &[u8]) -> Result<HolderPop>;
+        fn pqz_reg_message(chain_id: u64, chain_uid: &[u8], registry: &[u8], ua: &[u8], pqz_key: &[u8]) -> Result<Vec<u8>>;
         fn ua_auth_domain_separator(generation: u32, chain_id: u64, registry: &[u8], chain_uid: &[u8]) -> Result<Vec<u8>>;
         #[allow(clippy::too_many_arguments)]
         fn ua_auth_digest(
@@ -80,7 +90,7 @@ mod ffi {
         fn encode_msig(threshold: u16, members: &[Member]) -> Result<Vec<u8>>;
     }
 }
-use ffi::{KindInfo, Member};
+use ffi::{HolderPop, KindInfo, Member};
 
 fn info(k: &ua::Kind) -> KindInfo {
     KindInfo {
@@ -143,6 +153,12 @@ fn is_native(kind: u16) -> bool {
 fn is_zether(kind: u16) -> bool {
     ua::is_zether(kind)
 }
+fn is_pqz_holder(kind: u16) -> bool {
+    ua::is_pqz_holder(kind)
+}
+fn msig_pqz_eligible(key_data: &[u8]) -> R<bool> {
+    guard(|| Ok(ua::msig_pqz_eligible(key_data)?))
+}
 fn is_signing(kind: u16) -> bool {
     ua::is_signing(kind)
 }
@@ -155,8 +171,20 @@ fn ua_message(kind: u16, purpose: &[u8], digest: &[u8]) -> R<Vec<u8>> {
 fn chain_key_hash(chain_id: u64) -> Vec<u8> {
     ua::chain_key_hash(chain_id).to_vec()
 }
-fn pop_digest(chain_id: u64, chain_uid: &[u8], registry: &[u8], ua_id: &[u8], auth_ref: &[u8]) -> R<Vec<u8>> {
-    guard(|| Ok(ua::pop_digest(chain_id, &a(chain_uid)?, &a(registry)?, &a(ua_id)?, &a(auth_ref)?).to_vec()))
+fn pop_digest(chain_id: u64, chain_uid: &[u8], registry: &[u8], ua_id: &[u8], pqz_key_hash: &[u8]) -> R<Vec<u8>> {
+    guard(|| Ok(ua::pop_digest(chain_id, &a(chain_uid)?, &a(registry)?, &a(ua_id)?, &a(pqz_key_hash)?).to_vec()))
+}
+fn holder_pop_message(
+    kind: u16, chain_id: u64, chain_uid: &[u8], registry: &[u8], ua_id: &[u8], has_pqz_key: bool, pqz_key: &[u8],
+) -> R<HolderPop> {
+    guard(|| {
+        let key = has_pqz_key.then_some(pqz_key);
+        let (h, d, m) = ua::holder_pop_message(kind, chain_id, &a(chain_uid)?, &a(registry)?, &a(ua_id)?, key)?;
+        Ok(HolderPop { pqz_key_hash: h.to_vec(), pop_digest: d.to_vec(), message: m.to_vec() })
+    })
+}
+fn pqz_reg_message(chain_id: u64, chain_uid: &[u8], registry: &[u8], ua_id: &[u8], pqz_key: &[u8]) -> R<Vec<u8>> {
+    guard(|| Ok(ua::pqz_reg_message(chain_id, &a(chain_uid)?, &a(registry)?, &a(ua_id)?, pqz_key)?.to_vec()))
 }
 fn domain(generation: u32, chain_id: u64, registry: &[u8], chain_uid: &[u8]) -> R<ua::Domain> {
     Ok(ua::Domain { generation, chain_id, registry: a(registry)?, chain_uid: a(chain_uid)? })
