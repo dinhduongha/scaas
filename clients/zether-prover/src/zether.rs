@@ -68,8 +68,8 @@ pub struct Header {
     pub beneficiary: [u8; 32],
     /// Burn only (transfer: 0).
     pub amount: u64,
-    /// Burn only (transfer: zero address).
-    pub recipient: [u8; 20],
+    /// Burn only (transfer: 0): the recipient id, a padded address or a derived SIGNING UA (CTR-ZTH-51; word 12).
+    pub recipient: [u8; 32],
     /// Transfer only (burn: 0): 16 fresh random bytes per build, an input of [`derive_s`]; the prove functions draw it.
     pub salt: [u8; 16],
     /// Commit-reveal only (else 0): `keccak256` of the sender memo the payload ends with ([`seal_memo`]).
@@ -132,7 +132,7 @@ impl Header {
             be32_u64(self.fee),
             self.beneficiary,
             be32_u64(self.amount),
-            be32_addr(&self.recipient),
+            self.recipient,
             salt_word(&self.salt),
             self.memo_hash,
         ];
@@ -175,7 +175,7 @@ impl Header {
             fee: u64_of(w(9))?,
             beneficiary: w(10).try_into().unwrap(),
             amount: u64_of(w(11))?,
-            recipient: addr_of(w(12))?,
+            recipient: w(12).try_into().unwrap(),
             salt: w(13)[16..].try_into().unwrap(),
             memo_hash: w(14).try_into().unwrap(),
         })
@@ -312,7 +312,7 @@ impl<C: ZCurve> TransferStatement<C> {
     pub fn validate(&self) -> Result<(), ZError> {
         let h = &self.header;
         h.check_fee()?;
-        if h.amount != 0 || h.recipient != [0u8; 20] {
+        if h.amount != 0 || h.recipient != [0u8; 32] {
             return Err(ZError::BadStatement("transfer with amount/recipient"));
         }
         if self.y_f.is_zero() || self.y_t.is_zero() {
@@ -933,7 +933,7 @@ impl<C: ZCurve> MultiTransferStatement<C> {
         if !value_in_range(h.fee) {
             return Err(ZError::BadStatement("fee >= 2^n_v"));
         }
-        if h.amount != 0 || h.recipient != [0u8; 20] {
+        if h.amount != 0 || h.recipient != [0u8; 32] {
             return Err(ZError::BadStatement("transfer with amount/recipient"));
         }
         if self.legs.is_empty() || self.legs.len() > MAX_RECIPIENTS {

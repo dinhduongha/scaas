@@ -32,7 +32,7 @@ fn header(fee: u64) -> Header {
         fee,
         beneficiary: if fee > 0 { [0x22; 32] } else { [0; 32] },
         amount: 0,
-        recipient: [0; 20],
+        recipient: [0; 32],
         salt: [0; 16],
         memo_hash: [0; 32],
     }
@@ -260,7 +260,7 @@ fn burn_suite<C: ZCurve>() {
     let f = fx::<C>();
     let mut h = header(300);
     h.amount = 400_000;
-    h.recipient = [0x44; 20];
+    h.recipient[12..].fill(0x44); // a padded address
     let mut memo = h.clone();
     memo.memo_hash = [1; 32];
     assert!(prove_burn(&f.gens, &f.from, memo, f.acc, BAL, &mut rng()).is_err(), "a burn has no memo");

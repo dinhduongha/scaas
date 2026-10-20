@@ -137,7 +137,7 @@ fn ct_json<C: ZCurve>(c: &Ciphertext<C>) -> Value {
 /// `envelopeBinding` (relayed), or `unwrapBinding` (a direct `mtxUnshieldUnwrap`, burns only), or direct.
 /// Both at once, or `unwrapBinding` on a transfer, is refused: the token never builds such a statement. The memo word
 /// is the prove functions' (0 on a burn).
-fn header(v: &Value, amount: u64, recipient: [u8; 20], burn: bool) -> R<Header> {
+fn header(v: &Value, amount: u64, recipient: [u8; 32], burn: bool) -> R<Header> {
     let has = |k: &str| v.get(k).is_some_and(|x| !x.is_null());
     let binding = match (has("envelopeBinding"), has("unwrapBinding")) {
         (true, true) => return Err("`envelopeBinding` and `unwrapBinding` are exclusive".into()),
@@ -220,7 +220,7 @@ pub fn prove_transfer_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v
         return Err("a COMPACT token refuses the single format (TransferEntryDisabled)".into());
     }
     let k = key::<C>(v)?;
-    let h = header(v, 0, [0; 20], false)?;
+    let h = header(v, 0, [0; 32], false)?;
     let y_aud = y_aud::<C>(v)?;
     let (st, p, w) = zether::prove_transfer(
         gens,
@@ -261,7 +261,7 @@ pub fn prove_transfer_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v
 /// given); the same holds for `proveTransfer`. Relayed like the single format (`envelopeBinding`, CTR-ZTH-34).
 pub fn prove_transfer_multi_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v: &Value, rng: &mut Rn) -> R<Value> {
     let k = key::<C>(v)?;
-    let h = header(v, 0, [0; 20], false)?;
+    let h = header(v, 0, [0; 32], false)?;
     let compact = compact_token(v)?;
     let mode = match v.get("mode").filter(|x| !x.is_null()) {
         None if compact => TransferMode::Hash,
@@ -307,10 +307,23 @@ pub fn prove_transfer_multi_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens
     Ok(out)
 }
 
+/// `recipient`: a 20-byte address (its padded id) or a 32-byte id, a derived SIGNING UA (CTR-ZTH-51; the statement's
+/// word 12 either way).
+fn recipient_id(v: &Value) -> R<[u8; 32]> {
+    let b = bytes(v, "recipient")?;
+    let mut o = [0u8; 32];
+    match b.len() {
+        20 => o[12..].copy_from_slice(&b),
+        32 => o.copy_from_slice(&b),
+        _ => return Err("`recipient` must be a 20-byte address or a 32-byte UA id".into()),
+    }
+    Ok(o)
+}
+
 pub fn prove_burn_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v: &Value, rng: &mut Rn) -> R<Value> {
     let k = key::<C>(v)?;
     let amount = num(v, "amount")?;
-    let recipient: [u8; 20] = fixed(v, "recipient")?;
+    let recipient = recipient_id(v)?;
     let h = header(v, amount, recipient, true)?;
     let (st, p, w) =
         zether::prove_burn(gens, &k, h.clone(), ct::<C>(v, "acc")?, num(v, "balance")?, rng).map_err(e)?;
@@ -364,7 +377,7 @@ fn recovery_header(v: &Value, send_counter: u64) -> R<Header> {
         fee: 0,
         beneficiary: [0; 32],
         amount: 0,
-        recipient: [0; 20],
+        recipient: [0; 32],
         salt: [0; 16],
         memo_hash: [0; 32],
     })
