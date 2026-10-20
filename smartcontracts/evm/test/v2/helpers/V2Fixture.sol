@@ -9,19 +9,20 @@ import {IFactoryToken} from "../../../src/factory/IFactoryToken.sol";
 import {MetaTxLib} from "../../../src/common/MetaTxLib.sol";
 import {NoUnderlyingToken} from "../../../src/metatx/NoUnderlyingToken.sol";
 import {UnderlyingToken} from "../../../src/metatx/UnderlyingToken.sol";
+import {plainEnv} from "../../helpers/Catalogue.sol";
 
 bytes32 constant UID_ = 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464;
 
 /// Minimal kind on `MetaTokenBase` for the base tests: name, symbol, decimals, `initialSupply` to `initialHolder`;
 /// `PAYABLE` set as built (P1c), whatever `cfg.features` says.
 contract BaseHarness is MetaTokenBase {
-    constructor(address f, address s) MetaTokenBase(f, s, UID_, address(0), false) {}
+    constructor(address f, address s) MetaTokenBase(plainEnv(f, s, UID_, address(0), false)) {}
 
     function kind() public pure override returns (uint8) {
         return AdminLib.KIND_NONE;
     }
 
-    function _init(TokenConfig calldata cfg) internal override {
+    function _init(TokenConfig memory cfg) internal override {
         _setMetadata(cfg.name, cfg.symbol, cfg.decimals);
         AdminLib.Roles memory none;
         AdminLib.init(AdminLib.KIND_NONE, 1 << AdminLib.PAYABLE, 0, address(0), none);
@@ -98,7 +99,7 @@ abstract contract V2Fixture is Test {
         assertEq(cfg.legs.length, us.length, "fixture: legs vs underlyings");
         for (uint256 i; i < us.length; ++i) assertEq(cfg.legs[i].underlying, us[i], "fixture: leg order");
         t = Clones.clone(impl);
-        MetaTokenBase(t).initialize(creator_, 1, cfg);
+        MetaTokenBase(t).initialize(creator_, 1, abi.encode(cfg));
     }
 
     function _harness(address creator_, uint256 supply) internal returns (BaseHarness) {
@@ -115,7 +116,7 @@ abstract contract V2Fixture is Test {
 
     function _none(address creator_, uint256 supply, address minter) internal returns (NoUnderlyingToken) {
         if (noneImpl == address(0)) {
-            noneImpl = address(new NoUnderlyingToken(address(this), address(0), UID_, address(0), false));
+            noneImpl = address(new NoUnderlyingToken(1, plainEnv(address(this), address(0), UID_, address(0), false), ""));
         }
         return NoUnderlyingToken(_clone(noneImpl, creator_, new address[](0),
             abi.encode(noneInit("Points", "PTS", 0, supply, creator_, minter))));
@@ -146,7 +147,7 @@ abstract contract V2Fixture is Test {
 
     function _underlyingImpl() internal returns (address) {
         if (underlyingImpl == address(0)) {
-            underlyingImpl = address(new UnderlyingToken(address(this), address(0), UID_, address(0), false));
+            underlyingImpl = address(new UnderlyingToken(1, plainEnv(address(this), address(0), UID_, address(0), false), ""));
         }
         return underlyingImpl;
     }

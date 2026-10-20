@@ -3,10 +3,41 @@ pragma solidity ^0.8.24;
 
 import {AdminLib} from "../metatx/AdminLib.sol";
 
-/// @title What `OpenFactory` needs from every token implementation (CTR-TOK-25): the creation config, one
-///        `initialize` the factory calls in the SAME call as `CREATE2`, and `kind()`. The factory also reads
-///        `factory()` and `chainUid()` (`IMetaTx`) at registration.
+// Positions in `IFactoryToken.Env.deps` (plan 5g-Z2): the `*_ZETHER` kinds' transfer, burn and inner-product verifiers
+// and `ZetherDisclosure` of one curve (CTR-ZTH-20); the `*_PQZ` kinds' `UAPqzVerifier`.
+uint256 constant ENV_ZETHER_TRANSFER = 0;
+uint256 constant ENV_ZETHER_BURN = 1;
+uint256 constant ENV_ZETHER_INNER_PRODUCT = 2;
+uint256 constant ENV_ZETHER_DISCLOSURE = 3;
+uint256 constant ENV_PQZ_VERIFIER = 0;
+
+/// @title What `OpenFactory` needs from every token implementation (CTR-TOK-25, plan 5g-Z2): the release's deployment
+///        environment `Env`, one generic `initialize(creator, version, initArgs)` the factory calls in the SAME call as
+///        the clone's `CREATE2`, and `kind()`. The factory also reads `factory()`, `chainUid()` (`IMetaTx`) at deployment
+///        and `features()`, `lockedFeatures()`, `owner()`, `underlyings()` after `initialize` (provenance, the index).
+///        The kinds of this repository take `initArgs = abi.encode(TokenConfig)`; a later version may take another
+///        encoding without a factory change.
 interface IFactoryToken {
+    /// @notice The deployment environment of a release (owner 2026-10-20, CTR-ZTH-20): the system dependencies the
+    ///         factory publishes per kind and version (`OpenFactory.publishEnv`) and appends to every implementation's
+    ///         init code as `abi.encode(envVersion, env, implArgs)`, so they are constructor immutables of the code by
+    ///         construction. `factory` and `chainUid` are the factory's own; `registry` the UA registry (0 = none);
+    ///         `deps` the kind's dependencies by position (`*_ZETHER`: `ENV_ZETHER_*`; `*_PQZ`: `ENV_PQZ_VERIFIER`; plain
+    ///         kinds and the DEX: none); `libs` the linked libraries of the code, each checked against
+    ///         `libCodeHashes` (`extcodehash`) when a release is deployed. Generic on purpose: a dependency is an
+    ///         address with a documented position, not a named verifier field.
+    struct Env {
+        address factory;
+        bytes32 chainUid;
+        address registry;
+        address smartKeyAccountImpl;
+        bool hedera;
+        address[] deps;
+        address[] libs;
+        bytes32[] libCodeHashes;
+    }
+
+
     /// @notice One leg of an `UNDERLYING*` kind: `underlying` (`address(0)` = the native coin, CTR-TOK-26), rate
     ///         `num/den` (CTR-TOK-04). `uint256` so a value `≥ 2^96` reverts `RateInvalid` instead of failing to decode.
     struct Leg {
@@ -27,11 +58,9 @@ interface IFactoryToken {
     ///         default: every transfer entry, `zetherTransfer` stores the record) or 1 `COMPACT` (commit-reveal only);
     ///         `auditorMode` 0 `NONE` (no key, every `C_aud = O`), 1 `FULL` (key, every transfer includes the auditor)
     ///         or 2 `OPTIONAL` (key, the sender may leave the auditor out per transfer). `ZetherTypes` names the values.
+    ///         The verifiers are not in it: they are the release's (`Env.deps`, CTR-ZTH-20); the creator picks them by
+    ///         picking the version.
     struct ConfidentialConfig {
-        /// Must be 0 (`BadInit`) for every confidential kind (owner 2026-10-19, CTR-ZTH-20): the verifiers are
-        /// immutables of the implementation release, registered only on the factory's canonical set; the creator picks
-        /// them by picking the version. Kept so the creation ABI does not change (plan 5g-Z2 replaces this config).
-        address verifier;
         bytes auditorKey;
         uint256 shieldScale;
         uint256 maxShielded;
@@ -63,8 +92,13 @@ interface IFactoryToken {
     /// @notice A field set for another kind (`field`: 1 initialSupply/initialHolder, 2 legs, 3 rate, 4 conf).
     error ConfigFieldForOtherKind(uint8 field);
 
-    /// @notice Called by the factory only, in the same call as the clone's `CREATE2`.
-    function initialize(address creator, uint64 version, TokenConfig calldata cfg) external;
+    /// @notice Called by the factory only, in the same call as the clone's `CREATE2`; `initArgs` is the creator's,
+    ///         opaque to the factory (here `abi.encode(TokenConfig)`), decoded and validated by the implementation.
+    function initialize(address creator, uint64 version, bytes calldata initArgs) external;
+
+    /// @notice The token's underlyings in leg order, empty for the `NONE*` kinds: the factory's index reads it after
+    ///         `initialize`.
+    function underlyings() external view returns (address[] memory);
 
     /// @notice CTR-TOK-21 kind of the implementation (and of every clone).
     function kind() external view returns (uint8);

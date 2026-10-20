@@ -11,15 +11,15 @@ import {IMetaTx} from "./IMetaTx.sol";
 ///         rate limit, if an issuer needs one, lives in its minter contract. Built by `OpenFactory.createToken`
 ///         (CTR-TOK-25): `initialSupply` is minted to `initialHolder`; `legs`, `rate`, `conf` must be empty.
 contract NoUnderlyingToken is MetaTokenBase {
-    constructor(address factory_, address smartKeyAccountImpl_, bytes32 chainUid_, address registry_, bool isHedera_)
-        MetaTokenBase(factory_, smartKeyAccountImpl_, chainUid_, registry_, isHedera_)
-    {}
+    /// @dev The factory's append (`OpenFactory.deployImplementation`, plan 5g-Z2): the release's `Env`; this kind takes
+    ///      no `implArgs`.
+    constructor(uint16, Env memory env, bytes memory) MetaTokenBase(env) {}
 
     function kind() public pure virtual override returns (uint8) {
         return AdminLib.KIND_NONE;
     }
 
-    function _init(TokenConfig calldata cfg) internal virtual override {
+    function _init(TokenConfig memory cfg) internal virtual override {
         _requireUnused(cfg, false, true, true, true);
         _setMetadata(cfg.name, cfg.symbol, cfg.decimals);
         AdminLib.init(AdminLib.KIND_NONE, cfg.features, cfg.lockedFeatures, cfg.owner, cfg.roles);

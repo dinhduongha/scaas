@@ -31,6 +31,12 @@ contract DeployHarness is DeployBase {
         json = vm.serializeBytes32("deploy", "chain_uid", uid);
     }
 
+    function noticeFor(uint256 chainId, uint256 notice) external pure returns (uint64) {
+        return _checkedNotice(chainId, notice);
+    }
+
+    function defaultNotice(uint256 chainId) external pure returns (uint256) { return _defaultNotice(chainId); }
+
     function _precompiles() internal override returns (bool, bool) {
         if (forced) return (forcedBls, forcedBnG2);
         return abi.decode(address(new UAPrecompileProbe()).code, (bool, bool));

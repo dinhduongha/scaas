@@ -73,10 +73,10 @@ the implementation's immutables). `chain_uid` is the chain's genesis block hash 
 | Contract | Source of `chain_uid` |
 |---|---|
 | token implementations (`NoUnderlyingToken`, `UnderlyingToken`, `NoUnderlyingZetherToken`, `UnderlyingZetherToken`) | constructor immutable of the **implementation**; a clone runs its code by `DELEGATECALL`, so it uses the value with no storage and no `initialize` argument and cannot declare another one |
-| `OpenFactory` | constructor immutable; `registerImplementation` refuses an implementation whose `chainUid()` differs ([CTR-TOK-03](token-wrappers.md#CTR-TOK-03)) |
+| `OpenFactory` | constructor immutable; an env must carry it, and `deployImplementation` refuses a release whose `chainUid()` differs ([CTR-TOK-03](token-wrappers.md#CTR-TOK-03)) |
 | `SmartKeyAccount` | the factory's constructor argument, passed to `new SmartKeyAccount(chainUid)` |
 | `MandateWallet`, `HederaMandateWallet` | constructor argument from the chain profile; the node checks it before relaying for that wallet |
-| `SCaaSDex` (implementation; `SCaaSDexV1`) | constructor immutable of the implementation, checked at `registerDexImplementation`; `SCaaSDexV1` has none (its domain is unsalted; constructor `(admin)`) |
+| `SCaaSDex` (implementation; `SCaaSDexV1`) | constructor immutable of the implementation (from the DEX env), checked at `deployDexImplementation`; `SCaaSDexV1` has none (its domain is unsalted; constructor `(admin)`) |
 | `UniversalAccountRegistry` (legacy, `legacy/ua3/`, not built) | constructor immutable, in its PoP challenge; it checks raw digests, so every caller's digest carries `chainUid` ([CTR-ZTH-36](zether.md#CTR-ZTH-36)) |
 | `UARegistry` | constructor immutable ([CTR-UA-07](accounts.md#CTR-UA-07)) |
 | any later contract with a signature (tender, asset suite) | the same helper, constructor argument |
@@ -162,7 +162,7 @@ power.
 
 | Contract | Holder | Powers | Rule |
 |---|---|---|---|
-| `OpenFactory` | `registrar` (immutable; an EOA by default — the deployer — and a multisig before mainnet) | `registerImplementation`, `deprecate`, `setZetherEnabled` (dev chains only); none over any token | [token-wrappers](token-wrappers.md#factory) |
+| `OpenFactory` | `registrar` (immutable; an EOA by default — the deployer — and a multisig before mainnet) | `publishEnv` / `publishDexEnv` (versioned, never changed), `deployImplementation` / `deployDexImplementation` (the factory deploys each release on a named env, usable after `noticePeriod`), `deprecate` / `deprecateDex`, `setKindEnabled`; none over any token | [token-wrappers](token-wrappers.md#factory) |
 | Any token (EVM) | the `owner` (optional; 0 = none) | `grantRole` / `revokeRole` for the roles of set flags, `disableFeature(bit)` one-way on a flag not locked at creation, two-step `transferOwnership`, `renounceOwnership` (role holders keep their roles); no power touches a reserve or upgrades code | [CTR-TOK-22](token-wrappers.md#CTR-TOK-22) |
 | Any token (EVM), role holders | the holders of `minter`, `rateAdmin` (has code), `guardian`, `issuer`, `compliance` (the role column of the flag table; several holders allowed, may `renounceRole`) | the power of the flag only (mint to a public balance, a bounded timelocked rate change, `disableWrap`, freeze / forced transfer against a recorded order / bounded pause / allowlist); none touches a reserve or upgrades code | [CTR-TOK-22](token-wrappers.md#CTR-TOK-22), [CTR-TOK-06](token-wrappers.md#CTR-TOK-06), [CTR-TOK-07](token-wrappers.md#CTR-TOK-07) |
 | `SCaaSDex` | `admin` set once at creation ([CTR-DEX-24](dex.md#CTR-DEX-24); built: written once by `initialize`; `SCaaSDexV1`: immutable) (a multisig in production; the venue operator's multisig for a managed market) | `setMarket` (list or delist a pair), `setFeeSplit` (relayer share and treasury of the signed fee; never the amount), `setExchangeTarget` (list or delist an exchange target or executor), `setListedOnly` (DEX-wide listed-only mode for the exchange path); none touches funds | [CTR-DEX-03](dex.md#CTR-DEX-03), [CTR-DEX-23](dex.md#CTR-DEX-23) |
@@ -187,13 +187,13 @@ families carry stronger gates, enforced in code:
 
 | Gate | Rule | Status |
 |---|---|---|
-| Classical Zether dev gate | `ZetherSafety.isDevChain()`: `chainid ∈ {31337 (anvil/hardhat), 1337 (geth --dev)}`, a hard-coded allowlist; `OpenFactory.zetherEnabled` defaults to `false`; `setZetherEnabled(true)` (registrar) reverts outside a dev chain; `createToken`/`createTokenUnregistered` of kinds 2–3 revert when the flag is off **or** the chain is not a dev chain; the kinds' `initialize`, both verifier constructors and the built `UniversalAccountRegistry` revert outside a dev chain too, so a manual deploy cannot bypass it ([CTR-ZTH-02](zether.md#CTR-ZTH-02)) | **BUILT** |
+| Classical Zether dev gate | `ZetherSafety.isDevChain()`: `chainid ∈ {31337 (anvil/hardhat), 1337 (geth --dev)}`, a hard-coded allowlist; `OpenFactory.kindEnabled` starts `false` for kinds 2–3 (`setKindEnabled`, registrar; plan 5g-Z2); `createToken` of kinds 2–3 reverts when the kind is off, `createTokenUnregistered` always; the kinds' `initialize` (outside a dev chain, or with a verifier unsupported on the chain), both verifier constructors and the built `UniversalAccountRegistry` revert outside a dev chain too, so a manual deploy cannot bypass it ([CTR-ZTH-02](zether.md#CTR-ZTH-02)) | **BUILT** |
 | Adding a chain to the classical allowlist | a code change of `ZetherSafety` plus a new deployment, after the cryptographic audit | — |
 | Chain 7622 as a classical Zether dev chain | whether chain 7622 counts as "dev": not a dev chain until the owner decides ([CTR-ZTH-33](zether.md#CTR-ZTH-33)) | open |
 | Production curve for classical Zether | bn254 vs BLS12-381; BLS12-381 is more secure and **not** cheaper ([CTR-ZTH-32](zether.md#CTR-ZTH-32)) | open |
 | Cryptographic audit | independent audit of the Σ-Bulletproofs protocol, the transcript, the inner-product argument and the registry PoP **before** any dev gate is lifted | open |
 | Gas before public chains | the bn254 transfer (3.33 M execution gas) exceeds the 2.5 M per-transfer kill criterion; optimization is required before a public chain | open |
-| PQ Zether gate | hard-coded allowlist (31337, 1337 and the private chain 7622) **and** a constructor precompile self-test; `OpenFactory.pqzEnabled = false` by default; release gates: **G-LIC** (licences/patents) and audit ([CTR-PQZ-01](pq-zero-knowledge.md#CTR-PQZ-01)) | **SPECIFIED** |
+| PQ Zether gate | hard-coded allowlist (31337, 1337 and the private chain 7622) **and** a constructor precompile self-test; `OpenFactory.kindEnabled` starts `false` for kinds 4–5; release gates: **G-LIC** (licences/patents) and audit ([CTR-PQZ-01](pq-zero-knowledge.md#CTR-PQZ-01)) | **SPECIFIED** |
 | Clients | every Zether and PQ Zether contract carries **UNAUDITED — NOT FOR PRODUCTION FUNDS** in its NatSpec; client chain/token screens show an UNAUDITED warning | **BUILT** (NatSpec) |
 
 ## <a id="build-ci-and-pins"></a>5. Build, CI and pins

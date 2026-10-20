@@ -9,6 +9,7 @@ import {Clones} from "@openzeppelin/contracts/proxy/Clones.sol";
 import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
 import {MandateWallet} from "../../src/wallet/MandateWallet.sol";
 import {noneInit} from "../v2/helpers/V2Fixture.sol";
+import {plainEnv} from "../helpers/Catalogue.sol";
 
 /// Shared writer of the account-side `MetaTransaction` KATs (metatx.md §15: the `MandateWallet` and `SmartKeyAccount`
 /// vectors are `MetaTransaction` vectors in their own domains), chain 7622 with its real `chain_uid`.
@@ -104,8 +105,8 @@ contract MandateWalletKatTest is MtxKatBase {
         vm.chainId(7622);
         vm.warp(1_800_000_000);
         NoUnderlyingToken tok =
-            NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(address(this), address(0), UID, address(0), false))));
-        tok.initialize(address(this), 1, noneInit("Points", "PTS", 6, 0, address(this), address(this)));
+            NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(1, plainEnv(address(this), address(0), UID, address(0), false), ""))));
+        tok.initialize(address(this), 1, abi.encode(noneInit("Points", "PTS", 6, 0, address(this), address(this))));
         MandateWallet w = new MandateWallet(vm.addr(OWNER_PK), UID);
         tok.mint(address(w), 1_000e6);
         vm.startPrank(vm.addr(OWNER_PK));

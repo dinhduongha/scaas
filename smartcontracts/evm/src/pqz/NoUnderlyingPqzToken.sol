@@ -16,20 +16,20 @@ import {PqzLib} from "./PqzLib.sol";
 ///         only; shielded value exists only through `pqzShield`, which burns public units. Flags: `PAYABLE`,
 ///         `MINTABLE`, `BURNABLE`. Built by `OpenFactory.createToken` with `conf` set and `legs`, `rate` empty.
 contract NoUnderlyingPqzToken is NoUnderlyingToken, PqzLayer {
-    /// @param verifier_ the `UAPqzVerifier` of this release (CTR-ZTH-20 / CTR-PQZ-10: `OpenFactory` registers it only
-    ///        on one of its canonical PQZ verifiers).
-    constructor(address factory_, address smartKeyAccountImpl_, bytes32 chainUid_, address registry_, address verifier_)
-        NoUnderlyingToken(factory_, smartKeyAccountImpl_, chainUid_, registry_, false)
-        PqzLayer(verifier_)
+    /// @dev The factory's append (`OpenFactory.deployImplementation`, plan 5g-Z2): the release's `Env`, whose
+    ///      `deps[ENV_PQZ_VERIFIER]` is the release's `UAPqzVerifier` (CTR-ZTH-20 / CTR-PQZ-10); no `implArgs`.
+    constructor(uint16 envVersion, Env memory env, bytes memory implArgs)
+        NoUnderlyingToken(envVersion, env, implArgs)
+        PqzLayer(env)
     {
-        if (registry_.code.length == 0) revert BadInit();
+        if (env.registry.code.length == 0) revert BadInit();
     }
 
     function kind() public pure override(NoUnderlyingToken, MetaTokenBase) returns (uint8) {
         return AdminLib.KIND_NONE_PQZ;
     }
 
-    function _init(TokenConfig calldata cfg) internal override(NoUnderlyingToken, MetaTokenBase) {
+    function _init(TokenConfig memory cfg) internal override(NoUnderlyingToken, MetaTokenBase) {
         _requireUnused(cfg, false, true, true, false);
         _setMetadata(cfg.name, cfg.symbol, cfg.decimals);
         AdminLib.init(AdminLib.KIND_NONE_PQZ, cfg.features, cfg.lockedFeatures, cfg.owner, cfg.roles);

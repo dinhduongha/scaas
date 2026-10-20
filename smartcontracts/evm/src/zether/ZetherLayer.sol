@@ -9,6 +9,14 @@ import {IZetherVerifier, IZetherBurnVerifier} from "./IZetherVerifier.sol";
 import {ITransferDisclosure} from "./ITransferDisclosure.sol";
 import {ZetherTypes} from "./ZetherTypes.sol";
 import {ZetherLib} from "./ZetherLib.sol";
+import {
+    ENV_ZETHER_TRANSFER, ENV_ZETHER_BURN, ENV_ZETHER_INNER_PRODUCT, ENV_ZETHER_DISCLOSURE
+} from "../factory/IFactoryToken.sol";
+
+/// @dev What the layer reads from a transfer / burn verifier besides `IZetherVerifierCommon`.
+interface IInnerProductBound {
+    function innerProduct() external view returns (address);
+}
 
 /// @title The Zether layer of the kinds `NONE_ZETHER` and `UNDERLYING_ZETHER` (CTR-ZTH-44): the entry points of
 ///        CTR-ZTH-45 and the views; the state and the logic are `ZetherLib` (`scaas.zether`).
@@ -26,15 +34,33 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
     IZetherVerifier internal immutable TRANSFER_VERIFIER;
     IZetherBurnVerifier internal immutable BURN_VERIFIER;
 
-    /// @dev Runs after `MetaTokenBase`'s constructor, which set `_REGISTRY`: a Zether kind needs a registry. The two
-    ///      verifiers must be of one proof system (one curve).
-    constructor(ITransferDisclosure disclosure_, IZetherVerifier transferVerifier_, IZetherBurnVerifier burnVerifier_) {
-        if (_REGISTRY.code.length == 0 || address(disclosure_).code.length == 0
-            || address(transferVerifier_).code.length == 0 || address(burnVerifier_).code.length == 0
-            || transferVerifier_.proofSystemId() != burnVerifier_.proofSystemId()) revert BadInit();
-        _DISCLOSURE = disclosure_;
-        TRANSFER_VERIFIER = transferVerifier_;
-        BURN_VERIFIER = burnVerifier_;
+    /// @dev Runs after `MetaTokenBase`'s constructor, which set `_REGISTRY`: a Zether kind needs a registry. The release's
+    ///      `Env.deps` (plan 5g-Z2): `ENV_ZETHER_TRANSFER`, `ENV_ZETHER_BURN`, `ENV_ZETHER_INNER_PRODUCT` (fixed inside the
+    ///      two, checked here), `ENV_ZETHER_DISCLOSURE`; the two verifiers must be of one proof system (one curve), and
+    ///      each in its role (review 5g-Z2 P2-2): two addresses, the transfer verifier answers `ringSize()` and the burn
+    ///      verifier does not (a swapped or duplicated pair would accept shields and lock them).
+    constructor(Env memory env) {
+        address[] memory d = env.deps;
+        if (d.length != 4 || env.hedera || _REGISTRY.code.length == 0) revert BadInit(); // never on Hedera
+        IZetherVerifier t = IZetherVerifier(d[ENV_ZETHER_TRANSFER]);
+        IZetherBurnVerifier b = IZetherBurnVerifier(d[ENV_ZETHER_BURN]);
+        address ip = d[ENV_ZETHER_INNER_PRODUCT];
+        if (address(t).code.length == 0 || address(b).code.length == 0 || d[ENV_ZETHER_DISCLOSURE].code.length == 0
+            || t.proofSystemId() != b.proofSystemId() || ip == address(0)
+            || IInnerProductBound(address(t)).innerProduct() != ip || IInnerProductBound(address(b)).innerProduct() != ip
+            || address(t) == address(b) || !_answers(address(t), IZetherVerifier.ringSize.selector)
+            || _answers(address(b), IZetherVerifier.ringSize.selector)) {
+            revert BadInit();
+        }
+        _DISCLOSURE = ITransferDisclosure(d[ENV_ZETHER_DISCLOSURE]);
+        TRANSFER_VERIFIER = t;
+        BURN_VERIFIER = b;
+    }
+
+    /// @dev `target` answers `sel()` with one word (constructor only).
+    function _answers(address target, bytes4 sel) private view returns (bool) {
+        (bool ok, bytes memory r) = target.staticcall(abi.encodeWithSelector(sel));
+        return ok && r.length == 32;
     }
 
     /// @notice CTR-MTX-02: confidential tokens sign under `"SCaaS ZetherToken"`.

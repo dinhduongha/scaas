@@ -17,7 +17,7 @@ import {IUALedger} from "../../src/metatx/IUALedger.sol";
 import {MockERC20, StubUARegistry} from "../helpers/Mocks.sol";
 import {noneInit, underlyingInit, Rate} from "../v2/helpers/V2Fixture.sol";
 import {MockHederaAccountService, MockHts} from "./HederaMocks.sol";
-import {noVerifiers} from "../helpers/Canon.sol";
+import {plainEnv, Catalogue} from "../helpers/Catalogue.sol";
 
 /// T5: con Hedera của ba tầng (TW2 §11, R144) — HIP-632 trên mỗi tầng, associate lúc init, kiểm phí HTS fail-closed.
 contract HederaV2Test is Test {
@@ -41,13 +41,9 @@ contract HederaV2Test is Test {
         vm.etch(HTS, type(MockHts).runtimeCode);
         alice = address(uint160(1_234_567));
         MockHederaAccountService(HAS).setEdKey(alice, vm.addr(ALICE_KEY));
-        f = new OpenFactory(registrar, UID, noVerifiers());
-        vm.startPrank(registrar);
-        f.registerImplementation(IOpenFactory.TokenKind.NONE, 1,
-            address(new NoUnderlyingToken(address(f), address(0), UID, address(0), true)));
-        f.registerImplementation(IOpenFactory.TokenKind.UNDERLYING, 1,
-            address(new UnderlyingToken(address(f), address(0), UID, address(0), true)));
-        vm.stopPrank();
+        f = new OpenFactory(registrar, UID, 0);
+        Catalogue.plain(f, IOpenFactory.TokenKind.NONE, 1, type(NoUnderlyingToken).creationCode, address(0), address(0), true);
+        Catalogue.plain(f, IOpenFactory.TokenKind.UNDERLYING, 1, type(UnderlyingToken).creationCode, address(0), address(0), true);
         usdc = new MockERC20("USD Coin", "USDC", 6);
         plain = new MockERC20("Plain", "PLN", 6);
         MockHts(HTS).setHts(address(usdc), true);
@@ -77,7 +73,7 @@ contract HederaV2Test is Test {
     function _single(address u) internal returns (address) {
         address[] memory us = new address[](1);
         us[0] = u;
-        return f.createToken(IOpenFactory.TokenKind.UNDERLYING, 1, _init(us), keccak256(abi.encode(u)));
+        return f.createToken(IOpenFactory.TokenKind.UNDERLYING, 1, abi.encode(_init(us)), keccak256(abi.encode(u)));
     }
 
     /// One leg at 1:1, rates fixed, no owner.
@@ -100,8 +96,7 @@ contract HederaV2Test is Test {
 
     function test_tier1NativeAccountPays() public {
         vm.prank(alice);
-        address t = f.createToken(IOpenFactory.TokenKind.NONE, 1,
-            noneInit("Points", "PTS", 0, 1000, alice, address(0)), "n");
+        address t = f.createToken(IOpenFactory.TokenKind.NONE, 1, abi.encode(noneInit("Points", "PTS", 0, 1000, alice, address(0))), "n");
         MetaTxLib.MetaTransfer memory x = _tr(shop, 250, 0, 1);
         bytes memory sig = _edSign(IERC20MetaTx(t).mtxTransferDigest(x));
         vm.prank(relayer);
@@ -112,8 +107,7 @@ contract HederaV2Test is Test {
     /// HIP-632 payee: a native Hedera account co-signs the `ReceiverFee` (64-byte ed25519) for an EVM payer's payment.
     function test_tier1NativeAccountPayeeCoSignsReceiverFee() public {
         vm.prank(alice);
-        address t = f.createToken(IOpenFactory.TokenKind.NONE, 1,
-            noneInit("Points", "PTS", 0, 1000, alice, address(0)), "n");
+        address t = f.createToken(IOpenFactory.TokenKind.NONE, 1, abi.encode(noneInit("Points", "PTS", 0, 1000, alice, address(0))), "n");
         uint256 payerPk = 0xB0B;
         address payer = vm.addr(payerPk);
         address feeTo = address(0xFEE);
@@ -156,8 +150,7 @@ contract HederaV2Test is Test {
         uint256[] memory n = new uint256[](3);
         (n[0], n[1], n[2]) = (1, 1, 1);
         Rate memory c;
-        address t = f.createToken(IOpenFactory.TokenKind.UNDERLYING, 1,
-            underlyingInit(us, n, n, 6, c, address(0), address(0)), "m");
+        address t = f.createToken(IOpenFactory.TokenKind.UNDERLYING, 1, abi.encode(underlyingInit(us, n, n, 6, c, address(0), address(0))), "m");
         assertTrue(MockHts(HTS).associated(t, address(usdc)));
         assertTrue(MockHts(HTS).associated(t, address(usdt)));
         assertFalse(MockHts(HTS).associated(t, address(plain))); // not an HTS token: nothing to associate
@@ -191,18 +184,14 @@ contract HederaV2Test is Test {
     /// Version 2 of NONE and UNDERLYING with the UA ledger on (a stub registry: native signers only).
     function _ledgerOn() internal {
         StubUARegistry stub = new StubUARegistry(UID);
-        vm.startPrank(registrar);
-        f.registerImplementation(IOpenFactory.TokenKind.NONE, 2,
-            address(new NoUnderlyingToken(address(f), address(0), UID, address(stub), true)));
-        f.registerImplementation(IOpenFactory.TokenKind.UNDERLYING, 2,
-            address(new UnderlyingToken(address(f), address(0), UID, address(stub), true)));
-        vm.stopPrank();
+        Catalogue.plain(f, IOpenFactory.TokenKind.NONE, 2, type(NoUnderlyingToken).creationCode, address(stub), address(0), true);
+        Catalogue.plain(f, IOpenFactory.TokenKind.UNDERLYING, 2, type(UnderlyingToken).creationCode, address(stub), address(0), true);
     }
 
     function _singleV2(address u) internal returns (address) {
         address[] memory us = new address[](1);
         us[0] = u;
-        return f.createToken(IOpenFactory.TokenKind.UNDERLYING, 2, _init(us), keccak256(abi.encode(u, 2)));
+        return f.createToken(IOpenFactory.TokenKind.UNDERLYING, 2, abi.encode(_init(us)), keccak256(abi.encode(u, 2)));
     }
 
     /// An HTS leg wraps straight into a UA: the wrapper's association is unchanged, the UA needs none.
@@ -235,7 +224,7 @@ contract HederaV2Test is Test {
     function test_uaPayReceiverFee_hip632Payee() public {
         _ledgerOn();
         vm.prank(alice);
-        address t = f.createToken(IOpenFactory.TokenKind.NONE, 2, noneInit("Points", "PTS", 0, 1000, alice, address(0)), "n2");
+        address t = f.createToken(IOpenFactory.TokenKind.NONE, 2, abi.encode(noneInit("Points", "PTS", 0, 1000, alice, address(0))), "n2");
         uint256 payerPk = 0xB0B;
         address payer = vm.addr(payerPk);
         address feeTo = address(0xFEE);
@@ -263,7 +252,7 @@ contract HederaV2Test is Test {
         us[0] = address(usdc);
         IFactoryToken.TokenConfig memory init = _init(us);
         vm.expectRevert(err);
-        f.createToken(IOpenFactory.TokenKind.UNDERLYING, 1, init, "x");
+        f.createToken(IOpenFactory.TokenKind.UNDERLYING, 1, abi.encode(init), "x");
     }
 
     function test_isTokenFailureRefuses() public {

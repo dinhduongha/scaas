@@ -425,25 +425,30 @@ what proportion, **never the amount**: the amount comes only from the signed `fe
 sweep, no global pause (delisting a market stops that pair). No timelock: there is nothing to wait for — no signed
 order can be charged more than it signed.
 
-<a id="CTR-DEX-24"></a>**CTR-DEX-24** — **`OpenFactory.createDex(version, DexConfig, salt)` makes an `SCaaSDex` clone; `admin` is written once by
+<a id="CTR-DEX-24"></a>**CTR-DEX-24** — **`OpenFactory.createDex(version, initArgs, salt)` makes an `SCaaSDex` clone; `admin` is written once by
 `initialize`; the `DexPuller` is deployed by `initialize`; `isDex(addr)` is advisory: tokens never consult it** (owner).
 
 ```solidity
 struct DexConfig { address admin; uint32 relayerSharePpm; address treasury; bool listedOnly; }
-function createDex(uint64 version, DexConfig calldata cfg, bytes32 salt) external returns (address);
+function createDex(uint64 version, bytes calldata initArgs, bytes32 salt) external returns (address); // initArgs = abi.encode(DexConfig)
 // event DexCreated(address dex, address creator, uint64 version, address implementation, address admin)
 ```
 
-- **Clone.** `CREATE2` of an EIP-1167 clone and `initialize(cfg)` in the same call, as for tokens
+- **Clone.** `CREATE2` of an EIP-1167 clone and `initialize(creator, version, initArgs)` in the same call, as for tokens
   ([CTR-TOK-25](token-wrappers.md#CTR-TOK-25)); the implementation locks its own `initialize`. `admin` moves from an
   immutable to storage written once by `initialize` (same behaviour: no setter, [CTR-DEX-03](#CTR-DEX-03)); the
   `DexPuller` is deployed by `initialize`; the EIP-712 `verifyingContract` is the clone.
 - **Registry.** The factory keeps `isDex(addr)` and `dexVersionOf(addr)` (`versionOf` is the token one). Clients and
   the node use them with the implementation version to warn about or refuse an unlisted `dex`; tokens do not consult them.
 
-**Transitional (BUILT, P2b-1).** Built: `registerDexImplementation` (append-only; the implementation answers `factory()`
-and `chainUid()`), `dexImplementationOf`, `latestDexVersion`, `createDex`, `isDex`, `dexVersionOf`, `DexImplementationRegistered`,
-`DexCreated` (controller ruling, pending the owner); the scripts register the implementation (`dex_implementation`), no clone.
+**Transitional (BUILT, P2b-1; 5g-Z2).** Built: `publishDexEnv(envVersion, Env)` and
+`deployDexImplementation(version, envVersion, initcode, implArgs)` (registrar; the factory deploys the release on the
+DEX env it names — `factory`, `chainUid`, the `SmartKeyAccount` implementation, `hedera`, the linked `TradeLib` by code
+hash — as for tokens, [CTR-TOK-03](token-wrappers.md#release-env); append-only; the release answers `factory()` and
+`chainUid()`; usable after the notice period: `DexVersionNotYetUsable`), `dexReleaseOf`, `dexImplementationOf`,
+`latestDexVersion`, `createDex`, `isDex`, `dexVersionOf`, `DexImplementationDeployed` (env version and hash, init-code
+and code hashes), `DexCreated` (controller ruling, pending the owner); the scripts deploy the implementation
+(`dex_implementation`), no clone. The constructor is `(uint16 envVersion, Env env, bytes implArgs)`.
 `deprecateDex(version, reason)` (registrar, immediate, `DexImplementationDeprecated`) makes `createDex` refuse that version
 (`DexVersionDeprecated`); DEXes already made keep working (owner 2026-10-20, plan 5g-Z1; `isDexDeprecated`).
 

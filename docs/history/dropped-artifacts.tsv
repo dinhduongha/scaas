@@ -1052,3 +1052,6 @@ createUnregistered(ZETHER)	obsolete	a confidential kind cannot be created unregi
 _checkVerifier	obsolete	v1 factory check (legacy/p5); the canonical verifier sets of zether.md#CTR-ZTH-20 replace it (plan 5g-Z1)
 IZetherVerifier.verifyTransfer/verifyBurn	renamed	split per curve into IZetherVerifier.verifyTransfer and IZetherBurnVerifier.verifyBurn (zether.md#CTR-ZTH-20, plan 5g-Z1)
 verifyTransfer(statement, proof)	renamed	IZetherVerifier.verifyTransfer on the transfer verifier (zether.md §21, #CTR-ZTH-20)
+implementation.code.length > 0	renamed	plan 5g-Z2: the factory deploys each release itself (deployImplementation); ImplementationNotAContract still guards an empty deployment and createTokenUnregistered, contracts/token-wrappers.md#CTR-TOK-03
+setZetherEnabled(true)	renamed	plan 5g-Z2: setKindEnabled(kind, true), the generic kind gate; the dev-chain check is the token initialize (contracts/zether.md#CTR-ZTH-02)
+registerImplementation(kind, version, impl)	renamed	plan 5g-Z2: publishEnv + deployImplementation(kind, version, envVersion, initcode, implArgs), contracts/token-wrappers.md#release-env

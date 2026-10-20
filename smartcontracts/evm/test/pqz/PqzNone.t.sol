@@ -14,7 +14,7 @@ import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {PqzSafety} from "../../src/pqz/PqzSafety.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {NoUnderlyingPqzToken} from "../../src/pqz/NoUnderlyingPqzToken.sol";
-import {pqzCanon} from "../helpers/Canon.sol";
+import {Catalogue, pqzEnv} from "../helpers/Catalogue.sol";
 
 /// A verifier that claims any precompile and proof system and says "supported" (review W-B).
 contract FakePqzVerifier {
@@ -329,13 +329,13 @@ contract PqzNoneTest is PqzFixture {
         c.conf.auditorMode = uint8(ZetherTypes.AuditorMode.FULL);
         c.conf.auditorKey = "";
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.BadAuditorMode.selector, 1));
-        factory.createToken(IOpenFactory.TokenKind.NONE_PQZ, 1, c, "x1");
+        factory.createToken(IOpenFactory.TokenKind.NONE_PQZ, 1, abi.encode(c), "x1");
         c.conf.auditorKey = abi.encode(bytes32(uint256(9)));
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.AccountNotRegistered.selector, bytes32(uint256(9))));
-        factory.createToken(IOpenFactory.TokenKind.NONE_PQZ, 1, c, "x2");
+        factory.createToken(IOpenFactory.TokenKind.NONE_PQZ, 1, abi.encode(c), "x2");
         c = _cfg((1 << 62) + 1);
         vm.expectRevert(IPqzToken.BadInit.selector);
-        factory.createToken(IOpenFactory.TokenKind.NONE_PQZ, 1, c, "x3");
+        factory.createToken(IOpenFactory.TokenKind.NONE_PQZ, 1, abi.encode(c), "x3");
     }
 
     function test_compactAndNoBundle() public {
@@ -404,35 +404,55 @@ contract PqzNoneTest is PqzFixture {
     // ------------------------------------------------------------------ the factory gate (P6g D1, D2)
 
     function test_factoryGate() public {
+        bytes memory code = type(NoUnderlyingPqzToken).creationCode;
         vm.prank(registrar);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.KindReserved.selector, IOpenFactory.TokenKind.NONE_ZETHER_PQZ));
-        factory.registerImplementation(IOpenFactory.TokenKind.NONE_ZETHER_PQZ, 1, address(noneImpl));
-        // the creator names no verifier (CTR-ZTH-20): any non-zero `conf.verifier` is refused, the canonical one too
-        IFactoryToken.TokenConfig memory c = _cfg(1 << 40);
-        address[2] memory named = [address(reg), address(pqv)];
-        for (uint256 i; i < 2; ++i) {
-            c.conf.verifier = named[i];
-            vm.expectRevert(IPqzToken.BadInit.selector);
-            factory.createToken(IOpenFactory.TokenKind.NONE_PQZ, 1, c, bytes32(i + 1));
-        }
+        factory.deployImplementation(IOpenFactory.TokenKind.NONE_ZETHER_PQZ, 1, 1, code, "");
         // an unregistered PQZ implementation cannot be cloned at all (owner 2026-10-19)
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.UnregisteredConfidentialKind.selector,
             IOpenFactory.TokenKind.NONE_PQZ));
-        factory.createTokenUnregistered(IOpenFactory.TokenKind.NONE_PQZ, address(noneImpl), _cfg(1 << 40), "g2");
-        // the self-test failing now: refused at creation and at setPqzEnabled(true)
+        factory.createTokenUnregistered(IOpenFactory.TokenKind.NONE_PQZ, address(noneImpl), abi.encode(_cfg(1 << 40)), "g2");
+        // the self-test failing now: the token's initialize refuses (plan 5g-Z2: the chain gates are the implementation's)
         vm.mockCall(PQZ, hex"0600000000", abi.encode(bytes32(0)));
-        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.PqzVerifierUnsupported.selector, address(pqv)));
-        factory.createToken(IOpenFactory.TokenKind.NONE_PQZ, 1, _cfg(1 << 40), "g3");
+        vm.expectRevert(abi.encodeWithSelector(PqzSafety.SelfTestFailed.selector, PQZ));
+        factory.createToken(IOpenFactory.TokenKind.NONE_PQZ, 1, abi.encode(_cfg(1 << 40)), "g3");
+        _mockSelfTest();
+        // the factory's generic gate: the kind disabled
         vm.prank(registrar);
-        vm.expectRevert();
-        factory.setPqzEnabled(true);
-        vm.prank(registrar);
-        factory.setPqzEnabled(false);
-        vm.expectRevert(IOpenFactory.PqzDisabled.selector);
-        factory.createToken(IOpenFactory.TokenKind.NONE_PQZ, 1, _cfg(1 << 40), "g4");
+        factory.setKindEnabled(IOpenFactory.TokenKind.NONE_PQZ, false);
+        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.KindDisabled.selector, IOpenFactory.TokenKind.NONE_PQZ));
+        factory.createToken(IOpenFactory.TokenKind.NONE_PQZ, 1, abi.encode(_cfg(1 << 40)), "g4");
         assertEq(tok.kind(), 4);
         assertEq(tok.proofSystemId(), PQZL_ID);
         assertEq(tok.precompile(), PQZ);
+    }
+
+    /// Review 5g-Z2 P2-3: the release env (`deps = [UAPqzVerifier]` with code, never Hedera) is checked by the
+    /// constructor, bubbled through `deployImplementation`.
+    function test_constructorChecksTheEnv() public {
+        bytes memory code = type(NoUnderlyingPqzToken).creationCode;
+        IFactoryToken.Env[4] memory bad;
+        for (uint256 i; i < bad.length; ++i) bad[i] = pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv));
+        bad[0].deps = new address[](0);                                  // no verifier
+        bad[1].deps = new address[](2);                                  // two
+        (bad[1].deps[0], bad[1].deps[1]) = (address(pqv), address(pqv));
+        bad[2].hedera = true;                                            // never on Hedera
+        bad[3].deps[0] = address(0x1234);                                // a verifier without code
+        for (uint256 i; i < bad.length; ++i) {
+            uint16 ev = Catalogue.env(factory, IOpenFactory.TokenKind.NONE_PQZ, bad[i]);
+            vm.prank(registrar);
+            vm.expectRevert(IPqzToken.BadInit.selector);
+            factory.deployImplementation(IOpenFactory.TokenKind.NONE_PQZ, 2, ev, code, "");
+        }
+    }
+
+    /// Review 5g-Z2 P2-3 (controller proposal 2): the kind enabled, but on a chain outside PQZ's allowlist (22776, the
+    /// mainnet) every `createToken` reverts with the implementation's gate.
+    function test_createToken_enabledKindOnAForbiddenChain_reverts() public {
+        assertTrue(factory.kindEnabled(IOpenFactory.TokenKind.NONE_PQZ));
+        vm.chainId(22776);
+        vm.expectRevert(abi.encodeWithSelector(PqzSafety.NotAllowedChain.selector, 22776));
+        factory.createToken(IOpenFactory.TokenKind.NONE_PQZ, 1, abi.encode(_cfg(1 << 40)), "mainnet");
     }
 
     function test_shieldChecks() public {
@@ -482,33 +502,26 @@ contract PqzNoneTest is PqzFixture {
         assertEq(tok.transferCiphertextHash(ref), bytes32(0));
     }
 
-    /// W-B / CTR-ZTH-20: a release on a verifier the factory does not list is refused at registration; and even a
-    /// factory whose deployer listed a fake verifier gets tokens whose verdicts come from `PqzSafety.PQZ` only, for PQZL or
-    /// PQZH only, after the self-test (the init check stays as a second line).
+    /// W-B / CTR-ZTH-20: the verifier is the release env's (plan 5g-Z2); even an env whose registrar listed a fake
+    /// verifier gets tokens whose verdicts come from `PqzSafety.PQZ` only, for PQZL or PQZH only, after the self-test
+    /// (the init check is the second line).
     function test_initPinsThePrecompile() public {
-        NoUnderlyingPqzToken rogue = new NoUnderlyingPqzToken(address(factory), address(0), PQZ_UID, address(reg),
-            address(new FakePqzVerifier(PQZ, PQZL_ID)));
-        vm.prank(registrar);
-        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.NotCanonicalVerifiers.selector, address(rogue)));
-        factory.registerImplementation(IOpenFactory.TokenKind.NONE_PQZ, 2, address(rogue));
-        assertEq(factory.pqzVerifier(0), address(pqv));
-        assertEq(factory.pqzVerifier(1), address(0));
+        assertEq(factory.envOf(IOpenFactory.TokenKind.NONE_PQZ, 1).deps[0], address(pqv));
         address fake = address(0xFA4E);
         bytes32 other = keccak256("another proof system");
         address[3] memory pre = [fake, PQZ, PQZ];
         bytes32[3] memory ids = [PQZL_ID, other, PQZL_ID];
         for (uint256 i; i < 3; ++i) {
             address fv = address(new FakePqzVerifier(pre[i], ids[i]));
-            OpenFactory g = new OpenFactory(registrar, PQZ_UID, pqzCanon(1, fv));
-            NoUnderlyingPqzToken impl = new NoUnderlyingPqzToken(address(g), address(0), PQZ_UID, address(reg), fv);
-            vm.startPrank(registrar);
-            g.registerImplementation(IOpenFactory.TokenKind.NONE_PQZ, 1, address(impl));
-            g.setPqzEnabled(true);
-            vm.stopPrank();
+            OpenFactory g = new OpenFactory(registrar, PQZ_UID, 0);
+            Catalogue.release(g, IOpenFactory.TokenKind.NONE_PQZ, 1, pqzEnv(address(g), PQZ_UID, address(reg), fv),
+                type(NoUnderlyingPqzToken).creationCode);
+            vm.prank(registrar);
+            g.setKindEnabled(IOpenFactory.TokenKind.NONE_PQZ, true);
             if (i == 2) vm.mockCall(PQZ, hex"0600000000", abi.encode(bytes32(0))); // the real pair, self-test failing
             vm.expectRevert(i == 2 ? abi.encodeWithSelector(PqzSafety.SelfTestFailed.selector, PQZ)
                 : abi.encodeWithSelector(PqzSafety.NotPqz.selector, pre[i], ids[i]));
-            g.createToken(IOpenFactory.TokenKind.NONE_PQZ, 1, _cfg(1 << 40), "w");
+            g.createToken(IOpenFactory.TokenKind.NONE_PQZ, 1, abi.encode(_cfg(1 << 40)), "w");
         }
         _mockSelfTest();
         assertEq(tok.precompile(), PQZ);

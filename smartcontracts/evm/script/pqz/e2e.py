@@ -135,9 +135,10 @@ MTX_S = "(address,bytes,uint256,uint256,uint256,uint32,address,uint256,address)"
 UMTX_S = "(bytes32,bytes,uint256,uint256,uint256,uint32,address,uint256,address)"
 UNWRAP = ("t", ["w", "w", "w", "w"])
 CFG = ("t", ["b", "b", "w", "w", "w", "w", ("t", ["w"] * 5), "w", "w", ("a", ("t", ["w", "w", "w"])), ("t", ["w", "w"]),
-             ("t", ["w", "b", "w", "w", "w", "w", "w", "w"])])
-CFG_S = ("(string,string,uint8,uint256,uint256,address,(address,address,address,address,address),uint256,address,"
-         "(address,uint256,uint256)[],(uint32,uint16),(address,bytes,uint256,uint256,uint256,uint8,uint8,uint256))")
+             ("t", ["b", "w", "w", "w", "w", "w", "w"])])
+# IFactoryToken.Env (plan 5g-Z2): factory, chainUid, registry, smartKeyAccountImpl, hedera, deps, libs, libCodeHashes
+ENV = ("t", ["w", "w", "w", "w", "w", ("a", "w"), ("a", "w"), ("a", "w")])
+ENV_S = "(address,bytes32,address,address,bool,address[],address[],bytes32[])"
 
 
 # ------------------------------------------------------------------ transactions
@@ -205,14 +206,22 @@ class Deployer:
             self.libs[name] = self.deploy(name, b"", label=f"library {name}")
         return self.libs[name]
 
-    def deploy(self, name, args, src=None, label=None):
+    def linked(self, name, src=None):
+        """The init code without arguments, the libraries linked in, and their addresses (plan 5g-Z2: a release's env
+        lists them with their code hashes)."""
         code, links = artifact(name, src)
+        libs = []
         for _, ls in links.items():
             for ln, pos in ls.items():
                 a = self.lib(ln)[2:]
+                libs.append("0x" + a)
                 for p in pos:
                     code = code[:2 * p["start"]] + a + code[2 * (p["start"] + p["length"]):]
-        r = self.s.send(None, bytes.fromhex(code) + args, label or f"deploy {name}")
+        return bytes.fromhex(code), libs
+
+    def deploy(self, name, args, src=None, label=None):
+        code, _ = self.linked(name, src)
+        r = self.s.send(None, code + args, label or f"deploy {name}")
         a = r["contractAddress"]
         log(f"      {name} at {a}")
         self.addr[label or name] = a
@@ -365,17 +374,24 @@ def run(kd, kr, ke):
     reg = D.deploy("UARegistry", encs(["w", "w", "w", "w", "w", "w", ("a", ("t", ["w", "w", "w"]))],
                                       [uid, 0, 0, BUDGET, 0, 1, kinds]), label="UARegistry gen 1")
     REG[0] = reg
-    # the canonical verifiers fixed in the factory (CTR-ZTH-20, Canonical = Zether transfer[2], burn[2], disclosure[2],
-    # PQZ[2]: 8 static words); PQZL's is this run's UAPqzVerifier, the rest absent
-    fac = D.deploy("OpenFactory", encs(["w"] * 10, [sd.addr, uid, 0, 0, 0, 0, 0, 0, pqv, 0]))
-    none_i = D.deploy("NoUnderlyingToken", encs(["w"] * 5, [fac, 0, uid, reg, 0]))
-    # the release's verifier is a constructor argument (an implementation immutable, CTR-ZTH-20)
-    npqz_i = D.deploy("NoUnderlyingPqzToken", encs(["w"] * 5, [fac, 0, uid, reg, pqv]))
-    upqz_i = D.deploy("UnderlyingPqzToken", encs(["w"] * 5, [fac, 0, uid, reg, pqv]))
-    for kind, impl in ((0, none_i), (4, npqz_i), (5, upqz_i)):
-        sd.send(fac, cd("registerImplementation(uint8,uint64,address)", ["w", "w", "w"], kind, 1, impl),
-                f"registerImplementation(kind {kind})")
-    sd.send(fac, cd("setPqzEnabled(bool)", ["w"], 1), "setPqzEnabled(true) (self-test inside)")
+    # plan 5g-Z2: the factory (notice period 0 here) deploys every release itself: env version 1 of each kind
+    # (factory, chain_uid, registry, SmartKeyAccount implementation 0, Hedera false, deps, the linked libraries with
+    # their code hashes; the PQZ kinds' one dependency is this run's UAPqzVerifier, CTR-ZTH-20), then the release
+    # from the init code without arguments on env 1, named explicitly (owner 2026-10-20; the factory appends
+    # envVersion, env, implArgs)
+    fac = D.deploy("OpenFactory", encs(["w"] * 3, [sd.addr, uid, 0]))
+    for kind, name in ((0, "NoUnderlyingToken"), (4, "NoUnderlyingPqzToken"), (5, "UnderlyingPqzToken")):
+        code, libs = D.linked(name)
+        hashes = [keccak256(bytes.fromhex(rpc("eth_getCode", [a, "latest"])[2:])) for a in libs]
+        env = [fac, uid, reg, 0, 0, [pqv] if kind else [], libs, hashes]
+        sd.send(fac, cd(f"publishEnv(uint8,uint16,{ENV_S})", ["w", "w", ENV], kind, 1, env), f"publishEnv(kind {kind}, 1)")
+        r = sd.send(fac, cd("deployImplementation(uint8,uint64,uint16,bytes,bytes)", ["w", "w", "w", "b", "b"],
+                               kind, 1, 1, code, b""),
+                    f"deployImplementation(kind {kind}, 1) {name}")
+        lg = next(x for x in r["logs"] if x["address"].lower() == fac.lower() and len(x["topics"]) == 4)
+        log(f"      {name} release at 0x{lg['topics'][3][-40:]} ({int(r['gasUsed'], 16):,} gas)")
+    for kind in (4, 5):
+        sd.send(fac, cd("setKindEnabled(uint8,bool)", ["w", "w"], kind, 1), f"setKindEnabled({kind}, true)")
 
     # -------------------------------------------------------------- 2. UAs
     log("\n## 2. UAs: ML-DSA authorities (real signatures) and pqz-mlwe keys (real R_REG proofs)")
@@ -468,8 +484,9 @@ def run(kd, kr, ke):
     def create(kind, name, sym, legs, dmode, amode, feat, supply=0, holder=0, conf=True, salt=b"p6g"):
         aud_key = aud.ua if amode else b""
         c = [name, sym, 6, feat, 0, sd.addr, [sd.addr if feat & 2 else 0, 0, 0, 0, 0], supply, holder, legs, [0, 0],
-             [0, aud_key, SCALE, MAXS, FEE, dmode, amode, 0] if conf else [0, b"", 0, 0, 0, 0, 0, 0]]  # verifier 0: the release's
-        data = cd(f"createToken(uint8,uint64,{CFG_S},bytes32)", ["w", "w", CFG, "w"], kind, 1, c, kc(salt))
+             [aud_key, SCALE, MAXS, FEE, dmode, amode, 0] if conf else [b"", 0, 0, 0, 0, 0, 0]]
+        # plan 5g-Z2: initArgs = abi.encode(TokenConfig), opaque to the factory; the verifier is the release's
+        data = cd("createToken(uint8,uint64,bytes,bytes32)", ["w", "w", "b", "w"], kind, 1, encs([CFG], [c]), kc(salt))
         r = sd.send(fac, data, f"createToken {sym} (kind {kind})")
         lg = next(x for x in r["logs"] if x["address"].lower() == fac.lower())
         t = "0x" + lg["topics"][1][-40:]

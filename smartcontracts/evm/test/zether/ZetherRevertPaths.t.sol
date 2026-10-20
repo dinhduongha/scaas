@@ -27,6 +27,7 @@ import {
 } from "../../src/zether/ZetherVerifier.sol";
 import {IZetherVerifier, IZetherBurnVerifier, IZetherInnerProductVerifier} from "../../src/zether/IZetherVerifier.sol";
 import {UnderlyingZetherToken} from "../../src/zether/UnderlyingZetherToken.sol";
+import {Catalogue} from "../helpers/Catalogue.sol";
 import {ZetherDisclosure} from "../../src/zether/ZetherDisclosure.sol";
 import {ZetherVerifiers} from "./helpers/ZetherVerifiers.sol";
 import {Puller} from "../helpers/WalletMocks.sol";
@@ -36,9 +37,7 @@ import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 
 /// `NONE_ZETHER` with one guarded call-out to the caller (`reenter`): a frame that holds the guard.
 contract GuardHarness is NoUnderlyingZetherToken {
-    constructor(address f, bytes32 uid, address r, ITransferDisclosure d, IZetherVerifier v, IZetherBurnVerifier b)
-        NoUnderlyingZetherToken(f, address(0), uid, r, d, v, b)
-    {}
+    constructor(Env memory env) NoUnderlyingZetherToken(1, env, "") {}
 
     function holdGuard(bytes calldata data) external nonReentrant {
         ZetherRevertPathsTest(msg.sender).reenter(data);
@@ -61,6 +60,29 @@ contract AcceptAllVerifier {
         require(ok);
         return ret;
     }
+}
+
+/// An honest verifier that says it does not run on this chain (its precompiles absent): `isSupportedOnThisChain()` false,
+/// everything else forwarded.
+contract UnsupportedHereVerifier {
+    address internal immutable REAL;
+
+    constructor(address real) { REAL = real; }
+
+    function isSupportedOnThisChain() external pure returns (bool) { return false; }
+
+    fallback(bytes calldata data) external returns (bytes memory) {
+        (bool ok, bytes memory ret) = REAL.staticcall(data);
+        require(ok);
+        return ret;
+    }
+}
+
+/// The same, with a `curveName()` that reverts: the typed error survives with an empty name (review 5g-Z2 M-1).
+contract UnsupportedNamelessVerifier is UnsupportedHereVerifier {
+    constructor(address real) UnsupportedHereVerifier(real) {}
+
+    function curveName() external pure returns (string memory) { revert(); }
 }
 
 /// @notice The revert paths of the confidential layer on `NONE_ZETHER` (the relaying ones are in `ZetherRelay.t`, the
@@ -146,7 +168,7 @@ contract ZetherRevertPathsTest is ZetherFixture {
     /// guarded frame, so a harness (this implementation plus one guarded call-out) is etched over the implementation:
     /// a call back into any entry point from that frame hits the guard before its body.
     function test_everyEntryPointNonReentrant() public {
-        vm.etch(address(noneImpl), address(new GuardHarness(address(factory), ZUID, address(reg), dis, ver, burnVer)).code);
+        vm.etch(address(noneImpl), address(new GuardHarness(_zenv())).code);
         ZetherTypes.UA n = _none();
         bytes[10] memory calls = [
             abi.encodeCall(ZetherLayer.zetherShield, (alice.y, 1)),
@@ -212,7 +234,7 @@ contract ZetherRevertPathsTest is ZetherFixture {
         for (uint256 i; i < ok.length; ++i) {
             IFactoryToken.TokenConfig memory c = _cfg(false, max);
             c.conf.confidentialFee = ok[i];
-            ZetherLayer z = ZetherLayer(factory.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, c, bytes32(i + 900)));
+            ZetherLayer z = ZetherLayer(factory.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, abi.encode(c), bytes32(i + 900)));
             assertEq(z.confidentialFee(), ok[i]);
         }
         uint256[2] memory bad = [max, (uint256(1) << 64) - 1];
@@ -220,7 +242,7 @@ contract ZetherRevertPathsTest is ZetherFixture {
             IFactoryToken.TokenConfig memory c = _cfg(false, max);
             c.conf.confidentialFee = bad[i];
             vm.expectRevert(IZetherToken.BadInit.selector);
-            factory.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, c, bytes32(i + 910));
+            factory.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, abi.encode(c), bytes32(i + 910));
         }
     }
 
@@ -229,10 +251,10 @@ contract ZetherRevertPathsTest is ZetherFixture {
     function test_initializeRevertPaths() public {
         IFactoryToken.TokenConfig memory c = _cfg(false, uint256(1) << 40);
         vm.expectRevert(MetaTokenBase.NotFactory.selector);
-        noneImpl.initialize(address(this), 1, c);
+        noneImpl.initialize(address(this), 1, abi.encode(c));
         vm.prank(address(factory));
         vm.expectRevert(MetaTokenBase.AlreadyInitialized.selector);
-        NoUnderlyingZetherToken(address(tok)).initialize(address(this), 1, c);
+        NoUnderlyingZetherToken(address(tok)).initialize(address(this), 1, abi.encode(c));
         IFactoryToken.TokenConfig[6] memory bad;
         for (uint256 i; i < 6; ++i) bad[i] = _cfg(false, uint256(1) << 40);
         bad[0].conf.shieldScale = 0;
@@ -243,106 +265,129 @@ contract ZetherRevertPathsTest is ZetherFixture {
         bad[5].conf.auditorKey = ZetherKeys.pub(X_AUD, true);           // a BLS key on a bn254 token
         for (uint256 i; i < bad.length; ++i) {
             vm.expectRevert(IZetherToken.BadInit.selector);
-            factory.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, bad[i], bytes32(i + 100));
+            factory.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, abi.encode(bad[i]), bytes32(i + 100));
         }
         // cap · scale must not overflow
         IFactoryToken.TokenConfig memory big = _cfg(false, uint256(1) << 40);
         big.conf.shieldScale = type(uint256).max / (uint256(1) << 40) + 1;
         vm.expectRevert(IZetherToken.BadInit.selector);
-        factory.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, big, "overflow");
+        factory.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, abi.encode(big), "overflow");
         // the kind's fields: legs and rate belong to other kinds; the regulated flags are refused
         IFactoryToken.TokenConfig memory r = _cfg(false, uint256(1) << 40);
         r.rate.rateDelay = 2 days;
         vm.expectRevert(abi.encodeWithSelector(IFactoryToken.ConfigFieldForOtherKind.selector, 3));
-        factory.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, r, "rate");
+        factory.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, abi.encode(r), "rate");
         r = _cfg(false, uint256(1) << 40);
         r.features |= 1 << AdminLib.PAUSE;
         vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureInvalidForKind.selector, AdminLib.PAUSE));
-        factory.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, r, "pause");
+        factory.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, abi.encode(r), "pause");
         r = _cfg(false, uint256(1) << 40);
         r.features |= 1 << AdminLib.WRAP_DISABLEABLE;
         vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureInvalidForKind.selector, AdminLib.WRAP_DISABLEABLE));
-        factory.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, r, "wrap");
+        factory.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, abi.encode(r), "wrap");
         // initialize outside a dev chain (a hand-made clone, around the factory gate)
         address cl = Clones.clone(address(noneImpl));
         vm.chainId(1);
         vm.prank(address(factory));
         vm.expectRevert(abi.encodeWithSelector(ZetherSafety.ZetherNotDevChain.selector, 1));
-        NoUnderlyingZetherToken(cl).initialize(address(this), 1, c);
+        NoUnderlyingZetherToken(cl).initialize(address(this), 1, abi.encode(c));
     }
 
-    /// The implementation's immutables need code: a registry, a disclosure contract and the two verifiers, which must be
-    /// of one proof system (CTR-ZTH-20).
-    function test_constructorNeedsRegistryAndDisclosure() public {
-        vm.expectRevert(IZetherToken.BadInit.selector);
-        new NoUnderlyingZetherToken(address(factory), address(0), ZUID, address(0x1234), dis, ver, burnVer);
-        vm.expectRevert(IZetherToken.BadInit.selector);
-        new NoUnderlyingZetherToken(address(factory), address(0), ZUID, address(reg), ITransferDisclosure(address(0x1234)),
-            ver, burnVer);
-        vm.expectRevert(IZetherToken.BadInit.selector);
-        new NoUnderlyingZetherToken(address(factory), address(0), ZUID, address(reg), dis, IZetherVerifier(address(0x1234)),
-            burnVer);
-        vm.expectRevert(IZetherToken.BadInit.selector);
-        new NoUnderlyingZetherToken(address(factory), address(0), ZUID, address(reg), dis, ver,
-            IZetherBurnVerifier(address(0x1234)));
+    /// The release's `Env.deps` (plan 5g-Z2, CTR-ZTH-20): four entries with code, a registry, the two verifiers of one
+    /// proof system, both fixed to the env's inner-product verifier, each in its role; never on Hedera.
+    function test_constructorNeedsTheEnvDependencies() public {
+        bytes memory code = type(NoUnderlyingZetherToken).creationCode;
         (, IZetherBurnVerifier blsBurn) = ZetherVerifiers.deploy(true);
-        vm.expectRevert(IZetherToken.BadInit.selector); // a bn254 transfer verifier with a BLS12-381 burn verifier
-        new NoUnderlyingZetherToken(address(factory), address(0), ZUID, address(reg), dis, ver, blsBurn);
+        IZetherVerifier copy = IZetherVerifier(address(new ZetherTransferVerifierBn254(
+            ZetherVerifierBase(address(ver)).innerProduct())));
+        IFactoryToken.Env[10] memory bad;
+        for (uint256 i; i < bad.length; ++i) bad[i] = _zenv();
+        bad[0].registry = address(0x1234);                               // a registry without code
+        bad[1].deps[3] = address(0x1234);                                // a disclosure without code
+        bad[2].deps[0] = address(0x1234);                                // a transfer verifier without code
+        bad[3].deps[1] = address(blsBurn);                               // a BLS12-381 burn verifier with a bn254 one
+        bad[4].deps[2] = address(0x99);                                  // not the verifiers' inner-product verifier
+        bad[5].deps = new address[](3);                                  // too few
+        bad[6].hedera = true;                                            // never on Hedera
+        // each verifier in its role (review 5g-Z2 P2-2): a swapped or duplicated pair would lock every shield
+        (bad[7].deps[0], bad[7].deps[1]) = (address(burnVer), address(ver)); // swapped
+        bad[8].deps[1] = address(ver);                                   // the transfer verifier twice
+        bad[9].deps[1] = address(copy);                                  // two transfer verifiers
+        for (uint256 i; i < bad.length; ++i) {
+            vm.expectRevert(IZetherToken.BadInit.selector);
+            new NoUnderlyingZetherToken(1, bad[i], "");
+        }
+        // an honest copy of the transfer verifier on the same inner-product verifier is a different (valid) release
+        IFactoryToken.Env memory e = _zenv();
+        e.deps[0] = address(copy);
+        assertEq(address(NoUnderlyingZetherToken(Catalogue.release(factory, IOpenFactory.TokenKind.NONE_ZETHER, 2, e, code))
+            .verifier()), address(copy));
     }
 
-    /// CTR-ZTH-20 (review W-B, Zether half): the creator never chooses a verifier. A non-zero `conf.verifier` is refused
-    /// (through the factory and by a direct `initialize`); a release built on any other verifier (a fake that accepts
-    /// every proof, an honest copy at another address, one part of the set differing) is refused at registration, and an
-    /// unregistered confidential implementation cannot be cloned at all.
-    function test_fakeVerifierNeverAttached() public {
+    /// Plan 5g-Z2: the chain / verifier gate moved from the factory into the implementation's `initialize`
+    /// (`ZetherLib.init`): a release whose transfer verifier does not run on this chain deploys, but every `createToken`
+    /// of it reverts `VerifierUnsupportedOnThisChain`.
+    function test_createToken_refusesAVerifierUnsupportedOnThisChain() public {
+        UnsupportedHereVerifier w = new UnsupportedHereVerifier(address(ver));
+        IFactoryToken.Env memory e = _zenv();
+        e.deps[0] = address(w);
+        Catalogue.release(factory, IOpenFactory.TokenKind.NONE_ZETHER, 2, e, type(NoUnderlyingZetherToken).creationCode);
+        vm.expectRevert(abi.encodeWithSelector(IZetherToken.VerifierUnsupportedOnThisChain.selector, address(w), "bn254"));
+        factory.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 2, abi.encode(_cfg(false, 1 << 40)), "unsupported");
+        UnsupportedNamelessVerifier n = new UnsupportedNamelessVerifier(address(ver));
+        e.deps[0] = address(n);
+        Catalogue.release(factory, IOpenFactory.TokenKind.NONE_ZETHER, 3, e, type(NoUnderlyingZetherToken).creationCode);
+        vm.expectRevert(abi.encodeWithSelector(IZetherToken.VerifierUnsupportedOnThisChain.selector, address(n), ""));
+        factory.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 3, abi.encode(_cfg(false, 1 << 40)), "nameless");
+        // the same config on the honest release of the same env shape is accepted
+        assertTrue(factory.isRegisteredToken(
+            factory.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, abi.encode(_cfg(false, 1 << 40)), "supported")));
+    }
+
+    /// Review 5g-Z2 P2-3 (controller proposal 2): the registrar may enable a Zether kind anywhere, but on a non-dev
+    /// chain every `createToken` reverts with the implementation's gate.
+    function test_createToken_enabledKindOnANonDevChain_reverts() public {
+        assertTrue(factory.kindEnabled(IOpenFactory.TokenKind.NONE_ZETHER));
+        vm.chainId(1);
+        vm.expectRevert(abi.encodeWithSelector(ZetherSafety.ZetherNotDevChain.selector, 1));
+        factory.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, abi.encode(_cfg(false, 1 << 40)), "mainnet");
+    }
+
+    /// CTR-ZTH-20 / plan 5g-Z2: the creator never names a verifier — the config has no field for it; the factory deploys
+    /// every release with its own env appended, so the verifiers are the code's immutables by construction, and an
+    /// unregistered confidential implementation cannot be cloned. A release on another env (a fake verifier that accepts
+    /// every proof) can only come from the registrar, the trust root, and is a new version: tokens of version 1 keep
+    /// theirs.
+    function test_verifiersComeFromTheFactoryEnvOnly() public {
         AcceptAllVerifier fake = new AcceptAllVerifier(address(ver));
-        (IZetherVerifier copy, IZetherBurnVerifier copyB) = ZetherVerifiers.deploy(false);
-        IFactoryToken.TokenConfig memory c = _cfg(false, uint256(1) << 40);
-        address[4] memory vs = [address(fake), address(copy), address(ver), address(burnVer)];
-        for (uint256 i; i < vs.length; ++i) {
-            c.conf.verifier = vs[i];
-            vm.expectRevert(IZetherToken.BadInit.selector);
-            factory.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, c, bytes32(i + 300));
-        }
+        // a hand-made clone around the factory is no factory token (and the implementation refuses a non-factory caller)
         address cl = Clones.clone(address(noneImpl));
-        c.conf.verifier = address(fake);
-        vm.prank(address(factory));
-        vm.expectRevert(IZetherToken.BadInit.selector);
-        NoUnderlyingZetherToken(cl).initialize(address(this), 1, c);
-        // releases on another verifier set: any one part differing is enough
-        ZetherDisclosure dis2 = new ZetherDisclosure();
-        address[3][4] memory sets = [
-            [address(fake), address(fake), address(dis)], [address(copy), address(copyB), address(dis)],
-            [address(ver), address(copyB), address(dis)], [address(ver), address(burnVer), address(dis2)]
-        ];
-        for (uint256 i; i < sets.length; ++i) {
-            (ITransferDisclosure d, IZetherVerifier t, IZetherBurnVerifier b) =
-                (ITransferDisclosure(sets[i][2]), IZetherVerifier(sets[i][0]), IZetherBurnVerifier(sets[i][1]));
-            address n = address(new NoUnderlyingZetherToken(address(factory), address(0), ZUID, address(reg), d, t, b));
-            address u = address(new UnderlyingZetherToken(address(factory), address(0), ZUID, address(reg), d, t, b));
-            vm.startPrank(registrar);
-            vm.expectRevert(abi.encodeWithSelector(IOpenFactory.NotCanonicalVerifiers.selector, n));
-            factory.registerImplementation(IOpenFactory.TokenKind.NONE_ZETHER, 2, n);
-            vm.expectRevert(abi.encodeWithSelector(IOpenFactory.NotCanonicalVerifiers.selector, u));
-            factory.registerImplementation(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 2, u);
-            vm.stopPrank();
-            vm.expectRevert(abi.encodeWithSelector(IOpenFactory.UnregisteredConfidentialKind.selector,
-                IOpenFactory.TokenKind.NONE_ZETHER));
-            factory.createTokenUnregistered(IOpenFactory.TokenKind.NONE_ZETHER, n, _cfg(false, 1 << 40), "x");
-        }
-        // the canonical set: a second release registers, and every clone uses the release's verifiers
-        address n2 = address(new NoUnderlyingZetherToken(address(factory), address(0), ZUID, address(reg), dis, ver, burnVer));
-        vm.prank(registrar);
-        factory.registerImplementation(IOpenFactory.TokenKind.NONE_ZETHER, 2, n2);
-        c.conf.verifier = address(0);
-        ZetherLayer t2 = ZetherLayer(factory.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 2, c, "canon"));
-        assertEq(address(t2.verifier()), address(ver));
-        assertEq(address(t2.burnVerifier()), address(burnVer));
-        assertEq(address(t2.disclosure()), address(dis));
-        assertEq(t2.curve(), "bn254");
+        vm.expectRevert(MetaTokenBase.NotFactory.selector);
+        NoUnderlyingZetherToken(cl).initialize(address(this), 1, abi.encode(_cfg(false, 1 << 40)));
+        assertFalse(factory.isToken(cl));
+        // unregistered confidential: refused before any check
+        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.UnregisteredConfidentialKind.selector,
+            IOpenFactory.TokenKind.NONE_ZETHER));
+        factory.createTokenUnregistered(IOpenFactory.TokenKind.NONE_ZETHER, address(noneImpl), abi.encode(_cfg(false, 1 << 40)), "x");
+        // only the registrar publishes envs and deploys releases
+        IFactoryToken.Env memory e = _zenv();
+        e.deps[0] = address(fake);
+        vm.expectRevert(IOpenFactory.NotRegistrar.selector);
+        factory.publishEnv(IOpenFactory.TokenKind.NONE_ZETHER, 2, e);
+        vm.expectRevert(IOpenFactory.NotRegistrar.selector);
+        factory.deployImplementation(IOpenFactory.TokenKind.NONE_ZETHER, 2, 1, type(NoUnderlyingZetherToken).creationCode, "");
+        // the factory-made token carries the env's verifiers
+        assertEq(address(tok.verifier()), address(ver));
+        assertEq(address(tok.burnVerifier()), address(burnVer));
+        assertEq(address(tok.disclosure()), address(dis));
+        assertEq(tok.curve(), "bn254");
         bytes32 ns = 0xd1eef6cbeb7b383e0a92b3cb723053d5c39c76707d89da6b14ff91b83198ce00;
-        assertEq(address(uint160(uint256(vm.load(address(t2), ns)))), address(ver), "the library's copy");
-        assertTrue(factory.isRegisteredToken(address(t2)));
+        assertEq(address(uint160(uint256(vm.load(address(tok), ns)))), address(ver), "the library's copy");
+        assertTrue(factory.isRegisteredToken(address(tok)));
+        IOpenFactory.Release memory rel = factory.releaseOf(IOpenFactory.TokenKind.NONE_ZETHER, 1);
+        assertEq(rel.implementation, address(noneImpl));
+        assertEq(rel.envVersion, 1);
+        assertEq(rel.envHash, keccak256(abi.encode(_zenv())));
     }
 
     /// Every proof path goes through the release's verifiers (CTR-ZTH-20): a single and a multi-recipient transfer
@@ -370,7 +415,7 @@ contract ZetherRevertPathsTest is ZetherFixture {
     function test_minterMintsPublicUnitsOnly() public {
         IFactoryToken.TokenConfig memory c = _cfg(false, uint256(1) << 40);
         (c.initialSupply, c.initialHolder) = (7 * SCALE, address(0xA77));
-        ZetherLayer z = ZetherLayer(factory.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, c, "supply"));
+        ZetherLayer z = ZetherLayer(factory.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, abi.encode(c), "supply"));
         assertEq(z.balanceOf(address(0xA77)), 7 * SCALE);
         assertEq(z.totalShielded(), 0);
         _public(tok, address(0xA77), 5 * SCALE);

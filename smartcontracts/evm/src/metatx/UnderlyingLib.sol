@@ -77,7 +77,7 @@ library UnderlyingLib {
     /// @notice The token's `_init`: legs 1–8 (the factory's index reads the same `legs`), the metadata, the
     ///         flags/owner/roles of `kind` (`AdminLib.init`: `UNDERLYING` or `UNDERLYING_ZETHER`), the rate config, then
     ///         the legs in their given order (never changes).
-    function initToken(IFactoryToken.TokenConfig calldata c, bool isHedera, uint8 kind) public {
+    function initToken(IFactoryToken.TokenConfig memory c, bool isHedera, uint8 kind) public {
         uint256 n = c.legs.length;
         if (n == 0 || n > MAX_LEGS) revert MetaTokenBase.UnderlyingCountInvalid(n);
         AdminLib.TokenStorage storage t = AdminLib.$();
@@ -87,7 +87,7 @@ library UnderlyingLib {
         AdminLib.init(kind, c.features, c.lockedFeatures, c.owner, c.roles);
         bool adjustable = AdminLib.hasFeature(AdminLib.RATE_ADJUSTABLE);
         UnderlyingStorage storage s = $();
-        IFactoryToken.RateConfig calldata rate = c.rate;
+        IFactoryToken.RateConfig memory rate = c.rate;
         if (!adjustable) {
             if (rate.rateDelay != 0 || rate.maxRateStepBps != 0) revert IUnderlyingToken.RateConfigInvalid();
         } else {
@@ -99,7 +99,7 @@ library UnderlyingLib {
         for (uint256 i; i < n; ++i) _addLeg(s, c.legs[i], adjustable, isHedera);
     }
 
-    function _addLeg(UnderlyingStorage storage s, IFactoryToken.Leg calldata l, bool adjustable, bool isHedera)
+    function _addLeg(UnderlyingStorage storage s, IFactoryToken.Leg memory l, bool adjustable, bool isHedera)
         private
     {
         address u = l.underlying;

@@ -10,6 +10,7 @@ import {NoUnderlyingToken} from "../../src/metatx/NoUnderlyingToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {noneInit} from "../v2/helpers/V2Fixture.sol";
 import {UARegistryBase} from "./UARegistryBase.sol";
+import {plainEnv} from "../helpers/Catalogue.sol";
 
 /// The UA ledger with PQ signers (P6c; accounts.md CTR-UA-26, §1.16): pq_signatures.json's `metatx3` rows — the
 /// metatx3.json structs and domain, one row per PQ kind — on a `NONE` clone at the vector token address, context A,
@@ -45,10 +46,10 @@ contract UAMetaTx3PqTest is UARegistryBase {
         for (uint256 p; p < 2; ++p) reg.cacheExpandedKey(0x0131, pk1, p);
         reg.register(0x0131, pk1, vm.parseJsonBytes(pj, ".extraKeys[0].pop.sig"), 0, "");
         address token = vm.parseJsonAddress(pj, ".metatx3.token");
-        address impl = address(new NoUnderlyingToken(address(this), address(0), chainUidA, REG_A, false));
+        address impl = address(new NoUnderlyingToken(1, plainEnv(address(this), address(0), chainUidA, REG_A, false), ""));
         vm.etch(token, abi.encodePacked(hex"363d3d373d3d3d363d73", impl, hex"5af43d82803e903d91602b57fd5bf3"));
         tok = NoUnderlyingToken(token);
-        tok.initialize(address(this), 1, noneInit("Points", "PTS", 6, 0, address(0), address(this)));
+        tok.initialize(address(this), 1, abi.encode(noneInit("Points", "PTS", 6, 0, address(0), address(this))));
         vm.warp(1_800_000_000);
     }
 

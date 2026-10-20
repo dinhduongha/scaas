@@ -164,7 +164,7 @@ Further events, same object, same filters (decoders for a new kind ship before t
 
 - token wrappers: `Wrapped`, `Unwrapped`, `ReserveAdded`, `RateChangeProposed`, `RateChanged`, `RateChangeCancelled`,
   `RateAdminRenounced`, `WrapDisabled`, `GuardianRenounced`, `MinterRenounced`, `MetaNonceCancelled`; factory
-  `TokenCreated` (built; the node still reads the v1 `TokenDeployed`), `ImplementationRegistered`, `ImplementationDeprecated`;
+  `TokenCreated` (built; the node still reads the v1 `TokenDeployed`), `EnvPublished`, `ImplementationDeployed`, `ImplementationDeprecated`, `KindEnabled` (plan 5g-Z2; was `ImplementationRegistered`);
 - token-verified trade orders (SPECIFIED, [dex-venue.md#trade-orders](dex-venue.md#trade-orders)): on the sell token
   `TradeFilled(orderHash, from, sellFill, receiveFill, dexFee)`, `OrderCancelled(orderHash, from)`,
   `NoncesInvalidated(from, batch, minNonce)`; on the DEX `LegSettled(ref, orderHash, from, destination, sold, received,

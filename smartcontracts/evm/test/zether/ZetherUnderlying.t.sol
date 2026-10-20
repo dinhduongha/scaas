@@ -22,6 +22,7 @@ import {ZetherKeys} from "./helpers/ZetherKeys.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {IUALedger} from "../../src/metatx/IUALedger.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
+import {plainEnv, Catalogue} from "../helpers/Catalogue.sol";
 
 /// A leg that calls back into the token when the token pays it out or pulls it (an ERC-777-style hook).
 contract HookLeg is MockERC20 {
@@ -77,9 +78,8 @@ contract ZetherUnderlyingTest is ZetherFixture {
 
     function setUp() public {
         _stack(false);
-        undImpl = new UnderlyingZetherToken(address(factory), address(0), ZUID, address(reg), dis, ver, burnVer);
-        vm.prank(registrar);
-        factory.registerImplementation(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, address(undImpl));
+        undImpl = UnderlyingZetherToken(payable(Catalogue.release(factory, IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, _zenv(),
+            type(UnderlyingZetherToken).creationCode)));
         address[] memory legs = new address[](2);
         (legs[0], legs[1]) = (address(usd), address(eur));
         uint256[] memory nums = new uint256[](2);
@@ -110,10 +110,10 @@ contract ZetherUnderlyingTest is ZetherFixture {
         c.legs = new IFactoryToken.Leg[](legs.length);
         for (uint256 i; i < legs.length; ++i) c.legs[i] = IFactoryToken.Leg(legs[i], nums[i], dens[i]);
         c.conf = IFactoryToken.ConfidentialConfig(
-            address(0), auditor ? ZetherKeys.pub(X_AUD, false) : bytes(""), SCALE, uint256(1) << 40, FEE, dMode,
+            auditor ? ZetherKeys.pub(X_AUD, false) : bytes(""), SCALE, uint256(1) << 40, FEE, dMode,
             auditor ? aMode : 0, 0
         );
-        return UnderlyingZetherToken(payable(factory.createToken(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, c, salt)));
+        return UnderlyingZetherToken(payable(factory.createToken(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, abi.encode(c), salt)));
     }
 
     /// Public units by a 1:1 USD wrap.
@@ -209,8 +209,8 @@ contract ZetherUnderlyingTest is ZetherFixture {
         c.rate = IFactoryToken.RateConfig(2 days, 1000);
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);
-        c.conf = IFactoryToken.ConfidentialConfig(address(0), "", SCALE, 100, FEE, 0, 0, 0);
-        z = UnderlyingZetherToken(payable(factory.createToken(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, c, "small")));
+        c.conf = IFactoryToken.ConfidentialConfig("", SCALE, 100, FEE, 0, 0, 0);
+        z = UnderlyingZetherToken(payable(factory.createToken(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, abi.encode(c), "small")));
     }
 
     // ------------------------------------------------------------------ unshield-unwrap
@@ -361,20 +361,20 @@ contract ZetherUnderlyingTest is ZetherFixture {
         (c.name, c.symbol, c.decimals, c.features) = ("F", "F", 6, 1 << AdminLib.FREEZE);
         c.legs = new IFactoryToken.Leg[](1);
         c.legs[0] = IFactoryToken.Leg(address(usd), 1, 1);
-        c.conf = IFactoryToken.ConfidentialConfig(address(0), "", SCALE, 100, FEE, 0, 0, 0);
+        c.conf = IFactoryToken.ConfidentialConfig("", SCALE, 100, FEE, 0, 0, 0);
         vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureInvalidForKind.selector, AdminLib.FREEZE));
-        factory.createToken(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, c, "freeze");
+        factory.createToken(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, abi.encode(c), "freeze");
         c.features = 1 << AdminLib.MINTABLE;
         vm.expectRevert(abi.encodeWithSelector(ITokenAdmin.FeatureInvalidForKind.selector, AdminLib.MINTABLE));
-        factory.createToken(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, c, "mint");
+        factory.createToken(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, abi.encode(c), "mint");
         // `initialSupply` / `initialHolder` are the `NONE*` kinds' (CTR-TOK-25): refused, never silently ignored
         c.features = 0;
         c.initialSupply = 1;
         vm.expectRevert(abi.encodeWithSelector(IFactoryToken.ConfigFieldForOtherKind.selector, 1));
-        factory.createToken(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, c, "supply");
+        factory.createToken(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, abi.encode(c), "supply");
         (c.initialSupply, c.initialHolder) = (0, address(this));
         vm.expectRevert(abi.encodeWithSelector(IFactoryToken.ConfigFieldForOtherKind.selector, 1));
-        factory.createToken(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, c, "holder");
+        factory.createToken(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, abi.encode(c), "holder");
     }
 
     // ------------------------------------------------------------------ mtxWrap and shield, gasless (CTR-TOK-20, MT-3)
@@ -382,13 +382,12 @@ contract ZetherUnderlyingTest is ZetherFixture {
     /// An EOA holding a SCaaS underlying cannot approve (CTR-TOK-01): it wraps by signature (`mtxWrap`, inherited) and
     /// shields through `mtxExecute`, paying no gas.
     function test_mtxWrapThenRelayedShield_noApproveAnywhere() public {
-        NoUnderlyingToken pImpl = new NoUnderlyingToken(address(factory), address(0), ZUID, address(0), false);
-        vm.prank(registrar);
-        factory.registerImplementation(IOpenFactory.TokenKind.NONE, 1, address(pImpl));
+        Catalogue.plain(factory, IOpenFactory.TokenKind.NONE, 1, type(NoUnderlyingToken).creationCode, address(0),
+            address(0), false);
         IFactoryToken.TokenConfig memory pc;
         (pc.name, pc.symbol, pc.decimals, pc.features) = ("Points", "PTS", 6, 1 << AdminLib.PAYABLE);
         (pc.initialSupply, pc.initialHolder) = (50 * SCALE, payer);
-        NoUnderlyingToken pts = NoUnderlyingToken(factory.createToken(IOpenFactory.TokenKind.NONE, 1, pc, "pts"));
+        NoUnderlyingToken pts = NoUnderlyingToken(factory.createToken(IOpenFactory.TokenKind.NONE, 1, abi.encode(pc), "pts"));
         address[] memory legs = new address[](1);
         legs[0] = address(pts);
         UnderlyingZetherToken z = _wrapper(legs, _ones(1), _ones(1), "zpts", false);

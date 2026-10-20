@@ -6,24 +6,20 @@ import {IOpenFactory} from "./IOpenFactory.sol";
 import {IFactoryToken} from "./IFactoryToken.sol";
 import {ISCaaSDex} from "../dex/ISCaaSDex.sol";
 import {ITokenAdmin} from "../metatx/ITokenAdmin.sol";
-import {IZetherVerifierCommon} from "../zether/IZetherVerifier.sol";
-import {IZetherToken} from "../zether/IZetherToken.sol";
-import {ZetherSafety} from "../zether/ZetherSafety.sol";
-import {PqzSafety} from "../pqz/PqzSafety.sol";
 
-/// @title `OpenFactory` (CTR-TOK-03, CTR-TOK-25): the one token factory of a chain.
-/// @notice Anyone creates tokens; the registrar only appends implementations to the catalogue (and marks versions
-///         deprecated): it has no power over any token. A registered implementation must answer `kind()`,
-///         `factory() == this` and `chainUid() == chainUid` (so a clone's domain salt has one source, CTR-GEN-05);
-///         the catalogue is append-only, so a wrong entry would be dead forever. Creation clones by `CREATE2` with
-///         the salt scoped by the creator and calls `initialize` in the same call; flag validation is the token's.
-///         Kinds `NONE`, `UNDERLYING`, `NONE_ZETHER`, `UNDERLYING_ZETHER`; a `*_ZETHER` creation passes the Zether gate
-///         (`zetherEnabled`, a dev chain, a verifier this chain runs), a `*_PQZ` one the PQZ gate. The confidential
-///         verifiers are canonical (owner 2026-10-19, CTR-ZTH-20): fixed in the constructor (`Canonical`), and a
-///         confidential implementation is registered only when its verifier immutables are one of those sets; the
-///         creator never names a verifier and cannot use an unregistered confidential implementation. A deprecated
-///         version is no longer creatable (owner 2026-10-20). The registrar's key remains the trust root for code.
-///         **Zether is UNAUDITED — NOT FOR PRODUCTION FUNDS.**
+/// @title `OpenFactory` (CTR-TOK-03, CTR-TOK-25): the one token factory of a chain (plan 5g-Z2).
+/// @notice Anyone creates tokens and DEXes; the registrar publishes deployment environments (`publishEnv`, versioned
+///         per kind, never changed), deploys releases from init code (`deployImplementation`, `deployDexImplementation`:
+///         the factory's own `CREATE2`, the env version the registrar names appended as constructor arguments, so the
+///         dependencies — Zether and PQZ verifiers included, CTR-ZTH-20 — are immutables of the code by construction;
+///         each linked library checked by code hash), enables kinds and deprecates releases: it has no power over any
+///         token or DEX.
+///         A release must answer `kind()`, `factory() == this` and `chainUid() == chainUid` (CTR-GEN-05); the catalogue
+///         is append-only; a release is usable `noticePeriod` seconds after its deployment, and a deprecated one is no
+///         longer creatable (owner 2026-10-20). Creation clones by `CREATE2` with the salt scoped by the creator and
+///         calls `initialize(creator, version, initArgs)` in the same call; `initArgs` and every kind-specific check
+///         (flags, legs, the Zether / PQZ verifier and chain gates) are the implementation's. The registrar's key is the
+///         trust root for code (a multisig / UA msig before mainnet). **Zether is UNAUDITED — NOT FOR PRODUCTION FUNDS.**
 contract OpenFactory is IOpenFactory {
     struct Info {
         address creator;
@@ -33,117 +29,137 @@ contract OpenFactory is IOpenFactory {
     }
 
     uint256 internal constant MAX_LEGS = 8;
-    bytes4 private constant _VERIFIER_SEL = bytes4(keccak256("verifier()"));
+    uint8 public constant DEX_DOMAIN = type(uint8).max;
+    /// @dev The longest notice period (review 5g-Z2 P2-4): the period is immutable, and near `2^64` every
+    ///      `deployImplementation` would overflow `usableFrom` and brick the catalogue.
+    uint64 public constant MAX_NOTICE_PERIOD = 30 days;
 
     address public immutable registrar;
     bytes32 public immutable chainUid;
+    uint64 public immutable noticePeriod;
 
-    mapping(TokenKind => mapping(uint64 => address)) private _impl;
-    mapping(TokenKind => mapping(uint64 => bool)) private _deprecated;
+    mapping(uint8 => mapping(uint16 => IFactoryToken.Env)) private _envs;
+    mapping(uint8 => mapping(uint16 => bytes32)) private _envHash;
+    mapping(uint8 => uint16) private _latestEnv;
+    mapping(TokenKind => mapping(uint64 => Release)) private _releases;
     mapping(TokenKind => uint64) private _latest;
+    mapping(uint64 => Release) private _dexReleases;
+    uint64 private _latestDex;
+    /// @dev Bit `kind` set = creation enabled; the plain kinds start on.
+    uint256 private _enabled = 3;
     mapping(address => Info) private _info;
     mapping(address => mapping(address => address[])) private _wrappers;
     mapping(address => address[]) private _byUnderlying;
-    mapping(uint64 => address) private _dexImpl;
-    uint64 private _latestDex;
     mapping(address => uint64) private _dexVersion; // 0 = not a DEX made here
-    mapping(uint64 => bool) private _dexDeprecated;
-    bool public zetherEnabled;
-    bool public pqzEnabled;
 
-    address private immutable _ZV0;
-    address private immutable _ZV1;
-    address private immutable _ZB0;
-    address private immutable _ZB1;
-    address private immutable _ZD0;
-    address private immutable _ZD1;
-    address private immutable _PQ0;
-    address private immutable _PQ1;
-
-    constructor(address registrar_, bytes32 chainUid_, Canonical memory c) {
+    /// @param noticePeriod_ seconds between a release's deployment and its first use (7622: minutes, 22776: days).
+    constructor(address registrar_, bytes32 chainUid_, uint64 noticePeriod_) {
         if (chainUid_ == bytes32(0)) revert ChainUidZero();
+        if (noticePeriod_ > MAX_NOTICE_PERIOD) revert NoticePeriodTooLong(noticePeriod_);
         registrar = registrar_;
         chainUid = chainUid_;
-        (_ZV0, _ZV1, _ZB0, _ZB1) = (c.zetherVerifier[0], c.zetherVerifier[1], c.zetherBurnVerifier[0], c.zetherBurnVerifier[1]);
-        (_ZD0, _ZD1, _PQ0, _PQ1) = (c.zetherDisclosure[0], c.zetherDisclosure[1], c.pqzVerifier[0], c.pqzVerifier[1]);
+        noticePeriod = noticePeriod_;
     }
 
-    function zetherVerifiers(uint8 curve) public view returns (address verifier, address burnVerifier, address disclosure) {
-        if (curve == 0) return (_ZV0, _ZB0, _ZD0);
-        if (curve == 1) return (_ZV1, _ZB1, _ZD1);
-    }
-
-    function pqzVerifier(uint8 proofSystem) public view returns (address) {
-        return proofSystem == 0 ? _PQ0 : proofSystem == 1 ? _PQ1 : address(0);
-    }
-
-    // ------------------------------------------------------------------ catalogue
-
-    function registerImplementation(TokenKind kind, uint64 version, address implementation) external {
+    modifier onlyRegistrar() {
         if (msg.sender != registrar) revert NotRegistrar();
+        _;
+    }
+
+    // ------------------------------------------------------------------ environments
+
+    function publishEnv(TokenKind kind, uint16 envVersion, IFactoryToken.Env calldata env) external onlyRegistrar {
+        if (uint8(kind) > uint8(TokenKind.UNDERLYING_PQZ)) revert KindReserved(kind);
+        _publish(uint8(kind), envVersion, env);
+    }
+
+    function publishDexEnv(uint16 envVersion, IFactoryToken.Env calldata env) external onlyRegistrar {
+        _publish(DEX_DOMAIN, envVersion, env);
+    }
+
+    function envOf(TokenKind kind, uint16 envVersion) external view returns (IFactoryToken.Env memory) {
+        return _envs[uint8(kind)][envVersion];
+    }
+
+    function dexEnvOf(uint16 envVersion) external view returns (IFactoryToken.Env memory) {
+        return _envs[DEX_DOMAIN][envVersion];
+    }
+
+    function latestEnvVersion(TokenKind kind) external view returns (uint16) { return _latestEnv[uint8(kind)]; }
+
+    function latestDexEnvVersion() external view returns (uint16) { return _latestEnv[DEX_DOMAIN]; }
+
+    // ------------------------------------------------------------------ releases
+
+    function deployImplementation(
+        TokenKind kind,
+        uint64 version,
+        uint16 envVersion,
+        bytes calldata initcode,
+        bytes calldata implArgs
+    ) external onlyRegistrar returns (address implementation) {
+        if (uint8(kind) > uint8(TokenKind.UNDERLYING_PQZ)) revert KindReserved(kind);
         if (version == 0) revert VersionUnknown(kind, 0);
-        address existing = _impl[kind][version];
+        address existing = _releases[kind][version].implementation;
         if (existing != address(0)) revert VersionAlreadyRegistered(kind, version, existing);
+        Release memory r;
+        (implementation, r) =
+            _deploy(uint8(kind), envVersion, keccak256(abi.encode(kind, version)), initcode, implArgs);
         _checkImplementation(kind, implementation);
-        _checkCanonical(kind, implementation);
-        _impl[kind][version] = implementation;
+        _releases[kind][version] = r;
         if (version > _latest[kind]) _latest[kind] = version;
-        emit ImplementationRegistered(kind, version, implementation, msg.sender);
+        emit ImplementationDeployed(kind, version, implementation, r.envVersion, r.envHash, keccak256(initcode),
+            implementation.codehash, r.usableFrom);
     }
 
-    function deprecate(TokenKind kind, uint64 version, string calldata reason) external {
-        if (msg.sender != registrar) revert NotRegistrar();
-        if (_impl[kind][version] == address(0)) revert VersionUnknown(kind, version);
-        _deprecated[kind][version] = true;
+    function deprecate(TokenKind kind, uint64 version, string calldata reason) external onlyRegistrar {
+        if (_releases[kind][version].implementation == address(0)) revert VersionUnknown(kind, version);
+        _releases[kind][version].deprecated = true;
         emit ImplementationDeprecated(kind, version, reason);
     }
 
+    function setKindEnabled(TokenKind kind, bool on) external onlyRegistrar {
+        if (uint8(kind) > uint8(TokenKind.UNDERLYING_PQZ)) revert KindReserved(kind);
+        uint256 bit = 1 << uint8(kind);
+        _enabled = on ? _enabled | bit : _enabled & ~bit;
+        emit KindEnabled(kind, on);
+    }
+
+    function kindEnabled(TokenKind kind) public view returns (bool) { return _enabled & (1 << uint8(kind)) != 0; }
+
+    function releaseOf(TokenKind kind, uint64 version) external view returns (Release memory) {
+        return _releases[kind][version];
+    }
+
     function implementationOf(TokenKind kind, uint64 version) external view returns (address) {
-        return _impl[kind][version];
+        return _releases[kind][version].implementation;
     }
 
     function isDeprecated(TokenKind kind, uint64 version) external view returns (bool) {
-        return _deprecated[kind][version];
+        return _releases[kind][version].deprecated;
     }
 
-    function latestVersion(TokenKind kind) external view returns (uint64) {
-        return _latest[kind];
-    }
-
-    function setZetherEnabled(bool on) external {
-        if (msg.sender != registrar) revert NotRegistrar();
-        if (on) ZetherSafety.requireDevChain();
-        zetherEnabled = on;
-        emit ZetherEnabled(on);
-    }
-
-    function setPqzEnabled(bool on) external {
-        if (msg.sender != registrar) revert NotRegistrar();
-        if (on) {
-            PqzSafety.requireAllowedChain();
-            PqzSafety.requireSelfTest(PqzSafety.PQZ);
-        }
-        pqzEnabled = on;
-        emit PqzEnabled(on);
-    }
+    function latestVersion(TokenKind kind) external view returns (uint64) { return _latest[kind]; }
 
     // ------------------------------------------------------------------ create
 
-    function createToken(TokenKind kind, uint64 version, IFactoryToken.TokenConfig calldata cfg, bytes32 salt)
+    function createToken(TokenKind kind, uint64 version, bytes calldata initArgs, bytes32 salt)
         external returns (address)
     {
-        address impl = _impl[kind][version];
+        Release storage r = _releases[kind][version];
+        address impl = r.implementation;
         if (impl == address(0)) revert VersionUnknown(kind, version);
-        if (_deprecated[kind][version]) revert VersionDeprecated(kind, version);
-        return _create(kind, version, impl, cfg, salt);
+        if (r.deprecated) revert VersionDeprecated(kind, version);
+        if (block.timestamp < r.usableFrom) revert VersionNotYetUsable(kind, version, r.usableFrom);
+        return _create(kind, version, impl, initArgs, salt);
     }
 
-    function createTokenUnregistered(
-        TokenKind kind, address implementation, IFactoryToken.TokenConfig calldata cfg, bytes32 salt
-    ) external returns (address) {
+    function createTokenUnregistered(TokenKind kind, address implementation, bytes calldata initArgs, bytes32 salt)
+        external returns (address)
+    {
         if (uint8(kind) >= uint8(TokenKind.NONE_ZETHER)) revert UnregisteredConfidentialKind(kind);
         _checkImplementation(kind, implementation);
-        return _create(kind, 0, implementation, cfg, salt);
+        return _create(kind, 0, implementation, initArgs, salt);
     }
 
     function predictAddress(address implementation, address creator, bytes32 salt) public view returns (address) {
@@ -188,45 +204,55 @@ contract OpenFactory is IOpenFactory {
 
     // ------------------------------------------------------------------ DEX (CTR-DEX-24)
 
-    function registerDexImplementation(uint64 version, address implementation) external {
-        if (msg.sender != registrar) revert NotRegistrar();
+    function deployDexImplementation(uint64 version, uint16 envVersion, bytes calldata initcode, bytes calldata implArgs)
+        external onlyRegistrar returns (address implementation)
+    {
         if (version == 0) revert DexVersionUnknown(0);
-        address existing = _dexImpl[version];
+        address existing = _dexReleases[version].implementation;
         if (existing != address(0)) revert DexVersionAlreadyRegistered(version, existing);
+        Release memory r;
+        (implementation, r) =
+            _deploy(DEX_DOMAIN, envVersion, keccak256(abi.encode("dex", version)), initcode, implArgs);
         if (implementation.code.length == 0) revert ImplementationNotAContract(implementation);
         (bool ok, uint256 got) = _word(implementation, bytes4(keccak256("factory()")));
         if (!ok || got != uint256(uint160(address(this)))) revert ImplementationFactoryMismatch(implementation);
         (ok, got) = _word(implementation, bytes4(keccak256("chainUid()")));
         if (!ok || bytes32(got) != chainUid) revert ChainUidMismatch(chainUid, ok ? bytes32(got) : bytes32(0));
-        _dexImpl[version] = implementation;
+        _dexReleases[version] = r;
         if (version > _latestDex) _latestDex = version;
-        emit DexImplementationRegistered(version, implementation, msg.sender);
+        emit DexImplementationDeployed(version, implementation, r.envVersion, r.envHash, keccak256(initcode),
+            implementation.codehash, r.usableFrom);
     }
 
-    function dexImplementationOf(uint64 version) external view returns (address) { return _dexImpl[version]; }
+    function dexReleaseOf(uint64 version) external view returns (Release memory) { return _dexReleases[version]; }
 
-    function deprecateDex(uint64 version, string calldata reason) external {
-        if (msg.sender != registrar) revert NotRegistrar();
-        if (_dexImpl[version] == address(0)) revert DexVersionUnknown(version);
-        _dexDeprecated[version] = true;
+    function dexImplementationOf(uint64 version) external view returns (address) {
+        return _dexReleases[version].implementation;
+    }
+
+    function deprecateDex(uint64 version, string calldata reason) external onlyRegistrar {
+        if (_dexReleases[version].implementation == address(0)) revert DexVersionUnknown(version);
+        _dexReleases[version].deprecated = true;
         emit DexImplementationDeprecated(version, reason);
     }
 
-    function isDexDeprecated(uint64 version) external view returns (bool) { return _dexDeprecated[version]; }
+    function isDexDeprecated(uint64 version) external view returns (bool) { return _dexReleases[version].deprecated; }
 
     function latestDexVersion() external view returns (uint64) { return _latestDex; }
 
-    function createDex(uint64 version, ISCaaSDex.DexConfig calldata cfg, bytes32 salt) external returns (address dex) {
-        address impl = _dexImpl[version];
+    function createDex(uint64 version, bytes calldata initArgs, bytes32 salt) external returns (address dex) {
+        Release storage r = _dexReleases[version];
+        address impl = r.implementation;
         if (impl == address(0)) revert DexVersionUnknown(version);
-        if (_dexDeprecated[version]) revert DexVersionDeprecated(version);
+        if (r.deprecated) revert DexVersionDeprecated(version);
+        if (block.timestamp < r.usableFrom) revert DexVersionNotYetUsable(version, r.usableFrom);
         bytes32 s = _salt(msg.sender, salt);
         address predicted = Clones.predictDeterministicAddress(impl, s);
         if (predicted.code.length != 0 || _dexVersion[predicted] != 0) revert SaltAlreadyUsed(predicted);
         dex = Clones.cloneDeterministic(impl, s);
-        ISCaaSDex(dex).initialize(msg.sender, version, cfg);
+        ISCaaSDex(dex).initialize(msg.sender, version, initArgs);
         _dexVersion[dex] = version;
-        emit DexCreated(dex, msg.sender, version, impl, cfg.admin);
+        emit DexCreated(dex, msg.sender, version, impl, ISCaaSDex(dex).admin());
     }
 
     function isDex(address dex) external view returns (bool) { return _dexVersion[dex] != 0; }
@@ -234,6 +260,50 @@ contract OpenFactory is IOpenFactory {
     function dexVersionOf(address dex) external view returns (uint64) { return _dexVersion[dex]; }
 
     // ------------------------------------------------------------------ internal
+
+    function _publish(uint8 domain, uint16 envVersion, IFactoryToken.Env calldata env) private {
+        if (envVersion == 0) revert EnvUnknown(domain, 0);
+        if (_envHash[domain][envVersion] != bytes32(0)) revert EnvAlreadyPublished(domain, envVersion);
+        if (env.factory != address(this) || env.chainUid != chainUid || env.libs.length != env.libCodeHashes.length) {
+            revert EnvInvalid();
+        }
+        // An empty pin (0: no account; keccak256(""): no code) checks nothing (review 5g-Z2 P2-1).
+        for (uint256 i; i < env.libCodeHashes.length; ++i) {
+            bytes32 h = env.libCodeHashes[i];
+            if (h == bytes32(0) || h == keccak256("")) revert EnvInvalid();
+        }
+        _envs[domain][envVersion] = env;
+        bytes32 envHash = keccak256(abi.encode(env));
+        _envHash[domain][envVersion] = envHash;
+        if (envVersion > _latestEnv[domain]) _latestEnv[domain] = envVersion;
+        emit EnvPublished(domain, envVersion, envHash);
+    }
+
+    /// @dev The domain's env `v` (named by the registrar): every linked library's code hash, then `CREATE2` of
+    ///      `initcode ‖ abi.encode(v, env, implArgs)`; a constructor's revert is bubbled, an empty failure is `DeployFailed`.
+    function _deploy(uint8 domain, uint16 v, bytes32 salt, bytes calldata initcode, bytes calldata implArgs)
+        private returns (address at, Release memory r)
+    {
+        if (_envHash[domain][v] == bytes32(0)) revert EnvUnknown(domain, v);
+        IFactoryToken.Env storage env = _envs[domain][v];
+        for (uint256 i; i < env.libs.length; ++i) {
+            bytes32 got = env.libs[i].codehash;
+            if (got != env.libCodeHashes[i]) revert LibraryCodeHashMismatch(env.libs[i], env.libCodeHashes[i], got);
+        }
+        bytes memory code = bytes.concat(initcode, abi.encode(v, env, implArgs));
+        assembly ("memory-safe") {
+            at := create2(0, add(code, 32), mload(code), salt)
+            if iszero(at) {
+                if returndatasize() {
+                    let m := mload(0x40)
+                    returndatacopy(m, 0, returndatasize())
+                    revert(m, returndatasize())
+                }
+            }
+        }
+        if (at == address(0)) revert DeployFailed();
+        r = Release(at, v, _envHash[domain][v], uint64(block.timestamp) + noticePeriod, false);
+    }
 
     /// @dev Code, `kind()`, `factory()`, `chainUid()`: each read by staticcall, a missing or short answer refused.
     function _checkImplementation(TokenKind kind, address implementation) private view {
@@ -248,58 +318,6 @@ contract OpenFactory is IOpenFactory {
         if (!ok || bytes32(got) != chainUid) revert ChainUidMismatch(chainUid, ok ? bytes32(got) : bytes32(0));
     }
 
-    /// @dev A confidential implementation's verifier immutables must be one canonical set (CTR-ZTH-20): Zether
-    ///      `(verifier(), burnVerifier(), disclosure())` equal to curve 0's or curve 1's, PQZ `verifier()` equal to PQZL's
-    ///      or PQZH's. No answer reads as 0, and 0 never matches.
-    function _checkCanonical(TokenKind kind, address impl) private view {
-        bool ok = true;
-        if (_isZether(kind)) {
-            address v = _addr(impl, _VERIFIER_SEL);
-            address b = _addr(impl, IZetherToken.burnVerifier.selector);
-            address d = _addr(impl, IZetherToken.disclosure.selector);
-            ok = v != address(0) && ((v == _ZV0 && b == _ZB0 && d == _ZD0) || (v == _ZV1 && b == _ZB1 && d == _ZD1));
-        } else if (_isPqz(kind)) {
-            address v = _addr(impl, _VERIFIER_SEL);
-            ok = v != address(0) && (v == _PQ0 || v == _PQ1);
-        }
-        if (!ok) revert NotCanonicalVerifiers(impl);
-    }
-
-    function _isZether(TokenKind kind) private pure returns (bool) {
-        return kind == TokenKind.NONE_ZETHER || kind == TokenKind.UNDERLYING_ZETHER;
-    }
-
-    function _isPqz(TokenKind kind) private pure returns (bool) {
-        return kind == TokenKind.NONE_PQZ || kind == TokenKind.UNDERLYING_PQZ;
-    }
-
-    /// @dev An address-sized answer of `impl`, else 0.
-    function _addr(address impl, bytes4 sel) private view returns (address) {
-        (bool ok, uint256 w) = _word(impl, sel);
-        return ok && w == uint160(w) ? address(uint160(w)) : address(0);
-    }
-
-    /// @dev The gate, then the verifier: an absent precompile does not revert, it returns success with empty output,
-    ///      so a verifier this chain cannot run is refused before anyone deposits (CTR-TOK-03).
-    function _checkZether(address verifier) private view {
-        if (!zetherEnabled) revert ZetherDisabled();
-        ZetherSafety.requireDevChain(); // a flag set on a dev chain does not survive a chain id change (fork)
-        // low level: no code, or a fallback answering with empty data, fails typed rather than with a decode revert
-        (bool answered, uint256 w) = _word(verifier, IZetherVerifierCommon.isSupportedOnThisChain.selector);
-        if (answered && w == 1) return;
-        string memory curve;
-        if (answered) try IZetherVerifierCommon(verifier).curveName() returns (string memory c) { curve = c; } catch {}
-        revert VerifierUnsupportedOnThisChain(verifier, curve);
-    }
-
-    /// @dev The PQZ gate, the chain, then the verifier's own check (chain and the precompile's self-test, now).
-    function _checkPqz(address verifier) private view {
-        if (!pqzEnabled) revert PqzDisabled();
-        PqzSafety.requireAllowedChain();
-        (bool answered, uint256 w) = _word(verifier, IZetherVerifierCommon.isSupportedOnThisChain.selector);
-        if (!answered || w != 1) revert PqzVerifierUnsupported(verifier);
-    }
-
     function _word(address target, bytes4 sel) private view returns (bool ok, uint256 w) {
         bytes memory ret;
         (ok, ret) = target.staticcall(abi.encodeWithSelector(sel));
@@ -311,31 +329,26 @@ contract OpenFactory is IOpenFactory {
         return keccak256(abi.encode(creator, salt));
     }
 
-    function _create(TokenKind kind, uint64 version, address impl, IFactoryToken.TokenConfig calldata cfg,
-        bytes32 salt) private returns (address token)
+    /// @dev The generic gate (the kind enabled), the clone, `initialize` with the creator's `initArgs`, then the index
+    ///      and the event from the token's own views.
+    function _create(TokenKind kind, uint64 version, address impl, bytes calldata initArgs, bytes32 salt)
+        private returns (address token)
     {
-        // the release's own verifier (an immutable checked at registration, CTR-ZTH-20)
-        if (_isZether(kind)) _checkZether(_addr(impl, _VERIFIER_SEL));
-        if (_isPqz(kind)) _checkPqz(_addr(impl, _VERIFIER_SEL));
-        uint256 n = cfg.legs.length;
-        bool wrapper = kind == TokenKind.UNDERLYING || kind == TokenKind.UNDERLYING_ZETHER
-            || kind == TokenKind.UNDERLYING_PQZ;
-        if (wrapper ? n == 0 || n > MAX_LEGS : n != 0) revert UnderlyingCountInvalid(n);
+        if (!kindEnabled(kind)) revert KindDisabled(kind);
         bytes32 s = _salt(msg.sender, salt);
         address predicted = Clones.predictDeterministicAddress(impl, s);
         // a registered clone is never deleted; an unregistered implementation could self-destruct its clone in `initialize`
         if (_info[predicted].exists || predicted.code.length != 0) revert SaltAlreadyUsed(predicted);
         token = Clones.cloneDeterministic(impl, s);
-        IFactoryToken(token).initialize(msg.sender, version, cfg);
+        IFactoryToken(token).initialize(msg.sender, version, initArgs);
         _info[token] = Info({creator: msg.sender, kind: kind, version: version, exists: true});
-        address[] memory us = new address[](n);
-        for (uint256 i; i < n; ++i) {
-            address u = cfg.legs[i].underlying;
-            us[i] = u;
-            _wrappers[msg.sender][u].push(token);
-            _byUnderlying[u].push(token);
+        address[] memory us = IFactoryToken(token).underlyings();
+        if (us.length > MAX_LEGS) revert UnderlyingCountInvalid(us.length);
+        for (uint256 i; i < us.length; ++i) {
+            _wrappers[msg.sender][us[i]].push(token);
+            _byUnderlying[us[i]].push(token);
         }
-        emit TokenCreated(token, msg.sender, kind, version, impl, cfg.features,
-            ITokenAdmin(token).lockedFeatures(), cfg.owner, us);
+        ITokenAdmin t = ITokenAdmin(token);
+        emit TokenCreated(token, msg.sender, kind, version, impl, t.features(), t.lockedFeatures(), t.owner(), us);
     }
 }

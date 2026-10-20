@@ -10,6 +10,7 @@ import {IERC20MetaTx} from "../../src/metatx/IERC20MetaTx.sol";
 import {AdminLib} from "../../src/metatx/AdminLib.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
+import {plainEnv} from "../helpers/Catalogue.sol";
 
 /// T2: tầng 1 `NoUnderlyingToken` (TW2 §4, R141).
 contract Tier1Test is V2Fixture {
@@ -41,7 +42,7 @@ contract Tier1Test is V2Fixture {
 
     /// P1c: "zero minter means fixed supply" is now "no `MINTABLE` flag".
     function test_noMintableMeansFixedSupply() public {
-        noneImpl = address(new NoUnderlyingToken(address(this), address(0), UID_, address(0), false));
+        noneImpl = address(new NoUnderlyingToken(1, plainEnv(address(this), address(0), UID_, address(0), false), ""));
         IFactoryToken.TokenConfig memory c = noneInit("Points", "PTS", 0, 100, address(this), address(0));
         c.features &= ~uint256(1 << 1); // no MINTABLE
         NoUnderlyingToken t = NoUnderlyingToken(_clone(noneImpl, address(this), new address[](0), abi.encode(c)));
@@ -94,7 +95,7 @@ contract Tier1Test is V2Fixture {
     }
 
     function test_initRefusesUnderlyings() public {
-        noneImpl = address(new NoUnderlyingToken(address(this), address(0), UID_, address(0), false));
+        noneImpl = address(new NoUnderlyingToken(1, plainEnv(address(this), address(0), UID_, address(0), false), ""));
         address[] memory us = new address[](1);
         us[0] = address(0x1234);
         // E5/E6: the underlyings are the config's `legs`, a field of another kind for NONE

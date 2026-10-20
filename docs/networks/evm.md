@@ -181,13 +181,20 @@ pinned profiles in the same release; the node re-checks every `chainUid()` at ac
 ([NODE-GW-07](../node/gateway.md#NODE-GW-07)).
 
 Transitional (BUILT, P1e): `smartcontracts/scripts/deploy.sh evm <rpc>` runs the forge script `script/Deploy.s.sol` (reads
-`PRIVATE_KEY`, `REGISTRAR`, `DEPLOY_SALT`, `CHAIN_UID`) through the deterministic deployer at
+`PRIVATE_KEY`, `REGISTRAR`, `DEPLOY_SALT`, `CHAIN_UID`, `NOTICE_PERIOD`) through the deterministic deployer at
 `0x4e59b44847b379578588920ca78fbf26c0b4956c` (`new X{salt: DEPLOY_SALT}`; default salt `keccak256("scaas.deploy.v1")`) and
 the gate of `DeployBase.sol`: `chainUid()` of the factory and of each implementation equals `chain_uid` (`CHAIN_UID` or
 block 0's hash; past block 256 `CHAIN_UID` is required). The script stops when the deployer has no code: on such a
 chain, deploy it first (the keyless presigned deployment transaction of that proxy, funded by a transfer to its signer)
 and re-run. `forge script … --broadcast` needs `--sender <deployer address>`, which `deploy.sh` and the e2e pass; forge
-places the linked libraries from that sender, not by CREATE2. It deploys `OpenFactory` with `NoUnderlyingToken` as
+places the linked libraries from that sender, not by CREATE2. It deploys `OpenFactory` (notice period `NOTICE_PERIOD`
+seconds; owner ruling 2026-10-20: every mainnet — any chain outside `DeployBase._isTestChain`'s fixed list of test /
+dev chains, so 22776, Hedera 295 and an unknown chain too — defaults to and may not go below 3 days; 7622 defaults to 10
+minutes, the other listed test / dev chains to 0; at most 30 days, the factory's `MAX_NOTICE_PERIOD`; `DEMO_SUPPLY`
+needs 0) and, when
+the deployer is the registrar, publishes env 1 of `NONE` and of the DEX (the factory, `chain_uid`, the UA registry, the
+`SmartKeyAccount` implementation, Hedera, the linked libraries with their code hashes) and has the factory deploy
+(plan 5g-Z2, [CTR-TOK-03](../contracts/token-wrappers.md#release-env)) `NoUnderlyingToken` as
 version 1 of `NONE` on the UA registry (since UA-4 every token implementation carries the UA ledger and is over
 EIP-170, so `deploy.sh` always passes `--code-size-limit 65536` (and `--slow`: one tx per block, because forge's parallel broadcast can strand a deploy tx that doesn't fit the block's remaining gas) and the chain needs 64 KiB code; `UnderlyingToken` is not
 deployed until the size work), the `SCaaSDex`
@@ -204,14 +211,14 @@ It writes
 `deployments/<chainid>.json` (`token_factory`, `implementation_none`, `dex_implementation`, `ua_registry`, `chain_uid`, `smart_key_account_factory`,
 `smart_key_account_implementation`, `demo_token`, `demo_token_2`; `factory`, `implementation`, `dex`, `scaas_dex` are gone with v1),
 which seeds the client and the node configuration. forge writes it during the simulation, before the broadcast; `deploy.sh` puts the previous file back (or removes the new one) when the broadcast fails.
-Zether (built, P3; dev chains only, UNAUDITED): opt in with `DEPLOY_ZETHER=1` (default off; on a non-dev chain the script refuses). It deploys, before the factory (whose constructor fixes them, [CTR-ZTH-20](../contracts/zether.md#CTR-ZTH-20)), `ZetherDisclosure` and per curve the inner-product, transfer and burn verifiers; then points the confidential implementations at the UA registry (whose Zether kinds it enables there) and those verifiers, and adds `ZetherStatements` and per curve the two confidential implementations (bn254 as version 1, BLS12-381 as version 2 of `NONE_ZETHER` and `UNDERLYING_ZETHER`; the curve is the release's `curve()`; the factory's Zether gate on when the deployer is the registrar), with the keys `zether_registry` (= `ua_registry`), `zether_disclosure`, `zether_statements`, `zether_inner_product_verifier_<curve>`, `zether_verifier_<curve>` (transfer), `zether_burn_verifier_<curve>`, `implementation_none_zether_<curve>`, `implementation_underlying_zether_<curve>` (`<curve>` = `bn254`, `bls12381`; plan 5g-Z1). The implementations exceed 24,576 B and the BLS inner-product verifier's deploy (the generators) uses ~14 M gas, so `deploy.sh` always passes `--gas-estimate-multiplier 105` to `forge script` (the default ×1.30 exceeds the Osaka per-transaction cap of 16,777,216, EIP-7825; ×1.13 or more fails; the largest implementation, `UnderlyingPqzToken`, 13,319,335 gas measured, is deployed by `script/pqz/e2e.py`, which sets its own limit) and the anvil needs `--code-size-limit 65536`; `ZetherDeploy.t` checks each deploy fits. `scripts/e2e-zether.sh` runs the
+Zether (built, P3; dev chains only, UNAUDITED): opt in with `DEPLOY_ZETHER=1` (default off; on a non-dev chain the script refuses). It deploys `ZetherStatements`, `ZetherDisclosure` and per curve the inner-product, transfer and burn verifiers; when the deployer is the registrar it publishes per curve an env of `NONE_ZETHER` and `UNDERLYING_ZETHER` (the UA registry, whose Zether kinds it enables there; `deps` = transfer, burn, inner-product verifier, disclosure, [CTR-ZTH-20](../contracts/zether.md#CTR-ZTH-20); env 1 bn254, env 2 BLS12-381), has the factory deploy the two confidential implementations on it (bn254 as version 1, BLS12-381 as version 2 of each kind; the curve is the release's `curve()`) and enables both kinds, with the keys `zether_registry` (= `ua_registry`), `zether_disclosure`, `zether_statements`, `zether_inner_product_verifier_<curve>`, `zether_verifier_<curve>` (transfer), `zether_burn_verifier_<curve>`, `implementation_none_zether_<curve>`, `implementation_underlying_zether_<curve>` (`<curve>` = `bn254`, `bls12381`; plan 5g-Z1). The implementations exceed 24,576 B and the BLS inner-product verifier's deploy (the generators) uses ~14 M gas, so `deploy.sh` always passes `--gas-estimate-multiplier 105` to `forge script` (the default ×1.30 exceeds the Osaka per-transaction cap of 16,777,216, EIP-7825; ×1.13 or more fails; the largest implementation, `UnderlyingPqzToken`, 13,467,833 gas measured through `deployImplementation` (plan 5g-Z2; 63,975 B of init code with the env), is deployed by `script/pqz/e2e.py`, which sets its own limit) and the anvil needs `--code-size-limit 65536`; `ZetherDeploy.t` checks each deploy fits. `scripts/e2e-zether.sh` runs the
 dev-chain e2e (UA-3): a fresh anvil 31337, this deploy, two Zether UAs registered with clientkeys PoPs through a relayer
 (self, and a native `authRef` co-signed with `UAAuth`), and a `NONE_ZETHER` token shielding to one
 (`script/ZetherE2E.s.sol`).
 Integration tests use `anvil --hardfork osaka --gas-limit 16777216 --code-size-limit 65536` (64 KiB code, as EIP-7954 proposes; owner 2026-10-11 — real chains keep 24,576, so a contract that only fits this anvil still cannot be deployed there).
 
 Every contract is a non-upgradeable clone or a fixed deployment ([CTR-GEN-02](../contracts/README.md#CTR-GEN-02)):
-upgradeable proxies (UUPS / ERC-1822) are not used, and a fix is a new implementation version registered on the factory
+upgradeable proxies (UUPS / ERC-1822) are not used, and a fix is a new implementation version deployed by the factory
 plus a voluntary migration.
 
 ## 5. EIP-7702 accounts

@@ -10,6 +10,7 @@ import {UnderlyingToken} from "../../src/metatx/UnderlyingToken.sol";
 import {UnderlyingZetherToken} from "../../src/zether/UnderlyingZetherToken.sol";
 import {ZetherLayer} from "../../src/zether/ZetherLayer.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
+import {Catalogue} from "../helpers/Catalogue.sol";
 
 /// Random shield / wrap-shield / transfer / roll-over / unshield / unshield-unwrap / unwrap / rate-change sequences on one
 /// `UNDERLYING_ZETHER` token (legs 1:1 and 3/7, rate-adjustable, bn254, no auditor), real proofs; the plaintext balances
@@ -29,9 +30,8 @@ contract ZetherHandler is ZetherFixture {
         _stack(false);
         leg[0] = new MockERC20("USD", "USD", 6);
         leg[1] = new MockERC20("ODD", "ODD", 6);
-        UnderlyingZetherToken impl = new UnderlyingZetherToken(address(factory), address(0), ZUID, address(reg), dis, ver, burnVer);
-        vm.prank(registrar);
-        factory.registerImplementation(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, address(impl));
+        UnderlyingZetherToken impl = UnderlyingZetherToken(payable(Catalogue.release(factory, IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, _zenv(),
+            type(UnderlyingZetherToken).creationCode)));
         IFactoryToken.TokenConfig memory c;
         (c.name, c.symbol, c.decimals) = ("Z", "Z", 6);
         c.features = (1 << AdminLib.PAYABLE) | (1 << AdminLib.RATE_ADJUSTABLE);
@@ -40,8 +40,8 @@ contract ZetherHandler is ZetherFixture {
         c.legs = new IFactoryToken.Leg[](2);
         c.legs[0] = IFactoryToken.Leg(address(leg[0]), 1, 1);
         c.legs[1] = IFactoryToken.Leg(address(leg[1]), 3, 7);
-        c.conf = IFactoryToken.ConfidentialConfig(address(0), "", SCALE, MAX, FEE, 0, 0, 0);
-        w = UnderlyingZetherToken(payable(factory.createToken(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, c, "inv")));
+        c.conf = IFactoryToken.ConfidentialConfig("", SCALE, MAX, FEE, 0, 0, 0);
+        w = UnderlyingZetherToken(payable(factory.createToken(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, abi.encode(c), "inv")));
         tok = ZetherLayer(address(w));
         _users();
         (us[0], us[1], us[2]) = (alice, bob, carol);

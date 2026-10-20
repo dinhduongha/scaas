@@ -10,7 +10,6 @@ import {AdminLib} from "../metatx/AdminLib.sol";
 import {UnderlyingLib} from "../metatx/UnderlyingLib.sol";
 import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {ITransferDisclosure} from "./ITransferDisclosure.sol";
-import {IZetherVerifier, IZetherBurnVerifier} from "./IZetherVerifier.sol";
 import {ZetherTypes} from "./ZetherTypes.sol";
 import {ZetherLayer} from "./ZetherLayer.sol";
 import {ZetherLib} from "./ZetherLib.sol";
@@ -25,17 +24,23 @@ import {ZetherLib} from "./ZetherLib.sol";
 ///         `⌊amount·shieldScale·den/num⌋`, worth at most what it removes), and `executeRate` checks it with the shielded
 ///         part. Flags: `PAYABLE`, `RATE_ADJUSTABLE`, `WRAP_DISABLEABLE` (CTR-ZTH-47). Never on Hedera.
 contract UnderlyingZetherToken is UnderlyingToken, ZetherLayer {
-    constructor(address factory_, address smartKeyAccountImpl_, bytes32 chainUid_, address registry_,
-        ITransferDisclosure disclosure_, IZetherVerifier transferVerifier_, IZetherBurnVerifier burnVerifier_)
-        UnderlyingToken(factory_, smartKeyAccountImpl_, chainUid_, registry_, false)
-        ZetherLayer(disclosure_, transferVerifier_, burnVerifier_)
+    /// @dev The factory's append (`OpenFactory.deployImplementation`, plan 5g-Z2): the release's `Env` (Hedera off: no
+    ///      dev chain there); no `implArgs`.
+    constructor(uint16 envVersion, Env memory env, bytes memory implArgs)
+        UnderlyingToken(envVersion, env, implArgs)
+        ZetherLayer(env)
     {}
+
+    /// @dev The legs (`UnderlyingToken`), restated for the second base.
+    function underlyings() public view override(UnderlyingToken, MetaTokenBase) returns (address[] memory) {
+        return super.underlyings();
+    }
 
     function kind() public pure override(UnderlyingToken, MetaTokenBase) returns (uint8) {
         return AdminLib.KIND_UNDERLYING_ZETHER;
     }
 
-    function _init(TokenConfig calldata cfg) internal override(UnderlyingToken, MetaTokenBase) {
+    function _init(TokenConfig memory cfg) internal override(UnderlyingToken, MetaTokenBase) {
         _requireUnused(cfg, true, false, false, false);
         UnderlyingLib.initToken(cfg, false, AdminLib.KIND_UNDERLYING_ZETHER);
         ZetherLib.init(cfg.conf, TRANSFER_VERIFIER);

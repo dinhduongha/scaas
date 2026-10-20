@@ -2,14 +2,14 @@
 pragma solidity ^0.8.24;
 
 import {IFactoryToken} from "./IFactoryToken.sol";
-import {ISCaaSDex} from "../dex/ISCaaSDex.sol";
 
-/// @title The one token factory of a chain (CTR-TOK-03, CTR-TOK-25): an append-only catalogue of implementations per
-///        kind, EIP-1167 clones by `CREATE2` initialised in the same call, no power over any token it created.
+/// @title The one token factory of a chain (CTR-TOK-03, CTR-TOK-25; plan 5g-Z2): an append-only catalogue of releases
+///        per kind and of DEX releases, each the factory's own `CREATE2` of the registrar's init code with a published,
+///        versioned deployment environment (`IFactoryToken.Env`) appended; EIP-1167 clones initialised in the same call
+///        with the creator's opaque `initArgs`; no power over any token or DEX it created.
 interface IOpenFactory {
     /// @notice CTR-TOK-21, a fresh enum (nothing deployed): the value equals the implementation's `kind()`.
-    ///         `NONE_PQZ` / `UNDERLYING_PQZ` are built (P6g, behind the PQZ gate); the `*_ZETHER_PQZ` kinds are
-    ///         reserved (`KindReserved`: no implementation can be registered for them yet).
+    ///         `NONE_PQZ` / `UNDERLYING_PQZ` are built (P6g); the `*_ZETHER_PQZ` kinds are reserved (`KindReserved`).
     enum TokenKind {
         NONE,
         UNDERLYING,
@@ -21,28 +21,44 @@ interface IOpenFactory {
         UNDERLYING_ZETHER_PQZ
     }
 
-    /// @notice The canonical confidential verifiers of the chain, fixed at the factory's deployment (owner 2026-10-19,
-    ///         CTR-ZTH-20; no setter, a new set is a new factory): Zether per curve (0 bn254, 1 BLS12-381) the transfer
-    ///         verifier, the burn verifier and `ZetherDisclosure` (the inner-product verifier is fixed inside the two
-    ///         verifiers); PQZ per proof system (0 PQZL, 1 PQZH) the `UAPqzVerifier`. 0 = not on this chain.
-    struct Canonical {
-        address[2] zetherVerifier;
-        address[2] zetherBurnVerifier;
-        address[2] zetherDisclosure;
-        address[2] pqzVerifier;
+    /// @notice A release: the factory-deployed code, the env version it was deployed with (its `keccak256(abi.encode(env))`
+    ///         as `envHash`), the time from which `createToken` / `createDex` accept it (`usableFrom = deployment +
+    ///         noticePeriod`), and whether it is deprecated (immediate, never undone).
+    struct Release {
+        address implementation;
+        uint16 envVersion;
+        bytes32 envHash;
+        uint64 usableFrom;
+        bool deprecated;
     }
 
-    event ImplementationRegistered(
-        TokenKind indexed kind, uint64 indexed version, address indexed implementation, address registrar);
+    /// @notice An env domain: a `TokenKind` value, or `DEX_DOMAIN` for the DEX.
+    event EnvPublished(uint8 indexed domain, uint16 indexed envVersion, bytes32 envHash);
+    /// @notice The release hashes (owner 2026-10-20): the env's, the init code's (without the appended arguments, a
+    ///         reproducible-build check) and the deployed code's.
+    event ImplementationDeployed(
+        TokenKind indexed kind, uint64 indexed version, address indexed implementation, uint16 envVersion, bytes32 envHash,
+        bytes32 initcodeHash, bytes32 codeHash, uint64 usableFrom);
     event ImplementationDeprecated(TokenKind indexed kind, uint64 indexed version, string reason);
-    /// @notice The one event of a creation.
+    event KindEnabled(TokenKind indexed kind, bool enabled);
+    /// @notice The one event of a creation; `features`, `lockedFeatures`, `owner`, `underlyings` read from the token after
+    ///         `initialize`.
     event TokenCreated(
         address indexed token, address indexed creator, TokenKind indexed kind, uint64 version, address implementation,
         uint256 features, uint256 lockedFeatures, address owner, address[] underlyings);
+    event DexImplementationDeployed(
+        uint64 indexed version, address indexed implementation, uint16 envVersion, bytes32 envHash, bytes32 initcodeHash,
+        bytes32 codeHash, uint64 usableFrom);
+    event DexImplementationDeprecated(uint64 indexed version, string reason);
+    event DexCreated(address indexed dex, address indexed creator, uint64 version, address implementation, address admin);
 
     error NotRegistrar();
     error ChainUidZero();
+    /// @notice The constructor's notice period exceeds `MAX_NOTICE_PERIOD` (30 days).
+    error NoticePeriodTooLong(uint64 noticePeriod);
     error KindReserved(TokenKind kind);
+    /// @notice Creation of a kind the registrar has not enabled (plain kinds on from the start, confidential ones off).
+    error KindDisabled(TokenKind kind);
     error VersionAlreadyRegistered(TokenKind kind, uint64 version, address existing);
     error VersionUnknown(TokenKind kind, uint64 version);
     /// @notice The implementation's `kind()` differs (`got = type(uint256).max` when it does not answer).
@@ -50,7 +66,7 @@ interface IOpenFactory {
     error ImplementationNotAContract(address implementation);
     error ImplementationFactoryMismatch(address implementation);
     error ChainUidMismatch(bytes32 expected, bytes32 got);
-    /// @notice `NONE*` 0 legs, `UNDERLYING*` 1–8.
+    /// @notice The factory's index takes at most 8 legs (`underlyings()` after `initialize`).
     error UnderlyingCountInvalid(uint256 n);
     error SaltAlreadyUsed(address existing);
     error DexVersionUnknown(uint64 version);
@@ -58,64 +74,77 @@ interface IOpenFactory {
     /// @notice `createToken` / `createDex` refuse a deprecated version (owner 2026-10-20); existing tokens are untouched.
     error VersionDeprecated(TokenKind kind, uint64 version);
     error DexVersionDeprecated(uint64 version);
-    /// @notice A confidential implementation whose verifiers (Zether: `verifier()`, `burnVerifier()`, `disclosure()`;
-    ///         PQZ: `verifier()`) are not one of the factory's canonical sets (CTR-ZTH-20).
-    error NotCanonicalVerifiers(address implementation);
+    /// @notice Before `usableFrom` (the notice period, owner 2026-10-20).
+    error VersionNotYetUsable(TokenKind kind, uint64 version, uint64 usableFrom);
+    error DexVersionNotYetUsable(uint64 version, uint64 usableFrom);
     /// @notice `createTokenUnregistered` is for the plain kinds only (owner 2026-10-19).
     error UnregisteredConfidentialKind(TokenKind kind);
-
-    /// @notice The Zether gate (CTR-ZTH-02, CTR-TOK-03): off by default, switched by the registrar, on only on a dev
-    ///         chain (`ZetherSafety`); creating a `*_ZETHER` token needs it on, a dev chain, and a verifier this chain
-    ///         can run (`isSupportedOnThisChain()`).
-    event ZetherEnabled(bool enabled);
-    error ZetherDisabled();
-    /// @notice The PQZ gate (CTR-PQZ-01, P6g plan D1/D2): off by default; on only on a `PqzSafety` chain whose `PQZ`
-    ///         precompile passes its self-test; a `*_PQZ` creation needs it on and a `UAPqzVerifier` this chain runs.
-    event PqzEnabled(bool enabled);
-    error PqzDisabled();
-    error PqzVerifierUnsupported(address verifier);
-    /// @notice `curve` is the verifier's `curveName()`, empty when it has no code or no answer.
-    error VerifierUnsupportedOnThisChain(address verifier, string curve);
-
-    function zetherEnabled() external view returns (bool);
-    /// @notice Registrar only; `true` reverts `ZetherNotDevChain` outside chain ids 31337/1337, `false` always works.
-    function setZetherEnabled(bool on) external;
-
-    /// @notice Registrar only; `true` needs `PqzSafety`'s chain and the precompile's self-test, `false` always works.
-    function setPqzEnabled(bool on) external;
-
-    function pqzEnabled() external view returns (bool);
-
-    /// @notice DEX catalogue (CTR-DEX-24): append-only, versions from 1; the implementation must answer
-    ///         `factory() == this` and `chainUid() == chainUid`.
-    event DexImplementationRegistered(uint64 indexed version, address indexed implementation, address registrar);
-    event DexImplementationDeprecated(uint64 indexed version, string reason);
-    event DexCreated(address indexed dex, address indexed creator, uint64 version, address implementation, address admin);
+    /// @notice No env `envVersion` published for the domain (version 0 included).
+    error EnvUnknown(uint8 domain, uint16 envVersion);
+    error EnvAlreadyPublished(uint8 domain, uint16 envVersion);
+    /// @notice `factory` / `chainUid` not the factory's, `libs` and `libCodeHashes` of different lengths, or a library
+    ///         code hash that pins nothing (`0` or `keccak256("")`).
+    error EnvInvalid();
+    /// @notice A linked library of the env does not have its published code hash (checked at each release deployment).
+    error LibraryCodeHashMismatch(address library_, bytes32 expected, bytes32 got);
+    /// @notice The `CREATE2` of a release failed without revert data (a constructor's revert is bubbled), e.g. a
+    ///         runtime over the chain's code-size limit. Init code over the chain's init-code limit (EIP-3860) is an
+    ///         exceptional halt of the factory's call frame instead: the registrar's call consumes all its gas and
+    ///         fails without `DeployFailed`.
+    error DeployFailed();
 
     function registrar() external view returns (address);
     function chainUid() external view returns (bytes32);
-    /// @notice The canonical Zether set of `curve` (0 bn254, 1 BLS12-381); zeros when absent.
-    function zetherVerifiers(uint8 curve) external view returns (address verifier, address burnVerifier, address disclosure);
-    /// @notice The canonical `UAPqzVerifier` of `proofSystem` (0 PQZL, 1 PQZH); 0 when absent.
-    function pqzVerifier(uint8 proofSystem) external view returns (address);
+    /// @notice Seconds between a release's deployment and its first use (chain-configured: minutes on 7622, days on
+    ///         22776; 0 on the dev chains and in tests).
+    function noticePeriod() external view returns (uint64);
+    /// @notice The env domain of the DEX (`type(uint8).max`).
+    function DEX_DOMAIN() external view returns (uint8);
 
-    function registerImplementation(TokenKind kind, uint64 version, address implementation) external;
+    /// @notice Registrar only: publishes env `envVersion` (from 1, append-only, never changed) of a kind's releases.
+    ///         `env.factory` / `env.chainUid` must be this factory's (`EnvInvalid`).
+    function publishEnv(TokenKind kind, uint16 envVersion, IFactoryToken.Env calldata env) external;
+    function publishDexEnv(uint16 envVersion, IFactoryToken.Env calldata env) external;
+    function envOf(TokenKind kind, uint16 envVersion) external view returns (IFactoryToken.Env memory);
+    function dexEnvOf(uint16 envVersion) external view returns (IFactoryToken.Env memory);
+    function latestEnvVersion(TokenKind kind) external view returns (uint16);
+    function latestDexEnvVersion() external view returns (uint16);
+
+    /// @notice Registrar only: on the kind's published env `envVersion` (named explicitly, `EnvUnknown` otherwise —
+    ///         interim rule, controller proposal 2026-10-20, until the governance-matrix spec), checks each
+    ///         `env.libs[i].codehash`, `CREATE2`s (salt `keccak256(abi.encode(kind, version))`)
+    ///         `initcode ‖ abi.encode(envVersion, env, implArgs)`, checks `kind()`, `factory()`, `chainUid()`, records
+    ///         the release with its env version and hash (usable after `noticePeriod`). Append-only, version 0 refused;
+    ///         the same init code may be deployed again as a later version on another env.
+    function deployImplementation(
+        TokenKind kind,
+        uint64 version,
+        uint16 envVersion,
+        bytes calldata initcode,
+        bytes calldata implArgs
+    ) external returns (address implementation);
     function deprecate(TokenKind kind, uint64 version, string calldata reason) external;
+    /// @notice Registrar only; a confidential kind starts off.
+    function setKindEnabled(TokenKind kind, bool on) external;
+    function kindEnabled(TokenKind kind) external view returns (bool);
+    function releaseOf(TokenKind kind, uint64 version) external view returns (Release memory);
     function implementationOf(TokenKind kind, uint64 version) external view returns (address);
     function isDeprecated(TokenKind kind, uint64 version) external view returns (bool);
+    /// @notice May name a deprecated or not yet usable release: clients pick the newest usable one.
     function latestVersion(TokenKind kind) external view returns (uint64);
 
-    function createToken(TokenKind kind, uint64 version, IFactoryToken.TokenConfig calldata cfg, bytes32 salt)
+    /// @notice Any usable, non-deprecated release of an enabled kind; `initArgs` opaque to the factory (for the kinds of
+    ///         this repository `abi.encode(IFactoryToken.TokenConfig)`), validated by the implementation.
+    function createToken(TokenKind kind, uint64 version, bytes calldata initArgs, bytes32 salt)
         external returns (address token);
     /// @notice Plain kinds only (`UnregisteredConfidentialKind`): any implementation of `kind` for this factory and chain,
     ///         recorded with `version == 0` — unvetted code: clients and the gateway trust `isRegisteredToken` only.
-    function createTokenUnregistered(
-        TokenKind kind, address implementation, IFactoryToken.TokenConfig calldata cfg, bytes32 salt
-    ) external returns (address token);
+    function createTokenUnregistered(TokenKind kind, address implementation, bytes calldata initArgs, bytes32 salt)
+        external returns (address token);
 
     function predictAddress(address implementation, address creator, bytes32 salt) external view returns (address);
     function isToken(address token) external view returns (bool);
-    /// @notice Made by this factory from a registered implementation version (`version ≠ 0`).
+    /// @notice Made by this factory from a release (`version ≠ 0`).
     function isRegisteredToken(address token) external view returns (bool);
     function creatorOf(address token) external view returns (address);
     function versionOf(address token) external view returns (TokenKind kind, uint64 version);
@@ -126,14 +155,19 @@ interface IOpenFactory {
     function deployCountFor(address underlying) external view returns (uint256);
     function deployedFor(address underlying, uint256 index) external view returns (address);
 
-    function registerDexImplementation(uint64 version, address implementation) external;
+    /// @notice Registrar only: as `deployImplementation` for the DEX (salt `keccak256(abi.encode("dex", version))`, DEX
+    ///         env `envVersion`); the release must answer `factory()` and `chainUid()`.
+    function deployDexImplementation(uint64 version, uint16 envVersion, bytes calldata initcode, bytes calldata implArgs)
+        external returns (address implementation);
+    function dexReleaseOf(uint64 version) external view returns (Release memory);
     function dexImplementationOf(uint64 version) external view returns (address);
     /// @notice Registrar only: marks a DEX version deprecated; `createDex` then refuses it (existing DEXes untouched).
     function deprecateDex(uint64 version, string calldata reason) external;
     function isDexDeprecated(uint64 version) external view returns (bool);
     function latestDexVersion() external view returns (uint64);
-    /// @notice An `SCaaSDex` clone, `initialize(cfg)` in the same call (CTR-DEX-24).
-    function createDex(uint64 version, ISCaaSDex.DexConfig calldata cfg, bytes32 salt) external returns (address dex);
+    /// @notice An `SCaaSDex` clone of a usable, non-deprecated DEX release, `initialize(initArgs)` in the same call
+    ///         (`initArgs = abi.encode(ISCaaSDex.DexConfig)`, CTR-DEX-24).
+    function createDex(uint64 version, bytes calldata initArgs, bytes32 salt) external returns (address dex);
     /// @notice Advisory (clients and the node); tokens never consult it (CTR-DEX-19).
     function isDex(address dex) external view returns (bool);
     function dexVersionOf(address dex) external view returns (uint64);
