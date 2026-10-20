@@ -15,6 +15,8 @@ use sha2::{Digest, Sha256};
 pub use crate::groups::{dkg_transcript_ok, frost_secp256k1};
 
 pub const SCHNORR_TAG: &[u8] = b"scaas.ua.schnorr.v1";
+/// The Zether UA's Schnorr (0x0141): the same scheme under the prover's tag.
+pub const ZETHER_SCHNORR_TAG: &[u8] = b"SCAAS-ZETHER-SCHNORR-V1";
 pub const BLS12381_DST_SIG: &[u8] = b"SCAAS-UA-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_SIG_";
 pub const BLS12381_DST_POP: &[u8] = b"SCAAS-UA-V1_BLS12381G1_XMD:SHA-256_SSWU_RO_POP_";
 pub const BN254_LABEL_SIG: &[u8] = b"SCAAS-UA-BLS-BN254-SIG-V1";
@@ -32,6 +34,7 @@ pub fn verify(kind: u16, key_data: &[u8], message: &[u8; 32], sig: &[u8], pop: b
         0x0103 => bip340(key_data, message, sig),
         0x0104 => schnorr::<ark_bn254::g1::Config>(key_data, message, sig, 32),
         0x0105 => schnorr::<ark_bls12_381::g1::Config>(key_data, message, sig, 64),
+        0x0141 => schnorr_tagged::<ark_bls12_381::g1::Config>(ZETHER_SCHNORR_TAG, key_data, message, sig, 64),
         0x0106 => bls12381_minsig(key_data, message, sig, pop),
         0x0107 => bls_bn254_minsig(key_data, message, sig, pop),
         0x0108 => key_data.len() == 64 && native_ecdsa(keccak(&[key_data])[12..].try_into().unwrap(), message, sig),
@@ -185,12 +188,19 @@ pub(crate) fn schnorr<P: SWCurveConfig>(key_data: &[u8], message: &[u8; 32], sig
 where
     P::BaseField: PrimeField,
 {
+    schnorr_tagged::<P>(SCHNORR_TAG, key_data, message, sig, w)
+}
+
+fn schnorr_tagged<P: SWCurveConfig>(tag: &[u8], key_data: &[u8], message: &[u8; 32], sig: &[u8], w: usize) -> bool
+where
+    P::BaseField: PrimeField,
+{
     if sig.len() != 2 * w + 32 {
         return false;
     }
     let (rb, zb) = sig.split_at(2 * w);
     let (Some(r), Some(y), Some(z)) = (g1::<P>(rb, w), g1::<P>(key_data, w), fe::<P::ScalarField>(zb)) else { return false };
-    let seed = keccak(&[SCHNORR_TAG, rb, key_data, message]);
+    let seed = keccak(&[tag, rb, key_data, message]);
     let e = P::ScalarField::from_be_bytes_mod_order(&[keccak(&[&seed, &[2]]), keccak(&[&seed, &[3]])].concat());
     !e.is_zero() && Affine::<P>::generator() * z == r.into_group() + y * e
 }

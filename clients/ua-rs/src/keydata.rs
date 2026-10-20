@@ -1,6 +1,6 @@
 //! Key-data validation (accounts.md §1.6 "Validation at registration"): the unique canonical encoding of a valid key or
 //! structure, else `UAError::KeyData`. Never panics: every length is checked before it is sliced.
-use crate::{in_native_space, is_member, is_native, kind_info, Result, UAError};
+use crate::{in_native_space, SCHEMES, is_member, is_native, kind_info, Result, UAError};
 use ark_ec::short_weierstrass::{Affine, SWCurveConfig};
 use ark_ff::{BigInteger, PrimeField, Zero};
 
@@ -173,6 +173,9 @@ fn fndsa(d: &[u8]) -> Result<()> {
 
 /// `Ok` iff `key_data` is the unique canonical encoding of a valid key or structure of `kind`.
 pub fn validate_key_data(kind: u16, d: &[u8], hedera_native: bool) -> Result<()> {
+    if SCHEMES.iter().any(|k| k.kind == kind) {
+        return Err(UAError::KindNotDerived(kind));
+    }
     let k = kind_info(kind)?;
     if k.native {
         return Err(UAError::KindNotDerived(kind));
@@ -185,7 +188,7 @@ pub fn validate_key_data(kind: u16, d: &[u8], hedera_native: bool) -> Result<()>
         0x0101 => p256_point(d),
         0x0102 => ed25519_key(d),
         0x0103 => secp_compressed(&[&[2u8][..], d].concat()),
-        0x0104 | 0x0140 => bn_g1(d),
+        0x0104 => bn_g1(d),
         0x0105 | 0x0141 => bls_g1(d),
         0x0106 => bls_g2(d),
         0x0107 => bn_g2(d),
@@ -196,6 +199,6 @@ pub fn validate_key_data(kind: u16, d: &[u8], hedera_native: bool) -> Result<()>
         0x0113 => frost(d, bn_g1, 64, &BN_R),
         0x0120 => msig(d, hedera_native),
         0x0132 => fndsa(d),
-        _ => Ok(()), // mldsa44/65, slhdsa128s, pqz-mlwe: the length is the whole check
+        _ => Ok(()), // mldsa44/65, slhdsa128s: the length is the whole check
     }
 }

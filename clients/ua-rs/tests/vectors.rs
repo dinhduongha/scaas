@@ -40,6 +40,7 @@ fn table_groups_purposes_constants() {
         assert_eq!(info.group, r["group"].as_str(), "{}", info.name);
         assert_eq!(is_signing(n), r["signing"], "{}", info.name);
         assert_eq!(is_zether(n), r["zether"], "{}", info.name);
+        assert_eq!(is_pqz_holder(n), r["pqzHolder"], "{}", info.name);
         assert_eq!(is_member(n, false), r["member"], "{}", info.name);
         assert_eq!(is_member(n, true), r["memberHedera"], "{}", info.name);
         if info.native {
@@ -49,6 +50,18 @@ fn table_groups_purposes_constants() {
             assert_eq!(hx(&tag(n).unwrap()), r["TAG"]);
         }
     }
+    for r in arr(&k, "schemes") {
+        let n = kind(&r["kind"]);
+        assert_eq!(n, PQZ_SCHEME);
+        assert_eq!(SCHEMES[0].name, r["name"]);
+        assert_eq!(kind_tag_string(n).unwrap(), r["tag"]);
+        assert_eq!(hx(&tag(n).unwrap()), r["TAG"]);
+        assert_eq!(ua_of(n, &[]), Err(UAError::KindNotDerived(n)));
+        assert_eq!(validate_key_data(n, &[], false), Err(UAError::KindNotDerived(n)));
+        assert_eq!(derive_ua(n, &[], false), Err(UAError::KindNotDerived(n)));
+    }
+    let pk = bytes(&k["pqzKey"]);
+    assert_eq!(hx(&key_hash_of(PQZ_SCHEME, &pk).unwrap().unwrap()), k["pqzKeyHash"]);
     for r in arr(&k, "groups") {
         let g = r["group"].as_str().unwrap();
         assert_eq!(group_tag_string(g).unwrap(), r["tag"]);
@@ -128,9 +141,26 @@ fn structures() {
         let c = ctx(p["context"].as_str().unwrap());
         let chain_id = c["chainId"].as_u64().unwrap();
         assert_eq!(hx(&chain_key_hash(chain_id)), p["chainKeyHash"]);
-        let got = pop_digest(chain_id, &b32(&c["chainUid"]), &b20(&c["registry"]), &b32(&p["ua"]), &b32(&p["authRef"]));
+        let got = pop_digest(chain_id, &b32(&c["chainUid"]), &b20(&c["registry"]), &b32(&p["ua"]), &b32(&p["pqzKeyHash"]));
         assert_eq!(hx(&got), p["popDigest"]);
     }
+    let pk = bytes(&load("kinds.json")["pqzKey"]);
+    for p in arr(&s, "pqzReg") {
+        let c = ctx(p["context"].as_str().unwrap());
+        let (id, reg, uid, ua) = (c["chainId"].as_u64().unwrap(), b20(&c["registry"]), b32(&c["chainUid"]), b32(&p["ua"]));
+        let (h, d, m) = holder_pop_message(kind(&p["kind"]), id, &uid, &reg, &ua, Some(&pk)).unwrap();
+        assert_eq!((hx(&h), hx(&d)), (p["pqzKeyHash"].as_str().unwrap().to_string(), p["popDigest"].as_str().unwrap().to_string()));
+        assert_eq!(hx(&pqz_reg_message(id, &uid, &reg, &ua, &pk).unwrap()), p["pqzRegMessage"]);
+        assert_eq!(holder_pop_message(0x0101, id, &uid, &reg, &ua, Some(&pk)), Err(UAError::PqzHolder(0x0101)));
+        assert_eq!(holder_pop_message(0x0133, id, &uid, &reg, &ua, Some(&pk)), Err(UAError::PqzHolder(0x0133)));
+        let _ = m;
+    }
+    for p in arr(&s, "pqzMsig") {
+        let d = bytes(&p["keyData"]);
+        assert_eq!(msig_pqz_eligible(&d).unwrap(), p["eligible"], "{}", p["reason"]);
+        assert_eq!(hx(&derive_ua(0x0120, &d, false).unwrap()), p["ua"]);
+    }
+    assert!(msig_pqz_eligible(&[0u8; 5]).is_err());
     for a in arr(&s, "uaAuth") {
         let c = ctx(a["context"].as_str().unwrap());
         let d = Domain {
