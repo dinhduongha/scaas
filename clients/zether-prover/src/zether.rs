@@ -1,5 +1,5 @@
 //! Statements, Σ-protocol and proofs for `transfer` and `burn`, byte-exact per zether-design
-//! §6 (statement), §7 (Σ), §8 (Bulletproofs), §9 (wire + payload). `zetherShield` carries no proof
+//! §6 (statement), §7 (Σ), §8 (Bulletproofs), §9 (wire + payload). `mtxShield` carries no proof
 //! (public amount, §5). The verifier here mirrors the Solidity verifier for tests/vectors.
 
 use ark_ff::{PrimeField, Zero};
@@ -47,7 +47,7 @@ pub enum Binding {
     Direct,
     /// `ZTX_V1_RELAYED` with `envelopeBinding` from [`crate::envelope::envelope_binding`].
     Relayed([u8; 32]),
-    /// `ZTX_V1_DIRECT` with [`crate::envelope::unwrap_binding`]: a direct `zetherUnshieldUnwrap` binds its leg and
+    /// `ZTX_V1_DIRECT` with [`crate::envelope::unwrap_binding`]: a direct `mtxUnshieldUnwrap` binds its leg and
     /// `minOut` (controller ruling, pending the owner).
     Unwrap([u8; 32]),
 }
@@ -750,7 +750,7 @@ pub fn transfer_gas<C: ZCurve>(mode: TransferMode, auditor: bool, relayed: bool,
     }
 }
 
-/// The largest `M` whose [`transfer_gas`] fits [`TX_GAS_CAP`] less [`GAS_MARGIN`] (`zetherTransfer*` builds above it
+/// The largest `M` whose [`transfer_gas`] fits [`TX_GAS_CAP`] less [`GAS_MARGIN`] (`mtxConfidentialTransfer*` builds above it
 /// are refused, [`ZError::GasCap`]).
 pub fn max_recipients<C: ZCurve>(mode: TransferMode, auditor: bool, relayed: bool) -> usize {
     (1..=MAX_RECIPIENTS)
@@ -793,9 +793,9 @@ fn check_gas<C: ZCurve>(mode: TransferMode, auditor: bool, relayed: bool, m: usi
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum TransferMode {
     /// Commit-reveal: `keccak256(R)` and the sender memo stored, `R` in an event
-    /// (`zetherTransferCompact`; `zetherTransfer` on a `COMPACT` token, its only form). JSON `compact`.
+    /// (`mtxConfidentialTransferCompact`; `mtxConfidentialTransfer` on a `COMPACT` token, its only form). JSON `compact`.
     Hash,
-    /// `B_1 ‖ … ‖ B_M` stored (`zetherTransfer` on a `BUNDLE` token, the default).
+    /// `B_1 ‖ … ‖ B_M` stored (`mtxConfidentialTransfer` on a `BUNDLE` token, the default).
     Bundle,
     /// Nothing stored; disclosure off chain from calldata.
     NoBundle,
@@ -812,7 +812,7 @@ impl TransferMode {
         })
     }
 
-    /// The JSON name (the entries: `zetherTransfer` the token's default, `…Compact`, `…NoBundle`).
+    /// The JSON name (the entries: `mtxConfidentialTransfer` the token's default, `…Compact`, `…NoBundle`).
     pub fn name(self) -> &'static str {
         match self {
             Self::Hash => "compact",

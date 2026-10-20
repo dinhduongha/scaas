@@ -352,7 +352,7 @@ pub fn generate() -> Vec<(String, Value)> {
     files
 }
 
-/// A relayed `zetherTransfer` envelope (CTR-ZTH-34): its binding and digest through the JSON API, for the forge KAT.
+/// A relayed `mtxConfidentialTransfer` envelope (CTR-ZTH-34): its binding and digest through the JSON API, for the forge KAT.
 fn envelope_vector() -> Value {
     let mut req = json!({
         "chainId": CHAIN, "chainUid": CHAIN_UID, "token": TOKEN,

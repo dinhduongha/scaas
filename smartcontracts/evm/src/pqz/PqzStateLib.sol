@@ -5,6 +5,7 @@ import {IFactoryToken} from "../factory/IFactoryToken.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
 import {ZetherTypes} from "../zether/ZetherTypes.sol";
 import {IPqzToken} from "./IPqzToken.sol";
+import {IConfidentialToken} from "../confidential/IConfidentialToken.sol";
 import {PqzCt} from "./PqzCt.sol";
 import {PqzSafety} from "./PqzSafety.sol";
 import {UAPqzVerifier} from "./UAPqzVerifier.sol";
@@ -52,8 +53,8 @@ library PqzStateLib {
 
     /// @notice The proof-free shield (plan 5h D18): `totalShielded += amount` within the cap and a TRIVIAL entry
     ///         `(amount, block)` appended to `pending[ua]` or merged into its tail (`PqzCore._trivial`); anyone, into
-    ///         any PQZ holder, free (owner 2026-10-20). The token moves the public units of `from` (`pqzShield`) or mints
-    ///         a leg's underlying (`pqzWrapShield`) into `SHIELD_POOL` (D19).
+    ///         any PQZ holder, free (owner 2026-10-20). The token moves the public units of `from` (`mtxShield`) or mints
+    ///         a leg's underlying (`mtxWrapShield`) into `SHIELD_POOL` (D19).
     function shield(bytes32 ua, uint256 amount, address from, address registry) public {
         PqzCore.PqzStorage storage s = PqzCore.$();
         if (!PqzCore._registered(registry, ua)) revert IPqzToken.AccountNotRegistered(ua);
@@ -98,7 +99,7 @@ library PqzStateLib {
             a.cleared = end;
             if (end > a.floor) a.floor = end;
         }
-        emit IPqzToken.PqzRolled(ua, nr, uint32(units + n), h);
+        emit IConfidentialToken.RolledOver(ua, nr, uint32(units + n), h);
     }
 
     /// @notice Permissionless, idempotent (plan 5h D8): writes a non-zero placeholder into half `half` (0 or 1) of the

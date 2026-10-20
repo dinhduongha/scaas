@@ -6,7 +6,7 @@ import {PqzSlots} from "./PqzState.t.sol";
 import {PqzCt} from "../../src/pqz/PqzCt.sol";
 import {PqzCore} from "../../src/pqz/PqzCore.sol";
 
-/// Plan 5h Task 2 gas (Review Focus 5, 6; spec §5.3 / §5.4) on the real token: `ROLL_MAX` and the `pqzPrepareAcc` halves
+/// Plan 5h Task 2 gas (Review Focus 5, 6; spec §5.3 / §5.4) on the real token: `ROLL_MAX` and the `mtxPrepareAcc` halves
 /// pinned under `0.75 · 2^24`, the shield (append, merge) and the per-op table. Each test is one transaction after
 /// `setUp` (a slot written in `setUp` is clean and cold in the test, as on chain; `PqzStateSteadyGasTest*` of the
 /// prototype). Every rollover entry is a credit from its own op blob (distinct cold accounts, every coefficient `q − 1`).
@@ -38,9 +38,9 @@ contract PqzStatePinGasTest is PqzSlots {
         vm.roll(block.number + 100);
         for (uint256 k; k < 2; ++k) {
             bytes32 ua = k == 0 ? alice : dave;
-            tok.pqzPrepareAcc(ua, 0);
-            tok.pqzPrepareAcc(ua, 1);
-            tok.pqzRollOver(ua, PRE); // the first materialisation; the measured rollovers rewrite
+            tok.mtxPrepareAcc(ua, 0);
+            tok.mtxPrepareAcc(ua, 1);
+            tok.mtxRollOver(ua, PRE); // the first materialisation; the measured rollovers rewrite
         }
         _transfer(tok, carol, bob, bytes32(0), 1, true); // carol's acc: a fresh blob reference
         _fund(tok, bob, 1); // bob: an entry of an earlier block
@@ -87,12 +87,12 @@ contract PqzStatePinGasTest is PqzSlots {
     /// of a 128-entry rollover of another account in the same transaction) would not. Then the lanes: `acc` holds
     /// `16 (q − 1)`, the rollover adds `ROLL_MAX` entries of `q − 1`: every coefficient is `q − 272`.
     function test_gas_rollMax() public {
-        uint256 g128 = _gas(abi.encodeCall(tok.pqzRollOver, (dave, 128)));
-        uint256 gMax = _gas(abi.encodeCall(tok.pqzRollOver, (alice, PqzCore.ROLL_MAX)));
+        uint256 g128 = _gas(abi.encodeCall(tok.mtxRollOver, (dave, 128)));
+        uint256 gMax = _gas(abi.encodeCall(tok.mtxRollOver, (alice, PqzCore.ROLL_MAX)));
         uint256 next = gMax + (gMax - g128) * 16 / (PqzCore.ROLL_MAX - 128);
-        _log("pqzRollOver 128 (steady, distinct cold blobs)", g128);
-        _log("pqzRollOver ROLL_MAX = 256 (steady, distinct cold blobs)", gMax);
-        _log("pqzRollOver 272 (linear fit)", next);
+        _log("mtxRollOver 128 (steady, distinct cold blobs)", g128);
+        _log("mtxRollOver ROLL_MAX = 256 (steady, distinct cold blobs)", gMax);
+        _log("mtxRollOver 272 (linear fit)", next);
         console2.log("per entry / fixed (fit)", (gMax - g128) / 128, gMax - (gMax - g128) * 2);
         assertLe(gMax, CAP, "ROLL_MAX under 0.75 * 2^24");
         assertGt(next, CAP, "ROLL_MAX + 16 over it");
@@ -107,47 +107,47 @@ contract PqzStatePinGasTest is PqzSlots {
     }
 
     function test_gas_roll_1() public {
-        _log("pqzRollOver 1 (steady)", _gas(abi.encodeCall(tok.pqzRollOver, (alice, 1))));
+        _log("mtxRollOver 1 (steady)", _gas(abi.encodeCall(tok.mtxRollOver, (alice, 1))));
     }
 
     function test_gas_roll_16() public {
-        _log("pqzRollOver 16 (steady)", _gas(abi.encodeCall(tok.pqzRollOver, (alice, 16))));
+        _log("mtxRollOver 16 (steady)", _gas(abi.encodeCall(tok.mtxRollOver, (alice, 16))));
     }
 
     /// Each half of the first materialisation in a transaction of its own (D8; spec §5.3).
     function test_gas_prepareAcc_half0() public {
-        uint256 g = _gas(abi.encodeCall(tok.pqzPrepareAcc, (eve, 0)));
-        _log("pqzPrepareAcc half 0", g);
+        uint256 g = _gas(abi.encodeCall(tok.mtxPrepareAcc, (eve, 0)));
+        _log("mtxPrepareAcc half 0", g);
         assertLe(g, CAP);
     }
 
     function test_gas_prepareAcc_half1() public {
-        uint256 g = _gas(abi.encodeCall(tok.pqzPrepareAcc, (eve, 1)));
-        _log("pqzPrepareAcc half 1", g);
+        uint256 g = _gas(abi.encodeCall(tok.mtxPrepareAcc, (eve, 1)));
+        _log("mtxPrepareAcc half 1", g);
         assertLe(g, CAP);
     }
 
     // ------------------------------------------------------------------ the shield (D18)
 
     function test_gas_shield_firstEntry() public {
-        _log("pqzShield, the account's first entry (append)", _gas(abi.encodeCall(tok.pqzShield, (eve, 5))));
+        _log("mtxShield, the account's first entry (append)", _gas(abi.encodeCall(tok.mtxShield, (eve, 5))));
     }
 
     function test_gas_shield_append() public {
-        _log("pqzShield, append (tail of an earlier block)", _gas(abi.encodeCall(tok.pqzShield, (bob, 5))));
+        _log("mtxShield, append (tail of an earlier block)", _gas(abi.encodeCall(tok.mtxShield, (bob, 5))));
     }
 
     function test_gas_shield_merge() public {
-        uint256 g = _gas(abi.encodeCall(tok.pqzShield, (frank, 5)));
+        uint256 g = _gas(abi.encodeCall(tok.mtxShield, (frank, 5)));
         assertEq(tok.pqzAccount(frank).pendingCount, 1, "merged");
-        _log("pqzShield, merge (TRIVIAL tail of this block)", g);
+        _log("mtxShield, merge (TRIVIAL tail of this block)", g);
     }
 
     // ------------------------------------------------------------------ debits (spec §5.4)
 
     function _op1(bytes32 from, uint256 p, bool aud, bytes memory hint) internal view returns (bytes memory) {
-        return abi.encodeCall(tok.pqzTransferSingle,
-            (_payload(p, 0, from, bob, carol, _out(77, aud), ""), hint, hex"c0de", _mlAuth()));
+        return abi.encodeCall(tok.mtxConfidentialTransferSingle,
+            (_payload(p, 0, from, bob, carol, _out(77, aud), ""), hex"c0de", _mlAuth(), carol, hint));
     }
 
     function test_gas_op1_bundle_freshRef() public {
@@ -169,14 +169,14 @@ contract PqzStatePinGasTest is PqzSlots {
     }
 
     function test_gas_op1_compact() public {
-        bytes memory d = abi.encodeCall(tok.pqzTransferSingleCompact,
-            (_payload(0, 0, carol, bob, alice, _out(78, true), _memo()), "", hex"c0de", _mlAuth()));
+        bytes memory d = abi.encodeCall(tok.mtxConfidentialTransferSingleCompact,
+            (_payload(0, 0, carol, bob, alice, _out(78, true), _memo()), hex"c0de", _mlAuth(), alice, ""));
         _log("op 1 COMPACT (HASH), auditor, fee, fresh ref", _gas(d));
     }
 
     function test_gas_op1_shieldIn() public {
-        bytes memory d = abi.encodeCall(tok.pqzTransferSingle,
-            (_payload(0, 100, carol, bob, alice, _out(80, true), ""), "", hex"c0de", _mlAuth()));
+        bytes memory d = abi.encodeCall(tok.mtxConfidentialTransferSingle,
+            (_payload(0, 100, carol, bob, alice, _out(80, true), ""), hex"c0de", _mlAuth(), alice, ""));
         _log("op 1 BUNDLE, auditor, fee, shieldIn 100, fresh ref", _gas(d));
     }
 
@@ -185,8 +185,8 @@ contract PqzStatePinGasTest is PqzSlots {
         for (uint256 j; j < m; ++j) r = bytes.concat(r, xs[j]);
         uint256 g = (m + 3) / 4;
         bytes memory out = _blob(81 + m, PqzCt.PK * g + PqzCt.V * (m + 1) + PqzCt.V * m);
-        return abi.encodeCall(tok.pqzTransfer, (bytes.concat(abi.encode(uint256(0), block.number + 100, uint256(0),
-            carol, alice, m, uint256(0)), salt, r, out), "", hex"c0de", _mlAuth()));
+        return abi.encodeCall(tok.mtxConfidentialTransfer, (bytes.concat(abi.encode(uint256(0), block.number + 100, uint256(0),
+            carol, alice, m, uint256(0)), salt, r, out), hex"c0de", _mlAuth(), alice, ""));
     }
 
     function test_gas_op7_M4() public {
@@ -199,7 +199,7 @@ contract PqzStatePinGasTest is PqzSlots {
 
     function _burn(uint256 amount, address to) internal view returns (bytes memory) {
         bytes memory pl = bytes.concat(abi.encode(uint256(0), block.number + 5, uint256(0), carol, alice), _blob(5, PqzCt.CT));
-        return abi.encodeCall(tok.pqzUnshield, (pl, "", amount, to, hex"c0de", _mlAuth()));
+        return abi.encodeCall(tok.mtxUnshield, (pl, hex"c0de", _mlAuth(), _benM(pl), "", amount, bytes32(uint256(uint160(to)))));
     }
 
     function test_gas_refresh() public {

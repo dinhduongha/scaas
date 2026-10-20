@@ -55,7 +55,7 @@ fn api_roundtrip_mnemonic_keygen_prove_decrypt() {
         });
         let t = call("proveTransfer", req.clone());
         // review T2 M3: `unwrapBinding` only on a burn, never with `envelopeBinding`; an unwrap-bound burn gets no
-        // `zetherUnshield` calldata (the token would refuse it).
+        // `mtxUnshield` calldata (the token would refuse it).
         let ub = json!("0x".to_string() + &"cd".repeat(32));
         let with = |mut r: Value, k: &str| { r[k] = ub.clone(); r };
         let err = |cmd: &str, r: Value| zether_prover::api::call(cmd, &r.to_string()).unwrap_err();
@@ -67,7 +67,7 @@ fn api_roundtrip_mnemonic_keygen_prove_decrypt() {
         assert!(call("proveBurn", burn).get("directCalldata").is_some());
         assert!(err("proveBurn", with(ub_burn, "envelopeBinding")).contains("exclusive"));
         assert!(t.get("witness").is_none(), "secrets must not leave the API unless asked");
-        let single = hex::encode(zether_prover::envelope::selector("zetherTransferSingle(bytes,bytes,bytes32)"));
+        let single = hex::encode(zether_prover::envelope::selector("mtxConfidentialTransferSingle(bytes,bytes,bytes,bytes32,bytes)"));
         assert!(t["directCalldata"].as_str().unwrap().starts_with(&format!("0x{single}")), "direct selector (CTR-ZTH-45)");
         let ok = call("verifyTransfer", json!({"curve": curve, "statement": t["statement"], "proof": t["proof"]}));
         assert_eq!(ok["ok"], json!(true));

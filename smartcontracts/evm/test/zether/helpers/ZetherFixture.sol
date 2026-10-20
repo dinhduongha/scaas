@@ -177,7 +177,7 @@ abstract contract ZetherFixture is Test {
     /// @dev `amount` shielded units into `u`'s pending, paid from the fixture's public balance (CTR-ZTH-35).
     function _fund(ZetherLayer t, User memory u, uint256 amount) internal {
         _public(t, address(this), amount * SCALE);
-        t.zetherShield(u.y, amount);
+        t.mtxShield(ZetherTypes.UA.unwrap(u.ua), amount);
     }
 
     struct Tx {
@@ -304,6 +304,13 @@ abstract contract ZetherFixture is Test {
     function _proveUnshield(ZetherLayer t, User memory from, uint256 amount, uint256 b, address recipient, ZetherTypes.UA ben, bytes32 binding)
         internal view returns (bytes memory payload, bytes memory proof)
     {
+        return _proveUnshieldTo(t, from, amount, b, bytes32(uint256(uint160(recipient))), ben, binding);
+    }
+
+    /// @dev As `_proveUnshield`, to a recipient id: a padded address or a derived UA (CTR-ZTH-51, the same word).
+    function _proveUnshieldTo(ZetherLayer t, User memory from, uint256 amount, uint256 b, bytes32 recipient, ZetherTypes.UA ben, bytes32 binding)
+        internal view returns (bytes memory payload, bytes memory proof)
+    {
         payload = _unshieldPayload(t, from);
         bytes memory statement = stm.unshieldStatement(address(t), payload, amount, recipient, ben, binding);
         proof = _proveU(from, statement, amount, b, ben, t);
@@ -324,22 +331,22 @@ abstract contract ZetherFixture is Test {
     /// @dev The calldata of the Zether-layer op `sel` on `tok` for an envelope with binding `b`: shield 3 to bob, else
     ///      10 from alice's acc balance `bal` (to bob, or unshielded to 0xB0C). Used to relay every listed selector once.
     function _zetherOpCall(bytes4 sel, uint256 bal, bytes32 b) internal view returns (bytes memory) {
-        if (sel == ZetherLayer.zetherShield.selector) return abi.encodeCall(ZetherLayer.zetherShield, (bob.y, 3));
-        if (sel == ZetherLayer.zetherUnshield.selector) {
+        if (sel == ZetherLayer.mtxShield.selector) return abi.encodeCall(ZetherLayer.mtxShield, (ZetherTypes.UA.unwrap(bob.ua), 3));
+        if (sel == ZetherLayer.mtxUnshield.selector) {
             (bytes memory pl, bytes memory pr) = _proveUnshield(tok, alice, 10, bal, address(0xB0C), _none(), b);
-            return abi.encodeCall(ZetherLayer.zetherUnshield, (pl, pr, _none(), address(0xB0C), 10));
+            return abi.encodeCall(ZetherLayer.mtxUnshield, (pl, pr, bytes(""), bytes32(0), bytes(""), 10, bytes32(uint256(uint160(address(0xB0C))))));
         }
-        if (sel == ZetherLayer.zetherTransferSingle.selector) {
+        if (sel == ZetherLayer.mtxConfidentialTransferSingle.selector) {
             Tx memory t = _proveTransfer(tok, alice, bob, 10, bal, _none(), b);
-            return abi.encodeCall(ZetherLayer.zetherTransferSingle, (t.payload, t.proof, _none()));
+            return abi.encodeCall(ZetherLayer.mtxConfidentialTransferSingle, (t.payload, t.proof, bytes(""), bytes32(0), bytes("")));
         }
-        ZetherTypes.TransferMode mode = sel == ZetherLayer.zetherTransferCompact.selector ? ZetherTypes.TransferMode.HASH
-            : sel == ZetherLayer.zetherTransfer.selector ? _defaultForm(tok) : ZetherTypes.TransferMode.NONE;
-        require(mode != ZetherTypes.TransferMode.NONE || sel == ZetherLayer.zetherTransferNoBundle.selector, "not a Zether op");
+        ZetherTypes.TransferMode mode = sel == ZetherLayer.mtxConfidentialTransferCompact.selector ? ZetherTypes.TransferMode.HASH
+            : sel == ZetherLayer.mtxConfidentialTransfer.selector ? _defaultForm(tok) : ZetherTypes.TransferMode.NONE;
+        require(mode != ZetherTypes.TransferMode.NONE || sel == ZetherLayer.mtxConfidentialTransferNoBundle.selector, "not a Zether op");
         return _multiCall(sel, mode, bal, b);
     }
 
-    /// @dev The stored form of `zetherTransfer` on `t` (CTR-ZTH-38): BUNDLE, or HASH on a `COMMIT` token.
+    /// @dev The stored form of `mtxConfidentialTransfer` on `t` (CTR-ZTH-38): BUNDLE, or HASH on a `COMMIT` token.
     function _defaultForm(ZetherLayer t) internal view returns (ZetherTypes.TransferMode) {
         return t.disclosureMode() == ZetherTypes.DisclosureMode.COMPACT ? ZetherTypes.TransferMode.HASH
             : ZetherTypes.TransferMode.BUNDLE;
@@ -351,11 +358,11 @@ abstract contract ZetherFixture is Test {
         uint256[] memory vs = new uint256[](1);
         vs[0] = 10;
         Tx memory u = _proveMulti(tok, alice, to, vs, bal, _none(), mode, b);
-        return abi.encodeWithSelector(sel, u.payload, u.proof, _none());
+        return abi.encodeWithSelector(sel, u.payload, u.proof, bytes(""), bytes32(0), bytes(""));
     }
 
     function _direct(ZetherLayer t, Tx memory r, ZetherTypes.UA ben) internal returns (bytes32) {
-        return t.zetherTransferSingle(r.payload, r.proof, ben);
+        return t.mtxConfidentialTransferSingle(r.payload, r.proof, "", ZetherTypes.UA.unwrap(ben), "");
     }
 
     // ------------------------------------------------------------------ disclosure (ZetherDisclosure)

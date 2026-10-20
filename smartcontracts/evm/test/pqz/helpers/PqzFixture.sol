@@ -217,7 +217,7 @@ abstract contract PqzFixture is PqzRegistryBase {
     /// Shield `amount` from the test's public balance (a TRIVIAL entry, D18).
     function _fund(PqzLayer t, bytes32 ua, uint256 amount) internal {
         _public(t, address(this), amount * SCALE);
-        t.pqzShield(ua, amount);
+        t.mtxShield(ua, amount);
         _mirrorTrivial(t, ua, amount);
     }
 
@@ -227,7 +227,7 @@ abstract contract PqzFixture is PqzRegistryBase {
     {
         out = _out(seed, withAud);
         bytes memory pl = _payloadFor(t, from, to, ben, out);
-        ref = t.pqzTransferSingle(pl, "", hex"c0de", _mlAuth());
+        ref = t.mtxConfidentialTransferSingle(pl, hex"c0de", _mlAuth(), _benT(pl), "");
         _afterDebit(from, _cut(out, 0, PqzCt.PK), _cut(out, PqzCt.CT, PqzCt.V));
         pend[to].push(_cut(out, 0, PqzCt.CT));
         if (ben != 0) feeIn[ben] += t.confidentialFee(); // txFee: the beneficiary's public balance (D19)
@@ -248,8 +248,8 @@ abstract contract PqzFixture is PqzRegistryBase {
     /// Both halves of the account's `acc` words (D8), once.
     function _prepare(PqzLayer t, bytes32 ua) internal {
         uint8 f = t.pqzAccount(ua).flags;
-        if (f & 2 == 0) t.pqzPrepareAcc(ua, 0);
-        if (f & 4 == 0) t.pqzPrepareAcc(ua, 1);
+        if (f & 2 == 0) t.mtxPrepareAcc(ua, 0);
+        if (f & 4 == 0) t.mtxPrepareAcc(ua, 1);
     }
 
     /// Anyone's rollover of up to `n` entries after `ROLL_AGE` blocks; the client's mirror adds what was rolled.
@@ -257,7 +257,7 @@ abstract contract PqzFixture is PqzRegistryBase {
         _prepare(t, ua);
         vm.roll(block.number + ROLL_AGE);
         uint256 r = t.pqzAccount(ua).rolled;
-        t.pqzRollOver(ua, n);
+        t.mtxRollOver(ua, n);
         accOf[ua] = _sumRange(_acc(ua), ua, r, t.pqzAccount(ua).rolled, 0);
     }
 
@@ -279,5 +279,20 @@ abstract contract PqzFixture is PqzRegistryBase {
 
     function _cut(bytes memory b, uint256 off, uint256 len) internal pure returns (bytes memory) {
         return _slice(b, off, len);
+    }
+
+    /// @dev The shared `beneficiary` argument (plan 5h D20): the payload's beneficiary word, op 7 / burn at 128, op 1 at
+    ///      160; 0 for a payload too short to hold it (the library's `BadPayload` then).
+    function _benM(bytes memory pl) internal pure returns (bytes32) {
+        return _word(pl, 128);
+    }
+
+    function _benT(bytes memory pl) internal pure returns (bytes32) {
+        return _word(pl, 160);
+    }
+
+    function _word(bytes memory pl, uint256 off) internal pure returns (bytes32 w) {
+        if (pl.length < off + 32) return 0;
+        assembly ("memory-safe") { w := mload(add(add(pl, 32), off)) }
     }
 }

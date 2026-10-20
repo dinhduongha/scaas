@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {console2} from "forge-std/Test.sol";
+import {IConfidentialUnderlyingToken} from "../../src/confidential/IConfidentialToken.sol";
 import {PqzFixture} from "./helpers/PqzFixture.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {UnderlyingPqzToken} from "../../src/pqz/UnderlyingPqzToken.sol";
@@ -45,10 +46,10 @@ contract PqzUnderlyingTest is PqzFixture {
         usd.mint(address(this), 1_000 * SCALE + 1);
         usd.approve(address(w), type(uint256).max);
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.AmountNotScaled.selector, SCALE + 1, SCALE));
-        w.pqzWrapShield(address(usd), SCALE + 1, alice);
+        w.mtxWrapShield(address(usd), SCALE + 1, alice);
         uint256 g = gasleft();
-        w.pqzWrapShield(address(usd), 1_000 * SCALE, alice);
-        console2.log("pqzWrapShield gas", g - gasleft());
+        w.mtxWrapShield(address(usd), 1_000 * SCALE, alice);
+        console2.log("mtxWrapShield gas", g - gasleft());
         assertEq((w.pqzPending(alice, 0) >> 96) & type(uint64).max, 1_000, "the same TRIVIAL entry as a shield");
         assertEq(w.totalSupply(), 1_000 * SCALE, "minted to SHIELD_POOL (D19)");
         assertEq(w.totalShielded(), 1_000);
@@ -56,26 +57,26 @@ contract PqzUnderlyingTest is PqzFixture {
 
         bytes memory nb = _blob(21, PqzCt.CT);
         bytes memory pl = bytes.concat(abi.encode(uint256(1), block.number + 5, uint256(0), alice, bytes32(0)), nb);
-        UnderlyingPqzToken.Unwrap memory x = UnderlyingPqzToken.Unwrap(address(usd), address(0xD00D), 400, 400 * SCALE);
+        IConfidentialUnderlyingToken.Unwrap memory x = IConfidentialUnderlyingToken.Unwrap(address(usd), bytes32(uint256(uint160(address(0xD00D)))), 400, 400 * SCALE);
         bytes memory st = w.unshieldUnwrapStatement(pl, x, 0);
         assertEq(bytes32(_cut(st, 544, 32)), w.unwrapBinding(address(usd), 400 * SCALE), "direct: leg and minOut bound");
         assertEq(uint256(bytes32(_cut(st, 288, 32))), 400);
         vm.expectCall(PQZ, abi.encodePacked(uint8(2), uint32(50_048), st, hex"c0de"));
         g = gasleft();
-        w.pqzUnshieldUnwrap(pl, "", x, hex"c0de", _mlAuth());
-        console2.log("pqzUnshieldUnwrap (mocked proof) gas", g - gasleft());
+        w.mtxUnshieldUnwrap(pl, hex"c0de", _mlAuth(), _benM(pl), "", x);
+        console2.log("mtxUnshieldUnwrap (mocked proof) gas", g - gasleft());
         assertEq(usd.balanceOf(address(0xD00D)), 400 * SCALE);
         assertEq(w.totalShielded(), 600);
         assertGe(usd.balanceOf(address(w)), w.totalSupply(), "reserve invariant (the pool is in totalSupply)");
         // minOut above the quote
         pl = bytes.concat(abi.encode(uint256(1), block.number + 5, uint256(0), alice, bytes32(0)), _blob(22, PqzCt.CT));
-        x = UnderlyingPqzToken.Unwrap(address(usd), address(0xD00D), 10, 10 * SCALE + 1);
+        x = IConfidentialUnderlyingToken.Unwrap(address(usd), bytes32(uint256(uint160(address(0xD00D)))), 10, 10 * SCALE + 1);
         vm.expectRevert();
-        w.pqzUnshieldUnwrap(pl, "", x, hex"c0de", _mlAuth());
+        w.mtxUnshieldUnwrap(pl, hex"c0de", _mlAuth(), _benM(pl), "", x);
         // an unknown leg
-        x = UnderlyingPqzToken.Unwrap(address(0xBAD), address(0xD00D), 10, 0);
+        x = IConfidentialUnderlyingToken.Unwrap(address(0xBAD), bytes32(uint256(uint160(address(0xD00D)))), 10, 0);
         vm.expectRevert();
-        w.pqzUnshieldUnwrap(pl, "", x, hex"c0de", _mlAuth());
+        w.mtxUnshieldUnwrap(pl, hex"c0de", _mlAuth(), _benM(pl), "", x);
     }
 
     /// W-Q(f) / CTR-MTX-18: the kind's restated `disableFeature` and `executeRate` carry the guard too; a hook leg that
@@ -96,7 +97,7 @@ contract PqzUnderlyingTest is PqzFixture {
         for (uint256 i; i < 2; ++i) {
             hook.arm(address(z), calls[i]);
             vm.expectRevert(IMetaTx.Reentrancy.selector);
-            z.pqzWrapShield(address(hook), SCALE, alice);
+            z.mtxWrapShield(address(hook), SCALE, alice);
         }
     }
 
@@ -104,13 +105,13 @@ contract PqzUnderlyingTest is PqzFixture {
         usd.mint(address(this), 50 * SCALE);
         usd.approve(address(w), type(uint256).max);
         w.wrap(address(usd), 50 * SCALE);
-        w.pqzShield(bob, 20);
+        w.mtxShield(bob, 20);
         assertEq(w.totalSupply(), 50 * SCALE, "the shield moved 20 to the pool");
         assertEq(w.totalShielded(), 20);
-        // burn through pqzUnshield moves public units out of the pool (supply unchanged)
+        // burn through mtxUnshield moves public units out of the pool (supply unchanged)
         bytes memory pl = bytes.concat(abi.encode(uint256(1), block.number + 5, uint256(0), bob, bytes32(0)),
             _blob(23, PqzCt.CT));
-        w.pqzUnshield(pl, "", 5, address(this), hex"c0de", _mlAuth());
+        w.mtxUnshield(pl, hex"c0de", _mlAuth(), _benM(pl), "", 5, bytes32(uint256(uint160(address(this)))));
         assertEq(w.totalSupply(), 50 * SCALE);
         assertEq(w.balanceOf(address(this)), 35 * SCALE);
         assertEq(usd.balanceOf(address(w)), w.totalSupply());

@@ -5,6 +5,7 @@ import {IFactoryToken} from "../factory/IFactoryToken.sol";
 import {IUARegistry} from "../ua/IUARegistry.sol";
 import {UAKinds} from "../ua/UAKinds.sol";
 import {IZetherToken} from "./IZetherToken.sol";
+import {IConfidentialToken} from "../confidential/IConfidentialToken.sol";
 import {IZetherVerifier, IZetherBurnVerifier} from "./IZetherVerifier.sol";
 import {ZetherTypes} from "./ZetherTypes.sol";
 import {ZetherSafety} from "./ZetherSafety.sol";
@@ -55,8 +56,8 @@ library ZetherLib {
     }
 
     /// @notice The token's immutables a call needs, and the statement's binding: `(ZTX_V1_DIRECT, 0)` for a direct
-    ///         call, `(ZTX_V1_RELAYED, envelopeBinding)` inside `mtxExecute`, `(ZTX_V1_DIRECT, unwrapBinding)` for a direct
-    ///         `zetherUnshieldUnwrap`.
+    ///         call, `(ZTX_V1_RELAYED, envelopeBinding)` inside `mtxExecute` / `uaExecute` (the UA envelope's binding,
+    ///         CTR-ZTH-51), `(ZTX_V1_DIRECT, unwrapBinding)` for a direct `mtxUnshieldUnwrap`.
     struct Env {
         address registry;
         bytes32 chainUid;
@@ -115,6 +116,7 @@ library ZetherLib {
     bytes32 internal constant TAG_DIRECT = keccak256("ZTX_V1_DIRECT");
     bytes32 internal constant TAG_RELAYED = keccak256("ZTX_V1_RELAYED");
     bytes32 internal constant TAG_ENVELOPE = keccak256("SCAAS-ZETHER-ENVELOPE-V1");
+    bytes32 internal constant TAG_UA_ENVELOPE = keccak256("SCAAS-ZETHER-UA-ENVELOPE-V1");
     bytes32 internal constant TAG_UNWRAP = keccak256("SCAAS-ZETHER-UNWRAP-V1");
     bytes32 private constant OP_TRANSFER = keccak256("SCAAS-ZETHER-OP-TRANSFER-V1");
     bytes32 private constant OP_BURN = keccak256("SCAAS-ZETHER-OP-BURN-V1");
@@ -182,15 +184,16 @@ library ZetherLib {
     // ------------------------------------------------------------------ shield
 
     /// @notice `pending[ua] += [amount]G` and `totalShielded += amount` within the cap. The token takes the public units
-    ///         (`zetherShield`) or the underlying (`zetherWrapShield`); the minter never mints shielded value.
-    function shield(ZetherTypes.UA ua, uint256 amount, address registry) public {
+    ///         (`mtxShield`) or the underlying (`mtxWrapShield`) of `from` (its `_msgSender()`); the minter never mints
+    ///         shielded value.
+    function shield(ZetherTypes.UA ua, uint256 amount, address registry, address from) public {
         ZetherStorage storage s = $();
         if (!registeredOn(registry, ua)) revert IZetherToken.AccountNotRegistered(ua);
         uint256 room = s.maxShielded - s.totalShielded;
         if (amount == 0 || amount > room) revert IZetherToken.AmountOutOfRange(amount, room);
         s.totalShielded += amount;
         _credit(s, ua, s.verifier.g1MulBase(amount), "");
-        emit IZetherToken.ZetherShielded(ua, amount);
+        emit IConfidentialToken.Shielded(ZetherTypes.UA.unwrap(ua), from, amount, s.acct[ua].pendingSeq);
     }
 
     // ------------------------------------------------------------------ transfer
@@ -224,7 +227,8 @@ library ZetherLib {
         _payFee(s, pp);
         entryRef = _sent(s, c, pp);
         s.entries[entryRef] = bytes.concat(pp.salt, pts[p:2 * p], pts[2 * p:4 * p], pts[5 * p:6 * p]);
-        emit IZetherToken.ZetherTransfer(pp.from, to, pp.beneficiary, pp.fee, pp.sendCounter, entryRef);
+        emit IConfidentialToken.ConfidentialTransfer(entryRef, ZetherTypes.UA.unwrap(pp.from), ZetherTypes.UA.unwrap(to),
+            ZetherTypes.UA.unwrap(pp.beneficiary), pp.fee, pp.sendCounter, address(0));
     }
 
     /// @notice `M` recipients, one proof (CTR-ZTH-37/38): `acc_f −= (C_deb + [fee]G, D_out)`, every
@@ -260,7 +264,11 @@ library ZetherLib {
         _payFee(s, pp);
         entryRef = _sent(s, c, pp);
         if (mode != ZetherTypes.TransferMode.NONE) _storeRecord(s, p, entryRef, payload, pp, mode);
-        emit IZetherToken.ZetherTransferMulti(pp.from, pp.beneficiary, pp.fee, pp.sendCounter, entryRef, pp.to, mode);
+        ZetherTypes.UA[] memory to = pp.to;
+        bytes32[] memory rec;
+        assembly ("memory-safe") { rec := to } // `UA` is `bytes32`: the same memory array
+        emit IConfidentialToken.ConfidentialTransferMulti(entryRef, ZetherTypes.UA.unwrap(pp.from),
+            ZetherTypes.UA.unwrap(pp.beneficiary), pp.fee, pp.sendCounter, rec, uint8(mode), address(0));
     }
 
     /// @dev Every `pend_tj += (C_out_j, D_out)`, decoys included.
@@ -276,13 +284,14 @@ library ZetherLib {
 
     /// @notice The unshield statement (zether.md §8.2, built name `burn`): checks, the proof (the only authority), then
     ///         `acc_f.C −= [amount + fee]G`, `totalShielded -= fee` (the fee is paid in public units by the layer), `sendCounter_f++`, `totalShielded −= amount`. The token
-    ///         then pays `amount · shieldScale` public-equivalent units to `recipient` (mint or a leg's underlying).
+    ///         then pays `amount · shieldScale` public-equivalent units to `recipient` (a padded address or a derived UA,
+    ///         CTR-ZTH-51: the statement's recipient word either way) from the pool or a leg's underlying.
     function unshield(
         bytes calldata payload,
         bytes calldata proof,
         ZetherTypes.UA beneficiary,
         uint256 amount,
-        address recipient,
+        bytes32 recipient,
         Env memory e
     ) public returns (uint256) {
         (Ctx memory c, Prepared memory pp) = _prepareUnshield(payload, amount, recipient, beneficiary, e);
@@ -293,14 +302,14 @@ library ZetherLib {
         _sent(s, c, pp);
         s.totalShielded -= amount;
         _payFee(s, pp);
-        emit IZetherToken.ZetherUnshielded(pp.from, amount, recipient);
+        emit IConfidentialToken.Unshielded(ZetherTypes.UA.unwrap(pp.from), amount, recipient, address(0));
         return pp.fee;
     }
 
     function _prepareUnshield(
         bytes calldata payload,
         uint256 amount,
-        address recipient,
+        bytes32 recipient,
         ZetherTypes.UA beneficiary,
         Env memory e
     ) private view returns (Ctx memory c, Prepared memory pp) {
@@ -394,7 +403,7 @@ library ZetherLib {
         return Acct(_pt(a.accC, p), _pt(a.accD, p), a.accSeq, a.sendCounter);
     }
 
-    /// @notice The form `zetherTransfer` takes: BUNDLE on a `BUNDLE` token, HASH (commit-reveal) on a `COMPACT` token.
+    /// @notice The form `mtxConfidentialTransfer` takes: BUNDLE on a `BUNDLE` token, HASH (commit-reveal) on a `COMPACT` token.
     function defaultMode() internal view returns (ZetherTypes.TransferMode) {
         return $().disclosureMode == ZetherTypes.DisclosureMode.COMPACT
             ? ZetherTypes.TransferMode.HASH
@@ -406,9 +415,9 @@ library ZetherLib {
         return binding == bytes32(0) ? TAG_DIRECT : TAG_RELAYED;
     }
 
-    /// @notice The binding word of a direct `zetherUnshieldUnwrap`: its leg and `minOut` (controller ruling, pending
+    /// @notice The binding word of a direct `mtxUnshieldUnwrap`: its leg and `minOut` (controller ruling, pending
     ///         the owner), so a proof lifted from a pending call cannot pick another leg, drop `minOut` or go through
-    ///         `zetherUnshield` instead.
+    ///         `mtxUnshield` instead.
     function unwrapBinding(address u, uint256 minOut) internal pure returns (bytes32) {
         return keccak256(abi.encode(TAG_UNWRAP, u, minOut));
     }
@@ -463,7 +472,7 @@ library ZetherLib {
         pp.sendCounter = _checkSeqs(a, payload);
         pp.salt = bytes16(payload[64:S_PTS]);
         pp.statement = bytes.concat(
-            _header(c, OP_TRANSFER, c.psid, a, pp, 0, address(0)),
+            _header(c, OP_TRANSFER, c.psid, a, pp, 0, 0),
             pts[0:2 * p], _auditorPoint(c, _isO(pts[5 * p:6 * p]) ? 1 : 0, 1), a.accC, a.accD, pts[2 * p:6 * p]
         );
     }
@@ -505,11 +514,11 @@ library ZetherLib {
         Acct memory a,
         bytes calldata payload,
         uint256 amount,
-        address recipient,
+        bytes32 recipient,
         ZetherTypes.UA beneficiary
     ) internal view returns (Prepared memory pp) {
         if (amount == 0 || amount > c.maxShielded) revert IZetherToken.AmountOutOfRange(amount, c.maxShielded);
-        if (recipient == address(0)) revert IZetherToken.ZeroRecipient();
+        if (recipient == 0) revert IZetherToken.ZeroRecipient();
         uint256 p = c.p;
         pp.from = ZetherTypes.toUA(payload[64:64 + p]);
         _requireRegistered(c, pp.from);
@@ -525,8 +534,8 @@ library ZetherLib {
 
     /// @dev The 480-byte header (zether.md §7): `chainUid` at word 3, the salt at word 13 (16 zero bytes ‖ salt,
     ///      CTR-ZTH-30), `memoHash` at word 14 (CTR-ZTH-50): both are in what the sender proves and signs, so a relayer
-    ///      can neither alter nor drop them.
-    function _header(Ctx memory c, bytes32 op, bytes32 psid, Acct memory a, Prepared memory pp, uint256 amount, address recipient)
+    ///      can neither alter nor drop them. `recipient` (word 12) is a padded address or a derived UA (CTR-ZTH-51).
+    function _header(Ctx memory c, bytes32 op, bytes32 psid, Acct memory a, Prepared memory pp, uint256 amount, bytes32 recipient)
         private view returns (bytes memory)
     {
         return bytes.concat(
@@ -548,7 +557,7 @@ library ZetherLib {
             ? OP_MULTI_HASH
             : mode == ZetherTypes.TransferMode.BUNDLE ? OP_MULTI_BUNDLE : OP_MULTI_NONE;
         bytes memory head = bytes.concat(
-            _header(c, op, c.ver.proofSystemIdMulti(), a, pp, 0, address(0)),
+            _header(c, op, c.ver.proofSystemIdMulti(), a, pp, 0, 0),
             payload[M_PTS:M_PTS + p], _auditorPoint(c, _audOff(payload, p, pp.to.length), pp.to.length), a.accC, a.accD
         );
         head = bytes.concat(head, payload[M_PTS + p:M_PTS + 3 * p], payload[80:M_PTS]);
@@ -653,7 +662,7 @@ library ZetherLib {
         delete a.pendD;
         a.accSeq += 1;
         a.lastRolledPendingSeq = a.pendingSeq;
-        emit IZetherToken.RolledOver(ua, a.accSeq);
+        emit IConfidentialToken.RolledOver(ZetherTypes.UA.unwrap(ua), a.accSeq, 0, 0);
     }
 
     /// @dev BUNDLE: the record `R` stored; HASH (commit-reveal): `keccak256(R)` in one slot, the sender memo next to it,

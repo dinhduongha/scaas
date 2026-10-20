@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {console2} from "forge-std/Test.sol";
+import {IConfidentialToken} from "../../src/confidential/IConfidentialToken.sol";
 import {ZetherFixture, ZUID} from "./helpers/ZetherFixture.sol";
 import {ZetherLayer} from "../../src/zether/ZetherLayer.sol";
 import {IZetherToken} from "../../src/zether/IZetherToken.sol";
@@ -42,7 +43,7 @@ abstract contract ZetherNoneSuite is ZetherFixture {
         assertEq(p, 1000, "shield lands in pending");
         assertEq(tok.balanceOf(address(this)), 0, "the public units were burnt");
 
-        tok.zetherRollOver(alice.ua);
+        tok.mtxRollOver(ZetherTypes.UA.unwrap(alice.ua), 1);
         (a, p) = _bal(alice);
         assertEq(a, 1000);
         assertEq(p, 0);
@@ -52,7 +53,7 @@ abstract contract ZetherNoneSuite is ZetherFixture {
         Tx memory t1 = _proveTransfer(tok, alice, bob, 300, 1000, carol.ua, 0);
         uint256 g0 = gasleft();
         bytes32 ref = _direct(tok, t1, carol.ua);
-        console2.log(bls ? "bls12-381" : "bn254", "zetherTransferSingle (direct, auditor, fee) gas", g0 - gasleft());
+        console2.log(bls ? "bls12-381" : "bn254", "mtxConfidentialTransferSingle (direct, auditor, fee) gas", g0 - gasleft());
         (a,) = _bal(alice);
         assertEq(a, 1000 - 300 - FEE, "sender acc debited v + fee");
         (, p) = _bal(bob);
@@ -64,23 +65,23 @@ abstract contract ZetherNoneSuite is ZetherFixture {
         _assertConservation(tok, 1100);
 
         // bob spends what he received: roll-over (PUBLIC, no signature), then 100 back
-        tok.zetherRollOver(bob.ua);
+        tok.mtxRollOver(ZetherTypes.UA.unwrap(bob.ua), 1);
         _direct(tok, _proveTransfer(tok, bob, alice, 100, 300, _none(), 0), _none());
         _assertConservation(tok, 1100);
 
         // bob unshields 50 into public units
         (bytes memory pl, bytes memory pr) = _proveUnshield(tok, bob, 50, 200, address(0xD00D), _none(), 0);
         g0 = gasleft();
-        tok.zetherUnshield(pl, pr, _none(), address(0xD00D), 50);
-        console2.log(bls ? "bls12-381" : "bn254", "zetherUnshield gas", g0 - gasleft());
+        tok.mtxUnshield(pl, pr, "", bytes32(0), "", 50, bytes32(uint256(uint160(address(0xD00D)))));
+        console2.log(bls ? "bls12-381" : "bn254", "mtxUnshield gas", g0 - gasleft());
         assertEq(tok.balanceOf(address(0xD00D)), 50 * SCALE);
         (a,) = _bal(bob);
         assertEq(a, 150);
 
         // alice rolls the 100 over, then unshields 700 with a fee to carol
-        tok.zetherRollOver(alice.ua);
+        tok.mtxRollOver(ZetherTypes.UA.unwrap(alice.ua), 1);
         (pl, pr) = _proveUnshield(tok, alice, 700, 798, address(0xD00D), carol.ua, 0);
-        tok.zetherUnshield(pl, pr, carol.ua, address(0xD00D), 700);
+        tok.mtxUnshield(pl, pr, "", ZetherTypes.UA.unwrap(carol.ua), "", 700, bytes32(uint256(uint160(address(0xD00D)))));
         (a,) = _bal(alice);
         assertEq(a, 798 - 700 - FEE);
         assertEq(tok.balanceOfUA(ZetherTypes.UA.unwrap(carol.ua)), 2 * FEE * SCALE, "both fees, public units");
@@ -92,17 +93,17 @@ abstract contract ZetherNoneSuite is ZetherFixture {
     function test_shieldAndRollOverGas() public {
         _public(tok, address(this), 1000 * SCALE);
         uint256 g0 = gasleft();
-        tok.zetherShield(alice.y, 500);
-        console2.log(bls ? "bls12-381" : "bn254", "zetherShield (first credit) gas", g0 - gasleft());
+        tok.mtxShield(ZetherTypes.UA.unwrap(alice.ua), 500);
+        console2.log(bls ? "bls12-381" : "bn254", "mtxShield (first credit) gas", g0 - gasleft());
         g0 = gasleft();
-        tok.zetherShield(alice.y, 500);
-        console2.log(bls ? "bls12-381" : "bn254", "zetherShield (warm) gas", g0 - gasleft());
+        tok.mtxShield(ZetherTypes.UA.unwrap(alice.ua), 500);
+        console2.log(bls ? "bls12-381" : "bn254", "mtxShield (warm) gas", g0 - gasleft());
         g0 = gasleft();
-        tok.zetherRollOver(alice.ua);
-        console2.log(bls ? "bls12-381" : "bn254", "zetherRollOver gas", g0 - gasleft());
+        tok.mtxRollOver(ZetherTypes.UA.unwrap(alice.ua), 1);
+        console2.log(bls ? "bls12-381" : "bn254", "mtxRollOver gas", g0 - gasleft());
         g0 = gasleft();
-        tok.zetherRollOver(alice.ua);
-        console2.log(bls ? "bls12-381" : "bn254", "zetherRollOver no-op gas", g0 - gasleft());
+        tok.mtxRollOver(ZetherTypes.UA.unwrap(alice.ua), 1);
+        console2.log(bls ? "bls12-381" : "bn254", "mtxRollOver no-op gas", g0 - gasleft());
     }
 
     /// CTR-ZTH-35: the caller's public units, exactly `amount · shieldScale`; shield to anyone registered; the cap.
@@ -114,7 +115,7 @@ abstract contract ZetherNoneSuite is ZetherFixture {
         vm.expectRevert(err);
         tok.transfer(SHIELD_POOL_, 1);
         vm.expectRevert(err); // an unshield payee
-        tok.zetherUnshield("", "", _none(), SHIELD_POOL_, 1);
+        tok.mtxUnshield("", "", "", bytes32(0), "", 1, bytes32(uint256(uint160(SHIELD_POOL_))));
         vm.prank(SHIELD_POOL_);
         vm.expectRevert(err); // a spender
         tok.transfer(address(this), 1);
@@ -123,9 +124,10 @@ abstract contract ZetherNoneSuite is ZetherFixture {
 
     function test_shieldMovesTheCallersPublicUnitsToThePool() public {
         _public(tok, address(this), 30 * SCALE + 1);
-        vm.expectEmit(true, false, false, true, address(tok));
-        emit IZetherToken.ZetherShielded(bob.ua, 30);
-        tok.zetherShield(bob.y, 30); // to someone else's account
+        uint64 seq = tok.accountState(bob.ua).pendingSeq + 1;
+        vm.expectEmit(true, true, false, true, address(tok));
+        emit IConfidentialToken.Shielded(ZetherTypes.UA.unwrap(bob.ua), address(this), 30, seq);
+        tok.mtxShield(ZetherTypes.UA.unwrap(bob.ua), 30); // to someone else's account
         assertEq(tok.balanceOf(address(this)), 1, "30 x scale moved, the rest kept");
         assertEq(tok.totalShielded(), 30);
         assertEq(tok.totalSupply(), 30 * SCALE + 1, "D19: nothing burnt");
@@ -134,14 +136,14 @@ abstract contract ZetherNoneSuite is ZetherFixture {
         assertEq(tok.accountState(bob.ua).pendingSeq, 1);
         bytes memory err = abi.encodeWithSignature("ERC20InsufficientBalance(address,uint256,uint256)", address(this), 1, SCALE);
         vm.expectRevert(err);
-        tok.zetherShield(bob.y, 1);
+        tok.mtxShield(ZetherTypes.UA.unwrap(bob.ua), 1);
         // the cap counts every account: room = max − totalShielded
         ZetherLayer small = _newToken(false, "small", 100);
         _public(small, address(this), 101 * SCALE);
-        small.zetherShield(alice.y, 60);
+        small.mtxShield(ZetherTypes.UA.unwrap(alice.ua), 60);
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.AmountOutOfRange.selector, 41, 40));
-        small.zetherShield(bob.y, 41);
-        small.zetherShield(bob.y, 40);
+        small.mtxShield(ZetherTypes.UA.unwrap(bob.ua), 41);
+        small.mtxShield(ZetherTypes.UA.unwrap(bob.ua), 40);
         assertEq(small.totalShielded(), 100);
     }
 
@@ -153,7 +155,7 @@ abstract contract ZetherNoneSuite is ZetherFixture {
     /// changed after proving is refused.
     function test_statementHeaderCarriesChainUid() public {
         _fund(tok, alice, 500);
-        tok.zetherRollOver(alice.ua);
+        tok.mtxRollOver(ZetherTypes.UA.unwrap(alice.ua), 1);
         Tx memory t = _proveTransfer(tok, alice, bob, 100, 500, carol.ua, 0);
         bytes memory st = stm.transferStatementSingle(address(tok), t.payload, carol.ua, 0);
         bytes memory head = new bytes(480);
@@ -167,7 +169,7 @@ abstract contract ZetherNoneSuite is ZetherFixture {
         assertEq(tok.chainUid(), ZUID);
         // unshield: amount and recipient at words 11 and 12
         (bytes memory pl,) = _proveUnshield(tok, alice, 7, 500, address(0xD00D), _none(), 0);
-        st = stm.unshieldStatement(address(tok), pl, 7, address(0xD00D), _none(), 0);
+        st = stm.unshieldStatement(address(tok), pl, 7, bytes32(uint256(uint160(address(0xD00D)))), _none(), 0);
         (uint256 amount, address rcp) = abi.decode(_cut(st, 352, 64), (uint256, address));
         assertEq(amount, 7);
         assertEq(rcp, address(0xD00D));
@@ -177,12 +179,13 @@ abstract contract ZetherNoneSuite is ZetherFixture {
         bytes memory tampered = bytes.concat(t.payload);
         tampered[70] ^= 0x01; // the salt
         vm.expectRevert(IZetherToken.ProofRejected.selector);
-        tok.zetherTransferSingle(tampered, t.proof, carol.ua);
+        tok.mtxConfidentialTransferSingle(tampered, t.proof, "", ZetherTypes.UA.unwrap(carol.ua), "");
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.BadPayload.selector, t.payload.length - 1));
-        tok.zetherTransferSingle(_cut(t.payload, 0, t.payload.length - 1), t.proof, carol.ua);
+        tok.mtxConfidentialTransferSingle(_cut(t.payload, 0, t.payload.length - 1), t.proof, "", ZetherTypes.UA.unwrap(carol.ua), "");
         bytes32 ref = _ref(tok, alice, 0);
         vm.expectEmit(true, true, true, true, address(tok));
-        emit IZetherToken.ZetherTransfer(alice.ua, bob.ua, carol.ua, FEE, 0, ref);
+        emit IConfidentialToken.ConfidentialTransfer(ref, ZetherTypes.UA.unwrap(alice.ua), ZetherTypes.UA.unwrap(bob.ua),
+            ZetherTypes.UA.unwrap(carol.ua), FEE, 0, address(0));
         _direct(tok, t, carol.ua);
     }
 
@@ -190,12 +193,12 @@ abstract contract ZetherNoneSuite is ZetherFixture {
 
     function test_rollOverIsNoOpWithoutNewCredit() public {
         _fund(tok, alice, 10);
-        tok.zetherRollOver(alice.ua);
-        tok.zetherRollOver(alice.ua); // no revert, no bump
+        tok.mtxRollOver(ZetherTypes.UA.unwrap(alice.ua), 1);
+        tok.mtxRollOver(ZetherTypes.UA.unwrap(alice.ua), 1); // no revert, no bump
         assertEq(tok.accountState(alice.ua).accSeq, 1);
         ZetherTypes.UA[] memory batch = new ZetherTypes.UA[](2);
         (batch[0], batch[1]) = (alice.ua, bob.ua);
-        tok.zetherRollOverBatch(batch);
+        tok.mtxRollOverBatch(batch);
         assertEq(tok.accountState(alice.ua).accSeq, 1);
     }
 
@@ -227,7 +230,7 @@ abstract contract ZetherNoneSuite is ZetherFixture {
         ));
         bytes memory bad = _ownerAuth(alice, noUid);
         vm.expectRevert();
-        tok.zetherSetRollOverMode(alice.ua, ZetherTypes.RollOverMode.OWNER_ONLY, until, bad);
+        tok.mtxSetRollOverMode(alice.ua, ZetherTypes.RollOverMode.OWNER_ONLY, until, bad);
         _fund(tok, alice, 10);
         bytes32 rollNoUid = keccak256(bytes.concat(
             abi.encode(keccak256("ZETHER_ROLLOVER_V1"), block.chainid, address(tok)),
@@ -235,43 +238,43 @@ abstract contract ZetherNoneSuite is ZetherFixture {
         ));
         bad = _ownerAuth(alice, rollNoUid);
         vm.expectRevert();
-        tok.zetherRollOverSigned(alice.ua, 1, until, bad);
-        tok.zetherRollOverSigned(alice.ua, 1, until, _rollSig(alice, 0, 1, until));
+        tok.mtxRollOverSigned(alice.ua, 1, until, bad);
+        tok.mtxRollOverSigned(alice.ua, 1, until, _rollSig(alice, 0, 1, until));
         assertEq(tok.accountState(alice.ua).accSeq, 1);
     }
 
-    /// A griefer with balance 0 slips a `v = 0` transfer before `zetherRollOverSigned`: `pendingSeq` moves on but the
+    /// A griefer with balance 0 slips a `v = 0` transfer before `mtxRollOverSigned`: `pendingSeq` moves on but the
     /// owner's roll-over still runs (merging the new credit too); the signature cannot replay (`accSeq` moved).
     function test_rollOverSignedSurvivesFrontRunCredit() public {
         uint64 until = uint64(block.number + 50);
-        tok.zetherSetRollOverMode(alice.ua, ZetherTypes.RollOverMode.OWNER_ONLY, until,
+        tok.mtxSetRollOverMode(alice.ua, ZetherTypes.RollOverMode.OWNER_ONLY, until,
             _modeSig(alice, ZetherTypes.RollOverMode.OWNER_ONLY, 0, until));
         _fund(tok, alice, 10);
         bytes memory rs = _rollSig(alice, 0, 1, until);
         _direct(tok, _proveTransfer(tok, bob, alice, 0, 0, _none(), 0), _none());
         assertEq(tok.accountState(alice.ua).pendingSeq, 2);
-        tok.zetherRollOverSigned(alice.ua, 1, until, rs);
+        tok.mtxRollOverSigned(alice.ua, 1, until, rs);
         (uint256 a,) = _bal(alice);
         assertEq(a, 10);
         _fund(tok, alice, 5);
         // the replay stops at the new-credit gate (1 ≤ lastRolled = 2), before the signature (accSeq moved too)
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.PendingSeqMismatch.selector, 1, 3));
-        tok.zetherRollOverSigned(alice.ua, 1, until, rs);
+        tok.mtxRollOverSigned(alice.ua, 1, until, rs);
     }
 
     /// CTR-ZTH-17: a signature that names no new credit is refused (it would be a reusable no-op ticket).
     function test_rollOverSignedWithoutNewCreditIsRejected() public {
         uint64 until = uint64(block.number + 50);
-        tok.zetherSetRollOverMode(alice.ua, ZetherTypes.RollOverMode.OWNER_ONLY, until,
+        tok.mtxSetRollOverMode(alice.ua, ZetherTypes.RollOverMode.OWNER_ONLY, until,
             _modeSig(alice, ZetherTypes.RollOverMode.OWNER_ONLY, 0, until));
         _fund(tok, alice, 10);
-        tok.zetherRollOverSigned(alice.ua, 1, until, _rollSig(alice, 0, 1, until));
+        tok.mtxRollOverSigned(alice.ua, 1, until, _rollSig(alice, 0, 1, until));
         bytes memory stale = _rollSig(alice, 1, 1, until);
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.PendingSeqMismatch.selector, 1, 1));
-        tok.zetherRollOverSigned(alice.ua, 1, until, stale);
+        tok.mtxRollOverSigned(alice.ua, 1, until, stale);
         _fund(tok, alice, 5);
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.PendingSeqMismatch.selector, 1, 2));
-        tok.zetherRollOverSigned(alice.ua, 1, until, stale);
+        tok.mtxRollOverSigned(alice.ua, 1, until, stale);
         assertEq(tok.accountState(alice.ua).accSeq, 1);
     }
 
@@ -280,7 +283,7 @@ abstract contract ZetherNoneSuite is ZetherFixture {
         bytes memory sig = _modeSig(alice, ZetherTypes.RollOverMode.OWNER_ONLY, 0, until);
         vm.roll(until + 1);
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.RollOverExpired.selector, until));
-        tok.zetherSetRollOverMode(alice.ua, ZetherTypes.RollOverMode.OWNER_ONLY, until, sig);
+        tok.mtxSetRollOverMode(alice.ua, ZetherTypes.RollOverMode.OWNER_ONLY, until, sig);
     }
 
     function test_ownerOnlyRollOver() public {
@@ -288,24 +291,24 @@ abstract contract ZetherNoneSuite is ZetherFixture {
         bytes memory sig = _modeSig(alice, ZetherTypes.RollOverMode.OWNER_ONLY, 0, until);
         vm.expectEmit(true, false, false, true, address(tok));
         emit IZetherToken.RollOverModeChanged(alice.ua, ZetherTypes.RollOverMode.OWNER_ONLY);
-        tok.zetherSetRollOverMode(alice.ua, ZetherTypes.RollOverMode.OWNER_ONLY, until, sig);
+        tok.mtxSetRollOverMode(alice.ua, ZetherTypes.RollOverMode.OWNER_ONLY, until, sig);
         assertEq(tok.accountState(alice.ua).modeNonce, 1);
         vm.expectRevert(); // the old signature again: modeNonce moved
-        tok.zetherSetRollOverMode(alice.ua, ZetherTypes.RollOverMode.OWNER_ONLY, until, sig);
+        tok.mtxSetRollOverMode(alice.ua, ZetherTypes.RollOverMode.OWNER_ONLY, until, sig);
         _fund(tok, alice, 10);
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.RollOverOwnerOnly.selector, alice.ua));
-        tok.zetherRollOver(alice.ua);
+        tok.mtxRollOver(ZetherTypes.UA.unwrap(alice.ua), 1);
         ZetherTypes.UA[] memory batch = new ZetherTypes.UA[](1);
         batch[0] = alice.ua;
-        tok.zetherRollOverBatch(batch); // skipped, no revert
+        tok.mtxRollOverBatch(batch); // skipped, no revert
         assertEq(tok.accountState(alice.ua).accSeq, 0);
 
         bytes memory rs = _rollSig(alice, 0, 1, until);
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.PendingSeqMismatch.selector, 2, 1));
-        tok.zetherRollOverSigned(alice.ua, 2, until, rs);
+        tok.mtxRollOverSigned(alice.ua, 2, until, rs);
         uint256 g0 = gasleft();
-        tok.zetherRollOverSigned(alice.ua, 1, until, rs);
-        console2.log(bls ? "bls12-381" : "bn254", "zetherRollOverSigned (Schnorr) gas", g0 - gasleft());
+        tok.mtxRollOverSigned(alice.ua, 1, until, rs);
+        console2.log(bls ? "bls12-381" : "bn254", "mtxRollOverSigned (Schnorr) gas", g0 - gasleft());
         assertEq(tok.accountState(alice.ua).accSeq, 1);
         (uint256 a,) = _bal(alice);
         assertEq(a, 10);
@@ -315,7 +318,7 @@ abstract contract ZetherNoneSuite is ZetherFixture {
         bytes memory late = _rollSig(alice, 1, 2, until);
         vm.roll(until + 1);
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.RollOverExpired.selector, until));
-        tok.zetherRollOverSigned(alice.ua, 2, until, late);
+        tok.mtxRollOverSigned(alice.ua, 2, until, late);
     }
 
     function test_rollOverSignedRejectsForeignSignature() public {
@@ -323,7 +326,7 @@ abstract contract ZetherNoneSuite is ZetherFixture {
         _fund(tok, alice, 10);
         bytes memory forged = _rollSig(bob, 0, 1, until); // bob signs for alice
         vm.expectRevert();
-        tok.zetherRollOverSigned(alice.ua, 1, until, forged);
+        tok.mtxRollOverSigned(alice.ua, 1, until, forged);
     }
 
     // ------------------------------------------------------------------ acc/pending race
@@ -331,7 +334,7 @@ abstract contract ZetherNoneSuite is ZetherFixture {
     /// A credit that arrives between proving and submitting changes only pending: the proof stays valid.
     function test_incomingCreditDoesNotKillInFlightProof() public {
         _fund(tok, alice, 500);
-        tok.zetherRollOver(alice.ua);
+        tok.mtxRollOver(ZetherTypes.UA.unwrap(alice.ua), 1);
         Tx memory t = _proveTransfer(tok, alice, bob, 100, 500, _none(), 0);
         _fund(tok, alice, 7); // someone sends alice dust
         _direct(tok, t, _none());
@@ -343,10 +346,10 @@ abstract contract ZetherNoneSuite is ZetherFixture {
     /// A roll-over in between moves `accSeq`: the old proof is refused cheaply, before verification.
     function test_rollOverBetweenProveAndSubmitRejectsCheaply() public {
         _fund(tok, alice, 500);
-        tok.zetherRollOver(alice.ua);
+        tok.mtxRollOver(ZetherTypes.UA.unwrap(alice.ua), 1);
         Tx memory t = _proveTransfer(tok, alice, bob, 100, 500, _none(), 0);
         _fund(tok, alice, 7);
-        tok.zetherRollOver(alice.ua);
+        tok.mtxRollOver(ZetherTypes.UA.unwrap(alice.ua), 1);
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.StaleAccSeq.selector, 2, 1));
         _direct(tok, t, _none());
     }
@@ -355,7 +358,7 @@ abstract contract ZetherNoneSuite is ZetherFixture {
 
     function test_replaySameProofRejected() public {
         _fund(tok, alice, 500);
-        tok.zetherRollOver(alice.ua);
+        tok.mtxRollOver(ZetherTypes.UA.unwrap(alice.ua), 1);
         Tx memory t = _proveTransfer(tok, alice, bob, 100, 500, _none(), 0);
         _direct(tok, t, _none());
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.StaleSendCounter.selector, 1, 0));
@@ -367,8 +370,8 @@ abstract contract ZetherNoneSuite is ZetherFixture {
         ZetherLayer other = _newToken(true, "zusd-2");
         _fund(tok, alice, 500);
         _fund(other, alice, 500);
-        tok.zetherRollOver(alice.ua);
-        other.zetherRollOver(alice.ua);
+        tok.mtxRollOver(ZetherTypes.UA.unwrap(alice.ua), 1);
+        other.mtxRollOver(ZetherTypes.UA.unwrap(alice.ua), 1);
         Tx memory t = _proveTransfer(tok, alice, bob, 100, 500, _none(), 0);
         vm.expectRevert(IZetherToken.ProofRejected.selector);
         _direct(other, t, _none());
@@ -377,7 +380,7 @@ abstract contract ZetherNoneSuite is ZetherFixture {
 
     function test_replayAcrossChainsRejected() public {
         _fund(tok, alice, 500);
-        tok.zetherRollOver(alice.ua);
+        tok.mtxRollOver(ZetherTypes.UA.unwrap(alice.ua), 1);
         Tx memory t = _proveTransfer(tok, alice, bob, 100, 500, _none(), 0);
         vm.chainId(1337); // another dev chain, same state
         vm.expectRevert(IZetherToken.ProofRejected.selector);
@@ -402,7 +405,7 @@ abstract contract ZetherNoneSuite is ZetherFixture {
 
     function test_disclosureFourOpenings() public {
         _fund(tok, alice, 500);
-        tok.zetherRollOver(alice.ua);
+        tok.mtxRollOver(ZetherTypes.UA.unwrap(alice.ua), 1);
         Tx memory t = _proveTransfer(tok, alice, bob, 123, 500, _none(), 0);
         bytes32 ref = _direct(tok, t, _none());
         // the sender opens with s
@@ -443,7 +446,7 @@ abstract contract ZetherNoneSuite is ZetherFixture {
     /// CTR-ZTH-36: the disclosure challenge carries `chainUid`; an opening made without it fails.
     function test_disclosureChallengeCarriesChainUid() public {
         _fund(tok, alice, 500);
-        tok.zetherRollOver(alice.ua);
+        tok.mtxRollOver(ZetherTypes.UA.unwrap(alice.ua), 1);
         Tx memory t = _proveTransfer(tok, alice, bob, 123, 500, _none(), 0);
         bytes32 ref = _direct(tok, t, _none());
         (bytes memory ct,) = dis.transferCiphertext(address(tok), ref, 0, "");
@@ -472,16 +475,16 @@ abstract contract ZetherNoneSuite is ZetherFixture {
     /// CTR-ZTH-42, single format: the token has an auditor, the sender leaves it out (`C_aud = O`, statement `Y_a = O`).
     function test_singleAuditorOptOut() public {
         _fund(tok, alice, 500);
-        tok.zetherRollOver(alice.ua);
+        tok.mtxRollOver(ZetherTypes.UA.unwrap(alice.ua), 1);
         audOut = true;
         Tx memory t = _proveTransfer(tok, alice, bob, 123, 500, _none(), 0);
         audOut = false;
         Tx memory on = _proveTransfer(tok, alice, bob, 123, 500, _none(), 0);
         // a proof of one choice does not pass under the other (Y_a is in the statement)
         vm.expectRevert(IZetherToken.ProofRejected.selector);
-        tok.zetherTransferSingle(t.payload, on.proof, _none());
+        tok.mtxConfidentialTransferSingle(t.payload, on.proof, "", bytes32(0), "");
         vm.expectRevert(IZetherToken.ProofRejected.selector);
-        tok.zetherTransferSingle(on.payload, t.proof, _none());
+        tok.mtxConfidentialTransferSingle(on.payload, t.proof, "", bytes32(0), "");
         bytes32 ref = _direct(tok, t, _none());
         assertTrue(_holds(tok, bob, 123, false));
         assertTrue(_vta(ref, 123, ITransferDisclosure.OpeningKind.SENDER_S, abi.encode(t.s)));
@@ -501,13 +504,13 @@ abstract contract ZetherNoneSuite is ZetherFixture {
         tok = _newToken(true, "big", uint256(1) << 54);
         uint256 b0 = (uint256(1) << 44) + 12_345;
         _fund(tok, alice, b0);
-        tok.zetherRollOver(alice.ua);
+        tok.mtxRollOver(ZetherTypes.UA.unwrap(alice.ua), 1);
         assertTrue(_holds(tok, alice, b0, true), "acc holds > 2^44");
         uint256 v = (uint256(1) << 33) + 7;
         Tx memory t = _proveTransfer(tok, alice, bob, v, b0, carol.ua, 0);
         uint256 g0 = gasleft();
         bytes32 ref = _direct(tok, t, carol.ua);
-        console2.log(bls ? "bls12-381" : "bn254", "zetherTransferSingle v > 2^32 (direct, auditor, fee) gas", g0 - gasleft());
+        console2.log(bls ? "bls12-381" : "bn254", "mtxConfidentialTransferSingle v > 2^32 (direct, auditor, fee) gas", g0 - gasleft());
         uint256 b1 = b0 - v - FEE;
         assertTrue(_holds(tok, alice, b1, true), "sender acc = b - v - fee");
         assertTrue(_holds(tok, bob, v, false), "receiver pending = v");
@@ -532,11 +535,11 @@ abstract contract ZetherNoneSuite is ZetherFixture {
     function _spendAllAndUnshield(uint256 b1, uint256 v) internal {
         _direct(tok, _proveTransfer(tok, alice, bob, b1, b1, _none(), 0), _none());
         assertTrue(_holds(tok, alice, 0, true), "sender emptied");
-        tok.zetherRollOver(bob.ua);
+        tok.mtxRollOver(ZetherTypes.UA.unwrap(bob.ua), 1);
         uint256 bb = v + b1;
         assertTrue(_holds(tok, bob, bb, true), "receiver acc = v + b1");
         (bytes memory pl, bytes memory pr) = _proveUnshield(tok, bob, bb, bb, address(0xD00D), _none(), 0);
-        tok.zetherUnshield(pl, pr, _none(), address(0xD00D), bb);
+        tok.mtxUnshield(pl, pr, "", bytes32(0), "", bb, bytes32(uint256(uint160(address(0xD00D)))));
         assertEq(tok.balanceOf(address(0xD00D)), bb * SCALE);
         assertEq(tok.totalShielded(), 0, "the fee left the shielded set (D19)");
     }
@@ -544,7 +547,7 @@ abstract contract ZetherNoneSuite is ZetherFixture {
     /// The auditor decrypts the disclosed transfer, nobody's balance.
     function test_auditorSeesTransferButNoBalance() public {
         _fund(tok, alice, 500);
-        tok.zetherRollOver(alice.ua);
+        tok.mtxRollOver(ZetherTypes.UA.unwrap(alice.ua), 1);
         bytes32 ref = _direct(tok, _proveTransfer(tok, alice, bob, 321, 500, _none(), 0), _none());
         (bytes memory ct,) = dis.transferCiphertext(address(tok), ref, 0, "");
         uint256 p = ver.g1EncodedBytes();
@@ -560,14 +563,14 @@ abstract contract ZetherNoneSuite is ZetherFixture {
     /// U9: a spend is authorized by the proof alone: no registry authorization call (only `kindOf`), no `authSig`.
     function test_UA6_spendWithoutAuthSig() public {
         _fund(tok, alice, 100);
-        tok.zetherRollOver(alice.ua);
+        tok.mtxRollOver(ZetherTypes.UA.unwrap(alice.ua), 1);
         Tx memory t1 = _proveTransfer(tok, alice, bob, 30, 100, _none(), 0);
         bytes4 legacyAuth = bytes4(keccak256("requireZetherAuthorized(bytes32,bytes32,bytes,bool)"));
         vm.expectCall(address(reg), abi.encodeWithSelector(legacyAuth), 0);
         vm.expectCall(address(reg), abi.encodeWithSelector(IUARegistry.requireAuthorized.selector), 0);
-        tok.zetherTransferSingle(t1.payload, t1.proof, _none());
+        tok.mtxConfidentialTransferSingle(t1.payload, t1.proof, "", bytes32(0), "");
         (bytes memory pl, bytes memory pr) = _proveUnshield(tok, alice, 20, 70, address(0xD00D), _none(), 0);
-        tok.zetherUnshield(pl, pr, _none(), address(0xD00D), 20);
+        tok.mtxUnshield(pl, pr, "", bytes32(0), "", 20, bytes32(uint256(uint160(address(0xD00D)))));
         (uint256 a,) = _bal(alice);
         assertEq(a, 50);
         assertEq(tok.balanceOf(address(0xD00D)), 20 * SCALE);
@@ -584,10 +587,10 @@ abstract contract ZetherNoneSuite is ZetherFixture {
         ));
         bytes memory wrong = _uaAuth(alice, UAKinds.PURPOSE_METATX, d);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua));
-        tok.zetherSetRollOverMode(alice.ua, ZetherTypes.RollOverMode.OWNER_ONLY, until, wrong);
+        tok.mtxSetRollOverMode(alice.ua, ZetherTypes.RollOverMode.OWNER_ONLY, until, wrong);
         bytes memory sig = _ownerAuth(alice, d);
         vm.expectCall(address(reg), abi.encodeCall(IUARegistry.requireAuthorized, (ua, UAKinds.PURPOSE_ZETHER_OWNER, d, sig)));
-        tok.zetherSetRollOverMode(alice.ua, ZetherTypes.RollOverMode.OWNER_ONLY, until, sig);
+        tok.mtxSetRollOverMode(alice.ua, ZetherTypes.RollOverMode.OWNER_ONLY, until, sig);
         _fund(tok, alice, 10);
         d = keccak256(bytes.concat(
             abi.encode(keccak256("ZETHER_ROLLOVER_V1"), block.chainid, ZUID, address(tok)),
@@ -595,7 +598,7 @@ abstract contract ZetherNoneSuite is ZetherFixture {
         ));
         sig = _ownerAuth(alice, d);
         vm.expectCall(address(reg), abi.encodeCall(IUARegistry.requireAuthorized, (ua, UAKinds.PURPOSE_ZETHER_OWNER, d, sig)));
-        tok.zetherRollOverSigned(alice.ua, 1, until, sig);
+        tok.mtxRollOverSigned(alice.ua, 1, until, sig);
         assertEq(tok.accountState(alice.ua).accSeq, 1);
     }
 
@@ -624,13 +627,13 @@ abstract contract ZetherNoneSuite is ZetherFixture {
         ));
         bytes memory sig = _otherSig(x, d);
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.AccountNotRegistered.selector, id));
-        tok.zetherSetRollOverMode(id, ZetherTypes.RollOverMode.OWNER_ONLY, until, sig);
+        tok.mtxSetRollOverMode(id, ZetherTypes.RollOverMode.OWNER_ONLY, until, sig);
         d = keccak256(abi.encode(
             keccak256("ZETHER_ROLLOVER_V1"), block.chainid, ZUID, address(tok), id, uint64(0), uint64(1), until
         ));
         sig = _otherSig(x, d);
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.AccountNotRegistered.selector, id));
-        tok.zetherRollOverSigned(id, 1, until, sig);
+        tok.mtxRollOverSigned(id, 1, until, sig);
     }
 
     function _otherSig(uint256 x, bytes32 d) internal view returns (bytes memory) {
@@ -639,7 +642,7 @@ abstract contract ZetherNoneSuite is ZetherFixture {
 
     /// U8 (CTR-UA-30 (2), CTR-ZTH-51): the Zether UA's public balance lives on the UA ledger under the same id: it
     /// receives by `transferToUA` and by a UA transfer, signs a `UAMetaTransfer`, and shields its own public units with
-    /// `uaExecute(zetherShield)` (Schnorr by `x` under `metatx`).
+    /// `uaExecute(mtxShield)` (Schnorr by `x` under `metatx`).
     function test_UA6_zetherUaSignsMetaTxAndShields() public {
         bytes32 a = ZetherTypes.UA.unwrap(alice.ua);
         bytes32 b = ZetherTypes.UA.unwrap(bob.ua);
@@ -656,7 +659,7 @@ abstract contract ZetherNoneSuite is ZetherFixture {
         tok.uaExecuteTransfer(t, auth);
         assertEq(tok.balanceOfUA(b), 10 * SCALE);
         MetaTxLib.UAMetaTransaction memory m = MetaTxLib.UAMetaTransaction({
-            from: a, data: abi.encodeCall(ZetherLayer.zetherShield, (alice.y, 40)), batch: 1, nonce: tok.uaNonce(a, 1),
+            from: a, data: abi.encodeCall(ZetherLayer.mtxShield, (ZetherTypes.UA.unwrap(alice.ua), 40)), batch: 1, nonce: tok.uaNonce(a, 1),
             validUntil: block.timestamp + 300, mode: MetaTxLib.MODE_RESTRICT_RELAYER, relayer: relayer, fee: 0,
             feeRecipient: address(0)
         });

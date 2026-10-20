@@ -9,6 +9,7 @@ import {MetaTxLib} from "../common/MetaTxLib.sol";
 import {SSTORE2} from "../common/SSTORE2.sol";
 import {ZetherTypes} from "../zether/ZetherTypes.sol";
 import {IPqzToken} from "./IPqzToken.sol";
+import {IConfidentialToken} from "../confidential/IConfidentialToken.sol";
 import {PqzCt} from "./PqzCt.sol";
 import {PqzSafety} from "./PqzSafety.sol";
 import {UAPqzVerifier} from "./UAPqzVerifier.sol";
@@ -73,7 +74,7 @@ library PqzCore {
         bytes32 chainUid;
         bytes32 binding;
         uint256 amount;
-        address recipient;
+        bytes32 recipient; // a padded address or a derived UA (UA-5c)
         ZetherTypes.TransferMode mode;
     }
 
@@ -86,7 +87,7 @@ library PqzCore {
         bytes32 ben;
         uint256 fee;
         uint256 amount;
-        address recipient;
+        bytes32 recipient;
         uint64 sendCounter;
         uint64 p;
         uint256 validUntil;
@@ -273,7 +274,7 @@ library PqzCore {
         ref = _sent(o);
         _credit(o.to, ptr, 16, 16 + PqzCt.PK, ref);
         _entry(o, ref, ptr, payload, MEMO);
-        emit IPqzToken.PqzTransfer(ref, o.from, o.to, ptr);
+        emit IConfidentialToken.ConfidentialTransfer(ref, o.from, o.to, o.ben, o.fee, o.sendCounter, ptr);
     }
 
     /// @dev `pending[ua] ← (blob, uOff, vOff, block)` (D2); never refused (D7).
@@ -282,7 +283,7 @@ library PqzCore {
         uint64 i = b.pendingCount;
         b.pending[i] = uint256(uint160(ptr)) << 96 | uOff << 80 | vOff << 64 | block.number;
         b.pendingCount = i + 1;
-        emit IPqzToken.PqzCredit(ua, i, ref);
+        emit IPqzToken.Credited(ua, i, ref);
     }
 
     /// @dev A TRIVIAL entry `(amount, block)` (D18): merged into the tail when that is TRIVIAL, of this block and still
@@ -300,13 +301,13 @@ library PqzCore {
             uint64 lo = b.floor > b.rolled ? b.floor : b.rolled;
             if (i >= lo && uint16(e >> 64) == 0 && uint64(e) == block.number && (e >> 96) + amount < VALUE_BOUND) {
                 b.pending[i] = e + (amount << 96);
-                emit IPqzToken.PqzShielded(ua, from, amount, i);
+                emit IConfidentialToken.Shielded(ua, from, amount, i);
                 return;
             }
         }
         b.pending[n] = amount << 96 | block.number;
         b.pendingCount = n + 1;
-        emit IPqzToken.PqzShielded(ua, from, amount, n);
+        emit IConfidentialToken.Shielded(ua, from, amount, n);
     }
 
     /// @dev The entry (D11; NONE retired): `entryPtr` = the op blob in both modes (`R` is its data minus the
@@ -434,7 +435,9 @@ library PqzCore {
         ref = _sent(o);
         _creditLegs(o, ref, payload, ptr);
         _entry(o, ref, ptr, payload, 18 + 40 * o.legs);
-        emit IPqzToken.PqzTransferMulti(ref, o.from, o.to, o.legs, ptr);
+        bytes32[] memory rec = new bytes32[](o.legs);
+        for (uint256 j; j < o.legs; ++j) rec[j] = bytes32(payload[M_OUT + 32 * j:M_OUT + 32 * j + 32]);
+        emit IConfidentialToken.ConfidentialTransferMulti(ref, o.from, o.ben, o.fee, o.sendCounter, rec, uint8(o.mode), ptr);
     }
 
     /// @dev `pending[UA_j] ← (u_{⌊j/4⌋}, v_j)` of the blob, in leg order.
@@ -482,7 +485,7 @@ library PqzCore {
         address ptr = SSTORE2.write(out);
         _debit(o, ptr, 0, PqzCt.PK);
         _sent(o);
-        emit IPqzToken.PqzBurned(o.from, o.amount, o.recipient, ptr);
+        emit IConfidentialToken.Unshielded(o.from, o.amount, o.recipient, ptr);
     }
 
     function prepareBurn(
@@ -494,14 +497,14 @@ library PqzCore {
         PqzStorage storage s = $();
         if (payload.length != B_OUT + PqzCt.CT) revert IPqzToken.BadPayload(payload.length);
         if (e.amount == 0) {
-            if (e.recipient != address(0)) revert IPqzToken.RefreshRecipient(e.recipient);
+            if (e.recipient != 0) revert IPqzToken.RefreshRecipient(e.recipient);
             o.opTag = OP_REFRESH;
         } else {
             if (e.amount > s.maxShielded) revert IPqzToken.AmountOutOfRange(e.amount, s.maxShielded);
-            if (e.recipient == address(0)) revert IPqzToken.ZeroRecipient();
+            if (e.recipient == 0) revert IPqzToken.ZeroRecipient();
             // D19: the pools are no payees (the unshield pays from `SHIELD_POOL`, the unwrap from a leg)
-            if (e.recipient == MetaTxLib.SHIELD_POOL) revert IUALedger.ShieldPoolNotPayable();
-            if (e.recipient == MetaTxLib.UA_POOL) revert IUALedger.UAPoolNotPayable();
+            if (e.recipient == MetaTxLib.pad(MetaTxLib.SHIELD_POOL)) revert IUALedger.ShieldPoolNotPayable();
+            if (e.recipient == MetaTxLib.pad(MetaTxLib.UA_POOL)) revert IUALedger.UAPoolNotPayable();
             o.opTag = OP_BURN;
         }
         o.op = 2;
@@ -621,7 +624,7 @@ library PqzCore {
 
 
 
-    /// @dev `pqzTransfer`'s form: BUNDLE on a BUNDLE token, commit-reveal (HASH) on a COMPACT one.
+    /// @dev `mtxConfidentialTransfer`'s form: BUNDLE on a BUNDLE token, commit-reveal (HASH) on a COMPACT one.
     function _defaultMode() internal view returns (ZetherTypes.TransferMode) {
         return $().disclosureMode == ZetherTypes.DisclosureMode.COMPACT
             ? ZetherTypes.TransferMode.HASH
@@ -757,7 +760,7 @@ library PqzCore {
         for (uint64 i = a.cleared; i < p; ++i) delete a.pending[i];
         a.cleared = p;
         s.totalShielded = s.totalShielded + o.shieldIn - o.fee - o.amount;
-        emit IPqzToken.PqzDebited(o.from, p, p, ptr);
+        emit IPqzToken.Debited(o.from, p, p, ptr);
     }
 
     /// @dev `sendCounter++`; the debit's `entryRef` (counter before the increment).

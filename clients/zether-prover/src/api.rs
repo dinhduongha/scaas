@@ -134,7 +134,7 @@ fn ct_json<C: ZCurve>(c: &Ciphertext<C>) -> Value {
     json!({"C": hx(&encode_point::<C>(&c.c)), "D": hx(&encode_point::<C>(&c.d))})
 }
 
-/// `envelopeBinding` (relayed), or `unwrapBinding` (a direct `zetherUnshieldUnwrap`, burns only), or direct.
+/// `envelopeBinding` (relayed), or `unwrapBinding` (a direct `mtxUnshieldUnwrap`, burns only), or direct.
 /// Both at once, or `unwrapBinding` on a transfer, is refused: the token never builds such a statement. The memo word
 /// is the prove functions' (0 on a burn).
 fn header(v: &Value, amount: u64, recipient: [u8; 20], burn: bool) -> R<Header> {
@@ -172,8 +172,8 @@ fn sc<C: ZCurve>(s: &Fr<C>) -> String {
     hx(&encode_scalar::<C>(s))
 }
 
-/// `zetherTransferSingle` — a direct call has no outer fee; relayed, the same bytes are the envelope's `data`.
-const TRANSFER_SINGLE: &str = "zetherTransferSingle(bytes,bytes,bytes32)";
+/// `mtxConfidentialTransferSingle` — a direct call has no outer fee; relayed, the same bytes are the envelope's `data`.
+const TRANSFER_SINGLE: &str = "mtxConfidentialTransferSingle(bytes,bytes,bytes,bytes32,bytes)";
 
 fn opt_str<'a>(v: &'a Value, k: &str) -> R<Option<&'a str>> {
     match v.get(k).filter(|x| !x.is_null()) {
@@ -204,14 +204,14 @@ fn y_aud<C: ZCurve>(v: &Value) -> R<G<C>> {
     }
 }
 
-/// The entry of a stored form (CTR-ZTH-38): `zetherTransfer` is the token's default (BUNDLE, or commit-reveal on a
-/// COMPACT token), `zetherTransferCompact` commit-reveal on every token, `zetherTransferNoBundle` NONE.
+/// The entry of a stored form (CTR-ZTH-38): `mtxConfidentialTransfer` is the token's default (BUNDLE, or commit-reveal
+/// on a COMPACT token), `mtxConfidentialTransferCompact` commit-reveal on every token, `…NoBundle` NONE.
 fn transfer_multi_sig(mode: TransferMode, compact: bool) -> &'static str {
     match mode {
-        TransferMode::Bundle => "zetherTransfer(bytes,bytes,bytes32)",
-        TransferMode::Hash if compact => "zetherTransfer(bytes,bytes,bytes32)",
-        TransferMode::Hash => "zetherTransferCompact(bytes,bytes,bytes32)",
-        TransferMode::NoBundle => "zetherTransferNoBundle(bytes,bytes,bytes32)",
+        TransferMode::Bundle => "mtxConfidentialTransfer(bytes,bytes,bytes,bytes32,bytes)",
+        TransferMode::Hash if compact => "mtxConfidentialTransfer(bytes,bytes,bytes,bytes32,bytes)",
+        TransferMode::Hash => "mtxConfidentialTransferCompact(bytes,bytes,bytes,bytes32,bytes)",
+        TransferMode::NoBundle => "mtxConfidentialTransferNoBundle(bytes,bytes,bytes,bytes32,bytes)",
     }
 }
 
@@ -254,7 +254,7 @@ pub fn prove_transfer_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v
 
 /// `recipients`: `[{"yTo", "amount"}, …]` (decoys with amount 0); `mode`, the stored form: `bundle` | `compact` |
 /// `none`, by default the token's (`disclosureMode` `"bundle"`, the default: `bundle`; `"compact"`: `compact`, the only
-/// form it takes), so the calldata calls `zetherTransfer` unless a gas-saving form is asked for. `yAud` absent or null leaves the auditor out (statement `Y_a = O`, every `C_aud = O`): required on a token
+/// form it takes), so the calldata calls `mtxConfidentialTransfer` unless a gas-saving form is asked for. `yAud` absent or null leaves the auditor out (statement `Y_a = O`, every `C_aud = O`): required on a token
 /// without auditor, refused on a `FULL` one, the sender's choice on an `OPTIONAL` one (`auditorMode`, checked when
 /// given); the same holds for `proveTransfer`. Relayed like the single format (`envelopeBinding`, CTR-ZTH-34).
 pub fn prove_transfer_multi_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v: &Value, rng: &mut Rn) -> R<Value> {
@@ -315,7 +315,7 @@ pub fn prove_burn_json<C: ZCurve, Rn: RngCore + CryptoRng>(gens: &Gens<C>, v: &V
         "proof": hx(&proof),
         "payload": hx(&payload),
     });
-    // An unwrap-bound proof fits only `zetherUnshieldUnwrap` (no builder yet, K15): `zetherUnshield` would refuse it.
+    // An unwrap-bound proof fits only `mtxUnshieldUnwrap` (no builder yet, K15): `mtxUnshield` would refuse it.
     if !matches!(h.binding, Binding::Unwrap(_)) {
         out["directCalldata"] = hx(&envelope::unshield_call(&payload, &proof, &h.beneficiary, &recipient, amount)).into();
     }
@@ -642,7 +642,7 @@ fn by_curve<C: ZCurve>(cmd: &str, v: &Value, rng: &mut OsRng) -> R<Value> {
                 "pop": hx(&schnorr::zether_pop(&k, chain, &uid, &reg, rng)),
             }))
         }
-        // A self account's owner op (roll-over, mode): `sig` for `zetherRollOverSigned` / `zetherSetRollOverMode`.
+        // A self account's owner op (roll-over, mode): `sig` for `mtxRollOverSigned` / `mtxSetRollOverMode`.
         "ownerAuth" => {
             let k = key::<C>(v)?;
             let d = fixed::<32>(v, "digest")?;
@@ -664,8 +664,9 @@ fn by_curve<C: ZCurve>(cmd: &str, v: &Value, rng: &mut OsRng) -> R<Value> {
             Ok(json!({"uaMsg": hx(&m), "sig": hx(&schnorr::sign(&k, &m, rng))}))
         }
         "shieldCalldata" => {
-            let mut d = envelope::selector("zetherShield(bytes,uint256)").to_vec();
-            d.extend(abi::encode(&[Tok::Bytes(encode_point::<C>(&point::<C>(v, "Y")?)), Tok::Word(abi::u256(num(v, "amount")?))]));
+            // `mtxShield(bytes32 toUA, uint256 amount)`: the Zether key is the UA (CTR-UA-30)
+            let mut d = envelope::selector("mtxShield(bytes32,uint256)").to_vec();
+            d.extend(abi::encode(&[Tok::Word(ua_of::<C>(&point::<C>(v, "Y")?)), Tok::Word(abi::u256(num(v, "amount")?))]));
             Ok(json!({"calldata": hx(&d)}))
         }
         _ => Err(format!("unknown command `{cmd}`")),

@@ -43,8 +43,8 @@ contract PqzRelayTest is PqzFixture {
 
     function test_v1BindingAndFee() public {
         _public(tok, signer, 10 * SCALE + 7);
-        // pqzShield from the signer's public balance, relayed with a fixed fee
-        MetaTxLib.MetaTransaction memory m = _m(abi.encodeCall(PqzLayer.pqzShield, (alice, 10)), 0, 7);
+        // mtxShield from the signer's public balance, relayed with a fixed fee
+        MetaTxLib.MetaTransaction memory m = _m(abi.encodeCall(PqzLayer.mtxShield, (alice, 10)), 0, 7);
         bytes memory sg = _sig(m);
         vm.prank(relayer);
         tok.mtxExecute(m, sg);
@@ -55,7 +55,7 @@ contract PqzRelayTest is PqzFixture {
         // a transfer inside an envelope: the statement carries envelopeBinding(m)
         bytes memory out = _out(1, true);
         bytes memory pl = _payload(1, 0, alice, bob, bytes32(0), out, "");
-        bytes memory data = abi.encodeCall(PqzLayer.pqzTransferSingle, (pl, bytes(""), hex"c0de", _mlAuth()));
+        bytes memory data = abi.encodeCall(PqzLayer.mtxConfidentialTransferSingle, (pl, hex"c0de", _mlAuth(), _benT(pl), bytes("")));
         m = _m(data, 1, 0);
         bytes32 b = tok.envelopeBinding(m);
         assertTrue(b != 0);
@@ -67,7 +67,7 @@ contract PqzRelayTest is PqzFixture {
         _mockOp(1, 0);
         vm.mockCall(PQZ, abi.encodePacked(uint8(1), uint32(83_072), st, hex"c0de"), abi.encode(uint256(1)));
         vm.expectRevert(IPqzToken.ProofRejected.selector);
-        tok.pqzTransferSingle(pl, "", hex"c0de", _mlAuth()); // stripped out of its envelope: the direct binding
+        tok.mtxConfidentialTransferSingle(pl, hex"c0de", _mlAuth(), _benT(pl), ""); // stripped out of its envelope: the direct binding
         MetaTxLib.MetaTransaction memory other = _m(data, 2, 0); // another nonce: another binding
         sg = _sig(other);
         vm.expectRevert(); // MetaTxBadNonce first; with nonce 1 used elsewhere the binding would differ
@@ -75,24 +75,24 @@ contract PqzRelayTest is PqzFixture {
         sg = _sig(m);
         uint256 g = gasleft();
         tok.mtxExecute(m, sg);
-        console2.log("pqzTransfer in a v1 envelope (mocked proof) gas", g - gasleft());
+        console2.log("mtxConfidentialTransfer in a v1 envelope (mocked proof) gas", g - gasleft());
         assertEq(tok.pqzAccount(alice).sendCounter, 1);
     }
 
     function test_percentAndBatchRefused() public {
         _public(tok, signer, 10 * SCALE);
-        MetaTxLib.MetaTransaction memory m = _m(abi.encodeCall(PqzLayer.pqzShield, (alice, 1)), 0, 0);
+        MetaTxLib.MetaTransaction memory m = _m(abi.encodeCall(PqzLayer.mtxShield, (alice, 1)), 0, 0);
         m.mode = MetaTxLib.MODE_FEE_PERCENT;
         m.fee = 100;
         bytes memory sg = _sig(m);
-        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxFeeClass.selector, PqzLayer.pqzShield.selector, m.mode));
+        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxFeeClass.selector, PqzLayer.mtxShield.selector, m.mode));
         tok.mtxExecute(m, sg);
-        m = _m(abi.encodeCall(PqzLayer.pqzShield, (alice, 1)), 0, 0);
+        m = _m(abi.encodeCall(PqzLayer.mtxShield, (alice, 1)), 0, 0);
         MetaTxLib.MetaTransaction[] memory ms = new MetaTxLib.MetaTransaction[](1);
         ms[0] = m;
         bytes[] memory sigs = new bytes[](1);
         sigs[0] = _sig(m);
-        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxNotBatchable.selector, PqzLayer.pqzShield.selector));
+        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxNotBatchable.selector, PqzLayer.mtxShield.selector));
         tok.mtxBatch(ms, sigs);
         // a non-PQZ selector still batches
         m = _m(abi.encodeWithSignature("burn(uint256)", 1), 0, 0);
@@ -107,7 +107,7 @@ contract PqzRelayTest is PqzFixture {
         minted += 20 * SCALE + 5;
         MetaTxLib.UAMetaTransaction memory m;
         m.from = fee;
-        m.data = abi.encodeCall(PqzLayer.pqzShield, (alice, 20));
+        m.data = abi.encodeCall(PqzLayer.mtxShield, (alice, 20));
         m.validUntil = block.timestamp + 1 hours;
         m.mode = MetaTxLib.MODE_FEE_FIXED;
         m.fee = 5;
@@ -122,7 +122,7 @@ contract PqzRelayTest is PqzFixture {
         NoUnderlyingPqzToken(address(tok)).mintToUA(fee, 2 * SCALE);
         minted += 2 * SCALE;
         bytes memory pl = _payload(1, 2, alice, bob, bytes32(0), _out(2, false), "");
-        m.data = abi.encodeCall(PqzLayer.pqzTransferSingle, (pl, bytes(""), hex"c0de", _mlAuth()));
+        m.data = abi.encodeCall(PqzLayer.mtxConfidentialTransferSingle, (pl, hex"c0de", _mlAuth(), _benT(pl), bytes("")));
         m.nonce = 1;
         m.mode = 0;
         m.fee = 0;
@@ -134,7 +134,7 @@ contract PqzRelayTest is PqzFixture {
         vm.mockCall(PQZ, abi.encodePacked(uint8(1), uint32(66_560), st, hex"c0de"), abi.encode(uint256(1)));
         uint256 g = gasleft();
         tok.uaExecute(m, _mlAuth());
-        console2.log("pqzTransfer in a v3 envelope (mldsa65 fee UA, mocked proof) gas", g - gasleft());
+        console2.log("mtxConfidentialTransfer in a v3 envelope (mldsa65 fee UA, mocked proof) gas", g - gasleft());
         assertEq(tok.pqzAccount(alice).sendCounter, 1);
         assertEq(tok.balanceOfUA(fee), 0, "shieldIn moved from the signing UA's ledger balance to the pool");
         assertEq(tok.totalShielded(), 22);
@@ -143,7 +143,7 @@ contract PqzRelayTest is PqzFixture {
         ms[0] = m;
         bytes[] memory auths = new bytes[](1);
         auths[0] = _mlAuth();
-        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxNotBatchable.selector, PqzLayer.pqzTransferSingle.selector));
+        vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxNotBatchable.selector, PqzLayer.mtxConfidentialTransferSingle.selector));
         tok.uaBatch(ms, auths);
         // UA-6: a holder is a signing UA, so alice (registered with her PQZ key in one call) signs an envelope herself;
         // the same envelope under a signature the `mldsa65` precompile rejects is refused (no `authRef`, no foreign signer)
@@ -151,7 +151,7 @@ contract PqzRelayTest is PqzFixture {
         minted += 3 * SCALE;
         MetaTxLib.UAMetaTransaction memory h;
         h.from = alice;
-        h.data = abi.encodeCall(PqzLayer.pqzShield, (bob, 3));
+        h.data = abi.encodeCall(PqzLayer.mtxShield, (bob, 3));
         h.validUntil = block.timestamp + 1 hours;
         vm.mockCall(ML65, bytes(""), abi.encode(uint256(0))); // every ML-DSA verification now fails
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, alice));

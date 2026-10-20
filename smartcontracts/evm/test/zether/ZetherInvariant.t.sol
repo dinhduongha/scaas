@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
+import {IConfidentialUnderlyingToken} from "../../src/confidential/IConfidentialToken.sol";
 import {ZetherFixture, ZUID} from "./helpers/ZetherFixture.sol";
 import {IOpenFactory} from "../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
@@ -81,7 +82,7 @@ contract ZetherHandler is ZetherFixture {
             _fund(tok, us[i], 7);
             pend[i] += 7;
         }
-        tok.zetherRollOver(us[i].ua);
+        tok.mtxRollOver(ZetherTypes.UA.unwrap(us[i].ua), 1);
         acc[i] += pend[i];
         pend[i] = 0;
     }
@@ -94,7 +95,7 @@ contract ZetherHandler is ZetherFixture {
         leg[l].mint(address(this), inAmt);
         leg[l].approve(address(w), inAmt);
         s0 = w.totalSupply();
-        w.zetherWrapShield(address(leg[l]), inAmt, us[i].ua);
+        w.mtxWrapShield(address(leg[l]), inAmt, ZetherTypes.UA.unwrap(us[i].ua));
         require(w.totalSupply() == s0 + amt * SCALE, "wrap-shield mints exactly to the pool");
         pend[i] += amt;
     }
@@ -108,14 +109,14 @@ contract ZetherHandler is ZetherFixture {
         amt = bound(amt, 1, 50);
         _public(tok, address(this), amt * SCALE);
         s0 = w.totalSupply();
-        tok.zetherShield(us[i % 3].y, amt);
+        tok.mtxShield(ZetherTypes.UA.unwrap(ZetherTypes.toUA(us[i % 3].y)), amt);
         require(w.totalSupply() == s0, "shield moves, not burns");
         pend[i % 3] += amt;
     }
 
     function rollOver(uint8 i) external noLoss {
         i %= 3;
-        tok.zetherRollOver(us[i].ua);
+        tok.mtxRollOver(ZetherTypes.UA.unwrap(us[i].ua), 1);
         acc[i] += pend[i];
         pend[i] = 0;
     }
@@ -177,10 +178,9 @@ contract ZetherHandler is ZetherFixture {
 
     function _uu(uint8 i, uint8 l, uint256 amt, uint256 out, ZetherTypes.UA ben) internal {
         bytes memory pl = _unshieldPayload(tok, us[i]);
-        bytes memory st = stm.unshieldUnwrapStatement(address(w), pl, amt, address(0xD00D), ben, address(leg[l]), out, 0);
+        bytes memory st = stm.unshieldUnwrapStatement(address(w), pl, amt, bytes32(uint256(uint160(address(0xD00D)))), ben, address(leg[l]), out, 0);
         s0 = w.totalSupply();
-        w.zetherUnshieldUnwrap(pl, _proveU(us[i], st, amt, acc[i], ben, tok), ben, address(leg[l]),
-            address(0xD00D), amt, out);
+        w.mtxUnshieldUnwrap(pl, _proveU(us[i], st, amt, acc[i], ben, tok), "", ZetherTypes.UA.unwrap(ben), "", IConfidentialUnderlyingToken.Unwrap(address(leg[l]), bytes32(uint256(uint160(address(0xD00D)))), amt, out));
         require(w.totalSupply() == s0 - amt * SCALE, "unshield-unwrap burns exactly from the pool");
     }
 
@@ -192,7 +192,7 @@ contract ZetherHandler is ZetherFixture {
         (ZetherTypes.UA ben, uint256 fee) = _ben(k, i, amt);
         (bytes memory pl, bytes memory pr) = _proveUnshield(tok, us[i], amt, acc[i], address(this), ben, 0);
         s0 = w.totalSupply();
-        tok.zetherUnshield(pl, pr, ben, address(this), amt);
+        tok.mtxUnshield(pl, pr, "", ZetherTypes.UA.unwrap(ben), "", amt, bytes32(uint256(uint160(address(this)))));
         require(w.totalSupply() == s0, "unshield moves, not mints");
         acc[i] -= amt + fee;
         if (fee != 0) feeUA[uint8(k % 3)] += fee * SCALE;

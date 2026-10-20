@@ -54,7 +54,7 @@ abstract contract ZetherProverCrossSuite is ZetherFixture {
         (dMode, aMode) = (d, a);
         t = _newToken(auditor, name);
         _fund(t, alice, B);
-        t.zetherRollOver(alice.ua);
+        t.mtxRollOver(ZetherTypes.UA.unwrap(alice.ua), 1);
     }
 
     /// @dev The prove request: alice's state, the fee to carol, the modes, `yAud` (null = left out), `extra` fields.

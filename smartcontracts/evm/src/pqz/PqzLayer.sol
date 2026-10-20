@@ -13,21 +13,24 @@ import {PqzTransferLib} from "./PqzTransferLib.sol";
 import {PqzViewLib} from "./PqzViewLib.sol";
 import {ENV_PQZ_VERIFIER} from "../factory/IFactoryToken.sol";
 import {SSTORE2} from "../common/SSTORE2.sol";
+import {UAKinds} from "../ua/UAKinds.sol";
 
 /// @title The PQZ layer of the kinds `NONE_PQZ` and `UNDERLYING_PQZ` (CTR-PQZ-15, CTR-PQZ-22; P6g plan D1): the entry
 ///        points and views of pq-zero-knowledge.md §9.4; the state and the logic are the four libraries (`scaas.pqz`; D14).
 /// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Chains 31337 / 1337 / 7622 only (`PqzSafety`). A layer over the
-///         public ERC-20 balance: `pqzShield` moves public units to `SHIELD_POOL` into a TRIVIAL pending entry (no
+///         public ERC-20 balance: `mtxShield` moves public units to `SHIELD_POOL` into a TRIVIAL pending entry (no
 ///         proof, any holder, free; plan 5h D18, D19), every debit may top up `shieldIn` from the signer's public
-///         balance in the same call, `pqzUnshield` moves units out of the pool; fees (txFee to the beneficiary, op 7's
+///         balance in the same call, `mtxUnshield` moves units out of the pool (to an address or a signing UA); fees (txFee to the beneficiary, op 7's
 ///         `decoyFee` to every leg) go from the pool to public UA-ledger balances. Nothing is minted or burnt by the
 ///         layer: `balanceOf(SHIELD_POOL) == totalShielded · shieldScale`. Ciphertexts, `acc` and the queue
 ///         live in state (plan 5h D1–D9): debits take an optional `accHint`, rollovers are `(ua, n)` by anyone. The verifier (precompile and proof system) is an
 ///         implementation immutable (CTR-ZTH-20 / CTR-PQZ-10), so the proof system is an attribute of the release; the
-///         auditor UA and the two modes are fixed at creation. Every entry point is `nonReentrant`; the PQZ selectors are
-///         allowlisted on both relaying paths (fee class `ABSOLUTE`) and never batched (CTR-PQZ-21). A holder is a signing
-///         UA: `authSig` is that UA's own signature over the statement digest, and its PQZ key is a record attribute
-///         (UA-6 U7); a UA without the key is refused as sender, leg, beneficiary, shield target and auditor.
+///         auditor UA and the two modes are fixed at creation. Every entry point is `nonReentrant`; the shared entry
+///         points are `IConfidentialToken`'s (plan 5h D20), allowlisted on both relaying paths (fee class `ABSOLUTE`)
+///         and never batched (CTR-PQZ-21); the rollover and `mtxPrepareAcc` are not (CTR-ZTH-34). A holder is a signing
+///         UA: `auth` is that UA's own signature over the statement digest, and its PQZ key is a record attribute
+///         (UA-6 U7); a UA without the key is refused as sender, leg, beneficiary, shield target and auditor. The shared
+///         `beneficiary` must be the payload's (`BeneficiaryMismatch`).
 abstract contract PqzLayer is MetaTokenBase, IPqzToken {
     /// @dev The `UAPqzVerifier` of this release; `init` takes the precompile and the proof system from it.
     address internal immutable PQZ_VERIFIER;
@@ -108,13 +111,13 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
         return PqzViewLib.statementOf(7, _envOf(binding), payload);
     }
 
-    /// @notice The op 1 statement of a single-recipient `payload` (`pqzTransferSingle*`; `binding` as above).
+    /// @notice The op 1 statement of a single-recipient `payload` (`mtxConfidentialTransferSingle*`; `binding` as above).
     function transferSingleStatement(bytes calldata payload, bytes32 binding) external view returns (bytes memory) {
         return PqzViewLib.statementOf(1, _envOf(binding), payload);
     }
 
     /// @notice The burn (`amount > 0`) or refresh (`amount = 0`, `recipient = 0`) statement.
-    function burnStatement(bytes calldata payload, uint256 amount, address recipient, bytes32 binding)
+    function burnStatement(bytes calldata payload, uint256 amount, bytes32 recipient, bytes32 binding)
         external view returns (bytes memory)
     {
         PqzCore.Env memory e = _envOf(binding);
@@ -154,9 +157,9 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
     // ------------------------------------------------------------------ shield (§7.3, P6g plan D1)
 
     /// @notice Moves `amount · shieldScale` public units of the signer to `SHIELD_POOL` (D19) into a TRIVIAL entry of
-    ///         `ua` (plan 5h D18); free, into any holder (owner 2026-10-20).
-    function pqzShield(bytes32 ua, uint256 amount) external nonReentrant {
-        PqzStateLib.shield(ua, amount, _msgSender(), _REGISTRY);
+    ///         `toUA` (plan 5h D18); free, into any holder (owner 2026-10-20).
+    function mtxShield(bytes32 toUA, uint256 amount) external nonReentrant {
+        PqzStateLib.shield(toUA, amount, _msgSender(), _REGISTRY);
         _toPool(amount);
     }
 
@@ -165,60 +168,76 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
     /// @notice The multi-recipient transfer, op 7 `R_TXM` (`M` legs, decoys included; CTR-PQZ-26), in the token's
     ///         default form: the bundle stored (BUNDLE token) or commit-reveal (COMPACT token). `accHint`: optional,
     ///         the materialised `acc` (used only when it hashes to `accHash`; plan 5h D5).
-    function pqzTransfer(bytes calldata payload, bytes calldata accHint, bytes calldata proof, bytes calldata authSig)
-        external nonReentrant returns (bytes32 r)
+    function mtxConfidentialTransfer(bytes calldata payload, bytes calldata proof, bytes calldata auth,
+        bytes32 beneficiary, bytes calldata accHint) external nonReentrant returns (bytes32)
     {
-        PqzCore.Paid memory f;
-        (r, f) = PqzTransferLib.transferMulti(_envTransfer(_defaultMode()), payload, accHint, proof, authSig);
-        _pay(f, payload);
+        _ben(payload, 128, beneficiary);
+        return _transfer(_envTransfer(_defaultMode()), true, payload, proof, auth, accHint);
     }
 
-    function pqzTransferCompact(bytes calldata payload, bytes calldata accHint, bytes calldata proof,
-        bytes calldata authSig) external nonReentrant returns (bytes32 r)
+    function mtxConfidentialTransferCompact(bytes calldata payload, bytes calldata proof, bytes calldata auth,
+        bytes32 beneficiary, bytes calldata accHint) external nonReentrant returns (bytes32)
     {
-        PqzCore.Paid memory f;
-        (r, f) = PqzTransferLib.transferMulti(_envTransfer(ZetherTypes.TransferMode.HASH), payload, accHint, proof, authSig);
-        _pay(f, payload);
+        _ben(payload, 128, beneficiary);
+        return _transfer(_envTransfer(ZetherTypes.TransferMode.HASH), true, payload, proof, auth, accHint);
     }
 
     /// @notice The single-recipient transfer, op 1 `R_TX` / `R_TX0` (§7.4), in the token's default form.
-    function pqzTransferSingle(bytes calldata payload, bytes calldata accHint, bytes calldata proof,
-        bytes calldata authSig) external nonReentrant returns (bytes32 r)
+    function mtxConfidentialTransferSingle(bytes calldata payload, bytes calldata proof, bytes calldata auth,
+        bytes32 beneficiary, bytes calldata accHint) external nonReentrant returns (bytes32)
     {
-        PqzCore.Paid memory f;
-        (r, f) = PqzTransferLib.transfer(_envTransfer(_defaultMode()), payload, accHint, proof, authSig);
-        _pay(f, payload);
+        _ben(payload, 160, beneficiary);
+        return _transfer(_envTransfer(_defaultMode()), false, payload, proof, auth, accHint);
     }
 
-    function pqzTransferSingleCompact(bytes calldata payload, bytes calldata accHint, bytes calldata proof,
-        bytes calldata authSig) external nonReentrant returns (bytes32 r)
+    function mtxConfidentialTransferSingleCompact(bytes calldata payload, bytes calldata proof, bytes calldata auth,
+        bytes32 beneficiary, bytes calldata accHint) external nonReentrant returns (bytes32)
+    {
+        _ben(payload, 160, beneficiary);
+        return _transfer(_envTransfer(ZetherTypes.TransferMode.HASH), false, payload, proof, auth, accHint);
+    }
+
+    /// @dev Op 7 (`multi`) or op 1 in the form of `e.mode`; the token pays what the library moved.
+    function _transfer(PqzCore.Env memory e, bool multi, bytes calldata payload, bytes calldata proof,
+        bytes calldata auth, bytes calldata accHint) private returns (bytes32 r)
     {
         PqzCore.Paid memory f;
-        (r, f) = PqzTransferLib.transfer(_envTransfer(ZetherTypes.TransferMode.HASH), payload, accHint, proof, authSig);
+        if (multi) (r, f) = PqzTransferLib.transferMulti(e, payload, accHint, proof, auth);
+        else (r, f) = PqzTransferLib.transfer(e, payload, accHint, proof, auth);
         _pay(f, payload);
     }
 
     // ------------------------------------------------------------------ burn and refresh (§7.5)
 
-    /// @notice Burn `amount` into `amount · shieldScale` public units moved from `SHIELD_POOL` to `recipient` (D19; the
-    ///         pools are refused); `amount = 0` with `recipient = 0` is a refresh.
-    function pqzUnshield(bytes calldata payload, bytes calldata accHint, uint256 amount, address recipient,
-        bytes calldata proof, bytes calldata authSig) external nonReentrant
+    /// @notice Burn `amount` into `amount · shieldScale` public units moved from `SHIELD_POOL` to `recipient` (D19): a
+    ///         padded address (the pools refused) or a registered SIGNING UA, credited on the UA ledger (UA-5c);
+    ///         `amount = 0` with `recipient = 0` is a refresh.
+    function mtxUnshield(bytes calldata payload, bytes calldata proof, bytes calldata auth, bytes32 beneficiary,
+        bytes calldata accHint, uint256 amount, bytes32 recipient) external nonReentrant
     {
-        _pay(PqzBurnLib.unshield(_envBurn(amount, recipient), payload, accHint, proof, authSig), payload);
-        _fromPool(MetaTxLib.pad(recipient), amount);
+        _ben(payload, 128, beneficiary);
+        if (!UAKinds.inNativeSpace(recipient)) _requireDerivedReceiver(recipient);
+        _burn(_envBurn(amount, recipient), payload, proof, auth, accHint);
+        _fromPool(recipient, amount);
+    }
+
+    /// @dev The burn / refresh debit of `e` (also `mtxUnshieldUnwrap`'s); the token pays what the library moved.
+    function _burn(PqzCore.Env memory e, bytes calldata payload, bytes calldata proof, bytes calldata auth,
+        bytes calldata accHint) internal
+    {
+        _pay(PqzBurnLib.unshield(e, payload, accHint, proof, auth), payload);
     }
 
     // ------------------------------------------------------------------ rollover (§7.6, plan 5h D8)
 
     /// @notice Anyone: the next `min(n, K_MAX − 1 − accUnits)` entries of `ua` into its `acc`, in order, each at least
     ///         `ROLL_AGE` blocks old; `1 ≤ n ≤ ROLL_MAX`.
-    function pqzRollOver(bytes32 ua, uint256 n) external nonReentrant {
+    function mtxRollOver(bytes32 ua, uint256 n) external nonReentrant {
         PqzStateLib.rollOver(ua, n);
     }
 
     /// @notice Anyone, once per account and half (0, 1) before its first rollover (idempotent).
-    function pqzPrepareAcc(bytes32 ua, uint256 half) external nonReentrant {
+    function mtxPrepareAcc(bytes32 ua, uint256 half) external nonReentrant {
         PqzStateLib.prepareAcc(ua, half, _REGISTRY);
     }
 
@@ -229,10 +248,10 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
     }
 
     function _envOf(bytes32 binding) internal view returns (PqzCore.Env memory) {
-        return PqzCore.Env(_REGISTRY, CHAIN_UID, binding, 0, address(0), ZetherTypes.TransferMode.BUNDLE);
+        return PqzCore.Env(_REGISTRY, CHAIN_UID, binding, 0, 0, ZetherTypes.TransferMode.BUNDLE);
     }
 
-    /// @dev `pqzTransfer`'s form: BUNDLE on a BUNDLE token, commit-reveal (HASH) on a COMPACT one.
+    /// @dev `mtxConfidentialTransfer`'s form: BUNDLE on a BUNDLE token, commit-reveal (HASH) on a COMPACT one.
     function _defaultMode() internal view returns (ZetherTypes.TransferMode) {
         return PqzCore.$().disclosureMode == ZetherTypes.DisclosureMode.COMPACT
             ? ZetherTypes.TransferMode.HASH
@@ -272,7 +291,16 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
         }
     }
 
-    function _envBurn(uint256 amount, address recipient) internal view returns (PqzCore.Env memory e) {
+    /// @dev The shared `beneficiary` is the payload's word at `off` (op 7 and burn 128, op 1 160); a payload too short
+    ///      for it is left to the library (`BadPayload`).
+    function _ben(bytes calldata payload, uint256 off, bytes32 beneficiary) internal pure {
+        if (payload.length >= off + 32) {
+            bytes32 b = bytes32(payload[off:off + 32]);
+            if (b != beneficiary) revert BeneficiaryMismatch(b, beneficiary);
+        }
+    }
+
+    function _envBurn(uint256 amount, bytes32 recipient) internal view returns (PqzCore.Env memory e) {
         e = _env();
         (e.amount, e.recipient) = (amount, recipient);
     }
@@ -292,20 +320,21 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
             m.nonce, m.validUntil, m.mode, r, m.fee, f));
     }
 
-    /// @dev The PQZ ops of both kinds (CTR-PQZ-21): allowlisted `ABSOLUTE` on both paths, never batched.
+    /// @dev The PQZ ops of both kinds (CTR-PQZ-21): allowlisted `ABSOLUTE` on both paths, never batched; not the
+    ///      rollover or `mtxPrepareAcc` (anyone calls them directly, CTR-ZTH-34).
     function _isPqzOp(bytes4 sel) internal pure virtual returns (bool) {
-        return sel == this.pqzShield.selector || sel == this.pqzTransfer.selector
-            || sel == this.pqzTransferCompact.selector
-            || sel == this.pqzTransferSingle.selector || sel == this.pqzTransferSingleCompact.selector
-            || sel == this.pqzUnshield.selector || sel == this.pqzRollOver.selector;
+        return sel == this.mtxShield.selector || sel == this.mtxConfidentialTransfer.selector
+            || sel == this.mtxConfidentialTransferCompact.selector
+            || sel == this.mtxConfidentialTransferSingle.selector
+            || sel == this.mtxConfidentialTransferSingleCompact.selector || sel == this.mtxUnshield.selector;
     }
 
     function _batchable(bytes4 sel) internal view virtual override returns (bool) {
         return !_isPqzOp(sel);
     }
 
-    /// @dev `pqzShield` has a static shape (68 bytes); the others carry `bytes`.
+    /// @dev `mtxShield` has a static shape (68 bytes); the others carry `bytes`.
     function _pqzRule(bytes4 sel) internal pure returns (MtxRule memory) {
-        return MtxRule(FEE_CLASS_ABSOLUTE, 0, sel == this.pqzShield.selector ? 68 : 0);
+        return MtxRule(FEE_CLASS_ABSOLUTE, 0, sel == this.mtxShield.selector ? 68 : 0);
     }
 }

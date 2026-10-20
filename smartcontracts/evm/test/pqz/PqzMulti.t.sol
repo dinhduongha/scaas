@@ -14,7 +14,7 @@ import {NoUnderlyingPqzToken} from "../../src/pqz/NoUnderlyingPqzToken.sol";
 import {OpenFactory} from "../../src/factory/OpenFactory.sol";
 import {Catalogue, pqzEnv} from "../helpers/Catalogue.sol";
 
-/// Op 7, the multi-recipient transfer (CTR-PQZ-25 / -26; P6g op 7): `pqzTransfer*` with `M` legs (decoys included),
+/// Op 7, the multi-recipient transfer (CTR-PQZ-25 / -26; P6g op 7): `mtxConfidentialTransfer*` with `M` legs (decoys included),
 /// the statement against pq-zero-knowledge.md §8.1 op 7, the effects per leg, the bundle (for `M = 1` the single
 /// transfer's), disclosure by leg, `decoyFee`, the PQZH limits. The precompile is mocked; the rest is real.
 contract PqzMultiTest is PqzFixture {
@@ -44,7 +44,7 @@ contract PqzMultiTest is PqzFixture {
         internal returns (bytes32 ref, bytes memory out)
     {
         out = _blob(seed, _outLen(rec.length, aud));
-        ref = t.pqzTransfer(_mplFor(t, from, ben, rec, out), "", hex"c0de", _mlAuth());
+        ref = t.mtxConfidentialTransfer(_mplFor(t, from, ben, rec, out), hex"c0de", _mlAuth(), ben, "");
         _mirror(from, rec, out);
     }
 
@@ -113,12 +113,12 @@ contract PqzMultiTest is PqzFixture {
         vm.expectCall(PQZ, abi.encodePacked(uint8(7), uint32(st.length), st, proof));
         for (uint256 j; j < 4; ++j) {
             vm.expectEmit(true, true, false, true, address(tok));
-            emit IPqzToken.PqzCredit(rec[j], 0, keccak256(abi.encode(keccak256("SCAAS-PQZ-ENTRY-V1"), block.chainid, PQZ_UID,
+            emit IPqzToken.Credited(rec[j], 0, keccak256(abi.encode(keccak256("SCAAS-PQZ-ENTRY-V1"), block.chainid, PQZ_UID,
                 address(tok), alice, uint256(0))));
         }
         uint256 g = gasleft();
-        bytes32 ref = tok.pqzTransfer(pl, "", proof, _mlAuth());
-        console2.log("pqzTransfer op 7 M = 4 (BUNDLE, auditor, fee, mocked proof) gas", g - gasleft());
+        bytes32 ref = tok.mtxConfidentialTransfer(pl, proof, _mlAuth(), _benM(pl), "");
+        console2.log("mtxConfidentialTransfer op 7 M = 4 (BUNDLE, auditor, fee, mocked proof) gas", g - gasleft());
         _mirror(alice, rec, out);
 
         IPqzToken.AccountState memory a = tok.pqzAccount(alice);
@@ -143,7 +143,7 @@ contract PqzMultiTest is PqzFixture {
         bytes32[] memory rec = _legsOf(8);
         uint256 g = gasleft();
         (bytes32 ref, bytes memory out) = _multi(tok, alice, bytes32(0), rec, 9, false);
-        console2.log("pqzTransfer op 7 M = 8 (BUNDLE, no auditor, mocked proof) gas", g - gasleft());
+        console2.log("mtxConfidentialTransfer op 7 M = 8 (BUNDLE, no auditor, mocked proof) gas", g - gasleft());
         for (uint256 j; j < 8; ++j) assertEq(tok.pqzPendingCt(rec[j], 0), pend[rec[j]][0]);
         assertEq(_cut(pend[rec[5]][0], 0, PqzCt.PK), _cut(out, PqzCt.PK, PqzCt.PK), "leg 5 uses u_1");
         assertEq(tok.transferEntry(ref).length, 16 + 2 * PqzCt.PK + 160 * 8);
@@ -172,42 +172,42 @@ contract PqzMultiTest is PqzFixture {
 
         bytes32[] memory three = _legsOf(3);
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.BadRecipientCount.selector, 3));
-        tok.pqzTransfer(_mpayload(0, 0, alice, 0, three, _blob(3, _outLen(3, false)), ""), "", hex"01", _mlAuth());
+        tok.mtxConfidentialTransfer(_mpayload(0, 0, alice, 0, three, _blob(3, _outLen(3, false)), ""), hex"01", _mlAuth(), bytes32(0), "");
         bytes32[] memory zero = new bytes32[](0);
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.BadRecipientCount.selector, 0));
-        tok.pqzTransfer(_mpayload(0, 0, alice, 0, zero, out, ""), "", hex"01", _mlAuth());
+        tok.mtxConfidentialTransfer(_mpayload(0, 0, alice, 0, zero, out, ""), hex"01", _mlAuth(), bytes32(0), "");
 
         bytes32[] memory dup = _legsOf(2);
         dup[1] = bob;
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.DuplicateRecipient.selector, bob));
-        tok.pqzTransfer(_mpayload(0, 0, alice, 0, dup, out, ""), "", hex"01", _mlAuth());
+        tok.mtxConfidentialTransfer(_mpayload(0, 0, alice, 0, dup, out, ""), hex"01", _mlAuth(), bytes32(0), "");
 
         bytes32[] memory self = _legsOf(2);
         self[1] = alice;
         vm.expectRevert(IPqzToken.SelfTransfer.selector);
-        tok.pqzTransfer(_mpayload(0, 0, alice, 0, self, out, ""), "", hex"01", _mlAuth());
+        tok.mtxConfidentialTransfer(_mpayload(0, 0, alice, 0, self, out, ""), hex"01", _mlAuth(), bytes32(0), "");
 
         bytes32[] memory unknown = _legsOf(2);
         unknown[1] = bytes32(uint256(5));
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.AccountNotRegistered.selector, bytes32(uint256(5))));
-        tok.pqzTransfer(_mpayload(0, 0, alice, 0, unknown, out, ""), "", hex"01", _mlAuth());
+        tok.mtxConfidentialTransfer(_mpayload(0, 0, alice, 0, unknown, out, ""), hex"01", _mlAuth(), bytes32(0), "");
 
         bytes memory pl = _mpayload(0, 0, alice, 0, rec, bytes.concat(out, bytes32(0)), "");
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.BadPayload.selector, pl.length));
-        tok.pqzTransfer(pl, "", hex"01", _mlAuth());
+        tok.mtxConfidentialTransfer(pl, hex"01", _mlAuth(), _benM(pl), "");
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.BadPayload.selector, 100));
-        tok.pqzTransfer(new bytes(100), "", hex"01", _mlAuth());
+        tok.mtxConfidentialTransfer(new bytes(100), hex"01", _mlAuth(), _benM(new bytes(100)), "");
 
         bytes memory nc = bytes.concat(out);
         nc[0] = 0xff;
         vm.expectRevert(IPqzToken.NonCanonical.selector);
-        tok.pqzTransfer(_mpayload(0, 0, alice, 0, rec, nc, ""), "", hex"01", _mlAuth());
+        tok.mtxConfidentialTransfer(_mpayload(0, 0, alice, 0, rec, nc, ""), hex"01", _mlAuth(), bytes32(0), "");
 
         _mockOp(7, 0);
         vm.expectRevert(IPqzToken.ProofRejected.selector);
-        tok.pqzTransfer(_mpayload(0, 0, alice, 0, rec, out, ""), "", hex"01", _mlAuth());
+        tok.mtxConfidentialTransfer(_mpayload(0, 0, alice, 0, rec, out, ""), hex"01", _mlAuth(), bytes32(0), "");
         _mockOp(7, 1);
-        tok.pqzTransfer(_mpayload(0, 0, alice, 0, rec, out, ""), "", hex"01", _mlAuth());
+        tok.mtxConfidentialTransfer(_mpayload(0, 0, alice, 0, rec, out, ""), hex"01", _mlAuth(), bytes32(0), "");
     }
 
     /// The auditor mode binds `auditorOn` (read from the length for the given `M`), and a COMPACT token takes only
@@ -217,11 +217,11 @@ contract PqzMultiTest is PqzFixture {
         PqzLayer full = _newToken("full");
         bytes32[] memory rec = _legsOf(2);
         vm.expectRevert(IPqzToken.AuditorRequired.selector);
-        full.pqzTransfer(_mpayload(0, 0, alice, 0, rec, _blob(1, _outLen(2, false)), ""), "", hex"01", _mlAuth());
+        full.mtxConfidentialTransfer(_mpayload(0, 0, alice, 0, rec, _blob(1, _outLen(2, false)), ""), hex"01", _mlAuth(), bytes32(0), "");
         aMode = uint8(ZetherTypes.AuditorMode.NONE);
         PqzLayer noAud = _newToken("noaud");
         vm.expectRevert(IPqzToken.AuditorForbidden.selector);
-        noAud.pqzTransfer(_mpayload(0, 0, alice, 0, rec, _blob(1, _outLen(2, true)), ""), "", hex"01", _mlAuth());
+        noAud.mtxConfidentialTransfer(_mpayload(0, 0, alice, 0, rec, _blob(1, _outLen(2, true)), ""), hex"01", _mlAuth(), bytes32(0), "");
 
         aMode = uint8(ZetherTypes.AuditorMode.OPTIONAL);
         dMode = uint8(ZetherTypes.DisclosureMode.COMPACT);
@@ -229,15 +229,15 @@ contract PqzMultiTest is PqzFixture {
         bytes memory out = _blob(2, _outLen(2, true));
         bytes memory noMemo = _mpayload(0, 0, alice, 0, rec, out, "");
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.BadPayload.selector, noMemo.length));
-        cpt.pqzTransfer(noMemo, "", hex"01", _mlAuth());
+        cpt.mtxConfidentialTransfer(noMemo, hex"01", _mlAuth(), _benM(noMemo), "");
         bytes memory badMemo = bytes.concat(bytes16(0), _slice(_mmemo(2), 16, 82));
         vm.expectRevert(IPqzToken.MemoSaltMismatch.selector);
-        cpt.pqzTransfer(_mpayload(0, 0, alice, 0, rec, out, badMemo), "", hex"01", _mlAuth());
+        cpt.mtxConfidentialTransfer(_mpayload(0, 0, alice, 0, rec, out, badMemo), hex"01", _mlAuth(), bytes32(0), "");
         bytes memory memo = _mmemo(2);
         bytes memory pl = _mpayload(0, 0, alice, 0, rec, out, memo);
         bytes memory st = cpt.transferStatement(pl, 0);
         assertEq(bytes32(_cut(st, 608, 32)), keccak256(memo), "memoHash");
-        bytes32 ref = cpt.pqzTransfer(pl, "", hex"01", _mlAuth());
+        bytes32 ref = cpt.mtxConfidentialTransfer(pl, hex"01", _mlAuth(), _benM(pl), "");
         bytes memory e = cpt.transferEntry(ref);
         assertEq(_cut(e, 32, e.length - 32), memo, "the memo stored");
         assertEq(bytes32(_cut(e, 0, 32)), cpt.transferCiphertextHash(ref));
@@ -283,7 +283,7 @@ contract PqzMultiTest is PqzFixture {
         assertEq(uint256(bytes32(_cut(st, 256, 32))), FEE + 4 * 5, "fee word = txFee + M * decoyFee");
         _mockOp(7, 0);
         vm.mockCall(PQZ, abi.encodePacked(uint8(7), uint32(st.length), st, hex"01"), abi.encode(uint256(1)));
-        t.pqzTransfer(pl, "", hex"01", _mlAuth());
+        t.mtxConfidentialTransfer(pl, hex"01", _mlAuth(), _benM(pl), "");
         _mockOp(7, 1);
         assertEq(t.balanceOfUA(carol), FEE * SCALE, "txFee to the beneficiary");
         for (uint256 j; j < 4; ++j) {
@@ -301,7 +301,7 @@ contract PqzMultiTest is PqzFixture {
         pl = _payload(0, 0, bob, alice, bytes32(0), _out(6, true), "");
         assertEq(uint256(bytes32(_cut(t.transferSingleStatement(pl, 0), 256, 32))), 0);
         uint256 before = t.balanceOfUA(alice);
-        t.pqzTransferSingle(pl, "", hex"01", _mlAuth());
+        t.mtxConfidentialTransferSingle(pl, hex"01", _mlAuth(), _benT(pl), "");
         assertEq(t.balanceOfUA(alice), before, "op 1: no decoyFee");
     }
 
@@ -313,14 +313,14 @@ contract PqzMultiTest is PqzFixture {
         decoy = 1;
         bytes memory pl = _mpayload(0, 0, alice, 0, rec, _blob(4, _outLen(2, true)), "");
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.DecoyFeeOutOfRange.selector, 1, 2));
-        t.pqzTransfer(pl, "", hex"01", _mlAuth());
+        t.mtxConfidentialTransfer(pl, hex"01", _mlAuth(), _benM(pl), "");
         decoy = uint256(1) << 64;
         pl = _mpayload(0, 0, alice, 0, rec, _blob(4, _outLen(2, true)), "");
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.DecoyFeeOutOfRange.selector, uint256(1) << 64, 2));
-        t.pqzTransfer(pl, "", hex"01", _mlAuth());
+        t.mtxConfidentialTransfer(pl, hex"01", _mlAuth(), _benM(pl), "");
         decoy = 0;
         _fund(tok, alice, 10);
-        tok.pqzTransfer(_mpayload(1, 0, alice, 0, rec, _blob(5, _outLen(2, true)), ""), "", hex"01", _mlAuth());
+        tok.mtxConfidentialTransfer(_mpayload(1, 0, alice, 0, rec, _blob(5, _outLen(2, true)), ""), hex"01", _mlAuth(), bytes32(0), "");
         assertEq(tok.balanceOfUA(bob), 0);
     }
 
@@ -334,7 +334,7 @@ contract PqzMultiTest is PqzFixture {
     function test_multi_shortPayloadIsBadPayload() public {
         bytes memory pl = bytes.concat(new bytes(160), bytes32(uint256(1)), bytes32(0), bytes16(0)); // M = 1, no leg
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.BadPayload.selector, uint256(240)));
-        tok.pqzTransfer(pl, "", hex"01", _mlAuth());
+        tok.mtxConfidentialTransfer(pl, hex"01", _mlAuth(), _benM(pl), "");
     }
 
     /// A PQZH token: M = 8 is not built; at most 10 inline credits on op 7 (16 on op 1).
@@ -350,7 +350,7 @@ contract PqzMultiTest is PqzFixture {
         assertEq(h.proofSystemId(), PQZH_ID);
         bytes32[] memory rec = _legsOf(8);
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.BadRecipientCount.selector, 8));
-        h.pqzTransfer(_mpayload(0, 0, alice, 0, rec, _blob(1, _outLen(8, true)), ""), "", hex"01", _mlAuth());
+        h.mtxConfidentialTransfer(_mpayload(0, 0, alice, 0, rec, _blob(1, _outLen(8, true)), ""), hex"01", _mlAuth(), bytes32(0), "");
         // 11 credits to alice, then a debit at p = 11 needs 11 inline credits: refused on op 7, accepted on op 1
         _fund(h, bob, 1000);
         for (uint256 i; i < 11; ++i) _transferOn(h, bob, alice, 100 + i);
@@ -358,8 +358,8 @@ contract PqzMultiTest is PqzFixture {
         bytes32[] memory one = new bytes32[](1);
         one[0] = carol;
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.InlineTooFar.selector, 11));
-        h.pqzTransfer(_mpayload(11, 0, alice, 0, one, _blob(2, _outLen(1, true)), ""), "", hex"01", _mlAuth());
-        h.pqzTransferSingle(_payload(11, 0, alice, carol, bytes32(0), _out(3, true), ""), "", hex"01", _mlAuth());
+        h.mtxConfidentialTransfer(_mpayload(11, 0, alice, 0, one, _blob(2, _outLen(1, true)), ""), hex"01", _mlAuth(), bytes32(0), "");
+        h.mtxConfidentialTransferSingle(_payload(11, 0, alice, carol, bytes32(0), _out(3, true), ""), hex"01", _mlAuth(), bytes32(0), "");
     }
 
     function _transferOn(PqzLayer t, bytes32 from, bytes32 to, uint256 seed) internal {
@@ -371,15 +371,15 @@ contract PqzMultiTest is PqzFixture {
     /// The four transfer selectors are allowlisted `ABSOLUTE` on the relaying paths; the NONE ones are gone (D11).
     function test_multi_allowlisted() public view {
         (bytes4[] memory s,,) = NoUnderlyingPqzToken(address(tok)).mtxSelectors();
-        bytes4[4] memory want = [PqzLayer.pqzTransfer.selector, PqzLayer.pqzTransferCompact.selector,
-            PqzLayer.pqzTransferSingle.selector, PqzLayer.pqzTransferSingleCompact.selector];
+        bytes4[4] memory want = [PqzLayer.mtxConfidentialTransfer.selector, PqzLayer.mtxConfidentialTransferCompact.selector,
+            PqzLayer.mtxConfidentialTransferSingle.selector, PqzLayer.mtxConfidentialTransferSingleCompact.selector];
         for (uint256 i; i < 4; ++i) {
             bool found;
             for (uint256 k; k < s.length; ++k) found = found || s[k] == want[i];
             assertTrue(found);
         }
-        bytes4[2] memory gone = [bytes4(keccak256("pqzTransferNoBundle(bytes,bytes,bytes,bytes)")),
-            bytes4(keccak256("pqzTransferSingleNoBundle(bytes,bytes,bytes,bytes)"))];
+        bytes4[2] memory gone = [bytes4(keccak256("mtxConfidentialTransferNoBundle(bytes,bytes,bytes,bytes32,bytes)")),
+            bytes4(keccak256("mtxConfidentialTransferSingleNoBundle(bytes,bytes,bytes,bytes32,bytes)"))];
         for (uint256 k; k < s.length; ++k) assertTrue(s[k] != gone[0] && s[k] != gone[1], "NONE retired");
     }
 }

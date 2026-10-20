@@ -103,12 +103,12 @@ contract ZetherRevertPathsTest is ZetherFixture {
     function test_shieldRevertPaths() public {
         bytes memory stranger = ZetherKeys.pub(0x5757, true);
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.AccountNotRegistered.selector, ZetherTypes.toUA(stranger)));
-        tok.zetherShield(stranger, 1);
+        tok.mtxShield(ZetherTypes.UA.unwrap(ZetherTypes.toUA(stranger)), 1);
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.AmountOutOfRange.selector, 0, uint256(1) << 40));
-        tok.zetherShield(alice.y, 0);
+        tok.mtxShield(ZetherTypes.UA.unwrap(alice.ua), 0);
         uint256 over = (uint256(1) << 40) + 1;
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.AmountOutOfRange.selector, over, uint256(1) << 40));
-        tok.zetherShield(alice.y, over);
+        tok.mtxShield(ZetherTypes.UA.unwrap(alice.ua), over);
         // a bn254 key (the legacy curve, UA-6 U10): no registry holds it, so it is never registered here
         bytes memory bnKey = ZetherKeys.pub(0x7777, false);
         ZetherTypes.UA bnUa = ZetherTypes.toUA(bnKey);
@@ -116,18 +116,18 @@ contract ZetherRevertPathsTest is ZetherFixture {
         reg.register(0x0140, bnKey, "", "", "");
         assertFalse(tok.registered(bnUa));
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.AccountNotRegistered.selector, bnUa));
-        tok.zetherShield(bnKey, 1);
+        tok.mtxShield(ZetherTypes.UA.unwrap(ZetherTypes.toUA(bnKey)), 1);
     }
 
     function _aliceTx() internal returns (Tx memory) {
         _fund(tok, alice, 100);
-        tok.zetherRollOver(alice.ua);
+        tok.mtxRollOver(ZetherTypes.UA.unwrap(alice.ua), 1);
         return _proveTransfer(tok, alice, bob, 10, 100, _none(), 0);
     }
 
     function _call(bytes memory payload, bytes memory proof, ZetherTypes.UA ben, bytes memory err) internal {
         vm.expectRevert(err);
-        tok.zetherTransferSingle(payload, proof, ben);
+        tok.mtxConfidentialTransferSingle(payload, proof, "", ZetherTypes.UA.unwrap(ben), "");
     }
 
     function test_transferBadPayloadLength() public {
@@ -161,7 +161,7 @@ contract ZetherRevertPathsTest is ZetherFixture {
     /// beneficiary, and passes with carol (review T3 m2).
     function test_otherBeneficiaryRejected() public {
         _fund(tok, alice, 100);
-        tok.zetherRollOver(alice.ua);
+        tok.mtxRollOver(ZetherTypes.UA.unwrap(alice.ua), 1);
         Tx memory t = _proveTransfer(tok, alice, bob, 10, 100, carol.ua, 0);
         _call(t.payload, t.proof, bob.ua, abi.encodeWithSelector(IZetherToken.ProofRejected.selector));
         _direct(tok, t, carol.ua);
@@ -176,16 +176,16 @@ contract ZetherRevertPathsTest is ZetherFixture {
         vm.etch(address(noneImpl), address(new GuardHarness(_zenv())).code);
         ZetherTypes.UA n = _none();
         bytes[10] memory calls = [
-            abi.encodeCall(ZetherLayer.zetherShield, (alice.y, 1)),
-            abi.encodeCall(ZetherLayer.zetherTransfer, ("", "", n)),
-            abi.encodeCall(ZetherLayer.zetherTransferCompact, ("", "", n)),
-            abi.encodeCall(ZetherLayer.zetherTransferNoBundle, ("", "", n)),
-            abi.encodeCall(ZetherLayer.zetherTransferSingle, ("", "", n)),
-            abi.encodeCall(ZetherLayer.zetherUnshield, ("", "", n, address(0xD), 1)),
-            abi.encodeCall(ZetherLayer.zetherRollOver, (alice.ua)),
-            abi.encodeCall(ZetherLayer.zetherRollOverBatch, (new ZetherTypes.UA[](0))),
-            abi.encodeCall(ZetherLayer.zetherRollOverSigned, (alice.ua, 1, 1, "")),
-            abi.encodeCall(ZetherLayer.zetherSetRollOverMode, (alice.ua, ZetherTypes.RollOverMode.PUBLIC, 1, ""))
+            abi.encodeCall(ZetherLayer.mtxShield, (ZetherTypes.UA.unwrap(alice.ua), 1)),
+            abi.encodeCall(ZetherLayer.mtxConfidentialTransfer, ("", "", bytes(""), ZetherTypes.UA.unwrap(n), bytes(""))),
+            abi.encodeCall(ZetherLayer.mtxConfidentialTransferCompact, ("", "", bytes(""), ZetherTypes.UA.unwrap(n), bytes(""))),
+            abi.encodeCall(ZetherLayer.mtxConfidentialTransferNoBundle, ("", "", bytes(""), ZetherTypes.UA.unwrap(n), bytes(""))),
+            abi.encodeCall(ZetherLayer.mtxConfidentialTransferSingle, ("", "", bytes(""), ZetherTypes.UA.unwrap(n), bytes(""))),
+            abi.encodeCall(ZetherLayer.mtxUnshield, ("", "", bytes(""), ZetherTypes.UA.unwrap(n), bytes(""), 1, bytes32(uint256(uint160(address(0xD)))))),
+            abi.encodeCall(ZetherLayer.mtxRollOver, (ZetherTypes.UA.unwrap(alice.ua), 1)),
+            abi.encodeCall(ZetherLayer.mtxRollOverBatch, (new ZetherTypes.UA[](0))),
+            abi.encodeCall(ZetherLayer.mtxRollOverSigned, (alice.ua, 1, 1, "")),
+            abi.encodeCall(ZetherLayer.mtxSetRollOverMode, (alice.ua, ZetherTypes.RollOverMode.PUBLIC, 1, ""))
         ];
         for (uint256 i; i < calls.length; ++i) {
             vm.expectRevert(IMetaTx.Reentrancy.selector);
@@ -202,26 +202,26 @@ contract ZetherRevertPathsTest is ZetherFixture {
     /// Amount and recipient are in the statement; checks before any precompile.
     function test_unshieldRevertPaths() public {
         _fund(tok, alice, 100);
-        tok.zetherRollOver(alice.ua);
+        tok.mtxRollOver(ZetherTypes.UA.unwrap(alice.ua), 1);
         (bytes memory pl, bytes memory pr) = _proveUnshield(tok, alice, 10, 100, address(0xD), _none(), 0);
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.AmountOutOfRange.selector, 0, uint256(1) << 40));
-        tok.zetherUnshield(pl, pr, _none(), address(0xD), 0);
+        tok.mtxUnshield(pl, pr, "", bytes32(0), "", 0, bytes32(uint256(uint160(address(0xD)))));
         uint256 over = (uint256(1) << 40) + 1;
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.AmountOutOfRange.selector, over, uint256(1) << 40));
-        tok.zetherUnshield(pl, pr, _none(), address(0xD), over);
+        tok.mtxUnshield(pl, pr, "", bytes32(0), "", over, bytes32(uint256(uint160(address(0xD)))));
         vm.expectRevert(IZetherToken.ZeroRecipient.selector);
-        tok.zetherUnshield(pl, pr, _none(), address(0), 10);
+        tok.mtxUnshield(pl, pr, "", bytes32(0), "", 10, bytes32(0));
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.BadPayload.selector, pl.length - 1));
-        tok.zetherUnshield(_trim(pl), pr, _none(), address(0xD), 10);
+        tok.mtxUnshield(_trim(pl), pr, "", bytes32(0), "", 10, bytes32(uint256(uint160(address(0xD)))));
         vm.expectRevert(IZetherToken.ProofRejected.selector); // another recipient than the proven one
-        tok.zetherUnshield(pl, pr, _none(), address(0xE), 10);
+        tok.mtxUnshield(pl, pr, "", bytes32(0), "", 10, bytes32(uint256(uint160(address(0xE)))));
         vm.expectRevert(IZetherToken.ProofRejected.selector); // another amount
-        tok.zetherUnshield(pl, pr, _none(), address(0xD), 11);
+        tok.mtxUnshield(pl, pr, "", bytes32(0), "", 11, bytes32(uint256(uint160(address(0xD)))));
         // to the token itself: the proof passes, the mint is refused (CTR-MTX-18)
         (bytes memory pl2, bytes memory pr2) = _proveUnshield(tok, alice, 10, 100, address(tok), _none(), 0);
         vm.expectRevert(IERC20MetaTx.TransferToSelf.selector);
-        tok.zetherUnshield(pl2, pr2, _none(), address(tok), 10);
-        tok.zetherUnshield(pl, pr, _none(), address(0xD), 10);
+        tok.mtxUnshield(pl2, pr2, "", bytes32(0), "", 10, bytes32(uint256(uint160(address(tok)))));
+        tok.mtxUnshield(pl, pr, "", bytes32(0), "", 10, bytes32(uint256(uint160(address(0xD)))));
         assertEq(tok.balanceOf(address(0xD)), 10 * SCALE);
         assertEq(tok.totalShielded(), 90);
     }
@@ -403,9 +403,9 @@ contract ZetherRevertPathsTest is ZetherFixture {
     /// through the inner-product verifier the two fix.
     function test_everyProofPathUsesThePinnedVerifiers() public {
         _fund(tok, alice, 100);
-        tok.zetherRollOver(alice.ua);
-        bytes4[3] memory ops = [ZetherLayer.zetherTransferSingle.selector, ZetherLayer.zetherTransfer.selector,
-            ZetherLayer.zetherUnshield.selector];
+        tok.mtxRollOver(ZetherTypes.UA.unwrap(alice.ua), 1);
+        bytes4[3] memory ops = [ZetherLayer.mtxConfidentialTransferSingle.selector, ZetherLayer.mtxConfidentialTransfer.selector,
+            ZetherLayer.mtxUnshield.selector];
         bytes4[3] memory checks = [IZetherVerifier.verifyTransfer.selector, IZetherVerifier.verifyTransferMulti.selector,
             IZetherBurnVerifier.verifyBurn.selector];
         address ip = address(ZetherVerifierBase(address(ver)).innerProduct());

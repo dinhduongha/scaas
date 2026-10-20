@@ -109,7 +109,7 @@ pub fn envelope_binding(chain_id: u64, chain_uid: &[u8; 32], token: &[u8; 20], m
     )
 }
 
-/// The binding word of a direct `zetherUnshieldUnwrap` (under `ZTX_V1_DIRECT`): its leg and `minOut` (`min_out` as
+/// The binding word of a direct `mtxUnshieldUnwrap` (under `ZTX_V1_DIRECT`): its leg and `minOut` (`min_out` as
 /// the 32-byte ABI word). Controller ruling, pending the owner.
 pub fn unwrap_binding(underlying: &[u8; 20], min_out: &[u8; 32]) -> [u8; 32] {
     keccak256(&[keccak256(b"SCAAS-ZETHER-UNWRAP-V1"), abi::addr(underlying), *min_out].concat())
@@ -119,19 +119,24 @@ pub fn selector(sig: &str) -> [u8; 4] {
     keccak256(sig.as_bytes())[..4].try_into().unwrap()
 }
 
-/// Calldata of a confidential transfer (`zetherTransfer`, `…Compact`, `…NoBundle`, `…Single`, all
-/// `(bytes payload, bytes proof, bytes32 beneficiary)`; UA-6: no `authSig`, the proof alone authorizes the spend): the direct call and, unchanged, the envelope's `data`.
+/// Calldata of a confidential transfer (`mtxConfidentialTransfer`, `…Compact`, `…NoBundle`, `…Single`, all
+/// `(bytes payload, bytes proof, bytes auth, bytes32 beneficiary, bytes accHint)`, the shared `IConfidentialToken`
+/// signature; Zether: `auth` and `accHint` empty, the proof alone authorizes the spend, UA-6): the direct call and,
+/// unchanged, the envelope's `data`.
 pub fn transfer_call(sig: &str, payload: &[u8], proof: &[u8], beneficiary: &[u8; 32]) -> Vec<u8> {
     let mut d = selector(sig).to_vec();
     d.extend(abi::encode(&[
         Tok::Bytes(payload.to_vec()),
         Tok::Bytes(proof.to_vec()),
+        Tok::Bytes(Vec::new()),
         Tok::Word(*beneficiary),
+        Tok::Bytes(Vec::new()),
     ]));
     d
 }
 
-/// `zetherUnshield(bytes payload, bytes proof, bytes32 beneficiary, address to, uint256 amount)`.
+/// `mtxUnshield(bytes payload, bytes proof, bytes auth, bytes32 beneficiary, bytes accHint, uint256 amount, bytes32
+/// recipient)`, `auth` and `accHint` empty, `to` a native address (its padded id; a UA recipient is Task 4).
 pub fn unshield_call(
     payload: &[u8],
     proof: &[u8],
@@ -139,13 +144,15 @@ pub fn unshield_call(
     to: &[u8; 20],
     amount: u64,
 ) -> Vec<u8> {
-    let mut d = selector("zetherUnshield(bytes,bytes,bytes32,address,uint256)").to_vec();
+    let mut d = selector("mtxUnshield(bytes,bytes,bytes,bytes32,bytes,uint256,bytes32)").to_vec();
     d.extend(abi::encode(&[
         Tok::Bytes(payload.to_vec()),
         Tok::Bytes(proof.to_vec()),
+        Tok::Bytes(Vec::new()),
         Tok::Word(*beneficiary),
-        Tok::Word(abi::addr(to)),
+        Tok::Bytes(Vec::new()),
         Tok::Word(abi::u256(amount)),
+        Tok::Word(abi::addr(to)),
     ]));
     d
 }
