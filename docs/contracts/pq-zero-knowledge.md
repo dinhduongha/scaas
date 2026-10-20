@@ -1746,7 +1746,8 @@ estimates below predate this table.
 
 | Operation | Gas | Note |
 |---|---|---|
-| `register` `pqz-mlwe` (PoP `R_REG` + `mldsa65` co-sign) | 7,239,088 | 48.2 KB calldata; SSTORE2 of the 16 KB `pk` |
+| `register` `pqz-mlwe` (PoP `R_REG` + `mldsa65` co-sign) (pre-UA-6 shape; the kind 0x0142 is no longer registrable) | 7,239,088 | 48.2 KB calldata; SSTORE2 of the 16 KB `pk` |
+| UA-6 `register(mldsa65, …, pqzKey, pqzPop)` (holder: PQZ key attribute) / PQ-eligible `msig` {mldsa65, p256} t=2 with a PQZ key | 4,438,075 / 3,894,160 | `UARegistryUA6.t` `test_UA6_holderWithKey` / `test_UA6_msigSquatting`, `--isolate`, **stand-in verifiers** (a lower bound: the real `R_REG` precompile prices more); 2026-10-21, `runs/2026-10-21-ua6-gas.txt` |
 | `register` `mldsa65` / `mldsa44` (PoP on the precompile) | 687,743 / 509,018 | |
 | `registry.requireAuthorized` `mldsa65` / `mldsa44` (`eth_estimateGas`) | 301,776 / 287,268 | incl. 21,000 and the 3.3 / 2.4 KB signature calldata |
 | `pqzShield` | 97,801 | public units burned |

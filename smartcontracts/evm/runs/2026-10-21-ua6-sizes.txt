@@ -1,0 +1,16 @@
+UA-6 Task 9 sizes, 2026-10-21. $ forge build src --sizes --json; python3 -I scripts/size_gate.py sizes.json size-baseline.json -> size gate: 0 error(s), 91 contracts
+(the brief's `forge build --sizes` without `src` also counts test harnesses, which are not gated)
+
+contract | baseline before | measured now | delta
+NoUnderlyingToken | 37954 | 37970 | +16
+UnderlyingToken | 47880 | 47896 | +16
+UnderlyingToken.init | 50103 | 50119 | +16
+NoUnderlyingZetherToken | 46523 | 46218 | -305
+NoUnderlyingZetherToken.init | 49978 | 49673 | -305
+UnderlyingZetherToken | 58633 | 58278 | -355
+UnderlyingZetherToken.init | 62137 | 61782 | -355
+NoUnderlyingPqzToken | 48381 | 48397 | +16
+NoUnderlyingPqzToken.init | 50896 | 50912 | +16
+UnderlyingPqzToken | 60822 | 60838 | +16
+UnderlyingPqzToken.init | 63344 | 63360 | +16
+UARegistry | 25856 | 25297 | -559
