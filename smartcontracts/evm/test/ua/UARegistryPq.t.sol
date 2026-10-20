@@ -2,7 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
-import {IUAKindVerifier} from "../../src/ua/IUAVerifier.sol";
+import {IUAKindVerifier, IUAPopVerifier} from "../../src/ua/IUAVerifier.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {UAMldsaVerifier} from "../../src/ua/MlDsa.sol";
@@ -182,7 +182,7 @@ contract UARegistryPqTest is UARegistryBase {
         }
         assertEq(rows, 4, "PQ kinds");
         assertEq(sigs, 8, "PQ sigs");
-        assertEq(negs, 27, "PQ negatives");
+        assertEq(negs, 33, "PQ negatives");
     }
 
     /// PoP-side refusals, the ML-DSA cache (refused before it is complete), then `register` (logged).
@@ -200,7 +200,7 @@ contract UARegistryPqTest is UARegistryBase {
         _popRefused(r, kind, pk, vm.parseJsonBytes(pj, _row(i, "popOther.sig")));
         for (uint256 n; vm.keyExistsJson(pj, _row(i, string.concat("negatives[", vm.toString(n), "]"))); ++n) {
             string memory ng = _row(i, string.concat("negatives[", vm.toString(n), "]."));
-            if (vm.parseJsonBool(pj, string.concat(ng, "verifyPop"))) {
+            if (vm.parseJsonBool(pj, string.concat(ng, "verifyPop")) && !_isPqzRow(vm.parseJsonString(pj, string.concat(ng, "name")))) {
                 _popRefused(r, kind, pk, vm.parseJsonBytes(pj, string.concat(ng, "sig")));
             }
         }
@@ -209,6 +209,57 @@ contract UARegistryPqTest is UARegistryBase {
         g -= gasleft();
         emit log_named_uint(string.concat("register ", name), g);
         assertEq(r.keyOf(ua), pk);
+    }
+
+    /// `c` plus a stand-in `0x0142` R_REG verifier (accepts; it runs after the PoP, which stays real).
+    function _withPqz(UARegistry.KindConfig[] memory b) internal returns (UARegistry.KindConfig[] memory c) {
+        address rreg = makeAddr("rreg");
+        vm.etch(rreg, hex"00");
+        vm.mockCall(rreg, abi.encodeWithSelector(IUAPopVerifier.verifyPop.selector), abi.encode(uint256(1)));
+        c = new UARegistry.KindConfig[](b.length + 1);
+        for (uint256 i; i < b.length; ++i) c[i] = b[i];
+        c[b.length] = UARegistry.KindConfig(0x0142, rreg, 1_000_000);
+    }
+
+    /// The negative that is refused only when registering WITH the PQZ key (a plain-digest PoP offered with a key).
+    function _isPqzRow(string memory name) internal pure returns (bool) {
+        return keccak256(bytes(name)) == keccak256("pop-without-pqz-key");
+    }
+
+    /// UA-6 U2: the holders' PoP over `popDigest(ua, h)` with the PQZ key `h`: the vector's `popPqz.sig` registers
+    /// (real signer verifier; the `0x0142` R_REG verifier is a stand-in, it runs after the PoP); a PoP over the plain digest offered with the key is `UAPoP`
+    /// (the converse, a keyed PoP offered without the key, runs in `test_vectors_pq`).
+    function test_vectors_pqzPop() public {
+        string memory pj = _pj();
+        UARegistry r = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), true, _withPqz(_realPq()));
+        uint256 n;
+        for (uint256 i; vm.keyExistsJson(pj, string.concat(".kinds[", vm.toString(i), "]")); ++i) {
+            if (!vm.keyExistsJson(pj, _row(i, "popPqz"))) continue;
+            uint256 snap = vm.snapshotState(); // the vectors share one PQZ key: one holder per state
+            _pqzPopRow(r, pj, i);
+            vm.revertToState(snap);
+            ++n;
+        }
+        assertEq(n, 3, "holder kinds");
+    }
+
+    function _pqzPopRow(UARegistry r, string memory pj, uint256 i) internal {
+        uint16 kind = uint16(vm.parseJsonUint(pj, _row(i, "kind")));
+        bytes memory pk = vm.parseJsonBytes(pj, _row(i, "keyData"));
+        bytes memory zk = vm.parseJsonBytes(pj, _row(i, "pqzKey"));
+        bytes32 ua = vm.parseJsonBytes32(pj, _row(i, "ua"));
+        bytes32 h = vm.parseJsonBytes32(pj, _row(i, "popPqz.pqzKeyHash"));
+        if (kind == 0x0130 || kind == 0x0131) _cache(r, kind, pk, vm.parseJsonString(pj, _row(i, "name")));
+        assertEq(UAKinds.keyHashOf(UAKinds.PQZ_MLWE, zk), h);
+        assertEq(r.popDigest(ua, h), vm.parseJsonBytes32(pj, _row(i, "popPqz.popDigest")));
+        for (uint256 k; vm.keyExistsJson(pj, _row(i, string.concat("negatives[", vm.toString(k), "]"))); ++k) {
+            string memory ng = _row(i, string.concat("negatives[", vm.toString(k), "]."));
+            if (!_isPqzRow(vm.parseJsonString(pj, string.concat(ng, "name")))) continue;
+            vm.expectRevert(IUARegistry.UAPoP.selector);
+            r.register(kind, pk, vm.parseJsonBytes(pj, string.concat(ng, "sig")), zk, hex"01");
+        }
+        assertEq(r.register(kind, pk, vm.parseJsonBytes(pj, _row(i, "popPqz.sig")), zk, hex"01"), ua);
+        assertEq(r.keyOwner(h), ua);
     }
 
     /// The `metatx` and `member` signatures pass with an empty `keyData` (logged).
@@ -268,10 +319,9 @@ contract UARegistryPqTest is UARegistryBase {
     /// authorizes within `verifyBudget`; the treasury {mldsa65 ×3} t=2 is refused (2 × 5.95 M + the hold > 12 M).
     function test_T_GAS_pqHybrid() public {
         string memory pj = _pj();
-        UARegistry.KindConfig[] memory c = _realPq();
-        UARegistry r = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), true, c);
+        UARegistry r = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), true, _withPqz(_realPq()));
         _members(r, pj);
-        bytes32 hua = _registerMocked(r, c, vm.parseJsonBytes(pj, ".msig.hybrid.keyData"));
+        bytes32 hua = _registerMsig(r, pj, ".msig.hybrid");
         assertEq(hua, vm.parseJsonBytes32(pj, ".msig.hybrid.ua"));
         _sets(r, pj, ".msig.hybrid", hua, 1);
         bytes memory tk = vm.parseJsonBytes(pj, ".msig.treasury.keyData");
@@ -285,28 +335,18 @@ contract UARegistryPqTest is UARegistryBase {
         string memory pj = _pj();
         UARegistry.KindConfig[] memory c = _realPq();
         c[2].cap = 5_921_000;
-        UARegistry r = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), true, c);
+        UARegistry r = _deploy(REG_A, chainUidA, address(0), false, BUDGET, address(0), true, _withPqz(c));
         _members(r, pj);
-        bytes32 tua = _registerMocked(r, c, vm.parseJsonBytes(pj, ".msig.treasury.keyData"));
+        bytes32 tua = _registerMsig(r, pj, ".msig.treasury");
         assertEq(tua, vm.parseJsonBytes32(pj, ".msig.treasury.ua"));
         _sets(r, pj, ".msig.treasury", tua, 2);
     }
 
-    /// UA-6 U5: a PQ-eligible `msig` registers with an m-of-n PoP (members 0 and 1, weight 1 each, t = 2). The vectors
-    /// carry no member signature over the PoP message (Task 8 regenerates them), so the members' verifiers (`c` of
-    /// `_realPq`) are mocked for the registration only; every authorization after it runs on the real verifiers.
-    function _registerMocked(UARegistry r, UARegistry.KindConfig[] memory c, bytes memory d) internal returns (bytes32) {
-        vm.mockCall(c[2].verifier, abi.encodeWithSelector(UAMldsaVerifier.verifyCached.selector), abi.encode(uint256(1)));
-        vm.mockCall(c[0].verifier, abi.encodeWithSelector(IUAKindVerifier.verify.selector), abi.encode(uint256(1)));
-        bytes memory p256Key = vm.parseJsonBytes(vm.readFile("../vectors/ua/signatures.json"), ".derived[1].keyData");
-        UARegistry.MemberSig[] memory sigs = new UARegistry.MemberSig[](2);
-        for (uint16 i; i < 2; ++i) {
-            bool p256 = uint16(bytes2(abi.encodePacked(d[4 + 36 * i], d[5 + 36 * i]))) == 0x0101;
-            sigs[i] = UARegistry.MemberSig(i, p256 ? p256Key : bytes(""), new bytes(32));
-        }
-        bytes32 ua = r.register(UAKinds.MSIG, d, abi.encode(sigs), "", "");
-        vm.clearMockedCalls();
-        return ua;
+    /// UA-6 U5: a PQ-eligible `msig` registers with its m-of-n PoP (members 0 and 1, weight 1 each, t = 2): the
+    /// vector's real member signatures `msig.*.popPqz.pop` over the PoP digest with the PQZ key (R_REG stand-in).
+    function _registerMsig(UARegistry r, string memory pj, string memory m) internal returns (bytes32) {
+        return r.register(UAKinds.MSIG, vm.parseJsonBytes(pj, string.concat(m, ".keyData")),
+            vm.parseJsonBytes(pj, string.concat(m, ".popPqz.pop")), vm.parseJsonBytes(pj, string.concat(m, ".popPqz.pqzKey")), hex"01");
     }
 
     /// Each valid set authorizes with exactly `verifyBudget` gas; the below-threshold set fails.

@@ -251,7 +251,7 @@ contract UAGasTest is UARegistryBase {
                 }
             }
         }
-        assertEq(rows, 20 + 85, "signature rows scanned");
+        assertEq(rows, 22 + 91, "signature rows scanned");
         assertGe(max, 256, "largest real signature");
         return new bytes(max);
     }

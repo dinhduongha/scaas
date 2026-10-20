@@ -41,7 +41,7 @@ contract UADeployTest is Test {
         assertTrue(bn);
         string memory code = vm.toString(type(UAPrecompileProbe).creationCode);
         string memory j = vm.readFile("../vectors/ua/kinds.json");
-        uint256[3] memory rows = [uint256(88), 94, 99];
+        uint256[3] memory rows = [uint256(79), 85, 90];
         for (uint256 i; i < 3; ++i) {
             string memory row = string.concat(".invalid[", vm.toString(rows[i]), "]");
             assertEq(vm.parseJsonString(j, string.concat(row, ".reason")), "outside the subgroup");

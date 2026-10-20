@@ -154,8 +154,8 @@ contract UARegistryTest is UARegistryBase {
         }
         _register(reg, 0x0101, p);
         _registerReverts(reg, 0x0101, p, abi.encodeWithSelector(IUARegistry.UAAlreadyRegistered.selector, ua));
-        // the same point under the other p256-group kind (kinds.json valid[22]: p256 key ‖ rpIdHash)
-        bytes memory w = vm.parseJsonBytes(_kindsJson(), ".valid[22].keyData");
+        // the same point under the other p256-group kind (kinds.json valid[20]: p256 key ‖ rpIdHash)
+        bytes memory w = vm.parseJsonBytes(_kindsJson(), ".valid[20].keyData");
         bytes32 kh = reg.keyHashOf(0x0100, w);
         assertEq(kh, reg.keyHashOf(0x0101, p));
         _registerReverts(reg, 0x0100, w, abi.encodeWithSelector(IUARegistry.UAKeyInUse.selector, kh, ua));
@@ -166,7 +166,7 @@ contract UARegistryTest is UARegistryBase {
     }
 
     /// `secp256k1` (ECDSA, 0x0108) shares the keyHash group of `bip340`: the bip340 key's point as an ECDSA key
-    /// (kinds.json valid[28]) is UAKeyInUse; another ECDSA key registers, is listed and has its own id.
+    /// (kinds.json valid[26]) is UAKeyInUse; another ECDSA key registers, is listed and has its own id.
     function test_secp256k1_sharesTheSecp256k1Group() public {
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](2);
         c[0] = UARegistry.KindConfig(0x0103, address(mock), 50_000);
@@ -174,16 +174,16 @@ contract UARegistryTest is UARegistryBase {
         UARegistry r = _deploy(address(0x5ca0000000000000000000000000000000000108), chainUidA, address(0), false, BUDGET,
             address(0), true, c);
         string memory j = _kindsJson();
-        assertEq(vm.parseJsonUint(j, ".valid[27].kind"), 0x0108);
-        assertEq(vm.parseJsonUint(j, ".valid[28].kind"), 0x0108);
+        assertEq(vm.parseJsonUint(j, ".valid[25].kind"), 0x0108);
+        assertEq(vm.parseJsonUint(j, ".valid[26].kind"), 0x0108);
         bytes32 bip = _register(r, 0x0103, _key(0x0103));
-        bytes memory lifted = vm.parseJsonBytes(j, ".valid[28].keyData");
+        bytes memory lifted = vm.parseJsonBytes(j, ".valid[26].keyData");
         bytes32 kh = r.keyHashOf(0x0108, lifted);
         assertEq(kh, r.keyHashOf(0x0103, _key(0x0103)));
         _registerReverts(r, 0x0108, lifted, abi.encodeWithSelector(IUARegistry.UAKeyInUse.selector, kh, bip));
-        bytes memory k = vm.parseJsonBytes(j, ".valid[27].keyData");
+        bytes memory k = vm.parseJsonBytes(j, ".valid[25].keyData");
         bytes32 ua = _register(r, 0x0108, k);
-        assertEq(ua, vm.parseJsonBytes32(j, ".valid[27].ua"));
+        assertEq(ua, vm.parseJsonBytes32(j, ".valid[25].ua"));
         assertEq(r.kindOf(ua), 0x0108);
         assertEq(r.uaAt(0x0108, 0), ua);
         // off the curve: y + 1
@@ -401,7 +401,7 @@ contract UARegistryTest is UARegistryBase {
 
     /// `zether-bn254` (0x0140) is in `legacy/ua6/` (UA-6 U10): no slot, no tag; its old id is never authorized.
     function test_T_AUTH_1b_zether() public {
-        bytes memory y = vm.parseJsonBytes(_kindsJson(), ".valid[16].keyData");
+        bytes memory y = new bytes(64); // any key data: 0x0140 has no slot and no tag
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKindDisabled.selector, uint16(0x0140)));
         reg.register(0x0140, y, "", "", "");
         vm.expectRevert(abi.encodeWithSelector(UAKinds.UAKindUnknown.selector, uint16(0x0140)));

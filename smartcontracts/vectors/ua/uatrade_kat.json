@@ -1695,6 +1695,174 @@
       },
       "invalidateDigest": "0x2067364ddf44dab926b7f6f23cc32ed9432bba0694d757003621d927aa54fb4c",
       "invalidateAuth": "0x000000000000000000000000000000000000000000000000000000000000004000000000000000000000000000000000000000000000000000000000000000a00000000000000000000000000000000000000000000000000000000000000040b8d6a62c582eb94925ec4296c5dd24373c38eee76212d1bfacfd5ad434ab21b5235095446465c8ec6e2da3defd9ddb82fa26d6536acd515ae702e445e17f7a1d000000000000000000000000000000000000000000000000000000000000004119eaeb3557938aa1a05c62f26b1b2aebd83c73a45c85e272254088f19cd0c5823a8e7c35c6660b3fbf5d03fd25ebb80bd9427e41154597269bda10db8106b5291b00000000000000000000000000000000000000000000000000000000000000"
+    },
+    {
+      "name": "zether-bls12381",
+      "kind": 321,
+      "from": "0x77c6ca9465cf5bd3eb3160bfdabd80bc08d6a9dc63cb3976301a5275f482e174",
+      "order": {
+        "types": {
+          "EIP712Domain": [
+            {
+              "name": "name",
+              "type": "string"
+            },
+            {
+              "name": "version",
+              "type": "string"
+            },
+            {
+              "name": "chainId",
+              "type": "uint256"
+            },
+            {
+              "name": "verifyingContract",
+              "type": "address"
+            },
+            {
+              "name": "salt",
+              "type": "bytes32"
+            }
+          ],
+          "UATradeOrder": [
+            {
+              "name": "from",
+              "type": "bytes32"
+            },
+            {
+              "name": "receiveToken",
+              "type": "address"
+            },
+            {
+              "name": "amount",
+              "type": "uint256"
+            },
+            {
+              "name": "receiveAmount",
+              "type": "uint256"
+            },
+            {
+              "name": "minFill",
+              "type": "uint256"
+            },
+            {
+              "name": "fee",
+              "type": "uint256"
+            },
+            {
+              "name": "relayer",
+              "type": "address"
+            },
+            {
+              "name": "dex",
+              "type": "address"
+            },
+            {
+              "name": "destination",
+              "type": "bytes32"
+            },
+            {
+              "name": "flags",
+              "type": "uint8"
+            },
+            {
+              "name": "batch",
+              "type": "uint256"
+            },
+            {
+              "name": "nonce",
+              "type": "uint256"
+            },
+            {
+              "name": "validUntil",
+              "type": "uint256"
+            }
+          ]
+        },
+        "primaryType": "UATradeOrder",
+        "domain": {
+          "name": "SCaaS MetaToken",
+          "version": "1",
+          "chainId": "31337",
+          "verifyingContract": "0x5ca00000000000000000000000000000000000c1",
+          "salt": "0xfd5ae6a2375e412f1c037047add923e138f84c83e565e12d4000707f3d0eabcc"
+        },
+        "message": {
+          "from": "0x77c6ca9465cf5bd3eb3160bfdabd80bc08d6a9dc63cb3976301a5275f482e174",
+          "receiveToken": "0x5ca00000000000000000000000000000000000c2",
+          "amount": "1000",
+          "receiveAmount": "2000",
+          "minFill": "0",
+          "fee": "3000",
+          "relayer": "0x000000000000000000000000000000000000beef",
+          "dex": "0x5ca00000000000000000000000000000000000d1",
+          "destination": "0x0000000000000000000000000000000000000000000000000000000000000000",
+          "flags": 0,
+          "batch": "1",
+          "nonce": "1",
+          "validUntil": "1800000300"
+        }
+      },
+      "structHash": "0x95b0d397b3fd080e19db74532a35d0b2fc3cbddc101c87a8bd8ec21110b0bd65",
+      "orderHash": "0xc420299311be5bcfdb5867cb3d36c22e3b453602be7d35585efe31120333b86d",
+      "auth": "0x00000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000060000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000a0000000000000000000000000000000001057a7729ab39c297add3a302f3e72a7794522446dbf8521aa38a5107b010ee8ec3129dae15caa41128fb9a46ae88027000000000000000000000000000000001798f85813338986601cccfdf8a58c45627cc20a17665174c397618b3ec534ae34b1f655dc7c257d8eebedcbb552857f48fe86ac955da4919c5da6c926bb35083e66eadfee6ca7488c3a652b1ea4d3dd",
+      "cancelDigest": "0xeb54c1b1196e605f51bc905b39e4f23ed5848f824123f2aee318ecfc86104b1d",
+      "cancelAuth": "0x00000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000060000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000a0000000000000000000000000000000000ac4e33cb78361b421c14cdee897d47ff1919314f80908fe036e2f3e2493e0d9fe508a8d3b0749d2ce3090465026993a000000000000000000000000000000000240c98d20b650fa9420e3e744d2011457aa4868086a1c3cc1a3a6103338c44fa1a797fad18e8a2576949b4249369e6407d770ec93f1cba4b7bc40ad68a5a2996cf86db480709c07b42fa2efd42dad7a",
+      "invalidate": {
+        "types": {
+          "EIP712Domain": [
+            {
+              "name": "name",
+              "type": "string"
+            },
+            {
+              "name": "version",
+              "type": "string"
+            },
+            {
+              "name": "chainId",
+              "type": "uint256"
+            },
+            {
+              "name": "verifyingContract",
+              "type": "address"
+            },
+            {
+              "name": "salt",
+              "type": "bytes32"
+            }
+          ],
+          "UAInvalidateNonces": [
+            {
+              "name": "from",
+              "type": "bytes32"
+            },
+            {
+              "name": "batch",
+              "type": "uint256"
+            },
+            {
+              "name": "minNonce",
+              "type": "uint256"
+            }
+          ]
+        },
+        "primaryType": "UAInvalidateNonces",
+        "domain": {
+          "name": "SCaaS MetaToken",
+          "version": "1",
+          "chainId": "31337",
+          "verifyingContract": "0x5ca00000000000000000000000000000000000c1",
+          "salt": "0xfd5ae6a2375e412f1c037047add923e138f84c83e565e12d4000707f3d0eabcc"
+        },
+        "message": {
+          "from": "0x77c6ca9465cf5bd3eb3160bfdabd80bc08d6a9dc63cb3976301a5275f482e174",
+          "batch": "1",
+          "minNonce": "5"
+        }
+      },
+      "invalidateDigest": "0xf61ef41fb2506715393a1095e9350634e4ee379d7acdda2b2e82f73b9038a56e",
+      "invalidateAuth": "0x00000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000060000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000a000000000000000000000000000000000194b81b87ccd91f84e3ee97d08b4c53b5c4a243bb6de5f02f65691e8e90ec519aea1073ecce3309fcb0501fe829f077d0000000000000000000000000000000003e2c43539bac2db780623494cb5e9eaf9ae2ebdb3f0a60ef92e6ba9bb0eaf5d862243174f4194db95b53f62f621e46424ff2ac4b85cbb041e0e54598b8bc83e42ad64acf1f7d0e8c8c3221e47035fae"
     }
   ],
   "nativeMaker": {
