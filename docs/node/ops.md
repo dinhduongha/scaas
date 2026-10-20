@@ -704,7 +704,7 @@ Above the rated load: a second node on **different chains**, not a bigger store.
   `ua_metatx` (v3) jobs, with the node-computed digest over the token's domain, idempotency and lanes unchanged; the
   token row has `kind = pqz`. Job kind `pqz_call` is for **direct open calls** only: `{chain, contract, selector ∈
   {mtxConfidentialTransfer, mtxUnshield, mtxRollOver}, calldata}` (direct `mtxShield` moves the caller's public units into the pool and `mtxWrapShield` pulls the caller's underlying, so neither is a node
-  job; `mtxRollOver` is a direct call, never relayed; with the multi-recipient transfer, P6-ANON, `mtxConfidentialTransfer*` is op 7 with M ≥ 1 recipients and the single-recipient
+  job; `mtxRollOver` is also an allowlisted envelope op (a relayed `metatx` job, outer fee may be 0, owner 2026-10-20); with the multi-recipient transfer, P6-ANON, `mtxConfidentialTransfer*` is op 7 with M ≥ 1 recipients and the single-recipient
   `mtxConfidentialTransferSingle*` (op 1) joins the set, each with its `Compact` variant; `NoBundle` is retired on PQZ). For all: the contract must be a configured PQZ token; pre-simulation by `eth_estimateGas` on a
   **follower**, never the signer (fails ⇒ job rejected, no gas spent; op 7 is pre-simulated the same way); `max_gas_per_tx = 16_000_000` on chain 7622 (the
   default 3,000,000 already rejects classical Zether transfers at 3.36 M); never batched (`PqzToken` has no

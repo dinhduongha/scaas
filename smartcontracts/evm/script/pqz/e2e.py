@@ -56,7 +56,7 @@ TAG = {MLDSA44: kc("scaas.ua.mldsa44.v1"), MLDSA65: kc("scaas.ua.mldsa65.v1"), S
 
 # ------------------------------------------------------------------ the token API in one place (plan 5h Task 3b, spec
 # §5.11): the shared `mtx*` names and the shared signature `(payload, proof, auth, beneficiary, accHint[, trailing])`.
-# Checked against the built ABI (Task 4b); mtxRollOver / mtxPrepareAcc are not relayable: called directly, never in a meta-tx.
+# Checked against the built ABI (Task 4b); mtxRollOver / mtxPrepareAcc are relayable (Task R) but this script calls them directly.
 SH_S, SH_T = "bytes,bytes,bytes,bytes32,bytes", ["b", "b", "b", "w", "b"]  # payload, proof, auth, beneficiary, accHint
 UNWRAP_S = "(address,bytes32,uint256,uint256)"  # IConfidentialToken.Unwrap(underlying, recipient, amount, minOut), a calldata struct
 API = dict(

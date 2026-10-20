@@ -320,6 +320,12 @@ declares its allowlist as constants — exact selectors, overloads listed one by
 publishes it through `mtxSelectors() returns (bytes4[] selectors, uint8[] feeClass, uint8[] amountArg)`; a test pins
 it. Nothing else is reachable through `mtxExecute`.
 
+**General rule (owner 2026-10-20): every state-changing `mtx*` function is relayable, even with no fee.** It is either itself
+a meta-tx entry point (`mtxExecute`, `mtxBatch`, `mtxTransfer`, the named builders that carry their own signature) or an
+allowlisted self-call whose outer fee may be 0 (`NONE` or `FIXED` 0). So the confidential tokens list their roll-overs
+(Zether: `mtxRollOver`, `mtxRollOverBatch`, `mtxRollOverSigned`, `mtxSetRollOverMode`; PQZ: `mtxRollOver`, `mtxPrepareAcc`), whatever
+the function's own authority is (none, or an owner signature checked inside). BUILT for the confidential tokens, commit `b5e61c96`.
+
 | Implementation | Self-call selector | Fee class |
 |---|---|---|
 | every token | `cancelNonce(uint256)` | `ABSOLUTE` |
@@ -335,7 +341,7 @@ it. Nothing else is reachable through `mtxExecute`.
 | | `mtxShield(bytes32,uint256)`, `mtxWrapShield(address,uint256,bytes32)` (`UNDERLYING_ZETHER`) | `ABSOLUTE` |
 | | `mtxConfidentialTransfer`, `…Compact`, `…NoBundle`, `…Single` `(bytes payload,bytes proof,bytes auth,bytes32 beneficiary,bytes accHint)`, `mtxUnshield(…, uint256 amount, bytes32 recipient)`, `mtxUnshieldUnwrap` (the shared signature of the 5h interface, [CTR-ZTH-45](zether.md#CTR-ZTH-45); Zether takes empty `auth` and `accHint`) | `ABSOLUTE`; envelope binding through the ticket ([CTR-ZTH-34](zether.md#CTR-ZTH-34)) |
 | | `mtxUnshield` / `mtxUnshieldUnwrap` with a derived-UA recipient (one selector each; the former `…ToUA` names are gone; BUILT, plan 5h Task 3b, [CTR-ZTH-51](zether.md#CTR-ZTH-51)) | `ABSOLUTE`; envelope binding as above |
-| `PqzToken` | `mtxConfidentialTransfer`, `…Compact`, `…Single`, `…SingleCompact` `(bytes payload,bytes proof,bytes auth,bytes32 beneficiary,bytes accHint)`, `mtxUnshield(…, uint256 amount, bytes32 recipient)`, `mtxShield(bytes32,uint256)` (`UNDERLYING_PQZ`: also `mtxWrapShield`, `mtxUnshieldUnwrap`); `mtxRollOver` and `mtxPrepareAcc` are not allowlisted | `ABSOLUTE`; not batchable ([CTR-PQZ-21](pq-zero-knowledge.md#CTR-PQZ-21)) |
+| `PqzToken` | `mtxConfidentialTransfer`, `…Compact`, `…Single`, `…SingleCompact` `(bytes payload,bytes proof,bytes auth,bytes32 beneficiary,bytes accHint)`, `mtxUnshield(…, uint256 amount, bytes32 recipient)`, `mtxShield(bytes32,uint256)` (`UNDERLYING_PQZ`: also `mtxWrapShield`, `mtxUnshieldUnwrap`); `mtxRollOver` and `mtxPrepareAcc` too (Task R) | `ABSOLUTE`; not batchable ([CTR-PQZ-21](pq-zero-knowledge.md#CTR-PQZ-21)) |
 | `MandateWallet` | delegate: `payUnderMandate(address,address,uint256,bytes32,uint64)`, `revoke(address,uint64)`; owner: `setMandate`, `setPayee`, `revoke(address)`, `execute` ([CTR-ACC-06](mandates.md#CTR-ACC-06)) | fee `NONE` only |
 | `SmartKeyAccount` | `addKey`, `removeKey`, `rotateKey`, `setGuardian`, `cancelRecovery`, `execute`, signed by the account itself ([CTR-ACC-10](accounts.md#CTR-ACC-10)) | fee `NONE` only |
 

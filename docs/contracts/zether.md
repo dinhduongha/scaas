@@ -715,8 +715,10 @@ signer (`uaExecute`) the binding is the UA envelope's, with its own tag ([CTR-ZT
 The outer fee is
 the base's step 6, `FIXED` absolute or `NONE` (fee class `ABSOLUTE`, [CTR-MTX-20](metatx.md#CTR-MTX-20)); the inner fee
 (`confidentialFee` to the beneficiary's public balance out of `SHIELD_POOL`) keeps its amount and statement word. The dynamic arguments are re-encoded canonically by the node
-before it computes the mesh `intent_id`. The `rollOver*` functions stay outside the allowlist: `mtxRollOver` needs no
-signature, and `mtxRollOverSigned`/`mtxSetRollOverMode` carry their own signature, so anyone can relay them.
+before it computes the mesh `intent_id`. The four roll-over functions are on both allowlists too, `ABSOLUTE` with the outer fee `FIXED` (possibly 0) or
+`NONE` (owner 2026-10-20: every `mtx*` write is relayable): `mtxRollOver(bytes32,uint256)`, `mtxRollOverBatch(bytes32[])`,
+`mtxRollOverSigned` and `mtxSetRollOverMode`. They do exactly what the direct call does (the first two need no
+signature; the signed pair keep checking their owner signature inside, so a relayer only pays the gas). BUILT, commit `b5e61c96`.
 **Built (P3)**, with every signer-authorised confidential op allowlisted `ABSOLUTE`: the four transfers, `mtxShield`,
 `mtxUnshield`, and on `UNDERLYING_ZETHER` `mtxWrapShield` and `mtxUnshieldUnwrap` beside `UnderlyingToken`'s
 wrap and unwrap entries (without `unwrap(uint256,address)`). A direct `mtxUnshieldUnwrap` proves under `ZTX_V1_DIRECT`
@@ -1032,7 +1034,7 @@ on every proof-taking entry point; `mtxRollOver(ua, 0)` ⇒ `RollOverRange(0)`. 
 `mtxUnshield(payload, proof, auth, beneficiary, accHint, uint256 amount, bytes32 recipient)`; `mtxUnshieldUnwrap` takes the five and then
 the leg as one calldata struct `Unwrap(address underlying, bytes32 recipient, uint256 amount, uint256 minOut)` (declared in
 `IConfidentialToken`; a flat 9-argument form is stack-too-deep on the legacy code generator, `via_ir = false`). The relay allow-lists (`mtxSelectors`, address and UA path)
-list these selectors; the Zether roll-overs stay off them ([CTR-ZTH-34](#CTR-ZTH-34)); PQZ's `mtxRollOver` and `mtxPrepareAcc` are off its lists too (3b; both are called directly).
+list these selectors; the Zether roll-overs (all four) and PQZ's `mtxRollOver` and `mtxPrepareAcc` are on them too (Task R, owner 2026-10-20, [CTR-ZTH-34](#CTR-ZTH-34)).
 
 **Events** (shared names): `Shielded(bytes32 indexed toUA, address indexed from, uint256 amount, uint64 index)` (Zether `index` =
 `pendingSeq`), `ConfidentialTransfer`, `ConfidentialTransferMulti` (fields unified where both layers have them),

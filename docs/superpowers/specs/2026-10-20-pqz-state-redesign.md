@@ -483,7 +483,7 @@ one selector each — the proof-taking ones `(bytes payload, bytes proof, bytes 
 accHint[, …])`: PQZ requires `beneficiary` to equal the payload's, Zether requires an empty `accHint`. Layer-only
 functions (`mtxPrepareAcc`, the Zether rollover modes) sit in the layer's own interface on the same scheme. Views keep
 their names (`pqzAccount`, `accountState`, …): CTR-ZTH-45 is about entry points. The relay allow-lists
-(`mtxSelectors`) follow the new selectors; rollovers stay off them (CTR-ZTH-34).
+(`mtxSelectors`) follow the new selectors; ~~rollovers stay off them (CTR-ZTH-34)~~ (superseded by the owner 2026-10-20: every `mtx*` write is relayable, so the rollovers and `mtxPrepareAcc` are on both allow-lists, Task R).
 
 ## 6. Larger parameters: A' measured, 16k chosen
 

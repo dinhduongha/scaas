@@ -1044,8 +1044,8 @@ in place, each stored as `ACC_MARK | word` (bit 255; lanes are `< 2^42`), so no 
 TRIVIAL-only first rollover, whose `u` is 0 (final review I1) — and the mark is masked off on read (`accHash` and hints are
 over the unmarked bytes); `accHash` is updated, `flags |= MAT`, `rolled += n′`, `accUnits += n′`; the pending slots below `rolled − INLINE_MAX`
 are deleted (`cleared` and, when passed, `floor` follow); emit `RolledOver(ua, rolled, accUnits, accHash)`. No calldata besides
-`(ua, n)`, no proof, no signature: rollover cannot hurt anyone. It is not an envelope op (off both PQZ allow-lists, plan 5h
-Task 3b): anyone calls it directly. Cost (contract side, measured on the built token, `ROLL_AGE = 5`, each rollover its own
+`(ua, n)`, no proof, no signature: rollover cannot hurt anyone. It is also an allowlisted envelope op on both paths (Task R, owner 2026-10-20, [CTR-PQZ-21](#CTR-PQZ-21)): anyone calls it
+directly or through a relayer; the relayed `ROLL_MAX` rollover measures 12,185,595 gas (under `0.75 · 2^24`). Cost (contract side, measured on the built token, `ROLL_AGE = 5`, each rollover its own
 cold transaction): ≈ 2.85 M fixed (516 word rewrites) + ≈ 36.3 k per entry: 1 → 2.85 M, 16 → 3.43 M, 128 → 7.50 M,
 **256 → 12.15 M (72.4 % of 2^24)**; 272 would be 12.73 M, over the 0.75 · 2^24 = 12,582,912 rule, so `ROLL_MAX = 256`,
 pinned by `PqzStatePinGasTest`; 256 credits after a TRIVIAL-only rollover 12.09 M (`PqzStateTrivialRollGasTest`; 20.89 M
@@ -1299,7 +1299,7 @@ which pays the underlying straight to `recipient`, so no envelope `unwrap` op is
 | `mtxShield(bytes32,uint256)` | shield, source = the signer's public balance | none: no statement; the envelope signature covers `(ua, amount)` |
 | `UNDERLYING_PQZ`: `mtxWrapShield(address,uint256,bytes32)`, `mtxUnshieldUnwrap` | wrap-shield, unshield-unwrap | the unwrap folds `(leg, minOut)` into the binding |
 
-`mtxRollOver` and `mtxPrepareAcc` are **not** allowlisted (3b removed `mtxRollOver` from both PQZ lists: keepers and wallets call them directly; neither needs an authority, and a relayed call would only add a signature; a meta-tx carrying either ⇒ `MtxSelectorNotAllowed` / `MetaTxUnknownOp`).
+`mtxRollOver(bytes32,uint256)` and `mtxPrepareAcc(bytes32,uint256)` are allowlisted on both paths (Task R, owner 2026-10-20: every `mtx*` write is relayable; `ABSOLUTE`, the outer fee may be 0; static 68-byte shape; unbatched like the other PQZ ops). Neither needs an authority: the relayed call does what the direct call does, and the signer's only role is to pay the outer fee. BUILT, commit `b5e61c96`.
 
 Any other selector ⇒ `MtxSelectorNotAllowed`. `supportedModes()` returns `0xF3` on both paths: flag bits
 `MODE_RESTRICT_RELAYER` (`0x01`) and `MODE_RESTRICT_FEE_RECIPIENT` (`0x02`) apply to every op; fee nibble `NONE`
@@ -1314,7 +1314,7 @@ chain 7622) and protects itself by simulating on a follower.
 
 <a id="CTR-PQZ-21"></a>**CTR-PQZ-21** — **`PqzToken` relays through the generic self-call, as classical Zether**
 (owner 2026-10-08: "why not the same as Zether?"). `mtxConfidentialTransfer*`, `mtxUnshield`, `mtxShield(bytes32,uint256)` are allowlisted self-calls
-through `mtxExecute`/`uaExecute` (`mtxRollOver` and `mtxPrepareAcc` are not), and the proof-carrying
+through `mtxExecute`/`uaExecute` (`mtxRollOver` and `mtxPrepareAcc` too, Task R), and the proof-carrying
 ones read the envelope binding from the ticket ([CTR-ZTH-34](zether.md#CTR-ZTH-34)); there is no separate PQZ mixin.
 PQZ selectors are refused in `mtxBatch`/`uaBatch` (`MtxNotBatchable(selector)`: one op is ≈ 3 M gas and up to
 ≈ 340 KB). **Cost of the self-call:** one memory copy of `m.data` for the `CALL`, `3·w + w²/512` gas with `w` = words:
