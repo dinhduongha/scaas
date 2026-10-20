@@ -188,7 +188,10 @@ block 0's hash; past block 256 `CHAIN_UID` is required). The script stops when t
 chain, deploy it first (the keyless presigned deployment transaction of that proxy, funded by a transfer to its signer)
 and re-run. `forge script … --broadcast` needs `--sender <deployer address>`, which `deploy.sh` and the e2e pass; forge
 places the linked libraries from that sender, not by CREATE2. It deploys `OpenFactory` (notice period `NOTICE_PERIOD`
-seconds, default 10 minutes on 7622, 3 days on 22776, 0 elsewhere — owner 2026-10-20; `DEMO_SUPPLY` needs 0) and, when
+seconds; owner ruling 2026-10-20: every mainnet — any chain outside `DeployBase._isTestChain`'s fixed list of test /
+dev chains, so 22776, Hedera 295 and an unknown chain too — defaults to and may not go below 3 days; 7622 defaults to 10
+minutes, the other listed test / dev chains to 0; at most 30 days, the factory's `MAX_NOTICE_PERIOD`; `DEMO_SUPPLY`
+needs 0) and, when
 the deployer is the registrar, publishes env 1 of `NONE` and of the DEX (the factory, `chain_uid`, the UA registry, the
 `SmartKeyAccount` implementation, Hedera, the linked libraries with their code hashes) and has the factory deploy
 (plan 5g-Z2, [CTR-TOK-03](../contracts/token-wrappers.md#release-env)) `NoUnderlyingToken` as

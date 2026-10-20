@@ -1858,6 +1858,18 @@ rule belongs to a later governance-matrix spec): interim, **controller proposal 
 or the DEX (`EnvUnknown(domain, envVersion)`), recorded in the `Release`; an older env stays usable for a new release.
 Status: built on branch `rev2-zether-z2`, commit `0f88e66f` (plan Task 5g-Z2).
 
+Change (2026-10-20): **owner ruling 2026-10-20 — every mainnet gets a notice period of at least 3 days** (replaces the
+defaults of item (1) above) and the review 5g-Z2 fixes. (1) `DeployBase` is safe by default: a fixed list of test / dev
+chains (31337, 1337, the node e2e's anvils 31900–31999, 7622, Hedera 296–298 and the public testnets of
+`chain-uids.json`: 11155111, 560048, 17000, 63, 97, 10200, 80002, 84532, 11142220, 44787, 11155420, 421614, 43113,
+59141) may use any period (default 10 minutes on 7622, 0 on the others); every other chain is a mainnet (22776, Hedera
+295, Ethereum, BSC, an unknown chain) with default and floor 3 days, and a `NOTICE_PERIOD` below it reverts. A
+`NOTICE_PERIOD` over `uint64` reverts instead of truncating. (2) The `OpenFactory` constructor caps the period at 30 days
+(`MAX_NOTICE_PERIOD`, `NoticePeriodTooLong`; controller choice: near `2^64` every `deployImplementation` overflows
+`usableFrom` and the immutable period would brick the catalogue). (3) `publishEnv` / `publishDexEnv` refuse a library
+code hash `0` (no account) or `keccak256("")` (no code), a pin that checks nothing (`EnvInvalid`). Status: built on
+branch `rev2-zether-z2` (review-fix commits listed in `smartcontracts/evm/runs/2026-10-20-5gz2-wip.txt`).
+
 ### CTR-TOK-04 — Conversion rate num/den, rounding favours contract
 - old: R133 · status: current · owner: no · date: 2026-10-06 · normative: contracts/token-wrappers.md#CTR-TOK-04 · superseded-by: —
 
@@ -2753,6 +2765,15 @@ proposal, owner may override:** the Hedera refusal, for PQZ too — no confident
 set is a new env version plus a new release; tokens of older versions keep theirs. Limit restated: the factory proves
 which env and libraries a release was deployed with, not what its code does; the registrar's key stays the trust root.
 Status: built on branch `rev2-zether-z2`, commit `0f88e66f` (plan Task 5g-Z2).
+
+Change (2026-10-20): review 5g-Z2 P2-2, controller choice (owner may override) — the Zether constructor also checks each
+verifier's role: the transfer and burn verifiers are two addresses, the transfer verifier answers `ringSize()` (one word)
+and the burn verifier does not (`BadInit`); a swapped or duplicated pair passed the proof-system and inner-product checks
+and would have accepted shields that no transfer or unshield could move. `ringSize()` is chosen over a new role constant
+because the deployed verifier contracts already have it. `ZetherLib.init` keeps `VerifierUnsupportedOnThisChain` typed
+when the verifier's `curveName()` reverts (empty name). Limit restated: the factory proves which env was appended and that
+the env's listed libraries had their pinned code hashes, not which libraries the code links nor what it does. Status:
+built on branch `rev2-zether-z2` (review-fix commits listed in `smartcontracts/evm/runs/2026-10-20-5gz2-wip.txt`).
 
 ### CTR-ZTH-21 — Zether envelopes use the base's ERC-1271 cap by codehash
 - old: RS2-21 · status: current · owner: no · date: 2026-10-08 · normative: contracts/zether.md#CTR-ZTH-21 · superseded-by: —

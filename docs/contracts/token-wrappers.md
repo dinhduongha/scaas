@@ -689,7 +689,8 @@ implementation itself, so what a release depends on is fixed in its code by cons
   (owner 2026-10-20).
 - **Envs** are published per kind (and one domain for the DEX) by `publishEnv(kind, envVersion, Env)` /
   `publishDexEnv(envVersion, Env)`: versions from 1, append-only, never changed (`EnvAlreadyPublished`), `Env.factory` and
-  `Env.chainUid` the factory's own (`EnvInvalid`); `EnvPublished(domain, envVersion, envHash)` with
+  `Env.chainUid` the factory's own and no library code hash `0` or `keccak256("")`, a pin that checks nothing
+  (`EnvInvalid`); `EnvPublished(domain, envVersion, envHash)` with
   `envHash = keccak256(abi.encode(env))`; views `envOf`, `dexEnvOf`, `latestEnvVersion`, `latestDexEnvVersion`.
 - **Deployment.** `deployImplementation(kind, version, envVersion, initcode, implArgs)` /
   `deployDexImplementation(version, envVersion, initcode, implArgs)` name the env explicitly: it must be published for
@@ -699,14 +700,19 @@ implementation itself, so what a release depends on is fixed in its code by cons
   (`LibraryCodeHashMismatch`; the list is the registrar's, checked by code hash, not compared with the init code's link
   references — owner 2026-10-20), `CREATE2`s `initcode ‖ abi.encode(envVersion, env, implArgs)` (salt
   `keccak256(abi.encode(kind, version))`, DEX `keccak256(abi.encode("dex", version))`), bubbles a constructor's revert
-  (`DeployFailed` without revert data), checks `kind()`, `factory()`, `chainUid()`, and records
+  (`DeployFailed` without revert data, e.g. a runtime over the chain's code-size limit; init code over the chain's
+  EIP-3860 limit halts the factory's frame instead, so the registrar's call consumes all its gas without `DeployFailed`), checks `kind()`, `factory()`, `chainUid()`, and records
   `Release {implementation, envVersion, envHash, usableFrom, deprecated}`. The event carries the env version and hash,
   `keccak256(initcode)` (without the appended arguments: a reproducible-build check) and the deployed code hash.
 - **Notice period.** `usableFrom = block.timestamp + noticePeriod`; `createToken` / `createDex` refuse a release before
-  it (`VersionNotYetUsable`, `DexVersionNotYetUsable`). The deploy script reads `NOTICE_PERIOD`, default 10 minutes on
-  7622, 3 days on 22776, 0 elsewhere (owner 2026-10-20).
+  it (`VersionNotYetUsable`, `DexVersionNotYetUsable`). The deploy script reads `NOTICE_PERIOD`: every mainnet (any
+  chain outside `DeployBase._isTestChain`'s fixed test / dev list — 22776, Hedera 295, Ethereum, BSC, an unknown chain)
+  defaults to and may not go below 3 days; 7622 defaults to 10 minutes, the other test / dev chains to 0 (owner
+  ruling 2026-10-20). The constructor caps it at 30 days (`MAX_NOTICE_PERIOD`, `NoticePeriodTooLong`: near `2^64` every deployment would overflow).
 - **Limit.** The registrar's key is the trust root for code: it chooses the init code and the env. The factory proves
-  which env and libraries a release was built with, not that the code is honest.
+  which env was appended to the init code and that each library listed in the env had its pinned code hash at
+  deployment; the init code may link libraries the env does not list (owner 2026-10-20), and nothing proves the code
+  honest.
 
 <a id="CTR-TOK-25"></a>**CTR-TOK-25** — **Creation API: `createToken`, `createTokenUnregistered`, `TokenConfig`,
 `TokenCreated`.**
@@ -769,10 +775,12 @@ Factory v2 is backed up in `smartcontracts/evm/legacy/p1e/` (not built).
 - **Deployment** ([CTR-TOK-03](#CTR-TOK-03)): `EnvUnknown`, `LibraryCodeHashMismatch`, the constructor's own error or
   `DeployFailed`, then `kind()`, `factory()` and `chainUid()` read by staticcall: `ImplementationNotAContract`,
   `VersionKindMismatch(expected, got)` (`got = type(uint256).max` when there is no answer),
-  `ImplementationFactoryMismatch`, `ChainUidMismatch`. `NONE_ZETHER_PQZ` and `UNDERLYING_ZETHER_PQZ` (6–7) revert
+  `ImplementationFactoryMismatch`, `ChainUidMismatch`. The constructor refuses a notice period over 30 days
+  (`NoticePeriodTooLong`). `NONE_ZETHER_PQZ` and `UNDERLYING_ZETHER_PQZ` (6–7) revert
   `KindReserved`; kinds 2–5 are built (Zether P3, PQZ P6g; review W-Q, 2026-10-19: this text had kinds 4–7 reserved).
   The constructors check their env: a confidential kind needs its `deps` (`*_ZETHER`: four with code, a registry, the
-  two verifiers of one `proofSystemId`, both fixed to `deps[2]`; `*_PQZ`: the verifier) and refuses a Hedera env
+  two verifiers of one `proofSystemId`, both fixed to `deps[2]`, two addresses, the transfer verifier answering
+  `ringSize()` and the burn verifier not; `*_PQZ`: the verifier) and refuses a Hedera env
   (`BadInit`).
 - **Creation:** `createToken` (a deployed release: `VersionUnknown`; not deprecated: `VersionDeprecated`; past
   `usableFrom`: `VersionNotYetUsable`) and `createTokenUnregistered` (plain kinds only, `UnregisteredConfidentialKind`

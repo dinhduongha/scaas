@@ -1099,14 +1099,15 @@ could carry a fake verifier (`true` for every proof ⇒ `zetherUnshield` drains 
   `UAPqzVerifier` (`ENV_PQZ_VERIFIER` 0); `deployImplementation(kind, version, envVersion, initcode, implArgs)`
   `CREATE2`s the init code with that env appended, so the verifiers are immutables of the release by construction
   ([CTR-TOK-03](token-wrappers.md#release-env)). The Zether constructor refuses missing code, two verifiers of different
-  proof systems, verifiers not fixed to `deps[2]` and a Hedera env (`BadInit`); its `initialize` refuses a transfer
+  proof systems, verifiers not fixed to `deps[2]`, a swapped or duplicated transfer / burn pair (the transfer verifier
+  must answer `ringSize()`, the burn verifier must not) and a Hedera env (`BadInit`); its `initialize` refuses a transfer
   verifier that does not run on this chain (`VerifierUnsupportedOnThisChain`, moved from the factory). No setter, no admin
   list (an admin list would only move the trust to the admin key); a new verifier set is a new env version and a new
   release; tokens of older versions keep theirs. `createTokenUnregistered` refuses every confidential kind. The UA registry's Zether kinds (`zether-bn254`,
   `zether-bls12381`) verify with `ZetherSchnorr*Verifier`, fixed in the registry constructor, not with these proof
   verifiers: unchanged.
-- **Limit, stated plainly:** the factory proves which env and libraries a release was deployed with, not what its code
-  does; a deliberately malicious registrar can still deploy init code that ignores the env. The registrar's key is
+- **Limit, stated plainly:** the factory proves which env was appended to a release's init code and that the env's
+  listed libraries had their pinned code hashes, not which libraries the code links nor what it does; a deliberately malicious registrar can still deploy init code that ignores the env. The registrar's key is
   the trust root for code — a multisig / UA msig before mainnet (a timelock is an option, not built).
 - **Clients and the gateway** accept a Zether token only when the chain's published `OpenFactory` answers
   `isRegisteredToken(token)` and `registry()` equals the chain's canonical registry; the factory is the published source of
