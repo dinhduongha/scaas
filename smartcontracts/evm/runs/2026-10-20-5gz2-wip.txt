@@ -1,0 +1,239 @@
+# Z2 status / resume notes (2026-10-20, paused for the machine shutdown; finished the same day — see "Results" at the end)
+
+- **Worktree:** `/home/ha/work/ainative/scaas/.claude/worktrees/rev2-zether-z2`
+- **Branch:** `rev2-zether-z2`, from main `c951c69d`.
+- **Head:** `3c45eab1` "WIP Z2: …" (a WIP commit) at the pause; the WIP commits were squashed into the logical commits
+  listed under "Results".
+- Nothing merged or pushed, and no capped jobs or shells running. The last `forge build` was stopped before it
+  finished, so no compile output was captured.
+- `smartcontracts/evm/lib/` holds symlinks, as in the earlier worktrees.
+
+## Done
+
+### Contracts (`forge build src` succeeds)
+
+- **`IFactoryToken`:**
+  - `Env {factory, chainUid, registry, smartKeyAccountImpl, hedera, address[] deps, address[] libs, bytes32[] libCodeHashes}`.
+  - Dependency positions: `ENV_ZETHER_{TRANSFER,BURN,INNER_PRODUCT,DISCLOSURE}` = 0..3 and `ENV_PQZ_VERIFIER` = 0.
+  - Generic `initialize(address creator, uint64 version, bytes initArgs)`.
+  - `underlyings()` added to the interface.
+  - `ConfidentialConfig.verifier` removed.
+- **Tokens:**
+  - `MetaTokenBase` takes `Env`, decodes `initArgs = abi.encode(TokenConfig)` to memory, and has a default empty
+    `underlyings()`.
+  - Every token constructor and `SCaaSDex` is `(uint16 envVersion, Env env, bytes implArgs)`.
+  - `_init` / `_requireUnused` / `UnderlyingLib.initToken` / `ZetherLib.init` / `PqzLib.init` take memory.
+  - Zether reads `deps[0..3]` and checks the two verifiers' proof system and `innerProduct()` against `deps[2]`; it
+    refuses a Hedera env.
+  - PQZ reads `deps[0]` and refuses a Hedera env.
+  - `ZetherLib.init` now does the verifier's `isSupportedOnThisChain` check (new error
+    `IZetherToken.VerifierUnsupportedOnThisChain`), moved there from the factory.
+  - `SCaaSDex.initialize(address, uint64, bytes)`.
+- **`OpenFactory` / `IOpenFactory`** (rewritten):
+  - Constructor `(registrar, chainUid, uint64 noticePeriod)`.
+  - `publishEnv(kind, envVersion, Env)` / `publishDexEnv`: envs are versioned, append-only, must name this factory and
+    chain, and emit `EnvPublished(domain, envVersion, envHash)`.
+  - `deployImplementation(kind, version, initcode, implArgs)` / `deployDexImplementation`:
+    - they bind the kind's latest env and check each library's `extcodehash`;
+    - they CREATE2 `initcode ‖ abi.encode(envVersion, env, implArgs)`, bubbling the constructor's revert, then run the
+      `kind()` / `factory()` / `chainUid()` checks;
+    - they record a `Release {implementation, envVersion, envHash, usableFrom, deprecated}`;
+    - the event carries `envHash`, the init-code hash and the code hash.
+  - `createToken(kind, version, bytes initArgs, salt)` refuses an unknown, deprecated or not-yet-usable release and a
+    disabled kind.
+  - `setKindEnabled` / `kindEnabled`: the generic gate; plain kinds start on, confidential kinds off. It replaces
+    `setZetherEnabled` / `setPqzEnabled`.
+  - `createTokenUnregistered` is for plain kinds only; `isRegisteredToken` is unchanged.
+  - `createDex(version, bytes initArgs, salt)`.
+  - The index and `TokenCreated` read the token's `underlyings()`, `features()`, `lockedFeatures()` and `owner()`
+    after `initialize`.
+  - Removed: `Canonical`, `zetherVerifiers`, `pqzVerifier`, `registerImplementation`, `registerDexImplementation`,
+    `zetherEnabled` / `pqzEnabled`, and the Zether / PQZ factory errors.
+
+### Scripts
+
+- **`DeployBase`:**
+  - Reads `NOTICE_PERIOD` (default 10 minutes on 7622, 3 days on 22776, 0 elsewhere).
+  - Publishes the NONE and DEX envs, with the libraries taken via `address(Lib)` and their code hashes.
+  - Deploys the releases through the factory.
+  - Zether: per curve, verifiers and disclosure, then env v1 (bn254) / v2 (BLS12-381) and releases v1 / v2, then the
+    kinds enabled.
+  - Demo tokens require `NOTICE_PERIOD` = 0.
+- **`ZetherE2E.s.sol`:** creates with `initArgs`.
+- **`script/pqz/e2e.py`:**
+  - Factory constructor with a notice period of 0.
+  - Per kind, `publishEnv` with the linked libraries read from the artifact and their code hashes from `eth_getCode`,
+    then `deployImplementation`.
+  - `setKindEnabled` for kinds 4 and 5.
+  - `createToken` with `bytes initArgs`.
+  - `py_compile` passes; not run against a chain.
+- **`deploy.sh`:** unchanged from Z1.
+
+### Tests (conversion in progress, the tree does not compile yet)
+
+- **Mechanical conversion of all suites:**
+  - factory constructor;
+  - `createToken` / `createTokenUnregistered` / `createDex` arguments wrapped in `abi.encode(…)`;
+  - token / DEX constructors to `(1, plainEnv(…), "")`.
+- **New helper `test/helpers/Catalogue.sol`:** `plainEnv`, `zetherEnv`, `pqzEnv`, and
+  `Catalogue.env / release / plain / dex / predict`. The Z1 helper `test/helpers/Canon.sol` is removed.
+- **Rewritten:**
+  - `test/v2/Factory.t.sol`: envs, library code-hash check, deploy checks and release hashes, notice period, kind gate,
+    leg count now the token's.
+  - `test/v2/FactoryZether.t.sol`: the generic gate.
+  - `test/v2/Dex.t.sol`: DEX catalogue, `deployDexImplementation`, notice period.
+  - Zether fixture (`_zenv()`), Zether underlying / invariant / modes.
+  - `ZetherRevertPaths`: Env dependency checks, verifiers only from the factory env; `GuardHarness(Env)`.
+  - `ZetherDeploy`: env deps and library hashes; the fits test with the env append.
+  - PQZ fixture, PqzUnderlying (the largest-release test now measures `deployImplementation` itself), PqzMulti, PqzNone
+    (gate and precompile pin).
+
+## Not done / next steps (at the pause; all done, see "Results")
+
+1. **Get the test tree compiling** (`scripts/capped forge build`). Expected fixes:
+   - test mocks still overriding `_init(TokenConfig calldata)` → `memory` (e.g. `test/v2/helpers/V2Fixture.sol:24`);
+   - helpers calling `initialize` with `TokenConfig` instead of bytes (check V2Fixture `_clone`, HederaKat,
+     SmartKeyAccount, UA ledger bases);
+   - remaining `ConfidentialConfig(...)` literals with the removed `verifier` field (8 fields → 7);
+   - references to removed factory APIs (`zetherEnabled`, `ZetherDisabled`, `VerifierUnsupportedOnThisChain`
+     in IOpenFactory, `pqzVerifier`, `zetherVerifiers`);
+   - imports placed inside multi-line import blocks by the converter;
+   - stack-too-deep in long tests.
+2. **Add the moved Zether chain / verifier gate test:** a transfer-verifier wrapper whose `isSupportedOnThisChain()`
+   is false → `IZetherToken.VerifierUnsupportedOnThisChain` at `createToken`.
+3. **Run the full forge suite,** `--isolate` UAGas / UARegistryGroups, the research `PqzStateGas` (default and with
+   `--gas-limit 60000000000`), `FOUNDRY_PROFILE=private7622 forge build`, `size_gate.py` (raise the baseline with
+   reasons), `evm_libs.sh check`, `docs_check.py`.
+4. **Measure** the init-code size of each implementation with the Env, and the `deployImplementation` gas of
+   `UnderlyingPqzToken` (the test logs it).
+5. **Specs:**
+   - token-wrappers.md OpenFactory section / CTR-TOK-03, -15, -17, -18, -25;
+   - zether.md CTR-ZTH-20;
+   - dex.md CTR-DEX-24;
+   - pq-zero-knowledge.md;
+   - networks/evm.md (NOTICE_PERIOD, JSON keys);
+   - decisions.md Change lines in full;
+   - TODO.md bamboo-dms note (generic factory API).
+6. Then commit in logical steps (the WIP commit may be squashed into them) and report.
+
+## Owner questions (answered 2026-10-20, see "Results")
+
+- **Notice-period defaults:** 10 minutes on 7622, 3 days on 22776. Confirm or give values.
+- **Generic initialize:** it takes `(creator, version, initArgs)`, not `(Env, initArgs)`. The Env is already the
+  release's (constructor immutables), so passing it again would add nothing. Confirm.
+- **Env binding:** `deployImplementation(kind, version, initcode, implArgs)` binds the kind's latest published env, with
+  no env-version parameter, to keep the owner's signature. Confirm, or ask for an explicit env version.
+- **Library pinning:** `Env.libs` is the registrar's list of the libraries the release links, each pinned by code hash.
+  The factory does not parse the init code to check that list against the bytecode's link references.
+- **Removed factory-level gates:** the dev-chain and verifier gates that were in the factory (`setZetherEnabled` on dev
+  chains only, `_checkZether`, `_checkPqz`) now live only in the implementations' `initialize` (ZetherSafety, the
+  verifier's `isSupportedOnThisChain`, `PqzSafety.requirePqz`), as the owner directed.
+
+## Results (2026-10-20, Z2 finished)
+
+forge 1.3.5-stable, solc 0.8.37, optimizer 200, evm osaka; every build / test through `scripts/capped`, `-j2`.
+
+### Owner answers applied (2026-10-20)
+
+- **Notice-period defaults:** 10 minutes on 7622, 3 days on 22776, 0 elsewhere — OK (owner ruling).
+- **Generic `initialize(creator, version, initArgs)` without Env:** OK (owner ruling). The split stays explicit: the
+  implementation carries what never changes for it (the `Env` in its constructor: verifiers, registry, chain, libraries);
+  each instance carries its own config from `initArgs` (rates, features, roles, confidential settings).
+- **Env binding:** owner said **no** to "`deployImplementation` binds the kind's latest env"; the final rule belongs to a
+  later governance-matrix spec. Interim, controller proposal (owner may override), built:
+  `deployImplementation(kind, version, envVersion, initcode, implArgs)` and
+  `deployDexImplementation(version, envVersion, initcode, implArgs)` take an explicit `envVersion`, which must be
+  published for that kind / the DEX (`EnvUnknown(domain, envVersion)`), recorded in the `Release` as before. DeployBase,
+  `script/pqz/e2e.py`, the Catalogue test helper and the direct test callers updated.
+- **Library pins:** the registrar's list checked by code hash, not compared with link references — OK (owner ruling).
+- Not done in Z2 (plan Task 5h): dropping `*_ZETHER_PQZ` kinds, Zether BLS12-381-only, mtxShield / mtxUnshield renames.
+
+### Commits (branch `rev2-zether-z2`, from main `c951c69d`; WIP commits `3c45eab1`, `fd672de9` squashed in)
+
+- `0f88e66f` OpenFactory 5g-Z2: versioned envs, factory-deployed releases, generic creation API (src, scripts, tests).
+- `19d1de69` vectors: regenerate `dex_order_kat.json` (the DEX clone address moves with the factory-deployed release).
+- `1acf1ab0` size gate: raise the token baseline (reasons in `size-baseline.json` `_comment`).
+- `38d19b5a` docs: specs, decisions.md Change lines, TODO bamboo-dms note, dropped-artifacts.tsv.
+- (this file, committed last).
+
+### Fixes needed to finish the test conversion
+
+- 46 compile errors: `initialize(…, TokenConfig)` calls in tests → `abi.encode(cfg)` (one scripted pass over the
+  compiler's locations, 43 sites in 22 files, one of them an `ISCaaSDex.DexConfig` in UATradeVectors), `BaseHarness`
+  constructor → `MetaTokenBase(plainEnv(…))` and `_init(TokenConfig memory)`.
+- `HederaV2.t` setUp: `vm.startPrank(registrar)` around `Catalogue.plain` (which pranks itself) → removed.
+- `DexKat.t`: the KAT's DEX address changed → `WRITE_KAT=true forge test --match-contract DexKatTest`; consumers
+  re-checked: clientkeys `node --test test/evm.test.js` 20 / 20 pass (dependencies from the main checkout's
+  `node_modules`, symlinked for the run and removed); scaas-node `cargo test --lib kat_hashes_and_calldata_match_forge` (capped, -j2, target dir in the
+  session scratchpad): 1 passed, 0 failed.
+- New tests: Factory.t `test_publishEnv` (env unknown / gap / 0, an older env still usable for a new release, recorded
+  env version and hash, the older env's registry in the code); Dex.t `EnvUnknown(255, 9)`; ZetherRevertPaths.t
+  `test_createToken_refusesAVerifierUnsupportedOnThisChain` (an honest transfer verifier wrapped so that
+  `isSupportedOnThisChain()` is false: the release deploys, `createToken` reverts
+  `IZetherToken.VerifierUnsupportedOnThisChain(wrapper, "bn254")`, the honest release of the same shape creates).
+
+### Gates
+
+$ forge test   (full suite)
+Ran 117 test suites in 146.64s (291.98s CPU time): 1326 tests passed, 0 failed, 14 skipped (1340 total tests)
+   (skipped: PqzStateGas without its gas limit 2 + 2 setUp, ZetherProverCross 2 setUp, the opt-in measure_* tests 8)
+$ forge test --isolate --match-path 'test/ua/{UAGas,UARegistryGroups}.t.sol'
+Ran 2 test suites in 2.95s (4.25s CPU time): 20 tests passed, 0 failed, 0 skipped (20 total tests)
+$ forge test --match-path test/research/PqzStateGas.t.sol --gas-limit 60000000000
+Ran 3 test suites in 1.61s (2.53s CPU time): 26 tests passed, 0 failed, 0 skipped (26 total tests)
+$ forge test --match-path test/{zether/ZetherRevertPaths,pqz/PqzMulti,pqz/PqzUnderlying,pqz/PqzNone,v2/FactoryZether,v2/Factory,v2/Dex,zether/ZetherDeploy}.t.sol -vv
+Ran 8 test suites in 3.44s (6.43s CPU time): 119 tests passed, 0 failed, 0 skipped (119 total tests)
+$ FOUNDRY_PROFILE=private7622 forge build      compiles (lint notes only)
+$ forge build src --sizes --json; python3 scripts/size_gate.py   (after the baseline update)
+size gate: 0 error(s), 95 contracts   (before the update: 11 errors, all token runtime / init growth below)
+$ scripts/evm_libs.sh check     openzeppelin-contracts OK, forge-std OK
+$ python3 -I scripts/docs_check.py check     0 error(s), 2 warning(s) (line budgets of token-wrappers.md and
+   node/ops.md, both over budget before Z2), 15 note(s)
+
+### Sizes (bytes; Z1 baseline → Z2) and init code with the appended env
+
+   contract                   runtime          init (forge)       + env   = init sent   linked libraries
+   NoUnderlyingToken          37,067 → 37,733  39,949              672     40,621      Admin, Hedera, Trade
+   UnderlyingToken            47,220 → 47,659  49,882 (> 3860)     736     50,618      + Underlying
+   NoUnderlyingZetherToken    45,786 → 46,302  47,805 → 49,498     864     50,362      Admin, Hedera, Trade, Zether
+   UnderlyingZetherToken      58,027 → 58,432  60,095 → 61,677     928     62,605      + Underlying
+   NoUnderlyingPqzToken       47,581 → 48,160  49,255 → 50,675     768     51,443      Admin, Hedera, Pqz, Trade
+   UnderlyingPqzToken         60,151 → 60,621  61,832 → 63,143     832     63,975      + Underlying
+   SCaaSDex                   23,009           24,669              544     25,213      Trade
+   OpenFactory                12,266 → 15,505  13,033 → 15,839
+   env bytes = abi.encode(uint16, Env, bytes "") = 480 + 32 · (deps + 2 · libs), with deps 4 (Zether) / 1 (PQZ) / 0 and
+   the libraries each artifact links (the registrar may list more; DeployBase's Zether env lists 5 for both kinds).
+   Reasons (baseline `_comment`): `initArgs` decoded to a memory `TokenConfig` and the memory `_init` paths, the common
+   `underlyings()` view (runtime); the constructor's `Env` decoding with its dynamic arrays (init). New `.init` entries:
+   `UnderlyingToken` 49,882, `NoUnderlyingZetherToken` 49,498. Every runtime within 65,536 B, every init sent within
+   7622's 131,072 B.
+
+### Measurements
+
+- `UnderlyingPqzToken` through `OpenFactory.deployImplementation` (registrar tx: intrinsic + calldata + the call, test
+  env with no pinned libraries): init with the env 63,655 B, runtime 60,621 B, **13,467,833 gas** (Z1, direct deploy:
+  13,319,335); fits EIP-7825 with forge's ×1.05 estimate.
+- ZetherDeploy fits test (deploy tx gas; order as in the Z1 log: disclosure, statements, IP bn254, IP BLS, transfer / burn
+  bn254, transfer / burn BLS, NONE_ZETHER, UNDERLYING_ZETHER — the last two now through `deployImplementation`):
+  1,169,140; 2,031,330; 4,846,667; 12,342,118; 2,520,685 / 1,205,912; 2,595,584 / 1,257,558; 10,303,344; 12,967,751
+  (Z1: … 10,164,764; 12,853,539). All < 2^24 / 1.05².
+
+### Controller proposals made in Z2 (owner may override)
+
+1. Explicit `envVersion` on `deployImplementation` / `deployDexImplementation` (interim, above).
+2. Kind gate defaults: plain kinds enabled, confidential kinds disabled at construction; `setKindEnabled` runs no chain
+   check (the token's `initialize` does), so on a non-dev chain a Zether kind can be enabled but every creation reverts.
+3. Confidential kinds refuse a Hedera env (`BadInit`) in their constructors.
+4. The DEX env domain is `type(uint8).max` (255) in `EnvPublished` / `EnvUnknown`.
+5. `latestEnvVersion` / `latestDexEnvVersion` kept as views (no factory logic uses them now; clients and tooling may).
+6. DeployBase publishes one Zether env per curve for both Zether kinds, listing five libraries (`UnderlyingLib` too,
+   which `NoUnderlyingZetherToken` does not link): an extra pin is harmless and keeps one env per curve.
+
+### Not run / open
+
+- `script/pqz/e2e.py` (7622 / anvil) and `scripts/e2e-zether.sh` were not run against a chain (py_compile passes; the
+  forge script paths compile and the DeployBase path is covered by ZetherDeploy.t).
+- `UnderlyingToken` init (49,882 B forge, 50,618 B with the env) now exceeds EIP-3860: not deployable on a 49,152 B
+  chain before EIP-7954; it is not deployed by the scripts today (owner: size work after Glamsterdam).
+- main has moved since the branch point (`e4fc3a09` at the time of writing): expect text conflicts in docs/decisions.md
+  and TODO.md when merging.
