@@ -180,13 +180,18 @@ export function zetherPop(curve, x, { chainId, chainUid, registry }) {
   return { kind, Y, UA, popDigest: hex(d), uaMsg: hex(m), pop: hex(schnorrSign(curve, x, m)) };
 }
 
+// The purposes a Zether UA signs: no contract accepts `member` (the kind is SIGNING, not MEMBER) or `zether-auth` (no PQZ key).
+const ZETHER_PURPOSES = ['metatx', 'metatx-cancel', 'keyop', 'receiver-fee', 'vp', 'vc-anchor', 'trade', 'zether-owner'];
+
 /**
  * The `sig` a Zether UA gives every UA-ledger write (metatx, metatx-cancel, keyop, receiver-fee, vp, vc-anchor, trade,
- * zether-owner, member): Schnorr by `x` over `uaMessage(0x0141, purpose, digest)`; the registry reads `Y` from its record.
- * Spends carry no signature: the proof alone authorizes them (UA-6).
+ * zether-owner): Schnorr by `x` over `uaMessage(0x0141, purpose, digest)`, returned RAW as `R‖z` (160 bytes); the
+ * registry reads `Y` from its record. `requireAuthorized` wants `abi.encode(bytes(""), sig)`: use `zetherOwnerAuth`
+ * for the owner ops. Spends carry no signature: the proof alone authorizes them (UA-6).
  */
 export function zetherSign(curve, x, purpose, digest) {
   if (purpose === 'pop') throw new Error('the PoP has its own signer: zetherPop');
+  if (!ZETHER_PURPOSES.includes(purpose)) throw new Error(`a Zether UA does not sign purpose ${purpose}`);
   return schnorrSign(curve, x, uaMessage(zetherKind(curve), purposeTag(purpose), digest));
 }
 

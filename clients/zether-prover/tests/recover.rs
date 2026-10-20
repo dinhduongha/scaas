@@ -279,14 +279,14 @@ fn modes_in_the_request() {
 
 /// Review T1 I1, final review I1: over the EIP-7825 cap the refusal names the cap, the measured gas limit at this `M`,
 /// the most recipients the form takes and the cheaper forms that fit (here BLS12-381 commit-reveal with the auditor at
-/// M = 8, direct: none fits, at most 7).
+/// M = 8, direct: at most 7; three cheaper forms fit at M = 8).
 #[test]
 fn gas_cap_message() {
     let mut req = multi("bls12381");
     req["recipients"] = json!((1..=8).map(|a| json!({"yTo": y("bls12381", a), "amount": 1})).collect::<Vec<_>>());
     let e = err("proveTransferMulti", &req);
-    for part in ["EIP-7825", "16777216", "M = 8", "17535556", "at most 7 recipients", "bls12381 compact with the auditor, direct",
-        "a cheaper form: none ("] {
+    for part in ["EIP-7825", "16777216", "M = 8", "16924647", "at most 7 recipients", "bls12381 compact with the auditor, direct",
+        "a cheaper form: compact without the auditor (~16563056)", "none without the auditor (~16205229)"] {
         assert!(e.contains(part), "{part}: {e}");
     }
     #[cfg(feature = "bn254")]

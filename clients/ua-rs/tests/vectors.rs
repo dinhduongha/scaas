@@ -153,7 +153,8 @@ fn structures() {
         assert_eq!(hx(&pqz_reg_message(id, &uid, &reg, &ua, &pk).unwrap()), p["pqzRegMessage"]);
         assert_eq!(holder_pop_message(0x0101, id, &uid, &reg, &ua, Some(&pk)), Err(UAError::PqzHolder(0x0101)));
         assert_eq!(holder_pop_message(0x0133, id, &uid, &reg, &ua, Some(&pk)), Err(UAError::PqzHolder(0x0133)));
-        let _ = m;
+        // the message the holder signs: ua_message(kind, pop, the vector's popDigest)
+        assert_eq!(m, ua_message(kind(&p["kind"]), &purpose_tag("pop").unwrap(), &b32(&p["popDigest"])).unwrap());
     }
     for p in arr(&s, "pqzMsig") {
         let d = bytes(&p["keyData"]);

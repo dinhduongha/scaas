@@ -655,8 +655,8 @@ fn by_curve<C: ZCurve>(cmd: &str, v: &Value, rng: &mut OsRng) -> R<Value> {
         "uaSig" => {
             let k = key::<C>(v)?;
             let (purpose, d) = (get(v, "purpose")?.as_str().ok_or("`purpose` must be a string")?, fixed::<32>(v, "digest")?);
-            // the SIGNING purposes of a Zether UA; `pop` has its own command, anything else is unknown
-            const PURPOSES: [&str; 10] = ["metatx", "zether-auth", "metatx-cancel", "member", "zether-owner", "keyop", "receiver-fee", "vp", "vc-anchor", "trade"];
+            // the purposes a Zether UA signs (no `member`: the kind is SIGNING, not MEMBER; no `zether-auth`: no PQZ key); `pop` has its own command. `sig` is the raw R‖z; `requireAuthorized` wants abi.encode(bytes(""), sig)
+            const PURPOSES: [&str; 8] = ["metatx", "metatx-cancel", "zether-owner", "keyop", "receiver-fee", "vp", "vc-anchor", "trade"];
             if !PURPOSES.contains(&purpose) {
                 return Err(format!("`purpose` must be one of {PURPOSES:?} (the PoP has its own command `pop`)"));
             }

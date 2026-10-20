@@ -563,7 +563,7 @@ fn gas_table_edges_bn254() {
 
 #[test]
 fn gas_table_edges_bls12_381() {
-    gas_table_edges::<Bls12381>(false, [[7, 7], [6, 6], [7, 7]]);
+    gas_table_edges::<Bls12381>(false, [[7, 8], [6, 7], [8, 8]]);
     gas_table_edges::<Bls12381>(true, [[7, 7], [6, 6], [7, 7]]);
 }
 

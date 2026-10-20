@@ -91,7 +91,7 @@ fn api_roundtrip_mnemonic_keygen_prove_decrypt() {
         assert_eq!(raw.len(), 128 + 32, "R || z");
         let y = zether_prover::curve::decode_point::<zether_prover::curve::Bls12381>(&hex::decode(&a["Y"].as_str().unwrap()[2..]).unwrap()).unwrap();
         zether_prover::schnorr::verify::<zether_prover::curve::Bls12381>(&y, &m, &raw).unwrap();
-        for bad in ["pop", "nope"] {
+        for bad in ["pop", "nope", "member", "zether-auth"] {
             let r = json!({"curve": curve, "key": k0, "purpose": bad, "digest": "0x".to_string() + &"78".repeat(32)});
             assert!(zether_prover::api::call("uaSig", &r.to_string()).is_err(), "{bad}");
         }
