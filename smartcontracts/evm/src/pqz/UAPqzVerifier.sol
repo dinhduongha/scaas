@@ -5,7 +5,7 @@ import {IUAPopVerifier} from "../ua/IUAVerifier.sol";
 import {PqzSafety} from "./PqzSafety.sol";
 import {PqzCt} from "./PqzCt.sol";
 
-/// @title `pqz-mlwe` (0x0142) UA verifier (CTR-PQZ-13, pq-zero-knowledge.md §7.2 step 6; P6g plan D3): the PoP is an `R_REG`
+/// @title PQZ key PoK verifier of slot 0x0142 (UA-6 U10; CTR-PQZ-13, pq-zero-knowledge.md §7.2 step 6; P6g plan D3): the PoP is an `R_REG`
 ///        proof through the `PQZ` precompile, op 3, on `opTag(REGISTER) ‖ PROOF_SYSTEM_ID ‖ message ‖ pk` (16,480 B).
 /// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Stateless; the precompile and the proof system are immutables. The
 ///         constructor runs only on an allowed chain (`PqzSafety`), for exactly the `PQZ` precompile and one of its two
@@ -13,8 +13,8 @@ import {PqzCt} from "./PqzCt.sol";
 ///         (the pinned vector of that proof system ⇒ true, the same proof with one bit flipped ⇒ false), so a deployed
 ///         instance has watched the precompile accept and refuse (review W-B, 2026-10-19). The same contract is the
 ///         `verifier` of a PQZ token's `ConfidentialConfig` (P6g plan D9): the token takes `PRECOMPILE` and
-///         `PROOF_SYSTEM_ID` from it. `verify` (the registry never calls it for this kind: a PQZ UA authorizes nothing,
-///         CTR-PQZ-12) is the same check as `verifyPop`.
+///         `PROOF_SYSTEM_ID` from it. `verify` (the registry never calls it: a PQZ key is an attribute of a PQ signing
+///         UA, which authorizes with its own signature, CTR-PQZ-12; `register` calls `verifyPop` over the key, UA-6 U3) is the same check as `verifyPop`.
 contract UAPqzVerifier is IUAPopVerifier {
     /// @notice `keccak256("SCAAS-PQZ-OP-REGISTER-V1")` (pq-zero-knowledge.md §8.1).
     bytes32 internal constant OP_TAG_REGISTER = 0x69562a9cd615eb3d906cb1934ad56c788c30228d2faf7c517e33d65b4a03c088;
