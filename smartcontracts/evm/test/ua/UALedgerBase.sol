@@ -9,13 +9,15 @@ import {UnderlyingToken} from "../../src/metatx/UnderlyingToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {ZetherKeys} from "../zether/helpers/ZetherKeys.sol";
+import {ZetherSchnorrBls12381Verifier} from "../../src/ua/verifiers/PairingVerifiers.sol";
 import {noneInit, underlyingInit, Rate} from "../v2/helpers/V2Fixture.sol";
 import {UARegistryBase} from "./UARegistryBase.sol";
 import {plainEnv} from "../helpers/Catalogue.sol";
 
 /// The UA ledger fixture (accounts.md CTR-UA-18/19/26): a registry at `REG_L` on context A (chain 31337, `chainUidA`)
-/// with the stand-in verifier for the eight classical kinds and `zether-bn254`; a `NONE` clone and a one-leg 1:1
-/// `UNDERLYING` clone bound to it; two registered SIGNING UAs (`p256`, `bip340`) and a registered Zether UA. UA-5a
+/// with the stand-in verifier for the eight classical kinds and the real `zether-bls12381` verifier; a `NONE` clone and a
+/// one-leg 1:1 `UNDERLYING` clone bound to it; two registered SIGNING UAs (`p256`, `bip340`) and a registered Zether UA
+/// (a SIGNING UA since UA-6, U8: it receives and signs with a Schnorr by `x`). UA-5a
 /// (CTR-UA-28): `wrpL`, a one-leg 1:1 wrapper of the ledger token `tok` (its reserve wrapped by this fixture, a contract
 /// that may approve, CTR-TOK-01), and `wrpN`, a one-leg 1:1 wrapper of the native coin.
 abstract contract UALedgerBase is UARegistryBase {
@@ -25,6 +27,7 @@ abstract contract UALedgerBase is UARegistryBase {
     address internal constant REG_L = 0x5Ca0000000000000000000000000000000000003;
     uint256 internal constant ALICE_PK = 0xA11CE;
     uint256 internal constant BOB_PK = 0xB0B;
+    uint256 internal constant ZX = 0xA11CE5; // the Zether UA's `x`
     address internal constant RELAYER = address(0xBEEF);
     address internal constant FEE_TO = address(0xFEE);
     uint32 internal constant RR = MetaTxLib.MODE_RESTRICT_RELAYER;
@@ -43,18 +46,21 @@ abstract contract UALedgerBase is UARegistryBase {
     address internal bob;
     bytes32 internal uaP; // p256 (0x0101)
     bytes32 internal uaB; // bip340 (0x0103)
-    bytes32 internal uaZ; // zether-bn254 (0x0140)
+    bytes32 internal uaZ; // zether-bls12381 (0x0141)
 
     function setUp() public virtual override {
         super.setUp();
         UARegistry.KindConfig[] memory base = _cfgs(address(mock));
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](base.length + 1);
         for (uint256 i; i < base.length; ++i) c[i] = base[i];
-        c[base.length] = UARegistry.KindConfig(UAKinds.ZETHER_BN254, address(mock), 50_000);
+        c[base.length] = UARegistry.KindConfig(UAKinds.ZETHER_BLS12381, address(new ZetherSchnorrBls12381Verifier()), 70_000);
         lreg = _deploy(REG_L, chainUidA, address(0), false, BUDGET, address(0), true, c);
         uaP = _register(lreg, UAKinds.P256, _key(UAKinds.P256));
         uaB = _register(lreg, UAKinds.BIP340, _key(UAKinds.BIP340));
-        uaZ = _register(lreg, UAKinds.ZETHER_BN254, ZetherKeys.pub(0xA11CE5, false));
+        bytes memory y = ZetherKeys.pub(ZX, true);
+        bytes32 z = lreg.uaOf(UAKinds.ZETHER_BLS12381, y);
+        uaZ = lreg.register(UAKinds.ZETHER_BLS12381, y,
+            ZetherKeys.schnorr(ZX, lreg.uaMessage(UAKinds.ZETHER_BLS12381, UAKinds.PURPOSE_POP, lreg.popDigest(z, 0)), true), "", "");
         (alice, bob) = (vm.addr(ALICE_PK), vm.addr(BOB_PK));
         vm.warp(1_800_000_000);
         tok = NoUnderlyingToken(Clones.clone(address(new NoUnderlyingToken(1, plainEnv(address(this), address(0), chainUidA, REG_L, false), ""))));
@@ -108,8 +114,14 @@ abstract contract UALedgerBase is UARegistryBase {
         if (from == _pad(alice)) return _ecdsa(ALICE_PK, digest);
         if (from == _pad(bob)) return _ecdsa(BOB_PK, digest);
         uint16 kind = lreg.kindOf(from);
+        if (from == uaZ) return _zAuth(UAKinds.PURPOSE_METATX, digest);
         bytes memory k = kind == UAKinds.P256 ? _key(UAKinds.P256) : _key(UAKinds.BIP340);
         return _auth(lreg, kind, k, UAKinds.PURPOSE_METATX, digest);
+    }
+
+    /// The Zether UA signs like a stored kind (UA-6 U8): `abi.encode(bytes(""), Schnorr by x over ua_msg)`.
+    function _zAuth(bytes32 purpose, bytes32 digest) internal view returns (bytes memory) {
+        return abi.encode(bytes(""), ZetherKeys.schnorr(ZX, lreg.uaMessage(UAKinds.ZETHER_BLS12381, purpose, digest), true));
     }
 
     function _authT(address token, MetaTxLib.UAMetaTransfer memory t) internal view returns (bytes memory) {

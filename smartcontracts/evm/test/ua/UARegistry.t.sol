@@ -26,10 +26,6 @@ contract StarvingPredecessor is MockPredecessor {
         _fail();
     }
 
-    function requireZetherAuthorized(bytes32, bytes32, bytes calldata, bool) external view {
-        _fail();
-    }
-
     function _fail() private view {
         if (cheap) revert();
         while (true) {}
@@ -403,13 +399,15 @@ contract UARegistryTest is UARegistryBase {
         _expectUnauthorized(ua, purpose, DIGEST, _auth(reg, kind, _key(otherKind), purpose, DIGEST));
     }
 
-    /// A Zether UA (it cannot even be registered by this generation) is never authorized.
+    /// `zether-bn254` (0x0140) is in `legacy/ua6/` (UA-6 U10): no slot, no tag; its old id is never authorized.
     function test_T_AUTH_1b_zether() public {
         bytes memory y = vm.parseJsonBytes(_kindsJson(), ".valid[16].keyData");
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKindDisabled.selector, uint16(0x0140)));
         reg.register(0x0140, y, "", "", "");
-        bytes32 ua = UAKinds.uaOf(0x0140, y);
-        _expectUnauthorized(ua, UAKinds.PURPOSE_METATX, DIGEST, _auth(reg, 0x0140, y, UAKinds.PURPOSE_METATX, DIGEST));
+        vm.expectRevert(abi.encodeWithSelector(UAKinds.UAKindUnknown.selector, uint16(0x0140)));
+        reg.uaOf(0x0140, y);
+        bytes32 ua = keccak256(abi.encodePacked(keccak256("scaas.ua.zether-bn254.v1"), y));
+        _expectUnauthorized(ua, UAKinds.PURPOSE_METATX, DIGEST, abi.encode(y, _sig(y, DIGEST)));
     }
 
     function test_T_AUTH_2_msig() public {
@@ -776,13 +774,9 @@ contract UARegistryTest is UARegistryBase {
         bytes32 ua = bytes32(uint256(0xbeef) << 200); // derived, unknown to gen 2: handed to gen 1
         vm.expectRevert(UAKinds.UAVerifyGas.selector);
         gen2.requireAuthorized{gas: 1_000_000}(ua, UAKinds.PURPOSE_METATX, DIGEST, "");
-        vm.expectRevert(UAKinds.UAVerifyGas.selector);
-        gen2.requireZetherAuthorized{gas: 1_000_000}(ua, DIGEST, "", true);
         pred.setCheap(true);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua));
         gen2.requireAuthorized{gas: 1_000_000}(ua, UAKinds.PURPOSE_METATX, DIGEST, "");
-        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua));
-        gen2.requireZetherAuthorized{gas: 1_000_000}(ua, DIGEST, "", true);
     }
 
     /// W-M: gen 1 running out of gas before its hold (behind gen 2) is `UAVerifyGas`, never a verdict. At every gas

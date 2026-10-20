@@ -21,10 +21,8 @@ abstract contract ZetherGasLimitSuite is ZetherFixture {
     uint256 internal constant PAYER_PK = 0x9A7E5;
     User[12] internal rs;
 
-    function _curve() internal pure virtual returns (bool);
-
     function setUp() public {
-        _deploy(_curve(), true);
+        _deploy(true);
         for (uint256 i; i < rs.length; ++i) rs[i] = _user(0xD00 + i, address(uint160(0xE00 + i)));
         _public(tok, vm.addr(PAYER_PK), 1000);
         _fund(tok, alice, 1_000_000);
@@ -46,7 +44,7 @@ abstract contract ZetherGasLimitSuite is ZetherFixture {
         vs[m / 2] = 1000;
         if (!relayed) {
             Tx memory t = _proveMulti(tok, alice, to, vs, 1_000_000, carol.ua, mode);
-            return abi.encodeWithSelector(_sel(mode), t.payload, t.proof, bytes(""), carol.ua);
+            return abi.encodeWithSelector(_sel(mode), t.payload, t.proof, carol.ua);
         }
         MetaTxLib.MetaTransaction memory mt = MetaTxLib.MetaTransaction({
             from: vm.addr(PAYER_PK), data: "", batch: 1, nonce: tok.mtxNonce(vm.addr(PAYER_PK), 1),
@@ -54,7 +52,7 @@ abstract contract ZetherGasLimitSuite is ZetherFixture {
             relayer: relayer, fee: 3, feeRecipient: address(0)
         });
         Tx memory u = _proveMulti(tok, alice, to, vs, 1_000_000, carol.ua, mode, tok.envelopeBinding(mt));
-        mt.data = abi.encodeWithSelector(_sel(mode), u.payload, u.proof, bytes(""), carol.ua);
+        mt.data = abi.encodeWithSelector(_sel(mode), u.payload, u.proof, carol.ua);
         (uint8 v, bytes32 r, bytes32 s) = vm.sign(PAYER_PK, tok.mtxDigest(mt));
         return abi.encodeCall(IMetaTx.mtxExecute, (mt, abi.encodePacked(r, s, v)));
     }
@@ -133,7 +131,7 @@ abstract contract ZetherGasLimitSuite is ZetherFixture {
             bytes memory cd;
             if (!relayed) {
                 Tx memory t = _proveTransfer(tok, alice, rs[0], 1000, 1_000_000, carol.ua, 0);
-                cd = abi.encodeCall(ZetherLayer.zetherTransferSingle, (t.payload, t.proof, bytes(""), carol.ua));
+                cd = abi.encodeCall(ZetherLayer.zetherTransferSingle, (t.payload, t.proof, carol.ua));
             } else {
                 MetaTxLib.MetaTransaction memory mt = MetaTxLib.MetaTransaction({
                     from: vm.addr(PAYER_PK), data: "", batch: 1, nonce: tok.mtxNonce(vm.addr(PAYER_PK), 1),
@@ -141,7 +139,7 @@ abstract contract ZetherGasLimitSuite is ZetherFixture {
                     relayer: relayer, fee: 3, feeRecipient: address(0)
                 });
                 Tx memory u = _proveTransfer(tok, alice, rs[0], 1000, 1_000_000, carol.ua, tok.envelopeBinding(mt));
-                mt.data = abi.encodeCall(ZetherLayer.zetherTransferSingle, (u.payload, u.proof, bytes(""), carol.ua));
+                mt.data = abi.encodeCall(ZetherLayer.zetherTransferSingle, (u.payload, u.proof, carol.ua));
                 (uint8 v, bytes32 r, bytes32 s) = vm.sign(PAYER_PK, tok.mtxDigest(mt));
                 cd = abi.encodeCall(IMetaTx.mtxExecute, (mt, abi.encodePacked(r, s, v)));
             }
@@ -156,18 +154,7 @@ abstract contract ZetherGasLimitSuite is ZetherFixture {
 }
 
 /// forge-config: default.isolate = true
-contract ZetherGasLimitBn254Test is ZetherGasLimitSuite {
-    function _curve() internal pure override returns (bool) { return false; }
-
-    function _edges() internal pure override returns (uint8[12] memory) {
-        return [8, 8, 9, 8, 8, 7, 8, 8, 9, 8, 9, 9];
-    }
-}
-
-/// forge-config: default.isolate = true
 contract ZetherGasLimitBls12381Test is ZetherGasLimitSuite {
-    function _curve() internal pure override returns (bool) { return true; }
-
     function _edges() internal pure override returns (uint8[12] memory) {
         return [7, 7, 7, 7, 6, 6, 6, 6, 7, 7, 7, 7];
     }

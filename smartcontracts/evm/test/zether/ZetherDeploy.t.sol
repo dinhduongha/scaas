@@ -12,9 +12,6 @@ import {UAKinds} from "../../src/ua/UAKinds.sol";
 import {ZetherDisclosure} from "../../src/zether/ZetherDisclosure.sol";
 import {ZetherStatements} from "../../src/zether/ZetherStatements.sol";
 import {
-    ZetherInnerProductVerifierBn254,
-    ZetherTransferVerifierBn254,
-    ZetherBurnVerifierBn254,
     ZetherInnerProductVerifierBls12381,
     ZetherTransferVerifierBls12381,
     ZetherBurnVerifierBls12381
@@ -37,15 +34,14 @@ contract ZetherDeployTest is Test {
         return vm.computeCreate2Address(keccak256("scaas.deploy.v1"), keccak256(initCode), address(h));
     }
 
-    /// Curve `c`'s canonical set in the factory and the JSON, and its two releases; returns its transfer verifier.
-    function _checkCurve(OpenFactory f, DeployHarness h, string memory json, uint8 c) internal view returns (address tv) {
-        string memory key = c == 0 ? "bn254" : "bls12381";
-        address ip = _at(h, c == 0 ? type(ZetherInnerProductVerifierBn254).creationCode
-            : type(ZetherInnerProductVerifierBls12381).creationCode);
-        tv = _at(h, abi.encodePacked(c == 0 ? type(ZetherTransferVerifierBn254).creationCode
-            : type(ZetherTransferVerifierBls12381).creationCode, abi.encode(ip)));
-        address bv = _at(h, abi.encodePacked(c == 0 ? type(ZetherBurnVerifierBn254).creationCode
-            : type(ZetherBurnVerifierBls12381).creationCode, abi.encode(ip)));
+    /// The BLS12-381 canonical set in the factory and the JSON, and its two releases (version 1; the bn254 line is in
+    /// `legacy/ua6/`, CTR-ZTH-32); returns its transfer verifier.
+    function _checkCurve(OpenFactory f, DeployHarness h, string memory json) internal view returns (address tv) {
+        string memory key = "bls12381";
+        uint16 c = 0; // version c + 1
+        address ip = _at(h, type(ZetherInnerProductVerifierBls12381).creationCode);
+        tv = _at(h, abi.encodePacked(type(ZetherTransferVerifierBls12381).creationCode, abi.encode(ip)));
+        address bv = _at(h, abi.encodePacked(type(ZetherBurnVerifierBls12381).creationCode, abi.encode(ip)));
         // the env each release was deployed with (plan 5g-Z2): deps = transfer, burn, inner-product verifier, disclosure
         for (uint8 k = 2; k <= 3; ++k) {
             IOpenFactory.Release memory rel = f.releaseOf(IOpenFactory.TokenKind(k), c + 1);
@@ -64,7 +60,7 @@ contract ZetherDeployTest is Test {
         assertEq(vm.parseJsonAddress(json, string.concat(".zether_inner_product_verifier_", key)), ip);
         for (uint8 k = 2; k <= 3; ++k) {
             ZetherLayer rel = ZetherLayer(f.implementationOf(IOpenFactory.TokenKind(k), c + 1));
-            assertEq(rel.curve(), c == 0 ? "bn254" : "bls12-381");
+            assertEq(rel.curve(), "bls12-381");
             assertEq(address(rel.verifier()), tv);
             assertEq(address(rel.burnVerifier()), bv);
         }
@@ -82,14 +78,13 @@ contract ZetherDeployTest is Test {
         NoUnderlyingZetherToken none = NoUnderlyingZetherToken(f.implementationOf(IOpenFactory.TokenKind.NONE_ZETHER, 1));
         UnderlyingZetherToken und =
             UnderlyingZetherToken(payable(f.implementationOf(IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1)));
-        // CTR-ZTH-20: the factory fixed the canonical verifiers in its constructor; one release per curve and kind, the
-        // curve an attribute of the release (`curve()`), not of the version number
-        address[2] memory tv = [_checkCurve(f, h, json, 0), _checkCurve(f, h, json, 1)];
+        // CTR-ZTH-20: one release per kind on the canonical verifiers, the curve an attribute of the release (`curve()`)
+        address tv = _checkCurve(f, h, json);
         assertEq(none.kind(), AdminLib.KIND_NONE_ZETHER);
         assertEq(und.kind(), AdminLib.KIND_UNDERLYING_ZETHER);
         address reg = vm.parseJsonAddress(json, ".ua_registry");
         assertEq(vm.parseJsonAddress(json, ".zether_registry"), reg, "the same registry");
-        assertTrue(IUARegistry(reg).kindEnabled(UAKinds.ZETHER_BN254));
+        assertFalse(IUARegistry(reg).kindEnabled(0x0140), "zether-bn254 is in legacy/ua6/");
         assertTrue(IUARegistry(reg).kindEnabled(UAKinds.ZETHER_BLS12381));
         assertEq(IUARegistry(reg).chainUid(), ZUID);
         assertEq(IUARegistry(reg).verifyBudget(), 12_000_000);
@@ -107,7 +102,7 @@ contract ZetherDeployTest is Test {
         (c.name, c.symbol, c.decimals, c.features) = ("Z", "Z", 6, 1 << AdminLib.PAYABLE);
         c.conf = IFactoryToken.ConfidentialConfig("", 1, 1 << 40, 0, 0, 0, 0);
         ZetherLayer t = ZetherLayer(f.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, abi.encode(c), "z"));
-        assertEq(address(t.verifier()), tv[0]);
+        assertEq(address(t.verifier()), tv);
         assertEq(t.chainUid(), ZUID);
         // multiLegFee is PQZ's (op 7, CTR-PQZ-25): a Zether token refuses a non-zero one
         c.conf.multiLegFee = 1;
@@ -162,20 +157,16 @@ contract ZetherDeployTest is Test {
     /// figure on anvil (BLS verifier: 14,963,261 vs 14,296,783; 14,083,070 used), hence the first ×1.05.
     function test_zetherStack_fitsOneOsakaTx() public {
         address ip = address(new ZetherInnerProductVerifierBls12381());
-        address ipBn = address(new ZetherInnerProductVerifierBn254());
         bytes memory ipArg = abi.encode(ip);
         // the factory's append (plan 5g-Z2): abi.encode(envVersion, env, implArgs)
         bytes memory zArgs = abi.encode(uint16(1), zetherEnv(address(this), ZUID, address(this),
-            address(new ZetherTransferVerifierBn254(ZetherInnerProductVerifierBn254(ipBn))),
-            address(new ZetherBurnVerifierBn254(ZetherInnerProductVerifierBn254(ipBn))), ipBn,
+            address(new ZetherTransferVerifierBls12381(ZetherInnerProductVerifierBls12381(ip))),
+            address(new ZetherBurnVerifierBls12381(ZetherInnerProductVerifierBls12381(ip))), ip,
             address(new ZetherDisclosure())), bytes(""));
-        bytes[10] memory codes = [
+        bytes[7] memory codes = [
             type(ZetherDisclosure).creationCode,
             type(ZetherStatements).creationCode,
-            type(ZetherInnerProductVerifierBn254).creationCode,
             type(ZetherInnerProductVerifierBls12381).creationCode,
-            abi.encodePacked(type(ZetherTransferVerifierBn254).creationCode, abi.encode(ipBn)),
-            abi.encodePacked(type(ZetherBurnVerifierBn254).creationCode, abi.encode(ipBn)),
             abi.encodePacked(type(ZetherTransferVerifierBls12381).creationCode, ipArg),
             abi.encodePacked(type(ZetherBurnVerifierBls12381).creationCode, ipArg),
             abi.encodePacked(type(NoUnderlyingZetherToken).creationCode, zArgs),

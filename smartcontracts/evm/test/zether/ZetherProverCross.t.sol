@@ -12,7 +12,7 @@ import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 ///         token's statement builder (`ZetherStatements`, the same `ZetherLib` code the token runs) returns the
 ///         prover's `statement` byte for byte, the prover's calldata settles, the stored form is the prover's and the
 ///         sender recovers `R` and `s` from storage alone. One cell per stored form, disclosure mode, auditor mode and
-///         binding, both curves. Opt-in, it needs the binary:
+///         binding, on BLS12-381 (the bn254 suite is in `legacy/ua6/`). Opt-in, it needs the binary:
 ///         `cargo build --release --bin zether-cli` (clients/zether-prover), then
 ///         `ZETHER_CLI=<path>/zether-cli forge test --ffi --match-path test/zether/ZetherProverCross.t.sol`.
 abstract contract ZetherProverCrossSuite is ZetherFixture {
@@ -23,11 +23,9 @@ abstract contract ZetherProverCrossSuite is ZetherFixture {
     User[3] internal rs;
     uint256[3] internal amts = [uint256(1200), 0, 77];
 
-    function _curve() internal pure virtual returns (bool);
-
     function setUp() public {
         vm.skip(bytes(vm.envOr("ZETHER_CLI", string(""))).length == 0);
-        _stack(_curve());
+        _stack();
         _users();
         for (uint256 i; i < 3; ++i) rs[i] = _user(0xD00 + i, address(uint160(0xE00 + i)));
     }
@@ -180,10 +178,4 @@ abstract contract ZetherProverCrossSuite is ZetherFixture {
     }
 }
 
-contract ZetherProverCrossBn254Test is ZetherProverCrossSuite {
-    function _curve() internal pure override returns (bool) { return false; }
-}
-
-contract ZetherProverCrossBls12381Test is ZetherProverCrossSuite {
-    function _curve() internal pure override returns (bool) { return true; }
-}
+contract ZetherProverCrossBls12381Test is ZetherProverCrossSuite {}

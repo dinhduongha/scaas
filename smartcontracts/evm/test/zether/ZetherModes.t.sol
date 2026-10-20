@@ -91,12 +91,12 @@ abstract contract ZetherModesSuite is ZetherFixture {
         bytes memory single = _payload(tok, alice, bob, 5, 7, tok.accountState(alice.ua));
         (audForce, audOut) = (false, false);
         vm.expectRevert(err);
-        tok.zetherTransferCompact(multi, "", "", _none());
+        tok.zetherTransferCompact(multi, "", _none());
         vm.expectRevert(err);
         stm.transferStatement(address(tok), multi, _none(), ZetherTypes.TransferMode.HASH, 0);
         if (d == COMPACT) return;
         vm.expectRevert(err);
-        tok.zetherTransferSingle(single, "", "", _none());
+        tok.zetherTransferSingle(single, "", _none());
         vm.expectRevert(err);
         stm.transferStatementSingle(address(tok), single, _none(), 0);
     }
@@ -130,13 +130,13 @@ abstract contract ZetherModesSuite is ZetherFixture {
         bytes memory pl = _multiPayload(tok, alice, _two(), _vs(11), 7, tok.accountState(alice.ua));
         bytes memory single = _payload(tok, alice, bob, 5, 7, tok.accountState(alice.ua));
         vm.expectRevert(dis_);
-        tok.zetherTransferNoBundle(pl, "", "", _none());
+        tok.zetherTransferNoBundle(pl, "", _none());
         vm.expectRevert(dis_);
         stm.transferStatement(address(tok), pl, _none(), ZetherTypes.TransferMode.BUNDLE, 0);
         vm.expectRevert(dis_);
         stm.transferStatement(address(tok), pl, _none(), ZetherTypes.TransferMode.NONE, 0);
         vm.expectRevert(dis_);
-        tok.zetherTransferSingle(single, "", "", _none());
+        tok.zetherTransferSingle(single, "", _none());
         vm.expectRevert(dis_);
         stm.transferStatementSingle(address(tok), single, _none(), 0);
         _hashForm(audIn, ZetherLayer.zetherTransfer.selector);
@@ -171,24 +171,24 @@ abstract contract ZetherModesSuite is ZetherFixture {
         bytes memory memo1 = bytes.concat(t.payload);
         memo1[memo1.length - 1] ^= 0x01;
         vm.expectRevert(IZetherToken.ProofRejected.selector);
-        tok.zetherTransferCompact(memo1, t.proof, "", _none());
+        tok.zetherTransferCompact(memo1, t.proof, _none());
         bytes memory salt1 = bytes.concat(t.payload);
         salt1[70] ^= 0x01;
         // review T2 m2: the memo's clear salt must be the payload's, before the proof (and in the statement view)
         vm.expectRevert(IZetherToken.MemoSaltMismatch.selector);
-        tok.zetherTransferCompact(salt1, t.proof, "", _none());
+        tok.zetherTransferCompact(salt1, t.proof, _none());
         vm.expectRevert(IZetherToken.MemoSaltMismatch.selector);
         stm.transferStatement(address(tok), salt1, _none(), ZetherTypes.TransferMode.HASH, 0);
         salt1[salt1.length - 97 + 6] ^= 0x01; // the same flip in the memo: the proof refuses it
         vm.expectRevert(IZetherToken.ProofRejected.selector);
-        tok.zetherTransferCompact(salt1, t.proof, "", _none());
+        tok.zetherTransferCompact(salt1, t.proof, _none());
         bytes memory short = new bytes(t.payload.length - 1);
         for (uint256 i; i < short.length; ++i) short[i] = t.payload[i];
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.BadPayload.selector, short.length));
-        tok.zetherTransferCompact(short, t.proof, "", _none());
+        tok.zetherTransferCompact(short, t.proof, _none());
         vm.expectRevert(abi.encodeWithSelector(IZetherToken.BadPayload.selector, t.payload.length));
-        tok.zetherTransfer(t.payload, t.proof, "", _none()); // a memo on the BUNDLE form
-        tok.zetherTransferCompact(t.payload, t.proof, "", _none());
+        tok.zetherTransfer(t.payload, t.proof, _none()); // a memo on the BUNDLE form
+        tok.zetherTransferCompact(t.payload, t.proof, _none());
         assertTrue(_holds(tok, bob, 9, false));
     }
 
@@ -205,7 +205,7 @@ abstract contract ZetherModesSuite is ZetherFixture {
         bytes memory pl = bytes.concat(_multiPayload(tok, alice, _two(), _vs(9), 7, tok.accountState(alice.ua)), _memo(2));
         for (uint256 i; i < p; ++i) pl[112 + 5 * p + i] = 0; // leg 1: C_aud = O, leg 2 ≠ O
         vm.expectRevert(IZetherToken.AuditorRequired.selector);
-        tok.zetherTransferCompact(pl, "", "", _none());
+        tok.zetherTransferCompact(pl, "", _none());
         vm.expectRevert(IZetherToken.AuditorRequired.selector);
         stm.transferStatement(address(tok), pl, _none(), ZetherTypes.TransferMode.HASH, 0);
         (dMode, aMode) = (BUNDLE, NONE);
@@ -217,12 +217,12 @@ abstract contract ZetherModesSuite is ZetherFixture {
         audForce = false;
         for (uint256 i; i < p; ++i) pl[112 + 5 * p + i] = 0;
         vm.expectRevert(IZetherToken.AuditorForbidden.selector);
-        tok.zetherTransfer(pl, "", "", _none());
+        tok.zetherTransfer(pl, "", _none());
         vm.expectRevert(IZetherToken.AuditorForbidden.selector);
         stm.transferStatement(address(tok), pl, _none(), ZetherTypes.TransferMode.NONE, 0);
         uint256 pk = 0x9A7E5;
         MetaTxLib.MetaTransaction memory m = MetaTxLib.MetaTransaction({
-            from: vm.addr(pk), data: abi.encodeCall(ZetherLayer.zetherTransferNoBundle, (pl, bytes(""), bytes(""), _none())),
+            from: vm.addr(pk), data: abi.encodeCall(ZetherLayer.zetherTransferNoBundle, (pl, bytes(""), _none())),
             batch: 3, nonce: 0, validUntil: block.timestamp + 300, mode: MetaTxLib.MODE_RESTRICT_RELAYER, relayer: relayer,
             fee: 0, feeRecipient: address(0)
         });
@@ -306,7 +306,7 @@ abstract contract ZetherModesSuite is ZetherFixture {
     /// @dev A transfer proved for the stored form `mode`, sent through the entry `sel`.
     function _multi(ZetherTypes.TransferMode mode, bytes4 sel, uint256 v) internal returns (bytes32 ref, Tx memory t) {
         t = _proveMulti(tok, alice, _two(), _vs(v), bal, _none(), mode);
-        (bool ok, bytes memory r) = address(tok).call(abi.encodeWithSelector(sel, t.payload, t.proof, bytes(""), _none()));
+        (bool ok, bytes memory r) = address(tok).call(abi.encodeWithSelector(sel, t.payload, t.proof, _none()));
         if (!ok) assembly ("memory-safe") { revert(add(r, 32), mload(r)) }
         ref = abi.decode(r, (bytes32));
         bal -= v;
@@ -347,19 +347,7 @@ abstract contract ZetherModesSuite is ZetherFixture {
 
 contract ZetherModesNoneTest is ZetherModesSuite {
     function setUp() public {
-        _stack(false);
-        _users();
-    }
-
-    function _kind() internal pure override returns (IOpenFactory.TokenKind) {
-        return IOpenFactory.TokenKind.NONE_ZETHER;
-    }
-}
-
-/// @notice The same suite on BLS12-381 (review T2 m6): the 480-byte header and the modes end to end through a token.
-contract ZetherModesBlsTest is ZetherModesSuite {
-    function setUp() public {
-        _stack(true);
+        _stack();
         _users();
     }
 
@@ -372,7 +360,7 @@ contract ZetherModesUnderlyingTest is ZetherModesSuite {
     MockERC20 internal usd = new MockERC20("USD", "USD", 6);
 
     function setUp() public {
-        _stack(false);
+        _stack();
         UnderlyingZetherToken impl = UnderlyingZetherToken(payable(Catalogue.release(factory, IOpenFactory.TokenKind.UNDERLYING_ZETHER, 1, _zenv(),
             type(UnderlyingZetherToken).creationCode)));
         _users();

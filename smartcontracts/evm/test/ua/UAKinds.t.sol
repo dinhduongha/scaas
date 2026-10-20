@@ -43,6 +43,10 @@ contract UAKindsTest is Test {
         assertEq(n, 31);
         for (uint256 i; i < n; ++i) {
             uint16 kind = uint16(vm.parseJsonUint(j, _at("kinds", i, "kind")));
+            if (kind == ZETHER_BN254) { // UA-6 U10: in legacy/ua6/ (row until Task 8 regenerates kinds.json)
+                assertFalse(UAKinds.isZether(kind) || UAKinds.isDerived(kind));
+                continue;
+            }
             bool native = vm.parseJsonBool(j, _at("kinds", i, "native"));
             assertEq(UAKinds.name(kind), vm.parseJsonString(j, _at("kinds", i, "name")));
             assertEq(UAKinds.isNative(kind), native);
@@ -60,6 +64,9 @@ contract UAKindsTest is Test {
             else assertEq(UAKinds.groupName(kind), vm.parseJsonString(j, _at("kinds", i, "group")));
         }
     }
+
+    /// `zether-bn254` (moved to legacy/ua6/ in UA-6, U10): its kinds.json rows are skipped until Task 8 regenerates it.
+    uint16 internal constant ZETHER_BN254 = 0x0140;
 
     /// The `authref` purpose (removed in UA-6) is still a row of kinds.json until Task 8 regenerates it.
     bytes32 internal constant AUTHREF_V1 = keccak256("scaas.ua.purpose.authref.v1");
@@ -98,6 +105,11 @@ contract UAKindsTest is Test {
                 // UA-6: a scheme, not a kind (row until Task 8); its id and keyHash bytes stay
                 vm.expectRevert(abi.encodeWithSelector(UAKinds.UAKindNotDerived.selector, kind));
             }
+            if (kind == ZETHER_BN254) { // UA-6 U10: in legacy/ua6/ (rows until Task 8)
+                vm.expectRevert(abi.encodeWithSelector(UAKinds.UAKindUnknown.selector, kind));
+                h.validate(kind, d, false);
+                continue;
+            }
             h.validate(kind, d, vm.parseJsonBool(j, _at("valid", i, "hederaNative")));
             bytes32 ua = UAKinds.uaOf(kind, d);
             assertEq(UAKinds.name(kind), vm.parseJsonString(j, _at("valid", i, "name")));
@@ -120,6 +132,8 @@ contract UAKindsTest is Test {
             bytes memory want = abi.encodeWithSelector(_selector(vm.parseJsonString(j, _at("invalid", i, "error"))), kind);
             // UA-6: pqz-mlwe is a scheme, not a kind (rows until Task 8)
             if (kind == UAKinds.PQZ_MLWE) want = abi.encodeWithSelector(UAKinds.UAKindNotDerived.selector, kind);
+            // UA-6 U10: zether-bn254 is in legacy/ua6/ (rows until Task 8)
+            if (kind == ZETHER_BN254) want = abi.encodeWithSelector(UAKinds.UAKindUnknown.selector, kind);
             try h.validate(kind, d, vm.parseJsonBool(j, _at("invalid", i, "hederaNative"))) {
                 revert(string.concat("accepted: ", reason));
             } catch (bytes memory got) {
@@ -149,6 +163,7 @@ contract UAKindsTest is Test {
         uint256 nm = _count(j, "messages");
         for (uint256 i; i < nm; ++i) {
             uint16 kind = uint16(vm.parseJsonUint(j, _at("messages", i, "kind")));
+            if (kind == ZETHER_BN254) continue; // UA-6 U10: in legacy/ua6/ (row until Task 8)
             bytes32 got = UAKinds.uaMessage(
                 kind, vm.parseJsonBytes32(j, _at("messages", i, "purposeTag")), vm.parseJsonBytes32(j, _at("messages", i, "digest"))
             );

@@ -8,7 +8,8 @@ import {IERC5267} from "@openzeppelin/contracts/interfaces/IERC5267.sol";
 /// @notice `eip712Domain()` (ERC-5267) comes from `IERC5267`: fields `0x1f`, name "SCaaS UARegistry", version = the
 ///         generation in decimal, salt = `chainUid`. The stored kinds add `keyOf`; the PQ kinds (P6c) the ML-DSA
 ///         expanded-key cache; UA-6 the PQZ key attribute of a PQ signing UA (`register`'s `pqzKey`, `recordOf`).
-///         `requireZetherAuthorized` stays until UA-6 Task 4 (every Zether UA is "self" since UA-6: no `authRef`).
+///         The Zether UA signs through `requireAuthorized` like any stored kind (UA-6 U8); `requireZetherAuthorized`
+///         is in `legacy/ua6/` (U9).
 interface IUARegistry is IERC5267 {
     struct Record {
         uint16 kind;
@@ -30,7 +31,7 @@ interface IUARegistry is IERC5267 {
     error UAMemberUnknown(bytes32 member); // structure member not native/registered, or kind ∉ MEMBER
     error UAPqzHolder(bytes32 ua); // UA-6 U3: this UA's kind / structure may not hold a PQZ key
     error UAPoP();
-    error UAUnauthorized(bytes32 ua); // also: ua is zether-bn254 or unregistered
+    error UAUnauthorized(bytes32 ua); // also: ua is unregistered
     error UAKeyCache(uint16 kind); // not ML-DSA, disabled, part past the last, or the verifier uses a precompile
     error UAIndex(uint16 kind, uint256 i); // uaAt past the kind's count
     error UANotIndexed(bytes32 ua); // uaIndex of an unregistered id
@@ -90,12 +91,6 @@ interface IUARegistry is IERC5267 {
     /// Derived SIGNING: auth = abi.encode(bytes keyData, bytes sig); keyData empty for stored kinds (Zether
     ///   `zether-bls12381` included, UA-6 U8: a Schnorr by `x` on `Y`).
     ///   msig: sig = abi.encode(MemberSig[]), MemberSig{uint16 index; bytes keyData; bytes sig}.
-    /// `zether-bn254` or unregistered: UAUnauthorized.
+    /// Unregistered: UAUnauthorized.
     function requireAuthorized(bytes32 ua, bytes32 purposeTag, bytes32 digest, bytes calldata auth) external view;
-
-    /// Reverts UAUnauthorized unless `auth` authorizes `digest` for the Zether UA `ua` (accounts.md §1.7 Z-auth; removed
-    /// in UA-6 Task 4). Every Zether UA is "self": zkCovered ⇒ `auth` empty (the proof is the authorization);
-    /// !zkCovered ⇒ a Zether Schnorr by `x`, `auth = abi.encode(bytes(""), sig)`, over
-    /// uaMessage(kind, PURPOSE_ZETHER_OWNER, digest), `Y` from `keyPtr`. Not a Zether UA, or unregistered: UAUnauthorized.
-    function requireZetherAuthorized(bytes32 ua, bytes32 digest, bytes calldata auth, bool zkCovered) external view;
 }

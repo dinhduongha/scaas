@@ -35,7 +35,6 @@ library UAKinds {
     uint16 internal constant MLDSA65 = 0x0131;
     uint16 internal constant FNDSA512 = 0x0132;
     uint16 internal constant SLHDSA128S = 0x0133;
-    uint16 internal constant ZETHER_BN254 = 0x0140;
     uint16 internal constant ZETHER_BLS12381 = 0x0141;
     /// @notice A scheme id since UA-6, not a kind: the PQZ key attribute of a PQ signing UA (its tag for `R_REG`'s
     ///         `uaMessage`, its keyHash group `pqz-mlwe`, the registry slot of its verifier and the `0x0142` list).
@@ -87,9 +86,9 @@ library UAKinds {
         return (kind >= EVM_EOA && kind <= HEDERA_NATIVE) || (kind >= 0x0010 && kind <= 0x0016);
     }
 
-    /// `zether-bn254` until UA-6 Task 4 moves it to `legacy/` (U10).
+    /// `zether-bls12381` only: `zether-bn254` (0x0140) is in `legacy/ua6/` since UA-6 (U10, CTR-ZTH-32).
     function isZether(uint16 kind) internal pure returns (bool) {
-        return kind == ZETHER_BN254 || kind == ZETHER_BLS12381;
+        return kind == ZETHER_BLS12381;
     }
 
     function _singleSigning(uint16 kind) private pure returns (bool) {
@@ -140,7 +139,6 @@ library UAKinds {
         if (kind == 0x0131) return "mldsa65";
         if (kind == 0x0132) return "fndsa512";
         if (kind == 0x0133) return "slhdsa128s";
-        if (kind == 0x0140) return "zether-bn254";
         if (kind == 0x0141) return "zether-bls12381";
         if (kind == 0x0142) return "pqz-mlwe";
         revert UAKindUnknown(kind);
@@ -169,7 +167,7 @@ library UAKinds {
         if (kind == WEBAUTHN_P256 || kind == P256) return "p256";
         if (kind == ED25519) return "ed25519";
         if (kind == BIP340 || kind == SECP256K1 || kind == MUSIG2_SECP256K1 || kind == FROST_SECP256K1) return "secp256k1";
-        if (kind == SCHNORR_BN254 || kind == MUSIG2_BN254 || kind == FROST_BN254 || kind == ZETHER_BN254) return "bn254-g1";
+        if (kind == SCHNORR_BN254 || kind == MUSIG2_BN254 || kind == FROST_BN254) return "bn254-g1";
         if (kind == SCHNORR_BLS12381 || kind == ZETHER_BLS12381) return "bls12381-g1";
         if (kind == BLS12381_MINSIG) return "bls12381-g2";
         if (kind == BLS_BN254_MINSIG) return "bn254-g2";
@@ -256,7 +254,7 @@ library UAKinds {
         else if (kind == ED25519) ok = _ed25519(d);
         else if (kind == BIP340) ok = _secpX(_word(d, 0));
         else if (kind == SECP256K1) ok = _secpXY(_word(d, 0), _word(d, 32));
-        else if (kind == SCHNORR_BN254 || kind == ZETHER_BN254) ok = _bnG1(d, 0);
+        else if (kind == SCHNORR_BN254) ok = _bnG1(d, 0);
         else if (kind == SCHNORR_BLS12381 || kind == ZETHER_BLS12381) ok = _bls(d, address(0x0c), 128);
         else if (kind == BLS12381_MINSIG) ok = _bls(d, address(0x0e), 256);
         else if (kind == BLS_BN254_MINSIG) ok = _bnG2(d);
@@ -272,7 +270,7 @@ library UAKinds {
 
     function _fixedLength(uint16 kind) private pure returns (uint256) {
         if (kind == WEBAUTHN_P256) return 96;
-        if (kind == P256 || kind == SECP256K1 || kind == SCHNORR_BN254 || kind == ZETHER_BN254) return 64;
+        if (kind == P256 || kind == SECP256K1 || kind == SCHNORR_BN254) return 64;
         if (kind == ED25519 || kind == BIP340 || kind == SLHDSA128S) return 32;
         if (kind == SCHNORR_BLS12381 || kind == ZETHER_BLS12381 || kind == BLS_BN254_MINSIG) return 128;
         if (kind == BLS12381_MINSIG) return 256;
