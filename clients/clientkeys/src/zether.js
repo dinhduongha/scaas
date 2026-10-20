@@ -196,7 +196,7 @@ export function zetherSign(curve, x, purpose, digest) {
 }
 
 /**
- * The `sig` of an owner op (`zetherRollOverSigned`, `zetherSetRollOverMode`):
+ * The `sig` of an owner op (`mtxRollOverSigned`, `mtxSetRollOverMode`):
  * `abi.encode(bytes(""), Schnorr by x over uaMessage(kind, zether-owner, digest))`.
  */
 export function zetherOwnerAuth(curve, x, digest) {
@@ -311,8 +311,8 @@ export function cacheAfterRollOver(curve, x, entries, state, pending) {
  *   1. the cache, when it checks against `acc`;
  *   2. else, from the last balance that checked, the DIFFERENCE `acc − b_cached` by the device BSGS
  *      (`decrypt(ct)` → amount, e.g. the prover wasm `decryptPending`, bound 2^44), first as a gain then as
- *      a loss. This covers rollOvers the wallet did not do (`rollOverPublic`/`rollOverBatch` by anyone —
- *      `fund(victim, 1)` + `rollOverPublic` is free griefing — and late credits swept by `rollOverSigned`)
+ *      a loss. This covers rollOvers the wallet did not do (`mtxRollOver`/`mtxRollOverBatch` by anyone —
+ *      `mtxShield(victim, 1)` + `mtxRollOver` is free griefing — and late credits swept by `mtxRollOverSigned`)
  *      and own debits it did not record (review M1). Each try costs one device BSGS when it misses;
  *   3. else the device BSGS on `acc` itself (no cache, or a big anchor spent down below the bound elsewhere,
  *      e.g. the same seed on another device — kept even for a big anchor, review N1).

@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="960" height="600" viewBox="0 0 960 600" role="img" aria-labelledby="t d">
   <title id="t">Token model: two axes</title>
-  <desc id="d">Axis 1, the kind, fixes the confidential layer: rows NONE (standalone) and UNDERLYING (wrapper of one to eight legs), columns plain (NONE and UNDERLYING, built in P1), ZETHER (NONE_ZETHER and UNDERLYING_ZETHER, built in P3, unaudited, dev chains only), PQZ (NONE_PQZ and UNDERLYING_PQZ, reserved, not built; post-quantum Zether specified and unaudited) and ZETHER_PQZ (NONE_ZETHER_PQZ and UNDERLYING_ZETHER_PQZ, reserved, not built; room in the kind ids only). Axis 2, who signs, belongs to the account: an EOA (ECDSA), a SmartKeyAccount (ERC-1271), or a Universal Account with a post-quantum key (mldsa44, mldsa65, fndsa512) through the UA ledger in the token base (specified, not built). Every kind accepts the same intents from every signer.</desc>
+  <desc id="d">Axis 1, the kind, fixes the confidential layer: rows NONE (standalone) and UNDERLYING (wrapper of one to eight legs), columns plain (NONE and UNDERLYING, built in P1), ZETHER (NONE_ZETHER and UNDERLYING_ZETHER, built in P3, unaudited, dev chains only), PQZ (NONE_PQZ and UNDERLYING_PQZ, built on the private chains, unaudited). The combined ZETHER_PQZ kinds (ids 6 and 7) were dropped on 2026-10-20; their ids are not reused. Axis 2, who signs, belongs to the account: an EOA (ECDSA), a SmartKeyAccount (ERC-1271), or a Universal Account with a post-quantum key (mldsa44, mldsa65, fndsa512) through the UA ledger in the token base (specified, not built). Every kind accepts the same intents from every signer.</desc>
   <defs>
     <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M0 0 L10 5 L0 10 z" fill="#57606a"/>
@@ -32,19 +32,15 @@
   <text class="b" x="366" y="132">ZETHER</text>
   <rect x="366" y="140" width="42" height="16" rx="8" fill="#dafbe1"/><text class="chip" x="387" y="152" text-anchor="middle" fill="#1a7f37">BUILT</text><text class="s" x="414" y="152">in P3, unaudited</text>
   <text class="b" x="562" y="132">PQZ</text>
-  <text class="s" x="562" y="152">reserved, not built</text>
-  <text class="b" x="758" y="132">ZETHER_PQZ</text>
-  <text class="s" x="758" y="152">reserved, not built</text>
+  <rect x="562" y="140" width="42" height="16" rx="8" fill="#dafbe1"/><text class="chip" x="583" y="152" text-anchor="middle" fill="#1a7f37">BUILT</text><text class="s" x="610" y="152">private chains, unaudited</text>
   <text class="b" x="30" y="182">NONE</text><text class="s" x="30" y="197">standalone token</text>
   <rect class="cell" x="160" y="164" width="188" height="38" rx="8"/><text class="k" x="254" y="187" text-anchor="middle">NONE</text>
   <rect class="cell" x="356" y="164" width="188" height="38" rx="8"/><text class="k" x="450" y="187" text-anchor="middle">NONE_ZETHER</text>
-  <rect class="rsv" x="552" y="164" width="188" height="38" rx="8"/><text class="k" x="646" y="187" text-anchor="middle">NONE_PQZ</text>
-  <rect class="rsv" x="748" y="164" width="188" height="38" rx="8"/><text class="k" x="842" y="187" text-anchor="middle">NONE_ZETHER_PQZ</text>
+  <rect class="cell" x="552" y="164" width="188" height="38" rx="8"/><text class="k" x="646" y="187" text-anchor="middle">NONE_PQZ</text>
   <text class="b" x="30" y="228">UNDERLYING</text><text class="s" x="30" y="243">wrapper, 1–8 legs</text>
   <rect class="cell" x="160" y="210" width="188" height="38" rx="8"/><text class="k" x="254" y="233" text-anchor="middle">UNDERLYING</text>
   <rect class="cell" x="356" y="210" width="188" height="38" rx="8"/><text class="k" x="450" y="233" text-anchor="middle">UNDERLYING_ZETHER</text>
-  <rect class="rsv" x="552" y="210" width="188" height="38" rx="8"/><text class="k" x="646" y="233" text-anchor="middle">UNDERLYING_PQZ</text>
-  <rect class="rsv" x="748" y="210" width="188" height="38" rx="8"/><text class="k" x="842" y="233" text-anchor="middle">UNDERLYING_ZETHER_PQZ</text>
+  <rect class="cell" x="552" y="210" width="188" height="38" rx="8"/><text class="k" x="646" y="233" text-anchor="middle">UNDERLYING_PQZ</text>
   <text class="b" x="30" y="290">What it hides</text><text class="s" x="30" y="306">less → more</text>
   <rect x="160" y="262" width="188" height="122" rx="8" fill="#f6fef9" stroke="#16a34a"/>
   <text class="s" x="170" y="282">amounts and balances</text>
@@ -61,11 +57,8 @@
   <text class="s" x="562" y="298">one lattice proof per operation;</text>
   <text class="s" x="562" y="314">precompile on chain 7622;</text>
   <text class="s" x="562" y="330">post-quantum confidentiality</text>
-  <rect x="562" y="344" width="136" height="16" rx="8" fill="#ddf4ff"/><text class="chip" x="630" y="356" text-anchor="middle" fill="#0969da">SPECIFIED, UNAUDITED</text>
+  <rect x="562" y="344" width="110" height="16" rx="8" fill="#dafbe1"/><text class="chip" x="617" y="356" text-anchor="middle" fill="#1a7f37">BUILT, UNAUDITED</text>
   <text class="s" x="562" y="376">PQ Zether</text>
-  <rect x="748" y="262" width="188" height="122" rx="8" fill="#f6fef9" stroke="#16a34a"/>
-  <text class="s" x="758" y="282">Zether and PQZ on one token:</text>
-  <text class="s" x="758" y="298">room in the kind ids only</text>
   <rect x="16" y="412" width="928" height="140" rx="12" fill="#ede9fe" stroke="#7c3aed"/>
   <text class="tier" x="30" y="437">2 · Who signs = the account</text><text class="tiers" x="240" y="437">every kind accepts the same intents from each of them</text>
   <rect x="30" y="450" width="220" height="88" rx="8" fill="#ffffff" stroke="#7c3aed"/>
@@ -82,5 +75,4 @@
   <text class="lab" x="74" y="580">in the code today</text>
   <rect x="203.4" y="568" width="70" height="16" rx="8" fill="#ddf4ff"/><text class="chip" x="238.4" y="580" text-anchor="middle" fill="#0969da">SPECIFIED</text>
   <text class="lab" x="281.4" y="580">designed, not built</text>
-  <text class="lab" x="400" y="580">dashed cell: kind id reserved, not built</text>
 </svg>

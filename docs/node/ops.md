@@ -724,7 +724,7 @@ Above the rated load: a second node on **different chains**, not a bigger store.
   and no 16-credit batch; the keeper policy and its numbers above are to be updated in the node task that follows part A
   ([CTR-PQZ-08](../contracts/pq-zero-knowledge.md#CTR-PQZ-08)).*
 - **P6i, multi-recipient transfer (op 7, P6-ANON; SPECIFIED):**
-  - Indexer: normalizes `ConfidentialTransferMulti(entryRef, fromUA, recipientsHash, M, out)` and its M per-leg
+  - Indexer: normalizes `ConfidentialTransferMulti(entryRef, fromUA, beneficiary, fee, sendCounter, recipients, mode, blob)` (M = `recipients.length`) and its M per-leg
     `Credited(ua, index, entryRef)` (`ConfidentialTransfer` + one `Credited` for op 1, as today). Leg j's credit ciphertext is
     `u_{⌊j/4⌋} ‖ v_j` sliced from `out` (`out = u_0 … u_{G−1} ‖ v_0 … v_{M−1} ‖ v_f ‖ [v_{a,0} … v_{a,M−1}]`,
     `G = ⌈M/4⌉`); legs are matched by log order (P6g emits the `Credited`s in leg order), and the indexer checks

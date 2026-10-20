@@ -862,7 +862,7 @@ totalShielded  = totalShielded + shieldIn − fee − amount     (checked; amoun
 
 and the token pays, from `SHIELD_POOL`, exactly what the library debited (`PqzCore.Paid`): `shieldIn` units from the signer
 into the pool, the `txFee` to the beneficiary's public balance (and op 7's `decoyFee` to each leg, [CTR-PQZ-25](#CTR-PQZ-25)); and
-emits `Debited(from, rolled, floor, blob)`, `ConfidentialTransfer(entryRef, fromUA, toUA, blob)` and `Credited(toUA, index, entryRef)`. After a debit the stored `accHash` is stale and the MAT flag is clear; the hint path checks the flag first.
+emits `Debited(from, rolled, floor, blob)`, `ConfidentialTransfer(entryRef, fromUA, toUA, beneficiary, fee, sendCounter, blob)` and `Credited(toUA, index, entryRef)`. After a debit the stored `accHash` is stale and the MAT flag is clear; the hint path checks the flag first.
 Deleting dead pending slots is nearly free on floor-bound transactions (the refund comes off execution gas) and keeps state
 from growing by 32 B per credit forever; slots `< floor` are never read again.
 
@@ -970,7 +970,7 @@ arguments as the single entries, with `payload = be32(p) ‖ be32(validUntilBloc
 beneficiaryUA ‖ be32(M) ‖ be32(decoyFee) ‖ salt(16) ‖ UA_0 … UA_{M−1} ‖ out ‖ [memo]` (words as 32 bytes; the plan's separate
 `recipients` / `out` arguments folded into the payload, so both families share one ABI shape); views
 `transferStatement` (op 7) and `transferSingleStatement` (op 1), each `(payload, binding)`. Events `ConfidentialTransferMulti(entryRef indexed, fromUA
-indexed, recipientsHash, legs, blob)` and `Credited` per leg in leg order.
+indexed, beneficiary indexed, fee, sendCounter, recipients, mode, blob)` and `Credited` per leg in leg order.
 
 *Contract checks, cheap first:* `M` built (`BadRecipientCount`); the length fixes `auditorOn` for that `M` (else
 `BadPayload`); recipients pairwise distinct, none = `fromUA`, all registered UAs holding a PQZ key (`DuplicateRecipient`,
@@ -984,7 +984,7 @@ as §7.4 and calls `PQZ(7, statement ‖ proof)`.
 per leg `pending[recipient_j] ← (blob, uOff of u_{g(j)}, vOff of v_j, block)`, `pendingCount++` (one slot, no hash); the
 `txFee` once to the beneficiary and `decoyFee` to **every** leg, both from `SHIELD_POOL` to public UA-ledger balances;
 the op blob as the entry in either mode; events `Debited`, `ConfidentialTransferMulti(entryRef, fromUA,
-recipientsHash, legs, blob)` and `Credited(ua indexed, index, entryRef)` per leg. Roll-over is the existing
+beneficiary, fee, sendCounter, recipients, mode, blob)` and `Credited(ua indexed, index, entryRef)` per leg. Roll-over is the existing
 `mtxRollOver` (decoy credits included; keepers roll them, P6i).
 
 *Storage and memo* (CTR-PQZ-23 with `M` legs): bundle `R = salt(16) ‖ u_0 … u_{G−1} ‖ (v_j ‖ [v_{a,j}] ‖ toUA_j)_{j<M}`
@@ -1119,11 +1119,18 @@ names shared with Zether ([CTR-ZTH-45](zether.md#CTR-ZTH-45)):
 or appended), `Credited(bytes32 indexed ua, uint64 indexed index, bytes32 entryRef)` (a proven credit; its `u ‖ v` are in the op
 blob of `entryRef`), `Debited(bytes32 indexed ua, uint64 rolled, uint64 floor, address blob)` (every debit: an indexer sees
 `rolled` move; `acc` now references `blob`), `ConfidentialTransfer(bytes32 indexed entryRef, bytes32 indexed fromUA, bytes32
-indexed toUA, address blob)` and `ConfidentialTransferMulti(bytes32 indexed entryRef, bytes32 indexed fromUA, bytes32
-recipientsHash, uint256 legs, address blob)` (the blob is the op blob; the salt is its first 16 bytes),
+indexed toUA, bytes32 beneficiary, uint256 fee, uint64 sendCounter, address blob)` and `ConfidentialTransferMulti(bytes32 indexed
+entryRef, bytes32 indexed fromUA, bytes32 indexed beneficiary, uint256 fee, uint64 sendCounter, bytes32[] recipients, uint8 mode, address blob)`
+(as built in `IConfidentialToken`; `fee` = the proven fee word, op 7: txFee + M·decoyFee; the blob is the op blob, the salt its first 16 bytes; `recipients` replaces the
+earlier `recipientsHash, legs`, both derivable from it),
 `RolledOver(bytes32 indexed ua, uint64 rolled, uint32 accUnits, bytes32 accHash)`, `Unshielded(bytes32 indexed ua, uint256 amount,
-bytes32 recipient, address blob)` (burn or refresh, `amount = 0`; the as-built PQZ event of plan 5h Task 3 had an `address`
+bytes32 indexed recipient, address blob)` (burn or refresh, `amount = 0`; the as-built PQZ event of plan 5h Task 3 had an `address`
 recipient, widened with the UA recipient in Task 3b), `PqzRegistered(…)`. `PqzPlainCredit` is gone with `plainPending`.
+`Shielded.from` is `_msgSender()`; for a UA signer (`uaExecute`) it is `UA_POOL`, not the UA (the UA is in the same transaction's
+`UAMetaTransactionExecuted` and in the `UATransfer(ua, SHIELD_POOL, …)` of the pool move). `mtxUnshieldUnwrap` takes the leg as the calldata struct
+`Unwrap(address underlying, bytes32 recipient, uint256 amount, uint256 minOut)`, pays through `UnderlyingLib.payOutTo` (native id: `quoteUnwrap` + `payOut`;
+derived UA: `quoteUnwrapToUA` + `payOutToUA`, `UALegNotLedger` for an outside leg) after the debit and the pool burn. A `beneficiary` that differs from the payload's word
+reverts `BeneficiaryMismatch(payload, given)`.
 
 **Views** (names unchanged by the `mtx*` rename; [CTR-ZTH-45](zether.md#CTR-ZTH-45) is about entry points):
 `pqzAccount(ua)` → `AccountState{pendingCount, rolled, floor, cleared, accBlob, accUnits, flags, sendCounter, accHash}`
@@ -1235,7 +1242,7 @@ the shared base, `ERC20MetaTx._uaMove` (a native `SHIELD_POOL` side of a ledger 
 pool. Relations and proofs are unchanged by the pool.
 
 Every PQZ op —
-`mtxShield`, `mtxConfidentialTransfer`, `mtxUnshield`, refresh, `mtxRollOver` — is reachable as a direct open call **and** as an allowlisted self-call
+`mtxShield`, `mtxConfidentialTransfer`, `mtxUnshield`, refresh — is reachable as a direct open call **and** as an allowlisted self-call
 whose `m.data` is byte-identical to the direct call's calldata ([CTR-PQZ-21](#CTR-PQZ-21)), so a client builds one
 calldata and either submits it or wraps it. Envelope ops take outer fee `NONE` or `FIXED` only, absolute; `PERCENT`
 reverts (`FeePolicy.requireConfidentialSafe`, [CTR-ZTH-07](zether.md#CTR-ZTH-07)) and stays available only for plain
@@ -1252,7 +1259,7 @@ from its own public balance, its nonce, and for `mtxShield` the public amount it
 
 **PQ-complete
 path:** the same selectors through `uaExecute` with a `UAMetaTransaction` ([CTR-UA-26](accounts.md#CTR-UA-26)) on
-`PqzToken`'s own `bytes32` UA ledger ([CTR-UA-18](accounts.md#CTR-UA-18)), whose UA allowlist holds the same selectors (the transfers, `mtxUnshield`, `mtxShield`, `mtxRollOver`; plus `mtxWrapShield` / `mtxUnshieldUnwrap` on `UNDERLYING_PQZ`), so an `mldsa65`/`mldsa44` UA or a PQ-dominant `msig` pays the outer fee and signs the nonce, and no
+`PqzToken`'s own `bytes32` UA ledger ([CTR-UA-18](accounts.md#CTR-UA-18)), whose UA allowlist holds the same selectors (the transfers, `mtxUnshield`, `mtxShield`; plus `mtxWrapShield` / `mtxUnshieldUnwrap` on `UNDERLYING_PQZ`), so an `mldsa65`/`mldsa44` UA or a PQ-dominant `msig` pays the outer fee and signs the nonce, and no
 classical key signs anything on the op path. Envelopes are not carried on the mesh, exactly as classical Zether
 ([NODE-MESH-01](../node/mesh.md#NODE-MESH-01)). Relayers, the node, the indexer and client systems handle PQZ with the
 existing meta-tx path. An address-path envelope signer is ECDSA/1271, hence the UA path. A broken envelope key can
@@ -1286,10 +1293,9 @@ which pays the underlying straight to `recipient`, so no envelope `unwrap` op is
 | `mtxConfidentialTransfer`, `…Compact`, `…Single`, `…SingleCompact` `(bytes payload,bytes proof,bytes auth,bytes32 beneficiary,bytes accHint)` | [transfer](#transfer) | `envelopeBinding` = this envelope's, folded with the mode ([CTR-PQZ-25](#CTR-PQZ-25)) |
 | `mtxUnshield(bytes,bytes,bytes,bytes32,bytes,uint256,bytes32)` (burn and refresh) | burn and refresh | as above |
 | `mtxShield(bytes32,uint256)` | shield, source = the signer's public balance | none: no statement; the envelope signature covers `(ua, amount)` |
-| `mtxRollOver(bytes32,uint256)` | [rollover](#rollover-op) | none (no authority needed) |
 | `UNDERLYING_PQZ`: `mtxWrapShield(address,uint256,bytes32)`, `mtxUnshieldUnwrap` | wrap-shield, unshield-unwrap | the unwrap folds `(leg, minOut)` into the binding |
 
-`mtxPrepareAcc` is **not** allowlisted (keepers call it directly; it needs no authority).
+`mtxRollOver` and `mtxPrepareAcc` are **not** allowlisted (3b removed `mtxRollOver` from both PQZ lists: keepers and wallets call them directly; neither needs an authority, and a relayed call would only add a signature; a meta-tx carrying either ⇒ `MtxSelectorNotAllowed` / `MetaTxUnknownOp`).
 
 Any other selector ⇒ `MtxSelectorNotAllowed`. `supportedModes()` returns `0xF3` on both paths: flag bits
 `MODE_RESTRICT_RELAYER` (`0x01`) and `MODE_RESTRICT_FEE_RECIPIENT` (`0x02`) apply to every op; fee nibble `NONE`
@@ -1303,8 +1309,8 @@ the token), then the escrow check. Anything failing ⇒ the whole transaction re
 chain 7622) and protects itself by simulating on a follower.
 
 <a id="CTR-PQZ-21"></a>**CTR-PQZ-21** — **`PqzToken` relays through the generic self-call, as classical Zether**
-(owner 2026-10-08: "why not the same as Zether?"). `mtxConfidentialTransfer*`, `mtxUnshield`, `mtxShield(bytes32,uint256)` and
-`mtxRollOver(bytes32,uint256)` are allowlisted self-calls through `mtxExecute`/`uaExecute`, and the proof-carrying
+(owner 2026-10-08: "why not the same as Zether?"). `mtxConfidentialTransfer*`, `mtxUnshield`, `mtxShield(bytes32,uint256)` are allowlisted self-calls
+through `mtxExecute`/`uaExecute` (`mtxRollOver` and `mtxPrepareAcc` are not), and the proof-carrying
 ones read the envelope binding from the ticket ([CTR-ZTH-34](zether.md#CTR-ZTH-34)); there is no separate PQZ mixin.
 PQZ selectors are refused in `mtxBatch`/`uaBatch` (`MtxNotBatchable(selector)`: one op is ≈ 3 M gas and up to
 ≈ 340 KB). **Cost of the self-call:** one memory copy of `m.data` for the `CALL`, `3·w + w²/512` gas with `w` = words:
@@ -1978,8 +1984,8 @@ disks for that or prune ([NODE-OPS-15](../node/ops.md#NODE-OPS-15)).
 | `Sstore2` | existing pattern (classical generator blob) | reused |
 
 Selectors (normative ABI; the proof-taking ones share the signature `(bytes payload, bytes proof, bytes auth, bytes32 beneficiary, bytes accHint[, …])`
-with Zether, [CTR-ZTH-45](zether.md#CTR-ZTH-45); names assumed from the plan 5h Task 3b brief, the reconcile pass checks them against the built
-`IConfidentialToken`): `mtxShield(bytes32,uint256)`, `mtxWrapShield(address,uint256,bytes32)`,
+with Zether, [CTR-ZTH-45](zether.md#CTR-ZTH-45); as built in `src/confidential/IConfidentialToken.sol`, selectors pinned in
+`ConfidentialSelectors.t.sol`): `mtxShield(bytes32,uint256)`, `mtxWrapShield(address,uint256,bytes32)`,
 `mtxConfidentialTransfer(bytes,bytes,bytes,bytes32,bytes)` (op 7, [CTR-PQZ-26](#CTR-PQZ-26)) and `…Compact`, `…Single`, `…SingleCompact`
 (op 1) with the same arguments, `mtxUnshield(bytes,bytes,bytes,bytes32,bytes,uint256,bytes32)`, `mtxUnshieldUnwrap` (the same five, then
 the leg arguments), `mtxRollOver(bytes32,uint256)`, `mtxPrepareAcc(bytes32,uint256)`; views `pqzAccount(bytes32)` →

@@ -56,9 +56,9 @@ TAG = {MLDSA44: kc("scaas.ua.mldsa44.v1"), MLDSA65: kc("scaas.ua.mldsa65.v1"), S
 
 # ------------------------------------------------------------------ the token API in one place (plan 5h Task 3b, spec
 # §5.11): the shared `mtx*` names and the shared signature `(payload, proof, auth, beneficiary, accHint[, trailing])`.
-# Task 4a was written against the 3b brief; the reconcile pass adjusts THIS table only.
+# Checked against the built ABI (Task 4b); mtxRollOver / mtxPrepareAcc are not relayable: called directly, never in a meta-tx.
 SH_S, SH_T = "bytes,bytes,bytes,bytes32,bytes", ["b", "b", "b", "w", "b"]  # payload, proof, auth, beneficiary, accHint
-UNWRAP_S = "(address,bytes32,uint256,uint256)"  # leg token, recipient id, amount, minOut (ASSUMED order, 3b: "record it")
+UNWRAP_S = "(address,bytes32,uint256,uint256)"  # IConfidentialToken.Unwrap(underlying, recipient, amount, minOut), a calldata struct
 API = dict(
     shield="mtxShield(bytes32,uint256)",
     wrapShield="mtxWrapShield(address,uint256,bytes32)",
@@ -75,10 +75,9 @@ API = dict(
     multiStmt="transferStatement(bytes,bytes32)",
     discStmt="disclosureStatement(bytes32,uint256,uint256,uint8)",
     verifyAmt="verifyTransferAmount(bytes32,uint256,uint256,uint8,bytes)",
-    # events carrying the entry reference as topic 1 (3b unifies the fields; only topic 0 is looked up here)
-    ev_single=["ConfidentialTransfer(bytes32,bytes32,bytes32,address)", "PqzTransfer(bytes32,bytes32,bytes32,address)"],
-    ev_multi=["ConfidentialTransferMulti(bytes32,bytes32,bytes32,uint256,address)",
-              "PqzTransferMulti(bytes32,bytes32,bytes32,uint256,address)"],
+    # events carrying the entry reference as topic 1 (as built, IConfidentialToken; only topic 0 is looked up here)
+    ev_single=["ConfidentialTransfer(bytes32,bytes32,bytes32,bytes32,uint256,uint64,address)"],
+    ev_multi=["ConfidentialTransferMulti(bytes32,bytes32,bytes32,uint256,uint64,bytes32[],uint8,address)"],
 )
 ACCT = ["pendingCount", "rolled", "floor", "cleared", "accBlob", "accUnits", "flags", "sendCounter", "accHash"]  # pqzAccount
 

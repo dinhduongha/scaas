@@ -51,7 +51,9 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
   (5) fixes → fuzz → gate fin → **freeze pqz-core** → (5a) **token-family rename** (`NormalToken` / `WrappedToken`;
   before P6h and before Codex run 2, so the review sees the final names) → (5b) **`clients/pqz-prover` (P6h)**: the
   wallet PQZ prover — a Rust crate over `pqzl` + `stmt` with wasm bindings, API shaped like `clients/zether-prover`
-  (read state, decrypt the balance, build statements, prove, envelope) → (5c′) **UA-5c (c) + (d)**: the generic UA
+  (read state, decrypt the balance, build statements, prove, envelope; the wallet view list `pqzAccount`, `pqzAcc`,
+  `pqzPending`, `pqzPendingCt`, `pqzEntryBlob`, `minDecoyFee`; rollover by count, with `mtxPrepareAcc` called directly
+  — neither `mtxRollOver` nor `mtxPrepareAcc` is relayable) → (5c′) **UA-5c (c) + (d)**: the generic UA
   envelope pipeline in `MetaTxBase` and `MandateWallet` (+ Hedera) with `bytes32` owner / delegate / payees (needed by
   the node's `ua_metatx`) → (5c) **node relay (P6i + the needed part of
   UA F5)**: `ua_metatx` jobs (UA envelopes, `from: bytes32` — after UA-6 every Zether UA and PQ signer writes only

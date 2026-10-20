@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="960" height="740" viewBox="0 0 960 740" role="img" aria-labelledby="t d">
   <title id="t">EVM token tree</title>
-  <desc id="d">The EVM token tree: MetaTxBase, then ERC20MetaTx, then MetaTokenBase, then six kinds by code: NONE (NoUnderlyingToken) and UNDERLYING (UnderlyingToken, 1 to 8 legs, the native coin allowed), built in phase P1; NONE_ZETHER and UNDERLYING_ZETHER, built in phase P3 (unaudited, dev chains only); NONE_PQZ and UNDERLYING_PQZ, the post-quantum confidential kinds, built in phase P6g (unaudited, chain 7622). External libraries: AdminLib, UnderlyingLib, HederaLib, TradeLib (P2), ZetherLib (P3) and PqzLib (P6g), all built. Features are flags chosen at creation. A token with both confidential layers (NONE_ZETHER_PQZ, UNDERLYING_ZETHER_PQZ) is reserved, not built.</desc>
+  <desc id="d">The EVM token tree: MetaTxBase, then ERC20MetaTx, then MetaTokenBase, then six kinds by code: NONE (NoUnderlyingToken) and UNDERLYING (UnderlyingToken, 1 to 8 legs, the native coin allowed), built in phase P1; NONE_ZETHER and UNDERLYING_ZETHER, built in phase P3 (unaudited, dev chains only); NONE_PQZ and UNDERLYING_PQZ, the post-quantum confidential kinds, built in phase P6g (unaudited, chain 7622). External libraries: AdminLib, UnderlyingLib, HederaLib, TradeLib (P2), ZetherLib (P3) and PqzLib (P6g), all built. Features are flags chosen at creation. The combined kinds 6 and 7 (both confidential layers in one token) were dropped on 2026-10-20; their ids are not reused.</desc>
   <defs>
     <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M0 0 L10 5 L0 10 z" fill="#57606a"/>
@@ -104,7 +104,7 @@
   <text class="s" x="24" y="564">lattice encryption, proofs</text>
   <text class="s" x="24" y="580">checked by the PQZ precompile</text>
 
-  <text class="s" x="24" y="620">Reserved, not built: NONE_ZETHER_PQZ, UNDERLYING_ZETHER_PQZ (both confidential layers in one token).</text>
+  <text class="s" x="24" y="620">Kinds 6 and 7 (both layers in one token) were dropped on 2026-10-20; the ids are not reused.</text>
 
   <!-- libraries -->
   <text class="sec" x="712" y="98">External libraries</text>

@@ -1015,11 +1015,12 @@ confidential transfers are `mtxConfidentialTransfer…` (wallets may label them 
 **Shared proof-taking signature** (controller ruling, plan 5h): `(bytes payload, bytes proof, bytes auth, bytes32 beneficiary,
 bytes accHint[, layer-neutral trailing arguments])`. PQZ: `auth` = the signing UA's signature over `authDigest` (formerly
 `authSig`), `beneficiary` must equal the payload's beneficiary (the call reverts otherwise), `accHint` = the optional materialised `acc`.
-Zether: `auth` and `accHint` **must be empty** (the proof alone authorizes, UA-6; a named revert otherwise). Trailing arguments:
+Zether: `auth` and `accHint` **must be empty** (the proof alone authorizes, UA-6): `AuthNotEmpty()` / `AccHintNotEmpty()`, checked first
+on every proof-taking entry point; `mtxRollOver(ua, 0)` ⇒ `RollOverRange(0)`. Trailing arguments:
 `mtxUnshield(payload, proof, auth, beneficiary, accHint, uint256 amount, bytes32 recipient)`; `mtxUnshieldUnwrap` takes the five and then
-the leg arguments in one shared order `(address u, bytes32 recipient, uint256 amount, uint256 minOut)` (assumed from the 5h Task 3b
-brief: the reconcile pass checks it against the built `IConfidentialToken`). The relay allow-lists (`mtxSelectors`, address and UA path)
-list these selectors; the Zether roll-overs stay off them ([CTR-ZTH-34](#CTR-ZTH-34)); PQZ's `mtxRollOver` is on its list, `mtxPrepareAcc` is not.
+the leg as one calldata struct `Unwrap(address underlying, bytes32 recipient, uint256 amount, uint256 minOut)` (declared in
+`IConfidentialToken`; a flat 9-argument form is stack-too-deep on the legacy code generator, `via_ir = false`). The relay allow-lists (`mtxSelectors`, address and UA path)
+list these selectors; the Zether roll-overs stay off them ([CTR-ZTH-34](#CTR-ZTH-34)); PQZ's `mtxRollOver` and `mtxPrepareAcc` are off its lists too (3b; both are called directly).
 
 **Events** (shared names): `Shielded(bytes32 indexed toUA, address indexed from, uint256 amount, uint64 index)` (Zether `index` =
 `pendingSeq`), `ConfidentialTransfer`, `ConfidentialTransferMulti` (fields unified where both layers have them),
@@ -1075,8 +1076,12 @@ Zether token (its own confidential account is classical by nature).
   `uaExecute(mtxShield)`; owner 2026-10-13); the roll-over functions; the Zether UA as the confidential account.
 
 Status: the pool, the pool fee path and the `mtxShield` UA allowlist entry are **BUILT** (plan 5h Task 3z, UA-6 Task 4); the `mtx*` rename,
-the one-function unshield to a UA and the UA-5c (a) envelope are **SPECIFIED** here and built by plan 5h Task 3b. PQZ takes a
-`bytes32` recipient the same way.
+the one-function unshield to a UA and the UA-5c (a) envelope are **BUILT** (plan 5h Task 3b). PQZ takes a
+`bytes32` recipient the same way. The unshield-unwrap payout is one branch, `UnderlyingLib.payOutTo(i, recipient, wrapped, minOut)` (3b fix 1,
+on both underlying kinds): a native id ⇒ `quoteUnwrap` + `payOut`, a derived UA ⇒ `quoteUnwrapToUA` + `payOutToUA` (`UALegNotLedger` for an
+outside leg); the order is debit, pool burn of `amount · shieldScale`, beneficiary fee, then `payOutTo`.
+`Shielded.from` is `_msgSender()`: for a UA signer (`uaExecute`) it is `UA_POOL` on both layers, not the UA (the shielding UA is in the same
+transaction's `UAMetaTransactionExecuted(from, …)` and in the `UATransfer(ua, SHIELD_POOL, …)` of the pool move).
 
 <a id="CTR-ZTH-46"></a>**CTR-ZTH-46** — **The prover views live in a stateless `ZetherStatements`** (owner, T14; pairs
 with `ZetherDisclosure`). It serves `transferStatement`, `transferStatementSingle` and `unshieldStatement` (built:
@@ -1535,13 +1540,12 @@ interface IZetherToken is IERC20MetaTx {  // target; built (P3): standalone, the
     struct AccountState { bytes accC; bytes accD; bytes pendingC; bytes pendingD; uint64 accSeq; uint64 pendingSeq;
                           uint64 sendCounter; uint64 modeNonce; ZetherTypes.RollOverMode mode; }
     event Shielded(bytes32 indexed toUA, address indexed from, uint256 amount, uint64 index);   // shared name, index = pendingSeq
-    event ConfidentialTransfer(ZetherTypes.UA indexed from, ZetherTypes.UA indexed to, ZetherTypes.UA indexed beneficiary,
-                               uint256 fee, uint256 sendCounter, bytes32 entryRef);          // single format
-    event ConfidentialTransferMulti(ZetherTypes.UA indexed from, ZetherTypes.UA indexed beneficiary, uint256 fee,
-                                    uint256 sendCounter, bytes32 entryRef, ZetherTypes.UA[] recipients,
-                                    ZetherTypes.TransferMode mode);
+    event ConfidentialTransfer(bytes32 indexed entryRef, bytes32 indexed fromUA, bytes32 indexed toUA, bytes32 beneficiary,
+                               uint256 fee, uint64 sendCounter, address blob);               // single format; blob = 0 on Zether
+    event ConfidentialTransferMulti(bytes32 indexed entryRef, bytes32 indexed fromUA, bytes32 indexed beneficiary, uint256 fee,
+                                    uint64 sendCounter, bytes32[] recipients, uint8 mode, address blob);  // mode = TransferMode
     event TransferBundles(bytes32 indexed entryRef, bytes bundles);                          // commit-reveal (HASH)
-    event Unshielded(ZetherTypes.UA indexed account, uint256 amount, bytes32 indexed recipient);   // shared name; recipient a native id or a UA
+    event Unshielded(bytes32 indexed ua, uint256 amount, bytes32 indexed recipient, address blob);   // shared name; recipient a native id or a UA; blob = 0 on Zether
     event RolledOver(bytes32 indexed ua, uint64 rolled, uint32 accUnits, bytes32 accHash);   // shared name; Zether: rolled = accSeq
     event RollOverModeChanged(ZetherTypes.UA indexed account, ZetherTypes.RollOverMode mode);
 
