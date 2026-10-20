@@ -18,7 +18,7 @@ import {UAPqzVerifier} from "./UAPqzVerifier.sol";
 ///         pq-zero-knowledge.md §7.4–§7.9 and §8.1. Ciphertexts are calldata and events, hashes in storage (CTR-PQZ-07). Every
 ///         statement is built once, in a buffer `u8(op) ‖ be32(len) ‖ stmt ‖ proof` that is the precompile input
 ///         (P6g D13); `authDigest = keccak256("SCAAS-PQZ-AUTH-V1" ‖ keccak256(stmt))` is checked by the registry
-///         (`requireZetherAuthorized`, the `authRef`'s PQ signature) before the precompile.
+///         (`requireAuthorized`, the signing UA's PQ signature, purpose `zether-auth`) before the precompile.
 library PqzLib {
     struct Account {
         bytes32 accHash; // 0 = Trivial(0) (P6g D10)
@@ -803,7 +803,8 @@ library PqzLib {
         if (units > K_MAX) revert IPqzToken.UnitsInvariant();
     }
 
-    /// @dev The authority (registry, the `authRef`'s PQ signature over `authDigest`), then the proof.
+    /// @dev The authority (registry: the signing UA `from` itself over `authDigest`, purpose `zether-auth`; UA-6 U7),
+    ///      then the proof.
     function _check(Op memory o, bytes memory buf, bytes calldata proof, bytes calldata authSig)
         private view
     {
@@ -811,7 +812,7 @@ library PqzLib {
         bytes32 h;
         assembly ("memory-safe") { h := keccak256(add(buf, 37), len) }
         bytes32 d = keccak256(abi.encodePacked("SCAAS-PQZ-AUTH-V1", h));
-        try IUARegistry(o.registry).requireZetherAuthorized(o.from, d, authSig, true) {}
+        try IUARegistry(o.registry).requireAuthorized(o.from, UAKinds.PURPOSE_ZETHER_AUTH, d, authSig) {}
         catch (bytes memory err) {
             if (err.length == 4 && bytes4(err) == UAKinds.UAVerifyGas.selector) revert UAKinds.UAVerifyGas();
             revert IPqzToken.AuthRejected();
@@ -868,15 +869,16 @@ library PqzLib {
         return keccak256(abi.encode(TAG_ENTRY, block.chainid, chainUid, address(this), from, uint256(counter)));
     }
 
+    /// @dev A UA holding a PQZ key (UA-6 U7: `recordOf(ua).pqzKey ≠ 0`).
     function _registered(address registry, bytes32 ua) private view returns (bool) {
-        return IUARegistry(registry).kindOf(ua) == UAKinds.PQZ_MLWE;
+        (, address ptr) = IUARegistry(registry).recordOf(ua);
+        return ptr != address(0);
     }
 
-    /// @dev The `pk` pointer of a registered `pqz-mlwe` UA (`AccountNotRegistered` otherwise).
+    /// @dev The PQZ key pointer of a holder (`AccountNotRegistered` otherwise, or for a key of another length).
     function _keyPtr(address registry, bytes32 ua) private view returns (address ptr) {
-        (IUARegistry.Record memory r,) = IUARegistry(registry).recordOf(ua);
-        if (r.kind != UAKinds.PQZ_MLWE || r.keyPtr.code.length != PqzCt.PK + 1) revert IPqzToken.AccountNotRegistered(ua);
-        return r.keyPtr;
+        (, ptr) = IUARegistry(registry).recordOf(ua);
+        if (ptr.code.length != PqzCt.PK + 1) revert IPqzToken.AccountNotRegistered(ua);
     }
 
     // ------------------------------------------------------------------ the buffer `u8(op) ‖ be32(len) ‖ stmt ‖ proof`

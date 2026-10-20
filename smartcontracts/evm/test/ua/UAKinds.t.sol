@@ -46,8 +46,12 @@ contract UAKindsTest is Test {
             bool native = vm.parseJsonBool(j, _at("kinds", i, "native"));
             assertEq(UAKinds.name(kind), vm.parseJsonString(j, _at("kinds", i, "name")));
             assertEq(UAKinds.isNative(kind), native);
-            assertEq(UAKinds.isSigning(kind), vm.parseJsonBool(j, _at("kinds", i, "signing")));
-            assertEq(UAKinds.isZether(kind), vm.parseJsonBool(j, _at("kinds", i, "zether")));
+            // UA-6 (until Task 8 regenerates kinds.json): zether-bls12381 joins SIGNING (U8); pqz-mlwe is a scheme, no
+            // longer a (Zether-family) kind
+            bool signing = vm.parseJsonBool(j, _at("kinds", i, "signing")) || kind == UAKinds.ZETHER_BLS12381;
+            bool zether = vm.parseJsonBool(j, _at("kinds", i, "zether")) && kind != UAKinds.PQZ_MLWE;
+            assertEq(UAKinds.isSigning(kind), signing);
+            assertEq(UAKinds.isZether(kind), zether);
             assertEq(UAKinds.isMember(kind, false), vm.parseJsonBool(j, _at("kinds", i, "member")));
             assertEq(UAKinds.isMember(kind, true), vm.parseJsonBool(j, _at("kinds", i, "memberHedera")));
             if (native) continue;
@@ -56,6 +60,9 @@ contract UAKindsTest is Test {
             else assertEq(UAKinds.groupName(kind), vm.parseJsonString(j, _at("kinds", i, "group")));
         }
     }
+
+    /// The `authref` purpose (removed in UA-6) is still a row of kinds.json until Task 8 regenerates it.
+    bytes32 internal constant AUTHREF_V1 = keccak256("scaas.ua.purpose.authref.v1");
 
     function test_groupsPurposesConstants() public view {
         string memory j = _k();
@@ -67,7 +74,7 @@ contract UAKindsTest is Test {
             );
         }
         bytes32[12] memory p = [
-            UAKinds.PURPOSE_POP, UAKinds.PURPOSE_AUTHREF, UAKinds.PURPOSE_METATX, UAKinds.PURPOSE_METATX_CANCEL,
+            UAKinds.PURPOSE_POP, AUTHREF_V1, UAKinds.PURPOSE_METATX, UAKinds.PURPOSE_METATX_CANCEL,
             UAKinds.PURPOSE_MEMBER, UAKinds.PURPOSE_ZETHER_AUTH, UAKinds.PURPOSE_ZETHER_OWNER, UAKinds.PURPOSE_KEYOP,
             UAKinds.PURPOSE_RECEIVER_FEE, UAKinds.PURPOSE_VP, UAKinds.PURPOSE_VC_ANCHOR, UAKinds.PURPOSE_TRADE
         ];
@@ -87,6 +94,10 @@ contract UAKindsTest is Test {
         for (uint256 i; i < n; ++i) {
             uint16 kind = uint16(vm.parseJsonUint(j, _at("valid", i, "kind")));
             bytes memory d = vm.parseJsonBytes(j, _at("valid", i, "keyData"));
+            if (kind == UAKinds.PQZ_MLWE) {
+                // UA-6: a scheme, not a kind (row until Task 8); its id and keyHash bytes stay
+                vm.expectRevert(abi.encodeWithSelector(UAKinds.UAKindNotDerived.selector, kind));
+            }
             h.validate(kind, d, vm.parseJsonBool(j, _at("valid", i, "hederaNative")));
             bytes32 ua = UAKinds.uaOf(kind, d);
             assertEq(UAKinds.name(kind), vm.parseJsonString(j, _at("valid", i, "name")));
@@ -107,6 +118,8 @@ contract UAKindsTest is Test {
             bytes memory d = vm.parseJsonBytes(j, _at("invalid", i, "keyData"));
             string memory reason = vm.parseJsonString(j, _at("invalid", i, "reason"));
             bytes memory want = abi.encodeWithSelector(_selector(vm.parseJsonString(j, _at("invalid", i, "error"))), kind);
+            // UA-6: pqz-mlwe is a scheme, not a kind (rows until Task 8)
+            if (kind == UAKinds.PQZ_MLWE) want = abi.encodeWithSelector(UAKinds.UAKindNotDerived.selector, kind);
             try h.validate(kind, d, vm.parseJsonBool(j, _at("invalid", i, "hederaNative"))) {
                 revert(string.concat("accepted: ", reason));
             } catch (bytes memory got) {

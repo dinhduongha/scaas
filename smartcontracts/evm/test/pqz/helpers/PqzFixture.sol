@@ -58,10 +58,10 @@ abstract contract PqzFixture is PqzRegistryBase {
         for (uint8 op = 1; op <= 5; ++op) if (op != 3) _mockOp(op, 1);
         txStmt = _vecHex("statement_transfer.json", ".rows[0].stmt");
         vm.mockCall(PQZ, abi.encodePacked(uint8(3)), abi.encode(uint256(1))); // PoPs of the fixture's keys
-        alice = _pqzUA(_slice(txStmt, 640, PqzCt.PK), _mldsaUA(1));
-        bob = _pqzUA(_slice(txStmt, 17_024, PqzCt.PK), _mldsaUA(2));
-        aud = _pqzUA(_slice(txStmt, 33_408, PqzCt.PK), _mldsaUA(3));
-        carol = _pqzUA(_pk(7), _mldsaUA(4));
+        alice = _pqzUA(_slice(txStmt, 640, PqzCt.PK), 1);
+        bob = _pqzUA(_slice(txStmt, 17_024, PqzCt.PK), 2);
+        aud = _pqzUA(_slice(txStmt, 33_408, PqzCt.PK), 3);
+        carol = _pqzUA(_pk(7), 4);
     }
 
     function _cfg(uint256 maxShielded) internal view virtual returns (IFactoryToken.TokenConfig memory c) {

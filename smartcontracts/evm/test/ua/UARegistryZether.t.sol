@@ -15,9 +15,10 @@ import {ZetherSafety} from "../../src/zether/ZetherSafety.sol";
 import {ZetherKeys} from "../zether/helpers/ZetherKeys.sol";
 import {UARegistryBase, MockVerifier} from "./UARegistryBase.sol";
 
-/// accounts.md CTR-UA-07, CTR-UA-16, §1.8 steps 5–8 and §1.7 Z-auth for the Zether kinds 0x0140/0x0141 (UA-3): the
-/// real Zether Schnorr verifiers for the Zether kinds, the stand-in verifier for the classical authorities.
-/// T-REG-3b, T-AUTH-1b, T-ZET-1 (registry side).
+/// accounts.md CTR-UA-07, CTR-UA-16, §1.8 and §1.7 Z-auth for the Zether kinds 0x0140/0x0141 (UA-3; UA-6: the Zether
+/// key is the UA, no `authRef` — the `authRef` cases are in legacy/ua6/test/ua/UARegistryZether.t.sol): the real Zether
+/// Schnorr verifiers for the Zether kinds, the stand-in verifier for the classical kinds. T-AUTH-1b, T-ZET-1 (registry
+/// side).
 contract UARegistryZetherTest is UARegistryBase {
     uint256 internal constant PK_A = 0xA11CE;
     uint256 internal constant X1 = 0xA11CE5;
@@ -50,28 +51,20 @@ contract UARegistryZetherTest is UARegistryBase {
         return bls ? UAKinds.ZETHER_BLS12381 : UAKinds.ZETHER_BN254;
     }
 
-    /// The Zether PoP: Schnorr by `x` under the Zether tag over `uaMessage(kind, POP, popDigest(ua, authRef))`.
-    function _zpop(UARegistry r, uint256 x, bool bls, bytes32 authRef) internal view returns (bytes memory) {
+    /// The Zether PoP: Schnorr by `x` under the Zether tag over `uaMessage(kind, POP, popDigest(ua, 0))`.
+    function _zpop(UARegistry r, uint256 x, bool bls) internal view returns (bytes memory) {
         uint16 kind = _zkind(bls);
         bytes32 ua = r.uaOf(kind, ZetherKeys.pub(x, bls));
-        return ZetherKeys.schnorr(x, r.uaMessage(kind, UAKinds.PURPOSE_POP, r.popDigest(ua, authRef)), bls);
+        return ZetherKeys.schnorr(x, r.uaMessage(kind, UAKinds.PURPOSE_POP, r.popDigest(ua, 0)), bls);
     }
 
-    function _zregister(UARegistry r, uint256 x, bool bls, bytes32 authRef, bytes memory authPop)
-        internal
-        returns (bytes32)
-    {
-        return r.register(_zkind(bls), ZetherKeys.pub(x, bls), _zpop(r, x, bls, authRef), authRef, authPop);
+    function _zregister(UARegistry r, uint256 x, bool bls) internal returns (bytes32) {
+        return r.register(_zkind(bls), ZetherKeys.pub(x, bls), _zpop(r, x, bls), "", "");
     }
 
     /// The owner op of a self Zether UA: `abi.encode(bytes(""), Schnorr by x over uaMessage(kind, purpose, digest))`.
     function _ownerAuth(uint256 x, bool bls, bytes32 purpose, bytes32 digest) internal view returns (bytes memory) {
         return abi.encode(bytes(""), ZetherKeys.schnorr(x, zreg.uaMessage(_zkind(bls), purpose, digest), bls));
-    }
-
-    function _authPopNative(UARegistry r, uint256 pk, bytes32 ua) internal view returns (bytes memory) {
-        bytes32 authRef = _pad(vm.addr(pk));
-        return _nativeSig(r, pk, UAKinds.PURPOSE_AUTHREF, r.popDigest(ua, authRef));
     }
 
     function _expectZetherUnauthorized(bytes32 ua, bytes32 digest, bytes memory auth, bool zk) internal {
@@ -81,28 +74,28 @@ contract UARegistryZetherTest is UARegistryBase {
 
     // ----- register -----
 
-    /// Self (`authRef = 0`), both curves: record, stored `Y` (`keyOf`, CTR-ZTH-50), keyOwner, the event.
+    /// Both curves: record, stored `Y` (`keyOf`, CTR-ZTH-50), keyOwner, the event (no PQZ key).
     function test_registerSelf() public {
         for (uint256 b; b < 2; ++b) {
             bool bls = b == 1;
             bytes memory y = ZetherKeys.pub(X1, bls);
             uint16 kind = _zkind(bls);
             bytes32 ua = UAKinds.uaOf(kind, y);
-            bytes memory pop = _zpop(zreg, X1, bls, 0);
+            bytes memory pop = _zpop(zreg, X1, bls);
             vm.expectEmit(true, true, false, true, address(zreg));
-            emit IUARegistry.UARegistered(ua, kind, y, 0);
+            emit IUARegistry.UARegistered(ua, kind, y, address(0));
             uint256 g = gasleft();
-            assertEq(zreg.register(kind, y, pop, 0, ""), ua);
+            assertEq(zreg.register(kind, y, pop, "", ""), ua);
             console.log(bls ? "register zether-bls12381 self" : "register zether-bn254 self", g - gasleft());
-            (IUARegistry.Record memory rec, bytes32 authRef) = zreg.recordOf(ua);
+            (IUARegistry.Record memory rec, address pqzKey) = zreg.recordOf(ua);
             assertEq(rec.kind, kind);
-            assertEq(authRef, 0);
+            assertEq(pqzKey, address(0));
             assertTrue(rec.keyPtr != address(0), "Y stored");
             assertEq(zreg.keyOf(ua), y);
             assertEq(zreg.kindOf(ua), kind);
             assertEq(zreg.keyOwner(UAKinds.keyHashOf(kind, y)), ua);
             vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAAlreadyRegistered.selector, ua));
-            zreg.register(kind, y, pop, 0, "");
+            zreg.register(kind, y, pop, "", "");
         }
         assertEq(zreg.keyOf(bytes32(uint256(1) << 200)).length, 0, "unregistered: empty");
     }
@@ -110,109 +103,19 @@ contract UARegistryZetherTest is UARegistryBase {
     /// The same point as `schnorr-bn254` and as `zether-bn254`: one keyHash group, so the second is `UAKeyInUse`.
     function test_keyHashGroupShared() public {
         bytes memory y = ZetherKeys.pub(X1, false);
-        bytes32 ua = _zregister(zreg, X1, false, 0, "");
+        bytes32 ua = _zregister(zreg, X1, false);
         bytes32 kh = UAKinds.keyHashOf(UAKinds.SCHNORR_BN254, y);
         bytes memory pop = _pop(zreg, UAKinds.SCHNORR_BN254, y);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKeyInUse.selector, kh, ua));
-        zreg.register(UAKinds.SCHNORR_BN254, y, pop, 0, "");
-    }
-
-    /// T-REG-3b for Zether: the PoP binds `authRef`; the authority must co-sign; `authPop` only with an `authRef`.
-    function test_T_REG_3b_zether() public {
-        bytes memory y = ZetherKeys.pub(X1, false);
-        bytes32 ua = UAKinds.uaOf(UAKinds.ZETHER_BN254, y);
-        bytes32 native = _pad(vm.addr(PK_A));
-        bytes memory pop0 = _zpop(zreg, X1, false, 0);
-        bytes memory popN = _zpop(zreg, X1, false, native);
-        bytes memory authPop = _authPopNative(zreg, PK_A, ua);
-        // a PoP for authRef 0 replayed with an authRef
-        vm.expectRevert(IUARegistry.UAPoP.selector);
-        zreg.register(UAKinds.ZETHER_BN254, y, pop0, native, authPop);
-        // a valid PoP for the authRef without (or with a wrong) co-sign
-        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, native));
-        zreg.register(UAKinds.ZETHER_BN254, y, popN, native, "");
-        bytes memory otherAuthPop = _nativeSig(zreg, PK_A, UAKinds.PURPOSE_AUTHREF, zreg.popDigest(ua, 0));
-        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, native));
-        zreg.register(UAKinds.ZETHER_BN254, y, popN, native, otherAuthPop);
-        // authPop without authRef
-        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAAuthRef.selector, bytes32(0)));
-        zreg.register(UAKinds.ZETHER_BN254, y, pop0, 0, authPop);
-        // the record follows the signed data only: anyone may relay it
-        vm.prank(address(0xBEEF));
-        uint256 g = gasleft();
-        zreg.register(UAKinds.ZETHER_BN254, y, popN, native, authPop);
-        console.log("register zether-bn254 native authRef", g - gasleft());
-        (, bytes32 authRef) = zreg.recordOf(ua);
-        assertEq(authRef, native);
-    }
-
-    /// The co-sign of a derived authority whose stand-in signature is over its own key data.
-    function _coSignDerived(uint16 kind, bytes32 authRef, uint256 x, bool bls) internal view returns (bytes memory) {
-        bytes32 zua = UAKinds.uaOf(_zkind(bls), ZetherKeys.pub(x, bls));
-        bytes memory k = _key(kind);
-        return abi.encode(k, _sig(k, zreg.uaMessage(kind, UAKinds.PURPOSE_AUTHREF, zreg.popDigest(zua, authRef))));
-    }
-
-    function _expectAuthRefRefused(uint256 x, bool bls, bytes32 authRef) internal {
-        bytes memory y = ZetherKeys.pub(x, bls);
-        bytes memory pop = _zpop(zreg, x, bls, authRef);
-        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAAuthRef.selector, authRef));
-        zreg.register(_zkind(bls), y, pop, authRef, hex"01");
-    }
-
-    /// Step 5: a registered single-key SIGNING authority (stand-in verifier) co-signs and is recorded.
-    function test_authRefDerived() public {
-        bytes32 p256 = _register(zreg, 0x0101, _key(0x0101));
-        bytes32 zua = _zregister(zreg, X1, false, p256, _coSignDerived(0x0101, p256, X1, false));
-        (, bytes32 authRef) = zreg.recordOf(zua);
-        assertEq(authRef, p256);
-    }
-
-    /// Step 5: a BLS authority on the curve of `Y` is refused, on the other curve accepted (CTR-UA-16, S12).
-    function test_authRefSameCurveBls() public {
-        bytes32 blsBn = _register(zreg, UAKinds.BLS_BN254_MINSIG, _key(UAKinds.BLS_BN254_MINSIG));
-        bytes32 bls381 = _register(zreg, UAKinds.BLS12381_MINSIG, _key(UAKinds.BLS12381_MINSIG));
-        _expectAuthRefRefused(X1, false, blsBn);
-        _zregister(zreg, X1, false, bls381, _coSignDerived(UAKinds.BLS12381_MINSIG, bls381, X1, false));
-        _expectAuthRefRefused(X1, true, bls381);
-        _zregister(zreg, X1, true, blsBn, _coSignDerived(UAKinds.BLS_BN254_MINSIG, blsBn, X1, true));
-    }
-
-    /// Step 5: an unregistered derived id and a Zether UA are refused as authorities.
-    function test_authRefRefused() public {
-        bytes32 ghost = UAKinds.uaOf(0x0103, _key(0x0103));
-        _expectAuthRefRefused(X2, true, ghost);
-        bytes32 zua = _zregister(zreg, X1, false, 0, "");
-        _expectAuthRefRefused(X2, true, zua);
-    }
-
-    /// Step 5: an `msig` authority co-signs through its members.
-    function test_authRefMsig() public {
-        bytes32 p256 = _register(zreg, 0x0101, _key(0x0101));
-        (bytes memory d, bytes32 msigUa) = _msigOfP256(p256);
-        bytes32 zua = UAKinds.uaOf(UAKinds.ZETHER_BLS12381, ZetherKeys.pub(X2, true));
-        bytes32 md = _memberDigest(msigUa, UAKinds.PURPOSE_AUTHREF, zreg.popDigest(zua, msigUa));
-        UARegistry.MemberSig[] memory s = new UARegistry.MemberSig[](1);
-        bytes memory k = _key(0x0101);
-        s[0] = UARegistry.MemberSig(0, k, _sig(k, zreg.uaMessage(0x0101, UAKinds.PURPOSE_MEMBER, md)));
-        _zregister(zreg, X2, true, msigUa, _msigAuth(d, s));
-        (, bytes32 authRef) = zreg.recordOf(zua);
-        assertEq(authRef, msigUa);
-    }
-
-    /// A 1-of-1 `msig` over the registered p256 UA.
-    function _msigOfP256(bytes32 p256) internal returns (bytes memory d, bytes32 ua) {
-        Member[] memory m = new Member[](1);
-        m[0] = Member(0x0101, p256, 1);
-        d = _msigKey(1, m);
-        ua = zreg.register(UAKinds.MSIG, d, "", 0, "");
+        zreg.register(UAKinds.SCHNORR_BN254, y, pop, "", "");
     }
 
     // ----- requireAuthorized / requireZetherAuthorized -----
 
-    /// T-AUTH-1b: a registered Zether UA never signs through `requireAuthorized`, whatever the auth.
+    /// T-AUTH-1b: a registered `zether-bn254` UA never signs through `requireAuthorized`, whatever the auth (not in
+    /// SIGNING; to legacy/ in UA-6 Task 4). `zether-bls12381` signs there since UA-6 (U8): `UARegistryUA6.t.sol`.
     function test_T_AUTH_1b_registeredZether() public {
-        bytes32 ua = _zregister(zreg, X1, false, 0, "");
+        bytes32 ua = _zregister(zreg, X1, false);
         bytes memory y = ZetherKeys.pub(X1, false);
         bytes memory sig = ZetherKeys.schnorr(X1, zreg.uaMessage(UAKinds.ZETHER_BN254, UAKinds.PURPOSE_METATX, DIGEST), false);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, ua));
@@ -225,7 +128,7 @@ contract UARegistryZetherTest is UARegistryBase {
     function test_zetherAuthorizedSelf() public {
         for (uint256 b; b < 2; ++b) {
             bool bls = b == 1;
-            bytes32 ua = _zregister(zreg, X1, bls, 0, "");
+            bytes32 ua = _zregister(zreg, X1, bls);
             zreg.requireZetherAuthorized(ua, DIGEST, "", true);
             bytes memory owner = _ownerAuth(X1, bls, UAKinds.PURPOSE_ZETHER_OWNER, DIGEST);
             _expectZetherUnauthorized(ua, DIGEST, owner, true); // zkCovered: auth must be empty
@@ -250,48 +153,27 @@ contract UARegistryZetherTest is UARegistryBase {
         _expectZetherUnauthorized(native, DIGEST, _nativeSig(zreg, PK_A, UAKinds.PURPOSE_ZETHER_AUTH, DIGEST), true);
     }
 
-    /// `authRef ≠ 0`: the authority signs, `zether-auth` with the proof, `zether-owner` without; the proof alone never.
-    function test_zetherAuthorizedByAuthRef() public {
-        bytes32 native = _pad(vm.addr(PK_A));
-        bytes32 zua = UAKinds.uaOf(UAKinds.ZETHER_BN254, ZetherKeys.pub(X1, false));
-        _zregister(zreg, X1, false, native, _authPopNative(zreg, PK_A, zua));
-        _expectZetherUnauthorized(zua, DIGEST, "", true);
-        uint256 g = gasleft();
-        zreg.requireZetherAuthorized(zua, DIGEST, _nativeSig(zreg, PK_A, UAKinds.PURPOSE_ZETHER_AUTH, DIGEST), true);
-        console.log("zether-auth, native authRef", g - gasleft());
-        zreg.requireZetherAuthorized(zua, DIGEST, _nativeSig(zreg, PK_A, UAKinds.PURPOSE_ZETHER_OWNER, DIGEST), false);
-        _expectZetherUnauthorized(zua, DIGEST, _nativeSig(zreg, PK_A, UAKinds.PURPOSE_ZETHER_OWNER, DIGEST), true);
-        _expectZetherUnauthorized(zua, DIGEST, _nativeSig(zreg, PK_A, UAKinds.PURPOSE_ZETHER_AUTH, DIGEST), false);
-        _expectZetherUnauthorized(zua, DIGEST, _ownerAuth(X1, false, UAKinds.PURPOSE_ZETHER_OWNER, DIGEST), false);
-        // a derived authority: auth = abi.encode(keyData, sig) of its kind
-        bytes32 p256 = _register(zreg, 0x0101, _key(0x0101));
-        bytes32 z2 = _zregister(zreg, X2, true, p256, _coSignDerived(0x0101, p256, X2, true));
-        zreg.requireZetherAuthorized(z2, DIGEST, _auth(zreg, 0x0101, _key(0x0101), UAKinds.PURPOSE_ZETHER_AUTH, DIGEST), true);
-        _expectZetherUnauthorized(z2, DIGEST, _auth(zreg, 0x0101, _key(0x0101), UAKinds.PURPOSE_METATX, DIGEST), true);
-    }
-
     // ----- generations -----
 
-    /// Gen 2 (no Zether kinds of its own) sees gen-1 Zether records, their `authRef` and `Y`, and hands their checks to
-    /// gen 1; it may not enable a Zether kind whose group gen 1 enables.
+    /// Gen 2 (no Zether kinds of its own) sees gen-1 Zether records and their `Y`, and hands their checks to gen 1
+    /// (`requireAuthorized` too for `zether-bls12381`, UA-6); it may not enable a Zether kind whose group gen 1 enables.
     function test_gen2HandsZetherToGen1() public {
-        bytes32 native = _pad(vm.addr(PK_A));
-        bytes32 zua = UAKinds.uaOf(UAKinds.ZETHER_BN254, ZetherKeys.pub(X1, false));
-        _zregister(zreg, X1, false, native, _authPopNative(zreg, PK_A, zua));
-        bytes32 self = _zregister(zreg, X2, true, 0, "");
+        bytes32 zua = _zregister(zreg, X1, false);
+        bytes32 self = _zregister(zreg, X2, true);
         UARegistry.KindConfig[] memory none = new UARegistry.KindConfig[](0);
         UARegistry gen2 = new UARegistry(chainUidA, address(zreg), false, BUDGET, address(0), true, none);
         assertEq(gen2.kindOf(zua), UAKinds.ZETHER_BN254);
-        (, bytes32 authRef) = gen2.recordOf(zua);
-        assertEq(authRef, native);
+        (, address pqzKey) = gen2.recordOf(zua);
+        assertEq(pqzKey, address(0));
         assertEq(gen2.keyOf(self), ZetherKeys.pub(X2, true));
-        gen2.requireZetherAuthorized(zua, DIGEST, _nativeSig(zreg, PK_A, UAKinds.PURPOSE_ZETHER_AUTH, DIGEST), true);
+        gen2.requireZetherAuthorized(zua, DIGEST, "", true);
         gen2.requireZetherAuthorized(self, DIGEST, "", true);
+        gen2.requireAuthorized(self, UAKinds.PURPOSE_METATX, DIGEST, _ownerAuth(X2, true, UAKinds.PURPOSE_METATX, DIGEST));
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, self));
         gen2.requireZetherAuthorized(self, DIGEST, hex"01", true);
         bytes memory y = ZetherKeys.pub(X2, false);
         vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAKindDisabled.selector, UAKinds.ZETHER_BN254));
-        gen2.register(UAKinds.ZETHER_BN254, y, "", 0, "");
+        gen2.register(UAKinds.ZETHER_BN254, y, "", "", "");
         UARegistry.KindConfig[] memory c = new UARegistry.KindConfig[](1);
         c[0] = UARegistry.KindConfig(UAKinds.ZETHER_BLS12381, address(zbls), 70_000);
         vm.expectRevert(abi.encodeWithSelector(UARegistry.UAConfig.selector, UAKinds.ZETHER_BLS12381));

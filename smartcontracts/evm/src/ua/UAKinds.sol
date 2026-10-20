@@ -37,11 +37,12 @@ library UAKinds {
     uint16 internal constant SLHDSA128S = 0x0133;
     uint16 internal constant ZETHER_BN254 = 0x0140;
     uint16 internal constant ZETHER_BLS12381 = 0x0141;
+    /// @notice A scheme id since UA-6, not a kind: the PQZ key attribute of a PQ signing UA (its tag for `R_REG`'s
+    ///         `uaMessage`, its keyHash group `pqz-mlwe`, the registry slot of its verifier and the `0x0142` list).
     uint16 internal constant PQZ_MLWE = 0x0142;
 
     bytes32 internal constant MSG_TAG = keccak256("scaas.ua.msg.v1");
     bytes32 internal constant PURPOSE_POP = keccak256("scaas.ua.purpose.pop.v1");
-    bytes32 internal constant PURPOSE_AUTHREF = keccak256("scaas.ua.purpose.authref.v1");
     bytes32 internal constant PURPOSE_METATX = keccak256("scaas.ua.purpose.metatx.v1");
     bytes32 internal constant PURPOSE_METATX_CANCEL = keccak256("scaas.ua.purpose.metatx-cancel.v1");
     bytes32 internal constant PURPOSE_MEMBER = keccak256("scaas.ua.purpose.member.v1");
@@ -79,14 +80,16 @@ library UAKinds {
     uint256 private constant BN_P = 0x30644E72E131A029B85045B68181585D97816A916871CA8D3C208C16D87CFD47;
     uint256 private constant BN_R = 0x30644E72E131A029B85045B68181585D2833E84879B9709143E1F593F0000001;
 
-    // ----- sets (accounts.md §1.6 "Closed kind sets"; slhdsa128s in SIGNING and MEMBER) -----
+    // ----- sets (accounts.md §1.6 "Closed kind sets"; slhdsa128s in SIGNING and MEMBER; UA-6 U8: zether-bls12381 in
+    //       SIGNING, not MEMBER) -----
 
     function isNative(uint16 kind) internal pure returns (bool) {
         return (kind >= EVM_EOA && kind <= HEDERA_NATIVE) || (kind >= 0x0010 && kind <= 0x0016);
     }
 
+    /// `zether-bn254` until UA-6 Task 4 moves it to `legacy/` (U10).
     function isZether(uint16 kind) internal pure returns (bool) {
-        return kind >= ZETHER_BN254 && kind <= PQZ_MLWE;
+        return kind == ZETHER_BN254 || kind == ZETHER_BLS12381;
     }
 
     function _singleSigning(uint16 kind) private pure returns (bool) {
@@ -95,7 +98,7 @@ library UAKinds {
     }
 
     function isSigning(uint16 kind) internal pure returns (bool) {
-        return kind == MSIG || _singleSigning(kind);
+        return kind == MSIG || kind == ZETHER_BLS12381 || _singleSigning(kind);
     }
 
     function isDerived(uint16 kind) internal pure returns (bool) {
@@ -145,19 +148,24 @@ library UAKinds {
 
     function _requireDerived(uint16 kind) private pure {
         if (isDerived(kind)) return;
-        if (isNative(kind)) revert UAKindNotDerived(kind);
+        if (isNative(kind) || kind == PQZ_MLWE) revert UAKindNotDerived(kind);
         revert UAKindUnknown(kind);
+    }
+
+    /// A derived kind or the scheme `pqz-mlwe` (UA-6: it keeps its tag and keyHash group).
+    function _requireTagged(uint16 kind) private pure {
+        if (kind != PQZ_MLWE) _requireDerived(kind);
     }
 
     /// `TAG(kind) = keccak256("scaas.ua." ‖ name ‖ ".v1")`.
     function tag(uint16 kind) internal pure returns (bytes32) {
-        _requireDerived(kind);
+        _requireTagged(kind);
         return keccak256(abi.encodePacked("scaas.ua.", name(kind), ".v1"));
     }
 
-    /// The keyHash group of a derived kind; "" for `msig`.
+    /// The keyHash group of a derived kind or of the scheme `pqz-mlwe`; "" for `msig`.
     function groupName(uint16 kind) internal pure returns (string memory) {
-        _requireDerived(kind);
+        _requireTagged(kind);
         if (kind == WEBAUTHN_P256 || kind == P256) return "p256";
         if (kind == ED25519) return "ed25519";
         if (kind == BIP340 || kind == SECP256K1 || kind == MUSIG2_SECP256K1 || kind == FROST_SECP256K1) return "secp256k1";
@@ -166,7 +174,7 @@ library UAKinds {
         if (kind == BLS12381_MINSIG) return "bls12381-g2";
         if (kind == BLS_BN254_MINSIG) return "bn254-g2";
         if (kind == MSIG) return "";
-        return name(kind); // mldsa44, mldsa65, fndsa512, slhdsa128s, pqz-mlwe: the group is the kind
+        return name(kind); // mldsa44, mldsa65, fndsa512, slhdsa128s, the scheme pqz-mlwe: the group is the name
     }
 
     function groupTag(string memory group) internal pure returns (bytes32) {
@@ -208,11 +216,12 @@ library UAKinds {
         return keccak256(abi.encodePacked("evm:", Strings.toString(chainId)));
     }
 
-    /// `pop_digest = keccak256(POP_TAG ‖ chainKeyHash ‖ chainUid ‖ registry_id ‖ ua ‖ authRef)` (CTR-UA-07).
-    function popDigest(bytes32 chainKeyHash_, bytes32 chainUid, address registry, bytes32 ua, bytes32 authRef)
+    /// `pop_digest = keccak256(POP_TAG ‖ chainKeyHash ‖ chainUid ‖ registry_id ‖ ua ‖ pqzKeyHash)` (CTR-UA-07; UA-6 U4:
+    /// the last word is the PQZ keyHash, 0 for every UA without a PQZ key — the bytes of the former `authRef = 0`).
+    function popDigest(bytes32 chainKeyHash_, bytes32 chainUid, address registry, bytes32 ua, bytes32 pqzKeyHash)
         internal pure returns (bytes32)
     {
-        return keccak256(abi.encode(PURPOSE_POP, chainKeyHash_, chainUid, registry, ua, authRef));
+        return keccak256(abi.encode(PURPOSE_POP, chainKeyHash_, chainUid, registry, ua, pqzKeyHash));
     }
 
     function uaAuthDomainSeparator(uint256 generation, uint256 chainId, address registry, bytes32 chainUid)
@@ -257,7 +266,7 @@ library UAKinds {
         else if (kind == FROST_BN254) ok = _frost(d, 64);
         else if (kind == MSIG) ok = _msig(d, hederaNative);
         else if (kind == FNDSA512) ok = _fndsa(d);
-        else ok = true; // mldsa44/65, slhdsa128s, pqz-mlwe: the length is the whole check
+        else ok = true; // mldsa44/65, slhdsa128s: the length is the whole check
         if (!ok) revert UAKeyData(kind);
     }
 
@@ -270,7 +279,6 @@ library UAKinds {
         if (kind == MLDSA44) return 1312;
         if (kind == MLDSA65) return 1952;
         if (kind == FNDSA512) return 897;
-        if (kind == PQZ_MLWE) return 16384;
         return 0; // MuSig2, FROST, msig: variable
     }
 

@@ -275,8 +275,8 @@ contract ZetherS3VectorsTest is Test {
             assertEq(reg.popDigest(ua, 0), j.readBytes32(string.concat(key, ".pop.popDigest")));
             bytes memory pop = j.readBytes(string.concat(key, ".pop.pop"));
             vm.expectRevert(IUARegistry.UAPoP.selector);
-            reg.register(kind, y, _flip(pop, pop.length - 1), 0, "");
-            assertEq(reg.register(kind, y, pop, 0, ""), ua);
+            reg.register(kind, y, _flip(pop, pop.length - 1), "", "");
+            assertEq(reg.register(kind, y, pop, "", ""), ua);
             assertEq(reg.keyOf(ua), y);
         }
     }

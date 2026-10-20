@@ -142,29 +142,25 @@ abstract contract ZetherFixture is Test {
         return ZetherLayer(factory.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, abi.encode(_cfg(auditor, maxShielded)), salt));
     }
 
+    /// Registers `Y = [x]G` as this stack's Zether kind (the Zether key is the UA: no `authRef` since UA-6), relayed by
+    /// `evm` (the record does not depend on the caller, CTR-UA-07).
     function _user(uint256 x, address evm) internal returns (User memory u) {
-        return _user(x, evm, 0, "");
-    }
-
-    /// Registers `Y = [x]G` as this stack's Zether kind with `authRef` (0 = self) and the authority's co-sign `authPop`,
-    /// relayed by `evm` (the record does not depend on the caller, CTR-UA-07).
-    function _user(uint256 x, address evm, bytes32 authRef, bytes memory authPop) internal returns (User memory u) {
         u.x = x;
         u.y = ZetherKeys.pub(x, bls);
         u.evm = evm;
-        bytes memory pop = ZetherKeys.schnorr(x, _popMsg(u.y, authRef), bls);
+        bytes memory pop = ZetherKeys.schnorr(x, _popMsg(u.y), bls);
         vm.prank(evm);
-        u.ua = ZetherTypes.UA.wrap(reg.register(_zkind(), u.y, pop, authRef, authPop));
+        u.ua = ZetherTypes.UA.wrap(reg.register(_zkind(), u.y, pop, "", ""));
     }
 
     function _zkind() internal view returns (uint16) {
         return bls ? UAKinds.ZETHER_BLS12381 : UAKinds.ZETHER_BN254;
     }
 
-    /// `uaMessage(kind, POP, popDigest(UA(Y), authRef))`, what the Zether key signs to register (CTR-UA-07).
-    function _popMsg(bytes memory y, bytes32 authRef) internal view returns (bytes32) {
+    /// `uaMessage(kind, POP, popDigest(UA(Y), 0))`, what the Zether key signs to register (CTR-UA-07).
+    function _popMsg(bytes memory y) internal view returns (bytes32) {
         bytes32 ua = ZetherTypes.UA.unwrap(ZetherTypes.toUA(y));
-        return reg.uaMessage(_zkind(), UAKinds.PURPOSE_POP, reg.popDigest(ua, authRef));
+        return reg.uaMessage(_zkind(), UAKinds.PURPOSE_POP, reg.popDigest(ua, 0));
     }
 
     /// A self account's owner op (roll-over, mode): `abi.encode(bytes(""), Schnorr by x over the zether-owner ua_msg)`.

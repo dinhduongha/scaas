@@ -39,3 +39,13 @@ Hedera children, `OpenFactoryV2`) and the old `ZetherToken` with `ZetherMetaTx`,
   (`UA = keccak256(encodedY)`, eight `AuthScheme`s, PoP bound to `msg.sender`, `links`/`link_eth`, `keyOf`),
   `src/common/AuthScheme.sol`, and their tests `test/zether/UniversalAccountRegistry.t.sol`, `test/AuthScheme.t.sol`;
   not built. `src/common/MultiSig.sol` stays in `src/` (accounts.md §1.13).
+- `ua6/`: the UA registry and its consumers as they stood on `main` before UA-6 Task 2 removed `authRef`
+  (CTR-UA-30 Change 2026-10-20; spec `docs/superpowers/specs/2026-10-20-ua6-encryption-key-attributes.md`; owner:
+  backup, not delete): `src/ua/UARegistry.sol`, `IUARegistry.sol`, `UAKinds.sol` (`register(kind, keyData, pop,
+  authRef, authPop)`, `_authRef`, `_checkAuthRef`, `_checkPqzAuthRef`, `_coSign`, `PURPOSE_AUTHREF`, error `UAAuthRef`,
+  `pqz-mlwe` 0x0142 as a stored kind), `src/pqz/PqzLib.sol` (the PQZ account as a `pqz-mlwe` UA, authorized by its
+  `authRef` through `requireZetherAuthorized`), and the tests with the `authRef` cases: `test/ua/UARegistry.t.sol`
+  (T-REG-3b), `UARegistryZether.t.sol` (native / derived / `msig` / same-curve-BLS `authRef`), `UARegistryPq.t.sol`
+  (the `pqz-mlwe` `authRef` rule), `test/pqz/UAPqzVerifier.t.sol` and `helpers/PqzRegistryBase.sol` (the `pqz-mlwe`
+  registration), `test/zether/ZetherAuthRef.t.sol` (moved, not copied); not built. UA-6 Task 4 adds the `zether-bn254`
+  line and `requireZetherAuthorized` here.

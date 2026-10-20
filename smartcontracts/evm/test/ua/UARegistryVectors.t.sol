@@ -84,7 +84,7 @@ contract UARegistryVectorsTest is UARegistryBase {
         }
         bytes memory pop = vm.parseJsonBytes(sj, _d(i, "pop.sig"));
         uint256 g = gasleft();
-        reg.register(kind, k, pop, 0, "");
+        reg.register(kind, k, pop, "", "");
         g -= gasleft();
         emit log_named_uint(string.concat("register ", vm.parseJsonString(sj, _d(i, "name"))), g);
         assertEq(reg.kindOf(ua), kind);
@@ -131,7 +131,7 @@ contract UARegistryVectorsTest is UARegistryBase {
 
     function _popRefused(uint16 kind, bytes memory k, bytes memory sig) internal {
         vm.expectRevert(IUARegistry.UAPoP.selector);
-        reg.register(kind, k, sig, 0, "");
+        reg.register(kind, k, sig, "", "");
     }
 
     function test_vectors_native() public {
@@ -198,13 +198,13 @@ contract UARegistryVectorsTest is UARegistryBase {
                 uint16(vm.parseJsonUint(sj, _d(i, "kind"))),
                 vm.parseJsonBytes(sj, _d(i, "keyData")),
                 vm.parseJsonBytes(sj, _d(i, "pop.sig")),
-                0,
+                "",
                 ""
             );
         }
         bytes memory d = vm.parseJsonBytes(sj, ".msig.keyData");
         uint256 g = gasleft();
-        bytes32 ua = reg.register(UAKinds.MSIG, d, "", 0, "");
+        bytes32 ua = reg.register(UAKinds.MSIG, d, "", "", "");
         emit log_named_uint("register msig (4 members)", g - gasleft());
         assertEq(ua, vm.parseJsonBytes32(sj, ".msig.ua"));
         uint256 valid;
