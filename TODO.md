@@ -41,7 +41,9 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
 
 - [ ] **Review order with Codex (owner 2026-10-20; Codex credits limited — two runs only, one type at a time, each on
   the owner's go):** (1) UA-6 (contracts, clients; Claude reviews) → (2) 5h part A (PQZ state, proof-free shield,
-  `SHIELD_POOL`, `mtx*` names, fees; contracts, today's parameters; Claude reviews) → (3) 5h part B: the 16k
+  `SHIELD_POOL`, `mtx*` names, fees; plus UA-5c (a) the confidential ops through the UA envelope binding and (b)
+  unshield to a `bytes32` UA recipient, owner 2026-10-20 — the ABI is rewritten once; contracts, today's parameters;
+  Claude reviews) → (3) 5h part B: the 16k
   regeneration in pqz-core (C, Rust, PQZH Ligero, codegen, vectors; q = 2^50 − 42,310,535, B-1, A-2, `R_REG`) →
   (4) **Codex run 1: pqz-core Rust + C** — one job over the v3 → v4 pqz-core diff, focus: Fiat–Shamir transcript (B-1,
   A-2), parameters / q / Ligero subgroup, `R_REG` message, constant-time paths, secret wiping (A-3), C = Rust parity;
@@ -49,7 +51,9 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
   (5) fixes → fuzz → gate fin → **freeze pqz-core** → (5a) **token-family rename** (`NormalToken` / `WrappedToken`;
   before P6h and before Codex run 2, so the review sees the final names) → (5b) **`clients/pqz-prover` (P6h)**: the
   wallet PQZ prover — a Rust crate over `pqzl` + `stmt` with wasm bindings, API shaped like `clients/zether-prover`
-  (read state, decrypt the balance, build statements, prove, envelope) → (5c) **node relay (P6i + the needed part of
+  (read state, decrypt the balance, build statements, prove, envelope) → (5c′) **UA-5c (c) + (d)**: the generic UA
+  envelope pipeline in `MetaTxBase` and `MandateWallet` (+ Hedera) with `bytes32` owner / delegate / payees (needed by
+  the node's `ua_metatx`) → (5c) **node relay (P6i + the needed part of
   UA F5)**: `ua_metatx` jobs (UA envelopes, `from: bytes32` — after UA-6 every Zether UA and PQ signer writes only
   through them; today the node relays address envelopes only), `pqz_call` (direct PQZ calls on the private chain),
   canonical re-encoding of Zether calldata (one intent, one id; NODE-JOB-20) → (6) **Codex run 2: contracts +
@@ -267,6 +271,9 @@ Owner/operator gates from `docs/history/HANDOFF-blockchain.md` §1 (O1–O8 are 
 - [ ] **UA-5** UA parity (owner 2026-10-13; record `docs/history/specs/2026-10-13-ua-parity-design.md`; rules
   CTR-UA-27/28, CTR-DEX-25/26, CTR-ZTH-51, CTR-ACC-12): UA-5a and UA-5b done (COMPLETED.md); left UA-5c below. Each
   phase ends with the size gate and the full forge suite (default and `private7622`).
+  - [ ] **UA-5c split (owner 2026-10-20):** (a) confidential ops via the UA envelope + (b) unshield to a UA → 5h part A;
+    (c) generic UA pipeline in `MetaTxBase` + (d) `MandateWallet` `bytes32` → step 5c′ before the node relay (5c);
+    `zetherShield` via `uaExecute` already built in UA-6.
   - [ ] **UA-5c** Zether public side and mandates: `zetherShield` and the confidential ops on the UA allowlist with the UA envelope binding (`SCAAS-ZETHER-UA-ENVELOPE-V1`), `zetherUnshieldToUA` / `zetherUnshieldUnwrapToUA` (`bytes32` recipient word, zether-prover 32-byte recipient); the generic UA pipeline into `MetaTxBase`; `MandateWallet` (+ Hedera) with `bytes32` owner / delegate / payees and UA builders, no ERC-1271 for a derived owner. Independent of UA-5b (needs UA-5a's `_uaMint` and `payWithFeeToUA`); the node part after UA F5.
   - Later, with their own streams: regulated tokens key compliance by `bytes32` and hook the UA ledger (asset suite, CTR-AS-07); `SealedBidTender`, `VestingGrant`, `Distribution`, `ExchangeOffer` with UA bidders and beneficiaries when built; `pqzUnshield` with a `bytes32` recipient (P6g).
 - [x] ~~Zether prover gas cap: an authorization allowance by `authRef` kind in `check_gas`~~ — obsolete: UA-6 removed the Zether `authRef` and `authSig`, the allowance is gone (branch `ua6`, merge pending); full note in COMPLETED.md.
