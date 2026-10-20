@@ -17,12 +17,12 @@ import {ZetherLib} from "./ZetherLib.sol";
 /// @title Kind `UNDERLYING_ZETHER` (CTR-TOK-21): the wrapper of 1–8 legs with the Zether layer (CTR-ZTH-44).
 /// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Dev chains only. The legs, rates, reserves, `wrap`/`unwrap`,
 ///         `mtxWrap` and the rate and guardian roles are `UnderlyingToken`'s (`UnderlyingLib`); the layer adds
-///         `zetherWrapShield` (a leg's underlying straight into a shielded balance, nothing minted) and
-///         `zetherUnshieldUnwrap` (a shielded balance straight out to a leg's underlying, nothing minted). Reserve
-///         invariant: `Σ⌊reserve_i·num_i/den_i⌋ ≥ totalSupply() + totalShielded·shieldScale`, by construction (a wrap-shield
-///         credits `minted / shieldScale` with `minted` a multiple of the scale, an unshield-unwrap pays
-///         `⌊amount·shieldScale·den/num⌋`, worth at most what it removes), and `executeRate` checks it with the shielded
-///         part. Flags: `PAYABLE`, `RATE_ADJUSTABLE`, `WRAP_DISABLEABLE` (CTR-ZTH-47). Never on Hedera.
+///         `zetherWrapShield` (a leg's underlying straight into a shielded balance, minted to the pool) and
+///         `zetherUnshieldUnwrap` (a shielded balance straight out to a leg's underlying, burnt from the pool). Reserve
+///         invariant: `Σ⌊reserve_i·num_i/den_i⌋ ≥ totalSupply()` (the shielded value is public units in `SHIELD_POOL`, D19), by
+///         construction (a wrap-shield mints `minted`, a multiple of the scale, to the pool, an unshield-unwrap burns
+///         `amount·shieldScale` from it and pays `⌊amount·shieldScale·den/num⌋`, worth at most what it removes), and
+///         `executeRate` checks it. Flags: `PAYABLE`, `RATE_ADJUSTABLE`, `WRAP_DISABLEABLE` (CTR-ZTH-47). Never on Hedera.
 contract UnderlyingZetherToken is UnderlyingToken, ZetherLayer {
     /// @dev The factory's append (`OpenFactory.deployImplementation`, plan 5g-Z2): the release's `Env` (Hedera off: no
     ///      dev chain there); no `implArgs`.
@@ -49,17 +49,18 @@ contract UnderlyingZetherToken is UnderlyingToken, ZetherLayer {
     // ------------------------------------------------------------------ wrap-shield / unshield-unwrap (CTR-ZTH-45)
 
     /// @notice Pulls `amountIn` of leg `u` (native: `msg.value`) and credits the public-equivalent `minted` (the leg's
-    ///         rate on the measured delta) as `minted / shieldScale` shielded units to `ua`, minting nothing;
+    ///         rate on the measured delta) as `minted / shieldScale` shielded units to `ua`, minting `minted` to `SHIELD_POOL`;
     ///         `minted % shieldScale ≠ 0` ⇒ `AmountNotScaled` (the client sends an exact amount).
     function zetherWrapShield(address u, uint256 amountIn, ZetherTypes.UA ua) external payable nonReentrant {
         (,, uint256 minted) = UnderlyingLib.wrap(UnderlyingLib.indexOf(u), amountIn, _msgSender(), msg.value);
         uint256 scale = ZetherLib.$().shieldScale;
         if (minted % scale != 0) revert AmountNotScaled(minted, scale);
         ZetherLib.shield(ua, minted / scale, _REGISTRY);
+        _uaMove(bytes32(0), MetaTxLib.pad(MetaTxLib.SHIELD_POOL), minted); // D19: minted to the pool
     }
 
     /// @notice The unshield proof (amount and `recipient` in the statement; a direct call also binds `u` and `minOut`),
-    ///         then leg `u` pays `⌊amount·shieldScale·den/num⌋ ≥ minOut` from its reserve to `recipient`, minting nothing.
+    ///         then leg `u` pays `⌊amount·shieldScale·den/num⌋ ≥ minOut` from its reserve to `recipient`, burning `amount·shieldScale` from `SHIELD_POOL`.
     function zetherUnshieldUnwrap(
         bytes calldata payload,
         bytes calldata proof,
@@ -88,7 +89,10 @@ contract UnderlyingZetherToken is UnderlyingToken, ZetherLayer {
         Unwrap memory x
     ) private {
         uint256 i = UnderlyingLib.indexOf(x.u);
+        _requirePayee(x.recipient);
         ZetherLib.unshield(payload, proof, beneficiary, x.amount, x.recipient, _envUnwrap(x.u, x.minOut));
+        _uaMove(MetaTxLib.pad(MetaTxLib.SHIELD_POOL), bytes32(0), x.amount * ZetherLib.$().shieldScale); // D19: burn from the pool
+        _payBeneficiary(beneficiary);
         (uint256 out,) = UnderlyingLib.quoteUnwrap(i, x.amount * ZetherLib.$().shieldScale, x.recipient, x.minOut);
         UnderlyingLib.payOut(i, x.recipient, out);
     }
@@ -101,7 +105,7 @@ contract UnderlyingZetherToken is UnderlyingToken, ZetherLayer {
 
     /// @notice The collateral check of a rate change counts the shielded value too.
     function executeRate() external override nonReentrant {
-        UnderlyingLib.executeRate(_msgSender(), totalSupply() + ZetherLib.$().totalShielded * ZetherLib.$().shieldScale);
+        UnderlyingLib.executeRate(_msgSender(), totalSupply()); // the shielded value sits in SHIELD_POOL (D19)
     }
 
     // ------------------------------------------------------------------ the layer's hooks

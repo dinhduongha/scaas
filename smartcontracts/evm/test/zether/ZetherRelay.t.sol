@@ -74,7 +74,8 @@ contract ZetherRelayTest is ZetherFixture {
         assertEq(abi.decode(ret, (bytes32)), _ref(tok, alice, 0), "the self-call returns the entryRef");
         assertEq(tok.balanceOf(relayer), 25, "outer fee: public units to the relayer");
         assertEq(tok.balanceOf(payer), 975);
-        assertTrue(_holds(tok, carol, FEE, false), "inner fee: [fee]G into the beneficiary's pending");
+        assertEq(tok.balanceOfUA(ZetherTypes.UA.unwrap(carol.ua)), FEE * SCALE, "inner fee: public units to the beneficiary");
+        assertEq(tok.accountState(carol.ua).pendingSeq, 0, "no pend_ben credit (D19)");
         assertTrue(_holds(tok, alice, 500 - 100 - FEE, true));
         assertTrue(_holds(tok, bob, 100, false));
         assertEq(tok.mtxNonce(payer, m.batch), 1);

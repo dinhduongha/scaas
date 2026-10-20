@@ -139,6 +139,11 @@ library MetaTxLib {
     ///         derived UAs' balances. Nobody holds its key.
     address internal constant UA_POOL = address(uint160(uint256(keccak256("scaas.ua.pool.v1"))));
 
+    /// @notice CTR-ZTH-51 / CTR-PQZ-15 (D19): the holder of all shielded value, public units: `balanceOf(SHIELD_POOL)` =
+    ///         `totalShielded · shieldScale`. Shield, unshield and the beneficiary fee are transfers from / to it, so
+    ///         `totalSupply()` stays the true total. Not payable and cannot spend: only the layer's own moves touch it.
+    address internal constant SHIELD_POOL = address(uint160(uint256(keccak256("scaas.shield.pool.v1"))));
+
     /// @notice A native id as a UA-ledger id: the address zero-padded (top 96 bits zero, accounts.md §1.3).
     function pad(address a) internal pure returns (bytes32) {
         return bytes32(uint256(uint160(a)));

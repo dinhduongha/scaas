@@ -68,6 +68,8 @@ abstract contract ZetherFixture is Test {
     address internal relayer = address(0xBEEF);
     uint256 internal constant SCALE = 10_000; // a 6-decimal unit kept to 2 decimals (CTR-ZTH-04)
     uint256 internal constant FEE = 2;
+    /// @dev Independent of `MetaTxLib.SHIELD_POOL` on purpose (D19).
+    address internal constant SHIELD_POOL_ = address(uint160(uint256(keccak256("scaas.shield.pool.v1"))));
     uint256 internal constant X_AUD = 0xA0D17;
 
     User internal alice;
@@ -442,6 +444,7 @@ abstract contract ZetherFixture is Test {
             sum += a + p;
         }
         assertEq(sum, t.totalShielded(), "sum of plaintext balances == totalShielded");
-        assertEq(t.totalSupply() + t.totalShielded() * SCALE, minted[address(t)], "public + shielded x scale == created");
+        assertEq(t.totalSupply(), minted[address(t)], "totalSupply == created (D19: no burn)");
+        assertEq(t.balanceOf(SHIELD_POOL_), t.totalShielded() * SCALE, "balanceOf(SHIELD_POOL) == totalShielded x scale");
     }
 }

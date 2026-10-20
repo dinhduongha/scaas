@@ -165,7 +165,8 @@ contract ZetherRevertPathsTest is ZetherFixture {
         Tx memory t = _proveTransfer(tok, alice, bob, 10, 100, carol.ua, 0);
         _call(t.payload, t.proof, bob.ua, abi.encodeWithSelector(IZetherToken.ProofRejected.selector));
         _direct(tok, t, carol.ua);
-        assertTrue(_holds(tok, carol, FEE, false));
+        assertEq(tok.balanceOfUA(ZetherTypes.UA.unwrap(carol.ua)), FEE * SCALE, "beneficiary public balance");
+        assertEq(tok.accountState(carol.ua).pendingSeq, 0, "no pend_ben credit (D19)");
     }
 
     /// Every confidential entry point is `nonReentrant` (review T3 m1). The NONE kind makes no outside call inside a

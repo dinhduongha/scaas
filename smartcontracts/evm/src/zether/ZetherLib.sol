@@ -196,7 +196,7 @@ library ZetherLib {
     // ------------------------------------------------------------------ transfer
 
     /// @notice The single-recipient format (BUNDLE tokens only): checks, the proof (the only authority), then
-    ///         `acc_f −= (C_deb + [fee]G, D_out)`, `pend_t += (C_out, D_out)`, `pend_ben += [fee]G`, `sendCounter_f++`;
+    ///         `acc_f −= (C_deb + [fee]G, D_out)`, `pend_t += (C_out, D_out)`, `totalShielded -= fee` (the fee is paid in public units by the layer), `sendCounter_f++`;
     ///         the record `salt ‖ B` stored in full.
     function transferSingle(bytes calldata payload, bytes calldata proof, ZetherTypes.UA beneficiary, Env memory e)
         public returns (bytes32)
@@ -221,14 +221,14 @@ library ZetherLib {
         ZetherTypes.UA to = ZetherTypes.toUA(pts[p:2 * p]);
         _debit(c, s.acct[pp.from], pts[4 * p:5 * p], pts[3 * p:4 * p], pp.fee);
         _credit(s, to, pts[2 * p:3 * p], pts[3 * p:4 * p]);
-        _payFee(s, c, pp);
+        _payFee(s, pp);
         entryRef = _sent(s, c, pp);
         s.entries[entryRef] = bytes.concat(pp.salt, pts[p:2 * p], pts[2 * p:4 * p], pts[5 * p:6 * p]);
         emit IZetherToken.ZetherTransfer(pp.from, to, pp.beneficiary, pp.fee, pp.sendCounter, entryRef);
     }
 
     /// @notice `M` recipients, one proof (CTR-ZTH-37/38): `acc_f −= (C_deb + [fee]G, D_out)`, every
-    ///         `pend_tj += (C_out_j, D_out)`, `pend_ben += [fee]G`, `sendCounter_f++` once; the record by `mode` (the stored
+    ///         `pend_tj += (C_out_j, D_out)`, `totalShielded -= fee` (the fee is paid in public units by the layer), `sendCounter_f++` once; the record by `mode` (the stored
     ///         form, CTR-ZTH-38), which a `COMPACT` token allows only as HASH.
     function transferMulti(
         bytes calldata payload,
@@ -257,7 +257,7 @@ library ZetherLib {
         uint256 p = c.p;
         _debit(c, s.acct[pp.from], payload[M_PTS + 2 * p:M_PTS + 3 * p], payload[M_PTS + p:M_PTS + 2 * p], pp.fee);
         _creditLegs(s, pp.to, payload, p);
-        _payFee(s, c, pp);
+        _payFee(s, pp);
         entryRef = _sent(s, c, pp);
         if (mode != ZetherTypes.TransferMode.NONE) _storeRecord(s, p, entryRef, payload, pp, mode);
         emit IZetherToken.ZetherTransferMulti(pp.from, pp.beneficiary, pp.fee, pp.sendCounter, entryRef, pp.to, mode);
@@ -275,7 +275,7 @@ library ZetherLib {
     // ------------------------------------------------------------------ unshield
 
     /// @notice The unshield statement (zether.md §8.2, built name `burn`): checks, the proof (the only authority), then
-    ///         `acc_f.C −= [amount + fee]G`, `pend_ben += [fee]G`, `sendCounter_f++`, `totalShielded −= amount`. The token
+    ///         `acc_f.C −= [amount + fee]G`, `totalShielded -= fee` (the fee is paid in public units by the layer), `sendCounter_f++`, `totalShielded −= amount`. The token
     ///         then pays `amount · shieldScale` public-equivalent units to `recipient` (mint or a leg's underlying).
     function unshield(
         bytes calldata payload,
@@ -292,7 +292,7 @@ library ZetherLib {
         a.accC = c.ver.g1Sub(_pt(a.accC, c.p), c.ver.g1MulBase(amount + pp.fee));
         _sent(s, c, pp);
         s.totalShielded -= amount;
-        _payFee(s, c, pp);
+        _payFee(s, pp);
         emit IZetherToken.ZetherUnshielded(pp.from, amount, recipient);
     }
 
@@ -613,9 +613,10 @@ library ZetherLib {
         if (!ok) revert IZetherToken.ProofRejected();
     }
 
-    /// @dev The inner fee: `[fee]G` into the beneficiary's `pending` (a public scalar, CTR-ZTH-05).
-    function _payFee(ZetherStorage storage s, Ctx memory c, Prepared memory pp) private {
-        if (pp.fee != 0) _credit(s, pp.beneficiary, c.ver.g1MulBase(pp.fee), "");
+    /// @dev The inner fee leaves the shielded set (D19, CTR-ZTH-51): `totalShielded -= fee`; the layer then moves
+    ///      `fee · shieldScale` public units from `SHIELD_POOL` to the beneficiary's public balance (no `pend_ben`).
+    function _payFee(ZetherStorage storage s, Prepared memory pp) private {
+        if (pp.fee != 0) s.totalShielded -= pp.fee;
     }
 
     /// @dev `sendCounter_f++` once; the `entryRef` of this debit (with the counter before the increment).

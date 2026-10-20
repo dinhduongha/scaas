@@ -8,6 +8,8 @@ import {IFactoryToken} from "../../src/factory/IFactoryToken.sol";
 import {AdminLib} from "../../src/metatx/AdminLib.sol";
 import {UnderlyingToken} from "../../src/metatx/UnderlyingToken.sol";
 import {UnderlyingZetherToken} from "../../src/zether/UnderlyingZetherToken.sol";
+import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
+import {ZetherTypes} from "../../src/zether/ZetherTypes.sol";
 import {ZetherLayer} from "../../src/zether/ZetherLayer.sol";
 import {MockERC20} from "../helpers/Mocks.sol";
 import {Catalogue} from "../helpers/Catalogue.sol";
@@ -15,8 +17,11 @@ import {Catalogue} from "../helpers/Catalogue.sol";
 /// Random shield / wrap-shield / transfer / roll-over / unshield / unshield-unwrap / unwrap / rate-change sequences on one
 /// `UNDERLYING_ZETHER` token (legs 1:1 and 3/7, rate-adjustable, bn254, no auditor), real proofs; the plaintext balances
 /// are the ghost. Every value op does work (`_ensureAcc` rolls over, wrap-shields or shields first), the surplus
-/// `collateral − (supply + shielded·S)` never drops except by a rate change (rounding against the holder), and the
-/// underlying paid out equals a ghost per leg (CTR-ZTH-22 a, review T5 I1).
+/// `collateral − supply` never drops except by a rate change (rounding against the holder), and the underlying paid
+/// out equals a ghost per leg (CTR-ZTH-22 a, review T5 I1). D19 (CTR-ZTH-51): the shielded value is public units in
+/// `SHIELD_POOL`: `totalSupply()` is unchanged by shield, transfer fees and unshield (wrap-shield mints and
+/// unshield-unwrap burns exactly the pool's share), `balanceOf(SHIELD_POOL) == totalShielded · S`, and
+/// `Σ balanceOf == totalSupply()`.
 contract ZetherHandler is ZetherFixture {
     UnderlyingZetherToken public w;
     MockERC20[2] public leg;
@@ -24,6 +29,8 @@ contract ZetherHandler is ZetherFixture {
     uint256[3] public acc;
     uint256[3] public pend;
     uint256[2] public paid;
+    uint256 internal s0; // totalSupply before the op under test (storage: the stack is full)
+    uint256[3] public feeUA; // public units the inner fee paid to each user's UA-ledger balance
     uint256 internal constant MAX = 1 << 30;
 
     function init() external {
@@ -58,13 +65,13 @@ contract ZetherHandler is ZetherFixture {
     }
 
     function surplus() public view returns (uint256) {
-        return w.collateralValue() - w.totalSupply() - w.totalShielded() * SCALE;
+        return w.collateralValue() - w.totalSupply();
     }
 
     modifier noLoss() {
-        uint256 s0 = surplus();
+        uint256 sur0 = surplus();
         _;
-        require(surplus() >= s0, "surplus dropped");
+        require(surplus() >= sur0, "surplus dropped");
     }
 
     function _ensureAcc(uint256 i) internal {
@@ -86,7 +93,9 @@ contract ZetherHandler is ZetherFixture {
         if (m != amt * SCALE) return; // no exact amount at this rate
         leg[l].mint(address(this), inAmt);
         leg[l].approve(address(w), inAmt);
+        s0 = w.totalSupply();
         w.zetherWrapShield(address(leg[l]), inAmt, us[i].ua);
+        require(w.totalSupply() == s0 + amt * SCALE, "wrap-shield mints exactly to the pool");
         pend[i] += amt;
     }
 
@@ -97,7 +106,10 @@ contract ZetherHandler is ZetherFixture {
 
     function shield(uint8 i, uint256 amt) external noLoss {
         amt = bound(amt, 1, 50);
-        _fund(tok, us[i % 3], amt);
+        _public(tok, address(this), amt * SCALE);
+        s0 = w.totalSupply();
+        tok.zetherShield(us[i % 3].y, amt);
+        require(w.totalSupply() == s0, "shield moves, not burns");
         pend[i % 3] += amt;
     }
 
@@ -119,6 +131,23 @@ contract ZetherHandler is ZetherFixture {
         pend[j] += v;
     }
 
+    /// A transfer with the inner fee to a third UA's public balance (D19): the supply is unchanged.
+    function transferFee(uint8 i, uint8 j, uint8 k, uint256 v) external noLoss {
+        (i, j, k) = (i % 3, j % 3, k % 3);
+        if (i == j) j = (i + 1) % 3;
+        if (k == i) k = (i + 1) % 3;
+        if (_pendingRate()) return;
+        _ensureAcc(i);
+        if (acc[i] <= FEE) return;
+        v = bound(v, 1, acc[i] - FEE);
+        s0 = w.totalSupply();
+        _direct(tok, _proveTransfer(tok, us[i], us[j], v, acc[i], us[k].ua, 0), us[k].ua);
+        require(w.totalSupply() == s0, "a fee does not change the supply");
+        acc[i] -= v + FEE;
+        pend[j] += v;
+        feeUA[k] += FEE * SCALE;
+    }
+
     function unshieldUnwrap(uint8 i, uint8 l, uint256 amt) external noLoss {
         (i, l) = (i % 3, l % 2);
         if (_pendingRate()) return; // the fixture's _ensureAcc would wrap-shield
@@ -129,8 +158,10 @@ contract ZetherHandler is ZetherFixture {
         if (out == 0 || out > r) return;
         bytes memory pl = _unshieldPayload(tok, us[i]);
         bytes memory st = stm.unshieldUnwrapStatement(address(w), pl, amt, address(0xD00D), _none(), address(leg[l]), out, 0);
+        s0 = w.totalSupply();
         w.zetherUnshieldUnwrap(pl, _proveU(us[i], st, amt, acc[i], _none(), tok), _none(), address(leg[l]),
             address(0xD00D), amt, out);
+        require(w.totalSupply() == s0 - amt * SCALE, "unshield-unwrap burns exactly from the pool");
         acc[i] -= amt;
         paid[l] += out;
     }
@@ -141,7 +172,9 @@ contract ZetherHandler is ZetherFixture {
         _ensureAcc(i);
         amt = bound(amt, 1, acc[i]);
         (bytes memory pl, bytes memory pr) = _proveUnshield(tok, us[i], amt, acc[i], address(this), _none(), 0);
+        s0 = w.totalSupply();
         tok.zetherUnshield(pl, pr, _none(), address(this), amt);
+        require(w.totalSupply() == s0, "unshield moves, not mints");
         acc[i] -= amt;
     }
 
@@ -170,7 +203,7 @@ contract ZetherHandler is ZetherFixture {
         try w.executeRate() {} catch {
             w.cancelRate();
         }
-        require(w.collateralValue() >= w.totalSupply() + w.totalShielded() * SCALE, "rate broke the invariant");
+        require(w.collateralValue() >= w.totalSupply(), "rate broke the invariant");
     }
 
     function _pendingRate() internal view returns (bool) {
@@ -193,7 +226,15 @@ contract ZetherHandler is ZetherFixture {
             require(leg[l].balanceOf(address(w)) == r, "balance == reserve");
             require(leg[l].balanceOf(address(0xD00D)) == paid[l], "paid ghost");
         }
-        require(w.collateralValue() >= w.totalSupply() + w.totalShielded() * SCALE, "reserve invariant");
+        require(w.collateralValue() >= w.totalSupply(), "reserve >= totalSupply");
+        require(w.balanceOf(SHIELD_POOL_) == w.totalShielded() * SCALE, "balanceOf(pool) == totalShielded x scale");
+        // Σ balanceOf == totalSupply: the pool, this handler, the users' addresses and UA_POOL (Σ UA balances = the fees)
+        uint256 holders = w.balanceOf(SHIELD_POOL_) + w.balanceOf(address(this)) + w.balanceOf(MetaTxLib.UA_POOL);
+        for (uint256 i; i < 3; ++i) {
+            holders += w.balanceOf(us[i].evm);
+            require(w.balanceOfUA(ZetherTypes.UA.unwrap(us[i].ua)) == feeUA[i], "UA fee ghost");
+        }
+        require(holders == w.totalSupply(), "sum balanceOf == totalSupply");
     }
 }
 
@@ -204,9 +245,10 @@ contract ZetherInvariantTest is Test {
         h = new ZetherHandler();
         h.init();
         targetContract(address(h));
-        bytes4[] memory sel = new bytes4[](8);
+        bytes4[] memory sel = new bytes4[](9);
         (sel[0], sel[1], sel[2], sel[3]) = (h.shield.selector, h.wrapShield.selector, h.rollOver.selector, h.transfer.selector);
         (sel[4], sel[5], sel[6], sel[7]) = (h.unshieldUnwrap.selector, h.unshieldPublic.selector, h.unwrap.selector, h.rate.selector);
+        sel[8] = h.transferFee.selector;
         targetSelector(FuzzSelector(address(h), sel));
     }
 

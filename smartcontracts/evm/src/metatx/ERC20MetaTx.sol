@@ -278,6 +278,7 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
     function _update(address from, address to, uint256 value) internal virtual override {
         if (to == address(this)) revert TransferToSelf();
         if (to == MetaTxLib.UA_POOL) revert UAPoolNotPayable();
+        if (to == MetaTxLib.SHIELD_POOL || from == MetaTxLib.SHIELD_POOL) revert ShieldPoolNotPayable(); // D19
         if (from == MetaTxLib.UA_POOL) {
             bytes32 ua = _ticketSubject();
             if (UAKinds.inNativeSpace(ua)) revert UAPoolNotPayable();
@@ -402,6 +403,7 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
             if (MetaTxLib.pad(feeTo) == t.to) revert FeeRecipientIsPayee();
             if (feeTo == address(this)) revert TransferToSelf();
             if (feeTo == MetaTxLib.UA_POOL) revert UAPoolNotPayable();
+            if (feeTo == MetaTxLib.SHIELD_POOL) revert ShieldPoolNotPayable();
         }
         uint256 need = t.value + fee;
         uint256 have = balanceOfUA(t.from);
@@ -430,6 +432,7 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
             if (a == address(0)) revert PayToZero();
             if (a == address(this)) revert TransferToSelf();
             if (a == MetaTxLib.UA_POOL) revert UAPoolNotPayable();
+            if (a == MetaTxLib.SHIELD_POOL) revert ShieldPoolNotPayable();
             return;
         }
         uint16 kind = IUARegistry(_REGISTRY).kindOf(to);
@@ -447,6 +450,7 @@ abstract contract ERC20MetaTx is ERC20, MetaTxBase, IERC20Payment, ITradeToken, 
         }
         address a = address(uint160(uint256(from)));
         if (a == MetaTxLib.UA_POOL) revert UAPoolNotPayable();
+        if (a == MetaTxLib.SHIELD_POOL) revert ShieldPoolNotPayable();
         _requireNativeUASignature(a, digest, auth);
     }
 

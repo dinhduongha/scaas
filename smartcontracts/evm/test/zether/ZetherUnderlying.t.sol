@@ -135,7 +135,7 @@ contract ZetherUnderlyingTest is ZetherFixture {
         }
         assertEq(sum, t.totalShielded(), "sum of plaintext balances == totalShielded");
         UnderlyingToken u = UnderlyingToken(payable(address(t)));
-        assertGe(u.collateralValue(), t.totalSupply() + t.totalShielded() * SCALE, "reserve invariant");
+        assertGe(u.collateralValue(), t.totalSupply(), "reserve invariant (the shielded value sits in SHIELD_POOL, D19)");
     }
 
     function _wrapShield(MockERC20 leg, uint256 amountIn, User memory to) internal {
@@ -150,13 +150,14 @@ contract ZetherUnderlyingTest is ZetherFixture {
 
     // ------------------------------------------------------------------ wrap-shield
 
-    function test_wrapShield_creditsShieldedUnits_mintsNothing() public {
+    function test_wrapShield_creditsShieldedUnits_mintsToThePool() public {
         usd.mint(address(this), 30 * SCALE);
         usd.approve(address(w), 30 * SCALE);
         vm.expectEmit(true, false, false, true, address(w));
         emit IZetherToken.ZetherShielded(alice.ua, 30);
         w.zetherWrapShield(address(usd), 30 * SCALE, alice.ua);
-        assertEq(w.totalSupply(), 0, "nothing minted");
+        assertEq(w.totalSupply(), 30 * SCALE, "minted to the pool, D19");
+        assertEq(w.balanceOf(SHIELD_POOL_), 30 * SCALE);
         assertEq(w.totalShielded(), 30);
         assertEq(_reserve(address(usd)), 30 * SCALE);
         assertTrue(_holds(tok, alice, 30, false));
@@ -229,7 +230,7 @@ contract ZetherUnderlyingTest is ZetherFixture {
         pr = _proveU(alice, st, amount, b, _none(), tok);
     }
 
-    function test_unshieldUnwrap_paysTheLeg_mintsNothing() public {
+    function test_unshieldUnwrap_paysTheLeg_burnsFromThePool() public {
         _shielded(60, 40 * SCALE); // 60 + 80 shielded
         (bytes memory pl, bytes memory pr) = _unwrapProof(40, 140, address(0xD00D), address(eur), 20 * SCALE, 0);
         vm.expectEmit(true, false, false, true, address(w));
@@ -237,7 +238,8 @@ contract ZetherUnderlyingTest is ZetherFixture {
         w.zetherUnshieldUnwrap(pl, pr, _none(), address(eur), address(0xD00D), 40, 20 * SCALE);
         assertEq(eur.balanceOf(address(0xD00D)), 20 * SCALE, "40 units at 2 per raw EUR");
         assertEq(_reserve(address(eur)), 20 * SCALE);
-        assertEq(w.totalSupply(), 0, "nothing minted");
+        assertEq(w.totalSupply(), 100 * SCALE, "40 units burnt from the pool, D19");
+        assertEq(w.balanceOf(SHIELD_POOL_), 100 * SCALE);
         assertEq(w.totalShielded(), 100);
         assertTrue(_holds(tok, alice, 100, true));
         // the USD leg, 1:1
@@ -339,7 +341,7 @@ contract ZetherUnderlyingTest is ZetherFixture {
         usd.mint(address(this), 100 * SCALE);
         usd.approve(address(z), 100 * SCALE);
         z.zetherWrapShield(address(usd), 100 * SCALE, alice.ua);
-        assertEq(z.totalSupply(), 0);
+        assertEq(z.totalSupply(), 100 * SCALE, "minted to SHIELD_POOL (D19)");
         z.proposeRate(address(usd), 9, 10);
         vm.warp(block.timestamp + 2 days);
         vm.expectRevert(abi.encodeWithSelector(IUnderlyingToken.RateChangeUndercollateralized.selector, 90 * SCALE,
