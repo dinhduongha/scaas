@@ -54,6 +54,8 @@ interface IOpenFactory {
 
     error NotRegistrar();
     error ChainUidZero();
+    /// @notice The constructor's notice period exceeds `MAX_NOTICE_PERIOD` (30 days).
+    error NoticePeriodTooLong(uint64 noticePeriod);
     error KindReserved(TokenKind kind);
     /// @notice Creation of a kind the registrar has not enabled (plain kinds on from the start, confidential ones off).
     error KindDisabled(TokenKind kind);
@@ -80,11 +82,15 @@ interface IOpenFactory {
     /// @notice No env `envVersion` published for the domain (version 0 included).
     error EnvUnknown(uint8 domain, uint16 envVersion);
     error EnvAlreadyPublished(uint8 domain, uint16 envVersion);
-    /// @notice `factory` / `chainUid` not the factory's, or `libs` and `libCodeHashes` of different lengths.
+    /// @notice `factory` / `chainUid` not the factory's, `libs` and `libCodeHashes` of different lengths, or a library
+    ///         code hash that pins nothing (`0` or `keccak256("")`).
     error EnvInvalid();
     /// @notice A linked library of the env does not have its published code hash (checked at each release deployment).
     error LibraryCodeHashMismatch(address library_, bytes32 expected, bytes32 got);
-    /// @notice The `CREATE2` of a release failed without revert data (a constructor's revert is bubbled).
+    /// @notice The `CREATE2` of a release failed without revert data (a constructor's revert is bubbled), e.g. a
+    ///         runtime over the chain's code-size limit. Init code over the chain's init-code limit (EIP-3860) is an
+    ///         exceptional halt of the factory's call frame instead: the registrar's call consumes all its gas and
+    ///         fails without `DeployFailed`.
     error DeployFailed();
 
     function registrar() external view returns (address);

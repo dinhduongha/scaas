@@ -23,6 +23,9 @@ contract OtherChainDex {
     function chainUid() external pure returns (bytes32) { return keccak256("other chain"); }
 }
 
+/// A DEX release answering nothing the factory asks.
+contract MutedDex {}
+
 /// ERC-1271 makers that must not take other settlements down with them.
 contract Burner1271 {
     function isValidSignature(bytes32, bytes calldata) external pure returns (bytes4 r) { r = 0; while (true) {} }
@@ -685,6 +688,13 @@ contract DexTest is Test {
         assertEq(SCaaSDex(d).admin(), address(0xADD));
     }
 
+    /// Where `deployDexImplementation(version, latest DEX env, code, "")` puts the release.
+    function _predictDex(uint64 version, bytes memory code) internal view returns (address) {
+        uint16 v = f.latestDexEnvVersion();
+        return vm.computeCreate2Address(keccak256(abi.encode("dex", version)),
+            keccak256(bytes.concat(code, abi.encode(v, f.dexEnvOf(v), bytes("")))), address(f));
+    }
+
     /// Plan 5g-Z2: the factory deploys the DEX release from init code on the DEX env it names (registrar only; the
     /// release answers `factory()` / `chainUid()`, both from the env); the release hashes in the event; a notice period applies.
     function test_deployDexImplementation() public {
@@ -700,6 +710,16 @@ contract DexTest is Test {
         vm.prank(registrar);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.EnvUnknown.selector, 255, 9)); // the env is named, explicit
         f.deployDexImplementation(3, 9, code, "");
+        address muted = _predictDex(3, type(MutedDex).creationCode);
+        address empty = _predictDex(3, "");
+        vm.prank(registrar);
+        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ImplementationFactoryMismatch.selector, muted));
+        f.deployDexImplementation(3, 1, type(MutedDex).creationCode, ""); // no factory()
+        vm.prank(registrar);
+        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ImplementationNotAContract.selector, empty));
+        f.deployDexImplementation(3, 1, "", ""); // an empty init code makes an account without code
+        vm.expectRevert(IOpenFactory.NotRegistrar.selector);
+        f.publishDexEnv(2, plainEnv(address(f), address(0xBEEF), UID_, address(0), false));
         vm.recordLogs();
         address v3 = Catalogue.dex(f, 3, code, address(0xBEEF));
         Vm.Log[] memory logs = vm.getRecordedLogs();

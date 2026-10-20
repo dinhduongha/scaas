@@ -126,6 +126,13 @@ contract FactoryTest is Test {
         bad.libs = new address[](1);
         vm.expectRevert(IOpenFactory.EnvInvalid.selector);
         f.publishEnv(NONE, 2, bad);
+        // a pin that pins nothing (review 5g-Z2 P2-1): 0 (no account) or keccak256("") (no code)
+        (bad.libs[0], bad.libCodeHashes) = (address(AdminLib), new bytes32[](1));
+        vm.expectRevert(IOpenFactory.EnvInvalid.selector);
+        f.publishEnv(NONE, 2, bad);
+        bad.libCodeHashes[0] = keccak256("");
+        vm.expectRevert(IOpenFactory.EnvInvalid.selector);
+        f.publishEnv(NONE, 2, bad);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.KindReserved.selector, IOpenFactory.TokenKind.NONE_ZETHER_PQZ));
         f.publishEnv(IOpenFactory.TokenKind.NONE_ZETHER_PQZ, 1, e);
         e.registry = address(0x1234);
@@ -230,6 +237,10 @@ contract FactoryTest is Test {
 
     /// Plan 5g-Z2: a release is usable `noticePeriod` seconds after its deployment (7622: minutes, 22776: days).
     function test_noticePeriod() public {
+        // the period is immutable, capped at 30 days (review 5g-Z2 P2-4: near 2^64 `usableFrom` would overflow)
+        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.NoticePeriodTooLong.selector, 30 days + 1));
+        new OpenFactory(registrar, UID_, 30 days + 1);
+        assertEq(new OpenFactory(registrar, UID_, 30 days).noticePeriod(), f.MAX_NOTICE_PERIOD());
         OpenFactory g = new OpenFactory(registrar, UID_, 10 minutes);
         assertEq(g.noticePeriod(), 10 minutes);
         Catalogue.plain(g, NONE, 1, type(NoUnderlyingToken).creationCode, address(0), address(0), false);

@@ -30,6 +30,9 @@ contract OpenFactory is IOpenFactory {
 
     uint256 internal constant MAX_LEGS = 8;
     uint8 public constant DEX_DOMAIN = type(uint8).max;
+    /// @dev The longest notice period (review 5g-Z2 P2-4): the period is immutable, and near `2^64` every
+    ///      `deployImplementation` would overflow `usableFrom` and brick the catalogue.
+    uint64 public constant MAX_NOTICE_PERIOD = 30 days;
 
     address public immutable registrar;
     bytes32 public immutable chainUid;
@@ -52,6 +55,7 @@ contract OpenFactory is IOpenFactory {
     /// @param noticePeriod_ seconds between a release's deployment and its first use (7622: minutes, 22776: days).
     constructor(address registrar_, bytes32 chainUid_, uint64 noticePeriod_) {
         if (chainUid_ == bytes32(0)) revert ChainUidZero();
+        if (noticePeriod_ > MAX_NOTICE_PERIOD) revert NoticePeriodTooLong(noticePeriod_);
         registrar = registrar_;
         chainUid = chainUid_;
         noticePeriod = noticePeriod_;
@@ -263,11 +267,16 @@ contract OpenFactory is IOpenFactory {
         if (env.factory != address(this) || env.chainUid != chainUid || env.libs.length != env.libCodeHashes.length) {
             revert EnvInvalid();
         }
+        // An empty pin (0: no account; keccak256(""): no code) checks nothing (review 5g-Z2 P2-1).
+        for (uint256 i; i < env.libCodeHashes.length; ++i) {
+            bytes32 h = env.libCodeHashes[i];
+            if (h == bytes32(0) || h == keccak256("")) revert EnvInvalid();
+        }
         _envs[domain][envVersion] = env;
-        bytes32 h = keccak256(abi.encode(env));
-        _envHash[domain][envVersion] = h;
+        bytes32 envHash = keccak256(abi.encode(env));
+        _envHash[domain][envVersion] = envHash;
         if (envVersion > _latestEnv[domain]) _latestEnv[domain] = envVersion;
-        emit EnvPublished(domain, envVersion, h);
+        emit EnvPublished(domain, envVersion, envHash);
     }
 
     /// @dev The domain's env `v` (named by the registrar): every linked library's code hash, then `CREATE2` of
