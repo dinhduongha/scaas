@@ -46,8 +46,12 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
   (4) **Codex run 1: pqz-core Rust + C** — one job over the v3 → v4 pqz-core diff, focus: Fiat–Shamir transcript (B-1,
   A-2), parameters / q / Ligero subgroup, `R_REG` message, constant-time paths, secret wiping (A-3), C = Rust parity;
   hand it the gate logs, fuzz results and review A's cheating prover; free sandbox check `codex sandbox` first →
-  (5) fixes → fuzz → gate fin → **freeze pqz-core** → (6) **Codex run 2: contracts** (OpenFactory 5g-Z2, UA-6 registry,
-  PQZ / Zether after 5h) before the 7622 redeploy → (7) plan fs3 Task 13 (7622 reset; ask the owner before timing).
+  (5) fixes → fuzz → gate fin → **freeze pqz-core** → (5a) **token-family rename** (`NormalToken` / `WrappedToken`;
+  before P6h and before Codex run 2, so the review sees the final names) → (5b) **`clients/pqz-prover` (P6h)**: the
+  wallet PQZ prover — a Rust crate over `pqzl` + `stmt` with wasm bindings, API shaped like `clients/zether-prover`
+  (read state, decrypt the balance, build statements, prove, envelope) → (6) **Codex run 2: contracts + pqz-prover**
+  (OpenFactory 5g-Z2, UA-6 registry, PQZ / Zether after 5h; the prover's secret handling) before the 7622 redeploy →
+  (7) plan fs3 Task 13 (7622 reset, real e2e with pqz-prover; ask the owner before timing).
   If credits allow only one run: pqz-core first (proof soundness); contracts keep Claude reviews.
   **Every Codex run is paired with an agy (Antigravity / Gemini) review of the same scope at the same time** (owner
   2026-10-20), then one triage of both reports (as G / H on 2026-10-19).
