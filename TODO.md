@@ -44,6 +44,7 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
   first; code merged `361a86b`, PQZL `proofSystemId` v3; full item in COMPLETED.md): Task 5h, the 16k regeneration,
   Tasks 12 → 6 → 13 → 14 in the order of the Next line. Owner approval pending: the lazer#28 comment and the D-2/D-3
   issue (drafts in `scratchpad/`).
+- [ ] **Zether BLS12-381 only (owner 2026-10-20, decisions CTR-ZTH-32)** — bn254 Zether (verifier, `proofSystemId`, UA kind `zether-bn254` 0x0140 + its Schnorr verifier, deploy steps, vectors, client paths) to `legacy/`; specs zether.md / accounts.md / README follow; with UA-6 and 5h. Also with 5h: drop `*_ZETHER_PQZ` kinds (CTR-TOK-21), `mtxShield` / `mtxUnshield` (CTR-ZTH-45), four flows with proof-free shield (CTR-PQZ-06).
 - [ ] **UA-6: encryption keys as UA attributes (owner 2026-10-20, decisions CTR-UA-30; research `docs/research/ua-identity.md`)** — spec + plan, then code: registry `register` takes the PQZ key (PQ signers only), `keyOwner` uniqueness incl. msig, `pqz-mlwe` kind and `authRef` removed, `R_REG` message bound to the UA id (rides the 16k id bump), PQZ account keyed by the signing UA; classical Zether unchanged (key = UA, "self" mode). Before plan Task 5h. All UA clients follow.
 - [ ] **Z2 owner questions (answers 2026-10-20):** notice period defaults (10 min on 7622, 3 days on 22776) — **OK**;
   library pins = registrar list checked by code hash, not compared with the init code's link references — **OK**;

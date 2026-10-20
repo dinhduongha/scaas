@@ -1976,6 +1976,8 @@ Change (2026-10-13): built as ruled (UA-5b): `uaWrap` in `UnderlyingToken` / `Un
 **Cost if wrong.** Per-combination contracts multiply audits and overflow EIP-170 (today `ZetherToken` is 4,363 B over); a creator could not pick "single underlying, payable off, confidential".
 **Source.** `history/specs/2026-10-08-token-tree-design.md` §1, §2 (T1, T3, T9, T10, T13), §3.
 
+Change (2026-10-20, owner): **the reserved kinds `NONE_ZETHER_PQZ` and `UNDERLYING_ZETHER_PQZ` are dropped** (a token carries at most one confidential layer; a holder who wants both uses two tokens). Ids 6 and 7 are not reused for anything else; the enum entries go with the `mtxShield` / `mtxUnshield` rework (no layer argument needed; CTR-ZTH-45 change) — all chains are test-only. Specs to update with it: token-wrappers.md kind table, pq-zero-knowledge.md, contracts/README.md. Status: decided; code change with plan Task 5h.
+
 ### CTR-TOK-22 — Features are flags: features, lockedFeatures, owner, roles, disableFeature
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/token-wrappers.md#CTR-TOK-22 · superseded-by: —
 
@@ -2768,6 +2770,8 @@ Change (2026-10-11): owner — `s = HKDF-SHA256(seed_zether, "ZTX/s/v2" ‖ chai
 **Cost if wrong.** Choosing bn254 for money at rest accepts ~100-bit security.
 **Source.** `history/plans/2026-10-07-docs-reorg.md:1241`
 
+Change (2026-10-20, owner): **classical Zether uses BLS12-381 only** (closes this open question). Reasons: ~117–126-bit vs ~100-bit security for long-lived encrypted balances; EIP-2537 is live on every EVM target chain of the 2026-10-11 survey and on 7622 / 22776; the planned Rust verifier precompile and the MSM ruling of 2026-10-17 are BLS12-381. Cost accepted (measured, §19): `verifyTransfer` +8 %, minimum transfer gas limit +19 %, shield +35 %, rollover +44 %, 128-byte points; Hedera (bn254 only) gets no Zether (owner: not needed). The bn254 Zether line — verifier instance, `proofSystemId` `…/bn254/…`, UA kind `zether-bn254` 0x0140 and its Schnorr verifier, deploy steps, vectors — moves to `legacy/` (backup, not delete); the prover keeps its curve-generic code but builds and tests BLS12-381 only. The bn254 signing UA kinds (`schnorr-bn254`, `bls-bn254-minsig`, `frost-bn254`, `musig2-bn254`) are not affected. Status: decided; built with UA-6 (kind) and plan Task 5h (tokens).
+
 ### CTR-ZTH-33 — Chain 7622 is not a classical-Zether dev chain
 - old: reorg:Q5(dev-chain) · status: open · owner: yes · date: 2026-10-07 · normative: contracts/zether.md#CTR-ZTH-33 · superseded-by: —
 
@@ -2866,7 +2870,7 @@ Change (2026-10-11): owner — only under `auditorMode = OPTIONAL` (CTR-ZTH-49);
 **Cost if wrong.** `burn` on a token with `BURNABLE` means a holder burn of the public balance, so a clash with the Zether `burn` would be silent.
 **Source.** `history/specs/2026-10-08-token-tree-design.md` T5, T6, §6.2.
 
-Change (2026-10-20, owner): **one name for both confidential layers: `mtxShield` / `mtxUnshield`**, with the siblings on the same scheme (wrap-shield, unshield-unwrap, rollover, transfers, events) as one interface shared by the Zether and PQZ tokens; replaces the `zether*` / `pqz*` prefixes of this rule. Built with plan Task 5h (the PQZ ABI changes there anyway; test chains, no migration). Open: the reserved `*_ZETHER_PQZ` kinds would need a layer argument (owner: unclear what they are for; analysis `research/shield-and-key-reuse.md` §3). Status: decided; built in 5h.
+Change (2026-10-20, owner): **one name for both confidential layers: `mtxShield` / `mtxUnshield`**, with the siblings on the same scheme (wrap-shield, unshield-unwrap, rollover, transfers, events) as one interface shared by the Zether and PQZ tokens; replaces the `zether*` / `pqz*` prefixes of this rule. Built with plan Task 5h (the PQZ ABI changes there anyway; test chains, no migration). The reserved `*_ZETHER_PQZ` kinds are dropped (CTR-TOK-21 change 2026-10-20), so no layer argument. Status: decided; built in 5h.
 
 ### CTR-ZTH-46 — Prover views in a stateless ZetherStatements
 - old: — · status: current · owner: yes · date: 2026-10-08 · normative: contracts/zether.md#CTR-ZTH-46 · superseded-by: —
