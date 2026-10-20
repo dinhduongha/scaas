@@ -2,7 +2,7 @@
 
 **Status:** design (designer for plan Task 5h, 2026-10-20). Owner rulings O1–O9 on the first version recorded
 (CTR-PQZ-07 Change 2026-10-20); **updated 2026-10-20 (later the same day)** to the owner's further rulings listed under
-"Update 2026-10-20" below. **Part A is built (2026-10-20, branch `pqz-state-b`, Tasks 1–3; see "Docs sync" below); part B (16k parameters, one id bump) and Task 3b (`mtx*` rename) are not.** Implementation plan:
+"Update 2026-10-20" below. **Part A is built (2026-10-20, branch `pqz-state-b`, Tasks 1–5 incl. 3b, the `mtx*` rename; see "Docs sync" below); part B (16k parameters, one id bump) is not built.** Implementation plan:
 [`2026-10-20-pqz-state-redesign.md`](../plans/2026-10-20-pqz-state-redesign.md) (decisions D1–D25).
 
 **Docs sync 2026-10-20 (plan Task 5; the text below is the design as written, the passages it lists are superseded, not rewritten).**

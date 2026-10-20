@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="960" height="740" viewBox="0 0 960 740" role="img" aria-labelledby="t d">
   <title id="t">EVM token tree</title>
-  <desc id="d">The EVM token tree: MetaTxBase, then ERC20MetaTx, then MetaTokenBase, then six kinds by code: NONE (NoUnderlyingToken) and UNDERLYING (UnderlyingToken, 1 to 8 legs, the native coin allowed), built in phase P1; NONE_ZETHER and UNDERLYING_ZETHER, built in phase P3 (unaudited, dev chains only); NONE_PQZ and UNDERLYING_PQZ, the post-quantum confidential kinds, built in phase P6g (unaudited, chain 7622). External libraries: AdminLib, UnderlyingLib, HederaLib, TradeLib (P2), ZetherLib (P3) and PqzLib (P6g), all built. Features are flags chosen at creation. The combined kinds 6 and 7 (both confidential layers in one token) were dropped on 2026-10-20; their ids are not reused.</desc>
+  <desc id="d">The EVM token tree: MetaTxBase, then ERC20MetaTx, then MetaTokenBase, then six kinds by code: NONE (NoUnderlyingToken) and UNDERLYING (UnderlyingToken, 1 to 8 legs, the native coin allowed), built in phase P1; NONE_ZETHER and UNDERLYING_ZETHER, built in phase P3 (unaudited, dev chains only); NONE_PQZ and UNDERLYING_PQZ, the post-quantum confidential kinds, built in phase P6g (unaudited, chain 7622). External libraries: AdminLib, UnderlyingLib, HederaLib, TradeLib (P2), ZetherLib (P3) and the four PQZ libraries PqzStateLib, PqzTransferLib, PqzBurnLib and PqzViewLib (P6g, plan 5h; PqzCore is internal), all built. Features are flags chosen at creation. The combined kinds 6 and 7 (both confidential layers in one token) were dropped on 2026-10-20; their ids are not reused.</desc>
   <defs>
     <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
       <path d="M0 0 L10 5 L0 10 z" fill="#57606a"/>
@@ -138,10 +138,13 @@
   <text class="okc" x="922" y="420" text-anchor="end">built</text>
   <text class="s" x="716" y="440">proofs, shielding · *_ZETHER</text>
 
-  <rect class="built" x="702" y="466" width="234" height="58" rx="8"/>
-  <text class="b" x="716" y="488">PqzLib</text>
+  <rect class="built" x="702" y="466" width="234" height="150" rx="8"/>
+  <text class="b" x="716" y="488">PQZ libraries</text>
   <text class="okc" x="922" y="488" text-anchor="end">built</text>
-  <text class="s" x="716" y="508">PQZ statements, ciphertexts · *_PQZ</text>
+  <text class="s" x="716" y="508">PqzStateLib · PqzTransferLib</text>
+  <text class="s" x="716" y="526">PqzBurnLib · PqzViewLib</text>
+  <text class="s" x="716" y="546">(PqzCore: internal code, no library)</text>
+  <text class="s" x="716" y="566">PQZ statements, ciphertexts · *_PQZ</text>
 
   <!-- features strip -->
   <rect x="24" y="642" width="912" height="62" rx="10" fill="#eef2f6" stroke="#d0d7de"/>
