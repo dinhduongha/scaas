@@ -14,7 +14,7 @@ import {MetaTxLib} from "../common/MetaTxLib.sol";
 
 /// @title Kind `NONE_ZETHER` (CTR-TOK-21): the standalone token with the Zether layer (CTR-ZTH-44).
 /// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Dev chains only. `MINTABLE` mints public units only; shielded
-///         value exists only through `zetherShield`, which burns public units. Flags: `PAYABLE`, `MINTABLE`, `BURNABLE`
+///         value exists only through `zetherShield`, which moves public units to `SHIELD_POOL`. Flags: `PAYABLE`, `MINTABLE`, `BURNABLE`
 ///         (the regulated flags are refused, CTR-ZTH-47). Built by `OpenFactory.createToken` with `conf` set and `legs`,
 ///         `rate` empty. Never on Hedera (no dev chain there).
 contract NoUnderlyingZetherToken is NoUnderlyingToken, ZetherLayer {

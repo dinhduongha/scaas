@@ -156,9 +156,10 @@ abstract contract ZetherMultiSuite is ZetherFixture {
         }
         assertEq(tok.accountState(rs[1].ua).pendingSeq, seq + 1, "every recipient gets a credit");
         assertEq(tok.accountState(rs[0].ua).pendingSeq, 1, "decoys too");
-        assertTrue(_holds(tok, carol, FEE, false), "beneficiary");
+        assertEq(tok.balanceOfUA(ZetherTypes.UA.unwrap(carol.ua)), FEE * SCALE, "beneficiary public balance");
+        assertEq(tok.accountState(carol.ua).pendingSeq, 0, "no pend_ben credit (D19)");
         assertEq(tok.sendCounter(alice.ua), 1);
-        assertEq(tok.totalShielded(), 1000, "nothing created or destroyed");
+        assertEq(tok.totalShielded(), 1000 - FEE, "only the fee left the shielded set (D19)");
     }
 
     function test_auditorOffToken() public {

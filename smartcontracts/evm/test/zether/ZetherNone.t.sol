@@ -57,8 +57,8 @@ abstract contract ZetherNoneSuite is ZetherFixture {
         assertEq(a, 1000 - 300 - FEE, "sender acc debited v + fee");
         (, p) = _bal(bob);
         assertEq(p, 300, "receiver pending credited");
-        (, p) = _bal(carol);
-        assertEq(p, FEE, "beneficiary pending credited [fee]G");
+        assertEq(tok.balanceOfUA(ZetherTypes.UA.unwrap(carol.ua)), FEE * SCALE, "beneficiary: fee x scale public units from the pool");
+        assertEq(tok.accountState(carol.ua).pendingSeq, 0, "no pend_ben credit (D19)");
         assertEq(tok.sendCounter(alice.ua), 1);
         assertEq(ref, _ref(tok, alice, 0), "entryRef carries chainUid");
         _assertConservation(tok, 1100);
@@ -83,9 +83,8 @@ abstract contract ZetherNoneSuite is ZetherFixture {
         tok.zetherUnshield(pl, pr, carol.ua, address(0xD00D), 700);
         (a,) = _bal(alice);
         assertEq(a, 798 - 700 - FEE);
-        (, p) = _bal(carol);
-        assertEq(p, 2 * FEE);
-        assertEq(tok.totalShielded(), 1000 - 750);
+        assertEq(tok.balanceOfUA(ZetherTypes.UA.unwrap(carol.ua)), 2 * FEE * SCALE, "both fees, public units");
+        assertEq(tok.totalShielded(), 1000 - 750 - 2 * FEE, "the fees left the shielded set (D19)");
         assertEq(tok.balanceOf(address(0xD00D)), 750 * SCALE);
         _assertConservation(tok, 1100);
     }
@@ -107,14 +106,30 @@ abstract contract ZetherNoneSuite is ZetherFixture {
     }
 
     /// CTR-ZTH-35: the caller's public units, exactly `amount · shieldScale`; shield to anyone registered; the cap.
-    function test_shieldBurnsTheCallersPublicUnits() public {
+    /// D19 (CTR-ZTH-51): `SHIELD_POOL` is neither a payee nor a spender; no external path reaches it.
+    function test_shieldPool_neitherPayeeNorSpender() public {
+        _fund(tok, alice, 5); // the pool now holds 5 x scale
+        _public(tok, address(this), 3 * SCALE);
+        bytes memory err = abi.encodeWithSignature("ShieldPoolNotPayable()");
+        vm.expectRevert(err);
+        tok.transfer(SHIELD_POOL_, 1);
+        vm.expectRevert(err); // an unshield payee
+        tok.zetherUnshield("", "", _none(), SHIELD_POOL_, 1);
+        vm.prank(SHIELD_POOL_);
+        vm.expectRevert(err); // a spender
+        tok.transfer(address(this), 1);
+        assertEq(tok.balanceOf(SHIELD_POOL_), 5 * SCALE, "untouched");
+    }
+
+    function test_shieldMovesTheCallersPublicUnitsToThePool() public {
         _public(tok, address(this), 30 * SCALE + 1);
         vm.expectEmit(true, false, false, true, address(tok));
         emit IZetherToken.ZetherShielded(bob.ua, 30);
         tok.zetherShield(bob.y, 30); // to someone else's account
-        assertEq(tok.balanceOf(address(this)), 1, "30 x scale burnt, the rest kept");
+        assertEq(tok.balanceOf(address(this)), 1, "30 x scale moved, the rest kept");
         assertEq(tok.totalShielded(), 30);
-        assertEq(tok.totalSupply(), 1);
+        assertEq(tok.totalSupply(), 30 * SCALE + 1, "D19: nothing burnt");
+        assertEq(tok.balanceOf(SHIELD_POOL_), 30 * SCALE);
         assertTrue(_holds(tok, bob, 30, false));
         assertEq(tok.accountState(bob.ua).pendingSeq, 1);
         bytes memory err = abi.encodeWithSignature("ERC20InsufficientBalance(address,uint256,uint256)", address(this), 1, SCALE);
@@ -496,7 +511,8 @@ abstract contract ZetherNoneSuite is ZetherFixture {
         uint256 b1 = b0 - v - FEE;
         assertTrue(_holds(tok, alice, b1, true), "sender acc = b - v - fee");
         assertTrue(_holds(tok, bob, v, false), "receiver pending = v");
-        assertTrue(_holds(tok, carol, FEE, false), "beneficiary pending = fee");
+        assertEq(tok.balanceOfUA(ZetherTypes.UA.unwrap(carol.ua)), FEE * SCALE, "beneficiary public balance = fee x scale");
+        assertEq(tok.accountState(carol.ua).pendingSeq, 0, "no pend_ben credit (D19)");
         _discloseLarge(ref, v, t.s);
         _spendAllAndUnshield(b1, v);
     }
@@ -522,7 +538,7 @@ abstract contract ZetherNoneSuite is ZetherFixture {
         (bytes memory pl, bytes memory pr) = _proveUnshield(tok, bob, bb, bb, address(0xD00D), _none(), 0);
         tok.zetherUnshield(pl, pr, _none(), address(0xD00D), bb);
         assertEq(tok.balanceOf(address(0xD00D)), bb * SCALE);
-        assertEq(tok.totalShielded(), FEE, "only carol's fee left shielded");
+        assertEq(tok.totalShielded(), 0, "the fee left the shielded set (D19)");
     }
 
     /// The auditor decrypts the disclosed transfer, nobody's balance.
@@ -655,7 +671,8 @@ abstract contract ZetherNoneSuite is ZetherFixture {
         (, uint256 p) = _bal(alice);
         assertEq(p, 40, "the Zether UA shielded its own public units");
         assertEq(tok.totalShielded(), 40);
-        assertEq(tok.totalSupply() + tok.totalShielded() * SCALE, minted[address(tok)]);
+        assertEq(tok.totalSupply(), minted[address(tok)]);
+        assertEq(tok.balanceOf(SHIELD_POOL_), 40 * SCALE);
     }
 
     /// The Zether UA's signature through `requireAuthorized` (stored kind: no key data).

@@ -218,6 +218,14 @@ contract UAReceiverFeeTest is UALedgerBase {
         assertEq(tok.balanceOf(POOL), N);
     }
 
+    /// D19: a `SHIELD_POOL` fee recipient is refused (`_uaMove` bypasses the `_update` guard).
+    function test_uaPayReceiverFee_shieldPoolFeeRecipientRefused() public {
+        _fund(uaP, N);
+        _runRevert(_pay(uaP, uaE, 10), 1, MetaTxLib.SHIELD_POOL, block.timestamp,
+            abi.encodeWithSelector(IUALedger.ShieldPoolNotPayable.selector));
+        assertEq(tok.balanceOf(MetaTxLib.SHIELD_POOL), 0);
+    }
+
     // ----- the co-signature binds one payment -----
 
     /// A derived payee signs under `receiver-fee` only: its `metatx` signature over the receiver-fee digest fails, and

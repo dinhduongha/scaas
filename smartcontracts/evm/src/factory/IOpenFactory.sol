@@ -9,16 +9,15 @@ import {IFactoryToken} from "./IFactoryToken.sol";
 ///        with the creator's opaque `initArgs`; no power over any token or DEX it created.
 interface IOpenFactory {
     /// @notice CTR-TOK-21, a fresh enum (nothing deployed): the value equals the implementation's `kind()`.
-    ///         `NONE_PQZ` / `UNDERLYING_PQZ` are built (P6g); the `*_ZETHER_PQZ` kinds are reserved (`KindReserved`).
+    ///         `NONE_PQZ` / `UNDERLYING_PQZ` are built (P6g); ids 6 and 7 (the dropped
+    ///         `*_ZETHER_PQZ` kinds) are never reused: an out-of-range kind fails ABI decoding.
     enum TokenKind {
         NONE,
         UNDERLYING,
         NONE_ZETHER,
         UNDERLYING_ZETHER,
         NONE_PQZ,
-        UNDERLYING_PQZ,
-        NONE_ZETHER_PQZ,
-        UNDERLYING_ZETHER_PQZ
+        UNDERLYING_PQZ
     }
 
     /// @notice A release: the factory-deployed code, the env version it was deployed with (its `keccak256(abi.encode(env))`
@@ -56,7 +55,6 @@ interface IOpenFactory {
     error ChainUidZero();
     /// @notice The constructor's notice period exceeds `MAX_NOTICE_PERIOD` (30 days).
     error NoticePeriodTooLong(uint64 noticePeriod);
-    error KindReserved(TokenKind kind);
     /// @notice Creation of a kind the registrar has not enabled (plain kinds on from the start, confidential ones off).
     error KindDisabled(TokenKind kind);
     error VersionAlreadyRegistered(TokenKind kind, uint64 version, address existing);

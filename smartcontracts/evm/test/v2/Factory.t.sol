@@ -133,8 +133,8 @@ contract FactoryTest is Test {
         bad.libCodeHashes[0] = keccak256("");
         vm.expectRevert(IOpenFactory.EnvInvalid.selector);
         f.publishEnv(NONE, 2, bad);
-        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.KindReserved.selector, IOpenFactory.TokenKind.NONE_ZETHER_PQZ));
-        f.publishEnv(IOpenFactory.TokenKind.NONE_ZETHER_PQZ, 1, e);
+        _kindOutOfRange(abi.encodeWithSelector(f.publishEnv.selector, uint8(6), 1, e)); // D21: 6, 7 fail ABI decoding
+        _kindOutOfRange(abi.encodeWithSelector(f.publishEnv.selector, uint8(7), 1, e));
         e.registry = address(0x1234);
         vm.expectEmit(true, true, false, true, address(f));
         emit IOpenFactory.EnvPublished(0, 5, keccak256(abi.encode(e)));
@@ -200,8 +200,8 @@ contract FactoryTest is Test {
         f.deployImplementation(NONE, 2, 1, hex"fe", ""); // INVALID: no revert data
         vm.expectRevert(IOpenFactory.EnvInvalid.selector); // a constructor's error is bubbled
         f.deployImplementation(NONE, 2, 1, type(BadConstructor).creationCode, "");
-        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.KindReserved.selector, IOpenFactory.TokenKind.NONE_ZETHER_PQZ));
-        f.deployImplementation(IOpenFactory.TokenKind.NONE_ZETHER_PQZ, 1, 1, code, "");
+        _kindOutOfRange(abi.encodeWithSelector(f.deployImplementation.selector, uint8(6), 1, 1, code, ""));
+        _kindOutOfRange(abi.encodeWithSelector(f.deployImplementation.selector, uint8(7), 1, 1, code, ""));
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VersionUnknown.selector, NONE, 0));
         f.deployImplementation(NONE, 0, 1, code, "");
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.VersionAlreadyRegistered.selector, NONE, 1, address(noneImpl)));
@@ -268,8 +268,15 @@ contract FactoryTest is Test {
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.KindDisabled.selector, NONE));
         f.createTokenUnregistered(NONE, address(noneImpl), abi.encode(_none(alice)), "off");
         vm.prank(registrar);
-        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.KindReserved.selector, IOpenFactory.TokenKind.NONE_ZETHER_PQZ));
-        f.setKindEnabled(IOpenFactory.TokenKind.NONE_ZETHER_PQZ, true);
+        _kindOutOfRange(abi.encodeWithSelector(f.setKindEnabled.selector, uint8(6), true));
+        _kindOutOfRange(abi.encodeWithSelector(f.setKindEnabled.selector, uint8(7), true));
+    }
+
+    /// @dev D21 (CTR-TOK-21): ids 6 and 7 were dropped from `TokenKind`, so the ABI decoder reverts (no data), as the registrar.
+    function _kindOutOfRange(bytes memory callData) internal {
+        (bool ok, bytes memory ret) = address(f).call(callData);
+        assertFalse(ok, "kind 6/7 accepted");
+        assertEq(ret.length, 0, "ABI decoding panics with no data");
     }
 
     /// `deprecate` is immediate and refuses new tokens of that version (owner 2026-10-20); tokens already made keep
@@ -414,9 +421,12 @@ contract FactoryTest is Test {
         assertFalse(f.isRegisteredToken(t), "version 0: unvetted");
         assertTrue(f.isRegisteredToken(f.createToken(NONE, 1, abi.encode(_none(alice)), "r")));
         assertFalse(f.isRegisteredToken(address(mine)));
-        for (uint8 k = 2; k <= 7; ++k) {
+        for (uint8 k = 2; k <= 5; ++k) {
             vm.expectRevert(abi.encodeWithSelector(IOpenFactory.UnregisteredConfidentialKind.selector, k));
             f.createTokenUnregistered(IOpenFactory.TokenKind(k), address(mine), abi.encode(_none(alice)), "c");
+        }
+        for (uint8 k = 6; k <= 7; ++k) { // D21: dropped kinds fail ABI decoding
+            _kindOutOfRange(abi.encodeWithSelector(f.createTokenUnregistered.selector, k, address(mine), abi.encode(_none(alice)), "c"));
         }
         NoUnderlyingToken other = new NoUnderlyingToken(1, plainEnv(address(f), address(0), keccak256("x"), address(0), false), "");
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.ChainUidMismatch.selector, UID_, keccak256("x")));

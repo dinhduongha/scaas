@@ -21,6 +21,8 @@ interface IUALedger {
     error UALedgerOff();
     error UARegistryChainUid(bytes32 registryUid, bytes32 tokenUid);
     error UAPoolNotPayable();
+    /// @notice D19 (CTR-ZTH-51): `SHIELD_POOL` is neither a payee nor a spender; only a shielding layer moves it.
+    error ShieldPoolNotPayable();
     error UANotRegistered(bytes32 ua);
     error UAKindNotAccepted(bytes32 ua, uint16 kind);
     error UAInsufficientBalance(bytes32 ua, uint256 balance, uint256 needed);

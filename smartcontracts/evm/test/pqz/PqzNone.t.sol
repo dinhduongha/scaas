@@ -389,8 +389,8 @@ contract PqzNoneTest is PqzFixture {
     function test_factoryGate() public {
         bytes memory code = type(NoUnderlyingPqzToken).creationCode;
         vm.prank(registrar);
-        vm.expectRevert(abi.encodeWithSelector(IOpenFactory.KindReserved.selector, IOpenFactory.TokenKind.NONE_ZETHER_PQZ));
-        factory.deployImplementation(IOpenFactory.TokenKind.NONE_ZETHER_PQZ, 1, 1, code, "");
+        (bool ok,) = address(factory).call(abi.encodeWithSelector(factory.deployImplementation.selector, uint8(6), 1, 1, code, ""));
+        assertFalse(ok, "kind 6 (dropped, D21) fails ABI decoding");
         // an unregistered PQZ implementation cannot be cloned at all (owner 2026-10-19)
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.UnregisteredConfidentialKind.selector,
             IOpenFactory.TokenKind.NONE_PQZ));

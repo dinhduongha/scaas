@@ -150,7 +150,7 @@ interface IZetherToken is IUALedger {
 
     // ------------------------------------------------------------------ shield / transfer / unshield (CTR-ZTH-45)
 
-    /// @notice Burns `amount · shieldScale` public units of the caller; `pending[ua] += [amount]G` (CTR-ZTH-35).
+    /// @notice Moves `amount · shieldScale` public units of the caller to `SHIELD_POOL`; `pending[ua] += [amount]G` (CTR-ZTH-35).
     function zetherShield(bytes calldata encodedY, uint256 amount) external;
     /// @notice `M` recipients, one proof, the token's default (CTR-ZTH-38): the record stored (BUNDLE) on a `BUNDLE`
     ///         token, commit-reveal (HASH: the commitment and the sender memo stored, the record in `TransferBundles`) on
@@ -166,7 +166,7 @@ interface IZetherToken is IUALedger {
     /// @notice The single-recipient format, its record stored in full; `TransferEntryDisabled` on a `COMPACT` token.
     function zetherTransferSingle(bytes calldata payload, bytes calldata proof, ZetherTypes.UA beneficiary)
         external returns (bytes32 entryRef);
-    /// @notice Proves the unshield statement, then mints `amount · shieldScale` public units to `to`.
+    /// @notice Proves the unshield statement, then moves `amount · shieldScale` public units from `SHIELD_POOL` to `to`.
     function zetherUnshield(
         bytes calldata payload,
         bytes calldata proof,

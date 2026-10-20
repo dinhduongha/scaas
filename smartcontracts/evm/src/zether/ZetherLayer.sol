@@ -21,7 +21,7 @@ interface IInnerProductBound {
 /// @title The Zether layer of the kinds `NONE_ZETHER` and `UNDERLYING_ZETHER` (CTR-ZTH-44): the entry points of
 ///        CTR-ZTH-45 and the views; the state and the logic are `ZetherLib` (`scaas.zether`).
 /// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Dev chains only (`ZetherSafety`, CTR-ZTH-02). A layer over the
-///         public ERC-20 balance: `zetherShield` burns public units, `zetherUnshield` mints them; the confidential layer
+///         public ERC-20 balance: `zetherShield` moves public units to `SHIELD_POOL`, `zetherUnshield` moves them back (D19: no burn, no mint); the confidential layer
 ///         keeps no underlying of its own. The registry (the base's, `ERC20MetaTx`), the disclosure contract and the
 ///         curve's transfer and burn verifiers are implementation immutables (CTR-ZTH-20: `OpenFactory` registers an
 ///         implementation only on its canonical verifiers), so the curve is an attribute of the release (`curve()`); the
@@ -112,10 +112,13 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
 
     // ------------------------------------------------------------------ shield (CTR-ZTH-35)
 
-    /// @notice Burns `amount · shieldScale` public units of the caller (the signer, relayed); `pending[ua] += [amount]G`.
+    /// @notice Moves `amount · shieldScale` public units of the signer to `SHIELD_POOL` (D19: a transfer, not a burn);
+    ///         `pending[ua] += [amount]G`. A derived UA signer pays from its UA-ledger balance.
     function zetherShield(bytes calldata encodedY, uint256 amount) external nonReentrant {
         ZetherLib.shield(ZetherTypes.toUA(encodedY), amount, _REGISTRY);
-        _burn(_msgSender(), amount * ZetherLib.$().shieldScale);
+        address m = _msgSender();
+        _poolMove(m == MetaTxLib.UA_POOL ? _ticketSubject() : MetaTxLib.pad(m), MetaTxLib.pad(MetaTxLib.SHIELD_POOL),
+            amount * ZetherLib.$().shieldScale);
     }
 
     // ------------------------------------------------------------------ transfer (CTR-ZTH-37, CTR-ZTH-38)
@@ -124,30 +127,39 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
     function zetherTransfer(bytes calldata payload, bytes calldata proof, ZetherTypes.UA beneficiary)
         external nonReentrant returns (bytes32)
     {
-        return ZetherLib.transferMulti(payload, proof, beneficiary, ZetherLib.defaultMode(), _env());
+        (bytes32 ref, uint256 fee) = ZetherLib.transferMulti(payload, proof, beneficiary, ZetherLib.defaultMode(), _env());
+        _payBeneficiary(beneficiary, fee);
+        return ref;
     }
 
     function zetherTransferCompact(bytes calldata payload, bytes calldata proof, ZetherTypes.UA beneficiary)
         external nonReentrant returns (bytes32)
     {
-        return ZetherLib.transferMulti(payload, proof, beneficiary, ZetherTypes.TransferMode.HASH, _env());
+        (bytes32 ref, uint256 fee) = ZetherLib.transferMulti(payload, proof, beneficiary, ZetherTypes.TransferMode.HASH, _env());
+        _payBeneficiary(beneficiary, fee);
+        return ref;
     }
 
     function zetherTransferNoBundle(bytes calldata payload, bytes calldata proof, ZetherTypes.UA beneficiary)
         external nonReentrant returns (bytes32)
     {
-        return ZetherLib.transferMulti(payload, proof, beneficiary, ZetherTypes.TransferMode.NONE, _env());
+        (bytes32 ref, uint256 fee) = ZetherLib.transferMulti(payload, proof, beneficiary, ZetherTypes.TransferMode.NONE, _env());
+        _payBeneficiary(beneficiary, fee);
+        return ref;
     }
 
     function zetherTransferSingle(bytes calldata payload, bytes calldata proof, ZetherTypes.UA beneficiary)
         external nonReentrant returns (bytes32)
     {
-        return ZetherLib.transferSingle(payload, proof, beneficiary, _env());
+        (bytes32 ref, uint256 fee) = ZetherLib.transferSingle(payload, proof, beneficiary, _env());
+        _payBeneficiary(beneficiary, fee);
+        return ref;
     }
 
     // ------------------------------------------------------------------ unshield
 
-    /// @notice The unshield statement binds `amount` and `to`; mints `amount · shieldScale` public units to `to`.
+    /// @notice The unshield statement binds `amount` and `to`; moves `amount · shieldScale` public units from
+    ///         `SHIELD_POOL` to `to` (D19), then the fee to the beneficiary.
     function zetherUnshield(
         bytes calldata payload,
         bytes calldata proof,
@@ -155,8 +167,10 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
         address to,
         uint256 amount
     ) external nonReentrant {
-        ZetherLib.unshield(payload, proof, beneficiary, amount, to, _env());
-        _mint(to, amount * ZetherLib.$().shieldScale);
+        _requirePayee(to);
+        uint256 fee = ZetherLib.unshield(payload, proof, beneficiary, amount, to, _env());
+        _poolMove(MetaTxLib.pad(MetaTxLib.SHIELD_POOL), MetaTxLib.pad(to), amount * ZetherLib.$().shieldScale);
+        _payBeneficiary(beneficiary, fee);
     }
 
     // ------------------------------------------------------------------ roll-over (not allowlisted, CTR-ZTH-34)
@@ -187,6 +201,21 @@ abstract contract ZetherLayer is MetaTokenBase, IZetherToken {
     }
 
     // ------------------------------------------------------------------ internals
+
+    /// @dev A public payee of an unshield: not `SHIELD_POOL`, not `UA_POOL`; the token is refused by the move and zero by
+    ///      `prepareUnshield` (`ZeroRecipient`).
+    function _requirePayee(address to) internal pure {
+        if (to == MetaTxLib.SHIELD_POOL) revert ShieldPoolNotPayable();
+        if (to == MetaTxLib.UA_POOL) revert UAPoolNotPayable();
+    }
+
+    /// @dev The beneficiary fee (D19): `fee · shieldScale` public units (`fee` from the library: 0 without a beneficiary)
+    ///      from the pool to the beneficiary's public (UA-ledger) balance.
+    function _payBeneficiary(ZetherTypes.UA beneficiary, uint256 fee) internal {
+        if (fee != 0) {
+            _poolMove(MetaTxLib.pad(MetaTxLib.SHIELD_POOL), ZetherTypes.UA.unwrap(beneficiary), fee * ZetherLib.$().shieldScale);
+        }
+    }
 
     /// @dev The statement binding of this call (CTR-ZTH-34): the envelope's inside `mtxExecute` (`ZTX_V1_RELAYED`),
     ///      else 0 (`ZTX_V1_DIRECT`), so a proof lifted out of a pending envelope fails as a direct call.
