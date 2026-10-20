@@ -104,8 +104,8 @@ contract ZetherDeployTest is Test {
         ZetherLayer t = ZetherLayer(f.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, abi.encode(c), "z"));
         assertEq(address(t.verifier()), tv);
         assertEq(t.chainUid(), ZUID);
-        // multiLegFee is PQZ's (op 7, CTR-PQZ-25): a Zether token refuses a non-zero one
-        c.conf.multiLegFee = 1;
+        // minDecoyFee is PQZ's (op 7, CTR-PQZ-25): a Zether token refuses a non-zero one
+        c.conf.minDecoyFee = 1;
         vm.expectRevert();
         f.createToken(IOpenFactory.TokenKind.NONE_ZETHER, 1, abi.encode(c), "z2");
     }

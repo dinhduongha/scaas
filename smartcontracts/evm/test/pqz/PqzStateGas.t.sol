@@ -47,6 +47,7 @@ contract PqzStatePinGasTest is PqzSlots {
         vm.roll(block.number + 1);
         _fund(tok, frank, 1); // frank: a TRIVIAL tail of the test's block
         _public(tok, address(this), 1000 * SCALE);
+        _fund(tok, _pqzUA(_pk(12), 12), 100); // D19: the pool holds the fees the measured debits pay out
     }
 
     /// `STOP ‖ salt(16) ‖ u ‖ v_t ‖ toUA ‖ v_f`, every coefficient `q − 1` (the lane-overflow worst case).
@@ -138,7 +139,7 @@ contract PqzStatePinGasTest is PqzSlots {
 
     function test_gas_shield_merge() public {
         uint256 g = _gas(abi.encodeCall(tok.pqzShield, (frank, 5)));
-        assertEq(tok.accountState(frank).pendingCount, 1, "merged");
+        assertEq(tok.pqzAccount(frank).pendingCount, 1, "merged");
         _log("pqzShield, merge (TRIVIAL tail of this block)", g);
     }
 
@@ -173,12 +174,6 @@ contract PqzStatePinGasTest is PqzSlots {
         _log("op 1 COMPACT (HASH), auditor, fee, fresh ref", _gas(d));
     }
 
-    function test_gas_op1_none() public {
-        bytes memory d = abi.encodeCall(tok.pqzTransferSingleNoBundle,
-            (_payload(0, 0, carol, bob, alice, _out(79, true), ""), "", hex"c0de", _mlAuth()));
-        _log("op 1 NONE, auditor, fee, fresh ref", _gas(d));
-    }
-
     function test_gas_op1_shieldIn() public {
         bytes memory d = abi.encodeCall(tok.pqzTransferSingle,
             (_payload(0, 100, carol, bob, alice, _out(80, true), ""), "", hex"c0de", _mlAuth()));
@@ -191,7 +186,7 @@ contract PqzStatePinGasTest is PqzSlots {
         uint256 g = (m + 3) / 4;
         bytes memory out = _blob(81 + m, PqzCt.PK * g + PqzCt.V * (m + 1) + PqzCt.V * m);
         return abi.encodeCall(tok.pqzTransfer, (bytes.concat(abi.encode(uint256(0), block.number + 100, uint256(0),
-            carol, alice, m), salt, r, out), "", hex"c0de", _mlAuth()));
+            carol, alice, m, uint256(0)), salt, r, out), "", hex"c0de", _mlAuth()));
     }
 
     function test_gas_op7_M4() public {

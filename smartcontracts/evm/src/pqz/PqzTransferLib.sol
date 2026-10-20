@@ -14,8 +14,8 @@ import {PqzCore} from "./PqzCore.sol";
 ///        namespace `scaas.pqz`; the shared steps are `internal` in `PqzCore`, compiled into each.
 /// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** `address(this)` is the token.
 library PqzTransferLib {
-    /// @notice One-recipient transfer: checks, statement, `authSig`, proof, then the debit, the credit, the fee, the
-    ///         entry by `mode` (HASH commit-reveal, BUNDLE stored, NONE nothing).
+    /// @notice One-recipient transfer: checks, statement, `authSig`, proof, then the debit, the credit, the entry by
+    ///         `mode` (BUNDLE or commit-reveal HASH; NONE retired, D11). The token pays the fee from `SHIELD_POOL`.
     ///      Arguments ordered for the stack: the ones used last on top.
     function transfer(
         PqzCore.Env memory e,
@@ -30,9 +30,10 @@ library PqzTransferLib {
     }
 
     /// @notice Op 7 `R_TXM`: `M` legs (decoys are legs of amount 0), one proof; the sender exactly as a single transfer,
-    ///         a credit per leg, the fee once, the entry by `mode`. Payload: `p ‖ validUntilBlock ‖ shieldIn ‖ fromUA ‖
-    ///         beneficiaryUA ‖ M ‖ salt(16) ‖ UA_0 … UA_{M−1} ‖ out ‖ [memo]`, `out = u_0 … u_{G−1} ‖ v_0 … v_{M−1} ‖ v_f ‖
-    ///         [v_{a,0} … v_{a,M−1}]`, memo `18 + 40·M` bytes on HASH.
+    ///         a credit per leg, the entry by `mode`; the statement's fee `txFee + M · decoyFee`. Payload: `p ‖
+    ///         validUntilBlock ‖ shieldIn ‖ fromUA ‖ beneficiaryUA ‖ M ‖ decoyFee ‖ salt(16) ‖ UA_0 … UA_{M−1} ‖ out ‖
+    ///         [memo]`, `out = u_0 … u_{G−1} ‖ v_0 … v_{M−1} ‖ v_f ‖ [v_{a,0} … v_{a,M−1}]`, memo `18 + 40·M` bytes on
+    ///         HASH. The token pays txFee to the beneficiary and `decoyFee` to every leg from `SHIELD_POOL`.
     function transferMulti(
         PqzCore.Env memory e,
         bytes calldata payload,

@@ -12,6 +12,7 @@ import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
+import {ZetherTypes} from "../../src/zether/ZetherTypes.sol";
 
 /// Relaying (CTR-PQZ-15 / -21, P6g plan D4): the address path binds the envelope into the statement (header word 17), the
 /// UA path with an `mldsa65` fee UA likewise with its own tag, PQZ selectors are never batched, `PERCENT` is refused.
@@ -61,7 +62,7 @@ contract PqzRelayTest is PqzFixture {
         assertEq(b, keccak256(abi.encode(keccak256("SCAAS-PQZ-ENVELOPE-V1"), block.chainid, tok.chainUid(), address(tok),
             signer, uint256(0), uint256(1), m.validUntil, uint32(0), address(0), uint256(0), address(0))));
         bytes memory st = tok.transferSingleStatement(pl, b);
-        assertEq(bytes32(_cut(st, 544, 32)), b);
+        assertEq(bytes32(_cut(st, 544, 32)), _relayed(b, ZetherTypes.TransferMode.BUNDLE), "D15: the mode folded in");
         // the proof of the bound statement is valid only there: the mocked precompile accepts exactly that input
         _mockOp(1, 0);
         vm.mockCall(PQZ, abi.encodePacked(uint8(1), uint32(83_072), st, hex"c0de"), abi.encode(uint256(1)));
@@ -75,7 +76,7 @@ contract PqzRelayTest is PqzFixture {
         uint256 g = gasleft();
         tok.mtxExecute(m, sg);
         console2.log("pqzTransfer in a v1 envelope (mocked proof) gas", g - gasleft());
-        assertEq(tok.accountState(alice).sendCounter, 1);
+        assertEq(tok.pqzAccount(alice).sendCounter, 1);
     }
 
     function test_percentAndBatchRefused() public {
@@ -134,8 +135,8 @@ contract PqzRelayTest is PqzFixture {
         uint256 g = gasleft();
         tok.uaExecute(m, _mlAuth());
         console2.log("pqzTransfer in a v3 envelope (mldsa65 fee UA, mocked proof) gas", g - gasleft());
-        assertEq(tok.accountState(alice).sendCounter, 1);
-        assertEq(tok.balanceOfUA(fee), 0, "shieldIn burnt from the signing UA's ledger balance");
+        assertEq(tok.pqzAccount(alice).sendCounter, 1);
+        assertEq(tok.balanceOfUA(fee), 0, "shieldIn moved from the signing UA's ledger balance to the pool");
         assertEq(tok.totalShielded(), 22);
         _assertConservation(tok);
         MetaTxLib.UAMetaTransaction[] memory ms = new MetaTxLib.UAMetaTransaction[](1);

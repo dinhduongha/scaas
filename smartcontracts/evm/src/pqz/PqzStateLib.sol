@@ -17,13 +17,14 @@ library PqzStateLib {
     /// @notice The kind's `_init` (P6g plan D9): `verifier` the release's `UAPqzVerifier` (CTR-ZTH-20: the creator never
     ///         chooses one; precompile and proof system: exactly `PqzSafety.PQZ`, PQZL or PQZH,
     ///         the self-test passing now; review W-B), `auditorKey` empty or the auditor's 32-byte `pqz-mlwe` UA, cap
-    ///         `≤ 2^62`, fee `< 2^64` and `< cap`.
+    ///         `≤ 2^62`, `confidentialFee + 8 · minDecoyFee` `< 2^64` and `< cap` (no chain-level floor, owner 2026-10-20).
     function init(IFactoryToken.ConfidentialConfig memory c, address registry, address verifier) public {
         PqzSafety.requireAllowedChain();
         bytes memory aud = c.auditorKey;
         if (c.shieldScale == 0 || c.maxShielded == 0 || c.maxShielded > PqzCore.MAX_TOTAL_SHIELDED
             || c.confidentialFee >= PqzCore.VALUE_BOUND || c.confidentialFee >= c.maxShielded
-            || c.confidentialFee + 8 * c.multiLegFee >= PqzCore.VALUE_BOUND || c.confidentialFee + 8 * c.multiLegFee >= c.maxShielded
+            || c.minDecoyFee >= PqzCore.VALUE_BOUND || c.confidentialFee + 8 * c.minDecoyFee >= PqzCore.VALUE_BOUND
+            || c.confidentialFee + 8 * c.minDecoyFee >= c.maxShielded
             || (aud.length != 0 && aud.length != 32) || c.maxShielded > type(uint256).max / c.shieldScale) {
             revert IPqzToken.BadInit();
         }
@@ -45,20 +46,21 @@ library PqzStateLib {
         s.shieldScale = c.shieldScale;
         s.maxShielded = c.maxShielded;
         s.confidentialFee = c.confidentialFee;
-        s.multiLegFee = c.multiLegFee;
+        s.minDecoyFee = c.minDecoyFee;
         s.auditorUA = a;
     }
 
     /// @notice The proof-free shield (plan 5h D18): `totalShielded += amount` within the cap and a TRIVIAL entry
     ///         `(amount, block)` appended to `pending[ua]` or merged into its tail (`PqzCore._trivial`); anyone, into
-    ///         any PQZ holder. The token takes the public units (`pqzShield`) or a leg's underlying (`pqzWrapShield`).
-    function shield(bytes32 ua, uint256 amount, address registry) public {
+    ///         any PQZ holder, free (owner 2026-10-20). The token moves the public units of `from` (`pqzShield`) or mints
+    ///         a leg's underlying (`pqzWrapShield`) into `SHIELD_POOL` (D19).
+    function shield(bytes32 ua, uint256 amount, address from, address registry) public {
         PqzCore.PqzStorage storage s = PqzCore.$();
         if (!PqzCore._registered(registry, ua)) revert IPqzToken.AccountNotRegistered(ua);
         uint256 room = s.maxShielded - s.totalShielded;
         if (amount == 0 || amount > room) revert IPqzToken.AmountOutOfRange(amount, room);
         s.totalShielded += amount;
-        PqzCore._trivial(ua, amount);
+        PqzCore._trivial(ua, amount, from);
     }
 
     /// @notice Anyone (plan 5h D8): `acc += Σ pending[rolled .. rolled + n')` strictly in order, `n' = min(n, K_MAX − 1 −
@@ -96,7 +98,7 @@ library PqzStateLib {
             a.cleared = end;
             if (end > a.floor) a.floor = end;
         }
-        emit IPqzToken.PqzRolled(ua, nr, h);
+        emit IPqzToken.PqzRolled(ua, nr, uint32(units + n), h);
     }
 
     /// @notice Permissionless, idempotent (plan 5h D8): writes a non-zero placeholder into half `half` (0 or 1) of the

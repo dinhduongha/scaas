@@ -50,7 +50,7 @@ contract PqzUnderlyingTest is PqzFixture {
         w.pqzWrapShield(address(usd), 1_000 * SCALE, alice);
         console2.log("pqzWrapShield gas", g - gasleft());
         assertEq((w.pqzPending(alice, 0) >> 96) & type(uint64).max, 1_000, "the same TRIVIAL entry as a shield");
-        assertEq(w.totalSupply(), 0, "nothing minted");
+        assertEq(w.totalSupply(), 1_000 * SCALE, "minted to SHIELD_POOL (D19)");
         assertEq(w.totalShielded(), 1_000);
         assertEq(usd.balanceOf(address(w)), 1_000 * SCALE);
 
@@ -66,7 +66,7 @@ contract PqzUnderlyingTest is PqzFixture {
         console2.log("pqzUnshieldUnwrap (mocked proof) gas", g - gasleft());
         assertEq(usd.balanceOf(address(0xD00D)), 400 * SCALE);
         assertEq(w.totalShielded(), 600);
-        assertGe(usd.balanceOf(address(w)), w.totalSupply() + w.totalShielded() * SCALE, "reserve invariant");
+        assertGe(usd.balanceOf(address(w)), w.totalSupply(), "reserve invariant (the pool is in totalSupply)");
         // minOut above the quote
         pl = bytes.concat(abi.encode(uint256(1), block.number + 5, uint256(0), alice, bytes32(0)), _blob(22, PqzCt.CT));
         x = UnderlyingPqzToken.Unwrap(address(usd), address(0xD00D), 10, 10 * SCALE + 1);
@@ -105,14 +105,15 @@ contract PqzUnderlyingTest is PqzFixture {
         usd.approve(address(w), type(uint256).max);
         w.wrap(address(usd), 50 * SCALE);
         w.pqzShield(bob, 20);
-        assertEq(w.totalSupply(), 30 * SCALE);
+        assertEq(w.totalSupply(), 50 * SCALE, "the shield moved 20 to the pool");
         assertEq(w.totalShielded(), 20);
-        // burn through pqzUnshield mints public units (reserve still covers them)
+        // burn through pqzUnshield moves public units out of the pool (supply unchanged)
         bytes memory pl = bytes.concat(abi.encode(uint256(1), block.number + 5, uint256(0), bob, bytes32(0)),
             _blob(23, PqzCt.CT));
         w.pqzUnshield(pl, "", 5, address(this), hex"c0de", _mlAuth());
-        assertEq(w.totalSupply(), 35 * SCALE);
-        assertEq(usd.balanceOf(address(w)), w.totalSupply() + w.totalShielded() * SCALE);
+        assertEq(w.totalSupply(), 50 * SCALE);
+        assertEq(w.balanceOf(address(this)), 35 * SCALE);
+        assertEq(usd.balanceOf(address(w)), w.totalSupply());
     }
 
     /// The largest implementation (`UnderlyingPqzToken`, plan 5g-Z) fits one Osaka transaction as `deploy.sh` sends a

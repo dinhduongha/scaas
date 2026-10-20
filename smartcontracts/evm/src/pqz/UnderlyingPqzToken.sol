@@ -18,9 +18,10 @@ import {PqzViewLib} from "./PqzViewLib.sol";
 /// @title Kind `UNDERLYING_PQZ` (CTR-TOK-21, CTR-PQZ-22): the wrapper of 1–8 legs with the PQZ layer (P6g plan D1).
 /// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** Chains 31337 / 1337 / 7622 only. Legs, rates, reserves,
 ///         `wrap` / `unwrap` and the roles are `UnderlyingToken`'s; the layer adds `pqzWrapShield` (a leg's underlying
-///         straight into a TRIVIAL pending entry, nothing minted; plan 5h D18) and `pqzUnshieldUnwrap` (a burn paid straight out of a leg's
-///         reserve, nothing minted), as `zetherWrapShield` / `zetherUnshieldUnwrap`. Reserve invariant
-///         `Σ⌊reserve_i·num_i/den_i⌋ ≥ totalSupply() + totalShielded·shieldScale`; `executeRate` counts the shielded part.
+///         into a TRIVIAL pending entry, the public-equivalent minted to `SHIELD_POOL`; plan 5h D18, D19) and
+///         `pqzUnshieldUnwrap` (a burn: `amount · shieldScale` burnt from `SHIELD_POOL`, then paid out of a leg's
+///         reserve), as `zetherWrapShield` / `zetherUnshieldUnwrap`. Reserve invariant
+///         `Σ⌊reserve_i·num_i/den_i⌋ ≥ totalSupply()` (the shielded value is the pool's public units).
 contract UnderlyingPqzToken is UnderlyingToken, PqzLayer {
     /// @notice A burn paid from leg `u`: `amount` shielded units to `recipient`, at least `minOut` of the leg.
     struct Unwrap {
@@ -56,22 +57,27 @@ contract UnderlyingPqzToken is UnderlyingToken, PqzLayer {
 
     // ------------------------------------------------------------------ wrap-shield / unshield-unwrap (CTR-PQZ-22)
 
-    /// @notice Pulls `amountIn` of leg `u` (native: `msg.value`); the minted public-equivalent, a multiple of
-    ///         `shieldScale` (`AmountNotScaled`), becomes a TRIVIAL entry of `minted / shieldScale` for `ua`.
+    /// @notice Pulls `amountIn` of leg `u` (native: `msg.value`); the public-equivalent `minted`, a multiple of
+    ///         `shieldScale` (`AmountNotScaled`), is minted to `SHIELD_POOL` (D19) and becomes a TRIVIAL entry of
+    ///         `minted / shieldScale` for `ua`.
     function pqzWrapShield(address u, uint256 amountIn, bytes32 ua) external payable nonReentrant {
-        (,, uint256 minted) = UnderlyingLib.wrap(UnderlyingLib.indexOf(u), amountIn, _msgSender(), msg.value);
+        address m = _msgSender();
+        (,, uint256 minted) = UnderlyingLib.wrap(UnderlyingLib.indexOf(u), amountIn, m, msg.value);
         uint256 scale = PqzCore.$().shieldScale;
         if (minted % scale != 0) revert AmountNotScaled(minted, scale);
-        PqzStateLib.shield(ua, minted / scale, _REGISTRY);
+        PqzStateLib.shield(ua, minted / scale, m, _REGISTRY);
+        _poolMove(bytes32(0), MetaTxLib.pad(MetaTxLib.SHIELD_POOL), minted);
     }
 
-    /// @notice The burn of `x.amount` (statement: `amount`, `recipient`; direct, `envelopeBinding` binds `x.u` and
-    ///         `x.minOut`, P6g D12), then leg `x.u` pays `⌊amount·shieldScale·den/num⌋ ≥ minOut` to `x.recipient`.
+    /// @notice The burn of `x.amount` (statement: `amount`, `recipient`; `envelopeBinding` binds `x.u` and `x.minOut`,
+    ///         direct P6g D12, relayed folded with the envelope's D15), `amount · shieldScale` burnt from `SHIELD_POOL`,
+    ///         txFee to the beneficiary, then leg `x.u` pays `⌊amount·shieldScale·den/num⌋ ≥ minOut` to `x.recipient`.
     function pqzUnshieldUnwrap(bytes calldata payload, bytes calldata accHint, Unwrap calldata x,
         bytes calldata proof, bytes calldata authSig) external nonReentrant
     {
-        PqzBurnLib.unshield(_envUnwrap(x), payload, accHint, proof, authSig);
-        _shieldIn(payload);
+        PqzBurnLib.unshield(_envUnwrap(x, _ticketBinding()), payload, accHint, proof, authSig);
+        _fees(payload, 128);
+        _poolMove(MetaTxLib.pad(MetaTxLib.SHIELD_POOL), bytes32(0), x.amount * PqzCore.$().shieldScale);
         _payUnwrap(x);
     }
 
@@ -86,18 +92,18 @@ contract UnderlyingPqzToken is UnderlyingToken, PqzLayer {
         return keccak256(abi.encode(PqzCore.TAG_UNWRAP, u, minOut));
     }
 
-    /// @notice The burn statement of `pqzUnshieldUnwrap` (the binding as the call would use it, direct or `binding`).
+    /// @notice The burn statement of `pqzUnshieldUnwrap` (`binding` 0 = direct, else the relayed call's envelope binding).
     function unshieldUnwrapStatement(bytes calldata payload, Unwrap calldata x, bytes32 binding)
         external view returns (bytes memory)
     {
-        PqzCore.Env memory e = _envOf(binding == 0 ? unwrapBinding(x.u, x.minOut) : binding);
-        (e.amount, e.recipient) = (x.amount, x.recipient);
-        return PqzViewLib.statementOf(2, e, payload);
+        return PqzViewLib.statementOf(2, _envUnwrap(x, binding), payload);
     }
 
-    function _envUnwrap(Unwrap calldata x) private view returns (PqzCore.Env memory e) {
-        bytes32 b = _ticketBinding();
-        e = _envOf(b != 0 ? b : unwrapBinding(x.u, x.minOut));
+    /// @dev The binding word: `unwrapBinding(u, minOut)` direct, `keccak256(abi.encode(envelope, unwrapBinding(u,
+    ///      minOut)))` relayed (plan 5h D15).
+    function _envUnwrap(Unwrap calldata x, bytes32 b) private view returns (PqzCore.Env memory e) {
+        bytes32 w = unwrapBinding(x.u, x.minOut);
+        e = _envOf(b == 0 ? w : keccak256(abi.encode(b, w)));
         (e.amount, e.recipient) = (x.amount, x.recipient);
     }
 
@@ -107,9 +113,9 @@ contract UnderlyingPqzToken is UnderlyingToken, PqzLayer {
         if (bit == AdminLib.RATE_ADJUSTABLE) UnderlyingLib.dropPending();
     }
 
-    /// @notice The collateral check of a rate change counts the shielded value too.
+    /// @notice The collateral check of a rate change: `totalSupply()` (the shielded value sits in `SHIELD_POOL`, D19).
     function executeRate() external override nonReentrant {
-        UnderlyingLib.executeRate(_msgSender(), totalSupply() + PqzCore.$().totalShielded * PqzCore.$().shieldScale);
+        UnderlyingLib.executeRate(_msgSender(), totalSupply());
     }
 
     // ------------------------------------------------------------------ the layer's hooks
@@ -145,9 +151,9 @@ contract UnderlyingPqzToken is UnderlyingToken, PqzLayer {
         public pure override(UnderlyingToken, IMetaTx, MetaTxBase)
         returns (bytes4[] memory s, uint8[] memory c, uint8[] memory a)
     {
-        s = new bytes4[](19);
-        c = new uint8[](19);
-        a = new uint8[](19);
+        s = new bytes4[](17);
+        c = new uint8[](17);
+        a = new uint8[](17);
         (s[0], c[0]) = (this.cancelNonce.selector, FEE_CLASS_ABSOLUTE);
         (s[1], c[1]) = (SEL_WRAP, FEE_CLASS_ABSOLUTE);
         (s[2], c[2]) = (SEL_UNWRAP_MIN, FEE_CLASS_AMOUNT);
@@ -159,14 +165,12 @@ contract UnderlyingPqzToken is UnderlyingToken, PqzLayer {
         (s[8], c[8]) = (this.pqzShield.selector, FEE_CLASS_ABSOLUTE);
         (s[9], c[9]) = (this.pqzTransfer.selector, FEE_CLASS_ABSOLUTE);
         (s[10], c[10]) = (this.pqzTransferCompact.selector, FEE_CLASS_ABSOLUTE);
-        (s[11], c[11]) = (this.pqzTransferNoBundle.selector, FEE_CLASS_ABSOLUTE);
-        (s[12], c[12]) = (this.pqzUnshield.selector, FEE_CLASS_ABSOLUTE);
-        (s[13], c[13]) = (this.pqzRollOver.selector, FEE_CLASS_ABSOLUTE);
-        (s[14], c[14]) = (this.pqzWrapShield.selector, FEE_CLASS_ABSOLUTE);
-        (s[15], c[15]) = (this.pqzUnshieldUnwrap.selector, FEE_CLASS_ABSOLUTE);
-        (s[16], c[16]) = (this.pqzTransferSingle.selector, FEE_CLASS_ABSOLUTE);
-        (s[17], c[17]) = (this.pqzTransferSingleCompact.selector, FEE_CLASS_ABSOLUTE);
-        (s[18], c[18]) = (this.pqzTransferSingleNoBundle.selector, FEE_CLASS_ABSOLUTE);
+        (s[11], c[11]) = (this.pqzUnshield.selector, FEE_CLASS_ABSOLUTE);
+        (s[12], c[12]) = (this.pqzRollOver.selector, FEE_CLASS_ABSOLUTE);
+        (s[13], c[13]) = (this.pqzWrapShield.selector, FEE_CLASS_ABSOLUTE);
+        (s[14], c[14]) = (this.pqzUnshieldUnwrap.selector, FEE_CLASS_ABSOLUTE);
+        (s[15], c[15]) = (this.pqzTransferSingle.selector, FEE_CLASS_ABSOLUTE);
+        (s[16], c[16]) = (this.pqzTransferSingleCompact.selector, FEE_CLASS_ABSOLUTE);
     }
 
     function _mtxRule(bytes4 sel) internal view override(UnderlyingToken, MetaTxBase) returns (MtxRule memory) {

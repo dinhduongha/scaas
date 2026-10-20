@@ -48,8 +48,8 @@ contract PqzNoneTest is PqzFixture {
 
     function test_lifecycle() public {
         _fund(tok, alice, 1000);
-        assertEq(tok.balanceOf(address(this)), 0, "public units burnt");
-        IPqzToken.AccountState memory a = tok.accountState(alice);
+        assertEq(tok.balanceOf(address(this)), 0, "public units moved to the pool");
+        IPqzToken.AccountState memory a = tok.pqzAccount(alice);
         assertEq(a.pendingCount, 1, "a TRIVIAL entry");
         assertEq(_amt(tok, alice, 0), 1000);
         assertEq(tok.pqzAcc(alice), new bytes(PqzCt.CT), "a new acc is Trivial(0)");
@@ -59,14 +59,15 @@ contract PqzNoneTest is PqzFixture {
         uint256 g = gasleft();
         (bytes32 ref, bytes memory out) = _transfer(tok, alice, bob, carol, 1, true);
         console2.log("pqzTransfer (BUNDLE, auditor, fee, 1 inline TRIVIAL, mocked proof) gas", g - gasleft());
-        a = tok.accountState(alice);
+        a = tok.pqzAccount(alice);
         assertEq(tok.pqzAcc(alice), accOf[alice], "acc = u || v_f");
         assertEq(a.sendCounter, 1);
         assertEq(a.accUnits, 1);
         assertEq(a.rolled, 1);
-        assertEq(tok.accountState(bob).pendingCount, 1);
+        assertEq(tok.pqzAccount(bob).pendingCount, 1);
         assertEq(tok.pqzPendingCt(bob, 0), _cut(out, 0, PqzCt.CT));
-        assertEq(_amt(tok, carol, 0), FEE, "the fee: a TRIVIAL entry of the beneficiary");
+        assertEq(tok.balanceOfUA(carol), FEE * SCALE, "txFee: the beneficiary's public balance (D19)");
+        assertEq(tok.pqzAccount(carol).pendingCount, 0, "no TRIVIAL fee entry");
         assertEq(ref, keccak256(abi.encode(keccak256("SCAAS-PQZ-ENTRY-V1"), block.chainid, PQZ_UID, address(tok), alice,
             uint256(0))), "entryRef");
         bytes memory r = bytes.concat(salt, _cut(out, 0, PqzCt.CT), _cut(out, 16_640, 128), bob);
@@ -77,9 +78,9 @@ contract PqzNoneTest is PqzFixture {
         _roll(tok, bob, 1);
         console2.log("pqzRollOver (1 credit, first after prepare) gas", g - gasleft());
         assertEq(tok.pqzAcc(bob), accOf[bob]);
-        assertEq(tok.accountState(bob).accUnits, 1);
+        assertEq(tok.pqzAccount(bob).accUnits, 1);
         _transfer(tok, bob, alice, bytes32(0), 2, false);
-        assertEq(tok.accountState(alice).pendingCount, 2);
+        assertEq(tok.pqzAccount(alice).pendingCount, 2);
         _assertConservation(tok);
 
         // burn 100 from alice's pending credit (p = 2 ≥ rolled 1: one inline credit)
@@ -90,11 +91,10 @@ contract PqzNoneTest is PqzFixture {
         console2.log("pqzUnshield (1 inline, fee, mocked proof) gas", g - gasleft());
         accOf[alice] = nb;
         assertEq(tok.balanceOf(address(0xD00D)), 100 * SCALE);
-        assertEq(tok.totalShielded(), 900);
-        assertEq(tok.accountState(carol).pendingCount, 2, "a later block: the fee appended");
-        assertEq(_amt(tok, carol, 1), FEE);
-        assertEq(tok.accountState(alice).rolled, 2);
-        assertEq(tok.accountState(alice).sendCounter, 2);
+        assertEq(tok.totalShielded(), 900 - 2 * FEE, "the burn and both fees left the pool");
+        assertEq(tok.balanceOfUA(carol), 2 * FEE * SCALE, "the burn's txFee too");
+        assertEq(tok.pqzAccount(alice).rolled, 2);
+        assertEq(tok.pqzAccount(alice).sendCounter, 2);
         assertEq(tok.pqzAcc(alice), nb, "acc = the burn's blob");
         _assertConservation(tok);
 
@@ -140,7 +140,7 @@ contract PqzNoneTest is PqzFixture {
         tok.pqzTransferSingle(pl, "", proof, _mlAuth());
         console2.log("pqzTransfer of the vector statement (83,072 B, mocked proof) gas", g - gasleft());
         // the auth digest the registry saw is over this statement (a changed salt changes it, hence the proof)
-        assertEq(tok.accountState(alice).sendCounter, 1);
+        assertEq(tok.pqzAccount(alice).sendCounter, 1);
         assertEq(tok.balanceOf(address(this)), 0, "shieldIn taken from the signer");
         _assertConservation(tok);
     }
@@ -172,7 +172,7 @@ contract PqzNoneTest is PqzFixture {
     function test_inlineAboveRolled() public {
         _credits(alice, 3);
         (, bytes memory out) = _transfer(tok, alice, bob, bytes32(0), 50, true); // p = 3, inline = pending[0..3)
-        IPqzToken.AccountState memory a = tok.accountState(alice);
+        IPqzToken.AccountState memory a = tok.pqzAccount(alice);
         assertEq(a.rolled, 3);
         assertEq(a.floor, 3);
         assertEq(a.cleared, 3);
@@ -194,7 +194,7 @@ contract PqzNoneTest is PqzFixture {
         bytes memory t = ct.sum(_acc(alice), none, inl, 0);
         assertEq(_cut(st, 49_792, PqzCt.CT), t, "T = acc - inline");
         tok.pqzTransferSingle(pl, "", hex"01", _mlAuth());
-        IPqzToken.AccountState memory a = tok.accountState(alice);
+        IPqzToken.AccountState memory a = tok.pqzAccount(alice);
         assertEq(tok.pqzAcc(alice), bytes.concat(_cut(out, 0, PqzCt.PK), _cut(out, PqzCt.CT, 128)), "acc = (u, v_f)");
         assertEq(a.accUnits, 1);
         assertEq(a.rolled, 1, "un-rolled");
@@ -220,7 +220,7 @@ contract PqzNoneTest is PqzFixture {
         uint256 g = gasleft();
         _roll(tok, bob, 16);
         console2.log("pqzRollOver (16 credits, first materialisation after prepare) gas", g - gasleft());
-        IPqzToken.AccountState memory a = tok.accountState(bob);
+        IPqzToken.AccountState memory a = tok.pqzAccount(bob);
         assertEq(a.rolled, 16);
         assertEq(a.accUnits, 16);
         assertEq(a.accHash, keccak256(accOf[bob]));
@@ -286,7 +286,7 @@ contract PqzNoneTest is PqzFixture {
         tok.pqzTransferSingle(pl, "", hex"01", _mlAuth());
         pl = _payload(16, 0, alice, bob, bytes32(0), _out(70, true), "");
         tok.pqzTransferSingle(pl, "", hex"01", _mlAuth());
-        assertEq(tok.accountState(alice).rolled, 16);
+        assertEq(tok.pqzAccount(alice).rolled, 16);
     }
 
     // ------------------------------------------------------------------ modes (CTR-PQZ-23 / -24)
@@ -324,13 +324,13 @@ contract PqzNoneTest is PqzFixture {
         factory.createToken(IOpenFactory.TokenKind.NONE_PQZ, 1, abi.encode(c), "x3");
     }
 
-    function test_compactAndNoBundle() public {
+    /// D11: NONE retired; a COMPACT entry is the op blob plus the memo (no stored hash): `transferEntry` =
+    /// `keccak256(R) ‖ memo`, `transferCiphertextHash` = `keccak256(R)` unchanged in value, `pqzEntryBlob` = `R ‖ v_f`.
+    function test_compactAndNoneRetired() public {
         dMode = uint8(ZetherTypes.DisclosureMode.COMPACT);
         PqzLayer cpt = _newToken("compact");
         bytes memory out = _out(90, true);
         bytes memory pl = _payload(0, 0, alice, bob, bytes32(0), out, "");
-        vm.expectRevert(abi.encodeWithSelector(IPqzToken.TransferEntryDisabled.selector, 1));
-        cpt.pqzTransferSingleNoBundle(pl, "", hex"01", _mlAuth());
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.BadPayload.selector, pl.length));
         cpt.pqzTransferSingle(pl, "", hex"01", _mlAuth()); // no memo
         bytes memory memo = _memo();
@@ -346,42 +346,51 @@ contract PqzNoneTest is PqzFixture {
         bytes memory r = bytes.concat(salt, _cut(out, 0, PqzCt.CT), _cut(out, 16_640, 128), bob);
         assertEq(cpt.transferEntry(ref), bytes.concat(keccak256(r), memo), "hash || memo");
         assertEq(cpt.transferCiphertextHash(ref), keccak256(r));
-        // BUNDLE token: compact and no-bundle forms
-        ref = tok.pqzTransferSingleNoBundle(pl = _payload(0, 0, alice, bob, bytes32(0), out, ""), "", hex"01", _mlAuth());
-        assertEq(tok.transferCiphertextHash(ref), bytes32(0));
+        assertEq(cpt.pqzEntryBlob(ref), bytes.concat(r, _cut(out, PqzCt.CT, 128)), "the op blob: R || v_f");
+        // disclosure of a COMPACT entry reads R from the blob: no bundle argument
+        assertEq(_cut(cpt.disclosureStatement(ref, 0, 5, 1), 16_672, PqzCt.CT), _cut(out, 0, PqzCt.CT), "u || v_t");
+        // BUNDLE token: the commit-reveal form, same hash
         ref = tok.pqzTransferSingleCompact(_payload(0, 0, alice, bob, bytes32(0), out, memo), "", hex"01", _mlAuth());
         assertEq(tok.transferCiphertextHash(ref), keccak256(r));
+        // the NONE entry points are gone
+        bytes memory d = abi.encodeWithSignature("pqzTransferSingleNoBundle(bytes,bytes,bytes,bytes)",
+            _payload(1, 0, alice, bob, bytes32(0), out, ""), bytes(""), hex"01", _mlAuth());
+        (bool ok,) = address(tok).call(d);
+        assertFalse(ok, "pqzTransferSingleNoBundle retired");
+        (ok,) = address(tok).call(abi.encodeWithSignature("pqzTransferNoBundle(bytes,bytes,bytes,bytes)", bytes(""),
+            bytes(""), bytes(""), bytes("")));
+        assertFalse(ok, "pqzTransferNoBundle retired");
+        assertEq(tok.pqzEntryBlob(keccak256("unknown")), "", "no entry: empty");
     }
 
     // ------------------------------------------------------------------ disclosure (§7.9, P6g D11)
 
+    /// Disclosure reads `R` from the op blob (D11): `disclosureStatement(ref, leg, amount, kind)`, the opening is the
+    /// proof alone.
     function test_disclosure() public {
         (bytes32 ref, bytes memory out) = _transfer(tok, alice, bob, bytes32(0), 95, true);
-        bytes memory r = bytes.concat(salt, _cut(out, 0, PqzCt.CT), _cut(out, 16_640, 128), bob);
-        bytes memory st = tok.disclosureStatement(ref, 0, 123, 1, r);
+        bytes memory st = tok.disclosureStatement(ref, 0, 123, 1);
         assertEq(st.length, 33_184);
         assertEq(_cut(st, 0, 288), abi.encode(PqzCore.OP_DR, PQZL_ID, block.chainid, PQZ_UID, address(tok), address(reg),
             ref, uint256(123), uint256(1)));
         assertEq(_cut(st, 288, PqzCt.PK), _cut(txStmt, 17_024, PqzCt.PK), "pk_t (bob)");
         assertEq(_cut(st, 16_672, PqzCt.PK + 128), _cut(out, 0, PqzCt.CT), "u || v_t");
-        st = tok.disclosureStatement(ref, 0, 123, 2, r);
+        st = tok.disclosureStatement(ref, 0, 123, 2);
         assertEq(_cut(st, 288, PqzCt.PK), _cut(txStmt, 33_408, PqzCt.PK), "pk_a");
         assertEq(_cut(st, 33_056, 128), _cut(out, 16_640, 128), "v_a");
         assertEq(bytes32(_cut(st, 0, 32)), PqzCore.OP_DA);
-        bytes memory opening = abi.encode(r, hex"0a0b");
-        vm.expectCall(PQZ, abi.encodePacked(uint8(5), uint32(33_184), st, hex"0a0b"));
-        assertTrue(tok.verifyTransferAmount(ref, 0, 123, 2, opening));
-        assertTrue(tok.verifyTransferAmount(ref, 0, 123, 0, opening), "SENDER_S (op 4)");
+        bytes memory proof = hex"0a0b";
+        vm.expectCall(PQZ, abi.encodePacked(uint8(5), uint32(33_184), st, proof));
+        assertTrue(tok.verifyTransferAmount(ref, 0, 123, 2, proof));
+        assertTrue(tok.verifyTransferAmount(ref, 0, 123, 0, proof), "SENDER_S (op 4)");
         _mockOp(5, 0);
-        assertFalse(tok.verifyTransferAmount(ref, 0, 123, 1, opening), "the precompile says no");
-        assertTrue(tok.verifyTransferAmount(ref, 0, 123, 0, opening));
-        assertFalse(tok.verifyTransferAmount(ref, 0, 123, 3, opening), "SENDER_CP / unknown kind");
-        assertFalse(tok.verifyTransferAmount(ref, 0, 1 << 64, 0, opening), "amount >= 2^64");
-        assertFalse(tok.verifyTransferAmount(keccak256("x"), 0, 123, 0, opening), "unknown entry");
-        bytes memory other = bytes.concat(r);
-        other[20] ^= 0x01;
-        assertFalse(tok.verifyTransferAmount(ref, 0, 123, 0, abi.encode(other, hex"0a0b")), "not the stored bundle");
-        assertFalse(tok.verifyTransferAmount(ref, 0, 123, 0, bytes.concat(opening, bytes32(0))), "non-canonical opening");
+        assertFalse(tok.verifyTransferAmount(ref, 0, 123, 1, proof), "the precompile says no");
+        assertTrue(tok.verifyTransferAmount(ref, 0, 123, 0, proof));
+        assertFalse(tok.verifyTransferAmount(ref, 0, 123, 3, proof), "SENDER_CP / unknown kind");
+        assertFalse(tok.verifyTransferAmount(ref, 0, 1 << 64, 0, proof), "amount >= 2^64");
+        assertFalse(tok.verifyTransferAmount(keccak256("x"), 0, 123, 0, proof), "unknown entry");
+        assertFalse(tok.verifyTransferAmount(ref, 0, 123, 0, ""), "empty proof");
+        assertFalse(tok.verifyTransferAmount(ref, 1, 123, 0, proof), "no leg 1");
     }
 
     // ------------------------------------------------------------------ the factory gate (P6g D1, D2)
@@ -482,31 +491,23 @@ contract PqzNoneTest is PqzFixture {
 
     // ------------------------------------------------------------------ review 2026-10-19 (plan Task 5g)
 
-    /// W-A: a direct transfer's statement names its mode (`envelopeBinding` word), so a front-runner cannot replay a
-    /// BUNDLE call through `…NoBundle` (no entry stored) or the reverse: the proof and `authSig` are for one entry point.
+    /// W-A: a direct transfer's statement names its mode (`envelopeBinding` word): a proof bound to another mode (a
+    /// retired `…NoBundle` one) does not pass as a BUNDLE call.
     function test_directModeBound_single() public {
         bytes memory pl = _payload(0, 0, alice, bob, bytes32(0), _out(97, true), "");
         bytes memory st = tok.transferSingleStatement(pl, 0);
         assertEq(bytes32(_cut(st, 544, 32)), _direct(ZetherTypes.TransferMode.BUNDLE));
-        bytes memory stN = tok.transferSingleStatement(pl, _direct(ZetherTypes.TransferMode.NONE));
-        assertEq(bytes32(_cut(stN, 544, 32)), _direct(ZetherTypes.TransferMode.NONE));
-        assertEq(_cut(stN, 0, 544), _cut(st, 0, 544));
-        assertEq(_cut(stN, 576, st.length - 576), _cut(st, 576, st.length - 576), "only the binding differs");
+        bytes memory stN = tok.transferSingleStatement(pl, 0);
+        bytes32 nb = _direct(ZetherTypes.TransferMode.NONE);
+        assembly ("memory-safe") { mstore(add(stN, 576), nb) } // word 544: another mode's binding
         bytes memory proof = hex"b0b0";
-        _mockOp(1, 0); // the precompile accepts exactly the BUNDLE statement with this proof
-        vm.mockCall(PQZ, abi.encodePacked(uint8(1), uint32(st.length), st, proof), abi.encode(uint256(1)));
-        vm.expectRevert(IPqzToken.ProofRejected.selector);
-        tok.pqzTransferSingleNoBundle(pl, "", proof, _mlAuth());
-        bytes32 ref = tok.pqzTransferSingle(pl, "", proof, _mlAuth());
-        assertTrue(tok.transferCiphertextHash(ref) != 0, "the bundle stored");
-        // the reverse: a NoBundle proof does not pass as a BUNDLE call
-        pl = _payload(0, 0, alice, bob, bytes32(0), _out(98, true), "");
-        stN = tok.transferSingleStatement(pl, _direct(ZetherTypes.TransferMode.NONE));
+        _mockOp(1, 0); // the precompile accepts exactly the other mode's statement
         vm.mockCall(PQZ, abi.encodePacked(uint8(1), uint32(stN.length), stN, proof), abi.encode(uint256(1)));
         vm.expectRevert(IPqzToken.ProofRejected.selector);
         tok.pqzTransferSingle(pl, "", proof, _mlAuth());
-        ref = tok.pqzTransferSingleNoBundle(pl, "", proof, _mlAuth());
-        assertEq(tok.transferCiphertextHash(ref), bytes32(0));
+        vm.mockCall(PQZ, abi.encodePacked(uint8(1), uint32(st.length), st, proof), abi.encode(uint256(1)));
+        bytes32 ref = tok.pqzTransferSingle(pl, "", proof, _mlAuth());
+        assertTrue(tok.transferCiphertextHash(ref) != 0, "the bundle stored");
     }
 
     /// W-B / CTR-ZTH-20: the verifier is the release env's (plan 5g-Z2); even an env whose registrar listed a fake
@@ -538,13 +539,6 @@ contract PqzNoneTest is PqzFixture {
 
     // The W-E race tests (a debit on the base) live on as "a rollover between prove and submit still settles" in
     // PqzState.t.sol (plan 5h D6: the base is gone, `T` is read from state).
-
-    /// W-I: an opening that does not decode reverts (as documented); a non-canonical one is false.
-    function test_verifyTransferAmount_undecodableOpeningReverts() public {
-        (bytes32 ref,) = _transfer(tok, alice, bob, bytes32(0), 95, true);
-        vm.expectRevert();
-        tok.verifyTransferAmount(ref, 0, 1, 0, hex"0102");
-    }
 
     // ------------------------------------------------------------------ helpers
 

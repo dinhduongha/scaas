@@ -29,7 +29,7 @@ abstract contract PqzSlots is PqzFixture {
         uint256 w = uint256(vm.load(address(t), k));
         w = (w & ~(uint256(type(uint32).max) << 192)) | (units << 192);
         vm.store(address(t), k, bytes32(w));
-        assertEq(t.accountState(ua).accUnits, units);
+        assertEq(t.pqzAccount(ua).accUnits, units);
     }
 
     /// `T` of an op 1 statement (`pk_f ‖ pk_t ‖ [pk_a]` before it).
@@ -45,7 +45,7 @@ abstract contract PqzSlots is PqzFixture {
     }
 
     function _flags(PqzLayer t, bytes32 ua) internal view returns (uint8) {
-        return t.accountState(ua).flags;
+        return t.pqzAccount(ua).flags;
     }
 }
 
@@ -86,11 +86,11 @@ contract PqzStateTest is PqzSlots {
         legs[0] = bob;
         bytes memory out = _blob(2, PqzCt.PK + 2 * PqzCt.V);
         bytes memory pl = bytes.concat(abi.encode(uint256(0), block.number + 100, uint256(0), alice, bytes32(0),
-            uint256(1)), salt, legs[0], out);
+            uint256(1), uint256(0)), salt, legs[0], out);
         _mockOp(7, 1);
         tok.pqzTransfer(pl, "", hex"c0de", _mlAuth());
-        assertEq(tok.accountState(bob).pendingCount, 3);
-        assertEq(tok.accountState(bob).accUnits, PqzCore.K_MAX - 1);
+        assertEq(tok.pqzAccount(bob).pendingCount, 3);
+        assertEq(tok.pqzAccount(bob).accUnits, PqzCore.K_MAX - 1);
     }
 
     /// D8: a rollover is strictly `[rolled, rolled + n')`, `n' = min(n, K_MAX − 1 − accUnits)`; `CapReached` at the
@@ -109,7 +109,7 @@ contract PqzStateTest is PqzSlots {
         _setUnits(tok, alice, PqzCore.K_MAX - 4);
         vm.roll(block.number + ROLL_AGE);
         tok.pqzRollOver(alice, 10);
-        IPqzToken.AccountState memory a = tok.accountState(alice);
+        IPqzToken.AccountState memory a = tok.pqzAccount(alice);
         assertEq(a.rolled, 3, "clamped to K_MAX - 1 - accUnits = 3");
         assertEq(a.accUnits, PqzCore.K_MAX - 1);
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.CapReached.selector, alice));
@@ -121,14 +121,14 @@ contract PqzStateTest is PqzSlots {
         bytes memory pl = bytes.concat(abi.encode(uint256(3), block.number + 5, uint256(0), alice, bytes32(0)),
             _blob(9, PqzCt.CT));
         tok.pqzUnshield(pl, "", 0, address(0), hex"c0de", _mlAuth());
-        a = tok.accountState(alice);
+        a = tok.pqzAccount(alice);
         assertEq(a.accUnits, 1, "refresh resets");
         assertEq(a.rolled, 3);
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.RollOverRange.selector, 100));
         tok.pqzRollOver(alice, 100); // only 7 left: never a partial or skipping roll
         tok.pqzRollOver(alice, 7);
-        assertEq(tok.accountState(alice).rolled, 10);
-        assertEq(tok.accountState(alice).accUnits, 8);
+        assertEq(tok.pqzAccount(alice).rolled, 10);
+        assertEq(tok.pqzAccount(alice).accUnits, 8);
     }
 
     /// The over-long rollover reverts `RollOverRange` (nothing is skipped or partially taken).
@@ -139,7 +139,7 @@ contract PqzStateTest is PqzSlots {
         vm.expectRevert(abi.encodeWithSelector(IPqzToken.RollOverRange.selector, 2));
         tok.pqzRollOver(alice, 2);
         tok.pqzRollOver(alice, 1);
-        assertEq(tok.accountState(alice).rolled, 1);
+        assertEq(tok.pqzAccount(alice).rolled, 1);
     }
 
     /// D8: `AccNotPrepared` until both halves; `pqzPrepareAcc` is idempotent and keyed to a PQZ holder.
@@ -177,7 +177,7 @@ contract PqzStateTest is PqzSlots {
             vm.roll(block.number + 1);
         }
         _roll(tok, alice, PqzCore.ROLL_MAX);
-        IPqzToken.AccountState memory a = tok.accountState(alice);
+        IPqzToken.AccountState memory a = tok.pqzAccount(alice);
         uint256 r = PqzCore.ROLL_MAX;
         assertEq(a.rolled, r);
         assertEq(a.accUnits, r);
@@ -196,13 +196,13 @@ contract PqzStateTest is PqzSlots {
         assertEq(_tOf(tok.transferSingleStatement(pl, 0), false), want);
         _send(pl, "");
         _mirrorDebit(alice, bob, pl);
-        a = tok.accountState(alice);
+        a = tok.pqzAccount(alice);
         assertEq(a.rolled, r - 16, "un-rolled");
         assertEq(a.floor, r - 16);
         assertEq(a.accUnits, 1);
         for (uint256 i = r - 16; i < total; ++i) assertEq(tok.pqzPendingCt(alice, uint64(i)), _entCt(alice, i), "pending again");
         _roll(tok, alice, 32);
-        assertEq(tok.accountState(alice).rolled, total);
+        assertEq(tok.pqzAccount(alice).rolled, total);
         assertEq(tok.pqzAcc(alice), accOf[alice], "rolled again, nothing lost");
     }
 
@@ -224,14 +224,14 @@ contract PqzStateTest is PqzSlots {
         assertEq(_tOf(st, false), _expectT(alice, new bytes(PqzCt.CT), 0, 4, 0));
         _roll(tok, alice, 1); // anyone: h1 is stale now
         bytes memory h2 = tok.pqzAcc(alice); // the materialised acc the debit below replaces
-        assertEq(keccak256(h2), tok.accountState(alice).accHash);
+        assertEq(keccak256(h2), tok.pqzAccount(alice).accHash);
         assertEq(tok.transferSingleStatement(pl, 0), st, "same T after the rollover");
         vm.expectCall(PQZ, abi.encodePacked(uint8(1), uint32(st.length), st, hex"c0de"));
         _send(pl, h1);
         _mirrorDebit(alice, bob, pl);
         // after the debit the flag is clear but `accHash` still hashes h2: a hint of h2 must be ignored (the MAT check
         // is what keeps a spent acc from being reused: a double spend otherwise)
-        IPqzToken.AccountState memory a = tok.accountState(alice);
+        IPqzToken.AccountState memory a = tok.pqzAccount(alice);
         assertEq(a.flags & 1, 0, "MATERIALISED cleared");
         assertEq(keccak256(h2), a.accHash, "the stale accHash still matches h2");
         assertEq(tok.pqzAcc(alice), accOf[alice], "fresh reference");
@@ -286,7 +286,7 @@ contract PqzStateTest is PqzSlots {
         bytes memory pl = _pl(2, alice, bob, 1, false);
         assertEq(_tOf(tok.transferSingleStatement(pl, 0), false), ct.sum(_trivCt(5), _range(alice, 1, 2), none, 0));
         _send(pl, "");
-        assertEq(tok.accountState(alice).rolled, 2);
+        assertEq(tok.pqzAccount(alice).rolled, 2);
     }
 
     // ------------------------------------------------------------------ the W-E races, now "a rollover between prove and submit still settles"
@@ -304,7 +304,7 @@ contract PqzStateTest is PqzSlots {
         assertEq(tok.transferSingleStatement(pl, 0), st, "same T");
         vm.expectCall(PQZ, abi.encodePacked(uint8(1), uint32(st.length), st, hex"c0de"));
         _send(pl, tok.pqzAcc(alice));
-        IPqzToken.AccountState memory a = tok.accountState(alice);
+        IPqzToken.AccountState memory a = tok.pqzAccount(alice);
         assertEq(a.rolled, 3);
         assertEq(a.floor, 3);
         assertEq(a.accUnits, 1);
@@ -317,22 +317,22 @@ contract PqzStateTest is PqzSlots {
         bytes memory p1 = _pl(1, alice, bob, 20, false);
         _send(p1, "");
         _mirrorDebit(alice, bob, p1); // rolled 1: entries 1, 2 pending again
-        assertEq(tok.accountState(alice).rolled, 1);
+        assertEq(tok.pqzAccount(alice).rolled, 1);
         _fund(tok, alice, 9);
         _transfer(tok, carol, alice, bytes32(0), 13, false);
         vm.roll(block.number + ROLL_AGE);
         bytes memory pl = _pl(2, alice, bob, 21, false);
         bytes memory st = tok.transferSingleStatement(pl, 0);
         _roll(tok, alice, 4); // rolled 5
-        assertEq(tok.accountState(alice).rolled, 5);
+        assertEq(tok.pqzAccount(alice).rolled, 5);
         assertEq(tok.transferSingleStatement(pl, 0), st, "same T");
         vm.expectCall(PQZ, abi.encodePacked(uint8(1), uint32(st.length), st, hex"c0de"));
         _send(pl, "");
         _mirrorDebit(alice, bob, pl);
-        assertEq(tok.accountState(alice).rolled, 2, "un-rolled to p");
+        assertEq(tok.pqzAccount(alice).rolled, 2, "un-rolled to p");
         _roll(tok, alice, 3);
         assertEq(tok.pqzAcc(alice), accOf[alice]);
-        assertEq(tok.accountState(alice).accUnits, 4);
+        assertEq(tok.pqzAccount(alice).accUnits, 4);
     }
 
     /// `p > rolled` at proving; after `ROLL_AGE` anyone rolls past `p`; the debit still settles and un-rolls.
@@ -346,12 +346,12 @@ contract PqzStateTest is PqzSlots {
         vm.expectCall(PQZ, abi.encodePacked(uint8(1), uint32(st.length), st, hex"c0de"));
         _send(pl, "");
         _mirrorDebit(alice, bob, pl);
-        IPqzToken.AccountState memory a = tok.accountState(alice);
+        IPqzToken.AccountState memory a = tok.pqzAccount(alice);
         assertEq(a.rolled, 2, "rolled back to p");
         assertEq(a.accUnits, 1);
         assertEq(a.floor, 2);
         _roll(tok, alice, 3);
-        assertEq(tok.accountState(alice).rolled, 5);
+        assertEq(tok.pqzAccount(alice).rolled, 5);
         assertEq(tok.pqzAcc(alice), accOf[alice]);
     }
 
@@ -360,7 +360,7 @@ contract PqzStateTest is PqzSlots {
     function test_trivial_mergeAndAppend() public {
         _fund(tok, alice, 5);
         _fund(tok, alice, 7); // same block: merged
-        assertEq(tok.accountState(alice).pendingCount, 1);
+        assertEq(tok.pqzAccount(alice).pendingCount, 1);
         uint256 e = tok.pqzPending(alice, 0);
         assertEq(e >> 160, 0, "blob field 0: TRIVIAL");
         assertEq((e >> 96) & type(uint64).max, 12, "amount");
@@ -368,10 +368,10 @@ contract PqzStateTest is PqzSlots {
         assertEq(tok.pqzPendingCt(alice, 0), _trivCt(12));
         vm.roll(block.number + 1);
         _fund(tok, alice, 1); // next block: appended
-        assertEq(tok.accountState(alice).pendingCount, 2);
+        assertEq(tok.pqzAccount(alice).pendingCount, 2);
         _transfer(tok, carol, alice, bytes32(0), 1, false); // a credit tail
         _fund(tok, alice, 2); // the tail is a credit: appended
-        assertEq(tok.accountState(alice).pendingCount, 4);
+        assertEq(tok.pqzAccount(alice).pendingCount, 4);
         assertEq(tok.totalShielded(), 15);
         _assertConservation(tok);
     }
@@ -382,7 +382,7 @@ contract PqzStateTest is PqzSlots {
         bytes memory pl = _pl(1, alice, bob, 1, false);
         _send(pl, ""); // spends entry 0 inline, same block
         _fund(tok, alice, 4);
-        assertEq(tok.accountState(alice).pendingCount, 2, "appended, not merged into the spent entry");
+        assertEq(tok.pqzAccount(alice).pendingCount, 2, "appended, not merged into the spent entry");
         assertEq(tok.pqzPending(alice, 0), 0, "the spent entry deleted by the debit");
         assertEq((tok.pqzPending(alice, 1) >> 96) & type(uint64).max, 4);
     }
@@ -398,12 +398,12 @@ contract PqzStateTest is PqzSlots {
         _public(tok, mallory, 3 * SCALE);
         vm.prank(mallory);
         tok.pqzShield(alice, 3);
-        assertEq(tok.accountState(alice).pendingCount, 2, "appended (the tail is of an earlier block)");
+        assertEq(tok.pqzAccount(alice).pendingCount, 2, "appended (the tail is of an earlier block)");
         assertEq(tok.transferSingleStatement(pl, 0), st, "same T");
         vm.expectCall(PQZ, abi.encodePacked(uint8(1), uint32(st.length), st, hex"c0de"));
         _send(pl, "");
         assertEq((tok.pqzPending(alice, 1) >> 96) & type(uint64).max, 3, "still pending");
-        assertEq(tok.accountState(alice).rolled, 1);
+        assertEq(tok.pqzAccount(alice).rolled, 1);
     }
 
     /// The documented residual of spec §5.9 (pinned, intentional): a debit whose window holds an entry of its own block
@@ -419,7 +419,7 @@ contract PqzStateTest is PqzSlots {
         _public(tok, mallory, SCALE);
         vm.prank(mallory);
         tok.pqzShield(alice, 1); // merged into entry 0: T changes
-        assertEq(tok.accountState(alice).pendingCount, 1, "merged");
+        assertEq(tok.pqzAccount(alice).pendingCount, 1, "merged");
         assertTrue(keccak256(tok.transferSingleStatement(pl, 0)) != keccak256(st));
         vm.expectRevert(IPqzToken.ProofRejected.selector);
         _send(pl, "");
@@ -430,9 +430,9 @@ contract PqzStateTest is PqzSlots {
         _public(tok, mallory, SCALE);
         vm.prank(mallory);
         tok.pqzShield(alice, 1);
-        assertEq(tok.accountState(alice).pendingCount, 2, "appended");
+        assertEq(tok.pqzAccount(alice).pendingCount, 2, "appended");
         _send(pl, "");
-        assertEq(tok.accountState(alice).rolled, 1);
+        assertEq(tok.pqzAccount(alice).rolled, 1);
     }
 
     /// TRIVIAL entries on both sides of `p` in an un-roll: `T` is exact; `unitsOf` counts each entry.
@@ -492,7 +492,7 @@ contract PqzStateTest is PqzSlots {
             bytes memory o7 = _blob(2, 2 * PqzCt.PK + 9 * PqzCt.V);
             for (uint256 i; i < PqzCt.PK; ++i) o7[g * PqzCt.PK + i] = 0;
             bytes memory pl = bytes.concat(abi.encode(uint256(0), block.number + 100, uint256(0), alice, bytes32(0),
-                uint256(8)), salt, abi.encodePacked(legs), o7);
+                uint256(8), uint256(0)), salt, abi.encodePacked(legs), o7);
             vm.expectRevert(IPqzToken.ZeroU.selector);
             tok.pqzTransfer(pl, "", hex"c0de", _mlAuth());
         }
@@ -523,7 +523,7 @@ contract PqzStateTest is PqzSlots {
         (legs[0], legs[1]) = (bob, alice);
         bytes memory o7 = _blob(5, PqzCt.PK + 3 * PqzCt.V + 2 * PqzCt.V);
         tok.pqzTransfer(bytes.concat(abi.encode(uint256(0), block.number + 100, uint256(0), carol, bytes32(0),
-            uint256(2)), salt, abi.encodePacked(legs), o7), "", hex"c0de", _mlAuth());
+            uint256(2), uint256(0)), salt, abi.encodePacked(legs), o7), "", hex"c0de", _mlAuth());
         pend[bob].push(bytes.concat(_cut(o7, 0, PqzCt.PK), _cut(o7, PqzCt.PK, PqzCt.V)));
         pend[alice].push(bytes.concat(_cut(o7, 0, PqzCt.PK), _cut(o7, PqzCt.PK + PqzCt.V, PqzCt.V)));
         _restoreCheck(alice);
@@ -540,7 +540,7 @@ contract PqzStateTest is PqzSlots {
     }
 
     function _restoreCheck(bytes32 ua) internal view {
-        IPqzToken.AccountState memory a = tok.accountState(ua);
+        IPqzToken.AccountState memory a = tok.pqzAccount(ua);
         assertEq(tok.pqzAcc(ua), _acc(ua), "acc from state");
         for (uint256 i = a.rolled; i < a.pendingCount; ++i) assertEq(tok.pqzPendingCt(ua, uint64(i)), _entCt(ua, i), "pending ct");
         if (a.flags & 1 != 0) assertEq(a.accHash, keccak256(tok.pqzAcc(ua)), "accHash of the materialised acc");
@@ -554,7 +554,7 @@ contract PqzStateTest is PqzSlots {
         bytes memory r = bytes.concat(salt, _cut(out, 0, PqzCt.CT), _cut(out, 16_640, 128), bob);
         assertEq(tok.transferEntry(ref), r);
         assertEq(tok.transferCiphertextHash(ref), keccak256(r));
-        IPqzToken.AccountState memory a = tok.accountState(alice);
+        IPqzToken.AccountState memory a = tok.pqzAccount(alice);
         assertEq(a.accBlob.code.length, 1 + r.length + PqzCt.V, "STOP, R, v_f");
         uint256 e = tok.pqzPending(bob, 0);
         assertEq(address(uint160(e >> 96)), a.accBlob, "the credit points into the sender's blob");
@@ -611,7 +611,7 @@ contract PqzStateHandler is Test {
 
     function credit() external {
         bytes memory out = _blob(++seed, 16_640);
-        bytes memory pl = bytes.concat(abi.encode(tok.accountState(carol).pendingCount, block.number + 100, uint256(0),
+        bytes memory pl = bytes.concat(abi.encode(tok.pqzAccount(carol).pendingCount, block.number + 100, uint256(0),
             carol, alice, bytes32(0)), bytes16(uint128(seed)), out);
         tok.pqzTransferSingle(pl, "", hex"c0de", auth);
         bytes memory u = new bytes(PqzCt.CT);
@@ -623,7 +623,7 @@ contract PqzStateHandler is Test {
 
     function shield(uint256 amount) external {
         amount = bound(amount, 1, 1000);
-        IPqzToken.AccountState memory a = tok.accountState(alice);
+        IPqzToken.AccountState memory a = tok.pqzAccount(alice);
         uint256 n = ents.length;
         uint256 lo = a.floor > a.rolled ? a.floor : a.rolled;
         tok.pqzShield(alice, amount);
@@ -634,7 +634,7 @@ contract PqzStateHandler is Test {
             amts.push(amount);
             blks.push(block.number);
         }
-        assertEq(tok.accountState(alice).pendingCount, ents.length, "mirror: merge / append");
+        assertEq(tok.pqzAccount(alice).pendingCount, ents.length, "mirror: merge / append");
     }
 
     function advance(uint256 k) external {
@@ -643,7 +643,7 @@ contract PqzStateHandler is Test {
 
     /// Anyone's rollover after `ROLL_AGE` blocks (a keeper), of 1 .. all pending entries.
     function roll(uint256 n) external {
-        IPqzToken.AccountState memory a = tok.accountState(alice);
+        IPqzToken.AccountState memory a = tok.pqzAccount(alice);
         if (a.pendingCount == a.rolled) return;
         vm.roll(block.number + 5);
         tok.pqzRollOver(alice, bound(n, 1, a.pendingCount - a.rolled));
@@ -654,7 +654,7 @@ contract PqzStateHandler is Test {
     /// `hint`: 0 none, 1 the current `pqzAcc` (a reference after a debit), 2 the last materialised `acc` (stale after
     /// a debit or a later rollover; its keccak may still be the stored `accHash`): `T` must be the state's every time.
     function debit(uint256 sel, uint8 hint) external {
-        IPqzToken.AccountState memory a = tok.accountState(alice);
+        IPqzToken.AccountState memory a = tok.pqzAccount(alice);
         uint256 lo = a.rolled > 16 ? a.rolled - 16 : 0;
         if (lo < a.floor) lo = a.floor;
         uint256 hi = a.rolled + 16 < a.pendingCount ? a.rolled + 16 : a.pendingCount;
@@ -709,7 +709,7 @@ contract PqzStateInvariantTest is PqzFixture {
     /// forge-config: default.invariant.runs = 16
     /// forge-config: default.invariant.depth = 32
     function invariant_everyEntryInExactlyOnePlace() public view {
-        IPqzToken.AccountState memory a = tok.accountState(alice);
+        IPqzToken.AccountState memory a = tok.pqzAccount(alice);
         assertLe(a.cleared, a.floor);
         assertLe(a.floor, a.rolled);
         assertLe(a.rolled, a.pendingCount);

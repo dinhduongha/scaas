@@ -67,9 +67,9 @@ interface IFactoryToken {
         uint256 confidentialFee;
         uint8 disclosureMode;
         uint8 auditorMode;
-        /// PQZ only (op 7, CTR-PQZ-25): a public amount credited to every listed leg of a multi-recipient transfer,
-        /// paid by the sender with the fee; 0 = none. Zether kinds: must be 0.
-        uint256 multiLegFee;
+        /// PQZ only (op 7, CTR-PQZ-25; owner 2026-10-20): the least `decoyFee` a sender may put in an op 7 payload; the
+        /// sender's `decoyFee` goes to every leg's public balance. Immutable; 0 allowed. Zether kinds: must be 0 (5h Task 3b).
+        uint256 minDecoyFee;
     }
 
     /// @notice CTR-TOK-25. Fields of another kind must be empty (`ConfigFieldForOtherKind`), so a token never carries a

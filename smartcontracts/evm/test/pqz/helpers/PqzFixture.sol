@@ -8,11 +8,14 @@ import {IOpenFactory} from "../../../src/factory/IOpenFactory.sol";
 import {IFactoryToken} from "../../../src/factory/IFactoryToken.sol";
 import {AdminLib} from "../../../src/metatx/AdminLib.sol";
 import {NoUnderlyingPqzToken} from "../../../src/pqz/NoUnderlyingPqzToken.sol";
+import {UnderlyingPqzToken} from "../../../src/pqz/UnderlyingPqzToken.sol";
+import {MockERC20} from "../../helpers/Mocks.sol";
 import {PqzLayer} from "../../../src/pqz/PqzLayer.sol";
 import {PqzCt} from "../../../src/pqz/PqzCt.sol";
 import {PqzCore} from "../../../src/pqz/PqzCore.sol";
 import {ZetherTypes} from "../../../src/zether/ZetherTypes.sol";
 import {IPqzToken} from "../../../src/pqz/IPqzToken.sol";
+import {MetaTxLib} from "../../../src/common/MetaTxLib.sol";
 import {Catalogue, pqzEnv} from "../../helpers/Catalogue.sol";
 
 /// @notice The PQZ token stack of chain 7622 in forge (P6g plan D6): the gen-1 registry (`PqzRegistryBase`), `OpenFactory`
@@ -39,13 +42,15 @@ abstract contract PqzFixture is PqzRegistryBase {
     uint8 internal aMode = uint8(ZetherTypes.AuditorMode.OPTIONAL);
     bytes16 internal salt = bytes16(uint128(0x5A17));
     uint256 internal minted;
-    uint256 internal mlf; // multiLegFee (op 7)
+    uint256 internal minDecoy; // the token's `minDecoyFee` (op 7)
+    uint256 internal decoy; // the sender's per-leg `decoyFee` in an op 7 payload
 
     /// the client's view of each account: `acc` and every entry ever appended (TRIVIAL amounts in `triv`)
     mapping(bytes32 => bytes) internal accOf;
     mapping(bytes32 => bytes[]) internal pend;
     mapping(bytes32 => mapping(uint256 => uint256)) internal triv;
     mapping(bytes32 => mapping(uint256 => uint256)) internal trivBlk; // the block a TRIVIAL entry was appended in
+    mapping(bytes32 => uint256) internal feeIn; // fees paid to a UA's public balance, in shielded units
 
     function _stack() internal virtual {
         _registryStack();
@@ -75,12 +80,27 @@ abstract contract PqzFixture is PqzRegistryBase {
         c.roles.minter = address(this);
         bool withAud = aMode != uint8(ZetherTypes.AuditorMode.NONE);
         c.conf = IFactoryToken.ConfidentialConfig(
-            withAud ? abi.encode(aud) : bytes(""), SCALE, maxShielded, FEE, dMode, aMode, mlf
+            withAud ? abi.encode(aud) : bytes(""), SCALE, maxShielded, FEE, dMode, aMode, minDecoy
         );
     }
 
     function _newToken(bytes32 s) internal returns (PqzLayer) {
         return PqzLayer(factory.createToken(IOpenFactory.TokenKind.NONE_PQZ, 1, abi.encode(_cfg(uint256(1) << 40)), s));
+    }
+
+    function _releaseUnderlying() internal {
+        Catalogue.release(factory, IOpenFactory.TokenKind.UNDERLYING_PQZ, 1,
+            pqzEnv(address(factory), PQZ_UID, address(reg), address(pqv)), type(UnderlyingPqzToken).creationCode);
+    }
+
+    /// An `UNDERLYING_PQZ` token with one 1:1 `MockERC20` leg (after `_releaseUnderlying`).
+    function _newUnderlying(bytes32 s) internal returns (UnderlyingPqzToken) {
+        IFactoryToken.TokenConfig memory c = _cfg(uint256(1) << 40);
+        c.features = (1 << AdminLib.PAYABLE);
+        c.roles.minter = address(0);
+        c.legs = new IFactoryToken.Leg[](1);
+        c.legs[0] = IFactoryToken.Leg(address(new MockERC20("USD", "USD", 6)), 1, 1);
+        return UnderlyingPqzToken(payable(factory.createToken(IOpenFactory.TokenKind.UNDERLYING_PQZ, 1, abi.encode(c), s)));
     }
 
     // ------------------------------------------------------------------ ciphertexts
@@ -111,6 +131,20 @@ abstract contract PqzFixture is PqzRegistryBase {
         return bytes.concat(abi.encode(p, block.number + 100, shieldIn, from, to, ben), salt, out, memo);
     }
 
+    /// Op 7: `p ‖ validUntilBlock ‖ shieldIn ‖ fromUA ‖ beneficiaryUA ‖ M ‖ decoyFee ‖ salt(16) ‖ UA_0 … UA_{M−1} ‖ out ‖
+    /// [memo]` (`decoyFee` the sender's per-leg fee, owner 2026-10-20).
+    function _mpayload(uint256 p, uint256 shieldIn, bytes32 from, bytes32 ben, bytes32[] memory rec, bytes memory out,
+        bytes memory memo) internal view returns (bytes memory)
+    {
+        bytes memory r;
+        for (uint256 j; j < rec.length; ++j) r = bytes.concat(r, rec[j]);
+        return bytes.concat(abi.encode(p, block.number + 100, shieldIn, from, ben, rec.length, decoy), salt, r, out, memo);
+    }
+
+    function _outLen(uint256 m, bool withAud) internal pure returns (uint256) {
+        return PqzCt.PK * ((m + 3) / 4) + PqzCt.V * (m + 1) + (withAud ? PqzCt.V * m : 0);
+    }
+
     function _memo() internal view returns (bytes memory) {
         return bytes.concat(salt, _slice(_blob(0x3e30, 64), 0, 41));
     }
@@ -134,7 +168,7 @@ abstract contract PqzFixture is PqzRegistryBase {
     /// the tail when it is TRIVIAL, of this block and at an index `≥ max(floor, rolled)`, else append; the token must
     /// agree. `pend` holds "" and `triv` the amount (16.5 KB of test storage per entry would cost ≈ 11 M gas).
     function _mirrorTrivial(PqzLayer t, bytes32 ua, uint256 amount) internal {
-        IPqzToken.AccountState memory a = t.accountState(ua);
+        IPqzToken.AccountState memory a = t.pqzAccount(ua);
         uint256 n = pend[ua].length;
         uint256 lo = a.floor > a.rolled ? a.floor : a.rolled;
         if (n != 0 && pend[ua][n - 1].length == 0 && trivBlk[ua][n - 1] == block.number && n - 1 >= lo) {
@@ -196,14 +230,14 @@ abstract contract PqzFixture is PqzRegistryBase {
         ref = t.pqzTransferSingle(pl, "", hex"c0de", _mlAuth());
         _afterDebit(from, _cut(out, 0, PqzCt.PK), _cut(out, PqzCt.CT, PqzCt.V));
         pend[to].push(_cut(out, 0, PqzCt.CT));
-        if (ben != 0 && t.confidentialFee() != 0) _mirrorTrivial(t, ben, t.confidentialFee());
+        if (ben != 0) feeIn[ben] += t.confidentialFee(); // txFee: the beneficiary's public balance (D19)
     }
 
     function _payloadFor(PqzLayer t, bytes32 from, bytes32 to, bytes32 ben, bytes memory out)
         internal view returns (bytes memory)
     {
         bytes memory memo = t.disclosureMode() == ZetherTypes.DisclosureMode.COMPACT ? _memo() : bytes("");
-        return _payload(t.accountState(from).pendingCount, 0, from, to, ben, out, memo);
+        return _payload(t.pqzAccount(from).pendingCount, 0, from, to, ben, out, memo);
     }
 
     /// The client's `acc` after any debit: `u ‖ v_f` (D4: a debit below `rolled` un-rolls, it keeps nothing).
@@ -213,7 +247,7 @@ abstract contract PqzFixture is PqzRegistryBase {
 
     /// Both halves of the account's `acc` words (D8), once.
     function _prepare(PqzLayer t, bytes32 ua) internal {
-        uint8 f = t.accountState(ua).flags;
+        uint8 f = t.pqzAccount(ua).flags;
         if (f & 2 == 0) t.pqzPrepareAcc(ua, 0);
         if (f & 4 == 0) t.pqzPrepareAcc(ua, 1);
     }
@@ -222,18 +256,25 @@ abstract contract PqzFixture is PqzRegistryBase {
     function _roll(PqzLayer t, bytes32 ua, uint256 n) internal {
         _prepare(t, ua);
         vm.roll(block.number + ROLL_AGE);
-        uint256 r = t.accountState(ua).rolled;
+        uint256 r = t.pqzAccount(ua).rolled;
         t.pqzRollOver(ua, n);
-        accOf[ua] = _sumRange(_acc(ua), ua, r, t.accountState(ua).rolled, 0);
+        accOf[ua] = _sumRange(_acc(ua), ua, r, t.pqzAccount(ua).rolled, 0);
     }
 
+    /// D19: shields, unshields and fees move public units to / from `SHIELD_POOL`; nothing is minted or burnt.
     function _assertConservation(PqzLayer t) internal view {
-        assertEq(t.totalSupply() + t.totalShielded() * SCALE, minted, "public + shielded = created");
+        assertEq(t.totalSupply(), minted, "totalSupply = created");
+        assertEq(t.balanceOf(MetaTxLib.SHIELD_POOL), t.totalShielded() * SCALE, "pool = totalShielded * scale");
     }
 
     /// A direct transfer's `envelopeBinding` word (review W-A).
     function _direct(ZetherTypes.TransferMode m) internal pure returns (bytes32) {
         return keccak256(abi.encode(PqzCore.TAG_DIRECT_MODE, uint8(m)));
+    }
+
+    /// A relayed transfer's binding word: the envelope's with the mode folded in (plan 5h D15, review L1).
+    function _relayed(bytes32 envelope, ZetherTypes.TransferMode m) internal pure returns (bytes32) {
+        return keccak256(abi.encode(envelope, uint8(m)));
     }
 
     function _cut(bytes memory b, uint256 off, uint256 len) internal pure returns (bytes memory) {
