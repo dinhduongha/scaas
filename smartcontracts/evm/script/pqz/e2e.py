@@ -269,7 +269,7 @@ class PQ:
 # ------------------------------------------------------------------ the scenario
 
 class UA:
-    """An ML-DSA UA (`kind`, seed) or a PQZ UA (seed32, pk, s, e, authRef)."""
+    """An ML-DSA UA (`kind`, seed); a PQZ holder also has the PQZ key (pk, s, e)."""
 
     def __init__(self, **kw):
         self.__dict__.update(kw)
@@ -403,31 +403,34 @@ def run(kd, kr, ke):
         u = UA(name=name, kind=kind, seed=seed, pk=pk, ua=ua)
         pd = words(call(reg, cd("popDigest(bytes32,bytes32)", ["w", "w"], ua, 0)))[0]
         pop = pq.ml_sign(lvl, seed, kc(TAG[kind], ua_msg(kind, P_POP, pd)))
-        sd.send(reg, cd("register(uint16,bytes,bytes,bytes32,bytes)", ["w", "b", "b", "w", "b"], kind, pk, pop, 0, b""),
+        sd.send(reg, cd("register(uint16,bytes,bytes,bytes,bytes)", ["w", "b", "b", "b", "b"], kind, pk, pop, b"", b""),
                 f"register {name} (mldsa{lvl}, seed {seed.hex()[:8]}…)")
         return u
 
-    def pqz_ua(name, seed, auth):
+    def pqz_ua(name, seed, mlseed):
+        """A PQZ holder (UA-6): an ML-DSA-65 UA with the pqz-mlwe key as an attribute, ONE register call."""
         pk, s, e, _ = K.keygen(seed)
-        ua = words(call(reg, cd("uaOf(uint16,bytes)", ["w", "b"], PQZ_MLWE, pk)))[0]
-        pd = words(call(reg, cd("popDigest(bytes32,bytes32)", ["w", "w"], ua, auth.ua)))[0]
-        stmt = K.build_register(ua_msg(PQZ_MLWE, P_POP, pd), pk)
-        proof = pq.prove(3, stmt, K.i8(s) + K.i16(e))
-        sd.send(reg, cd("register(uint16,bytes,bytes,bytes32,bytes)", ["w", "b", "b", "w", "b"], PQZ_MLWE, pk, proof,
-                        auth.ua, ml_auth(pq, auth, P_AUTHREF, pd)), f"register {name} (pqz-mlwe, R_REG {len(proof):,} B)")
-        kind = int.from_bytes(words(call(reg, cd("kindOf(bytes32)", ["w"], ua)))[0], "big")
-        check(kind == PQZ_MLWE, f"{name} = {ua.hex()[:16]}… kindOf 0x0142")
-        return UA(name=name, kind=PQZ_MLWE, seed=seed, pk=pk, s=s, e=e, ua=ua, auth=auth)
+        mlpk = pq.ml_pk(65, mlseed)
+        ua = words(call(reg, cd("uaOf(uint16,bytes)", ["w", "b"], MLDSA65, mlpk)))[0]
+        h = words(call(reg, cd("keyHashOf(uint16,bytes)", ["w", "b"], PQZ_MLWE, pk)))[0]
+        pd = words(call(reg, cd("popDigest(bytes32,bytes32)", ["w", "w"], ua, h)))[0]
+        pop = pq.ml_sign(65, mlseed, kc(TAG[MLDSA65], ua_msg(MLDSA65, P_POP, pd)))
+        proof = pq.prove(3, K.build_register(ua_msg(PQZ_MLWE, P_POP, pd), pk), K.i8(s) + K.i16(e))
+        sd.send(reg, cd("register(uint16,bytes,bytes,bytes,bytes)", ["w", "b", "b", "b", "b"], MLDSA65, mlpk, pop, pk, proof),
+                f"register {name} (mldsa65 + pqz-mlwe key, R_REG {len(proof):,} B, one call)")
+        rec = words(call(reg, cd("recordOf(bytes32)", ["w"], ua)))
+        check(int.from_bytes(rec[-1], "big") != 0, f"{name} = {ua.hex()[:16]}… recordOf: PQZ key pointer set")
+        check(int.from_bytes(words(call(reg, cd("kindOf(bytes32)", ["w"], ua)))[0], "big") == MLDSA65, f"{name} kindOf 0x0131")
+        return UA(name=name, kind=MLDSA65, seed=mlseed, pk=pk, s=s, e=e, ua=ua)
 
     sk = lambda tag: kc("p6g-e2e-7622/", tag)  # noqa: E731  (test seeds, in this log on purpose)
     log(f"test seeds: keccak256('p6g-e2e-7622/<name>')")
-    ml = {n: ml_ua(f"auth-{n}", MLDSA65, sk("ml-" + n)) for n in ("alice", "bob", "aud", "carol")}
     ml44 = ml_ua("auth-44", MLDSA44, sk("ml44"))
     feeua = ml_ua("fee-ua", MLDSA65, sk("fee"))
-    U = {n: pqz_ua(n, sk("pqz-" + n), ml[n]) for n in ("alice", "bob", "aud", "carol")}
+    U = {n: pqz_ua(n, sk("pqz-" + n), sk("ml-" + n)) for n in ("alice", "bob", "aud", "carol")}
     alice, bob, aud, carol = U["alice"], U["bob"], U["aud"], U["carol"]
-    # op 7 decoys (P6g op 7): five more pqz-mlwe UAs, authority carol's ML-DSA UA
-    DEC = [pqz_ua(f"decoy{i}", sk(f"pqz-decoy{i}"), ml["carol"]) for i in range(5)]
+    # op 7 decoys (P6g op 7): five more PQZ holders
+    DEC = [pqz_ua(f"decoy{i}", sk(f"pqz-decoy{i}"), sk(f"ml-decoy{i}")) for i in range(5)]
 
     # secp256k1 (ECDSA, 0x0108; CTR-UA-06, owner 2026-10-17): a secp256k1 key registers a derived id, separate from
     # its EOA address and the same on every chain
@@ -441,8 +444,8 @@ def run(kd, kr, ke):
     sec_ua = words(call(reg, cd("uaOf(uint16,bytes)", ["w", "b"], SECP256K1, secd)))[0]
     check(sec_ua == kc(TAG[SECP256K1], secd), "secp256k1 UA = keccak256(TAG ‖ x ‖ y)")
     pd = words(call(reg, cd("popDigest(bytes32,bytes32)", ["w", "w"], sec_ua, b"\0" * 32)))[0]
-    sd.send(reg, cd("register(uint16,bytes,bytes,bytes32,bytes)", ["w", "b", "b", "w", "b"], SECP256K1, secd,
-                    ecdsa(seck, ua_msg(SECP256K1, P_POP, pd)), b"\0" * 32, b""), "register secp256k1 (ECDSA PoP)")
+    sd.send(reg, cd("register(uint16,bytes,bytes,bytes,bytes)", ["w", "b", "b", "b", "b"], SECP256K1, secd,
+                    ecdsa(seck, ua_msg(SECP256K1, P_POP, pd)), b"", b""), "register secp256k1 (ECDSA PoP)")
     kind = int.from_bytes(words(call(reg, cd("kindOf(bytes32)", ["w"], sec_ua)))[0], "big")
     check(kind == SECP256K1, f"secp256k1 UA {sec_ua.hex()[:16]}… kindOf 0x0108; the same key's EOA {address(seck)} is a "
                              f"separate native id")
@@ -460,7 +463,7 @@ def run(kd, kr, ke):
         check(True, "secp256k1 signature over another digest is refused (UAUnauthorized)")
 
     # the per-kind list (CTR-UA-29, owner 2026-10-17): every UA of a kind in registration order
-    for kind, uas in ((PQZ_MLWE, [u.ua for u in list(U.values()) + DEC]), (MLDSA65, [u.ua for u in list(ml.values()) + [feeua]]),
+    for kind, uas in ((PQZ_MLWE, [u.ua for u in list(U.values()) + DEC]), (MLDSA65, [u.ua for u in [feeua] + list(U.values()) + DEC]),
                       (MLDSA44, [ml44.ua]), (SECP256K1, [sec_ua])):
         n = int.from_bytes(words(call(reg, cd("uaCount(uint16)", ["w"], kind)))[0], "big")
         at = [words(call(reg, cd("uaAt(uint16,uint256)", ["w", "w"], kind, i)))[0] for i in range(n)]
@@ -673,7 +676,7 @@ def transfer(pq, s, C, frm, to, ben, v, aud_on, what, binding=b"\0" * 32, send=T
     wit = K.i8(frm.s) + K.i16(frm.e) + K.i8(r_) + K.i16(e1) + b"".join(K.i16(x) for x in e2) + bytes(K.digits(v)) + bytes(K.digits(rest))
     proof = pq.prove(1, stmt, wit)
     ad = kc("SCAAS-PQZ-AUTH-V1", keccak256(stmt))
-    auth = ml_auth(pq, frm.auth, P_ZAUTH, ad)
+    auth = ml_auth(pq, frm, P_ZAUTH, ad)
     data = cd("pqzTransferSingle(bytes,bytes,bytes[],bytes,bytes)", ["b", "b", ("a", "b"), "b", "b"], pl, C.accb(frm), inl, proof, auth)
     log(f"      {what}: balance {b} → {rest} (+{v} to {to.name}, fee {fee}), p {p}, plainUsed {plain}, {len(inl)} inline, "
         f"proof {len(proof):,} B, auth {len(auth):,} B")
@@ -732,7 +735,7 @@ def transfer_multi(pq, s, C, frm, legs, ben, aud_on, what):
     t0 = time.time()
     proof = pq.prove(7, stmt, wit)
     tp = time.time() - t0
-    auth = ml_auth(pq, frm.auth, P_ZAUTH, kc("SCAAS-PQZ-AUTH-V1", keccak256(stmt)))
+    auth = ml_auth(pq, frm, P_ZAUTH, kc("SCAAS-PQZ-AUTH-V1", keccak256(stmt)))
     data = cd("pqzTransfer(bytes,bytes,bytes[],bytes,bytes)", ["b", "b", ("a", "b"), "b", "b"], pl, C.accb(frm), inl, proof, auth)
     log(f"      {what}: M {m}, balance {b} → {rest}, fee {fee}, proof {len(proof):,} B in {tp:.2f} s, calldata {len(data):,} B")
     newacc = e["us"][0] + e["v_f"]
@@ -774,7 +777,7 @@ def burn(pq, s, C, frm, amount, recipient, what, unwrap=None):
     stmt = view(pl)
     wit = K.i8(frm.s) + K.i16(frm.e) + K.i8(r_) + K.i16(e1) + K.i16(e2[0]) + bytes(K.digits(rest))
     proof = pq.prove(2, stmt, wit)
-    auth = ml_auth(pq, frm.auth, P_ZAUTH, kc("SCAAS-PQZ-AUTH-V1", keccak256(stmt)))
+    auth = ml_auth(pq, frm, P_ZAUTH, kc("SCAAS-PQZ-AUTH-V1", keccak256(stmt)))
     if unwrap:
         data = cd("pqzUnshieldUnwrap(bytes,bytes,bytes[],(address,address,uint256,uint256),bytes,bytes)",
                   ["b", "b", ("a", "b"), UNWRAP, "b", "b"], pl, C.accb(frm), inl, x, proof, auth)
