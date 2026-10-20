@@ -267,7 +267,11 @@ library PqzCore {
     }
 
     /// @dev A TRIVIAL entry `(amount, block)` (D18): merged into the tail when that is TRIVIAL, of this block and still
-    ///      pending (index `≥ max(floor, rolled)`: never one a same-block debit spent), else appended.
+    ///      pending (index `≥ max(floor, rolled)`: never one a same-block debit spent), else appended. A debit proven on
+    ///      an earlier block never holds the merged entry in its window. Residual (spec §5.9, accepted): a submitter
+    ///      that predicted an entry of its own block and holds it in its window can have the debit reverted by a
+    ///      same-block merge before it (`T` changes, the proof fails); wallets use the same-call `shieldIn` instead
+    ///      (pinned by `test_trivial_sameBlockResidual`).
     function _trivial(bytes32 ua, uint256 amount) internal {
         Account storage b = $().acct[ua];
         uint64 n = b.pendingCount;
@@ -663,6 +667,8 @@ library PqzCore {
         if (p < a.floor || p > a.pendingCount) revert IPqzToken.PendingRange(p, a.floor, a.pendingCount);
         bool up = p >= r;
         uint256 n = up ? p - r : r - p;
+        // Down (`p < rolled`) this is defence in depth: every rollover sets `floor ≥ rolled − INLINE_MAX`, so
+        // `PendingRange` fires first for `rolled − p > INLINE_MAX` (PQZH op 7's 10 still applies here).
         if (n > (o.op == 7 && $().psid == PQZH_ID ? INLINE_MAX_PQZH : INLINE_MAX)) revert IPqzToken.InlineTooFar(n);
         t = _accOf(a, hint);
         _window(a, t, up ? r : p, n, up, false);

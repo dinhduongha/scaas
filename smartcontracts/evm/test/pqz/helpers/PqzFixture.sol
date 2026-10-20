@@ -12,6 +12,7 @@ import {PqzLayer} from "../../../src/pqz/PqzLayer.sol";
 import {PqzCt} from "../../../src/pqz/PqzCt.sol";
 import {PqzCore} from "../../../src/pqz/PqzCore.sol";
 import {ZetherTypes} from "../../../src/zether/ZetherTypes.sol";
+import {IPqzToken} from "../../../src/pqz/IPqzToken.sol";
 import {Catalogue, pqzEnv} from "../../helpers/Catalogue.sol";
 
 /// @notice The PQZ token stack of chain 7622 in forge (P6g plan D6): the gen-1 registry (`PqzRegistryBase`), `OpenFactory`
@@ -44,6 +45,7 @@ abstract contract PqzFixture is PqzRegistryBase {
     mapping(bytes32 => bytes) internal accOf;
     mapping(bytes32 => bytes[]) internal pend;
     mapping(bytes32 => mapping(uint256 => uint256)) internal triv;
+    mapping(bytes32 => mapping(uint256 => uint256)) internal trivBlk; // the block a TRIVIAL entry was appended in
 
     function _stack() internal virtual {
         _registryStack();
@@ -128,12 +130,20 @@ abstract contract PqzFixture is PqzRegistryBase {
         return ct.sum(new bytes(PqzCt.CT), new bytes[](0), new bytes[](0), amount);
     }
 
-    /// The client's mirror of a TRIVIAL entry the token appended or merged into its tail (D18): `pend` holds "" and
-    /// `triv` the amount (16.5 KB of test storage per entry would cost ≈ 11 M gas).
+    /// The client's mirror of a TRIVIAL entry (D18), the merge rule computed here, not read from the token: merge into
+    /// the tail when it is TRIVIAL, of this block and at an index `≥ max(floor, rolled)`, else append; the token must
+    /// agree. `pend` holds "" and `triv` the amount (16.5 KB of test storage per entry would cost ≈ 11 M gas).
     function _mirrorTrivial(PqzLayer t, bytes32 ua, uint256 amount) internal {
-        uint256 n = t.accountState(ua).pendingCount;
-        if (n > pend[ua].length) pend[ua].push("");
-        triv[ua][n - 1] += amount;
+        IPqzToken.AccountState memory a = t.accountState(ua);
+        uint256 n = pend[ua].length;
+        uint256 lo = a.floor > a.rolled ? a.floor : a.rolled;
+        if (n != 0 && pend[ua][n - 1].length == 0 && trivBlk[ua][n - 1] == block.number && n - 1 >= lo) {
+            triv[ua][n - 1] += amount;
+        } else {
+            pend[ua].push("");
+            (triv[ua][n], trivBlk[ua][n]) = (amount, block.number);
+        }
+        assertEq(a.pendingCount, pend[ua].length, "mirror: merge / append");
     }
 
     /// Entry `i` as a ciphertext (a TRIVIAL one rebuilt from its amount).
