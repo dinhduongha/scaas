@@ -123,7 +123,7 @@ library TradeLib {
                 }
             }
             if (mulGt(move, o.receiveAmount, f.receiveFill, o.amount)) revert ITradeToken.PriceLimit(h);
-            if (f.dexFee > (f.receiveFill * o.fee + PPM - 1) / PPM) revert ITradeToken.FeeAboveSigned(h);
+            if (f.dexFee > Math.mulDiv(f.receiveFill, o.fee, PPM, Math.Rounding.Ceil)) revert ITradeToken.FeeAboveSigned(h);
         } else {
             move = o.amount;
             if (p != 0 || f.sellFill != move || f.receiveFill != 0 || f.dexFee != 0) {

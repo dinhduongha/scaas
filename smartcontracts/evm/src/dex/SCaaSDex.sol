@@ -428,7 +428,7 @@ contract SCaaSDex is ISCaaSDex, SaltedEIP712, ReentrancyGuardTransient {
         DexStorage storage s = _s();
         ITradeToken.UATradeOrder memory o = c.o;
         to = o.destination == 0 ? o.from : o.destination;
-        relayerShare = c.fee * s.relayerSharePpm / PPM;
+        relayerShare = Math.mulDiv(c.fee, s.relayerSharePpm, PPM);
         treasuryShare = c.fee - relayerShare;
         _sendTo(o.receiveToken, to, c.recv - c.fee + surplus);
         _send(o.receiveToken, submitter, relayerShare);

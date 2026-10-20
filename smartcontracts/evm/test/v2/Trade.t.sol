@@ -90,6 +90,17 @@ contract TradeTest is V2Fixture {
         _expect(ITradeToken.PriceLimit.selector, o, _fill(1 << 200, (1 << 100) - 1, 0));
     }
 
+    /// CHAIN-03 (review T2, 2026-10-19): the signed fee bound of a huge receiveFill is `mulDiv`, not a product past 2^256;
+    /// the bound is exactly ceil(2^250 · 1 %).
+    function test_pathA_feeBound_hugeReceiveFill() public {
+        ITradeToken.TradeOrder memory o = _order(1000, 1 << 250);
+        o.fee = 10_000;
+        uint256 cap = (uint256(1) << 250) / 100 + 1; // 2^250 is not a multiple of 100: ceil = floor + 1
+        _expect(ITradeToken.FeeAboveSigned.selector, o, _fill(1000, 1 << 250, cap + 1));
+        _trade(o, _fill(1000, 1 << 250, cap));
+        assertEq(t.pulled(t.tradeOrderDigest(o)), 1000);
+    }
+
     /// `mulGt` is exactly `a·b > c·d` wherever the products fit, and ordered past 2^256.
     function testFuzz_mulGt(uint128 a, uint128 b, uint128 c, uint128 d) public pure {
         assertEq(TradeLib.mulGt(a, b, c, d), uint256(a) * b > uint256(c) * d);

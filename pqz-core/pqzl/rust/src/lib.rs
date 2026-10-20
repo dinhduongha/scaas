@@ -97,9 +97,13 @@ pub enum Error {
 /// Platform boundary (review H-2, 2026-10-19): best effort, not guaranteed. It is plain stores plus `black_box`; a
 /// volatile write needs `unsafe` (forbidden outside `c-oracle`) and `zeroize` is a dependency (D1), so the compiler
 /// is not bound to keep the stores (`black_box` on the cleared buffer makes eliding them unlikely), and copies it made
-/// itself (moves of arrays and `Wiped` values, register spills, stack temporaries) are never cleared. Not cleared
-/// either, as in C (STATUS Open 8): the masks y / y3 / y4 and the z vectors built from them, `r_times`' products
-/// R·s3 / R'·s4, and the `coeffvec` copies inside the rejection step.
+/// itself (moves of arrays and `Wiped` values, register spills, stack temporaries) are never cleared. Also cleared,
+/// as the C core does since Q-B (`d08e3f9`; review A-3, 2026-10-20): the key helpers' secret key, noise and encryption
+/// randomness (`keys::keypair_from_secret`, `encrypt_raw` with each pk^T r, `decrypt_raw`'s key and plaintext, the
+/// rejected samples of `keygen` / `enc_seed` on their error exits) and the witness parsing's values (`rel::dec_w`,
+/// `debit_witness`, `dr_witness`, `set_upsilon`). Not cleared (C clears them since Q-B with its arena,
+/// `pqz_arena_wipe_release`; a gap of this crate): the masks y / y3 / y4 and the z vectors built from them, `r_times`'
+/// products R·s3 / R'·s4, and the `coeffvec` copies inside the rejection step.
 pub(crate) fn wipe<T: Default>(x: &mut [T]) {
     x.iter_mut().for_each(|e| *e = T::default());
     core::hint::black_box(&*x);
@@ -113,15 +117,27 @@ pub(crate) trait Wipe {
     fn wipe(&mut self);
 }
 
-impl<const N: usize> Wipe for [u8; N] {
+impl<T: Default, const N: usize> Wipe for [T; N] {
     fn wipe(&mut self) {
         wipe(&mut self[..]);
     }
 }
 
-impl Wipe for alloc::vec::Vec<i64> {
+impl<T: Default> Wipe for alloc::vec::Vec<T> {
     fn wipe(&mut self) {
         wipe(&mut self[..]);
+    }
+}
+
+impl<T: Wipe> Wipe for alloc::boxed::Box<T> {
+    fn wipe(&mut self) {
+        (**self).wipe();
+    }
+}
+
+impl Wipe for arith::poly::Poly {
+    fn wipe(&mut self) {
+        wipe(core::slice::from_mut(self));
     }
 }
 
@@ -134,6 +150,13 @@ impl Wipe for arith::polyvec::PolyVec {
 impl<T: Wipe> Drop for Wiped<T> {
     fn drop(&mut self) {
         self.0.wipe();
+    }
+}
+
+impl<T: Wipe> Wiped<T> {
+    /// The value, not wiped: its owner now holds the secret (an output); `blank` takes its place (review A-3)
+    pub(crate) fn take(mut self, blank: T) -> T {
+        core::mem::replace(&mut self.0, blank)
     }
 }
 

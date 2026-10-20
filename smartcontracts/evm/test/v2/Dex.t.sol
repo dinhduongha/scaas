@@ -299,6 +299,29 @@ contract DexTest is Test {
         _expectOne(s, abi.encodeWithSelector(ISCaaSDex.PriceLimit.selector, a.tradeOrderDigest(o)));
     }
 
+    /// CHAIN-03 (review T2, 2026-10-19): a 1 % taker fee on 2^250 B, its signed bound (`TradeLib`) and the relayer
+    /// share (`_payLeg`) are `mulDiv`, not products past 2^256; every amount is the exact one.
+    function test_settle_hugeAmounts_feeAndRelayerShare() public {
+        NoUnderlyingToken big = NoUnderlyingToken(
+            f.createToken(IOpenFactory.TokenKind.NONE, 1, abi.encode(noneInit("G", "G", 0, 1 << 251, bob, address(0))), "g"));
+        vm.prank(admin);
+        dex.setMarket(address(a), address(big), true);
+        DexLegs.Settlement memory s;
+        s.ref = "r";
+        s.makers = new DexLegs.Leg[](1);
+        s.makers[0] = _leg(BOB_PK, big, _order(bob, a, 1 << 250, 500, 0), 1 << 250);
+        s.taker = _leg(ALICE_PK, a, _order(alice, big, 500, 1 << 250, 10_000), 500);
+        DexLegs.Settlement[] memory ss = _one(s);
+        vm.prank(relayer);
+        assertTrue(dex.mtxSettle(DexLegs.wire(ss))[0]);
+        uint256 fee = (uint256(1) << 250) / 100 + 1; // ceil(2^250 · 1 %)
+        uint256 share = fee / 5; // floor(fee · 20 %)
+        assertEq(big.balanceOf(alice), (1 << 250) - fee);
+        assertEq(big.balanceOf(relayer), share);
+        assertEq(big.balanceOf(treasury), fee - share);
+        assertEq(a.balanceOf(bob), 500);
+    }
+
     function test_pathB_takerPartialMatch_refundsInA() public {
         DexLegs.Settlement memory s = _book();
         ITradeToken.TradeOrder memory o = _order(alice, b, 1200, 2000, 3_000);

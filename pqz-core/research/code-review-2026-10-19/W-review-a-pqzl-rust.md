@@ -15,7 +15,7 @@ Only what I confirmed myself or what is new is reported; earlier findings are no
 |---|---|---|---|
 | A-1 | **P0** | V3 / V4 are drawn before `tg`: the JL consistency rows can be cancelled through `g` (= review B's B-1, found independently) | **Confirmed by a run** (Rust generic and specialised verifiers, all 14 relation codes); C by code reading; statement-level forgery a hypothesis |
 | A-2 | P3 | Schwartz–Zippel domain collision: the last β4 row and the υ row share `(hash1, M + 2(d−1))` | Confirmed in code (all four implementations); not exploitable (argument below) |
-| A-3 | P3 | Rust lags the C core's Q-B wiping: key helpers and witness parsing keep secret copies | Confirmed in code |
+| A-3 | P3 | Rust lags the C core's Q-B wiping: key helpers and witness parsing keep secret copies | Confirmed in code; **fixed** `aee749df` + `03d0e512`, review fixes `5747b6e2` (branch `rev2-small-fixes`, verified 2026-10-20) |
 
 ---
 
@@ -96,6 +96,21 @@ opinion is in the section **"Second opinion on review B's B-1"** below; this ent
 - **Suggested fix:** `Wiped` for the `PolyVec`s and the `[i64; 16]` arrays (an `impl Wipe for [i64; N]`), a wiping
   guard for the boxed outputs on the error paths, `crate::wipe` of `dec_w`'s accumulator; update the `lib.rs` comment.
   Proof bytes, keys and verdicts unchanged.
+- **Status: fixed** in `aee749df` (WIP) + `03d0e512` (verified) (branch `rev2-small-fixes`): the suggested fix as
+  above (`Wiped` guards on the key helpers' and witness parsing's secrets, wiping on the error exits, `Wipe` for `[T; N]`, `Vec<T>`, `Box<T>`, `Poly`;
+  `lib.rs` comment updated). Verified 2026-10-20 by `scripts/capped sh pqz-core/pqzl/rust/run.sh a3`
+  (`pqz-core/pqzl/rust/runs/a3-*`): every test binary ok (`c-oracle`, `test-hooks`, `bench`), KATs and native vectors
+  as before, bench and wasm `proofs_fnv` equal to the pinned digests (proof bytes unchanged), native = wasm32 on 387
+  digest lines, 0 fails.
+- **Status, review fixes** (`5747b6e2`; review of the branch: `.superpowers/sdd/2026-10-20-small-fixes-review.md`): P2-1
+  fixed (`encrypt_raw` wipes each recipient's pkᵀr `acc` and its `redc` copy, `wr_poly` its `redp` copy, as C
+  `pqz_rel.c:1551–1552`); Minor-1 fixed (`set_upsilon`'s `Int::from_i64(2, n2)` bound and wiped); Minor-2 fixed
+  (`debit_witness`'s `vals` in `Wiped`); Minor-3 fixed (`keys::encrypt` allocates the e2 copy last); Minor-4 partly
+  (the `take` blanks are allocated before the sampling loop, so a computed key / encryption no longer comes back as
+  `Error::Memory`; the 2 blank allocations stay, since moving a `Box` out of `Wiped` without them needs a dead `Option`
+  branch); Minor-5 no change (the documented H-2 boundary in `lib.rs`). Verified 2026-10-20 by `scripts/capped sh
+  pqz-core/pqzl/rust/run.sh a3b` (`pqz-core/pqzl/rust/runs/a3b-*`): every test binary ok, KATs as before, bench and
+  wasm `proofs_fnv` equal to the pinned digests (proof bytes unchanged), native = wasm32 on 387 digest lines, 0 fails.
 
 ---
 
