@@ -3235,6 +3235,8 @@ proof is ≈ 40 KB), so it rides on a PQ signer; Zether keys can sign, so the si
 
 Change (2026-10-20, owner): **definition — a UA is the actor (person, organization, device or group) that signs and is accountable for a write to a smart contract, tokens included**. Reads need no UA. Consequence (controller reading, consistent with rulings (2)–(4)): anything that cannot sign a write is not a UA but an attribute of one — the PQZ key (attribute of a PQ signer); a classical Zether key is a UA because it signs (Schnorr by `x`) and its proof authorizes the spend. Recorded in README §6. Status: decided.
 
+Change (2026-10-20, owner): **the Zether `authRef` is removed entirely** (no optional spending co-signer): a Zether key UA authorizes its spends by its proof alone and signs its other writes (`zetherRollOverSigned`, `zetherSetRollOverMode`, `pop`) by Schnorr with `x`; a leaked `x` is a full loss (funds and privacy), accepted (analysis `research/shield-and-key-reuse.md` §1). Removed in UA-6 with the PQZ `authRef`: the record field, `authPop`, purpose `authref`, `UAAuthRef`, `survivesEncKeyLeak` for Zether. Status: decided, built in UA-6.
+
 ### CTR-PQZ-01 — Separate PQZ class gated to private chains
 - old: R270 · status: current · owner: yes · date: 2026-10-07 · normative: contracts/pq-zero-knowledge.md#CTR-PQZ-01 · superseded-by: —
 

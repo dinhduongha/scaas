@@ -78,3 +78,44 @@ Trade-off:
 
 Both can coexist: the trivial-entry shield as the default, and `shieldIn` on a debit for a holder who is proving
 anyway. Status: proposal for the owner; if accepted it folds into plan Task 5h (state layout D2 gains an entry type).
+
+## 3. The four transfer flows, rollover vs debit, one name for both layers (owner questions, 2026-10-20)
+
+| Flow (A → B) | Classical Zether today | PQZ today (rulings 2026-10-20) | Proof needed |
+|---|---|---|---|
+| 1. public → public | UA-ledger / ERC-20 transfer | same | no (A's signature) |
+| 2. public → B's confidential | `zetherShield(ua, amount)`: any registered UA, `pending_B += [amount]G` | removed ("no shielding into another account"); own account only, as a proven debit | **no, cryptographically** (a public amount has a trivial encryption) |
+| 3. A's confidential → public | `zetherUnshield` with a `recipient` | `pqzUnshield` with a `recipient` | yes: A's debit (burn) |
+| 4. confidential → confidential | Zether transfer | `R_TX` (op 1), `R_TXM` (op 7) | yes: A's debit |
+
+Flows 2 and 3 are conveniences (flow 1 + B shields, or A unshields + flow 1) that save a transaction and let B stay
+offline; the amount is public in both either way.
+
+**Rollover vs debit (PQZ).** A rollover is permissionless, needs no proof and no key: `acc += Σ pending ciphertexts`
+(homomorphic, on chain); it only raises the balance and the noise (`accUnits += n`). A debit is every operation that
+lowers the encrypted balance — `R_TX`, `R_TXM`, burn / unshield, refresh — and only the owner can make it: the proof
+shows knowledge of the secret key and `b' = b + shieldIn − v − fee ≥ 0`, and `acc` becomes a fresh encryption of `b'`
+(noise reset, `accUnits = 1`). `plainPending` / `shieldIn` was only a public term inside a debit's `T`; removing it
+removes no debit. Its real flaw was that **only a debit could consume it**, so a shielded amount needed a proof before
+it counted in `acc`. Folding public amounts in the rollover (`Trivial(sum)`, zero noise, one unit) removes that flaw.
+
+**Why flow 2 differs between the layers.** Zether: pending is one aggregated ciphertext and EC-ElGamal addition has
+no noise, so any number of third-party shields costs the victim nothing (the spammer pays gas); a public rollover can
+change `acc` under an in-flight debit, which `OWNER_ONLY` mode answers. PQZ: proven credits are separate ciphertexts,
+each costing a unit of `K_MAX` and a state slot — the 2026-10-06 dust attack came from counting public shields the same
+way. Public amounts can instead be **merged into one per-account accumulator** (or one trivial tail entry) folded by
+the rollover as a single unit, so third-party shields cost the receiver nothing either. Design detail for 5h: the fold
+must sit at an ordered position (or be keyed by block) so a debit in flight neither loses the folded amount when it
+replaces `acc` (D4) nor gets griefed by a merge into an entry it inlined.
+
+Controller recommendation: allow all four flows on both layers; flow 2 proof-free on both (Zether as today; PQZ with
+the merged accumulator folded by rollover; shield-to-self is flow 2 with B = A); `shieldIn` on a debit stays optional.
+
+**One name: `mtxShield` / `mtxUnshield`.** Feasible. `zetherShield(ua, amount)` and `pqzShield(ua, amount)` already
+have the same shape; after 5h (D5: debits read `acc` from state, optional hint) the unshields converge on
+`(bytes payload, bytes proof, bytes authSig[, bytes hint])` with the layer's own payload. Points to settle: (1) the
+`*_ZETHER_PQZ` kinds (in the enum, not built) carry both layers, so they need a layer argument or the kind decides;
+(2) `mtx*` in this code base names relayed meta-transaction entry points (`mtxWrap`, `mtxSettle`, …), which fits since
+both layers are relayed through the envelope (CTR-PQZ-21); (3) the siblings follow the same scheme (`mtxWrapShield`,
+`mtxUnshieldUnwrap`, `mtxConfidentialTransfer…`, `mtxRollOver`) and the events (`Shielded` / `Unshielded`) as one
+`IConfidentialToken` interface; (4) timing: with 5h, where the PQZ ABI changes anyway (test chains, no migration).

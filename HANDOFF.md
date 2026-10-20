@@ -49,11 +49,11 @@ removable).
 
 **Later the same day (owner chat, 2026-10-20):** done — HANDOFF / TODO compacted, finished work moved verbatim to
 `COMPLETED.md`; README §6 rewritten with the owner's UA definition (a UA is the actor that signs and answers for a write
-to a contract, tokens included; recorded under CTR-UA-30). Open owner questions: (a) **Otterscan on 7622** — not
+to a contract, tokens included; recorded under CTR-UA-30). Owner later: Otterscan **dropped** (not needed); Zether `authRef` **removed entirely** (decisions CTR-UA-30). Were open: (a) **Otterscan on 7622** — not
 possible on Nethermind 1.39 (no `ots_` / `erigon_` RPC, NethermindEth/nethermind#11990; node container stopped, nothing
 changed): Blockscout from the commented stack in `/home/dockers/mba-chain-nethermind/docker-compose.yml` (recommended,
-≈ 1.5–3 GB, pin tags, `mem_limit`, ports 22776+) or an own `ots_` shim; (b) Z2 `initialize` without Env; (c) keep an
-optional spending co-signer (`authRef`) for Zether key UAs (leak of `x` = read-only) or drop it; (d) proof-free
+≈ 1.5–3 GB, pin tags, `mem_limit`, ports 22776+) or an own `ots_` shim; (b) Z2 `initialize` without Env; (c) Zether
+`authRef` (decided: removed); still open (d) the four transfer flows and shielding into another account, proof-free
 `pqzShield` (trivial pending entry folded by the permissionless rollover) into 5h — analysis
 `docs/research/shield-and-key-reuse.md`.
 
