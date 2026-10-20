@@ -627,8 +627,8 @@ optional smart account `SmartKeyAccount` — itself a native contract UA
 
 **Status.** The UA registry is BUILT and deployed on chain 7622 (signing, BLS, group, threshold, multisig,
 post-quantum and Zether kinds; P6g), with the UA ledger in the token base (UA-4), UA receivers and wrap (UA-5a) and UA
-trade orders (UA-5b); UA-5c is SPECIFIED. The identity rule above (owner, 2026-10-20, CTR-UA-30) is decided, not built:
-UA-6 (SPECIFIED, next to build) replaces today's separate `pqz-mlwe` kind and its `authRef` with a PQZ key carried by the PQ signer,
+trade orders (UA-5b); UA-5c is SPECIFIED. The identity rule above (owner, 2026-10-20, CTR-UA-30) is built:
+UA-6 (built on branch `ua6`, merge pending) replaces the former separate `pqz-mlwe` kind and its `authRef` with a PQZ key carried by the PQ signer,
 removes the Zether `authRef`, and moves the bn254 Zether line to `legacy/`
 ([function → kinds](docs/contracts/accounts.md#function-kinds)).
 

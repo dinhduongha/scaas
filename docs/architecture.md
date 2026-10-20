@@ -757,9 +757,9 @@ sequenceDiagram
     TOK->>TOK: pull leg u at its rate, credit pending of ua
     SND->>STM: transferStatement(token, ...)
     SND->>SND: prove M legs (real and decoys) under one proof
-    SND->>RLY: MetaTransaction zetherTransfer(payload, proof, authSig, beneficiary)
+    SND->>RLY: MetaTransaction zetherTransfer(payload, proof, beneficiary)
     RLY->>TOK: mtxExecute(m, sig)
-    TOK->>VER: verify, after the registry's requireAuthorized
+    TOK->>VER: verify the proof (no authSig: the proof of x is the authorization)
     TOK->>TOK: debit the sender, credit each leg, store the bundle hash
     RCV->>TOK: zetherRollOver (relayed), then decrypt off chain
     RCV->>RLY: MetaTransaction zetherUnshieldUnwrap(..., u, recipient, amount, minOut)

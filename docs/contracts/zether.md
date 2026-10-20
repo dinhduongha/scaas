@@ -584,7 +584,7 @@ matches it. Relaying through the meta-transaction envelope is the generic self-c
 once. `entryRef` as in the single format (one per transfer); recipient `j` is addressed as `(entryRef, j)`.
 
 <a id="storage-modes"></a>
-<a id="CTR-ZTH-38"></a>**CTR-ZTH-38** — **Three transfer entries; the plain name is the mode's default** (owner 2026-10-08, 2026-10-11; built in P3b). `zetherTransfer`, `zetherTransferCompact`, `zetherTransferNoBundle`, all `(bytes payload, bytes proof, UA beneficiary) returns (bytes32 entryRef)`; the salt ([CTR-ZTH-30](#CTR-ZTH-30)) and the sender memo ([CTR-ZTH-50](#CTR-ZTH-50)) travel inside `payload`, so they are signed and the ABI shape is the same for every entry. The bundle of leg `j` is `B_j = Y_tj ‖ C_out_j ‖ D_out ‖ C_aud_j` (bn254 256 B, BLS12-381 512 B per leg); the record is `R = salt ‖ B_1 ‖ … ‖ B_M`. Commit-reveal stores `keccak256(R)` (one slot) ‖ `memo` and emits `TransferBundles(entryRef, R)`; on-chain disclosure then takes `R` from the caller and `ZetherDisclosure` checks the hash (the commitment is over `R`, salt included: controller ruling, pending the owner). A large `M` exceeds the EIP-7825 cap on a transaction's gas limit: the prover takes at most 6 to 9 recipients by curve, form, auditor and direct or relayed ([§19](#gas)) and refuses a larger build against its table of measured gas limits; the contract has no cap. Every entry emits `ZetherTransferMulti(from, beneficiary, fee, sendCounter, entryRef, recipients, mode)`; `mode` in the event and the `opTag` names what is stored:
+<a id="CTR-ZTH-38"></a>**CTR-ZTH-38** — **Three transfer entries; the plain name is the mode's default** (owner 2026-10-08, 2026-10-11; built in P3b). `zetherTransfer`, `zetherTransferCompact`, `zetherTransferNoBundle`, all `(bytes payload, bytes proof, UA beneficiary) returns (bytes32 entryRef)`; the salt ([CTR-ZTH-30](#CTR-ZTH-30)) and the sender memo ([CTR-ZTH-50](#CTR-ZTH-50)) travel inside `payload`, so they are signed and the ABI shape is the same for every entry. The bundle of leg `j` is `B_j = Y_tj ‖ C_out_j ‖ D_out ‖ C_aud_j` (bn254 256 B, BLS12-381 512 B per leg); the record is `R = salt ‖ B_1 ‖ … ‖ B_M`. Commit-reveal stores `keccak256(R)` (one slot) ‖ `memo` and emits `TransferBundles(entryRef, R)`; on-chain disclosure then takes `R` from the caller and `ZetherDisclosure` checks the hash (the commitment is over `R`, salt included: controller ruling, pending the owner). A large `M` exceeds the EIP-7825 cap on a transaction's gas limit: the prover takes at most 6 to 8 recipients by form, auditor and direct or relayed (BLS12-381, measured after UA-6: [§19](#gas)) and refuses a larger build against its table of measured gas limits; the contract has no cap. Every entry emits `ZetherTransferMulti(from, beneficiary, fee, sendCounter, entryRef, recipients, mode)`; `mode` in the event and the `opTag` names what is stored:
 
 | Entry | BUNDLE token ([CTR-ZTH-48](#CTR-ZTH-48)): stored per transfer | COMPACT token: stored per transfer |
 |---|---|---|
@@ -684,8 +684,8 @@ binding differs ⇒ revert; another token / another chain ⇒ the header differs
 <a id="direct-calls"></a>
 <a id="CTR-ZTH-34"></a>**CTR-ZTH-34** — **Zether runs through the generic self-call** (owner). `mtxExecute` with `m.data` =
 the real calldata of an allowlisted Zether function
-([CTR-MTX-19](metatx.md#CTR-MTX-19)): `zetherTransfer(bytes,bytes,bytes,bytes32)`,
-`zetherUnshield(bytes,bytes,bytes,bytes32,address,uint256)`, `zetherShield(bytes,uint256)`, public `wrap(uint256)` and `unwrap(uint256,address)`;
+([CTR-MTX-19](metatx.md#CTR-MTX-19)): `zetherTransfer(bytes,bytes,bytes32)`,
+`zetherUnshield(bytes,bytes,bytes32,address,uint256)`, `zetherShield(bytes,uint256)`, public `wrap(uint256)` and `unwrap(uint256,address)`;
 a public ERC-20 transfer is a `MetaTransfer` like on every token ([CTR-MTX-23](metatx.md#CTR-MTX-23)). `PqzToken`
 relays the same way ([CTR-PQZ-21](pq-zero-knowledge.md#CTR-PQZ-21)). `zetherTransfer` and `zetherUnshield` compute
 `binding = (msg.sender == address(this) && ticket live) ? ticketBinding : 0`, so the statement tag is
@@ -704,7 +704,7 @@ wrap and unwrap entries (without `unwrap(uint256,address)`). A direct `zetherUns
 with `keccak256(abi.encode(keccak256("SCAAS-ZETHER-UNWRAP-V1"), u, minOut))` as its binding word, so a copied proof can
 neither change the leg, drop `minOut` nor become a `zetherUnshield` (controller rulings, pending the owner). Relayed, the
 envelope binding covers every envelope field except `data`, so `u` and `minOut` are protected only by the envelope
-signer's signature: the envelope signer (the account itself) can re-route a proof to another leg with `minOut` 0, or into public
+signer's signature: the envelope signer (on `mtxExecute`, the address `m.from` the holder chose; these proof-carrying ops are not on the UA allowlist until UA-5c) can re-route a proof to another leg with `minOut` 0, or into public
 units through `zetherUnshield`; the relayer cannot (amount and recipient stay bound). Binding `u` and `minOut` when relayed
 is an open question (controller ruling, pending the owner).
 
@@ -1122,8 +1122,7 @@ could carry a fake verifier (`true` for every proof ⇒ `zetherUnshield` drains 
   must answer `ringSize()`, the burn verifier must not) and a Hedera env (`BadInit`); its `initialize` refuses a transfer
   verifier that does not run on this chain (`VerifierUnsupportedOnThisChain`, moved from the factory). No setter, no admin
   list (an admin list would only move the trust to the admin key); a new verifier set is a new env version and a new
-  release; tokens of older versions keep theirs. `createTokenUnregistered` refuses every confidential kind. The UA registry's Zether kinds (`zether-bn254`,
-  `zether-bls12381`) verify with `ZetherSchnorr*Verifier`, fixed in the registry constructor, not with these proof
+  release; tokens of older versions keep theirs. `createTokenUnregistered` refuses every confidential kind. The UA registry's Zether kind (`zether-bls12381`) verifies with `ZetherSchnorr*Verifier`, fixed in the registry constructor, not with these proof
   verifiers: unchanged.
 - **Limit, stated plainly:** the factory proves which env was appended to a release's init code and that the env's
   listed libraries had their pinned code hashes, not which libraries the code links nor what it does; a deliberately malicious registrar can still deploy init code that ignores the env. The registrar's key is
