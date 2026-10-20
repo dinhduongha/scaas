@@ -10,6 +10,7 @@ import {IPqzToken} from "../../src/pqz/IPqzToken.sol";
 import {NoUnderlyingPqzToken} from "../../src/pqz/NoUnderlyingPqzToken.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 import {IMetaTx} from "../../src/metatx/IMetaTx.sol";
+import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
 
 /// Relaying (CTR-PQZ-15 / -21, P6g plan D4): the address path binds the envelope into the statement (header word 17), the
@@ -140,11 +141,22 @@ contract PqzRelayTest is PqzFixture {
         auths[0] = _mlAuth();
         vm.expectRevert(abi.encodeWithSelector(IMetaTx.MtxNotBatchable.selector, PqzLayer.pqzTransferSingle.selector));
         tok.uaBatch(ms, auths);
-        // a PQZ id cannot sign envelopes (ZETHER kind)
-        m.from = alice;
-        m.nonce = 0;
-        vm.expectRevert();
-        tok.uaExecute(m, _mlAuth());
+        // UA-6: a holder is a signing UA, so alice (registered with her PQZ key in one call) signs an envelope herself;
+        // the same envelope under a signature the `mldsa65` precompile rejects is refused (no `authRef`, no foreign signer)
+        NoUnderlyingPqzToken(address(tok)).mintToUA(alice, 3 * SCALE);
+        minted += 3 * SCALE;
+        MetaTxLib.UAMetaTransaction memory h;
+        h.from = alice;
+        h.data = abi.encodeCall(PqzLayer.pqzShield, (bob, 3));
+        h.validUntil = block.timestamp + 1 hours;
+        vm.mockCall(ML65, bytes(""), abi.encode(uint256(0))); // every ML-DSA verification now fails
+        vm.expectRevert(abi.encodeWithSelector(IUARegistry.UAUnauthorized.selector, alice));
+        tok.uaExecute(h, _mlAuth());
+        vm.mockCall(ML65, bytes(""), abi.encode(uint256(1)));
+        tok.uaExecute(h, _mlAuth());
+        assertEq(tok.balanceOfUA(alice), 0, "alice's own signature shielded her units");
+        assertEq(tok.accountState(bob).plainPending, 3);
+        _assertConservation(tok);
         assertEq(UAKinds.PQZ_MLWE, 0x0142);
     }
 }
