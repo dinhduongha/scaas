@@ -3336,6 +3336,8 @@ Change (2026-10-20, owner): **definition — a UA is the actor (person, organiza
 
 Change (2026-10-20, owner): **the Zether `authRef` is removed entirely** (no optional spending co-signer): a Zether key UA authorizes its spends by its proof alone and signs its other writes (`zetherRollOverSigned`, `zetherSetRollOverMode`, `pop`) by Schnorr with `x`; a leaked `x` is a full loss (funds and privacy), accepted (analysis `research/shield-and-key-reuse.md` §1). Removed in UA-6 with the PQZ `authRef`: the record field, `authPop`, purpose `authref`, `UAAuthRef`, `survivesEncKeyLeak` for Zether. Status: decided, built in UA-6.
 
+Change (2026-10-20, owner; UA-6 design question Q1): **a Zether key UA may sign every write**, like any signing UA (follows the UA definition above: the actor that signs and answers for a write) — its Schnorr signature by `x` authorizes UA-ledger transfers, trades and every other `requireAuthorized` path, and its public balance is spendable that way; `zether-bls12381` joins the SIGNING set (not an `msig` member, cannot hold a PQZ key). UA-6 spec decision U8 (`docs/superpowers/specs/2026-10-20-ua6-encryption-key-attributes.md`, branch `ua6-spec`). Status: decided; built in UA-6.
+
 ### CTR-PQZ-01 — Separate PQZ class gated to private chains
 - old: R270 · status: current · owner: yes · date: 2026-10-07 · normative: contracts/pq-zero-knowledge.md#CTR-PQZ-01 · superseded-by: —
 
