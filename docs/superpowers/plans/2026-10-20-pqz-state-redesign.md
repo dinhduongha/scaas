@@ -35,6 +35,22 @@ Order: B, the state layout and items 5–6 first (today's parameters, no relatio
 review: `docs/contracts/pq-zero-knowledge.md` §4.1, §4.3, §4.4, §7.1, §7.3–§7.8, CTR-PQZ-06, -07, -08, -15, threats
 T7, T8, T22, T23; `docs/contracts/zether.md` CTR-ZTH-45, -51; `docs/contracts/token-wrappers.md` kind table.
 
+## Owner rulings on this plan (2026-10-20, plan review) — these override the rows below
+
+1. **Q1 — modulus:** q = **2^50 − 42,310,535** (prime; q − 1 = 2^3·19·43·431·5659·70627, so the Ligero subgroup of
+   today's PQZH exists), Δ = 2^30 − 41; replaces 2^50 − 71 everywhere in this plan and the spec. PQZL and PQZH share q.
+2. **Q2 — third-party shield:** free (gas only); no per-credit / decoy fee on any shield; tx fee only when relayed.
+3. **Q3 — names:** the `mtx*` table (D20) approved, confidential transfers are **`mtxConfidentialTransfer…`** (not
+   `mtxZKTransfer`; wallets may label it "Secure Transfer"); one selector per shared function across both layers.
+4. **Fees (supersedes D10's per-credit fee and O4's floor):** two fees. **`txFee`** (today `confidentialFee`): per
+   transaction, any op, to the beneficiary. **`decoyFee`** (today `multiLegFee`): **op 7 only** (op 1 has no decoys and
+   never pays it), the same amount to **every** leg, real recipient included (uniform, so it reveals no decoy); the
+   token sets an immutable **`minDecoyFee`** at `initialize` (may be 0); the **sender chooses the per-leg amount
+   `d ≥ minDecoyFee`** (public, in the payload, bound by the statement: `fee = txFee + M·d`). No chain-level floor.
+   Both layers (Zether may now set a non-zero `minDecoyFee`; default 0).
+5. **bn254 Zether to `legacy/`:** done in **UA-6** (its U10), not in a separate Z-BLS task: drop D22's Z-BLS task and
+   the bn254 steps from Task 3b; 5h assumes BLS12-381-only Zether.
+
 ## Global constraints
 
 - Heavy jobs under `scripts/capped` (forge, cargo `-j2`, the Sage image); Docker always with `--memory`; never poll; stop

@@ -20,6 +20,14 @@ updated in parallel and is this plan's dependency only for the chain-7622 roll-o
 (U1–U20, owner question Q1). Normative text after Task 1: `docs/contracts/accounts.md` §1.4–§1.8, `zether.md` §13 and
 CTR-ZTH-51, `pq-zero-knowledge.md` §6, §7.2, §7.10, `docs/node/gateway.md` NODE-GW-03.
 
+## Owner rulings on this plan (2026-10-20, plan review) — these override the rows below
+
+1. **Q1:** a Zether key UA may sign every write (U8 accepted; decisions CTR-UA-30).
+2. **U10 accepted:** UA-6 moves the whole bn254 Zether line to `legacy/` (verifier instance, `proofSystemId`, kind
+   `zether-bn254` 0x0140 and its Schnorr verifier, deploy steps, vectors, client paths); the 5h plan drops its Z-BLS
+   task.
+3. The `R_REG` change rides the 5h `proofSystemId` bump with q = 2^50 − 42,310,535 (5h plan, owner rulings).
+
 ## Global constraints
 
 - Heavy jobs under `scripts/capped` (forge, cargo, npm, dotnet, dart / flutter), **never wrapped in `timeout`** (it
