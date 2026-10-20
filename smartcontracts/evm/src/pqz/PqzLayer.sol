@@ -168,30 +168,34 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
     function pqzTransfer(bytes calldata payload, bytes calldata accHint, bytes calldata proof, bytes calldata authSig)
         external nonReentrant returns (bytes32 r)
     {
-        r = PqzTransferLib.transferMulti(_envTransfer(_defaultMode()), payload, accHint, proof, authSig);
-        _multiFees(payload);
+        PqzCore.Paid memory f;
+        (r, f) = PqzTransferLib.transferMulti(_envTransfer(_defaultMode()), payload, accHint, proof, authSig);
+        _pay(f, payload);
     }
 
     function pqzTransferCompact(bytes calldata payload, bytes calldata accHint, bytes calldata proof,
         bytes calldata authSig) external nonReentrant returns (bytes32 r)
     {
-        r = PqzTransferLib.transferMulti(_envTransfer(ZetherTypes.TransferMode.HASH), payload, accHint, proof, authSig);
-        _multiFees(payload);
+        PqzCore.Paid memory f;
+        (r, f) = PqzTransferLib.transferMulti(_envTransfer(ZetherTypes.TransferMode.HASH), payload, accHint, proof, authSig);
+        _pay(f, payload);
     }
 
     /// @notice The single-recipient transfer, op 1 `R_TX` / `R_TX0` (§7.4), in the token's default form.
     function pqzTransferSingle(bytes calldata payload, bytes calldata accHint, bytes calldata proof,
         bytes calldata authSig) external nonReentrant returns (bytes32 r)
     {
-        r = PqzTransferLib.transfer(_envTransfer(_defaultMode()), payload, accHint, proof, authSig);
-        _fees(payload, 160);
+        PqzCore.Paid memory f;
+        (r, f) = PqzTransferLib.transfer(_envTransfer(_defaultMode()), payload, accHint, proof, authSig);
+        _pay(f, payload);
     }
 
     function pqzTransferSingleCompact(bytes calldata payload, bytes calldata accHint, bytes calldata proof,
         bytes calldata authSig) external nonReentrant returns (bytes32 r)
     {
-        r = PqzTransferLib.transfer(_envTransfer(ZetherTypes.TransferMode.HASH), payload, accHint, proof, authSig);
-        _fees(payload, 160);
+        PqzCore.Paid memory f;
+        (r, f) = PqzTransferLib.transfer(_envTransfer(ZetherTypes.TransferMode.HASH), payload, accHint, proof, authSig);
+        _pay(f, payload);
     }
 
     // ------------------------------------------------------------------ burn and refresh (§7.5)
@@ -201,8 +205,7 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
     function pqzUnshield(bytes calldata payload, bytes calldata accHint, uint256 amount, address recipient,
         bytes calldata proof, bytes calldata authSig) external nonReentrant
     {
-        PqzBurnLib.unshield(_envBurn(amount, recipient), payload, accHint, proof, authSig);
-        _fees(payload, 128);
+        _pay(PqzBurnLib.unshield(_envBurn(amount, recipient), payload, accHint, proof, authSig), payload);
         _fromPool(MetaTxLib.pad(recipient), amount);
     }
 
@@ -256,21 +259,17 @@ abstract contract PqzLayer is MetaTokenBase, IPqzToken {
         if (units != 0) _poolMove(MetaTxLib.pad(MetaTxLib.SHIELD_POOL), to, units * PqzCore.$().shieldScale);
     }
 
-    /// @dev After a debit the library settled (it checked the payload, counted `shieldIn` in and the fee out of
-    ///      `totalShielded`): the debit's `shieldIn` (payload word 2) into the pool, then txFee (`confidentialFee`)
-    ///      to the beneficiary at payload offset `ben` (none when 0; owner 2026-10-20).
-    function _fees(bytes calldata payload, uint256 ben) internal {
-        _toPool(uint256(bytes32(payload[64:96])));
-        bytes32 b = bytes32(payload[ben:ben + 32]);
-        if (b != 0) _fromPool(b, PqzCore.$().confidentialFee);
-    }
-
-    /// @dev Op 7: `_fees`, then the sender's `decoyFee` (word 6) to EVERY leg (the real recipient too; owner 2026-10-20).
-    function _multiFees(bytes calldata payload) internal {
-        _fees(payload, 128);
-        uint256 d = uint256(bytes32(payload[192:224]));
-        uint256 m = uint256(bytes32(payload[160:192]));
-        for (uint256 j; j < m; ++j) _fromPool(bytes32(payload[PqzCore.M_OUT + 32 * j:PqzCore.M_OUT + 32 * j + 32]), d);
+    /// @dev After a debit the library settled: exactly what it moved through `totalShielded` (`f`, D19): `shieldIn`
+    ///      into the pool first, then txFee (`fee − legs · decoyFee`) to the beneficiary and op 7's `decoyFee` to EVERY
+    ///      leg (the real recipient too; owner 2026-10-20). Only the leg UAs are read from the (checked) payload.
+    function _pay(PqzCore.Paid memory f, bytes calldata payload) internal {
+        _toPool(f.shieldIn);
+        _fromPool(f.ben, f.fee - f.legs * f.decoyFee);
+        if (f.decoyFee != 0) {
+            for (uint256 j; j < f.legs; ++j) {
+                _fromPool(bytes32(payload[PqzCore.M_OUT + 32 * j:PqzCore.M_OUT + 32 * j + 32]), f.decoyFee);
+            }
+        }
     }
 
     function _envBurn(uint256 amount, address recipient) internal view returns (PqzCore.Env memory e) {

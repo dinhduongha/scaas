@@ -14,16 +14,18 @@ import {PqzCore} from "./PqzCore.sol";
 ///        namespace `scaas.pqz`; the shared steps are `internal` in `PqzCore`, compiled into each.
 /// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** `address(this)` is the token.
 library PqzBurnLib {
-    /// @notice `R_BURN`: the debit with `amount` public (0 = refresh); the token then pays `amount · shieldScale`.
+    /// @notice `R_BURN`: the debit with `amount` public (0 = refresh); the token then moves `paid` (D19)
+    ///         and pays `amount · shieldScale`.
     function unshield(
         PqzCore.Env memory e,
         bytes calldata payload,
         bytes calldata hint,
         bytes calldata proof,
         bytes calldata authSig
-    ) public {
+    ) public returns (PqzCore.Paid memory paid) {
         (PqzCore.Op memory o, bytes memory buf) = PqzCore.prepareBurn(e, payload, hint, proof.length);
         PqzCore._check(o, buf, proof, authSig);
         PqzCore._settleBurn(o, payload[PqzCore.B_OUT:PqzCore.B_OUT + PqzCt.CT]);
+        paid = PqzCore._paid(o);
     }
 }

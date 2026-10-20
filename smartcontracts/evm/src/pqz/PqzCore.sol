@@ -99,12 +99,28 @@ library PqzCore {
         address keyA;
         address[] keys; // op 7: the legs' key pointers
         uint256 legs; // op 7: M
+        uint256 decoyFee; // op 7: the sender's per-leg fee `d`
         uint256 groups; // op 7: G = ⌈M / 4⌉
         uint256 outLen;
         uint256 stLen;
         address registry;
         bytes32 chainUid;
         ZetherTypes.TransferMode mode;
+    }
+
+    /// @dev What a settled debit moved through `totalShielded`, for the token to move through `SHIELD_POOL` exactly
+    ///      (D19; the library decides, the token pays — as Zether's returned fee): `shieldIn` in, then `fee` out:
+    ///      `decoyFee` to each of the `legs` leg UAs (op 7; payload `M_OUT + 32·j`), the rest (txFee) to `ben`.
+    struct Paid {
+        uint256 shieldIn;
+        bytes32 ben;
+        uint256 fee;
+        uint256 decoyFee;
+        uint256 legs;
+    }
+
+    function _paid(Op memory o) internal pure returns (Paid memory) {
+        return Paid(o.shieldIn, o.ben, o.fee, o.decoyFee, o.legs);
     }
 
     // keccak256(abi.encode(uint256(keccak256("scaas.pqz")) - 1)) & ~bytes32(uint256(0xff))
@@ -315,6 +331,7 @@ library PqzCore {
         uint256 d = uint256(bytes32(payload[192:224]));
         uint256 dMin = $().minDecoyFee;
         if (d < dMin || d >= VALUE_BOUND) revert IPqzToken.DecoyFeeOutOfRange(d, dMin);
+        o.decoyFee = d;
         o.fee += o.legs * d;
         if (o.fee >= VALUE_BOUND) revert IPqzToken.AmountOutOfRange(o.fee, VALUE_BOUND);
         _legs(o, e, payload);

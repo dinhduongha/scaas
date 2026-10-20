@@ -75,8 +75,7 @@ contract UnderlyingPqzToken is UnderlyingToken, PqzLayer {
     function pqzUnshieldUnwrap(bytes calldata payload, bytes calldata accHint, Unwrap calldata x,
         bytes calldata proof, bytes calldata authSig) external nonReentrant
     {
-        PqzBurnLib.unshield(_envUnwrap(x, _ticketBinding()), payload, accHint, proof, authSig);
-        _fees(payload, 128);
+        _pay(PqzBurnLib.unshield(_envUnwrap(x, _ticketBinding()), payload, accHint, proof, authSig), payload);
         _poolMove(MetaTxLib.pad(MetaTxLib.SHIELD_POOL), bytes32(0), x.amount * PqzCore.$().shieldScale);
         _payUnwrap(x);
     }
