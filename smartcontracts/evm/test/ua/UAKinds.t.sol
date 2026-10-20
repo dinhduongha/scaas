@@ -40,22 +40,14 @@ contract UAKindsTest is Test {
     function test_kindTable() public view {
         string memory j = _k();
         uint256 n = _count(j, "kinds");
-        assertEq(n, 31);
+        assertEq(n, 29);
         for (uint256 i; i < n; ++i) {
             uint16 kind = uint16(vm.parseJsonUint(j, _at("kinds", i, "kind")));
-            if (kind == ZETHER_BN254) { // UA-6 U10: in legacy/ua6/ (row until Task 8 regenerates kinds.json)
-                assertFalse(UAKinds.isZether(kind) || UAKinds.isDerived(kind));
-                continue;
-            }
             bool native = vm.parseJsonBool(j, _at("kinds", i, "native"));
             assertEq(UAKinds.name(kind), vm.parseJsonString(j, _at("kinds", i, "name")));
             assertEq(UAKinds.isNative(kind), native);
-            // UA-6 (until Task 8 regenerates kinds.json): zether-bls12381 joins SIGNING (U8); pqz-mlwe is a scheme, no
-            // longer a (Zether-family) kind
-            bool signing = vm.parseJsonBool(j, _at("kinds", i, "signing")) || kind == UAKinds.ZETHER_BLS12381;
-            bool zether = vm.parseJsonBool(j, _at("kinds", i, "zether")) && kind != UAKinds.PQZ_MLWE;
-            assertEq(UAKinds.isSigning(kind), signing);
-            assertEq(UAKinds.isZether(kind), zether);
+            assertEq(UAKinds.isSigning(kind), vm.parseJsonBool(j, _at("kinds", i, "signing")));
+            assertEq(UAKinds.isZether(kind), vm.parseJsonBool(j, _at("kinds", i, "zether")));
             assertEq(UAKinds.isMember(kind, false), vm.parseJsonBool(j, _at("kinds", i, "member")));
             assertEq(UAKinds.isMember(kind, true), vm.parseJsonBool(j, _at("kinds", i, "memberHedera")));
             if (native) continue;
@@ -64,12 +56,6 @@ contract UAKindsTest is Test {
             else assertEq(UAKinds.groupName(kind), vm.parseJsonString(j, _at("kinds", i, "group")));
         }
     }
-
-    /// `zether-bn254` (moved to legacy/ua6/ in UA-6, U10): its kinds.json rows are skipped until Task 8 regenerates it.
-    uint16 internal constant ZETHER_BN254 = 0x0140;
-
-    /// The `authref` purpose (removed in UA-6) is still a row of kinds.json until Task 8 regenerates it.
-    bytes32 internal constant AUTHREF_V1 = keccak256("scaas.ua.purpose.authref.v1");
 
     function test_groupsPurposesConstants() public view {
         string memory j = _k();
@@ -80,13 +66,13 @@ contract UAKindsTest is Test {
                 vm.parseJsonBytes32(j, _at("groups", i, "GROUP"))
             );
         }
-        bytes32[12] memory p = [
-            UAKinds.PURPOSE_POP, AUTHREF_V1, UAKinds.PURPOSE_METATX, UAKinds.PURPOSE_METATX_CANCEL,
+        bytes32[11] memory p = [
+            UAKinds.PURPOSE_POP, UAKinds.PURPOSE_METATX, UAKinds.PURPOSE_METATX_CANCEL,
             UAKinds.PURPOSE_MEMBER, UAKinds.PURPOSE_ZETHER_AUTH, UAKinds.PURPOSE_ZETHER_OWNER, UAKinds.PURPOSE_KEYOP,
             UAKinds.PURPOSE_RECEIVER_FEE, UAKinds.PURPOSE_VP, UAKinds.PURPOSE_VC_ANCHOR, UAKinds.PURPOSE_TRADE
         ];
-        assertEq(_count(j, "purposes"), 12);
-        for (uint256 i; i < 12; ++i) assertEq(p[i], vm.parseJsonBytes32(j, _at("purposes", i, "purposeTag")));
+        assertEq(_count(j, "purposes"), 11);
+        for (uint256 i; i < 11; ++i) assertEq(p[i], vm.parseJsonBytes32(j, _at("purposes", i, "purposeTag")));
         assertEq(UAKinds.MSG_TAG, vm.parseJsonBytes32(j, ".constants.MSG_TAG"));
         assertEq(UAKinds.PURPOSE_POP, vm.parseJsonBytes32(j, ".constants.POP_TAG"));
         assertEq(UAKinds.DOMAIN_TYPEHASH, vm.parseJsonBytes32(j, ".constants.DOMAIN_TYPEHASH"));
@@ -101,15 +87,6 @@ contract UAKindsTest is Test {
         for (uint256 i; i < n; ++i) {
             uint16 kind = uint16(vm.parseJsonUint(j, _at("valid", i, "kind")));
             bytes memory d = vm.parseJsonBytes(j, _at("valid", i, "keyData"));
-            if (kind == UAKinds.PQZ_MLWE) {
-                // UA-6: a scheme, not a kind (row until Task 8); its id and keyHash bytes stay
-                vm.expectRevert(abi.encodeWithSelector(UAKinds.UAKindNotDerived.selector, kind));
-            }
-            if (kind == ZETHER_BN254) { // UA-6 U10: in legacy/ua6/ (rows until Task 8)
-                vm.expectRevert(abi.encodeWithSelector(UAKinds.UAKindUnknown.selector, kind));
-                h.validate(kind, d, false);
-                continue;
-            }
             h.validate(kind, d, vm.parseJsonBool(j, _at("valid", i, "hederaNative")));
             bytes32 ua = UAKinds.uaOf(kind, d);
             assertEq(UAKinds.name(kind), vm.parseJsonString(j, _at("valid", i, "name")));
@@ -130,10 +107,6 @@ contract UAKindsTest is Test {
             bytes memory d = vm.parseJsonBytes(j, _at("invalid", i, "keyData"));
             string memory reason = vm.parseJsonString(j, _at("invalid", i, "reason"));
             bytes memory want = abi.encodeWithSelector(_selector(vm.parseJsonString(j, _at("invalid", i, "error"))), kind);
-            // UA-6: pqz-mlwe is a scheme, not a kind (rows until Task 8)
-            if (kind == UAKinds.PQZ_MLWE) want = abi.encodeWithSelector(UAKinds.UAKindNotDerived.selector, kind);
-            // UA-6 U10: zether-bn254 is in legacy/ua6/ (rows until Task 8)
-            if (kind == ZETHER_BN254) want = abi.encodeWithSelector(UAKinds.UAKindUnknown.selector, kind);
             try h.validate(kind, d, vm.parseJsonBool(j, _at("invalid", i, "hederaNative"))) {
                 revert(string.concat("accepted: ", reason));
             } catch (bytes memory got) {
@@ -163,7 +136,6 @@ contract UAKindsTest is Test {
         uint256 nm = _count(j, "messages");
         for (uint256 i; i < nm; ++i) {
             uint16 kind = uint16(vm.parseJsonUint(j, _at("messages", i, "kind")));
-            if (kind == ZETHER_BN254) continue; // UA-6 U10: in legacy/ua6/ (row until Task 8)
             bytes32 got = UAKinds.uaMessage(
                 kind, vm.parseJsonBytes32(j, _at("messages", i, "purposeTag")), vm.parseJsonBytes32(j, _at("messages", i, "digest"))
             );
@@ -183,7 +155,7 @@ contract UAKindsTest is Test {
                 vm.parseJsonBytes32(s, string.concat(c, ".chainUid")),
                 vm.parseJsonAddress(s, string.concat(c, ".registry")),
                 vm.parseJsonBytes32(s, _at("pop", i, "ua")),
-                vm.parseJsonBytes32(s, _at("pop", i, "authRef"))
+                vm.parseJsonBytes32(s, _at("pop", i, "pqzKeyHash"))
             );
             assertEq(got, vm.parseJsonBytes32(s, _at("pop", i, "popDigest")));
         }

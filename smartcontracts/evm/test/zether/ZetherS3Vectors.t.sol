@@ -164,16 +164,15 @@ contract ZetherS3VectorsTest is Test {
         for (uint256 i; i < 192; ++i) out[i] = st[off + i];
     }
 
-    /// `directCalldata` = `zetherTransferSingle(payload, proof, authSig, beneficiary)`: the direct call, and unchanged the
-    /// envelope's `data` (CTR-ZTH-34). The vectors predate UA-6 U9 (`authSig` removed, the entry point is now
-    /// `zetherTransferSingle(bytes,bytes,bytes32)`); UA-6 Task 8 regenerates them, then this pins the new selector.
+    /// `directCalldata` = `zetherTransferSingle(payload, proof, beneficiary)`: the direct call, and unchanged the
+    /// envelope's `data` (CTR-ZTH-34; no `authSig` since UA-6 U9).
     function test_s3DirectCalldataIsTheEntryPointCall() public view {
         string memory j = vm.readFile(string.concat(DIR, "transfer_bls12381.json"));
         bytes memory op = j.readBytes(".directCalldata");
-        assertEq(bytes4(op), bytes4(keccak256("zetherTransferSingle(bytes,bytes,bytes,bytes32)")));
+        assertEq(bytes4(op), bytes4(keccak256("zetherTransferSingle(bytes,bytes,bytes32)")));
         bytes memory args = new bytes(op.length - 4);
         for (uint256 i; i < args.length; ++i) args[i] = op[4 + i];
-        (bytes memory pl, bytes memory pr,, bytes32 ben) = abi.decode(args, (bytes, bytes, bytes, bytes32));
+        (bytes memory pl, bytes memory pr, bytes32 ben) = abi.decode(args, (bytes, bytes, bytes32));
         assertEq(pl, j.readBytes(".payload"));
         assertEq(pr, j.readBytes(".proof"));
         assertEq(ben, j.readBytes32(".request.beneficiary"));
@@ -237,7 +236,7 @@ contract ZetherS3VectorsTest is Test {
     }
 
     /// The prover's registration PoP (`r33_keys.json`, CTR-UA-07: chain 31337, the vectors' `chainUid`, registry
-    /// `0xaa…aa`, `authRef` 0) registers on a real UA registry at that address: one PoP for the prover, clientkeys
+    /// `0xaa…aa`, no PQZ key) registers on a real UA registry at that address: one PoP for the prover, clientkeys
     /// (`test/zether.test.js` reads the same file) and the registry. A flipped bit is `UAPoP`.
     function test_s3PopRegisters() public {
         string memory j = vm.readFile(string.concat(DIR, "r33_keys.json"));

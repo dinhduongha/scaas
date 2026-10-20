@@ -219,8 +219,7 @@ fn ua_identity_matches_ua_vectors() {
     for row in st["pop"].as_array().unwrap() {
         let c = &st["contexts"][row["context"].as_str().unwrap()];
         let reg: [u8; 20] = hex::decode(&c["registry"].as_str().unwrap()[2..]).unwrap().try_into().unwrap();
-        let d = pop_digest(c["chainId"].as_u64().unwrap(), &hex32(&c["chainUid"]), &reg, &hex32(&row["ua"]), &hex32(&row.get("pqzKeyHash").unwrap_or(&row["authRef"])));
-        // ponytail: `authRef` is the pre-UA-6 name of the same (zero) word; Task 8 regenerates the file with `pqzKeyHash`.
+        let d = pop_digest(c["chainId"].as_u64().unwrap(), &hex32(&c["chainUid"]), &reg, &hex32(&row["ua"]), &hex32(&row["pqzKeyHash"]));
         assert_eq!(d, hex32(&row["popDigest"]));
         n += 1;
     }

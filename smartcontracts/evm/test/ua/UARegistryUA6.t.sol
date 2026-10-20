@@ -292,7 +292,7 @@ contract UARegistryUA6Test is UARegistryBase {
     /// `secp256k1`, `bip340`, `slhdsa128s`, the Zether kind and a classical-dominant `msig` may not hold a key.
     function test_UA6_nonHolders() public {
         bytes memory key = _pk(0x0142, 6);
-        bytes memory secp = vm.parseJsonBytes(_kindsJson(), ".valid[27].keyData");
+        bytes memory secp = vm.parseJsonBytes(_kindsJson(), ".valid[25].keyData");
         bytes memory slh = _pk(0x0133, 6);
         bytes memory y = ZetherKeys.pub(ZX, true);
         (bytes memory c, bytes32 cUa) = _msig(2, 1, 2);
