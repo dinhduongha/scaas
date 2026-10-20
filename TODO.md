@@ -49,9 +49,13 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
   (5) fixes → fuzz → gate fin → **freeze pqz-core** → (5a) **token-family rename** (`NormalToken` / `WrappedToken`;
   before P6h and before Codex run 2, so the review sees the final names) → (5b) **`clients/pqz-prover` (P6h)**: the
   wallet PQZ prover — a Rust crate over `pqzl` + `stmt` with wasm bindings, API shaped like `clients/zether-prover`
-  (read state, decrypt the balance, build statements, prove, envelope) → (6) **Codex run 2: contracts + pqz-prover**
-  (OpenFactory 5g-Z2, UA-6 registry, PQZ / Zether after 5h; the prover's secret handling) before the 7622 redeploy →
-  (7) plan fs3 Task 13 (7622 reset, real e2e with pqz-prover; ask the owner before timing).
+  (read state, decrypt the balance, build statements, prove, envelope) → (5c) **node relay (P6i + the needed part of
+  UA F5)**: `ua_metatx` jobs (UA envelopes, `from: bytes32` — after UA-6 every Zether UA and PQ signer writes only
+  through them; today the node relays address envelopes only), `pqz_call` (direct PQZ calls on the private chain),
+  canonical re-encoding of Zether calldata (one intent, one id; NODE-JOB-20) → (6) **Codex run 2: contracts +
+  pqz-prover + node relay** (OpenFactory 5g-Z2, UA-6 registry, PQZ / Zether after 5h; the prover's secret handling;
+  the relay paths) before the 7622 redeploy → (7) plan fs3 Task 13 (7622 reset, real e2e: wallet with pqz-prover,
+  node relay, fees; ask the owner before timing).
   If credits allow only one run: pqz-core first (proof soundness); contracts keep Claude reviews.
   **Every Codex run is paired with an agy (Antigravity / Gemini) review of the same scope at the same time** (owner
   2026-10-20), then one triage of both reports (as G / H on 2026-10-19).
