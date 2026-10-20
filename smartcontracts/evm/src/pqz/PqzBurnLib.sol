@@ -18,13 +18,12 @@ library PqzBurnLib {
     function unshield(
         PqzCore.Env memory e,
         bytes calldata payload,
-        bytes calldata acc,
-        bytes[] calldata inl,
+        bytes calldata hint,
         bytes calldata proof,
         bytes calldata authSig
     ) public {
-        (PqzCore.Op memory o, bytes memory buf) = PqzCore.prepareBurn(e, payload, acc, inl, proof.length);
+        (PqzCore.Op memory o, bytes memory buf) = PqzCore.prepareBurn(e, payload, hint, proof.length);
         PqzCore._check(o, buf, proof, authSig);
-        PqzCore._settleBurn(o, payload[PqzCore.B_OUT:PqzCore.B_OUT + PqzCt.CT], inl);
+        PqzCore._settleBurn(o, payload[PqzCore.B_OUT:PqzCore.B_OUT + PqzCt.CT]);
     }
 }

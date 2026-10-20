@@ -64,6 +64,15 @@ library PqzCt {
     /// @notice `a += Trivial(amount)`: `v[i] += Δ·digit_i(amount)` for the 16 base-16 digits (`amount < 2^64`); `u`
     ///         unchanged. `a` is a ciphertext (16,512 B).
     function addTrivial(bytes memory a, uint256 amount) internal pure {
+        _trivial(a, amount, false);
+    }
+
+    /// @notice `a −= Trivial(amount)` as `v[i] += q − Δ·digit_i(amount)` (unreduced; `Δ·15 < q`, no borrow).
+    function subTrivial(bytes memory a, uint256 amount) internal pure {
+        _trivial(a, amount, true);
+    }
+
+    function _trivial(bytes memory a, uint256 amount, bool neg) private pure {
         assembly ("memory-safe") {
             let v := add(add(a, 32), PK)
             for { let j := 0 } lt(j, 4) { j := add(j, 1) } {
@@ -72,9 +81,61 @@ library PqzCt {
                     let digit := and(shr(mul(4, add(mul(4, j), k)), amount), 15)
                     t := or(t, shl(mul(64, sub(3, k)), mul(DELTA, digit)))
                 }
+                if neg { t := sub(Q4, t) }
                 let p := add(v, mul(32, j))
                 mstore(p, add(mload(p), t))
             }
+        }
+    }
+
+    /// @notice `t = u ‖ v` of a stored entry (plan 5h D1): `u` (16,384 B) at byte `uOff`, `v` (128 B) at `vOff` of the
+    ///         SSTORE2 data at `blob` (code offset + 1, after the STOP byte). `t` is a ciphertext buffer.
+    function loadBlob(address blob, uint256 uOff, uint256 vOff, bytes memory t) internal view {
+        assembly ("memory-safe") {
+            let d := add(t, 32)
+            extcodecopy(blob, d, add(uOff, 1), PK)
+            extcodecopy(blob, add(d, PK), add(vOff, 1), V)
+        }
+    }
+
+    /// @notice `a += x` lane-wise, unreduced, both in memory (`a.length` words; a multiple of 4 words, as `CT`).
+    function addMem(bytes memory a, bytes memory x) internal pure {
+        assembly ("memory-safe") {
+            let p := add(a, 32)
+            let q := add(x, 32)
+            let e := add(p, mload(a))
+            for {} lt(p, e) {} {
+                mstore(p, add(mload(p), mload(q)))
+                mstore(add(p, 32), add(mload(add(p, 32)), mload(add(q, 32))))
+                mstore(add(p, 64), add(mload(add(p, 64)), mload(add(q, 64))))
+                mstore(add(p, 96), add(mload(add(p, 96)), mload(add(q, 96))))
+                p := add(p, 128)
+                q := add(q, 128)
+            }
+        }
+    }
+
+    /// @notice `a −= x` lane-wise as `a += (q − x)`, both in memory (unreduced; `x` canonical).
+    function subMem(bytes memory a, bytes memory x) internal pure {
+        assembly ("memory-safe") {
+            let p := add(a, 32)
+            let q := add(x, 32)
+            let e := add(p, mload(a))
+            for {} lt(p, e) {} {
+                mstore(p, add(mload(p), sub(Q4, mload(q))))
+                p := add(p, 32)
+                q := add(q, 32)
+            }
+        }
+    }
+
+    /// @notice Every byte of `b` zero (D24).
+    function isZero(bytes calldata b) internal pure returns (bool z) {
+        assembly ("memory-safe") {
+            let acc := 0
+            let end := add(b.offset, b.length)
+            for { let p := b.offset } lt(p, end) { p := add(p, 32) } { acc := or(acc, calldataload(p)) }
+            z := iszero(acc)
         }
     }
 

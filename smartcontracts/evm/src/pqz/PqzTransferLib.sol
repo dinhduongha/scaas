@@ -20,30 +20,28 @@ library PqzTransferLib {
     function transfer(
         PqzCore.Env memory e,
         bytes calldata payload,
-        bytes calldata acc,
-        bytes[] calldata inl,
+        bytes calldata hint,
         bytes calldata proof,
         bytes calldata authSig
     ) public returns (bytes32 ref) {
-        (PqzCore.Op memory o, bytes memory buf) = PqzCore.prepareTransfer(e, payload, acc, inl, proof.length);
+        (PqzCore.Op memory o, bytes memory buf) = PqzCore.prepareTransfer(e, payload, hint, proof.length);
         PqzCore._check(o, buf, proof, authSig);
-        ref = PqzCore._settleTransfer(o, payload, inl);
+        ref = PqzCore._settleTransfer(o, payload);
     }
 
     /// @notice Op 7 `R_TXM`: `M` legs (decoys are legs of amount 0), one proof; the sender exactly as a single transfer,
-    ///         a credit per leg, the fee once, the entry by `mode`. Payload: `p ‖ validUntilBlock ‖ plainUsed ‖ fromUA ‖
+    ///         a credit per leg, the fee once, the entry by `mode`. Payload: `p ‖ validUntilBlock ‖ shieldIn ‖ fromUA ‖
     ///         beneficiaryUA ‖ M ‖ salt(16) ‖ UA_0 … UA_{M−1} ‖ out ‖ [memo]`, `out = u_0 … u_{G−1} ‖ v_0 … v_{M−1} ‖ v_f ‖
     ///         [v_{a,0} … v_{a,M−1}]`, memo `18 + 40·M` bytes on HASH.
     function transferMulti(
         PqzCore.Env memory e,
         bytes calldata payload,
-        bytes calldata acc,
-        bytes[] calldata inl,
+        bytes calldata hint,
         bytes calldata proof,
         bytes calldata authSig
     ) public returns (bytes32 ref) {
-        (PqzCore.Op memory o, bytes memory buf) = PqzCore.prepareMulti(e, payload, acc, inl, proof.length);
+        (PqzCore.Op memory o, bytes memory buf) = PqzCore.prepareMulti(e, payload, hint, proof.length);
         PqzCore._check(o, buf, proof, authSig);
-        ref = PqzCore._settleMulti(o, payload, inl);
+        ref = PqzCore._settleMulti(o, payload);
     }
 }

@@ -10,7 +10,7 @@ import {PqzSafety} from "./PqzSafety.sol";
 import {UAPqzVerifier} from "./UAPqzVerifier.sol";
 import {PqzCore} from "./PqzCore.sol";
 
-/// @title init, shield, rollover (the account state; D14): one of the four `DELEGATECALL` libraries of the PQZ release (plan 5h D14), in the ERC-7201
+/// @title init, shield, rollover, prepare-acc and the state views (the account state; D14): one of the four `DELEGATECALL` libraries of the PQZ release (plan 5h D14), in the ERC-7201
 ///        namespace `scaas.pqz`; the shared steps are `internal` in `PqzCore`, compiled into each.
 /// @notice **UNAUDITED — NOT FOR PRODUCTION FUNDS.** `address(this)` is the token.
 library PqzStateLib {
@@ -49,36 +49,85 @@ library PqzStateLib {
         s.auditorUA = a;
     }
 
-    /// @notice `plainPending[ua] += amount`, `totalShielded += amount` within the cap. The token takes the public units
-    ///         (`pqzShield`) or a leg's underlying (`pqzWrapShield`).
+    /// @notice The proof-free shield (plan 5h D18): `totalShielded += amount` within the cap and a TRIVIAL entry
+    ///         `(amount, block)` appended to `pending[ua]` or merged into its tail (`PqzCore._trivial`); anyone, into
+    ///         any PQZ holder. The token takes the public units (`pqzShield`) or a leg's underlying (`pqzWrapShield`).
     function shield(bytes32 ua, uint256 amount, address registry) public {
         PqzCore.PqzStorage storage s = PqzCore.$();
         if (!PqzCore._registered(registry, ua)) revert IPqzToken.AccountNotRegistered(ua);
         uint256 room = s.maxShielded - s.totalShielded;
         if (amount == 0 || amount > room) revert IPqzToken.AmountOutOfRange(amount, room);
         s.totalShielded += amount;
-        PqzCore._plain(ua, amount);
+        PqzCore._trivial(ua, amount);
     }
 
-    /// @notice Anyone: `acc += Σ cts` for the next `1 ≤ n ≤ 16` pending credits.
-    function rollOver(bytes32 ua, bytes calldata acc, bytes[] calldata cts) public {
+    /// @notice Anyone (plan 5h D8): `acc += Σ pending[rolled .. rolled + n')` strictly in order, `n' = min(n, K_MAX − 1 −
+    ///         accUnits)` (`CapReached` at 0), `1 ≤ n ≤ ROLL_MAX`, each entry at least `ROLL_AGE` blocks old
+    ///         (`RollTooYoung`), the account prepared (`AccNotPrepared`); the sum is written to the `acc` words with its
+    ///         `accHash`; the slots below `rolled − INLINE_MAX` are deleted (`floor` follows `cleared`).
+    function rollOver(bytes32 ua, uint256 n) public {
+        if (n == 0 || n > PqzCore.ROLL_MAX) revert IPqzToken.RollOverRange(n);
         PqzCore.Account storage a = PqzCore.$().acct[ua];
-        uint256 n = cts.length;
+        if (a.flags & PqzCore.PREP != PqzCore.PREP) revert IPqzToken.AccNotPrepared(ua);
+        uint256 units = a.accUnits;
+        if (units + 1 >= PqzCore.K_MAX) revert IPqzToken.CapReached(ua);
+        if (n > PqzCore.K_MAX - 1 - units) n = PqzCore.K_MAX - 1 - units;
         uint64 r = a.rolled;
-        if (n == 0 || n > PqzCore.ROLL_MAX || r + n > a.pendingCount) revert IPqzToken.RollOverRange(n);
-        if (acc.length != PqzCt.CT || keccak256(acc) != PqzCt.stored(a.accHash)) revert IPqzToken.AccMismatch();
-        bytes memory c = PqzCt.load(acc);
-        for (uint256 j; j < n; ++j) {
-            if (cts[j].length != PqzCt.CT || keccak256(cts[j]) != a.pendingHash[uint64(r + j)]) {
-                revert IPqzToken.InlineMismatch(j);
-            }
-            PqzCt.plus(c, cts[j]);
-        }
+        if (r + n > a.pendingCount) revert IPqzToken.RollOverRange(n);
+        bytes memory c = PqzCore._accOf(a, msg.data[0:0]);
+        PqzCore._window(a, c, r, n, true, true);
         PqzCt.reduce(c);
+        uint256[516] storage w = a.accWords;
+        assembly ("memory-safe") {
+            let b := w.slot
+            let d := add(c, 32)
+            for { let i := 0 } lt(i, 516) { i := add(i, 1) } { sstore(add(b, i), mload(add(d, shl(5, i)))) }
+        }
         bytes32 h = keccak256(c);
+        uint64 nr = uint64(r + n);
         a.accHash = h;
-        a.rolled = uint64(r + n);
-        a.accUnits += uint16(n);
-        emit IPqzToken.PqzRolled(ua, uint64(r + n), h);
+        a.rolled = nr;
+        a.accUnits = uint32(units + n);
+        a.flags |= PqzCore.MAT;
+        uint64 end = nr > PqzCore.INLINE_MAX ? nr - uint64(PqzCore.INLINE_MAX) : 0;
+        uint64 c0 = a.cleared;
+        if (end > c0) {
+            for (uint64 i = c0; i < end; ++i) delete a.pending[i];
+            a.cleared = end;
+            if (end > a.floor) a.floor = end;
+        }
+        emit IPqzToken.PqzRolled(ua, nr, h);
+    }
+
+    /// @notice Permissionless, idempotent (plan 5h D8): writes a non-zero placeholder into half `half` (0 or 1) of the
+    ///         account's `acc` words, so the first rollover rewrites instead of creating 516 slots (≈ 11.4 M); a no-op
+    ///         once done (a materialised `acc` has both).
+    function prepareAcc(bytes32 ua, uint256 half, address registry) public {
+        if (half > 1) revert IPqzToken.BadPayload(half);
+        PqzCore.Account storage a = PqzCore.$().acct[ua];
+        uint8 bit = uint8(2 << half);
+        if (a.flags & bit != 0) return;
+        if (!PqzCore._registered(registry, ua)) revert IPqzToken.AccountNotRegistered(ua);
+        uint256[516] storage w = a.accWords;
+        uint256 hw = PqzCore.HALF_WORDS;
+        assembly ("memory-safe") {
+            let b := add(w.slot, mul(half, hw))
+            for { let i := 0 } lt(i, hw) { i := add(i, 1) } { sstore(add(b, i), 1) }
+        }
+        a.flags |= bit;
+    }
+
+    /// @notice The account's `acc` bytes (D13 `pqzAcc`): the materialised words, or the reference's `u ‖ v`, or 0.
+    function accOf(bytes32 ua) public view returns (bytes memory) {
+        return PqzCore._accOf(PqzCore.$().acct[ua], msg.data[0:0]);
+    }
+
+    /// @notice Entry `i` of `ua` as a ciphertext (D13 `pqzPendingCt`): `u_g ‖ v_j` from its blob, or
+    ///         `Trivial(digits(amount))` of a TRIVIAL entry; `Trivial(0)` for a deleted or unwritten index.
+    function pendingCt(bytes32 ua, uint64 i) public view returns (bytes memory c) {
+        uint256 e = PqzCore.$().acct[ua].pending[i];
+        c = new bytes(PqzCt.CT);
+        if (uint16(e >> 64) == 0) PqzCt.addTrivial(c, uint64(e >> 96));
+        else PqzCt.loadBlob(address(uint160(e >> 96)), uint16(e >> 80), uint16(e >> 64), c);
     }
 }
