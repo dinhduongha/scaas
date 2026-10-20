@@ -17,36 +17,17 @@ BigInt _be(Uint8List b, int lo, int hi) {
 
 BigInt _inv(BigInt a, BigInt p) => (a % p).modInverse(p);
 
-final _secpP = _hex(
-  'fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f',
-);
-final _secpN = _hex(
-  'fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141',
-);
-final _p256P = _hex(
-  'ffffffff00000001000000000000000000000000ffffffffffffffffffffffff',
-);
-final _p256B = _hex(
-  '5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604b',
-);
+final _secpP = _hex('fffffffffffffffffffffffffffffffffffffffffffffffffffffffefffffc2f');
+final _secpN = _hex('fffffffffffffffffffffffffffffffebaaedce6af48a03bbfd25e8cd0364141');
+final _p256P = _hex('ffffffff00000001000000000000000000000000ffffffffffffffffffffffff');
+final _p256B = _hex('5ac635d8aa3a93e7b3ebbd55769886bc651d06b0cc53b0f63bce3c3e27d2604b');
 final _edP = (BigInt.one << 255) - BigInt.from(19);
 final _edD = (BigInt.from(-121665) * _inv(BigInt.from(121666), _edP)) % _edP;
-final _edSqrtM1 = BigInt.two.modPow(
-  (_edP - BigInt.one) ~/ BigInt.from(4),
-  _edP,
-);
-final _bnP = _hex(
-  '30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47',
-);
-final _bnR = _hex(
-  '30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001',
-);
-final _blsP = _hex(
-  '1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab',
-);
-final _blsR = _hex(
-  '73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001',
-);
+final _edSqrtM1 = BigInt.two.modPow((_edP - BigInt.one) ~/ BigInt.from(4), _edP);
+final _bnP = _hex('30644e72e131a029b85045b68181585d97816a916871ca8d3c208c16d87cfd47');
+final _bnR = _hex('30644e72e131a029b85045b68181585d2833e84879b9709143e1f593f0000001');
+final _blsP = _hex('1a0111ea397fe69a4b1ba7b6434bacd764774b84f38512bf6730d2a0f6b0f6241eabfffeb153ffffb9feffffffffaaab');
+final _blsR = _hex('73eda753299d7d483339d80809a1d80553bda402fffe5bfeffffffff00000001');
 
 void _need(bool ok, String reason) {
   if (!ok) throw UAError('UAKeyData', reason);
@@ -81,15 +62,13 @@ class _F2 {
 
 _F2 _add(_F2 a, _F2 b, BigInt p) => _F2((a.a0 + b.a0) % p, (a.a1 + b.a1) % p);
 _F2 _sub(_F2 a, _F2 b, BigInt p) => _F2((a.a0 - b.a0) % p, (a.a1 - b.a1) % p);
-_F2 _mul(_F2 a, _F2 b, BigInt p) =>
-    _F2((a.a0 * b.a0 - a.a1 * b.a1) % p, (a.a0 * b.a1 + a.a1 * b.a0) % p);
+_F2 _mul(_F2 a, _F2 b, BigInt p) => _F2((a.a0 * b.a0 - a.a1 * b.a1) % p, (a.a0 * b.a1 + a.a1 * b.a0) % p);
 _F2 _inv2(_F2 a, BigInt p) {
   final n = _inv(a.a0 * a.a0 + a.a1 * a.a1, p);
   return _F2((a.a0 * n) % p, (-a.a1 * n) % p);
 }
 
-bool _onCurve(_F2 x, _F2 y, _F2 b, BigInt p) =>
-    _mul(y, y, p) == _add(_mul(_mul(x, x, p), x, p), b, p);
+bool _onCurve(_F2 x, _F2 y, _F2 b, BigInt p) => _mul(y, y, p) == _add(_mul(_mul(x, x, p), x, p), b, p);
 
 class _Pt {
   final _F2 x, y;
@@ -101,8 +80,7 @@ _Pt? _addPt(_Pt? a, _Pt? c, BigInt p) {
   if (c == null) return a;
   _F2 l;
   if (a.x == c.x) {
-    if (a.y != c.y || a.y.isZero)
-      return null; // P + (-P), or doubling a 2-torsion point
+    if (a.y != c.y || a.y.isZero) return null; // P + (-P), or doubling a 2-torsion point
     final x2 = _mul(a.x, a.x, p);
     l = _mul(_add(_add(x2, x2, p), x2, p), _inv2(_add(a.y, a.y, p), p), p);
   } else {
@@ -152,10 +130,7 @@ void _secpCompressed(Uint8List b, int o) {
 void _p256Point(Uint8List b) {
   final x = _be(b, 0, 32), y = _be(b, 32, 64);
   _need(x < _p256P && y < _p256P, 'range');
-  _need(
-    (y * y - (x * x * x - BigInt.from(3) * x + _p256B)) % _p256P == BigInt.zero,
-    'curve',
-  );
+  _need((y * y - (x * x * x - BigInt.from(3) * x + _p256B)) % _p256P == BigInt.zero, 'curve');
 }
 
 (BigInt, BigInt) _edAdd((BigInt, BigInt) a, (BigInt, BigInt) c) {
@@ -174,8 +149,7 @@ void _ed25519(Uint8List b) {
   final sign = (v >> 255).toInt();
   final y = v & ((BigInt.one << 255) - BigInt.one);
   _need(y < _edP, 'range');
-  final x2 =
-      ((y * y - BigInt.one) * _inv(_edD * y * y + BigInt.one, _edP)) % _edP;
+  final x2 = ((y * y - BigInt.one) * _inv(_edD * y * y + BigInt.one, _edP)) % _edP;
   var x = x2.modPow((_edP + BigInt.from(3)) ~/ BigInt.from(8), _edP);
   if ((x * x - x2) % _edP != BigInt.zero) x = (x * _edSqrtM1) % _edP;
   _need((x * x - x2) % _edP == BigInt.zero, 'curve');
@@ -195,32 +169,13 @@ void _bnG1(Uint8List b, int o) {
   _need((y * y - x * x * x - BigInt.from(3)) % _bnP == BigInt.zero, 'curve');
 }
 
-final _bnB2v = _mul(
-  _F2(BigInt.from(3), BigInt.zero),
-  _inv2(_F2(BigInt.from(9), BigInt.one), _bnP),
-  _bnP,
-);
+final _bnB2v = _mul(_F2(BigInt.from(3), BigInt.zero), _inv2(_F2(BigInt.from(9), BigInt.one), _bnP), _bnP);
 
 void _bnG2(Uint8List b) {
-  final xi = _be(b, 0, 32),
-      xr = _be(b, 32, 64),
-      yi = _be(b, 64, 96),
-      yr = _be(b, 96, 128);
+  final xi = _be(b, 0, 32), xr = _be(b, 32, 64), yi = _be(b, 64, 96), yr = _be(b, 96, 128);
   _need(xi < _bnP && xr < _bnP && yi < _bnP && yr < _bnP, 'range');
-  _need(
-    !(xi == BigInt.zero &&
-        xr == BigInt.zero &&
-        yi == BigInt.zero &&
-        yr == BigInt.zero),
-    'identity',
-  );
-  _curveAndSubgroup(
-    _F2(xr, xi),
-    _F2(yr, yi),
-    _bnB2v,
-    _bnR,
-    _bnP,
-  ); // EIP-197: imaginary part first
+  _need(!(xi == BigInt.zero && xr == BigInt.zero && yi == BigInt.zero && yr == BigInt.zero), 'identity');
+  _curveAndSubgroup(_F2(xr, xi), _F2(yr, yi), _bnB2v, _bnR, _bnP); // EIP-197: imaginary part first
 }
 
 BigInt _blsFp(Uint8List b, int o) {
@@ -235,34 +190,13 @@ BigInt _blsFp(Uint8List b, int o) {
 void _blsG1(Uint8List b) {
   final x = _blsFp(b, 0), y = _blsFp(b, 64);
   _need(!(x == BigInt.zero && y == BigInt.zero), 'identity');
-  _curveAndSubgroup(
-    _F2(x, BigInt.zero),
-    _F2(y, BigInt.zero),
-    _F2(BigInt.from(4), BigInt.zero),
-    _blsR,
-    _blsP,
-  );
+  _curveAndSubgroup(_F2(x, BigInt.zero), _F2(y, BigInt.zero), _F2(BigInt.from(4), BigInt.zero), _blsR, _blsP);
 }
 
 void _blsG2(Uint8List b) {
-  final x0 = _blsFp(b, 0),
-      x1 = _blsFp(b, 64),
-      y0 = _blsFp(b, 128),
-      y1 = _blsFp(b, 192);
-  _need(
-    !(x0 == BigInt.zero &&
-        x1 == BigInt.zero &&
-        y0 == BigInt.zero &&
-        y1 == BigInt.zero),
-    'identity',
-  );
-  _curveAndSubgroup(
-    _F2(x0, x1),
-    _F2(y0, y1),
-    _F2(BigInt.from(4), BigInt.from(4)),
-    _blsR,
-    _blsP,
-  ); // EIP-2537: c0 first
+  final x0 = _blsFp(b, 0), x1 = _blsFp(b, 64), y0 = _blsFp(b, 128), y1 = _blsFp(b, 192);
+  _need(!(x0 == BigInt.zero && x1 == BigInt.zero && y0 == BigInt.zero && y1 == BigInt.zero), 'identity');
+  _curveAndSubgroup(_F2(x0, x1), _F2(y0, y1), _F2(BigInt.from(4), BigInt.from(4)), _blsR, _blsP); // EIP-2537: c0 first
 }
 
 // ----- layouts -----
@@ -292,12 +226,7 @@ void _musig2(Uint8List d, void Function(Uint8List, int) point, int size) {
   }
 }
 
-void _frost(
-  Uint8List d,
-  void Function(Uint8List, int) point,
-  int size,
-  BigInt order,
-) {
+void _frost(Uint8List d, void Function(Uint8List, int) point, int size, BigInt order) {
   final t = _u16(d, size), n = _u16(d, size + 2);
   _need(t >= 2 && t <= n && n <= 16, 'threshold');
   final per = (t + 1) * size + 32;
@@ -308,10 +237,7 @@ void _frost(
     for (var j = 0; j <= t; j++) {
       point(d, o + j * size); // t commitments, then R_i
     }
-    _need(
-      _be(d, o + (t + 1) * size, o + (t + 1) * size + 32) < order,
-      'scalar',
-    );
+    _need(_be(d, o + (t + 1) * size, o + (t + 1) * size + 32) < order, 'scalar');
   }
 }
 

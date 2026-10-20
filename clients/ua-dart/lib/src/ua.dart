@@ -6,8 +6,7 @@ import 'keccak.dart';
 import 'keydata.dart';
 import 'table.dart';
 
-const domainType =
-    'EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)';
+const domainType = 'EIP712Domain(string name,string version,uint256 chainId,address verifyingContract,bytes32 salt)';
 const uaAuthType = 'UAAuth(bytes32 ua,bytes32 purpose,bytes32 digest)';
 const registryName = 'SCaaS UARegistry';
 
@@ -38,8 +37,7 @@ Uint8List tag(int kind) => _k([_utf8(kindTagString(kind))]);
 
 /// Throws ArgumentError for a group outside the table (a programming error; the table is closed).
 String groupTagString(String group) {
-  if (!groups.contains(group))
-    throw ArgumentError('unknown keyHash group $group');
+  if (!groups.contains(group)) throw ArgumentError('unknown keyHash group $group');
   return 'scaas.ua.group.$group.v1';
 }
 
@@ -55,12 +53,10 @@ Uint8List _sized(Uint8List b, int n, String what) {
   return b;
 }
 
-String _hex(Uint8List b) =>
-    b.map((x) => x.toRadixString(16).padLeft(2, '0')).join();
+String _hex(Uint8List b) => b.map((x) => x.toRadixString(16).padLeft(2, '0')).join();
 
 /// keccak256(TAG(kind) ‖ keyData); no validation (see [deriveUA]). [keyData]: Uint8List or hex String.
-Uint8List uaOf(int kind, Object? keyData) =>
-    _k([tag(_derived(kind).number), keyBytes(keyData)]);
+Uint8List uaOf(int kind, Object? keyData) => _k([tag(_derived(kind).number), keyBytes(keyData)]);
 
 bool inNativeSpace(Uint8List id) {
   _sized(id, 32, 'id');
@@ -105,12 +101,8 @@ Uint8List? keyHashOf(int kind, Object? keyData) {
   return _k([groupTag(g), Uint8List.sublistView(d, lo, hi)]);
 }
 
-Uint8List uaMessage(int kind, Uint8List purpose, Uint8List digest) => _k([
-  msgTag,
-  tag(kind),
-  _sized(purpose, 32, 'purposeTag'),
-  _sized(digest, 32, 'digest'),
-]);
+Uint8List uaMessage(int kind, Uint8List purpose, Uint8List digest) =>
+    _k([msgTag, tag(kind), _sized(purpose, 32, 'purposeTag'), _sized(digest, 32, 'digest')]);
 
 BigInt _id(int v) {
   if (v < 0) throw ArgumentError('chainId must be non-negative');
@@ -137,65 +129,36 @@ Uint8List _addressWord(Uint8List a) {
 }
 
 /// pop_digest (CTR-UA-07); [pqzKeyHash] is the keyHash of the UA's PQZ key, 32 zero bytes without one.
-Uint8List popDigest(
-  int chainId,
-  Uint8List chainUid,
-  Uint8List registry,
-  Uint8List ua,
-  Uint8List pqzKeyHash,
-) => _k([
-  purposeTag('pop'),
-  chainKeyHash(chainId),
-  _sized(chainUid, 32, 'chainUid'),
-  _addressWord(registry),
-  _sized(ua, 32, 'ua'),
-  _sized(pqzKeyHash, 32, 'pqzKeyHash'),
-]);
+Uint8List popDigest(int chainId, Uint8List chainUid, Uint8List registry, Uint8List ua, Uint8List pqzKeyHash) => _k([
+      purposeTag('pop'),
+      chainKeyHash(chainId),
+      _sized(chainUid, 32, 'chainUid'),
+      _addressWord(registry),
+      _sized(ua, 32, 'ua'),
+      _sized(pqzKeyHash, 32, 'pqzKeyHash'),
+    ]);
 
 /// What a PQ holder signs to register (UA-6 U14): the PQZ keyHash (zeros without a key), the pop digest and
 /// uaMessage(kind, pop, popDigest). A [pqzKey] needs a holder kind ([isPqzHolder]), else UAPqzHolder.
-({Uint8List pqzKeyHash, Uint8List popDigest, Uint8List message})
-holderPopMessage(
-  int kind,
-  int chainId,
-  Uint8List chainUid,
-  Uint8List registry,
-  Uint8List ua, [
-  Object? pqzKey,
-]) {
+({Uint8List pqzKeyHash, Uint8List popDigest, Uint8List message}) holderPopMessage(
+    int kind, int chainId, Uint8List chainUid, Uint8List registry, Uint8List ua,
+    [Object? pqzKey]) {
   if (pqzKey != null && !isPqzHolder(kind)) {
-    throw UAError(
-      'UAPqzHolder',
-      '0x${kind.toRadixString(16).padLeft(4, '0')} may not hold a PQZ key',
-    );
+    throw UAError('UAPqzHolder', '0x${kind.toRadixString(16).padLeft(4, '0')} may not hold a PQZ key');
   }
   final h = pqzKey == null ? Uint8List(32) : keyHashOf(0x0142, pqzKey)!;
   final d = popDigest(chainId, chainUid, registry, ua, h);
-  return (
-    pqzKeyHash: h,
-    popDigest: d,
-    message: uaMessage(kind, purposeTag('pop'), d),
-  );
+  return (pqzKeyHash: h, popDigest: d, message: uaMessage(kind, purposeTag('pop'), d));
 }
 
 /// The message R_REG proves over: uaMessage(0x0142, pop, popDigest(ua, keyHash(0x0142, pqzKey))).
-Uint8List pqzRegMessage(
-  int chainId,
-  Uint8List chainUid,
-  Uint8List registry,
-  Uint8List ua,
-  Object? pqzKey,
-) => uaMessage(
-  0x0142,
-  purposeTag('pop'),
-  popDigest(chainId, chainUid, registry, ua, keyHashOf(0x0142, pqzKey)!),
-);
+Uint8List pqzRegMessage(int chainId, Uint8List chainUid, Uint8List registry, Uint8List ua, Object? pqzKey) =>
+    uaMessage(0x0142, purposeTag('pop'), popDigest(chainId, chainUid, registry, ua, keyHashOf(0x0142, pqzKey)!));
 
 /// True when the msig members outside kinds 0x0130-0x0133 weigh less than its threshold (CTR-PQZ-12).
 bool msigPqzEligible(Object? keyData) {
   final d = keyBytes(keyData);
-  if (d.length < 4 || d.length != 4 + 36 * ((d[2] << 8) | d[3]))
-    throw UAError('UAKeyData', 'length');
+  if (d.length < 4 || d.length != 4 + 36 * ((d[2] << 8) | d[3])) throw UAError('UAKeyData', 'length');
   var classical = 0;
   for (var o = 4; o < d.length; o += 36) {
     final k = (d[o] << 8) | d[o + 1];
@@ -212,30 +175,20 @@ class Domain {
 }
 
 Uint8List uaAuthDomainSeparator(Domain d) => _k([
-  _k([_utf8(domainType)]),
-  _k([_utf8(registryName)]),
-  _k([_utf8('${_id(d.generation)}')]),
-  _word(d.chainId),
-  _addressWord(d.registry),
-  _sized(d.chainUid, 32, 'chainUid'),
-]);
+      _k([_utf8(domainType)]),
+      _k([_utf8(registryName)]),
+      _k([_utf8('${_id(d.generation)}')]),
+      _word(d.chainId),
+      _addressWord(d.registry),
+      _sized(d.chainUid, 32, 'chainUid'),
+    ]);
 
 /// EIP-712 digest of UAAuth(ua, purpose, digest): what native signers behind the registry sign.
-Uint8List uaAuthDigest(
-  Domain d,
-  Uint8List ua,
-  Uint8List purpose,
-  Uint8List digest,
-) => _k([
-  Uint8List.fromList([0x19, 0x01]),
-  uaAuthDomainSeparator(d),
-  _k([
-    _k([_utf8(uaAuthType)]),
-    _sized(ua, 32, 'ua'),
-    _sized(purpose, 32, 'purposeTag'),
-    _sized(digest, 32, 'digest'),
-  ]),
-]);
+Uint8List uaAuthDigest(Domain d, Uint8List ua, Uint8List purpose, Uint8List digest) => _k([
+      Uint8List.fromList([0x19, 0x01]),
+      uaAuthDomainSeparator(d),
+      _k([_k([_utf8(uaAuthType)]), _sized(ua, 32, 'ua'), _sized(purpose, 32, 'purposeTag'), _sized(digest, 32, 'digest')]),
+    ]);
 
 Uint8List memberDigest(Uint8List structureUa, Uint8List uaMsg) =>
     _k([_sized(structureUa, 32, 'structureUa'), _sized(uaMsg, 32, 'uaMsg')]);
@@ -255,9 +208,7 @@ String canonicalId(String text) {
 Uint8List encodeMsig(int threshold, List<(int, Uint8List, int)> members) {
   void u16(List<int> o, int v) {
     if (v < 0 || v > 0xffff) throw ArgumentError('u16 out of range');
-    o
-      ..add(v >> 8)
-      ..add(v & 0xff);
+    o..add(v >> 8)..add(v & 0xff);
   }
 
   final o = <int>[];
