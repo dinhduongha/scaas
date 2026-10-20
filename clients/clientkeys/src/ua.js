@@ -54,9 +54,7 @@ const DERIVED = [
   [0x0131, 'mldsa65', [1952], 'mldsa65'],
   [0x0132, 'fndsa512', [897], 'fndsa512'],
   [0x0133, 'slhdsa128s', [32], 'slhdsa128s'],
-  [0x0140, 'zether-bn254', [64], 'bn254-g1'],
   [0x0141, 'zether-bls12381', [128], 'bls12381-g1'],
-  [0x0142, 'pqz-mlwe', [16384], 'pqz-mlwe'],
   [0x0108, 'secp256k1', [64], 'secp256k1'], // 2026-10-17, appended (rows keep their positions)
 ];
 // [number, name, native id lengths]
@@ -70,31 +68,50 @@ export const KINDS = Object.freeze([
   ...NATIVE.map(([kind, name, lengths]) => Object.freeze({ kind, name, native: true, lengths, group: null })),
   ...DERIVED.map(([kind, name, lengths, group]) => Object.freeze({ kind, name, native: false, lengths, group })),
 ]);
+/** Schemes are not kinds (UA-6 U14): 0x0142 is the PQZ key attribute of a PQ holder; it keeps its tag and keyHash group. */
+export const SCHEMES = Object.freeze([Object.freeze({ kind: 0x0142, name: 'pqz-mlwe', lengths: [16384], group: 'pqz-mlwe' })]);
 const BY_NUMBER = new Map(KINDS.map((k) => [k.kind, k]));
+const SCHEME_BY_NUMBER = new Map(SCHEMES.map((k) => [k.kind, k]));
 export const kindInfo = (kind) => BY_NUMBER.get(kind) ?? fail('UAKindUnknown', `0x${Number(kind).toString(16)}`);
 const derived = (kind) => {
+  if (SCHEME_BY_NUMBER.has(kind)) fail('UAKindNotDerived', SCHEME_BY_NUMBER.get(kind).name);
   const k = kindInfo(kind);
   if (k.native) fail('UAKindNotDerived', k.name);
   return k;
 };
+// tag / keyHash / message accept a kind or a scheme; id derivation and key-data validation accept kinds only
+const tagged = (kind) => SCHEME_BY_NUMBER.get(kind) ?? derived(kind);
 
 const singleSigning = (k) => (k >= 0x0100 && k <= 0x0108) || (k >= 0x0110 && k <= 0x0113) || (k >= 0x0130 && k <= 0x0133);
 export const isNativeKind = (kind) => BY_NUMBER.get(kind)?.native === true;
-export const isZetherKind = (kind) => kind >= 0x0140 && kind <= 0x0142;
-export const isSigningKind = (kind) => kind === 0x0120 || singleSigning(kind);
+export const isZetherKind = (kind) => kind === 0x0141;
+export const isSigningKind = (kind) => kind === 0x0120 || kind === 0x0141 || singleSigning(kind);
+/** Kinds that may hold a PQZ key attribute: mldsa44, mldsa65, fndsa512 (an `msig` per `msigPqzEligible`). */
+export const isPqzHolder = (kind) => kind >= 0x0130 && kind <= 0x0132;
+/** An `msig` whose members of kinds outside 0x0130–0x0133 weigh less than its threshold (CTR-PQZ-12). */
+export function msigPqzEligible(keyData) {
+  const d = bytes(keyData);
+  need(d.length >= 4 && d.length === 4 + 36 * u16(d, 2), 'length');
+  let classical = 0;
+  for (let o = 4; o < d.length; o += 36) {
+    const k = u16(d, o);
+    if (k < 0x0130 || k > 0x0133) classical += u16(d, o + 34);
+  }
+  return classical < u16(d, 0);
+}
 export const isMemberKind = (kind, hederaNative = false) =>
   singleSigning(kind) || kind === 0x0001 || kind === 0x0002 || (hederaNative && kind === 0x0003);
 
-export const kindTagString = (kind) => `scaas.ua.${derived(kind).name}.v1`;
+export const kindTagString = (kind) => `scaas.ua.${tagged(kind).name}.v1`;
 export const TAG = (kind) => tagHash(kindTagString(kind));
-export const GROUPS = Object.freeze([...new Set(DERIVED.map(([, , , g]) => g).filter(Boolean))]);
+export const GROUPS = Object.freeze([...new Set([...DERIVED.map(([, , , g]) => g), ...SCHEMES.map((k) => k.group)].filter(Boolean))]);
 export const groupTagString = (group) => {
   if (!GROUPS.includes(group)) throw new Error(`unknown keyHash group ${group}`);
   return `scaas.ua.group.${group}.v1`;
 };
 export const GROUP = (group) => tagHash(groupTagString(group));
 export const MSG_TAG = tagHash('scaas.ua.msg.v1');
-export const PURPOSES = Object.freeze(['pop', 'authref', 'metatx', 'metatx-cancel', 'member', 'zether-auth', 'zether-owner',
+export const PURPOSES = Object.freeze(['pop', 'metatx', 'metatx-cancel', 'member', 'zether-auth', 'zether-owner',
   'keyop', 'receiver-fee', 'vp', 'vc-anchor', 'trade']);
 export const purposeTag = (p) => {
   if (!PURPOSES.includes(p)) fail('UAPurposeUnknown', p);
@@ -106,7 +123,10 @@ export const UAAUTH_TYPEHASH = tagHash('UAAuth(bytes32 ua,bytes32 purpose,bytes3
 export const NAME_HASH = tagHash('SCaaS UARegistry');
 
 /** `keccak256(TAG(kind) ‖ keyData)`; no validation (use `deriveUA`). */
-export const uaOf = (kind, keyData) => keccak_256(concatBytes(TAG(kind), bytes(keyData)));
+export const uaOf = (kind, keyData) => {
+  derived(kind); // a scheme (0x0142) or a native kind has no derived id
+  return keccak_256(concatBytes(TAG(kind), bytes(keyData)));
+};
 export const inNativeSpace = (id) => sized(id, 32, 'id').subarray(0, 12).every((b) => b === 0);
 
 /** Validate, derive, refuse an id whose top 96 bits are zero (CTR-UA-03). */
@@ -128,7 +148,7 @@ export function nativeId(kind, raw) {
 
 /** `keccak256(GROUP(g) ‖ canonical pubkey)`, null for structures. Call on validated key data. */
 export function keyHashOf(kind, keyData) {
-  const k = derived(kind);
+  const k = tagged(kind);
   if (!k.group) return null;
   const d = bytes(keyData);
   const [lo, hi] = { 0x0100: [0, 32], 0x0101: [0, 32], 0x0108: [0, 32], 0x0110: [1, 33], 0x0111: [1, 33], 0x0112: [0, 64], 0x0113: [0, 64] }[kind]
@@ -142,10 +162,27 @@ export const uaMessage = (kind, purpose, digest) =>
 export const chainKeyHash = (chainId) => tagHash(`evm:${BigInt(chainId).toString(10)}`);
 const addressWord = (a) => concatBytes(new Uint8Array(12), sized(a, 20, 'registry'));
 
-/** `pop_digest` (CTR-UA-07). */
-export function popDigest({ chainId, chainUid, registry, ua, authRef = new Uint8Array(32) }) {
+/** `pop_digest` (CTR-UA-07): `pqzKeyHash` is the keyHash of the UA's PQZ key, 0 without one (the bytes of the former `authRef = 0`). */
+export function popDigest({ chainId, chainUid, registry, ua, pqzKeyHash = new Uint8Array(32) }) {
   return keccak_256(concatBytes(POP_TAG, chainKeyHash(chainId), sized(chainUid, 32, 'chainUid'), addressWord(registry),
-    sized(ua, 32, 'ua'), sized(authRef, 32, 'authRef')));
+    sized(ua, 32, 'ua'), sized(pqzKeyHash, 32, 'pqzKeyHash')));
+}
+
+/**
+ * What a PQ holder signs to register with a PQZ key (UA-6 U14): `{ pqzKeyHash, popDigest, message }` with
+ * `message = uaMessage(kind, pop, popDigest(ua, h))`, `h = keyHash(0x0142, pqzKey)`; the same `h` goes to `pqzRegMessage`
+ * for the native prover's `pqzPop`. Without a key (`pqzKey` omitted) `h = 0`, the plain pop.
+ */
+export function holderPopMessage(kind, { chainId, chainUid, registry, ua, pqzKey }) {
+  const pqzKeyHash = pqzKey ? keyHashOf(0x0142, pqzKey) : new Uint8Array(32);
+  const d = popDigest({ chainId, chainUid, registry, ua, pqzKeyHash });
+  return { pqzKeyHash, popDigest: d, message: uaMessage(kind, POP_TAG, d) };
+}
+
+/** The message `R_REG` proves over: `uaMessage(0x0142, pop, popDigest(ua, keyHash(0x0142, pqzKey)))` (UA-6 U14). */
+export function pqzRegMessage({ chainId, chainUid, registry, ua, pqzKey }) {
+  const h = keyHashOf(0x0142, pqzKey);
+  return uaMessage(0x0142, POP_TAG, popDigest({ chainId, chainUid, registry, ua, pqzKeyHash: h }));
 }
 
 export function uaAuthDomainSeparator({ generation, chainId, registry, chainUid }) {
@@ -338,7 +375,7 @@ export function validateKeyData(kind, keyData, { hederaNative = false } = {}) {
     case 0x0101: return p256Point(d);
     case 0x0102: return ed25519Key(d);
     case 0x0103: return secpCompressed(concatBytes(Uint8Array.of(2), d));
-    case 0x0104: case 0x0140: return bnG1(d);
+    case 0x0104: return bnG1(d);
     case 0x0105: case 0x0141: return blsG1(d);
     case 0x0106: return blsG2(d);
     case 0x0107: return bnG2(d);
@@ -349,6 +386,6 @@ export function validateKeyData(kind, keyData, { hederaNative = false } = {}) {
     case 0x0113: return frost(d, bnG1, 64, BN_R);
     case 0x0120: return msig(d, hederaNative);
     case 0x0132: return fndsa(d);
-    default: return undefined; // mldsa44/65, slhdsa128s, pqz-mlwe: the length is the whole check (U7)
+    default: return undefined; // mldsa44/65, slhdsa128s: the length is the whole check (U7)
   }
 }

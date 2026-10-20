@@ -10,12 +10,13 @@ import { p256 } from '@noble/curves/nist.js';
 import { ed25519 } from '@noble/curves/ed25519.js';
 import { sha256 } from '@noble/hashes/sha2.js';
 import * as ua from '../src/ua.js';
+import { schnorrVerify as zetherVerify } from '../src/zether.js';
 import { hex, fromHex, keccak_256, concatBytes } from '../src/bytes.js';
 import { PQ_KINDS, pqMessage } from '../src/pq.js';
 import { hashTypedData, hashStruct, padId, uaTradeOrderTypedData, uaInvalidateNoncesTypedData, orderCancelTypedData,
   checkTradeOrder, checkCancel } from '../src/evm.js';
 
-const dir = new URL('../../../smartcontracts/vectors/ua/', import.meta.url);
+import { dir } from './ua-vectors-dir.js';
 const V = JSON.parse(readFileSync(new URL('uatrade_kat.json', dir)));
 const S = JSON.parse(readFileSync(new URL('signatures.json', dir)));
 const P = JSON.parse(readFileSync(new URL('pq_signatures.json', dir)));
@@ -36,14 +37,15 @@ const NOBLE = {
   0x0101: (kd, m, sig) => p256.verify(sig, sha256(m), concatBytes(Uint8Array.of(4), kd), { prehash: false, lowS: true }),
   0x0103: (kd, m, sig) => schnorr.verify(sig, m, kd),
   0x0102: (kd, m, sig) => ed25519.verify(sig, m, kd, { zip215: false }),
+  0x0141: (kd, m, sig) => zetherVerify('bls12381', kd, m, sig), // UA-6: the Zether UA signs every write
 };
 /** true / false where noble can tell; null for a kind verified on chain only. */
 const authOk = (from, purpose, digest, auth) => {
   if (from === S.native.ua) return recover(auth, digest) === S.native.address;
   const d = S.derived.find((x) => x.ua === from);
   const [kd, sig] = split(auth);
-  assert.equal(hex(kd), d.keyData);
-  return NOBLE[d.kind] ? NOBLE[d.kind](kd, ua.uaMessage(d.kind, ua.purposeTag(purpose), fromHex(digest)), sig) : null;
+  assert.equal(hex(kd), d.stored ? '0x' : d.keyData, 'a stored kind (Zether) sends no key data');
+  return NOBLE[d.kind] ? NOBLE[d.kind](d.stored ? fromHex(d.keyData) : kd, ua.uaMessage(d.kind, ua.purposeTag(purpose), fromHex(digest)), sig) : null;
 };
 
 test('typehashes, the purpose tag and the signer set', () => {
@@ -74,7 +76,7 @@ test('every row: order, cancel and invalidate digests; the builders rebuild the 
       if (v === true && r.from !== S.native.ua) assert.equal(authOk(r.from, 'metatx', d, auth), false, 'the purpose binds');
     }
   }
-  assert.equal(nobled, 3 * 4, 'native ECDSA, p256, bip340, ed25519 x order / cancel / invalidate');
+  assert.equal(nobled, 3 * 5, 'native ECDSA, p256, bip340, ed25519, zether x order / cancel / invalidate');
   const n = V.nativeMaker;
   assert.equal(hex(hashTypedData(n.order)), n.orderHash);
   assert.equal(recover(n.auth, n.orderHash), S.native.address);
