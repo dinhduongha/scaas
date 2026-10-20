@@ -105,6 +105,11 @@ typedef struct {
  */
 #define SCAAS_UA_ERR_INTERNAL 10
 
+/**
+ * "UAPqzHolder": a PQZ key given for a kind that may not hold one (only 0x0130-0x0132 may).
+ */
+#define SCAAS_UA_ERR_PQZ_HOLDER 11
+
 #ifdef __cplusplus
 extern "C" {
 #endif // __cplusplus
@@ -116,7 +121,7 @@ uint32_t scaas_ua_abi_version(void);
 
 /**
  * The static code string of a status: "UAOk", "UAKeyData" ... "UAPurposeUnknown" (the vector files' `error` values),
- * "UAArgument", "UABuffer", "UAInternal"; "UAStatusUnknown" for any other value.
+ * "UAArgument", "UABuffer", "UAInternal", "UAPqzHolder"; "UAStatusUnknown" for any other value.
  */
 const char *scaas_ua_status_name(ScaasUaStatus status);
 
@@ -151,14 +156,28 @@ bool scaas_ua_is_signing(uint16_t kind);
 bool scaas_ua_is_member(uint16_t kind, bool hedera_native);
 
 /**
- * The 32-byte TAG of a derived kind.
+ * Whether `kind` may hold a PQZ key attribute (mldsa44, mldsa65, fndsa512).
+ */
+bool scaas_ua_is_pqz_holder(uint16_t kind);
+
+/**
+ * `*out = true` iff the `msig` key data is PQ-eligible: its members outside 0x0130-0x0133 weigh less than the threshold.
+ */
+ScaasUaStatus scaas_ua_msig_pqz_eligible(const uint8_t *key_data,
+                                         size_t key_data_len,
+                                         bool *out);
+
+/**
+ * The 32-byte TAG of a derived kind, or of the PQZ scheme 0x0142.
  */
 ScaasUaStatus scaas_ua_tag(uint16_t kind, uint8_t *out32);
 
 /**
- * The tag string of a derived kind (NUL-terminated; `*out_len` counts the NUL).
+ * The tag string of a derived kind or of the PQZ scheme 0x0142 (NUL-terminated; `*out_len` counts the NUL).
  */
-ScaasUaStatus scaas_ua_kind_tag_string(uint16_t kind, char *out, size_t *out_len);
+ScaasUaStatus scaas_ua_kind_tag_string(uint16_t kind,
+                                       char *out,
+                                       size_t *out_len);
 
 /**
  * The 32-byte GROUP tag of `group`; `*present = false` (and `out32` untouched) for an unknown or non-UTF-8 group.
@@ -243,14 +262,41 @@ ScaasUaStatus scaas_ua_ua_message(uint16_t kind,
 ScaasUaStatus scaas_ua_chain_key_hash(uint64_t chain_id, uint8_t *out32);
 
 /**
- * The 32-byte popDigest; `chain_uid32`, `ua32`, `auth_ref32` are 32 bytes, `registry20` is 20 bytes.
+ * The 32-byte popDigest; `chain_uid32`, `ua32`, `pqz_key_hash32` are 32 bytes (the keyHash of the UA's PQZ key, all
+ * zero without one), `registry20` is 20 bytes.
  */
 ScaasUaStatus scaas_ua_pop_digest(uint64_t chain_id,
                                   const uint8_t *chain_uid32,
                                   const uint8_t *registry20,
                                   const uint8_t *ua32,
-                                  const uint8_t *auth_ref32,
+                                  const uint8_t *pqz_key_hash32,
                                   uint8_t *out32);
+
+/**
+ * What a PQ holder signs to register: `out_pqz_key_hash32`, `out_pop_digest32` and `out_message32` (the ua_msg over the pop
+ * digest). `pqz_key` NULL = no key (hash 0, the plain pop); a key for a kind that may not hold one is `SCAAS_UA_ERR_PQZ_HOLDER`.
+ */
+ScaasUaStatus scaas_ua_holder_pop_message(uint16_t kind,
+                                          uint64_t chain_id,
+                                          const uint8_t *chain_uid32,
+                                          const uint8_t *registry20,
+                                          const uint8_t *ua32,
+                                          const uint8_t *pqz_key,
+                                          size_t pqz_key_len,
+                                          uint8_t *out_pqz_key_hash32,
+                                          uint8_t *out_pop_digest32,
+                                          uint8_t *out_message32);
+
+/**
+ * The 32-byte message `R_REG` proves over for `pqz_key` (the PQZ scheme 0x0142).
+ */
+ScaasUaStatus scaas_ua_pqz_reg_message(uint64_t chain_id,
+                                       const uint8_t *chain_uid32,
+                                       const uint8_t *registry20,
+                                       const uint8_t *ua32,
+                                       const uint8_t *pqz_key,
+                                       size_t pqz_key_len,
+                                       uint8_t *out32);
 
 /**
  * The 32-byte UARegistry EIP-712 domain separator; `registry20` is 20 bytes, `chain_uid32` 32 bytes.
