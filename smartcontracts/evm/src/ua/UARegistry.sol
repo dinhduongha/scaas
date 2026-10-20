@@ -328,6 +328,8 @@ contract UARegistry is IUARegistry, SaltedEIP712 {
 
     // ----- register (accounts.md §1.8 steps 1–8) -----
 
+    /// Registers `keyData` of `kind` (accounts.md §1.8). `UAPoP` when the PoP fails, except one case: the `pop` of a
+    /// PQ-eligible `msig` that does not decode as `MemberSig[]` reverts with empty data (the ABI decoder), not `UAPoP`.
     function register(uint16 kind, bytes calldata keyData, bytes calldata pop, bytes calldata pqzKey,
         bytes calldata pqzPop) external returns (bytes32 ua)
     {

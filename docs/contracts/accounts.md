@@ -584,7 +584,7 @@ EVM Zether (the `*_ZETHER` tokens, BLS12-381 only):
 | `zetherRollOver(ua)`, `zetherRollOverBatch(uas)` | `ua` | Z | none (public) |
 | `wrap`, `unwrap` | sender | N | — |
 | `mtxExecute(m, sig)` (self-call of `zetherTransfer`/`zetherUnshield`/`zetherShield`/`wrap`/`unwrap`, outer fee) | `m.from` (outer-fee payer) | N | the base's `_requireValidSignature` |
-| `uaExecute(m, auth)` (the same self-calls under the UA envelope binding, outer fee from the UA ledger; SPECIFIED, UA-5c) | `m.from` (outer-fee payer) | U | `requireAuthorized` (derived) / the native check ([CTR-ZTH-51](zether.md#CTR-ZTH-51)) |
+| `uaExecute(m, auth)` (the same self-calls under the UA envelope binding, outer fee from the UA ledger; `zetherShield` BUILT (UA-6 Task 4), the other Zether self-calls SPECIFIED, UA-5c) | `m.from` (outer-fee payer) | U | `requireAuthorized` (derived) / the native check ([CTR-ZTH-51](zether.md#CTR-ZTH-51)) |
 | views `registered`, `accountState`, `sendCounter` | `ua` | Z | — |
 
 The proof-covered entry points carry no `authSig`: the proof of knowledge of `x` is the authorization. The roll-over and
@@ -959,7 +959,7 @@ it. The v3 token's own native path keeps its `UAMetaTransaction` typed data.
    `x` under the Zether tag; a classical-dominant `msig`: **no** PoP of its own — members proved theirs, a non-empty
    `pop` is refused; a PQ-eligible `msig` (non-PQ weight below the threshold) **signs its registration**: `pop` is
    `abi.encode(MemberSig[])` reaching the threshold over the same message, with purpose `pop`, with or without a PQZ key,
-   so nobody can register it first without the key) — `UAPoP`. The PoP goes through `IUAPopVerifier.verifyPop`
+   so nobody can register it first without the key) — `UAPoP`; a `pop` of a PQ-eligible `msig` that does not decode as `MemberSig[]` reverts with empty data (the ABI decoder), not `UAPoP`. The PoP goes through `IUAPopVerifier.verifyPop`
    (below). For the group kinds the PoP call is capped at `verifyBudget` without the
    caller-holds-that-much check (else every group registration needs a ≥ 12.4 M gas limit); a starved group registration
    reverts `UAPoP` (a gas shortage at the key write reverts `SSTORE2WriteFailed`), never creates a record.

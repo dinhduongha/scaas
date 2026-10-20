@@ -33,7 +33,7 @@ read the same files. Never edit them by hand.
 (`kindInfo`, `isNativeKind`, `isZetherKind`, `isSigningKind`, `isMemberKind(kind, hederaNative)`; JS names shown, the set predicates drop `Kind` elsewhere: `is_native` / `IsNative`), tags (`TAG`, `GROUP`,
 `MSG_TAG`, `purposeTag`), ids (`uaOf`, `deriveUA`, `nativeId`, `inNativeSpace`, `canonicalId`), `keyHashOf`,
 `validateKeyData`, digests (`uaMessage`, `chainKeyHash`, `popDigest`, `uaAuthDomainSeparator`, `uaAuthDigest`,
-`memberDigest`) and `encodeMsig`. Errors carry one code everywhere: `UAKeyData`, `UAIdInNativeSpace`, `UAKindUnknown`,
+`memberDigest`) and `encodeMsig`. UA-6 adds the PQZ key attribute ([accounts.md](../contracts/accounts.md) CTR-UA-16): `popDigest(ua, pqzKeyHash)` takes the keyHash of the UA's PQZ key (0 without one); `isPqzHolder(kind)` (`mldsa44`, `mldsa65`, `fndsa512`), `msigPqzEligible` (an `msig` whose non-PQ weight is below the threshold), `holderPopMessage` (what a holder signs to register: the key hash, the PoP digest and the message) and `pqzRegMessage` (the message `R_REG` proves over). Errors carry one code everywhere: `UAKeyData`, `UAIdInNativeSpace`, `UAKindUnknown`,
 `UAKindNotDerived`, `UAKindNotNative`, `UAIdFormat`, `UAPurposeUnknown`. The Solidity library has the on-chain subset.
 
 **Bindings.** C: the caller owns every buffer and nothing is freed; a fixed-size argument points to 32 bytes (20 for
@@ -61,6 +61,12 @@ are exact to 2^53 when compiled to JavaScript. No Rust panic crosses a binding.
 CMake cache variables `-DSCAAS_UA_VECTORS_DIR` and `-DUA_VECTORS_DIR`, FRB Dart the environment variable
 `SCAAS_UA_VECTORS` (and `SCAAS_UA_LIB` for the native library), the C ctypes suite `SCAAS_UA_VECTORS` (and
 `SCAAS_UA_C_LIB`), pure Dart `UA_VECTORS`.
+
+**Kinds and schemes (UA-6).** The kind `0x0140` is gone and `0x0142` `pqz-mlwe` is a **scheme**, not a kind: it keeps its
+tag, keyHash group and key-data length (16,384 B) in a separate schemes table (`SCHEMES`), `kindInfo` / `deriveUA` / `uaOf`
+refuse to derive an id from it (`UAKindNotDerived`), and `keyHashOf(0x0142, pk)` still works. The Zether kind `0x0141`
+(`zether-bls12381`) is in SIGNING (and in ZETHER, the closed set `{0x0141}`); `zether-bn254` is a legacy line
+(`smartcontracts/evm/legacy/ua6/`).
 
 **Definitions this layer fixes** (controller rulings, pending the owner): `GROUP(g) = keccak256("scaas.ua.group." ‖ g ‖
 ".v1")` and `keyHash = keccak256(GROUP(g) ‖ canonical pubkey)` (secp256k1 `x`, P-256 `x`, the full point or key otherwise;

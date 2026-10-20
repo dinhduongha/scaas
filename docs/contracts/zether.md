@@ -291,7 +291,7 @@ construction: the underlying is already held for those public units. A holder of
 funds — two direct calls, or one gasless `mtxBatch` of `mtxExecute(wrap)` and `mtxExecute(zetherShield)`; an EOA holding a
 SCaaS underlying wraps by signature (`mtxWrap`, [CTR-TOK-20](token-wrappers.md#CTR-TOK-20)), then funds. Without it, an
 EOA holding a SCaaS underlying could not shield at all (it cannot approve, [CTR-TOK-01](token-wrappers.md#CTR-TOK-01)).
-A UA shields from its UA balance through `uaExecute(zetherShield)` ([CTR-ZTH-51](#CTR-ZTH-51); SPECIFIED, UA-5c).
+A UA shields from its UA balance through `uaExecute(zetherShield)` ([CTR-ZTH-51](#CTR-ZTH-51); the `zetherShield` part BUILT in UA-6 Task 4, the other self-calls SPECIFIED, UA-5c).
 - **transfer:** the sender proves over `acc`. Effect:
 
 ```
@@ -1201,7 +1201,7 @@ Limits (shielded units; for a 6-decimal stablecoin kept to 2 decimals, `shieldSc
 | Withdrawal (`zetherUnshield`) | `0 < amount ≤ maxDecryptableShielded` | ≤ the supply |
 | Confidential fee | `confidentialFee < 2^n_v` **and** `< maxDecryptableShielded` (else `BadInit`, `ZetherLib.init`) | < 2^64 and < `maxDecryptableShielded` |
 | Amount provable by disclosure | `amount < 2^n_v` | < 2^64 |
-| Node gas cap per transaction | `max_gas_per_tx`, default 3,000,000 | **below** every transfer (single, minimum gas limit: bn254 3,593,875 direct / 3,750,726 relayed, BLS12-381 4,277,302 / 4,457,625) ⇒ a chain with Zether sets ≥ 4.5 M, up to 2^24 to relay large `M` ([§19](#gas)) |
+| Node gas cap per transaction | `max_gas_per_tx`, default 3,000,000 | **below** every transfer (single, minimum gas limit: bn254 3,593,875 direct / 3,750,726 relayed, BLS12-381 4,284,877 / 4,465,468) ⇒ a chain with Zether sets ≥ 4.5 M, up to 2^24 to relay large `M` ([§19](#gas)) |
 
 | Client limit (defaults) | Value |
 |---|---|
@@ -1282,20 +1282,20 @@ intrinsic and calldata** (a bn254 transfer ≈ 3.9 KB calldata ≈ +52 k; BLS �
 depend on the value (identical for `v = 300`, `v = 2^32 + 5`, `v = 2^64 − 1`). The test that produced each figure is in
 the first column; `zetherUnshield` is on `NONE_ZETHER` (public mint, no underlying transfer); `zetherWrapShield` and
 `zetherUnshieldUnwrap` are not measured. UA-6 (U9) removed the registry authorization call and the `authSig` calldata
-from every spend and moved the owner ops to `requireAuthorized`; the BLS12-381 figures below predate it (U18
-re-measures them).
+from every spend and moved the owner ops to `requireAuthorized`; the BLS12-381 figures below are re-measured after it (UA-6 U18, 2026-10-21, `runs/2026-10-21-ua6-gas.txt`; the
+max-`M` rows of the EIP-7825 table moved: the prover's `gas_limits` follow).
 
 | Operation (test) | BLS12-381 | Earlier estimate (bn254 unless noted) | Deviation (n_v = 64) |
 |---|---|---|---|
-| `verifyTransfer` (verifier, auditor off; `ZetherVerifier.t` `test_transferBls`) | **2,967,069** | BP 1,507 k + Σ 171 k = 1,678 k | +63 % |
-| `verifyTransfer` (auditor on; `test_transferBlsAuditor`) | **3,009,705** | +27.5 k | matches (+28 k / +43 k) |
-| `verifyBurn` (`test_burnBls`) | **1,448,212** | ~1.27 M | +6 % |
+| `verifyTransfer` (verifier, auditor off; `ZetherVerifier.t` `test_transferBls`) | **2,962,817** | BP 1,507 k + Σ 171 k = 1,678 k | +63 % |
+| `verifyTransfer` (auditor on; `test_transferBlsAuditor`) | **3,004,284** | +27.5 k | matches (+28 k / +43 k) |
+| `verifyBurn` (`test_burnBls`) | **1,457,771** | ~1.27 M | +6 % |
 | `zetherTransferSingle` / `zetherTransfer` (multi) | see tables (a) and (b) below | earlier single-recipient figures: 3.29 M / 3.92 M (direct, auditor, inner fee) | superseded by (a) |
-| `zetherUnshield` (`ZetherNone.t` `test_lifecycleShieldTransferRollOverUnshield`) | **1,565,410** | ~1.27 M | +13 % |
-| `zetherShield` (first credit / warm; `test_shieldAndRollOverGas`) | 216,283 / 34,174 | — | UA-3 (`kindOf`); before 159,788 / 25,384 and 215,748 / 33,639 |
-| `zetherRollOver` (work / no-op; `test_shieldAndRollOverGas`) | 166,975 / 3,083 | ~66 k execution | unchanged |
-| `zetherRollOverSigned` (Schnorr; `test_ownerOnlyRollOver`) | **207,785** | ~31 k | UA-3: the registry's verifier call and `Y` from SSTORE2 (before 135,768 / 199,750) |
-| UA registry `register`, self (`UARegistryZether.t` `test_registerSelf`, cold, `--isolate`) | **205,059** | — | UA-3: the UA PoP + SSTORE2(`Y`) for `keyOf` (CTR-ZTH-50) |
+| `zetherUnshield` (`ZetherNone.t` `test_lifecycleShieldTransferRollOverUnshield`) | **1,568,179** | ~1.27 M | +13 % |
+| `zetherShield` (first credit / warm; `test_shieldAndRollOverGas`) | 214,130 / 34,021 | — | UA-3 (`kindOf`); before 159,788 / 25,384 and 215,748 / 33,639; UA-6 −2.4 k / −0.4 k |
+| `zetherRollOver` (work / no-op; `test_shieldAndRollOverGas`) | 166,822 / 2,922 | ~66 k execution | unchanged |
+| `zetherRollOverSigned` (Schnorr; `test_ownerOnlyRollOver`) | **207,962** | ~31 k | UA-3: the registry's verifier call and `Y` from SSTORE2 (before 135,768 / 199,750) |
+| UA registry `register`, self (`UARegistryZether.t` `test_registerSelf`, cold, `--isolate`) | **251,761** | — | UA-3: the UA PoP + SSTORE2(`Y`) for `keyOf` (CTR-ZTH-50); 205,059 before the UA index and UA-6 (main 250,236) |
 | `register` SELF_SCHNORR, the backed-up registry (`legacy/ua3`, `UniversalAccountRegistry.t` `test_registerGas`) | 194,966 | ~105,750; BLS ~160 k | P3: 102,659 / 83,440; +67 k / +112 k in P3b, the key kept for `keyOf` (CTR-ZTH-50) |
 
 <details><summary>Legacy bn254 column (as measured before UA-6; <code>legacy/ua6/</code>)</summary>
@@ -1345,14 +1345,14 @@ BUNDLE token, NONE = `zetherTransferNoBundle`.
 
 | Curve | Entry | Aud. | M = 1 | M = 2 | M = 4 | M = 8 | Calldata (M = 1 / 2 / 4 / 8) |
 |---|---|---|---|---|---|---|---|
-| BLS12-381 | `zetherTransferSingle` | on | 3,968,916 | — | — | — | 6,980 |
-| BLS12-381 | `zetherTransferSingle` | out | 3,846,915 | — | — | — | 6,980 |
-| BLS12-381 | Compact | on | 3,680,488 | 5,470,832 | 9,068,513 | **16,533,815** | 7,076 / 10,276 / 16,708 / 29,540 |
-| BLS12-381 | Compact | out | 3,639,184 | 5,386,415 | 8,894,955 | 16,170,317 | same |
-| BLS12-381 | BUNDLE | on | 3,984,226 | 6,080,832 | 10,335,337 | **19,090,805** | 7,012 / 10,180 / 16,516 / 29,188 |
-| BLS12-381 | BUNDLE | out | 3,863,321 | 5,837,216 | 9,843,379 | **18,090,504** | same |
-| BLS12-381 | NONE | on | 3,581,588 | 5,321,839 | 8,863,490 | 16,191,841 | as BUNDLE |
-| BLS12-381 | NONE | out | 3,540,283 | 5,237,423 | 8,689,932 | 15,828,339 | as BUNDLE |
+| BLS12-381 | `zetherTransferSingle` | on | 3,962,306 | — | — | — | 6,916 |
+| BLS12-381 | `zetherTransferSingle` | out | 3,841,474 | — | — | — | 6,916 |
+| BLS12-381 | Compact | on | 3,673,079 | 5,437,135 | 8,925,099 | **15,942,363** | 7,012 / 10,212 / 16,644 / 29,476 |
+| BLS12-381 | Compact | out | 3,632,840 | 5,355,647 | 8,760,589 | 15,609,732 | same |
+| BLS12-381 | BUNDLE | on | 3,976,535 | 6,046,855 | 10,191,643 | **18,499,048** | 6,948 / 10,116 / 16,452 / 29,124 |
+| BLS12-381 | BUNDLE | out | 3,856,696 | 5,806,166 | 9,708,732 | **17,529,613** | same |
+| BLS12-381 | NONE | on | 3,573,934 | 5,287,899 | 8,719,833 | 15,600,108 | as BUNDLE |
+| BLS12-381 | NONE | out | 3,533,695 | 5,206,410 | 8,555,322 | 15,267,471 | as BUNDLE |
 
 <details><summary>Legacy bn254 rows (as measured before UA-6; <code>legacy/ua6/</code>)</summary>
 
@@ -1380,12 +1380,12 @@ BUNDLE token, NONE = `zetherTransferNoBundle`.
 
 | Curve | Form | Aud. | max `M` | limit at max | limit at max + 1 |
 |---|---|---|---|---|---|
-| BLS12-381 | Compact | on | 7 / 7 | 15,542,949 / 16,096,752 | 17,535,556 / 18,155,759 |
-| BLS12-381 | Compact | out | 7 / 7 | 15,202,174 / 15,745,625 | 17,142,001 / 17,750,224 |
-| BLS12-381 | BUNDLE | on | 6 / 6 | 15,529,396 / 16,079,862 | 17,838,917 / 18,465,985 |
-| BLS12-381 | BUNDLE | out | 6 / 6 | 14,747,469 / 15,273,371 | 16,923,160 / 17,521,427 |
-| BLS12-381 | NONE | on | 7 / 7 | 15,215,864 / 15,759,174 | 17,177,775 / 17,786,510 |
-| BLS12-381 | NONE | out | 7 / 7 | 14,875,267 / 15,407,985 | 16,784,409 / 17,381,188 |
+| BLS12-381 | Compact | on | 7 / 7 | 15,076,920 / 15,615,982 | 16,924,647 / 17,525,754 |
+| BLS12-381 | Compact | out | 8 / 7 | 16,563,056 / 15,290,789 | 18,365,576 / 17,153,058 |
+| BLS12-381 | BUNDLE | on | 6 / 6 | 15,188,797 / 15,728,743 | 17,372,899 / 17,985,178 |
+| BLS12-381 | BUNDLE | out | 7 / 6 | 16,482,217 / 14,941,807 | 18,539,733 / 17,066,376 |
+| BLS12-381 | NONE | on | 8 / 7 | 16,566,909 / 15,278,242 | 18,384,918 / 17,156,247 |
+| BLS12-381 | NONE | out | 8 / 7 | 16,205,229 / 14,953,144 | 17,977,092 / 16,783,617 |
 
 <details><summary>Legacy bn254 rows (as measured before UA-6; <code>legacy/ua6/</code>)</summary>
 
@@ -1414,11 +1414,11 @@ calldata — its size in the last column, its transaction calldata cost (≤ 16 
 
 | Curve | Entry | `SENDER_S` | `RECEIVER_X` | `AUDITOR` | `SENDER_CP` | Bundles in calldata |
 |---|---|---|---|---|---|---|
-| BLS12-381 | Single (stored) | 122,807 | 154,318 | 167,632 | 154,367 | — |
-| BLS12-381 | BUNDLE M = 1 | 122,807 | 154,318 | 167,632 | 154,367 | — |
-| BLS12-381 | BUNDLE M = 8 | 367,013 | 398,586 | 411,915 | 398,635 | — |
-| BLS12-381 | Compact M = 1 | 90,829 | 122,337 | 135,651 | 122,386 | 528 B |
-| BLS12-381 | Compact M = 8 | 113,235 | 144,785 | 158,106 | 144,834 | 4,112 B |
+| BLS12-381 | Single (stored) | 120,531 | 151,955 | 165,203 | 152,004 | — |
+| BLS12-381 | BUNDLE M = 1 | 120,531 | 151,955 | 165,203 | 152,004 | — |
+| BLS12-381 | BUNDLE M = 8 | 364,737 | 396,223 | 409,486 | 396,272 | — |
+| BLS12-381 | Compact M = 1 | 88,553 | 119,974 | 133,222 | 120,023 | 528 B |
+| BLS12-381 | Compact M = 8 | 110,959 | 142,422 | 155,677 | 142,471 | 4,112 B |
 
 <details><summary>Legacy bn254 rows (as measured before UA-6; <code>legacy/ua6/</code>)</summary>
 
@@ -1448,7 +1448,7 @@ calldata — its size in the last column, its transaction calldata cost (≤ 16 
 | (the combined `ZetherVerifierBn254` / `ZetherVerifierBls12381` before 5g-Z1) | 15,955 / 16,312 |
 
 
-**Node gas cap:** the default `max_gas_per_tx = 3,000,000` (`scaas-node/src/config.rs:429-430`) is below every Zether transfer. The node compares `eth_estimateGas` (the minimum gas limit) with it, so a chain with Zether sets `max_gas_per_tx` ≥ 4.5 M for single transfers (minimum limit, auditor on, measured as above: bn254 3,593,875 direct / 3,750,726 relayed, BLS12-381 4,277,302 / 4,457,625) and, to relay larger `M`, raises it to the relayed limit of that `M` in the table above (at most 2^24). Registering a Zether token on a chain whose cap is below that warns (SPECIFIED, [NODE-STO-10](../node/store.md#NODE-STO-10)). The node pads the estimate by 20 % and clamps it: it sends `min(g + g/5, 2^24)` (EIP-7825; built in P5, `guard::gas_limit`).
+**Node gas cap:** the default `max_gas_per_tx = 3,000,000` (`scaas-node/src/config.rs:429-430`) is below every Zether transfer. The node compares `eth_estimateGas` (the minimum gas limit) with it, so a chain with Zether sets `max_gas_per_tx` ≥ 4.5 M for single transfers (minimum limit, auditor on, measured as above: bn254 3,593,875 direct / 3,750,726 relayed, BLS12-381 4,284,877 / 4,465,468) and, to relay larger `M`, raises it to the relayed limit of that `M` in the table above (at most 2^24). Registering a Zether token on a chain whose cap is below that warns (SPECIFIED, [NODE-STO-10](../node/store.md#NODE-STO-10)). The node pads the estimate by 20 % and clamps it: it sends `min(g + g/5, 2^24)` (EIP-7825; built in P5, `guard::gas_limit`).
 
 The 2.5 M per-transfer kill criterion of the original plan is exceeded by the bn254 transfer (3.33 M direct after
 `n_v = 64`; 2.75 M before) — accepted by the owner for v1 in exchange for one transaction per payment of any size. This
