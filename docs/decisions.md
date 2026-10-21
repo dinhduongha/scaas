@@ -3492,7 +3492,9 @@ per-`M` regular gas not re-measured (a gas run on the owner's go). The node (`sc
 calldata floor (15,000 + 64 per byte) over 2^24 before simulating, reads "out of gas" / "gas required exceeds allowance"
 of its simulation as a refusal (regular gas over 2^24, measured on Nethermind 2.2.0), and bounds the gas limit
 (`eth_estimateGas` + 20 %, regular + state) by `max_gas_per_tx`, the chain's current block gas limit read from
-`latest` and 2^32 − 1 — no longer by 2^24; never a zero gas price (fees from `eth_feeHistory`, ≥ 1 wei). SCaaS
+`latest` and 2^32 − 1 — no longer by 2^24 on an Amsterdam chain (the fork is read per chain from the `latest`
+header's `blockAccessListHash`; before Amsterdam the whole limit stays ≤ 2^24, the first review fix, `d88b0e1c`); a job
+rebuilt after a restart keeps its sent transaction's gas limit; never a zero gas price (fees from `eth_feeHistory`, ≥ 1 wei). SCaaS
 testnet `max_gas_per_tx` 16,000,000 → **64,000,000** (op 1 ≈ 41.7–43.4 M with state gas, Task 7b). Normative:
 [node/submit-lanes.md#amsterdam-gas](node/submit-lanes.md#amsterdam-gas). Status: built on branch `amsterdam-node`
 (not merged).
