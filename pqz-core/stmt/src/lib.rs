@@ -24,10 +24,20 @@
 extern crate alloc;
 use alloc::vec::Vec;
 
-/// q = 2^42 − 215 (CTR-PQZ-03)
-pub const Q: u64 = (1 << 42) - 215;
+// the parameter set (Cargo.toml: at most one `set-<set>` feature, none = v3)
+const _: () = assert!(!(cfg!(feature = "set-n2048-kmax1024") && cfg!(feature = "set-n2304-kmax4096")), "at most one set-<set> feature");
+#[cfg(feature = "set-n2304-kmax4096")]
+#[path = "../../params/sets/n2304-kmax4096/rust/set.rs"]
+mod set;
+#[cfg(not(feature = "set-n2304-kmax4096"))]
+#[path = "../../params/sets/n2048-kmax1024/rust/set.rs"]
+mod set;
+
+/// q of the parameter set (v3: 2^42 − 215, CTR-PQZ-03)
+pub const Q: u64 = set::Q;
 pub const D: usize = 64;
-pub const K: usize = 32;
+/// polys per key / ciphertext vector u (v3: 32)
+pub const K: usize = set::K;
 pub type Word = [u8; 32];
 /// pk, u: 32 polys × 64 coefficients, `be8`, poly 0 / coefficient 0 first
 pub const PK_BYTES: usize = K * D * 8;
@@ -174,12 +184,12 @@ impl Form {
     /// PQZL witness bytes of the prover API (pqz.h; R3: not consensus)
     pub const fn wit_len(self) -> usize {
         match self {
-            Form::Transfer => 12_288 + 3 * 32 + 32,
-            Form::Transfer0 => 12_288 + 2 * 32 + 32,
-            Form::Burn | Form::Refresh => 12_288 + 32 + 16,
-            Form::Register => 6_144,
-            Form::DiscloseSender => 6_144 + 32,
-            Form::DiscloseReceiver | Form::DiscloseAuditor => 6_144,
+            Form::Transfer => 6 * K * D + 3 * 32 + 32, // v3: 12,288 + ...
+            Form::Transfer0 => 6 * K * D + 2 * 32 + 32,
+            Form::Burn | Form::Refresh => 6 * K * D + 32 + 16,
+            Form::Register => 3 * K * D, // v3: 6,144
+            Form::DiscloseSender => 3 * K * D + 32,
+            Form::DiscloseReceiver | Form::DiscloseAuditor => 3 * K * D,
         }
     }
     fn debit(self) -> bool {

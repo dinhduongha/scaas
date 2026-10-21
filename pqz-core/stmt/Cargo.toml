@@ -10,6 +10,11 @@ publish = false
 [dependencies]
 
 [features]
+# Parameter set (owner 2026-10-21: one per build; pqz-core/params/sets/<set>/rust/set.rs): at most one `set-<set>`, none =
+# the frozen v3 set n2048-kmax1024 (pqz-ffi, pqz-vectors, the node). Stand-in of plan 5h Task 8c part 1 (Q, K and the
+# witness lengths only) until Task 8b's set-generic pqz-stmt replaces it.
+set-n2048-kmax1024 = []
+set-n2304-kmax4096 = []
 # bench only (P6-ANON plan, global constraints): op 7 accepts M = 8, 16 for both ids; never in the precompile build
 oversize = []
 
