@@ -807,9 +807,13 @@ Each ruling, with its content and status:
    so nothing is justified by a zero gas price or by the testnet's block gas limit: per-transaction and per-block
    budgets use 2^24 regular gas per transaction, the EIP-7976 calldata floor and a 60 M mainnet-like block, not the
    testnet's 200 M target. Status: decided (owner 2026-10-21); applies to every gas pin of 8d and later.
-3. **op 7 with M ≤ 4 on chain; no G = 1 relation.** The contracts refuse M > 4 (8d). The cores keep M = 8 with today's
-   G = 2 shape (two randomness groups of four legs, ≤ 80 hints per group); its specs are regenerated at set (a) too (8b).
-   The G = 1 specs of §6.2 / Task 7 (`txm8g1`, `txm80g1`) are not built. Status: decided; cores in 8b, contracts in 8d.
+3. **op 7 M = 8 on chain: decided by measurement in 8d; no G = 1 relation.** A first ruling "op 7 M ≤ 4 on chain"
+   (owner 2026-10-21) is **withdrawn** the same day: it assumed the precompile input travels as calldata, but the token
+   builds it in memory, and op 7 M = 8 (G = 2) relayed calldata is ≈ 124 KB (< 261,909). Whether M = 8 stays on chain is
+   decided in 8d by a measurement at set (a) (regular gas ≤ 2^24 under Amsterdam; the total against an Ethereum-like
+   60 M block); a spike measures it now. The cores keep M = 8 with today's G = 2 shape (two randomness groups of four
+   legs, ≤ 80 hints per group), regenerated at set (a) (8b). The G = 1 specs of §6.2 / Task 7 (`txm8g1`, `txm80g1`) are
+   not built. Status: cores decided and built in 8b; on-chain M = 8 open until 8d's measurement.
 4. **PQZH is a backup only.** Its debit inputs (406–469 KB at 16k, Task 7b) exceed what one transaction can carry
    (≈ 261,909 B of calldata), so PQZH is not offered on chain; 8c moves it to the new q as a backup.
    `MAX_PROOF_PQZH` stays 262,144. Status: decided; 8c.
@@ -833,9 +837,8 @@ Each ruling, with its content and status:
 
 6. **`ROLL_MAX` is re-pinned in 8d** on the as-built code at set (a): ≈ 96 [estimate, n-study §6] instead of 16k's 80
    (Amsterdam) / 192 (old rules). Status: open until 8d measures it.
-7. **`MAX_INPUT` = 261,120 (255 KiB), proposal** (Task 7b): at most the ≈ 261,909-byte calldata limit; covers every
-   PQZL form on chain (largest at set (a): op 7 M = 4 with the auditor, ≈ 202,331 B with the codegen proof). Replaces
-   §6.3's 512 KiB (O8). Status: controller proposal (owner may override); built in 8d.
+7. **`MAX_INPUT` stays 512 KiB** (O8): the precompile input is built in memory by the token, so the calldata limit does
+   not bound it. Task 7b's 261,120 (255 KiB) proposal is dropped. Status: decided (owner 2026-10-21).
 8. **`MAX_PROOF_PQZH` stays 262,144.** Status: decided.
 9. **Precompile addresses move to 32-bit form** in 8d: `PQZ` `0x…5caa0f01`, `MLDSA44` `0x…5caa0012`, `MLDSA65`
    `0x…5caa0013` (were `0x5caa50…0f01` / `…0012` / `…0013`, decisions.md CTR-PQZ-10 Change 2026-10-15, P6f D3). Status: decided; 8d.
@@ -848,6 +851,9 @@ Each ruling, with its content and status:
     `private7622` profiles use `evm_version = "amsterdam"`, `isolate = true` is pinned. Status: built on its branch, not
     yet merged into pqz-16k.
 
+12. **Spike: tight coefficient packing of the stored blobs and `acc`** (≈ −28 % state gas [estimate]) runs before 8d
+    and may change the stored blob format. Status: pending.
+
 Superseded by this section (kept above as the record): the 16k set n = 2560 / `K_MAX` 16,384 / q = 2^50 − 42,310,535
 (§6, §6.4's id label `mlwe-d64k40-q50l4`, the k / q of the new label follow set (a) in 8d), O9's G = 1 for M = 8 on
-chain, `MAX_INPUT` 512 KiB (O8, §6.3), `ROLL_MAX` 208 / 192 (§9, Task 7) and PQZH as an on-chain proof system.
+chain, `ROLL_MAX` 208 / 192 (§9, Task 7) and PQZH as an on-chain proof system.
