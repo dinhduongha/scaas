@@ -48,7 +48,8 @@ Honest proofs: seeds 0 and 1 of the crate's test inputs (`runs/c8-a-kat.jsonl`).
 - `MAX_PROOF_PQZH` = 262,144 (owner 2026-10-21: stays): R_REG / R_DS / R_DR fit; **every debit bound is above it**
   (by 1,640–3,092 B), and the honest debit proofs measured are 130–2,712 B below it. A chain at this set either accepts
   that a debit proof above 262,144 is refused (the prover can re-prove with fresh randomness until it is below:
-  `prove_inner`'s retry with the precompile's limit, Task 8c part 2), or uses a preset with the extra radices 7 / 17 of
+  `prove_inner`'s retry with the precompile's limit, Task 8c part 2; the retry then fires, so its zero-knowledge argument
+is to be re-checked: review finding 6 in `docs/research/pqzh-ligero.md` §12), or uses a preset with the extra radices 7 / 17 of
   this q (n 45,752, k 952, t 119: R_TX bound 250,512, op 7 M = 4 251,940 [model]; not built), or raises the limit.
 - `MAX_INPUT`: 393,216 today, 512 KiB from Task 8d: every built form fits 512 KiB (op 7 M = 4 auditor 414,617 does not
   fit today's 393,216).

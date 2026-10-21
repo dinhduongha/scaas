@@ -1178,3 +1178,56 @@ Taken from the document only, not re-verified:
 - the per-relation field-term numbers and the measurements;
 - the Johnson preset (reference only).
 
+
+## 16. Parameter sets: PQZH at the set's q (plan 5h Task 8c part 1, 2026-10-21) [measured / model]
+
+Plan `docs/superpowers/plans/2026-10-20-pqz-state-redesign.md` Task 8 (split 8a → 8b → 8c → 8d; spec §12), branch
+`pqz-8c`. PQZH is the backup proof system (owner 2026-10-21); this part moves the crate to the parameter-set tree
+`pqz-core/params/sets/<set>/` that PQZL uses. Raw files `pqz-core/pqzh/ligero/runs/c8-*`; per-set conditions for a chain
+in `pqz-core/params/sets/<set>/PQZH.md`.
+
+### 16.1 What changed (decisions, all built)
+
+1. **One set per build, as PQZL.** Features `set-n2048-kmax1024` (v3) / `set-n2304-kmax4096` (set (a)), at most one;
+   none = v3 (so `pqz-ffi`, which depends with `default-features = false`, keeps v3 until 8c part 2 forwards its set).
+   Forwarded to `pqz-stmt`, whose set-generic Q / K / witness lengths are a minimal stand-in until Task 8b's
+   set-generic `pqz-stmt` replaces it on merge. Constants: the set's PQZL `rust/set.rs` plus a hand-written
+   `pqzh_set.rs` (q − 1 factors, generator 3, F_q^4 non-residue 3, radices, preset; the 8b generator takes it over).
+2. **Field for any set q (< 2^59).** Barrett as PQZL's `redx` / `red128` (canonical, branch-free); EB = ⌈log2 q / 8⌉
+   bytes per element (6 at v3 and set (a), 7 at 50 bits); F_q^4 = X^4 − 3 at every set (3 is the smallest non-square,
+   2 is a square since q ≡ 1 mod 8). wasm32 (no 64 × 64 → 128 multiply): NL limbs of W bits, NL = 2 / W = 21 at 42 bits
+   (as before), NL = 3 / W = ⌈L / 3⌉ above (16 at set (a), 17 at 50 bits); a product's 2 NL − 1 columns are normalised to
+   W-bit digits, the high digits folded with 2^(W i) mod q, and a final Barrett step whose product fits u64.
+3. **Domains: THE preset at every set** (n 32,756, k 817, t 121, l 695; radices 2 / 19 / 43 / 431): every set's q − 1
+   is divisible by 2^3·19·43·431, 3 generates F_q^*, 3·H_n misses H_k (tested); the query term depends on n, k only
+   (128.50 bits), the field terms grow with q. Task 7 chose the same at 16k.
+4. **Widths from the set:** l2 bounds BETA_S / BETA_E / BETA_2, value offsets 2^bitlen(β) in bitlen(β) + 1 bits, slacks
+   in bitlen(B^2) bits, M_i in MBITS, carries + 64 in CBITS, e_T / e' + 2^(EBITS−1) in EBITS, N, K, Δ, the LOG2Q mask of
+   the A expansion and of uniform samples. At v3 every value is the old literal.
+
+### 16.2 Results
+
+| check | v3 (`n2048-kmax1024`) | set (a) (`n2304-kmax4096`) |
+|---|---|---|
+| proofs = before the change | 24 / 24 fingerprints = `756713a2` (`c8-v3-kat-vs-base.txt`); 16 / 16 rows of `smartcontracts/vectors/pqz/proof_pqzh.json` re-proved byte-exact, stored proofs verify (`c8-v3-replay.txt`) | — |
+| tests (`c8-<tag>-tests.txt`, `-nobench.txt`) | 15 + 17 + 8 + 1, production 13 | 15 + 16 (+ `evm_fixtures` ignored: v3 fixtures) + 8 + 1, production 13 |
+| native = wasm32 (`c8-<tag>-native-vs-wasm.txt`) | 24 / 24 proofs, 144 / 144 mutations rejected | 24 / 24, 144 / 144 |
+| exact proof bounds (`c8-<tag>-sizes.jsonl`) | R_REG / R_DS / R_DR 190,458; debits 234,744–236,196 | 204,978; debits 263,784–265,236 (> `MAX_PROOF_PQZH`) |
+| honest proofs | 185,462–233,604 | 200,376–262,014 |
+| soundness total | 127.23 bits | 127.23 bits |
+
+The model (`ligero_params.py --set`) equals the crate on all 14 relations of both sets and reproduces Task 7's 16k
+numbers. No timing was run: verify p99 at set (a) is not measured (v3 wasm32 15–24 ms before the change, `runs/rev2-proven-wasm.jsonl`).
+
+### 16.3 Open (for the owner / 8c part 2 / 8d)
+
+- **Set (a) debit proofs vs `MAX_PROOF_PQZH` 262,144** (owner: stays): bounds 1,640–3,092 B above, honest proofs
+  measured 130–2,712 B below. Options: (A) the prover re-proves above the precompile's limit (`prove_inner` with
+  `MAX_PROOF_PQZH`; review finding 6 of §12: the retry then fires, its ZK argument to be re-checked; the condition is a
+  function of the public proof, so a simulator can rejection-sample the same event); (B) a set (a) preset using the
+  radices 7 / 17 of its q − 1: n 45,752, k 952, t 119, R_TX bound 250,512, op 7 M = 4 251,940, ≈ 5× fewer prover
+  products [model; needs radix-7 / 17 FFT stages and a per-set preset]; (C) raise the limit. Debits cannot be carried
+  by one 2^24 transaction at set (a) anyway (calldata ≈ 287–290 KB > 261,909 B; PQZH.md).
+- 16k: crate build when Task 8b's set directory exists (part 2); model only until then (debit bounds ≈ 302–304 KB).
+- `pqz-ffi` / `pqz-vectors` / `gate.sh` set forwarding, the PQZH id per set (8d), `G_op` calibration and verify timing at
+  the new sets.
