@@ -1,7 +1,7 @@
 scaas/nethermind-pqz — notices for the files SCaaS adds to the Nethermind image (P6f, /nethermind/plugins/)
 
-This image is the unmodified Nethermind 1.39.0 image
-  nethermind/nethermind:1.39.0@sha256:8af90a30989c16cb15e087bd250c623c98585e490a25950a75642460d497eae6
+This image is the unmodified Nethermind 2.2.0 image
+  nethermind/nethermind:2.2.0@sha256:5cc0061e6a317e9249e1e1f537a0a40a2036525c62f1cb250943432f4c000a38
 (Nethermind: LGPL-3.0-only, Demerzel Solutions Limited; .NET runtime: MIT, Microsoft; Ubuntu 26.04 packages incl.
 OpenSSL: Apache-2.0 — their own notices are in the base image) plus three files in /nethermind/plugins/:
 

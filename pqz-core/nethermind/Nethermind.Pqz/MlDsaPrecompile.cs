@@ -50,10 +50,10 @@ public sealed class MlDsa44Precompile : IPrecompile<MlDsa44Precompile>
     public static MlDsa44Precompile Instance { get; } = new();
     public static Address Address => PqzAddresses.MlDsa44;
     public static string Name => "MLDSA44";
-    public long BaseGasCost(IReleaseSpec releaseSpec) => 0L;
+    public ulong BaseGasCost(IReleaseSpec releaseSpec) => 0UL;
 
-    public long DataGasCost(ReadOnlyMemory<byte> inputData, IReleaseSpec releaseSpec) =>
-        PqzReleaseSpec.ScheduleOf(releaseSpec) is { } s ? MlDsa.Gas(inputData.Length, MlDsa.Pk44, MlDsa.Sig44, s.MlDsa44Gas) : long.MaxValue;
+    public ulong DataGasCost(ReadOnlyMemory<byte> inputData, IReleaseSpec releaseSpec) =>
+        PqzReleaseSpec.ScheduleOf(releaseSpec) is { } s ? (ulong)MlDsa.Gas(inputData.Length, MlDsa.Pk44, MlDsa.Sig44, s.MlDsa44Gas) : ulong.MaxValue;
 
     public Result<byte[]> Run(ReadOnlyMemory<byte> inputData, IReleaseSpec releaseSpec) =>
         MlDsa.Verify(MLDsaAlgorithm.MLDsa44, MlDsa.Pk44, MlDsa.Sig44, inputData.Span);
@@ -64,10 +64,10 @@ public sealed class MlDsa65Precompile : IPrecompile<MlDsa65Precompile>
     public static MlDsa65Precompile Instance { get; } = new();
     public static Address Address => PqzAddresses.MlDsa65;
     public static string Name => "MLDSA65";
-    public long BaseGasCost(IReleaseSpec releaseSpec) => 0L;
+    public ulong BaseGasCost(IReleaseSpec releaseSpec) => 0UL;
 
-    public long DataGasCost(ReadOnlyMemory<byte> inputData, IReleaseSpec releaseSpec) =>
-        PqzReleaseSpec.ScheduleOf(releaseSpec) is { } s ? MlDsa.Gas(inputData.Length, MlDsa.Pk65, MlDsa.Sig65, s.MlDsa65Gas) : long.MaxValue;
+    public ulong DataGasCost(ReadOnlyMemory<byte> inputData, IReleaseSpec releaseSpec) =>
+        PqzReleaseSpec.ScheduleOf(releaseSpec) is { } s ? (ulong)MlDsa.Gas(inputData.Length, MlDsa.Pk65, MlDsa.Sig65, s.MlDsa65Gas) : ulong.MaxValue;
 
     public Result<byte[]> Run(ReadOnlyMemory<byte> inputData, IReleaseSpec releaseSpec) =>
         MlDsa.Verify(MLDsaAlgorithm.MLDsa65, MlDsa.Pk65, MlDsa.Sig65, inputData.Span);

@@ -104,8 +104,11 @@ def enc_addr_bytes(addr, data):
     return w(int(addr, 16)) + w(64) + abi_bytes(data)
 
 
+CORPUS = os.path.join(ROOT, "pqz-core/nethermind/bin/corpus.jsonl")  # --corpus
+
+
 def corpus():
-    with open(os.path.join(ROOT, "pqz-core/nethermind/bin/corpus.jsonl")) as f:
+    with open(CORPUS) as f:
         return [json.loads(l) for l in f]
 
 
@@ -184,10 +187,42 @@ def ua_rows():
     return out
 
 
-def call_probe(target, data, gas=16_000_000):
+CAP = 2**24
+AMS = False  # Amsterdam (Nethermind 2.2.0, 2026-10-21): set in main() from the head (EIP-7928 blockAccessListHash)
+
+
+def intrinsic(data):
+    """(standard, floor) intrinsic gas of a call transaction with calldata `data`. Amsterdam: EIP-2780 base 12,000 +
+    3,000 for a cold non-self recipient (EIP-8038), EIP-7976 floor 64 gas per byte; under EIP-8037 a floor (or an
+    intrinsic execution) over 2^24 makes the transaction invalid at any gas limit. Before: 21,000, EIP-7623 floor."""
+    if AMS:
+        return 15_000 + 4 * tokens(data), 15_000 + 64 * len(data)
+    return 21_000 + 4 * tokens(data), 21_000 + 10 * tokens(data)
+
+
+def probe_cd(target, data):
+    return selector("call(address,bytes)") + enc_addr_bytes(target, data)
+
+
+def over_cap(cd_hex):
+    """Amsterdam: the calldata floor alone exceeds 2^24, so no transaction (nor eth_call) can carry it."""
+    return AMS and intrinsic(bytes.fromhex(cd_hex))[1] > CAP
+
+
+def refused(f):
+    """f() is refused with the EIP-8037 intrinsic-gas cap error."""
+    try:
+        f()
+    except RuntimeError as e:
+        return "exceeded cap" in str(e) or "exceeds cap" in str(e).lower()
+    return False
+
+
+def call_probe(target, data, gas=None):
     """probe.call(target, data) through eth_call with the probe's code at PROBE_AT (state override)."""
     _, deployed = artifact("PqzPrecompileProbe.sol", "PqzPrecompileProbe")
-    cd = "0x" + selector("call(address,bytes)") + enc_addr_bytes(target, data)
+    cd = "0x" + probe_cd(target, data)
+    gas = gas or (CAP if AMS else 16_000_000)
     r = rpc("eth_call", [{"to": PROBE_AT, "data": cd, "gas": hex(gas)}, "latest", {PROBE_AT: {"code": "0x" + deployed}}])
     r = r[2:]
     return int(r[0:64], 16), int(r[64:128], 16), int(r[128:192], 16)
@@ -235,6 +270,11 @@ def cmd_probe(a, expect_fail=False):
     by = {}
     for r in rows:
         b = bytes.fromhex(r["input"])
+        if over_cap(probe_cd(PQZ, b)):
+            floor = intrinsic(bytes.fromhex(probe_cd(PQZ, b)))[1]
+            check(refused(lambda: call_probe(PQZ, b)),
+                  f"PQZ {r['kind']:8} {r['name'][:46]:46} {r['id']}: {len(b):,} B refused (Amsterdam: EIP-7976 floor {floor:,} > 2^24, EIP-8037)")
+            continue
         word, used, rlen = call_probe(PQZ, b)
         want = int(r["expect"], 16) if r["kind"] == "selftest" else 0 if sch.row(b) is None else int(r["expect"])
         gas = used - 100 - oh
@@ -252,8 +292,11 @@ def cmd_probe(a, expect_fail=False):
         check(rlen == 32 and word == 0 and used - 100 - oh == sch.gas(b) and sch.row(b) is None,
               f"PQZ miss {name}: …00, gas {used - 100 - oh} = smallest row + length term {sch.gas(b)}")
     over = h + bytes(393217 - len(h))
-    word, used, rlen = call_probe(PQZ, over)
-    check(word == 2**256 - 1 and rlen == 0, f"PQZ input of MAX_INPUT + 1: failed call (word {hex(word)[:6]}, rlen {rlen})")
+    if AMS:
+        check(refused(lambda: call_probe(PQZ, over)), "PQZ input of MAX_INPUT + 1: refused before the precompile (Amsterdam floor > 2^24)")
+    else:
+        word, used, rlen = call_probe(PQZ, over)
+        check(word == 2**256 - 1 and rlen == 0, f"PQZ input of MAX_INPUT + 1: failed call (word {hex(word)[:6]}, rlen {rlen})")
     for lvl, b, valid, name in ml_rows():
         addr, pk, sig, price = (ML44, PK44, SIG44, sch.m44) if lvl == 44 else (ML65, PK65, SIG65, sch.m65)
         word, used, rlen = call_probe(addr, b)
@@ -293,8 +336,9 @@ class Sender:
         # Mining.MinGasPrice is not a Nethermind key; Blocks.MinGasPrice defaults to 1 wei)
         fee = int(rpc("eth_getBlockByNumber", ["latest", False])["baseFeePerGas"], 16)
         raw = legacy_tx(self.key, self.nonce, max(2 * fee + 1, 10**9), gas, to, 0, bytes.fromhex(data_hex.removeprefix("0x")), CHAIN_ID)
+        h = rpc("eth_sendRawTransaction", ["0x" + raw.hex()])
         self.nonce += 1
-        return rpc("eth_sendRawTransaction", ["0x" + raw.hex()])
+        return h
 
 
 def receipt(h, timeout=180):
@@ -317,7 +361,7 @@ def cmd_e2e(a):
     s = Sender(a.key)
     log(f"sender {s.addr} nonce {s.nonce}")
     code, _ = artifact("PqzPrecompileProbe.sol", "PqzPrecompileProbe")
-    r = receipt(s.send(None, "0x" + code, 2_000_000))
+    r = receipt(s.send(None, "0x" + code, 8_000_000 if AMS else 2_000_000))  # Amsterdam: EIP-8037 code deposit 1,530 / byte
     probe = r["contractAddress"]
     check(r["status"] == "0x1", f"probe deployed at {probe} (block {int(r['blockNumber'], 16)}, gas {int(r['gasUsed'], 16)})")
     topic = "0x" + keccak256(b"Probed(address,bytes32,uint256,uint256,uint256)").hex()
@@ -326,8 +370,14 @@ def cmd_e2e(a):
     pending = []
     for row in rows:
         b = bytes.fromhex(row["input"])
-        gl = min(16_000_000, 21_000 + 10 * tokens(b) + 40 * len(b) + sch.gas(b) + 500_000)
-        pending.append((row, b, s.send(probe, "0x" + sel + enc_addr_bytes(PQZ, b), gl)))
+        cd = sel + enc_addr_bytes(PQZ, b)
+        if over_cap(cd):
+            check(refused(lambda: s.send(probe, "0x" + cd, CAP)),
+                  f"tx check() {row['kind']:6} {row['name'][:40]:40} {row['id']}: {len(b):,} B refused by the pool (Amsterdam: floor {intrinsic(bytes.fromhex(cd))[1]:,} > 2^24)")
+            continue
+        std, floor = intrinsic(bytes.fromhex(cd))
+        gl = min(CAP if AMS else 16_000_000, max(floor, std + 40 * len(b)) + sch.gas(b) + 500_000)
+        pending.append((row, b, s.send(probe, "0x" + cd, gl)))
     blocks = set()
     for row, b, h in pending:
         rc = receipt(h)
@@ -340,15 +390,17 @@ def cmd_e2e(a):
               f"tx check() {row['kind']:6} {row['name'][:40]:40} {row['id']}: event word {word} (want {row['expect']}), call gas {used}, tx gas {int(rc['gasUsed'], 16)}, block {int(rc['blockNumber'], 16)}")
     log(f"check() transactions in blocks {sorted(blocks)}")
     # direct transactions to PQZ with the largest inputs (> 128 KiB: TxPool.MaxTxSize)
-    big = sorted((r for r in corpus() if r["kind"] in ("honest", "fee0") and r["id"] == "pqzh"), key=lambda r: -len(r["input"]))[:2]
+    # (Amsterdam: the largest that still fit the EIP-7976 floor under 2^24, ≤ 261,909 B)
+    big = sorted((r for r in corpus() if r["kind"] in ("honest", "fee0") and r["id"] == "pqzh" and not over_cap(r["input"])),
+                 key=lambda r: -len(r["input"]))[:2]
     for row in big:
         b = bytes.fromhex(row["input"])
-        std = 21_000 + 4 * tokens(b) + sch.gas(b)
-        floor = 21_000 + 10 * tokens(b)
-        rc = receipt(s.send(PQZ, "0x" + b.hex(), min(16_777_216, max(std, floor) + 10_000)))
+        std, floor = intrinsic(b)
+        std += sch.gas(b)
+        rc = receipt(s.send(PQZ, "0x" + b.hex(), min(CAP, max(std, floor) + 10_000)))
         got = int(rc["gasUsed"], 16)
         check(rc["status"] == "0x1" and got == max(std, floor),
-              f"direct tx to PQZ, {row['name']} ({len(b):,} B > 131,072): gasUsed {got:,} = max(standard {std:,}, EIP-7623 floor {floor:,}), block {int(rc['blockNumber'], 16)}")
+              f"direct tx to PQZ, {row['name']} ({len(b):,} B > 131,072): gasUsed {got:,} = max(standard {std:,}, {'EIP-7976' if AMS else 'EIP-7623'} floor {floor:,}), block {int(rc['blockNumber'], 16)}")
     if a.no_ua:
         log("UAMldsaVerifier skipped (--no-ua: on 7622 it is deployed with the registry in P6g, plan R5)")
         return
@@ -414,6 +466,28 @@ def cmd_burst(a):
     check(all(4 <= g <= 6 for g in gaps), "burst: signer block interval 5 s ± 1 s")
 
 
+def cmd_codesize(a):
+    """64 KiB code (EIP-7954 under Amsterdam; maxCodeSize 0x10000 before): a create transaction whose initcode returns
+    65,536 zero bytes deploys, 65,537 fails (status 0). Under EIP-8037 the code deposit is state gas (1,530 per byte,
+    ≈ 100.3 M for 64 KiB) and the block reserves tx.gas in its state dimension, so the block gas limit must exceed tx.gas:
+    this command waits for the ramp (TargetBlockGasLimit, 1/1024 per block)."""
+    s = Sender(a.key)
+    gas = 110_000_000
+    while True:
+        b = rpc("eth_getBlockByNumber", ["latest", False])
+        if int(b["gasLimit"], 16) > gas + 1_000_000:
+            break
+        log(f"waiting: block {int(b['number'], 16)} gasLimit {int(b['gasLimit'], 16):,} <= {gas:,}")
+        time.sleep(300)
+    for n, ok in ((65_536, True), (65_537, False)):
+        init = bytes([0x62]) + n.to_bytes(3, "big") + bytes([0x60, 0x00, 0xF3])  # RETURN(0, n): n zero bytes
+        rc = receipt(s.send(None, "0x" + init.hex(), gas))
+        addr = rc.get("contractAddress")
+        size = (len(rpc("eth_getCode", [addr, "latest"])) - 2) // 2 if addr else 0
+        check((rc["status"] == "0x1") == ok and size == (n if ok else 0),
+              f"create {n:,} B code: status {rc['status']} (want {'0x1' if ok else '0x0'}), eth_getCode {size:,} B, gasUsed {int(rc['gasUsed'], 16):,}, block {int(rc['blockNumber'], 16)}")
+
+
 def cmd_fill(a):
     sch = Schedule(a.engine)
     s = Sender(a.key)
@@ -434,7 +508,7 @@ def cmd_fill(a):
 
 
 def main():
-    global RPC, SCHEDULE
+    global RPC, SCHEDULE, CORPUS
     p = argparse.ArgumentParser()
     p.add_argument("cmd")
     p.add_argument("--rpc", default=RPC)
@@ -446,10 +520,14 @@ def main():
     p.add_argument("--n", type=int, default=8)
     p.add_argument("--no-ua", action="store_true")
     p.add_argument("--schedule", type=int, default=-1)
+    p.add_argument("--corpus", default=CORPUS, help="corpus.jsonl (default bin/corpus.jsonl)")
     a = p.parse_args()
-    RPC, SCHEDULE = a.rpc, a.schedule
+    RPC, SCHEDULE, CORPUS = a.rpc, a.schedule, a.corpus
+    global AMS
+    AMS = "blockAccessListHash" in rpc("eth_getBlockByNumber", ["latest", False])
+    log(f"head rules: {'Amsterdam (EIP-7928 header field present)' if AMS else 'before Amsterdam'}")
     {"head": cmd_head, "before": cmd_before, "probe": cmd_probe, "stock": cmd_stock, "e2e": cmd_e2e,
-     "burst": cmd_burst, "fill": cmd_fill}[a.cmd](a)
+     "burst": cmd_burst, "fill": cmd_fill, "codesize": cmd_codesize}[a.cmd](a)
     log(f"{a.cmd}: {'FAILED ' + str(len(FAILS)) if FAILS else 'all checks passed'}")
     sys.exit(1 if FAILS else 0)
 

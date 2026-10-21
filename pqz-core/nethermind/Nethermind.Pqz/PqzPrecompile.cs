@@ -27,17 +27,18 @@ public sealed class PqzPrecompile : IPrecompile<PqzPrecompile>
     /// <summary>Calls that reached pqz-ffi (tests: a miss must not).</summary>
     public static long FfiCalls => Interlocked.Read(ref _ffiCalls);
 
-    public long BaseGasCost(IReleaseSpec releaseSpec) => 0L;
+    public ulong BaseGasCost(IReleaseSpec releaseSpec) => 0UL;
 
-    public long DataGasCost(ReadOnlyMemory<byte> inputData, IReleaseSpec releaseSpec) =>
+    public ulong DataGasCost(ReadOnlyMemory<byte> inputData, IReleaseSpec releaseSpec) =>
         Gas(inputData.Span, PqzReleaseSpec.ScheduleOf(releaseSpec));
 
-    /// <summary>D6; a function of the bytes only. No schedule ⇒ long.MaxValue (out of gas: fail closed).</summary>
-    public static long Gas(ReadOnlySpan<byte> input, PqzSchedule? s)
+    /// <summary>D6; a function of the bytes only. No schedule ⇒ ulong.MaxValue (out of gas: fail closed; Nethermind 2.x
+    /// prices precompiles in ulong).</summary>
+    public static ulong Gas(ReadOnlySpan<byte> input, PqzSchedule? s)
     {
-        if (s is null) return long.MaxValue;
-        if (input.Length > 0 && input[0] == 6) return s.SelftestGas;
-        return (s.RowGas(input) ?? s.MinGas) + 3L * ((input.Length + 31L) / 32);
+        if (s is null) return ulong.MaxValue;
+        if (input.Length > 0 && input[0] == 6) return (ulong)s.SelftestGas;
+        return (ulong)((s.RowGas(input) ?? s.MinGas) + 3L * ((input.Length + 31L) / 32));
     }
 
     public Result<byte[]> Run(ReadOnlyMemory<byte> inputData, IReleaseSpec releaseSpec) =>

@@ -6,7 +6,7 @@
 #   is left alone (the op 7 rows join the live rows in a second schedule).
 set -eu
 cd "$(dirname "$0")"
-TAG=scaas/nethermind-pqz:1.39.0-${1:?label, e.g. pqz1}-calib
+TAG=scaas/nethermind-pqz:2.2.0-${1:?label, e.g. pqz1}-calib
 shift
 D=$(date +%F)-calib${1:+-ops$(echo "$*" | tr -cd 0-9)}
 mkdir -p runs

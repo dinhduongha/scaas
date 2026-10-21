@@ -67,7 +67,7 @@ public class SpecTests
         // every block, genesis included; not a fork transition
         ISpecProvider stock = new ChainSpecBasedSpecProvider(Load(), LimboLogs.Instance);
         ISpecProvider p = Provider(WithPqz(Schedule(0)));
-        foreach (var (b, ts) in new[] { (0L, 0UL), (1L, 5UL), (10_000L, T1) })
+        foreach (var (b, ts) in new[] { (0UL, 0UL), (1UL, 5UL), (10_000UL, T1) })
         {
             FrozenSet<AddressAsKey> s = Set(p, ts);
             Assert.That(s.Except(Set(stock, ts)).Count(), Is.EqualTo(3), $"block {b}");
@@ -96,15 +96,15 @@ public class SpecTests
     [Test]
     public void A_block_number_transition_keeps_the_schedule()
     {
-        const long B = 6432;
+        const ulong B = 6432;
         Assert.That(Load().Parameters.MaxCodeSizeTransition, Is.EqualTo(B), "the test genesis' block-number transition");
         // (block, timestamp, schedule's selftestGas or null, EIP-170 on = the release of block B or later)
-        (long b, ulong ts, long? gas, bool eip170)[] genesisAndT1 =
+        (ulong b, ulong ts, long? gas, bool eip170)[] genesisAndT1 =
         [
             (0, 0, 1000, false), (1, 5, 1000, false), (B - 1, T1 - 1, 1000, false), (B, T1 - 1, 1000, true), (B + 1, T1 - 1, 1000, true),
             (1, T1, 2000, true), (B - 1, T1, 2000, true), (B, T1, 2000, true), (B + 100, T1 + 100, 2000, true),
         ];
-        (long b, ulong ts, long? gas, bool eip170)[] onlyT1 =
+        (ulong b, ulong ts, long? gas, bool eip170)[] onlyT1 =
         [
             (0, 0, null, false), (B - 1, T1 - 1, null, false), (B, T1 - 1, null, true), (B + 1, T1 - 1, null, true),
             (1, T1, 2000, true), (B - 1, T1, 2000, true), (B, T1, 2000, true), (B + 100, T1 + 100, 2000, true),
@@ -137,6 +137,26 @@ public class SpecTests
         IReleaseSpec spec = Provider(WithPqz(Schedule(T1))).GetSpec(new ForkActivation(1, T1));
         IReleaseSpec wrapped = new ReleaseSpecDecorator(spec);
         Assert.That(PqzReleaseSpec.ScheduleOf(wrapped), Is.SameAs(PqzReleaseSpec.ScheduleOf(spec)));
+    }
+
+    /// <summary>Nethermind 2.2.0: <c>IsPrecompile</c> (what the VM, the gas policy and the code-info repositories ask)
+    /// finds the three 0x5caa5… addresses from T on, directly and through a decorator, and keeps the stock ones.</summary>
+    [Test]
+    public void IsPrecompile_finds_the_three_from_T()
+    {
+        ISpecProvider p = Provider(WithPqz(Schedule(T1)));
+        IReleaseSpec before = p.GetSpec(new ForkActivation(1, T1 - 1)), after = p.GetSpec(new ForkActivation(1, T1));
+        foreach (AddressAsKey a in Three)
+        {
+            Assert.That(before.IsPrecompile(a), Is.False, $"{a.Value} before T");
+            Assert.That(after.IsPrecompile(a), Is.True, $"{a.Value} from T");
+            Assert.That(((IReleaseSpec)new ReleaseSpecDecorator(after)).IsPrecompile(a), Is.True, $"{a.Value} through a decorator");
+        }
+        foreach (IReleaseSpec s in new[] { before, after })
+        {
+            Assert.That(s.IsPrecompile(Nethermind.Core.Precompiles.PrecompiledAddresses.ECRecover), Is.True);
+            Assert.That(s.IsPrecompile(new Address("0x5caa500000000000000000000000000000000f02")), Is.False);
+        }
     }
 
     private static JsonObject Without(JsonObject s, string key) { s.Remove(key); return s; }
@@ -195,6 +215,23 @@ public class SpecTests
         Assert.That(new PqzPlugin(Load()).Enabled, Is.False);
         Assert.That(new PqzPlugin(WithPqz(Schedule(T1))).Enabled, Is.True);
         Assert.DoesNotThrow(() => new ChainSpecBasedSpecProvider(Load(), LimboLogs.Instance), "without engine.Pqz the stock provider is untouched");
+    }
+
+    /// <summary>Nethermind 2.x calls no plugin <c>Init</c>: the start-up checks (R3) must be a registered step that
+    /// runs before the genesis block (on 2.2.0 an <c>Init</c> method compiled and was silently never called).</summary>
+    [Test]
+    public void Startup_checks_are_a_step_before_genesis()
+    {
+        Autofac.ContainerBuilder b = new();
+        Autofac.ModuleRegistrationExtensions.RegisterModule(b, new PqzModule());
+        using Autofac.IContainer c = b.Build();
+        Assert.That(Autofac.ResolutionExtensions.Resolve<System.Collections.Generic.IEnumerable<Nethermind.Api.Steps.StepInfo>>(c)
+            .Select(i => i.StepType), Does.Contain(typeof(PqzStartupCheck)));
+        Nethermind.Api.Steps.RunnerStepDependenciesAttribute a = typeof(PqzStartupCheck)
+            .GetCustomAttributes(typeof(Nethermind.Api.Steps.RunnerStepDependenciesAttribute), false)
+            .Cast<Nethermind.Api.Steps.RunnerStepDependenciesAttribute>().Single();
+        Assert.That(a.Dependents, Does.Contain(typeof(Nethermind.Init.Steps.LoadGenesisBlock)));
+        Assert.That(typeof(PqzPlugin).GetMethod("Init"), Is.Null, "no dead Init hook");
     }
 }
 
