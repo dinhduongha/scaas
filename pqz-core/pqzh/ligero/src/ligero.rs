@@ -773,7 +773,11 @@ mod tests {
         let (n, t) = (p.n, p.t);
         let tree = Tree::new((0..n as u32).map(|i| keccak(&[&i.to_be_bytes()])).collect());
         let worst = (1..depth(n)).map(|l| t.min(n.div_ceil(1 << l))).sum::<usize>() + 2 - t;
-        let spread: Vec<usize> = (0..t).map(|i| i * n / t).collect();
+        // evenly spread columns from the left or (spike B, n 45,752: the left spread reaches worst - 1) from the right
+        let left: Vec<usize> = (0..t).map(|i| i * n / t).collect();
+        let mut right: Vec<usize> = (0..t).map(|i| n - 1 - i * n / t).collect();
+        right.sort_unstable();
+        let spread = if tree.multiproof(&right).len() > tree.multiproof(&left).len() { right } else { left };
         assert_eq!(tree.multiproof(&spread).len(), worst);
         let mut x = 0x9E3779B97F4A7C15u64;
         for _ in 0..300 {

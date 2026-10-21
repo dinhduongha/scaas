@@ -467,7 +467,12 @@ fn transfer_forms_cross_rejected() {
         assert_eq!(prove_unchecked(OP_TRANSFER, st, w, [6; 32], &pp), Err("length"));
     }
     // the length gate is the form's: R_TX0's bound is R_BURN's (same m), below R_TX's
-    assert!(pp.max_proof_len(Form::Transfer0) < pp.max_proof_len(Form::Transfer));
+    // (research spike B, l = 832: R_TX0 and R_TX have the same rows, 124, so equal bounds)
+    if cfg!(feature = "spike-b") {
+        assert_eq!(pp.max_proof_len(Form::Transfer0), pp.max_proof_len(Form::Transfer));
+    } else {
+        assert!(pp.max_proof_len(Form::Transfer0) < pp.max_proof_len(Form::Transfer));
+    }
 }
 
 /// the EVM fixtures (ligero_export) verify natively: honest and other-statement proofs accepted, negative witnesses

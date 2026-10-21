@@ -1,0 +1,5 @@
+    Finished `release` profile [optimized + debuginfo] target(s) in 0.01s
+   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8c-spike/pqz-core/pqzh/ligero)
+    Finished `release` profile [optimized + debuginfo] target(s) in 4.83s
+   Compiling pqzh-ligero v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-8c-spike/pqz-core/pqzh/ligero)
+    Finished `release` profile [optimized + debuginfo] target(s) in 3.88s
