@@ -44,12 +44,12 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
   every profile amsterdam) — both merged into `pqz-16k`. **Task 8b paused** (parameter sets `pqz-core/params/sets/`, PQZL at set (a)). Then 8c PQZH
   (backup) → 8d stmt / contracts (P46, per-set Solidity, 32-bit precompile addresses, `ROLL_MAX`, M = 8 by measurement,
   one id bump) → Task 9. HANDOFF.md top note has every owner ruling of the day.
-- [ ] **Node / relayer on the Amsterdam gas model** (F185 finding): regular gas ≤ 2^24 per tx, total (regular + state)
+- [x] **Node / relayer on the Amsterdam gas model — done 2026-10-22, merged `b62a54f1`** (per-chain fork detection, regular ≤ 2^24 + EIP-7976 floor on Amsterdam chains, 2^24 clamp elsewhere, gas = estimate + 20 % capped by `max_gas_per_tx` / live block limit / 2^32 − 1, out-of-gas simulations refused, rebuilt jobs keep their gas; `DECOY_LEG_GAS` 120,000; testnet `max_gas_per_tx` 64 M, owner). Was (F185 finding): regular gas ≤ 2^24 per tx, total (regular + state)
   up to 2^32 − 1; `scaas-node` zether.rs `DECOY_LEG_GAS` 32,000 vs 116,698 measured per leg; the prover's `gas_limits` M
   table assumes total ≤ 2^24 (edge cells need 21–31 M); `docs/node/ops.md` `max_gas_per_tx` 16 M. Never assume gas
   price 0 or our block limit (owner 2026-10-21: the precompile may be deployed for customers).
-- [ ] **SCaaS testnet at the next reset (plan fs3 Task 13):** genesis `gasLimit` 200 M (0xBEBC200) instead of 16.7 M
-  (the ramp takes ≈ 2.5 h to 110 M); the PQZ library v4 of the chosen set; the 32-bit precompile addresses; the
+- [ ] **SCaaS testnet at the next reset (plan fs3 Task 13):** ~~genesis `gasLimit` 200 M~~ **done 2026-10-22** (owner: reset now;
+  genesis `0xa17faef4…2ac2`, `b62a54f1`; fail-closed drill, README v2-id note, `eth_estimateGas` probe row also done); the PQZ library v4 of the chosen set; the 32-bit precompile addresses; the
   `nethermind-2.2` review minors: fail-closed drill with a tampered library, e2e burst / fill drills under Amsterdam,
   a 200 M block load rehearsal, `.dockerignore` for the default (no `FFI_REV`) image build, README note that the
   testnet's PQZL v2 id is the forgeable one, an `eth_estimateGas` row in the probe; main's FFI library `ee2f7096…` is
