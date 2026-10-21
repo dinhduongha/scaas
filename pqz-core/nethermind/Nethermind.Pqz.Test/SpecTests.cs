@@ -216,6 +216,23 @@ public class SpecTests
         Assert.That(new PqzPlugin(WithPqz(Schedule(T1))).Enabled, Is.True);
         Assert.DoesNotThrow(() => new ChainSpecBasedSpecProvider(Load(), LimboLogs.Instance), "without engine.Pqz the stock provider is untouched");
     }
+
+    /// <summary>Nethermind 2.x calls no plugin <c>Init</c>: the start-up checks (R3) must be a registered step that
+    /// runs before the genesis block (on 2.2.0 an <c>Init</c> method compiled and was silently never called).</summary>
+    [Test]
+    public void Startup_checks_are_a_step_before_genesis()
+    {
+        Autofac.ContainerBuilder b = new();
+        Autofac.ModuleRegistrationExtensions.RegisterModule(b, new PqzModule());
+        using Autofac.IContainer c = b.Build();
+        Assert.That(Autofac.ResolutionExtensions.Resolve<System.Collections.Generic.IEnumerable<Nethermind.Api.Steps.StepInfo>>(c)
+            .Select(i => i.StepType), Does.Contain(typeof(PqzStartupCheck)));
+        Nethermind.Api.Steps.RunnerStepDependenciesAttribute a = typeof(PqzStartupCheck)
+            .GetCustomAttributes(typeof(Nethermind.Api.Steps.RunnerStepDependenciesAttribute), false)
+            .Cast<Nethermind.Api.Steps.RunnerStepDependenciesAttribute>().Single();
+        Assert.That(a.Dependents, Does.Contain(typeof(Nethermind.Init.Steps.LoadGenesisBlock)));
+        Assert.That(typeof(PqzPlugin).GetMethod("Init"), Is.Null, "no dead Init hook");
+    }
 }
 
 public class AssemblyTests
