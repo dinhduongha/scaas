@@ -20,11 +20,11 @@ Status: **BUILT** on the private chain 7622 and anvil; public chains are seeded 
 |---|---|---|---|---|---|
 | Private reference chain | 7622 | `private7622` (Solidity `amsterdam`, [NET-EVM-06](#NET-EVM-06)) | free (base fee 0) | depth 1, quorum 1 | BUILT, first target |
 | Anvil (tests) | 31337 (also 1337) | — | — | depth | BUILT (dev only) |
-| Gnosis Chain | 100 | `gnosis` (`osaka`; Pectra since 2025-04-30, then Fusaka) | native xDAI (stable value) | `tag finalized` (~160–240 s), quorum ≥ 2 independent RPCs | seeded `draft` until the operator gate passes |
-| Celo | 42220 | `celo` (`osaka`, owner 2026-10-11; the chain's fork level is not re-measured) | CELO; fee currencies optional | `l1_batch` (PLANNED) | seeded `draft` |
-| BNB Smart Chain | 56 | `bsc` (`osaka`; Mendel = Osaka since 2026-04-28) | BNB (~0.05 gwei) | `tag finalized` (BEP-126 fast finality, ~1 s), quorum ≥ 2 | seeded `draft` |
-| Polygon PoS | 137 | `polygon` (`osaka` opcode set; no named Osaka fork) | POL (~250–300 gwei) | `tag finalized` (milestones, ~3–6 s); `safe` unsupported | seeded `draft` |
-| Base | 8453 | `base` (`osaka`; Azul since 2026-05-28) | ETH (~0.005 gwei) + L1 data fee | `l1_batch`: `safe` ~90 s, `finalized` ~16 min | seeded `draft` |
+| Gnosis Chain | 100 | `gnosis` (`amsterdam`; Pectra since 2025-04-30, then Fusaka; deploy after its Glamsterdam fork) | native xDAI (stable value) | `tag finalized` (~160–240 s), quorum ≥ 2 independent RPCs | seeded `draft` until the operator gate passes |
+| Celo | 42220 | `celo` (`amsterdam`; the chain's fork level is not re-measured; deploy after its Glamsterdam fork) | CELO; fee currencies optional | `l1_batch` (PLANNED) | seeded `draft` |
+| BNB Smart Chain | 56 | `bsc` (`amsterdam`; Mendel = Osaka since 2026-04-28; deploy after its Glamsterdam fork) | BNB (~0.05 gwei) | `tag finalized` (BEP-126 fast finality, ~1 s), quorum ≥ 2 | seeded `draft` |
+| Polygon PoS | 137 | `polygon` (`amsterdam`; runs the Osaka opcode set today; deploy after its Glamsterdam fork) | POL (~250–300 gwei) | `tag finalized` (milestones, ~3–6 s); `safe` unsupported | seeded `draft` |
+| Base | 8453 | `base` (`amsterdam`; Azul since 2026-05-28; deploy after its Glamsterdam fork) | ETH (~0.005 gwei) + L1 data fee | `l1_batch`: `safe` ~90 s, `finalized` ~16 min | seeded `draft` |
 
 - **Gnosis Chain (100)** is the recommended public chain for B2B: native gas is xDAI, a stable-value coin, so gas
   costs are predictable in unit, though their size still follows the gas price (the often-quoted < $0.001/tx is not a
@@ -173,13 +173,16 @@ every later address; with CREATE2 the address follows from what was deployed. Co
 each chain before the first deployment, and a redeploy with the same init code collides with the first (a new
 version needs a new salt or new code).
 
-<a id="NET-EVM-06"></a>**NET-EVM-06** — **The `default` and `private7622` Foundry profiles compile for the `amsterdam` EVM; the public-chain
-profiles stay `osaka` until each chain forks.** Owner ruling 2026-10-21; status **BUILT**. The SCaaS testnet (7622) runs
-Nethermind 2.2.0 with Amsterdam from block 1, and the test suite runs on Foundry 1.8.5, which needs `experimental = true`
-for `evm_version = "amsterdam"`. The `zether`, `gnosis`, `celo`, `bsc`, `polygon` and `base` profiles keep `osaka`.The flows' total gas (regular + EIP-8037 state gas) exceeds 2^24, up to ~109 M for the largest implementation deploy, so the testnet block gas limit must ramp to its 200 M target (genesis `0x1000000`). No
-contract reads `block.slotnum` (EIP-7843): Clique has no slot, so the opcode is off on the testnet. The bytecode equals the
-`osaka` build apart from the metadata hash; the gas bounds of the tests moved with Amsterdam's prices (EIP-8037 state gas,
-EIP-8038 storage writes, EIP-7976 calldata floor, EIP-2780 intrinsic), each re-pin names its EIP in the test.
+<a id="NET-EVM-06"></a>**NET-EVM-06** — **Every Foundry profile compiles for the `amsterdam` EVM: every chain that runs these contracts
+requires Glamsterdam, and a public chain is deployed only after its own fork.** Owner ruling 2026-10-21; status **BUILT**.
+The SCaaS testnet (7622) runs Nethermind 2.2.0 with Amsterdam from block 1, and the test suite runs on Foundry 1.8.5,
+which needs `experimental = true` for `evm_version = "amsterdam"`; the profiles `default`, `private7622`, `zether`,
+`gnosis`, `celo`, `bsc`, `polygon` and `base` all set it, with one set of gas bounds. No contract reads `block.slotnum`
+(EIP-7843): Clique has no slot, so the opcode is off on the testnet. The bytecode equals the earlier `osaka` build apart
+from the metadata; the gas bounds of the tests moved with Amsterdam's prices (EIP-8037 state gas, EIP-8038 storage writes,
+EIP-7976 calldata floor, EIP-2780 intrinsic), each re-pin names its EIP in the test. The flows' total gas (regular + EIP-8037
+state gas) exceeds 2^24, up to ~109 M for the largest implementation deploy, so the testnet block gas limit must ramp to
+its 200 M target (genesis `0x1000000`).
 
 Runbook notes: (1) read the genesis hash from every configured RPC and stop if they differ; (2) on a private chain,
 confirm the genesis carries its unique `extraData` nonce before deploying; (3) deploy the CREATE2 deployer once per

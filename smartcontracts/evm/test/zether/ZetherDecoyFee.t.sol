@@ -2,7 +2,6 @@
 pragma solidity ^0.8.24;
 
 import {console2} from "forge-std/Test.sol";
-import {isAmsterdam} from "../helpers/EvmVersion.sol";
 import {IConfidentialToken} from "../../src/confidential/IConfidentialToken.sol";
 import {ZetherFixture} from "./helpers/ZetherFixture.sol";
 import {ZetherLayer} from "../../src/zether/ZetherLayer.sol";
@@ -179,6 +178,6 @@ contract ZetherDecoyFeeGasTest is ZetherFixture {
         // F185: was 32,000 = zether.rs `DECOY_LEG_GAS` (measured 28,663 on Osaka). Under Amsterdam a leg's payout to a
         // public balance costs 116,698: EIP-8037 state gas for the new balance slot, EIP-8038 for the writes. The prover's
         // constant is NOT changed here (Rust is outside F185): it undercounts by this much on the SCaaS testnet.
-        assertLe((g1 - g0 + 3) / 4, isAmsterdam() ? 120_000 : 32_000, "a leg's payout (zether.rs DECOY_LEG_GAS 32,000 holds on Osaka only)");
+        assertLe((g1 - g0 + 3) / 4, 120_000, "a leg's payout (zether.rs DECOY_LEG_GAS is still 32,000)");
     }
 }

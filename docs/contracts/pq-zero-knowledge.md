@@ -1432,7 +1432,7 @@ B-1 and A-2 (5h Task 8a, 2026-10-21; reviews B and A of plan fs3; folded into th
 D23, made in Task 8d): v3 still drew V3 / V4 from `hz`, before the masking commitment `tg`, while `g` (masked by `tg`)
 is what makes the evaluation accumulators' coefficients 0 and d/2 vanish; a prover could set those coefficients of `g`
 to cancel the V-folded error of a false `z3` / `z4` (review A's cheating prover forged on all 14 relation codes in all
-four verifiers). V3 / V4 now come from `hash1`, after `tg` (round 4), in all four verifiers and both provers; the
+four verifiers). V3 / V4 now come from `hash1`, after `tg` (fourth round), in all four verifiers and both provers; the
 cheating prover is the regression fixture `pqz-core/pqzl/rust/tests/cheat_b1.rs`, and the binding tests mutate `tg`
 (`sz/fs_bind.c`, `rust/tests/fs_bind.rs`). A-2 (not exploitable, review A): υ shared the last β4 row's domain, so the
 accumulators checked only their sum; the domains from υ up moved by one (`check_tbox_fixes.sh` A-2: no shared dom).

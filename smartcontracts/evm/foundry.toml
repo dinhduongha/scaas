@@ -4,9 +4,9 @@ out = "out"
 libs = ["lib"]
 test = "test"
 solc_version = "0.8.37"
-# Amsterdam for the default and private7622 profiles (owner 2026-10-21, NET-EVM-06): the SCaaS testnet runs Nethermind 2.2.0
-# with Amsterdam from block 1. Gnosis, Celo, BSC, Polygon, Base and Zether stay Fusaka (Osaka EVM, owner 2026-10-11) until
-# each chain forks. Foundry 1.8.5 needs `experimental` for it. No `block.slotnum` (EIP-7843): Clique has no slot.
+# Amsterdam (Glamsterdam) for every profile (owner 2026-10-21, NET-EVM-06): every chain that runs these contracts must
+# have it, and the SCaaS testnet has it from block 1 (Nethermind 2.2.0). A public chain is deployed only after its fork.
+# Foundry 1.8.5 needs `experimental` for it. No `block.slotnum` (EIP-7843): Clique has no slot.
 evm_version = "amsterdam"
 experimental = true
 # Foundry 1.8.5 isolates by default: each top-level call of a test is its own transaction (intrinsic gas, EIP-7976 calldata
@@ -39,7 +39,7 @@ runs = 64
 depth = 32
 fail_on_revert = true
 
-# Chain 7622, formerly 9000 (private, Clique một signer): Nethermind 1.39.0 with Fusaka + BPO2 until 2026-10-21, now Nethermind 2.2.0 with Amsterdam from block 1.
+# Chain 7622, formerly 9000 (private, Clique một signer): Nethermind 2.2.0 with Amsterdam from block 1 (was 1.39.0 with Fusaka + BPO2).
 # [2026-08-31] Trước đây profile này phải là "berlin": genesis khai fork kiểu Geth mà
 # Nethermind bỏ qua im lặng, nên chain chạy pre-London — không PUSH0, không TSTORE,
 # không EIP-2537. Đã sửa chainspec và đo lại: PUSH0/TLOAD/MCOPY/BASEFEE/CLZ đều sống,
@@ -48,25 +48,26 @@ fail_on_revert = true
 [profile.private7622]
 evm_version = "amsterdam"
 
-# Zether (S2): BLS12-381 cần EIP-2537 (Prague trở lên); profile ghim Osaka như default.
+# Zether (S2): BLS12-381 cần EIP-2537 (Prague trở lên); profile ghim Amsterdam như default.
 #   FOUNDRY_PROFILE=zether forge test --match-path 'test/zether/*'
 [profile.zether]
-evm_version = "osaka"
+evm_version = "amsterdam"
 
-# Gnosis Chain: Pectra since 2025-04-30 14:03:40 UTC, then Fusaka (EIP-2537 measured live, docs/networks/evm.md §3).
+# Gnosis Chain: Pectra since 2025-04-30 14:03:40 UTC, then Fusaka (EIP-2537 measured live, docs/networks/evm.md §3); deploy after its Glamsterdam fork.
 [profile.gnosis]
-evm_version = "osaka"
+evm_version = "amsterdam"
 
 [profile.celo]
-evm_version = "osaka"
+evm_version = "amsterdam"
 
 # Draft chains (docs/networks/evm.md §1, researched 2026-10-11): BSC through Mendel (Osaka) 2026-04-28; Polygon PoS has
-# no named Osaka fork but runs the Osaka opcode set (CLZ since Lisovo 2026-03-04); Base through Azul 2026-05-28.
+# no named Osaka fork but runs the Osaka opcode set (CLZ since Lisovo 2026-03-04); Base through Azul 2026-05-28; each is
+# deployed after its Glamsterdam fork.
 [profile.bsc]
-evm_version = "osaka"
+evm_version = "amsterdam"
 
 [profile.polygon]
-evm_version = "osaka"
+evm_version = "amsterdam"
 
 [profile.base]
-evm_version = "osaka"
+evm_version = "amsterdam"
