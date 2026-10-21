@@ -34,7 +34,9 @@ fn hex(s: &str) -> Vec<u8> {
 
 #[test]
 fn cbd_eq_vectors() {
-    let path = concat!(env!("CARGO_MANIFEST_DIR"), "/../../../smartcontracts/vectors/pqz/cbd.json");
+    // the vectors of this build's parameter set (v3 at the canonical path, another set below it)
+    let b = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../smartcontracts/vectors/pqz");
+    let path = if pqzl::SET == "n2048-kmax1024" { b } else { b.join(pqzl::SET) }.join("cbd.json");
     let doc: serde_json::Value = serde_json::from_str(&std::fs::read_to_string(path).unwrap()).unwrap();
     let mut parts = 0;
     for row in doc["rows"].as_array().unwrap() {

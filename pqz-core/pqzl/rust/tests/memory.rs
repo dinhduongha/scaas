@@ -238,7 +238,17 @@ fn exhaustion_is_error() {
     let rs = rows();
     let tx = rs.iter().find(|r| r.code == 1).unwrap();
     let m8 = rs.iter().find(|r| r.name == "M8-on").unwrap();
-    for (r, cap, want_mem) in [(tx, 64, false), (m8, 64, true), (tx, 32, true)] {
+    // the caps: the brief's 64 / 32 MiB for the v3 set; for another set the R_TX prove's cold peak rounded up + 4 MiB
+    // and half that (the same roles: R_TX fits, R_TXM8 and half the cap do not)
+    let (hi, lo) = if pqzl::SET == "n2048-kmax1024" {
+        (64, 32)
+    } else {
+        let (_, p, _, _) = measure(None, 0, || run(&mut Ctx::new(), tx, 0));
+        let hi = p.div_ceil(MIB) + 4;
+        println!("R_TX prove cold peak {p} B: caps {hi} / {} MiB", hi / 2);
+        (hi, hi / 2)
+    };
+    for (r, cap, want_mem) in [(tx, hi, false), (m8, hi, true), (tx, lo, true)] {
         let mut c = Ctx::new();
         let (out, _, _, d) = measure(Some(cap * MIB), 0, || run(&mut c, r, 0));
         assert_eq!((out, d > 0), if want_mem { (None, true) } else { (Some(true), false) }, "{} prove, {cap} MiB", r.name);

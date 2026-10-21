@@ -49,7 +49,9 @@ fn rel_code(r: &Value) -> u8 {
 
 /// one frozen proof per relation code (the first row of each), in file order
 fn proofs() -> Vec<(u8, Vec<u8>)> {
-    let p = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../smartcontracts/vectors/pqz/proof_pqzl.json");
+    // the vectors of this build's parameter set (v3 at the canonical path, another set below it)
+    let b = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../smartcontracts/vectors/pqz");
+    let p = if pqzl::SET == "n2048-kmax1024" { b } else { b.join(pqzl::SET) }.join("proof_pqzl.json");
     let j: Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
     let mut out: Vec<(u8, Vec<u8>)> = Vec::new();
     for r in j["rows"].as_array().unwrap() {
@@ -120,14 +122,18 @@ fn malformed_eq_c() {
         x[n - 1] |= 0x80; // a one after the pad
         let must = x[n - 1] != proof[n - 1];
         v.push(("bit after pad".into(), x, must));
+        // tB[0][0]: the first LOG2Q bits, LSB first (the coder's width of a value mod q; v3: 42)
+        let l = 64 - (Q - 1).leading_zeros() as usize;
+        let put = |x: &mut [u8], v: u64| {
+            for b in 0..l {
+                x[b / 8] = (x[b / 8] & !(1 << (b % 8))) | ((((v >> b) & 1) as u8) << (b % 8));
+            }
+        };
         let mut x = proof.clone();
-        x[..5].fill(0xff); // tB[0][0] = 2^42 - 1 >= q
-        x[5] |= 3;
+        put(&mut x, (1 << l) - 1); // 2^LOG2Q - 1 >= q
         v.push(("tB coefficient >= q".into(), x, true));
         let mut x = proof.clone();
-        let q_le = Q.to_le_bytes(); // tB[0][0] = q exactly
-        x[..5].copy_from_slice(&q_le[..5]);
-        x[5] = (x[5] & !3) | (q_le[5] & 3);
+        put(&mut x, Q); // q exactly
         v.push(("tB coefficient = q".into(), x, true));
         let mut x = proof.clone();
         x.resize(MAX_PROOF + 1, 0);

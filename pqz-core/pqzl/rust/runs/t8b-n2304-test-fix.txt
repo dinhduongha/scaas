@@ -1,0 +1,182 @@
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust)
+    Finished `release` profile [optimized + debuginfo] target(s) in 20.77s
+     Running tests/memory.rs (target/n2304-kmax4096/release/deps/memory-4aad8083dd982fc2)
+
+running 2 tests
+size_of::<Ctx>() = 41032 B (the specialised verifier's fixed tables inline, the rest on the heap)
+peak_per_op (bytes; cold = fresh Ctx, the call builds A / keys / SV tables; warm = second call)
+row                            prove cold   prove warm  verify cold  verify warm    fast cold    fast warm    allocs
+PQZL_MEM_* settings: none (the defaults)
+R_TX prove cold peak 69224208 B: caps 71 / 35 MiB
+TRANSFER                         69224208     65703504     68869392     65348688     11667921      1312017     33807
+TRANSFER prove cold under 71 MiB: the vector's proof; the same Ctx then proves
+M8-on prove cold under 71 MiB: Error::Memory; the same Ctx then proves
+TRANSFER0                        68155840     64658368     67804192     64306720     11586001      1299409     32389
+TRANSFER prove cold under 35 MiB: Error::Memory; the same Ctx then proves
+R_TX verify cold under 34434696 B (half its peak 68869392 B): try_ = Error::Memory, bool = false; the same Ctx then accepts
+R_TX verify_fast cold under 5833960 B (half its peak 11667921 B): try_ = Error::Memory, bool = false; the same Ctx then accepts
+BURN                             66873040     63410416     66526144     63063520     11464673      1281537     29698
+REGISTER                         25075232     22734080     24892544     22551392      7678305       794689     15397
+keys (free functions): each of the 45 allocations denied in turn: Error::Memory, then the same outputs
+keys (Ctx methods, cold): each of the 41 allocations denied in turn: Error::Memory, then the same outputs
+DISCLOSE-SENDER                  26141136     23777808     25955280     23591952      7756065       806241     21522
+keys (Ctx methods, warm): each of the 40 allocations denied in turn: Error::Memory, then the same outputs
+DISCLOSE-RECEIVER                27195472     24776704     26982688     24563920      7943777       832017     19417
+TRANSFER verify_fast cold   : peak   11667921 B,  16609 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (3 s)
+TRANSFER verify_fast warm   : peak    1312017 B,    484 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (3 s)
+M1-on                            69224208     65703504     68869392     65348688     11667921      1312017     32571
+M2-on                            71594384     68015600     71231648     67652864     11889601      1360929     41852
+M4-on                            77135656     73317688     76756024     72938056     12698225      1462401     32798
+TRANSFER prove cold         : peak   69224208 B,  33807 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (22 s)
+TRANSFER0 prove cold        : peak   68155840 B,  32389 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (19 s)
+M8-on                           156973240    152013736    156444712    151485208     16668961      2067473     43260
+TRANSFER verify cold        : peak   68869392 B,  26767 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (29 s)
+M1-off                           68155840     64658368     67804192     64306720     11586001      1299409     29701
+TRANSFER0 verify_fast cold  : peak   11586001 B,  16475 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (2 s)
+TRANSFER0 verify_fast warm  : peak    1299409 B,    482 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (3 s)
+M2-off                           69721520     66189200     69365120     65832800     11725761      1335713     41605
+TRANSFER0 prove warm        : peak   64658368 B,  16401 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (38 s)
+TRANSFER prove warm         : peak   65703504 B,  17687 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (46 s)
+M4-off                           72329360     68727344     71963456     68361440     12005281      1408321     43913
+test exhaustion_is_error has been running for over 60 seconds
+test peak_per_op has been running for over 60 seconds
+TRANSFER0 verify cold       : peak   67804192 B,  26385 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (28 s)
+BURN prove cold             : peak   66873040 B,  29698 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (16 s)
+BURN verify_fast cold       : peak   11464673 B,  16275 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (3 s)
+M8-off                          143591584    138826384    143088400    138323200     15988585      1966425     43062
+R_TX prove (cold) 69224208 B = 0.22 x the C arena peak 312151904 B (target <= 1.1, fails > 2)
+test peak_per_op ... ok
+TRANSFER verify warm        : peak   65348688 B,  10647 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (58 s)
+BURN verify_fast warm       : peak    1281537 B,    480 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (2 s)
+REGISTER prove cold         : peak   25075232 B,  15397 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (5 s)
+REGISTER prove warm         : peak   22734080 B,   5979 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (8 s)
+BURN prove warm             : peak   63410416 B,  13908 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (27 s)
+REGISTER verify_fast cold   : peak    7678305 B,   9821 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (1 s)
+BURN verify cold            : peak   66526144 B,  25936 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (25 s)
+REGISTER verify cold        : peak   24892544 B,  12971 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (8 s)
+REGISTER verify_fast warm   : peak     794689 B,    398 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (1 s)
+TRANSFER0 verify warm       : peak   64306720 B,  10397 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (52 s)
+DISCLOSE-SENDER prove cold  : peak   26141136 B,  21522 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (9 s)
+DISCLOSE-SENDER verify_fast cold: peak    7756065 B,   9951 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (2 s)
+REGISTER verify warm        : peak   22551392 B,   3553 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (16 s)
+DISCLOSE-SENDER verify cold : peak   25955280 B,  17564 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (12 s)
+DISCLOSE-SENDER verify_fast warm: peak     806241 B,    402 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (2 s)
+DISCLOSE-RECEIVER prove cold: peak   27195472 B,  19417 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (5 s)
+DISCLOSE-SENDER verify warm : peak   23591952 B,   8020 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (14 s)
+DISCLOSE-SENDER prove warm  : peak   23777808 B,  11978 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (17 s)
+DISCLOSE-RECEIVER verify_fast cold: peak    7943777 B,  10266 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (1 s)
+DISCLOSE-RECEIVER verify_fast warm: peak     832017 B,    402 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (1 s)
+DISCLOSE-RECEIVER verify cold: peak   26982688 B,  17857 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (8 s)
+DISCLOSE-RECEIVER prove warm: peak   24776704 B,   9558 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (10 s)
+BURN verify warm            : peak   63063520 B,  10146 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (44 s)
+M1-on verify_fast cold      : peak   11667921 B,  16609 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (3 s)
+M1-on verify_fast warm      : peak    1312017 B,    484 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (3 s)
+DISCLOSE-RECEIVER verify warm: peak   24563920 B,   7998 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (21 s)
+M1-on prove cold            : peak   69224208 B,  32571 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (20 s)
+M1-on verify cold           : peak   68869392 B,  26767 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (23 s)
+M1-on prove warm            : peak   65703504 B,  16451 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (36 s)
+M2-on verify_fast cold      : peak   11889601 B,  16943 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (2 s)
+M2-on verify_fast warm      : peak    1360929 B,    488 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (2 s)
+M2-on prove cold            : peak   71594384 B,  41852 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (32 s)
+M2-on verify cold           : peak   71231648 B,  27654 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (32 s)
+M4-on prove cold            : peak   77135656 B,  32798 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (13 s)
+M1-on verify warm           : peak   65348688 B,  10647 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (55 s)
+M4-on verify_fast cold      : peak   12698225 B,  18310 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (3 s)
+M4-on verify_fast warm      : peak    1462401 B,    496 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (3 s)
+M2-on verify warm           : peak   67652864 B,  11204 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (53 s)
+M4-on prove warm            : peak   73317688 B,  14989 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (37 s)
+M4-on verify cold           : peak   76756024 B,  30063 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (36 s)
+M2-on prove warm            : peak   68015600 B,  25402 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (72 s)
+M8-on prove cold            : peak  156973240 B,  43260 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (29 s)
+M8-on verify_fast cold      : peak   16668961 B,  24888 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (4 s)
+M8-on verify_fast warm      : peak    2067473 B,    588 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (5 s)
+M1-off prove cold           : peak   68155840 B,  29701 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (13 s)
+M1-off prove warm           : peak   64658368 B,  13713 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (27 s)
+M4-on verify warm           : peak   72938056 B,  12254 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (79 s)
+M1-off verify cold          : peak   67804192 B,  26385 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (25 s)
+M8-on prove warm            : peak  152013736 B,  18965 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (58 s)
+M1-off verify_fast cold     : peak   11586001 B,  16475 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (3 s)
+M1-off verify_fast warm     : peak    1299409 B,    482 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (2 s)
+M2-off verify cold          : peak   69365120 B,  26866 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (26 s)
+M8-on verify cold           : peak  156444712 B,  40491 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (84 s)
+M2-off verify_fast cold     : peak   11725761 B,  16675 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (2 s)
+M2-off verify_fast warm     : peak    1335713 B,    484 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (3 s)
+M2-off prove cold           : peak   69721520 B,  41605 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (35 s)
+M1-off verify warm          : peak   64306720 B,  10397 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (47 s)
+M4-off verify cold          : peak   71963456 B,  27818 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (30 s)
+M2-off prove warm           : peak   66189200 B,  25419 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (71 s)
+M4-off verify_fast cold     : peak   12005281 B,  17075 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (3 s)
+M4-off prove cold           : peak   72329360 B,  43913 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (45 s)
+M4-off verify_fast warm     : peak    1408321 B,    488 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (3 s)
+M2-off verify warm          : peak   65832800 B,  10680 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (54 s)
+M8-on verify warm           : peak  151485208 B,  16196 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (154 s)
+M4-off prove warm           : peak   68727344 B,  27331 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (73 s)
+M8-off prove cold           : peak  143591584 B,  43062 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (33 s)
+M8-off verify_fast cold     : peak   15988585 B,  23768 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (3 s)
+M8-off verify_fast warm     : peak    1966425 B,    572 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (4 s)
+M4-off verify warm          : peak   68361440 B,  11236 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (52 s)
+M8-off verify cold          : peak  143088400 B,  37319 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (50 s)
+M8-off prove warm           : peak  138826384 B,  19871 allocations,  11 capped runs ( 11 out of memory): each the honest result or out of memory, the Ctx usable after (56 s)
+M8-off verify warm          : peak  138323200 B,  14128 allocations,  39 capped runs ( 39 out of memory): each the honest result or out of memory, the Ctx usable after (88 s)
+test exhaustion_is_error ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 433.57s
+
+     Running tests/oracle_codec.rs (target/n2304-kmax4096/release/deps/oracle_codec-ab9277bc32f51156)
+
+running 3 tests
+code 0x01: refused 0 of 64 bit flips, 12 of 13 foreign proofs
+code 0x81: refused 0 of 64 bit flips, 12 of 13 foreign proofs
+code 0x02: refused 1 of 64 bit flips, 13 of 13 foreign proofs
+code 0x03: refused 0 of 64 bit flips, 13 of 13 foreign proofs
+code 0x04: refused 0 of 64 bit flips, 13 of 13 foreign proofs
+code 0x05: refused 0 of 64 bit flips, 13 of 13 foreign proofs
+code 0x78: refused 0 of 64 bit flips, 12 of 13 foreign proofs
+code 0x79: refused 2 of 64 bit flips, 13 of 13 foreign proofs
+code 0x7a: refused 3 of 64 bit flips, 13 of 13 foreign proofs
+code 0x7b: refused 1 of 64 bit flips, 13 of 13 foreign proofs
+code 0x70: refused 0 of 64 bit flips, 12 of 13 foreign proofs
+code 0x71: refused 1 of 64 bit flips, 13 of 13 foreign proofs
+code 0x72: refused 0 of 64 bit flips, 13 of 13 foreign proofs
+code 0x73: refused 0 of 64 bit flips, 13 of 13 foreign proofs
+test malformed_eq_c ... ok
+code 0x01: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+test ghint_eq_c ... ok
+code 0x81: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x02: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x03: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x04: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x05: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+test test_mutate_eq_c has been running for over 60 seconds
+code 0x78: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x79: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x7a: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x7b: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x70: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x71: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x72: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+code 0x73: re-encoded per kind [200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200, 200] of 200
+test test_mutate_eq_c ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 160.27s
+
+     Running tests/vectors.rs (target/n2304-kmax4096/release/deps/vectors-093ef7c6b1c53c91)
+
+running 12 tests
+test enc_group_seed_eq_shake ... ok
+test enc_dec_input_errors ... ok
+test keygen_json ... ok
+test codec_roundtrip ... ok
+test enc_json ... ok
+test prove_refuses_noncanonical_statement ... ok
+test matrix_json ... ok
+test cheating_proofs_reject ... ok
+test all_pqzl_proofs_verify ... ok
+test reprove_byte_equal ... ok
+negative_rows_reject: 364 of 367 rows split into (op, stmt, proof), all rejected
+test negative_rows_reject ... ok
+test wasm_replay_inputs has been running for over 60 seconds
+test wasm_replay_inputs ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 63.00s
+

@@ -259,15 +259,15 @@ mod harness {
                 w[j] = kf.s[j] as u8;
                 le16(&mut w[pqzl::N + 2 * j..], kf.e[j]);
                 w[(3 * pqzl::N) + j] = r[j] as u8;
-                le16(&mut w[8192 + 2 * j..], e1[j]);
+                le16(&mut w[(4 * pqzl::N) + 2 * j..], e1[j]);
             }
             for k in 0..3 {
                 for j in 0..16 {
                     le16(&mut w[(6 * pqzl::N) + 32 * k + 2 * j..], e2[k][j]);
                 }
             }
-            w[12384..12400].copy_from_slice(&m[0]);
-            w[12400..12416].copy_from_slice(&m[1]);
+            w[(6 * pqzl::N) + 96..(6 * pqzl::N) + 112].copy_from_slice(&m[0]);
+            w[(6 * pqzl::N) + 112..(6 * pqzl::N) + 128].copy_from_slice(&m[1]);
             if !tx0 {
                 return (st, w);
             }
@@ -320,12 +320,12 @@ mod harness {
                 w[j] = kf.s[j] as u8;
                 le16(&mut w[pqzl::N + 2 * j..], kf.e[j]);
                 w[(3 * pqzl::N) + j] = r[j] as u8;
-                le16(&mut w[8192 + 2 * j..], e1[j]);
+                le16(&mut w[(4 * pqzl::N) + 2 * j..], e1[j]);
             }
             for j in 0..16 {
                 le16(&mut w[(6 * pqzl::N) + 2 * j..], e2[j]);
             }
-            w[12320..].copy_from_slice(&m);
+            w[(6 * pqzl::N) + 32..].copy_from_slice(&m);
             (st, w)
         }
 

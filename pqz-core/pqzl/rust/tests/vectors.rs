@@ -59,7 +59,7 @@ fn keygen_json() {
 #[test]
 fn matrix_json() {
     let j = json("matrix.json");
-    let cols: Vec<Box<[u8; POLYVEC_BYTES]>> = (0..32)
+    let cols: Vec<Box<[u8; POLYVEC_BYTES]>> = (0..pqzl::K)
         .map(|c| {
             let mut s = [0i8; pqzl::N];
             s[64 * c] = 1;
@@ -67,7 +67,7 @@ fn matrix_json() {
         })
         .collect();
     let mut a = Vec::new(); // A[0][0], A[0][1], ...: row i of A is poly i of every column
-    for i in 0..32 {
+    for i in 0..pqzl::K {
         for col in &cols {
             a.extend_from_slice(&col[512 * i..512 * (i + 1)]);
         }
@@ -78,8 +78,9 @@ fn matrix_json() {
     let want = |k: &str| ints(&j[k]).iter().map(|&x| x as u64).collect::<Vec<_>>();
     assert_eq!(coeffs(0, 0, 0), want("A_0_0_first8"));
     assert_eq!(coeffs(0, 0, 56), want("A_0_0_last8"));
-    assert_eq!(coeffs(31, 31, 0), want("A_31_31_first8"));
-    assert_eq!(coeffs(31, 31, 56), want("A_31_31_last8"));
+    let l = pqzl::K - 1; // the last poly of A (v3: A_31_31)
+    assert_eq!(coeffs(l, l, 0), want(&format!("A_{l}_{l}_first8")));
+    assert_eq!(coeffs(l, l, 56), want(&format!("A_{l}_{l}_last8")));
 }
 
 fn ct_of(u: &[u8], v: &[u8]) -> Box<[u8; CT_BYTES]> {
@@ -280,7 +281,13 @@ fn negative_rows_reject() {
     // 367 since PQZL v3 (pqzl-fs3 Task 5): + 16 "retired PQZL v2 proofSystemId" rows, - 3 coder-padding rows (the
     // generator adds those only when the proof's last byte is < 0x80); 368 since B-1 / A-2 (5h Task 8a): the new
     // proofs' last bytes give + 3 - 2 such rows
-    assert_eq!(rows.len(), 368);
+    // set n2304-kmax4096: 367 (its proofs' last bytes give one coder-padding row fewer)
+    let want = match pqzl::SET {
+        "n2048-kmax1024" => 368,
+        "n2304-kmax4096" => 367,
+        s => panic!("no negative.json row count recorded for set {s}"),
+    };
+    assert_eq!(rows.len(), want);
     let mut n = 0;
     for (name, b) in &rows {
         if let Some((op, stmt, proof)) = common::split(b) {

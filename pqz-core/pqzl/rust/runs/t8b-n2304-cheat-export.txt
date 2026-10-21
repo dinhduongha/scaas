@@ -1,0 +1,97 @@
+== control (P6-L2 fix undone)
+honest    ||s||^2=1130 (bound 1444) ||e||^2=1150 (bound 29929) sum=2280 (bound 31373)
+  honest prover rc=0 (proves)
+  pooled-slack prover rc=0 proof 30285 B; prover self-checks: pass:0
+  in-process pqz_verify(honest): ACCEPT
+s_over_A  ||s||^2=20191 (bound 1444) ||e||^2=1102 (bound 29929) sum=21293 (bound 31373)  <-- s exceeds its own bound
+  honest prover rc=3 (refuses: witness above a block bound)
+  pooled-slack prover rc=0 proof 30289 B; prover self-checks: pass:0
+  in-process pqz_verify(s_over_A): ACCEPT
+s_over_B  ||s||^2=31360 (bound 1444) ||e||^2=0 (bound 29929) sum=31360 (bound 31373)  <-- s exceeds its own bound
+  honest prover rc=3 (refuses: witness above a block bound)
+  pooled-slack prover rc=0 proof 30294 B; prover self-checks: pass:0
+  in-process pqz_verify(s_over_B): ACCEPT
+tx_over  ||s_f||^2+||e_f||^2=2277 ||r||^2=59933 (bound 1444, ||r||=244.8 vs 38) ||e1||^2=4144 (bound 29929) sum=66354 (bound 75034)
+  recipient decryption noise, coefficient 0: 36861  (spec worst case B_FRESH = 13212; ratio 2.79)
+  x 4095 credits = 150.95 M  (E = 67.11 M debit range; Delta/2 = 116.87 M; mint threshold Delta - E = 166.64 M)
+  honest prover rc=3 (refuses: witness above a block bound)
+  pooled-slack prover rc=0 proof 46671 B; prover self-checks: pass:0
+  in-process pqz_verify(tx_over): ACCEPT
+== fixed tree, production verifier
+honest    ||s||^2=1130 (bound 1444) ||e||^2=1150 (bound 29929) sum=2280 (bound 31373)
+  honest prover rc=0 (proves)
+  pooled-slack prover rc=1 proof 30301 B; prover self-checks: FAIL (ignored), first at lazer/lnp-tbox.c:184
+  in-process pqz_verify(honest): REJECT
+s_over_A  ||s||^2=20191 (bound 1444) ||e||^2=1102 (bound 29929) sum=21293 (bound 31373)  <-- s exceeds its own bound
+  honest prover rc=3 (refuses: witness above a block bound)
+  pooled-slack prover rc=1 proof 30282 B; prover self-checks: FAIL (ignored), first at lazer/lnp-tbox.c:184
+  in-process pqz_verify(s_over_A): REJECT
+s_over_B  ||s||^2=31360 (bound 1444) ||e||^2=0 (bound 29929) sum=31360 (bound 31373)  <-- s exceeds its own bound
+  honest prover rc=3 (refuses: witness above a block bound)
+  pooled-slack prover rc=1 proof 30273 B; prover self-checks: FAIL (ignored), first at lazer/lnp-tbox.c:184
+  in-process pqz_verify(s_over_B): REJECT
+  production-lib pqz_verify(honest): REJECT
+  production-lib pqz_verify(s_over_A): REJECT
+  production-lib pqz_verify(s_over_B): REJECT
+tx_over  ||s_f||^2+||e_f||^2=2277 ||r||^2=59933 (bound 1444, ||r||=244.8 vs 38) ||e1||^2=4144 (bound 29929) sum=66354 (bound 75034)
+  recipient decryption noise, coefficient 0: 36861  (spec worst case B_FRESH = 13212; ratio 2.79)
+  x 4095 credits = 150.95 M  (E = 67.11 M debit range; Delta/2 = 116.87 M; mint threshold Delta - E = 166.64 M)
+  honest prover rc=3 (refuses: witness above a block bound)
+  pooled-slack prover rc=1 proof 46651 B; prover self-checks: FAIL (ignored), first at lazer/lnp-tbox.c:184
+  in-process pqz_verify(tx_over): REJECT
+  production-lib pqz_verify(tx_over): REJECT
+prover patch: 57 lines added or changed
+== cheating prover
+honest   prove rc=0 proof 30297 B
+z1_over  prove rc=0 proof 35448 B
+z21_big  prove rc=0 proof 90992 B  ||z21||^2 = 2065783240714968 (R_REG Bsq = 22226101053479, 92.9x)
+w_over   prove rc=0 proof 30456 B
+== production verifiers (build/native/libpqz.a)
+honest   generic ACCEPT  fast ACCEPT
+z1_over  generic REJECT  fast REJECT
+z21_big  generic REJECT  fast REJECT
+w_over   generic REJECT  fast REJECT
+== control: z1 norm check removed from both verifiers
+honest   generic ACCEPT  fast ACCEPT
+z1_over  generic ACCEPT  fast ACCEPT
+z21_big  generic REJECT  fast REJECT
+w_over   generic REJECT  fast REJECT
+== control: ||(z21, w - gamma w1)|| check removed from both verifiers
+honest   generic ACCEPT  fast ACCEPT
+z1_over  generic REJECT  fast REJECT
+z21_big  generic ACCEPT  fast ACCEPT
+w_over   generic ACCEPT  fast ACCEPT
+== control: z21 term removed from the ||(z21, w - gamma w1)|| check in both verifiers (pre-P6-Z21)
+honest   generic ACCEPT  fast ACCEPT
+z1_over  generic REJECT  fast REJECT
+z21_big  generic ACCEPT  fast ACCEPT
+w_over   generic REJECT  fast REJECT
+== cheating prover (patched lnp-tbox.c, 5 lines)
+honest   prove rc=0 proof 30295 B
+z3_over  prove rc=0 proof 30418 B
+z4_over  prove rc=0 proof 30860 B
+== production verifiers (build/native/libpqz.a)
+honest   generic ACCEPT  fast ACCEPT
+z3_over  generic REJECT  fast REJECT
+z4_over  generic REJECT  fast REJECT
+total 672
+-rw-rw-r-- 1 ha ha 30301 Oct 22 01:06 l2dom_honest.proof
+-rw-rw-r-- 1 ha ha 18528 Oct 22 01:06 l2dom_honest.stmt
+-rw-rw-r-- 1 ha ha 30282 Oct 22 01:06 l2dom_s_over_A.proof
+-rw-rw-r-- 1 ha ha 18528 Oct 22 01:06 l2dom_s_over_A.stmt
+-rw-rw-r-- 1 ha ha 30273 Oct 22 01:06 l2dom_s_over_B.proof
+-rw-rw-r-- 1 ha ha 18528 Oct 22 01:06 l2dom_s_over_B.stmt
+-rw-rw-r-- 1 ha ha 30297 Oct 22 01:07 norm_honest.proof
+-rw-rw-r-- 1 ha ha 18528 Oct 22 01:07 norm_honest.stmt
+-rw-rw-r-- 1 ha ha 30456 Oct 22 01:07 norm_w_over.proof
+-rw-rw-r-- 1 ha ha 18528 Oct 22 01:07 norm_w_over.stmt
+-rw-rw-r-- 1 ha ha 35448 Oct 22 01:07 norm_z1_over.proof
+-rw-rw-r-- 1 ha ha 18528 Oct 22 01:07 norm_z1_over.stmt
+-rw-rw-r-- 1 ha ha 90992 Oct 22 01:07 norm_z21_big.proof
+-rw-rw-r-- 1 ha ha 18528 Oct 22 01:07 norm_z21_big.stmt
+-rw-rw-r-- 1 ha ha 30418 Oct 22 01:07 norm_z3_over.proof
+-rw-rw-r-- 1 ha ha 18528 Oct 22 01:07 norm_z3_over.stmt
+-rw-rw-r-- 1 ha ha 30860 Oct 22 01:07 norm_z4_over.proof
+-rw-rw-r-- 1 ha ha 18528 Oct 22 01:07 norm_z4_over.stmt
+-rw-rw-r-- 1 ha ha 46651 Oct 22 01:06 tx_over.proof
+-rw-rw-r-- 1 ha ha 93312 Oct 22 01:06 tx_over.stmt

@@ -5,8 +5,10 @@ use pqzl::{Ctx, OP_REGISTER};
 use serde_json::Value;
 use std::path::PathBuf;
 
+/// the vectors of this build's parameter set (v3 at the canonical path, another set below it)
 fn vectors() -> PathBuf {
-    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../smartcontracts/vectors/pqz")
+    let b = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../smartcontracts/vectors/pqz");
+    if pqzl::SET == "n2048-kmax1024" { b } else { b.join(pqzl::SET) }
 }
 
 fn json(file: &str) -> Value {

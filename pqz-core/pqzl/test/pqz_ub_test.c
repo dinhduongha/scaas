@@ -256,7 +256,7 @@ test_onetime (void)
 
 /* ---- (b) pqz_encrypt / pqz_decrypt_raw on non-canonical coefficients ---- */
 
-#define PQZ_Q_ 61275424977257ULL /* q (pqz_ntt.h PQZ_Q; this test does not include it) */
+#define PQZ_Q_ PQZ_Q /* q of the parameter set (pqz_set.h via pqz.h) */
 
 static void
 wr_be8 (uint8_t *p, uint64_t v)

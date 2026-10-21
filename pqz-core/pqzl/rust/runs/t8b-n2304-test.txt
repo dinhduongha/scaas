@@ -1,0 +1,243 @@
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust)
+    Finished `release` profile [optimized + debuginfo] target(s) in 31.53s
+     Running unittests src/lib.rs (target/n2304-kmax4096/release/deps/pqzl-f233821061f26228)
+
+running 10 tests
+test arith::spoly::tests::errors_and_order ... ok
+test arith::polymat::tests::views ... ok
+test keys::tests::canonical_short_chunk ... ok
+test rand::fixexp::tests::bernoulli_masked_add_eq_shift ... ok
+test rand::rejection::tests::saturation_near_2_63 ... ok
+test sv::tests::hint_bound_unreachable_by_encoding ... ok
+test rel::tests::bad_length_refused_before_caches ... ok
+test rel::tests::build_refuses_noncanonical ... ok
+test sv::tests::setup_limits_eq_generic ... ok
+test rand::rejection::tests::onetime_rej1 ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.71s
+
+     Running unittests src/bin/bench.rs (target/n2304-kmax4096/release/deps/bench-0cbde1480a2f5b00)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/kat_dump.rs (target/n2304-kmax4096/release/deps/kat_dump-2bc41be74372cb7e)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/keys_kat.rs (target/n2304-kmax4096/release/deps/keys_kat-3d9b757059310fc1)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/cheat_b1.rs (target/n2304-kmax4096/release/deps/cheat_b1-295fdb093ce9589b)
+
+running 1 test
+test cheating_prover_rejected has been running for over 60 seconds
+test cheating_prover_rejected ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 124.58s
+
+     Running tests/fs_bind.rs (target/n2304-kmax4096/release/deps/fs_bind-5d60c654516f4042)
+
+running 1 test
+test fs_bind ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.96s
+
+     Running tests/keys.rs (target/n2304-kmax4096/release/deps/keys-da68da7e73d9ef5f)
+
+running 1 test
+test ctx_eq_free ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.12s
+
+     Running tests/memory.rs (target/n2304-kmax4096/release/deps/memory-4aad8083dd982fc2)
+
+running 2 tests
+test exhaustion_is_error ... FAILED
+test peak_per_op ... ok
+
+failures:
+
+---- exhaustion_is_error stdout ----
+PQZL_MEM_* settings: none (the defaults)
+
+thread 'exhaustion_is_error' (625494) panicked at tests/memory.rs:244:9:
+assertion `left == right` failed: TRANSFER prove, 64 MiB
+  left: (None, true)
+ right: (Some(true), false)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    exhaustion_is_error
+
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 41.95s
+
+error: test failed, to rerun pass `--test memory`
+     Running tests/oracle_arith.rs (target/n2304-kmax4096/release/deps/oracle_arith-b26f638d694c47d0)
+
+running 4 tests
+test ntt_roundtrip_eq_c ... ok
+test basemul_eq_c ... ok
+test int_ops_eq_c ... ok
+test polyvec_ops_eq_c ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.28s
+
+     Running tests/oracle_codec.rs (target/n2304-kmax4096/release/deps/oracle_codec-ab9277bc32f51156)
+
+running 3 tests
+test malformed_eq_c ... FAILED
+test ghint_eq_c ... ok
+test test_mutate_eq_c has been running for over 60 seconds
+test test_mutate_eq_c ... ok
+
+failures:
+
+---- malformed_eq_c stdout ----
+
+thread 'malformed_eq_c' (646804) panicked at tests/oracle_codec.rs:153:13:
+code 0x1 tB coefficient >= q: C accepts
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    malformed_eq_c
+
+test result: FAILED. 2 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 156.99s
+
+error: test failed, to rerun pass `--test oracle_codec`
+     Running tests/oracle_keys.rs (target/n2304-kmax4096/release/deps/oracle_keys-8be9642d42746d90)
+
+running 2 tests
+test keygen_enc_dec_eq_c ... ok
+test keypair_encrypt_decrypt_raw_eq_c ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.86s
+
+     Running tests/oracle_params.rs (target/n2304-kmax4096/release/deps/oracle_params-15b15222ed77fefb)
+
+running 1 test
+test constants_eq_c ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/oracle_prove.rs (target/n2304-kmax4096/release/deps/oracle_prove-fdcfda21497e5709)
+
+running 1 test
+test prove_eq_c ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 29.91s
+
+     Running tests/oracle_rand.rs (target/n2304-kmax4096/release/deps/oracle_rand-bbbc822b9988d95b)
+
+running 7 tests
+test cbd_eq_vectors ... ok
+test rejection_saturation_eq_c ... ok
+test aes_ctr_eq_c ... ok
+test shake_eq_c ... ok
+test grandom_eq_c ... ok
+test urandom_eq_c ... ok
+test rejection_eq_c ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.77s
+
+     Running tests/oracle_smoke.rs (target/n2304-kmax4096/release/deps/oracle_smoke-2628c231e90cc6f0)
+
+running 2 tests
+test rust_verify_accepts ... ok
+test c_core_selftest_proofs_verify ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.31s
+
+     Running tests/oracle_verify.rs (target/n2304-kmax4096/release/deps/oracle_verify-3ec36ddc36506a5e)
+
+running 5 tests
+test cheating_eq_c ... ok
+test bad_length_eq_c ... ok
+test c_out_of_range_rejected ... ok
+test mutated_eq_c has been running for over 60 seconds
+test negative_eq_c has been running for over 60 seconds
+test negative_eq_c ... ok
+test mutated_eq_c ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 356.03s
+
+     Running tests/sv_diff.rs (target/n2304-kmax4096/release/deps/sv_diff-035f3b3b24a65f95)
+
+running 4 tests
+test cheating_rejected ... ok
+test vectors_verify_fast ... ok
+test sv_eq_c_sv has been running for over 60 seconds
+test sv_eq_generic has been running for over 60 seconds
+test sv_eq_c_sv ... ok
+test sv_eq_generic ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 332.24s
+
+     Running tests/threads.rs (target/n2304-kmax4096/release/deps/threads-0ce683b5e0fc0cda)
+
+running 1 test
+test concurrent_eq_sequential has been running for over 60 seconds
+test concurrent_eq_sequential ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 163.26s
+
+     Running tests/vectors.rs (target/n2304-kmax4096/release/deps/vectors-093ef7c6b1c53c91)
+
+running 12 tests
+test enc_group_seed_eq_shake ... ok
+test enc_dec_input_errors ... ok
+test keygen_json ... ok
+test codec_roundtrip ... ok
+test enc_json ... ok
+test matrix_json ... FAILED
+test prove_refuses_noncanonical_statement ... ok
+test negative_rows_reject ... FAILED
+test cheating_proofs_reject ... ok
+test all_pqzl_proofs_verify ... ok
+test reprove_byte_equal ... ok
+test wasm_replay_inputs has been running for over 60 seconds
+test wasm_replay_inputs ... ok
+
+failures:
+
+---- matrix_json stdout ----
+
+thread 'matrix_json' (768578) panicked at tests/vectors.rs:76:5:
+assertion `left == right` failed
+  left: 524288
+ right: 663552
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+---- negative_rows_reject stdout ----
+
+thread 'negative_rows_reject' (768579) panicked at tests/vectors.rs:283:5:
+assertion `left == right` failed
+  left: 367
+ right: 368
+
+
+failures:
+    matrix_json
+    negative_rows_reject
+
+test result: FAILED. 10 passed; 2 failed; 0 ignored; 0 measured; 0 filtered out; finished in 61.06s
+
+error: test failed, to rerun pass `--test vectors`
+   Doc-tests pqzl
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+error: 3 targets failed:
+    `--test memory`
+    `--test oracle_codec`
+    `--test vectors`
