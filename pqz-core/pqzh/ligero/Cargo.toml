@@ -35,6 +35,11 @@ path = "src/bin/ligero_export.rs"
 required-features = ["bench"]
 
 [[bin]]
+name = "ligero_kat"
+path = "src/bin/ligero_kat.rs"
+required-features = ["bench"]
+
+[[bin]]
 name = "ct"
 path = "src/bin/ct.rs"
 required-features = ["ctgrind"]
