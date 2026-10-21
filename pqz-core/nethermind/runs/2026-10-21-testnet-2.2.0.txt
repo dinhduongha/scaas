@@ -1457,3 +1457,15 @@ e2e: all checks passed
 [rc=0]
 
 # docs on the chain host: README-chainspec.md gets a 2026-10-21 note at the top (copy README-chainspec.md.bak-1.39.0-20261021)
+# ordinary transfer (key 0x…01 -> 0x2B5AD5c4795c026514f8317c7a215E218DcCD6cF, 1 ETH, gas limit 21,000): status 0x1, gasUsed 21,000 (Amsterdam: 12,000 + 3,000 cold recipient + 6,000 value = 21,000), block 258, balance +1000000000000000000, logs 1 (EIP-7708 transfer log)
+
+# 64 KiB code check: NOT RUN (stopped by the controller while waiting for the gas-limit ramp)
+$ python3 -I chain/e2e.py codesize --rpc http://127.0.0.1:8545 --key <test key 0x…04>
+head rules: Amsterdam (EIP-7928 header field present)
+waiting: block 206 gasLimit 20,513,412 <= 110,000,000
+... (polls every 5 min)
+waiting: block 806 gasLimit 36,844,169 <= 110,000,000
+[stopped at block ~856, gasLimit 38,686,847; no transaction was sent: key 0x…04 nonce latest = pending = 0x2f]
+The ramp: genesis gasLimit 0x1000000 (16,777,216) -> Blocks.TargetBlockGasLimit 200,000,000 at 1/1024 per block
+(5 s blocks): ~1,780 blocks (~2.5 h) to 110 M, ~2,540 blocks (~3.5 h) to 200 M after the reset (01:47:55Z).
+Re-run the command above once gasLimit > 111 M; it waits by itself.

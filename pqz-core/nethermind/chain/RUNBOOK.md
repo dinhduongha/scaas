@@ -392,7 +392,16 @@ work the same way with `eip<N>TransitionTimestamp` = T > now (Clique forks by ti
 5 s with a `blockAccessListHash` in the header; `eth_chainId` 0x1dc6; genesis hash unchanged; `e2e.py probe` all
 checks passed with the reviewed library's corpus (`--corpus bin/corpus-ffi-1adbd563.jsonl`), every input whose
 calldata floor exceeds 2^24 refused by `eth_call`; `e2e.py e2e` all checks passed (76), the same inputs refused by the
-pool; `e2e.py codesize`: 65,536 B of code deploys, 65,537 B fails.
+pool; one ordinary value transfer (21,000 gas = 12,000 + 3,000 + 6,000, with its EIP-7708 log). **Not yet run:**
+`e2e.py codesize` (65,536 B of code must deploy, 65,537 B fail). It needs a block gas limit above its `tx.gas` of
+110 M, and after the reset the limit ramps from the genesis `gasLimit` 0x1000000 (16,777,216) toward
+`TargetBlockGasLimit` 200 M by only 1/1024 per block: ≈ 1,780 blocks (≈ 2.5 h) to 110 M, ≈ 2,540 blocks (≈ 3.5 h) to
+200 M (block 856 was at 38.7 M). Re-run once `gasLimit` > 111 M (the command waits by itself):
+`python3 -I pqz-core/nethermind/chain/e2e.py codesize --rpc http://127.0.0.1:8545 --key <test key 0x…04>`.
+
+**After any reset** the same ramp applies: until the limit has climbed, a transaction whose `tx.gas` exceeds the
+current block gas limit is not included (EIP-8037 reserves `tx.gas` in the state dimension), so large deploys wait.
+Changing the genesis `gasLimit` would change the genesis hash.
 
 **Rollback** to 1.39.0 (not needed): stop the node, put the three `*.bak-1.39.0-20261021` files back, swap the data
 dirs back (`data/nethermind_data.pre-2.2.0-20261021` → `data/nethermind_data`), start. The 1.39.0 head is the one in
