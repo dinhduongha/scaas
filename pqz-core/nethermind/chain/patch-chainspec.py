@@ -19,7 +19,8 @@ old history). It also sets the genesis gasLimit to 200,000,000 (0xbebc200, TODO 
 plan fs3 Task 13): under Amsterdam (EIP-8037) a transaction's gas limit (regular + state) must fit the block gas limit,
 and from the old 0x1000000 the 1/1024-per-block ramp took ~2.5 h to reach the 110 M a 64 KiB deploy needs. This changes
 the genesis header, so the genesis hash (= chainUid, smartcontracts/evm/chain-uids.json) changes with the reset. A
-genesis that already has engine.Pqz (the live chainspec) gets it replaced, on a reset only. patch-chainspec.py --check
+genesis that already has engine.Pqz (the live chainspec) gets it replaced, on a reset only. --testnet-reset refuses any
+chain but the SCaaS testnet (params.chainId 0x1dc6 = 7622; never 22776, the future mainnet). patch-chainspec.py --check
 runs the self-check. Run with python3 -I."""
 import difflib
 import json
@@ -31,6 +32,7 @@ import time
 ADDR = ["5caa500000000000000000000000000000000f01", "5caa500000000000000000000000000000000012",
         "5caa500000000000000000000000000000000013"]
 RESET = {"eip4895TransitionTimestamp": 1, "maximumExtraDataSize": "0xffff", "maxCodeSizeTransition": 0}
+TESTNET = 7622  # the only chain --testnet-reset may touch (owner 2026-10-15; 22776 is the future mainnet)
 RESET_GAS_LIMIT = "0xbebc200"  # 200,000,000 = config.json Blocks.TargetBlockGasLimit: no ramp after the reset
 
 
@@ -45,6 +47,8 @@ def main(src, eng, ts, out, *flags):
         sys.exit("a precompile address has an allocation")
     t = int(ts, 0)
     g0 = int(str(g["genesis"]["timestamp"]), 0)
+    if reset and int(str(g["params"].get("chainId", "0")), 0) != TESTNET:
+        sys.exit(f"--testnet-reset: chainId {g['params'].get('chainId')} is not the SCaaS testnet's {TESTNET} (0x1dc6)")
     if reset and t != g0:
         sys.exit(f"--testnet-reset: timestamp {t} is not the genesis timestamp {g0}")
     if not reset and t < time.time() + 300:
@@ -85,7 +89,7 @@ def check():
         src, eng, out = (os.path.join(d, f) for f in ("g.json", "e.json", "o.json"))
         src2 = os.path.join(d, "g2.json")  # a fresh chain whose genesis is still an hour ahead
         for f, g0 in ((src, "0x0"), (src2, hex(now + 3600))):
-            json.dump({"params": {"networkID": 1}, "engine": {"clique": {}}, "genesis": {"timestamp": g0},
+            json.dump({"params": {"networkID": 1, "chainId": "0x1dc6"}, "engine": {"clique": {}}, "genesis": {"timestamp": g0},
                        "accounts": {"0x1": {}}}, open(f, "w"))
         json.dump({"schedules": [{"timestamp": "0x0", "pqz": []}]}, open(eng, "w"))
         main(src, eng, str(now + 900), out)
@@ -104,6 +108,16 @@ def check():
             assert e.code == "engine.Pqz already present", e.code
             print(f"  refused (engine.Pqz present, no --testnet-reset): {e.code}")
         main(src2, eng, str(now + 3600), out, "--testnet-reset")
+        other = os.path.join(d, "g22776.json")  # review amsterdam-node L2: a reset of any other chain is refused
+        g = json.load(open(src))
+        g["params"]["chainId"] = hex(22776)
+        json.dump(g, open(other, "w"))
+        try:
+            main(other, eng, "0", out, "--testnet-reset")
+            raise AssertionError("reset of chain 22776")
+        except SystemExit as e:
+            assert "not the SCaaS testnet's 7622" in str(e.code), e.code
+            print(f"  refused (chainId 22776, --testnet-reset): {e.code}")
         main(src2, eng, str(now + 3601), out)
         for g, bad, why in ((src, [str(now - 60)], "5 minutes"), (src, [str(now + 60)], "5 minutes"),
                             (src, ["0"], "5 minutes"), (src, [str(now + 900), "--testnet-reset"], "not the genesis"),

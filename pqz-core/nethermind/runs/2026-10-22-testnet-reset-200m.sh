@@ -3,9 +3,10 @@
 # có 200 M sớm, không cần chạy tải"). Everything else as on 2026-10-21: image scaas/nethermind-pqz:2.2.0-pqz3, the same
 # engine.Pqz and params (Amsterdam from timestamp 1), config.json (TargetBlockGasLimit 200 M already) and compose
 # unchanged, same ports and keys. No chain-data backup (owner 2026-10-21); the old data dir is renamed, not deleted, and
-# genesis.json gets a .bak copy. Prepared and rehearsed on throwaway chains (2026-10-22-genesis-200m-throwaway.txt):
-# the predicted genesis hash is 0xa17faef4…2ac2. NOT RUN by the amsterdam-node implementer (the permission system
-# refused access to the live stack): run by the owner or the controller.
+# genesis.json gets a .bak copy. Prepared and rehearsed on throwaway chains (2026-10-22-genesis-200m-throwaway.txt).
+# Run by the controller on 2026-10-22 (log 2026-10-22-testnet-200m.txt): genesis 0xa17faef4…2ac2 as predicted. Review
+# amsterdam-node L3 (after that run): the patched chainspec is written to genesis.json.new, checked, then moved, so a
+# failed check leaves genesis.json untouched; reuse it at plan fs3 Task 13 with that task's engine file and checks.
 #   sh runs/2026-10-22-testnet-reset-200m.sh reset     stop, back up genesis.json, patch, rename the data dir, start
 #   sh runs/2026-10-22-testnet-reset-200m.sh check     head, probe (with the eth_estimateGas row), e2e smoke, 64 KiB deploy
 # Log: runs/2026-10-22-testnet-200m.txt (each step appends). No load rehearsal, no burst / fill, no calibration.
@@ -33,9 +34,9 @@ reset)
   [ -e "genesis.json.bak-pre-200m-$D" ] || cp -p genesis.json "genesis.json.bak-pre-200m-$D"
   # the same chainspec apart from the genesis gasLimit: --testnet-reset replaces engine.Pqz by the same rows (the
   # extracted live copy), keeps the params (the three reset params are already set) and sets gasLimit 0xbebc200
-  run python3 -I "$C/patch-chainspec.py" "genesis.json.bak-pre-200m-$D" "$E" 0 genesis.json --testnet-reset
-  echo "\$ diff genesis.json.bak-pre-200m-$D genesis.json (semantic)" >> "$LOG"
-  python3 -I - "genesis.json.bak-pre-200m-$D" genesis.json >> "$LOG" 2>&1 <<'PY'
+  run python3 -I "$C/patch-chainspec.py" "genesis.json.bak-pre-200m-$D" "$E" 0 genesis.json.new --testnet-reset
+  echo "\$ diff genesis.json.bak-pre-200m-$D genesis.json.new (semantic)" >> "$LOG"
+  python3 -I - "genesis.json.bak-pre-200m-$D" genesis.json.new >> "$LOG" 2>&1 <<'PY'
 import json, sys
 a, b = (json.load(open(p)) for p in sys.argv[1:3])
 def flat(x, p=""):
@@ -45,6 +46,7 @@ d = {k: (fa.get(k), fb.get(k)) for k in set(fa) | set(fb) if fa.get(k) != fb.get
 print(d)
 assert set(d) == {"genesis.gasLimit"}, d
 PY
+  mv genesis.json.new genesis.json
   grep -q '"TargetBlockGasLimit": 200000000' config.json || { echo "FAIL config.json TargetBlockGasLimit is not 200 M" >> "$LOG"; exit 1; }
   # the fresh chain: the old data dir is renamed, not deleted
   run docker run --rm --memory 256m --cpus 1 -v "$L/data:/d" alpine:3 sh -c "mv /d/nethermind_data /d/nethermind_data.pre-200m-$D && mkdir /d/nethermind_data && ls -la /d"
