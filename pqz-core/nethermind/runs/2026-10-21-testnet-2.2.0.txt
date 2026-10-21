@@ -1469,3 +1469,9 @@ waiting: block 806 gasLimit 36,844,169 <= 110,000,000
 The ramp: genesis gasLimit 0x1000000 (16,777,216) -> Blocks.TargetBlockGasLimit 200,000,000 at 1/1024 per block
 (5 s blocks): ~1,780 blocks (~2.5 h) to 110 M, ~2,540 blocks (~3.5 h) to 200 M after the reset (01:47:55Z).
 Re-run the command above once gasLimit > 111 M; it waits by itself.
+
+## 64 KiB deploy check (controller, after the gas-limit ramp)
+$ python3 -I pqz-core/nethermind/chain/e2e.py codesize --rpc http://127.0.0.1:8545 --key <test key 0x…04>
+ok    create 65,536 B code: status 0x1 (want 0x1), eth_getCode 65,536 B, gasUsed 100,504,388, block 1940
+ok    create 65,537 B code: status 0x0 (want 0x0), eth_getCode 0 B, gasUsed 16,777,216, block 1942
+codesize: all checks passed
