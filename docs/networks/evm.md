@@ -18,7 +18,7 @@ Status: **BUILT** on the private chain 7622 and anvil; public chains are seeded 
 
 | Chain | Chain id | Profile | Gas | Finality gate | Status |
 |---|---|---|---|---|---|
-| Private reference chain | 7622 | `private7622` (Solidity `osaka`) | free (base fee 0) | depth 1, quorum 1 | BUILT, first target |
+| Private reference chain | 7622 | `private7622` (Solidity `amsterdam`, [NET-EVM-06](#NET-EVM-06)) | free (base fee 0) | depth 1, quorum 1 | BUILT, first target |
 | Anvil (tests) | 31337 (also 1337) | — | — | depth | BUILT (dev only) |
 | Gnosis Chain | 100 | `gnosis` (`osaka`; Pectra since 2025-04-30, then Fusaka) | native xDAI (stable value) | `tag finalized` (~160–240 s), quorum ≥ 2 independent RPCs | seeded `draft` until the operator gate passes |
 | Celo | 42220 | `celo` (`osaka`, owner 2026-10-11; the chain's fork level is not re-measured) | CELO; fee currencies optional | `l1_batch` (PLANNED) | seeded `draft` |
@@ -92,7 +92,7 @@ Parameters:
 |---|---|
 | Client | Nethermind 1.39 |
 | Consensus | Clique PoA, one signer, `period` 5 s, `epoch` 30000 |
-| Forks | live through Fusaka + BPO2: EIP-2537 (BLS12-381), EIP-7951 P-256 at `0x100`, EIP-7825 per-transaction gas cap 16,777,216, EIP-7623, EIP-7934 |
+| Forks | live through Fusaka + BPO2, and Amsterdam from block 1 on Nethermind 2.2.0 ([NET-EVM-06](#NET-EVM-06)); Fusaka: EIP-2537 (BLS12-381), EIP-7951 P-256 at `0x100`, EIP-7825 per-transaction gas cap 16,777,216, EIP-7623, EIP-7934 |
 | Base fee | 0 (gas free; `MinGasPrice` 0) |
 | Contract code size | 64 KiB (`maxCodeSize` `0x10000`, `maxCodeSizeTransition` 6432) since 2026-10-11, owner, ahead of Glamsterdam (cf. EIP-7954); 24,576 before. Probed at block 6434: 65,536 B code deploys (13.27 M gas), 65,537 B is refused, a 50,005 B init code is accepted (the init-code limit follows `maxCodeSize`). Public chains keep 24,576 |
 | Block gas limit | 16,777,216 today (`0x1000000`); 80 M `TargetBlockGasLimit` target for post-quantum Zether ([CTR-PQZ-11](../contracts/pq-zero-knowledge.md#CTR-PQZ-11)) (SPECIFIED) |
@@ -172,6 +172,14 @@ the deployer's nonce, so the same contract lands at unrelated addresses on each 
 every later address; with CREATE2 the address follows from what was deployed. Cost: a fixed-salt deployer must exist on
 each chain before the first deployment, and a redeploy with the same init code collides with the first (a new
 version needs a new salt or new code).
+
+<a id="NET-EVM-06"></a>**NET-EVM-06** — **The `default` and `private7622` Foundry profiles compile for the `amsterdam` EVM; the public-chain
+profiles stay `osaka` until each chain forks.** Owner ruling 2026-10-21; status **BUILT**. The SCaaS testnet (7622) runs
+Nethermind 2.2.0 with Amsterdam from block 1, and the test suite runs on Foundry 1.8.5, which needs `experimental = true`
+for `evm_version = "amsterdam"`. The `zether`, `gnosis`, `celo`, `bsc`, `polygon` and `base` profiles keep `osaka`. No
+contract reads `block.slotnum` (EIP-7843): Clique has no slot, so the opcode is off on the testnet. The bytecode equals the
+`osaka` build apart from the metadata hash; the gas bounds of the tests moved with Amsterdam's prices (EIP-8037 state gas,
+EIP-8038 storage writes, EIP-7976 calldata floor, EIP-2780 intrinsic), each re-pin names its EIP in the test.
 
 Runbook notes: (1) read the genesis hash from every configured RPC and stop if they differ; (2) on a private chain,
 confirm the genesis carries its unique `extraData` nonce before deploying; (3) deploy the CREATE2 deployer once per

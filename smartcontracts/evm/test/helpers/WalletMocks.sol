@@ -54,9 +54,10 @@ contract Mock1271Wallet {
             }
         }
         if (mode == Mode.Burn) {
-            // burn ~48k gas, then answer valid: proves the wallet really received its 50k cap
+            // burn ~46k gas, then answer valid: proves the wallet really received its 50k cap. F185: was 48k; the cold `mode`
+            // read before it costs more under Amsterdam (EIP-8038), which left 48k over the cap
             uint256 g = gasleft();
-            while (g - gasleft() < 48_000) {}
+            while (g - gasleft() < 46_000) {}
             return 0x1626ba7e;
         }
         if (mode == Mode.WrongMagic) return 0xffffffff;

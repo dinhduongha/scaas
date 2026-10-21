@@ -4084,6 +4084,14 @@ R36-R49 reserved for the third design batch, never used.
 **Cost if wrong.** Unpredictable addresses across chains, or a contract deployed with another chain's `chain_uid`.
 **Source.** [history/specs/2026-10-07-metatx-generic.md](history/specs/2026-10-07-metatx-generic.md) §2 A11; §3 MG-4, MG-6; §6 step 2.
 
+### NET-EVM-06 — Default and private7622 profiles compile for Amsterdam
+- old: — · status: current · owner: yes · date: 2026-10-21 · normative: networks/evm.md#NET-EVM-06 · superseded-by: —
+
+**Rule.** The `default` and `private7622` Foundry profiles use `evm_version = "amsterdam"` (Foundry 1.8.5, `experimental = true`); the public-chain profiles (zether, gnosis, celo, bsc, polygon, base) stay `osaka` until each chain forks. No contract reads `block.slotnum`.
+**Why.** The SCaaS testnet runs Nethermind 2.2.0 with Amsterdam from block 1, so tests must price gas as the chain does; EIP-7843 (slot number) is off there because Clique has no slot.
+**Cost if wrong.** Gas bounds pinned for Osaka prices would pass in CI and fail on the testnet.
+**Source.** Owner 2026-10-21 (Task F185).
+
 Under "Clients — signers":
 
 ### NET-EVM-80 — First chain Gnosis, then Celo

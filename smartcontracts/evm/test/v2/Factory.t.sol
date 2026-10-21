@@ -399,10 +399,10 @@ contract FactoryTest is Test {
         address t = f.createTokenUnregistered(NONE, address(bad), abi.encode(_none(alice)), "x");
         assertEq(t, predicted);
         assertTrue(f.isToken(t));
-        // the clone's code is gone at the end of its creating transaction: a test is one transaction, so apply it
-        assertGt(t.code.length, 0, "still there within the creating tx");
-        vm.etch(t, "");
-        assertEq(t.code.length, 0);
+        // the clone's code is gone at the end of its creating transaction (EIP-6780): the `isolate` profile makes the call
+        // above its own transaction (F185; it was one transaction for the whole test, so the code was still there and the
+        // test applied the end of it with `vm.etch`)
+        assertEq(t.code.length, 0, "gone at the end of its creating tx");
         vm.prank(alice);
         vm.expectRevert(abi.encodeWithSelector(IOpenFactory.SaltAlreadyUsed.selector, t));
         f.createTokenUnregistered(NONE, address(bad), abi.encode(_none(alice)), "x");
