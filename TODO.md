@@ -39,7 +39,10 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
 
 ### Now (order)
 
-- **Now (2026-10-21 evening):** **5h part B** on branch `pqz-16k` (not pushed). Done: Task 7 (16k, now superseded),
+- **Now (2026-10-22, shutdown):** 8b items 1–5 + per-set generator done on `pqz-16k` (`61b0c003` WIP; set (a) gate PASS;
+  v3 gate re-run + item 6 16k / A′ via `set.toml` + `make.sh all` left); 8c part 1 + 1b on `pqz-8c` (`6e69bfa0` WIP; set (a)
+  PQZH = preset B t 120, fallbacks A `fallback-retry` / C; `c8b.sh` checks left). Order in HANDOFF.md top note.
+- **Earlier (2026-10-21 evening):** **5h part B** on branch `pqz-16k` (not pushed). Done: Task 7 (16k, now superseded),
   7b (Amsterdam re-measure), 7c (smaller n), 8a (B-1, A-2, `R_REG`; reviewed), spike PACK (P46) and F185 (Foundry 1.8.5,
   every profile amsterdam) — both merged into `pqz-16k`. **Task 8b paused** (parameter sets `pqz-core/params/sets/`, PQZL at set (a)). Then 8c PQZH
   (backup) → 8d stmt / contracts (P46, per-set Solidity, 32-bit precompile addresses, `ROLL_MAX`, M = 8 by measurement,

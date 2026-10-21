@@ -1,3 +1,50 @@
+## Session 2026-10-22 (5h part B: 8b items 1–5 + per-set generator, 8c part 1/1b, Amsterdam node gas merged, testnet 200 M) — resume here
+
+**State:** main `9d2b90f8` + this note, pushed. Merged today: `amsterdam-node` (`b62a54f1`: node / relayer on the Amsterdam
+2-D gas model, review APPROVE-WITH-FIXES + fix round 1). **SCaaS testnet reset 2026-10-22** with genesis `gasLimit` 200 M
+(genesis `0xa17faef4…2ac2`, image 2.2.0-pqz3, probe / e2e / 64 KiB codesize ok; `chain-uids.json` private7622 updated,
+client test vectors keep `0x24e43dcb…c464` as a fixed constant). No agent, capped job, gate or background shell running
+(stopped at the owner's request); only the testnet node and the owner's Odoo containers run. SDD ledger with every
+ruling (git-ignored): `.claude/worktrees/pqz-16k/.superpowers/sdd/2026-10-20-pqz-state-redesign/progress.md`.
+
+**Branches (not pushed):**
+- **`pqz-16k`** (worktree `.claude/worktrees/pqz-16k`), head **`61b0c003` WIP** on `c4df6064`. Task 8b done: (1) v3 gate
+  byte-identical `fc61e6ca`; (2) set (a) cheat fixtures + Rust suite `0c1886e1`; (3) e_s0 all 14 relations MET `d24b4f41`;
+  (4)(5) + generator `c4df6064`: pqz-stmt / pqz-ffi / pqz-vectors set-generic (PQZH only for v3 until 8c part 2), set (a)
+  vectors `smartcontracts/vectors/pqz/n2304-kmax4096/`, **gate t8b set (a) PASS** (xcheck skipped: PQZH), SET.md, docs;
+  **per-set generator** (owner): `params/sets/<set>/set.toml` (only input) → `gen_set.py <set>|--all [--check]` (specs,
+  `pqz_set.h`, `rust/set.rs`, `set.json`, `PqzSet.sol`, feature blocks) → `make.sh <set> all|steps` (stops at the first
+  failing step; e_s1 prints the values for set.toml); old gen_pa.py / regen.sh in `params/sets/legacy/`; `PqzSet.sol` not
+  wired into contracts (8d). **Stopped mid gate t8b-v3b** (v3 re-run after (4)(5): kat..ffi ok; rust / cargo / xcheck /
+  fuzz to re-run); the implementer's Paused section was NOT written — the ledger's last line + `c4df6064` message are the
+  resume notes.
+- **`pqz-8c`** (worktree `.claude/worktrees/pqz-8c`), head `6e69bfa0` WIP. 8c part 1: pqzh-ligero set-generic (Barrett
+  field, wasm32 limbs, per-set `pqzh_set.rs`, v3 byte-identical, set (a) tests / native = wasm32 / ct ok, `PQZH.md`
+  "Conditions for a chain to run PQZH" per set). Part 1b (owner): **set (a) production preset = B** (radices 2/7/17/19/43/431,
+  n 45,752, k 952, **t 120**: debit bounds 251,608–253,048 B, 9–10 KB under `MAX_PROOF_PQZH` 262,144, soundness 127.40
+  bits); fallbacks kept: **A** re-prove under the limit (Cargo feature `fallback-retry`, never default / production; ZK
+  argument in `docs/research/pqzh-set-a-proof-limit.md`; tag `pqzh-set-a-fallback-A` on `4f3477b8`, local), **C** raise
+  `MAX_PROOF_PQZH` per set (documented only); old preset `pqzh_set_fallback.rs`; branch `pqz-8c-spike` merged and kept.
+  Carries a stand-in pqz-stmt commit `cded0eb4` — take 8b's pqz-stmt at the merge.
+- `amsterdam-node` merged (worktree removable); `pqz-8c-spike` kept.
+
+**Owner rulings today:** per-set generation (one `set.toml` + `gen_set.py` + `make.sh <set> all`); restore the K_MAX ≈ 65k
+set as `n2816-kmax65536` (A′, core-only) via the generator; 8c in parallel to 8b; testnet reset now to 200 M, no load
+run; chainUid handling (live hash in chain-uids.json / node example / evm.md, vectors keep the old constant); testnet
+`max_gas_per_tx` 64 M; PQZH set (a) = B (t 120), A (own Cargo feature) and C fallbacks; Dependabot 19/20/21/36 left open
+(dev / test-only); `/home/dockers/mba-chain-nethermind` = SCaaS testnet stack, not production (allow rules in the
+git-ignored `.claude/settings.local.json`, + memory).
+
+**Next (order):** (1) 8b: re-run `PQZ_SET=n2048-kmax1024 scripts/capped pqz-core/gate.sh t8b-v3` (alone), then item 6:
+`n2560-kmax16384` (16k, from `pqzl/params/p16k/`; full vectors + gate + SET.md "Conditions for this set to work on a
+chain") and `n2816-kmax65536` (A′ from `pqzl/params/aprime/`, `core_only`; report a 64-bit / limb blocker instead of
+changing algorithms) each via `set.toml` + `make.sh <set> all`; item 7 final report → review (opus) → merge into
+`pqz-16k`. (2) 8c part 1b: `scripts/capped pqz-core/pqzh/ligero/runs/c8b.sh` (≈ 45 min: v3 byte identity, set (a) tests,
+sizes, native = wasm32, fallback tests, ct), `ligero_params.py` t ≥ minimum + FFT cost fix, PQZH.md / research note
+"Fallbacks (owner 2026-10-22)"; 16k debit (~302 KB) > 262,144 is an open B / A / C question for that set. (3) merge
+`pqz-8c` into `pqz-16k` (take 8b's pqz-stmt) → 8c part 2 (pqz-ffi / pqz-vectors / gate / gen_set.py take PQZH per set)
+→ review. (4) 8d → Task 9 (timing only on the owner's go) → merge part B → metatx split (variant A).
+
 ## Session 2026-10-21 (evening; 5h part B: 8a done, 8b paused, Amsterdam re-plan) — resume here
 
 **State:** main `28af51d3` + this note, pushed up to `28af51d3` (Nethermind 2.2.0 merge + SCaaS testnet rename). Part B
