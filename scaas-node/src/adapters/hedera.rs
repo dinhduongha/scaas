@@ -322,6 +322,8 @@ mod tests {
         let ok = |r: Value| json!({"jsonrpc": "2.0", "id": id, "result": r});
         axum::Json(match b["method"].as_str().unwrap_or_default() {
             "eth_getBalance" => ok(json!(n.balance)),
+            // the recorded testnet block's gasLimit (tests/vectors/hedera_testnet.json): the gas cap reads `latest`
+            "eth_getBlockByNumber" if b["params"][0] == "latest" => ok(json!({"gasLimit": "0x8f0d180"})),
             "eth_getBlockByNumber" => {
                 n.block0_reads += 1;
                 match n.block0_err.clone() {

@@ -184,7 +184,9 @@ the Clique producer sets none and 2.2.0 rejects such a header) and EIP-8282 (bui
 size 64 KiB native (EIP-7954; `maxCodeSize` 0x10000 stays for the genesis release). `Blocks.TargetBlockGasLimit`
 80 M → 200 M: a 64 KiB deploy is ≈ 100 M of EIP-8037 state gas and needs a block larger than its `tx.gas`.
 `engine.Pqz` keeps the two schedules the testnet ran before (PQZL rows with the v2 id `0x2e07e6ed…`, which the reviewed
-`pqz3` library verifies; copy in `runs/2026-10-21-testnet-engine-pqz.json`); `chain/engine-pqz.json` on main already
+`pqz3` library verifies; copy in `runs/2026-10-21-testnet-engine-pqz.json`). **The v2 id is the forgeable one**: the
+PQZL v2 transcript lets a proof be forged (fixed by v3 / `0x8079d65b…`, pqzl-fs3 Task 5), so a PQZL proof accepted by
+the testnet proves nothing until the v4 library rolls out — a test chain only (owner ruling, review nethermind-2.2 M5); `chain/engine-pqz.json` on main already
 carries the v3 id `0x8079d65b…` for the `pqz4` roll-out (plan pqzl-fs3 Task 13) and does not match this image. Procedure:
 [chain/RUNBOOK.md](chain/RUNBOOK.md#nethermind-220-and-amsterdam-on-the-scaas-testnet-executed-2026-10-21); log
 `runs/2026-10-21-testnet-2.2.0.txt`.
@@ -195,6 +197,22 @@ every PQZH TRANSFER / BURN / REFRESH / op 7 input and PQZL op 7 M = 8 with the a
 the 16k op 7 M = 8 (309,591 B) can never fit; (2) EIP-8038's 10,000-gas storage write puts the 16k `ROLL_MAX` = 192
 rollover at ≈ 16.6–18.0 M, so `ROLL_MAX` under 0.75 · 2^24 becomes ≈ 80–96 [estimate]; (3) the precompile prices are
 unchanged (every probed row = formula); (4) every SSTORE2 op blob becomes ≈ 26–32 M of state gas.
+
+**Prepared for the next reset (2026-10-22, branch `amsterdam-node`; the review nethermind-2.2 minors that need no new
+library).** (a) `chain/patch-chainspec.py --testnet-reset` sets the genesis `gasLimit` to 200,000,000 (`0xbebc200`,
+= `TargetBlockGasLimit`: no 2.5 h ramp) and replaces an existing `engine.Pqz` (reset only); the genesis hash changes
+with it. Checked on a throwaway chain (`runs/2026-10-22-genesis-200m-throwaway.txt`): block 0 `gasLimit` 200 M, a
+65,536 B contract deployed in block 9 (100,504,388 gas), 65,537 B refused, a 22.0 M-gas transaction (200 new slots,
+regular < 2^24) included, probe all checks passed; the live genesis through the same reset gives the hash
+`0xa17faef4…2ac2`. Reset script `runs/2026-10-22-testnet-reset-200m.sh` (not run yet, see RUNBOOK). (b) `e2e.py probe`
+has an `eth_estimateGas` row (a direct call to `PQZ` estimates the precompile row: 3,394,851 vs exact 3,366,962,
++0.8 %, on the throwaway chain), closing the review's open point on Facade / JsonRpc. (c) Fail-closed drill (M1) on a
+throwaway container: a library with one appended byte gives `PQZ-REFUSE … != the reviewed 16dd99ce…` and exit 120
+3.5 s after start, RPC never answered; the untampered control starts (`runs/2026-10-22-fail-closed-drill.txt`).
+(d) M4 (no `.dockerignore` for the default build) does not hold: BuildKit reads `Dockerfile.dockerignore` (an
+allowlist) for `-f Dockerfile`; the default build sends 16 MB (`runs/2026-10-22-default-context-check.txt`). (e)
+`e2e.py burst` / `fill` pick the largest input under the calldata floor and size `tx.gas` by `intrinsic()` (M2; not
+run: Task 13 drills). Not done (owner's go): the 200 M block load rehearsal (M3), timing / gas calibration.
 
 ## Runbook
 

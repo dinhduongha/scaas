@@ -706,15 +706,21 @@ Above the rated load: a second node on **different chains**, not a bigger store.
   {mtxConfidentialTransfer, mtxUnshield, mtxRollOver}, calldata}` (direct `mtxShield` moves the caller's public units into the pool and `mtxWrapShield` pulls the caller's underlying, so neither is a node
   job; `mtxRollOver` is also an allowlisted envelope op (a relayed `metatx` job, outer fee may be 0, owner 2026-10-20); with the multi-recipient transfer, P6-ANON, `mtxConfidentialTransfer*` is op 7 with M ≥ 1 recipients and the single-recipient
   `mtxConfidentialTransferSingle*` (op 1) joins the set, each with its `Compact` variant; `NoBundle` is retired on PQZ). For all: the contract must be a configured PQZ token; pre-simulation by `eth_estimateGas` on a
-  **follower**, never the signer (fails ⇒ job rejected, no gas spent; op 7 is pre-simulated the same way); `max_gas_per_tx = 16_000_000` on the SCaaS testnet (the
-  default 3,000,000 already rejects classical Zether transfers at 3.36 M); never batched (`PqzToken` has no
+  **follower**, never the signer (fails ⇒ job rejected, no gas spent; op 7 is pre-simulated the same way); `max_gas_per_tx = 64_000_000` on the SCaaS testnet (Amsterdam,
+  2026-10-22: the cap is on regular + state gas; op 1 needs ≈ 41.7–43.4 M with ≈ 32.8 M of EIP-8037 state gas, Task 7b,
+  +20 % ≈ 52 M; 16,000,000 before Amsterdam; the default 3,000,000 already rejects classical Zether transfers at 3.36 M;
+  regular gas stays ≤ 2^24 and the block gas limit is read from the chain, [submit-lanes.md#amsterdam-gas](submit-lanes.md#amsterdam-gas)); never batched (`PqzToken` has no
   `mtxBatch`). Gateway body limit 1 MiB on job submissions to the `pqz` chain profile only (a v3 transfer job is ≈ 170
   KB as hex; the gateway's global limit stays 64 KiB). **Checked for op 7 (P6-ANON S9, 2026-10-16) — all unchanged**, against the largest
   call of each id within 16 M gas [estimate: measured proof sizes, precompile gas scaled from the live op 1 rows,
   `pqz-core/pqzl/params/anon/s9_limits.py`]: PQZL M = 8 + 16 inline credits 383,108 B of calldata, ≈ 14.6 M gas; PQZH M = 4
   + 10 inline 440,356 B, ≈ 15.9 M (floor-bound; 11 inline need 16.4 M, over this cap, under EIP-7825's 16,777,216). As
   hex the largest job is ≈ 0.88 MB (≈ 0.92 MB at 11 inline), under 1 MiB (1.19×). No inline credit: PQZL M = 8 ≈ 10.4
-  M, PQZH M = 4 ≈ 10.7 M; ≥ 5 such calls per 80 M block.
+  M, PQZH M = 4 ≈ 10.7 M; ≥ 5 such calls per 80 M block. *Under Amsterdam (SCaaS testnet since 2026-10-21) these
+  figures are history: a transaction carries at most 261,909 calldata bytes (EIP-7976 floor 15,000 + 64 per byte ≤
+  2^24, regular gas), so the 383 KB / 440 KB calls above cannot be sent at all and the node refuses them before
+  simulating; every op that stores an SSTORE2 blob adds ≈ 25.6–31.8 M of state gas
+  ([gas impact](../../pqz-core/nethermind/runs/2026-10-21-glamsterdam-gas-impact.md)).*
 - Optional rollover keeper: per configured PQZ token, when an account has ≥ 16 unrolled credits **older than
   `KEEPER_AGE = 24` blocks** (2 min) and the chain is idle, submit `mtxRollOver` of those old credits only, with
   ciphertexts from logs (anyone may; it is harmless). A proof in flight chose `p ≥` every credit older than its own
@@ -743,7 +749,9 @@ Above the rated load: a second node on **different chains**, not a bigger store.
   `scaas/nethermind-pqz:1.39.0-pqz1`; `config.json` `TxPool.MaxTxSize` 1,048,576 (a PQZH transfer is 345,221 B with
   framing; the largest op 7 transaction within 16 M gas ≈ 440 KB, 2.38× under it, S9; the follower proxy's
   `client_max_body_size` 2 MiB takes its hex raw transaction, ≈ 0.88 MB) and `Blocks.TargetBlockGasLimit` 80,000,000 (Clique moves the limit ≈ 0.1 % per block: 16.78 M → 80 M in
-  ≈ 1,600 blocks ≈ 2.2 h); the chainspec carries `engine.Pqz`. Health after any start: the log line `PQZ-START`
+  ≈ 1,600 blocks ≈ 2.2 h; 200,000,000 since the Amsterdam reset of 2026-10-21, and the genesis `gasLimit` 200 M
+  (`0xbebc200`, `chain/patch-chainspec.py --testnet-reset`) from the next reset, so no ramp; a relayer never assumes
+  this limit: it reads the block gas limit from the chain); the chainspec carries `engine.Pqz`. Health after any start: the log line `PQZ-START`
   (library SHA-256 = the image label `scaas.pqz.ffi.sha256`, self-test hash `ed910a2c…d205`, the schedules, the
   addresses), no `PQZ-REFUSE`. A node fault (D4: arena, worker) logs `PQZ-NODE-FAULT` and **exits with code 120**: the
   block in progress is never sealed, nothing is marked invalid, and a restart re-processes it; `PQZ-INPUT-PANIC` is an

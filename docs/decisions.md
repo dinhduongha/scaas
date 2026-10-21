@@ -3482,6 +3482,20 @@ Change (2026-10-20, controller record, owner may override where marked "proposal
 (Owner Q1, for part B) the 16k modulus is **q = 2^50 − 42,310,535** (prime; q − 1 = 2^3·19·43·431·5659·70627 keeps today's Ligero radices), Δ = 2^30 − 41, replacing 2^50 − 71 (no FFT domain for PQZH); PQZL and PQZH share q. Status: decided; built in part B (not in part A, which keeps q = 2^42 − 215, `K_MAX = 1024`).
 (D16, D17) parameters as the 16k Change above, order: B + state + shield / pool / names / kinds on today's parameters first (part A), then the 16k regeneration with B-1, A-2 and `R_REG` as one id bump (part B; see CTR-PQZ-09), then plan fs3 Task 12, 6, 13. Status: decided; part A built, part B pending.
 Superseded by this Change: the first 5h design's `ROLL_AGE = 24` (owner 2026-10-20: **`ROLL_AGE = 5` blocks**, see CTR-PQZ-08), D10's per-credit fee and the O4 floor, and "`pqzShield` becomes a proven debit". Status: decided; part A built.
+Change (2026-10-22): controller proposal (owner may override) — **gas under Amsterdam in the clients and the node**
+(TODO "Node / relayer on the Amsterdam gas model", branch `amsterdam-node`). zether-prover `DECOY_LEG_GAS` 32,000 →
+**120,000** (a leg's payout measured 116,698 under Amsterdam, F185 `ZetherDecoyFee.test_gas_decoyFeePerLeg`; the bound
+the contract test pins). zether-prover keeps the Osaka `gas_limits` table as the bound on a transfer's **regular** gas
+(EIP-7825's 2^24 under EIP-8037; F185 re-ran every edge cell under Amsterdam and each settles; total 21.4–31.2 M) and
+`TX_GAS_CAP` 2^24 as that regular cap; the transaction's gas limit comes from `eth_estimateGas`, never from the table;
+per-`M` regular gas not re-measured (a gas run on the owner's go). The node (`scaas-node` `guard::gas`): refuses a
+calldata floor (15,000 + 64 per byte) over 2^24 before simulating, reads "out of gas" / "gas required exceeds allowance"
+of its simulation as a refusal (regular gas over 2^24, measured on Nethermind 2.2.0), and bounds the gas limit
+(`eth_estimateGas` + 20 %, regular + state) by `max_gas_per_tx`, the chain's current block gas limit read from
+`latest` and 2^32 − 1 — no longer by 2^24; never a zero gas price (fees from `eth_feeHistory`, ≥ 1 wei). SCaaS
+testnet `max_gas_per_tx` 16,000,000 → **64,000,000** (op 1 ≈ 41.7–43.4 M with state gas, Task 7b). Normative:
+[node/submit-lanes.md#amsterdam-gas](node/submit-lanes.md#amsterdam-gas). Status: built on branch `amsterdam-node`
+(not merged).
 
 ### CTR-PQZ-07 — Ciphertexts in calldata, hashes in storage
 - old: R276 · status: current · owner: no · date: 2026-10-06 · normative: contracts/pq-zero-knowledge.md#CTR-PQZ-07 · superseded-by: —

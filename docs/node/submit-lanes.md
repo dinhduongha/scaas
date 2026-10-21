@@ -248,7 +248,8 @@ loop every poll_ms:
   for job:
      sim = eth_estimateGas(token.executeMetaTransaction(m, sig), from=lane, block=pending)
      revert → consumption check; consumed ⇒ 'consumed'; else 'dead' with the decoded error (MetaTxBadNonce, Expired…)
-     gas > max_gas_per_tx → 'dead'
+     calldata floor (15,000 + 64·bytes) > 2^24, or the simulation out of gas → 'dead'   # regular gas, Amsterdam
+     gas > max_gas_per_tx or > the chain's block gas limit → 'dead'        # gas = regular + state (EIP-8037)
      ok → sign EIP-1559 (nonce = next++) → tx_hash known BEFORE sending
           → journal 'signed' (tx_hash, nonce)       # journal first
           → eth_sendRawTransaction → 'broadcast'        # legacy: relay_report(chain_state = signed|broadcast|…)
@@ -308,6 +309,18 @@ with the job and counted (`scaas_simulation_total`).
 | revert with data, not consumed | `dead` with decoded error (`MetaTxBadNonce`, `MetaTxExpired`, …) |
 | transport error, timeout, unreadable nonce | `queued` (retry), never `dead` |
 | gas > `max_gas_per_tx` | `dead` |
+| gas > the chain's current block gas limit (read from `latest`, never assumed) | `dead` |
+| calldata floor over 2^24, or the simulation runs out of gas (over 2^24 regular gas) | `dead` |
+
+<a id="amsterdam-gas"></a>**Gas under Amsterdam** (every EVM chain is served after its Glamsterdam fork, owner 2026-10-21;
+BUILT 2026-10-22, `guard::gas`): EIP-7825's 2^24 caps a transaction's **regular** gas (intrinsic, the EIP-7976 calldata
+floor of 15,000 + 64 per byte, execution); EIP-8037 state gas (a new slot 97,920, code 1,530 per byte) comes on top,
+so a gas limit above 2^24 is normal (a PQZ op 1 ≈ 42–43 M, a multi-recipient Zether edge transfer 21–31 M) and may
+reach 2^32 − 1. The node: refuses a calldata floor over 2^24 before any RPC (at most 261,909 calldata bytes); reads an
+"out of gas" / "gas required exceeds allowance" answer of the simulation (no gas field, the RPC's cap) as the job's
+answer, never a transport error; takes the gas limit from `eth_estimateGas` (regular + state) + 20 %, bounded by
+`max_gas_per_tx`, the chain's current block gas limit (EIP-8037 never includes a larger `tx.gas`) and 2^32 − 1. The
+fee is the chain's `eth_feeHistory` estimate (`maxFeePerGas` ≥ 1 wei), never a zero gas price.
 
 Unwrap jobs ([unwrap jobs](#unwrap-jobs)) simulate the full outer transaction and re-simulate immediately before
 signing. A subject that crossed the grief threshold gets a re-simulation right before signing too
@@ -324,7 +337,7 @@ never indexing, tracking or replacing signed transactions, rescues or gap-filler
 | `base_fee_spike` (EVM) | current `baseFeePerGas` > `spike_ratio` × 1 h trailing mean, with ≥ 4 samples and fee > `spike_min_base_fee_gwei`; reopens when back below | ratio 3.0 (0 disables), min 1 gwei |
 | `gas_budget` | gas spent in the fixed hour window ≥ `gas_budget_per_hour` (smallest gas-coin unit, per lane × chain); metered per [NODE-LANE-13](#NODE-LANE-13) | warn (log + metric) at 90 %; stop new work until the window ends at 100 % |
 | `balance_floor` | lane balance < `min_relayer_balance` ⇒ that lane takes no new job | warn below 120 % of the floor |
-| structural | simulated gas > `max_gas_per_tx` ⇒ job `dead` | 3 000 000 (classical Zether chains ≥ 4 500 000; post-quantum Zether chain 16 000 000; [NODE-STO-10](store.md#NODE-STO-10)) |
+| structural | simulated gas (regular + state) > `max_gas_per_tx` or > the block gas limit ⇒ job `dead` ([Amsterdam gas](#amsterdam-gas)) | 3 000 000 (classical Zether chains ≥ 4 500 000, multi-recipient Zether ≥ 40 000 000; SCaaS testnet 64 000 000; [NODE-STO-10](store.md#NODE-STO-10)) |
 | `revert_streak` (chain) | ≥ 3 post-simulation reverts of class `other` in 15 min | [NODE-OPS-06](ops.md#NODE-OPS-06), latched |
 
 Non-EVM families use budget + balance floor (no EIP-1559 base fee). The SCaaS testnet (chain id 7622, formerly 9000) is a
@@ -537,7 +550,7 @@ in-flight key is the token's `mtxDigest`, never the job's `digest`. A job-API jo
 recipient 0 is unchanged in effect. A job carrying `receiver_fee` is refused (`dead`), never relayed without it. BUILT: the guard
 ([NODE-JOB-20](job-api.md#NODE-JOB-20)) runs in `Submitter::submit` before the digest read, simulation or signing; a `MetaTransfer` and the
 order and wrap entries need a registered token (an entry also a listed DEX), else `TOKEN_NOT_SERVED`; the token lists refresh every
-15 s with the breaker sample. Jobs rebuilt from the tracked journal after a restart pass the guard and the 2^24 gas clamp too; a refused
+15 s with the breaker sample. Jobs rebuilt from the tracked journal after a restart pass the guard too and keep `max_gas_per_tx` capped by the block gas limit as their gas limit; a refused
 one is only logged and its nonce gap-filled (the ERP gets no report). Hedera runs the same lane checks at start ([NET-HED-08](../networks/hedera.md#NET-HED-08)).
 
 ## <a id="batching"></a>11. Batching

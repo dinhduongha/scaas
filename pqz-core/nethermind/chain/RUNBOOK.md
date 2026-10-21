@@ -5,7 +5,7 @@ This runbook is the step-by-step procedure for switching on the PQZ and ML-DSA p
 owner, or the controller session the owner has allowed to back up, reset and deploy the SCaaS testnet (owner decision
 2026-10-15). Every step was first rehearsed on a throwaway **copy** of the SCaaS testnet, then run on the real chain.
 
-**Status (all executed):**
+**Status (all executed except the last row):**
 
 | Procedure | Date | Log |
 |---|---|---|
@@ -13,6 +13,7 @@ owner, or the controller session the owner has allowed to back up, reset and dep
 | [Live roll-out on the SCaaS testnet](#live-roll-out-on-the-scaas-testnet-task-10-executed-2026-10-16) — back up, reset with the precompiles from block 0 (Task 10, image `pqz1`) | 2026-10-16 | `../runs/2026-10-16-live.txt` |
 | [The multi-recipient transfer (op 7)](#the-multi-recipient-transfer-op-7-on-the-scaas-testnet-executed-2026-10-17) — a second schedule on the running chain (image `pqz2`) | 2026-10-17 | `../runs/2026-10-17-s8-live*.txt` |
 | [Nethermind 2.2.0 and Amsterdam](#nethermind-220-and-amsterdam-on-the-scaas-testnet-executed-2026-10-21) — reset onto image `2.2.0-pqz3`, Amsterdam from block 1 | 2026-10-21 | `../runs/2026-10-21-testnet-2.2.0.txt` |
+| [Genesis gasLimit 200 M](#genesis-gaslimit-200-m-on-the-scaas-testnet-prepared-2026-10-22-not-yet-run) — the same chain reset with a 200 M genesis block (**prepared, not run**) | 2026-10-22 | `../runs/2026-10-22-genesis-200m-throwaway.txt` |
 
 The commands below are the ones that were executed. Steps marked *live only* ran on the SCaaS testnet itself; everything else
 ran on the copy. Plan: [P6f](../../../docs/superpowers/plans/2026-10-14-p6f-precompiles.md) Tasks 7, 8, 10; spec:
@@ -412,3 +413,32 @@ exceed 2^24 (up to 2^32 − 1) but execution gas may not; the calldata floor is 
 a transaction carries at most ≈ 261,909 calldata bytes; a transaction's `tx.gas` must fit the block gas limit (EIP-8037
 reserves it in the state dimension); new storage slots cost 97,920 state gas and code 1,530 per byte.
 
+
+## Genesis gasLimit 200 M on the SCaaS testnet (prepared 2026-10-22, not yet run)
+
+*Live only.* Owner 2026-10-22: reset the SCaaS testnet now so blocks are 200 M from block 0 ("Reset ngay để có 200 M
+sớm, không cần chạy tải"); no load rehearsal, no burst / fill drill, no calibration. Everything else stays as on
+2026-10-21: image `scaas/nethermind-pqz:2.2.0-pqz3`, the same `engine.Pqz` (two schedules, PQZL v2 rows) and params
+(Amsterdam from timestamp 1), `config.json` (`TargetBlockGasLimit` already 200 M), compose, ports and keys. No chain-data
+backup (owner 2026-10-21); the data dir is renamed, `genesis.json` gets a `.bak-pre-200m-20261022` copy.
+
+**Status:** prepared and rehearsed on throwaway chains (`../runs/2026-10-22-genesis-200m-throwaway.txt`); **not run**:
+the amsterdam-node implementer's session was refused access to the live stack by the permission system, so the owner or
+the controller runs it.
+
+```sh
+sh pqz-core/nethermind/runs/2026-10-22-testnet-reset-200m.sh reset   # stop, .bak, patch-chainspec --testnet-reset, rename data, start
+sh pqz-core/nethermind/runs/2026-10-22-testnet-reset-200m.sh check   # head, block 0 / 1, probe (+ eth_estimateGas row), e2e --no-ua, codesize
+```
+
+`reset` refuses to go on unless the semantic diff of `genesis.json` is exactly `genesis.gasLimit` `0x1000000` →
+`0xbebc200`. Success: `PQZ-START` (library `16dd99ce…`), block 0 hash `0xa17faef497fa29ec90603969dad0176ea18fd1cc2eaf0f9f4fa2dacc9c952ac2`
+(predicted by the throwaway run with the live genesis) and `gasLimit` 200,000,000 from block 0, probe and e2e all checks
+passed, `codesize` deploys 65,536 B at once (no ramp). After it: record block 1's hash and the image id in this section
+and in `../README.md`; the genesis hash is the new `chainUid` of chain 7622 (`smartcontracts/evm/chain-uids.json`
+`private7622`, the chain profile's `genesis_hash`, every contract that pins `chainUid`); everything deployed on the old
+chain is gone and is redeployed by its own scripts (`smartcontracts/evm/script/pqz/e2e.py` for the PQZ stack). The test
+vectors that use `0x24e43dcb…c464` as a fixed `chainUid` keep it (a test constant, not the live chain's).
+
+**Rollback:** stop the node, put `genesis.json.bak-pre-200m-20261022` back, swap the data dirs back
+(`data/nethermind_data.pre-200m-20261022` → `data/nethermind_data`), start.

@@ -47,6 +47,19 @@ pub fn classify(e: &TransportError) -> SimError {
     }
 }
 
+/// [`classify`] for a simulation without a gas field: "out of gas" / "gas required exceeds allowance" there is the
+/// call needing more than 2^24 regular gas (EIP-7825 under EIP-8037: execution gets at most 2^24 at any gas limit) or
+/// more than the RPC's gas cap — no gas limit makes it fit, so it is the job's answer, not the network's. Nethermind
+/// 2.2.0 answers exactly these two messages for an endless loop (`pqz-core/nethermind/runs/2026-10-22-genesis-200m-throwaway.txt`).
+pub fn classify_sim(e: &TransportError) -> SimError {
+    match classify(e) {
+        SimError::Transport(m) if m.contains("out of gas") || m.contains("gas required exceeds allowance") => {
+            SimError::Revert(format!("over the 2^24 regular gas of a transaction or the RPC gas cap: {m}"))
+        }
+        x => x,
+    }
+}
+
 pub struct Chain {
     pub number: u64,
     providers: Vec<DynProvider>,
@@ -100,11 +113,21 @@ impl Chain {
         self.simulate_from(self.address, to, data).await
     }
 
-    /// Mô phỏng với `from` tuỳ ý (gateway mô phỏng chân DEX bằng địa chỉ DEX).
+    /// Mô phỏng với `from` tuỳ ý (gateway mô phỏng chân DEX bằng địa chỉ DEX). The estimate is the gas limit the
+    /// transaction needs, regular + state (EIP-8037); no gas field, so both calls run at the RPC's gas cap.
     pub async fn simulate_from(&self, from: Address, to: Address, data: Bytes) -> std::result::Result<u64, SimError> {
         let tx = TransactionRequest::default().with_from(from).with_to(to).with_input(data);
-        self.primary().call(tx.clone()).await.map_err(|e| classify(&e))?;
-        self.primary().estimate_gas(tx).await.map_err(|e| classify(&e))
+        self.primary().call(tx.clone()).await.map_err(|e| classify_sim(&e))?;
+        self.primary().estimate_gas(tx).await.map_err(|e| classify_sim(&e))
+    }
+
+    /// The current block gas limit (`latest`): EIP-8037 includes a transaction only when its gas limit fits it. Read
+    /// from the header's `gasLimit` alone, so any RPC's block shape works.
+    pub async fn block_gas_limit(&self) -> Result<u64> {
+        let b: serde_json::Value =
+            self.primary().raw_request("eth_getBlockByNumber".into(), ("latest", false)).await?;
+        let g = b["gasLimit"].as_str().ok_or_else(|| anyhow!("chain {}: latest block without gasLimit", self.number))?;
+        Ok(u64::from_str_radix(g.trim_start_matches("0x"), 16)?)
     }
 
     /// This chain's `chain_uid`: the RPC's block 0 hash, which must equal the configured `chain_uid` when one is set

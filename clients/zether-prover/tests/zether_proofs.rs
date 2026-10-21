@@ -456,7 +456,9 @@ fn multi_decoy_fee_bls12_381() {
     assert!(bad.validate().is_err(), "fee without beneficiary not M · decoyFee");
     assert!(prove(Header { beneficiary: [0; 32], ..header(300) }, 4, &rs).is_err());
     assert!(prove(header(300), u64::MAX / 2, &rs).is_err(), "txFee + M · d >= 2^64");
-    // the decoy payout's gas: bls12-381 none with the auditor, direct, fits M = 8 without a decoy fee, 7 with one
+    // the decoy payout's gas: bls12-381 none with the auditor, direct, fits M = 8 without a decoy fee, 7 with one;
+    // a leg costs 116,698 under Amsterdam (F185 ZetherDecoyFee.test_gas_decoyFeePerLeg; 28,663 on Osaka)
+    assert!(DECOY_LEG_GAS >= 116_698, "the measured Amsterdam leg payout");
     assert_eq!(build_gas::<C>(TransferMode::NoBundle, true, false, 8, true), transfer_gas::<C>(TransferMode::NoBundle, true, false, 8) + 8 * DECOY_LEG_GAS);
     let rs8: Vec<(G<C>, u64)> = (0..8).map(|i| (key::<C>(10 + i).y, 1)).collect();
     let none = |d| prove_transfer_multi(&f.gens, &f.from, header(0), d, TransferMode::NoBundle, &rs8, f.aud.y, f.acc, BAL, &mut rng()).map(|_| ());

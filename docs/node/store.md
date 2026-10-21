@@ -579,8 +579,11 @@ Aptos/Solana `PRUNE_DELAY_S`, Sui `LANE_HORIZON_S`, node `LANE_TTL_S`, the issue
 
 <a id="NODE-STO-10"></a>**NODE-STO-10** — `max_gas_per_tx` keeps its default of 3 000 000; registering a confidential
 token (classical Zether or post-quantum Zether) on a chain whose `max_gas_per_tx` is below that token kind's per-chain
-minimum (≥ 4 500 000 on classical Zether chains, relayed single-transfer gas limit 3 750 000 bn254 / 4 460 000 BLS12-381, [contracts/zether.md#gas-measured](../contracts/zether.md#gas-measured);
-16 000 000 on the post-quantum Zether chain, [contracts/pq-zero-knowledge.md#verifier](../contracts/pq-zero-knowledge.md#verifier)) is accepted with a warning
+minimum (≥ 4 500 000 on classical Zether chains, relayed single-transfer gas limit 3 750 000 bn254 / 4 460 000 BLS12-381, [contracts/zether.md#gas-measured](../contracts/zether.md#gas-measured)
+— Osaka figures; under Amsterdam the cap is on regular + state gas and a multi-recipient edge transfer needs 21.4–31.2 M
+(F185), so ≥ 40 000 000 where multi-recipient Zether is relayed;
+64 000 000 on the post-quantum Zether chain (SCaaS testnet: op 1 ≈ 41.7–43.4 M with state gas, Task 7b,
+[submit-lanes.md#amsterdam-gas](submit-lanes.md#amsterdam-gas); was 16 000 000 before Amsterdam), [contracts/pq-zero-knowledge.md#verifier](../contracts/pq-zero-knowledge.md#verifier)) is accepted with a warning
 and a `422`-free admin response field `warnings`, so the operator raises the cap before the first transfer.
 
 Also refused: an upgradeable program on a chain being activated ([NODE-STO-07](#NODE-STO-07)); the same public key in
