@@ -330,7 +330,7 @@ pub fn dec(s: &[i8; 2048], ct: &[u8; CT_BYTES]) -> Result<([i64; 16], [i64; 16])
 }
 
 /// `pqz_test_mutate` (test hook): decode `proof` for relation `rel` (an op, 0x81 = R_TX0, or an R_TXM shape code),
-/// change one field (`kind` 0..14 with `r1` / `r2`; any other kind re-encodes only) and re-encode. `Ok(None)` where
+/// change one field (`kind` 0..15 with `r1` / `r2`; any other kind re-encodes only) and re-encode. `Ok(None)` where
 /// C returns 0: an unknown relation, a proof that does not decode, an encoding that does not fit 2 MAX_PROOF bytes.
 #[cfg(feature = "test-hooks")]
 pub fn test_mutate(rel: u8, proof: &[u8], kind: u32, r1: u64, r2: u64) -> Result<Option<Vec<u8>>, Error> {
@@ -372,4 +372,29 @@ pub mod fstrace {
             }
         });
     }
+}
+
+/// Review A's cheating prover (A-1 = review B's B-1; the regression fixture `tests/cheat_b1.rs`, test hook): this
+/// thread's `prove` calls, with `mode` 0 honest, 1 `z4[0][0] += 1` cancelled through g, 2 `z3 = y3` (no `β3·R·s3`)
+/// cancelled through g, 3 `z4[0][0] += 1` not cancelled (control). The cancellation folds the z3 / z4 error with the V
+/// the cheater can know before `tg`, i.e. V seeded from hz (`tbox::prove`); since B-1 V is drawn after `tg`, so the
+/// proofs of modes 1 and 2 no longer verify. Never set in a production build (no `test-hooks`: always 0).
+#[cfg(feature = "test-hooks")]
+pub fn set_cheat(mode: u32) {
+    CHEAT.with(|c| c.set(mode))
+}
+
+#[cfg(feature = "test-hooks")]
+std::thread_local! {
+    static CHEAT: core::cell::Cell<u32> = const { core::cell::Cell::new(0) };
+}
+
+#[cfg(feature = "test-hooks")]
+pub(crate) fn cheat() -> u32 {
+    CHEAT.with(|c| c.get())
+}
+
+#[cfg(not(feature = "test-hooks"))]
+pub(crate) const fn cheat() -> u32 {
+    0
 }

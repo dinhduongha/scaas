@@ -1,0 +1,56 @@
+   Compiling version_check v0.9.5
+   Compiling typenum v1.20.1
+   Compiling generic-array v0.14.7
+   Compiling find-msvc-tools v0.1.14
+   Compiling shlex v2.0.1
+   Compiling cc v1.8.0
+   Compiling crypto-common v0.1.7
+   Compiling block-buffer v0.10.4
+   Compiling inout v0.1.4
+   Compiling cipher v0.4.4
+   Compiling digest v0.10.7
+   Compiling cfg-if v1.0.5
+   Compiling keccak v0.1.6
+   Compiling cpufeatures v0.2.17
+   Compiling aes v0.8.4
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust)
+   Compiling sha3 v0.10.8
+   Compiling zmij v1.0.23
+   Compiling serde_core v1.0.229
+   Compiling serde_json v1.0.154
+   Compiling itoa v1.0.18
+   Compiling memchr v2.8.3
+    Finished `release` profile [optimized + debuginfo] target(s) in 21.36s
+     Running tests/cheat_b1.rs (target/release/deps/cheat_b1-d54d5528e3e2f7c7)
+
+running 1 test
+TRANSFER             code 0x01: m0 [true, true, true, true]; m3 [false, false, false, false]; m1 [true, true, true, true]; m2 [true, true, true, true];
+TRANSFER0            code 0x81: m0 [true, true, true, true]; m3 [false, false, false, false]; m1 [true, true, true, true]; m2 [true, true, true, true];
+BURN                 code 0x02: m0 [true, true, true, true]; m3 [false, false, false, false]; m1 [true, true, true, true]; m2 [true, true, true, true];
+REGISTER             code 0x03: m0 [true, true, true, true]; m3 [false, false, false, false]; m1 [true, true, true, true]; m2 [true, true, true, true];
+DISCLOSE-SENDER      code 0x04: m0 [true, true, true, true]; m3 [false, false, false, false]; m1 [true, true, true, true]; m2 [true, true, true, true];
+DISCLOSE-RECEIVER    code 0x05: m0 [true, true, true, true]; m3 [false, false, false, false]; m1 [true, true, true, true]; m2 [true, true, true, true];
+M1-on                code 0x78: m0 [true, true, true, true]; m3 [false, false, false, false]; m1 [true, true, true, true]; m2 [true, true, true, true];
+M2-on                code 0x79: m0 [true, true, true, true]; m3 [false, false, false, false]; m1 [true, true, true, true]; m2 [true, true, true, true];
+M4-on                code 0x7a: m0 [true, true, true, true]; m3 [false, false, false, false]; m1 [true, true, true, true]; m2 [true, true, true, true];
+test cheating_prover_rejected has been running for over 60 seconds
+M8-on                code 0x7b: m0 [true, true, true, true]; m3 [false, false, false, false]; m1 [true, true, true, true]; m2 [true, true, true, true];
+M1-off               code 0x70: m0 [true, true, true, true]; m3 [false, false, false, false]; m1 [true, true, true, true]; m2 [true, true, true, true];
+M2-off               code 0x71: m0 [true, true, true, true]; m3 [false, false, false, false]; m1 [true, true, true, true]; m2 [true, true, true, true];
+M4-off               code 0x72: m0 [true, true, true, true]; m3 [false, false, false, false]; m1 [true, true, true, true]; m2 [true, true, true, true];
+M8-off               code 0x73: m0 [true, true, true, true]; m3 [false, false, false, false]; m1 [true, true, true, true]; m2 [true, true, true, true];
+VERDICT: B-1 cheating prover FORGES (28 accepted)
+
+thread 'cheating_prover_rejected' (24705) panicked at tests/cheat_b1.rs:43:5:
+cheating proofs accepted (verify, verify_fast, C verify, C verify_fast): ["TRANSFER mode 1 [true, true, true, true]", "TRANSFER mode 2 [true, true, true, true]", "TRANSFER0 mode 1 [true, true, true, true]", "TRANSFER0 mode 2 [true, true, true, true]", "BURN mode 1 [true, true, true, true]", "BURN mode 2 [true, true, true, true]", "REGISTER mode 1 [true, true, true, true]", "REGISTER mode 2 [true, true, true, true]", "DISCLOSE-SENDER mode 1 [true, true, true, true]", "DISCLOSE-SENDER mode 2 [true, true, true, true]", "DISCLOSE-RECEIVER mode 1 [true, true, true, true]", "DISCLOSE-RECEIVER mode 2 [true, true, true, true]", "M1-on mode 1 [true, true, true, true]", "M1-on mode 2 [true, true, true, true]", "M2-on mode 1 [true, true, true, true]", "M2-on mode 2 [true, true, true, true]", "M4-on mode 1 [true, true, true, true]", "M4-on mode 2 [true, true, true, true]", "M8-on mode 1 [true, true, true, true]", "M8-on mode 2 [true, true, true, true]", "M1-off mode 1 [true, true, true, true]", "M1-off mode 2 [true, true, true, true]", "M2-off mode 1 [true, true, true, true]", "M2-off mode 2 [true, true, true, true]", "M4-off mode 1 [true, true, true, true]", "M4-off mode 2 [true, true, true, true]", "M8-off mode 1 [true, true, true, true]", "M8-off mode 2 [true, true, true, true]"]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test cheating_prover_rejected ... FAILED
+
+failures:
+
+failures:
+    cheating_prover_rejected
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 95.84s
+
+error: test failed, to rerun pass `--test cheat_b1`

@@ -1012,7 +1012,9 @@ fn compute_z34(
             let s3c = Wiped(coeffs_i64(&mut s3)?);
             z3v = coeffs_i64(&mut y3)?;
             rs3 = r_times(&s3c, &cseed, 0)?;
-            z3v.iter_mut().zip(&rs3).for_each(|(z, &r)| *z += beta3 * r);
+            if crate::cheat() != 2 {
+                z3v.iter_mut().zip(&rs3).for_each(|(z, &r)| *z += beta3 * r);
+            }
         }
         let mut rs4 = Vec::new();
         if nprime > 0 {
@@ -1022,7 +1024,7 @@ fn compute_z34(
             z4v.iter_mut().zip(&rs4).for_each(|(z, &r)| *z += beta4 * r);
         }
         // rejection sampling (rej3 = rej4 = 2 in every relation: bimodal)
-        if nex > 0 && p.rej3 != 0 {
+        if nex > 0 && p.rej3 != 0 && crate::cheat() != 2 {
             let rej = rej_bimodal(&mut rstate, &intvec(&z3v)?, &intvec(&rs3)?, &p.scm3, &p.stdev3sqr)?;
             let rej = crate::ct::verdict(rej); // review E: the verdict is public
             if rej {
@@ -1088,6 +1090,11 @@ pub(crate) fn prove(
 
     let mut au = autos(s, p)?;
     compute_z34(hash, f, s1, m, s2, &mut keys[2], s, seed_rej34)?;
+    let mode = crate::cheat(); // review A's cheating prover (test hook; 0 in a production build)
+    if (mode == 1 || mode == 3) && p.nprime > 0 {
+        let v = f.z4[0].get_coeff(0).get_i64();
+        f.z4[0].set_coeff(0, &int(v + 1));
+    }
     let cseed = *hash;
     hash_z34(hash, &f.z3, &f.z4, p)?;
     let hash0 = *hash;
@@ -1099,11 +1106,26 @@ pub(crate) fn prove(
     polyvec::set(&mut sv.sub((m1 + z) * 2, loff + 1, 2), &m.sub(l, loff + 1, 1));
     polyvec::auto(&mut sv.sub((m1 + z) * 2 + 1, loff + 1, 2), &mut m.sub(l, loff + 1, 1));
 
+    // cheating modes 1, 2: the z3 / z4 part of each accumulator at coefficients 0 and d/2 as the cheater can know it
+    // before tg (V from hz, a dummy Gamma seed: Gamma's part is 0 there for an otherwise honest s), cancelled through g
+    let mut offs = Vec::new();
+    if mode == 1 || mode == 2 {
+        let (mut c1, mut c2) = accs(p)?;
+        let mut au2 = autos(s, p)?;
+        accumulate_all(&mut c1, &mut c2, s, &mut au2, &mut f.z3, &mut f.z4, &[0x55; 32], &hash0, &cseed, p)?;
+        for a in c1.iter_mut() {
+            let t = evaleq(Some(&mut a.r2), Some(&mut a.r1), Some(&a.r0), &mut sv.sub(0, n_, 1))?;
+            offs.push((t.c(0).get_i64(), t.c(D / 2).get_i64()));
+        }
+    }
     // g = h: uniform with coefficients 0 and d/2 zero, appended to m; tg = B_ext s2 + g, hashed
     for i in 0..lambda / 2 {
         let mut v = urandom_q(D, seed_cont, i as u64)?;
         v[0] = 0;
         v[D / 2] = 0;
+        if let Some(&(o0, o32)) = offs.get(i) {
+            (v[0], v[D / 2]) = (-o0, -o32);
+        }
         f.h[i].set_i64(&v);
     }
     polyvec::set(&mut m.sub(qe.l as usize, lambda / 2, 1), &*f.h);
@@ -1130,11 +1152,18 @@ pub(crate) fn prove(
     // h_i = g_i + the accumulated evaluation i (coefficients 0 and d/2 zero), then the quadratic equations
     for (i, a) in a1.iter_mut().enumerate() {
         let mut sub = sv.sub(0, n_, 1);
-        check_coeff0(Some(&mut a.r2), Some(&mut a.r1), Some(&a.r0), &mut sub, Some(false))?;
+        if mode == 0 {
+            check_coeff0(Some(&mut a.r2), Some(&mut a.r1), Some(&a.r0), &mut sub, Some(false))?;
+        }
         let mut t = evaleq(Some(&mut a.r2), Some(&mut a.r1), Some(&a.r0), &mut sub)?;
         f.h[i].add_assign(&mut t, false);
         crate::ct::public(&f.h[i]); // review E: hi, a proof field
-        if !(f.h[i].get_coeff(0).eqzero() && f.h[i].get_coeff(D / 2).eqzero()) {
+        if mode == 1 || mode == 2 {
+            // what the cancellation left (zero only if it guessed V) is dropped: the proof is sent anyway
+            f.h[i].set_coeff(0, &int(0));
+            f.h[i].set_coeff(D / 2, &int(0));
+        }
+        if mode != 3 && !(f.h[i].get_coeff(0).eqzero() && f.h[i].get_coeff(D / 2).eqzero()) {
             return Err(Error::Internal);
         }
         finish(a, &mut f.h[i], i, p)?;
@@ -1143,7 +1172,7 @@ pub(crate) fn prove(
     let og = (m1 + z + l + loff + 1) * 2;
     polyvec::set(&mut sv.sub(og, lambda / 2, 2), &m.sub(l + loff + 1, lambda / 2, 1));
     polyvec::auto(&mut sv.sub(og + 1, lambda / 2, 2), &mut m.sub(l + loff + 1, lambda / 2, 1));
-    for a in a1.iter_mut() {
+    for a in a1.iter_mut().filter(|_| mode == 0) {
         check_coeff0(Some(&mut a.r2), Some(&mut a.r1), Some(&a.r0), &mut *sv, Some(true))?;
     }
 

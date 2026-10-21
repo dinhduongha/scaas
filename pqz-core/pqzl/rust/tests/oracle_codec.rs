@@ -73,16 +73,16 @@ fn len(x: &Option<Vec<u8>>) -> Option<usize> {
     x.as_ref().map(Vec::len)
 }
 
-/// kinds 0..14 x 200 (r1, r2) seeds x every relation code: Rust = C. Within a seed the kinds chain (kind k mutates
+/// kinds 0..15 x 200 (r1, r2) seeds x every relation code: Rust = C. Within a seed the kinds chain (kind k mutates
 /// kind k - 1's output when there is one), so the decoders also meet what the mutations produce (long hints, large z).
 #[test]
 fn test_mutate_eq_c() {
     let mut g = Rnd(0x5EED_C0DE);
     for (code, proof) in proofs() {
-        let mut some = [0u32; 15];
+        let mut some = [0u32; 16];
         for s in 0..200 {
             let mut cur = proof.clone();
-            for kind in 0..15u32 {
+            for kind in 0..16u32 {
                 let (r1, r2) = (g.next(), g.next());
                 let r = test_mutate(code, &cur, kind, r1, r2).expect("Rust test_mutate error");
                 let c = c_test_mutate(code, &cur, kind, r1, r2);

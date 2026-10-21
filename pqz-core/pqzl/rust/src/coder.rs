@@ -462,7 +462,7 @@ pub(crate) fn encode_proof(f: &ProofParts, cap: usize) -> Result<Vec<u8>, Error>
     Ok(w.b)
 }
 
-/// `pqz_test_mutate` (test hook): decode `proof` as relation `code`, change one field (`kind` 0..14 with `r1`, `r2`;
+/// `pqz_test_mutate` (test hook): decode `proof` as relation `code`, change one field (`kind` 0..15 with `r1`, `r2`;
 /// any other kind re-encodes only) and re-encode. `Ok(None)` where C returns 0: an unknown code, a proof that does
 /// not decode, an encoding over 2 MAX_PROOF bytes (the hook's buffer) or a fixed-width value out of range.
 #[cfg(feature = "test-hooks")]
@@ -501,6 +501,11 @@ pub(crate) fn test_mutate(code: u8, proof: &[u8], kind: u32, r1: u64, r2: u64) -
         12 => add(&mut f.z21[ix(m2r)], c64, sg),
         13 => f.h.swap(0, 1),
         14 => add(&mut f.z3[ix(4)], c64, sg),
+        15 => {
+            // tg (B-1's binding test, fs_bind): coefficient +1 mod q of one poly of the commitment to g
+            let x = &mut f.t_b[p.quad_eval.quad_eval.l as usize + ix(p.quad_eval.lambda as u64 / 2)];
+            set(x, c64, (get(x, c64) + 1) % Q as i64)
+        }
         _ => {}
     }
     match encode_proof(&f, 2 * MAX_PROOF) {

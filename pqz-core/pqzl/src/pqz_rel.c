@@ -1685,6 +1685,10 @@ pqz_test_mutate (uint8_t op, const uint8_t *proof, size_t len, unsigned kind, ui
     case 14: /* z3 coefficient +-1 (not clamped: a coefficient at Bz3 leaves it; the P6-FS binding test, sz/fs_bind.c; not in the fuzzers' % 14) */
       p = polyvec_get_elem (F.z3, r1 % 4), set_c (p, c64, cval (p, c64) + sg);
       break;
+    case 15: /* tg coefficient +1 mod q (B-1's binding test, sz/fs_bind.c; not in the fuzzers' % 14) */
+      p = polyvec_get_elem (F.tB, P->quad_eval->quad_eval->l + r1 % (P->quad_eval->lambda / 2));
+      set_c (p, c64, (cval (p, c64) + 1) % (int64_t)PQZ_Q);
+      break;
     default: /* re-encode only */
       break;
     }
