@@ -48,3 +48,57 @@ reduced `acc`), the rollover's unspread accumulators. Per op 1 including its cre
 (−20.7 %); per op 7 M = 8 including 8 credits: 73.93 M → 57.64 M (−22.0 %). P51 is the fallback if rollover
 throughput outweighs state. Open: M = 8's group count G at set (a) under the O9 hint rule was not re-examined; all
 precompile prices are estimates.
+
+## Discussion and decision (owner and controller, 2026-10-21)
+
+**Why M = 8 was first ruled out, and why that was wrong.** The SCaaS testnet move to Amsterdam measured the precompile
+input sent *directly* as calldata (statement + proof ≈ 278–310 KB) against the EIP-7976 floor limit of 261,909 B per
+transaction, and op 7 was ruled to M ≤ 4. Through the token the precompile input is built in memory from state (keys from
+the registry, `acc` and pending entries from the contract); the relayed calldata is only the payload and the proof
+(op 7 M = 8, G = 2: ≈ 124 KB at 16k, Task 7 table). The ruling was withdrawn; M = 8 is bounded by block gas, not calldata
+(Finding 1).
+
+**SSTORE and SSTORE2 under Amsterdam [measured / from the Glamsterdam gas-impact note of the Nethermind 2.2.0 move].**
+
+| Store | First write | Overwrite | Used for |
+|---|---|---|---|
+| SSTORE (32-byte slot) | 97,920 state gas per new slot (≈ 3,060 / byte) | 10,000 regular gas (EIP-8038, ≈ 312 / byte) | `acc` (580 words at set (a), 417 under P46), counters, `accHash` — data rewritten in place |
+| SSTORE2 (contract code) | ≈ 1,530 state gas / byte (EIP-8037) | not possible (immutable) | op blobs — written once, never changed |
+
+Both choices of today's design are the cheaper store for their data: an `acc` in SSTORE2 would re-deploy ≈ 28 M of state
+gas at every rollover; a blob in slots would cost twice the state gas. The bytes stored are what P46 reduces. The blob
+is dominated by the shared `u` (2,304 coefficients); `v` is 16 coefficients (128 B) per recipient, and one `u` per
+randomness group is already shared by every leg (CTR-PQZ-04). Further options not taken: Kyber-style compression of `u`
+(adds noise to every homomorphic sum, `K_MAX` 4,096 of them — a parameter study), dropping the auditor copies from state
+(rejected: they are ciphertexts too), G = 1 for M = 8 (≈ 449 at 144 hints at set (a) [inference], below 450).
+
+**Ciphertexts stay in state — absolute (owner 2026-10-21: "Không được mất ciphertext").** A hash-only design (blob
+bytes in calldata / events, the hash in state) was considered and rejected: calldata and logs live in block history,
+which clients prune (EIP-4444 history expiry), and a lost ciphertext freezes its funds for good. The state-gas cost is
+accepted as the price of that rule.
+
+**No zero-gas assumption (owner 2026-10-21: the precompile may be deployed for customers).** Costs are real money on a
+customer chain. On 2026-10-21 (public RPC + CoinGecko): Ethereum 0.041 gwei, ETH $2,454; BSC 0.05 gwei, BNB $747 — 30 M
+gas ≈ $3.0 on Ethereum, ≈ $1.12 on BSC; at 1 gwei ≈ $74 on Ethereum. (Mainnet Ethereum and BSC had not activated
+Glamsterdam; under their rules a 20 KB SSTORE2 blob is ≈ 4.2 M gas.)
+
+**Why a 60 M block, and the outlook.** 60 M is Ethereum mainnet's block gas limit on 2026-10-21 (read over RPC), used as
+the "customer-like" yardstick instead of the testnet's 200 M target; it is not a protocol constant (operators choose it,
+±1/1024 per block). Reported plans: Sepolia raised to 200 M with Glamsterdam (October 2026), Hoodi activates Glamsterdam
+on 2026-10-26 with 200 M, mainnet date open, 300 M floated as a later step (news coverage of the Ethereum Foundation
+announcement — [CCN](https://www.ccn.com/news/crypto/ethereum-glamsterdam-upgrade-testnet-200m-gas-limit/),
+[U.Today](https://u.today/ethereum-eyes-massive-33x-gas-limit-boost-as-glamsterdam-approaches),
+[FinanceFeeds](https://financefeeds.com/ethereum-schedules-glamsterdam-upgrade-on-hoodi-for-october-26-targeting-200-million-gas-limit/);
+no primary EF page read). Larger blocks cost node processing time, state growth (which EIP-8037 prices on purpose),
+sync time and hardware; 200 M blocks were not load-rehearsed on the SCaaS testnet. With 200 M blocks every layout fits
+M = 8, so cost decides, not block fit.
+
+**Cost per credit, P46 vs P51 [inference from the measured numbers].** A rollover is ≈ 12.5 M regular gas, so per credit
+≈ 156 k under P46 (`ROLL_MAX` 80) and ≈ 87 k under P51 (`ROLL_MAX` 144); P46 saves ≈ 2.5 M more state gas per op than
+P51. P46 is cheaper overall by a wide margin.
+
+**Decision (owner 2026-10-21): P46.** Built in 5h Task 8d with the proofSystemId bump: stored blob and `acc` layout,
+hint format, `accHash`, `ciphertextHash`; the token unpacks to 64-bit lanes for the precompile, so pqz-stmt, the
+precompile and the proofs do not change; the packed rollover accumulator; `ROLL_MAX` re-measured (≈ 80 at set (a));
+the disclosure and hint paths measured and tested there. Each parameter set's `SET.md` states the condition "op 7 M = 8
+needs a block gas limit ≥ ≈ 57 M" (P46).
