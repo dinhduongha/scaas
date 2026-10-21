@@ -4,7 +4,8 @@
 #   scripts/capped pqz-core/pqzh/ligero/runs/ct.sh <label> [rels] [nprove] [set]   -> runs/ct-<label>.txt
 # rels: src/bin/ct.rs's bit mask (default 4095: the six forms and the six op 7 shapes); nprove: proofs per relation
 # (default 1); set: the parameter set (cargo feature set-<set>; default none = v3). The crate is built with the
-# test-only feature ctgrind (release profile, x86-64); src/bin/ct.rs marks the witness and rnd32 undefined (secret) and proves at THE preset; memcheck then reports every branch ("Conditional jump
+# test-only feature ctgrind (release profile, x86-64); src/bin/ct.rs marks the witness and rnd32 undefined (secret)
+# and proves at THE preset; memcheck then reports every branch ("Conditional jump
 # or move depends on uninitialised value(s)") or address ("Use of uninitialised value") that depends on them, after the
 # declassification points (ct::public / ct::verdict: the root, w, q, h, the opened columns, the witness-valid and
 # self-check verdicts, the samplers' accept bits; research/code-review-2026-10-19/O-pqzh-constant-time.md).
