@@ -1,25 +1,25 @@
-# P6f runbook — the copy (executed) and the live roll-out on chain 7622 (Task 10)
+# P6f runbook — the copy (executed) and the live roll-out on the SCaaS testnet (Task 10)
 
 This runbook is the step-by-step procedure for switching on the PQZ and ML-DSA precompiles
 ([../README.md](../README.md)) on a running chain, and for undoing it. It is for whoever operates the chain host: the
-owner, or the controller session the owner has allowed to back up, reset and deploy chain 7622 (owner decision
-2026-10-15). Every step was first rehearsed on a throwaway **copy** of chain 7622, then run on the real chain.
+owner, or the controller session the owner has allowed to back up, reset and deploy the SCaaS testnet (owner decision
+2026-10-15). Every step was first rehearsed on a throwaway **copy** of the SCaaS testnet, then run on the real chain.
 
 **Status (all executed):**
 
 | Procedure | Date | Log |
 |---|---|---|
 | [The copy](#the-copy-tasks-78) — rehearsal of both activation paths (Tasks 7–8); gate passed | 2026-10-15 / 16 | `../runs/*-copy-*.txt`, `../runs/2026-10-15-rehearsal.txt` |
-| [Live roll-out on chain 7622](#live-roll-out-on-chain-7622-task-10-executed-2026-10-16) — back up, reset with the precompiles from block 0 (Task 10, image `pqz1`) | 2026-10-16 | `../runs/2026-10-16-live.txt` |
-| [The multi-recipient transfer (op 7)](#the-multi-recipient-transfer-op-7-on-chain-7622-executed-2026-10-17) — a second schedule on the running chain (image `pqz2`) | 2026-10-17 | `../runs/2026-10-17-s8-live*.txt` |
+| [Live roll-out on the SCaaS testnet](#live-roll-out-on-the-scaas-testnet-task-10-executed-2026-10-16) — back up, reset with the precompiles from block 0 (Task 10, image `pqz1`) | 2026-10-16 | `../runs/2026-10-16-live.txt` |
+| [The multi-recipient transfer (op 7)](#the-multi-recipient-transfer-op-7-on-the-scaas-testnet-executed-2026-10-17) — a second schedule on the running chain (image `pqz2`) | 2026-10-17 | `../runs/2026-10-17-s8-live*.txt` |
 | [Nethermind 2.2.0 and Amsterdam](#nethermind-220-and-amsterdam-on-the-scaas-testnet-executed-2026-10-21) — reset onto image `2.2.0-pqz3`, Amsterdam from block 1 | 2026-10-21 | `../runs/2026-10-21-testnet-2.2.0.txt` |
 
-The commands below are the ones that were executed. Steps marked *live only* ran on chain 7622 itself; everything else
+The commands below are the ones that were executed. Steps marked *live only* ran on the SCaaS testnet itself; everything else
 ran on the copy. Plan: [P6f](../../../docs/superpowers/plans/2026-10-14-p6f-precompiles.md) Tasks 7, 8, 10; spec:
 [pq-zero-knowledge.md §10](../../../docs/contracts/pq-zero-knowledge.md#chain-integration). Logs of the executed runs:
 [`../runs/`](../runs/).
 
-**Chain roles** (owner 2026-10-15): **7622 is the testnet**, and its data may be reset. **22776 is the future
+**Chain roles** (owner 2026-10-15): **the SCaaS testnet (chain id 7622) is the test chain**, and its data may be reset. **22776 is the future
 mainnet** (owner only; not built). Chain 22776 gets the precompiles only after the production gates — the external
 audit and the G-LIC written licence clearance ([pq-zero-knowledge.md CTR-PQZ-01](../../../docs/contracts/pq-zero-knowledge.md),
 the licence inventory) — with `engine.Pqz` in its genesis from block 0 and the same addresses.
@@ -28,8 +28,8 @@ the licence inventory) — with `engine.Pqz` in its genesis from block 0 and the
 
 | Term | Meaning |
 |---|---|
-| chain host | the machine that runs chain 7622: live directory `/home/dockers/mba-chain-nethermind`, container `mba_chain_node_nethermind`, RPC `http://127.0.0.1:8545` |
-| copy | a replica of chain 7622 with a throwaway signer key, run from `scratchpad/p6f-copy` (containers `pqzcopy-*`) |
+| chain host | the machine that runs the SCaaS testnet: live directory `/home/dockers/mba-chain-nethermind`, container `mba_chain_node_nethermind`, RPC `http://127.0.0.1:8545` |
+| copy | a replica of the SCaaS testnet with a throwaway signer key, run from `scratchpad/p6f-copy` (containers `pqzcopy-*`) |
 | chainspec | the chain's JSON configuration (`genesis.json`); the precompiles are switched on by its `engine.Pqz` section |
 | schedule, T | one entry of `engine.Pqz.schedules`: gas prices that apply from its timestamp T on |
 | stock image | the unmodified `nethermind/nethermind:1.39.0`; it ignores `engine.Pqz` |
@@ -42,7 +42,7 @@ the licence inventory) — with `engine.Pqz` in its genesis from block 0 and the
 | Path | When | chainspec | Data |
 |---|---|---|---|
 | **A. Transition timestamp** (an upgrade of a running chain) | 22776 later, any chain upgrade, a re-price or a new op such as the multi-recipient transfer (`R_TXM`, op 7), added as a second schedule | `engine.Pqz.schedules[0].timestamp` = T in the future; history before T is unchanged | kept |
-| **B. From genesis** (a new chain, the 7622 testnet reset, owner 2026-10-15) | Task 10 on 7622 (used on 2026-10-16) | `engine.Pqz` with the first timestamp = the genesis timestamp (0 on 7622): active in every block | fresh (the old data dir is backed up, not used) |
+| **B. From genesis** (a new chain, the SCaaS testnet reset, owner 2026-10-15) | Task 10 on the SCaaS testnet (used on 2026-10-16) | `engine.Pqz` with the first timestamp = the genesis timestamp (0 on 7622): active in every block | fresh (the old data dir is backed up, not used) |
 
 The plugin refuses a first timestamp *before* genesis; a timestamp equal to genesis is path B.
 `patch-chainspec.py` is stricter (review CHAIN-02): without `--testnet-reset` the first timestamp must lie at least
@@ -50,16 +50,16 @@ The plugin refuses a first timestamp *before* genesis; a timestamp equal to gene
 
 ## The copy (Tasks 7–8)
 
-**What it is.** The copy is a **replica** of chain 7622: the live chainspec's parameters, engine and genesis header
+**What it is.** The copy is a **replica** of the SCaaS testnet: the live chainspec's parameters, engine and genesis header
 (`../Nethermind.Pqz.Test/chainspecs/genesis-7622.json`) with a throwaway signer key in `extraData`. The stock image
 first produces some history on it. The live directory is never read beyond read-only `cat` / `ls` /
 `docker image inspect`, and no live data or key material is copied. As a result the copy's genesis hash is its own,
-not 7622's `0x24e43dcb…c464`; on the live chain, step 2 of the probe checks the live hash.
+not the SCaaS testnet's `0x24e43dcb…c464`; on the live chain, step 2 of the probe checks the live hash.
 
 **Changes the copy needed** (found in runs `2026-10-1[56]-copy-*.txt`):
 
 - the history chainspec `genesis.stock.json` adds `eip4895TransitionTimestamp` 0 and `maximumExtraDataSize` `0xffff`
-  (with 7622's parameters as they are, no follower can sync);
+  (with the SCaaS testnet's parameters as they are, no follower can sync);
 - path B starts from the faithful replica `genesis.faithful.json` with `--testnet-reset`, exactly as Task 10 does;
 - both node configs set `Network.FilterPeersByRecentIp` false (otherwise a restarted follower was refused for minutes);
 - `copy.sh up` starts the signer first.
@@ -100,13 +100,13 @@ $C/probe.sh $E && python3 -I $C/e2e.py e2e --engine $E --key <throwaway key>
 
 Results: `../runs/*-copy-*.txt`, `../runs/*-rehearsal.txt`.
 
-## Live roll-out on chain 7622 (Task 10, executed 2026-10-16)
+## Live roll-out on the SCaaS testnet (Task 10, executed 2026-10-16)
 
 *Live only.* **Executed on 2026-10-16** with image `pqz1`; log `../runs/2026-10-16-live.txt`. The chain has run `pqz2` since
-2026-10-17 ([op 7 section](#the-multi-recipient-transfer-op-7-on-chain-7622-executed-2026-10-17)).
+2026-10-17 ([op 7 section](#the-multi-recipient-transfer-op-7-on-the-scaas-testnet-executed-2026-10-17)).
 
 **The decision** (owner 2026-10-15, TODO.md, explicit): once the copy gate (Tasks 7–9) passes, back up the current
-7622 chain data, then **reset** 7622 with a fresh genesis carrying the precompiles from block 0 (path B). Keep chain id
+SCaaS testnet data, then **reset** the SCaaS testnet with a fresh genesis carrying the precompiles from block 0 (path B). Keep chain id
 7622, the gas limit 16,777,216, the ports and the signer.
 
 **Why the genesis hash does not change.** The genesis **block** stays byte-identical, so the genesis hash stays
@@ -289,7 +289,7 @@ process-wide lock is shared by RPC calls and block import. A node that serves RP
 (a node fault inside an `eth_call`) or slowed (calls queueing on the lock) by its callers. So the signer's JSON-RPC
 must be reachable from the chain host only; public RPC goes to a follower behind the rate-limited proxy
 (`config.follower.json`, `nginx-rpc.conf`; the copy publishes it on `127.0.0.1:18545`), whose exit stops only that
-follower. **On 7622** the live `docker-compose.yml` (read 2026-10-19) publishes `8545:8545` and `8546:8546` on every
+follower. **On the SCaaS testnet** the live `docker-compose.yml` (read 2026-10-19) publishes `8545:8545` and `8546:8546` on every
 host interface; **accepted for the testnet (owner 2026-10-19)**: no firewall or binding change. The rule above binds
 mainnet 22776. A start-up refusal
 `PQZ-REFUSE … sha256 … != the reviewed …` means the image's `libpqz_ffi.so` is not the reviewed build (review W-G):
@@ -297,13 +297,13 @@ use an image built by `build-image.sh` from the reviewed commit.
 
 ### Owner steps outside this runbook
 
-- The follower node and the rate-limited public RPC on 7622. The copy's `docker-compose.copy.yml`,
+- The follower node and the rate-limited public RPC on the SCaaS testnet. The copy's `docker-compose.copy.yml`,
   `config.follower.json` and `nginx-rpc.conf` are the rehearsed configs.
 - A restart policy for the node.
 - When to delete the `*.bak-pqz-*` backups (the runbook's backups are the dated directories `pqz-<TS>` and
   `op7-<TS>` in `/home/dockers/mba-chain-nethermind-backups/`).
 
-## The multi-recipient transfer (op 7) on chain 7622 (executed 2026-10-17)
+## The multi-recipient transfer (op 7) on the SCaaS testnet (executed 2026-10-17)
 
 *Live only;* plan P6-ANON S8. This added the multi-recipient transfer (`R_TXM`, op 7) to the running chain.
 

@@ -200,9 +200,9 @@ unchanged (every probed row = formula); (4) every SSTORE2 op blob becomes ≈ 26
 
 [chain/RUNBOOK.md](chain/RUNBOOK.md) has every step, in order, for:
 
-- **the copy** (Tasks 7–8): the rehearsal on a replica of chain 7622. Executed; the gate passed on 2026-10-16, with
+- **the copy** (Tasks 7–8): the rehearsal on a replica of the SCaaS testnet. Executed; the gate passed on 2026-10-16, with
   the checklist in `runs/2026-10-15-rehearsal.txt`;
-- **the live roll-out on chain 7622** (Task 10): back up, then reset the chain with `engine.Pqz` active from block 0
+- **the live roll-out on the SCaaS testnet** (Task 10): back up, then reset the chain with `engine.Pqz` active from block 0
   (owner decision 2026-10-15). Executed on 2026-10-16, log `runs/2026-10-16-live.txt`;
 - **adding the multi-recipient transfer (op 7)** to the running chain with a second schedule. Executed on 2026-10-17,
   log `runs/2026-10-17-s8-live.txt`.
@@ -219,7 +219,7 @@ unchanged (every probed row = formula); (4) every SSTORE2 op blob becomes ≈ 26
 | 6 calibration | `t_ecMul` 17 µs; rows 2.567–5.409 M gas; `selftestGas` 2,567,000; ML-DSA 49,000 / 68,000 | `runs/2026-10-15-calib.txt` |
 | 7 copy | the stock image ignores `engine.Pqz`; path A before / after T, probe 111, e2e 53; path B probe 112, e2e 53 | `runs/2026-10-1[56]-copy-*.txt` |
 | 8 rehearsal | burst 429s, 80 M ramp + full block (79.24 M gas), kill drill, rollback | `runs/2026-10-15-rehearsal.txt` |
-| 10 live roll-out | chain 7622 backed up and reset with `engine.Pqz` from block 0 (image `pqz1`); genesis hash unchanged; probe and e2e passed | `runs/2026-10-16-live.txt` |
+| 10 live roll-out | the SCaaS testnet backed up and reset with `engine.Pqz` from block 0 (image `pqz1`); genesis hash unchanged; probe and e2e passed | `runs/2026-10-16-live.txt` |
 | S8 multi-recipient transfer (op 7, P6-ANON) | plugin rows per `(id, M, auditorOn)` (plan D19), 41 / 41 tests; harness 60 min CLEAN (4,577,772 inputs); image `pqz2` (library `4fc1a6a2…`); multi-recipient calibration 14 rows 3,625,000–6,177,000 gas; copy path A (pqz1 → pqz2, data kept) before / after T, e2e 86 ok; **live on 7622** 2026-10-17: second schedule at T = 1792205116, probe 389 ok before and after T, e2e 76 ok | `runs/2026-10-17-*` |
 
 | Nethermind 2.2.0 + Amsterdam | port tests 46 / 46; image `2.2.0-pqz3` (library `16dd99ce…` from `1adbd563`); **SCaaS testnet reset** 2026-10-21 with Amsterdam from block 1: `PQZ-START`, genesis hash unchanged, probe all checks passed (input refusals over the floor included), e2e 76 ok, one ordinary transfer; the 64 KiB deploy check waits for the gas-limit ramp (RUNBOOK) | `runs/2026-10-21-*` |
