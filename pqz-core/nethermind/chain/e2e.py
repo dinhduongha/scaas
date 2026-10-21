@@ -10,8 +10,10 @@ smartcontracts/evm/out. Requests are paced (the proxy allows 10 r/s, burst 20) a
   e2e.py stock   --engine E                 the stock image after T: the probe must FAIL (G2 demonstration)
   e2e.py e2e     --engine E --key K [--no-ua]  transactions: probe contract, check() per row, direct > 128 KiB
                                             inputs, UAMldsaVerifier at both levels (not with --no-ua: live 7622)
-  e2e.py burst   [--clients 4 --calls 50]   step 5: eth_call spam at PQZ; counts 200 / 429; block interval
-  e2e.py fill    --engine E --key K [--n 8] PQZH transfers sent straight to PQZ, to fill a block
+  e2e.py burst   [--clients 4 --calls 50]   step 5: eth_call spam at PQZ (the largest honest input a transaction can
+                                            carry); counts 200 / 429; block interval
+  e2e.py fill    --engine E --key K [--n 8] the largest honest inputs a transaction can carry (PQZH transfers before
+                                            Amsterdam), sent straight to PQZ, to fill a block
   e2e.py head                               number, hash, gasLimit, timestamp of the head
 
 Common: --rpc URL (default http://127.0.0.1:18545); --schedule N: the engine file's schedule in force (default the
@@ -285,6 +287,22 @@ def cmd_probe(a, expect_fail=False):
     for k, v in sorted(by.items()):
         if "honest" in v and "flip" in v:
             check(v["honest"] == v["flip"], f"gas valid = invalid {k[:2]} ({len(k[2]) - 5:,} B statement): {v['honest']} / {v['flip']}")
+    # eth_estimateGas reaches the precompile too (review nethermind-2.2 §1: Facade / JsonRpc were outside the clone):
+    # a direct call to PQZ with the row whose precompile gas stands out most above the calldata floor; an empty account
+    # would estimate max(standard intrinsic, floor) only
+    def margin(r):
+        b = bytes.fromhex(r["input"])
+        std, floor = intrinsic(b)
+        return std + sch.gas(b) - floor
+    est_row = max((r for r in rows if r["kind"] == "honest" and sch.row(bytes.fromhex(r["input"])) is not None
+                   and not over_cap(r["input"])), key=margin)
+    b = bytes.fromhex(est_row["input"])
+    std, floor = intrinsic(b)
+    want = max(std + sch.gas(b), floor)
+    est = int(rpc("eth_estimateGas", [{"to": PQZ, "data": "0x" + b.hex()}, "latest"]), 16)
+    check(want <= est < want + sch.gas(b) // 2 and est > max(std, floor),
+          f"eth_estimateGas direct to PQZ, {est_row['name'][:40]} ({len(b):,} B): {est:,} >= max(standard + row {std + sch.gas(b):,}, "
+          f"floor {floor:,}) = {want:,} (+{(est - want) * 100 / want:.1f} %; an empty account would be {max(std, floor):,})")
     h = bytes.fromhex(next(r for r in rows if r["kind"] == "honest")["input"])
     for name, b in (("unknown id", h[:40] + bytes([h[40] ^ 1]) + h[41:]), ("short (68 B)", h[:68]), ("empty", b""),
                     ("unknown op 9", bytes([9]) + h[1:])):
@@ -431,9 +449,10 @@ def cmd_e2e(a):
 
 
 def cmd_burst(a):
-    """Step 5: `clients` threads × `calls` eth_call to PQZ (PQZH transfer) through the proxy, no pacing."""
-    b = bytes.fromhex(next(r for r in corpus() if r["kind"] == "honest" and r["id"] == "pqzh" and r["form"] == "TRANSFER")["input"])
-    body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "eth_call", "params": [{"to": PQZ, "data": "0x" + b.hex(), "gas": hex(16_000_000)}, "latest"]}).encode()
+    """Step 5: `clients` threads × `calls` eth_call to PQZ through the proxy, no pacing: the largest honest input whose
+    calldata floor fits 2^24 (Amsterdam refuses a PQZH transfer's 280+ KB at any gas, review nethermind-2.2 M2)."""
+    b = max((bytes.fromhex(r["input"]) for r in corpus() if r["kind"] == "honest" and not over_cap(r["input"])), key=len)
+    body = json.dumps({"jsonrpc": "2.0", "id": 1, "method": "eth_call", "params": [{"to": PQZ, "data": "0x" + b.hex(), "gas": hex(CAP)}, "latest"]}).encode()
     codes = {}
     lk = threading.Lock()
     h0 = rpc("eth_getBlockByNumber", ["latest", False])
@@ -459,7 +478,7 @@ def cmd_burst(a):
     n0, n1 = int(h0["number"], 16), int(h1["number"], 16)
     stamps = [int(rpc("eth_getBlockByNumber", [hex(n), False])["timestamp"], 16) for n in range(n0, n1 + 1)]
     gaps = [y - x for x, y in zip(stamps, stamps[1:])]
-    log(f"burst: {a.clients} clients × {a.calls} eth_call (PQZH transfer, {len(b):,} B) in {dt:.1f} s: {codes}")
+    log(f"burst: {a.clients} clients × {a.calls} eth_call ({len(b):,} B input) in {dt:.1f} s: {codes}")
     log(f"blocks {n0}..{n1} during and after the burst: intervals {gaps}")
     check(codes.get("429", 0) > 0, "burst: requests beyond the limit get 429")
     check(codes.get("200 other", 0) == 0, "burst: every answered call = …01")
@@ -491,12 +510,15 @@ def cmd_codesize(a):
 def cmd_fill(a):
     sch = Schedule(a.engine)
     s = Sender(a.key)
-    rows = [r for r in corpus() if r["kind"] in ("honest", "fee0") and r["id"] == "pqzh" and r["op"] == 1]
+    # review nethermind-2.2 M2: under Amsterdam the PQZH op 1 inputs are over the calldata floor's 2^24, and tx.gas
+    # follows intrinsic() (EIP-2780 base, EIP-7976 floor), not 21,000 and the EIP-7623 floor
+    rows = sorted((r for r in corpus() if r["kind"] in ("honest", "fee0") and not over_cap(r["input"])
+                   and (AMS or (r["id"] == "pqzh" and r["op"] == 1))), key=lambda r: -len(r["input"]))
     hs = []
     for i in range(a.n):
         b = bytes.fromhex(rows[i % len(rows)]["input"])
-        std = 21_000 + 4 * tokens(b) + sch.gas(b)
-        hs.append((s.send(PQZ, "0x" + b.hex(), max(std, 21_000 + 10 * tokens(b)) + 10_000), len(b)))
+        std, floor = intrinsic(b)
+        hs.append((s.send(PQZ, "0x" + b.hex(), max(std + sch.gas(b), floor) + 10_000), len(b)))
     blocks = {}
     for h, n in hs:
         rc = receipt(h)

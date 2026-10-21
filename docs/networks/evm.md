@@ -70,10 +70,11 @@ is always the hard value. Gas is never assumed: Zether-sized transactions do not
 <a id="private-chain"></a><a id="private-7622"></a>
 
 <a id="NET-EVM-02"></a>**NET-EVM-02** — **The private reference chain is chain id 7622; its identity is the pair
-(chain id 7622, genesis hash `0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464`), profile
+(chain id 7622, genesis hash `0xa17faef497fa29ec90603969dad0176ea18fd1cc2eaf0f9f4fa2dacc9c952ac2` since the 2026-10-22 reset (genesis gas limit 200 M); the client test vectors keep
+the earlier `0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464` as a fixed constant), profile
 `private7622`.** Owner ruling 2026-10-07. Chain id `0x1dc6`; the chain was reset with a new genesis when it moved
 from 9000, which is also Evmos Testnet — replay protection is only as good as the chain id, so every signer and node
-also binds the genesis hash ([NET-ALL-22](README.md#NET-ALL-22)). Genesis hashes of the live EVM chains, two sources each, are in [`chain-uids.json`](../../smartcontracts/evm/chain-uids.json). Nodes bind the profile to the genesis hash, not to
+also binds the genesis hash ([NET-ALL-22](README.md#NET-ALL-22)). Genesis hashes of the live EVM chains, two sources each (7622: one, its own local RPC), are in [`chain-uids.json`](../../smartcontracts/evm/chain-uids.json). Nodes bind the profile to the genesis hash, not to
 the chain id alone. The profile, seeds, environment variable names and test vectors use `private7622`; the chain's
 directory is `src/chains/private7622`.
 
@@ -95,7 +96,7 @@ Parameters:
 | Forks | live through Fusaka + BPO2: EIP-2537 (BLS12-381), EIP-7951 P-256 at `0x100`, EIP-7825 per-transaction gas cap 16,777,216, EIP-7623, EIP-7934 |
 | Base fee | 0 (gas free; `MinGasPrice` 0) |
 | Contract code size | 64 KiB (`maxCodeSize` `0x10000`, `maxCodeSizeTransition` 6432) since 2026-10-11, owner, ahead of Glamsterdam (cf. EIP-7954); 24,576 before. Probed at block 6434: 65,536 B code deploys (13.27 M gas), 65,537 B is refused, a 50,005 B init code is accepted (the init-code limit follows `maxCodeSize`). Public chains keep 24,576 |
-| Block gas limit | 16,777,216 today (`0x1000000`); 80 M `TargetBlockGasLimit` target for post-quantum Zether ([CTR-PQZ-11](../contracts/pq-zero-knowledge.md#CTR-PQZ-11)) (SPECIFIED) |
+| Block gas limit | 200,000,000 from genesis (`0xbebc200`, reset 2026-10-22, owner; `TargetBlockGasLimit` 200 M); 16,777,216 before. Per tx: regular gas ≤ 2^24 (EIP-7825), node `max_gas_per_tx` 64 M (owner 2026-10-22) |
 | Finality | depth 1, quorum 1 (single-provider trust, reported as such) |
 | Classical Zether | not on the dev-chain allowlist ({31337, 1337}, [CTR-ZTH-02](../contracts/zether.md#CTR-ZTH-02)); whether the SCaaS testnet becomes a dev chain for it is an open owner question |
 | Post-quantum Zether | the only PQZ chain: `PQZ` `0x5caa500000000000000000000000000000000f01`, `MLDSA44` `…0012`, `MLDSA65` `…0013` from the plugin in image `scaas/nethermind-pqz:1.39.0-pqz1` (local, never pushed), chainspec `engine.Pqz` ([chain integration](../contracts/pq-zero-knowledge.md#chain-integration), [§3](#precompiles)) |
@@ -107,8 +108,8 @@ BLS12-381 precompiles `0x0b`/`0x0c`/`0x0f`/`0x10` were empty while `alt_bn128` `
 Forks must be written with Nethermind's own keys (`eip1559TransitionTimestamp`, `eip2537TransitionTimestamp`, …),
 and changing them changes the genesis hash (chain reset). The only detection is to inspect a block header or call
 the precompile — the deployment checklist does both. The chainspec was fixed on 2026-08-31 before the reset to
-the SCaaS testnet. The 16,777,216 block gas limit admits only ~5 classical confidential transfers per block (3.33 M gas each,
-measured); post-quantum Zether raises the target to 80 M ([CTR-PQZ-11](../contracts/pq-zero-knowledge.md#CTR-PQZ-11)).
+the SCaaS testnet. The earlier 16,777,216 block gas limit admitted only ~5 classical confidential transfers per block (3.33 M gas each,
+measured); the 2026-10-22 reset starts at 200 M ([CTR-PQZ-11](../contracts/pq-zero-knowledge.md#CTR-PQZ-11)).
 
 Further operator traps, found on the P6f copy of the SCaaS testnet (2026-10-15, `pqz-core/nethermind/runs/2026-10-15-copy-*.txt`):
 **no follower can sync 7622's chainspec as it is** — `eip4844TransitionTimestamp` 0 without
