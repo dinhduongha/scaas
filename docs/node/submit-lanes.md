@@ -312,15 +312,24 @@ with the job and counted (`scaas_simulation_total`).
 | gas > the chain's current block gas limit (read from `latest`, never assumed) | `dead` |
 | calldata floor over 2^24, or the simulation runs out of gas (over 2^24 regular gas) | `dead` |
 
-<a id="amsterdam-gas"></a>**Gas under Amsterdam** (every EVM chain is served after its Glamsterdam fork, owner 2026-10-21;
-BUILT 2026-10-22, `guard::gas`): EIP-7825's 2^24 caps a transaction's **regular** gas (intrinsic, the EIP-7976 calldata
-floor of 15,000 + 64 per byte, execution); EIP-8037 state gas (a new slot 97,920, code 1,530 per byte) comes on top,
-so a gas limit above 2^24 is normal (a PQZ op 1 ≈ 42–43 M, a multi-recipient Zether edge transfer 21–31 M) and may
-reach 2^32 − 1. The node: refuses a calldata floor over 2^24 before any RPC (at most 261,909 calldata bytes); reads an
-"out of gas" / "gas required exceeds allowance" answer of the simulation (no gas field, the RPC's cap) as the job's
-answer, never a transport error; takes the gas limit from `eth_estimateGas` (regular + state) + 20 %, bounded by
-`max_gas_per_tx`, the chain's current block gas limit (EIP-8037 never includes a larger `tx.gas`) and 2^32 − 1. The
-fee is the chain's `eth_feeHistory` estimate (`maxFeePerGas` ≥ 1 wei), never a zero gas price.
+<a id="amsterdam-gas"></a>**Gas under Amsterdam** (SCaaS contracts go on a public chain after its Glamsterdam fork, owner
+2026-10-21; BUILT 2026-10-22, `guard::gas`). The node reads the fork **per chain** from its `latest` header: the header
+carries EIP-7928's `blockAccessListHash` ⇒ Amsterdam. Under Amsterdam EIP-7825's 2^24 caps a transaction's **regular**
+gas (intrinsic, the EIP-7976 calldata floor of 15,000 + 64 per byte, execution); EIP-8037 state gas (a new slot
+97,920, code 1,530 per byte) comes on top, so a gas limit above 2^24 is normal (a PQZ op 1 ≈ 42–43 M, a
+multi-recipient Zether edge transfer 21–31 M) and may reach 2^32 − 1. There the node: refuses a calldata floor over
+2^24 before simulating (at most 261,909 calldata bytes); takes the gas limit from `eth_estimateGas` (regular + state)
++ 20 %, bounded by `max_gas_per_tx`, the chain's current block gas limit (EIP-8037 never includes a larger `tx.gas`)
+and 2^32 − 1. Before Amsterdam (Osaka chains, L2s, the e2e anvil: no `blockAccessListHash`) the whole gas limit stays
+≤ 2^24 as before and there is no 64 gas/byte floor check. On every chain: an "out of gas" / "gas required exceeds
+allowance" answer of the simulation (no gas field, so the RPC's gas cap — Nethermind 100,000,000; a call with total >
+2^24 and regular < 2^24 simulates fine that way, measured on the SCaaS testnet,
+`pqz-core/nethermind/runs/2026-10-22-testnet-gasless-call.txt`) is the job's answer (`dead`), any other simulation or
+block-read error is transient (`queued`). A padded limit that reaches the block gas limit is accepted with a warning
+log (the transaction then takes a whole block's gas reservation; controller ruling 2026-10-22, owner may override). A
+job rebuilt after a restart keeps its sent transaction's gas limit (`eth_getTransactionByHash`) for replacements; only
+when the RPC does not know it, the cap above. The fee is the chain's `eth_feeHistory` estimate (`maxFeePerGas` ≥ 1
+wei), never a zero gas price.
 
 Unwrap jobs ([unwrap jobs](#unwrap-jobs)) simulate the full outer transaction and re-simulate immediately before
 signing. A subject that crossed the grief threshold gets a re-simulation right before signing too
@@ -341,7 +350,9 @@ never indexing, tracking or replacing signed transactions, rescues or gap-filler
 | `revert_streak` (chain) | ≥ 3 post-simulation reverts of class `other` in 15 min | [NODE-OPS-06](ops.md#NODE-OPS-06), latched |
 
 Non-EVM families use budget + balance floor (no EIP-1559 base fee). The SCaaS testnet (chain id 7622, formerly 9000) is a
-pre-London Clique chain with `MinGasPrice = 0`: it has no base fee, so `base_fee_spike` does not apply there. Metric `scaas_breaker_open{chain,lane,breaker}`;
+Clique chain with EIP-1559 from genesis (`eip1559Transition` 0, genesis `baseFeePerGas` 0; the base fee stays at 0 or
+a few wei while blocks stay under their target, and Nethermind's minimum gas price is 1 wei), so `base_fee_spike`
+applies but rarely trips; the node never assumes a zero gas price there (fees from `eth_feeHistory`, ≥ 1 wei). Metric `scaas_breaker_open{chain,lane,breaker}`;
 manual reset `POST /v1/admin/chains/{key}/breaker/reset` (operator, [admin-auth.md#routes](admin-auth.md#routes)).
 
 <a id="selector-breaker"></a><a id="NODE-LANE-25"></a>**NODE-LANE-25** — **A breaker per `(from, selector)` for
@@ -550,7 +561,7 @@ in-flight key is the token's `mtxDigest`, never the job's `digest`. A job-API jo
 recipient 0 is unchanged in effect. A job carrying `receiver_fee` is refused (`dead`), never relayed without it. BUILT: the guard
 ([NODE-JOB-20](job-api.md#NODE-JOB-20)) runs in `Submitter::submit` before the digest read, simulation or signing; a `MetaTransfer` and the
 order and wrap entries need a registered token (an entry also a listed DEX), else `TOKEN_NOT_SERVED`; the token lists refresh every
-15 s with the breaker sample. Jobs rebuilt from the tracked journal after a restart pass the guard too and keep `max_gas_per_tx` capped by the block gas limit as their gas limit; a refused
+15 s with the breaker sample. Jobs rebuilt from the tracked journal after a restart pass the guard too and keep their sent transaction's gas limit (`max_gas_per_tx` capped by the block gas limit, and by 2^24 before Amsterdam, when the RPC no longer knows it; [Amsterdam gas](#amsterdam-gas)); a refused
 one is only logged and its nonce gap-filled (the ERP gets no report). Hedera runs the same lane checks at start ([NET-HED-08](../networks/hedera.md#NET-HED-08)).
 
 ## <a id="batching"></a>11. Batching

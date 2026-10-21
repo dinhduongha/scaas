@@ -60,6 +60,14 @@ pub fn classify_sim(e: &TransportError) -> SimError {
     }
 }
 
+/// The `latest` header's gas facts ([`Chain::block_gas`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BlockGas {
+    pub limit: u64,
+    /// EIP-7928's `blockAccessListHash` is in the header: the Amsterdam two-dimensional gas model applies.
+    pub amsterdam: bool,
+}
+
 pub struct Chain {
     pub number: u64,
     providers: Vec<DynProvider>,
@@ -121,13 +129,21 @@ impl Chain {
         self.primary().estimate_gas(tx).await.map_err(|e| classify_sim(&e))
     }
 
-    /// The current block gas limit (`latest`): EIP-8037 includes a transaction only when its gas limit fits it. Read
-    /// from the header's `gasLimit` alone, so any RPC's block shape works.
-    pub async fn block_gas_limit(&self) -> Result<u64> {
+    /// The `latest` header's gas facts: its `gasLimit` (EIP-8037 includes a transaction only when its gas limit fits
+    /// it) and whether the chain runs Amsterdam — the header carries EIP-7928's `blockAccessListHash` (as
+    /// `pqz-core/nethermind/chain/e2e.py` decides it). Read from the raw header, so any RPC's block shape works.
+    pub async fn block_gas(&self) -> Result<BlockGas> {
         let b: serde_json::Value =
             self.primary().raw_request("eth_getBlockByNumber".into(), ("latest", false)).await?;
         let g = b["gasLimit"].as_str().ok_or_else(|| anyhow!("chain {}: latest block without gasLimit", self.number))?;
-        Ok(u64::from_str_radix(g.trim_start_matches("0x"), 16)?)
+        Ok(BlockGas { limit: u64::from_str_radix(g.trim_start_matches("0x"), 16)?, amsterdam: b.get("blockAccessListHash").is_some() })
+    }
+
+    /// The gas limit of the transaction `hash` as it was sent (`eth_getTransactionByHash`); `None` if the RPC does not
+    /// know it.
+    pub async fn tx_gas(&self, hash: B256) -> Result<Option<u64>> {
+        let t: serde_json::Value = self.primary().raw_request("eth_getTransactionByHash".into(), (hash,)).await?;
+        t["gas"].as_str().map(|g| Ok(u64::from_str_radix(g.trim_start_matches("0x"), 16)?)).transpose()
     }
 
     /// This chain's `chain_uid`: the RPC's block 0 hash, which must equal the configured `chain_uid` when one is set

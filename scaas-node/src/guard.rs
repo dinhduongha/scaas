@@ -11,10 +11,11 @@
 //!   (`mtxSelectors()`, `supportedModes()`);
 //! - `mtxSettle` gas is sized by a simulation that settles every planned settlement (success is not monotonic in gas,
 //!   P2b-2), and a contract signer's meta-tx gets at least the ERC-1271 floor (P1b note c);
-//! - gas follows the Amsterdam two-dimensional model (EIP-7825 + EIP-8037, every EVM chain after its Glamsterdam fork,
-//!   owner 2026-10-21): regular gas ≤ 2^24 per transaction, enforced by the chain's own simulation and checked here for
-//!   the calldata floor; the gas limit (regular + state) bounded by `max_gas_per_tx`, the chain's current block gas
-//!   limit (read, never assumed) and 2^32 − 1.
+//! - gas follows the chain's fork, read from its `latest` header: under Amsterdam (EIP-7928 `blockAccessListHash`
+//!   present) the two-dimensional model (EIP-7825 + EIP-8037): regular gas ≤ 2^24 per transaction, enforced by the
+//!   chain's own simulation and checked here for the calldata floor, the gas limit (regular + state) bounded by
+//!   `max_gas_per_tx`, the chain's current block gas limit (read, never assumed) and 2^32 − 1; before it (Osaka, L2s,
+//!   anvil) the whole gas limit ≤ 2^24 as before.
 //!
 //! Pure rules first (unit- and mutation-tested), then the cached chain reads (`Guard`).
 use std::collections::{HashMap, HashSet};
@@ -22,9 +23,10 @@ use std::sync::{Arc, Mutex, RwLock};
 
 use alloy::primitives::{Address, Bytes};
 use alloy::sol_types::SolValue;
+use tracing::warn;
 
 use crate::abi::IToken;
-use crate::chain::{Chain, SimError};
+use crate::chain::{BlockGas, Chain, SimError};
 use crate::config::ChainCfg;
 use crate::metatx::{Mtx, MODE_FEE_MASK};
 use crate::submit::Work;
@@ -86,9 +88,11 @@ pub fn calldata_floor(len: usize) -> u64 {
 }
 
 /// The gas limit cap of one transaction: `max_gas_per_tx`, the chain's block gas limit (EIP-8037 reserves `tx.gas` in
-/// the block's state dimension: a larger limit is never included) and EIP-8037's 2^32 − 1.
-pub fn total_cap(max_gas_per_tx: u64, block_gas_limit: u64) -> u64 {
-    max_gas_per_tx.min(block_gas_limit).min(MAX_TX_TOTAL_GAS)
+/// the block's state dimension: a larger limit is never included) and EIP-8037's 2^32 − 1; before Amsterdam EIP-7825's
+/// 2^24 caps the whole limit.
+pub fn total_cap(max_gas_per_tx: u64, block: BlockGas) -> u64 {
+    let c = max_gas_per_tx.min(block.limit).min(MAX_TX_TOTAL_GAS);
+    if block.amsterdam { c } else { c.min(MAX_TX_GAS) }
 }
 
 const FEE_CLASS_ABSOLUTE: u8 = 1;
@@ -314,28 +318,37 @@ impl Guard {
 /// the chain's block gas limit; `mtxSettle` is sized until every planned settlement settles; a contract signer's
 /// meta-tx gets at least the ERC-1271 floor.
 pub async fn gas(chain: &Chain, w: &Work, max: u64) -> Result<u64, SimError> {
+    let block = chain.block_gas().await.map_err(|e| SimError::Transport(format!("block gas limit: {e:#}")))?;
     let floor = calldata_floor(w.data.len());
-    if floor > MAX_TX_GAS {
+    if block.amsterdam && floor > MAX_TX_GAS {
         return Err(SimError::Revert(format!(
             "calldata floor {floor} above the 2^24 regular gas of a transaction ({} B; EIP-7976, EIP-7825)", w.data.len())));
     }
-    let block = chain.block_gas_limit().await.map_err(|e| SimError::Transport(format!("block gas limit: {e:#}")))?;
     let est = chain.simulate(w.to, w.data.clone()).await?;
     if est > max {
         return Err(SimError::Revert(format!("gas {est} above max_gas_per_tx {max}")));
     }
-    if est > block {
-        return Err(SimError::Revert(format!("gas {est} above the chain's block gas limit {block}")));
+    if est > block.limit {
+        return Err(SimError::Revert(format!("gas {est} above the chain's block gas limit {}", block.limit)));
+    }
+    if !block.amsterdam && est > MAX_TX_GAS {
+        return Err(SimError::Revert(format!("gas {est} above the 2^24 gas limit of a transaction (EIP-7825, before Amsterdam)")));
     }
     let max = total_cap(max, block);
-    if !w.entry && w.meta.is_none() && w.data.get(..4) == Some(&SEL_MTX_SETTLE[..]) {
-        return settle_gas(chain, w.to, &w.data, est, max).await;
-    }
-    let contract_signer = match &w.meta {
-        Some(m) => chain.has_code(m.from).await.map_err(|e| SimError::Transport(format!("eth_getCode: {e:#}")))?,
-        None => false,
+    let g = if !w.entry && w.meta.is_none() && w.data.get(..4) == Some(&SEL_MTX_SETTLE[..]) {
+        settle_gas(chain, w.to, &w.data, est, max).await?
+    } else {
+        let contract_signer = match &w.meta {
+            Some(m) => chain.has_code(m.from).await.map_err(|e| SimError::Transport(format!("eth_getCode: {e:#}")))?,
+            None => false,
+        };
+        gas_limit(est, contract_signer, max)
     };
-    Ok(gas_limit(est, contract_signer, max))
+    if g >= block.limit {
+        // review L1 (controller 2026-10-22): accepted, but the transaction fills a whole block's gas reservation
+        warn!(to = %w.to, gas = g, estimate = est, block = block.limit, "gas limit equals the chain's block gas limit");
+    }
+    Ok(g)
 }
 
 /// Size `mtxSettle` gas by simulation (P2b-2, NODE-DEX-15): from the estimate +20 %, raise ×1.5 until every planned
@@ -459,15 +472,19 @@ mod tests {
     #[test]
     fn gas_floor_and_settle_sizing() {
         assert_eq!(ERC1271_FLOOR, 432_349);
-        let cap = total_cap(u64::MAX, 200_000_000);
+        let ams = |limit| BlockGas { limit, amsterdam: true };
+        let cap = total_cap(u64::MAX, ams(200_000_000));
         assert_eq!(gas_limit(100_000, false, cap), 120_000);
         assert_eq!(gas_limit(100_000, true, cap), ERC1271_FLOOR);
         assert_eq!(gas_limit(1_000_000, true, cap), 1_200_000);
         assert_eq!(gas_limit(MAX_TX_GAS, false, cap), MAX_TX_GAS + MAX_TX_GAS / 5, "Amsterdam: a limit past 2^24 is kept");
         assert_eq!(gas_limit(190_000_000, false, cap), 200_000_000, "the padded estimate is clamped to the cap");
-        assert_eq!(gas_limit(u64::MAX, true, total_cap(u64::MAX, u64::MAX)), MAX_TX_TOTAL_GAS, "EIP-8037: 2^32 - 1");
-        assert_eq!(total_cap(50_000_000, 30_000_000), 30_000_000, "the block gas limit binds");
-        assert_eq!(total_cap(50_000_000, 200_000_000), 50_000_000, "max_gas_per_tx binds");
+        assert_eq!(gas_limit(u64::MAX, true, total_cap(u64::MAX, ams(u64::MAX))), MAX_TX_TOTAL_GAS, "EIP-8037: 2^32 - 1");
+        assert_eq!(total_cap(50_000_000, ams(30_000_000)), 30_000_000, "the block gas limit binds");
+        assert_eq!(total_cap(50_000_000, ams(200_000_000)), 50_000_000, "max_gas_per_tx binds");
+        let osaka = BlockGas { limit: 200_000_000, amsterdam: false };
+        assert_eq!(total_cap(50_000_000, osaka), MAX_TX_GAS, "before Amsterdam the whole limit stays under 2^24");
+        assert_eq!(gas_limit(MAX_TX_GAS, false, total_cap(u64::MAX, osaka)), MAX_TX_GAS);
         assert_eq!(calldata_floor(220_415), 14_121_560, "measured on the SCaaS testnet");
         assert!(calldata_floor(261_909) <= MAX_TX_GAS && calldata_floor(261_910) > MAX_TX_GAS, "261,909 B per transaction");
         assert_eq!(next_gas(1_000, 3_000), Some(1_500));

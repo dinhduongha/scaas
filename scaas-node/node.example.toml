@@ -101,7 +101,8 @@ chain_uid = "0xa17faef497fa29ec90603969dad0176ea18fd1cc2eaf0f9f4fa2dacc9c952ac2"
 # exclusive_ms = 7000
 poll_ms = 1000
 stuck_after_secs = 60
-max_gas_per_tx = 3000000
+max_gas_per_tx = 64000000                        # regular + state gas (Amsterdam): PQZ op 1 ≈ 43 M (owner 2026-10-22);
+                                                 # regular stays ≤ 2^24, and the block gas limit is read from the chain
 max_fee_cap_gwei = 500
 max_index_lag = 100                              # /readyz fails when final head - indexed > this
 # Gas circuit breakers (R55), per lane; they pause NEW work only, signed txs are still tracked/replaced.

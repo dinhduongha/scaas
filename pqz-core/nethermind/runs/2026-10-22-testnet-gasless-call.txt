@@ -1,0 +1,12 @@
+# Review amsterdam-node M2: does the node's gas-less simulation (eth_call + eth_estimateGas without a gas field) work for a call
+# whose total gas (regular + state) is above 2^24 while its regular gas is below? SCaaS testnet (7622, after the 200 M reset), 2026-10-21T21:37:02Z
+# test key 0x…04; contract = 17 B runtime writing 200 new storage slots (6100c8 5b 600181 55 6001900380600357 00)
+head: 377 0x86987c2a6a23ed9dc14829a43905a059c2ae155188f771c4711922d86e805e0e gasLimit 200000000 Amsterdam header
+deployed 0x6a342758a8c0d89ea8d7e934ac509fe7b683f92d, code 0x6100c85b60018155600190038060035700
+$ eth_call {from, to} (no gas field)
+{"jsonrpc": "2.0", "result": "0x", "id": 1}
+$ eth_estimateGas {from, to} (no gas field)
+{'jsonrpc': '2.0', 'result': '0x152c41f', 'id': 1} 22201375
+$ eth_call with gas 2^24 (state gas spills into the 2^24: must fail)
+{"jsonrpc": "2.0", "error": {"code": -32000, "message": "out of gas"}, "id": 1}
+Result: the gas-less eth_call succeeds and eth_estimateGas returns 22,201,375 (> 2^24, regular < 2^24): Nethermind runs a call without a gas field at its RPC gas cap (100,000,000, see 'gas required exceeds allowance (100000000)' in 2026-10-22-genesis-200m-throwaway.txt), so the node's simulation needs no explicit gas. With gas = 2^24 the same call runs out of gas (EIP-8037: state gas spills into the 2^24 when there is no reservoir).
