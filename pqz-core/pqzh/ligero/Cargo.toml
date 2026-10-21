@@ -16,6 +16,10 @@ pqz-stmt = { path = "../../stmt" }
 # Production users (pqz-ffi, Task 7) depend with default-features = false and get Params::proven() only, no floats.
 [features]
 default = ["bench"]
+# RESEARCH SPIKE (5h Task 8c spike, throwaway): set (a) with the radices 7 / 17 and their preset (pqzh_set_spike_b.rs)
+spike-b = []
+# RESEARCH SPIKE: count the prover's / verifier's field products (thread-local counter; src/bin/spike_count.rs)
+spike-count = ["bench"]
 # Parameter set (owner 2026-10-21: one per build; pqz-core/params/sets/<set>/{rust/set.rs, pqzh_set.rs}; plan 5h Task
 # 8c): at most one `set-<set>`; none = the frozen v3 set n2048-kmax1024 (pqz-ffi, default-features = false, until 8c
 # part 2 forwards its set). Forwarded to pqz-stmt (statement lengths).
@@ -44,6 +48,16 @@ required-features = ["bench"]
 name = "ligero_kat"
 path = "src/bin/ligero_kat.rs"
 required-features = ["bench"]
+
+[[bin]]
+name = "spike_retry"
+path = "src/bin/spike_retry.rs"
+required-features = ["bench"]
+
+[[bin]]
+name = "spike_count"
+path = "src/bin/spike_count.rs"
+required-features = ["spike-count"]
 
 [[bin]]
 name = "ct"

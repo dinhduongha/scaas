@@ -1,0 +1,1 @@
+native = wasm32 (spike b): identical (24 proofs) ; mutations rejected 144 / 144

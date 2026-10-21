@@ -113,7 +113,7 @@ impl Params {
     pub fn preset(op: u8, proven: bool, r431: bool) -> Params {
         let small = matches!(op, OP_REGISTER | OP_DISCLOSE_SENDER | OP_DISCLOSE_RECEIVER);
         let (n, k) = match (proven, r431, small) {
-            (true, true, _) => (32756, 817),
+            (true, true, _) => (crate::set::PRESET_N, crate::set::PRESET_K),
             (true, false, _) => (6536, 817),
             (false, true, true) => (18533, 172),
             (false, true, false) => (18533, 344),
@@ -628,6 +628,70 @@ fn verify_inner(op: u8, stmt: &[u8], proof: &[u8], p: &Params) -> Result<bool, O
     Ok(true)
 }
 
+// ---- research spike (plan 5h Task 8c spike A, 2026-10-22; throwaway, kept as the record): a prover limit below the
+// verifier's bound (MAX_PROOF_PQZH at set (a)) and what the proof length depends on. Feature `bench` only. ----
+
+/// honest proving with `limit` (as `prove_inner`), returning every attempt's proof (the last one is the accepted one
+/// when it is <= limit)
+#[cfg(feature = "bench")]
+pub fn spike_prove_attempts(op: u8, stmt: &[u8], wit: &[u8], rnd: [u8; 32], p: &Params, limit: usize) -> Result<Vec<Vec<u8>>, &'static str> {
+    let mut rng = Rng::new(rnd, op, stmt, wit);
+    let mut out = Vec::new();
+    for _ in 0..ATTEMPTS {
+        let pf = prove_once(op, stmt, wit, p, true, &mut rng)?;
+        let ok = pf.len() <= limit;
+        out.push(pf);
+        if ok {
+            return Ok(out);
+        }
+    }
+    Err("proof length")
+}
+
+/// the query indices a proof's transcript draws (`verify_inner`'s first steps: statement, root, the challenges, the
+/// test polynomials, the nonce), sorted and distinct
+#[cfg(feature = "bench")]
+pub fn spike_query_indices(op: u8, stmt: &[u8], proof: &[u8], p: &Params) -> Vec<usize> {
+    let rel = cs::rel_of(op, stmt).expect("op");
+    let lay = Layout::new(rel, p.ell);
+    let mut tr = Tr::new(op, stmt);
+    tr.absorb(&proof[..32]);
+    let _ = draw(&mut tr, lay.m, lay.triples.len()).expect("memory");
+    tr.absorb(&proof[32..32 + p.poly_bytes()]);
+    let nonce = &proof[32 + p.poly_bytes()..40 + p.poly_bytes()];
+    tr.absorb(nonce);
+    let mut idx: Vec<usize> = (0..p.t).map(|_| tr.index(p.n)).collect();
+    idx.sort_unstable();
+    idx.dedup();
+    idx
+}
+
+/// the proof length as a function of the sorted distinct query indices only: root, test polynomials, nonce, one salt
+/// and column per index, and the pruned multiproof's digest count (merkle.rs: one sibling per node whose sibling is
+/// not itself on the path)
+#[cfg(feature = "bench")]
+pub fn spike_len_of(rel: impl Into<Rel>, idx: &[usize], p: &Params) -> usize {
+    let m = Layout::new(rel, p.ell).m;
+    let mut cur = idx.to_vec();
+    let mut sib = 0;
+    for _ in 0..depth(p.n) {
+        let mut next = Vec::with_capacity(cur.len());
+        let mut i = 0;
+        while i < cur.len() {
+            let x = cur[i];
+            if x % 2 == 0 && i + 1 < cur.len() && cur[i + 1] == x + 1 {
+                i += 2;
+            } else {
+                sib += 1;
+                i += 1;
+            }
+            next.push(x / 2);
+        }
+        cur = next;
+    }
+    32 + p.poly_bytes() + 8 + idx.len() * (32 + (m + BLIND) * EB) + 32 * sib
+}
+
 /// soundness bits per term: (name, bits); "total" combines them
 #[cfg(feature = "bench")]
 pub fn soundness(op: u8, stmt: &[u8], p: &Params) -> Vec<(&'static str, f64)> {
@@ -684,7 +748,7 @@ mod tests {
     #[cfg(feature = "bench")]
     #[test]
     fn proven_is_the_model() {
-        assert_eq!(Params::proven(), Params::new(32756, 817, true));
+        assert_eq!(Params::proven(), Params::new(crate::set::PRESET_N, crate::set::PRESET_K, true));
     }
 
     /// D6: the same rnd32, op and statement with another witness give unrelated masks; equal inputs, equal masks
@@ -709,7 +773,11 @@ mod tests {
         let (n, t) = (p.n, p.t);
         let tree = Tree::new((0..n as u32).map(|i| keccak(&[&i.to_be_bytes()])).collect());
         let worst = (1..depth(n)).map(|l| t.min(n.div_ceil(1 << l))).sum::<usize>() + 2 - t;
-        let spread: Vec<usize> = (0..t).map(|i| i * n / t).collect();
+        // evenly spread columns from the left or (spike B, n 45,752: the left spread reaches worst - 1) from the right
+        let left: Vec<usize> = (0..t).map(|i| i * n / t).collect();
+        let mut right: Vec<usize> = (0..t).map(|i| n - 1 - i * n / t).collect();
+        right.sort_unstable();
+        let spread = if tree.multiproof(&right).len() > tree.multiproof(&left).len() { right } else { left };
         assert_eq!(tree.multiproof(&spread).len(), worst);
         let mut x = 0x9E3779B97F4A7C15u64;
         for _ in 0..300 {
@@ -745,7 +813,17 @@ mod tests {
         let p = Params::proven();
         let v3 = crate::set::NAME == "n2048-kmax1024";
         // (form, exact bound, within MAX_PROOF_PQZH and MAX_INPUT)
-        let expect = if v3 {
+        let spike = cfg!(feature = "spike-b"); // research spike B: set (a) at n 45,752, k 952, t 119
+        let expect = if spike {
+            [
+                (Form::Register, 206_958, true),
+                (Form::Transfer, 250_512, true),
+                (Form::Burn, 250_512, true),
+                (Form::DiscloseSender, 206_958, true),
+                (Form::DiscloseReceiver, 206_958, true),
+                (Form::Transfer0, 250_512, true),
+            ]
+        } else if v3 {
             [
                 (Form::Register, 190_458, true),
                 (Form::Transfer, 235_470, true),
@@ -776,7 +854,20 @@ mod tests {
         // op 7 R_TXM, (M, auditorOn): exact bounds and inputs 5 + statement + bound (v3 = the pre-review H-3 table,
         // measured max_len_exact in runs/l16-txm-*; set (a): runs/c8-a-sizes.jsonl); v3's built shapes (M <= 4)
         // within MAX_PROOF_PQZH and MAX_INPUT, the oversize ones above; set (a): every shape above MAX_PROOF_PQZH
-        let multi = if v3 {
+        let multi = if spike {
+            [
+                ((1, true), 250_512, 343_829),
+                ((1, false), 250_512, 325_269),
+                ((2, true), 251_226, 363_231),
+                ((2, false), 250_512, 343_829),
+                ((4, true), 251_940, 401_321),
+                ((4, false), 251_226, 381_663),
+                ((8, true), 295_494, 538_059),
+                ((8, false), 294_780, 517_889),
+                ((16, true), 385_458, 814_391),
+                ((16, false), 381_888, 790_341),
+            ]
+        } else if v3 {
             [
                 ((1, true), 235_470, 318_547),
                 ((1, false), 234_744, 301_309),
@@ -806,7 +897,9 @@ mod tests {
         for ((m, aud), max, input) in multi {
             let r = Rel::Multi { m, aud };
             assert_eq!((p.max_len_exact(r), p.max_proof_len(r), 5 + r.stmt_len() + max), (max, max, input), "M {m} {aud}");
-            assert_eq!(max <= MAX_PROOF_PQZH && input <= MAX_INPUT, v3 && m <= 4, "M {m} {aud}");
+            // spike: every built shape within MAX_PROOF_PQZH; M = 4 auditor on above today's MAX_INPUT (512 KiB in 8d)
+            let fits = if spike { m <= 4 && !(m == 4 && aud) } else { v3 && m <= 4 };
+            assert_eq!(max <= MAX_PROOF_PQZH && input <= MAX_INPUT, fits, "M {m} {aud}");
             assert!(p.proof_len_ok(r, max) && !p.proof_len_ok(r, max + 1) && !p.proof_len_ok(r, 0));
         }
         let built = cs::multi_rels();
