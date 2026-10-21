@@ -1,0 +1,22 @@
+# gate t8a: 4adea55cac9e55e7381012608c364808ca4e069c, 2026-10-21T02:35Z
+== kat
+   ok
+== tbox
+   ok
+== sv
+   ok
+== diff
+   ok
+== vectors
+   ok
+== ffi
+   ok
+== rust
+   ok
+== cargo
+   ok
+== xcheck
+   ok
+== fuzz
+   ok
+gate t8a: PASS
