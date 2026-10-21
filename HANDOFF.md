@@ -1,9 +1,8 @@
 ## Session 2026-10-21 (evening; 5h part B: 8a done, 8b paused, Amsterdam re-plan) — resume here
 
 **State:** main `28af51d3` + this note, pushed up to `28af51d3` (Nethermind 2.2.0 merge + SCaaS testnet rename). Part B
-on branch **`pqz-16k`** (worktree `.claude/worktrees/pqz-16k`, not pushed), **8b WIP at `__8B__`**. Side branches done,
-not yet merged into `pqz-16k` (merge once 8b commits clean): **`foundry-185`** (`d3a1c39c`), **`pqz-pack`**
-(`d7761d4b`). SDD ledger with every ruling (git-ignored):
+on branch **`pqz-16k`** (worktree `.claude/worktrees/pqz-16k`, not pushed), **8b paused at WIP `15c929b3`**; `foundry-185` (F185) merged
+(`98cd0830`) and `pqz-pack` (spike PACK + P46 note) merged (`756713a2`): `pqz-16k` HEAD `756713a2`. SDD ledger with every ruling (git-ignored):
 `.claude/worktrees/pqz-16k/.superpowers/sdd/2026-10-20-pqz-state-redesign/progress.md`; per-task briefs / reports /
 reviews in the same dir. No agent, capped job, docker container (except the testnet node) or background shell running.
 
@@ -42,10 +41,17 @@ reviews in the same dir. No agent, capped job, docker container (except the test
 op 7 M = 4 6.98 / 31.64 / 38.62 M, op 7 M = 8 G = 2 10.54 / 62.39 / 72.93 M, `ROLL_MAX` 96. 8a: cheating prover 28
 forgeries → 0 in all four verifiers; gate t8a PASS; review clean.
 
-**Next:** (1) resume 8b from `task-8b-report.md` § "Paused" (n2304-kmax4096 Rust + full gate t8b → 16k set with
-vectors + gate → A' build / KATs) → review; (2) merge `foundry-185` and `pqz-pack` into `pqz-16k`; (3) 8c PQZH at the new
-q (backup) + conditions doc; (4) 8d: pqz-stmt, P46 contracts, per-set Solidity constants, precompile addresses,
-`ROLL_MAX`, M = 8 measurement, one proofSystemId bump, vectors; (5) Task 9 (timing only on the owner's go). TODO.md "Now".
+**8b so far:** sets tree + set-generic C / Rust cores; set (a) KAT 19/19 (new LaZer golden), v3 KAT 19/19 and v3 Rust
+suite byte-identical; set (a) cheating bench + `check_tbox_fixes` (with an A-2 control) ok; all 14 specs at rank 36;
+measured proofs R_TX 46,681 B, R_REG 30,270, op 7 M = 4 50,749, M = 8 G = 2 67,604 (aud); heap ≤ 937 MB (M = 8 needs
+`PQZ_ARENA_MB=2048`). Rulings for resume (ledger): pqz-stmt set-generic now (ids / limits in 8d), PQZH compiled out
+for non-v3 sets until 8c; vectors: v3 stays at `smartcontracts/vectors/pqz/`, set (a) / 16k in sub-dirs; Δ even at (a)
+(note for review).
+
+**Next:** (1) resume 8b from `task-8b-report.md` § "Paused" (v3 gate, set (a) Rust suite + cheat fixtures, e_s0 per
+relation, pqz-stmt set-generic, vectors + gate t8b, SET.md, then the 16k set with vectors + gate, then A') → review; (2) 8c PQZH at the new
+q (backup) + conditions doc; (3) 8d: pqz-stmt, P46 contracts, per-set Solidity constants, precompile addresses,
+`ROLL_MAX`, M = 8 measurement, one proofSystemId bump, vectors; (4) Task 9 (timing only on the owner's go). TODO.md "Now".
 
 ## Session 2026-10-21 (5h part B: Task 7 done, Task 8a paused) — resume here
 

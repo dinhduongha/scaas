@@ -40,13 +40,10 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
 ### Now (order)
 
 - **Now (2026-10-21 evening):** **5h part B** on branch `pqz-16k` (not pushed). Done: Task 7 (16k, now superseded),
-  7b (Amsterdam re-measure), 7c (smaller n), 8a (B-1, A-2, `R_REG`; reviewed), spike PACK (branch `pqz-pack`), F185
-  (branch `foundry-185`). **Task 8b paused** (parameter sets `pqz-core/params/sets/`, PQZL at set (a)). Then 8c PQZH
+  7b (Amsterdam re-measure), 7c (smaller n), 8a (B-1, A-2, `R_REG`; reviewed), spike PACK (P46) and F185 (Foundry 1.8.5,
+  every profile amsterdam) — both merged into `pqz-16k`. **Task 8b paused** (parameter sets `pqz-core/params/sets/`, PQZL at set (a)). Then 8c PQZH
   (backup) → 8d stmt / contracts (P46, per-set Solidity, 32-bit precompile addresses, `ROLL_MAX`, M = 8 by measurement,
   one id bump) → Task 9. HANDOFF.md top note has every owner ruling of the day.
-- [ ] **Merge into `pqz-16k` once 8b commits clean:** `foundry-185` (F185 complete, `d4c24678..d3a1c39c`; expect a
-  one-line conflict at `docs/contracts/pq-zero-knowledge.md:1435`, both reworded "round 4") and `pqz-pack` (`55d38e61`,
-  `d7761d4b` research note with the P46 decision).
 - [ ] **Node / relayer on the Amsterdam gas model** (F185 finding): regular gas ≤ 2^24 per tx, total (regular + state)
   up to 2^32 − 1; `scaas-node` zether.rs `DECOY_LEG_GAS` 32,000 vs 116,698 measured per leg; the prover's `gas_limits` M
   table assumes total ≤ 2^24 (edge cells need 21–31 M); `docs/node/ops.md` `max_gas_per_tx` 16 M. Never assume gas
