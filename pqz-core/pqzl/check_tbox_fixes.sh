@@ -12,6 +12,9 @@
 #   P6-FS (issue 28): sz/fs_bind, the Fiat-Shamir binding test: in pqz_verify and pqz_verify_fast the V4 / V3 seeds
 #          must change when z3 or z4 changes and the mu seed when h changes (a missing seed record fails); the
 #          honest proof must verify. Observation only (which bytes seed which challenge), no cheating prover.
+#          Since B-1 (review B) also the tg mutation: the V4 / V3 seeds must change and the proof must be rejected
+#          (review A's cheating prover itself is rust/tests/cheat_b1.rs, gate step rust).
+#   A-2 (review A): sv/review/review.sh dom, no two Schwartz-Zippel calls of one R_REG prove share a dom.
 # Needs build/native/libpqz.a (./build.sh native). Heavy: run under scripts/capped. Exit 0 = all fixes in place.
 set -eu
 cd "$(dirname "$0")"
@@ -56,6 +59,11 @@ else
   echo "fs_bind: not built (build/sz-trace.txt)"; st=1
 fi
 res "P6-FS lazer#28" $st
+st=0
+sv/review/review.sh dom > build/dom-trace.txt 2>&1 || st=1
+grep 'shared dom(s)$' build/dom-trace.txt || st=1
+grep -q '^0 shared dom(s)$' build/dom-trace.txt || st=1
+res A-2 $st
 echo "checks: $sum"
 [ $rc = 0 ] && echo "check_tbox_fixes: ok" || echo "check_tbox_fixes: FAIL"
 exit $rc

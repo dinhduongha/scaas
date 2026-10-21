@@ -515,7 +515,8 @@ change is a new `proofSystemId`. Hints then open only ciphertexts of amounts the
   `opTag = keccak256("SCAAS-PQZ-OP-<NAME>-V1")` for `TRANSFER`, `BURN`, `REFRESH`, `REGISTER`, `DISCLOSE-SENDER`,
   `DISCLOSE-RECEIVER`, `DISCLOSE-AUDITOR`. The precompile requires the `opTag` to belong to the input's `op` byte and
   the `proofSystemId` to be one it implements, for every op.
-- <a id="transcript"></a>**Transcripts (as implemented; P6e D7, 2026-10-14; PQZL v3 P6-FS, 2026-10-19).** Both proof
+- <a id="transcript"></a>**Transcripts (as implemented; P6e D7, 2026-10-14; PQZL v3 P6-FS, 2026-10-19; B-1 / A-2, 5h
+  Task 8a, 2026-10-21).** Both proof
   systems absorb `op` and the whole statement (with its `opTag ‖ proofSystemId` prefix) **before** any prover message
   (strong Fiat–Shamir, as classical); challenges are derived, never sent. `op` is the input's op byte (1 for both
   `R_TX` and `R_TX0`).
@@ -524,17 +525,21 @@ change is a new `proofSystemId`. Hints then open only ciphertexts of amounts the
     SHAKE128("SCAAS-PQZ-TRANSCRIPT-V1" ‖ u8(op) ‖ be32(len(stmt)) ‖ stmt)`, 32 bytes (the tag's ASCII bytes, no length
     prefix). `hash0` seeds LaZer's tbox transcript: each prover message (including the ones the verifier recomputes
     instead of reading from the proof), encoded with LaZer's coder as the proof fields are
-    ([serialization v1](#serialization)), is absorbed as `hash ← SHAKE128(hash ‖ encoded message)[0..32)` before the
-    first challenge that depends on it, and every challenge is expanded from the current `hash`; there are no labels
+    ([serialization v1](#serialization)), is absorbed as `hash ← SHAKE128(hash ‖ encoded message)[0..32)`, and each
+    challenge is derived after every prover message it is combined with, the masking commitment `tg` included (`tg`
+    before V3 / V4 and γ; review B's B-2), expanded from the current `hash`; there are no labels
     or length fields (lengths are fixed per relation; the `z` encoding is self-delimiting). The rounds, in order:
     1. the commitment `tA1 ‖ tB` (`abdlop_hashcomm`);
     2. `ty3 ‖ ty4 ‖ tbeta` → `cseed`: the seed of the JL rows `R` (`cseed`, row `i`) and `R'` (`cseed`, `256 + i`);
     3. **`z3 ‖ z4` (new in v3)**, absorbed after the verifier's norm checks on them: one coder session of
        `grandom3(z3, log2stdev3)` then `grandom3(z4, log2stdev4)` over centred copies (the proof's encoding of these
-       fields), `hz = SHAKE128(cseed ‖ enc)`. The matrices V4 (domain `M + 2(d−1) + 2 + Z`) and V3 (that `+ 256`),
-       which fold the 256 equations `z = y + β·R·s` of each, and the next round chain from `hz`; `R` / `R'` stay on
-       `cseed`, because the prover computes `z3` / `z4` from them;
-    4. `tg` → `hash1`: the Schwartz–Zippel challenges γ of the evaluation step;
+       fields), `hz = SHAKE128(cseed ‖ enc)`, the input of the next round; `R` / `R'` stay on `cseed`, because the
+       prover computes `z3` / `z4` from them;
+    4. `tg` → `hash1`: the Schwartz–Zippel challenges γ of the evaluation step, domains: input equations 0, β3 rows
+       `M + i`, β4 rows `M + d − 1 + i` (`i = 1..d−1`), υ `M + 2(d−1) + 1`, binary `+ 2`, exact ℓ2 block `i` `+ 3 + i`;
+       and the matrices V4 (domain `M + 2(d−1) + 3 + Z`) and V3 (that `+ 256`), which fold the 256 equations
+       `z = y + β·R·s` of each (B-1: before 8a they came from `hz`, before `tg`; A-2: υ, binary and ℓ2 sat one lower,
+       υ on the last β4 row's domain);
     5. **`h` (new in v3)**, as `urandom3(h mod q ∈ [0, q), q, 42)` (its proof encoding) → `hash2`: the seed of `μ`
        (`lnp-quad-many.c`);
     6. `t ‖ v ‖ w1` → `SHAKE128(hash2 ‖ t ‖ v ‖ w1)`, the seed of the final challenge `c` (`lnp-quad.c`); `z1`, `z21`,
@@ -1423,6 +1428,14 @@ genesis at the v3 roll-out (owner 2026-10-19, path B), since the PQZ tokens and 
 immutably and are redeployed. v3 also carries the two prover-side fixes below (z2 rejection, β signs), which change
 honest proofs but no verifier rule. Regression check: `pqz-core/pqzl/check_tbox_fixes.sh` (P6-FS,
 `pqz-core/pqzl/sz/README.md`); analysis `docs/research/pqz-tbox-soundness.md` §8.
+B-1 and A-2 (5h Task 8a, 2026-10-21; reviews B and A of plan fs3; folded into the 16k `proofSystemId` bump, plan 5h
+D23, made in Task 8d): v3 still drew V3 / V4 from `hz`, before the masking commitment `tg`, while `g` (masked by `tg`)
+is what makes the evaluation accumulators' coefficients 0 and d/2 vanish; a prover could set those coefficients of `g`
+to cancel the V-folded error of a false `z3` / `z4` (review A's cheating prover forged on all 14 relation codes in all
+four verifiers). V3 / V4 now come from `hash1`, after `tg` (round 4), in all four verifiers and both provers; the
+cheating prover is the regression fixture `pqz-core/pqzl/rust/tests/cheat_b1.rs`, and the binding tests mutate `tg`
+(`sz/fs_bind.c`, `rust/tests/fs_bind.rs`). A-2 (not exploitable, review A): υ shared the last β4 row's domain, so the
+accumulators checked only their sum; the domains from υ up moved by one (`check_tbox_fixes.sh` A-2: no shared dom).
 
 - **Origin.** Fork of LaZer at a pinned commit (`main` was `3330e48`, 2026-09-28; the pin is recorded), MIT, repo path
   `scaas/pqz-core/`. Kept: LNP22 protocol logic, codegen (`scripts/lin-codegen.sage` with lattice-estimator), parameter

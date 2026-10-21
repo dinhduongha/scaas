@@ -23,7 +23,7 @@ contract UAPqzVerifier is IUAPopVerifier {
     /// @notice `SELFTEST_VECTOR_HASH` per proof system (pq-zero-knowledge.md §10, self-test): `keccak256(psid ‖ message
     ///         ‖ pk ‖ proof)` of the self-test's `R_REG` vector (`statement_register.json` row 0, `proof_pqzl.json` /
     ///         `proof_pqzh.json` row 4 REGISTER).
-    bytes32 internal constant PROBE_PQZL = 0x6c4573abdffe4b9182defc6084990ae2617e374381098da1eb191f44d2cd5b04;
+    bytes32 internal constant PROBE_PQZL = 0x517488fac253ba7d53c533e0ea580b231637e1bdb66d9933069735ee4f9923f3;
     bytes32 internal constant PROBE_PQZH = 0x36c3b5f321f2fd59201c4efe63f65ff94649cb44435405cd6b80884584a65160;
 
     address public immutable PRECOMPILE;

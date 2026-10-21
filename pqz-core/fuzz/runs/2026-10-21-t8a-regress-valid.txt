@@ -1,0 +1,37 @@
+# 5h Task 8a (2026-10-21): regress/valid/fixture-disclose-receiver-rnd33 re-proved under the B-1 / A-2 transcript
+# (sha1 67ba1c65037110ac979f66e6c802778d955941b6, 62178 B; same statement and rnd32, the proofSystemId bump is 8d's)
+
+Why: the old proof was made with V3 / V4 before tg and the old upsilon / binary / l2 domains; under the new
+transcript the precompile answers 00 for it, while seeds.py lists regress/valid/* as honest inputs.
+
+## run (scratch crate depending on pqz-ffi --features prove, default backend; under scripts/capped)
+old: precompile word Ok(00)
+statement = fixture::cases DiscloseReceiver: true
+new: proof 28989 B, input 62178 B, precompile word 01, generic verifier Ok(true)
+re-proved again: byte-equal true
+
+## source (src/main.rs; Cargo.toml: pqz-ffi = { path = "pqz-core/ffi", features = ["prove"] }, toolchain 1.97.1)
+// Task 8a (5h, 2026-10-21): re-prove pqz-core/fuzz/regress/valid/fixture-disclose-receiver-rnd33 under the B-1 / A-2
+// transcript: same statement (fixture::cases(PQZL_ID) DiscloseReceiver), same rnd32 = 0x33..
+// Usage: refix <old input> <new input out>
+use pqz_ffi::*;
+fn main() {
+    let a: Vec<String> = std::env::args().collect();
+    let old = std::fs::read(&a[1]).unwrap();
+    println!("old: precompile word {:02x?}", precompile(&old).map(|w| w[31]));
+    let n = u32::from_be_bytes(old[1..5].try_into().unwrap()) as usize;
+    let c = fixture::cases(&PQZL_ID).unwrap().into_iter().find(|c| c.form == stmt::Form::DiscloseReceiver).unwrap();
+    println!("statement = fixture::cases DiscloseReceiver: {}", old[5..5 + n] == c.stmt[..]);
+    assert_eq!(&old[5..5 + n], &c.stmt[..]);
+    let p = prove(c.op(), &c.stmt, &c.wit, &[0x33; 32]).unwrap();
+    let mut x = vec![c.op()];
+    x.extend_from_slice(&(c.stmt.len() as u32).to_be_bytes());
+    x.extend_from_slice(&c.stmt);
+    x.extend_from_slice(&p);
+    let w = precompile(&x).unwrap();
+    println!("new: proof {} B, input {} B, precompile word {:02x}, generic verifier {:?}", p.len(), x.len(), w[31], pqzl::verify_generic(c.op(), &c.stmt, &p));
+    assert_eq!(w[31], 1);
+    let p2 = prove(c.op(), &c.stmt, &c.wit, &[0x33; 32]).unwrap();
+    println!("re-proved again: byte-equal {}", p2 == p);
+    std::fs::write(&a[2], &x).unwrap();
+}

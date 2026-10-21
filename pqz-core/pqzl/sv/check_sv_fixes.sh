@@ -3,7 +3,7 @@
 # the specialised verifier must follow both, and the differential test must see it when it does not. For each fix,
 # src/pqz_sv.c is copied with that one line reverted to the pre-v2 transcript and pqz_sv_diff is linked against it:
 #   SZ (P6-SZ, lazer-crypto/lazer#24): sz_eval_challenges back to one pair of rows (2 M values) for all pairs;
-#   L2 (P6-L2, lazer-crypto/lazer#25): every exact-l2 equation back to the one domain M + 2 (d - 1) + 2.
+#   L2 (P6-L2, lazer-crypto/lazer#25): every exact-l2 equation back to one domain (M + 2 (d - 1) + 3 since A-2).
 # Each reverted build must show mismatches (honest proofs the generic verifier accepts and it rejects); the tree's
 # own build must show none. Needs build/native (./build.sh native). Heavy: run under scripts/capped.
 #   sv/check_sv_fixes.sh [pqz_sv_diff args]     (default "1 1 0 1 0 1 1 1 1 1": one honest proof per relation, every
@@ -20,7 +20,7 @@ F="-std=gnu11 -O2 -fno-builtin -fno-math-errno -ffp-contract=off -w -DPQZ_SV -DP
 H=build/native
 OLD_SZ='  { uint64_t V[2 * M]; if (!urandom_q (V, 2 * M, seed, dom)) return 0; for (unsigned i = 0; i < LAMBDA / 2; i++) for (unsigned j = 0; j < M; j++) g[(2 * i) * M + j] = V[j], g[(2 * i + 1) * M + j] = V[M + j]; return 1; }'
 sed "s|^  return urandom_q (g, LAMBDA \* M, seed, dom);\$|$OLD_SZ|" src/pqz_sv.c > $B/sv_sz.c
-sed 's|ONE (M + 2 \* (DEG - 1) + 2 + i);|ONE (M + 2 * (DEG - 1) + 2);|' src/pqz_sv.c > $B/sv_l2.c
+sed 's|ONE (M + 2 \* (DEG - 1) + 3 + i);|ONE (M + 2 * (DEG - 1) + 3);|' src/pqz_sv.c > $B/sv_l2.c
 rc=0
 for v in tree sz l2; do
   src=src/pqz_sv.c

@@ -316,7 +316,10 @@ pub fn check_ct(b: &[u8]) -> Result<(), Reject> {
     Ok(())
 }
 
-/// `R_REG`: `opTag ‖ proofSystemId ‖ message ‖ pk`.
+/// `R_REG`: `opTag ‖ proofSystemId ‖ message ‖ pk`. The 32-byte `message` is opaque to the relation and to this
+/// codec; on chain it binds the registration to chain, registry and the signing UA (UA-6, CTR-UA-30 (3), U13):
+/// `message = uaMessage(0x0142, POP, popDigest(ua, keyHash(0x0142, pk)))`, computed by the caller (`UARegistry`,
+/// `scaas-ua` `pqz_reg_message`); the self-test / probe vector keeps its fixed `keccak256("SCAAS-PQZ-SELFTEST-V1")`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Register<'a> {
     /// opTag, proofSystemId, message

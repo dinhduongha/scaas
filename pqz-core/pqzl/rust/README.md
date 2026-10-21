@@ -67,10 +67,12 @@ floating point.
   Rust backend; raised from 4 in Task 12, see "The wasm32 op 7 limit" below; the C backend keeps 4).
 - PQZL v3 (P6-FS, [lazer#28](https://github.com/lazer-crypto/lazer/issues/28)): `proof/tbox.rs` `hash_z34` absorbs
   `grandom3(z3) ‖ grandom3(z4)` (one `Coder` session over centred copies, the proof's encoding) after `compute_z34` /
-  a successful `check_z34`; the result `hz` seeds V3 / V4 and the tg round, while the JL rows R / R' stay on `cseed`
+  a successful `check_z34`; the result `hz` is the input of the tg round, while the JL rows R / R' stay on `cseed`
   (`sz_z3` / `sz_z4` take both seeds). `hash_h` absorbs `urandom3(h mod q)` before `quad::many_prove` / `many_verify`,
-  the seed of μ and the final challenge. `sv.rs` does the same (`hz` for V3 / V4, `cseed` for the JL rows, μ and the
-  final round from `hash2`). Byte-equal to the C core's `_lnp_tbox_hash_z34` / `_lnp_tbox_hash_h` (run `fs3`).
+  the seed of μ and the final challenge. `sv.rs` does the same (`cseed` for the JL rows, μ and the final round from
+  `hash2`). Byte-equal to the C core's `_lnp_tbox_hash_z34` / `_lnp_tbox_hash_h` (run `fs3`). Since B-1 / A-2 (5h
+  Task 8a): V3 / V4 come from the hash after tg (`hash1`, with γ; before, from `hz`), and υ / binary / exact ℓ2 / V
+  sit one domain higher (υ no longer shares the last β4 row's domain); byte-equal to C again (run `t8a`).
 - Secrets: the prover's seeds, the witness vector s1, the commitment randomness s2 and `dec`'s w are cleared after
   use (`fill` + `black_box`, where C calls `explicit_bzero`), and the AES-CTR key schedules and SHAKE sponges when
   they are dropped (re-keyed with zeros / replaced by an empty sponge, where C calls `_aes256ctr_clear` /
@@ -111,8 +113,12 @@ refuses non-canonical statements in `prove`, verifies every PQZL proof, rejects 
 cheating provers' proofs of `check_tbox_fixes.sh` and of `tests/fixtures/cheating/z34poc.sh` (z3 / z4 over their bounds;
 `tests/fixtures/cheating`, exported once by its `export.sh`),
 `tests/fs_bind.rs` the P6-FS binding test (as `pqzl/sz/fs_bind.c`: one honest R_REG proof and its h- (kind 7), z3-
-(kind 14) and z4-changed (kind 5 at the bound) re-encodings; in `verify` and `verify_fast` the V3 / V4 seeds change
-with z3 and z4 and the μ seed with h, 12 checks, a missing record fails; observation only),
+(kind 14), z4-changed (kind 5 at the bound) and tg-changed (kind 15, B-1) re-encodings; in `verify` and `verify_fast`
+the V3 / V4 seeds change with z3, z4 and tg and the μ seed with h, the tg-changed proof is rejected, 18 checks, a
+missing record fails; observation only), `tests/cheat_b1.rs` review A's cheating prover (B-1's regression fixture,
+the `set_cheat` test hook in `tbox::prove`: a false z3 / z4 cancelled through g with V guessed from hz; every mode
+rejected by `verify`, `verify_fast`, `pqz_verify` and `pqz_verify_fast` on all 14 relation codes, mode 0 = the
+vectors),
 `tests/oracle_verify.rs` `verify` = `pqz_verify` on those, on out-of-range challenges and on `test_mutate` outputs
 (`PQZL_MUTATED_N`, default 280), `tests/oracle_prove.rs` `prove` = `pqz_prove` (bytes or error code) on honest and
 altered witnesses of every relation code, `tests/oracle_keys.rs` keys, Enc and Dec against C, `tests/oracle_codec.rs`

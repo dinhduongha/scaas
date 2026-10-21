@@ -594,8 +594,11 @@ fn beta_eqs(p: &Tbox) -> Result<[Eq; 2], Error> {
 
 /// The Schwartz–Zippel accumulation, prover and verifier alike (C: from `__schwartz_zippel_accumulate2` of the
 /// relation's evaluation equations to `__schwartz_zippel_auto`): the relation's equations, then the norm proofs'
-/// internal ones (beta3, beta4, upsilon, binary, exact l2 with P6-L2's domain per block, z4, z3). `hash0` = hz seeds
-/// V3 / V4, `cseed` (the round over ty3, ty4, tbeta) the JL rows R / R' (P6-FS, lazer#28)
+/// internal ones (beta3, beta4, upsilon, binary, exact l2 with P6-L2's domain per block, z4, z3). `hash` (the round
+/// over tg) seeds Gamma and, since B-1 (review B; review A's A-1), V3 / V4; `cseed` (the round over ty3, ty4, tbeta)
+/// the JL rows R / R' (P6-FS, lazer#28). Domains: input equations 0, beta3 M + i, beta4 M + d - 1 + i (i = 1..d-1),
+/// then, one apart since A-2 (review A: upsilon shared the last beta4 row's M + 2(d - 1)), upsilon M + 2(d - 1) + 1,
+/// binary + 2, exact l2 + 3 + i, V4 + 3 + Z, V3 + 3 + Z + 256
 #[allow(clippy::too_many_arguments)]
 fn accumulate_all(
     a1: &mut [Acc],
@@ -605,7 +608,6 @@ fn accumulate_all(
     z3: &mut PolyVec,
     z4: &mut PolyVec,
     hash: &[u8; 32],
-    hash0: &[u8; 32],
     cseed: &[u8; 32],
     p: &Tbox,
 ) -> Result<(), Error> {
@@ -659,7 +661,7 @@ fn accumulate_all(
         }
         r2.set_sorted(true);
         r1.set_sorted(true);
-        accumulate2(a1, a2, &mut eq(Some(r2), Some(r1), None), hash, mm + 2 * (dd - 1), qe)?;
+        accumulate2(a1, a2, &mut eq(Some(r2), Some(r1), None), hash, mm + 2 * (dd - 1) + 1, qe)?;
     }
     if nbin > 0 {
         // Ps s1 binary: <Ps s1, Ps s1 - 1> = 0 over Z
@@ -687,7 +689,7 @@ fn accumulate_all(
         if !r2.is_upperdiag() {
             return Err(Error::Internal);
         }
-        accumulate2(a1, a2, &mut eq(Some(r2), Some(r1), Some(Poly::ZERO)), hash, mm + 2 * (dd - 1) + 1, qe)?;
+        accumulate2(a1, a2, &mut eq(Some(r2), Some(r1), Some(Poly::ZERO)), hash, mm + 2 * (dd - 1) + 2, qe)?;
     }
     // exact l2 (P6-L2: domain dom + i per block): ||Es_i s1||^2 + <pow2, upsilon_i> - B_i^2 = 0 over Z
     #[allow(clippy::needless_range_loop)] // i indexes es, oes, l2bsqr and the domain
@@ -708,17 +710,17 @@ fn accumulate_all(
         if !r2.is_upperdiag() {
             return Err(Error::Internal);
         }
-        accumulate2(a1, a2, &mut eq(Some(r2), Some(r1), Some(mono(0, &a_))), hash, mm + 2 * (dd - 1) + 2 + i as u32, qe)?;
+        accumulate2(a1, a2, &mut eq(Some(r2), Some(r1), Some(mono(0, &a_))), hash, mm + 2 * (dd - 1) + 3 + i as u32, qe)?;
     }
     if nprime > 0 {
         #[cfg(feature = "test-hooks")]
-        crate::fstrace::rec(2, hash0, (mm + 2 * (dd - 1) + 2 + z as u32) as u64);
-        sz_z4(a1, a2, &mut au.ods, z4, hash0, cseed, mm + 2 * (dd - 1) + 2 + z as u32, p)?;
+        crate::fstrace::rec(2, hash, (mm + 2 * (dd - 1) + 3 + z as u32) as u64);
+        sz_z4(a1, a2, &mut au.ods, z4, hash, cseed, mm + 2 * (dd - 1) + 3 + z as u32, p)?;
     }
     if nex > 0 {
         #[cfg(feature = "test-hooks")]
-        crate::fstrace::rec(3, hash0, (mm + 2 * (dd - 1) + 2 + z as u32 + 256) as u64);
-        sz_z3(a1, a2, &mut au.oes, au.ops.as_mut(), z3, hash0, cseed, mm + 2 * (dd - 1) + 2 + z as u32 + 256, p)?;
+        crate::fstrace::rec(3, hash, (mm + 2 * (dd - 1) + 3 + z as u32 + 256) as u64);
+        sz_z3(a1, a2, &mut au.oes, au.ops.as_mut(), z3, hash, cseed, mm + 2 * (dd - 1) + 3 + z as u32 + 256, p)?;
     }
     for (x, y) in a1.iter_mut().zip(a2.iter_mut()) {
         sz_auto(x, y, qe)?;
@@ -780,7 +782,6 @@ pub(crate) fn verify(hash: &mut [u8; 32], f: &mut ProofParts, keys: &mut [PolyMa
     }
     let cseed = *hash;
     hash_z34(hash, &f.z3, &f.z4, p)?;
-    let hash0 = *hash;
     for h in f.h.iter_mut() {
         if !(h.get_coeff(0).eqzero() && h.get_coeff(D / 2).eqzero()) {
             return Ok(false);
@@ -793,7 +794,7 @@ pub(crate) fn verify(hash: &mut [u8; 32], f: &mut ProofParts, keys: &mut [PolyMa
     enc.urandom(&mut tg, q, log2q)?;
     *hash = hash2(hash, &enc.end()?);
 
-    accumulate_all(&mut a1, &mut a2, s, &mut au, &mut f.z3, &mut f.z4, hash, &hash0, &cseed, p)?;
+    accumulate_all(&mut a1, &mut a2, s, &mut au, &mut f.z3, &mut f.z4, hash, &cseed, p)?;
     for (i, a) in a1.iter_mut().enumerate() {
         finish(a, &mut f.h[i], i, p)?;
     }
@@ -1097,7 +1098,7 @@ pub(crate) fn prove(
     }
     let cseed = *hash;
     hash_z34(hash, &f.z3, &f.z4, p)?;
-    let hash0 = *hash;
+    let hz = *hash; // the cheating prover's guess of V's seed (B-1: V is drawn after tg, from the next hash)
 
     // s = (<s1>, <m>, <y3>, <y4>, <beta>) (and <g> before the last check)
     let mut sv = Wiped(PolyVec::new(np)?);
@@ -1107,12 +1108,12 @@ pub(crate) fn prove(
     polyvec::auto(&mut sv.sub((m1 + z) * 2 + 1, loff + 1, 2), &mut m.sub(l, loff + 1, 1));
 
     // cheating modes 1, 2: the z3 / z4 part of each accumulator at coefficients 0 and d/2 as the cheater can know it
-    // before tg (V from hz, a dummy Gamma seed: Gamma's part is 0 there for an otherwise honest s), cancelled through g
+    // before tg (Gamma and V from hz: Gamma's part is 0 there for an otherwise honest s), cancelled through g
     let mut offs = Vec::new();
     if mode == 1 || mode == 2 {
         let (mut c1, mut c2) = accs(p)?;
         let mut au2 = autos(s, p)?;
-        accumulate_all(&mut c1, &mut c2, s, &mut au2, &mut f.z3, &mut f.z4, &[0x55; 32], &hash0, &cseed, p)?;
+        accumulate_all(&mut c1, &mut c2, s, &mut au2, &mut f.z3, &mut f.z4, &hz, &cseed, p)?;
         for a in c1.iter_mut() {
             let t = evaleq(Some(&mut a.r2), Some(&mut a.r1), Some(&a.r0), &mut sv.sub(0, n_, 1))?;
             offs.push((t.c(0).get_i64(), t.c(D / 2).get_i64()));
@@ -1147,7 +1148,7 @@ pub(crate) fn prove(
 
     let (mut a1, mut a2) = accs(p)?;
     let beta = beta_eqs(p)?;
-    accumulate_all(&mut a1, &mut a2, s, &mut au, &mut f.z3, &mut f.z4, hash, &hash0, &cseed, p)?;
+    accumulate_all(&mut a1, &mut a2, s, &mut au, &mut f.z3, &mut f.z4, hash, &cseed, p)?;
 
     // h_i = g_i + the accumulated evaluation i (coefficients 0 and d/2 zero), then the quadratic equations
     for (i, a) in a1.iter_mut().enumerate() {

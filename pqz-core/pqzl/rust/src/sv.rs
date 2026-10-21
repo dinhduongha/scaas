@@ -1312,8 +1312,8 @@ fn verify_body(ar: &Ar, s: &SvRel, code: u8, hash_stmt: &[u8; 32], stmt: &[u8], 
         }
         hash2(&hash, &c.end()?)
     };
-    // P6-FS (lazer#28, PQZL v3): hz = H(hash0 || grandom3(z3) || grandom3(z4)), the seed of V3 / V4 (g0) and of the
-    // tg round; the JL rows R / R' stay on hash0 (the prover's cseed, which z3 / z4 depend on)
+    // P6-FS (lazer#28, PQZL v3): hz = H(hash0 || grandom3(z3) || grandom3(z4)), the input of the tg round; the JL rows
+    // R / R' stay on hash0 (the prover's cseed, which z3 / z4 depend on)
     let mut hz = hash0;
     tbox::hash_z34(&mut hz, &f.z3, &f.z4, p)?;
     // h: coefficients 0 and d/2 are zero
@@ -1390,7 +1390,7 @@ fn verify_body(ar: &Ar, s: &SvRel, code: u8, hash_stmt: &[u8; 32], stmt: &[u8], 
     let cbm = nt_mul(&wc, &bm_, pr);
 
     // challenges: the PRG seeds
-    let (g0, g1, g2) = (&hz, &hash1, &h2);
+    let (g1, g2) = (&hash1, &h2);
 
     // ---- the evaluation-equation polynomials that do not depend on the challenges ----
     // upsilon: sum_j o(u_j) (u_j - c J)   (Z <= 43 terms with X-1: |.| < 43 * 2^91)
@@ -1434,20 +1434,20 @@ fn verify_body(ar: &Ar, s: &SvRel, code: u8, hash_stmt: &[u8; 32], stmt: &[u8], 
         pke[k] = ar.fwd(&ar.red(&acc));
     }
 
-    // ---- z3 / z4 (JL) rows: V from (hz, dom), R / R' rows from (hash0, i) / (hash0, 256 + i) ----
+    // ---- z3 / z4 (JL) rows: V from (hash1, dom) (B-1: after tg), R / R' rows from (hash0, i) / (hash0, 256 + i) ----
     let mut v3 = vz(1, [[0u64; JLR]; LAMBDA])?;
     let mut v4 = vz(1, [[0u64; JLR]; LAMBDA])?;
     let (v3, v4) = (&mut v3[0], &mut v4[0]);
     let mut gz = [NT0; LAMBDA]; // z3 + z4 term of accumulator half k (reduced)
-    let dom_z4 = (mm + 2 * (DEG - 1) + 2 + z) as u32;
+    let dom_z4 = (mm + 2 * (DEG - 1) + 3 + z) as u32; // A-2: upsilon, binary, l2 and V one domain up
     let dom_z3 = dom_z4 + 256;
     #[cfg(feature = "test-hooks")]
     {
-        crate::fstrace::rec(12, g0, dom_z4 as u64); // kinds + 10: the SV tag
-        crate::fstrace::rec(13, g0, dom_z3 as u64);
+        crate::fstrace::rec(12, g1, dom_z4 as u64); // kinds + 10: the SV tag
+        crate::fstrace::rec(13, g1, dom_z3 as u64);
     }
-    urandom_mat(v4, g0, dom_z4)?;
-    urandom_mat(v3, g0, dom_z3)?;
+    urandom_mat(v4, g1, dom_z4)?;
+    urandom_mat(v3, g1, dom_z3)?;
     {
         let mut ga = [ACC0; LAMBDA];
         // inv2 (beta + o(beta)), inv2 X^32 (o(beta) - beta) as coefficients mod q
@@ -1566,14 +1566,14 @@ fn verify_body(ar: &Ar, s: &SvRel, code: u8, hash_stmt: &[u8; 32], stmt: &[u8], 
         for i in 1..DEG {
             one(mm + DEG - 1 + i, &mut e)?; // beta4: dom M + d - 1 + i
         }
-        one(mm + 2 * (DEG - 1), &mut e)?; // upsilon
+        one(mm + 2 * (DEG - 1) + 1, &mut e)?; // upsilon (A-2: not the last beta4 row's dom)
         if s.nbin > 0 {
-            one(mm + 2 * (DEG - 1) + 1, &mut e)?; // binary
+            one(mm + 2 * (DEG - 1) + 2, &mut e)?; // binary
         } else {
             e += 1;
         }
         for i in 0..z {
-            one(mm + 2 * (DEG - 1) + 2 + i, &mut e)?; // l2: one call per equation, dom + i (P6-L2)
+            one(mm + 2 * (DEG - 1) + 3 + i, &mut e)?; // l2: one call per equation, dom + i (P6-L2)
         }
     }
     let (mut gm, mut abits) = (vz(SVPR, [0i64; DEG])?, vz(SVBIN, [0i64; DEG])?);

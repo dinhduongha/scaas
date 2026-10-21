@@ -1435,7 +1435,7 @@ verify_body (const svrel_t *S, uint8_t op, const uint8_t hash_stmt[32], const ui
   work_t W;
 #define F (*Fp) /* the decoded proof, owned by pqz_sv_verify */
   uint8_t hash[32], hashr[32], hash0[32], hash1[32], hash2[32], cseed[32];
-  prg_t gr, g0, g1, g2;
+  prg_t gr, g1, g2;
   polyring_srcptr Rq;
   unsigned i, j, k, h;
   int64_t a[DEG], b[DEG], r[DEG];
@@ -1517,7 +1517,8 @@ verify_body (const svrel_t *S, uint8_t op, const uint8_t hash_stmt[32], const ui
     shake128_clear (hs);
   }
   /* PQZ (P6-FS, lazer#28): z3, z4 before V3 / V4, as _lnp_tbox_hash_z34: hash0 = SHAKE128(cseed || grandom3 (z3) ||
-     grandom3 (z4)), the proof's own encoding (F.z3, F.z4 are centred above and not read again) */
+     grandom3 (z4)), the proof's own encoding (F.z3, F.z4 are centred above and not read again); the input of the tg
+     round, whose hash1 seeds V3 / V4 since B-1 */
   {
     coder_state_t cs;
     shake128_state_t hs;
@@ -1594,8 +1595,7 @@ verify_body (const svrel_t *S, uint8_t op, const uint8_t hash_stmt[32], const ui
 
   /* challenges */
   prg_seed (&gr, hashr); /* JL rows R, R' */
-  prg_seed (&g0, hash0); /* V3, V4 */
-  prg_seed (&g1, hash1); /* the Schwartz-Zippel challenges */
+  prg_seed (&g1, hash1); /* the Schwartz-Zippel challenges and, since B-1 (review B), V3, V4 */
   prg_seed (&g2, hash2); /* mu */
 
   /* ---- the evaluation-equation polynomials that do not depend on the challenges ---- */
@@ -1637,16 +1637,16 @@ verify_body (const svrel_t *S, uint8_t op, const uint8_t hash_stmt[32], const ui
       fwd (&PKe[k], r);
     }
 
-  /* ---- z3 / z4 (JL) rows: V from (hash0, dom), R / R' rows from (cseed, i) / (cseed, 256 + i) ---- */
+  /* ---- z3 / z4 (JL) rows: V from (hash1, dom) (B-1: after tg), R / R' rows from (cseed, i) / (cseed, 256 + i) ---- */
   uint64_t (*V3)[JLR] = sv_alloc (sizeof (uint64_t) * LAMBDA * JLR);
   uint64_t (*V4)[JLR] = sv_alloc (sizeof (uint64_t) * LAMBDA * JLR);
   nt_t *Gz = sv_alloc (sizeof (nt_t) * LAMBDA); /* z3 + z4 term of accumulator half k (reduced) */
   if (Gz == NULL)
     return 0;
-  const uint32_t dom_z4 = M + 2 * (DEG - 1) + 2 + Z, dom_z3 = dom_z4 + 256;
-  SV_FST (12, hash0, dom_z4);
-  SV_FST (13, hash0, dom_z3);
-  if (!urandom_mat (V4, &g0, dom_z4) || !urandom_mat (V3, &g0, dom_z3))
+  const uint32_t dom_z4 = M + 2 * (DEG - 1) + 3 + Z, dom_z3 = dom_z4 + 256; /* A-2: one up */
+  SV_FST (12, hash1, dom_z4);
+  SV_FST (13, hash1, dom_z3);
+  if (!urandom_mat (V4, &g1, dom_z4) || !urandom_mat (V3, &g1, dom_z3))
     return 0;
   {
     nt_t Bh, Bm, P4, cy[8];
@@ -1759,13 +1759,13 @@ verify_body (const svrel_t *S, uint8_t op, const uint8_t hash_stmt[32], const ui
       ONE (M + i);
     for (i = 1; i < DEG; i++) /* beta4: dom M + d - 1 + i */
       ONE (M + DEG - 1 + i);
-    ONE (M + 2 * (DEG - 1)); /* upsilon */
+    ONE (M + 2 * (DEG - 1) + 1); /* upsilon (A-2, review A: not the last beta4 row's dom) */
     if (S->nbin > 0)
-      ONE (M + 2 * (DEG - 1) + 1); /* binary */
+      ONE (M + 2 * (DEG - 1) + 2); /* binary */
     else
       e++;
     for (i = 0; i < Z; i++) /* l2: one call per equation, dom + i as __schwartz_zippel_accumulate_l2 (P6-L2) */
-      ONE (M + 2 * (DEG - 1) + 2 + i);
+      ONE (M + 2 * (DEG - 1) + 3 + i);
 #undef ONE
   }
   for (k = 0; k < LAMBDA; k++)

@@ -1,0 +1,18 @@
+P6-FS verify honest: ACCEPT
+P6-FS verify h-mutated (rejected) kind 5 mu seed: honest 52b76c55 mutated 581b32e6 -> differ
+P6-FS verify z3-mutated (rejected) kind 2 V4 seed: honest 426d756b mutated a9db3743 -> differ
+P6-FS verify z3-mutated (rejected) kind 3 V3 seed: honest 426d756b mutated a9db3743 -> differ
+P6-FS verify z4-mutated (rejected) kind 2 V4 seed: honest 426d756b mutated 808bb20b -> differ
+P6-FS verify z4-mutated (rejected) kind 3 V3 seed: honest 426d756b mutated 808bb20b -> differ
+P6-FS verify tg-mutated (rejected) kind 2 V4 seed: honest 426d756b mutated 5afe4a00 -> differ
+P6-FS verify tg-mutated (rejected) kind 3 V3 seed: honest 426d756b mutated 5afe4a00 -> differ
+P6-FS verify_fast honest: ACCEPT
+P6-FS verify_fast h-mutated (rejected) kind 15 mu seed: honest 52b76c55 mutated 581b32e6 -> differ
+P6-FS verify_fast z3-mutated (rejected) kind 12 V4 seed: honest 426d756b mutated a9db3743 -> differ
+P6-FS verify_fast z3-mutated (rejected) kind 13 V3 seed: honest 426d756b mutated a9db3743 -> differ
+P6-FS verify_fast z4-mutated (rejected) kind 12 V4 seed: honest 426d756b mutated 808bb20b -> differ
+P6-FS verify_fast z4-mutated (rejected) kind 13 V3 seed: honest 426d756b mutated 808bb20b -> differ
+P6-FS verify_fast tg-mutated (rejected) kind 12 V4 seed: honest 426d756b mutated 5afe4a00 -> differ
+P6-FS verify_fast tg-mutated (rejected) kind 13 V3 seed: honest 426d756b mutated 5afe4a00 -> differ
+
+VERDICT: P6-FS Fiat-Shamir binding (lazer#28) ok (0 failed checks of 18)

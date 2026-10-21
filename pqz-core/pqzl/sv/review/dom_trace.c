@@ -5,9 +5,10 @@
  * Reuses sz/sz_trace.c (one honest R_REG prove with the -DPQZ_SZ_TRACE hook; every __schwartz_zippel_accumulate2
  * call records its dom and the lambda = 4 challenge rows, all under the same seed, the hash after the tg round).
  * Each call is four consecutive records (acc 0..3). Calls are listed in transcript order: beta3 (dom M + i, i < d),
- * beta4 (M + d - 1 + i), upsilon (M + 2 (d - 1)), binary (absent for R_REG), l2 (M + 2 (d - 1) + 2 + i). Prints
+ * beta4 (M + d - 1 + i), upsilon (M + 2 (d - 1) + 1), binary (absent for R_REG), l2 (M + 2 (d - 1) + 3 + i). Prints
  * every dom used by more than one call and whether their rows are equal. pqz_sv.c sz_eval_challenges reproduces
- * the same derivation (ONE (M + DEG - 1 + i) for beta4, ONE (M + 2 * (DEG - 1)) for upsilon).
+ * the same derivation (ONE (M + DEG - 1 + i) for beta4, ONE (M + 2 * (DEG - 1) + 1) for upsilon). Finding 3 here is
+ * review A's A-2 (the last beta4 row and upsilon shared M + 2 (d - 1)); since the A-2 renumbering this exits 0.
  * Exit 0 = no shared dom, 1 = at least one.
  */
 #define main sz_trace_main

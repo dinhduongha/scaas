@@ -105,7 +105,7 @@ of every run. It is light: it uses `pqz_kat.py`'s helpers, and the fuzz process 
     cases), `proof_pqzh.json` 8 (M ∈ {1, 2, 4}); the statements come from `statement_transfer_multi.json`; oversize M
     is never built;
   - the files of `regress/valid/`.
-- **The `precompile` seeds:** those inputs, plus `06 00000000` and the 744 rows of `negative.json` (347 of them
+- **The `precompile` seeds:** those inputs, plus `06 00000000` and the 745 rows of `negative.json` (350 of them
   multi-recipient).
 
 `regress/valid/` holds valid inputs from outside the vectors, which the oracle must know as honest. Today it holds one
@@ -121,6 +121,8 @@ file, `fixture-disclose-receiver-rnd33`:
 - PQZL v3 (lazer#28 fix, 2026-10-19): `crash-b9881dfc…` carried the retired v2 id, so it was re-proved under v3 with the
   same statement (id word aside) and `rnd32`, and renamed: `runs/2026-10-19-fs5-regress-valid.txt`. Re-proved rather
   than deleted, so the honest set stays at 44 and the committed `mutate` / `codec` edit scripts keep their meaning.
+- B-1 / A-2 (5h Task 8a, 2026-10-21): re-proved again under the new transcript, same statement and `rnd32`
+  (`runs/2026-10-21-t8a-regress-valid.txt`).
 
 ## Build (D12)
 
