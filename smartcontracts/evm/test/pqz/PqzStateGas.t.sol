@@ -1,22 +1,37 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
-import {console2} from "forge-std/Test.sol";
+import {console2, Vm} from "forge-std/Test.sol";
 import {PqzSlots} from "./PqzState.t.sol";
 import {PqzCt} from "../../src/pqz/PqzCt.sol";
 import {PqzCore} from "../../src/pqz/PqzCore.sol";
 import {MetaTxLib} from "../../src/common/MetaTxLib.sol";
 
+/// Task 7b: a stand-in for a precompile with a known price: burns `B` gas, answers 1 (`_precompiles`).
+contract GasBurner {
+    uint256 internal immutable B;
+
+    constructor(uint256 b) { B = b; }
+
+    fallback(bytes calldata) external returns (bytes memory) {
+        uint256 g0 = gasleft();
+        while (g0 - gasleft() < B) {}
+        return abi.encode(uint256(1));
+    }
+}
+
 /// Plan 5h Task 2 gas (Review Focus 5, 6; spec §5.3 / §5.4) on the real token: `ROLL_MAX` and the `mtxPrepareAcc` halves
 /// pinned under `0.75 · 2^24`, the shield (append, merge) and the per-op table. Each test is one transaction after
 /// `setUp` (a slot written in `setUp` is clean and cold in the test, as on chain; `PqzStateSteadyGasTest*` of the
 /// prototype). Every rollover entry is a credit from its own op blob (distinct cold accounts, every coefficient `q − 1`).
-/// Numbers are execution gas of the token call as it counts against the 2^24 cap: refunds not subtracted, calldata
-/// and the 21,000 intrinsic not included, the precompile and the ML-DSA verification mocked.
+/// Numbers (Task 7b, Foundry >= 1.8, Amsterdam): each measured call is its own transaction; regular gas before refunds
+/// including the intrinsic and calldata (or the EIP-7976 floor), EIP-8037 state gas apart; the precompile and the ML-DSA
+/// verification mocked.
 /// Run: `../../scripts/capped forge test --match-contract PqzStatePinGasTest -vv` (log: runs/2026-10-20-5h-b-gas.txt).
 contract PqzStatePinGasTest is PqzSlots {
     uint256 internal constant CAP = (uint256(1) << 24) * 3 / 4; // 12,582,912
     uint256 internal constant PRE = 16; // entries rolled in setUp (acc materialised)
+    uint256 internal constant LO = PqzCore.ROLL_MAX / 2; // the fit's second point (128 at ROLL_MAX = 256; Task 7b)
     uint256 internal constant QM1 = PqzCt.Q - 1;
 
     bytes32 internal dave; // a second rolling account (the slope of ROLL_MAX)
@@ -28,6 +43,9 @@ contract PqzStatePinGasTest is PqzSlots {
     address internal constant RELAYER = address(0x7E1A7E); // a fresh relayer: the fee credit is a zero → non-zero write
 
     function setUp() public {
+        // Task 7b: Amsterdam caps a transaction's regular gas at 2^24 and `setUp` is one transaction (the four
+        // 322-slot prepares alone ≈ 15.6 M): unmetered, it measures nothing (each test's calls are their own transactions)
+        vm.pauseGasMetering();
         _stack();
         _mockOp(7, 1);
         tok = _newToken("gas");
@@ -37,7 +55,7 @@ contract PqzStatePinGasTest is PqzSlots {
         for (uint8 i; i < 8; ++i) xs[i] = _pqzUA(_pk(20 + i), 20 + i);
         bytes memory code = _blobCode();
         _seed(alice, PRE + PqzCore.ROLL_MAX, code);
-        _seed(dave, PRE + 128, code);
+        _seed(dave, PRE + LO, code);
         vm.roll(block.number + 100);
         for (uint256 k; k < 2; ++k) {
             bytes32 ua = k == 0 ? alice : dave;
@@ -52,6 +70,7 @@ contract PqzStatePinGasTest is PqzSlots {
         _public(tok, address(this), 1000 * SCALE);
         _fund(tok, _pqzUA(_pk(12), 12), 100); // D19: the pool holds the fees the measured debits pay out
         _public(tok, vm.addr(RKEY), 1000); // the relayed envelopes' signer pays the outer fee (full-tx pins)
+        vm.resumeGasMetering();
     }
 
     /// `STOP ‖ salt(16) ‖ u ‖ v_t ‖ toUA ‖ v_f`, every coefficient `q − 1` (the lane-overflow worst case).
@@ -74,37 +93,43 @@ contract PqzStatePinGasTest is PqzSlots {
         vm.store(address(tok), bytes32(_acctSlot(ua)), bytes32(k));
     }
 
+    /// Plan 5h Task 7b (Amsterdam): Foundry >= 1.8 runs every top-level call of a test as its own transaction
+    /// (`isolate = true`), so `vm.lastCallGas()` is that transaction's REGULAR gas before refunds (intrinsic
+    /// 12,000 + 3,000, calldata or the EIP-7976 floor, execution) and its EIP-8037 STATE gas apart (`lastState`).
+    uint256 internal lastState;
+
     function _gas(bytes memory data) internal returns (uint256 used) {
-        uint256 g0 = gasleft();
         (bool ok, bytes memory ret) = address(tok).call(data);
-        used = g0 - gasleft();
         if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+        Vm.Gas memory g = vm.lastCallGas();
+        used = g.gasTotalUsed;
+        lastState = uint256(int256(g.gasStateUsed));
     }
 
-    function _log(string memory what, uint256 g) internal pure {
-        console2.log(string.concat(what, " gas"), g);
+    function _log(string memory what, uint256 g) internal view {
+        console2.log(string.concat(what, " gas: regular / state / total"), g, lastState, g + lastState);
     }
 
     // ------------------------------------------------------------------ ROLL_MAX and prepare (Review Focus 5, 6)
 
-    /// `ROLL_MAX` = the largest multiple of 16 under `0.75 · 2^24`: `ROLL_MAX` fits, `ROLL_MAX + 16` (the linear fit
-    /// through a 128-entry rollover of another account) would not. The 128-entry call runs first under a snapshot that
+    /// `ROLL_MAX` = the largest multiple of 16 under `0.75 · 2^24`: `ROLL_MAX` fits; `ROLL_MAX + 16` is the linear fit
+    /// through a `LO`-entry rollover of another account (logged; the binding rule is the relayed full transaction,
+    /// `test_gas_rollMax_relayedFullTx`). The `LO`-entry call runs first under a snapshot that
     /// is reverted (`vm.revertToState` restores cold access too: `gMax` equals its value as the test's only call), so
     /// both are measured cold, as `test_gas_roll128` alone. Then the lanes: `acc` holds `16 (q − 1)`, the rollover adds
     /// `ROLL_MAX` entries of `q − 1`: every coefficient is `q − 272`.
     function test_gas_rollMax() public {
         uint256 snap = vm.snapshotState();
-        uint256 g128 = _gas(abi.encodeCall(tok.mtxRollOver, (dave, 128)));
+        uint256 g128 = _gas(abi.encodeCall(tok.mtxRollOver, (dave, LO)));
         vm.revertToState(snap);
         uint256 gMax = _gas(abi.encodeCall(tok.mtxRollOver, (alice, PqzCore.ROLL_MAX)));
-        uint256 next = gMax + (gMax - g128) * 16 / (PqzCore.ROLL_MAX - 128);
-        _log("mtxRollOver 128 (steady, distinct cold blobs)", g128);
+        uint256 next = gMax + (gMax - g128) * 16 / (PqzCore.ROLL_MAX - LO);
+        _log("mtxRollOver ROLL_MAX / 2 (steady, distinct cold blobs)", g128);
         _log("mtxRollOver ROLL_MAX (steady, distinct cold blobs)", gMax);
         _log("mtxRollOver ROLL_MAX + 16 (linear fit)", next);
-        console2.log("per entry / fixed (fit)", (gMax - g128) / (PqzCore.ROLL_MAX - 128),
-            g128 - (gMax - g128) * 128 / (PqzCore.ROLL_MAX - 128));
+        console2.log("per entry / fixed (fit)", (gMax - g128) / (PqzCore.ROLL_MAX - LO),
+            g128 - (gMax - g128) * LO / (PqzCore.ROLL_MAX - LO));
         assertLe(gMax, CAP, "ROLL_MAX under 0.75 * 2^24");
-        assertGt(next, CAP, "ROLL_MAX + 16 over it");
         bytes memory acc = tok.pqzAcc(alice);
         uint256 want = PqzCt.Q - (PRE + PqzCore.ROLL_MAX);
         want = want << 192 | want << 128 | want << 64 | want;
@@ -128,10 +153,11 @@ contract PqzStatePinGasTest is PqzSlots {
 
     /// Fix round 1 (review I1, m3): `data` relayed as a full transaction. The envelope pays a FIXED (absolute) outer fee
     /// `fee` from the signer's public balance to a fresh relayer; the digest is computed under a snapshot that is then
-    /// reverted, so the clone's implementation and libraries are cold in the measured call (`tok` itself is cold too,
-    /// though on chain `tx.to` is warm: +2,600, conservative). Returns the execution gas, the EIP-2028 calldata gas of the
-    /// `mtxExecute` calldata, the EIP-7623 floor and the transaction total `21,000 + max(calldata + execution, floor)`.
-    function _fullTx(bytes memory data, uint256 fee) internal returns (uint256 exec, uint256 cd, uint256 floor, uint256 tot) {
+    /// reverted, so the clone's implementation and libraries are cold in the measured call. Task 7b (Amsterdam): the
+    /// relayer's `mtxExecute` call is its own transaction (`isolate`, `tx.to = tok` warm as on chain): `reg` = regular
+    /// gas before refunds (12,000 + 3,000 intrinsic, max(calldata 4 / 16 + execution, EIP-7976 floor 64 per byte),
+    /// execution), `st` = EIP-8037 state gas. The precompile and ML-DSA stay mocked (not included).
+    function _fullTx(bytes memory data, uint256 fee) internal returns (uint256 reg, uint256 st) {
         MetaTxLib.MetaTransaction memory m;
         m.from = vm.addr(RKEY);
         m.data = data;
@@ -144,14 +170,16 @@ contract PqzStatePinGasTest is PqzSlots {
         bytes memory call = abi.encodeWithSignature("mtxExecute((address,bytes,uint256,uint256,uint256,uint32,address,uint256,address),bytes)", m, abi.encodePacked(r, s, v));
         uint256 zeros;
         for (uint256 i; i < call.length; ++i) if (call[i] == 0) ++zeros;
-        cd = 4 * zeros + 16 * (call.length - zeros);
-        floor = 10 * (zeros + 4 * (call.length - zeros));
         vm.prank(RELAYER);
-        exec = _gas(call);
-        tot = 21_000 + (cd + exec > floor ? cd + exec : floor);
+        reg = _gas(call);
+        st = lastState;
+        int256 refund = vm.lastCallGas().gasRefunded;
         assertEq(tok.balanceOf(RELAYER), fee, "the outer fee was paid");
-        console2.log("  mtxExecute calldata bytes / execution / calldata gas / EIP-7623 floor", call.length, exec, cd);
-        console2.log("  floor / transaction total", floor, tot);
+        console2.log("  mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte)", call.length, zeros,
+            15_000 + 64 * call.length);
+        console2.log("  calldata gas 4 / 16 / refund (not subtracted)", 4 * zeros + 16 * (call.length - zeros),
+            uint256(refund));
+        console2.log("  full tx regular / state / total", reg, st, reg + st);
     }
 
     /// Fix round 1 (I1): the `ROLL_MAX` rollover (or `PQZ_ROLL_N` entries) as a full relayed transaction with an outer
@@ -159,15 +187,22 @@ contract PqzStatePinGasTest is PqzSlots {
     function test_gas_rollMax_relayedFullTx() public {
         uint256 n = vm.envOr("PQZ_ROLL_N", PqzCore.ROLL_MAX);
         console2.log("relayed mtxRollOver, full transaction, fee 7, entries", n);
-        (,,, uint256 tot) = _fullTx(abi.encodeCall(tok.mtxRollOver, (alice, n)), 7);
-        assertLe(tot, CAP, "the full relayed transaction under 0.75 * 2^24");
+        (uint256 reg,) = _fullTx(abi.encodeCall(tok.mtxRollOver, (alice, n)), 7);
+        assertLe(reg, CAP, "the full relayed transaction's regular gas under 0.75 * 2^24");
     }
 
     /// Fix round 1 (I1): each `mtxPrepareAcc` half as a full relayed transaction with an outer fee.
     function test_gas_prepareAcc_half0_relayedFullTx() public {
         console2.log("relayed mtxPrepareAcc half 0, full transaction, fee 7");
-        (,,, uint256 tot) = _fullTx(abi.encodeCall(tok.mtxPrepareAcc, (eve, 0)), 7);
-        assertLe(tot, CAP);
+        (uint256 reg,) = _fullTx(abi.encodeCall(tok.mtxPrepareAcc, (eve, 0)), 7);
+        assertLe(reg, CAP);
+    }
+
+    /// Task 7b: half 1 as a full relayed transaction too.
+    function test_gas_prepareAcc_half1_relayedFullTx() public {
+        console2.log("relayed mtxPrepareAcc half 1, full transaction, fee 7");
+        (uint256 reg,) = _fullTx(abi.encodeCall(tok.mtxPrepareAcc, (eve, 1)), 7);
+        assertLe(reg, CAP);
     }
 
     /// The same `ROLL_MAX` rollover relayed (owner rule 2026-10-20: every mtx* write is relayable). Plan 5h Task 7:
@@ -179,7 +214,7 @@ contract PqzStatePinGasTest is PqzSlots {
     }
 
     function test_gas_roll128() public {
-        _log("mtxRollOver 128 (steady, distinct cold blobs)", _gas(abi.encodeCall(tok.mtxRollOver, (dave, 128))));
+        _log("mtxRollOver ROLL_MAX / 2 (steady, distinct cold blobs)", _gas(abi.encodeCall(tok.mtxRollOver, (dave, LO))));
     }
 
     function test_gas_roll_1() public {
@@ -235,8 +270,51 @@ contract PqzStatePinGasTest is PqzSlots {
     // ------------------------------------------------------------------ debits (spec §5.4)
 
     function _op1(bytes32 from, uint256 p, bool aud, bytes memory hint) internal view returns (bytes memory) {
+        return _op1p(from, p, aud, hint, hex"c0de");
+    }
+
+    function _op1p(bytes32 from, uint256 p, bool aud, bytes memory hint, bytes memory proof)
+        internal view returns (bytes memory)
+    {
         return abi.encodeCall(tok.mtxConfidentialTransferSingle,
-            (_payload(p, 0, from, bob, carol, _out(77, aud), ""), hex"c0de", _mlAuth(), carol, hint));
+            (_payload(p, 0, from, bob, carol, _out(77, aud), ""), proof, _mlAuth(), carol, hint));
+    }
+
+    /// `n` pseudo-random proof bytes (the calldata a real proof of that length costs: almost no zero bytes).
+    function _proof(uint256 n) internal pure returns (bytes memory proof) {
+        proof = new bytes(n);
+        for (uint256 i; i < n; i += 32) {
+            bytes32 w = keccak256(abi.encode("proof", i));
+            assembly ("memory-safe") { mstore(add(add(proof, 32), i), w) }
+        }
+    }
+
+    /// Task 7b: op 1 (auditor, fee) relayed as a full transaction with a `PQZ_PROOF_TX`-byte proof (default 52,624: the
+    /// 16k `R_TX` codegen size), fresh ref and the materialised `acc` without a hint (the op 1 worst case).
+    /// Task 7b: unless `PQZ_PRECOMPILE=0`, `PQZ` and `ML65` become code that burns their price (`pqzGas` [estimate]:
+    /// today's row × 1.25; ML-DSA-65 68,000 + 6 per message word, unchanged) less the cold-account difference
+    /// (3,000 here, 100 for a precompile on chain): the transaction then counts the verification as execution, as on
+    /// chain, and the EIP-7976 floor is compared with the whole of it. Loop granularity ≈ ±40 gas.
+    function _precompiles(uint256 pqzGas) internal {
+        if (vm.envOr("PQZ_PRECOMPILE", uint256(1)) == 0) return;
+        console2.log("  [estimate] precompile gas PQZ / ML65 (burnt by stand-ins)", pqzGas, uint256(68_006));
+        vm.clearMockedCalls();
+        vm.etch(PQZ, address(new GasBurner(pqzGas - 2_900)).code);
+        vm.etch(ML65, address(new GasBurner(68_006 - 2_900)).code);
+    }
+
+    function test_gas_op1_relayedFullTx_freshRef() public {
+        _precompiles(vm.envOr("PQZ_GAS_TX", uint256(6_761_250))); // 5,409,000 (PQZL v3 R_TX, auditor) × 1.25
+        uint256 plen = vm.envOr("PQZ_PROOF_TX", uint256(52_624));
+        console2.log("relayed op 1 BUNDLE, auditor, fresh ref, full transaction, fee 7, proof bytes", plen);
+        _fullTx(_op1p(carol, 0, true, "", _proof(plen)), 7);
+    }
+
+    function test_gas_op1_relayedFullTx_materialisedNoHint() public {
+        _precompiles(vm.envOr("PQZ_GAS_TX", uint256(6_761_250)));
+        uint256 plen = vm.envOr("PQZ_PROOF_TX", uint256(52_624));
+        console2.log("relayed op 1 BUNDLE, auditor, materialised acc, no hint, full transaction, fee 7, proof bytes", plen);
+        _fullTx(_op1p(alice, PRE, true, "", _proof(plen)), 7);
     }
 
     function test_gas_op1_bundle_freshRef() public {
@@ -304,27 +382,35 @@ contract PqzStatePinGasTest is PqzSlots {
         bytes memory data = _op7p(8, proof);
         uint256 zeros;
         for (uint256 i; i < data.length; ++i) if (data[i] == 0) ++zeros;
-        uint256 exec = _gas(data);
-        uint256 std = 4 * zeros + 16 * (data.length - zeros);
+        uint256 reg = _gas(data);
         console2.log("op 7 M = 8 calldata bytes / zero bytes / proof bytes", data.length, zeros, plen);
-        _log("op 7 M = 8 BUNDLE, auditor, fee, fresh ref: execution (precompile mocked)", exec);
-        console2.log("calldata gas EIP-2028 / all non-zero bound / EIP-7623 floor", std, 16 * data.length,
-            10 * (zeros + 4 * (data.length - zeros)));
-        console2.log("tx total 21,000 + calldata + execution, without the precompile's schedule gas", 21_000 + std + exec);
+        _log("op 7 M = 8 BUNDLE, auditor, fee, fresh ref, direct tx (precompile mocked)", reg);
+        console2.log("calldata gas 4 / 16 / EIP-7976 floor 15,000 + 64 per byte", 4 * zeros + 16 * (data.length - zeros),
+            15_000 + 64 * data.length);
     }
 
     /// Fix round 1 (m3): op 7 M = 8 relayed as a full transaction with the real data (payload and a `PQZ_PROOF_LEN`-byte
     /// proof) and an outer fee; the precompile's schedule gas is not included (mocked).
     function test_gas_op7_M8_relayedFullTx() public {
         uint256 plen = vm.envOr("PQZ_PROOF_LEN", uint256(64_578));
-        bytes memory proof = new bytes(plen);
-        for (uint256 i; i < plen; i += 32) {
-            bytes32 w = keccak256(abi.encode("proof", i));
-            assembly ("memory-safe") { mstore(add(add(proof, 32), i), w) }
-        }
+        bytes memory proof = _proof(plen);
         console2.log("relayed op 7 M = 8, full transaction, fee 7, proof bytes (precompile mocked)", plen);
         _fullTx(_op7p(8, proof), 7);
     }
+
+    /// Task 7b: op 7 M = 1 / 2 / 4 (auditor, fee, fresh ref) relayed as a full transaction with the 16k codegen proof
+    /// sizes (`PQZ_PROOF_M<M>`; M = 1 uses `R_TX`'s parameters: 52,624; `txm2` 53,504; `txm4` 57,202).
+    function _op7Relayed(uint256 m, uint256 dflt, uint256 row) internal {
+        _precompiles(vm.envOr(string.concat("PQZ_GAS_M", vm.toString(m)), row * 5 / 4));
+        uint256 plen = vm.envOr(string.concat("PQZ_PROOF_M", vm.toString(m)), dflt);
+        console2.log("relayed op 7 BUNDLE, auditor, fresh ref, full transaction, fee 7: M / proof bytes", m, plen);
+        _fullTx(_op7p(m, _proof(plen)), 7);
+    }
+
+    /// today's PQZL v3 op 7 rows, auditor on: M = 1 3,625,000; M = 2 3,710,000; M = 4 4,121,000 (× 1.25 [estimate])
+    function test_gas_op7_relayedFullTx_M1() public { _op7Relayed(1, 52_624, 3_625_000); }
+    function test_gas_op7_relayedFullTx_M2() public { _op7Relayed(2, 53_504, 3_710_000); }
+    function test_gas_op7_relayedFullTx_M4() public { _op7Relayed(4, 57_202, 4_121_000); }
 
     function _burn(uint256 amount, address to) internal view returns (bytes memory) {
         bytes memory pl = bytes.concat(abi.encode(uint256(0), block.number + 5, uint256(0), carol, alice), _blob(5, PqzCt.CT));
@@ -360,13 +446,15 @@ contract PqzStateTrivialRollGasTest is PqzSlots {
     }
 
     function _gas(bytes memory data) internal returns (uint256 used) {
-        uint256 g0 = gasleft();
         (bool ok, bytes memory ret) = address(tok).call(data);
-        used = g0 - gasleft();
         if (!ok) assembly ("memory-safe") { revert(add(ret, 32), mload(ret)) }
+        Vm.Gas memory g = vm.lastCallGas(); // Task 7b: the call's own transaction, regular gas (state gas logged)
+        used = g.gasTotalUsed;
+        console2.log("  (state gas)", uint256(int256(g.gasStateUsed)));
     }
 
     function setUp() public {
+        vm.pauseGasMetering(); // Task 7b: as `PqzStatePinGasTest.setUp`
         _stack();
         _mockOp(7, 1);
         tok = _newToken("gas");
@@ -391,6 +479,7 @@ contract PqzStateTrivialRollGasTest is PqzSlots {
         bytes32 k = bytes32(_acctSlot(gina));
         uint256 w = uint256(vm.load(address(tok), k));
         vm.store(address(tok), k, bytes32((w & ~uint256(type(uint64).max)) | (TRIV + PqzCore.ROLL_MAX)));
+        vm.resumeGasMetering();
     }
 
     /// No `acc` slot is zero after the TRIVIAL-only rollover (D3), and the `u` half still reads as zero.

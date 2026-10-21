@@ -1,0 +1,181 @@
+### the relayed full-transaction rollover of N entries in the ROLL_MAX = 192 build (forge 1.8.5, Amsterdam)
+### PQZ_ROLL_N=64 EVM=amsterdam scripts/capped pqz-core/pqzl/params/p16k/gas16k.sh <work dir> <lib> 192 --match-test test_gas_rollMax_relayedFullTx -vv
+Ran 1 test for test/pqz/PqzStateGas.t.sol:PqzStatePinGasTest
+[PASS] test_gas_rollMax_relayedFullTx() (gas: 11270032)
+Logs:
+  relayed mtxRollOver, full transaction, fee 7, entries 64
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 612 475 54168
+    calldata gas 4 / 16 / refund (not subtracted) 4092 743424
+    full tx regular / state / total 11540411 195840 11736251
+
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 414.26ms (13.86ms CPU time)
+
+Ran 1 test suite in 415.13ms (414.26ms CPU time): 1 tests passed, 0 failed, 0 skipped (1 total tests)
+
+### PQZ_ROLL_N=80 EVM=amsterdam scripts/capped pqz-core/pqzl/params/p16k/gas16k.sh <work dir> <lib> 192 --match-test test_gas_rollMax_relayedFullTx -vv
+Ran 1 test for test/pqz/PqzStateGas.t.sol:PqzStatePinGasTest
+[PASS] test_gas_rollMax_relayedFullTx() (gas: 11900224)
+Logs:
+  relayed mtxRollOver, full transaction, fee 7, entries 80
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 612 475 54168
+    calldata gas 4 / 16 / refund (not subtracted) 4092 929280
+    full tx regular / state / total 12356459 195840 12552299
+
+Suite result: ok. 1 passed; 0 failed; 0 skipped; finished in 397.52ms (15.05ms CPU time)
+
+Ran 1 test suite in 401.25ms (397.52ms CPU time): 1 tests passed, 0 failed, 0 skipped (1 total tests)
+
+### PQZ_ROLL_N=96 EVM=amsterdam scripts/capped pqz-core/pqzl/params/p16k/gas16k.sh <work dir> <lib> 192 --match-test test_gas_rollMax_relayedFullTx -vv
+Ran 1 test for test/pqz/PqzStateGas.t.sol:PqzStatePinGasTest
+[FAIL: the full relayed transaction's regular gas under 0.75 * 2^24: 13172507 > 12582912] test_gas_rollMax_relayedFullTx() (gas: 13355413)
+Logs:
+  relayed mtxRollOver, full transaction, fee 7, entries 96
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 612 475 54168
+    calldata gas 4 / 16 / refund (not subtracted) 4092 1115136
+    full tx regular / state / total 13172507 195840 13368347
+
+Suite result: FAILED. 0 passed; 1 failed; 0 skipped; finished in 393.04ms (22.92ms CPU time)
+
+Ran 1 test suite in 394.06ms (393.04ms CPU time): 0 tests passed, 1 failed, 0 skipped (1 total tests)
+
+Failing tests:
+Encountered 1 failing test in test/pqz/PqzStateGas.t.sol:PqzStatePinGasTest
+[FAIL: the full relayed transaction's regular gas under 0.75 * 2^24: 13172507 > 12582912] test_gas_rollMax_relayedFullTx() (gas: 13355413)
+
+Encountered a total of 1 failing tests, 0 tests succeeded
+
+Tip: Run `forge test --rerun` to retry only the 1 failed test
+Tip: Run `forge test --debug --match-test <TEST_NAME>` to inspect one failing test in the debugger
+
+### PQZ_ROLL_N=112 EVM=amsterdam scripts/capped pqz-core/pqzl/params/p16k/gas16k.sh <work dir> <lib> 192 --match-test test_gas_rollMax_relayedFullTx -vv
+Ran 1 test for test/pqz/PqzStateGas.t.sol:PqzStatePinGasTest
+[FAIL: the full relayed transaction's regular gas under 0.75 * 2^24: 13988555 > 12582912] test_gas_rollMax_relayedFullTx() (gas: 14171461)
+Logs:
+  relayed mtxRollOver, full transaction, fee 7, entries 112
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 612 475 54168
+    calldata gas 4 / 16 / refund (not subtracted) 4092 1300992
+    full tx regular / state / total 13988555 195840 14184395
+
+Suite result: FAILED. 0 passed; 1 failed; 0 skipped; finished in 406.55ms (33.64ms CPU time)
+
+Ran 1 test suite in 407.45ms (406.55ms CPU time): 0 tests passed, 1 failed, 0 skipped (1 total tests)
+
+Failing tests:
+Encountered 1 failing test in test/pqz/PqzStateGas.t.sol:PqzStatePinGasTest
+[FAIL: the full relayed transaction's regular gas under 0.75 * 2^24: 13988555 > 12582912] test_gas_rollMax_relayedFullTx() (gas: 14171461)
+
+Encountered a total of 1 failing tests, 0 tests succeeded
+
+Tip: Run `forge test --rerun` to retry only the 1 failed test
+Tip: Run `forge test --debug --match-test <TEST_NAME>` to inspect one failing test in the debugger
+
+### PQZ_ROLL_N=128 EVM=amsterdam scripts/capped pqz-core/pqzl/params/p16k/gas16k.sh <work dir> <lib> 192 --match-test test_gas_rollMax_relayedFullTx -vv
+Ran 1 test for test/pqz/PqzStateGas.t.sol:PqzStatePinGasTest
+[FAIL: the full relayed transaction's regular gas under 0.75 * 2^24: 14804603 > 12582912] test_gas_rollMax_relayedFullTx() (gas: 14987509)
+Logs:
+  relayed mtxRollOver, full transaction, fee 7, entries 128
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 612 475 54168
+    calldata gas 4 / 16 / refund (not subtracted) 4092 1486848
+    full tx regular / state / total 14804603 195840 15000443
+
+Suite result: FAILED. 0 passed; 1 failed; 0 skipped; finished in 379.08ms (25.54ms CPU time)
+
+Ran 1 test suite in 380.13ms (379.08ms CPU time): 0 tests passed, 1 failed, 0 skipped (1 total tests)
+
+Failing tests:
+Encountered 1 failing test in test/pqz/PqzStateGas.t.sol:PqzStatePinGasTest
+[FAIL: the full relayed transaction's regular gas under 0.75 * 2^24: 14804603 > 12582912] test_gas_rollMax_relayedFullTx() (gas: 14987509)
+
+Encountered a total of 1 failing tests, 0 tests succeeded
+
+Tip: Run `forge test --rerun` to retry only the 1 failed test
+Tip: Run `forge test --debug --match-test <TEST_NAME>` to inspect one failing test in the debugger
+
+### PQZ_ROLL_N=144 EVM=amsterdam scripts/capped pqz-core/pqzl/params/p16k/gas16k.sh <work dir> <lib> 192 --match-test test_gas_rollMax_relayedFullTx -vv
+Ran 1 test for test/pqz/PqzStateGas.t.sol:PqzStatePinGasTest
+[FAIL: the full relayed transaction's regular gas under 0.75 * 2^24: 15620651 > 12582912] test_gas_rollMax_relayedFullTx() (gas: 15803557)
+Logs:
+  relayed mtxRollOver, full transaction, fee 7, entries 144
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 612 475 54168
+    calldata gas 4 / 16 / refund (not subtracted) 4092 1672704
+    full tx regular / state / total 15620651 195840 15816491
+
+Suite result: FAILED. 0 passed; 1 failed; 0 skipped; finished in 423.41ms (30.02ms CPU time)
+
+Ran 1 test suite in 424.35ms (423.41ms CPU time): 0 tests passed, 1 failed, 0 skipped (1 total tests)
+
+Failing tests:
+Encountered 1 failing test in test/pqz/PqzStateGas.t.sol:PqzStatePinGasTest
+[FAIL: the full relayed transaction's regular gas under 0.75 * 2^24: 15620651 > 12582912] test_gas_rollMax_relayedFullTx() (gas: 15803557)
+
+Encountered a total of 1 failing tests, 0 tests succeeded
+
+Tip: Run `forge test --rerun` to retry only the 1 failed test
+Tip: Run `forge test --debug --match-test <TEST_NAME>` to inspect one failing test in the debugger
+
+### PQZ_ROLL_N=160 EVM=amsterdam scripts/capped pqz-core/pqzl/params/p16k/gas16k.sh <work dir> <lib> 192 --match-test test_gas_rollMax_relayedFullTx -vv
+Ran 1 test for test/pqz/PqzStateGas.t.sol:PqzStatePinGasTest
+[FAIL: the full relayed transaction's regular gas under 0.75 * 2^24: 16436699 > 12582912] test_gas_rollMax_relayedFullTx() (gas: 16619605)
+Logs:
+  relayed mtxRollOver, full transaction, fee 7, entries 160
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 612 475 54168
+    calldata gas 4 / 16 / refund (not subtracted) 4092 1858560
+    full tx regular / state / total 16436699 195840 16632539
+
+Suite result: FAILED. 0 passed; 1 failed; 0 skipped; finished in 455.56ms (36.81ms CPU time)
+
+Ran 1 test suite in 456.40ms (455.56ms CPU time): 0 tests passed, 1 failed, 0 skipped (1 total tests)
+
+Failing tests:
+Encountered 1 failing test in test/pqz/PqzStateGas.t.sol:PqzStatePinGasTest
+[FAIL: the full relayed transaction's regular gas under 0.75 * 2^24: 16436699 > 12582912] test_gas_rollMax_relayedFullTx() (gas: 16619605)
+
+Encountered a total of 1 failing tests, 0 tests succeeded
+
+Tip: Run `forge test --rerun` to retry only the 1 failed test
+Tip: Run `forge test --debug --match-test <TEST_NAME>` to inspect one failing test in the debugger
+
+### PQZ_ROLL_N=176 EVM=amsterdam scripts/capped pqz-core/pqzl/params/p16k/gas16k.sh <work dir> <lib> 192 --match-test test_gas_rollMax_relayedFullTx -vv
+Ran 1 test for test/pqz/PqzStateGas.t.sol:PqzStatePinGasTest
+[FAIL: the full relayed transaction's regular gas under 0.75 * 2^24: 17252747 > 12582912] test_gas_rollMax_relayedFullTx() (gas: 17435653)
+Logs:
+  relayed mtxRollOver, full transaction, fee 7, entries 176
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 612 475 54168
+    calldata gas 4 / 16 / refund (not subtracted) 4092 2044416
+    full tx regular / state / total 17252747 195840 17448587
+
+Suite result: FAILED. 0 passed; 1 failed; 0 skipped; finished in 452.97ms (31.76ms CPU time)
+
+Ran 1 test suite in 453.78ms (452.97ms CPU time): 0 tests passed, 1 failed, 0 skipped (1 total tests)
+
+Failing tests:
+Encountered 1 failing test in test/pqz/PqzStateGas.t.sol:PqzStatePinGasTest
+[FAIL: the full relayed transaction's regular gas under 0.75 * 2^24: 17252747 > 12582912] test_gas_rollMax_relayedFullTx() (gas: 17435653)
+
+Encountered a total of 1 failing tests, 0 tests succeeded
+
+Tip: Run `forge test --rerun` to retry only the 1 failed test
+Tip: Run `forge test --debug --match-test <TEST_NAME>` to inspect one failing test in the debugger
+
+### PQZ_ROLL_N=192 EVM=amsterdam scripts/capped pqz-core/pqzl/params/p16k/gas16k.sh <work dir> <lib> 192 --match-test test_gas_rollMax_relayedFullTx -vv
+Ran 1 test for test/pqz/PqzStateGas.t.sol:PqzStatePinGasTest
+[FAIL: the full relayed transaction's regular gas under 0.75 * 2^24: 18068783 > 12582912] test_gas_rollMax_relayedFullTx() (gas: 18251757)
+Logs:
+  relayed mtxRollOver, full transaction, fee 7, entries 192
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 612 476 54168
+    calldata gas 4 / 16 / refund (not subtracted) 4080 2230272
+    full tx regular / state / total 18068783 195840 18264623
+
+Suite result: FAILED. 0 passed; 1 failed; 0 skipped; finished in 423.79ms (38.34ms CPU time)
+
+Ran 1 test suite in 424.73ms (423.79ms CPU time): 0 tests passed, 1 failed, 0 skipped (1 total tests)
+
+Failing tests:
+Encountered 1 failing test in test/pqz/PqzStateGas.t.sol:PqzStatePinGasTest
+[FAIL: the full relayed transaction's regular gas under 0.75 * 2^24: 18068783 > 12582912] test_gas_rollMax_relayedFullTx() (gas: 18251757)
+
+Encountered a total of 1 failing tests, 0 tests succeeded
+
+Tip: Run `forge test --rerun` to retry only the 1 failed test
+Tip: Run `forge test --debug --match-test <TEST_NAME>` to inspect one failing test in the debugger
+

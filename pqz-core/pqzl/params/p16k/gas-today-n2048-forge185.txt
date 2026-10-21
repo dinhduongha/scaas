@@ -1,0 +1,182 @@
+### (cd smartcontracts/evm && scripts/capped forge test --match-contract 'PqzStatePinGasTest|PqzStateTrivialRollGasTest' -vv)   today's sizes, repo foundry.toml (osaka), forge 1.8.5: the edited test still passes
+Ran 2 tests for test/pqz/PqzStateGas.t.sol:PqzStateTrivialRollGasTest
+[PASS] test_gas_rollMax_afterTrivialRoll() (gas: 12250801)
+Logs:
+    (state gas) 0
+  mtxRollOver ROLL_MAX after a TRIVIAL-only rollover gas 12104951
+
+[PASS] test_trivialRoll_noZeroSlot() (gas: 2059838)
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 265.79ms (45.02ms CPU time)
+
+Warning: the following cheatcode(s) are deprecated and will be removed in future versions:
+  lastCallGas(): replaced by `lastFrameGas`
+Ran 32 tests for test/pqz/PqzStateGas.t.sol:PqzStatePinGasTest
+[PASS] test_gas_burn() (gas: 4294757)
+Logs:
+  burn 1 to an address, fee, fresh ref gas: regular / state / total 4069178 0 4069178
+
+[PASS] test_gas_op1_bundle_16inline() (gas: 6432476)
+Logs:
+  op 1 BUNDLE, auditor, fee, 16 inline credits (cold blobs), hint gas: regular / state / total 5130329 0 5130329
+
+[PASS] test_gas_op1_bundle_freshRef() (gas: 4449500)
+Logs:
+  op 1 BUNDLE, auditor, fee, p = rolled, acc = blob reference gas: regular / state / total 4217493 0 4217493
+
+[PASS] test_gas_op1_bundle_materialised_hint() (gas: 5930108)
+Logs:
+  op 1 BUNDLE, auditor, fee, p = rolled, materialised acc, hint gas: regular / state / total 4551193 0 4551193
+
+[PASS] test_gas_op1_bundle_materialised_noHint() (gas: 5601189)
+Logs:
+  op 1 BUNDLE, auditor, fee, p = rolled, materialised acc, no hint gas: regular / state / total 5444022 0 5444022
+
+[PASS] test_gas_op1_compact() (gas: 4535500)
+Logs:
+  op 1 COMPACT (HASH), auditor, fee, fresh ref gas: regular / state / total 4289658 0 4289658
+
+[PASS] test_gas_op1_relayedFullTx_freshRef() (gas: 24461414)
+Logs:
+    [estimate] precompile gas PQZ / ML65 (burnt by stand-ins) 6761250 68006
+  relayed op 1 BUNDLE, auditor, fresh ref, full transaction, fee 7, proof bytes 52624
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 73924 10778 4746136
+    calldata gas 4 / 16 / refund (not subtracted) 1053448 0
+    full tx regular / state / total 12156097 0 12156097
+
+[PASS] test_gas_op1_relayedFullTx_materialisedNoHint() (gas: 25613122)
+Logs:
+    [estimate] precompile gas PQZ / ML65 (burnt by stand-ins) 6761250 68006
+  relayed op 1 BUNDLE, auditor, materialised acc, no hint, full transaction, fee 7, proof bytes 52624
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 73924 10778 4746136
+    calldata gas 4 / 16 / refund (not subtracted) 1053448 76800
+    full tx regular / state / total 13382614 0 13382614
+
+[PASS] test_gas_op1_shieldIn() (gas: 4463021)
+Logs:
+  op 1 BUNDLE, auditor, fee, shieldIn 100, fresh ref gas: regular / state / total 4229487 0 4229487
+
+[PASS] test_gas_op7_M4() (gas: 4945652)
+Logs:
+  op 7 M = 4 BUNDLE, auditor, fee, fresh ref (4 first credits) gas: regular / state / total 4692512 0 4692512
+
+[PASS] test_gas_op7_M8() (gas: 9518970)
+Logs:
+  op 7 M = 8 BUNDLE, auditor, fee, fresh ref (8 first credits) gas: regular / state / total 8983750 0 8983750
+
+[PASS] test_gas_op7_M8_relayedFullTx() (gas: 28036334)
+Logs:
+  relayed op 7 M = 8, full transaction, fee 7, proof bytes (precompile mocked) 64578
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 104356 17754 6693784
+    calldata gas 4 / 16 / refund (not subtracted) 1456648 0
+    full tx regular / state / total 10440294 0 10440294
+
+[PASS] test_gas_op7_M8_txTotal() (gas: 27184532)
+Logs:
+  op 7 M = 8 calldata bytes / zero bytes / proof bytes 103812 17313 64578
+  op 7 M = 8 BUNDLE, auditor, fee, fresh ref, direct tx (precompile mocked) gas: regular / state / total 10180950 0 10180950
+  calldata gas 4 / 16 / EIP-7976 floor 15,000 + 64 per byte 1453236 6658968
+
+[PASS] test_gas_op7_relayedFullTx_M1() (gas: 22289225)
+Logs:
+    [estimate] precompile gas PQZ / ML65 (burnt by stand-ins) 4531250 68006
+  relayed op 7 BUNDLE, auditor, fresh ref, full transaction, fee 7: M / proof bytes 1 52624
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 73988 10847 4750232
+    calldata gas 4 / 16 / refund (not subtracted) 1053644 0
+    full tx regular / state / total 9963799 0 9963799
+
+[PASS] test_gas_op7_relayedFullTx_M2() (gas: 22758601)
+Logs:
+    [estimate] precompile gas PQZ / ML65 (burnt by stand-ins) 4637500 68006
+  relayed op 7 BUNDLE, auditor, fresh ref, full transaction, fee 7: M / proof bytes 2 53504
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 75140 10938 4823960
+    calldata gas 4 / 16 / refund (not subtracted) 1070984 0
+    full tx regular / state / total 10235964 0 10235964
+
+[PASS] test_gas_op7_relayedFullTx_M4() (gas: 24377963)
+Logs:
+    [estimate] precompile gas PQZ / ML65 (burnt by stand-ins) 5151250 68006
+  relayed op 7 BUNDLE, auditor, fresh ref, full transaction, fee 7: M / proof bytes 4 57202
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 79428 11154 5098392
+    calldata gas 4 / 16 / refund (not subtracted) 1137000 0
+    full tx regular / state / total 11127581 0 11127581
+
+[PASS] test_gas_prepareAcc_half0() (gas: 5793971)
+Logs:
+  mtxPrepareAcc half 0 gas: regular / state / total 5776666 0 5776666
+
+[PASS] test_gas_prepareAcc_half0_relayed() (gas: 5856109)
+Logs:
+  relayed mtxPrepareAcc half 0 (mtxExecute, fee 0) gas: regular / state / total 5822190 0 5822190
+
+[PASS] test_gas_prepareAcc_half0_relayedFullTx() (gas: 6015380)
+Logs:
+  relayed mtxPrepareAcc half 0, full transaction, fee 7
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 612 476 54168
+    calldata gas 4 / 16 / refund (not subtracted) 4080 0
+    full tx regular / state / total 5853455 0 5853455
+
+[PASS] test_gas_prepareAcc_half1() (gas: 5794003)
+Logs:
+  mtxPrepareAcc half 1 gas: regular / state / total 5776678 0 5776678
+
+[PASS] test_gas_prepareAcc_half1_relayed() (gas: 5856008)
+Logs:
+  relayed mtxPrepareAcc half 1 (mtxExecute, fee 0) gas: regular / state / total 5822202 0 5822202
+
+[PASS] test_gas_prepareAcc_half1_relayedFullTx() (gas: 6015266)
+Logs:
+  relayed mtxPrepareAcc half 1, full transaction, fee 7
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 612 476 54168
+    calldata gas 4 / 16 / refund (not subtracted) 4080 0
+    full tx regular / state / total 5853455 0 5853455
+
+[PASS] test_gas_refresh() (gas: 4269246)
+Logs:
+  refresh, fee, fresh ref gas: regular / state / total 4043765 0 4043765
+
+[PASS] test_gas_roll128() (gas: 6920528)
+Logs:
+  mtxRollOver ROLL_MAX / 2 (steady, distinct cold blobs) gas: regular / state / total 7517695 0 7517695
+
+[PASS] test_gas_rollMax() (gas: 19162714)
+Logs:
+  mtxRollOver ROLL_MAX / 2 (steady, distinct cold blobs) gas: regular / state / total 7517695 0 7517695
+  mtxRollOver ROLL_MAX (steady, distinct cold blobs) gas: regular / state / total 12167039 0 12167039
+  mtxRollOver ROLL_MAX + 16 (linear fit) gas: regular / state / total 12748207 0 12748207
+  per entry / fixed (fit) 36323 2868351
+
+[PASS] test_gas_rollMax_relayed() (gas: 11017634)
+Logs:
+  relayed mtxRollOver ROLL_MAX (mtxExecute, fee 0) gas: regular / state / total 12212500 0 12212500
+
+[PASS] test_gas_rollMax_relayedFullTx() (gas: 11179763)
+Logs:
+  relayed mtxRollOver, full transaction, fee 7, entries 256
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 612 475 54168
+    calldata gas 4 / 16 / refund (not subtracted) 4092 1228800
+    full tx regular / state / total 12243678 0 12243678
+
+[PASS] test_gas_roll_1() (gas: 2885534)
+Logs:
+  mtxRollOver 1 (steady) gas: regular / state / total 2873174 0 2873174
+
+[PASS] test_gas_roll_16() (gas: 3389851)
+Logs:
+  mtxRollOver 16 (steady) gas: regular / state / total 3449519 0 3449519
+
+[PASS] test_gas_shield_append() (gas: 109757)
+Logs:
+  mtxShield, append (tail of an earlier block) gas: regular / state / total 92660 0 92660
+
+[PASS] test_gas_shield_firstEntry() (gas: 124090)
+Logs:
+  mtxShield, the account's first entry (append) gas: regular / state / total 106939 0 106939
+
+[PASS] test_gas_shield_merge() (gas: 104035)
+Logs:
+  mtxShield, merge (TRIVIAL tail of this block) gas: regular / state / total 70494 0 70494
+
+Suite result: ok. 32 passed; 0 failed; 0 skipped; finished in 546.85ms (1.28s CPU time)
+
+Ran 2 test suites in 551.42ms (812.65ms CPU time): 34 tests passed, 0 failed, 0 skipped (34 total tests)
+

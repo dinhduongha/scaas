@@ -36,13 +36,19 @@ sed -i -e 's/\b516\b/644/g' -e 's/HALF_WORDS = 258/HALF_WORDS = 322/' -e 's/K_MA
 sed -i -e 's/\b516\b/644/g' "$S/PqzStateLib.sol"
 sed -i -e 's/33184)/41376)/' "$S/PqzViewLib.sol"
 sed -i -e 's/withAud ? 16_768 : 16_640/withAud ? 20_864 : 20_736/' "$W/evm/test/pqz/helpers/PqzFixture.sol"
+# EVM=amsterdam (Task 7b): the work tree's default profile only (EIP-7976 / 8037 / 8038 / 2780 / 7954; Foundry >= 1.8.3);
+# solc 0.8.37 accepts "amsterdam" only with its experimental settings on. EIP-7954 makes 65,536 B code native, so no
+# code-size override is needed.
+if [ -n "${EVM:-}" ]; then
+  sed -i -e "0,/^evm_version = .*/s//evm_version = \"$EVM\"\nexperimental = true/" "$W/evm/foundry.toml"
+fi
 # G1=1: op 7 with one randomness group for every M <= 8 (the O9 "M = 8 uses G = 1" shape; groups of 8 legs)
 if [ "${G1:-}" = 1 ]; then
   sed -i -e 's|(m + 3) / 4|(m + 7) / 8|g' -e 's|(j / 4)|(j / 8)|g' "$S/PqzCore.sol"
   sed -i -e 's|(m + 3) / 4|(m + 7) / 8|g' "$W/evm/test/pqz/PqzStateGas.t.sol" "$W/evm/test/pqz/helpers/PqzFixture.sol"
 fi
-echo "== p16k/gas16k.sh: repository $(git -C "$ROOT" rev-parse --short HEAD), ROLL_MAX = $R, G1 = ${G1:-0}; the 16k edits:"
-for f in src/pqz/PqzCt.sol src/pqz/PqzCore.sol src/pqz/PqzStateLib.sol src/pqz/PqzViewLib.sol test/pqz/helpers/PqzFixture.sol test/pqz/PqzStateGas.t.sol; do
+echo "== p16k/gas16k.sh: repository $(git -C "$ROOT" rev-parse --short HEAD), ROLL_MAX = $R, G1 = ${G1:-0}, EVM = ${EVM:-foundry.toml}; the 16k edits:"
+for f in foundry.toml src/pqz/PqzCt.sol src/pqz/PqzCore.sol src/pqz/PqzStateLib.sol src/pqz/PqzViewLib.sol test/pqz/helpers/PqzFixture.sol test/pqz/PqzStateGas.t.sol; do
   diff "$ROOT/smartcontracts/evm/$f" "$W/evm/$f" | sed "s|^|   $f: |" || true
 done
 cd "$W/evm"
