@@ -12,9 +12,14 @@ const _: () = assert!(
 #[cfg(feature = "set-n2304-kmax4096")]
 #[path = "../../../params/sets/n2304-kmax4096/rust/set.rs"]
 mod lattice;
-#[cfg(feature = "set-n2304-kmax4096")]
+#[cfg(all(feature = "set-n2304-kmax4096", not(feature = "spike-b")))]
 #[path = "../../../params/sets/n2304-kmax4096/pqzh_set.rs"]
 mod pqzh;
+// research spike B (5h Task 8c spike): radices 7 / 17 and their preset at set (a)
+#[cfg(all(feature = "set-n2304-kmax4096", feature = "spike-b"))]
+#[path = "../../../params/sets/n2304-kmax4096/pqzh_set_spike_b.rs"]
+mod pqzh;
+const _: () = assert!(!cfg!(feature = "spike-b") || cfg!(feature = "set-n2304-kmax4096"), "spike-b is set (a) only");
 
 #[cfg(not(feature = "set-n2304-kmax4096"))]
 #[path = "../../../params/sets/n2048-kmax1024/rust/set.rs"]

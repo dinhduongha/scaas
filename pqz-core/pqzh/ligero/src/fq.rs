@@ -24,6 +24,25 @@ pub(crate) const MASK: u64 = (1 << L) - 1;
 const NR: u64 = set::NR;
 const _: () = assert!(NR >= 2 && NR <= 5);
 
+/// RESEARCH SPIKE (5h Task 8c spike B): a thread-local count of base-field products (F_q products, 16 per F_q^4
+/// product, 4 per lazy F_q^4 x F_q term, the FFT's u128 products); feature `spike-count` only, a no-op otherwise.
+#[cfg(feature = "spike-count")]
+pub mod spike_count {
+    use std::cell::Cell;
+    thread_local!(static N: Cell<u64> = const { Cell::new(0) });
+    pub fn add(k: u64) {
+        N.with(|n| n.set(n.get() + k));
+    }
+    pub fn take() -> u64 {
+        N.with(|n| n.replace(0))
+    }
+}
+#[inline(always)]
+pub(crate) fn cnt(_k: u64) {
+    #[cfg(feature = "spike-count")]
+    spike_count::add(_k);
+}
+
 /// x - q if x >= q, else x (x < 2^63), by a mask instead of a branch (review P-B: the prover's arithmetic runs on
 /// secret values)
 #[inline(always)]
@@ -239,6 +258,7 @@ impl Mul for Fq {
     type Output = Fq;
     #[inline(always)]
     fn mul(self, o: Fq) -> Fq {
+        cnt(1);
         if cfg!(target_arch = "wasm32") {
             return Fq(limb::red(limb::mul(self.0, o.0)));
         }
@@ -328,6 +348,7 @@ impl Mul for F4 {
     type Output = F4;
     #[inline(always)]
     fn mul(self, o: F4) -> F4 {
+        cnt(16);
         if cfg!(target_arch = "wasm32") {
             return F4(limb::f4_mul(self.0.map(|x| x.0), o.0.map(|x| x.0)).map(Fq));
         }
@@ -350,6 +371,7 @@ pub struct Acc4([u128; 4]);
 impl Acc4 {
     #[inline(always)]
     pub fn add(&mut self, a: &F4, x: Fq) {
+        cnt(4);
         let x = x.0 as u128;
         for i in 0..4 {
             self.0[i] += a.0[i].0 as u128 * x;
@@ -368,6 +390,7 @@ pub struct Acc4([[u64; limb::NC]; 4]);
 impl Acc4 {
     #[inline(always)]
     pub fn add(&mut self, a: &F4, x: Fq) {
+        cnt(4);
         for i in 0..4 {
             limb::mac(&mut self.0[i], a.0[i].0, x.0, 1);
         }

@@ -139,6 +139,13 @@ fn honest_every_shape() {
         if m <= 4 && pqzh_ligero::set::NAME == "n2048-kmax1024" {
             assert!(max <= MAX_PROOF_PQZH && 5 + rel.stmt_len() + max <= MAX_INPUT, "{} limits", name(m, aud));
         }
+        // research spike B (radices 7 / 17 at set (a)): every built bound within MAX_PROOF_PQZH
+        if cfg!(feature = "spike-b") {
+            assert!(max <= MAX_PROOF_PQZH, "{} spike limit", name(m, aud));
+        }
+        if false {
+            assert!(max <= MAX_PROOF_PQZH && 5 + rel.stmt_len() + max <= MAX_INPUT, "{} limits", name(m, aud));
+        }
         // the single-leg shapes have op 1's rows
         if m == 1 {
             let f = if aud { Form::Transfer } else { Form::Transfer0 };

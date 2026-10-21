@@ -113,7 +113,7 @@ impl Params {
     pub fn preset(op: u8, proven: bool, r431: bool) -> Params {
         let small = matches!(op, OP_REGISTER | OP_DISCLOSE_SENDER | OP_DISCLOSE_RECEIVER);
         let (n, k) = match (proven, r431, small) {
-            (true, true, _) => (32756, 817),
+            (true, true, _) => (crate::set::PRESET_N, crate::set::PRESET_K),
             (true, false, _) => (6536, 817),
             (false, true, true) => (18533, 172),
             (false, true, false) => (18533, 344),
@@ -748,7 +748,7 @@ mod tests {
     #[cfg(feature = "bench")]
     #[test]
     fn proven_is_the_model() {
-        assert_eq!(Params::proven(), Params::new(32756, 817, true));
+        assert_eq!(Params::proven(), Params::new(crate::set::PRESET_N, crate::set::PRESET_K, true));
     }
 
     /// D6: the same rnd32, op and statement with another witness give unrelated masks; equal inputs, equal masks
@@ -809,7 +809,17 @@ mod tests {
         let p = Params::proven();
         let v3 = crate::set::NAME == "n2048-kmax1024";
         // (form, exact bound, within MAX_PROOF_PQZH and MAX_INPUT)
-        let expect = if v3 {
+        let spike = cfg!(feature = "spike-b"); // research spike B: set (a) at n 45,752, k 952, t 119
+        let expect = if spike {
+            [
+                (Form::Register, 206_958, true),
+                (Form::Transfer, 250_512, true),
+                (Form::Burn, 250_512, true),
+                (Form::DiscloseSender, 206_958, true),
+                (Form::DiscloseReceiver, 206_958, true),
+                (Form::Transfer0, 250_512, true),
+            ]
+        } else if v3 {
             [
                 (Form::Register, 190_458, true),
                 (Form::Transfer, 235_470, true),
@@ -840,7 +850,20 @@ mod tests {
         // op 7 R_TXM, (M, auditorOn): exact bounds and inputs 5 + statement + bound (v3 = the pre-review H-3 table,
         // measured max_len_exact in runs/l16-txm-*; set (a): runs/c8-a-sizes.jsonl); v3's built shapes (M <= 4)
         // within MAX_PROOF_PQZH and MAX_INPUT, the oversize ones above; set (a): every shape above MAX_PROOF_PQZH
-        let multi = if v3 {
+        let multi = if spike {
+            [
+                ((1, true), 250_512, 343_829),
+                ((1, false), 250_512, 325_269),
+                ((2, true), 251_226, 363_231),
+                ((2, false), 250_512, 343_829),
+                ((4, true), 251_940, 401_321),
+                ((4, false), 251_226, 381_663),
+                ((8, true), 295_494, 538_059),
+                ((8, false), 294_780, 517_889),
+                ((16, true), 385_458, 814_391),
+                ((16, false), 381_888, 790_341),
+            ]
+        } else if v3 {
             [
                 ((1, true), 235_470, 318_547),
                 ((1, false), 234_744, 301_309),
@@ -870,7 +893,9 @@ mod tests {
         for ((m, aud), max, input) in multi {
             let r = Rel::Multi { m, aud };
             assert_eq!((p.max_len_exact(r), p.max_proof_len(r), 5 + r.stmt_len() + max), (max, max, input), "M {m} {aud}");
-            assert_eq!(max <= MAX_PROOF_PQZH && input <= MAX_INPUT, v3 && m <= 4, "M {m} {aud}");
+            // spike: every built shape within MAX_PROOF_PQZH; M = 4 auditor on above today's MAX_INPUT (512 KiB in 8d)
+            let fits = if spike { m <= 4 && !(m == 4 && aud) } else { v3 && m <= 4 };
+            assert_eq!(max <= MAX_PROOF_PQZH && input <= MAX_INPUT, fits, "M {m} {aud}");
             assert!(p.proof_len_ok(r, max) && !p.proof_len_ok(r, max + 1) && !p.proof_len_ok(r, 0));
         }
         let built = cs::multi_rels();
