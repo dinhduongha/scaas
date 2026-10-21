@@ -10,21 +10,21 @@
 
 #include "pqz.h"
 
-#define N 2048
-#define DELTA ((int64_t)((1 << 26) - 1))
+#define N PQZ_N
+#define DELTA PQZ_DELTA
 #define MAXCTR 64
 
 #ifdef PQZ_TEST_HOOKS
 /* test-only norm thresholds (never in libpqz): test/pqz_keys_kat.c lowers them to pin the resample path and the
    counter-64 error, which the real thresholds (>= 10 s.d. above the mean norms) never reach */
-int pqz_test_bs = 36, pqz_test_be = 164, pqz_test_b2 = 64;
+int pqz_test_bs = PQZ_BETA_S, pqz_test_be = PQZ_BETA_E, pqz_test_b2 = PQZ_BETA_2;
 #define BS pqz_test_bs
 #define BE pqz_test_be
 #define B2 pqz_test_b2
 #else
-#define BS 36
-#define BE 164
-#define B2 64
+#define BS PQZ_BETA_S /* the set's norm bounds (pqz_set.h) */
+#define BE PQZ_BETA_E
+#define B2 PQZ_BETA_2
 #endif
 
 typedef struct
@@ -112,7 +112,7 @@ canonical (const uint8_t *p, size_t n)
 }
 
 int
-pqz_keygen (const uint8_t seed32[32], uint8_t pk[PQZ_POLYVEC_BYTES], int8_t s[2048], int16_t e[2048],
+pqz_keygen (const uint8_t seed32[32], uint8_t pk[PQZ_POLYVEC_BYTES], int8_t s[PQZ_N], int16_t e[PQZ_N],
             unsigned *ctr_used)
 {
   bits_t b;
@@ -136,7 +136,7 @@ pqz_keygen (const uint8_t seed32[32], uint8_t pk[PQZ_POLYVEC_BYTES], int8_t s[20
 
 int
 pqz_enc_seed (const uint8_t *const pks[], unsigned npk, const uint8_t msgs[][16], const uint8_t seed_enc[32],
-              uint8_t u[PQZ_POLYVEC_BYTES], uint8_t vs[][PQZ_V_BYTES], int8_t r[2048], int16_t e1[2048],
+              uint8_t u[PQZ_POLYVEC_BYTES], uint8_t vs[][PQZ_V_BYTES], int8_t r[PQZ_N], int16_t e1[PQZ_N],
               int16_t e2[][16], unsigned *ctr_used)
 {
   bits_t b;
@@ -186,7 +186,7 @@ pqz_enc_group_seed (const uint8_t seed_enc[32], unsigned g, uint8_t out[32])
 }
 
 int
-pqz_dec (const int8_t s[2048], const uint8_t ct[PQZ_POLYVEC_BYTES + PQZ_V_BYTES], int64_t M[16], int64_t noise[16])
+pqz_dec (const int8_t s[PQZ_N], const uint8_t ct[PQZ_POLYVEC_BYTES + PQZ_V_BYTES], int64_t M[16], int64_t noise[16])
 {
   int64_t w[16];
   if (!canonical (ct, PQZ_POLYVEC_BYTES + PQZ_V_BYTES))
@@ -199,11 +199,13 @@ pqz_dec (const int8_t s[2048], const uint8_t ct[PQZ_POLYVEC_BYTES + PQZ_V_BYTES]
     }
   for (unsigned i = 0; i < 16; i++)
     {
-      /* M = round(w / Delta) = floor((2w + Delta) / (2 Delta)), no ties (Delta odd); branch-free: |w| < q/2 < 2^41, so
-         t = 2w + Delta + 2 Delta 2^17 > 0, and floor(t / (2 Delta)) = M + 2^17. review E: the division is the fixed-step
-         restoring division of pqz_mpn.h (w is secret; wasm32 keeps a 64-bit '/' as i64.div_u even by a constant) */
-      mp_limb_t t = (uint64_t)(2 * w[i] + DELTA + 2 * DELTA * ((int64_t)1 << 17)), d = 2 * DELTA;
-      int64_t m = (int64_t)pqz__div (NULL, &t, 1, &d, 1) - ((int64_t)1 << 17);
+      /* M = round(w / Delta) = floor((2w + Delta) / (2 Delta)), ties up (v3: Delta odd, no ties; pa: Delta even, and an
+         encryption's |noise| < Delta / 2 never ties); branch-free: |w| < q/2 and Delta ~ q / 2^(MBITS + 2), so with
+         SH = MBITS + 3, 2 Delta 2^SH ~ 4q, t = 2w + Delta + 2 Delta 2^SH > 0 and floor(t / (2 Delta)) = M + 2^SH.
+         review E: the division is the fixed-step restoring division of pqz_mpn.h (w is secret; wasm32 keeps a 64-bit
+         '/' as i64.div_u even by a constant) */
+      mp_limb_t t = (uint64_t)(2 * w[i] + DELTA + 2 * DELTA * ((int64_t)1 << (PQZ_MBITS + 3))), d = 2 * DELTA;
+      int64_t m = (int64_t)pqz__div (NULL, &t, 1, &d, 1) - ((int64_t)1 << (PQZ_MBITS + 3));
       M[i] = m, noise[i] = w[i] - DELTA * m;
     }
   explicit_bzero (w, sizeof w);

@@ -20,10 +20,24 @@
 #define PQZ_OP_DISCLOSE_RECEIVER 5
 #define PQZ_MAX_PROOF 98304 /* MAX_PROOF (pq-zero-knowledge.md §8) */
 
-#define PQZ_POLYVEC_BYTES 16384 /* 32 polys x 64 coeffs x be8 */
+/* The parameter set (owner 2026-10-21: one directory per set, chosen at compile time, one set per library build;
+   build.sh PQZ_SET=pa | v3): params/sets/<set>/pqz_set.h gives n = PQZ_N = k d (k = PQZ_K polys of d = 64), q, Delta,
+   K_MAX, the norm bounds and the bit widths (pa: n 2304, q = 61,275,424,977,257, M_i 16, carries 13, e_T 27 bits;
+   v3: n 2048, q = 2^42 - 215, 14 / 11 / 25). */
+#include "pqz_set.h"
+#define PQZ_EOFF ((int64_t)1 << (PQZ_EBITS - 1)) /* e_T + E, e' + E in EBITS bits */
+/* debit bit layout after the legs' digits d_j (64 bits each): d' at 0, M_i at PQZ_BITS_M + MBITS i, c_i + 64 at
+   PQZ_BITS_C + CBITS i, e_T,i + E at PQZ_BITS_E + EBITS i; R_BURN (no leg) has PQZ_BITS_BURN bits (v3 853, pa 947), a
+   debit with M legs PQZ_BITS_BURN + 64 M */
+#define PQZ_BITS_M 64
+#define PQZ_BITS_C (PQZ_BITS_M + 16 * PQZ_MBITS)
+#define PQZ_BITS_E (PQZ_BITS_C + 15 * PQZ_CBITS)
+#define PQZ_BITS_BURN (PQZ_BITS_E + 16 * PQZ_EBITS)
+#define PQZ_POLYVEC_BYTES (PQZ_K * 512) /* k polys x 64 coeffs x be8 */
 #define PQZ_V_BYTES 128         /* 16 coeffs x be8 */
 #define PQZ_PREFIX_BYTES 64     /* opTag || proofSystemId */
-/* proofSystemId (statement bytes 32..63) = keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v3") (pq-zero-knowledge.md §8,
+/* proofSystemId (statement bytes 32..63) = keccak256("scaas/pqz/lnp22/mlwe-d64k32-q42l4/v3"); the same for every set in
+   plan 5h Task 8b: 8d makes the one bump for set (a) and the transcript fixes of Task 8 (pq-zero-knowledge.md §8,
    CTR-PQZ-09). pqz-core only hashes it; the precompile accepts only ids it implements. v3 (was .../v2): the Fiat-Shamir
    transcript absorbs z3, z4 before V3 / V4 and h before mu and the final challenge (P6-FS, lazer/lnp-tbox.c
    _lnp_tbox_hash_z34 / _lnp_tbox_hash_h, src/pqz_sv.c; lazer-crypto/lazer issue 28); v2 is retired (forgeable).
@@ -34,8 +48,8 @@
 
 /* R_REG: prefix || message (32) || pk */
 #define PQZ_REG_STMT_BYTES (PQZ_PREFIX_BYTES + 32 + PQZ_POLYVEC_BYTES)
-/* R_REG witness: s (2048 x int8) || e (2048 x int16 LE) */
-#define PQZ_REG_WIT_BYTES (2048 + 4096)
+/* R_REG witness: s (n x int8) || e (n x int16 LE) */
+#define PQZ_REG_WIT_BYTES (3 * PQZ_N)
 
 /* Debit statements (pq-zero-knowledge.md §7.7): header (640 B of 32-byte words) || body. The relations read fee (header
    offset 256) and, for R_BURN, amount (288), each a be32 word that must be < 2^64; the rest of the header is only
@@ -50,8 +64,8 @@
    on transfers and REFRESH (amount: transfers and REFRESH); auditorOn and the whole salt word on BURN / REFRESH */
 #define PQZ_HDR_TO_UA 192
 #define PQZ_HDR_RECIPIENT 320
-/* auditorOn word (§7.7 offset 448; CTR-PQZ-24): op 1 is R_TX with an 83,072-byte statement, which requires the word
-   = 1, and R_TX0 with a 66,560-byte one, which requires 0; anything else is rejected (P6e plan R6) */
+/* auditorOn word (§7.7 offset 448; CTR-PQZ-24): op 1 is R_TX with a 93,312-byte statement, which requires the word
+   = 1, and R_TX0 with a 74,752-byte one (pa; v3: 83,072 / 66,560), which requires 0; anything else is rejected (P6e plan R6) */
 #define PQZ_HDR_AUDITOR_ON 448
 /* R_TX (auditor on): header || pk_f || pk_t || pk_a || T = u_T || v_T || out = u || v_t || v_f || v_a */
 #define PQZ_TX_STMT_BYTES                                                                                   \
@@ -59,7 +73,7 @@
    + (PQZ_POLYVEC_BYTES + 3 * PQZ_V_BYTES))
 /* R_TX witness: s_f (int8) || e_f (int16) || r (int8) || e1 (int16) || e2_t, e2_f, e2_a (16 x int16 each)
    || d (16 x u8) || d' (16 x u8)   [M, carries and e_T are derived by the prover] */
-#define PQZ_TX_WIT_BYTES (2048 + 4096 + 2048 + 4096 + 3 * 32 + 16 + 16)
+#define PQZ_TX_WIT_BYTES (6 * PQZ_N + 3 * 32 + 16 + 16)
 
 /* R_TX0 (auditor off, CTR-PQZ-24: no pk_a / v_a, row 5 skipped; P6e D8): header || pk_f || pk_t || T = u_T || v_T
    || out = u || v_t || v_f */
@@ -68,13 +82,13 @@
    + (PQZ_POLYVEC_BYTES + 2 * PQZ_V_BYTES))
 /* R_TX0 witness: s_f (int8) || e_f (int16) || r (int8) || e1 (int16) || e2_t, e2_f (16 x int16 each) || d (16 x u8)
    || d' (16 x u8) */
-#define PQZ_TX0_WIT_BYTES (2048 + 4096 + 2048 + 4096 + 2 * 32 + 16 + 16)
+#define PQZ_TX0_WIT_BYTES (6 * PQZ_N + 2 * 32 + 16 + 16)
 
 /* R_TXM (op 7, OP_TRANSFER_MULTI; P6-ANON plan §3, §4): M legs (a decoy is a leg of amount 0), G = ceil(M / 4)
    randomness groups (leg j in group j / 4, v_f in group 0), auditor on (A = 1, one copy v_{a,j} per leg) or off.
    Header: §7.7's with word 192 = recipientsHash (hashed only) and word 320 = M; the core picks the relation by the
    M word (PQZ_TXM_BUILT) and the auditorOn word (0 / 1) and requires the length PQZ_TXM_STMT_BYTES(M, A) (the length
-   alone does not fix (M, A): (1, on) and (2, off) are both 83,072 B). Body: pk_f || pk_0 .. pk_{M-1} || [pk_a] ||
+   alone does not fix (M, A): (1, on) and (2, off) have the same length, pa 93,312 B, v3 83,072 B). Body: pk_f || pk_0 .. pk_{M-1} || [pk_a] ||
    T = u_T || v_T || u_0 .. u_{G-1} || v_0 .. v_{M-1} || v_f || [v_{a,0} .. v_{a,M-1}]; at M = 1 that is R_TX's /
    R_TX0's body, and the relation uses R_TX's / R_TX0's parameters with ABDLOP keys of its own. Built M: 1, 2, 4, 8;
    M = 16 only with -DPQZ_TXM_OVERSIZE (bench builds; it does not fit MAX_INPUT, plan D3 / D20). */
@@ -93,25 +107,25 @@
    s_f (int8) || e_f (int16) || (r_g (int8) || e1_g (int16)) for g < G || e2_j (16 x int16) for j < M || e2_f
    || [e2_{a,j} for j < M] || d_j (16 x u8) for j < M || d' (16 x u8); at M = 1 R_TX's / R_TX0's witness */
 #define PQZ_TXM_WIT_BYTES(m, a)                                                                             \
-  ((1 + PQZ_TXM_GROUPS (m)) * (2048 + 4096) + 32 * ((m) + 1 + (a) * (m)) + 16 * (m) + 16)
+  ((1 + PQZ_TXM_GROUPS (m)) * 3 * PQZ_N + 32 * ((m) + 1 + (a) * (m)) + 16 * (m) + 16)
 
 /* R_BURN (§7.5): header || pk_f || T = u_T || v_T || out = u || v_f */
 #define PQZ_BURN_STMT_BYTES (PQZ_HEADER_BYTES + PQZ_POLYVEC_BYTES + 2 * (PQZ_POLYVEC_BYTES + PQZ_V_BYTES))
 /* R_BURN witness: s_f (int8) || e_f (int16) || r (int8) || e1 (int16) || e2_f (16 x int16) || d' (16 x u8)
    [M, carries and e_T are derived by the prover; d = digits(amount) is public] */
-#define PQZ_BURN_WIT_BYTES (2048 + 4096 + 2048 + 4096 + 32 + 16)
+#define PQZ_BURN_WIT_BYTES (6 * PQZ_N + 32 + 16)
 
 /* Disclosure (pq-zero-knowledge.md §7.9): opTag || proofSystemId || chainId || chainUid || token || registry || entryRef
    || amount || kind || pk || u || v, every scalar a 32-byte word (amount < 2^64; kind is hashed only), so pk starts
-   at 288. Same layout for R_DS and R_DR; 33,184 B. */
+   at 288. Same layout for R_DS and R_DR; pa 37,280 B, v3 33,184 B. */
 #define PQZ_DISC_AMOUNT (PQZ_PREFIX_BYTES + 5 * 32)
 #define PQZ_DISC_KIND (PQZ_DISC_AMOUNT + 32)
 #define PQZ_DISC_PK (PQZ_DISC_KIND + 32)
 #define PQZ_DISC_STMT_BYTES (PQZ_DISC_PK + 2 * PQZ_POLYVEC_BYTES + PQZ_V_BYTES)
 /* R_DS witness (sender): r (int8) || e1 (int16) || e2_t (16 x int16) */
-#define PQZ_DS_WIT_BYTES (2048 + 4096 + 32)
+#define PQZ_DS_WIT_BYTES (3 * PQZ_N + 32)
 /* R_DR witness (receiver or auditor): s (int8) || e (int16)   [e' is derived by the prover] */
-#define PQZ_DR_WIT_BYTES (2048 + 4096)
+#define PQZ_DR_WIT_BYTES (3 * PQZ_N)
 
 /* arena: caller memory used for every call (long-lived caches at the bottom); returns 0 on success */
 int pqz_init (void *arena, size_t arena_len);
@@ -131,30 +145,30 @@ int pqz_verify (uint8_t op, const uint8_t *stmt, size_t stmt_len, const uint8_t 
 int pqz_verify_fast (uint8_t op, const uint8_t *stmt, size_t stmt_len, const uint8_t *proof, size_t proof_len);
 
 /* helpers for tests and clients: the public matrix A (spec CTR-PQZ-03) applied to short vectors */
-int pqz_keypair_from_secret (const int8_t s[2048], const int16_t e[2048], uint8_t pk[PQZ_POLYVEC_BYTES]);
-int pqz_encrypt (const uint8_t *const pks[], unsigned int npk, const uint8_t msgs[][16], const int8_t r[2048],
-                 const int16_t e1[2048], const int16_t e2[][16], uint8_t u[PQZ_POLYVEC_BYTES],
+int pqz_keypair_from_secret (const int8_t s[PQZ_N], const int16_t e[PQZ_N], uint8_t pk[PQZ_POLYVEC_BYTES]);
+int pqz_encrypt (const uint8_t *const pks[], unsigned int npk, const uint8_t msgs[][16], const int8_t r[PQZ_N],
+                 const int16_t e1[PQZ_N], const int16_t e2[][16], uint8_t u[PQZ_POLYVEC_BYTES],
                  uint8_t vs[][PQZ_V_BYTES]);
-int pqz_decrypt_raw (const int8_t s[2048], const uint8_t u[PQZ_POLYVEC_BYTES], const uint8_t v[PQZ_V_BYTES],
+int pqz_decrypt_raw (const int8_t s[PQZ_N], const uint8_t u[PQZ_POLYVEC_BYTES], const uint8_t v[PQZ_V_BYTES],
                      int64_t w[16]); /* w_i = centre(v_i - (u^T s)_i) */
 
 /* keys and encryption from seeds (pq-zero-knowledge.md §4.2, pqz_keys.c). 0 = ok; PQZ_ERR_INTERNAL (1) before pqz_init (as the
    three helpers above); PQZ_ERR_REJECT (4) after 64 counters (never in practice: the thresholds sit >= 10 s.d. above the mean norms), PQZ_ERR_INPUT (3) on a pk or
    ciphertext coefficient >= q or a digit > 15. ctr_used (may be NULL): the counter of the accepted attempt.
    KeyGen: SHAKE256("SCAAS-PQZ-KEYGEN-V1" || seed32 || be4(ctr)), s <- CBD_1, e <- CBD_20, pk = A s + e. */
-int pqz_keygen (const uint8_t seed32[32], uint8_t pk[PQZ_POLYVEC_BYTES], int8_t s[2048], int16_t e[2048],
+int pqz_keygen (const uint8_t seed32[32], uint8_t pk[PQZ_POLYVEC_BYTES], int8_t s[PQZ_N], int16_t e[PQZ_N],
                 unsigned *ctr_used);
 /* Enc: SHAKE256("SCAAS-PQZ-ENC-V1" || seed_enc || be4(ctr)), r <- CBD_1, e1 <- CBD_20, e2_j <- CBD_20^16 in recipient
    order; u = A^T r + e1, v_j = pk_j^T r + e2_j + Delta m_j (msgs: 16 digits < 16 per recipient) */
 int pqz_enc_seed (const uint8_t *const pks[], unsigned int npk, const uint8_t msgs[][16], const uint8_t seed_enc[32],
-                  uint8_t u[PQZ_POLYVEC_BYTES], uint8_t vs[][PQZ_V_BYTES], int8_t r[2048], int16_t e1[2048],
+                  uint8_t u[PQZ_POLYVEC_BYTES], uint8_t vs[][PQZ_V_BYTES], int8_t r[PQZ_N], int16_t e1[PQZ_N],
                   int16_t e2[][16], unsigned *ctr_used);
 /* R_TXM group seeds (CTR-PQZ-19 extended, P6-ANON D13): group 0 uses seed_enc itself, group g >= 1
    SHAKE256("SCAAS-PQZ-ENC-GROUP-V1" || seed_enc || be4(g))[0..32); pqz_enc_seed then encrypts the group's legs, then
    (group 0) pk_f, then the group's auditor copies, in that order. Pure hashing: no pqz_init needed. */
 void pqz_enc_group_seed (const uint8_t seed_enc[32], unsigned g, uint8_t out[32]);
 /* Dec of ct = u || v: M_i = round(w_i / Delta), noise_i = w_i - Delta M_i; value = sum M_i 16^i (the caller's) */
-int pqz_dec (const int8_t s[2048], const uint8_t ct[PQZ_POLYVEC_BYTES + PQZ_V_BYTES], int64_t M[16],
+int pqz_dec (const int8_t s[PQZ_N], const uint8_t ct[PQZ_POLYVEC_BYTES + PQZ_V_BYTES], int64_t M[16],
              int64_t noise[16]);
 
 #endif

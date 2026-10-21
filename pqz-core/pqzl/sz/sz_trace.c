@@ -119,8 +119,8 @@ int
 main (void)
 {
   static uint8_t arena[(size_t)768 << 20];
-  int8_t s[2048];
-  int16_t e[2048];
+  int8_t s[PQZ_N];
+  int16_t e[PQZ_N];
   uint8_t pk[PQZ_POLYVEC_BYTES], stmt[PQZ_REG_STMT_BYTES], wit[PQZ_REG_WIT_BYTES], proof[PQZ_MAX_PROOF];
   uint8_t rnd32[32];
   size_t len = sizeof (proof);
@@ -128,8 +128,8 @@ main (void)
   if (pqz_init (arena, sizeof (arena)))
     return fprintf (stderr, "init failed\n"), 1;
 
-  short8 (s, 2048, 1, 36);
-  short16 (e, 2048, 20, 164);
+  short8 (s, PQZ_N, 1, PQZ_BETA_S);
+  short16 (e, PQZ_N, 20, PQZ_BETA_E);
   if (pqz_keypair_from_secret (s, e, pk))
     return fprintf (stderr, "keypair failed\n"), 1;
 
@@ -137,11 +137,11 @@ main (void)
   for (int i = 0; i < 32; i++)
     stmt[PQZ_PREFIX_BYTES + i] = (uint8_t)i;
   memcpy (stmt + PQZ_PREFIX_BYTES + 32, pk, PQZ_POLYVEC_BYTES);
-  for (int j = 0; j < 2048; j++)
+  for (int j = 0; j < PQZ_N; j++)
     {
       wit[j] = (uint8_t)s[j];
-      wit[2048 + 2 * j] = (uint8_t)(uint16_t)e[j];
-      wit[2048 + 2 * j + 1] = (uint8_t)((uint16_t)e[j] >> 8);
+      wit[PQZ_N + 2 * j] = (uint8_t)(uint16_t)e[j];
+      wit[PQZ_N + 2 * j + 1] = (uint8_t)((uint16_t)e[j] >> 8);
     }
   for (int i = 0; i < 32; i++)
     rnd32[i] = (uint8_t)(i * 31 + 7);

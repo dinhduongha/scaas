@@ -1,6 +1,8 @@
 #!/bin/sh
 # pqz-core build: native (libpqz.a, libpqz.so, tests, bench) and freestanding wasm32 (pqz.wasm).
 #   ./build.sh native | wasm | all        (outputs in build/)
+#   PQZ_SET=<set> ./build.sh ...           the parameter set, params/sets/<set>/ (default n2304-kmax4096; the frozen v3
+#                                          set n2048-kmax1024); one set per build directory (B=build/<set> to keep several)
 set -eu
 cd "$(dirname "$0")"
 B=${B:-build}
@@ -11,6 +13,7 @@ WARN="-Wall -Wextra -Wno-unused-parameter -Wno-unused-function -Wno-sign-compare
 CFLAGS_LIB="-std=gnu11 -O2 -fno-builtin -fno-math-errno -ffp-contract=off $WARN -I$B/include -Isrc -Ilazer -Iparams"
 
 lazer_h() {
+  . ./set.sh
   { cat lazer/lazer-in1.h; echo; echo "#ifndef LAZER_CONFIG_H"; echo "#define LAZER_CONFIG_H"
     cat lazer/config.h; echo "#endif"; echo; cat lazer/lazer-in2.h; echo
     echo "/* PQZ: no CRT moduli tables (upstream moduli.h); generated rings name them, the fork ignores them */"
@@ -48,7 +51,7 @@ native() {
   ./check_symbols.sh $objs
   $CC -shared -Wl,--gc-sections -o $B/native/libpqz.so $objs
   # tests and bench (hosted programs; the library objects stay libc-free)
-  $CC -std=gnu11 -O2 $WARN $SVDEF -Isrc -o $B/native/pqz_bench test/pqz_bench.c $B/native/libpqz.a
+  $CC -std=gnu11 -O2 $WARN $SVDEF -I$B/include -Isrc -o $B/native/pqz_bench test/pqz_bench.c $B/native/libpqz.a
   $CC -std=gnu11 -O2 -DPQZ_BACKEND -DBUILD_FLAGS='"pqz-core native"' -I$B/include -Isrc -Ilazer -Iparams \
     -o $B/native/kat_dump kat/lazer_dump.c $B/native/libpqz.a
   # keys KAT: pqz_keys.c again with the test hooks (lowered thresholds), before the library's own object
@@ -62,10 +65,10 @@ native() {
   for f in pqz_rel pqz_sv; do
     $CC $CFLAGS_LIB -DPQZ_TEST_HOOKS -c src/$f.c -o $B/native/hooks/$f.o
   done
-  $CC -std=gnu11 -O2 $WARN $SVDEF -Isrc -o $B/native/pqz_sv_diff test/pqz_sv_diff.c $B/native/hooks/pqz_rel.o \
+  $CC -std=gnu11 -O2 $WARN $SVDEF -I$B/include -Isrc -o $B/native/pqz_sv_diff test/pqz_sv_diff.c $B/native/hooks/pqz_rel.o \
     $B/native/hooks/pqz_sv.o $B/native/pqz_lazer.o $B/native/pqz_ntt.o $B/native/pqz_arena.o
   # the bench with the test-only cheating prover (pqz_bench_hooks n_p n_v mask 1: R_TXM negatives reach the verifiers)
-  $CC -std=gnu11 -O2 $WARN $SVDEF -DPQZ_TEST_HOOKS -Isrc -o $B/native/pqz_bench_hooks test/pqz_bench.c \
+  $CC -std=gnu11 -O2 $WARN $SVDEF -DPQZ_TEST_HOOKS -I$B/include -Isrc -o $B/native/pqz_bench_hooks test/pqz_bench.c \
     $B/native/hooks/pqz_rel.o $B/native/hooks/pqz_sv.o $B/native/pqz_lazer.o $B/native/pqz_ntt.o $B/native/pqz_arena.o
 }
 
@@ -104,9 +107,9 @@ native_x86v3() {
   objs="$objs $B/native-x86v3/pqz_sv.o"
   ar rcs $B/native-x86v3/libpqz.a $objs
   ./check_symbols.sh $objs
-  $CC -std=gnu11 -O2 $WARN $SVDEF -Isrc -o $B/native-x86v3/pqz_bench test/pqz_bench.c $B/native-x86v3/libpqz.a
+  $CC -std=gnu11 -O2 $WARN $SVDEF -I$B/include -Isrc -o $B/native-x86v3/pqz_bench test/pqz_bench.c $B/native-x86v3/libpqz.a
   $CC $CFLAGS_LIB -O3 -march=x86-64-v3 -maes -DPQZ_TEST_HOOKS -c src/pqz_sv.c -o $B/native-x86v3/pqz_sv_hooks.o
-  $CC -std=gnu11 -O2 $WARN $SVDEF -Isrc -o $B/native-x86v3/pqz_sv_diff test/pqz_sv_diff.c $B/native/hooks/pqz_rel.o \
+  $CC -std=gnu11 -O2 $WARN $SVDEF -I$B/include -Isrc -o $B/native-x86v3/pqz_sv_diff test/pqz_sv_diff.c $B/native/hooks/pqz_rel.o \
     $B/native-x86v3/pqz_sv_hooks.o $B/native/pqz_lazer.o $B/native/pqz_ntt.o $B/native/pqz_arena.o
 }
 

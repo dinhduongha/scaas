@@ -27,8 +27,8 @@ $CC -I$B $FL -DPQZ_SV -c src/pqz_lazer.c -o $B/pqz_lazer.o
 for f in pqz_ntt pqz_arena pqz_rel pqz_keys pqz_sv; do $CC $FL -DPQZ_SV -c src/$f.c -o $B/$f.o; done
 rm -f $B/libpqz.a
 ar rcs $B/libpqz.a $B/*.o
-$CC -std=gnu11 -O2 -w -DPQZ_Z34_POC -Isrc -o $B/z34poc_prove "$F/z34poc.c" $B/libpqz.a
-$CC -std=gnu11 -O2 -w -Isrc -o $B/z34poc_verify "$F/z34poc.c" build/native/libpqz.a
+$CC -std=gnu11 -O2 -w -DPQZ_Z34_POC -Ibuild/include -Isrc -o $B/z34poc_prove "$F/z34poc.c" $B/libpqz.a
+$CC -std=gnu11 -O2 -w -Ibuild/include -Isrc -o $B/z34poc_verify "$F/z34poc.c" build/native/libpqz.a
 echo "== cheating prover (patched lnp-tbox.c, $n lines)"
 $B/z34poc_prove prove $B/out
 echo "== production verifiers (build/native/libpqz.a)"

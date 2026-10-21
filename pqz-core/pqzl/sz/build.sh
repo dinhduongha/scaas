@@ -16,6 +16,7 @@ CC=${CC:-clang}
   cat lazer/config.h; echo "#endif"; echo; cat lazer/lazer-in2.h; echo
   echo "#define moduli_d64 ((const modulus_srcptr *)0)"
   echo "#define moduli_d128 ((const modulus_srcptr *)0)"; } > "$B/include/lazer.h"
+. ./set.sh
 
 CFLAGS="-std=gnu11 -O2 -fno-builtin -fno-math-errno -ffp-contract=off -DPQZ_SZ_TRACE -DPQZ_SV \
   -Wall -Wextra -Wno-unused-parameter -Wno-unused-function -Wno-sign-compare -I$B/include -Isrc -Ilazer -Iparams"

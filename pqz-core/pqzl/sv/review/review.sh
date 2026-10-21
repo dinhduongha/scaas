@@ -46,13 +46,13 @@ s|^  polyvec_dcompress_make_ghint (h, y22, w1, dcomp_param);$|&\n  if (pqz_poc_m
 case "${1:-}" in
 dom)
   for f in pqz_lazer pqz_ntt pqz_arena pqz_rel; do $CC $FL -DPQZ_SZ_TRACE -c src/$f.c -o $B/dom-$f.o; done
-  $CC -std=gnu11 -O2 -w -Isrc -o $B/dom_trace sv/review/dom_trace.c $B/dom-*.o
+  $CC -std=gnu11 -O2 -w -Ibuild/include -Isrc -o $B/dom_trace sv/review/dom_trace.c $B/dom-*.o
   $B/dom_trace | grep -v '^dom=' || true
   ;;
 norm)
   mkdir -p $B/noz1 $B/now $B/noz21 $B/norm-out
   poc
-  $CC -std=gnu11 -O2 -w -DPQZ_NORM_POC -Isrc -o $B/normpoc_prove sv/review/normpoc.c $B/poc/libpqz.a
+  $CC -std=gnu11 -O2 -w -DPQZ_NORM_POC -Ibuild/include -Isrc -o $B/normpoc_prove sv/review/normpoc.c $B/poc/libpqz.a
   # controls: one check removed in both verifiers (lnp_quad_verify, pqz_sv.c verify_body)
   sed '336,$ s|b = int_le (l2sqr, bnd);|b = 1; /* review control */|' lazer/lnp-quad.c > $B/noz1/lnp-quad.c
   sed 's|if (!l2_le (W.zc, DEG \* mq, S->z1bnd))|if (0) /* review control */|' src/pqz_sv.c > $B/noz1/pqz_sv.c
@@ -67,9 +67,9 @@ norm)
       [ "$(diff $src $B/$v/$f | grep -c '^>' || true)" = 1 ] || echo "control $v: patch of $f did not apply"
     done
     lib $v $B/$v $B/$v/pqz_sv.c "-DPQZ_SV"
-    $CC -std=gnu11 -O2 -w -Isrc -o $B/normpoc_verify_$v sv/review/normpoc.c $B/$v/libpqz.a
+    $CC -std=gnu11 -O2 -w -Ibuild/include -Isrc -o $B/normpoc_verify_$v sv/review/normpoc.c $B/$v/libpqz.a
   done
-  $CC -std=gnu11 -O2 -w -Isrc -o $B/normpoc_verify sv/review/normpoc.c build/native/libpqz.a
+  $CC -std=gnu11 -O2 -w -Ibuild/include -Isrc -o $B/normpoc_verify sv/review/normpoc.c build/native/libpqz.a
   echo "== cheating prover"
   $B/normpoc_prove prove $B/norm-out
   echo "== production verifiers (build/native/libpqz.a)"
@@ -84,7 +84,7 @@ norm)
 zdiff)
   # P6-Z21 differential: z21-inflated proofs of every relation, both verifiers in-process (sv/review/z21diff.c)
   poc
-  $CC -std=gnu11 -O2 -w -Isrc -o $B/z21diff sv/review/z21diff.c $B/poc/libpqz.a -lm
+  $CC -std=gnu11 -O2 -w -Ibuild/include -Isrc -o $B/z21diff sv/review/z21diff.c $B/poc/libpqz.a -lm
   PQZ_ARENA_MB=${PQZ_ARENA_MB:-2048} $B/z21diff "${2:-1}" "${3:-31}" "${4:-16383}" # mask: six P6e forms + eight R_TXM
   ;;
 fuzz)

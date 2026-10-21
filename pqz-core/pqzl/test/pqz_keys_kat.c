@@ -6,7 +6,7 @@
  * 2. KeyGen on 20 seeds (seed_i[j] = 31 i + j), the pk as SHAKE256(pk) (32 B); Enc of two values to recipients i and
  *    i + 1 (seed_enc_i[j] = 17 i + j + 1), u as SHAKE256(u), both v in full, Dec by recipient i (M, noise);
  *    the R_TXM group seeds of seed_enc_0..3 for g = 0..3 (P6-ANON D13, pqz_enc_group_seed);
- * 3. Dec(Enc(m)) = m with |noise| <= B_FRESH = 11,872 (pq-zero-knowledge.md §4.3) for n_roundtrip seeds;
+ * 3. Dec(Enc(m)) = m with |noise| <= B_FRESH = 2 beta_e beta_s + 64 (pq-zero-knowledge.md §4.3) for n_roundtrip seeds;
  * 4. the resample path and the counter-64 error with lowered thresholds (PQZ_TEST_HOOKS build of pqz_keys.c: the real
  *    thresholds are never exceeded in practice);
  * 5. every keys entry point before pqz_init returns PQZ_ERR_INTERNAL (1).
@@ -21,7 +21,7 @@
 #include <string.h>
 
 #define ARENA ((size_t)64 << 20)
-#define B_FRESH 11872
+#define B_FRESH (2 * PQZ_BETA_E * PQZ_BETA_S + 64) /* v3 11,872, n2304-kmax4096 13,212 */
 
 static void
 hex (const uint8_t *p, size_t n)
@@ -65,10 +65,19 @@ ints (const int64_t *v, int n)
 
 extern int pqz_test_bs, pqz_test_be, pqz_test_b2;
 
+static int
+isqrt_round (int x) /* round(sqrt(x)) */
+{
+  int r = 0;
+  while ((r + 1) * (r + 1) <= x)
+    r++;
+  return x - r * r > r ? r + 1 : r;
+}
+
 #define NK 20
 static uint8_t pk[NK][PQZ_POLYVEC_BYTES], seed[NK][32];
-static int8_t s[NK][2048];
-static int16_t e[NK][2048];
+static int8_t s[NK][PQZ_N];
+static int16_t e[NK][PQZ_N];
 
 int
 main (int argc, char **argv)
@@ -76,8 +85,8 @@ main (int argc, char **argv)
   int nrt = argc > 1 ? atoi (argv[1]) : 1000, fails = 0;
   static uint8_t in[5000], out[1000], out2[1000];
   static uint8_t u[PQZ_POLYVEC_BYTES], ct[PQZ_POLYVEC_BYTES + PQZ_V_BYTES], vs[2][PQZ_V_BYTES];
-  static int8_t r[2048];
-  static int16_t e1[2048], e2[2][16];
+  static int8_t r[PQZ_N];
+  static int16_t e1[PQZ_N], e2[2][16];
   uint8_t h[32], m[2][16], se[32];
   int64_t M[16], noise[16];
   unsigned ctr;
@@ -195,11 +204,13 @@ main (int argc, char **argv)
         hex (gs, 32);
         printf ("\"}}\n");
       }
-  /* 4. lowered thresholds (test hooks): KeyGen ||s|| <= 32, ||e|| <= 143 (each passes about half the time), Enc also
-     ||e2_j|| <= 12; then a threshold no sample meets (0): the counter-64 error */
+  /* 4. lowered thresholds (test hooks): KeyGen ||s|| <= HS = round(sqrt(n / 2)), ||e|| <= HE = round(sqrt(10 n))
+     (the mean norms: each passes about half the time; v3 32 / 143, n2304-kmax4096 34 / 152), Enc also ||e2_j|| <= 12;
+     then a threshold no sample meets (0): the counter-64 error */
   {
-    static const int LS[6][4] = { { 32, 143, 64, 0 }, { 32, 143, 64, 1 }, { 32, 143, 64, 2 }, { 32, 143, 12, 3 },
-                                  { 0, 164, 64, 4 }, { 36, 164, 0, 5 } };
+    const int HS = isqrt_round (PQZ_N / 2), HE = isqrt_round (10 * PQZ_N);
+    const int LS[6][4] = { { HS, HE, 64, 0 }, { HS, HE, 64, 1 }, { HS, HE, 64, 2 }, { HS, HE, 12, 3 },
+                           { 0, PQZ_BETA_E, 64, 4 }, { PQZ_BETA_S, PQZ_BETA_E, 0, 5 } };
     int resampled_k = 0, resampled_e = 0, err64 = 0;
     for (int c = 0; c < 6; c++)
       {
@@ -208,7 +219,7 @@ main (int argc, char **argv)
         unsigned ck = 99, ce = 99;
         pqz_test_bs = LS[c][0], pqz_test_be = LS[c][1], pqz_test_b2 = 64;
         int rk = pqz_keygen (seed[LS[c][3]], kp, s[NK - 1], e[NK - 1], &ck);
-        pqz_test_bs = LS[c][0] ? LS[c][0] : 36, pqz_test_be = LS[c][1], pqz_test_b2 = LS[c][2];
+        pqz_test_bs = LS[c][0] ? LS[c][0] : PQZ_BETA_S, pqz_test_be = LS[c][1], pqz_test_b2 = LS[c][2];
         for (int j = 0; j < 32; j++)
           se[j] = (uint8_t)(101 * c + j);
         digits (m[0], mix (c)), digits (m[1], mix (c + 50));
@@ -237,7 +248,7 @@ main (int argc, char **argv)
         hex (vs[1], PQZ_V_BYTES);
         printf ("\"]}}\n");
       }
-    pqz_test_bs = 36, pqz_test_be = 164, pqz_test_b2 = 64;
+    pqz_test_bs = PQZ_BETA_S, pqz_test_be = PQZ_BETA_E, pqz_test_b2 = PQZ_BETA_2;
     fails += resampled_k == 0 || resampled_e == 0 || err64 != 2;
     printf ("{\"lowered\": {\"keygen_resampled\": %d, \"enc_resampled\": %d, \"ctr64_errors\": %d}}\n", resampled_k,
             resampled_e, err64);

@@ -54,12 +54,12 @@ setup_txm (int k, unsigned m, unsigned a, const uint8_t *pk, const int8_t *s, co
   for (unsigned j = 0; j < m + 1 + a * m; j++)
     memcpy (p, v[0], PQZ_V_BYTES), p += PQZ_V_BYTES;
   p = wit;
-  for (int j = 0; j < 2048; j++)
-    p[j] = (uint8_t)s[j], p[2048 + 2 * j] = (uint8_t)e[j], p[2049 + 2 * j] = (uint8_t)(e[j] >> 8);
-  p += 6144;
-  for (unsigned g = 0; g < G; g++, p += 6144)
-    for (int j = 0; j < 2048; j++)
-      p[j] = (uint8_t)r[j], p[2048 + 2 * j] = (uint8_t)e1[j], p[2049 + 2 * j] = (uint8_t)(e1[j] >> 8);
+  for (int j = 0; j < PQZ_N; j++)
+    p[j] = (uint8_t)s[j], p[PQZ_N + 2 * j] = (uint8_t)e[j], p[PQZ_N + 1 + 2 * j] = (uint8_t)(e[j] >> 8);
+  p += (3 * PQZ_N);
+  for (unsigned g = 0; g < G; g++, p += (3 * PQZ_N))
+    for (int j = 0; j < PQZ_N; j++)
+      p[j] = (uint8_t)r[j], p[PQZ_N + 2 * j] = (uint8_t)e1[j], p[PQZ_N + 1 + 2 * j] = (uint8_t)(e1[j] >> 8);
   memset (p, 0, 32 * (m + 1 + a * m) + 16 * (m + 1)); /* e2 = 0, digits 0 */
   plen[k] = PQZ_MAX_PROOF;
   pqz_prove (PQZ_OP_TRANSFER_MULTI, STM[k], STL[k], wit, PQZ_TXM_WIT_BYTES (m, a), r32, proof[k], &plen[k]);
@@ -69,19 +69,19 @@ setup_txm (int k, unsigned m, unsigned a, const uint8_t *pk, const int8_t *s, co
 static void
 setup (void)
 {
-  static int8_t s[2048], r[2048];
-  static int16_t e[2048], e1[2048], e2[3][16];
+  static int8_t s[PQZ_N], r[PQZ_N];
+  static int16_t e[PQZ_N], e1[PQZ_N], e2[3][16];
   static uint8_t pk[PQZ_POLYVEC_BYTES], u[PQZ_POLYVEC_BYTES], vs[3][PQZ_V_BYTES];
   static uint8_t reg_wit[PQZ_REG_WIT_BYTES], tx_wit[PQZ_TX_WIT_BYTES], tx0_wit[PQZ_TX0_WIT_BYTES];
   uint8_t m[3][16] = { { 0 } }, r32[32] = { 0 };
-  for (int j = 0; j < 2048; j++)
+  for (int j = 0; j < PQZ_N; j++)
     s[j] = (int8_t)(j % 3 ? 0 : (j / 3) & 1 ? 1 : -1), r[j] = (int8_t)(j % 3 != 1 ? 0 : (j / 3) & 1 ? -1 : 1),
-    e[j] = (int16_t)(j % 5 - 2), e1[j] = (int16_t)(j % 7 - 3); /* within the l2 bounds 36 / 164 */
+    e[j] = (int16_t)(j % 5 - 2), e1[j] = (int16_t)(j % 7 - 3); /* within the l2 bounds 38 / 173 */
   pqz_keypair_from_secret (s, e, pk);
   memset (reg_stmt, 0xA5, PQZ_PREFIX_BYTES);
   memcpy (reg_stmt + PQZ_PREFIX_BYTES + 32, pk, PQZ_POLYVEC_BYTES);
-  for (int j = 0; j < 2048; j++)
-    reg_wit[j] = (uint8_t)s[j], reg_wit[2048 + 2 * j] = (uint8_t)e[j], reg_wit[2049 + 2 * j] = (uint8_t)(e[j] >> 8);
+  for (int j = 0; j < PQZ_N; j++)
+    reg_wit[j] = (uint8_t)s[j], reg_wit[PQZ_N + 2 * j] = (uint8_t)e[j], reg_wit[PQZ_N + 1 + 2 * j] = (uint8_t)(e[j] >> 8);
   plen[0] = PQZ_MAX_PROOF;
   pqz_prove (PQZ_OP_REGISTER, reg_stmt, sizeof reg_stmt, reg_wit, sizeof reg_wit, r32, proof[0], &plen[0]);
 
@@ -103,12 +103,12 @@ setup (void)
   for (int k = 0; k < 3; k++)
     memcpy (p, vs[k], PQZ_V_BYTES), p += PQZ_V_BYTES;
   p = tx_wit;
-  for (int j = 0; j < 2048; j++)
-    p[j] = (uint8_t)s[j], p[2048 + 2 * j] = (uint8_t)e[j], p[2049 + 2 * j] = (uint8_t)(e[j] >> 8);
-  p += 6144;
-  for (int j = 0; j < 2048; j++)
-    p[j] = (uint8_t)r[j], p[2048 + 2 * j] = (uint8_t)e1[j], p[2049 + 2 * j] = (uint8_t)(e1[j] >> 8);
-  p += 6144;
+  for (int j = 0; j < PQZ_N; j++)
+    p[j] = (uint8_t)s[j], p[PQZ_N + 2 * j] = (uint8_t)e[j], p[PQZ_N + 1 + 2 * j] = (uint8_t)(e[j] >> 8);
+  p += (3 * PQZ_N);
+  for (int j = 0; j < PQZ_N; j++)
+    p[j] = (uint8_t)r[j], p[PQZ_N + 2 * j] = (uint8_t)e1[j], p[PQZ_N + 1 + 2 * j] = (uint8_t)(e1[j] >> 8);
+  p += (3 * PQZ_N);
   memset (p, 0, 96 + 32); /* e2 = 0, digits d = d' = 0 */
   plen[1] = PQZ_MAX_PROOF;
   pqz_prove (PQZ_OP_TRANSFER, tx_stmt, sizeof tx_stmt, tx_wit, sizeof tx_wit, r32, proof[1], &plen[1]);
@@ -118,7 +118,7 @@ setup (void)
   memcpy (tx0_stmt + PQZ_HEADER_BYTES, tx_stmt + PQZ_HEADER_BYTES, 2 * PQZ_POLYVEC_BYTES); /* pk_f, pk_t */
   memcpy (tx0_stmt + PQZ_HEADER_BYTES + 2 * PQZ_POLYVEC_BYTES, tx_stmt + PQZ_HEADER_BYTES + 3 * PQZ_POLYVEC_BYTES,
           PQZ_TX0_STMT_BYTES - PQZ_HEADER_BYTES - 2 * PQZ_POLYVEC_BYTES); /* T, u, v_t, v_f (v_a dropped) */
-  memcpy (tx0_wit, tx_wit, 12288 + 64), memset (tx0_wit + 12288 + 64, 0, 32);
+  memcpy (tx0_wit, tx_wit, (6 * PQZ_N) + 64), memset (tx0_wit + (6 * PQZ_N) + 64, 0, 32);
   plen[2] = PQZ_MAX_PROOF;
   pqz_prove (PQZ_OP_TRANSFER, tx0_stmt, sizeof tx0_stmt, tx0_wit, sizeof tx0_wit, r32, proof[2], &plen[2]);
 

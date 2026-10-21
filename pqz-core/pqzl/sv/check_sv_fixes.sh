@@ -28,7 +28,7 @@ for v in tree sz l2; do
   n=$(diff src/pqz_sv.c $src | grep -c '^>' || true)
   if [ $v != tree ] && [ "$n" != 1 ]; then echo "check_sv_fixes $v: revert did not apply ($n lines)"; rc=1; continue; fi
   $CC $F -c $src -o $B/pqz_sv_$v.o
-  $CC -std=gnu11 -O2 -w -Isrc -o $B/pqz_sv_diff_$v test/pqz_sv_diff.c $H/hooks/pqz_rel.o $B/pqz_sv_$v.o \
+  $CC -std=gnu11 -O2 -w -Ibuild/include -Isrc -o $B/pqz_sv_diff_$v test/pqz_sv_diff.c $H/hooks/pqz_rel.o $B/pqz_sv_$v.o \
     $H/pqz_lazer.o $H/pqz_ntt.o $H/pqz_arena.o
   # shellcheck disable=SC2086
   $B/pqz_sv_diff_$v $A > $B/$v.jsonl || true

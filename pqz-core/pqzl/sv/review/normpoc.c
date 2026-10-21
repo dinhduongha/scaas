@@ -59,8 +59,8 @@ int
 main (int argc, char **argv)
 {
   static uint8_t stmt[PQZ_REG_STMT_BYTES], wit[PQZ_REG_WIT_BYTES], proof[PQZ_MAX_PROOF];
-  static int8_t s[2048];
-  static int16_t e[2048];
+  static int8_t s[PQZ_N];
+  static int16_t e[PQZ_N];
   size_t arena_len = (size_t)512 << 20;
   void *arena = malloc (arena_len);
   if (argc < 3 || !arena || pqz_init (arena, arena_len))
@@ -76,18 +76,18 @@ main (int argc, char **argv)
           do
             {
               ns = ne = 0;
-              for (int j = 0; j < 2048; j++)
+              for (int j = 0; j < PQZ_N; j++)
                 s[j] = (int8_t)cbd (1), e[j] = (int16_t)cbd (20), ns += s[j] * s[j], ne += e[j] * e[j];
             }
-          while (ns > 36 * 36 || ne > 164 * 164);
+          while (ns > PQZ_BETA_S * PQZ_BETA_S || ne > PQZ_BETA_E * PQZ_BETA_E);
           memset (stmt, 0xA5, PQZ_PREFIX_BYTES);
           const uint8_t psid[32] = PQZ_PROOF_SYSTEM_ID;
           memcpy (stmt + 32, psid, 32);
           for (int i = 0; i < 32; i++)
             stmt[PQZ_PREFIX_BYTES + i] = (uint8_t)(i + 7 * k);
           pqz_keypair_from_secret (s, e, stmt + PQZ_PREFIX_BYTES + 32);
-          for (int j = 0; j < 2048; j++)
-            wit[j] = (uint8_t)s[j], wit[2048 + 2 * j] = (uint8_t)e[j], wit[2049 + 2 * j] = (uint8_t)((uint16_t)e[j] >> 8);
+          for (int j = 0; j < PQZ_N; j++)
+            wit[j] = (uint8_t)s[j], wit[PQZ_N + 2 * j] = (uint8_t)e[j], wit[PQZ_N + 1 + 2 * j] = (uint8_t)((uint16_t)e[j] >> 8);
           uint8_t rnd32[32];
           for (int i = 0; i < 32; i++)
             rnd32[i] = (uint8_t)(k * 31 + i);
