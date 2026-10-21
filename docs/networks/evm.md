@@ -18,13 +18,13 @@ Status: **BUILT** on the private chain 7622 and anvil; public chains are seeded 
 
 | Chain | Chain id | Profile | Gas | Finality gate | Status |
 |---|---|---|---|---|---|
-| Private reference chain | 7622 | `private7622` (Solidity `osaka`) | free (base fee 0) | depth 1, quorum 1 | BUILT, first target |
+| Private reference chain | 7622 | `private7622` (Solidity `amsterdam`, [NET-EVM-06](#NET-EVM-06)) | free (base fee 0) | depth 1, quorum 1 | BUILT, first target |
 | Anvil (tests) | 31337 (also 1337) | — | — | depth | BUILT (dev only) |
-| Gnosis Chain | 100 | `gnosis` (`osaka`; Pectra since 2025-04-30, then Fusaka) | native xDAI (stable value) | `tag finalized` (~160–240 s), quorum ≥ 2 independent RPCs | seeded `draft` until the operator gate passes |
-| Celo | 42220 | `celo` (`osaka`, owner 2026-10-11; the chain's fork level is not re-measured) | CELO; fee currencies optional | `l1_batch` (PLANNED) | seeded `draft` |
-| BNB Smart Chain | 56 | `bsc` (`osaka`; Mendel = Osaka since 2026-04-28) | BNB (~0.05 gwei) | `tag finalized` (BEP-126 fast finality, ~1 s), quorum ≥ 2 | seeded `draft` |
-| Polygon PoS | 137 | `polygon` (`osaka` opcode set; no named Osaka fork) | POL (~250–300 gwei) | `tag finalized` (milestones, ~3–6 s); `safe` unsupported | seeded `draft` |
-| Base | 8453 | `base` (`osaka`; Azul since 2026-05-28) | ETH (~0.005 gwei) + L1 data fee | `l1_batch`: `safe` ~90 s, `finalized` ~16 min | seeded `draft` |
+| Gnosis Chain | 100 | `gnosis` (`amsterdam`; Pectra since 2025-04-30, then Fusaka; deploy after its Glamsterdam fork) | native xDAI (stable value) | `tag finalized` (~160–240 s), quorum ≥ 2 independent RPCs | seeded `draft` until the operator gate passes |
+| Celo | 42220 | `celo` (`amsterdam`; the chain's fork level is not re-measured; deploy after its Glamsterdam fork) | CELO; fee currencies optional | `l1_batch` (PLANNED) | seeded `draft` |
+| BNB Smart Chain | 56 | `bsc` (`amsterdam`; Mendel = Osaka since 2026-04-28; deploy after its Glamsterdam fork) | BNB (~0.05 gwei) | `tag finalized` (BEP-126 fast finality, ~1 s), quorum ≥ 2 | seeded `draft` |
+| Polygon PoS | 137 | `polygon` (`amsterdam`; runs the Osaka opcode set today; deploy after its Glamsterdam fork) | POL (~250–300 gwei) | `tag finalized` (milestones, ~3–6 s); `safe` unsupported | seeded `draft` |
+| Base | 8453 | `base` (`amsterdam`; Azul since 2026-05-28; deploy after its Glamsterdam fork) | ETH (~0.005 gwei) + L1 data fee | `l1_batch`: `safe` ~90 s, `finalized` ~16 min | seeded `draft` |
 
 - **Gnosis Chain (100)** is the recommended public chain for B2B: native gas is xDAI, a stable-value coin, so gas
   costs are predictable in unit, though their size still follows the gas price (the often-quoted < $0.001/tx is not a
@@ -90,12 +90,12 @@ Parameters:
 
 | Parameter | Value |
 |---|---|
-| Client | Nethermind 1.39 |
+| Client | Nethermind 2.2.0 |
 | Consensus | Clique PoA, one signer, `period` 5 s, `epoch` 30000 |
-| Forks | live through Fusaka + BPO2: EIP-2537 (BLS12-381), EIP-7951 P-256 at `0x100`, EIP-7825 per-transaction gas cap 16,777,216, EIP-7623, EIP-7934 |
+| Forks | live through Fusaka + BPO2, and Amsterdam from block 1 on Nethermind 2.2.0 ([NET-EVM-06](#NET-EVM-06)); Fusaka: EIP-2537 (BLS12-381), EIP-7951 P-256 at `0x100`, EIP-7825 per-transaction gas cap 16,777,216, EIP-7623, EIP-7934 |
 | Base fee | 0 (gas free; `MinGasPrice` 0) |
 | Contract code size | 64 KiB (`maxCodeSize` `0x10000`, `maxCodeSizeTransition` 6432) since 2026-10-11, owner, ahead of Glamsterdam (cf. EIP-7954); 24,576 before. Probed at block 6434: 65,536 B code deploys (13.27 M gas), 65,537 B is refused, a 50,005 B init code is accepted (the init-code limit follows `maxCodeSize`). Public chains keep 24,576 |
-| Block gas limit | 16,777,216 today (`0x1000000`); 80 M `TargetBlockGasLimit` target for post-quantum Zether ([CTR-PQZ-11](../contracts/pq-zero-knowledge.md#CTR-PQZ-11)) (SPECIFIED) |
+| Block gas limit | genesis `0x1000000` (16,777,216), ramping to `Blocks.TargetBlockGasLimit` 200 M (node `config.json`); Amsterdam flows need it: total gas (regular + state, EIP-8037) is 21–31 M for a Zether edge transfer, 30–40 M for a `cacheExpandedKey` and about 109 M for the largest implementation deploy, while the per-transaction regular gas stays under 2^24 (EIP-7825). Earlier 80 M target for post-quantum Zether: [CTR-PQZ-11](../contracts/pq-zero-knowledge.md#CTR-PQZ-11) |
 | Finality | depth 1, quorum 1 (single-provider trust, reported as such) |
 | Classical Zether | not on the dev-chain allowlist ({31337, 1337}, [CTR-ZTH-02](../contracts/zether.md#CTR-ZTH-02)); whether 7622 becomes a dev chain for it is an open owner question |
 | Post-quantum Zether | the only PQZ chain: `PQZ` `0x5caa500000000000000000000000000000000f01`, `MLDSA44` `…0012`, `MLDSA65` `…0013` from the plugin in image `scaas/nethermind-pqz:1.39.0-pqz1` (local, never pushed), chainspec `engine.Pqz` ([chain integration](../contracts/pq-zero-knowledge.md#chain-integration), [§3](#precompiles)) |
@@ -107,7 +107,7 @@ BLS12-381 precompiles `0x0b`/`0x0c`/`0x0f`/`0x10` were empty while `alt_bn128` `
 Forks must be written with Nethermind's own keys (`eip1559TransitionTimestamp`, `eip2537TransitionTimestamp`, …),
 and changing them changes the genesis hash (chain reset). The only detection is to inspect a block header or call
 the precompile — the deployment checklist does both. The chainspec was fixed on 2026-08-31 before the reset to
-7622. The 16,777,216 block gas limit admits only ~5 classical confidential transfers per block (3.33 M gas each,
+7622. The genesis block gas limit of 16,777,216 (Osaka-priced measurement; the testnet ramps to 200 M) admits only ~5 classical confidential transfers per block (3.33 M gas each,
 measured); post-quantum Zether raises the target to 80 M ([CTR-PQZ-11](../contracts/pq-zero-knowledge.md#CTR-PQZ-11)).
 
 Further operator traps, found on the P6f copy of 7622 (2026-10-15, `pqz-core/nethermind/runs/2026-10-15-copy-*.txt`):
@@ -172,6 +172,17 @@ the deployer's nonce, so the same contract lands at unrelated addresses on each 
 every later address; with CREATE2 the address follows from what was deployed. Cost: a fixed-salt deployer must exist on
 each chain before the first deployment, and a redeploy with the same init code collides with the first (a new
 version needs a new salt or new code).
+
+<a id="NET-EVM-06"></a>**NET-EVM-06** — **Every Foundry profile compiles for the `amsterdam` EVM: every chain that runs these contracts
+requires Glamsterdam, and a public chain is deployed only after its own fork.** Owner ruling 2026-10-21; status **BUILT**.
+The SCaaS testnet (7622) runs Nethermind 2.2.0 with Amsterdam from block 1, and the test suite runs on Foundry 1.8.5,
+which needs `experimental = true` for `evm_version = "amsterdam"`; the profiles `default`, `private7622`, `zether`,
+`gnosis`, `celo`, `bsc`, `polygon` and `base` all set it, with one set of gas bounds. No contract reads `block.slotnum`
+(EIP-7843): Clique has no slot, so the opcode is off on the testnet. The bytecode equals the earlier `osaka` build apart
+from the metadata; the gas bounds of the tests moved with Amsterdam's prices (EIP-8037 state gas, EIP-8038 storage writes,
+EIP-7976 calldata floor, EIP-2780 intrinsic), each re-pin names its EIP in the test. The flows' total gas (regular + EIP-8037
+state gas) exceeds 2^24, up to ~109 M for the largest implementation deploy, so the testnet block gas limit must ramp to
+its 200 M target (genesis `0x1000000`).
 
 Runbook notes: (1) read the genesis hash from every configured RPC and stop if they differ; (2) on a private chain,
 confirm the genesis carries its unique `extraData` nonce before deploying; (3) deploy the CREATE2 deployer once per

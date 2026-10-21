@@ -31,10 +31,12 @@ contract SSTORE2Test is Test {
         (bool ok, bytes memory ret) = q.call(hex"12345678");
         assertTrue(ok);
         assertEq(ret.length, 0);
-        // a CREATE that fails (here: out of gas for the 200 gas/byte code deposit) reverts, never yields address 0
+        // a CREATE that fails (here: out of gas for the code deposit) reverts, never yields address 0. F185: this holds under
+        // Amsterdam, where the deposit is EIP-8037 state gas and the CREATE needs more than 100,000 (the call ran out of
+        // gas before it could revert): 250,000, was 100,000 (Osaka's 200 gas/byte deposit; 250,000 would afford it)
         bytes memory kb = new bytes(1_000);
         vm.expectRevert(SSTORE2.SSTORE2WriteFailed.selector);
-        h.write{gas: 100_000}(kb);
+        h.write{gas: 250_000}(kb);
         // P6c: data the 2-byte length of the init code cannot carry reverts instead of storing a truncated copy
         vm.expectRevert(SSTORE2.SSTORE2WriteFailed.selector);
         h.write(new bytes(0xffff));

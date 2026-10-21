@@ -4086,6 +4086,14 @@ R36-R49 reserved for the third design batch, never used.
 **Cost if wrong.** Unpredictable addresses across chains, or a contract deployed with another chain's `chain_uid`.
 **Source.** [history/specs/2026-10-07-metatx-generic.md](history/specs/2026-10-07-metatx-generic.md) §2 A11; §3 MG-4, MG-6; §6 step 2.
 
+### NET-EVM-06 — Every profile compiles for Amsterdam (Glamsterdam required on every chain)
+- old: — · status: current · owner: yes · date: 2026-10-21 · normative: networks/evm.md#NET-EVM-06 · superseded-by: —
+
+**Rule.** Every Foundry profile (default, private7622, zether, gnosis, celo, bsc, polygon, base) uses `evm_version = "amsterdam"` (Foundry 1.8.5, `experimental = true`); every chain that runs these contracts requires Glamsterdam, and a public chain is deployed only after its fork. No contract reads `block.slotnum` (EIP-7843 is off on the SCaaS testnet: Clique has no slot).
+**Why.** The SCaaS testnet runs Nethermind 2.2.0 with Amsterdam from block 1, and owner ruling 2026-10-21 makes Glamsterdam mandatory everywhere, so one set of gas bounds priced as the chain prices them is enough.
+**Cost if wrong.** Gas bounds pinned for another schedule would pass in CI and fail on the chain.
+**Source.** Owner 2026-10-21 (Task F185, "Đồng ý").
+
 Under "Clients — signers":
 
 ### NET-EVM-80 — First chain Gnosis, then Celo
