@@ -1,0 +1,72 @@
+
+== /p/specs/n2304k8192/reg_params.sage
+LaZer codegen as is: kmsis 20, kmlwe 36, m2 68, B 2^35.60, D 11, gamma 1037848: MSIS beta 463, MLWE uSVP beta 447, proof ~31728 B
+  pqz_delta 1.00366, kmlwe_min 36: kmsis 20, kmlwe 36, m2 68, B 2^35.60, D 11, gamma 1037848, lambda 4: MSIS beta 463, MLWE uSVP beta 447, dual_hybrid beta 0 / 0, proof ~31728 B
+  pqz_delta 1.00366, kmlwe_min 37: kmsis 20, kmlwe 37, m2 69, B 2^35.60, D 11, gamma 1037848, lambda 4: MSIS beta 463, MLWE uSVP beta 465, dual_hybrid beta 456 / 457, proof ~31856 B
+=> /p/specs/n2304k8192/reg_params.sage: pqz_delta = 1.00366, kmlwe_min = 37 (kmsis = 20, m2 = 69, D = 11, gamma = 1037848, lambda = 4, MSIS beta 463, MLWE uSVP beta 465, dual_hybrid 456 / 457, codegen proof size ~31856 B)
+
+== /p/specs/n2304k8192/tx_params.sage
+LaZer codegen as is: kmsis 21, kmlwe 36, m2 69, B 2^36.33, D 12, gamma 2016356: MSIS beta 469, MLWE uSVP beta 446, proof ~49170 B
+  pqz_delta 1.00366, kmlwe_min 36: kmsis 21, kmlwe 36, m2 69, B 2^36.33, D 12, gamma 2016356, lambda 4: MSIS beta 469, MLWE uSVP beta 446, dual_hybrid beta 0 / 0, proof ~49170 B
+  pqz_delta 1.00366, kmlwe_min 37: kmsis 21, kmlwe 37, m2 70, B 2^36.33, D 12, gamma 2016356, lambda 4: MSIS beta 469, MLWE uSVP beta 464, dual_hybrid beta 456 / 457, proof ~49298 B
+=> /p/specs/n2304k8192/tx_params.sage: pqz_delta = 1.00366, kmlwe_min = 37 (kmsis = 21, m2 = 70, D = 12, gamma = 2016356, lambda = 4, MSIS beta 469, MLWE uSVP beta 464, dual_hybrid 456 / 457, codegen proof size ~49298 B)
+
+== /p/specs/n2304k8192/tx0_params.sage
+LaZer codegen as is: kmsis 21, kmlwe 36, m2 69, B 2^36.32, D 12, gamma 2016356: MSIS beta 469, MLWE uSVP beta 446, proof ~48818 B
+  pqz_delta 1.00366, kmlwe_min 36: kmsis 21, kmlwe 36, m2 69, B 2^36.32, D 12, gamma 2016356, lambda 4: MSIS beta 469, MLWE uSVP beta 446, dual_hybrid beta 0 / 0, proof ~48818 B
+  pqz_delta 1.00366, kmlwe_min 37: kmsis 21, kmlwe 37, m2 70, B 2^36.32, D 12, gamma 2016356, lambda 4: MSIS beta 469, MLWE uSVP beta 464, dual_hybrid beta 456 / 457, proof ~48946 B
+=> /p/specs/n2304k8192/tx0_params.sage: pqz_delta = 1.00366, kmlwe_min = 37 (kmsis = 21, m2 = 70, D = 12, gamma = 2016356, lambda = 4, MSIS beta 469, MLWE uSVP beta 464, dual_hybrid 456 / 457, codegen proof size ~48946 B)
+
+== /p/specs/n2304k8192/burn_params.sage
+LaZer codegen as is: kmsis 21, kmlwe 36, m2 69, B 2^36.31, D 12, gamma 2016356: MSIS beta 469, MLWE uSVP beta 446, proof ~48290 B
+  pqz_delta 1.00366, kmlwe_min 36: kmsis 21, kmlwe 36, m2 69, B 2^36.31, D 12, gamma 2016356, lambda 4: MSIS beta 469, MLWE uSVP beta 446, dual_hybrid beta 0 / 0, proof ~48290 B
+  pqz_delta 1.00366, kmlwe_min 37: kmsis 21, kmlwe 37, m2 70, B 2^36.31, D 12, gamma 2016356, lambda 4: MSIS beta 469, MLWE uSVP beta 464, dual_hybrid beta 456 / 457, proof ~48418 B
+=> /p/specs/n2304k8192/burn_params.sage: pqz_delta = 1.00366, kmlwe_min = 37 (kmsis = 21, m2 = 70, D = 12, gamma = 2016356, lambda = 4, MSIS beta 469, MLWE uSVP beta 464, dual_hybrid 456 / 457, codegen proof size ~48418 B)
+
+== /p/specs/n2304k8192/ds_params.sage
+LaZer codegen as is: kmsis 20, kmlwe 36, m2 68, B 2^35.61, D 11, gamma 1037848: MSIS beta 463, MLWE uSVP beta 447, proof ~32272 B
+  pqz_delta 1.00366, kmlwe_min 36: kmsis 20, kmlwe 36, m2 68, B 2^35.61, D 11, gamma 1037848, lambda 4: MSIS beta 463, MLWE uSVP beta 447, dual_hybrid beta 0 / 0, proof ~32272 B
+  pqz_delta 1.00366, kmlwe_min 37: kmsis 20, kmlwe 37, m2 69, B 2^35.61, D 11, gamma 1037848, lambda 4: MSIS beta 463, MLWE uSVP beta 465, dual_hybrid beta 456 / 457, proof ~32400 B
+=> /p/specs/n2304k8192/ds_params.sage: pqz_delta = 1.00366, kmlwe_min = 37 (kmsis = 20, m2 = 69, D = 11, gamma = 1037848, lambda = 4, MSIS beta 463, MLWE uSVP beta 465, dual_hybrid 456 / 457, codegen proof size ~32400 B)
+
+== /p/specs/n2304k8192/dr_params.sage
+LaZer codegen as is: kmsis 20, kmlwe 36, m2 68, B 2^35.65, D 11, gamma 1037848: MSIS beta 461, MLWE uSVP beta 447, proof ~32960 B
+  pqz_delta 1.00366, kmlwe_min 36: kmsis 20, kmlwe 36, m2 68, B 2^35.65, D 11, gamma 1037848, lambda 4: MSIS beta 461, MLWE uSVP beta 447, dual_hybrid beta 0 / 0, proof ~32960 B
+  pqz_delta 1.00366, kmlwe_min 37: kmsis 20, kmlwe 37, m2 69, B 2^35.65, D 11, gamma 1037848, lambda 4: MSIS beta 461, MLWE uSVP beta 465, dual_hybrid beta 456 / 457, proof ~33088 B
+=> /p/specs/n2304k8192/dr_params.sage: pqz_delta = 1.00366, kmlwe_min = 37 (kmsis = 20, m2 = 69, D = 11, gamma = 1037848, lambda = 4, MSIS beta 461, MLWE uSVP beta 465, dual_hybrid 456 / 457, codegen proof size ~33088 B)
+
+== /p/specs/n2304k8192/txm2_params.sage
+LaZer codegen as is: kmsis 21, kmlwe 36, m2 69, B 2^36.34, D 12, gamma 2016356: MSIS beta 468, MLWE uSVP beta 446, proof ~50050 B
+  pqz_delta 1.00366, kmlwe_min 36: kmsis 21, kmlwe 36, m2 69, B 2^36.34, D 12, gamma 2016356, lambda 4: MSIS beta 468, MLWE uSVP beta 446, dual_hybrid beta 0 / 0, proof ~50050 B
+  pqz_delta 1.00366, kmlwe_min 37: kmsis 21, kmlwe 37, m2 70, B 2^36.34, D 12, gamma 2016356, lambda 4: MSIS beta 468, MLWE uSVP beta 464, dual_hybrid beta 456 / 457, proof ~50178 B
+=> /p/specs/n2304k8192/txm2_params.sage: pqz_delta = 1.00366, kmlwe_min = 37 (kmsis = 21, m2 = 70, D = 12, gamma = 2016356, lambda = 4, MSIS beta 468, MLWE uSVP beta 464, dual_hybrid 456 / 457, codegen proof size ~50178 B)
+
+== /p/specs/n2304k8192/txm20_params.sage
+LaZer codegen as is: kmsis 21, kmlwe 36, m2 69, B 2^36.33, D 12, gamma 2016356: MSIS beta 469, MLWE uSVP beta 446, proof ~49346 B
+  pqz_delta 1.00366, kmlwe_min 36: kmsis 21, kmlwe 36, m2 69, B 2^36.33, D 12, gamma 2016356, lambda 4: MSIS beta 469, MLWE uSVP beta 446, dual_hybrid beta 0 / 0, proof ~49346 B
+  pqz_delta 1.00366, kmlwe_min 37: kmsis 21, kmlwe 37, m2 70, B 2^36.33, D 12, gamma 2016356, lambda 4: MSIS beta 469, MLWE uSVP beta 464, dual_hybrid beta 456 / 457, proof ~49474 B
+=> /p/specs/n2304k8192/txm20_params.sage: pqz_delta = 1.00366, kmlwe_min = 37 (kmsis = 21, m2 = 70, D = 12, gamma = 2016356, lambda = 4, MSIS beta 469, MLWE uSVP beta 464, dual_hybrid 456 / 457, codegen proof size ~49474 B)
+
+== /p/specs/n2304k8192/txm4_params.sage
+LaZer codegen as is: kmsis 22, kmlwe 36, m2 70, B 2^37.37, D 13, gamma 4032712: MSIS beta 462, MLWE uSVP beta 446, proof ~53428 B
+  pqz_delta 1.00366, kmlwe_min 36: kmsis 22, kmlwe 36, m2 70, B 2^37.37, D 13, gamma 4032712, lambda 4: MSIS beta 462, MLWE uSVP beta 446, dual_hybrid beta 0 / 0, proof ~53428 B
+  pqz_delta 1.00366, kmlwe_min 37: kmsis 22, kmlwe 37, m2 71, B 2^37.37, D 13, gamma 4032712, lambda 4: MSIS beta 462, MLWE uSVP beta 463, dual_hybrid beta 456 / 457, proof ~53556 B
+=> /p/specs/n2304k8192/txm4_params.sage: pqz_delta = 1.00366, kmlwe_min = 37 (kmsis = 22, m2 = 71, D = 13, gamma = 4032712, lambda = 4, MSIS beta 462, MLWE uSVP beta 463, dual_hybrid 456 / 457, codegen proof size ~53556 B)
+
+== /p/specs/n2304k8192/txm40_params.sage
+LaZer codegen as is: kmsis 21, kmlwe 36, m2 69, B 2^36.34, D 12, gamma 2016356: MSIS beta 468, MLWE uSVP beta 446, proof ~50402 B
+  pqz_delta 1.00366, kmlwe_min 36: kmsis 21, kmlwe 36, m2 69, B 2^36.34, D 12, gamma 2016356, lambda 4: MSIS beta 468, MLWE uSVP beta 446, dual_hybrid beta 0 / 0, proof ~50402 B
+  pqz_delta 1.00366, kmlwe_min 37: kmsis 21, kmlwe 37, m2 70, B 2^36.34, D 12, gamma 2016356, lambda 4: MSIS beta 468, MLWE uSVP beta 464, dual_hybrid beta 456 / 457, proof ~50530 B
+=> /p/specs/n2304k8192/txm40_params.sage: pqz_delta = 1.00366, kmlwe_min = 37 (kmsis = 21, m2 = 70, D = 12, gamma = 2016356, lambda = 4, MSIS beta 468, MLWE uSVP beta 464, dual_hybrid 456 / 457, codegen proof size ~50530 B)
+
+SUMMARY
+/p/specs/n2304k8192/reg_params.sage: kmlwe_min 37, kmsis 20, MSIS 463, MLWE uSVP 465, dual_hybrid 456 / 457, proof 31856 B
+/p/specs/n2304k8192/tx_params.sage: kmlwe_min 37, kmsis 21, MSIS 469, MLWE uSVP 464, dual_hybrid 456 / 457, proof 49298 B
+/p/specs/n2304k8192/tx0_params.sage: kmlwe_min 37, kmsis 21, MSIS 469, MLWE uSVP 464, dual_hybrid 456 / 457, proof 48946 B
+/p/specs/n2304k8192/burn_params.sage: kmlwe_min 37, kmsis 21, MSIS 469, MLWE uSVP 464, dual_hybrid 456 / 457, proof 48418 B
+/p/specs/n2304k8192/ds_params.sage: kmlwe_min 37, kmsis 20, MSIS 463, MLWE uSVP 465, dual_hybrid 456 / 457, proof 32400 B
+/p/specs/n2304k8192/dr_params.sage: kmlwe_min 37, kmsis 20, MSIS 461, MLWE uSVP 465, dual_hybrid 456 / 457, proof 33088 B
+/p/specs/n2304k8192/txm2_params.sage: kmlwe_min 37, kmsis 21, MSIS 468, MLWE uSVP 464, dual_hybrid 456 / 457, proof 50178 B
+/p/specs/n2304k8192/txm20_params.sage: kmlwe_min 37, kmsis 21, MSIS 469, MLWE uSVP 464, dual_hybrid 456 / 457, proof 49474 B
+/p/specs/n2304k8192/txm4_params.sage: kmlwe_min 37, kmsis 22, MSIS 462, MLWE uSVP 463, dual_hybrid 456 / 457, proof 53556 B
+/p/specs/n2304k8192/txm40_params.sage: kmlwe_min 37, kmsis 21, MSIS 468, MLWE uSVP 464, dual_hybrid 456 / 457, proof 50530 B
