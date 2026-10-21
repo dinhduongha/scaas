@@ -1,0 +1,6 @@
+In file included from ../xcheck/dump_setup.c:12:
+In file included from ../xcheck/../../pqzl/test/pqz_bench.c:17:
+../../pqzl/src/pqz.h:27:10: fatal error: 'pqz_set.h' file not found
+   27 | #include "pqz_set.h"
+      |          ^~~~~~~~~~~
+1 error generated.

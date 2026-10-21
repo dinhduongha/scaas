@@ -8,8 +8,8 @@ set -eu
 cd "$(dirname "$0")/.."
 out=ligero/target/xcheck
 mkdir -p $out/c $out/rust
-(cd ../pqzl && ./build.sh native > /dev/null)
-${CC:-clang} -std=gnu11 -O2 -I../pqzl/src -o $out/dump_setup xcheck/dump_setup.c ../pqzl/build/native/libpqz.a
+(cd ../pqzl && PQZ_SET=n2048-kmax1024 ./build.sh native > /dev/null) # PQZH: the v3 set only (until plan 5h Task 8c)
+${CC:-clang} -std=gnu11 -O2 -I../pqzl/src -I../pqzl/build/include -o $out/dump_setup xcheck/dump_setup.c ../pqzl/build/native/libpqz.a
 $out/dump_setup $out/c pqzh
 (cd ligero && cargo run --release --offline --quiet --example dump_setup -- target/xcheck/rust)
 rc=0

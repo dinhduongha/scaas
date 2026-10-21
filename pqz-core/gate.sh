@@ -49,10 +49,20 @@ fnv() { (cd pqzl && PQZ_ARENA_MB=2048 build/native/pqz_bench 2 1 16383 > "../$R-
   (cd wasm && CARGO_TARGET_DIR=target/$PQZ_SET cargo build -j2 --release --offline --target wasm32-unknown-unknown \
      --no-default-features --features "set-$PQZ_SET") &&
   PQZL_WASM_FILE="wasm/target/$PQZ_SET/wasm32-unknown-unknown/release/pqzl_wasm.wasm" node wasm/run_wasm.mjs 2 1 16383 > "../../$R-fnv-wasm.jsonl" &&
-  cd ../.. && for x in c rust wasm; do grep -o '"rel": "[A-Z0-9_]*", .*"proofs_fnv": "[0-9a-f]*"' "$R-fnv-$x.jsonl" |
-    sed 's/"proof_bytes_last.*"proofs_fnv"/ fnv/' > "$R-fnv-$x.txt"; done &&
+  cd ../.. && for x in c rust wasm; do python3 -I -c "$FNVX" "$R-fnv-$x.jsonl" > "$R-fnv-$x.txt" || return 1; done &&
   test "$(wc -l < "$R-fnv-c.txt")" = 14 && cmp "$R-fnv-c.txt" "$R-fnv-rust.txt" && cmp "$R-fnv-c.txt" "$R-fnv-wasm.txt" &&
-  cat "$R-fnv-c.txt" && ! grep -h '"fails": [1-9]' "$R-fnv-c.jsonl" "$R-fnv-rust.jsonl" "$R-fnv-wasm.jsonl"); }
+  cat "$R-fnv-c.txt"); }
+# one "<rel> <proofs_fnv>" line per relation of a bench's JSON lines (the C / Rust benches print '": ', the wasm32 one
+# '":'); exit 1 if any line reports fails > 0
+FNVX='import json, sys
+bad = 0
+for l in open(sys.argv[1]):
+    if l.startswith("{"):
+        j = json.loads(l)
+        bad += j.get("fails", 0) > 0
+        if "proofs_fnv" in j:
+            print(j["rel"], j["proofs_fnv"])
+sys.exit(1 if bad else 0)'
 sv() { (cd pqzl && sv/check_sv_fixes.sh); }
 cargo_tests() { (cd stmt && cargo test --release --offline) && (cd pqzh/ligero && cargo test --release --offline); }
 # a smoke run is too short to merge into the committed corpora (the 2 h campaigns'): restore them afterwards
