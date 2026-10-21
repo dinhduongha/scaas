@@ -12,14 +12,16 @@ const _: () = assert!(
 #[cfg(feature = "set-n2304-kmax4096")]
 #[path = "../../../params/sets/n2304-kmax4096/rust/set.rs"]
 mod lattice;
-#[cfg(all(feature = "set-n2304-kmax4096", not(feature = "spike-b")))]
+// set (a): preset B (radices 7 / 17, n 45,752, k 952, t 120; owner 2026-10-22); feature `fallback-retry`: THE preset
+// with the prover's retry under MAX_PROOF_PQZH (fallback A, docs/research/pqzh-set-a-proof-limit.md)
+#[cfg(all(feature = "set-n2304-kmax4096", not(feature = "fallback-retry")))]
 #[path = "../../../params/sets/n2304-kmax4096/pqzh_set.rs"]
 mod pqzh;
-// research spike B (5h Task 8c spike): radices 7 / 17 and their preset at set (a)
-#[cfg(all(feature = "set-n2304-kmax4096", feature = "spike-b"))]
-#[path = "../../../params/sets/n2304-kmax4096/pqzh_set_spike_b.rs"]
+#[cfg(all(feature = "set-n2304-kmax4096", feature = "fallback-retry"))]
+#[path = "../../../params/sets/n2304-kmax4096/pqzh_set_fallback.rs"]
 mod pqzh;
-const _: () = assert!(!cfg!(feature = "spike-b") || cfg!(feature = "set-n2304-kmax4096"), "spike-b is set (a) only");
+const _: () =
+    assert!(!cfg!(feature = "fallback-retry") || cfg!(feature = "set-n2304-kmax4096"), "fallback-retry is set (a) only");
 
 #[cfg(not(feature = "set-n2304-kmax4096"))]
 #[path = "../../../params/sets/n2048-kmax1024/rust/set.rs"]

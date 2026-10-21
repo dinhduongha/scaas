@@ -4,7 +4,8 @@
 //! proof, the accepted proof verified, and every attempt's length checked against `spike_len_of(query indices)` (the
 //! length is a function of the transcript's query indices alone). Then a Monte Carlo of the same length function over
 //! uniform index sets. No timing: prover runs are counted.
-//!   spike_retry <N per form> <threads> <monte carlo samples>      (build with --features set-n2304-kmax4096)
+//!   spike_retry <N per form> <threads> <monte carlo samples>   (--features set-n2304-kmax4096,fallback-retry: THE preset,
+//!   the fallback A build; owner 2026-10-22)
 
 use pqzh_ligero::client::{inputs, rel_name, setup};
 use pqzh_ligero::ligero::{spike_len_of, spike_prove_attempts, spike_query_indices};

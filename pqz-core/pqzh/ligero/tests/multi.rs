@@ -139,9 +139,9 @@ fn honest_every_shape() {
         if m <= 4 && pqzh_ligero::set::NAME == "n2048-kmax1024" {
             assert!(max <= MAX_PROOF_PQZH && 5 + rel.stmt_len() + max <= MAX_INPUT, "{} limits", name(m, aud));
         }
-        // research spike B (radices 7 / 17 at set (a)): every built bound within MAX_PROOF_PQZH
-        if cfg!(feature = "spike-b") {
-            assert!(max <= MAX_PROOF_PQZH, "{} spike limit", name(m, aud));
+        // set (a) preset B (owner 2026-10-22): every built bound within MAX_PROOF_PQZH
+        if pqzh_ligero::set::NAME == "n2304-kmax4096" && !cfg!(feature = "fallback-retry") {
+            assert!(max <= MAX_PROOF_PQZH, "{} limit", name(m, aud));
         }
         if false {
             assert!(max <= MAX_PROOF_PQZH && 5 + rel.stmt_len() + max <= MAX_INPUT, "{} limits", name(m, aud));
@@ -430,4 +430,20 @@ fn hedged_and_deterministic() {
     assert_ne!(a[..32], b[..32]);
     assert_eq!(a, prove_unchecked(OP7, &st, &w, [5; 32], &p).unwrap());
     assert_eq!(a, prove(OP7, &st, &w, [5; 32], &p).unwrap());
+}
+
+/// fallback A (feature `fallback-retry`, set (a) with THE preset; owner 2026-10-22): the prover re-proves while a proof is
+/// above MAX_PROOF_PQZH, so every accepted proof of the worst shape (op 7 M = 4 with the auditor: 27.6 % of attempts over,
+/// docs/research/pqzh-set-a-proof-limit.md) is within the limit and verifies, although the verifier's bound is above it
+#[cfg(feature = "fallback-retry")]
+#[test]
+fn fallback_retry_under_limit() {
+    let p = pp();
+    let rel = Rel::Multi { m: 4, aud: true };
+    let (st, w) = setup_multi(4, true, &MultiTweak::default());
+    assert!(p.max_proof_len(rel) > MAX_PROOF_PQZH);
+    for seed in 0..12u8 {
+        let pf = prove(OP7, &st, &w, [seed; 32], &p).expect("prove");
+        assert!(pf.len() <= MAX_PROOF_PQZH && verify(OP7, &st, &pf, &p), "seed {seed}: {} B", pf.len());
+    }
 }

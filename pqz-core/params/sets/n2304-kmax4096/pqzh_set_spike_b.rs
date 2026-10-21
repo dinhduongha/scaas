@@ -1,6 +1,7 @@
-//! RESEARCH SPIKE B (plan 5h Task 8c spike, 2026-10-22; throwaway, kept as the record): set (a)'s PQZH constants with
-//! the radices 7 and 17 of its q - 1 and the preset `ligero_params.py --set n2304-kmax4096` finds with them. Only with
-//! pqzh-ligero's feature `spike-b`; the production set is ./pqzh_set.rs.
+//! SUPERSEDED, not compiled (owner 2026-10-22: preset B at t = 120 is ./pqzh_set.rs). RESEARCH SPIKE B (plan 5h Task 8c
+//! spike, 2026-10-22; kept as the record of the measured t = 119 run, runs/spike-b-*): set (a)'s PQZH constants with
+//! the radices 7 and 17 of its q - 1 and the preset `ligero_params.py --set n2304-kmax4096` finds with them. It was selected by
+//! the spike's feature `spike-b` (removed).
 #![allow(dead_code)]
 /// the prime factors of q - 1, with multiplicity
 pub(crate) const QM1: &[u64] = &[2, 2, 2, 7, 17, 19, 43, 431, 182_789];

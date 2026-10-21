@@ -467,8 +467,8 @@ fn transfer_forms_cross_rejected() {
         assert_eq!(prove_unchecked(OP_TRANSFER, st, w, [6; 32], &pp), Err("length"));
     }
     // the length gate is the form's: R_TX0's bound is R_BURN's (same m), below R_TX's
-    // (research spike B, l = 832: R_TX0 and R_TX have the same rows, 124, so equal bounds)
-    if cfg!(feature = "spike-b") {
+    // (set (a) preset B, l = 831: R_TX0 and R_TX have the same rows, 124, so equal bounds)
+    if pqzh_ligero::set::NAME == "n2304-kmax4096" && !cfg!(feature = "fallback-retry") {
         assert_eq!(pp.max_proof_len(Form::Transfer0), pp.max_proof_len(Form::Transfer));
     } else {
         assert!(pp.max_proof_len(Form::Transfer0) < pp.max_proof_len(Form::Transfer));

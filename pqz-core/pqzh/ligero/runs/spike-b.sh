@@ -1,4 +1,6 @@
 #!/bin/sh
+# SUPERSEDED (owner 2026-10-22): preset B (t = 120) is set (a)'s production preset and the feature spike-b is gone; this
+# script is the record of the spike's t = 119 run (runs/spike-b-*). A set (a) round today: runs/c8.sh <tag> n2304-kmax4096.
 # Research spike B (plan 5h Task 8c spike, 2026-10-22): set (a) with the radices 7 / 17 and the preset n 45,752,
 # k 952, t 119 (feature spike-b). No timing. scripts/capped pqz-core/pqzh/ligero/runs/spike-b.sh <tag>
 # 1. tests 2. production lib tests 3. ligero_kat setup / sizes 4. native = wasm32 (wasm/fnv_wasm.mjs) 5. base-field

@@ -23,8 +23,10 @@ pub const LAMBDA: f64 = 128.0;
 pub const POW_BITS: u32 = 16;
 const FB: usize = 4 * EB; // bytes per F_q^4 element
 const BLIND: usize = 12;
-/// prover attempts before "proof length" (see `prove_inner`); one in practice: no proof exceeds max_proof_len
-const ATTEMPTS: usize = 16;
+/// prover attempts before "proof length" (see `prove_inner`); one in practice: no proof exceeds max_proof_len.
+/// Fallback A (feature `fallback-retry`): 32, the limit is MAX_PROOF_PQZH and op 7 M = 4 with the auditor re-proves in
+/// 27.6 % of the attempts (failure after 32: ~ 10^-18 per proof; docs/research/pqzh-set-a-proof-limit.md)
+const ATTEMPTS: usize = if cfg!(feature = "fallback-retry") { 32 } else { 16 };
 
 /// Fixed per proofSystemId; never read from the proof.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -113,7 +115,7 @@ impl Params {
     pub fn preset(op: u8, proven: bool, r431: bool) -> Params {
         let small = matches!(op, OP_REGISTER | OP_DISCLOSE_SENDER | OP_DISCLOSE_RECEIVER);
         let (n, k) = match (proven, r431, small) {
-            (true, true, _) => (crate::set::PRESET_N, crate::set::PRESET_K),
+            (true, true, _) => return Params::proven(),
             (true, false, _) => (6536, 817),
             (false, true, true) => (18533, 172),
             (false, true, false) => (18533, 344),
@@ -264,7 +266,19 @@ fn draw(tr: &mut Tr, m: usize, ntri: usize) -> Result<Draw, Oom> {
 
 pub fn prove(op: u8, stmt: &[u8], wit: &[u8], rnd: [u8; 32], p: &Params) -> Result<Vec<u8>, &'static str> {
     let rel = cs::rel_of(op, stmt).ok_or("op")?;
-    prove_inner(op, stmt, wit, rnd, p, true, p.max_proof_len(rel))
+    prove_inner(op, stmt, wit, rnd, p, true, prover_limit(p, rel))
+}
+
+/// The prover's length limit: the verifier's bound; fallback A (feature `fallback-retry`, set (a) with THE preset): also
+/// at most MAX_PROOF_PQZH, so the prover re-proves (fresh masks and salts) while a proof is longer. The length is a
+/// function of the transcript's query indices alone, so the rejection keeps zero knowledge (the simulator rejection-
+/// samples the same public event): docs/research/pqzh-set-a-proof-limit.md.
+fn prover_limit(p: &Params, rel: Rel) -> usize {
+    if cfg!(feature = "fallback-retry") {
+        p.max_proof_len(rel).min(pqz_stmt::MAX_PROOF_PQZH)
+    } else {
+        p.max_proof_len(rel)
+    }
 }
 
 /// Test hook: skips the honest prover's checks so that invalid witnesses reach the proof system (tests and `bench`
@@ -748,7 +762,13 @@ mod tests {
     #[cfg(feature = "bench")]
     #[test]
     fn proven_is_the_model() {
-        assert_eq!(Params::proven(), Params::new(crate::set::PRESET_N, crate::set::PRESET_K, true));
+        // the model's t (128 bits of query and grinding) is the least; a set may take more (set (a) preset B: 120 over
+        // the model's 119, owner 2026-10-22)
+        let m = Params::new(crate::set::PRESET_N, crate::set::PRESET_K, true);
+        let t = crate::set::PRESET_T;
+        assert_eq!(Params::proven(), Params { t, ell: m.k - t - 1, ..m });
+        assert!(m.t <= t);
+        assert_eq!(m.t == t, crate::set::NAME == "n2048-kmax1024" || cfg!(feature = "fallback-retry"));
     }
 
     /// D6: the same rnd32, op and statement with another witness give unrelated masks; equal inputs, equal masks
@@ -773,7 +793,8 @@ mod tests {
         let (n, t) = (p.n, p.t);
         let tree = Tree::new((0..n as u32).map(|i| keccak(&[&i.to_be_bytes()])).collect());
         let worst = (1..depth(n)).map(|l| t.min(n.div_ceil(1 << l))).sum::<usize>() + 2 - t;
-        // evenly spread columns from the left or (spike B, n 45,752: the left spread reaches worst - 1) from the right
+        // evenly spread columns from the left or (set (a) preset B, n 45,752: the left spread reaches worst - 1) from the
+        // right
         let left: Vec<usize> = (0..t).map(|i| i * n / t).collect();
         let mut right: Vec<usize> = (0..t).map(|i| n - 1 - i * n / t).collect();
         right.sort_unstable();
@@ -813,15 +834,16 @@ mod tests {
         let p = Params::proven();
         let v3 = crate::set::NAME == "n2048-kmax1024";
         // (form, exact bound, within MAX_PROOF_PQZH and MAX_INPUT)
-        let spike = cfg!(feature = "spike-b"); // research spike B: set (a) at n 45,752, k 952, t 119
-        let expect = if spike {
+        // set (a) with preset B (n 45,752, k 952, t 120; owner 2026-10-22); the fallback build keeps THE preset
+        let b = !v3 && !cfg!(feature = "fallback-retry");
+        let expect = if b {
             [
-                (Form::Register, 206_958, true),
-                (Form::Transfer, 250_512, true),
-                (Form::Burn, 250_512, true),
-                (Form::DiscloseSender, 206_958, true),
-                (Form::DiscloseReceiver, 206_958, true),
-                (Form::Transfer0, 250_512, true),
+                (Form::Register, 207_688, true),
+                (Form::Transfer, 251_608, true),
+                (Form::Burn, 251_608, true),
+                (Form::DiscloseSender, 207_688, true),
+                (Form::DiscloseReceiver, 207_688, true),
+                (Form::Transfer0, 251_608, true),
             ]
         } else if v3 {
             [
@@ -854,18 +876,18 @@ mod tests {
         // op 7 R_TXM, (M, auditorOn): exact bounds and inputs 5 + statement + bound (v3 = the pre-review H-3 table,
         // measured max_len_exact in runs/l16-txm-*; set (a): runs/c8-a-sizes.jsonl); v3's built shapes (M <= 4)
         // within MAX_PROOF_PQZH and MAX_INPUT, the oversize ones above; set (a): every shape above MAX_PROOF_PQZH
-        let multi = if spike {
+        let multi = if b {
             [
-                ((1, true), 250_512, 343_829),
-                ((1, false), 250_512, 325_269),
-                ((2, true), 251_226, 363_231),
-                ((2, false), 250_512, 343_829),
-                ((4, true), 251_940, 401_321),
-                ((4, false), 251_226, 381_663),
-                ((8, true), 295_494, 538_059),
-                ((8, false), 294_780, 517_889),
-                ((16, true), 385_458, 814_391),
-                ((16, false), 381_888, 790_341),
+                ((1, true), 251_608, 344_925),
+                ((1, false), 251_608, 326_365),
+                ((2, true), 252_328, 364_333),
+                ((2, false), 251_608, 344_925),
+                ((4, true), 253_048, 402_429),
+                ((4, false), 252_328, 382_765),
+                ((8, true), 296_968, 539_533),
+                ((8, false), 296_248, 519_357),
+                ((16, true), 387_688, 816_621),
+                ((16, false), 384_088, 792_541),
             ]
         } else if v3 {
             [
@@ -897,8 +919,8 @@ mod tests {
         for ((m, aud), max, input) in multi {
             let r = Rel::Multi { m, aud };
             assert_eq!((p.max_len_exact(r), p.max_proof_len(r), 5 + r.stmt_len() + max), (max, max, input), "M {m} {aud}");
-            // spike: every built shape within MAX_PROOF_PQZH; M = 4 auditor on above today's MAX_INPUT (512 KiB in 8d)
-            let fits = if spike { m <= 4 && !(m == 4 && aud) } else { v3 && m <= 4 };
+            // preset B: every built shape within MAX_PROOF_PQZH; M = 4 auditor on above today's MAX_INPUT (512 KiB in 8d)
+            let fits = if b { m <= 4 && !(m == 4 && aud) } else { v3 && m <= 4 };
             assert_eq!(max <= MAX_PROOF_PQZH && input <= MAX_INPUT, fits, "M {m} {aud}");
             assert!(p.proof_len_ok(r, max) && !p.proof_len_ok(r, max + 1) && !p.proof_len_ok(r, 0));
         }

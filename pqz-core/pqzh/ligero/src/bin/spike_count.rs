@@ -2,7 +2,7 @@
 //! prover and of the verifier per relation at the build's preset (fq::spike_count: F_q products, 16 per F_q^4 product,
 //! 4 per lazy term, the FFT's products; the honest prover's integer ring checks are not counted: the same at every
 //! preset). Seed [0; 32]. No timing.
-//!   spike_count       (--features spike-count,set-n2304-kmax4096[,spike-b])
+//!   spike_count       (--features spike-count,set-n2304-kmax4096: preset B; + fallback-retry: THE preset)
 
 use pqzh_ligero::client::{inputs, rel_name, setup};
 use pqzh_ligero::fq::spike_count;
