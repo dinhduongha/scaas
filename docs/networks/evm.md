@@ -1,12 +1,12 @@
 # EVM chains
 
 Common rules for every family: [networks/README](README.md). Contracts: [contracts/](../contracts/README.md).
-Status: **BUILT** on the private chain 7622 and anvil; public chains are seeded as `draft` profiles.
+Status: **BUILT** on the SCaaS testnet and anvil; public chains are seeded as `draft` profiles.
 
 **Contents**
 
 1. [Chains](#1-chains)
-2. [Private reference chain 7622](#2-private-reference-chain-7622)
+2. [Private SCaaS testnet](#2-private-scaas-testnet)
 3. [Precompiles](#3-precompiles)
 4. [Deployment](#4-deployment)
 5. [EIP-7702 accounts](#5-eip-7702-accounts)
@@ -18,7 +18,7 @@ Status: **BUILT** on the private chain 7622 and anvil; public chains are seeded 
 
 | Chain | Chain id | Profile | Gas | Finality gate | Status |
 |---|---|---|---|---|---|
-| Private reference chain | 7622 | `private7622` (Solidity `osaka`) | free (base fee 0) | depth 1, quorum 1 | BUILT, first target |
+| SCaaS testnet (private reference chain) | 7622 | `private7622` (Solidity `osaka`) | free (base fee 0) | depth 1, quorum 1 | BUILT, first target |
 | Anvil (tests) | 31337 (also 1337) | — | — | depth | BUILT (dev only) |
 | Gnosis Chain | 100 | `gnosis` (`osaka`; Pectra since 2025-04-30, then Fusaka) | native xDAI (stable value) | `tag finalized` (~160–240 s), quorum ≥ 2 independent RPCs | seeded `draft` until the operator gate passes |
 | Celo | 42220 | `celo` (`osaka`, owner 2026-10-11; the chain's fork level is not re-measured) | CELO; fee currencies optional | `l1_batch` (PLANNED) | seeded `draft` |
@@ -65,7 +65,7 @@ to be re-measured before use: Ethereum L1 12-s slots, finality = 2 epochs (~12.8
 confirmation ~1 s (soft) vs L1 batch finalization ~15 min (hard); Polygon PoS checkpoint ~25–30 min. A finality gate
 is always the hard value. Gas is never assumed: Zether-sized transactions do not fit every L2 block.
 
-## 2. Private reference chain 7622
+## 2. Private SCaaS testnet
 
 <a id="private-chain"></a><a id="private-7622"></a>
 
@@ -97,7 +97,7 @@ Parameters:
 | Contract code size | 64 KiB (`maxCodeSize` `0x10000`, `maxCodeSizeTransition` 6432) since 2026-10-11, owner, ahead of Glamsterdam (cf. EIP-7954); 24,576 before. Probed at block 6434: 65,536 B code deploys (13.27 M gas), 65,537 B is refused, a 50,005 B init code is accepted (the init-code limit follows `maxCodeSize`). Public chains keep 24,576 |
 | Block gas limit | 16,777,216 today (`0x1000000`); 80 M `TargetBlockGasLimit` target for post-quantum Zether ([CTR-PQZ-11](../contracts/pq-zero-knowledge.md#CTR-PQZ-11)) (SPECIFIED) |
 | Finality | depth 1, quorum 1 (single-provider trust, reported as such) |
-| Classical Zether | not on the dev-chain allowlist ({31337, 1337}, [CTR-ZTH-02](../contracts/zether.md#CTR-ZTH-02)); whether 7622 becomes a dev chain for it is an open owner question |
+| Classical Zether | not on the dev-chain allowlist ({31337, 1337}, [CTR-ZTH-02](../contracts/zether.md#CTR-ZTH-02)); whether the SCaaS testnet becomes a dev chain for it is an open owner question |
 | Post-quantum Zether | the only PQZ chain: `PQZ` `0x5caa500000000000000000000000000000000f01`, `MLDSA44` `…0012`, `MLDSA65` `…0013` from the plugin in image `scaas/nethermind-pqz:1.39.0-pqz1` (local, never pushed), chainspec `engine.Pqz` ([chain integration](../contracts/pq-zero-knowledge.md#chain-integration), [§3](#precompiles)) |
 
 Operator trap, measured on the earlier chain: **a Nethermind chainspec silently ignores Geth-style keys.** With
@@ -107,10 +107,10 @@ BLS12-381 precompiles `0x0b`/`0x0c`/`0x0f`/`0x10` were empty while `alt_bn128` `
 Forks must be written with Nethermind's own keys (`eip1559TransitionTimestamp`, `eip2537TransitionTimestamp`, …),
 and changing them changes the genesis hash (chain reset). The only detection is to inspect a block header or call
 the precompile — the deployment checklist does both. The chainspec was fixed on 2026-08-31 before the reset to
-7622. The 16,777,216 block gas limit admits only ~5 classical confidential transfers per block (3.33 M gas each,
+the SCaaS testnet. The 16,777,216 block gas limit admits only ~5 classical confidential transfers per block (3.33 M gas each,
 measured); post-quantum Zether raises the target to 80 M ([CTR-PQZ-11](../contracts/pq-zero-knowledge.md#CTR-PQZ-11)).
 
-Further operator traps, found on the P6f copy of 7622 (2026-10-15, `pqz-core/nethermind/runs/2026-10-15-copy-*.txt`):
+Further operator traps, found on the P6f copy of the SCaaS testnet (2026-10-15, `pqz-core/nethermind/runs/2026-10-15-copy-*.txt`):
 **no follower can sync 7622's chainspec as it is** — `eip4844TransitionTimestamp` 0 without
 `eip4895TransitionTimestamp` makes a syncing peer reject every block (`InvalidWithdrawalsRoot`: the header has no
 `withdrawalsRoot`, its wire slot is a zero hash), and without `maximumExtraDataSize` (default 32 B) it rejects every
@@ -138,14 +138,14 @@ so a transaction priced at 1 wei is never mined; clients price at least `baseFee
   A missing precompile returns empty `0x`; an input-length error (`invalid input length` on Celo, `PrecompileError`
   on Gnosis) also proves the code exists. Live is not cheap: measured costs are in
   [contracts/zether](../contracts/zether.md).
-- **PQ precompiles on 7622** (P6f, plugin `Nethermind.Pqz`, [CTR-PQZ-10](../contracts/pq-zero-knowledge.md#CTR-PQZ-10)):
+- **PQ precompiles on the SCaaS testnet** (P6f, plugin `Nethermind.Pqz`, [CTR-PQZ-10](../contracts/pq-zero-knowledge.md#CTR-PQZ-10)):
   `PQZ` `0x5caa500000000000000000000000000000000f01` (PQZL and PQZH proofs, per-row gas 2.57–5.41 M + 3 per word),
   `MLDSA44` `0x5caa500000000000000000000000000000000012` (49,000 + 6 per message word) and `MLDSA65`
   `0x5caa500000000000000000000000000000000013` (68,000 + 6 per word), EIP-8355 layout, empty context; prices frozen in
   the chainspec's `engine.Pqz` ([CTR-PQZ-11](../contracts/pq-zero-knowledge.md#CTR-PQZ-11)). A stock Nethermind image ignores
   that section and the addresses stay empty accounts (shown on the copy), so contracts self-test and nodes probe.
   Runbook: `pqz-core/nethermind/chain/RUNBOOK.md`.
-- **P-256** (RIP-7212 / EIP-7951 at `0x100`): present on 7622; probed per chain (`has_p256_precompile`); without it
+- **P-256** (RIP-7212 / EIP-7951 at `0x100`): present on the SCaaS testnet; probed per chain (`has_p256_precompile`); without it
   OpenZeppelin's Solidity verifier costs ~200–330 k gas ([passkeys](README.md#webauthn)).
 
 ## 4. Deployment
@@ -189,7 +189,7 @@ chain, deploy it first (the keyless presigned deployment transaction of that pro
 and re-run. `forge script … --broadcast` needs `--sender <deployer address>`, which `deploy.sh` and the e2e pass; forge
 places the linked libraries from that sender, not by CREATE2. It deploys `OpenFactory` (notice period `NOTICE_PERIOD`
 seconds; owner ruling 2026-10-20: every mainnet — any chain outside `DeployBase._isTestChain`'s fixed list of test /
-dev chains, so 22776, Hedera 295 and an unknown chain too — defaults to and may not go below 3 days; 7622 defaults to 10
+dev chains, so 22776, Hedera 295 and an unknown chain too — defaults to and may not go below 3 days; the SCaaS testnet defaults to 10
 minutes, the other listed test / dev chains to 0; at most 30 days, the factory's `MAX_NOTICE_PERIOD`; `DEMO_SUPPLY`
 needs 0) and, when
 the deployer is the registrar, publishes env 1 of `NONE` and of the DEX (the factory, `chain_uid`, the UA registry, the
@@ -203,7 +203,7 @@ kind-`NONE` demo tokens; the v1 line left the deploy in P5 (`legacy/p5/`) ([depl
 Since UA-3 it also deploys the UA registry generation 1 with its verifiers on every chain (first, since UA-4: the token implementations take its address; `_deployUARegistry`; budget
 12 M, Hedera 10.5 M): the EIP-2537 kinds and `bls-bn254-minsig` only where `script/UAPrecompileProbe.sol`, asked
 through an `eth_call` with no `to` (the node's own precompiles), passes; `bls-bn254-minsig` only on private chains, the
-Zether kinds only on dev chains; the PQ signing kinds (P6c, unaudited) only on the dev chains and 7622, ML-DSA in
+Zether kinds only on dev chains; the PQ signing kinds (P6c, unaudited) only on the dev chains and the SCaaS testnet, ML-DSA in
 Solidity on the registry's expanded-key cache: an ML-DSA UA's cache parts (`cacheExpandedKey`, one transaction each,
 ≤ 13.5 M gas) come before its `register` ([accounts.md §1.9](../contracts/accounts.md#verifiers)).
 
@@ -234,5 +234,5 @@ An EOA that delegated its code through EIP-7702 is still a native account: SCaaS
 
 - Celo `l1_batch` finality and CIP-64 lanes: PLANNED / open ([NET-EVM-01](#NET-EVM-01)).
 - Public profiles stay `draft` until their finality gate is measured and an RPC quorum ≥ 2 is configured.
-- Chain 7622 has one signer and one RPC provider (the node's quorum is 1); its threat profile is in
+- The SCaaS testnet has one signer and one RPC provider (the node's quorum is 1); its threat profile is in
   [NET-EVM-04](#NET-EVM-04).

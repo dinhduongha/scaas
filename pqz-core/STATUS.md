@@ -45,13 +45,13 @@ Terms used throughout:
 - **Review round 2 (PQZH Rust) fixes P-A…P-H are on branch `rev2-pqzh`** (plan Task 5c), not merged: no PQZH proof
   byte or verdict changes (section "PQZH review fixes"); P-I is a gate before the STARK backup is ever
   promoted (Open item 12).
-- **Chain 7622 still runs PQZL v2** (image `pqz2`, the C core), which accepts forgeable v2 proofs (a test chain; owner
+- **The SCaaS testnet still runs PQZL v2** (image `pqz2`, the C core), which accepts forgeable v2 proofs (a test chain; owner
   ruling), until the v3 roll-out resets it from genesis (decision F9, path B; plan Task 13).
 
 - Every round below is merged into `main` (merge commits in the table), except PQZL v3.
 - **Gate A (PQZL) and gate B (PQZH) passed on 2026-10-17**, and both `proofSystemId`s are frozen. **The freeze**
   is done: `artifact/runs/freeze-2026-10-17/` (section "Gates A / B and the freeze").
-- The multi-recipient transfer (`R_TXM`, op 7) is live in the `PQZ` precompile on chain 7622 since 2026-10-17 and
+- The multi-recipient transfer (`R_TXM`, op 7) is live in the `PQZ` precompile on the SCaaS testnet since 2026-10-17 and
   is used by the PQZ tokens.
 - **The PQZL Rust port is done** on branch `pqzl-rust` (plan `docs/superpowers/plans/2026-10-17-pqzl-rust-port.md`;
   merge into `main` pending): crate `pqzl` in `pqzl/rust/`, byte-for-byte equal to the C core. Tasks 1–12 (Task 10b's
@@ -80,7 +80,7 @@ Terms used throughout:
   production PQZL core of the `PQZ` precompile once the port is finished and verified (Rust = C on the vectors, the
   fuzz differential clean, the review passed). `pqz-ffi` then switches its default backend to it (port Task 11).
   The C core stays in the repository as the reference and the differential oracle (kept, less maintained). **Not
-  live yet:** the precompile on chain 7622 still runs the C core today.
+  live yet:** the precompile on the SCaaS testnet still runs the C core today.
 
 | Round (section below) | Branch | Merged into `main` |
 |---|---|---|
@@ -100,7 +100,7 @@ Terms used throughout:
 | Multi-recipient transfer S3 (`pqz-stmt` / `pqz-ffi`) | `p6-anon-s3` | `d7b22ec`, 2026-10-16 |
 | Multi-recipient transfer S4 (vectors) | `p6-anon-s4` | `59522d6`, 2026-10-16 |
 | Multi-recipient transfer S6 (reproducibility package) | `p6-anon-s6b` | `926a481`, 2026-10-17 |
-| Multi-recipient transfer S8 (live on chain 7622) | `p6-anon-s8` | `63e672f`, 2026-10-17 |
+| Multi-recipient transfer S8 (live on the SCaaS testnet) | `p6-anon-s8` | `63e672f`, 2026-10-17 |
 | PQZL v3: Fiat–Shamir fix | `pqzl-fs3` | not yet (plan Tasks 9–12) |
 
 Original header of this log: "P6d (E-S1 `pqz-core` spike), P6d-2 (optimisation) and P6e — status (2026-10-14)".
@@ -1044,14 +1044,14 @@ D21: `R_TXM` joins the frozen set.)
   p99 native 9.9–10.9 ms, wasm32 18.5–20.4 ms.
 - Full table: `artifact/README.md`; logs `artifact/runs/s6-docker-{quick,multi}/`.
 
-## Op 7 live in the `PQZ` precompile on chain 7622, P6-ANON S8 (branch `p6-anon-s8`; plan D19)
+## Op 7 live in the `PQZ` precompile on the SCaaS testnet, P6-ANON S8 (branch `p6-anon-s8`; plan D19)
 
-P6-ANON step S8: the multi-recipient transfer (`R_TXM`, op 7) is live on chain 7622 with its own gas table. Merged
+P6-ANON step S8: the multi-recipient transfer (`R_TXM`, op 7) is live on the SCaaS testnet with its own gas table. Merged
 as `63e672f` on 2026-10-17. (D19: op 7 verified by the one `PQZ` precompile through `pqz-ffi`, priced by a table.)
 
 - `Nethermind.Pqz` prices the multi-recipient transfer per `(proofSystemId, M, auditorOn)` (header words 320 /
   448): 14 calibrated rows, 3,625,000–6,177,000 gas. Image `pqz2`.
-- On chain 7622 since T = 1792205116 (2026-10-17 02:45:16Z), through a second `engine.Pqz` schedule ("path A":
+- On the SCaaS testnet since T = 1792205116 (2026-10-17 02:45:16Z), through a second `engine.Pqz` schedule ("path A":
   chain data kept).
 - Harness 60 min CLEAN; the copy-chain and live probes and the end-to-end tests pass (`nethermind/runs/2026-10-17-*`).
 - The rows are in plan S8's results and in `nethermind/chain/engine-pqz.json`.
@@ -1164,7 +1164,7 @@ Evidence:
 Plan `docs/superpowers/plans/2026-10-19-pqzl-fs3.md`; decisions CTR-PQZ-09 F1–F10 (owner rulings of Task 0 recorded
 `2fff733`); spec pq-zero-knowledge.md §5 "Transcripts" and §8; analysis `docs/research/pqz-tbox-soundness.md` §8.
 Closes Open item 11. Not merged yet: the reproduction package and fuzz on v3, the gate, reviews A / B (Tasks 6, 7,
-9–12); the roll-out on 7622 follows the merge (Task 13).
+9–12); the roll-out on the SCaaS testnet follows the merge (Task 13).
 
 What changed, in the C prover and generic verifier (`lazer/lnp-tbox.c`), the C specialised verifier (`src/pqz_sv.c`),
 the Rust prover and generic verifier (`rust/src/proof/tbox.rs`) and the Rust specialised verifier (`rust/src/sv.rs`):
@@ -1259,7 +1259,7 @@ did not move in this sample. The full v3 tables (both cores, wasm32, the special
 
 **Not done in this round:** the package's `expected-results.json` (Task 6) and the fuzz campaign on v3 (Task 7; three
 small `corpus/precompile` inputs still carry the v2 id and now reject on it); the gate and reviews A / B (Tasks 9–11);
-the merge (Task 12); the roll-out on 7622 with a new image and gas re-calibration (Task 13). The external
+the merge (Task 12); the roll-out on the SCaaS testnet with a new image and gas re-calibration (Task 13). The external
 cryptographic audit before mainnet 22776 remains open.
 
 ## PQZH review fixes (branch `rev2-pqzh`, plan Task 5c; review round 2)
@@ -1505,7 +1505,7 @@ the record.
     [lazer#28](https://github.com/lazer-crypto/lazer/issues/28). On code reading a cheating prover forges a proof for any
     PQZL statement by a linear solve for `h`. Reports and controller verification:
     `research/code-review-2026-10-19/`. Owner 2026-10-19: fix now (cheating-prover PoC first, then the transcript in all
-    four implementations, new `proofSystemId`, vectors, spec); the Rust roll-out on 7622 is stopped and the chain stays on
+    four implementations, new `proofSystemId`, vectors, spec); the Rust roll-out on the SCaaS testnet is stopped and the chain stays on
     `pqz2` until the fix. PQZH (Ligero) is not affected.~~
     **Closed 2026-10-19 on branch `pqzl-fs3`** (merge after the gate and reviews A / B, plan Tasks 9–12): lazer#28 is
     fixed in all four implementations and both provers (section "PQZL v3: Fiat–Shamir fix"): C generic verifier and
@@ -1514,7 +1514,7 @@ the record.
     `hash_h`) and Rust specialised verifier (`rust/src/sv.rs`) in `420f409` (`13a8f8e`, run `41c708b`); PQZL
     `proofSystemId` v3 in every pin and the regenerated vectors in `8af584b`. The owner replaced "cheating-prover PoC
     first" with binding tests that only observe the challenge seeds (`c5b2c99`, `c0bd890`, `b3cc772`): 10 of 12 checks
-    FAIL before the fix, 0 of 12 after, in both cores. Chain 7622 stays on `pqz2` (v2) until plan Task 13.
+    FAIL before the fix, 0 of 12 after, in both cores. The SCaaS testnet stays on `pqz2` (v2) until plan Task 13.
 
 12. **STARK backup promotion gate (review round 2, P-I; B-F1, B-F5, I-1, I-8).** `pqzh/stark-backup` is not
     reachable (pqz-ffi never dispatches to it) and stays a record. Before it is ever promoted to a live proof system

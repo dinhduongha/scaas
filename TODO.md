@@ -10,7 +10,7 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
 - **Specs before app code** (owner 2026-10-08).
 - **Concurrency** (owner 2026-10-08 / 2026-10-15): max 3 agents; `scripts/capped` has 2 heavy slots (`heavy`,
   `heavy.2`; `CAPPED_SLOTS` overrides), 4 GB each; docker containers need their own `--memory`.
-- **Chains** (owner 2026-10-15): 7622 = testnet, resettable — the controller backs up the chain data, then resets /
+- **Chains** (owner 2026-10-15): SCaaS testnet = testnet, resettable — the controller backs up the chain data, then resets /
   redeploys itself; 22776 = future mainnet — every change is the owner's (work on a throwaway copy), precompiles only
   after the production gates (cryptographic audit, G-LIC), and from its launch "test-only, no migration" ends there.
 - **P6 mandate** (owner 2026-10-14, session 4): carry P6 to its end; merge AND push each sub-phase once tests, size gate,
@@ -75,7 +75,7 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
   through them; today the node relays address envelopes only), `pqz_call` (direct PQZ calls on the private chain),
   canonical re-encoding of Zether calldata (one intent, one id; NODE-JOB-20) → (6) **Codex run 2: contracts +
   pqz-prover + node relay** (OpenFactory 5g-Z2, UA-6 registry, PQZ / Zether after 5h; the prover's secret handling;
-  the relay paths) before the 7622 redeploy → (7) plan fs3 Task 13 (7622 reset, real e2e: wallet with pqz-prover,
+  the relay paths) before the SCaaS testnet redeploy → (7) plan fs3 Task 13 (SCaaS testnet reset, real e2e: wallet with pqz-prover,
   node relay, fees; ask the owner before timing).
   If credits allow only one run: pqz-core first (proof soundness); contracts keep Claude reviews.
   **Every Codex run is paired with an agy (Antigravity / Gemini) review of the same scope at the same time** (owner
@@ -87,13 +87,13 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
   issue (drafts in `scratchpad/`).
 - [x] **Zether BLS12-381 only (owner 2026-10-20, decisions CTR-ZTH-32; done inside UA-6, design U10)** — bn254 Zether (verifier, `proofSystemId`, UA kind `zether-bn254` 0x0140 + its Schnorr verifier, deploy steps, vectors, client paths) to `legacy/`; specs zether.md / accounts.md / README follow; with UA-6 and 5h. Also with 5h: drop `*_ZETHER_PQZ` kinds (CTR-TOK-21), `mtxShield` / `mtxUnshield` (CTR-ZTH-45), four flows with proof-free shield (CTR-PQZ-06). **Done on branch `ua6` (merge pending).**
 - [x] **UA-6: encryption keys as UA attributes (owner 2026-10-20, decisions CTR-UA-30; research `docs/research/ua-identity.md`; spec + plan merged 2026-10-20: `docs/superpowers/{specs,plans}/2026-10-20-ua6-encryption-key-attributes.md`, owner rulings at the plan's top; next: code)** — spec + plan, then code: registry `register` takes the PQZ key (PQ signers only), `keyOwner` uniqueness incl. msig, `pqz-mlwe` kind and `authRef` removed, `R_REG` message bound to the UA id (rides the 16k id bump), PQZ account keyed by the signing UA; classical Zether unchanged (key = UA, "self" mode). Before plan Task 5h. All UA clients follow. **Done on branch `ua6` (merge pending).**
-- [x] **Z2 owner questions (answers 2026-10-20; Z2 merged 2026-10-20, all applied; notice period: 3 days minimum on every mainnet, owner):** notice period defaults (10 min on 7622, 3 days on 22776) — **OK**;
+- [x] **Z2 owner questions (answers 2026-10-20; Z2 merged 2026-10-20, all applied; notice period: 3 days minimum on every mainnet, owner):** notice period defaults (10 min on the SCaaS testnet, 3 days on 22776) — **OK**;
   library pins = registrar list checked by code hash, not compared with the init code's link references — **OK**;
   `initialize` without Env — **answered**: keep the split explicit — the implementation carries what never changes for it (Env: verifier addresses, registry, chain, libraries; fixed in its constructor), the contract instance carries its own configuration from `initArgs` (e.g. a wrapped USDC → VND token at 1 : 25,000 and a USDC → RUB token at another rate; mint / burn / blacklist / … allowed or not), and both feed the governance matrix item; `deployImplementation` binds the kind's latest Env
   — **No**: to be discussed together with smart-contract governance and token governance.
-- [ ] **bamboo-dms: follow the generic factory API (owner 2026-10-20, plan Task 5g-Z)** — `createToken(kind, version, bytes initArgs, salt)` / `createDex(version, bytes initArgs, salt)` replace the typed `TokenConfig` path; the confidential verifier set comes from the factory (no creator-supplied verifier); `createTokenUnregistered` is refused for confidential kinds; version 0 tokens are unvetted (`isRegisteredToken`). Encoders (plan 5g-Z2, merged 2026-10-20): `initArgs = abi.encode(TokenConfig)` with `ConfidentialConfig` **without** the `verifier` field (7 fields: auditorKey, shieldScale, maxShielded, confidentialFee, disclosureMode, auditorMode, multiLegFee), `createDex` `initArgs = abi.encode(DexConfig)`; a release may not be usable yet (`VersionNotYetUsable`: 10 minutes after its deployment on 7622, 3 days minimum on every mainnet) and a kind may be disabled (`KindDisabled`); factory events `EnvPublished`, `ImplementationDeployed`, `KindEnabled` replace `ImplementationRegistered` and the Zether / PQZ flags. 5g-Z2 merged 2026-10-20: update the Odoo connector encoders now.
+- [ ] **bamboo-dms: follow the generic factory API (owner 2026-10-20, plan Task 5g-Z)** — `createToken(kind, version, bytes initArgs, salt)` / `createDex(version, bytes initArgs, salt)` replace the typed `TokenConfig` path; the confidential verifier set comes from the factory (no creator-supplied verifier); `createTokenUnregistered` is refused for confidential kinds; version 0 tokens are unvetted (`isRegisteredToken`). Encoders (plan 5g-Z2, merged 2026-10-20): `initArgs = abi.encode(TokenConfig)` with `ConfidentialConfig` **without** the `verifier` field (7 fields: auditorKey, shieldScale, maxShielded, confidentialFee, disclosureMode, auditorMode, multiLegFee), `createDex` `initArgs = abi.encode(DexConfig)`; a release may not be usable yet (`VersionNotYetUsable`: 10 minutes after its deployment on the SCaaS testnet, 3 days minimum on every mainnet) and a kind may be disabled (`KindDisabled`); factory events `EnvPublished`, `ImplementationDeployed`, `KindEnabled` replace `ImplementationRegistered` and the Zether / PQZ flags. 5g-Z2 merged 2026-10-20: update the Odoo connector encoders now.
 - [ ] **PQZL Rust port follow-ups** (port merged `5952951`; placed in the fs3 plan 2026-10-19; full text in
-  COMPLETED.md): (1) roll-out on 7622 — Rust-backed `Nethermind.Pqz` image (pqz-ffi default `pqzl-rust`), RUNBOOK steps
+  COMPLETED.md): (1) roll-out on the SCaaS testnet — Rust-backed `Nethermind.Pqz` image (pqz-ffi default `pqzl-rust`), RUNBOOK steps
   as P6f, PQZ gas rows re-calibrated on the chain host before or with the image switch (CTR-PQZ-09 controller proposal)
   — Task 13; (2) at the roll-out pq-zero-knowledge.md (~1293 / 1320 / 1504) names the Rust crate as the production core
   — Task 13; (3) wasm32 limb path in `pqzl/rust/src/arith/ntt.rs` (wasm32 `verify_fast` 1.7–2.0× slower than C, R_TXM8
@@ -111,13 +111,13 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
 ### P6 — what is left
 
 Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-SZ, P6-Z21, P6-REL, P6-PQZH-SOL, the
-`R_TXM` multi-recipient transfer (P6-ANON S1–S9, op 7 live on 7622 and in the PQZ tokens), gates A / B and the freeze
+`R_TXM` multi-recipient transfer (P6-ANON S1–S9, op 7 live on the SCaaS testnet and in the PQZ tokens), gates A / B and the freeze
 (2026-10-17) — details in COMPLETED.md.
 - [ ] **P6h** clients and WASM (browser wallet bundle builds with `SV=0`, owner 2026-10-13), **P6i** node, **P6j**
   review — after the token-family rename (owner 2026-10-19).
 - [ ] **P6c owner step:** audit the PQ verifiers and the expanded-key cache before any public chain enables a PQ kind.
-- [ ] **P6f follow-ups (owner):** follower + public RPC, restart policy (the 7622 node has none), deleting backups; the
-  hourly `watch.sh` check is manual. (P6f done and live on 7622 since 2026-10-16.)
+- [ ] **P6f follow-ups (owner):** follower + public RPC, restart policy (the SCaaS testnet node has none), deleting backups; the
+  hourly `watch.sh` check is manual. (P6f done and live on the SCaaS testnet since 2026-10-16.)
 - [ ] **P6-PUB drafts** (owner 2026-10-14, session 4): after P6, the live precompiles and P6-ANON, the controller drafts
   the ePrint paper (LaTeX, citing the frozen package) and the ethresear.ch post (Markdown, results-first), kept private
   in `scratchpad/pub/` until the owner posts; the results mail to the LaZer maintainers
@@ -141,7 +141,7 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
 
 - [ ] **Zether BLS12-381 verifier precompile in Rust** (owner 2026-10-17; after the PQZL Rust port, not scheduled):
   full verifier (Σ-protocol + the two Bulletproofs, `…/bls12-381/n64-n64/v2`) in `Nethermind.Pqz` (Rust cdylib +
-  P/Invoke) for 7622 / 22776; chains with it use it, others keep the Solidity `ZetherVerifier` (same statement, proof
+  P/Invoke) for the SCaaS testnet / 22776; chains with it use it, others keep the Solidity `ZetherVerifier` (same statement, proof
   bytes and verdict; chain allowlist + self-test as `PqzSafety`); built only with an explicit option (Cargo feature +
   MSBuild property, image build argument; default off); a node built without it refuses a chainspec that activates it.
   bn254 stays Solidity-only. Controller notes in COMPLETED.md.
@@ -216,7 +216,7 @@ Roadmap `docs/superpowers/plans/2026-10-12-p6-roadmap.md`. Done: P6a–P6g, P6-S
     (3) **hybrid underlying** — wrap (citizen brings a stablecoin) plus issuer mint under one `maxSupply`; reserve
     accounting needed (proposal: unbacked units not redeemable for the underlying; alternatives pro-rata or queue P15);
     PQZ / Zether minters never mint shielded value.
-- [ ] **SCaaS Chain 22776** (owner 2026-10-12): a new chain "SCaaS Chain", chain id 22776, beside the existing ones; chain 7622 and the UA key tree `m/7622'/…` stay unchanged. Ports in the 22776+ range (proposed RPC HTTP 22776, WS 22777, P2P 22778). Onboard like any chain: docs/networks/evm.md row, profile, finality gate, genesis/identity pin, deploy, node config. The chain itself (docker/chainspec) is run by the owner outside this repo.
+- [ ] **SCaaS Chain 22776** (owner 2026-10-12): a new chain "SCaaS Chain", chain id 22776, beside the existing ones; SCaaS testnet and the UA key tree `m/7622'/…` stay unchanged. Ports in the 22776+ range (proposed RPC HTTP 22776, WS 22777, P2P 22778). Onboard like any chain: docs/networks/evm.md row, profile, finality gate, genesis/identity pin, deploy, node config. The chain itself (docker/chainspec) is run by the owner outside this repo.
 - [ ] **Template library** (owner 2026-10-12): every README use case (escrow with an arbiter, milestone service
   contracts, sale with delivery, leases, installment loans, subscriptions, revenue sharing, deposit with periodic
   withdrawal, provenance and family-tree registries) as an implementation deployed once per chain, instances by clone /

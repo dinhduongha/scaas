@@ -462,7 +462,7 @@ estimates]
 
 | Family | Persistence of an idle balance | Cost of one balance entry | Cost of one 16,512-B ciphertext | Recurring? | UA without a native wallet | `msig` bound per transaction |
 |---|---|---|---|---|---|---|
-| EVM (7622, public) | forever | ≈ 22,100 gas (one slot) | 2.6–8.8 M gas | no | `SmartKeyAccount` / registry (built) | gas (EIP-7825 cap 2^24 per transaction) |
+| EVM (SCaaS testnet, public) | forever | ≈ 22,100 gas (one slot) | 2.6–8.8 M gas | no | `SmartKeyAccount` / registry (built) | gas (EIP-7825 cap 2^24 per transaction) |
 | Cosmos (CosmWasm) | forever | ≈ 2,000 + 30 × ≈ 60 B ≈ 4 k gas | ≈ 0.5 M gas | no | contract-internal ledger keyed by UA id | block gas |
 | Sui | forever | ≈ 0.001–0.002 SUI per object, 99 % rebate | ≈ 0.125 SUI, 99 % rebate | no | `Account<T>` per subject | 128 KB transaction (not re-checked) |
 | Aptos | forever | ≈ 0.004–0.005 APT, refundable | ≈ 0.070 APT, refundable | no | `Account` object per subject | 64 KiB transaction (gas schedule) |
@@ -476,7 +476,7 @@ estimates]
 What PQZ needs per transfer (pq-zero-knowledge.md §4.4): ≈ 77 KB of calldata in PQZL (statement parts + 42,762-B
 proof; ≈ 231 KB in PQZH), three 16 KB public keys and the 16,512-B balance read from state, ≈ 16.7 KB written, and a
 verifier that takes ≈ 8 ms on one native core (§6 of pq-fhe.md quotes the measured figure) [source]. On EVM it runs
-as a precompile on chain 7622 only; on a public chain of these families it would have to be contract code [inference].
+as a precompile on the SCaaS testnet only; on a public chain of these families it would have to be contract code [inference].
 
 | Family | Compute | Size | State | Verdict [inference] |
 |---|---|---|---|---|

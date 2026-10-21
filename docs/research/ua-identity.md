@@ -195,7 +195,7 @@ CTR-PQZ-13), and the m-of-n signature is the **authorization** of every spend ov
 Threshold decryption for lattice or ElGamal keys exists but would change the proof relations; not proposed.
 
 **Storage per chain** [estimate]: EVM SSTORE2 of 16,384 B ≈ 3.3 M gas (CTR-PQZ-13, unchanged — the same bytes move
-from a kind record to an attribute record), 64 / 128 B for Zether as today. PQZ is chain-7622-only and Zether EVM
+from a kind record to an attribute record), 64 / 128 B for Zether as today. PQZ is SCaaS testnet-only and Zether EVM
 dev chains only (CTR-PQZ-01, CTR-ZTH-02), so no other family stores these records today. If a family ever does: Solana
 rent-exempt deposit `(128 + 16,384) × 5,080` lamports ≈ 0.084 SOL for one PQZ key at the live rate
 ([near-algorand.md §5.1](near-algorand.md)); Sui and Aptos charge a per-byte storage fee into a refundable rebate /
@@ -233,7 +233,7 @@ stated only [inference]:
 | Confidentiality against a future quantum adversary (harvest now, decrypt later) | kept: amounts are MLWE-encrypted whoever signs | kept |
 | Spend authority against a quantum adversary | lost once secp256k1 / P-256 / BLS fall: the attacker signs the `authDigest` | kept (PQ or PQ-dominant `msig`) |
 | Who can use PQZ | any wallet: MetaMask, passkeys, HSMs; no ML-DSA support needed | users with an ML-DSA / FN-DSA / SLH-DSA key (or a hybrid `msig`); EOAs only as a minority `msig` member |
-| Cost per spend on 7622 | ECDSA ≈ 3 k gas, 65 B | ML-DSA-65 ≈ 236 k gas with the precompile, 3,309 B signature |
+| Cost per spend on the SCaaS testnet | ECDSA ≈ 3 k gas, 65 B | ML-DSA-65 ≈ 236 k gas with the precompile, 3,309 B signature |
 | Later tightening | immutable records: a later PQ-only rule cannot reach existing attachments; users would have to move funds | nothing to tighten |
 
 A middle option is a per-token immutable flag (`pqAuthRequired`, set at `initialize`): a token chooses, users see it.

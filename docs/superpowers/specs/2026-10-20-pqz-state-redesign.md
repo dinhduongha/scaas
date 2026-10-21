@@ -52,7 +52,7 @@ controller's request of 2026-10-20 (library split, §8). Normative text today:
 - Parameters: `pqz-core/pqzl/params/aprime/` — `aprime.sage` (budget, lattice-estimator `53da598`, leaky-LWE-Estimator
   `0a9caf8`; output `aprime.txt`), the A' sizing specs `ap<n>_<rel>_params.sage` run through LaZer's codegen and
   `e_s1_proof.sage` (output `proof-aprime.txt`), `README.md` (how to rerun).
-- Live baseline: chain 7622 run of 2026-10-17 (`smartcontracts/evm/runs/2026-10-17-p6g-op7-7622.txt`).
+- Live baseline: SCaaS testnet run of 2026-10-17 (`smartcontracts/evm/runs/2026-10-17-p6g-op7-7622.txt`).
 
 ## 1. Summary
 
@@ -96,7 +96,7 @@ calldata and events, except the optional BUNDLE entry (SSTORE2 of `R = salt ‖ 
 reverts `RefreshRequired` when `accUnits + unrolled + 2 > K_MAX = 1024`. `pqzRollOver(ua, acc, cts)` takes up to 16
 ciphertexts in calldata.
 
-| Operation (chain 7622, 2026-10-17, PQZL) | Gas | Calldata |
+| Operation (SCaaS testnet, 2026-10-17, PQZL) | Gas | Calldata |
 |---|---|---|
 | `pqzTransferSingle` (BUNDLE, auditor, fee) | 10,721,458 | 80,036 B |
 | `pqzTransferSingle` with 1 inline credit | 11,041,224 | 96,644 B |
@@ -148,7 +148,7 @@ byte; EXTCODECOPY 2,600 cold + 3 per word.
 
 The blob of an op 7 transfer with M = 8 and the auditor is 35,216 B (43,408 B under 16k [16k]; 47,504 B under the
 superseded A'): above EIP-170's 24,576 B, inside
-the 65,536 B `maxCodeSize` of chain 7622 (since 2026-10-11, [evm.md](../../networks/evm.md); PQZ is gated to the
+the 65,536 B `maxCodeSize` of the SCaaS testnet (since 2026-10-11, [evm.md](../../networks/evm.md); PQZ is gated to the
 private chains, CTR-PQZ-01), so one blob per operation always fits there. **New requirement:** the mainnet 22776
 genesis must keep `maxCodeSize ≥ 64 KiB` (≥ 43.4 KB is what 16k needs), or op 7 blobs split per group.
 
@@ -249,7 +249,7 @@ the slot `INLINE_MAX` behind ≈ 5 k gross); under A' ≈ 3.81 M + 46.6 k. With 
   Task 7 and pinned in Task 8. A TRIVIAL entry costs a rollover ≈ 9 k [estimate] (slot read, 16 lane adds on `v`,
   deletion), so the worst case for `ROLL_MAX` stays "every entry a credit from a distinct cold blob".
 
-Today's `ROLL_MAX = 16` costs ≈ 8.9 M: 1.76 M of execution plus 17 ciphertexts of calldata, 3.55 M at the standard price and 8.86 M under the EIP-7623 floor (`test_today_n2048`); the live 7622 run measured 0.71 M for one ciphertext and 1.59 M for two. 64-bit lanes hold `2^64 / q` terms: 2^22 today, 1,024 under A', **16,384 under 16k**, so
+Today's `ROLL_MAX = 16` costs ≈ 8.9 M: 1.76 M of execution plus 17 ciphertexts of calldata, 3.55 M at the standard price and 8.86 M under the EIP-7623 floor (`test_today_n2048`); the live SCaaS testnet run measured 0.71 M for one ciphertext and 1.59 M for two. 64-bit lanes hold `2^64 / q` terms: 2^22 today, 1,024 under A', **16,384 under 16k**, so
 `ROLL_MAX + 1 + INLINE_MAX` stays far below the bound (one `mod q` per lane at the end, as today).
 
 **The first materialisation** of an account writes its `CT/32` words zero → non-zero: 516 × 22.1 k ≈ 11.4 M (measured:
@@ -263,7 +263,7 @@ permissionless and idempotent, writes a non-zero placeholder into one half of th
 
 ### 5.4 Gas per operation against today
 
-Contract-side, from the measured parts (prototype) and the live 7622 numbers of §2; the precompile and the authorisation
+Contract-side, from the measured parts (prototype) and the live SCaaS testnet numbers of §2; the precompile and the authorisation
 are unchanged (today's parameters). "Δ" is against today.
 
 | Operation | Today | Proposed (today's parameters) | Δ, where it comes from |
@@ -343,7 +343,7 @@ recipient side one rollover share (≈ 36 k) later, paid by keepers or the owner
 so gas does not price a flood; [superseded by `txFee` + `decoyFee`, Docs sync] the levers are (a) the **per-credit fee**: today's `multiLegFee` (op 7 only, default 0)
 becomes a per-credit fee on both transfer paths, paid out of `SHIELD_POOL` to every credited UA's **public UA-ledger
 balance** [noPP] [pool] (the victim is paid for the work, spendable at once), the same for every leg so it reveals
-nothing; on chains 7622 / 22776 `initialize` refuses an amount below the floor (O4 ruled: at least the state cost of one
+nothing; on chains SCaaS testnet / 22776 `initialize` refuses an amount below the floor (O4 ruled: at least the state cost of one
 pending slot, ≈ 26.3 k gas at the chain's gas price, the figure set per chain profile); (b) permissioned submitters and
 node rate limits (T7), unchanged. Filling a victim's queue no longer locks it (R-B), so a flood now costs the victim
 rollover work and delay, not liveness.
@@ -631,13 +631,13 @@ the owner folded into the same bump (CTR-PQZ-09 Change, review B-1; CTR-UA-30 Co
 - **ids** (controller proposal): PQZL `keccak256("scaas/pqz/lnp22/mlwe-d64k40-q50l4/v4")` — the label's d/k/q/l
   change and the version continues from v3 so "v3 → v4" stays unambiguous in the B-1 records; PQZH
   `keccak256("scaas/pqz/pqzh/ligero-fq-<radices>-keccak256-zk-proven/v2")` with the radices of §6.5; v3 and PQZH v1
-  retired at the 7622 reset (plan fs3 Task 13);
+  retired at the SCaaS testnet reset (plan fs3 Task 13);
 - **gas**: precompile calibration (timing, owner's go-ahead), the 60 ms p99 verify limit re-checked (R_TXM M = 8 was
   51.0 ms p99 in wasm32 at today's size; +25 % input), node memory.
 
 Order (D17): B, the state layout, the shield / pool / names work on today's parameters first — no relation, vector
 or id changes (statements are unchanged; `shieldIn` is a rename of a header word) — reviewed and merged; then the
-16k regeneration with B-1, A-2 and `R_REG` as one id bump; then plan fs3 Task 6 (package) and Task 13 (7622 reset
+16k regeneration with B-1, A-2 and `R_REG` as one id bump; then plan fs3 Task 6 (package) and Task 13 (SCaaS testnet reset
 and gas), which wait for 5h.
 
 ### 6.5 New constraint: PQZH needs FFT domains in F_q
@@ -764,7 +764,7 @@ two were then superseded the same day by [16k].
 | O1 | B alone removes the liveness problem (credits are never refused; only rollovers stop at the cap until a refresh). Is A' still wanted? With `K_MAX = 1024` an account refreshes every ≈ 1,000 credits; with 65,536 every ≈ 65,000. | Keep B first; decide A' after B is live, weighing +37 % sizes, the verify-time risk and the re-calibration against fewer refreshes. If A' is kept: n = 2816. | B first with today's parameters, then larger parameters — now the 16k set [16k] |
 | O2 | n = 2816 (β 520 / 496.8 with 80 hints, margin 3.08×) or n = 2688 (488 / 465.3, 3.21×, 4.5 % smaller)? | 2816: drops the β 446 exception with room. | n = 2816 — **superseded** by [16k]: n = 2560, q ≈ 2^50 (β 508 / 482.4, margin 3.36×) |
 | O3 | Mint margin 3.08× (today 4.14×) acceptable? q ≈ 2^55 doubles it (6.2×) at a few β units. | Accept 3.08× (the cap is enforced twice; a forge invariant checks it). | accepted, re-checked by review B; under 16k the margin is 3.36× |
-| O4 | The per-credit fee floor on 7622 / 22776: any non-zero amount, or a minimum in token units set per token by the deployer? | `init` refuses 0 on the SCaaS chains; the amount is the deployer's. | a floor of at least the state cost of one pending slot (≈ 26.3 k gas at the chain's gas price), set per chain profile; paid to public balances [noPP] |
+| O4 | The per-credit fee floor on the SCaaS testnet / 22776: any non-zero amount, or a minimum in token units set per token by the deployer? | `init` refuses 0 on the SCaaS chains; the amount is the deployer's. | a floor of at least the state cost of one pending slot (≈ 26.3 k gas at the chain's gas price), set per chain profile; paid to public balances [noPP] |
 | O5 | Storage modes: with every op stored, BUNDLE costs nothing extra and NONE saves nothing. Keep the three entry points (ABI) with the new meaning, or retire NONE? | Keep them (ABI and W-A bindings stable). | **NONE retired** for PQZ (fewer entry points, simpler W-A binding) |
 | O6 | `ROLL_AGE = 24` blocks enforced (rollovers wait 2 min after a credit)? [superseded: 5 blocks] | Yes. | yes (replaces W-E's base); TRIVIAL entries too |
 | O7 | Burn / refresh write a 16.5 KB blob (+3.3 M). Alternative: write the fresh `acc` into the account's slots when they exist (≈ 2.6 M), the blob otherwise. | Blob always (one rule); revisit if refresh gas matters. | accepted (≈ 3.3 M dearer) |

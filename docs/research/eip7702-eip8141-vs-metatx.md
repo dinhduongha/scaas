@@ -69,7 +69,7 @@ sponsor role for the node); adopt nothing now.
 | Replay protection | 2D nonce `(from, lane)`; `validUntil`; domain `chainId` + `salt = chain_uid` + `verifyingContract` ([CTR-MTX-02](../contracts/metatx.md#CTR-MTX-02)) | tuple nonce = EOA nonce; `chain_id` or 0 (all chains) | one sequential account nonce; `chain_id`; expiry only through the canonical `EXPIRY_VERIFIER` frame |
 | Key types | secp256k1, ERC-1271 (`SmartKeyAccount`: P-256 WebAuthn), UA kinds incl. ML-DSA/FN-DSA ([accounts.md](../contracts/accounts.md#kinds)) | secp256k1 root; anything the delegate verifies | `SECP256K1`, `P256` native; anything via `ARBITRARY` + account code (PQ path) |
 | Rotation / recovery | `SmartKeyAccount` keys + guardian, 2-day delay ([CTR-ACC-03](../contracts/accounts.md#CTR-ACC-03)); UAs single-key by design | none for the root key; delegate may add session keys | account code decides; an EOA keeps its secp256k1 key |
-| Chains | every SCaaS family ([networks](../networks/README.md#families-and-chains)) | Ethereum, Gnosis, BSC, Polygon PoS, Base, Celo, chain 7622 (§4.7); no non-EVM family | none today; Ethereum L1 after Hegotá; L2s undecided |
+| Chains | every SCaaS family ([networks](../networks/README.md#families-and-chains)) | Ethereum, Gnosis, BSC, Polygon PoS, Base, Celo, SCaaS testnet (§4.7); no non-EVM family | none today; Ethereum L1 after Hegotá; L2s undecided |
 | Mempool / inclusion | node lanes, own simulation, breakers ([submit-lanes](../node/submit-lanes.md)) | normal mempool; clients keep 1 pending tx per delegated EOA | public mempool with bounded validation (100 k gas, sender-only storage) |
 | Trust | relayer can delay or drop, never alter (all fields signed, optional relayer binding) | delegate code has total control; relayer risks unpaid gas | sponsor contract code; no relayer needed |
 | Token changes needed | built in (`MetaTxBase`, `ERC20MetaTx`) | none | none (a `SENDER` frame calls the token directly) |
@@ -109,7 +109,7 @@ meta-tx path is the only path.
 | 4 | Relayer node (lanes, sponsorship) | **not applicable** | **prepare** (sponsor-signer role) |
 | 5 | DEX (`TradeOrder`, ERC-1271 cap) | **already handled** | **not applicable** |
 | 6 | Hedera and non-EVM families | **not applicable** | **not applicable** |
-| 7 | Chain 7622 and public EVM chains | **already handled** (live on all) | **not applicable** (live nowhere) |
+| 7 | SCaaS testnet and public EVM chains | **already handled** (live on all) | **not applicable** (live nowhere) |
 
 **(1) Token meta-tx path.** A 7702 EOA can batch its own calls (transfer on token A, `pay` on token B) in one
 transaction, but **it pays ETH as the sender**; to be gasless it still needs someone to submit a 0x04 or a call into
@@ -158,11 +158,11 @@ discussed) is **[unverified]** and the designator rule in `SigCheck` is harmless
 Sui, Aptos, TON and Solana have their own native sponsorship (feegrant, fee-bump, sponsored transactions, fee payer,
 W5), which SCaaS already uses only so a relayer pays ([NET-ALL-02](../networks/README.md#NET-ALL-02)).
 
-**(7) Chains.** 7702 is live on every EVM chain SCaaS profiles: chain 7622 (Fusaka + BPO2, Prague features, per
+**(7) Chains.** 7702 is live on every EVM chain SCaaS profiles: SCaaS testnet (Fusaka + BPO2, Prague features, per
 [CTR-TOK-01](../contracts/token-wrappers.md#CTR-TOK-01)), Ethereum (Pectra, 2025-05-07), Gnosis (Pectra, 2025-04-30),
 BSC (Pascal, 2025-03-20), Polygon PoS (Bhilai, 2025-07-01), Base (Isthmus, 2025-05 **[date unverified]**; live per the
 RPC probe in [networks/evm.md](../networks/evm.md)), Celo (Isthmus, 2025-07-09). 8141 is live on none; no production
-client implements it; 7622 should not enable it from a devnet build.
+client implements it; the SCaaS testnet should not enable it from a devnet build.
 
 ## 5. Recommendations
 
@@ -173,7 +173,7 @@ client implements it; 7622 should not enable it from a devnet build.
 | **Decide** | `SigCheck` for 7702 accounts: ECDSA only (as built) or ECDSA else ERC-1271 (as CTR-UA-24) | ECDSA only: passkey/session-key 7702 wallets cannot sign; with 1271: a buggy delegate answers for the account (the key is root anyway) |
 | **Prepare** | A study, not code: `SmartKeyAccount` as a 7702 target (EOA-signed init, ERC-7201 storage, cap by designator target) | storage collisions on re-delegation; delegation phishing; recovery cannot stop a stolen root key |
 | **Prepare** | Watch 8141 through Hegotá devnets; keep `mtx…` direct-call equivalents usable from a `SENDER` frame; sketch the node's sponsor-signer role | spec churn (number and shape may change, L2 split with EIP-8130); per-account nonce reintroduces head-of-line blocking |
-| **Do not** | Enable 8141 on chain 7622 early, or route business payments through a single-nonce account path | a private fork of a moving spec; stuck subjects |
+| **Do not** | Enable 8141 on the SCaaS testnet early, or route business payments through a single-nonce account path | a private fork of a moving spec; stuck subjects |
 
 Unverified points to re-check before any decision: Hegotá's date; the final `APPROVE` and paymaster rules; whether
 8141 keeps one nonce per account; Base's Isthmus date; Hedera's 7702 status; which SCaaS-relevant wallets ship 7702

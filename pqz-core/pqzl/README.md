@@ -11,7 +11,7 @@ systems, the precompile, the measurements) read the parent [pqz-core/README.md](
 
 > **The production core is moving to Rust** (owner 2026-10-18): the crate `pqzl` in `rust/` is a byte-for-byte port
 > of this C core and becomes the core of the `PQZ` precompile once the port is verified. The C core then stays as the
-> reference the Rust crate is checked against. Until then, the precompile on chain 7622 runs this C core. The port is
+> reference the Rust crate is checked against. Until then, the precompile on the SCaaS testnet runs this C core. The port is
 > on branch `pqzl-rust` ([plan](../../docs/superpowers/plans/2026-10-17-pqzl-rust-port.md)).
 
 ## How it is put together

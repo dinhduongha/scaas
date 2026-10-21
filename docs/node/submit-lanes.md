@@ -327,7 +327,7 @@ never indexing, tracking or replacing signed transactions, rescues or gap-filler
 | structural | simulated gas > `max_gas_per_tx` ⇒ job `dead` | 3 000 000 (classical Zether chains ≥ 4 500 000; post-quantum Zether chain 16 000 000; [NODE-STO-10](store.md#NODE-STO-10)) |
 | `revert_streak` (chain) | ≥ 3 post-simulation reverts of class `other` in 15 min | [NODE-OPS-06](ops.md#NODE-OPS-06), latched |
 
-Non-EVM families use budget + balance floor (no EIP-1559 base fee). The private chain 7622 (formerly 9000) is a
+Non-EVM families use budget + balance floor (no EIP-1559 base fee). The SCaaS testnet (chain id 7622, formerly 9000) is a
 pre-London Clique chain with `MinGasPrice = 0`: it has no base fee, so `base_fee_spike` does not apply there. Metric `scaas_breaker_open{chain,lane,breaker}`;
 manual reset `POST /v1/admin/chains/{key}/breaker/reset` (operator, [admin-auth.md#routes](admin-auth.md#routes)).
 

@@ -1116,8 +1116,8 @@ node's simulation gate).
 
 <a id="chains"></a>
 <a id="CTR-ZTH-27"></a>**CTR-ZTH-27** — *Open (owner).* The owner put the private chain in scope as the **first**
-target for confidential payments (where gas is not a blocking constraint); the private reference chain is 7622, but
-classical Zether is gated to the dev chain ids 31337/1337 ([CTR-ZTH-02](#CTR-ZTH-02)) and whether 7622 counts as a dev
+target for confidential payments (where gas is not a blocking constraint); the private reference chain is the SCaaS testnet (chain id 7622), but
+classical Zether is gated to the dev chain ids 31337/1337 ([CTR-ZTH-02](#CTR-ZTH-02)) and whether the SCaaS testnet counts as a dev
 chain is open ([CTR-ZTH-33](#CTR-ZTH-33)). Post-quantum Zether serves the private chain instead
 ([pq-zero-knowledge.md](pq-zero-knowledge.md)).
 
@@ -1140,7 +1140,7 @@ of `ZetherSafety` + a new deployment, after the cryptographic audit.
   revert outside a dev chain (a manual deploy cannot bypass it).
 - The NatSpec of every Zether contract carries **UNAUDITED — NOT FOR PRODUCTION FUNDS**.
 
-<a id="CTR-ZTH-33"></a>**CTR-ZTH-33** — *Open (owner).* **Chain 7622 is not a classical-Zether dev chain**:
+<a id="CTR-ZTH-33"></a>**CTR-ZTH-33** — *Open (owner).* **The SCaaS testnet is not a classical-Zether dev chain**:
 `ZetherSafety`'s allowlist stays `{31337, 1337}` until the owner decides whether the private chain counts as "dev".
 
 <a id="parameters"></a>
@@ -1457,7 +1457,7 @@ BUNDLE token, NONE = `mtxConfidentialTransferNoBundle`.
 </details>
 
   A limit under 2^24 at `M + 1` is refused by the margin. More recipients go in separate transfers; the statement itself allows `M ≤ 16`.
-- **Prover** (release `zether-cli proveTransferMulti`, one process per call; median of 3 on the chain-7622 host, AMD
+- **Prover** (release `zether-cli proveTransferMulti`, one process per call; median of 3 on the SCaaS testnet host, AMD
   Ryzen 5 7235HS): bn254 single 74 ms, M = 1/2/4/8 = 75 / 114 / 181 / 322 ms; BLS12-381 single 162 ms, M = 1/2/4/8 =
   159 / 231 / 361 / 660 ms.
 

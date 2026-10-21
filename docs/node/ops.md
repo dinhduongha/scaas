@@ -77,7 +77,7 @@ Telemetry targets W3B-01 … W3B-06:
 | W3B-01 | Meta-tx success rate | intents finalized (incl. `landed_elsewhere`) ÷ intents broadcast, 30 d | ≥ 99.5 % | fail over RPC, check lane balances, page operator | metric inputs **BUILT** (`scaas_relay_jobs{state}`); SLO **SPECIFIED** |
 | W3B-02 | Simulation zero-revert | broadcast transactions that reverted for a reason simulation would have caught ÷ broadcast; lost races (`consumed`) excluded | **0.00 %** (any occurrence is an incident); guard: revert rate ≤ 0.5 % per 7 d including races | stop the chain's new work (breaker), investigate contract/simulation drift | gate **BUILT**; metric **SPECIFIED** |
 | W3B-03 | Gas budget adherence | gas spent ÷ approved budget per lane and window | ≤ 100 % (warn 90 %) | breaker `gas_budget` stops new work; notify finance owner | **BUILT** |
-| W3B-04 | Finality latency | broadcast → final range delivered, p95 | ≤ chain hard finality + 60 s (Gnosis ≤ 240 s + 60 s; chain 7622 ≤ 15 s) | alert; check RPC quorum and indexer lag | lag gauge **BUILT** (`scaas_indexer_lag_blocks`); histogram **SPECIFIED** |
+| W3B-04 | Finality latency | broadcast → final range delivered, p95 | ≤ chain hard finality + 60 s (Gnosis ≤ 240 s + 60 s; SCaaS testnet ≤ 15 s) | alert; check RPC quorum and indexer lag | lag gauge **BUILT** (`scaas_indexer_lag_blocks`); histogram **SPECIFIED** |
 | W3B-05 | Zether proof latency | client proof time + on-chain verification | to be set after measurement on target devices | optimize prover/verifier | **SPECIFIED** as a release benchmark |
 | W3B-06 | Relayer fee spread | fees earned − gas paid, per chain per month | may be negative (fee = 0 B2B) | monthly OPEX review | **SPECIFIED** ([finops](#finops)) |
 
@@ -127,7 +127,7 @@ finality + 60 s for depth/tag families, `include` + 30 s for instant families (o
 
 | Chain class | Block / finality | `include` | `broadcast_final` | Reason |
 |---|---|---|---|---|
-| EVM private (7622, formerly 9000; Clique, 1 signer) | ~5 s, depth 1 | 15 s | 15 s | 3 blocks |
+| EVM private (SCaaS testnet, formerly 9000; Clique, 1 signer) | ~5 s, depth 1 | 15 s | 15 s | 3 blocks |
 | EVM public (Gnosis) | 5 s, `finalized` ~160–240 s | 30 s | 300 s | 6 blocks; 240 s + 60 s |
 | EVM L2 (Celo, `tag` until `l1_batch`) | 1 s, L1 finality ~13–20 min | 10 s | 1 260 s | 20 min + 60 s |
 | Hedera | 3–5 s record files, instant | 15 s | 45 s | 3 record files |
@@ -706,7 +706,7 @@ Above the rated load: a second node on **different chains**, not a bigger store.
   {mtxConfidentialTransfer, mtxUnshield, mtxRollOver}, calldata}` (direct `mtxShield` moves the caller's public units into the pool and `mtxWrapShield` pulls the caller's underlying, so neither is a node
   job; `mtxRollOver` is also an allowlisted envelope op (a relayed `metatx` job, outer fee may be 0, owner 2026-10-20); with the multi-recipient transfer, P6-ANON, `mtxConfidentialTransfer*` is op 7 with M ≥ 1 recipients and the single-recipient
   `mtxConfidentialTransferSingle*` (op 1) joins the set, each with its `Compact` variant; `NoBundle` is retired on PQZ). For all: the contract must be a configured PQZ token; pre-simulation by `eth_estimateGas` on a
-  **follower**, never the signer (fails ⇒ job rejected, no gas spent; op 7 is pre-simulated the same way); `max_gas_per_tx = 16_000_000` on chain 7622 (the
+  **follower**, never the signer (fails ⇒ job rejected, no gas spent; op 7 is pre-simulated the same way); `max_gas_per_tx = 16_000_000` on the SCaaS testnet (the
   default 3,000,000 already rejects classical Zether transfers at 3.36 M); never batched (`PqzToken` has no
   `mtxBatch`). Gateway body limit 1 MiB on job submissions to the `pqz` chain profile only (a v3 transfer job is ≈ 170
   KB as hex; the gateway's global limit stays 64 KiB). **Checked for op 7 (P6-ANON S9, 2026-10-16) — all unchanged**, against the largest
@@ -749,11 +749,11 @@ Above the rated load: a second node on **different chains**, not a bigger store.
   block in progress is never sealed, nothing is marked invalid, and a restart re-processes it; `PQZ-INPUT-PANIC` is an
   input-caused panic answered `…00` (should never appear). `pqz-core/nethermind/chain/watch.sh <container> <rpc>
   [since]` prints the head (height, age, `gasLimit`), the container state and last exit code and counts those tags; run
-  it from cron or by hand. There is no restart policy on chain 7622 today (owner step), so an exit 120 stops the chain
+  it from cron or by hand. There is no restart policy on the SCaaS testnet today (owner step), so an exit 120 stops the chain
   visibly until restarted. Clients price transactions at least `baseFee + 1` ([evm.md](../networks/evm.md#private-chain)).
 - The node never holds a PQZ secret or an ML-DSA key of a user (as for classical Zether: "the node never needs the
   confidential key"); it holds no envelope key either — envelopes arrive signed.
 - Indexer: `MetaTransactionExecuted`, `UAMetaTransactionExecuted`, `Transfer` and `UATransfer` of a PQZ token are
   normalized like any meta token's, beside the `Pqz*` events.
 - Not on the mesh, exactly as classical Zether: the bus never exports a `metatx` or `ua_metatx` intent naming a PQZ
-  token, and chain 7622 is private anyway.
+  token, and the SCaaS testnet is private anyway.

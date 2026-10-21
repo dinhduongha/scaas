@@ -55,7 +55,7 @@ CTR-ZTH-06/08/13/21/23/34, §14 disclosure, §15 CTR-ZTH-44…47, §16 gate, §2
   (Task 6) has a named killer.
 - `via_ir` stays off: `ZetherLib`'s `_prepare*`/`_settle*` split and the fixture's helpers exist to stay under the stack
   limit.
-- Code size is not a concern (owner: wait for the Glamsterdam fork; anvil and chain 7622 run 64 KiB); the ratchet
+- Code size is not a concern (owner: wait for the Glamsterdam fork; anvil and the SCaaS testnet run 64 KiB); the ratchet
   baseline records sizes (`NoUnderlyingToken` 22,978 B, `UnderlyingToken` 30,036 B, `NoUnderlyingZetherToken` 30,659 B, `UnderlyingZetherToken` 40,381 B (init 41,991 B), `ZetherLib` 15,662 B, `ZetherStatements` 7,311 B). The deploy of the Zether stack on an anvil needs `--code-size-limit 65536`.
 - Component docs say "controller ruling, pending the owner", never a K-id. The multi-key account is `SmartKeyAccount`.
 - Commit trailer (both lines): `Co-Authored-By: Claude Opus 5.5 <noreply@anthropic.com>` and
@@ -6985,11 +6985,11 @@ index 73331d1..b2cdc5f 100644
  - **Node:** re-encodes the dynamic arguments and refuses non-canonical `data` before computing the mesh `intent_id`
    ([NODE-JOB-20](../node/job-api.md#NODE-JOB-20)).
 -- **Status / Transitional (BUILT):** `ZetherToken` is BUILT, UNAUDITED and refuses to deploy outside chain ids 31337 and
--  1337 ([CTR-ZTH-02](zether.md#CTR-ZTH-02)); chain 7622 is not on that list. It carries its own `ZetherMetaTx`
+-  1337 ([CTR-ZTH-02](zether.md#CTR-ZTH-02)); the SCaaS testnet is not on that list. It carries its own `ZetherMetaTx`
 -  envelope with the built names `transferConfidential*`, `burn`, `fund`, `rollOver*`; the rename and the move onto the
 -  base are P3.
 +- **Status:** BUILT (P3), UNAUDITED: the `*_ZETHER` kinds refuse to initialize outside chain ids 31337 and 1337
-+  ([CTR-ZTH-02](zether.md#CTR-ZTH-02)); chain 7622 is not on that list. The old `ZetherToken` with its own envelope and
++  ([CTR-ZTH-02](zether.md#CTR-ZTH-02)); the SCaaS testnet is not on that list. The old `ZetherToken` with its own envelope and
 +  names is backed up in `smartcontracts/evm/legacy/p3/`.
  
  ### 3.8 Mandates

@@ -23,7 +23,7 @@ Source column:
 |---|---|---|---|---|---|---|
 | `registrar` address | IMPL | — | — | constructor arg, not checked against 0 | no setter, no transfer, no renounce. A contract registrar (Safe / UA msig) can rotate its signers internally; otherwise you need a new factory | Z2:factory/OpenFactory.sol:33,52-57 (main:…:38) |
 | `chainUid` | IMPL | — | — | ≠ 0 | immutable | Z2:…OpenFactory.sol:34,53 |
-| `noticePeriod` (**Z2 only**) | IMPL | — | — | any `uint64`. HANDOFF: 10 min on 7622, 3 days on 22776, 0 on dev/tests | immutable | Z2:…OpenFactory.sol:35,51; IOpenFactory.sol:92-94 |
+| `noticePeriod` (**Z2 only**) | IMPL | — | — | any `uint64`. HANDOFF: 10 min on the SCaaS testnet, 3 days on 22776, 0 on dev/tests | immutable | Z2:…OpenFactory.sol:35,51; IOpenFactory.sol:92-94 |
 | `MAX_LEGS = 8` (index) | IMPL | — | — | constant | — | Z2:…OpenFactory.sol:30,331 |
 | `publishEnv(kind, v, Env)` / `publishDexEnv` (**Z2**) | POST | registrar | **none** (the delay only applies to a release built on the env) | `v ≥ 1`, append-only, never changed; `env.factory == this`, `env.chainUid == chainUid`, `libs.length == libCodeHashes.length`; kinds 0–5 only | an env cannot be revoked or deprecated; the registrar cannot be removed | Z2:…OpenFactory.sol:66-73,253-264 |
 | Content of an `Env` (registry, `smartKeyAccountImpl`, `hedera`, `deps[]` = Zether/PQZ verifiers and disclosure, `libs[]` + code hashes) | POST (by the registrar, per env version) → becomes IMPL of every release built on it | registrar | none on publish | no semantic check: Zether/PQZ constructors check `deps` (see §5, §6) | permanent per version | Z2:factory/IFactoryToken.sol:8-12,29-38 |

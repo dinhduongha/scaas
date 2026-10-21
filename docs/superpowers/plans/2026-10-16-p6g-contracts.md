@@ -1,4 +1,4 @@
-# P6g — E-S4 contracts: `PqzSafety`, `PqzCt`, `UAPqzVerifier`, the `*_PQZ` token kinds, deploy and e2e on chain 7622 — Implementation Plan
+# P6g — E-S4 contracts: `PqzSafety`, `PqzCt`, `UAPqzVerifier`, the `*_PQZ` token kinds, deploy and e2e on the SCaaS testnet — Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -6,7 +6,7 @@
 `PqzSafety` (allowlist + precompile self-test), `PqzCt` (ciphertext arithmetic), `UAPqzVerifier` (the `pqz-mlwe`
 0x0142 kind through the `PQZ` precompile op 3), the PQZ layer (`PqzLayer` + `PqzLib`) on `MetaTokenBase` with the kinds
 `NONE_PQZ` / `UNDERLYING_PQZ` (CTR-PQZ-15/21/22/23/24), `OpenFactory.pqzEnabled`; forge tests with the precompile
-mocked and real ciphertext arithmetic; then the owner mandate of 2026-10-15 (TODO.md): **deploy on chain 7622** (UA
+mocked and real ciphertext arithmetic; then the owner mandate of 2026-10-15 (TODO.md): **deploy on the SCaaS testnet** (UA
 registry generation 1 with `UAMldsaVerifier` on the `MLDSA44` / `MLDSA65` precompiles and `UAPqzVerifier`, the factory,
 the implementations, tokens) and an **e2e with real proofs** — register, shield, transfer, rollover, burn, refresh,
 disclose, both relaying paths — with every gas figure measured and logged in `runs/`.
@@ -45,7 +45,7 @@ decisions.md CTR-PQZ-01…24 with their Change lines; the [P6c plan](2026-10-13-
 `pqz-mlwe` slot, the `< q` key check left to P6g) and the [P6f plan](2026-10-14-p6f-precompiles.md) (addresses, gas
 rows, live chain). HANDOFF.md 2026-10-16 "p6g": the eight design notes, recorded below as D1–D8.
 
-**Base:** `main` at `b6185dd` (P6f live on 7622, Tracks L / H merged). Chain 7622 runs `scaas/nethermind-pqz:1.39.0-pqz1`
+**Base:** `main` at `b6185dd` (P6f live on the SCaaS testnet, Tracks L / H merged). The SCaaS testnet runs `scaas/nethermind-pqz:1.39.0-pqz1`
 with the precompiles from block 0, `maxCodeSize` 0x10000 from block 0, gas limit ramping 16.8 M → 80 M; funded test
 keys `0x…01`–`0x…04` in genesis. P6-ANON S3 is in flight in `pqz-core/stmt` and `pqz-core/ffi` (another agent): this
 plan only adds one example file there and touches nothing else.
@@ -61,7 +61,7 @@ plan only adds one example file there and touches nothing else.
 | Factory | `TokenKind` already lists `NONE_PQZ` (4), `UNDERLYING_PQZ` (5), `*_ZETHER_PQZ` (6, 7); `_checkImplementation` refuses kinds above `UNDERLYING_ZETHER` (`KindReserved`). `ConfidentialConfig {verifier, auditorKey, shieldScale, maxShielded, confidentialFee, disclosureMode, auditorMode}`. |
 | Sizes | baseline `NoUnderlyingZetherToken` 43,624, `UnderlyingZetherToken` 55,528 (init 57,223): over EIP-170, under 7622's 65,536. |
 | Vectors | `smartcontracts/vectors/pqz/`: statement rows with full statement bytes (`statement_*.json`), `enc.json` Add / Sub with Trivial as `ct_keccak`, proofs per id, `selftest.json` (`0xed910a2c…d205`), `pqz_kat.py` (KeyGen, Enc, `trivial`, `digits`, `build_debit`, witnesses). |
-| Chain 7622 | head ≈ 340, base fee 7 wei, gas limit 23.4 M and rising; PQZ / ML-DSA live (P6f `runs/2026-10-16-live.txt`). Nothing of SCaaS deployed since the reset (no CREATE2 deployer either). |
+| SCaaS testnet | head ≈ 340, base fee 7 wei, gas limit 23.4 M and rising; PQZ / ML-DSA live (P6f `runs/2026-10-16-live.txt`). Nothing of SCaaS deployed since the reset (no CREATE2 deployer either). |
 
 ## 2. Decisions (controller proposals, owner may override; recorded in decisions.md)
 
@@ -92,7 +92,7 @@ plan only adds one example file there and touches nothing else.
   `pqzUnshield`, `pqzRollOver`; on `UNDERLYING_PQZ` also `pqzWrapShield`, `pqzUnshieldUnwrap`) join both allowlists,
   fee class `ABSOLUTE`. A new hook `_batchable(sel)` (default true) in `mtxBatch` / `uaBatch`; the PQZ layer returns
   false for its selectors ⇒ `MtxNotBatchable(sel)` (CTR-PQZ-21).
-- **D5 — Sizes** (note 5): chain 7622 has `maxCodeSize` 0x10000 from block 0; no size-reduction work (owner: wait for
+- **D5 — Sizes** (note 5): the SCaaS testnet has `maxCodeSize` 0x10000 from block 0; no size-reduction work (owner: wait for
   Glamsterdam); the measured runtime / init sizes of the new contracts over their limits go into `size-baseline.json`
   (a ratchet), the two token names into `size_gate.py`'s `TOKENS`.
 - **D6 — Forge tests** (note 6): the precompile is mocked with `vm.mockCall` (op 6 ⇒ the frozen hash, op 1–5 ⇒ the
@@ -131,11 +131,11 @@ plan only adds one example file there and touches nothing else.
   `MemoSaltMismatch`; `memoHash` in the header); no-bundle ⇒ nothing (`TransferEntryDisabled` on COMPACT).
   `PqzTransfer` carries the salt (pq-zero-knowledge.md §7.4 says the salt is "in `PqzTransfer`"; §7.8's event gains the field)
   so `R` is rebuildable from logs.
-- **D15 — 7622 deploy without `forge script`.** forge's EVM has neither `PQZ` nor `MLDSA*`, so its simulation of
+- **D15 — SCaaS testnet deploy without `forge script`.** forge's EVM has neither `PQZ` nor `MLDSA*`, so its simulation of
   `UAPqzVerifier`'s constructor (self-test) and the token ops fails; the e2e driver deploys the forge artifacts with
-  raw transactions (libraries linked from `linkReferences`). Registry gen 1 on 7622: `mldsa44`, `mldsa65`
+  raw transactions (libraries linked from `linkReferences`). Registry gen 1 on the SCaaS testnet: `mldsa44`, `mldsa65`
   (`UAMldsaVerifier` on the precompiles, probe from `pq_signatures.json`), `pqz-mlwe` (`UAPqzVerifier`, PQZL), `msig`;
-  budget 12 M; the classical kinds are not enabled in this generation (7622 is the resettable testnet; a full-stack
+  budget 12 M; the classical kinds are not enabled in this generation (the SCaaS testnet is the resettable testnet; a full-stack
   deploy is `Deploy.s.sol`'s, which needs the CREATE2 deployer this chain does not have since the reset).
 - **D16 — Proof system of the e2e tokens:** PQZL (smaller calldata, the registry's PoP system); one PQZH token through
   a second `UAPqzVerifier` (id PQZH) measures the PQZH debit paths when time allows.
@@ -233,7 +233,7 @@ pinned layout changes (it must not).
 - `e2e.py deploy` / `e2e.py run`: deploy (D15), then the scenario (Task 8), every tx's gas and hash logged; `--rpc`,
   `--key`; reads forge artifacts from `smartcontracts/evm/out`.
 
-### Task 8: Deploy and e2e on chain 7622
+### Task 8: Deploy and e2e on the SCaaS testnet
 
 - One run: `UAMldsaVerifier` ×2 (`PRECOMPILE()` = `…0012` / `…0013`), `UAPqzVerifier` (PQZL), `UARegistry` gen 1,
   `OpenFactory`, the libraries, both implementations, `setPqzEnabled(true)`, tokens (`NONE_PQZ` BUNDLE / FULL auditor,
@@ -247,7 +247,7 @@ pinned layout changes (it must not).
 ### Task 9: Docs
 
 - pq-zero-knowledge.md §7.3 (shield burns public units), §7.8 (`PqzTransfer` with the salt), §9.3 measured P6g rows, §9.4
-  "built"; accounts.md `pqz-mlwe` row built and the 7622 gen 1; roadmap P6g row; decisions.md (D1–D16 as Change
+  "built"; accounts.md `pqz-mlwe` row built and the SCaaS testnet gen 1; roadmap P6g row; decisions.md (D1–D16 as Change
   lines); `smartcontracts/evm/README.md` if it lists contracts; `scripts/docs_check.py check` and the size gate clean.
 
 ## 4. Results (2026-10-16, branch `p6g`)
@@ -257,7 +257,7 @@ pinned layout changes (it must not).
   self-test + `R_REG` probe, exact op-3 input, `pk < q`; a `pqz-mlwe` UA in a gen-1 registry (3,693,727 gas with a
   mocked PoP). **T4** base hooks, kinds 4 / 5, factory gate (`5a24fdc`). **T5** `PqzLib`, `PqzLayer`,
   `NoUnderlyingPqzToken` (`befc7d8`): the token-built transfer statement body equals `statement_transfer.json`'s byte
-  for byte. **T6** `UnderlyingPqzToken`, relay tests, sizes (`80d6ced`). **T7** tooling (`0bb7690`). **T8** 7622 (`8b5a322`).
+  for byte. **T6** `UnderlyingPqzToken`, relay tests, sizes (`80d6ced`). **T7** tooling (`0bb7690`). **T8** SCaaS testnet (`8b5a322`).
 - **Forge:** 31 PQZ tests in `test/pqz/` (PqzCt 5, UAPqzVerifier 4, PqzNone 13, PqzUnderlying 2, PqzRelay 3) and the
   whole suite (1,272 tests: 1,256 passed, 10 skipped) green except the six `test/pqzh/ligero` `test_mutations_*` (`MemoryOOG`), which fail the same on `main`
   `b6185dd` (not touched here). Two existing tests updated for kinds 4 / 5 being built (`AdminLib.t.sol`,
@@ -265,7 +265,7 @@ pinned layout changes (it must not).
 - **Sizes** (runtime / init, B): `NoUnderlyingPqzToken` 50,483 / 52,073, `UnderlyingPqzToken` 62,572 / 64,169 (2,964 B
   under 7622's 65,536), `PqzLib` 12,725, `UAPqzVerifier` 1,314; the four existing tokens +137 B each (the two hooks);
   `size-baseline.json` ratchet entries, size gate 0 errors.
-- **Chain 7622** (log `smartcontracts/evm/runs/2026-10-16-p6g-7622.txt`, 89 checks, 0 failures, 479 s; the first run,
+- **SCaaS testnet** (log `smartcontracts/evm/runs/2026-10-16-p6g-7622.txt`, 89 checks, 0 failures, 479 s; the first run,
   aborted at §6 because SCaaS tokens give EOAs no allowance (CTR-TOK-01), is kept as `…-run1-aborted.txt`; its contracts
   stay on chain unused; superseded 2026-10-17 by the UA-index redeploy, `smartcontracts/evm/runs/2026-10-17-ua-index-7622.txt`): `UARegistry` gen 1 `0xd3806d52cfc265ea6a8ae264dc3feda92cf1be84`, `UAMldsaVerifier` 44
   `0xe120dcaba543fb54a37cc5dddcc11199f0d4073e` / 65 `0xf422e821237328257e9ae78d30a6081753cd67be` (`PRECOMPILE()` =
@@ -274,7 +274,7 @@ pinned layout changes (it must not).
   `NoUnderlyingPqzToken` `0x6a23b0bdbb88c34589366388194e403b78176248`, `UnderlyingPqzToken`
   `0x0f39a5bcb7149ec90d9139d4437b7833b85bc802`, tokens pqUSD (`NONE_PQZ`, BUNDLE, FULL)
   `0x802348c24edfbb3fabd9a1e3038eec225c3485ec`, pqW (`UNDERLYING_PQZ` over a MockERC20 tUSD, COMPACT, OPTIONAL)
-  `0xfb5b3b351c7aa91612bd6bd5989a4904589b9113`. Gas per path: pq-zero-knowledge.md §9.3 "Measured on chain 7622 (P6g)".
+  `0xfb5b3b351c7aa91612bd6bd5989a4904589b9113`. Gas per path: pq-zero-knowledge.md §9.3 "Measured on the SCaaS testnet (P6g)".
 - **Open:** D16's PQZH token (not run; PQZH debit paths unmeasured on chain); the sender memo body is random filler
   in the e2e (the CTR-ZTH-50 HKDF memo is the client's, P6h); op 7 entry points (D8); `pqzUnshield` to a `bytes32`
   recipient (TODO.md, not in §9.4's selectors) not built; the classical kinds are not in 7622's gen 1 (D15);

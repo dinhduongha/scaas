@@ -1,4 +1,4 @@
-# PQZ e2e on chain 7622 (P6g)
+# PQZ e2e on the SCaaS testnet (P6g)
 
 Plan: [2026-10-16-p6g-contracts.md](../../../../docs/superpowers/plans/2026-10-16-p6g-contracts.md) (D7, D15).
 Deploys the PQZ stack with raw transactions (forge's EVM has no `PQZ` / `MLDSA*` precompile, so `forge script`
@@ -14,7 +14,7 @@ python3 -I smartcontracts/evm/script/pqz/e2e.py --rpc http://127.0.0.1:8545 --lo
 ```
 
 - `e2e.py`: the driver (Python stdlib; `pqz-core/nethermind/chain/eth.py` signs, `smartcontracts/vectors/pqz/pqz_kat.py`
-  does KeyGen / Enc / Dec / witnesses). Statements come from the token's views. Test keys `0x…01`–`0x…03` of the 7622
+  does KeyGen / Enc / Dec / witnesses). Statements come from the token's views. Test keys `0x…01`–`0x…03` of the SCaaS testnet
   genesis; test seeds `keccak256("p6g-e2e-7622/<name>")`.
 - `mldsa.mjs`: ML-DSA keys and signatures, `@noble/post-quantum` 0.7.1 from `clients/clientkeys/node_modules`.
 - `pqz-core/ffi/examples/pqz_prove.rs`: `prove` / `verify` jobs on stdin.

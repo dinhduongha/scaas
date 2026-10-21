@@ -179,7 +179,7 @@ signer nothing: the surplus comes back, [CTR-DEX-21](../contracts/dex.md#CTR-DEX
 (b) through the node's own listed executor for callbacks and flash swaps; (6) simulate the whole call, submit it as a
 `call` job, watch the final event. Fees by role: an exchange-only order pays `taker_fee_ppm` (below ⇒ `FEE_TOO_LOW`), a
 resting order filled through an AMM `maker_fee_ppm`. MEV: on a public chain submit through a private relay where one
-exists (a sandwich takes only surplus, never below the signed limit); chain 7622 has no public mempool. Config per
+exists (a sandwich takes only surplus, never below the signed limit); the SCaaS testnet has no public mempool. Config per
 chain: `trade_engine.enabled` (default `false`), `trade_engine.amm` (`{kind: univ2|univ3, factory, quoter, router}`),
 `max_hops`, `executor`, `tick`, `buffer`. EVM only.
 

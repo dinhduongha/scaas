@@ -298,8 +298,8 @@ The gate before the merge (plan Tasks 9, 12) and the reviews A / B (Tasks 10, 11
 
 ### 8.5 Impact on PQZ
 
-- **Deployed:** v2 runs on chain 7622 (image `pqz2`), a test chain; every SCaaS chain is test-only. v2 proofs are
-  forgeable, so v2 is retired: removed from the accepted set and from `pqz-stmt`, and 7622 is reset from genesis at
+- **Deployed:** v2 runs on the SCaaS testnet (image `pqz2`), a test chain; every SCaaS chain is test-only. v2 proofs are
+  forgeable, so v2 is retired: removed from the accepted set and from `pqz-stmt`, and the SCaaS testnet is reset from genesis at
   the v3 roll-out (owner 2026-10-19, path B), with the PQZ tokens and `UAPqzVerifier`, which hold the id immutably,
   redeployed. v1 had the same gap and is already retired [code].
 - **Parameters, sizes, noise budget:** unchanged. With both rounds in place the extractor argument of LNP22 applies
