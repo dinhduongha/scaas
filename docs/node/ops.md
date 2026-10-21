@@ -750,7 +750,7 @@ Above the rated load: a second node on **different chains**, not a bigger store.
   framing; the largest op 7 transaction within 16 M gas ≈ 440 KB, 2.38× under it, S9; the follower proxy's
   `client_max_body_size` 2 MiB takes its hex raw transaction, ≈ 0.88 MB) and `Blocks.TargetBlockGasLimit` 80,000,000 (Clique moves the limit ≈ 0.1 % per block: 16.78 M → 80 M in
   ≈ 1,600 blocks ≈ 2.2 h; 200,000,000 since the Amsterdam reset of 2026-10-21, and the genesis `gasLimit` 200 M
-  (`0xbebc200`, `chain/patch-chainspec.py --testnet-reset`) from the next reset, so no ramp; a relayer never assumes
+  (`0xbebc200`, `chain/patch-chainspec.py --testnet-reset`) since the reset of 2026-10-22, so no ramp; a relayer never assumes
   this limit: it reads the block gas limit from the chain); the chainspec carries `engine.Pqz`. Health after any start: the log line `PQZ-START`
   (library SHA-256 = the image label `scaas.pqz.ffi.sha256`, self-test hash `ed910a2c…d205`, the schedules, the
   addresses), no `PQZ-REFUSE`. A node fault (D4: arena, worker) logs `PQZ-NODE-FAULT` and **exits with code 120**: the

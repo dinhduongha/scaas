@@ -5,7 +5,7 @@ This runbook is the step-by-step procedure for switching on the PQZ and ML-DSA p
 owner, or the controller session the owner has allowed to back up, reset and deploy the SCaaS testnet (owner decision
 2026-10-15). Every step was first rehearsed on a throwaway **copy** of the SCaaS testnet, then run on the real chain.
 
-**Status (all executed except the last row):**
+**Status (all executed):**
 
 | Procedure | Date | Log |
 |---|---|---|
@@ -13,7 +13,7 @@ owner, or the controller session the owner has allowed to back up, reset and dep
 | [Live roll-out on the SCaaS testnet](#live-roll-out-on-the-scaas-testnet-task-10-executed-2026-10-16) — back up, reset with the precompiles from block 0 (Task 10, image `pqz1`) | 2026-10-16 | `../runs/2026-10-16-live.txt` |
 | [The multi-recipient transfer (op 7)](#the-multi-recipient-transfer-op-7-on-the-scaas-testnet-executed-2026-10-17) — a second schedule on the running chain (image `pqz2`) | 2026-10-17 | `../runs/2026-10-17-s8-live*.txt` |
 | [Nethermind 2.2.0 and Amsterdam](#nethermind-220-and-amsterdam-on-the-scaas-testnet-executed-2026-10-21) — reset onto image `2.2.0-pqz3`, Amsterdam from block 1 | 2026-10-21 | `../runs/2026-10-21-testnet-2.2.0.txt` |
-| [Genesis gasLimit 200 M](#genesis-gaslimit-200-m-on-the-scaas-testnet-prepared-2026-10-22-not-yet-run) — the same chain reset with a 200 M genesis block (**prepared, not run**) | 2026-10-22 | `../runs/2026-10-22-genesis-200m-throwaway.txt` |
+| [Genesis gasLimit 200 M](#genesis-gaslimit-200-m-on-the-scaas-testnet-executed-2026-10-22) — the same chain reset with a 200 M genesis block | 2026-10-22 | `../runs/2026-10-22-testnet-200m.txt` |
 
 The commands below are the ones that were executed. Steps marked *live only* ran on the SCaaS testnet itself; everything else
 ran on the copy. Plan: [P6f](../../../docs/superpowers/plans/2026-10-14-p6f-precompiles.md) Tasks 7, 8, 10; spec:
@@ -414,7 +414,7 @@ a transaction carries at most ≈ 261,909 calldata bytes; a transaction's `tx.ga
 reserves it in the state dimension); new storage slots cost 97,920 state gas and code 1,530 per byte.
 
 
-## Genesis gasLimit 200 M on the SCaaS testnet (prepared 2026-10-22, not yet run)
+## Genesis gasLimit 200 M on the SCaaS testnet (executed 2026-10-22)
 
 *Live only.* Owner 2026-10-22: reset the SCaaS testnet now so blocks are 200 M from block 0 ("Reset ngay để có 200 M
 sớm, không cần chạy tải"); no load rehearsal, no burst / fill drill, no calibration. Everything else stays as on
@@ -422,9 +422,19 @@ sớm, không cần chạy tải"); no load rehearsal, no burst / fill drill, no
 (Amsterdam from timestamp 1), `config.json` (`TargetBlockGasLimit` already 200 M), compose, ports and keys. No chain-data
 backup (owner 2026-10-21); the data dir is renamed, `genesis.json` gets a `.bak-pre-200m-20261022` copy.
 
-**Status:** prepared and rehearsed on throwaway chains (`../runs/2026-10-22-genesis-200m-throwaway.txt`); **not run**:
-the amsterdam-node implementer's session was refused access to the live stack by the permission system, so the owner or
-the controller runs it.
+**Status: executed 2026-10-22** by the controller (log `../runs/2026-10-22-testnet-200m.txt`, script
+`../runs/2026-10-22-testnet-reset-200m.sh`, rehearsed first on throwaway chains, `../runs/2026-10-22-genesis-200m-throwaway.txt`).
+Image `scaas/nethermind-pqz:2.2.0-pqz3` = `sha256:b3f6c855b2d2adbcf1fa6f6453e931cd54b79467e7e5f023e8642aae43a93b14`;
+`PQZ-START` with library `16dd99ce…`; genesis `0xa17faef497fa29ec90603969dad0176ea18fd1cc2eaf0f9f4fa2dacc9c952ac2` (as
+predicted), block 1 `0xca1fbc04d57f83aa20993bb097be1f5801b1fff4d1505a00926dce4e9024f012`, `gasLimit` 200,000,000 from
+block 0; probe all checks passed (with the `eth_estimateGas` row: 3,394,851 vs exact 3,366,962); e2e `--no-ua` all checks
+passed; `codesize`: 65,536 B deployed at once in block 46 (100,504,388 gas), 65,537 B refused. The e2e part of the log
+holds two interleaved check runs started at the same time with the same key: one hit a nonce clash ("replacement
+transaction underpriced"), the other passed fully — an operator slip, not a chain fault. Redeployed by the checks: the
+probe contract of `e2e.py e2e` and the two `codesize` contracts; nothing else (the PQZ / UA stack is redeployed with
+plan fs3 Task 13). Afterwards `smartcontracts/evm/chain-uids.json` `private7622`, `scaas-node/node.example.toml` and
+`docs/networks/evm.md` carry the new genesis hash (commit `00d791b0`). A gas-less `eth_call` of a call with total gas
+> 2^24 and regular < 2^24 succeeds on the reset chain (`../runs/2026-10-22-testnet-gasless-call.txt`).
 
 ```sh
 sh pqz-core/nethermind/runs/2026-10-22-testnet-reset-200m.sh reset   # stop, .bak, patch-chainspec --testnet-reset, rename data, start

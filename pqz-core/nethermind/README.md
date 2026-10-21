@@ -204,7 +204,10 @@ library).** (a) `chain/patch-chainspec.py --testnet-reset` sets the genesis `gas
 with it. Checked on a throwaway chain (`runs/2026-10-22-genesis-200m-throwaway.txt`): block 0 `gasLimit` 200 M, a
 65,536 B contract deployed in block 9 (100,504,388 gas), 65,537 B refused, a 22.0 M-gas transaction (200 new slots,
 regular < 2^24) included, probe all checks passed; the live genesis through the same reset gives the hash
-`0xa17faef4…2ac2`. Reset script `runs/2026-10-22-testnet-reset-200m.sh` (not run yet, see RUNBOOK). (b) `e2e.py probe`
+`0xa17faef4…2ac2`. **The SCaaS testnet was reset with it on 2026-10-22** (script
+`runs/2026-10-22-testnet-reset-200m.sh`, log `runs/2026-10-22-testnet-200m.txt`): genesis `0xa17faef4…2ac2` as predicted,
+block 1 `0xca1fbc04…f012`, image `sha256:b3f6c855…`, `gasLimit` 200 M from block 0, probe / e2e / `codesize` all
+checks passed ([RUNBOOK](chain/RUNBOOK.md#genesis-gaslimit-200-m-on-the-scaas-testnet-executed-2026-10-22)). (b) `e2e.py probe`
 has an `eth_estimateGas` row (a direct call to `PQZ` estimates the precompile row: 3,394,851 vs exact 3,366,962,
 +0.8 %, on the throwaway chain), closing the review's open point on Facade / JsonRpc. (c) Fail-closed drill (M1) on a
 throwaway container: a library with one appended byte gives `PQZ-REFUSE … != the reviewed 16dd99ce…` and exit 120
@@ -224,6 +227,8 @@ run: Task 13 drills). Not done (owner's go): the 200 M block load rehearsal (M3)
   (owner decision 2026-10-15). Executed on 2026-10-16, log `runs/2026-10-16-live.txt`;
 - **adding the multi-recipient transfer (op 7)** to the running chain with a second schedule. Executed on 2026-10-17,
   log `runs/2026-10-17-s8-live.txt`.
+- **Genesis gasLimit 200 M**: the SCaaS testnet reset again with a 200 M genesis block, everything else unchanged.
+  Executed on 2026-10-22, log `runs/2026-10-22-testnet-200m.txt`.
 - **Nethermind 2.2.0 + Amsterdam**: the SCaaS testnet reset onto `2.2.0-pqz3` with Amsterdam from block 1. Executed on
   2026-10-21, log `runs/2026-10-21-testnet-2.2.0.txt`.
 
