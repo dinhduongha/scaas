@@ -1,3 +1,5 @@
+> **Research note — background and rationale only, not normative; the current rules are in docs/ (see decisions.md).**
+
 # PQZH debit proofs at set (a) vs `MAX_PROOF_PQZH` — spikes A and B (research)
 
 Plan 5h Task 8c spike (2026-10-22), branch `pqz-8c-spike` from `pqz-8c` `0189d476`. Research only: the spike code is
