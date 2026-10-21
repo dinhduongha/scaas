@@ -39,17 +39,31 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
 
 ### Now (order)
 
-- **Now (2026-10-21):** **5h part B** on branch `pqz-16k` (not pushed): Task 7 done (16k set approved by the owner:
-  q = 2^50 − 42,310,535, rank 39, `ROLL_MAX` 192, op 7 M = 8 G = 1, `MAX_PROOF_PQZH` 327,680); **Task 8a paused before
-  code** (B-1, A-2, `R_REG`), then 8b PQZL 16k → 8c PQZH → 8d stmt / contracts / vectors / id bump → Task 9 (review,
-  timing on the owner's go). HANDOFF.md top note.
-- [x] **Spike A for `UnderlyingPqzToken`** (owner 2026-10-21) — done `a12cd06b` on `metatx-lib`: 61,045 → A 56,898
-  (headroom 8,638 under 65,536) / A2 54,321 (11,215); relayed +7–9k gas (A), large op 7 envelope ≈ +1 M unless only
-  the data hash goes to the library. HANDOFF.md top note.
+- **Now (2026-10-21 evening):** **5h part B** on branch `pqz-16k` (not pushed). Done: Task 7 (16k, now superseded),
+  7b (Amsterdam re-measure), 7c (smaller n), 8a (B-1, A-2, `R_REG`; reviewed), spike PACK (branch `pqz-pack`), F185
+  (branch `foundry-185`). **Task 8b paused** (parameter sets `pqz-core/params/sets/`, PQZL at set (a)). Then 8c PQZH
+  (backup) → 8d stmt / contracts (P46, per-set Solidity, 32-bit precompile addresses, `ROLL_MAX`, M = 8 by measurement,
+  one id bump) → Task 9. HANDOFF.md top note has every owner ruling of the day.
+- [ ] **Merge into `pqz-16k` once 8b commits clean:** `foundry-185` (F185 complete, `d4c24678..d3a1c39c`; expect a
+  one-line conflict at `docs/contracts/pq-zero-knowledge.md:1435`, both reworded "round 4") and `pqz-pack` (`55d38e61`,
+  `d7761d4b` research note with the P46 decision).
+- [ ] **Node / relayer on the Amsterdam gas model** (F185 finding): regular gas ≤ 2^24 per tx, total (regular + state)
+  up to 2^32 − 1; `scaas-node` zether.rs `DECOY_LEG_GAS` 32,000 vs 116,698 measured per leg; the prover's `gas_limits` M
+  table assumes total ≤ 2^24 (edge cells need 21–31 M); `docs/node/ops.md` `max_gas_per_tx` 16 M. Never assume gas
+  price 0 or our block limit (owner 2026-10-21: the precompile may be deployed for customers).
+- [ ] **SCaaS testnet at the next reset (plan fs3 Task 13):** genesis `gasLimit` 200 M (0xBEBC200) instead of 16.7 M
+  (the ramp takes ≈ 2.5 h to 110 M); the PQZ library v4 of the chosen set; the 32-bit precompile addresses; the
+  `nethermind-2.2` review minors: fail-closed drill with a tampered library, e2e burst / fill drills under Amsterdam,
+  a 200 M block load rehearsal, `.dockerignore` for the default (no `FFI_REV`) image build, README note that the
+  testnet's PQZL v2 id is the forgeable one, an `eth_estimateGas` row in the probe; main's FFI library `ee2f7096…` is
+  not the reviewed `16dd99ce…` (review the v4 library before building the image).
+- [ ] **Research (owner 2026-10-21, not blocking):** PQZH proof below ≈ 170 KB at the proven soundness (the debit
+  inputs must fit one tx under EIP-7976, ≈ 261,909 B with the statement); Kyber-style compression of `u` (noise vs
+  `K_MAX`); both only if PQZH on chain or smaller blobs are wanted.
 - [ ] **Metatx split** (owner 2026-10-20 "kiểu gì cũng phải tách"; governance goes to a lib or module): spec → plan →
   build **after 5h part B merges, before fs3 Tasks 12 / 6 / 13 and before governance code** (timing ruled 2026-10-21).
-  Open for the spec: A (library) vs B / B′ (module behind `fallback`; conflicts with the 2026-10-20 "no view fallback"
-  ruling).
+  **Owner 2026-10-21: variant A** (DELEGATECALL library, the token keeps the entry points); pass the library only the
+  envelope data hash (else a ≈ 340 KB op 7 pays ≈ +1 M gas).
 - [x] **`MtxRule`: allow-list vs fee class — owner 2026-10-20: keep as is.** `feeClass = 0` = not relayable,
   `ABSOLUTE` / `AMOUNT` = the fee basis (CTR-MTX-20); on contracts with `supportedModes() = 0x03` (`SmartKeyAccount`,
   `MandateWallet`, their `cancelNonce`) an `ABSOLUTE` selector can only run with fee mode `NONE` (CTR-MTX-22; node

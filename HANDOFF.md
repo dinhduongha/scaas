@@ -1,3 +1,52 @@
+## Session 2026-10-21 (evening; 5h part B: 8a done, 8b paused, Amsterdam re-plan) — resume here
+
+**State:** main `28af51d3` + this note, pushed up to `28af51d3` (Nethermind 2.2.0 merge + SCaaS testnet rename). Part B
+on branch **`pqz-16k`** (worktree `.claude/worktrees/pqz-16k`, not pushed), **8b WIP at `__8B__`**. Side branches done,
+not yet merged into `pqz-16k` (merge once 8b commits clean): **`foundry-185`** (`d3a1c39c`), **`pqz-pack`**
+(`d7761d4b`). SDD ledger with every ruling (git-ignored):
+`.claude/worktrees/pqz-16k/.superpowers/sdd/2026-10-20-pqz-state-redesign/progress.md`; per-task briefs / reports /
+reviews in the same dir. No agent, capped job, docker container (except the testnet node) or background shell running.
+
+**Owner rulings today (in the spec addendum "Amsterdam re-plan (owner 2026-10-21)", `76fd9916` / `ab04e0bd`):**
+- **Glamsterdam mandatory** on every chain that runs these contracts; never raise the 24 K code-size limit again
+  (ceiling 64 KiB). The SCaaS testnet runs **Nethermind 2.2.0 with Amsterdam from block 1** (merged on main).
+- **Ethereum's Amsterdam rules kept** (option (b): EIP-7976 calldata floor ≈ 261,909 B / tx, EIP-8037 state gas,
+  EIP-8038 storage writes). **No zero-gas / own-block-limit assumptions** (the precompile may be deployed for
+  customers); budgets per tx 2^24 regular, total against an Ethereum-like block (60 M today, 200 M expected with
+  Glamsterdam: Sepolia / Hoodi).
+- **Parameter set (a): n = 2304 (k 36), `K_MAX` 4,096, q = 61,275,424,977,257 (≈ 2^45.80), Δ = 233,747,196, proof
+  MLWE rank 36**; β at 80 hints 468.5 (DDGR20) / 458.5 (dual), no exception; sizes −10 % vs 16k (Task 7c,
+  `pqz-core/pqzl/params/n-study/`). Supersedes the 16k set approved this morning (Task 7, `params/p16k/`).
+- **Parameter sets are source directories** `pqz-core/params/sets/n<N>-kmax<K_MAX>/` (shared by PQZL and, in 8c, PQZH),
+  chosen at compile time (C `PQZ_SET=…`, Rust feature `set-…`; one set per library build); `SET.md` per set.
+  Sets: `n2048-kmax1024` (today, byte-identical), `n2304-kmax4096` (default), `n2560-kmax16384` (16k: shippable — full
+  vectors under `smartcontracts/vectors/pqz/n2560-kmax16384/`, gate, "Conditions for this set to work on a chain"),
+  `n2816-kmax65536` (A': core-only, build + KATs; report a 64-bit-arithmetic blocker instead of changing algorithms).
+- **op 7 M = 8**: the "M ≤ 4" rule was withdrawn (it rested on the precompile input sent as calldata; through the token
+  the input is built in memory, M = 8 calldata ≈ 124 KB). Core keeps M = 8 at G = 2; 8d decides by measurement.
+- **Blobs stay in contract state — absolute** ("Không được mất ciphertext"; calldata / events are pruned by EIP-4444).
+- **Stored layout P46** (spike PACK, `pa-pack/results-pack.md`, `docs/research/pqz-pack.md`): 46-bit coefficients, 4 per
+  23 B, stored data only (token unpacks to 64-bit lanes for the precompile; proofs / pqz-stmt unchanged); state −8.10 M
+  per op 1, −16.80 M per op 7 M = 8; regular +0.22–0.29 M; `ROLL_MAX` ≈ 80 at (a); op 7 M = 8 total 56.42 M. The packing
+  width is per set (⌈log2 q⌉: 46 for (a), 50 for 16k).
+- **PQZH = backup only** (its debit inputs exceed one tx under EIP-7976); `MAX_PROOF_PQZH` stays 262,144;
+  `MAX_INPUT` stays 512 KiB. 8c writes "Conditions for a chain to run PQZH" per set.
+- **Precompile addresses → 32-bit** `0x…5caa0f01` (PQZ), `0x…5caa0012` / `0x…5caa0013` (ML-DSA-44 / -65) in 8d; then
+  `PqzReleaseSpec`'s override goes.
+- **Foundry 1.8.5** machine-wide; **every foundry.toml profile `amsterdam`** (F185; size gate +14 B per entry for the
+  `"experimental": true` metadata, owner option (1)).
+- **Metatx split: variant A** (library; only the data hash to the library), after part B, before governance.
+
+**Measured today:** Task 7b (Amsterdam, forge 1.8.5 + testnet cross-check): 16k `ROLL_MAX` 80, op 1 / op 7 M ≤ 4 fit
+2^24, state ≈ 33 M per debit. Spike PACK at (a), today's lanes: op 1 8.09 / 29.63 / 37.72 M (regular / state / total),
+op 7 M = 4 6.98 / 31.64 / 38.62 M, op 7 M = 8 G = 2 10.54 / 62.39 / 72.93 M, `ROLL_MAX` 96. 8a: cheating prover 28
+forgeries → 0 in all four verifiers; gate t8a PASS; review clean.
+
+**Next:** (1) resume 8b from `task-8b-report.md` § "Paused" (n2304-kmax4096 Rust + full gate t8b → 16k set with
+vectors + gate → A' build / KATs) → review; (2) merge `foundry-185` and `pqz-pack` into `pqz-16k`; (3) 8c PQZH at the new
+q (backup) + conditions doc; (4) 8d: pqz-stmt, P46 contracts, per-set Solidity constants, precompile addresses,
+`ROLL_MAX`, M = 8 measurement, one proofSystemId bump, vectors; (5) Task 9 (timing only on the owner's go). TODO.md "Now".
+
 ## Session 2026-10-21 (5h part B: Task 7 done, Task 8a paused) — resume here
 
 **State:** main has this note only (local commit, not pushed). Part B work on branch **`pqz-16k`** (worktree

@@ -160,6 +160,25 @@ phases P1–P5 (P0 = the docs, done); each phase ends with the size gate (CTR-TO
 - [x] Meta-tx generic call (GC-1…10) accepted and folded 2026-10-08; record `docs/history/specs/2026-10-08-metatx-generic-call-design.md`.
 - [x] DEX exchange path (DS-1…8) accepted and folded 2026-10-08; record `docs/history/specs/2026-10-08-dex-exchange-design.md`.
 
+#### Done 2026-10-21
+
+- **Spike A for `UnderlyingPqzToken`** (owner 2026-10-21) — done `a12cd06b` on `metatx-lib`: 61,045 → A 56,898
+  (headroom 8,638 under 65,536) / A2 54,321 (11,215); relayed +7–9k gas (A), large op 7 envelope ≈ +1 M unless only
+  the data hash goes to the library. HANDOFF.md top note.
+- **Nethermind 2.2.0 + Glamsterdam on the SCaaS testnet** (owner 2026-10-21: "Glamsterdam đã có trên testnet eth …
+  cập nhật vào chain SCaaS testnet"): branch `nethermind-2.2` merged `bf1bc7ff`, pushed. Plugin ported to 2.2.0
+  (`PqzReleaseSpec` answers `IsPrecompile` for the > 32-bit `0x5caa5…` addresses, which 2.2.0 refuses; the 1.39 plugin
+  `Init` became the init step `PqzStartupCheck`, fail-closed, exit 120), image `scaas/nethermind-pqz:2.2.0-pqz3`
+  (local only; base `2.2.0@sha256:5cc0061e…`, reviewed library `16dd99ce…` via `FFI_REV`), 46 / 46 tests. Testnet reset
+  without backup (owner), Amsterdam from block 1 (EIP-2780, 7708, 7778, 7928, 7954, 7976, 7981, 8024, 8037, 8038, 8246;
+  7843 / 8282 off for Clique), genesis hash unchanged, probe + e2e 76 ok, 64 KiB deploy (65,536 B at 100.5 M gas;
+  65,537 refused). Old backups deleted (owner). Review merge-ready, minors in TODO (next reset). Gas impact note
+  `pqz-core/nethermind/runs/2026-10-21-glamsterdam-gas-impact.md`.
+- **Chain 7622 called "SCaaS testnet" in prose** (owner 2026-10-21): living docs, old plans, COMPLETED.md and
+  decisions.md (`5fb8fd15`), Nethermind README / RUNBOOK (`a5985e70`, `28af51d3`); numeric ids, `private7622`,
+  `m/7622'` unchanged; `docs/history/` untouched.
+- **Machine Foundry 1.3.5 → 1.8.5** (owner 2026-10-21; rollback `foundryup -u stable`).
+
 ### 0. Finish the spec phase (7 items left)
 
 - [ ] **Template library** (owner 2026-10-12): every README use case — including economic (commercial) contracts: escrow with an arbiter, milestone service contracts, sale with delivery, leases, installment loans, subscriptions, revenue sharing, deposit with periodic withdrawal (`VestingGrant` / `MandateWallet`), provenance and family-tree registries — ships as an **implementation deployed once per chain**; a user only creates a new instance by clone (EIP-1167) / CREATE2 through a factory with its own parameters (as `OpenFactory.createToken` / `createDex` do today), and calls it by meta-transaction. Off-chain presets (CTR-AS-14 JSON) are only parameter sets for these factories. Spec first (owner rule): `docs/contracts/templates.md` — the template set, each one's init parameters and invariants, the factory (`createX`, deterministic address, `chainUid` gate, registry of instances), who pays the fee per template, client builders; then code streams per template.
