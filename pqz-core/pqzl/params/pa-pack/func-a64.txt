@@ -1,0 +1,344 @@
+$  scripts/capped sh -c cd <scratch>/w64/evm && forge test --match-path 'test/pqz/*' --no-match-contract 'GasTest|InvariantTest'
+Compiling 180 files with Solc 0.8.37
+Solc 0.8.37 finished in 22.80s
+Compiler run successful with warnings:
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+  --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:92:29:
+   |
+92 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, signature);
+   |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:119:29:
+    |
+119 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, r, vs);
+    |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:161:29:
+    |
+161 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, v, r, s);
+    |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:169:26:
+    |
+169 |     function _throwError(RecoverError error, bytes32 errorArg) private pure {
+    |                          ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> src/factory/OpenFactory.sol:282:26:
+    |
+282 |         private returns (address at, Release memory r)
+    |                          ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+  --> src/common/Bls12381.sol:60:28:
+   |
+60 |     error PrecompileFailed(address at);
+   |                            ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> src/zether/ZetherVerifier.sol:264:13:
+    |
+264 |             uint256 at = 4 + 2 * n + 2 * j;
+    |             ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> src/zether/ZetherVerifier.sol:368:9:
+    |
+368 |         uint256 at = HEADER + 6 * p;
+    |         ^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+  --> src/ua/verifiers/Musig2Secp256k1Verifier.sol:43:14:
+   |
+43 |             (bool ok, uint256 hx, uint256 hy) = _hint(keyData, h, l, i);
+   |              ^^^^^^^
+Note: The shadowed declaration is here:
+  --> src/ua/verifiers/Musig2Secp256k1Verifier.sol:51:10:
+   |
+51 |         (bool ok, uint256 qy) = Bip340.liftX(qx);
+   |          ^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+   --> test/zether/helpers/ZetherFixture.sol:138:38:
+    |
+138 |     function _newToken(bool auditor, bytes32 salt) internal virtual returns (ZetherLayer) {
+    |                                      ^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+  --> test/zether/helpers/ZetherFixture.sol:62:5:
+   |
+62 |     bytes16 internal salt = bytes16(uint128(0x5A17));
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+   --> test/zether/helpers/ZetherFixture.sol:142:38:
+    |
+142 |     function _newToken(bool auditor, bytes32 salt, uint256 maxShielded) internal virtual returns (ZetherLayer) {
+    |                                      ^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+  --> test/zether/helpers/ZetherFixture.sol:62:5:
+   |
+62 |     bytes16 internal salt = bytes16(uint128(0x5A17));
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+   --> test/pqzh/Pqzh.sol:249:64:
+    |
+249 |     function pw(uint256[64] memory t, uint256 bits, uint256 n, uint256 off) internal pure returns (uint256 r) {
+    |                                                                ^^^^^^^^^^^
+Note: The shadowed declaration is here:
+   --> test/pqzh/Pqzh.sol:162:5:
+    |
+162 |     function off(bytes calldata x) internal pure returns (uint256 o) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+  --> src/ua/verifiers/Secp256k1Verifier.sol:14:5:
+   |
+14 |     function verify(bytes calldata keyData, bytes32 message, bytes calldata sig) public view returns (bool) {
+   |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+  --> src/ua/verifiers/Musig2Secp256k1Verifier.sol:82:5:
+   |
+82 |     function _coef(bytes32 l, bytes calldata pk) private view returns (uint256) {
+   |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to view
+   --> test/pqz/PqzShared.t.sol:160:5:
+    |
+160 |     function test_allowlists_noneKind() public {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:561:5:
+    |
+561 |     function _w(bytes calldata s, uint256 i) private view returns (uint256 v) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:568:5:
+    |
+568 |     function _seed(Ctx memory c, bytes calldata stmt) private view {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:573:5:
+    |
+573 |     function _observe(Ctx memory c, uint256 ptr, uint256 len) private view {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:584:5:
+    |
+584 |     function _sample(Ctx memory c) private view returns (uint256 r) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:653:5:
+    |
+653 |     function _cd(uint256 p) private view returns (uint256 v) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:661:5:
+    |
+661 |     function _alphaPowers(Ctx memory c) private view returns (uint256[] memory packed) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:700:5:
+    |
+700 |     function _combine(uint256[] memory packed, uint256 ptr, uint256 w, uint256 E) private view returns (uint256 o, uint256) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:772:5:
+    |
+772 |     function _rows(Ctx memory c, Tree memory tr, uint256 p, uint256 ti) private view returns (uint256 rowsBytes, uint256) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:787:5:
+    |
+787 |     function _deep(Ctx memory c, uint256 x) private view {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:846:5:
+    |
+846 |     function _gather(uint256[] memory ev, uint256 k, uint256 pos, uint256 folded, uint256 p, uint256 E)
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/pqzh/Pqzh.sol:862:5:
+    |
+862 |     function _leaf(uint256[] memory ev, uint256 k, uint256 E) private view returns (bytes32 h) {
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/ua/UARegistryBase.sol:232:5:
+    |
+232 |     function _auth(UARegistry r, uint16 kind, bytes memory keyData, bytes32 purpose, bytes32 digest)
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+
+Ran 5 tests for test/pqz/PqzCt.t.sol:PqzCtTest
+[PASS] test_canonical() (gas: 10748387)
+[PASS] test_safetyAllowlist() (gas: 6695)
+[PASS] test_selfTest() (gas: 10924)
+[FAIL: panic: array out-of-bounds access (0x32)] test_sumsAreExact() (gas: 15084946)
+[FAIL: T = Enc + Trivial(1000): 0x467c8d24cd1483d6d2832a218badf3914a588b82b3b5de125e842711840d970f != 0x8fa061dcb3749d0ef44c6136dced18270cfcb006a8b49892be5b4cf523c8b62e] test_trivialAgainstVectors() (gas: 10375294)
+Suite result: FAILED. 3 passed; 2 failed; 0 skipped; finished in 82.88ms (74.51ms CPU time)
+
+Ran 3 tests for test/pqz/PqzRelay.t.sol:PqzRelayTest
+[PASS] test_percentAndBatchRefused() (gas: 734876)
+[FAIL: ProofRejected()] test_v1BindingAndFee() (gas: 6541291)
+[FAIL: ProofRejected()] test_v3FeeUA() (gas: 3984482)
+Suite result: FAILED. 1 passed; 2 failed; 0 skipped; finished in 153.83ms (14.67ms CPU time)
+
+Ran 6 tests for test/pqz/PqzShared.t.sol:PqzSharedTest
+[PASS] test_allowlists_noneKind() (gas: 24601)
+[PASS] test_beneficiaryMismatch() (gas: 40707379)
+[PASS] test_relayedPrepareAndRollOver() (gas: 102386087)
+[PASS] test_unshieldRecipient_refused() (gas: 5826274)
+[PASS] test_unshieldToDerivedUA() (gas: 33319939)
+[PASS] test_unshieldUnwrap_toUA() (gas: 143526921)
+Suite result: ok. 6 passed; 0 failed; 0 skipped; finished in 165.73ms (28.29ms CPU time)
+
+Ran 4 tests for test/pqz/PqzUnderlying.t.sol:PqzUnderlyingTest
+[FAIL: fits EIP-7825 with --gas-estimate-multiplier 105: 109353607 >= 16777216] test_largestImplementationFitsOneOsakaTx() (gas: 18881173)
+[PASS] test_publicWrapThenShield() (gas: 31872692)
+[PASS] test_reentryIntoTheRestatedAdminEntriesRefused() (gas: 8715607)
+[FAIL: expected call to 0x5caA500000000000000000000000000000000F01 with data 0x020000c3807383374d83fbb89f84ee079bff7a2742e4acb70f64b0b1e2ef40c34fb4cc14078079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef0000000000000000000000000000000000000000000000000000000000007a690000000000000000000 …[log trimmed: 112272 more chars of hex]
+Suite result: FAILED. 2 passed; 2 failed; 0 skipped; finished in 207.91ms (72.99ms CPU time)
+
+Ran 2 tests for test/pqz/PqzPool.t.sol:PqzPoolUnderlyingTest
+[PASS] test_relayedUnwrapBound() (gas: 32811690)
+[PASS] test_wrapShieldMintsToPool_unwrapBurnsFromPool() (gas: 33543921)
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 142.72ms (9.48ms CPU time)
+
+Ran 12 tests for test/pqz/PqzMulti.t.sol:PqzMultiTest
+[PASS] test_decoyFee_bounds() (gas: 38838363)
+[PASS] test_decoyFee_perLegUniform() (gas: 75933079)
+[PASS] test_minDecoyFee_initBounds() (gas: 275628)
+[FAIL: assertion failed: 0x00000000000000000000000000005a170000005cbcdb65400000002f7e5dbf11000000e152a19d5f000000329092d5a6000000253db0cc2600000051c8c56a2d0000004da10cc96c000000a7828c6cdc000000b123ab4906000000e39afcbefe0000005e3bc3e3970000004a7a15ba090000005a16ee2af00000003c6bbb7889000000e51d4b502c0 …[log trimmed: 74734 more chars of hex]
+[PASS] test_multi_M8_twoGroups() (gas: 952290156)
+[PASS] test_multi_allowlisted() (gas: 31494)
+[PASS] test_multi_checks() (gas: 45642247)
+[FAIL: assertion failed: 37280 != 33184] test_multi_disclosureByLeg() (gas: 110873563)
+[PASS] test_multi_modes() (gas: 46373624)
+[FAIL: SSTORE2WriteFailed()] test_multi_pqzh() (gas: 191818993)
+[PASS] test_multi_shortPayloadIsBadPayload() (gas: 286437)
+[FAIL: len(M = 4, A = 1): 149376 != 132992] test_multi_statementAndEffects() (gas: 2173199)
+Suite result: FAILED. 8 passed; 4 failed; 0 skipped; finished in 742.47ms (736.62ms CPU time)
+
+Ran 19 tests for test/pqz/PqzState.t.sol:PqzStateTest
+[PASS] test_capClampCapReachedAndRefresh() (gas: 112598646)
+[PASS] test_creditsBeyondTheOldCapAccepted() (gas: 200694747)
+[PASS] test_hint_staleFreshAndAfterDebit() (gas: 569854975)
+[FAIL: assertion failed: 0x00000000000000000000000000005a17000000054e3d98b7000000fff9ebf8a100000015909091a8000000aab9266d2b000000dbb67a75720000006df4fd80fb000000885008ca32000000acf015c587000000070e48125c0000003cac9060e000000001fb29fc49000000453df4a3b0000000124a2870bb000000430c486f3c00000099c8b7614c0 …[log trimmed: 74719 more chars of hex]
+[PASS] test_prepareAcc() (gas: 70106298)
+[PASS] test_restoreFromState() (gas: 539974296)
+[PASS] test_rollRace_rolloverPastP() (gas: 868813060)
+[PASS] test_rollRace_rolloverUpToP() (gas: 451121290)
+[PASS] test_rollRace_unrollThenRollover() (gas: 884925147)
+[PASS] test_rollTooYoungAndYoungInline() (gas: 108546522)
+[PASS] test_rolloverPastTheQueueReverts() (gas: 66891579)
+[PASS] test_shieldIn() (gas: 41978826)
+[PASS] test_trivial_bothSidesOfPAndUnits() (gas: 255609809)
+[PASS] test_trivial_mergeAndAppend() (gas: 171487536)
+[PASS] test_trivial_noMergeIntoASpentTail() (gas: 32867456)
+[PASS] test_trivial_sameBlockResidual() (gas: 37789276)
+[PASS] test_trivial_thirdPartyShieldBetweenProveAndSubmit() (gas: 34688946)
+[PASS] test_unrollAtTheInlineEdgeAfterRollMax() (gas: 390047197)
+[PASS] test_zeroURefused() (gas: 261426989)
+Suite result: FAILED. 18 passed; 1 failed; 0 skipped; finished in 832.99ms (1.64s CPU time)
+
+Ran 6 tests for test/pqz/PqzPool.t.sol:PqzPoolTest
+[PASS] test_events() (gas: 305340500)
+[PASS] test_pool_neitherPayeeNorSpender() (gas: 4609376)
+[PASS] test_relayedModeBound() (gas: 35470671)
+[PASS] test_shield_toPoolAndFree() (gas: 1224992)
+[PASS] test_txFee_toBeneficiaryPublicBalance() (gas: 231303738)
+[FAIL: R || v_f: 0x00000000000000000000000000005a17000000054e3d98b7000000fff9ebf8a100000015909091a8000000aab9266d2b000000dbb67a75720000006df4fd80fb000000885008ca32000000acf015c587000000070e48125c0000003cac9060e000000001fb29fc49000000453df4a3b0000000124a2870bb000000430c486f3c00000099c8b7614c0000000aa …[log trimmed: 75211 more chars of hex]
+Suite result: FAILED. 5 passed; 1 failed; 0 skipped; finished in 830.50ms (175.54ms CPU time)
+
+Ran 5 tests for test/pqz/UAPqzVerifier.t.sol:UAPqzVerifierTest
+[PASS] test_constructorPins() (gas: 249254066)
+[PASS] test_constructorProbes() (gas: 252056997)
+[FAIL: UAPoP()] test_registerPqzKey() (gas: 116660750)
+[FAIL: UAPoP()] test_registerRefused() (gas: 118798057)
+[FAIL: assertion failed] test_verifyInputAndVerdict() (gas: 105876671)
+Suite result: FAILED. 2 passed; 3 failed; 0 skipped; finished in 753.91ms (395.13ms CPU time)
+
+Ran 18 tests for test/pqz/PqzNone.t.sol:PqzNoneTest
+[FAIL: R_TX0: 74752 != 66560] test_auditorModes() (gas: 4889879)
+[FAIL: assertion failed: 56192 != 50048] test_burnStatementLayout() (gas: 1090903)
+[FAIL: hash || memo: 0x228f04dba698bf13d5264bc727e59a5a5a279b90998d3bba5dea659244e611fc00000000000000000000000000005a1700000059bee35df8000000753eaf726b000000f1c4781460000000c52cc73e050000007e9783a94b00 != 0x053e54a60310e9e8bdc49bd754b634da20f70fb03643a272f0095eaff2f07fda00000000000000000000000000005 …[log trimmed: 131 more chars of hex]
+[PASS] test_constructorChecksTheEnv() (gas: 20960468)
+[PASS] test_createToken_enabledKindOnAForbiddenChain_reverts() (gas: 176055)
+[PASS] test_directModeBound_single() (gas: 35712453)
+[FAIL: assertion failed: 37280 != 33184] test_disclosure() (gas: 25632686)
+[PASS] test_factoryGate() (gas: 3909034)
+[PASS] test_initPinsThePrecompile() (gas: 244715220)
+[PASS] test_inlineAboveRolled() (gas: 554112934)
+[FAIL: T = acc - inline: 0x0000034ae016e4850000029c1d0429800000037fc64ca27f0000036c602678d4000000fc7ff86ecf000003d4ea9e7c3c0000019908171e20000001017ce24c7f000002b12304aab2000000521c8a6ced000001af3ce11d77000002c08a108f5e000000dd9e8d7cdc000003405a0410c5000000cbaeec21240000001f1c68ce0500000129f10949130 …[log trimmed: 74016 more chars of hex]
+[FAIL: EvmError: OutOfGas] test_inlineTooFar() (gas: 1073726760)
+[PASS] test_keylessUAIsNoPqzAccount() (gas: 177866491)
+[FAIL: BUNDLE stores R: 0x00000000000000000000000000005a170000003122d395ba0000002283fb069b00000056ef8ca547000000b552a59e7d000000b33c8bc7cb000000cbc43b36c7000000f8913c488c000000cfc71344ea000000d87311f09900000060f83efdb7000000d2a58c03700000009685917ab30000006938b2547300000086bdaf2821000000a65afedece00 …[log trimmed: 74710 more chars of hex]
+[FAIL: EvmError: OutOfGas] test_rollover() (gas: 1073726760)
+[PASS] test_shieldChecks() (gas: 1025208)
+[PASS] test_transferChecks() (gas: 224535663)
+[FAIL: BadPayload(16976 [1.697e4])] test_transferStatementMatchesVector() (gas: 53693807)
+Suite result: FAILED. 9 passed; 9 failed; 0 skipped; finished in 836.92ms (1.29s CPU time)
+
+Ran 10 test suites in 838.53ms (4.75s CPU time): 56 tests passed, 24 failed, 0 skipped (80 total tests)
+
+Failing tests:
+Encountered 2 failing tests in test/pqz/PqzCt.t.sol:PqzCtTest
+[FAIL: panic: array out-of-bounds access (0x32)] test_sumsAreExact() (gas: 15084946)
+[FAIL: T = Enc + Trivial(1000): 0x467c8d24cd1483d6d2832a218badf3914a588b82b3b5de125e842711840d970f != 0x8fa061dcb3749d0ef44c6136dced18270cfcb006a8b49892be5b4cf523c8b62e] test_trivialAgainstVectors() (gas: 10375294)
+
+Encountered 4 failing tests in test/pqz/PqzMulti.t.sol:PqzMultiTest
+[FAIL: assertion failed: 0x00000000000000000000000000005a170000005cbcdb65400000002f7e5dbf11000000e152a19d5f000000329092d5a6000000253db0cc2600000051c8c56a2d0000004da10cc96c000000a7828c6cdc000000b123ab4906000000e39afcbefe0000005e3bc3e3970000004a7a15ba090000005a16ee2af00000003c6bbb7889000000e51d4b502c0 …[log trimmed: 74734 more chars of hex]
+[FAIL: assertion failed: 37280 != 33184] test_multi_disclosureByLeg() (gas: 110873563)
+[FAIL: SSTORE2WriteFailed()] test_multi_pqzh() (gas: 191818993)
+[FAIL: len(M = 4, A = 1): 149376 != 132992] test_multi_statementAndEffects() (gas: 2173199)
+
+Encountered 9 failing tests in test/pqz/PqzNone.t.sol:PqzNoneTest
+[FAIL: R_TX0: 74752 != 66560] test_auditorModes() (gas: 4889879)
+[FAIL: assertion failed: 56192 != 50048] test_burnStatementLayout() (gas: 1090903)
+[FAIL: hash || memo: 0x228f04dba698bf13d5264bc727e59a5a5a279b90998d3bba5dea659244e611fc00000000000000000000000000005a1700000059bee35df8000000753eaf726b000000f1c4781460000000c52cc73e050000007e9783a94b00 != 0x053e54a60310e9e8bdc49bd754b634da20f70fb03643a272f0095eaff2f07fda00000000000000000000000000005 …[log trimmed: 131 more chars of hex]
+[FAIL: assertion failed: 37280 != 33184] test_disclosure() (gas: 25632686)
+[FAIL: T = acc - inline: 0x0000034ae016e4850000029c1d0429800000037fc64ca27f0000036c602678d4000000fc7ff86ecf000003d4ea9e7c3c0000019908171e20000001017ce24c7f000002b12304aab2000000521c8a6ced000001af3ce11d77000002c08a108f5e000000dd9e8d7cdc000003405a0410c5000000cbaeec21240000001f1c68ce0500000129f10949130 …[log trimmed: 74016 more chars of hex]
+[FAIL: EvmError: OutOfGas] test_inlineTooFar() (gas: 1073726760)
+[FAIL: BUNDLE stores R: 0x00000000000000000000000000005a170000003122d395ba0000002283fb069b00000056ef8ca547000000b552a59e7d000000b33c8bc7cb000000cbc43b36c7000000f8913c488c000000cfc71344ea000000d87311f09900000060f83efdb7000000d2a58c03700000009685917ab30000006938b2547300000086bdaf2821000000a65afedece00 …[log trimmed: 74710 more chars of hex]
+[FAIL: EvmError: OutOfGas] test_rollover() (gas: 1073726760)
+[FAIL: BadPayload(16976 [1.697e4])] test_transferStatementMatchesVector() (gas: 53693807)
+
+Encountered 1 failing test in test/pqz/PqzPool.t.sol:PqzPoolTest
+[FAIL: R || v_f: 0x00000000000000000000000000005a17000000054e3d98b7000000fff9ebf8a100000015909091a8000000aab9266d2b000000dbb67a75720000006df4fd80fb000000885008ca32000000acf015c587000000070e48125c0000003cac9060e000000001fb29fc49000000453df4a3b0000000124a2870bb000000430c486f3c00000099c8b7614c0000000aa …[log trimmed: 75211 more chars of hex]
+
+Encountered 2 failing tests in test/pqz/PqzRelay.t.sol:PqzRelayTest
+[FAIL: ProofRejected()] test_v1BindingAndFee() (gas: 6541291)
+[FAIL: ProofRejected()] test_v3FeeUA() (gas: 3984482)
+
+Encountered 1 failing test in test/pqz/PqzState.t.sol:PqzStateTest
+[FAIL: assertion failed: 0x00000000000000000000000000005a17000000054e3d98b7000000fff9ebf8a100000015909091a8000000aab9266d2b000000dbb67a75720000006df4fd80fb000000885008ca32000000acf015c587000000070e48125c0000003cac9060e000000001fb29fc49000000453df4a3b0000000124a2870bb000000430c486f3c00000099c8b7614c0 …[log trimmed: 74719 more chars of hex]
+
+Encountered 2 failing tests in test/pqz/PqzUnderlying.t.sol:PqzUnderlyingTest
+[FAIL: fits EIP-7825 with --gas-estimate-multiplier 105: 109353607 >= 16777216] test_largestImplementationFitsOneOsakaTx() (gas: 18881173)
+[FAIL: expected call to 0x5caA500000000000000000000000000000000F01 with data 0x020000c3807383374d83fbb89f84ee079bff7a2742e4acb70f64b0b1e2ef40c34fb4cc14078079d65b5e5c15e330f7e65c875776dfc1b0f6c93ced90c045e83865d116baef0000000000000000000000000000000000000000000000000000000000007a690000000000000000000 …[log trimmed: 112272 more chars of hex]
+
+Encountered 3 failing tests in test/pqz/UAPqzVerifier.t.sol:UAPqzVerifierTest
+[FAIL: UAPoP()] test_registerPqzKey() (gas: 116660750)
+[FAIL: UAPoP()] test_registerRefused() (gas: 118798057)
+[FAIL: assertion failed] test_verifyInputAndVerdict() (gas: 105876671)
+
+Encountered a total of 24 failing tests, 56 tests succeeded
+
+Tip: Run `forge test --rerun` to retry only the 24 failed tests
+Tip: Run `forge test --debug --match-test <TEST_NAME>` to inspect one failing test in the debugger

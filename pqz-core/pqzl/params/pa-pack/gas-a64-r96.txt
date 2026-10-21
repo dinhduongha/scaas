@@ -1,0 +1,601 @@
+$  scripts/capped pqz-core/pqzl/params/pa-pack/gasa.sh <scratch>/w64 smartcontracts/evm/lib 96 --match-contract PqzStatePinGasTest|PqzStateTrivialRollGasTest|PqzPackGasTest|PqzPackRoundTripTest -vv
+== pa-pack/gasa.sh: repository 76fd9916, set (a), ROLL_MAX = 96, PACK = 64-bit lanes, EVM = amsterdam; the edits:
+   foundry.toml: 8c8,9
+   foundry.toml: < evm_version = "osaka"
+   foundry.toml: ---
+   foundry.toml: > evm_version = "amsterdam"
+   foundry.toml: > experimental = true
+   src/pqz/PqzCt.sol: 12,14c12,14
+   src/pqz/PqzCt.sol: <     uint256 internal constant Q = 4_398_046_510_889; // 2^42 − 215
+   src/pqz/PqzCt.sol: <     uint256 internal constant DELTA = 67_108_863; // 2^26 − 1 = ⌊q / 2^16⌋
+   src/pqz/PqzCt.sol: <     uint256 internal constant PK = 16_384;
+   src/pqz/PqzCt.sol: ---
+   src/pqz/PqzCt.sol: >     uint256 internal constant Q = 61_275_424_977_257; // set (a): 2^45.80
+   src/pqz/PqzCt.sol: >     uint256 internal constant DELTA = 233_747_196; // set (a): ⌊q / 2^18⌋
+   src/pqz/PqzCt.sol: >     uint256 internal constant PK = 18_432;
+   src/pqz/PqzCt.sol: 16c16
+   src/pqz/PqzCt.sol: <     uint256 internal constant CT = 16_512;
+   src/pqz/PqzCt.sol: ---
+   src/pqz/PqzCt.sol: >     uint256 internal constant CT = 18_560;
+   src/pqz/PqzCt.sol: 18c18
+   src/pqz/PqzCt.sol: <     bytes32 internal constant ZERO_HASH = 0xe21fb1ce17769d3b97b60b85064a46819cef2ccaede8163ddc683cf730e37e97;
+   src/pqz/PqzCt.sol: ---
+   src/pqz/PqzCt.sol: >     bytes32 internal constant ZERO_HASH = 0xc11732fdd2aa4672c880154f6c4240ddc2b2c55621b9b3ed3200b6151d8a24f1;
+   src/pqz/PqzCt.sol: 20c20
+   src/pqz/PqzCt.sol: <     uint256 private constant Q4 = 0x000003ffffffff29000003ffffffff29000003ffffffff29000003ffffffff29; // q in each lane
+   src/pqz/PqzCt.sol: ---
+   src/pqz/PqzCt.sol: >     uint256 private constant Q4 = 0x000037bacbf07169000037bacbf07169000037bacbf07169000037bacbf07169; // q in each lane
+   src/pqz/PqzCore.sol: 49c49
+   src/pqz/PqzCore.sol: <         uint256[516] accWords; // CT / 32, each `ACC_MARK | word`: written non-zero by `prepareAcc`, never zeroed (D3)
+   src/pqz/PqzCore.sol: ---
+   src/pqz/PqzCore.sol: >         uint256[580] accWords; // CT / 32, each `ACC_MARK | word`: written non-zero by `prepareAcc`, never zeroed (D3)
+   src/pqz/PqzCore.sol: 150c150
+   src/pqz/PqzCore.sol: <     uint256 internal constant K_MAX = 1024;
+   src/pqz/PqzCore.sol: ---
+   src/pqz/PqzCore.sol: >     uint256 internal constant K_MAX = 4096;
+   src/pqz/PqzCore.sol: 154c154
+   src/pqz/PqzCore.sol: <     uint256 internal constant ROLL_MAX = 256;
+   src/pqz/PqzCore.sol: ---
+   src/pqz/PqzCore.sol: >     uint256 internal constant ROLL_MAX = 96;
+   src/pqz/PqzCore.sol: 159c159
+   src/pqz/PqzCore.sol: <     uint256 internal constant HALF_WORDS = 258;
+   src/pqz/PqzCore.sol: ---
+   src/pqz/PqzCore.sol: >     uint256 internal constant HALF_WORDS = 290;
+   src/pqz/PqzCore.sol: 173,174c173,174
+   src/pqz/PqzCore.sol: <     uint256 internal constant OUT_ON = 16_768;
+   src/pqz/PqzCore.sol: <     uint256 internal constant OUT_OFF = 16_640;
+   src/pqz/PqzCore.sol: ---
+   src/pqz/PqzCore.sol: >     uint256 internal constant OUT_ON = 18_816;
+   src/pqz/PqzCore.sol: >     uint256 internal constant OUT_OFF = 18_688;
+   src/pqz/PqzCore.sol: 176c176
+   src/pqz/PqzCore.sol: <     uint256 internal constant DISCLOSE = 33_184;
+   src/pqz/PqzCore.sol: ---
+   src/pqz/PqzCore.sol: >     uint256 internal constant DISCLOSE = 37_280;
+   src/pqz/PqzCore.sol: 564,566c564,566
+   src/pqz/PqzCore.sol: <             let d := add(add(buf, 37), 16672)
+   src/pqz/PqzCore.sol: <             mcopy(d, add(add(bundle, 32), uOff), 16384)
+   src/pqz/PqzCore.sol: <             mcopy(add(d, 16384), add(add(bundle, 32), vOff), 128)
+   src/pqz/PqzCore.sol: ---
+   src/pqz/PqzCore.sol: >             let d := add(add(buf, 37), 18720)
+   src/pqz/PqzCore.sol: >             mcopy(d, add(add(bundle, 32), uOff), 18432)
+   src/pqz/PqzCore.sol: >             mcopy(add(d, 18432), add(add(bundle, 32), vOff), 128)
+   src/pqz/PqzCore.sol: 706c706
+   src/pqz/PqzCore.sol: <             uint256[516] storage w = a.accWords;
+   src/pqz/PqzCore.sol: ---
+   src/pqz/PqzCore.sol: >             uint256[580] storage w = a.accWords;
+   src/pqz/PqzCore.sol: 711c711
+   src/pqz/PqzCore.sol: <                 for { let i := 0 } lt(i, 516) { i := add(i, 1) } { mstore(add(d, shl(5, i)), and(sload(add(b, i)), k)) }
+   src/pqz/PqzCore.sol: ---
+   src/pqz/PqzCore.sol: >                 for { let i := 0 } lt(i, 580) { i := add(i, 1) } { mstore(add(d, shl(5, i)), and(sload(add(b, i)), k)) }
+   src/pqz/PqzCore.sol: 820c820
+   src/pqz/PqzCore.sol: <         assembly ("memory-safe") { extcodecopy(ptr, add(add(buf, 37), off), 1, 16384) }
+   src/pqz/PqzCore.sol: ---
+   src/pqz/PqzCore.sol: >         assembly ("memory-safe") { extcodecopy(ptr, add(add(buf, 37), off), 1, 18432) }
+   src/pqz/PqzStateLib.sol: 83c83
+   src/pqz/PqzStateLib.sol: <         uint256[516] storage w = a.accWords;
+   src/pqz/PqzStateLib.sol: ---
+   src/pqz/PqzStateLib.sol: >         uint256[580] storage w = a.accWords;
+   src/pqz/PqzStateLib.sol: 88c88
+   src/pqz/PqzStateLib.sol: <             for { let i := 0 } lt(i, 516) { i := add(i, 1) } { sstore(add(b, i), or(mload(add(d, shl(5, i))), mk)) }
+   src/pqz/PqzStateLib.sol: ---
+   src/pqz/PqzStateLib.sol: >             for { let i := 0 } lt(i, 580) { i := add(i, 1) } { sstore(add(b, i), or(mload(add(d, shl(5, i))), mk)) }
+   src/pqz/PqzStateLib.sol: 107c107
+   src/pqz/PqzStateLib.sol: <     ///         account's `acc` words, so the first rollover rewrites instead of creating 516 slots (≈ 11.4 M); a no-op
+   src/pqz/PqzStateLib.sol: ---
+   src/pqz/PqzStateLib.sol: >     ///         account's `acc` words, so the first rollover rewrites instead of creating 580 slots (≈ 11.4 M); a no-op
+   src/pqz/PqzStateLib.sol: 115c115
+   src/pqz/PqzStateLib.sol: <         uint256[516] storage w = a.accWords;
+   src/pqz/PqzStateLib.sol: ---
+   src/pqz/PqzStateLib.sol: >         uint256[580] storage w = a.accWords;
+   src/pqz/PqzViewLib.sol: 51c51
+   src/pqz/PqzViewLib.sol: <         assembly ("memory-safe") { calldatacopy(add(add(buf, 37), 33184), proof.offset, proof.length) }
+   src/pqz/PqzViewLib.sol: ---
+   src/pqz/PqzViewLib.sol: >         assembly ("memory-safe") { calldatacopy(add(add(buf, 37), 37280), proof.offset, proof.length) }
+   test/pqz/helpers/PqzFixture.sol: 125c125
+   test/pqz/helpers/PqzFixture.sol: <         return _blob(seed, withAud ? 16_768 : 16_640);
+   test/pqz/helpers/PqzFixture.sol: ---
+   test/pqz/helpers/PqzFixture.sol: >         return _blob(seed, withAud ? 18_816 : 18_688);
+forge Version: 1.8.5
+Compiling 16 files with Solc 0.8.37
+Solc 0.8.37 finished in 10.12s
+Compiler run successful with warnings:
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+  --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:92:29:
+   |
+92 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, signature);
+   |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:119:29:
+    |
+119 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, r, vs);
+    |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:161:29:
+    |
+161 |         (address recovered, RecoverError error, bytes32 errorArg) = tryRecover(hash, v, r, s);
+    |                             ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "error" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> lib/openzeppelin-contracts/contracts/utils/cryptography/ECDSA.sol:169:26:
+    |
+169 |     function _throwError(RecoverError error, bytes32 errorArg) private pure {
+    |                          ^^^^^^^^^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+  --> src/common/Bls12381.sol:60:28:
+   |
+60 |     error PrecompileFailed(address at);
+   |                            ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> src/factory/OpenFactory.sol:282:26:
+    |
+282 |         private returns (address at, Release memory r)
+    |                          ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> src/zether/ZetherVerifier.sol:264:13:
+    |
+264 |             uint256 at = 4 + 2 * n + 2 * j;
+    |             ^^^^^^^^^^
+
+Warning (6335): "at" will be promoted to keyword in the future and will not be allowed as an identifier anymore.
+   --> src/zether/ZetherVerifier.sol:368:9:
+    |
+368 |         uint256 at = HEADER + 6 * p;
+    |         ^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+   --> test/zether/helpers/ZetherFixture.sol:138:38:
+    |
+138 |     function _newToken(bool auditor, bytes32 salt) internal virtual returns (ZetherLayer) {
+    |                                      ^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+  --> test/zether/helpers/ZetherFixture.sol:62:5:
+   |
+62 |     bytes16 internal salt = bytes16(uint128(0x5A17));
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (2519): This declaration shadows an existing declaration.
+   --> test/zether/helpers/ZetherFixture.sol:142:38:
+    |
+142 |     function _newToken(bool auditor, bytes32 salt, uint256 maxShielded) internal virtual returns (ZetherLayer) {
+    |                                      ^^^^^^^^^^^^
+Note: The shadowed declaration is here:
+  --> test/zether/helpers/ZetherFixture.sol:62:5:
+   |
+62 |     bytes16 internal salt = bytes16(uint128(0x5A17));
+   |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Warning (2018): Function state mutability can be restricted to pure
+   --> test/ua/UARegistryBase.sol:232:5:
+    |
+232 |     function _auth(UARegistry r, uint16 kind, bytes memory keyData, bytes32 purpose, bytes32 digest)
+    |     ^ (Relevant source part starts here and spans across multiple lines).
+
+
+Warning: the following cheatcode(s) are deprecated and will be removed in future versions:
+  lastCallGas(): replaced by `lastFrameGas`
+Ran 2 tests for test/pqz/PqzStateGas.t.sol:PqzStateTrivialRollGasTest
+[PASS] test_gas_rollMax_afterTrivialRoll() (gas: 12326486)
+Logs:
+    (state gas) 0
+  mtxRollOver ROLL_MAX after a TRIVIAL-only rollover gas 11823744
+
+[PASS] test_trivialRoll_noZeroSlot() (gas: 2320972)
+Suite result: ok. 2 passed; 0 failed; 0 skipped; finished in 228.85ms (24.48ms CPU time)
+
+Warning: the following cheatcode(s) are deprecated and will be removed in future versions:
+  lastCallGas(): replaced by `lastFrameGas`
+Ran 37 tests for test/research/PqzPackGas.t.sol:PqzPackGasTest
+[PASS] test_gas_burn() (gas: 30697858)
+Logs:
+  burn 1 to an address, fee, fresh ref gas: regular / state / total 1459096 28875690 30334786
+
+[PASS] test_gas_op1_bundle_16inline() (gas: 33578475)
+Logs:
+  op 1 BUNDLE, auditor, fee, 16 inline credits (cold blobs), hint gas: regular / state / total 2663320 29536650 32199970
+
+[PASS] test_gas_op1_bundle_freshRef() (gas: 31283819)
+Logs:
+  op 1 BUNDLE, auditor, fee, p = rolled, acc = blob reference gas: regular / state / total 1475480 29438730 30914210
+
+[PASS] test_gas_op1_bundle_materialised_hint() (gas: 33764298)
+Logs:
+  op 1 BUNDLE, auditor, fee, p = rolled, materialised acc, hint gas: regular / state / total 2663320 29536650 32199970
+
+[PASS] test_gas_op1_bundle_materialised_noHint() (gas: 32098132)
+Logs:
+  op 1 BUNDLE, auditor, fee, p = rolled, materialised acc, no hint gas: regular / state / total 2375747 29536650 31912397
+
+[PASS] test_gas_op1_compact() (gas: 31595561)
+Logs:
+  op 1 COMPACT (HASH), auditor, fee, fresh ref gas: regular / state / total 1479576 29732490 31212066
+
+[PASS] test_gas_op1_relayedFullTx_freshRef() (gas: 51792330)
+Logs:
+    [estimate] precompile gas PQZ / ML65 (burnt by stand-ins) 6761250 68006
+  relayed op 1 BUNDLE, auditor, fresh ref, full transaction, fee 7, proof bytes 52624
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 75972 11550 4877208
+    calldata gas 4 / 16 / refund (not subtracted) 1076952 0
+    full tx regular / state / total 8842356 29634570 38476926
+
+[PASS] test_gas_op1_relayedFullTx_materialisedNoHint() (gas: 53175154)
+Logs:
+    [estimate] precompile gas PQZ / ML65 (burnt by stand-ins) 6761250 68006
+  relayed op 1 BUNDLE, auditor, materialised acc, no hint, full transaction, fee 7, proof bytes 52624
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 75972 11549 4877208
+    calldata gas 4 / 16 / refund (not subtracted) 1076964 185856
+    full tx regular / state / total 10311249 29732490 40043739
+
+[PASS] test_gas_op1_shieldIn() (gas: 31285341)
+Logs:
+  op 1 BUNDLE, auditor, fee, shieldIn 100, fresh ref gas: regular / state / total 1475480 29438730 30914210
+
+[PASS] test_gas_op7_M4() (gas: 33372046)
+Logs:
+  op 7 M = 4 BUNDLE, auditor, fee, fresh ref (4 first credits) gas: regular / state / total 1534872 31446090 32980962
+
+[PASS] test_gas_op7_M8() (gas: 65697721)
+Logs:
+  op 7 M = 8 BUNDLE, auditor, fee, fresh ref (8 first credits) gas: regular / state / total 2788248 62192970 64981218
+
+[PASS] test_gas_op7_M8_relayedFullTx() (gas: 87851765)
+Logs:
+  relayed op 7 M = 8, full transaction, fee 7, proof bytes (precompile mocked) 64578
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 108452 19296 6955928
+    calldata gas 4 / 16 / refund (not subtracted) 1503680 0
+    full tx regular / state / total 6955928 62388810 69344738
+
+[PASS] test_gas_op7_M8_txTotal() (gas: 86993486)
+Logs:
+  op 7 M = 8 calldata bytes / zero bytes / proof bytes 107908 18855 64578
+  op 7 M = 8 BUNDLE, auditor, fee, fresh ref, direct tx (precompile mocked) gas: regular / state / total 6921112 62192970 69114082
+  calldata gas 4 / 16 / EIP-7976 floor 15,000 + 64 per byte 1500268 6921112
+
+[PASS] test_gas_op7_relayedFullTx_M1() (gas: 49701176)
+Logs:
+    [estimate] precompile gas PQZ / ML65 (burnt by stand-ins) 4531250 68006
+  relayed op 7 BUNDLE, auditor, fresh ref, full transaction, fee 7: M / proof bytes 1 52624
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 76036 11620 4881304
+    calldata gas 4 / 16 / refund (not subtracted) 1077136 0
+    full tx regular / state / total 6633162 29732490 36365652
+
+[PASS] test_gas_op7_relayedFullTx_M2() (gas: 50734943)
+Logs:
+    [estimate] precompile gas PQZ / ML65 (burnt by stand-ins) 4637500 68006
+  relayed op 7 BUNDLE, auditor, fresh ref, full transaction, fee 7: M / proof bytes 2 53504
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 77188 11709 4955032
+    calldata gas 4 / 16 / refund (not subtracted) 1094500 0
+    full tx regular / state / total 6832748 30368970 37201718
+
+[PASS] test_gas_op7_relayedFullTx_M4() (gas: 53485896)
+Logs:
+    [estimate] precompile gas PQZ / ML65 (burnt by stand-ins) 5151250 68006
+  relayed op 7 BUNDLE, auditor, fresh ref, full transaction, fee 7: M / proof bytes 4 57202
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 81476 11926 5229464
+    calldata gas 4 / 16 / refund (not subtracted) 1160504 0
+    full tx regular / state / total 7580346 31641930 39222276
+
+[PASS] test_gas_prepareAcc_half0() (gas: 32192277)
+Logs:
+  mtxPrepareAcc half 0 gas: regular / state / total 3571122 28494720 32065842
+
+[PASS] test_gas_prepareAcc_half0_relayed() (gas: 32344037)
+Logs:
+  relayed mtxPrepareAcc half 0 (mtxExecute, fee 0) gas: regular / state / total 3607258 28592640 32199898
+
+[PASS] test_gas_prepareAcc_half0_relayedFullTx() (gas: 32600228)
+Logs:
+  relayed mtxPrepareAcc half 0, full transaction, fee 7
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 612 477 54168
+    calldata gas 4 / 16 / refund (not subtracted) 4068 0
+    full tx regular / state / total 3635799 28690560 32326359
+
+[PASS] test_gas_prepareAcc_half1() (gas: 32192177)
+Logs:
+  mtxPrepareAcc half 1 gas: regular / state / total 3571134 28494720 32065854
+
+[PASS] test_gas_prepareAcc_half1_relayed() (gas: 32343924)
+Logs:
+  relayed mtxPrepareAcc half 1 (mtxExecute, fee 0) gas: regular / state / total 3607258 28592640 32199898
+
+[PASS] test_gas_prepareAcc_half1_relayedFullTx() (gas: 32600091)
+Logs:
+  relayed mtxPrepareAcc half 1, full transaction, fee 7
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 612 475 54168
+    calldata gas 4 / 16 / refund (not subtracted) 4092 0
+    full tx regular / state / total 3635823 28690560 32326383
+
+[PASS] test_gas_refresh() (gas: 30599838)
+Logs:
+  refresh, fee, fresh ref gas: regular / state / total 1459096 28777770 30236866
+
+[PASS] test_gas_roll128() (gas: 9148773)
+Logs:
+  mtxRollOver ROLL_MAX / 2 (steady, distinct cold blobs) gas: regular / state / total 9688008 0 9688008
+
+[PASS] test_gas_rollMax() (gas: 21468765)
+Logs:
+  mtxRollOver ROLL_MAX / 2 (steady, distinct cold blobs) gas: regular / state / total 9688008 0 9688008
+  mtxRollOver ROLL_MAX (steady, distinct cold blobs) gas: regular / state / total 11971032 0 11971032
+  mtxRollOver ROLL_MAX + 16 (linear fit) gas: regular / state / total 12732040 0 12732040
+  per entry / fixed (fit) 47563 7404984
+
+[PASS] test_gas_rollMax_relayed() (gas: 11134009)
+Logs:
+  relayed mtxRollOver ROLL_MAX (mtxExecute, fee 0) gas: regular / state / total 12007093 97920 12105013
+
+[PASS] test_gas_rollMax_relayedFullTx() (gas: 11393480)
+Logs:
+  relayed mtxRollOver, full transaction, fee 7, entries 96
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 612 475 54168
+    calldata gas 4 / 16 / refund (not subtracted) 4092 1115136
+    full tx regular / state / total 12035571 195840 12231411
+
+[PASS] test_gas_roll_1() (gas: 7429147)
+Logs:
+  mtxRollOver 1 (steady) gas: regular / state / total 7422547 0 7422547
+
+[PASS] test_gas_roll_16() (gas: 7998324)
+Logs:
+  mtxRollOver 16 (steady) gas: regular / state / total 8165992 0 8165992
+
+[PASS] test_gas_shield_append() (gas: 330797)
+Logs:
+  mtxShield, append (tail of an earlier block) gas: regular / state / total 106760 97920 204680
+
+[PASS] test_gas_shield_firstEntry() (gas: 425950)
+Logs:
+  mtxShield, the account's first entry (append) gas: regular / state / total 103939 195840 299779
+
+[PASS] test_gas_shield_merge() (gas: 129636)
+Logs:
+  mtxShield, merge (TRIVIAL tail of this block) gas: regular / state / total 94594 0 94594
+
+[PASS] test_pack_op1_relayedFullTx_freshRef() (gas: 50392749)
+Logs:
+    [estimate] precompile gas PQZ / ML65 (burnt by stand-ins) 6085125 68006
+  relayed op 1 BUNDLE, auditor, fresh ref, full transaction, fee 7, proof bytes 48724
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 72068 11528 4627352
+    calldata gas 4 / 16 / refund (not subtracted) 1014752 0
+    full tx regular / state / total 8087495 29634570 37722065
+
+[PASS] test_pack_op1_relayedFullTx_materialisedNoHint() (gas: 51775719)
+Logs:
+    [estimate] precompile gas PQZ / ML65 (burnt by stand-ins) 6085125 68006
+  relayed op 1 BUNDLE, auditor, materialised acc, no hint, full transaction, fee 7, proof bytes 48724
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 72068 11528 4627352
+    calldata gas 4 / 16 / refund (not subtracted) 1014752 185856
+    full tx regular / state / total 9556376 29732490 39288866
+
+[PASS] test_pack_op7_relayedFullTx_M4() (gas: 52170205)
+Logs:
+    [estimate] precompile gas PQZ / ML65 (burnt by stand-ins) 4636125 68006
+  relayed op 7 M = 4 BUNDLE, auditor, fresh ref, full transaction, fee 7, proof bytes 52950
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 77220 11912 4957080
+    calldata gas 4 / 16 / refund (not subtracted) 1092576 0
+    full tx regular / state / total 6977644 31641930 38619574
+
+[PASS] test_pack_op7_relayedFullTx_M8() (gas: 93238572)
+Logs:
+    [estimate] precompile gas PQZ / ML65 (burnt by stand-ins) 6949125 68006
+  relayed op 7 M = 8 (G = 2) BUNDLE, auditor, fresh ref, full transaction, fee 7, proof bytes 70353
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 114212 19300 7324568
+    calldata gas 4 / 16 / refund (not subtracted) 1595792 0
+    full tx regular / state / total 10542118 62388810 72930928
+
+[PASS] test_pack_scanRoll() (gas: 59781471)
+Logs:
+  scan: relayed mtxRollOver, full transaction, fee 7, entries 16
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 612 475 54168
+    calldata gas 4 / 16 / refund (not subtracted) 4092 185856
+    full tx regular / state / total 8230531 195840 8426371
+  scan row: entries / regular / state 16 8230531 195840
+    fits 0.75 * 2^24
+  scan: relayed mtxRollOver, full transaction, fee 7, entries 32
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 612 476 54168
+    calldata gas 4 / 16 / refund (not subtracted) 4080 371712
+    full tx regular / state / total 8991527 195840 9187367
+  scan row: entries / regular / state 32 8991527 195840
+    fits 0.75 * 2^24
+  scan: relayed mtxRollOver, full transaction, fee 7, entries 48
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 612 475 54168
+    calldata gas 4 / 16 / refund (not subtracted) 4092 557568
+    full tx regular / state / total 9752547 195840 9948387
+  scan row: entries / regular / state 48 9752547 195840
+    fits 0.75 * 2^24
+  scan: relayed mtxRollOver, full transaction, fee 7, entries 64
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 612 475 54168
+    calldata gas 4 / 16 / refund (not subtracted) 4092 743424
+    full tx regular / state / total 10513555 195840 10709395
+  scan row: entries / regular / state 64 10513555 195840
+    fits 0.75 * 2^24
+  scan: relayed mtxRollOver, full transaction, fee 7, entries 80
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 612 476 54168
+    calldata gas 4 / 16 / refund (not subtracted) 4080 929280
+    full tx regular / state / total 11274551 195840 11470391
+  scan row: entries / regular / state 80 11274551 195840
+    fits 0.75 * 2^24
+  scan: relayed mtxRollOver, full transaction, fee 7, entries 96
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 612 475 54168
+    calldata gas 4 / 16 / refund (not subtracted) 4092 1115136
+    full tx regular / state / total 12035571 195840 12231411
+  scan row: entries / regular / state 96 12035571 195840
+    fits 0.75 * 2^24
+
+Suite result: ok. 37 passed; 0 failed; 0 skipped; finished in 662.73ms (1.61s CPU time)
+
+Warning: the following cheatcode(s) are deprecated and will be removed in future versions:
+  lastCallGas(): replaced by `lastFrameGas`
+Ran 32 tests for test/pqz/PqzStateGas.t.sol:PqzStatePinGasTest
+[PASS] test_gas_burn() (gas: 30697880)
+Logs:
+  burn 1 to an address, fee, fresh ref gas: regular / state / total 1459096 28875690 30334786
+
+[PASS] test_gas_op1_bundle_16inline() (gas: 33578474)
+Logs:
+  op 1 BUNDLE, auditor, fee, 16 inline credits (cold blobs), hint gas: regular / state / total 2663320 29536650 32199970
+
+[PASS] test_gas_op1_bundle_freshRef() (gas: 31283841)
+Logs:
+  op 1 BUNDLE, auditor, fee, p = rolled, acc = blob reference gas: regular / state / total 1475480 29438730 30914210
+
+[PASS] test_gas_op1_bundle_materialised_hint() (gas: 33764298)
+Logs:
+  op 1 BUNDLE, auditor, fee, p = rolled, materialised acc, hint gas: regular / state / total 2663320 29536650 32199970
+
+[PASS] test_gas_op1_bundle_materialised_noHint() (gas: 32098132)
+Logs:
+  op 1 BUNDLE, auditor, fee, p = rolled, materialised acc, no hint gas: regular / state / total 2375747 29536650 31912397
+
+[PASS] test_gas_op1_compact() (gas: 31595561)
+Logs:
+  op 1 COMPACT (HASH), auditor, fee, fresh ref gas: regular / state / total 1479576 29732490 31212066
+
+[PASS] test_gas_op1_relayedFullTx_freshRef() (gas: 51792225)
+Logs:
+    [estimate] precompile gas PQZ / ML65 (burnt by stand-ins) 6761250 68006
+  relayed op 1 BUNDLE, auditor, fresh ref, full transaction, fee 7, proof bytes 52624
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 75972 11550 4877208
+    calldata gas 4 / 16 / refund (not subtracted) 1076952 0
+    full tx regular / state / total 8842356 29634570 38476926
+
+[PASS] test_gas_op1_relayedFullTx_materialisedNoHint() (gas: 53175105)
+Logs:
+    [estimate] precompile gas PQZ / ML65 (burnt by stand-ins) 6761250 68006
+  relayed op 1 BUNDLE, auditor, materialised acc, no hint, full transaction, fee 7, proof bytes 52624
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 75972 11549 4877208
+    calldata gas 4 / 16 / refund (not subtracted) 1076964 185856
+    full tx regular / state / total 10311249 29732490 40043739
+
+[PASS] test_gas_op1_shieldIn() (gas: 31285363)
+Logs:
+  op 1 BUNDLE, auditor, fee, shieldIn 100, fresh ref gas: regular / state / total 1475480 29438730 30914210
+
+[PASS] test_gas_op7_M4() (gas: 33372068)
+Logs:
+  op 7 M = 4 BUNDLE, auditor, fee, fresh ref (4 first credits) gas: regular / state / total 1534872 31446090 32980962
+
+[PASS] test_gas_op7_M8() (gas: 65697610)
+Logs:
+  op 7 M = 8 BUNDLE, auditor, fee, fresh ref (8 first credits) gas: regular / state / total 2788248 62192970 64981218
+
+[PASS] test_gas_op7_M8_relayedFullTx() (gas: 87851787)
+Logs:
+  relayed op 7 M = 8, full transaction, fee 7, proof bytes (precompile mocked) 64578
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 108452 19296 6955928
+    calldata gas 4 / 16 / refund (not subtracted) 1503680 0
+    full tx regular / state / total 6955928 62388810 69344738
+
+[PASS] test_gas_op7_M8_txTotal() (gas: 86993486)
+Logs:
+  op 7 M = 8 calldata bytes / zero bytes / proof bytes 107908 18855 64578
+  op 7 M = 8 BUNDLE, auditor, fee, fresh ref, direct tx (precompile mocked) gas: regular / state / total 6921112 62192970 69114082
+  calldata gas 4 / 16 / EIP-7976 floor 15,000 + 64 per byte 1500268 6921112
+
+[PASS] test_gas_op7_relayedFullTx_M1() (gas: 49701176)
+Logs:
+    [estimate] precompile gas PQZ / ML65 (burnt by stand-ins) 4531250 68006
+  relayed op 7 BUNDLE, auditor, fresh ref, full transaction, fee 7: M / proof bytes 1 52624
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 76036 11620 4881304
+    calldata gas 4 / 16 / refund (not subtracted) 1077136 0
+    full tx regular / state / total 6633162 29732490 36365652
+
+[PASS] test_gas_op7_relayedFullTx_M2() (gas: 50734965)
+Logs:
+    [estimate] precompile gas PQZ / ML65 (burnt by stand-ins) 4637500 68006
+  relayed op 7 BUNDLE, auditor, fresh ref, full transaction, fee 7: M / proof bytes 2 53504
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 77188 11709 4955032
+    calldata gas 4 / 16 / refund (not subtracted) 1094500 0
+    full tx regular / state / total 6832748 30368970 37201718
+
+[PASS] test_gas_op7_relayedFullTx_M4() (gas: 53485785)
+Logs:
+    [estimate] precompile gas PQZ / ML65 (burnt by stand-ins) 5151250 68006
+  relayed op 7 BUNDLE, auditor, fresh ref, full transaction, fee 7: M / proof bytes 4 57202
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 81476 11926 5229464
+    calldata gas 4 / 16 / refund (not subtracted) 1160504 0
+    full tx regular / state / total 7580346 31641930 39222276
+
+[PASS] test_gas_prepareAcc_half0() (gas: 32192167)
+Logs:
+  mtxPrepareAcc half 0 gas: regular / state / total 3571122 28494720 32065842
+
+[PASS] test_gas_prepareAcc_half0_relayed() (gas: 32344037)
+Logs:
+  relayed mtxPrepareAcc half 0 (mtxExecute, fee 0) gas: regular / state / total 3607258 28592640 32199898
+
+[PASS] test_gas_prepareAcc_half0_relayedFullTx() (gas: 32600272)
+Logs:
+  relayed mtxPrepareAcc half 0, full transaction, fee 7
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 612 477 54168
+    calldata gas 4 / 16 / refund (not subtracted) 4068 0
+    full tx regular / state / total 3635799 28690560 32326359
+
+[PASS] test_gas_prepareAcc_half1() (gas: 32192199)
+Logs:
+  mtxPrepareAcc half 1 gas: regular / state / total 3571134 28494720 32065854
+
+[PASS] test_gas_prepareAcc_half1_relayed() (gas: 32343924)
+Logs:
+  relayed mtxPrepareAcc half 1 (mtxExecute, fee 0) gas: regular / state / total 3607258 28592640 32199898
+
+[PASS] test_gas_prepareAcc_half1_relayedFullTx() (gas: 32600046)
+Logs:
+  relayed mtxPrepareAcc half 1, full transaction, fee 7
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 612 475 54168
+    calldata gas 4 / 16 / refund (not subtracted) 4092 0
+    full tx regular / state / total 3635823 28690560 32326383
+
+[PASS] test_gas_refresh() (gas: 30599860)
+Logs:
+  refresh, fee, fresh ref gas: regular / state / total 1459096 28777770 30236866
+
+[PASS] test_gas_roll128() (gas: 9148773)
+Logs:
+  mtxRollOver ROLL_MAX / 2 (steady, distinct cold blobs) gas: regular / state / total 9688008 0 9688008
+
+[PASS] test_gas_rollMax() (gas: 21468787)
+Logs:
+  mtxRollOver ROLL_MAX / 2 (steady, distinct cold blobs) gas: regular / state / total 9688008 0 9688008
+  mtxRollOver ROLL_MAX (steady, distinct cold blobs) gas: regular / state / total 11971032 0 11971032
+  mtxRollOver ROLL_MAX + 16 (linear fit) gas: regular / state / total 12732040 0 12732040
+  per entry / fixed (fit) 47563 7404984
+
+[PASS] test_gas_rollMax_relayed() (gas: 11134031)
+Logs:
+  relayed mtxRollOver ROLL_MAX (mtxExecute, fee 0) gas: regular / state / total 12007093 97920 12105013
+
+[PASS] test_gas_rollMax_relayedFullTx() (gas: 11393480)
+Logs:
+  relayed mtxRollOver, full transaction, fee 7, entries 96
+    mtxExecute calldata bytes / zero bytes / EIP-7976 floor (15,000 + 64 per byte) 612 475 54168
+    calldata gas 4 / 16 / refund (not subtracted) 4092 1115136
+    full tx regular / state / total 12035571 195840 12231411
+
+[PASS] test_gas_roll_1() (gas: 7429191)
+Logs:
+  mtxRollOver 1 (steady) gas: regular / state / total 7422547 0 7422547
+
+[PASS] test_gas_roll_16() (gas: 7998368)
+Logs:
+  mtxRollOver 16 (steady) gas: regular / state / total 8165992 0 8165992
+
+[PASS] test_gas_shield_append() (gas: 330797)
+Logs:
+  mtxShield, append (tail of an earlier block) gas: regular / state / total 106760 97920 204680
+
+[PASS] test_gas_shield_firstEntry() (gas: 425950)
+Logs:
+  mtxShield, the account's first entry (append) gas: regular / state / total 103939 195840 299779
+
+[PASS] test_gas_shield_merge() (gas: 129635)
+Logs:
+  mtxShield, merge (TRIVIAL tail of this block) gas: regular / state / total 94594 0 94594
+
+Suite result: ok. 32 passed; 0 failed; 0 skipped; finished in 662.73ms (916.25ms CPU time)
+
+Ran 3 test suites in 664.73ms (1.55s CPU time): 71 tests passed, 0 failed, 0 skipped (71 total tests)
