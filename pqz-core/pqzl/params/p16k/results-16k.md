@@ -4,6 +4,9 @@
 vector. Plan Task 8 switches the code after this checkpoint. Plan: `docs/superpowers/plans/2026-10-20-pqz-state-redesign.md`
 (D16, D23, D25); spec §6.
 
+**Amsterdam (Task 7b, §8):** the SCaaS testnet and the owner's rules are now Amsterdam; §8 re-measures the gas with
+Foundry 1.8.5 and supersedes §6's Osaka gas figures: `ROLL_MAX` = **80** (not 192), `MAX_INPUT` proposal 261,120.
+
 **Candidate.** n = 2560 (k = 40), q = 2^50 − 42,310,535 (prime, q ≡ 9 mod 16; owner ruling Q1), Δ = 2^30 − 41,
 β_s = 40, β_e = 182, `K_MAX` = 16,384, `e_T + 2^28` in 29 bits, `M_i` < 2^18, carries 15 bits. PQZL and PQZH share q.
 
@@ -257,4 +260,187 @@ PQZ_ROLL_N=192 scripts/capped $P/gas16k.sh <work dir> <lib> 208 --match-test tes
 PQZ_PROOF_LEN=76002 scripts/capped $P/gas16k.sh <work dir> <lib> 192 > $P/gas-16k-r192.txt
 SCRIPT=dual_hints16k.sage scripts/capped $P/run_enc16k.sh $T/le >> $P/hints-16k-n2560.txt
 PQZ_PROOF_LEN=60882 G1=1 scripts/capped $P/gas16k.sh <work dir> <lib> 208 --match-test test_gas_op7 -vv > $P/gas-16k-r208-g1.txt
+```
+
+## 8. Amsterdam re-measure, SCaaS testnet (plan 5h Task 7b, 2026-10-21)
+
+**Why.** The testnet (7622) runs Nethermind 2.2.0 with Amsterdam from block 1; the owner keeps Ethereum's rules (EIP-7976
+calldata floor, EIP-8037 state gas, EIP-8038 storage repricing, EIP-2780 intrinsic). §6 was measured with Foundry 1.3.5
+(Osaka rules). Rulings applied, not revisited: op 7 on chain M ≤ 4, PQZH backup only (no PQZH token), no multi-tx
+staging; the `ROLL_MAX` rule is "regular (execution) gas ≤ 0.75 · 2^24 = 12,582,912 as a full relayed transaction".
+
+**How.** Foundry **1.8.5** (`51a52c59`; the machine-wide `~/.foundry/bin` after the owner's upgrade; an identical
+copy from the checksum-verified release tarball sits in `~/usr/foundry-1.8.5/`). `gas16k.sh` gained `EVM=amsterdam`:
+the work tree's default profile only gets `evm_version = "amsterdam"` and `experimental = true` (solc 0.8.37 accepts
+"amsterdam" only as experimental; the bytecode is identical to the Osaka build except the metadata hash, checked for
+the token, its four libraries, `UARegistry`, `OpenFactory`, `UAPqzVerifier`, `MetaTxLib`). No code-size setting is
+needed (EIP-7954: 65,536 B native). Foundry 1.8 runs each top-level call of a test as its own transaction
+(`isolate = true`), so `PqzStateGas.t.sol` now reads `vm.lastCallGas()`: **regular** gas before refunds (intrinsic
+12,000 + 3,000, calldata 4 / 16 or the EIP-7976 floor 15,000 + 64 per byte, execution) and **state** gas apart; `setUp`
+runs unmetered (it is one transaction and would hit the 2^24 regular cap). The full relayed transaction is the §6
+convention (`mtxExecute` from a fresh relayer, ABSOLUTE fee 7 to it, cold implementation; `tx.to` warm as on chain).
+The precompile part is today's PQZL v3 row × 1.25 **[estimate]** (op 1 auditor 5,409,000 → 6,761,250; op 7 M = 1 / 2 / 4
+auditor 3,625,000 / 3,710,000 / 4,121,000 → 4,531,250 / 4,637,500 / 5,151,250) plus ML-DSA-65 68,006 (unchanged),
+burnt inside the transaction by stand-in contracts at `PQZ` / `ML65` (`GasBurner`, less the 2,900 cold-account
+difference; ±40 gas), so the floor is compared with the whole transaction. No timing or calibration run.
+
+### 8.1 Headline
+
+| Item | Amsterdam (16k) | Limit | §6 (Osaka) |
+|---|---|---|---|
+| **`ROLL_MAX` proposal** | **80**: relayed full tx regular **12,356,459**, state 195,840, total 12,552,299 (margin 226,453); 96: 13,172,507 — over | 12,582,912 regular | 192 (11,934,843) |
+| rollover fit, relayed full tx | **51,003 per entry + 8,276,219** (direct call: 51,003 + 8,211,680) | — | 43,203 + 3,541,348 |
+| `mtxPrepareAcc` half 0 / 1, relayed full tx | regular **4,024,867**, state 31,824,000, total 35,848,867 (each) | 12,582,912 regular | 7,274,714 |
+| op 1 relayed, auditor, 52,624 B proof (fresh ref / materialised acc, no hint) | regular **8,926,563 / 10,534,720**, state 32,768,010 / 32,865,930 [estimate: precompile] | 2^24 regular | — |
+| op 7 M = 1 / 2 / 4 relayed, auditor | regular **6,717,641 / 6,921,774 / 7,679,749**, state 32.9 / 33.5 / 34.8 M [estimate: precompile] | 2^24 regular | — |
+| one transaction's calldata (EIP-7976 + EIP-8037) | **261,909 B** (15,000 + 64 · n ≤ 2^24) | — | none |
+| largest PQZL 16k form, M ≤ 4: precompile input / relayed calldata | 222,967 B (op 7 M = 4, auditor) / 83,524 B | 261,909 | — |
+| **`MAX_INPUT` proposal** | **261,120 (255 KiB)**: ≤ the 261,909 B a direct call to `PQZ` can carry | — | 393,216 |
+| Foundry 1.8.5 vs Nethermind 2.2.0 on the same transactions | **equal to the gas** (`cast run` = receipt, 10 of 10 replayable transactions) | — | — |
+
+### 8.2 `ROLL_MAX` (`gas-amsterdam-scan-r192.txt`, `gas-amsterdam-r80.txt`, `gas-amsterdam-r96.txt`)
+
+Relayed full transaction (`test_gas_rollMax_relayedFullTx`, `PQZ_ROLL_N` entries in the 192 build; 80 and 96 in their
+own builds give the same numbers):
+
+| entries | 64 | **80** | 96 | 112 | 128 | 144 | 160 | 176 | 192 |
+|---|---|---|---|---|---|---|---|---|---|
+| regular | 11,540,411 | **12,356,459** | 13,172,507 | 13,988,555 | 14,804,603 | 15,620,651 | 16,436,699 | 17,252,747 | 18,068,783 |
+
+State gas 195,840 at every size (two new slots of the envelope: the fresh relayer's fee balance, and one more the fee-0 relay
+also writes, 97,920; the rollover itself writes no new slot). Refunds (not subtracted; the cap is on gas before refunds): 929,280 at 80 (80 deleted
+pending slots), 2,230,272 at 192. Exactly linear: **51,003 per entry, 8,276,219 fixed**. The fixed part is the 644
+`acc` words rewritten cold: 644 × (2,100 + 10,000 EIP-8038 storage write) = 7.79 M of it (§6: 644 × 5,000). In the 80
+build every pin passes: direct `ROLL_MAX` 12,291,920; relayed fee 0 12,327,969; ROLL_MAX after a TRIVIAL-only
+rollover 12,144,632; 1 / 16 / 40 entries 8,232,683 / 9,027,728 / 10,251,800. In the 96 build the four `ROLL_MAX` pins fail
+(13,107,968 direct, 13,172,507 relayed full tx, 12,960,680 after TRIVIAL). The direct-call pin's fit point moved from
+128 to `ROLL_MAX / 2` (128 at today's 256; 128 > 80 cannot be rolled) and its "`ROLL_MAX` + 16 over the cap" assertion
+became a log line (direct-call convention; §6 already noted Task 8 re-pins on the full-transaction convention).
+The Nethermind note's inference (≈ 80–96, `pqz-core/nethermind/runs/2026-10-21-glamsterdam-gas-impact.md`) holds.
+
+### 8.3 The prepare halves, op 1 and op 7 (`gas-amsterdam-r80.txt`, `gas-amsterdam-r80-mocked.txt`)
+
+| relayed full transaction (fee 7) | proof B | calldata B | EIP-7976 floor | regular, precompile mocked | **regular with the precompile [estimate]** | state | total |
+|---|---|---|---|---|---|---|---|
+| `mtxPrepareAcc` half 0 / 1 | — | 612 | 54,168 | 4,024,867 | — | 31,824,000 | 35,848,867 |
+| `mtxRollOver` 80 | — | 612 | 54,168 | 12,356,459 | — | 195,840 | 12,552,299 |
+| op 1, auditor, fresh ref | 52,624 | 78,020 | 5,008,280 | 5,008,280 (= floor) | **8,926,563** | 32,768,010 | 41,694,573 |
+| op 1, auditor, materialised acc, no hint | 52,624 | 78,020 | 5,008,280 | 5,008,280 (= floor) | **10,534,720** | 32,865,930 | 43,400,650 |
+| op 7 M = 1, auditor | 52,624 | 78,084 | 5,012,376 | 5,012,376 (= floor) | **6,717,641** | 32,865,930 | 39,583,571 |
+| op 7 M = 2, auditor | 53,504 | 79,236 | 5,086,104 | 5,086,104 (= floor) | **6,921,774** | 33,502,410 | 40,424,184 |
+| op 7 M = 4, auditor | 57,202 | 83,524 | 5,360,536 | 5,360,536 (= floor) | **7,679,749** | 34,775,370 | 42,455,119 |
+
+- **Every form fits**: regular ≤ 10.53 M < 2^24 (op 1 worst case: the PQZ row may grow to 13,003,746 = 2.40× today's
+  5,409,000 before op 1 leaves 2^24; op 7 M = 4: 14,248,717, 3.46×), and every floor ≤ 5.36 M ≤ 2^24. With the precompile
+  mocked the floor binds (EVM part ≈ 2.1–3.8 M); with it, the standard path does. Proof sizes: the 16k codegen sizes
+  (M = 1 uses `R_TX`'s parameters). op 7 M = 8 (ruled out on chain) relayed, G = 2, mocked: regular 7,218,072 (floor),
+  state 68,655,690.
+- **State gas dominates the total**: every debit stores its op blob by SSTORE2 (≈ 20.9 KB of code: 1,530 per byte +
+  183,600 for the account ≈ 32.0 M) and new slots (97,920 each); a prepare half creates 322 slots (31.5 M). A transaction's
+  total (`tx.gas`) may exceed 2^24 (≤ 2^32 − 1), but it must fit the block gas limit: on the testnet today (≈ 40.5 M at
+  block 903, rising toward the 200 M target) a debit of ≈ 41–43 M is not includable yet, and a block holds
+  ⌊gasLimit / ≈ 33 M⌋ debits in the state dimension. The relayer must set `tx.gas` ≥ regular + state (else the state gas
+  spills into the 2^24 regular budget).
+- burn / refresh (direct, 2-byte proof) regular 1,590,168, state 32.0 / 31.9 M; shield append / first entry / merge
+  regular 106,760 / 103,939 / 94,594, state 97,920 / 195,840 / 0.
+
+### 8.4 Inputs and calldata per form (`inputs16k.py` → `inputs-amsterdam-16k.txt`)
+
+One transaction carries at most **261,909 calldata bytes** (to ≠ sender, no value, no access list): the EIP-7976 floor
+15,000 + 64 · n must be ≤ 2^24, else Nethermind refuses it at any gas limit (EIP-8037). Through the token the precompile
+input (5 + statement + proof) is built in **memory** from state (keys, `acc`, entries) plus the calldata's payload and
+proof; only a direct call to `PQZ` (eth_call probes, the self-test) carries the input itself as calldata.
+
+| form (16k) | statement | proof | input | direct call ≤ 261,909 | entry point | tx calldata | fits | max proof in one tx |
+|---|---|---|---|---|---|---|---|---|
+| R_TX op 1, auditor / off | 103,552 / 82,944 | 52,624 / 52,272 | 156,181 / 135,221 | yes | relayed `mtxExecute` | 78,020 / 77,540 | yes | 236,512 / 236,640 |
+| R_BURN op 2 | 62,336 | 51,744 | 114,085 | yes | relayed `mtxExecute` | 76,868 | yes | 236,768 |
+| R_REG op 3 | 20,576 | 33,734 | 54,315 | yes | `UARegistry.register` | 59,812 | yes | 235,840 |
+| R_DS / R_DR op 4 / 5 | 41,376 | 34,278 / 35,142 | 75,659 / 76,523 | yes | `verifyTransferAmount` (eth_call) | 34,500 / 35,364 | yes | 261,696 |
+| R_TXM op 7 M = 1, auditor / off | 103,552 / 82,944 | 52,624 / 52,272 | 156,181 / 135,221 | yes | relayed | 78,084 / 77,604 | yes | 236,448 / 236,576 |
+| R_TXM op 7 M = 2, auditor / off | 124,288 / 103,552 | 53,504 / 52,800 | 177,797 / 156,357 | yes | relayed | 79,236 / 78,276 | yes | 236,160 / 236,416 |
+| R_TXM op 7 M = 4, auditor / off | 165,760 / 144,768 | 57,202 / 53,856 | **222,967** / 198,629 | yes | relayed | 83,524 / 79,652 | yes | 235,584 / 236,096 |
+| (ruled out) op 7 M = 8, G = 1, auditor | 248,704 | 60,882 | 309,591 | no | relayed | 88,356 | yes | 234,432 |
+| PQZH R_REG [estimate] | 20,576 | 233,289 | 253,870 | yes | `register` | 259,364 | yes (2,545 B margin) | 235,840 |
+| PQZH R_DS / R_DR [estimate] | 41,376 | 233,289 | 274,670 | **no** | eth_call | 233,508 | yes | 261,696 |
+| PQZH R_TX op 1 / op 7 M = 4, auditor [estimate] | 103,552 / 165,760 | 302,743 / 303,590 | 406,300 / 469,355 | no | relayed | 328,132 / 329,924 | **no** | 236,512 / 235,584 |
+
+Statements: today's v3 `stmtLen` with each 16,384-byte unit at 20,480 (reproduces Task 7's 103,552, 165,760, 269,184);
+calldata: the ABI layout of each entry point (reproduces the measured 78,020 / 78,084 / 79,236 / 83,524 and Task 7's
+88,356). Every PQZL form fits one transaction with ≥ 178 KB to spare; PQZH debit forms cannot be carried by any
+transaction (as "PQZH backup only" assumes); PQZH R_REG fits narrowly. The Nethermind note's statement that op 7 M = 8
+"cannot be sent at all" holds for a **direct** call to `PQZ` only; through the token its calldata is 88 KB (moot: M ≤ 4).
+
+**`MAX_INPUT` proposal: 261,120 B (255 KiB)**, the largest whole KiB a single transaction can carry to `PQZ`
+(≤ 261,909). It covers every PQZL 16k form up to op 7 M = 4 (largest 222,967; 38 KB margin) and PQZH R_REG (253,870). Not
+covered: PQZH R_DS / R_DR (274,670; only reachable through the token's in-memory input) and every PQZH debit form.
+
+### 8.5 Cross-check on the SCaaS testnet (`gas-amsterdam-xcheck7622.txt`, `xcheck/`)
+
+`xcheck/PqzGasHarness.sol` puts the as-built `PqzStateLib` / `PqzTransferLib` (16k work tree, `ROLL_MAX` = 80) behind a
+contract that is its own registry and whose `pqz` answers 1 (`PqzOk`): the rollover, prepare and op 1 code paths of the
+token without the registry stack, the factory or the precompiles (the token itself needs the `PQZ` / ML-DSA precompiles
+to accept mock proofs, which a live chain cannot fake). `xcheck/xcheck7622.py` (stdlib; signs with the RUNBOOK's
+`eth.py`) built the gas test's state with real transactions from a fresh key funded once from the dev key `0x…04`
+(3 key pointers, 96 op blobs of q − 1 coefficients, the pending slots), then sent the measured transactions; nonce
+latest = pending at the end (no pending transaction). `xcheck/replay.py` re-executes each with Foundry
+(`cast run --evm-version amsterdam`) on the node's state.
+
+| transaction (block) | calldata B | Nethermind eth_estimateGas | Nethermind receipt | Foundry `cast run` |
+|---|---|---|---|---|
+| 1 ETH to the fresh account (922) | 0 | 207,391 | 204,600 | 204,600 |
+| deploy `PqzStateLib` (924) | 6,472 | 10,217,263 | 10,135,654 | 10,135,654 |
+| deploy `PqzTransferLib` (926) | 13,632 | 21,377,789 | 21,208,302 | (state pruned) |
+| key pointer, 20,481 B code (932) | 20,580 | 32,148,944 | 31,644,317 | (state pruned) |
+| op blob, 20,785 B code (944; 1130 / 1132 / 1134) | 20,868 | 32,584,919 | 32,327,187 | 32,327,187 (1130–1134) |
+| prepareAcc half 0 (1140) | 68 | 35,862,808 | 35,579,266 | 35,579,266 |
+| prepareAcc half 1 (1142) | 68 | 35,764,123 | 35,481,358 | 35,481,358 |
+| rollOver 16, first materialisation (1144) | 68 | 8,951,806 | 8,809,635 | 8,809,635 |
+| **rollOver 80, distinct cold blobs (1146)** | 68 | 12,485,685 | **11,359,017** | **11,359,017** |
+| op 1, auditor, fee, 52,624 B proof (1148) | 77,444 | 34,748,704 | 34,473,934 | 34,473,934 |
+
+The harness rollover of 80 is the token's path: 11,359,017 after its refund of 929,280 (the token's relayed full-tx log
+for 80) is 12,288,297 before it, against the token's direct `ROLL_MAX` pin 12,291,920 (the entry point adds ≈ 3.6 k).
+The prepare halves on chain (35,579,266 / 35,481,358 total) sit next to the token's direct pins (3,960,178 + 31,628,160 =
+35,588,338). The relayed envelope (`mtxExecute`, fee) and the precompiles were not on chain (no token there).
+
+**Foundry vs Nethermind.**
+1. **Same gas on the same transactions**: every replayable transaction gives the receipt's gas exactly (10 of 10; the
+   three older ones could not be replayed because the node keeps only recent state, error −32002). eth_estimateGas is
+   0.8–9.9 % above the receipt (largest for the rollover: the receipt is after the refund of the 80 deleted slots).
+2. **The calldata floor with state gas — forge test convention ≠ chain**: Nethermind (and `cast run`) charge
+   max(regular + state, floor); the forge test's `vm.lastCallGas()` reports regular = max(regular, floor) and the state
+   gas on top (op blob: Nethermind 32,327,187 = 342,537 regular + 31,984,650 state; a forge-test probe of the same
+   call: 1,350,552 (the floor) + 31,984,650; key pointer 31,644,317 = 124,787 + 31,519,530 vs 1,332,120 + 31,519,530). So the forge figures are conservative where the floor binds (the mocked op rows of 8.3); they do not
+   change any conclusion here (the rollover and prepare floors are 54,168; with the precompile the op rows are above
+   their floors). For the 2^24 rule the floor is checked on its own (≤ 2^24) and the execution budget is 2^24 − intrinsic.
+3. **Receipts are after refunds, the cap is before**: the rollover's receipt 11,359,017 is 12,288,297 before its
+   929,280 refund (≤ 1/5); the 2^24 cap and the `ROLL_MAX` rule apply before refunds, as the forge figures are.
+4. **anvil 1.8.5 does not price Amsterdam's state**: the same driver against `anvil --hardfork amsterdam` gives the old
+   prices (op blob 4,521,637, 96 new slots 2,260,120, rollover 80 6,645,197; `gas-amsterdam-anvil-dryrun.txt`) while
+   `forge test` / `cast run` with `amsterdam` apply EIP-8037 / 8038. Do not size gas on anvil.
+5. A value transfer to a NEW account costs 204,600 (21,000 + 183,600 state gas): a 21,000 gas limit fails (attempt 1).
+
+### 8.6 Files and reruns
+
+| File | What |
+|---|---|
+| `gas16k.sh` (`EVM=amsterdam`) → `gas-amsterdam-r80.txt`, `-r96.txt`, `-r80-mocked.txt`, `-scan-r192.txt` | the pins at the 16k sizes under Amsterdam |
+| `inputs16k.py` → `inputs-amsterdam-16k.txt` | inputs and calldata per form, the one-transaction limit |
+| `xcheck/PqzGasHarness.sol` | the harness (measurement only; `PqzOk`, its own registry) |
+| `xcheck/xcheck7622.py`, `xcheck/replay.py` → `gas-amsterdam-xcheck7622.txt` | the testnet run and Foundry's replay |
+| `gas-amsterdam-anvil-dryrun.txt` | the driver's dry run on anvil (old prices, item 4) |
+| `gas-today-n2048-forge185.txt` | the edited `PqzStateGas.t.sol` at today's sizes (repo, Osaka, forge 1.8.5): 34 / 34 pass |
+
+```sh
+P=pqz-core/pqzl/params/p16k; W=<work dir>; L=smartcontracts/evm/lib   # forge 1.8.5
+EVM=amsterdam scripts/capped $P/gas16k.sh $W $L 80 > $P/gas-amsterdam-r80.txt
+PQZ_PRECOMPILE=0 EVM=amsterdam scripts/capped $P/gas16k.sh $W $L 80 --match-test 'relayedFullTx_(M|fresh|mat)' -vv > $P/gas-amsterdam-r80-mocked.txt
+EVM=amsterdam scripts/capped $P/gas16k.sh $W $L 96 --match-test test_gas_rollMax -vv > $P/gas-amsterdam-r96.txt
+for n in 64 80 96 112 128 144 160 176 192; do PQZ_ROLL_N=$n EVM=amsterdam scripts/capped $P/gas16k.sh $W $L 192 --match-test test_gas_rollMax_relayedFullTx -vv; done
+python3 -I $P/inputs16k.py > $P/inputs-amsterdam-16k.txt
+# testnet: the 80 work tree plus the harness
+mkdir -p $W/evm/test/xcheck && cp $P/xcheck/PqzGasHarness.sol $W/evm/test/xcheck/ && scripts/capped sh -c "cd $W/evm && forge build"
+python3 -I $P/xcheck/xcheck7622.py --eth <nethermind-2.2>/pqz-core/nethermind/chain --out $W/evm/out --rpc http://127.0.0.1:8545 --dev-key 0x…04 --roll 80 > log
+python3 -I $P/xcheck/replay.py log http://127.0.0.1:8545 >> log
 ```

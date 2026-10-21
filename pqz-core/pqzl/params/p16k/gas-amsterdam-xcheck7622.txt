@@ -1,0 +1,152 @@
+### attempt 1 (2026-10-21): the dev key's 1 ETH transfer to the fresh key with gas 21,000 ran out of gas (a NEW account costs 183,600 EIP-8037 state gas on top of 21,000); status 0, nothing else sent
+== xcheck7622: chain 7622, head 904, client Nethermind/v2.2.0+1d2aff00-f/linux-x64/dotnet10.0.13
+fresh key -> 0xe05223e2f8452fdc83460d74e53a7317447d1aae (funded once from the dev key)
+  fund the fresh key: block 906 gasUsed 21000 estimate 21000 status 0x0
+fund the fresh key failed: {'transactionHash': '0xd6176ea58aa5b7a5a50326844e09aed8faf75ecb3864c615c0ee8b4be0062da2', 'transactionIndex': '0x0', 'blockHash': '0x960690c0baa88f955da88bd73dcdea5f65b950048826482a6eb029449baf0041', 'blockNumber': '0x38a', 'cumulativeGasUsed': '0x5208', 'gasUsed': '0x5208', 'effectiveGasPrice': '0x3e8', 'from': '0x1eff47bc3a10a45d4b230b5d10e37751fe6aa718', 'to': '0xe052
+
+### python3 -I pqz-core/pqzl/params/p16k/xcheck/xcheck7622.py --eth <nethermind-2.2>/pqz-core/nethermind/chain --out <work dir>/evm/out --rpc http://127.0.0.1:8545 --dev-key 0x…04 --roll 80   (work dir: EVM=amsterdam gas16k.sh … 80 + xcheck/PqzGasHarness.sol)
+== xcheck7622: chain 7622, head 920, client Nethermind/v2.2.0+1d2aff00-f/linux-x64/dotnet10.0.13
+fresh key -> 0xddf4d2f5c5a1c43cde5f82fe953ee4e32fd0ac98 (funded once from the dev key)
+MEASURED {"label": "fund the fresh key (a new account: EIP-8037 state gas)", "hash": "0xa4111ea018339537b0ef0d8e22b64fcdea84837e15da9a25940b949b6d67da41", "block": 922, "calldata": 0, "estimate": 207391, "gasLimit": 267760, "gasUsed": 204600, "status": "0x1", "contract": null, "receiptKeys": ["blockHash", "blockNumber", "contractAddress", "cumulativeGasUsed", "effectiveGasPrice", "from", "gasUsed", "logs", "logsBloom", "status", "to", "transactionHash", "transactionIndex", "type"]}
+MEASURED {"label": "deploy PqzStateLib", "hash": "0xb43b429645ac079a64e988aed6ed26855b52cf03ff8f344ed9ad50a09bb1b8d6", "block": 924, "calldata": 6472, "estimate": 10217263, "gasLimit": 10778126, "gasUsed": 10135654, "status": "0x1", "contract": "0x502dcbccc247fda09cf59ffd638c25e089e9960b", "receiptKeys": ["blockHash", "blockNumber", "contractAddress", "cumulativeGasUsed", "effectiveGasPrice", "from", "gasUsed", "logs", "logsBloom", "status", "to", "transactionHash", "transactionIndex", "type"]}
+MEASURED {"label": "deploy PqzTransferLib", "hash": "0x1433777b0b740fabfe4b0aadf8ad4354f4745f4c1d10cca5af6f7b950cdbed7a", "block": 926, "calldata": 13632, "estimate": 21377789, "gasLimit": 22496678, "gasUsed": 21208302, "status": "0x1", "contract": "0x32b0cabe5cad07e80371ac765af669f0115cf2cc", "receiptKeys": ["blockHash", "blockNumber", "contractAddress", "cumulativeGasUsed", "effectiveGasPrice", "from", "gasUsed", "logs", "logsBloom", "status", "to", "transactionHash", "transactionIndex", "type"]}
+  deploy PqzOk: block 928 gasUsed 415275 estimate 419738 status 0x1
+  deploy PqzGasHarness: block 930 gasUsed 5187726 estimate 5230066 status 0x1
+harness 0x0e3d004eaa986adb0b86d8934d6b09c9b061642b, libs {'PqzStateLib': '0x502dcbccc247fda09cf59ffd638c25e089e9960b', 'PqzTransferLib': '0x32b0cabe5cad07e80371ac765af669f0115cf2cc'}, PqzOk 0x1ccf61efc0776138ea6cc86b39bc3077f018db84
+MEASURED {"label": "key pointer 0", "hash": "0xda44176165ed8c6e7f6ab86748f0e4262c97f0ae15466f8af5167e4f7525521f", "block": 932, "calldata": 20580, "estimate": 32148944, "gasLimit": 33806391, "gasUsed": 31644317, "status": "0x1", "contract": null, "receiptKeys": ["blockHash", "blockNumber", "contractAddress", "cumulativeGasUsed", "effectiveGasPrice", "from", "gasUsed", "logs", "logsBloom", "status", "to", "transactionHash", "transactionIndex", "type"]}
+  setKey 0: block 934 gasUsed 126559 estimate 127644 status 0x1
+  key pointer 1: block 936 gasUsed 31644317 estimate 32148944 status 0x1
+  setKey 1: block 938 gasUsed 126559 estimate 127644 status 0x1
+  key pointer 2: block 940 gasUsed 31644317 estimate 32148944 status 0x1
+  setKey 2: block 942 gasUsed 126559 estimate 127644 status 0x1
+MEASURED {"label": "op blob 0", "hash": "0xa257224042952daf8363a2e8213b5fb56baf27dbf55d99a8e7ffb6e312f57858", "block": 944, "calldata": 20868, "estimate": 32584919, "gasLimit": 34264164, "gasUsed": 32327187, "status": "0x1", "contract": null, "receiptKeys": ["blockHash", "blockNumber", "contractAddress", "cumulativeGasUsed", "effectiveGasPrice", "from", "gasUsed", "logs", "logsBloom", "status", "to", "transactionHash", "transactionIndex", "type"]}
+  op blob 1: block 946 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 2: block 948 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 3: block 950 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 4: block 952 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 5: block 954 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 6: block 956 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 7: block 958 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 8: block 960 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 9: block 962 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 10: block 964 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 11: block 966 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 12: block 968 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 13: block 970 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 14: block 972 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 15: block 974 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 16: block 976 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 17: block 978 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 18: block 980 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 19: block 982 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 20: block 984 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 21: block 986 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 22: block 988 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 23: block 990 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 24: block 992 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 25: block 994 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 26: block 996 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 27: block 998 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 28: block 1000 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 29: block 1002 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 30: block 1004 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 31: block 1006 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 32: block 1008 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 33: block 1010 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 34: block 1012 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 35: block 1014 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 36: block 1016 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 37: block 1018 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 38: block 1020 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 39: block 1022 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 40: block 1024 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 41: block 1026 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 42: block 1028 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 43: block 1030 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 44: block 1032 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 45: block 1034 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 46: block 1036 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 47: block 1038 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 48: block 1040 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 49: block 1042 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 50: block 1044 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 51: block 1046 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 52: block 1048 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 53: block 1050 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 54: block 1052 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 55: block 1054 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 56: block 1056 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 57: block 1058 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 58: block 1060 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 59: block 1062 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 60: block 1064 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 61: block 1066 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 62: block 1068 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 63: block 1070 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 64: block 1072 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 65: block 1074 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 66: block 1076 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 67: block 1078 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 68: block 1080 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 69: block 1082 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 70: block 1084 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 71: block 1086 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 72: block 1088 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 73: block 1090 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 74: block 1092 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 75: block 1094 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 76: block 1096 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 77: block 1098 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 78: block 1100 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 79: block 1102 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 80: block 1104 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 81: block 1106 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 82: block 1108 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 83: block 1110 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 84: block 1112 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 85: block 1114 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 86: block 1116 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 87: block 1118 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 88: block 1120 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 89: block 1122 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 90: block 1124 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 91: block 1126 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 92: block 1128 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 93: block 1130 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 94: block 1132 gasUsed 32327187 estimate 32584919 status 0x1
+  op blob 95: block 1134 gasUsed 32327187 estimate 32584919 status 0x1
+  seed 96 entries: block 1136 gasUsed 10782484 estimate 10869227 status 0x1
+  setKey alice (any non-zero pointer: registered for prepareAcc): block 1138 gasUsed 126559 estimate 127644 status 0x1
+MEASURED {"label": "prepareAcc half 0", "hash": "0x46d151b5d269ebf6be18b0bbee9e528b1735d3858e0910a6cf6b7f1866219fa6", "block": 1140, "calldata": 68, "estimate": 35862808, "gasLimit": 37705948, "gasUsed": 35579266, "status": "0x1", "contract": null, "receiptKeys": ["blockHash", "blockNumber", "contractAddress", "cumulativeGasUsed", "effectiveGasPrice", "from", "gasUsed", "logs", "logsBloom", "status", "to", "transactionHash", "transactionIndex", "type"]}
+MEASURED {"label": "prepareAcc half 1", "hash": "0x0d2cbe14d53f3f7af51f9f7612a0c74ee0c5f2ebeb8590e66d6ee1409f563ccd", "block": 1142, "calldata": 68, "estimate": 35764123, "gasLimit": 37602329, "gasUsed": 35481358, "status": "0x1", "contract": null, "receiptKeys": ["blockHash", "blockNumber", "contractAddress", "cumulativeGasUsed", "effectiveGasPrice", "from", "gasUsed", "logs", "logsBloom", "status", "to", "transactionHash", "transactionIndex", "type"]}
+MEASURED {"label": "rollOver 16 (first materialisation)", "hash": "0xb21e042b08f8163295ebe55a1ced52b4d9bc9c845c4c5eb2c9b35734ae0f34d1", "block": 1144, "calldata": 68, "estimate": 8951806, "gasLimit": 9449396, "gasUsed": 8809635, "status": "0x1", "contract": null, "receiptKeys": ["blockHash", "blockNumber", "contractAddress", "cumulativeGasUsed", "effectiveGasPrice", "from", "gasUsed", "logs", "logsBloom", "status", "to", "transactionHash", "transactionIndex", "type"]}
+MEASURED {"label": "rollOver 80 (ROLL_MAX, distinct cold blobs)", "hash": "0xefaadb980cc0e21e21034a7bd1bd948f1b95a0ab2a1a6118bd6f8e5978cbdb0a", "block": 1146, "calldata": 68, "estimate": 12485685, "gasLimit": 13159969, "gasUsed": 11359017, "status": "0x1", "contract": null, "receiptKeys": ["blockHash", "blockNumber", "contractAddress", "cumulativeGasUsed", "effectiveGasPrice", "from", "gasUsed", "logs", "logsBloom", "status", "to", "transactionHash", "transactionIndex", "type"]}
+MEASURED {"label": "op 1 BUNDLE, auditor, fee, fresh sender, proof 52,624 B", "hash": "0x088c87402a13f675e41297a20bdbeda69575082ab16d8df309b635821ea6d9c2", "block": 1148, "calldata": 77444, "estimate": 34748704, "gasLimit": 36536139, "gasUsed": 34473934, "status": "0x1", "contract": null, "receiptKeys": ["blockHash", "blockNumber", "contractAddress", "cumulativeGasUsed", "effectiveGasPrice", "from", "gasUsed", "logs", "logsBloom", "status", "to", "transactionHash", "transactionIndex", "type"]}
+fresh key nonce latest 113 pending 113 (no pending transaction: True)
+ROWS [{"label": "fund the fresh key (a new account: EIP-8037 state gas)", "hash": "0xa4111ea018339537b0ef0d8e22b64fcdea84837e15da9a25940b949b6d67da41", "block": 922, "calldata": 0, "estimate": 207391, "gasLimit": 267760, "gasUsed": 204600, "status": "0x1", "contract": null, "receiptKeys": ["blockHash", "blockNumber", "contractAddress", "cumulativeGasUsed", "effectiveGasPrice", "from", "gasUsed", "logs", "logsBloom", "status", "to", "transactionHash", "transactionIndex", "type"]}, {"label": "deploy PqzStateLib", "hash": "0xb43b429645ac079a64e988aed6ed26855b52cf03ff8f344ed9ad50a09bb1b8d6", "block": 924, "calldata": 6472, "estimate": 10217263, "gasLimit": 10778126, "gasUsed": 10135654, "status": "0x1", "contract": "0x502dcbccc247fda09cf59ffd638c25e089e9960b", "receiptKeys": ["blockHash", "blockNumber", "contractAddress", "cumulativeGasUsed", "effectiveGasPrice", "from", "gasUsed", "logs", "logsBloom", "status", "to", "transactionHash", "transactionIndex", "type"]}, {"label": "deploy PqzTransferLib", "hash": "0x1433777b0b740fabfe4b0aadf8ad4354f4745f4c1d10cca5af6f7b950cdbed7a", "block": 926, "calldata": 13632, "estimate": 21377789, "gasLimit": 22496678, "gasUsed": 21208302, "status": "0x1", "contract": "0x32b0cabe5cad07e80371ac765af669f0115cf2cc", "receiptKeys": ["blockHash", "blockNumber", "contractAddress", "cumulativeGasUsed", "effectiveGasPrice", "from", "gasUsed", "logs", "logsBloom", "status", "to", "transactionHash", "transactionIndex", "type"]}, {"label": "key pointer 0", "hash": "0xda44176165ed8c6e7f6ab86748f0e4262c97f0ae15466f8af5167e4f7525521f", "block": 932, "calldata": 20580, "estimate": 32148944, "gasLimit": 33806391, "gasUsed": 31644317, "status": "0x1", "contract": null, "receiptKeys": ["blockHash", "blockNumber", "contractAddress", "cumulativeGasUsed", "effectiveGasPrice", "from", "gasUsed", "logs", "logsBloom", "status", "to", "transactionHash", "transactionIndex", "type"]}, {"label": "op blob 0", "hash": "0xa257224042952daf8363a2e8213b5fb56baf27dbf55d99a8e7ffb6e312f57858", "block": 944, "calldata": 20868, "estimate": 32584919, "gasLimit": 34264164, "gasUsed": 32327187, "status": "0x1", "contract": null, "receiptKeys": ["blockHash", "blockNumber", "contractAddress", "cumulativeGasUsed", "effectiveGasPrice", "from", "gasUsed", "logs", "logsBloom", "status", "to", "transactionHash", "transactionIndex", "type"]}, {"label": "prepareAcc half 0", "hash": "0x46d151b5d269ebf6be18b0bbee9e528b1735d3858e0910a6cf6b7f1866219fa6", "block": 1140, "calldata": 68, "estimate": 35862808, "gasLimit": 37705948, "gasUsed": 35579266, "status": "0x1", "contract": null, "receiptKeys": ["blockHash", "blockNumber", "contractAddress", "cumulativeGasUsed", "effectiveGasPrice", "from", "gasUsed", "logs", "logsBloom", "status", "to", "transactionHash", "transactionIndex", "type"]}, {"label": "prepareAcc half 1", "hash": "0x0d2cbe14d53f3f7af51f9f7612a0c74ee0c5f2ebeb8590e66d6ee1409f563ccd", "block": 1142, "calldata": 68, "estimate": 35764123, "gasLimit": 37602329, "gasUsed": 35481358, "status": "0x1", "contract": null, "receiptKeys": ["blockHash", "blockNumber", "contractAddress", "cumulativeGasUsed", "effectiveGasPrice", "from", "gasUsed", "logs", "logsBloom", "status", "to", "transactionHash", "transactionIndex", "type"]}, {"label": "rollOver 16 (first materialisation)", "hash": "0xb21e042b08f8163295ebe55a1ced52b4d9bc9c845c4c5eb2c9b35734ae0f34d1", "block": 1144, "calldata": 68, "estimate": 8951806, "gasLimit": 9449396, "gasUsed": 8809635, "status": "0x1", "contract": null, "receiptKeys": ["blockHash", "blockNumber", "contractAddress", "cumulativeGasUsed", "effectiveGasPrice", "from", "gasUsed", "logs", "logsBloom", "status", "to", "transactionHash", "transactionIndex", "type"]}, {"label": "rollOver 80 (ROLL_MAX, distinct cold blobs)", "hash": "0xefaadb980cc0e21e21034a7bd1bd948f1b95a0ab2a1a6118bd6f8e5978cbdb0a", "block": 1146, "calldata": 68, "estimate": 12485685, "gasLimit": 13159969, "gasUsed": 11359017, "status": "0x1", "contract": null, "receiptKeys": ["blockHash", "blockNumber", "contractAddress", "cumulativeGasUsed", "effectiveGasPrice", "from", "gasUsed", "logs", "logsBloom", "status", "to", "transactionHash", "transactionIndex", "type"]}, {"label": "op 1 BUNDLE, auditor, fee, fresh sender, proof 52,624 B", "hash": "0x088c87402a13f675e41297a20bdbeda69575082ab16d8df309b635821ea6d9c2", "block": 1148, "calldata": 77444, "estimate": 34748704, "gasLimit": 36536139, "gasUsed": 34473934, "status": "0x1", "contract": null, "receiptKeys": ["blockHash", "blockNumber", "contractAddress", "cumulativeGasUsed", "effectiveGasPrice", "from", "gasUsed", "logs", "logsBloom", "status", "to", "transactionHash", "transactionIndex", "type"]}]
+
+### python3 -I pqz-core/pqzl/params/p16k/xcheck/replay.py <log above> http://127.0.0.1:8545   (forge 1.8.5 cast run; 'not successful' = the node had pruned that block's parent state, error -32002 'No state available for block 943')
+== replay.py: `cast run <hash> -r <rpc> --evm-version amsterdam` per measured transaction
+label | block | calldata B | Nethermind eth_estimateGas | Nethermind receipt gasUsed | Foundry cast run gas | Foundry - Nethermind
+fund the fresh key (a new account: EIP-8037 state gas) | 922 | 0 | 207,391 | 204,600 | 204,600 | +0
+deploy PqzStateLib | 924 | 6,472 | 10,217,263 | 10,135,654 | 10,135,654 | +0
+deploy PqzTransferLib | 926 | 13,632 | 21,377,789 | 21,208,302 | n/a (replay not successful) | n/a
+key pointer 0 | 932 | 20,580 | 32,148,944 | 31,644,317 | n/a (replay not successful) | n/a
+op blob 0 | 944 | 20,868 | 32,584,919 | 32,327,187 | n/a (replay not successful) | n/a
+prepareAcc half 0 | 1140 | 68 | 35,862,808 | 35,579,266 | 35,579,266 | +0
+prepareAcc half 1 | 1142 | 68 | 35,764,123 | 35,481,358 | 35,481,358 | +0
+rollOver 16 (first materialisation) | 1144 | 68 | 8,951,806 | 8,809,635 | 8,809,635 | +0
+rollOver 80 (ROLL_MAX, distinct cold blobs) | 1146 | 68 | 12,485,685 | 11,359,017 | 11,359,017 | +0
+op 1 BUNDLE, auditor, fee, fresh sender, proof 52,624 B | 1148 | 77,444 | 34,748,704 | 34,473,934 | 34,473,934 | +0
+
+### the same replay on three later op blob creations (blocks 1134 / 1132 / 1130, parent state still held): cast run <hash> -r http://127.0.0.1:8545 --evm-version amsterdam
+op blob (make, 20,868 B calldata) | 1134 | receipt 32,327,187 | cast run 32,327,187 | +0
+op blob | 1132 | receipt 32,327,187 | cast run 32,327,187 | +0
+op blob | 1130 | receipt 32,327,187 | cast run 32,327,187 | +0
+
+### Foundry forge-test probe of the harness (2026-10-21, a one-off test in the work tree, not kept): `h.make(code)` as its
+### own transaction (isolate), vm.lastCallGas(): regular (incl. the EIP-7976 floor) / state / total
+key pointer (make, 20,481 B code): regular / state / total 1332120 31519530 32851650
+op blob (make, 20,785 B code): regular / state / total 1350552 31984650 33335202
+# Nethermind and cast run: op blob 32,327,187 = 342,537 (standard regular) + 31,984,650 (state): the chain applies the floor
+# to regular + state, the forge test to regular alone (results §8.5 item 2). Key pointer: 31,644,317 = 124,787 + 31,519,530.
