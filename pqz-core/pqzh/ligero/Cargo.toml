@@ -46,6 +46,11 @@ path = "src/bin/ligero_kat.rs"
 required-features = ["bench"]
 
 [[bin]]
+name = "spike_retry"
+path = "src/bin/spike_retry.rs"
+required-features = ["bench"]
+
+[[bin]]
 name = "ct"
 path = "src/bin/ct.rs"
 required-features = ["ctgrind"]
