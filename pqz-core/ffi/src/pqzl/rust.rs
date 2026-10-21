@@ -24,12 +24,13 @@ use std::sync::atomic::{AtomicBool, Ordering::Relaxed};
 
 use ::pqzl::Ctx;
 
-use super::{on_worker, Enc, Key, NodeFault, Worker, CT_BYTES, PK_BYTES};
+use super::{on_worker, Enc, Key, NodeFault, Worker, CT_BYTES, N, PK_BYTES};
 
 const _: () = assert!(
     super::WASM_PQZL_MAX_LEGS == ::pqzl::WASM_MAX_LEGS
         && super::MAX_PROOF == ::pqzl::MAX_PROOF
         && PK_BYTES == ::pqzl::POLYVEC_BYTES
+        && N == ::pqzl::N
         && CT_BYTES == ::pqzl::CT_BYTES
 );
 
@@ -134,7 +135,7 @@ pub fn verify_generic(op: u8, stmt: &[u8], proof: &[u8]) -> Result<bool, NodeFau
 }
 
 /// pk = A·s + e (`pqz_keypair_from_secret`; no norm check): the self-test reads the columns of A with it.
-pub fn keypair_from_secret(s: &[i8; 2048], e: &[i16; 2048]) -> Option<Box<[u8; PK_BYTES]>> {
+pub fn keypair_from_secret(s: &[i8; N], e: &[i16; N]) -> Option<Box<[u8; PK_BYTES]>> {
     with_ctx(|c| c.keypair_from_secret(s, e)).ok()?.ok()
 }
 
@@ -158,7 +159,7 @@ pub fn enc_group_seed(seed_enc: &[u8; 32], g: usize) -> [u8; 32] {
 }
 
 /// Dec of `ct = u ‖ v` (16,512 B) with `s`: the 16 digits `M` and their noise (§4.2, `pqz_dec`).
-pub fn dec(s: &[i8; 2048], ct: &[u8; CT_BYTES]) -> Option<([i64; 16], [i64; 16])> {
+pub fn dec(s: &[i8; N], ct: &[u8; CT_BYTES]) -> Option<([i64; 16], [i64; 16])> {
     with_ctx(|_| ::pqzl::dec(s, ct)).ok()?.ok()
 }
 
@@ -181,8 +182,8 @@ pub fn prove(op: u8, stmt: &[u8], wit: &[u8], rnd32: &[u8; 32]) -> Result<Vec<u8
 pub fn encrypt(
     pks: &[&[u8; PK_BYTES]],
     msgs: &[[u8; 16]],
-    r: &[i8; 2048],
-    e1: &[i16; 2048],
+    r: &[i8; N],
+    e1: &[i16; N],
     e2: &[[i16; 16]],
 ) -> Option<super::Encrypted> {
     if pks.is_empty() {

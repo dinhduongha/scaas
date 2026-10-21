@@ -821,7 +821,7 @@ Each ruling, with its content and status:
    (k = 36), `K_MAX` = 4,096, q = 61,275,424,977,257 (≈ 2^45.80, q ≡ 9 mod 16, q − 1 divisible by 2^3 · 19 · 43 · 431),
    Δ = ⌊q / 2^18⌋ = 233,747,196, β_s / β_e = 38 / 173, digit sums `M_i` 16 bits, carries 13 bits, `e_T` / `e'` + 2^26 in
    27 bits, proof MLWE rank (`kmlwe`) 36. Mint margin 3.08×. Status: decided (owner 2026-10-21); 8b builds the cores
-   (`pqz-core/pqzl/params/pa/`), 8c / 8d the rest.
+   (`pqz-core/params/sets/n2304-kmax4096/`, item 13), 8c / 8d the rest.
 
    The n-study table (q = the smallest admissible prime with mint margin ≥ 3.08×; β at 80 worst-case hints):
 
@@ -853,6 +853,17 @@ Each ruling, with its content and status:
 
 12. **Spike: tight coefficient packing of the stored blobs and `acc`** (≈ −28 % state gas [estimate]) runs before 8d
     and may change the stored blob format. Status: pending.
+13. **Parameter sets are per-directory, selected at compile time; one set per library build.** Each set is one
+    directory `pqz-core/params/sets/n<n>-kmax<K_MAX>/` whose only input is `set.toml` (n, `K_MAX`, q, `pqz_delta`,
+    `kmlwe_min`, description, approval); `gen_set.py` derives the codegen specs, `pqz_set.h`, `rust/set.rs`,
+    `set.json`, `PqzSet.sol` and the crates' feature lists, `make.sh <set> all` runs the rest (estimator, codegen,
+    KATs, vectors, gate). C chooses with `PQZ_SET=<set>`, Rust with the cargo feature `set-<set>`; the algorithm code
+    uses named constants only; a runtime choice between sets is deferred. Sets: `n2048-kmax1024` (the frozen v3
+    set; its vectors stay at `smartcontracts/vectors/pqz/`, which the contracts read until 8d) and `n2304-kmax4096`
+    (set (a), the `pqzl` crate's default; vectors under `smartcontracts/vectors/pqz/n2304-kmax4096/`); later
+    `n2560-kmax16384` (16k, shippable) and `n2816-kmax65536` (A', core only). PQZH is compiled out of pqz-ffi /
+    pqz-vectors for every set but v3 until 8c; every set carries the v3 `proofSystemId` until the 8d bump. Status:
+    decided (owner 2026-10-21); built in 8b.
 
 Superseded by this section (kept above as the record): the 16k set n = 2560 / `K_MAX` 16,384 / q = 2^50 − 42,310,535
 (§6, §6.4's id label `mlwe-d64k40-q50l4`, the k / q of the new label follow set (a) in 8d), O9's G = 1 for M = 8 on

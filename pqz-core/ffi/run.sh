@@ -11,9 +11,13 @@ L=runs/$1 X=$(pwd)/target/run
 mkdir -p runs "$X"
 rm -f "$X/fill.txt"
 OUT() { echo "\$ $*"; "$@"; echo "[rc=$?]"; }
+# PQZ_SET: the parameter set (pqz-core/params/sets/<set>, one per build; default the v3 set n2048-kmax1024, pqz-ffi's
+# default feature); another set or an explicit backend: --no-default-features --features pqzl-<backend>,set-<set>
+S=${PQZ_SET:-n2048-kmax1024}
+[ -f "../params/sets/$S/pqz_set.h" ] || { echo "PQZ_SET=$S: no pqz-core/params/sets/$S" >&2; exit 2; }
 case ${PQZL:-} in
-  rust | c) BF="--no-default-features --features pqzl-$PQZL" ;;
-  "") BF= ;;
+  rust | c) BF="--no-default-features --features pqzl-$PQZL,set-$S" ;;
+  "") if [ "$S" = n2048-kmax1024 ]; then BF=; else BF="--no-default-features --features pqzl-rust,set-$S"; fi ;;
   *) echo "PQZL=$PQZL: rust or c" >&2; exit 2 ;;
 esac
 

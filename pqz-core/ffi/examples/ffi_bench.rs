@@ -33,7 +33,7 @@ fn main() {
     let n: usize = std::env::args().nth(1).and_then(|a| a.parse().ok()).unwrap_or(200);
     let rnd = [0x33u8; 32];
     let mut pqzl_inputs = Vec::new();
-    for id in [PQZL_ID, PQZH_ID] {
+    for id in [PQZL_ID, PQZH_ID].into_iter().filter(|&id| id == PQZL_ID || pqz_ffi::PQZH) {
         let sys = if id == PQZL_ID { "PQZL" } else { "PQZH" };
         let forms = fixture::cases(&id).unwrap().into_iter().map(|c| (format!("{:?}", c.form), c.op(), c.stmt, c.wit, None));
         let multi = fixture::multi_cases(&id, usize::MAX).unwrap().into_iter().map(|c| (c.name(), c.op(), c.stmt, c.wit, Some((c.m, c.aud))));
@@ -65,7 +65,7 @@ fn main() {
             ];
             let body: Vec<String> = row.into_iter().map(|(k, v)| format!("\"{k}\": {}", stats(v))).collect();
             let multi = shape.map_or(String::new(), |(m, aud)| {
-                let bound = if id == PQZL_ID { stmt::MAX_PROOF_PQZL } else { pqzh::PARAMS.max_proof_len(pqzh_ligero::Rel::Multi { m, aud }) };
+                let bound = if id == PQZL_ID { stmt::MAX_PROOF_PQZL } else { pqzh::max_proof_len_multi(m, aud) };
                 format!(
                     "\"m\": {m}, \"auditor\": {aud}, \"stmt_bytes\": {}, \"input_bytes\": {}, \"proof_bound\": {bound}, \"worst_input_bytes\": {}, \"prove_ms\": {prove_ms:.0}, ",
                     st.len(),

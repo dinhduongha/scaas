@@ -16,9 +16,11 @@ import shutil
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-V = os.path.join(HERE, "../../smartcontracts/vectors/pqz")
-sys.path.insert(0, V)
-import pqz_kat as k  # noqa: E402
+sys.path.insert(0, os.path.join(HERE, "../../smartcontracts/vectors/pqz"))
+import pqz_kat as k  # noqa: E402  (PQZ_SET selects the parameter set and its vector directory)
+
+V = k.VEC_DIR
+IDN = list(k.IDS)  # "pqzl", and "pqzh" where the set has PQZH
 
 out = sys.argv[1]
 stmts = {f: bytes.fromhex(r["stmt"]) for f, r in k.statement_rows(V).items()}
@@ -32,14 +34,15 @@ def inputs(n, multi):
             for r in rows[n] if (r["op"] == 7) == multi]
 
 
-honest = inputs("pqzl", False) + inputs("pqzh", False)
+honest = [x for n in IDN for x in inputs(n, False)]
 honest += [k.precompile_input(r["op"], k.with_id(bytes.fromhex(r["stmt"]), k.IDS[n]), bytes.fromhex(r[n]["proof"]))
-           for n in ("pqzl", "pqzh") for r in k.load(V, "fee0.json")["rows"]]
+           for n in IDN for r in k.load(V, "fee0.json")["rows"]]
 n_p6e = len(honest)
-honest += inputs("pqzl", True) + inputs("pqzh", True)
+honest += [x for n in IDN for x in inputs(n, True)]
 n_multi = len(honest) - n_p6e
 rv = os.path.join(HERE, "regress", "valid")
-extra = [open(os.path.join(rv, f), "rb").read() for f in sorted(os.listdir(rv))] if os.path.isdir(rv) else []
+# regress/valid/ holds v3-set inputs (valid under that set only)
+extra = [open(os.path.join(rv, f), "rb").read() for f in sorted(os.listdir(rv))] if os.path.isdir(rv) and k.SET == k.V3 else []
 honest += extra
 with open(os.path.join(out, "honest.bin"), "wb") as f:
     for b in honest:

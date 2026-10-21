@@ -11,9 +11,12 @@
 # pqz_kat.py --check, tamper, pqz-ffi selftest vectors, wasm32 replay), the pqz-ffi job (tests, symbol scans, native =
 # wasm32 digests), cargo test of pqz-stmt and Ligero, the STARK backup cross-check, the fuzz targets (build, then
 # <fuzz-seconds> per target, default 60), and the Rust PQZL core pqzl/rust (step rust: its tests with the C oracle and
-# the cheating fixtures, to_rust.py --check, gen_set.py --check). pqz-stmt, pqz-ffi, PQZH and the vectors exist for
-# the set n2048-kmax1024 only until plan 5h Task 8c / 8d: for another set those five steps are not run (said in the
-# summary, whose verdict is then PARTIAL, not PASS). Exit 1 if any step fails.
+# the cheating fixtures, to_rust.py --check, gen_set.py --all --check). Every step runs at the set: its vectors are
+# smartcontracts/vectors/pqz/ (n2048-kmax1024) or smartcontracts/vectors/pqz/<set>/ (pqz-vectors, pqz_kat.py, fuzz
+# seeds and the Rust tests read the set's). PQZH (Ligero over F_q) exists for the sets whose set.json says pqzh (n2048-kmax1024 until plan 5h Task 8c): for
+# another set the Ligero tests and the STARK / Ligero cross-check are "skipped (PQZH ...)" and pqz-ffi / pqz-vectors
+# are built without PQZH (owner ruling 2026-10-21: skipped, not PARTIAL). A core_only set (set.toml, e.g. A') has no
+# pqz-stmt / precompile build: vectors, ffi, cargo, xcheck and fuzz are "skipped (core_only)". Exit 1 if any step fails.
 set -u
 cd "$(dirname "$0")"
 L=$1 FZ=${2:-60} R=runs/gate/$1
@@ -22,12 +25,16 @@ export PQZ_SET
 [ -f "params/sets/$PQZ_SET/pqz_set.h" ] || { echo "PQZ_SET=$PQZ_SET: no params/sets/$PQZ_SET" >&2; exit 2; }
 V3=n2048-kmax1024
 mkdir -p runs/gate
-fail=0 partial=0
+fail=0
 # the summary also goes to a file (review round 2: the PQZL Rust port's gate PASS line was on stdout only)
 say() { echo "$*" | tee -a "$R-summary.txt"; }
 echo "# gate $L (set $PQZ_SET): $(git rev-parse HEAD)$(git diff --quiet HEAD || echo ' + uncommitted changes'), $(date -u +%Y-%m-%dT%H:%MZ)" > "$R-summary.txt"
 step() { name=$1; shift; say "== $name"; if "$@" > "$R-$name.txt" 2>&1; then say "   ok"; else say "   FAILED (rc=$?)"; fail=1; fi; }
-v3only() { say "== $1"; say "   not run: set $PQZ_SET (pqz-stmt / pqz-ffi / PQZH / vectors are set $V3 only until plan 5h Task 8c / 8d)"; partial=1; }
+skip() { say "== $1"; say "   skipped ($2)"; }
+SJ=params/sets/$PQZ_SET/set.json
+json() { python3 -I -c "import json, sys; print(json.load(open(sys.argv[1]))[sys.argv[2]])" "$SJ" "$1"; }
+PQZH=$(json pqzh) CORE_ONLY=$(json core_only)
+NOPQZH="PQZH is not built for set $PQZ_SET until plan 5h Task 8c"
 
 # the pqzl crate's cargo flags for the set (one set-<set> feature, default-features off for a non-default set)
 if [ "$PQZ_SET" = n2304-kmax4096 ]; then NODEF=""; FEAT=""; else NODEF="--no-default-features"; FEAT="sv,set-$PQZ_SET,"; fi
@@ -40,7 +47,7 @@ tbox() { (cd pqzl && ./check_tbox_fixes.sh); }
 # the vector tests need the set's vectors; without them (any set but v3 until 8d) tests/common builds one honest row per
 # bench relation, proved by the C core, so the crate also needs feature bench
 rust() { (cd pqzl/rust && CARGO_TARGET_DIR=target/$PQZ_SET cargo test -j2 --release --offline $NODEF --features "${FEAT}c-oracle,test-hooks,bench" &&
-  python3 -I ../params/to_rust.py --check && python3 -I ../../params/sets/gen_set.py --check); }
+  python3 -I ../params/to_rust.py --check && python3 -I ../../params/sets/gen_set.py --all --check); }
 # C = Rust = wasm32 on the bench proofs: the C core's pqz_bench, the Rust bench and the Rust bench in wasm32 (node) print
 # the same proofs_fnv per relation (2 proofs of each of the 14 relations, mask 16383)
 fnv() { (cd pqzl && PQZ_ARENA_MB=2048 build/native/pqz_bench 2 1 16383 > "../$R-fnv-c.jsonl" &&
@@ -64,7 +71,9 @@ for l in open(sys.argv[1]):
             print(j["rel"], j["proofs_fnv"])
 sys.exit(1 if bad else 0)'
 sv() { (cd pqzl && sv/check_sv_fixes.sh); }
-cargo_tests() { (cd stmt && cargo test --release --offline) && (cd pqzh/ligero && cargo test --release --offline); }
+# pqz-stmt at the set; Ligero's tests where the set has PQZH
+cargo_tests() { (cd stmt && CARGO_TARGET_DIR=target/$PQZ_SET cargo test --release --offline --no-default-features --features "set-$PQZ_SET") &&
+  if [ "$PQZH" = True ]; then (cd pqzh/ligero && cargo test --release --offline); else echo "Ligero: $NOPQZH"; fi; }
 # a smoke run is too short to merge into the committed corpora (the 2 h campaigns'): restore them afterwards
 fuzz() { fuzz/build.sh && for t in precompile mutate codec; do fuzz/run.sh "$t" "$FZ" "gate-$L" || return 1; done &&
   git checkout -- fuzz/corpus && git clean -fdq fuzz/corpus; }
@@ -75,22 +84,15 @@ step tbox tbox
 step sv sv
 step diff diffs
 step fnv fnv
-if [ "$PQZ_SET" = $V3 ]; then
+if [ "$CORE_ONLY" = True ]; then
+  skip vectors core_only; skip ffi core_only
+else
   step vectors ffi/vectors/run.sh "gate-$L"
   step ffi ffi/run.sh "gate-$L"
-else
-  v3only vectors
-  v3only ffi
 fi
 step rust rust
-if [ "$PQZ_SET" = $V3 ]; then
-  step cargo cargo_tests
-  step xcheck pqzh/xcheck/run.sh
-  step fuzz fuzz
-else
-  v3only cargo
-  v3only xcheck
-  v3only fuzz
-fi
-say "gate $L (set $PQZ_SET): $( [ $fail = 0 ] && { [ $partial = 0 ] && echo PASS || echo 'PARTIAL (every step run passed; steps not run above)'; } || echo FAIL )"
+if [ "$CORE_ONLY" = True ]; then skip cargo core_only; else step cargo cargo_tests; fi
+if [ "$PQZH" = True ]; then step xcheck pqzh/xcheck/run.sh; else skip xcheck "$NOPQZH"; fi
+if [ "$CORE_ONLY" = True ]; then skip fuzz core_only; else step fuzz fuzz; fi
+say "gate $L (set $PQZ_SET): $( [ $fail = 0 ] && echo PASS || echo FAIL )"
 exit $fail

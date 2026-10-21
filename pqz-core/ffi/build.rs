@@ -4,21 +4,48 @@
 //! pqz_wasm_rt.c's 128-bit helpers only (their shifts are branch-free, the prover shifts by secret amounts; Rust's
 //! compiler_builtins provides mem*). Then the symbol scan (../pqzl/check_symbols.sh) on the archive: no malloc,
 //! stdio, libm, GMP, MPFR. Always: the self-test proofs from the REGISTER rows of
-//! smartcontracts/vectors/pqz/proof_{pqzl,pqzh}.json (bytes for include_bytes!).
-use std::path::PathBuf;
+//! smartcontracts/vectors/pqz/proof_{pqzl,pqzh}.json (bytes for include_bytes!); for a parameter set other than
+//! n2048-kmax1024 from smartcontracts/vectors/pqz/<set>/proof_pqzl.json, no PQZH (compiled out until plan 5h Task 8c),
+//! and while that set has no vectors yet an empty proof (pqz-vectors writes them, then a rebuild; --check flags stale
+//! self-test proofs).
+use std::path::{Path, PathBuf};
 use std::{env, fs};
+
+/// The parameter set of this build: the one feature `set-<set>` (pqz-stmt refuses any other count), from cargo's
+/// CARGO_FEATURE_SET_<SET> variable (`n2304-kmax4096` <- `N2304_KMAX4096`).
+fn set() -> String {
+    let s: Vec<String> = env::vars()
+        .filter_map(|(k, _)| k.strip_prefix("CARGO_FEATURE_SET_").map(|x| x.to_lowercase().replace('_', "-")))
+        .collect();
+    assert_eq!(s.len(), 1, "exactly one parameter set feature set-<set>: {s:?}");
+    s[0].clone()
+}
+
+/// The set's vectors directory: v3 at the canonical path the contracts read until plan 5h Task 8d, others below it.
+fn vectors_dir(core: &Path, set: &str) -> PathBuf {
+    let v = core.join("../../smartcontracts/vectors/pqz");
+    if set == "n2048-kmax1024" { v } else { v.join(set) }
+}
 
 fn main() {
     let core = PathBuf::from(env::var("CARGO_MANIFEST_DIR").unwrap()).join("../pqzl"); // the PQZL C core
     let out = PathBuf::from(env::var("OUT_DIR").unwrap());
+    let set = set();
+    let set = set.as_str();
     #[cfg(feature = "pqzl-c")]
-    c_core(&core, &out);
+    c_core(&core, &out, set);
 
     // the self-test's compiled-in R_REG proofs (D13): the REGISTER rows of the canonical vectors (D9: read in place,
     // no copy here); written by this crate's pqz-vectors binary
-    let vec = core.join("../../smartcontracts/vectors/pqz");
+    let vec = vectors_dir(&core, set);
+    let pqzh = env::var_os("CARGO_FEATURE_PQZH").is_some();
     for id in ["pqzl", "pqzh"] {
         let src = vec.join(format!("proof_{id}.json"));
+        println!("cargo:rerun-if-changed={}", src.display());
+        if (id == "pqzh" && !pqzh) || (set != "n2048-kmax1024" && !src.exists()) {
+            fs::write(out.join(format!("{id}_reg.bin")), []).unwrap();
+            continue;
+        }
         let j = fs::read_to_string(&src).unwrap_or_else(|e| panic!("{}: {e}", src.display()));
         let row = &j[j.find("\"form\": \"REGISTER\"").expect("REGISTER row")..];
         let hex = &row[row.find("\"proof\": \"").expect("proof field") + 10..];
@@ -26,12 +53,11 @@ fn main() {
         let nib = |c: u8| (c as char).to_digit(16).expect("proof hex") as u8;
         let bin: Vec<u8> = hex.as_bytes().chunks(2).map(|p| nib(p[0]) << 4 | nib(p[1])).collect();
         fs::write(out.join(format!("{id}_reg.bin")), bin).unwrap();
-        println!("cargo:rerun-if-changed={}", src.display());
     }
 }
 
 #[cfg(feature = "pqzl-c")]
-fn c_core(core: &std::path::Path, out: &std::path::Path) {
+fn c_core(core: &Path, out: &Path, set: &str) {
     let wasm = env::var("CARGO_CFG_TARGET_ARCH").unwrap() == "wasm32";
 
     // lazer.h as build.sh's lazer_h() assembles it
@@ -56,8 +82,8 @@ fn c_core(core: &std::path::Path, out: &std::path::Path) {
     for f in ["-std=gnu11", "-O2", "-fno-builtin", "-fno-math-errno", "-ffp-contract=off", "-DPQZ_SV", "-Wall", "-Wextra", "-Wno-unused-parameter", "-Wno-unused-function", "-Wno-sign-compare"] {
         b.flag(f);
     }
-    // the parameter set of pqz-stmt / PQZH (Cargo.toml: n2048-kmax1024 until plan 5h Task 8c / 8d)
-    let setdir = core.join("../params/sets/n2048-kmax1024");
+    // the parameter set of this build (feature set-<set>, the same as pqz-stmt's and the Rust core's)
+    let setdir = core.join("../params/sets").join(set);
     b.include(&inc).include(core.join("src")).include(core.join("lazer")).include(&setdir);
     for f in ["pqz_lazer", "pqz_ntt", "pqz_arena", "pqz_rel", "pqz_keys", "pqz_sv"] {
         b.file(core.join(format!("src/{f}.c")));

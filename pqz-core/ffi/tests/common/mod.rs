@@ -55,16 +55,22 @@ impl Honest {
     }
 }
 
+/// The ids of this build: PQZL, and PQZH where it is compiled in (the parameter set n2048-kmax1024 until plan 5h Task
+/// 8c).
+pub fn ids() -> Vec<Word> {
+    if PQZH { vec![PQZL_ID, PQZH_ID] } else { vec![PQZL_ID] }
+}
+
 /// Every form of both ids, then every built op 7 shape of both ids, proved (fixture, rnd32 = RND).
 pub fn prove_all() -> Vec<Honest> {
     let mut v = Vec::new();
-    for id in [PQZL_ID, PQZH_ID] {
+    for id in ids() {
         for c in fixture::cases(&id).expect("fixture") {
             let proof = prove(c.op(), &c.stmt, &c.wit, &RND).unwrap_or_else(|e| panic!("prove {:?} {:?}: {e:?}", id[0], c.form));
             v.push(Honest { id, op: c.op(), form: Some(c.form), multi: None, stmt: c.stmt, proof });
         }
     }
-    for id in [PQZL_ID, PQZH_ID] {
+    for id in ids() {
         for c in fixture::multi_cases(&id, usize::MAX).expect("fixture op 7") {
             let proof = prove(c.op(), &c.stmt, &c.wit, &RND).unwrap_or_else(|e| panic!("prove {:?} {}: {e:?}", id[0], c.name()));
             v.push(Honest { id, op: c.op(), form: None, multi: Some((c.m, c.aud)), stmt: c.stmt, proof });
@@ -190,7 +196,7 @@ pub fn negatives(h: &Honest) -> Vec<(String, Vec<u8>, Option<Reject>)> {
         ("length field + 1".into(), { let mut i = inp(op, st, pf); i[4] += 1; i }, None),
         ("coefficient = q".into(), inp(op, &with(st.len() - 8, &|s| s.copy_from_slice(&stmt::Q.to_be_bytes())), pf),
             Some(Reject::Coefficient)),
-        ("coefficient = 2^42".into(), inp(op, &with(st.len() - 8, &|s| s.copy_from_slice(&(1u64 << 42).to_be_bytes())), pf),
+        ("coefficient = 2^LOG2Q".into(), inp(op, &with(st.len() - 8, &|s| s.copy_from_slice(&(1u64 << stmt::LOG2Q).to_be_bytes())), pf),
             Some(Reject::Coefficient)),
         ("coefficient top byte".into(), inp(op, &with(st.len() - 8, &|s| s[0] = 0x80), pf), Some(Reject::Coefficient)),
         ("empty proof".into(), inp(op, st, &[]), Some(Reject::ProofLength)),

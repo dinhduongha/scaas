@@ -122,7 +122,7 @@ fn verify_only_arena() {
     let f = tmp("verify_only_inputs.bin");
     child("child_task", &format!("gen:{f}"));
     let hs = from_bytes(&std::fs::read(&f).unwrap());
-    assert_eq!(hs.len(), 16 + 14);
+    assert_eq!(hs.len(), if PQZH { 16 + 14 } else { 16 }); // PQZL 8 forms + 8 op 7 shapes; PQZH 8 + 6
     let honest: Vec<Vec<u8>> = hs.iter().map(|h| h.input()).collect();
     let c = corpus(&hs, N_GEN);
     let gen_from = c.len() - N_GEN;
@@ -189,7 +189,7 @@ fn verify_only_arena() {
     let loop_peak = heap::PEAK.load(Relaxed);
     #[cfg(feature = "pqzl-rust")]
     assert!(loop_peak <= warm_peak, "Rust heap peak of the mixed calls {loop_peak} B over the warm-up's {warm_peak} B");
-    let lp = pqzh_ligero::ligero::VERIFY_PANICS.load(Relaxed);
+    let lp = pqzh::verify_panics();
     #[cfg(feature = "pqzl-rust")]
     let mem = format!(
         "Rust backend (no arena): heap in use after the 5,000 mixed calls {lo}..={hi} B (before them {heap0} B), their \

@@ -13,22 +13,36 @@ canonical-encoding rules of the plan's D15 / R6), ctHash, authDigest, the bundle
 
 A vector file without a checker here is a failure: the generator (P6e Task 11) adds the file and its checker
 together. Public data only: nothing here is constant-time.
+
+Parameter set (owner 2026-10-21: one per build): PQZ_SET=<set> (default n2048-kmax1024, the v3 set, whose files are
+next to this script); the set's constants come from pqz-core/params/sets/<set>/set.json (gen_set.py), its files from
+<set>/ next to this script. A set without PQZH (every set but n2048-kmax1024 until plan 5h Task 8c) has PQZL files only.
 """
 import glob
 import hashlib
 import hmac
 import json
+import math
 import os
 import sys
 
-Q = 2**42 - 215
+V3 = "n2048-kmax1024"
+SET = os.environ.get("PQZ_SET", V3)
+_HERE = os.path.dirname(os.path.abspath(__file__))
+_S = json.load(open(os.path.join(_HERE, "..", "..", "..", "pqz-core", "params", "sets", SET, "set.json")))
+VEC_DIR = _HERE if SET == V3 else os.path.join(_HERE, SET)  # the set's vector files
+Q = _S["q"]  # v3: 2^42 - 215
 D = 64
-K = 32
-N = D * K  # 2048
-DELTA = 2**26 - 1
-B_S, B_E, B_2 = 36, 164, 64
-B_FRESH = B_E * B_S + B_S * B_E + B_2  # 11,872 (§4.3)
-PK_BYTES = 16384
+K = _S["k"]  # v3: 32
+N = D * K  # v3: 2048
+LOG2Q = _S["log2q"]  # the A expansion's width: values mod 2^LOG2Q, kept if < q (v3: 42)
+DELTA = _S["delta"]  # v3: 2^26 - 1
+K_MAX, M_BITS, E_BITS = _S["k_max"], _S["mbits"], _S["ebits"] - 1  # |e_T| < 2^E_BITS (v3: 1,024, 14, 24)
+B_S, B_E, B_2 = _S["beta_s"], _S["beta_e"], _S["beta_2"]  # v3: 36, 164, 64
+B_FRESH = B_E * B_S + B_S * B_E + B_2  # v3: 11,872 (§4.3)
+HAS_PQZH = _S["pqzh"]
+assert (_S["n"], _S["d"], B_FRESH, _S["lengths"]["pk"]) == (N, D, _S["b_fresh"], 512 * K) and Q % 16 == 9
+PK_BYTES = 512 * K  # v3: 16,384
 V_BYTES = 128
 CT_BYTES = PK_BYTES + V_BYTES
 HEADER_BYTES = 640
@@ -94,8 +108,11 @@ OP_NAMES = ["TRANSFER", "BURN", "REFRESH", "REGISTER", "DISCLOSE-SENDER", "DISCL
 OP_TAG = {n: keccak256(b"SCAAS-PQZ-OP-" + n.encode() + b"-V1") for n in OP_NAMES}
 OP_BYTE = {"TRANSFER": 1, "BURN": 2, "REFRESH": 2, "REGISTER": 3, "DISCLOSE-SENDER": 4, "DISCLOSE-RECEIVER": 5,
            "DISCLOSE-AUDITOR": 5, "TRANSFER-MULTI": 7}
-STMT_BYTES = {"TRANSFER": 83072, "TRANSFER0": 66560, "BURN": 50048, "REFRESH": 50048, "REGISTER": 16480,
-              "DISCLOSE-SENDER": 33184, "DISCLOSE-RECEIVER": 33184, "DISCLOSE-AUDITOR": 33184}
+STMT_BYTES = {"TRANSFER": 640 + 5 * PK_BYTES + 4 * V_BYTES, "TRANSFER0": 640 + 4 * PK_BYTES + 3 * V_BYTES,
+              "BURN": 640 + 3 * PK_BYTES + 2 * V_BYTES, "REFRESH": 640 + 3 * PK_BYTES + 2 * V_BYTES, "REGISTER": 96 + PK_BYTES,
+              "DISCLOSE-SENDER": 288 + 2 * PK_BYTES + V_BYTES, "DISCLOSE-RECEIVER": 288 + 2 * PK_BYTES + V_BYTES,
+              "DISCLOSE-AUDITOR": 288 + 2 * PK_BYTES + V_BYTES}  # v3: 83,072 / 66,560 / 50,048 / 16,480 / 33,184
+assert STMT_BYTES == _S["lengths"]["stmt"]
 
 
 def word(x):
@@ -133,7 +150,7 @@ def _unpack(x, n):
 
 def dot(big, small):
     """sum_j big[j] * small[j] in R_q; big: polys with coefficients in [0, q) (or their _pack), small: polys with
-    coefficients in [-1, 1]. Slot sums stay below 32 * 64 * q < 2^64."""
+    coefficients in [-1, 1]. Slot sums stay below k * 64 * q < 2^64 (v3: 32 * 64 * q)."""
     accp = accn = 0
     for a, s in zip(big, small):
         a = a if isinstance(a, int) else _pack(a)
@@ -143,12 +160,12 @@ def dot(big, small):
     return [(p[k] - p[k + D] - n[k] + n[k + D]) % Q for k in range(D)]
 
 
-def polys(vec):  # 2048 coefficients -> 32 polys
+def polys(vec):  # N coefficients -> K polys
     return [list(vec[D * i:D * i + D]) for i in range(K)]
 
 
 def matrix_A():
-    """A[i][j] from SHAKE128("SCAAS-PQZ-A-V2" || u8(i) || u8(j)): 8-byte BE words, low 42 bits, keep if < q."""
+    """A[i][j] from SHAKE128("SCAAS-PQZ-A-V2" || u8(i) || u8(j)): 8-byte BE words, low LOG2Q bits, keep if < q."""
     A = []
     for i in range(K):
         row = []
@@ -156,7 +173,7 @@ def matrix_A():
             n, cs = 8 * D + 64, []
             while len(cs) < D:
                 st = shake128(b"SCAAS-PQZ-A-V2" + bytes([i, j]), n)
-                cs = [v for v in (int.from_bytes(st[o:o + 8], "big") & (2**42 - 1) for o in range(0, n, 8)) if v < Q]
+                cs = [v for v in (int.from_bytes(st[o:o + 8], "big") & (2**LOG2Q - 1) for o in range(0, n, 8)) if v < Q]
                 n *= 2
             row.append(cs[:D])
         A.append(row)
@@ -176,7 +193,7 @@ def A():
 
 
 def a_bytes():
-    return b"".join(enc_poly(p) for row in A() for p in row)  # A[0][0], A[0][1], ...: 32 x 32 x 512 B
+    return b"".join(enc_poly(p) for row in A() for p in row)  # A[0][0], A[0][1], ...: K x K x 512 B
 
 
 def mul_A(s):  # A·s
@@ -678,9 +695,10 @@ def selftest(log):
     t = forms["TRANSFER"]
     rejects(t[:-1], 1, "length - 1", "length")
     rejects(t + b"\0", 1, "length + 1", "length")
-    rejects(t[:448] + word(0) + t[480:], 1, "auditorOn 0 on the 83,072-byte form", "auditorOn does not match the length")
-    rejects(forms["TRANSFER0"][:448] + word(1) + forms["TRANSFER0"][480:], 1, "auditorOn 1 on the 66,560-byte form",
+    rejects(t[:448] + word(0) + t[480:], 1, f"auditorOn 0 on the {STMT_BYTES['TRANSFER']:,}-byte form",
             "auditorOn does not match the length")
+    rejects(forms["TRANSFER0"][:448] + word(1) + forms["TRANSFER0"][480:], 1,
+            f"auditorOn 1 on the {STMT_BYTES['TRANSFER0']:,}-byte form", "auditorOn does not match the length")
     rejects(t[:448] + word(2) + t[480:], 1, "auditorOn 2", "auditorOn does not match the length")
     rejects(t[:256] + word(2**64) + t[288:], 1, "fee >= 2^64", "fee >= 2^64")
     rejects(t[:576] + b"\1" + t[577:], 1, "salt word top byte set", "salt word not 16 zero bytes || salt")
@@ -695,17 +713,18 @@ def selftest(log):
         st, w = forms[form], word(0x0101)  # low bytes only: the salt word keeps its 16-zero-byte form
         rejects(st[:at] + w + st[at + 32:], OP_BYTE[form.rstrip("0")], f"{form} {name} != 0", name + " must be 0")
     rejects(t[:640] + Q.to_bytes(8, "big") + t[648:], 1, "coefficient = q", "coefficient >= q")
-    rejects(t[:640] + (2**42).to_bytes(8, "big") + t[648:], 1, "coefficient = 2^42", "coefficient >= q")
+    rejects(t[:640] + (2**LOG2Q).to_bytes(8, "big") + t[648:], 1, f"coefficient = 2^{LOG2Q}", "coefficient >= q")
     rejects(t, 2, "TRANSFER statement under op 2", "opTag does not belong to op")
     rejects(t[:32] + bytes(32) + t[64:], 1, "unknown proofSystemId", "unknown proofSystemId")
     d = forms["DISCLOSE-SENDER"]
     rejects(d[:224] + word(2**64) + d[256:], 4, "disclosure amount >= 2^64", "amount >= 2^64")
     # op 7 R_TXM: every built shape of both ids (fee 0 too), round trip, op 1's body at M = 1, every rule
     lens = {(m, a): multi_len(m, a) for m in (1, 2, 4, 8, 16) for a in (1, 0)}
-    ok(lens[1, 1] == 83072 and lens[1, 0] == 66560 and lens[2, 1] == 99712 and lens[2, 0] == 83072 and
-       lens[4, 1] == 132992 and lens[4, 0] == 116096 and lens[8, 1] == 215936 and lens[16, 0] == 363392 and
+    v3 = SET != V3 or (lens[1, 1] == 83072 and lens[1, 0] == 66560 and lens[2, 1] == 99712 and lens[2, 0] == 83072 and
+                       lens[4, 1] == 132992 and lens[4, 0] == 116096 and lens[8, 1] == 215936 and lens[16, 0] == 363392)
+    ok(v3 and lens[1, 1] == STMT_BYTES["TRANSFER"] and lens[1, 0] == STMT_BYTES["TRANSFER0"] and lens[2, 0] == lens[1, 1] and
        len(set(lens.values())) == 9,
-       "op 7 lengths (plan §4), distinct except (M = 1, on) = (M = 2, off) = 83,072")
+       f"op 7 lengths (plan §4), distinct except (M = 1, on) = (M = 2, off) = {STMT_BYTES['TRANSFER']:,}")
 
     def multi(psid, m, aud, fee):
         f = dict(hdr, proofSystemId=psid, fee=fee, recipientsHash=recipients_hash(range(1, m + 1)))
@@ -755,12 +774,14 @@ def selftest(log):
     one = multi(PQZL_ID, 1, 1, 0)
     two = parse(7, one[:320] + word(2) + one[352:448] + word(0) + one[480:])
     ok(two["legs"] == 2 and not two["auditor"] and two["pks"][1] == pk and two["v_f"] == vs[2],
-       "op 7 at 83,072 B: the M / auditorOn words pick (1, on) or (2, off)")
+       f"op 7 at {STMT_BYTES['TRANSFER']:,} B: the M / auditorOn words pick (1, on) or (2, off)")
     # the resample path and the counter-64 error, with lowered thresholds (the real ones are never exceeded)
-    ctrs = [keygen_sample(bytes([i]) * 32, bs=32, be=143)[2] for i in range(4)]
-    ok(any(c >= 1 for c in ctrs), f"KeyGen resamples with ||s|| <= 32, ||e|| <= 143: counters {ctrs}")
-    ctrs = [enc_sample(bytes([i]) * 32, 2, bs=32, be=143, b2=12)[3] for i in range(4)]
-    ok(any(c >= 1 for c in ctrs), f"Enc resamples with 32 / 143 / 12: counters {ctrs}")
+    # lowered to about the mean norms (v3: 32 / 143 / 12): ceil(sqrt(n / 2)), floor(sqrt(10 n)), floor(sqrt(160))
+    ls, le, l2 = math.isqrt(N // 2 - 1) + 1, math.isqrt(10 * N), math.isqrt(160)
+    ctrs = [keygen_sample(bytes([i]) * 32, bs=ls, be=le)[2] for i in range(4)]
+    ok(any(c >= 1 for c in ctrs), f"KeyGen resamples with ||s|| <= {ls}, ||e|| <= {le}: counters {ctrs}")
+    ctrs = [enc_sample(bytes([i]) * 32, 2, bs=ls, be=le, b2=l2)[3] for i in range(4)]
+    ok(any(c >= 1 for c in ctrs), f"Enc resamples with {ls} / {le} / {l2}: counters {ctrs}")
     for what, f in (("KeyGen", lambda: keygen_sample(bytes(32), bs=0)), ("Enc", lambda: enc_sample(bytes(32), 1, b2=0))):
         try:
             f()
@@ -768,8 +789,9 @@ def selftest(log):
         except ValueError as x:
             ok("counter 64" in str(x), f"{what}: counter 64 error")
     # bundle / opening sizes, entryRef / ctHash / authDigest shapes
-    ok(len(bundle(bytes(16), u, vs[0], vs[2], 1)) == 16688 and len(bundle(bytes(16), u, vs[0], None, 1)) == 16560,
-       "bundle 16,688 / 16,560 B")
+    bl = (len(bundle(bytes(16), u, vs[0], vs[2], 1)), len(bundle(bytes(16), u, vs[0], None, 1)))
+    ok(bl == (_S["lengths"]["bundle"], _S["lengths"]["bundle0"]) and (SET != V3 or bl == (16688, 16560)),
+       f"bundle {bl[0]:,} / {bl[1]:,} B")
     o = opening(b"\1" * 33, b"\2" * 5)
     ok(len(o) == 64 + 32 + 64 + 32 + 32 and o[:64] == word(64) + word(160), "opening = abi.encode(bytes, bytes)")
     log(f"     entryRef(7622, 1, token, 2, 0) = {entry_ref(7622, 1, bytes(range(20)), 2, 0).hex()}")
@@ -896,7 +918,7 @@ def decode_input(b):
 # ---------------------------------------------------------------- vector files (P6e Task 11): one checker per file
 # Everything but proof validity is recomputed here from seeds; proof validity is the generator's (pqz-ffi's pqz-vectors,
 # the C verifiers and Ligero) and the wasm32 replay's. A file without a checker fails --check.
-IDS = {"pqzl": PQZL_ID, "pqzh": PQZH_ID}
+IDS = {"pqzl": PQZL_ID, "pqzh": PQZH_ID} if HAS_PQZH else {"pqzl": PQZL_ID}  # the ids with proofs in the set's files
 STATEMENT_FILES = ["statement_transfer.json", "statement_burn.json", "statement_refresh.json",
                    "statement_register.json", "statement_disclose.json"]
 LIGERO = {"n": 32756, "k": 817, "ell": 695, "t": 121, "pow_bits": 16, "max_proof": 262144}  # D3 preset, never read
@@ -1016,8 +1038,8 @@ def check_matrix(j, d):
     bad = []
     a = a_bytes()
     for k, want in (("a_bytes", len(a)), ("a_keccak", kec(a).hex()), ("A_0_0_first8", A()[0][0][:8]),
-                    ("A_0_0_last8", A()[0][0][56:]), ("A_31_31_first8", A()[31][31][:8]),
-                    ("A_31_31_last8", A()[31][31][56:])):
+                    ("A_0_0_last8", A()[0][0][56:]), (f"A_{K - 1}_{K - 1}_first8", A()[K - 1][K - 1][:8]),
+                    (f"A_{K - 1}_{K - 1}_last8", A()[K - 1][K - 1][56:])):
         cmp(bad, k, j[k], want)
     return bad
 
@@ -1454,16 +1476,20 @@ def check_selftest(j, d):
     u, vs, _ = enc_of({"seed_enc": j["seed_enc"], "recipients": [j["seed_key"]], "values": [j["msg_value"]]})
     ct = u + vs[0]
     M, _, val = dec(s, ct)
-    n = j["fft"]["n"]
-    om = pow(3, (Q - 1) // n, Q)
-    W = [pow(om, i, Q) for i in range(n)]
-    f = dft([(i * i * 0x9E3779B9 + 1) % Q for i in range(n)], W)
+    # a set without PQZH: no Ligero FFT (n 0, empty, not ok) and both PQZH results 0 (pqz-ffi selftest.rs)
+    n = 1634 if HAS_PQZH else 0
+    if n:
+        om = pow(3, (Q - 1) // n, Q)
+        W = [pow(om, i, Q) for i in range(n)]
+        f = dft([(i * i * 0x9E3779B9 + 1) % Q for i in range(n)], W)
+    else:
+        f = []
     fb = b"".join(x.to_bytes(6, "big") for x in f)
-    kat = keccak256(a_digest, kec(pk), kec(ct), bytes(M), kec(fb), b"\x01")
+    kat = keccak256(a_digest, kec(pk), kec(ct), bytes(M), kec(fb), bytes([HAS_PQZH]))
     for k, want in (("input", "0600000000"), ("message", keccak256(b"SCAAS-PQZ-SELFTEST-V1").hex()),
                     ("a_digest", a_digest.hex()), ("pk_keccak", kec(pk).hex()), ("ct_keccak", kec(ct).hex()),
-                    ("M", M), ("fft", {"n": 1634, "keccak": kec(fb).hex(), "ok": True}), ("kat_digest", kat.hex()),
-                    ("results", [1, 0, 1, 0]), ("hash", keccak256(kat, bytes(j["results"])).hex()),
+                    ("M", M), ("fft", {"n": n, "keccak": kec(fb).hex(), "ok": HAS_PQZH}), ("kat_digest", kat.hex()),
+                    ("results", [1, 0, int(HAS_PQZH), 0]), ("hash", keccak256(kat, bytes(j["results"])).hex()),
                     ("rnd32", "53" * 32)):
         cmp(bad, k, j[k], want)
     cmp(bad, "Dec value", val, j["msg_value"])
@@ -1478,13 +1504,16 @@ def check_selftest(j, d):
     return bad
 
 
+MARGIN_E = f"margin_2_{E_BITS}"  # the worst-case files' margin against the proven range 2^E_BITS (v3: margin_2_24)
+
+
 def rot(x):  # coefficient-0 weights per poly: (x * y)[0] = sum_k rot(x)_k y_k in Z[X]/(X^64 + 1)
     return [x[i] if i % 64 == 0 else -x[i - i % 64 + 64 - i % 64] for i in range(N)]
 
 
 def align_r(w, b=B_S * B_S):
     from fractions import Fraction
-    c = sorted(((Fraction(-abs(w[k]), 2 * a + 1), k, a) for k in range(N) if w[k] for a in range(36)))
+    c = sorted(((Fraction(-abs(w[k]), 2 * a + 1), k, a) for k in range(N) if w[k] for a in range(B_S)))
     r, left = [0] * N, b
     for _, k, a in c:
         if 2 * a + 1 <= left:
@@ -1586,10 +1615,10 @@ def check_bound(bad, j, b):
     M, tn, val = dec(s, T)
     mx = max(map(abs, tn))
     cmp(bad, "bound T", (b["T_keccak"], b["T_M"], b["T_noise"], b["max_abs_noise"]), (kec(T).hex(), M, tn, mx))
-    cmp(bad, "bound T noise = 1,023 * B_FRESH", mx, nc * j["b_fresh"])
+    cmp(bad, f"bound T noise = {nc:,} * B_FRESH", mx, nc * j["b_fresh"])
     cmp(bad, "bound value", val, (nc + 1) * c["value"])
-    cmp(bad, "bound margins", (b["margin_2_24"], b["margin_mint"]), (ratio(2**24, mx), ratio(j["mint_threshold"], mx)))
-    if not (mx < 2**24 and max(M) < 2**14):
+    cmp(bad, "bound margins", (b[MARGIN_E], b["margin_mint"]), (ratio(2**E_BITS, mx), ratio(j["mint_threshold"], mx)))
+    if not (mx < 2**E_BITS and max(M) < 2**M_BITS):
         bad.append(f"bound T outside the proven ranges: noise {mx}, M {max(M)}")
     check_debit(bad, "bound", b["debit"], T)
 
@@ -1630,8 +1659,8 @@ def check_illustrative(bad, j, b):
     mx = max(map(abs, noise))
     cmp(bad, "T", (b["T_keccak"], b["T_M"], b["T_noise"], b["max_abs_noise"]), (kec(T).hex(), M, noise, mx))
     cmp(bad, "T value", val, (nc + 1) * credit)
-    cmp(bad, "margin", b["margin_2_24"], ratio(2**24, mx))
-    if not (mx < 2**24 and max(M) < 2**14):
+    cmp(bad, "margin", b[MARGIN_E], ratio(2**E_BITS, mx))
+    if not (mx < 2**E_BITS and max(M) < 2**M_BITS):
         bad.append(f"T outside the proven ranges: noise {mx}, M {max(M)}")
     check_debit(bad, "illustrative", b["debit"], T)
 
@@ -1653,7 +1682,7 @@ def check_fee0(j, d):
 def check_worstcase(j, d):
     bad = []
     cmp(bad, "constants", (j["k_max"], j["credits_n"], j["b_fresh"], j["e_T_range"], j["mint_threshold"]),
-        (1024, 1023, B_FRESH, 2**24, DELTA - 2**24))
+        (K_MAX, K_MAX - 1, B_FRESH, 2**E_BITS, DELTA - 2**E_BITS))
     check_bound(bad, j, j["bound"])
     check_illustrative(bad, j, j["illustrative"])
     return bad
@@ -1690,7 +1719,8 @@ def main(argv):
         bad = check_c_keys(argv[1], log)
     elif argv and argv[0] == "--check":
         bad = selftest(log)
-        files = argv[1:] or sorted(glob.glob(os.path.join(os.path.dirname(os.path.abspath(__file__)), "*.json")))
+        files = argv[1:] or sorted(glob.glob(os.path.join(VEC_DIR, "*.json")))
+        log(f"     parameter set {SET} (q = {Q}, n = {N}, K_MAX = {K_MAX:,}{', PQZH' if HAS_PQZH else ', no PQZH'})")
         log(f"     vector files: {len(files)}")
         bad += check_files(files, log)
     else:

@@ -1,0 +1,56 @@
+# PQZL backend: the default feature (cargo flags: --no-default-features --features pqzl-rust,set-n2304-kmax4096)
+test pqzl::rust::tests::out_of_memory_is_a_node_fault ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test pqzl::rust::tests::out_of_memory_is_a_node_fault ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+thread 'pqz-core' (987793) panicked at src/pqzl/rust.rs:78:17:
+thread 'pqz-core' (987793) panicked at src/pqzl/rust.rs:78:17:
+node faults: Ctx and core allocation failures and worker failure → status 4, out untouched; recovered
+test node_faults_are_status_4 ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 1.27s
+test header_matches ... ok
+test c_abi_arguments ... ok
+op 7 largest worst-case input 340869 B of MAX_INPUT 393216
+test multi_limits_and_memo ... ok
+test one_mib_stack ... ok
+test digest_lines ... ok
+selftest hash 70ec3b7c3c9d9d8cdc5f5fa11b658fa37e1dd29a5ba239f6e3fece7414c3d2a8
+test selftest_report ... ok
+test selftest_vectors ... ok
+test round_trip_every_form ... ok
+rejection cases: 546
+test every_rejection ... ok
+differential: 112 cases, 16 accepted, 0 disagreements
+test pqzl_differential ... ok
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 59.60s
+test child_task ... ok
+test child_task ... ok
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 1 filtered out; finished in 14.88s
+verify-only path: 16 honest inputs, corpus 10801 inputs (10240 generator), warm-up 15.0 s, 174 valid (= the unedited honest ones), status 3 / 4: 0; generator again from 8 threads and on a 1 MiB stack: equal; 5,000 mixed calls: equal; Rust backend (no arena): heap in use after the 5,000 mixed calls 986588289..=986588289 B (before them 986588289 B), their peak 988655818 B <= the warm-up's 988656010 B, Ligero panics caught 0
+test verify_only_arena ... ok
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 64.61s
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+C core in this build: none (feature pqzl-c off, pqzl-rust on: build.rs compiles no C)
+$ readelf -d target/release/libpqz_ffi.so | grep NEEDED
+ 0x0000000000000001 (NEEDED)             Shared library: [libgcc_s.so.1]
+ 0x0000000000000001 (NEEDED)             Shared library: [libc.so.6]
+ 0x0000000000000001 (NEEDED)             Shared library: [ld-linux-x86-64.so.2]
+symbols /gmp|mpfr|hexl/i: 0
+strings /gmp|mpfr|hexl/i: 0
+libm-style imports: 0
+c_abi: selftest 70ec3b7c3c9d9d8cdc5f5fa11b658fa37e1dd29a5ba239f6e3fece7414c3d2a8
+c_abi: ok (0 failures)
+# wasm32: the verify-only lib, then the prove harness (wasm/) and the digest diff against native
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust)
+   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/ffi)
+   Compiling pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/stmt)
+   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/ffi)
+   Compiling pqz-ffi-wasm v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/ffi/wasm)
+wasm bytes 554642
+wasm run 37801 ms, memory 169410560 B
+native = wasm32: 15 lines equal
+{"sys": "PQZL", "form": "TransferMulti4_0", "m": 4, "auditor": false, "stmt_bytes": 130432, "input_bytes": 178267, "proof_bound": 98304, "worst_input_bytes": 228741, "prove_ms": 736, "proof_bytes": 47830, "direct": {"n": 200, "p50_ms": 7.200, "p99_ms": 9.547, "max_ms": 9.709}, "rust": {"n": 200, "p50_ms": 7.263, "p99_ms": 9.138, "max_ms": 9.771}, "c_abi": {"n": 200, "p50_ms": 7.306, "p99_ms": 10.351, "max_ms": 10.662}, "adversarial": {"n": 200, "p50_ms": 7.223, "p99_ms": 9.633, "max_ms": 10.052}, "decode": {"n": 200, "p50_ms": 0.004, "p99_ms": 0.020, "max_ms": 0.023}}
+{"sys": "PQZL", "form": "TransferMulti8_0", "m": 8, "auditor": false, "stmt_bytes": 223104, "input_bytes": 287729, "proof_bound": 98304, "worst_input_bytes": 321413, "prove_ms": 1471, "proof_bytes": 64620, "direct": {"n": 200, "p50_ms": 10.243, "p99_ms": 12.876, "max_ms": 13.156}, "rust": {"n": 200, "p50_ms": 10.299, "p99_ms": 12.695, "max_ms": 12.780}, "c_abi": {"n": 200, "p50_ms": 10.349, "p99_ms": 13.305, "max_ms": 14.041}, "adversarial": {"n": 200, "p50_ms": 10.339, "p99_ms": 13.274, "max_ms": 16.756}, "decode": {"n": 200, "p50_ms": 0.015, "p99_ms": 0.032, "max_ms": 0.073}}
+	Maximum resident set size (kbytes): 246512
+bench rc=0

@@ -1,0 +1,33 @@
+   Compiling pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/stmt)
+    Finished `release` profile [optimized] target(s) in 0.97s
+     Running unittests src/lib.rs (target/n2304-kmax4096/release/deps/pqz_stmt-1598fd3638288aae)
+
+running 11 tests
+test tests::coefficient_codec ... ok
+test tests::lengths_and_constants ... ok
+test tests::multi_lengths_and_sets ... ok
+test tests::bundle_and_opening ... ok
+test tests::fields_land_where_the_spec_says ... ok
+test tests::multi_m1_body_is_op1_body ... ok
+test tests::precompile_input ... ok
+test tests::round_trip_every_form_both_ids ... ok
+test tests::every_d15_r6_rule_rejects ... ok
+test tests::multi_round_trip_every_built_shape_fee_0 ... ok
+test tests::multi_every_rule_rejects ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/xcheck.rs (target/n2304-kmax4096/release/deps/xcheck-1c38fd9159020fec)
+
+running 1 test
+test xcheck_c_and_pqz_kat ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+   Doc-tests pqz_stmt
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+Ligero: PQZH is not built for set n2304-kmax4096 until plan 5h Task 8c

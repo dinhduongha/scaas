@@ -50,7 +50,9 @@ pub const WASM_PQZL_MAX_LEGS: usize = if cfg!(feature = "pqzl-rust") { 8 } else 
 pub const STACK: usize = 16 << 20;
 
 pub const MAX_PROOF: usize = 98_304;
-pub const PK_BYTES: usize = 16_384;
+/// the parameter set's ring dimension and object sizes (pqz-stmt, feature `set-<set>`; v3: 2,048 / 16,384 B)
+pub const N: usize = pqz_stmt::N;
+pub const PK_BYTES: usize = pqz_stmt::PK_BYTES;
 pub const CT_BYTES: usize = PK_BYTES + 128;
 
 type Job = Box<dyn FnOnce() + Send + 'static>;
@@ -114,8 +116,8 @@ pub type Encrypted = (Box<[u8; PK_BYTES]>, Vec<[u8; 128]>);
 /// A key pair from a seed (pq-zero-knowledge.md §4.2, `pqz_keygen`).
 pub struct Key {
     pub pk: Box<[u8; PK_BYTES]>,
-    pub s: Box<[i8; 2048]>,
-    pub e: Box<[i16; 2048]>,
+    pub s: Box<[i8; N]>,
+    pub e: Box<[i16; N]>,
     /// the counter of the accepted attempt (§4.2)
     pub ctr: u32,
 }
@@ -125,8 +127,8 @@ pub struct Key {
 pub struct Enc {
     pub u: Box<[u8; PK_BYTES]>,
     pub vs: Vec<[u8; 128]>,
-    pub r: Box<[i8; 2048]>,
-    pub e1: Box<[i16; 2048]>,
+    pub r: Box<[i8; N]>,
+    pub e1: Box<[i16; N]>,
     pub e2: Vec<[i16; 16]>,
     /// the counter of the accepted attempt (§4.2)
     pub ctr: u32,

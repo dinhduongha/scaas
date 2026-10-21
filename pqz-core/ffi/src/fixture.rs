@@ -27,7 +27,7 @@ pub fn put_i16(out: &mut Vec<u8>, v: &[i16]) {
 
 /// Witness of `R_REG` / `R_DR`: `s ‖ e` (6,144 B).
 pub fn wit_key(k: &Key) -> Vec<u8> {
-    let mut w = Vec::with_capacity(6144);
+    let mut w = Vec::with_capacity(3 * pqzl::N);
     put_i8(&mut w, &k.s[..]);
     put_i16(&mut w, &k.e[..]);
     w
@@ -59,7 +59,7 @@ pub fn wit_multi(kf: &Key, c: &pqzl::EncMulti, d_legs: &[[u8; 16]], d_f: [u8; 16
 
 /// `R_TXM` witness bytes
 pub const fn multi_wit_len(m: usize, aud: bool) -> usize {
-    6144 * (1 + groups(m)) + 32 * (m + 1 + aud as usize * m) + 16 * (m + 1)
+    3 * pqzl::N * (1 + groups(m)) + 32 * (m + 1 + aud as usize * m) + 16 * (m + 1)
 }
 
 /// `recipientsHash = keccak256(UA_0 ‖ … ‖ UA_{M−1})` (32-byte words, leg order; P6-ANON §4)
@@ -70,7 +70,7 @@ pub fn recipients_hash(uas: &[Word]) -> Word {
 
 /// Witness of `R_DS`: `r ‖ e1 ‖ e2_t`.
 pub fn wit_ds(c: &pqzl::Enc) -> Vec<u8> {
-    let mut w = Vec::with_capacity(6176);
+    let mut w = Vec::with_capacity(3 * pqzl::N + 32);
     put_i8(&mut w, &c.r[..]);
     put_i16(&mut w, &c.e1[..]);
     put_i16(&mut w, &c.e2[0]);
@@ -279,6 +279,9 @@ const DIGEST_MAX_LEGS: usize = 4;
 /// precompile's verdict. Native (test `digest_lines`) and wasm32 (`wasm/`) must print the same lines: byte-equal
 /// fixtures and proofs, the same verdicts.
 pub fn digest_lines(id: &Word) -> String {
+    if *id == crate::PQZH_ID && !crate::PQZH {
+        return String::new(); // PQZH not in this build (parameter set without PQZH until plan 5h Task 8c)
+    }
     let sys = if *id == PQZL_ID { "PQZL" } else { "PQZH" };
     let forms = cases(id).unwrap_or_default().into_iter().map(|c| (format!("{:?}", c.form), c.op(), c.stmt, c.wit));
     let multi = multi_cases(id, DIGEST_MAX_LEGS).unwrap_or_default().into_iter().map(|c| (c.name(), c.op(), c.stmt, c.wit));

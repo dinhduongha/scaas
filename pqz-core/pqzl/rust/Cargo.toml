@@ -24,10 +24,11 @@ serde_json = "1"
 # one parameter set per build (owner 2026-10-21; pqz-core/params/sets/<set>/): exactly one `set-<set>` feature; a
 # non-default set needs default-features = false (e.g. `--no-default-features --features sv,set-n2048-kmax1024`)
 default = ["sv", "set-n2304-kmax4096"]
-# set (a): n 2304, K_MAX 4,096, q = 61,275,424,977,257 (owner 2026-10-21)
-set-n2304-kmax4096 = []
-# the frozen v3 set: n 2048, K_MAX 1,024, q = 2^42 - 215 (proofSystemId .../mlwe-d64k32-q42l4/v3)
+# one feature per set of pqz-core/params/sets/ (each set's set.toml and SET.md say what it is)
+# BEGIN gen_set.py sets
 set-n2048-kmax1024 = []
+set-n2304-kmax4096 = []
+# END gen_set.py sets
 # the specialised verifier (pqz_verify_fast)
 sv = []
 # R_TXM with M = 16 (bench only; does not fit MAX_INPUT)

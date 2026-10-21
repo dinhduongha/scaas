@@ -17,6 +17,16 @@ pub fn prove(op: u8, stmt: &[u8], wit: &[u8], rnd32: &[u8; 32]) -> Result<Vec<u8
     pqzh_ligero::prove(op, stmt, wit, *rnd32, &PARAMS)
 }
 
+/// Ligero's exact proof-length bound of an op 7 shape (tests, bench).
+pub fn max_proof_len_multi(m: usize, aud: bool) -> usize {
+    PARAMS.max_proof_len(pqzh_ligero::Rel::Multi { m, aud })
+}
+
+/// Panics the Ligero verifier caught so far (tests).
+pub fn verify_panics() -> usize {
+    pqzh_ligero::ligero::VERIFY_PANICS.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 /// One forward and inverse FFT over the preset's 2k − 1 domain (n2 = 1,634 = 2·19·43) of a fixed vector: the
 /// self-test's Ligero KAT (D13). Returns the forward output as 6-byte big-endian elements and whether the inverse
 /// gave the input back.

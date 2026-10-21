@@ -34,6 +34,15 @@ Terms used throughout:
 
 ## Current state (2026-10-19)
 
+- **Parameter sets (plan 5h Task 8b, 2026-10-22, branch `pqz-16k`).** PQZ's parameters are now one directory per set,
+  [`params/sets/<set>/`](params/README.md), selected at compile time (C `PQZ_SET`, Rust feature `set-<set>`; one set
+  per library build); the only input of a set is its `set.toml`, `params/sets/gen_set.py` derives the rest and
+  `params/sets/make.sh <set> all` runs estimator → codegen → KATs → vectors → gate. Sets: `n2048-kmax1024` (the frozen
+  v3 set: main's constants, vectors byte-identical, contracts until 8d) and `n2304-kmax4096` (set (a), owner
+  2026-10-21: C = Rust = wasm32, its own vectors under `smartcontracts/vectors/pqz/n2304-kmax4096/`, PQZH compiled out
+  until 8c, the v3 `proofSystemId` until 8d). Details: the sets' `SET.md` and
+  `.superpowers/sdd/2026-10-20-pqz-state-redesign/task-8b-report.md`.
+
 - **PQZL v2 is forgeable; PQZL v3 fixes it on branch `pqzl-fs3`, not merged yet.** The whole-code review of
   2026-10-19 found that LaZer's tbox absorbs `z3`, `z4` and `h` after the challenges that check them
   ([lazer#28](https://github.com/lazer-crypto/lazer/issues/28), Open item 11). The fix is in all four PQZL

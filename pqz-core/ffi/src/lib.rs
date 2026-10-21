@@ -31,10 +31,17 @@ use std::panic::{AssertUnwindSafe, catch_unwind};
 
 pub use pqz_stmt::{self as stmt, Input, MAX_INPUT, PQZH_ID, PQZL_ID, Reject, Word};
 
+// the parameter set (owner 2026-10-21: one per build): feature `set-<set>`, forwarded to pqz-stmt (which refuses to
+// build without exactly one) and pqzl; `stmt::SET` names it
+/// whether PQZH (Ligero) is compiled in: the v3 set only until plan 5h Task 8c; without it a PQZH-id input decodes
+/// and its verdict is `…00` (no verifier for that id in this build), its prover refuses
+pub const PQZH: bool = cfg!(feature = "pqzh");
+
 #[cfg(feature = "prove")]
 pub mod fixture;
 #[cfg(feature = "prove")]
 pub mod memo;
+#[cfg_attr(not(feature = "pqzh"), path = "pqzh_none.rs")]
 pub mod pqzh;
 pub mod pqzl;
 pub mod selftest;

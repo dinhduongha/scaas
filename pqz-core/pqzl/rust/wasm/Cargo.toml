@@ -17,8 +17,10 @@ pqzl = { path = "..", default-features = false, features = ["sv", "bench"] }
 [features]
 # the parameter set (owner 2026-10-21: one per build), forwarded to pqzl; exactly one
 default = ["set-n2304-kmax4096"]
-set-n2304-kmax4096 = ["pqzl/set-n2304-kmax4096"]
+# BEGIN gen_set.py sets
 set-n2048-kmax1024 = ["pqzl/set-n2048-kmax1024"]
+set-n2304-kmax4096 = ["pqzl/set-n2304-kmax4096"]
+# END gen_set.py sets
 
 [profile.release]
 panic = "abort"

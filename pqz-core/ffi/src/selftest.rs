@@ -12,6 +12,8 @@
 //! `smartcontracts/vectors/pqz/proof_<id>.json` (proved with `RND`; build.rs reads it, plan D9: no copy; written by
 //! `pqz-vectors`, `tests/ffi.rs` `selftest_vectors` checks a fresh prove equals it); invalid = the same proof under the
 //! statement with the last message byte flipped. Frozen with the vectors (`selftest.json`, P6e Task 11).
+//! A build without PQZH (feature `pqzh` off: every parameter set but n2048-kmax1024 until plan 5h Task 8c) has no
+//! Ligero FFT (`fft` empty, `fft_ok` 0) and no PQZH proof (both PQZH results 0); the vectors of its set record that.
 use std::sync::OnceLock;
 
 use pqz_stmt::{Form, Register, Stmt, Word, PQZH_ID, PQZL_ID};
@@ -29,6 +31,7 @@ pub fn message() -> Word {
 }
 
 static PQZL_PROOF: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/pqzl_reg.bin"));
+/// empty when PQZH is compiled out (feature `pqzh` off): its two results are then 0, 0
 static PQZH_PROOF: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/pqzh_reg.bin"));
 
 /// The compiled-in R_REG proofs (PQZL, PQZH).
@@ -67,16 +70,17 @@ pub struct Report {
     pub hash: Word,
 }
 
-/// A in `pqz_kat.py`'s order, from 32 calls `pk = A·e_j + 0`.
+/// A in `pqz_kat.py`'s order, from k calls `pk = A·e_j + 0`.
 pub fn a_bytes() -> Option<Vec<u8>> {
-    let mut cols = Vec::with_capacity(32);
-    for j in 0..32 {
-        let mut s = [0i8; 2048];
+    let k = pqz_stmt::K;
+    let mut cols = Vec::with_capacity(k);
+    for j in 0..k {
+        let mut s = [0i8; pqzl::N];
         s[64 * j] = 1;
-        cols.push(pqzl::keypair_from_secret(&s, &[0; 2048])?);
+        cols.push(pqzl::keypair_from_secret(&s, &[0; pqzl::N])?);
     }
-    let mut a = Vec::with_capacity(32 * pqzl::PK_BYTES);
-    for i in 0..32 {
+    let mut a = Vec::with_capacity(k * pqzl::PK_BYTES);
+    for i in 0..k {
         cols.iter().for_each(|c| a.extend_from_slice(&c[512 * i..512 * (i + 1)]));
     }
     Some(a)

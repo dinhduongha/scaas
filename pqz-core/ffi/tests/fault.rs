@@ -17,8 +17,11 @@ fn node_faults_are_status_4() {
     let c = fixture::cases(&PQZL_ID).unwrap().into_iter().find(|c| c.form == stmt::Form::Transfer).unwrap();
     let proof = prove(c.op(), &c.stmt, &c.wit, &[7; 32]).unwrap();
     let input = stmt::input(c.op(), &c.stmt, &proof);
-    let h = fixture::cases(&PQZH_ID).unwrap().into_iter().find(|c| c.form == stmt::Form::Register).unwrap();
-    let pqzh_input = stmt::input(h.op(), &h.stmt, &prove(h.op(), &h.stmt, &h.wit, &[7; 32]).unwrap());
+    // PQZH: in the v3 set's build only (until plan 5h Task 8c)
+    let pqzh_input = PQZH.then(|| {
+        let h = fixture::cases(&PQZH_ID).unwrap().into_iter().find(|c| c.form == stmt::Form::Register).unwrap();
+        stmt::input(h.op(), &h.stmt, &prove(h.op(), &h.stmt, &h.wit, &[7; 32]).unwrap())
+    });
     assert_eq!(precompile(&input), Ok(VALID));
 
     #[cfg(not(feature = "pqzl-rust"))]
@@ -35,7 +38,9 @@ fn node_faults_are_status_4() {
     assert!(pqzl::keygen(&[1; 32]).is_none());
     assert_eq!(prove(c.op(), &c.stmt, &c.wit, &[7; 32]), Err(ProveError::Pqzl(-1)));
     // PQZH needs no core
-    assert_eq!(precompile(&pqzh_input), Ok(VALID));
+    if let Some(i) = &pqzh_input {
+        assert_eq!(precompile(i), Ok(VALID));
+    }
     pqzl::TEST_FAIL_WORKER.store(false, Relaxed);
     assert_eq!(precompile(&input), Ok(VALID));
     let st = precompile(&[6, 0, 0, 0, 0]).unwrap();

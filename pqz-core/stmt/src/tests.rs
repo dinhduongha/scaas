@@ -80,14 +80,26 @@ fn build(form: Form, o: &Objs, id: &Word) -> Vec<u8> {
 
 #[test]
 fn lengths_and_constants() {
-    let want = [83_072, 66_560, 50_048, 50_048, 16_480, 33_184, 33_184, 33_184];
+    // every set: the lengths from k (PK = 512 k); the v3 set's numbers pinned
+    let (pk, v) = (PK_BYTES, V_BYTES);
+    assert_eq!((pk, N), (512 * K, 64 * K));
+    let want = [640 + 5 * pk + 4 * v, 640 + 4 * pk + 3 * v, 640 + 3 * pk + 2 * v, 640 + 3 * pk + 2 * v, 96 + pk,
+                288 + 2 * pk + v, 288 + 2 * pk + v, 288 + 2 * pk + v];
     for (f, n) in FORMS.iter().zip(want) {
         assert_eq!(f.stmt_len(), n, "{f:?}");
     }
-    assert_eq!(Form::Transfer0.wit_len(), 12_384);
-    assert_eq!(Form::Transfer.wit_len(), 12_416);
-    assert_eq!((BUNDLE_BYTES, BUNDLE0_BYTES), (16_688, 16_560));
-    assert_eq!(5 + Form::Transfer.stmt_len() + MAX_PROOF_PQZH, 345_221);
+    assert_eq!((Form::Transfer0.wit_len(), Form::Transfer.wit_len()), (6 * N + 96, 6 * N + 128));
+    assert_eq!((BUNDLE_BYTES, BUNDLE0_BYTES), (16 + pk + 2 * v + 32, 16 + pk + v + 32));
+    if SET == "n2048-kmax1024" {
+        let want = [83_072, 66_560, 50_048, 50_048, 16_480, 33_184, 33_184, 33_184];
+        for (f, n) in FORMS.iter().zip(want) {
+            assert_eq!(f.stmt_len(), n, "{f:?}");
+        }
+        assert_eq!(Form::Transfer0.wit_len(), 12_384);
+        assert_eq!(Form::Transfer.wit_len(), 12_416);
+        assert_eq!((BUNDLE_BYTES, BUNDLE0_BYTES), (16_688, 16_560));
+        assert_eq!(5 + Form::Transfer.stmt_len() + MAX_PROOF_PQZH, 345_221);
+    }
     assert!(345_221 <= MAX_INPUT);
     assert_eq!(max_proof(&PQZL_ID), Some(98_304));
     assert_eq!(max_proof(&PQZH_ID), Some(262_144));
@@ -156,7 +168,7 @@ fn every_d15_r6_rule_rejects() {
     let rg = build(Form::Register, &o, &PQZH_ID);
     let cases: Vec<(&str, u8, Vec<u8>, Reject)> = vec![
         ("coefficient = q", 1, with(&t, 640, &Q.to_be_bytes()), Reject::Coefficient),
-        ("coefficient = 2^42", 1, with(&t, 640, &(1u64 << 42).to_be_bytes()), Reject::Coefficient),
+        ("coefficient = 2^LOG2Q", 1, with(&t, 640, &(1u64 << LOG2Q).to_be_bytes()), Reject::Coefficient),
         ("coefficient = q in v_a", 1, with(&t, t.len() - 8, &Q.to_be_bytes()), Reject::Coefficient),
         ("coefficient = q in R_TX0", 1, with(&t0, 700, &Q.to_be_bytes()), Reject::Coefficient),
         ("coefficient = q in pk (register)", 3, with(&rg, 96, &u64::MAX.to_be_bytes()), Reject::Coefficient),
@@ -212,7 +224,7 @@ fn bundle_and_opening() {
     for v_a in [Some(&o.v3[..]), None] {
         let b = Bundle { salt: [3; 16], u: &o.u, v_t: &o.v1, v_a, to_ua: [9; 32] };
         let e = b.encode().unwrap();
-        assert_eq!(e.len(), if v_a.is_some() { 16_688 } else { 16_560 });
+        assert_eq!(e.len(), if v_a.is_some() { BUNDLE_BYTES } else { BUNDLE0_BYTES });
         assert_eq!(parse_bundle(&e).unwrap(), b);
         assert_eq!(parse_bundle(&e[1..]).err(), Some(Reject::Length));
         assert_eq!(parse_bundle(&with(&e, 16, &Q.to_be_bytes())).err(), Some(Reject::Coefficient));
@@ -281,11 +293,11 @@ fn precompile_input() {
 
 #[test]
 fn coefficient_codec() {
-    let c: Vec<u64> = (0..2048).map(|i| (i * 2_147_483_647) % Q).collect();
+    let c: Vec<u64> = (0..N as u64).map(|i| (i * 2_147_483_647) % Q).collect();
     let mut b = Vec::new();
     write_coeffs(&c, &mut b).unwrap();
     check_pk(&b).unwrap();
-    let mut back = vec![0u64; 2048];
+    let mut back = vec![0u64; N];
     read_coeffs(&b, &mut back).unwrap();
     assert_eq!(back, c);
     assert_eq!(write_coeffs(&[Q], &mut b).err(), Some(Reject::Coefficient));
@@ -331,9 +343,12 @@ fn multi_lengths_and_sets() {
         (16, 381_824, 363_392),
     ];
     for (m, on, off) in want {
-        assert_eq!((multi_len(m, true), multi_len(m, false)), (on, off), "M = {m}");
-        assert_eq!(multi_len(m, true), 50_048 + 16_640 * m + 16_384 * groups(m));
-        assert_eq!(multi_len(m, false), 33_664 + 16_512 * m + 16_384 * groups(m));
+        if SET == "n2048-kmax1024" {
+            assert_eq!((multi_len(m, true), multi_len(m, false)), (on, off), "M = {m}");
+        }
+        let (pk, v) = (PK_BYTES, V_BYTES);
+        assert_eq!(multi_len(m, true), 640 + 3 * pk + 2 * v + (pk + 2 * v) * m + pk * groups(m));
+        assert_eq!(multi_len(m, false), 640 + 2 * pk + 2 * v + (pk + v) * m + pk * groups(m));
     }
     assert_eq!([1, 2, 4, 5, 8, 9, 16].map(groups), [1, 1, 1, 2, 2, 3, 4]);
     // M = 1 has op 1's lengths (F6); the lengths of the union of built sets are distinct except (M = 1, on) =
@@ -361,7 +376,9 @@ fn multi_lengths_and_sets() {
             }
         }
     }
-    assert_eq!(MAX_INPUT - 5 - multi_len(4, true), 260_219);
+    if SET == "n2048-kmax1024" {
+        assert_eq!(MAX_INPUT - 5 - multi_len(4, true), 260_219);
+    }
     assert_eq!(OP_TAG_TRANSFER_MULTI[..4], [0x6f, 0x6a, 0x77, 0x3a]);
 }
 
@@ -379,8 +396,8 @@ fn multi_round_trip_every_built_shape_fee_0() {
                     assert_eq!(s.encode().unwrap(), b, "encode(parse(x)) != x, M = {m}, A = {aud}");
                     // §4 offsets
                     let a = aud as usize;
-                    assert_eq!(s.pk(m - 1), &b[17_024 + PK_BYTES * (m - 1)..][..PK_BYTES]);
-                    let u0 = 33_536 + PK_BYTES * (m + a);
+                    assert_eq!(s.pk(m - 1), &b[640 + PK_BYTES + PK_BYTES * (m - 1)..][..PK_BYTES]);
+                    let u0 = 640 + 2 * PK_BYTES + V_BYTES + PK_BYTES * (m + a);
                     assert_eq!(s.u(g - 1), &b[u0 + PK_BYTES * (g - 1)..][..PK_BYTES]);
                     let v0 = u0 + PK_BYTES * g;
                     assert_eq!(s.v(m - 1), &b[v0 + V_BYTES * (m - 1)..][..V_BYTES]);
@@ -457,8 +474,8 @@ fn multi_every_rule_rejects() {
         ("fee >= 2^64", with(&l, 256, &[1]), Reject::Fee),
         ("salt word high half", with(&l0, 576 + 3, &[1]), Reject::Salt),
         ("coefficient = q in pk_f", with(&l, 640, &Q.to_be_bytes()), Reject::Coefficient),
-        ("coefficient = q in pk_1", with(&l, 17_024 + PK_BYTES, &Q.to_be_bytes()), Reject::Coefficient),
-        ("coefficient = 2^42 in u_0", with(&h, 33_536 + 4 * PK_BYTES, &(1u64 << 42).to_be_bytes()), Reject::Coefficient),
+        ("coefficient = q in pk_1", with(&l, 640 + 2 * PK_BYTES, &Q.to_be_bytes()), Reject::Coefficient),
+        ("coefficient = 2^LOG2Q in u_0", with(&h, 640 + 2 * PK_BYTES + V_BYTES + 4 * PK_BYTES, &(1u64 << LOG2Q).to_be_bytes()), Reject::Coefficient),
         ("coefficient = q in v_{a,M-1}", with(&l, l.len() - 8, &Q.to_be_bytes()), Reject::Coefficient),
         ("coefficient = q in v_f (auditor off)", with(&l0, l0.len() - 8, &Q.to_be_bytes()), Reject::Coefficient),
         ("op 1 opTag", with(&l, 0, &Form::Transfer.op_tag()), Reject::OpTag),
@@ -500,8 +517,9 @@ fn multi_every_rule_rejects() {
     assert_eq!(parse(OP_TRANSFER, &l).err(), Some(Reject::OpTag));
     // PQZH (4, on) with a proof of MAX_INPUT − 5 − 132,992 = 260,219 B is exactly MAX_INPUT; one byte more is Input
     let h4 = build_multi(&PQZH_ID, 4, true, 0);
-    assert!(decode_input(&input(OP_TRANSFER_MULTI, &h4, &vec![1; 260_219])).is_ok());
-    assert_eq!(decode_input(&input(OP_TRANSFER_MULTI, &h4, &vec![1; 260_220])).err(), Some(Reject::Input));
+    let room = MAX_INPUT - 5 - multi_len(4, true); // v3: 260,219
+    assert!(decode_input(&input(OP_TRANSFER_MULTI, &h4, &vec![1; room])).is_ok());
+    assert_eq!(decode_input(&input(OP_TRANSFER_MULTI, &h4, &vec![1; room + 1])).err(), Some(Reject::Input));
     // an op 1 statement under op 7's decoder
     let o = objs();
     assert_eq!(parse_multi(&build(Form::Transfer, &o, &PQZL_ID)).err(), Some(Reject::OpTag));

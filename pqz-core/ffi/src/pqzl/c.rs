@@ -21,7 +21,7 @@ use std::sync::Mutex;
 #[cfg(feature = "test-hooks")]
 use std::sync::atomic::{AtomicU32, AtomicUsize, Ordering::Relaxed};
 
-use super::{on_worker, Enc, Key, NodeFault, Worker, CT_BYTES, PK_BYTES};
+use super::{on_worker, Enc, Key, NodeFault, Worker, CT_BYTES, N, PK_BYTES};
 
 const PQZ_ERR_ARENA: i32 = 2; // pqz_rt.h
 
@@ -213,14 +213,14 @@ pub fn verify_generic(op: u8, stmt: &[u8], proof: &[u8]) -> Result<bool, NodeFau
 }
 
 /// pk = A·s + e (`pqz_keypair_from_secret`; no norm check): the self-test reads the columns of A with it.
-pub fn keypair_from_secret(s: &[i8; 2048], e: &[i16; 2048]) -> Option<Box<[u8; PK_BYTES]>> {
+pub fn keypair_from_secret(s: &[i8; N], e: &[i16; N]) -> Option<Box<[u8; PK_BYTES]>> {
     let mut pk = Box::new([0u8; PK_BYTES]);
     let rc = with_core(ARENA_SMALL, || unsafe { pqz_keypair_from_secret(s.as_ptr(), e.as_ptr(), pk.as_mut_ptr()) }).ok()?;
     (rc == 0).then_some(pk)
 }
 
 pub fn keygen(seed32: &[u8; 32]) -> Option<Key> {
-    let mut k = Key { pk: Box::new([0; PK_BYTES]), s: Box::new([0; 2048]), e: Box::new([0; 2048]), ctr: 0 };
+    let mut k = Key { pk: Box::new([0; PK_BYTES]), s: Box::new([0; N]), e: Box::new([0; N]), ctr: 0 };
     let rc = with_core(ARENA_SMALL, || unsafe {
         pqz_keygen(seed32.as_ptr(), k.pk.as_mut_ptr(), k.s.as_mut_ptr(), k.e.as_mut_ptr(), &mut k.ctr)
     })
@@ -236,8 +236,8 @@ pub fn enc(pks: &[&[u8; PK_BYTES]], msgs: &[[u8; 16]], seed_enc: &[u8; 32]) -> O
     let mut c = Enc {
         u: Box::new([0; PK_BYTES]),
         vs: vec![[0; 128]; n],
-        r: Box::new([0; 2048]),
-        e1: Box::new([0; 2048]),
+        r: Box::new([0; N]),
+        e1: Box::new([0; N]),
         e2: vec![[0; 16]; n],
         ctr: 0,
     };
@@ -270,7 +270,7 @@ pub fn enc_group_seed(seed_enc: &[u8; 32], g: usize) -> [u8; 32] {
 }
 
 /// Dec of `ct = u ‖ v` (16,512 B) with `s`: the 16 digits `M` and their noise (§4.2, `pqz_dec`).
-pub fn dec(s: &[i8; 2048], ct: &[u8; CT_BYTES]) -> Option<([i64; 16], [i64; 16])> {
+pub fn dec(s: &[i8; N], ct: &[u8; CT_BYTES]) -> Option<([i64; 16], [i64; 16])> {
     let (mut m, mut noise) = ([0i64; 16], [0i64; 16]);
     let rc =
         with_core(ARENA_SMALL, || unsafe { pqz_dec(s.as_ptr(), ct.as_ptr(), m.as_mut_ptr(), noise.as_mut_ptr()) }).ok()?;
@@ -299,8 +299,8 @@ pub fn prove(op: u8, stmt: &[u8], wit: &[u8], rnd32: &[u8; 32]) -> Result<Vec<u8
 pub fn encrypt(
     pks: &[&[u8; PK_BYTES]],
     msgs: &[[u8; 16]],
-    r: &[i8; 2048],
-    e1: &[i16; 2048],
+    r: &[i8; N],
+    e1: &[i16; N],
     e2: &[[i16; 16]],
 ) -> Option<super::Encrypted> {
     let n = pks.len();

@@ -1,0 +1,13 @@
+# PQZ parameter set n2048-kmax1024: the input of pqz-core/params/sets/gen_set.py (every other file of this set is
+# derived from it; README.md beside this directory). The frozen v3 set.
+description = "the frozen v3 set (proofSystemId .../mlwe-d64k32-q42l4/v3)"
+n = 2048
+k_max = 1024
+q = 4398046510889                 # 2^42 - 215
+pqz_delta = 1.00366               # the v3 specs' (pqzl/params/*.sage); no kmlwe_min: LaZer's default hiding rank (33)
+pqzh = true                       # PQZH (Ligero over this q) is built for this set
+frozen = true                     # its codegen headers are the record: make.sh codegen only checks they reproduce
+
+[approval]
+date = "2026-10-07"
+what = "CTR-PQZ-03 (lattice parameters at or above Kyber-512); the v3 proofSystemId since the Fiat-Shamir fix (CTR-PQZ-09 F6); kept frozen as the reference set (owner 2026-10-21)"

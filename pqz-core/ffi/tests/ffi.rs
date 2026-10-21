@@ -27,7 +27,7 @@ fn round_trip_every_form() {
     }
     // 8 forms each; op 7: PQZL M in {1, 2, 4, 8}, PQZH {1, 2, 4}, auditor on and off (P6-ANON D3 / D20)
     assert_eq!(honest().iter().filter(|h| h.pqzl()).count(), 8 + 8);
-    assert_eq!(honest().iter().filter(|h| !h.pqzl()).count(), 8 + 6);
+    assert_eq!(honest().iter().filter(|h| !h.pqzl()).count(), if PQZH { 8 + 6 } else { 0 });
 }
 
 /// Op 7 (P6-ANON S3, D3): every built shape's input within `MAX_INPUT` with the id's worst-case proof (PQZL
@@ -38,7 +38,7 @@ fn multi_limits_and_memo() {
     let mut largest = 0;
     for h in honest().iter().filter(|h| h.multi.is_some()) {
         let (m, aud) = h.multi.unwrap();
-        let bound = if h.pqzl() { stmt::MAX_PROOF_PQZL } else { pqzh::PARAMS.max_proof_len(pqzh_ligero::Rel::Multi { m, aud }) };
+        let bound = if h.pqzl() { stmt::MAX_PROOF_PQZL } else { pqzh::max_proof_len_multi(m, aud) };
         let worst = 5 + h.stmt.len() + bound;
         eprintln!(
             "op 7 {} {}: statement {} B, proof {} B (bound {bound}), input {} B, worst-case input {worst} B (MAX_INPUT {MAX_INPUT})",
@@ -52,19 +52,24 @@ fn multi_limits_and_memo() {
         largest = largest.max(worst);
     }
     eprintln!("op 7 largest worst-case input {largest} B of MAX_INPUT {MAX_INPUT}");
-    // PQZH (4, on): 5 + 132,992 + 260,219 = MAX_INPUT
-    let h = honest().iter().find(|h| !h.pqzl() && h.multi == Some((4, true))).unwrap();
-    let pad = |n: usize| stmt::input(7, &h.stmt, &[&h.proof[..], &vec![0; n - h.proof.len()]].concat());
-    assert_eq!(pad(260_219).len(), MAX_INPUT);
-    assert_eq!(precompile(&pad(260_219)), Ok(INVALID));
-    assert_eq!(precompile(&pad(260_220)), Err(Error::Revert));
-    // oversize shapes (bench builds only) never decode here: PQZL M = 16, PQZH M = 8
+    // PQZH (4, on): 5 + 132,992 + 260,219 = MAX_INPUT (the v3 set: PQZH is in that build only)
+    if PQZH {
+        let h = honest().iter().find(|h| !h.pqzl() && h.multi == Some((4, true))).unwrap();
+        let pad = |n: usize| stmt::input(7, &h.stmt, &[&h.proof[..], &vec![0; n - h.proof.len()]].concat());
+        assert_eq!(pad(260_219).len(), MAX_INPUT);
+        assert_eq!(precompile(&pad(260_219)), Ok(INVALID));
+        assert_eq!(precompile(&pad(260_220)), Err(Error::Revert));
+    }
+    // oversize shapes (bench builds only) never decode here: PQZL M = 16, PQZH M = 8 (the decoder knows both ids in
+    // every build)
     for (id, m) in [(PQZL_ID, 16), (PQZH_ID, 8)] {
         let mut st = vec![0u8; stmt::multi_len(m, true)];
         for (i, w) in stmt::Multi::header(&id, m, true).iter().enumerate() {
             st[32 * i..32 * i + 32].copy_from_slice(w);
         }
-        assert_eq!(decode(&stmt::input(7, &st, &[1])).err(), Some(Reject::Legs), "M = {m}");
+        // Legs; or Input where the oversize statement alone exceeds MAX_INPUT (PQZL M = 16 at k >= 36)
+        let e = decode(&stmt::input(7, &st, &[1])).err();
+        assert!(matches!(e, Some(Reject::Legs | Reject::Input)), "M = {m}: {e:?}");
     }
     // recipientsHash and the memo of the fixture
     for (m, aud) in [(1, false), (8, true)] {
@@ -162,7 +167,7 @@ fn c_abi_arguments() {
     }
 }
 
-/// pqz_kat.py --check prints "A digest keccak256(A bytes) = f176b313…" (Python, independent of the C core)
+/// pqz_kat.py --check prints "A digest keccak256(A bytes) = f176b313…" (Python, independent of the C core); the v3 set
 const A_DIGEST: &str = "f176b313331c898e11230c6addae3d44821413361e1416a6aedf9f26a7be3df0";
 
 #[test]
@@ -170,10 +175,12 @@ fn selftest_report() {
     let r = selftest::report().unwrap();
     let hex = |w: &[u8]| w.iter().map(|b| format!("{b:02x}")).collect::<String>();
     eprintln!("selftest: {r:?}\nselftest hash {}", hex(&r.hash));
-    assert_eq!(hex(&r.a_digest), A_DIGEST);
-    assert!(r.fft_ok);
+    if stmt::SET == "n2048-kmax1024" {
+        assert_eq!(hex(&r.a_digest), A_DIGEST);
+    }
+    assert_eq!(r.fft_ok, PQZH);
     assert_eq!(r.m, selftest::digits(selftest::MSG_VALUE));
-    assert_eq!(r.results, [true, false, true, false]);
+    assert_eq!(r.results, [true, false, PQZH, false]);
     assert_eq!(precompile(&[6, 0, 0, 0, 0]), Ok(r.hash));
     assert_eq!(selftest::report().unwrap(), r, "deterministic");
 }
@@ -183,7 +190,7 @@ fn selftest_report() {
 #[test]
 fn selftest_vectors() {
     let key = pqzl::keygen(&selftest::SEED_KEY).unwrap();
-    for (i, id) in [PQZL_ID, PQZH_ID].into_iter().enumerate() {
+    for (i, id) in ids().into_iter().enumerate() {
         let st = selftest::reg_statement(&id, &key.pk[..]);
         let proof = prove(3, &st, &fixture::wit_key(&key), &selftest::RND).unwrap();
         assert_eq!(proof, selftest::proofs()[i], "self-test proof {i}: regenerate the vectors (pqz-vectors), then rebuild");
@@ -213,7 +220,7 @@ fn one_mib_stack() {
 fn digest_lines() {
     let s = fixture::digest_lines(&PQZL_ID) + &fixture::digest_lines(&PQZH_ID) + &fixture::selftest_line();
     // 8 forms + the op 7 shapes with M <= 4 (what wasm32 proves), each id
-    assert_eq!(s.matches("\"valid\": true").count(), 2 * (8 + 6), "{s}");
+    assert_eq!(s.matches("\"valid\": true").count(), ids().len() * (8 + 6), "{s}");
     if let Ok(p) = std::env::var("PQZ_FFI_DIGESTS") {
         std::fs::write(p, s).unwrap();
     }
