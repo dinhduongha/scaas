@@ -12,6 +12,7 @@ owner, or the controller session the owner has allowed to back up, reset and dep
 | [The copy](#the-copy-tasks-78) — rehearsal of both activation paths (Tasks 7–8); gate passed | 2026-10-15 / 16 | `../runs/*-copy-*.txt`, `../runs/2026-10-15-rehearsal.txt` |
 | [Live roll-out on chain 7622](#live-roll-out-on-chain-7622-task-10-executed-2026-10-16) — back up, reset with the precompiles from block 0 (Task 10, image `pqz1`) | 2026-10-16 | `../runs/2026-10-16-live.txt` |
 | [The multi-recipient transfer (op 7)](#the-multi-recipient-transfer-op-7-on-chain-7622-executed-2026-10-17) — a second schedule on the running chain (image `pqz2`) | 2026-10-17 | `../runs/2026-10-17-s8-live*.txt` |
+| [Nethermind 2.2.0 and Amsterdam](#nethermind-220-and-amsterdam-on-the-scaas-testnet-executed-2026-10-21) — reset onto image `2.2.0-pqz3`, Amsterdam from block 1 | 2026-10-21 | `../runs/2026-10-21-testnet-2.2.0.txt` |
 
 The commands below are the ones that were executed. Steps marked *live only* ran on chain 7622 itself; everything else
 ran on the copy. Plan: [P6f](../../../docs/superpowers/plans/2026-10-14-p6f-precompiles.md) Tasks 7, 8, 10; spec:
@@ -362,3 +363,43 @@ python3 -I $C/e2e.py e2e --engine $C/engine-pqz.json --rpc http://127.0.0.1:8545
   start it again. The data needs no restore, because no block has used the second schedule yet.
 - **After T:** run [Task 10's rollback](#rollback) with `$B`'s data, again writing `op7-$TS` where it says `pqz-$TS`.
   This returns the chain to its state at the op 7 backup.
+
+## Nethermind 2.2.0 and Amsterdam on the SCaaS testnet (executed 2026-10-21)
+
+*Live only.* The owner's instruction (2026-10-21): reset the SCaaS testnet directly with the new image and Amsterdam
+active, **no backup**. Nothing was deleted: the 1.39.0 data dir was renamed to
+`data/nethermind_data.pre-2.2.0-20261021`, and the three edited files got `*.bak-1.39.0-20261021` copies (the live
+directory's convention); deleting them is the controller's call.
+
+**Why a reset and not a fork at a future timestamp.** The owner allowed and then asked for a reset; it also gives a
+fresh flat-DB (2.x default for a new node) instead of a 1.39.0 patricia DB carried forward. An in-place fork would
+work the same way with `eip<N>TransitionTimestamp` = T > now (Clique forks by timestamp like any chain).
+
+**What changed** (script `../runs/2026-10-21-testnet-reset-2.2.0.sh`, steps `reset` and `check`):
+
+- `genesis.json`: `eip<N>TransitionTimestamp` = 1 for EIP-2780, 7708, 7778, 7928, 7954, 7976, 7981, 8024, 8037, 8038,
+  8246. Timestamp 1, not 0: the genesis (timestamp 0) stays a pre-Amsterdam block, so its header and hash
+  `0x24e43dcb…c464` do not change (the same trick as `eip4895TransitionTimestamp` 1). Left out: EIP-7843 (SLOTNUM; the
+  Clique producer sets no slot number and 2.2.0's header validator rejects the block) and EIP-8282 (builder requests,
+  CL predeploys). `engine.Pqz` unchanged (two schedules, PQZL v2 rows). The file was rewritten by `json.dump` with
+  indent 2, so its diff is mostly whitespace.
+- `config.json`: `Blocks.TargetBlockGasLimit` 80,000,000 → 200,000,000 (a 64 KiB deploy needs ≈ 100 M of state gas
+  and a block bigger than its `tx.gas`; the limit ramps by 1/1024 per block, ≈ 2.5 h from 16.8 M to 100 M); `Init.IsMining`
+  removed (2.2.0: "Invalid configuration settings"; `Mining.Enabled` is the key).
+- `docker-compose.yml`: image `scaas/nethermind-pqz:2.2.0-pqz3`.
+
+**Checks** (all in the log): `PQZ-START` with library `16dd99ce…`, self-test `ed910a2c…`, both schedules; blocks every
+5 s with a `blockAccessListHash` in the header; `eth_chainId` 0x1dc6; genesis hash unchanged; `e2e.py probe` all
+checks passed with the reviewed library's corpus (`--corpus bin/corpus-ffi-1adbd563.jsonl`), every input whose
+calldata floor exceeds 2^24 refused by `eth_call`; `e2e.py e2e` all checks passed (76), the same inputs refused by the
+pool; `e2e.py codesize`: 65,536 B of code deploys, 65,537 B fails.
+
+**Rollback** to 1.39.0 (not needed): stop the node, put the three `*.bak-1.39.0-20261021` files back, swap the data
+dirs back (`data/nethermind_data.pre-2.2.0-20261021` → `data/nethermind_data`), start. The 1.39.0 head is the one in
+that data dir.
+
+**Amsterdam rules the operator must know** ([gas impact](../runs/2026-10-21-glamsterdam-gas-impact.md)): `tx.gas` may
+exceed 2^24 (up to 2^32 − 1) but execution gas may not; the calldata floor is 64 gas per byte and must stay ≤ 2^24, so
+a transaction carries at most ≈ 261,909 calldata bytes; a transaction's `tx.gas` must fit the block gas limit (EIP-8037
+reserves it in the state dimension); new storage slots cost 97,920 state gas and code 1,530 per byte.
+

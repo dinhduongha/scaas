@@ -46,6 +46,7 @@ import json, sys
 p = sys.argv[1]
 c = json.load(open(p))
 c["Blocks"]["TargetBlockGasLimit"] = 200000000
+c["Init"].pop("IsMining", None)  # 2.2.0: "Invalid configuration settings" (done by hand at the restart; Mining.Enabled stays)
 json.dump(c, open(p, "w"), indent=2)
 PY
   sed -i "s#image: scaas/nethermind-pqz:1.39.0-pqz2#image: $IMG#" docker-compose.yml
@@ -62,8 +63,12 @@ check)
   run "$C/watch.sh" mba_chain_node_nethermind http://127.0.0.1:8545 2h
   run python3 -I "$C/e2e.py" head --rpc http://127.0.0.1:8545
   run python3 -I -c "import json; json.dump(json.load(open('$L/genesis.json'))['engine']['Pqz'], open('$HERE/2026-10-21-testnet-engine-pqz.json', 'w'), indent=2)"
-  run cmp "$HERE/2026-10-21-testnet-engine-pqz.json" "$C/engine-pqz.json"
-  run python3 -I "$C/e2e.py" probe --engine "$C/engine-pqz.json" --rpc http://127.0.0.1:8545 --genesis-hash $G
-  run python3 -I "$C/e2e.py" e2e --engine "$C/engine-pqz.json" --rpc http://127.0.0.1:8545 --key $KEY --no-ua
+  # the live rows (PQZL v2 id) and the vectors of the library's own commit (FFI_REV of build-image.sh): main's
+  # chain/engine-pqz.json and bin/corpus.jsonl carry the v3 id the reviewed library does not verify
+  run python3 -I "$N/bin/ffi-src/pqz-core/nethermind/corpus.py" "$N/bin/corpus-ffi-1adbd563.jsonl"
+  E=$HERE/2026-10-21-testnet-engine-pqz.json; K=$N/bin/corpus-ffi-1adbd563.jsonl
+  run python3 -I "$C/e2e.py" probe --engine "$E" --corpus "$K" --rpc http://127.0.0.1:8545 --genesis-hash $G
+  run python3 -I "$C/e2e.py" e2e --engine "$E" --corpus "$K" --rpc http://127.0.0.1:8545 --key $KEY --no-ua
+  run python3 -I "$C/e2e.py" codesize --rpc http://127.0.0.1:8545 --key $KEY   # waits for the 1/1024 gas-limit ramp
   ;;
 esac

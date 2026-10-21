@@ -859,3 +859,601 @@ $ docker logs mba_chain_node_nethermind | grep PQZ / Nethermind / Invalid / Erro
 [97m[37m21 Oct 01:48:15[97m[37m | [97mSealed block 6 ([37m0x8a2a8a...7c3e4f[97m)  diff 2 | [37mtxs[97m       0 [0m
 [97m[37m21 Oct 01:48:20[97m[37m | [97mSealed block 7 ([37m0x556e2b...b39c5d[97m)  diff 2 | [37mtxs[97m       0 [0m
 [97m[37m21 Oct 01:48:25[97m[37m | [97mSealed block 8 ([37m0x5b567c...c0b313[97m)  diff 2 | [37mtxs[97m       0 [0m
+
+# restart onto the rebuilt image (start-up checks as an init step) 2026-10-21T01:53:18Z: sha256:b3f6c855b2d2adbcf1fa6f6453e931cd54b79467e7e5f023e8642aae43a93b14; the first image sha256:2a233cd8… ran blocks 1–N without PQZ-START (Init hook never called on 2.x)
+$ remove Init.IsMining from config.json (2.2.0: "Invalid configuration settings: InitConfig IsMining"; Mining.Enabled stays)
+Init.IsMining was True
+config.json.bak-1.39.0-20261021 → config.json
+   +42 added, -43 removed, ~3 modified
+
+-   7     "IsMining": true,
++   7     "KzgSetupPath": "/nethermind/kzg_trusted_setup.txt",
+-   8     "KzgSetupPath": "/nethermind/kzg_trusted_setup.txt",
++   8     "PeerManagerEnabled": true
+-   9     "PeerManagerEnabled": true
++   9   },
+-  10   },
++  10   "JsonRpc": {
+-  11   "JsonRpc": {
++  11     "Enabled": true,
+-  12     "Enabled": true,
++  12     "Host": "0.0.0.0",
+-  13     "Host": "0.0.0.0",
++  13     "Port": 8545,
+~  14     "Port": 8545, →     "WebSocketsPort": 8546,
+-  15     "WebSocketsPort": 8546,
++  15     "EnabledModules": [
+-  16     "EnabledModules": [
++  16       "eth",
+~  17       "eth", →       "trace",
+~  18       "trace", →       "net",
+-  19       "net",
++  19       "web3",
+-  20       "web3",
++  20       "clique",
+-  21       "clique",
++  21       "personal",
+-  22       "personal",
++  22       "parity"
+-  23       "parity"
++  23     ],
+-  24     ],
++  24     "AdditionalRpcUrls": [
+-  25     "AdditionalRpcUrls": [
++  25       "http://0.0.0.0:8547|http|Eth;Web3;Net"
+-  26       "http://0.0.0.0:8547|http|Eth;Web3;Net"
++  26     ]
+-  27     ]
++  27   },
+-  28   },
++  28   "KeyStore": {
+-  29   "KeyStore": {
++  29     "KeyStoreDirectory": "/nethermind/keystore",
+-  30     "KeyStoreDirectory": "/nethermind/keystore",
++  30     "PasswordFiles": [
+-  31     "PasswordFiles": [
++  31       "/nethermind/password.txt"
+-  32       "/nethermind/password.txt"
++  32     ],
+-  33     ],
++  33     "EnodeAccount": "0xdE36845Cc887783397b2808c13f2Ed95DC2646BB",
+-  34     "EnodeAccount": "0xdE36845Cc887783397b2808c13f2Ed95DC2646BB",
++  34     "UnlockAccounts": [
+-  35     "UnlockAccounts": [
++  35       "0xdE36845Cc887783397b2808c13f2Ed95DC2646BB"
+-  36       "0xdE36845Cc887783397b2808c13f2Ed95DC2646BB"
++  36     ]
+-  37     ]
++  37   },
+-  38   },
++  38   "Mining": {
+-  39   "Mining": {
++  39     "Enabled": true
+-  40     "Enabled": true
++  40   },
+-  41   },
++  41   "Merge": {
+-  42   "Merge": {
++  42     "Enabled": false
+-  43     "Enabled": false
++  43   },
+-  44   },
++  44   "Plugins": {},
+-  45   "Plugins": {},
++  45   "TxPool": {
+-  46   "TxPool": {
++  46     "MaxTxSize": 1048576
+-  47     "MaxTxSize": 1048576
++  47   },
+-  48   },
++  48   "Blocks": {
+-  49   "Blocks": {
++  49     "TargetBlockGasLimit": 200000000
+-  50     "TargetBlockGasLimit": 80000000
++  50   }
+-  51   }
++  51 }
+-  52 }
+$ docker compose stop -t 120 blockchain-node && docker compose up -d blockchain-node
+time="2026-10-21T08:53:18+07:00" level=warning msg="/home/dockers/mba-chain-nethermind/docker-compose.yml: the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion"
+ Container mba_chain_node_nethermind Stopping 
+ Container mba_chain_node_nethermind Stopped 
+time="2026-10-21T08:53:18+07:00" level=warning msg="/home/dockers/mba-chain-nethermind/docker-compose.yml: the attribute `version` is obsolete, it will be ignored, please remove it to avoid potential confusion"
+ Container mba_chain_node_nethermind Recreate 
+ Container mba_chain_node_nethermind Recreated 
+ Container mba_chain_node_nethermind Starting 
+ Container mba_chain_node_nethermind Started 
+21 Oct 01:53:19 | Version: 2.2.0+1d2aff00 
+PQZ-START sha256=16dd99ce77d05a9bea9f54142979bc21511240aeff6d4442d784470a428c9caf selftest=ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205 addresses=PQZ:0x5caa500000000000000000000000000000000f01,MLDSA44:0x5caa500000000000000000000000000000000012,MLDSA65:0x5caa500000000000000000000000000000000013 schedules=[{ts 0, rows 12 [op1/0a47a768/83072=4225000, op1/0a47a768/66560=4021000, op
+21 Oct 01:53:23 | PQZ-START sha256=16dd99ce77d05a9bea9f54142979bc21511240aeff6d4442d784470a428c9caf selftest=ed910a2cf4c8f7845efe524151f68f91074a40ab8f59df687e233ce91333d205 addresses=PQZ:0x5caa500000000000000000000000000000000f01,MLDSA44:0x5caa500000000000000000000000000000000012,MLDSA65:0x5caa500000000000000000000000000000000013 schedules=[{ts 0, rows 12 [op1/0a47a768/83072=4225000, op1/0a47a768
+# check 2026-10-21T01:55:18Z
+$ /home/ha/work/ainative/scaas/.claude/worktrees/nethermind-2.2/pqz-core/nethermind/chain/watch.sh mba_chain_node_nethermind http://127.0.0.1:8545 2h
+head 88 age 3s gasLimit 18,281,873 gasUsed 0 hash 0xd86df54e639204f827272c116c1e3f805ac39e3503d30d55f5a40ee1ba78dac4
+container mba_chain_node_nethermind: running exit=0 started=2026-10-21T01:53:19.000858947Z restarts=0
+PQZ-START since 2h: 2
+PQZ-INPUT-PANIC since 2h: 0
+PQZ-NODE-FAULT since 2h: 0
+PQZ-REFUSE since 2h: 0
+[rc=0]
+$ python3 -I /home/ha/work/ainative/scaas/.claude/worktrees/nethermind-2.2/pqz-core/nethermind/chain/e2e.py head --rpc http://127.0.0.1:8545
+head 88 0xd86df54e639204f827272c116c1e3f805ac39e3503d30d55f5a40ee1ba78dac4 gasLimit 18281873 gasUsed 0 ts 1792547715
+head: all checks passed
+[rc=0]
+$ python3 -I -c import json; json.dump(json.load(open('/home/dockers/mba-chain-nethermind/genesis.json'))['engine']['Pqz'], open('/home/ha/work/ainative/scaas/.claude/worktrees/nethermind-2.2/pqz-core/nethermind/runs/2026-10-21-testnet-engine-pqz.json', 'w'), indent=2)
+[rc=0]
+$ cmp /home/ha/work/ainative/scaas/.claude/worktrees/nethermind-2.2/pqz-core/nethermind/runs/2026-10-21-testnet-engine-pqz.json /home/ha/work/ainative/scaas/.claude/worktrees/nethermind-2.2/pqz-core/nethermind/chain/engine-pqz.json
+/home/ha/work/ainative/scaas/.claude/worktrees/nethermind-2.2/pqz-core/nethermind/runs/2026-10-21-testnet-engine-pqz.json /home/ha/work/ainative/scaas/.claude/worktrees/nethermind-2.2/pqz-core/nethermind/chain/engine-pqz.json differ: byte 473, line 20
+
+# the check step stopped at cmp: the live engine.Pqz has the PQZL v2 id 0x2e07e6ed… (the reviewed library 16dd99ce = pqz3, built from 1adbd563), chain/engine-pqz.json on main has the v3 id 0x8079d65b… (pqzl-fs3 Task 5, library not reviewed yet). The probe and e2e run with the live rows and the corpus of the library's commit:
+$ python3 -I bin/ffi-src/pqz-core/nethermind/corpus.py bin/corpus-ffi-1adbd563.jsonl
+corpus bin/corpus-ffi-1adbd563.jsonl: 775 inputs
+$ python3 -I chain/e2e.py probe --engine runs/2026-10-21-testnet-engine-pqz.json --corpus bin/corpus-ffi-1adbd563.jsonl --rpc http://127.0.0.1:8545 --genesis-hash 0x24e43dcb…c464   (first run, before e2e.py knew Amsterdam: crashed at M8-on, eth_call -32000 "Intrinsic gas (execution 3715872, floor 17798040) exceeded cap of 16777216")
+$ (the same, e2e.py Amsterdam-aware)
+head rules: Amsterdam (EIP-7928 header field present)
+ok    eth_chainId = 0x1dc6
+ok    genesis hash 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464 = 0x24e43dcbfc9624b23bf89409acd104d6e5671e2c41d8c192373d65519321c464
+ok    OP_SELFTEST eth_call = ed910a2c…d205 (got 0xed910a2cf4…)
+probe overhead (identity precompile) = 22 gas
+ok    PQZ honest   TRANSFER pqzl                                  pqzl: word 1 (want 1), gas 5420799 = formula 5420799
+ok    PQZ honest   TRANSFER0 pqzl                                 pqzl: word 1 (want 1), gas 5233221 = formula 5233221
+ok    PQZ honest   BURN pqzl                                      pqzl: word 1 (want 1), gas 3731622 = formula 3731622
+ok    PQZ honest   REFRESH pqzl                                   pqzl: word 1 (want 1), gas 3731622 = formula 3731622
+ok    PQZ honest   REGISTER pqzl                                  pqzl: word 1 (want 1), gas 2699182 = formula 2699182
+ok    PQZ honest   DISCLOSE-SENDER pqzl                           pqzl: word 1 (want 1), gas 2606829 = formula 2606829
+ok    PQZ honest   DISCLOSE-RECEIVER pqzl                         pqzl: word 1 (want 1), gas 2572832 = formula 2572832
+ok    PQZ honest   DISCLOSE-AUDITOR pqzl                          pqzl: word 1 (want 1), gas 2572829 = formula 2572829
+ok    PQZ honest   M1-on pqzl                                     pqzl: word 1 (want 1), gas 3636796 = formula 3636796
+ok    PQZ honest   M2-on pqzl                                     pqzl: word 1 (want 1), gas 3723437 = formula 3723437
+ok    PQZ honest   M4-on pqzl                                     pqzl: word 1 (want 1), gas 4137713 = formula 4137713
+ok    PQZ honest   M8-on pqzl                                     pqzl: 277,735 B refused (Amsterdam: EIP-7976 floor 17,798,040 > 2^24, EIP-8037)
+ok    PQZ honest   M1-off pqzl                                    pqzl: word 1 (want 1), gas 3963218 = formula 3963218
+ok    PQZ honest   M2-off pqzl                                    pqzl: word 1 (want 1), gas 3838814 = formula 3838814
+ok    PQZ honest   M4-off pqzl                                    pqzl: word 1 (want 1), gas 3987006 = formula 3987006
+ok    PQZ honest   M8-off pqzl                                    pqzl: word 1 (want 1), gas 5363144 = formula 5363144
+ok    PQZ honest   M2-off-two-real pqzl                           pqzl: word 1 (want 1), gas 3838814 = formula 3838814
+ok    PQZ honest   M4-off-decoys pqzl                             pqzl: word 1 (want 1), gas 3987003 = formula 3987003
+ok    PQZ honest   M8-on-boundary pqzl                            pqzl: 277,736 B refused (Amsterdam: EIP-7976 floor 17,798,040 > 2^24, EIP-8037)
+ok    PQZ honest   TRANSFER pqzh                                  pqzh: 314,023 B refused (Amsterdam: EIP-7976 floor 20,120,472 > 2^24, EIP-8037)
+ok    PQZ honest   TRANSFER0 pqzh                                 pqzh: 298,045 B refused (Amsterdam: EIP-7976 floor 19,096,472 > 2^24, EIP-8037)
+ok    PQZ honest   BURN pqzh                                      pqzh: 282,237 B refused (Amsterdam: EIP-7976 floor 18,084,760 > 2^24, EIP-8037)
+ok    PQZ honest   REFRESH pqzh                                   pqzh: 280,333 B refused (Amsterdam: EIP-7976 floor 17,963,928 > 2^24, EIP-8037)
+ok    PQZ honest   REGISTER pqzh                                  pqzh: word 1 (want 1), gas 3341056 = formula 3341056
+ok    PQZ honest   DISCLOSE-SENDER pqzh                           pqzh: word 1 (want 1), gas 3303592 = formula 3303592
+ok    PQZ honest   DISCLOSE-RECEIVER pqzh                         pqzh: word 1 (want 1), gas 2901664 = formula 2901664
+ok    PQZ honest   DISCLOSE-AUDITOR pqzh                          pqzh: word 1 (want 1), gas 2901661 = formula 2901661
+ok    PQZ honest   M1-on pqzh                                     pqzh: 315,571 B refused (Amsterdam: EIP-7976 floor 20,218,776 > 2^24, EIP-8037)
+ok    PQZ honest   M2-on pqzh                                     pqzh: 330,973 B refused (Amsterdam: EIP-7976 floor 21,203,864 > 2^24, EIP-8037)
+ok    PQZ honest   M4-on pqzh                                     pqzh: 365,705 B refused (Amsterdam: EIP-7976 floor 23,427,992 > 2^24, EIP-8037)
+ok    PQZ honest   M1-off pqzh                                    pqzh: 298,813 B refused (Amsterdam: EIP-7976 floor 19,145,624 > 2^24, EIP-8037)
+ok    PQZ honest   M2-off pqzh                                    pqzh: 315,155 B refused (Amsterdam: EIP-7976 floor 20,192,152 > 2^24, EIP-8037)
+ok    PQZ honest   M4-off pqzh                                    pqzh: 348,595 B refused (Amsterdam: EIP-7976 floor 22,332,312 > 2^24, EIP-8037)
+ok    PQZ honest   M2-off-two-real pqzh                           pqzh: 314,717 B refused (Amsterdam: EIP-7976 floor 20,163,480 > 2^24, EIP-8037)
+ok    PQZ honest   M4-off-decoys pqzh                             pqzh: 347,827 B refused (Amsterdam: EIP-7976 floor 22,283,160 > 2^24, EIP-8037)
+ok    PQZ flip     TRANSFER: proof middle byte bit 3 flipped      pqzl: word 0 (want 0), gas 5420799 = formula 5420799
+ok    PQZ flip     TRANSFER0: proof middle byte bit 3 flipped     pqzl: word 0 (want 0), gas 5233221 = formula 5233221
+ok    PQZ flip     BURN: proof middle byte bit 3 flipped          pqzl: word 0 (want 0), gas 3731622 = formula 3731622
+ok    PQZ flip     REFRESH: proof middle byte bit 3 flipped       pqzl: word 0 (want 0), gas 3731622 = formula 3731622
+ok    PQZ flip     REGISTER: proof middle byte bit 3 flipped      pqzl: word 0 (want 0), gas 2699182 = formula 2699182
+ok    PQZ flip     DISCLOSE-SENDER: proof middle byte bit 3 flipp pqzl: word 0 (want 0), gas 2606829 = formula 2606829
+ok    PQZ flip     DISCLOSE-RECEIVER: proof middle byte bit 3 fli pqzl: word 0 (want 0), gas 2572832 = formula 2572832
+ok    PQZ flip     DISCLOSE-AUDITOR: proof middle byte bit 3 flip pqzl: word 0 (want 0), gas 2572829 = formula 2572829
+ok    PQZ negative TRANSFER: under op 7                           pqzl: word 0 (want 0), gas 2578799 = formula 2578799
+ok    PQZ flip     TRANSFER: proof middle byte bit 3 flipped      pqzh: 314,023 B refused (Amsterdam: EIP-7976 floor 20,120,472 > 2^24, EIP-8037)
+ok    PQZ flip     TRANSFER0: proof middle byte bit 3 flipped     pqzh: 298,045 B refused (Amsterdam: EIP-7976 floor 19,096,472 > 2^24, EIP-8037)
+ok    PQZ flip     BURN: proof middle byte bit 3 flipped          pqzh: 282,237 B refused (Amsterdam: EIP-7976 floor 18,084,760 > 2^24, EIP-8037)
+ok    PQZ flip     REFRESH: proof middle byte bit 3 flipped       pqzh: 280,333 B refused (Amsterdam: EIP-7976 floor 17,963,928 > 2^24, EIP-8037)
+ok    PQZ flip     REGISTER: proof middle byte bit 3 flipped      pqzh: word 0 (want 0), gas 3341056 = formula 3341056
+ok    PQZ flip     DISCLOSE-SENDER: proof middle byte bit 3 flipp pqzh: word 0 (want 0), gas 3303592 = formula 3303592
+ok    PQZ flip     DISCLOSE-RECEIVER: proof middle byte bit 3 fli pqzh: word 0 (want 0), gas 2901664 = formula 2901664
+ok    PQZ flip     DISCLOSE-AUDITOR: proof middle byte bit 3 flip pqzh: word 0 (want 0), gas 2901661 = formula 2901661
+ok    PQZ negative TRANSFER: under op 7                           pqzh: 314,023 B refused (Amsterdam: EIP-7976 floor 20,120,472 > 2^24, EIP-8037)
+ok    PQZ negative M1-on: statement length - 1                    pqzl: word 0 (want 0), gas 2578793 = formula 2578793
+ok    PQZ negative M1-on: statement length + 1                    pqzl: word 0 (want 0), gas 2578796 = formula 2578796
+ok    PQZ negative M1-on: unknown proofSystemId (zero word)       pqzl: word 0 (want 0), gas 2578796 = formula 2578796
+ok    PQZ negative M1-on: the other system's proofSystemId        pqzl: word 0 (want 0), gas 3875796 = formula 3875796
+ok    PQZ negative M1-on: proof truncated by 1 byte               pqzl: word 0 (want 0), gas 3636793 = formula 3636793
+ok    PQZ negative M1-on: proof extended by 1 zero byte           pqzl: word 0 (want 0), gas 3636796 = formula 3636796
+ok    PQZ negative M1-on: proof byte 0 bit 0 flipped              pqzl: word 0 (want 0), gas 3636796 = formula 3636796
+ok    PQZ flip     M1-on: proof middle byte bit 3 flipped         pqzl: word 0 (want 0), gas 3636796 = formula 3636796
+ok    PQZ negative M1-on: proof last byte bit 7 flipped           pqzl: word 0 (want 0), gas 3636796 = formula 3636796
+ok    PQZ negative M1-on: coder padding bit 7 set after the final pqzl: word 0 (want 0), gas 3636796 = formula 3636796
+ok    PQZ negative M2-on: statement length - 1                    pqzl: word 0 (want 0), gas 2580437 = formula 2580437
+ok    PQZ negative M2-on: statement length + 1                    pqzl: word 0 (want 0), gas 2580437 = formula 2580437
+ok    PQZ negative M2-on: unknown proofSystemId (zero word)       pqzl: word 0 (want 0), gas 2580437 = formula 2580437
+ok    PQZ negative M2-on: the other system's proofSystemId        pqzl: word 0 (want 0), gas 4014437 = formula 4014437
+ok    PQZ negative M2-on: proof truncated by 1 byte               pqzl: word 0 (want 0), gas 3723437 = formula 3723437
+ok    PQZ negative M2-on: proof extended by 1 zero byte           pqzl: word 0 (want 0), gas 3723437 = formula 3723437
+ok    PQZ negative M2-on: proof byte 0 bit 0 flipped              pqzl: word 0 (want 0), gas 3723437 = formula 3723437
+ok    PQZ flip     M2-on: proof middle byte bit 3 flipped         pqzl: word 0 (want 0), gas 3723437 = formula 3723437
+ok    PQZ negative M2-on: proof last byte bit 7 flipped           pqzl: word 0 (want 0), gas 3723437 = formula 3723437
+ok    PQZ negative M2-on: coder padding bit 7 set after the final pqzl: word 0 (want 0), gas 3723437 = formula 3723437
+ok    PQZ negative M4-on: statement length - 1                    pqzl: word 0 (want 0), gas 2583713 = formula 2583713
+ok    PQZ negative M4-on: statement length + 1                    pqzl: word 0 (want 0), gas 2583716 = formula 2583716
+ok    PQZ negative M4-on: unknown proofSystemId (zero word)       pqzl: word 0 (want 0), gas 2583713 = formula 2583713
+ok    PQZ negative M4-on: the other system's proofSystemId        pqzl: word 0 (want 0), gas 4951713 = formula 4951713
+ok    PQZ negative M4-on: proof truncated by 1 byte               pqzl: word 0 (want 0), gas 4137713 = formula 4137713
+ok    PQZ negative M4-on: proof extended by 1 zero byte           pqzl: word 0 (want 0), gas 4137716 = formula 4137716
+ok    PQZ negative M4-on: proof byte 0 bit 0 flipped              pqzl: word 0 (want 0), gas 4137713 = formula 4137713
+ok    PQZ flip     M4-on: proof middle byte bit 3 flipped         pqzl: word 0 (want 0), gas 4137713 = formula 4137713
+ok    PQZ negative M4-on: proof last byte bit 7 flipped           pqzl: word 0 (want 0), gas 4137713 = formula 4137713
+ok    PQZ negative M4-on: coder padding bit 7 set after the final pqzl: word 0 (want 0), gas 4137713 = formula 4137713
+ok    PQZ negative M8-on: statement length - 1                    pqzl: 277,734 B refused (Amsterdam: EIP-7976 floor 17,798,040 > 2^24, EIP-8037)
+ok    PQZ negative M8-on: statement length + 1                    pqzl: 277,736 B refused (Amsterdam: EIP-7976 floor 17,798,040 > 2^24, EIP-8037)
+ok    PQZ negative M8-on: unknown proofSystemId (zero word)       pqzl: 277,735 B refused (Amsterdam: EIP-7976 floor 17,798,040 > 2^24, EIP-8037)
+ok    PQZ negative M8-on: the other system's proofSystemId        pqzl: 277,735 B refused (Amsterdam: EIP-7976 floor 17,798,040 > 2^24, EIP-8037)
+ok    PQZ negative M8-on: proof truncated by 1 byte               pqzl: 277,734 B refused (Amsterdam: EIP-7976 floor 17,798,040 > 2^24, EIP-8037)
+ok    PQZ negative M8-on: proof extended by 1 zero byte           pqzl: 277,736 B refused (Amsterdam: EIP-7976 floor 17,798,040 > 2^24, EIP-8037)
+ok    PQZ negative M8-on: proof byte 0 bit 0 flipped              pqzl: 277,735 B refused (Amsterdam: EIP-7976 floor 17,798,040 > 2^24, EIP-8037)
+ok    PQZ flip     M8-on: proof middle byte bit 3 flipped         pqzl: 277,735 B refused (Amsterdam: EIP-7976 floor 17,798,040 > 2^24, EIP-8037)
+ok    PQZ negative M8-on: proof last byte bit 7 flipped           pqzl: 277,735 B refused (Amsterdam: EIP-7976 floor 17,798,040 > 2^24, EIP-8037)
+ok    PQZ negative M8-on: coder padding bit 7 set after the final pqzl: 277,735 B refused (Amsterdam: EIP-7976 floor 17,798,040 > 2^24, EIP-8037)
+ok    PQZ negative M1-off: statement length - 1                   pqzl: word 0 (want 0), gas 2577218 = formula 2577218
+ok    PQZ negative M1-off: statement length + 1                   pqzl: word 0 (want 0), gas 2577218 = formula 2577218
+ok    PQZ negative M1-off: unknown proofSystemId (zero word)      pqzl: word 0 (want 0), gas 2577218 = formula 2577218
+ok    PQZ negative M1-off: the other system's proofSystemId       pqzl: word 0 (want 0), gas 4324218 = formula 4324218
+ok    PQZ negative M1-off: proof truncated by 1 byte              pqzl: word 0 (want 0), gas 3963218 = formula 3963218
+ok    PQZ negative M1-off: proof extended by 1 zero byte          pqzl: word 0 (want 0), gas 3963218 = formula 3963218
+ok    PQZ negative M1-off: proof byte 0 bit 0 flipped             pqzl: word 0 (want 0), gas 3963218 = formula 3963218
+ok    PQZ flip     M1-off: proof middle byte bit 3 flipped        pqzl: word 0 (want 0), gas 3963218 = formula 3963218
+ok    PQZ negative M1-off: proof last byte bit 7 flipped          pqzl: word 0 (want 0), gas 3963218 = formula 3963218
+ok    PQZ negative M1-off: coder padding bit 7 set after the fina pqzl: word 0 (want 0), gas 3963218 = formula 3963218
+ok    PQZ negative M2-off: statement length - 1                   pqzl: word 0 (want 0), gas 2578814 = formula 2578814
+ok    PQZ negative M2-off: statement length + 1                   pqzl: word 0 (want 0), gas 2578814 = formula 2578814
+ok    PQZ negative M2-off: unknown proofSystemId (zero word)      pqzl: word 0 (want 0), gas 2578814 = formula 2578814
+ok    PQZ negative M2-off: the other system's proofSystemId       pqzl: word 0 (want 0), gas 4426814 = formula 4426814
+ok    PQZ negative M2-off: proof truncated by 1 byte              pqzl: word 0 (want 0), gas 3838814 = formula 3838814
+ok    PQZ negative M2-off: proof extended by 1 zero byte          pqzl: word 0 (want 0), gas 3838814 = formula 3838814
+ok    PQZ negative M2-off: proof byte 0 bit 0 flipped             pqzl: word 0 (want 0), gas 3838814 = formula 3838814
+ok    PQZ flip     M2-off: proof middle byte bit 3 flipped        pqzl: word 0 (want 0), gas 3838814 = formula 3838814
+ok    PQZ negative M2-off: proof last byte bit 7 flipped          pqzl: word 0 (want 0), gas 3838814 = formula 3838814
+ok    PQZ negative M2-off: coder padding bit 7 set after the fina pqzl: word 0 (want 0), gas 3838814 = formula 3838814
+ok    PQZ negative M4-off: statement length - 1                   pqzl: word 0 (want 0), gas 2582003 = formula 2582003
+ok    PQZ negative M4-off: statement length + 1                   pqzl: word 0 (want 0), gas 2582006 = formula 2582006
+ok    PQZ negative M4-off: unknown proofSystemId (zero word)      pqzl: word 0 (want 0), gas 2582006 = formula 2582006
+ok    PQZ negative M4-off: the other system's proofSystemId       pqzl: word 0 (want 0), gas 4907006 = formula 4907006
+ok    PQZ negative M4-off: proof truncated by 1 byte              pqzl: word 0 (want 0), gas 3987003 = formula 3987003
+ok    PQZ negative M4-off: proof extended by 1 zero byte          pqzl: word 0 (want 0), gas 3987006 = formula 3987006
+ok    PQZ negative M4-off: proof byte 0 bit 0 flipped             pqzl: word 0 (want 0), gas 3987006 = formula 3987006
+ok    PQZ flip     M4-off: proof middle byte bit 3 flipped        pqzl: word 0 (want 0), gas 3987006 = formula 3987006
+ok    PQZ negative M4-off: proof last byte bit 7 flipped          pqzl: word 0 (want 0), gas 3987006 = formula 3987006
+ok    PQZ negative M4-off: coder padding bit 7 set after the fina pqzl: word 0 (want 0), gas 3987006 = formula 3987006
+ok    PQZ negative M8-off: statement length - 1                   pqzl: word 0 (want 0), gas 2591144 = formula 2591144
+ok    PQZ negative M8-off: statement length + 1                   pqzl: word 0 (want 0), gas 2591144 = formula 2591144
+ok    PQZ negative M8-off: unknown proofSystemId (zero word)      pqzl: word 0 (want 0), gas 2591144 = formula 2591144
+ok    PQZ negative M8-off: the other system's proofSystemId       pqzl: word 0 (want 0), gas 2591144 = formula 2591144
+ok    PQZ negative M8-off: proof truncated by 1 byte              pqzl: word 0 (want 0), gas 5363144 = formula 5363144
+ok    PQZ negative M8-off: proof extended by 1 zero byte          pqzl: word 0 (want 0), gas 5363144 = formula 5363144
+ok    PQZ negative M8-off: proof byte 0 bit 0 flipped             pqzl: word 0 (want 0), gas 5363144 = formula 5363144
+ok    PQZ flip     M8-off: proof middle byte bit 3 flipped        pqzl: word 0 (want 0), gas 5363144 = formula 5363144
+ok    PQZ negative M8-off: proof last byte bit 7 flipped          pqzl: word 0 (want 0), gas 5363144 = formula 5363144
+ok    PQZ negative M8-off: coder padding bit 7 set after the fina pqzl: word 0 (want 0), gas 5363144 = formula 5363144
+ok    PQZ negative M2-on: M word 0                                pqzl: word 0 (want 0), gas 2580437 = formula 2580437
+ok    PQZ negative M2-on: M word 3                                pqzl: word 0 (want 0), gas 2580437 = formula 2580437
+ok    PQZ negative M2-on: M word 16 (oversize only)               pqzl: word 0 (want 0), gas 2580437 = formula 2580437
+ok    PQZ negative M2-on: M word with bit 64 set                  pqzl: word 0 (want 0), gas 2580437 = formula 2580437
+ok    PQZ negative M2-on: M word 4 on the M = 2 length            pqzl: word 0 (want 0), gas 2580437 = formula 2580437
+ok    PQZ negative M2-on: auditorOn 0 on an auditor-on statement  pqzl: word 0 (want 0), gas 2580437 = formula 2580437
+ok    PQZ negative M4-off: auditorOn 1 on an auditor-off statemen pqzl: word 0 (want 0), gas 2582006 = formula 2582006
+ok    PQZ negative M2-on: auditorOn 2                             pqzl: word 0 (want 0), gas 2580437 = formula 2580437
+ok    PQZ negative M2-on: statement of the 640-byte header only   pqzl: word 0 (want 0), gas 2571149 = formula 2571149
+ok    PQZ negative M2-on: statement cut inside the header (639 by pqzl: word 0 (want 0), gas 2571149 = formula 2571149
+ok    PQZ negative M2-on: amount 1                                pqzl: word 0 (want 0), gas 3723437 = formula 3723437
+ok    PQZ negative M2-on: amount >= 2^64                          pqzl: word 0 (want 0), gas 3723437 = formula 3723437
+ok    PQZ negative M2-on: fee >= 2^64                             pqzl: word 0 (want 0), gas 3723437 = formula 3723437
+ok    PQZ negative M2-on: salt word top byte set                  pqzl: word 0 (want 0), gas 3723437 = formula 3723437
+ok    PQZ negative M4-off: salt word byte 15 set                  pqzl: word 0 (want 0), gas 3987006 = formula 3987006
+ok    PQZ negative M2-on: pk_f coefficient 0 = q                  pqzl: word 0 (want 0), gas 3723437 = formula 3723437
+ok    PQZ negative M2-on: pk_1 coefficient 0 = 2^42               pqzl: word 0 (want 0), gas 3723437 = formula 3723437
+ok    PQZ negative M2-on: u_0 coefficient 0 = q                   pqzl: word 0 (want 0), gas 3723437 = formula 3723437
+ok    PQZ negative M2-on: v_f last coefficient = q                pqzl: word 0 (want 0), gas 3723437 = formula 3723437
+ok    PQZ negative M2-on: v_{a,M-1} last coefficient = 2^64 - 1   pqzl: word 0 (want 0), gas 3723437 = formula 3723437
+ok    PQZ negative M2-on: recipientsHash bit flipped              pqzl: word 0 (want 0), gas 3723437 = formula 3723437
+ok    PQZ negative M2-on: memoHash bit flipped                    pqzl: word 0 (want 0), gas 3723437 = formula 3723437
+ok    PQZ negative M2-on: fee + 1                                 pqzl: word 0 (want 0), gas 3723437 = formula 3723437
+ok    PQZ negative M2-on: chainId bit flipped                     pqzl: word 0 (want 0), gas 3723437 = formula 3723437
+ok    PQZ negative M2-on: pk_0 coefficient 0 low bit flipped      pqzl: word 0 (want 0), gas 3723437 = formula 3723437
+ok    PQZ negative M2-on: v_0 replaced by v_1                     pqzl: word 0 (want 0), gas 3723437 = formula 3723437
+ok    PQZ negative M1-on: (1, on) read as (2, off): M word 2, aud pqzl: word 0 (want 0), gas 3838796 = formula 3838796
+ok    PQZ negative M1-on: op 1 TRANSFER's proof (same statement l pqzl: word 0 (want 0), gas 3636799 = formula 3636799
+ok    PQZ negative M1-off: op 1 TRANSFER0's proof (same statement pqzl: word 0 (want 0), gas 3963221 = formula 3963221
+ok    PQZ negative M2-on: M4-on's proof                           pqzl: word 0 (want 0), gas 3723593 = formula 3723593
+ok    PQZ negative M2-off-two-real: M2-on's proof                 pqzl: word 0 (want 0), gas 3838877 = formula 3838877
+ok    PQZ negative M2-on: empty proof                             pqzl: word 0 (want 0), gas 3719351 = formula 3719351
+ok    PQZ negative M2-on: proof of MAX_PROOF(id) + 1 bytes        pqzl: word 0 (want 0), gas 3728567 = formula 3728567
+ok    PQZ negative M2-on: proof of exactly MAX_PROOF(id) bytes    pqzl: word 0 (want 0), gas 3728567 = formula 3728567
+ok    PQZ negative M4-on: input of exactly MAX_INPUT bytes (not a pqzl: 393,216 B refused (Amsterdam: EIP-7976 floor 25,187,224 > 2^24, EIP-8037)
+ok    PQZ negative M2-on: length field = statement + 1            pqzl: word 0 (want 0), gas 2580437 = formula 2580437
+ok    PQZ negative M2-off-two-real: v_0 and v_1 swapped           pqzl: word 0 (want 0), gas 3838814 = formula 3838814
+ok    PQZ negative M8-on-boundary: v_3 and v_4 swapped (legs acro pqzl: 277,736 B refused (Amsterdam: EIP-7976 floor 17,798,040 > 2^24, EIP-8037)
+ok    PQZ negative M8-on-boundary: M8-off's proof                 pqzl: 274,916 B refused (Amsterdam: EIP-7976 floor 17,617,816 > 2^24, EIP-8037)
+ok    PQZ negative M8-on: M word 4 on the M = 8 length            pqzl: 277,735 B refused (Amsterdam: EIP-7976 floor 17,798,040 > 2^24, EIP-8037)
+ok    PQZ negative M1-on: statement length - 1                    pqzh: 315,570 B refused (Amsterdam: EIP-7976 floor 20,218,776 > 2^24, EIP-8037)
+ok    PQZ negative M1-on: statement length + 1                    pqzh: 315,572 B refused (Amsterdam: EIP-7976 floor 20,218,776 > 2^24, EIP-8037)
+ok    PQZ negative M1-on: unknown proofSystemId (zero word)       pqzh: 315,571 B refused (Amsterdam: EIP-7976 floor 20,218,776 > 2^24, EIP-8037)
+ok    PQZ negative M1-on: the other system's proofSystemId        pqzh: 315,571 B refused (Amsterdam: EIP-7976 floor 20,218,776 > 2^24, EIP-8037)
+ok    PQZ negative M1-on: proof truncated by 1 byte               pqzh: 315,570 B refused (Amsterdam: EIP-7976 floor 20,218,776 > 2^24, EIP-8037)
+ok    PQZ negative M1-on: proof extended by 1 zero byte           pqzh: 315,572 B refused (Amsterdam: EIP-7976 floor 20,218,776 > 2^24, EIP-8037)
+ok    PQZ negative M1-on: proof byte 0 bit 0 flipped              pqzh: 315,571 B refused (Amsterdam: EIP-7976 floor 20,218,776 > 2^24, EIP-8037)
+ok    PQZ flip     M1-on: proof middle byte bit 3 flipped         pqzh: 315,571 B refused (Amsterdam: EIP-7976 floor 20,218,776 > 2^24, EIP-8037)
+ok    PQZ negative M1-on: proof last byte bit 7 flipped           pqzh: 315,571 B refused (Amsterdam: EIP-7976 floor 20,218,776 > 2^24, EIP-8037)
+ok    PQZ negative M1-on: proof of max_proof_len(shape) + 1 bytes pqzh: 318,548 B refused (Amsterdam: EIP-7976 floor 20,409,240 > 2^24, EIP-8037)
+ok    PQZ negative M1-on: w coefficient 0 element = q             pqzh: 315,571 B refused (Amsterdam: EIP-7976 floor 20,218,776 > 2^24, EIP-8037)
+ok    PQZ negative M1-on: first opened column element 0 = q       pqzh: 315,571 B refused (Amsterdam: EIP-7976 floor 20,218,776 > 2^24, EIP-8037)
+ok    PQZ negative M1-on: opened columns 0 and 1 swapped (not inc pqzh: 315,571 B refused (Amsterdam: EIP-7976 floor 20,218,776 > 2^24, EIP-8037)
+ok    PQZ negative M1-on: opened column 0 repeated as column 1    pqzh: 315,571 B refused (Amsterdam: EIP-7976 floor 20,218,776 > 2^24, EIP-8037)
+ok    PQZ negative M2-on: statement length - 1                    pqzh: 330,972 B refused (Amsterdam: EIP-7976 floor 21,203,864 > 2^24, EIP-8037)
+ok    PQZ negative M2-on: statement length + 1                    pqzh: 330,974 B refused (Amsterdam: EIP-7976 floor 21,203,864 > 2^24, EIP-8037)
+ok    PQZ negative M2-on: unknown proofSystemId (zero word)       pqzh: 330,973 B refused (Amsterdam: EIP-7976 floor 21,203,864 > 2^24, EIP-8037)
+ok    PQZ negative M2-on: the other system's proofSystemId        pqzh: 330,973 B refused (Amsterdam: EIP-7976 floor 21,203,864 > 2^24, EIP-8037)
+ok    PQZ negative M2-on: proof truncated by 1 byte               pqzh: 330,972 B refused (Amsterdam: EIP-7976 floor 21,203,864 > 2^24, EIP-8037)
+ok    PQZ negative M2-on: proof extended by 1 zero byte           pqzh: 330,974 B refused (Amsterdam: EIP-7976 floor 21,203,864 > 2^24, EIP-8037)
+ok    PQZ negative M2-on: proof byte 0 bit 0 flipped              pqzh: 330,973 B refused (Amsterdam: EIP-7976 floor 21,203,864 > 2^24, EIP-8037)
+ok    PQZ flip     M2-on: proof middle byte bit 3 flipped         pqzh: 330,973 B refused (Amsterdam: EIP-7976 floor 21,203,864 > 2^24, EIP-8037)
+ok    PQZ negative M2-on: proof last byte bit 7 flipped           pqzh: 330,973 B refused (Amsterdam: EIP-7976 floor 21,203,864 > 2^24, EIP-8037)
+ok    PQZ negative M2-on: proof of max_proof_len(shape) + 1 bytes pqzh: 335,188 B refused (Amsterdam: EIP-7976 floor 21,474,200 > 2^24, EIP-8037)
+ok    PQZ negative M2-on: w coefficient 0 element = q             pqzh: 330,973 B refused (Amsterdam: EIP-7976 floor 21,203,864 > 2^24, EIP-8037)
+ok    PQZ negative M2-on: first opened column element 0 = q       pqzh: 330,973 B refused (Amsterdam: EIP-7976 floor 21,203,864 > 2^24, EIP-8037)
+ok    PQZ negative M2-on: opened columns 0 and 1 swapped (not inc pqzh: 330,973 B refused (Amsterdam: EIP-7976 floor 21,203,864 > 2^24, EIP-8037)
+ok    PQZ negative M2-on: opened column 0 repeated as column 1    pqzh: 330,973 B refused (Amsterdam: EIP-7976 floor 21,203,864 > 2^24, EIP-8037)
+ok    PQZ negative M4-on: statement length - 1                    pqzh: 365,704 B refused (Amsterdam: EIP-7976 floor 23,427,992 > 2^24, EIP-8037)
+ok    PQZ negative M4-on: statement length + 1                    pqzh: 365,706 B refused (Amsterdam: EIP-7976 floor 23,427,992 > 2^24, EIP-8037)
+ok    PQZ negative M4-on: unknown proofSystemId (zero word)       pqzh: 365,705 B refused (Amsterdam: EIP-7976 floor 23,427,992 > 2^24, EIP-8037)
+ok    PQZ negative M4-on: the other system's proofSystemId        pqzh: 365,705 B refused (Amsterdam: EIP-7976 floor 23,427,992 > 2^24, EIP-8037)
+ok    PQZ negative M4-on: proof truncated by 1 byte               pqzh: 365,704 B refused (Amsterdam: EIP-7976 floor 23,427,992 > 2^24, EIP-8037)
+ok    PQZ negative M4-on: proof extended by 1 zero byte           pqzh: 365,706 B refused (Amsterdam: EIP-7976 floor 23,427,992 > 2^24, EIP-8037)
+ok    PQZ negative M4-on: proof byte 0 bit 0 flipped              pqzh: 365,705 B refused (Amsterdam: EIP-7976 floor 23,427,992 > 2^24, EIP-8037)
+ok    PQZ flip     M4-on: proof middle byte bit 3 flipped         pqzh: 365,705 B refused (Amsterdam: EIP-7976 floor 23,427,992 > 2^24, EIP-8037)
+ok    PQZ negative M4-on: proof last byte bit 7 flipped           pqzh: 365,705 B refused (Amsterdam: EIP-7976 floor 23,427,992 > 2^24, EIP-8037)
+ok    PQZ negative M4-on: proof of max_proof_len(shape) + 1 bytes pqzh: 369,194 B refused (Amsterdam: EIP-7976 floor 23,651,224 > 2^24, EIP-8037)
+ok    PQZ negative M4-on: w coefficient 0 element = q             pqzh: 365,705 B refused (Amsterdam: EIP-7976 floor 23,427,992 > 2^24, EIP-8037)
+ok    PQZ negative M4-on: first opened column element 0 = q       pqzh: 365,705 B refused (Amsterdam: EIP-7976 floor 23,427,992 > 2^24, EIP-8037)
+ok    PQZ negative M4-on: opened columns 0 and 1 swapped (not inc pqzh: 365,705 B refused (Amsterdam: EIP-7976 floor 23,427,992 > 2^24, EIP-8037)
+ok    PQZ negative M4-on: opened column 0 repeated as column 1    pqzh: 365,705 B refused (Amsterdam: EIP-7976 floor 23,427,992 > 2^24, EIP-8037)
+ok    PQZ negative M1-off: statement length - 1                   pqzh: 298,812 B refused (Amsterdam: EIP-7976 floor 19,145,624 > 2^24, EIP-8037)
+ok    PQZ negative M1-off: statement length + 1                   pqzh: 298,814 B refused (Amsterdam: EIP-7976 floor 19,145,624 > 2^24, EIP-8037)
+ok    PQZ negative M1-off: unknown proofSystemId (zero word)      pqzh: 298,813 B refused (Amsterdam: EIP-7976 floor 19,145,624 > 2^24, EIP-8037)
+ok    PQZ negative M1-off: the other system's proofSystemId       pqzh: 298,813 B refused (Amsterdam: EIP-7976 floor 19,145,624 > 2^24, EIP-8037)
+ok    PQZ negative M1-off: proof truncated by 1 byte              pqzh: 298,812 B refused (Amsterdam: EIP-7976 floor 19,145,624 > 2^24, EIP-8037)
+ok    PQZ negative M1-off: proof extended by 1 zero byte          pqzh: 298,814 B refused (Amsterdam: EIP-7976 floor 19,145,624 > 2^24, EIP-8037)
+ok    PQZ negative M1-off: proof byte 0 bit 0 flipped             pqzh: 298,813 B refused (Amsterdam: EIP-7976 floor 19,145,624 > 2^24, EIP-8037)
+ok    PQZ flip     M1-off: proof middle byte bit 3 flipped        pqzh: 298,813 B refused (Amsterdam: EIP-7976 floor 19,145,624 > 2^24, EIP-8037)
+ok    PQZ negative M1-off: proof last byte bit 7 flipped          pqzh: 298,813 B refused (Amsterdam: EIP-7976 floor 19,145,624 > 2^24, EIP-8037)
+ok    PQZ negative M1-off: proof of max_proof_len(shape) + 1 byte pqzh: 301,310 B refused (Amsterdam: EIP-7976 floor 19,305,368 > 2^24, EIP-8037)
+ok    PQZ negative M1-off: w coefficient 0 element = q            pqzh: 298,813 B refused (Amsterdam: EIP-7976 floor 19,145,624 > 2^24, EIP-8037)
+ok    PQZ negative M1-off: first opened column element 0 = q      pqzh: 298,813 B refused (Amsterdam: EIP-7976 floor 19,145,624 > 2^24, EIP-8037)
+ok    PQZ negative M1-off: opened columns 0 and 1 swapped (not in pqzh: 298,813 B refused (Amsterdam: EIP-7976 floor 19,145,624 > 2^24, EIP-8037)
+ok    PQZ negative M1-off: opened column 0 repeated as column 1   pqzh: 298,813 B refused (Amsterdam: EIP-7976 floor 19,145,624 > 2^24, EIP-8037)
+ok    PQZ negative M2-off: statement length - 1                   pqzh: 315,154 B refused (Amsterdam: EIP-7976 floor 20,192,152 > 2^24, EIP-8037)
+ok    PQZ negative M2-off: statement length + 1                   pqzh: 315,156 B refused (Amsterdam: EIP-7976 floor 20,192,152 > 2^24, EIP-8037)
+ok    PQZ negative M2-off: unknown proofSystemId (zero word)      pqzh: 315,155 B refused (Amsterdam: EIP-7976 floor 20,192,152 > 2^24, EIP-8037)
+ok    PQZ negative M2-off: the other system's proofSystemId       pqzh: 315,155 B refused (Amsterdam: EIP-7976 floor 20,192,152 > 2^24, EIP-8037)
+ok    PQZ negative M2-off: proof truncated by 1 byte              pqzh: 315,154 B refused (Amsterdam: EIP-7976 floor 20,192,152 > 2^24, EIP-8037)
+ok    PQZ negative M2-off: proof extended by 1 zero byte          pqzh: 315,156 B refused (Amsterdam: EIP-7976 floor 20,192,152 > 2^24, EIP-8037)
+ok    PQZ negative M2-off: proof byte 0 bit 0 flipped             pqzh: 315,155 B refused (Amsterdam: EIP-7976 floor 20,192,152 > 2^24, EIP-8037)
+ok    PQZ flip     M2-off: proof middle byte bit 3 flipped        pqzh: 315,155 B refused (Amsterdam: EIP-7976 floor 20,192,152 > 2^24, EIP-8037)
+ok    PQZ negative M2-off: proof last byte bit 7 flipped          pqzh: 315,155 B refused (Amsterdam: EIP-7976 floor 20,192,152 > 2^24, EIP-8037)
+ok    PQZ negative M2-off: proof of max_proof_len(shape) + 1 byte pqzh: 318,548 B refused (Amsterdam: EIP-7976 floor 20,409,240 > 2^24, EIP-8037)
+ok    PQZ negative M2-off: w coefficient 0 element = q            pqzh: 315,155 B refused (Amsterdam: EIP-7976 floor 20,192,152 > 2^24, EIP-8037)
+ok    PQZ negative M2-off: first opened column element 0 = q      pqzh: 315,155 B refused (Amsterdam: EIP-7976 floor 20,192,152 > 2^24, EIP-8037)
+ok    PQZ negative M2-off: opened columns 0 and 1 swapped (not in pqzh: 315,155 B refused (Amsterdam: EIP-7976 floor 20,192,152 > 2^24, EIP-8037)
+ok    PQZ negative M2-off: opened column 0 repeated as column 1   pqzh: 315,155 B refused (Amsterdam: EIP-7976 floor 20,192,152 > 2^24, EIP-8037)
+ok    PQZ negative M4-off: statement length - 1                   pqzh: 348,594 B refused (Amsterdam: EIP-7976 floor 22,332,312 > 2^24, EIP-8037)
+ok    PQZ negative M4-off: statement length + 1                   pqzh: 348,596 B refused (Amsterdam: EIP-7976 floor 22,332,312 > 2^24, EIP-8037)
+ok    PQZ negative M4-off: unknown proofSystemId (zero word)      pqzh: 348,595 B refused (Amsterdam: EIP-7976 floor 22,332,312 > 2^24, EIP-8037)
+ok    PQZ negative M4-off: the other system's proofSystemId       pqzh: 348,595 B refused (Amsterdam: EIP-7976 floor 22,332,312 > 2^24, EIP-8037)
+ok    PQZ negative M4-off: proof truncated by 1 byte              pqzh: 348,594 B refused (Amsterdam: EIP-7976 floor 22,332,312 > 2^24, EIP-8037)
+ok    PQZ negative M4-off: proof extended by 1 zero byte          pqzh: 348,596 B refused (Amsterdam: EIP-7976 floor 22,332,312 > 2^24, EIP-8037)
+ok    PQZ negative M4-off: proof byte 0 bit 0 flipped             pqzh: 348,595 B refused (Amsterdam: EIP-7976 floor 22,332,312 > 2^24, EIP-8037)
+ok    PQZ flip     M4-off: proof middle byte bit 3 flipped        pqzh: 348,595 B refused (Amsterdam: EIP-7976 floor 22,332,312 > 2^24, EIP-8037)
+ok    PQZ negative M4-off: proof last byte bit 7 flipped          pqzh: 348,595 B refused (Amsterdam: EIP-7976 floor 22,332,312 > 2^24, EIP-8037)
+ok    PQZ negative M4-off: proof of max_proof_len(shape) + 1 byte pqzh: 351,572 B refused (Amsterdam: EIP-7976 floor 22,522,776 > 2^24, EIP-8037)
+ok    PQZ negative M4-off: w coefficient 0 element = q            pqzh: 348,595 B refused (Amsterdam: EIP-7976 floor 22,332,312 > 2^24, EIP-8037)
+ok    PQZ negative M4-off: first opened column element 0 = q      pqzh: 348,595 B refused (Amsterdam: EIP-7976 floor 22,332,312 > 2^24, EIP-8037)
+ok    PQZ negative M4-off: opened columns 0 and 1 swapped (not in pqzh: 348,595 B refused (Amsterdam: EIP-7976 floor 22,332,312 > 2^24, EIP-8037)
+ok    PQZ negative M4-off: opened column 0 repeated as column 1   pqzh: 348,595 B refused (Amsterdam: EIP-7976 floor 22,332,312 > 2^24, EIP-8037)
+ok    PQZ negative M2-on: M word 0                                pqzh: 330,973 B refused (Amsterdam: EIP-7976 floor 21,203,864 > 2^24, EIP-8037)
+ok    PQZ negative M2-on: M word 3                                pqzh: 330,973 B refused (Amsterdam: EIP-7976 floor 21,203,864 > 2^24, EIP-8037)
+ok    PQZ negative M2-on: M word 16 (oversize only)               pqzh: 330,973 B refused (Amsterdam: EIP-7976 floor 21,203,864 > 2^24, EIP-8037)
+ok    PQZ negative M2-on: M word with bit 64 set                  pqzh: 330,973 B refused (Amsterdam: EIP-7976 floor 21,203,864 > 2^24, EIP-8037)
+ok    PQZ negative M2-on: M word 4 on the M = 2 length            pqzh: 330,973 B refused (Amsterdam: EIP-7976 floor 21,203,864 > 2^24, EIP-8037)
+ok    PQZ negative M2-on: auditorOn 0 on an auditor-on statement  pqzh: 330,973 B refused (Amsterdam: EIP-7976 floor 21,203,864 > 2^24, EIP-8037)
+ok    PQZ negative M4-off: auditorOn 1 on an auditor-off statemen pqzh: 348,595 B refused (Amsterdam: EIP-7976 floor 22,332,312 > 2^24, EIP-8037)
+ok    PQZ negative M2-on: auditorOn 2                             pqzh: 330,973 B refused (Amsterdam: EIP-7976 floor 21,203,864 > 2^24, EIP-8037)
+ok    PQZ negative M2-on: statement of the 640-byte header only   pqzh: word 0 (want 0), gas 2588741 = formula 2588741
+ok    PQZ negative M2-on: statement cut inside the header (639 by pqzh: word 0 (want 0), gas 2588741 = formula 2588741
+ok    PQZ negative M2-on: amount 1                                pqzh: 330,973 B refused (Amsterdam: EIP-7976 floor 21,203,864 > 2^24, EIP-8037)
+ok    PQZ negative M2-on: amount >= 2^64                          pqzh: 330,973 B refused (Amsterdam: EIP-7976 floor 21,203,864 > 2^24, EIP-8037)
+ok    PQZ negative M2-on: fee >= 2^64                             pqzh: 330,973 B refused (Amsterdam: EIP-7976 floor 21,203,864 > 2^24, EIP-8037)
+ok    PQZ negative M2-on: salt word top byte set                  pqzh: 330,973 B refused (Amsterdam: EIP-7976 floor 21,203,864 > 2^24, EIP-8037)
+ok    PQZ negative M4-off: salt word byte 15 set                  pqzh: 348,595 B refused (Amsterdam: EIP-7976 floor 22,332,312 > 2^24, EIP-8037)
+ok    PQZ negative M2-on: pk_f coefficient 0 = q                  pqzh: 330,973 B refused (Amsterdam: EIP-7976 floor 21,203,864 > 2^24, EIP-8037)
+ok    PQZ negative M2-on: pk_1 coefficient 0 = 2^42               pqzh: 330,973 B refused (Amsterdam: EIP-7976 floor 21,203,864 > 2^24, EIP-8037)
+ok    PQZ negative M2-on: u_0 coefficient 0 = q                   pqzh: 330,973 B refused (Amsterdam: EIP-7976 floor 21,203,864 > 2^24, EIP-8037)
+ok    PQZ negative M2-on: v_f last coefficient = q                pqzh: 330,973 B refused (Amsterdam: EIP-7976 floor 21,203,864 > 2^24, EIP-8037)
+ok    PQZ negative M2-on: v_{a,M-1} last coefficient = 2^64 - 1   pqzh: 330,973 B refused (Amsterdam: EIP-7976 floor 21,203,864 > 2^24, EIP-8037)
+ok    PQZ negative M2-on: recipientsHash bit flipped              pqzh: 330,973 B refused (Amsterdam: EIP-7976 floor 21,203,864 > 2^24, EIP-8037)
+ok    PQZ negative M2-on: memoHash bit flipped                    pqzh: 330,973 B refused (Amsterdam: EIP-7976 floor 21,203,864 > 2^24, EIP-8037)
+ok    PQZ negative M2-on: fee + 1                                 pqzh: 330,973 B refused (Amsterdam: EIP-7976 floor 21,203,864 > 2^24, EIP-8037)
+ok    PQZ negative M2-on: chainId bit flipped                     pqzh: 330,973 B refused (Amsterdam: EIP-7976 floor 21,203,864 > 2^24, EIP-8037)
+ok    PQZ negative M2-on: pk_0 coefficient 0 low bit flipped      pqzh: 330,973 B refused (Amsterdam: EIP-7976 floor 21,203,864 > 2^24, EIP-8037)
+ok    PQZ negative M2-on: v_0 replaced by v_1                     pqzh: 330,973 B refused (Amsterdam: EIP-7976 floor 21,203,864 > 2^24, EIP-8037)
+ok    PQZ negative M1-on: (1, on) read as (2, off): M word 2, aud pqzh: 315,571 B refused (Amsterdam: EIP-7976 floor 20,218,776 > 2^24, EIP-8037)
+ok    PQZ negative M1-on: op 1 TRANSFER's proof (same statement l pqzh: 314,023 B refused (Amsterdam: EIP-7976 floor 20,120,472 > 2^24, EIP-8037)
+ok    PQZ negative M1-off: op 1 TRANSFER0's proof (same statement pqzh: 298,045 B refused (Amsterdam: EIP-7976 floor 19,096,472 > 2^24, EIP-8037)
+ok    PQZ negative M2-on: M4-on's proof                           pqzh: 332,425 B refused (Amsterdam: EIP-7976 floor 21,298,072 > 2^24, EIP-8037)
+ok    PQZ negative M2-off-two-real: M2-on's proof                 pqzh: 314,333 B refused (Amsterdam: EIP-7976 floor 20,138,904 > 2^24, EIP-8037)
+ok    PQZ negative M2-on: empty proof                             pqzh: word 0 (want 0), gas 4010351 = formula 4010351
+ok    PQZ negative M2-on: proof of MAX_PROOF(id) + 1 bytes        pqzh: 361,862 B refused (Amsterdam: EIP-7976 floor 23,182,232 > 2^24, EIP-8037)
+ok    PQZ negative M2-on: proof of exactly MAX_PROOF(id) bytes    pqzh: 361,861 B refused (Amsterdam: EIP-7976 floor 23,182,232 > 2^24, EIP-8037)
+ok    PQZ negative M4-on: input of exactly MAX_INPUT bytes (not a pqzh: 393,216 B refused (Amsterdam: EIP-7976 floor 25,187,224 > 2^24, EIP-8037)
+ok    PQZ negative M2-on: length field = statement + 1            pqzh: 330,973 B refused (Amsterdam: EIP-7976 floor 21,203,864 > 2^24, EIP-8037)
+ok    PQZ negative M2-off-two-real: v_0 and v_1 swapped           pqzh: 314,717 B refused (Amsterdam: EIP-7976 floor 20,163,480 > 2^24, EIP-8037)
+ok    PQZ negative M4-on: M word 8 (not built for PQZH)           pqzh: 365,705 B refused (Amsterdam: EIP-7976 floor 23,427,992 > 2^24, EIP-8037)
+ok    PQZ fee0     fee0 TRANSFER pqzl                             pqzl: word 1 (want 1), gas 5420799 = formula 5420799
+ok    PQZ fee0     fee0 TRANSFER pqzh                             pqzh: 315,219 B refused (Amsterdam: EIP-7976 floor 20,196,248 > 2^24, EIP-8037)
+ok    PQZ fee0     fee0 TRANSFER0 pqzl                            pqzl: word 1 (want 1), gas 5233218 = formula 5233218
+ok    PQZ fee0     fee0 TRANSFER0 pqzh                            pqzh: 297,949 B refused (Amsterdam: EIP-7976 floor 19,090,328 > 2^24, EIP-8037)
+ok    PQZ fee0     fee0 BURN pqzl                                 pqzl: word 1 (want 1), gas 3731622 = formula 3731622
+ok    PQZ fee0     fee0 BURN pqzh                                 pqzh: 279,661 B refused (Amsterdam: EIP-7976 floor 17,920,920 > 2^24, EIP-8037)
+ok    PQZ fee0     fee0 REFRESH pqzl                              pqzl: word 1 (want 1), gas 3731625 = formula 3731625
+ok    PQZ fee0     fee0 REFRESH pqzh                              pqzh: 281,597 B refused (Amsterdam: EIP-7976 floor 18,043,800 > 2^24, EIP-8037)
+ok    PQZ selftest OP_SELFTEST                                    -: word 0xed910a2c (want hash), gas 2567000 = formula 2567000
+ok    gas valid = invalid ('pqzh', 'DISCLOSE-AUDITOR') (33,184 B statement): 2901661 / 2901661
+ok    gas valid = invalid ('pqzh', 'DISCLOSE-RECEIVER') (33,184 B statement): 2901664 / 2901664
+ok    gas valid = invalid ('pqzh', 'DISCLOSE-SENDER') (33,184 B statement): 3303592 / 3303592
+ok    gas valid = invalid ('pqzh', 'REGISTER') (16,480 B statement): 3341056 / 3341056
+ok    gas valid = invalid ('pqzl', 'BURN') (50,048 B statement): 3731622 / 3731622
+ok    gas valid = invalid ('pqzl', 'DISCLOSE-AUDITOR') (33,184 B statement): 2572829 / 2572829
+ok    gas valid = invalid ('pqzl', 'DISCLOSE-RECEIVER') (33,184 B statement): 2572832 / 2572832
+ok    gas valid = invalid ('pqzl', 'DISCLOSE-SENDER') (33,184 B statement): 2606829 / 2606829
+ok    gas valid = invalid ('pqzl', 'REFRESH') (50,048 B statement): 3731622 / 3731622
+ok    gas valid = invalid ('pqzl', 'REGISTER') (16,480 B statement): 2699182 / 2699182
+ok    gas valid = invalid ('pqzl', 'TRANSFER') (83,072 B statement): 5420799 / 5420799
+ok    gas valid = invalid ('pqzl', 'TRANSFER-MULTI') (66,560 B statement): 3963218 / 3963218
+ok    gas valid = invalid ('pqzl', 'TRANSFER-MULTI') (83,072 B statement): 3636796 / 3636796
+ok    gas valid = invalid ('pqzl', 'TRANSFER-MULTI') (83,072 B statement): 3838814 / 3838814
+ok    gas valid = invalid ('pqzl', 'TRANSFER-MULTI') (99,712 B statement): 3723437 / 3723437
+ok    gas valid = invalid ('pqzl', 'TRANSFER-MULTI') (116,096 B statement): 3987006 / 3987006
+ok    gas valid = invalid ('pqzl', 'TRANSFER-MULTI') (132,992 B statement): 4137713 / 4137713
+ok    gas valid = invalid ('pqzl', 'TRANSFER-MULTI') (198,528 B statement): 5363144 / 5363144
+ok    gas valid = invalid ('pqzl', 'TRANSFER0') (66,560 B statement): 5233221 / 5233221
+ok    PQZ miss unknown id: …00, gas 2578799 = smallest row + length term 2578799
+ok    PQZ miss short (68 B): …00, gas 2567009 = smallest row + length term 2567009
+ok    PQZ miss empty: …00, gas 2567000 = smallest row + length term 2567000
+ok    PQZ miss unknown op 9: …00, gas 2578799 = smallest row + length term 2578799
+ok    PQZ input of MAX_INPUT + 1: refused before the precompile (Amsterdam floor > 2^24)
+ok    MLDSA44 eip8355 wycheproof/mldsa_44_verify_test.json: word 1 (want 1), gas 49006 = 49006
+ok    MLDSA44 eip8355 wycheproof/mldsa_44_ve sig bit flipped: 0, same gas
+ok    MLDSA44 eip8355 wycheproof/mldsa_44_verify_test.json: word 0 (want 0), gas 49006 = 49006
+ok    MLDSA44 eip8355 input shorter than PK_LEN + SIG_LEN : word 0 (want 0), gas 49000 = 49000
+ok    MLDSA65 eip8355 input shorter than PK_LEN + SIG_LEN : word 0 (want 0), gas 68000 = 68000
+ok    MLDSA44 acvp ML-DSA-44 tc 1                         : word 0 (want 0), gas 50374 = 50374
+ok    MLDSA44 acvp ML-DSA-44 tc 2                         : word 0 (want 0), gas 50494 = 50494
+ok    MLDSA44 acvp ML-DSA-44 tc 3                         : word 0 (want 0), gas 49468 = 49468
+ok    MLDSA44 acvp ML-DSA-44 tc 4                         : word 0 (want 0), gas 50404 = 50404
+ok    MLDSA44 acvp ML-DSA-44 tc 5                         : word 0 (want 0), gas 49684 = 49684
+ok    MLDSA44 acvp ML-DSA-44 tc 6                         : word 0 (want 0), gas 50536 = 50536
+ok    MLDSA44 acvp ML-DSA-44 tc 7                         : word 0 (want 0), gas 50128 = 50128
+ok    MLDSA44 acvp ML-DSA-44 tc 8                         : word 0 (want 0), gas 49210 = 49210
+ok    MLDSA44 acvp ML-DSA-44 tc 9                         : word 0 (want 0), gas 49006 = 49006
+ok    MLDSA44 acvp ML-DSA-44 tc 10                        : word 0 (want 0), gas 49894 = 49894
+ok    MLDSA44 acvp ML-DSA-44 tc 11                        : word 0 (want 0), gas 49108 = 49108
+ok    MLDSA44 acvp ML-DSA-44 tc 12                        : word 0 (want 0), gas 49726 = 49726
+ok    MLDSA44 acvp ML-DSA-44 tc 13                        : word 0 (want 0), gas 49870 = 49870
+ok    MLDSA44 acvp ML-DSA-44 tc 14                        : word 0 (want 0), gas 49588 = 49588
+ok    MLDSA44 acvp ML-DSA-44 tc 15                        : word 0 (want 0), gas 49582 = 49582
+ok    MLDSA65 acvp ML-DSA-65 tc 31                        : word 0 (want 0), gas 68654 = 68654
+ok    MLDSA65 acvp ML-DSA-65 tc 32                        : word 0 (want 0), gas 68282 = 68282
+ok    MLDSA65 acvp ML-DSA-65 tc 33                        : word 0 (want 0), gas 68282 = 68282
+ok    MLDSA65 acvp ML-DSA-65 tc 34                        : word 0 (want 0), gas 68144 = 68144
+ok    MLDSA65 acvp ML-DSA-65 tc 35                        : word 0 (want 0), gas 68396 = 68396
+ok    MLDSA65 acvp ML-DSA-65 tc 36                        : word 0 (want 0), gas 69272 = 69272
+ok    MLDSA65 acvp ML-DSA-65 tc 37                        : word 0 (want 0), gas 69512 = 69512
+ok    MLDSA65 acvp ML-DSA-65 tc 38                        : word 0 (want 0), gas 68006 = 68006
+ok    MLDSA65 acvp ML-DSA-65 tc 39                        : word 0 (want 0), gas 68684 = 68684
+ok    MLDSA65 acvp ML-DSA-65 tc 40                        : word 0 (want 0), gas 69536 = 69536
+ok    MLDSA65 acvp ML-DSA-65 tc 41                        : word 0 (want 0), gas 68090 = 68090
+ok    MLDSA65 acvp ML-DSA-65 tc 42                        : word 0 (want 0), gas 68714 = 68714
+ok    MLDSA65 acvp ML-DSA-65 tc 43                        : word 0 (want 0), gas 68036 = 68036
+ok    MLDSA65 acvp ML-DSA-65 tc 44                        : word 0 (want 0), gas 68552 = 68552
+ok    MLDSA65 acvp ML-DSA-65 tc 45                        : word 0 (want 0), gas 68522 = 68522
+ok    MLDSA44 ua mldsa44 pop                              : word 1 (want 1), gas 49006 = 49006
+ok    MLDSA44 ua mldsa44 pop sig bit flipped: 0, same gas
+ok    MLDSA44 ua mldsa44 popOther                         : word 1 (want 1), gas 49006 = 49006
+ok    MLDSA44 ua mldsa44 popOther sig bit flipped: 0, same gas
+ok    MLDSA65 ua mldsa65 pop                              : word 1 (want 1), gas 68006 = 68006
+ok    MLDSA65 ua mldsa65 pop sig bit flipped: 0, same gas
+ok    MLDSA65 ua mldsa65 popOther                         : word 1 (want 1), gas 68006 = 68006
+ok    MLDSA65 ua mldsa65 popOther sig bit flipped: 0, same gas
+ok    MLDSA65 ua mldsa65 pop                              : word 1 (want 1), gas 68006 = 68006
+ok    MLDSA65 ua mldsa65 pop sig bit flipped: 0, same gas
+ok    MLDSA65 ua mldsa65 pop                              : word 1 (want 1), gas 68006 = 68006
+ok    MLDSA65 ua mldsa65 pop sig bit flipped: 0, same gas
+probe: all checks passed
+[rc=0]
+
+$ python3 -I chain/e2e.py e2e --engine runs/2026-10-21-testnet-engine-pqz.json --corpus bin/corpus-ffi-1adbd563.jsonl --rpc http://127.0.0.1:8545 --key <test key 0x…04> --no-ua
+head rules: Amsterdam (EIP-7928 header field present)
+sender 0x1eff47bc3a10a45d4b230b5d10e37751fe6aa718 nonce 0
+ok    probe deployed at 0x060cc26038e69d73552679103271eca6e37d4ce6 (block 138, gas 1129589)
+ok    tx check() honest M8-on pqzl                               pqzl: 277,735 B refused by the pool (Amsterdam: floor 17,798,040 > 2^24)
+ok    tx check() honest M8-on-boundary pqzl                      pqzl: 277,736 B refused by the pool (Amsterdam: floor 17,798,040 > 2^24)
+ok    tx check() honest TRANSFER pqzh                            pqzh: 314,023 B refused by the pool (Amsterdam: floor 20,120,472 > 2^24)
+ok    tx check() honest TRANSFER0 pqzh                           pqzh: 298,045 B refused by the pool (Amsterdam: floor 19,096,472 > 2^24)
+ok    tx check() honest BURN pqzh                                pqzh: 282,237 B refused by the pool (Amsterdam: floor 18,084,760 > 2^24)
+ok    tx check() honest REFRESH pqzh                             pqzh: 280,333 B refused by the pool (Amsterdam: floor 17,963,928 > 2^24)
+ok    tx check() honest M1-on pqzh                               pqzh: 315,571 B refused by the pool (Amsterdam: floor 20,218,776 > 2^24)
+ok    tx check() honest M2-on pqzh                               pqzh: 330,973 B refused by the pool (Amsterdam: floor 21,203,864 > 2^24)
+ok    tx check() honest M4-on pqzh                               pqzh: 365,705 B refused by the pool (Amsterdam: floor 23,427,992 > 2^24)
+ok    tx check() honest M1-off pqzh                              pqzh: 298,813 B refused by the pool (Amsterdam: floor 19,145,624 > 2^24)
+ok    tx check() honest M2-off pqzh                              pqzh: 315,155 B refused by the pool (Amsterdam: floor 20,192,152 > 2^24)
+ok    tx check() honest M4-off pqzh                              pqzh: 348,595 B refused by the pool (Amsterdam: floor 22,332,312 > 2^24)
+ok    tx check() honest M2-off-two-real pqzh                     pqzh: 314,717 B refused by the pool (Amsterdam: floor 20,163,480 > 2^24)
+ok    tx check() honest M4-off-decoys pqzh                       pqzh: 347,827 B refused by the pool (Amsterdam: floor 22,283,160 > 2^24)
+ok    tx check() flip   TRANSFER: proof middle byte bit 3 flippe pqzh: 314,023 B refused by the pool (Amsterdam: floor 20,120,472 > 2^24)
+ok    tx check() flip   TRANSFER0: proof middle byte bit 3 flipp pqzh: 298,045 B refused by the pool (Amsterdam: floor 19,096,472 > 2^24)
+ok    tx check() flip   BURN: proof middle byte bit 3 flipped    pqzh: 282,237 B refused by the pool (Amsterdam: floor 18,084,760 > 2^24)
+ok    tx check() flip   REFRESH: proof middle byte bit 3 flipped pqzh: 280,333 B refused by the pool (Amsterdam: floor 17,963,928 > 2^24)
+ok    tx check() flip   M8-on: proof middle byte bit 3 flipped   pqzl: 277,735 B refused by the pool (Amsterdam: floor 17,798,040 > 2^24)
+ok    tx check() flip   M1-on: proof middle byte bit 3 flipped   pqzh: 315,571 B refused by the pool (Amsterdam: floor 20,218,776 > 2^24)
+ok    tx check() flip   M2-on: proof middle byte bit 3 flipped   pqzh: 330,973 B refused by the pool (Amsterdam: floor 21,203,864 > 2^24)
+ok    tx check() flip   M4-on: proof middle byte bit 3 flipped   pqzh: 365,705 B refused by the pool (Amsterdam: floor 23,427,992 > 2^24)
+ok    tx check() flip   M1-off: proof middle byte bit 3 flipped  pqzh: 298,813 B refused by the pool (Amsterdam: floor 19,145,624 > 2^24)
+ok    tx check() flip   M2-off: proof middle byte bit 3 flipped  pqzh: 315,155 B refused by the pool (Amsterdam: floor 20,192,152 > 2^24)
+ok    tx check() flip   M4-off: proof middle byte bit 3 flipped  pqzh: 348,595 B refused by the pool (Amsterdam: floor 22,332,312 > 2^24)
+ok    tx check() fee0   fee0 TRANSFER pqzh                       pqzh: 315,219 B refused by the pool (Amsterdam: floor 20,196,248 > 2^24)
+ok    tx check() fee0   fee0 TRANSFER0 pqzh                      pqzh: 297,949 B refused by the pool (Amsterdam: floor 19,090,328 > 2^24)
+ok    tx check() fee0   fee0 BURN pqzh                           pqzh: 279,661 B refused by the pool (Amsterdam: floor 17,920,920 > 2^24)
+ok    tx check() fee0   fee0 REFRESH pqzh                        pqzh: 281,597 B refused by the pool (Amsterdam: floor 18,043,800 > 2^24)
+ok    tx check() honest TRANSFER pqzl                            pqzl: event word 1 (want 1), call gas 5420921, tx gas 8076184, block 140
+ok    tx check() honest TRANSFER0 pqzl                           pqzl: event word 1 (want 1), call gas 5233343, tx gas 6998936, block 142
+ok    tx check() honest BURN pqzl                                pqzl: event word 1 (want 1), call gas 3731744, tx gas 5907352, block 143
+ok    tx check() honest REFRESH pqzl                             pqzl: event word 1 (want 1), call gas 3731744, tx gas 5907352, block 144
+ok    tx check() honest REGISTER pqzl                            pqzl: event word 1 (want 1), call gas 2699304, tx gas 3411390, block 144
+ok    tx check() honest DISCLOSE-SENDER pqzl                     pqzl: event word 1 (want 1), call gas 2606951, tx gas 4000664, block 145
+ok    tx check() honest DISCLOSE-RECEIVER pqzl                   pqzl: event word 1 (want 1), call gas 2572954, tx gas 4002712, block 146
+ok    tx check() honest DISCLOSE-AUDITOR pqzl                    pqzl: event word 1 (want 1), call gas 2572951, tx gas 4000664, block 146
+ok    tx check() honest M1-on pqzl                               pqzl: event word 1 (want 1), call gas 3636918, tx gas 8074136, block 147
+ok    tx check() honest M2-on pqzl                               pqzl: event word 1 (want 1), call gas 3723559, tx gas 9194392, block 148
+ok    tx check() honest M4-on pqzl                               pqzl: event word 1 (want 1), call gas 4137835, tx gas 11430808, block 149
+ok    tx check() honest M1-off pqzl                              pqzl: event word 1 (want 1), call gas 3963340, tx gas 6996888, block 151
+ok    tx check() honest M2-off pqzl                              pqzl: event word 1 (want 1), call gas 3838936, tx gas 8086424, block 152
+ok    tx check() honest M4-off pqzl                              pqzl: event word 1 (want 1), call gas 3987128, tx gas 10265496, block 153
+ok    tx check() honest M8-off pqzl                              pqzl: event word 1 (want 1), call gas 5363266, tx gas 16503704, block 154
+ok    tx check() honest M2-off-two-real pqzl                     pqzl: event word 1 (want 1), call gas 3838936, tx gas 8086424, block 156
+ok    tx check() honest M4-off-decoys pqzl                       pqzl: event word 1 (want 1), call gas 3987125, tx gas 10263448, block 157
+ok    tx check() honest REGISTER pqzh                            pqzh: event word 1 (want 1), call gas 3341178, tx gas 13030296, block 158
+ok    tx check() honest DISCLOSE-SENDER pqzh                     pqzh: event word 1 (want 1), call gas 3303714, tx gas 14078872, block 160
+ok    tx check() honest DISCLOSE-RECEIVER pqzh                   pqzh: event word 1 (want 1), call gas 2901786, tx gas 14128024, block 161
+ok    tx check() honest DISCLOSE-AUDITOR pqzh                    pqzh: event word 1 (want 1), call gas 2901783, tx gas 14125976, block 163
+ok    tx check() flip   TRANSFER: proof middle byte bit 3 flippe pqzl: event word 0 (want 0), call gas 5420921, tx gas 8076184, block 164
+ok    tx check() flip   TRANSFER0: proof middle byte bit 3 flipp pqzl: event word 0 (want 0), call gas 5233343, tx gas 6998936, block 165
+ok    tx check() flip   BURN: proof middle byte bit 3 flipped    pqzl: event word 0 (want 0), call gas 3731744, tx gas 5907352, block 166
+ok    tx check() flip   REFRESH: proof middle byte bit 3 flipped pqzl: event word 0 (want 0), call gas 3731744, tx gas 5907352, block 167
+ok    tx check() flip   REGISTER: proof middle byte bit 3 flippe pqzl: event word 0 (want 0), call gas 2699304, tx gas 3411390, block 167
+ok    tx check() flip   DISCLOSE-SENDER: proof middle byte bit 3 pqzl: event word 0 (want 0), call gas 2606951, tx gas 4000664, block 168
+ok    tx check() flip   DISCLOSE-RECEIVER: proof middle byte bit pqzl: event word 0 (want 0), call gas 2572954, tx gas 4002712, block 168
+ok    tx check() flip   DISCLOSE-AUDITOR: proof middle byte bit  pqzl: event word 0 (want 0), call gas 2572951, tx gas 4000664, block 169
+ok    tx check() flip   REGISTER: proof middle byte bit 3 flippe pqzh: event word 0 (want 0), call gas 3341178, tx gas 13030296, block 170
+ok    tx check() flip   DISCLOSE-SENDER: proof middle byte bit 3 pqzh: event word 0 (want 0), call gas 3303714, tx gas 14078872, block 172
+ok    tx check() flip   DISCLOSE-RECEIVER: proof middle byte bit pqzh: event word 0 (want 0), call gas 2901786, tx gas 14128024, block 174
+ok    tx check() flip   DISCLOSE-AUDITOR: proof middle byte bit  pqzh: event word 0 (want 0), call gas 2901783, tx gas 14125976, block 176
+ok    tx check() flip   M1-on: proof middle byte bit 3 flipped   pqzl: event word 0 (want 0), call gas 3636918, tx gas 8074136, block 177
+ok    tx check() flip   M2-on: proof middle byte bit 3 flipped   pqzl: event word 0 (want 0), call gas 3723559, tx gas 9194392, block 179
+ok    tx check() flip   M4-on: proof middle byte bit 3 flipped   pqzl: event word 0 (want 0), call gas 4137835, tx gas 11430808, block 181
+ok    tx check() flip   M1-off: proof middle byte bit 3 flipped  pqzl: event word 0 (want 0), call gas 3963340, tx gas 6996888, block 183
+ok    tx check() flip   M2-off: proof middle byte bit 3 flipped  pqzl: event word 0 (want 0), call gas 3838936, tx gas 8086424, block 184
+ok    tx check() flip   M4-off: proof middle byte bit 3 flipped  pqzl: event word 0 (want 0), call gas 3987128, tx gas 10265496, block 186
+ok    tx check() flip   M8-off: proof middle byte bit 3 flipped  pqzl: event word 0 (want 0), call gas 5363266, tx gas 16503704, block 187
+ok    tx check() fee0   fee0 TRANSFER pqzl                       pqzl: event word 1 (want 1), call gas 5420921, tx gas 8076184, block 189
+ok    tx check() fee0   fee0 TRANSFER0 pqzl                      pqzl: event word 1 (want 1), call gas 5233340, tx gas 6996888, block 191
+ok    tx check() fee0   fee0 BURN pqzl                           pqzl: event word 1 (want 1), call gas 3731744, tx gas 5907352, block 192
+ok    tx check() fee0   fee0 REFRESH pqzl                        pqzl: event word 1 (want 1), call gas 3731747, tx gas 5909400, block 193
+check() transactions in blocks [140, 142, 143, 144, 145, 146, 147, 148, 149, 151, 152, 153, 154, 156, 157, 158, 160, 161, 163, 164, 165, 166, 167, 168, 169, 170, 172, 174, 176, 177, 179, 181, 183, 184, 186, 187, 189, 191, 192, 193]
+ok    direct tx to PQZ, DISCLOSE-RECEIVER pqzh (220,415 B > 131,072): gasUsed 14,121,560 = max(standard 6,244,368, EIP-7976 floor 14,121,560), block 195
+ok    direct tx to PQZ, DISCLOSE-AUDITOR pqzh (220,383 B > 131,072): gasUsed 14,119,512 = max(standard 6,242,497, EIP-7976 floor 14,119,512), block 197
+UAMldsaVerifier skipped (--no-ua: on 7622 it is deployed with the registry in P6g, plan R5)
+e2e: all checks passed
+[rc=0]
+
+# docs on the chain host: README-chainspec.md gets a 2026-10-21 note at the top (copy README-chainspec.md.bak-1.39.0-20261021)
