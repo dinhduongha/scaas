@@ -4,13 +4,18 @@
 //!   ligero_kat replay    stdin lines "op stmt_hex wit_hex rnd32_hex proof_hex" (runs/replay_vectors.py builds them
 //!                        from smartcontracts/vectors/pqz/proof_pqzh.json): the keccak of a fresh proof and the verdict
 //!                        on the stored proof, one JSON line per input
+//!   ligero_kat sizes     per relation (the six forms, op 7 M = 1, 2, 4, 8, 16 with and without the auditor): rows m,
+//!                        the verifier's exact proof bound, statement bytes, precompile input 5 + statement + bound, and
+//!                        the soundness terms of an honest statement (M = 8, 16: layout only, not built shapes)
 //! wasm/fnv_wasm.mjs prints the same `setup` lines from the wasm32 build (native = wasm32).
 
 use std::io::BufRead;
 
-use pqzh_ligero::client::{inputs, rel_name, setup};
+use pqzh_ligero::client::{MultiTweak, inputs, rel_name, setup, setup_multi};
+use pqzh_ligero::cs::{self, Layout};
+use pqzh_ligero::fq::EB;
 use pqzh_ligero::merkle::keccak;
-use pqzh_ligero::{Params, RELS, Rel, multi_rels, prove, verify};
+use pqzh_ligero::{Params, RELS, Rel, multi_rels, prove, soundness, verify};
 
 fn hex(b: &[u8]) -> String {
     b.iter().map(|x| format!("{x:02x}")).collect()
@@ -36,7 +41,7 @@ fn main() {
                     let pf = prove(r.op(), &st, &w, [seed; 32], &p).expect("prove");
                     println!(
                         "{{\"set\": \"{}\", \"rel\": \"{}\", \"seed\": {seed}, \"proof_bytes\": {}, \"keccak\": \"{}\", \"fnv\": \"{:08x}\", \"verify\": {}}}",
-                        "baseline-HEAD-756713a2",
+                        pqzh_ligero::set::NAME,
                         rel_name(r),
                         pf.len(),
                         hex(&keccak(&[&pf])),
@@ -61,6 +66,31 @@ fn main() {
                 );
             }
         }
-        _ => panic!("usage: ligero_kat setup | replay"),
+        "sizes" => {
+            let s = setup();
+            let multi = [1, 2, 4, 8, 16].into_iter().flat_map(|m| [true, false].map(|aud| Rel::Multi { m, aud }));
+            for r in RELS.iter().map(|&f| Rel::Form(f)).chain(multi) {
+                let st = match r {
+                    Rel::Form(_) => inputs(&s, r).0,
+                    Rel::Multi { m, aud } => setup_multi(m, aud, &MultiTweak::default()).0,
+                };
+                let max = p.max_proof_len(r);
+                // soundness needs a statement the crate parses: not for the shapes it does not build (M = 8, 16)
+                let snd: Vec<String> = match cs::rel_of(r.op(), &st) {
+                    Some(_) => soundness(r.op(), &st, &p).iter().map(|(n, b)| format!("\"{n}\": {b:.2}")).collect(),
+                    None => vec!["\"built\": false".into()],
+                };
+                println!(
+                    "{{\"set\": \"{}\", \"rel\": \"{}\", \"eb\": {EB}, \"rows_m\": {}, \"max_proof_len\": {max}, \"stmt_bytes\": {}, \"input_max\": {}, \"soundness\": {{{}}}}}",
+                    pqzh_ligero::set::NAME,
+                    rel_name(r),
+                    Layout::new(r, p.ell).m,
+                    r.stmt_len(),
+                    5 + r.stmt_len() + max,
+                    snd.join(", ")
+                );
+            }
+        }
+        _ => panic!("usage: ligero_kat setup | replay | sizes"),
     }
 }

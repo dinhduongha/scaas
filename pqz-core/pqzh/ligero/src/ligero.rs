@@ -89,11 +89,13 @@ impl Params {
         Params { n, k, ell: k - t - 1, t, pow_bits: POW_BITS, proven: true, johnson: true }
     }
 
-    /// THE preset (owner 2026-10-14 (a)): proven, radix 431, n = 32,756, k = 817, t = 121, l = 695, every op; the
-    /// parameter model's `Params::new(32756, 817, true)` (unit test `proven_is_the_model`), written out so that the
-    /// production build has no float code
+    /// THE preset (owner 2026-10-14 (a)): proven, radix 431, n = 32,756, k = 817, t = 121, l = 695, every op, the same
+    /// in every parameter set (pqzh_set.rs; plan 5h Task 8c: the domains exist for every set's q and the soundness
+    /// depends on n, k only); the parameter model's `Params::new(32756, 817, true)` (unit test `proven_is_the_model`),
+    /// written out so that the production build has no float code
     pub const fn proven() -> Params {
-        Params { n: 32756, k: 817, ell: 695, t: 121, pow_bits: POW_BITS, proven: true, johnson: false }
+        use crate::set::{PRESET_K, PRESET_N, PRESET_T};
+        Params { n: PRESET_N, k: PRESET_K, ell: PRESET_K - PRESET_T - 1, t: PRESET_T, pow_bits: POW_BITS, proven: true, johnson: false }
     }
 
     /// the model's smallest Johnson preset with the field term >= 128 bits (charged once): runs/p1-params.txt.
@@ -147,10 +149,10 @@ impl Params {
         32 + self.poly_bytes() + 8 + self.t * (32 + (m + BLIND) * EB) + (mid + 2 - self.t) * 32
     }
 
-    /// The verifier's length bound (plan Task 9): the exact maximum. At THE preset (the D3 id) it is
+    /// The verifier's length bound (plan Task 9): the exact maximum. At THE preset (the D3 id) and the v3 set it is
     /// <= pqz_stmt::MAX_PROOF_PQZH (D5) for every relation: the six forms (R_TX 235,470 B) and every built op 7 R_TXM
-    /// shape (largest (M = 4, auditor on) 236,196 B, 5 + statement + bound 369,193 B <= MAX_INPUT); unit test
-    /// `limits_exact` pins all of them. Not capped at MAX_PROOF_PQZH: the reference
+    /// shape (largest (M = 4, auditor on) 236,196 B, 5 + statement + bound 369,193 B <= MAX_INPUT); at set (a) the
+    /// debit forms are above it (R_TX 264,510 B, plan 5h Task 8c); unit test `limits_exact` pins all of them per set. Not capped at MAX_PROOF_PQZH: the reference
     /// presets are not the id, proven without radix 431 has every R_TX / R_BURN proof above it, and the bench-only
     /// oversize R_TXM shapes (M = 8, 16) are above it by design.
     pub fn max_proof_len(&self, rel: impl Into<Rel>) -> usize {
@@ -190,7 +192,7 @@ impl Rng {
         loop {
             let mut w = [0u8; 8];
             self.0.read(&mut w);
-            let v = u64::from_be_bytes(w) & ((1 << 42) - 1);
+            let v = u64::from_be_bytes(w) & crate::fq::MASK;
             // uniform rejection sampling: the try count is independent of the accepted value (public, review P-B)
             if ct::verdict(v < crate::fq::Q) {
                 return Fq(v);
@@ -732,48 +734,79 @@ mod tests {
         }
     }
 
-    /// Task 9 / D5: the verifier's bound is the exact maximum, <= MAX_PROOF_PQZH at THE preset, every input fits
-    /// MAX_INPUT, and the length gate admits MAX and rejects MAX + 1 (and 0) before the statement or the proof is
-    /// parsed; ops without a relation have no form
+    /// Task 9 / D5: the verifier's bound is the exact maximum, the length gate admits MAX and rejects MAX + 1 (and 0)
+    /// before the statement or the proof is parsed; ops without a relation have no form. Per parameter set (plan 5h
+    /// Task 8c): v3 every built relation within MAX_PROOF_PQZH and MAX_INPUT (D5); set (a) R_REG / R_DS / R_DR within,
+    /// every debit form's bound above MAX_PROOF_PQZH 262,144 (owner 2026-10-21: it stays; PQZH is a backup, its debit
+    /// inputs exceed one transaction's calldata anyway: ligero_params.py --set, PQZH.md of the set)
     #[test]
     fn limits_exact() {
         use pqz_stmt::{MAX_INPUT, MAX_PROOF_PQZH};
         let p = Params::proven();
-        let expect = [
-            (Form::Register, 190_458),
-            (Form::Transfer, 235_470),
-            (Form::Burn, 234_744),
-            (Form::DiscloseSender, 190_458),
-            (Form::DiscloseReceiver, 190_458),
-            (Form::Transfer0, 234_744),
-        ];
+        let v3 = crate::set::NAME == "n2048-kmax1024";
+        // (form, exact bound, within MAX_PROOF_PQZH and MAX_INPUT)
+        let expect = if v3 {
+            [
+                (Form::Register, 190_458, true),
+                (Form::Transfer, 235_470, true),
+                (Form::Burn, 234_744, true),
+                (Form::DiscloseSender, 190_458, true),
+                (Form::DiscloseReceiver, 190_458, true),
+                (Form::Transfer0, 234_744, true),
+            ]
+        } else {
+            [
+                (Form::Register, 204_978, true),
+                (Form::Transfer, 264_510, false),
+                (Form::Burn, 263_784, false),
+                (Form::DiscloseSender, 204_978, true),
+                (Form::DiscloseReceiver, 204_978, true),
+                (Form::Transfer0, 263_784, false),
+            ]
+        };
         assert_eq!(expect.map(|e| e.0), RELS);
-        for (f, max) in expect {
+        for (f, max, fits) in expect {
             assert_eq!((p.max_len_exact(f), p.max_proof_len(f)), (max, max));
-            assert!(max <= MAX_PROOF_PQZH && 5 + f.stmt_len() + max <= MAX_INPUT);
+            assert_eq!(max <= MAX_PROOF_PQZH && 5 + f.stmt_len() + max <= MAX_INPUT, fits, "{f:?}");
             assert!(p.proof_len_ok(f, max) && p.proof_len_ok(f, 1));
             assert!(!p.proof_len_ok(f, max + 1) && !p.proof_len_ok(f, 0));
             assert_eq!(cs::form_of(f.op(), f.stmt_len()), Some(f));
         }
         assert!([0, 6, 7, 255].iter().all(|&op| cs::form_of(op, 0).is_none()));
-        // op 7 R_TXM, (M, auditorOn): exact bounds (= the pre-review H-3 table, measured max_len_exact in
-        // runs/l16-txm-*); the built shapes (M <= 4) within MAX_PROOF_PQZH and MAX_INPUT, the oversize ones above
-        let multi = [
-            ((1, true), 235_470, 318_547),
-            ((1, false), 234_744, 301_309),
-            ((2, true), 235_470, 335_187),
-            ((2, false), 235_470, 318_547),
-            ((4, true), 236_196, 369_193),
-            ((4, false), 235_470, 351_571),
-            ((8, true), 281_208, 497_149),
-            ((8, false), 279_756, 478_289),
-            ((16, true), 372_684, 754_513),
-            ((16, false), 369_054, 732_451),
-        ];
+        // op 7 R_TXM, (M, auditorOn): exact bounds and inputs 5 + statement + bound (v3 = the pre-review H-3 table,
+        // measured max_len_exact in runs/l16-txm-*; set (a): runs/c8-a-sizes.jsonl); v3's built shapes (M <= 4)
+        // within MAX_PROOF_PQZH and MAX_INPUT, the oversize ones above; set (a): every shape above MAX_PROOF_PQZH
+        let multi = if v3 {
+            [
+                ((1, true), 235_470, 318_547),
+                ((1, false), 234_744, 301_309),
+                ((2, true), 235_470, 335_187),
+                ((2, false), 235_470, 318_547),
+                ((4, true), 236_196, 369_193),
+                ((4, false), 235_470, 351_571),
+                ((8, true), 281_208, 497_149),
+                ((8, false), 279_756, 478_289),
+                ((16, true), 372_684, 754_513),
+                ((16, false), 369_054, 732_451),
+            ]
+        } else {
+            [
+                ((1, true), 264_510, 357_827),
+                ((1, false), 263_784, 338_541),
+                ((2, true), 264_510, 376_515),
+                ((2, false), 264_510, 357_827),
+                ((4, true), 265_236, 414_617),
+                ((4, false), 264_510, 394_947),
+                ((8, true), 324_768, 567_333),
+                ((8, false), 324_042, 547_151),
+                ((16, true), 445_284, 874_217),
+                ((16, false), 441_654, 850_107),
+            ]
+        };
         for ((m, aud), max, input) in multi {
             let r = Rel::Multi { m, aud };
             assert_eq!((p.max_len_exact(r), p.max_proof_len(r), 5 + r.stmt_len() + max), (max, max, input), "M {m} {aud}");
-            assert_eq!(max <= MAX_PROOF_PQZH && input <= MAX_INPUT, m <= 4, "M {m} {aud}");
+            assert_eq!(max <= MAX_PROOF_PQZH && input <= MAX_INPUT, v3 && m <= 4, "M {m} {aud}");
             assert!(p.proof_len_ok(r, max) && !p.proof_len_ok(r, max + 1) && !p.proof_len_ok(r, 0));
         }
         let built = cs::multi_rels();
@@ -791,11 +824,14 @@ mod tests {
     fn prover_retries_over_limit() {
         let s = crate::client::setup();
         let (op, st, w, p) = (pqz_stmt::OP_REGISTER, &s.reg_stmt, &s.reg_wit, Params::proven());
-        let a = prove_inner(op, st, w, [1; 32], &p, true, p.max_proof_len(Form::Register)).unwrap();
-        assert_eq!(a, prove(op, st, w, [1; 32], &p).unwrap());
-        let b = prove_inner(op, st, w, [1; 32], &p, true, a.len() - 1).unwrap();
+        // the seed (of 1..=4) with the longest proof, so that a shorter one is a likely retry (v3: seed 1 already is;
+        // set (a)'s seed 1 proof was shorter than its 16 retries)
+        let rnd = (1..=4u8).max_by_key(|&x| prove(op, st, w, [x; 32], &p).unwrap().len()).unwrap();
+        let a = prove_inner(op, st, w, [rnd; 32], &p, true, p.max_proof_len(Form::Register)).unwrap();
+        assert_eq!(a, prove(op, st, w, [rnd; 32], &p).unwrap());
+        let b = prove_inner(op, st, w, [rnd; 32], &p, true, a.len() - 1).unwrap();
         assert!(b.len() < a.len() && b[..32] != a[..32]);
         assert!(verify(op, st, &a, &p) && verify(op, st, &b, &p));
-        assert_eq!(prove_inner(op, st, w, [1; 32], &p, true, 32), Err("proof length"));
+        assert_eq!(prove_inner(op, st, w, [rnd; 32], &p, true, 32), Err("proof length"));
     }
 }

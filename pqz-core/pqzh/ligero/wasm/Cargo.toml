@@ -15,6 +15,9 @@ pqzh-ligero = { path = ".." }
 
 [features]
 oversize = ["pqzh-ligero/oversize"]
+# the parameter set (pqzh-ligero's; none = v3)
+set-n2048-kmax1024 = ["pqzh-ligero/set-n2048-kmax1024"]
+set-n2304-kmax4096 = ["pqzh-ligero/set-n2304-kmax4096"]
 
 [profile.release]
 panic = "abort"

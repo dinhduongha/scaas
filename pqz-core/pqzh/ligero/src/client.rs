@@ -12,6 +12,11 @@ use pqz_stmt::{
 use crate::cs::Rel;
 use crate::ring::*;
 
+/// the l2 bounds of the samplers (KeyGen / Enc's resampling): CBD(1) vectors, CBD(20) vectors, e2 (v3 36 / 164 / 64)
+const BS: i64 = crate::set::BETA_S as i64;
+const BE: i64 = crate::set::BETA_E as i64;
+const B2: i64 = crate::set::BETA_2 as i64;
+
 /// byte offsets of the statement words the tests and mutations touch (pq-zero-knowledge.md §7.7, §7.9)
 pub const PREFIX: usize = 64;
 pub const HDR_FEE: usize = 32 * H_FEE;
@@ -87,8 +92,8 @@ pub struct Key {
 }
 
 pub fn keygen(rng: &mut Rng) -> Key {
-    let s = rng.short(2048, 1, 36);
-    let e = rng.short(2048, 20, 164);
+    let s = rng.short(N, 1, BS);
+    let e = rng.short(N, 20, BE);
     let pk = keypair(&polys(&s), &polys(&e));
     Key { s, e, pk }
 }
@@ -211,15 +216,15 @@ pub fn setup_with(tw: &Tweak) -> Setup {
 
     let (bal, v, fee) = (1_000_000u64, 123_456u64, 7u64);
     let bp = bal - v - fee;
-    let r0 = rng.short(2048, 1, 36);
-    let e10 = rng.short(2048, 20, 164);
-    let e20 = rng.short(16, 20, 64);
+    let r0 = rng.short(N, 1, BS);
+    let e10 = rng.short(N, 20, BE);
+    let e20 = rng.short(16, 20, B2);
     let (ut, vt) = encrypt(&[&kf.pk], &[digits(bal)], &polys(&r0), &polys(&e10), &[e20]);
-    let r = rng.short(2048, 1, 36);
-    let e1 = rng.short(2048, 20, 164);
+    let r = rng.short(N, 1, BS);
+    let e1 = rng.short(N, 20, BE);
     let r = tw.r.clone().unwrap_or(r);
     let e1 = tw.e1.clone().unwrap_or(e1);
-    let mut e2: Vec<Vec<i64>> = (0..3).map(|_| rng.short(16, 20, 64)).collect();
+    let mut e2: Vec<Vec<i64>> = (0..3).map(|_| rng.short(16, 20, B2)).collect();
     let mut m = [digits(v), digits(bp), digits(v)];
     if let Some(e) = &tw.e2_t {
         e2[0] = e.clone();
@@ -275,8 +280,8 @@ pub fn setup_with(tw: &Tweak) -> Setup {
     wr_vec(&mut tx0, &u);
     wr_v(&mut tx0, &vs[0]);
     wr_v(&mut tx0, &vs[1]);
-    let mut w0 = w[..12288 + 64].to_vec();
-    w0.extend_from_slice(&w[12288 + 96..]);
+    let mut w0 = w[..6 * N + 64].to_vec();
+    w0.extend_from_slice(&w[6 * N + 96..]);
     assert_eq!((tx0.len(), w0.len()), (Form::Transfer0.stmt_len(), Form::Transfer0.wit_len()));
 
     // R_DS / R_DR: header words chainId .. entryRef = (i * 7), amount v, kind 0 / 1; pk_t, u, v_t
@@ -305,11 +310,11 @@ pub fn setup_with(tw: &Tweak) -> Setup {
     );
 
     // R_BURN: fresh (r, e1, e2_f) for the new balance
-    let rb = rng.short(2048, 1, 36);
-    let e1b = rng.short(2048, 20, 164);
+    let rb = rng.short(N, 1, BS);
+    let e1b = rng.short(N, 20, BE);
     let rb = tw.r.clone().unwrap_or(rb);
     let e1b = tw.e1.clone().unwrap_or(e1b);
-    let mut e2b = rng.short(16, 20, 64);
+    let mut e2b = rng.short(16, 20, B2);
     if let Some(e) = &tw.burn_e2 {
         e2b = e.clone();
     }
@@ -330,7 +335,7 @@ pub fn setup_with(tw: &Tweak) -> Setup {
     wr_v(&mut burn, &vt[0]);
     wr_vec(&mut burn, &ub);
     wr_v(&mut burn, &vb[0]);
-    let mut bw = w[..2048 + 4096].to_vec();
+    let mut bw = w[..3 * N].to_vec();
     bw.extend(rb.iter().map(|&x| x as i8 as u8));
     le16(&mut bw, &e1b);
     le16(&mut bw, &e2b);
@@ -411,15 +416,15 @@ pub fn setup_multi(m: usize, aud: bool, tw: &MultiTweak) -> (Vec<u8>, Vec<u8>) {
         d[j] = x;
     }
     let dp = tw.dp.unwrap_or(digits(bal.wrapping_sub(sum).wrapping_sub(fee)));
-    let r0 = rng.short(2048, 1, 36);
-    let e10 = rng.short(2048, 20, 164);
-    let e20 = rng.short(16, 20, 64);
+    let r0 = rng.short(N, 1, BS);
+    let e10 = rng.short(N, 20, BE);
+    let e20 = rng.short(16, 20, B2);
     let (ut, vt) = encrypt(&[&kf.pk], &[digits(bal)], &polys(&r0), &polys(&e10), &[e20]);
     let mut rs: Vec<Vec<i64>> = vec![];
     let mut e1s: Vec<Vec<i64>> = vec![];
     for _ in 0..g {
-        rs.push(rng.short(2048, 1, 36));
-        e1s.push(rng.short(2048, 20, 164));
+        rs.push(rng.short(N, 1, BS));
+        e1s.push(rng.short(N, 20, BE));
     }
     if let Some((i, x)) = &tw.r {
         rs[*i] = x.clone();
@@ -428,7 +433,7 @@ pub fn setup_multi(m: usize, aud: bool, tw: &MultiTweak) -> (Vec<u8>, Vec<u8>) {
         e1s[*i] = x.clone();
     }
     let nv = m + 1 + aud as usize * m;
-    let mut e2: Vec<Vec<i64>> = (0..nv).map(|_| rng.short(16, 20, 64)).collect();
+    let mut e2: Vec<Vec<i64>> = (0..nv).map(|_| rng.short(16, 20, B2)).collect();
     if let Some((x, v)) = &tw.e2 {
         e2[*x] = v.clone();
     }

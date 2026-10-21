@@ -16,6 +16,12 @@ pqz-stmt = { path = "../../stmt" }
 # Production users (pqz-ffi, Task 7) depend with default-features = false and get Params::proven() only, no floats.
 [features]
 default = ["bench"]
+# Parameter set (owner 2026-10-21: one per build; pqz-core/params/sets/<set>/{rust/set.rs, pqzh_set.rs}; plan 5h Task
+# 8c): at most one `set-<set>`; none = the frozen v3 set n2048-kmax1024 (pqz-ffi, default-features = false, until 8c
+# part 2 forwards its set). Forwarded to pqz-stmt (statement lengths).
+set-n2048-kmax1024 = ["pqz-stmt/set-n2048-kmax1024"]
+# set (a): n 2304, K_MAX 4,096, q = 61,275,424,977,257 (owner 2026-10-21)
+set-n2304-kmax4096 = ["pqz-stmt/set-n2304-kmax4096"]
 bench = []
 # bench only (P6-ANON plan, global constraints): op 7 also at M = 8, 16 (pqz-stmt's `oversize`), proofs above
 # MAX_PROOF_PQZH; never in a production build (pqz-ffi refuses pqz-stmt's `oversize`)
