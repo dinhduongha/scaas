@@ -33,6 +33,8 @@ static struct
 static unsigned nrec;
 static int phase; /* 0 = prove, 1 = verify */
 static unsigned n_v_z4z3, n_jl;
+static uint64_t vdom[8]; /* the dom of each V4 / V3 matrix (kind 2 / 3) of the prove pass (sv/review/dom_trace.c) */
+static int vkind[8];
 
 static void
 trace (int kind, const uint8_t seed[32], uint64_t dom, int acc, const int64_t *v, unsigned int n)
@@ -47,6 +49,8 @@ trace (int kind, const uint8_t seed[32], uint64_t dom, int acc, const int64_t *v
     return; /* only record the prove pass; verify re-derives the same transcript */
   if (kind == 2 || kind == 3)
     {
+      if (n_v_z4z3 < 8)
+        vdom[n_v_z4z3] = dom, vkind[n_v_z4z3] = kind;
       n_v_z4z3++;
       return;
     }

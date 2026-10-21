@@ -7,7 +7,7 @@ use pqzl::{dec, decrypt_raw, enc_group_seed, enc_seed, encrypt, keygen, keypair_
            V_BYTES};
 
 const N: usize = 200;
-const Q: u64 = 4_398_046_510_889;
+const Q: u64 = pqzl::Q;
 
 /// xorshift64*
 struct Rnd(u64);
@@ -48,8 +48,8 @@ impl Rnd {
 fn keypair_encrypt_decrypt_raw_eq_c() {
     let mut rnd = Rnd(0x6b65_7973_2d6f_7261);
     for it in 0..N {
-        let s: [i8; 2048] = core::array::from_fn(|_| rnd.next() as i8);
-        let e: [i16; 2048] = core::array::from_fn(|_| rnd.next() as i16);
+        let s: [i8; pqzl::N] = core::array::from_fn(|_| rnd.next() as i8);
+        let e: [i16; pqzl::N] = core::array::from_fn(|_| rnd.next() as i16);
         let pk = keypair_from_secret(&s, &e);
         assert_eq!(pk.as_ref().ok(), c_keypair_from_secret(&s, &e).as_ref().ok(), "keypair_from_secret {it}");
 
@@ -57,8 +57,8 @@ fn keypair_encrypt_decrypt_raw_eq_c() {
         let pks: Vec<_> = (0..npk).map(|_| rnd.pk()).collect();
         let pkr: Vec<&[u8; POLYVEC_BYTES]> = pks.iter().map(|p| &**p).collect();
         let msgs: Vec<[u8; 16]> = (0..npk).map(|_| core::array::from_fn(|_| rnd.next() as u8)).collect();
-        let r: [i8; 2048] = core::array::from_fn(|_| rnd.next() as i8);
-        let e1: [i16; 2048] = core::array::from_fn(|_| rnd.next() as i16);
+        let r: [i8; pqzl::N] = core::array::from_fn(|_| rnd.next() as i8);
+        let e1: [i16; pqzl::N] = core::array::from_fn(|_| rnd.next() as i16);
         let e2: Vec<[i16; 16]> = (0..npk).map(|_| core::array::from_fn(|_| rnd.next() as i16)).collect();
         let c = encrypt(&pkr, &msgs, &r, &e1, &e2).expect("encrypt");
         let (u, vs) = c_encrypt(&pkr, &msgs, &r, &e1, &e2).expect("c encrypt");

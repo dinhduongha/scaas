@@ -497,7 +497,7 @@ pub(crate) fn test_mutate(code: u8, proof: &[u8], kind: u32, r1: u64, r2: u64) -
             set(&mut f.c, c64, v)
         }
         10 => set(&mut f.t_b[ix((tb.l + tb.lext) as u64)], c64, (r1 % Q) as i64),
-        11 => set(&mut f.t_a1[ix(km)], c64, ((r1 >> 8) % (1 << (42 - p.quad_eval.quad_many.dcompress.d))) as i64),
+        11 => set(&mut f.t_a1[ix(km)], c64, ((r1 >> 8) % (1 << (crate::params::set::LOG2Q - p.quad_eval.quad_many.dcompress.d))) as i64),
         12 => add(&mut f.z21[ix(m2r)], c64, sg),
         13 => f.h.swap(0, 1),
         14 => add(&mut f.z3[ix(4)], c64, sg),

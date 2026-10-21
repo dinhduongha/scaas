@@ -11,8 +11,8 @@ use sha3::{Digest, Keccak256, Shake256};
 mod common;
 use common::{hex, json};
 
-const Q: u64 = 4_398_046_510_889;
-const DELTA: u64 = (1 << 26) - 1;
+const Q: u64 = pqzl::Q;
+const DELTA: u64 = pqzl::DELTA as u64;
 
 fn hex32(s: &Value) -> [u8; 32] {
     hex(s).try_into().expect("32 bytes")
@@ -61,9 +61,9 @@ fn matrix_json() {
     let j = json("matrix.json");
     let cols: Vec<Box<[u8; POLYVEC_BYTES]>> = (0..32)
         .map(|c| {
-            let mut s = [0i8; 2048];
+            let mut s = [0i8; pqzl::N];
             s[64 * c] = 1;
-            keypair_from_secret(&s, &[0; 2048]).expect("keypair_from_secret")
+            keypair_from_secret(&s, &[0; pqzl::N]).expect("keypair_from_secret")
         })
         .collect();
     let mut a = Vec::new(); // A[0][0], A[0][1], ...: row i of A is poly i of every column

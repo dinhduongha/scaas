@@ -118,7 +118,7 @@ pub fn c_verify_fast(op: u8, stmt: &[u8], proof: &[u8]) -> bool {
 }
 
 pub fn c_keygen(seed32: &[u8; 32]) -> Result<Key, Error> {
-    let mut k = Key { pk: Box::new([0; POLYVEC_BYTES]), s: Box::new([0; 2048]), e: Box::new([0; 2048]), ctr: 0 };
+    let mut k = Key { pk: Box::new([0; POLYVEC_BYTES]), s: Box::new([0; crate::N]), e: Box::new([0; crate::N]), ctr: 0 };
     // SAFETY: fixed-size outputs of the sizes pqz.h declares
     rc(with_core(|| unsafe {
         pqz_keygen(seed32.as_ptr(), k.pk.as_mut_ptr(), k.s.as_mut_ptr(), k.e.as_mut_ptr(), &mut k.ctr)
@@ -136,8 +136,8 @@ pub fn c_enc_seed(pks: &[&[u8; POLYVEC_BYTES]], msgs: &[[u8; 16]], seed_enc: &[u
     let mut c = Enc {
         u: Box::new([0; POLYVEC_BYTES]),
         vs: vec![[0; V_BYTES]; n],
-        r: Box::new([0; 2048]),
-        e1: Box::new([0; 2048]),
+        r: Box::new([0; crate::N]),
+        e1: Box::new([0; crate::N]),
         e2: vec![[0; 16]; n],
         ctr: 0,
     };
@@ -150,14 +150,14 @@ pub fn c_enc_seed(pks: &[&[u8; POLYVEC_BYTES]], msgs: &[[u8; 16]], seed_enc: &[u
     Ok(c)
 }
 
-pub fn c_dec(s: &[i8; 2048], ct: &[u8; CT_BYTES]) -> Result<([i64; 16], [i64; 16]), Error> {
+pub fn c_dec(s: &[i8; crate::N], ct: &[u8; CT_BYTES]) -> Result<([i64; 16], [i64; 16]), Error> {
     let (mut m, mut noise) = ([0i64; 16], [0i64; 16]);
     // SAFETY: fixed-size inputs and outputs of the sizes pqz.h declares
     rc(with_core(|| unsafe { pqz_dec(s.as_ptr(), ct.as_ptr(), m.as_mut_ptr(), noise.as_mut_ptr()) }))?;
     Ok((m, noise))
 }
 
-pub fn c_keypair_from_secret(s: &[i8; 2048], e: &[i16; 2048]) -> Result<Box<[u8; POLYVEC_BYTES]>, Error> {
+pub fn c_keypair_from_secret(s: &[i8; crate::N], e: &[i16; crate::N]) -> Result<Box<[u8; POLYVEC_BYTES]>, Error> {
     let mut pk = Box::new([0u8; POLYVEC_BYTES]);
     // SAFETY: fixed-size inputs and output of the sizes pqz.h declares
     rc(with_core(|| unsafe { pqz_keypair_from_secret(s.as_ptr(), e.as_ptr(), pk.as_mut_ptr()) }))?;
@@ -168,7 +168,7 @@ pub fn c_keypair_from_secret(s: &[i8; 2048], e: &[i16; 2048]) -> Result<Box<[u8;
 pub type UVs = (Box<[u8; POLYVEC_BYTES]>, Vec<[u8; V_BYTES]>);
 
 /// `pqz_encrypt` -> (u, vs); `Err(Input)` if `msgs` / `e2` and `pks` differ in length (one count in the C ABI).
-pub fn c_encrypt(pks: &[&[u8; POLYVEC_BYTES]], msgs: &[[u8; 16]], r: &[i8; 2048], e1: &[i16; 2048], e2: &[[i16; 16]])
+pub fn c_encrypt(pks: &[&[u8; POLYVEC_BYTES]], msgs: &[[u8; 16]], r: &[i8; crate::N], e1: &[i16; crate::N], e2: &[[i16; 16]])
                  -> Result<UVs, Error> {
     let n = pks.len();
     let npk = u32::try_from(n).map_err(|_| Error::Input)?;
@@ -185,7 +185,7 @@ pub fn c_encrypt(pks: &[&[u8; POLYVEC_BYTES]], msgs: &[[u8; 16]], r: &[i8; 2048]
     Ok((u, vs))
 }
 
-pub fn c_decrypt_raw(s: &[i8; 2048], u: &[u8; POLYVEC_BYTES], v: &[u8; V_BYTES]) -> Result<[i64; 16], Error> {
+pub fn c_decrypt_raw(s: &[i8; crate::N], u: &[u8; POLYVEC_BYTES], v: &[u8; V_BYTES]) -> Result<[i64; 16], Error> {
     let mut w = [0i64; 16];
     // SAFETY: fixed-size inputs and output of the sizes pqz.h declares
     rc(with_core(|| unsafe { pqz_decrypt_raw(s.as_ptr(), u.as_ptr(), v.as_ptr(), w.as_mut_ptr()) }))?;

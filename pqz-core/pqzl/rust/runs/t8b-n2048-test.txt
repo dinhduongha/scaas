@@ -1,0 +1,202 @@
+   Compiling version_check v0.9.5
+   Compiling typenum v1.20.1
+   Compiling generic-array v0.14.7
+   Compiling shlex v2.0.1
+   Compiling find-msvc-tools v0.1.14
+   Compiling cc v1.8.0
+   Compiling crypto-common v0.1.7
+   Compiling block-buffer v0.10.4
+   Compiling inout v0.1.4
+   Compiling cipher v0.4.4
+   Compiling digest v0.10.7
+   Compiling keccak v0.1.6
+   Compiling pqzl v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/pqzl/rust)
+   Compiling cpufeatures v0.2.17
+   Compiling cfg-if v1.0.5
+   Compiling aes v0.8.4
+   Compiling sha3 v0.10.8
+   Compiling serde_core v1.0.229
+   Compiling zmij v1.0.23
+   Compiling serde_json v1.0.154
+   Compiling itoa v1.0.18
+   Compiling memchr v2.8.3
+    Finished `release` profile [optimized + debuginfo] target(s) in 32.95s
+     Running unittests src/lib.rs (target/n2048-kmax1024/release/deps/pqzl-bf4edd9b88130646)
+
+running 10 tests
+test arith::polymat::tests::views ... ok
+test arith::spoly::tests::errors_and_order ... ok
+test keys::tests::canonical_short_chunk ... ok
+test sv::tests::hint_bound_unreachable_by_encoding ... ok
+test rand::fixexp::tests::bernoulli_masked_add_eq_shift ... ok
+test rel::tests::bad_length_refused_before_caches ... ok
+test rand::rejection::tests::saturation_near_2_63 ... ok
+test rel::tests::build_refuses_noncanonical ... ok
+test sv::tests::setup_limits_eq_generic ... ok
+test rand::rejection::tests::onetime_rej1 ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.01s
+
+     Running unittests src/bin/kat_dump.rs (target/n2048-kmax1024/release/deps/kat_dump-2813bf99f6fb6dfb)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running unittests src/bin/keys_kat.rs (target/n2048-kmax1024/release/deps/keys_kat-0ba26123f2a1d7cc)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/cheat_b1.rs (target/n2048-kmax1024/release/deps/cheat_b1-75072e9ca9b9e52c)
+
+running 1 test
+test cheating_prover_rejected has been running for over 60 seconds
+test cheating_prover_rejected ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 111.80s
+
+     Running tests/fs_bind.rs (target/n2048-kmax1024/release/deps/fs_bind-407f425f9118f6f9)
+
+running 1 test
+test fs_bind ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.69s
+
+     Running tests/keys.rs (target/n2048-kmax1024/release/deps/keys-19fe9bd5d03d073f)
+
+running 1 test
+test ctx_eq_free ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.98s
+
+     Running tests/memory.rs (target/n2048-kmax1024/release/deps/memory-4630fe18a793db8a)
+
+running 2 tests
+test peak_per_op ... ok
+test exhaustion_is_error has been running for over 60 seconds
+test exhaustion_is_error ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 336.32s
+
+     Running tests/oracle_arith.rs (target/n2048-kmax1024/release/deps/oracle_arith-fb6d7e948b74a5ae)
+
+running 4 tests
+test ntt_roundtrip_eq_c ... ok
+test basemul_eq_c ... ok
+test int_ops_eq_c ... ok
+test polyvec_ops_eq_c ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 4.74s
+
+     Running tests/oracle_codec.rs (target/n2048-kmax1024/release/deps/oracle_codec-b7395f4131011266)
+
+running 3 tests
+test malformed_eq_c ... ok
+test ghint_eq_c ... ok
+test test_mutate_eq_c has been running for over 60 seconds
+test test_mutate_eq_c ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 146.82s
+
+     Running tests/oracle_keys.rs (target/n2048-kmax1024/release/deps/oracle_keys-a2d5cbcfe0aee223)
+
+running 2 tests
+test keypair_encrypt_decrypt_raw_eq_c ... ok
+test keygen_enc_dec_eq_c ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 2.22s
+
+     Running tests/oracle_params.rs (target/n2048-kmax1024/release/deps/oracle_params-23ec0b31b0fced5a)
+
+running 1 test
+test constants_eq_c ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+     Running tests/oracle_prove.rs (target/n2048-kmax1024/release/deps/oracle_prove-c69a26791e770f15)
+
+running 1 test
+test prove_eq_c ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 40.70s
+
+     Running tests/oracle_rand.rs (target/n2048-kmax1024/release/deps/oracle_rand-4b6ad4d60070c7c0)
+
+running 7 tests
+test cbd_eq_vectors ... ok
+test aes_ctr_eq_c ... ok
+test rejection_saturation_eq_c ... ok
+test grandom_eq_c ... ok
+test shake_eq_c ... ok
+test urandom_eq_c ... ok
+test rejection_eq_c ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.86s
+
+     Running tests/oracle_smoke.rs (target/n2048-kmax1024/release/deps/oracle_smoke-30106cff5e7b6ec2)
+
+running 2 tests
+test rust_verify_accepts ... ok
+test c_core_selftest_proofs_verify ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.26s
+
+     Running tests/oracle_verify.rs (target/n2048-kmax1024/release/deps/oracle_verify-3759d4889f62bd38)
+
+running 5 tests
+test cheating_eq_c ... ok
+test bad_length_eq_c ... ok
+test c_out_of_range_rejected ... ok
+test mutated_eq_c has been running for over 60 seconds
+test negative_eq_c has been running for over 60 seconds
+test negative_eq_c ... ok
+test mutated_eq_c ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 309.54s
+
+     Running tests/sv_diff.rs (target/n2048-kmax1024/release/deps/sv_diff-c4552cb22004eef1)
+
+running 4 tests
+test cheating_rejected ... ok
+test vectors_verify_fast ... ok
+test sv_eq_c_sv has been running for over 60 seconds
+test sv_eq_generic has been running for over 60 seconds
+test sv_eq_c_sv ... ok
+test sv_eq_generic ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 400.53s
+
+     Running tests/threads.rs (target/n2048-kmax1024/release/deps/threads-8e653102ee800fd9)
+
+running 1 test
+test concurrent_eq_sequential has been running for over 60 seconds
+test concurrent_eq_sequential ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 134.82s
+
+     Running tests/vectors.rs (target/n2048-kmax1024/release/deps/vectors-685dd764e3d5a8a5)
+
+running 12 tests
+test enc_group_seed_eq_shake ... ok
+test enc_dec_input_errors ... ok
+test keygen_json ... ok
+test codec_roundtrip ... ok
+test enc_json ... ok
+test matrix_json ... ok
+test prove_refuses_noncanonical_statement ... ok
+test cheating_proofs_reject ... ok
+test all_pqzl_proofs_verify ... ok
+test reprove_byte_equal ... ok
+test negative_rows_reject ... ok
+test wasm_replay_inputs ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 52.21s
+
+   Doc-tests pqzl
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

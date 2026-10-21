@@ -17,8 +17,10 @@ crate-type = ["rlib", "cdylib", "staticlib"]
 pqz-stmt = { path = "../stmt" }
 pqzh-ligero = { path = "../pqzh/ligero", default-features = false }
 sha3 = "=0.10.8"
-# feature `pqzl-rust`: the PQZL core in Rust (pqz-core/pqzl/rust), byte-for-byte equal to the C core
-pqzl = { path = "../pqzl/rust", optional = true }
+# feature `pqzl-rust`: the PQZL core in Rust (pqz-core/pqzl/rust), byte-for-byte equal to the C core. Parameter set
+# (owner 2026-10-21: one per build): the frozen v3 set n2048-kmax1024 only, the set of pqz-stmt and PQZH until plan
+# 5h Task 8c / 8d (build.rs compiles the C core with the same set)
+pqzl = { path = "../pqzl/rust", optional = true, default-features = false, features = ["sv", "set-n2048-kmax1024"] }
 # feature `prove` only: the op 7 sender memo (P6-ANON §5.4, CTR-PQZ-23 / CTR-ZTH-50: HKDF-SHA256)
 hkdf = { version = "=0.12.4", optional = true }
 sha2 = { version = "=0.10.9", optional = true }

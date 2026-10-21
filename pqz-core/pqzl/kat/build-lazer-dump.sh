@@ -2,7 +2,8 @@
 # Build the upstream side of the arithmetic-layer KAT: a fully static x86-64 `lazer_dump` linked against
 # LaZer 3330e48 (+ Intel HEXL from LaZer's third_party zip, distro static GMP / MPFR, static libstdc++).
 #
-#   kat/build-lazer-dump.sh <work dir> [v4|v3]      -> <work dir>/lazer_dump-<variant> + build-info-<variant>.txt
+#   [PQZ_SET=<set>] kat/build-lazer-dump.sh <work dir> [v4|v3]      -> <work dir>/lazer_dump-<variant> + build-info-<variant>.txt
+#   (the golden file of a set: pqz-core/params/sets/<set>/lazer-3330e48-kat.json)
 #
 #   v4 (default): -march=x86-64-v4 -mavx512ifma -mavx512vbmi2 -maes -mpclmul, HEXL's AVX-512 kernels forced
 #                 in (HEXL normally enables them only if its configure-time try_run succeeds on the build
@@ -33,7 +34,10 @@ fi
 git -C "$W/lazer-$V" checkout -q "$PIN"
 [ "$(git -C "$W/lazer-$V" rev-parse HEAD)" = "$PIN" ] || { echo "LaZer is not at $PIN" >&2; exit 1; }
 
-cp "$HERE/kat/lazer_dump.c" "$HERE/params/pqz_tx_params.h" "$W/"
+# the parameter set (PQZ_SET, default n2304-kmax4096): its pqz_set.h and R_TX header (pqz-core/params/sets/<set>/)
+SETD="$HERE/../params/sets/${PQZ_SET:-n2304-kmax4096}"
+[ -f "$SETD/pqz_set.h" ] || { echo "no parameter set $SETD" >&2; exit 2; }
+cp "$HERE/kat/lazer_dump.c" "$SETD/pqz_tx_params.h" "$SETD/pqz_set.h" "$W/"
 
 docker run --rm --memory=4g -e MARCH="$MARCH" -e V="$V" -v "$W":/w -w /w "$IMG" sh -euc '
   export DEBIAN_FRONTEND=noninteractive

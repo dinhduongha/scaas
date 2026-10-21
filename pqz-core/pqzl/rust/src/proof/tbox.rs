@@ -53,10 +53,21 @@ fn vec_of<T>(n: usize, f: impl FnMut(usize) -> T) -> Result<Vec<T>, Error> {
     Ok(v)
 }
 
+/// review A's cheating prover, mode 2 (`z3 = y3`: no `β3·R·s3`, no rej3): test hook only (8a review m3)
+#[cfg(feature = "test-hooks")]
+fn cheat_skips_s3() -> bool {
+    crate::cheat() == 2
+}
+#[cfg(not(feature = "test-hooks"))]
+#[inline(always)]
+const fn cheat_skips_s3() -> bool {
+    false
+}
+
 /// `n` uniform values mod q from (seed, dom) (`intvec_urandom (V, q, log2q, seed, dom)`, `dom` not shifted)
 fn urandom_q(n: usize, seed: &[u8; 32], dom: u64) -> Result<Vec<i64>, Error> {
     let mut v = vec_of(n, |_| 0i64)?;
-    urandom_i64(&mut v, Q as i64, 42, seed, dom)?;
+    urandom_i64(&mut v, Q as i64, crate::params::set::LOG2Q, seed, dom)?;
     Ok(v)
 }
 
@@ -1013,7 +1024,7 @@ fn compute_z34(
             let s3c = Wiped(coeffs_i64(&mut s3)?);
             z3v = coeffs_i64(&mut y3)?;
             rs3 = r_times(&s3c, &cseed, 0)?;
-            if crate::cheat() != 2 {
+            if !cheat_skips_s3() {
                 z3v.iter_mut().zip(&rs3).for_each(|(z, &r)| *z += beta3 * r);
             }
         }
@@ -1025,7 +1036,7 @@ fn compute_z34(
             z4v.iter_mut().zip(&rs4).for_each(|(z, &r)| *z += beta4 * r);
         }
         // rejection sampling (rej3 = rej4 = 2 in every relation: bimodal)
-        if nex > 0 && p.rej3 != 0 && crate::cheat() != 2 {
+        if nex > 0 && p.rej3 != 0 && !cheat_skips_s3() {
             let rej = rej_bimodal(&mut rstate, &intvec(&z3v)?, &intvec(&rs3)?, &p.scm3, &p.stdev3sqr)?;
             let rej = crate::ct::verdict(rej); // review E: the verdict is public
             if rej {
@@ -1091,13 +1102,20 @@ pub(crate) fn prove(
 
     let mut au = autos(s, p)?;
     compute_z34(hash, f, s1, m, s2, &mut keys[2], s, seed_rej34)?;
-    let mode = crate::cheat(); // review A's cheating prover (test hook; 0 in a production build)
+    // review A's cheating prover (8a review m3): every cheating step is compiled only with the feature test-hooks;
+    // without it `mode` is the constant 0 and only the honest prover's checks are left
+    #[cfg(feature = "test-hooks")]
+    let mode = crate::cheat();
+    #[cfg(not(feature = "test-hooks"))]
+    let mode = 0u32;
+    #[cfg(feature = "test-hooks")]
     if (mode == 1 || mode == 3) && p.nprime > 0 {
         let v = f.z4[0].get_coeff(0).get_i64();
         f.z4[0].set_coeff(0, &int(v + 1));
     }
     let cseed = *hash;
     hash_z34(hash, &f.z3, &f.z4, p)?;
+    #[cfg(feature = "test-hooks")]
     let hz = *hash; // the cheating prover's guess of V's seed (B-1: V is drawn after tg, from the next hash)
 
     // s = (<s1>, <m>, <y3>, <y4>, <beta>) (and <g> before the last check)
@@ -1109,7 +1127,9 @@ pub(crate) fn prove(
 
     // cheating modes 1, 2: the z3 / z4 part of each accumulator at coefficients 0 and d/2 as the cheater can know it
     // before tg (Gamma and V from hz: Gamma's part is 0 there for an otherwise honest s), cancelled through g
+    #[cfg(feature = "test-hooks")]
     let mut offs = Vec::new();
+    #[cfg(feature = "test-hooks")]
     if mode == 1 || mode == 2 {
         let (mut c1, mut c2) = accs(p)?;
         let mut au2 = autos(s, p)?;
@@ -1124,6 +1144,7 @@ pub(crate) fn prove(
         let mut v = urandom_q(D, seed_cont, i as u64)?;
         v[0] = 0;
         v[D / 2] = 0;
+        #[cfg(feature = "test-hooks")]
         if let Some(&(o0, o32)) = offs.get(i) {
             (v[0], v[D / 2]) = (-o0, -o32);
         }
@@ -1159,6 +1180,7 @@ pub(crate) fn prove(
         let mut t = evaleq(Some(&mut a.r2), Some(&mut a.r1), Some(&a.r0), &mut sub)?;
         f.h[i].add_assign(&mut t, false);
         crate::ct::public(&f.h[i]); // review E: hi, a proof field
+        #[cfg(feature = "test-hooks")]
         if mode == 1 || mode == 2 {
             // what the cancellation left (zero only if it guessed V) is dropped: the proof is sent anyway
             f.h[i].set_coeff(0, &int(0));

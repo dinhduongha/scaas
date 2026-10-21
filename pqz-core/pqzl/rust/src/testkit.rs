@@ -112,10 +112,13 @@ pub fn kat_json() -> Result<String, crate::Error> {
     }
 
     let mut o = String::new();
-    o.push_str(
-        "{\n  \"meta\": {\"backend\": \"pqzl-rust\", \"lazer_commit\": \"3330e487228f633eceb322807b13a596b516770f\", \
+    let _ = write!(
+        o,
+        "{{\n  \"meta\": {{\"backend\": \"pqzl-rust\", \"lazer_commit\": \"3330e487228f633eceb322807b13a596b516770f\", \
          \"build\": \"rust\", \"compiler\": \"rustc\", \"cpu_avx512f\": 0, \"cpu_avx512ifma\": 0, \
-         \"ring\": \"Z_q[X]/(X^64+1), q = 2^42 - 215\"},\n  \"cases\": {",
+         \"ring\": \"Z_q[X]/(X^64+1), q = {} (set {})\"}},\n  \"cases\": {{",
+        crate::params::set::Q,
+        crate::params::set::SET_NAME
     );
     let mut first = true;
     for (name, v) in [("inputs_a", &mut a), ("inputs_b", &mut b)] {
@@ -215,7 +218,7 @@ pub fn kat_json() -> Result<String, crate::Error> {
         let _ = write!(o, "{x:02x}");
     }
     o.push('"');
-    per_pair(&mut o, &mut first, "urandom", &mut a, &mut b, &|i, _, _| Poly::urandom(&RING_Q, 42, &seed, i as u64))?;
+    per_pair(&mut o, &mut first, "urandom", &mut a, &mut b, &|i, _, _| Poly::urandom(&RING_Q, crate::arith::poly::LOG2Q, &seed, i as u64))?;
     per_pair(&mut o, &mut first, "brandom", &mut a, &mut b, &|i, _, _| Poly::brandom(2, &seed, i as u64))?;
     o.push_str("\n  }\n}\n");
     Ok(o)

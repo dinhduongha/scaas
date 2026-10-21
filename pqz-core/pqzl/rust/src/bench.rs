@@ -89,15 +89,15 @@ impl Xs {
         }
     }
 
-    fn r8(&mut self) -> Box<[i8; 2048]> {
-        let mut x = Box::new([0i8; 2048]);
-        self.short8(&mut x[..], 1, 36);
+    fn r8(&mut self) -> Box<[i8; crate::N]> {
+        let mut x = Box::new([0i8; crate::N]);
+        self.short8(&mut x[..], 1, crate::keys::BS);
         x
     }
 
-    fn e16(&mut self) -> Box<[i16; 2048]> {
-        let mut x = Box::new([0i16; 2048]);
-        self.short16(&mut x[..], 20, 164);
+    fn e16(&mut self) -> Box<[i16; crate::N]> {
+        let mut x = Box::new([0i16; crate::N]);
+        self.short16(&mut x[..], 20, crate::keys::BE);
         x
     }
 
@@ -131,8 +131,8 @@ fn i8s(out: &mut Vec<u8>, x: &[i8]) {
 }
 
 struct Key {
-    s: Box<[i8; 2048]>,
-    e: Box<[i16; 2048]>,
+    s: Box<[i8; crate::N]>,
+    e: Box<[i16; crate::N]>,
     pk: Box<[u8; PV]>,
 }
 
@@ -258,7 +258,7 @@ impl Bench {
         for x in [&kf.pk[..], &ut[..], &vt[..], &nb.u[..], &nb.vs[0]] {
             burn.extend_from_slice(x);
         }
-        let mut burn_wit = tx_wit[..2048 + 4096].to_vec();
+        let mut burn_wit = tx_wit[..3 * crate::N].to_vec();
         i8s(&mut burn_wit, &rb[..]);
         le16s(&mut burn_wit, &e1b[..]);
         le16s(&mut burn_wit, &e2b);
@@ -270,8 +270,8 @@ impl Bench {
         for x in [&kf.pk[..], &kt.pk[..], &ut[..], &vt[..], &c.u[..], &c.vs[0], &c.vs[1]] {
             tx0.extend_from_slice(x);
         }
-        let mut tx0_wit = tx_wit[..12288 + 64].to_vec();
-        tx0_wit.extend_from_slice(&tx_wit[12288 + 96..12288 + 128]);
+        let mut tx0_wit = tx_wit[..6 * crate::N + 64].to_vec();
+        tx0_wit.extend_from_slice(&tx_wit[6 * crate::N + 96..6 * crate::N + 128]);
 
         let mut stmt = vec![reg, tx, burn, ds, dr, tx0];
         let mut wit = vec![reg_wit, tx_wit, burn_wit, ds_wit, dr_wit, tx0_wit];
@@ -332,6 +332,19 @@ impl Bench {
         self.proofs[rel].len()
     }
 
+    /// relation rel's (op, relation code, statement, witness): the oracle tests' honest rows for a parameter set
+    /// without committed vectors (tests/common `pqzl_rows`)
+    pub fn instance(&self, rel: usize) -> (u8, u8, &[u8], &[u8]) {
+        const CODES: [u8; 6] = [3, 1, 2, 4, 5, 0x81];
+        let code = if rel < 6 {
+            CODES[rel]
+        } else {
+            let (m, a) = TXB[rel - 6];
+            0x70 | (a as u8) << 3 | m.trailing_zeros() as u8
+        };
+        (self.ops[rel], code, &self.stmt[rel], &self.wit[rel])
+    }
+
     /// `step_verify`
     pub fn verify(&mut self, rel: usize) -> bool {
         vfy(&mut self.ctx, self.fast, self.ops[rel], &self.stmt[rel], &self.proofs[rel])
@@ -359,7 +372,7 @@ impl Bench {
                 vfy(&mut self.ctx, self.fast, op, &self.stmt[rel], &bad)
             }
             2 | 5 => {
-                let off = if kind == 2 { self.keyoff[rel] + 8 * (self.xs.rnd() % 2048) as usize + 7 } else { self.scaloff[rel] };
+                let off = if kind == 2 { self.keyoff[rel] + 8 * (self.xs.rnd() % crate::N as u64) as usize + 7 } else { self.scaloff[rel] };
                 self.stmt[rel][off] ^= 1;
                 let r = vfy(&mut self.ctx, self.fast, op, &self.stmt[rel], &self.proofs[rel]);
                 self.stmt[rel][off] ^= 1;
@@ -451,7 +464,7 @@ fn txm_build(xs: &mut Xs, kts: &Key, kta: &Key, ktr: &[Key], m: usize, a: usize,
     }
     dg.iter().for_each(|x| wt.extend_from_slice(x));
     wt.extend_from_slice(&dpg);
-    if st.len() != crate::rel::txm_stmt(m, a) || wt.len() != (1 + g) * 6144 + 32 * (m + 1 + a * m) + 16 * m + 16 {
+    if st.len() != crate::rel::txm_stmt(m, a) || wt.len() != (1 + g) * 3 * crate::N + 32 * (m + 1 + a * m) + 16 * m + 16 {
         return Err(Error::Internal);
     }
     Ok((st, wt))

@@ -17,7 +17,7 @@ use crate::Error;
 
 /// the one ring of every relation (pqz_*_params.h): q, log2 q, 2^-1 mod q as `int_t` (-(q-1)/2)
 pub(crate) const RING_Q: Int = Int::from_limbs(&[Q], 0);
-pub(crate) const LOG2Q: u32 = 42;
+pub(crate) const LOG2Q: u32 = crate::params::set::LOG2Q;
 pub(crate) const RING_INV2: Int = Int::from_limbs(&[(Q - 1) / 2], 1);
 
 #[derive(Clone, Debug)]

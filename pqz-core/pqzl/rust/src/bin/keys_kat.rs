@@ -19,7 +19,8 @@ use sha3::Shake256;
 use std::fmt::Write;
 
 const NK: usize = 20;
-const B_FRESH: i64 = 11_872;
+/// B_FRESH = 2 beta_e beta_s + 64 (v3 11,872)
+const B_FRESH: i64 = 2 * (pqzl::BETA_E * pqzl::BETA_S) as i64 + 64;
 
 fn hex(p: &[u8]) -> String {
     p.iter().fold(String::new(), |mut s, x| {
@@ -165,16 +166,24 @@ fn main() {
         }
     }
 
-    // 4. lowered thresholds: KeyGen ||s|| <= 32, ||e|| <= 143 (each passes about half the time), Enc also ||e2_j|| <=
-    // 12; then a threshold no sample meets (0): the counter-64 error
-    const LS: [[i64; 4]; 6] = [[32, 143, 64, 0], [32, 143, 64, 1], [32, 143, 64, 2], [32, 143, 12, 3], [0, 164, 64, 4],
-                               [36, 164, 0, 5]];
+    // 4. lowered thresholds: KeyGen ||s|| <= HS = round(sqrt(n / 2)), ||e|| <= HE = round(sqrt(10 n)) (the mean norms:
+    // each passes about half the time; v3 32 / 143), Enc also ||e2_j|| <= 12; then a threshold no sample meets (0):
+    // the counter-64 error (pqz_keys_kat.c)
+    let isqrt_round = |x: i64| {
+        let mut r = 0;
+        while (r + 1) * (r + 1) <= x {
+            r += 1;
+        }
+        if x - r * r > r { r + 1 } else { r }
+    };
+    let (hs, he, bs0, be0) = (isqrt_round(pqzl::N as i64 / 2), isqrt_round(10 * pqzl::N as i64), pqzl::BETA_S as i64, pqzl::BETA_E as i64);
+    let ls: [[i64; 4]; 6] = [[hs, he, 64, 0], [hs, he, 64, 1], [hs, he, 64, 2], [hs, he, 12, 3], [0, be0, 64, 4], [bs0, be0, 0, 5]];
     let (mut resampled_k, mut resampled_e, mut err64) = (0, 0, 0);
     let mut kp = vec![0u8; POLYVEC_BYTES];
-    for (c, l) in LS.iter().enumerate() {
+    for (c, l) in ls.iter().enumerate() {
         let sd = &seed[l[3] as usize];
         let k = keygen_lowered(ctx.as_mut(), sd, l[0], l[1]);
-        let (bs, be, b2) = (if l[0] != 0 { l[0] } else { 36 }, l[1], l[2]);
+        let (bs, be, b2) = (if l[0] != 0 { l[0] } else { bs0 }, l[1], l[2]);
         se = core::array::from_fn(|j| (101 * c + j) as u8);
         let mv = [mix(c as u64), mix(c as u64 + 50)];
         m = [digits(mv[0]), digits(mv[1])];

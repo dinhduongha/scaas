@@ -12,7 +12,13 @@ crate-type = ["cdylib"]
 path = "lib.rs"
 
 [dependencies]
-pqzl = { path = "..", features = ["bench"] }
+pqzl = { path = "..", default-features = false, features = ["sv", "bench"] }
+
+[features]
+# the parameter set (owner 2026-10-21: one per build), forwarded to pqzl; exactly one
+default = ["set-n2304-kmax4096"]
+set-n2304-kmax4096 = ["pqzl/set-n2304-kmax4096"]
+set-n2048-kmax1024 = ["pqzl/set-n2048-kmax1024"]
 
 [profile.release]
 panic = "abort"

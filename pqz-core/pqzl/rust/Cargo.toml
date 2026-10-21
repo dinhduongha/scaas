@@ -21,7 +21,13 @@ cc = { version = "1", optional = true }
 serde_json = "1"
 
 [features]
-default = ["sv"]
+# one parameter set per build (owner 2026-10-21; pqz-core/params/sets/<set>/): exactly one `set-<set>` feature; a
+# non-default set needs default-features = false (e.g. `--no-default-features --features sv,set-n2048-kmax1024`)
+default = ["sv", "set-n2304-kmax4096"]
+# set (a): n 2304, K_MAX 4,096, q = 61,275,424,977,257 (owner 2026-10-21)
+set-n2304-kmax4096 = []
+# the frozen v3 set: n 2048, K_MAX 1,024, q = 2^42 - 215 (proofSystemId .../mlwe-d64k32-q42l4/v3)
+set-n2048-kmax1024 = []
 # the specialised verifier (pqz_verify_fast)
 sv = []
 # R_TXM with M = 16 (bench only; does not fit MAX_INPUT)
@@ -34,7 +40,7 @@ bench = []
 # wasm32 proves op 7 up to TXM_MAX_LEGS (16 with oversize; 8 without, which is the default since Task 12): the
 # measurements (d6.sh, reproduce.sh --multi-bench). Bench builds only, never in a production build.
 wasm-m8 = ["bench"]
-# dev / test only: the C core (../src, ../lazer, ../params) as the oracle, module `c_oracle`
+# dev / test only: the C core (../src, ../lazer, the set's headers) as the oracle, module `c_oracle`
 c-oracle = ["dep:cc"]
 # test only (x86-64): valgrind memcheck client requests for the constant-time check (src/bin/ct.rs, review fix E)
 ctgrind = ["bench"]

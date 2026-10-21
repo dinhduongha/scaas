@@ -7,8 +7,20 @@ use std::path::PathBuf;
 
 pub const PQZL_ID: [u8; 32] = pqzl::PROOF_SYSTEM_ID;
 
+/// the committed vectors of this build's parameter set (owner 2026-10-21, one set per build): the frozen v3 set
+/// n2048-kmax1024 at smartcontracts/vectors/pqz (what the contracts read until plan 5h Task 8d), any other set under
+/// smartcontracts/vectors/pqz/<set>/ once generated; None = this set has no vectors yet
+pub fn vectors_dir() -> Option<PathBuf> {
+    let base = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../smartcontracts/vectors/pqz");
+    if pqzl::SET == "n2048-kmax1024" {
+        return Some(base);
+    }
+    let d = base.join(pqzl::SET);
+    d.join("proof_pqzl.json").is_file().then_some(d)
+}
+
 pub fn json(file: &str) -> Value {
-    let p = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../smartcontracts/vectors/pqz").join(file);
+    let p = vectors_dir().unwrap_or_else(|| panic!("no vectors of set {} (smartcontracts/vectors/pqz/{0}/)", pqzl::SET)).join(file);
     serde_json::from_str(&std::fs::read_to_string(&p).unwrap_or_else(|e| panic!("{}: {e}", p.display()))).unwrap()
 }
 
@@ -73,8 +85,13 @@ pub struct Row {
     pub rnd32: [u8; 32],
 }
 
-/// every PQZL row of proof_pqzl.json (19) and fee0.json (4)
+/// every PQZL row of proof_pqzl.json (19) and fee0.json (4); for a set without vectors, one honest row per bench
+/// relation (pqzl::bench, the 14 relations of pqz_bench.c), proved by the C core (feature c-oracle) with a fixed
+/// rnd32: the Rust prover must give the same bytes
 pub fn pqzl_rows() -> Vec<Row> {
+    if vectors_dir().is_none() {
+        return bench_rows();
+    }
     let st = statements();
     let mut out = Vec::new();
     for r in json("proof_pqzl.json")["rows"].as_array().unwrap() {
@@ -106,8 +123,31 @@ pub fn pqzl_rows() -> Vec<Row> {
     out
 }
 
-/// negative.json's PQZL rows as precompile inputs u8(op) || be32(len) || stmt || proof (pqz_kat.py `apply_edits`)
+#[cfg(all(feature = "bench", feature = "c-oracle"))]
+fn bench_rows() -> Vec<Row> {
+    let b = pqzl::bench::Bench::new().expect("bench setup");
+    (0..pqzl::bench::NREL)
+        .map(|rel| {
+            let (op, code, stmt, wit) = b.instance(rel);
+            let rnd32: [u8; 32] = core::array::from_fn(|i| (7 * rel + i) as u8);
+            let proof = pqzl::c_oracle::c_prove(op, stmt, wit, &rnd32).expect("C prove of a bench relation");
+            Row { name: format!("bench {}", pqzl::bench::NAMES[rel]), op, code, stmt: stmt.to_vec(), proof, wit: wit.to_vec(), rnd32 }
+        })
+        .collect()
+}
+
+#[cfg(not(all(feature = "bench", feature = "c-oracle")))]
+fn bench_rows() -> Vec<Row> {
+    panic!("set {} has no vectors: the rows come from pqzl::bench (features bench, c-oracle)", pqzl::SET)
+}
+
+/// negative.json's PQZL rows as precompile inputs u8(op) || be32(len) || stmt || proof (pqz_kat.py `apply_edits`);
+/// empty for a set without vectors (said once on stderr: the bench's adversarial verifies cover it there)
 pub fn negative_inputs() -> Vec<(String, Vec<u8>)> {
+    if vectors_dir().is_none() {
+        eprintln!("set {}: no negative.json yet (no vectors): no negative-vector rows", pqzl::SET);
+        return Vec::new();
+    }
     let j = json("negative.json");
     let st = statements();
     let mut proofs: HashMap<String, Vec<u8>> = HashMap::new();
@@ -190,7 +230,11 @@ pub fn split(b: &[u8]) -> Option<(u8, &[u8], &[u8])> {
 pub type Fixture = (&'static str, u8, Vec<u8>, Vec<u8>, bool);
 
 pub fn cheating() -> Vec<Fixture> {
-    let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/cheating");
+    // the v3 set's fixtures at tests/fixtures/cheating, another set's under tests/fixtures/cheating/<set>/ (export.sh)
+    let mut dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/cheating");
+    if pqzl::SET != "n2048-kmax1024" {
+        dir = dir.join(pqzl::SET);
+    }
     let rd = |f: String| std::fs::read(dir.join(&f)).unwrap_or_else(|e| panic!("{f}: {e}"));
     [
         "l2dom_honest",

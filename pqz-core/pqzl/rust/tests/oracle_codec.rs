@@ -8,7 +8,7 @@ use pqzl::testkit::{dcomp_gamma_m, ghint, synthetic_proof};
 use serde_json::Value;
 use std::path::PathBuf;
 
-const Q: u64 = 4_398_046_510_889;
+const Q: u64 = pqzl::Q;
 const MAX_PROOF: usize = pqzl::MAX_PROOF;
 
 /// xorshift64*

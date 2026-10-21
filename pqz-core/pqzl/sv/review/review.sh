@@ -2,6 +2,8 @@
 # Independent review of pqz_sv.c (docs/reviews/specs/2026-10-13-pqz-sv-review.md): the reproducers. Heavy: run under
 # scripts/capped. Nothing here is linked into libpqz; production sources are only copied and patched under build/.
 #   sv/review/review.sh dom          finding 3: beta4 (i = d - 1) and upsilon share one (seed, dom) (sz trace hook)
+#   sv/review/review.sh domctl       the same on a copy of lnp-tbox.c with A-2 undone (upsilon back at M + 2 (d - 1)):
+#                                    the control must report the shared dom (8a review m2)
 #   sv/review/review.sh norm         cheating provers past the final hash: z1 / w / z21 norms (both verifiers must
 #                                    reject, and accept once that one check is removed). z21 was finding 1 (no bound,
 #                                    both accepted; lazer#26), fixed as P6-Z21: check_tbox_fixes.sh runs this mode
@@ -48,6 +50,16 @@ dom)
   for f in pqz_lazer pqz_ntt pqz_arena pqz_rel; do $CC $FL -DPQZ_SZ_TRACE -c src/$f.c -o $B/dom-$f.o; done
   $CC -std=gnu11 -O2 -w -Ibuild/include -Isrc -o $B/dom_trace sv/review/dom_trace.c $B/dom-*.o
   $B/dom_trace | grep -v '^dom=' || true
+  ;;
+domctl)
+  U=$B/a2ctl
+  mkdir -p $U
+  sed 's|hash, M + 2 \* (d - 1) + 1, params);|hash, M + 2 * (d - 1), params);|' lazer/lnp-tbox.c > $U/lnp-tbox.c
+  echo "control: A-2 undone on $(diff lazer/lnp-tbox.c $U/lnp-tbox.c | grep -c '^>') line(s) of lnp-tbox.c"
+  $CC -I$U $FL -DPQZ_SZ_TRACE -c src/pqz_lazer.c -o $U/dom-pqz_lazer.o
+  for f in pqz_ntt pqz_arena pqz_rel; do $CC $FL -DPQZ_SZ_TRACE -c src/$f.c -o $U/dom-$f.o; done
+  $CC -std=gnu11 -O2 -w -Ibuild/include -Isrc -o $U/dom_trace sv/review/dom_trace.c $U/dom-*.o
+  $U/dom_trace | grep -v '^dom=' || true
   ;;
 norm)
   mkdir -p $B/noz1 $B/now $B/noz21 $B/norm-out

@@ -56,7 +56,9 @@ fn c_core(core: &std::path::Path, out: &std::path::Path) {
     for f in ["-std=gnu11", "-O2", "-fno-builtin", "-fno-math-errno", "-ffp-contract=off", "-DPQZ_SV", "-Wall", "-Wextra", "-Wno-unused-parameter", "-Wno-unused-function", "-Wno-sign-compare"] {
         b.flag(f);
     }
-    b.include(&inc).include(core.join("src")).include(core.join("lazer")).include(core.join("params"));
+    // the parameter set of pqz-stmt / PQZH (Cargo.toml: n2048-kmax1024 until plan 5h Task 8c / 8d)
+    let setdir = core.join("../params/sets/n2048-kmax1024");
+    b.include(&inc).include(core.join("src")).include(core.join("lazer")).include(&setdir);
     for f in ["pqz_lazer", "pqz_ntt", "pqz_arena", "pqz_rel", "pqz_keys", "pqz_sv"] {
         b.file(core.join(format!("src/{f}.c")));
     }
@@ -96,8 +98,9 @@ fn c_core(core: &std::path::Path, out: &std::path::Path) {
         }
     }
 
-    for d in ["src", "lazer", "params", "check_symbols.sh"] {
+    for d in ["src", "lazer", "check_symbols.sh"] {
         println!("cargo:rerun-if-changed={}", core.join(d).display());
     }
+    println!("cargo:rerun-if-changed={}", setdir.display());
     println!("cargo:rerun-if-changed=csrc");
 }

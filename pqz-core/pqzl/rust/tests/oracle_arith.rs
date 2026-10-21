@@ -5,7 +5,7 @@
 use pqzl::c_oracle::{c_int_ops, c_ntt_basemul, c_ntt_fwd, c_ntt_inv, c_polyvec_ops};
 use pqzl::testkit::{int_ops, ntt_basemul, ntt_fwd, ntt_inv, polyvec_ops, INT_OPS_IN, OPS_IN};
 
-const Q: u64 = 4_398_046_510_889;
+const Q: u64 = pqzl::Q;
 const H: i64 = ((Q - 1) / 2) as i64;
 const N: usize = 10_000;
 

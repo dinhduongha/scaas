@@ -36,7 +36,7 @@ mod ct;
 mod rand;
 mod keys;
 #[allow(dead_code)]
-mod params; // generated (plan D8): pqzl/params/to_rust.py
+mod params; // generated (plan D8): pqzl/params/to_rust.py; the parameter set's modules and `params::set`
 mod proof;
 mod rel;
 #[cfg(feature = "sv")]
@@ -53,8 +53,23 @@ pub const OP_DISCLOSE_RECEIVER: u8 = 5;
 pub const OP_TRANSFER_MULTI: u8 = 7;
 /// MAX_PROOF (pq-zero-knowledge.md §8)
 pub const MAX_PROOF: usize = 98_304;
-/// 32 polys x 64 coeffs x be8: a public key or `u`
-pub const POLYVEC_BYTES: usize = 16_384;
+/// The parameter set of this build (owner 2026-10-21: one per build, cargo feature `set-<set>`; pqz-core/params/sets/)
+pub const SET: &str = params::set::SET_NAME;
+/// ring dimension n = k d of the set (secret keys and encryption randomness have n coefficients)
+pub const N: usize = params::set::N;
+/// polys per public key / `u` (k)
+pub const K: usize = params::set::K;
+/// the modulus q of the set
+pub const Q: u64 = params::set::Q;
+/// Delta = floor(q / 2^(MBITS + 2)): the plaintext digits' scale
+pub const DELTA: i64 = params::set::DELTA;
+/// credits per account between refreshes
+pub const K_MAX: usize = params::set::K_MAX;
+/// the norm bounds ||s||, ||r|| (KeyGen / Enc thresholds) and ||e||, ||e1|| of the set
+pub const BETA_S: usize = params::set::BETA_S;
+pub const BETA_E: usize = params::set::BETA_E;
+/// k polys x 64 coeffs x be8: a public key or `u`
+pub const POLYVEC_BYTES: usize = K * 512;
 /// 16 coeffs x be8: one `v`
 pub const V_BYTES: usize = 128;
 /// ciphertext `u || v`
@@ -237,7 +252,7 @@ impl Ctx {
     }
 
     /// [`keypair_from_secret`] with this `Ctx`'s A: same arguments, same result.
-    pub fn keypair_from_secret(&mut self, s: &[i8; 2048], e: &[i16; 2048]) -> Result<Box<[u8; POLYVEC_BYTES]>, Error> {
+    pub fn keypair_from_secret(&mut self, s: &[i8; N], e: &[i16; N]) -> Result<Box<[u8; POLYVEC_BYTES]>, Error> {
         keys::keypair_from_secret(&mut self.a, s, e)
     }
 
@@ -246,8 +261,8 @@ impl Ctx {
         &mut self,
         pks: &[&[u8; POLYVEC_BYTES]],
         msgs: &[[u8; 16]],
-        r: &[i8; 2048],
-        e1: &[i16; 2048],
+        r: &[i8; N],
+        e1: &[i16; N],
         e2: &[[i16; 16]],
     ) -> Result<Enc, Error> {
         keys::encrypt(&mut self.a, pks, msgs, r, e1, e2)
@@ -270,8 +285,8 @@ fn only_memory(r: Result<bool, Error>) -> Result<bool, Error> {
 /// A key pair from a seed (pq-zero-knowledge.md §4.2, `pqz_keygen`).
 pub struct Key {
     pub pk: Box<[u8; POLYVEC_BYTES]>,
-    pub s: Box<[i8; 2048]>,
-    pub e: Box<[i16; 2048]>,
+    pub s: Box<[i8; N]>,
+    pub e: Box<[i16; N]>,
     /// the counter of the accepted attempt
     pub ctr: u32,
 }
@@ -280,15 +295,15 @@ pub struct Key {
 pub struct Enc {
     pub u: Box<[u8; POLYVEC_BYTES]>,
     pub vs: Vec<[u8; V_BYTES]>,
-    pub r: Box<[i8; 2048]>,
-    pub e1: Box<[i16; 2048]>,
+    pub r: Box<[i8; N]>,
+    pub e1: Box<[i16; N]>,
     pub e2: Vec<[i16; 16]>,
     /// the counter of the accepted attempt
     pub ctr: u32,
 }
 
 /// `pqz_keypair_from_secret`: pk = A s + e (no norm check).
-pub fn keypair_from_secret(s: &[i8; 2048], e: &[i16; 2048]) -> Result<Box<[u8; POLYVEC_BYTES]>, Error> {
+pub fn keypair_from_secret(s: &[i8; N], e: &[i16; N]) -> Result<Box<[u8; POLYVEC_BYTES]>, Error> {
     keys::keypair_from_secret(&mut None, s, e)
 }
 
@@ -312,20 +327,20 @@ pub fn enc_group_seed(seed_enc: &[u8; 32], g: u32) -> [u8; 32] {
 pub fn encrypt(
     pks: &[&[u8; POLYVEC_BYTES]],
     msgs: &[[u8; 16]],
-    r: &[i8; 2048],
-    e1: &[i16; 2048],
+    r: &[i8; N],
+    e1: &[i16; N],
     e2: &[[i16; 16]],
 ) -> Result<Enc, Error> {
     keys::encrypt(&mut None, pks, msgs, r, e1, e2)
 }
 
 /// `pqz_decrypt_raw`: w_i = centre(v_i - (u^T s)_i).
-pub fn decrypt_raw(s: &[i8; 2048], u: &[u8; POLYVEC_BYTES], v: &[u8; V_BYTES]) -> Result<[i64; 16], Error> {
+pub fn decrypt_raw(s: &[i8; N], u: &[u8; POLYVEC_BYTES], v: &[u8; V_BYTES]) -> Result<[i64; 16], Error> {
     keys::decrypt_raw(s, &u[..], &v[..])
 }
 
 /// `pqz_dec` of ct = u || v: the 16 digits M_i = round(w_i / Delta) and their noise w_i - Delta M_i.
-pub fn dec(s: &[i8; 2048], ct: &[u8; CT_BYTES]) -> Result<([i64; 16], [i64; 16]), Error> {
+pub fn dec(s: &[i8; N], ct: &[u8; CT_BYTES]) -> Result<([i64; 16], [i64; 16]), Error> {
     keys::dec(s, ct)
 }
 
@@ -389,12 +404,9 @@ std::thread_local! {
     static CHEAT: core::cell::Cell<u32> = const { core::cell::Cell::new(0) };
 }
 
+/// the mode `set_cheat` gave this thread; only with test-hooks (8a review m3: no production build has it, so no
+/// cheating step can be reached from one)
 #[cfg(feature = "test-hooks")]
 pub(crate) fn cheat() -> u32 {
     CHEAT.with(|c| c.get())
-}
-
-#[cfg(not(feature = "test-hooks"))]
-pub(crate) const fn cheat() -> u32 {
-    0
 }

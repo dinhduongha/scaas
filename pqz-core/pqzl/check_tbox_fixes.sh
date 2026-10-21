@@ -63,6 +63,11 @@ st=0
 sv/review/review.sh dom > build/dom-trace.txt 2>&1 || st=1
 grep 'shared dom(s)$' build/dom-trace.txt || st=1
 grep -q '^0 shared dom(s)$' build/dom-trace.txt || st=1
+# control (8a review m2): with A-2 undone the same harness must report the shared dom
+sv/review/review.sh domctl > build/dom-trace-control.txt 2>&1 || st=1
+grep -e '^control:' -e 'shared dom(s)$' build/dom-trace-control.txt | sed 's/^/A-2 control: /' || true
+grep -q '^control: A-2 undone on 2 line(s)' build/dom-trace-control.txt || st=1
+grep -q '^[1-9][0-9]* shared dom(s)$' build/dom-trace-control.txt || st=1
 res A-2 $st
 echo "checks: $sum"
 [ $rc = 0 ] && echo "check_tbox_fixes: ok" || echo "check_tbox_fixes: FAIL"
