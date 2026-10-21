@@ -2,7 +2,7 @@
 
 **Status:** design (designer for plan Task 5h, 2026-10-20). Owner rulings O1–O9 on the first version recorded
 (CTR-PQZ-07 Change 2026-10-20); **updated 2026-10-20 (later the same day)** to the owner's further rulings listed under
-"Update 2026-10-20" below. **Part A is built (2026-10-20, branch `pqz-state-b`, Tasks 1–5 incl. 3b, the `mtx*` rename; see "Docs sync" below); part B (16k parameters, one id bump) is not built.** Implementation plan:
+"Update 2026-10-20" below. **Part A is built (2026-10-20, branch `pqz-state-b`, Tasks 1–5 incl. 3b, the `mtx*` rename; see "Docs sync" below); part B (16k parameters, one id bump) is not built.** **Superseded 2026-10-21 (§12): set (a) (n = 2304, `K_MAX` 4,096, q = 61,275,424,977,257) replaces the 16k set; §6's 16k figures stay as the record.** Implementation plan:
 [`2026-10-20-pqz-state-redesign.md`](../plans/2026-10-20-pqz-state-redesign.md) (decisions D1–D25).
 
 **Docs sync 2026-10-20 (plan Task 5; the text below is the design as written, the passages it lists are superseded, not rewritten).**
@@ -487,6 +487,9 @@ their names (`pqzAccount`, `accountState`, …): CTR-ZTH-45 is about entry point
 
 ## 6. Larger parameters: A' measured, 16k chosen
 
+**Superseded (owner 2026-10-21, §12):** the 16k set below is replaced by set (a), n = 2304, `K_MAX` 4,096,
+q = 61,275,424,977,257; the text is kept as the record.
+
 **[16k] (owner 2026-10-20, CTR-PQZ-06 Change):** `K_MAX = 16,384` with the spec's option-A set n = 2560 (k = 40),
 q = 2^50 − 71, Δ = 2^30 − 1 — supersedes the A' recommendation (n = 2816, q = 2^54 − 327) and rulings O2 and O9's A'
 figures. §6.1–§6.3 keep the A' measurements as the record and add the 16k row; §6.4 is the 16k regeneration; §6.5 is
@@ -783,3 +786,68 @@ Ligero preset search are measured and reported, not asked).
 | Q1 | The ruled q = 2^50 − 71 has no FFT domain for PQZH's Ligero (q − 1 = 2^3 · 17 · 8.3·10^12, §6.5). Change q to a prime of the same size whose q − 1 keeps today's Ligero radices, or keep 2^50 − 71 for PQZL and leave PQZH without a 16k id? | **q = 2^50 − 42,310,535** (q − 1 divisible by 2^3 · 19 · 43 · 431, Δ = 2^30 − 41, every budget check, `K_MAX` 16,384 and the security estimate unchanged); PQZL and PQZH keep one shared q. | Task 7 |
 | Q2 | A PQZ shield into **another** account adds a queue entry and a `K_MAX` unit to the victim (§5.7): charge it the per-credit fee (O4 floor), paid from the shielder straight to the recipient's public balance, with shields to oneself free? | Yes (controller proposal); Zether shields stay free. | Task 2 |
 | Q3 | The `mtx*` name table of §5.11 — in particular `mtxConfidentialTransfer…` (since `mtxTransfer` is the public meta-transfer) and one selector per function across both layers (unused arguments refused per layer). | Approve the table as proposed. | Task 3b |
+
+## 12. Amsterdam re-plan (owner 2026-10-21)
+
+**Status:** owner rulings of 2026-10-21, recorded by the controller (CTR-PQZ-06 Change "Amsterdam re-plan" in
+[decisions.md](../../decisions.md)). They supersede the 16k parameter set of §6 (n = 2560, `K_MAX` 16,384, q = 2^50 −
+42,310,535): §6 is kept as the record, its 16k figures are **superseded** where this section names a new value. Plan 5h
+Task 8 is split 8a (transcript B-1 / A-2 / `R_REG`, built `4adea55c` on today's parameters) → 8b (PQZL C and Rust cores
+at set (a)) → 8c (PQZH at the new q, backup only) → 8d (`pqz-stmt`, contracts, vectors and the one `proofSystemId` bump).
+
+Each ruling, with its content and status:
+
+1. **Ethereum's Amsterdam rules on the SCaaS chains (option (b)).** The chains run the Amsterdam fork rules as
+   Ethereum does: EIP-7976 raises the calldata floor (a transaction carries at most ≈ 261,909 B of calldata:
+   `(2^24 − 15,000) / 64`), EIP-8037 prices new state separately (state gas, ≈ 1,530 gas per stored byte for an SSTORE2
+   blob), EIP-8038 prices storage writes (a cold `acc` word rewrite ≈ 12,100 gas). Measured under Foundry 1.8.5 in plan
+   Task 7b (`9c2f53ef`, merged into pqz-16k `6643389b`; `pqz-core/pqzl/params/p16k/results-16k.md` §8). Status: decided;
+   measured.
+2. **Budgets are judged against Ethereum-like limits, not the testnet's.** The precompile may be deployed for customers,
+   so nothing is justified by a zero gas price or by the testnet's block gas limit: per-transaction and per-block
+   budgets use 2^24 regular gas per transaction, the EIP-7976 calldata floor and a 60 M mainnet-like block, not the
+   testnet's 200 M target. Status: decided (owner 2026-10-21); applies to every gas pin of 8d and later.
+3. **op 7 with M ≤ 4 on chain; no G = 1 relation.** The contracts refuse M > 4 (8d). The cores keep M = 8 with today's
+   G = 2 shape (two randomness groups of four legs, ≤ 80 hints per group); its specs are regenerated at set (a) too (8b).
+   The G = 1 specs of §6.2 / Task 7 (`txm8g1`, `txm80g1`) are not built. Status: decided; cores in 8b, contracts in 8d.
+4. **PQZH is a backup only.** Its debit inputs (406–469 KB at 16k, Task 7b) exceed what one transaction can carry
+   (≈ 261,909 B of calldata), so PQZH is not offered on chain; 8c moves it to the new q as a backup.
+   `MAX_PROOF_PQZH` stays 262,144. Status: decided; 8c.
+5. **Set (a) replaces 16k** (n-study candidate E, `pqz-core/pqzl/params/n-study/results-n-study.md`): n = 2304
+   (k = 36), `K_MAX` = 4,096, q = 61,275,424,977,257 (≈ 2^45.80, q ≡ 9 mod 16, q − 1 divisible by 2^3 · 19 · 43 · 431),
+   Δ = ⌊q / 2^18⌋ = 233,747,196, β_s / β_e = 38 / 173, digit sums `M_i` 16 bits, carries 13 bits, `e_T` / `e'` + 2^26 in
+   27 bits, proof MLWE rank (`kmlwe`) 36. Mint margin 3.08×. Status: decided (owner 2026-10-21); 8b builds the cores
+   (`pqz-core/pqzl/params/pa/`), 8c / 8d the rest.
+
+   The n-study table (q = the smallest admissible prime with mint margin ≥ 3.08×; β at 80 worst-case hints):
+
+   | | n | `K_MAX` | q | DDGR20 β @80 / dual_hybrid − offset | sizes vs 16k | R_TX / op 7 M = 4 proof (codegen) | `ROLL_MAX` Amsterdam [estimate] |
+   |---|---|---|---|---|---|---|---|
+   | 16k (superseded) | 2560 | 16,384 | 2^50.00 | 482.4 / 474.4 | — | 52,624 / 57,202 | 80 (measured, 7b) |
+   | B | 2432 | 16,384 | 2^49.85 | 450.5 / 442.5 | −5 % | 51,376 / 55,898 | 80 |
+   | C | 2432 | 8,192 | 2^47.85 | 476.4 / 466.4 | −5 % | 50,706 / 55,028 | 80 |
+   | D | 2304 | 8,192 | 2^47.80 | 441.9 / 434.9 | −10 % | 49,298 / 53,556 | 96 |
+   | **E = set (a)** | **2304** | **4,096** | **2^45.80** | **468.5 / 458.5** | **−10 %** | **48,724 / 52,950** | **96** |
+   | F | 2176 | 4,096 | 2^45.75 | 432.6 / 424.6 | −15 % | 47,316 / 51,478 | 112 |
+   | G | 2048 | 1,024 | 2^41.69 | 450.5 / 442.5 | −20 % | 44,712 / 47,352 | 128 |
+
+6. **`ROLL_MAX` is re-pinned in 8d** on the as-built code at set (a): ≈ 96 [estimate, n-study §6] instead of 16k's 80
+   (Amsterdam) / 192 (old rules). Status: open until 8d measures it.
+7. **`MAX_INPUT` = 261,120 (255 KiB), proposal** (Task 7b): at most the ≈ 261,909-byte calldata limit; covers every
+   PQZL form on chain (largest at set (a): op 7 M = 4 with the auditor, ≈ 202,331 B with the codegen proof). Replaces
+   §6.3's 512 KiB (O8). Status: controller proposal (owner may override); built in 8d.
+8. **`MAX_PROOF_PQZH` stays 262,144.** Status: decided.
+9. **Precompile addresses move to 32-bit form** in 8d: `PQZ` `0x…5caa0f01`, `MLDSA44` `0x…5caa0012`, `MLDSA65`
+   `0x…5caa0013` (were `0x5caa50…0f01` / `…0012` / `…0013`, decisions.md CTR-PQZ-10 Change 2026-10-15, P6f D3). Status: decided; 8d.
+10. **Op blobs stay in contract state ("Không được mất ciphertext": a ciphertext must never be lost).** Absolute rule:
+    calldata and events can be pruned by history expiry (EIP-4444), so every ciphertext a later debit or rollover needs
+    stays in state (CTR-PQZ-07 Change 2026-10-19 holds). The state-gas cost is real money on a customer chain and is
+    accepted: ≈ 30 M per debit under EIP-8037 at 16k (Task 7b: 32.0 M for op 1's blob), ≈ 27–29 M at set (a) (n-study
+    estimate 28.9 M for op 1's blob). Status: decided (owner 2026-10-21).
+11. **Foundry 1.8.5 with Amsterdam profiles** (task F185, branch `foundry-185`, `d4c24678`): the default and
+    `private7622` profiles use `evm_version = "amsterdam"`, `isolate = true` is pinned. Status: built on its branch, not
+    yet merged into pqz-16k.
+
+Superseded by this section (kept above as the record): the 16k set n = 2560 / `K_MAX` 16,384 / q = 2^50 − 42,310,535
+(§6, §6.4's id label `mlwe-d64k40-q50l4`, the k / q of the new label follow set (a) in 8d), O9's G = 1 for M = 8 on
+chain, `MAX_INPUT` 512 KiB (O8, §6.3), `ROLL_MAX` 208 / 192 (§9, Task 7) and PQZH as an on-chain proof system.
