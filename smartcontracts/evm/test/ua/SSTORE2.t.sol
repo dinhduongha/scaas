@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {Test} from "forge-std/Test.sol";
+import {isAmsterdam} from "../helpers/EvmVersion.sol";
 import {SSTORE2} from "../../src/common/SSTORE2.sol";
 
 contract SSTORE2Harness {
@@ -35,8 +36,9 @@ contract SSTORE2Test is Test {
         // Amsterdam, where the deposit is EIP-8037 state gas and the CREATE needs more than 100,000 (the call ran out of
         // gas before it could revert): 250,000, was 100,000 (Osaka's 200 gas/byte deposit; 250,000 would afford it)
         bytes memory kb = new bytes(1_000);
+        uint256 gas_ = isAmsterdam() ? 250_000 : 100_000; // before `expectRevert`: the probe is a call
         vm.expectRevert(SSTORE2.SSTORE2WriteFailed.selector);
-        h.write{gas: 250_000}(kb);
+        h.write{gas: gas_}(kb);
         // P6c: data the 2-byte length of the init code cannot carry reverts instead of storing a truncated copy
         vm.expectRevert(SSTORE2.SSTORE2WriteFailed.selector);
         h.write(new bytes(0xffff));

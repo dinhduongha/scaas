@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
 pragma solidity ^0.8.24;
 
+import {isAmsterdam} from "../helpers/EvmVersion.sol";
 import {IUARegistry} from "../../src/ua/IUARegistry.sol";
 import {UARegistry} from "../../src/ua/UARegistry.sol";
 import {UAKinds} from "../../src/ua/UAKinds.sol";
@@ -199,10 +200,12 @@ contract UAGasTest is UARegistryBase {
     /// of its own, all accounts and slots cold; its calldata is paid by that transaction, not by the frame).
     /// F185: EIP-8037 state gas of `register`'s new storage slots (the record), charged inside the call's gas: `gas used`
     /// of `register` 312,557 -> 658,937 (ed25519) and 346,533 -> 692,913 (bls-bn254-minsig) from Osaka to Amsterdam, +346 k.
-    uint256 internal constant REGISTER_STATE_GAS = 350_000;
+    function _registerStateGas() internal returns (uint256) {
+        return isAmsterdam() ? 350_000 : 0; // Osaka: no state gas, the old bounds
+    }
 
-    function _registerLimit() internal view returns (uint256) {
-        return _cap(0x0102) + 100_000 + REGISTER_STATE_GAS;
+    function _registerLimit() internal returns (uint256) {
+        return _cap(0x0102) + 100_000 + _registerStateGas();
     }
 
     function _leastGas(address r, bytes memory call, uint256 bound) internal returns (uint256 hi) {
@@ -465,7 +468,7 @@ contract UAGasTest is UARegistryBase {
         // §1.15: ECDSA ~3.5 k + the EIP-712 hash ~1 k + the registry's ~5 k, + a cold account (`--isolate`); F185: the
         // bound was 12,100; Foundry 1.8.5 isolates by default (13,413 on Osaka) and Amsterdam's EIP-8038 raises the cold
         // account and slot reads again (14,413), so + 2,400 -> 14,500
-        assertLe(g, 3_500 + 1_000 + 5_000 + 2_600 + 2_400, "native ECDSA over the documented cost");
+        assertLe(g, 3_500 + 1_000 + 5_000 + 2_600 + (isAmsterdam() ? 2_400 : 1_400), "native ECDSA over the documented cost");
         MockWallet w = new MockWallet(vm.addr(pk), 0, 0, address(0));
         bytes32 wua = _pad(address(w));
         sig = _ecdsa(pk, reg.uaAuthDigest(wua, UAKinds.PURPOSE_METATX, DIGEST));
@@ -502,7 +505,7 @@ contract UAGasTest is UARegistryBase {
         (bool ok2,) = address(r).call(call);
         assertTrue(ok2);
         emit log_named_uint("register bls-bn254-minsig: gas used", g - gasleft());
-        assertLt(hi, 500_000 + REGISTER_STATE_GAS); // F185: was 500,000 (452,440 on Osaka); 673,046 under Amsterdam
+        assertLt(hi, 500_000 + _registerStateGas()); // F185: was 500,000 (452,440 on Osaka); 673,046 under Amsterdam
     }
 
     /// UA-2b `ed25519`: the least frame gas of the verifier on its most expensive accepted input (every Straus window

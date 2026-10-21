@@ -90,12 +90,12 @@ Parameters:
 
 | Parameter | Value |
 |---|---|
-| Client | Nethermind 1.39 |
+| Client | Nethermind 2.2.0 |
 | Consensus | Clique PoA, one signer, `period` 5 s, `epoch` 30000 |
 | Forks | live through Fusaka + BPO2, and Amsterdam from block 1 on Nethermind 2.2.0 ([NET-EVM-06](#NET-EVM-06)); Fusaka: EIP-2537 (BLS12-381), EIP-7951 P-256 at `0x100`, EIP-7825 per-transaction gas cap 16,777,216, EIP-7623, EIP-7934 |
 | Base fee | 0 (gas free; `MinGasPrice` 0) |
 | Contract code size | 64 KiB (`maxCodeSize` `0x10000`, `maxCodeSizeTransition` 6432) since 2026-10-11, owner, ahead of Glamsterdam (cf. EIP-7954); 24,576 before. Probed at block 6434: 65,536 B code deploys (13.27 M gas), 65,537 B is refused, a 50,005 B init code is accepted (the init-code limit follows `maxCodeSize`). Public chains keep 24,576 |
-| Block gas limit | 16,777,216 today (`0x1000000`); 80 M `TargetBlockGasLimit` target for post-quantum Zether ([CTR-PQZ-11](../contracts/pq-zero-knowledge.md#CTR-PQZ-11)) (SPECIFIED) |
+| Block gas limit | genesis `0x1000000` (16,777,216), ramping to `Blocks.TargetBlockGasLimit` 200 M (node `config.json`); Amsterdam flows need it: total gas (regular + state, EIP-8037) is 21–31 M for a Zether edge transfer, 30–40 M for a `cacheExpandedKey` and about 109 M for the largest implementation deploy, while the per-transaction regular gas stays under 2^24 (EIP-7825). Earlier 80 M target for post-quantum Zether: [CTR-PQZ-11](../contracts/pq-zero-knowledge.md#CTR-PQZ-11) |
 | Finality | depth 1, quorum 1 (single-provider trust, reported as such) |
 | Classical Zether | not on the dev-chain allowlist ({31337, 1337}, [CTR-ZTH-02](../contracts/zether.md#CTR-ZTH-02)); whether 7622 becomes a dev chain for it is an open owner question |
 | Post-quantum Zether | the only PQZ chain: `PQZ` `0x5caa500000000000000000000000000000000f01`, `MLDSA44` `…0012`, `MLDSA65` `…0013` from the plugin in image `scaas/nethermind-pqz:1.39.0-pqz1` (local, never pushed), chainspec `engine.Pqz` ([chain integration](../contracts/pq-zero-knowledge.md#chain-integration), [§3](#precompiles)) |
@@ -107,7 +107,7 @@ BLS12-381 precompiles `0x0b`/`0x0c`/`0x0f`/`0x10` were empty while `alt_bn128` `
 Forks must be written with Nethermind's own keys (`eip1559TransitionTimestamp`, `eip2537TransitionTimestamp`, …),
 and changing them changes the genesis hash (chain reset). The only detection is to inspect a block header or call
 the precompile — the deployment checklist does both. The chainspec was fixed on 2026-08-31 before the reset to
-7622. The 16,777,216 block gas limit admits only ~5 classical confidential transfers per block (3.33 M gas each,
+7622. The genesis block gas limit of 16,777,216 (Osaka-priced measurement; the testnet ramps to 200 M) admits only ~5 classical confidential transfers per block (3.33 M gas each,
 measured); post-quantum Zether raises the target to 80 M ([CTR-PQZ-11](../contracts/pq-zero-knowledge.md#CTR-PQZ-11)).
 
 Further operator traps, found on the P6f copy of 7622 (2026-10-15, `pqz-core/nethermind/runs/2026-10-15-copy-*.txt`):
@@ -176,7 +176,7 @@ version needs a new salt or new code).
 <a id="NET-EVM-06"></a>**NET-EVM-06** — **The `default` and `private7622` Foundry profiles compile for the `amsterdam` EVM; the public-chain
 profiles stay `osaka` until each chain forks.** Owner ruling 2026-10-21; status **BUILT**. The SCaaS testnet (7622) runs
 Nethermind 2.2.0 with Amsterdam from block 1, and the test suite runs on Foundry 1.8.5, which needs `experimental = true`
-for `evm_version = "amsterdam"`. The `zether`, `gnosis`, `celo`, `bsc`, `polygon` and `base` profiles keep `osaka`. No
+for `evm_version = "amsterdam"`. The `zether`, `gnosis`, `celo`, `bsc`, `polygon` and `base` profiles keep `osaka`.The flows' total gas (regular + EIP-8037 state gas) exceeds 2^24, up to ~109 M for the largest implementation deploy, so the testnet block gas limit must ramp to its 200 M target (genesis `0x1000000`). No
 contract reads `block.slotnum` (EIP-7843): Clique has no slot, so the opcode is off on the testnet. The bytecode equals the
 `osaka` build apart from the metadata hash; the gas bounds of the tests moved with Amsterdam's prices (EIP-8037 state gas,
 EIP-8038 storage writes, EIP-7976 calldata floor, EIP-2780 intrinsic), each re-pin names its EIP in the test.

@@ -2,6 +2,7 @@
 pragma solidity ^0.8.24;
 
 import {console2} from "forge-std/Test.sol";
+import {isAmsterdam} from "../helpers/EvmVersion.sol";
 import {ZetherFixture} from "./helpers/ZetherFixture.sol";
 import {ZetherLayer} from "../../src/zether/ZetherLayer.sol";
 import {ZetherTypes} from "../../src/zether/ZetherTypes.sol";
@@ -21,8 +22,11 @@ abstract contract ZetherGasLimitSuite is ZetherFixture {
     uint256 internal constant MARGIN = CAP / 100;
     /// @dev F185: under Amsterdam EIP-7825's 2^24 caps a transaction's REGULAR gas and EIP-8037 state gas (the new
     ///      accounts' slots: every recipient's first credit) comes on top. The edge cells need 21.4 M to 31.2 M in total
-    ///      (BLS12-381, measured), so the edge limit is 2^25 (was 2^24 = CAP, state gas included).
-    uint256 internal constant EDGE_LIMIT = 2 * CAP;
+    ///      (BLS12-381, measured), so the edge limit is 2^25 there. On Osaka (the `zether` profile and the public chains)
+    ///      EIP-7825 caps the whole transaction: a cell must settle at exactly 2^24.
+    function _edgeLimit() internal returns (uint256) {
+        return isAmsterdam() ? 2 * CAP : CAP;
+    }
     uint256 internal constant PAYER_PK = 0x9A7E5;
     User[12] internal rs;
 
@@ -90,8 +94,8 @@ abstract contract ZetherGasLimitSuite is ZetherFixture {
             ZetherTypes.TransferMode.NONE][cell / 2];
         audOut = cell % 2 == 1;
         uint8[12] memory e = _edges();
-        assertTrue(_ok(_build(e[2 * cell], mode, false), EDGE_LIMIT, false), "direct edge at 2^25");
-        assertTrue(_ok(_build(e[2 * cell + 1], mode, true), EDGE_LIMIT, true), "relayed edge at 2^25");
+        assertTrue(_ok(_build(e[2 * cell], mode, false), _edgeLimit(), false), "direct edge at the limit");
+        assertTrue(_ok(_build(e[2 * cell + 1], mode, true), _edgeLimit(), true), "relayed edge at the limit");
     }
 
     function test_edge_compactOn() public { _edge(0); }
@@ -125,7 +129,7 @@ abstract contract ZetherGasLimitSuite is ZetherFixture {
     function test_isolated() public {
         bytes memory cd = bytes.concat(abi.encodeWithSignature("decimals()"), new bytes(100_000));
         assertFalse(_ok(cd, 500_000, false), "isolated");
-        assertTrue(_ok(cd, 6_500_000, false), "fits");
+        assertTrue(_ok(cd, isAmsterdam() ? 6_500_000 : 1_100_000, false), "fits");
     }
 
     /// @dev `mtxConfidentialTransferSingle` alice → rs[0], auditor on and out, direct and relayed (§19 node cap).
