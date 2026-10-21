@@ -1,0 +1,504 @@
+diff -ruN base/src/pqz/PqzCore.sol p46v1/src/pqz/PqzCore.sol
+--- base/src/pqz/PqzCore.sol	2026-10-21 15:22:22.218547151 +0700
++++ p46v1/src/pqz/PqzCore.sol	2026-10-21 15:31:46.804335963 +0700
+@@ -46,7 +46,7 @@
+         uint64 sendCounter;
+         bytes32 accHash;
+         mapping(uint64 => uint256) pending;
+-        uint256[580] accWords; // CT / 32, each `ACC_MARK | word`: written non-zero by `prepareAcc`, never zeroed (D3)
++        uint256[417] accWords; // P46: `PqzCt.ACC_WORDS` slots of `not(packed word)`; CT / 32, each `ACC_MARK | word`: written non-zero by `prepareAcc`, never zeroed (D3)
+     }
+ 
+     /// @custom:storage-location erc7201:scaas.pqz
+@@ -156,7 +156,10 @@
+     uint64 internal constant ROLL_AGE = 5;
+     uint8 internal constant MAT = 1; // `acc` is `accWords`
+     uint8 internal constant PREP = 6; // both halves of `accWords` written (bits 2, 4: halves 0, 1)
+-    uint256 internal constant HALF_WORDS = 290;
++    uint256 internal constant HALF_WORDS = 209; // P46: halves of 209 + 208 slots
++    uint256 internal constant CTP_ = 13_340;
++    uint256 internal constant PKP_ = 13_248;
++    uint256 internal constant VP_ = 92;
+     /// @dev Bit 255 of every stored `accWords` slot (lanes are `< 2^42`, so the bit is free): a word of four zero
+     ///      coefficients (a TRIVIAL-only `acc` has `u = 0`) never zeroes its slot (D3; final review I1). Masked off on read.
+     uint256 internal constant ACC_MARK = 1 << 255;
+@@ -270,12 +273,23 @@
+     ///      of `totalShielded`; the token pays it from `SHIELD_POOL`, D19), the credit `(u, v_t)`, the entry by mode.
+     function _settleTransfer(Op memory o, bytes calldata payload) internal returns (bytes32 ref) {
+         bytes calldata out = payload[T_OUT:T_OUT + o.outLen];
+-        bytes memory blob =
+-            bytes.concat(o.salt, out[0:PqzCt.CT], out[OUT_OFF:o.outLen], o.to, out[PqzCt.CT:PqzCt.CT + PqzCt.V]);
++        // P46: `salt ‖ P(u ‖ v_t) ‖ [P(v_a)] ‖ toUA ‖ P(v_f)`, written in ascending order (each pack spills 9 zero bytes)
++        uint256 len = 16 + PqzCt.PKP + PqzCt.VP * (2 + o.auditorOn) + 32;
++        bytes memory blob = new bytes(len + 32);
++        _put(blob, 0, abi.encodePacked(o.salt));
++        PqzCt.packCd(blob, 16, out[0:PqzCt.CT]);
++        uint256 q = 16 + PqzCt.PKP + PqzCt.VP;
++        if (o.auditorOn == 1) {
++            PqzCt.packCd(blob, q, out[OUT_OFF:o.outLen]);
++            q += PqzCt.VP;
++        }
++        _put(blob, q, abi.encode(o.to));
++        PqzCt.packCd(blob, q + 32, out[PqzCt.CT:PqzCt.CT + PqzCt.V]);
++        assembly ("memory-safe") { mstore(blob, len) }
+         address ptr = SSTORE2.write(blob);
+-        _debit(o, ptr, 16, blob.length - PqzCt.V);
++        _debit(o, ptr, 16, len - PqzCt.VP);
+         ref = _sent(o);
+-        _credit(o.to, ptr, 16, 16 + PqzCt.PK, ref);
++        _credit(o.to, ptr, 16, 16 + PqzCt.PKP, ref);
+         _entry(o, ref, ptr, payload, MEMO);
+         emit IConfidentialToken.ConfidentialTransfer(ref, o.from, o.to, o.ben, o.fee, o.sendCounter, ptr);
+     }
+@@ -434,7 +448,7 @@
+         bytes calldata out = payload[M_OUT + 32 * o.legs:M_OUT + 32 * o.legs + o.outLen];
+         bytes memory blob = _bundleMulti(o, payload, out);
+         address ptr = SSTORE2.write(blob);
+-        _debit(o, ptr, 16, blob.length - PqzCt.V);
++        _debit(o, ptr, 16, blob.length - PqzCt.VP);
+         ref = _sent(o);
+         _creditLegs(o, ref, payload, ptr);
+         _entry(o, ref, ptr, payload, 18 + 40 * o.legs);
+@@ -447,30 +461,34 @@
+ 
+     /// @dev `pending[UA_j] ← (u_{⌊j/4⌋}, v_j)` of the blob, in leg order.
+     function _creditLegs(Op memory o, bytes32 ref, bytes calldata payload, address ptr) internal {
+-        uint256 us = 16 + PqzCt.PK * o.groups;
+-        uint256 ls = 160 + PqzCt.V * o.auditorOn;
++        uint256 us = 16 + PqzCt.PKP * o.groups;
++        uint256 ls = 32 + PqzCt.VP * (1 + o.auditorOn);
+         for (uint256 j; j < o.legs; ++j) {
+             bytes32 ua = bytes32(payload[M_OUT + 32 * j:M_OUT + 32 * j + 32]);
+-            _credit(ua, ptr, 16 + PqzCt.PK * (j / 4), us + ls * j, ref);
++            _credit(ua, ptr, 16 + PqzCt.PKP * (j / 4), us + ls * j, ref);
+         }
+     }
+ 
+     /// @dev The op blob `R ‖ v_f`, `R = salt ‖ u_0 … u_{G−1} ‖ (v_j ‖ [v_{a,j}] ‖ word(UA_j))_{j<M}` — for `M = 1` the
+     ///      single transfer's bundle exactly (CTR-PQZ-26).
+     function _bundleMulti(Op memory o, bytes calldata payload, bytes calldata out) internal pure returns (bytes memory r) {
++        // P46: the same fields packed, written in ascending order (each pack spills 9 zero bytes)
+         uint256 m = o.legs;
+-        uint256 us = PqzCt.PK * o.groups;
+-        uint256 ls = 160 + PqzCt.V * o.auditorOn;
+-        r = new bytes(16 + us + ls * m + PqzCt.V);
+-        _putCd(r, 16 + us + ls * m, out[us + PqzCt.V * m:us + PqzCt.V * (m + 1)]);
++        uint256 us = PqzCt.PK * o.groups; // in `out` (64-bit lanes)
++        uint256 ps = PqzCt.PKP * o.groups; // in the blob
++        uint256 ls = 32 + PqzCt.VP * (1 + o.auditorOn);
++        uint256 len = 16 + ps + ls * m + PqzCt.VP;
++        r = new bytes(len + 32);
+         _put(r, 0, abi.encodePacked(o.salt));
+-        _putCd(r, 16, out[0:us]);
++        PqzCt.packCd(r, 16, out[0:us]);
+         for (uint256 j; j < m; ++j) {
+-            uint256 d = 16 + us + ls * j;
+-            _putCd(r, d, out[us + PqzCt.V * j:us + PqzCt.V * (j + 1)]);
+-            if (o.auditorOn == 1) _putCd(r, d + PqzCt.V, out[us + PqzCt.V * (m + 1 + j):us + PqzCt.V * (m + 2 + j)]);
++            uint256 d = 16 + ps + ls * j;
++            PqzCt.packCd(r, d, out[us + PqzCt.V * j:us + PqzCt.V * (j + 1)]);
++            if (o.auditorOn == 1) PqzCt.packCd(r, d + PqzCt.VP, out[us + PqzCt.V * (m + 1 + j):us + PqzCt.V * (m + 2 + j)]);
+             _putCd(r, d + ls - 32, payload[M_OUT + 32 * j:M_OUT + 32 * j + 32]);
+         }
++        PqzCt.packCd(r, 16 + ps + ls * m, out[us + PqzCt.V * m:us + PqzCt.V * (m + 1)]);
++        assembly ("memory-safe") { mstore(r, len) }
+     }
+ 
+     function _put(bytes memory r, uint256 off, bytes memory x) internal pure {
+@@ -487,8 +505,11 @@
+     /// @dev The op blob `u' ‖ v_f` (D1), the debit (the amount and the fee out of `totalShielded`; the token moves both
+     ///      from `SHIELD_POOL`, D19).
+     function _settleBurn(Op memory o, bytes calldata out) internal {
+-        address ptr = SSTORE2.write(out);
+-        _debit(o, ptr, 0, PqzCt.PK);
++        bytes memory b = new bytes(PqzCt.CTP + 32); // P46: P(u' ‖ v_f)
++        PqzCt.packCd(b, 0, out);
++        assembly ("memory-safe") { mstore(b, CTP_) }
++        address ptr = SSTORE2.write(b);
++        _debit(o, ptr, 0, PqzCt.PKP);
+         _sent(o);
+         emit IConfidentialToken.Unshielded(o.from, o.amount, o.recipient, ptr);
+     }
+@@ -562,9 +583,12 @@
+         _key(buf, 288, _keyPtr(e.registry, owner));
+         assembly ("memory-safe") {
+             let d := add(add(buf, 37), 18720)
+-            mcopy(d, add(add(bundle, 32), uOff), 18432)
+-            mcopy(add(d, 18432), add(add(bundle, 32), vOff), 128)
++            mcopy(d, add(add(bundle, 32), uOff), PKP_)
++            mcopy(add(d, PKP_), add(add(bundle, 32), vOff), VP_)
+         }
++        uint256 dp;
++        assembly ("memory-safe") { dp := add(add(buf, 37), 18720) }
++        PqzCt.expandAt(dp, PqzCt.CT / 32); // P46
+     }
+ 
+     /// @dev Leg `j` of a bundle: the offsets of `u_{⌊j/4⌋}` and of `v_j` (`v_{a,j}` for `AUDITOR`), and its owner.
+@@ -574,10 +598,10 @@
+         uint256 bl = bundle.length;
+         (uint256 g, uint256 m, uint256 a) = _bundleShape(bl);
+         if (j >= m || (kind == 2 && a == 0)) revert IPqzToken.BadPayload(bl);
+-        uint256 ls = 160 + PqzCt.V * a;
+-        uint256 leg = 16 + PqzCt.PK * g + ls * j;
+-        uOff = 16 + PqzCt.PK * (j / 4);
+-        vOff = kind == 2 ? leg + PqzCt.V : leg;
++        uint256 ls = 32 + PqzCt.VP * (1 + a);
++        uint256 leg = 16 + PqzCt.PKP * g + ls * j;
++        uOff = 16 + PqzCt.PKP * (j / 4);
++        vOff = kind == 2 ? leg + PqzCt.VP : leg;
+         assembly ("memory-safe") { owner := mload(add(add(bundle, 32), sub(add(leg, ls), 32))) }
+         if (kind == 2) owner = $().auditorUA;
+     }
+@@ -585,12 +609,12 @@
+     /// @dev `(G, M, auditorOn)` of a bundle `salt ‖ u_0 … u_{G−1} ‖ (v_j ‖ [v_{a,j}] ‖ UA_j)_{j<M}` from its length:
+     ///      unique for every built `M` (≤ 8: the legs take < 16,384 bytes), else `BadPayload`.
+     function _bundleShape(uint256 bl) internal pure returns (uint256 g, uint256 m, uint256 a) {
+-        if (bl < 16 + PqzCt.PK) revert IPqzToken.BadPayload(bl);
+-        g = (bl - 16) / PqzCt.PK;
+-        uint256 rem = bl - 16 - PqzCt.PK * g;
++        if (bl < 16 + PqzCt.PKP) revert IPqzToken.BadPayload(bl);
++        g = (bl - 16) / PqzCt.PKP;
++        uint256 rem = bl - 16 - PqzCt.PKP * g;
+         for (uint256 i; i < 2; ++i) {
+             a = 1 - i;
+-            uint256 ls = 160 + PqzCt.V * a;
++            uint256 ls = 32 + PqzCt.VP * (1 + a);
+             m = rem / ls;
+             if (m != 0 && m <= 8 && rem == ls * m && (m + 3) / 4 == g) return (g, m, a);
+         }
+@@ -611,7 +635,7 @@
+ 
+     /// @notice `R` of an op blob: its data without the trailing `v_f` (D1, D11).
+     function rOf(address ptr) internal view returns (bytes memory r) {
+-        r = new bytes(ptr.code.length - 1 - PqzCt.V);
++        r = new bytes(ptr.code.length - 1 - PqzCt.VP);
+         assembly ("memory-safe") { extcodecopy(ptr, add(r, 32), 1, mload(r)) }
+     }
+ 
+@@ -701,15 +725,20 @@
+     ///      else the reference's `(u, v)`, else `Trivial(0)`.
+     function _accOf(Account storage a, bytes calldata hint) internal view returns (bytes memory c) {
+         if (a.flags & MAT != 0) {
+-            if (hint.length == PqzCt.CT && keccak256(hint) == a.accHash) return PqzCt.load(hint);
++            // P46: `accHash` = keccak of the packed stream (`CTP` bytes), the hint is that stream
+             c = new bytes(PqzCt.CT);
+-            uint256[580] storage w = a.accWords;
+-            assembly ("memory-safe") {
+-                let b := w.slot
+-                let d := add(c, 32)
+-                let k := not(ACC_MARK)
+-                for { let i := 0 } lt(i, 580) { i := add(i, 1) } { mstore(add(d, shl(5, i)), and(sload(add(b, i)), k)) }
++            uint256 d;
++            assembly ("memory-safe") { d := add(c, 32) }
++            if (hint.length == PqzCt.CTP && keccak256(hint) == a.accHash) {
++                assembly ("memory-safe") { calldatacopy(d, hint.offset, CTP_) }
++            } else {
++                uint256[417] storage w = a.accWords;
++                assembly ("memory-safe") {
++                    let b := w.slot
++                    for { let i := 0 } lt(i, 417) { i := add(i, 1) } { mstore(add(d, shl(5, i)), not(sload(add(b, i)))) }
++                }
+             }
++            PqzCt.expandAt(d, PqzCt.CT / 32);
+             return c;
+         }
+         c = new bytes(PqzCt.CT);
+@@ -726,9 +755,7 @@
+                 if (up) PqzCt.addTrivial(c, uint64(e >> 96));
+                 else PqzCt.subTrivial(c, uint64(e >> 96));
+             } else {
+-                PqzCt.loadBlob(address(uint160(e >> 96)), uint16(e >> 80), uint16(e >> 64), x);
+-                if (up) PqzCt.addMem(c, x);
+-                else PqzCt.subMem(c, x);
++                PqzCt.addBlob(c, x, address(uint160(e >> 96)), uint16(e >> 80), uint16(e >> 64), !up); // P46
+             }
+         }
+     }
+diff -ruN base/src/pqz/PqzCt.sol p46v1/src/pqz/PqzCt.sol
+--- base/src/pqz/PqzCt.sol	2026-10-21 15:22:22.218792903 +0700
++++ p46v1/src/pqz/PqzCt.sol	2026-10-21 15:31:46.806067771 +0700
+@@ -93,9 +93,10 @@
+     function loadBlob(address blob, uint256 uOff, uint256 vOff, bytes memory t) internal view {
+         assembly ("memory-safe") {
+             let d := add(t, 32)
+-            extcodecopy(blob, d, add(uOff, 1), PK)
+-            extcodecopy(blob, add(d, PK), add(vOff, 1), V)
++            extcodecopy(blob, d, add(uOff, 1), PKP)
++            extcodecopy(blob, add(d, PKP), add(vOff, 1), VP)
+         }
++        expandAt(_ptr(t), CT / 32); // P46
+     }
+ 
+     /// @notice `a += x` lane-wise, unreduced, both in memory (`a.length` words; a multiple of 4 words, as `CT`).
+@@ -158,4 +159,97 @@
+     function stored(bytes32 h) internal pure returns (bytes32) {
+         return h == bytes32(0) ? ZERO_HASH : h;
+     }
++
++    // ------------------------------------------------------------------ spike PACK, layout P46 (measurement only)
++    // Stored ciphertexts (op blobs, `acc` slots) hold every coefficient in 46 bits (⌈log2 q⌉): one 64-bit-lane word (4
++    // coefficients) is 23 bytes, `x = c0 ‖ c1 ‖ c2 ‖ c3` big-endian, so the stream stays byte-aligned and `u`, `v`
++    // pack apart (2304 and 16 are multiples of 4). Memory, calldata and the statement keep the 64-bit lanes.
++
++    uint256 internal constant PKP = 13_248; // PK / 32 · 23
++    uint256 internal constant VP = 92;
++    uint256 internal constant CTP = 13_340;
++    uint256 internal constant ACC_WORDS = 417; // ⌈CTP / 32⌉ slots, each `not(stream word)`: never 0 for a canonical acc
++    uint256 private constant M46 = 0x3fffffffffff;
++
++    /// @notice `dst[dOff ..] = pack(src)` (each 32-byte word of canonical lanes → 23 bytes); writes 9 zero bytes past
++    ///         the packed end, so callers write fields in ascending order and leave 9 bytes of slack.
++    function packCd(bytes memory dst, uint256 dOff, bytes calldata src) internal pure {
++        assembly ("memory-safe") {
++            let d := add(add(dst, 32), dOff)
++            let end := add(src.offset, src.length)
++            for { let p := src.offset } lt(p, end) { p := add(p, 32) } {
++                let w := calldataload(p)
++                mstore(d, shl(72, or(or(shl(138, shr(192, w)), shl(92, and(shr(128, w), M64))),
++                    or(shl(46, and(shr(64, w), M64)), and(w, M64)))))
++                d := add(d, 23)
++            }
++        }
++    }
++
++    /// @notice The packed form of a 64-bit-lane buffer (`src.length / 32 · 23` bytes; 32 bytes of slack allocated).
++    function packMem(bytes memory src) internal pure returns (bytes memory r) {
++        uint256 n = src.length / 32;
++        r = new bytes(n * 23 + 32);
++        assembly ("memory-safe") {
++            let s := add(src, 32)
++            let d := add(r, 32)
++            for { let i := 0 } lt(i, n) { i := add(i, 1) } {
++                let w := mload(add(s, shl(5, i)))
++                mstore(add(d, mul(23, i)), shl(72, or(or(shl(138, shr(192, w)), shl(92, and(shr(128, w), M64))),
++                    or(shl(46, and(shr(64, w), M64)), and(w, M64)))))
++            }
++            mstore(r, mul(n, 23))
++        }
++    }
++
++    /// @notice In place: the `k` packed groups at memory `p` become `k` 64-bit-lane words at `p` (descending, so no
++    ///         unread group is overwritten).
++    function expandAt(uint256 p, uint256 k) internal pure {
++        assembly ("memory-safe") {
++            for { let i := k } i {} {
++                i := sub(i, 1)
++                let x := shr(72, mload(add(p, mul(23, i))))
++                mstore(add(p, shl(5, i)), or(or(shl(192, shr(138, x)), shl(128, and(shr(92, x), M46))),
++                    or(shl(64, and(shr(46, x), M46)), and(x, M46))))
++            }
++        }
++    }
++
++    /// @notice The 64-bit-lane ciphertext of a packed one (`CTP` bytes).
++    function unpackCt(bytes memory packed) internal pure returns (bytes memory c) {
++        c = new bytes(CT);
++        assembly ("memory-safe") { mcopy(add(c, 32), add(packed, 32), CTP) }
++        expandAt(_ptr(c), CT / 32);
++    }
++
++    function packCt(bytes memory c) internal pure returns (bytes memory) {
++        return packMem(c);
++    }
++
++    function packV(bytes memory v) internal pure returns (bytes memory) {
++        return packMem(v);
++    }
++
++    function _ptr(bytes memory b) private pure returns (uint256 p) {
++        assembly ("memory-safe") { p := add(b, 32) }
++    }
++
++    /// @notice `c ±= u ‖ v` of a stored entry, unpacked on the fly (`x` scratch of ≥ `CTP + 9` bytes).
++    function addBlob(bytes memory c, bytes memory x, address blob, uint256 uOff, uint256 vOff, bool neg) internal view {
++        assembly ("memory-safe") {
++            let s := add(x, 32)
++            extcodecopy(blob, s, add(uOff, 1), PKP)
++            extcodecopy(blob, add(s, PKP), add(vOff, 1), VP)
++            let d := add(c, 32)
++            let n := shr(5, mload(c))
++            for { let i := 0 } lt(i, n) { i := add(i, 1) } {
++                let y := shr(72, mload(add(s, mul(23, i))))
++                let w := or(or(shl(192, shr(138, y)), shl(128, and(shr(92, y), M46))),
++                    or(shl(64, and(shr(46, y), M46)), and(y, M46)))
++                if neg { w := sub(Q4, w) }
++                let p := add(d, shl(5, i))
++                mstore(p, add(mload(p), w))
++            }
++        }
++    }
+ }
+diff -ruN base/src/pqz/PqzStateLib.sol p46v1/src/pqz/PqzStateLib.sol
+--- base/src/pqz/PqzStateLib.sol	2026-10-21 15:22:22.218515061 +0700
++++ p46v1/src/pqz/PqzStateLib.sol	2026-10-21 15:31:46.804604278 +0700
+@@ -80,14 +80,14 @@
+         bytes memory c = PqzCore._accOf(a, msg.data[0:0]);
+         PqzCore._window(a, c, r, n, true, true);
+         PqzCt.reduce(c);
+-        uint256[580] storage w = a.accWords;
+-        uint256 mk = PqzCore.ACC_MARK;
++        bytes memory pk_ = PqzCt.packMem(c); // P46: 417 slots of `not(packed word)`, `accHash` over the packed stream
++        uint256[417] storage w = a.accWords;
+         assembly ("memory-safe") {
+             let b := w.slot
+-            let d := add(c, 32)
+-            for { let i := 0 } lt(i, 580) { i := add(i, 1) } { sstore(add(b, i), or(mload(add(d, shl(5, i))), mk)) }
++            let d := add(pk_, 32)
++            for { let i := 0 } lt(i, 417) { i := add(i, 1) } { sstore(add(b, i), not(mload(add(d, shl(5, i))))) }
+         }
+-        bytes32 h = keccak256(c);
++        bytes32 h = keccak256(pk_);
+         uint64 nr = uint64(r + n);
+         a.accHash = h;
+         a.rolled = nr;
+@@ -112,12 +112,13 @@
+         uint8 bit = uint8(2 << half);
+         if (a.flags & bit != 0) return;
+         if (!PqzCore._registered(registry, ua)) revert IPqzToken.AccountNotRegistered(ua);
+-        uint256[580] storage w = a.accWords;
++        uint256[417] storage w = a.accWords;
+         uint256 hw = PqzCore.HALF_WORDS;
+         uint256 mk = PqzCore.ACC_MARK;
++        uint256 cnt = half == 0 ? hw : 417 - hw; // P46: 209 + 208
+         assembly ("memory-safe") {
+             let b := add(w.slot, mul(half, hw))
+-            for { let i := 0 } lt(i, hw) { i := add(i, 1) } { sstore(add(b, i), mk) }
++            for { let i := 0 } lt(i, cnt) { i := add(i, 1) } { sstore(add(b, i), mk) }
+         }
+         a.flags |= bit;
+     }
+diff -ruN base/test/pqz/PqzStateGas.t.sol p46v1/test/pqz/PqzStateGas.t.sol
+--- base/test/pqz/PqzStateGas.t.sol	2026-10-21 15:22:22.220427799 +0700
++++ p46v1/test/pqz/PqzStateGas.t.sol	2026-10-21 15:31:46.804720356 +0700
+@@ -75,11 +75,22 @@
+ 
+     /// `STOP ‖ salt(16) ‖ u ‖ v_t ‖ toUA ‖ v_f`, every coefficient `q − 1` (the lane-overflow worst case).
+     function _blobCode() internal pure returns (bytes memory c) {
+-        c = new bytes(1 + 16 + PqzCt.PK + 128 + 32 + 128);
++        // spike PACK: `STOP ‖ salt ‖ P(u ‖ v_t) ‖ toUA ‖ P(v_f)`, every coefficient q − 1
++        bytes memory ct = new bytes(PqzCt.CT);
+         uint256 w = QM1 << 192 | QM1 << 128 | QM1 << 64 | QM1;
+-        for (uint256 o = 17; o < 17 + PqzCt.CT; o += 32) {
+-            assembly ("memory-safe") { mstore(add(add(c, 32), o), w) }
++        for (uint256 o; o < PqzCt.CT; o += 32) {
++            assembly ("memory-safe") { mstore(add(add(ct, 32), o), w) }
++        }
++        bytes memory pc = PqzCt.packCt(ct);
++        c = bytes.concat(hex"00", bytes16(0), pc, bytes32(0), _packV(w));
++    }
++
++    function _packV(uint256 w) internal pure returns (bytes memory) {
++        bytes memory v = new bytes(PqzCt.V);
++        for (uint256 o; o < PqzCt.V; o += 32) {
++            assembly ("memory-safe") { mstore(add(add(v, 32), o), w) }
+         }
++        return PqzCt.packV(v);
+     }
+ 
+     /// `k` credits of `ua`, each pointing into its own etched blob (block 1, so old enough after `setUp`'s roll).
+@@ -87,7 +98,7 @@
+         for (uint256 i; i < k; ++i) {
+             address b = address(uint160(++nextBlob));
+             vm.etch(b, code);
+-            uint256 e = uint256(uint160(b)) << 96 | uint256(16) << 80 | uint256(16 + PqzCt.PK) << 64 | 1;
++            uint256 e = uint256(uint160(b)) << 96 | uint256(16) << 80 | uint256(16 + PqzCt.PKP) << 64 | 1;
+             vm.store(address(tok), _pendingSlot(ua, i), bytes32(e));
+         }
+         vm.store(address(tok), bytes32(_acctSlot(ua)), bytes32(k));
+@@ -438,11 +449,22 @@
+     bytes32 internal gina;
+ 
+     function _blobCode() internal pure returns (bytes memory c) {
+-        c = new bytes(1 + 16 + PqzCt.PK + 128 + 32 + 128);
++        // spike PACK: `STOP ‖ salt ‖ P(u ‖ v_t) ‖ toUA ‖ P(v_f)`, every coefficient q − 1
++        bytes memory ct = new bytes(PqzCt.CT);
+         uint256 w = QM1 << 192 | QM1 << 128 | QM1 << 64 | QM1;
+-        for (uint256 o = 17; o < 17 + PqzCt.CT; o += 32) {
+-            assembly ("memory-safe") { mstore(add(add(c, 32), o), w) }
++        for (uint256 o; o < PqzCt.CT; o += 32) {
++            assembly ("memory-safe") { mstore(add(add(ct, 32), o), w) }
++        }
++        bytes memory pc = PqzCt.packCt(ct);
++        c = bytes.concat(hex"00", bytes16(0), pc, bytes32(0), _packV(w));
++    }
++
++    function _packV(uint256 w) internal pure returns (bytes memory) {
++        bytes memory v = new bytes(PqzCt.V);
++        for (uint256 o; o < PqzCt.V; o += 32) {
++            assembly ("memory-safe") { mstore(add(add(v, 32), o), w) }
+         }
++        return PqzCt.packV(v);
+     }
+ 
+     function _gas(bytes memory data) internal returns (uint256 used) {
+@@ -473,7 +495,7 @@
+         for (uint256 i; i < PqzCore.ROLL_MAX; ++i) {
+             address b = address(uint160(++nextBlob));
+             vm.etch(b, code);
+-            uint256 e = uint256(uint160(b)) << 96 | uint256(16) << 80 | uint256(16 + PqzCt.PK) << 64 | 1;
++            uint256 e = uint256(uint160(b)) << 96 | uint256(16) << 80 | uint256(16 + PqzCt.PKP) << 64 | 1;
+             vm.store(address(tok), _pendingSlot(gina, TRIV + i), bytes32(e));
+         }
+         bytes32 k = bytes32(_acctSlot(gina));
+@@ -484,7 +506,7 @@
+ 
+     /// No `acc` slot is zero after the TRIVIAL-only rollover (D3), and the `u` half still reads as zero.
+     function test_trivialRoll_noZeroSlot() public view {
+-        for (uint256 i; i < PqzCt.CT / 32; ++i) {
++        for (uint256 i; i < PqzCt.ACC_WORDS; ++i) {
+             assertTrue(vm.load(address(tok), bytes32(_acctSlot(gina) + 5 + i)) != 0, "acc slot zeroed");
+         }
+         bytes memory acc = tok.pqzAcc(gina);
+@@ -493,7 +515,7 @@
+             assembly ("memory-safe") { x := mload(add(add(acc, 32), o)) }
+             assertEq(x, 0, "u of Trivial(4)");
+         }
+-        assertEq(keccak256(acc), tok.pqzAccount(gina).accHash, "accHash over the unmarked bytes");
++        assertEq(keccak256(PqzCt.packCt(acc)), tok.pqzAccount(gina).accHash, "accHash over the unmarked bytes");
+     }
+ 
+     /// The regression pin: `ROLL_MAX` cold credits after the TRIVIAL-only rollover fit `0.75 · 2^24` (10.6 M for
+@@ -510,6 +532,6 @@
+             assembly ("memory-safe") { x := mload(add(add(acc, 32), o)) }
+             assertEq(x, want);
+         }
+-        assertEq(keccak256(acc), tok.pqzAccount(gina).accHash);
++        assertEq(keccak256(PqzCt.packCt(acc)), tok.pqzAccount(gina).accHash);
+     }
+ }
+diff -ruN base/test/research/PqzPackRoundTrip.t.sol p46v1/test/research/PqzPackRoundTrip.t.sol
+--- base/test/research/PqzPackRoundTrip.t.sol	1970-01-01 08:00:00.000000000 +0800
++++ p46v1/test/research/PqzPackRoundTrip.t.sol	2026-10-21 15:31:46.804791530 +0700
+@@ -0,0 +1,32 @@
++// SPDX-License-Identifier: LicenseRef-Vegan-Community-1.0
++pragma solidity ^0.8.24;
++
++import {Test} from "forge-std/Test.sol";
++import {PqzCt} from "../../src/pqz/PqzCt.sol";
++
++/// Spike PACK (work tree only, `pack46.patch` / `pack51.patch`): the packed stored layout loses nothing — every
++/// canonical ciphertext packs to `CTP` bytes and unpacks to itself (random, all `q − 1`, all zero).
++contract PqzPackRoundTripTest is Test {
++    function _ct(uint256 seed, uint256 mode) internal pure returns (bytes memory c) {
++        c = new bytes(PqzCt.CT);
++        for (uint256 o; o < PqzCt.CT; o += 8) {
++            uint256 x = mode == 0 ? uint256(keccak256(abi.encode(seed, o))) % PqzCt.Q : mode == 1 ? PqzCt.Q - 1 : 0;
++            for (uint256 b; b < 8; ++b) c[o + b] = bytes1(uint8(x >> (8 * (7 - b))));
++        }
++    }
++
++    function _check(bytes memory c) internal pure {
++        bytes memory p = PqzCt.packCt(c);
++        assertEq(p.length, PqzCt.CTP, "packed length");
++        assertEq(keccak256(PqzCt.unpackCt(p)), keccak256(c), "round trip");
++    }
++
++    function test_roundTrip_random(uint256 seed) public pure {
++        _check(_ct(seed, 0));
++    }
++
++    function test_roundTrip_edges() public pure {
++        _check(_ct(0, 1));
++        _check(_ct(0, 2));
++    }
++}
