@@ -1,0 +1,76 @@
+# PQZH Ligero at parameter set n2304-kmax4096 (plan 5h Task 8c; [model] = this layout model, [crate] = the crate)
+
+constants: pqz-core/params/sets/n2304-kmax4096/rust/set.rs + pqzh_set.rs
+
+## Field and domains
+
+- q = 61,275,424,977,257 (2^45.80), prime, q mod 16 = 9; q - 1 = 2 * 2 * 2 * 7 * 17 * 19 * 43 * 431 * 182789
+- F_q element 46 bits in 6 bytes (EB); F_q^4 = F_q[X]/(X^4 - 3) (3 a non-square, q = 1 mod 4), |F_q^4| = 2^183.2; generator 3
+- native: Barrett (products < 2^92, u128); wasm32: 3 limbs of 16 bits in u64
+- radices 2/19/43/431 divide q - 1 (domain sizes | 2,817,016); small primes of q - 1 the crate does not use: [7, 17]
+- THE preset: proven, n = 32,756 = 2 * 2 * 19 * 431 (H_n, the commitment coset 3 H_n), k = 817 = 19 * 43 (H_k), t = 121, l = 695, N2 = 1634; 3 H_n and H_k disjoint (3^lcm(n, k) != 1)
+
+## Soundness (THE preset; per-query factor depends on n, k only)
+
+- query: t = 121 x 0.9298 + 16 grinding = 128.50 bits (same as v3); field terms grow with q: |F_q^4| = 2^183.2 (v3 2^168.0); the crate's per-relation totals: `ligero_kat sizes` (runs/c8-*-sizes.jsonl)
+
+## Sizes per form [model] (exact verifier bound = the largest proof the verifier parses)
+
+| relation | rows m | proof bound B | <= MAX_PROOF_PQZH 262,144 | statement B | input 5 + stmt + bound B | <= MAX_INPUT 393,216 today / 524,288 (8d) | crate bound [crate] | crate soundness bits |
+|---|---|---|---|---|---|---|---|---|
+| R_REG | 83 | 204,978 | yes | 18,528 | 223,511 | yes / yes | 204978 | 127.23 |
+| R_TX | 165 | 264,510 | NO | 93,312 | 357,827 | yes / yes | 264510 | 127.23 |
+| R_BURN | 164 | 263,784 | NO | 56,192 | 319,981 | yes / yes | 263784 | 127.23 |
+| R_DS | 83 | 204,978 | yes | 37,280 | 242,263 | yes / yes | 204978 | 127.23 |
+| R_DR | 83 | 204,978 | yes | 37,280 | 242,263 | yes / yes | 204978 | 127.23 |
+| R_TX0 | 164 | 263,784 | NO | 74,752 | 338,541 | yes / yes | 263784 | 127.23 |
+| R_TXM1 | 165 | 264,510 | NO | 93,312 | 357,827 | yes / yes | 264510 | 127.23 |
+| R_TXM1_0 | 164 | 263,784 | NO | 74,752 | 338,541 | yes / yes | 263784 | 127.23 |
+| R_TXM2 | 165 | 264,510 | NO | 112,000 | 376,515 | yes / yes | 264510 | 127.23 |
+| R_TXM2_0 | 165 | 264,510 | NO | 93,312 | 357,827 | yes / yes | 264510 | 127.23 |
+| R_TXM4 | 166 | 265,236 | NO | 149,376 | 414,617 | no / yes | 265236 | 127.23 |
+| R_TXM4_0 | 165 | 264,510 | NO | 130,432 | 394,947 | no / yes | 264510 | 127.23 |
+| R_TXM8 | 248 | 324,768 | NO | 242,560 | 567,333 | no / NO | 324768 | not built |
+| R_TXM8_0 | 247 | 324,042 | NO | 223,104 | 547,151 | no / NO | 324042 | not built |
+
+model = crate on 14 relations (c8-a-sizes.jsonl); op 7 M = 8: G = 2, not a built PQZH shape
+
+## One transaction (EIP-7976: 15,000 + 64 x calldata bytes <= the regular-gas cap; at 2^24: <= 261,909 B)
+
+Calldata through the token / registry (Task 7b ABI model, inputs16k.py, pk = 8 N) with the proof at its bound; the precompile input itself is built in memory (only a direct call carries it as calldata).
+
+| relation | path | tx calldata B | EIP-7976 floor gas | fits 2^24 | smallest cap (floor) | direct-call input B | direct fits 2^24 | largest proof one 2^24 tx carries |
+|---|---|---|---|---|---|---|---|---|
+| R_REG | UARegistry.register | 228,996 | 14,670,744 | yes | 14.67 M | 223,511 | yes | 237,888 |
+| R_TX | relayed mtxExecute (op 1) | 287,844 | 18,437,016 | NO | 18.44 M | 357,827 | NO | 238,560 |
+| R_BURN | relayed mtxExecute (op 2) | 286,884 | 18,375,576 | NO | 18.38 M | 319,981 | NO | 238,816 |
+| R_DS | verifyTransferAmount (eth_call) | 205,188 | 13,147,032 | yes | 13.15 M | 242,263 | yes | 261,696 |
+| R_DR | verifyTransferAmount (eth_call) | 205,188 | 13,147,032 | yes | 13.15 M | 242,263 | yes | 261,696 |
+| R_TX0 | relayed mtxExecute (op 1) | 287,012 | 18,383,768 | NO | 18.38 M | 338,541 | NO | 238,688 |
+| R_TXM1 | relayed mtxExecute (op 7) | 287,908 | 18,441,112 | NO | 18.44 M | 357,827 | NO | 238,496 |
+| R_TXM1_0 | relayed mtxExecute (op 7) | 287,076 | 18,387,864 | NO | 18.39 M | 338,541 | NO | 238,624 |
+| R_TXM2 | relayed mtxExecute (op 7) | 288,196 | 18,459,544 | NO | 18.46 M | 376,515 | NO | 238,208 |
+| R_TXM2_0 | relayed mtxExecute (op 7) | 287,940 | 18,443,160 | NO | 18.44 M | 357,827 | NO | 238,464 |
+| R_TXM4 | relayed mtxExecute (op 7) | 289,508 | 18,543,512 | NO | 18.54 M | 414,617 | NO | 237,632 |
+| R_TXM4_0 | relayed mtxExecute (op 7) | 288,260 | 18,463,640 | NO | 18.46 M | 394,947 | NO | 238,144 |
+
+## Preset search (proven, n >= 4k, k >= 64, l >= 16, prover <= 4e+09 products): the smallest R_TX and R_TXM4 bounds, radices of the crate and with the small primes of q - 1 it does not use
+
+| radices | relation | n | k | t | l | rows m | proof bound B | <= 262,144 | prover products |
+|---|---|---|---|---|---|---|---|---|---|
+| 2/19/43/431 | R_TX | 37,066 | 817 | 120 | 696 | 165 | 263,904 | no | 3.17e+09 |
+| 2/19/43/431 | R_TX | 32,756 | 817 | 121 | 695 | 165 | 264,510 | no | 2.69e+09 |
+| 2/19/43/431 | R_TX | 37,066 | 862 | 120 | 741 | 165 | 269,304 | no | 3.36e+09 |
+| 2/19/43/431 | R_TX | 32,756 | 862 | 121 | 740 | 165 | 269,910 | no | 2.88e+09 |
+| 2/19/43/431 | R_TXM4 | 37,066 | 817 | 120 | 696 | 166 | 264,624 | no | 3.19e+09 |
+| 2/19/43/431 | R_TXM4 | 32,756 | 817 | 121 | 695 | 166 | 265,236 | no | 2.7e+09 |
+| 2/19/43/431 | R_TXM4 | 37,066 | 862 | 120 | 741 | 166 | 270,024 | no | 3.38e+09 |
+| 2/19/43/431 | R_TXM4 | 32,756 | 862 | 121 | 740 | 166 | 270,636 | no | 2.89e+09 |
+| 2/19/43/431/7/17 | R_TX | 45,752 | 952 | 119 | 832 | 124 | 250,512 | yes | 5.26e+08 |
+| 2/19/43/431/7/17 | R_TX | 55,556 | 952 | 118 | 833 | 124 | 250,632 | yes | 6.86e+08 |
+| 2/19/43/431/7/17 | R_TX | 57,323 | 952 | 118 | 833 | 124 | 250,760 | yes | 3.61e+09 |
+| 2/19/43/431/7/17 | R_TX | 40,936 | 952 | 120 | 831 | 124 | 250,936 | yes | 4.61e+08 |
+| 2/19/43/431/7/17 | R_TXM4 | 45,752 | 952 | 119 | 832 | 126 | 251,940 | yes | 5.33e+08 |
+| 2/19/43/431/7/17 | R_TXM4 | 55,556 | 952 | 118 | 833 | 126 | 252,048 | yes | 6.97e+08 |
+| 2/19/43/431/7/17 | R_TXM4 | 57,323 | 952 | 118 | 833 | 126 | 252,176 | yes | 3.66e+09 |
+| 2/19/43/431/7/17 | R_TXM4 | 40,936 | 952 | 120 | 831 | 126 | 252,376 | yes | 4.68e+08 |

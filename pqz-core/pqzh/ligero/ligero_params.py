@@ -6,13 +6,20 @@ parameter choice (n, k, l, t) with a proof-size and verifier-work model. Stdlib 
   python3 pqz-core/pqzh/ligero/ligero_params.py          > runs/p1-params.txt   (layout of the crate, radices 2/19/43
                                                                                   and 2/19/43/431 side by side)
   python3 pqz-core/pqzh/ligero/ligero_params.py --p0     > runs/p0-params.txt   (the first model, kept for reference)
+  python3 -I pqz-core/pqzh/ligero/ligero_params.py --set <set> > runs/c8-params-<set>.txt   (plan 5h Task 8c: one
+        parameter set of pqz-core/params/sets/: field, domains, soundness, the crate's layout and exact proof bounds per
+        form (checked against the crate's runs/c8-*-sizes.jsonl where it exists), precompile inputs, transaction
+        calldata under EIP-7976, a preset search with the set's radices)
 
 p1 (2026-10-14, crate layout): blinding rows in F_q^4 (3 polynomials = 12 base rows, needed for ZK since w, q, h have
 F_q^4 coefficients), small values packed as the crate does (cs.rs), k need not divide n (the encoding is an inverse
 FFT on H_k and a coset FFT on 3 H_n; 3 H_n and H_k are always disjoint because 3 generates F_q^*), n >= 4k (degree
 correction, §5.1), exact proven factor of RS[n, 2k-1] at its unique-decoding radius.
 """
+import json
 import math
+import os
+import re
 import sys
 
 Q = 2**42 - 215
@@ -285,8 +292,277 @@ def main0():
                       f"{r['polys']:,} | {r['cols']:,} | {r['merkle']:,} | {size:,} | {r['ver_mults']:,} |")
 
 
+
+# ---- per parameter set (plan 5h Task 8c): --set <name> ----
+HERE = os.path.dirname(os.path.abspath(__file__))
+SETS_DIR = os.path.join(HERE, '..', '..', 'params', 'sets')
+# a set whose directory Task 8b has not created yet: (n, K_MAX, q) for n-study's budget(), as gen_set.py derives them
+PENDING = {'n2560-kmax16384': (2560, 16_384, 2**50 - 42_310_535)}
+# pqzh_set.rs defaults (every set so far)
+PQZH_DEFAULT = {'GEN': 3, 'NR': 3, 'RADICES': [2, 19, 43, 431], 'PRESET_N': 32756, 'PRESET_K': 817, 'PRESET_T': 121}
+MAX_PROOF_PQZH, MAX_INPUT_TODAY, MAX_INPUT_8D = 262_144, 393_216, 512 * 1024
+CAP = 2**24                  # Ethereum-like regular gas per transaction (EIP-7825)
+TX_LIMIT = (CAP - 15_000) // 64   # EIP-7976: 15,000 + 64 gas per calldata byte <= the cap (Task 7b: 261,909 B)
+BLIND_B, DIGEST = 12, 32
+
+
+def read_rs(path):
+    """`pub(crate) const NAME: T = value;` lines of a generated / hand-written set file"""
+    out = {}
+    for name, v in re.findall(r'pub\(crate\) const (\w+): [^=]+= ([^;]+);', open(path).read()):
+        v = v.strip()
+        if v.startswith('"'):
+            out[name] = v.strip('"')
+        elif v.startswith('&[') or v.startswith('['):
+            out[name] = [int(x.replace('_', '')) for x in v.strip('&[]').split(',') if x.strip()]
+        else:
+            out[name] = int(v.replace('_', ''))
+    return out
+
+
+def set_consts(name):
+    d = os.path.join(SETS_DIR, name)
+    if os.path.exists(os.path.join(d, 'rust', 'set.rs')):
+        c = read_rs(os.path.join(d, 'rust', 'set.rs'))
+        ph = os.path.join(d, 'pqzh_set.rs')
+        c.update(read_rs(ph) if os.path.exists(ph) else PQZH_DEFAULT)
+        src = f'pqz-core/params/sets/{name}/rust/set.rs + ' + ('pqzh_set.rs' if os.path.exists(ph) else 'defaults (no pqzh_set.rs)')
+        return c, src
+    n, kmax, q = PENDING[name]
+    sys.path.insert(0, os.path.join(HERE, '..', '..', 'pqzl', 'params', 'n-study'))
+    from budget import budget
+    b = budget(n, kmax, q)
+    c = dict(SET_NAME=name, N=n, K=b['k'], Q=q, LOG2Q=(q - 1).bit_length(), K_MAX=kmax, MBITS=b['m'], CBITS=b['m'] - 3,
+             EBITS=b['e_bits'] + 1, BETA_S=b['bs'], BETA_E=b['be'], BETA_2=64, DELTA=b['D'])
+    c.update(PQZH_DEFAULT)
+    return c, f'n-study budget({n}, {kmax}, {q}) as gen_set.py (no set directory yet: Task 8b creates it) + defaults'
+
+
+def is_prime(n):
+    return n > 1 and all(n % d for d in range(2, math.isqrt(n) + 1))
+
+
+class Lay:
+    """cs::Layout::new's widths of a set: CBD(1) / CBD(20) groups x + 2^blen(beta) in blen(beta) + 1 bits, slacks
+    B^2 - ||x||^2 in blen(B^2) bits, e2 likewise with BETA_2, M / carries / e_T widths of the set"""
+    def __init__(self, c):
+        bl = lambda x: x.bit_length()  # noqa: E731
+        self.N, self.eb = c['N'], (c['LOG2Q'] + 7) // 8
+        self.s_bits, self.e_bits = bl(c['BETA_S']) + 1, bl(c['BETA_E']) + 1
+        self.sl_s, self.sl_e = bl(c['BETA_S']**2), bl(c['BETA_E']**2)
+        self.e2_bits, self.sl_2 = bl(c['BETA_2']) + 1, bl(c['BETA_2']**2)
+        self.m_bits, self.c_bits, self.et_bits = c['MBITS'], c['CBITS'], c['EBITS']
+
+
+def rows_set(p, rel, ell):
+    """cs::Layout::new(rel, ell).m; rel = ('reg' | 'tx' | 'tx0' | 'burn' | 'ds' | 'dr') or ('txm', M, aud)"""
+    se, sl = [p.s_bits, p.e_bits], [(1, p.sl_s), (1, p.sl_e)]
+
+    def debit(legs, nd, pairs):
+        v = [(16 * legs, p.e2_bits)] + ([(16 * nd, 4)] if nd else [])
+        v += [(16, 4), (16, p.m_bits), (16, p.c_bits), (16, p.et_bits)] + sl * pairs + [(1, p.sl_2)] * legs
+        return v
+
+    name = rel[0]
+    if name == 'reg':
+        bigs, smalls = se, sl
+    elif name in ('tx', 'tx0', 'burn'):
+        bigs, smalls = se * 2, debit({'tx': 3, 'tx0': 2, 'burn': 1}[name], 0 if name == 'burn' else 1, 2)
+    elif name == 'ds':
+        bigs, smalls = se, [(16, p.e2_bits)] + sl + [(1, p.sl_2)]
+    elif name == 'dr':
+        bigs, smalls = se, [(16, p.et_bits)] + sl
+    else:
+        _, m, aud = rel
+        pairs = 1 + (m + 3) // 4
+        bigs, smalls = se * pairs, debit(m + 1 + aud * m, m, pairs)
+    nr = -(-p.N // ell)
+    return (sum(nr * (2 + b) for b in bigs) + 2 * -(-sum(c for c, _ in smalls) // ell)
+            + -(-sum(c * b for c, b in smalls) // ell))
+
+
+def bound_set(p, rel, n, k, t):
+    """Params::max_len_exact: root, w, q, h, nonce, t distinct columns, the largest pruned multiproof"""
+    ell, d = k - t - 1, (n - 1).bit_length()
+    mid = sum(min(t, -(-n // (1 << lv))) for lv in range(1, d))
+    poly = (2 * (2 * k - 1) + (2 * k - 1 - ell)) * EXT * p.eb
+    return 32 + poly + 8 + t * (32 + (rows_set(p, rel, ell) + BLIND_B) * p.eb) + (mid + 2 - t) * DIGEST
+
+
+def stmt_set(p, rel):
+    """pqz-stmt lengths: header 640, pk / u 8 N bytes, v 128"""
+    pk, v, h = 8 * p.N, 128, 640
+    name = rel[0]
+    if name == 'reg':
+        return 96 + pk
+    if name in ('ds', 'dr'):
+        return 288 + 2 * pk + v
+    if name in ('tx', 'tx0', 'burn'):
+        legs = {'tx': 3, 'tx0': 2, 'burn': 1}[name]
+        return h + legs * pk + (pk + v) + pk + legs * v
+    _, m, aud = rel
+    return h + (1 + m + aud) * pk + (pk + v) + (m + 3) // 4 * pk + v * (m + 1) + aud * v * m
+
+
+def pad32(n):
+    return n + (-n % 32)
+
+
+def calldata(p, rel, proof):
+    """one transaction's calldata through the token / registry (pqzl/params/p16k/inputs16k.py's ABI layout, Task 7b,
+    with pk = 8 N): (bytes, path)"""
+    pk, v, auth = 8 * p.N, 128, 3_456
+
+    def relayed(inner):
+        return 516 + pad32(inner)
+
+    def tail(payload, head=160):
+        return 4 + head + 32 + pad32(payload) + 32 + pad32(proof) + 32 + auth + 32
+
+    name = rel[0]
+    if name == 'reg':
+        return 4 + 160 + 32 + 1_952 + 32 + pad32(3_309) + 32 + pk + 32 + pad32(proof), 'UARegistry.register'
+    if name in ('ds', 'dr'):
+        return 4 + 160 + 32 + pad32(proof), 'verifyTransferAmount (eth_call)'
+    if name in ('tx', 'tx0'):
+        return relayed(tail(208 + pk + v + v + (v if name == 'tx' else 0))), 'relayed mtxExecute (op 1)'
+    if name == 'burn':
+        return relayed(tail(160 + pk + v, head=224)), 'relayed mtxExecute (op 2)'
+    _, m, aud = rel
+    out = pk * ((m + 3) // 4) + v * (m + 1) + (v * m if aud else 0)
+    return relayed(tail(224 + 16 + 32 * m + out)), 'relayed mtxExecute (op 7)'
+
+
+SET_RELS = [('reg',), ('tx',), ('burn',), ('ds',), ('dr',), ('tx0',), ('txm', 1, 1), ('txm', 1, 0), ('txm', 2, 1),
+            ('txm', 2, 0), ('txm', 4, 1), ('txm', 4, 0), ('txm', 8, 1), ('txm', 8, 0)]
+CRATE_NAMES = {('reg',): 'R_REG', ('tx',): 'R_TX', ('burn',): 'R_BURN', ('ds',): 'R_DS', ('dr',): 'R_DR', ('tx0',): 'R_TX0'}
+
+
+def label(rel):
+    if rel[0] != 'txm':
+        return CRATE_NAMES[rel]
+    return f"R_TXM{rel[1]}{'' if rel[2] else '_0'}"
+
+
+def crate_sizes(name):
+    """the crate's own exact bounds (ligero_kat sizes) if this set was built: runs/c8-<tag>-sizes.jsonl"""
+    for f in os.listdir(os.path.join(HERE, 'runs')):
+        if f.startswith('c8-') and f.endswith('-sizes.jsonl'):
+            rows = [json.loads(x) for x in open(os.path.join(HERE, 'runs', f))]
+            if rows and rows[0]['set'] == name:
+                return f, {r['rel']: r for r in rows}
+    return None, {}
+
+
+def main_set(name):
+    c, src = set_consts(name)
+    q, L = c['Q'], c['LOG2Q']
+    p = Lay(c)
+    f = factor(q - 1)
+    print(f'# PQZH Ligero at parameter set {name} (plan 5h Task 8c; [model] = this layout model, [crate] = the crate)\n')
+    print(f'constants: {src}\n')
+    print('## Field and domains\n')
+    assert is_prime(q) and q % 16 == 9 and 2**(L - 1) < q < 2**L
+    assert sorted(f) == sorted(c['QM1']) if 'QM1' in c else True, (f, c.get('QM1'))
+    gen, nr = c['GEN'], c['NR']
+    assert all(pow(gen, (q - 1) // r, q) != 1 for r in set(f)), 'GEN generates F_q^*'
+    assert pow(nr, (q - 1) // 2, q) == q - 1 and q % 4 == 1, 'X^4 - NR irreducible'
+    nl = 2 if L <= 42 else 3
+    print(f'- q = {q:,} (2^{math.log2(q):.2f}), prime, q mod 16 = 9; q - 1 = {" * ".join(map(str, f))}')
+    print(f'- F_q element {L} bits in {p.eb} bytes (EB); F_q^4 = F_q[X]/(X^4 - {nr}) ({nr} a non-square, q = 1 mod 4), '
+          f'|F_q^4| = 2^{4 * math.log2(q):.1f}; generator {gen}')
+    print(f'- native: Barrett (products < 2^{2 * L}, u128); wasm32: {nl} limbs of {-(-L // nl)} bits in u64')
+    rad = c['RADICES']
+    nmax = 4 * math.prod(rad)
+    extra = sorted({r for r in f if r not in rad and r <= 431})
+    assert (q - 1) % nmax == 0
+    n, k, t = c['PRESET_N'], c['PRESET_K'], c['PRESET_T']
+    ell = k - t - 1
+    fac = factor_proven(n, k)
+    assert t_of(fac) == t and all(pow(gen, (q - 1) // r, q) != 1 for r in set(factor(n)) | set(factor(k)))
+    lcm = n * k // math.gcd(n, k)
+    assert pow(gen, lcm, q) != 1, 'GEN H_n meets H_k'
+    print(f'- radices {"/".join(map(str, rad))} divide q - 1 (domain sizes | {nmax:,}); small primes of q - 1 the crate '
+          f'does not use: {extra or "none"}')
+    print(f'- THE preset: proven, n = {n:,} = {" * ".join(map(str, factor(n)))} (H_n, the commitment coset {gen} H_n), '
+          f'k = {k} = {" * ".join(map(str, factor(k)))} (H_k), t = {t}, l = {ell}, N2 = {n2_of(k, SMOOTH4)}; '
+          f'{gen} H_n and H_k disjoint ({gen}^lcm(n, k) != 1)\n')
+    print('## Soundness (THE preset; per-query factor depends on n, k only)\n')
+    qb = t * -math.log2(fac) + POW
+    print(f'- query: t = {t} x {-math.log2(fac):.4f} + {POW} grinding = {qb:.2f} bits (same as v3); field terms grow '
+          f'with q: |F_q^4| = 2^{4 * math.log2(q):.1f} (v3 2^168.0); the crate\'s per-relation totals: '
+          f'`ligero_kat sizes` (runs/c8-*-sizes.jsonl)\n')
+    cf, cs = crate_sizes(name)
+    print('## Sizes per form [model] (exact verifier bound = the largest proof the verifier parses)\n')
+    print(f'| relation | rows m | proof bound B | <= MAX_PROOF_PQZH {MAX_PROOF_PQZH:,} | statement B | input 5 + stmt + '
+          f'bound B | <= MAX_INPUT {MAX_INPUT_TODAY:,} today / {MAX_INPUT_8D:,} (8d) | crate bound [crate] | crate soundness bits |')
+    print('|---|---|---|---|---|---|---|---|---|')
+    checked = 0
+    for rel in SET_RELS:
+        b, st = bound_set(p, rel, n, k, t), stmt_set(p, rel)
+        inp = 5 + st + b
+        cr = cs.get(label(rel))
+        if cr:
+            assert (cr['max_proof_len'], cr['stmt_bytes'], cr['rows_m']) == (b, st, rows_set(p, rel, ell)), (rel, cr)
+            checked += 1
+        snd = cr['soundness'].get('total') if cr else None
+        print(f"| {label(rel)} | {rows_set(p, rel, ell)} | {b:,} | {'yes' if b <= MAX_PROOF_PQZH else 'NO'} | {st:,} | "
+              f"{inp:,} | {'yes' if inp <= MAX_INPUT_TODAY else 'no'} / {'yes' if inp <= MAX_INPUT_8D else 'NO'} | "
+              f"{cr['max_proof_len'] if cr else '-'} | {snd if snd is not None else ('not built' if cr else '-')} |")
+    print(f'\nmodel = crate on {checked} relations ({cf or "no crate build of this set yet"}); op 7 M = 8: G = 2, not a '
+          f'built PQZH shape\n')
+    print(f'## One transaction (EIP-7976: 15,000 + 64 x calldata bytes <= the regular-gas cap; at 2^24: <= {TX_LIMIT:,} B)\n')
+    print('Calldata through the token / registry (Task 7b ABI model, inputs16k.py, pk = 8 N) with the proof at its bound; '
+          'the precompile input itself is built in memory (only a direct call carries it as calldata).\n')
+    print('| relation | path | tx calldata B | EIP-7976 floor gas | fits 2^24 | smallest cap (floor) | direct-call input B '
+          '| direct fits 2^24 | largest proof one 2^24 tx carries |')
+    print('|---|---|---|---|---|---|---|---|---|')
+    for rel in SET_RELS[:12]:
+        b = bound_set(p, rel, n, k, t)
+        cd, path = calldata(p, rel, b)
+        inp = 5 + stmt_set(p, rel) + b
+        lo, hi = 0, TX_LIMIT
+        while lo < hi:
+            mid = (lo + hi + 1) // 2
+            lo, hi = (mid, hi) if calldata(p, rel, mid)[0] <= TX_LIMIT else (lo, mid - 1)
+        floor = 15_000 + 64 * cd
+        print(f"| {label(rel)} | {path} | {cd:,} | {floor:,} | {'yes' if cd <= TX_LIMIT else 'NO'} | {floor / 1e6:.2f} M | "
+              f"{inp:,} | {'yes' if inp <= TX_LIMIT else 'NO'} | {lo:,} |")
+    print('\n## Preset search (proven, n >= 4k, k >= 64, l >= 16, prover <= %.0e products): the smallest R_TX and '
+          'R_TXM4 bounds, radices of the crate and with the small primes of q - 1 it does not use\n' % PMAX)
+    print('| radices | relation | n | k | t | l | rows m | proof bound B | <= 262,144 | prover products |')
+    print('|---|---|---|---|---|---|---|---|---|---|')
+    mult = {r: f.count(r) for r in set(f)}
+    for rs in [rad] + ([rad + extra] if extra else []):
+        sm = {1}
+        for r in rs:
+            sm = {x * r**e for x in sm for e in range(mult[r] + (2 if r == 2 else 0) + 1) if r**e <= 2**21}
+        sm = sorted(x for x in sm if (q - 1) % x == 0 and x <= NMAX)
+        for rel in (('tx',), ('txm', 4, 1)):
+            res = []
+            for nn in sm:
+                for kk in sm:
+                    if 4 * kk > nn or kk < 64:
+                        continue
+                    tt = t_of(factor_proven(nn, kk))
+                    if kk - tt - 1 < 16:
+                        continue
+                    m_rows = rows_set(p, rel, kk - tt - 1)
+                    n2 = min(x for x in sm if x >= 2 * kk - 1) if 2 * kk - 1 <= sm[-1] else None
+                    if n2 is None:
+                        continue
+                    pr = (m_rows + BLIND_B) * (fft_cost(kk) + fft_cost(nn)) + (m_rows + 40) * fft_cost(n2)
+                    if pr <= PMAX:
+                        res.append((bound_set(p, rel, nn, kk, tt), nn, kk, tt, m_rows, pr))
+            for b, nn, kk, tt, m_rows, pr in sorted(res)[:4]:
+                print(f"| {'/'.join(map(str, rs))} | {label(rel)} | {nn:,} | {kk} | {tt} | {kk - tt - 1} | {m_rows} | {b:,} | "
+                      f"{'yes' if b <= MAX_PROOF_PQZH else 'no'} | {pr:.3g} |")
+
+
 if __name__ == '__main__':
-    if '--p0' in sys.argv:
+    if '--set' in sys.argv:
+        main_set(sys.argv[sys.argv.index('--set') + 1])
+    elif '--p0' in sys.argv:
         main0()
     else:
         main1()
