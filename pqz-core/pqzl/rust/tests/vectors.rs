@@ -14,6 +14,16 @@ use common::{hex, json};
 const Q: u64 = pqzl::Q;
 const DELTA: u64 = pqzl::DELTA as u64;
 
+/// false (said on stderr) for a set without vectors (core_only, e.g. n2816-kmax65536): the tests that read the vectors'
+/// key / ciphertext files skip (keys and Enc are C = Rust through oracle_keys there)
+fn have_vectors(test: &str) -> bool {
+    let h = common::vectors_dir().is_some();
+    if !h {
+        eprintln!("set {}: no vectors (core_only): {test} skipped", pqzl::SET);
+    }
+    h
+}
+
 fn hex32(s: &Value) -> [u8; 32] {
     hex(s).try_into().expect("32 bytes")
 }
@@ -41,6 +51,9 @@ fn value(m: &[i64; 16]) -> i128 {
 
 #[test]
 fn keygen_json() {
+    if !have_vectors("keygen_json") {
+        return;
+    }
     let j = json("keygen.json");
     let rows = j["rows"].as_array().unwrap();
     assert_eq!(rows.len(), 8);
@@ -58,6 +71,9 @@ fn keygen_json() {
 /// A = the columns pqz_keypair_from_secret(unit vector at poly j, 0) (matrix.json's own derivation)
 #[test]
 fn matrix_json() {
+    if !have_vectors("matrix_json") {
+        return;
+    }
     let j = json("matrix.json");
     let cols: Vec<Box<[u8; POLYVEC_BYTES]>> = (0..pqzl::K)
         .map(|c| {
@@ -102,6 +118,9 @@ fn ct_op(a: &[u8; CT_BYTES], b: &[u8; CT_BYTES], add: bool) -> Box<[u8; CT_BYTES
 
 #[test]
 fn enc_json() {
+    if !have_vectors("enc_json") {
+        return;
+    }
     let j = json("enc.json");
     let mut cts = Vec::new();
     let rows = j["rows"].as_array().unwrap();
@@ -286,6 +305,7 @@ fn negative_rows_reject() {
         "n2048-kmax1024" => 368,
         "n2304-kmax4096" => 367,
         "n2560-kmax16384" => 370,
+        "n2816-kmax65536" => 0, // core_only: no vectors
         s => panic!("no negative.json row count recorded for set {s}"),
     };
     assert_eq!(rows.len(), want);

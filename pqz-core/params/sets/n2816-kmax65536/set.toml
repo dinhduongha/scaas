@@ -1,0 +1,15 @@
+# PQZ parameter set n2816-kmax65536: the input of pqz-core/params/sets/gen_set.py (every other file of this set is
+# derived from it; README.md beside this directory). A' of plan 5h (research record pqz-core/pqzl/params/aprime/):
+# K_MAX about 65k for a customer that wants it later; core only.
+description = "A' (K_MAX 65,536), owner 2026-10-21: core only"
+n = 2816
+k_max = 65536
+q = 18014398509481657             # 2^54 - 327 (aprime/aprime.sage budget)
+pqz_delta = 1.00366               # e-s1.txt
+kmlwe_min = 42                    # e-s1.txt: dual_hybrid 462 / 463 at 42; 41 (aprime/proof-aprime.txt, uSVP only)
+                                  # gives dual_hybrid 447 / 448 < 450 (make.sh e_s1 stop, 2026-10-23; 8b report)
+core_only = true                  # no pqz-stmt / precompile / vectors / contracts for this set
+
+[approval]
+date = "2026-10-21"
+what = "owner 2026-10-21: restore the earlier K_MAX ~ 65k set into params/sets/ in case a customer wants it later; core only (C + Rust native + wasm32, own KATs C = Rust, SET.md)"

@@ -157,6 +157,7 @@ mod tests {
             "n2048-kmax1024" => (11624, 5438, 5417),
             "n2304-kmax4096" => (11294, 5438, 5400),
             "n2560-kmax16384" => (11127, 5438, 5385),
+            "n2816-kmax65536" => (10756, 5438, 5355),
             s => panic!("no C counts recorded for set {s}: run test/ub_test.sh with PQZ_SET={s}"),
         };
         assert_eq!((acc, neg, negstd), want, "= the C test's counts");

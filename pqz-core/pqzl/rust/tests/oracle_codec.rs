@@ -8,6 +8,8 @@ use pqzl::testkit::{dcomp_gamma_m, ghint, synthetic_proof};
 use serde_json::Value;
 use std::path::PathBuf;
 
+mod common;
+
 const Q: u64 = pqzl::Q;
 const MAX_PROOF: usize = pqzl::MAX_PROOF;
 
@@ -52,6 +54,16 @@ fn proofs() -> Vec<(u8, Vec<u8>)> {
     // the vectors of this build's parameter set (v3 at the canonical path, another set below it)
     let b = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../../smartcontracts/vectors/pqz");
     let p = if pqzl::SET == "n2048-kmax1024" { b } else { b.join(pqzl::SET) }.join("proof_pqzl.json");
+    if !p.is_file() {
+        // a set without vectors (core_only, e.g. n2816-kmax65536): one C-proved bench proof per relation code
+        let mut out: Vec<(u8, Vec<u8>)> = Vec::new();
+        for r in common::pqzl_rows() {
+            if !out.iter().any(|(c, _)| *c == r.code) {
+                out.push((r.code, r.proof));
+            }
+        }
+        return out;
+    }
     let j: Value = serde_json::from_str(&std::fs::read_to_string(p).unwrap()).unwrap();
     let mut out: Vec<(u8, Vec<u8>)> = Vec::new();
     for r in j["rows"].as_array().unwrap() {

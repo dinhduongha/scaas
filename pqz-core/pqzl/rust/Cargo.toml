@@ -29,6 +29,7 @@ default = ["sv", "set-n2304-kmax4096"]
 set-n2048-kmax1024 = []
 set-n2304-kmax4096 = []
 set-n2560-kmax16384 = []
+set-n2816-kmax65536 = []
 # END gen_set.py sets
 # the specialised verifier (pqz_verify_fast)
 sv = []

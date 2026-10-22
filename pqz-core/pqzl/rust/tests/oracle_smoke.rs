@@ -23,6 +23,10 @@ fn hex(s: &Value) -> Vec<u8> {
 
 /// `(stmt, proof)` of every REGISTER row of proof_pqzl.json.
 fn register_rows() -> Vec<(Vec<u8>, Vec<u8>)> {
+    if !vectors().join("proof_pqzl.json").is_file() {
+        eprintln!("set {}: no vectors (core_only): no self-test REGISTER rows", pqzl::SET);
+        return Vec::new();
+    }
     let rows: Vec<_> = json("proof_pqzl.json")["rows"]
         .as_array()
         .unwrap()

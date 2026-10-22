@@ -131,7 +131,21 @@ fn bench_rows() -> Vec<Row> {
             let (op, code, stmt, wit) = b.instance(rel);
             let rnd32: [u8; 32] = core::array::from_fn(|i| (7 * rel + i) as u8);
             let proof = pqzl::c_oracle::c_prove(op, stmt, wit, &rnd32).expect("C prove of a bench relation");
-            Row { name: format!("bench {}", pqzl::bench::NAMES[rel]), op, code, stmt: stmt.to_vec(), proof, wit: wit.to_vec(), rnd32 }
+            // the vectors' row name of the relation, so lookups by name (memory.rs, vectors.rs) find the bench row
+            let n = pqzl::bench::NAMES[rel];
+            let name = match n {
+                "R_REG" => "REGISTER".into(),
+                "R_TX" => "TRANSFER".into(),
+                "R_TX0" => "TRANSFER0".into(),
+                "R_BURN" => "BURN".into(),
+                "R_DS" => "DISCLOSE-SENDER".into(),
+                "R_DR" => "DISCLOSE-RECEIVER".into(),
+                _ => match n.strip_prefix("R_TXM").unwrap().split_once('_') {
+                    Some((m, _)) => format!("M{m}-off"),
+                    None => format!("M{}-on", &n[5..]),
+                },
+            };
+            Row { name, op, code, stmt: stmt.to_vec(), proof, wit: wit.to_vec(), rnd32 }
         })
         .collect()
 }
