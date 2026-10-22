@@ -58,8 +58,12 @@ def consts(name):
     assert b["ok"] and q % 16 == 9, f"{name}: the §4.3 budget fails or q != 9 mod 16"
     L = (q - 1).bit_length()                  # the ring's log2q (LaZer codegen: ceil(log2(q - 1)))
     assert 2**(L - 1) < q < 2**L
-    z = pow(3, (q - 1) // 8, q)
-    assert pow(z, 4, q) == q - 1, f"{name}: 3^((q - 1) / 8) is not a primitive 8th root of unity"
+    # g: the smallest quadratic non-residue >= 3, so zeta = g^((q - 1) / 8) has order 8 (g^((q - 1) / 2) = -1); 3 for
+    # n2048-kmax1024, n2304-kmax4096 and n2560-kmax16384, 5 for n2816-kmax65536 (q = 2^54 - 327: 3 is a residue). Any
+    # primitive 8th root gives the same ring arithmetic: the NTT is internal to the cores (2026-10-22, 8b item 6)
+    g = next(g for g in range(3, q) if pow(g, (q - 1) // 2, q) == q - 1)
+    z = pow(g, (q - 1) // 8, q)
+    assert pow(z, 4, q) == q - 1, f"{name}: {g}^((q - 1) / 8) is not a primitive 8th root of unity"
     i, z3 = z * z % q, pow(z, 3, q)
     inv = lambda x: pow(x, q - 2, q)  # noqa: E731
     mbits, ebits = b["m"], b["e_bits"] + 1
@@ -76,7 +80,7 @@ def consts(name):
          ("EBITS", ebits, None, f"e_T,i + 2^{ebits - 1} and e'_i + 2^{ebits - 1} (|e| < E = 2^{ebits - 1})"),
          ("BETA_S", b["bs"], None, "||s||, ||r|| bound (CBD(1))"), ("BETA_E", b["be"], None, "||e||, ||e1|| bound (CBD(20))"),
          ("BETA_2", 64, None, "||e2_j|| bound (16 coefficients)"),
-         ("ZETA", z, None, "3^((q - 1) / 8), a primitive 8th root of unity"), ("IROOT", i, None, "zeta^2"),
+         ("ZETA", z, None, f"{g}^((q - 1) / 8), a primitive 8th root of unity"), ("IROOT", i, None, "zeta^2"),
          ("ZETA3", z3, None, "zeta^3"), ("INV2", inv(2), None, "1/2"), ("INVZ", inv(z), None, "1/zeta"),
          ("INVI", inv(i), None, "1/zeta^2"), ("INVZ3", inv(z3), None, "1/zeta^3"),
          ("R64", 2**64 % q, None, "2^64 mod q"),

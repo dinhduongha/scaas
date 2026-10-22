@@ -1,0 +1,8 @@
+set n2048-kmax1024
+== kat
+   ok
+== tbox
+   ok
+== sv
+   ok
+== diff

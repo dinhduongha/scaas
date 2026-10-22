@@ -1,0 +1,9 @@
+# gate t8b-v3c (set n2048-kmax1024): 61b0c003d41853a48788c5e1da5f0526334824c7, 2026-10-22T01:14Z
+set n2048-kmax1024
+== kat
+   ok
+== tbox
+   ok
+== sv
+   ok
+== diff

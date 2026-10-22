@@ -14,6 +14,7 @@
 #   e_s0    e_s0_set.py: the set's budget checks, exactness of the norm proofs per relation, FS rounds -> <set>/e-s0.txt
 #   kat     the upstream LaZer golden arithmetic KAT at the set's q (pqzl/kat/build-lazer-dump.sh, docker, x86-64-v3)
 #           -> <set>/lazer-3330e48-kat.json (+ -build.txt), then pqz-core = upstream (pqzl/kat/check.py)
+#   fixtures the cheating fixtures the Rust suite reads (pqzl/rust/tests/fixtures/cheating/export.sh -> <set>/)  (capped)
 #   vectors pqz-ffi/vectors/run.sh write (PQZ_SET=<set>): smartcontracts/vectors/pqz[/<set>]   (not for core_only)
 #   sol     <set>/PqzSet.sol -> smartcontracts/evm/src/pqz/PqzSet.sol, forge build of that file   (not for core_only)
 #   gate    PQZ_SET=<set> pqz-core/gate.sh <set>-<date> (run alone)
@@ -27,7 +28,7 @@ CORE=$(cd "$HERE/../.." && pwd)
 REPO=$(cd "$CORE/.." && pwd)
 CAP="$REPO/scripts/capped"
 IMG=sagemath/sagemath@sha256:4f5589eb6c565949a006f8665de2876b8414410daf5ac554f4434a15d4f3d528   # tag 10.7
-[ $# -ge 2 ] || { sed -n '2,25p' "$0"; exit 2; }
+[ $# -ge 2 ] || { sed -n '2,24p' "$0"; exit 2; }
 S=$1
 shift
 D=$HERE/$S
@@ -106,6 +107,8 @@ step_kat() {
      python3 -I kat/check.py "$D/lazer-3330e48-kat.json" build/native/kat-pqz.json)
 }
 
+step_fixtures() { PQZ_SET=$S "$CAP" "$CORE/pqzl/rust/tests/fixtures/cheating/export.sh"; }
+
 step_vectors() {
   [ "$CORE_ONLY" = True ] && { echo "skipped (core_only set: no pqz-stmt / precompile vectors)"; return 0; }
   PQZ_SET=$S "$CAP" "$CORE/ffi/vectors/run.sh" "$S-$(date -u +%Y%m%d)" write
@@ -119,9 +122,9 @@ step_sol() {
 
 step_gate() { PQZ_SET=$S "$CAP" "$CORE/gate.sh" "$S-$(date -u +%Y%m%d)"; }
 
-[ "$1" = all ] && set -- specs e_s1 codegen rust e_s0 kat vectors sol gate
+[ "$1" = all ] && set -- specs e_s1 codegen rust e_s0 kat fixtures vectors sol gate
 for st in "$@"; do
-  case $st in specs | e_s1 | codegen | rust | e_s0 | kat | vectors | sol | gate) ;; *) echo "make.sh: unknown step $st" >&2; exit 2 ;; esac
+  case $st in specs | e_s1 | codegen | rust | e_s0 | kat | fixtures | vectors | sol | gate) ;; *) echo "make.sh: unknown step $st" >&2; exit 2 ;; esac
   echo "== $S: $st"
   if ! "step_$st"; then
     echo "make.sh $S: step $st FAILED (logs: $D/, pqz-core/runs/gate/, pqz-core/ffi/vectors/runs/)"
