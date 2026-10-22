@@ -8,11 +8,11 @@ constants: pqz-core/params/sets/n2048-kmax1024/rust/set.rs + pqzh_set.rs
 - F_q element 42 bits in 6 bytes (EB); F_q^4 = F_q[X]/(X^4 - 3) (3 a non-square, q = 1 mod 4), |F_q^4| = 2^168.0; generator 3
 - native: Barrett (products < 2^84, u128); wasm32: 2 limbs of 21 bits in u64
 - radices 2/19/43/431 divide q - 1 (domain sizes | 2,817,016); small primes of q - 1 the crate does not use: none
-- THE preset: proven, n = 32,756 = 2 * 2 * 19 * 431 (H_n, the commitment coset 3 H_n), k = 817 = 19 * 43 (H_k), t = 121, l = 695, N2 = 1634; 3 H_n and H_k disjoint (3^lcm(n, k) != 1)
+- the preset (pqzh_set.rs): proven, n = 32,756 = 2 * 2 * 19 * 431 (H_n, the commitment coset 3 H_n), k = 817 = 19 * 43 (H_k), t = 121 (the model's minimum 121), l = 695, N2 = 1634; 3 H_n and H_k disjoint (3^lcm(n, k) != 1)
 
-## Soundness (THE preset; per-query factor depends on n, k only)
+## Soundness (the preset; per-query factor depends on n, k only)
 
-- query: t = 121 x 0.9298 + 16 grinding = 128.50 bits (same as v3); field terms grow with q: |F_q^4| = 2^168.0 (v3 2^168.0); the crate's per-relation totals: `ligero_kat sizes` (runs/c8-*-sizes.jsonl)
+- query: t = 121 x 0.9298 + 16 grinding = 128.50 bits (v3 128.50); field terms grow with q: |F_q^4| = 2^168.0 (v3 2^168.0); the crate's per-relation totals: `ligero_kat sizes` (runs/c8-*-sizes.jsonl, runs/c8b-*-sizes.jsonl)
 
 ## Sizes per form [model] (exact verifier bound = the largest proof the verifier parses)
 
@@ -58,11 +58,16 @@ Calldata through the token / registry (Task 7b ABI model, inputs16k.py, pk = 8 N
 
 | radices | relation | n | k | t | l | rows m | proof bound B | <= 262,144 | prover products |
 |---|---|---|---|---|---|---|---|---|---|
-| 2/19/43/431 | R_TX | 37,066 | 817 | 120 | 696 | 125 | 235,104 | yes | 2.46e+09 |
-| 2/19/43/431 | R_TX | 32,756 | 817 | 121 | 695 | 125 | 235,470 | yes | 2.08e+09 |
-| 2/19/43/431 | R_TX | 37,066 | 862 | 120 | 741 | 124 | 239,784 | yes | 2.59e+09 |
-| 2/19/43/431 | R_TX | 18,533 | 817 | 128 | 688 | 125 | 239,824 | yes | 1.23e+09 |
-| 2/19/43/431 | R_TXM4 | 37,066 | 817 | 120 | 696 | 126 | 235,824 | yes | 2.48e+09 |
-| 2/19/43/431 | R_TXM4 | 32,756 | 817 | 121 | 695 | 126 | 236,196 | yes | 2.1e+09 |
-| 2/19/43/431 | R_TXM4 | 18,533 | 817 | 128 | 688 | 126 | 240,592 | yes | 1.24e+09 |
-| 2/19/43/431 | R_TXM4 | 37,066 | 862 | 120 | 741 | 126 | 241,224 | yes | 2.63e+09 |
+| 2/19/43/431 | R_TX | 74,132 | 817 | 116 | 700 | 125 | 234,408 | yes | 5.52e+08 |
+| 2/19/43/431 | R_TX | 65,512 | 817 | 117 | 699 | 125 | 234,806 | yes | 2.86e+08 |
+| 2/19/43/431 | R_TX | 37,066 | 817 | 120 | 696 | 125 | 235,104 | yes | 3.16e+08 |
+| 2/19/43/431 | R_TX | 148,264 | 817 | 114 | 702 | 124 | 235,104 | yes | 1.02e+09 |
+| 2/19/43/431 | R_TXM4 | 74,132 | 817 | 116 | 700 | 126 | 235,104 | yes | 5.56e+08 |
+| 2/19/43/431 | R_TXM4 | 65,512 | 817 | 117 | 699 | 126 | 235,508 | yes | 2.89e+08 |
+| 2/19/43/431 | R_TXM4 | 37,066 | 817 | 120 | 696 | 126 | 235,824 | yes | 3.19e+08 |
+| 2/19/43/431 | R_TXM4 | 32,756 | 817 | 121 | 695 | 126 | 236,196 | yes | 1.85e+08 |
+
+## Prover work: the model's FFT products vs the crate's counted products (fq::spike_count, all base-field products of one honest proof, seed 0; runs/*count*.jsonl of this set)
+
+| count file | n | k | t | relation | model FFT products | crate products | model / crate |
+|---|---|---|---|---|---|---|---|

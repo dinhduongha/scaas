@@ -16,6 +16,7 @@ F_q^4 coefficients), small values packed as the crate does (cs.rs), k need not d
 FFT on H_k and a coset FFT on 3 H_n; 3 H_n and H_k are always disjoint because 3 generates F_q^*), n >= 4k (degree
 correction, §5.1), exact proven factor of RS[n, 2k-1] at its unique-decoding radius.
 """
+import functools
 import json
 import math
 import os
@@ -356,6 +357,11 @@ class Lay:
 
 def rows_set(p, rel, ell):
     """cs::Layout::new(rel, ell).m; rel = ('reg' | 'tx' | 'tx0' | 'burn' | 'ds' | 'dr') or ('txm', M, aud)"""
+    return rows_own_set(p, rel, ell)[0]
+
+
+def rows_own_set(p, rel, ell):
+    """(rows m, rows with an own linear-test vector the prover interpolates: big value rows and the small rows)"""
     se, sl = [p.s_bits, p.e_bits], [(1, p.sl_s), (1, p.sl_e)]
 
     def debit(legs, nd, pairs):
@@ -377,8 +383,45 @@ def rows_set(p, rel, ell):
         pairs = 1 + (m + 3) // 4
         bigs, smalls = se * pairs, debit(m + 1 + aud * m, m, pairs)
     nr = -(-p.N // ell)
-    return (sum(nr * (2 + b) for b in bigs) + 2 * -(-sum(c for c, _ in smalls) // ell)
-            + -(-sum(c * b for c, b in smalls) // ell))
+    small = 2 * -(-sum(c for c, _ in smalls) // ell) + -(-sum(c * b for c, b in smalls) // ell)
+    return sum(nr * (2 + b) for b in bigs) + small, len(bigs) * nr + small
+
+
+@functools.lru_cache(None)
+def fft_products(n, radices, length):
+    """base-field products of fft.rs Domain::rec (the crate's counter, fq::spike_count) for a size-n transform whose
+    inputs past `length` are zero: stages in the order of `radices`, the deepest r-point stage costs r per nonzero input
+    when fewer than r / 4 are nonzero (the zero-padding skip), r^2 otherwise; radix 2 costs one product per butterfly"""
+    rs, m = [], n
+    for r in radices:
+        while m % r == 0:
+            rs.append(r)
+            m //= r
+    assert m == 1, (n, radices)
+
+    @functools.lru_cache(None)
+    def rec(size, level, length, stride):
+        if size == 1:
+            return 0
+        r = rs[level]
+        mm = size // r
+        c = sum(rec(mm, level + 1, max(0, length - s * stride), stride * r) for s in range(r))
+        if r == 2:
+            return c + mm
+        ns = min(r, -(-length // stride))
+        return c + mm * ((r - 1) + (r * ns if ns * 4 < r else r * r))
+    return rec(n, 0, min(length, n), 1)
+
+
+def prover_fft_set(p, rel, n, k, t, n2, radices):
+    """the prover's FFT products (ligero.rs prove_once): per witness row an inverse FFT on H_k, a coset FFT on 3 H_n and an
+    FFT on H_N2 (k nonzero inputs); 12 blinding base rows on 3 H_n (2k - 1 nonzero); per own row and the two shared
+    vectors 4 x (inverse FFT on H_k + FFT on H_N2); 8 dense inverse FFTs on H_N2 (q and the quadratic quotient). Products
+    outside the FFTs (the combinations, the H_N2 products) are not modelled: compare with the crate's counts"""
+    m, own = rows_own_set(p, rel, k - t - 1)
+    f = lambda size, ln: fft_products(size, tuple(radices), min(ln, size))  # noqa: E731
+    return (m * (f(k, k) + f(n, k) + f(n2, k)) + BLIND_B * f(n, 2 * k - 1) + 4 * (own + 2) * (f(k, k) + f(n2, k))
+            + 8 * f(n2, n2))
 
 
 def bound_set(p, rel, n, k, t):
@@ -445,9 +488,10 @@ def label(rel):
 
 
 def crate_sizes(name):
-    """the crate's own exact bounds (ligero_kat sizes) if this set was built: runs/c8-<tag>-sizes.jsonl"""
-    for f in os.listdir(os.path.join(HERE, 'runs')):
-        if f.startswith('c8-') and f.endswith('-sizes.jsonl'):
+    """the crate's own exact bounds (ligero_kat sizes) if this set was built: runs/c8b-<tag>-sizes.jsonl (part 1b, the
+    current preset) before runs/c8-<tag>-sizes.jsonl (part 1)"""
+    for f in sorted(os.listdir(os.path.join(HERE, 'runs')), reverse=True):
+        if f.startswith(('c8b-', 'c8-')) and f.endswith('-sizes.jsonl'):
             rows = [json.loads(x) for x in open(os.path.join(HERE, 'runs', f))]
             if rows and rows[0]['set'] == name:
                 return f, {r['rel']: r for r in rows}
@@ -479,19 +523,25 @@ def main_set(name):
     n, k, t = c['PRESET_N'], c['PRESET_K'], c['PRESET_T']
     ell = k - t - 1
     fac = factor_proven(n, k)
-    assert t_of(fac) == t and all(pow(gen, (q - 1) // r, q) != 1 for r in set(factor(n)) | set(factor(k)))
+    tmin = t_of(fac)
+    assert t >= tmin and all(pow(gen, (q - 1) // r, q) != 1 for r in set(factor(n)) | set(factor(k)))
     lcm = n * k // math.gcd(n, k)
     assert pow(gen, lcm, q) != 1, 'GEN H_n meets H_k'
     print(f'- radices {"/".join(map(str, rad))} divide q - 1 (domain sizes | {nmax:,}); small primes of q - 1 the crate '
           f'does not use: {extra or "none"}')
-    print(f'- THE preset: proven, n = {n:,} = {" * ".join(map(str, factor(n)))} (H_n, the commitment coset {gen} H_n), '
-          f'k = {k} = {" * ".join(map(str, factor(k)))} (H_k), t = {t}, l = {ell}, N2 = {n2_of(k, SMOOTH4)}; '
-          f'{gen} H_n and H_k disjoint ({gen}^lcm(n, k) != 1)\n')
-    print('## Soundness (THE preset; per-query factor depends on n, k only)\n')
+    mult = {r: f.count(r) for r in set(f)}
+    smooth_of = lambda rs: sorted(  # noqa: E731
+        x for x in functools.reduce(lambda a, r: {y * r**e for y in a for e in range(mult[r] + (2 if r == 2 else 0) + 1)
+                                                  if y * r**e <= 2**21}, rs, {1}) if (q - 1) % x == 0 and x <= NMAX)
+    n2 = n2_of(k, smooth_of(rad))
+    print(f'- the preset (pqzh_set.rs): proven, n = {n:,} = {" * ".join(map(str, factor(n)))} (H_n, the commitment coset '
+          f'{gen} H_n), k = {k} = {" * ".join(map(str, factor(k)))} (H_k), t = {t} (the model\'s minimum {tmin}), l = {ell}, '
+          f'N2 = {n2}; {gen} H_n and H_k disjoint ({gen}^lcm(n, k) != 1)\n')
+    print('## Soundness (the preset; per-query factor depends on n, k only)\n')
     qb = t * -math.log2(fac) + POW
-    print(f'- query: t = {t} x {-math.log2(fac):.4f} + {POW} grinding = {qb:.2f} bits (same as v3); field terms grow '
+    print(f'- query: t = {t} x {-math.log2(fac):.4f} + {POW} grinding = {qb:.2f} bits (v3 128.50); field terms grow '
           f'with q: |F_q^4| = 2^{4 * math.log2(q):.1f} (v3 2^168.0); the crate\'s per-relation totals: '
-          f'`ligero_kat sizes` (runs/c8-*-sizes.jsonl)\n')
+          f'`ligero_kat sizes` (runs/c8-*-sizes.jsonl, runs/c8b-*-sizes.jsonl)\n')
     cf, cs = crate_sizes(name)
     print('## Sizes per form [model] (exact verifier bound = the largest proof the verifier parses)\n')
     print(f'| relation | rows m | proof bound B | <= MAX_PROOF_PQZH {MAX_PROOF_PQZH:,} | statement B | input 5 + stmt + '
@@ -532,12 +582,9 @@ def main_set(name):
           'R_TXM4 bounds, radices of the crate and with the small primes of q - 1 it does not use\n' % PMAX)
     print('| radices | relation | n | k | t | l | rows m | proof bound B | <= 262,144 | prover products |')
     print('|---|---|---|---|---|---|---|---|---|---|')
-    mult = {r: f.count(r) for r in set(f)}
-    for rs in [rad] + ([rad + extra] if extra else []):
-        sm = {1}
-        for r in rs:
-            sm = {x * r**e for x in sm for e in range(mult[r] + (2 if r == 2 else 0) + 1) if r**e <= 2**21}
-        sm = sorted(x for x in sm if (q - 1) % x == 0 and x <= NMAX)
+    v3r = PQZH_DEFAULT['RADICES']  # the v3 radices (the fallback preset's) next to the set's own
+    for rs in ([v3r] if v3r != rad else []) + [rad] + ([sorted(rad + extra)] if extra else []):
+        sm = smooth_of(rs)
         for rel in (('tx',), ('txm', 4, 1)):
             res = []
             for nn in sm:
@@ -551,12 +598,33 @@ def main_set(name):
                     n2 = min(x for x in sm if x >= 2 * kk - 1) if 2 * kk - 1 <= sm[-1] else None
                     if n2 is None:
                         continue
-                    pr = (m_rows + BLIND_B) * (fft_cost(kk) + fft_cost(nn)) + (m_rows + 40) * fft_cost(n2)
-                    if pr <= PMAX:
-                        res.append((bound_set(p, rel, nn, kk, tt), nn, kk, tt, m_rows, pr))
-            for b, nn, kk, tt, m_rows, pr in sorted(res)[:4]:
+                    res.append((bound_set(p, rel, nn, kk, tt), nn, kk, tt, m_rows, n2))
+            best = []  # the prover cost is the slow part: only for the smallest bounds, until 4 fit PMAX
+            for b, nn, kk, tt, m_rows, n2 in sorted(res):
+                pr = prover_fft_set(p, rel, nn, kk, tt, n2, rs)
+                if pr <= PMAX:
+                    best.append((b, nn, kk, tt, m_rows, pr))
+                    if len(best) == 4:
+                        break
+            for b, nn, kk, tt, m_rows, pr in best:
                 print(f"| {'/'.join(map(str, rs))} | {label(rel)} | {nn:,} | {kk} | {tt} | {kk - tt - 1} | {m_rows} | {b:,} | "
                       f"{'yes' if b <= MAX_PROOF_PQZH else 'no'} | {pr:.3g} |")
+    print('\n## Prover work: the model\'s FFT products vs the crate\'s counted products (fq::spike_count, all base-field '
+          'products of one honest proof, seed 0; runs/*count*.jsonl of this set)\n')
+    print('| count file | n | k | t | relation | model FFT products | crate products | model / crate |')
+    print('|---|---|---|---|---|---|---|---|')
+    by_label = {label(r): r for r in SET_RELS}
+    for fn in sorted(x for x in os.listdir(os.path.join(HERE, 'runs')) if 'count' in x and x.endswith('.jsonl')):
+        rows = [json.loads(x) for x in open(os.path.join(HERE, 'runs', fn))]
+        if not rows or rows[0].get('set') != name:
+            continue
+        h = rows[0]
+        rs = rad if h['n'] == n and h['k'] == k else PQZH_DEFAULT['RADICES']  # THE preset: the v3 radices
+        for r in rows[1:]:
+            if r['rel'] in ('R_REG', 'R_TX', 'R_TXM4'):
+                mf = prover_fft_set(p, by_label[r['rel']], h['n'], h['k'], h['t'], h['n2'], rs)
+                print(f"| {fn} | {h['n']:,} | {h['k']} | {h['t']} | {r['rel']} | {mf:.4g} | {r['prover_products']:.4g} | "
+                      f"{mf / r['prover_products']:.2f} |")
 
 
 if __name__ == '__main__':
