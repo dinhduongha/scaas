@@ -1,9 +1,9 @@
 #!/bin/sh
 # Plan 5h Task 8c part 1b (owner 2026-10-22: set (a) preset B, fallback A): every round, no timing. Run under the lock:
-#   scripts/capped pqz-core/pqzh/ligero/runs/c8b.sh
+#   scripts/capped pqz-core/pqzh/ligero/runs/c8b.sh [a]     (a: skip the v3 round, e.g. after a restart)
 set -u
 cd "$(dirname "$0")/.."
-runs/c8.sh c8b-v3 n2048-kmax1024 && runs/c8-wasm.sh c8b-v3 n2048-kmax1024
+[ "${1:-}" = a ] || { runs/c8.sh c8b-v3 n2048-kmax1024 && runs/c8-wasm.sh c8b-v3 n2048-kmax1024; }
 runs/c8.sh c8b-a n2304-kmax4096 && runs/c8-wasm.sh c8b-a n2304-kmax4096
 target/release/ligero_kat sizes > runs/c8b-a-sizes.jsonl
 cargo test --release --offline --no-fail-fast --features set-n2304-kmax4096,fallback-retry -- --test-threads 1 > runs/c8b-fallback-tests.txt 2>&1 || echo "fallback tests FAILED"
