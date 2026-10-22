@@ -39,7 +39,11 @@ Owner rulings that still constrain open work (full text in COMPLETED.md; decisio
 
 ### Now (order)
 
-- **Now (2026-10-22, shutdown):** 8b items 1–5 + per-set generator done on `pqz-16k` (`61b0c003` WIP; set (a) gate PASS;
+- **Now (2026-10-23, shutdown):** `pqz-16k` `eb823b44`: 8b item 6 built (`n2560-kmax16384`, `n2816-kmax65536`), gate
+  resume tooling; next `scripts/capped pqz-core/gate.sh --last` (resumes the `n2816-kmax65536` gate), then the
+  `n2560-kmax16384` full gate, 8b report → review → merge `pqz-8c` (`bf38bbbd`, 8c part 1b done) → 8c part 2
+  (`MAX_PROOF_PQZH` 327,680 B for `n2560-kmax16384` only, owner). Order in HANDOFF.md top note.
+- **Earlier (2026-10-22, shutdown):** 8b items 1–5 + per-set generator done on `pqz-16k` (`61b0c003` WIP; set (a) gate PASS;
   v3 gate re-run + item 6 16k / A′ via `set.toml` + `make.sh all` left); 8c part 1 + 1b on `pqz-8c` (`6e69bfa0` WIP; set (a)
   PQZH = preset B t 120, fallbacks A `fallback-retry` / C; `c8b.sh` checks left). Order in HANDOFF.md top note.
 - **Earlier (2026-10-21 evening):** **5h part B** on branch `pqz-16k` (not pushed). Done: Task 7 (16k, now superseded),

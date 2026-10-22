@@ -1,3 +1,44 @@
+## Session 2026-10-23 (5h part B: 8b item 6 near done, 8c part 1b done, gate resume) — resume here
+
+**State:** main `c5d2001d` + this note. No agent, capped job, gate or background shell running (stopped for the
+shutdown); only the testnet node and the owner's Odoo containers. SDD ledger (git-ignored):
+`.claude/worktrees/pqz-16k/.superpowers/sdd/2026-10-20-pqz-state-redesign/progress.md` (every ruling, last lines = this
+session). Parameter sets are named by directory only (owner 2026-10-23): `n2048-kmax1024` (frozen v3),
+`n2304-kmax4096` (default; older notes: "set (a)"), `n2560-kmax16384` ("16k"), `n2816-kmax65536` ("A′", core only).
+
+**Branches (not pushed):**
+- **`pqz-16k`** (worktree `.claude/worktrees/pqz-16k`), head **`eb823b44`**. Task 8b: v3 gate PASS on the final code
+  (`b81e6e8c`); `n2560-kmax16384` built via set.toml + make.sh (`59860bae`), gate fixes (`07ae4c77`: C oracle arena
+  2 GiB, pqz-stmt PQZH limit test per set; Rust suite and pqz-stmt re-run ok) — **its full gate not yet re-run on the
+  fixed code**; `n2816-kmax65536` built (`76afd23e`: kmlwe 42, not 41 — at 41 dual_hybrid is 447 / 448 < 450; no 64-bit
+  blocker; no PQZH: q − 1 lacks 19 / 43 / 431) and its gate fixes (`0b339ff8`: z21_big proof under `MAX_PROOF`,
+  fixtures re-exported — the old ones were 16k files, core-only row count in the Rust vector tests). The 8b implementer
+  stopped on the Opus weekly usage limit (resets 2026-10-24 23:00); the controller finished its fixes.
+  Docs: `pqz-core/params/sets/README.md` — what a set fixes (cryptography first, cost follows), PQZL / PQZH shared vs
+  own, PQZH per set, the three options when a PQZH proof exceeds `MAX_PROOF_PQZH` (`dc1d127d`, `75593342`, `031dfdfb`).
+- **`pqz-8c`** (worktree `.claude/worktrees/pqz-8c`), head **`bf38bbbd`**. 8c part 1b DONE_WITH_CONCERNS: `n2304-kmax4096`
+  PQZH = radix-7/17 preset (t 120; debits 251,608–253,048 B, soundness 127.40 bits; tests, native = wasm32, ct ok),
+  fallback re-prove bug fixed (`2e071981`), `ligero_params.py` fix, docs; carries the stand-in pqz-stmt `cded0eb4`
+  (take 8b's at the merge). Not measured: wasm32 verify time, `G_op`.
+
+**Gate tooling (owner 2026-10-23, on `pqz-16k`):** `pqz-core/gate.sh` resumes per step and per part (diff / fnv /
+vectors / ffi / rust per test binary / cargo / fuzz; `a0161798`, `pqz-core/resume.sh`), logs milestones to
+`runs/gate/<label>-progress.txt` (`f76188ed`), label defaults to the set name (`eaa4b14f`), `runs/gate/last` + `gate.sh
+--last` (`4b7afcee`), resume key = file contents, not the commit (`eb823b44`). `GATE_FRESH=1` restarts.
+
+**Owner rulings today:** sets named by directory, never "set (a)" / "16k" / "A′" in new text; README section on what a
+set fixes and PQZL / PQZH shared vs own; **`MAX_PROOF_PQZH` = 327,680 B (320 KiB) for `n2560-kmax16384` only** (per-set
+limit raise; every other set 262,144; decisions CTR-PQZ-10; built in 8c part 2 + 8d); gates resume near the stop
+point, label = set, milestones logged; do not start the `n2560-kmax16384` full gate without resume (now built).
+
+**Next (order):** (1) in `pqz-16k`: `scripts/capped pqz-core/gate.sh --last` — resumes the `n2816-kmax65536` gate
+(kat / tbox / sv / diff-portable done; stopped in diff/x86v3; ≈ 1.5 h left); (2) the `n2560-kmax16384` full gate:
+`PQZ_SET=n2560-kmax16384 scripts/capped pqz-core/gate.sh` (owner go; several hours, resumable); (3) 8b final report
+(rewrite the top of `task-8b-report.md`, progress line "Task 8b: DONE") → review (Opus limit until 2026-10-24 23:00:
+ask the owner — controller review or sonnet) → merge `pqz-8c` into `pqz-16k` (take 8b's pqz-stmt) → 8c part 2
+(pqz-ffi / vectors / gate / gen_set.py take PQZH per set; `n2560-kmax16384` PQZH with `MAX_PROOF_PQZH` 327,680) →
+review; (4) 8d → Task 9 (timing only on the owner's go) → merge part B → metatx split (variant A).
+
 ## Session 2026-10-22 (5h part B: 8b items 1–5 + per-set generator, 8c part 1/1b, Amsterdam node gas merged, testnet 200 M) — resume here
 
 **State:** main `9d2b90f8` + this note, pushed. Merged today: `amsterdam-node` (`b62a54f1`: node / relayer on the Amsterdam
