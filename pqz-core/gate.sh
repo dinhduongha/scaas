@@ -46,10 +46,17 @@ fail=0
 GATE_STATE=$(pwd)/$R-state
 [ "${GATE_FRESH:-0}" = 1 ] && rm -f "$GATE_STATE"
 TOP=$(git rev-parse --show-toplevel)
-GATE_TREE=$PQZ_SET-$( { git rev-parse HEAD
-  git -C "$TOP" diff HEAD -- . ':(exclude,glob)**/runs/**' ':(exclude)pqz-core/fuzz/corpus'
-  git -C "$TOP" ls-files -o --exclude-standard -z -- . ':(exclude,glob)**/runs/**' ':(exclude)pqz-core/fuzz/corpus' |
-    (cd "$TOP" && xargs -0r sha256sum); } | sha256sum | cut -c1-16)
+# the tree = file contents, not the commit (committing does not invalidate finished parts): the index's blob ids, the
+# unstaged changes and the untracked files, without the logs, the fuzz corpus and the files that change no tested code
+# (this script, resume.sh, .gitignore, *.md)
+tree() {
+  set -- . ':(exclude,glob)**/runs/**' ':(exclude)pqz-core/fuzz/corpus' ':(exclude)pqz-core/gate.sh' \
+    ':(exclude)pqz-core/resume.sh' ':(exclude,glob)**/.gitignore' ':(exclude,glob)**/*.md'
+  git ls-files -s -- "$@"
+  git diff -- "$@"
+  git ls-files -o --exclude-standard -z -- "$@" | xargs -0r sha256sum
+}
+GATE_TREE=$PQZ_SET-$( (cd "$TOP" && tree) | sha256sum | cut -c1-16)
 GATE_LOG=$(pwd)/$R-progress.txt
 export GATE_STATE GATE_TREE GATE_LOG
 printf 'set=%s\nlabel=%s\nstarted=%s\nstatus=running\n' "$PQZ_SET" "$L" "$(date +%FT%T)" > runs/gate/last
