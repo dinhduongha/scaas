@@ -49,6 +49,33 @@ its own `proofSystemId` (plan 5h Task 8d), and a cryptographic audit covers one 
 capacity (`K_MAX`) against cost at the same target security; it never changes the cryptography's bar, only its instance.
 Numbers: each set's `SET.md`.
 
+## PQZL and PQZH in one set: what is shared, what is not (owner question 2026-10-23)
+
+**Shared.** PQZL (lattice proofs, LaZer) and PQZH (hash-based backup, Ligero over F_q) prove the same statements over
+the same ciphertexts mod q, so a set's q, n, `K_MAX`, Δ and the statement / object layout are one source for both; both
+live in the same directory `params/sets/<set>/` and are built for one set per library build.
+
+**Not shared.** The proof parameters are each system's own:
+
+| | PQZL | PQZH |
+|---|---|---|
+| file in `<set>/` | `pqz_set.h`, `rust/set.rs`, `<rel>_params.sage`, `pqz_<rel>_params.h`, `rust/<rel>.rs` | `pqzh_set.rs` (plan 5h Task 8c) |
+| proof parameters | proof MLWE rank `kmlwe`, norm bounds, codegen shapes per relation | the Ligero preset: domain radices, code length n, message length k, query count t |
+| security measure | lattice estimator β ≥ 450 (MSIS, MLWE uSVP / dual_hybrid, `e-s1.txt`), norm-proof exactness and Fiat–Shamir rounds (`e-s0.txt`) | soundness bits of the preset (query and total soundness, `PQZH.md`; `n2304-kmax4096` preset B: 127.40 bits total) |
+| size limit | `MAX_PROOF` 98,304 B | `MAX_PROOF_PQZH` 262,144 B |
+
+**Not every set has PQZH.** Ligero's evaluation domains need q − 1 to be divisible by small radices, so whether PQZH
+exists at a set depends on q:
+
+| Set | PQZH |
+|---|---|
+| `n2048-kmax1024` | built and running (`pqz-ffi`, vectors) |
+| `n2304-kmax4096` | built on branch `pqz-8c` (owner 2026-10-22): preset B, radices 2 / 7 / 17 / 19 / 43 / 431, n 45,752, k 952, t 120, debit proofs 251,608–253,048 B (9–10 KB under 262,144), soundness 127.40 bits; fallbacks A (re-prove under the limit, Cargo feature `fallback-retry`, never in production builds) and C (raise `MAX_PROOF_PQZH` for this set, documented only); wiring into `pqz-ffi` / vectors / gate is Task 8c part 2 |
+| `n2560-kmax16384` | model only: debit proofs ≈ 302–304 KB exceed 262,144; no smaller preset exists (q − 1 = 2^3 · 19 · 43 · 431 · 5,659 · 70,627 has no other small radix), re-proving (A) cannot close a 37–41 KB gap, so the choice is C (≥ ≈ 304 KB for this set) or no PQZH debits at this set — open, the owner's decision |
+| `n2816-kmax65536` | none: q − 1 = 2^3 · 3 · 1,789 · 419,563,967,521 has none of the radices 19 / 43 / 431 of PQZH's domains; PQZH here would need other domains |
+
+Details per set: `<set>/PQZH.md` (on branch `pqz-8c` until it merges).
+
 ## Selecting a set
 
 | Build | How |
