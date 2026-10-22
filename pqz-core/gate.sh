@@ -20,7 +20,8 @@
 # Resume (owner 2026-10-23, every set): runs/gate/<label>-state records each step and each part of a long step (diff,
 # fnv, vectors, ffi, rust, cargo, fuzz; resume.sh) that passed; re-running the same label at the same set and tree
 # (HEAD + uncommitted changes, logs and the fuzz corpus excluded) skips them, so an interrupted gate restarts near
-# where it stopped. A code change re-runs everything; GATE_FRESH=1 ignores the state.
+# where it stopped. A code change re-runs everything; GATE_FRESH=1 ignores the state. Milestones: every step and part
+# logs start / ok (duration) / FAILED / resumed with a timestamp to runs/gate/<label>-progress.txt (tail -f it).
 set -u
 cd "$(dirname "$0")"
 L=$1 FZ=${2:-60} R=runs/gate/$1
@@ -38,7 +39,9 @@ GATE_TREE=$PQZ_SET-$( { git rev-parse HEAD
   git -C "$TOP" diff HEAD -- . ':(exclude,glob)**/runs/**' ':(exclude)pqz-core/fuzz/corpus'
   git -C "$TOP" ls-files -o --exclude-standard -z -- . ':(exclude,glob)**/runs/**' ':(exclude)pqz-core/fuzz/corpus' |
     (cd "$TOP" && xargs -0r sha256sum); } | sha256sum | cut -c1-16)
-export GATE_STATE GATE_TREE
+GATE_LOG=$(pwd)/$R-progress.txt
+export GATE_STATE GATE_TREE GATE_LOG
+glog "gate $L (set $PQZ_SET) started at $(git rev-parse --short HEAD), tree $GATE_TREE"
 # the summary also goes to a file (review round 2: the PQZL Rust port's gate PASS line was on stdout only)
 say() { echo "$*" | tee -a "$R-summary.txt"; }
 echo "# gate $L (set $PQZ_SET): $(git rev-parse HEAD)$(git diff --quiet HEAD || echo ' + uncommitted changes'), $(date -u +%Y-%m-%dT%H:%MZ)" > "$R-summary.txt"
@@ -46,10 +49,16 @@ step() {
   name=$1
   shift
   say "== $name"
-  if grep -qxF "step/$name $GATE_TREE" "$GATE_STATE" 2>/dev/null; then say "   ok (resumed: passed earlier at this tree)"; return; fi
-  if "$@" > "$R-$name.txt" 2>&1; then say "   ok"; echo "step/$name $GATE_TREE" >> "$GATE_STATE"; else say "   FAILED (rc=$?)"; fail=1; fi
+  if grep -qxF "step/$name $GATE_TREE" "$GATE_STATE" 2>/dev/null; then say "   ok (resumed: passed earlier at this tree)"; glog "resumed step/$name"; return; fi
+  glog "start   step/$name"
+  t0=$(date +%s)
+  if "$@" > "$R-$name.txt" 2>&1; then
+    say "   ok"; echo "step/$name $GATE_TREE" >> "$GATE_STATE"; glog "ok      step/$name ($(dur "$t0"))"
+  else
+    rc=$?; say "   FAILED (rc=$rc)"; fail=1; glog "FAILED  step/$name rc=$rc ($(dur "$t0"))"
+  fi
 }
-skip() { say "== $1"; say "   skipped ($2)"; }
+skip() { say "== $1"; say "   skipped ($2)"; glog "skipped step/$1 ($2)"; }
 SJ=params/sets/$PQZ_SET/set.json
 json() { python3 -I -c "import json, sys; print(json.load(open(sys.argv[1]))[sys.argv[2]])" "$SJ" "$1"; }
 PQZH=$(json pqzh) CORE_ONLY=$(json core_only)
@@ -125,4 +134,5 @@ if [ "$CORE_ONLY" = True ]; then skip cargo core_only; else step cargo cargo_tes
 if [ "$PQZH" = True ]; then step xcheck pqzh/xcheck/run.sh; else skip xcheck "$NOPQZH"; fi
 if [ "$CORE_ONLY" = True ]; then skip fuzz core_only; else step fuzz fuzz; fi
 say "gate $L (set $PQZ_SET): $( [ $fail = 0 ] && echo PASS || echo FAIL )"
+glog "gate $L (set $PQZ_SET): $( [ $fail = 0 ] && echo PASS || echo FAIL )"
 exit $fail
