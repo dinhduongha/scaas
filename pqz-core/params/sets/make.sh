@@ -17,7 +17,7 @@
 #   fixtures the cheating fixtures the Rust suite reads (pqzl/rust/tests/fixtures/cheating/export.sh -> <set>/)  (capped)
 #   vectors pqz-ffi/vectors/run.sh write (PQZ_SET=<set>): smartcontracts/vectors/pqz[/<set>]   (not for core_only)
 #   sol     <set>/PqzSet.sol -> smartcontracts/evm/src/pqz/PqzSet.sol, forge build of that file   (not for core_only)
-#   gate    PQZ_SET=<set> pqz-core/gate.sh <set>-<date> (run alone)
+#   gate    PQZ_SET=<set> pqz-core/gate.sh (run alone; label = the set, an interrupted gate resumes)
 # Environment: PQZ_TOOLS = a directory with the pinned checkouts lk (leaky-LWE-Estimator 0a9caf8), le
 # (lattice-estimator 53da598), lz (LaZer 3330e48) (e_s1, codegen); PQZ_WORK = a work directory for the KAT build
 # (LaZer / HEXL clones, the static lazer_dump; never committed). Heavy steps run under scripts/capped (never wrap
@@ -121,7 +121,7 @@ step_sol() {
     (cd "$REPO/smartcontracts/evm" && "$CAP" forge build --contracts src/pqz/PqzSet.sol)
 }
 
-step_gate() { PQZ_SET=$S "$CAP" "$CORE/gate.sh" "$S-$(date -u +%Y%m%d)"; }
+step_gate() { PQZ_SET=$S "$CAP" "$CORE/gate.sh"; }
 
 [ "$1" = all ] && set -- specs e_s1 codegen rust e_s0 kat fixtures vectors sol gate
 for st in "$@"; do

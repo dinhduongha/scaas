@@ -2,8 +2,10 @@
 # Gate A (PQZL, both cores: the C core and, since the Rust port, the Rust crate pqzl) and gate B (PQZH) of the relations plan (docs/superpowers/plans/2026-10-14-p6e-relations.md, "Gate A /
 # Gate B") with op 7 in the frozen set (P6-ANON), one job under scripts/capped (it calls capped jobs itself only through
 # the step scripts; run alone):
-#   [PQZ_SET=<set>] scripts/capped pqz-core/gate.sh <label> [fuzz-seconds]  -> runs/gate/<label>-*.txt, summary on stdout
+#   [PQZ_SET=<set>] scripts/capped pqz-core/gate.sh [label [fuzz-seconds]]  -> runs/gate/<label>-*.txt, summary on stdout
 #                                                                           and in runs/gate/<label>-summary.txt
+# label: optional, default the set's name (owner 2026-10-23: nothing to remember — re-running the same command resumes;
+# progress in runs/gate/<set>-progress.txt). A run at another tree starts over and overwrites that label's logs.
 # PQZ_SET: the parameter set (owner 2026-10-21: pqz-core/params/sets/<set>/, one set per library build; default
 # n2304-kmax4096, the frozen v3 set is n2048-kmax1024); named in the summary.
 # Steps: KAT 19/19 (against the set's upstream LaZer golden file), check_tbox_fixes, check_sv_fixes, the PQZL
@@ -24,8 +26,9 @@
 # logs start / ok (duration) / FAILED / resumed with a timestamp to runs/gate/<label>-progress.txt (tail -f it).
 set -u
 cd "$(dirname "$0")"
-L=$1 FZ=${2:-60} R=runs/gate/$1
 PQZ_SET=${PQZ_SET:-n2304-kmax4096}
+L=${1:-$PQZ_SET} FZ=${2:-60}
+R=runs/gate/$L
 export PQZ_SET
 [ -f "params/sets/$PQZ_SET/pqz_set.h" ] || { echo "PQZ_SET=$PQZ_SET: no params/sets/$PQZ_SET" >&2; exit 2; }
 V3=n2048-kmax1024
