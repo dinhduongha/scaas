@@ -4,12 +4,13 @@ Owner 2026-10-21: **parameter sets are per-directory, selected at compile time; 
 runtime choice between sets is deferred). Each directory `<set>/` holds every parameter-dependent input of the PQZL C
 and Rust cores; the algorithm code uses only the named constants. Sets are named by n and `K_MAX`. PQZH adds its own
 file per set in plan 5h Task 8c (`pqzh_set.rs`); until then PQZH exists for `n2048-kmax1024` only and is compiled out
-of `pqz-ffi` / `pqz-vectors` for every other set.
+of `pqz-ffi` / `pqz-vectors` for every other set. Adding a set: write `<set>/set.toml`, then `make.sh <set> all`.
 
 | Set | n, k | q | `K_MAX` | Status | `SET.md` |
 |---|---|---|---|---|---|
 | `n2048-kmax1024` | 2048, 32 | 2^42 − 215 | 1,024 | the frozen v3 set: main's build, the committed vectors, the contracts until 8d | [SET.md](n2048-kmax1024/SET.md) |
 | `n2304-kmax4096` | 2304, 36 | 61,275,424,977,257 (2^45.80) | 4,096 | set (a), owner 2026-10-21: the default of the `pqzl` crate and `gate.sh` | [SET.md](n2304-kmax4096/SET.md) |
+| `n2560-kmax16384` | 2560, 40 | 2^50 − 42,310,535 | 16,384 | the 16k set (approved 2026-10-20, superseded as the default 2026-10-21): shippable for customer chains; full vectors + gate | [SET.md](n2560-kmax16384/SET.md) |
 
 ## Selecting a set
 

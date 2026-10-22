@@ -1,0 +1,34 @@
+   Compiling pqz-stmt v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/stmt)
+    Finished `release` profile [optimized] target(s) in 1.09s
+     Running unittests src/lib.rs (target/n2560-kmax16384/release/deps/pqz_stmt-89338fd49aa04c0e)
+
+running 11 tests
+test tests::coefficient_codec ... ok
+test tests::multi_lengths_and_sets ... FAILED
+test tests::bundle_and_opening ... ok
+test tests::fields_land_where_the_spec_says ... ok
+test tests::multi_m1_body_is_op1_body ... ok
+test tests::round_trip_every_form_both_ids ... ok
+test tests::lengths_and_constants ... ok
+test tests::precompile_input ... ok
+test tests::every_d15_r6_rule_rejects ... ok
+test tests::multi_round_trip_every_built_shape_fee_0 ... ok
+test tests::multi_every_rule_rejects ... ok
+
+failures:
+
+---- tests::multi_lengths_and_sets stdout ----
+
+thread 'tests::multi_lengths_and_sets' (1165573) panicked at src/tests.rs:375:17:
+assertion `left == right` failed: M = 4, A = false
+  left: false
+ right: true
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    tests::multi_lengths_and_sets
+
+test result: FAILED. 10 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+error: test failed, to rerun pass `--lib`

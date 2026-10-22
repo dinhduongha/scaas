@@ -52,7 +52,10 @@ extern "C" {
                        outlen: *mut usize) -> i32;
 }
 
-pub const ARENA: usize = 1 << 30;
+/// 2 GiB of capacity (reserved, touched only as used), as the C bench's `PQZ_ARENA_MB=2048` for R_TXM M = 8: the C
+/// prover's M = 8 arena peak is 937 MB at n2304-kmax4096 and 1,094 MB at n2560-kmax16384 (over 1 GiB: the arena's
+/// fail-stop trap, SIGILL, in cheat_b1)
+pub const ARENA: usize = 2 << 30;
 pub const STACK: usize = 16 << 20;
 
 /// The arena (capacity only: the C core owns the bytes, Rust never reads them; 16-byte aligned); `None` before the

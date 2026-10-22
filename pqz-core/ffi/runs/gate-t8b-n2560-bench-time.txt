@@ -1,0 +1,27 @@
+   Compiling pqz-ffi v0.1.0 (/home/ha/work/ainative/scaas/.claude/worktrees/pqz-16k/pqz-core/ffi)
+    Finished `release` profile [optimized + debuginfo] target(s) in 1.61s
+     Running `target/release/examples/ffi_bench 200`
+	Command being timed: "cargo run --release --offline --no-default-features --features pqzl-rust,set-n2560-kmax16384 --features prove,test-hooks --example ffi_bench 200"
+	User time (seconds): 128.87
+	System time (seconds): 1.40
+	Percent of CPU this job got: 102%
+	Elapsed (wall clock) time (h:mm:ss or m:ss): 2:07.18
+	Average shared text size (kbytes): 0
+	Average unshared data size (kbytes): 0
+	Average stack size (kbytes): 0
+	Average total size (kbytes): 0
+	Maximum resident set size (kbytes): 287696
+	Average resident set size (kbytes): 0
+	Major (requiring I/O) page faults: 79
+	Minor (reclaiming a frame) page faults: 519831
+	Voluntary context switches: 21044
+	Involuntary context switches: 4429
+	Swaps: 0
+	File system inputs: 16
+	File system outputs: 117872
+	Socket messages sent: 0
+	Socket messages received: 0
+	Signals delivered: 0
+	Page size (bytes): 4096
+	Exit status: 0
+bench rc=0

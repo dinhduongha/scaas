@@ -12,15 +12,17 @@ derived (see [`../README.md`](../README.md)).
 | q | 2^50 − 42,310,535 = 1,125,899,864,532,089 (prime, q ≡ 9 mod 16; q − 1 divisible by 2^3·19·43·431, PQZH's radices) |
 | Δ | ⌊q / 2^20⌋ = 1,073,741,783 (odd) |
 | `K_MAX` | 16,384; digit sums `M_i` 18 bits, carries 15 bits, `e_T` / `e'` + 2^28 in 29 bits |
-| norm bounds | β_s 40, β_e 182, β_2 64; B_FRESH 14,624; mint margin 3.36 |
-| proof MLWE rank (`kmlwe_min`) | 39 (`e-s1.txt`) |
+| norm bounds | β_s 40 (CBD(1)), β_e 182 (CBD(20)), β_2 64; B_FRESH 14,624; worst case 16,383 · B_FRESH = 239,584,992 < E = 2^28 (margin 1.12), mint margin 3.36 (`worstcase_noise.json`) |
+| proof MLWE rank (`kmlwe_min`) | 39 (`e-s1.txt`: every one of the 14 specs meets MSIS β 455–468, hiding MLWE uSVP 470–475, dual_hybrid 462 / 463 at `pqz_delta` 1.00366; the codegen default rank 38 gives dual_hybrid 446 / 447) |
 | encryption, no hints | uSVP β 508; 2^145.7 classical / 2^132.7 quantum (dual_hybrid β 499 / 500) (`p16k/results-16k.md` §2) |
 | encryption, 80 hints | DDGR20 worst case β 482.43; dual_hybrid on the hinted instance 474.43 / 476.43 [estimate: n − 80 model minus the measured offset] (n-study §3.3) |
-| e_s0 | `e-s0.txt` |
+| e_s0 | budget, exactness of every norm proof (14 relations) and Fiat–Shamir rounds (final challenge 2^-129.79): MET (`e-s0.txt`) |
 | proofSystemId | the v3 label until the plan 5h Task 8d bump (owner ruling 2026-10-21); the 16k label of spec §6.4 (`mlwe-d64k40-q50l4`) is superseded |
 | owner approval | 2026-10-20 (Q1, the Task 8 set), 2026-10-21 (superseded as default by set (a); kept shippable) |
 | stored-blob packing width (P46 ruling) | ⌈log2 q⌉ = 50 bits (P50); `PqzSet.sol` `PACK_BITS`; built in 8d |
 | PQZH | q is PQZH-compatible; not built for this set until plan 5h Task 8c (pqz-ffi / pqz-vectors / the gate skip it) |
+| LaZer codegen headers | byte-identical to the p16k record's (`pqzl/params/p16k/`, the 12 relations it has) |
+| upstream KAT | `lazer-3330e48-kat.json`: pqz-core = upstream LaZer 3330e48 (+ HEXL), 19/19 |
 
 ## Conditions for this set to work on a chain
 
@@ -53,6 +55,15 @@ today's PQZL v3 rows × 1.25 [estimate].
    β 482.4 (above 450, no exception needed); proof MSIS / MLWE β ≥ 450 per spec (`e-s1.txt`); exactness and
    Fiat–Shamir rounds MET (`e-s0.txt`); mint margin 3.36.
 8. **Verify time** (≤ 60 ms p99 wasm32, the precompile's budget): not re-measured for this set (owner rule: no timing
-   runs during this task); the proof sizes are ≈ 12 % above set (a)'s.
+   runs during this task); the proof sizes are 6–8 % above set (a)'s (below).
 
-Proof sizes: see `smartcontracts/vectors/pqz/n2560-kmax16384/proof_pqzl.json` (filled in by this set's vectors run).
+Proof sizes (`smartcontracts/vectors/pqz/n2560-kmax16384/proof_pqzl.json`, byte-identical C = Rust = wasm32): TRANSFER
+50,391 B, TRANSFER0 50,053, BURN 49,538, REFRESH 49,527, REGISTER 32,452, DISCLOSE-SENDER 32,985, -RECEIVER 33,763,
+-AUDITOR 33,771; op 7 with the auditor M = 1 / 2 / 4 / 8: 50,390 / 51,216 / 54,817 / 72,704 B, without 50,031 /
+50,557 / 51,558 / 69,888 B (all below `MAX_PROOF` 98,304). Object sizes: pk 20,480 B, ciphertext 20,608 B, op 1
+statement 103,552 B (auditor on). Heap: C prover arena peaks (`pqz-core/runs/gate/t8b-n2560-fnv-c.jsonl`) 141 MB
+(R_REG) … 457 MB (R_TX) … 1,094 MB (R_TXM M = 8 with the auditor: needs `PQZ_ARENA_MB=2048`).
+
+Files: `set.toml` (input), `pqz_set.h`, `rust/set.rs`, `set.json`, `PqzSet.sol`, `<rel>_params.sage` (gen_set.py),
+`pqz_<rel>_params.h` + `codegen.txt` (LaZer codegen), `rust/<rel>.rs` (to_rust.py), `e-s1.txt`, `e-s0.txt`,
+`lazer-3330e48-kat.json` (+ `-build.txt`); made by `make.sh n2560-kmax16384 all`.

@@ -1,0 +1,25 @@
+# gate t8b-n2560 (set n2560-kmax16384): 59860bae97166fe485d46bafd302dea970d78a4d, 2026-10-22T15:18Z
+set n2560-kmax16384
+== kat
+   ok
+== tbox
+   ok
+== sv
+   ok
+== diff
+   ok
+== fnv
+   ok
+== vectors
+   ok
+== ffi
+   ok
+== rust
+   FAILED (rc=101)
+== cargo
+   FAILED (rc=101)
+== xcheck
+   skipped (PQZH is not built for set n2560-kmax16384 until plan 5h Task 8c)
+== fuzz
+   ok
+gate t8b-n2560 (set n2560-kmax16384): FAIL
