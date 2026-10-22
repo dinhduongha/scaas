@@ -70,11 +70,28 @@ exists at a set depends on q:
 | Set | PQZH |
 |---|---|
 | `n2048-kmax1024` | built and running (`pqz-ffi`, vectors) |
-| `n2304-kmax4096` | built on branch `pqz-8c` (owner 2026-10-22): preset B, radices 2 / 7 / 17 / 19 / 43 / 431, n 45,752, k 952, t 120, debit proofs 251,608–253,048 B (9–10 KB under 262,144), soundness 127.40 bits; fallbacks A (re-prove under the limit, Cargo feature `fallback-retry`, never in production builds) and C (raise `MAX_PROOF_PQZH` for this set, documented only); wiring into `pqz-ffi` / vectors / gate is Task 8c part 2 |
-| `n2560-kmax16384` | model only: debit proofs ≈ 302–304 KB exceed 262,144; no smaller preset exists (q − 1 = 2^3 · 19 · 43 · 431 · 5,659 · 70,627 has no other small radix), re-proving (A) cannot close a 37–41 KB gap, so the choice is C (≥ ≈ 304 KB for this set) or no PQZH debits at this set — open, the owner's decision |
+| `n2304-kmax4096` | built on branch `pqz-8c` (owner 2026-10-22): the **radix-7/17 preset** (radices 2 / 7 / 17 / 19 / 43 / 431, n 45,752, k 952, t 120), debit proofs 251,608–253,048 B (9–10 KB under 262,144), soundness 127.40 bits; the two other options below stay as fallbacks (re-prove under the limit: Cargo feature `fallback-retry`, never in production builds; per-set limit raise: documented only); wiring into `pqz-ffi` / vectors / gate is Task 8c part 2 |
+| `n2560-kmax16384` | sizes are a model until Task 8c part 2 builds the crate here: debit proofs ≈ 301.9–303.6 KB exceed 262,144; no set-specific preset exists (q − 1 = 2^3 · 19 · 43 · 431 · 5,659 · 70,627 has no other small radix) and re-proving cannot close a 37–41 KB gap → **owner 2026-10-23: `MAX_PROOF_PQZH` = 327,680 B (320 KiB) for this set only** (per-set limit raise; decisions CTR-PQZ-10) |
 | `n2816-kmax65536` | none: q − 1 = 2^3 · 3 · 1,789 · 419,563,967,521 has none of the radices 19 / 43 / 431 of PQZH's domains; PQZH here would need other domains |
 
 Details per set: `<set>/PQZH.md` (on branch `pqz-8c` until it merges).
+
+### When a PQZH proof exceeds `MAX_PROOF_PQZH`: three options
+
+Found at `n2304-kmax4096` (plan 5h Task 8c, 2026-10-22): with the Ligero layout every other set uses, its debit proofs
+were 263,784–265,236 B, 1.6–3 KB above 262,144. Three ways out, usable for any set that hits the same limit (research
+note `docs/research/pqzh-set-a-proof-limit.md`; 8c notes call them A, B, C — the letters say nothing, the names below
+are used here):
+
+| Option (8c letter) | What it does | Cost / limits | Where used |
+|---|---|---|---|
+| **re-prove under the limit** (A) | keep the preset; when a proof comes out over the limit, prove again with fresh randomness until it fits. The proof length depends only on the query indices (public), so dropping a long proof reveals nothing about the witness (ZK argument in the research note) | extra prover runs: at `n2304-kmax4096` 0.9 % of runs for most forms, 27.6 % for op 7 M = 4 with the auditor (average 1.38 runs, at most 7 in 200); useless when the gap is larger than the spread of honest proof lengths (a few KB) | `n2304-kmax4096` fallback: Cargo feature `fallback-retry`, never in default or production builds; tag `pqzh-set-a-fallback-A` |
+| **set-specific preset** (B; at `n2304-kmax4096` the radix-7/17 preset) | a new Ligero preset whose evaluation domain uses extra small radices of q − 1 (there 7 and 17, through the existing generic FFT stage), so the code length / message length / query count fit under the limit | needs q − 1 to have such radices; soundness must stay at or above the old preset's | **`n2304-kmax4096` production** (owner 2026-10-22): debits 251,608–253,048 B, soundness 127.40 bits, prover 4–5 % fewer products |
+| **per-set limit raise** (C) | keep the preset; raise `MAX_PROOF_PQZH` for that set only (one constant per set in `pqz-stmt` and the prover) | larger precompile inputs (`MAX_INPUT` must cover 5 + largest statement + limit) and calldata; every chain running the set must accept the larger limit | **`n2560-kmax16384`** (owner 2026-10-23): 327,680 B (320 KiB), largest bound 303,590 B (24,090 B headroom), largest input 493,445 B ≤ `MAX_INPUT` 512 KiB; `n2304-kmax4096` fallback (≥ 265,236 B, documented only) |
+
+Picking an option for a new set: try a set-specific preset first (no limit change, no extra prover runs); re-proving
+fits only a gap of a few KB; the per-set raise always works but changes the chain-facing limits. Whatever is chosen is
+an owner decision recorded in `docs/decisions.md` (CTR-PQZ-10) and in the set's `PQZH.md`.
 
 ## Selecting a set
 
