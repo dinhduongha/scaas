@@ -11,6 +11,7 @@ F=$(cd "$(dirname "$0")" && pwd)
 cd "$F/../../../.." # pqz-core/pqzl
 [ -f build/native/libpqz.a ] || ./build.sh native > /dev/null
 B=build/z34poc
+rm -rf $B/out # never a previous run's (another parameter set's) proofs
 mkdir -p $B/out
 CC=${CC:-clang}
 FL="-std=gnu11 -O2 -fno-builtin -fno-math-errno -ffp-contract=off -w -Ibuild/include -Isrc -Ilazer -Iparams"

@@ -21,6 +21,7 @@
 
 #ifdef PQZ_NORM_POC
 extern int pqz_poc_mode;
+extern int pqz_poc_shift;
 extern int64_t pqz_poc_z21sq;
 #endif
 
@@ -91,14 +92,21 @@ main (int argc, char **argv)
           uint8_t rnd32[32];
           for (int i = 0; i < 32; i++)
             rnd32[i] = (uint8_t)(k * 31 + i);
-          pqz_poc_mode = k;
-          pqz_poc_z21sq = 0;
-          int rc = pqz_prove (PQZ_OP_REGISTER, stmt, sl, wit, sizeof wit, rnd32, proof, &pl);
-          pqz_poc_mode = 0;
+          /* mode 2: y21 << 7, or the largest shift whose proof fits PQZ_MAX_PROOF (a larger q encodes z21 wider) */
+          int rc;
+          for (pqz_poc_shift = 7;; pqz_poc_shift--)
+            {
+              pqz_poc_mode = k;
+              pqz_poc_z21sq = 0;
+              rc = pqz_prove (PQZ_OP_REGISTER, stmt, sl, wit, sizeof wit, rnd32, proof, &pl);
+              pqz_poc_mode = 0;
+              if (rc == 0 || k != 2 || pqz_poc_shift == 1)
+                break;
+            }
           printf ("%-8s prove rc=%d proof %zu B", MODE[k], rc, pl);
           if (k == 2)
-            printf ("  ||z21||^2 = %lld (R_REG Bsq = 22226101053479, %.1fx)", (long long)pqz_poc_z21sq,
-                    pqz_poc_z21sq / 22226101053479.0);
+            printf ("  y21 << %d: ||z21||^2 = %lld (%.1fx the v3 R_REG Bsq 22226101053479)", pqz_poc_shift,
+                    (long long)pqz_poc_z21sq, pqz_poc_z21sq / 22226101053479.0);
           printf ("\n");
           if (rc)
             continue;

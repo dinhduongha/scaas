@@ -51,6 +51,7 @@ step_e_s1() {
     -v "$CORE/pqzl/params/n-study":/p:ro -v "$CORE/pqzl/params":/params:ro -v "$D":/set:ro --entrypoint /bin/sh "$IMG" -c \
     "mkdir -p /tmp/w && cp -r /params/codegen /tmp/w/ && ln -s /lz/third_party /tmp/w/third_party && cp /p/*.sage /tmp/w/ &&
      cd /tmp/w/codegen && sage /tmp/w/e_s1_n.sage $specs" > "$D/e-s1.txt" 2> "$D/.e-s1.err" || return 1
+  rm -f "$D/.e-s1.err" # the estimator's stderr (kept only when the run fails)
   python3 -I - "$D" <<'EOF'
 import os, re, sys, tomllib
 d = sys.argv[1]

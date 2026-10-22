@@ -32,7 +32,7 @@ poc () { # the cheating prover: lnp_quad_prove (lines 1..335 of lnp-quad.c) with
   mkdir -p $B/poc
   { echo '#include "lazer.h"'; cat sv/review/normpoc_hooks.h; sed -e '1d' -e '1,335{
 s|^      polyvec_grandom (y1, params->log2stdev1, yseed, dom);$|&\n      if (pqz_poc_mode == 1) polyvec_lshift (y1, y1, 3);|
-s|^      polyvec_grandom (y2, params->log2stdev2, yseed, dom);$|&\n      if (pqz_poc_mode == 2) polyvec_lshift (y21, y21, 7);\n      if (pqz_poc_mode == 4) poc_mul0 (y21, pqz_poc_k);|
+s|^      polyvec_grandom (y2, params->log2stdev2, yseed, dom);$|&\n      if (pqz_poc_mode == 2) polyvec_lshift (y21, y21, pqz_poc_shift);\n      if (pqz_poc_mode == 4) poc_mul0 (y21, pqz_poc_k);|
 s|if (params->rej1)$|if (params->rej1 \&\& pqz_poc_mode != 1)|
 s|if (params->rej2)$|if (params->rej2 \&\& !POC_Z21)|
 s|rej = int_gt (norm, params->Bsqr);|rej = !POC_Z21 \&\& int_gt (norm, params->Bsqr);|
@@ -62,7 +62,8 @@ domctl)
   $U/dom_trace | grep -v '^dom=' || true
   ;;
 norm)
-  mkdir -p $B/noz1 $B/now $B/noz21 $B/norm-out
+  rm -rf $B/norm-out # a previous run's proofs (another parameter set's) must never be verified or exported
+mkdir -p $B/noz1 $B/now $B/noz21 $B/norm-out
   poc
   $CC -std=gnu11 -O2 -w -DPQZ_NORM_POC -Ibuild/include -Isrc -o $B/normpoc_prove sv/review/normpoc.c $B/poc/libpqz.a
   # controls: one check removed in both verifiers (lnp_quad_verify, pqz_sv.c verify_body)

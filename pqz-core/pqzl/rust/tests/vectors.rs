@@ -24,6 +24,17 @@ fn have_vectors(test: &str) -> bool {
     h
 }
 
+/// the vectors give 23 PQZL rows (proof_pqzl.json + fee0.json); a set without vectors (core_only) gives one C-proved
+/// bench row per relation (`common::pqzl_rows`), so the C = Rust checks still run there
+fn check_row_count(rows: &[common::Row]) {
+    #[cfg(feature = "bench")]
+    let bench = pqzl::bench::NREL;
+    #[cfg(not(feature = "bench"))]
+    let bench = 0; // unreachable: without vectors and feature bench, pqzl_rows panics first
+    let want = if common::vectors_dir().is_some() { 23 } else { bench };
+    assert_eq!(rows.len(), want);
+}
+
 fn hex32(s: &Value) -> [u8; 32] {
     hex(s).try_into().expect("32 bytes")
 }
@@ -222,17 +233,11 @@ fn enc_dec_input_errors() {
 #[cfg(feature = "test-hooks")]
 #[test]
 fn codec_roundtrip() {
-    let mut n = 0;
-    let pqzl = json("proof_pqzl.json");
-    let fee0 = json("fee0.json");
-    let rows = pqzl["rows"].as_array().unwrap().iter().map(|r| (r, &r["proof"]));
-    for (r, proof) in rows.chain(fee0["rows"].as_array().unwrap().iter().map(|r| (r, &r["pqzl"]["proof"]))) {
-        let code = common::rel_code(r["form"].as_str().unwrap(), r["statement"]["case"].as_str());
-        let p = hex(proof);
-        assert!(pqzl::test_mutate(code, &p, 99, 0, 0) == Ok(Some(p.clone())), "{} {}", r["form"], r["statement"]["case"]);
-        n += 1;
+    let rows = common::pqzl_rows();
+    check_row_count(&rows);
+    for r in &rows {
+        assert!(pqzl::test_mutate(r.code, &r.proof, 99, 0, 0) == Ok(Some(r.proof.clone())), "{}", r.name);
     }
-    assert_eq!(n, 23);
 }
 
 /// every PQZL proof of proof_pqzl.json and fee0.json, re-proved from the row's witness and rnd32, is the same bytes
@@ -240,7 +245,7 @@ fn codec_roundtrip() {
 #[test]
 fn reprove_byte_equal() {
     let rows = common::pqzl_rows();
-    assert_eq!(rows.len(), 23);
+    check_row_count(&rows);
     let only = std::env::var("PQZL_REPROVE").unwrap_or_default();
     let mut ctx = pqzl::Ctx::new();
     for r in rows.iter().filter(|r| r.name.contains(&only)) {
@@ -283,7 +288,7 @@ fn prove_refuses_noncanonical_statement() {
 #[test]
 fn all_pqzl_proofs_verify() {
     let rows = common::pqzl_rows();
-    assert_eq!(rows.len(), 23);
+    check_row_count(&rows);
     let mut ctx = pqzl::Ctx::new();
     for r in &rows {
         assert!(ctx.verify(r.op, &r.stmt, &r.proof), "{}", r.name);
