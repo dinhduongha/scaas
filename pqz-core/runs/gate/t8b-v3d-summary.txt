@@ -1,0 +1,25 @@
+# gate t8b-v3d (set n2048-kmax1024): ac90c161498e76012a20231cfe44ad94b09c49b8, 2026-10-22T12:23Z
+set n2048-kmax1024
+== kat
+   ok
+== tbox
+   ok
+== sv
+   ok
+== diff
+   ok
+== fnv
+   ok
+== vectors
+   ok
+== ffi
+   ok
+== rust
+   ok
+== cargo
+   ok
+== xcheck
+   ok
+== fuzz
+   ok
+gate t8b-v3d (set n2048-kmax1024): PASS
